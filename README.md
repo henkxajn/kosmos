@@ -1,29 +1,14 @@
-# Pastel Orbits — Stage 1 (Fundament symulacji)
+# Pastel Orbits — 2D Top-Down (No Build)
 
-To jest minimalny szkielet **Etapu 1**: symulacja w **Web Worker**, deterministyczny generator układu (seed), ruch po orbitach Keplera i snapshoty stanu.
+Zmiana koncepcji: render **2D z góry** (top-down), bez pochylenia 2.5D.
+To usuwa problemy z projekcją i upraszcza follow/picking.
 
-## Wymagania
-- Node.js (LTS) + npm
+## GitHub Pages
+Settings → Pages → main + /(root).
+Wrzuć pliki do repo (root), nadpisz i odśwież stronę.
 
-## Start lokalnie
-```bash
-npm install
-npm run dev
-```
-
-Otwórz adres z terminala (zwykle `http://localhost:5173/`).
-Logi zobaczysz też w **DevTools → Console**.
-
-## Co tu jest
-- `src/worker/sim.worker.ts` — worker z pętlą symulacji
-- `src/sim/WorldGen.ts` — generator gwiazda + 3–9 planet + księżyce
-- `src/sim/systems/OrbitSystem.ts` — Kepler: elementy orbity → pozycje i okresy
-- `src/sim/SimEngine.ts` — fixed timestep + timeScale + snapshot
-
-## Upload na GitHub
-Możesz:
-1. Utworzyć repo na GitHub.
-2. W GitHub Desktop: **Add local repository** / **Open** i wskazać ten folder.
-3. Commit + Push.
-
-Albo wrzucić pliki przez stronę GitHub (Upload files).
+## Sterowanie
+- przeciągnij = pan
+- scroll = zoom
+- klik na ciało = follow (albo wybierz z listy)
+- tempo: 1 dzień / 1s, 1 miesiąc / 1s, 1 rok / 1s, 10 lat / 1s

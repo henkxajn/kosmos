@@ -3,10 +3,61 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pastel Orbits — Stage 1</title>
+    <title>Pastel Orbits — 2D Top-Down (No Build)</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b1020; overflow: hidden; }
+      #hud { position: fixed; left: 16px; top: 16px; right: 16px; color: #e9ecff;
+             font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; pointer-events: none; }
+      #panel { pointer-events: auto; display: inline-flex; gap: 12px; align-items: center; flex-wrap: wrap;
+               background: rgba(20, 26, 52, 0.65); border: 1px solid rgba(255,255,255,0.10);
+               backdrop-filter: blur(8px); padding: 10px 12px; border-radius: 12px;
+               box-shadow: 0 10px 30px rgba(0,0,0,0.25); }
+      #panel button, #panel select { background: rgba(255,255,255,0.10); color: #e9ecff;
+               border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; padding: 6px 10px; cursor: pointer; }
+      #panel button:hover { background: rgba(255,255,255,0.14); }
+      #hint { margin-top: 10px; opacity: 0.85; font-size: 13px; }
+      #info { margin-top: 10px; display: inline-block; background: rgba(20, 26, 52, 0.55);
+              border: 1px solid rgba(255,255,255,0.08); padding: 10px 12px; border-radius: 12px;
+              max-width: min(520px, calc(100vw - 32px)); }
+      #info pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <canvas id="c"></canvas>
+
+    <div id="hud">
+      <div id="panel">
+        <strong style="font-size: 16px;">Pastel Orbits — 2D Top-Down</strong>
+        <button id="pause">Pause/Resume</button>
+
+        <label style="display:flex; align-items:center; gap:8px;">
+          Tempo:
+          <select id="speed">
+            <option value="86400">1 dzień / 1 s</option>
+            <option value="2592000">1 miesiąc / 1 s</option>
+            <option value="31557600">1 rok / 1 s</option>
+            <option value="315576000">10 lat / 1 s</option>
+          </select>
+        </label>
+
+        <label style="display:flex; align-items:center; gap:8px;">
+          Follow:
+          <select id="follow">
+            <option value="">(free)</option>
+          </select>
+        </label>
+
+        <button id="resetCam">Reset Cam</button>
+      </div>
+
+      <div id="hint">
+        Widok z góry (2D). Sterowanie: przeciągnij = pan, scroll = zoom, klik na ciało = follow (lub wybierz z listy).
+      </div>
+
+      <div id="info"><pre id="status">Ładowanie…</pre></div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
   </body>
 </html>
