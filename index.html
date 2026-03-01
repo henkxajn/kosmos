@@ -1,106 +1,54 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pl">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pastel Orbits — 2D Top-Down (Inspector)</title>
-    <style>
-      html, body { margin: 0; height: 100%; background: #0b1020; overflow: hidden; }
-      #hud {
-        position: fixed; left: 16px; top: 16px; right: 16px;
-        color: #e9ecff; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-        pointer-events: none;
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 12px;
-        align-items: start;
-      }
-      #panel {
-        pointer-events: auto;
-        display: inline-flex; gap: 12px; align-items: center; flex-wrap: wrap;
-        background: rgba(20, 26, 52, 0.65);
-        border: 1px solid rgba(255,255,255,0.10);
-        backdrop-filter: blur(8px);
-        padding: 10px 12px;
-        border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-      }
-      #panel button, #panel select, #panel label {
-        background: rgba(255,255,255,0.10);
-        color: #e9ecff;
-        border: 1px solid rgba(255,255,255,0.14);
-        border-radius: 10px;
-        padding: 6px 10px;
-        cursor: pointer;
-      }
-      #panel label { display:flex; align-items:center; gap:8px; cursor: default; }
-      #panel input[type="checkbox"] { transform: scale(1.1); }
-      #panel button:hover { background: rgba(255,255,255,0.14); }
-      #hint { margin-top: 10px; opacity: 0.85; font-size: 13px; pointer-events:none; }
-      .box {
-        pointer-events: auto;
-        background: rgba(20, 26, 52, 0.55);
-        border: 1px solid rgba(255,255,255,0.08);
-        padding: 10px 12px;
-        border-radius: 12px;
-        width: min(520px, calc(100vw - 32px));
-      }
-      .box h3 { margin: 0 0 6px; font-size: 13px; opacity: 0.9; font-weight: 600; }
-      .box pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.35; }
-      #right { pointer-events: none; display: grid; gap: 10px; justify-items: end; }
-      canvas { display: block; width: 100vw; height: 100vh; }
-    </style>
-  </head>
-  <body>
-    <canvas id="c"></canvas>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KOSMOS — Symulator Układu Słonecznego</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #000;
+    }
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+    /* Wszystkie warstwy nakładają się na siebie i wypełniają kontener */
+    #game-container canvas,
+    #event-layer {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: block;
+    }
+    #three-canvas  { z-index: 1; }
+    #ui-canvas     { z-index: 2; pointer-events: none; }
+    #planet-canvas { z-index: 4; display: none; }
+    #event-layer   { z-index: 3; cursor: default; }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="three-canvas"></canvas>
+    <canvas id="ui-canvas"></canvas>
+    <canvas id="planet-canvas"></canvas>
+    <div    id="event-layer"></div>
+  </div>
 
-    <div id="hud">
-      <div>
-        <div id="panel">
-          <strong style="font-size: 16px; background: transparent; border: none; padding: 0;">Pastel Orbits — 2D Top-Down</strong>
+  <!-- Three.js lokalnie (unikamy blokowania przez Tracking Prevention) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./src/lib/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.171/examples/jsm/"
+    }
+  }
+  </script>
 
-          <button id="pause">Pause/Resume</button>
-
-          <label>
-            Tempo:
-            <select id="speed" style="background: transparent; border: none; padding: 0;">
-              <option value="86400">1 dzień / 1 s</option>
-              <option value="2592000">1 miesiąc / 1 s</option>
-              <option value="31557600">1 rok / 1 s</option>
-              <option value="315576000">10 lat / 1 s</option>
-            </select>
-          </label>
-
-          <label>
-            Wybór:
-            <select id="selectBody" style="background: transparent; border: none; padding: 0; min-width: 220px;">
-              <option value="">(kliknij na mapie)</option>
-            </select>
-          </label>
-
-          <label style="background: rgba(255,255,255,0.08);">
-            <input id="followChk" type="checkbox" checked />
-            follow
-          </label>
-
-          <button id="center">Center</button>
-          <button id="resetCam">Reset Cam</button>
-        </div>
-
-        <div id="hint">
-          Sterowanie: przeciągnij = pan (wyłącza follow), scroll = zoom, klik = wybór (preferuje planety), kółko = zaznaczenie.
-        </div>
-
-        <div style="margin-top:10px; display:grid; gap:10px;">
-          <div class="box"><h3>System</h3><pre id="status">Ładowanie…</pre></div>
-        </div>
-      </div>
-
-      <div id="right">
-        <div class="box"><h3>Inspector</h3><pre id="inspector">Kliknij planetę/księżyc/gwiazdę…</pre></div>
-      </div>
-    </div>
-
-    <script type="module" src="./src/main.js"></script>
-  </body>
+  <!-- Entry point gry (ES Module) -->
+  <script type="module" src="src/main.js"></script>
+</body>
 </html>
