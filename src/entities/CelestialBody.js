@@ -35,6 +35,7 @@ export class CelestialBody {
     this.isSelected = false;  // czy zaznaczone przez gracza
     this.lifeScore  = 0;      // wynik życia (0=brak; tylko Planet.js nadpisuje logicznie)
     this.explored   = false;  // czy zbadane ekspedycją naukową (wymagane do kolonizacji)
+    this.deposits   = [];     // złoża surowców [{ resourceId, richness, totalAmount, remaining }]
   }
 
   // Przesuń wiek o deltę (wywoływane przez TimeSystem)

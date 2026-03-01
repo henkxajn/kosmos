@@ -32,6 +32,27 @@ export const ELEMENTS = {
   Au:  { symbol: 'Au',  nazwaPL: 'Złoto',     kat: 'rzadki',        zycie: 0 },
   Pt:  { symbol: 'Pt',  nazwaPL: 'Platyna',   kat: 'rzadki',        zycie: 0 },
   He:  { symbol: 'He',  nazwaPL: 'Hel',       kat: 'gazSzlachetny', zycie: 0 },
+  // ── 5 nowych pierwiastków (gospodarka 4X) ──────────────────────────────
+  Cu:  { symbol: 'Cu',  nazwaPL: 'Miedź',     kat: 'metal',         zycie: 0 },
+  Li:  { symbol: 'Li',  nazwaPL: 'Lit',       kat: 'metal',         zycie: 0 },
+  W:   { symbol: 'W',   nazwaPL: 'Wolfram',   kat: 'metal',         zycie: 0 },
+  Xe:  { symbol: 'Xe',  nazwaPL: 'Ksenon',    kat: 'gazSzlachetny', zycie: 0 },
+  Nt:  { symbol: 'Nt',  nazwaPL: 'Neutronium',kat: 'egzotyczny',    zycie: 0 },
+};
+
+// ── Mapowanie: pierwiastek chemiczny → zasób wydobywalny (MINED_RESOURCES) ──
+// Nie każdy pierwiastek ma odpowiednik wydobywalny — tylko te 10 z ResourcesData
+export const ELEMENT_TO_RESOURCE = {
+  C:  'C',
+  Fe: 'Fe',
+  Si: 'Si',
+  Cu: 'Cu',
+  Ti: 'Ti',
+  Li: 'Li',
+  W:  'W',
+  Pt: 'Pt',
+  Xe: 'Xe',
+  Nt: 'Nt',
 };
 
 // ── 20 Minerałów ─────────────────────────────────────────────────
@@ -69,35 +90,40 @@ export const PLANET_COMPOSITIONS = {
 
   // Merkury-podobne: bogate w żelazo, prawie bez wody i organiki
   hot_rocky: {
-    Fe: 35, Si: 22, O: 18, Ni: 10, S: 6, Mg: 5, Ti: 2, Au: 0.8, Pt: 0.5, Ca: 0.7,
+    Fe: 33, Si: 20, O: 17, Ni: 9.5, S: 5.5, Mg: 4.5, Ti: 2, Au: 0.8, Pt: 0.5, Ca: 0.7,
+    Cu: 2.5, W: 1.2, Li: 0.3, Xe: 0, Nt: 0,
     C: 0, H: 0, H2O: 0, N: 0, P: 0, Al: 0, K: 0, Na: 0, U: 0, He: 0,
   },
 
   // Ziemia-podobne (strefa HZ): różnorodne, z wodą i pierwiastkami biogennymi
   rocky: {
-    Fe: 24, Si: 24, O: 27, Mg: 8, Ca: 3, Al: 3,
+    Fe: 22, Si: 22, O: 25, Mg: 7, Ca: 3, Al: 3,
+    Cu: 1.8, Li: 0.5, W: 0.3, Xe: 0.01, Nt: 0,
     H2O: 2.5, C: 1.5, N: 0.8, P: 0.3, H: 1.0, S: 0.9,
     K: 0.3, Na: 0.4, Ni: 0.5, U: 0.1, Ti: 0.2, Au: 0.1, Pt: 0.05, He: 0,
   },
 
   // Zimne, lodowate skaliste (za strefą HZ): bogaty w lód wodny i organikę
   rocky_cold: {
-    Fe: 14, Si: 14, O: 14, Mg: 6,
+    Fe: 13, Si: 13, O: 13, Mg: 5.5,
+    Cu: 0.8, Li: 1.2, W: 0.2, Xe: 0.05, Nt: 0,
     H2O: 28, C: 8, N: 7, H: 5,
     Ca: 1.5, S: 1.2, P: 0.5, Al: 0.3, K: 0.1, Na: 0.1, Ni: 0.1, U: 0.05, Ti: 0.05, Au: 0, Pt: 0, He: 0,
   },
 
   // Gazowe olbrzymy: głównie wodór i hel
   gas: {
-    H: 62, He: 28, C: 4, N: 3, O: 2, S: 0.6,
+    H: 61, He: 27, C: 4, N: 3, O: 2, S: 0.6,
     Fe: 0.15, Si: 0.15, Mg: 0.05, Ni: 0.05,
+    Cu: 0.05, Li: 0.5, W: 0, Xe: 0.8, Nt: 0,
     H2O: 0, P: 0, Ca: 0, Al: 0, K: 0, Na: 0, U: 0, Ti: 0, Au: 0, Pt: 0,
   },
 
   // Lodowe: woda, azot, węgiel dominują
   ice: {
-    H2O: 50, N: 17, C: 12, H: 9,
+    H2O: 49, N: 16.5, C: 12, H: 9,
     Si: 4, Fe: 3.5, Mg: 2, S: 1.2, P: 0.5, O: 0.5,
+    Cu: 0.3, Li: 0.6, W: 0.1, Xe: 0.3, Nt: 0,
     Ca: 0.1, Al: 0.1, Ni: 0.05, U: 0, Ti: 0.05, K: 0, Na: 0, He: 0, Au: 0, Pt: 0,
   },
 };
@@ -107,6 +133,7 @@ export const PLANET_COMPOSITIONS = {
 export const COMET_COMPOSITION = {
   H2O: 40, C: 22, N: 14, O: 10, Si: 4, Fe: 3, S: 3, P: 2.5, H: 1.5,
   Mg: 0, Ca: 0, Al: 0, K: 0, Na: 0, Ni: 0, Ti: 0, U: 0, Au: 0, Pt: 0, He: 0,
+  Cu: 0, Li: 0, W: 0, Xe: 0, Nt: 0,
 };
 
 // ── Pomocnik: normalizuj skład do 100% ───────────────────────────

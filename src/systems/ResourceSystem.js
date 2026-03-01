@@ -1,26 +1,31 @@
-// ResourceSystem — zarządzanie surowcami cywilizacji
+// ResourceSystem — zarządzanie zasobami cywilizacji (nowy model inventory)
 //
-// 4 surowce podstawowe:
-//   minerals  — rudy metali, skały (wydobycie z pól hex)
-//   energy    — elektryczność, ciepło (elektrownie, reaktory)
-//   organics  — żywność, biomasa (farmy, ekosystem)
-//   water     — woda pitna i techniczna (źródła powierzchniowe, lód)
+// 4 kategorie zasobów:
+//   MINED (10):     inventory (stockpile), wydobywane z kopalni
+//   HARVESTED (2):  inventory, z farm/studni (food, water)
+//   COMMODITIES:    inventory, produkowane w fabrykach
+//   UTILITY (2):    energy (flow/bilans), research (accumulator)
 //
-// Stan każdego surowca: { amount, capacity, perYear }
-//   amount   — bieżąca ilość (jednostki arbitralne)
-//   capacity — maksymalny magazyn
-//   perYear  — bilans netto za rok gry (suma wszystkich producentów i konsumentów)
+// Inventory: Map<resourceId, amount> — nieograniczona pojemność
+// Energy: bilans (produkcja − zużycie), brak stockpile, deficyt = brownout
+// Research: akumuluje się, wydawane na tech
 //
 // Komunikacja:
-//   Nasłuchuje: 'time:tick'                     → aktualizacja stanu co tik
+//   Nasłuchuje: 'time:tick'                     → aktualizacja co tik
 //               'resource:registerProducer'      → rejestracja budynku/instalacji
 //               'resource:removeProducer'        → usunięcie budynku/instalacji
-//   Emituje:    'resource:changed'   { resources } → UI odświeża paski
-//               'resource:shortage'  { resource, deficit } → alert niedoboru
+//   Emituje:    'resource:changed'   { resources, inventory } → UI
+//               'resource:shortage'  { resource, deficit } → alert
 
 import EventBus from '../core/EventBus.js';
+import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES, ALL_RESOURCES }
+  from '../data/ResourcesData.js';
+import { COMMODITIES } from '../data/CommoditiesData.js';
 
-// ── Definicje surowców (metadane dla UI) ─────────────────────────────────────
+// ── Jak często emitujemy resource:changed (co ile lat gry) ─────────────────
+const EMIT_THROTTLE_YEARS = 1 / 365.25; // co dzień gry
+
+// ── Stare klucze zasobów (do kompatybilności z istniejącym kodem) ──────────
 export const RESOURCE_DEFS = {
   minerals: { namePL: 'Minerały', icon: '⛏', color: 0x8B7355 },
   energy:   { namePL: 'Energia',  icon: '⚡', color: 0xFFD700 },
@@ -29,49 +34,64 @@ export const RESOURCE_DEFS = {
   research: { namePL: 'Nauka',    icon: '🔬', color: 0xAA44FF },
 };
 
-// ── Startowe wartości surowców ────────────────────────────────────────────────
-// Przeznaczone na scenariusz "Świt" — bazowe zasoby młodej cywilizacji
-// Scenariusze mogą nadpisywać przez restore() lub setInitial()
-const DEFAULT_INITIAL = {
-  minerals: { amount: 200, capacity:  500 },
-  energy:   { amount: 100, capacity: 1000 },
-  organics: { amount: 150, capacity:  500 },
-  water:    { amount: 120, capacity:  500 },
-  research: { amount:   0, capacity: 1000 },
-};
-
-// ── Jak często emitujemy resource:changed (co ile lat gry) ───────────────────
-// Przy 1d/s i perYear=0 chcemy unikać spamu — emituj tylko gdy stan się zmienia
-const EMIT_THROTTLE_YEARS = 1 / 365.25; // co dzień gry (przy najwolniejszym tempie)
-
 export class ResourceSystem {
   constructor(initialOverride = {}) {
-    // Stan surowców — głęboka kopia, ewentualne nadpisanie per scenariusz
-    this.resources = {};
-    for (const [key, def] of Object.entries(DEFAULT_INITIAL)) {
-      this.resources[key] = {
-        amount:  initialOverride[key]?.amount   ?? def.amount,
-        capacity: initialOverride[key]?.capacity ?? def.capacity,
-        perYear: 0,  // obliczane dynamicznie z rejestrów
-      };
+    // ── Inventory: Map<resourceId, amount> ───────────────────────────────
+    // Przechowuje MINED + HARVESTED + COMMODITIES
+    this.inventory = new Map();
+
+    // Inicjalizuj mined resources
+    for (const id of Object.keys(MINED_RESOURCES)) {
+      this.inventory.set(id, initialOverride[id] ?? 0);
+    }
+    // Inicjalizuj harvested
+    for (const id of Object.keys(HARVESTED_RESOURCES)) {
+      this.inventory.set(id, initialOverride[id] ?? 0);
+    }
+    // Inicjalizuj commodities
+    for (const id of Object.keys(COMMODITIES)) {
+      this.inventory.set(id, initialOverride[id] ?? 0);
     }
 
-    // Rejestr producentów/konsumentów
-    // Klucz: dowolny unikalny string (np. 'building_42', 'planet_base')
-    // Wartość: { minerals: N, energy: N, organics: N, water: N }
-    //   dodatnie = produkcja rocznie, ujemne = konsumpcja rocznie
+    // ── Energy: flow (bilans) ────────────────────────────────────────────
+    // Nie w inventory — obliczany z producentów
+    this.energy = {
+      production: 0,   // suma produkcji ⚡/rok
+      consumption: 0,  // suma konsumpcji ⚡/rok (wartość dodatnia)
+      balance: 0,      // production - consumption
+      brownout: false,  // true gdy balance < 0
+    };
+
+    // ── Research: accumulator ────────────────────────────────────────────
+    this.research = {
+      amount: initialOverride.research ?? 0,
+      perYear: 0,  // netto produkcja/rok
+    };
+
+    // ── Rejestr producentów ──────────────────────────────────────────────
+    // Klucz: string id, Wartość: { rates } — rates to Map z kluczami zasobów
+    // Dla inventory resources: dodatnie = produkcja/rok, ujemne = konsumpcja/rok
+    // Dla energy: klucz 'energy', dodatnie = produkcja, ujemne = konsumpcja
+    // Dla research: klucz 'research'
     this._producers = new Map();
+
+    // ── Śledzenie zmian inventory per rok (do UI delta) ──────────────────
+    this._inventoryPerYear = new Map();
 
     // Bufor czasu — throttle emitowania
     this._accumYears = 0;
 
-    // Flaga: czy któryś surowiec jest w niedoborze (do unikania spamu alertów)
-    this._shortageFlags = Object.fromEntries(Object.keys(this.resources).map(k => [k, false]));
+    // Flagi niedoboru
+    this._shortageFlags = {};
 
-    // ── Nasłuch zdarzeń ────────────────────────────────────────────────────
+    // ── Kompatybilność wsteczna: stary obiekt resources ──────────────────
+    // Wielu konsumentów (UI, BuildingSystem, CivSystem) czyta this.resources
+    // Tworzymy proxy obiekt który mapuje stare klucze na nowy system
+    this.resources = this._buildLegacyProxy();
+
+    // ── Nasłuch zdarzeń ──────────────────────────────────────────────────
     EventBus.on('time:tick', ({ deltaYears }) => this._update(deltaYears));
 
-    // Rejestracja producenta — tylko aktywna kolonia przetwarza
     EventBus.on('resource:registerProducer', ({ id, rates }) => {
       if (window.KOSMOS?.resourceSystem !== this) return;
       this.registerProducer(id, rates);
@@ -82,71 +102,85 @@ export class ResourceSystem {
       this.removeProducer(id);
     });
 
-    // Natychmiastowy snapshot — tylko aktywna kolonia odpowiada
     EventBus.on('resource:requestSnapshot', () => {
       if (window.KOSMOS?.resourceSystem !== this) return;
-      EventBus.emit('resource:changed', { resources: this.snapshot() });
+      EventBus.emit('resource:changed', { resources: this.snapshot(), inventory: this.inventorySnapshot() });
     });
   }
 
-  // ── API publiczne ──────────────────────────────────────────────────────────
+  // ── API publiczne ────────────────────────────────────────────────────────
 
-  // Zarejestruj źródło produkcji/konsumpcji
-  // id:    unikalny identyfikator (np. ID budynku)
-  // rates: { minerals: 10, energy: -5 } — wartości za rok gry
   registerProducer(id, rates) {
     this._producers.set(id, { ...rates });
     this._recalcPerYear();
   }
 
-  // Usuń źródło (zniszczony / wyłączony budynek)
   removeProducer(id) {
     if (this._producers.delete(id)) {
       this._recalcPerYear();
     }
   }
 
-  // Jednorazowy wydatek (koszt budynku, misji itp.)
-  // costs: { minerals: 50, energy: 20 }
-  // Zwraca true jeśli udało się zapłacić, false jeśli brak surowców
+  // Jednorazowy wydatek — obsługuje zarówno inventory jak i stare klucze
+  // costs: { Fe: 50, steel_plates: 2, energy: 20 } lub { minerals: 50 }
   spend(costs) {
-    // Weryfikacja przed pobraniem — niepodzielna operacja
+    // Weryfikacja
     for (const [key, amount] of Object.entries(costs)) {
-      if ((this.resources[key]?.amount ?? 0) < amount) return false;
+      if (amount <= 0) continue;
+      if (key === 'energy' || key === 'research') continue; // utility — nie z inventory
+      const mapped = this._mapLegacyKey(key);
+      if ((this.inventory.get(mapped) ?? 0) < amount) return false;
     }
+    // Pobranie
     for (const [key, amount] of Object.entries(costs)) {
-      this.resources[key].amount -= amount;
+      if (amount <= 0) continue;
+      if (key === 'energy') continue; // energia to flow, nie pobieramy jednorazowo
+      if (key === 'research') {
+        this.research.amount = Math.max(0, this.research.amount - amount);
+        continue;
+      }
+      const mapped = this._mapLegacyKey(key);
+      this.inventory.set(mapped, (this.inventory.get(mapped) ?? 0) - amount);
     }
-    EventBus.emit('resource:changed', { resources: this.snapshot() });
+    this._syncLegacyProxy();
+    this._emitChanged();
     return true;
   }
 
-  // Jednorazowy przychód (nagroda, dostawa z ekspedycji, zdarzenie)
-  // gains: { minerals: 100, water: 50 }
+  // Jednorazowy przychód
   receive(gains) {
     for (const [key, amount] of Object.entries(gains)) {
-      if (this.resources[key] !== undefined) {
-        this.resources[key].amount = Math.min(
-          this.resources[key].capacity,
-          this.resources[key].amount + amount
-        );
+      if (amount <= 0) continue;
+      if (key === 'energy') continue; // flow
+      if (key === 'research') {
+        this.research.amount += amount;
+        continue;
       }
+      const mapped = this._mapLegacyKey(key);
+      this.inventory.set(mapped, (this.inventory.get(mapped) ?? 0) + amount);
     }
-    EventBus.emit('resource:changed', { resources: this.snapshot() });
+    this._syncLegacyProxy();
+    this._emitChanged();
   }
 
-  // Ustaw pojemność magazynu (budynek Magazyn — etap 7.2)
-  setCapacity(key, newCapacity) {
-    if (this.resources[key]) {
-      this.resources[key].capacity = newCapacity;
-      // Przytnij nadmiar jeśli amount > nowy limit
-      this.resources[key].amount = Math.min(this.resources[key].amount, newCapacity);
-      EventBus.emit('resource:changed', { resources: this.snapshot() });
+  // Czy stać na dany koszt?
+  canAfford(costs) {
+    for (const [key, amount] of Object.entries(costs)) {
+      if (amount <= 0) continue;
+      if (key === 'energy') continue; // flow — nie płacisz z stockpile
+      if (key === 'research') {
+        if (this.research.amount < amount) return false;
+        continue;
+      }
+      const mapped = this._mapLegacyKey(key);
+      if ((this.inventory.get(mapped) ?? 0) < amount) return false;
     }
+    return true;
   }
 
-  // Snapshot stanu — płytka kopia do odczytu przez UI (bez mutowania oryginału)
+  // Snapshot stanu (kompatybilność ze starym kodem — zwraca obiekt z minerals/energy/etc.)
   snapshot() {
+    this._syncLegacyProxy();
     const snap = {};
     for (const [key, res] of Object.entries(this.resources)) {
       snap[key] = { ...res };
@@ -154,91 +188,214 @@ export class ResourceSystem {
     return snap;
   }
 
-  // Czy stać na dany koszt? (sprawdzenie bez pobierania)
-  canAfford(costs) {
-    for (const [key, amount] of Object.entries(costs)) {
-      if ((this.resources[key]?.amount ?? 0) < amount) return false;
+  // Snapshot pełnego inventory
+  inventorySnapshot() {
+    const snap = {};
+    for (const [id, amount] of this.inventory) {
+      snap[id] = amount;
     }
-    return true;
+    snap._energy = { ...this.energy };
+    snap._research = { ...this.research };
+    snap._perYear = {};
+    for (const [id, val] of this._inventoryPerYear) {
+      snap._perYear[id] = val;
+    }
+    return snap;
   }
 
-  // ── Serializacja (SaveSystem — etap 6.8+) ─────────────────────────────────
+  // Pobierz ilość danego zasobu z inventory
+  getAmount(resourceId) {
+    const mapped = this._mapLegacyKey(resourceId);
+    if (mapped === 'energy') return this.energy.balance;
+    if (mapped === 'research') return this.research.amount;
+    return this.inventory.get(mapped) ?? 0;
+  }
+
+  // Pobierz zmianę/rok danego zasobu
+  getPerYear(resourceId) {
+    if (resourceId === 'energy') return this.energy.balance;
+    if (resourceId === 'research') return this.research.perYear;
+    return this._inventoryPerYear.get(resourceId) ?? 0;
+  }
+
+  // Pojemność magazynu — nie używana w nowym systemie (nieograniczone)
+  // Zachowana dla kompatybilności ze starym kodem
+  setCapacity(key, newCapacity) {
+    if (this.resources[key]) {
+      this.resources[key].capacity = newCapacity;
+    }
+  }
+
+  // ── Serializacja ─────────────────────────────────────────────────────────
 
   serialize() {
-    // Zapisujemy tylko amount i capacity; perYear jest obliczane z budynków
-    const data = {};
-    for (const [key, res] of Object.entries(this.resources)) {
-      data[key] = { amount: res.amount, capacity: res.capacity };
+    const inv = {};
+    for (const [id, amount] of this.inventory) {
+      if (amount !== 0) inv[id] = amount;
     }
-    return data;
+    return {
+      inventory: inv,
+      research: this.research.amount,
+    };
   }
 
   restore(data) {
-    for (const [key, saved] of Object.entries(data)) {
-      if (this.resources[key]) {
-        this.resources[key].amount   = saved.amount;
-        this.resources[key].capacity = saved.capacity;
-        // perYear zostanie przeliczone gdy budynki zarejestrują swoich producentów
+    if (data.inventory) {
+      // Nowy format (v6)
+      for (const [id, amount] of Object.entries(data.inventory)) {
+        this.inventory.set(id, amount);
+      }
+      this.research.amount = data.research ?? 0;
+    } else {
+      // Stary format (v5) — migracja minerals/organics/water/energy/research
+      for (const [key, saved] of Object.entries(data)) {
+        if (key === 'minerals') {
+          this.inventory.set('Fe', (saved.amount ?? 0));
+        } else if (key === 'organics') {
+          this.inventory.set('food', (saved.amount ?? 0));
+        } else if (key === 'water') {
+          this.inventory.set('water', (saved.amount ?? 0));
+        } else if (key === 'research') {
+          this.research.amount = saved.amount ?? 0;
+        }
+        // energy — flow, nie przywracamy stockpile
       }
     }
+    this._syncLegacyProxy();
   }
 
-  // ── Prywatne ──────────────────────────────────────────────────────────────
+  // ── Prywatne ─────────────────────────────────────────────────────────────
 
-  // Przelicz sumaryczne perYear ze wszystkich zarejestrowanych źródeł
+  // Mapuj stare klucze zasobów na nowe
+  _mapLegacyKey(key) {
+    if (key === 'minerals') return 'Fe';
+    if (key === 'organics') return 'food';
+    // water, energy, research — bez zmian
+    return key;
+  }
+
+  // Przelicz sumaryczne perYear ze wszystkich producentów
   _recalcPerYear() {
-    // Zeruj bilans
-    for (const key of Object.keys(this.resources)) {
-      this.resources[key].perYear = 0;
-    }
-    // Sumuj
+    // Reset
+    this._inventoryPerYear.clear();
+    let energyProd = 0, energyCons = 0;
+    let researchPerYear = 0;
+
     for (const rates of this._producers.values()) {
       for (const [key, value] of Object.entries(rates)) {
-        if (this.resources[key] !== undefined) {
-          this.resources[key].perYear += value;
+        if (key === 'energy') {
+          if (value > 0) energyProd += value;
+          else energyCons += Math.abs(value);
+        } else if (key === 'research') {
+          researchPerYear += value;
+        } else {
+          const mapped = this._mapLegacyKey(key);
+          this._inventoryPerYear.set(mapped,
+            (this._inventoryPerYear.get(mapped) ?? 0) + value);
         }
       }
     }
-    EventBus.emit('resource:changed', { resources: this.snapshot() });
+
+    this.energy.production = energyProd;
+    this.energy.consumption = energyCons;
+    this.energy.balance = energyProd - energyCons;
+    this.energy.brownout = this.energy.balance < 0;
+
+    this.research.perYear = researchPerYear;
+
+    this._syncLegacyProxy();
+    this._emitChanged();
   }
 
-  // Aktualizacja stanów surowców co tik czasu gry
-  // Zasoby aktualizują się dla WSZYSTKICH kolonii (multi-colony tick),
-  // ale eventy resource:changed/shortage emitowane tylko dla aktywnej kolonii (UI).
+  // Aktualizacja co tik
   _update(deltaYears) {
     this._accumYears += deltaYears;
     const isActive = (window.KOSMOS?.resourceSystem === this);
 
-    // Aktualizuj zasoby proporcjonalnie do deltaYears
     let anyChange = false;
-    for (const [key, res] of Object.entries(this.resources)) {
-      if (res.perYear === 0) continue;
 
-      const delta   = res.perYear * deltaYears;
-      const before  = res.amount;
-      res.amount    = Math.min(res.capacity, Math.max(0, res.amount + delta));
+    // Aktualizuj inventory resources (mined, harvested) wg perYear
+    for (const [id, perYear] of this._inventoryPerYear) {
+      if (perYear === 0) continue;
+      const delta = perYear * deltaYears;
+      const before = this.inventory.get(id) ?? 0;
+      const after = Math.max(0, before + delta);
+      this.inventory.set(id, after);
+      if (after !== before) anyChange = true;
 
-      if (res.amount !== before) anyChange = true;
-
-      // Wykrywanie niedoboru — emituj tylko dla aktywnej kolonii
+      // Wykrywanie niedoboru
       if (isActive) {
-        const isShortage = (res.amount <= 0 && res.perYear < 0);
-        if (isShortage && !this._shortageFlags[key]) {
-          this._shortageFlags[key] = true;
-          EventBus.emit('resource:shortage', {
-            resource: key,
-            deficit:  Math.abs(res.perYear),  // jednostek/rok
-          });
-        } else if (!isShortage && this._shortageFlags[key]) {
-          this._shortageFlags[key] = false;   // niedobór ustąpił
+        const isShortage = (after <= 0 && perYear < 0);
+        if (isShortage && !this._shortageFlags[id]) {
+          this._shortageFlags[id] = true;
+          EventBus.emit('resource:shortage', { resource: id, deficit: Math.abs(perYear) });
+        } else if (!isShortage && this._shortageFlags[id]) {
+          this._shortageFlags[id] = false;
         }
       }
     }
 
-    // Emituj resource:changed tylko dla aktywnej kolonii (UI update)
+    // Aktualizuj research (accumulator)
+    if (this.research.perYear !== 0) {
+      const before = this.research.amount;
+      this.research.amount = Math.max(0, this.research.amount + this.research.perYear * deltaYears);
+      if (this.research.amount !== before) anyChange = true;
+    }
+
+    // Brownout check
+    if (this.energy.balance < 0 && !this.energy.brownout) {
+      this.energy.brownout = true;
+      if (isActive) EventBus.emit('resource:shortage', { resource: 'energy', deficit: Math.abs(this.energy.balance) });
+    } else if (this.energy.balance >= 0 && this.energy.brownout) {
+      this.energy.brownout = false;
+    }
+
+    // Emituj zmianę
     if (isActive && (anyChange || this._accumYears >= EMIT_THROTTLE_YEARS)) {
       this._accumYears = 0;
-      EventBus.emit('resource:changed', { resources: this.snapshot() });
+      this._syncLegacyProxy();
+      EventBus.emit('resource:changed', { resources: this.snapshot(), inventory: this.inventorySnapshot() });
+    }
+  }
+
+  // Buduj legacy proxy obiekt (kompatybilność wsteczna)
+  _buildLegacyProxy() {
+    return {
+      minerals: { amount: 0, capacity: 99999, perYear: 0 },
+      energy:   { amount: 0, capacity: 99999, perYear: 0 },
+      organics: { amount: 0, capacity: 99999, perYear: 0 },
+      water:    { amount: 0, capacity: 99999, perYear: 0 },
+      research: { amount: 0, capacity: 99999, perYear: 0 },
+    };
+  }
+
+  // Synchronizuj legacy proxy z aktualnym stanem
+  _syncLegacyProxy() {
+    // minerals → Fe
+    this.resources.minerals.amount  = this.inventory.get('Fe') ?? 0;
+    this.resources.minerals.perYear = this._inventoryPerYear.get('Fe') ?? 0;
+
+    // energy → flow
+    this.resources.energy.amount  = this.energy.balance;
+    this.resources.energy.perYear = this.energy.balance;
+
+    // organics → food
+    this.resources.organics.amount  = this.inventory.get('food') ?? 0;
+    this.resources.organics.perYear = this._inventoryPerYear.get('food') ?? 0;
+
+    // water
+    this.resources.water.amount  = this.inventory.get('water') ?? 0;
+    this.resources.water.perYear = this._inventoryPerYear.get('water') ?? 0;
+
+    // research
+    this.resources.research.amount  = this.research.amount;
+    this.resources.research.perYear = this.research.perYear;
+  }
+
+  _emitChanged() {
+    const isActive = (window.KOSMOS?.resourceSystem === this);
+    if (isActive) {
+      EventBus.emit('resource:changed', { resources: this.snapshot(), inventory: this.inventorySnapshot() });
     }
   }
 }

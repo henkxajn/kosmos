@@ -1,16 +1,25 @@
 // TransportModal — modal DOM do transferu zasobów między koloniami
 //
 // Gracz wybiera kolonię docelową i ilości zasobów do wysłania.
+// Nowy model: pełne inventory (mined + harvested + commodities) + waga + cargo capacity.
 // Styl: sci-fi, ciemny panel, z-index 100.
 
 import EventBus from '../core/EventBus.js';
+import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
+import { COMMODITIES } from '../data/CommoditiesData.js';
+import { SHIPS } from '../data/ShipsData.js';
 
-const RESOURCE_ICONS = {
-  minerals: '⛏',
-  energy:   '⚡',
-  organics: '🌿',
-  water:    '💧',
-};
+// Ikony zasobów (wszystkie kategorie)
+const RES_ICONS = {};
+for (const [id, def] of Object.entries(MINED_RESOURCES))     RES_ICONS[id] = def.icon;
+for (const [id, def] of Object.entries(HARVESTED_RESOURCES))  RES_ICONS[id] = def.icon;
+for (const [id, def] of Object.entries(COMMODITIES))          RES_ICONS[id] = def.icon ?? '📦';
+
+// Wagi zasobów
+const WEIGHTS = {};
+for (const [id, def] of Object.entries(MINED_RESOURCES))     WEIGHTS[id] = def.weight ?? 1;
+for (const [id, def] of Object.entries(HARVESTED_RESOURCES))  WEIGHTS[id] = def.weight ?? 1;
+for (const [id, def] of Object.entries(COMMODITIES))          WEIGHTS[id] = def.weight ?? 1;
 
 /**
  * Pokaż modal transferu zasobów.
@@ -25,6 +34,15 @@ export function showTransportModal(sourceColony, targetColonies) {
       return;
     }
 
+    // Cargo capacity — cargo_ship lub colony_ship
+    const fleet = sourceColony.fleet ?? [];
+    let cargoCapacity = 0;
+    for (const shipId of fleet) {
+      const ship = SHIPS[shipId];
+      if (ship?.cargoCapacity > cargoCapacity) cargoCapacity = ship.cargoCapacity;
+    }
+    if (cargoCapacity === 0) cargoCapacity = 200; // domyślna pojemność
+
     // Overlay
     const overlay = document.createElement('div');
     overlay.style.cssText = `
@@ -37,7 +55,8 @@ export function showTransportModal(sourceColony, targetColonies) {
     const panel = document.createElement('div');
     panel.style.cssText = `
       background: #0a1628; border: 1px solid #1a4060;
-      border-radius: 6px; padding: 20px; width: 380px;
+      border-radius: 6px; padding: 20px; width: 440px; max-height: 80vh;
+      overflow-y: auto;
       font-family: monospace; color: #c8e8ff;
       box-shadow: 0 0 30px rgba(0,0,0,0.8);
     `;
@@ -73,45 +92,94 @@ export function showTransportModal(sourceColony, targetColonies) {
     }
     panel.appendChild(targetSelect);
 
+    // Cargo info
+    const cargoInfo = document.createElement('div');
+    cargoInfo.style.cssText = 'font-size: 10px; color: #88ffcc; margin-bottom: 8px; text-align: center;';
+    cargoInfo.textContent = `Ładowność: 0 / ${cargoCapacity} ton`;
+    panel.appendChild(cargoInfo);
+
     // Separator
     const sep = document.createElement('hr');
     sep.style.cssText = 'border: none; border-top: 1px solid #1a3050; margin: 8px 0;';
     panel.appendChild(sep);
 
-    // Slidery zasobów
-    const inputs = {};
+    // Pobierz inventory źródłowe
     const resSys = sourceColony.resourceSystem;
-    const resources = resSys?.resources ?? {};
+    const inventory = resSys?.inventory ?? new Map();
 
-    for (const [key, icon] of Object.entries(RESOURCE_ICONS)) {
-      const available = Math.floor(resources[key]?.amount ?? 0);
+    // Buduj listę zasobów z ilością > 0, pogrupowane
+    const inputs = {};
+    let totalWeight = 0;
 
-      const row = document.createElement('div');
-      row.style.cssText = 'display: flex; align-items: center; margin-bottom: 6px;';
+    const addSection = (label, items) => {
+      const filteredItems = items.filter(([id]) => (inventory.get(id) ?? 0) > 0);
+      if (filteredItems.length === 0) return;
 
-      const label = document.createElement('span');
-      label.style.cssText = 'width: 24px; font-size: 12px;';
-      label.textContent = icon;
-      row.appendChild(label);
+      const header = document.createElement('div');
+      header.style.cssText = 'font-size: 9px; color: #4a6a8a; margin: 6px 0 2px 0; font-weight: bold;';
+      header.textContent = label;
+      panel.appendChild(header);
 
-      const input = document.createElement('input');
-      input.type = 'number';
-      input.min = 0;
-      input.max = available;
-      input.value = 0;
-      input.style.cssText = `
-        width: 70px; padding: 2px 4px; background: #0d1a2e; border: 1px solid #1a4060;
-        color: #c8e8ff; font-family: monospace; font-size: 11px; text-align: right;
-      `;
-      row.appendChild(input);
-      inputs[key] = input;
+      for (const [id, def] of filteredItems) {
+        const available = Math.floor(inventory.get(id) ?? 0);
+        const weight = WEIGHTS[id] ?? 1;
 
-      const avail = document.createElement('span');
-      avail.style.cssText = 'font-size: 9px; color: #6888aa; margin-left: 8px;';
-      avail.textContent = `/ ${available}`;
-      row.appendChild(avail);
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px;';
 
-      panel.appendChild(row);
+        const icon = document.createElement('span');
+        icon.style.cssText = 'width: 20px; font-size: 11px;';
+        icon.textContent = RES_ICONS[id] ?? '?';
+        row.appendChild(icon);
+
+        const name = document.createElement('span');
+        name.style.cssText = 'width: 90px; font-size: 10px; color: #8aaacc;';
+        name.textContent = def.namePL ?? id;
+        row.appendChild(name);
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = 0;
+        input.max = available;
+        input.value = 0;
+        input.style.cssText = `
+          width: 60px; padding: 2px 4px; background: #0d1a2e; border: 1px solid #1a4060;
+          color: #c8e8ff; font-family: monospace; font-size: 10px; text-align: right;
+        `;
+        input.addEventListener('input', updateWeight);
+        row.appendChild(input);
+        inputs[id] = { input, weight };
+
+        const avail = document.createElement('span');
+        avail.style.cssText = 'font-size: 9px; color: #6888aa; margin-left: 6px; width: 50px;';
+        avail.textContent = `/ ${available}`;
+        row.appendChild(avail);
+
+        const wSpan = document.createElement('span');
+        wSpan.style.cssText = 'font-size: 8px; color: #4a6a8a; margin-left: 4px; width: 40px;';
+        wSpan.textContent = `${weight}t/szt`;
+        row.appendChild(wSpan);
+
+        panel.appendChild(row);
+      }
+    };
+
+    // Sekcje zasobów
+    addSection('SUROWCE', Object.entries(MINED_RESOURCES));
+    addSection('ZBIERANE', Object.entries(HARVESTED_RESOURCES));
+    addSection('TOWARY', Object.entries(COMMODITIES));
+
+    function updateWeight() {
+      totalWeight = 0;
+      for (const [id, { input, weight }] of Object.entries(inputs)) {
+        const val = parseInt(input.value) || 0;
+        totalWeight += val * weight;
+      }
+      const overweight = totalWeight > cargoCapacity;
+      cargoInfo.textContent = `Ładowność: ${totalWeight.toFixed(1)} / ${cargoCapacity} ton`;
+      cargoInfo.style.color = overweight ? '#cc4422' : '#88ffcc';
+      btnSend.disabled = overweight;
+      btnSend.style.opacity = overweight ? '0.5' : '1';
     }
 
     // Info
@@ -143,9 +211,9 @@ export function showTransportModal(sourceColony, targetColonies) {
     btnSend.textContent = 'WYŚLIJ';
     btnSend.onclick = () => {
       const cargo = {};
-      for (const [key, input] of Object.entries(inputs)) {
+      for (const [id, { input }] of Object.entries(inputs)) {
         const val = parseInt(input.value) || 0;
-        if (val > 0) cargo[key] = val;
+        if (val > 0) cargo[id] = val;
       }
       if (Object.keys(cargo).length === 0) return; // nic nie wybrano
       close({ targetId: targetSelect.value, cargo });

@@ -152,8 +152,11 @@ export class HexTile {
     this.type = type;
 
     // ID budynku stojącego na tym polu (null = puste)
-    // Format: string, np. 'mine_1', 'solar_farm_3'
+    // Format: string, np. 'mine', 'solar_farm'
     this.buildingId = null;
+
+    // Poziom budynku (1–10, domyślnie 1)
+    this.buildingLevel = 1;
 
     // Czy pole zostało zbadane przez gracza (fog of war na innych ciałach)
     this.explored = true;    // na planecie domowej zawsze true
@@ -199,6 +202,7 @@ export class HexTile {
       r:                 this.r,
       type:              this.type,
       buildingId:        this.buildingId,
+      buildingLevel:     this.buildingLevel,
       explored:          this.explored,
       strategicResource: this.strategicResource,
       damaged:           this.damaged,
@@ -210,6 +214,7 @@ export class HexTile {
   static restore(data) {
     const tile = new HexTile(data.q, data.r, data.type);
     tile.buildingId        = data.buildingId        ?? null;
+    tile.buildingLevel     = data.buildingLevel     ?? 1;
     tile.explored          = data.explored          ?? true;
     tile.strategicResource = data.strategicResource ?? null;
     tile.damaged           = data.damaged           ?? false;

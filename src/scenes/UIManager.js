@@ -40,7 +40,16 @@ const C = {
   blue:     '#4488ff',
   purple:   '#cc88ff',
   mint:     '#44ffaa',
+  dim:      '#3a5a7a',
 };
+
+// ── Formatowanie liczb ──────────────────────────────────────────────
+function _fmtNum(n) {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
+  return Number.isInteger(n) ? String(Math.round(n)) : n.toFixed(1);
+}
 
 // Kolory zdarzeń EventLog
 const LOG_COLORS = {
@@ -122,8 +131,11 @@ export class UIManager {
 
     // ── Stan zasobów (4X) ─────────────────────────────────────
     this._resources = { minerals: 0, energy: 0, organics: 0, water: 0, research: 0 };
-    this._resCap    = { minerals: 500, energy: 500, organics: 500, water: 500, research: 1000 };
+    this._resCap    = { minerals: 99999, energy: 99999, organics: 99999, water: 99999, research: 99999 };
     this._resDelta  = { minerals: 0, energy: 0, organics: 0, water: 0, research: 0 };
+    this._inventory = {};      // pełne inventory z ResourceSystem
+    this._invPerYear = {};     // zmiana/rok per zasób
+    this._energyFlow = { production: 0, consumption: 0, balance: 0, brownout: false };
 
     // ── Stan ekspedycji ───────────────────────────────────────
     this._expeditions = [];     // lista aktywnych ekspedycji
@@ -198,13 +210,27 @@ export class UIManager {
       this._energyMax = max;
     });
 
-    // Zasoby 4X — ResourceSystem emituje { resources: { key: { amount, capacity, perYear } } }
-    const _applyResources = ({ resources }) => {
-      if (!resources) return;
-      for (const [key, res] of Object.entries(resources)) {
-        this._resources[key] = res.amount   ?? 0;
-        this._resDelta[key]  = res.perYear  ?? 0;
-        this._resCap[key]    = res.capacity ?? 500;
+    // Zasoby 4X — ResourceSystem emituje { resources, inventory }
+    const _applyResources = ({ resources, inventory }) => {
+      if (resources) {
+        for (const [key, res] of Object.entries(resources)) {
+          this._resources[key] = res.amount   ?? 0;
+          this._resDelta[key]  = res.perYear  ?? 0;
+          this._resCap[key]    = res.capacity ?? 99999;
+        }
+      }
+      if (inventory) {
+        // Pełne inventory (mined + harvested + commodities)
+        for (const [id, amt] of Object.entries(inventory)) {
+          if (id.startsWith('_')) continue; // metadata
+          this._inventory[id] = amt;
+        }
+        if (inventory._energy) this._energyFlow = { ...inventory._energy };
+        if (inventory._research) {
+          this._resources.research = inventory._research.amount ?? 0;
+          this._resDelta.research  = inventory._research.perYear ?? 0;
+        }
+        if (inventory._perYear) this._invPerYear = { ...inventory._perYear };
       }
     };
     EventBus.on('resource:changed',  _applyResources);
@@ -877,7 +903,7 @@ export class UIManager {
     });
   }
 
-  // ── ResourcePanel (4X) ────────────────────────────────────────
+  // ── ResourcePanel (4X) — 4 krytyczne wskaźniki ──────────────
   _drawResourcePanel() {
     const ctx  = this.ctx;
     const BAR_H = 44;
@@ -889,29 +915,77 @@ export class UIManager {
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(0, TOP + BAR_H); ctx.lineTo(W, TOP + BAR_H); ctx.stroke();
 
-    const icons   = { minerals: '⛏', energy: '⚡', organics: '🌿', water: '💧', research: '🔬' };
-    const RES     = ['minerals', 'energy', 'organics', 'water', 'research'];
-    const colW    = W / 5;
+    // 4 wskaźniki: Energia (bilans), Żywność (zapas), Woda (zapas), Nauka (/rok)
+    const indicators = [
+      {
+        icon: '⚡', label: 'ENERGIA',
+        value: this._energyFlow.balance ?? 0,
+        isFlow: true,
+        brownout: this._energyFlow.brownout,
+      },
+      {
+        icon: '🍖', label: 'ŻYWNOŚĆ',
+        value: this._inventory.food ?? this._resources.organics ?? 0,
+        delta: this._invPerYear.food ?? this._resDelta.organics ?? 0,
+      },
+      {
+        icon: '💧', label: 'WODA',
+        value: this._inventory.water ?? this._resources.water ?? 0,
+        delta: this._invPerYear.water ?? this._resDelta.water ?? 0,
+      },
+      {
+        icon: '🔬', label: 'NAUKA',
+        value: this._resources.research ?? 0,
+        delta: this._resDelta.research ?? 0,
+      },
+    ];
 
-    RES.forEach((r, i) => {
-      const cx   = i * colW + colW / 2;
-      const amt  = this._resources[r] ?? 0;
-      const cap  = this._resCap[r]    ?? 500;
-      const dlt  = this._resDelta[r]  ?? 0;
-      const frac = cap > 0 ? amt / cap : 0;
+    const colW = W / indicators.length;
+    indicators.forEach((ind, i) => {
+      const cx = i * colW + colW / 2;
 
+      // Separator
+      if (i > 0) {
+        ctx.strokeStyle = 'rgba(42,64,96,0.7)';
+        ctx.beginPath();
+        ctx.moveTo(Math.round(i * colW), TOP + 4);
+        ctx.lineTo(Math.round(i * colW), TOP + BAR_H - 4);
+        ctx.stroke();
+      }
+
+      // Etykieta
       ctx.font      = '9px monospace';
       ctx.fillStyle = C.label;
       ctx.textAlign = 'center';
-      ctx.fillText(icons[r] + ' ' + r.toUpperCase(), cx, TOP + 11);
+      ctx.fillText(`${ind.icon} ${ind.label}`, cx, TOP + 11);
 
-      ctx.font      = '11px monospace';
-      ctx.fillStyle = frac < 0.10 ? C.red : frac < 0.25 ? C.orange : C.bright;
-      ctx.fillText(`${Math.floor(amt)} / ${cap}`, cx, TOP + 24);
-
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = dlt >= 0 ? '#44cc66' : '#cc4422';
-      ctx.fillText(`${dlt >= 0 ? '+' : ''}${dlt.toFixed(1)}/r`, cx, TOP + 37);
+      // Wartość główna
+      ctx.font = '12px monospace';
+      if (ind.isFlow) {
+        // Energia: bilans (flow)
+        const bal = ind.value;
+        ctx.fillStyle = ind.brownout ? C.red : (bal < 0 ? C.orange : '#44cc66');
+        const sign = bal >= 0 ? '+' : '';
+        ctx.fillText(`${sign}${_fmtNum(bal)}/r${ind.brownout ? ' BROWNOUT' : ''}`, cx, TOP + 25);
+        // Produkcja vs konsumpcja
+        ctx.font = '9px monospace';
+        ctx.fillStyle = C.dim;
+        ctx.fillText(`+${_fmtNum(this._energyFlow.production ?? 0)} / -${_fmtNum(this._energyFlow.consumption ?? 0)}`, cx, TOP + 37);
+      } else {
+        // Zapas
+        ctx.fillStyle = ind.value < 10 ? C.red : ind.value < 50 ? C.orange : C.bright;
+        ctx.fillText(_fmtNum(ind.value), cx, TOP + 25);
+        // Delta
+        const dlt = ind.delta ?? 0;
+        ctx.font = '9px monospace';
+        ctx.fillStyle = dlt >= 0 ? '#44cc66' : '#cc4422';
+        if (Math.abs(dlt) > 0.01) {
+          ctx.fillText(`${dlt >= 0 ? '+' : ''}${dlt.toFixed(1)}/r`, cx, TOP + 37);
+        } else {
+          ctx.fillStyle = C.dim;
+          ctx.fillText('0.0/r', cx, TOP + 37);
+        }
+      }
     });
     ctx.textAlign = 'left';
   }
@@ -1096,59 +1170,90 @@ export class UIManager {
       y2 += 13;
     }
 
-    // ── Kolumna 3: Bilans zasobów ──
+    // ── Kolumna 3: Inventory + Bilans ──
     const x3 = bodyX + colW * 2 + PAD;
     let y3 = bodyY + 16;
 
     ctx.font      = '9px monospace';
     ctx.fillStyle = C.title;
-    ctx.fillText('BILANS ROCZNY', x3, y3);
+    ctx.fillText('INVENTORY', x3, y3);
     y3 += LH + 2;
 
-    // Oblicz produkcję/konsumpcję z podziałem na budynki i POP
-    const resSys    = window.KOSMOS?.resourceSystem;
-    const producers = resSys?._producers ?? new Map();
-    const RES = ['minerals', 'energy', 'organics', 'water', 'research'];
-    const icons = RESOURCE_ICONS;
+    // Wyświetl surowce z inventory (mined + harvested)
+    const inv = this._inventory;
+    const perYear = this._invPerYear;
+    const MINED_KEYS = ['Fe', 'C', 'Si', 'Cu', 'Ti', 'Li', 'W', 'Pt', 'Xe', 'Nt'];
+    const HARV_KEYS  = ['food', 'water'];
+    const RES_NAMES = {
+      Fe: 'Fe', C: 'C', Si: 'Si', Cu: 'Cu', Ti: 'Ti', Li: 'Li', W: 'W', Pt: 'Pt', Xe: 'Xe', Nt: 'Nt',
+      food: '🍖', water: '💧',
+    };
 
-    for (const r of RES) {
-      let buildTotal = 0, popCons = 0;
-      for (const [id, rates] of producers) {
-        const val = rates[r] ?? 0;
-        if (id === 'civilization_consumption') {
-          popCons += val;
-        } else {
-          buildTotal += val;
-        }
+    for (const r of [...MINED_KEYS, ...HARV_KEYS]) {
+      const amt = inv[r] ?? 0;
+      if (amt < 0.1 && !(perYear[r])) continue; // ukryj zerowe zasoby bez produkcji
+      const dlt = perYear[r] ?? 0;
+      const name = RES_NAMES[r] ?? r;
+
+      ctx.font = '8px monospace';
+      ctx.fillStyle = C.text;
+      ctx.fillText(`${name}`, x3, y3);
+
+      ctx.fillStyle = C.bright;
+      ctx.fillText(`${_fmtNum(amt)}`, x3 + 28, y3);
+
+      if (Math.abs(dlt) > 0.01) {
+        ctx.fillStyle = dlt >= 0 ? '#44cc66' : '#cc4422';
+        ctx.fillText(`${dlt >= 0 ? '+' : ''}${dlt.toFixed(1)}/r`, x3 + 75, y3);
       }
-      const total = buildTotal + popCons;
-      const icon = icons[r] ?? r;
-
-      ctx.font      = '9px monospace';
-
-      // "⛏ +25.0 bud  -1.0 POP  = +24.0/r"
-      let line = `${icon} `;
-      if (buildTotal !== 0) {
-        line += `${buildTotal >= 0 ? '+' : ''}${buildTotal.toFixed(1)} bud`;
-      }
-      ctx.fillStyle = buildTotal >= 0 ? '#44cc66' : '#cc4422';
-      ctx.fillText(line, x3, y3);
-
-      if (popCons < -0.01) {
-        const bw = ctx.measureText(line).width;
-        ctx.fillStyle = '#cc4422';
-        ctx.fillText(` ${popCons.toFixed(1)} POP`, x3 + bw, y3);
-      }
-
-      // Suma
-      const totalStr = `= ${total >= 0 ? '+' : ''}${total.toFixed(1)}/r`;
-      ctx.fillStyle = total >= 0 ? '#44cc66' : '#cc4422';
-      ctx.textAlign = 'right';
-      ctx.fillText(totalStr, x3 + colW - PAD * 2, y3);
-      ctx.textAlign = 'left';
-
-      y3 += LH;
+      y3 += 11;
     }
+
+    // Commodities
+    y3 += 4;
+    ctx.font = '9px monospace';
+    ctx.fillStyle = C.title;
+    ctx.fillText('TOWARY', x3, y3);
+    y3 += LH;
+
+    const COMM_KEYS = ['steel_plates', 'polymer_composites', 'power_cells', 'electronics',
+      'food_synthesizers', 'mining_drills', 'hull_armor', 'semiconductors', 'ion_thrusters', 'quantum_cores'];
+    const COMM_SHORT = {
+      steel_plates: 'Stal', polymer_composites: 'Polimery', power_cells: 'Ogniwa',
+      electronics: 'Elektr.', food_synthesizers: 'Synt.żyw.', mining_drills: 'Wiertła',
+      hull_armor: 'Pancerz', semiconductors: 'Półprzew.', ion_thrusters: 'Sil.jon.',
+      quantum_cores: 'Rdzenie Q',
+    };
+
+    for (const c of COMM_KEYS) {
+      const amt = inv[c] ?? 0;
+      if (amt < 1) continue;
+      ctx.font = '8px monospace';
+      ctx.fillStyle = C.text;
+      ctx.fillText(COMM_SHORT[c] ?? c, x3, y3);
+      ctx.fillStyle = C.bright;
+      ctx.fillText(`${Math.floor(amt)}`, x3 + 75, y3);
+      y3 += 11;
+    }
+
+    // Bilans energii
+    y3 += 4;
+    ctx.font = '9px monospace';
+    ctx.fillStyle = C.title;
+    ctx.fillText('⚡ ENERGIA', x3, y3);
+    y3 += LH;
+
+    const ef = this._energyFlow;
+    ctx.font = '8px monospace';
+    ctx.fillStyle = '#44cc66';
+    ctx.fillText(`Produkcja: +${_fmtNum(ef.production ?? 0)}/r`, x3, y3);
+    y3 += 11;
+    ctx.fillStyle = '#cc4422';
+    ctx.fillText(`Konsumpcja: -${_fmtNum(ef.consumption ?? 0)}/r`, x3, y3);
+    y3 += 11;
+    const bal = ef.balance ?? 0;
+    ctx.fillStyle = bal >= 0 ? '#44cc66' : '#ff4444';
+    ctx.fillText(`Bilans: ${bal >= 0 ? '+' : ''}${_fmtNum(bal)}/r${ef.brownout ? ' BROWNOUT!' : ''}`, x3, y3);
   }
 
   // ── Zakładka: Technologie ─────────────────────────────────
@@ -1946,9 +2051,13 @@ export class UIManager {
     lines.push({ type: 'separator' });
 
     // Koszt budowy
-    const costStr = formatCost(b.cost, b.popCost);
+    const costStr = formatCost(b.cost, b.popCost, b.commodityCost);
     if (costStr) {
       lines.push({ type: 'line', text: `Koszt: ${costStr}`, color: C.yellow });
+    }
+    // Koszt energii
+    if (b.energyCost && b.energyCost > 0) {
+      lines.push({ type: 'line', text: `⚡ Energia: -${b.energyCost}/r`, color: C.orange });
     }
 
     // Housing

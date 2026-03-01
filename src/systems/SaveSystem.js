@@ -46,7 +46,7 @@ export class SaveSystem {
     const planets = EntityManager.getByType('planet');
     const moons   = EntityManager.getByType('moon');
     const data = {
-      version:  5,              // v5: multi-kolonia (ColonyManager)
+      version:  6,              // v6: inventory+deposits+factory+levels
       savedAt:  Date.now(),
       gameTime: this.timeSystem.gameTime,
       star:     this._serializeStar(this.star),
@@ -147,6 +147,11 @@ export class SaveSystem {
       surface: { ...(p.surface || {}) },
       // Eksploracja (Etap 14)
       explored: p.explored || false,
+      // Złoża (Etap 26 — gospodarka)
+      deposits: p.deposits ? p.deposits.map(d => ({
+        resourceId: d.resourceId, richness: d.richness,
+        totalAmount: d.totalAmount, remaining: d.remaining,
+      })) : [],
     };
   }
 
@@ -166,6 +171,10 @@ export class SaveSystem {
       color:             m.visual.color,
       age:               m.age || 0,
       explored:          m.explored || false,
+      deposits: m.deposits ? m.deposits.map(d => ({
+        resourceId: d.resourceId, richness: d.richness,
+        totalAmount: d.totalAmount, remaining: d.remaining,
+      })) : [],
     };
   }
 

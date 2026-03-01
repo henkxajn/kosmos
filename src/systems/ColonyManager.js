@@ -30,6 +30,7 @@ import EntityManager from '../core/EntityManager.js';
 import { ResourceSystem } from './ResourceSystem.js';
 import { CivilizationSystem } from './CivilizationSystem.js';
 import { BuildingSystem } from './BuildingSystem.js';
+import { FactorySystem } from './FactorySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
 
 // Rozmiary siatek hex per typ/masa ciała
@@ -186,6 +187,10 @@ export class ColonyManager {
 
   // Zarejestruj homePlanet jako pierwszą kolonię (przy civMode=true)
   registerHomePlanet(planet, resourceSystem, civSystem, buildingSystem = null) {
+    // FactorySystem per-kolonia
+    const factSys = new FactorySystem(resourceSystem);
+    if (buildingSystem) buildingSystem.setFactorySystem(factSys);
+
     const colony = {
       planetId:        planet.id,
       planet:          planet,
@@ -195,6 +200,7 @@ export class ColonyManager {
       resourceSystem:  resourceSystem,
       civSystem:       civSystem,
       buildingSystem:  buildingSystem,  // per-kolonia BuildingSystem
+      factorySystem:   factSys,
       grid:            null,  // ustawiane przy otwarciu mapy
       allowImmigration: true,
       allowEmigration:  true,
@@ -203,6 +209,7 @@ export class ColonyManager {
     };
     this._colonies.set(planet.id, colony);
     this._activePlanetId = planet.id;
+    window.KOSMOS.factorySystem = factSys;
     return colony;
   }
 
@@ -214,14 +221,8 @@ export class ColonyManager {
       return null;
     }
 
-    // ResourceSystem per-kolonia
-    const resSys = new ResourceSystem({
-      minerals: { amount: startResources.minerals ?? 100, capacity: 500 },
-      energy:   { amount: startResources.energy   ?? 100, capacity: 500 },
-      organics: { amount: startResources.organics ?? 100, capacity: 500 },
-      water:    { amount: startResources.water    ?? 100, capacity: 500 },
-      research: { amount: startResources.research ?? 0,   capacity: 500 },
-    });
+    // ResourceSystem per-kolonia (nowy model inventory)
+    const resSys = new ResourceSystem(startResources);
 
     // CivilizationSystem per-kolonia
     const civSys = new CivilizationSystem({
@@ -231,6 +232,11 @@ export class ColonyManager {
 
     // BuildingSystem per-kolonia — powiązany z własnymi ResourceSystem i CivilizationSystem
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
+    bSys.setDeposits(entity.deposits ?? []);
+
+    // FactorySystem per-kolonia
+    const factSys = new FactorySystem(resSys);
+    bSys.setFactorySystem(factSys);
 
     const colony = {
       planetId,
@@ -241,6 +247,7 @@ export class ColonyManager {
       resourceSystem:  resSys,
       civSystem:       civSys,
       buildingSystem:  bSys,
+      factorySystem:   factSys,
       grid:            null,
       allowImmigration: true,
       allowEmigration:  true,
@@ -330,15 +337,16 @@ export class ColonyManager {
       return { ok: false, reason };
     }
 
-    // Sprawdź czy stać na koszt
-    if (!colony.resourceSystem.canAfford(ship.cost)) {
+    // Sprawdź czy stać na koszt (surowce + commodities)
+    const allCosts = { ...ship.cost, ...(ship.commodityCost || {}) };
+    if (!colony.resourceSystem.canAfford(allCosts)) {
       const reason = 'Brak surowców na budowę statku';
       EventBus.emit('fleet:buildFailed', { reason });
       return { ok: false, reason };
     }
 
     // Pobierz zasoby
-    colony.resourceSystem.spend(ship.cost);
+    colony.resourceSystem.spend(allCosts);
 
     // Ustaw kolejkę budowy
     colony.shipQueue = {
@@ -430,38 +438,36 @@ export class ColonyManager {
     }
   }
 
-  // Wykonaj automatyczne transfery na drogach handlowych
+  // Wykonaj automatyczne transfery na drogach handlowych (nowy model inventory)
   _executeTradeRoutes() {
+    // Zasoby podlegające handlowi (inventory items)
+    const TRADE_RESOURCES = ['Fe', 'C', 'Si', 'Cu', 'Ti', 'Li', 'W', 'Pt', 'food', 'water'];
+
     for (const route of this._tradeRoutes) {
       if (!route.active) continue;
       const a = this.getColony(route.colonyA);
       const b = this.getColony(route.colonyB);
       if (!a || !b) continue;
 
-      const RESOURCES = ['minerals', 'energy', 'organics', 'water'];
       const transferred = {};
 
-      for (const res of RESOURCES) {
-        const aRes = a.resourceSystem.resources[res];
-        const bRes = b.resourceSystem.resources[res];
-        if (!aRes || !bRes) continue;
+      for (const res of TRADE_RESOURCES) {
+        const aAmt = a.resourceSystem.inventory.get(res) ?? 0;
+        const bAmt = b.resourceSystem.inventory.get(res) ?? 0;
 
-        const aFrac = aRes.capacity > 0 ? aRes.amount / aRes.capacity : 0;
-        const bFrac = bRes.capacity > 0 ? bRes.amount / bRes.capacity : 0;
-
-        // Kierunek: nadwyżka → niedobór
-        if (aFrac > TRADE_SURPLUS_RATIO && bFrac < TRADE_DEFICIT_RATIO) {
-          const amt = Math.min(TRADE_BASE_AMOUNT, Math.floor(aRes.amount * 0.1));
+        // Kierunek: nadwyżka (>200) → niedobór (<50)
+        if (aAmt > 200 && bAmt < 50) {
+          const amt = Math.min(TRADE_BASE_AMOUNT, Math.floor(aAmt * 0.1));
           if (amt > 0) {
-            aRes.amount -= amt;
-            bRes.amount = Math.min(bRes.capacity, bRes.amount + amt);
+            a.resourceSystem.spend({ [res]: amt });
+            b.resourceSystem.receive({ [res]: amt });
             transferred[res] = (transferred[res] ?? 0) + amt;
           }
-        } else if (bFrac > TRADE_SURPLUS_RATIO && aFrac < TRADE_DEFICIT_RATIO) {
-          const amt = Math.min(TRADE_BASE_AMOUNT, Math.floor(bRes.amount * 0.1));
+        } else if (bAmt > 200 && aAmt < 50) {
+          const amt = Math.min(TRADE_BASE_AMOUNT, Math.floor(bAmt * 0.1));
           if (amt > 0) {
-            bRes.amount -= amt;
-            aRes.amount = Math.min(aRes.capacity, aRes.amount + amt);
+            b.resourceSystem.spend({ [res]: amt });
+            a.resourceSystem.receive({ [res]: amt });
             transferred[res] = (transferred[res] ?? 0) - amt; // ujemne = B→A
           }
         }
@@ -518,6 +524,7 @@ export class ColonyManager {
         resources:        col.resourceSystem.serialize(),
         civ:              col.civSystem.serialize(),
         buildings:        col.buildingSystem?.serialize() ?? [],
+        factorySystem:    col.factorySystem?.serialize() ?? null,
         allowImmigration: col.allowImmigration,
         allowEmigration:  col.allowEmigration,
         fleet:            col.fleet ?? [],
@@ -550,9 +557,15 @@ export class ColonyManager {
 
       // BuildingSystem per-kolonia — powiązany z własnymi systemami
       const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
+      bSys.setDeposits(entity.deposits ?? []);
       if (colData.buildings?.length > 0) {
         bSys.restoreFromSave(colData.buildings);
       }
+
+      // FactorySystem per-kolonia
+      const factSys = new FactorySystem(resSys);
+      bSys.setFactorySystem(factSys);
+      if (colData.factorySystem) factSys.restore(colData.factorySystem);
 
       const colony = {
         planetId:         colData.planetId,
@@ -563,6 +576,7 @@ export class ColonyManager {
         resourceSystem:   resSys,
         civSystem:        civSys,
         buildingSystem:   bSys,
+        factorySystem:    factSys,
         grid:             null,
         allowImmigration: colData.allowImmigration ?? true,
         allowEmigration:  colData.allowEmigration  ?? true,
@@ -574,6 +588,7 @@ export class ColonyManager {
 
       if (colData.isHomePlanet) {
         this._activePlanetId = colData.planetId;
+        window.KOSMOS.factorySystem = factSys;
       }
     }
 

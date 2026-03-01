@@ -1,19 +1,18 @@
 // BuildingsData — definicje budynków możliwych do postawienia na polach hex
 //
+// NOWY SYSTEM (Etap 26):
+//   cost:          { Fe: 20, C: 10 } — surowce z inventory
+//   commodityCost: { steel_plates: 2 } — towary z inventory
+//   energyCost:    2 — stały koszt energii/rok (dodawany do rates jako ujemna energia)
+//   rates:         produkcja/konsumpcja per rok (PRZED modyfikatorami terenu i poziomu)
+//   maxLevel:      max poziom budynku (domyślnie 10, ograniczany przez tech)
+//
 // category: klucz zgodny z HexTile.allowedCategories
-//   'mining' | 'energy' | 'food' | 'population' | 'research' | 'military' | 'space'
-//
-// rates: produkcja/konsumpcja surowców na rok gry (przed modyfikatorem terenu)
-//   dodatnie = produkcja, ujemne = konsumpcja
-//   Klucz 'research' będzie używany przez ResearchSystem (etap 8)
-//
 // terrainOnly: null = według category; tablica = tylko te typy terenu
-// terrainAny:  true = gdziekolwiek buildable, bez sprawdzania category
-//
-// capacityBonus: jednorazowy przyrost pojemności magazynów po wybudowaniu
-// housing:       jednorazowy przyrost miejsc mieszkalnych (przez civ:addHousing)
-// buildTime:     czas budowy w latach gry (używany od etapu 7)
-// requires:      id technologii wymaganej (null = brak, etap 8)
+// terrainAny:  true = gdziekolwiek buildable
+// housing:     przyrost miejsc mieszkalnych
+// popCost:     koszt POP do obsługi budynku
+// requires:    id technologii wymaganej
 
 export const BUILDINGS = {
 
@@ -27,10 +26,13 @@ export const BUILDINGS = {
     description: 'Stolica cywilizacji — nie blokuje budowy na hexie',
     isCapital:   true,
     cost:        {},
+    commodityCost: {},
+    energyCost:  2,
     buildTime:   0,
-    rates:       { energy: -2 },     // utrzymanie
-    housing:     4,                   // startowe miejsca mieszkalne
-    popCost:     0,                   // nie wymaga POPów
+    rates:       {},
+    housing:     4,
+    popCost:     0,
+    maxLevel:    1,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  true,
@@ -45,16 +47,20 @@ export const BUILDINGS = {
     namePL:      'Kopalnia',
     category:    'mining',
     icon:        '⛏',
-    description: 'Wydobywa minerały z podłoża skalnego',
-    cost:        { minerals: 60 },
+    description: 'Wydobywa surowce z podłoża — zależy od złóż na ciele niebieskim',
+    cost:        { Fe: 20, C: 10 },
+    commodityCost: { steel_plates: 2, mining_drills: 1 },
+    energyCost:  2,
     buildTime:   3,
-    rates:       { minerals: 10, energy: -1 },
+    rates:       {},       // produkcja obliczana dynamicznie z deposits
     housing:     0,
     popCost:     0.25,
+    maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  false,
     requires:    null,
+    isMine:      true,     // flaga: kopalnia wydobywa z deposits
   },
 
   // ── Energia ───────────────────────────────────────────────────────────────
@@ -65,11 +71,14 @@ export const BUILDINGS = {
     category:    'energy',
     icon:        '☀',
     description: 'Zamienia promieniowanie gwiazdy w energię elektryczną',
-    cost:        { minerals: 40 },
+    cost:        { Si: 15, Cu: 5 },
+    commodityCost: { steel_plates: 2, power_cells: 1 },
+    energyCost:  0,
     buildTime:   2,
     rates:       { energy: 8 },
     housing:     0,
     popCost:     0.25,
+    maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  false,
@@ -82,13 +91,16 @@ export const BUILDINGS = {
     category:    'energy',
     icon:        '♨',
     description: 'Wykorzystuje ciepło magmy — olbrzymia wydajność',
-    cost:        { minerals: 100 },
+    cost:        { Fe: 30, Ti: 5 },
+    commodityCost: { steel_plates: 3 },
+    energyCost:  0,
     buildTime:   5,
     rates:       { energy: 25 },
     housing:     0,
     popCost:     0.25,
+    maxLevel:    10,
     capacityBonus: null,
-    terrainOnly: ['volcano'],   // tylko wulkany
+    terrainOnly: ['volcano'],
     terrainAny:  false,
     requires:    null,
   },
@@ -100,12 +112,15 @@ export const BUILDINGS = {
     namePL:      'Farma',
     category:    'food',
     icon:        '🌾',
-    description: 'Uprawy zapewniające organikę dla populacji',
-    cost:        { minerals: 30, water: 20 },
+    description: 'Uprawy zapewniające żywność dla populacji',
+    cost:        { Fe: 10, C: 5 },
+    commodityCost: { steel_plates: 1 },
+    energyCost:  1,
     buildTime:   2,
-    rates:       { organics: 10, water: -1 },
+    rates:       { food: 10 },
     housing:     0,
     popCost:     0.25,
+    maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  false,
@@ -118,11 +133,14 @@ export const BUILDINGS = {
     category:    'food',
     icon:        '💧',
     description: 'Wydobywa wodę podziemną lub topnieje lód',
-    cost:        { minerals: 25 },
+    cost:        { Fe: 15 },
+    commodityCost: { steel_plates: 1 },
+    energyCost:  1,
     buildTime:   1,
     rates:       { water: 6 },
     housing:     0,
     popCost:     0.25,
+    maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  false,
@@ -137,11 +155,14 @@ export const BUILDINGS = {
     category:    'population',
     icon:        '🏠',
     description: 'Zapewnia przestrzeń mieszkalną dla 3 jednostek populacji',
-    cost:        { minerals: 80, energy: 20 },
+    cost:        { Fe: 25, Si: 10 },
+    commodityCost: { steel_plates: 3 },
+    energyCost:  3,
     buildTime:   4,
-    rates:       { energy: -3 },
-    housing:     3,             // +3 POPy miejsca mieszkalne
+    rates:       {},
+    housing:     3,
     popCost:     0.25,
+    maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  false,
@@ -153,18 +174,43 @@ export const BUILDINGS = {
   warehouse: {
     id:          'warehouse',
     namePL:      'Magazyn',
-    category:    'mining',      // tolerowany przez większość terenów
+    category:    'mining',
     icon:        '🏗',
-    description: 'Rozszerza pojemność magazynów (+200 każdego surowca)',
-    cost:        { minerals: 50 },
+    description: 'Rozszerza pojemność magazynów',
+    cost:        { Fe: 20, C: 10 },
+    commodityCost: { steel_plates: 2 },
+    energyCost:  0,
     buildTime:   2,
-    rates:       {},            // brak produkcji/konsumpcji
+    rates:       {},
     housing:     0,
     popCost:     0.25,
+    maxLevel:    10,
     capacityBonus: { minerals: 200, energy: 200, organics: 200, water: 200 },
     terrainOnly: null,
-    terrainAny:  true,          // można postawić na każdym buildable terenie
+    terrainAny:  true,
     requires:    null,
+  },
+
+  // ── Fabryka (produkuje commodities) ───────────────────────────────────────
+
+  factory: {
+    id:          'factory',
+    namePL:      'Fabryka',
+    category:    'mining',
+    icon:        '🏭',
+    description: 'Daje punkt produkcji — alokuj do receptur w panelu Gospodarka',
+    cost:        { Fe: 30, Cu: 10, Si: 10 },
+    commodityCost: { steel_plates: 4 },
+    energyCost:  5,
+    buildTime:   6,
+    rates:       {},       // produkcja via FactorySystem, nie rates
+    housing:     0,
+    popCost:     0.5,
+    maxLevel:    10,
+    capacityBonus: null,
+    terrainOnly: null,
+    terrainAny:  false,
+    requires:    'metallurgy',
   },
 
   // ── Zaawansowane (wymagają technologii) ──────────────────────────────────
@@ -173,17 +219,20 @@ export const BUILDINGS = {
     id:          'smelter',
     namePL:      'Huta',
     category:    'mining',
-    icon:        '🏭',
-    description: 'Przetwarza rudę na czyste metale — wysoka produkcja minerałów',
-    cost:        { minerals: 120, energy: 40 },
+    icon:        '🔥',
+    description: 'Przetwarza rudę na czyste metale — zwiększa wydajność kopalni',
+    cost:        { Fe: 40, Si: 15, Cu: 5 },
+    commodityCost: { steel_plates: 3, power_cells: 1 },
+    energyCost:  8,
     buildTime:   6,
-    rates:       { minerals: 25, energy: -8 },
+    rates:       {},       // bonus do kopalni (przetwarzanie)
     housing:     0,
     popCost:     0.25,
+    maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  false,
-    requires:    'deep_drilling',   // id technologii wymaganej
+    requires:    'deep_drilling',
   },
 
   nuclear_plant: {
@@ -192,15 +241,18 @@ export const BUILDINGS = {
     category:    'energy',
     icon:        '☢',
     description: 'Rozszczepienie atomu — ogromna produkcja energii',
-    cost:        { minerals: 200, energy: 50 },
+    cost:        { Fe: 50, Ti: 20, Si: 15 },
+    commodityCost: { steel_plates: 5, electronics: 3 },
+    energyCost:  0,
     buildTime:   10,
-    rates:       { energy: 60, minerals: -2 },
+    rates:       { energy: 60 },
     housing:     0,
-    popCost:     0.5,           // złożona instalacja — wymaga więcej POPów
+    popCost:     0.5,
+    maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  false,
-    requires:    'nuclear_power',   // id technologii wymaganej
+    requires:    'nuclear_power',
   },
 
   // ── Kosmos ────────────────────────────────────────────────────────────────
@@ -208,18 +260,21 @@ export const BUILDINGS = {
   launch_pad: {
     id:          'launch_pad',
     namePL:      'Wyrzutnia Rakietowa',
-    category:    'mining',      // terrainAny=true — category tylko dla kolorowania panelu
+    category:    'mining',
     icon:        '🚀',
-    description: 'Baza startowa ekspedycji kosmicznych — wymagana do każdej misji',
-    cost:        { minerals: 300, energy: 150 },
+    description: 'Baza startowa ekspedycji kosmicznych',
+    cost:        { Fe: 60, Ti: 30, Cu: 15 },
+    commodityCost: { steel_plates: 5, hull_armor: 3, electronics: 2 },
+    energyCost:  10,
     buildTime:   15,
-    rates:       { energy: -10 },
+    rates:       {},
     housing:     0,
-    popCost:     0.5,           // złożona instalacja — wymaga więcej POPów
+    popCost:     0.5,
+    maxLevel:    5,
     capacityBonus: null,
     terrainOnly: null,
-    terrainAny:  true,          // można postawić na każdym buildable terenie
-    requires:    'rocketry',    // wymaga technologii Rakietnictwo
+    terrainAny:  true,
+    requires:    'rocketry',
   },
 
   // ── Nauka ─────────────────────────────────────────────────────────────────
@@ -230,18 +285,21 @@ export const BUILDINGS = {
     category:    'research',
     icon:        '🔬',
     description: 'Prowadzi badania naukowe — kosztowna, ale niezbędna',
-    cost:        { minerals: 150, energy: 80 },
+    cost:        { Si: 30, Cu: 15 },
+    commodityCost: { steel_plates: 3, electronics: 2 },
+    energyCost:  10,
     buildTime:   6,
-    rates:       { energy: -10, minerals: -2, research: 8 },
+    rates:       { research: 8 },
     housing:     0,
     popCost:     0.25,
+    maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  false,
     requires:    null,
   },
 
-  // ── Stocznia (buduje statki kosmiczne) ───────────────────────────────────
+  // ── Stocznia ──────────────────────────────────────────────────────────────
 
   shipyard: {
     id:          'shipyard',
@@ -249,11 +307,14 @@ export const BUILDINGS = {
     category:    'space',
     icon:        '⚓',
     description: 'Buduje statki kosmiczne. Wymagana do produkcji floty.',
-    cost:        { minerals: 200, energy: 100 },
+    cost:        { Fe: 80, Ti: 30, Cu: 20 },
+    commodityCost: { steel_plates: 8, hull_armor: 5, power_cells: 3 },
+    energyCost:  5,
     buildTime:   10,
-    rates:       { energy: -5 },
+    rates:       {},
     housing:     0,
     popCost:     0.5,
+    maxLevel:    5,
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  true,
@@ -261,18 +322,22 @@ export const BUILDINGS = {
   },
 };
 
-// Ikony surowców — używane w panelach budynków i zasobów
+// ── Ikony zasobów — rozszerzony zestaw ──────────────────────────────────────
 export const RESOURCE_ICONS = {
-  minerals: '⛏',
-  energy:   '⚡',
-  organics: '🌿',
-  water:    '💧',
-  research: '🔬',
-  pop:      '👤',
+  // Mined
+  C: '\u25C6', Fe: '🔩', Si: '💎', Cu: '🟤', Ti: '⬜',
+  Li: '🔋', W: '⚙', Pt: '✨', Xe: '💜', Nt: '⚛',
+  // Harvested
+  food: '🍖', water: '💧',
+  // Utility
+  energy: '⚡', research: '🔬',
+  // Legacy
+  minerals: '⛏', organics: '🌿',
+  // POP
+  pop: '👤',
 };
 
 // Formatuj stawki produkcji/konsumpcji jako czytelny string
-// np. { minerals: 10, energy: -1 } → "+10⛏  -1⚡"
 export function formatRates(rates) {
   return Object.entries(rates)
     .filter(([, v]) => v !== 0)
@@ -280,12 +345,16 @@ export function formatRates(rates) {
     .join('  ');
 }
 
-// Formatuj koszt jako czytelny string
-// np. { minerals: 60 } → "60⛏", z opcjonalnym kosztem POP: "60⛏  0.25👤"
-export function formatCost(cost, popCost = 0) {
-  let str = Object.entries(cost)
-    .map(([k, v]) => `${v}${RESOURCE_ICONS[k] ?? k}`)
-    .join('  ');
+// Formatuj koszt jako czytelny string (surowce + commodities)
+export function formatCost(cost, popCost = 0, commodityCost = null) {
+  let parts = Object.entries(cost)
+    .map(([k, v]) => `${v}${RESOURCE_ICONS[k] ?? k}`);
+  if (commodityCost) {
+    for (const [k, v] of Object.entries(commodityCost)) {
+      parts.push(`${v}×${k}`);
+    }
+  }
+  let str = parts.join('  ');
   if (popCost > 0) str += `  ${popCost}👤`;
   return str;
 }

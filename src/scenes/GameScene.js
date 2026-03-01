@@ -22,6 +22,8 @@ import { TechSystem }        from '../systems/TechSystem.js';
 import { ExpeditionSystem }  from '../systems/ExpeditionSystem.js';
 import { ColonyManager }      from '../systems/ColonyManager.js';
 import { RandomEventSystem }  from '../systems/RandomEventSystem.js';
+import { FactorySystem }      from '../systems/FactorySystem.js';
+import { DepositSystem }      from '../systems/DepositSystem.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification } from '../ui/EventChoiceModal.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
@@ -103,6 +105,8 @@ export class GameScene {
     this.techSystem      = new TechSystem(this.resourceSystem);
     this.civSystem       = new CivilizationSystem({}, this.techSystem);
     this.buildingSystem  = new BuildingSystem(this.resourceSystem, this.civSystem, this.techSystem);
+    this.factorySystem   = new FactorySystem(this.resourceSystem);
+    this.buildingSystem.setFactorySystem(this.factorySystem);
     this.expeditionSystem = new ExpeditionSystem(this.resourceSystem);
     this.colonyManager   = new ColonyManager(this.techSystem);
     this.randomEventSystem = new RandomEventSystem();
@@ -113,6 +117,7 @@ export class GameScene {
     window.KOSMOS.resourceSystem   = this.resourceSystem;
     window.KOSMOS.civSystem        = this.civSystem;
     window.KOSMOS.techSystem       = this.techSystem;
+    window.KOSMOS.factorySystem    = this.factorySystem;
     window.KOSMOS.expeditionSystem = this.expeditionSystem;
     window.KOSMOS.colonyManager    = this.colonyManager;
     window.KOSMOS.timeSystem       = this.timeSystem;
@@ -148,6 +153,10 @@ export class GameScene {
               window.KOSMOS.resourceSystem  = homeCol.resourceSystem;
               window.KOSMOS.civSystem       = homeCol.civSystem;
               window.KOSMOS.buildingSystem  = homeCol.buildingSystem;
+              if (homeCol.factorySystem) {
+                window.KOSMOS.factorySystem = homeCol.factorySystem;
+                this.factorySystem = homeCol.factorySystem;
+              }
               this.resourceSystem  = homeCol.resourceSystem;
               this.civSystem       = homeCol.civSystem;
               this.buildingSystem  = homeCol.buildingSystem;
@@ -155,6 +164,8 @@ export class GameScene {
               this.techSystem.resourceSystem      = homeCol.resourceSystem;
               const gridSizes = { rocky: 10, hot_rocky: 6, ice: 6, gas: 6 };
               this.buildingSystem._gridHeight = gridSizes[hp?.planetType] ?? 10;
+              // Ustaw deposits z homePlanet dla BuildingSystem (kopalnie)
+              if (hp?.deposits) this.buildingSystem.setDeposits(hp.deposits);
             }
           }, 0);
         }
@@ -214,22 +225,30 @@ export class GameScene {
       for (const m of EntityManager.getByType('moon')) {
         if (m.parentPlanetId === planet.id) m.explored = true;
       }
-      // Startowe zasoby dla nowej kolonii
+      // Startowe zasoby (nowy system inventory + commodities)
       if (window.KOSMOS.edenScenario) {
-        // Eden: tryb testowy — nieograniczone zasoby i nauka
-        const INF = 999999;
-        for (const key of ['minerals', 'energy', 'organics', 'water', 'research']) {
-          this.resourceSystem.setCapacity(key, INF);
-        }
+        // Eden: tryb testowy — duże zapasy surowców + commodities T1/T2
         this.resourceSystem.receive({
-          minerals: INF, energy: INF, organics: INF, water: INF, research: INF,
+          Fe: 500, C: 300, Si: 200, Cu: 100, Ti: 50, Li: 30, W: 10, Pt: 5,
+          food: 200, water: 200, research: 50,
+          // Commodities T1/T2
+          steel_plates: 20, polymer_composites: 20,
+          power_cells: 20, electronics: 20, food_synthesizers: 20,
+          mining_drills: 20, hull_armor: 20,
         });
       } else {
+        // Nowa Gra: skromne zapasy + commodities T1/T2
         this.resourceSystem.receive({
-          minerals: 100, energy: 100, organics: 100, water: 100, research: 100,
+          Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10,
+          food: 100, water: 100, research: 100,
+          // Commodities T1/T2
+          steel_plates: 20, polymer_composites: 20,
+          power_cells: 20, electronics: 20, food_synthesizers: 20,
+          mining_drills: 20, hull_armor: 20,
         });
       }
       // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
+      this.buildingSystem.setDeposits(planet.deposits ?? []);
       this.colonyManager.registerHomePlanet(planet, this.resourceSystem, this.civSystem, this.buildingSystem);
       const idx = this.timeSystem.multiplierIndex;
       this.planetGlobeScene.open(planet, idx);
@@ -334,6 +353,10 @@ export class GameScene {
       p.age              = pd.age              || 0;
       p.surface          = { ...(pd.surface || {}) };
       p.explored         = pd.explored         || false;
+      // Przywróć złoża z save (v6)
+      if (pd.deposits?.length > 0) {
+        p.deposits = pd.deposits.map(d => ({ ...d }));
+      }
       EntityManager.add(p);
       return p;
     });
@@ -357,9 +380,23 @@ export class GameScene {
       });
       m.age      = md.age      || 0;
       m.explored = md.explored || false;
+      // Przywróć złoża z save (v6)
+      if (md.deposits?.length > 0) {
+        m.deposits = md.deposits.map(d => ({ ...d }));
+      }
       EntityManager.add(m);
       return m;
     });
+
+    // Wygeneruj brakujące złoża (migracja ze starszych save'ów)
+    const depSys = new DepositSystem();
+    depSys.resetNeutroniumCount();
+    for (const p of planets) {
+      if (!p.deposits || p.deposits.length === 0) depSys.generateDeposits(p);
+    }
+    for (const m of moons) {
+      if (!m.deposits || m.deposits.length === 0) depSys.generateDeposits(m);
+    }
 
     const maxId = [data.star, ...data.planets, ...(data.moons || [])]
       .map(e => { const m = String(e.id).match(/(\d+)$/); return m ? parseInt(m[1]) : 0; })

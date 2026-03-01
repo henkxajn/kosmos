@@ -42,6 +42,20 @@ export const TECHS = {
 
   // ── Gałąź: Wydobycie ──────────────────────────────────────────────────────
 
+  metallurgy: {
+    id:          'metallurgy',
+    namePL:      'Metalurgia',
+    branch:      'mining',
+    tier:        1,
+    cost:        { research: 60 },
+    requires:    [],
+    effects: [
+      { type: 'unlockCommodity', tier: 1 },
+      { type: 'unlockBuilding', buildingId: 'factory' },
+    ],
+    description: 'Wytop metali i produkcja komponentów — odblokowanie Fabryki i towarów T1',
+  },
+
   advanced_mining: {
     id:          'advanced_mining',
     namePL:      'Zaawansowane Wydobycie',
@@ -65,8 +79,22 @@ export const TECHS = {
     effects: [
       { type: 'modifier', resource: 'minerals', multiplier: 1.5 },
       { type: 'unlockBuilding', buildingId: 'smelter' },
+      { type: 'buildingLevelCap', maxLevel: 7 },
     ],
-    description: 'Wydobycie z głębin + odblokowanie Huty — +50% minerałów',
+    description: 'Wydobycie z głębin + odblokowanie Huty — +50% minerałów, max level 7',
+  },
+
+  advanced_materials: {
+    id:          'advanced_materials',
+    namePL:      'Zaawansowane Materiały',
+    branch:      'mining',
+    tier:        2,
+    cost:        { research: 150 },
+    requires:    ['metallurgy'],
+    effects: [
+      { type: 'unlockCommodity', tier: 2 },
+    ],
+    description: 'Zaawansowane technologie materiałowe — odblokowanie towarów T2',
   },
 
   // ── Gałąź: Energia ────────────────────────────────────────────────────────
@@ -181,8 +209,9 @@ export const TECHS = {
     requires:    ['orbital_survey', 'advanced_mining'],
     effects: [
       { type: 'modifier', resource: 'minerals', multiplier: 2.0 },
+      { type: 'buildingLevelCap', maxLevel: 10 },
     ],
-    description: 'Wydobycie z asteroid — podwojenie produkcji minerałów',
+    description: 'Wydobycie z asteroid — podwojenie produkcji minerałów, max level 10',
   },
 
   rocketry: {
@@ -196,6 +225,34 @@ export const TECHS = {
       { type: 'unlockBuilding', buildingId: 'launch_pad' },
     ],
     description: 'Rakiety i napęd jonowy — odblokowanie Wyrzutni Rakietowej',
+  },
+
+  // ── Tier 3: Materiały egzotyczne i fizyka kwantowa ────────────────────────
+
+  exotic_materials: {
+    id:          'exotic_materials',
+    namePL:      'Materiały Egzotyczne',
+    branch:      'space',
+    tier:        3,
+    cost:        { research: 350 },
+    requires:    ['advanced_materials', 'space_mining'],
+    effects: [
+      { type: 'unlockCommodity', tier: 3 },
+    ],
+    description: 'Przetwarzanie ksenonu i egzotycznych metali — odblokowanie towarów T3',
+  },
+
+  quantum_physics: {
+    id:          'quantum_physics',
+    namePL:      'Fizyka Kwantowa',
+    branch:      'energy',
+    tier:        3,
+    cost:        { research: 500 },
+    requires:    ['nuclear_power', 'exotic_materials'],
+    effects: [
+      { type: 'unlockCommodity', tier: 4 },
+    ],
+    description: 'Manipulacja materią na poziomie kwantowym — Rdzenie Kwantowe (T4)',
   },
 
   // ── Tier 3: Eksploracja i kolonizacja ────────────────────────────────────

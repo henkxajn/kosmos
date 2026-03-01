@@ -16,6 +16,8 @@ import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/Buil
 import { showRenameModal } from '../ui/ModalInput.js';
 import { TECHS }             from '../data/TechData.js';
 import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
+import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
+import { COMMODITIES } from '../data/CommoditiesData.js';
 
 // ── Stałe layoutu (identyczne z PlanetScene) ─────────────────
 const TOP_BAR_H    = 44;
@@ -57,6 +59,7 @@ export class PlanetGlobeScene {
     this._hoveredTile  = null;
     this._selectedTile = null;
     this._resources    = {};
+    this._inventory    = {};  // pełne inventory z ResourceSystem
     this._prevMultiplierIndex = 1;
 
     // Panel budowania
@@ -83,6 +86,7 @@ export class PlanetGlobeScene {
     this._onWheel          = null;
     this._onBuildResult    = null;
     this._onDemolishResult = null;
+    this._onUpgradeResult  = null;
     this._onResourceChange = null;
     this._onSnapshot       = null;
     this._onTimeState      = null;
@@ -112,9 +116,12 @@ export class PlanetGlobeScene {
       if (colony) {
         window.KOSMOS.resourceSystem  = colony.resourceSystem;
         window.KOSMOS.civSystem       = colony.civSystem;
-        // Per-kolonia BuildingSystem — każda kolonia ma swój
+        // Per-kolonia BuildingSystem i FactorySystem — każda kolonia ma swój
         if (colony.buildingSystem) {
           window.KOSMOS.buildingSystem = colony.buildingSystem;
+        }
+        if (colony.factorySystem) {
+          window.KOSMOS.factorySystem = colony.factorySystem;
         }
         if (window.KOSMOS.expeditionSystem) {
           window.KOSMOS.expeditionSystem.resourceSystem = colony.resourceSystem;
@@ -132,9 +139,10 @@ export class PlanetGlobeScene {
     // Generuj siatkę
     this.grid = PlanetMapGenerator.generate(planet, true);
 
-    // Ustaw gridHeight w BuildingSystem (do modyfikatora polarnego)
+    // Ustaw gridHeight i deposits w BuildingSystem
     if (window.KOSMOS?.buildingSystem) {
       window.KOSMOS.buildingSystem._gridHeight = this.grid.height;
+      window.KOSMOS.buildingSystem.setDeposits(planet.deposits ?? []);
     }
 
     // Synchronizuj budynki z BuildingSystem
@@ -341,11 +349,22 @@ export class PlanetGlobeScene {
       }
     };
 
-    // Resources
-    const applyRes = ({ resources }) => {
-      if (!resources) return;
-      for (const [k, v] of Object.entries(resources)) {
-        this._resources[k] = v.amount ?? 0;
+    this._onUpgradeResult = ({ success }) => {
+      if (success) {
+        this._syncBuildingIds();
+        this._globeRenderer?.refreshTexture();
+      }
+    };
+
+    // Resources — nowy model inventory
+    const applyRes = ({ resources, inventory }) => {
+      if (resources) {
+        for (const [k, v] of Object.entries(resources)) {
+          this._resources[k] = v.amount ?? 0;
+        }
+      }
+      if (inventory) {
+        this._inventory = inventory;
       }
     };
     this._onResourceChange = applyRes;
@@ -369,8 +388,9 @@ export class PlanetGlobeScene {
       layer.addEventListener('click',      this._onClick);
       layer.addEventListener('wheel',      this._onWheel, { passive: false });
     }
-    EventBus.on('planet:buildResult',   this._onBuildResult);
+    EventBus.on('planet:buildResult',    this._onBuildResult);
     EventBus.on('planet:demolishResult', this._onDemolishResult);
+    EventBus.on('planet:upgradeResult',  this._onUpgradeResult);
     EventBus.on('resource:changed',     this._onResourceChange);
     EventBus.on('resource:snapshot',    this._onSnapshot);
     EventBus.on('time:stateChanged',    this._onTimeState);
@@ -386,8 +406,9 @@ export class PlanetGlobeScene {
       if (this._onClick)     layer.removeEventListener('click',     this._onClick);
       if (this._onWheel)     layer.removeEventListener('wheel',     this._onWheel);
     }
-    EventBus.off('planet:buildResult',   this._onBuildResult);
+    EventBus.off('planet:buildResult',    this._onBuildResult);
     EventBus.off('planet:demolishResult', this._onDemolishResult);
+    EventBus.off('planet:upgradeResult',  this._onUpgradeResult);
     EventBus.off('resource:changed',     this._onResourceChange);
     EventBus.off('resource:snapshot',    this._onSnapshot);
     EventBus.off('time:stateChanged',    this._onTimeState);
@@ -404,10 +425,11 @@ export class PlanetGlobeScene {
     // Wyczyść stan przed synchronizacją
     this.grid.toArray().forEach(t => {
       t.buildingId = null;
+      t.buildingLevel = 1;
       t.capitalBase = false;
     });
 
-    // Ustaw buildingId / capitalBase z _active
+    // Ustaw buildingId / capitalBase / buildingLevel z _active
     bSys._active.forEach((entry, activeKey) => {
       // Stolica: klucz 'capital_Q,R' → ustaw capitalBase na tile
       if (activeKey.startsWith('capital_')) {
@@ -420,7 +442,10 @@ export class PlanetGlobeScene {
       // Zwykły budynek
       const [q, r] = activeKey.split(',').map(Number);
       const tile = this.grid.get(q, r);
-      if (tile) tile.buildingId = entry.building.id;
+      if (tile) {
+        tile.buildingId = entry.building.id;
+        tile.buildingLevel = entry.level ?? 1;
+      }
     });
   }
 
@@ -582,7 +607,7 @@ export class PlanetGlobeScene {
     if (!window.KOSMOS?.civMode) return;
     const ctx  = this.ctx;
     const Y    = TOP_BAR_H;
-    const rSys = window.KOSMOS?.resourceSystem;
+    const inv  = this._inventory;
 
     ctx.fillStyle = 'rgba(6,13,24,0.90)';
     ctx.fillRect(0, Y, LW, RES_BAR_H);
@@ -590,29 +615,33 @@ export class PlanetGlobeScene {
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(0, Y + RES_BAR_H); ctx.lineTo(LW, Y + RES_BAR_H); ctx.stroke();
 
-    const icons = { minerals: '⛏', energy: '⚡', organics: '🌿', water: '💧', research: '🔬' };
-    const RES   = ['minerals', 'energy', 'organics', 'water', 'research'];
-    const colW  = LW / 5;
+    // 4 krytyczne wskaźniki: Energia (bilans), Żywność (zapas), Woda (zapas), Nauka (/rok)
+    const colW = LW / 4;
+    const en  = inv._energy   ?? {};
+    const res = inv._research ?? {};
+    const py  = inv._perYear  ?? {};
 
-    RES.forEach((r, i) => {
+    const indicators = [
+      { icon: '⚡', label: 'ENERGIA',  val: `${en.balance >= 0 ? '+' : ''}${(en.balance ?? 0).toFixed(1)}/r`, sub: en.brownout ? '⚠ BROWNOUT' : `+${(en.production ?? 0).toFixed(0)} −${(en.consumption ?? 0).toFixed(0)}`, alert: en.brownout, color: en.brownout ? '#cc4422' : en.balance >= 0 ? '#ffdd44' : '#ff8844' },
+      { icon: '🍖', label: 'ŻYWNOŚĆ', val: `${Math.floor(inv.food ?? 0)}`, sub: `${(py.food ?? 0) >= 0 ? '+' : ''}${(py.food ?? 0).toFixed(1)}/r`, alert: (inv.food ?? 0) < 20, color: (inv.food ?? 0) < 20 ? '#cc4422' : '#44cc66' },
+      { icon: '💧', label: 'WODA',    val: `${Math.floor(inv.water ?? 0)}`, sub: `${(py.water ?? 0) >= 0 ? '+' : ''}${(py.water ?? 0).toFixed(1)}/r`, alert: (inv.water ?? 0) < 15, color: (inv.water ?? 0) < 15 ? '#cc4422' : '#4488ff' },
+      { icon: '🔬', label: 'NAUKA',   val: `${Math.floor(res.amount ?? 0)}`, sub: `+${(res.perYear ?? 0).toFixed(1)}/r`, alert: false, color: '#cc66ff' },
+    ];
+
+    indicators.forEach((ind, i) => {
       const cx = i * colW + colW / 2;
-      const amt = this._resources[r]             ?? 0;
-      const cap = rSys?.resources?.[r]?.capacity ?? 500;
-      const dlt = rSys?.resources?.[r]?.perYear  ?? 0;
-
       ctx.font      = '9px monospace';
       ctx.fillStyle = '#6a8aaa';
       ctx.textAlign = 'center';
-      ctx.fillText(icons[r] + ' ' + r.toUpperCase(), cx, Y + 12);
+      ctx.fillText(`${ind.icon} ${ind.label}`, cx, Y + 12);
 
-      const frac = cap > 0 ? amt / cap : 0;
       ctx.font      = '11px monospace';
-      ctx.fillStyle = frac < 0.10 ? '#cc4422' : frac < 0.25 ? '#ffaa44' : '#c8e8ff';
-      ctx.fillText(`${Math.floor(amt)} / ${cap}`, cx, Y + 25);
+      ctx.fillStyle = ind.color;
+      ctx.fillText(ind.val, cx, Y + 25);
 
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = (dlt || 0) >= 0 ? '#44cc66' : '#cc4422';
-      ctx.fillText(`${(dlt || 0) >= 0 ? '+' : ''}${(dlt || 0).toFixed(1)}/r`, cx, Y + 38);
+      ctx.font      = '8px monospace';
+      ctx.fillStyle = ind.alert ? '#cc4422' : '#4a6a8a';
+      ctx.fillText(ind.sub, cx, Y + 37);
     });
     ctx.textAlign = 'left';
   }
@@ -701,9 +730,11 @@ export class PlanetGlobeScene {
     bSys._active.forEach((entry, tileKey) => {
       if (y > LH - 60) return;
       const b = entry.building;
+      const lvl = entry.level ?? 1;
       ctx.font      = '9px monospace';
       ctx.fillStyle = CAT_COLORS[b.category] || '#888';
-      ctx.fillText(`${b.icon || '🏗'} ${b.namePL}`, 12, y + 8);
+      const lvlStr = lvl > 1 ? ` Lv${lvl}` : '';
+      ctx.fillText(`${b.icon || '🏗'} ${b.namePL}${lvlStr}`, 12, y + 8);
       ctx.font      = '8px monospace';
       ctx.fillStyle = '#2a4060';
       ctx.fillText(tileKey, 12, y + 19);
@@ -832,6 +863,7 @@ export class PlanetGlobeScene {
     const terrain = TERRAIN_TYPES[tile.type];
     const bSys  = window.KOSMOS?.buildingSystem;
     const tSys  = window.KOSMOS?.techSystem;
+    const inv   = this._inventory;
 
     ctx.fillStyle = 'rgba(6,13,24,0.95)';
     ctx.fillRect(BPX, HEADER_H, RIGHT_W, LH - HEADER_H);
@@ -850,8 +882,30 @@ export class PlanetGlobeScene {
       ctx.fillText(`Zasób: ${tile.strategicResource}`, BPX + 8, HEADER_H + 34);
     }
 
-    // Stolica (wirtualny budynek — nie blokuje budowy)
+    // Złoża na ciele niebieskim (jeśli są)
     let buildListY = HEADER_H + 48;
+    const deposits = this.planet?.deposits ?? [];
+    if (deposits.length > 0 && !tile.buildingId) {
+      ctx.font      = '8px monospace';
+      ctx.fillStyle = '#6888aa';
+      ctx.fillText('ZŁOŻA:', BPX + 8, buildListY);
+      buildListY += 10;
+      for (const d of deposits.slice(0, 5)) {
+        const pct = d.totalAmount > 0 ? Math.round(d.remaining / d.totalAmount * 100) : 0;
+        const icon = RESOURCE_ICONS[d.resourceId] ?? d.resourceId;
+        ctx.fillStyle = pct > 50 ? '#44cc66' : pct > 20 ? '#ffaa44' : '#cc4422';
+        ctx.fillText(`${icon} ${d.resourceId}: ${pct}% (${Math.floor(d.remaining)})`, BPX + 14, buildListY);
+        buildListY += 10;
+      }
+      if (deposits.length > 5) {
+        ctx.fillStyle = '#4a6a8a';
+        ctx.fillText(`...i ${deposits.length - 5} więcej`, BPX + 14, buildListY);
+        buildListY += 10;
+      }
+      buildListY += 4;
+    }
+
+    // Stolica (wirtualny budynek — nie blokuje budowy)
     if (tile.capitalBase) {
       ctx.font      = '9px monospace';
       ctx.fillStyle = '#4488ff';
@@ -859,16 +913,61 @@ export class PlanetGlobeScene {
       buildListY += 14;
     }
 
-    // Aktualny budynek
+    // Aktualny budynek — z poziomem i przyciskiem ulepszenia
     if (tile.buildingId && BUILDINGS[tile.buildingId]) {
       const b = BUILDINGS[tile.buildingId];
+      const lvl = tile.buildingLevel ?? 1;
+      const maxLvl = bSys?.getMaxLevel?.() ?? 3;
+
       ctx.font      = '9px monospace';
       ctx.fillStyle = CAT_COLORS[b.category] || '#fff';
-      ctx.fillText(`${b.icon} ${b.namePL}`, BPX + 8, buildListY);
+      ctx.fillText(`${b.icon} ${b.namePL}  Lv.${lvl}/${maxLvl}`, BPX + 8, buildListY);
+      buildListY += 4;
+
+      // Pasek poziomu
+      const barW = RIGHT_W - 24;
+      const barH = 5;
+      ctx.fillStyle = '#0d1520';
+      ctx.fillRect(BPX + 8, buildListY, barW, barH);
+      const frac = maxLvl > 1 ? (lvl - 1) / (maxLvl - 1) : 1;
+      ctx.fillStyle = '#44cc66';
+      ctx.fillRect(BPX + 8, buildListY, Math.round(barW * frac), barH);
+      ctx.strokeStyle = '#1a3050';
+      ctx.strokeRect(BPX + 8, buildListY, barW, barH);
+      buildListY += 12;
+
+      // Stawki produkcji budynku
+      if (b.rates && Object.keys(b.rates).length > 0) {
+        ctx.font      = '8px monospace';
+        ctx.fillStyle = '#6888aa';
+        ctx.fillText(formatRates(b.rates), BPX + 8, buildListY);
+        buildListY += 10;
+      }
+      if (b.energyCost > 0) {
+        ctx.font      = '8px monospace';
+        ctx.fillStyle = '#ffaa44';
+        ctx.fillText(`⚡ −${b.energyCost}/r`, BPX + 8, buildListY);
+        buildListY += 10;
+      }
+
+      // Przycisk ulepszenia (jeśli nie max)
+      if (lvl < maxLvl && !b.isCapital) {
+        const upgradeY = buildListY + 2;
+        ctx.fillStyle = 'rgba(20,40,60,0.8)';
+        ctx.fillRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
+        ctx.strokeStyle = '#44cc66';
+        ctx.strokeRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
+        ctx.font      = '9px monospace';
+        ctx.fillStyle = '#88ffcc';
+        ctx.textAlign = 'center';
+        ctx.fillText(`[ Ulepsz do Lv.${lvl + 1} ]`, BPX + RIGHT_W / 2, upgradeY + 11);
+        ctx.textAlign = 'left';
+        buildListY = upgradeY + 24;
+      }
 
       // Przycisk rozbiórki (nie dla Stolicy)
-      const demolishY = buildListY + 6;
       if (!b.isColonyBase && !b.isCapital) {
+        const demolishY = buildListY + 2;
         ctx.fillStyle = 'rgba(100,30,30,0.8)';
         ctx.fillRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
         ctx.strokeStyle = '#cc4422';
@@ -905,16 +1004,20 @@ export class PlanetGlobeScene {
           const techName = TECHS[b.requires]?.namePL ?? b.requires;
           reason = `Wymaga: ${techName} (🔬 NAUKA)`;
         } else {
-          const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (this._resources[res] ?? 0) >= amt);
+          // Sprawdź koszty (surowce + commodities) z inventory
+          const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
+          const commodityOk = Object.entries(b.commodityCost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
           const popCost = b.popCost ?? 0.25;
           const popOk   = popCost <= 0 || (cSys && cSys.freePops >= popCost);
-          if (!resourceOk) reason = 'Brak surowców';
+          if (!resourceOk || !commodityOk) reason = 'Brak surowców';
           else if (!popOk) reason = 'Brak POPów';
         }
 
         const blocked  = reason === 'Zły teren' || (reason && reason.startsWith('Wymaga'));
         const affordable = !reason;
-        const rowH = blocked ? 36 : 28;
+        // Większy wiersz dla nowych kosztów
+        const hasCommodity = b.commodityCost && Object.keys(b.commodityCost).length > 0;
+        const rowH = blocked ? 42 : (hasCommodity ? 38 : 28);
 
         // Tło i ramka
         ctx.fillStyle   = blocked ? 'rgba(30,8,8,0.85)' : (affordable ? 'rgba(13,26,46,0.90)' : 'rgba(8,14,24,0.90)');
@@ -923,12 +1026,14 @@ export class PlanetGlobeScene {
         ctx.lineWidth   = 1;
         ctx.strokeRect(BPX + 8, yy, RIGHT_W - 16, rowH);
 
-        // Nazwa budynku
+        // Nazwa budynku + koszt energii
         ctx.font      = '9px monospace';
         ctx.fillStyle = blocked ? '#663333' : (affordable ? (CAT_COLORS[b.category] || '#fff') : '#2a3050');
-        ctx.fillText(`${b.icon} ${b.namePL}`, BPX + 14, yy + 12);
+        let nameStr = `${b.icon} ${b.namePL}`;
+        if (b.energyCost > 0) nameStr += `  ⚡−${b.energyCost}`;
+        ctx.fillText(nameStr, BPX + 14, yy + 12);
 
-        // Koszt
+        // Koszt surowców
         const costStr = Object.entries(b.cost || {}).map(([k, v]) => `${RESOURCE_ICONS?.[k] ?? k}${v}`).join(' ');
         ctx.font      = '8px monospace';
         ctx.fillStyle = blocked ? '#442222' : (affordable ? '#2a4060' : '#181e28');
@@ -941,11 +1046,18 @@ export class PlanetGlobeScene {
           ctx.fillText(`${popCost}👤`, BPX + RIGHT_W - 48, yy + 23);
         }
 
+        // Koszt commodities (nowy wiersz)
+        if (hasCommodity && !blocked) {
+          const comStr = Object.entries(b.commodityCost).map(([k, v]) => `${v}×${k.replace(/_/g,' ')}`).join(' ');
+          ctx.fillStyle = affordable ? '#6a5a40' : '#181e28';
+          ctx.fillText(comStr, BPX + 14, yy + 33);
+        }
+
         // Powód blokady
         if (blocked) {
           ctx.font      = '7px monospace';
           ctx.fillStyle = '#884444';
-          ctx.fillText(`❌ ${reason}`, BPX + 14, yy + 33);
+          ctx.fillText(`❌ ${reason}`, BPX + 14, yy + 35);
         }
 
         yy += rowH + 4;
@@ -1012,23 +1124,49 @@ export class PlanetGlobeScene {
     const tile = this._buildPanelTile;
     const BPX  = LW - RIGHT_W;
     if (!tile || mx < BPX) return false;
+    const inv  = this._inventory;
 
-    // Przesunięcie Y gdy Stolica jest na hexie
-    const capitalOffset = tile.capitalBase ? 14 : 0;
+    // Oblicz przesunięcie Y z uwzględnieniem złóż i Stolicy
+    const deposits = this.planet?.deposits ?? [];
+    let offsetY = HEADER_H + 48;
+    if (deposits.length > 0 && !tile.buildingId) {
+      offsetY += 14 + Math.min(deposits.length, 5) * 10;
+      if (deposits.length > 5) offsetY += 10;
+    }
+    if (tile.capitalBase) offsetY += 14;
 
     if (tile.buildingId && BUILDINGS[tile.buildingId]) {
       const bDef = BUILDINGS[tile.buildingId];
-      if (bDef?.isColonyBase || bDef?.isCapital) return false;
-      // Rozbiórka — Y przesunięte o capitalOffset
-      const demolishY = HEADER_H + 54 + capitalOffset;
+      if (bDef?.isColonyBase || bDef?.isCapital) return true; // pochłoń klik
+      const lvl = tile.buildingLevel ?? 1;
+      const maxLvl = window.KOSMOS?.buildingSystem?.getMaxLevel?.() ?? 3;
+
+      // Oblicz pozycję przycisków (muszą odpowiadać _drawBuildPanel)
+      let btnY = offsetY + 26; // po nazwie + pasku poziomu
+      if (bDef.rates && Object.keys(bDef.rates).length > 0) btnY += 10;
+      if (bDef.energyCost > 0) btnY += 10;
+
+      // Ulepszenie
+      if (lvl < maxLvl) {
+        const upgradeY = btnY + 2;
+        if (mx >= BPX + 8 && mx <= LW - 8 && my >= upgradeY && my <= upgradeY + 18) {
+          EventBus.emit('planet:upgradeRequest', { planet: this.planet, tile });
+          return true;
+        }
+        btnY = upgradeY + 24;
+      }
+
+      // Rozbiórka
+      const demolishY = btnY + 2;
       if (mx >= BPX + 8 && mx <= LW - 8 && my >= demolishY && my <= demolishY + 18) {
         const key = `${tile.q},${tile.r}`;
         EventBus.emit('planet:demolishRequest', { planet: this.planet, tileKey: key, tile });
         return true;
       }
+      return true; // pochłoń kliknięcie w prawy panel
     } else {
       // Buduj — iteruj przez WSZYSTKIE budynki (identycznie jak _drawBuildPanel)
-      let yy   = HEADER_H + 60 + capitalOffset;
+      let yy   = offsetY + 12;
       const tSys = window.KOSMOS?.techSystem;
       const cSys = window.KOSMOS?.civSystem;
       for (const b of Object.values(BUILDINGS)) {
@@ -1047,14 +1185,16 @@ export class PlanetGlobeScene {
         } else if (b.requires && !tSys?.isResearched(b.requires)) {
           reason = 'blocked';
         } else {
-          const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (this._resources[res] ?? 0) >= amt);
+          const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
+          const commodityOk = Object.entries(b.commodityCost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
           const popCost = b.popCost ?? 0.25;
           const popOk   = popCost <= 0 || (cSys && cSys.freePops >= popCost);
-          if (!resourceOk || !popOk) reason = 'unaffordable';
+          if (!resourceOk || !commodityOk || !popOk) reason = 'unaffordable';
         }
 
         const blocked = reason === 'blocked';
-        const rowH = blocked ? 36 : 28;
+        const hasCommodity = b.commodityCost && Object.keys(b.commodityCost).length > 0;
+        const rowH = blocked ? 42 : (hasCommodity ? 38 : 28);
 
         // Tylko klikalne jeśli dostępne (nie zablokowane i nie za drogie)
         if (!reason && mx >= BPX + 8 && mx <= LW - 8 && my >= yy && my <= yy + rowH) {

@@ -13,6 +13,7 @@ import { KeplerMath }    from '../utils/KeplerMath.js';
 import { GAME_CONFIG, STAR_TYPES, PLANET_TYPE_CONFIG } from '../config/GameConfig.js';
 import EntityManager     from '../core/EntityManager.js';
 import { getCompositionTemplate, normalizeComposition } from '../data/ElementsData.js';
+import { DepositSystem } from '../systems/DepositSystem.js';
 
 export class SystemGenerator {
 
@@ -35,7 +36,25 @@ export class SystemGenerator {
     planetoids.forEach(p => EntityManager.add(p));
     // Planetezymale NIE trafiają do EntityManager — lightweight array
 
+    // Generuj złoża surowców z composition (Etap 26)
+    this._generateDepositsForAll(planets, moons, planetoids, asteroids);
+
     return { star, planets, moons, planetesimals, asteroids, comets, planetoids };
+  }
+
+  // ── Generacja złóż surowców z composition ─────────────────────────────────
+  _generateDepositsForAll(planets, moons, planetoids, asteroids) {
+    const depSys = new DepositSystem();
+    depSys.resetNeutroniumCount();
+
+    // Planety — główne źródła
+    for (const p of planets) depSys.generateDeposits(p);
+    // Księżyce
+    for (const m of moons) depSys.generateDeposits(m);
+    // Planetoidy — bogate w rzadkie surowce
+    for (const p of planetoids) depSys.generateDeposits(p);
+    // Asteroidy
+    for (const a of asteroids) depSys.generateDeposits(a);
   }
 
   // Wygeneruj gwiazdę z losowym typem spektralnym
@@ -334,7 +353,7 @@ export class SystemGenerator {
   // ── Planetoidy (a=0.5–8 AU, e=0.05–0.50, różne rozmiary) ──────
   // Unikają nakładania z istniejącymi planetami (odstęp ± 0.3 AU)
   _generatePlanetoids(star, planets) {
-    const count = 5 + Math.floor(Math.random() * 6);  // 5–10
+    const count = 15 + Math.floor(Math.random() * 26);  // 15–40
     const planetoids = [];
     const occupiedAU  = planets.map(p => p.orbital.a);
 
@@ -396,13 +415,13 @@ export class SystemGenerator {
     const e    = 0.001; // kwazikolista orbita
     const T    = KeplerMath.orbitalPeriod(a, star.physics.mass);
 
-    // Optymalny skład chemiczny dla życia (H₂O + C + P na maksimum)
+    // Optymalny skład chemiczny dla życia + nowe pierwiastki (Cu, Li, W, Xe, Nt)
     const comp = normalizeComposition({
-      H2O: 18,  // dużo wody
+      H2O: 17,  // dużo wody
       C:    7,  // bogaty w węgiel
-      O:   22,  // tlen
-      Fe:  17,  // żelazo (rdzeń)
-      Si:  15,  // krzemian
+      O:   21,  // tlen
+      Fe:  15,  // żelazo (rdzeń)
+      Si:  14,  // krzemian
       N:    6,  // azot
       Mg:   5,  // magnez
       P:    2,  // fosfor (klucz dla życia)
@@ -411,6 +430,13 @@ export class SystemGenerator {
       Ca:   1,  // wapń
       Al:   1,  // aluminium
       K:    1,  // potas
+      Cu:   2,  // miedź (gospodarka)
+      Ti:   1.5,// tytan
+      Li:   0.8,// lit
+      W:    0.4,// wolfram
+      Pt:   0.2,// platyna
+      Xe:   0.05,// ksenon (śladowe)
+      Nt:   0,  // neutronium — nie na Eden
     });
 
     const planet = new Planet({
@@ -463,6 +489,9 @@ export class SystemGenerator {
     EntityManager.add(star);
     EntityManager.add(planet);
     comets.forEach(c => EntityManager.add(c));
+
+    // Generuj złoża surowców dla Eden (Etap 26)
+    this._generateDepositsForAll([planet], [], [], []);
 
     return {
       star,

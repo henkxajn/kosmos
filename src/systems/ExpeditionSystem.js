@@ -13,7 +13,7 @@
 //     - technologia 'rocketry' zbadana
 //     - budynek 'launch_pad' aktywny na mapie planety
 //     - scientific: wymaga statku 'science_vessel' w hangarze floty
-//     - koszt startowy: { minerals: 150, energy: 200, organics: 50 }
+//     - koszt startowy: { Fe: 50, C: 20 }
 //     - wolni POPowie: freePops >= 0.5
 //   colony:
 //     - technologia 'colonization' zbadana
@@ -21,7 +21,7 @@
 //     - cel explored=true (wcześniejsza ekspedycja scientific)
 //     - cel: skaliste ciało (planet rocky/ice, moon, planetoid)
 //     - 2 wolne POPy (crewCost=2.0)
-//     - koszt: { minerals: 500, energy: 300, organics: 200, water: 100 }
+//     - koszt: { Fe: 150, C: 50, Ti: 20, food: 100, water: 50 }
 //     - colony_ship zużywany z hangaru po wysłaniu!
 //
 // Czas podróży = odległość_AU × 2 lat (minimum 2 lata, colony: minimum 3)
@@ -55,11 +55,11 @@ import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
 
 // Koszt ekspedycji mining/scientific (stały, niezależnie od celu)
-const LAUNCH_COST          = { minerals: 150, energy: 200, organics: 50 };
+const LAUNCH_COST          = { Fe: 50, C: 20 };
 // Koszt ekspedycji kolonizacyjnej
-const COLONY_LAUNCH_COST   = { minerals: 500, energy: 300, organics: 200, water: 100 };
-// Koszt misji rozpoznawczej
-const RECON_COST           = { energy: 100 };
+const COLONY_LAUNCH_COST   = { Fe: 150, C: 50, Ti: 20, food: 100, water: 50 };
+// Koszt misji rozpoznawczej (symboliczny — energia flow nie pobierana z inventory)
+const RECON_COST           = { Fe: 10 };
 const MIN_TRAVEL_YEARS     = 2;     // minimalna długość podróży w latach gry
 const MIN_COLONY_TRAVEL    = 3;     // minimalna podróż kolonizacyjna
 const EXPEDITION_CREW_COST = 0.5;   // POP zablokowany na czas misji (mining/scientific)
@@ -67,7 +67,7 @@ const COLONY_CREW_COST     = 2.0;   // POPy blokowane przez ekspedycję koloniza
 const RECON_CREW_COST      = 0.5;   // POP zablokowany na czas misji rozpoznawczej
 
 // Zasoby startowe nowej kolonii (przed mnożnikiem zdarzenia)
-const COLONY_START_RESOURCES = { minerals: 200, energy: 150, organics: 150, water: 100, research: 50 };
+const COLONY_START_RESOURCES = { Fe: 200, C: 150, Si: 100, Cu: 50, food: 100, water: 100, research: 50 };
 
 export class ExpeditionSystem {
   constructor(resourceSystem = null) {
@@ -758,32 +758,46 @@ export class ExpeditionSystem {
 
   // Bazowy zarobek bez mnożnika zdarzenia
   // Używany zarówno do szacunków (modal) jak i do obliczeń przy przybyciu
+  // Nowy system: yield z deposits na ciele niebieskim (jeśli dostępne)
   _baseYield(type, target) {
-    if (!target) return { minerals: 30 };
+    if (!target) return { Fe: 30 };
 
     const gained = {};
+    const deposits = target.deposits ?? [];
+
+    // Jeśli cel ma złoża — mining yield proporcjonalny do pozostałych zasobów
+    if (type === 'mining' && deposits.length > 0) {
+      for (const d of deposits) {
+        if (d.remaining <= 0) continue;
+        // Yield = richness × 30, max 150 per surowiec
+        const amt = Math.min(150, Math.max(5, Math.floor(d.richness * 30)));
+        gained[d.resourceId] = (gained[d.resourceId] ?? 0) + amt;
+      }
+      // Brak złóż z remaining > 0 → fallback
+      if (Object.keys(gained).length === 0) gained.Fe = 20;
+      return gained;
+    }
 
     if (target.type === 'asteroid' || target.type === 'planetoid') {
-      // Asteroidy i planetoidy — głównie minerały wg zawartości żelaza
-      const feContent  = target.composition?.Fe ?? 20;
-      const massFactor = target.physics?.mass   ?? 1;
-      gained.minerals  = Math.max(20, Math.min(300,
-        Math.floor(feContent * 1.5 + massFactor * 20)
-      ));
+      // Asteroidy i planetoidy — surowce wg składu chemicznego
+      const comp = target.composition ?? {};
+      gained.Fe = Math.max(10, Math.min(200, Math.floor((comp.Fe ?? 15) * 1.5)));
+      if ((comp.Si ?? 0) > 5) gained.Si = Math.floor((comp.Si ?? 0) * 0.8);
+      if ((comp.C  ?? 0) > 5) gained.C  = Math.floor((comp.C  ?? 0) * 0.8);
       if (type === 'scientific') {
         gained.research = 30;
       }
 
     } else if (target.type === 'comet') {
-      // Komety — bogate w lód wodny i organikę
-      gained.water    = 200;   // szacunek (losowy przy przybyciu przez mnożnik)
-      gained.organics = 40;
+      // Komety — bogate w lód wodny
+      gained.water    = 200;
+      gained.C        = 40;
       gained.research = 50;
 
     } else if (target.type === 'moon') {
-      // Księżyc — mniejszy zarobek niż planeta, zależny od typu
+      // Księżyc — mniejszy zarobek, zależy od składu
       const isMassive = (target.physics?.mass ?? 0) > 0.01;
-      gained.minerals = isMassive ? 80 : 40;
+      gained.Fe = isMassive ? 80 : 40;
       if (target.moonType === 'icy') {
         gained.water = 100;
       }
@@ -792,12 +806,13 @@ export class ExpeditionSystem {
       }
 
     } else if (target.type === 'planet') {
-      // Inna planeta — minerały i woda wg składu chemicznego
-      const comp     = target.composition ?? {};
-      gained.minerals = Math.max(30, Math.floor((comp.Fe  ?? 15) * 0.8));
-      gained.water    = Math.max(10, Math.floor((comp.H2O ?? 5)  * 0.8));
+      // Inna planeta — surowce wg składu chemicznego
+      const comp = target.composition ?? {};
+      gained.Fe    = Math.max(20, Math.floor((comp.Fe  ?? 15) * 0.8));
+      gained.Si    = Math.max(5,  Math.floor((comp.Si  ?? 10) * 0.5));
+      gained.water = Math.max(10, Math.floor((comp.H2O ?? 5)  * 0.8));
       if (target.surface?.hasWater) {
-        gained.organics = 30;
+        gained.food = 30;
       }
       if (type === 'scientific') {
         gained.research = (target.lifeScore ?? 0) > 30 ? 80 : 30;
@@ -805,7 +820,7 @@ export class ExpeditionSystem {
 
     } else {
       // Fallback
-      gained.minerals = 30;
+      gained.Fe = 30;
     }
 
     return gained;

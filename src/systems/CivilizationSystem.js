@@ -51,13 +51,9 @@ const DEFAULT_POP      = 2;    // startowa liczba POPów
 const DEFAULT_HOUSING  = 0;    // housing pochodzi wyłącznie z budynków (colony_base = 4)
 export const POP_PER_BUILDING = 0.25;  // domyślny koszt POP na budynek
 
-// Konsumpcja per POP per rok gry
-const POP_CONSUMPTION = {
-  organics: 3.0,   // jedzenie — główna potrzeba
-  water:    1.5,    // woda
-  energy:   1.0,    // ogrzewanie, transport
-  minerals: 0.5,    // utrzymanie narzędzi
-};
+// Konsumpcja per POP per rok gry (nowy system: food/water/energy)
+import { POP_CONSUMPTION } from '../data/ResourcesData.js';
+// POP_CONSUMPTION = { food: 3.0, water: 1.5, energy: 1.0 }
 
 // Wzrost populacji
 const BASE_GROWTH_INTERVAL = 20;  // lat na nowego POPa przy bazowych warunkach
@@ -265,7 +261,7 @@ export class CivilizationSystem {
 
     // 5. Kryzysy
     this._updateUnrest();
-    this._updateFamine(this._resourceRatio('organics'));
+    this._updateFamine(this._resourceRatio('food') || this._resourceRatio('organics'));
 
     // 6. Epoka
     this._checkEpoch();
@@ -291,7 +287,7 @@ export class CivilizationSystem {
       return;
     }
 
-    const orgRatio  = this._resourceRatio('organics');
+    const orgRatio  = this._resourceRatio('food') || this._resourceRatio('organics');
     const foodMod   = this._foodGrowthModifier(orgRatio);
     if (foodMod <= 0) { this._lastGrowth = 0; return; }
 
@@ -324,9 +320,10 @@ export class CivilizationSystem {
   _updatePopDeath() {
     if (this.population <= 1) return;  // minimum 1 POP
 
-    const orgRatio = this._resourceRatio('organics');
+    // Nowy system: używaj 'food' zamiast 'organics'
+    const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
 
-    if (orgRatio < 0.02) {
+    if (foodRatio < 0.02) {
       this._starvationYears++;
       if (this._starvationYears >= STARVATION_YEARS) {
         this.population = Math.max(1, this.population - 1);
@@ -349,8 +346,8 @@ export class CivilizationSystem {
                    : popRatio <= 0.80 ? 10
                    : 0;
 
-    // 2. Żywność (0–20)
-    const orgRatio = this._resourceRatio('organics');
+    // 2. Żywność (0–20) — nowy system: food (fallback: organics)
+    const orgRatio = this._resourceRatio('food') || this._resourceRatio('organics');
     const food     = orgRatio > 0.50 ? 20
                    : orgRatio > 0.20 ? 12
                    : orgRatio > 0.05 ? 4
@@ -456,16 +453,17 @@ export class CivilizationSystem {
     if (pop === this._registeredPop) return;
     this._registeredPop = pop;
 
-    const orgMult = this.techSystem?.getConsumptionMultiplier('organics') ?? 1.0;
-    const watMult = this.techSystem?.getConsumptionMultiplier('water')    ?? 1.0;
+    // Nowy system: food/water/energy (bez minerals)
+    const foodMult = this.techSystem?.getConsumptionMultiplier('food') ??
+                     this.techSystem?.getConsumptionMultiplier('organics') ?? 1.0;
+    const watMult  = this.techSystem?.getConsumptionMultiplier('water') ?? 1.0;
 
     EventBus.emit('resource:registerProducer', {
       id:    'civilization_consumption',
       rates: {
-        organics: -(pop * POP_CONSUMPTION.organics * orgMult),
-        water:    -(pop * POP_CONSUMPTION.water    * watMult),
-        energy:   -(pop * POP_CONSUMPTION.energy),
-        minerals: -(pop * POP_CONSUMPTION.minerals),
+        food:   -(pop * POP_CONSUMPTION.food   * foodMult),
+        water:  -(pop * POP_CONSUMPTION.water  * watMult),
+        energy: -(pop * POP_CONSUMPTION.energy),
       },
     });
   }
@@ -474,7 +472,15 @@ export class CivilizationSystem {
 
   _resourceRatio(key) {
     const res = this._resourceSnap[key];
-    if (!res || res.capacity <= 0) return 0;
+    if (!res) return 0;
+    // Nowy system: brak capacity (unlimited) — obliczamy ratio z perYear i amount
+    if (!res.capacity || res.capacity <= 0 || res.capacity >= 99999) {
+      // Dla inventory resources: ratio = ilość / (roczna konsumpcja × 10)
+      // Daje 1.0 gdy mamy zapas na 10 lat konsumpcji
+      const consumption = Math.abs(res.perYear < 0 ? res.perYear : 0);
+      if (consumption <= 0) return res.amount > 0 ? 1.0 : 0;
+      return Math.min(1.0, res.amount / (consumption * 10));
+    }
     return res.amount / res.capacity;
   }
 
