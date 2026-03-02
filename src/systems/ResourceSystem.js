@@ -84,6 +84,16 @@ export class ResourceSystem {
     // Flagi niedoboru
     this._shortageFlags = {};
 
+    // ── Obserwowane delty (faktyczne zmiany inventory w czasie) ─────────
+    // Śledzą WSZYSTKIE źródła zmian: producenci + receive() + spend()
+    this._deltaTracker = {
+      prevSnapshot: new Map(),   // inventory na początku okna pomiarowego
+      prevResearch: 0,
+      timer: 0,                  // czas okna pomiarowego (lata gry)
+      observedPerYear: new Map(), // obliczone stawki per rok
+      initialized: false,
+    };
+
     // ── Kompatybilność wsteczna: stary obiekt resources ──────────────────
     // Wielu konsumentów (UI, BuildingSystem, CivSystem) czyta this.resources
     // Tworzymy proxy obiekt który mapuje stare klucze na nowy system
@@ -200,6 +210,11 @@ export class ResourceSystem {
     for (const [id, val] of this._inventoryPerYear) {
       snap._perYear[id] = val;
     }
+    // Obserwowane delty (faktyczne zmiany inventory — uwzględnia mining, receive, spend)
+    snap._observedPerYear = {};
+    for (const [id, val] of this._deltaTracker.observedPerYear) {
+      snap._observedPerYear[id] = val;
+    }
     return snap;
   }
 
@@ -307,6 +322,26 @@ export class ResourceSystem {
     this._emitChanged();
   }
 
+  // Oblicz obserwowane stawki zmian inventory (co ~0.5 roku gry)
+  _computeObservedRates() {
+    const dt = this._deltaTracker;
+    if (dt.timer <= 0) return;
+
+    for (const [id, current] of this.inventory) {
+      const prev = dt.prevSnapshot.get(id) ?? current;
+      const rate = (current - prev) / dt.timer;
+      dt.observedPerYear.set(id, rate);
+      dt.prevSnapshot.set(id, current);
+    }
+
+    // Research
+    const resRate = (this.research.amount - dt.prevResearch) / dt.timer;
+    dt.observedPerYear.set('research', resRate);
+    dt.prevResearch = this.research.amount;
+
+    dt.timer = 0;
+  }
+
   // Aktualizacja co tik
   _update(deltaYears) {
     this._accumYears += deltaYears;
@@ -340,6 +375,19 @@ export class ResourceSystem {
       const before = this.research.amount;
       this.research.amount = Math.max(0, this.research.amount + this.research.perYear * deltaYears);
       if (this.research.amount !== before) anyChange = true;
+    }
+
+    // Obserwowane delty — co ~0.5 roku gry przelicz faktyczne zmiany
+    this._deltaTracker.timer += deltaYears;
+    if (!this._deltaTracker.initialized) {
+      // Inicjalizacja snapshot przy pierwszym tiku
+      for (const [id, amount] of this.inventory) {
+        this._deltaTracker.prevSnapshot.set(id, amount);
+      }
+      this._deltaTracker.prevResearch = this.research.amount;
+      this._deltaTracker.initialized = true;
+    } else if (this._deltaTracker.timer >= 0.5) {
+      this._computeObservedRates();
     }
 
     // Brownout check

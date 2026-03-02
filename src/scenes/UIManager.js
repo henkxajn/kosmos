@@ -262,7 +262,13 @@ export class UIManager {
           this._resources.research = inventory._research.amount ?? 0;
           this._resDelta.research  = inventory._research.perYear ?? 0;
         }
-        if (inventory._perYear) this._invPerYear = { ...inventory._perYear };
+        // Preferuj obserwowane delty (uwzględniają mining + receive + spend)
+        // Fallback na _perYear (tylko registrowane producenty)
+        if (inventory._observedPerYear && Object.keys(inventory._observedPerYear).length > 0) {
+          this._invPerYear = { ...inventory._observedPerYear };
+        } else if (inventory._perYear) {
+          this._invPerYear = { ...inventory._perYear };
+        }
       }
     };
     EventBus.on('resource:changed',  _applyResources);

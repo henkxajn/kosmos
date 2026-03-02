@@ -412,7 +412,7 @@ export class PlanetGlobeScene {
     };
 
     // Resources — nowy model inventory (rozszerzony o perYear/energyFlow dla TopBar)
-    const applyRes = ({ resources, inventory, perYear, energyFlow }) => {
+    const applyRes = ({ resources, inventory }) => {
       if (resources) {
         for (const [k, v] of Object.entries(resources)) {
           this._resources[k] = v.amount ?? 0;
@@ -420,12 +420,15 @@ export class PlanetGlobeScene {
       }
       if (inventory) {
         this._inventory = inventory;
-      }
-      if (perYear) {
-        this._invPerYear = perYear;
-      }
-      if (energyFlow) {
-        this._energyFlow = energyFlow;
+        // Preferuj obserwowane delty (uwzględniają mining + receive + spend)
+        if (inventory._observedPerYear && Object.keys(inventory._observedPerYear).length > 0) {
+          this._invPerYear = { ...inventory._observedPerYear };
+        } else if (inventory._perYear) {
+          this._invPerYear = { ...inventory._perYear };
+        }
+        if (inventory._energy) {
+          this._energyFlow = { ...inventory._energy };
+        }
       }
     };
     this._onResourceChange = applyRes;
