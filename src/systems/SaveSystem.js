@@ -72,6 +72,7 @@ export class SaveSystem {
 
     const tSys   = window.KOSMOS.techSystem;
     const eSys   = window.KOSMOS.expeditionSystem;
+    const vMgr   = window.KOSMOS.vesselManager;
     const colMgr = window.KOSMOS.colonyManager;
 
     // Serializuj kolonie z ColonyManager (budynki per-kolonia już w colonies[].buildings)
@@ -100,6 +101,7 @@ export class SaveSystem {
       // Globalne
       techs:          tSys?.serialize()    ?? null,
       expeditions:    eSys?.serialize()    ?? null,
+      vesselManager:  vMgr?.serialize()    ?? null,
       exploredBodies,
     };
   }

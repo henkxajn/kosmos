@@ -19,11 +19,23 @@ export const TEXTURE_VARIANTS = 3; // ile wariantów per typ
 
 /**
  * Mapowanie typu planety (gra) → typ tekstury (generator).
- * Gas → null (proceduralna tekstura canvas).
+ * Zwraca klucz odpowiadający typowi w PLANET_TYPES generatora.
  */
 export function resolveTextureType(planet) {
+  // Planetoidy — pod-typ wg planetoidType
+  if (planet.type === 'planetoid') {
+    return `planetoid_${planet.planetoidType || 'silicate'}`;
+  }
+
   const type = planet.planetType;
-  if (type === 'gas') return null; // proceduralna
+
+  // Gas giganty — pod-typ wg temperatury
+  if (type === 'gas') {
+    const tempK = planet.temperatureK || 150;
+    if (tempK > 200) return 'gas_warm';
+    if (tempK < 80)  return 'gas_cold';
+    return 'gas_giant';
+  }
 
   if (type === 'hot_rocky') return 'volcanic';
   if (type === 'ice')       return 'ice';

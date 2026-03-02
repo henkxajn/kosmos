@@ -17,47 +17,8 @@ import EventBus   from '../core/EventBus.js';
 import { HexGrid } from '../map/HexGrid.js';
 import { PlanetGlobeTexture }         from './PlanetGlobeTexture.js';
 import { PlanetGlobeCameraController } from './PlanetGlobeCameraController.js';
-import { resolveTextureType, loadPlanetTextures, hashCode, isTextureInCache, TEXTURE_VARIANTS }
+import { resolveTextureType, loadPlanetTextures, hashCode, TEXTURE_VARIANTS }
   from './PlanetTextureUtils.js';
-
-// ── Proceduralna tekstura dla gazowych gigantów (pasma) ─────────
-function noise(x, y, seed) {
-  const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
-  return n - Math.floor(n);
-}
-function fbm(x, y, seed, octaves = 6) {
-  let val = 0, amp = 0.5, freq = 1;
-  for (let i = 0; i < octaves; i++) {
-    val += amp * noise(x * freq, y * freq, seed);
-    amp *= 0.5; freq *= 2;
-  }
-  return val;
-}
-
-const GAS_PALETTES = {
-  gas:      [[180,150,120],[200,170,130],[160,130,100],[140,120,90],[210,190,160]],
-  gas_cold: [[150,180,255],[100,140,220],[180,200,255],[80,120,200],[140,160,240]],
-};
-
-function generateGasTexture(seed) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512; canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  const pal = (seed % 2 === 0) ? GAS_PALETTES.gas : GAS_PALETTES.gas_cold;
-  for (let y = 0; y < 256; y++) {
-    for (let x = 0; x < 512; x++) {
-      const nx = x / 512, ny = y / 256;
-      let val = fbm(nx * 2 + ny * 0.5, ny * 8, seed, 5);
-      val = (Math.sin(ny * 20 + val * 6) + 1) * 0.5;
-      const idx = Math.min(Math.floor(val * pal.length), pal.length - 1);
-      const c   = pal[idx];
-      const v   = 0.85 + noise(x * 0.1, y * 0.1, seed + 1) * 0.3;
-      ctx.fillStyle = `rgb(${c[0]*v|0},${c[1]*v|0},${c[2]*v|0})`;
-      ctx.fillRect(x, y, 1, 1);
-    }
-  }
-  return new THREE.CanvasTexture(canvas);
-}
 
 export class PlanetGlobeRenderer {
   constructor() {
@@ -149,15 +110,14 @@ export class PlanetGlobeRenderer {
     dirLight.position.set(3, 2, 4);
     this._scene.add(dirLight);
 
-    // ── Materiał sfery: PBR lub proceduralna (gas) ──────────────
+    // ── Materiał sfery: PBR (pre-generowane tekstury z plików) ──────
     const texType = resolveTextureType(planet);
-    this._isGas = !texType;
+    this._isGas = (planet.planetType === 'gas');
 
     const geometry = new THREE.SphereGeometry(1.0, 64, 64);
     let material;
 
     if (texType) {
-      // Pre-generowane tekstury PBR z plików
       const seed    = hashCode(String(planet.id));
       const variant = (seed % TEXTURE_VARIANTS) + 1;
       const maps    = loadPlanetTextures(texType, variant);
@@ -165,16 +125,13 @@ export class PlanetGlobeRenderer {
         map:          maps.diffuse,
         normalMap:    maps.normal,
         roughnessMap: maps.roughness,
-        metalness:    0.05,
+        metalness:    this._isGas ? 0.0 : 0.05,
       });
     } else {
-      // Gas giant — proceduralna tekstura canvas
-      const seed = hashCode(String(planet.id));
-      const tex  = generateGasTexture(seed);
-      material = new THREE.MeshPhongMaterial({
-        map:       tex,
-        shininess: 8,
-        specular:  new THREE.Color(0x111111),
+      // Fallback: solid color (nie powinno wystąpić)
+      material = new THREE.MeshStandardMaterial({
+        color: planet.visual?.color ?? 0x888888,
+        metalness: 0.05, roughness: 0.7,
       });
     }
 
@@ -276,13 +233,8 @@ export class PlanetGlobeRenderer {
     // Dispose Three.js
     if (this._sphereMesh) {
       this._sphereMesh.geometry.dispose();
-      // Dispose materiału (ale NIE tekstur z cache PBR)
-      const mat = this._sphereMesh.material;
-      if (this._isGas && mat.map) {
-        mat.map.dispose(); // canvas gas — nie w cache
-      }
       // Tekstury PBR z loadPlanetTextures są w _textureCache — nie dispose'uj
-      mat.dispose();
+      this._sphereMesh.material.dispose();
       this._scene.remove(this._sphereMesh);
       this._sphereMesh = null;
     }

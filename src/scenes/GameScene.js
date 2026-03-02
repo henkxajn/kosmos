@@ -21,6 +21,7 @@ import { BuildingSystem }    from '../systems/BuildingSystem.js';
 import { TechSystem }        from '../systems/TechSystem.js';
 import { ExpeditionSystem }  from '../systems/ExpeditionSystem.js';
 import { ColonyManager }      from '../systems/ColonyManager.js';
+import { VesselManager }      from '../systems/VesselManager.js';
 import { RandomEventSystem }  from '../systems/RandomEventSystem.js';
 import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }      from '../systems/DepositSystem.js';
@@ -117,6 +118,7 @@ export class GameScene {
     this.buildingSystem.setFactorySystem(this.factorySystem);
     this.expeditionSystem = new ExpeditionSystem(this.resourceSystem);
     this.colonyManager   = new ColonyManager(this.techSystem);
+    this.vesselManager   = new VesselManager();
     this.randomEventSystem = new RandomEventSystem();
 
     window.KOSMOS.civMode          = false;
@@ -128,6 +130,7 @@ export class GameScene {
     window.KOSMOS.factorySystem    = this.factorySystem;
     window.KOSMOS.expeditionSystem = this.expeditionSystem;
     window.KOSMOS.colonyManager    = this.colonyManager;
+    window.KOSMOS.vesselManager    = this.vesselManager;
     window.KOSMOS.timeSystem       = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
 
@@ -185,6 +188,12 @@ export class GameScene {
           }
         }
         if (c4x.expeditions) this.expeditionSystem.restore(c4x.expeditions);
+        // Przywróć VesselManager
+        if (c4x.vesselManager) {
+          this.vesselManager.restore(c4x.vesselManager);
+        }
+        // Migracja starych save: fleet[] ze stringami → vessel instances
+        this._migrateStringFleets();
       } else {
         // Save v4: stary format (single-colony) → migruj
         if (c4x.resources) this.resourceSystem.restore(c4x.resources);
@@ -349,6 +358,22 @@ export class GameScene {
     // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
     this.buildingSystem.setDeposits(planet.deposits ?? []);
     this.colonyManager.registerHomePlanet(planet, this.resourceSystem, this.civSystem, this.buildingSystem);
+  }
+
+  // ── Migracja starych save: fleet[] ze stringami → vessel instances ──
+  _migrateStringFleets() {
+    const colMgr = this.colonyManager;
+    const vMgr = this.vesselManager;
+    if (!colMgr || !vMgr) return;
+
+    for (const colony of colMgr.getAllColonies()) {
+      if (!colony.fleet || colony.fleet.length === 0) continue;
+      // Sprawdź czy fleet zawiera stare stringi (typy statków)
+      const hasStrings = colony.fleet.some(f => typeof f === 'string' && !f.startsWith('v_'));
+      if (hasStrings) {
+        colony.fleet = vMgr.migrateStringFleet(colony.fleet, colony.planetId);
+      }
+    }
   }
 
   // ── Generowanie / przywracanie układu ─────────────────────────

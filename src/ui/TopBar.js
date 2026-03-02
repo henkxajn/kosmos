@@ -162,10 +162,7 @@ export class TopBar {
 
     ctx.textAlign = 'left';
 
-    // ── Tooltip (rysuj na wierzchu) ──
-    if (this._tooltip) {
-      this._drawTooltip(ctx, W);
-    }
+    // Tooltip rysowany osobno przez drawTooltip() — na samym wierzchu
   }
 
   // ── Tooltip ────────────────────────────────────────────
@@ -210,6 +207,11 @@ export class TopBar {
       ctx.fillText(line.text, bx + PAD, by + PAD + i * LH + 8);
     }
     ctx.textAlign = 'left';
+  }
+
+  // Publiczny — rysuj tooltip na samym wierzchu (po wszystkich panelach)
+  drawTooltip(ctx, W) {
+    if (this._tooltip) this._drawTooltip(ctx, W);
   }
 
   // Aktualizuj hover — wywoływane z UIManager/PlanetGlobeScene przy mousemove

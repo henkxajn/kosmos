@@ -85,12 +85,12 @@ export class ExpeditionSystem {
     EventBus.on('time:tick', () => this._checkArrivals());
 
     // Obsługa żądania wysłania ekspedycji z UI
-    EventBus.on('expedition:sendRequest', ({ type, targetId, cargo }) =>
-      this._launch(type, targetId, cargo));
+    EventBus.on('expedition:sendRequest', ({ type, targetId, cargo, vesselId }) =>
+      this._launch(type, targetId, cargo, vesselId));
 
     // Obsługa żądania transferu zasobów
-    EventBus.on('expedition:transportRequest', ({ targetId, cargo }) =>
-      this._launchTransport(targetId, cargo));
+    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId }) =>
+      this._launchTransport(targetId, cargo, vesselId));
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────
@@ -226,16 +226,17 @@ export class ExpeditionSystem {
   }
 
   // Wyślij nową ekspedycję
-  _launch(type, targetId) {
+  // vesselId: opcjonalny — konkretny statek do przypisania (nowy system)
+  _launch(type, targetId, cargo, vesselId) {
     // Rozdziel obsługę kolonizacji
     if (type === 'colony') {
-      this._launchColony(targetId);
+      this._launchColony(targetId, vesselId);
       return;
     }
 
     // Rozdziel obsługę misji rozpoznawczej
     if (type === 'recon') {
-      this._launchRecon(targetId);  // targetId = 'nearest' | 'full_system'
+      this._launchRecon(targetId, vesselId);  // targetId = 'nearest' | 'full_system'
       return;
     }
 
@@ -265,8 +266,26 @@ export class ExpeditionSystem {
       return;
     }
 
-    // Sprawdź zasięg statku (scientific wymaga science_vessel)
-    if (type === 'scientific' && !this._isInRange(target, 'science_vessel')) {
+    // Oblicz odległość
+    const distance = this._calcDistance(target);
+
+    // Sprawdź zasięg: jeśli podano vessel → sprawdź paliwo, inaczej stary system (range)
+    const vMgr = window.KOSMOS?.vesselManager;
+    let assignedVesselId = vesselId ?? null;
+    if (vMgr && assignedVesselId) {
+      const vessel = vMgr.getVessel(assignedVesselId);
+      if (!vessel || vessel.status !== 'idle') {
+        EventBus.emit('expedition:launchFailed', { reason: 'Statek niedostępny' });
+        return;
+      }
+      const fuelNeeded = distance * vessel.fuel.consumption;
+      if (vessel.fuel.current < fuelNeeded) {
+        EventBus.emit('expedition:launchFailed', {
+          reason: `Brak paliwa (potrzeba ${fuelNeeded.toFixed(1)} pc, ma ${vessel.fuel.current.toFixed(1)})`
+        });
+        return;
+      }
+    } else if (type === 'scientific' && !this._isInRange(target, 'science_vessel')) {
       const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
       const range = SHIPS.science_vessel.range;
       EventBus.emit('expedition:launchFailed', {
@@ -287,8 +306,7 @@ export class ExpeditionSystem {
     // Zablokuj POPy na czas misji
     EventBus.emit('civ:lockPops', { amount: EXPEDITION_CREW_COST });
 
-    // Oblicz odległość i czas podróży
-    const distance   = this._calcDistance(target);
+    // Czas podróży
     const travelTime = Math.max(MIN_TRAVEL_YEARS, Math.ceil(distance * 2));
     const departYear = Math.floor(this._gameYear);
 
@@ -304,17 +322,32 @@ export class ExpeditionSystem {
       distance:    parseFloat(distance.toFixed(2)),
       travelTime,
       crewCost:    EXPEDITION_CREW_COST,
+      vesselId:    assignedVesselId,
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
     };
 
     this._expeditions.push(expedition);
+
+    // Wyślij vessel na misję (jeśli przypisany)
+    if (vMgr && assignedVesselId) {
+      vMgr.dispatchOnMission(assignedVesselId, {
+        type,
+        targetId,
+        targetName: target.name,
+        departYear,
+        arrivalYear: expedition.arrivalYear,
+        returnYear:  expedition.returnYear,
+        fuelCost:    distance * (vMgr.getVessel(assignedVesselId)?.fuel?.consumption ?? 0),
+      });
+    }
+
     EventBus.emit('expedition:launched', { expedition });
   }
 
   // Wyślij ekspedycję kolonizacyjną
-  _launchColony(targetId) {
+  _launchColony(targetId, vesselId) {
     const check = this.canLaunchColony(targetId);
     if (!check.ok) {
       const reason = !check.techOk
@@ -335,9 +368,24 @@ export class ExpeditionSystem {
     }
 
     const target = this._findTarget(targetId);
+    const distance = this._calcDistance(target);
 
-    // Sprawdź zasięg statku kolonijnego
-    if (!this._isInRange(target, 'colony_ship')) {
+    // Sprawdź zasięg: vessel → paliwo, fallback → stary range
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr && vesselId) {
+      const vessel = vMgr.getVessel(vesselId);
+      if (!vessel || vessel.status !== 'idle') {
+        EventBus.emit('expedition:launchFailed', { reason: 'Statek niedostępny' });
+        return;
+      }
+      const fuelNeeded = distance * vessel.fuel.consumption;
+      if (vessel.fuel.current < fuelNeeded) {
+        EventBus.emit('expedition:launchFailed', {
+          reason: `Brak paliwa (potrzeba ${fuelNeeded.toFixed(1)} pc, ma ${vessel.fuel.current.toFixed(1)})`
+        });
+        return;
+      }
+    } else if (!this._isInRange(target, 'colony_ship')) {
       const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
       const range = SHIPS.colony_ship.range;
       EventBus.emit('expedition:launchFailed', {
@@ -358,14 +406,13 @@ export class ExpeditionSystem {
     // Zablokuj 2 POPy
     EventBus.emit('civ:lockPops', { amount: COLONY_CREW_COST });
 
-    // Zużyj colony_ship z hangaru floty
+    // Zużyj colony_ship z hangaru floty (vessel zostanie zniszczony)
     const colMgrC = window.KOSMOS?.colonyManager;
     if (colMgrC) {
-      colMgrC.consumeShip(colMgrC.activePlanetId, 'colony_ship');
+      colMgrC.consumeShip(colMgrC.activePlanetId, vesselId ?? 'colony_ship');
     }
 
-    // Oblicz odległość i czas podróży
-    const distance   = this._calcDistance(target);
+    // Czas podróży
     const travelTime = Math.max(MIN_COLONY_TRAVEL, Math.ceil(distance * 2));
     const departYear = Math.floor(this._gameYear);
 
@@ -391,7 +438,7 @@ export class ExpeditionSystem {
   }
 
   // Wyślij transport zasobów między koloniami
-  _launchTransport(targetId, cargo) {
+  _launchTransport(targetId, cargo, vesselId) {
     if (!cargo || Object.keys(cargo).length === 0) {
       EventBus.emit('expedition:launchFailed', { reason: 'Brak ładunku do transportu' });
       return;
@@ -443,6 +490,7 @@ export class ExpeditionSystem {
       distance:    parseFloat(distance.toFixed(2)),
       travelTime,
       crewCost:    EXPEDITION_CREW_COST,
+      vesselId:    vesselId ?? null,
       cargo:       { ...cargo },
       status:      'en_route',
       gained:      null,
@@ -450,12 +498,25 @@ export class ExpeditionSystem {
     };
 
     this._expeditions.push(expedition);
+
+    // Wyślij vessel na transport
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr && vesselId) {
+      vMgr.dispatchOnMission(vesselId, {
+        type: 'transport', targetId,
+        targetName: expedition.targetName,
+        departYear, arrivalYear: expedition.arrivalYear, returnYear: expedition.returnYear,
+        fuelCost: distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0),
+        cargo: { ...cargo },
+      });
+    }
+
     EventBus.emit('expedition:launched', { expedition });
   }
 
   // Wyślij misję rozpoznawczą
   // scope: 'nearest' — najbliższa niezbadana planeta; 'full_system' — cały układ
-  _launchRecon(scope) {
+  _launchRecon(scope, vesselId) {
     const { ok, techOk, padOk, crewOk, vesselOk } = this.canLaunchRecon();
     if (!ok) {
       const reason = !techOk
@@ -509,12 +570,24 @@ export class ExpeditionSystem {
       distance:    0,
       travelTime,
       crewCost:    RECON_CREW_COST,
+      vesselId:    vesselId ?? null,
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
     };
 
     this._expeditions.push(expedition);
+
+    // Wyślij vessel na misję recon
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr && vesselId) {
+      vMgr.dispatchOnMission(vesselId, {
+        type: 'recon', targetId: scope, targetName: expedition.targetName,
+        departYear, arrivalYear: expedition.arrivalYear, returnYear: expedition.returnYear,
+        fuelCost: 0, // recon — symboliczny koszt, nie paliwo
+      });
+    }
+
     EventBus.emit('expedition:launched', { expedition });
   }
 
@@ -530,6 +603,11 @@ export class ExpeditionSystem {
         exp.status = 'completed';
         // Odblokuj POPy — załoga wraca
         EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
+        // Vessel wraca do hangaru
+        if (exp.vesselId) {
+          const vMgr = window.KOSMOS?.vesselManager;
+          if (vMgr) vMgr.dockAtColony(exp.vesselId);
+        }
         EventBus.emit('expedition:returned', { expedition: exp });
         changed = true;
       }
@@ -570,11 +648,15 @@ export class ExpeditionSystem {
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
 
+    const vMgr = window.KOSMOS?.vesselManager;
+
     if (roll < 5) {
       // KATASTROFA (5%) — brak zarobku, załoga zaginiona → odblokuj POPy
       exp.status = 'completed';
       exp.gained = {};
       EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
+      // Statek utracony
+      if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
       EventBus.emit('expedition:disaster', { expedition: exp });
       return;
     }
@@ -602,6 +684,12 @@ export class ExpeditionSystem {
 
     exp.gained = gained;
     exp.status = 'returning';
+
+    // Vessel zaczyna powrót
+    if (exp.vesselId && vMgr) {
+      vMgr.arriveAtTarget(exp.vesselId);
+      vMgr.startReturn(exp.vesselId);
+    }
 
     // Dostarcz zasoby przy przybyciu (nie przy powrocie)
     if (this.resourceSystem && Object.keys(gained).length > 0) {
@@ -678,6 +766,13 @@ export class ExpeditionSystem {
     exp.gained = exp.cargo || {};
     exp.status = 'returning';  // załoga wraca
 
+    // Vessel: dotarł do celu → zaczyna powrót
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (exp.vesselId && vMgr) {
+      vMgr.arriveAtTarget(exp.vesselId);
+      vMgr.startReturn(exp.vesselId);
+    }
+
     EventBus.emit('expedition:arrived', {
       expedition: exp,
       gained: exp.cargo,
@@ -689,16 +784,21 @@ export class ExpeditionSystem {
   _processReconArrival(exp) {
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
+    const vMgrR = window.KOSMOS?.vesselManager;
 
     if (roll < 5) {
       // KATASTROFA (5%) — statek utracony, załoga zaginiona
       exp.status = 'completed';
       exp.gained = {};
       EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? RECON_CREW_COST });
-      // Zużyj statek naukowy przy katastrofie
-      const colMgr = window.KOSMOS?.colonyManager;
-      const activePid = colMgr?.activePlanetId;
-      if (colMgr) colMgr.consumeShip(activePid, 'science_vessel');
+      // Zniszcz vessel lub zużyj stary sposób
+      if (exp.vesselId && vMgrR) {
+        vMgrR.destroyVessel(exp.vesselId);
+      } else {
+        const colMgr = window.KOSMOS?.colonyManager;
+        const activePid = colMgr?.activePlanetId;
+        if (colMgr) colMgr.consumeShip(activePid, 'science_vessel');
+      }
       EventBus.emit('expedition:disaster', { expedition: exp });
       return;
     }
@@ -737,6 +837,11 @@ export class ExpeditionSystem {
 
     exp.gained = { discovered: discovered.length };
     exp.status = 'returning';
+
+    // Vessel zaczyna powrót
+    if (exp.vesselId && vMgrR) {
+      vMgrR.startReturn(exp.vesselId);
+    }
 
     EventBus.emit('expedition:reconComplete', {
       expedition: exp,

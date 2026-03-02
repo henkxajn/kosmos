@@ -665,6 +665,11 @@ export class PlanetGlobeScene {
       this._drawCivTabOverlay(ctx);
     }
 
+    // Tooltip TopBar — na samym wierzchu (po wszystkich panelach)
+    if (window.KOSMOS?.civMode) {
+      this._topBar.drawTooltip(ctx, LW);
+    }
+
     ctx.restore();
   }
 

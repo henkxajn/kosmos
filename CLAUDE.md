@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v5
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v6
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -77,6 +77,7 @@ window.KOSMOS = {
   civSystem,        // CivilizationSystem
   buildingSystem,   // BuildingSystem
   techSystem,       // TechSystem
+  vesselManager,    // VesselManager — rejestr statków (pozycje, paliwo, misje)
   savedData,        // dane z localStorage (BootScene → GameScene)
 }
 ```
@@ -165,8 +166,8 @@ DistanceUtils (src/utils/DistanceUtils.js)
   └─ orbitalFromHomeAU(entity)  ← skrót orbital od homePlanet (zasięg statków)
 
 SaveSystem._serializeCiv4x()
-  └─ czyta: window.KOSMOS.{resourceSystem, civSystem, buildingSystem, techSystem, expeditionSystem}
-  └─ zapisuje: resources, civ, buildings (z baseRates + popCost!), techs, expeditions
+  └─ czyta: window.KOSMOS.{resourceSystem, civSystem, buildingSystem, techSystem, expeditionSystem, vesselManager}
+  └─ zapisuje: resources, civ, buildings (z baseRates + popCost!), techs, expeditions, vesselManager
 ```
 
 ---
@@ -189,7 +190,7 @@ SaveSystem._serializeCiv4x()
 | `civ:popBorn { population }` | CivilizationSystem | UIManager, BuildingSystem |
 | `civ:popDied { cause, population }` | CivilizationSystem | UIManager, BuildingSystem |
 | `civ:employmentChanged { delta }` | BuildingSystem | CivilizationSystem |
-| `expedition:sendRequest { type, targetId }` | UIManager | ExpeditionSystem |
+| `expedition:sendRequest { type, targetId, vesselId }` | UIManager | ExpeditionSystem |
 | `civ:lockPops / unlockPops { amount }` | ExpeditionSystem | CivilizationSystem |
 | `fleet:buildRequest { shipId }` | UIManager | ColonyManager |
 | `fleet:buildStarted { planetId, shipId }` | ColonyManager | UIManager |
@@ -197,6 +198,13 @@ SaveSystem._serializeCiv4x()
 | `fleet:buildFailed { reason }` | ColonyManager | UIManager |
 | `fleet:shipConsumed { planetId, shipId }` | ColonyManager | — |
 | `expedition:reconComplete { scope, discovered }` | ExpeditionSystem | UIManager (EventLog) |
+| `vessel:created { vessel }` | VesselManager | — |
+| `vessel:launched { vessel, mission }` | VesselManager | ThreeRenderer, UIManager |
+| `vessel:arrived { vessel, mission }` | VesselManager | ExpeditionSystem |
+| `vessel:returning { vessel }` | VesselManager | — |
+| `vessel:docked { vessel }` | VesselManager | ThreeRenderer, UIManager |
+| `vessel:positionUpdate { vessels[] }` | VesselManager | ThreeRenderer |
+| `vessel:rename { vesselId, name }` | UIManager | VesselManager |
 | `planet:colonize { planet }` | UIScene | GameScene → PlanetScene |
 | `planet:openMap { planet }` | UIScene | GameScene → PlanetScene |
 
@@ -210,7 +218,7 @@ SaveSystem._serializeCiv4x()
 4. NIE importuj systemów bezpośrednio między sobą
 5. Dane gry (budynki, tech, składy chemiczne) → `src/data/` — oddzielone od logiki
 6. Nowy budynek tier-2: dodaj `requires: 'tech_id'` w BuildingsData + odpowiednie `unlockBuilding` w TechData
-7. Nowy statek: dodaj definicję w `ShipsData.js` (z `range` w AU) + `unlockShip` w TechData + budowa przez Stocznię (ColonyManager.startShipBuild)
+7. Nowy statek: dodaj definicję w `ShipsData.js` (z `fuelCapacity`, `fuelPerAU`) + `unlockShip` w TechData + budowa przez Stocznię (ColonyManager.startShipBuild) + pula nazw w `VesselNames.js`
 8. Odległość między ciałami → `DistanceUtils` (`src/utils/DistanceUtils.js`): euclidean (dynamiczna) i orbital (stabilna)
 9. Nowy typ planety wizualnie → dodaj typ w `generate-planets.js` (PLANET_TYPES) + wygeneruj tekstury CLI → dodaj mapowanie w `resolveTextureType()` w ThreeRenderer
 10. Regeneracja tekstur: `node generate-planets.js --type <typ> --count 3 --resolution 1024 --quality high --output ./assets/planet-textures --name <typ>`
@@ -265,6 +273,7 @@ SaveSystem._serializeCiv4x()
 ### Scenariusze i architektura
 - [x] **Etap 28** — Scenariusz "Cywilizacja": losowy układ z gwarancją cywilizacji, wyłączone perturbacje/kolizje, auto-kolonizacja; zamrożony "Generator"; usunięty Eden
 - [x] **Etap 29** — Planetoidy: 3 typy (metallic/carbonaceous/silicate), wzbogacone składy (Cu/Ti/W/Pt/Li), widoczne orbity, save/restore
+- [x] **Etap 30** — System Transportowy: VesselManager (rejestr floty), Vessel entity (pozycja/paliwo/misja), VesselNames (auto-nazwy PL), paliwo Tier 1 (power_cells, fuelPerAU), statki jako 3D sprites na mapie, UI floty z panelem akcji, integracja z ExpeditionSystem (vesselId), save v6 z migracją string fleet → vessel instances
 
 ### Następne etapy (plan)
 - [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
@@ -292,7 +301,9 @@ SaveSystem._serializeCiv4x()
 | Statki jako jednostki floty (nie budynki) | Stocznia buduje statki → trafiają do hangaru kolonii; intuicyjniejsze niż budynki na hexach |
 | RandomEventSystem disabled | System wstrzymany (flaga disabled=true) do czasu dopracowania logiki zdarzeń |
 | Dwie metryki odległości (euclidean/orbital) | Euclidean = dynamiczna (UI, travel time), orbital = stabilna (gating zasięgu statków) |
-| range w ShipsData (AU) | science_vessel=20 AU, colony_ship=12 AU — wymusza stopniową ekspansję |
+| Paliwo fuel-based (fuelCapacity/fuelPerAU) | Zastąpił statyczne `range` — emergentny zasięg z paliwa; power_cells jako Tier 1 |
+| Vessel instances (nie stringi w fleet) | Indywidualne statki z ID/nazwą/pozycją/paliwem → przyszłe interakcje w kosmosie (walki, spotkania) |
+| Auto-tankowanie w hangarze | 2 pc/rok z power_cells kolonii — napięcie zasobowe (produkcja power_cells vs tankowanie) |
 | Dynamiczny min-zoom dla księżyców | Moon r=0.015–0.04 → minDist=0.5 przy focus (vs 3 domyślnie) |
 | PBR tekstury (MeshStandardMaterial) | Pre-generowane PNG z normalMap+roughnessMap dają realistyczne oświetlenie 3D; gas giganty zachowują proceduralne pasma (MeshPhongMaterial) |
 | Tekstury pre-generowane (nie runtime) | Gra działa w przeglądarce (Live Server) — brak Node.js runtime; generator CLI tworzy PNG offline |

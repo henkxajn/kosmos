@@ -61,7 +61,10 @@ UŻYCIE:
 OPCJE:
   --type <typ>         Typ planety (domyślnie: all)
                        Dostępne: rocky, mercury, volcanic, desert,
-                       iron, ice, ocean, toxic, lava-ocean, all
+                       iron, ice, ocean, toxic, lava-ocean,
+                       gas_warm, gas_cold, gas_giant,
+                       planetoid_metallic, planetoid_carbonaceous,
+                       planetoid_silicate, all
   --count <n>          Ile wariantów danego typu (domyślnie: 1)
   --resolution <px>    Szerokość tekstury (domyślnie: 2048)
   --seed <n>           Seed bazowy (domyślnie: losowy)
@@ -244,6 +247,103 @@ const PLANET_TYPES = {
       hasEmission: true, emissionThreshold: 0.45,
     },
   },
+
+  // ── Gas giganty (proceduralne pasma, bez terenu) ──────────────
+  gas_warm: {
+    label: 'Gas giant warm (Jupiter-like)',
+    isGas: true,
+    palette: [
+      [120,70,30],[140,85,40],[160,100,50],[175,110,55],[190,125,65],
+      [200,140,75],[210,155,85],[215,165,100],[220,175,115],[225,185,130],
+      [230,195,145],[235,200,155],[240,210,170],[245,220,185],[250,230,200],
+      [255,240,215],
+    ],
+    bandConfig: {
+      bandFreq: 12,          // liczba głównych pasm
+      turbulenceScale: 3.5,  // skala turbulencji na pasmach
+      stormChance: 0.15,     // szansa na burzę per piksel (próg Worley)
+      stormScale: 6,         // skala Worley dla burz
+      bandWidthVariation: 0.6, // zmienność szerokości pasm
+    },
+  },
+  gas_cold: {
+    label: 'Gas giant cold (Neptune-like)',
+    isGas: true,
+    palette: [
+      [30,50,120],[40,65,140],[50,80,160],[55,90,170],[60,100,180],
+      [70,110,190],[80,120,200],[90,130,210],[100,145,218],[110,155,225],
+      [120,165,230],[135,178,235],[150,190,240],[170,205,245],[190,218,248],
+      [210,230,252],
+    ],
+    bandConfig: {
+      bandFreq: 18,          // węższe pasma
+      turbulenceScale: 2.5,
+      stormChance: 0.08,     // mniej burz
+      stormScale: 8,
+      bandWidthVariation: 0.4,
+    },
+  },
+  gas_giant: {
+    label: 'Gas giant (Saturn-like)',
+    isGas: true,
+    palette: [
+      [180,165,130],[190,175,140],[195,180,145],[200,185,150],[205,190,155],
+      [210,195,160],[215,200,165],[218,205,172],[220,208,178],[222,210,182],
+      [225,215,188],[228,218,192],[230,220,195],[235,225,200],[240,232,210],
+      [245,238,218],
+    ],
+    bandConfig: {
+      bandFreq: 24,          // liczne wąskie pasma
+      turbulenceScale: 2.0,
+      stormChance: 0.05,
+      stormScale: 10,
+      bandWidthVariation: 0.3,
+    },
+  },
+
+  // ── Planetoidy (standardowy pipeline, małe ciała) ─────────────
+  planetoid_metallic: {
+    label: 'Planetoid metallic (bright, iron-rich)',
+    palette: [
+      [140,135,125],[150,145,135],[160,155,145],[170,165,155],[178,172,162],
+      [185,180,170],[192,188,178],[198,194,185],[205,200,192],[210,206,198],
+      [215,212,205],[220,218,212],
+    ],
+    features: {
+      craters: true, craterCount: 80, craterMin: 0.005, craterMax: 0.08,
+      ridges: false, ridgeScale: 2, ridgeBlend: 0.1,
+      tectonic: false, tecScale: 3, tecStr: 0.15,
+      baseScale: 2.5, polar: false, polarFrost: false, minerals: true,
+    },
+  },
+  planetoid_carbonaceous: {
+    label: 'Planetoid carbonaceous (dark, carbon-rich)',
+    palette: [
+      [25,22,18],[30,27,22],[35,32,26],[40,36,30],[48,42,35],
+      [55,48,40],[62,55,46],[68,60,50],[75,66,55],[82,72,60],
+      [88,78,65],[95,84,70],
+    ],
+    features: {
+      craters: true, craterCount: 60, craterMin: 0.004, craterMax: 0.06,
+      ridges: false, ridgeScale: 2, ridgeBlend: 0.1,
+      tectonic: false, tecScale: 3, tecStr: 0.1,
+      baseScale: 2.0, polar: false, polarFrost: false, minerals: false,
+    },
+  },
+  planetoid_silicate: {
+    label: 'Planetoid silicate (grey, rocky)',
+    palette: [
+      [80,78,72],[90,88,82],[100,98,92],[110,108,100],[118,115,108],
+      [125,122,115],[132,130,122],[140,138,130],[148,145,138],[155,152,145],
+      [162,160,152],[170,168,160],
+    ],
+    features: {
+      craters: true, craterCount: 70, craterMin: 0.004, craterMax: 0.07,
+      ridges: true, ridgeScale: 3, ridgeBlend: 0.15,
+      tectonic: false, tecScale: 3, tecStr: 0.1,
+      baseScale: 2.2, polar: false, polarFrost: false, minerals: true,
+    },
+  },
 };
 
 if (flags['list-types']) {
@@ -419,6 +519,156 @@ function generatePlanet(planetType, W, H, seed, genOpts) {
 }
 
 // ============================================
+// GAS GIANT GENERATION PIPELINE
+// ============================================
+
+/**
+ * Generuje tekstury gazowego giganta — pasma + turbulencja + burze.
+ * Nie korzysta z generateTerrain() (brak kraterów/erozji/ridges).
+ * @param {object} planetType — z PLANET_TYPES (isGas=true)
+ * @param {number} W — szerokość px
+ * @param {number} H — wysokość px
+ * @param {number} seed
+ * @param {object} genOpts — flagi generacji
+ * @returns {object} — { diffuse, normal?, height?, roughness? }
+ */
+function generateGasGiant(planetType, W, H, seed, genOpts) {
+  const { palette, bandConfig } = planetType;
+  const { bandFreq, turbulenceScale, stormChance, stormScale, bandWidthVariation } = bandConfig;
+  const quality = genOpts.quality || 'high';
+  const useGamma = quality === 'high' || quality === 'ultra';
+  const octaves = quality === 'low' ? 4 : quality === 'medium' ? 6 : quality === 'ultra' ? 10 : 8;
+
+  // ── 1. Heightmap (band-based + turbulencja + burze) ──
+  const t0h = Date.now();
+  const heightmap = new Float32Array(W * H);
+
+  // Silnik szumu
+  const nBand    = createNoise(seed + 100);
+  const nTurb    = createNoise(seed + 200);
+  const nWarp    = createNoise(seed + 300);
+  const nDetail  = createNoise(seed + 400);
+  const nBandVar = createNoise(seed + 500);
+
+  for (let py = 0; py < H; py++) {
+    if (py % 100 === 0) progressBar(py, H, 'gas bands', t0h);
+
+    for (let px = 0; px < W; px++) {
+      const u = px / W, v = py / H;
+      const { x: nx, y: ny, z: nz } = sphereCoords(u, v);
+
+      // Główne pasma: sinus po latitude (ny) z modulacją
+      const bandVariation = fbm3d(nBandVar, nx * 2, ny * 2, nz * 2, 3) * bandWidthVariation;
+      const bandVal = Math.sin((ny * bandFreq + bandVariation) * Math.PI);
+
+      // Turbulencja: domain warp na pasmach
+      const warpX = fbm3d(nWarp, nx * turbulenceScale, ny * turbulenceScale, nz * turbulenceScale, octaves, 2.0, 0.5);
+      const warpZ = fbm3d(nWarp, nx * turbulenceScale + 7.3, ny * turbulenceScale + 3.1, nz * turbulenceScale + 5.7, octaves, 2.0, 0.5);
+
+      const turbBand = Math.sin(
+        (ny * bandFreq + bandVariation + warpX * 1.2) * Math.PI +
+        warpZ * 0.8
+      );
+
+      // Mieszanka pasma + turbulencja
+      let h = (turbBand * 0.6 + bandVal * 0.4 + 1) * 0.5; // [0, 1]
+
+      // Drobne detale (drobna struktura chmur)
+      const detail = fbm3d(nDetail, nx * 12, ny * 12, nz * 12, Math.min(octaves, 6), 2.2, 0.45);
+      h += detail * 0.08;
+
+      // Burze (storm spots) — Worley noise
+      if (stormChance > 0) {
+        const storm = sphereWorley(u * Math.PI * 2, v * Math.PI, stormScale, 0.85, seed + 600);
+        const stormVal = 1 - storm.f1;
+        if (stormVal > (1 - stormChance)) {
+          const intensity = (stormVal - (1 - stormChance)) / stormChance;
+          // Wirowe zaciemnienie/rozjaśnienie (naprzemienne)
+          const swirl = fbm3d(nTurb, nx * 15 + storm.f2 * 3, ny * 15, nz * 15 + storm.f1 * 3, 4);
+          h += intensity * swirl * 0.2;
+        }
+      }
+
+      heightmap[py * W + px] = clamp(h, 0, 1);
+    }
+  }
+  progressDone('gas bands', t0h);
+
+  // ── 2. Diffuse color ──
+  const t0c = Date.now();
+  const diffuse = new Uint8Array(W * H * 3);
+  const nColor = createNoise(seed + 700);
+
+  for (let py = 0; py < H; py++) {
+    if (py % 100 === 0) progressBar(py, H, 'gas diffuse', t0c);
+
+    for (let px = 0; px < W; px++) {
+      const u = px / W, v = py / H;
+      const { x: nx, y: ny, z: nz } = sphereCoords(u, v);
+      let h = heightmap[py * W + px];
+
+      // kontrast
+      const hc = useGamma ? contrastCurve(h, 1.8) : h;
+
+      // gradient mapping
+      let c = useGamma ? gammaLerp(palette, hc) : multiLerp(palette, hc);
+
+      // color variation (niskoczęstotliwościowa)
+      const cv = fbm3d(nColor, nx * 5, ny * 5, nz * 5, 3);
+      c = colorVariation(c, cv, 15);
+
+      const idx = (py * W + px) * 3;
+      diffuse[idx]     = clamp(Math.round(c[0]), 0, 255);
+      diffuse[idx + 1] = clamp(Math.round(c[1]), 0, 255);
+      diffuse[idx + 2] = clamp(Math.round(c[2]), 0, 255);
+    }
+  }
+  progressDone('gas diffuse', t0c);
+
+  const result = { diffuse };
+
+  // ── 3. Normal map — niska siła (subtelna głębia chmur) ──
+  if (genOpts.normal !== false) {
+    const t1 = Date.now();
+    result.normal = generateNormalMap(heightmap, W, H, 0.8);
+    progressDone('gas normal', t1);
+  }
+
+  // ── 4. Heightmap grayscale ──
+  if (genOpts.height !== false) {
+    result.height = generateHeightGrayscale(heightmap, W, H);
+    console.log('  ✓ gas heightmap');
+  }
+
+  // ── 5. Roughness — niska i jednolita (gładka atmosfera) ──
+  if (genOpts.roughness !== false) {
+    const roughness = new Uint8Array(W * H);
+    const nRough = createNoise(seed + 800);
+    for (let py = 0; py < H; py++) {
+      for (let px = 0; px < W; px++) {
+        const u = px / W, v = py / H;
+        const { x: nx, y: ny, z: nz } = sphereCoords(u, v);
+        // Bazowa roughness 0.25–0.45 z subtelną wariacją
+        const variation = fbm3d(nRough, nx * 6, ny * 6, nz * 6, 3) * 0.1;
+        const rough = 0.35 + variation;
+        roughness[py * W + px] = clamp(Math.round(rough * 255), 0, 255);
+      }
+    }
+    result.roughness = roughness;
+    console.log('  ✓ gas roughness');
+  }
+
+  // ── 6. Clouds (opcjonalny) ──
+  if (genOpts.clouds) {
+    const t1 = Date.now();
+    result.clouds = generateCloudLayer(W, H, seed);
+    progressDone('gas clouds', t1);
+  }
+
+  return result;
+}
+
+// ============================================
 // WORKER PIPELINE (opcjonalny)
 // ============================================
 
@@ -524,7 +774,10 @@ async function main() {
         nightlights: genNightlights,
       };
 
-      const result = generatePlanet(PLANET_TYPES[type], W, H, seed, genOpts);
+      const pType = PLANET_TYPES[type];
+      const result = pType.isGas
+        ? generateGasGiant(pType, W, H, seed, genOpts)
+        : generatePlanet(pType, W, H, seed, genOpts);
 
       // ── Zapis plików ──
       const postOpts = {

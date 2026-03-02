@@ -10,7 +10,7 @@ import * as THREE         from 'three';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
 import { GAME_CONFIG }    from '../config/GameConfig.js';
-import { resolveTextureType, loadPlanetTextures, hashCode, isTextureInCache, TEXTURE_VARIANTS }
+import { resolveTextureType, loadPlanetTextures, hashCode, TEXTURE_VARIANTS }
   from './PlanetTextureUtils.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
@@ -20,51 +20,8 @@ const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 
 const LIFE_GLOW_COL = 0x44ff88;
 
-// ── FBM tekstury (TYLKO dla gazowych — reszta ładowana z plików) ──
-function noise(x, y, seed) {
-  const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
-  return n - Math.floor(n);
-}
-function fbm(x, y, seed, octaves = 6) {
-  let val = 0, amp = 0.5, freq = 1;
-  for (let i = 0; i < octaves; i++) {
-    val += amp * noise(x * freq, y * freq, seed);
-    amp *= 0.5; freq *= 2;
-  }
-  return val;
-}
-
-const GAS_PALETTES = {
-  gas:      [[180,150,120],[200,170,130],[160,130,100],[140,120,90],[210,190,160]],
-  gas_cold: [[150,180,255],[100,140,220],[180,200,255],[80,120,200],[140,160,240]],
-};
-
-/** Proceduralna tekstura — TYLKO dla gazowych gigantów (pasma) */
-function generateGasTexture(seed) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256; canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-
-  const pal = (seed % 2 === 0) ? GAS_PALETTES.gas : GAS_PALETTES.gas_cold;
-
-  for (let y = 0; y < 128; y++) {
-    for (let x = 0; x < 256; x++) {
-      const nx = x / 256, ny = y / 128;
-      let val = fbm(nx * 2 + ny * 0.5, ny * 8, seed, 5);
-      val = (Math.sin(ny * 20 + val * 6) + 1) * 0.5;
-
-      const idx = Math.min(Math.floor(val * pal.length), pal.length - 1);
-      const c   = pal[idx];
-      const v   = 0.85 + noise(x * 0.1, y * 0.1, seed + 1) * 0.3;
-      ctx.fillStyle = `rgb(${c[0]*v|0},${c[1]*v|0},${c[2]*v|0})`;
-      ctx.fillRect(x, y, 1, 1);
-    }
-  }
-  return new THREE.CanvasTexture(canvas);
-}
-
 // ── Tekstury planet: resolveTextureType, loadPlanetTextures, hashCode,
-//    isTextureInCache, TEXTURE_VARIANTS — importowane z PlanetTextureUtils.js ──
+//    TEXTURE_VARIANTS — importowane z PlanetTextureUtils.js ──
 
 // ── Główna klasa renderera ───────────────────────────────────────
 export class ThreeRenderer {
@@ -107,6 +64,7 @@ export class ThreeRenderer {
     this._planetoidOrbits  = new Map();   // planetoidId → Line (ukryte domyślnie)
     this._entityByUUID = new Map();   // mesh.uuid → entity
     this._clickable    = [];
+    this._vessels      = new Map();   // vesselId → { sprite, routeLine }
 
     // Współdzielona tekstura kropki życia — tworzona raz
     this._lifeDotTex    = ThreeRenderer._createLifeDotTexture();
@@ -241,6 +199,17 @@ export class ThreeRenderer {
 
     EventBus.on('planet:ejected', ({ planet }) => {
       this._removePlanetMesh(planet.id);
+    });
+
+    // ── Vessel sprites ──────────────────────────────────────────
+    EventBus.on('vessel:launched', ({ vessel }) => {
+      this._addVesselSprite(vessel);
+    });
+    EventBus.on('vessel:docked', ({ vessel }) => {
+      this._removeVesselSprite(vessel.id);
+    });
+    EventBus.on('vessel:positionUpdate', ({ vessels }) => {
+      this._syncVesselPositions(vessels);
     });
 
     // ── Śledzenie kamery po kliknięciu ciała ─────────────────
@@ -387,27 +356,25 @@ export class ThreeRenderer {
     const group = new THREE.Group();
     group.position.set(S(planet.x), 0, S(planet.y));
 
-    // Materiał: PBR (MeshStandardMaterial) dla planet z plikowymi teksturami,
-    // MeshPhongMaterial z canvas tylko dla gazowych gigantów
+    // Materiał: PBR (MeshStandardMaterial) — pre-generowane tekstury z plików
     const texType = resolveTextureType(planet);
     let material;
     if (texType) {
-      // Pre-generowana tekstura z pliku (diffuse + normal + roughness)
       const variant = (seed % TEXTURE_VARIANTS) + 1;
       const maps    = loadPlanetTextures(texType, variant);
+      // Gas giganty: metalness=0 (chmury), reszta: 0.05
+      const isGas = planet.planetType === 'gas';
       material = new THREE.MeshStandardMaterial({
         map:          maps.diffuse,
         normalMap:    maps.normal,
         roughnessMap: maps.roughness,
-        metalness:    0.05,
+        metalness:    isGas ? 0.0 : 0.05,
       });
     } else {
-      // Gas giant — proceduralna tekstura canvas
-      const tex = generateGasTexture(seed);
-      material = new THREE.MeshPhongMaterial({
-        map:       tex,
-        shininess: 8,
-        specular:  new THREE.Color(0x111111),
+      // Fallback: solid color (nie powinno wystąpić — resolveTextureType pokrywa wszystkie typy)
+      material = new THREE.MeshStandardMaterial({
+        color: planet.visual?.color ?? 0x888888,
+        metalness: 0.05, roughness: 0.7,
       });
     }
 
@@ -470,24 +437,21 @@ export class ThreeRenderer {
 
     // Odtwórz materiał z odpowiednimi teksturami
     const texType = resolveTextureType(planet);
+    mesh.material.dispose();
     if (texType) {
       const variant = (seed % TEXTURE_VARIANTS) + 1;
       const maps    = loadPlanetTextures(texType, variant);
-      // Dispose starego materiału (ale NIE tekstur z cache)
-      mesh.material.dispose();
+      const isGas = planet.planetType === 'gas';
       mesh.material = new THREE.MeshStandardMaterial({
         map:          maps.diffuse,
         normalMap:    maps.normal,
         roughnessMap: maps.roughness,
-        metalness:    0.05,
+        metalness:    isGas ? 0.0 : 0.05,
       });
     } else {
-      // Gas — odtwórz canvas teksturę
-      if (mesh.material.map) mesh.material.map.dispose();
-      mesh.material.dispose();
-      const tex = generateGasTexture(seed);
-      mesh.material = new THREE.MeshPhongMaterial({
-        map: tex, shininess: 8, specular: new THREE.Color(0x111111),
+      mesh.material = new THREE.MeshStandardMaterial({
+        color: planet.visual?.color ?? 0x888888,
+        metalness: 0.05, roughness: 0.7,
       });
     }
   }
@@ -503,10 +467,7 @@ export class ThreeRenderer {
     entry.group.traverse(obj => {
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) {
-        // Dispose tekstury TYLKO jeśli nie jest w cache (canvas gas textures)
-        if (obj.material.map && !isTextureInCache(obj.material.map)) {
-          obj.material.map.dispose();
-        }
+        // Tekstury PBR z loadPlanetTextures są w _textureCache — nie dispose'uj
         obj.material.dispose();
       }
     });
@@ -815,13 +776,31 @@ export class ThreeRenderer {
       // Mesh sfery (r = 0.08–0.12 na podstawie masy — widoczne w zewnętrznym układzie)
       const mass = p.physics?.mass ?? 0.01;
       const r = Math.max(0.08, Math.min(0.12, 0.06 + mass * 0.8));
-      const geo = new THREE.SphereGeometry(r, 12, 8);
-      const mat = new THREE.MeshPhongMaterial({
-        color: p.visual?.color ?? 0x998877,
-        shininess: 15,
-        emissive: p.visual?.color ?? 0x998877,
-        emissiveIntensity: 0.15,  // lekka auto-emisja — widoczne w cieniu
-      });
+      const geo = new THREE.SphereGeometry(r, 16, 12);
+
+      // PBR tekstura z pre-generowanych plików
+      const texType = resolveTextureType(p);
+      let mat;
+      if (texType) {
+        const seed    = hashCode(String(p.id));
+        const variant = (seed % TEXTURE_VARIANTS) + 1;
+        const maps    = loadPlanetTextures(texType, variant);
+        // Metallic planetoids: wyższy metalness (błyszczące)
+        const isMetallic = p.planetoidType === 'metallic';
+        mat = new THREE.MeshStandardMaterial({
+          map:          maps.diffuse,
+          normalMap:    maps.normal,
+          roughnessMap: maps.roughness,
+          metalness:    isMetallic ? 0.25 : 0.05,
+        });
+      } else {
+        // Fallback: solid color
+        mat = new THREE.MeshStandardMaterial({
+          color: p.visual?.color ?? 0x998877,
+          metalness: 0.05, roughness: 0.7,
+        });
+      }
+
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(S(p.x), 0, S(p.y));
       this.scene.add(mesh);
@@ -1080,4 +1059,121 @@ export class ThreeRenderer {
 
   // Rejestracja kontrolera kamery (ustawiany przez GameScene)
   setCameraController(ctrl) { this._cameraController = ctrl; }
+
+  // ── Vessel sprites ──────────────────────────────────────────────────
+
+  /**
+   * Dodaj sprite statku na mapie 3D.
+   */
+  _addVesselSprite(vessel) {
+    if (this._vessels.has(vessel.id)) return;
+
+    // Kolor wg typu statku
+    const typeColors = {
+      science_vessel: 0x4488ff,
+      colony_ship:    0xff8800,
+      cargo_ship:     0x44cc66,
+    };
+    const color = typeColors[vessel.shipId] ?? 0xaaaaaa;
+
+    // Stwórz sprite (billboard)
+    const canvas = document.createElement('canvas');
+    canvas.width = 32; canvas.height = 32;
+    const c = canvas.getContext('2d');
+    // Romb z kolorem
+    c.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+    c.beginPath();
+    c.moveTo(16, 2); c.lineTo(30, 16); c.lineTo(16, 30); c.lineTo(2, 16);
+    c.closePath(); c.fill();
+    // Obramowanie
+    c.strokeStyle = '#fff';
+    c.lineWidth = 1.5;
+    c.stroke();
+
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({
+      map: tex, transparent: true, opacity: 0.9,
+      depthWrite: false,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.4, 0.4, 1);
+
+    // Pozycja startowa
+    const px = S(vessel.position.x);
+    const pz = S(vessel.position.y);
+    sprite.position.set(px, 0.3, pz); // lekko nad płaszczyzną
+
+    this.scene.add(sprite);
+
+    // Linia trasy (przerywana)
+    let routeLine = null;
+    if (vessel.mission) {
+      const startPx = S(vessel.mission.startX ?? vessel.position.x);
+      const startPz = S(vessel.mission.startY ?? vessel.position.y);
+      const targetPx = S(vessel.mission.targetX ?? 0);
+      const targetPz = S(vessel.mission.targetY ?? 0);
+
+      const points = [
+        new THREE.Vector3(startPx, 0.1, startPz),
+        new THREE.Vector3(targetPx, 0.1, targetPz),
+      ];
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      const lineMat = new THREE.LineDashedMaterial({
+        color, dashSize: 0.3, gapSize: 0.15,
+        transparent: true, opacity: 0.4,
+      });
+      routeLine = new THREE.Line(geo, lineMat);
+      routeLine.computeLineDistances();
+      this.scene.add(routeLine);
+    }
+
+    this._vessels.set(vessel.id, { sprite, routeLine, tex });
+  }
+
+  /**
+   * Usuń sprite statku z mapy 3D.
+   */
+  _removeVesselSprite(vesselId) {
+    const entry = this._vessels.get(vesselId);
+    if (!entry) return;
+
+    this.scene.remove(entry.sprite);
+    entry.sprite.material.dispose();
+    if (entry.tex) entry.tex.dispose();
+    if (entry.routeLine) {
+      this.scene.remove(entry.routeLine);
+      entry.routeLine.geometry.dispose();
+      entry.routeLine.material.dispose();
+    }
+    this._vessels.delete(vesselId);
+  }
+
+  /**
+   * Synchronizuj pozycje vessel sprites z danymi z VesselManager.
+   */
+  _syncVesselPositions(vessels) {
+    for (const vessel of vessels) {
+      const entry = this._vessels.get(vessel.id);
+      if (!entry) {
+        // Vessel w tranzycie ale nie ma sprite'a → stwórz
+        this._addVesselSprite(vessel);
+        continue;
+      }
+      entry.sprite.position.set(S(vessel.position.x), 0.3, S(vessel.position.y));
+
+      // Aktualizuj linię trasy
+      if (entry.routeLine && vessel.mission) {
+        const m = vessel.mission;
+        const sx = m.phase === 'returning' ? S(m.returnStartX ?? 0) : S(m.startX ?? 0);
+        const sz = m.phase === 'returning' ? S(m.returnStartY ?? 0) : S(m.startY ?? 0);
+        const tx = m.phase === 'returning' ? S(m.returnTargetX ?? 0) : S(m.targetX ?? 0);
+        const tz = m.phase === 'returning' ? S(m.returnTargetY ?? 0) : S(m.targetY ?? 0);
+        const posArr = entry.routeLine.geometry.attributes.position.array;
+        posArr[0] = sx; posArr[1] = 0.1; posArr[2] = sz;
+        posArr[3] = tx; posArr[4] = 0.1; posArr[5] = tz;
+        entry.routeLine.geometry.attributes.position.needsUpdate = true;
+        entry.routeLine.computeLineDistances();
+      }
+    }
+  }
 }

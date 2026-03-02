@@ -367,9 +367,8 @@ export class ColonyManager {
       colony.shipQueue.progress += deltaYears;
 
       if (colony.shipQueue.progress >= colony.shipQueue.buildTime) {
-        // Statek gotowy — dodaj do hangaru
+        // Statek gotowy — VesselManager stworzy instancję i doda vessel ID do fleet
         const shipId = colony.shipQueue.shipId;
-        colony.fleet.push(shipId);
         colony.shipQueue = null;
 
         EventBus.emit('fleet:shipCompleted', { planetId: colony.planetId, shipId });
@@ -377,30 +376,63 @@ export class ColonyManager {
     }
   }
 
-  // Zużyj statek z floty (przy wysyłaniu ekspedycji)
-  consumeShip(planetId, shipId) {
+  // Zużyj statek z floty (przy wysyłaniu ekspedycji — np. colony_ship)
+  // vesselId: konkretny vessel ID do zużycia, LUB shipId: typ do znalezienia pierwszego
+  consumeShip(planetId, shipIdOrVesselId) {
     const colony = this.getColony(planetId);
     if (!colony) return false;
 
-    const idx = colony.fleet.indexOf(shipId);
-    if (idx === -1) return false;
+    const vMgr = window.KOSMOS?.vesselManager;
 
+    if (vMgr) {
+      // Nowy system: vessel instances
+      let vesselId = shipIdOrVesselId;
+      // Jeśli podano typ statku (stary API) — znajdź pierwszego dostępnego
+      if (SHIPS[shipIdOrVesselId]) {
+        const vessel = vMgr.getFirstAvailable(planetId, shipIdOrVesselId);
+        if (!vessel) return false;
+        vesselId = vessel.id;
+      }
+      // Usuń z fleet
+      const idx = colony.fleet.indexOf(vesselId);
+      if (idx !== -1) colony.fleet.splice(idx, 1);
+      // Zniszcz w VesselManager
+      vMgr.destroyVessel(vesselId);
+      EventBus.emit('fleet:shipConsumed', { planetId, shipId: shipIdOrVesselId });
+      return true;
+    }
+
+    // Fallback: stary system (stringi)
+    const idx = colony.fleet.indexOf(shipIdOrVesselId);
+    if (idx === -1) return false;
     colony.fleet.splice(idx, 1);
-    EventBus.emit('fleet:shipConsumed', { planetId, shipId });
+    EventBus.emit('fleet:shipConsumed', { planetId, shipId: shipIdOrVesselId });
     return true;
   }
 
-  // Sprawdź czy kolonia ma statek danego typu w hangarze
+  // Sprawdź czy kolonia ma statek danego typu w hangarze (idle, docked)
   hasShip(planetId, shipId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr) {
+      return vMgr.hasAvailableShip(planetId, shipId);
+    }
+    // Fallback: stary system
     const colony = this.getColony(planetId);
     if (!colony) return false;
     return colony.fleet.includes(shipId);
   }
 
-  // Pobierz flotę kolonii
+  // Pobierz flotę kolonii (vessel IDs lub stare string types)
   getFleet(planetId) {
     const colony = this.getColony(planetId);
     return colony?.fleet ?? [];
+  }
+
+  // Pobierz flotę jako vessel instances (nowe API)
+  getFleetInstances(planetId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return [];
+    return vMgr.getVesselsAt(planetId);
   }
 
   // Pobierz kolejkę budowy
