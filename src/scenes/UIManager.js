@@ -137,6 +137,7 @@ export class UIManager {
     this._audioEnabled    = true;
     this._notifications   = [];
     this._confirmDialog   = null;
+    this._gameOverData    = null;   // { reason, planetName } — ekran końca gry
 
     // ── Stan zasobów (4X) ─────────────────────────────────────
     this._resources = { minerals: 0, energy: 0, organics: 0, water: 0, research: 0 };
@@ -346,6 +347,11 @@ export class UIManager {
       this._confirmDialog = { visible: true };
     });
 
+    // Game Over — cywilizacja zniszczona
+    EventBus.on('game:over', ({ reason, planetName }) => {
+      this._gameOverData = { reason, planetName };
+    });
+
     // EventLog subskrypcje
     this._setupLogEvents();
   }
@@ -458,7 +464,8 @@ export class UIManager {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
 
-    // Dialog potwierdzenia — blokuje cały ekran
+    // Game Over / Dialog potwierdzenia — blokują cały ekran
+    if (this._gameOverData) return true;
     if (this._confirmDialog?.visible) return true;
 
     // TopBar (zawsze widoczny)
@@ -503,6 +510,11 @@ export class UIManager {
   // ══════════════════════════════════════════════════════════════
   handleClick(x, y) {
     x /= UI_SCALE; y /= UI_SCALE;
+
+    // Game Over — klik na przycisk "Nowa Gra"
+    if (this._gameOverData) {
+      return this._hitTestGameOver(x, y);
+    }
 
     // Dialog potwierdzenia
     if (this._confirmDialog?.visible) {
@@ -636,6 +648,9 @@ export class UIManager {
 
     // ── Dialog potwierdzenia ─────────────────────────────────
     if (this._confirmDialog?.visible) this._drawConfirmDialog();
+
+    // ── Game Over ─────────────────────────────────────────────
+    if (this._gameOverData) this._drawGameOver();
 
     ctx.restore();
   }
@@ -1306,6 +1321,86 @@ export class UIManager {
     ctx.fillStyle = C.red; ctx.fillText('[ TAK ]', W / 2 - 50, DY + 62);
     ctx.fillStyle = C.title; ctx.fillText('[ ANULUJ ]', W / 2 + 50, DY + 62);
     ctx.textAlign = 'left';
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // Game Over — ekran końca gry
+  // ══════════════════════════════════════════════════════════════
+  _drawGameOver() {
+    const ctx = this.ctx;
+    const d = this._gameOverData;
+    if (!d) return;
+
+    // Pulsujące czerwone tło
+    const pulse = 0.5 + 0.15 * Math.sin(Date.now() / 800);
+
+    // Ciemny overlay
+    ctx.fillStyle = `rgba(20,0,0,${pulse})`;
+    ctx.fillRect(0, 0, W, H);
+
+    // Ramka centralna
+    const DW = 420, DH = 180;
+    const DX = W / 2 - DW / 2, DY = H / 2 - DH / 2;
+
+    ctx.fillStyle = 'rgba(10,4,4,0.95)';
+    ctx.fillRect(DX, DY, DW, DH);
+    ctx.strokeStyle = '#cc2222';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(DX, DY, DW, DH);
+
+    // Nagłówek
+    ctx.font = `bold ${THEME.fontSizeTitle + 4}px ${THEME.fontFamily}`;
+    ctx.fillStyle = '#ff3333';
+    ctx.textAlign = 'center';
+    ctx.fillText('CYWILIZACJA ZNISZCZONA', W / 2, DY + 36);
+
+    // Opis
+    const reasonText = d.reason === 'collision'
+      ? `Kolizja planetarna zniszczyła planetę ${d.planetName}.`
+      : d.reason === 'ejected'
+        ? `Planeta ${d.planetName} została wyrzucona z układu.`
+        : `Życie na planecie ${d.planetName} wymarło.`;
+    ctx.font = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = '#ccaaaa';
+    ctx.fillText(reasonText, W / 2, DY + 64);
+    ctx.fillText('Twoja cywilizacja nie przetrwała.', W / 2, DY + 84);
+
+    // Czas przetrwania
+    const gameTime = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const years = Math.round(gameTime).toLocaleString('pl-PL');
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = '#887766';
+    ctx.fillText(`Czas przetrwania: ${years} lat`, W / 2, DY + 108);
+
+    // Przycisk NOWA GRA
+    const btnW = 140, btnH = 28;
+    const btnX = W / 2 - btnW / 2, btnY = DY + DH - 44;
+    ctx.fillStyle = '#881111';
+    ctx.fillRect(btnX, btnY, btnW, btnH);
+    ctx.strokeStyle = '#cc3333';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(btnX, btnY, btnW, btnH);
+    ctx.font = `bold ${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = '#ffcccc';
+    ctx.fillText('NOWA GRA', W / 2, btnY + 18);
+
+    ctx.textAlign = 'left';
+  }
+
+  _hitTestGameOver(x, y) {
+    if (!this._gameOverData) return false;
+    // Przycisk NOWA GRA
+    const DW = 420, DH = 180;
+    const DY = H / 2 - DH / 2;
+    const btnW = 140, btnH = 28;
+    const btnX = W / 2 - btnW / 2, btnY = DY + DH - 44;
+    if (x >= btnX && x <= btnX + btnW && y >= btnY && y <= btnY + btnH) {
+      this._gameOverData = null;
+      EventBus.emit('game:new');
+      return true;
+    }
+    // Blokuj kliknięcia poza przyciskiem — ekran jest modalny
+    return true;
   }
 
   // ══════════════════════════════════════════════════════════════

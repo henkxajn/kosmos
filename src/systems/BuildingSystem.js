@@ -316,6 +316,57 @@ export class BuildingSystem {
     const entry     = this._active.get(tile.key);
     const buildingId = tile.buildingId;
     const building  = BUILDINGS[buildingId];
+    const level     = entry?.level ?? 1;
+
+    // ── Downgrade (Lv > 1): obniż o 1 poziom ──────────────────────
+    if (level > 1) {
+      const refund = {};
+      // Zwrot surowców: floor(ceil(baseCost × level × 1.5) × 0.5)
+      if (building?.cost) {
+        for (const [k, v] of Object.entries(building.cost)) {
+          refund[k] = Math.floor(Math.ceil(v * level * 1.5) * 0.5);
+        }
+      }
+      // Zwrot commodities (tylko gdy level >= 3 — wydano je przy upgrade do 3+)
+      if (level >= 3 && building?.commodityCost) {
+        for (const [k, v] of Object.entries(building.commodityCost)) {
+          const spent = Math.ceil(v * (level - 1));
+          refund[k] = Math.floor(spent / 2);
+        }
+      }
+
+      // Oddaj surowce i commodities
+      if (this.resourceSystem && Object.keys(refund).length > 0) {
+        this.resourceSystem.receive(refund);
+      }
+
+      // Obniż poziom
+      const newLevel = level - 1;
+      entry.level = newLevel;
+      tile.buildingLevel = newLevel;
+
+      // Przelicz stawki produkcji na nowy (niższy) level
+      entry.baseRates = this._calcBaseRates(building, tile, newLevel);
+      entry.effectiveRates = this._applyTechMultipliers(entry.baseRates, building);
+
+      const producerId = `building_${tile.key}`;
+      if (Object.keys(entry.effectiveRates).length > 0 && this.resourceSystem) {
+        this.resourceSystem.registerProducer(producerId, entry.effectiveRates);
+      }
+
+      // Fabryka: przelicz punkty produkcji
+      if (buildingId === 'factory' && this._factorySystem) {
+        this._recalcFactoryPoints();
+      }
+
+      EventBus.emit('planet:demolishResult', {
+        success: true, tile, buildingId,
+        downgrade: true, newLevel,
+      });
+      return;
+    }
+
+    // ── Pełna rozbiórka (Lv 1) ──────────────────────────────────────
 
     EventBus.emit('resource:removeProducer', { id: `building_${tile.key}` });
 
@@ -326,13 +377,22 @@ export class BuildingSystem {
       EventBus.emit('civ:removeHousing', { amount: entry.housing });
     }
 
-    // Zwrot 50% kosztu budowy
-    if (building?.cost && this.resourceSystem) {
+    // Zwrot 50% kosztu budowy (surowce + commodities)
+    if (building && this.resourceSystem) {
       const refund = {};
-      for (const [k, v] of Object.entries(building.cost)) {
-        refund[k] = Math.floor(v * 0.5);
+      if (building.cost) {
+        for (const [k, v] of Object.entries(building.cost)) {
+          refund[k] = Math.floor(v * 0.5);
+        }
       }
-      this.resourceSystem.receive(refund);
+      if (building.commodityCost) {
+        for (const [k, v] of Object.entries(building.commodityCost)) {
+          refund[k] = Math.floor(v / 2);
+        }
+      }
+      if (Object.keys(refund).length > 0) {
+        this.resourceSystem.receive(refund);
+      }
     }
 
     // Fabryka: odejmij punkty produkcji

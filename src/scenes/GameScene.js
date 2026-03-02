@@ -278,6 +278,41 @@ export class GameScene {
     // Nowa gra
     EventBus.on('game:new', () => { SaveSystem.clearSave(); window.location.reload(); });
 
+    // ── Game Over — planeta gracza zniszczona ──────────────────
+    this._gameOver = false;
+    const checkHomeDestroyed = (planet, reason) => {
+      if (this._gameOver) return;
+      if (!window.KOSMOS?.civMode || !window.KOSMOS?.homePlanet) return;
+      if (planet?.id !== window.KOSMOS.homePlanet.id) return;
+      this._gameOver = true;
+      // Pauzuj grę
+      EventBus.emit('time:pause');
+      // Zamknij mapę planety jeśli otwarta
+      if (this.planetGlobeScene?.isOpen) this.planetGlobeScene.close();
+      if (this.planetScene?.isOpen)      this.planetScene.close();
+      // Wyłącz tryb 4X
+      window.KOSMOS.civMode = false;
+      // Emituj event game over — UIManager pokaże ekran końca gry
+      EventBus.emit('game:over', { reason, planetName: planet.name });
+    };
+
+    // Kolizja planetarna — oba ciała tracą życie
+    EventBus.on('body:collision', ({ winner, loser }) => {
+      [winner, loser].forEach(p => {
+        if (p?.id === window.KOSMOS?.homePlanet?.id) {
+          checkHomeDestroyed(p, 'collision');
+        }
+      });
+    });
+    // Życie wymarło (np. warunki klimatyczne, kolizja)
+    EventBus.on('life:extinct', ({ planet, reason }) => {
+      checkHomeDestroyed(planet, reason ?? 'extinction');
+    });
+    // Planeta wyrzucona z układu (ejekcja orbitalna)
+    EventBus.on('planet:ejected', ({ planet }) => {
+      checkHomeDestroyed(planet, 'ejected');
+    });
+
     // Focus kamery na encji (z Outlinera — klik na ekspedycję)
     EventBus.on('camera:focusTarget', ({ targetId }) => {
       if (!targetId) return;

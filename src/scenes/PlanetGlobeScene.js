@@ -653,6 +653,7 @@ export class PlanetGlobeScene {
     if (this._buildPanelTile) {
       this._drawBuildPanel();
     } else {
+      this._buildTooltipVisible = false;
       // Podpowiedź w prawym panelu
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.borderLight;
@@ -668,6 +669,12 @@ export class PlanetGlobeScene {
     // Tooltip TopBar — na samym wierzchu (po wszystkich panelach)
     if (window.KOSMOS?.civMode) {
       this._topBar.drawTooltip(ctx, LW);
+    }
+
+    // Dynamiczny z-index globusa: obniż gdy tooltip lub CivPanel zasłaniałyby canvas 2D
+    if (this._globeRenderer?._canvas) {
+      const needLower = this._civTab || this._buildTooltipVisible || this._topBar?._tooltip;
+      this._globeRenderer._canvas.style.zIndex = needLower ? '3' : '5';
     }
 
     ctx.restore();
@@ -1114,18 +1121,32 @@ export class PlanetGlobeScene {
         buildListY += 4;
       }
 
-      // Przycisk rozbiórki (nie dla Stolicy)
+      // Przycisk rozbiórki / obniżenia poziomu (nie dla Stolicy)
       if (!b.isColonyBase && !b.isCapital) {
         const demolishY = buildListY + 2;
-        ctx.fillStyle = 'rgba(100,30,30,0.8)';
-        ctx.fillRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
-        ctx.strokeStyle = THEME.dangerDim;
-        ctx.strokeRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
-        ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = '#ff8888';
-        ctx.textAlign = 'center';
-        ctx.fillText('[ Rozbiórka ]', BPX + RIGHT_W / 2, demolishY + 11);
-        ctx.textAlign = 'left';
+        if (lvl > 1) {
+          // Obniżenie poziomu — żółto-pomarańczowy
+          ctx.fillStyle = 'rgba(80,60,20,0.8)';
+          ctx.fillRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
+          ctx.strokeStyle = '#aa8822';
+          ctx.strokeRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
+          ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = '#ffcc44';
+          ctx.textAlign = 'center';
+          ctx.fillText(`[ Obniż Lv ${lvl} → ${lvl - 1} ]`, BPX + RIGHT_W / 2, demolishY + 11);
+          ctx.textAlign = 'left';
+        } else {
+          // Pełna rozbiórka — czerwony
+          ctx.fillStyle = 'rgba(100,30,30,0.8)';
+          ctx.fillRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
+          ctx.strokeStyle = THEME.dangerDim;
+          ctx.strokeRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
+          ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = '#ff8888';
+          ctx.textAlign = 'center';
+          ctx.fillText('[ Rozbiórka ]', BPX + RIGHT_W / 2, demolishY + 11);
+          ctx.textAlign = 'left';
+        }
       }
     } else {
       // Lista budynków (dostępne + niedostępne z powodem) — ze scrollem
@@ -1242,6 +1263,7 @@ export class PlanetGlobeScene {
       ctx.restore();
 
       // ── Tooltip budynku (gdy hover) ────────────────────
+      this._buildTooltipVisible = !!hoveredBuilding;
       if (hoveredBuilding) {
         this._drawBuildTooltip(ctx, hoveredBuilding, inv, cSys);
       }
@@ -1264,12 +1286,8 @@ export class PlanetGlobeScene {
   // Przełącz zakładkę CivPanel (toggle)
   _toggleCivTab(tabId) {
     this._civTab = (this._civTab === tabId) ? null : tabId;
-    // Globus widoczny — panel CivPanel rysowany na planet-canvas (z=4),
-    // więc globus (z=5) musi zejść niżej żeby panel był widoczny nad nim.
-    // Gdy zakładka zamknięta — globus wraca nad planet-canvas (normalny rendering).
-    if (this._globeRenderer?._canvas) {
-      this._globeRenderer._canvas.style.zIndex = this._civTab ? '3' : '5';
-    }
+    // Z-index globusa zarządzany dynamicznie w _draw() —
+    // obniżany gdy civTab / tooltip / TopBar hover zasłaniałyby canvas 2D.
   }
 
   _civOverlayRect() {
