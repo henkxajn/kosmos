@@ -23,13 +23,8 @@ import { HexGrid }        from '../map/HexGrid.js';
 import { POP_PER_BUILDING } from '../systems/CivilizationSystem.js';
 import { DepositSystem }    from '../systems/DepositSystem.js';
 
-// Maksymalny poziom budynku zależny od tech
-const BASE_MAX_LEVEL = 3;
-const TECH_LEVEL_CAPS = {
-  advanced_mining: 5,
-  deep_drilling:   7,
-  space_mining:    10,
-};
+// Maksymalny poziom budynku — base 10, tech nie potrzebny
+const BASE_MAX_LEVEL = 10;
 
 export class BuildingSystem {
   constructor(resourceSystem = null, civSystem = null, techSystem = null) {
@@ -101,15 +96,9 @@ export class BuildingSystem {
   setDeposits(deposits) { this._deposits = deposits; }
   setFactorySystem(fs) { this._factorySystem = fs; }
 
-  // ── Pobierz max level budynku na podstawie tech ─────────────────────────
+  // ── Pobierz max level budynku ────────────────────────────────────────────
   getMaxLevel() {
-    let max = BASE_MAX_LEVEL;
-    for (const [techId, cap] of Object.entries(TECH_LEVEL_CAPS)) {
-      if (this.techSystem?.isResearched(techId) && cap > max) {
-        max = cap;
-      }
-    }
-    return max;
+    return BASE_MAX_LEVEL;
   }
 
   // ── Pobierz level budynku na tile ───────────────────────────────────────

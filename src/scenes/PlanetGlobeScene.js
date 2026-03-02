@@ -1022,17 +1022,57 @@ export class PlanetGlobeScene {
 
       // Przycisk ulepszenia (jeśli nie max)
       if (lvl < maxLvl && !b.isCapital) {
+        const nextLvl = lvl + 1;
         const upgradeY = buildListY + 2;
-        ctx.fillStyle = 'rgba(20,40,60,0.8)';
+
+        // Oblicz koszt ulepszenia (ta sama formuła co BuildingSystem._upgrade)
+        const upgCost = {};
+        if (b.cost) {
+          for (const [k, v] of Object.entries(b.cost)) {
+            upgCost[k] = Math.ceil(v * nextLvl * 1.5);
+          }
+        }
+        if (nextLvl >= 3 && b.commodityCost) {
+          for (const [k, v] of Object.entries(b.commodityCost)) {
+            upgCost[k] = Math.ceil(v * (nextLvl - 1));
+          }
+        }
+
+        // Sprawdź czy stać
+        const canAfford = Object.entries(upgCost).every(([k, v]) => (inv[k] ?? 0) >= v);
+
+        // Hover detection
+        const isHover = this._buildPanelMouseX >= BPX + 8
+          && this._buildPanelMouseX <= BPX + RIGHT_W - 8
+          && this._buildPanelMouseY >= upgradeY
+          && this._buildPanelMouseY <= upgradeY + 18;
+
+        ctx.fillStyle = isHover ? 'rgba(26,50,76,0.95)' : 'rgba(20,40,60,0.8)';
         ctx.fillRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
-        ctx.strokeStyle = THEME.successDim;
+        ctx.strokeStyle = canAfford ? (isHover ? THEME.accent : THEME.successDim) : '#553322';
         ctx.strokeRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
         ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.accent;
+        ctx.fillStyle = canAfford ? THEME.accent : '#884433';
         ctx.textAlign = 'center';
-        ctx.fillText(`[ Ulepsz do Lv.${lvl + 1} ]`, BPX + RIGHT_W / 2, upgradeY + 11);
+        ctx.fillText(`[ Ulepsz do Lv.${nextLvl} ]`, BPX + RIGHT_W / 2, upgradeY + 11);
         ctx.textAlign = 'left';
         buildListY = upgradeY + 24;
+
+        // Koszty ulepszenia — zawsze widoczne pod przyciskiem
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        for (const [resId, amt] of Object.entries(upgCost)) {
+          const have = Math.floor(inv[resId] ?? 0);
+          const icon = RESOURCE_ICONS[resId] ?? resId;
+          const resDef = ALL_RESOURCES[resId];
+          const comDef = COMMODITIES[resId];
+          const name = resDef?.namePL ?? (comDef ? (COMMODITY_SHORT[resId] ?? resId) : resId);
+          const dispIcon = comDef?.icon ?? icon;
+          const ok = have >= amt;
+          ctx.fillStyle = ok ? '#448866' : '#cc4422';
+          ctx.fillText(`${dispIcon} ${name}: ${have}/${amt}`, BPX + 14, buildListY);
+          buildListY += 11;
+        }
+        buildListY += 4;
       }
 
       // Przycisk rozbiórki (nie dla Stolicy)
