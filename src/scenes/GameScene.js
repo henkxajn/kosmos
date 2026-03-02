@@ -26,6 +26,7 @@ import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }      from '../systems/DepositSystem.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification } from '../ui/EventChoiceModal.js';
+import { showIntroSequence }     from '../ui/IntroModal.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
@@ -226,25 +227,7 @@ export class GameScene {
     // Przejście do mapy planety — globus 3D jako domyślna mapa
     EventBus.on('planet:colonize', ({ planet }) => {
       if (this.planetScene.isOpen || this.planetGlobeScene?.isOpen) return;
-      window.KOSMOS.civMode    = true;
-      window.KOSMOS.homePlanet = planet;
-      planet.explored = true;
-      // Księżyce planety domowej — zawsze zbadane
-      for (const m of EntityManager.getByType('moon')) {
-        if (m.parentPlanetId === planet.id) m.explored = true;
-      }
-      // Startowe zasoby (surowce + commodities T1/T2)
-      this.resourceSystem.receive({
-        Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10,
-        food: 100, water: 100, research: 100,
-        // Commodities T1/T2
-        steel_plates: 20, polymer_composites: 20,
-        power_cells: 20, electronics: 20, food_synthesizers: 20,
-        mining_drills: 20, hull_armor: 20,
-      });
-      // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
-      this.buildingSystem.setDeposits(planet.deposits ?? []);
-      this.colonyManager.registerHomePlanet(planet, this.resourceSystem, this.civSystem, this.buildingSystem);
+      this._setupColony(planet);
       const idx = this.timeSystem.multiplierIndex;
       this.planetGlobeScene.open(planet, idx);
     });
@@ -296,14 +279,42 @@ export class GameScene {
     });
 
     // ── Auto-kolonizacja w scenariuszu Cywilizacja ───────────
-    // Po initSystem i pierwszym renderze: automatycznie kolonizuj planetę z cywilizacją
+    // Nowa gra: intro (transmisja rządowa → nazwy) → kolonizacja → globus
     if (!savedData && this._civPlanetId) {
-      setTimeout(() => {
+      setTimeout(async () => {
         const civPlanet = EntityManager.get(this._civPlanetId);
-        if (civPlanet) {
-          EventBus.emit('planet:colonize', { planet: civPlanet });
-        }
+        if (!civPlanet) return;
+
+        // Pauzuj grę na czas intro
+        EventBus.emit('time:pause');
+
+        // Focus kamery na planecie macierzystej + bliski zoom
+        EventBus.emit('body:selected', { entity: civPlanet });
+        this.cameraController._targetDist = 8;
+
+        // Czekaj na animację kamery (lerp do planety)
+        await new Promise(r => setTimeout(r, 1200));
+
+        // Sekwencja intro: transmisja rządowa → nazwa cywilizacji → nazwa stolicy
+        const { civName, capitalName } = await showIntroSequence();
+
+        // Kolonizuj planetę (bez otwierania globusa)
+        this._setupColony(civPlanet);
+
+        // Zapisz nazwy
+        window.KOSMOS.civName = civName;
+        civPlanet.name = capitalName;
+        const colony = this.colonyManager.getColony(civPlanet.id);
+        if (colony) colony.name = capitalName;
+
+        // Otwórz globus 3D mapy planety
+        const idx = this.timeSystem.multiplierIndex;
+        this.planetGlobeScene.open(civPlanet, idx);
       }, 100);
+    }
+    // Przywrócenie civName z save
+    if (savedData?.civ4x?.civName) {
+      window.KOSMOS.civName = savedData.civ4x.civName;
     }
 
     // ── Pętla gry ─────────────────────────────────────────────
@@ -316,6 +327,28 @@ export class GameScene {
       requestAnimationFrame(gameLoop);
     };
     requestAnimationFrame(gameLoop);
+  }
+
+  // ── Konfiguracja kolonii (wyciągnięte z planet:colonize) ───────
+  _setupColony(planet) {
+    window.KOSMOS.civMode    = true;
+    window.KOSMOS.homePlanet = planet;
+    planet.explored = true;
+    // Księżyce planety domowej — zawsze zbadane
+    for (const m of EntityManager.getByType('moon')) {
+      if (m.parentPlanetId === planet.id) m.explored = true;
+    }
+    // Startowe zasoby (surowce + commodities T1/T2)
+    this.resourceSystem.receive({
+      Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10,
+      food: 100, water: 100, research: 100,
+      steel_plates: 20, polymer_composites: 20,
+      power_cells: 20, electronics: 20, food_synthesizers: 20,
+      mining_drills: 20, hull_armor: 20,
+    });
+    // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
+    this.buildingSystem.setDeposits(planet.deposits ?? []);
+    this.colonyManager.registerHomePlanet(planet, this.resourceSystem, this.civSystem, this.buildingSystem);
   }
 
   // ── Generowanie / przywracanie układu ─────────────────────────

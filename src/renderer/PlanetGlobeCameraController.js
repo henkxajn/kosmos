@@ -108,6 +108,12 @@ export class PlanetGlobeCameraController {
     this._targetDist = Math.max(1.5, Math.min(8.0, this._targetDist + deltaY * 0.003));
   }
 
+  // Ustaw obrót kamery (radiany) — do programowego focusu na tile
+  setYawPitch(yaw, pitch) {
+    this._yaw   = yaw;
+    this._pitch = Math.max(-1.3, Math.min(1.3, pitch));
+  }
+
   // Aktualizuj pozycję kamery (wywoływane co klatkę)
   update() {
     // Płynny zoom

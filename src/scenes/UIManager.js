@@ -571,6 +571,7 @@ export class UIManager {
         resources: this._resources,
         resDelta: this._resDelta,
         timeState: this._timeState,
+        factoryData: this._factoryData,
       });
     } else {
       // W trybie Generator — prosty TopBar z logo + czas
@@ -603,7 +604,6 @@ export class UIManager {
       logEntries: this._logEntries,
       audioEnabled: this._audioEnabled,
       autoSlow: this._timeState.autoSlow,
-      diskPhase: this._diskPhasePL,
       civMode,
     });
 
@@ -638,12 +638,6 @@ export class UIManager {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
     ctx.fillText('Symulator Układu Słonecznego', 14, 34);
-
-    // Faza dysku
-    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = '#88aaff';
-    ctx.textAlign = 'center';
-    ctx.fillText(`FAZA: ${this._diskPhasePL}`, W / 2, 20);
 
     // Czas (prawa strona) — prosta wersja
     const { isPaused, multiplierIndex, displayText } = this._timeState;
@@ -884,7 +878,7 @@ export class UIManager {
 
       // Budowa statków — dla każdego typu
       const canBuildAny = hasShipyard && !queue;
-      const inv = activeCol?.resourceSystem?._inventory ?? {};
+      const inv = activeCol?.resourceSystem?.inventorySnapshot() ?? {};
       const fullW = halfW - PAD * 2;
 
       for (const ship of Object.values(SHIPS)) {

@@ -16,6 +16,7 @@ import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/Buil
 import { showRenameModal } from '../ui/ModalInput.js';
 import { TECHS }             from '../data/TechData.js';
 import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
+import { PlanetGlobeTexture } from '../renderer/PlanetGlobeTexture.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
@@ -223,6 +224,9 @@ export class PlanetGlobeScene {
 
     this._globeRenderer = new PlanetGlobeRenderer();
     this._globeRenderer.open(planet, this.grid, globeBounds, true);
+
+    // Obróć globus na stolicę (jeśli istnieje)
+    this._focusOnCapital();
 
     // Callbacki z globusa
     this._globeRenderer.onTileHover = (tile) => {
@@ -578,6 +582,34 @@ export class PlanetGlobeScene {
     return null;
   }
 
+  // ── Obróć kamerę globusa na stolicę ─────────────────────────────
+
+  _focusOnCapital() {
+    if (!this.grid || !this._globeRenderer?.cameraCtrl) return;
+
+    // Znajdź tile ze stolicą
+    let capitalTile = null;
+    this.grid.forEach(tile => {
+      if (tile.capitalBase) capitalTile = tile;
+    });
+    if (!capitalTile) return;
+
+    // Hex → piksel → UV (0..1) na teksturze equirectangular
+    const hexSize = PlanetGlobeTexture.calcHexSize(this.grid);
+    const gridPx  = this.grid.gridPixelSize(hexSize);
+    const center  = HexGrid.hexToPixel(capitalTile.q, capitalTile.r, hexSize);
+    const u = center.x / gridPx.w;  // 0..1 poziomo
+    const v = center.y / gridPx.h;  // 0..1 pionowo
+
+    // UV → sferyczne (yaw, pitch) — Three.js SphereGeometry mapping
+    // Three.js phi: uv.x=0→phi=0 (-X), uv.x=0.25→phi=π/2 (+Z), uv.x=0.5→phi=π (+X)
+    // Kamera yaw=0 patrzy na +Z = uv.x=0.25
+    const yaw   = (u - 0.25) * 2 * Math.PI;
+    const pitch = Math.max(-1.0, Math.min(1.0, (0.5 - v) * Math.PI));
+
+    this._globeRenderer.cameraCtrl.setYawPitch(yaw, pitch);
+  }
+
   // ── Pętla rysowania paneli ─────────────────────────────────────
 
   _startDrawLoop() {
@@ -650,6 +682,7 @@ export class PlanetGlobeScene {
         resources: this._resources,
         resDelta: this._invPerYear,
         timeState: this._timeState,
+        factoryData: this.uiManager?._factoryData,
       }, BACK_W);
     } else {
       // Tryb bez civMode — pusty pasek
@@ -956,7 +989,7 @@ export class PlanetGlobeScene {
       ctx.fillStyle = THEME.textSecondary;
       ctx.fillText('ZŁOŻA:', BPX + 8, buildListY);
       buildListY += 10;
-      for (const d of deposits.slice(0, 5)) {
+      for (const d of deposits) {
         const pct = d.totalAmount > 0 ? Math.round(d.remaining / d.totalAmount * 100) : 0;
         const richness = d.richness ?? (d.totalAmount > 0 ? d.remaining / d.totalAmount : 0);
         const icon = RESOURCE_ICONS[d.resourceId] ?? d.resourceId;
@@ -968,11 +1001,6 @@ export class PlanetGlobeScene {
           ctx.fillStyle = richness >= 0.7 ? THEME.successDim : richness >= 0.4 ? THEME.warning : THEME.dangerDim;
           ctx.fillText(`${icon} ${d.resourceId}: ${pct}% ${stars}`, BPX + 14, buildListY);
         }
-        buildListY += 10;
-      }
-      if (deposits.length > 5) {
-        ctx.fillStyle = '#4a6a8a';
-        ctx.fillText(`...i ${deposits.length - 5} więcej`, BPX + 14, buildListY);
         buildListY += 10;
       }
       buildListY += 4;
@@ -1057,11 +1085,11 @@ export class PlanetGlobeScene {
         ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = canAfford ? THEME.accent : '#884433';
         ctx.textAlign = 'center';
-        ctx.fillText(`[ Ulepsz do Lv.${nextLvl} ]`, BPX + RIGHT_W / 2, upgradeY + 11);
+        ctx.fillText(`[ Ulepsz do Lv.${nextLvl} ]`, BPX + RIGHT_W / 2, upgradeY + 13);
         ctx.textAlign = 'left';
-        buildListY = upgradeY + 24;
+        buildListY = upgradeY + 32;
 
-        // Koszty ulepszenia — zawsze widoczne pod przyciskiem
+        // Koszty ulepszenia — widoczne pod przyciskiem
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         for (const [resId, amt] of Object.entries(upgCost)) {
           const have = Math.floor(inv[resId] ?? 0);
@@ -1073,7 +1101,7 @@ export class PlanetGlobeScene {
           const ok = have >= amt;
           ctx.fillStyle = ok ? '#448866' : '#cc4422';
           ctx.fillText(`${dispIcon} ${name}: ${have}/${amt}`, BPX + 14, buildListY);
-          buildListY += 11;
+          buildListY += 12;
         }
         buildListY += 4;
       }
@@ -1384,7 +1412,7 @@ export class PlanetGlobeScene {
 
     // Rysuj treść zakładki (CivPanelDrawer lub UIManager dla Expeditions)
     const bodyX = x;
-    const bodyY = y + 8;
+    const bodyY = y + 20;
     const bodyW = w;
 
     const ui = this.uiManager;
@@ -1538,7 +1566,10 @@ export class PlanetGlobeScene {
           EventBus.emit('planet:upgradeRequest', { planet: this.planet, tile });
           return true;
         }
-        btnY = upgradeY + 24;
+        // Pomiń przycisk + linie kosztów ulepszenia
+        const upgCostCount = Object.keys(bDef.cost || {}).length
+          + (((tile.buildingLevel ?? 1) + 1) >= 3 ? Object.keys(bDef.commodityCost || {}).length : 0);
+        btnY = upgradeY + 32 + upgCostCount * 12 + 4;
       }
 
       // Rozbiórka

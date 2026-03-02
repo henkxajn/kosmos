@@ -239,21 +239,29 @@ export class BottomContext {
       ly += BH + 8;
     }
 
-    // Podsumowanie złóż
+    // Podsumowanie złóż (2 kolumny jeśli >5)
     const deposits = entity.deposits ?? [];
     if (deposits.length > 0 && (entity.explored || !civMode || isHome)) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.label;
       ctx.fillText('ZŁOŻA:', x + PAD, ly);
       ly += 12;
-      for (const d of deposits.slice(0, 5)) {
+      const colW = Math.floor((w - PAD * 2) / 2); // szerokość kolumny
+      const useTwoCols = deposits.length > 5;
+      for (let i = 0; i < deposits.length; i++) {
+        const d = deposits[i];
         const pct = d.totalAmount > 0 ? d.remaining / d.totalAmount : 0;
         const rich = d.richness ?? pct;
         const stars = rich >= 0.7 ? '★★★' : rich >= 0.4 ? '★★' : '★';
         const color = pct <= 0 ? '#666' : rich >= 0.7 ? C.green : rich >= 0.4 ? C.orange : C.red;
         ctx.fillStyle = color;
-        ctx.fillText(`${d.resourceId} ${stars}`, x + PAD, ly);
-        ly += 11;
+        if (useTwoCols) {
+          const col = i % 2;           // 0=lewa, 1=prawa kolumna
+          const row = Math.floor(i / 2);
+          ctx.fillText(`${d.resourceId} ${stars}`, x + PAD + col * colW, ly + row * 11);
+        } else {
+          ctx.fillText(`${d.resourceId} ${stars}`, x + PAD, ly + i * 11);
+        }
       }
     }
   }

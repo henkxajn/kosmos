@@ -176,29 +176,6 @@ export class ThreeRenderer {
     });
     this.scene.add(new THREE.Points(geo, mat));
 
-    // Mgławica — 30 gradientowych plam
-    const nebCanvas = document.createElement('canvas');
-    nebCanvas.width = 512; nebCanvas.height = 512;
-    const nc = nebCanvas.getContext('2d');
-    for (let i = 0; i < 30; i++) {
-      const x = Math.random() * 512, y = Math.random() * 512;
-      const r = 60 + Math.random() * 180;
-      const g = nc.createRadialGradient(x, y, 0, x, y, r);
-      const hue = 200 + Math.random() * 60;
-      g.addColorStop(0, `hsla(${hue},60%,40%,0.04)`);
-      g.addColorStop(1, 'transparent');
-      nc.fillStyle = g; nc.fillRect(0, 0, 512, 512);
-    }
-    const nebTex = new THREE.CanvasTexture(nebCanvas);
-    const plane  = new THREE.Mesh(
-      new THREE.PlaneGeometry(400, 400),
-      new THREE.MeshBasicMaterial({
-        map: nebTex, transparent: true, opacity: 0.3,
-        side: THREE.DoubleSide, depthWrite: false,
-      })
-    );
-    plane.position.z = -200;
-    this.scene.add(plane);
   }
 
   // ── Oświetlenie ──────────────────────────────────────────────

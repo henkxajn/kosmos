@@ -47,7 +47,7 @@ export class TopBar {
   // ── Rysowanie ───────────────────────────────────────────
   // startX: opcjonalny offset lewej krawędzi zasobów (np. dla "← Wróć" w globe view)
   draw(ctx, W, H, state, startX = 0) {
-    const { inventory, invPerYear, energyFlow, resources, resDelta, timeState } = state;
+    const { inventory, invPerYear, energyFlow, resources, resDelta, timeState, factoryData } = state;
 
     // Tło paska
     ctx.fillStyle = bgAlpha(0.92);
@@ -83,7 +83,7 @@ export class TopBar {
     // Zbierz widoczne zasoby per grupę (bez commodities — za dużo)
     const mined     = this._getVisibleMined(inventory, invPerYear);
     const harvested = this._getVisibleHarvested(inventory, invPerYear);
-    const utility   = this._getVisibleUtility(energyFlow, resources, resDelta);
+    const utility   = this._getVisibleUtility(energyFlow, resources, resDelta, factoryData);
 
     const groups = [
       { items: mined,     label: 'SUROWCE',  color: '#886644' },
@@ -234,7 +234,7 @@ export class TopBar {
     return items;
   }
 
-  _getVisibleUtility(energyFlow, resources, resDelta) {
+  _getVisibleUtility(energyFlow, resources, resDelta, factoryData) {
     const items = [];
 
     // Energia (flow balance)
@@ -267,6 +267,20 @@ export class TopBar {
       icon: '🔬', symbol: '', value: resAmt, delta: resDlt,
       color: '#aa44ff',
     });
+
+    // PC — Production Capacity (używane / dostępne punkty fabryk)
+    const fd = factoryData ?? window.KOSMOS?.factorySystem;
+    const totalPts = fd?.totalPoints ?? 0;
+    const usedPts  = fd?.usedPoints  ?? 0;
+    if (totalPts > 0 || usedPts > 0) {
+      items.push({
+        icon: '🏭', symbol: 'PC',
+        value: usedPts,
+        color: usedPts >= totalPts ? C.orange : '#6688aa',
+        flowLabel: `${usedPts}/${totalPts}`,
+        flowColor: usedPts >= totalPts ? C.orange : C.dim,
+      });
+    }
 
     return items;
   }

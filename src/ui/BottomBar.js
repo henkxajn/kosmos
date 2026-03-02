@@ -42,7 +42,7 @@ export class BottomBar {
 
   // ── Rysowanie ───────────────────────────────────────────
   draw(ctx, W, H, state) {
-    const { stability, logEntries, audioEnabled, autoSlow, diskPhase, civMode } = state;
+    const { stability, logEntries, audioEnabled, autoSlow, civMode } = state;
     const barY = H - BAR_H;
 
     // Rozwinięty log — dodatkowe tło nad paskiem
@@ -102,16 +102,9 @@ export class BottomBar {
     ctx.lineWidth = 1;
     ctx.strokeRect(sBarX, sBarY, sBarW, sBarH);
 
-    // Faza dysku
-    if (diskPhase) {
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = '#88aaff';
-      ctx.fillText(diskPhase, 140, textY);
-    }
-
     // ── Sekcja centralna: EventLog (inline) ──
-    const logX = 200;
-    const logW = W - 400; // dostępna szerokość na log
+    const logX = 140;
+    const logW = W - 340; // dostępna szerokość na log
     const maxChars = Math.floor(logW / 6);
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -126,7 +119,7 @@ export class BottomBar {
     });
 
     // Przycisk rozwinięcia [▲/▼]
-    const expandBtnX = logX - 16;
+    const expandBtnX = logX - 14;
     ctx.fillStyle = this._expanded ? C.title : C.label;
     ctx.fillText(this._expanded ? '▼' : '▲', expandBtnX, textY);
 
@@ -172,7 +165,7 @@ export class BottomBar {
     }
 
     // Przycisk rozwinięcia EventLog
-    const logExpandX = 184;
+    const logExpandX = 126;
     if (x >= logExpandX - 8 && x <= logExpandX + 12) {
       this._expanded = !this._expanded;
       return true;

@@ -90,6 +90,7 @@ export class SaveSystem {
     return {
       civMode:        true,
       homePlanetId:   window.KOSMOS.homePlanet?.id ?? null,
+      civName:        window.KOSMOS.civName ?? null,
       // v5: kolonie (per-kolonia zasoby, populacja i budynki)
       colonies:        coloniesData.colonies,
       activePlanetId:  coloniesData.activePlanetId,
