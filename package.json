@@ -1,0 +1,25 @@
+{
+  "name": "kosmos",
+  "version": "1.0.0",
+  "description": "- Kliknięcie **preferuje planety** (żeby nie łapało głównie księżyców).\r - Widzisz **nazwy planet i gwiazdy** (księżyce tylko po zbliżeniu albo gdy zaznaczone).\r - Jest **Inspector** z informacjami o wybranym ciele (masa, promień, g, orbit).\r - Lista wyboru ma podział: Gwiazda / Planety / Księżyce.\r - Zoom max podniesiony, żeby dało się zejść do skali księżyców.",
+  "main": "generate-planets.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henkxajn/kosmos.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/henkxajn/kosmos/issues"
+  },
+  "homepage": "https://github.com/henkxajn/kosmos#readme",
+  "dependencies": {
+    "sharp": "^0.34.5",
+    "simplex-noise": "^4.0.3"
+  }
+}

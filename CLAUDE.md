@@ -16,7 +16,8 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - **Three.js** (przez CDN, bez npm) — renderer 3D warstwy symulacyjnej (zastąpił Phaser 3)
 - **Canvas 2D** (natywny) — warstwa UI (UIManager) i mapa planety (PlanetScene)
 - JavaScript ES Modules (natywne, bez bundlera)
-- **Brak Node.js** — otwierać przez Live Server w VS Code
+- **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
+- Grę otwierać przez Live Server w VS Code (brak bundlera)
 - Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v5
 
 ### Architektura renderingu (3D + 2D overlay)
@@ -26,10 +27,23 @@ index.html
   #ui-canvas      → UIManager (Canvas 2D)           — panel info, paski czasu, EventLog
   #planet-canvas  → PlanetScene (Canvas 2D)         — mapa hex planety (4X)
   #event-layer    → przezroczysta warstwa zdarzeń myszy (z-index nad wszystkim)
+
+generate-planets.js (CLI, Node.js) → assets/planet-textures/*.png
+  lib/noise.js     → SimplexNoise3D, Worley, fBm, ridgedFbm, turbulence, domainWarp
+  lib/terrain.js   → heightmap pipeline (10 faz: fBm → plates → ridges → cracks → warp → craters → erosion)
+  lib/craters.js   → fizyczne kratery (4 klasy wielkości, central peak, ejecta rays)
+  lib/erosion.js   → erozja hydrauliczna (droplet-based) + termiczna (talus angle)
+  lib/colors.js    → gradient gamma-correct, Worley jitter, polar ice, lava flow
+  lib/maps.js      → normal, roughness, AO, specular, emission, clouds, night lights
+  lib/postprocess.js → sharp (unsharp mask, gamma) + fallback PNG encoder
 ```
 
 **ThreeRenderer** (`src/renderer/ThreeRenderer.js`):
-- Sfera dla gwiazdy + planety (MeshPhongMaterial, atmosfera glow jako sprite)
+- Planety rocky/ice/volcanic: pre-generowane tekstury PNG (diffuse + normal + roughness) → `MeshStandardMaterial` (PBR)
+- Planety gas: proceduralne pasma (canvas) → `MeshPhongMaterial`
+- `resolveTextureType(planet)` — mapuje planetType + temperatureK na typ tekstury generatora
+- `loadPlanetTextures(texType, variant)` — TextureLoader + `_textureCache` (współdzielone instancje)
+- Wariant deterministyczny: `hashCode(planet.id) % 3 + 1` → `"01"/"02"/"03"`
 - Księżyce: małe sfery w scenie głównej + RingGeometry jako child grupy planety
 - OrbitLine: TubeGeometry po punktach Keplera
 - `initSystem(star, planets, planetesimals, moons)` — buduje scenę przy starcie
@@ -56,7 +70,7 @@ index.html
 `window.KOSMOS` — referencje do wszystkich systemów 4X:
 ```
 window.KOSMOS = {
-  game, edenScenario,
+  game, scenario,     // 'civilization' (aktywny) | 'generator' (zamrożony)
   civMode,          // bool — czy gracz przejął cywilizację
   homePlanet,       // planeta gracza
   resourceSystem,   // ResourceSystem
@@ -125,6 +139,8 @@ Projekt realizuje podejście **MDA (Mechanics → Dynamics → Aesthetics)**:
 | `src/systems/PhysicsSystem.js` | Prawa Keplera + kolizje — fizyka orbitalna |
 | `src/config/GameConfig.js` | Globalne stałe gry |
 | `src/map/HexGrid.js` | Matematyka hex cube coordinates |
+| `generate-planets.js` + `lib/` | Generator tekstur planet — 9 modułów, pipeline heightmap→color→PBR |
+| `assets/planet-textures/` | Pre-generowane tekstury PNG — ładowane przez ThreeRenderer |
 
 ---
 
@@ -196,6 +212,8 @@ SaveSystem._serializeCiv4x()
 6. Nowy budynek tier-2: dodaj `requires: 'tech_id'` w BuildingsData + odpowiednie `unlockBuilding` w TechData
 7. Nowy statek: dodaj definicję w `ShipsData.js` (z `range` w AU) + `unlockShip` w TechData + budowa przez Stocznię (ColonyManager.startShipBuild)
 8. Odległość między ciałami → `DistanceUtils` (`src/utils/DistanceUtils.js`): euclidean (dynamiczna) i orbital (stabilna)
+9. Nowy typ planety wizualnie → dodaj typ w `generate-planets.js` (PLANET_TYPES) + wygeneruj tekstury CLI → dodaj mapowanie w `resolveTextureType()` w ThreeRenderer
+10. Regeneracja tekstur: `node generate-planets.js --type <typ> --count 3 --resolution 1024 --quality high --output ./assets/planet-textures --name <typ>`
 
 ---
 
@@ -239,6 +257,14 @@ SaveSystem._serializeCiv4x()
 - [x] **Etap 23** — Stocznia + Flota: statki jako jednostki, shipyard, hangar per-kolonia
 - [x] **Etap 24** — Misje rozpoznawcze: recon w ExpeditionSystem, explored gating
 - [x] **Etap 25** — System odległości + zoom: DistanceUtils (euclidean/orbital AU), range statków, dynamiczny min-zoom dla księżyców
+- [x] **Etap 26** — Restrukturyzacja ekonomii: FactorySystem, DepositSystem, CivPanel 5 zakładek
+
+### Tekstury i rendering
+- [x] **Etap 27** — Generator tekstur: modularny pipeline (noise→terrain→craters→erosion→color→maps), 9 typów planet, PBR (diffuse+normal+roughness+height), integracja z ThreeRenderer (MeshStandardMaterial)
+
+### Scenariusze i architektura
+- [x] **Etap 28** — Scenariusz "Cywilizacja": losowy układ z gwarancją cywilizacji, wyłączone perturbacje/kolizje, auto-kolonizacja; zamrożony "Generator"; usunięty Eden
+- [x] **Etap 29** — Planetoidy: 3 typy (metallic/carbonaceous/silicate), wzbogacone składy (Cu/Ti/W/Pt/Li), widoczne orbity, save/restore
 
 ### Następne etapy (plan)
 - [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
@@ -268,3 +294,9 @@ SaveSystem._serializeCiv4x()
 | Dwie metryki odległości (euclidean/orbital) | Euclidean = dynamiczna (UI, travel time), orbital = stabilna (gating zasięgu statków) |
 | range w ShipsData (AU) | science_vessel=20 AU, colony_ship=12 AU — wymusza stopniową ekspansję |
 | Dynamiczny min-zoom dla księżyców | Moon r=0.015–0.04 → minDist=0.5 przy focus (vs 3 domyślnie) |
+| PBR tekstury (MeshStandardMaterial) | Pre-generowane PNG z normalMap+roughnessMap dają realistyczne oświetlenie 3D; gas giganty zachowują proceduralne pasma (MeshPhongMaterial) |
+| Tekstury pre-generowane (nie runtime) | Gra działa w przeglądarce (Live Server) — brak Node.js runtime; generator CLI tworzy PNG offline |
+| Typ tekstury wg temperatury planety | resolveTextureType: tempK → volcanic/lava-ocean/desert/ocean/rocky/iron — emergentna różnorodność wizualna |
+| Scenariusz Cywilizacja (nie Eden) | Losowy układ + najlepsza rocky w HZ z lifeScore=100; fizyka uproszczona (Kepler bez perturbacji); auto-kolonizacja |
+| Generator zamrożony (nie usunięty) | Kod generatora + systemy fizyki zachowane, ale niedostępne w UI (przycisk wyszarzony); łatwy powrót w przyszłości |
+| `window.KOSMOS.scenario` zamiast `edenScenario` | Czytelniejsza semantyka; wartości: 'civilization' / 'generator' |

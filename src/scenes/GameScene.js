@@ -30,6 +30,7 @@ import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
 import { Moon }              from '../entities/Moon.js';
+import { Planetoid }         from '../entities/Planetoid.js';
 import { ThreeRenderer }     from '../renderer/ThreeRenderer.js';
 import { ThreeCameraController } from '../renderer/ThreeCameraController.js';
 import { UIManager }         from './UIManager.js';
@@ -86,11 +87,17 @@ export class GameScene {
     this.cameraController._isOverUI = (x, y) => this.uiManager.isOverUI(x, y);
 
     // ── Pozostałe systemy ──────────────────────────────────────
-    this.accretionSystem   = new AccretionSystem({ planetesimals, star });
-    this.stabilitySystem   = new StabilitySystem(star);
-    this.playerActionSystem = new PlayerActionSystem(star);
+    const isGenerator = window.KOSMOS?.scenario === 'generator';
+
+    // Systemy fizyki symulacyjnej — aktywne tylko w trybie Generator
+    if (isGenerator) {
+      this.accretionSystem    = new AccretionSystem({ planetesimals, star });
+      this.stabilitySystem    = new StabilitySystem(star);
+      this.playerActionSystem = new PlayerActionSystem(star);
+      this.gravitySystem      = new GravitySystem(star);
+    }
+
     this.lifeSystem        = new LifeSystem(star);
-    this.gravitySystem     = new GravitySystem(star);
     this.audioSystem       = new AudioSystem();
     this.diskPhaseSystem   = new DiskPhaseSystem(this.timeSystem);
     this.saveSystem        = new SaveSystem(star, this.timeSystem);
@@ -214,6 +221,7 @@ export class GameScene {
 
     // ── PlanetGlobeScene (3D mapa planety) ──────────────────────
     this.planetGlobeScene = new PlanetGlobeScene(planetCanvas, this.timeSystem);
+    this.planetGlobeScene.uiManager = this.uiManager;
 
     // Przejście do mapy planety — globus 3D jako domyślna mapa
     EventBus.on('planet:colonize', ({ planet }) => {
@@ -225,28 +233,15 @@ export class GameScene {
       for (const m of EntityManager.getByType('moon')) {
         if (m.parentPlanetId === planet.id) m.explored = true;
       }
-      // Startowe zasoby (nowy system inventory + commodities)
-      if (window.KOSMOS.edenScenario) {
-        // Eden: tryb testowy — duże zapasy surowców + commodities T1/T2
-        this.resourceSystem.receive({
-          Fe: 500, C: 300, Si: 200, Cu: 100, Ti: 50, Li: 30, W: 10, Pt: 5,
-          food: 200, water: 200, research: 50,
-          // Commodities T1/T2
-          steel_plates: 20, polymer_composites: 20,
-          power_cells: 20, electronics: 20, food_synthesizers: 20,
-          mining_drills: 20, hull_armor: 20,
-        });
-      } else {
-        // Nowa Gra: skromne zapasy + commodities T1/T2
-        this.resourceSystem.receive({
-          Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10,
-          food: 100, water: 100, research: 100,
-          // Commodities T1/T2
-          steel_plates: 20, polymer_composites: 20,
-          power_cells: 20, electronics: 20, food_synthesizers: 20,
-          mining_drills: 20, hull_armor: 20,
-        });
-      }
+      // Startowe zasoby (surowce + commodities T1/T2)
+      this.resourceSystem.receive({
+        Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10,
+        food: 100, water: 100, research: 100,
+        // Commodities T1/T2
+        steel_plates: 20, polymer_composites: 20,
+        power_cells: 20, electronics: 20, food_synthesizers: 20,
+        mining_drills: 20, hull_armor: 20,
+      });
       // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
       this.buildingSystem.setDeposits(planet.deposits ?? []);
       this.colonyManager.registerHomePlanet(planet, this.resourceSystem, this.civSystem, this.buildingSystem);
@@ -291,6 +286,26 @@ export class GameScene {
     // Nowa gra
     EventBus.on('game:new', () => { SaveSystem.clearSave(); window.location.reload(); });
 
+    // Focus kamery na encji (z Outlinera — klik na ekspedycję)
+    EventBus.on('camera:focusTarget', ({ targetId }) => {
+      if (!targetId) return;
+      const entity = EntityManager.get(targetId);
+      if (entity) {
+        EventBus.emit('body:selected', { entity });
+      }
+    });
+
+    // ── Auto-kolonizacja w scenariuszu Cywilizacja ───────────
+    // Po initSystem i pierwszym renderze: automatycznie kolonizuj planetę z cywilizacją
+    if (!savedData && this._civPlanetId) {
+      setTimeout(() => {
+        const civPlanet = EntityManager.get(this._civPlanetId);
+        if (civPlanet) {
+          EventBus.emit('planet:colonize', { planet: civPlanet });
+        }
+      }, 100);
+    }
+
     // ── Pętla gry ─────────────────────────────────────────────
     // TimeSystem.update(deltaMs) emituje 'time:tick' → wszystkie systemy
     let lastTime = performance.now();
@@ -307,9 +322,9 @@ export class GameScene {
 
   _generateFreshSystem(cx, cy) {
     const generator = new SystemGenerator();
-    const result    = window.KOSMOS?.edenScenario
-      ? generator.generateEdenScenario()
-      : generator.generate();
+    const result    = generator.generateCivScenario();
+    // Zachowaj id planety z cywilizacją do auto-kolonizacji
+    this._civPlanetId = result.civPlanetId;
     // Gwiazda zawsze w centrum układu współrzędnych Three.js (0, 0)
     result.star.x = 0;
     result.star.y = 0;
@@ -388,6 +403,31 @@ export class GameScene {
       return m;
     });
 
+    // Przywróć planetoidy
+    const planetoids = (data.planetoids || []).map(pd => {
+      const p = new Planetoid({
+        id:                pd.id,
+        name:              pd.name,
+        planetoidType:     pd.planetoidType || 'silicate',
+        a:                 pd.a,
+        e:                 pd.e,
+        T:                 pd.T,
+        M:                 pd.M,
+        inclinationOffset: pd.inclinationOffset,
+        mass:              pd.mass,
+        visualRadius:      pd.visualRadius,
+        color:             pd.color,
+        composition:       pd.composition,
+      });
+      p.explored = pd.explored || false;
+      // Przywróć złoża z save
+      if (pd.deposits?.length > 0) {
+        p.deposits = pd.deposits.map(d => ({ ...d }));
+      }
+      EntityManager.add(p);
+      return p;
+    });
+
     // Wygeneruj brakujące złoża (migracja ze starszych save'ów)
     const depSys = new DepositSystem();
     depSys.resetNeutroniumCount();
@@ -397,14 +437,17 @@ export class GameScene {
     for (const m of moons) {
       if (!m.deposits || m.deposits.length === 0) depSys.generateDeposits(m);
     }
+    for (const p of planetoids) {
+      if (!p.deposits || p.deposits.length === 0) depSys.generateDeposits(p);
+    }
 
-    const maxId = [data.star, ...data.planets, ...(data.moons || [])]
+    const maxId = [data.star, ...data.planets, ...(data.moons || []), ...(data.planetoids || [])]
       .map(e => { const m = String(e.id).match(/(\d+)$/); return m ? parseInt(m[1]) : 0; })
       .reduce((a, b) => Math.max(a, b), 0);
     EntityManager._nextId = maxId + 1;
 
     window.KOSMOS.savedData = null;
-    return { star, planets, moons, planetesimals: [], asteroids: [], comets: [], planetoids: [] };
+    return { star, planets, moons, planetesimals: [], asteroids: [], comets: [], planetoids };
   }
 
   // ── Klawiatura ─────────────────────────────────────────────────
@@ -433,8 +476,21 @@ export class GameScene {
         case 'KeyQ': if (!window.KOSMOS?.civMode) EventBus.emit('action:stabilize');  break;
         case 'KeyW': if (!window.KOSMOS?.civMode) EventBus.emit('action:nudgeToHz');  break;
         case 'KeyE': if (!window.KOSMOS?.civMode) EventBus.emit('action:bombard');    break;
+        case 'F7':
+          e.preventDefault();
+          this._toggleThemeOverlay();
+          break;
       }
     });
+  }
+
+  // ── Theme overlay (F7) ───────────────────────────────────────────
+  async _toggleThemeOverlay() {
+    if (!this._themeOverlay) {
+      const { ThemeOverlay } = await import('../ui/ThemeOverlay.js');
+      this._themeOverlay = new ThemeOverlay();
+    }
+    this._themeOverlay.toggle();
   }
 
   // ── Mysz: rozdziela kliknięcia między UI a Three.js ───────────

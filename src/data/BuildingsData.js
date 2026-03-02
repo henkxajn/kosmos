@@ -1,3 +1,5 @@
+import { COMMODITIES, COMMODITY_SHORT } from './CommoditiesData.js';
+
 // BuildingsData — definicje budynków możliwych do postawienia na polach hex
 //
 // NOWY SYSTEM (Etap 26):
@@ -169,25 +171,25 @@ export const BUILDINGS = {
     requires:    null,
   },
 
-  // ── Logistyka ─────────────────────────────────────────────────────────────
+  // ── Nauka ─────────────────────────────────────────────────────────────────
 
-  warehouse: {
-    id:          'warehouse',
-    namePL:      'Magazyn',
-    category:    'mining',
-    icon:        '🏗',
-    description: 'Rozszerza pojemność magazynów',
-    cost:        { Fe: 20, C: 10 },
-    commodityCost: { steel_plates: 2 },
-    energyCost:  0,
-    buildTime:   2,
-    rates:       {},
+  research_station: {
+    id:          'research_station',
+    namePL:      'Stacja Badawcza',
+    category:    'research',
+    icon:        '🔬',
+    description: 'Prowadzi badania naukowe — kosztowna, ale niezbędna',
+    cost:        { Si: 30, Cu: 15 },
+    commodityCost: { steel_plates: 3, electronics: 2 },
+    energyCost:  10,
+    buildTime:   6,
+    rates:       { research: 8 },
     housing:     0,
     popCost:     0.25,
     maxLevel:    10,
-    capacityBonus: { minerals: 200, energy: 200, organics: 200, water: 200 },
+    capacityBonus: null,
     terrainOnly: null,
-    terrainAny:  true,
+    terrainAny:  false,
     requires:    null,
   },
 
@@ -277,28 +279,6 @@ export const BUILDINGS = {
     requires:    'rocketry',
   },
 
-  // ── Nauka ─────────────────────────────────────────────────────────────────
-
-  research_station: {
-    id:          'research_station',
-    namePL:      'Stacja Badawcza',
-    category:    'research',
-    icon:        '🔬',
-    description: 'Prowadzi badania naukowe — kosztowna, ale niezbędna',
-    cost:        { Si: 30, Cu: 15 },
-    commodityCost: { steel_plates: 3, electronics: 2 },
-    energyCost:  10,
-    buildTime:   6,
-    rates:       { research: 8 },
-    housing:     0,
-    popCost:     0.25,
-    maxLevel:    10,
-    capacityBonus: null,
-    terrainOnly: null,
-    terrainAny:  false,
-    requires:    null,
-  },
-
   // ── Stocznia ──────────────────────────────────────────────────────────────
 
   shipyard: {
@@ -351,7 +331,9 @@ export function formatCost(cost, popCost = 0, commodityCost = null) {
     .map(([k, v]) => `${v}${RESOURCE_ICONS[k] ?? k}`);
   if (commodityCost) {
     for (const [k, v] of Object.entries(commodityCost)) {
-      parts.push(`${v}×${k}`);
+      const icon = COMMODITIES[k]?.icon ?? '📦';
+      const name = COMMODITY_SHORT[k] ?? k;
+      parts.push(`${v}×${icon}${name}`);
     }
   }
   let str = parts.join('  ');

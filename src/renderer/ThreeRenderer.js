@@ -10,6 +10,8 @@ import * as THREE         from 'three';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
 import { GAME_CONFIG }    from '../config/GameConfig.js';
+import { resolveTextureType, loadPlanetTextures, hashCode, isTextureInCache, TEXTURE_VARIANTS }
+  from './PlanetTextureUtils.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -18,7 +20,7 @@ const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 
 const LIFE_GLOW_COL = 0x44ff88;
 
-// ── FBM tekstury (port z prototypu) ─────────────────────────────
+// ── FBM tekstury (TYLKO dla gazowych — reszta ładowana z plików) ──
 function noise(x, y, seed) {
   const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
   return n - Math.floor(n);
@@ -32,41 +34,24 @@ function fbm(x, y, seed, octaves = 6) {
   return val;
 }
 
-const PALETTES = {
-  hot_rocky: [[180,40,20],[220,80,20],[140,20,10],[255,120,30],[60,10,5]],
-  rocky:     [[100,90,80],[130,120,100],[80,75,65],[150,140,120],[60,55,50]],
-  rocky_hz:  [[34,80,60],[45,120,80],[80,150,60],[170,160,100],[200,200,220]],
-  gas:       [[180,150,120],[200,170,130],[160,130,100],[140,120,90],[210,190,160]],
-  gas_cold:  [[150,180,255],[100,140,220],[180,200,255],[80,120,200],[140,160,240]],
-  ice:       [[180,200,240],[140,170,220],[200,220,255],[100,140,200],[240,245,255]],
+const GAS_PALETTES = {
+  gas:      [[180,150,120],[200,170,130],[160,130,100],[140,120,90],[210,190,160]],
+  gas_cold: [[150,180,255],[100,140,220],[180,200,255],[80,120,200],[140,160,240]],
 };
 
-function generateTexture(planetType, seed, tempK) {
+/** Proceduralna tekstura — TYLKO dla gazowych gigantów (pasma) */
+function generateGasTexture(seed) {
   const canvas = document.createElement('canvas');
   canvas.width = 256; canvas.height = 128;
   const ctx = canvas.getContext('2d');
 
-  // Wybór palety
-  let palKey = 'rocky';
-  if (planetType === 'hot_rocky') palKey = 'hot_rocky';
-  else if (planetType === 'gas')  palKey = (seed % 2 === 0) ? 'gas' : 'gas_cold';
-  else if (planetType === 'ice')  palKey = 'ice';
-  else if (tempK > 250 && tempK < 400) palKey = 'rocky_hz'; // HZ = zielonkawa
-
-  const pal = PALETTES[palKey];
+  const pal = (seed % 2 === 0) ? GAS_PALETTES.gas : GAS_PALETTES.gas_cold;
 
   for (let y = 0; y < 128; y++) {
     for (let x = 0; x < 256; x++) {
       const nx = x / 256, ny = y / 128;
-      let val;
-
-      if (planetType === 'gas') {
-        // Gaz: poziome pasy z turbulencjami
-        val = fbm(nx * 2 + ny * 0.5, ny * 8, seed, 5);
-        val = (Math.sin(ny * 20 + val * 6) + 1) * 0.5;
-      } else {
-        val = fbm(nx * 4, ny * 4, seed, 6);
-      }
+      let val = fbm(nx * 2 + ny * 0.5, ny * 8, seed, 5);
+      val = (Math.sin(ny * 20 + val * 6) + 1) * 0.5;
 
       const idx = Math.min(Math.floor(val * pal.length), pal.length - 1);
       const c   = pal[idx];
@@ -75,29 +60,11 @@ function generateTexture(planetType, seed, tempK) {
       ctx.fillRect(x, y, 1, 1);
     }
   }
-
-  // Czapa polarna dla planety lodowej
-  if (planetType === 'ice') {
-    const capH = 25 + (seed % 8) * 3;
-    const g = ctx.createLinearGradient(0, 0, 0, capH);
-    g.addColorStop(0, 'rgba(255,255,255,0.95)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, 256, capH);
-    const g2 = ctx.createLinearGradient(0, 128 - capH, 0, 128);
-    g2.addColorStop(0, 'rgba(255,255,255,0)');
-    g2.addColorStop(1, 'rgba(255,255,255,0.95)');
-    ctx.fillStyle = g2; ctx.fillRect(0, 128 - capH, 256, capH);
-  }
-
   return new THREE.CanvasTexture(canvas);
 }
 
-// ── Hash do seedów deterministycznych ───────────────────────────
-function hashCode(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
+// ── Tekstury planet: resolveTextureType, loadPlanetTextures, hashCode,
+//    isTextureInCache, TEXTURE_VARIANTS — importowane z PlanetTextureUtils.js ──
 
 // ── Główna klasa renderera ───────────────────────────────────────
 export class ThreeRenderer {
@@ -111,8 +78,9 @@ export class ThreeRenderer {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setSize(W, H);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    // Bez fizycznego tone mappingu — r171 ACES ciemni MeshPhongMaterial
-    this.renderer.toneMapping = THREE.NoToneMapping;
+    // Poprawne zarządzanie kolorami dla MeshStandardMaterial (PBR)
+    this.renderer.toneMapping    = THREE.NoToneMapping;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     // ── Scena ─────────────────────────────────────────────────
     this.scene = new THREE.Scene();
@@ -135,15 +103,21 @@ export class ThreeRenderer {
     this._orbits       = new Map();   // planetId → Line
     this._lifeGlows    = new Map();   // planetId → Sprite (dziecko group planety)
     this._moons        = new Map();   // moonId → { mesh, ring, parentEntry }
+    this._planetoids       = new Map();   // planetoidId → { mesh }
+    this._planetoidOrbits  = new Map();   // planetoidId → Line (ukryte domyślnie)
     this._entityByUUID = new Map();   // mesh.uuid → entity
     this._clickable    = [];
 
     // Współdzielona tekstura kropki życia — tworzona raz
-    this._lifeDotTex = ThreeRenderer._createLifeDotTexture();
+    this._lifeDotTex    = ThreeRenderer._createLifeDotTexture();
+    this._playerDotTex  = ThreeRenderer._createPlayerDotTexture();
 
     // ── Małe ciała i dysk ─────────────────────────────────────
     this._diskPoints      = null;
     this._smallBodyPoints = null;
+
+    // ── Licznik do periodycznego odświeżania orbit ───────────
+    this._orbitRebuildCounter = 0;
 
     // ── Gwiazda ───────────────────────────────────────────────
     this._star      = null;
@@ -275,9 +249,16 @@ export class ThreeRenderer {
 
     EventBus.on('entity:removed', ({ entity }) => {
       this._removePlanetMesh(entity.id);
+      this._removePlanetoidMesh(entity.id);
     });
 
     EventBus.on('orbits:stabilityChanged', () => {
+      this._rebuildAllOrbits();
+    });
+
+    // Gracz przejmuje planetę → zmień zieloną kropkę na żółtą + odśwież orbity
+    EventBus.on('planet:colonize', ({ planet }) => {
+      this._updateLifeGlow(planet);
       this._rebuildAllOrbits();
     });
 
@@ -293,6 +274,13 @@ export class ThreeRenderer {
         this._cameraController.setMinDist(entity.type === 'moon' ? 0.5 : 3);
       }
       this._updateCameraFocus();
+      // Pokaż orbitę planetoidy po kliknięciu
+      this._showPlanetoidOrbit(entity.id, 0.35);
+      // Pokaż orbitę księżyca po kliknięciu (ukryta domyślnie)
+      this._hideAllMoonOrbits();
+      if (entity.type === 'moon') this._showMoonOrbit(entity.id);
+      // Odśwież orbitę planety gracza (żółty kolor)
+      this._rebuildAllOrbits();
     });
 
     EventBus.on('body:deselected', () => {
@@ -304,6 +292,22 @@ export class ThreeRenderer {
         const sz = this._starGroup ? this._starGroup.position.z : 0;
         this._cameraController.focusOn(sx, sz);
       }
+      // Ukryj orbity planetoidów i księżyców
+      this._hideAllPlanetoidOrbits();
+      this._hideAllMoonOrbits();
+      this._rebuildAllOrbits();
+    });
+
+    // Hover na planetoidzie → pokaż orbitę jaśniej
+    EventBus.on('planet:hover', ({ entityId }) => {
+      // Przywróć domyślną widoczność orbit planetoidów (nie zaznaczonych)
+      this._planetoidOrbits.forEach((line, id) => {
+        if (id !== this._focusEntityId) {
+          line.material.opacity = 0.12;
+          line.visible = true;
+        }
+      });
+      if (entityId) this._showPlanetoidOrbit(entityId, 0.20);
     });
   }
 
@@ -313,6 +317,7 @@ export class ThreeRenderer {
     this._buildHabitableZone(star);
     planets.forEach(p => this.addPlanetMesh(p));
     moons.forEach(m => this._addMoonMesh(m));
+    this._initPlanetoids();
     this._rebuildAllOrbits();
     if (planetesimals?.length > 0) this._updateDiskPoints(planetesimals);
   }
@@ -405,15 +410,33 @@ export class ThreeRenderer {
     const group = new THREE.Group();
     group.position.set(S(planet.x), 0, S(planet.y));
 
-    // Sfera planety z FBM teksturą (MeshPhongMaterial — działa z każdą wersją Three.js)
-    const tex  = generateTexture(planet.planetType, seed, planet.temperatureK || 0);
+    // Materiał: PBR (MeshStandardMaterial) dla planet z plikowymi teksturami,
+    // MeshPhongMaterial z canvas tylko dla gazowych gigantów
+    const texType = resolveTextureType(planet);
+    let material;
+    if (texType) {
+      // Pre-generowana tekstura z pliku (diffuse + normal + roughness)
+      const variant = (seed % TEXTURE_VARIANTS) + 1;
+      const maps    = loadPlanetTextures(texType, variant);
+      material = new THREE.MeshStandardMaterial({
+        map:          maps.diffuse,
+        normalMap:    maps.normal,
+        roughnessMap: maps.roughness,
+        metalness:    0.05,
+      });
+    } else {
+      // Gas giant — proceduralna tekstura canvas
+      const tex = generateGasTexture(seed);
+      material = new THREE.MeshPhongMaterial({
+        map:       tex,
+        shininess: 8,
+        specular:  new THREE.Color(0x111111),
+      });
+    }
+
     const mesh = new THREE.Mesh(
       new THREE.SphereGeometry(r, 48, 48),
-      new THREE.MeshPhongMaterial({
-        map:       tex,
-        shininess: planet.planetType === 'ice' ? 60 : 8,
-        specular:  new THREE.Color(0x111111),
-      })
+      material
     );
     mesh.rotation.z = 0.1 + (seed % 10) * 0.04;
     group.add(mesh);
@@ -467,9 +490,29 @@ export class ThreeRenderer {
     const r    = ThreeRenderer._planetRadius(planet);
     mesh.geometry.dispose();
     mesh.geometry = new THREE.SphereGeometry(r, 48, 48);
-    if (mesh.material.map) { mesh.material.map.dispose(); }
-    mesh.material.map = generateTexture(planet.planetType, seed, planet.temperatureK || 0);
-    mesh.material.needsUpdate = true;
+
+    // Odtwórz materiał z odpowiednimi teksturami
+    const texType = resolveTextureType(planet);
+    if (texType) {
+      const variant = (seed % TEXTURE_VARIANTS) + 1;
+      const maps    = loadPlanetTextures(texType, variant);
+      // Dispose starego materiału (ale NIE tekstur z cache)
+      mesh.material.dispose();
+      mesh.material = new THREE.MeshStandardMaterial({
+        map:          maps.diffuse,
+        normalMap:    maps.normal,
+        roughnessMap: maps.roughness,
+        metalness:    0.05,
+      });
+    } else {
+      // Gas — odtwórz canvas teksturę
+      if (mesh.material.map) mesh.material.map.dispose();
+      mesh.material.dispose();
+      const tex = generateGasTexture(seed);
+      mesh.material = new THREE.MeshPhongMaterial({
+        map: tex, shininess: 8, specular: new THREE.Color(0x111111),
+      });
+    }
   }
 
   _removePlanetMesh(id) {
@@ -482,8 +525,13 @@ export class ThreeRenderer {
     this.scene.remove(entry.group);
     entry.group.traverse(obj => {
       if (obj.geometry) obj.geometry.dispose();
-      if (obj.material?.map) obj.material.map.dispose();
-      if (obj.material) obj.material.dispose();
+      if (obj.material) {
+        // Dispose tekstury TYLKO jeśli nie jest w cache (canvas gas textures)
+        if (obj.material.map && !isTextureInCache(obj.material.map)) {
+          obj.material.map.dispose();
+        }
+        obj.material.dispose();
+      }
     });
     this._planets.delete(id);
 
@@ -526,11 +574,19 @@ export class ThreeRenderer {
     const mEntry = this._moons.get(this._focusEntityId);
     if (mEntry) {
       this._cameraController.focusOn(mEntry.mesh.position.x, mEntry.mesh.position.z);
+      return;
+    }
+    // Sprawdź planetoidy
+    const pdEntry = this._planetoids.get(this._focusEntityId);
+    if (pdEntry) {
+      this._cameraController.focusOn(pdEntry.mesh.position.x, pdEntry.mesh.position.z);
     }
   }
 
   // ── Synchronizacja pozycji planet i księżyców ─────────────────
   _syncPlanetMeshes(planets, moons = []) {
+    const homePlanetId = window.KOSMOS?.homePlanet?.id;
+
     planets.forEach(planet => {
       const entry = this._planets.get(planet.id);
       if (!entry) return;
@@ -539,8 +595,12 @@ export class ThreeRenderer {
 
       const lg = this._lifeGlows.get(planet.id);
       if (lg) {
-        lg._phase = (lg._phase || 0) + 0.025;
-        lg.material.opacity = 0.75 + Math.sin(lg._phase) * 0.20;
+        // Planeta gracza: szybsze + mocniejsze pulsowanie (żółta kropka)
+        const isPlayer = planet.id === homePlanetId;
+        lg._phase = (lg._phase || 0) + (isPlayer ? 0.045 : 0.025);
+        lg.material.opacity = isPlayer
+          ? 0.80 + Math.sin(lg._phase) * 0.20   // 0.60–1.00
+          : 0.75 + Math.sin(lg._phase) * 0.20;  // 0.55–0.95
       }
     });
 
@@ -551,28 +611,60 @@ export class ThreeRenderer {
       entry.mesh.position.set(S(moon.x), 0, S(moon.y));
     });
 
+    // Planetoidy: synchronizuj pozycje meshów
+    this._syncPlanetoidPositions();
+
     // Aktualizuj śledzenie kamery (ciało się porusza → kamera za nim)
     this._updateCameraFocus();
 
     this._syncSmallBodies();
+
+    // Periodyczne odświeżanie orbit (co ~180 klatek ≈ 3s przy 60fps)
+    this._orbitRebuildCounter++;
+    if (this._orbitRebuildCounter >= 180) {
+      this._orbitRebuildCounter = 0;
+      this._rebuildAllOrbits();
+      this._rebuildPlanetoidOrbits();
+    }
   }
 
-  // ── Mesh księżyca + orbit ring ────────────────────────────────
-  // Ring jako dziecko grupy planety-rodzica — automatycznie podąża za planetą.
+  // ── Mesh księżyca + orbit line ────────────────────────────────
+  // Eliptyczna orbita jako dziecko grupy planety-rodzica (podąża za planetą).
   // Sfera księżyca w scenie — pozycja aktualizowana w _syncPlanetMeshes.
+  // Orbita ukryta domyślnie — widoczna po kliknięciu na księżyc.
   _addMoonMesh(moon) {
     const parentEntry = this._planets.get(moon.parentPlanetId);
     if (!parentEntry) return;
 
-    // Orbit ring — dziecko grupy planety (płaszczyzna XZ = obrót -π/2 wokół X)
-    const ringR   = moon.orbital.a * AU / WORLD_SCALE;  // AU → ThreeJS units
-    const ringGeo = new THREE.RingGeometry(Math.max(0.01, ringR - 0.018), ringR + 0.018, 64);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x445566, transparent: true, opacity: 0.30,
-      side: THREE.DoubleSide, depthWrite: false,
-    });
-    const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = -Math.PI / 2;
+    // Eliptyczna orbita — dziecko grupy planety (local space, XZ plane)
+    const orb   = moon.orbital;
+    const a3d   = orb.a * AU / WORLD_SCALE;               // półoś wielka w Three.js
+    const b3d   = a3d * Math.sqrt(1 - orb.e * orb.e);     // półoś mała
+    const c3d   = a3d * orb.e;                              // odl. ognisko → centrum
+    const angle = orb.inclinationOffset || 0;
+
+    // Centrum elipsy przesunięte o c (planeta w ognisku, nie w centrum)
+    const cx = -c3d * Math.cos(angle);
+    const cz = -c3d * Math.sin(angle);
+
+    const STEPS  = 96;
+    const points = [];
+    for (let i = 0; i <= STEPS; i++) {
+      const t  = (i / STEPS) * Math.PI * 2;
+      const ex = a3d * Math.cos(t);
+      const ey = b3d * Math.sin(t);
+      const rx = ex * Math.cos(angle) - ey * Math.sin(angle) + cx;
+      const ry = ex * Math.sin(angle) + ey * Math.cos(angle) + cz;
+      points.push(new THREE.Vector3(rx, 0, ry));
+    }
+
+    const ring = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({
+        color: 0x445566, transparent: true, opacity: 0.30,
+      })
+    );
+    ring.visible = false;  // ukryta domyślnie — widoczna po kliknięciu
     parentEntry.group.add(ring);
 
     // Sfera księżyca — w scenie, pozycja synchronizowana z moon.x/y
@@ -589,7 +681,25 @@ export class ThreeRenderer {
     this._moons.set(moon.id, { mesh, ring, parentEntry });
   }
 
-  // ── Znacznik życia — mała kropka przy planecie ────────────────
+  // Pokaż orbitę konkretnego księżyca
+  _showMoonOrbit(moonId) {
+    const entry = this._moons.get(moonId);
+    if (!entry?.ring) return;
+    entry.ring.material.opacity = 0.30;
+    entry.ring.visible = true;
+  }
+
+  // Ukryj wszystkie orbity księżyców
+  _hideAllMoonOrbits() {
+    this._moons.forEach(entry => {
+      if (entry.ring) {
+        entry.ring.material.opacity = 0;
+        entry.ring.visible = false;
+      }
+    });
+  }
+
+  // ── Znacznik na planecie: żółty (gracz) lub zielony (życie) ───
   // Sprite (billboard) jako dziecko entry.group — automatycznie podąża za planetą
   _updateLifeGlow(planet) {
     const entry = this._planets.get(planet.id);
@@ -599,14 +709,19 @@ export class ThreeRenderer {
       old.material?.dispose();
       this._lifeGlows.delete(planet.id);
     }
-    if (planet.lifeScore <= 0 || !entry) return;
+
+    // Planeta gracza → żółta kropka (niezależnie od lifeScore)
+    const isPlayer = planet.id === window.KOSMOS?.homePlanet?.id;
+    if (!isPlayer && planet.lifeScore <= 0) return;
+    if (!entry) return;
 
     const r       = ThreeRenderer._planetRadius(planet);
-    const dotSize = Math.max(0.04, r * 0.35);   // rozmiar kropki (skalowana do nowych mniejszych planet)
+    // Kropka gracza nieco większa
+    const dotSize = isPlayer ? Math.max(0.05, r * 0.45) : Math.max(0.04, r * 0.35);
 
     const sprite = new THREE.Sprite(
       new THREE.SpriteMaterial({
-        map: this._lifeDotTex,
+        map: isPlayer ? this._playerDotTex : this._lifeDotTex,
         transparent: true, opacity: 0.90,
         depthWrite: false,
       })
@@ -617,18 +732,18 @@ export class ThreeRenderer {
     const offset = r * 0.72 + dotSize;
     sprite.position.set(offset, offset, 0);
     sprite._phase = Math.random() * Math.PI * 2;
+    sprite._isPlayer = isPlayer;
 
     entry.group.add(sprite);
     this._lifeGlows.set(planet.id, sprite);
   }
 
-  // Współdzielona tekstura zielonej kropki — tworzona raz w konstruktorze
+  // Współdzielona tekstura zielonej kropki (życie) — tworzona raz
   static _createLifeDotTexture() {
     const c   = document.createElement('canvas');
     c.width   = 32; c.height = 32;
     const dc  = c.getContext('2d');
 
-    // Zewnętrzna poświata
     const grd = dc.createRadialGradient(16, 16, 3, 16, 16, 14);
     grd.addColorStop(0, 'rgba(136,255,204,0.9)');
     grd.addColorStop(0.5, 'rgba(68,255,136,0.4)');
@@ -636,10 +751,32 @@ export class ThreeRenderer {
     dc.fillStyle = grd;
     dc.fillRect(0, 0, 32, 32);
 
-    // Środkowa pełna kropka
     dc.beginPath();
     dc.arc(16, 16, 5, 0, Math.PI * 2);
     dc.fillStyle = '#88ffcc';
+    dc.fill();
+
+    return new THREE.CanvasTexture(c);
+  }
+
+  // Współdzielona tekstura żółtej kropki (planeta gracza) — tworzona raz
+  static _createPlayerDotTexture() {
+    const c   = document.createElement('canvas');
+    c.width   = 32; c.height = 32;
+    const dc  = c.getContext('2d');
+
+    // Zewnętrzna poświata — złoto-żółta
+    const grd = dc.createRadialGradient(16, 16, 3, 16, 16, 14);
+    grd.addColorStop(0, 'rgba(255,220,68,0.95)');
+    grd.addColorStop(0.5, 'rgba(255,180,34,0.5)');
+    grd.addColorStop(1,   'rgba(255,150,0,0)');
+    dc.fillStyle = grd;
+    dc.fillRect(0, 0, 32, 32);
+
+    // Środkowa pełna kropka — jasno-żółta
+    dc.beginPath();
+    dc.arc(16, 16, 5, 0, Math.PI * 2);
+    dc.fillStyle = '#ffdd44';
     dc.fill();
 
     return new THREE.CanvasTexture(c);
@@ -666,6 +803,8 @@ export class ThreeRenderer {
 
     let color = 0x1a3a5a;
     if (planet.lifeScore > 0)          color = 0x226622;
+    // Złoty kolor orbity dla planety gracza
+    if (planet.id === window.KOSMOS?.homePlanet?.id) color = 0x7a6a22;
     if (planet.orbitalStability < 0.5) color = 0x774422;
     if (planet.isSelected)             color = 0x4a8ae8;
 
@@ -688,6 +827,144 @@ export class ThreeRenderer {
     );
     this.scene.add(line);
     this._orbits.set(planet.id, line);
+  }
+
+  // ── Planetoidy: indywidualne meshe + ukryte orbity ───────────────
+
+  // Tworzy sfery mesh + orbit lines dla wszystkich planetoidów (orbity ukryte domyślnie)
+  _initPlanetoids() {
+    const planetoids = EntityManager.getByType('planetoid');
+    planetoids.forEach(p => {
+      // Mesh sfery (r = 0.08–0.12 na podstawie masy — widoczne w zewnętrznym układzie)
+      const mass = p.physics?.mass ?? 0.01;
+      const r = Math.max(0.08, Math.min(0.12, 0.06 + mass * 0.8));
+      const geo = new THREE.SphereGeometry(r, 12, 8);
+      const mat = new THREE.MeshPhongMaterial({
+        color: p.visual?.color ?? 0x998877,
+        shininess: 15,
+        emissive: p.visual?.color ?? 0x998877,
+        emissiveIntensity: 0.15,  // lekka auto-emisja — widoczne w cieniu
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(S(p.x), 0, S(p.y));
+      this.scene.add(mesh);
+
+      this._clickable.push(mesh);
+      this._entityByUUID.set(mesh.uuid, p);
+      this._planetoids.set(p.id, { mesh });
+
+      // Orbita (ukryta domyślnie)
+      this._buildPlanetoidOrbit(p);
+    });
+  }
+
+  // Usuń mesh i orbitę planetoidy (entity:removed)
+  _removePlanetoidMesh(id) {
+    const entry = this._planetoids.get(id);
+    if (!entry) return;
+    const idx = this._clickable.indexOf(entry.mesh);
+    if (idx !== -1) this._clickable.splice(idx, 1);
+    this._entityByUUID.delete(entry.mesh.uuid);
+    this.scene.remove(entry.mesh);
+    entry.mesh.geometry.dispose();
+    entry.mesh.material.dispose();
+    this._planetoids.delete(id);
+
+    const orb = this._planetoidOrbits.get(id);
+    if (orb) {
+      this.scene.remove(orb);
+      orb.geometry.dispose();
+      orb.material.dispose();
+      this._planetoidOrbits.delete(id);
+    }
+  }
+
+  // Synchronizuj pozycje meshów planetoidów z danymi fizyki
+  _syncPlanetoidPositions() {
+    const planetoids = EntityManager.getByType('planetoid');
+    planetoids.forEach(p => {
+      const entry = this._planetoids.get(p.id);
+      if (entry) {
+        entry.mesh.position.set(S(p.x), 0, S(p.y));
+      }
+    });
+  }
+
+  // Pokaż orbitę konkretnej planetoidy (hover/click)
+  _showPlanetoidOrbit(entityId, opacity = 0.25) {
+    const line = this._planetoidOrbits.get(entityId);
+    if (!line) return;
+    line.material.opacity = opacity;
+    line.visible = true;
+  }
+
+  // Przywróć domyślną widoczność orbit planetoidów (przyciemnione)
+  _hideAllPlanetoidOrbits() {
+    this._planetoidOrbits.forEach(line => {
+      line.material.opacity = 0.12;
+      line.visible = true;
+    });
+  }
+
+  // Przebuduj geometrię orbit planetoidów (zachowaj widoczność)
+  _rebuildPlanetoidOrbits() {
+    // Zapamiętaj stan widoczności
+    const wasVisible = new Map();
+    this._planetoidOrbits.forEach((line, id) => {
+      wasVisible.set(id, { visible: line.visible, opacity: line.material.opacity });
+      this.scene.remove(line);
+      line.geometry.dispose();
+      line.material.dispose();
+    });
+    this._planetoidOrbits.clear();
+
+    EntityManager.getByType('planetoid').forEach(p => {
+      this._buildPlanetoidOrbit(p);
+      // Przywróć wcześniejszy stan widoczności
+      const prev = wasVisible.get(p.id);
+      if (prev) {
+        const line = this._planetoidOrbits.get(p.id);
+        if (line) {
+          line.visible = prev.visible;
+          line.material.opacity = prev.opacity;
+        }
+      }
+    });
+  }
+
+  // Buduje linię orbity jednej planetoidy (domyślnie ukryta)
+  _buildPlanetoidOrbit(planetoid) {
+    const orb  = planetoid.orbital;
+    const star = this._star;
+    if (!orb || !star) return;
+
+    const a     = S(orb.a * AU);
+    const b     = a * Math.sqrt(1 - orb.e * orb.e);
+    const c     = a * orb.e;
+    const angle = orb.inclinationOffset || 0;
+    const cx    = S(star.x) - c * Math.cos(angle);
+    const cz    = S(star.y) - c * Math.sin(angle);
+
+    const STEPS  = 96;
+    const points = [];
+    for (let i = 0; i <= STEPS; i++) {
+      const t  = (i / STEPS) * Math.PI * 2;
+      const ex = a * Math.cos(t);
+      const ey = b * Math.sin(t);
+      const rx = ex * Math.cos(angle) - ey * Math.sin(angle) + cx;
+      const ry = ex * Math.sin(angle) + ey * Math.cos(angle) + cz;
+      points.push(new THREE.Vector3(rx, 0, ry));
+    }
+
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({
+        color: 0x554433, transparent: true, opacity: 0.12,
+      })
+    );
+    line.visible = true;
+    this.scene.add(line);
+    this._planetoidOrbits.set(planetoid.id, line);
   }
 
   // ── Dysk protoplanetarny ──────────────────────────────────────
@@ -721,7 +998,6 @@ export class ThreeRenderer {
     const bodies = [
       ...EntityManager.getByType('asteroid'),
       ...EntityManager.getByType('comet'),
-      ...EntityManager.getByType('planetoid'),
     ];
     if (this._smallBodyPoints) {
       this.scene.remove(this._smallBodyPoints);
@@ -735,8 +1011,7 @@ export class ThreeRenderer {
     const col = new Float32Array(bodies.length * 3);
     bodies.forEach((b, i) => {
       pos[i*3] = S(b.x); pos[i*3+1] = 0; pos[i*3+2] = S(b.y);
-      if (b.type === 'comet')    { col[i*3]=0.7; col[i*3+1]=0.8; col[i*3+2]=1.0; }
-      else if (b.type === 'planetoid') { col[i*3]=0.7; col[i*3+1]=0.6; col[i*3+2]=0.5; }
+      if (b.type === 'comet') { col[i*3]=0.7; col[i*3+1]=0.8; col[i*3+2]=1.0; }
       else { const v = 0.45; col[i*3]=v; col[i*3+1]=v; col[i*3+2]=v; }
     });
 

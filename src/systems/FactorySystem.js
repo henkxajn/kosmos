@@ -60,12 +60,6 @@ export class FactorySystem {
     const def = COMMODITIES[commodityId];
     if (!def) return;
 
-    // Sprawdź czy technologia odblokowana
-    if (def.requiredTech) {
-      const techSys = window.KOSMOS?.techSystem;
-      if (techSys && !techSys.isResearched(def.requiredTech)) return;
-    }
-
     if (points <= 0) {
       // Usuń alokację
       this._allocations.delete(commodityId);

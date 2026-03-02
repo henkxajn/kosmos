@@ -50,10 +50,9 @@ export const TECHS = {
     cost:        { research: 60 },
     requires:    [],
     effects: [
-      { type: 'unlockCommodity', tier: 1 },
       { type: 'unlockBuilding', buildingId: 'factory' },
     ],
-    description: 'Wytop metali i produkcja komponentów — odblokowanie Fabryki i towarów T1',
+    description: 'Wytop metali i produkcja komponentów — odblokowanie Fabryki',
   },
 
   advanced_mining: {
@@ -91,10 +90,8 @@ export const TECHS = {
     tier:        2,
     cost:        { research: 150 },
     requires:    ['metallurgy'],
-    effects: [
-      { type: 'unlockCommodity', tier: 2 },
-    ],
-    description: 'Zaawansowane technologie materiałowe — odblokowanie towarów T2',
+    effects: [],
+    description: 'Zaawansowane technologie materiałowe — prerequisite do egzotycznych materiałów',
   },
 
   // ── Gałąź: Energia ────────────────────────────────────────────────────────
@@ -236,10 +233,8 @@ export const TECHS = {
     tier:        3,
     cost:        { research: 350 },
     requires:    ['advanced_materials', 'space_mining'],
-    effects: [
-      { type: 'unlockCommodity', tier: 3 },
-    ],
-    description: 'Przetwarzanie ksenonu i egzotycznych metali — odblokowanie towarów T3',
+    effects: [],
+    description: 'Przetwarzanie ksenonu i egzotycznych metali — prerequisite do fizyki kwantowej',
   },
 
   quantum_physics: {
@@ -249,10 +244,8 @@ export const TECHS = {
     tier:        3,
     cost:        { research: 500 },
     requires:    ['nuclear_power', 'exotic_materials'],
-    effects: [
-      { type: 'unlockCommodity', tier: 4 },
-    ],
-    description: 'Manipulacja materią na poziomie kwantowym — Rdzenie Kwantowe (T4)',
+    effects: [],
+    description: 'Manipulacja materią na poziomie kwantowym — zaawansowana fizyka endgame',
   },
 
   // ── Tier 3: Eksploracja i kolonizacja ────────────────────────────────────

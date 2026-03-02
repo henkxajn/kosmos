@@ -136,6 +136,35 @@ export const COMET_COMPOSITION = {
   Cu: 0, Li: 0, W: 0, Xe: 0, Nt: 0,
 };
 
+// ── Składy planetoidów (taksonomia Tholena) ────────────────────────
+// M-type: metaliczne — koncentracja rzadkich metali (Cu, Ti, W, Pt)
+// C-type: węgliste — organika, lit, woda
+// S-type: krzemianowe — mieszane, z ksenonem i tytanem
+export const PLANETOID_COMPOSITIONS = {
+  metallic: {
+    Fe: 35, Ni: 12, Cu: 8, Ti: 5, Si: 10, O: 8, Mg: 4,
+    W: 3, Pt: 2, Li: 1.5, S: 2, C: 1, Ca: 1, Al: 1, Au: 0.5,
+    H2O: 0, N: 0, P: 0, H: 0, K: 0, Na: 0, U: 0, Xe: 0, Nt: 0, He: 0,
+  },
+  carbonaceous: {
+    C: 18, Si: 14, O: 15, Fe: 12, H2O: 8, Mg: 5, N: 4,
+    S: 3, Li: 3, Cu: 2, Ni: 2, H: 2, Ti: 1.5, P: 1.5,
+    Ca: 1.5, Al: 1.5, W: 0.5, K: 0.5, Na: 0.5, Pt: 0.1,
+    Au: 0, Xe: 0.1, Nt: 0, U: 0, He: 0,
+  },
+  silicate: {
+    Si: 22, O: 20, Fe: 12, Mg: 8, Ca: 4, Al: 4,
+    H2O: 5, Ti: 3, Cu: 3, Li: 2.5, S: 2, Ni: 2, C: 2,
+    W: 1, N: 1, H: 1, P: 0.5, K: 0.5, Na: 0.5, Xe: 0.5,
+    Pt: 0.3, Au: 0.2, U: 0.1, Nt: 0, He: 0,
+  },
+};
+
+// Pomocnik: szablon składu planetoidy wg typu
+export function getPlanetoidComposition(planetoidType) {
+  return { ...(PLANETOID_COMPOSITIONS[planetoidType] || PLANETOID_COMPOSITIONS.silicate) };
+}
+
 // ── Pomocnik: normalizuj skład do 100% ───────────────────────────
 export function normalizeComposition(comp) {
   const total = Object.values(comp).reduce((s, v) => s + Math.max(0, v), 0);

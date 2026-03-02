@@ -1,7 +1,8 @@
-// PlanetGlobeRenderer — 3D widok planety z siatką heksagonalną
+// PlanetGlobeRenderer — 3D widok planety z czystą teksturą PBR
 //
 // Osobna scena Three.js na dynamicznie tworzonym canvasie.
-// Sfera z teksturą łączącą powierzchnię planety + hex overlay.
+// Główna sfera: pre-generowane tekstury PBR (diffuse + normal + roughness).
+// Overlay sfera (r=1.005): markery budynków + highlight hexów + opcjonalna siatka.
 // Raycasting: klik/hover na sferze → UV → hex tile.
 //
 // Dwa tryby:
@@ -16,6 +17,47 @@ import EventBus   from '../core/EventBus.js';
 import { HexGrid } from '../map/HexGrid.js';
 import { PlanetGlobeTexture }         from './PlanetGlobeTexture.js';
 import { PlanetGlobeCameraController } from './PlanetGlobeCameraController.js';
+import { resolveTextureType, loadPlanetTextures, hashCode, isTextureInCache, TEXTURE_VARIANTS }
+  from './PlanetTextureUtils.js';
+
+// ── Proceduralna tekstura dla gazowych gigantów (pasma) ─────────
+function noise(x, y, seed) {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
+  return n - Math.floor(n);
+}
+function fbm(x, y, seed, octaves = 6) {
+  let val = 0, amp = 0.5, freq = 1;
+  for (let i = 0; i < octaves; i++) {
+    val += amp * noise(x * freq, y * freq, seed);
+    amp *= 0.5; freq *= 2;
+  }
+  return val;
+}
+
+const GAS_PALETTES = {
+  gas:      [[180,150,120],[200,170,130],[160,130,100],[140,120,90],[210,190,160]],
+  gas_cold: [[150,180,255],[100,140,220],[180,200,255],[80,120,200],[140,160,240]],
+};
+
+function generateGasTexture(seed) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const pal = (seed % 2 === 0) ? GAS_PALETTES.gas : GAS_PALETTES.gas_cold;
+  for (let y = 0; y < 256; y++) {
+    for (let x = 0; x < 512; x++) {
+      const nx = x / 512, ny = y / 256;
+      let val = fbm(nx * 2 + ny * 0.5, ny * 8, seed, 5);
+      val = (Math.sin(ny * 20 + val * 6) + 1) * 0.5;
+      const idx = Math.min(Math.floor(val * pal.length), pal.length - 1);
+      const c   = pal[idx];
+      const v   = 0.85 + noise(x * 0.1, y * 0.1, seed + 1) * 0.3;
+      ctx.fillStyle = `rgb(${c[0]*v|0},${c[1]*v|0},${c[2]*v|0})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  return new THREE.CanvasTexture(canvas);
+}
 
 export class PlanetGlobeRenderer {
   constructor() {
@@ -26,11 +68,10 @@ export class PlanetGlobeRenderer {
     this._scene    = null;
     this._camera   = null;
     this._cameraCtrl = null;
-    this._texture  = null;
     this._sphereMesh     = null;
     this._atmosphereMesh = null;
-    this._overlayMesh    = null;    // sfera highlight (r=1.01)
-    this._overlayTexture = null;    // lekka tekstura highlight
+    this._overlayMesh    = null;    // sfera overlay (r=1.005) — markery + highlight + siatka
+    this._overlayTexture = null;    // canvas texture overlay
     this._hoveredTile    = null;
     this._selectedTileCoords = null;  // {q, r} zaznaczonego tile
     this._animFrameId    = null;
@@ -38,6 +79,8 @@ export class PlanetGlobeRenderer {
     this._mouse     = new THREE.Vector2();
     this._externalInput = false;  // tryb sterowania zewnętrznego
     this._bounds    = null;       // {x, y, w, h} lub null (fullscreen)
+    this._showGrid  = false;      // toggle siatki hex
+    this._isGas     = false;      // czy planeta gazowa (proceduralna tekstura)
 
     // Callbacki zewnętrzne
     this.onTileHover = null;   // (tile, screenX, screenY) => {}
@@ -90,6 +133,8 @@ export class PlanetGlobeRenderer {
     this._renderer.setSize(W, H);
     this._renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this._renderer.toneMapping = THREE.NoToneMapping;
+    // Poprawne kolory dla PBR (MeshStandardMaterial)
+    this._renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     // Scena
     this._scene = new THREE.Scene();
@@ -98,31 +143,52 @@ export class PlanetGlobeRenderer {
     // Kamera
     this._camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100);
 
-    // Oświetlenie
-    this._scene.add(new THREE.AmbientLight(0x334466, 0.6));
-    const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+    // Oświetlenie — dostosowane do PBR
+    this._scene.add(new THREE.AmbientLight(0x334466, 0.5));
+    const dirLight = new THREE.DirectionalLight(0xffeedd, 1.5);
     dirLight.position.set(3, 2, 4);
     this._scene.add(dirLight);
 
-    // Tekstura z hexami
-    this._texture = PlanetGlobeTexture.generate(planet, grid, {
-      showGrid: true,
-      showBuildings: true,
-    });
+    // ── Materiał sfery: PBR lub proceduralna (gas) ──────────────
+    const texType = resolveTextureType(planet);
+    this._isGas = !texType;
 
-    // Sfera planety
     const geometry = new THREE.SphereGeometry(1.0, 64, 64);
-    const material = new THREE.MeshPhongMaterial({
-      map: this._texture,
-      shininess: planet.planetType === 'ice' ? 40 : 8,
-      specular: new THREE.Color(0x111111),
-    });
+    let material;
+
+    if (texType) {
+      // Pre-generowane tekstury PBR z plików
+      const seed    = hashCode(String(planet.id));
+      const variant = (seed % TEXTURE_VARIANTS) + 1;
+      const maps    = loadPlanetTextures(texType, variant);
+      material = new THREE.MeshStandardMaterial({
+        map:          maps.diffuse,
+        normalMap:    maps.normal,
+        roughnessMap: maps.roughness,
+        metalness:    0.05,
+      });
+    } else {
+      // Gas giant — proceduralna tekstura canvas
+      const seed = hashCode(String(planet.id));
+      const tex  = generateGasTexture(seed);
+      material = new THREE.MeshPhongMaterial({
+        map:       tex,
+        shininess: 8,
+        specular:  new THREE.Color(0x111111),
+      });
+    }
+
     this._sphereMesh = new THREE.Mesh(geometry, material);
     this._scene.add(this._sphereMesh);
 
-    // Overlay highlight sphere (r=1.01) — rysuje tylko 1-2 podświetlone hexy
-    this._overlayTexture = PlanetGlobeTexture.generateHighlightTexture(grid, null, null);
-    const overlayGeom = new THREE.SphereGeometry(1.01, 64, 64);
+    // ── Overlay sfera (r=1.005) — markery budynków + highlight + siatka ──
+    this._overlayTexture = PlanetGlobeTexture.generateOverlay(grid, {
+      showGrid: this._showGrid,
+      showBuildings: true,
+      selectedTile: null,
+      hoveredTile: null,
+    });
+    const overlayGeom = new THREE.SphereGeometry(1.005, 64, 64);
     const overlayMat  = new THREE.MeshBasicMaterial({
       map: this._overlayTexture,
       transparent: true,
@@ -210,7 +276,13 @@ export class PlanetGlobeRenderer {
     // Dispose Three.js
     if (this._sphereMesh) {
       this._sphereMesh.geometry.dispose();
-      this._sphereMesh.material.dispose();
+      // Dispose materiału (ale NIE tekstur z cache PBR)
+      const mat = this._sphereMesh.material;
+      if (this._isGas && mat.map) {
+        mat.map.dispose(); // canvas gas — nie w cache
+      }
+      // Tekstury PBR z loadPlanetTextures są w _textureCache — nie dispose'uj
+      mat.dispose();
       this._scene.remove(this._sphereMesh);
       this._sphereMesh = null;
     }
@@ -229,10 +301,6 @@ export class PlanetGlobeRenderer {
     if (this._overlayTexture) {
       this._overlayTexture.dispose();
       this._overlayTexture = null;
-    }
-    if (this._texture) {
-      this._texture.dispose();
-      this._texture = null;
     }
     if (this._renderer) {
       this._renderer.dispose();
@@ -265,7 +333,7 @@ export class PlanetGlobeRenderer {
     if (tile !== this._hoveredTile) {
       this._hoveredTile = tile;
       if (this.onTileHover) this.onTileHover(tile, clientX, clientY);
-      this._updateHighlight();  // overlay <1ms
+      this._updateOverlay();
     }
   }
 
@@ -278,31 +346,34 @@ export class PlanetGlobeRenderer {
 
   setSelectedTile(tile) {
     this._selectedTileCoords = tile ? { q: tile.q, r: tile.r } : null;
-    this._updateHighlight();
+    this._updateOverlay();
   }
 
-  // ── Odśwież teksturę (np. po budowie budynku) ──────────────
+  // ── Toggle siatki hex ────────────────────────────────────────
+  setShowGrid(show) {
+    this._showGrid = !!show;
+    this._updateOverlay();
+  }
+
+  // ── Odśwież overlay (np. po budowie budynku) ─────────────────
 
   refreshTexture() {
-    if (!this._texture || !this._planet || !this._grid) return;
-    // Bazowa tekstura bez highlight — highlight jest na overlay sphere
-    PlanetGlobeTexture.update(this._texture, this._planet, this._grid, {
-      showGrid: true,
-      showBuildings: true,
-    });
-    // Odśwież overlay (budynek mógł się pojawić pod highlighted hexem)
-    this._updateHighlight();
+    if (!this._overlayTexture || !this._grid) return;
+    this._updateOverlay();
   }
 
   // ── Prywatne ────────────────────────────────────────────────
 
-  // Update overlay highlight — rysuje 1-2 hexy na przezroczystej sferze (<1ms)
-  _updateHighlight() {
+  // Pełna aktualizacja overlay — markery + highlight + opcjonalna siatka
+  _updateOverlay() {
     if (!this._overlayTexture || !this._grid) return;
-    PlanetGlobeTexture.updateHighlightTexture(
-      this._overlayTexture, this._grid,
-      this._selectedTileCoords,
-      this._hoveredTile ? { q: this._hoveredTile.q, r: this._hoveredTile.r } : null,
+    PlanetGlobeTexture.updateOverlay(
+      this._overlayTexture, this._grid, {
+        showGrid: this._showGrid,
+        showBuildings: true,
+        selectedTile: this._selectedTileCoords,
+        hoveredTile: this._hoveredTile ? { q: this._hoveredTile.q, r: this._hoveredTile.r } : null,
+      }
     );
   }
 
@@ -324,7 +395,7 @@ export class PlanetGlobeRenderer {
       if (tile !== this._hoveredTile) {
         this._hoveredTile = tile;
         if (this.onTileHover) this.onTileHover(tile, e.clientX, e.clientY);
-        this._updateHighlight();  // overlay <1ms
+        this._updateOverlay();
       }
     };
 

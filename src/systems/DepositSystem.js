@@ -4,9 +4,13 @@
 //   { resourceId, richness, totalAmount, remaining }
 //
 // Generacja: z entity.composition — dla każdego z 10 surowców:
-//   Próg pojawienia = rarity × 3% (rarity 1 → 3%, rarity 5 → 15%)
+//   Próg pojawienia zależy od rarity:
+//     rarity 1–2: 0.01% (gwarantowane gdy obecny w składzie)
+//     rarity 3:   0.05% (potrzebny ślad)
+//     rarity 4:   0.1%  (potrzebna mała ilość)
+//     rarity 5:   2.0%  (naprawdę rzadkie — Xe, Nt)
 //   Jeśli composition[element] > próg → twórz złoże
-//   richness = (composition% − próg) / 20, clamp 0.1–1.0
+//   richness = composition% / (rarity × 2), clamp 0.1–1.0
 //   totalAmount = richness × 10000 × (1 + rand × 0.5)
 //   Neutronium: max 1–2 ciała w systemie (extreme rarity)
 //
@@ -25,6 +29,10 @@ function seededRandom(seed) {
     return s / 0x7fffffff;
   };
 }
+
+// Progi pojawienia złoża wg rarity (indeks = rarity)
+// Niski rarity = łatwo dostępne, wysoki = naprawdę rzadkie
+const RARITY_THRESHOLDS = [0, 0.01, 0.01, 0.05, 0.1, 2.0];
 
 export class DepositSystem {
   constructor() {
@@ -53,7 +61,7 @@ export class DepositSystem {
       if (!resDef) continue;
 
       const compositionPct = entity.composition[element] || 0;
-      const threshold = resDef.rarity * 3; // % progu pojawienia
+      const threshold = RARITY_THRESHOLDS[resDef.rarity] ?? (resDef.rarity * 3);
 
       if (compositionPct <= threshold) continue;
 
@@ -63,7 +71,9 @@ export class DepositSystem {
         this._neutroniumCount++;
       }
 
-      const richness = Math.min(1.0, Math.max(0.1, (compositionPct - threshold) / 20));
+      // Zasobność: proporcjonalna do composition / rarity
+      // Fe(r1) 22% → 1.0, Cu(r2) 1.8% → 0.45, Ti(r3) 0.2% → 0.1
+      const richness = Math.min(1.0, Math.max(0.1, compositionPct / (resDef.rarity * 2)));
       const totalAmount = Math.round(richness * 10000 * (1 + rand() * 0.5));
 
       deposits.push({

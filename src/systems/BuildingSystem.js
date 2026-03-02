@@ -464,7 +464,11 @@ export class BuildingSystem {
   // Oblicz stawki bazowe z uwzględnieniem poziomu budynku
   // Efekt poziomu: rate × (1 + 0.3 × (level − 1))
   _calcBaseRates(building, tile, level = 1) {
-    if (!building.rates || Object.keys(building.rates).length === 0) return {};
+    const hasRates = building.rates && Object.keys(building.rates).length > 0;
+    const hasEnergyCost = building.energyCost && building.energyCost > 0;
+
+    // Jeśli brak rates I brak energyCost → naprawdę puste
+    if (!hasRates && !hasEnergyCost) return {};
 
     const terrain = TERRAIN_TYPES[tile.type];
     const bonuses = terrain?.yieldBonus ?? {};
@@ -478,20 +482,22 @@ export class BuildingSystem {
     const levelMult = 1 + 0.3 * (level - 1);
 
     const base = {};
-    for (const [key, val] of Object.entries(building.rates)) {
-      if (key === 'research') {
-        base[key] = val * latMod.production * levelMult;
-      } else if (val < 0) {
-        // Konsumpcja rośnie z levelem (ale wolniej: 1 + 0.15 × (level-1))
-        const consLevelMult = 1 + 0.15 * (level - 1);
-        base[key] = val * consLevelMult;
-      } else {
-        base[key] = val * multiplier * latMod.production * levelMult;
+    if (hasRates) {
+      for (const [key, val] of Object.entries(building.rates)) {
+        if (key === 'research') {
+          base[key] = val * latMod.production * levelMult;
+        } else if (val < 0) {
+          // Konsumpcja rośnie z levelem (ale wolniej: 1 + 0.15 × (level-1))
+          const consLevelMult = 1 + 0.15 * (level - 1);
+          base[key] = val * consLevelMult;
+        } else {
+          base[key] = val * multiplier * latMod.production * levelMult;
+        }
       }
     }
 
     // Dodatkowa konsumpcja energii (energyCost z definicji budynku)
-    if (building.energyCost && building.energyCost > 0) {
+    if (hasEnergyCost) {
       const consLevelMult = 1 + 0.15 * (level - 1);
       base.energy = (base.energy ?? 0) - building.energyCost * consLevelMult;
     }

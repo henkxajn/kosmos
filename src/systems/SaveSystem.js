@@ -43,16 +43,18 @@ export class SaveSystem {
 
   // ── Zapis ────────────────────────────────────────────────────
   save() {
-    const planets = EntityManager.getByType('planet');
-    const moons   = EntityManager.getByType('moon');
+    const planets    = EntityManager.getByType('planet');
+    const moons      = EntityManager.getByType('moon');
+    const planetoids = EntityManager.getByType('planetoid');
     const data = {
-      version:  6,              // v6: inventory+deposits+factory+levels
-      savedAt:  Date.now(),
-      gameTime: this.timeSystem.gameTime,
-      star:     this._serializeStar(this.star),
-      planets:  planets.map(p => this._serializePlanet(p)),
-      moons:    moons.map(m => this._serializeMoon(m)),
-      civ4x:    this._serializeCiv4x(),
+      version:    6,              // v6: inventory+deposits+factory+levels
+      savedAt:    Date.now(),
+      gameTime:   this.timeSystem.gameTime,
+      star:       this._serializeStar(this.star),
+      planets:    planets.map(p => this._serializePlanet(p)),
+      moons:      moons.map(m => this._serializeMoon(m)),
+      planetoids: planetoids.map(p => this._serializePlanetoid(p)),
+      civ4x:      this._serializeCiv4x(),
     };
 
     try {
@@ -172,6 +174,28 @@ export class SaveSystem {
       age:               m.age || 0,
       explored:          m.explored || false,
       deposits: m.deposits ? m.deposits.map(d => ({
+        resourceId: d.resourceId, richness: d.richness,
+        totalAmount: d.totalAmount, remaining: d.remaining,
+      })) : [],
+    };
+  }
+
+  _serializePlanetoid(p) {
+    return {
+      id:                p.id,
+      name:              p.name,
+      planetoidType:     p.planetoidType || 'silicate',
+      a:                 p.orbital.a,
+      e:                 p.orbital.e,
+      T:                 p.orbital.T,
+      M:                 p.orbital.M,
+      inclinationOffset: p.orbital.inclinationOffset,
+      mass:              p.physics.mass,
+      visualRadius:      p.visual.radius,
+      color:             p.visual.color,
+      composition:       { ...(p.composition || {}) },
+      explored:          p.explored || false,
+      deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,
       })) : [],

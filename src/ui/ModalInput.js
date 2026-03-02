@@ -3,6 +3,8 @@
 // Tworzy DOM overlay z inputem pasującym do sci-fi estetyki gry.
 // Zwraca Promise<string|null> — nowa nazwa lub null (anulowano).
 
+import { THEME } from '../config/ThemeConfig.js';
+
 /**
  * Wyświetla modal do zmiany nazwy obiektu.
  * @param {string} currentName — aktualna nazwa (wstawiona w input)
@@ -22,21 +24,21 @@ export function showRenameModal(currentName) {
     // ── Panel ─────────────────────────────────────────────────
     const panel = document.createElement('div');
     Object.assign(panel.style, {
-      background: '#0a1628',
-      border: '1px solid #1a3050',
+      background: THEME.bgSecondary,
+      border: `1px solid ${THEME.border}`,
       borderRadius: '6px',
       boxShadow: '0 0 30px rgba(0,80,120,0.3)',
       padding: '18px 24px',
       width: '300px',
-      fontFamily: 'monospace',
+      fontFamily: THEME.fontFamily,
     });
 
     // ── Tytuł ─────────────────────────────────────────────────
     const title = document.createElement('div');
     title.textContent = 'ZMIEŃ NAZWĘ';
     Object.assign(title.style, {
-      color: '#88ffcc',
-      fontSize: '13px',
+      color: THEME.accent,
+      fontSize: `${THEME.fontSizeLarge}px`,
       marginBottom: '12px',
       letterSpacing: '1px',
     });
@@ -50,11 +52,11 @@ export function showRenameModal(currentName) {
     Object.assign(input.style, {
       width: '100%',
       boxSizing: 'border-box',
-      background: '#060d18',
-      border: '1px solid #1a3050',
+      background: THEME.bgPrimary,
+      border: `1px solid ${THEME.border}`,
       borderRadius: '3px',
-      color: '#c8e8ff',
-      fontFamily: 'monospace',
+      color: THEME.textPrimary,
+      fontFamily: THEME.fontFamily,
       fontSize: '14px',
       padding: '8px 10px',
       outline: 'none',
@@ -62,11 +64,11 @@ export function showRenameModal(currentName) {
     });
     // Focus glow
     input.addEventListener('focus', () => {
-      input.style.borderColor = '#3a6090';
+      input.style.borderColor = THEME.borderActive;
       input.style.boxShadow = '0 0 8px rgba(58,96,144,0.4)';
     });
     input.addEventListener('blur', () => {
-      input.style.borderColor = '#1a3050';
+      input.style.borderColor = THEME.border;
       input.style.boxShadow = 'none';
     });
     panel.appendChild(input);
@@ -85,8 +87,8 @@ export function showRenameModal(currentName) {
         border: `1px solid ${borderColor}`,
         borderRadius: '3px',
         color: textColor,
-        fontFamily: 'monospace',
-        fontSize: '11px',
+        fontFamily: THEME.fontFamily,
+        fontSize: `${THEME.fontSizeNormal + 1}px`,
         padding: '6px 18px',
         cursor: 'pointer',
         letterSpacing: '0.5px',
@@ -100,8 +102,8 @@ export function showRenameModal(currentName) {
       return btn;
     };
 
-    const btnCancel = makeBtn('ANULUJ', '#3a5068', '#6888aa');
-    const btnOk     = makeBtn('OK', '#226644', '#44ff88');
+    const btnCancel = makeBtn('ANULUJ', THEME.textDim, THEME.textSecondary);
+    const btnOk     = makeBtn('OK', '#226644', THEME.success);
 
     btnRow.appendChild(btnCancel);
     btnRow.appendChild(btnOk);

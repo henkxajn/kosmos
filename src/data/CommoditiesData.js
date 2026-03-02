@@ -3,11 +3,10 @@
 // Towary (commodities) = produkty przetworzone z surowców wydobywalnych.
 // Wymagane do budowy zaawansowanych budynków i statków.
 //
-// Tier:       1–4 (wyższy = droższy, wymaga lepszej technologii)
+// Tier:       1–4 (wyższy = droższy)
 // Recipe:     { resourceId: ilość } — surowce zużywane na 1 sztukę
 // BaseTime:   lata gry na 1 sztukę przy 1 punkcie produkcji
 // Weight:     tony na sztukę (do cargo capacity statków)
-// RequiredTech: id technologii wymaganej do odblokowania produkcji
 
 export const COMMODITIES = {
 
@@ -21,7 +20,6 @@ export const COMMODITIES = {
     recipe:       { Fe: 8, C: 4 },
     baseTime:     3,       // lata/szt przy 1 punkcie produkcji
     weight:       3.0,
-    requiredTech: 'metallurgy',
     description:  'Podstawowy materiał budowlany — stal z żelaza i węgla',
   },
 
@@ -33,7 +31,6 @@ export const COMMODITIES = {
     recipe:       { C: 12, Si: 4 },
     baseTime:     3,
     weight:       1.5,
-    requiredTech: 'metallurgy',
     description:  'Lekkie kompozyty węglowo-krzemowe — izolacja i obudowy',
   },
 
@@ -47,7 +44,6 @@ export const COMMODITIES = {
     recipe:       { Li: 6, Cu: 4, Si: 2 },
     baseTime:     6,
     weight:       2.0,
-    requiredTech: 'advanced_materials',
     description:  'Litowo-miedziowe ogniwa akumulatorowe — zasilanie mobilne',
   },
 
@@ -59,7 +55,6 @@ export const COMMODITIES = {
     recipe:       { Si: 8, Cu: 6, C: 2 },
     baseTime:     6,
     weight:       1.0,
-    requiredTech: 'advanced_materials',
     description:  'Układy scalone i systemy sterowania',
   },
 
@@ -71,7 +66,6 @@ export const COMMODITIES = {
     recipe:       { C: 8, Cu: 4, Pt: 2 },
     baseTime:     6,
     weight:       2.5,
-    requiredTech: 'advanced_materials',
     description:  'Syntetyczna produkcja żywności na jałowych ciałach',
   },
 
@@ -83,7 +77,6 @@ export const COMMODITIES = {
     recipe:       { C: 10, Fe: 6, W: 2 },
     baseTime:     6,
     weight:       4.0,
-    requiredTech: 'advanced_materials',
     description:  'Zaawansowane wiertła do głębokich złóż',
   },
 
@@ -95,7 +88,6 @@ export const COMMODITIES = {
     recipe:       { Ti: 8, Fe: 6, W: 4 },
     baseTime:     6,
     weight:       5.0,
-    requiredTech: 'advanced_materials',
     description:  'Tytanowo-wolframowy pancerz kadłubów statków',
   },
 
@@ -109,7 +101,6 @@ export const COMMODITIES = {
     recipe:       { Si: 10, Cu: 4, Pt: 3, Xe: 1 },
     baseTime:     12,
     weight:       0.5,
-    requiredTech: 'exotic_materials',
     description:  'Ultra-czyste kryształy do zaawansowanej elektroniki',
   },
 
@@ -121,7 +112,6 @@ export const COMMODITIES = {
     recipe:       { Ti: 6, Xe: 4, Cu: 4, W: 3, Li: 2 },
     baseTime:     12,
     weight:       3.0,
-    requiredTech: 'exotic_materials',
     description:  'Ksenonowe silniki jonowe — napęd statków dalekiego zasięgu',
   },
 
@@ -135,9 +125,22 @@ export const COMMODITIES = {
     recipe:       { Si: 6, Nt: 4, Pt: 4, Xe: 3, Ti: 2, Li: 2 },
     baseTime:     24,
     weight:       1.0,
-    requiredTech: 'quantum_physics',
     description:  'Procesory kwantowe — klucz do teleportacji i FTL',
   },
+};
+
+// ── Krótkie nazwy PL do UI ────────────────────────────────────────────────
+export const COMMODITY_SHORT = {
+  steel_plates:       'Stal',
+  polymer_composites: 'Polimery',
+  power_cells:        'Ogniwa',
+  electronics:        'Elektr.',
+  food_synthesizers:  'Synt.żyw.',
+  mining_drills:      'Wiertła',
+  hull_armor:         'Pancerz',
+  semiconductors:     'Półprzew.',
+  ion_thrusters:      'Sil.jon.',
+  quantum_cores:      'Rdzenie Q',
 };
 
 // ── Pomocniki ───────────────────────────────────────────────────────────────

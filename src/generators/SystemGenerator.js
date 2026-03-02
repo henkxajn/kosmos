@@ -12,7 +12,7 @@ import { Planetoid }     from '../entities/Planetoid.js';
 import { KeplerMath }    from '../utils/KeplerMath.js';
 import { GAME_CONFIG, STAR_TYPES, PLANET_TYPE_CONFIG } from '../config/GameConfig.js';
 import EntityManager     from '../core/EntityManager.js';
-import { getCompositionTemplate, normalizeComposition } from '../data/ElementsData.js';
+import { getCompositionTemplate, normalizeComposition, getPlanetoidComposition } from '../data/ElementsData.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
 
 export class SystemGenerator {
@@ -350,17 +350,24 @@ export class SystemGenerator {
     return comets;
   }
 
-  // ── Planetoidy (a=0.5–8 AU, e=0.05–0.50, różne rozmiary) ──────
-  // Unikają nakładania z istniejącymi planetami (odstęp ± 0.3 AU)
+  // ── Planetoidy (a=3.5–8 AU, 3 typy: metallic/carbonaceous/silicate) ──────
+  // Bogate w rzadkie surowce (Cu, Ti, W, Pt, Li) — motywacja do ekspedycji.
+  // Unikają nakładania z istniejącymi planetami (odstęp ± 0.4 AU).
   _generatePlanetoids(star, planets) {
     const count = 15 + Math.floor(Math.random() * 26);  // 15–40
     const planetoids = [];
     const occupiedAU  = planets.map(p => p.orbital.a);
 
+    // Palety kolorów per typ planetoidy
+    const TYPE_COLORS = {
+      metallic:     [0xccbbaa, 0xbbaa99, 0xddccbb],  // jasne, metaliczne
+      carbonaceous: [0x665544, 0x554433, 0x776655],  // ciemne, węgliste
+      silicate:     [0x998877, 0x887766, 0xaa9988],  // szare, krzemianowe
+    };
+
     for (let i = 0; i < count; i++) {
       let a, attempts = 0;
       do {
-        // Planetoidy tylko w zewnętrznym układzie — unikają strefy rocky (0.3–3 AU)
         a = 3.5 + Math.random() * 4.5;  // 3.5–8.0 AU
         attempts++;
       } while (
@@ -368,16 +375,27 @@ export class SystemGenerator {
         occupiedAU.some(pA => Math.abs(pA - a) < 0.4)
       );
 
-      const e           = 0.05 + Math.random() * 0.20;  // max 0.25 — umiarkowane ekscentryczności
+      const e           = 0.05 + Math.random() * 0.20;
       const T           = KeplerMath.orbitalPeriod(a, star.physics.mass);
       const mass        = 0.005 + Math.random() * 0.075;  // 0.005–0.08 M⊕
       const visualRadius = mass > 0.05 ? 5 : mass > 0.02 ? 4 : 3;
 
-      // Kolor wg strefy
-      const hz  = star.habitableZone;
-      let color = 0x998877;
-      if (a < hz.min)        color = 0xaa7755;  // wewnętrzna — cieplejszy
-      if (a > hz.max * 3.0)  color = 0x8899aa;  // zewnętrzna — lodowy odcień
+      // Losowy typ: metallic 30%, carbonaceous 40%, silicate 30%
+      const r = Math.random();
+      const planetoidType = r < 0.30 ? 'metallic' : r < 0.70 ? 'carbonaceous' : 'silicate';
+
+      // Skład chemiczny wg typu + jitter ±20%
+      const baseComp = getPlanetoidComposition(planetoidType);
+      const composition = {};
+      for (const [el, pct] of Object.entries(baseComp)) {
+        const jitter    = 0.8 + Math.random() * 0.4;  // 80–120%
+        composition[el] = Math.max(0, pct * jitter);
+      }
+      const normComp = normalizeComposition(composition);
+
+      // Kolor wg typu
+      const colors = TYPE_COLORS[planetoidType];
+      const color  = colors[Math.floor(Math.random() * colors.length)];
 
       planetoids.push(new Planetoid({
         id:                EntityManager.generateId(),
@@ -388,12 +406,61 @@ export class SystemGenerator {
         mass,
         visualRadius,
         color,
+        planetoidType,
+        composition:       normComp,
       }));
     }
     return planetoids;
   }
 
-  // ── Scenariusz testowy EDEN ──────────────────────────────────────────────────
+  // ── Scenariusz CYWILIZACJA ───────────────────────────────────────────────────
+  // Losowy układ planetarny z gwarancją 1 planety z cywilizacją.
+  // Wybiera najlepszą planetę rocky w HZ i ustawia lifeScore=100.
+  // DiskPhaseSystem = MATURE od startu (stabilny układ, bez perturbacji/kolizji).
+  // Zwraca standardowy wynik + civPlanetId (id planety z cywilizacją).
+  generateCivScenario() {
+    const result = this.generate();
+    const { star, planets } = result;
+    const hz = star.habitableZone;
+
+    // Znajdź najlepszą planetę rocky w HZ (scoring: temp 273–323K, atmosfera, stabilność)
+    let bestPlanet = null;
+    let bestScore  = -Infinity;
+    for (const p of planets) {
+      if (p.planetType !== 'rocky') continue;
+      let score = 0;
+      // Bonus: w strefie HZ
+      if (p.orbital.a >= hz.min && p.orbital.a <= hz.max) score += 50;
+      // Bonus: temperatura 273–323K (0–50°C)
+      const T = p.temperatureK ?? 0;
+      if (T >= 273 && T <= 323) score += 30;
+      else if (T >= 250 && T <= 350) score += 15;
+      // Bonus: atmosfera
+      if (p.atmosphere === 'thin') score += 10;
+      if (p.atmosphere === 'dense') score += 5;
+      // Bonus: stabilność orbitalna
+      score += (p.orbitalStability ?? 0.5) * 10;
+      if (score > bestScore) { bestScore = score; bestPlanet = p; }
+    }
+
+    // Fallback: pierwsza rocky, albo pierwsza planeta
+    if (!bestPlanet) bestPlanet = planets.find(p => p.planetType === 'rocky') || planets[0];
+
+    // Ustaw cywilizację na wybranej planecie
+    bestPlanet.lifeScore        = 100;
+    bestPlanet.orbitalStability = Math.max(0.9, bestPlanet.orbitalStability ?? 0.5);
+    bestPlanet.surface          = bestPlanet.surface || {};
+    bestPlanet.surface.hasWater = true;
+    if (bestPlanet.atmosphere === 'none') bestPlanet.atmosphere = 'thin';
+
+    // Ustaw flagę globalną scenariusza
+    window.KOSMOS.scenario = 'civilization';
+
+    result.civPlanetId = bestPlanet.id;
+    return result;
+  }
+
+  // ── ARCHIWALNE — Scenariusz testowy EDEN (nie używany) ─────────────────────
   // Układ idealnie wybalansowany — jeden cel: szybkie powstanie i ewolucja życia.
   // Przeznaczony do testów rozgrywki 4X, NIE do normalnej gry.
   // Warunki: G-type star, 1 planeta w centrum HZ, lifeScore pre-seeded,
@@ -483,8 +550,8 @@ export class SystemGenerator {
       }));
     }
 
-    // Oznacz globalnie — DiskPhaseSystem i GameScene korzystają z tej flagi
-    window.KOSMOS.edenScenario = true;
+    // ARCHIWALNE — stara flaga, nie używana w nowej architekturze
+    window.KOSMOS.scenario = 'civilization';
 
     EntityManager.add(star);
     EntityManager.add(planet);

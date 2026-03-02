@@ -24,14 +24,20 @@ export class Planetoid extends CelestialBody {
       inclinationOffset: config.inclinationOffset || 0,
     };
 
+    // Typ planetoidy (metallic / carbonaceous / silicate)
+    this.planetoidType = config.planetoidType || 'silicate';
+
     // Pola wymagane przez OrbitRenderer / StabilitySystem
     this.lifeScore        = 0;
     this.orbitalStability = 1.0;
 
+    // Exploration gating (recon missions)
+    this.explored = config.explored || false;
+
     // Minimalne pola powierzchniowe (kompatybilność z _resolveCollision)
     this.surface = { hasWater: false, atmospherePressure: 0, magneticField: 0 };
 
-    // Skład mieszany skalny/lodowy
+    // Skład chemiczny — generator nadpisuje wzbogaconym składem wg typu
     this.composition = config.composition || {
       Fe: 25, Si: 25, O: 28, Mg: 8, Ca: 3, Al: 3,
       H2O: 2, C: 1.5, N: 0.5, P: 0.2, H: 1, S: 0.8,

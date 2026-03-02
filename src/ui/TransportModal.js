@@ -8,6 +8,7 @@ import EventBus from '../core/EventBus.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { SHIPS } from '../data/ShipsData.js';
+import { THEME } from '../config/ThemeConfig.js';
 
 // Ikony zasobów (wszystkie kategorie)
 const RES_ICONS = {};
@@ -54,10 +55,10 @@ export function showTransportModal(sourceColony, targetColonies) {
     // Panel
     const panel = document.createElement('div');
     panel.style.cssText = `
-      background: #0a1628; border: 1px solid #1a4060;
+      background: ${THEME.bgSecondary}; border: 1px solid ${THEME.border};
       border-radius: 6px; padding: 20px; width: 440px; max-height: 80vh;
       overflow-y: auto;
-      font-family: monospace; color: #c8e8ff;
+      font-family: ${THEME.fontFamily}; color: ${THEME.textPrimary};
       box-shadow: 0 0 30px rgba(0,0,0,0.8);
     `;
 
@@ -69,20 +70,20 @@ export function showTransportModal(sourceColony, targetColonies) {
 
     // Z: kolonia źródłowa
     const fromDiv = document.createElement('div');
-    fromDiv.style.cssText = 'font-size: 10px; color: #6888aa; margin-bottom: 8px;';
+    fromDiv.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
     fromDiv.textContent = `Z: 🏛 ${sourceColony.name}`;
     panel.appendChild(fromDiv);
 
     // Do: wybór kolonii docelowej
     const toLabel = document.createElement('div');
-    toLabel.style.cssText = 'font-size: 10px; color: #6888aa; margin-bottom: 4px;';
+    toLabel.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary}; margin-bottom: 4px;`;
     toLabel.textContent = 'Do:';
     panel.appendChild(toLabel);
 
     const targetSelect = document.createElement('select');
     targetSelect.style.cssText = `
-      width: 100%; padding: 4px; background: #0d1a2e; border: 1px solid #1a4060;
-      color: #c8e8ff; font-family: monospace; font-size: 11px; margin-bottom: 12px;
+      width: 100%; padding: 4px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.border};
+      color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily}; font-size: ${THEME.fontSizeNormal + 1}px; margin-bottom: 12px;
     `;
     for (const col of targetColonies) {
       const opt = document.createElement('option');
@@ -94,13 +95,13 @@ export function showTransportModal(sourceColony, targetColonies) {
 
     // Cargo info
     const cargoInfo = document.createElement('div');
-    cargoInfo.style.cssText = 'font-size: 10px; color: #88ffcc; margin-bottom: 8px; text-align: center;';
+    cargoInfo.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.accent}; margin-bottom: 8px; text-align: center;`;
     cargoInfo.textContent = `Ładowność: 0 / ${cargoCapacity} ton`;
     panel.appendChild(cargoInfo);
 
     // Separator
     const sep = document.createElement('hr');
-    sep.style.cssText = 'border: none; border-top: 1px solid #1a3050; margin: 8px 0;';
+    sep.style.cssText = `border: none; border-top: 1px solid ${THEME.border}; margin: 8px 0;`;
     panel.appendChild(sep);
 
     // Pobierz inventory źródłowe
@@ -116,7 +117,7 @@ export function showTransportModal(sourceColony, targetColonies) {
       if (filteredItems.length === 0) return;
 
       const header = document.createElement('div');
-      header.style.cssText = 'font-size: 9px; color: #4a6a8a; margin: 6px 0 2px 0; font-weight: bold;';
+      header.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textDim}; margin: 6px 0 2px 0; font-weight: bold;`;
       header.textContent = label;
       panel.appendChild(header);
 
@@ -133,7 +134,7 @@ export function showTransportModal(sourceColony, targetColonies) {
         row.appendChild(icon);
 
         const name = document.createElement('span');
-        name.style.cssText = 'width: 90px; font-size: 10px; color: #8aaacc;';
+        name.style.cssText = `width: 90px; font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary};`;
         name.textContent = def.namePL ?? id;
         row.appendChild(name);
 
@@ -143,20 +144,20 @@ export function showTransportModal(sourceColony, targetColonies) {
         input.max = available;
         input.value = 0;
         input.style.cssText = `
-          width: 60px; padding: 2px 4px; background: #0d1a2e; border: 1px solid #1a4060;
-          color: #c8e8ff; font-family: monospace; font-size: 10px; text-align: right;
+          width: 60px; padding: 2px 4px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.border};
+          color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily}; font-size: ${THEME.fontSizeNormal}px; text-align: right;
         `;
         input.addEventListener('input', updateWeight);
         row.appendChild(input);
         inputs[id] = { input, weight };
 
         const avail = document.createElement('span');
-        avail.style.cssText = 'font-size: 9px; color: #6888aa; margin-left: 6px; width: 50px;';
+        avail.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}; margin-left: 6px; width: 50px;`;
         avail.textContent = `/ ${available}`;
         row.appendChild(avail);
 
         const wSpan = document.createElement('span');
-        wSpan.style.cssText = 'font-size: 8px; color: #4a6a8a; margin-left: 4px; width: 40px;';
+        wSpan.style.cssText = `font-size: ${THEME.fontSizeSmall - 1}px; color: ${THEME.textDim}; margin-left: 4px; width: 40px;`;
         wSpan.textContent = `${weight}t/szt`;
         row.appendChild(wSpan);
 
@@ -177,14 +178,14 @@ export function showTransportModal(sourceColony, targetColonies) {
       }
       const overweight = totalWeight > cargoCapacity;
       cargoInfo.textContent = `Ładowność: ${totalWeight.toFixed(1)} / ${cargoCapacity} ton`;
-      cargoInfo.style.color = overweight ? '#cc4422' : '#88ffcc';
+      cargoInfo.style.color = overweight ? THEME.dangerDim : THEME.accent;
       btnSend.disabled = overweight;
       btnSend.style.opacity = overweight ? '0.5' : '1';
     }
 
     // Info
     const info = document.createElement('div');
-    info.style.cssText = 'font-size: 9px; color: #6888aa; margin: 8px 0;';
+    info.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}; margin: 8px 0;`;
     info.textContent = 'Koszt załogi: 0.5 POP (zablokowany na czas podróży)';
     panel.appendChild(info);
 
@@ -194,9 +195,9 @@ export function showTransportModal(sourceColony, targetColonies) {
 
     const btnCancel = document.createElement('button');
     btnCancel.style.cssText = `
-      background: rgba(60,20,20,0.8); border: 1px solid #cc4422;
-      color: #ff8888; padding: 4px 16px; cursor: pointer; font-family: monospace;
-      font-size: 11px; border-radius: 3px;
+      background: rgba(60,20,20,0.8); border: 1px solid ${THEME.dangerDim};
+      color: #ff8888; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
+      font-size: ${THEME.fontSizeNormal + 1}px; border-radius: 3px;
     `;
     btnCancel.textContent = 'Anuluj';
     btnCancel.onclick = () => close(null);
@@ -204,9 +205,9 @@ export function showTransportModal(sourceColony, targetColonies) {
 
     const btnSend = document.createElement('button');
     btnSend.style.cssText = `
-      background: rgba(20,60,40,0.8); border: 1px solid #44cc66;
-      color: #88ffcc; padding: 4px 16px; cursor: pointer; font-family: monospace;
-      font-size: 11px; border-radius: 3px;
+      background: rgba(20,60,40,0.8); border: 1px solid ${THEME.successDim};
+      color: ${THEME.accent}; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
+      font-size: ${THEME.fontSizeNormal + 1}px; border-radius: 3px;
     `;
     btnSend.textContent = 'WYŚLIJ';
     btnSend.onclick = () => {

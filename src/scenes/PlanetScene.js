@@ -11,6 +11,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { TECHS }             from '../data/TechData.js';
 import { showRenameModal }   from '../ui/ModalInput.js';
+import { THEME, bgAlpha }   from '../config/ThemeConfig.js';
 
 // ── Stałe layoutu ───────────────────────────────────────────
 // HEX_SIZE dynamiczny — obliczany per planeta/rozdzielczość w _calcOptimalHexSize()
@@ -361,7 +362,7 @@ export class PlanetScene {
         gs.w + pad * 2,
         gs.h + pad * 2
       );
-      ctx.strokeStyle = '#2a4060';
+      ctx.strokeStyle = THEME.borderLight;
       ctx.lineWidth   = 1;
       ctx.strokeRect(
         this._screenCX - gs.w / 2 - pad,
@@ -436,7 +437,7 @@ export class PlanetScene {
     }
 
     // Obramowanie
-    ctx.strokeStyle = isSelected ? '#88ffcc' : isHovered ? '#ffffff' : '#1a2a3a';
+    ctx.strokeStyle = isSelected ? THEME.accent : isHovered ? '#ffffff' : '#1a2a3a';
     ctx.lineWidth   = isSelected ? 2 : 1;
     ctx.stroke();
 
@@ -459,7 +460,7 @@ export class PlanetScene {
     // Zasób strategiczny
     if (tile.strategicResource) {
       const sc = STRAT_COLORS[tile.strategicResource] || '#ffffff';
-      ctx.font        = '8px monospace';
+      ctx.font        = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle   = sc;
       ctx.textAlign   = 'center';
       ctx.fillText(tile.strategicResource, pos.x, pos.y + this._hexSize - 6);
@@ -548,33 +549,33 @@ export class PlanetScene {
   _drawTopBar() {
     const ctx = this.ctx;
 
-    ctx.fillStyle = 'rgba(6,13,24,0.95)';
+    ctx.fillStyle = bgAlpha(0.95);
     ctx.fillRect(0, 0, LW, TOP_BAR_H);
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(0, TOP_BAR_H); ctx.lineTo(LW, TOP_BAR_H); ctx.stroke();
 
     // Przycisk WRÓĆ
-    ctx.font      = '11px monospace';
-    ctx.fillStyle = '#88ffcc';
+    ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
     ctx.textAlign = 'left';
     ctx.fillText('← Wróć', 14, TOP_BAR_H / 2 + 4);
 
     // Nazwa planety + przycisk zmiany nazwy ✏
     if (this.planet) {
-      ctx.font      = '14px monospace';
-      ctx.fillStyle = '#c8e8ff';
+      ctx.font      = `${THEME.fontSizeTitle - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
       ctx.textAlign = 'center';
       ctx.fillText(this.planet.name, LW / 2, TOP_BAR_H / 2 + 5);
 
       // Przycisk ✏ obok nazwy
       const nameW = ctx.measureText(this.planet.name).width;
-      ctx.font      = '10px monospace';
-      ctx.fillStyle = '#6888aa';
+      ctx.font      = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
       ctx.fillText('✏', LW / 2 + nameW / 2 + 8, TOP_BAR_H / 2 + 5);
 
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#6888aa';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
       const temp = this.planet.temperatureK
         ? `${Math.round(this.planet.temperatureK - 273)} °C`
         : '';
@@ -591,9 +592,9 @@ export class PlanetScene {
     const Y    = TOP_BAR_H;
     const rSys = window.KOSMOS?.resourceSystem;
 
-    ctx.fillStyle = 'rgba(6,13,24,0.90)';
+    ctx.fillStyle = bgAlpha(0.90);
     ctx.fillRect(0, Y, LW, RES_BAR_H);
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(0, Y + RES_BAR_H); ctx.lineTo(LW, Y + RES_BAR_H); ctx.stroke();
 
@@ -607,18 +608,18 @@ export class PlanetScene {
       const cap = rSys?.resources?.[r]?.capacity ?? 500;
       const dlt = rSys?.resources?.[r]?.perYear  ?? 0;
 
-      ctx.font      = '9px monospace';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = '#6a8aaa';
       ctx.textAlign = 'center';
       ctx.fillText(icons[r] + ' ' + r.toUpperCase(), cx, Y + 12);
 
       const frac = cap > 0 ? amt / cap : 0;
-      ctx.font      = '11px monospace';
-      ctx.fillStyle = frac < 0.10 ? '#cc4422' : frac < 0.25 ? '#ffaa44' : '#c8e8ff';
+      ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = frac < 0.10 ? THEME.dangerDim : frac < 0.25 ? THEME.warning : THEME.textPrimary;
       ctx.fillText(`${Math.floor(amt)} / ${cap}`, cx, Y + 25);
 
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = (dlt || 0) >= 0 ? '#44cc66' : '#cc4422';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = (dlt || 0) >= 0 ? THEME.successDim : THEME.dangerDim;
       ctx.fillText(`${(dlt || 0) >= 0 ? '+' : ''}${(dlt || 0).toFixed(1)}/r`, cx, Y + 38);
     });
     ctx.textAlign = 'left';
@@ -630,9 +631,9 @@ export class PlanetScene {
     const bSys = window.KOSMOS?.buildingSystem;
     const cSys = window.KOSMOS?.civSystem;
 
-    ctx.fillStyle = 'rgba(6,13,24,0.88)';
+    ctx.fillStyle = bgAlpha(0.88);
     ctx.fillRect(0, HEADER_H, LEFT_W, LH - HEADER_H);
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(LEFT_W, HEADER_H); ctx.lineTo(LEFT_W, LH); ctx.stroke();
 
@@ -641,28 +642,28 @@ export class PlanetScene {
 
     if (cSys) {
       // Populacja / housing
-      ctx.font      = '10px monospace';
-      ctx.fillStyle = '#c8e8ff';
+      ctx.font      = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(`👤 POP: ${cSys.population} / ${cSys.housing}`, 12, y + 12);
       y += 18;
 
       // Pasek postępu wzrostu
       const barW = LEFT_W - 24;
       const barH = 5;
-      ctx.fillStyle = '#0d1520';
+      ctx.fillStyle = THEME.bgTertiary;
       ctx.fillRect(12, y, barW, barH);
       const progress = Math.min(1, cSys._growthProgress ?? 0);
       if (progress > 0) {
-        ctx.fillStyle = '#44cc66';
+        ctx.fillStyle = THEME.successDim;
         ctx.fillRect(12, y, Math.round(barW * progress), barH);
       }
-      ctx.strokeStyle = '#1a3050';
+      ctx.strokeStyle = THEME.border;
       ctx.strokeRect(12, y, barW, barH);
       y += 10;
 
       // Zatrudnieni / wolni
-      ctx.font      = '8px monospace';
-      ctx.fillStyle = '#6888aa';
+      ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
       const emp = cSys._employedPops ?? 0;
       const free = cSys.freePops ?? 0;
       ctx.fillText(`Zatrudn: ${emp.toFixed(2)}  Wolni: ${free.toFixed(2)}`, 12, y + 6);
@@ -670,18 +671,18 @@ export class PlanetScene {
 
       // Morale
       const morale = Math.round(cSys.morale ?? 50);
-      const moraleColor = morale >= 60 ? '#44cc66' : morale >= 30 ? '#ffaa44' : '#cc4422';
+      const moraleColor = morale >= 60 ? THEME.successDim : morale >= 30 ? THEME.warning : THEME.dangerDim;
       ctx.fillStyle = moraleColor;
       ctx.fillText(`Morale: ${morale}%`, 12, y + 6);
 
       // Epoka (obok morale)
-      ctx.fillStyle = '#cc88ff';
+      ctx.fillStyle = THEME.purple;
       ctx.fillText(`Epoka: ${cSys.epochName}`, 110, y + 6);
       y += 14;
 
       // Kryzysy
       if (cSys.isUnrest) {
-        ctx.fillStyle = '#ff4444';
+        ctx.fillStyle = THEME.danger;
         ctx.fillText('⚠ NIEPOKOJE!', 12, y + 6);
         y += 12;
       }
@@ -693,20 +694,20 @@ export class PlanetScene {
 
       // Separator
       y += 4;
-      ctx.strokeStyle = '#1a3050';
+      ctx.strokeStyle = THEME.border;
       ctx.beginPath(); ctx.moveTo(8, y); ctx.lineTo(LEFT_W - 8, y); ctx.stroke();
       y += 6;
     }
 
     // ── Lista instalacji ──────────────────────────────────────────
-    ctx.font      = '9px monospace';
-    ctx.fillStyle = '#2a4060';
+    ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.borderLight;
     ctx.fillText('INSTALACJE', 12, y + 12);
     y += 20;
 
     if (!bSys || bSys._active.size === 0) {
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#2a4060';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.borderLight;
       ctx.fillText('Brak instalacji', 12, y + 8);
       return;
     }
@@ -714,11 +715,11 @@ export class PlanetScene {
     bSys._active.forEach((entry, tileKey) => {
       if (y > LH - 60) return;
       const b = entry.building;
-      ctx.font      = '9px monospace';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = CAT_COLORS[b.category] || '#888';
       ctx.fillText(`${b.icon || '🏗'} ${b.namePL}`, 12, y + 8);
-      ctx.font      = '8px monospace';
-      ctx.fillStyle = '#2a4060';
+      ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.borderLight;
       ctx.fillText(tileKey, 12, y + 19);
       y += 26;
     });
@@ -731,11 +732,11 @@ export class PlanetScene {
     const CX   = LW / 2;
 
     // Tło
-    ctx.fillStyle = 'rgba(6,13,24,0.90)';
+    ctx.fillStyle = bgAlpha(0.90);
     ctx.fillRect(0, BY, LW, BOTTOM_BAR_H);
 
     // Separator górny
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(0, BY); ctx.lineTo(LW, BY); ctx.stroke();
 
@@ -743,8 +744,8 @@ export class PlanetScene {
     ctx.beginPath(); ctx.moveTo(0, BY + 22); ctx.lineTo(LW, BY + 22); ctx.stroke();
 
     // ── Wiersz 1: info terenu + podpowiedź ────────────────────
-    ctx.font      = '9px monospace';
-    ctx.fillStyle = '#6888aa';
+    ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
     ctx.textAlign = 'left';
     ctx.fillText('Klik: wybierz  |  ESC: wróć', 14, BY + 14);
 
@@ -788,14 +789,14 @@ export class PlanetScene {
 
       // Rysuj: nazwa terenu po lewej-centrum
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#c8e8ff';
+      ctx.fillStyle = THEME.textPrimary;
       const infoX = 200;
       ctx.fillText(info, infoX, BY + 14);
 
       // Zasoby bazowe + modyfikatory obok nazwy terenu
       if (yieldParts.length > 0 || modParts.length > 0) {
         const infoW = ctx.measureText(info).width;
-        ctx.font      = '8px monospace';
+        ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = '#88aacc';
         const allParts = [...yieldParts, ...modParts].join('  ');
         ctx.fillText(allParts, infoX + infoW + 10, BY + 14);
@@ -807,12 +808,12 @@ export class PlanetScene {
     const TY = BY + 38;   // środek Y drugiego wiersza
 
     // Przycisk pauza/graj
-    ctx.font      = '11px monospace';
+    ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
     ctx.textAlign = 'center';
-    ctx.fillStyle = isPaused ? '#88ffcc' : '#6888aa';
+    ctx.fillStyle = isPaused ? THEME.accent : THEME.textSecondary;
     ctx.fillText(isPaused ? '▶ GRAJ' : '⏸ PAUZA', CX - 190, TY);
 
-    ctx.fillStyle = '#2a4060';
+    ctx.fillStyle = THEME.borderLight;
     ctx.fillText('|', CX - 136, TY);
 
     // Przyciski prędkości ×1 … ×16
@@ -820,19 +821,19 @@ export class PlanetScene {
     speedLabels.forEach((label, i) => {
       const bx = CX - 100 + i * 50;
       const isActive = !isPaused && multiplierIndex === i + 1;
-      ctx.font      = '11px monospace';
-      ctx.fillStyle = isActive ? '#88ffcc' : '#6888aa';
+      ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = isActive ? THEME.accent : THEME.textSecondary;
       ctx.textAlign = 'center';
       ctx.fillText(label, bx, TY);
     });
 
-    ctx.fillStyle = '#2a4060';
+    ctx.fillStyle = THEME.borderLight;
     ctx.fillText('|', CX + 116, TY);
 
     // Wyświetlacz czasu gry
     if (displayText) {
-      ctx.font      = '10px monospace';
-      ctx.fillStyle = '#c8e8ff';
+      ctx.font      = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
       ctx.textAlign = 'center';
       ctx.fillText(displayText, CX + 196, TY);
     }
@@ -851,19 +852,19 @@ export class PlanetScene {
     const bSys  = window.KOSMOS?.buildingSystem;
     const tSys  = window.KOSMOS?.techSystem;
 
-    ctx.fillStyle = 'rgba(6,13,24,0.95)';
+    ctx.fillStyle = bgAlpha(0.95);
     ctx.fillRect(BPX, HEADER_H, RIGHT_W, LH - HEADER_H);
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(BPX, HEADER_H); ctx.lineTo(BPX, LH); ctx.stroke();
 
     // Nagłówek pola
-    ctx.font      = '10px monospace';
-    ctx.fillStyle = '#c8e8ff';
+    ctx.font      = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary;
     ctx.fillText(terrain?.namePL ?? tile.type, BPX + 8, HEADER_H + 20);
 
     if (tile.strategicResource) {
-      ctx.font      = '9px monospace';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = STRAT_COLORS[tile.strategicResource] || '#fff';
       ctx.fillText(`Zasób: ${tile.strategicResource}`, BPX + 8, HEADER_H + 34);
     }
@@ -871,8 +872,8 @@ export class PlanetScene {
     // Stolica (wirtualny budynek — nie blokuje budowy)
     let buildListY = HEADER_H + 48;
     if (tile.capitalBase) {
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#4488ff';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.info;
       ctx.fillText('🏛 Stolica', BPX + 8, buildListY);
       buildListY += 14;
     }
@@ -880,7 +881,7 @@ export class PlanetScene {
     // Aktualny budynek
     if (tile.buildingId && BUILDINGS[tile.buildingId]) {
       const b = BUILDINGS[tile.buildingId];
-      ctx.font      = '9px monospace';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = CAT_COLORS[b.category] || '#fff';
       ctx.fillText(`${b.icon} ${b.namePL}`, BPX + 8, buildListY);
 
@@ -889,9 +890,9 @@ export class PlanetScene {
       if (!b.isColonyBase && !b.isCapital) {
         ctx.fillStyle = 'rgba(100,30,30,0.8)';
         ctx.fillRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
-        ctx.strokeStyle = '#cc4422';
+        ctx.strokeStyle = THEME.dangerDim;
         ctx.strokeRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
-        ctx.font      = '9px monospace';
+        ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = '#ff8888';
         ctx.textAlign = 'center';
         ctx.fillText('[ Rozbiórka ]', BPX + RIGHT_W / 2, demolishY + 11);
@@ -899,8 +900,8 @@ export class PlanetScene {
       }
     } else {
       // Lista budynków (dostępne + niedostępne z powodem)
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#2a4060';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.borderLight;
       ctx.fillText('Budynki:', BPX + 8, buildListY);
 
       let yy = buildListY + 12;
@@ -940,13 +941,13 @@ export class PlanetScene {
         ctx.lineWidth   = 1;
         ctx.strokeRect(BPX + 8, yy, RIGHT_W - 16, rowH);
 
-        ctx.font      = '9px monospace';
+        ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = blocked ? '#663333' : (affordable ? CAT_COLORS[b.category] : '#2a3050');
         ctx.fillText(`${b.icon} ${b.namePL}`, BPX + 14, yy + 12);
 
         const costStr = Object.entries(b.cost || {}).map(([k, v]) => `${RESOURCE_ICONS?.[k] ?? k}${v}`).join(' ');
-        ctx.font      = '8px monospace';
-        ctx.fillStyle = blocked ? '#442222' : (affordable ? '#2a4060' : '#181e28');
+        ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = blocked ? '#442222' : (affordable ? THEME.borderLight : '#181e28');
         ctx.fillText(costStr, BPX + 14, yy + 23);
 
         const popCost = b.popCost ?? 0.25;
@@ -957,7 +958,7 @@ export class PlanetScene {
         }
 
         if (blocked) {
-          ctx.font      = '7px monospace';
+          ctx.font      = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
           ctx.fillStyle = '#884444';
           ctx.fillText(`❌ ${reason}`, BPX + 14, yy + 33);
         }
@@ -978,7 +979,7 @@ export class PlanetScene {
     // Przycisk ✏ zmiany nazwy planety (obok nazwy w top barze)
     if (this.planet && my >= 4 && my <= TOP_BAR_H - 4) {
       const ctx = this.ctx;
-      ctx.font = '14px monospace';
+      ctx.font = `${THEME.fontSizeTitle - 1}px ${THEME.fontFamily}`;
       const nameW = ctx.measureText(this.planet.name).width;
       const editX = LW / 2 + nameW / 2 + 2;
       if (mx >= editX && mx <= editX + 20) {

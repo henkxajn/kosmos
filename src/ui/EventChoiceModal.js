@@ -3,6 +3,8 @@
 // Wyświetla powiadomienie o zdarzeniu losowym z opcjonalnym wyborem gracza.
 // Styl: sci-fi, ciemny panel, z-index 100 (nad wszystkim).
 
+import { THEME } from '../config/ThemeConfig.js';
+
 const MODAL_TIMEOUT = 8000; // ms — auto-zamknięcie po 8 sekundach
 
 /**
@@ -23,8 +25,8 @@ export function showEventNotification(event, colonyName) {
 
     // Panel
     const panel = document.createElement('div');
-    const borderColor = event.severity === 'danger' ? '#cc4422'
-                      : event.severity === 'warning' ? '#ffaa44'
+    const borderColor = event.severity === 'danger' ? THEME.dangerDim
+                      : event.severity === 'warning' ? THEME.warning
                       : '#2288cc';
     const bgColor = event.severity === 'danger' ? 'rgba(60,10,10,0.95)'
                   : event.severity === 'warning' ? 'rgba(40,30,5,0.95)'
@@ -32,7 +34,7 @@ export function showEventNotification(event, colonyName) {
     panel.style.cssText = `
       background: ${bgColor}; border: 1px solid ${borderColor};
       border-radius: 6px; padding: 16px 24px; max-width: 400px; min-width: 280px;
-      font-family: monospace; color: #c8e8ff; pointer-events: auto;
+      font-family: ${THEME.fontFamily}; color: ${THEME.textPrimary}; pointer-events: auto;
       box-shadow: 0 0 20px rgba(0,0,0,0.7); animation: slideDown 0.3s ease-out;
     `;
 
@@ -44,20 +46,20 @@ export function showEventNotification(event, colonyName) {
 
     // Kolonia
     const colony = document.createElement('div');
-    colony.style.cssText = 'font-size: 10px; color: #6888aa; margin-bottom: 8px;';
+    colony.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
     colony.textContent = `Kolonia: ${colonyName}`;
     panel.appendChild(colony);
 
     // Opis
     const desc = document.createElement('div');
-    desc.style.cssText = 'font-size: 11px; color: #88aacc; margin-bottom: 12px; line-height: 1.4;';
+    desc.style.cssText = `font-size: ${THEME.fontSizeNormal + 1}px; color: ${THEME.textSecondary}; margin-bottom: 12px; line-height: 1.4;`;
     desc.textContent = event.description;
     panel.appendChild(desc);
 
     // Czas trwania
     if (event.duration > 0) {
       const dur = document.createElement('div');
-      dur.style.cssText = 'font-size: 9px; color: #6888aa; margin-bottom: 8px;';
+      dur.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
       dur.textContent = `Czas trwania: ${event.duration} lat`;
       panel.appendChild(dur);
     }
@@ -66,8 +68,8 @@ export function showEventNotification(event, colonyName) {
     const btn = document.createElement('button');
     btn.style.cssText = `
       background: rgba(20,40,60,0.9); border: 1px solid ${borderColor};
-      color: #88ffcc; padding: 4px 16px; cursor: pointer; font-family: monospace;
-      font-size: 11px; border-radius: 3px;
+      color: ${THEME.accent}; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
+      font-size: ${THEME.fontSizeNormal + 1}px; border-radius: 3px;
     `;
     btn.textContent = 'OK';
     btn.onclick = close;

@@ -1,10 +1,13 @@
-// PlanetGlobeTexture — generuje teksturę łączącą powierzchnię planety z siatką hex
+// PlanetGlobeTexture — overlay canvas dla globusa planety
 //
-// Dwie warstwy:
-//   1. Bazowa powierzchnia — FBM noise z paletami (port z ThreeRenderer)
-//   2. Nakładka heksagonalna — kolory biomów + linie siatki + markery budynków
+// Generuje PRZEZROCZYSTĄ teksturę 1024×512 (equirectangular) z:
+//   - Markerami budynków (kolorowe kółka per kategoria)
+//   - Markerami stolicy (niebieski)
+//   - Highlight hexów (selected/hovered)
+//   - Opcjonalną siatką hex (delikatne linie)
 //
-// Tekstura 1024×512 (equirectangular) mapowana na sferę UV.
+// Główna tekstura planety to pre-generowane PNG PBR (MeshStandardMaterial).
+// Ten moduł rysuje TYLKO overlay na oddzielnej sferze (r=1.005).
 
 import * as THREE from 'three';
 import { HexGrid }       from '../map/HexGrid.js';
@@ -26,80 +29,9 @@ const CAT_COLORS = {
   space:      [170, 170, 255],
 };
 
-// ── FBM noise (port z ThreeRenderer.js) ───────────────────────
-function noise(x, y, seed) {
-  const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
-  return n - Math.floor(n);
-}
-
-function fbm(x, y, seed, octaves = 6) {
-  let val = 0, amp = 0.5, freq = 1;
-  for (let i = 0; i < octaves; i++) {
-    val += amp * noise(x * freq, y * freq, seed);
-    amp *= 0.5; freq *= 2;
-  }
-  return val;
-}
-
-function hashCode(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
-  return Math.abs(h);
-}
-
-const PALETTES = {
-  hot_rocky: [[180,40,20],[220,80,20],[140,20,10],[255,120,30],[60,10,5]],
-  rocky:     [[100,90,80],[130,120,100],[80,75,65],[150,140,120],[60,55,50]],
-  rocky_hz:  [[34,80,60],[45,120,80],[80,150,60],[170,160,100],[200,200,220]],
-  gas:       [[180,150,120],[200,170,130],[160,130,100],[140,120,90],[210,190,160]],
-  gas_cold:  [[150,180,255],[100,140,220],[180,200,255],[80,120,200],[140,160,240]],
-  ice:       [[180,200,240],[140,170,220],[200,220,255],[100,140,200],[240,245,255]],
-};
-
 // ── API publiczne ─────────────────────────────────────────────
 
 export class PlanetGlobeTexture {
-
-  // Generuje CanvasTexture z planetą + siatką hex
-  // planet:  obiekt Planet (id, planetType, temperatureK…)
-  // grid:    HexGrid (wygenerowana przez PlanetMapGenerator)
-  // options: { showGrid: bool, showBuildings: bool, selectedTile: {q,r}, hoveredTile: {q,r} }
-  static generate(planet, grid, options = {}) {
-    const canvas = document.createElement('canvas');
-    canvas.width  = TEX_W;
-    canvas.height = TEX_H;
-    const ctx = canvas.getContext('2d');
-
-    // 1. Bazowa tekstura planety (FBM)
-    PlanetGlobeTexture._drawBaseTexture(ctx, planet);
-
-    // 2. Nakładka heksagonalna
-    PlanetGlobeTexture._drawHexOverlay(ctx, grid, options);
-
-    // 3. Markery budynków
-    if (options.showBuildings !== false) {
-      PlanetGlobeTexture._drawBuildingMarkers(ctx, grid);
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }
-
-  // Odśwież istniejącą teksturę (np. po budowie)
-  static update(existingTex, planet, grid, options = {}) {
-    const canvas = existingTex.image;
-    const ctx = canvas.getContext('2d');
-
-    // Przerysuj od zera
-    PlanetGlobeTexture._drawBaseTexture(ctx, planet);
-    PlanetGlobeTexture._drawHexOverlay(ctx, grid, options);
-    if (options.showBuildings !== false) {
-      PlanetGlobeTexture._drawBuildingMarkers(ctx, grid);
-    }
-
-    existingTex.needsUpdate = true;
-  }
 
   // Optymalny hexSize aby siatka pokryła teksturę
   static calcHexSize(grid) {
@@ -108,135 +40,115 @@ export class PlanetGlobeTexture {
     return Math.floor(Math.min(hexByW, hexByH));
   }
 
-  // ── Bazowa tekstura (port z ThreeRenderer.generateTexture) ──
+  // ── Overlay: markery + highlight + opcjonalna siatka ────────
 
-  static _drawBaseTexture(ctx, planet) {
-    const seed  = hashCode(String(planet.id));
-    const tempK = planet.temperatureK ?? 300;
-    const pType = planet.planetType ?? 'rocky';
+  // Generuje nową CanvasTexture (przezroczyste tło + markery + highlight + siatka)
+  static generateOverlay(grid, options = {}) {
+    const canvas = document.createElement('canvas');
+    canvas.width  = TEX_W;
+    canvas.height = TEX_H;
+    const ctx = canvas.getContext('2d');
+    // Canvas domyślnie przezroczysty (alpha=0)
 
-    // Wybór palety
-    let palKey = 'rocky';
-    if (pType === 'hot_rocky') palKey = 'hot_rocky';
-    else if (pType === 'gas')  palKey = (seed % 2 === 0) ? 'gas' : 'gas_cold';
-    else if (pType === 'ice')  palKey = 'ice';
-    else if (tempK > 250 && tempK < 400) palKey = 'rocky_hz';
+    PlanetGlobeTexture._drawOverlayContent(ctx, grid, options);
 
-    const pal = PALETTES[palKey];
-
-    for (let y = 0; y < TEX_H; y++) {
-      for (let x = 0; x < TEX_W; x++) {
-        const nx = x / TEX_W, ny = y / TEX_H;
-        let val;
-
-        if (pType === 'gas') {
-          val = fbm(nx * 2 + ny * 0.5, ny * 8, seed, 5);
-          val = (Math.sin(ny * 20 + val * 6) + 1) * 0.5;
-        } else {
-          val = fbm(nx * 4, ny * 4, seed, 6);
-        }
-
-        const idx = Math.min(Math.floor(val * pal.length), pal.length - 1);
-        const c   = pal[idx];
-        const v   = 0.85 + noise(x * 0.1, y * 0.1, seed + 1) * 0.3;
-        ctx.fillStyle = `rgb(${c[0]*v|0},${c[1]*v|0},${c[2]*v|0})`;
-        ctx.fillRect(x, y, 1, 1);
-      }
-    }
-
-    // Czapa polarna dla lodowej planety
-    if (pType === 'ice') {
-      const capH = 50 + (seed % 8) * 6;
-      const g = ctx.createLinearGradient(0, 0, 0, capH);
-      g.addColorStop(0, 'rgba(255,255,255,0.95)');
-      g.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, TEX_W, capH);
-      const g2 = ctx.createLinearGradient(0, TEX_H - capH, 0, TEX_H);
-      g2.addColorStop(0, 'rgba(255,255,255,0)');
-      g2.addColorStop(1, 'rgba(255,255,255,0.95)');
-      ctx.fillStyle = g2; ctx.fillRect(0, TEX_H - capH, TEX_W, capH);
-    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
   }
 
-  // ── Nakładka heksagonalna ───────────────────────────────────
+  // Odśwież istniejącą teksturę overlay (clearRect + przerysuj)
+  static updateOverlay(existingTex, grid, options = {}) {
+    const canvas = existingTex.image;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, TEX_W, TEX_H);
 
-  static _drawHexOverlay(ctx, grid, options) {
-    if (options.showGrid === false) return;
+    PlanetGlobeTexture._drawOverlayContent(ctx, grid, options);
 
+    existingTex.needsUpdate = true;
+  }
+
+  // ── Kompatybilność wsteczna (używane w raycast — calcHexSize) ──
+
+  // Stare API — zachowane dla PlanetGlobeRenderer._raycastToTile()
+  static generateHighlightTexture(grid, selectedTile, hoveredTile) {
+    return PlanetGlobeTexture.generateOverlay(grid, {
+      showGrid: false,
+      showBuildings: false,
+      selectedTile,
+      hoveredTile,
+    });
+  }
+
+  static updateHighlightTexture(existingTex, grid, selectedTile, hoveredTile) {
+    PlanetGlobeTexture.updateOverlay(existingTex, grid, {
+      showGrid: false,
+      showBuildings: false,
+      selectedTile,
+      hoveredTile,
+    });
+  }
+
+  // ── Rysowanie zawartości overlay ──────────────────────────────
+
+  static _drawOverlayContent(ctx, grid, options) {
     const hexSize = PlanetGlobeTexture.calcHexSize(grid);
     const gridPx  = grid.gridPixelSize(hexSize);
 
-    // Odczytaj bieżące piksele aby blendować
-    const imgData = ctx.getImageData(0, 0, TEX_W, TEX_H);
-    const data    = imgData.data;
-    const alpha   = 0.45; // siła nakładki terenu
-
-    for (let py = 0; py < TEX_H; py++) {
-      for (let px = 0; px < TEX_W; px++) {
-        // UV → hex pixel coordinates
-        const hexX = (px / TEX_W) * gridPx.w;
-        const hexY = (py / TEX_H) * gridPx.h;
-
-        const { q, r } = HexGrid.pixelToHex(hexX, hexY, hexSize);
-        const tile = grid.get(q, r);
-        if (!tile) continue;
-
-        const terrain = TERRAIN_TYPES[tile.type];
-        if (!terrain) continue;
-
-        // Kolor terenu
-        const color = terrain.color;
-        const cr = (color >> 16) & 0xff;
-        const cg = (color >>  8) & 0xff;
-        const cb =  color        & 0xff;
-
-        const idx = (py * TEX_W + px) * 4;
-
-        // Blend kolor terenu z bazową teksturą
-        data[idx]     = Math.round(data[idx]     * (1 - alpha) + cr * alpha);
-        data[idx + 1] = Math.round(data[idx + 1] * (1 - alpha) + cg * alpha);
-        data[idx + 2] = Math.round(data[idx + 2] * (1 - alpha) + cb * alpha);
-
-        // Krawędź hexa — rozjaśnij piksele blisko granicy
-        const isEdge = PlanetGlobeTexture._isHexEdge(hexX, hexY, q, r, hexSize);
-        if (isEdge) {
-          data[idx]     = Math.min(255, data[idx]     + 50);
-          data[idx + 1] = Math.min(255, data[idx + 1] + 50);
-          data[idx + 2] = Math.min(255, data[idx + 2] + 50);
-        }
-      }
+    // 1. Siatka hex (opcjonalna, delikatna)
+    if (options.showGrid) {
+      PlanetGlobeTexture._drawHexGrid(ctx, grid, hexSize, gridPx);
     }
 
-    ctx.putImageData(imgData, 0, 0);
+    // 2. Markery budynków
+    if (options.showBuildings !== false) {
+      PlanetGlobeTexture._drawBuildingMarkers(ctx, grid, hexSize, gridPx);
+    }
+
+    // 3. Highlight hexów (selected + hovered)
+    if (options.selectedTile) {
+      PlanetGlobeTexture._drawHexHighlight(ctx, options.selectedTile.q, options.selectedTile.r, hexSize, gridPx, 'selected');
+    }
+    if (options.hoveredTile) {
+      const sel = options.selectedTile;
+      if (!sel || options.hoveredTile.q !== sel.q || options.hoveredTile.r !== sel.r) {
+        PlanetGlobeTexture._drawHexHighlight(ctx, options.hoveredTile.q, options.hoveredTile.r, hexSize, gridPx, 'hovered');
+      }
+    }
   }
 
-  // Sprawdza czy punkt (hexX, hexY) leży blisko krawędzi hexa (pointy-top)
-  static _isHexEdge(hexX, hexY, q, r, hexSize) {
-    const center = HexGrid.hexToPixel(q, r, hexSize);
-    const dx = hexX - center.x;
-    const dy = hexY - center.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+  // ── Delikatna siatka hex ──────────────────────────────────────
 
-    if (dist < 1) return false; // centrum — na pewno nie krawędź
+  static _drawHexGrid(ctx, grid, hexSize, gridPx) {
+    const scaleX = TEX_W / gridPx.w;
+    const scaleY = TEX_H / gridPx.h;
 
-    // Kąt od centrum hexa
-    let angle = Math.atan2(dy, dx);
-    if (angle < 0) angle += Math.PI * 2;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth   = 1;
 
-    // Pointy-top hex: odległość granicy przy kącie θ
-    const sectorAngle = angle % (Math.PI / 3);
-    const edgeDist = hexSize * Math.cos(Math.PI / 6) / Math.cos(sectorAngle - Math.PI / 6);
+    grid.forEach(tile => {
+      const center = HexGrid.hexToPixel(tile.q, tile.r, hexSize);
+      const texCX = (center.x / gridPx.w) * TEX_W;
+      const texCY = (center.y / gridPx.h) * TEX_H;
 
-    // 2px grubość linii
-    return dist > (edgeDist - 2);
+      // 6 wierzchołków hexa (pointy-top)
+      const hexR = hexSize * 0.95;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 180) * (60 * i - 30);
+        const px = texCX + hexR * Math.cos(angle) * scaleX;
+        const py = texCY + hexR * Math.sin(angle) * scaleY;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    });
   }
 
   // ── Markery budynków ────────────────────────────────────────
 
-  static _drawBuildingMarkers(ctx, grid) {
-    const hexSize = PlanetGlobeTexture.calcHexSize(grid);
-    const gridPx  = grid.gridPixelSize(hexSize);
-
+  static _drawBuildingMarkers(ctx, grid, hexSize, gridPx) {
     // Kolory anomalii
     const ANOMALY_COLORS = {
       scientific: [100, 200, 255],
@@ -310,49 +222,7 @@ export class PlanetGlobeTexture {
     });
   }
 
-  // ── Overlay highlight — lekka tekstura z 1-2 hexami ───────
-
-  // Generuje przezroczystą teksturę RGBA z highlighted hexami
-  static generateHighlightTexture(grid, selectedTile, hoveredTile) {
-    const canvas = document.createElement('canvas');
-    canvas.width  = TEX_W;
-    canvas.height = TEX_H;
-    const ctx = canvas.getContext('2d');
-    // Canvas domyślnie przezroczysty (alpha=0)
-
-    const hexSize = PlanetGlobeTexture.calcHexSize(grid);
-    const gridPx  = grid.gridPixelSize(hexSize);
-
-    if (selectedTile) {
-      PlanetGlobeTexture._drawHexHighlight(ctx, selectedTile.q, selectedTile.r, hexSize, gridPx, 'selected');
-    }
-    if (hoveredTile && (!selectedTile || hoveredTile.q !== selectedTile.q || hoveredTile.r !== selectedTile.r)) {
-      PlanetGlobeTexture._drawHexHighlight(ctx, hoveredTile.q, hoveredTile.r, hexSize, gridPx, 'hovered');
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
-  }
-
-  // Odśwież istniejącą teksturę overlay (clearRect + rysuj 1-2 hexy)
-  static updateHighlightTexture(existingTex, grid, selectedTile, hoveredTile) {
-    const canvas = existingTex.image;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, TEX_W, TEX_H);
-
-    const hexSize = PlanetGlobeTexture.calcHexSize(grid);
-    const gridPx  = grid.gridPixelSize(hexSize);
-
-    if (selectedTile) {
-      PlanetGlobeTexture._drawHexHighlight(ctx, selectedTile.q, selectedTile.r, hexSize, gridPx, 'selected');
-    }
-    if (hoveredTile && (!selectedTile || hoveredTile.q !== selectedTile.q || hoveredTile.r !== selectedTile.r)) {
-      PlanetGlobeTexture._drawHexHighlight(ctx, hoveredTile.q, hoveredTile.r, hexSize, gridPx, 'hovered');
-    }
-
-    existingTex.needsUpdate = true;
-  }
+  // ── Highlight hexa ──────────────────────────────────────────
 
   // Rysuje JEDEN hex jako Canvas 2D path (fill + stroke) — <1ms
   static _drawHexHighlight(ctx, q, r, hexSize, gridPx, type) {

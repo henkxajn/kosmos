@@ -2,6 +2,7 @@
 // Przepisana: bez Phasera, Canvas 2D na #ui-canvas
 
 import { SaveSystem } from '../systems/SaveSystem.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 
 const W = window.innerWidth;
 const H = window.innerHeight;
@@ -28,13 +29,13 @@ export class BootScene {
     ctx.clearRect(0, 0, W, H);
 
     // Tytuł
-    ctx.font      = '52px monospace';
-    ctx.fillStyle = '#88ffcc';
+    ctx.font      = `52px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
     ctx.textAlign = 'center';
     ctx.fillText('K O S M O S', W / 2, H / 2 - 60);
 
-    ctx.font      = '16px monospace';
-    ctx.fillStyle = '#6888aa';
+    ctx.font      = `${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
     ctx.fillText('Symulator Układu Słonecznego', W / 2, H / 2 - 20);
 
     ctx.textAlign = 'left';
@@ -49,24 +50,32 @@ export class BootScene {
 
   _drawNewGameDialog() {
     const ctx = this.ctx;
-    const PW = 400, PH = 100;
+    const PW = 400, PH = 120;
     const PX = W / 2 - PW / 2;
     const PY = H / 2 + 30;
 
     this._roundRect(ctx, PX, PY, PW, PH);
 
-    ctx.font      = '12px monospace';
-    ctx.fillStyle = '#6888aa';
+    ctx.font      = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
     ctx.textAlign = 'center';
     ctx.fillText('Wybierz tryb gry:', W / 2, PY + 22);
 
-    this._drawBtn(ctx, W / 2 - 100, PY + 50, '[ NOWY UKŁAD ]',  '#88ffcc', 'new');
-    this._drawBtn(ctx, W / 2 + 100, PY + 50, '[ EDEN — TEST ]', '#aaddff', 'eden');
+    // Aktywny przycisk — nowa gra (scenariusz Cywilizacja)
+    this._drawBtn(ctx, W / 2, PY + 52, '[ NOWA GRA ]', THEME.accent, 'civ');
 
-    ctx.font      = '8px monospace';
-    ctx.fillStyle = '#2a4060';
+    ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = '#4a6a8a';
     ctx.textAlign = 'center';
-    ctx.fillText('idealna orbita, szybkie życie', W / 2 + 100, PY + 68);
+    ctx.fillText('losowy układ z cywilizacją', W / 2, PY + 68);
+
+    // Wyszarzony przycisk — Generator (zamrożony)
+    ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = '#445566';
+    ctx.fillText('[ GENERATOR ]', W / 2, PY + 96);
+    ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = '#2a3a4a';
+    ctx.fillText('wkrótce', W / 2, PY + 110);
 
     ctx.textAlign = 'left';
   }
@@ -80,16 +89,16 @@ export class BootScene {
     this._roundRect(ctx, PX, PY, PW, PH);
 
     const years = Math.round(savedTime).toLocaleString('pl-PL');
-    ctx.font      = '13px monospace';
-    ctx.fillStyle = '#c8e8ff';
+    ctx.font      = `${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary;
     ctx.textAlign = 'center';
     ctx.fillText(`Zapisana gra: ${years} lat`, W / 2, PY + 22);
 
-    ctx.font      = '11px monospace';
-    ctx.fillStyle = '#6888aa';
+    ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
     ctx.fillText('Kontynuować tę grę?', W / 2, PY + 40);
 
-    this._drawBtn(ctx, W / 2 - 70,  PY + 66, '[ TAK — KONTYNUUJ ]', '#88ffcc', 'yes');
+    this._drawBtn(ctx, W / 2 - 70,  PY + 66, '[ TAK — KONTYNUUJ ]', THEME.accent, 'yes');
     this._drawBtn(ctx, W / 2 + 55,  PY + 66, '[ NOWA GRA ]',         '#ff8888', 'new');
 
     ctx.textAlign = 'left';
@@ -97,7 +106,7 @@ export class BootScene {
 
   _drawBtn(ctx, x, y, label, color, id) {
     const hover = this._hoveredBtn === id;
-    ctx.font      = '11px monospace';
+    ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = hover ? '#ffffff' : color;
     ctx.textAlign = 'center';
     ctx.fillText(label, x, y);
@@ -109,8 +118,8 @@ export class BootScene {
   }
 
   _roundRect(ctx, x, y, w, h) {
-    ctx.fillStyle   = 'rgba(17,24,40,0.95)';
-    ctx.strokeStyle = '#2a4060';
+    ctx.fillStyle   = bgAlpha(0.95);
+    ctx.strokeStyle = THEME.borderLight;
     ctx.lineWidth   = 1;
     ctx.fillRect(x, y, w, h);
     ctx.strokeRect(x, y, w, h);
@@ -154,16 +163,12 @@ export class BootScene {
 
   _handleBtn(btn) {
     if (btn === 'yes') {
-      window.KOSMOS.savedData    = SaveSystem.loadData();
-      window.KOSMOS.edenScenario = false;
-    } else if (btn === 'new') {
+      window.KOSMOS.savedData = SaveSystem.loadData();
+      window.KOSMOS.scenario  = 'civilization';
+    } else if (btn === 'new' || btn === 'civ') {
       SaveSystem.clearSave();
-      window.KOSMOS.savedData    = null;
-      window.KOSMOS.edenScenario = false;
-    } else if (btn === 'eden') {
-      SaveSystem.clearSave();
-      window.KOSMOS.savedData    = null;
-      window.KOSMOS.edenScenario = true;
+      window.KOSMOS.savedData = null;
+      window.KOSMOS.scenario  = 'civilization';
     }
 
     // Wyczyść boot screen

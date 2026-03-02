@@ -37,9 +37,9 @@ export class DiskPhaseSystem {
   constructor(timeSystem) {
     this.timeSystem = timeSystem;
 
-    // Faza na starcie — scenariusz Eden zaczyna w MATURE (brak blokerów życia)
-    // Normalny start: faza zależy od gameTime (wczytany save może być w MATURE)
-    this._currentPhase  = window.KOSMOS?.edenScenario
+    // Faza na starcie — scenariusz Cywilizacja zaczyna w MATURE (stabilny układ)
+    // Generator: faza zależy od gameTime (wczytany save może być w MATURE)
+    this._currentPhase  = window.KOSMOS?.scenario === 'civilization'
       ? 'MATURE'
       : this._phaseForTime(timeSystem.gameTime);
     this._clearingAccum = 0;

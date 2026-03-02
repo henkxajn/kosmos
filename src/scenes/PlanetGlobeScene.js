@@ -16,22 +16,34 @@ import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/Buil
 import { showRenameModal } from '../ui/ModalInput.js';
 import { TECHS }             from '../data/TechData.js';
 import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
-import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
-import { COMMODITIES } from '../data/CommoditiesData.js';
+import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
+import { ALL_RESOURCES } from '../data/ResourcesData.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { GLOBE }         from '../config/LayoutConfig.js';
+import { TopBar }        from '../ui/TopBar.js';
+import {
+  CIV_TABS,
+  drawEconomyTab, drawPopulationTab, drawTechTab, drawBuildingsTab,
+  handleTechClick, handleFactoryClick,
+} from '../ui/CivPanelDrawer.js';
 
-// ── Stałe layoutu (identyczne z PlanetScene) ─────────────────
-const TOP_BAR_H    = 44;
-const RES_BAR_H    = 44;
-const HEADER_H     = TOP_BAR_H + RES_BAR_H;
-const BOTTOM_BAR_H = 52;
-const LEFT_W       = 220;
-const RIGHT_W      = 234;
+// ── Stałe layoutu (z LayoutConfig — spójne z nowym UI) ────────
+const TOP_BAR_H    = GLOBE.TOP_BAR_H;     // 50
+const HEADER_H     = TOP_BAR_H;           // 50 (TopBar zastępuje TopBar+ResourceBar)
+const BOTTOM_BAR_H = GLOBE.BOTTOM_BAR_H;  // 44
+const LEFT_W       = GLOBE.LEFT_W;        // 240
+const RIGHT_W      = GLOBE.RIGHT_W;       // 220
 
 const W = window.innerWidth;
 const H = window.innerHeight;
 const PS_SCALE = Math.min(W / 1280, H / 720);
 const LW = Math.round(W / PS_SCALE);
 const LH = Math.round(H / PS_SCALE);
+
+// CivPanel — zakładki (z CivPanelDrawer)
+const CIV_TAB_ICONS = CIV_TABS; // [{ id, icon, label }]
+const CIV_TAB_BTN_W  = 40;  // szerokość jednego przycisku
+const CIV_TAB_BAR_H  = 26;  // wysokość paska ikon
 
 // Kolory kategorii budynków
 const CAT_COLORS = {
@@ -64,13 +76,28 @@ export class PlanetGlobeScene {
 
     // Panel budowania
     this._buildPanelTile   = null;
-    this._buildPanelScroll = 0;
+    this._buildPanelScrollY = 0;
+    this._buildPanelMouseX = -1;  // pozycja kursora w panelu budowania (do tooltip)
+    this._buildPanelMouseY = -1;
 
     // Stan kontrolek czasu
     this._timeState = { isPaused: true, multiplierIndex: 1, displayText: '' };
 
+    // TopBar (nowy komponent zasobów + czas)
+    this._topBar = new TopBar();
+    this._invPerYear  = {};
+    this._energyFlow  = {};
+    this._factoryBtns = [];
+
     // PlanetGlobeRenderer (tworzony w open)
     this._globeRenderer = null;
+
+    // CivPanel — zakładki widoczne na mapie planety
+    this._civTab = null; // null | 'economy' | 'population' | 'tech' | 'buildings' | 'expeditions'
+    this.uiManager = null; // referencja ustawiana przez GameScene
+
+    // Toggle siatki hex (domyślnie OFF — czysty PBR)
+    this._showGrid = false;
 
     // Drag kamery — stan
     this._isDragging = false;
@@ -105,7 +132,13 @@ export class PlanetGlobeScene {
     this._hoveredTile        = null;
     this._selectedTile       = null;
     this._buildPanelTile     = null;
+    this._buildPanelScrollY  = 0;
     this._isDragging         = false;
+    this._showGrid           = false;
+    this._civTab             = null;
+
+    // Flaga: UIManager NIE rysuje CivPanel (rysuje PlanetGlobeScene)
+    if (window.KOSMOS) window.KOSMOS.planetGlobeOpen = true;
 
     // Przełącz aktywną kolonię w ColonyManager
     const colMgr = window.KOSMOS?.colonyManager;
@@ -213,7 +246,9 @@ export class PlanetGlobeScene {
 
   _close() {
     this.isOpen = false;
+    this._civTab = null;
     this.canvas.style.display = 'none';
+    if (window.KOSMOS) window.KOSMOS.planetGlobeOpen = false;
 
     const layer = document.getElementById('event-layer');
     if (layer) layer.style.zIndex = '3';
@@ -282,9 +317,21 @@ export class PlanetGlobeScene {
           this._hoveredTile = null;
           this._globeRenderer?.handleExternalMouseMove(-9999, -9999); // poza ekranem
         }
+        // Śledź pozycję kursora w panelu budowania (do tooltip)
+        const BPX = LW - RIGHT_W;
+        if (this._buildPanelTile && mx >= BPX) {
+          this._buildPanelMouseX = mx;
+          this._buildPanelMouseY = my;
+        } else {
+          this._buildPanelMouseX = -1;
+          this._buildPanelMouseY = -1;
+        }
         layer.style.cursor = 'default';
         return;
       }
+      // Kursor poza panelami — reset hover budowania
+      this._buildPanelMouseX = -1;
+      this._buildPanelMouseY = -1;
 
       // W obszarze globusa → raycasting
       this._globeRenderer?.handleExternalMouseMove(e.clientX, e.clientY);
@@ -304,6 +351,7 @@ export class PlanetGlobeScene {
 
       // Panele UI — działają zawsze (wasDrag nie blokuje)
       if (this._hitTestClose(mx, my))      return;
+      if (this._hitTestCivTabs(mx, my))    return;
       if (this._hitTestTimeBar(mx, my))    return;
       if (this._hitTestBuildPanel(mx, my)) return;
       if (this._hitTestLeftPanel(mx, my))  return;
@@ -317,6 +365,7 @@ export class PlanetGlobeScene {
         if (tile) {
           this._selectedTile   = tile;
           this._buildPanelTile = tile;
+          this._buildPanelScrollY = 0;
         } else {
           this._selectedTile   = null;
           this._buildPanelTile = null;
@@ -328,6 +377,12 @@ export class PlanetGlobeScene {
     this._onWheel = (e) => {
       const mx = e.clientX / PS_SCALE;
       const my = e.clientY / PS_SCALE;
+      // Scroll w prawym panelu budynków
+      if (this._buildPanelTile && mx > LW - RIGHT_W && my > HEADER_H && my < LH - BOTTOM_BAR_H) {
+        this._buildPanelScrollY = Math.max(0, this._buildPanelScrollY + e.deltaY * 0.5);
+        e.preventDefault();
+        return;
+      }
       if (!this._isInPanel(mx, my)) {
         e.preventDefault();
         this._globeRenderer?.cameraCtrl?.applyZoom(e.deltaY);
@@ -356,8 +411,8 @@ export class PlanetGlobeScene {
       }
     };
 
-    // Resources — nowy model inventory
-    const applyRes = ({ resources, inventory }) => {
+    // Resources — nowy model inventory (rozszerzony o perYear/energyFlow dla TopBar)
+    const applyRes = ({ resources, inventory, perYear, energyFlow }) => {
       if (resources) {
         for (const [k, v] of Object.entries(resources)) {
           this._resources[k] = v.amount ?? 0;
@@ -365,6 +420,12 @@ export class PlanetGlobeScene {
       }
       if (inventory) {
         this._inventory = inventory;
+      }
+      if (perYear) {
+        this._invPerYear = perYear;
+      }
+      if (energyFlow) {
+        this._energyFlow = energyFlow;
       }
     };
     this._onResourceChange = applyRes;
@@ -460,6 +521,11 @@ export class PlanetGlobeScene {
     if (mx < LEFT_W) return true;
     // Right panel (gdy aktywny)
     if (this._buildPanelTile && mx > LW - RIGHT_W) return true;
+    // CivPanel overlay (gdy zakładka otwarta — blokuj interakcję z globem)
+    if (this._civTab) {
+      const { x, y, w, h } = this._civOverlayRect();
+      if (mx >= x && mx <= x + w && my >= y && my <= y + h) return true;
+    }
     return false;
   }
 
@@ -538,111 +604,81 @@ export class PlanetGlobeScene {
     ctx.fillRect(LW - RIGHT_W, HEADER_H, RIGHT_W, LH - HEADER_H - BOTTOM_BAR_H);
 
     // Separator prawego panelu
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(LW - RIGHT_W, HEADER_H); ctx.lineTo(LW - RIGHT_W, LH - BOTTOM_BAR_H); ctx.stroke();
 
     // Rysuj panele
-    this._drawTopBar();
-    this._drawResourceBar();
+    this._drawTopBarGlobe();
     this._drawLeftPanel();
     this._drawBottomBar();
     if (this._buildPanelTile) {
       this._drawBuildPanel();
     } else {
       // Podpowiedź w prawym panelu
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#2a4060';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.borderLight;
       ctx.fillText('Kliknij hex', LW - RIGHT_W + 8, HEADER_H + 20);
       ctx.fillText('aby zobaczyć opcje', LW - RIGHT_W + 8, HEADER_H + 34);
+    }
+
+    // CivPanel overlay — rysuj treść zakładki nad globem
+    if (this._civTab) {
+      this._drawCivTabOverlay(ctx);
     }
 
     ctx.restore();
   }
 
-  // ── Górny pasek ───────────────────────────────────────────────
+  // ── Górny pasek (TopBar z zasobami + "← Wróć") ────────────────
 
-  _drawTopBar() {
+  _drawTopBarGlobe() {
     const ctx = this.ctx;
 
-    ctx.fillStyle = 'rgba(6,13,24,0.95)';
-    ctx.fillRect(0, 0, LW, TOP_BAR_H);
-    ctx.strokeStyle = '#1a3050';
-    ctx.lineWidth   = 1;
-    ctx.beginPath(); ctx.moveTo(0, TOP_BAR_H); ctx.lineTo(LW, TOP_BAR_H); ctx.stroke();
+    // Szerokość bloku "← Wróć" + nazwa planety
+    const BACK_W = 130;
 
-    // Przycisk WRÓĆ
-    ctx.font      = '11px monospace';
-    ctx.fillStyle = '#88ffcc';
-    ctx.textAlign = 'left';
-    ctx.fillText('← Wróć', 14, TOP_BAR_H / 2 + 4);
-
-    // Nazwa planety + przycisk zmiany nazwy ✏
-    if (this.planet) {
-      ctx.font      = '14px monospace';
-      ctx.fillStyle = '#c8e8ff';
-      ctx.textAlign = 'center';
-      ctx.fillText(this.planet.name, LW / 2, TOP_BAR_H / 2 + 5);
-
-      // Przycisk ✏ obok nazwy
-      const nameW = ctx.measureText(this.planet.name).width;
-      ctx.font      = '10px monospace';
-      ctx.fillStyle = '#6888aa';
-      ctx.fillText('✏', LW / 2 + nameW / 2 + 8, TOP_BAR_H / 2 + 5);
-
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#6888aa';
-      const temp = this.planet.temperatureK
-        ? `${Math.round(this.planet.temperatureK - 273)} °C`
-        : '';
-      ctx.fillText(`${this.planet.planetType ?? ''} ${temp}  [3D]`, LW / 2, TOP_BAR_H / 2 + 18);
+    // TopBar z zasobami + kontrolkami czasu (reuse komponent)
+    if (window.KOSMOS?.civMode) {
+      this._topBar.draw(ctx, LW, LH, {
+        inventory: this._inventory,
+        invPerYear: this._invPerYear,
+        energyFlow: this._energyFlow,
+        resources: this._resources,
+        resDelta: this._invPerYear,
+        timeState: this._timeState,
+      }, BACK_W);
+    } else {
+      // Tryb bez civMode — pusty pasek
+      ctx.fillStyle = bgAlpha(0.95);
+      ctx.fillRect(0, 0, LW, TOP_BAR_H);
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth   = 1;
+      ctx.beginPath(); ctx.moveTo(0, TOP_BAR_H); ctx.lineTo(LW, TOP_BAR_H); ctx.stroke();
     }
 
+    // Blok "← Wróć" + nazwa planety (na lewo, nad zasobami)
+    ctx.fillStyle = 'rgba(6,8,16,0.92)';
+    ctx.fillRect(0, 0, BACK_W, TOP_BAR_H);
+    ctx.strokeStyle = 'rgba(42,64,96,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(BACK_W, 6); ctx.lineTo(BACK_W, TOP_BAR_H - 6); ctx.stroke();
+
+    ctx.font      = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
     ctx.textAlign = 'left';
-  }
+    ctx.fillText('← Wróć', 10, 20);
 
-  // ── Pasek surowców ────────────────────────────────────────────
+    // Nazwa planety + typ + temperatura (pod przyciskiem)
+    if (this.planet) {
+      ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      const temp = this.planet.temperatureK
+        ? ` ${Math.round(this.planet.temperatureK - 273)}°C`
+        : '';
+      ctx.fillText(`${this.planet.name}${temp} ✏`, 10, 34);
+    }
 
-  _drawResourceBar() {
-    if (!window.KOSMOS?.civMode) return;
-    const ctx  = this.ctx;
-    const Y    = TOP_BAR_H;
-    const inv  = this._inventory;
-
-    ctx.fillStyle = 'rgba(6,13,24,0.90)';
-    ctx.fillRect(0, Y, LW, RES_BAR_H);
-    ctx.strokeStyle = '#1a3050';
-    ctx.lineWidth   = 1;
-    ctx.beginPath(); ctx.moveTo(0, Y + RES_BAR_H); ctx.lineTo(LW, Y + RES_BAR_H); ctx.stroke();
-
-    // 4 krytyczne wskaźniki: Energia (bilans), Żywność (zapas), Woda (zapas), Nauka (/rok)
-    const colW = LW / 4;
-    const en  = inv._energy   ?? {};
-    const res = inv._research ?? {};
-    const py  = inv._perYear  ?? {};
-
-    const indicators = [
-      { icon: '⚡', label: 'ENERGIA',  val: `${en.balance >= 0 ? '+' : ''}${(en.balance ?? 0).toFixed(1)}/r`, sub: en.brownout ? '⚠ BROWNOUT' : `+${(en.production ?? 0).toFixed(0)} −${(en.consumption ?? 0).toFixed(0)}`, alert: en.brownout, color: en.brownout ? '#cc4422' : en.balance >= 0 ? '#ffdd44' : '#ff8844' },
-      { icon: '🍖', label: 'ŻYWNOŚĆ', val: `${Math.floor(inv.food ?? 0)}`, sub: `${(py.food ?? 0) >= 0 ? '+' : ''}${(py.food ?? 0).toFixed(1)}/r`, alert: (inv.food ?? 0) < 20, color: (inv.food ?? 0) < 20 ? '#cc4422' : '#44cc66' },
-      { icon: '💧', label: 'WODA',    val: `${Math.floor(inv.water ?? 0)}`, sub: `${(py.water ?? 0) >= 0 ? '+' : ''}${(py.water ?? 0).toFixed(1)}/r`, alert: (inv.water ?? 0) < 15, color: (inv.water ?? 0) < 15 ? '#cc4422' : '#4488ff' },
-      { icon: '🔬', label: 'NAUKA',   val: `${Math.floor(res.amount ?? 0)}`, sub: `+${(res.perYear ?? 0).toFixed(1)}/r`, alert: false, color: '#cc66ff' },
-    ];
-
-    indicators.forEach((ind, i) => {
-      const cx = i * colW + colW / 2;
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#6a8aaa';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${ind.icon} ${ind.label}`, cx, Y + 12);
-
-      ctx.font      = '11px monospace';
-      ctx.fillStyle = ind.color;
-      ctx.fillText(ind.val, cx, Y + 25);
-
-      ctx.font      = '8px monospace';
-      ctx.fillStyle = ind.alert ? '#cc4422' : '#4a6a8a';
-      ctx.fillText(ind.sub, cx, Y + 37);
-    });
     ctx.textAlign = 'left';
   }
 
@@ -653,52 +689,91 @@ export class PlanetGlobeScene {
     const bSys = window.KOSMOS?.buildingSystem;
     const cSys = window.KOSMOS?.civSystem;
 
-    ctx.fillStyle = 'rgba(6,13,24,0.88)';
+    ctx.fillStyle = bgAlpha(0.88);
     ctx.fillRect(0, HEADER_H, LEFT_W, LH - HEADER_H);
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(LEFT_W, HEADER_H); ctx.lineTo(LEFT_W, LH); ctx.stroke();
 
+    // ── CivPanel — pasek ikon zakładek ──────────────────────────
+    if (window.KOSMOS?.civMode) {
+      const tabY = HEADER_H + 2;
+      const padX = (LEFT_W - CIV_TAB_ICONS.length * CIV_TAB_BTN_W) / 2;
+
+      for (let i = 0; i < CIV_TAB_ICONS.length; i++) {
+        const tab = CIV_TAB_ICONS[i];
+        const btnX = padX + i * CIV_TAB_BTN_W;
+        const active = this._civTab === tab.id;
+
+        ctx.fillStyle = active ? 'rgba(26,48,80,0.95)' : 'rgba(8,14,24,0.80)';
+        ctx.fillRect(btnX, tabY, CIV_TAB_BTN_W - 2, CIV_TAB_BAR_H);
+
+        if (active) {
+          ctx.fillStyle = THEME.info;
+          ctx.fillRect(btnX, tabY + CIV_TAB_BAR_H - 2, CIV_TAB_BTN_W - 2, 2);
+        }
+
+        ctx.font      = `${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
+        ctx.fillStyle = active ? THEME.textPrimary : THEME.textSecondary;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(tab.icon, btnX + (CIV_TAB_BTN_W - 2) / 2, tabY + CIV_TAB_BAR_H / 2);
+      }
+      ctx.textAlign    = 'left';
+      ctx.textBaseline = 'alphabetic';
+
+      // Separator pod ikonami
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath();
+      ctx.moveTo(4, tabY + CIV_TAB_BAR_H + 2);
+      ctx.lineTo(LEFT_W - 4, tabY + CIV_TAB_BAR_H + 2);
+      ctx.stroke();
+    }
+
+    // Gdy zakładka CivPanel aktywna — treść rysowana w overlay, pomijamy POP/budynki
+    if (this._civTab) return;
+
     // ── Widget POP ──────────────────────────────────────────────
-    let y = HEADER_H + 6;
+    const tabBarOffset = window.KOSMOS?.civMode ? CIV_TAB_BAR_H + 6 : 0;
+    let y = HEADER_H + 6 + tabBarOffset;
 
     if (cSys) {
-      ctx.font      = '10px monospace';
-      ctx.fillStyle = '#c8e8ff';
+      ctx.font      = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(`👤 POP: ${cSys.population} / ${cSys.housing}`, 12, y + 12);
       y += 18;
 
       const barW = LEFT_W - 24;
       const barH = 5;
-      ctx.fillStyle = '#0d1520';
+      ctx.fillStyle = THEME.bgTertiary;
       ctx.fillRect(12, y, barW, barH);
       const progress = Math.min(1, cSys._growthProgress ?? 0);
       if (progress > 0) {
-        ctx.fillStyle = '#44cc66';
+        ctx.fillStyle = THEME.successDim;
         ctx.fillRect(12, y, Math.round(barW * progress), barH);
       }
-      ctx.strokeStyle = '#1a3050';
+      ctx.strokeStyle = THEME.border;
       ctx.strokeRect(12, y, barW, barH);
       y += 10;
 
-      ctx.font      = '8px monospace';
-      ctx.fillStyle = '#6888aa';
+      ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
       const emp = cSys._employedPops ?? 0;
       const free = cSys.freePops ?? 0;
       ctx.fillText(`Zatrudn: ${emp.toFixed(2)}  Wolni: ${free.toFixed(2)}`, 12, y + 6);
       y += 14;
 
       const morale = Math.round(cSys.morale ?? 50);
-      const moraleColor = morale >= 60 ? '#44cc66' : morale >= 30 ? '#ffaa44' : '#cc4422';
+      const moraleColor = morale >= 60 ? THEME.successDim : morale >= 30 ? THEME.warning : THEME.dangerDim;
       ctx.fillStyle = moraleColor;
       ctx.fillText(`Morale: ${morale}%`, 12, y + 6);
 
-      ctx.fillStyle = '#cc88ff';
+      ctx.fillStyle = THEME.purple;
       ctx.fillText(`Epoka: ${cSys.epochName}`, 110, y + 6);
       y += 14;
 
       if (cSys.isUnrest) {
-        ctx.fillStyle = '#ff4444';
+        ctx.fillStyle = THEME.danger;
         ctx.fillText('⚠ NIEPOKOJE!', 12, y + 6);
         y += 12;
       }
@@ -709,20 +784,20 @@ export class PlanetGlobeScene {
       }
 
       y += 4;
-      ctx.strokeStyle = '#1a3050';
+      ctx.strokeStyle = THEME.border;
       ctx.beginPath(); ctx.moveTo(8, y); ctx.lineTo(LEFT_W - 8, y); ctx.stroke();
       y += 6;
     }
 
     // ── Lista instalacji ────────────────────────────────────────
-    ctx.font      = '9px monospace';
-    ctx.fillStyle = '#2a4060';
+    ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.borderLight;
     ctx.fillText('INSTALACJE', 12, y + 12);
     y += 20;
 
     if (!bSys || bSys._active.size === 0) {
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#2a4060';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.borderLight;
       ctx.fillText('Brak instalacji', 12, y + 8);
       return;
     }
@@ -731,38 +806,37 @@ export class PlanetGlobeScene {
       if (y > LH - 60) return;
       const b = entry.building;
       const lvl = entry.level ?? 1;
-      ctx.font      = '9px monospace';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = CAT_COLORS[b.category] || '#888';
       const lvlStr = lvl > 1 ? ` Lv${lvl}` : '';
       ctx.fillText(`${b.icon || '🏗'} ${b.namePL}${lvlStr}`, 12, y + 8);
-      ctx.font      = '8px monospace';
-      ctx.fillStyle = '#2a4060';
+      ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.borderLight;
       ctx.fillText(tileKey, 12, y + 19);
       y += 26;
     });
   }
 
-  // ── Dolny pasek ───────────────────────────────────────────────
+  // ── Dolny pasek (44px: info terenu + SIATKA; czas w TopBar) ───
 
   _drawBottomBar() {
     const ctx = this.ctx;
     const BY  = LH - BOTTOM_BAR_H;
-    const CX  = LW / 2;
 
-    ctx.fillStyle = 'rgba(6,13,24,0.90)';
+    ctx.fillStyle = bgAlpha(0.90);
     ctx.fillRect(0, BY, LW, BOTTOM_BAR_H);
 
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(0, BY); ctx.lineTo(LW, BY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, BY + 22); ctx.lineTo(LW, BY + 22); ctx.stroke();
 
-    // ── Wiersz 1: info terenu + podpowiedź ────────────────────
-    ctx.font      = '9px monospace';
-    ctx.fillStyle = '#6888aa';
+    // ── Wiersz 1: podpowiedź ────────────────────
+    ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
     ctx.textAlign = 'left';
     ctx.fillText('Klik: wybierz  |  ESC: wróć', 14, BY + 14);
 
+    // ── Wiersz 2: info terenu (gdy hover) ────────
     if (this._hoveredTile) {
       const t       = this._hoveredTile;
       const terrain = TERRAIN_TYPES[t.type];
@@ -770,13 +844,12 @@ export class PlanetGlobeScene {
       const bldg    = t.buildingId ? BUILDINGS[t.buildingId]?.namePL : null;
       const capital = t.capitalBase ? '🏛 Stolica' : null;
 
-      // Nazwa terenu + budynek
       let info = name;
       if (capital && bldg) info += ` → ${capital} + ${bldg}`;
       else if (capital)    info += ` → ${capital}`;
       else if (bldg)       info += ` → ${bldg}`;
 
-      // Zasoby bazowe terenu (baseYield) — np. "⛏0.8  💧2.5"
+      // Zasoby bazowe terenu (baseYield)
       const by = terrain?.baseYield ?? {};
       const yieldParts = [];
       const RI = { minerals: '⛏', energy: '⚡', organics: '🌿', water: '💧', research: '🔬' };
@@ -784,7 +857,7 @@ export class PlanetGlobeScene {
         if (val) yieldParts.push(`${RI[res] ?? res}${val}`);
       }
 
-      // Modyfikatory produkcji (yieldBonus) — np. "×1.6⛏"
+      // Modyfikatory produkcji (yieldBonus)
       const yb = terrain?.yieldBonus ?? {};
       const modParts = [];
       for (const [cat, val] of Object.entries(yb)) {
@@ -801,53 +874,43 @@ export class PlanetGlobeScene {
       if (latMod?.label) modParts.push(latMod.label);
       if (latMod && latMod.buildCost !== 1.0) modParts.push(`Budowa×${latMod.buildCost}`);
 
-      // Rysuj: nazwa terenu po lewej-centrum
+      // Info terenu
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#c8e8ff';
+      ctx.fillStyle = THEME.textPrimary;
       const infoX = 200;
       ctx.fillText(info, infoX, BY + 14);
 
-      // Zasoby bazowe + modyfikatory obok nazwy terenu
       if (yieldParts.length > 0 || modParts.length > 0) {
         const infoW = ctx.measureText(info).width;
-        ctx.font      = '8px monospace';
+        ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = '#88aacc';
         const allParts = [...yieldParts, ...modParts].join('  ');
         ctx.fillText(allParts, infoX + infoW + 10, BY + 14);
       }
+
+      // Modyfikatory terenu (wiersz 2)
+      if (yieldParts.length > 0) {
+        ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(yieldParts.join(' '), infoX, BY + 28);
+      }
     }
 
-    // ── Wiersz 2: kontrolki czasu ─────────────────────────────
-    const { isPaused, multiplierIndex, displayText } = this._timeState;
-    const TY = BY + 38;
-
-    ctx.font      = '11px monospace';
+    // ── Toggle SIATKA (prawy kraniec) ─────────────────
+    const gridBtnX = LW - 70;
+    const gridBtnY = BY + 3;
+    const gridBtnW = 58;
+    const gridBtnH = 16;
+    ctx.fillStyle   = this._showGrid ? 'rgba(26,48,80,0.95)' : 'rgba(13,20,30,0.80)';
+    ctx.fillRect(gridBtnX, gridBtnY, gridBtnW, gridBtnH);
+    ctx.strokeStyle = this._showGrid ? THEME.info : THEME.borderLight;
+    ctx.lineWidth   = 1;
+    ctx.strokeRect(gridBtnX, gridBtnY, gridBtnW, gridBtnH);
+    ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = this._showGrid ? THEME.accent : THEME.textSecondary;
     ctx.textAlign = 'center';
-    ctx.fillStyle = isPaused ? '#88ffcc' : '#6888aa';
-    ctx.fillText(isPaused ? '▶ GRAJ' : '⏸ PAUZA', CX - 190, TY);
-
-    ctx.fillStyle = '#2a4060';
-    ctx.fillText('|', CX - 136, TY);
-
-    const speedLabels = ['×1', '×2', '×4', '×8', '×16'];
-    speedLabels.forEach((label, i) => {
-      const bx = CX - 100 + i * 50;
-      const isActive = !isPaused && multiplierIndex === i + 1;
-      ctx.font      = '11px monospace';
-      ctx.fillStyle = isActive ? '#88ffcc' : '#6888aa';
-      ctx.textAlign = 'center';
-      ctx.fillText(label, bx, TY);
-    });
-
-    ctx.fillStyle = '#2a4060';
-    ctx.fillText('|', CX + 116, TY);
-
-    if (displayText) {
-      ctx.font      = '10px monospace';
-      ctx.fillStyle = '#c8e8ff';
-      ctx.textAlign = 'center';
-      ctx.fillText(displayText, CX + 196, TY);
-    }
+    ctx.fillText('SIATKA', gridBtnX + gridBtnW / 2, gridBtnY + 12);
 
     ctx.textAlign = 'left';
   }
@@ -865,36 +928,43 @@ export class PlanetGlobeScene {
     const tSys  = window.KOSMOS?.techSystem;
     const inv   = this._inventory;
 
-    ctx.fillStyle = 'rgba(6,13,24,0.95)';
+    ctx.fillStyle = bgAlpha(0.95);
     ctx.fillRect(BPX, HEADER_H, RIGHT_W, LH - HEADER_H);
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(BPX, HEADER_H); ctx.lineTo(BPX, LH); ctx.stroke();
 
     // Nagłówek pola
-    ctx.font      = '10px monospace';
-    ctx.fillStyle = '#c8e8ff';
+    ctx.font      = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary;
     ctx.fillText(terrain?.namePL ?? tile.type, BPX + 8, HEADER_H + 20);
 
     if (tile.strategicResource) {
-      ctx.font      = '9px monospace';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = STRAT_COLORS[tile.strategicResource] || '#fff';
       ctx.fillText(`Zasób: ${tile.strategicResource}`, BPX + 8, HEADER_H + 34);
     }
 
-    // Złoża na ciele niebieskim (jeśli są)
+    // Złoża na ciele niebieskim (zawsze wyświetlane)
     let buildListY = HEADER_H + 48;
     const deposits = this.planet?.deposits ?? [];
-    if (deposits.length > 0 && !tile.buildingId) {
-      ctx.font      = '8px monospace';
-      ctx.fillStyle = '#6888aa';
+    if (deposits.length > 0) {
+      ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
       ctx.fillText('ZŁOŻA:', BPX + 8, buildListY);
       buildListY += 10;
       for (const d of deposits.slice(0, 5)) {
         const pct = d.totalAmount > 0 ? Math.round(d.remaining / d.totalAmount * 100) : 0;
+        const richness = d.richness ?? (d.totalAmount > 0 ? d.remaining / d.totalAmount : 0);
         const icon = RESOURCE_ICONS[d.resourceId] ?? d.resourceId;
-        ctx.fillStyle = pct > 50 ? '#44cc66' : pct > 20 ? '#ffaa44' : '#cc4422';
-        ctx.fillText(`${icon} ${d.resourceId}: ${pct}% (${Math.floor(d.remaining)})`, BPX + 14, buildListY);
+        if (pct <= 0) {
+          ctx.fillStyle = '#666666';
+          ctx.fillText(`${icon} ${d.resourceId}: WYCZERPANE`, BPX + 14, buildListY);
+        } else {
+          const stars = richness >= 0.7 ? '★★★' : richness >= 0.4 ? '★★' : '★';
+          ctx.fillStyle = richness >= 0.7 ? THEME.successDim : richness >= 0.4 ? THEME.warning : THEME.dangerDim;
+          ctx.fillText(`${icon} ${d.resourceId}: ${pct}% ${stars}`, BPX + 14, buildListY);
+        }
         buildListY += 10;
       }
       if (deposits.length > 5) {
@@ -907,8 +977,8 @@ export class PlanetGlobeScene {
 
     // Stolica (wirtualny budynek — nie blokuje budowy)
     if (tile.capitalBase) {
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#4488ff';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.info;
       ctx.fillText('🏛 Stolica', BPX + 8, buildListY);
       buildListY += 14;
     }
@@ -919,7 +989,7 @@ export class PlanetGlobeScene {
       const lvl = tile.buildingLevel ?? 1;
       const maxLvl = bSys?.getMaxLevel?.() ?? 3;
 
-      ctx.font      = '9px monospace';
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = CAT_COLORS[b.category] || '#fff';
       ctx.fillText(`${b.icon} ${b.namePL}  Lv.${lvl}/${maxLvl}`, BPX + 8, buildListY);
       buildListY += 4;
@@ -927,25 +997,25 @@ export class PlanetGlobeScene {
       // Pasek poziomu
       const barW = RIGHT_W - 24;
       const barH = 5;
-      ctx.fillStyle = '#0d1520';
+      ctx.fillStyle = THEME.bgTertiary;
       ctx.fillRect(BPX + 8, buildListY, barW, barH);
       const frac = maxLvl > 1 ? (lvl - 1) / (maxLvl - 1) : 1;
-      ctx.fillStyle = '#44cc66';
+      ctx.fillStyle = THEME.successDim;
       ctx.fillRect(BPX + 8, buildListY, Math.round(barW * frac), barH);
-      ctx.strokeStyle = '#1a3050';
+      ctx.strokeStyle = THEME.border;
       ctx.strokeRect(BPX + 8, buildListY, barW, barH);
       buildListY += 12;
 
       // Stawki produkcji budynku
       if (b.rates && Object.keys(b.rates).length > 0) {
-        ctx.font      = '8px monospace';
-        ctx.fillStyle = '#6888aa';
+        ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textSecondary;
         ctx.fillText(formatRates(b.rates), BPX + 8, buildListY);
         buildListY += 10;
       }
       if (b.energyCost > 0) {
-        ctx.font      = '8px monospace';
-        ctx.fillStyle = '#ffaa44';
+        ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.warning;
         ctx.fillText(`⚡ −${b.energyCost}/r`, BPX + 8, buildListY);
         buildListY += 10;
       }
@@ -955,10 +1025,10 @@ export class PlanetGlobeScene {
         const upgradeY = buildListY + 2;
         ctx.fillStyle = 'rgba(20,40,60,0.8)';
         ctx.fillRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
-        ctx.strokeStyle = '#44cc66';
+        ctx.strokeStyle = THEME.successDim;
         ctx.strokeRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
-        ctx.font      = '9px monospace';
-        ctx.fillStyle = '#88ffcc';
+        ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.accent;
         ctx.textAlign = 'center';
         ctx.fillText(`[ Ulepsz do Lv.${lvl + 1} ]`, BPX + RIGHT_W / 2, upgradeY + 11);
         ctx.textAlign = 'left';
@@ -970,25 +1040,36 @@ export class PlanetGlobeScene {
         const demolishY = buildListY + 2;
         ctx.fillStyle = 'rgba(100,30,30,0.8)';
         ctx.fillRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
-        ctx.strokeStyle = '#cc4422';
+        ctx.strokeStyle = THEME.dangerDim;
         ctx.strokeRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
-        ctx.font      = '9px monospace';
+        ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = '#ff8888';
         ctx.textAlign = 'center';
         ctx.fillText('[ Rozbiórka ]', BPX + RIGHT_W / 2, demolishY + 11);
         ctx.textAlign = 'left';
       }
     } else {
-      // Lista budynków (dostępne + niedostępne z powodem)
-      ctx.font      = '9px monospace';
-      ctx.fillStyle = '#2a4060';
+      // Lista budynków (dostępne + niedostępne z powodem) — ze scrollem
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.borderLight;
       ctx.fillText('Budynki:', BPX + 8, buildListY);
 
-      let yy = buildListY + 12;
+      const clipTop = buildListY + 4;
+      const clipBot = LH - BOTTOM_BAR_H;
+      const scrollY = this._buildPanelScrollY;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(BPX, clipTop, RIGHT_W, clipBot - clipTop);
+      ctx.clip();
+
+      let yy = buildListY + 12 - scrollY;
       const cSys = window.KOSMOS?.civSystem;
+      let totalContentH = 0;
+      let hoveredBuilding = null; // budynek pod kursorem (do tooltip)
+      let hoveredBuildY   = 0;
 
       Object.values(BUILDINGS).forEach(b => {
-        if (yy > LH - 50) return;
         if (b.isColonyBase || b.isCapital) return;
 
         // Sprawdź powód niedostępności
@@ -1019,15 +1100,26 @@ export class PlanetGlobeScene {
         const hasCommodity = b.commodityCost && Object.keys(b.commodityCost).length > 0;
         const rowH = blocked ? 42 : (hasCommodity ? 38 : 28);
 
+        // Hover detection — zapamiętaj budynek pod kursorem
+        if (this._buildPanelMouseY >= 0) {
+          const absY = yy; // aktualna pozycja wiersza (po scroll)
+          if (this._buildPanelMouseY >= absY && this._buildPanelMouseY <= absY + rowH
+              && this._buildPanelMouseX >= BPX + 8 && this._buildPanelMouseX <= BPX + RIGHT_W - 8) {
+            hoveredBuilding = b;
+            hoveredBuildY   = absY;
+          }
+        }
+
         // Tło i ramka
-        ctx.fillStyle   = blocked ? 'rgba(30,8,8,0.85)' : (affordable ? 'rgba(13,26,46,0.90)' : 'rgba(8,14,24,0.90)');
+        const isHovered = hoveredBuilding === b;
+        ctx.fillStyle   = blocked ? 'rgba(30,8,8,0.85)' : isHovered ? 'rgba(20,36,60,0.95)' : (affordable ? 'rgba(13,26,46,0.90)' : 'rgba(8,14,24,0.90)');
         ctx.fillRect(BPX + 8, yy, RIGHT_W - 16, rowH);
-        ctx.strokeStyle = blocked ? '#441818' : (affordable ? '#2a5080' : '#111828');
+        ctx.strokeStyle = blocked ? '#441818' : isHovered ? '#4488cc' : (affordable ? '#2a5080' : '#111828');
         ctx.lineWidth   = 1;
         ctx.strokeRect(BPX + 8, yy, RIGHT_W - 16, rowH);
 
         // Nazwa budynku + koszt energii
-        ctx.font      = '9px monospace';
+        ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = blocked ? '#663333' : (affordable ? (CAT_COLORS[b.category] || '#fff') : '#2a3050');
         let nameStr = `${b.icon} ${b.namePL}`;
         if (b.energyCost > 0) nameStr += `  ⚡−${b.energyCost}`;
@@ -1035,8 +1127,8 @@ export class PlanetGlobeScene {
 
         // Koszt surowców
         const costStr = Object.entries(b.cost || {}).map(([k, v]) => `${RESOURCE_ICONS?.[k] ?? k}${v}`).join(' ');
-        ctx.font      = '8px monospace';
-        ctx.fillStyle = blocked ? '#442222' : (affordable ? '#2a4060' : '#181e28');
+        ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = blocked ? '#442222' : (affordable ? THEME.borderLight : '#181e28');
         ctx.fillText(costStr, BPX + 14, yy + 23);
 
         const popCost = b.popCost ?? 0.25;
@@ -1048,7 +1140,11 @@ export class PlanetGlobeScene {
 
         // Koszt commodities (nowy wiersz)
         if (hasCommodity && !blocked) {
-          const comStr = Object.entries(b.commodityCost).map(([k, v]) => `${v}×${k.replace(/_/g,' ')}`).join(' ');
+          const comStr = Object.entries(b.commodityCost).map(([k, v]) => {
+            const icon = COMMODITIES[k]?.icon ?? '📦';
+            const name = COMMODITY_SHORT[k] ?? k;
+            return `${v}×${icon}${name}`;
+          }).join(' ');
           ctx.fillStyle = affordable ? '#6a5a40' : '#181e28';
           ctx.fillText(comStr, BPX + 14, yy + 33);
         }
@@ -1061,55 +1157,301 @@ export class PlanetGlobeScene {
         }
 
         yy += rowH + 4;
+        totalContentH += rowH + 4;
+      });
+
+      ctx.restore();
+
+      // ── Tooltip budynku (gdy hover) ────────────────────
+      if (hoveredBuilding) {
+        this._drawBuildTooltip(ctx, hoveredBuilding, inv, cSys);
+      }
+
+      // Scrollbar
+      const viewH = clipBot - clipTop;
+      const maxScroll = Math.max(0, totalContentH - viewH + 12);
+      if (this._buildPanelScrollY > maxScroll) this._buildPanelScrollY = maxScroll;
+      if (maxScroll > 0) {
+        const barH = Math.max(20, viewH * (viewH / (totalContentH + 12)));
+        const barY = clipTop + (this._buildPanelScrollY / maxScroll) * (viewH - barH);
+        ctx.fillStyle = 'rgba(136,255,204,0.25)';
+        ctx.fillRect(BPX + RIGHT_W - 6, barY, 4, barH);
+      }
+    }
+  }
+
+  // ── CivPanel overlay — treść zakładki nad globem ───────────────
+
+  // Przełącz zakładkę CivPanel (toggle)
+  _toggleCivTab(tabId) {
+    this._civTab = (this._civTab === tabId) ? null : tabId;
+    // Globus widoczny — panel CivPanel rysowany na planet-canvas (z=4),
+    // więc globus (z=5) musi zejść niżej żeby panel był widoczny nad nim.
+    // Gdy zakładka zamknięta — globus wraca nad planet-canvas (normalny rendering).
+    if (this._globeRenderer?._canvas) {
+      this._globeRenderer._canvas.style.zIndex = this._civTab ? '3' : '5';
+    }
+  }
+
+  _civOverlayRect() {
+    // Panel boczny — pokrywa lewy panel + część globusa
+    const tabBarH = CIV_TAB_BAR_H + 6;
+    const panelW = Math.min(Math.round(LW * 0.38), 460);
+    return {
+      x: 0,
+      y: HEADER_H + tabBarH,
+      w: panelW,
+      h: LH - HEADER_H - tabBarH - BOTTOM_BAR_H,
+    };
+  }
+
+  // ── Tooltip budynku (szczegółowe koszty + czego brakuje) ──────
+  _drawBuildTooltip(ctx, building, inv, cSys) {
+    const BPX = LW - RIGHT_W;
+    const mx  = this._buildPanelMouseX;
+
+    // Zbierz linie kosztów
+    const lines = [];
+
+    // Opis budynku
+    if (building.description) {
+      lines.push({ text: building.description, color: THEME.textSecondary, isDesc: true });
+    }
+
+    lines.push({ text: '── Koszty budowy ──', color: THEME.borderLight });
+
+    // Surowce (cost)
+    for (const [resId, amt] of Object.entries(building.cost || {})) {
+      const have = Math.floor(inv[resId] ?? 0);
+      const icon = RESOURCE_ICONS[resId] ?? resId;
+      const name = ALL_RESOURCES[resId]?.namePL ?? resId;
+      const ok   = have >= amt;
+      lines.push({
+        text: `${icon} ${name}: ${have}/${amt}`,
+        color: ok ? THEME.successDim : '#ff6644',
+        missing: !ok,
       });
     }
+
+    // Commodities (commodityCost)
+    for (const [comId, amt] of Object.entries(building.commodityCost || {})) {
+      const have = Math.floor(inv[comId] ?? 0);
+      const icon = COMMODITIES[comId]?.icon ?? '📦';
+      const name = COMMODITY_SHORT[comId] ?? comId;
+      const ok   = have >= amt;
+      lines.push({
+        text: `${icon} ${name}: ${have}/${amt}`,
+        color: ok ? THEME.successDim : '#ff6644',
+        missing: !ok,
+      });
+    }
+
+    // POP
+    const popCost = building.popCost ?? 0.25;
+    if (popCost > 0) {
+      const freePops = cSys?.freePops ?? 0;
+      const ok = freePops >= popCost;
+      lines.push({
+        text: `👤 Populacja: ${freePops.toFixed(2)}/${popCost}`,
+        color: ok ? THEME.successDim : '#ff6644',
+        missing: !ok,
+      });
+    }
+
+    // Energia (energyCost)
+    if (building.energyCost > 0) {
+      lines.push({
+        text: `⚡ Energia: −${building.energyCost}/rok`,
+        color: THEME.warning,
+      });
+    }
+
+    // Produkcja (rates)
+    if (building.rates && Object.keys(building.rates).length > 0) {
+      lines.push({ text: '── Produkcja ──', color: THEME.borderLight });
+      for (const [resId, val] of Object.entries(building.rates)) {
+        const icon = RESOURCE_ICONS[resId] ?? resId;
+        const name = ALL_RESOURCES[resId]?.namePL ?? resId;
+        const sign = val >= 0 ? '+' : '';
+        lines.push({
+          text: `${icon} ${name}: ${sign}${val}/rok`,
+          color: val >= 0 ? THEME.successDim : '#ff6644',
+        });
+      }
+    }
+
+    if (building.isMine) {
+      lines.push({ text: '⛏ Wydobycie zależy od złóż', color: '#88aacc' });
+    }
+
+    // Rozmiar tooltip
+    const lineH   = 13;
+    const padX    = 8;
+    const padY    = 6;
+    const ttW     = 200;
+    const ttH     = padY * 2 + lines.length * lineH;
+
+    // Pozycja — na lewo od panelu budowania
+    let ttX = BPX - ttW - 6;
+    let ttY = this._buildPanelMouseY - ttH / 2;
+    if (ttX < 0) ttX = mx + 12;
+    if (ttY < HEADER_H) ttY = HEADER_H;
+    if (ttY + ttH > LH - BOTTOM_BAR_H) ttY = LH - BOTTOM_BAR_H - ttH;
+
+    // Rysuj tło
+    ctx.fillStyle = 'rgba(6,10,20,0.95)';
+    ctx.fillRect(ttX, ttY, ttW, ttH);
+    ctx.strokeStyle = '#3a5a80';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(ttX, ttY, ttW, ttH);
+
+    // Rysuj linie
+    let ly = ttY + padY;
+    for (const line of lines) {
+      ctx.font = line.isDesc
+        ? `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`
+        : `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = line.color;
+      ctx.textAlign = 'left';
+      ctx.fillText(line.text, ttX + padX, ly + 9);
+      ly += lineH;
+    }
+  }
+
+  _drawCivTabOverlay(ctx) {
+    if (!this._civTab) return;
+
+    const { x, y, w, h } = this._civOverlayRect();
+
+    // Tło panelu bocznego (półprzezroczyste — globus widoczny obok)
+    ctx.fillStyle = 'rgba(6,10,20,0.94)';
+    ctx.fillRect(x, y, w, h);
+    // Prawa krawędź panelu
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + w, y); ctx.lineTo(x + w, y + h);
+    ctx.stroke();
+
+    // Nagłówek zakładki
+    const tabDef = CIV_TAB_ICONS.find(t => t.id === this._civTab);
+    ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(`${tabDef?.icon ?? ''} ${tabDef?.label ?? ''}`, x + 10, y + 16);
+
+    // Rysuj treść zakładki (CivPanelDrawer lub UIManager dla Expeditions)
+    const bodyX = x;
+    const bodyY = y + 8;
+    const bodyW = w;
+
+    const ui = this.uiManager;
+    const state = {
+      inventory: this._inventory,
+      invPerYear: this._invPerYear,
+      energyFlow: this._energyFlow,
+      factoryData: ui?._factoryData,
+      civData: ui?._civData,
+      moraleData: ui?._moraleData,
+    };
+
+    if (this._civTab === 'economy')     this._factoryBtns = drawEconomyTab(ctx, bodyY, bodyX, bodyW, state);
+    if (this._civTab === 'population')  drawPopulationTab(ctx, bodyY, bodyX, bodyW, state);
+    if (this._civTab === 'tech')        drawTechTab(ctx, bodyY, bodyX, bodyW);
+    if (this._civTab === 'buildings')   drawBuildingsTab(ctx, bodyY, bodyX, bodyW);
+    if (this._civTab === 'expeditions' && ui) ui._drawExpeditionsTab(ctx, bodyY, bodyX, bodyW);
   }
 
   // ── Hit testing ───────────────────────────────────────────────
 
-  _hitTestClose(mx, my) {
-    if (mx >= 8 && mx <= 80 && my >= 4 && my <= TOP_BAR_H - 4) {
-      this._close();
-      return true;
+  _hitTestCivTabs(mx, my) {
+    if (!window.KOSMOS?.civMode) return false;
+
+    const tabY = HEADER_H + 2;
+    const padX = (LEFT_W - CIV_TAB_ICONS.length * CIV_TAB_BTN_W) / 2;
+
+    // Klik w pasek ikon
+    if (my >= tabY && my <= tabY + CIV_TAB_BAR_H && mx >= padX && mx <= padX + CIV_TAB_ICONS.length * CIV_TAB_BTN_W) {
+      const idx = Math.floor((mx - padX) / CIV_TAB_BTN_W);
+      if (idx >= 0 && idx < CIV_TAB_ICONS.length) {
+        this._toggleCivTab(CIV_TAB_ICONS[idx].id);
+        return true;
+      }
     }
-    // Przycisk ✏ zmiany nazwy planety (obok nazwy w top barze)
-    if (this.planet && my >= 4 && my <= TOP_BAR_H - 4) {
-      const ctx = this.ctx;
-      ctx.font = '14px monospace';
-      const nameW = ctx.measureText(this.planet.name).width;
-      const editX = LW / 2 + nameW / 2 + 2;
-      if (mx >= editX && mx <= editX + 20) {
-        showRenameModal(this.planet.name).then(newName => {
-          if (newName) this.planet.name = newName;
-        });
+
+    // Klik w overlay (gdy zakładka otwarta)
+    if (this._civTab) {
+      const { x, y, w, h } = this._civOverlayRect();
+      if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
+        // Przekaż do UIManager (przelicz na rawX/rawY)
+        this._handleCivOverlayClick(mx, my);
         return true;
       }
     }
     return false;
   }
 
-  _hitTestTimeBar(mx, my) {
-    const BY = LH - BOTTOM_BAR_H;
-    if (my < BY + 22 || my > LH) return false;
+  // Obsługa kliknięcia w panelu CivPanel — CivPanelDrawer / UIManager
+  _handleCivOverlayClick(mx, my) {
+    const { x, y, w } = this._civOverlayRect();
+    const bodyY = y + 8;
+    const bodyW = w;
 
-    const CX = LW / 2;
-    const { isPaused } = this._timeState;
+    if (this._civTab === 'economy') {
+      handleFactoryClick(mx, my, this._factoryBtns);
+    } else if (this._civTab === 'tech') {
+      handleTechClick(mx, my, bodyY, x, bodyW);
+    } else if (this._civTab === 'expeditions') {
+      this.uiManager?._handleExpeditionsClick?.(mx, my);
+    }
+  }
 
-    if (mx >= CX - 240 && mx <= CX - 136) {
-      isPaused ? EventBus.emit('time:play') : EventBus.emit('time:pause');
+  _hitTestClose(mx, my) {
+    const BACK_W = 130;
+    // Przycisk "← Wróć" (lewa strona TopBar)
+    if (mx >= 0 && mx <= BACK_W && my >= 0 && my <= 22) {
+      this._close();
       return true;
     }
-
-    for (let i = 0; i < 5; i++) {
-      const bx = CX - 100 + i * 50;
-      if (mx >= bx - 24 && mx <= bx + 24) {
-        EventBus.emit('time:setMultiplier', { index: i + 1 });
-        EventBus.emit('time:play');
+    // Przycisk ✏ zmiany nazwy planety (w obszarze back, wiersz 2)
+    if (this.planet && mx >= 0 && mx <= BACK_W && my >= 22 && my <= TOP_BAR_H) {
+      const ctx = this.ctx;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      const nameTxt = this.planet.name;
+      const temp = this.planet.temperatureK
+        ? ` ${Math.round(this.planet.temperatureK - 273)}°C`
+        : '';
+      const fullTxt = `${nameTxt}${temp}`;
+      const fullW = ctx.measureText(fullTxt).width;
+      const editX = 10 + fullW + 2;
+      if (mx >= editX && mx <= editX + 16) {
+        showRenameModal(this.planet.name).then(newName => {
+          if (newName) this.planet.name = newName;
+        });
         return true;
       }
     }
+    // Klik TopBar (czas/zasoby) — deleguj do TopBar.hitTest
+    if (my >= 0 && my <= TOP_BAR_H && mx > BACK_W) {
+      return this._topBar.hitTest(mx, my, LW);
+    }
+    return false;
+  }
 
-    return true; // Pochłoń każdy klik w dolnym pasku
+  _hitTestTimeBar(mx, my) {
+    const BY = LH - BOTTOM_BAR_H;
+    if (my < BY || my > LH) return false;
+
+    // ── Toggle SIATKA (prawy kraniec) ────────────────
+    const gridBtnX = LW - 70;
+    const gridBtnY = BY + 3;
+    if (mx >= gridBtnX && mx <= gridBtnX + 58 && my >= gridBtnY && my <= gridBtnY + 16) {
+      this._showGrid = !this._showGrid;
+      this._globeRenderer?.setShowGrid(this._showGrid);
+      return true;
+    }
+
+    // Kontrolki czasu przeniesione do TopBar — pochłoń klik w dolnym pasku
+    return true;
   }
 
   _hitTestLeftPanel(mx, my) {
@@ -1129,7 +1471,7 @@ export class PlanetGlobeScene {
     // Oblicz przesunięcie Y z uwzględnieniem złóż i Stolicy
     const deposits = this.planet?.deposits ?? [];
     let offsetY = HEADER_H + 48;
-    if (deposits.length > 0 && !tile.buildingId) {
+    if (deposits.length > 0) {
       offsetY += 14 + Math.min(deposits.length, 5) * 10;
       if (deposits.length > 5) offsetY += 10;
     }
@@ -1165,12 +1507,11 @@ export class PlanetGlobeScene {
       }
       return true; // pochłoń kliknięcie w prawy panel
     } else {
-      // Buduj — iteruj przez WSZYSTKIE budynki (identycznie jak _drawBuildPanel)
-      let yy   = offsetY + 12;
+      // Buduj — iteruj przez WSZYSTKIE budynki (z uwzględnieniem scrolla)
+      let yy   = offsetY + 12 - this._buildPanelScrollY;
       const tSys = window.KOSMOS?.techSystem;
       const cSys = window.KOSMOS?.civSystem;
       for (const b of Object.values(BUILDINGS)) {
-        if (yy > LH - 50) break;
         if (b.isColonyBase || b.isCapital) continue;
 
         // Sprawdź powód niedostępności (ta sama logika co _drawBuildPanel)

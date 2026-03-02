@@ -3,10 +3,11 @@
 
 import { BootScene } from './scenes/BootScene.js';
 import { GameScene } from './scenes/GameScene.js';
+import { loadTheme } from './config/ThemeConfig.js';
 
 // Globalny stan gry (dostępny przez window.KOSMOS)
 window.KOSMOS = {
-  edenScenario: false,
+  scenario:     'civilization',   // 'civilization' (aktywny) | 'generator' (zamrożony)
   civMode:      false,
   homePlanet:   null,
   savedData:    null,
@@ -16,6 +17,9 @@ window.KOSMOS = {
 const uiCanvas    = document.getElementById('ui-canvas');
 const threeCanvas = document.getElementById('three-canvas');
 const eventLayer  = document.getElementById('event-layer');
+
+// Przywróć zapisany motyw kolorystyczny (przed renderem BootScene)
+loadTheme();
 
 const boot = new BootScene(uiCanvas);
 boot.show();
