@@ -75,16 +75,16 @@ export class Outliner {
     let cy = y + 4;
 
     // ── KOLONIE ──────────────────────────────────────────
-    cy = this._drawSection(ctx, x, cy, 'colonies', `KOLONIE [${colonies.length}]`, () => {
+    cy = this._drawSection(ctx, x, cy, 'colonies', `KOLONIE [${colonies.length}]`, (startY) => {
       if (colonies.length === 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.dim;
-        ctx.fillText('Brak kolonii', x + PAD, cy + 14);
+        ctx.fillText('Brak kolonii', x + PAD, startY + 14);
         return ITEM_H;
       }
       let dy = 0;
       for (const col of colonies.slice(0, 8)) {
-        const iy = cy + dy;
+        const iy = startY + dy;
         const icon = col.isHomePlanet ? '🏛' : '🏙';
         const pop = col.civSystem?.population ?? 0;
         const mor = Math.round(col.civSystem?.morale ?? 50);
@@ -108,16 +108,16 @@ export class Outliner {
     });
 
     // ── EKSPEDYCJE ───────────────────────────────────────
-    cy = this._drawSection(ctx, x, cy, 'expeditions', `EKSPEDYCJE [${expeditions.length}]`, () => {
+    cy = this._drawSection(ctx, x, cy, 'expeditions', `EKSPEDYCJE [${expeditions.length}]`, (startY) => {
       if (expeditions.length === 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.dim;
-        ctx.fillText('Brak misji', x + PAD, cy + 14);
+        ctx.fillText('Brak misji', x + PAD, startY + 14);
         return ITEM_H;
       }
       let dy = 0;
       for (const exp of expeditions.slice(0, 6)) {
-        const iy = cy + dy;
+        const iy = startY + dy;
         const icon = exp.type === 'scientific' ? '🔬'
           : exp.type === 'colony' ? '🚢'
           : exp.type === 'transport' ? '📦'
@@ -149,11 +149,11 @@ export class Outliner {
 
     // ── FLOTA ────────────────────────────────────────────
     const totalShips = fleet ? fleet.length : 0;
-    cy = this._drawSection(ctx, x, cy, 'fleet', `FLOTA [${totalShips}]`, () => {
+    cy = this._drawSection(ctx, x, cy, 'fleet', `FLOTA [${totalShips}]`, (startY) => {
       if (totalShips === 0 && !shipQueue) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.dim;
-        ctx.fillText('Brak statków', x + PAD, cy + 14);
+        ctx.fillText('Brak statków', x + PAD, startY + 14);
         return ITEM_H;
       }
 
@@ -167,7 +167,7 @@ export class Outliner {
         }
       }
       for (const [sid, count] of Object.entries(counts)) {
-        const iy = cy + dy;
+        const iy = startY + dy;
         const ship = SHIPS[sid];
         const icon = ship?.icon ?? '🚀';
         const name = ship?.namePL ?? sid;
@@ -179,7 +179,7 @@ export class Outliner {
 
       // Queue (budowa w toku)
       if (shipQueue) {
-        const iy = cy + dy;
+        const iy = startY + dy;
         const shipDef = SHIPS[shipQueue.shipId];
         const frac = shipQueue.buildTime > 0 ? shipQueue.progress / shipQueue.buildTime : 0;
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -188,7 +188,7 @@ export class Outliner {
 
         // Mini pasek
         const barX = x + PAD;
-        const barY = iy + 14;
+        const barY = iy + 16;
         const barW = OUTLINER_W - PAD * 2;
         const barH = 4;
         ctx.fillStyle = THEME.bgTertiary;
@@ -206,6 +206,7 @@ export class Outliner {
   }
 
   // Rysuj sekcję z nagłówkiem (zwijalna)
+  // drawContent(contentStartY) → zwraca wysokość treści
   _drawSection(ctx, x, startY, sectionId, title, drawContent) {
     let cy = startY;
     const open = this._sections[sectionId];
@@ -230,9 +231,9 @@ export class Outliner {
 
     cy += SECTION_HDR_H;
 
-    // Treść (jeśli rozwinięta)
+    // Treść (jeśli rozwinięta) — przekaż pozycję startową ZA nagłówkiem
     if (open) {
-      const contentH = drawContent.call(this);
+      const contentH = drawContent.call(this, cy);
       cy += contentH + 4;
     }
 
