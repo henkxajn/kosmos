@@ -315,6 +315,9 @@ export class PlanetGlobeScene {
       const mx = e.clientX / PS_SCALE;
       const my = e.clientY / PS_SCALE;
 
+      // TopBar hover (tooltip zasobów)
+      this._topBar.updateHover(mx, my);
+
       if (this._isInPanel(mx, my)) {
         // W panelach → brak hover na globusie
         if (this._hoveredTile !== null) {

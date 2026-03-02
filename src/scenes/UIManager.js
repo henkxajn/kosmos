@@ -537,6 +537,8 @@ export class UIManager {
     }
     // Detekcja tooltipa CivPanel
     this._tooltip = this._detectCivPanelTooltip(x, y);
+    // TopBar hover (tooltip zasobów)
+    this._topBar.updateHover(x, y);
   }
 
   // ══════════════════════════════════════════════════════════════

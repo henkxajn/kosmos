@@ -3,11 +3,11 @@
 // Zastępuje ResourcePanel (4 wskaźniki) + TimeControls (dolny pasek).
 // Wyświetla WSZYSTKIE zasoby w 4 grupach: MINED, HARVESTED, COMMODITIES, UTILITY.
 // Kontrolki czasu po prawej stronie.
+// Tooltip przy hover na zasobie — podsumowanie/bilans.
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { GAME_CONFIG }    from '../config/GameConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES } from '../data/ResourcesData.js';
-// Commodities usunięte z TopBar — za dużo elementów
 import { COSMIC }         from '../config/LayoutConfig.js';
 import EventBus            from '../core/EventBus.js';
 
@@ -41,13 +41,18 @@ function _fmtNum(n) {
 
 export class TopBar {
   constructor() {
-    this._hoverItem = null; // klucz zasobu pod kursorem
+    this._hoverItem = null;   // klucz zasobu pod kursorem
+    this._itemRects = [];     // [{x, y, w, h, item}] — do hit test hover
+    this._tooltip   = null;   // {x, y, lines: [{text, color}]} — aktywny tooltip
+    this._lastState = null;   // cache stanu do tooltipów
   }
 
   // ── Rysowanie ───────────────────────────────────────────
   // startX: opcjonalny offset lewej krawędzi zasobów (np. dla "← Wróć" w globe view)
   draw(ctx, W, H, state, startX = 0) {
     const { inventory, invPerYear, energyFlow, resources, resDelta, timeState, factoryData } = state;
+    this._lastState = state;
+    this._itemRects = [];
 
     // Tło paska
     ctx.fillStyle = bgAlpha(0.92);
@@ -80,7 +85,7 @@ export class TopBar {
     const compact = resW < 700;
     const iw = compact ? ITEM_W_SM : ITEM_W;
 
-    // Zbierz widoczne zasoby per grupę (bez commodities — za dużo)
+    // Zbierz widoczne zasoby per grupę
     const mined     = this._getVisibleMined(inventory, invPerYear);
     const harvested = this._getVisibleHarvested(inventory, invPerYear);
     const utility   = this._getVisibleUtility(energyFlow, resources, resDelta, factoryData);
@@ -118,17 +123,18 @@ export class TopBar {
       let ix = x;
       const row1Y = 22;
       const row2Y = 36;
-      let maxPerRow = Math.floor((resEndX - x) / iw);
-      let cols = Math.min(grp.items.length, Math.max(2, maxPerRow));
 
       for (let i = 0; i < grp.items.length && ix + iw <= resEndX + iw; i++) {
         const item = grp.items[i];
-        // Nazwa/symbol
+
+        // Zapamiętaj prostokąt do hover/tooltip
+        this._itemRects.push({ x: ix, y: 0, w: iw, h: BAR_H, item });
+
+        // Rząd 1: ikona + symbol : wartość
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = item.color || C.text;
         ctx.textAlign = 'left';
 
-        // Rząd 1: ikona + symbol : wartość
         const valStr = _fmtNum(item.value);
         ctx.fillText(`${item.icon}${item.symbol}`, ix, row1Y);
 
@@ -155,6 +161,119 @@ export class TopBar {
     }
 
     ctx.textAlign = 'left';
+
+    // ── Tooltip (rysuj na wierzchu) ──
+    if (this._tooltip) {
+      this._drawTooltip(ctx, W);
+    }
+  }
+
+  // ── Tooltip ────────────────────────────────────────────
+  _drawTooltip(ctx, W) {
+    const tt = this._tooltip;
+    if (!tt || !tt.lines || tt.lines.length === 0) return;
+
+    const PAD = 8;
+    const LH = 14;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+
+    // Oblicz wymiary tooltipa
+    let maxW = 0;
+    for (const line of tt.lines) {
+      const tw = ctx.measureText(line.text).width;
+      if (tw > maxW) maxW = tw;
+    }
+    const boxW = maxW + PAD * 2;
+    const boxH = tt.lines.length * LH + PAD * 2 - 4;
+
+    // Pozycja — pod item, nie wychodząc poza ekran
+    let bx = tt.x;
+    let by = BAR_H + 4;
+    if (bx + boxW > W - 10) bx = W - boxW - 10;
+    if (bx < 4) bx = 4;
+
+    // Tło
+    ctx.fillStyle = 'rgba(8,14,28,0.95)';
+    ctx.fillRect(bx, by, boxW, boxH);
+    ctx.strokeStyle = '#3a6090';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, boxW, boxH);
+
+    // Linie tekstu
+    for (let i = 0; i < tt.lines.length; i++) {
+      const line = tt.lines[i];
+      ctx.font = line.bold
+        ? `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`
+        : `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = line.color || C.text;
+      ctx.textAlign = 'left';
+      ctx.fillText(line.text, bx + PAD, by + PAD + i * LH + 8);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // Aktualizuj hover — wywoływane z UIManager/PlanetGlobeScene przy mousemove
+  updateHover(mx, my) {
+    if (my < 0 || my > BAR_H) {
+      this._tooltip = null;
+      this._hoverItem = null;
+      return;
+    }
+    // Szukaj itemu pod kursorem
+    for (const rect of this._itemRects) {
+      if (mx >= rect.x && mx < rect.x + rect.w && my >= rect.y && my < rect.y + rect.h) {
+        if (this._hoverItem === rect.item) return; // bez zmian
+        this._hoverItem = rect.item;
+        this._tooltip = this._buildTooltip(rect.item, rect.x);
+        return;
+      }
+    }
+    this._tooltip = null;
+    this._hoverItem = null;
+  }
+
+  // Buduj dane tooltipa dla danego itemu
+  _buildTooltip(item, x) {
+    const lines = [];
+
+    // Tytuł
+    const name = item.tooltipName || `${item.icon} ${item.symbol || ''}`.trim();
+    lines.push({ text: name, color: C.bright, bold: true });
+
+    // Ilość
+    lines.push({ text: `Ilość: ${_fmtNum(item.value)}`, color: C.text });
+
+    // Delta / Flow
+    if (item.delta !== undefined && Math.abs(item.delta) > 0.01) {
+      const sign = item.delta >= 0 ? '+' : '';
+      const color = item.delta >= 0 ? THEME.successDim : THEME.dangerDim;
+      lines.push({ text: `Zmiana: ${sign}${item.delta.toFixed(1)}/r`, color });
+    }
+
+    // Szczegóły energii
+    if (item._energyDetails) {
+      const e = item._energyDetails;
+      lines.push({ text: `Produkcja: +${_fmtNum(e.production)}/r`, color: THEME.successDim });
+      lines.push({ text: `Konsumpcja: -${_fmtNum(e.consumption)}/r`, color: THEME.dangerDim });
+      lines.push({ text: `Bilans: ${e.balance >= 0 ? '+' : ''}${_fmtNum(e.balance)}/r`,
+        color: e.balance >= 0 ? THEME.successDim : THEME.dangerDim });
+      if (e.brownout) lines.push({ text: '⚠ BROWNOUT — produkcja wstrzymana', color: C.red });
+    }
+
+    // Szczegóły PC (fabryki)
+    if (item._pcDetails) {
+      const pc = item._pcDetails;
+      lines.push({ text: `Używane: ${pc.used}`, color: C.text });
+      lines.push({ text: `Dostępne: ${pc.total}`, color: C.text });
+      lines.push({ text: `Wolne: ${pc.total - pc.used}`, color: pc.total - pc.used > 0 ? THEME.successDim : C.orange });
+    }
+
+    // Flow label (dla elementów z flowLabel ale bez delta)
+    if (item.flowLabel && !item._energyDetails && !item._pcDetails && item.delta === undefined) {
+      lines.push({ text: item.flowLabel, color: item.flowColor || C.dim });
+    }
+
+    return { x, lines };
   }
 
   // ── Blok kontrolek czasu (prawa strona) ─────────────────
@@ -216,6 +335,7 @@ export class TopBar {
       items.push({
         icon: def.icon, symbol: id, value: amt, delta: dlt,
         color: def.color || C.text,
+        tooltipName: `${def.icon} ${def.namePL} (${id})`,
       });
     }
     return items;
@@ -229,6 +349,7 @@ export class TopBar {
       items.push({
         icon: def.icon, symbol: '', value: amt, delta: dlt,
         color: def.color || C.text,
+        tooltipName: `${def.icon} ${def.namePL}`,
       });
     }
     return items;
@@ -258,6 +379,13 @@ export class TopBar {
       icon: eIcon, symbol: '', value: eVal,
       color: eColor,
       flowLabel: eFlowLabel, flowColor: eFlowColor,
+      tooltipName: '⚡ Energia',
+      _energyDetails: {
+        production: energyFlow.production ?? 0,
+        consumption: energyFlow.consumption ?? 0,
+        balance: bal,
+        brownout,
+      },
     });
 
     // Nauka (akumulator + delta)
@@ -266,19 +394,22 @@ export class TopBar {
     items.push({
       icon: '🔬', symbol: '', value: resAmt, delta: resDlt,
       color: '#aa44ff',
+      tooltipName: '🔬 Nauka (research)',
     });
 
-    // PC — Production Capacity (używane / dostępne punkty fabryk)
+    // PC — Production Capacity (zawsze widoczne w civMode)
     const fd = factoryData ?? window.KOSMOS?.factorySystem;
     const totalPts = fd?.totalPoints ?? 0;
     const usedPts  = fd?.usedPoints  ?? 0;
-    if (totalPts > 0 || usedPts > 0) {
+    if (window.KOSMOS?.civMode) {
       items.push({
         icon: '🏭', symbol: 'PC',
         value: usedPts,
-        color: usedPts >= totalPts ? C.orange : '#6688aa',
+        color: usedPts >= totalPts && totalPts > 0 ? C.orange : '#6688aa',
         flowLabel: `${usedPts}/${totalPts}`,
-        flowColor: usedPts >= totalPts ? C.orange : C.dim,
+        flowColor: usedPts >= totalPts && totalPts > 0 ? C.orange : C.dim,
+        tooltipName: '🏭 Punkty Produkcji (PC)',
+        _pcDetails: { used: usedPts, total: totalPts },
       });
     }
 
