@@ -131,11 +131,6 @@ export class EventLog {
       this._add(`⏪ ${reason}`, 'auto_slow');
     });
 
-    // Zmiana fazy dysku protoplanetarnego
-    EventBus.on('disk:phaseChanged', ({ newPhasePL }) => {
-      this._add(`Faza dysku: ${newPhasePL}`, 'disk_phase');
-    });
-
     // ── Zdarzenia cywilizacyjne ───────────────────────────────────
     EventBus.on('civ:epochChanged', ({ epoch }) => {
       this._add(`⭐ Epoka: ${epoch.namePL}`, 'civ_epoch');

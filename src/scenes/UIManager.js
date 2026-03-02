@@ -374,9 +374,6 @@ export class UIManager {
       this._log(`Auto-slow: ${reason}`, 'auto_slow');
     });
 
-    EventBus.on('disk:phaseChanged', ({ newPhasePL }) => {
-      this._log(`Faza dysku: ${newPhasePL}`, 'disk_phase');
-    });
 
     EventBus.on('civ:epochChanged', ({ epoch }) => {
       this._log(`Nowa epoka: ${epoch}`, 'civ_epoch');
