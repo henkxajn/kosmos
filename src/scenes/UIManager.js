@@ -180,6 +180,9 @@ export class UIManager {
     this._vesselRows = [];
     this._vesselActionBtns = [];
     this._orbitReturnBtns = [];
+    this._orbitRedirectBtns = [];
+    this._redirectTargetBtns = [];
+    this._redirectTargetExpId = null;  // ID ekspedycji w trybie wyboru celu
     this._selectedVesselId = null;
     this._vesselMissionType = null;
     this._colonyListItems = [];
@@ -344,6 +347,15 @@ export class UIManager {
       if (idx !== -1) {
         this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
       }
+    });
+    EventBus.on('expedition:redirected', ({ expedition }) => {
+      const idx = this._expeditions.findIndex(e => e.id === expedition.id);
+      if (idx !== -1) {
+        this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
+      }
+    });
+    EventBus.on('expedition:redirectFailed', ({ reason }) => {
+      this._addNotification(`⚠ Zmiana celu: ${reason}`);
     });
 
     // Flota
@@ -698,7 +710,7 @@ export class UIManager {
         colonies: colMgr?.getAllColonies() ?? [],
         expeditions: this._expeditions,
         fleet: colMgr?.getFleet(activePid) ?? [],
-        shipQueue: colMgr?.getShipQueue(activePid) ?? null,
+        shipQueues: colMgr?.getShipQueues(activePid) ?? [],
       });
     }
 
@@ -850,8 +862,9 @@ export class UIManager {
     ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + halfW - PAD, y); ctx.stroke();
     y += 10;
 
-    // Przyciski powrotu (orbiting) — zbierane do hitTest
+    // Przyciski powrotu i redirect (orbiting) — zbierane do hitTest
     this._orbitReturnBtns = [];
+    this._orbitRedirectBtns = [];
 
     if (count === 0) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -875,17 +888,30 @@ export class UIManager {
         ctx.fillText(`${arrow} ${icon} ${displayName}`, bodyX + PAD, y);
 
         if (exp.status === 'orbiting') {
-          const btnW = 42; const btnH = 12;
-          const btnX = bodyX + halfW - PAD - btnW;
+          // Dwa przyciski: Powrót + Cel
+          const btnW = 34; const btnH = 12; const gap = 2;
+          const btnRetX = bodyX + halfW - PAD - btnW * 2 - gap;
+          const btnRedX = bodyX + halfW - PAD - btnW;
           const btnY = y - 9;
+          // Powrót
           ctx.fillStyle = 'rgba(60,50,10,0.7)';
-          ctx.fillRect(btnX, btnY, btnW, btnH);
-          ctx.strokeStyle = C.yellow; ctx.strokeRect(btnX, btnY, btnW, btnH);
+          ctx.fillRect(btnRetX, btnY, btnW, btnH);
+          ctx.strokeStyle = C.yellow; ctx.strokeRect(btnRetX, btnY, btnW, btnH);
           ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
           ctx.fillStyle = C.yellow; ctx.textAlign = 'center';
-          ctx.fillText('↩ Powrót', btnX + btnW / 2, btnY + 9);
+          ctx.fillText('↩ Baza', btnRetX + btnW / 2, btnY + 9);
           ctx.textAlign = 'left';
-          this._orbitReturnBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, expId: exp.id });
+          this._orbitReturnBtns.push({ x: btnRetX, y: btnY, w: btnW, h: btnH, expId: exp.id });
+          // Zmień cel
+          const isRedirectActive = this._redirectTargetExpId === exp.id;
+          ctx.fillStyle = isRedirectActive ? 'rgba(20,50,80,0.8)' : 'rgba(10,30,60,0.7)';
+          ctx.fillRect(btnRedX, btnY, btnW, btnH);
+          ctx.strokeStyle = '#4488cc'; ctx.strokeRect(btnRedX, btnY, btnW, btnH);
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = '#88ccff'; ctx.textAlign = 'center';
+          ctx.fillText('➡ Cel', btnRedX + btnW / 2, btnY + 9);
+          ctx.textAlign = 'left';
+          this._orbitRedirectBtns.push({ x: btnRedX, y: btnY, w: btnW, h: btnH, expId: exp.id });
         } else {
           const eta = exp.status === 'returning'
             ? `↩ ${_shortYear(exp.returnYear ?? 0)}`
@@ -898,6 +924,14 @@ export class UIManager {
         y += LH;
       }
       if (count > 10) { ctx.fillStyle = C.text; ctx.fillText(`...i ${count - 10} więcej`, bodyX + PAD, y); y += LH; }
+
+      // Inline target picker — gdy redirectTargetExpId jest ustawiony
+      if (this._redirectTargetExpId) {
+        const redExp = this._expeditions.find(e => e.id === this._redirectTargetExpId);
+        if (redExp && redExp.status === 'orbiting') {
+          y = this._drawRedirectTargetPicker(ctx, redExp, bodyX + PAD, y, halfW - PAD * 2);
+        }
+      }
     }
 
     // ── PRAWA KOLUMNA: KATALOG CIAŁ NIEBIESKICH ──────────────────
@@ -942,22 +976,27 @@ export class UIManager {
 
     const activePid = colMgr?.activePlanetId;
     const activeCol = colMgr?.getColony(activePid);
-    const hasShipyard = activeCol?.buildingSystem
-      ? (() => { for (const [, e] of activeCol.buildingSystem._active) { if (e.building.id === 'shipyard') return true; } return false; })()
-      : false;
+    // Pobierz poziom stoczni (0 = brak)
+    let shipyardLevel = 0;
+    if (activeCol?.buildingSystem) {
+      for (const [, e] of activeCol.buildingSystem._active) {
+        if (e.building.id === 'shipyard') { shipyardLevel = e.level ?? 1; break; }
+      }
+    }
+    const hasShipyard = shipyardLevel > 0;
     const hasExploration = tSys?.isResearched('exploration') ?? false;
 
     if (!hasExploration) { ctx.fillStyle = C.orange; ctx.fillText('🔒 Wymaga: Eksploracja', bodyX + PAD, y); y += LH; }
     else if (!hasShipyard) { ctx.fillStyle = C.orange; ctx.fillText('⚓ Stocznia: ❌ (zbuduj)', bodyX + PAD, y); y += LH; }
     else {
-      ctx.fillStyle = C.green; ctx.fillText('⚓ Stocznia: ✅', bodyX + PAD, y); y += LH;
-      const queue = colMgr?.getShipQueue(activePid);
-      if (queue) {
-        const shipDef = SHIPS[queue.shipId];
-        const frac = queue.buildTime > 0 ? queue.progress / queue.buildTime : 0;
-        ctx.fillStyle = '#88ccff'; ctx.fillText(`Budowa: ${shipDef?.icon ?? '🚀'} ${shipDef?.namePL ?? queue.shipId}`, bodyX + PAD, y); y += LH - 2;
+      const queues = colMgr?.getShipQueues(activePid) ?? [];
+      ctx.fillStyle = C.green; ctx.fillText(`⚓ Stocznia ✅ (${queues.length}/${shipyardLevel} slotów)`, bodyX + PAD, y); y += LH;
+      for (const q of queues) {
+        const shipDef = SHIPS[q.shipId];
+        const frac = q.buildTime > 0 ? q.progress / q.buildTime : 0;
+        ctx.fillStyle = '#88ccff'; ctx.fillText(`Budowa: ${shipDef?.icon ?? '🚀'} ${shipDef?.namePL ?? q.shipId}`, bodyX + PAD, y); y += LH - 2;
         drawMiniBar(ctx, bodyX + PAD, y, fullW - PAD, 6, frac, '#4488cc'); y += 8;
-        ctx.fillStyle = C.text; ctx.fillText(`${Math.floor(queue.progress)}/${queue.buildTime} lat`, bodyX + PAD, y); y += LH;
+        ctx.fillStyle = C.text; ctx.fillText(`${Math.floor(q.progress)}/${q.buildTime} lat`, bodyX + PAD, y); y += LH;
       }
 
       // ── Hangar — indywidualne statki ────────────────────────────────
@@ -1005,10 +1044,54 @@ export class UIManager {
       }
       y += 4;
 
+      // ── Na orbicie (statki z tej kolonii orbitujące cele) ────────────
+      const allVessels = vMgr?.getAllVessels() ?? [];
+      const orbitingVessels = allVessels.filter(v => v.colonyId === activePid && v.position.state === 'orbiting');
+      const inTransitVessels = allVessels.filter(v => v.colonyId === activePid && v.position.state === 'in_transit');
+
+      if (orbitingVessels.length > 0) {
+        ctx.fillStyle = C.yellow; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillText(`Na orbicie (${orbitingVessels.length}):`, bodyX + PAD, y); y += LH - 2;
+        for (const v of orbitingVessels) {
+          const sd = SHIPS[v.shipId];
+          const rowH = 16;
+          const rx = bodyX + PAD; const ry = y;
+          const isSelected = this._selectedVesselId === v.id;
+          ctx.fillStyle = isSelected ? 'rgba(60,60,20,0.5)' : 'rgba(30,30,10,0.4)';
+          ctx.fillRect(rx, ry, fullW, rowH);
+          if (isSelected) { ctx.strokeStyle = C.yellow; ctx.strokeRect(rx, ry, fullW, rowH); }
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = C.yellow;
+          const targetName = v.mission?.targetName ?? '?';
+          ctx.fillText(`${sd?.icon ?? '🚀'} ${_truncate(v.name, 10)} ⊙ ${_truncate(targetName, 8)}`, rx + 2, ry + 11);
+          this._vesselRows.push({ x: rx, y: ry, w: fullW, h: rowH, vesselId: v.id });
+          y += rowH + 1;
+        }
+        y += 2;
+      }
+
+      if (inTransitVessels.length > 0) {
+        ctx.fillStyle = '#4488ff'; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillText(`W locie (${inTransitVessels.length}):`, bodyX + PAD, y); y += LH - 2;
+        for (const v of inTransitVessels) {
+          const sd = SHIPS[v.shipId];
+          const rowH = 16;
+          const rx = bodyX + PAD; const ry = y;
+          ctx.fillStyle = 'rgba(15,25,50,0.4)';
+          ctx.fillRect(rx, ry, fullW, rowH);
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = '#4488ff';
+          const targetName = v.mission?.targetName ?? '?';
+          ctx.fillText(`${sd?.icon ?? '🚀'} ${_truncate(v.name, 10)} → ${_truncate(targetName, 8)}`, rx + 2, ry + 11);
+          y += rowH + 1;
+        }
+        y += 2;
+      }
+
       // ── Panel akcji wybranego statku ────────────────────────────────
       if (this._selectedVesselId && vMgr) {
         const sv = vMgr.getVessel(this._selectedVesselId);
-        if (sv && sv.position.state === 'docked') {
+        if (sv && (sv.position.state === 'docked' || sv.position.state === 'orbiting')) {
           y = this._drawVesselActionPanel(ctx, sv, bodyX + PAD, y, fullW);
         }
       } else if (vessels.length > 0) {
@@ -1020,7 +1103,7 @@ export class UIManager {
 
       y += 4;
       // ── Budowa statków ─────────────────────────────────────────────
-      const canBuildAny = hasShipyard && !queue;
+      const canBuildAny = hasShipyard && queues.length < shipyardLevel;
       const inv = activeCol?.resourceSystem?.inventorySnapshot() ?? {};
 
       for (const ship of Object.values(SHIPS)) {
@@ -1257,7 +1340,7 @@ export class UIManager {
 
     // Nagłówek
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = '#88ccff';
+    ctx.fillStyle = vessel.position.state === 'orbiting' ? C.yellow : '#88ccff';
     ctx.fillText(`${sd?.icon ?? '🚀'} ${vessel.name}`, px + 2, y);
     y += LH;
 
@@ -1279,6 +1362,58 @@ export class UIManager {
     const colMgr = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
 
+    // ── Statek na orbicie — rozkazy zamiast listy misji ────────────
+    if (vessel.position.state === 'orbiting') {
+      // Znajdź powiązaną ekspedycję
+      const orbExp = this._expeditions.find(e => e.vesselId === vessel.id && e.status === 'orbiting');
+      const targetName = orbExp?.targetName ?? vessel.mission?.targetName ?? '?';
+      ctx.fillStyle = C.yellow;
+      ctx.fillText(`⊙ Na orbicie: ${targetName}`, px + 2, y); y += LH;
+
+      // Dwa przyciski: Powrót i Zmień cel
+      const btnH = 15; const gap = 4;
+      const halfW = Math.floor((panelW - gap) / 2);
+      // Powrót
+      const bRetX = px; const bRetY = y;
+      ctx.fillStyle = 'rgba(60,50,10,0.7)'; ctx.fillRect(bRetX, bRetY, halfW, btnH);
+      ctx.strokeStyle = C.yellow; ctx.strokeRect(bRetX, bRetY, halfW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.yellow; ctx.textAlign = 'center';
+      ctx.fillText('↩ Powrót do bazy', bRetX + halfW / 2, bRetY + 11);
+      ctx.textAlign = 'left';
+      if (orbExp) {
+        this._vesselActionBtns.push({
+          x: bRetX, y: bRetY, w: halfW, h: btnH,
+          action: 'orbitReturn', expId: orbExp.id, vesselId: vessel.id,
+        });
+      }
+      // Zmień cel
+      const bRedX = px + halfW + gap; const bRedY = y;
+      const isRedirectActive = this._redirectTargetExpId === orbExp?.id;
+      ctx.fillStyle = isRedirectActive ? 'rgba(20,50,80,0.8)' : 'rgba(10,30,60,0.7)';
+      ctx.fillRect(bRedX, bRedY, halfW, btnH);
+      ctx.strokeStyle = '#4488cc'; ctx.strokeRect(bRedX, bRedY, halfW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#88ccff'; ctx.textAlign = 'center';
+      ctx.fillText('➡ Zmień cel', bRedX + halfW / 2, bRedY + 11);
+      ctx.textAlign = 'left';
+      if (orbExp) {
+        this._vesselActionBtns.push({
+          x: bRedX, y: bRedY, w: halfW, h: btnH,
+          action: 'orbitRedirect', expId: orbExp.id, vesselId: vessel.id,
+        });
+      }
+      y += btnH + 4;
+
+      // Jeśli tryb wyboru celu → rysuj listę celów
+      if (isRedirectActive && orbExp) {
+        y = this._drawRedirectTargetPicker(ctx, orbExp, px, y, panelW);
+      }
+
+      return y;
+    }
+
+    // ── Statek w hangarze — normalna lista misji ─────────────────
     // Określ dostępne typy misji wg typu statku
     const missionTypes = [];
     if (vessel.shipId === 'science_vessel') {
@@ -1515,6 +1650,81 @@ export class UIManager {
       return a.dist - b.dist;
     });
     return targets;
+  }
+
+  // ── Inline target picker dla redirect z orbity ────────────────────
+  _drawRedirectTargetPicker(ctx, exp, px, py, panelW) {
+    const LH = 13;
+    let y = py;
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = C.label;
+    ctx.fillText(`Nowy cel dla: ${_truncate(exp.targetName ?? '?', 12)}`, px, y); y += LH;
+
+    // Pobierz vessel
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+    if (!vessel) {
+      ctx.fillStyle = C.dim; ctx.fillText('Statek niedostępny', px, y);
+      return y + LH;
+    }
+
+    // Oblicz dystanse od bieżącej pozycji (orbiting body)
+    const currentBody = this._findTargetBody(exp.targetId);
+    const homePl = window.KOSMOS?.homePlanet;
+    const TYPES = ['planet', 'moon', 'planetoid'];
+    const targets = [];
+
+    for (const t of TYPES) {
+      for (const body of EntityManager.getByType(t)) {
+        if (body.id === exp.targetId) continue;
+        const fromEntity = currentBody ?? homePl;
+        if (!fromEntity) continue;
+        const dist = Math.max(0.001, DistanceUtils.euclideanAU(fromEntity, body));
+        const fuelNeeded = dist * vessel.fuel.consumption;
+        const inRange = vessel.fuel.current >= fuelNeeded;
+        const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
+        targets.push({ id: body.id, name: body.name, dist, inRange, icon, explored: !!body.explored });
+      }
+    }
+
+    targets.sort((a, b) => a.dist - b.dist);
+
+    if (!this._redirectTargetBtns) this._redirectTargetBtns = [];
+    this._redirectTargetBtns = [];
+
+    for (const t of targets.slice(0, 8)) {
+      const btnH = 13;
+      const bx = px; const by = y;
+      ctx.fillStyle = t.inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
+      ctx.fillRect(bx, by, panelW, btnH);
+      ctx.strokeStyle = t.inRange ? '#335' : '#322'; ctx.strokeRect(bx, by, panelW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = t.inRange ? '#88ccff' : '#665555';
+      const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
+      const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
+      const nameStr = t.explored ? `${t.icon} ${_truncate(t.name, 8)}` : `${t.icon} ???`;
+      ctx.fillText(`${nameStr} ${distStr}AU ⛽${fuelCost}`, bx + 2, by + 9);
+      if (t.inRange) {
+        this._redirectTargetBtns.push({
+          x: bx, y: by, w: panelW, h: btnH, targetId: t.id, expId: exp.id,
+        });
+      }
+      y += btnH + 1;
+    }
+
+    return y;
+  }
+
+  // Helper: znajdź ciało po id (dla redirect target picker)
+  _findTargetBody(targetId) {
+    const TYPES = ['planet', 'moon', 'asteroid', 'comet', 'planetoid'];
+    for (const t of TYPES) {
+      for (const body of EntityManager.getByType(t)) {
+        if (body.id === targetId) return body;
+      }
+    }
+    return null;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1977,6 +2187,23 @@ export class UIManager {
     for (const btn of (this._orbitReturnBtns ?? [])) {
       if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
         EventBus.emit('expedition:orderReturn', { expeditionId: btn.expId });
+        this._redirectTargetExpId = null;
+        return;
+      }
+    }
+    // Orbit redirect buttons — przycisk "Cel" w AKTYWNE MISJE
+    for (const btn of (this._orbitRedirectBtns ?? [])) {
+      if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+        // Toggle tryb wyboru celu
+        this._redirectTargetExpId = this._redirectTargetExpId === btn.expId ? null : btn.expId;
+        return;
+      }
+    }
+    // Redirect target picker — inline lista celów (górna strefa, bez scrollu)
+    for (const btn of (this._redirectTargetBtns ?? [])) {
+      if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+        EventBus.emit('expedition:orderRedirect', { expeditionId: btn.expId, targetId: btn.targetId });
+        this._redirectTargetExpId = null;
         return;
       }
     }
@@ -2018,6 +2245,20 @@ export class UIManager {
   _handleVesselAction(btn) {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return;
+
+    // Rozkaz powrotu z orbity (z panelu floty)
+    if (btn.action === 'orbitReturn') {
+      EventBus.emit('expedition:orderReturn', { expeditionId: btn.expId });
+      this._selectedVesselId = null;
+      this._redirectTargetExpId = null;
+      return;
+    }
+
+    // Toggle trybu wyboru celu redirect (z panelu floty)
+    if (btn.action === 'orbitRedirect') {
+      this._redirectTargetExpId = this._redirectTargetExpId === btn.expId ? null : btn.expId;
+      return;
+    }
 
     if (btn.action === 'missionType') {
       // Zmień wybrany typ misji

@@ -631,7 +631,11 @@ export class PlanetGlobeScene {
   _startDrawLoop() {
     const draw = () => {
       if (!this.isOpen) return;
-      this._draw();
+      try {
+        this._draw();
+      } catch (err) {
+        console.error('[PlanetGlobeScene] Błąd w pętli rysowania:', err);
+      }
       this._animFrameId = requestAnimationFrame(draw);
     };
     this._animFrameId = requestAnimationFrame(draw);
@@ -1010,10 +1014,14 @@ export class PlanetGlobeScene {
     const tile = this._buildPanelTile;
     if (!tile) return;
 
+    // Reset flagi tooltip (ustawiana w else-branch — building list)
+    this._buildTooltipVisible = false;
+
     const BPX   = LW - RIGHT_W;
     const terrain = TERRAIN_TYPES[tile.type];
     const bSys  = window.KOSMOS?.buildingSystem;
     const tSys  = window.KOSMOS?.techSystem;
+    const cSys  = window.KOSMOS?.civSystem;
     const inv   = this._inventory;
 
     ctx.fillStyle = bgAlpha(0.95);
@@ -1216,7 +1224,6 @@ export class PlanetGlobeScene {
       ctx.clip();
 
       let yy = buildListY + 12 - scrollY;
-      const cSys = window.KOSMOS?.civSystem;
       let totalContentH = 0;
       let hoveredBuilding = null; // budynek pod kursorem (do tooltip)
       let hoveredBuildY   = 0;

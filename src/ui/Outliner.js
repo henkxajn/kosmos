@@ -57,7 +57,7 @@ export class Outliner {
 
   // ── Rysowanie ───────────────────────────────────────────
   draw(ctx, W, H, state) {
-    const { colonies, expeditions, fleet, shipQueue } = state;
+    const { colonies, expeditions, fleet, shipQueues } = state;
 
     const x = W - OUTLINER_W;
     const y = TOP_BAR_H;
@@ -123,8 +123,9 @@ export class Outliner {
           : exp.type === 'transport' ? '📦'
           : exp.type === 'recon' ? '🔭'
           : '⛏';
-        const arrow = exp.status === 'returning' ? '↩' : '→';
-        const color = exp.status === 'returning' ? C.mint : '#88ccff';
+        const arrow = exp.status === 'returning' ? '↩' : exp.status === 'orbiting' ? '⊙' : '→';
+        const color = exp.status === 'returning' ? C.mint
+          : exp.status === 'orbiting' ? C.orange : '#88ccff';
 
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = color;
@@ -132,7 +133,9 @@ export class Outliner {
 
         const eta = exp.status === 'returning'
           ? `↩${_shortYear(exp.returnYear ?? 0)}`
-          : `${_shortYear(exp.arrivalYear ?? 0)}`;
+          : exp.status === 'orbiting'
+            ? '⊙ orbita'
+            : `${_shortYear(exp.arrivalYear ?? 0)}`;
         ctx.fillStyle = C.label;
         ctx.textAlign = 'right';
         ctx.fillText(eta, x + OUTLINER_W - PAD, iy + 14);
@@ -150,7 +153,8 @@ export class Outliner {
     // ── FLOTA ────────────────────────────────────────────
     const totalShips = fleet ? fleet.length : 0;
     cy = this._drawSection(ctx, x, cy, 'fleet', `FLOTA [${totalShips}]`, (startY) => {
-      if (totalShips === 0 && !shipQueue) {
+      const queues = shipQueues ?? [];
+      if (totalShips === 0 && queues.length === 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.dim;
         ctx.fillText('Brak statków', x + PAD, startY + 14);
@@ -177,11 +181,11 @@ export class Outliner {
         dy += ITEM_H;
       }
 
-      // Queue (budowa w toku)
-      if (shipQueue) {
+      // Queues (budowa w toku — wiele slotów)
+      for (const q of queues) {
         const iy = startY + dy;
-        const shipDef = SHIPS[shipQueue.shipId];
-        const frac = shipQueue.buildTime > 0 ? shipQueue.progress / shipQueue.buildTime : 0;
+        const shipDef = SHIPS[q.shipId];
+        const frac = q.buildTime > 0 ? q.progress / q.buildTime : 0;
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = '#88ccff';
         ctx.fillText(`⚓ ${shipDef?.icon ?? '🚀'} budowa`, x + PAD, iy + 14);

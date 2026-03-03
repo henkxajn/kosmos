@@ -95,6 +95,10 @@ export class ExpeditionSystem {
     // Obsługa rozkazu powrotu z orbity
     EventBus.on('expedition:orderReturn', ({ expeditionId }) =>
       this._orderReturn(expeditionId));
+
+    // Obsługa rozkazu zmiany celu z orbity
+    EventBus.on('expedition:orderRedirect', ({ expeditionId, targetId }) =>
+      this._orderRedirect(expeditionId, targetId));
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────
@@ -565,6 +569,57 @@ export class ExpeditionSystem {
     EventBus.emit('expedition:returnOrdered', { expedition: exp });
   }
 
+  // Rozkaz zmiany celu statku na orbicie (gracz ręcznie wywołuje)
+  _orderRedirect(expeditionId, newTargetId) {
+    const exp = this._expeditions.find(e => e.id === expeditionId);
+    if (!exp || exp.status !== 'orbiting') return;
+
+    const target = this._findTarget(newTargetId);
+    if (!target) {
+      EventBus.emit('expedition:redirectFailed', { reason: 'Nieznany cel' });
+      return;
+    }
+
+    // Oblicz dystans od bieżącej pozycji (orbiting body) do nowego celu
+    const currentBody = this._findTarget(exp.targetId);
+    const dist = currentBody
+      ? DistanceUtils.euclideanAU(currentBody, target)
+      : this._calcDistance(target);
+
+    // Sprawdź paliwo (tylko w jedną stronę — statek będzie orbitował nowy cel)
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (exp.vesselId && vMgr) {
+      const vessel = vMgr.getVessel(exp.vesselId);
+      if (vessel) {
+        const fuelNeeded = dist * vessel.fuel.consumption;
+        if (vessel.fuel.current < fuelNeeded) {
+          EventBus.emit('expedition:redirectFailed', {
+            reason: `Brak paliwa (potrzeba ${fuelNeeded.toFixed(1)} pc, ma ${vessel.fuel.current.toFixed(1)})`
+          });
+          return;
+        }
+      }
+    }
+
+    // Zaktualizuj ekspedycję
+    const shipSpeed = this._getShipSpeed(exp.vesselId);
+    const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, dist / shipSpeed).toFixed(3));
+
+    exp.targetId    = newTargetId;
+    exp.targetName  = target.name ?? '???';
+    exp.distance    = parseFloat(dist.toFixed(4));
+    exp.arrivalYear = this._gameYear + travelTime;
+    exp.returnYear  = null;
+    exp.status      = 'en_route';
+
+    // Przekieruj vessel
+    if (exp.vesselId && vMgr) {
+      vMgr.redirectToTarget(exp.vesselId, newTargetId, exp.arrivalYear);
+    }
+
+    EventBus.emit('expedition:redirected', { expedition: exp });
+  }
+
   // Wyślij misję rozpoznawczą
   // scope: 'nearest' | 'full_system' | konkretne body.id
   _launchRecon(scope, vesselId) {
@@ -1027,10 +1082,11 @@ export class ExpeditionSystem {
       }
 
       exp.gained = { discovered: discovered.length };
-      exp.status = 'returning';
+      exp.status = 'orbiting';
 
+      // Statek zostaje na orbicie — czeka na rozkaz gracza
       if (exp.vesselId && vMgr) {
-        vMgr.startReturn(exp.vesselId);
+        vMgr.arriveAtTarget(exp.vesselId);
       }
 
       EventBus.emit('expedition:reconComplete', {
@@ -1095,21 +1151,13 @@ export class ExpeditionSystem {
         }
       }
 
-      // Brak kolejnych celów lub brak paliwa → wracaj do bazy
+      // Brak kolejnych celów lub brak paliwa → statek zostaje na orbicie ostatniego celu
       exp.gained = { discovered: exp.bodiesDiscovered?.length ?? 0 };
-      exp.status = 'returning';
+      exp.status = 'orbiting';
 
-      // Oblicz czas powrotu
-      const shipSpeed = this._getShipSpeed(exp.vesselId);
-      const homePl2 = window.KOSMOS?.homePlanet;
-      const returnDist = target && homePl2 ? DistanceUtils.euclideanAU(target, homePl2) : 1;
-      const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, returnDist / shipSpeed).toFixed(3));
-      exp.returnYear = this._gameYear + returnTime;
-
+      // Statek czeka na rozkaz gracza
       if (exp.vesselId && vMgr) {
-        const vessel = vMgr.getVessel(exp.vesselId);
-        if (vessel?.mission) vessel.mission.returnYear = exp.returnYear;
-        vMgr.startReturn(exp.vesselId);
+        vMgr.arriveAtTarget(exp.vesselId);
       }
 
       EventBus.emit('expedition:reconComplete', {

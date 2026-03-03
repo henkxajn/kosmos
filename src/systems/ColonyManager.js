@@ -5,7 +5,7 @@
 //   - CivilizationSystem (populacja, morale, wzrost per-kolonia)
 //   - Listę budynków (zarządzaną przez BuildingSystem)
 //   - Siatkę hex (HexGrid)
-//   - Flotę statków (fleet) i kolejkę budowy (shipQueue)
+//   - Flotę statków (fleet) i kolejki budowy (shipQueues — 1 slot per poziom stoczni)
 //
 // Wspólne (globalne):
 //   - TechSystem (jedno drzewo tech dla całej cywilizacji)
@@ -205,7 +205,7 @@ export class ColonyManager {
       allowImmigration: true,
       allowEmigration:  true,
       fleet:           [],    // statki w hangarze: ['science_vessel', ...]
-      shipQueue:       null,  // aktualnie budowany: { shipId, progress, buildTime }
+      shipQueues:      [],    // sloty budowy: [{ shipId, progress, buildTime }, ...]
     };
     this._colonies.set(planet.id, colony);
     this._activePlanetId = planet.id;
@@ -252,7 +252,7 @@ export class ColonyManager {
       allowImmigration: true,
       allowEmigration:  true,
       fleet:           [],
-      shipQueue:       null,
+      shipQueues:      [],
     };
 
     this._colonies.set(planetId, colony);
@@ -301,6 +301,16 @@ export class ColonyManager {
 
   // ── Flota — budowa i zarządzanie statkami ────────────────────────
 
+  // Pobierz poziom stoczni w kolonii (0 = brak stoczni)
+  _getShipyardLevel(colony) {
+    const bSys = colony?.buildingSystem;
+    if (!bSys) return 0;
+    for (const [, entry] of bSys._active) {
+      if (entry.building.id === 'shipyard') return entry.level ?? 1;
+    }
+    return 0;
+  }
+
   // Rozpocznij budowę statku w stoczni danej kolonii
   startShipBuild(planetId, shipId) {
     const colony = this.getColony(planetId);
@@ -322,17 +332,18 @@ export class ColonyManager {
       return { ok: false, reason };
     }
 
-    // Sprawdź czy stocznia istnieje w tej kolonii
-    if (!this._hasBuilding(colony, 'shipyard')) {
+    // Sprawdź czy stocznia istnieje i ile slotów ma
+    const shipyardLevel = this._getShipyardLevel(colony);
+    if (shipyardLevel === 0) {
       const reason = 'Brak Stoczni w tej kolonii';
       EventBus.emit('fleet:buildFailed', { reason });
       return { ok: false, reason };
     }
 
-    // Sprawdź czy nie buduje się już inny statek
-    if (colony.shipQueue) {
-      const current = SHIPS[colony.shipQueue.shipId];
-      const reason = `Stocznia zajęta: budowa ${current?.namePL ?? colony.shipQueue.shipId}`;
+    // Sprawdź czy są wolne sloty (1 slot per poziom stoczni)
+    if (!colony.shipQueues) colony.shipQueues = [];
+    if (colony.shipQueues.length >= shipyardLevel) {
+      const reason = `Stocznia pełna: ${colony.shipQueues.length}/${shipyardLevel} slotów`;
       EventBus.emit('fleet:buildFailed', { reason });
       return { ok: false, reason };
     }
@@ -348,12 +359,12 @@ export class ColonyManager {
     // Pobierz zasoby
     colony.resourceSystem.spend(allCosts);
 
-    // Ustaw kolejkę budowy
-    colony.shipQueue = {
+    // Dodaj do kolejki budowy
+    colony.shipQueues.push({
       shipId:    ship.id,
       progress:  0,
       buildTime: ship.buildTime,
-    };
+    });
 
     EventBus.emit('fleet:buildStarted', { planetId, shipId: ship.id });
     return { ok: true };
@@ -362,16 +373,17 @@ export class ColonyManager {
   // Tick budowy statków — wywoływany z time:tick
   _tickShipBuilds(deltaYears) {
     for (const colony of this._colonies.values()) {
-      if (!colony.shipQueue) continue;
+      const queues = colony.shipQueues;
+      if (!queues || queues.length === 0) continue;
 
-      colony.shipQueue.progress += deltaYears;
-
-      if (colony.shipQueue.progress >= colony.shipQueue.buildTime) {
-        // Statek gotowy — VesselManager stworzy instancję i doda vessel ID do fleet
-        const shipId = colony.shipQueue.shipId;
-        colony.shipQueue = null;
-
-        EventBus.emit('fleet:shipCompleted', { planetId: colony.planetId, shipId });
+      // Iteruj od końca — splice nie zaburza indeksu
+      for (let i = queues.length - 1; i >= 0; i--) {
+        queues[i].progress += deltaYears;
+        if (queues[i].progress >= queues[i].buildTime) {
+          const shipId = queues[i].shipId;
+          queues.splice(i, 1);
+          EventBus.emit('fleet:shipCompleted', { planetId: colony.planetId, shipId });
+        }
       }
     }
   }
@@ -435,10 +447,16 @@ export class ColonyManager {
     return vMgr.getVesselsAt(planetId);
   }
 
-  // Pobierz kolejkę budowy
-  getShipQueue(planetId) {
+  // Pobierz kolejki budowy (tablica slotów)
+  getShipQueues(planetId) {
     const colony = this.getColony(planetId);
-    return colony?.shipQueue ?? null;
+    return colony?.shipQueues ?? [];
+  }
+
+  // Kompatybilność wsteczna — pierwszy slot z tablicy
+  getShipQueue(planetId) {
+    const queues = this.getShipQueues(planetId);
+    return queues.length > 0 ? queues[0] : null;
   }
 
   // Sprawdź czy kolonia ma budynek o danym id
@@ -560,7 +578,7 @@ export class ColonyManager {
         allowImmigration: col.allowImmigration,
         allowEmigration:  col.allowEmigration,
         fleet:            col.fleet ?? [],
-        shipQueue:        col.shipQueue ?? null,
+        shipQueues:       col.shipQueues ?? [],
       });
     }
     return {
@@ -613,7 +631,8 @@ export class ColonyManager {
         allowImmigration: colData.allowImmigration ?? true,
         allowEmigration:  colData.allowEmigration  ?? true,
         fleet:            colData.fleet ?? [],
-        shipQueue:        colData.shipQueue ?? null,
+        // Migracja: stary shipQueue → nowe shipQueues
+        shipQueues:       colData.shipQueues ?? (colData.shipQueue ? [colData.shipQueue] : []),
       };
 
       this._colonies.set(colData.planetId, colony);

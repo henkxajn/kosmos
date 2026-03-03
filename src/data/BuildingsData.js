@@ -286,7 +286,7 @@ export const BUILDINGS = {
     namePL:      'Stocznia',
     category:    'space',
     icon:        '⚓',
-    description: 'Buduje statki kosmiczne. Wymagana do produkcji floty.',
+    description: 'Buduje statki kosmiczne. Każdy poziom = 1 dodatkowy slot budowy.',
     cost:        { Fe: 80, Ti: 30, Cu: 20 },
     commodityCost: { steel_plates: 8, hull_armor: 5, power_cells: 3 },
     energyCost:  5,
