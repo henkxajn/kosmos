@@ -40,6 +40,9 @@ import { UIManager }         from './UIManager.js';
 import { PlanetScene }       from './PlanetScene.js';
 import { PlanetGlobeScene }    from './PlanetGlobeScene.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
+import { TECHS }             from '../data/TechData.js';          // POWER TEST
+import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
+import { TERRAIN_TYPES }     from '../map/HexTile.js';            // POWER TEST
 
 export class GameScene {
   // canvas3D — element #three-canvas
@@ -155,10 +158,7 @@ export class GameScene {
             if (hp) {
               window.KOSMOS.homePlanet = hp;
               hp.explored = true;
-              // Księżyce planety domowej — zawsze zbadane
-              for (const m of EntityManager.getByType('moon')) {
-                if (m.parentPlanetId === hp.id) m.explored = true;
-              }
+              // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
             }
             // Przywróć aktywne systemy z homePlanet (per-kolonia instancje)
             const homeCol = this.colonyManager.getColony(homePlanetId);
@@ -210,10 +210,7 @@ export class GameScene {
             if (hp) {
               window.KOSMOS.homePlanet = hp;
               hp.explored = true;
-              // Księżyce planety domowej — zawsze zbadane
-              for (const m of EntityManager.getByType('moon')) {
-                if (m.parentPlanetId === hp.id) m.explored = true;
-              }
+              // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
               this.colonyManager.registerHomePlanet(hp, this.resourceSystem, this.civSystem, this.buildingSystem);
               const gridSizes = { rocky: 10, hot_rocky: 6, ice: 6, gas: 6 };
               this.buildingSystem._gridHeight = gridSizes[hp.planetType] ?? 10;
@@ -339,9 +336,11 @@ export class GameScene {
       }
     });
 
-    // ── Auto-kolonizacja w scenariuszu Cywilizacja ───────────
+    // ── Auto-kolonizacja w scenariuszu Cywilizacja / Power Test ───────────
     // Nowa gra: intro (transmisja rządowa → nazwy) → kolonizacja → globus
     if (!savedData && this._civPlanetId) {
+      const isPowerTest = window.KOSMOS?.scenario === 'power_test';  // POWER TEST
+
       setTimeout(async () => {
         const civPlanet = EntityManager.get(this._civPlanetId);
         if (!civPlanet) return;
@@ -352,6 +351,30 @@ export class GameScene {
         // Focus kamery na planecie macierzystej + bliski zoom
         EventBus.emit('body:selected', { entity: civPlanet });
         this.cameraController._targetDist = 8;
+
+        // POWER TEST — pomijamy intro, domyślne nazwy
+        if (isPowerTest) {
+          // Kolonizuj planetę
+          this._setupColony(civPlanet);
+          // Ogromne zasoby startowe
+          this._setupPowerTestResources();
+          // Zbadaj WSZYSTKIE technologie
+          this._setupPowerTestTechs();
+          // Populacja 20 POP
+          this.civSystem.population = 20;
+          // Domyślne nazwy
+          window.KOSMOS.civName = 'Test Empire';
+          civPlanet.name = 'Test Capital';
+          const colony = this.colonyManager.getColony(civPlanet.id);
+          if (colony) colony.name = 'Test Capital';
+          // Otwórz globus i auto-build budynków
+          const idx = this.timeSystem.multiplierIndex;
+          this.planetGlobeScene.open(civPlanet, idx);
+          // Czekaj na otwarcie globusa (grid musi istnieć)
+          await new Promise(r => setTimeout(r, 200));
+          this._autoBuildPowerTest();
+          return;
+        }
 
         // Czekaj na animację kamery (lerp do planety)
         await new Promise(r => setTimeout(r, 1200));
@@ -395,10 +418,7 @@ export class GameScene {
     window.KOSMOS.civMode    = true;
     window.KOSMOS.homePlanet = planet;
     planet.explored = true;
-    // Księżyce planety domowej — zawsze zbadane
-    for (const m of EntityManager.getByType('moon')) {
-      if (m.parentPlanetId === planet.id) m.explored = true;
-    }
+    // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
     // Startowe zasoby (surowce + commodities T1/T2)
     this.resourceSystem.receive({
       Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10,
@@ -428,11 +448,135 @@ export class GameScene {
     }
   }
 
+  // ── POWER TEST — metody pomocnicze ─────────────────────────────
+
+  // POWER TEST — ogromne zasoby startowe
+  _setupPowerTestResources() {
+    this.resourceSystem.receive({
+      Fe: 99999, C: 99999, Si: 99999, Cu: 99999, Ti: 99999, Li: 99999,
+      food: 99999, water: 99999, research: 10000,
+      steel_plates: 9999, polymer_composites: 9999,
+      power_cells: 9999, electronics: 9999, food_synthesizers: 9999,
+      mining_drills: 9999, hull_armor: 9999,
+    });
+  }
+
+  // POWER TEST — zbadaj wszystkie technologie
+  _setupPowerTestTechs() {
+    const allTechIds = Object.keys(TECHS);
+    this.techSystem.restore({ researched: allTechIds });
+  }
+
+  // POWER TEST — auto-budowa budynków na globusie po otwarciu mapy
+  _autoBuildPowerTest() {
+    const grid = this.planetGlobeScene?.grid;
+    const bSys = window.KOSMOS?.buildingSystem;
+    if (!grid || !bSys) return;
+
+    // Zbierz wolne, budowlane tile'y (nie ocean, nie damaged, nie zajęte)
+    const allTiles = grid.toArray();
+    const freeTiles = allTiles.filter(t => {
+      const terrain = TERRAIN_TYPES[t.type];
+      return terrain?.buildable && !t.isOccupied && !t.damaged;
+    });
+
+    // Priorytet: plains → desert → mountains → tundra → crater → reszta
+    const terrainPriority = ['plains', 'desert', 'mountains', 'tundra', 'crater', 'forest', 'ice_sheet', 'wasteland', 'volcano'];
+    freeTiles.sort((a, b) => {
+      const ai = terrainPriority.indexOf(a.type);
+      const bi = terrainPriority.indexOf(b.type);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    // Lista budynków do postawienia
+    const buildPlan = [
+      { id: 'habitat',          level: 10, count: 1 },
+      { id: 'solar_farm',       level: 10, count: 2 },
+      { id: 'mine',             level: 10, count: 2 },
+      { id: 'farm',             level: 10, count: 1 },
+      { id: 'well',             level: 10, count: 1 },
+      { id: 'factory',          level: 10, count: 1 },
+      { id: 'research_station', level: 10, count: 1 },
+      { id: 'launch_pad',       level: 1,  count: 1 },
+      { id: 'shipyard',         level: 1,  count: 2 },
+    ];
+
+    const entries = [];  // dane do restoreFromSave
+    const usedTiles = new Set();
+
+    for (const plan of buildPlan) {
+      const building = BUILDINGS[plan.id];
+      if (!building) continue;
+
+      for (let n = 0; n < plan.count; n++) {
+        // Znajdź tile pasujący do tego budynku
+        const tile = this._findTileForBuilding(freeTiles, building, usedTiles);
+        if (!tile) continue;
+
+        usedTiles.add(tile.key);
+        tile.buildingId    = plan.id;
+        tile.buildingLevel = plan.level;
+
+        // Oblicz baseRates z uwzględnieniem terenu i poziomu
+        const baseRates = bSys._calcBaseRates(building, tile, plan.level);
+
+        // Skumulowane housing (per level)
+        const housing = (building.housing || 0) * plan.level;
+
+        entries.push({
+          tileKey:    tile.key,
+          buildingId: plan.id,
+          baseRates,
+          housing,
+          popCost:    building.popCost ?? 0.25,
+          level:      plan.level,
+        });
+      }
+    }
+
+    // Przywróć budynki przez restoreFromSave (przelicza housing, employment, factory points)
+    if (entries.length > 0) {
+      bSys.restoreFromSave(entries);
+    }
+
+    // Odśwież stan budynków na globusie (grid → overlay)
+    if (this.planetGlobeScene._globeRenderer) {
+      this.planetGlobeScene._syncBuildingIds();
+      this.planetGlobeScene._globeRenderer.refreshTexture();
+    }
+  }
+
+  // POWER TEST — znajdź wolny tile pasujący do budynku
+  _findTileForBuilding(freeTiles, building, usedTiles) {
+    for (const tile of freeTiles) {
+      if (usedTiles.has(tile.key)) continue;
+      const terrain = TERRAIN_TYPES[tile.type];
+      if (!terrain?.buildable) continue;
+
+      // terrainOnly: tylko określone typy terenu
+      if (building.terrainOnly) {
+        if (building.terrainOnly.includes(tile.type)) return tile;
+        continue;
+      }
+      // terrainAny: dowolny buildable tile
+      if (building.terrainAny) return tile;
+      // Standardowe: category musi być w allowedCategories
+      if (terrain.allowedCategories.includes(building.category)) return tile;
+    }
+    return null;
+  }
+
   // ── Generowanie / przywracanie układu ─────────────────────────
 
   _generateFreshSystem(cx, cy) {
     const generator = new SystemGenerator();
-    const result    = generator.generateCivScenario();
+
+    // POWER TEST — scenariusz testowy z dużym układem
+    const isPowerTest = window.KOSMOS?.scenario === 'power_test';
+    const result = isPowerTest
+      ? generator.generatePowerTestScenario()
+      : generator.generateCivScenario();
+
     // Zachowaj id planety z cywilizacją do auto-kolonizacji
     this._civPlanetId = result.civPlanetId;
     // Gwiazda zawsze w centrum układu współrzędnych Three.js (0, 0)

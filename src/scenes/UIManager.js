@@ -95,7 +95,7 @@ const ACTION_COSTS = { stabilize: 25, nudgeToHz: 35, bombard: 20 };
 
 // Pozycja CivPanel (pod TopBar)
 const CIV_PANEL_Y = COSMIC.TOP_BAR_H;
-const CIV_EXPEDITIONS_H = 450; // wysokość panelu ekspedycji (większy niż standardowy CIV_PANEL_BODY_H)
+const CIV_EXPEDITIONS_H = H - CIV_PANEL_Y - 15; // dynamiczna wysokość — panel rozciąga się do dołu ekranu
 
 // ── Tooltip CivPanel ────────────────────────────────────────────
 const TOOLTIP_PAD    = 8;
@@ -189,6 +189,12 @@ export class UIManager {
     this._catalogScrollY = 0;
     this._catalogContentH = 0;
     this._catalogVisibleH = 0;
+
+    // ── Scroll sekcji FLOTA ──────────────────────────────────
+    this._fleetScrollY = 0;
+    this._fleetContentH = 0;
+    this._fleetVisibleH = 0;
+    this._fleetClipRect = { y: 0, h: 0 };
 
     this._setupEvents();
     this._startDrawLoop();
@@ -484,6 +490,9 @@ export class UIManager {
     EventBus.on('expedition:disaster', ({ expedition }) => {
       this._log(`Katastrofa: ${expedition.targetName}!`, 'expedition_fail');
     });
+    EventBus.on('expedition:launchFailed', ({ reason }) => {
+      this._log(`⚠ Start anulowany: ${reason}`, 'expedition_fail');
+    });
     EventBus.on('colony:founded', ({ colony }) => {
       this._log(`🏙 Nowa kolonia: ${colony.name}`, 'new_planet');
     });
@@ -600,14 +609,22 @@ export class UIManager {
   handleWheel(rawX, rawY, deltaY) {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
-    // Katalog zbadanych ciał — scroll w prawej kolumnie zakładki Ekspedycje
+    // Ekspedycje — scroll katalogu (prawa kolumna) lub floty (dolna sekcja)
     if (this._civPanelTab === 'expeditions') {
       const rect = this._civPanelBodyRect();
       const halfW = Math.floor(rect.w / 2);
       const upperZoneH = 200;
+      // Katalog — scroll w prawej kolumnie górnej strefy
       if (x >= rect.x + halfW && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + upperZoneH) {
         const maxScroll = Math.max(0, this._catalogContentH - this._catalogVisibleH);
         this._catalogScrollY = Math.max(0, Math.min(maxScroll, this._catalogScrollY + deltaY * 0.5));
+        return true;
+      }
+      // Flota — scroll w dolnej sekcji
+      const fc = this._fleetClipRect;
+      if (fc && fc.h > 0 && x >= rect.x && x <= rect.x + rect.w && y >= fc.y && y <= fc.y + fc.h) {
+        const maxScroll = Math.max(0, this._fleetContentH - this._fleetVisibleH);
+        this._fleetScrollY = Math.max(0, Math.min(maxScroll, (this._fleetScrollY || 0) + deltaY * 0.5));
         return true;
       }
     }
@@ -798,11 +815,11 @@ export class UIManager {
     if (this._civPanelTab === 'population')  drawPopulationTab(ctx, bodyY, bodyX, bodyW, state);
     if (this._civPanelTab === 'tech')        drawTechTab(ctx, bodyY, bodyX, bodyW);
     if (this._civPanelTab === 'buildings')   drawBuildingsTab(ctx, bodyY, bodyX, bodyW);
-    if (this._civPanelTab === 'expeditions') this._drawExpeditionsTab(ctx, bodyY, bodyX, bodyW);
+    if (this._civPanelTab === 'expeditions') this._drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, bodyH);
   }
 
   // Ekspedycje — zachowana w UIManager (ma dużo stanu)
-  _drawExpeditionsTab(ctx, bodyY, bodyX, bodyW) {
+  _drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, bodyH) {
     const exSys  = window.KOSMOS?.expeditionSystem;
     const colMgr = window.KOSMOS?.colonyManager;
     const PAD    = 14;
@@ -902,6 +919,7 @@ export class UIManager {
 
     this._fleetBuildBtns = [];
     this._vesselRows = [];
+    this._vesselActionBtns = [];
     const tSys = window.KOSMOS?.techSystem;
     const vMgr = window.KOSMOS?.vesselManager;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -910,6 +928,17 @@ export class UIManager {
     ctx.strokeStyle = C.border;
     ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + PAD + fullW, y); ctx.stroke();
     y += 10;
+
+    // === Strefa scrollowalna FLOTA ===
+    const fleetContentY = y;
+    const fleetMaxH = bodyY + bodyH - fleetContentY;
+    this._fleetVisibleH = fleetMaxH;
+    this._fleetClipRect = { y: fleetContentY, h: fleetMaxH };
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bodyX, fleetContentY, bodyW, fleetMaxH);
+    ctx.clip();
+    y -= (this._fleetScrollY || 0);
 
     const activePid = colMgr?.activePlanetId;
     const activeCol = colMgr?.getColony(activePid);
@@ -1050,6 +1079,23 @@ export class UIManager {
         ctx.fillText(`⏱${ship.buildTime} lat`, bodyX + PAD + 2, y + 8);
         y += LH;
       }
+    }
+
+    // === Koniec strefy scrollowalnej FLOTA ===
+    this._fleetContentH = y - fleetContentY + (this._fleetScrollY || 0);
+    // Clamp scroll — zabezpieczenie gdy content się skurczył
+    const maxFleetScroll = Math.max(0, this._fleetContentH - fleetMaxH);
+    if (this._fleetScrollY > maxFleetScroll) this._fleetScrollY = maxFleetScroll;
+    ctx.restore();
+
+    // Scrollbar wizualny (3px pasek po prawej)
+    if (this._fleetContentH > fleetMaxH) {
+      const sbH = Math.max(12, fleetMaxH * (fleetMaxH / this._fleetContentH));
+      const maxScroll = this._fleetContentH - fleetMaxH;
+      const scrollFrac = maxScroll > 0 ? (this._fleetScrollY || 0) / maxScroll : 0;
+      const sbY = fleetContentY + scrollFrac * (fleetMaxH - sbH);
+      ctx.fillStyle = 'rgba(100,140,180,0.3)';
+      ctx.fillRect(bodyX + bodyW - 3, sbY, 3, sbH);
     }
   }
 
@@ -1236,7 +1282,6 @@ export class UIManager {
     // Określ dostępne typy misji wg typu statku
     const missionTypes = [];
     if (vessel.shipId === 'science_vessel') {
-      missionTypes.push({ type: 'scientific', label: '🔬 Naukowa', icon: '🔬' });
       missionTypes.push({ type: 'recon', label: '🔭 Rozpoznanie', icon: '🔭' });
     }
     if (vessel.shipId === 'cargo_ship') {
@@ -1317,7 +1362,7 @@ export class UIManager {
         ctx.fillStyle = C.label; ctx.fillText('Lub wybierz konkretne ciało:', px + 2, y); y += LH;
 
         const reconTargets = this._getReconTargets(vessel);
-        for (const t of reconTargets.slice(0, 8)) {
+        for (const t of reconTargets) {
           const btnH2 = 14;
           const bx = px; const by = y;
           const inRange = t.inRange;
@@ -1332,7 +1377,7 @@ export class UIManager {
           ctx.fillStyle = isExplored ? '#446644'
             : inRange ? '#88ccff' : '#665555';
           const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
-          const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
+          const fuelCost = (t.dist * 2 * vessel.fuel.consumption).toFixed(1); // ×2: tam + powrót
           const shipSpeed = SHIPS[vessel.shipId]?.speedAU ?? 1.0;
           const eta = t.dist / shipSpeed;
           const etaStr = eta < 0.05 ? `${Math.round(eta * 365)}d` : `${eta.toFixed(1)}y`;
@@ -1428,7 +1473,8 @@ export class UIManager {
           if (body.type === 'planet' && body.planetType !== 'rocky' && body.planetType !== 'ice') continue;
         }
 
-        const dist = DistanceUtils.orbitalFromHomeAU(body);
+        // Euclidean — spójne z ExpeditionSystem._calcDistance()
+        const dist = Math.max(0.001, DistanceUtils.euclideanAU(homePl, body));
         const fuelNeeded = dist * vessel.fuel.consumption;
         const inRange = vessel.fuel.current >= fuelNeeded;
         const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙'
@@ -1450,7 +1496,8 @@ export class UIManager {
     for (const t of TYPES) {
       for (const body of EntityManager.getByType(t)) {
         if (body === homePl) continue;
-        const dist = DistanceUtils.orbitalFromHomeAU(body);
+        // Euclidean — spójne z ExpeditionSystem._calcDistance()
+        const dist = Math.max(0.001, DistanceUtils.euclideanAU(homePl, body));
         // Paliwo na lot + powrót (2× dystans)
         const fuelNeeded = dist * 2 * vessel.fuel.consumption;
         const inRange = vessel.fuel.current >= fuelNeeded;
@@ -1905,6 +1952,7 @@ export class UIManager {
       // Toggle zakładki
       this._civPanelTab = (this._civPanelTab === result) ? null : result;
       this._catalogScrollY = 0; // reset scrolla katalogu przy zmianie zakładki
+      this._fleetScrollY = 0;   // reset scrolla floty
       return true;
     }
 
@@ -1925,38 +1973,43 @@ export class UIManager {
   }
 
   _handleExpeditionsClick(x, y) {
-    // Orbit return buttons — przycisk "Powrót" dla orbiting
+    // Orbit return buttons — przycisk "Powrót" dla orbiting (górna strefa, bez scrollu)
     for (const btn of (this._orbitReturnBtns ?? [])) {
       if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
         EventBus.emit('expedition:orderReturn', { expeditionId: btn.expId });
         return;
       }
     }
-    // Vessel action buttons (typ misji, cel, launch)
-    for (const btn of (this._vesselActionBtns ?? [])) {
-      if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
-        this._handleVesselAction(btn);
-        return;
-      }
-    }
-    // Vessel row click → select/deselect
-    for (const vr of (this._vesselRows ?? [])) {
-      if (x >= vr.x && x <= vr.x + vr.w && y >= vr.y && y <= vr.y + vr.h) {
-        if (this._selectedVesselId === vr.vesselId) {
-          this._selectedVesselId = null; // toggle off
-          this._vesselMissionType = null;
-        } else {
-          this._selectedVesselId = vr.vesselId;
-          this._vesselMissionType = null;
+    // Elementy sekcji FLOTA — tylko gdy klik w widocznym obszarze scrollu
+    const fc = this._fleetClipRect;
+    const inFleetArea = fc && fc.h > 0 && y >= fc.y && y <= fc.y + fc.h;
+    if (inFleetArea) {
+      // Vessel action buttons (typ misji, cel, launch)
+      for (const btn of (this._vesselActionBtns ?? [])) {
+        if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+          this._handleVesselAction(btn);
+          return;
         }
-        return;
       }
-    }
-    // Fleet build buttons
-    for (const fb of (this._fleetBuildBtns ?? [])) {
-      if (fb.enabled && x >= fb.x && x <= fb.x + fb.w && y >= fb.y && y <= fb.y + fb.h) {
-        EventBus.emit('fleet:buildRequest', { shipId: fb.shipId });
-        return;
+      // Vessel row click → select/deselect
+      for (const vr of (this._vesselRows ?? [])) {
+        if (x >= vr.x && x <= vr.x + vr.w && y >= vr.y && y <= vr.y + vr.h) {
+          if (this._selectedVesselId === vr.vesselId) {
+            this._selectedVesselId = null; // toggle off
+            this._vesselMissionType = null;
+          } else {
+            this._selectedVesselId = vr.vesselId;
+            this._vesselMissionType = null;
+          }
+          return;
+        }
+      }
+      // Fleet build buttons
+      for (const fb of (this._fleetBuildBtns ?? [])) {
+        if (fb.enabled && x >= fb.x && x <= fb.x + fb.w && y >= fb.y && y <= fb.y + fb.h) {
+          EventBus.emit('fleet:buildRequest', { shipId: fb.shipId });
+          return;
+        }
       }
     }
   }

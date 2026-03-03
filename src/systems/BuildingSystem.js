@@ -452,6 +452,7 @@ export class BuildingSystem {
 
   restoreFromSave(buildings) {
     let totalPopCost = 0;
+    let totalHousing = 0;
 
     for (const b of buildings) {
       const building = BUILDINGS[b.buildingId];
@@ -466,21 +467,30 @@ export class BuildingSystem {
       const activeKey  = isCapital ? (b.tileKey.startsWith('capital_') ? b.tileKey : `capital_${b.tileKey}`) : b.tileKey;
       const producerId = isCapital ? `capital_${b.tileKey.replace('capital_', '')}` : `building_${b.tileKey}`;
       const popCost    = b.popCost ?? building.popCost ?? POP_PER_BUILDING;
+      const housing    = b.housing || 0;
 
       if (Object.keys(effectiveRates).length > 0 && this.resourceSystem) {
         this.resourceSystem.registerProducer(producerId, effectiveRates);
       }
       this._active.set(activeKey, {
         building, baseRates, effectiveRates,
-        housing: b.housing || 0,
+        housing,
         popCost,
         level,
       });
       totalPopCost += popCost * level;
+      totalHousing += housing;  // housing już skumulowany (per-level) w serialize()
     }
 
-    if (totalPopCost > 0 && this.civSystem) {
-      this.civSystem._employedPops = Math.max(0, this.civSystem._employedPops + totalPopCost);
+    if (this.civSystem) {
+      // Przelicz zatrudnienie z budynków
+      if (totalPopCost > 0) {
+        this.civSystem._employedPops = Math.max(0, this.civSystem._employedPops + totalPopCost);
+      }
+      // Przelicz housing z budynków (analogicznie — bezpośrednio, nie przez EventBus)
+      if (totalHousing > 0) {
+        this.civSystem.housing += totalHousing;
+      }
     }
 
     // Przelicz punkty fabryczne po restore

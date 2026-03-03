@@ -1507,7 +1507,7 @@ export class PlanetGlobeScene {
     if (this._civTab === 'population')  drawPopulationTab(ctx, bodyY, bodyX, bodyW, state);
     if (this._civTab === 'tech')        drawTechTab(ctx, bodyY, bodyX, bodyW);
     if (this._civTab === 'buildings')   drawBuildingsTab(ctx, bodyY, bodyX, bodyW);
-    if (this._civTab === 'expeditions' && ui) ui._drawExpeditionsTab(ctx, bodyY, bodyX, bodyW);
+    if (this._civTab === 'expeditions' && ui) ui._drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, h - 20);
   }
 
   // ── Hit testing ───────────────────────────────────────────────

@@ -88,6 +88,7 @@ export class SystemGenerator {
   // Losuj liczbę planet wg rozkładu prawdopodobieństwa opartego na statystykach egzoplanet
   // Kubełki: 1 planeta=1%, 2-3=15%, 3-4=30%, 4-6=20%, 6-9=24%, 9-11=10%
   _rollPlanetCount() {
+    if (this._powerTest) return 11;  // POWER TEST — zawsze 11 planet
     const r = Math.random() * 100;
     if (r < 1)  return 1;
     if (r < 16) return 2 + Math.floor(Math.random() * 2);   // 2 lub 3
@@ -108,7 +109,9 @@ export class SystemGenerator {
     let currentAU = Math.max(0.04, hz.min * 0.5);
 
     // Rozstaw orbit: mniejszy ratio dla dużych układów (by zmieścić wiele planet w MAX_ORBIT_AU)
+    // POWER TEST: szerszy rozstaw → stabilniejsze orbity (mniej kolizji)
     const [minRatio, maxRatio, minGap] =
+      this._powerTest ? [1.35, 1.55, 0.15] :
       count > 8 ? [1.22, 1.42, 0.10] :
       count > 5 ? [1.35, 1.62, 0.14] :
                   [1.50, 2.00, 0.20];
@@ -145,7 +148,10 @@ export class SystemGenerator {
   // forceType — opcjonalne nadpisanie typu (np. 'rocky' dla gwarancji HZ)
   _makePlanet(star, a, nameIndex, forceType = null) {
     // Niski mimośród jak w realnym układzie słonecznym (Ziemia=0.017, Jowisz=0.049)
-    const e          = 0.01 + Math.random() * 0.08;
+    // POWER TEST: bardziej kołowe orbity → mniej przecięć → mniej kolizji
+    const e          = this._powerTest
+      ? 0.005 + Math.random() * 0.02
+      : 0.01 + Math.random() * 0.08;
     const T          = KeplerMath.orbitalPeriod(a, star.physics.mass);
     const planetType = forceType || this.getPlanetType(a, star);
     const mass       = this.getPlanetMass(planetType);
@@ -354,7 +360,7 @@ export class SystemGenerator {
   // Bogate w rzadkie surowce (Cu, Ti, W, Pt, Li) — motywacja do ekspedycji.
   // Unikają nakładania z istniejącymi planetami (odstęp ± 0.4 AU).
   _generatePlanetoids(star, planets) {
-    const count = 15 + Math.floor(Math.random() * 26);  // 15–40
+    const count = this._powerTest ? 40 : 15 + Math.floor(Math.random() * 26);  // POWER TEST: 40, normalnie 15–40
     const planetoids = [];
     const occupiedAU  = planets.map(p => p.orbital.a);
 
@@ -455,6 +461,51 @@ export class SystemGenerator {
 
     // Ustaw flagę globalną scenariusza
     window.KOSMOS.scenario = 'civilization';
+
+    result.civPlanetId = bestPlanet.id;
+    return result;
+  }
+
+  // ── POWER TEST — scenariusz testowy z rozwiniętą cywilizacją ─────────────
+  // Duży układ (11 planet, 40 planetoidów, dużo księżyców) z gwarantowaną
+  // planetą cywilizacyjną w HZ. Reszta identyczna z generateCivScenario().
+  // Łatwe usunięcie: szukaj "POWER TEST" w kodzie.
+  generatePowerTestScenario() {
+    // Wymuszamy max parametry generacji (flaga tymczasowa)
+    this._powerTest = true;   // POWER TEST — flaga odczytywana w _rollPlanetCount, _generatePlanetoids, _moonCount
+
+    const result = this.generate();
+
+    this._powerTest = false;  // POWER TEST — reset flagi
+
+    const { star, planets } = result;
+    const hz = star.habitableZone;
+
+    // Scoring planety cywilizacyjnej (jak w generateCivScenario)
+    let bestPlanet = null;
+    let bestScore  = -Infinity;
+    for (const p of planets) {
+      if (p.planetType !== 'rocky') continue;
+      let score = 0;
+      if (p.orbital.a >= hz.min && p.orbital.a <= hz.max) score += 50;
+      const T = p.temperatureK ?? 0;
+      if (T >= 273 && T <= 323) score += 30;
+      else if (T >= 250 && T <= 350) score += 15;
+      if (p.atmosphere === 'thin') score += 10;
+      if (p.atmosphere === 'dense') score += 5;
+      score += (p.orbitalStability ?? 0.5) * 10;
+      if (score > bestScore) { bestScore = score; bestPlanet = p; }
+    }
+    if (!bestPlanet) bestPlanet = planets.find(p => p.planetType === 'rocky') || planets[0];
+
+    // Ustaw cywilizację na wybranej planecie
+    bestPlanet.lifeScore        = 100;
+    bestPlanet.orbitalStability = Math.max(0.9, bestPlanet.orbitalStability ?? 0.5);
+    bestPlanet.surface          = bestPlanet.surface || {};
+    bestPlanet.surface.hasWater = true;
+    if (bestPlanet.atmosphere === 'none') bestPlanet.atmosphere = 'thin';
+
+    window.KOSMOS.scenario = 'power_test';  // POWER TEST
 
     result.civPlanetId = bestPlanet.id;
     return result;
@@ -601,6 +652,15 @@ export class SystemGenerator {
     const r    = Math.random();
     const mass = planet.physics.mass;
     const type = planet.planetType;
+
+    // POWER TEST — więcej księżyców (gwarantowane minimum)
+    if (this._powerTest) {
+      if (type === 'hot_rocky')  return 0;
+      if (type === 'rocky')      return 1 + Math.floor(Math.random() * 2); // 1-2
+      if (type === 'gas')        return 3 + Math.floor(Math.random() * 3); // 3-5
+      if (type === 'ice')        return 2 + Math.floor(Math.random() * 2); // 2-3
+      return 1;
+    }
 
     if (type === 'hot_rocky')           return 0;          // za blisko gwiazdy
     if (type === 'rocky' && mass < 0.3) return 0;          // za mała (Merkury-like)

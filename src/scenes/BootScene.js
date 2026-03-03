@@ -50,7 +50,7 @@ export class BootScene {
 
   _drawNewGameDialog() {
     const ctx = this.ctx;
-    const PW = 400, PH = 120;
+    const PW = 400, PH = 180;  // POWER TEST — wyższy panel
     const PX = W / 2 - PW / 2;
     const PY = H / 2 + 30;
 
@@ -76,6 +76,13 @@ export class BootScene {
     ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = '#2a3a4a';
     ctx.fillText('wkrótce', W / 2, PY + 110);
+
+    // POWER TEST — przycisk testowy (magenta)
+    this._drawBtn(ctx, W / 2, PY + 140, '[ POWER TEST ]', '#ff44ff', 'power_test');
+    ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = '#8a4a8a';
+    ctx.textAlign = 'center';
+    ctx.fillText('scenariusz testowy — rozwinięta cywilizacja', W / 2, PY + 156);
 
     ctx.textAlign = 'left';
   }
@@ -165,6 +172,11 @@ export class BootScene {
     if (btn === 'yes') {
       window.KOSMOS.savedData = SaveSystem.loadData();
       window.KOSMOS.scenario  = 'civilization';
+    } else if (btn === 'power_test') {
+      // POWER TEST — scenariusz testowy
+      SaveSystem.clearSave();
+      window.KOSMOS.savedData = null;
+      window.KOSMOS.scenario  = 'power_test';
     } else if (btn === 'new' || btn === 'civ') {
       SaveSystem.clearSave();
       window.KOSMOS.savedData = null;

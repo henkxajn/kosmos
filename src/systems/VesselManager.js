@@ -24,6 +24,7 @@
 
 import EventBus       from '../core/EventBus.js';
 import EntityManager  from '../core/EntityManager.js';
+import { KeplerMath } from '../utils/KeplerMath.js';
 import { SHIPS }      from '../data/ShipsData.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import {
@@ -162,16 +163,17 @@ export class VesselManager {
     if (!vessel) return false;
     if (vessel.status !== 'idle' || vessel.position.state !== 'docked') return false;
 
-    // Pobierz pozycje start i cel
+    // Pozycja startu (bieżąca pozycja kolonii)
     const startEntity = this._findEntity(vessel.position.dockedAt);
-    const targetEntity = this._findEntity(mission.targetId);
-
     const sx = startEntity?.x ?? vessel.position.x;
     const sy = startEntity?.y ?? vessel.position.y;
-    const tx = targetEntity?.x ?? 0;
-    const ty = targetEntity?.y ?? 0;
 
-    // Oblicz trasę z unikaniem Słońca
+    // Pozycja celu — predykcja Keplera (gdzie cel BĘDZIE w momencie przylotu)
+    const predicted = this._predictPosition(mission.targetId, mission.arrivalYear);
+    const tx = predicted.x;
+    const ty = predicted.y;
+
+    // Oblicz trasę z unikaniem Słońca i ciał niebieskich
     const route = this._calcRoute(sx, sy, tx, ty);
 
     vessel.mission = {
@@ -220,13 +222,13 @@ export class VesselManager {
     const m = vessel.mission;
     m.returnStartX = vessel.position.x;
     m.returnStartY = vessel.position.y;
-    // Cel powrotu = aktualna pozycja kolonii macierzystej
-    const homeEntity = this._findEntity(vessel.colonyId);
-    m.returnTargetX = homeEntity?.x ?? m.startX;
-    m.returnTargetY = homeEntity?.y ?? m.startY;
+    // Cel powrotu = predykowana pozycja kolonii macierzystej w momencie przylotu
+    const predictedHome = this._predictPosition(vessel.colonyId, m.returnYear);
+    m.returnTargetX = predictedHome.x || m.startX;
+    m.returnTargetY = predictedHome.y || m.startY;
     m.phase = 'returning';
 
-    // Oblicz waypoints powrotne (unikanie Słońca)
+    // Oblicz waypoints powrotne (unikanie Słońca + ciał niebieskich)
     const returnRoute = this._calcRoute(m.returnStartX, m.returnStartY, m.returnTargetX, m.returnTargetY);
     m.returnWaypoints = returnRoute.waypoints;
 
@@ -445,14 +447,8 @@ export class VesselManager {
       const m = vessel.mission;
 
       if (m.phase === 'returning') {
-        // Dynamicznie aktualizuj cel powrotu (planeta macierzysta się porusza po orbicie)
-        const homeEntity = this._findEntity(vessel.colonyId);
-        if (homeEntity) {
-          m.returnTargetX = homeEntity.x;
-          m.returnTargetY = homeEntity.y;
-        }
-
         // Powrót: interpolacja returnStart → (waypoints) → returnTarget
+        // (cel powrotu ustalony predykcyjnie w startReturn — bez dynamicznego śledzenia)
         const totalReturn = (m.returnYear ?? m.arrivalYear) - (m.arrivalYear ?? m.departYear);
         if (totalReturn <= 0) continue;
         const t = Math.max(0, Math.min(1,
@@ -473,13 +469,7 @@ export class VesselManager {
           (gameYear - m.departYear) / totalTravel
         ));
 
-        // Aktualizuj pozycje docelowe (cele się poruszają po orbitach)
-        const targetEntity = this._findEntity(m.targetId);
-        if (targetEntity) {
-          m.targetX = targetEntity.x;
-          m.targetY = targetEntity.y;
-        }
-
+        // Cel ustalony predykcyjnie w dispatchOnMission — bez dynamicznego śledzenia
         const op = this._interpolateWaypoints(
           m.startX, m.startY,
           m.targetX, m.targetY,
@@ -538,51 +528,120 @@ export class VesselManager {
   }
 
   /**
-   * Oblicz trasę z unikaniem Słońca.
+   * Oblicz trasę z unikaniem Słońca i ciał niebieskich.
    * Zwraca { waypoints: [{x,y}], totalDist } w jednostkach fizyki gry (px).
    */
   _calcRoute(sx, sy, tx, ty) {
-    // Sprawdź czy odcinek start→target przecina strefę wykluczenia (0,0)
+    // ── Krok 1: unikanie Słońca (strefa wykluczenia wokół (0,0)) ──
+    let sunWaypoints = [];
     const dx = tx - sx, dy = ty - sy;
     const lenSq = dx * dx + dy * dy;
     if (lenSq < 1) return { waypoints: [], totalDist: Math.sqrt(lenSq) };
 
-    // Minimalna odległość prostej start→target od (0,0)
-    // Wzór: |cross(P-S, D)| / |D| gdzie D=target-start, P=(0,0)
     const cross = (-sx) * dy - (-sy) * dx;
     const len = Math.sqrt(lenSq);
-    const minDist = Math.abs(cross) / len;
+    const minDistSun = Math.abs(cross) / len;
 
-    // Sprawdź też czy (0,0) leży pomiędzy start i target (nie za nimi)
-    const dot = (-sx) * dx + (-sy) * dy;
-    const t = dot / lenSq;
+    const dotSun = (-sx) * dx + (-sy) * dy;
+    const tSun = dotSun / lenSq;
 
-    if (minDist > SUN_EXCLUSION || t < 0 || t > 1) {
-      // Prosta trasa — nie przecina strefy
-      return { waypoints: [], totalDist: len };
+    if (minDistSun <= SUN_EXCLUSION && tSun >= 0 && tSun <= 1) {
+      const r = SUN_EXCLUSION + SUN_MARGIN;
+      const baseAngle = Math.atan2(dy, dx);
+      const wp1 = { x: r * Math.cos(baseAngle + Math.PI / 2), y: r * Math.sin(baseAngle + Math.PI / 2) };
+      const wp2 = { x: r * Math.cos(baseAngle - Math.PI / 2), y: r * Math.sin(baseAngle - Math.PI / 2) };
+      const d1 = Math.hypot(wp1.x - sx, wp1.y - sy) + Math.hypot(tx - wp1.x, ty - wp1.y);
+      const d2 = Math.hypot(wp2.x - sx, wp2.y - sy) + Math.hypot(tx - wp2.x, ty - wp2.y);
+      sunWaypoints = [d1 <= d2 ? wp1 : wp2];
     }
 
-    // Potrzebny waypoint — punkt tangencjalny po krótszej stronie
-    const r = SUN_EXCLUSION + SUN_MARGIN;
+    // ── Krok 2: unikanie planet i księżyców ──
+    const BODY_MARGIN = 0.15 * AU_TO_PX; // 0.15 AU margines
+    const allBodies = [
+      ...EntityManager.getByType('planet'),
+      ...EntityManager.getByType('moon'),
+    ];
+    const waypoints = this._avoidBodies(sx, sy, tx, ty, sunWaypoints, allBodies, BODY_MARGIN);
 
-    // Kąt wektora start→target
+    // Przelicz łączny dystans z finalnymi waypointami
+    const totalDist = this._routeLength(sx, sy, tx, ty, waypoints);
+    return { waypoints, totalDist };
+  }
+
+  /**
+   * Sprawdź kolizje trasy z ciałami niebieskimi i dodaj waypoints ominięcia.
+   */
+  _avoidBodies(sx, sy, tx, ty, existingWps, bodies, margin) {
+    const newWps = [...existingWps];
+
+    for (const body of bodies) {
+      const bx = body.x, by = body.y;
+
+      // Nie omijaj celu ani startu (byłoby absurdalne)
+      const distToStart = Math.hypot(bx - sx, by - sy);
+      const distToEnd   = Math.hypot(bx - tx, by - ty);
+      if (distToStart < margin || distToEnd < margin) continue;
+
+      // Zbuduj aktualną trasę z waypointami
+      const pts = [{ x: sx, y: sy }, ...newWps, { x: tx, y: ty }];
+
+      // Sprawdź każdy segment trasy
+      for (let i = 0; i < pts.length - 1; i++) {
+        const minDist = this._pointToSegmentDist(bx, by, pts[i], pts[i + 1]);
+        if (minDist < margin) {
+          const wp = this._avoidanceWaypoint(pts[i], pts[i + 1], bx, by, margin + 0.05 * AU_TO_PX);
+          if (wp) newWps.push(wp);
+          break; // jedno ciało = jeden waypoint
+        }
+      }
+    }
+
+    // Posortuj waypoints wg odległości od startu (spójna trasa)
+    if (newWps.length > 1) {
+      newWps.sort((a, b) =>
+        Math.hypot(a.x - sx, a.y - sy) - Math.hypot(b.x - sx, b.y - sy)
+      );
+    }
+    return newWps;
+  }
+
+  /**
+   * Minimalna odległość punktu (px, py) od odcinka segA→segB.
+   */
+  _pointToSegmentDist(px, py, segA, segB) {
+    const dx = segB.x - segA.x, dy = segB.y - segA.y;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq < 1) return Math.hypot(px - segA.x, py - segA.y);
+    const t = Math.max(0, Math.min(1, ((px - segA.x) * dx + (py - segA.y) * dy) / lenSq));
+    const projX = segA.x + t * dx, projY = segA.y + t * dy;
+    return Math.hypot(px - projX, py - projY);
+  }
+
+  /**
+   * Waypoint ominięcia ciała — tangencjalny, po krótszej stronie trasy.
+   */
+  _avoidanceWaypoint(segA, segB, bx, by, avoidR) {
+    const dx = segB.x - segA.x, dy = segB.y - segA.y;
     const baseAngle = Math.atan2(dy, dx);
+    const wp1 = { x: bx + avoidR * Math.cos(baseAngle + Math.PI / 2),
+                  y: by + avoidR * Math.sin(baseAngle + Math.PI / 2) };
+    const wp2 = { x: bx + avoidR * Math.cos(baseAngle - Math.PI / 2),
+                  y: by + avoidR * Math.sin(baseAngle - Math.PI / 2) };
+    const d1 = Math.hypot(wp1.x - segA.x, wp1.y - segA.y) + Math.hypot(segB.x - wp1.x, segB.y - wp1.y);
+    const d2 = Math.hypot(wp2.x - segA.x, wp2.y - segA.y) + Math.hypot(segB.x - wp2.x, segB.y - wp2.y);
+    return d1 <= d2 ? wp1 : wp2;
+  }
 
-    // Dwa potencjalne waypoints (po obu stronach Słońca)
-    const perpAngle1 = baseAngle + Math.PI / 2;
-    const perpAngle2 = baseAngle - Math.PI / 2;
-
-    const wp1 = { x: r * Math.cos(perpAngle1), y: r * Math.sin(perpAngle1) };
-    const wp2 = { x: r * Math.cos(perpAngle2), y: r * Math.sin(perpAngle2) };
-
-    // Wybierz stronę minimalizującą łączny dystans
-    const dist1 = Math.hypot(wp1.x - sx, wp1.y - sy) + Math.hypot(tx - wp1.x, ty - wp1.y);
-    const dist2 = Math.hypot(wp2.x - sx, wp2.y - sy) + Math.hypot(tx - wp2.x, ty - wp2.y);
-
-    const wp = dist1 <= dist2 ? wp1 : wp2;
-    const totalDist = dist1 <= dist2 ? dist1 : dist2;
-
-    return { waypoints: [wp], totalDist };
+  /**
+   * Łączna długość trasy start → waypoints → target (px).
+   */
+  _routeLength(sx, sy, tx, ty, wps) {
+    const pts = [{ x: sx, y: sy }, ...(wps || []), { x: tx, y: ty }];
+    let total = 0;
+    for (let i = 1; i < pts.length; i++) {
+      total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    }
+    return total;
   }
 
   /**
@@ -604,16 +663,17 @@ export class VesselManager {
     m.startX = vessel.position.x;
     m.startY = vessel.position.y;
     m.targetId = newTargetId;
-    const target = this._findEntity(newTargetId);
-    m.targetX = target?.x ?? 0;
-    m.targetY = target?.y ?? 0;
+    // Predykowana pozycja nowego celu w momencie przylotu
+    const predicted = this._predictPosition(newTargetId, newArrivalYear);
+    m.targetX = predicted.x;
+    m.targetY = predicted.y;
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     m.departYear = gameYear;
     m.arrivalYear = newArrivalYear;
     m.phase = undefined; // outbound
 
-    // Oblicz waypoints (unikanie Słońca)
+    // Oblicz waypoints (unikanie Słońca + ciał niebieskich)
     const route = this._calcRoute(m.startX, m.startY, m.targetX, m.targetY);
     m.waypoints = route.waypoints;
 
@@ -622,6 +682,46 @@ export class VesselManager {
     vessel.fuel.current = Math.max(0, vessel.fuel.current - fuelCost);
 
     vessel.position.state = 'in_transit';
+  }
+
+  /**
+   * Predykcja pozycji ciała niebieskiego w przyszłości (Kepler).
+   * Zwraca {x, y} w pikselach (układ fizyki gry).
+   * @param {string} entityId — id ciała (planet, moon, planetoid)
+   * @param {number} futureYear — rok gry, w którym chcemy pozycję
+   */
+  _predictPosition(entityId, futureYear) {
+    const entity = this._findEntity(entityId);
+    if (!entity?.orbital) return entity ? { x: entity.x, y: entity.y } : { x: 0, y: 0 };
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const dt = futureYear - gameYear;
+    const orb = entity.orbital;
+
+    // Przyszła anomalia średnia → mimośrodowa → prawdziwa → pozycja
+    const futureM     = KeplerMath.updateMeanAnomaly(orb.M, dt, orb.T);
+    const futureE     = KeplerMath.solveKepler(futureM, orb.e);
+    const futureTheta = KeplerMath.eccentricToTrueAnomaly(futureE, orb.e);
+    const r           = KeplerMath.orbitalRadius(orb.a, orb.e, futureTheta);
+    const angle       = futureTheta + orb.inclinationOffset;
+
+    if (entity.type === 'moon') {
+      // Księżyc: najpierw przewidź pozycję planety-rodzica
+      const parentPos = this._predictPosition(entity.parentPlanetId, futureYear);
+      return {
+        x: parentPos.x + r * Math.cos(angle) * AU_TO_PX,
+        y: parentPos.y + r * Math.sin(angle) * AU_TO_PX,
+      };
+    }
+
+    // Planeta/planetoid: orbita wokół gwiazdy
+    const stars = EntityManager.getByType('star');
+    const starX = stars[0]?.x ?? 0;
+    const starY = stars[0]?.y ?? 0;
+    return {
+      x: starX + r * Math.cos(angle) * AU_TO_PX,
+      y: starY + r * Math.sin(angle) * AU_TO_PX,
+    };
   }
 
   /**

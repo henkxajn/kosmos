@@ -55,11 +55,13 @@ export class PhysicsSystem {
     // Kolizje małych ciał z planetami (max 1 na klatkę)
     this.checkSmallBodyCollisions(planets, smallBodies, star);
 
-    // Perturbacje co 200 lat gry
-    this._perturbAccum += deltaYears;
-    if (this._perturbAccum >= this.PERTURB_INTERVAL) {
-      this._perturbAccum = 0;
-      this.applyPerturbations(planets, star);
+    // Perturbacje co 20 000 lat gry (pominięte w power_test — stabilność priorytetem)
+    if (window.KOSMOS?.scenario !== 'power_test') {
+      this._perturbAccum += deltaYears;
+      if (this._perturbAccum >= this.PERTURB_INTERVAL) {
+        this._perturbAccum = 0;
+        this.applyPerturbations(planets, star);
+      }
     }
 
     EventBus.emit('physics:updated', { planets, star, moons });

@@ -20,10 +20,10 @@ export class DistanceUtils {
    * Używa pikseli z physics (pozycja orbitalna), przelicza na AU
    */
   static euclideanAU(a, b) {
-    const ax = a?.physics?.x ?? 0;
-    const ay = a?.physics?.y ?? 0;
-    const bx = b?.physics?.x ?? 0;
-    const by = b?.physics?.y ?? 0;
+    const ax = a?.x ?? 0;
+    const ay = a?.y ?? 0;
+    const bx = b?.x ?? 0;
+    const by = b?.y ?? 0;
     const dx = ax - bx;
     const dy = ay - by;
     return Math.sqrt(dx * dx + dy * dy) / AU_TO_PX;

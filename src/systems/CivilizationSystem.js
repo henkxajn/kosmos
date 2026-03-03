@@ -187,6 +187,7 @@ export class CivilizationSystem {
 
   serialize() {
     return {
+      popFormat:            'discrete',   // marker formatu POP (v4+)
       population:           this.population,
       housing:              this.housing,
       morale:               this.morale,
@@ -204,23 +205,24 @@ export class CivilizationSystem {
   }
 
   restore(data) {
-    // Migracja v3→v4: stary model w tysiącach → POPy
-    if (data.population > 10) {
+    // Migracja v3→v4: stary model (populacja w tysiącach, brak markera popFormat)
+    // Nowy format (v4+) ma marker popFormat === 'discrete' i populację 1–100
+    const isOldFormat = !data.popFormat && data.population > 100;
+    if (isOldFormat) {
       this.population = Math.max(DEFAULT_POP, Math.round(data.population / 50));
-      this.housing    = Math.max(DEFAULT_HOUSING, Math.round((data.housing ?? 200) / 50) * 3);
     } else {
       this.population = data.population ?? DEFAULT_POP;
-      this.housing    = data.housing    ?? DEFAULT_HOUSING;
     }
 
     this.morale               = data.morale               ?? DEFAULT_MORALE;
     this.epochIndex           = data.epochIndex           ?? 0;
     this._growthProgress      = data.growthProgress       ?? 0;
     this._starvationYears     = data.starvationYears      ?? 0;
-    // employedPops i lockedPops ustawiane na 0 — zostaną ponownie obliczone
-    // przez BuildingSystem.restoreFromSave() i ExpeditionSystem.restore()
+    // employedPops, lockedPops i housing ustawiane na 0 — zostaną ponownie
+    // obliczone przez BuildingSystem.restoreFromSave() i ExpeditionSystem.restore()
     this._employedPops        = 0;
     this._lockedPops          = 0;
+    this.housing              = DEFAULT_HOUSING;
     this._lowMoraleYears      = data.lowMoraleYears       ?? 0;
     this._unrestActive        = data.unrestActive         ?? false;
     this._unrestRemainingYears= data.unrestRemainingYears ?? 0;
