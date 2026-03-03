@@ -12,7 +12,7 @@ import { Planetoid }     from '../entities/Planetoid.js';
 import { KeplerMath }    from '../utils/KeplerMath.js';
 import { GAME_CONFIG, STAR_TYPES, PLANET_TYPE_CONFIG } from '../config/GameConfig.js';
 import EntityManager     from '../core/EntityManager.js';
-import { getCompositionTemplate, normalizeComposition, getPlanetoidComposition } from '../data/ElementsData.js';
+import { getCompositionTemplate, normalizeComposition, getPlanetoidComposition, getMoonComposition } from '../data/ElementsData.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
 
 export class SystemGenerator {
@@ -648,6 +648,22 @@ export class SystemGenerator {
     // Rozmiar wizualny: 1-3 (px/Three.js units, mały)
     const visualRadius = Math.max(1, Math.min(3, Math.round(mass * 200 + 0.8)));
 
+    // Skład chemiczny wg typu księżyca + losowe wahania ±15%
+    const baseComp = getMoonComposition(moonType);
+    const composition = {};
+    for (const [el, pct] of Object.entries(baseComp)) {
+      composition[el] = Math.max(0, pct * (0.85 + Math.random() * 0.30));
+    }
+    const normComp = normalizeComposition(composition);
+
+    // Temperatura równowagowa — przybliżona z orbity planety-rodzica
+    const parentA = planet.orbital?.a ?? 1.0;
+    const albedo  = moonType === 'icy' ? 0.6 : 0.12;
+    const temperatureK = this.calcEquilibriumTemp(star.luminosity, parentA, albedo);
+
+    // Atmosfera — większość księżyców nie ma; masywne mogą mieć cienką
+    const atmosphere = mass > 0.01 ? 'thin' : 'none';
+
     const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
     return new Moon({
       id:                EntityManager.generateId(),
@@ -659,6 +675,9 @@ export class SystemGenerator {
       color,
       parentPlanetId:    planet.id,
       moonType,
+      composition:       normComp,
+      temperatureK,
+      atmosphere,
     });
   }
 

@@ -60,8 +60,8 @@ const LAUNCH_COST          = { Fe: 50, C: 20 };
 const COLONY_LAUNCH_COST   = { Fe: 150, C: 50, Ti: 20, food: 100, water: 50 };
 // Koszt misji rozpoznawczej (symboliczny — energia flow nie pobierana z inventory)
 const RECON_COST           = { Fe: 10 };
-const MIN_TRAVEL_YEARS     = 2;     // minimalna długość podróży w latach gry
-const MIN_COLONY_TRAVEL    = 3;     // minimalna podróż kolonizacyjna
+const MIN_TRAVEL_YEARS     = 0.008; // ~3 dni gry — absolutne minimum podróży
+const MIN_COLONY_TRAVEL    = 0.02;  // ~7 dni gry — minimum podróży kolonizacyjnej
 const EXPEDITION_CREW_COST = 0.5;   // POP zablokowany na czas misji (mining/scientific)
 const COLONY_CREW_COST     = 2.0;   // POPy blokowane przez ekspedycję kolonizacyjną
 const RECON_CREW_COST      = 0.5;   // POP zablokowany na czas misji rozpoznawczej
@@ -91,6 +91,10 @@ export class ExpeditionSystem {
     // Obsługa żądania transferu zasobów
     EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId }) =>
       this._launchTransport(targetId, cargo, vesselId));
+
+    // Obsługa rozkazu powrotu z orbity
+    EventBus.on('expedition:orderReturn', ({ expeditionId }) =>
+      this._orderReturn(expeditionId));
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────
@@ -163,11 +167,17 @@ export class ExpeditionSystem {
   }
 
   // Szacowany czas misji rozpoznawczej
-  getReconTime(scope) {
-    if (scope === 'nearest') return 3;
-    // 'full_system': 8 + (liczba planet × 2)
+  getReconTime(scope, vesselId) {
+    const speed = this._getShipSpeed(vesselId);
+    if (scope === 'nearest') {
+      // Dynamiczny: dystans do najbliższej niezbadanej planety / prędkość
+      const nearest = this._findNearestUnexplored();
+      const dist = nearest ? this._calcDistance(nearest) : 2.0;
+      return parseFloat(Math.max(0.05, dist / speed).toFixed(3));
+    }
+    // 'full_system': proporcjonalny do rozmiaru układu
     const nPlanets = EntityManager.getByType('planet').length;
-    return 8 + nPlanets * 2;
+    return parseFloat(Math.max(1, nPlanets * 0.5).toFixed(1));
   }
 
   // Wszystkie ekspedycje (aktywne + ostatnie zakończone)
@@ -204,7 +214,7 @@ export class ExpeditionSystem {
     // Przywróć lockedPops — aktywne ekspedycje blokują POPy
     let totalLocked = 0;
     for (const exp of this._expeditions) {
-      if (exp.status === 'en_route' || exp.status === 'returning') {
+      if (exp.status === 'en_route' || exp.status === 'returning' || exp.status === 'orbiting') {
         totalLocked += exp.crewCost ?? EXPEDITION_CREW_COST;
       }
     }
@@ -306,9 +316,10 @@ export class ExpeditionSystem {
     // Zablokuj POPy na czas misji
     EventBus.emit('civ:lockPops', { amount: EXPEDITION_CREW_COST });
 
-    // Czas podróży
-    const travelTime = Math.max(MIN_TRAVEL_YEARS, Math.ceil(distance * 2));
-    const departYear = Math.floor(this._gameYear);
+    // Czas podróży — nowa formuła: dystans / prędkość statku
+    const shipSpeed  = this._getShipSpeed(assignedVesselId);
+    const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
+    const departYear = this._gameYear;
 
     const expedition = {
       id:          `exp_${this._nextId++}`,
@@ -319,7 +330,7 @@ export class ExpeditionSystem {
       departYear,
       arrivalYear: departYear + travelTime,
       returnYear:  departYear + travelTime * 2,
-      distance:    parseFloat(distance.toFixed(2)),
+      distance:    parseFloat(distance.toFixed(4)),
       travelTime,
       crewCost:    EXPEDITION_CREW_COST,
       vesselId:    assignedVesselId,
@@ -412,9 +423,10 @@ export class ExpeditionSystem {
       colMgrC.consumeShip(colMgrC.activePlanetId, vesselId ?? 'colony_ship');
     }
 
-    // Czas podróży
-    const travelTime = Math.max(MIN_COLONY_TRAVEL, Math.ceil(distance * 2));
-    const departYear = Math.floor(this._gameYear);
+    // Czas podróży — colony_ship wolniejszy (speedAU = 0.8)
+    const colonySpeed = SHIPS.colony_ship?.speedAU ?? 0.8;
+    const travelTime  = parseFloat(Math.max(MIN_COLONY_TRAVEL, distance / colonySpeed).toFixed(3));
+    const departYear  = this._gameYear;
 
     const expedition = {
       id:             `exp_${this._nextId++}`,
@@ -475,8 +487,9 @@ export class ExpeditionSystem {
 
     const target = this._findTarget(targetId);
     const distance   = this._calcDistance(target || { orbital: { a: 2 } });
-    const travelTime = Math.max(MIN_TRAVEL_YEARS, Math.ceil(distance * 2));
-    const departYear = Math.floor(this._gameYear);
+    const shipSpeed  = this._getShipSpeed(vesselId);
+    const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
+    const departYear = this._gameYear;
 
     const expedition = {
       id:          `exp_${this._nextId++}`,
@@ -512,6 +525,32 @@ export class ExpeditionSystem {
     }
 
     EventBus.emit('expedition:launched', { expedition });
+  }
+
+  // Rozkaz powrotu statku z orbity (gracz ręcznie wywołuje)
+  _orderReturn(expeditionId) {
+    const exp = this._expeditions.find(e => e.id === expeditionId);
+    if (!exp || exp.status !== 'orbiting') return;
+
+    // Oblicz czas powrotu (taki sam jak droga tam)
+    const shipSpeed  = this._getShipSpeed(exp.vesselId);
+    const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, exp.distance / shipSpeed).toFixed(3));
+
+    exp.status     = 'returning';
+    exp.returnYear = this._gameYear + returnTime;
+
+    // Vessel wyrusza w powrotną drogę
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (exp.vesselId && vMgr) {
+      // Zaktualizuj misję o returnYear
+      const vessel = vMgr.getVessel(exp.vesselId);
+      if (vessel?.mission) {
+        vessel.mission.returnYear = exp.returnYear;
+      }
+      vMgr.startReturn(exp.vesselId);
+    }
+
+    EventBus.emit('expedition:returnOrdered', { expedition: exp });
   }
 
   // Wyślij misję rozpoznawczą
@@ -554,8 +593,8 @@ export class ExpeditionSystem {
     EventBus.emit('civ:lockPops', { amount: RECON_CREW_COST });
 
     // Oblicz czas podróży
-    const travelTime = this.getReconTime(scope);
-    const departYear = Math.floor(this._gameYear);
+    const travelTime = this.getReconTime(scope, vesselId);
+    const departYear = this._gameYear;
 
     const expedition = {
       id:          `exp_${this._nextId++}`,
@@ -683,18 +722,27 @@ export class ExpeditionSystem {
     }
 
     exp.gained = gained;
-    exp.status = 'returning';
+    exp.status = 'orbiting';  // statek zostaje na orbicie — czeka na rozkaz powrotu
 
-    // Vessel zaczyna powrót
+    // Vessel dociera do celu (bez auto-return)
     if (exp.vesselId && vMgr) {
       vMgr.arriveAtTarget(exp.vesselId);
-      vMgr.startReturn(exp.vesselId);
     }
 
-    // Dostarcz zasoby przy przybyciu (nie przy powrocie)
+    // Dostarcz zasoby przy przybyciu
     if (this.resourceSystem && Object.keys(gained).length > 0) {
       this.resourceSystem.receive(gained);
     }
+
+    // Raport z misji w EventLog
+    const targetName = exp.targetName ?? '?';
+    const icon = exp.type === 'scientific' ? '🔬' : '⛏';
+    const gainParts = Object.entries(gained).map(([k, v]) => `${k}:${v}`).join(', ');
+    const multStr = multiplier !== 1.0 ? ` (×${multiplier.toFixed(1)})` : '';
+    EventBus.emit('expedition:missionReport', {
+      expedition: exp, gained, multiplier,
+      text: `${icon} ${targetName}: ${gainParts}${multStr}`,
+    });
 
     EventBus.emit('expedition:arrived', { expedition: exp, gained, multiplier });
   }
@@ -900,14 +948,16 @@ export class ExpeditionSystem {
       gained.research = 50;
 
     } else if (target.type === 'moon') {
-      // Księżyc — mniejszy zarobek, zależy od składu
-      const isMassive = (target.physics?.mass ?? 0) > 0.01;
-      gained.Fe = isMassive ? 80 : 40;
-      if (target.moonType === 'icy') {
-        gained.water = 100;
-      }
+      // Księżyc — yield z composition (jeśli dostępny)
+      const comp = target.composition ?? {};
+      const massMult = (target.physics?.mass ?? 0) > 0.01 ? 1.0 : 0.5;
+      gained.Fe = Math.max(10, Math.floor((comp.Fe ?? 10) * massMult));
+      gained.Si = Math.max(5,  Math.floor((comp.Si ?? 5)  * massMult * 0.5));
+      if ((comp.H2O ?? 0) > 5)  gained.water = Math.floor((comp.H2O ?? 0) * massMult * 2);
+      if ((comp.Cu  ?? 0) > 0.5) gained.Cu   = Math.floor((comp.Cu ?? 0) * massMult * 3);
+      if ((comp.Ti  ?? 0) > 0.1) gained.Ti   = Math.floor((comp.Ti ?? 0) * massMult * 2);
       if (type === 'scientific') {
-        gained.research = 40;
+        gained.research = target.atmosphere !== 'none' ? 60 : 30;
       }
 
     } else if (target.type === 'planet') {
@@ -934,10 +984,23 @@ export class ExpeditionSystem {
   // Oblicz odległość od planety domowej do celu w AU (euklidesowa, dynamiczna)
   _calcDistance(target) {
     const home = window.KOSMOS?.homePlanet;
-    if (!home || !target) return 0.5;
+    if (!home || !target) return 0.1;
     const dist = DistanceUtils.euclideanAU(home, target);
-    // Minimum 0.5 AU — podróże muszą trwać co najmniej MIN_TRAVEL_YEARS lat
-    return Math.max(0.5, dist);
+    // Minimum 0.001 AU — księżyce mogą być bardzo blisko
+    return Math.max(0.001, dist);
+  }
+
+  // Pobierz prędkość statku w AU/rok (z ShipsData lub domyślna)
+  _getShipSpeed(vesselId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr && vesselId) {
+      const vessel = vMgr.getVessel(vesselId);
+      if (vessel) {
+        const shipDef = SHIPS[vessel.shipId];
+        return shipDef?.speedAU ?? 1.0;
+      }
+    }
+    return 1.0; // domyślna prędkość
   }
 
   // Sprawdź czy cel jest w zasięgu statku (orbitalna, stabilna metryka)

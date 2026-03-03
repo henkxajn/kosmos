@@ -28,17 +28,25 @@ export class Moon extends CelestialBody {
 
     // Typ: 'rocky' | 'icy' (wpływa na kolor i skład)
     this.moonType = config.moonType || 'rocky';
+
+    // Skład chemiczny, temperatura, atmosfera (Etap 31)
+    this.composition  = config.composition  || null;
+    this.temperatureK = config.temperatureK || null;
+    this.atmosphere   = config.atmosphere   || 'none';
   }
 
   getDisplayInfo() {
     const typeLabel = this.moonType === 'icy' ? 'Lodowy' : 'Skalny';
     const periodDays = (this.orbital.T * 365.25).toFixed(1);
-    return {
+    const info = {
       ...super.getDisplayInfo(),
       'Typ':              `Księżyc (${typeLabel})`,
       'Orbita (od planety)': this.orbital.a.toFixed(4) + ' AU',
       'Mimośród':         this.orbital.e.toFixed(3),
       'Okres':            `${periodDays} dni`,
     };
+    if (this.temperatureK) info['Temperatura'] = `${Math.round(this.temperatureK - 273)}°C`;
+    if (this.atmosphere && this.atmosphere !== 'none') info['Atmosfera'] = this.atmosphere;
+    return info;
   }
 }

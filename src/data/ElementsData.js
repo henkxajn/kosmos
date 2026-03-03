@@ -165,6 +165,31 @@ export function getPlanetoidComposition(planetoidType) {
   return { ...(PLANETOID_COMPOSITIONS[planetoidType] || PLANETOID_COMPOSITIONS.silicate) };
 }
 
+// ── Składy księżyców (zredukowane — mniejsze ciała, uboższe) ──────────────
+// rocky: skaliste księżyce (Io, Księżyc) — mniej metali niż planety
+// icy: lodowe księżyce (Europa, Enceladus) — dużo wody i lotnych
+export const MOON_COMPOSITIONS = {
+  rocky: {
+    Fe: 18, Si: 20, O: 24, Mg: 8, Ca: 4, Al: 3,
+    Cu: 1.2, Ti: 0.3, Li: 0.3, W: 0.1,
+    H2O: 0.5, C: 0.3, N: 0.2, S: 1.0,
+    Ni: 0.4, P: 0.1, H: 0, K: 0.1, Na: 0.2,
+    U: 0.05, Au: 0.02, Pt: 0.01, He: 0, Xe: 0, Nt: 0,
+  },
+  icy: {
+    H2O: 55, N: 12, C: 8, H: 6,
+    Si: 5, Fe: 4, Mg: 2, S: 1.5, O: 1.0,
+    Cu: 0.2, Li: 0.5, Ca: 0.3, Al: 0.1,
+    Ni: 0.1, Ti: 0.05, P: 0.3, K: 0, Na: 0, W: 0,
+    U: 0, Au: 0, Pt: 0, He: 0, Xe: 0, Nt: 0,
+  },
+};
+
+// Pomocnik: szablon składu księżyca wg typu
+export function getMoonComposition(moonType) {
+  return { ...(MOON_COMPOSITIONS[moonType] || MOON_COMPOSITIONS.rocky) };
+}
+
 // ── Pomocnik: normalizuj skład do 100% ───────────────────────────
 export function normalizeComposition(comp) {
   const total = Object.values(comp).reduce((s, v) => s + Math.max(0, v), 0);

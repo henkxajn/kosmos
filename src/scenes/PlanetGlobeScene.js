@@ -857,13 +857,15 @@ export class PlanetGlobeScene {
       if (y > LH - 60) return;
       const b = entry.building;
       const lvl = entry.level ?? 1;
+      const pop = (entry.popCost ?? 0) * lvl;
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = CAT_COLORS[b.category] || '#888';
       const lvlStr = lvl > 1 ? ` Lv${lvl}` : '';
       ctx.fillText(`${b.icon || '🏗'} ${b.namePL}${lvlStr}`, 12, y + 8);
       ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.borderLight;
-      ctx.fillText(tileKey, 12, y + 19);
+      const popStr = pop > 0 ? `  👤${pop}` : '';
+      ctx.fillText(`${tileKey}${popStr}`, 12, y + 19);
       y += 26;
     });
   }
@@ -1052,17 +1054,23 @@ export class PlanetGlobeScene {
       ctx.strokeRect(BPX + 8, buildListY, barW, barH);
       buildListY += 12;
 
-      // Stawki produkcji budynku
-      if (b.rates && Object.keys(b.rates).length > 0) {
+      // Stawki produkcji budynku (efektywne — uwzględniają level, teren, tech)
+      const activeEntry = bSys?._active.get(tile.key);
+      const dispRates = activeEntry?.effectiveRates ?? b.rates ?? {};
+      if (Object.keys(dispRates).length > 0) {
         ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(formatRates(b.rates), BPX + 8, buildListY);
+        ctx.fillText(formatRates(dispRates), BPX + 8, buildListY);
         buildListY += 10;
       }
-      if (b.energyCost > 0) {
+
+      // POP zatrudniony w budynku
+      const bPopCost = activeEntry?.popCost ?? b.popCost ?? 0.25;
+      if (bPopCost > 0) {
+        const totalPop = bPopCost * lvl;
         ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.warning;
-        ctx.fillText(`⚡ −${b.energyCost}/r`, BPX + 8, buildListY);
+        ctx.fillStyle = '#4488cc';
+        ctx.fillText(`👤 ${totalPop} POP`, BPX + 8, buildListY);
         buildListY += 10;
       }
 
@@ -1075,7 +1083,7 @@ export class PlanetGlobeScene {
         const upgCost = {};
         if (b.cost) {
           for (const [k, v] of Object.entries(b.cost)) {
-            upgCost[k] = Math.ceil(v * nextLvl * 1.5);
+            upgCost[k] = Math.ceil(v * nextLvl * 1.2);
           }
         }
         if (nextLvl >= 3 && b.commodityCost) {
@@ -1564,6 +1572,7 @@ export class PlanetGlobeScene {
     const BPX  = LW - RIGHT_W;
     if (!tile || mx < BPX) return false;
     const inv  = this._inventory;
+    const bSys = window.KOSMOS?.buildingSystem;
 
     // Oblicz przesunięcie Y z uwzględnieniem złóż i Stolicy
     const deposits = this.planet?.deposits ?? [];
@@ -1582,8 +1591,11 @@ export class PlanetGlobeScene {
 
       // Oblicz pozycję przycisków (muszą odpowiadać _drawBuildPanel)
       let btnY = offsetY + 26; // po nazwie + pasku poziomu
-      if (bDef.rates && Object.keys(bDef.rates).length > 0) btnY += 10;
-      if (bDef.energyCost > 0) btnY += 10;
+      const htEntry = bSys?._active.get(tile.key);
+      const htRates = htEntry?.effectiveRates ?? bDef.rates ?? {};
+      if (Object.keys(htRates).length > 0) btnY += 10; // stawki produkcji
+      const htPop = (htEntry?.popCost ?? bDef.popCost ?? 0.25) * lvl;
+      if (htPop > 0) btnY += 10; // linia POP
 
       // Ulepszenie
       if (lvl < maxLvl) {

@@ -178,6 +178,7 @@ export class UIManager {
     this._fleetBuildBtns = [];
     this._vesselRows = [];
     this._vesselActionBtns = [];
+    this._orbitReturnBtns = [];
     this._selectedVesselId = null;
     this._vesselMissionType = null;
     this._colonyListItems = [];
@@ -302,13 +303,28 @@ export class UIManager {
       this._expeditions.push(expedition);
     });
     EventBus.on('expedition:arrived',  ({ expedition }) => {
-      this._expeditions = this._expeditions.filter(e => e.id !== expedition.id);
+      // Aktualizuj stan — orbiting/returning, nie usuwaj od razu
+      const idx = this._expeditions.findIndex(e => e.id === expedition.id);
+      if (idx !== -1) {
+        this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
+        // Usuwaj tylko jeśli completed (colony, transport po powrocie)
+        if (expedition.status === 'completed') {
+          this._expeditions.splice(idx, 1);
+        }
+      }
     });
     EventBus.on('expedition:disaster', ({ expedition }) => {
       this._expeditions = this._expeditions.filter(e => e.id !== expedition.id);
     });
     EventBus.on('expedition:returned', ({ expedition }) => {
       this._expeditions = this._expeditions.filter(e => e.id !== expedition.id);
+    });
+    EventBus.on('expedition:returnOrdered', ({ expedition }) => {
+      // Aktualizuj status na returning
+      const idx = this._expeditions.findIndex(e => e.id === expedition.id);
+      if (idx !== -1) {
+        this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
+      }
     });
 
     // Flota
@@ -420,12 +436,18 @@ export class UIManager {
       this._log(`${label}: odkryto ${discovered.length} ciał`, 'expedition_ok');
     });
     EventBus.on('expedition:arrived', ({ expedition, multiplier }) => {
+      // Orbiting nie loguje "wraca" — raport logowany osobno
+      if (expedition.status === 'orbiting') return;
       const mult = multiplier != null ? ` ×${multiplier.toFixed(1)}` : '';
       const typeLabel = expedition.type === 'transport' ? 'Transport dostarczony'
         : expedition.type === 'colony' ? 'Kolonia założona'
         : expedition.type === 'recon' ? 'Rozpoznanie zakończone'
-        : 'Ekspedycja wraca';
+        : 'Ekspedycja dotarła';
       this._log(`${typeLabel}: ${expedition.targetName}${mult}`, 'expedition_ok');
+    });
+    EventBus.on('expedition:missionReport', ({ text }) => {
+      // Raport z misji mining/scientific — szczegółowe zasoby
+      this._log(text, 'expedition_ok');
     });
     EventBus.on('expedition:disaster', ({ expedition }) => {
       this._log(`Katastrofa: ${expedition.targetName}!`, 'expedition_fail');
@@ -751,15 +773,21 @@ export class UIManager {
     ctx.fillText('AKTYWNE MISJE', bodyX + PAD, y);
 
     const count = this._expeditions.length;
+    const orbitCount = this._expeditions.filter(e => e.status === 'orbiting').length;
+    const statusText = orbitCount > 0 ? `${count - orbitCount} w locie, ${orbitCount} na orbicie` : `${count} w locie`;
     ctx.fillStyle = count > 0 ? C.mint : C.label;
     ctx.textAlign = 'right';
-    ctx.fillText(`${count} w locie`, bodyX + halfW - PAD, y);
+    ctx.fillText(statusText, bodyX + halfW - PAD, y);
     ctx.textAlign = 'left';
     y += 4;
 
     ctx.strokeStyle = C.border; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + halfW - PAD, y); ctx.stroke();
     y += 10;
+
+    // Przyciski powrotu (orbiting) — zbierane do hitTest
+    if (!this._orbitReturnBtns) this._orbitReturnBtns = [];
+    this._orbitReturnBtns = [];
 
     if (count === 0) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -770,97 +798,43 @@ export class UIManager {
       for (const exp of this._expeditions.slice(0, 6)) {
         const icon = exp.type === 'scientific' ? '🔬' : exp.type === 'colony' ? '🚢'
           : exp.type === 'transport' ? '📦' : exp.type === 'recon' ? '🔭' : '⛏';
-        const arrow = exp.status === 'returning' ? '↩' : '→';
-        const color = exp.status === 'returning' ? C.mint : '#88ccff';
+        const arrow = exp.status === 'returning' ? '↩' : exp.status === 'orbiting' ? '⊙' : '→';
+        const color = exp.status === 'returning' ? C.mint
+          : exp.status === 'orbiting' ? C.yellow : '#88ccff';
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = color;
         ctx.fillText(`${arrow} ${icon} ${_truncate(exp.targetName ?? '?', 14)}`, bodyX + PAD, y);
-        const eta = exp.status === 'returning'
-          ? `↩ ${_shortYear(exp.returnYear ?? 0)}`
-          : `▶ ${_shortYear(exp.arrivalYear ?? 0)}`;
-        ctx.fillStyle = C.label;
-        ctx.textAlign = 'right';
-        ctx.fillText(eta, bodyX + halfW - PAD, y);
-        ctx.textAlign = 'left';
+
+        if (exp.status === 'orbiting') {
+          // Przycisk "Powrót" dla statku na orbicie
+          const btnW = 42; const btnH = 12;
+          const btnX = bodyX + halfW - PAD - btnW;
+          const btnY = y - 9;
+          ctx.fillStyle = 'rgba(60,50,10,0.7)';
+          ctx.fillRect(btnX, btnY, btnW, btnH);
+          ctx.strokeStyle = C.yellow; ctx.strokeRect(btnX, btnY, btnW, btnH);
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = C.yellow; ctx.textAlign = 'center';
+          ctx.fillText('↩ Powrót', btnX + btnW / 2, btnY + 9);
+          ctx.textAlign = 'left';
+          this._orbitReturnBtns.push({ x: btnX, y: btnY, w: btnW, h: btnH, expId: exp.id });
+        } else {
+          const eta = exp.status === 'returning'
+            ? `↩ ${_shortYear(exp.returnYear ?? 0)}`
+            : `▶ ${_shortYear(exp.arrivalYear ?? 0)}`;
+          ctx.fillStyle = C.label;
+          ctx.textAlign = 'right';
+          ctx.fillText(eta, bodyX + halfW - PAD, y);
+          ctx.textAlign = 'left';
+        }
         y += LH;
       }
       if (count > 6) { ctx.fillStyle = C.text; ctx.fillText(`...i ${count - 6} więcej`, bodyX + PAD, y); y += LH; }
     }
 
-    // Status gotowości
-    y += 4;
-    ctx.strokeStyle = C.border;
-    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + halfW - PAD, y); ctx.stroke();
-    y += 10;
-    const { techOk, padOk, crewOk } = exSys?.canLaunch() ?? {};
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    if (!techOk) { ctx.fillStyle = C.orange; ctx.fillText('🔒 Wymaga: Rakietnictwo', bodyX + PAD, y); }
-    else if (!padOk) { ctx.fillStyle = C.orange; ctx.fillText('🔒 Wymaga: Wyrzutnia', bodyX + PAD, y); }
-    else if (!crewOk) { ctx.fillStyle = C.orange; ctx.fillText('🔒 Brak POPów (0.5👤)', bodyX + PAD, y); }
-    else { ctx.fillStyle = C.green; ctx.fillText('✅ Gotowy do startu', bodyX + PAD, y); }
-    y += LH + 2;
-
-    // MISJE ROZPOZNAWCZE
-    this._reconBtns = [];
-    const unexplored = exSys?.getUnexploredCount() ?? { planets: 0, moons: 0, other: 0, total: 0 };
-    ctx.strokeStyle = C.border;
-    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + halfW - PAD, y); ctx.stroke();
-    y += 10;
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.title;
-    ctx.fillText('MISJE', bodyX + PAD, y);
-    y += 4;
-    ctx.strokeStyle = C.border;
-    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + halfW - PAD, y); ctx.stroke();
-    y += 10;
-
-    if (unexplored.total === 0) {
-      ctx.fillStyle = C.green; ctx.fillText('✅ Układ w pełni zbadany', bodyX + PAD, y); y += LH;
-    } else {
-      ctx.fillStyle = C.text;
-      let countStr = `Niezbadane: ${unexplored.planets}🪐`;
-      if (unexplored.moons > 0) countStr += ` ${unexplored.moons}🌙`;
-      if (unexplored.other > 0) countStr += ` ${unexplored.other}☄`;
-      ctx.fillText(countStr, bodyX + PAD, y); y += LH;
-
-      const reconOk = exSys?.canLaunchRecon() ?? {};
-      const btnW = (halfW - PAD * 3) / 2 - 2;
-      const btnH = 16;
-      // Nearest
-      {
-        const bx = bodyX + PAD; const by = y;
-        const enabled = reconOk.ok && unexplored.planets > 0;
-        ctx.fillStyle = enabled ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.6)';
-        ctx.fillRect(bx, by, btnW, btnH);
-        ctx.strokeStyle = enabled ? '#4488cc' : '#333'; ctx.strokeRect(bx, by, btnW, btnH);
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = enabled ? '#88ccff' : '#555';
-        ctx.textAlign = 'center'; ctx.fillText('Najbliższa 🪐', bx + btnW / 2, by + 11); ctx.textAlign = 'left';
-        this._reconBtns.push({ x: bx, y: by, w: btnW, h: btnH, scope: 'nearest', enabled });
-      }
-      // Full system
-      {
-        const bx = bodyX + PAD + btnW + 4; const by = y;
-        const enabled = reconOk.ok && unexplored.total > 0;
-        ctx.fillStyle = enabled ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.6)';
-        ctx.fillRect(bx, by, btnW, btnH);
-        ctx.strokeStyle = enabled ? '#4488cc' : '#333'; ctx.strokeRect(bx, by, btnW, btnH);
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = enabled ? '#88ccff' : '#555';
-        ctx.textAlign = 'center'; ctx.fillText('Cały układ ☀', bx + btnW / 2, by + 11); ctx.textAlign = 'left';
-        this._reconBtns.push({ x: bx, y: by, w: btnW, h: btnH, scope: 'full_system', enabled });
-      }
-      y += btnH + 2;
-      ctx.font = '7px monospace'; ctx.fillStyle = C.label;
-      const nearT = exSys?.getReconTime('nearest') ?? 3;
-      const fullT = exSys?.getReconTime('full_system') ?? 16;
-      ctx.fillText(`~${nearT} lat, 100⚡`, bodyX + PAD, y);
-      ctx.textAlign = 'right'; ctx.fillText(`~${fullT} lat, 100⚡`, bodyX + halfW - PAD, y); ctx.textAlign = 'left';
-      y += LH - 4;
-    }
     y += 2;
 
-    // FLOTA + STOCZNIA (pełna szerokość — poniżej lewej kolumny misji)
+    // FLOTA + STOCZNIA (pełna szerokość — poniżej aktywnych misji)
     this._fleetBuildBtns = [];
     this._vesselRows = [];
     const tSys = window.KOSMOS?.techSystem;
@@ -901,7 +875,7 @@ export class UIManager {
       ctx.fillStyle = C.label; ctx.fillText(`Hangar (${vessels.length}):`, bodyX + PAD, y); y += LH - 2;
 
       if (vessels.length === 0) {
-        ctx.fillStyle = C.dim; ctx.fillText('  (pusty)', bodyX + PAD, y); y += LH - 2;
+        ctx.fillStyle = C.dim; ctx.fillText('Brak statków — zbuduj w Stoczni', bodyX + PAD, y); y += LH - 2;
       } else {
         for (const v of vessels) {
           const sd = SHIPS[v.shipId];
@@ -951,6 +925,12 @@ export class UIManager {
         if (sv && sv.position.state === 'docked') {
           y = this._drawVesselActionPanel(ctx, sv, bodyX + PAD, y, fullW);
         }
+      } else if (vessels.length > 0) {
+        // Podpowiedź — żaden statek nie wybrany
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.dim;
+        ctx.fillText('Wybierz statek aby rozpocząć misję', bodyX + PAD, y);
+        y += LH;
       }
 
       y += 4;
@@ -998,16 +978,17 @@ export class UIManager {
         }
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         let cx = bodyX + PAD + 2;
+        let costLineY = y;
         for (const part of costParts) {
           ctx.fillStyle = part.ok ? '#668844' : '#cc4422';
           const tw = ctx.measureText(part.text).width;
           if (cx + tw > bodyX + PAD + fullW - 2) {
-            y += LH - 4; cx = bodyX + PAD + 2;
+            costLineY += LH - 4; cx = bodyX + PAD + 2;
           }
-          ctx.fillText(part.text, cx, y + 9);
+          ctx.fillText(part.text, cx, costLineY + 9);
           cx += tw + 6;
         }
-        y += LH - 2;
+        y = costLineY + LH;
 
         ctx.fillStyle = C.dim;
         ctx.fillText(`⏱${ship.buildTime} lat`, bodyX + PAD + 2, y + 8);
@@ -1174,9 +1155,12 @@ export class UIManager {
         ctx.strokeStyle = inRange ? '#335' : '#322'; ctx.strokeRect(bx, by, panelW, btnH);
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = inRange ? '#88ccff' : '#665555';
-        const distStr = t.dist.toFixed(1);
+        const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
         const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
-        ctx.fillText(`${t.icon} ${_truncate(t.name, 14)}  ${distStr}AU ⛽${fuelCost}`, bx + 2, by + 10);
+        const shipSpeed = SHIPS[vessel.shipId]?.speedAU ?? 1.0;
+        const eta = t.dist / shipSpeed;
+        const etaStr = eta < 0.05 ? `${Math.round(eta * 365)}d` : `${eta.toFixed(1)}y`;
+        ctx.fillText(`${t.icon} ${_truncate(t.name, 12)} ${distStr}AU ⛽${fuelCost} ⏱${etaStr}`, bx + 2, by + 10);
         if (inRange) {
           this._vesselActionBtns.push({
             x: bx, y: by, w: panelW, h: btnH,
@@ -1674,6 +1658,13 @@ export class UIManager {
   }
 
   _handleExpeditionsClick(x, y) {
+    // Orbit return buttons — przycisk "Powrót" dla orbiting
+    for (const btn of (this._orbitReturnBtns ?? [])) {
+      if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+        EventBus.emit('expedition:orderReturn', { expeditionId: btn.expId });
+        return;
+      }
+    }
     // Vessel action buttons (typ misji, cel, launch)
     for (const btn of (this._vesselActionBtns ?? [])) {
       if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
@@ -1691,13 +1682,6 @@ export class UIManager {
           this._selectedVesselId = vr.vesselId;
           this._vesselMissionType = null;
         }
-        return;
-      }
-    }
-    // Recon buttons (stare — w sekcji MISJE)
-    for (const rb of (this._reconBtns ?? [])) {
-      if (rb.enabled && x >= rb.x && x <= rb.x + rb.w && y >= rb.y && y <= rb.y + rb.h) {
-        EventBus.emit('expedition:sendRequest', { type: 'recon', targetId: rb.scope });
         return;
       }
     }
@@ -1845,6 +1829,7 @@ function _shortYear(y) {
   if (y >= 1e9) return (y / 1e9).toFixed(1) + 'G';
   if (y >= 1e6) return (y / 1e6).toFixed(1) + 'M';
   if (y >= 1000) return (y / 1000).toFixed(0) + 'k';
+  if (y < 1 && y > 0) return y.toFixed(2);
   return String(Math.floor(y));
 }
 

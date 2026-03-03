@@ -253,11 +253,11 @@ export class BuildingSystem {
 
     const nextLevel = currentLevel + 1;
 
-    // Koszt ulepszenia: baseCost × level × 1.5
+    // Koszt ulepszenia: baseCost × level × 1.2
     const upgradeCost = {};
     if (building.cost) {
       for (const [k, v] of Object.entries(building.cost)) {
-        upgradeCost[k] = Math.ceil(v * nextLevel * 1.5);
+        upgradeCost[k] = Math.ceil(v * nextLevel * 1.2);
       }
     }
     // Commodities od poziomu 3
@@ -272,9 +272,26 @@ export class BuildingSystem {
       return;
     }
 
+    // Sprawdzenie wolnych POPów (upgrade wymaga dodatkowego popCost)
+    const popCost = entry.popCost ?? building.popCost ?? POP_PER_BUILDING;
+    if (popCost > 0) {
+      const civSys = this.civSystem;
+      if (civSys && civSys.freePops < popCost) {
+        EventBus.emit('planet:upgradeResult', {
+          success: false, tile, reason: `Brak wolnych POPów (potrzeba ${popCost})`,
+        });
+        return;
+      }
+    }
+
     // Pobierz koszt
     if (this.resourceSystem && Object.keys(upgradeCost).length > 0) {
       this.resourceSystem.spend(upgradeCost);
+    }
+
+    // Zatrudnienie — upgrade wymaga dodatkowego POPa
+    if (popCost > 0) {
+      EventBus.emit('civ:employmentChanged', { delta: popCost });
     }
 
     // Aktualizuj level
@@ -321,10 +338,10 @@ export class BuildingSystem {
     // ── Downgrade (Lv > 1): obniż o 1 poziom ──────────────────────
     if (level > 1) {
       const refund = {};
-      // Zwrot surowców: floor(ceil(baseCost × level × 1.5) × 0.5)
+      // Zwrot surowców: floor(ceil(baseCost × level × 1.2) × 0.5)
       if (building?.cost) {
         for (const [k, v] of Object.entries(building.cost)) {
-          refund[k] = Math.floor(Math.ceil(v * level * 1.5) * 0.5);
+          refund[k] = Math.floor(Math.ceil(v * level * 1.2) * 0.5);
         }
       }
       // Zwrot commodities (tylko gdy level >= 3 — wydano je przy upgrade do 3+)
@@ -357,6 +374,12 @@ export class BuildingSystem {
       // Fabryka: przelicz punkty produkcji
       if (buildingId === 'factory' && this._factorySystem) {
         this._recalcFactoryPoints();
+      }
+
+      // Zwolnij POPy za obniżony poziom
+      const downgradePop = entry.popCost ?? building?.popCost ?? POP_PER_BUILDING;
+      if (downgradePop > 0) {
+        EventBus.emit('civ:employmentChanged', { delta: -downgradePop });
       }
 
       EventBus.emit('planet:demolishResult', {
@@ -441,7 +464,7 @@ export class BuildingSystem {
         popCost,
         level,
       });
-      totalPopCost += popCost;
+      totalPopCost += popCost * level;
     }
 
     if (totalPopCost > 0 && this.civSystem) {
@@ -511,7 +534,7 @@ export class BuildingSystem {
   }
 
   // Oblicz stawki bazowe z uwzględnieniem poziomu budynku
-  // Efekt poziomu: rate × (1 + 0.3 × (level − 1))
+  // Efekt poziomu: rate × level (liniowy — upgrade podwaja produkcję)
   _calcBaseRates(building, tile, level = 1) {
     const hasRates = building.rates && Object.keys(building.rates).length > 0;
     const hasEnergyCost = building.energyCost && building.energyCost > 0;
@@ -527,8 +550,8 @@ export class BuildingSystem {
       ? HexGrid.getLatitudeModifier(tile.r, this._gridHeight)
       : { production: 1.0, buildCost: 1.0, label: null };
 
-    // Mnożnik poziomu: 1 + 0.3 × (level - 1) → diminishing returns
-    const levelMult = 1 + 0.3 * (level - 1);
+    // Mnożnik poziomu: liniowy — Lv2 = 2x, Lv3 = 3x produkcji
+    const levelMult = level;
 
     const base = {};
     if (hasRates) {
@@ -536,8 +559,8 @@ export class BuildingSystem {
         if (key === 'research') {
           base[key] = val * latMod.production * levelMult;
         } else if (val < 0) {
-          // Konsumpcja rośnie z levelem (ale wolniej: 1 + 0.15 × (level-1))
-          const consLevelMult = 1 + 0.15 * (level - 1);
+          // Konsumpcja rośnie z levelem: 1 + 0.25 × (level-1)
+          const consLevelMult = 1 + 0.25 * (level - 1);
           base[key] = val * consLevelMult;
         } else {
           base[key] = val * multiplier * latMod.production * levelMult;
@@ -547,7 +570,7 @@ export class BuildingSystem {
 
     // Dodatkowa konsumpcja energii (energyCost z definicji budynku)
     if (hasEnergyCost) {
-      const consLevelMult = 1 + 0.15 * (level - 1);
+      const consLevelMult = 1 + 0.25 * (level - 1);
       base.energy = (base.energy ?? 0) - building.energyCost * consLevelMult;
     }
 

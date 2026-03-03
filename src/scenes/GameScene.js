@@ -485,6 +485,9 @@ export class GameScene {
         color:             md.color,
         parentPlanetId:    md.parentPlanetId,
         moonType:          md.moonType || 'rocky',
+        composition:       md.composition || null,
+        temperatureK:      md.temperatureK || null,
+        atmosphere:        md.atmosphere || 'none',
       });
       m.age      = md.age      || 0;
       m.explored = md.explored || false;

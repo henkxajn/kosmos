@@ -176,6 +176,9 @@ export class SaveSystem {
       color:             m.visual.color,
       age:               m.age || 0,
       explored:          m.explored || false,
+      composition:       m.composition || null,
+      temperatureK:      m.temperatureK || null,
+      atmosphere:        m.atmosphere || 'none',
       deposits: m.deposits ? m.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,
