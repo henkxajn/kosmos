@@ -339,7 +339,7 @@ export function drawEconomyTab(ctx, bodyY, bodyX, bodyW, state) {
 
       const allocIds = new Set(allocs.map(a => a.commodityId));
       const available = Object.keys(COMMODITIES).filter(id => !allocIds.has(id));
-      for (const cid of available.slice(0, 5)) {
+      for (const cid of available) {
         const cicon = COMMODITIES[cid]?.icon ?? '';
         const cname = COMMODITY_SHORT[cid] ?? cid;
         const clabel = `${cicon} ${cname}`;

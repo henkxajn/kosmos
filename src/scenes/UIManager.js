@@ -95,6 +95,7 @@ const ACTION_COSTS = { stabilize: 25, nudgeToHz: 35, bombard: 20 };
 
 // Pozycja CivPanel (pod TopBar)
 const CIV_PANEL_Y = COSMIC.TOP_BAR_H;
+const CIV_EXPEDITIONS_H = 450; // wysokość panelu ekspedycji (większy niż standardowy CIV_PANEL_BODY_H)
 
 // ── Tooltip CivPanel ────────────────────────────────────────────
 const TOOLTIP_PAD    = 8;
@@ -183,6 +184,11 @@ export class UIManager {
     this._vesselMissionType = null;
     this._colonyListItems = [];
     this._transportBtnRect = null;
+
+    // ── Katalog zbadanych ciał (scroll) ────────────────────
+    this._catalogScrollY = 0;
+    this._catalogContentH = 0;
+    this._catalogVisibleH = 0;
 
     this._setupEvents();
     this._startDrawLoop();
@@ -523,7 +529,7 @@ export class UIManager {
     }
     // CivPanel body
     if (window.KOSMOS?.civMode && this._civPanelTab !== null) {
-      const bodyH = this._civPanelTab === 'expeditions' ? 300 : CIV_PANEL_BODY_H;
+      const bodyH = this._civPanelTab === 'expeditions' ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
       const panelBottom = CIV_PANEL_Y + bodyH;
       if (x >= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= panelBottom) return true;
     }
@@ -581,6 +587,17 @@ export class UIManager {
   handleWheel(rawX, rawY, deltaY) {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
+    // Katalog zbadanych ciał — scroll w prawej kolumnie zakładki Ekspedycje
+    if (this._civPanelTab === 'expeditions') {
+      const rect = this._civPanelBodyRect();
+      const halfW = Math.floor(rect.w / 2);
+      const upperZoneH = 200;
+      if (x >= rect.x + halfW && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + upperZoneH) {
+        const maxScroll = Math.max(0, this._catalogContentH - this._catalogVisibleH);
+        this._catalogScrollY = Math.max(0, Math.min(maxScroll, this._catalogScrollY + deltaY * 0.5));
+        return true;
+      }
+    }
     // BottomContext scroll
     if (this._selectedEntity) {
       if (this._bottomContext.handleWheel(x, y, deltaY, W, H, this._selectedEntity)) return true;
@@ -735,7 +752,7 @@ export class UIManager {
   // CivPanel — panel informacyjny cywilizacji
   // ══════════════════════════════════════════════════════════════
   _civPanelBodyRect() {
-    const h = this._civPanelTab === 'expeditions' ? 300 : CIV_PANEL_BODY_H;
+    const h = this._civPanelTab === 'expeditions' ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
     return { x: CIV_SIDEBAR_W, y: CIV_PANEL_Y, w: W - CIV_SIDEBAR_W - COSMIC.OUTLINER_W, h };
   }
 
@@ -778,9 +795,14 @@ export class UIManager {
     const PAD    = 14;
     const LH     = 14;
     const halfW  = Math.floor(bodyW / 2);
+    const upperZoneH = 200; // wysokość górnej strefy (misje + katalog)
     let y = bodyY + 16;
 
-    // MISJE (lewa kolumna)
+    // ═══════════════════════════════════════════════════════════════
+    // GÓRNA STREFA: dwie kolumny
+    // ═══════════════════════════════════════════════════════════════
+
+    // ── LEWA KOLUMNA: AKTYWNE MISJE ──────────────────────────────
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.title;
     ctx.fillText('AKTYWNE MISJE', bodyX + PAD, y);
@@ -799,7 +821,6 @@ export class UIManager {
     y += 10;
 
     // Przyciski powrotu (orbiting) — zbierane do hitTest
-    if (!this._orbitReturnBtns) this._orbitReturnBtns = [];
     this._orbitReturnBtns = [];
 
     if (count === 0) {
@@ -808,7 +829,7 @@ export class UIManager {
       ctx.fillText('Brak aktywnych misji', bodyX + PAD, y);
       y += LH;
     } else {
-      for (const exp of this._expeditions.slice(0, 6)) {
+      for (const exp of this._expeditions.slice(0, 10)) {
         const icon = exp.type === 'scientific' ? '🔬' : exp.type === 'colony' ? '🚢'
           : exp.type === 'transport' ? '📦' : exp.type === 'recon' ? '🔭' : '⛏';
         const arrow = exp.status === 'returning' ? '↩' : exp.status === 'orbiting' ? '⊙' : '→';
@@ -819,7 +840,6 @@ export class UIManager {
         ctx.fillText(`${arrow} ${icon} ${_truncate(exp.targetName ?? '?', 14)}`, bodyX + PAD, y);
 
         if (exp.status === 'orbiting') {
-          // Przycisk "Powrót" dla statku na orbicie
           const btnW = 42; const btnH = 12;
           const btnX = bodyX + halfW - PAD - btnW;
           const btnY = y - 9;
@@ -842,24 +862,35 @@ export class UIManager {
         }
         y += LH;
       }
-      if (count > 6) { ctx.fillStyle = C.text; ctx.fillText(`...i ${count - 6} więcej`, bodyX + PAD, y); y += LH; }
+      if (count > 10) { ctx.fillStyle = C.text; ctx.fillText(`...i ${count - 10} więcej`, bodyX + PAD, y); y += LH; }
     }
 
-    y += 2;
+    // ── PRAWA KOLUMNA: KATALOG ZBADANYCH CIAŁ ────────────────────
+    const catalogX = bodyX + halfW;
+    const catalogW = halfW - PAD;
+    const catalogMaxH = upperZoneH - 20; // margines
+    this._drawExploredCatalog(ctx, bodyY, catalogX, catalogW, catalogMaxH);
 
-    // FLOTA + STOCZNIA (pełna szerokość — poniżej aktywnych misji)
+    // ═══════════════════════════════════════════════════════════════
+    // DOLNA STREFA: FLOTA + STOCZNIA (pełna szerokość)
+    // ═══════════════════════════════════════════════════════════════
+    y = bodyY + upperZoneH;
+    const fullW = bodyW - PAD * 2;
+
+    // Separator
+    ctx.strokeStyle = C.border; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + PAD + fullW, y); ctx.stroke();
+    y += 10;
+
     this._fleetBuildBtns = [];
     this._vesselRows = [];
     const tSys = window.KOSMOS?.techSystem;
     const vMgr = window.KOSMOS?.vesselManager;
-    ctx.strokeStyle = C.border;
-    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + halfW - PAD, y); ctx.stroke();
-    y += 10;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.title; ctx.fillText('FLOTA', bodyX + PAD, y);
     y += 4;
     ctx.strokeStyle = C.border;
-    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + halfW - PAD, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + PAD + fullW, y); ctx.stroke();
     y += 10;
 
     const activePid = colMgr?.activePlanetId;
@@ -878,13 +909,12 @@ export class UIManager {
         const shipDef = SHIPS[queue.shipId];
         const frac = queue.buildTime > 0 ? queue.progress / queue.buildTime : 0;
         ctx.fillStyle = '#88ccff'; ctx.fillText(`Budowa: ${shipDef?.icon ?? '🚀'} ${shipDef?.namePL ?? queue.shipId}`, bodyX + PAD, y); y += LH - 2;
-        drawMiniBar(ctx, bodyX + PAD, y, halfW - PAD * 3, 6, frac, '#4488cc'); y += 8;
+        drawMiniBar(ctx, bodyX + PAD, y, fullW - PAD, 6, frac, '#4488cc'); y += 8;
         ctx.fillStyle = C.text; ctx.fillText(`${Math.floor(queue.progress)}/${queue.buildTime} lat`, bodyX + PAD, y); y += LH;
       }
 
       // ── Hangar — indywidualne statki ────────────────────────────────
       const vessels = vMgr?.getVesselsAt(activePid) ?? [];
-      const fullW = halfW - PAD * 2;
       ctx.fillStyle = C.label; ctx.fillText(`Hangar (${vessels.length}):`, bodyX + PAD, y); y += LH - 2;
 
       if (vessels.length === 0) {
@@ -897,12 +927,10 @@ export class UIManager {
           const ry = y;
           const isSelected = this._selectedVesselId === v.id;
 
-          // Tło wiersza
           ctx.fillStyle = isSelected ? 'rgba(40,80,120,0.5)' : 'rgba(15,25,40,0.4)';
           ctx.fillRect(rx, ry, fullW, rowH);
           if (isSelected) { ctx.strokeStyle = '#4488cc'; ctx.strokeRect(rx, ry, fullW, rowH); }
 
-          // Ikona + nazwa
           ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
           const statusColor = v.status === 'idle' ? '#44cc66'
             : v.status === 'refueling' ? '#cccc44'
@@ -921,11 +949,9 @@ export class UIManager {
           ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(barX, barY, barW, barH);
           ctx.fillStyle = fuelColor; ctx.fillRect(barX, barY, barW * fuelFrac, barH);
           ctx.strokeStyle = '#334'; ctx.strokeRect(barX, barY, barW, barH);
-          // Tekst paliwa
           ctx.font = '7px monospace'; ctx.fillStyle = C.label;
           ctx.fillText(`⛽${v.fuel.current.toFixed(1)}/${v.fuel.max}`, barX - 2, ry + 15);
 
-          // Zapamiętaj rect do kliku
           this._vesselRows.push({ x: rx, y: ry, w: fullW, h: rowH, vesselId: v.id });
           y += rowH + 1;
         }
@@ -939,7 +965,6 @@ export class UIManager {
           y = this._drawVesselActionPanel(ctx, sv, bodyX + PAD, y, fullW);
         }
       } else if (vessels.length > 0) {
-        // Podpowiedź — żaden statek nie wybrany
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.dim;
         ctx.fillText('Wybierz statek aby rozpocząć misję', bodyX + PAD, y);
@@ -1007,6 +1032,130 @@ export class UIManager {
         ctx.fillText(`⏱${ship.buildTime} lat`, bodyX + PAD + 2, y + 8);
         y += LH;
       }
+    }
+  }
+
+  // ── Lista zbadanych ciał (bez homePlanet) ─────────────────────────
+  _getExploredBodies() {
+    const homePl = window.KOSMOS?.homePlanet;
+    const bodies = [];
+    for (const t of ['planet', 'moon', 'planetoid']) {
+      for (const body of EntityManager.getByType(t)) {
+        if (!body.explored || body === homePl) continue;
+        bodies.push(body);
+      }
+    }
+    // Sortuj wg odległości orbitalnej od gwiazdy
+    return bodies.sort((a, b) => (a.orbital?.a ?? 0) - (b.orbital?.a ?? 0));
+  }
+
+  // ── Rysowanie katalogu zbadanych ciał (prawa kolumna, scrollowalna) ──
+  _drawExploredCatalog(ctx, bodyY, catalogX, catalogW, maxH) {
+    const PAD = 8;
+    const LH = 14;
+    const ROW_H = 28; // 2 wiersze na ciało
+    let cy = bodyY + 16;
+
+    // Nagłówek
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = C.title;
+    ctx.fillText('ZBADANE CIAŁA', catalogX + PAD, cy);
+
+    const bodies = this._getExploredBodies();
+    ctx.fillStyle = C.label;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${bodies.length}`, catalogX + catalogW - PAD, cy);
+    ctx.textAlign = 'left';
+    cy += 4;
+
+    ctx.strokeStyle = C.border; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(catalogX + PAD, cy); ctx.lineTo(catalogX + catalogW - PAD, cy); ctx.stroke();
+    cy += 6;
+
+    if (bodies.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.dim;
+      ctx.fillText('Brak zbadanych ciał', catalogX + PAD, cy);
+      this._catalogContentH = 0;
+      this._catalogVisibleH = 0;
+      return;
+    }
+
+    // Strefa scrollowalna z clippingiem
+    const visibleH = maxH - (cy - bodyY);
+    this._catalogVisibleH = visibleH;
+    this._catalogContentH = bodies.length * ROW_H;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(catalogX, cy, catalogW, visibleH);
+    ctx.clip();
+
+    const scrollY = this._catalogScrollY || 0;
+    let ry = cy - scrollY;
+
+    for (const body of bodies) {
+      // Pomiń elementy poza widocznym obszarem (optymalizacja)
+      if (ry + ROW_H < cy - 2) { ry += ROW_H; continue; }
+      if (ry > cy + visibleH + 2) break;
+
+      // Wiersz 1: ikona + nazwa + typ + temperatura
+      const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
+      const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
+      const tempStr = tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : '—';
+      const typeStr = body.planetType ?? body.type;
+
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#88ccff';
+      ctx.fillText(`${icon} ${_truncate(body.name, 12)}`, catalogX + PAD, ry + 10);
+      ctx.fillStyle = C.dim;
+      ctx.fillText(typeStr, catalogX + PAD + 90, ry + 10);
+      // Temperatura po prawej
+      ctx.fillStyle = tempC !== null && tempC > -20 && tempC < 60 ? '#44cc66' : C.label;
+      ctx.textAlign = 'right';
+      ctx.fillText(tempStr, catalogX + catalogW - PAD - 3, ry + 10);
+      ctx.textAlign = 'left';
+
+      // Wiersz 2: masa + AU od gwiazdy + AU od gracza + złoża
+      const mass = body.physics?.mass ?? 0;
+      const massStr = mass > 0 ? `${mass.toFixed(1)}M⊕` : '—';
+      const orbA = body.orbital?.a ?? 0;
+      const distHome = DistanceUtils.orbitalFromHomeAU(body);
+
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.dim;
+      ctx.fillText(`${massStr}  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2, ry + 22);
+
+      // Złoża (top 3 wg richness)
+      const deps = body.deposits ?? [];
+      if (deps.length > 0) {
+        const topDeps = [...deps]
+          .filter(d => d.remaining > 0)
+          .sort((a, b) => b.richness - a.richness)
+          .slice(0, 3);
+        let depStr = '';
+        for (const d of topDeps) {
+          const stars = d.richness >= 0.7 ? '★★★' : d.richness >= 0.4 ? '★★' : '★';
+          depStr += `${d.resourceId}${stars} `;
+        }
+        ctx.fillStyle = '#aa8844';
+        ctx.textAlign = 'right';
+        ctx.fillText(depStr.trim(), catalogX + catalogW - PAD - 3, ry + 22);
+        ctx.textAlign = 'left';
+      }
+
+      ry += ROW_H;
+    }
+
+    ctx.restore();
+
+    // Scrollbar wizualny (3px pasek po prawej)
+    if (this._catalogContentH > visibleH) {
+      const sbH = Math.max(12, visibleH * (visibleH / this._catalogContentH));
+      const maxScroll = this._catalogContentH - visibleH;
+      const sbY = cy + (scrollY / maxScroll) * (visibleH - sbH);
+      ctx.fillStyle = 'rgba(100,140,180,0.3)';
+      ctx.fillRect(catalogX + catalogW - 3, sbY, 3, sbH);
     }
   }
 
@@ -1651,6 +1800,7 @@ export class UIManager {
       if (result === 'sidebar') return true;
       // Toggle zakładki
       this._civPanelTab = (this._civPanelTab === result) ? null : result;
+      this._catalogScrollY = 0; // reset scrolla katalogu przy zmianie zakładki
       return true;
     }
 
@@ -1799,7 +1949,7 @@ export class UIManager {
                      + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
       if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarH) return 'civpanel';
       if (this._civPanelTab) {
-        const bodyH = this._civPanelTab === 'expeditions' ? 300 : CIV_PANEL_BODY_H;
+        const bodyH = this._civPanelTab === 'expeditions' ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
         if (x >= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + bodyH) return 'civpanel';
       }
     }
