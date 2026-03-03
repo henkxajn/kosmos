@@ -175,9 +175,21 @@ export class ExpeditionSystem {
       const dist = nearest ? this._calcDistance(nearest) : 2.0;
       return parseFloat(Math.max(0.05, dist / speed).toFixed(3));
     }
-    // 'full_system': proporcjonalny do rozmiaru układu
-    const nPlanets = EntityManager.getByType('planet').length;
-    return parseFloat(Math.max(1, nPlanets * 0.5).toFixed(1));
+    if (scope === 'full_system') {
+      // Szacunek: dystans do najbliższego × ~N (sekwencyjne odkrywanie)
+      const nearest = this._findNearestUnexplored();
+      const dist = nearest ? this._calcDistance(nearest) : 2.0;
+      const unexploredTotal = this.getUnexploredCount().total;
+      // Optymistyczny szacunek: średni dystans × liczba ciał
+      return parseFloat(Math.max(0.1, (dist / speed) * Math.max(1, unexploredTotal * 0.7)).toFixed(1));
+    }
+    // Konkretne ciało (targetId) — dystans do celu × 2 (tam i z powrotem)
+    const target = this._findTarget(scope);
+    if (target) {
+      const dist = this._calcDistance(target);
+      return parseFloat(Math.max(0.05, (dist / speed) * 2).toFixed(3));
+    }
+    return 1.0;
   }
 
   // Wszystkie ekspedycje (aktywne + ostatnie zakończone)
@@ -554,7 +566,7 @@ export class ExpeditionSystem {
   }
 
   // Wyślij misję rozpoznawczą
-  // scope: 'nearest' — najbliższa niezbadana planeta; 'full_system' — cały układ
+  // scope: 'nearest' | 'full_system' | konkretne body.id
   _launchRecon(scope, vesselId) {
     const { ok, techOk, padOk, crewOk, vesselOk } = this.canLaunchRecon();
     if (!ok) {
@@ -571,19 +583,29 @@ export class ExpeditionSystem {
 
     // Sprawdź czy jest coś do zbadania
     const unexplored = this.getUnexploredCount();
-    if (scope === 'nearest' && unexplored.planets === 0) {
-      EventBus.emit('expedition:launchFailed', { reason: 'Brak niezbadanych planet' });
-      return;
+    const isSpecificTarget = scope !== 'nearest' && scope !== 'full_system';
+
+    if (!isSpecificTarget) {
+      if (scope === 'nearest' && unexplored.planets === 0 && unexplored.moons === 0) {
+        EventBus.emit('expedition:launchFailed', { reason: 'Brak niezbadanych ciał niebieskich' });
+        return;
+      }
+      if (unexplored.total === 0) {
+        EventBus.emit('expedition:launchFailed', { reason: 'Układ w pełni zbadany' });
+        return;
+      }
     }
-    if (unexplored.total === 0) {
-      EventBus.emit('expedition:launchFailed', { reason: 'Układ w pełni zbadany' });
+
+    // Rozpoznanie konkretnego ciała — osobna logika
+    if (isSpecificTarget) {
+      this._launchReconTarget(scope, vesselId);
       return;
     }
 
     // Pobierz koszt
     if (this.resourceSystem) {
       if (!this.resourceSystem.canAfford(RECON_COST)) {
-        EventBus.emit('expedition:launchFailed', { reason: 'Brak surowców (100⚡)' });
+        EventBus.emit('expedition:launchFailed', { reason: 'Brak surowców startowych' });
         return;
       }
       this.resourceSystem.spend(RECON_COST);
@@ -592,21 +614,74 @@ export class ExpeditionSystem {
     // Zablokuj POPy
     EventBus.emit('civ:lockPops', { amount: RECON_CREW_COST });
 
-    // Oblicz czas podróży
-    const travelTime = this.getReconTime(scope, vesselId);
     const departYear = this._gameYear;
+    const vMgr = window.KOSMOS?.vesselManager;
+
+    if (scope === 'full_system') {
+      // Sekwencyjny recon: pierwszy cel = najbliższy niezbadany od homePlanet
+      const firstTarget = this._findNearestUnexplored();
+      if (!firstTarget) {
+        EventBus.emit('expedition:launchFailed', { reason: 'Brak niezbadanych ciał' });
+        return;
+      }
+      const distance = this._calcDistance(firstTarget);
+      const shipSpeed = this._getShipSpeed(vesselId);
+      const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
+
+      const expedition = {
+        id:               `exp_${this._nextId++}`,
+        type:             'recon',
+        scope:            'full_system',
+        targetId:         firstTarget.id,
+        targetName:       'Cały układ',
+        targetType:       'recon',
+        departYear,
+        arrivalYear:      departYear + travelTime,
+        returnYear:       null, // obliczone dynamicznie przy powrocie
+        distance:         parseFloat(distance.toFixed(4)),
+        travelTime,
+        crewCost:         RECON_CREW_COST,
+        vesselId:         vesselId ?? null,
+        status:           'en_route',
+        gained:           null,
+        eventRoll:        null,
+        bodiesDiscovered: [], // ciała odkryte sekwencyjnie
+      };
+
+      this._expeditions.push(expedition);
+
+      // Wyślij vessel — paliwo za pierwszy odcinek
+      if (vMgr && vesselId) {
+        const fuelCost = distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0);
+        vMgr.dispatchOnMission(vesselId, {
+          type: 'recon', targetId: firstTarget.id,
+          targetName: firstTarget.name,
+          departYear, arrivalYear: expedition.arrivalYear, returnYear: null,
+          fuelCost,
+        });
+      }
+
+      EventBus.emit('expedition:launched', { expedition });
+      return;
+    }
+
+    // scope === 'nearest' — pojedynczy lot do najbliższego ciała
+    const nearest = this._findNearestUnexplored();
+    const distance = nearest ? this._calcDistance(nearest) : 0.1;
+    const shipSpeed = this._getShipSpeed(vesselId);
+    const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
 
     const expedition = {
       id:          `exp_${this._nextId++}`,
       type:        'recon',
-      scope,
-      targetId:    scope,
-      targetName:  scope === 'nearest' ? 'Najbliższa planeta' : 'Cały układ',
+      scope:       'nearest',
+      targetId:    nearest?.id ?? 'nearest',
+      targetName:  nearest?.name ?? 'Najbliższe ciało',
       targetType:  'recon',
       departYear,
       arrivalYear: departYear + travelTime,
       returnYear:  departYear + travelTime * 2,
-      distance:    0,
+      distance:    parseFloat(distance.toFixed(4)),
       travelTime,
       crewCost:    RECON_CREW_COST,
       vesselId:    vesselId ?? null,
@@ -617,13 +692,96 @@ export class ExpeditionSystem {
 
     this._expeditions.push(expedition);
 
-    // Wyślij vessel na misję recon
-    const vMgr = window.KOSMOS?.vesselManager;
+    // Wyślij vessel na misję
     if (vMgr && vesselId) {
+      const fuelCost = distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0);
       vMgr.dispatchOnMission(vesselId, {
-        type: 'recon', targetId: scope, targetName: expedition.targetName,
+        type: 'recon', targetId: nearest?.id ?? 'nearest',
+        targetName: expedition.targetName,
         departYear, arrivalYear: expedition.arrivalYear, returnYear: expedition.returnYear,
-        fuelCost: 0, // recon — symboliczny koszt, nie paliwo
+        fuelCost,
+      });
+    }
+
+    EventBus.emit('expedition:launched', { expedition });
+  }
+
+  // Wyślij recon na konkretne ciało niebieskie (po id)
+  _launchReconTarget(targetId, vesselId) {
+    const target = this._findTarget(targetId);
+    if (!target) {
+      EventBus.emit('expedition:launchFailed', { reason: 'Nieznany cel rozpoznania' });
+      return;
+    }
+    if (target.explored) {
+      EventBus.emit('expedition:launchFailed', { reason: 'Ciało już zbadane' });
+      return;
+    }
+
+    const distance = this._calcDistance(target);
+    const vMgr = window.KOSMOS?.vesselManager;
+
+    // Sprawdź paliwo na lot + powrót
+    if (vMgr && vesselId) {
+      const vessel = vMgr.getVessel(vesselId);
+      if (!vessel || vessel.status !== 'idle') {
+        EventBus.emit('expedition:launchFailed', { reason: 'Statek niedostępny' });
+        return;
+      }
+      const fuelNeeded = distance * 2 * vessel.fuel.consumption;
+      if (vessel.fuel.current < fuelNeeded) {
+        EventBus.emit('expedition:launchFailed', {
+          reason: `Brak paliwa na lot i powrót (potrzeba ${fuelNeeded.toFixed(1)} pc)`
+        });
+        return;
+      }
+    }
+
+    // Pobierz koszt
+    if (this.resourceSystem) {
+      if (!this.resourceSystem.canAfford(RECON_COST)) {
+        EventBus.emit('expedition:launchFailed', { reason: 'Brak surowców startowych' });
+        return;
+      }
+      this.resourceSystem.spend(RECON_COST);
+    }
+
+    // Zablokuj POPy
+    EventBus.emit('civ:lockPops', { amount: RECON_CREW_COST });
+
+    const shipSpeed = this._getShipSpeed(vesselId);
+    const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
+    const departYear = this._gameYear;
+
+    const expedition = {
+      id:          `exp_${this._nextId++}`,
+      type:        'recon',
+      scope:       'target',
+      targetId,
+      targetName:  target.name ?? '???',
+      targetType:  target.type,
+      departYear,
+      arrivalYear: departYear + travelTime,
+      returnYear:  departYear + travelTime * 2,
+      distance:    parseFloat(distance.toFixed(4)),
+      travelTime,
+      crewCost:    RECON_CREW_COST,
+      vesselId:    vesselId ?? null,
+      status:      'en_route',
+      gained:      null,
+      eventRoll:   null,
+    };
+
+    this._expeditions.push(expedition);
+
+    // Wyślij vessel
+    if (vMgr && vesselId) {
+      const fuelCost = distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0);
+      vMgr.dispatchOnMission(vesselId, {
+        type: 'recon', targetId,
+        targetName: expedition.targetName,
+        departYear, arrivalYear: expedition.arrivalYear, returnYear: expedition.returnYear,
+        fuelCost,
       });
     }
 
@@ -832,16 +990,15 @@ export class ExpeditionSystem {
   _processReconArrival(exp) {
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
-    const vMgrR = window.KOSMOS?.vesselManager;
+    const vMgr = window.KOSMOS?.vesselManager;
 
     if (roll < 5) {
       // KATASTROFA (5%) — statek utracony, załoga zaginiona
       exp.status = 'completed';
       exp.gained = {};
       EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? RECON_CREW_COST });
-      // Zniszcz vessel lub zużyj stary sposób
-      if (exp.vesselId && vMgrR) {
-        vMgrR.destroyVessel(exp.vesselId);
+      if (exp.vesselId && vMgr) {
+        vMgr.destroyVessel(exp.vesselId);
       } else {
         const colMgr = window.KOSMOS?.colonyManager;
         const activePid = colMgr?.activePlanetId;
@@ -851,62 +1008,176 @@ export class ExpeditionSystem {
       return;
     }
 
-    // Sukces — odkryj ciała
-    const discovered = [];
+    // ── Rozpoznanie konkretnego ciała (scope='target' lub 'nearest') ──
+    if (exp.scope === 'target' || exp.scope === 'nearest') {
+      const discovered = [];
+      const target = this._findTarget(exp.targetId);
+      if (target && !target.explored) {
+        target.explored = true;
+        discovered.push(target.id);
+        // Jeśli to planeta — odkryj też jej księżyce
+        if (target.type === 'planet') {
+          for (const m of EntityManager.getByType('moon')) {
+            if (m.parentPlanetId === target.id && !m.explored) {
+              m.explored = true;
+              discovered.push(m.id);
+            }
+          }
+        }
+      }
 
-    if (exp.scope === 'nearest') {
-      // Odkryj najbliższą niezbadaną planetę + jej księżyce
-      const planet = this._findNearestUnexplored();
-      if (planet) {
-        planet.explored = true;
-        discovered.push(planet.id);
-        // Odkryj też księżyce tej planety
-        for (const m of EntityManager.getByType('moon')) {
-          if (m.parentPlanetId === planet.id && !m.explored) {
-            m.explored = true;
-            discovered.push(m.id);
-          }
-        }
+      exp.gained = { discovered: discovered.length };
+      exp.status = 'returning';
+
+      if (exp.vesselId && vMgr) {
+        vMgr.startReturn(exp.vesselId);
       }
-    } else {
-      // 'full_system' — odkryj WSZYSTKIE ciała niebieskie
-      const TYPES = ['planet', 'moon', 'asteroid', 'comet', 'planetoid'];
-      const homePl = window.KOSMOS?.homePlanet;
-      for (const t of TYPES) {
-        for (const b of EntityManager.getByType(t)) {
-          if (b === homePl) continue;
-          if (!b.explored) {
-            b.explored = true;
-            discovered.push(b.id);
-          }
-        }
-      }
+
+      EventBus.emit('expedition:reconComplete', {
+        expedition: exp, scope: exp.scope, discovered,
+      });
+      EventBus.emit('expedition:arrived', { expedition: exp, gained: exp.gained, multiplier: 1.0 });
+      return;
     }
 
-    exp.gained = { discovered: discovered.length };
+    // ── Sekwencyjny full_system recon ──
+    if (exp.scope === 'full_system') {
+      const target = this._findTarget(exp.targetId);
+      if (target && !target.explored) {
+        target.explored = true;
+        if (!exp.bodiesDiscovered) exp.bodiesDiscovered = [];
+        exp.bodiesDiscovered.push(target.id);
+        // Odkryj księżyce planety
+        if (target.type === 'planet') {
+          for (const m of EntityManager.getByType('moon')) {
+            if (m.parentPlanetId === target.id && !m.explored) {
+              m.explored = true;
+              exp.bodiesDiscovered.push(m.id);
+            }
+          }
+        }
+      }
+
+      // Emituj postęp rozpoznania
+      EventBus.emit('expedition:reconProgress', {
+        expedition: exp,
+        body: target,
+        discovered: exp.bodiesDiscovered?.length ?? 0,
+      });
+
+      // Znajdź następny cel (greedy nearest od bieżącej pozycji)
+      const nextTarget = this._findNearestUnexploredFrom(target);
+
+      if (nextTarget) {
+        // Sprawdź czy statek ma paliwo na lot do następnego + powrót do bazy
+        const vessel = vMgr?.getVessel(exp.vesselId);
+        const homePl = window.KOSMOS?.homePlanet;
+        if (vessel && homePl) {
+          const distNext = DistanceUtils.euclideanAU(target, nextTarget);
+          const distReturn = DistanceUtils.euclideanAU(nextTarget, homePl);
+          const fuelNeeded = (distNext + distReturn) * vessel.fuel.consumption;
+
+          if (vessel.fuel.current >= fuelNeeded) {
+            // Kontynuuj trasę — przekieruj statek
+            const shipSpeed = this._getShipSpeed(exp.vesselId);
+            const travelNext = parseFloat(Math.max(MIN_TRAVEL_YEARS, distNext / shipSpeed).toFixed(3));
+
+            exp.targetId = nextTarget.id;
+            exp.arrivalYear = this._gameYear + travelNext;
+            exp.status = 'en_route';
+
+            // Przekieruj vessel
+            if (vMgr && exp.vesselId) {
+              vMgr.redirectToTarget(exp.vesselId, nextTarget.id, exp.arrivalYear);
+            }
+            return; // nie zakończ misji — kontynuuj
+          }
+        }
+      }
+
+      // Brak kolejnych celów lub brak paliwa → wracaj do bazy
+      exp.gained = { discovered: exp.bodiesDiscovered?.length ?? 0 };
+      exp.status = 'returning';
+
+      // Oblicz czas powrotu
+      const shipSpeed = this._getShipSpeed(exp.vesselId);
+      const homePl2 = window.KOSMOS?.homePlanet;
+      const returnDist = target && homePl2 ? DistanceUtils.euclideanAU(target, homePl2) : 1;
+      const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, returnDist / shipSpeed).toFixed(3));
+      exp.returnYear = this._gameYear + returnTime;
+
+      if (exp.vesselId && vMgr) {
+        const vessel = vMgr.getVessel(exp.vesselId);
+        if (vessel?.mission) vessel.mission.returnYear = exp.returnYear;
+        vMgr.startReturn(exp.vesselId);
+      }
+
+      EventBus.emit('expedition:reconComplete', {
+        expedition: exp, scope: 'full_system',
+        discovered: exp.bodiesDiscovered ?? [],
+      });
+      EventBus.emit('expedition:arrived', { expedition: exp, gained: exp.gained, multiplier: 1.0 });
+      return;
+    }
+
+    // Fallback (nie powinno się zdarzyć)
     exp.status = 'returning';
-
-    // Vessel zaczyna powrót
-    if (exp.vesselId && vMgrR) {
-      vMgrR.startReturn(exp.vesselId);
-    }
-
-    EventBus.emit('expedition:reconComplete', {
-      expedition: exp,
-      scope: exp.scope,
-      discovered,
-    });
-    EventBus.emit('expedition:arrived', { expedition: exp, gained: exp.gained, multiplier: 1.0 });
+    if (exp.vesselId && vMgr) vMgr.startReturn(exp.vesselId);
   }
 
-  // Znajdź najbliższą niezbadaną planetę (wg odległości od homePlanet)
+  // Znajdź najbliższe niezbadane ciało — planetę lub księżyc (wg odległości od homePlanet)
+  // Księżyce planety domowej są dosłownie najbliższe — odkrywane jako pierwsze.
   _findNearestUnexplored() {
     const homePl = window.KOSMOS?.homePlanet;
-    const planets = EntityManager.getByType('planet')
-      .filter(p => !p.explored && p !== homePl);
-    if (planets.length === 0) return null;
-    planets.sort((a, b) => this._calcDistance(a) - this._calcDistance(b));
-    return planets[0];
+    const candidates = [];
+
+    // Planety (nie homePlanet — ta jest already explored)
+    for (const p of EntityManager.getByType('planet')) {
+      if (p === homePl || p.explored) continue;
+      candidates.push(p);
+    }
+    // Księżyce (w tym księżyce homePlanet — wymagają recon)
+    for (const m of EntityManager.getByType('moon')) {
+      if (m.explored) continue;
+      candidates.push(m);
+    }
+    // Planetoidy
+    for (const pl of EntityManager.getByType('planetoid')) {
+      if (pl.explored) continue;
+      candidates.push(pl);
+    }
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => this._calcDistance(a) - this._calcDistance(b));
+    return candidates[0];
+  }
+
+  // Znajdź najbliższe niezbadane ciało od podanej pozycji (nie od homePlanet)
+  // Używane przez sekwencyjny full_system recon (greedy nearest neighbor)
+  _findNearestUnexploredFrom(fromEntity) {
+    if (!fromEntity) return this._findNearestUnexplored();
+    const homePl = window.KOSMOS?.homePlanet;
+    const candidates = [];
+
+    for (const p of EntityManager.getByType('planet')) {
+      if (p === homePl || p.explored) continue;
+      candidates.push(p);
+    }
+    for (const m of EntityManager.getByType('moon')) {
+      if (m.explored) continue;
+      candidates.push(m);
+    }
+    for (const pl of EntityManager.getByType('planetoid')) {
+      if (pl.explored) continue;
+      candidates.push(pl);
+    }
+
+    if (candidates.length === 0) return null;
+    // Sortuj wg odległości euklidesowej od fromEntity
+    candidates.sort((a, b) =>
+      DistanceUtils.euclideanAU(fromEntity, a) - DistanceUtils.euclideanAU(fromEntity, b)
+    );
+    return candidates[0];
   }
 
   // Bazowy zarobek bez mnożnika zdarzenia

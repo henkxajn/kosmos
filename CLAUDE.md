@@ -198,6 +198,7 @@ SaveSystem._serializeCiv4x()
 | `fleet:buildFailed { reason }` | ColonyManager | UIManager |
 | `fleet:shipConsumed { planetId, shipId }` | ColonyManager | — |
 | `expedition:reconComplete { scope, discovered }` | ExpeditionSystem | UIManager (EventLog) |
+| `expedition:reconProgress { expedition, body, discovered }` | ExpeditionSystem | UIManager (EventLog, expedition state) |
 | `vessel:created { vessel }` | VesselManager | — |
 | `vessel:launched { vessel, mission }` | VesselManager | ThreeRenderer, UIManager |
 | `vessel:arrived { vessel, mission }` | VesselManager | ExpeditionSystem |
@@ -274,6 +275,7 @@ SaveSystem._serializeCiv4x()
 - [x] **Etap 28** — Scenariusz "Cywilizacja": losowy układ z gwarancją cywilizacji, wyłączone perturbacje/kolizje, auto-kolonizacja; zamrożony "Generator"; usunięty Eden
 - [x] **Etap 29** — Planetoidy: 3 typy (metallic/carbonaceous/silicate), wzbogacone składy (Cu/Ti/W/Pt/Li), widoczne orbity, save/restore
 - [x] **Etap 30** — System Transportowy: VesselManager (rejestr floty), Vessel entity (pozycja/paliwo/misja), VesselNames (auto-nazwy PL), paliwo Tier 1 (power_cells, fuelPerAU), statki jako 3D sprites na mapie, UI floty z panelem akcji, integracja z ExpeditionSystem (vesselId), save v6 z migracją string fleet → vessel instances
+- [x] **Etap 31** — Katalog ciał + fizyka lotów: katalog WSZYSTKICH ciał (explored+unexplored), recon na konkretne ciało, sekwencyjny full_system recon (greedy NN), unikanie Słońca (strefa wykluczenia 0.3 AU + waypoints), dynamiczny powrót do ruchomej planety, wielopunktowe linie trasy w 3D
 
 ### Następne etapy (plan)
 - [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
@@ -312,3 +314,9 @@ SaveSystem._serializeCiv4x()
 | Generator zamrożony (nie usunięty) | Kod generatora + systemy fizyki zachowane, ale niedostępne w UI (przycisk wyszarzony); łatwy powrót w przyszłości |
 | `window.KOSMOS.scenario` zamiast `edenScenario` | Czytelniejsza semantyka; wartości: 'civilization' / 'generator' |
 | Rozbiórka per-level (downgrade) | Lv>1: obniż o 1, zwrot 50% kosztu ulepszenia (surowce+commodities); Lv==1: pełna rozbiórka z 50% zwrotem; emergentna decyzja gracza |
+| Katalog ciał (nie tylko explored) | Gracz widzi WSZYSTKIE ciała w układzie — dane niezbadanych ukryte ("???"), ale typ i odległość widoczne (teleskop) |
+| Recon na konkretne ciało | Gracz wybiera cel rozpoznania z listy — nie tylko "nearest"/"full_system" ale konkretne body.id |
+| Sekwencyjny full_system recon | Statek odwiedza ciała jedno po drugim (greedy nearest neighbor) zamiast instant discover all |
+| Strefa wykluczenia Słońca (0.3 AU) | Statki nie lecą przez gwiazdę — `_calcRoute()` dodaje waypoint tangencjalny; `_interpolateWaypoints()` |
+| Dynamiczny powrót statku | `returnTargetX/Y` aktualizowane co tick z pozycji kolonii macierzystej — statek wraca do aktualnej pozycji planety |
+| Waypoints w misji (vessel.mission) | `waypoints: [{x,y}]` i `returnWaypoints: [{x,y}]` — serializowane w save, wielopunktowe linie trasy w ThreeRenderer |

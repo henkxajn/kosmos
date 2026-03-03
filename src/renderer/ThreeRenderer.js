@@ -1105,18 +1105,15 @@ export class ThreeRenderer {
 
     this.scene.add(sprite);
 
-    // Linia trasy (przerywana)
+    // Linia trasy (przerywana, wielopunktowa — start → waypoints → target)
     let routeLine = null;
     if (vessel.mission) {
-      const startPx = S(vessel.mission.startX ?? vessel.position.x);
-      const startPz = S(vessel.mission.startY ?? vessel.position.y);
-      const targetPx = S(vessel.mission.targetX ?? 0);
-      const targetPz = S(vessel.mission.targetY ?? 0);
+      const m = vessel.mission;
+      const wps = m.waypoints ?? [];
+      const points = [new THREE.Vector3(S(m.startX ?? vessel.position.x), 0.1, S(m.startY ?? vessel.position.y))];
+      for (const wp of wps) points.push(new THREE.Vector3(S(wp.x), 0.1, S(wp.y)));
+      points.push(new THREE.Vector3(S(m.targetX ?? 0), 0.1, S(m.targetY ?? 0)));
 
-      const points = [
-        new THREE.Vector3(startPx, 0.1, startPz),
-        new THREE.Vector3(targetPx, 0.1, targetPz),
-      ];
       const geo = new THREE.BufferGeometry().setFromPoints(points);
       const lineMat = new THREE.LineDashedMaterial({
         color, dashSize: 0.3, gapSize: 0.15,
@@ -1127,7 +1124,7 @@ export class ThreeRenderer {
       this.scene.add(routeLine);
     }
 
-    this._vessels.set(vessel.id, { sprite, routeLine, tex });
+    this._vessels.set(vessel.id, { sprite, routeLine, tex, color, _routePointCount: 0 });
   }
 
   /**
@@ -1161,18 +1158,49 @@ export class ThreeRenderer {
       }
       entry.sprite.position.set(S(vessel.position.x), 0.3, S(vessel.position.y));
 
-      // Aktualizuj linię trasy
-      if (entry.routeLine && vessel.mission) {
+      // Aktualizuj linię trasy (wielopunktowa: start → waypoints → target)
+      if (vessel.mission) {
         const m = vessel.mission;
-        const sx = m.phase === 'returning' ? S(m.returnStartX ?? 0) : S(m.startX ?? 0);
-        const sz = m.phase === 'returning' ? S(m.returnStartY ?? 0) : S(m.startY ?? 0);
-        const tx = m.phase === 'returning' ? S(m.returnTargetX ?? 0) : S(m.targetX ?? 0);
-        const tz = m.phase === 'returning' ? S(m.returnTargetY ?? 0) : S(m.targetY ?? 0);
-        const posArr = entry.routeLine.geometry.attributes.position.array;
-        posArr[0] = sx; posArr[1] = 0.1; posArr[2] = sz;
-        posArr[3] = tx; posArr[4] = 0.1; posArr[5] = tz;
-        entry.routeLine.geometry.attributes.position.needsUpdate = true;
-        entry.routeLine.computeLineDistances();
+        const isReturn = m.phase === 'returning';
+        const sx = isReturn ? (m.returnStartX ?? 0) : (m.startX ?? 0);
+        const sy = isReturn ? (m.returnStartY ?? 0) : (m.startY ?? 0);
+        const tx = isReturn ? (m.returnTargetX ?? 0) : (m.targetX ?? 0);
+        const ty = isReturn ? (m.returnTargetY ?? 0) : (m.targetY ?? 0);
+        const wps = isReturn ? (m.returnWaypoints ?? []) : (m.waypoints ?? []);
+
+        const nPts = 2 + wps.length; // start + waypoints + target
+        const prevPts = entry._routePointCount ?? 0;
+
+        if (prevPts !== nPts || !entry.routeLine) {
+          // Przebuduj geometrię (liczba punktów się zmieniła)
+          const savedColor = entry.color ?? 0xaaaaaa;
+          if (entry.routeLine) {
+            this.scene.remove(entry.routeLine);
+            entry.routeLine.geometry.dispose();
+            entry.routeLine.material.dispose();
+          }
+          const pts = [new THREE.Vector3(S(sx), 0.1, S(sy))];
+          for (const wp of wps) pts.push(new THREE.Vector3(S(wp.x), 0.1, S(wp.y)));
+          pts.push(new THREE.Vector3(S(tx), 0.1, S(ty)));
+          const geo = new THREE.BufferGeometry().setFromPoints(pts);
+          const lineMat = new THREE.LineDashedMaterial({
+            color: savedColor, dashSize: 0.3, gapSize: 0.15,
+            transparent: true, opacity: 0.4,
+          });
+          entry.routeLine = new THREE.Line(geo, lineMat);
+          entry.routeLine.computeLineDistances();
+          this.scene.add(entry.routeLine);
+          entry._routePointCount = nPts;
+        } else {
+          // Aktualizuj pozycje punktów w istniejącej geometrii
+          const posArr = entry.routeLine.geometry.attributes.position.array;
+          let idx = 0;
+          posArr[idx++] = S(sx); posArr[idx++] = 0.1; posArr[idx++] = S(sy);
+          for (const wp of wps) { posArr[idx++] = S(wp.x); posArr[idx++] = 0.1; posArr[idx++] = S(wp.y); }
+          posArr[idx++] = S(tx); posArr[idx++] = 0.1; posArr[idx++] = S(ty);
+          entry.routeLine.geometry.attributes.position.needsUpdate = true;
+          entry.routeLine.computeLineDistances();
+        }
       }
     }
   }

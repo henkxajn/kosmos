@@ -332,6 +332,13 @@ export class UIManager {
         this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
       }
     });
+    EventBus.on('expedition:reconProgress', ({ expedition }) => {
+      // Sekwencyjny full_system recon — aktualizuj dane (nowy targetId, arrivalYear, bodiesDiscovered)
+      const idx = this._expeditions.findIndex(e => e.id === expedition.id);
+      if (idx !== -1) {
+        this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
+      }
+    });
 
     // Flota
     EventBus.on('fleet:buildStarted', ({ shipId }) => {
@@ -450,9 +457,15 @@ export class UIManager {
       this._log(`Strata POPa${causeText}! Populacja: ${population}`, 'pop_died');
     });
 
+    EventBus.on('expedition:reconProgress', ({ body, discovered }) => {
+      // Postęp sekwencyjnego recon — odkryto kolejne ciało
+      const name = body?.name ?? '???';
+      this._log(`🔭 Odkryto: ${name} (${discovered} zbadanych)`, 'expedition_ok');
+    });
     EventBus.on('expedition:reconComplete', ({ scope, discovered }) => {
-      const label = scope === 'nearest' ? 'Rozpoznanie planety' : 'Rozpoznanie układu';
-      this._log(`${label}: odkryto ${discovered.length} ciał`, 'expedition_ok');
+      const label = scope === 'nearest' ? 'Rozpoznanie' : 'Rozpoznanie układu';
+      const count = Array.isArray(discovered) ? discovered.length : discovered;
+      this._log(`${label}: odkryto ${count} ciał`, 'expedition_ok');
     });
     EventBus.on('expedition:arrived', ({ expedition, multiplier }) => {
       // Orbiting nie loguje "wraca" — raport logowany osobno
@@ -837,7 +850,12 @@ export class UIManager {
           : exp.status === 'orbiting' ? C.yellow : '#88ccff';
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = color;
-        ctx.fillText(`${arrow} ${icon} ${_truncate(exp.targetName ?? '?', 14)}`, bodyX + PAD, y);
+        // Dla full_system recon pokaż postęp
+        let displayName = _truncate(exp.targetName ?? '?', 14);
+        if (exp.scope === 'full_system' && exp.bodiesDiscovered) {
+          displayName = `Recon (${exp.bodiesDiscovered.length} zbad.)`;
+        }
+        ctx.fillText(`${arrow} ${icon} ${displayName}`, bodyX + PAD, y);
 
         if (exp.status === 'orbiting') {
           const btnW = 42; const btnH = 12;
@@ -865,11 +883,11 @@ export class UIManager {
       if (count > 10) { ctx.fillStyle = C.text; ctx.fillText(`...i ${count - 10} więcej`, bodyX + PAD, y); y += LH; }
     }
 
-    // ── PRAWA KOLUMNA: KATALOG ZBADANYCH CIAŁ ────────────────────
+    // ── PRAWA KOLUMNA: KATALOG CIAŁ NIEBIESKICH ──────────────────
     const catalogX = bodyX + halfW;
     const catalogW = halfW - PAD;
     const catalogMaxH = upperZoneH - 20; // margines
-    this._drawExploredCatalog(ctx, bodyY, catalogX, catalogW, catalogMaxH);
+    this._drawBodyCatalog(ctx, bodyY, catalogX, catalogW, catalogMaxH);
 
     // ═══════════════════════════════════════════════════════════════
     // DOLNA STREFA: FLOTA + STOCZNIA (pełna szerokość)
@@ -1035,22 +1053,26 @@ export class UIManager {
     }
   }
 
-  // ── Lista zbadanych ciał (bez homePlanet) ─────────────────────────
-  _getExploredBodies() {
+  // ── Katalog WSZYSTKICH ciał niebieskich (bez homePlanet) ──────────
+  _getAllCatalogBodies() {
     const homePl = window.KOSMOS?.homePlanet;
     const bodies = [];
     for (const t of ['planet', 'moon', 'planetoid']) {
       for (const body of EntityManager.getByType(t)) {
-        if (!body.explored || body === homePl) continue;
-        bodies.push(body);
+        if (body === homePl) continue;
+        bodies.push({ body, explored: !!body.explored });
       }
     }
-    // Sortuj wg odległości orbitalnej od gwiazdy
-    return bodies.sort((a, b) => (a.orbital?.a ?? 0) - (b.orbital?.a ?? 0));
+    // Sortuj: explored najpierw, potem wg odległości orbitalnej
+    bodies.sort((a, b) => {
+      if (a.explored !== b.explored) return a.explored ? -1 : 1;
+      return (a.body.orbital?.a ?? 0) - (b.body.orbital?.a ?? 0);
+    });
+    return bodies;
   }
 
-  // ── Rysowanie katalogu zbadanych ciał (prawa kolumna, scrollowalna) ──
-  _drawExploredCatalog(ctx, bodyY, catalogX, catalogW, maxH) {
+  // ── Rysowanie katalogu ciał niebieskich (prawa kolumna, scrollowalna) ──
+  _drawBodyCatalog(ctx, bodyY, catalogX, catalogW, maxH) {
     const PAD = 8;
     const LH = 14;
     const ROW_H = 28; // 2 wiersze na ciało
@@ -1059,12 +1081,13 @@ export class UIManager {
     // Nagłówek
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.title;
-    ctx.fillText('ZBADANE CIAŁA', catalogX + PAD, cy);
+    ctx.fillText('KATALOG CIAŁ', catalogX + PAD, cy);
 
-    const bodies = this._getExploredBodies();
+    const entries = this._getAllCatalogBodies();
+    const exploredCount = entries.filter(e => e.explored).length;
     ctx.fillStyle = C.label;
     ctx.textAlign = 'right';
-    ctx.fillText(`${bodies.length}`, catalogX + catalogW - PAD, cy);
+    ctx.fillText(`${exploredCount}/${entries.length}`, catalogX + catalogW - PAD, cy);
     ctx.textAlign = 'left';
     cy += 4;
 
@@ -1072,10 +1095,10 @@ export class UIManager {
     ctx.beginPath(); ctx.moveTo(catalogX + PAD, cy); ctx.lineTo(catalogX + catalogW - PAD, cy); ctx.stroke();
     cy += 6;
 
-    if (bodies.length === 0) {
+    if (entries.length === 0) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.dim;
-      ctx.fillText('Brak zbadanych ciał', catalogX + PAD, cy);
+      ctx.fillText('Brak ciał w układzie', catalogX + PAD, cy);
       this._catalogContentH = 0;
       this._catalogVisibleH = 0;
       return;
@@ -1084,7 +1107,7 @@ export class UIManager {
     // Strefa scrollowalna z clippingiem
     const visibleH = maxH - (cy - bodyY);
     this._catalogVisibleH = visibleH;
-    this._catalogContentH = bodies.length * ROW_H;
+    this._catalogContentH = entries.length * ROW_H;
 
     ctx.save();
     ctx.beginPath();
@@ -1094,54 +1117,70 @@ export class UIManager {
     const scrollY = this._catalogScrollY || 0;
     let ry = cy - scrollY;
 
-    for (const body of bodies) {
+    for (const { body, explored } of entries) {
       // Pomiń elementy poza widocznym obszarem (optymalizacja)
       if (ry + ROW_H < cy - 2) { ry += ROW_H; continue; }
       if (ry > cy + visibleH + 2) break;
 
-      // Wiersz 1: ikona + nazwa + typ + temperatura
       const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
-      const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
-      const tempStr = tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : '—';
       const typeStr = body.planetType ?? body.type;
-
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = '#88ccff';
-      ctx.fillText(`${icon} ${_truncate(body.name, 12)}`, catalogX + PAD, ry + 10);
-      ctx.fillStyle = C.dim;
-      ctx.fillText(typeStr, catalogX + PAD + 90, ry + 10);
-      // Temperatura po prawej
-      ctx.fillStyle = tempC !== null && tempC > -20 && tempC < 60 ? '#44cc66' : C.label;
-      ctx.textAlign = 'right';
-      ctx.fillText(tempStr, catalogX + catalogW - PAD - 3, ry + 10);
-      ctx.textAlign = 'left';
-
-      // Wiersz 2: masa + AU od gwiazdy + AU od gracza + złoża
-      const mass = body.physics?.mass ?? 0;
-      const massStr = mass > 0 ? `${mass.toFixed(1)}M⊕` : '—';
       const orbA = body.orbital?.a ?? 0;
       const distHome = DistanceUtils.orbitalFromHomeAU(body);
 
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.dim;
-      ctx.fillText(`${massStr}  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2, ry + 22);
+      if (explored) {
+        // ── Zbadane ciało — pełne dane ──
+        const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
+        const tempStr = tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : '—';
 
-      // Złoża (top 3 wg richness)
-      const deps = body.deposits ?? [];
-      if (deps.length > 0) {
-        const topDeps = [...deps]
-          .filter(d => d.remaining > 0)
-          .sort((a, b) => b.richness - a.richness)
-          .slice(0, 3);
-        let depStr = '';
-        for (const d of topDeps) {
-          const stars = d.richness >= 0.7 ? '★★★' : d.richness >= 0.4 ? '★★' : '★';
-          depStr += `${d.resourceId}${stars} `;
-        }
-        ctx.fillStyle = '#aa8844';
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = '#88ccff';
+        ctx.fillText(`${icon} ${_truncate(body.name, 12)}`, catalogX + PAD, ry + 10);
+        ctx.fillStyle = C.dim;
+        ctx.fillText(typeStr, catalogX + PAD + 90, ry + 10);
+        ctx.fillStyle = tempC !== null && tempC > -20 && tempC < 60 ? '#44cc66' : C.label;
         ctx.textAlign = 'right';
-        ctx.fillText(depStr.trim(), catalogX + catalogW - PAD - 3, ry + 22);
+        ctx.fillText(tempStr, catalogX + catalogW - PAD - 3, ry + 10);
         ctx.textAlign = 'left';
+
+        // Wiersz 2: masa + AU od gwiazdy + AU od gracza + złoża
+        const mass = body.physics?.mass ?? 0;
+        const massStr = mass > 0 ? `${mass.toFixed(1)}M⊕` : '—';
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.dim;
+        ctx.fillText(`${massStr}  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2, ry + 22);
+
+        // Złoża (top 3 wg richness)
+        const deps = body.deposits ?? [];
+        if (deps.length > 0) {
+          const topDeps = [...deps]
+            .filter(d => d.remaining > 0)
+            .sort((a, b) => b.richness - a.richness)
+            .slice(0, 3);
+          let depStr = '';
+          for (const d of topDeps) {
+            const stars = d.richness >= 0.7 ? '★★★' : d.richness >= 0.4 ? '★★' : '★';
+            depStr += `${d.resourceId}${stars} `;
+          }
+          ctx.fillStyle = '#aa8844';
+          ctx.textAlign = 'right';
+          ctx.fillText(depStr.trim(), catalogX + catalogW - PAD - 3, ry + 22);
+          ctx.textAlign = 'left';
+        }
+      } else {
+        // ── Niezbadane ciało — ukryte dane ──
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = '#445566';
+        ctx.fillText(`${icon} ???`, catalogX + PAD, ry + 10);
+        ctx.fillStyle = '#334455';
+        ctx.fillText(typeStr, catalogX + PAD + 90, ry + 10);
+        ctx.textAlign = 'right';
+        ctx.fillText('???', catalogX + catalogW - PAD - 3, ry + 10);
+        ctx.textAlign = 'left';
+
+        // Wiersz 2: odległość widoczna, masa/złoża ukryte
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = '#334455';
+        ctx.fillText(`???  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2, ry + 22);
       }
 
       ry += ROW_H;
@@ -1248,7 +1287,7 @@ export class UIManager {
     let y = py;
     const colMgr = window.KOSMOS?.colonyManager;
 
-    // Recon — specjalne przyciski (nearest / full_system)
+    // Recon — przyciski nearest / full_system + lista ciał do rozpoznania
     if (missionType === 'recon') {
       const exSys = window.KOSMOS?.expeditionSystem;
       const unexplored = exSys?.getUnexploredCount() ?? { total: 0 };
@@ -1258,7 +1297,7 @@ export class UIManager {
       } else {
         const btnH = 15; const halfW = Math.floor((panelW - 4) / 2);
         for (const scope of ['nearest', 'full_system']) {
-          const label = scope === 'nearest' ? '🪐 Najbliższa' : '☀ Cały układ';
+          const label = scope === 'nearest' ? '🔭 Najbliższe' : '☀ Cały układ';
           const bx = scope === 'nearest' ? px : px + halfW + 4;
           const by = y;
           ctx.fillStyle = 'rgba(20,40,60,0.8)'; ctx.fillRect(bx, by, halfW, btnH);
@@ -1272,6 +1311,42 @@ export class UIManager {
           });
         }
         y += btnH + 4;
+
+        // Lista konkretnych ciał do rozpoznania (explored + unexplored)
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.label; ctx.fillText('Lub wybierz konkretne ciało:', px + 2, y); y += LH;
+
+        const reconTargets = this._getReconTargets(vessel);
+        for (const t of reconTargets.slice(0, 8)) {
+          const btnH2 = 14;
+          const bx = px; const by = y;
+          const inRange = t.inRange;
+          const isExplored = t.explored;
+          ctx.fillStyle = isExplored ? 'rgba(15,25,15,0.4)'
+            : inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
+          ctx.fillRect(bx, by, panelW, btnH2);
+          ctx.strokeStyle = isExplored ? '#224422'
+            : inRange ? '#335' : '#322';
+          ctx.strokeRect(bx, by, panelW, btnH2);
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = isExplored ? '#446644'
+            : inRange ? '#88ccff' : '#665555';
+          const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
+          const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
+          const shipSpeed = SHIPS[vessel.shipId]?.speedAU ?? 1.0;
+          const eta = t.dist / shipSpeed;
+          const etaStr = eta < 0.05 ? `${Math.round(eta * 365)}d` : `${eta.toFixed(1)}y`;
+          const nameStr = isExplored ? `✓${_truncate(t.name, 10)}` : `${t.icon} ???`;
+          ctx.fillText(`${nameStr} ${distStr}AU ⛽${fuelCost} ⏱${etaStr}`, bx + 2, by + 10);
+          // Tylko niezbadane ciała + w zasięgu → klikalny przycisk
+          if (!isExplored && inRange) {
+            this._vesselActionBtns.push({
+              x: bx, y: by, w: panelW, h: btnH2,
+              action: 'launchRecon', scope: t.id, vesselId: vessel.id,
+            });
+          }
+          y += btnH2 + 1;
+        }
       }
       return y;
     }
@@ -1363,6 +1438,35 @@ export class UIManager {
     }
 
     targets.sort((a, b) => a.dist - b.dist);
+    return targets;
+  }
+
+  // ── Pobierz cele rozpoznania (WSZYSTKIE ciała, explored + unexplored) ──
+  _getReconTargets(vessel) {
+    const homePl = window.KOSMOS?.homePlanet;
+    const targets = [];
+    const TYPES = ['planet', 'moon', 'planetoid'];
+
+    for (const t of TYPES) {
+      for (const body of EntityManager.getByType(t)) {
+        if (body === homePl) continue;
+        const dist = DistanceUtils.orbitalFromHomeAU(body);
+        // Paliwo na lot + powrót (2× dystans)
+        const fuelNeeded = dist * 2 * vessel.fuel.consumption;
+        const inRange = vessel.fuel.current >= fuelNeeded;
+        const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
+        targets.push({
+          id: body.id, name: body.name, dist, inRange, icon,
+          explored: !!body.explored,
+        });
+      }
+    }
+
+    // Niezbadane najpierw, potem wg dystansu
+    targets.sort((a, b) => {
+      if (a.explored !== b.explored) return a.explored ? 1 : -1;
+      return a.dist - b.dist;
+    });
     return targets;
   }
 

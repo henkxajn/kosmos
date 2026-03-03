@@ -36,6 +36,11 @@ import {
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
+// Strefa wykluczenia wokół gwiazdy (w jednostkach fizyki gry = AU × AU_TO_PX)
+const SUN_EXCLUSION_AU = 0.3;                           // AU
+const SUN_EXCLUSION    = SUN_EXCLUSION_AU * AU_TO_PX;   // px — promień strefy
+const SUN_MARGIN       = 0.1 * AU_TO_PX;                // margines ominięcia
+
 // Tankowanie: ile power_cells/rok docked vessel ładuje (z energii kolonii)
 const REFUEL_RATE = 2; // pc/rok
 // Koszt energetyczny: ile energy z inventory kolonii za 1 power_cell
@@ -161,12 +166,19 @@ export class VesselManager {
     const startEntity = this._findEntity(vessel.position.dockedAt);
     const targetEntity = this._findEntity(mission.targetId);
 
+    const sx = startEntity?.x ?? vessel.position.x;
+    const sy = startEntity?.y ?? vessel.position.y;
+    const tx = targetEntity?.x ?? 0;
+    const ty = targetEntity?.y ?? 0;
+
+    // Oblicz trasę z unikaniem Słońca
+    const route = this._calcRoute(sx, sy, tx, ty);
+
     vessel.mission = {
       ...mission,
-      startX: startEntity?.x ?? vessel.position.x,
-      startY: startEntity?.y ?? vessel.position.y,
-      targetX: targetEntity?.x ?? 0,
-      targetY: targetEntity?.y ?? 0,
+      startX: sx, startY: sy,
+      targetX: tx, targetY: ty,
+      waypoints: route.waypoints, // [{x,y}] lub []
     };
 
     // Zużyj paliwo (dystans w jedną stronę)
@@ -208,9 +220,15 @@ export class VesselManager {
     const m = vessel.mission;
     m.returnStartX = vessel.position.x;
     m.returnStartY = vessel.position.y;
-    m.returnTargetX = m.startX;
-    m.returnTargetY = m.startY;
+    // Cel powrotu = aktualna pozycja kolonii macierzystej
+    const homeEntity = this._findEntity(vessel.colonyId);
+    m.returnTargetX = homeEntity?.x ?? m.startX;
+    m.returnTargetY = homeEntity?.y ?? m.startY;
     m.phase = 'returning';
+
+    // Oblicz waypoints powrotne (unikanie Słońca)
+    const returnRoute = this._calcRoute(m.returnStartX, m.returnStartY, m.returnTargetX, m.returnTargetY);
+    m.returnWaypoints = returnRoute.waypoints;
 
     vessel.position.state = 'in_transit';
     vessel.position.dockedAt = null;
@@ -274,6 +292,13 @@ export class VesselManager {
   serialize() {
     const vessels = [];
     for (const v of this._vessels.values()) {
+      let missionData = null;
+      if (v.mission) {
+        missionData = { ...v.mission };
+        // Głęboka kopia waypoints (tablice obiektów)
+        if (missionData.waypoints) missionData.waypoints = missionData.waypoints.map(w => ({ ...w }));
+        if (missionData.returnWaypoints) missionData.returnWaypoints = missionData.returnWaypoints.map(w => ({ ...w }));
+      }
       vessels.push({
         id:         v.id,
         shipId:     v.shipId,
@@ -281,7 +306,7 @@ export class VesselManager {
         colonyId:   v.colonyId,
         position:   { ...v.position },
         fuel:       { ...v.fuel },
-        mission:    v.mission ? { ...v.mission } : null,
+        mission:    missionData,
         status:     v.status,
         experience: v.experience,
       });
@@ -301,6 +326,12 @@ export class VesselManager {
     restoreNameCounters(data.nameCounters ?? null);
 
     for (const vd of (data.vessels ?? [])) {
+      let missionData = null;
+      if (vd.mission) {
+        missionData = { ...vd.mission };
+        if (missionData.waypoints) missionData.waypoints = missionData.waypoints.map(w => ({ ...w }));
+        if (missionData.returnWaypoints) missionData.returnWaypoints = missionData.returnWaypoints.map(w => ({ ...w }));
+      }
       const vessel = {
         id:         vd.id,
         shipId:     vd.shipId,
@@ -308,7 +339,7 @@ export class VesselManager {
         colonyId:   vd.colonyId,
         position:   { ...vd.position },
         fuel:       { ...vd.fuel },
-        mission:    vd.mission ? { ...vd.mission } : null,
+        mission:    missionData,
         status:     vd.status ?? 'idle',
         experience: vd.experience ?? 0,
       };
@@ -414,16 +445,28 @@ export class VesselManager {
       const m = vessel.mission;
 
       if (m.phase === 'returning') {
-        // Powrót: interpolacja returnStart → returnTarget
+        // Dynamicznie aktualizuj cel powrotu (planeta macierzysta się porusza po orbicie)
+        const homeEntity = this._findEntity(vessel.colonyId);
+        if (homeEntity) {
+          m.returnTargetX = homeEntity.x;
+          m.returnTargetY = homeEntity.y;
+        }
+
+        // Powrót: interpolacja returnStart → (waypoints) → returnTarget
         const totalReturn = (m.returnYear ?? m.arrivalYear) - (m.arrivalYear ?? m.departYear);
         if (totalReturn <= 0) continue;
         const t = Math.max(0, Math.min(1,
           (gameYear - (m.arrivalYear ?? m.departYear)) / totalReturn
         ));
-        vessel.position.x = m.returnStartX + (m.returnTargetX - m.returnStartX) * t;
-        vessel.position.y = m.returnStartY + (m.returnTargetY - m.returnStartY) * t;
+        const rp = this._interpolateWaypoints(
+          m.returnStartX, m.returnStartY,
+          m.returnTargetX, m.returnTargetY,
+          m.returnWaypoints ?? [], t
+        );
+        vessel.position.x = rp.x;
+        vessel.position.y = rp.y;
       } else {
-        // W drodze do celu: interpolacja start → target
+        // W drodze do celu: interpolacja start → (waypoints) → target
         const totalTravel = (m.arrivalYear ?? 1) - (m.departYear ?? 0);
         if (totalTravel <= 0) continue;
         const t = Math.max(0, Math.min(1,
@@ -436,15 +479,14 @@ export class VesselManager {
           m.targetX = targetEntity.x;
           m.targetY = targetEntity.y;
         }
-        // Aktualizuj startowe (planeta źródłowa też się porusza)
-        const sourceEntity = this._findEntity(vessel.colonyId);
-        if (sourceEntity) {
-          m.startX = sourceEntity.x;
-          m.startY = sourceEntity.y;
-        }
 
-        vessel.position.x = m.startX + (m.targetX - m.startX) * t;
-        vessel.position.y = m.startY + (m.targetY - m.startY) * t;
+        const op = this._interpolateWaypoints(
+          m.startX, m.startY,
+          m.targetX, m.targetY,
+          m.waypoints ?? [], t
+        );
+        vessel.position.x = op.x;
+        vessel.position.y = op.y;
       }
 
       anyMoved = true;
@@ -453,6 +495,133 @@ export class VesselManager {
     if (anyMoved) {
       EventBus.emit('vessel:positionUpdate', { vessels: this.getInTransit() });
     }
+  }
+
+  /**
+   * Interpolacja po wielopunktowej trasie: start → waypoints → target.
+   * t ∈ [0,1] — postęp całej trasy; zwraca {x, y}.
+   */
+  _interpolateWaypoints(sx, sy, tx, ty, waypoints, t) {
+    if (!waypoints || waypoints.length === 0) {
+      // Prosta interpolacja bez waypointów
+      return { x: sx + (tx - sx) * t, y: sy + (ty - sy) * t };
+    }
+
+    // Zbuduj tablicę segmentów: start → wp1 → wp2 → ... → target
+    const pts = [{ x: sx, y: sy }];
+    for (const wp of waypoints) pts.push(wp);
+    pts.push({ x: tx, y: ty });
+
+    // Oblicz długości segmentów
+    const segLens = [];
+    let totalLen = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      segLens.push(d);
+      totalLen += d;
+    }
+    if (totalLen < 1) return { x: sx, y: sy };
+
+    // Znajdź segment odpowiadający postępowi t
+    let traveled = t * totalLen;
+    for (let i = 0; i < segLens.length; i++) {
+      if (traveled <= segLens[i] || i === segLens.length - 1) {
+        const segT = segLens[i] > 0 ? Math.min(1, traveled / segLens[i]) : 0;
+        return {
+          x: pts[i].x + (pts[i + 1].x - pts[i].x) * segT,
+          y: pts[i].y + (pts[i + 1].y - pts[i].y) * segT,
+        };
+      }
+      traveled -= segLens[i];
+    }
+    return { x: tx, y: ty };
+  }
+
+  /**
+   * Oblicz trasę z unikaniem Słońca.
+   * Zwraca { waypoints: [{x,y}], totalDist } w jednostkach fizyki gry (px).
+   */
+  _calcRoute(sx, sy, tx, ty) {
+    // Sprawdź czy odcinek start→target przecina strefę wykluczenia (0,0)
+    const dx = tx - sx, dy = ty - sy;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq < 1) return { waypoints: [], totalDist: Math.sqrt(lenSq) };
+
+    // Minimalna odległość prostej start→target od (0,0)
+    // Wzór: |cross(P-S, D)| / |D| gdzie D=target-start, P=(0,0)
+    const cross = (-sx) * dy - (-sy) * dx;
+    const len = Math.sqrt(lenSq);
+    const minDist = Math.abs(cross) / len;
+
+    // Sprawdź też czy (0,0) leży pomiędzy start i target (nie za nimi)
+    const dot = (-sx) * dx + (-sy) * dy;
+    const t = dot / lenSq;
+
+    if (minDist > SUN_EXCLUSION || t < 0 || t > 1) {
+      // Prosta trasa — nie przecina strefy
+      return { waypoints: [], totalDist: len };
+    }
+
+    // Potrzebny waypoint — punkt tangencjalny po krótszej stronie
+    const r = SUN_EXCLUSION + SUN_MARGIN;
+
+    // Kąt wektora start→target
+    const baseAngle = Math.atan2(dy, dx);
+
+    // Dwa potencjalne waypoints (po obu stronach Słońca)
+    const perpAngle1 = baseAngle + Math.PI / 2;
+    const perpAngle2 = baseAngle - Math.PI / 2;
+
+    const wp1 = { x: r * Math.cos(perpAngle1), y: r * Math.sin(perpAngle1) };
+    const wp2 = { x: r * Math.cos(perpAngle2), y: r * Math.sin(perpAngle2) };
+
+    // Wybierz stronę minimalizującą łączny dystans
+    const dist1 = Math.hypot(wp1.x - sx, wp1.y - sy) + Math.hypot(tx - wp1.x, ty - wp1.y);
+    const dist2 = Math.hypot(wp2.x - sx, wp2.y - sy) + Math.hypot(tx - wp2.x, ty - wp2.y);
+
+    const wp = dist1 <= dist2 ? wp1 : wp2;
+    const totalDist = dist1 <= dist2 ? dist1 : dist2;
+
+    return { waypoints: [wp], totalDist };
+  }
+
+  /**
+   * Przekieruj statek w locie do nowego celu (sekwencyjny recon).
+   */
+  redirectToTarget(vesselId, newTargetId, newArrivalYear) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel?.mission) return;
+    const m = vessel.mission;
+
+    // Snap do pozycji bieżącego celu (statek właśnie dotarł)
+    const currentTarget = this._findEntity(m.targetId);
+    if (currentTarget) {
+      vessel.position.x = currentTarget.x;
+      vessel.position.y = currentTarget.y;
+    }
+
+    // Obecna pozycja staje się nowym startem
+    m.startX = vessel.position.x;
+    m.startY = vessel.position.y;
+    m.targetId = newTargetId;
+    const target = this._findEntity(newTargetId);
+    m.targetX = target?.x ?? 0;
+    m.targetY = target?.y ?? 0;
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    m.departYear = gameYear;
+    m.arrivalYear = newArrivalYear;
+    m.phase = undefined; // outbound
+
+    // Oblicz waypoints (unikanie Słońca)
+    const route = this._calcRoute(m.startX, m.startY, m.targetX, m.targetY);
+    m.waypoints = route.waypoints;
+
+    // Zużyj paliwo za nowy odcinek (consumption = pc/AU, totalDist w px)
+    const fuelCost = (route.totalDist / AU_TO_PX) * vessel.fuel.consumption;
+    vessel.fuel.current = Math.max(0, vessel.fuel.current - fuelCost);
+
+    vessel.position.state = 'in_transit';
   }
 
   /**
