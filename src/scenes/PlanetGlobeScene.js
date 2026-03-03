@@ -120,6 +120,10 @@ export class PlanetGlobeScene {
     this._onTimeState      = null;
     this._onTimeDisplay    = null;
 
+    // Komunikat flash (błąd budowy/ulepszenia)
+    this._flashMsg     = null;   // tekst
+    this._flashEnd     = 0;      // timestamp zakończenia
+
     // Pętla rysowania
     this._animFrameId = null;
   }
@@ -397,24 +401,33 @@ export class PlanetGlobeScene {
     };
 
     // Build/Demolish results
-    this._onBuildResult = ({ success }) => {
+    this._onBuildResult = ({ success, reason }) => {
       if (success) {
         this._syncBuildingIds();
         this._globeRenderer?.refreshTexture();
+      } else if (reason) {
+        this._flashMsg = reason;
+        this._flashEnd = Date.now() + 2500;
       }
     };
 
-    this._onDemolishResult = ({ success }) => {
+    this._onDemolishResult = ({ success, reason }) => {
       if (success) {
         this._syncBuildingIds();
         this._globeRenderer?.refreshTexture();
+      } else if (reason) {
+        this._flashMsg = reason;
+        this._flashEnd = Date.now() + 2500;
       }
     };
 
-    this._onUpgradeResult = ({ success }) => {
+    this._onUpgradeResult = ({ success, reason }) => {
       if (success) {
         this._syncBuildingIds();
         this._globeRenderer?.refreshTexture();
+      } else if (reason) {
+        this._flashMsg = reason;
+        this._flashEnd = Date.now() + 2500;
       }
     };
 
@@ -664,6 +677,28 @@ export class PlanetGlobeScene {
     // CivPanel overlay — rysuj treść zakładki nad globem
     if (this._civTab) {
       this._drawCivTabOverlay(ctx);
+    }
+
+    // Flash message (błąd budowy/ulepszenia/rozbiórki)
+    if (this._flashMsg && Date.now() < this._flashEnd) {
+      const fAlpha = Math.min(1, (this._flashEnd - Date.now()) / 800);
+      ctx.globalAlpha = fAlpha;
+      const fW = ctx.measureText(this._flashMsg).width + 24;
+      const fX = (LW - fW) / 2;
+      const fY = HEADER_H + 8;
+      ctx.fillStyle = 'rgba(80,20,10,0.92)';
+      ctx.fillRect(fX, fY, fW, 22);
+      ctx.strokeStyle = '#cc4422';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(fX, fY, fW, 22);
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#ffaa88';
+      ctx.textAlign = 'center';
+      ctx.fillText(this._flashMsg, LW / 2, fY + 15);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
+    } else if (this._flashMsg && Date.now() >= this._flashEnd) {
+      this._flashMsg = null;
     }
 
     // Tooltip TopBar — na samym wierzchu (po wszystkich panelach)
@@ -1092,8 +1127,10 @@ export class PlanetGlobeScene {
           }
         }
 
-        // Sprawdź czy stać
-        const canAfford = Object.entries(upgCost).every(([k, v]) => (inv[k] ?? 0) >= v);
+        // Sprawdź czy stać (surowce + POP)
+        const upgPopCost = b.popCost ?? 0.25;
+        const upgPopOk   = upgPopCost <= 0 || (cSys && cSys.freePops >= upgPopCost);
+        const canAfford  = Object.entries(upgCost).every(([k, v]) => (inv[k] ?? 0) >= v) && upgPopOk;
 
         // Hover detection
         const isHover = this._buildPanelMouseX >= BPX + 8
@@ -1124,6 +1161,13 @@ export class PlanetGlobeScene {
           const ok = have >= amt;
           ctx.fillStyle = ok ? '#448866' : '#cc4422';
           ctx.fillText(`${dispIcon} ${name}: ${have}/${amt}`, BPX + 14, buildListY);
+          buildListY += 12;
+        }
+        // Koszt POP
+        if (upgPopCost > 0) {
+          const freePops = cSys?.freePops ?? 0;
+          ctx.fillStyle = upgPopOk ? '#448866' : '#cc4422';
+          ctx.fillText(`👤 POP: ${freePops >= upgPopCost ? '✓' : `${freePops}/${upgPopCost}`}`, BPX + 14, buildListY);
           buildListY += 12;
         }
         buildListY += 4;
@@ -1604,10 +1648,11 @@ export class PlanetGlobeScene {
           EventBus.emit('planet:upgradeRequest', { planet: this.planet, tile });
           return true;
         }
-        // Pomiń przycisk + linie kosztów ulepszenia
+        // Pomiń przycisk + linie kosztów ulepszenia (+ linia POP)
         const upgCostCount = Object.keys(bDef.cost || {}).length
           + (((tile.buildingLevel ?? 1) + 1) >= 3 ? Object.keys(bDef.commodityCost || {}).length : 0);
-        btnY = upgradeY + 32 + upgCostCount * 12 + 4;
+        const upgPopLine = (bDef.popCost ?? 0.25) > 0 ? 1 : 0;
+        btnY = upgradeY + 32 + (upgCostCount + upgPopLine) * 12 + 4;
       }
 
       // Rozbiórka

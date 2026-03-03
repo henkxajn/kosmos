@@ -307,6 +307,12 @@ export class BuildingSystem {
       this.resourceSystem.registerProducer(producerId, entry.effectiveRates);
     }
 
+    // Housing: każdy kolejny level dodaje housing (np. habitat +3/lv)
+    if (building.housing > 0) {
+      entry.housing = (entry.housing || 0) + building.housing;
+      EventBus.emit('civ:addHousing', { amount: building.housing });
+    }
+
     // Fabryka: dodaj punkt produkcji za każdy level powyżej 1
     if (building.id === 'factory' && this._factorySystem) {
       // Recalc total points: zlicz wszystkie fabryki × level
@@ -374,6 +380,12 @@ export class BuildingSystem {
       // Fabryka: przelicz punkty produkcji
       if (buildingId === 'factory' && this._factorySystem) {
         this._recalcFactoryPoints();
+      }
+
+      // Odejmij housing za obniżony poziom (np. habitat -3/lv)
+      if (building?.housing > 0) {
+        entry.housing = Math.max(0, (entry.housing || 0) - building.housing);
+        EventBus.emit('civ:removeHousing', { amount: building.housing });
       }
 
       // Zwolnij POPy za obniżony poziom
