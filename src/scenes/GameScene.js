@@ -27,7 +27,7 @@ import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }         from '../systems/DepositSystem.js';
 import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
-import { showEventNotification } from '../ui/EventChoiceModal.js';
+import { showEventNotification, showImpactNotification } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { Star }              from '../entities/Star.js';
@@ -269,6 +269,14 @@ export class GameScene {
     // Powiadomienia o zdarzeniach losowych
     EventBus.on('randomEvent:occurred', ({ event, colonyName }) => {
       showEventNotification(event, colonyName);
+    });
+
+    // Powiadomienia o uderzeniach kosmicznych (pauzuj grę przy poważnych)
+    EventBus.on('impact:colonyDamage', (data) => {
+      if (data.severity === 'heavy' || data.severity === 'extinction') {
+        EventBus.emit('time:pause');
+      }
+      showImpactNotification(data);
     });
 
     // Keyboard input (DOM)

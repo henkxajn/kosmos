@@ -175,13 +175,21 @@ export class ImpactDamageSystem {
         break;
     }
 
-    // Log do EventLog
+    // Zbierz dane do powiadomienia
     const planetName = colony.name || colony.planet?.name || planetId;
     const msg = SEVERITY_MESSAGES[severity];
+    const resourceLossPercent = severity === SEVERITY.LIGHT ? 5
+      : severity === SEVERITY.MODERATE ? 15
+      : severity === SEVERITY.HEAVY ? 50
+      : severity === SEVERITY.EXTINCTION ? 100 : 0;
+
     if (msg) {
       EventBus.emit('impact:colonyDamage', {
         planetId, severity, popLost, buildingsDestroyed,
+        resourceLossPercent,
+        popRemaining: civSystem.population,
         message: `${msg} ${planetName}`,
+        planetName,
       });
     }
 
