@@ -24,7 +24,8 @@ import { ColonyManager }      from '../systems/ColonyManager.js';
 import { VesselManager }      from '../systems/VesselManager.js';
 import { RandomEventSystem }  from '../systems/RandomEventSystem.js';
 import { FactorySystem }      from '../systems/FactorySystem.js';
-import { DepositSystem }      from '../systems/DepositSystem.js';
+import { DepositSystem }         from '../systems/DepositSystem.js';
+import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
@@ -120,6 +121,7 @@ export class GameScene {
     this.colonyManager   = new ColonyManager(this.techSystem);
     this.vesselManager   = new VesselManager();
     this.randomEventSystem = new RandomEventSystem();
+    this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -295,6 +297,13 @@ export class GameScene {
       // Emituj event game over — UIManager pokaże ekran końca gry
       EventBus.emit('game:over', { reason, planetName: planet.name });
     };
+
+    // Safety net: entity:removed odpala się PRZED body:collision (bo EntityManager.remove() jest wywołany wcześniej)
+    EventBus.on('entity:removed', ({ entity }) => {
+      if (entity?.id === window.KOSMOS?.homePlanet?.id) {
+        checkHomeDestroyed(entity, 'collision');
+      }
+    });
 
     // Kolizja planetarna — oba ciała tracą życie
     EventBus.on('body:collision', ({ winner, loser }) => {

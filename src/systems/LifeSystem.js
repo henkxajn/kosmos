@@ -35,16 +35,27 @@ export class LifeSystem {
       }
     });
 
-    // Kolizja → całkowite zniszczenie życia na obu planetach
-    // Dotyczy wszystkich typów: 'absorb', 'redirect', 'eject'
+    // Kolizja → zniszczenie życia (stopniowane wg mass ratio)
     EventBus.on('body:collision', ({ winner, loser, type }) => {
-      [winner, loser].forEach(planet => {
-        // Sprawdź: musi być encją z lifeScore > 0 (asteroidy mają lifeScore=undefined)
-        if (!planet || planet.type !== 'planet' || !(planet.lifeScore > 0)) return;
-        planet.lifeScore = 0;
-        EventBus.emit('life:extinct', { planet, reason: 'kolizja planetarna' });
-        EventBus.emit('life:updated',  { planet });
-      });
+      // Loser ZAWSZE traci życie
+      if (loser && loser.type === 'planet' && loser.lifeScore > 0) {
+        loser.lifeScore = 0;
+        EventBus.emit('life:extinct', { planet: loser, reason: 'kolizja planetarna' });
+        EventBus.emit('life:updated',  { planet: loser });
+      }
+
+      // Winner: w absorpcji małego ciała przeżywa (ImpactDamageSystem obsługuje szkody)
+      if (type === 'absorb' && winner && loser) {
+        const ratio = (loser.physics?.mass ?? 0) / (winner.physics?.mass ?? 1);
+        if (ratio < 0.1) return; // małe ciało — winner przeżywa
+      }
+
+      // Duże kolizje (deflection / duże absorpcje) — winner też traci życie
+      if (winner && winner.type === 'planet' && winner.lifeScore > 0) {
+        winner.lifeScore = 0;
+        EventBus.emit('life:extinct', { planet: winner, reason: 'kolizja planetarna' });
+        EventBus.emit('life:updated',  { planet: winner });
+      }
     });
   }
 

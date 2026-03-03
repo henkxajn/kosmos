@@ -394,6 +394,19 @@ export class UIManager {
       this._log(`${planet.name} wyrzucona z układu`, 'ejection');
     });
 
+    // Uderzenia kosmiczne na kolonie
+    EventBus.on('impact:colonyDamage', ({ message, severity, popLost, buildingsDestroyed }) => {
+      const type = severity === 'extinction' || severity === 'heavy' ? 'collision_destroy' : 'collision_absorb';
+      let detail = message;
+      if (popLost > 0 || buildingsDestroyed > 0) {
+        const parts = [];
+        if (popLost > 0) parts.push(`-${popLost} POP`);
+        if (buildingsDestroyed > 0) parts.push(`-${buildingsDestroyed} budynków`);
+        detail += ` (${parts.join(', ')})`;
+      }
+      this._log(detail, type);
+    });
+
     EventBus.on('accretion:newPlanet', (planet) => {
       this._log(`Nowa planeta: ${planet.name}`, 'new_planet');
     });

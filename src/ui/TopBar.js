@@ -270,8 +270,17 @@ export class TopBar {
       lines.push({ text: `Wolne: ${pc.total - pc.used}`, color: pc.total - pc.used > 0 ? THEME.successDim : C.orange });
     }
 
+    // Szczegóły POP
+    if (item._popDetails) {
+      const p = item._popDetails;
+      lines.push({ text: `Zatrudnieni: ${p.employed}`, color: C.text });
+      lines.push({ text: `Zablokowani (misje): ${p.locked}`, color: p.locked > 0 ? C.orange : C.text });
+      lines.push({ text: `Wolni: ${p.free}`, color: p.free > 0 ? THEME.successDim : C.orange });
+      lines.push({ text: `Mieszkania: ${p.housing}`, color: p.pop >= p.housing ? C.orange : C.text });
+    }
+
     // Flow label (dla elementów z flowLabel ale bez delta)
-    if (item.flowLabel && !item._energyDetails && !item._pcDetails && item.delta === undefined) {
+    if (item.flowLabel && !item._energyDetails && !item._pcDetails && !item._popDetails && item.delta === undefined) {
       lines.push({ text: item.flowLabel, color: item.flowColor || C.dim });
     }
 
@@ -412,6 +421,26 @@ export class TopBar {
         flowColor: usedPts >= totalPts && totalPts > 0 ? C.orange : C.dim,
         tooltipName: '🏭 Punkty Produkcji (PC)',
         _pcDetails: { used: usedPts, total: totalPts },
+      });
+    }
+
+    // POP — Populacja (zawsze widoczne w civMode)
+    const civSys = window.KOSMOS?.civSystem;
+    if (window.KOSMOS?.civMode && civSys) {
+      const pop     = civSys.population ?? 0;
+      const free    = civSys.freePops ?? 0;
+      const housing = civSys.housing ?? 0;
+      const employed = civSys._employedPops ?? 0;
+      const locked   = civSys._lockedPops ?? 0;
+      const atCap    = pop >= housing && housing > 0;
+      items.push({
+        icon: '👤', symbol: 'POP',
+        value: pop,
+        color: atCap ? C.orange : free > 0 ? THEME.successDim : '#6688aa',
+        flowLabel: `${free}/${pop}`,
+        flowColor: free > 0 ? THEME.successDim : C.orange,
+        tooltipName: '👤 Populacja (POP)',
+        _popDetails: { pop, free, employed, locked, housing },
       });
     }
 
