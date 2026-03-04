@@ -255,27 +255,14 @@ export class ResourceSystem {
   }
 
   restore(data) {
+    if (!data) return;
+    // Po migracji SaveMigration: zawsze format inventory (v6+)
     if (data.inventory) {
-      // Nowy format (v6)
       for (const [id, amount] of Object.entries(data.inventory)) {
         this.inventory.set(id, amount);
       }
-      this.research.amount = data.research ?? 0;
-    } else {
-      // Stary format (v5) — migracja minerals/organics/water/energy/research
-      for (const [key, saved] of Object.entries(data)) {
-        if (key === 'minerals') {
-          this.inventory.set('Fe', (saved.amount ?? 0));
-        } else if (key === 'organics') {
-          this.inventory.set('food', (saved.amount ?? 0));
-        } else if (key === 'water') {
-          this.inventory.set('water', (saved.amount ?? 0));
-        } else if (key === 'research') {
-          this.research.amount = saved.amount ?? 0;
-        }
-        // energy — flow, nie przywracamy stockpile
-      }
     }
+    this.research.amount = data.research ?? 0;
     this._syncLegacyProxy();
   }
 

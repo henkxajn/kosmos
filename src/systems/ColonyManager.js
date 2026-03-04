@@ -631,8 +631,7 @@ export class ColonyManager {
         allowImmigration: colData.allowImmigration ?? true,
         allowEmigration:  colData.allowEmigration  ?? true,
         fleet:            colData.fleet ?? [],
-        // Migracja: stary shipQueue → nowe shipQueues
-        shipQueues:       colData.shipQueues ?? (colData.shipQueue ? [colData.shipQueue] : []),
+        shipQueues:       colData.shipQueues ?? [],
       };
 
       this._colonies.set(colData.planetId, colony);

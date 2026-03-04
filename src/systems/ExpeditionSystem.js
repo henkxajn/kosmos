@@ -674,7 +674,8 @@ export class ExpeditionSystem {
 
     if (scope === 'full_system') {
       // Sekwencyjny recon: pierwszy cel = najbliższy niezbadany od homePlanet
-      const firstTarget = this._findNearestUnexplored();
+      // Pomija ciała będące celami innych aktywnych recon ekspedycji
+      const firstTarget = this._findNearestUnexplored(null);
       if (!firstTarget) {
         EventBus.emit('expedition:launchFailed', { reason: 'Brak niezbadanych ciał' });
         return;
@@ -721,7 +722,8 @@ export class ExpeditionSystem {
     }
 
     // scope === 'nearest' — pojedynczy lot do najbliższego ciała
-    const nearest = this._findNearestUnexplored();
+    // Pomija ciała będące celami innych aktywnych recon ekspedycji
+    const nearest = this._findNearestUnexplored(null);
     const distance = nearest ? this._calcDistance(nearest) : 0.1;
     const shipSpeed = this._getShipSpeed(vesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
@@ -1122,7 +1124,8 @@ export class ExpeditionSystem {
       });
 
       // Znajdź następny cel (greedy nearest od bieżącej pozycji)
-      const nextTarget = this._findNearestUnexploredFrom(target);
+      // Pomija ciała zbadane + cele innych aktywnych recon ekspedycji
+      const nextTarget = this._findNearestUnexploredFrom(target, exp.id);
 
       if (nextTarget) {
         // Sprawdź czy statek ma paliwo na lot do następnego + powrót do bazy
@@ -1173,25 +1176,40 @@ export class ExpeditionSystem {
     if (exp.vesselId && vMgr) vMgr.startReturn(exp.vesselId);
   }
 
+  // Zbierz ID ciał będących aktywnymi celami innych recon ekspedycji (en_route)
+  // Wyklucza ekspedycję o podanym id (bieżąca) — nie chcemy filtrować siebie
+  _getActiveReconTargets(excludeExpId = null) {
+    const targets = new Set();
+    for (const exp of this._expeditions) {
+      if (exp.id === excludeExpId) continue;
+      if (exp.type !== 'recon') continue;
+      if (exp.status !== 'en_route') continue;
+      targets.add(exp.targetId);
+    }
+    return targets;
+  }
+
   // Znajdź najbliższe niezbadane ciało — planetę lub księżyc (wg odległości od homePlanet)
   // Księżyce planety domowej są dosłownie najbliższe — odkrywane jako pierwsze.
-  _findNearestUnexplored() {
+  // excludeExpId — pomija cele innych aktywnych recon ekspedycji
+  _findNearestUnexplored(excludeExpId = null) {
     const homePl = window.KOSMOS?.homePlanet;
+    const activeTargets = this._getActiveReconTargets(excludeExpId);
     const candidates = [];
 
     // Planety (nie homePlanet — ta jest already explored)
     for (const p of EntityManager.getByType('planet')) {
-      if (p === homePl || p.explored) continue;
+      if (p === homePl || p.explored || activeTargets.has(p.id)) continue;
       candidates.push(p);
     }
     // Księżyce (w tym księżyce homePlanet — wymagają recon)
     for (const m of EntityManager.getByType('moon')) {
-      if (m.explored) continue;
+      if (m.explored || activeTargets.has(m.id)) continue;
       candidates.push(m);
     }
     // Planetoidy
     for (const pl of EntityManager.getByType('planetoid')) {
-      if (pl.explored) continue;
+      if (pl.explored || activeTargets.has(pl.id)) continue;
       candidates.push(pl);
     }
 
@@ -1202,21 +1220,23 @@ export class ExpeditionSystem {
 
   // Znajdź najbliższe niezbadane ciało od podanej pozycji (nie od homePlanet)
   // Używane przez sekwencyjny full_system recon (greedy nearest neighbor)
-  _findNearestUnexploredFrom(fromEntity) {
-    if (!fromEntity) return this._findNearestUnexplored();
+  // Pomija ciała zbadane LUB będące celami innych aktywnych recon ekspedycji
+  _findNearestUnexploredFrom(fromEntity, excludeExpId = null) {
+    if (!fromEntity) return this._findNearestUnexplored(excludeExpId);
     const homePl = window.KOSMOS?.homePlanet;
+    const activeTargets = this._getActiveReconTargets(excludeExpId);
     const candidates = [];
 
     for (const p of EntityManager.getByType('planet')) {
-      if (p === homePl || p.explored) continue;
+      if (p === homePl || p.explored || activeTargets.has(p.id)) continue;
       candidates.push(p);
     }
     for (const m of EntityManager.getByType('moon')) {
-      if (m.explored) continue;
+      if (m.explored || activeTargets.has(m.id)) continue;
       candidates.push(m);
     }
     for (const pl of EntityManager.getByType('planetoid')) {
-      if (pl.explored) continue;
+      if (pl.explored || activeTargets.has(pl.id)) continue;
       candidates.push(pl);
     }
 

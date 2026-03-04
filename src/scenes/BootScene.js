@@ -2,6 +2,7 @@
 // Przepisana: bez Phasera, Canvas 2D na #ui-canvas
 
 import { SaveSystem } from '../systems/SaveSystem.js';
+import { migrate } from '../systems/SaveMigration.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 
 const W = window.innerWidth;
@@ -170,7 +171,19 @@ export class BootScene {
 
   _handleBtn(btn) {
     if (btn === 'yes') {
-      window.KOSMOS.savedData = SaveSystem.loadData();
+      let saveData = SaveSystem.loadData();
+      if (saveData) {
+        saveData = migrate(saveData);
+        if (saveData.error) {
+          // Błąd migracji — pokaż komunikat i wróć do ekranu startowego
+          console.error('[BootScene] Migracja save:', saveData.message);
+          alert(saveData.message);
+          SaveSystem.clearSave();
+          window.location.reload();
+          return;
+        }
+      }
+      window.KOSMOS.savedData = saveData;
       window.KOSMOS.scenario  = 'civilization';
     } else if (btn === 'power_test') {
       // POWER TEST — scenariusz testowy

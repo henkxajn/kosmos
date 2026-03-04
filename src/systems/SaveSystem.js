@@ -12,6 +12,7 @@
 
 import EventBus     from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
+import { CURRENT_VERSION } from './SaveMigration.js';
 
 const SAVE_KEY           = 'kosmos_save_v1';
 const AUTOSAVE_INTERVAL  = 10000;  // lat gry między autosave'ami
@@ -47,7 +48,7 @@ export class SaveSystem {
     const moons      = EntityManager.getByType('moon');
     const planetoids = EntityManager.getByType('planetoid');
     const data = {
-      version:    6,              // v6: inventory+deposits+factory+levels
+      version:    CURRENT_VERSION,
       savedAt:    Date.now(),
       gameTime:   this.timeSystem.gameTime,
       star:       this._serializeStar(this.star),

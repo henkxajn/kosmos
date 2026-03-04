@@ -144,80 +144,50 @@ export class GameScene {
     if (c4x?.civMode) {
       window.KOSMOS.civMode = true;
 
-      // Save v5: multi-kolonia (colonies array)
+      // Po migracji SaveMigration: save zawsze ma colonies[] (v5+)
+      // Przywróć tech (globalne)
+      if (c4x.techs) this.techSystem.restore(c4x.techs);
+      // Przywróć kolonie przez ColonyManager (tworzy per-kolonia ResourceSystem, CivSystem, BuildingSystem)
       if (c4x.colonies?.length > 0) {
-        // Przywróć tech (globalne)
-        if (c4x.techs) this.techSystem.restore(c4x.techs);
-        // Przywróć kolonie przez ColonyManager (tworzy per-kolonia ResourceSystem, CivSystem, BuildingSystem)
         this.colonyManager.restore(c4x, this.buildingSystem);
-        // Ustaw homePlanet i aktywne systemy
-        const homePlanetId = c4x.homePlanetId ?? c4x.colonies.find(c => c.isHomePlanet)?.planetId;
-        if (homePlanetId) {
-          setTimeout(() => {
-            const hp = this.colonyManager._findEntity(homePlanetId);
-            if (hp) {
-              window.KOSMOS.homePlanet = hp;
-              hp.explored = true;
-              // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
-            }
-            // Przywróć aktywne systemy z homePlanet (per-kolonia instancje)
-            const homeCol = this.colonyManager.getColony(homePlanetId);
-            if (homeCol) {
-              window.KOSMOS.resourceSystem  = homeCol.resourceSystem;
-              window.KOSMOS.civSystem       = homeCol.civSystem;
-              window.KOSMOS.buildingSystem  = homeCol.buildingSystem;
-              if (homeCol.factorySystem) {
-                window.KOSMOS.factorySystem = homeCol.factorySystem;
-                this.factorySystem = homeCol.factorySystem;
-              }
-              this.resourceSystem  = homeCol.resourceSystem;
-              this.civSystem       = homeCol.civSystem;
-              this.buildingSystem  = homeCol.buildingSystem;
-              this.expeditionSystem.resourceSystem = homeCol.resourceSystem;
-              this.techSystem.resourceSystem      = homeCol.resourceSystem;
-              const gridSizes = { rocky: 10, hot_rocky: 6, ice: 6, gas: 6 };
-              this.buildingSystem._gridHeight = gridSizes[hp?.planetType] ?? 10;
-              // Ustaw deposits z homePlanet dla BuildingSystem (kopalnie)
-              if (hp?.deposits) this.buildingSystem.setDeposits(hp.deposits);
-            }
-          }, 0);
-        }
-        // Migracja save v4→v5: globalne budynki → przypisz do homePlanet
-        if (c4x.buildings?.length > 0 && homePlanetId) {
-          const homeCol = this.colonyManager.getColony(homePlanetId);
-          if (homeCol?.buildingSystem) {
-            homeCol.buildingSystem.restoreFromSave(c4x.buildings);
-          }
-        }
-        if (c4x.expeditions) this.expeditionSystem.restore(c4x.expeditions);
-        // Przywróć VesselManager
-        if (c4x.vesselManager) {
-          this.vesselManager.restore(c4x.vesselManager);
-        }
-        // Migracja starych save: fleet[] ze stringami → vessel instances
-        this._migrateStringFleets();
-      } else {
-        // Save v4: stary format (single-colony) → migruj
-        if (c4x.resources) this.resourceSystem.restore(c4x.resources);
-        if (c4x.techs)     this.techSystem.restore(c4x.techs);
-        if (c4x.civ)       this.civSystem.restore(c4x.civ);
-        if (c4x.buildings?.length > 0) this.buildingSystem.restoreFromSave(c4x.buildings);
-        if (c4x.expeditions) this.expeditionSystem.restore(c4x.expeditions);
-        // Zarejestruj homePlanet jako kolonię w ColonyManager
-        if (c4x.homePlanetId) {
-          setTimeout(() => {
-            const hp = EntityManager.getByType('planet').find(p => p.id === c4x.homePlanetId);
-            if (hp) {
-              window.KOSMOS.homePlanet = hp;
-              hp.explored = true;
-              // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
-              this.colonyManager.registerHomePlanet(hp, this.resourceSystem, this.civSystem, this.buildingSystem);
-              const gridSizes = { rocky: 10, hot_rocky: 6, ice: 6, gas: 6 };
-              this.buildingSystem._gridHeight = gridSizes[hp.planetType] ?? 10;
-            }
-          }, 0);
-        }
       }
+      // Ustaw homePlanet i aktywne systemy
+      const homePlanetId = c4x.homePlanetId ?? c4x.colonies?.find(c => c.isHomePlanet)?.planetId;
+      if (homePlanetId) {
+        setTimeout(() => {
+          const hp = this.colonyManager._findEntity(homePlanetId);
+          if (hp) {
+            window.KOSMOS.homePlanet = hp;
+            hp.explored = true;
+          }
+          // Przywróć aktywne systemy z homePlanet (per-kolonia instancje)
+          const homeCol = this.colonyManager.getColony(homePlanetId);
+          if (homeCol) {
+            window.KOSMOS.resourceSystem  = homeCol.resourceSystem;
+            window.KOSMOS.civSystem       = homeCol.civSystem;
+            window.KOSMOS.buildingSystem  = homeCol.buildingSystem;
+            if (homeCol.factorySystem) {
+              window.KOSMOS.factorySystem = homeCol.factorySystem;
+              this.factorySystem = homeCol.factorySystem;
+            }
+            this.resourceSystem  = homeCol.resourceSystem;
+            this.civSystem       = homeCol.civSystem;
+            this.buildingSystem  = homeCol.buildingSystem;
+            this.expeditionSystem.resourceSystem = homeCol.resourceSystem;
+            this.techSystem.resourceSystem      = homeCol.resourceSystem;
+            const gridSizes = { rocky: 10, hot_rocky: 6, ice: 6, gas: 6 };
+            this.buildingSystem._gridHeight = gridSizes[hp?.planetType] ?? 10;
+            if (hp?.deposits) this.buildingSystem.setDeposits(hp.deposits);
+          }
+        }, 0);
+      }
+      if (c4x.expeditions) this.expeditionSystem.restore(c4x.expeditions);
+      // Przywróć VesselManager
+      if (c4x.vesselManager) {
+        this.vesselManager.restore(c4x.vesselManager);
+      }
+      // Migracja starych save: fleet[] ze stringami → vessel instances
+      this._migrateStringFleets();
       if (c4x.civ?.unrestActive) {
         this.buildingSystem._civPenalty = 0.7;
         this.buildingSystem._reapplyAllRates();

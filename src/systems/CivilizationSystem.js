@@ -205,14 +205,9 @@ export class CivilizationSystem {
   }
 
   restore(data) {
-    // Migracja v3→v4: stary model (populacja w tysiącach, brak markera popFormat)
-    // Nowy format (v4+) ma marker popFormat === 'discrete' i populację 1–100
-    const isOldFormat = !data.popFormat && data.population > 100;
-    if (isOldFormat) {
-      this.population = Math.max(DEFAULT_POP, Math.round(data.population / 50));
-    } else {
-      this.population = data.population ?? DEFAULT_POP;
-    }
+    if (!data) return;
+    // Po migracji SaveMigration: zawsze discrete POP (v6+)
+    this.population = data.population ?? DEFAULT_POP;
 
     this.morale               = data.morale               ?? DEFAULT_MORALE;
     this.epochIndex           = data.epochIndex           ?? 0;

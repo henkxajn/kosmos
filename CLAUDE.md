@@ -140,6 +140,7 @@ Projekt realizuje podejście **MDA (Mechanics → Dynamics → Aesthetics)**:
 | `src/systems/PhysicsSystem.js` | Prawa Keplera + kolizje — fizyka orbitalna |
 | `src/config/GameConfig.js` | Globalne stałe gry |
 | `src/map/HexGrid.js` | Matematyka hex cube coordinates |
+| `src/systems/SaveMigration.js` | Łańcuch migracji save'ów — centralny punkt, nie rozpraszaj |
 | `generate-planets.js` + `lib/` | Generator tekstur planet — 9 modułów, pipeline heightmap→color→PBR |
 | `assets/planet-textures/` | Pre-generowane tekstury PNG — ładowane przez ThreeRenderer |
 
@@ -227,6 +228,29 @@ SaveSystem._serializeCiv4x()
 8. Odległość między ciałami → `DistanceUtils` (`src/utils/DistanceUtils.js`): euclidean (dynamiczna) i orbital (stabilna)
 9. Nowy typ planety wizualnie → dodaj typ w `generate-planets.js` (PLANET_TYPES) + wygeneruj tekstury CLI → dodaj mapowanie w `resolveTextureType()` w ThreeRenderer
 10. Regeneracja tekstur: `node generate-planets.js --type <typ> --count 3 --resolution 1024 --quality high --output ./assets/planet-textures --name <typ>`
+
+---
+
+## Protokół migracji save'ów
+
+Centralny system migracji: `src/systems/SaveMigration.js`
+
+**Przy dodawaniu nowej funkcji zmieniającej format save:**
+
+1. **`SaveMigration.js`**: bump `CURRENT_VERSION`, dodaj `_migrateVNtoVN+1(data)`, zarejestruj w mapie `MIGRATIONS`
+2. **W migracji**: dodaj nowe pola ze sensownymi defaults (per-kolonia w `c4x.colonies[]` i/lub globalne w `c4x`)
+3. **W `restore()` systemu**: `?? defaultValue` dla nowych pól (defensywne)
+4. **W `serialize()`**: zapisz nowe pola
+
+**Architektura:**
+- `migrate(data)` — backup → łańcuch v4→v5→v6→v7→... → persist
+- Backup: `kosmos_save_backup_v{N}` w localStorage
+- Wywołanie: `BootScene._handleBtn('yes')` po `SaveSystem.loadData()`
+- `SaveSystem.save()` używa `CURRENT_VERSION` (import z SaveMigration)
+- Migracje entity-level (Moon T, deposits) pozostają w `GameScene._restoreSystem()` (wymagają żywych instancji)
+- Migracja string fleet → vessel instances pozostaje w `GameScene._migrateStringFleets()` (wymaga VesselManager)
+
+**NIE dodawaj ad-hoc migracji** w `restore()` poszczególnych systemów — centralizuj w `SaveMigration.js`.
 
 ---
 
@@ -327,3 +351,4 @@ SaveSystem._serializeCiv4x()
 | Waypoints w misji (vessel.mission) | `waypoints: [{x,y}]` i `returnWaypoints: [{x,y}]` — serializowane w save, wielopunktowe linie trasy w ThreeRenderer |
 | shipQueues tablica (nie single shipQueue) | Lv stoczni = max slotów budowy; tablica pozwala na równoczesną budowę N statków; migracja save: `shipQueue → shipQueues` |
 | Statki orbitują cel (nie auto-return) | Recon i inne misje: po dotarciu `status='orbiting'`; gracz decyduje: powrót lub redirect do nowego celu |
+| Centralny SaveMigration (nie ad-hoc) | Łańcuchowa migracja v4→v5→v6→v7→...; backup w localStorage; wywołanie w BootScene przed GameScene |
