@@ -192,6 +192,7 @@ export class UIManager {
     this._catalogScrollY = 0;
     this._catalogContentH = 0;
     this._catalogVisibleH = 0;
+    this._catalogRowRects = [];  // hit rects wierszy katalogu
 
     // ── Scroll sekcji FLOTA ──────────────────────────────────
     this._fleetScrollY = 0;
@@ -508,6 +509,30 @@ export class UIManager {
     EventBus.on('colony:founded', ({ colony }) => {
       this._log(`🏙 Nowa kolonia: ${colony.name}`, 'new_planet');
     });
+    // Przełączenie aktywnej kolonii z Outliner → odśwież wszystkie dane UI
+    EventBus.on('colony:switched', () => {
+      EventBus.emit('resource:requestSnapshot');
+      // Odśwież dane populacji i morale z nowej kolonii
+      const cSys = window.KOSMOS?.civSystem;
+      if (cSys) {
+        this._civData = cSys._popSnapshot();
+        this._moraleData = {
+          morale:     cSys.morale,
+          target:     cSys.moraleTarget,
+          components: { ...cSys.moraleComponents },
+        };
+      }
+      // Odśwież dane fabryk
+      const fSys = window.KOSMOS?.factorySystem;
+      if (fSys) {
+        this._factoryData = {
+          allocations: fSys.getAllocations(),
+          totalPoints: fSys.totalPoints,
+          usedPoints:  fSys.usedPoints,
+          freePoints:  fSys.freePoints,
+        };
+      }
+    });
     EventBus.on('colony:tradeExecuted', ({ route }) => {
       this._log('📦 Droga handlowa: transfer wykonany', 'info');
     });
@@ -661,6 +686,8 @@ export class UIManager {
     this._tooltip = this._detectCivPanelTooltip(x, y);
     // TopBar hover (tooltip zasobów)
     this._topBar.updateHover(x, y);
+    // Outliner hover (tooltip kolonii)
+    if (this._outliner) this._outliner.updateHover(x, y, W, H);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -712,6 +739,8 @@ export class UIManager {
         fleet: colMgr?.getFleet(activePid) ?? [],
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
       });
+      // Tooltip kolonii (hover w Outliner)
+      this._outliner.drawTooltip(ctx);
     }
 
     // ── BottomContext (dolny panel info o encji) ──────────────
@@ -1213,6 +1242,7 @@ export class UIManager {
     const LH = 14;
     const ROW_H = 28; // 2 wiersze na ciało
     let cy = bodyY + 16;
+    this._catalogRowRects = [];  // reset hit rects
 
     // Nagłówek
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -1319,6 +1349,9 @@ export class UIManager {
         ctx.fillStyle = '#334455';
         ctx.fillText(`???  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2, ry + 22);
       }
+
+      // Hit rect (widoczne wiersze — po clipping pozycje to ry, nie screen-y)
+      this._catalogRowRects.push({ x: catalogX, y: ry, w: catalogW, h: ROW_H, body, explored });
 
       ry += ROW_H;
     }
@@ -1944,9 +1977,10 @@ export class UIManager {
 
     if (!this._civPanelTab) return null;
     if (x < bodyX || y < bodyY || y > bodyY + bodyH) return null;
-    if (this._civPanelTab === 'economy')   return this._detectFactoryTooltip(x, y);
-    if (this._civPanelTab === 'buildings') return this._detectBuildingTooltip(x, y, bodyY, bodyX, bodyW);
-    if (this._civPanelTab === 'tech')      return this._detectTechTooltip(x, y, bodyY, bodyX, bodyW);
+    if (this._civPanelTab === 'economy')     return this._detectFactoryTooltip(x, y);
+    if (this._civPanelTab === 'buildings')  return this._detectBuildingTooltip(x, y, bodyY, bodyX, bodyW);
+    if (this._civPanelTab === 'tech')       return this._detectTechTooltip(x, y, bodyY, bodyX, bodyW);
+    if (this._civPanelTab === 'expeditions') return this._detectCatalogTooltip(x, y);
     return null;
   }
 
@@ -2004,6 +2038,15 @@ export class UIManager {
     return null;
   }
 
+  _detectCatalogTooltip(x, y) {
+    for (const row of (this._catalogRowRects ?? [])) {
+      if (x >= row.x && x <= row.x + row.w && y >= row.y && y <= row.y + row.h) {
+        return { type: 'catalogBody', data: { body: row.body, explored: row.explored } };
+      }
+    }
+    return null;
+  }
+
   _drawTooltip() {
     const tt = this._tooltip;
     if (!tt) return;
@@ -2015,6 +2058,8 @@ export class UIManager {
       lines = this._buildBuildingTooltipLines(tt.data);
     } else if (tt.type === 'factory') {
       lines = this._buildFactoryTooltipLines(tt.data);
+    } else if (tt.type === 'catalogBody') {
+      lines = this._buildCatalogBodyTooltipLines(tt.data);
     } else {
       lines = this._buildTechTooltipLines(tt.data);
     }
@@ -2138,6 +2183,83 @@ export class UIManager {
     return lines;
   }
 
+  _buildCatalogBodyTooltipLines({ body, explored }) {
+    const lines = [];
+    const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
+    const typeStr = body.planetType ?? body.type;
+
+    if (!explored) {
+      // Niezbadane ciało — ograniczone dane
+      lines.push({ type: 'header', text: `${icon} ???`, color: '#445566' });
+      lines.push({ type: 'separator' });
+      lines.push({ type: 'line', text: `Typ: ${typeStr}`, color: C.dim });
+      const orbA = body.orbital?.a ?? 0;
+      lines.push({ type: 'line', text: `Orbita: ${orbA.toFixed(2)} AU`, color: C.dim });
+      const distHome = DistanceUtils.orbitalFromHomeAU(body);
+      lines.push({ type: 'line', text: `Odległość: ${distHome.toFixed(2)} AU`, color: C.dim });
+      lines.push({ type: 'separator' });
+      lines.push({ type: 'line', text: 'Wyślij misję rozpoznawczą', color: C.orange });
+      lines.push({ type: 'line', text: 'Klik → focus kamery', color: C.label });
+      return lines;
+    }
+
+    // Zbadane ciało — pełne dane
+    lines.push({ type: 'header', text: `${icon} ${body.name}`, color: '#88ccff' });
+    lines.push({ type: 'separator' });
+    lines.push({ type: 'line', text: `Typ: ${typeStr}`, color: C.text });
+
+    const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
+    if (tempC !== null) {
+      const tempColor = tempC > -20 && tempC < 60 ? C.green : C.label;
+      lines.push({ type: 'line', text: `Temperatura: ${tempC > 0 ? '+' : ''}${tempC}°C`, color: tempColor });
+    }
+
+    const mass = body.physics?.mass ?? 0;
+    if (mass > 0) lines.push({ type: 'line', text: `Masa: ${mass.toFixed(2)} M⊕`, color: C.text });
+
+    const orbA = body.orbital?.a ?? 0;
+    lines.push({ type: 'line', text: `Orbita: ${orbA.toFixed(2)} AU`, color: C.text });
+    const distHome = DistanceUtils.orbitalFromHomeAU(body);
+    lines.push({ type: 'line', text: `Odległość od bazy: ${distHome.toFixed(2)} AU`, color: C.text });
+
+    // Atmosfera
+    if (body.atmosphere?.composition) {
+      const atmo = body.atmosphere.composition;
+      const topGases = Object.entries(atmo).sort((a, b) => b[1] - a[1]).slice(0, 3);
+      if (topGases.length > 0) {
+        const atmoStr = topGases.map(([g, v]) => `${g} ${(v * 100).toFixed(0)}%`).join(', ');
+        lines.push({ type: 'line', text: `Atmosfera: ${atmoStr}`, color: C.label });
+      }
+    }
+
+    // Skład chemiczny (top 5)
+    if (body.composition) {
+      const topComp = Object.entries(body.composition).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      if (topComp.length > 0) {
+        const compStr = topComp.map(([e, v]) => `${e}:${(v * 100).toFixed(0)}%`).join(' ');
+        lines.push({ type: 'line', text: `Skład: ${compStr}`, color: C.label });
+      }
+    }
+
+    // Złoża
+    const deps = body.deposits ?? [];
+    if (deps.length > 0) {
+      lines.push({ type: 'separator' });
+      lines.push({ type: 'line', text: 'Złoża:', color: C.label });
+      for (const d of deps) {
+        const pct = d.totalAmount > 0 ? Math.round(d.remaining / d.totalAmount * 100) : 0;
+        const stars = d.richness >= 0.7 ? '★★★' : d.richness >= 0.4 ? '★★' : '★';
+        const color = pct <= 0 ? C.dim : d.richness >= 0.7 ? C.green : d.richness >= 0.4 ? C.orange : C.red;
+        const text = pct <= 0 ? `  ${d.resourceId}: WYCZERPANE` : `  ${d.resourceId} ${stars} ${pct}%`;
+        lines.push({ type: 'line', text, color });
+      }
+    }
+
+    lines.push({ type: 'separator' });
+    lines.push({ type: 'line', text: 'Klik → focus kamery', color: C.label });
+    return lines;
+  }
+
   _formatTechEffect(fx) {
     const icons = RESOURCE_ICONS;
     switch (fx.type) {
@@ -2249,6 +2371,15 @@ export class UIManager {
           EventBus.emit('fleet:buildRequest', { shipId: fb.shipId });
           return;
         }
+      }
+    }
+    // Klik w wiersz katalogu ciał → focus kamery na ciało
+    for (const row of (this._catalogRowRects ?? [])) {
+      if (x >= row.x && x <= row.x + row.w && y >= row.y && y <= row.y + row.h) {
+        EventBus.emit('body:selected', { entity: row.body });
+        // Zamknij globus jeśli otwarty
+        if (window.KOSMOS?.planetGlobeOpen) EventBus.emit('planet:closeGlobe');
+        return;
       }
     }
   }

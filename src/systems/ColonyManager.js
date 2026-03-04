@@ -150,6 +150,21 @@ export class ColonyManager {
     this._activePlanetId = id;
   }
 
+  // Przełącz aktywną kolonię — swap systemów w window.KOSMOS
+  // Zwraca true jeśli przełączono, false jeśli kolonia nie istnieje
+  switchActiveColony(planetId) {
+    const colony = this.getColony(planetId);
+    if (!colony) return false;
+    this._activePlanetId = planetId;
+    window.KOSMOS.resourceSystem  = colony.resourceSystem;
+    window.KOSMOS.civSystem       = colony.civSystem;
+    if (colony.buildingSystem) window.KOSMOS.buildingSystem = colony.buildingSystem;
+    if (colony.factorySystem)  window.KOSMOS.factorySystem  = colony.factorySystem;
+    if (window.KOSMOS.expeditionSystem) window.KOSMOS.expeditionSystem.resourceSystem = colony.resourceSystem;
+    if (window.KOSMOS.techSystem)       window.KOSMOS.techSystem.resourceSystem       = colony.resourceSystem;
+    return true;
+  }
+
   // Aktywny ResourceSystem (do użycia przez UI)
   get activeResourceSystem() {
     return this.getResourceSystem(this._activePlanetId);

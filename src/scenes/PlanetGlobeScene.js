@@ -148,26 +148,7 @@ export class PlanetGlobeScene {
     // Przełącz aktywną kolonię w ColonyManager
     const colMgr = window.KOSMOS?.colonyManager;
     if (colMgr) {
-      colMgr.activePlanetId = planet.id;
-      // Przełącz aktywne systemy na systemy tej kolonii
-      const colony = colMgr.getColony(planet.id);
-      if (colony) {
-        window.KOSMOS.resourceSystem  = colony.resourceSystem;
-        window.KOSMOS.civSystem       = colony.civSystem;
-        // Per-kolonia BuildingSystem i FactorySystem — każda kolonia ma swój
-        if (colony.buildingSystem) {
-          window.KOSMOS.buildingSystem = colony.buildingSystem;
-        }
-        if (colony.factorySystem) {
-          window.KOSMOS.factorySystem = colony.factorySystem;
-        }
-        if (window.KOSMOS.expeditionSystem) {
-          window.KOSMOS.expeditionSystem.resourceSystem = colony.resourceSystem;
-        }
-        if (window.KOSMOS.techSystem) {
-          window.KOSMOS.techSystem.resourceSystem = colony.resourceSystem;
-        }
-      }
+      colMgr.switchActiveColony(planet.id);
     }
 
     // Zwolnij czas
@@ -337,6 +318,12 @@ export class PlanetGlobeScene {
           this._buildPanelMouseX = -1;
           this._buildPanelMouseY = -1;
         }
+        // Deleguj hover do UIManager (tooltip katalogu ciał w zakładce Ekspedycje)
+        if (this._civTab === 'expeditions' && this.uiManager) {
+          this.uiManager._tooltipMouseX = mx;
+          this.uiManager._tooltipMouseY = my;
+          this.uiManager._tooltip = this.uiManager._detectCatalogTooltip(mx, my);
+        }
         layer.style.cursor = 'default';
         return;
       }
@@ -393,6 +380,28 @@ export class PlanetGlobeScene {
         this._buildPanelScrollY = Math.max(0, this._buildPanelScrollY + e.deltaY * 0.5);
         e.preventDefault();
         return;
+      }
+      // Scroll w zakładce Ekspedycje (katalog ciał / flota)
+      if (this._civTab === 'expeditions' && this.uiManager) {
+        const { x: ovX, y: ovY, w: ovW, h: ovH } = this._civOverlayRect();
+        const halfW = Math.floor(ovW / 2);
+        const upperZoneH = 200;
+        const ui = this.uiManager;
+        // Katalog — prawa kolumna górnej strefy overlay
+        if (mx >= ovX + halfW && mx <= ovX + ovW && my >= ovY && my <= ovY + upperZoneH) {
+          const maxScroll = Math.max(0, (ui._catalogContentH ?? 0) - (ui._catalogVisibleH ?? 0));
+          ui._catalogScrollY = Math.max(0, Math.min(maxScroll, (ui._catalogScrollY ?? 0) + e.deltaY * 0.5));
+          e.preventDefault();
+          return;
+        }
+        // Flota — dolna strefa overlay
+        const fc = ui._fleetClipRect;
+        if (fc && fc.h > 0 && mx >= ovX && mx <= ovX + ovW && my >= fc.y && my <= fc.y + fc.h) {
+          const maxScroll = Math.max(0, (ui._fleetContentH ?? 0) - (ui._fleetVisibleH ?? 0));
+          ui._fleetScrollY = Math.max(0, Math.min(maxScroll, (ui._fleetScrollY || 0) + e.deltaY * 0.5));
+          e.preventDefault();
+          return;
+        }
       }
       if (!this._isInPanel(mx, my)) {
         e.preventDefault();
@@ -464,6 +473,9 @@ export class PlanetGlobeScene {
       this._timeState.multiplierIndex = multiplierIndex;
     };
 
+    // Zamknięcie globusa z EventBus (np. klik w katalogu ciał)
+    this._onCloseGlobe = () => { if (this.isOpen) this._close(); };
+
     // Podpięcie
     if (layer) {
       layer.addEventListener('mousedown',  this._onMouseDown);
@@ -479,6 +491,7 @@ export class PlanetGlobeScene {
     EventBus.on('resource:snapshot',    this._onSnapshot);
     EventBus.on('time:stateChanged',    this._onTimeState);
     EventBus.on('time:display',         this._onTimeDisplay);
+    EventBus.on('planet:closeGlobe',    this._onCloseGlobe);
   }
 
   _unregisterEvents(layer) {
@@ -497,6 +510,7 @@ export class PlanetGlobeScene {
     EventBus.off('resource:snapshot',    this._onSnapshot);
     EventBus.off('time:stateChanged',    this._onTimeState);
     EventBus.off('time:display',         this._onTimeDisplay);
+    EventBus.off('planet:closeGlobe',    this._onCloseGlobe);
   }
 
   // ── Synchronizacja budynków z BuildingSystem ──────────────────
@@ -1514,7 +1528,16 @@ export class PlanetGlobeScene {
     if (this._civTab === 'population')  drawPopulationTab(ctx, bodyY, bodyX, bodyW, state);
     if (this._civTab === 'tech')        drawTechTab(ctx, bodyY, bodyX, bodyW);
     if (this._civTab === 'buildings')   drawBuildingsTab(ctx, bodyY, bodyX, bodyW);
-    if (this._civTab === 'expeditions' && ui) ui._drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, h - 20);
+    if (this._civTab === 'expeditions' && ui) {
+      ui._drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, h - 20);
+      // Rysuj tooltip katalogu ciał (jeśli aktywny)
+      if (ui._tooltip?.type === 'catalogBody') {
+        const savedCtx = ui.ctx;
+        ui.ctx = ctx;
+        ui._drawTooltip();
+        ui.ctx = savedCtx;
+      }
+    }
   }
 
   // ── Hit testing ───────────────────────────────────────────────
