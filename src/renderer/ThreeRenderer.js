@@ -1293,19 +1293,17 @@ export class ThreeRenderer {
 
     this.scene.add(sprite);
 
-    // Linia trasy (przerywana, wielopunktowa — start → waypoints → target)
+    // Linia trasy (przerywana, 2 punkty: statek → cel)
     let routeLine = null;
     if (vessel.mission) {
       const m = vessel.mission;
       const isReturn = m.phase === 'returning';
-      const wps = isReturn ? (m.returnWaypoints ?? []) : (m.waypoints ?? []);
-      const sx = isReturn ? (m.returnStartX ?? 0) : (m.liveOriginX ?? m.startX ?? vessel.position.x);
-      const sy = isReturn ? (m.returnStartY ?? 0) : (m.liveOriginY ?? m.startY ?? vessel.position.y);
       const tx = isReturn ? (m.liveOriginX ?? m.returnTargetX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
       const ty = isReturn ? (m.liveOriginY ?? m.returnTargetY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
-      const points = [new THREE.Vector3(S(sx), 0.1, S(sy))];
-      for (const wp of wps) points.push(new THREE.Vector3(S(wp.x), 0.1, S(wp.y)));
-      points.push(new THREE.Vector3(S(tx), 0.1, S(ty)));
+      const points = [
+        new THREE.Vector3(S(vessel.position.x), 0.1, S(vessel.position.y)),
+        new THREE.Vector3(S(tx), 0.1, S(ty)),
+      ];
 
       const geo = new THREE.BufferGeometry().setFromPoints(points);
       const lineMat = new THREE.LineDashedMaterial({
@@ -1317,7 +1315,7 @@ export class ThreeRenderer {
       this.scene.add(routeLine);
     }
 
-    this._vessels.set(vessel.id, { sprite, routeLine, tex, color, _routePointCount: 0 });
+    this._vessels.set(vessel.id, { sprite, routeLine, tex, color });
   }
 
   /**
@@ -1351,33 +1349,21 @@ export class ThreeRenderer {
       }
       entry.sprite.position.set(S(vessel.position.x), 0.3, S(vessel.position.y));
 
-      // Aktualizuj linię trasy (wielopunktowa: start → waypoints → target)
-      // liveOriginX/Y i liveTargetX/Y śledzą bieżące pozycje planet (VesselManager)
+      // Aktualizuj linię trasy (2 punkty: statek → cel)
       if (vessel.mission) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
-        // Punkt startu: outbound → planeta macierzysta (live), return → pozycja orbity (static)
-        const sx = isReturn ? (m.returnStartX ?? 0) : (m.liveOriginX ?? m.startX ?? 0);
-        const sy = isReturn ? (m.returnStartY ?? 0) : (m.liveOriginY ?? m.startY ?? 0);
-        // Punkt docelowy: outbound → cel (live), return → planeta macierzysta (live)
+        // Cel: outbound → target (live), return → macierzysta (live)
         const tx = isReturn ? (m.liveOriginX ?? m.returnTargetX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
         const ty = isReturn ? (m.liveOriginY ?? m.returnTargetY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
-        const wps = isReturn ? (m.returnWaypoints ?? []) : (m.waypoints ?? []);
 
-        const nPts = 2 + wps.length; // start + waypoints + target
-        const prevPts = entry._routePointCount ?? 0;
-
-        if (prevPts !== nPts || !entry.routeLine) {
-          // Przebuduj geometrię (liczba punktów się zmieniła)
+        if (!entry.routeLine) {
+          // Stwórz nową linię
           const savedColor = entry.color ?? 0xaaaaaa;
-          if (entry.routeLine) {
-            this.scene.remove(entry.routeLine);
-            entry.routeLine.geometry.dispose();
-            entry.routeLine.material.dispose();
-          }
-          const pts = [new THREE.Vector3(S(sx), 0.1, S(sy))];
-          for (const wp of wps) pts.push(new THREE.Vector3(S(wp.x), 0.1, S(wp.y)));
-          pts.push(new THREE.Vector3(S(tx), 0.1, S(ty)));
+          const pts = [
+            new THREE.Vector3(S(vessel.position.x), 0.1, S(vessel.position.y)),
+            new THREE.Vector3(S(tx), 0.1, S(ty)),
+          ];
           const geo = new THREE.BufferGeometry().setFromPoints(pts);
           const lineMat = new THREE.LineDashedMaterial({
             color: savedColor, dashSize: 0.3, gapSize: 0.15,
@@ -1386,14 +1372,11 @@ export class ThreeRenderer {
           entry.routeLine = new THREE.Line(geo, lineMat);
           entry.routeLine.computeLineDistances();
           this.scene.add(entry.routeLine);
-          entry._routePointCount = nPts;
         } else {
-          // Aktualizuj pozycje punktów w istniejącej geometrii
+          // Aktualizuj 2 punkty: statek → cel
           const posArr = entry.routeLine.geometry.attributes.position.array;
-          let idx = 0;
-          posArr[idx++] = S(sx); posArr[idx++] = 0.1; posArr[idx++] = S(sy);
-          for (const wp of wps) { posArr[idx++] = S(wp.x); posArr[idx++] = 0.1; posArr[idx++] = S(wp.y); }
-          posArr[idx++] = S(tx); posArr[idx++] = 0.1; posArr[idx++] = S(ty);
+          posArr[0] = S(vessel.position.x); posArr[1] = 0.1; posArr[2] = S(vessel.position.y);
+          posArr[3] = S(tx);                posArr[4] = 0.1; posArr[5] = S(ty);
           entry.routeLine.geometry.attributes.position.needsUpdate = true;
           entry.routeLine.computeLineDistances();
         }

@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 7;
+export const CURRENT_VERSION     = 8;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -22,6 +22,7 @@ const MIGRATIONS = {
   4: _migrateV4toV5,
   5: _migrateV5toV6,
   6: _migrateV6toV7,
+  7: _migrateV7toV8,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -216,6 +217,35 @@ function _migrateV6toV7(data) {
       if (!col.factorySystem) col.factorySystem = null;
       if (!col.shipQueues)    col.shipQueues = [];
       if (!col.fleet)         col.fleet = [];
+    }
+  }
+
+  return data;
+}
+
+// ── Migracja v7 → v8 ────────────────────────────────────────────────────────
+// Dodaje: tradeRouteManager, visitCounts w expeditions, queue w factorySystem
+
+function _migrateV7toV8(data) {
+  const c4x = data.civ4x;
+  if (!c4x) return data;
+
+  // Dodaj tradeRouteManager
+  if (!c4x.tradeRouteManager) {
+    c4x.tradeRouteManager = null;
+  }
+
+  // Dodaj visitCounts do expeditions
+  if (c4x.expeditions && !c4x.expeditions.visitCounts) {
+    c4x.expeditions.visitCounts = {};
+  }
+
+  // Per-kolonia: dodaj queue do factorySystem
+  if (c4x.colonies) {
+    for (const col of c4x.colonies) {
+      if (col.factorySystem && !col.factorySystem.queue) {
+        col.factorySystem.queue = [];
+      }
     }
   }
 

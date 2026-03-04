@@ -8,18 +8,31 @@ import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
+import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 
-// ── Kolory severity ──────────────────────────────────────────────────────
-const SEVERITY_STYLES = {
-  danger:    { border: '#cc4444', bg: 'rgba(60,10,10,0.97)' },
-  success:   { border: '#44cc88', bg: 'rgba(6,28,18,0.97)' },
-  info:      { border: '#2288cc', bg: 'rgba(6,14,28,0.97)' },
-  discovery: { border: '#44cccc', bg: 'rgba(6,20,28,0.97)' },
-};
+// ── Kolory severity (generowane z THEME) ─────────────────────────────────
+function _sevBg(hex, alpha = 0.97) {
+  const { r, g, b } = hexToRgb(hex);
+  // Ciemne tło z lekkim odcieniem severity
+  const base = hexToRgb(THEME.bgPrimary);
+  return `rgba(${Math.round(base.r * 0.6 + r * 0.12)},${Math.round(base.g * 0.6 + g * 0.12)},${Math.round(base.b * 0.6 + b * 0.12)},${alpha})`;
+}
+
+function _getSeverityStyles() {
+  return {
+    danger:    { border: THEME.danger,  bg: _sevBg(THEME.danger) },
+    success:   { border: THEME.success, bg: _sevBg(THEME.success) },
+    info:      { border: THEME.info,    bg: _sevBg(THEME.info) },
+    discovery: { border: THEME.mint,    bg: _sevBg(THEME.mint) },
+  };
+}
 
 // ── CSS animacja (inject raz) ────────────────────────────────────────────
 function _injectCSS() {
-  if (document.getElementById('mission-modal-css')) return;
+  // Usuwamy stary CSS i wstawiamy nowy (THEME może się zmienić)
+  const existing = document.getElementById('mission-modal-css');
+  if (existing) existing.remove();
+
   const style = document.createElement('style');
   style.id = 'mission-modal-css';
   style.textContent = `
@@ -37,55 +50,55 @@ function _injectCSS() {
       max-width: 575px; width: 90%;
       border-radius: 6px;
       padding: 24px 28px;
-      font-family: monospace;
-      color: #c8e8ff;
+      font-family: ${THEME.fontFamily};
+      color: ${THEME.textPrimary};
       animation: missionFadeIn 0.35s ease-out;
       box-shadow: 0 0 30px rgba(0,0,0,0.8);
     }
     .mission-modal-panel .mm-header {
-      font-size: 17px; font-weight: bold;
+      font-size: ${THEME.fontSizeTitle + 2}px; font-weight: bold;
       margin-bottom: 14px;
       display: flex; align-items: center; gap: 8px;
     }
     .mission-modal-panel .mm-content {
-      font-size: 13px; line-height: 1.6;
+      font-size: ${THEME.fontSizeLarge}px; line-height: 1.6;
       max-height: 55vh; overflow-y: auto;
       padding-right: 4px;
     }
     .mission-modal-panel .mm-content::-webkit-scrollbar { width: 4px; }
-    .mission-modal-panel .mm-content::-webkit-scrollbar-thumb { background: #2a4060; border-radius: 2px; }
+    .mission-modal-panel .mm-content::-webkit-scrollbar-thumb { background: ${THEME.borderLight}; border-radius: 2px; }
     .mission-modal-panel .mm-row {
       display: flex; justify-content: space-between;
       padding: 2px 0;
     }
-    .mission-modal-panel .mm-row .mm-label { color: #6888aa; }
-    .mission-modal-panel .mm-row .mm-value { color: #c8e8ff; text-align: right; }
+    .mission-modal-panel .mm-row .mm-label { color: ${THEME.textSecondary}; }
+    .mission-modal-panel .mm-row .mm-value { color: ${THEME.textPrimary}; text-align: right; }
     .mission-modal-panel .mm-section {
       margin-top: 10px; padding-top: 8px;
-      border-top: 1px solid rgba(255,255,255,0.08);
+      border-top: 1px solid ${THEME.border};
     }
     .mission-modal-panel .mm-section-title {
-      font-size: 11px; color: #2a6080;
+      font-size: 11px; color: ${THEME.textHeader};
       text-transform: uppercase; letter-spacing: 1px;
       margin-bottom: 4px;
     }
     .mission-modal-panel .mm-highlight {
-      color: #88ffcc; font-weight: bold;
+      color: ${THEME.accent}; font-weight: bold;
     }
-    .mission-modal-panel .mm-danger { color: #ff4444; }
-    .mission-modal-panel .mm-success { color: #44ff88; }
-    .mission-modal-panel .mm-warning { color: #ffaa44; }
-    .mission-modal-panel .mm-dim { color: #3a5a7a; }
+    .mission-modal-panel .mm-danger { color: ${THEME.danger}; }
+    .mission-modal-panel .mm-success { color: ${THEME.success}; }
+    .mission-modal-panel .mm-warning { color: ${THEME.warning}; }
+    .mission-modal-panel .mm-dim { color: ${THEME.textDim}; }
     .mission-modal-panel .mm-btn {
       display: block; margin: 16px auto 0;
       padding: 8px 32px;
-      background: rgba(34,136,204,0.15);
-      border: 1px solid #2288cc;
+      background: ${THEME.bgTertiary};
+      border: 1px solid ${THEME.borderActive};
       border-radius: 4px;
-      color: #c8e8ff; font-family: monospace; font-size: 14px;
+      color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily}; font-size: 14px;
       cursor: pointer; transition: background 0.15s;
     }
-    .mission-modal-panel .mm-btn:hover { background: rgba(34,136,204,0.3); }
+    .mission-modal-panel .mm-btn:hover { background: ${THEME.bgSecondary}; }
     .mission-modal-panel .mm-resources {
       display: grid; grid-template-columns: 1fr 1fr; gap: 2px 12px;
     }
@@ -249,7 +262,8 @@ function _showNext() {
 
   _injectCSS();
 
-  const sev = SEVERITY_STYLES[config.severity] ?? SEVERITY_STYLES.info;
+  const sevStyles = _getSeverityStyles();
+  const sev = sevStyles[config.severity] ?? sevStyles.info;
 
   // Overlay
   const overlay = document.createElement('div');

@@ -151,9 +151,7 @@ export class PlanetGlobeScene {
       colMgr.switchActiveColony(planet.id);
     }
 
-    // Zwolnij czas
-    EventBus.emit('time:setMultiplier', { index: 1 });
-    EventBus.emit('time:pause');
+    // Zachowaj prędkość gry (bez wymuszania zwolnienia)
 
     // Generuj siatkę
     this.grid = PlanetMapGenerator.generate(planet, true);
@@ -257,9 +255,7 @@ export class PlanetGlobeScene {
       this._animFrameId = null;
     }
 
-    // Przywróć prędkość czasu
-    EventBus.emit('time:setMultiplier', { index: this._prevMultiplierIndex });
-    EventBus.emit('time:play');
+    // Prędkość czasu zachowana (bez zmian przy wyjściu)
   }
 
   // ── Rejestracja eventów ────────────────────────────────────────

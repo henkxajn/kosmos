@@ -1,7 +1,7 @@
-// KOSMOS — nowy punkt wejścia (bez Phasera)
-// Inicjalizuje BootScene na Canvas 2D, potem uruchamia GameScene z Three.js
+// KOSMOS — punkt wejścia
+// Inicjalizuje TitleScene (animowany ekran tytułowy), potem uruchamia GameScene z Three.js
 
-import { BootScene } from './scenes/BootScene.js';
+import { TitleScene } from './scenes/TitleScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { loadTheme } from './config/ThemeConfig.js';
 
@@ -13,18 +13,18 @@ window.KOSMOS = {
   savedData:    null,
 };
 
-// Uruchom ekran startowy na #ui-canvas
+// Uruchom ekran tytułowy
 const uiCanvas    = document.getElementById('ui-canvas');
 const threeCanvas = document.getElementById('three-canvas');
 const eventLayer  = document.getElementById('event-layer');
 
-// Przywróć zapisany motyw kolorystyczny (przed renderem BootScene)
+// Przywróć zapisany motyw kolorystyczny
 loadTheme();
 
-const boot = new BootScene(uiCanvas);
-boot.show();
+const title = new TitleScene();
+title.show();
 
-// Wywoływane przez BootScene po wyborze gracza
+// Wywoływane przez TitleScene po wyborze gracza
 window._startMainGame = function () {
   const scene = new GameScene();
   scene.start(threeCanvas, uiCanvas, eventLayer);

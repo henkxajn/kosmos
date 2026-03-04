@@ -141,7 +141,7 @@ export class Outliner {
           : '⛏';
         const arrow = exp.status === 'returning' ? '↩' : exp.status === 'orbiting' ? '⊙' : '→';
         const color = exp.status === 'returning' ? C.mint
-          : exp.status === 'orbiting' ? C.orange : '#88ccff';
+          : exp.status === 'orbiting' ? C.orange : THEME.textPrimary;
 
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = color;
@@ -206,7 +206,7 @@ export class Outliner {
         const shipDef = SHIPS[q.shipId];
         const frac = q.buildTime > 0 ? q.progress / q.buildTime : 0;
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = '#88ccff';
+        ctx.fillStyle = THEME.textPrimary;
         ctx.fillText(`⚓ ${shipDef?.icon ?? '🚀'} budowa`, x + PAD, iy + 14);
 
         // Mini pasek
@@ -216,9 +216,9 @@ export class Outliner {
         const barH = 4;
         ctx.fillStyle = THEME.bgTertiary;
         ctx.fillRect(barX, barY, barW, barH);
-        ctx.fillStyle = '#4488cc';
+        ctx.fillStyle = THEME.borderActive;
         ctx.fillRect(barX, barY, Math.round(barW * frac), barH);
-        ctx.strokeStyle = '#1a3050';
+        ctx.strokeStyle = THEME.border;
         ctx.lineWidth = 1;
         ctx.strokeRect(barX, barY, barW, barH);
         dy += ITEM_H + 6;
@@ -356,7 +356,7 @@ export class Outliner {
         const resDef = ALL_RESOURCES[k];
         const comDef = COMMODITIES[k];
         const icon   = resDef?.icon ?? comDef?.icon ?? '';
-        const color  = resDef?.color ?? '#aa8844';
+        const color  = resDef?.color ?? THEME.yellow;
         segments.push({ label: `${icon}${k}:${Math.floor(v)}`, color });
       }
       // Łącz po 4 segmenty w wiersze — każdy wiersz ma mixed colors
@@ -420,7 +420,7 @@ export class Outliner {
     // Tło
     ctx.fillStyle = 'rgba(6,10,20,0.95)';
     ctx.fillRect(ttX, ttY, ttW, ttH);
-    ctx.strokeStyle = '#2a5080';
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ttX, ttY, ttW, ttH);
 

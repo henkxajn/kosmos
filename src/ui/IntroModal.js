@@ -4,9 +4,20 @@
 // 2. Nazwij swoją cywilizację
 // 3. Nazwij swoją stolicę
 //
-// Styl: sci-fi terminal + formalna transmisja, ciemne tło, niebieski akcent.
+// Styl: sci-fi terminal, kolory z THEME.
 
-import { THEME } from '../config/ThemeConfig.js';
+import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+
+// ── Helpery kolorów z THEME ──────────────────────────────────────────────
+function _bgAlpha(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function _glowShadow(hex, spread = 40, alpha = 0.3) {
+  const { r, g, b } = hexToRgb(hex);
+  return `0 0 ${spread}px rgba(${r},${g},${b},${alpha})`;
+}
 
 // ── Inject CSS animacji ─────────────────────────────────────────────────
 (function injectStyle() {
@@ -42,10 +53,10 @@ function _createOverlay() {
 function _createPanel(maxWidth = '520px') {
   const panel = document.createElement('div');
   Object.assign(panel.style, {
-    background: 'rgba(6,14,28,0.97)',
-    border: '1px solid #2288cc',
+    background: _bgAlpha(THEME.bgPrimary, 0.97),
+    border: `1px solid ${THEME.borderActive}`,
     borderRadius: '6px',
-    boxShadow: '0 0 40px rgba(0,80,180,0.3), inset 0 0 30px rgba(0,40,80,0.1)',
+    boxShadow: `${_glowShadow(THEME.borderActive, 40, 0.3)}, inset ${_glowShadow(THEME.borderActive, 30, 0.1)}`,
     padding: '24px 32px',
     maxWidth,
     width: '90%',
@@ -57,13 +68,13 @@ function _createPanel(maxWidth = '520px') {
 
 function _createBtn(label, isPrimary = true) {
   const btn = document.createElement('button');
-  const bg = isPrimary ? 'rgba(20,50,80,0.9)' : 'rgba(30,30,40,0.8)';
-  const bgHover = isPrimary ? 'rgba(30,70,110,0.9)' : 'rgba(50,50,60,0.8)';
+  const bg = isPrimary ? _bgAlpha(THEME.bgTertiary, 0.9) : _bgAlpha(THEME.bgSecondary, 0.8);
+  const bgHover = isPrimary ? _bgAlpha(THEME.borderActive, 0.3) : _bgAlpha(THEME.bgTertiary, 0.8);
   Object.assign(btn.style, {
     display: 'block',
     margin: '0 auto',
     background: bg,
-    border: `1px solid ${isPrimary ? '#2288cc' : '#445566'}`,
+    border: `1px solid ${isPrimary ? THEME.borderActive : THEME.border}`,
     borderRadius: '4px',
     color: isPrimary ? THEME.accent : THEME.textSecondary,
     fontFamily: THEME.fontFamily,
@@ -85,12 +96,12 @@ function showTransmission() {
     const overlay = _createOverlay();
     const panel = _createPanel('560px');
 
-    // Terminal header (monospace, zielony)
+    // Terminal header (monospace, akcent)
     const terminal = document.createElement('div');
     Object.assign(terminal.style, {
       fontFamily: '"Courier New", Consolas, monospace',
       fontSize: '11px',
-      color: '#44aa66',
+      color: THEME.success,
       marginBottom: '16px',
       lineHeight: '1.7',
       whiteSpace: 'pre',
@@ -107,7 +118,7 @@ function showTransmission() {
     // Separator
     const sep = document.createElement('hr');
     Object.assign(sep.style, {
-      border: 'none', borderTop: '1px solid #2a4060',
+      border: 'none', borderTop: `1px solid ${THEME.border}`,
       margin: '12px 0',
     });
     panel.appendChild(sep);
@@ -138,7 +149,7 @@ function showTransmission() {
       '',
       'Jedna planeta to za mało, by zagwarantować przetrwanie naszego gatunku. Jedno uderzenie asteroidy, jedna katastrofa — i wszystko, czym jesteśmy, zniknie na zawsze. Musimy się rozprzestrzenić.',
       '',
-      '<span style="color:#88bbdd;font-style:italic;">Eksploruj, kolonizuj, rozwijaj — rób co musisz, by ludzkość sięgnęła dalej niż kiedykolwiek.</span>',
+      `<span style="color:${THEME.textPrimary};font-style:italic;">Eksploruj, kolonizuj, rozwijaj — rób co musisz, by ludzkość sięgnęła dalej niż kiedykolwiek.</span>`,
     ].join('<br>');
     panel.appendChild(body);
 
@@ -147,7 +158,7 @@ function showTransmission() {
     Object.assign(warning.style, {
       fontSize: '14px',
       fontWeight: 'bold',
-      color: '#cc6644',
+      color: THEME.warning,
       marginBottom: '16px',
     });
     warning.textContent = 'Nie zawiódź nas.';
@@ -158,7 +169,7 @@ function showTransmission() {
     Object.assign(footer.style, {
       fontFamily: '"Courier New", Consolas, monospace',
       fontSize: '11px',
-      color: '#44aa66',
+      color: THEME.success,
       marginBottom: '20px',
       whiteSpace: 'pre',
       lineHeight: '1.5',
@@ -223,7 +234,7 @@ function showNameInput(title, defaultValue, placeholder) {
       width: '100%',
       boxSizing: 'border-box',
       background: THEME.bgPrimary,
-      border: '1px solid #2a4060',
+      border: `1px solid ${THEME.border}`,
       borderRadius: '4px',
       color: THEME.textPrimary,
       fontFamily: THEME.fontFamily,
@@ -234,11 +245,11 @@ function showNameInput(title, defaultValue, placeholder) {
       textAlign: 'center',
     });
     input.addEventListener('focus', () => {
-      input.style.borderColor = '#2288cc';
-      input.style.boxShadow = '0 0 10px rgba(34,136,204,0.3)';
+      input.style.borderColor = THEME.borderActive;
+      input.style.boxShadow = _glowShadow(THEME.borderActive, 10, 0.3);
     });
     input.addEventListener('blur', () => {
-      input.style.borderColor = '#2a4060';
+      input.style.borderColor = THEME.border;
       input.style.boxShadow = 'none';
     });
     panel.appendChild(input);

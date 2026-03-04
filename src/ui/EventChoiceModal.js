@@ -1,11 +1,24 @@
 // EventChoiceModal — modal DOM do wyświetlania zdarzeń losowych
 //
 // Wyświetla powiadomienie o zdarzeniu losowym z opcjonalnym wyborem gracza.
-// Styl: sci-fi, ciemny panel, z-index 100 (nad wszystkim).
+// Styl: sci-fi, ciemny panel, z-index 100. Kolory z THEME.
 
-import { THEME } from '../config/ThemeConfig.js';
+import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 
 const MODAL_TIMEOUT = 8000; // ms — auto-zamknięcie po 8 sekundach
+
+// ── Helpery kolorów ─────────────────────────────────────────────────────
+function _bgAlpha(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function _sevBg(colorHex) {
+  // Ciemne tło z lekkim odcieniem severity
+  const base = hexToRgb(THEME.bgPrimary);
+  const sev = hexToRgb(colorHex);
+  return `rgba(${Math.round(base.r * 0.7 + sev.r * 0.15)},${Math.round(base.g * 0.7 + sev.g * 0.15)},${Math.round(base.b * 0.7 + sev.b * 0.15)},0.95)`;
+}
 
 /**
  * Pokaż powiadomienie o zdarzeniu losowym.
@@ -25,12 +38,10 @@ export function showEventNotification(event, colonyName) {
 
     // Panel
     const panel = document.createElement('div');
-    const borderColor = event.severity === 'danger' ? THEME.dangerDim
+    const borderColor = event.severity === 'danger' ? THEME.danger
                       : event.severity === 'warning' ? THEME.warning
-                      : '#2288cc';
-    const bgColor = event.severity === 'danger' ? 'rgba(60,10,10,0.95)'
-                  : event.severity === 'warning' ? 'rgba(40,30,5,0.95)'
-                  : 'rgba(8,20,40,0.95)';
+                      : THEME.info;
+    const bgColor = _sevBg(borderColor);
     panel.style.cssText = `
       background: ${bgColor}; border: 1px solid ${borderColor};
       border-radius: 6px; padding: 16px 24px; max-width: 400px; min-width: 280px;
@@ -67,7 +78,7 @@ export function showEventNotification(event, colonyName) {
     // Przycisk OK
     const btn = document.createElement('button');
     btn.style.cssText = `
-      background: rgba(20,40,60,0.9); border: 1px solid ${borderColor};
+      background: ${_bgAlpha(THEME.bgTertiary, 0.9)}; border: 1px solid ${borderColor};
       color: ${THEME.accent}; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
       font-size: ${THEME.fontSizeNormal + 1}px; border-radius: 3px;
     `;
@@ -102,44 +113,47 @@ export function showEventNotification(event, colonyName) {
 }
 
 // ── Konfiguracja uderzeń kosmicznych ─────────────────────────────────────
-const IMPACT_CONFIG = {
-  light: {
-    icon: '☄',
-    title: 'Uderzenie meteorytyczne',
-    desc: 'Niewielki obiekt kosmiczny uderzył w powierzchnię planety. Szkody są ograniczone.',
-    borderColor: '#aa8833',
-    bgColor: 'rgba(40,30,5,0.95)',
-    autoClose: 6000,
-    pause: false,
-  },
-  moderate: {
-    icon: '💥',
-    title: 'Bombardowanie kosmiczne!',
-    desc: 'Znaczący obiekt uderzył w planetę powodując poważne zniszczenia infrastruktury i straty wśród populacji.',
-    borderColor: '#cc6622',
-    bgColor: 'rgba(50,20,5,0.95)',
-    autoClose: 10000,
-    pause: true,
-  },
-  heavy: {
-    icon: '🔥',
-    title: 'KATASTROFALNE UDERZENIE!',
-    desc: 'Ogromne ciało kosmiczne uderzyło w planetę. Większość infrastruktury i populacji została zniszczona. Cywilizacja walczy o przetrwanie.',
-    borderColor: '#ff4422',
-    bgColor: 'rgba(60,10,5,0.95)',
-    autoClose: 0,
-    pause: true,
-  },
-  extinction: {
-    icon: '☠',
-    title: 'APOKALIPSA — ZAGŁADA!',
-    desc: 'Masywne ciało planetarne uderzyło w planetę. Cała cywilizacja została unicestwiona. Powierzchnia planety jest pokryta morzem lawy.',
-    borderColor: '#ff0000',
-    bgColor: 'rgba(80,0,0,0.95)',
-    autoClose: 0,
-    pause: true,
-  },
-};
+// Kolory severity dynamiczne — generowane z THEME w runtime
+function _getImpactConfig() {
+  return {
+    light: {
+      icon: '☄',
+      title: 'Uderzenie meteorytyczne',
+      desc: 'Niewielki obiekt kosmiczny uderzył w powierzchnię planety. Szkody są ograniczone.',
+      borderColor: THEME.warning,
+      bgColor: _sevBg(THEME.warning),
+      autoClose: 6000,
+      pause: false,
+    },
+    moderate: {
+      icon: '💥',
+      title: 'Bombardowanie kosmiczne!',
+      desc: 'Znaczący obiekt uderzył w planetę powodując poważne zniszczenia infrastruktury i straty wśród populacji.',
+      borderColor: THEME.dangerDim,
+      bgColor: _sevBg(THEME.dangerDim),
+      autoClose: 10000,
+      pause: true,
+    },
+    heavy: {
+      icon: '🔥',
+      title: 'KATASTROFALNE UDERZENIE!',
+      desc: 'Ogromne ciało kosmiczne uderzyło w planetę. Większość infrastruktury i populacji została zniszczona. Cywilizacja walczy o przetrwanie.',
+      borderColor: THEME.danger,
+      bgColor: _sevBg(THEME.danger),
+      autoClose: 0,
+      pause: true,
+    },
+    extinction: {
+      icon: '☠',
+      title: 'APOKALIPSA — ZAGŁADA!',
+      desc: 'Masywne ciało planetarne uderzyło w planetę. Cała cywilizacja została unicestwiona. Powierzchnia planety jest pokryta morzem lawy.',
+      borderColor: THEME.danger,
+      bgColor: _sevBg(THEME.danger),
+      autoClose: 0,
+      pause: true,
+    },
+  };
+}
 
 /**
  * Pokaż powiadomienie o uderzeniu kosmicznym.
@@ -148,6 +162,7 @@ const IMPACT_CONFIG = {
  */
 export function showImpactNotification(data) {
   const { severity, planetName, popLost, buildingsDestroyed, resourceLossPercent, popRemaining } = data;
+  const IMPACT_CONFIG = _getImpactConfig();
   const cfg = IMPACT_CONFIG[severity];
   if (!cfg) return Promise.resolve();
 
@@ -224,7 +239,7 @@ export function showImpactNotification(data) {
     // Przycisk OK
     const btn = document.createElement('button');
     btn.style.cssText = `
-      background: rgba(20,40,60,0.9); border: 1px solid ${cfg.borderColor};
+      background: ${_bgAlpha(THEME.bgTertiary, 0.9)}; border: 1px solid ${cfg.borderColor};
       color: ${THEME.accent}; padding: 6px 20px; cursor: pointer; font-family: ${THEME.fontFamily};
       font-size: 13px; border-radius: 3px; display: block; margin: 0 auto;
     `;

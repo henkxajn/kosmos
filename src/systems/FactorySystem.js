@@ -20,15 +20,42 @@ export class FactorySystem {
     // Całkowita liczba punktów produkcji (= liczba fabryk × level)
     this._totalPoints = 0;
 
-    // Alokacja: Map<commodityId, { points, progress }>
+    // Alokacja: Map<commodityId, { points, progress, targetQty, produced }>
     // points: ile punktów przydzielono do tej receptury
     // progress: postęp produkcji w latach (reset do 0 po ukończeniu)
+    // targetQty: docelowa ilość (null = nieskończona)
+    // produced: licznik wyprodukowanych sztuk
     this._allocations = new Map();
+
+    // Kolejka produkcji: [{commodityId, qty}]
+    // Gdy bieżąca alokacja osiągnie target → automatycznie alokuj następny z kolejki
+    this._queue = [];
 
     // Nasłuchuj zdarzeń
     EventBus.on('factory:allocate', ({ commodityId, points }) => {
       if (window.KOSMOS?.factorySystem !== this) return;
       this.allocate(commodityId, points);
+    });
+
+    EventBus.on('factory:setTarget', ({ commodityId, qty }) => {
+      if (window.KOSMOS?.factorySystem !== this) return;
+      this.setTarget(commodityId, qty);
+    });
+
+    EventBus.on('factory:enqueue', ({ commodityId, qty }) => {
+      if (window.KOSMOS?.factorySystem !== this) return;
+      this.enqueue(commodityId, qty);
+    });
+
+    EventBus.on('factory:dequeue', ({ index }) => {
+      if (window.KOSMOS?.factorySystem !== this) return;
+      this.dequeue(index);
+    });
+
+    EventBus.on('factory:reorderQueue', ({ index, direction }) => {
+      if (window.KOSMOS?.factorySystem !== this) return;
+      if (direction === 'up') this.moveUp(index);
+      else this.moveDown(index);
     });
 
     EventBus.on('time:tick', ({ deltaYears }) => this._update(deltaYears));
@@ -72,10 +99,53 @@ export class FactorySystem {
       } else {
         this._allocations.set(commodityId, {
           points: actual,
-          progress: existing?.progress ?? 0,
+          progress:  existing?.progress ?? 0,
+          targetQty: existing?.targetQty ?? null,
+          produced:  existing?.produced ?? 0,
         });
       }
     }
+    this._emitStatus();
+  }
+
+  // Ustaw docelową ilość produkcji (null = nieskończona)
+  setTarget(commodityId, qty) {
+    const alloc = this._allocations.get(commodityId);
+    if (!alloc) return;
+    alloc.targetQty = (qty != null && qty > 0) ? qty : null;
+    // Reset licznika jeśli nowy cel
+    if (alloc.targetQty !== null && alloc.produced >= alloc.targetQty) {
+      alloc.produced = 0;
+    }
+    this._emitStatus();
+  }
+
+  // Dodaj do kolejki produkcji
+  enqueue(commodityId, qty) {
+    const def = COMMODITIES[commodityId];
+    if (!def || !qty || qty <= 0) return;
+    this._queue.push({ commodityId, qty });
+    this._emitStatus();
+  }
+
+  // Usuń z kolejki
+  dequeue(index) {
+    if (index < 0 || index >= this._queue.length) return;
+    this._queue.splice(index, 1);
+    this._emitStatus();
+  }
+
+  // Przesuń w kolejce w górę
+  moveUp(index) {
+    if (index <= 0 || index >= this._queue.length) return;
+    [this._queue[index - 1], this._queue[index]] = [this._queue[index], this._queue[index - 1]];
+    this._emitStatus();
+  }
+
+  // Przesuń w kolejce w dół
+  moveDown(index) {
+    if (index < 0 || index >= this._queue.length - 1) return;
+    [this._queue[index], this._queue[index + 1]] = [this._queue[index + 1], this._queue[index]];
     this._emitStatus();
   }
 
@@ -95,10 +165,15 @@ export class FactorySystem {
         timePerUnit,
         pctComplete: Math.min(100, (alloc.progress / timePerUnit) * 100),
         paused:      alloc._paused ?? false,
+        targetQty:   alloc.targetQty ?? null,
+        produced:    alloc.produced ?? 0,
       });
     }
     return result;
   }
+
+  // Pobierz kolejkę (do UI)
+  getQueue() { return [...this._queue]; }
 
   // ── Serializacja ─────────────────────────────────────────────────────────
 
@@ -109,9 +184,15 @@ export class FactorySystem {
         commodityId: id,
         points:      alloc.points,
         progress:    alloc.progress,
+        targetQty:   alloc.targetQty ?? null,
+        produced:    alloc.produced ?? 0,
       });
     }
-    return { totalPoints: this._totalPoints, allocations: allocs };
+    return {
+      totalPoints: this._totalPoints,
+      allocations: allocs,
+      queue:       [...this._queue],
+    };
   }
 
   restore(data) {
@@ -120,21 +201,33 @@ export class FactorySystem {
     if (data.allocations) {
       for (const a of data.allocations) {
         this._allocations.set(a.commodityId, {
-          points:   a.points,
-          progress: a.progress ?? 0,
+          points:    a.points,
+          progress:  a.progress ?? 0,
+          targetQty: a.targetQty ?? null,
+          produced:  a.produced ?? 0,
         });
       }
     }
+    this._queue = data.queue ?? [];
   }
 
   // ── Prywatne ─────────────────────────────────────────────────────────────
 
   _update(deltaYears) {
-    if (this._allocations.size === 0) return;
+    if (this._allocations.size === 0 && this._queue.length === 0) return;
+
+    const targetReached = []; // commodityId które osiągnęły target
 
     for (const [commodityId, alloc] of this._allocations) {
       const def = COMMODITIES[commodityId];
       if (!def || alloc.points <= 0) continue;
+
+      // Target osiągnięty — zatrzymaj produkcję
+      if (alloc.targetQty !== null && alloc.produced >= alloc.targetQty) {
+        alloc._paused = true;
+        targetReached.push({ commodityId, points: alloc.points });
+        continue;
+      }
 
       // Sprawdź czy mamy surowce na recepturę
       const canProduce = this._hasIngredients(def.recipe);
@@ -153,9 +246,17 @@ export class FactorySystem {
           break;
         }
 
+        // Sprawdź target
+        if (alloc.targetQty !== null && alloc.produced >= alloc.targetQty) {
+          alloc._paused = true;
+          targetReached.push({ commodityId, points: alloc.points });
+          break;
+        }
+
         // Zużyj surowce
         this._consumeIngredients(def.recipe);
         alloc.progress -= timePerUnit;
+        alloc.produced = (alloc.produced ?? 0) + 1;
 
         // Dodaj commodity do inventory
         if (this.resourceSystem) {
@@ -163,6 +264,20 @@ export class FactorySystem {
         }
 
         EventBus.emit('factory:produced', { commodityId, amount: 1 });
+      }
+    }
+
+    // Obsługa osiągniętych targetów — zwolnij punkty i alokuj z kolejki
+    for (const { commodityId, points } of targetReached) {
+      // Usuń ukończoną alokację
+      this._allocations.delete(commodityId);
+      EventBus.emit('factory:targetReached', { commodityId });
+
+      // Alokuj z kolejki (1 punkt)
+      if (this._queue.length > 0 && this.freePoints > 0) {
+        const next = this._queue.shift();
+        this.allocate(next.commodityId, 1);
+        this.setTarget(next.commodityId, next.qty);
       }
     }
   }

@@ -14,6 +14,7 @@ import { SHIPS } from '../data/ShipsData.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { showRenameModal } from '../ui/ModalInput.js';
 import { showTransportModal } from '../ui/TransportModal.js';
+import { showTradeRouteModal } from '../ui/TradeRouteModal.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
@@ -72,20 +73,20 @@ function _fmtNum(n) {
 // Kolory zdarzeń EventLog
 const LOG_COLORS = {
   get collision_absorb()   { return THEME.yellow; },
-  get collision_destroy()  { return '#ff6644'; },
-  get collision_redirect() { return '#ff9933'; },
+  get collision_destroy()  { return THEME.danger; },
+  get collision_redirect() { return THEME.warning; },
   get ejection()           { return THEME.purple; },
   get new_planet()         { return THEME.accent; },
   get life_good()          { return THEME.success; },
-  life_bad:           '#ff4488',
+  get life_bad()           { return THEME.danger; },
   get info()               { return THEME.textSecondary; },
   get auto_slow()          { return THEME.warning; },
-  disk_phase:         '#88aaff',
-  civ_epoch:          '#ffcc88',
+  get disk_phase()         { return THEME.info; },
+  get civ_epoch()          { return THEME.yellow; },
   get civ_unrest()         { return THEME.danger; },
-  civ_famine:         '#ff8800',
+  get civ_famine()         { return THEME.warning; },
   get expedition_ok()      { return THEME.mint; },
-  get expedition_fail()    { return '#ff6644'; },
+  get expedition_fail()    { return THEME.danger; },
   get pop_born()           { return THEME.success; },
   get pop_died()           { return THEME.danger; },
 };
@@ -912,7 +913,7 @@ export class UIManager {
           : exp.type === 'transport' ? '📦' : exp.type === 'recon' ? '🔭' : '⛏';
         const arrow = exp.status === 'returning' ? '↩' : exp.status === 'orbiting' ? '⊙' : '→';
         const color = exp.status === 'returning' ? C.mint
-          : exp.status === 'orbiting' ? C.yellow : '#88ccff';
+          : exp.status === 'orbiting' ? C.yellow : THEME.textPrimary;
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = color;
         // Dla full_system recon pokaż postęp
@@ -941,9 +942,9 @@ export class UIManager {
           const isRedirectActive = this._redirectTargetExpId === exp.id;
           ctx.fillStyle = isRedirectActive ? 'rgba(20,50,80,0.8)' : 'rgba(10,30,60,0.7)';
           ctx.fillRect(btnRedX, btnY, btnW, btnH);
-          ctx.strokeStyle = '#4488cc'; ctx.strokeRect(btnRedX, btnY, btnW, btnH);
+          ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(btnRedX, btnY, btnW, btnH);
           ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = '#88ccff'; ctx.textAlign = 'center';
+          ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
           ctx.fillText('➡ Cel', btnRedX + btnW / 2, btnY + 9);
           ctx.textAlign = 'left';
           this._orbitRedirectBtns.push({ x: btnRedX, y: btnY, w: btnW, h: btnH, expId: exp.id });
@@ -1012,13 +1013,15 @@ export class UIManager {
 
     const activePid = colMgr?.activePlanetId;
     const activeCol = colMgr?.getColony(activePid);
-    // Pobierz poziom stoczni (0 = brak)
-    let shipyardLevel = 0;
-    if (activeCol?.buildingSystem) {
+    // Pobierz poziom stoczni (0 = brak) — deleguj do ColonyManager
+    const shipyardLevel = colMgr?._getShipyardLevel?.(activeCol) ?? (() => {
+      if (!activeCol?.buildingSystem) return 0;
+      let total = 0;
       for (const [, e] of activeCol.buildingSystem._active) {
-        if (e.building.id === 'shipyard') { shipyardLevel = e.level ?? 1; break; }
+        if (e.building?.id === 'shipyard') total += e.level ?? 1;
       }
-    }
+      return total;
+    })();
     const hasShipyard = shipyardLevel > 0;
     const hasExploration = tSys?.isResearched('exploration') ?? false;
 
@@ -1026,13 +1029,18 @@ export class UIManager {
     else if (!hasShipyard) { ctx.fillStyle = C.orange; ctx.fillText('⚓ Stocznia: ❌ (zbuduj)', bodyX + PAD, y); y += LH; }
     else {
       const queues = colMgr?.getShipQueues(activePid) ?? [];
-      ctx.fillStyle = C.green; ctx.fillText(`⚓ Stocznia ✅ (${queues.length}/${shipyardLevel} slotów)`, bodyX + PAD, y); y += LH;
+      const usedSlots = queues.length || 1;
+      const speedBonus = Math.max(1, Math.floor(shipyardLevel / usedSlots));
+      const bonusStr = speedBonus > 1 ? ` ×${speedBonus}⚡` : '';
+      ctx.fillStyle = C.green; ctx.fillText(`⚓ Stocznia ✅ (${queues.length}/${shipyardLevel} slotów${bonusStr})`, bodyX + PAD, y); y += LH;
       for (const q of queues) {
         const shipDef = SHIPS[q.shipId];
-        const frac = q.buildTime > 0 ? q.progress / q.buildTime : 0;
-        ctx.fillStyle = '#88ccff'; ctx.fillText(`Budowa: ${shipDef?.icon ?? '🚀'} ${shipDef?.namePL ?? q.shipId}`, bodyX + PAD, y); y += LH - 2;
-        drawMiniBar(ctx, bodyX + PAD, y, fullW - PAD, 6, frac, '#4488cc'); y += 8;
-        ctx.fillStyle = C.text; ctx.fillText(`${Math.floor(q.progress)}/${q.buildTime} lat`, bodyX + PAD, y); y += LH;
+        const effectiveTime = speedBonus > 1 ? (q.buildTime / speedBonus) : q.buildTime;
+        const frac = effectiveTime > 0 ? q.progress / q.buildTime : 0;
+        ctx.fillStyle = THEME.textPrimary; ctx.fillText(`Budowa: ${shipDef?.icon ?? '🚀'} ${shipDef?.namePL ?? q.shipId}`, bodyX + PAD, y); y += LH - 2;
+        drawMiniBar(ctx, bodyX + PAD, y, fullW - PAD, 6, frac, THEME.borderActive); y += 8;
+        const remaining = Math.max(0, effectiveTime - q.progress / speedBonus);
+        ctx.fillStyle = C.text; ctx.fillText(`~${remaining.toFixed(1)} lat (×${speedBonus}⚡)`, bodyX + PAD, y); y += LH;
       }
 
       // ── Hangar — indywidualne statki ────────────────────────────────
@@ -1051,13 +1059,13 @@ export class UIManager {
 
           ctx.fillStyle = isSelected ? 'rgba(40,80,120,0.5)' : 'rgba(15,25,40,0.4)';
           ctx.fillRect(rx, ry, fullW, rowH);
-          if (isSelected) { ctx.strokeStyle = '#4488cc'; ctx.strokeRect(rx, ry, fullW, rowH); }
+          if (isSelected) { ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(rx, ry, fullW, rowH); }
 
           ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          const statusColor = v.status === 'idle' ? '#44cc66'
-            : v.status === 'refueling' ? '#cccc44'
-            : v.status === 'on_mission' ? '#4488ff'
-            : '#cc4444';
+          const statusColor = v.status === 'idle' ? THEME.successDim
+            : v.status === 'refueling' ? THEME.yellow
+            : v.status === 'on_mission' ? THEME.info
+            : THEME.dangerDim;
           ctx.fillStyle = statusColor;
           ctx.fillText(`${sd?.icon ?? '🚀'} ${_truncate(v.name, 14)}`, rx + 2, ry + 11);
 
@@ -1067,10 +1075,10 @@ export class UIManager {
           const barY = ry + 4;
           const barH = 6;
           const fuelFrac = v.fuel.max > 0 ? v.fuel.current / v.fuel.max : 0;
-          const fuelColor = fuelFrac > 0.5 ? '#44cc66' : fuelFrac > 0.2 ? '#cccc44' : '#cc4444';
+          const fuelColor = fuelFrac > 0.5 ? THEME.successDim : fuelFrac > 0.2 ? THEME.yellow : THEME.dangerDim;
           ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(barX, barY, barW, barH);
           ctx.fillStyle = fuelColor; ctx.fillRect(barX, barY, barW * fuelFrac, barH);
-          ctx.strokeStyle = '#334'; ctx.strokeRect(barX, barY, barW, barH);
+          ctx.strokeStyle = THEME.textLabel; ctx.strokeRect(barX, barY, barW, barH);
           ctx.font = '7px monospace'; ctx.fillStyle = C.label;
           ctx.fillText(`⛽${v.fuel.current.toFixed(1)}/${v.fuel.max}`, barX - 2, ry + 15);
 
@@ -1107,7 +1115,7 @@ export class UIManager {
       }
 
       if (inTransitVessels.length > 0) {
-        ctx.fillStyle = '#4488ff'; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.info; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillText(`W locie (${inTransitVessels.length}):`, bodyX + PAD, y); y += LH - 2;
         for (const v of inTransitVessels) {
           const sd = SHIPS[v.shipId];
@@ -1116,7 +1124,7 @@ export class UIManager {
           ctx.fillStyle = 'rgba(15,25,50,0.4)';
           ctx.fillRect(rx, ry, fullW, rowH);
           ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = '#4488ff';
+          ctx.fillStyle = THEME.info;
           const targetName = v.mission?.targetName ?? '?';
           ctx.fillText(`${sd?.icon ?? '🚀'} ${_truncate(v.name, 10)} → ${_truncate(targetName, 8)}`, rx + 2, ry + 11);
           y += rowH + 1;
@@ -1154,10 +1162,10 @@ export class UIManager {
         const bx = bodyX + PAD; const by = y;
         ctx.fillStyle = canBuild ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.6)';
         ctx.fillRect(bx, by, fullW, btnH);
-        ctx.strokeStyle = canBuild ? '#4488cc' : '#333';
+        ctx.strokeStyle = canBuild ? THEME.borderActive : THEME.textLabel;
         ctx.strokeRect(bx, by, fullW, btnH);
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = canBuild ? '#88ccff' : '#555';
+        ctx.fillStyle = canBuild ? THEME.textPrimary : THEME.textDim;
         ctx.textAlign = 'center';
         ctx.fillText(`Buduj ${ship.icon} ${ship.namePL}`, bx + fullW / 2, by + 12);
         ctx.textAlign = 'left';
@@ -1184,7 +1192,7 @@ export class UIManager {
         let cx = bodyX + PAD + 2;
         let costLineY = y;
         for (const part of costParts) {
-          ctx.fillStyle = part.ok ? '#668844' : '#cc4422';
+          ctx.fillStyle = part.ok ? THEME.successDim : THEME.dangerDim;
           const tw = ctx.measureText(part.text).width;
           if (cx + tw > bodyX + PAD + fullW - 2) {
             costLineY += LH - 4; cx = bodyX + PAD + 2;
@@ -1195,8 +1203,38 @@ export class UIManager {
         y = costLineY + LH;
 
         ctx.fillStyle = C.dim;
-        ctx.fillText(`⏱${ship.buildTime} lat`, bodyX + PAD + 2, y + 8);
+        const effectiveBuildTime = speedBonus > 1 ? (ship.buildTime / speedBonus).toFixed(1) : ship.buildTime;
+        ctx.fillText(`⏱${effectiveBuildTime} lat${speedBonus > 1 ? ` (×${speedBonus}⚡)` : ''}`, bodyX + PAD + 2, y + 8);
         y += LH;
+      }
+    }
+
+    // ── Aktywne trasy handlowe ──────────────────────────────────
+    const trMgr = window.KOSMOS?.tradeRouteManager;
+    const trRoutes = trMgr?.getRoutes()?.filter(r => r.status === 'active' || r.status === 'paused') ?? [];
+    if (trRoutes.length > 0) {
+      y += 4;
+      ctx.fillStyle = THEME.accent; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillText(`🔄 Trasy handlowe (${trRoutes.length}):`, bodyX + PAD, y); y += LH - 2;
+      for (const tr of trRoutes) {
+        const vName = vMgr?.getVessel(tr.vesselId)?.name ?? '?';
+        const statusIcon = tr.status === 'paused' ? '⏸' : '▶';
+        const tripsStr = tr.tripsTotal ? `${tr.tripsCompleted}/${tr.tripsTotal}` : `${tr.tripsCompleted}/∞`;
+        const rowH = 14; const rx = bodyX + PAD; const ry = y;
+        ctx.fillStyle = 'rgba(20,40,30,0.4)'; ctx.fillRect(rx, ry, fullW, rowH);
+        ctx.strokeStyle = THEME.textLabel; ctx.strokeRect(rx, ry, fullW, rowH);
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = tr.status === 'paused' ? THEME.textDim : THEME.mint;
+        ctx.fillText(`${statusIcon} ${_truncate(vName, 8)} → ${_truncate(tr.targetBodyId, 8)} [${tripsStr}]`, rx + 2, ry + 10);
+        // Przycisk pauza/wznów + usuń
+        const delBtnW = 14;
+        const delBtnX = rx + fullW - delBtnW - 1;
+        ctx.fillStyle = 'rgba(80,20,20,0.6)'; ctx.fillRect(delBtnX, ry + 1, delBtnW, rowH - 2);
+        ctx.fillStyle = THEME.dangerDim; ctx.textAlign = 'center';
+        ctx.fillText('✕', delBtnX + delBtnW / 2, ry + 10);
+        ctx.textAlign = 'left';
+        this._vesselActionBtns.push({ x: delBtnX, y: ry, w: delBtnW, h: rowH, action: 'deleteTradeRoute', routeId: tr.id });
+        y += rowH + 1;
       }
     }
 
@@ -1300,11 +1338,11 @@ export class UIManager {
         const tempStr = tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : '—';
 
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = '#88ccff';
+        ctx.fillStyle = THEME.textPrimary;
         ctx.fillText(`${icon} ${_truncate(body.name, 12)}`, catalogX + PAD, ry + 10);
         ctx.fillStyle = C.dim;
         ctx.fillText(typeStr, catalogX + PAD + 90, ry + 10);
-        ctx.fillStyle = tempC !== null && tempC > -20 && tempC < 60 ? '#44cc66' : C.label;
+        ctx.fillStyle = tempC !== null && tempC > -20 && tempC < 60 ? THEME.successDim : C.label;
         ctx.textAlign = 'right';
         ctx.fillText(tempStr, catalogX + catalogW - PAD - 3, ry + 10);
         ctx.textAlign = 'left';
@@ -1328,7 +1366,7 @@ export class UIManager {
             const stars = d.richness >= 0.7 ? '★★★' : d.richness >= 0.4 ? '★★' : '★';
             depStr += `${d.resourceId}${stars} `;
           }
-          ctx.fillStyle = '#aa8844';
+          ctx.fillStyle = THEME.yellow;
           ctx.textAlign = 'right';
           ctx.fillText(depStr.trim(), catalogX + catalogW - PAD - 3, ry + 22);
           ctx.textAlign = 'left';
@@ -1336,9 +1374,9 @@ export class UIManager {
       } else {
         // ── Niezbadane ciało — ukryte dane ──
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = '#445566';
+        ctx.fillStyle = THEME.textDim;
         ctx.fillText(`${icon} ???`, catalogX + PAD, ry + 10);
-        ctx.fillStyle = '#334455';
+        ctx.fillStyle = THEME.textLabel;
         ctx.fillText(typeStr, catalogX + PAD + 90, ry + 10);
         ctx.textAlign = 'right';
         ctx.fillText('???', catalogX + catalogW - PAD - 3, ry + 10);
@@ -1346,7 +1384,7 @@ export class UIManager {
 
         // Wiersz 2: odległość widoczna, masa/złoża ukryte
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = '#334455';
+        ctx.fillStyle = THEME.textLabel;
         ctx.fillText(`???  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2, ry + 22);
       }
 
@@ -1381,7 +1419,7 @@ export class UIManager {
 
     // Nagłówek
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = vessel.position.state === 'orbiting' ? C.yellow : '#88ccff';
+    ctx.fillStyle = vessel.position.state === 'orbiting' ? C.yellow : THEME.textPrimary;
     ctx.fillText(`${sd?.icon ?? '🚀'} ${vessel.name}`, px + 2, y);
     y += LH;
 
@@ -1437,9 +1475,9 @@ export class UIManager {
       const isRedirectActive = this._redirectTargetExpId === orbExp?.id;
       ctx.fillStyle = isRedirectActive ? 'rgba(20,50,80,0.8)' : 'rgba(10,30,60,0.7)';
       ctx.fillRect(bRedX, bRedY, halfW, btnH);
-      ctx.strokeStyle = '#4488cc'; ctx.strokeRect(bRedX, bRedY, halfW, btnH);
+      ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(bRedX, bRedY, halfW, btnH);
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = '#88ccff'; ctx.textAlign = 'center';
+      ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
       ctx.fillText('➡ Zmień cel', bRedX + halfW / 2, bRedY + 11);
       ctx.textAlign = 'left';
       if (orbExp) {
@@ -1449,6 +1487,29 @@ export class UIManager {
         });
       }
       y += btnH + 4;
+
+      // Przycisk "Dostarcz" — transport z pendingDelivery, cel ma teraz kolonię
+      if (orbExp && orbExp.pendingDelivery && orbExp.type === 'transport') {
+        const targetHasColony = !!colMgr?.hasColony(orbExp.targetId);
+        const delBtnH = 15;
+        const dbx = px; const dby = y;
+        if (targetHasColony) {
+          ctx.fillStyle = 'rgba(20,60,40,0.8)'; ctx.fillRect(dbx, dby, panelW, delBtnH);
+          ctx.strokeStyle = THEME.successDim; ctx.strokeRect(dbx, dby, panelW, delBtnH);
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.accent; ctx.textAlign = 'center';
+          ctx.fillText('📦 Dostarcz ładunek', dbx + panelW / 2, dby + 11);
+          ctx.textAlign = 'left';
+          this._vesselActionBtns.push({
+            x: dbx, y: dby, w: panelW, h: delBtnH,
+            action: 'deliverCargo', expId: orbExp.id, vesselId: vessel.id,
+          });
+        } else {
+          ctx.fillStyle = THEME.textDim; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillText('📦 Ładunek czeka — brak kolonii na celu', px + 2, dby + 11);
+        }
+        y += delBtnH + 4;
+      }
 
       // Jeśli tryb wyboru celu → rysuj listę celów
       if (isRedirectActive && orbExp) {
@@ -1466,12 +1527,11 @@ export class UIManager {
     }
     if (vessel.shipId === 'cargo_ship') {
       missionTypes.push({ type: 'transport', label: '📦 Transport', icon: '📦' });
+      missionTypes.push({ type: 'tradeRoute', label: '🔄 Trasa', icon: '🔄' });
     }
     if (vessel.shipId === 'colony_ship') {
       missionTypes.push({ type: 'colony', label: '🚢 Kolonizacja', icon: '🚢' });
     }
-    // Mining — dowolny statek z launch_padem
-    missionTypes.push({ type: 'mining', label: '⛏ Wydobycie', icon: '⛏' });
 
     const btnH = 15;
     const gap = 2;
@@ -1484,10 +1544,10 @@ export class UIManager {
       const isActive = this._vesselMissionType === mt.type;
       ctx.fillStyle = isActive ? 'rgba(40,80,120,0.8)' : 'rgba(20,40,60,0.6)';
       ctx.fillRect(bx, by, bw, btnH);
-      ctx.strokeStyle = isActive ? '#66aaee' : '#334';
+      ctx.strokeStyle = isActive ? THEME.borderActive : THEME.textLabel;
       ctx.strokeRect(bx, by, bw, btnH);
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = isActive ? '#aaddff' : '#88aacc';
+      ctx.fillStyle = isActive ? THEME.textPrimary : THEME.textSecondary;
       ctx.textAlign = 'center';
       ctx.fillText(mt.label, bx + bw / 2, by + 10);
       ctx.textAlign = 'left';
@@ -1526,9 +1586,9 @@ export class UIManager {
           const bx = scope === 'nearest' ? px : px + halfW + 4;
           const by = y;
           ctx.fillStyle = 'rgba(20,40,60,0.8)'; ctx.fillRect(bx, by, halfW, btnH);
-          ctx.strokeStyle = '#4488cc'; ctx.strokeRect(bx, by, halfW, btnH);
+          ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(bx, by, halfW, btnH);
           ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = '#88ccff'; ctx.textAlign = 'center';
+          ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
           ctx.fillText(label, bx + halfW / 2, by + 10); ctx.textAlign = 'left';
           this._vesselActionBtns.push({
             x: bx, y: by, w: halfW, h: btnH,
@@ -1550,12 +1610,12 @@ export class UIManager {
           ctx.fillStyle = isExplored ? 'rgba(15,25,15,0.4)'
             : inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
           ctx.fillRect(bx, by, panelW, btnH2);
-          ctx.strokeStyle = isExplored ? '#224422'
-            : inRange ? '#335' : '#322';
+          ctx.strokeStyle = isExplored ? THEME.successDim
+            : inRange ? THEME.textLabel : THEME.dangerDim;
           ctx.strokeRect(bx, by, panelW, btnH2);
           ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = isExplored ? '#446644'
-            : inRange ? '#88ccff' : '#665555';
+          ctx.fillStyle = isExplored ? THEME.successDim
+            : inRange ? THEME.textPrimary : THEME.textDim;
           const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
           const fuelCost = (t.dist * 2 * vessel.fuel.consumption).toFixed(1); // ×2: tam + powrót
           const shipSpeed = SHIPS[vessel.shipId]?.speedAU ?? 1.0;
@@ -1576,25 +1636,72 @@ export class UIManager {
       return y;
     }
 
-    // Transport — lista kolonii docelowych
+    // Trasa handlowa — lista explored bodies z ≥2 wizytami
+    if (missionType === 'tradeRoute') {
+      const exSys = window.KOSMOS?.expeditionSystem;
+      const targets = this._getMissionTargets(vessel, 'transport');
+      // Filtruj: tylko ciała z ≥2 wizytami
+      const tradeTargets = targets.filter(t => (exSys?.getVisitCount(t.id) ?? 0) >= 2);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.label; ctx.fillText('Cel trasy handlowej (≥2 wizyty):', px + 2, y); y += LH;
+      if (tradeTargets.length === 0) {
+        ctx.fillStyle = C.dim; ctx.fillText('Brak celów (wymagane ≥2 wizyty)', px + 2, y);
+        y += LH;
+      } else {
+        for (const t of tradeTargets) {
+          const btnH = 14;
+          const bx = px; const by = y;
+          const inRange = t.inRange;
+          ctx.fillStyle = inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
+          ctx.fillRect(bx, by, panelW, btnH);
+          ctx.strokeStyle = inRange ? THEME.textLabel : THEME.dangerDim; ctx.strokeRect(bx, by, panelW, btnH);
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = inRange ? THEME.textPrimary : THEME.textDim;
+          const visits = exSys?.getVisitCount(t.id) ?? 0;
+          ctx.fillText(`🔄 → ${_truncate(t.name, 12)} (${visits}×)`, bx + 2, by + 10);
+          if (inRange) {
+            this._vesselActionBtns.push({
+              x: bx, y: by, w: panelW, h: btnH,
+              action: 'setupTradeRoute', targetId: t.id, targetName: t.name, vesselId: vessel.id,
+            });
+          }
+          y += btnH + 1;
+        }
+      }
+      return y;
+    }
+
+    // Transport — lista wszystkich explored bodies
     if (missionType === 'transport') {
-      const colonies = colMgr?.getAllColonies() ?? [];
-      const activePid = colMgr?.activePlanetId;
+      const targets = this._getMissionTargets(vessel, 'transport');
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.label; ctx.fillText('Cel transportu:', px + 2, y); y += LH;
-      for (const col of colonies) {
-        if (col.planetId === activePid) continue;
-        const btnH = 14;
-        const bx = px; const by = y;
-        ctx.fillStyle = 'rgba(20,40,60,0.6)'; ctx.fillRect(bx, by, panelW, btnH);
-        ctx.strokeStyle = '#335'; ctx.strokeRect(bx, by, panelW, btnH);
-        ctx.fillStyle = '#88ccff'; ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillText(`📦 → ${_truncate(col.name, 18)}`, bx + 2, by + 10);
-        this._vesselActionBtns.push({
-          x: bx, y: by, w: panelW, h: btnH,
-          action: 'launchTransport', targetId: col.planetId, vesselId: vessel.id,
-        });
-        y += btnH + 1;
+      if (targets.length === 0) {
+        ctx.fillStyle = C.dim; ctx.fillText('Brak dostępnych celów', px + 2, y);
+        y += LH;
+      } else {
+        for (const t of targets) {
+          const btnH = 14;
+          const bx = px; const by = y;
+          const inRange = t.inRange;
+          const hasColony = !!colMgr?.hasColony(t.id);
+          ctx.fillStyle = inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
+          ctx.fillRect(bx, by, panelW, btnH);
+          ctx.strokeStyle = inRange ? THEME.textLabel : THEME.dangerDim; ctx.strokeRect(bx, by, panelW, btnH);
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = inRange ? (hasColony ? THEME.textPrimary : THEME.textSecondary) : THEME.textDim;
+          const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
+          const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
+          const colIcon = hasColony ? '🏠' : '📦';
+          ctx.fillText(`${colIcon} → ${_truncate(t.name, 10)} ${distStr}AU ⛽${fuelCost}`, bx + 2, by + 10);
+          if (inRange) {
+            this._vesselActionBtns.push({
+              x: bx, y: by, w: panelW, h: btnH,
+              action: 'launchTransport', targetId: t.id, vesselId: vessel.id,
+            });
+          }
+          y += btnH + 1;
+        }
       }
       return y;
     }
@@ -1608,15 +1715,15 @@ export class UIManager {
       ctx.fillStyle = C.dim; ctx.fillText('Brak dostępnych celów', px + 2, y);
       y += LH;
     } else {
-      for (const t of targets.slice(0, 8)) {
+      for (const t of targets) {
         const btnH = 14;
         const bx = px; const by = y;
         const inRange = t.inRange;
         ctx.fillStyle = inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
         ctx.fillRect(bx, by, panelW, btnH);
-        ctx.strokeStyle = inRange ? '#335' : '#322'; ctx.strokeRect(bx, by, panelW, btnH);
+        ctx.strokeStyle = inRange ? THEME.textLabel : THEME.dangerDim; ctx.strokeRect(bx, by, panelW, btnH);
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = inRange ? '#88ccff' : '#665555';
+        ctx.fillStyle = inRange ? THEME.textPrimary : THEME.textDim;
         const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
         const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
         const shipSpeed = SHIPS[vessel.shipId]?.speedAU ?? 1.0;
@@ -1651,6 +1758,10 @@ export class UIManager {
         if (missionType === 'colony') {
           if (colMgr?.hasColony(body.id)) continue;
           if (body.type === 'planet' && body.planetType !== 'rocky' && body.planetType !== 'ice') continue;
+        }
+        // Transport — nie wysyłaj do aktywnej kolonii (źródła)
+        if (missionType === 'transport') {
+          if (body.id === colMgr?.activePlanetId) continue;
         }
 
         // Euclidean — spójne z ExpeditionSystem._calcDistance()
@@ -1738,14 +1849,14 @@ export class UIManager {
     if (!this._redirectTargetBtns) this._redirectTargetBtns = [];
     this._redirectTargetBtns = [];
 
-    for (const t of targets.slice(0, 8)) {
+    for (const t of targets) {
       const btnH = 13;
       const bx = px; const by = y;
       ctx.fillStyle = t.inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
       ctx.fillRect(bx, by, panelW, btnH);
-      ctx.strokeStyle = t.inRange ? '#335' : '#322'; ctx.strokeRect(bx, by, panelW, btnH);
+      ctx.strokeStyle = t.inRange ? THEME.textLabel : THEME.dangerDim; ctx.strokeRect(bx, by, panelW, btnH);
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = t.inRange ? '#88ccff' : '#665555';
+      ctx.fillStyle = t.inRange ? THEME.textPrimary : THEME.textDim;
       const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
       const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
       const nameStr = t.explored ? `${t.icon} ${_truncate(t.name, 8)}` : `${t.icon} ???`;
@@ -1786,7 +1897,7 @@ export class UIManager {
     const PX     = W - COSMIC.OUTLINER_W - PW - 12;
     const PY     = H - PH - COSMIC.BOTTOM_BAR_H - 8;
 
-    this._roundRect(ctx, PX, PY, PW, PH, 3, '#060d18', 0.88, C.border);
+    this._roundRect(ctx, PX, PY, PW, PH, 3, THEME.bgPrimary, 0.88, C.border);
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
@@ -1798,15 +1909,15 @@ export class UIManager {
     const frac = this._energyMax > 0 ? this._energy / this._energyMax : 0;
     ctx.fillStyle = THEME.bgTertiary;
     ctx.fillRect(PX + PAD, E_Y, E_W, 6);
-    ctx.fillStyle = frac > 0.5 ? '#44aaff' : frac > 0.2 ? '#aabb22' : THEME.dangerDim;
+    ctx.fillStyle = frac > 0.5 ? THEME.info : frac > 0.2 ? THEME.yellow : THEME.dangerDim;
     ctx.fillRect(PX + PAD, E_Y, Math.round(E_W * frac), 6);
     ctx.strokeStyle = C.border; ctx.lineWidth = 1;
     ctx.strokeRect(PX + PAD, E_Y, E_W, 6);
 
     const actions = [
-      { id: 'stabilize', label: '[Q] STABILIZUJ',  cost: ACTION_COSTS.stabilize,  color: '#44aaff' },
-      { id: 'nudgeToHz', label: '[W] PCHNIJ → HZ', cost: ACTION_COSTS.nudgeToHz,  color: '#88ffcc' },
-      { id: 'bombard',   label: '[E] BOMBARDUJ',   cost: ACTION_COSTS.bombard,     color: '#ffaa44' },
+      { id: 'stabilize', label: '[Q] STABILIZUJ',  cost: ACTION_COSTS.stabilize,  color: THEME.info },
+      { id: 'nudgeToHz', label: '[W] PCHNIJ → HZ', cost: ACTION_COSTS.nudgeToHz,  color: THEME.accent },
+      { id: 'bombard',   label: '[E] BOMBARDUJ',   cost: ACTION_COSTS.bombard,     color: THEME.warning },
     ];
 
     const hasTarget = !!this._selectedEntity;
@@ -1815,11 +1926,11 @@ export class UIManager {
       const by = PY + PAD + 16 + 10 + i * (BTN_H + BTN_G);
       const bw = PW - PAD * 2;
       const canUse = hasTarget && this._energy >= act.cost;
-      ctx.fillStyle = canUse ? '#0d1a2e' : '#080e18';
+      ctx.fillStyle = canUse ? THEME.bgSecondary : THEME.bgPrimary;
       ctx.fillRect(bx, by, bw, BTN_H);
-      ctx.strokeStyle = canUse ? '#2a4060' : '#111828'; ctx.lineWidth = 1;
+      ctx.strokeStyle = canUse ? THEME.borderActive : THEME.border; ctx.lineWidth = 1;
       ctx.strokeRect(bx, by, bw, BTN_H);
-      ctx.fillStyle = canUse ? act.color : '#2a3050';
+      ctx.fillStyle = canUse ? act.color : THEME.textDim;
       ctx.fillRect(bx, by, 2, BTN_H);
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = canUse ? act.color : C.label;
@@ -1861,7 +1972,7 @@ export class UIManager {
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, W, H);
 
-    this._roundRect(ctx, DX, DY, DW, DH, 4, '#111828', 1.0, '#3a6090');
+    this._roundRect(ctx, DX, DY, DW, DH, 4, THEME.bgSecondary, 1.0, THEME.borderActive);
 
     ctx.font = `${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.bright; ctx.textAlign = 'center';
@@ -1896,13 +2007,13 @@ export class UIManager {
 
     ctx.fillStyle = 'rgba(10,4,4,0.95)';
     ctx.fillRect(DX, DY, DW, DH);
-    ctx.strokeStyle = '#cc2222';
+    ctx.strokeStyle = THEME.danger;
     ctx.lineWidth = 2;
     ctx.strokeRect(DX, DY, DW, DH);
 
     // Nagłówek
     ctx.font = `bold ${THEME.fontSizeTitle + 4}px ${THEME.fontFamily}`;
-    ctx.fillStyle = '#ff3333';
+    ctx.fillStyle = THEME.danger;
     ctx.textAlign = 'center';
     ctx.fillText('CYWILIZACJA ZNISZCZONA', W / 2, DY + 36);
 
@@ -1913,7 +2024,7 @@ export class UIManager {
         ? `Planeta ${d.planetName} została wyrzucona z układu.`
         : `Życie na planecie ${d.planetName} wymarło.`;
     ctx.font = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = '#ccaaaa';
+    ctx.fillStyle = THEME.textSecondary;
     ctx.fillText(reasonText, W / 2, DY + 64);
     ctx.fillText('Twoja cywilizacja nie przetrwała.', W / 2, DY + 84);
 
@@ -1921,19 +2032,19 @@ export class UIManager {
     const gameTime = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const years = Math.round(gameTime).toLocaleString('pl-PL');
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = '#887766';
+    ctx.fillStyle = THEME.textDim;
     ctx.fillText(`Czas przetrwania: ${years} lat`, W / 2, DY + 108);
 
     // Przycisk NOWA GRA
     const btnW = 140, btnH = 28;
     const btnX = W / 2 - btnW / 2, btnY = DY + DH - 44;
-    ctx.fillStyle = '#881111';
+    ctx.fillStyle = THEME.dangerDim;
     ctx.fillRect(btnX, btnY, btnW, btnH);
-    ctx.strokeStyle = '#cc3333';
+    ctx.strokeStyle = THEME.danger;
     ctx.lineWidth = 1;
     ctx.strokeRect(btnX, btnY, btnW, btnH);
     ctx.font = `bold ${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = '#ffcccc';
+    ctx.fillStyle = THEME.textPrimary;
     ctx.fillText('NOWA GRA', W / 2, btnY + 18);
 
     ctx.textAlign = 'left';
@@ -2087,12 +2198,12 @@ export class UIManager {
     if (ty + th > H - 4) ty = this._tooltipMouseY - th - 4;
     if (tx < 4) tx = 4; if (ty < 4) ty = 4;
 
-    this._roundRect(ctx, tx, ty, tw, th, 4, '#0a1020', 0.94, '#2a5080');
+    this._roundRect(ctx, tx, ty, tw, th, 4, THEME.bgPrimary, 0.94, THEME.borderActive);
 
     let cy = ty + TOOLTIP_PAD;
     for (const line of lines) {
       if (line.type === 'separator') {
-        cy += 3; ctx.strokeStyle = '#1a3050'; ctx.lineWidth = 1;
+        cy += 3; ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(tx + 6, cy); ctx.lineTo(tx + tw - 6, cy); ctx.stroke();
         cy += TOOLTIP_SEP_H - 3;
       } else if (line.type === 'header') {
@@ -2165,7 +2276,7 @@ export class UIManager {
     let statusIcon, statusColor, statusText;
     if (researched) { statusIcon = '✅'; statusColor = C.green; statusText = 'Zbadana'; }
     else if (available) { statusIcon = '🔓'; statusColor = C.yellow; statusText = 'Dostępna (kliknij)'; }
-    else { statusIcon = '🔒'; statusColor = '#555555'; statusText = 'Zablokowana'; }
+    else { statusIcon = '🔒'; statusColor = THEME.textDim; statusText = 'Zablokowana'; }
     lines.push({ type: 'header', text: `${statusIcon} ${tech.namePL}`, color: statusColor });
     lines.push({ type: 'separator' });
     if (tech.description) { for (const wl of this._wrapText(tech.description, TOOLTIP_WRAP)) lines.push({ type: 'line', text: wl }); lines.push({ type: 'separator' }); }
@@ -2190,7 +2301,7 @@ export class UIManager {
 
     if (!explored) {
       // Niezbadane ciało — ograniczone dane
-      lines.push({ type: 'header', text: `${icon} ???`, color: '#445566' });
+      lines.push({ type: 'header', text: `${icon} ???`, color: THEME.textDim });
       lines.push({ type: 'separator' });
       lines.push({ type: 'line', text: `Typ: ${typeStr}`, color: C.dim });
       const orbA = body.orbital?.a ?? 0;
@@ -2204,7 +2315,7 @@ export class UIManager {
     }
 
     // Zbadane ciało — pełne dane
-    lines.push({ type: 'header', text: `${icon} ${body.name}`, color: '#88ccff' });
+    lines.push({ type: 'header', text: `${icon} ${body.name}`, color: THEME.textPrimary });
     lines.push({ type: 'separator' });
     lines.push({ type: 'line', text: `Typ: ${typeStr}`, color: C.text });
 
@@ -2419,14 +2530,45 @@ export class UIManager {
       return;
     }
 
+    if (btn.action === 'deliverCargo') {
+      // Dostarczenie ładunku z orbity
+      EventBus.emit('expedition:deliverCargo', { expeditionId: btn.expId });
+      return;
+    }
+
+    if (btn.action === 'setupTradeRoute') {
+      // Otwórz modal konfiguracji trasy handlowej
+      const colMgr = window.KOSMOS?.colonyManager;
+      const activePid = colMgr?.activePlanetId;
+      const sourceCol = colMgr?.getColony(activePid);
+      if (sourceCol) {
+        showTradeRouteModal(sourceCol, btn.targetId, btn.targetName).then(result => {
+          if (result) {
+            EventBus.emit('tradeRoute:create', {
+              vesselId: btn.vesselId,
+              sourceColonyId: activePid,
+              targetBodyId: btn.targetId,
+              cargo: result.cargo,
+              tripsTotal: result.trips,
+            });
+          }
+        });
+      }
+      this._selectedVesselId = null;
+      this._vesselMissionType = null;
+      return;
+    }
+
     if (btn.action === 'launchTransport') {
       // Otwórz modal transportu z przypisanym statkiem
       const colMgr = window.KOSMOS?.colonyManager;
       const activePid = colMgr?.activePlanetId;
       const sourceCol = colMgr?.getColony(activePid);
       const targetCol = colMgr?.getColony(btn.targetId);
-      if (sourceCol && targetCol) {
-        showTransportModal(sourceCol, [targetCol]).then(result => {
+      // Dla transportu do dowolnego ciała: targetCol może być null
+      if (sourceCol) {
+        const targetsList = targetCol ? [targetCol] : [];
+        showTransportModal(sourceCol, targetsList, btn.targetId).then(result => {
           if (result) {
             EventBus.emit('expedition:transportRequest', {
               targetId: btn.targetId, cargo: result.cargo, vesselId: btn.vesselId,
@@ -2436,6 +2578,11 @@ export class UIManager {
       }
       this._selectedVesselId = null;
       this._vesselMissionType = null;
+      return;
+    }
+
+    if (btn.action === 'deleteTradeRoute') {
+      EventBus.emit('tradeRoute:delete', { routeId: btn.routeId });
       return;
     }
 

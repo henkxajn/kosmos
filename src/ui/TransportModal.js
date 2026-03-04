@@ -8,7 +8,7 @@ import EventBus from '../core/EventBus.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { SHIPS } from '../data/ShipsData.js';
-import { THEME } from '../config/ThemeConfig.js';
+import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 
 // Ikony zasobów (wszystkie kategorie)
 const RES_ICONS = {};
@@ -25,12 +25,13 @@ for (const [id, def] of Object.entries(COMMODITIES))          WEIGHTS[id] = def.
 /**
  * Pokaż modal transferu zasobów.
  * @param {Object} sourceColony — kolonia źródłowa
- * @param {Array}  targetColonies — dostępne kolonie docelowe
+ * @param {Array}  targetColonies — dostępne kolonie docelowe (może być pusta dla transportu do ciała bez kolonii)
+ * @param {string} [fixedTargetId] — opcjonalny stały cel (gdy brak kolonii docelowej)
  * @returns {Promise<{targetId, cargo}|null>}
  */
-export function showTransportModal(sourceColony, targetColonies) {
+export function showTransportModal(sourceColony, targetColonies, fixedTargetId) {
   return new Promise(resolve => {
-    if (!targetColonies || targetColonies.length === 0) {
+    if ((!targetColonies || targetColonies.length === 0) && !fixedTargetId) {
       resolve(null);
       return;
     }
@@ -85,11 +86,20 @@ export function showTransportModal(sourceColony, targetColonies) {
       width: 100%; padding: 4px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.border};
       color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily}; font-size: ${THEME.fontSizeNormal + 1}px; margin-bottom: 12px;
     `;
-    for (const col of targetColonies) {
+    if (targetColonies && targetColonies.length > 0) {
+      for (const col of targetColonies) {
+        const opt = document.createElement('option');
+        opt.value = col.planetId;
+        opt.textContent = `${col.isHomePlanet ? '🏛' : '🏙'} ${col.name}`;
+        targetSelect.appendChild(opt);
+      }
+    } else if (fixedTargetId) {
+      // Transport do ciała bez kolonii — stały cel
       const opt = document.createElement('option');
-      opt.value = col.planetId;
-      opt.textContent = `${col.isHomePlanet ? '🏛' : '🏙'} ${col.name}`;
+      opt.value = fixedTargetId;
+      opt.textContent = `📦 ${fixedTargetId}`;
       targetSelect.appendChild(opt);
+      targetSelect.disabled = true;
     }
     panel.appendChild(targetSelect);
 
@@ -194,9 +204,10 @@ export function showTransportModal(sourceColony, targetColonies) {
     btnRow.style.cssText = 'display: flex; justify-content: space-between; margin-top: 12px;';
 
     const btnCancel = document.createElement('button');
+    const _dc = hexToRgb(THEME.dangerDim);
     btnCancel.style.cssText = `
-      background: rgba(60,20,20,0.8); border: 1px solid ${THEME.dangerDim};
-      color: #ff8888; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
+      background: rgba(${_dc.r},${_dc.g},${_dc.b},0.2); border: 1px solid ${THEME.dangerDim};
+      color: ${THEME.danger}; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
       font-size: ${THEME.fontSizeNormal + 1}px; border-radius: 3px;
     `;
     btnCancel.textContent = 'Anuluj';
@@ -204,8 +215,9 @@ export function showTransportModal(sourceColony, targetColonies) {
     btnRow.appendChild(btnCancel);
 
     const btnSend = document.createElement('button');
+    const _sc = hexToRgb(THEME.successDim);
     btnSend.style.cssText = `
-      background: rgba(20,60,40,0.8); border: 1px solid ${THEME.successDim};
+      background: rgba(${_sc.r},${_sc.g},${_sc.b},0.2); border: 1px solid ${THEME.successDim};
       color: ${THEME.accent}; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
       font-size: ${THEME.fontSizeNormal + 1}px; border-radius: 3px;
     `;

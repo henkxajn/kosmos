@@ -3,7 +3,7 @@
 // Czyste funkcje importowane przez UIManager i PlanetGlobeScene.
 // Rysuje sidebar + 5 zakładek: Gospodarka, Populacja, Technologie, Budowle, Ekspedycje.
 
-import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
 import { TECHS, TECH_BRANCHES } from '../data/TechData.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { SHIPS }            from '../data/ShipsData.js';
@@ -75,7 +75,7 @@ export function drawCivPanelSidebar(ctx, panelY, activeTab) {
   const sidebarH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
                  + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
 
-  ctx.fillStyle = 'rgba(4,8,16,0.92)';
+  ctx.fillStyle = bgAlpha(0.92);
   ctx.fillRect(sx, sy, CIV_SIDEBAR_W, sidebarH);
   ctx.strokeStyle = C.border;
   ctx.lineWidth = 1;
@@ -88,11 +88,15 @@ export function drawCivPanelSidebar(ctx, panelY, activeTab) {
     const btnY = sy + CIV_SIDEBAR_PAD + i * (CIV_SIDEBAR_BTN + CIV_SIDEBAR_GAP);
     const active = activeTab === tab.id;
 
-    ctx.fillStyle = active ? 'rgba(26,48,80,0.95)' : 'rgba(8,14,24,0.80)';
+    const _bAc = hexToRgb(THEME.borderActive);
+    const _bPr = hexToRgb(THEME.bgPrimary);
+    ctx.fillStyle = active
+      ? `rgba(${_bAc.r},${_bAc.g},${_bAc.b},0.35)`
+      : `rgba(${_bPr.r},${_bPr.g},${_bPr.b},0.80)`;
     ctx.fillRect(sx, btnY, CIV_SIDEBAR_W, CIV_SIDEBAR_BTN);
 
     if (active) {
-      ctx.fillStyle = '#4488ff';
+      ctx.fillStyle = THEME.info;
       ctx.fillRect(sx, btnY, 3, CIV_SIDEBAR_BTN);
     }
 
@@ -243,7 +247,7 @@ export function drawEconomyTab(ctx, bodyY, bodyX, bodyW, state) {
   ctx.fillText(`Konsumpcja: -${_fmtNum(ef.consumption ?? 0)}/r`, x2, y2);
   y2 += LH;
   const bal = ef.balance ?? 0;
-  ctx.fillStyle = bal >= 0 ? THEME.successDim : '#ff4444';
+  ctx.fillStyle = bal >= 0 ? THEME.successDim : THEME.danger;
   ctx.fillText(`Bilans:     ${bal >= 0 ? '+' : ''}${_fmtNum(bal)}/r`, x2, y2);
 
   // ── Kolumna 3: FABRYKI ──
@@ -275,39 +279,77 @@ export function drawEconomyTab(ctx, bodyY, bodyX, bodyW, state) {
       const icon = a.icon ?? COMMODITIES[a.commodityId]?.icon ?? '📦';
       const name = COMMODITY_SHORT[a.commodityId] ?? a.namePL ?? a.commodityId;
       const pct = Math.min(100, a.pctComplete ?? 0);
+      const produced = a.produced ?? 0;
+      const targetQty = a.targetQty;
+      const targetDone = targetQty !== null && produced >= targetQty;
 
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = a.paused ? '#884444' : C.bright;
-      ctx.fillText(`${icon} ${name}`, x3, y3);
+      ctx.fillStyle = targetDone ? THEME.successDim : a.paused ? THEME.dangerDim : C.bright;
+      // Nazwa + licznik produced/target
+      const targetStr = targetQty !== null ? ` ${produced}/${targetQty}` : (produced > 0 ? ` ×${produced}` : '');
+      ctx.fillText(`${icon} ${name}${targetStr}`, x3, y3);
 
       const btnSize = 14;
       const btnY = y3 - 9;
       const plusBtnX = x3 + colW - PAD * 2 - btnSize;
       const minusBtnX = plusBtnX - btnSize - 4;
+      // Przycisk celu (target) — przed [-] i [+]
+      // Gdy target aktywny: [✕] do wyzerowania + [🎯+10]
+      const targetBtnSize = btnSize;
+      const clearBtnX = targetQty !== null ? (minusBtnX - btnSize - 4 - btnSize - 2) : 0;
+      const targetBtnX = minusBtnX - btnSize - 4;
+
+      // [✕] — wyczyść target (tylko gdy aktywny)
+      if (targetQty !== null) {
+        ctx.fillStyle = 'rgba(80,30,30,0.8)';
+        ctx.fillRect(clearBtnX, btnY, targetBtnSize, targetBtnSize);
+        ctx.strokeStyle = THEME.dangerDim;
+        ctx.strokeRect(clearBtnX, btnY, targetBtnSize, targetBtnSize);
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.danger;
+        ctx.textAlign = 'center';
+        ctx.fillText('✕', clearBtnX + targetBtnSize / 2, btnY + targetBtnSize - 3);
+      }
+
+      // [🎯] — dodaj +10 do target
+      ctx.fillStyle = targetQty !== null ? 'rgba(80,60,20,0.8)' : 'rgba(30,30,15,0.5)';
+      ctx.fillRect(targetBtnX, btnY, targetBtnSize, targetBtnSize);
+      ctx.strokeStyle = targetQty !== null ? THEME.warning : THEME.textLabel;
+      ctx.strokeRect(targetBtnX, btnY, targetBtnSize, targetBtnSize);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = targetQty !== null ? THEME.warning : THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText('🎯', targetBtnX + targetBtnSize / 2, btnY + targetBtnSize - 3);
 
       // [-]
       ctx.fillStyle = a.points > 0 ? 'rgba(100,40,40,0.8)' : 'rgba(30,15,15,0.5)';
       ctx.fillRect(minusBtnX, btnY, btnSize, btnSize);
-      ctx.strokeStyle = a.points > 0 ? THEME.dangerDim : '#333';
+      ctx.strokeStyle = a.points > 0 ? THEME.dangerDim : THEME.textLabel;
       ctx.strokeRect(minusBtnX, btnY, btnSize, btnSize);
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.fillStyle = a.points > 0 ? '#ff6644' : '#444';
-      ctx.textAlign = 'center';
+      ctx.fillStyle = a.points > 0 ? THEME.warning : THEME.textLabel;
       ctx.fillText('−', minusBtnX + btnSize / 2, btnY + btnSize - 3);
 
       // [+]
       ctx.fillStyle = freePts > 0 ? 'rgba(30,80,50,0.8)' : 'rgba(15,30,15,0.5)';
       ctx.fillRect(plusBtnX, btnY, btnSize, btnSize);
-      ctx.strokeStyle = freePts > 0 ? THEME.successDim : '#333';
+      ctx.strokeStyle = freePts > 0 ? THEME.successDim : THEME.textLabel;
       ctx.strokeRect(plusBtnX, btnY, btnSize, btnSize);
-      ctx.fillStyle = freePts > 0 ? '#88ffcc' : '#444';
+      ctx.fillStyle = freePts > 0 ? THEME.accent : THEME.textLabel;
       ctx.fillText('+', plusBtnX + btnSize / 2, btnY + btnSize - 3);
       ctx.textAlign = 'left';
 
       factoryBtns.push(
+        { x: targetBtnX, y: btnY, w: targetBtnSize, h: targetBtnSize, commodityId: a.commodityId, action: 'setTarget' },
         { x: minusBtnX, y: btnY, w: btnSize, h: btnSize, commodityId: a.commodityId, delta: -1 },
         { x: plusBtnX, y: btnY, w: btnSize, h: btnSize, commodityId: a.commodityId, delta: +1 },
       );
+      // Przycisk [✕] czyszczenia targetu (tylko gdy aktywny)
+      if (targetQty !== null) {
+        factoryBtns.push(
+          { x: clearBtnX, y: btnY, w: targetBtnSize, h: targetBtnSize, commodityId: a.commodityId, action: 'clearTarget' },
+        );
+      }
 
       y3 += LH + 2;
 
@@ -318,9 +360,9 @@ export function drawEconomyTab(ctx, bodyY, bodyX, bodyW, state) {
       const fillW = Math.max(0, Math.round(barW * pct / 100));
       ctx.fillStyle = THEME.bgTertiary;
       ctx.fillRect(barX, barY2, barW, barH);
-      ctx.fillStyle = a.paused ? '#884444' : THEME.successDim;
+      ctx.fillStyle = targetDone ? THEME.successDim : a.paused ? THEME.dangerDim : THEME.successDim;
       ctx.fillRect(barX, barY2, fillW, barH);
-      ctx.strokeStyle = '#1a3050';
+      ctx.strokeStyle = THEME.border;
       ctx.strokeRect(barX, barY2, barW, barH);
 
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -329,12 +371,64 @@ export function drawEconomyTab(ctx, bodyY, bodyX, bodyW, state) {
       y3 += LH;
     }
 
-    // Dodaj produkcję
-    if (freePts > 0) {
+    // Kolejka produkcji
+    const queue = window.KOSMOS?.factorySystem?.getQueue?.() ?? [];
+    if (queue.length > 0) {
+      y3 += 4;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.title;
+      ctx.fillText(`📋 KOLEJKA (${queue.length}):`, x3, y3);
+      y3 += LH;
+
+      for (let qi = 0; qi < queue.length; qi++) {
+        const q = queue[qi];
+        const qicon = COMMODITIES[q.commodityId]?.icon ?? '📦';
+        const qname = COMMODITY_SHORT[q.commodityId] ?? q.commodityId;
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.text;
+        ctx.fillText(`${qi + 1}. ${qicon} ${qname} ×${q.qty}`, x3, y3);
+
+        // Przyciski kolejki: [↑] [↓] [✕]
+        const qBtnSize = 12;
+        const qy = y3 - 8;
+        const delX = x3 + colW - PAD * 2 - qBtnSize;
+        const downX = delX - qBtnSize - 2;
+        const upX = downX - qBtnSize - 2;
+
+        // [↑]
+        if (qi > 0) {
+          ctx.fillStyle = 'rgba(20,40,60,0.7)'; ctx.fillRect(upX, qy, qBtnSize, qBtnSize);
+          ctx.strokeStyle = THEME.textLabel; ctx.strokeRect(upX, qy, qBtnSize, qBtnSize);
+          ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
+          ctx.fillText('↑', upX + qBtnSize / 2, qy + qBtnSize - 2);
+          factoryBtns.push({ x: upX, y: qy, w: qBtnSize, h: qBtnSize, action: 'queueUp', queueIndex: qi });
+        }
+        // [↓]
+        if (qi < queue.length - 1) {
+          ctx.fillStyle = 'rgba(20,40,60,0.7)'; ctx.fillRect(downX, qy, qBtnSize, qBtnSize);
+          ctx.strokeStyle = THEME.textLabel; ctx.strokeRect(downX, qy, qBtnSize, qBtnSize);
+          ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
+          ctx.fillText('↓', downX + qBtnSize / 2, qy + qBtnSize - 2);
+          factoryBtns.push({ x: downX, y: qy, w: qBtnSize, h: qBtnSize, action: 'queueDown', queueIndex: qi });
+        }
+        // [✕]
+        ctx.fillStyle = 'rgba(80,20,20,0.7)'; ctx.fillRect(delX, qy, qBtnSize, qBtnSize);
+        ctx.strokeStyle = THEME.dangerDim; ctx.strokeRect(delX, qy, qBtnSize, qBtnSize);
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText('✕', delX + qBtnSize / 2, qy + qBtnSize - 2);
+        ctx.textAlign = 'left';
+        factoryBtns.push({ x: delX, y: qy, w: qBtnSize, h: qBtnSize, action: 'dequeue', queueIndex: qi });
+
+        y3 += LH;
+      }
+    }
+
+    // Dodaj produkcję / Do kolejki
+    if (freePts > 0 || allocs.length > 0) {
       y3 += 4;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.dim;
-      ctx.fillText('+ Dodaj produkcję:', x3, y3);
+      ctx.fillText(freePts > 0 ? '+ Dodaj produkcję:' : '+ Do kolejki:', x3, y3);
       y3 += LH;
 
       const allocIds = new Set(allocs.map(a => a.commodityId));
@@ -344,14 +438,19 @@ export function drawEconomyTab(ctx, bodyY, bodyX, bodyW, state) {
         const cname = COMMODITY_SHORT[cid] ?? cid;
         const clabel = `${cicon} ${cname}`;
         const tw = Math.min(colW - PAD * 2, ctx.measureText(clabel).width + 12);
-        ctx.fillStyle = 'rgba(20,40,60,0.7)';
+        ctx.fillStyle = freePts > 0 ? 'rgba(20,40,60,0.7)' : 'rgba(30,30,15,0.5)';
         ctx.fillRect(x3, y3 - 9, tw, 13);
-        ctx.strokeStyle = '#2a5080';
+        ctx.strokeStyle = freePts > 0 ? THEME.borderActive : THEME.textLabel;
         ctx.strokeRect(x3, y3 - 9, tw, 13);
-        ctx.fillStyle = C.blue;
+        ctx.fillStyle = freePts > 0 ? C.blue : THEME.warning;
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillText(clabel, x3 + 4, y3);
-        factoryBtns.push({ x: x3, y: y3 - 9, w: tw, h: 13, commodityId: cid, delta: +1 });
+        // Jeśli free pts → alokuj od razu; jeśli nie → dodaj do kolejki
+        if (freePts > 0) {
+          factoryBtns.push({ x: x3, y: y3 - 9, w: tw, h: 13, commodityId: cid, delta: +1 });
+        } else {
+          factoryBtns.push({ x: x3, y: y3 - 9, w: tw, h: 13, commodityId: cid, action: 'enqueue' });
+        }
         y3 += 16;
       }
     }
@@ -487,7 +586,7 @@ export function drawTechTab(ctx, bodyY, bodyX, bodyW) {
       let statusIcon, statusColor;
       if (researched) { statusIcon = '✅'; statusColor = C.green; }
       else if (available) { statusIcon = '🔓'; statusColor = C.yellow; }
-      else { statusIcon = '🔒'; statusColor = '#555555'; }
+      else { statusIcon = '🔒'; statusColor = THEME.textDim; }
 
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = statusColor;
@@ -496,10 +595,10 @@ export function drawTechTab(ctx, bodyY, bodyX, bodyW) {
 
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       if (researched) {
-        ctx.fillStyle = '#6888aa';
+        ctx.fillStyle = THEME.textSecondary;
         ctx.fillText(_truncate(techEffectSummary(tech), 20), bx + 10, by);
       } else {
-        ctx.fillStyle = available ? C.yellow : '#444444';
+        ctx.fillStyle = available ? C.yellow : THEME.textLabel;
         ctx.fillText(`${tech.cost.research} 🔬`, bx + 10, by);
       }
       by += 14;
@@ -662,6 +761,38 @@ export function handleFactoryClick(x, y, factoryBtns) {
     if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
       const fSys = window.KOSMOS?.factorySystem;
       if (!fSys) return false;
+
+      // Obsługa akcji kolejki i targetu
+      if (btn.action === 'setTarget') {
+        const alloc = fSys._allocations.get(btn.commodityId);
+        const curTarget = alloc?.targetQty;
+        // Dodaj +10 za każdym kliknięciem; null → 10, potem +10
+        const newTarget = (curTarget === null) ? 10 : curTarget + 10;
+        EventBus.emit('factory:setTarget', { commodityId: btn.commodityId, qty: newTarget });
+        return true;
+      }
+      if (btn.action === 'clearTarget') {
+        EventBus.emit('factory:setTarget', { commodityId: btn.commodityId, qty: null });
+        return true;
+      }
+      if (btn.action === 'enqueue') {
+        EventBus.emit('factory:enqueue', { commodityId: btn.commodityId, qty: 10 });
+        return true;
+      }
+      if (btn.action === 'dequeue') {
+        EventBus.emit('factory:dequeue', { index: btn.queueIndex });
+        return true;
+      }
+      if (btn.action === 'queueUp') {
+        EventBus.emit('factory:reorderQueue', { index: btn.queueIndex, direction: 'up' });
+        return true;
+      }
+      if (btn.action === 'queueDown') {
+        EventBus.emit('factory:reorderQueue', { index: btn.queueIndex, direction: 'down' });
+        return true;
+      }
+
+      // Standardowa zmiana alokacji punktów
       const existing = fSys._allocations.get(btn.commodityId);
       const curPts = existing?.points ?? 0;
       const newPts = Math.max(0, curPts + btn.delta);

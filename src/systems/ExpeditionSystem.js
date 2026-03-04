@@ -75,6 +75,7 @@ export class ExpeditionSystem {
     this._expeditions   = [];   // tablica aktywnych i ostatnich zakończonych misji
     this._nextId        = 1;
     this._gameYear      = 0;    // bieżący rok gry (śledzony z time:display)
+    this._visitCounts   = new Map(); // Map<bodyId, number> — licznik wizyt
 
     // Śledź bieżący rok gry
     EventBus.on('time:display', ({ gameTime }) => {
@@ -99,6 +100,10 @@ export class ExpeditionSystem {
     // Obsługa rozkazu zmiany celu z orbity
     EventBus.on('expedition:orderRedirect', ({ expeditionId, targetId }) =>
       this._orderRedirect(expeditionId, targetId));
+
+    // Obsługa dostarczenia ładunku (transport do ciała bez kolonii → teraz ma kolonię)
+    EventBus.on('expedition:deliverCargo', ({ expeditionId }) =>
+      this._deliverCargo(expeditionId));
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────
@@ -213,11 +218,18 @@ export class ExpeditionSystem {
     return this._baseYield(type, target);
   }
 
+  // Pobierz liczbę wizyt na ciele
+  getVisitCount(bodyId) { return this._visitCounts.get(bodyId) ?? 0; }
+
   // Serializacja do save
   serialize() {
+    // Konwersja Map → Object dla visitCounts
+    const visitObj = {};
+    for (const [k, v] of this._visitCounts) visitObj[k] = v;
     return {
       expeditions: this._expeditions.map(e => ({ ...e })),
       nextId:      this._nextId,
+      visitCounts: visitObj,
     };
   }
 
@@ -226,6 +238,14 @@ export class ExpeditionSystem {
     if (!data) return;
     this._expeditions = data.expeditions ?? [];
     this._nextId      = data.nextId ?? (this._expeditions.length + 1);
+
+    // Przywróć visitCounts
+    this._visitCounts.clear();
+    if (data.visitCounts) {
+      for (const [k, v] of Object.entries(data.visitCounts)) {
+        this._visitCounts.set(k, v);
+      }
+    }
 
     // Przywróć lockedPops — aktywne ekspedycje blokują POPy
     let totalLocked = 0;
@@ -433,12 +453,6 @@ export class ExpeditionSystem {
     // Zablokuj 2 POPy
     EventBus.emit('civ:lockPops', { amount: COLONY_CREW_COST });
 
-    // Zużyj colony_ship z hangaru floty (vessel zostanie zniszczony)
-    const colMgrC = window.KOSMOS?.colonyManager;
-    if (colMgrC) {
-      colMgrC.consumeShip(colMgrC.activePlanetId, vesselId ?? 'colony_ship');
-    }
-
     // Czas podróży — colony_ship wolniejszy (speedAU = 0.8)
     const colonySpeed = SHIPS.colony_ship?.speedAU ?? 0.8;
     const travelTime  = parseFloat(Math.max(MIN_COLONY_TRAVEL, distance / colonySpeed).toFixed(3));
@@ -459,9 +473,24 @@ export class ExpeditionSystem {
       status:         'en_route',
       gained:         null,
       eventRoll:      null,
+      vesselId:       vesselId ?? null,
     };
 
     this._expeditions.push(expedition);
+
+    // Wyślij vessel na misję (widoczny na mapie 3D podczas lotu)
+    if (vMgr && vesselId) {
+      vMgr.dispatchOnMission(vesselId, {
+        type:        'colony',
+        targetId,
+        targetName:  target.name,
+        departYear,
+        arrivalYear: expedition.arrivalYear,
+        returnYear:  null,
+        fuelCost:    distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0),
+      });
+    }
+
     EventBus.emit('expedition:launched', { expedition });
   }
 
@@ -484,12 +513,7 @@ export class ExpeditionSystem {
       return;
     }
 
-    // Sprawdź czy kolonia docelowa istnieje
     const colMgr = window.KOSMOS?.colonyManager;
-    if (!colMgr?.hasColony(targetId)) {
-      EventBus.emit('expedition:launchFailed', { reason: 'Kolonia docelowa nie istnieje' });
-      return;
-    }
 
     // Pobierz zasoby z bieżącej kolonii
     if (this.resourceSystem && !this.resourceSystem.canAfford(cargo)) {
@@ -618,6 +642,28 @@ export class ExpeditionSystem {
     }
 
     EventBus.emit('expedition:redirected', { expedition: exp });
+  }
+
+  // Dostarczenie ładunku z orbity (transport do ciała bez kolonii, teraz ma kolonię)
+  _deliverCargo(expeditionId) {
+    const exp = this._expeditions.find(e => e.id === expeditionId);
+    if (!exp || exp.status !== 'orbiting' || !exp.pendingDelivery) return;
+
+    const colMgr = window.KOSMOS?.colonyManager;
+    const targetCol = colMgr?.getColony(exp.targetId);
+    if (!targetCol) {
+      EventBus.emit('expedition:deliverFailed', { reason: 'Brak kolonii docelowej' });
+      return;
+    }
+
+    // Dostarczenie ładunku
+    if (exp.cargo) {
+      targetCol.resourceSystem.receive(exp.cargo);
+    }
+    exp.pendingDelivery = false;
+    exp.gained = exp.cargo || {};
+
+    EventBus.emit('expedition:cargoDelivered', { expedition: exp, gained: exp.gained });
   }
 
   // Wyślij misję rozpoznawczą
@@ -881,6 +927,11 @@ export class ExpeditionSystem {
 
   // Przetwórz przybycie ekspedycji — losuj zdarzenie i oblicz zarobek
   _processArrival(exp) {
+    // Inkrementuj licznik wizyt
+    if (exp.targetId) {
+      this._visitCounts.set(exp.targetId, (this._visitCounts.get(exp.targetId) ?? 0) + 1);
+    }
+
     // Ekspedycja kolonizacyjna — osobna obsługa
     if (exp.type === 'colony') {
       this._processColonyArrival(exp);
@@ -967,6 +1018,12 @@ export class ExpeditionSystem {
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
 
+    // Zniszcz vessel (colony_ship nie wraca — zużyty przy kolonizacji)
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (exp.vesselId && vMgr) {
+      vMgr.destroyVessel(exp.vesselId);
+    }
+
     if (roll < 5) {
       // KATASTROFA (5%) — kolonia NIE powstaje, POPy giną, zasoby stracone
       exp.status = 'completed';
@@ -1024,16 +1081,25 @@ export class ExpeditionSystem {
     if (targetCol && exp.cargo) {
       // Dostarczenie ładunku do kolonii docelowej
       targetCol.resourceSystem.receive(exp.cargo);
-    }
+      exp.gained = exp.cargo || {};
+      exp.status = 'returning';
 
-    exp.gained = exp.cargo || {};
-    exp.status = 'returning';  // załoga wraca
+      // Vessel: dotarł do celu → zaczyna powrót
+      const vMgr = window.KOSMOS?.vesselManager;
+      if (exp.vesselId && vMgr) {
+        vMgr.arriveAtTarget(exp.vesselId);
+        vMgr.startReturn(exp.vesselId);
+      }
+    } else {
+      // Cel bez kolonii — statek orbituje z ładunkiem (pendingDelivery)
+      exp.gained = {};
+      exp.status = 'orbiting';
+      exp.pendingDelivery = true;
 
-    // Vessel: dotarł do celu → zaczyna powrót
-    const vMgr = window.KOSMOS?.vesselManager;
-    if (exp.vesselId && vMgr) {
-      vMgr.arriveAtTarget(exp.vesselId);
-      vMgr.startReturn(exp.vesselId);
+      const vMgr = window.KOSMOS?.vesselManager;
+      if (exp.vesselId && vMgr) {
+        vMgr.arriveAtTarget(exp.vesselId);
+      }
     }
 
     EventBus.emit('expedition:arrived', {

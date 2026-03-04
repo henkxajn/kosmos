@@ -316,14 +316,15 @@ export class ColonyManager {
 
   // ── Flota — budowa i zarządzanie statkami ────────────────────────
 
-  // Pobierz poziom stoczni w kolonii (0 = brak stoczni)
+  // Pobierz łączną liczbę slotów stoczni w kolonii (suma poziomów wszystkich stoczni)
   _getShipyardLevel(colony) {
     const bSys = colony?.buildingSystem;
     if (!bSys) return 0;
+    let totalSlots = 0;
     for (const [, entry] of bSys._active) {
-      if (entry.building.id === 'shipyard') return entry.level ?? 1;
+      if (entry.building.id === 'shipyard') totalSlots += entry.level ?? 1;
     }
-    return 0;
+    return totalSlots;
   }
 
   // Rozpocznij budowę statku w stoczni danej kolonii
@@ -386,14 +387,19 @@ export class ColonyManager {
   }
 
   // Tick budowy statków — wywoływany z time:tick
+  // Prędkość budowy = poziom stoczni (Lv2=2×, Lv3=3×, Lv4=4× itd.)
   _tickShipBuilds(deltaYears) {
     for (const colony of this._colonies.values()) {
       const queues = colony.shipQueues;
       if (!queues || queues.length === 0) continue;
 
+      // Bonus prędkości: wolne sloty przyspieszają budowę (totalSlots / usedSlots)
+      const shipyardLevel = this._getShipyardLevel(colony);
+      const speedBonus = Math.max(1, Math.floor(shipyardLevel / queues.length));
+
       // Iteruj od końca — splice nie zaburza indeksu
       for (let i = queues.length - 1; i >= 0; i--) {
-        queues[i].progress += deltaYears;
+        queues[i].progress += deltaYears * speedBonus;
         if (queues[i].progress >= queues[i].buildTime) {
           const shipId = queues[i].shipId;
           queues.splice(i, 1);

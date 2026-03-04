@@ -127,7 +127,7 @@ export class BottomContext {
 
     // Przycisk rename ✏
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = '#6888aa';
+    ctx.fillStyle = THEME.textSecondary;
     ctx.fillText('✏', x + w - 22, y + 20);
 
     // Typ
@@ -169,9 +169,9 @@ export class BottomContext {
       const tx = x + PAD + i * (tabW + 2);
       const ty = y + 6;
       const active = tab === this._tab;
-      ctx.fillStyle = active ? '#1a3050' : '#080e18';
+      ctx.fillStyle = active ? THEME.border : THEME.bgPrimary;
       ctx.fillRect(tx, ty, tabW, 16);
-      ctx.strokeStyle = active ? '#3a6090' : C.border;
+      ctx.strokeStyle = active ? THEME.borderActive : C.border;
       ctx.lineWidth = 1;
       ctx.strokeRect(tx, ty, tabW, 16);
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -226,9 +226,9 @@ export class BottomContext {
     if (actionLabel) {
       const BW = w - PAD * 2;
       const BH = 20;
-      ctx.fillStyle = '#1a3050';
+      ctx.fillStyle = THEME.border;
       ctx.fillRect(x + PAD, ly - 4, BW, BH);
-      ctx.strokeStyle = '#3a6090';
+      ctx.strokeStyle = THEME.borderActive;
       ctx.lineWidth = 1;
       ctx.strokeRect(x + PAD, ly - 4, BW, BH);
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -253,7 +253,7 @@ export class BottomContext {
         const pct = d.totalAmount > 0 ? d.remaining / d.totalAmount : 0;
         const rich = d.richness ?? pct;
         const stars = rich >= 0.7 ? '★★★' : rich >= 0.4 ? '★★' : '★';
-        const color = pct <= 0 ? '#666' : rich >= 0.7 ? C.green : rich >= 0.4 ? C.orange : C.red;
+        const color = pct <= 0 ? THEME.textDim : rich >= 0.7 ? C.green : rich >= 0.4 ? C.orange : C.red;
         ctx.fillStyle = color;
         if (useTwoCols) {
           const col = i % 2;           // 0=lewa, 1=prawa kolumna

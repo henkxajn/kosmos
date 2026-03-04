@@ -3,7 +3,7 @@
 // Tworzy DOM overlay z inputem pasującym do sci-fi estetyki gry.
 // Zwraca Promise<string|null> — nowa nazwa lub null (anulowano).
 
-import { THEME } from '../config/ThemeConfig.js';
+import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 
 /**
  * Wyświetla modal do zmiany nazwy obiektu.
@@ -27,7 +27,7 @@ export function showRenameModal(currentName) {
       background: THEME.bgSecondary,
       border: `1px solid ${THEME.border}`,
       borderRadius: '6px',
-      boxShadow: '0 0 30px rgba(0,80,120,0.3)',
+      boxShadow: (() => { const c = hexToRgb(THEME.borderActive); return `0 0 30px rgba(${c.r},${c.g},${c.b},0.3)`; })(),
       padding: '18px 24px',
       width: '300px',
       fontFamily: THEME.fontFamily,
@@ -65,7 +65,8 @@ export function showRenameModal(currentName) {
     // Focus glow
     input.addEventListener('focus', () => {
       input.style.borderColor = THEME.borderActive;
-      input.style.boxShadow = '0 0 8px rgba(58,96,144,0.4)';
+      const fc = hexToRgb(THEME.borderActive);
+      input.style.boxShadow = `0 0 8px rgba(${fc.r},${fc.g},${fc.b},0.4)`;
     });
     input.addEventListener('blur', () => {
       input.style.borderColor = THEME.border;
@@ -103,7 +104,7 @@ export function showRenameModal(currentName) {
     };
 
     const btnCancel = makeBtn('ANULUJ', THEME.textDim, THEME.textSecondary);
-    const btnOk     = makeBtn('OK', '#226644', THEME.success);
+    const btnOk     = makeBtn('OK', THEME.successDim, THEME.success);
 
     btnRow.appendChild(btnCancel);
     btnRow.appendChild(btnOk);

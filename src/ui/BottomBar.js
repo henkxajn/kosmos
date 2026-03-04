@@ -95,10 +95,10 @@ export class BottomBar {
     ctx.fillRect(sBarX, sBarY, sBarW, sBarH);
     const sFillW = Math.round((score / 100) * sBarW);
     if (sFillW > 0) {
-      ctx.fillStyle = score >= 70 ? THEME.successDim : score >= 40 ? '#ccaa22' : THEME.dangerDim;
+      ctx.fillStyle = score >= 70 ? THEME.successDim : score >= 40 ? THEME.yellow : THEME.dangerDim;
       ctx.fillRect(sBarX, sBarY, sFillW, sBarH);
     }
-    ctx.strokeStyle = '#1a3050';
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth = 1;
     ctx.strokeRect(sBarX, sBarY, sBarW, sBarH);
 

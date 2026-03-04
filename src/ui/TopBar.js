@@ -91,9 +91,9 @@ export class TopBar {
     const utility   = this._getVisibleUtility(energyFlow, resources, resDelta, factoryData);
 
     const groups = [
-      { items: mined,     label: 'SUROWCE',  color: '#886644' },
-      { items: harvested, label: 'ZASOBY',   color: '#448866' },
-      { items: utility,   label: 'SYSTEMY',  color: '#664488' },
+      { items: mined,     label: 'SUROWCE',  color: THEME.textHeader },
+      { items: harvested, label: 'ZASOBY',   color: THEME.textHeader },
+      { items: utility,   label: 'SYSTEMY',  color: THEME.textHeader },
     ];
 
     let x = resStartX;
@@ -104,7 +104,7 @@ export class TopBar {
 
       // Separator pionowy między grupami
       if (gi > 0 && x > resStartX + 4) {
-        ctx.strokeStyle = 'rgba(42,64,96,0.5)';
+        ctx.strokeStyle = THEME.border;
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x, 6);
@@ -190,9 +190,9 @@ export class TopBar {
     if (bx < 4) bx = 4;
 
     // Tło
-    ctx.fillStyle = 'rgba(8,14,28,0.95)';
+    ctx.fillStyle = bgAlpha(0.95);
     ctx.fillRect(bx, by, boxW, boxH);
-    ctx.strokeStyle = '#3a6090';
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(bx, by, boxW, boxH);
 
@@ -296,7 +296,7 @@ export class TopBar {
     const midY   = BAR_H / 2;
 
     // Separator pionowy
-    ctx.strokeStyle = 'rgba(42,64,96,0.7)';
+    ctx.strokeStyle = THEME.borderLight;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(blockX, 6);
@@ -377,7 +377,7 @@ export class TopBar {
     if (brownout) {
       const blink = Date.now() % 1000 < 500;
       eVal = 0;
-      eColor = blink ? C.red : '#880000';
+      eColor = blink ? C.red : THEME.dangerDim;
       eFlowLabel = '⚠ BROWNOUT';
       eFlowColor = C.red;
     } else {
@@ -404,7 +404,7 @@ export class TopBar {
     const resDlt = resDelta.research ?? 0;
     items.push({
       icon: '🔬', symbol: '', value: resAmt, delta: resDlt,
-      color: '#aa44ff',
+      color: THEME.purple,
       tooltipName: '🔬 Nauka (research)',
     });
 
@@ -416,7 +416,7 @@ export class TopBar {
       items.push({
         icon: '🏭', symbol: 'PC',
         value: usedPts,
-        color: usedPts >= totalPts && totalPts > 0 ? C.orange : '#6688aa',
+        color: usedPts >= totalPts && totalPts > 0 ? C.orange : THEME.textSecondary,
         flowLabel: `${usedPts}/${totalPts}`,
         flowColor: usedPts >= totalPts && totalPts > 0 ? C.orange : C.dim,
         tooltipName: '🏭 Punkty Produkcji (PC)',
@@ -436,7 +436,7 @@ export class TopBar {
       items.push({
         icon: '👤', symbol: 'POP',
         value: pop,
-        color: atCap ? C.orange : free > 0 ? THEME.successDim : '#6688aa',
+        color: atCap ? C.orange : free > 0 ? THEME.successDim : THEME.textSecondary,
         flowLabel: `${free}/${pop}`,
         flowColor: free > 0 ? THEME.successDim : C.orange,
         tooltipName: '👤 Populacja (POP)',

@@ -26,6 +26,7 @@ import { RandomEventSystem }  from '../systems/RandomEventSystem.js';
 import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }         from '../systems/DepositSystem.js';
 import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
+import { TradeRouteManager }    from '../systems/TradeRouteManager.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification, showImpactNotification } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
@@ -124,6 +125,7 @@ export class GameScene {
     this.expeditionSystem = new ExpeditionSystem(this.resourceSystem);
     this.colonyManager   = new ColonyManager(this.techSystem);
     this.vesselManager   = new VesselManager();
+    this.tradeRouteManager = new TradeRouteManager();
     this.randomEventSystem = new RandomEventSystem();
     this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
 
@@ -137,6 +139,7 @@ export class GameScene {
     window.KOSMOS.expeditionSystem = this.expeditionSystem;
     window.KOSMOS.colonyManager    = this.colonyManager;
     window.KOSMOS.vesselManager    = this.vesselManager;
+    window.KOSMOS.tradeRouteManager = this.tradeRouteManager;
     window.KOSMOS.timeSystem       = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
 
@@ -186,6 +189,10 @@ export class GameScene {
       // Przywróć VesselManager
       if (c4x.vesselManager) {
         this.vesselManager.restore(c4x.vesselManager);
+      }
+      // Przywróć TradeRouteManager
+      if (c4x.tradeRouteManager) {
+        this.tradeRouteManager.restore(c4x.tradeRouteManager);
       }
       // Migracja starych save: fleet[] ze stringami → vessel instances
       this._migrateStringFleets();
@@ -334,13 +341,15 @@ export class GameScene {
           this._setupPowerTestResources();
           // Zbadaj WSZYSTKIE technologie
           this._setupPowerTestTechs();
-          // Populacja 20 POP
-          this.civSystem.population = 20;
+          // Populacja 30 POP
+          this.civSystem.population = 30;
           // Domyślne nazwy
           window.KOSMOS.civName = 'Test Empire';
           civPlanet.name = 'Test Capital';
           const colony = this.colonyManager.getColony(civPlanet.id);
           if (colony) colony.name = 'Test Capital';
+          // Flota startowa: 1× science_vessel, 1× colony_ship, 1× cargo_ship
+          this._spawnPowerTestFleet(civPlanet.id);
           // Otwórz globus i auto-build budynków
           const idx = this.timeSystem.multiplierIndex;
           this.planetGlobeScene.open(civPlanet, idx);
@@ -439,6 +448,17 @@ export class GameScene {
   _setupPowerTestTechs() {
     const allTechIds = Object.keys(TECHS);
     this.techSystem.restore({ researched: allTechIds });
+  }
+
+  // POWER TEST — flota startowa (1× science_vessel, 1× colony_ship, 1× cargo_ship)
+  _spawnPowerTestFleet(planetId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    const colony = this.colonyManager.getColony(planetId);
+    if (!vMgr || !colony) return;
+    for (const shipId of ['science_vessel', 'colony_ship', 'cargo_ship']) {
+      const vessel = vMgr.createAndRegister(shipId, planetId);
+      colony.fleet.push(vessel.id);
+    }
   }
 
   // POWER TEST — auto-budowa budynków na globusie po otwarciu mapy
