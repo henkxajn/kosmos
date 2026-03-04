@@ -198,8 +198,11 @@ SaveSystem._serializeCiv4x()
 | `fleet:shipCompleted { planetId, shipId }` | ColonyManager | UIManager |
 | `fleet:buildFailed { reason }` | ColonyManager | UIManager |
 | `fleet:shipConsumed { planetId, shipId }` | ColonyManager | — |
-| `expedition:reconComplete { scope, discovered }` | ExpeditionSystem | UIManager (EventLog) |
-| `expedition:reconProgress { expedition, body, discovered }` | ExpeditionSystem | UIManager (EventLog, expedition state) |
+| `expedition:reconComplete { scope, discovered }` | ExpeditionSystem | UIManager (EventLog), MissionEventModal |
+| `expedition:reconProgress { expedition, body, discovered }` | ExpeditionSystem | UIManager (EventLog), MissionEventModal |
+| `expedition:disaster { expedition }` | ExpeditionSystem | MissionEventModal |
+| `expedition:colonyFounded { expedition, planetId, startResources, startPop, resourceMult }` | ExpeditionSystem | MissionEventModal |
+| `expedition:missionReport { expedition, gained, multiplier, text }` | ExpeditionSystem | MissionEventModal |
 | `vessel:created { vessel }` | VesselManager | — |
 | `vessel:launched { vessel, mission }` | VesselManager | ThreeRenderer, UIManager |
 | `vessel:arrived { vessel, mission }` | VesselManager | ExpeditionSystem |
@@ -306,6 +309,9 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 - [x] **Etap 31** — Katalog ciał + fizyka lotów: katalog WSZYSTKICH ciał (explored+unexplored), recon na konkretne ciało, sekwencyjny full_system recon (greedy NN), unikanie Słońca (strefa wykluczenia 0.3 AU + waypoints), dynamiczny powrót do ruchomej planety, wielopunktowe linie trasy w 3D
 - [x] **Etap 32** — Stocznia wielopoziomowa + orbita statków: shipQueue→shipQueues (Lv=sloty), recon orbiting zamiast auto-return, rozkazy redirect/return dla orbitujących statków, UI sekcje "Na orbicie"/"W locie" w panelu floty
 
+### UI i powiadomienia
+- [x] **Etap 33** — Popupy misji: MissionEventModal z pauzą, kolejką, save/restore czasu; popupy dla katastrofy, kolonizacji, raportu misji, odkrycia ciała (recon)
+
 ### Następne etapy (plan)
 - [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
 
@@ -352,3 +358,4 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 | shipQueues tablica (nie single shipQueue) | Lv stoczni = max slotów budowy; tablica pozwala na równoczesną budowę N statków; migracja save: `shipQueue → shipQueues` |
 | Statki orbitują cel (nie auto-return) | Recon i inne misje: po dotarciu `status='orbiting'`; gracz decyduje: powrót lub redirect do nowego celu |
 | Centralny SaveMigration (nie ad-hoc) | Łańcuchowa migracja v4→v5→v6→v7→...; backup w localStorage; wywołanie w BootScene przed GameScene |
+| Popupy misji z pauzą (MissionEventModal) | Każde ważne zdarzenie misji pauzuje grę, popup z danymi, kolejka wielu zdarzeń, czas wraca po ostatnim OK |

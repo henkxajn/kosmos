@@ -37,13 +37,18 @@ export function resolveTextureType(planet) {
     return 'gas_giant';
   }
 
-  if (type === 'hot_rocky') return 'volcanic';
+  // hot_rocky — pod-typ wg masy: małe = merkury (szare), duże = wulkaniczne (czerwone)
+  if (type === 'hot_rocky') {
+    const mass = planet.physics?.mass ?? 1;
+    return mass < 0.5 ? 'mercury' : 'volcanic';
+  }
   if (type === 'ice')       return 'ice';
 
   // rocky — zależne od temperatury
   const tempK = planet.temperatureK || 300;
   if (tempK > 473) return 'lava-ocean'; // >200°C — mocno gorąca
-  if (tempK > 333) return 'desert';     // 60–200°C
+  if (tempK > 383) return 'toxic';      // 110–200°C — toksyczna atmosfera (Wenus-like)
+  if (tempK > 333) return 'desert';     // 60–110°C — pustynna
   if (tempK > 283) return 'ocean';      // 10–60°C (strefa zamieszkiwalna)
   if (tempK > 253) return 'rocky';      // −20–10°C
   return 'iron';                        // <−20°C — zimna, ciemna

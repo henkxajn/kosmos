@@ -34,21 +34,21 @@ function _injectCSS() {
       display: flex; align-items: center; justify-content: center;
     }
     .mission-modal-panel {
-      max-width: 500px; width: 90%;
+      max-width: 575px; width: 90%;
       border-radius: 6px;
-      padding: 20px 24px;
+      padding: 24px 28px;
       font-family: monospace;
       color: #c8e8ff;
       animation: missionFadeIn 0.35s ease-out;
       box-shadow: 0 0 30px rgba(0,0,0,0.8);
     }
     .mission-modal-panel .mm-header {
-      font-size: 15px; font-weight: bold;
-      margin-bottom: 12px;
+      font-size: 17px; font-weight: bold;
+      margin-bottom: 14px;
       display: flex; align-items: center; gap: 8px;
     }
     .mission-modal-panel .mm-content {
-      font-size: 11px; line-height: 1.6;
+      font-size: 13px; line-height: 1.6;
       max-height: 55vh; overflow-y: auto;
       padding-right: 4px;
     }
@@ -65,7 +65,7 @@ function _injectCSS() {
       border-top: 1px solid rgba(255,255,255,0.08);
     }
     .mission-modal-panel .mm-section-title {
-      font-size: 10px; color: #2a6080;
+      font-size: 11px; color: #2a6080;
       text-transform: uppercase; letter-spacing: 1px;
       margin-bottom: 4px;
     }
@@ -82,7 +82,7 @@ function _injectCSS() {
       background: rgba(34,136,204,0.15);
       border: 1px solid #2288cc;
       border-radius: 4px;
-      color: #c8e8ff; font-family: monospace; font-size: 12px;
+      color: #c8e8ff; font-family: monospace; font-size: 14px;
       cursor: pointer; transition: background 0.15s;
     }
     .mission-modal-panel .mm-btn:hover { background: rgba(34,136,204,0.3); }
@@ -156,9 +156,15 @@ function _buildBodyHTML(body) {
 
   // Typ + temperatura + masa + orbita
   const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
-  const massE = body.physics?.mass
-    ? (body.physics.mass / 3e-6).toFixed(2) // masa w M⊕ (3e-6 M☉ ≈ 1 M⊕)
-    : null;
+  // Planety/księżyce/planetoidy mają masę w M⊕, gwiazdy w M☉
+  const rawMass = body.physics?.mass;
+  let massE = null;
+  if (rawMass != null) {
+    if (body.type === 'star') massE = (rawMass / 3e-6).toFixed(1);
+    else if (rawMass < 0.01)  massE = rawMass.toFixed(4);
+    else if (rawMass < 1)     massE = rawMass.toFixed(3);
+    else                      massE = rawMass.toFixed(1);
+  }
   const orbitAU = body.orbital?.a?.toFixed(2) ?? '?';
 
   lines.push('<div class="mm-row"><span class="mm-label">Typ</span><span class="mm-value">' +
@@ -198,8 +204,9 @@ function _buildBodyHTML(body) {
     if (compEntries.length > 0) {
       lines.push('<div class="mm-section"><div class="mm-section-title">Skład chemiczny</div>');
       for (const [elem, pct] of compEntries) {
+        // composition jest w % (0-100), nie trzeba mnożyć
         lines.push('<div class="mm-row"><span class="mm-label">' + elem +
-          '</span><span class="mm-value">' + (pct * 100).toFixed(1) + '%</span></div>');
+          '</span><span class="mm-value">' + pct.toFixed(1) + '%</span></div>');
       }
       lines.push('</div>');
     }

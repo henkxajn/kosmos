@@ -448,19 +448,19 @@ export class ThreeRenderer {
     const mass = planet.physics?.mass ?? 1;
     const type = planet.planetType;
     if (type === 'gas') {
-      // 30–330 M⊕ → promień 0.35–0.55 (gwiazda 3–4.5× większa)
-      return Math.max(0.35, Math.min(0.55, 0.25 + Math.log10(Math.max(1, mass)) * 0.12));
+      // 30–330 M⊕ → promień 0.30–0.50 (gwiazda 3.2–5.3× większa)
+      return Math.max(0.30, Math.min(0.50, 0.22 + Math.log10(Math.max(1, mass)) * 0.11));
     }
     if (type === 'ice') {
-      // 8–68 M⊕ → promień 0.20–0.32 (gwiazda 5–8× większa)
-      return Math.max(0.20, Math.min(0.32, 0.15 + Math.log10(Math.max(1, mass)) * 0.09));
+      // 8–68 M⊕ → promień 0.18–0.28 (gwiazda 5.7–8.9× większa)
+      return Math.max(0.18, Math.min(0.28, 0.13 + Math.log10(Math.max(1, mass)) * 0.08));
     }
     if (type === 'hot_rocky') {
-      // 0.1–3 M⊕ → promień 0.07–0.12 (gwiazda 13–23× większa)
-      return Math.max(0.07, Math.min(0.12, 0.07 + mass * 0.016));
+      // 0.1–3 M⊕ → promień 0.06–0.11 (gwiazda 14.5–26.7× większa)
+      return Math.max(0.06, Math.min(0.11, 0.06 + mass * 0.015));
     }
-    // rocky: 0.2–8 M⊕ → promień 0.10–0.18 (gwiazda 9–16× większa)
-    return Math.max(0.10, Math.min(0.18, 0.09 + mass * 0.012));
+    // rocky: 0.2–8 M⊕ → promień 0.09–0.16 (gwiazda 10–17.8× większa)
+    return Math.max(0.09, Math.min(0.16, 0.08 + mass * 0.011));
   }
 
   // ── Planeta mesh ─────────────────────────────────────────────
@@ -1297,10 +1297,15 @@ export class ThreeRenderer {
     let routeLine = null;
     if (vessel.mission) {
       const m = vessel.mission;
-      const wps = m.waypoints ?? [];
-      const points = [new THREE.Vector3(S(m.startX ?? vessel.position.x), 0.1, S(m.startY ?? vessel.position.y))];
+      const isReturn = m.phase === 'returning';
+      const wps = isReturn ? (m.returnWaypoints ?? []) : (m.waypoints ?? []);
+      const sx = isReturn ? (m.returnStartX ?? 0) : (m.liveOriginX ?? m.startX ?? vessel.position.x);
+      const sy = isReturn ? (m.returnStartY ?? 0) : (m.liveOriginY ?? m.startY ?? vessel.position.y);
+      const tx = isReturn ? (m.liveOriginX ?? m.returnTargetX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
+      const ty = isReturn ? (m.liveOriginY ?? m.returnTargetY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+      const points = [new THREE.Vector3(S(sx), 0.1, S(sy))];
       for (const wp of wps) points.push(new THREE.Vector3(S(wp.x), 0.1, S(wp.y)));
-      points.push(new THREE.Vector3(S(m.targetX ?? 0), 0.1, S(m.targetY ?? 0)));
+      points.push(new THREE.Vector3(S(tx), 0.1, S(ty)));
 
       const geo = new THREE.BufferGeometry().setFromPoints(points);
       const lineMat = new THREE.LineDashedMaterial({
@@ -1347,13 +1352,16 @@ export class ThreeRenderer {
       entry.sprite.position.set(S(vessel.position.x), 0.3, S(vessel.position.y));
 
       // Aktualizuj linię trasy (wielopunktowa: start → waypoints → target)
+      // liveOriginX/Y i liveTargetX/Y śledzą bieżące pozycje planet (VesselManager)
       if (vessel.mission) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
-        const sx = isReturn ? (m.returnStartX ?? 0) : (m.startX ?? 0);
-        const sy = isReturn ? (m.returnStartY ?? 0) : (m.startY ?? 0);
-        const tx = isReturn ? (m.returnTargetX ?? 0) : (m.targetX ?? 0);
-        const ty = isReturn ? (m.returnTargetY ?? 0) : (m.targetY ?? 0);
+        // Punkt startu: outbound → planeta macierzysta (live), return → pozycja orbity (static)
+        const sx = isReturn ? (m.returnStartX ?? 0) : (m.liveOriginX ?? m.startX ?? 0);
+        const sy = isReturn ? (m.returnStartY ?? 0) : (m.liveOriginY ?? m.startY ?? 0);
+        // Punkt docelowy: outbound → cel (live), return → planeta macierzysta (live)
+        const tx = isReturn ? (m.liveOriginX ?? m.returnTargetX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
+        const ty = isReturn ? (m.liveOriginY ?? m.returnTargetY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
         const wps = isReturn ? (m.returnWaypoints ?? []) : (m.waypoints ?? []);
 
         const nPts = 2 + wps.length; // start + waypoints + target

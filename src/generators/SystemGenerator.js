@@ -106,7 +106,8 @@ export class SystemGenerator {
     const planets = [];
 
     // Start od połowy wewnętrznej krawędzi HZ — daje szansę dotarcia do HZ
-    let currentAU = Math.max(0.04, hz.min * 0.5);
+    // Minimum 0.15 AU (Merkury ma 0.39 AU — bliżej byłoby nierealistycznie)
+    let currentAU = Math.max(0.15, hz.min * 0.5);
 
     // Rozstaw orbit: mniejszy ratio dla dużych układów (by zmieścić wiele planet w MAX_ORBIT_AU)
     // POWER TEST: szerszy rozstaw → stabilniejsze orbity (mniej kolizji)
@@ -139,6 +140,25 @@ export class SystemGenerator {
       const insertAt = planets.findIndex(p => p.orbital.a > hzA);
       if (insertAt === -1) planets.push(hzP);
       else planets.splice(insertAt, 0, hzP);
+    }
+
+    // ── Gwarancja ZEWNĘTRZNEJ planety (gas/ice) ──────────────────────
+    // Przy 4+ planetach, jeśli żadna nie leży za linią mrozu → dodaj gazowego/lodowego olbrzyma
+    // Daje różnorodność wizualną (chłodne planety = inne kolory) + cele ekspedycji
+    const frostLine = hz.max * 2.2;
+    const hasOuter = planets.some(p => p.orbital.a > frostLine);
+    if (!hasOuter && planets.length >= 4) {
+      // Umieść 1-2 planety w strefie gazowych olbrzymów
+      const outerCount = 1 + (Math.random() < 0.5 ? 1 : 0);
+      for (let oi = 0; oi < outerCount; oi++) {
+        const outerA = frostLine * (1.2 + Math.random() * 2.5); // 1.2–3.7× frostLine
+        if (outerA > GAME_CONFIG.MAX_ORBIT_AU) continue;
+        const outerType = Math.random() < 0.65 ? 'gas' : 'ice';
+        const outerP = this._makePlanet(star, outerA, planets.length + oi, outerType);
+        planets.push(outerP);
+      }
+      // Posortuj po półosi
+      planets.sort((a, b) => a.orbital.a - b.orbital.a);
     }
 
     return planets;
@@ -247,8 +267,8 @@ export class SystemGenerator {
     if (a < frostLine)       return r < 0.28 ? 'gas' : 'rocky';
     // Strefa gazowych olbrzymów: głównie gaz, trochę lód
     if (a < frostLine * 3.5) return r < 0.78 ? 'gas' : 'ice';
-    // Zewnętrzny układ: lodowe olbrzymy z domieszką gazowych
-    return r < 0.32 ? 'gas' : 'ice';
+    // Zewnętrzny układ: lodowe olbrzymy z domieszką gazowych (Neptun/Uran-like)
+    return r < 0.55 ? 'gas' : 'ice';
   }
 
   // Masa planety (masy Ziemi) — szersze zakresy dla większej różnorodności

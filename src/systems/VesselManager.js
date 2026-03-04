@@ -190,6 +190,7 @@ export class VesselManager {
       startX: sx, startY: sy,
       targetX: tx, targetY: ty,
       waypoints: route.waypoints, // [{x,y}] lub []
+      originId: vessel.position.dockedAt ?? vessel.colonyId, // id planety startu (do śledzenia linii trasy)
     };
 
     // Zużyj paliwo (dystans w jedną stronę)
@@ -342,6 +343,8 @@ export class VesselManager {
         missionData = { ...vd.mission };
         if (missionData.waypoints) missionData.waypoints = missionData.waypoints.map(w => ({ ...w }));
         if (missionData.returnWaypoints) missionData.returnWaypoints = missionData.returnWaypoints.map(w => ({ ...w }));
+        // Fallback: stare save'y bez originId
+        if (!missionData.originId) missionData.originId = vd.colonyId;
       }
       const vessel = {
         id:         vd.id,
@@ -502,6 +505,26 @@ export class VesselManager {
       anyMoved = true;
     }
 
+    // ── Aktualizuj wizualne końce linii trasy (śledzą planety w ruchu) ──
+    for (const vessel of this._vessels.values()) {
+      const m = vessel.mission;
+      if (!m) continue;
+
+      // Punkt startu trasy → aktualna pozycja planety macierzystej
+      const originEntity = this._findEntity(m.originId ?? vessel.colonyId);
+      if (originEntity) {
+        m.liveOriginX = originEntity.x;
+        m.liveOriginY = originEntity.y;
+      }
+
+      // Punkt docelowy → aktualna pozycja ciała docelowego
+      const targetEntity = this._findEntity(m.targetId);
+      if (targetEntity) {
+        m.liveTargetX = targetEntity.x;
+        m.liveTargetY = targetEntity.y;
+      }
+    }
+
     if (anyMoved) {
       const moving = [...this.getInTransit(), ...this._getOrbiting()];
       EventBus.emit('vessel:positionUpdate', { vessels: moving });
@@ -553,14 +576,23 @@ export class VesselManager {
    * Zwraca { waypoints: [{x,y}], totalDist } w jednostkach fizyki gry (px).
    */
   _calcRoute(sx, sy, tx, ty) {
-    // ── Krok 1: unikanie Słońca (strefa wykluczenia wokół (0,0)) ──
-    let sunWaypoints = [];
     const dx = tx - sx, dy = ty - sy;
     const lenSq = dx * dx + dy * dy;
-    if (lenSq < 1) return { waypoints: [], totalDist: Math.sqrt(lenSq) };
+    const directDist = Math.sqrt(lenSq);
+    if (lenSq < 1) return { waypoints: [], totalDist: directDist };
+
+    // Krótkie dystanse (< 0.5 AU) → linia prosta, bez unikania
+    // (np. lot planeta→księżyc — oba blisko gwiazdy, nie trzeba omijać)
+    const SHORT_HOP = 0.5 * AU_TO_PX;
+    if (directDist < SHORT_HOP) {
+      return { waypoints: [], totalDist: directDist };
+    }
+
+    // ── Krok 1: unikanie Słońca (strefa wykluczenia wokół (0,0)) ──
+    let sunWaypoints = [];
 
     const cross = (-sx) * dy - (-sy) * dx;
-    const len = Math.sqrt(lenSq);
+    const len = directDist;
     const minDistSun = Math.abs(cross) / len;
 
     const dotSun = (-sx) * dx + (-sy) * dy;
@@ -586,6 +618,13 @@ export class VesselManager {
 
     // Przelicz łączny dystans z finalnymi waypointami
     const totalDist = this._routeLength(sx, sy, tx, ty, waypoints);
+
+    // Sanity check: jeśli trasa z waypointami jest >3× dłuższa niż prosta,
+    // waypoints przynoszą więcej szkody niż pożytku — leć prosto
+    if (waypoints.length > 0 && totalDist > directDist * 3) {
+      return { waypoints: [], totalDist: directDist };
+    }
+
     return { waypoints, totalDist };
   }
 
