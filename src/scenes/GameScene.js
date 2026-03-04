@@ -29,6 +29,7 @@ import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification, showImpactNotification } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
+import { initMissionEvents }    from '../ui/MissionEventModal.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
@@ -245,6 +246,9 @@ export class GameScene {
       }
       showImpactNotification(data);
     });
+
+    // Popupy misji (pauza + powiadomienie)
+    initMissionEvents();
 
     // Keyboard input (DOM)
     this._setupKeyboard();
