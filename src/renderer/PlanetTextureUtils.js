@@ -74,6 +74,31 @@ export function loadPlanetTextures(texType, variant) {
   return maps;
 }
 
+/**
+ * Ładuje zestaw tekstur gwiazdy (diffuse + emission + normal) z cache.
+ * @param {string} texType — np. 'star_M', 'star_G'
+ * @param {number} variant — 1, 2, lub 3
+ * @returns {{ diffuse: THREE.Texture, emission: THREE.Texture, normal: THREE.Texture }}
+ */
+export function loadStarTextures(texType, variant) {
+  const vStr   = String(variant).padStart(2, '0');
+  const prefix = `${TEXTURE_DIR}/${texType}_${vStr}`;
+  const maps   = {};
+
+  const mapTypes = ['diffuse', 'emission', 'normal'];
+  for (const key of mapTypes) {
+    const cacheKey = `${texType}_${vStr}_${key}`;
+    if (!_textureCache.has(cacheKey)) {
+      const tex = _textureLoader.load(`${prefix}_${key}.png`);
+      // diffuse i emission → sRGB, normal → linear (dane)
+      tex.colorSpace = (key === 'normal') ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
+      _textureCache.set(cacheKey, tex);
+    }
+    maps[key] = _textureCache.get(cacheKey);
+  }
+  return maps;
+}
+
 /** Sprawdza czy tekstura jest w cache (chroni przed dispose współdzielonych tekstur) */
 export function isTextureInCache(tex) {
   for (const [, cached] of _textureCache) {

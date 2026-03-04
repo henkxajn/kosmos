@@ -42,6 +42,12 @@ export const STAR_TYPES = {
     glowColor: 0xff3311,
     habitableZone: { min: 0.1, max: 0.4 },
     weight: 3,
+    texType: 'star_M',
+    corona: {
+      glowScale: 6.0, glowOpacity: 1.0,
+      brightness: 3.5,   // mocniejsze overexposure (ciemne kolory)
+      whitePower: 0.8,    // szersze białe centrum
+    },
   },
   K: {
     name: 'Pomarańczowy karzeł',
@@ -52,6 +58,12 @@ export const STAR_TYPES = {
     glowColor: 0xff8822,
     habitableZone: { min: 0.5, max: 0.9 },
     weight: 2,
+    texType: 'star_K',
+    corona: {
+      glowScale: 6.5, glowOpacity: 1.0,
+      brightness: 3.2,
+      whitePower: 0.9,
+    },
   },
   G: {
     name: 'Żółty karzeł (jak Słońce)',
@@ -62,6 +74,12 @@ export const STAR_TYPES = {
     glowColor: 0xffee66,
     habitableZone: { min: 0.95, max: 1.4 },
     weight: 2,
+    texType: 'star_G',
+    corona: {
+      glowScale: 7.0, glowOpacity: 1.0,
+      brightness: 2.8,
+      whitePower: 1.2,
+    },
   },
   F: {
     name: 'Żółto-biały karzeł',
@@ -72,6 +90,12 @@ export const STAR_TYPES = {
     glowColor: 0xddddff,
     habitableZone: { min: 1.5, max: 2.2 },
     weight: 1,
+    texType: 'star_F',
+    corona: {
+      glowScale: 8.0, glowOpacity: 1.0,
+      brightness: 2.5,   // białe = mniej potrzebne overexposure
+      whitePower: 1.5,
+    },
   },
 };
 

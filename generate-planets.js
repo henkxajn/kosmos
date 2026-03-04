@@ -33,7 +33,7 @@ const {
   generateCloudLayer, generateNightLightsMap,
 } = require('./lib/maps');
 const { savePNG, hasSharp } = require('./lib/postprocess');
-const { sphereCoords, clamp, progressBar, progressDone } = require('./lib/utils');
+const { sphereCoords, clamp, smoothstep, seededRandom, progressBar, progressDone } = require('./lib/utils');
 
 // ============================================
 // CLI ARGUMENT PARSER
@@ -63,6 +63,7 @@ OPCJE:
                        Dostępne: rocky, mercury, volcanic, desert,
                        iron, ice, ocean, toxic, lava-ocean,
                        gas_warm, gas_cold, gas_giant,
+                       star_M, star_K, star_G, star_F,
                        planetoid_metallic, planetoid_carbonaceous,
                        planetoid_silicate, all
   --count <n>          Ile wariantów danego typu (domyślnie: 1)
@@ -298,6 +299,64 @@ const PLANET_TYPES = {
       stormChance: 0.05,
       stormScale: 10,
       bandWidthVariation: 0.3,
+    },
+  },
+
+  // ── Gwiazdy (granulacja Worley + plamy + emission) ────────────
+  star_M: {
+    label: 'Star M (red dwarf)',
+    isStar: true,
+    palette: [
+      [80,15,5],[100,25,8],[120,35,12],[140,50,18],[160,65,25],
+      [180,80,35],[200,100,48],[215,120,60],[225,140,75],[235,160,90],
+      [240,175,105],[245,190,120],
+    ],
+    starConfig: {
+      granuleScale: 8, granuleJitter: 0.85,
+      spotCount: 3, spotMinR: 0.04, spotMaxR: 0.10, spotDarkness: 0.15,
+      chromaticVar: 10, limbDarkeningPower: 1.8,
+    },
+  },
+  star_K: {
+    label: 'Star K (orange dwarf)',
+    isStar: true,
+    palette: [
+      [140,60,15],[160,75,25],[180,90,35],[195,105,45],[210,120,55],
+      [220,135,65],[230,150,80],[238,165,95],[242,180,110],[248,195,130],
+      [252,210,150],[255,232,185],
+    ],
+    starConfig: {
+      granuleScale: 10, granuleJitter: 0.88,
+      spotCount: 5, spotMinR: 0.03, spotMaxR: 0.08, spotDarkness: 0.12,
+      chromaticVar: 12, limbDarkeningPower: 1.5,
+    },
+  },
+  star_G: {
+    label: 'Star G (yellow dwarf, Sun-like)',
+    isStar: true,
+    palette: [
+      [200,160,60],[210,170,70],[218,178,80],[225,185,90],[232,192,100],
+      [238,200,112],[242,208,125],[246,215,140],[248,222,155],[250,230,170],
+      [252,238,190],[255,250,225],
+    ],
+    starConfig: {
+      granuleScale: 12, granuleJitter: 0.90,
+      spotCount: 8, spotMinR: 0.015, spotMaxR: 0.06, spotDarkness: 0.10,
+      chromaticVar: 14, limbDarkeningPower: 1.2,
+    },
+  },
+  star_F: {
+    label: 'Star F (white-yellow dwarf)',
+    isStar: true,
+    palette: [
+      [200,200,220],[208,208,228],[215,215,235],[222,222,240],[228,228,244],
+      [234,234,248],[238,238,250],[242,242,252],[245,245,253],[248,248,254],
+      [252,252,255],[255,255,255],
+    ],
+    starConfig: {
+      granuleScale: 14, granuleJitter: 0.92,
+      spotCount: 2, spotMinR: 0.01, spotMaxR: 0.04, spotDarkness: 0.08,
+      chromaticVar: 8, limbDarkeningPower: 1.0,
     },
   },
 
@@ -669,6 +728,160 @@ function generateGasGiant(planetType, W, H, seed, genOpts) {
 }
 
 // ============================================
+// STAR GENERATION PIPELINE
+// ============================================
+
+/**
+ * Generuje tekstury gwiazdy — granulacja Worley, plamy słoneczne, emission map.
+ * @param {object} planetType — z PLANET_TYPES (isStar=true)
+ * @param {number} W — szerokość px
+ * @param {number} H — wysokość px
+ * @param {number} seed
+ * @param {object} genOpts — flagi generacji
+ * @returns {object} — { diffuse, emission, normal? }
+ */
+function generateStar(planetType, W, H, seed, genOpts) {
+  const { palette, starConfig } = planetType;
+  const {
+    granuleScale, granuleJitter,
+    spotCount, spotMinR, spotMaxR, spotDarkness,
+    chromaticVar, limbDarkeningPower,
+  } = starConfig;
+  const quality = genOpts.quality || 'high';
+  const useGamma = quality === 'high' || quality === 'ultra';
+
+  const rng = seededRandom(seed + 3000);
+
+  // ── 1. Plamy słoneczne — losowe pozycje na sferze ──
+  const spots = [];
+  for (let i = 0; i < spotCount; i++) {
+    // losowa pozycja w strefie ±60° szerokości (jak prawdziwe plamy)
+    const lat = (rng() - 0.5) * 1.2; // [-0.6, 0.6] → ~±35°
+    const lon = rng() * Math.PI * 2;
+    const r = spotMinR + rng() * (spotMaxR - spotMinR);
+    spots.push({ lat, lon, r, penumbraR: r * 1.6 });
+  }
+
+  // ── 2. Heightmap — granulacja Worley + mikro-detale fBm ──
+  const t0h = Date.now();
+  const heightmap = new Float32Array(W * H);
+  const nDetail = createNoise(seed + 100);
+
+  for (let py = 0; py < H; py++) {
+    if (py % 100 === 0) progressBar(py, H, 'star granules', t0h);
+
+    for (let px = 0; px < W; px++) {
+      const u = px / W, v = py / H;
+      const theta = u * Math.PI * 2;
+      const phi = v * Math.PI;
+      const { x: nx, y: ny, z: nz } = sphereCoords(u, v);
+
+      // Granulacja Worley — jasne centra komórek, ciemne krawędzie
+      const wor = sphereWorley(theta, phi, granuleScale, granuleJitter, seed + 200);
+      let h = 1.0 - wor.f1; // odwrócone — centra jasne
+
+      // Mikro-detale fBm (drobna tekstura plazmy)
+      const detail = fbm3d(nDetail, nx * 25, ny * 25, nz * 25, 4, 2.2, 0.45);
+      h += detail * 0.05;
+
+      // Limb darkening — przyciemnienie na krawędziach (efekt sferyczny)
+      const cosAngle = Math.abs(ny); // uproszczone — v=0/1 → krawędź
+      const sinAngle = Math.sqrt(1 - cosAngle * cosAngle);
+      // Prawdziwe limb darkening: I(θ) = I₀(1 - u(1 - cosθ))
+      // Używamy lat-based approx: bieguny ciemniejsze lekko
+      // (pełne limb darkening w 3D jest w shaderze — tu subtelne)
+
+      // Plamy słoneczne
+      for (const spot of spots) {
+        // odległość na sferze (great circle approx)
+        const spotTheta = spot.lon;
+        const spotPhi = (0.5 - spot.lat / Math.PI) * Math.PI;
+        const spotNx = Math.cos(spotTheta) * Math.sin(spotPhi);
+        const spotNy = Math.cos(spotPhi);
+        const spotNz = Math.sin(spotTheta) * Math.sin(spotPhi);
+        const dist = Math.acos(clamp(nx * spotNx + ny * spotNy + nz * spotNz, -1, 1));
+
+        if (dist < spot.penumbraR) {
+          // penumbra → umbra smoothstep
+          const penumbra = 1 - smoothstep(spot.r * 0.3, spot.penumbraR, dist);
+          const umbra = 1 - smoothstep(0, spot.r * 0.3, dist);
+          const dark = penumbra * spotDarkness + umbra * spotDarkness * 2.5;
+          h *= (1 - dark);
+        }
+      }
+
+      heightmap[py * W + px] = clamp(h, 0, 1);
+    }
+  }
+  progressDone('star granules', t0h);
+
+  // ── 3. Diffuse color — gradient + color variation ──
+  const t0c = Date.now();
+  const diffuse = new Uint8Array(W * H * 3);
+  const nColor = createNoise(seed + 500);
+
+  for (let py = 0; py < H; py++) {
+    if (py % 100 === 0) progressBar(py, H, 'star diffuse', t0c);
+
+    for (let px = 0; px < W; px++) {
+      const u = px / W, v = py / H;
+      const { x: nx, y: ny, z: nz } = sphereCoords(u, v);
+      let h = heightmap[py * W + px];
+
+      // kontrast
+      const hc = useGamma ? contrastCurve(h, 1.6) : h;
+
+      // gradient mapping
+      let c = useGamma ? gammaLerp(palette, hc) : multiLerp(palette, hc);
+
+      // color variation (niskoczęstotliwościowa)
+      const cv = fbm3d(nColor, nx * 6, ny * 6, nz * 6, 3);
+      c = colorVariation(c, cv, chromaticVar);
+
+      // Worley-based color jitter per granula
+      const theta = u * Math.PI * 2;
+      const phi = v * Math.PI;
+      const worColor = sphereWorley(theta, phi, granuleScale, granuleJitter, seed + 200);
+      c = colorJitter(c, worColor.cellId, 0.4);
+
+      const idx = (py * W + px) * 3;
+      diffuse[idx]     = clamp(Math.round(c[0]), 0, 255);
+      diffuse[idx + 1] = clamp(Math.round(c[1]), 0, 255);
+      diffuse[idx + 2] = clamp(Math.round(c[2]), 0, 255);
+    }
+  }
+  progressDone('star diffuse', t0c);
+
+  const result = { diffuse };
+
+  // ── 4. Emission map — jasność proporcjonalna do heightmap ──
+  const t0e = Date.now();
+  const emission = new Uint8Array(W * H * 3);
+  for (let py = 0; py < H; py++) {
+    for (let px = 0; px < W; px++) {
+      const h = heightmap[py * W + px];
+      const emFactor = 0.7 + h * 0.3; // jasne granule = mocniejsza emisja
+
+      const idx = (py * W + px) * 3;
+      emission[idx]     = clamp(Math.round(diffuse[idx] * emFactor), 0, 255);
+      emission[idx + 1] = clamp(Math.round(diffuse[idx + 1] * emFactor), 0, 255);
+      emission[idx + 2] = clamp(Math.round(diffuse[idx + 2] * emFactor), 0, 255);
+    }
+  }
+  result.emission = emission;
+  console.log('  ✓ star emission map');
+
+  // ── 5. Normal map — subtelna głębia ──
+  if (genOpts.normal !== false) {
+    const t1 = Date.now();
+    result.normal = generateNormalMap(heightmap, W, H, 1.5);
+    progressDone('star normal', t1);
+  }
+
+  return result;
+}
+
+// ============================================
 // WORKER PIPELINE (opcjonalny)
 // ============================================
 
@@ -775,9 +988,11 @@ async function main() {
       };
 
       const pType = PLANET_TYPES[type];
-      const result = pType.isGas
-        ? generateGasGiant(pType, W, H, seed, genOpts)
-        : generatePlanet(pType, W, H, seed, genOpts);
+      const result = pType.isStar
+        ? generateStar(pType, W, H, seed, genOpts)
+        : pType.isGas
+          ? generateGasGiant(pType, W, H, seed, genOpts)
+          : generatePlanet(pType, W, H, seed, genOpts);
 
       // ── Zapis plików ──
       const postOpts = {

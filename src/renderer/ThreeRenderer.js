@@ -9,8 +9,8 @@
 import * as THREE         from 'three';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
-import { GAME_CONFIG }    from '../config/GameConfig.js';
-import { resolveTextureType, loadPlanetTextures, hashCode, TEXTURE_VARIANTS }
+import { GAME_CONFIG, STAR_TYPES } from '../config/GameConfig.js';
+import { resolveTextureType, loadPlanetTextures, loadStarTextures, hashCode, TEXTURE_VARIANTS }
   from './PlanetTextureUtils.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
@@ -81,6 +81,8 @@ export class ThreeRenderer {
     this._star      = null;
     this._starGroup = null;
     this._starLight = null;
+    this._starCoronaUniform = null;  // referencja do uTime korony
+    this._starPromCount     = 0;     // liczba protuberancji
 
     // ── Raycaster ─────────────────────────────────────────────
     this._ray   = new THREE.Raycaster();
@@ -138,8 +140,8 @@ export class ThreeRenderer {
 
   // ── Oświetlenie ──────────────────────────────────────────────
   _buildLights() {
-    // Ambient — delikatne wypełnienie (nocna strona planet nie jest całkiem czarna)
-    this.scene.add(new THREE.AmbientLight(0x334466, 0.5));
+    // Ambient — bardzo słabe wypełnienie (nocna strona ledwo widoczna)
+    this.scene.add(new THREE.AmbientLight(0x111122, 0.15));
     // PointLight od gwiazdy — decay=0: brak fizycznego tłumienia (r171 domyślnie decay=2
     // co przy intensity=2.0 i odl.=11j daje 2/121≈0.017 = czarny).
     // distance=0 = brak limitu zasięgu.
@@ -268,41 +270,156 @@ export class ThreeRenderer {
     if (planetesimals?.length > 0) this._updateDiskPoints(planetesimals);
   }
 
-  // ── Gwiazda (3 sfery + PointLight) ──────────────────────────
+  // ── Gwiazda (kolorowy rdzeń + białe centrum + kolorowe promieniowanie) ──
   renderStar(star) {
     this._star = star;
-    const r     = 1.6;   // stały promień 3D — niezależny od visualRadius (2D px)
+    const r     = 1.6;   // stały promień 3D
     const color = new THREE.Color(star.visual.color);
     const glow  = new THREE.Color(star.visual.glowColor ?? star.visual.color);
+
+    // Typ spektralny → konfiguracja per-typ
+    const spec   = star.spectralType || 'G';
+    const stData = STAR_TYPES[spec] || STAR_TYPES.G;
+    const cfg    = stData.corona;
+    const brightness = cfg.brightness || 3.0;
+    const whitePower = cfg.whitePower || 1.0;
+    const glowScale  = cfg.glowScale  || 7.0;
+    const glowOpacity = cfg.glowOpacity || 1.0;
 
     const group = new THREE.Group();
     group.position.set(S(star.x), 0, S(star.y));
 
-    // Rdzeń — pełna kula
-    group.add(new THREE.Mesh(
-      new THREE.SphereGeometry(r, 48, 48),
-      new THREE.MeshBasicMaterial({ color })
-    ));
+    // Kolory RGB do canvas gradientów
+    const cr = Math.round(color.r * 255);
+    const cg = Math.round(color.g * 255);
+    const cb = Math.round(color.b * 255);
+    const glR = Math.round(glow.r * 255);
+    const glG = Math.round(glow.g * 255);
+    const glB = Math.round(glow.b * 255);
 
-    // Warstwy glow — mniejsze mnożniki, glow max = 1.6*2.8 = 4.5j
-    // (orbity wewnętrzne startują od ~4-5j więc glow ich nie zasłania)
-    const glowLayers = [
-      { size: 1.4, alpha: 0.30 },
-      { size: 2.0, alpha: 0.12 },
-      { size: 2.8, alpha: 0.04 },
-    ];
-    glowLayers.forEach(({ size, alpha }) => {
-      group.add(new THREE.Mesh(
-        new THREE.SphereGeometry(r * size, 24, 24),
-        new THREE.MeshBasicMaterial({
-          color: glow, transparent: true, opacity: alpha,
-          side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false,
-        })
-      ));
+    // ── [0] Rdzeń — shader: tekstura wypalona do jasności, kolor na krawędziach ──
+    const texType = stData.texType || `star_${spec}`;
+    const variant = (hashCode(star.id || 'star') % TEXTURE_VARIANTS) + 1;
+    const texMaps = loadStarTextures(texType, variant);
+
+    const coreMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uDiffuse:    { value: texMaps.diffuse },
+        uEmission:   { value: texMaps.emission },
+        uColor:      { value: color },
+        uBrightness: { value: brightness },
+        uWhitePower: { value: whitePower },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vViewDir;
+        void main() {
+          vUv = uv;
+          vNormal = normalize(normalMatrix * normal);
+          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+          vViewDir = normalize(-mvPos.xyz);
+          gl_Position = projectionMatrix * mvPos;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uDiffuse;
+        uniform sampler2D uEmission;
+        uniform vec3  uColor;
+        uniform float uBrightness;
+        uniform float uWhitePower;
+
+        varying vec2 vUv;
+        varying vec3 vNormal;
+        varying vec3 vViewDir;
+
+        void main() {
+          vec3 emTex = texture2D(uEmission, vUv).rgb;
+
+          // Limb darkening — krawędzie ciemniejsze (fizycznie poprawne)
+          float NdotV = max(dot(vNormal, vViewDir), 0.0);
+          float limb = pow(NdotV, 0.5);
+
+          // Bazowy kolor: emission texture × kolor gwiazdy × jasność
+          vec3 base = emTex * uColor * uBrightness * limb;
+
+          // Białe prześwietlenie — uWhitePower kontroluje zasięg
+          // M/K (ciemne) → whitePower 0.8-0.9 = szerokie białe centrum
+          // F (jasne)   → whitePower 1.5 = wąskie białe centrum
+          float whiteAmount = pow(NdotV, uWhitePower) * 1.0;
+          base = mix(base, vec3(1.0), whiteAmount);
+
+          // Gwarantuj minimalną jasność (gwiazda nigdy nie jest ciemna)
+          base = max(base, uColor * 0.3);
+
+          // Reinhard tone mapping — miękki clamp, zachowuje kolory
+          base = base / (base + vec3(0.35));
+          base *= 1.7;
+
+          gl_FragColor = vec4(base, 1.0);
+        }
+      `,
     });
+    group.add(new THREE.Mesh(new THREE.SphereGeometry(r, 64, 64), coreMat));
+
+    // ── Helper: canvas sprite z radial gradient ──
+    const _glowSprite = (size, stops, opacity, scale) => {
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const h = size / 2;
+      const g = ctx.createRadialGradient(h, h, 0, h, h, h);
+      for (const [pos, col] of stops) g.addColorStop(pos, col);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(c),
+        transparent: true, opacity,
+        blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+      }));
+      sp.scale.setScalar(scale);
+      return sp;
+    };
+
+    // ── [1] Glow wewnętrzny — silny biały bloom zakrywający rdzeń ──
+    group.add(_glowSprite(512, [
+      [0.0,  `rgba(255,255,255,1.0)`],
+      [0.06, `rgba(255,255,255,0.9)`],
+      [0.12, `rgba(255,255,255,0.6)`],
+      [0.18, `rgba(${cr},${cg},${cb},0.35)`],
+      [0.28, `rgba(${cr},${cg},${cb},0.15)`],
+      [0.42, `rgba(${glR},${glG},${glB},0.05)`],
+      [0.65, `rgba(${glR},${glG},${glB},0.01)`],
+      [1.0,  `rgba(${glR},${glG},${glB},0.0)`],
+    ], 1.0, r * 13.5));
+
+    // ── [2] Glow średni — kolorowa poświata ──
+    group.add(_glowSprite(512, [
+      [0.0,  `rgba(${cr},${cg},${cb},0.50)`],
+      [0.06, `rgba(${cr},${cg},${cb},0.30)`],
+      [0.14, `rgba(${glR},${glG},${glB},0.16)`],
+      [0.25, `rgba(${glR},${glG},${glB},0.08)`],
+      [0.40, `rgba(${glR},${glG},${glB},0.03)`],
+      [0.60, `rgba(${glR},${glG},${glB},0.008)`],
+      [0.85, `rgba(${glR},${glG},${glB},0.001)`],
+      [1.0,  `rgba(${glR},${glG},${glB},0.0)`],
+    ], glowOpacity, r * glowScale * 3.0));
+
+    // ── [3] Glow zewnętrzny — duży zasięg, miękkie promieniowanie ──
+    group.add(_glowSprite(512, [
+      [0.0,  `rgba(${glR},${glG},${glB},0.14)`],
+      [0.06, `rgba(${glR},${glG},${glB},0.08)`],
+      [0.15, `rgba(${glR},${glG},${glB},0.035)`],
+      [0.30, `rgba(${glR},${glG},${glB},0.012)`],
+      [0.50, `rgba(${glR},${glG},${glB},0.003)`],
+      [0.75, `rgba(${glR},${glG},${glB},0.0005)`],
+      [1.0,  `rgba(${glR},${glG},${glB},0.0)`],
+    ], glowOpacity * 0.8, r * glowScale * 6.0));
 
     this.scene.add(group);
     this._starGroup = group;
+    this._starCoronaUniform = null;
+    this._starPromCount = 0;
 
     // Zaktualizuj PointLight
     this._starLight.color = color;
@@ -385,19 +502,65 @@ export class ThreeRenderer {
     mesh.rotation.z = 0.1 + (seed % 10) * 0.04;
     group.add(mesh);
 
-    // Atmosferyczny glow
+    // Atmosferyczny glow — Fresnel shader (jasne krawędzie od strony gwiazdy)
     if (planet.atmosphere && planet.atmosphere !== 'none') {
-      const gc = planet.visual.glowColor ?? 0x4488ff;
-      group.add(new THREE.Mesh(
-        new THREE.SphereGeometry(r * 1.12, 24, 24),
-        new THREE.MeshBasicMaterial({
-          color: new THREE.Color(gc), transparent: true, opacity: 0.14,
-          side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false,
-        })
-      ));
+      const gc = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
+      const atmoMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uColor:    { value: gc },
+          uLightDir: { value: new THREE.Vector3(0, 0, 0) }, // aktualizowane w sync
+        },
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+          varying vec3 vWorldPos;
+          varying float vFresnel;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+            vViewDir = normalize(-mvPos.xyz);
+            vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+            // Fresnel w vertex — na BackSide normalna jest odwrócona
+            float NdotV = dot(vNormal, vViewDir);
+            // Na BackSide NdotV jest ujemne w centrum, bliskie 0 na krawędziach
+            float rim = 1.0 - abs(NdotV);
+            vFresnel = rim * rim * rim; // kubiczny falloff — max na krawędzi, 0 w centrum
+            gl_Position = projectionMatrix * mvPos;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uColor;
+          uniform vec3 uLightDir;
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+          varying vec3 vWorldPos;
+          varying float vFresnel;
+          void main() {
+            // vFresnel: 0 w centrum sfery, ~1 na krawędziach
+            // Miękki fade-out na samej krawędzi (unika ostrego pierścienia)
+            float glow = vFresnel * smoothstep(1.0, 0.6, vFresnel);
+            // Oświetlenie — miękkie przejście za terminator
+            vec3 toLight = normalize(uLightDir - vWorldPos);
+            float NdotL = dot(normalize(vWorldPos), toLight);
+            float lit = smoothstep(-0.3, 0.8, NdotL);
+            // Łącznie: bazowa widoczność + oświetlona strona
+            float alpha = glow * (0.2 + lit * 0.35);
+            gl_FragColor = vec4(uColor, alpha);
+          }
+        `,
+        side: THREE.BackSide,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const atmoMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(r * 1.15, 32, 32), atmoMat
+      );
+      atmoMesh.userData.isAtmosphere = true;
+      group.add(atmoMesh);
     }
 
-    // Pierścienie dla planet lodowych
+    // Pierścienie dla planet lodowych — reagują na oświetlenie
     if (planet.planetType === 'ice') {
       const ringCanvas = document.createElement('canvas');
       ringCanvas.width = 256; ringCanvas.height = 1;
@@ -410,9 +573,10 @@ export class ThreeRenderer {
       const rTex = new THREE.CanvasTexture(ringCanvas);
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(r * 1.4, r * 2.2, 64),
-        new THREE.MeshBasicMaterial({
+        new THREE.MeshStandardMaterial({
           map: rTex, transparent: true,
           side: THREE.DoubleSide, depthWrite: false,
+          metalness: 0, roughness: 0.8,
         })
       );
       ring.rotation.x = -Math.PI * 0.42;
@@ -525,11 +689,22 @@ export class ThreeRenderer {
   _syncPlanetMeshes(planets, moons = []) {
     const homePlanetId = window.KOSMOS?.homePlanet?.id;
 
+    // Pozycja gwiazdy w world space (dla atmosfery oświetlonej)
+    const starWPos = this._starGroup
+      ? this._starGroup.position : new THREE.Vector3(0, 0, 0);
+
     planets.forEach(planet => {
       const entry = this._planets.get(planet.id);
       if (!entry) return;
       entry.group.position.set(S(planet.x), 0, S(planet.y));
       entry.mesh.rotation.y += 0.003;
+
+      // Aktualizuj kierunek światła w atmosferze
+      for (const child of entry.group.children) {
+        if (child.userData.isAtmosphere && child.material.uniforms) {
+          child.material.uniforms.uLightDir.value.copy(starWPos);
+        }
+      }
 
       const lg = this._lifeGlows.get(planet.id);
       if (lg) {
@@ -1038,12 +1213,25 @@ export class ThreeRenderer {
       requestAnimationFrame(loop);
       const t = this._clock.getElapsedTime();
 
-      // Pulsowanie gwiazdy
-      if (this._starGroup && this._starGroup.children.length > 1) {
-        this._starGroup.children[1].material.opacity = 0.25 + Math.sin(t * 2) * 0.08;
-        if (this._starGroup.children[2]) {
-          this._starGroup.children[2].material.opacity = 0.06 + Math.sin(t * 1.5) * 0.03;
-          this._starGroup.children[2].scale.setScalar(1 + Math.sin(t * 1.8) * 0.05);
+      // Animacja gwiazdy — [0]=rdzeń, [1]=innerGlow, [2]=midGlow, [3]=outerGlow
+      if (this._starGroup) {
+        const sg = this._starGroup;
+        // Rdzeń — powolna rotacja (granulacja widoczna przy zoom-in)
+        if (sg.children[0]) sg.children[0].rotation.y += 0.0005;
+        // Glow pulsowanie — delikatne "oddychanie"
+        for (let gi = 1; gi <= 3 && gi < sg.children.length; gi++) {
+          const spr = sg.children[gi];
+          if (!spr.material) continue;
+          if (spr.material._baseOpacity === undefined) {
+            spr.material._baseOpacity = spr.material.opacity;
+            spr.userData.baseScale = spr.scale.x;
+          }
+          const speed = 1.6 - gi * 0.3;  // inner szybszy, outer wolniejszy
+          spr.material.opacity = spr.material._baseOpacity
+            + Math.sin(t * speed) * 0.03;
+          spr.scale.setScalar(
+            spr.userData.baseScale * (1 + Math.sin(t * speed * 0.8) * 0.015)
+          );
         }
       }
 
