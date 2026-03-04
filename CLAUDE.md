@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v6
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v8
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -27,6 +27,11 @@ index.html
   #ui-canvas      → UIManager (Canvas 2D)           — panel info, paski czasu, EventLog
   #planet-canvas  → PlanetScene (Canvas 2D)         — mapa hex planety (4X)
   #event-layer    → przezroczysta warstwa zdarzeń myszy (z-index nad wszystkim)
+
+TitleScene (src/scenes/TitleScene.js):
+  Canvas starfield + mgławica + mini-słońce + hero planet (iron_02 PBR tekstura)
+  HTML overlay: logo KOSMOS, przyciski (Nowa gra / Kontynuuj / Power Test)
+  CSS atmospheric layers + gradient tło
 
 generate-planets.js (CLI, Node.js) → assets/planet-textures/*.png
   lib/noise.js     → SimplexNoise3D, Worley, fBm, ridgedFbm, turbulence, domainWarp
@@ -70,7 +75,7 @@ generate-planets.js (CLI, Node.js) → assets/planet-textures/*.png
 `window.KOSMOS` — referencje do wszystkich systemów 4X:
 ```
 window.KOSMOS = {
-  game, scenario,     // 'civilization' (aktywny) | 'generator' (zamrożony)
+  game, scenario,     // 'civilization' (aktywny) | 'generator' (zamrożony) | 'power_test'
   civMode,          // bool — czy gracz przejął cywilizację
   homePlanet,       // planeta gracza
   resourceSystem,   // ResourceSystem
@@ -216,6 +221,11 @@ SaveSystem._serializeCiv4x()
 | `expedition:redirectFailed { reason }` | ExpeditionSystem | UIManager |
 | `planet:colonize { planet }` | UIScene | GameScene → PlanetScene |
 | `planet:openMap { planet }` | UIScene | GameScene → PlanetScene |
+| `factory:setTarget { commodityId, qty }` | CivPanelDrawer | FactorySystem |
+| `factory:enqueue { commodityId, qty }` | CivPanelDrawer | FactorySystem |
+| `factory:dequeue { index }` | CivPanelDrawer | FactorySystem |
+| `tradeRoute:create/pause/resume/delete` | TradeRouteModal | TradeRouteManager |
+| `expedition:deliverCargo { expeditionId }` | UIManager | ExpeditionSystem |
 
 ---
 
@@ -312,6 +322,10 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 ### UI i powiadomienia
 - [x] **Etap 33** — Popupy misji: MissionEventModal z pauzą, kolejką, save/restore czasu; popupy dla katastrofy, kolonizacji, raportu misji, odkrycia ciała (recon)
 
+### Gameplay i UI (✅ ukończone)
+- [x] **Etap 34** — 8 zadań gameplay: kolejka produkcji, usunięcie mining, trasy handlowe, scroll misji, stocznia speed, popup theming, linia trasy, cargo bez limitu
+- [x] **Etap 35** — Branding KOSMOS: TitleScene z animowanym tłem, hero planet, paleta ciepły bursztyn; unifikacja THEME tokenów we wszystkich plikach UI Canvas 2D; scenariusz Power Test
+
 ### Następne etapy (plan)
 - [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
 
@@ -347,7 +361,7 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 | Typ tekstury wg temperatury planety | resolveTextureType: tempK → volcanic/lava-ocean/desert/ocean/rocky/iron — emergentna różnorodność wizualna |
 | Scenariusz Cywilizacja (nie Eden) | Losowy układ + najlepsza rocky w HZ z lifeScore=100; fizyka uproszczona (Kepler bez perturbacji); auto-kolonizacja |
 | Generator zamrożony (nie usunięty) | Kod generatora + systemy fizyki zachowane, ale niedostępne w UI (przycisk wyszarzony); łatwy powrót w przyszłości |
-| `window.KOSMOS.scenario` zamiast `edenScenario` | Czytelniejsza semantyka; wartości: 'civilization' / 'generator' |
+| `window.KOSMOS.scenario` zamiast `edenScenario` | Czytelniejsza semantyka; wartości: 'civilization' / 'generator' / 'power_test' |
 | Rozbiórka per-level (downgrade) | Lv>1: obniż o 1, zwrot 50% kosztu ulepszenia (surowce+commodities); Lv==1: pełna rozbiórka z 50% zwrotem; emergentna decyzja gracza |
 | Katalog ciał (nie tylko explored) | Gracz widzi WSZYSTKIE ciała w układzie — dane niezbadanych ukryte ("???"), ale typ i odległość widoczne (teleskop) |
 | Recon na konkretne ciało | Gracz wybiera cel rozpoznania z listy — nie tylko "nearest"/"full_system" ale konkretne body.id |
@@ -356,6 +370,9 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 | Dynamiczny powrót statku | `returnTargetX/Y` aktualizowane co tick z pozycji kolonii macierzystej — statek wraca do aktualnej pozycji planety |
 | Waypoints w misji (vessel.mission) | `waypoints: [{x,y}]` i `returnWaypoints: [{x,y}]` — serializowane w save, wielopunktowe linie trasy w ThreeRenderer |
 | shipQueues tablica (nie single shipQueue) | Lv stoczni = max slotów budowy; tablica pozwala na równoczesną budowę N statków; migracja save: `shipQueue → shipQueues` |
+| Stocznia multi-slot: suma poziomów | `_getShipyardLevel()` sumuje level WSZYSTKICH stoczni w kolonii (nie tylko pierwszej); speed bonus = floor(totalSlots / usedSlots) |
+| Unified THEME tokens | Wszystkie pliki UI Canvas 2D używają `THEME.*` z ThemeConfig.js zamiast hardkodowanych hex kolorów; preset `kosmos` (ciepły bursztyn) |
+| TitleScene zamiast BootScene | Ekran tytułowy z animowanym canvas (gwiazdozbiór, mgławica, mini-słońce, hero planet z teksturą PBR); HTML overlay z przyciskami |
 | Statki orbitują cel (nie auto-return) | Recon i inne misje: po dotarciu `status='orbiting'`; gracz decyduje: powrót lub redirect do nowego celu |
 | Centralny SaveMigration (nie ad-hoc) | Łańcuchowa migracja v4→v5→v6→v7→...; backup w localStorage; wywołanie w BootScene przed GameScene |
 | Popupy misji z pauzą (MissionEventModal) | Każde ważne zdarzenie misji pauzuje grę, popup z danymi, kolejka wielu zdarzeń, czas wraca po ostatnim OK |
