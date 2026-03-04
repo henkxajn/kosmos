@@ -970,13 +970,14 @@ export class UIManager {
     y += 10;
 
     // === Strefa scrollowalna FLOTA ===
+    const CLIP_PAD = 12; // zapas na ascenders tekstu (górna krawędź liter)
     const fleetContentY = y;
     const fleetMaxH = bodyY + bodyH - fleetContentY;
     this._fleetVisibleH = fleetMaxH;
-    this._fleetClipRect = { y: fleetContentY, h: fleetMaxH };
+    this._fleetClipRect = { y: fleetContentY - CLIP_PAD, h: fleetMaxH + CLIP_PAD };
     ctx.save();
     ctx.beginPath();
-    ctx.rect(bodyX, fleetContentY, bodyW, fleetMaxH);
+    ctx.rect(bodyX, fleetContentY - CLIP_PAD, bodyW, fleetMaxH + CLIP_PAD);
     ctx.clip();
     y -= (this._fleetScrollY || 0);
 
@@ -1240,13 +1241,14 @@ export class UIManager {
     }
 
     // Strefa scrollowalna z clippingiem
+    const catClipPad = 4; // zapas na ascenders
     const visibleH = maxH - (cy - bodyY);
     this._catalogVisibleH = visibleH;
     this._catalogContentH = entries.length * ROW_H;
 
     ctx.save();
     ctx.beginPath();
-    ctx.rect(catalogX, cy, catalogW, visibleH);
+    ctx.rect(catalogX, cy - catClipPad, catalogW, visibleH + catClipPad);
     ctx.clip();
 
     const scrollY = this._catalogScrollY || 0;
