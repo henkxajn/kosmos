@@ -206,6 +206,10 @@ SaveSystem._serializeCiv4x()
 | `vessel:docked { vessel }` | VesselManager | ThreeRenderer, UIManager |
 | `vessel:positionUpdate { vessels[] }` | VesselManager | ThreeRenderer |
 | `vessel:rename { vesselId, name }` | UIManager | VesselManager |
+| `expedition:orderReturn { expeditionId }` | UIManager | ExpeditionSystem |
+| `expedition:orderRedirect { expeditionId, targetId }` | UIManager | ExpeditionSystem |
+| `expedition:redirected { expedition }` | ExpeditionSystem | UIManager |
+| `expedition:redirectFailed { reason }` | ExpeditionSystem | UIManager |
 | `planet:colonize { planet }` | UIScene | GameScene → PlanetScene |
 | `planet:openMap { planet }` | UIScene | GameScene → PlanetScene |
 
@@ -276,6 +280,7 @@ SaveSystem._serializeCiv4x()
 - [x] **Etap 29** — Planetoidy: 3 typy (metallic/carbonaceous/silicate), wzbogacone składy (Cu/Ti/W/Pt/Li), widoczne orbity, save/restore
 - [x] **Etap 30** — System Transportowy: VesselManager (rejestr floty), Vessel entity (pozycja/paliwo/misja), VesselNames (auto-nazwy PL), paliwo Tier 1 (power_cells, fuelPerAU), statki jako 3D sprites na mapie, UI floty z panelem akcji, integracja z ExpeditionSystem (vesselId), save v6 z migracją string fleet → vessel instances
 - [x] **Etap 31** — Katalog ciał + fizyka lotów: katalog WSZYSTKICH ciał (explored+unexplored), recon na konkretne ciało, sekwencyjny full_system recon (greedy NN), unikanie Słońca (strefa wykluczenia 0.3 AU + waypoints), dynamiczny powrót do ruchomej planety, wielopunktowe linie trasy w 3D
+- [x] **Etap 32** — Stocznia wielopoziomowa + orbita statków: shipQueue→shipQueues (Lv=sloty), recon orbiting zamiast auto-return, rozkazy redirect/return dla orbitujących statków, UI sekcje "Na orbicie"/"W locie" w panelu floty
 
 ### Następne etapy (plan)
 - [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
@@ -320,3 +325,5 @@ SaveSystem._serializeCiv4x()
 | Strefa wykluczenia Słońca (0.3 AU) | Statki nie lecą przez gwiazdę — `_calcRoute()` dodaje waypoint tangencjalny; `_interpolateWaypoints()` |
 | Dynamiczny powrót statku | `returnTargetX/Y` aktualizowane co tick z pozycji kolonii macierzystej — statek wraca do aktualnej pozycji planety |
 | Waypoints w misji (vessel.mission) | `waypoints: [{x,y}]` i `returnWaypoints: [{x,y}]` — serializowane w save, wielopunktowe linie trasy w ThreeRenderer |
+| shipQueues tablica (nie single shipQueue) | Lv stoczni = max slotów budowy; tablica pozwala na równoczesną budowę N statków; migracja save: `shipQueue → shipQueues` |
+| Statki orbitują cel (nie auto-return) | Recon i inne misje: po dotarciu `status='orbiting'`; gracz decyduje: powrót lub redirect do nowego celu |

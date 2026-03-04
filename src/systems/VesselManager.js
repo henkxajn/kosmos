@@ -145,6 +145,15 @@ export class VesselManager {
     return result;
   }
 
+  /** Statki orbitujące wokół ciał (do aktualizacji pozycji). */
+  _getOrbiting() {
+    const result = [];
+    for (const v of this._vessels.values()) {
+      if (v.position.state === 'orbiting') result.push(v);
+    }
+    return result;
+  }
+
   /**
    * Wszystkie statki (do UI listy floty itp.).
    */
@@ -442,6 +451,17 @@ export class VesselManager {
     let anyMoved = false;
 
     for (const vessel of this._vessels.values()) {
+      // Orbitujące statki — podążają za ciałem, wokół którego krążą
+      if (vessel.position.state === 'orbiting' && vessel.mission) {
+        const body = this._findEntity(vessel.mission.targetId);
+        if (body) {
+          vessel.position.x = body.x;
+          vessel.position.y = body.y;
+          anyMoved = true;
+        }
+        continue;
+      }
+
       if (vessel.position.state !== 'in_transit' || !vessel.mission) continue;
 
       const m = vessel.mission;
@@ -483,7 +503,8 @@ export class VesselManager {
     }
 
     if (anyMoved) {
-      EventBus.emit('vessel:positionUpdate', { vessels: this.getInTransit() });
+      const moving = [...this.getInTransit(), ...this._getOrbiting()];
+      EventBus.emit('vessel:positionUpdate', { vessels: moving });
     }
   }
 

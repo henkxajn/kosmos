@@ -834,6 +834,12 @@ export class UIManager {
   _drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, bodyH) {
     const exSys  = window.KOSMOS?.expeditionSystem;
     const colMgr = window.KOSMOS?.colonyManager;
+
+    // Synchronizuj listę ekspedycji z ExpeditionSystem (po save/restore)
+    if (exSys && this._expeditions.length === 0) {
+      const active = exSys.getActive?.() ?? [];
+      if (active.length > 0) this._expeditions = active.map(e => ({ ...e }));
+    }
     const PAD    = 14;
     const LH     = 14;
     const halfW  = Math.floor(bodyW / 2);
@@ -1364,8 +1370,12 @@ export class UIManager {
 
     // ── Statek na orbicie — rozkazy zamiast listy misji ────────────
     if (vessel.position.state === 'orbiting') {
-      // Znajdź powiązaną ekspedycję
-      const orbExp = this._expeditions.find(e => e.vesselId === vessel.id && e.status === 'orbiting');
+      // Znajdź powiązaną ekspedycję (UIManager cache → fallback do ExpeditionSystem)
+      let orbExp = this._expeditions.find(e => e.vesselId === vessel.id && e.status === 'orbiting');
+      if (!orbExp && exSys) {
+        const active = exSys.getActive?.() ?? [];
+        orbExp = active.find(e => e.vesselId === vessel.id && e.status === 'orbiting');
+      }
       const targetName = orbExp?.targetName ?? vessel.mission?.targetName ?? '?';
       ctx.fillStyle = C.yellow;
       ctx.fillText(`⊙ Na orbicie: ${targetName}`, px + 2, y); y += LH;
