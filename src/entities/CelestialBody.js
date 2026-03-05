@@ -27,7 +27,6 @@ export class CelestialBody {
       color:       config.color       || 0xffffff,
       glowColor:   config.glowColor   || null,
       radius:      config.visualRadius || 8,  // rozmiar kółka na ekranie (px)
-      sprite:      null,  // referencja do obiektu Phasera (ustawiana przez renderer)
     };
 
     // Stan encji

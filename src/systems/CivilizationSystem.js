@@ -242,23 +242,26 @@ export class CivilizationSystem {
   }
 
   _yearlyUpdate() {
-    // 1. Oblicz moraleTarget z komponentów
-    this.moraleTarget = this._calcMoraleTarget();
+    // Cache resource ratios raz na yearly update (unika wielokrotnego obliczania)
+    const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
+
+    // 1. Oblicz moraleTarget z komponentów (przekaż cached ratios)
+    this.moraleTarget = this._calcMoraleTarget(foodRatio);
 
     // 2. Zmiana morale (inercja + tech bonus)
     const techBonus = this.techSystem?.getMoraleBonus() ?? 0;
     const inertia   = (this.moraleTarget - this.morale) * MORALE_INERTIA;
     this.morale     = Math.max(0, Math.min(100, this.morale + inertia + techBonus));
 
-    // 3. Wzrost populacji
-    this._updatePopGrowth();
+    // 3. Wzrost populacji (przekaż cached foodRatio)
+    this._updatePopGrowth(foodRatio);
 
-    // 4. Śmierć POPa (głód)
-    this._updatePopDeath();
+    // 4. Śmierć POPa (głód) — przekaż cached foodRatio
+    this._updatePopDeath(foodRatio);
 
     // 5. Kryzysy
     this._updateUnrest();
-    this._updateFamine(this._resourceRatio('food') || this._resourceRatio('organics'));
+    this._updateFamine(foodRatio);
 
     // 6. Epoka
     this._checkEpoch();
@@ -269,7 +272,7 @@ export class CivilizationSystem {
       EventBus.emit('civ:moraleChanged', {
         morale:     this.morale,
         target:     this.moraleTarget,
-        components: { ...this.moraleComponents },
+        components: this.moraleComponents, // referencja — bez kopiowania (read-only w UI)
         efficiency: this.productionEfficiency,
       });
     }
@@ -277,14 +280,14 @@ export class CivilizationSystem {
 
   // ── Wzrost populacji (akumulator) ───────────────────────────────────────
 
-  _updatePopGrowth() {
+  _updatePopGrowth(foodRatio) {
     // Brak miejsca → zero wzrostu
     if (this.population >= this.housing) {
       this._lastGrowth = 0;
       return;
     }
 
-    const orgRatio  = this._resourceRatio('food') || this._resourceRatio('organics');
+    const orgRatio  = foodRatio ?? (this._resourceRatio('food') || this._resourceRatio('organics'));
     const foodMod   = this._foodGrowthModifier(orgRatio);
     if (foodMod <= 0) { this._lastGrowth = 0; return; }
 
@@ -314,11 +317,10 @@ export class CivilizationSystem {
 
   // ── Śmierć POPa ────────────────────────────────────────────────────────
 
-  _updatePopDeath() {
+  _updatePopDeath(cachedFoodRatio) {
     if (this.population <= 1) return;  // minimum 1 POP
 
-    // Nowy system: używaj 'food' zamiast 'organics'
-    const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
+    const foodRatio = cachedFoodRatio ?? (this._resourceRatio('food') || this._resourceRatio('organics'));
 
     if (foodRatio < 0.02) {
       this._starvationYears++;
@@ -336,7 +338,7 @@ export class CivilizationSystem {
 
   // ── Morale (6 składników → 0–100) ──────────────────────────────────────
 
-  _calcMoraleTarget() {
+  _calcMoraleTarget(cachedFoodRatio) {
     // 1. Housing (0–20)
     const popRatio = this.housing > 0 ? this.population / this.housing : 1;
     const housing  = popRatio <= 0.50 ? 20
@@ -344,7 +346,7 @@ export class CivilizationSystem {
                    : 0;
 
     // 2. Żywność (0–20) — nowy system: food (fallback: organics)
-    const orgRatio = this._resourceRatio('food') || this._resourceRatio('organics');
+    const orgRatio = cachedFoodRatio ?? (this._resourceRatio('food') || this._resourceRatio('organics'));
     const food     = orgRatio > 0.50 ? 20
                    : orgRatio > 0.20 ? 12
                    : orgRatio > 0.05 ? 4

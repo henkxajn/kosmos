@@ -60,10 +60,3 @@ export const POP_CONSUMPTION = {
   energy: 1.0,  // z bilansu energii (flow)
 };
 
-// ── Mapowanie starych zasobów (minerals/organics) → nowych ─────────────────
-// Używane przez migrację save v5→v6
-export const LEGACY_RESOURCE_MAP = {
-  minerals: 'Fe',       // minerały → żelazo (główny surowiec)
-  organics: 'food',     // organika → żywność
-  // energy, water, research → bez zmian nazwy (ale energy/research to utility)
-};

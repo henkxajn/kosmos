@@ -26,6 +26,9 @@ import { DepositSystem }    from '../systems/DepositSystem.js';
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
 const BASE_MAX_LEVEL = 10;
 
+// Helper: sprawdza czy obiekt ma klucze (bez alokacji tablicy)
+function hasKeys(obj) { for (const _ in obj) return true; return false; }
+
 export class BuildingSystem {
   constructor(resourceSystem = null, civSystem = null, techSystem = null) {
     this.resourceSystem = resourceSystem;
@@ -157,7 +160,7 @@ export class BuildingSystem {
     }
 
     // Sprawdzenie środków
-    if (this.resourceSystem && Object.keys(actualCost).length > 0 && !this.resourceSystem.canAfford(actualCost)) {
+    if (this.resourceSystem && hasKeys(actualCost) && !this.resourceSystem.canAfford(actualCost)) {
       EventBus.emit('planet:buildResult', { success: false, tile, reason: 'Brak surowców' });
       return;
     }
@@ -175,7 +178,7 @@ export class BuildingSystem {
     }
 
     // Pobierz koszt
-    if (this.resourceSystem && Object.keys(actualCost).length > 0) {
+    if (this.resourceSystem && hasKeys(actualCost)) {
       this.resourceSystem.spend(actualCost);
     }
 
@@ -196,7 +199,7 @@ export class BuildingSystem {
     const producerId = isCapital ? `capital_${tile.key}` : `building_${tile.key}`;
 
     // Zarejestruj produkcję (energia rejestrowana jako flow)
-    if (Object.keys(effectiveRates).length > 0) {
+    if (hasKeys(effectiveRates)) {
       EventBus.emit('resource:registerProducer', { id: producerId, rates: effectiveRates });
     }
 
@@ -212,18 +215,22 @@ export class BuildingSystem {
       this._factorySystem.setTotalPoints(this._factorySystem.totalPoints + 1);
     }
 
-    // Zapamiętaj aktywny budynek
+    // Zapamiętaj aktywny budynek (producerId cachowany dla szybkiego dostępu)
     this._active.set(activeKey, {
       building, baseRates, effectiveRates,
       housing: building.housing,
       popCost,
       level,
+      producerId,
     });
 
     // Zatrudnienie
     if (popCost > 0) {
       EventBus.emit('civ:employmentChanged', { delta: popCost });
     }
+
+    // Invaliduj cache mine level jeśli zbudowano kopalnię
+    if (building.isMine || buildingId === 'mine') this._mineLevelDirty = true;
 
     EventBus.emit('planet:buildResult', { success: true, tile, buildingId });
   }
@@ -267,7 +274,7 @@ export class BuildingSystem {
       }
     }
 
-    if (this.resourceSystem && Object.keys(upgradeCost).length > 0 && !this.resourceSystem.canAfford(upgradeCost)) {
+    if (this.resourceSystem && hasKeys(upgradeCost) && !this.resourceSystem.canAfford(upgradeCost)) {
       EventBus.emit('planet:upgradeResult', { success: false, tile, reason: 'Brak surowców na ulepszenie' });
       return;
     }
@@ -285,7 +292,7 @@ export class BuildingSystem {
     }
 
     // Pobierz koszt
-    if (this.resourceSystem && Object.keys(upgradeCost).length > 0) {
+    if (this.resourceSystem && hasKeys(upgradeCost)) {
       this.resourceSystem.spend(upgradeCost);
     }
 
@@ -303,7 +310,7 @@ export class BuildingSystem {
     entry.effectiveRates = this._applyTechMultipliers(entry.baseRates, building);
 
     const producerId = `building_${tile.key}`;
-    if (Object.keys(entry.effectiveRates).length > 0 && this.resourceSystem) {
+    if (hasKeys(entry.effectiveRates) && this.resourceSystem) {
       this.resourceSystem.registerProducer(producerId, entry.effectiveRates);
     }
 
@@ -318,6 +325,9 @@ export class BuildingSystem {
       // Recalc total points: zlicz wszystkie fabryki × level
       this._recalcFactoryPoints();
     }
+
+    // Invaliduj cache mine level jeśli ulepszono kopalnię
+    if (building.id === 'mine' || building.isMine) this._mineLevelDirty = true;
 
     EventBus.emit('planet:upgradeResult', { success: true, tile, level: nextLevel });
   }
@@ -359,7 +369,7 @@ export class BuildingSystem {
       }
 
       // Oddaj surowce i commodities
-      if (this.resourceSystem && Object.keys(refund).length > 0) {
+      if (this.resourceSystem && hasKeys(refund)) {
         this.resourceSystem.receive(refund);
       }
 
@@ -373,7 +383,7 @@ export class BuildingSystem {
       entry.effectiveRates = this._applyTechMultipliers(entry.baseRates, building);
 
       const producerId = `building_${tile.key}`;
-      if (Object.keys(entry.effectiveRates).length > 0 && this.resourceSystem) {
+      if (hasKeys(entry.effectiveRates) && this.resourceSystem) {
         this.resourceSystem.registerProducer(producerId, entry.effectiveRates);
       }
 
@@ -393,6 +403,9 @@ export class BuildingSystem {
       if (downgradePop > 0) {
         EventBus.emit('civ:employmentChanged', { delta: -downgradePop });
       }
+
+      // Invaliduj cache mine level jeśli rozebrano kopalnię
+      if (buildingId === 'mine' || building?.isMine) this._mineLevelDirty = true;
 
       EventBus.emit('planet:demolishResult', {
         success: true, tile, buildingId,
@@ -425,7 +438,7 @@ export class BuildingSystem {
           refund[k] = Math.floor(v / 2);
         }
       }
-      if (Object.keys(refund).length > 0) {
+      if (hasKeys(refund)) {
         this.resourceSystem.receive(refund);
       }
     }
@@ -440,6 +453,9 @@ export class BuildingSystem {
     if (popCost > 0) {
       EventBus.emit('civ:employmentChanged', { delta: -popCost });
     }
+
+    // Invaliduj cache mine level jeśli rozebrano kopalnię
+    if (buildingId === 'mine' || building?.isMine) this._mineLevelDirty = true;
 
     tile.buildingId = null;
     tile.buildingLevel = 1;
@@ -469,7 +485,7 @@ export class BuildingSystem {
       const popCost    = b.popCost ?? building.popCost ?? POP_PER_BUILDING;
       const housing    = b.housing || 0;
 
-      if (Object.keys(effectiveRates).length > 0 && this.resourceSystem) {
+      if (hasKeys(effectiveRates) && this.resourceSystem) {
         this.resourceSystem.registerProducer(producerId, effectiveRates);
       }
       this._active.set(activeKey, {
@@ -477,6 +493,7 @@ export class BuildingSystem {
         housing,
         popCost,
         level,
+        producerId,
       });
       totalPopCost += popCost * level;
       totalHousing += housing;  // housing już skumulowany (per-level) w serialize()
@@ -510,7 +527,7 @@ export class BuildingSystem {
       const effectiveRates = this._applyTechMultipliers(baseRates, building);
       const producerId     = `building_${tile.key}`;
 
-      if (Object.keys(effectiveRates).length > 0 && this.resourceSystem) {
+      if (hasKeys(effectiveRates) && this.resourceSystem) {
         this.resourceSystem.registerProducer(producerId, effectiveRates);
       }
       this._active.set(tile.key, {
@@ -518,6 +535,7 @@ export class BuildingSystem {
         housing: building.housing,
         popCost: building.popCost ?? POP_PER_BUILDING,
         level,
+        producerId,
       });
     });
 
@@ -558,7 +576,7 @@ export class BuildingSystem {
   // Oblicz stawki bazowe z uwzględnieniem poziomu budynku
   // Efekt poziomu: rate × level (liniowy — upgrade podwaja produkcję)
   _calcBaseRates(building, tile, level = 1) {
-    const hasRates = building.rates && Object.keys(building.rates).length > 0;
+    const hasRates = building.rates && hasKeys(building.rates);
     const hasEnergyCost = building.energyCost && building.energyCost > 0;
 
     // Jeśli brak rates I brak energyCost → naprawdę puste
@@ -577,7 +595,9 @@ export class BuildingSystem {
 
     const base = {};
     if (hasRates) {
-      for (const [key, val] of Object.entries(building.rates)) {
+      const rates = building.rates;
+      for (const key in rates) {
+        const val = rates[key];
         if (key === 'research') {
           base[key] = val * latMod.production * levelMult;
         } else if (val < 0) {
@@ -600,12 +620,13 @@ export class BuildingSystem {
   }
 
   _applyTechMultipliers(baseRates, building) {
-    if (Object.keys(baseRates).length === 0) return {};
+    if (!hasKeys(baseRates)) return {};
 
     const empPenalty = this.civSystem?.employmentPenalty ?? 1.0;
 
     const effective = {};
-    for (const [key, val] of Object.entries(baseRates)) {
+    for (const key in baseRates) {
+      const val = baseRates[key];
       if (val > 0) {
         const techMult = this.techSystem?.getProductionMultiplier(key) ?? 1.0;
         effective[key] = val * techMult * this._civPenalty * empPenalty;
@@ -624,9 +645,9 @@ export class BuildingSystem {
       const newEffective = this._applyTechMultipliers(entry.baseRates, entry.building);
       entry.effectiveRates = newEffective;
 
-      const producerId = activeKey.startsWith('capital_') ? activeKey : `building_${activeKey}`;
-      if (Object.keys(newEffective).length > 0 && this.resourceSystem) {
-        this.resourceSystem.registerProducer(producerId, newEffective);
+      if (hasKeys(newEffective) && this.resourceSystem) {
+        const pid = entry.producerId ?? (activeKey.startsWith('capital_') ? activeKey : `building_${activeKey}`);
+        this.resourceSystem.registerProducer(pid, newEffective);
       }
     }
   }
@@ -648,27 +669,25 @@ export class BuildingSystem {
     if (!this._deposits || this._deposits.length === 0) return;
     if (!this.resourceSystem) return;
 
-    // Oblicz sumaryczny "mine level" — suma poziomów wszystkich kopalni
-    let totalMineLevel = 0;
-    for (const entry of this._active.values()) {
-      if (entry.building.isMine || entry.building.id === 'mine') {
-        totalMineLevel += entry.level ?? 1;
+    // Cache mine level — invalidowany przy budowie/rozbiórce kopalni
+    if (this._mineLevelDirty !== false) {
+      let total = 0;
+      for (const entry of this._active.values()) {
+        if (entry.building.isMine || entry.building.id === 'mine') {
+          total += entry.level ?? 1;
+        }
       }
+      this._cachedMineLevel = total;
+      this._mineLevelDirty = false;
     }
-    if (totalMineLevel === 0) return;
+    if (this._cachedMineLevel === 0) return;
 
-    // Wydobądź surowce z deposits
-    const extracted = DepositSystem.extractFromDeposits(this._deposits, totalMineLevel, deltaYears);
+    // Wydobądź surowce z deposits (zwraca plain object)
+    const gains = DepositSystem.extractFromDeposits(this._deposits, this._cachedMineLevel, deltaYears);
 
     // Dodaj wydobyte surowce do inventory
-    if (extracted.size > 0) {
-      const gains = {};
-      for (const [resId, amount] of extracted) {
-        if (amount > 0) gains[resId] = amount;
-      }
-      if (Object.keys(gains).length > 0) {
-        this.resourceSystem.receive(gains);
-      }
+    if (gains && hasKeys(gains)) {
+      this.resourceSystem.receive(gains);
     }
   }
 }

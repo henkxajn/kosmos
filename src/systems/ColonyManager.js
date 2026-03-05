@@ -108,6 +108,18 @@ export class ColonyManager {
     EventBus.on('time:tick', ({ deltaYears }) => {
       this._tickShipBuilds(deltaYears);
     });
+
+    // Invaliduj cache shipyard level przy budowie/rozbiórce/upgrade stoczni
+    const invalidateShipyard = ({ buildingId, tile }) => {
+      if (buildingId === 'shipyard' || tile?.buildingId === 'shipyard') {
+        const pid = this._activePlanetId;
+        const colony = pid ? this._colonies.get(pid) : null;
+        if (colony) colony._shipyardLevelDirty = true;
+      }
+    };
+    EventBus.on('planet:buildResult', invalidateShipyard);
+    EventBus.on('planet:demolishResult', invalidateShipyard);
+    EventBus.on('planet:upgradeResult', invalidateShipyard);
   }
 
   // ── API publiczne ───────────────────────────────────────────────────────
@@ -317,13 +329,19 @@ export class ColonyManager {
   // ── Flota — budowa i zarządzanie statkami ────────────────────────
 
   // Pobierz łączną liczbę slotów stoczni w kolonii (suma poziomów wszystkich stoczni)
+  // Cache per-kolonia — invalidowany przy budowie/rozbiórce stoczni
   _getShipyardLevel(colony) {
+    if (colony._cachedShipyardLevel != null && !colony._shipyardLevelDirty) {
+      return colony._cachedShipyardLevel;
+    }
     const bSys = colony?.buildingSystem;
     if (!bSys) return 0;
     let totalSlots = 0;
-    for (const [, entry] of bSys._active) {
+    for (const entry of bSys._active.values()) {
       if (entry.building.id === 'shipyard') totalSlots += entry.level ?? 1;
     }
+    colony._cachedShipyardLevel = totalSlots;
+    colony._shipyardLevelDirty = false;
     return totalSlots;
   }
 
@@ -544,7 +562,9 @@ export class ColonyManager {
         }
       }
 
-      if (Object.keys(transferred).length > 0) {
+      let hasTransfer = false;
+      for (const _ in transferred) { hasTransfer = true; break; }
+      if (hasTransfer) {
         EventBus.emit('colony:tradeExecuted', { route, transferred });
       }
     }
@@ -700,14 +720,9 @@ export class ColonyManager {
     }
   }
 
-  // Znajdź encję po id — przeszukaj planety, księżyce, planetoidy
+  // Znajdź encję po id — O(1) lookup z EntityManager
   _findEntity(targetId) {
-    const TYPES = ['planet', 'moon', 'planetoid'];
-    for (const t of TYPES) {
-      const bodies = EntityManager.getByType(t);
-      const found  = bodies.find(b => b.id === targetId);
-      if (found) return found;
-    }
-    return null;
+    if (!targetId) return null;
+    return EntityManager.get(targetId);
   }
 }

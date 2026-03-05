@@ -92,10 +92,11 @@ export class DepositSystem {
   // deposits: tablica złóż ciała niebieskiego
   // mineLevel: poziom kopalni (1–10)
   // deltaYears: czas w latach gry
-  // Zwraca: Map<resourceId, ilość wydobyta>
+  // Zwraca: plain object { resourceId: ilość } (bez alokacji Map)
   static extractFromDeposits(deposits, mineLevel, deltaYears) {
-    const extracted = new Map();
-    if (!deposits || deposits.length === 0) return extracted;
+    if (!deposits || deposits.length === 0) return null;
+
+    let extracted = null;
 
     for (const dep of deposits) {
       if (dep.remaining <= 0) continue;
@@ -110,7 +111,8 @@ export class DepositSystem {
       dep.remaining = Math.max(0, dep.remaining - actual);
 
       if (actual > 0) {
-        extracted.set(dep.resourceId, (extracted.get(dep.resourceId) || 0) + actual);
+        if (!extracted) extracted = {};
+        extracted[dep.resourceId] = (extracted[dep.resourceId] || 0) + actual;
       }
     }
 

@@ -145,15 +145,6 @@ export class VesselManager {
     return result;
   }
 
-  /** Statki orbitujące wokół ciał (do aktualizacji pozycji). */
-  _getOrbiting() {
-    const result = [];
-    for (const v of this._vessels.values()) {
-      if (v.position.state === 'orbiting') result.push(v);
-    }
-    return result;
-  }
-
   /**
    * Wszystkie statki (do UI listy floty itp.).
    */
@@ -447,87 +438,93 @@ export class VesselManager {
   }
 
   /**
-   * Interpolacja pozycji statków w tranzycie.
+   * Interpolacja pozycji statków w tranzycie + aktualizacja linii tras.
+   * Połączone w jedną pętlę dla wydajności.
    */
   _updatePositions(deltaYears) {
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    let anyMoved = false;
+    const moving = []; // statki w ruchu (do vessel:positionUpdate)
 
     for (const vessel of this._vessels.values()) {
+      const m = vessel.mission;
+
       // Orbitujące statki — podążają za ciałem, wokół którego krążą
-      if (vessel.position.state === 'orbiting' && vessel.mission) {
-        const body = this._findEntity(vessel.mission.targetId);
+      if (vessel.position.state === 'orbiting' && m) {
+        const body = this._findEntity(m.targetId);
         if (body) {
           vessel.position.x = body.x;
           vessel.position.y = body.y;
-          anyMoved = true;
         }
+        // Aktualizuj linie trasy dla orbitujących
+        this._updateRouteLine(vessel, m);
+        moving.push(vessel);
         continue;
       }
 
-      if (vessel.position.state !== 'in_transit' || !vessel.mission) continue;
-
-      const m = vessel.mission;
-
-      if (m.phase === 'returning') {
-        // Powrót: interpolacja returnStart → (waypoints) → returnTarget
-        // (cel powrotu ustalony predykcyjnie w startReturn — bez dynamicznego śledzenia)
-        const totalReturn = (m.returnYear ?? m.arrivalYear) - (m.arrivalYear ?? m.departYear);
-        if (totalReturn <= 0) continue;
-        const t = Math.max(0, Math.min(1,
-          (gameYear - (m.arrivalYear ?? m.departYear)) / totalReturn
-        ));
-        const rp = this._interpolateWaypoints(
-          m.returnStartX, m.returnStartY,
-          m.returnTargetX, m.returnTargetY,
-          m.returnWaypoints ?? [], t
-        );
-        vessel.position.x = rp.x;
-        vessel.position.y = rp.y;
-      } else {
-        // W drodze do celu: interpolacja start → (waypoints) → target
-        const totalTravel = (m.arrivalYear ?? 1) - (m.departYear ?? 0);
-        if (totalTravel <= 0) continue;
-        const t = Math.max(0, Math.min(1,
-          (gameYear - m.departYear) / totalTravel
-        ));
-
-        // Cel ustalony predykcyjnie w dispatchOnMission — bez dynamicznego śledzenia
-        const op = this._interpolateWaypoints(
-          m.startX, m.startY,
-          m.targetX, m.targetY,
-          m.waypoints ?? [], t
-        );
-        vessel.position.x = op.x;
-        vessel.position.y = op.y;
+      if (vessel.position.state === 'in_transit' && m) {
+        if (m.phase === 'returning') {
+          // Powrót: interpolacja returnStart → (waypoints) → returnTarget
+          const totalReturn = (m.returnYear ?? m.arrivalYear) - (m.arrivalYear ?? m.departYear);
+          if (totalReturn > 0) {
+            const t = Math.max(0, Math.min(1,
+              (gameYear - (m.arrivalYear ?? m.departYear)) / totalReturn
+            ));
+            const rp = this._interpolateWaypoints(
+              m.returnStartX, m.returnStartY,
+              m.returnTargetX, m.returnTargetY,
+              m.returnWaypoints ?? [], t
+            );
+            vessel.position.x = rp.x;
+            vessel.position.y = rp.y;
+          }
+        } else {
+          // W drodze do celu: interpolacja start → (waypoints) → target
+          const totalTravel = (m.arrivalYear ?? 1) - (m.departYear ?? 0);
+          if (totalTravel > 0) {
+            const t = Math.max(0, Math.min(1,
+              (gameYear - m.departYear) / totalTravel
+            ));
+            const op = this._interpolateWaypoints(
+              m.startX, m.startY,
+              m.targetX, m.targetY,
+              m.waypoints ?? [], t
+            );
+            vessel.position.x = op.x;
+            vessel.position.y = op.y;
+          }
+        }
+        // Aktualizuj linie trasy dla latających
+        this._updateRouteLine(vessel, m);
+        moving.push(vessel);
+        continue;
       }
 
-      anyMoved = true;
-    }
-
-    // ── Aktualizuj wizualne końce linii trasy (śledzą planety w ruchu) ──
-    for (const vessel of this._vessels.values()) {
-      const m = vessel.mission;
-      if (!m) continue;
-
-      // Punkt startu trasy → aktualna pozycja planety macierzystej
-      const originEntity = this._findEntity(m.originId ?? vessel.colonyId);
-      if (originEntity) {
-        m.liveOriginX = originEntity.x;
-        m.liveOriginY = originEntity.y;
-      }
-
-      // Punkt docelowy → aktualna pozycja ciała docelowego
-      const targetEntity = this._findEntity(m.targetId);
-      if (targetEntity) {
-        m.liveTargetX = targetEntity.x;
-        m.liveTargetY = targetEntity.y;
+      // Docked z misją — aktualizuj linie trasy
+      if (m) {
+        this._updateRouteLine(vessel, m);
       }
     }
 
-    if (anyMoved) {
-      const moving = [...this.getInTransit(), ...this._getOrbiting()];
+    if (moving.length > 0) {
       EventBus.emit('vessel:positionUpdate', { vessels: moving });
+    }
+  }
+
+  /**
+   * Aktualizuj wizualne końce linii trasy (śledzą planety w ruchu).
+   */
+  _updateRouteLine(vessel, m) {
+    // Punkt startu trasy → aktualna pozycja planety macierzystej
+    const originEntity = this._findEntity(m.originId ?? vessel.colonyId);
+    if (originEntity) {
+      m.liveOriginX = originEntity.x;
+      m.liveOriginY = originEntity.y;
+    }
+    // Punkt docelowy → aktualna pozycja ciała docelowego
+    const targetEntity = this._findEntity(m.targetId);
+    if (targetEntity) {
+      m.liveTargetX = targetEntity.x;
+      m.liveTargetY = targetEntity.y;
     }
   }
 
@@ -774,10 +771,11 @@ export class VesselManager {
       };
     }
 
-    // Planeta/planetoid: orbita wokół gwiazdy
+    // Planeta/planetoid: orbita wokół gwiazdy (cache z getByType)
     const stars = EntityManager.getByType('star');
-    const starX = stars[0]?.x ?? 0;
-    const starY = stars[0]?.y ?? 0;
+    const star = stars[0];
+    const starX = star?.x ?? 0;
+    const starY = star?.y ?? 0;
     return {
       x: starX + r * Math.cos(angle) * AU_TO_PX,
       y: starY + r * Math.sin(angle) * AU_TO_PX,
@@ -785,16 +783,10 @@ export class VesselManager {
   }
 
   /**
-   * Znajdź encję po id (planet, moon, planetoid).
+   * Znajdź encję po id — O(1) lookup z EntityManager.
    */
   _findEntity(targetId) {
     if (!targetId) return null;
-    const TYPES = ['planet', 'moon', 'planetoid', 'asteroid', 'comet'];
-    for (const t of TYPES) {
-      const bodies = EntityManager.getByType(t);
-      const found = bodies.find(b => b.id === targetId);
-      if (found) return found;
-    }
-    return null;
+    return EntityManager.get(targetId);
   }
 }

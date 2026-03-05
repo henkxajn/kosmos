@@ -191,11 +191,14 @@ export class ResourceSystem {
   // Snapshot stanu (kompatybilność ze starym kodem — zwraca obiekt z minerals/energy/etc.)
   snapshot() {
     this._syncLegacyProxy();
-    const snap = {};
-    for (const [key, res] of Object.entries(this.resources)) {
-      snap[key] = { ...res };
-    }
-    return snap;
+    const r = this.resources;
+    return {
+      minerals: { amount: r.minerals.amount, capacity: r.minerals.capacity, perYear: r.minerals.perYear },
+      energy:   { amount: r.energy.amount,   capacity: r.energy.capacity,   perYear: r.energy.perYear },
+      organics: { amount: r.organics.amount, capacity: r.organics.capacity, perYear: r.organics.perYear },
+      water:    { amount: r.water.amount,    capacity: r.water.capacity,    perYear: r.water.perYear },
+      research: { amount: r.research.amount, capacity: r.research.capacity, perYear: r.research.perYear },
+    };
   }
 
   // Snapshot pełnego inventory
@@ -284,7 +287,8 @@ export class ResourceSystem {
     let researchPerYear = 0;
 
     for (const rates of this._producers.values()) {
-      for (const [key, value] of Object.entries(rates)) {
+      for (const key in rates) {
+        const value = rates[key];
         if (key === 'energy') {
           if (value > 0) energyProd += value;
           else energyCons += Math.abs(value);

@@ -284,19 +284,16 @@ export class FactorySystem {
 
   _hasIngredients(recipe) {
     if (!this.resourceSystem) return false;
-    for (const [resId, qty] of Object.entries(recipe)) {
-      if ((this.resourceSystem.inventory.get(resId) ?? 0) < qty) return false;
+    for (const resId in recipe) {
+      if ((this.resourceSystem.inventory.get(resId) ?? 0) < recipe[resId]) return false;
     }
     return true;
   }
 
   _consumeIngredients(recipe) {
     if (!this.resourceSystem) return;
-    const costs = {};
-    for (const [resId, qty] of Object.entries(recipe)) {
-      costs[resId] = qty;
-    }
-    this.resourceSystem.spend(costs);
+    // Przekaż recipe bezpośrednio — spend() iteruje po Object.entries
+    this.resourceSystem.spend(recipe);
   }
 
   _emitStatus() {

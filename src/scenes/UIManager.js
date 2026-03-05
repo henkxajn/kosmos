@@ -1412,8 +1412,8 @@ export class UIManager {
     const sd = SHIPS[vessel.shipId];
     let y = py;
 
-    // Tło panelu
-    ctx.fillStyle = 'rgba(10,20,40,0.7)';
+    // Separator + tło panelu akcji
+    ctx.fillStyle = 'rgba(10,20,40,0.85)';
     ctx.fillRect(px, y, panelW, 4); // separator
     y += 6;
 
@@ -1556,7 +1556,7 @@ export class UIManager {
         action: 'missionType', missionType: mt.type, vesselId: vessel.id,
       });
     }
-    y += btnH + 4;
+    y += btnH + 10;
 
     // Lista celów (jeśli wybrany typ misji)
     if (this._vesselMissionType) {
@@ -1677,7 +1677,9 @@ export class UIManager {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.label; ctx.fillText('Cel transportu:', px + 2, y); y += LH;
       if (targets.length === 0) {
-        ctx.fillStyle = C.dim; ctx.fillText('Brak dostępnych celów', px + 2, y);
+        ctx.fillStyle = C.dim;
+        ctx.fillText('Brak zbadanych celów — wyślij', px + 2, y); y += LH;
+        ctx.fillText('najpierw misję rozpoznawczą 🔭', px + 2, y);
         y += LH;
       } else {
         for (const t of targets) {

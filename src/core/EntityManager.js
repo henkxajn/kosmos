@@ -9,6 +9,8 @@ class EntityManager {
     this.entities = new Map();
     // Indeks typów dla szybkiego filtrowania ('star', 'planet', 'moon', 'asteroid')
     this.byType = new Map();
+    // Cache tablicowy dla getByType — invalidowany przy add/remove
+    this._typeCache = new Map();
     // Licznik ID
     this._nextId = 1;
   }
@@ -28,6 +30,9 @@ class EntityManager {
     }
     this.byType.get(entity.type).add(entity.id);
 
+    // Invaliduj cache dla tego typu
+    this._typeCache.delete(entity.type);
+
     EventBus.emit('entity:added', { entity });
     return entity;
   }
@@ -43,6 +48,9 @@ class EntityManager {
       this.byType.get(entity.type).delete(id);
     }
 
+    // Invaliduj cache dla tego typu
+    this._typeCache.delete(entity.type);
+
     EventBus.emit('entity:removed', { entity });
   }
 
@@ -57,11 +65,17 @@ class EntityManager {
   }
 
   // Pobierz encje po typie ('star', 'planet', 'moon', 'asteroid')
+  // Wynik cachowany — invalidacja przy add/remove
   getByType(type) {
+    const cached = this._typeCache.get(type);
+    if (cached) return cached;
+
     if (!this.byType.has(type)) return [];
-    return Array.from(this.byType.get(type))
+    const result = Array.from(this.byType.get(type))
       .map(id => this.entities.get(id))
       .filter(Boolean);
+    this._typeCache.set(type, result);
+    return result;
   }
 
   // Liczba encji
@@ -73,6 +87,7 @@ class EntityManager {
   clear() {
     this.entities.clear();
     this.byType.clear();
+    this._typeCache.clear();
     this._nextId = 1;
   }
 }

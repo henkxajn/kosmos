@@ -35,7 +35,7 @@ export class Planetoid extends CelestialBody {
     this.explored = config.explored || false;
 
     // Minimalne pola powierzchniowe (kompatybilność z _resolveCollision)
-    this.surface = { hasWater: false, atmospherePressure: 0, magneticField: 0 };
+    this.surface = { hasWater: false, magneticField: 0 };
 
     // Skład chemiczny — generator nadpisuje wzbogaconym składem wg typu
     this.composition = config.composition || {

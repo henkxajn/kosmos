@@ -5,6 +5,7 @@
 // Styl: sci-fi, ciemny panel, z-index 100.
 
 import EventBus from '../core/EventBus.js';
+import EntityManager from '../core/EntityManager.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { SHIPS } from '../data/ShipsData.js';
@@ -95,9 +96,10 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
       }
     } else if (fixedTargetId) {
       // Transport do ciała bez kolonii — stały cel
+      const body = EntityManager.get(fixedTargetId);
       const opt = document.createElement('option');
       opt.value = fixedTargetId;
-      opt.textContent = `📦 ${fixedTargetId}`;
+      opt.textContent = `📦 ${body?.name ?? fixedTargetId}`;
       targetSelect.appendChild(opt);
       targetSelect.disabled = true;
     }

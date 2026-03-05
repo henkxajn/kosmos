@@ -40,7 +40,6 @@ export class Planet extends CelestialBody {
     this.surface = {
       temperature:        this.temperatureK - 273,  // °C
       hasWater:           false,
-      atmospherePressure: 0,    // atm
       magneticField:      0,    // 0-1
     };
 
