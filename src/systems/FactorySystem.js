@@ -88,8 +88,10 @@ export class FactorySystem {
     if (!def) return;
 
     if (points <= 0) {
-      // Usuń alokację
+      // Usuń alokację — zwolnione punkty mogą trafić do kolejki
+      const had = this._allocations.has(commodityId);
       this._allocations.delete(commodityId);
+      if (had) this._promoteFromQueue();
     } else {
       const existing = this._allocations.get(commodityId);
       const maxAlloc = this.freePoints + (existing?.points ?? 0);
@@ -268,17 +270,36 @@ export class FactorySystem {
     }
 
     // Obsługa osiągniętych targetów — zwolnij punkty i alokuj z kolejki
-    for (const { commodityId, points } of targetReached) {
-      // Usuń ukończoną alokację
+    for (const { commodityId } of targetReached) {
       this._allocations.delete(commodityId);
       EventBus.emit('factory:targetReached', { commodityId });
+    }
+    if (targetReached.length > 0) {
+      this._promoteFromQueue();
+      this._emitStatus();
+    }
+  }
 
-      // Alokuj z kolejki (1 punkt)
-      if (this._queue.length > 0 && this.freePoints > 0) {
-        const next = this._queue.shift();
-        this.allocate(next.commodityId, 1);
-        this.setTarget(next.commodityId, next.qty);
+  // Promuj elementy z kolejki na wolne punkty produkcji
+  _promoteFromQueue() {
+    while (this._queue.length > 0 && this.freePoints > 0) {
+      const next = this._queue.shift();
+      // Jeśli commodity jest już produkowany — pomiń, dodaj qty do istniejącego
+      const existing = this._allocations.get(next.commodityId);
+      if (existing) {
+        // Dodaj do istniejącego targetu
+        if (existing.targetQty !== null) {
+          existing.targetQty += next.qty;
+        }
+        continue;
       }
+      const pts = Math.min(1, this.freePoints);
+      this._allocations.set(next.commodityId, {
+        points: pts,
+        progress: 0,
+        targetQty: next.qty,
+        produced: 0,
+      });
     }
   }
 
