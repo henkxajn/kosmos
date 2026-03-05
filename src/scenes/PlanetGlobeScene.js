@@ -167,6 +167,8 @@ export class PlanetGlobeScene {
     // Synchronizuj budynki z BuildingSystem (pełny sync: id + level + capital + underConstruction)
     this._syncBuildingIds();
 
+    const bSys = window.KOSMOS?.buildingSystem;
+
     // Auto-place Stolicy przy pierwszym otwarciu mapy (pomiń outpost)
     const colony = window.KOSMOS?.colonyManager?.getColony(planet.id);
     const isOutpost = colony?.isOutpost ?? false;
@@ -228,6 +230,9 @@ export class PlanetGlobeScene {
     // Start pętli rysowania paneli
     this._startDrawLoop();
   }
+
+  // ── Zamknij scenę (publiczny alias) ────────────────────────────
+  close() { this._close(); }
 
   // ── Zamknij scenę ──────────────────────────────────────────────
 
