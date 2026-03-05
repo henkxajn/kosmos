@@ -1267,19 +1267,47 @@ export class UIManager {
   // ── Katalog WSZYSTKICH ciał niebieskich (bez homePlanet) ──────────
   _getAllCatalogBodies() {
     const homePl = window.KOSMOS?.homePlanet;
-    const bodies = [];
-    for (const t of ['planet', 'moon', 'planetoid']) {
+
+    // Zbierz planety i planetoidy (ciała "główne")
+    const planets = [];
+    for (const t of ['planet', 'planetoid']) {
       for (const body of EntityManager.getByType(t)) {
         if (body === homePl) continue;
-        bodies.push({ body, explored: !!body.explored });
+        planets.push({ body, explored: !!body.explored });
       }
     }
-    // Sortuj: explored najpierw, potem wg odległości orbitalnej
-    bodies.sort((a, b) => {
+    // Sortuj główne ciała: explored najpierw, potem wg odległości orbitalnej
+    planets.sort((a, b) => {
       if (a.explored !== b.explored) return a.explored ? -1 : 1;
       return (a.body.orbital?.a ?? 0) - (b.body.orbital?.a ?? 0);
     });
-    return bodies;
+
+    // Zbierz księżyce pogrupowane wg parentPlanetId
+    const moonsByParent = new Map();
+    for (const moon of EntityManager.getByType('moon')) {
+      const pid = moon.parentPlanetId;
+      if (!moonsByParent.has(pid)) moonsByParent.set(pid, []);
+      moonsByParent.get(pid).push({ body: moon, explored: !!moon.explored, isMoon: true });
+    }
+    // Sortuj księżyce każdej planety wg odległości orbitalnej
+    for (const moons of moonsByParent.values()) {
+      moons.sort((a, b) => (a.body.orbital?.a ?? 0) - (b.body.orbital?.a ?? 0));
+    }
+
+    // Buduj wynikową listę: planeta → jej księżyce → następna planeta...
+    const result = [];
+    // Księżyce homePlanet (bez samej planety)
+    const homeMoons = homePl ? (moonsByParent.get(homePl.id) ?? []) : [];
+    if (homeMoons.length > 0) {
+      for (const m of homeMoons) result.push(m);
+      moonsByParent.delete(homePl.id);
+    }
+    for (const entry of planets) {
+      result.push(entry);
+      const moons = moonsByParent.get(entry.body.id) ?? [];
+      for (const m of moons) result.push(m);
+    }
+    return result;
   }
 
   // ── Rysowanie katalogu ciał niebieskich (prawa kolumna, scrollowalna) ──
@@ -1330,7 +1358,12 @@ export class UIManager {
     const scrollY = this._catalogScrollY || 0;
     let ry = cy - scrollY;
 
-    for (const { body, explored } of entries) {
+    for (const entry of entries) {
+      const { body, explored } = entry;
+      const isMoon = !!entry.isMoon;
+      // Wcięcie dla księżyców
+      const indent = isMoon ? 12 : 0;
+
       // Pomiń elementy poza widocznym obszarem (optymalizacja)
       if (ry + ROW_H < cy - 2) { ry += ROW_H; continue; }
       if (ry > cy + visibleH + 2) break;
@@ -1340,23 +1373,26 @@ export class UIManager {
       const orbA = body.orbital?.a ?? 0;
       const distHome = DistanceUtils.orbitalFromHomeAU(body);
 
+      // Prefix dla księżyców — wizualna gałąź drzewa
+      const namePrefix = isMoon ? '└ ' : '';
+
       if (explored) {
         // ── Zbadane ciało — pełne dane ──
         const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
         const tempStr = tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : '—';
 
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textPrimary;
-        ctx.fillText(`${icon} ${_truncate(body.name, 12)}`, catalogX + PAD, ry + 10);
+        ctx.fillStyle = isMoon ? THEME.textLabel : THEME.textPrimary;
+        ctx.fillText(`${namePrefix}${icon} ${_truncate(body.name, isMoon ? 10 : 12)}`, catalogX + PAD + indent, ry + 10);
         ctx.fillStyle = C.dim;
-        ctx.fillText(typeStr, catalogX + PAD + 90, ry + 10);
+        ctx.fillText(typeStr, catalogX + PAD + 90 + indent, ry + 10);
 
         // Ikona atmosfery obok typu
         const atm = body.atmosphere || 'none';
         if (atm !== 'none') {
           const atmIcon = body.breathableAtmosphere ? '☁✓' : '☁';
           ctx.fillStyle = body.breathableAtmosphere ? THEME.success : THEME.info;
-          ctx.fillText(atmIcon, catalogX + PAD + 125, ry + 10);
+          ctx.fillText(atmIcon, catalogX + PAD + 125 + indent, ry + 10);
         }
 
         ctx.fillStyle = tempC !== null && tempC > -20 && tempC < 60 ? THEME.successDim : C.label;
@@ -1369,7 +1405,7 @@ export class UIManager {
         const massStr = mass > 0 ? `${mass.toFixed(1)}M⊕` : '—';
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.dim;
-        ctx.fillText(`${massStr}  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2, ry + 22);
+        ctx.fillText(`${massStr}  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2 + indent, ry + 22);
 
         // Złoża (top 3 wg richness)
         const deps = body.deposits ?? [];
@@ -1392,9 +1428,9 @@ export class UIManager {
         // ── Niezbadane ciało — ukryte dane ──
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(`${icon} ???`, catalogX + PAD, ry + 10);
+        ctx.fillText(`${namePrefix}${icon} ???`, catalogX + PAD + indent, ry + 10);
         ctx.fillStyle = THEME.textLabel;
-        ctx.fillText(typeStr, catalogX + PAD + 90, ry + 10);
+        ctx.fillText(typeStr, catalogX + PAD + 90 + indent, ry + 10);
         ctx.textAlign = 'right';
         ctx.fillText('???', catalogX + catalogW - PAD - 3, ry + 10);
         ctx.textAlign = 'left';
@@ -1402,7 +1438,7 @@ export class UIManager {
         // Wiersz 2: odległość widoczna, masa/złoża ukryte
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textLabel;
-        ctx.fillText(`???  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2, ry + 22);
+        ctx.fillText(`???  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2 + indent, ry + 22);
       }
 
       // Hit rect (widoczne wiersze — po clipping pozycje to ry, nie screen-y)
