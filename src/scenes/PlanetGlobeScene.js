@@ -1995,7 +1995,7 @@ export class PlanetGlobeScene {
       const maxLvl = window.KOSMOS?.buildingSystem?.getMaxLevel?.() ?? 3;
 
       // Oblicz pozycję przycisków (muszą odpowiadać _drawBuildPanel)
-      let btnY = offsetY + 26; // po nazwie + pasku poziomu
+      let btnY = offsetY + 16; // po nazwie (+4) + pasku poziomu (+12)
       const htEntry = bSys?._active.get(tile.key);
       const htRates = htEntry?.effectiveRates ?? bDef.rates ?? {};
       if (Object.keys(htRates).length > 0) btnY += 10; // stawki produkcji

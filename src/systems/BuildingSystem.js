@@ -351,7 +351,15 @@ export class BuildingSystem {
     }
 
     if (this.resourceSystem && hasKeys(upgradeCost) && !this.resourceSystem.canAfford(upgradeCost)) {
-      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: 'Brak surowców na ulepszenie' });
+      // Diagnostyka — który surowiec brakuje?
+      const missing = [];
+      for (const [k, need] of Object.entries(upgradeCost)) {
+        const have = this.resourceSystem.getAmount(k);
+        if (have < need) missing.push(`${k}: ${Math.floor(have)}/${need}`);
+      }
+      const detail = missing.length ? ` (${missing.join(', ')})` : '';
+      console.warn(`[BuildingSystem] Upgrade ${building.id} Lv${nextLevel}: brak surowców${detail}`, upgradeCost);
+      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: `Brak surowców na ulepszenie${detail}` });
       return;
     }
 
