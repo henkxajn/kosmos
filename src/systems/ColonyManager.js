@@ -120,6 +120,8 @@ export class ColonyManager {
     EventBus.on('planet:buildResult', invalidateShipyard);
     EventBus.on('planet:demolishResult', invalidateShipyard);
     EventBus.on('planet:upgradeResult', invalidateShipyard);
+    // Budynki z buildTime kończą budowę asynchronicznie — invaliduj też po zakończeniu
+    EventBus.on('planet:constructionComplete', invalidateShipyard);
   }
 
   // ── API publiczne ───────────────────────────────────────────────────────
