@@ -1080,6 +1080,43 @@ export class PlanetGlobeScene {
     ctx.textAlign = 'left';
   }
 
+  // ── Sortowanie budynków wg dostępności (affordable → unaffordable → blocked) ──
+
+  _getSortedBuildings(tile, tSys, cSys, inv) {
+    const result = [];
+    for (const b of Object.values(BUILDINGS)) {
+      if (b.isColonyBase || b.isCapital) continue;
+
+      let reason = null;
+      const terrainDef = TERRAIN_TYPES[tile.type];
+      const terrainOk = !terrainDef?.buildable ? false
+        : b.terrainOnly ? b.terrainOnly.includes(tile.type)
+        : b.terrainAny  ? true
+        : terrainDef.allowedCategories.includes(b.category);
+      if (!terrainOk) {
+        reason = 'Zły teren';
+      } else if (b.requires && !tSys?.isResearched(b.requires)) {
+        const techName = TECHS[b.requires]?.namePL ?? b.requires;
+        reason = `Wymaga: ${techName} (🔬 NAUKA)`;
+      } else {
+        const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
+        const commodityOk = Object.entries(b.commodityCost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
+        const popCost = b.popCost ?? 0.25;
+        const isOutpost = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
+        const popOk = isOutpost || popCost <= 0 || (cSys && cSys.freePops >= popCost);
+        if (!resourceOk || !commodityOk) reason = 'Brak surowców';
+        else if (!popOk) reason = 'Brak POPów';
+      }
+
+      // Priorytet sortowania: 0 = affordable, 1 = unaffordable, 2 = blocked
+      const blocked = reason === 'Zły teren' || (reason && reason.startsWith('Wymaga'));
+      const priority = !reason ? 0 : blocked ? 2 : 1;
+      result.push({ b, reason, priority });
+    }
+    result.sort((a, b) => a.priority - b.priority);
+    return result;
+  }
+
   // ── Panel budowania (prawy) ───────────────────────────────────
 
   _drawBuildPanel() {
@@ -1422,31 +1459,10 @@ export class PlanetGlobeScene {
       let hoveredBuilding = null; // budynek pod kursorem (do tooltip)
       let hoveredBuildY   = 0;
 
-      Object.values(BUILDINGS).forEach(b => {
-        if (b.isColonyBase || b.isCapital) return;
+      // Sortowanie budynków wg dostępności: affordable → unaffordable → blocked
+      const sortedBuildings = this._getSortedBuildings(tile, tSys, cSys, inv);
 
-        // Sprawdź powód niedostępności
-        let reason = null;
-        const terrainDef = TERRAIN_TYPES[tile.type];
-        const terrainOk = !terrainDef?.buildable ? false
-          : b.terrainOnly ? b.terrainOnly.includes(tile.type)
-          : b.terrainAny  ? true
-          : terrainDef.allowedCategories.includes(b.category);
-        if (!terrainOk) {
-          reason = 'Zły teren';
-        } else if (b.requires && !tSys?.isResearched(b.requires)) {
-          const techName = TECHS[b.requires]?.namePL ?? b.requires;
-          reason = `Wymaga: ${techName} (🔬 NAUKA)`;
-        } else {
-          // Sprawdź koszty (surowce + commodities) z inventory
-          const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
-          const commodityOk = Object.entries(b.commodityCost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
-          const popCost = b.popCost ?? 0.25;
-          const isOutpostBuild = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
-          const popOk   = isOutpostBuild || popCost <= 0 || (cSys && cSys.freePops >= popCost);
-          if (!resourceOk || !commodityOk) reason = 'Brak surowców';
-          else if (!popOk) reason = 'Brak POPów';
-        }
+      sortedBuildings.forEach(({ b, reason }) => {
 
         const blocked  = reason === 'Zły teren' || (reason && reason.startsWith('Wymaga'));
         const affordable = !reason;
@@ -2095,34 +2111,13 @@ export class PlanetGlobeScene {
         return true; // pochłoń klik w panelu deploy
       }
 
-      // Buduj — iteruj przez WSZYSTKIE budynki (z uwzględnieniem scrolla)
+      // Buduj — iteruj przez WSZYSTKIE budynki (posortowane wg dostępności, z uwzględnieniem scrolla)
       let yy   = offsetY + 12 + 20 - this._buildPanelScrollY; // +20 na tab bar
       const tSys = window.KOSMOS?.techSystem;
       const cSys = window.KOSMOS?.civSystem;
-      for (const b of Object.values(BUILDINGS)) {
-        if (b.isColonyBase || b.isCapital) continue;
-
-        // Sprawdź powód niedostępności (ta sama logika co _drawBuildPanel)
-        let reason = null;
-        const terrainDef = TERRAIN_TYPES[tile.type];
-        const terrainOk = !terrainDef?.buildable ? false
-          : b.terrainOnly ? b.terrainOnly.includes(tile.type)
-          : b.terrainAny  ? true
-          : terrainDef.allowedCategories.includes(b.category);
-        if (!terrainOk) {
-          reason = 'blocked';
-        } else if (b.requires && !tSys?.isResearched(b.requires)) {
-          reason = 'blocked';
-        } else {
-          const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
-          const commodityOk = Object.entries(b.commodityCost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
-          const popCost = b.popCost ?? 0.25;
-          const isOutpostClick = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
-          const popOk   = isOutpostClick || popCost <= 0 || (cSys && cSys.freePops >= popCost);
-          if (!resourceOk || !commodityOk || !popOk) reason = 'unaffordable';
-        }
-
-        const blocked = reason === 'blocked';
+      const sortedClick = this._getSortedBuildings(tile, tSys, cSys, inv);
+      for (const { b, reason } of sortedClick) {
+        const blocked = reason === 'Zły teren' || (reason && reason.startsWith('Wymaga'));
         const hasCommodity = b.commodityCost && Object.keys(b.commodityCost).length > 0;
         const rowH = blocked ? 42 : (hasCommodity ? 38 : 28);
 
