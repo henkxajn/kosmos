@@ -418,7 +418,7 @@ export class GameScene {
       steel_plates: 15, polymer_composites: 10, concrete_mix: 8, copper_wiring: 8,
       power_cells: 12, electronics: 6, food_synthesizers: 3,
       mining_drills: 5, hull_armor: 4, habitat_modules: 4, water_recyclers: 3,
-      robots: 0, semiconductors: 0, ion_thrusters: 0,
+      robots: 0, semiconductors: 2, ion_thrusters: 0,
       fusion_cores: 0, nanotech_filters: 0, quantum_cores: 0, antimatter_cells: 0,
     });
     // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
