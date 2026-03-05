@@ -2,14 +2,16 @@
 //
 // NOWY SYSTEM: poziomy budynków (1–10), koszty w surowcach+commodities,
 // kopalnia → wydobycie z deposits, energyCost per budynek, fabryka → punkty produkcji
+// CZAS BUDOWY: budynki z buildTime > 0 trafiają do kolejki budowy
 //
 // Komunikacja:
 //   Nasłuchuje: 'planet:buildRequest'    { tile, buildingId }
 //               'planet:demolishRequest' { tile }
 //               'planet:upgradeRequest'  { tile }
-//   Emituje:    'planet:buildResult'     { success, tile, buildingId, reason }
-//               'planet:demolishResult'  { success, tile, reason }
-//               'planet:upgradeResult'   { success, tile, reason }
+//   Emituje:    'planet:buildResult'     { success, tile, buildingId, reason, underConstruction? }
+//               'planet:demolishResult'  { success, tile, reason, cancelled? }
+//               'planet:upgradeResult'   { success, tile, reason, underConstruction? }
+//               'planet:constructionComplete' { tileKey, buildingId }
 //               'resource:registerProducer' → do ResourceSystem
 //               'resource:removeProducer'   → do ResourceSystem
 //               'civ:addHousing'            → do CivilizationSystem
@@ -39,6 +41,10 @@ export class BuildingSystem {
     //   tileKey → { building, baseRates, effectiveRates, housing, popCost, level }
     this._active = new Map();
 
+    // Kolejka budowy:
+    //   tileKey → { buildingId, progress, buildTime, tileR, tileType, isUpgrade?, targetLevel? }
+    this._constructionQueue = new Map();
+
     // Wysokość siatki (do obliczania modyfikatora polarnego)
     this._gridHeight = 0;
 
@@ -47,6 +53,9 @@ export class BuildingSystem {
 
     // Referencja na factorySystem (do punktów produkcji)
     this._factorySystem = null;
+
+    // Flaga outpost — pomija POP w build/deploy/upgrade/activate
+    this._isOutpost = false;
 
     // Guard: tylko aktywna kolonia przetwarza żądania budowy/rozbiórki
     EventBus.on('planet:buildRequest', ({ tile, buildingId }) => {
@@ -89,8 +98,9 @@ export class BuildingSystem {
       this._reapplyAllRates();
     });
 
-    // Tick: wydobycie surowców z deposits przez kopalnie
+    // Tick: budowa + wydobycie surowców z deposits przez kopalnie
     EventBus.on('time:tick', ({ deltaYears }) => {
+      this._tickConstruction(deltaYears);
       this._tickMineExtraction(deltaYears);
     });
   }
@@ -107,6 +117,57 @@ export class BuildingSystem {
   // ── Pobierz level budynku na tile ───────────────────────────────────────
   getBuildingLevel(tileKey) {
     return this._active.get(tileKey)?.level ?? 1;
+  }
+
+  // ── Aktywacja budynku (wspólna logika dla nowej budowy i zakończenia construction) ──
+
+  _activateBuilding(tileKey, buildingId, tileR, tileType, isCapital = false) {
+    const building = BUILDINGS[buildingId];
+    if (!building) return;
+
+    const level = 1;
+    // Zbuduj minimalny tile-like obiekt do obliczenia stawek
+    const tileLike = { r: tileR, type: tileType, key: tileKey };
+
+    const baseRates      = this._calcBaseRates(building, tileLike, level);
+    const effectiveRates = this._applyTechMultipliers(baseRates, building);
+
+    const activeKey  = isCapital ? `capital_${tileKey}` : tileKey;
+    const producerId = isCapital ? `capital_${tileKey}` : `building_${tileKey}`;
+
+    // Zarejestruj produkcję
+    if (hasKeys(effectiveRates)) {
+      EventBus.emit('resource:registerProducer', { id: producerId, rates: effectiveRates });
+    }
+
+    // Housing
+    if (building.housing > 0) {
+      EventBus.emit('civ:addHousing', { amount: building.housing });
+    }
+
+    // Fabryka: dodaj punkt produkcji
+    if (buildingId === 'factory' && this._factorySystem) {
+      this._factorySystem.setTotalPoints(this._factorySystem.totalPoints + 1);
+    }
+
+    const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
+
+    // Zapamiętaj aktywny budynek
+    this._active.set(activeKey, {
+      building, baseRates, effectiveRates,
+      housing: building.housing,
+      popCost,
+      level,
+      producerId,
+    });
+
+    // Zatrudnienie (pomiń w outpost)
+    if (popCost > 0 && !this._isOutpost) {
+      EventBus.emit('civ:employmentChanged', { delta: popCost });
+    }
+
+    // Invaliduj cache mine level jeśli zbudowano kopalnię
+    if (building.isMine || buildingId === 'mine') this._mineLevelDirty = true;
   }
 
   // ── Budowa ──────────────────────────────────────────────────────────────
@@ -159,14 +220,46 @@ export class BuildingSystem {
       }
     }
 
+    // Habitat na planecie z atmosferą thick/dense — nie wymaga habitat_modules
+    if (buildingId === 'habitat') {
+      const atmo = window.KOSMOS?.homePlanet?.atmosphere;
+      if (atmo === 'thick' || atmo === 'dense') {
+        delete actualCost.habitat_modules;
+      }
+    }
+
+    // Mutex: farm vs synthesized_food_plant (nie mogą istnieć na tej samej planecie)
+    if (building.isSynthFood) {
+      for (const entry of this._active.values()) {
+        if (entry.building.id === 'farm') {
+          EventBus.emit('planet:buildResult', {
+            success: false, tile,
+            reason: 'Na tej planecie działa Farma — nie można budować Zakładu Syntetycznej Żywności',
+          });
+          return;
+        }
+      }
+    }
+    if (buildingId === 'farm') {
+      for (const entry of this._active.values()) {
+        if (entry.building.isSynthFood) {
+          EventBus.emit('planet:buildResult', {
+            success: false, tile,
+            reason: 'Na tej planecie działa Zakład Syntetycznej Żywności — nie można budować Farmy',
+          });
+          return;
+        }
+      }
+    }
+
     // Sprawdzenie środków
     if (this.resourceSystem && hasKeys(actualCost) && !this.resourceSystem.canAfford(actualCost)) {
       EventBus.emit('planet:buildResult', { success: false, tile, reason: 'Brak surowców' });
       return;
     }
 
-    // Sprawdzenie POPów
-    const popCost = building.popCost ?? POP_PER_BUILDING;
+    // Sprawdzenie POPów (pomiń w outpost)
+    const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
     if (popCost > 0) {
       const civSys = this.civSystem;
       if (civSys && civSys.freePops < popCost) {
@@ -182,7 +275,25 @@ export class BuildingSystem {
       this.resourceSystem.spend(actualCost);
     }
 
-    // Ustaw budynek na hexie
+    // Czas budowy
+    const buildTime = building.buildTime ?? 0;
+
+    if (buildTime > 0 && !isCapital) {
+      // Budowa z opóźnieniem — dodaj do kolejki
+      const tileKey = tile.key;
+      this._constructionQueue.set(tileKey, {
+        buildingId,
+        progress: 0,
+        buildTime,
+        tileR: tile.r,
+        tileType: tile.type,
+      });
+      tile.underConstruction = { buildingId, progress: 0, buildTime };
+      EventBus.emit('planet:buildResult', { success: true, tile, buildingId, underConstruction: true });
+      return;
+    }
+
+    // Natychmiastowa budowa (buildTime === 0 lub stolica)
     if (isCapital) {
       tile.capitalBase = true;
     } else {
@@ -190,56 +301,21 @@ export class BuildingSystem {
       tile.buildingLevel = 1;
     }
 
-    // Oblicz stawki produkcji
-    const level = 1;
-    const baseRates      = this._calcBaseRates(building, tile, level);
-    const effectiveRates = this._applyTechMultipliers(baseRates, building);
-
-    const activeKey  = isCapital ? `capital_${tile.key}` : tile.key;
-    const producerId = isCapital ? `capital_${tile.key}` : `building_${tile.key}`;
-
-    // Zarejestruj produkcję (energia rejestrowana jako flow)
-    if (hasKeys(effectiveRates)) {
-      EventBus.emit('resource:registerProducer', { id: producerId, rates: effectiveRates });
-    }
-
-    // Bonus pojemnościowy (Magazyn) — pominięty: inventory jest nieograniczone
-
-    // Housing
-    if (building.housing > 0) {
-      EventBus.emit('civ:addHousing', { amount: building.housing });
-    }
-
-    // Fabryka: dodaj punkt produkcji
-    if (buildingId === 'factory' && this._factorySystem) {
-      this._factorySystem.setTotalPoints(this._factorySystem.totalPoints + 1);
-    }
-
-    // Zapamiętaj aktywny budynek (producerId cachowany dla szybkiego dostępu)
-    this._active.set(activeKey, {
-      building, baseRates, effectiveRates,
-      housing: building.housing,
-      popCost,
-      level,
-      producerId,
-    });
-
-    // Zatrudnienie
-    if (popCost > 0) {
-      EventBus.emit('civ:employmentChanged', { delta: popCost });
-    }
-
-    // Invaliduj cache mine level jeśli zbudowano kopalnię
-    if (building.isMine || buildingId === 'mine') this._mineLevelDirty = true;
-
+    this._activateBuilding(tile.key, buildingId, tile.r, tile.type, isCapital);
     EventBus.emit('planet:buildResult', { success: true, tile, buildingId });
   }
 
   // ── Ulepszenie budynku ──────────────────────────────────────────────────
 
   _upgrade(tile) {
-    if (!tile.isOccupied) {
+    if (!tile.buildingId) {
       EventBus.emit('planet:upgradeResult', { success: false, tile, reason: 'Brak budynku' });
+      return;
+    }
+
+    // Nie można ulepszać podczas trwającej budowy/upgrade na tym hexie
+    if (tile.underConstruction) {
+      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: 'Trwa budowa na tym polu' });
       return;
     }
 
@@ -279,8 +355,8 @@ export class BuildingSystem {
       return;
     }
 
-    // Sprawdzenie wolnych POPów (upgrade wymaga dodatkowego popCost)
-    const popCost = entry.popCost ?? building.popCost ?? POP_PER_BUILDING;
+    // Sprawdzenie wolnych POPów (upgrade wymaga dodatkowego popCost; pomiń w outpost)
+    const popCost = this._isOutpost ? 0 : (entry.popCost ?? building.popCost ?? POP_PER_BUILDING);
     if (popCost > 0) {
       const civSys = this.civSystem;
       if (civSys && civSys.freePops < popCost) {
@@ -296,6 +372,33 @@ export class BuildingSystem {
       this.resourceSystem.spend(upgradeCost);
     }
 
+    // Czas budowy upgrade: bazowy × 0.5
+    const upgradeTime = (building.buildTime ?? 0) * 0.5;
+
+    if (upgradeTime > 0) {
+      // Upgrade z opóźnieniem — budynek działa normalnie na starym poziomie
+      const tileKey = tile.key;
+      this._constructionQueue.set(tileKey, {
+        buildingId: building.id,
+        progress: 0,
+        buildTime: upgradeTime,
+        tileR: tile.r,
+        tileType: tile.type,
+        isUpgrade: true,
+        targetLevel: nextLevel,
+      });
+      tile.underConstruction = { buildingId: building.id, progress: 0, buildTime: upgradeTime, isUpgrade: true };
+      EventBus.emit('planet:upgradeResult', { success: true, tile, underConstruction: true });
+      return;
+    }
+
+    // Natychmiastowy upgrade (buildTime === 0)
+    this._applyUpgrade(tile, entry, building, nextLevel, popCost);
+    EventBus.emit('planet:upgradeResult', { success: true, tile, level: nextLevel });
+  }
+
+  // Wspólna logika natychmiastowego ulepszenia
+  _applyUpgrade(tile, entry, building, nextLevel, popCost) {
     // Zatrudnienie — upgrade wymaga dodatkowego POPa
     if (popCost > 0) {
       EventBus.emit('civ:employmentChanged', { delta: popCost });
@@ -322,20 +425,68 @@ export class BuildingSystem {
 
     // Fabryka: dodaj punkt produkcji za każdy level powyżej 1
     if (building.id === 'factory' && this._factorySystem) {
-      // Recalc total points: zlicz wszystkie fabryki × level
       this._recalcFactoryPoints();
     }
 
     // Invaliduj cache mine level jeśli ulepszono kopalnię
     if (building.id === 'mine' || building.isMine) this._mineLevelDirty = true;
-
-    EventBus.emit('planet:upgradeResult', { success: true, tile, level: nextLevel });
   }
 
   // ── Rozbiórka ───────────────────────────────────────────────────────────
 
   _demolish(tile) {
-    if (!tile.isOccupied) {
+    // Anulowanie budowy w toku
+    if (tile.underConstruction) {
+      const uc = tile.underConstruction;
+      const building = BUILDINGS[uc.buildingId];
+      const tileKey = tile.key;
+
+      // Usuń z kolejki
+      this._constructionQueue.delete(tileKey);
+      tile.underConstruction = null;
+
+      // Zwrot 50% kosztu budowy (tylko dla nowej budowy, nie upgrade)
+      if (!uc.isUpgrade && building && this.resourceSystem) {
+        const refund = {};
+        if (building.cost) {
+          for (const [k, v] of Object.entries(building.cost)) {
+            refund[k] = Math.floor(v * 0.5);
+          }
+        }
+        if (building.commodityCost) {
+          for (const [k, v] of Object.entries(building.commodityCost)) {
+            refund[k] = Math.floor(v / 2);
+          }
+        }
+        if (hasKeys(refund)) {
+          this.resourceSystem.receive(refund);
+        }
+      }
+
+      // Zwrot 50% kosztu upgrade
+      if (uc.isUpgrade && building && this.resourceSystem) {
+        const targetLevel = uc.targetLevel ?? 2;
+        const refund = {};
+        if (building.cost) {
+          for (const [k, v] of Object.entries(building.cost)) {
+            refund[k] = Math.floor(Math.ceil(v * targetLevel * 1.2) * 0.5);
+          }
+        }
+        if (targetLevel >= 3 && building.commodityCost) {
+          for (const [k, v] of Object.entries(building.commodityCost)) {
+            refund[k] = Math.floor(Math.ceil(v * (targetLevel - 1)) / 2);
+          }
+        }
+        if (hasKeys(refund)) {
+          this.resourceSystem.receive(refund);
+        }
+      }
+
+      EventBus.emit('planet:demolishResult', { success: true, tile, cancelled: true, buildingId: uc.buildingId });
+      return;
+    }
+
+    if (!tile.buildingId) {
       EventBus.emit('planet:demolishResult', { success: false, tile, reason: 'Brak budynku' });
       return;
     }
@@ -418,8 +569,6 @@ export class BuildingSystem {
 
     EventBus.emit('resource:removeProducer', { id: `building_${tile.key}` });
 
-    // Zwrot pojemności (Magazyn) — pominięty: inventory jest nieograniczone
-
     // Housing
     if (entry?.housing > 0) {
       EventBus.emit('civ:removeHousing', { amount: entry.housing });
@@ -464,6 +613,84 @@ export class BuildingSystem {
     EventBus.emit('planet:demolishResult', { success: true, tile, buildingId });
   }
 
+  // ── Tick budowy — progresja construction queue ────────────────────────
+
+  _tickConstruction(deltaYears) {
+    if (this._constructionQueue.size === 0) return;
+
+    const completed = [];
+
+    for (const [tileKey, entry] of this._constructionQueue) {
+      entry.progress += deltaYears;
+
+      if (entry.progress >= entry.buildTime) {
+        completed.push(tileKey);
+      }
+    }
+
+    for (const tileKey of completed) {
+      const entry = this._constructionQueue.get(tileKey);
+      this._constructionQueue.delete(tileKey);
+
+      if (entry.isUpgrade) {
+        // Upgrade zakończony — zaktualizuj level w _active
+        const activeEntry = this._active.get(tileKey);
+        if (activeEntry) {
+          const building = activeEntry.building;
+          const nextLevel = entry.targetLevel ?? (activeEntry.level + 1);
+          const popCost = activeEntry.popCost ?? building?.popCost ?? POP_PER_BUILDING;
+
+          // Użyj tile-like do _applyUpgrade
+          const tileLike = { key: tileKey, r: entry.tileR, type: entry.tileType, buildingLevel: activeEntry.level, buildingId: building.id };
+          this._applyUpgrade(tileLike, activeEntry, building, nextLevel, popCost);
+        }
+      } else {
+        // Nowa budowa zakończona — aktywuj budynek
+        this._activateBuilding(tileKey, entry.buildingId, entry.tileR, entry.tileType, false);
+      }
+
+      EventBus.emit('planet:constructionComplete', { tileKey, buildingId: entry.buildingId, isUpgrade: entry.isUpgrade });
+    }
+  }
+
+  // ── Deploy z prefabu (natychmiastowa budowa bez kosztu surowcowego) ────
+
+  deployFromCargo(tile, buildingId) {
+    const building = BUILDINGS[buildingId];
+    if (!building) return { success: false, reason: 'Nieznany budynek' };
+
+    if (tile.isOccupied) return { success: false, reason: 'Pole zajęte' };
+
+    if (!this._canBuildOnTile(tile, building)) {
+      return { success: false, reason: 'Teren niedozwolony' };
+    }
+
+    // Sprawdzenie tech
+    if (building.requires) {
+      const hastech = this.techSystem?.isResearched(building.requires) ?? false;
+      if (!hastech) {
+        const techName = TECHS[building.requires]?.namePL ?? building.requires;
+        return { success: false, reason: `Wymaga tech: ${techName}` };
+      }
+    }
+
+    // Sprawdzenie POPów (pomiń w outpost)
+    const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
+    if (popCost > 0) {
+      const civSys = this.civSystem;
+      if (civSys && civSys.freePops < popCost) {
+        return { success: false, reason: `Brak wolnych POPów (potrzeba ${popCost})` };
+      }
+    }
+
+    // Natychmiastowa aktywacja (bez kosztu surowcowego — prefab pokrywa)
+    tile.buildingId = buildingId;
+    tile.buildingLevel = 1;
+    this._activateBuilding(tile.key, buildingId, tile.r, tile.type, false);
+
+    return { success: true };
+  }
+
   // ── Przywracanie zapisanego stanu ───────────────────────────────────────
 
   restoreFromSave(buildings) {
@@ -482,7 +709,7 @@ export class BuildingSystem {
 
       const activeKey  = isCapital ? (b.tileKey.startsWith('capital_') ? b.tileKey : `capital_${b.tileKey}`) : b.tileKey;
       const producerId = isCapital ? `capital_${b.tileKey.replace('capital_', '')}` : `building_${b.tileKey}`;
-      const popCost    = b.popCost ?? building.popCost ?? POP_PER_BUILDING;
+      const popCost    = this._isOutpost ? 0 : (b.popCost ?? building.popCost ?? POP_PER_BUILDING);
       const housing    = b.housing || 0;
 
       if (hasKeys(effectiveRates) && this.resourceSystem) {
@@ -518,7 +745,7 @@ export class BuildingSystem {
 
   restoreFromGrid(grid) {
     grid.forEach(tile => {
-      if (!tile.isOccupied) return;
+      if (!tile.buildingId) return;  // pomiń puste i underConstruction-only
       const building = BUILDINGS[tile.buildingId];
       if (!building) return;
 
@@ -560,6 +787,43 @@ export class BuildingSystem {
       });
     });
     return buildings;
+  }
+
+  // Serializacja kolejki budowy (oddzielnie — przez ColonyManager)
+  serializeQueue() {
+    const queue = [];
+    for (const [tileKey, entry] of this._constructionQueue) {
+      const item = {
+        tileKey,
+        buildingId: entry.buildingId,
+        progress:   entry.progress,
+        buildTime:  entry.buildTime,
+        tileR:      entry.tileR,
+        tileType:   entry.tileType,
+      };
+      if (entry.isUpgrade) {
+        item.isUpgrade   = true;
+        item.targetLevel = entry.targetLevel;
+      }
+      queue.push(item);
+    }
+    return queue;
+  }
+
+  // Przywracanie kolejki budowy (z ColonyManager.restore)
+  restoreQueue(queue) {
+    if (!Array.isArray(queue)) return;
+    for (const item of queue) {
+      this._constructionQueue.set(item.tileKey, {
+        buildingId: item.buildingId,
+        progress:   item.progress ?? 0,
+        buildTime:  item.buildTime ?? 1,
+        tileR:      item.tileR ?? 0,
+        tileType:   item.tileType ?? 'plains',
+        isUpgrade:  item.isUpgrade ?? false,
+        targetLevel: item.targetLevel,
+      });
+    }
   }
 
   // ── Prywatne ────────────────────────────────────────────────────────────
@@ -622,7 +886,9 @@ export class BuildingSystem {
   _applyTechMultipliers(baseRates, building) {
     if (!hasKeys(baseRates)) return {};
 
-    const empPenalty = this.civSystem?.employmentPenalty ?? 1.0;
+    // Autonomiczne budynki (popCost=0, isAutonomous) nie podlegają karze za brak POPów
+    const isAutonomous = building.isAutonomous || building.popCost === 0;
+    const empPenalty = isAutonomous ? 1.0 : (this.civSystem?.employmentPenalty ?? 1.0);
 
     const effective = {};
     for (const key in baseRates) {

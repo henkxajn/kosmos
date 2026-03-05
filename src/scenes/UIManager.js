@@ -15,6 +15,7 @@ import { SaveSystem } from '../systems/SaveSystem.js';
 import { showRenameModal } from '../ui/ModalInput.js';
 import { showTransportModal } from '../ui/TransportModal.js';
 import { showTradeRouteModal } from '../ui/TradeRouteModal.js';
+import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
@@ -589,7 +590,8 @@ export class UIManager {
     }
     // CivPanel body
     if (window.KOSMOS?.civMode && this._civPanelTab !== null) {
-      const bodyH = this._civPanelTab === 'expeditions' ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
+      const bodyH = (this._civPanelTab === 'expeditions' || this._civPanelTab === 'economy')
+        ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
       const panelBottom = CIV_PANEL_Y + bodyH;
       if (x >= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= panelBottom) return true;
     }
@@ -824,7 +826,8 @@ export class UIManager {
   // CivPanel — panel informacyjny cywilizacji
   // ══════════════════════════════════════════════════════════════
   _civPanelBodyRect() {
-    const h = this._civPanelTab === 'expeditions' ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
+    const h = (this._civPanelTab === 'expeditions' || this._civPanelTab === 'economy')
+      ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
     return { x: CIV_SIDEBAR_W, y: CIV_PANEL_Y, w: W - CIV_SIDEBAR_W - COSMIC.OUTLINER_W, h };
   }
 
@@ -852,7 +855,12 @@ export class UIManager {
     };
 
     if (this._civPanelTab === 'economy') {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(bodyX, bodyY, bodyW, bodyH);
+      ctx.clip();
       this._factoryBtns = drawEconomyTab(ctx, bodyY, bodyX, bodyW, state);
+      ctx.restore();
     }
     if (this._civPanelTab === 'population')  drawPopulationTab(ctx, bodyY, bodyX, bodyW, state);
     if (this._civPanelTab === 'tech')        drawTechTab(ctx, bodyY, bodyX, bodyW);
@@ -1342,6 +1350,15 @@ export class UIManager {
         ctx.fillText(`${icon} ${_truncate(body.name, 12)}`, catalogX + PAD, ry + 10);
         ctx.fillStyle = C.dim;
         ctx.fillText(typeStr, catalogX + PAD + 90, ry + 10);
+
+        // Ikona atmosfery obok typu
+        const atm = body.atmosphere || 'none';
+        if (atm !== 'none') {
+          const atmIcon = body.breathableAtmosphere ? '☁✓' : '☁';
+          ctx.fillStyle = body.breathableAtmosphere ? THEME.success : THEME.info;
+          ctx.fillText(atmIcon, catalogX + PAD + 125, ry + 10);
+        }
+
         ctx.fillStyle = tempC !== null && tempC > -20 && tempC < 60 ? THEME.successDim : C.label;
         ctx.textAlign = 'right';
         ctx.fillText(tempStr, catalogX + catalogW - PAD - 3, ry + 10);
@@ -1488,29 +1505,6 @@ export class UIManager {
       }
       y += btnH + 4;
 
-      // Przycisk "Dostarcz" — transport z pendingDelivery, cel ma teraz kolonię
-      if (orbExp && orbExp.pendingDelivery && orbExp.type === 'transport') {
-        const targetHasColony = !!colMgr?.hasColony(orbExp.targetId);
-        const delBtnH = 15;
-        const dbx = px; const dby = y;
-        if (targetHasColony) {
-          ctx.fillStyle = 'rgba(20,60,40,0.8)'; ctx.fillRect(dbx, dby, panelW, delBtnH);
-          ctx.strokeStyle = THEME.successDim; ctx.strokeRect(dbx, dby, panelW, delBtnH);
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.accent; ctx.textAlign = 'center';
-          ctx.fillText('📦 Dostarcz ładunek', dbx + panelW / 2, dby + 11);
-          ctx.textAlign = 'left';
-          this._vesselActionBtns.push({
-            x: dbx, y: dby, w: panelW, h: delBtnH,
-            action: 'deliverCargo', expId: orbExp.id, vesselId: vessel.id,
-          });
-        } else {
-          ctx.fillStyle = THEME.textDim; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillText('📦 Ładunek czeka — brak kolonii na celu', px + 2, dby + 11);
-        }
-        y += delBtnH + 4;
-      }
-
       // Jeśli tryb wyboru celu → rysuj listę celów
       if (isRedirectActive && orbExp) {
         y = this._drawRedirectTargetPicker(ctx, orbExp, px, y, panelW);
@@ -1520,6 +1514,29 @@ export class UIManager {
     }
 
     // ── Statek w hangarze — normalna lista misji ─────────────────
+
+    // Przycisk "Załaduj cargo" dla statków z ładownią
+    const shipDef2 = SHIPS[vessel.shipId];
+    if (shipDef2?.cargoCapacity > 0) {
+      const cbH = 15;
+      const cbW = panelW;
+      ctx.fillStyle = 'rgba(30,60,40,0.6)';
+      ctx.fillRect(px, y, cbW, cbH);
+      ctx.strokeStyle = THEME.successDim;
+      ctx.strokeRect(px, y, cbW, cbH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.successDim;
+      ctx.textAlign = 'center';
+      const cargoUsed = vessel.cargoUsed ?? 0;
+      ctx.fillText(`📦 Cargo (${cargoUsed.toFixed(0)}/${shipDef2.cargoCapacity}t)`, px + cbW / 2, y + 10);
+      ctx.textAlign = 'left';
+      this._vesselActionBtns.push({
+        x: px, y: y, w: cbW, h: cbH,
+        action: 'openCargoModal', vesselId: vessel.id,
+      });
+      y += cbH + 4;
+    }
+
     // Określ dostępne typy misji wg typu statku
     const missionTypes = [];
     if (vessel.shipId === 'science_vessel') {
@@ -1748,22 +1765,20 @@ export class UIManager {
   _getMissionTargets(vessel, missionType) {
     const homePl = window.KOSMOS?.homePlanet;
     const colMgr = window.KOSMOS?.colonyManager;
+    const activePid = colMgr?.activePlanetId ?? homePl?.id;
     const targets = [];
     const TYPES = ['planet', 'moon', 'asteroid', 'comet', 'planetoid'];
 
     for (const t of TYPES) {
       for (const body of EntityManager.getByType(t)) {
-        if (body === homePl) continue;
+        // Wyklucz aktywną kolonię (źródło) — nie homePlanet ogólnie
+        if (body.id === activePid) continue;
         if (!body.explored) continue;
 
         // Filtruj wg typu misji
         if (missionType === 'colony') {
           if (colMgr?.hasColony(body.id)) continue;
           if (body.type === 'planet' && body.planetType !== 'rocky' && body.planetType !== 'ice') continue;
-        }
-        // Transport — nie wysyłaj do aktywnej kolonii (źródła)
-        if (missionType === 'transport') {
-          if (body.id === colMgr?.activePlanetId) continue;
         }
 
         // Euclidean — spójne z ExpeditionSystem._calcDistance()
@@ -2101,12 +2116,22 @@ export class UIManager {
     const allocs = this._factoryData?.allocations
       ?? window.KOSMOS?.factorySystem?.getAllocations?.() ?? [];
     for (const btn of this._factoryBtns) {
-      if (x >= btn.x - 120 && x <= btn.x + btn.w + 40 && y >= btn.y && y <= btn.y + btn.h + 4) {
-        const a = allocs.find(al => al.commodityId === btn.commodityId);
-        if (a) {
+      // Tooltip-only rects (TOWARY kolumna) — ścisły hit test
+      if (btn.isTooltipOnly) {
+        if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
           const def = COMMODITIES[btn.commodityId];
-          return { type: 'factory', data: { alloc: a, def } };
+          if (def) return { type: 'commodity', data: { def } };
         }
+        continue;
+      }
+      if (x >= btn.x - 120 && x <= btn.x + btn.w + 40 && y >= btn.y && y <= btn.y + btn.h + 4) {
+        const def = COMMODITIES[btn.commodityId];
+        if (!def) continue;
+        const a = allocs.find(al => al.commodityId === btn.commodityId);
+        // Alokowany towar → pełny tooltip z postępem
+        if (a) return { type: 'factory', data: { alloc: a, def } };
+        // Niealokowany (przycisk "Dodaj produkcję") → tooltip z nazwą i recepturą
+        return { type: 'commodity', data: { def } };
       }
     }
     return null;
@@ -2171,6 +2196,8 @@ export class UIManager {
       lines = this._buildBuildingTooltipLines(tt.data);
     } else if (tt.type === 'factory') {
       lines = this._buildFactoryTooltipLines(tt.data);
+    } else if (tt.type === 'commodity') {
+      lines = this._buildCommodityTooltipLines(tt.data);
     } else if (tt.type === 'catalogBody') {
       lines = this._buildCatalogBodyTooltipLines(tt.data);
     } else {
@@ -2261,7 +2288,12 @@ export class UIManager {
     lines.push({ type: 'header', text: `${def?.icon ?? '📦'} ${name}`, color: C.bright });
     lines.push({ type: 'separator' });
     if (def?.recipe) {
-      const recipeStr = Object.entries(def.recipe).map(([r, q]) => `${q}×${r}`).join(' + ');
+      const recipeStr = Object.entries(def.recipe).map(([r, q]) => {
+        const comDef = COMMODITIES[r];
+        const resDef = ALL_RESOURCES[r];
+        const label = comDef ? (COMMODITY_SHORT[r] ?? comDef.namePL) : resDef ? resDef.namePL : r;
+        return `${q}× ${label}`;
+      }).join(' + ');
       lines.push({ text: `Receptura: ${recipeStr}`, color: C.text });
     }
     const pts = alloc.points ?? 1;
@@ -2270,6 +2302,37 @@ export class UIManager {
     if (alloc.paused) lines.push({ text: '⚠ Wstrzymana — brak surowców', color: C.red });
     else lines.push({ text: `Postęp: ${Math.round(alloc.pctComplete ?? 0)}%`, color: C.green });
     if (def?.description) { lines.push({ type: 'separator' }); lines.push({ text: def.description, color: C.dim }); }
+    return lines;
+  }
+
+  _buildCommodityTooltipLines({ def }) {
+    const lines = [];
+    lines.push({ type: 'header', text: `${def?.icon ?? '📦'} ${def?.namePL ?? def?.id ?? '?'}`, color: C.bright });
+    lines.push({ type: 'separator' });
+    if (def?.recipe) {
+      const recipeStr = Object.entries(def.recipe).map(([r, q]) => {
+        // Rozwiń nazwy: Fe→Żelazo, electronics→Elektronika itp.
+        const comDef = COMMODITIES[r];
+        const resDef = ALL_RESOURCES[r];
+        const label = comDef ? (COMMODITY_SHORT[r] ?? comDef.namePL)
+          : resDef ? resDef.namePL : r;
+        return `${q}× ${label}`;
+      }).join(' + ');
+      lines.push({ text: `Receptura: ${recipeStr}`, color: C.text });
+    }
+    if (def?.baseTime) {
+      lines.push({ text: `Czas bazowy: ${def.baseTime} lat/szt`, color: C.text });
+    }
+    if (def?.weight) {
+      lines.push({ text: `Waga: ${def.weight} t/szt`, color: C.text });
+    }
+    if (def?.tier) {
+      lines.push({ text: `Tier: ${def.tier}`, color: C.dim });
+    }
+    if (def?.description) {
+      lines.push({ type: 'separator' });
+      lines.push({ text: def.description, color: C.dim });
+    }
     return lines;
   }
 
@@ -2335,15 +2398,13 @@ export class UIManager {
     const distHome = DistanceUtils.orbitalFromHomeAU(body);
     lines.push({ type: 'line', text: `Odległość od bazy: ${distHome.toFixed(2)} AU`, color: C.text });
 
-    // Atmosfera
-    if (body.atmosphere?.composition) {
-      const atmo = body.atmosphere.composition;
-      const topGases = Object.entries(atmo).sort((a, b) => b[1] - a[1]).slice(0, 3);
-      if (topGases.length > 0) {
-        const atmoStr = topGases.map(([g, v]) => `${g} ${(v * 100).toFixed(0)}%`).join(', ');
-        lines.push({ type: 'line', text: `Atmosfera: ${atmoStr}`, color: C.label });
-      }
-    }
+    // Atmosfera (string: 'none'/'thin'/'dense')
+    const atm = body.atmosphere || 'none';
+    const atmLabels = { dense: 'Gęsta', thin: 'Cienka', none: 'Brak' };
+    let atmText = atmLabels[atm] || atm;
+    if (body.breathableAtmosphere) atmText += ' — zdatna do życia ✅';
+    const atmColor = atm === 'none' ? C.dim : body.breathableAtmosphere ? C.green : C.text;
+    lines.push({ type: 'line', text: `Atmosfera: ${atmText}`, color: atmColor });
 
     // Skład chemiczny (top 5)
     if (body.composition) {
@@ -2516,6 +2577,17 @@ export class UIManager {
       return;
     }
 
+    if (btn.action === 'openCargoModal') {
+      // Otwórz modal załadunku cargo
+      const vessel = vMgr.getVessel(btn.vesselId);
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colony = colMgr?.getColony(vessel?.colonyId);
+      if (vessel && colony) {
+        showCargoLoadModal(vessel, colony);
+      }
+      return;
+    }
+
     if (btn.action === 'missionType') {
       // Zmień wybrany typ misji
       this._vesselMissionType = this._vesselMissionType === btn.missionType ? null : btn.missionType;
@@ -2529,12 +2601,6 @@ export class UIManager {
       });
       this._selectedVesselId = null;
       this._vesselMissionType = null;
-      return;
-    }
-
-    if (btn.action === 'deliverCargo') {
-      // Dostarczenie ładunku z orbity
-      EventBus.emit('expedition:deliverCargo', { expeditionId: btn.expId });
       return;
     }
 
@@ -2562,13 +2628,28 @@ export class UIManager {
     }
 
     if (btn.action === 'launchTransport') {
-      // Otwórz modal transportu z przypisanym statkiem
       const colMgr = window.KOSMOS?.colonyManager;
       const activePid = colMgr?.activePlanetId;
       const sourceCol = colMgr?.getColony(activePid);
-      const targetCol = colMgr?.getColony(btn.targetId);
-      // Dla transportu do dowolnego ciała: targetCol może być null
+      const vMgr = window.KOSMOS?.vesselManager;
+      const vessel = vMgr?.getVessel(btn.vesselId);
+
+      // Jeśli statek ma już załadowane cargo → wyślij bezpośrednio (bez modala)
+      const existingCargo = vessel?.cargo ?? {};
+      const hasExistingCargo = Object.values(existingCargo).some(qty => qty > 0);
+
+      if (hasExistingCargo) {
+        EventBus.emit('expedition:transportRequest', {
+          targetId: btn.targetId, cargo: { ...existingCargo }, vesselId: btn.vesselId,
+        });
+        this._selectedVesselId = null;
+        this._vesselMissionType = null;
+        return;
+      }
+
+      // Brak cargo → otwórz modal transportu (jak dotychczas)
       if (sourceCol) {
+        const targetCol = colMgr?.getColony(btn.targetId);
         const targetsList = targetCol ? [targetCol] : [];
         showTransportModal(sourceCol, targetsList, btn.targetId).then(result => {
           if (result) {
@@ -2639,7 +2720,8 @@ export class UIManager {
                      + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
       if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarH) return 'civpanel';
       if (this._civPanelTab) {
-        const bodyH = this._civPanelTab === 'expeditions' ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
+        const bodyH = (this._civPanelTab === 'expeditions' || this._civPanelTab === 'economy')
+          ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
         if (x >= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + bodyH) return 'civpanel';
       }
     }

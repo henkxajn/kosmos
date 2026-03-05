@@ -61,6 +61,10 @@ export function createVessel(shipId, colonyId, opts = {}) {
     // Stan statku
     status: 'idle', // 'idle' | 'on_mission' | 'refueling' | 'damaged'
 
+    // Cargo — towary na pokładzie (commodityId → ilość sztuk)
+    cargo: {},
+    cargoUsed: 0, // tony (suma weight × qty)
+
     // Doświadczenie (przyszłość — weteran = bonus)
     experience: 0,
   };
@@ -117,6 +121,81 @@ export function needsRefuel(vessel) {
  */
 export function getShipDef(vessel) {
   return SHIPS[vessel.shipId] ?? null;
+}
+
+// ── Cargo ────────────────────────────────────────────────────────────────────
+
+import { COMMODITIES } from '../data/CommoditiesData.js';
+import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
+
+// Pobierz wagę towaru/surowca
+function _getWeight(id) {
+  return COMMODITIES[id]?.weight ?? MINED_RESOURCES[id]?.weight ?? HARVESTED_RESOURCES[id]?.weight ?? 1;
+}
+
+// Pobierz ilość z ResourceSystem (inventory Map) lub plain object
+function _getAvailable(resSys, id) {
+  if (resSys?.inventory instanceof Map) return resSys.inventory.get(id) ?? 0;
+  if (resSys?.inventory) return resSys.inventory[id] ?? 0;
+  return resSys?.get?.(id) ?? resSys?.[id] ?? 0;
+}
+
+/**
+ * Załaduj towar na statek z inventory kolonii (ResourceSystem).
+ * @param {object} vessel — instancja statku
+ * @param {string} commodityId — id towaru lub surowca
+ * @param {number} qty — żądana ilość
+ * @param {object} resSys — ResourceSystem kolonii (ma spend/receive/inventory Map)
+ * @returns {number} faktycznie załadowana ilość
+ */
+export function loadCargo(vessel, commodityId, qty, resSys) {
+  const ship = SHIPS[vessel.shipId];
+  const capacity = ship?.cargoCapacity ?? 0;
+  if (qty <= 0 || capacity <= 0) return 0;
+
+  const weight = _getWeight(commodityId);
+  const freeSpace = capacity - (vessel.cargoUsed ?? 0);
+  const maxBySpace = Math.floor(freeSpace / weight);
+  const available = Math.floor(_getAvailable(resSys, commodityId));
+  const actual = Math.min(qty, maxBySpace, available);
+  if (actual <= 0) return 0;
+
+  // Zabierz z inventory kolonii
+  if (resSys?.spend) {
+    resSys.spend({ [commodityId]: actual });
+  }
+
+  // Dodaj do cargo statku
+  vessel.cargo[commodityId] = (vessel.cargo[commodityId] ?? 0) + actual;
+  vessel.cargoUsed = (vessel.cargoUsed ?? 0) + actual * weight;
+
+  return actual;
+}
+
+/**
+ * Rozładuj towar ze statku do inventory kolonii (ResourceSystem).
+ * @returns {number} faktycznie rozładowana ilość
+ */
+export function unloadCargo(vessel, commodityId, qty, resSys) {
+  if (qty <= 0) return 0;
+
+  const have = vessel.cargo[commodityId] ?? 0;
+  const actual = Math.min(qty, have);
+  if (actual <= 0) return 0;
+
+  const weight = _getWeight(commodityId);
+
+  // Dodaj do inventory kolonii
+  if (resSys?.receive) {
+    resSys.receive({ [commodityId]: actual });
+  }
+
+  // Zdejmij z cargo statku
+  vessel.cargo[commodityId] -= actual;
+  if (vessel.cargo[commodityId] <= 0) delete vessel.cargo[commodityId];
+  vessel.cargoUsed = Math.max(0, (vessel.cargoUsed ?? 0) - actual * weight);
+
+  return actual;
 }
 
 // ── Zarządzanie ID ───────────────────────────────────────────────────────────

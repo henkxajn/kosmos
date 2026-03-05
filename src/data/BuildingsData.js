@@ -28,9 +28,9 @@ export const BUILDINGS = {
     description: 'Stolica cywilizacji — nie blokuje budowy na hexie',
     isCapital:   true,
     cost:        {},
-    commodityCost: {},
+    commodityCost: { steel_plates: 2, electronics: 1 },
     energyCost:  2,
-    buildTime:   0,
+    buildTime:   0,           // natychmiastowa
     rates:       {},
     housing:     4,
     popCost:     0,
@@ -51,9 +51,9 @@ export const BUILDINGS = {
     icon:        '⛏',
     description: 'Wydobywa surowce z podłoża — zależy od złóż na ciele niebieskim',
     cost:        { Fe: 20, C: 10 },
-    commodityCost: { steel_plates: 2, mining_drills: 1 },
+    commodityCost: { steel_plates: 3, mining_drills: 2, power_cells: 1 },
     energyCost:  2,
-    buildTime:   3,
+    buildTime:   0.75,     // lata gry
     rates:       {},       // produkcja obliczana dynamicznie z deposits
     housing:     0,
     popCost:     0.25,
@@ -74,9 +74,9 @@ export const BUILDINGS = {
     icon:        '☀',
     description: 'Zamienia promieniowanie gwiazdy w energię elektryczną',
     cost:        { Si: 15, Cu: 5 },
-    commodityCost: { steel_plates: 2, power_cells: 1 },
+    commodityCost: { steel_plates: 3, power_cells: 2, copper_wiring: 1 },
     energyCost:  0,
-    buildTime:   2,
+    buildTime:   0.5,      // lata gry
     rates:       { energy: 8 },
     housing:     0,
     popCost:     0.25,
@@ -94,9 +94,9 @@ export const BUILDINGS = {
     icon:        '♨',
     description: 'Wykorzystuje ciepło magmy — olbrzymia wydajność',
     cost:        { Fe: 30, Ti: 5 },
-    commodityCost: { steel_plates: 3 },
+    commodityCost: { steel_plates: 4, power_cells: 2, copper_wiring: 1 },
     energyCost:  0,
-    buildTime:   5,
+    buildTime:   1.0,      // lata gry
     rates:       { energy: 25 },
     housing:     0,
     popCost:     0.25,
@@ -116,9 +116,9 @@ export const BUILDINGS = {
     icon:        '🌾',
     description: 'Uprawy zapewniające żywność dla populacji',
     cost:        { Fe: 10, C: 5 },
-    commodityCost: { steel_plates: 1 },
+    commodityCost: { steel_plates: 2, polymer_composites: 1 },
     energyCost:  1,
-    buildTime:   2,
+    buildTime:   0.5,      // lata gry
     rates:       { food: 10 },
     housing:     0,
     popCost:     0.25,
@@ -136,9 +136,9 @@ export const BUILDINGS = {
     icon:        '💧',
     description: 'Wydobywa wodę podziemną lub topnieje lód',
     cost:        { Fe: 15 },
-    commodityCost: { steel_plates: 1 },
+    commodityCost: { steel_plates: 2, copper_wiring: 1 },
     energyCost:  1,
-    buildTime:   1,
+    buildTime:   0.25,     // lata gry
     rates:       { water: 6 },
     housing:     0,
     popCost:     0.25,
@@ -158,9 +158,9 @@ export const BUILDINGS = {
     icon:        '🏠',
     description: 'Zapewnia przestrzeń mieszkalną dla 3 jednostek populacji',
     cost:        { Fe: 25, Si: 10 },
-    commodityCost: { steel_plates: 3 },
+    commodityCost: { steel_plates: 4, habitat_modules: 3, water_recyclers: 2, electronics: 1 },
     energyCost:  3,
-    buildTime:   4,
+    buildTime:   1.0,      // lata gry
     rates:       {},
     housing:     3,
     popCost:     0.25,
@@ -180,9 +180,9 @@ export const BUILDINGS = {
     icon:        '🔬',
     description: 'Prowadzi badania naukowe — kosztowna, ale niezbędna',
     cost:        { Si: 30, Cu: 15 },
-    commodityCost: { steel_plates: 3, electronics: 2 },
+    commodityCost: { steel_plates: 4, electronics: 3, semiconductors: 2, power_cells: 1 },
     energyCost:  10,
-    buildTime:   6,
+    buildTime:   2.0,      // lata gry
     rates:       { research: 8 },
     housing:     0,
     popCost:     0.25,
@@ -202,9 +202,9 @@ export const BUILDINGS = {
     icon:        '🏭',
     description: 'Daje punkt produkcji — alokuj do receptur w panelu Gospodarka',
     cost:        { Fe: 30, Cu: 10, Si: 10 },
-    commodityCost: { steel_plates: 4 },
+    commodityCost: { steel_plates: 5, power_cells: 3, electronics: 2 },
     energyCost:  5,
-    buildTime:   6,
+    buildTime:   1.5,      // lata gry
     rates:       {},       // produkcja via FactorySystem, nie rates
     housing:     0,
     popCost:     0.5,
@@ -224,9 +224,9 @@ export const BUILDINGS = {
     icon:        '🔥',
     description: 'Przetwarza rudę na czyste metale — zwiększa wydajność kopalni',
     cost:        { Fe: 40, Si: 15, Cu: 5 },
-    commodityCost: { steel_plates: 3, power_cells: 1 },
+    commodityCost: { steel_plates: 5, power_cells: 3, mining_drills: 2 },
     energyCost:  8,
-    buildTime:   6,
+    buildTime:   1.5,      // lata gry
     rates:       {},       // bonus do kopalni (przetwarzanie)
     housing:     0,
     popCost:     0.25,
@@ -244,9 +244,9 @@ export const BUILDINGS = {
     icon:        '☢',
     description: 'Rozszczepienie atomu — ogromna produkcja energii',
     cost:        { Fe: 50, Ti: 20, Si: 15 },
-    commodityCost: { steel_plates: 5, electronics: 3 },
+    commodityCost: { steel_plates: 6, power_cells: 4, electronics: 3, fusion_cores: 2 },
     energyCost:  0,
-    buildTime:   10,
+    buildTime:   3.0,      // lata gry
     rates:       { energy: 60 },
     housing:     0,
     popCost:     0.5,
@@ -266,9 +266,9 @@ export const BUILDINGS = {
     icon:        '🚀',
     description: 'Baza startowa ekspedycji kosmicznych',
     cost:        { Fe: 60, Ti: 30, Cu: 15 },
-    commodityCost: { steel_plates: 5, hull_armor: 3, electronics: 2 },
+    commodityCost: { steel_plates: 6, hull_armor: 4, electronics: 3, concrete_mix: 2 },
     energyCost:  10,
-    buildTime:   15,
+    buildTime:   2.5,      // lata gry
     rates:       {},
     housing:     0,
     popCost:     0.5,
@@ -288,9 +288,9 @@ export const BUILDINGS = {
     icon:        '⚓',
     description: 'Buduje statki kosmiczne. Każdy poziom = 1 dodatkowy slot budowy.',
     cost:        { Fe: 80, Ti: 30, Cu: 20 },
-    commodityCost: { steel_plates: 8, hull_armor: 5, power_cells: 3 },
+    commodityCost: { steel_plates: 8, hull_armor: 6, electronics: 4, power_cells: 3, copper_wiring: 2 },
     energyCost:  5,
-    buildTime:   10,
+    buildTime:   2.5,      // lata gry
     rates:       {},
     housing:     0,
     popCost:     0.5,
@@ -299,6 +299,119 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  true,
     requires:    'exploration',
+  },
+  // ── Syntetyczna żywność ───────────────────────────────────────────────────
+
+  synthesized_food_plant: {
+    id:            'synthesized_food_plant',
+    namePL:        'Zakład Syntetycznej Żywności',
+    category:      'food',
+    icon:          '🧬',
+    description:   'Produkuje żywność syntetyczną na ciałach bez gleby i atmosfery. Drogi w budowie i energochłonny.',
+    cost:          { Fe: 40, Cu: 20, Si: 15, Ti: 5 },
+    commodityCost: { steel_plates: 6, food_synthesizers: 5, electronics: 2, power_cells: 2 },
+    energyCost:    8,
+    buildTime:     1.0,     // lata gry
+    rates:         { food: 6 },
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      10,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'food_synthesis',
+    isSynthFood:   true,
+  },
+
+  // ── Kopalnia autonomiczna ────────────────────────────────────────────────
+
+  autonomous_mine: {
+    id:            'autonomous_mine',
+    namePL:        'Kopalnia Autonomiczna',
+    category:      'mining',
+    icon:          '🤖',
+    description:   'Wydobywa surowce bez POPów — wymaga Robotów i Wierteł.',
+    cost:          { Fe: 30, Ti: 10, Cu: 5 },
+    commodityCost: { steel_plates: 4, robots: 3, mining_drills: 2, power_cells: 1 },
+    energyCost:    4,
+    buildTime:     2.0,     // lata gry
+    rates:         {},
+    housing:       0,
+    popCost:       0,
+    maxLevel:      10,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    false,
+    requires:      null,
+    isMine:        true,
+    isAutonomous:  true,
+  },
+
+  // ── Autonomiczna elektrownia słoneczna ────────────────────────────────────
+
+  autonomous_solar_farm: {
+    id:            'autonomous_solar_farm',
+    namePL:        'Autonomiczna Elektrownia Słoneczna',
+    category:      'energy',
+    icon:          '🤖☀',
+    description:   'Elektrownia słoneczna obsługiwana przez roboty — działa bez POPów.',
+    cost:          { Si: 20, Cu: 8, Ti: 5 },
+    commodityCost: { steel_plates: 4, robots: 3, power_cells: 2, copper_wiring: 2, electronics: 1 },
+    energyCost:    0,
+    buildTime:     1.5,     // lata gry
+    rates:         { energy: 6 },
+    housing:       0,
+    popCost:       0,
+    maxLevel:      10,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    false,
+    requires:      null,
+    isAutonomous:  true,
+  },
+
+  // ── Reaktor fuzyjny ─────────────────────────────────────────────────────
+
+  fusion_reactor: {
+    id:            'fusion_reactor',
+    namePL:        'Reaktor Fuzyjny',
+    category:      'energy',
+    icon:          '🔆',
+    description:   'Reaktor termojądrowy — ogromna ilość czystej energii',
+    cost:          { Ti: 40, W: 20, Li: 15, Fe: 20 },
+    commodityCost: { steel_plates: 6, fusion_cores: 4, copper_wiring: 3 },
+    energyCost:    0,
+    buildTime:     3.0,     // lata gry
+    rates:         { energy: 100 },
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'fusion_power',
+  },
+
+  // ── Terraformer ─────────────────────────────────────────────────────────
+
+  terraformer: {
+    id:            'terraformer',
+    namePL:        'Terraformer',
+    category:      'space',
+    icon:          '🌍',
+    description:   'Powoli przekształca atmosferę ciała niebieskiego — mega-projekt długoterminowy',
+    cost:          { Ti: 50, Si: 30, W: 20, Fe: 30 },
+    commodityCost: { steel_plates: 6, nanotech_filters: 4, fusion_cores: 3, electronics: 2 },
+    energyCost:    20,
+    buildTime:     3.0,     // lata gry
+    rates:         {},
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'terraforming',
   },
 };
 

@@ -174,6 +174,9 @@ export class HexTile {
     // Anomalia na hexie (null | 'scientific' | 'resource' | 'danger')
     // Widoczna jako marker na globusie — gracz może zbadać
     this.anomaly = null;
+
+    // Budowa w toku (null | { buildingId, progress, buildTime, isUpgrade? })
+    this.underConstruction = null;
   }
 
   // Skrótowy dostęp do definicji terenu
@@ -184,13 +187,14 @@ export class HexTile {
   // Czy można tu postawić budynek danej kategorii?
   canBuild(category) {
     if (!this.terrainDef.buildable) return false;
-    if (this.buildingId !== null) return false;   // zajęte
+    if (this.buildingId !== null) return false;           // zajęte przez budynek
+    if (this.underConstruction !== null) return false;    // zajęte przez budowę w toku
     if (this.damaged) return false;
     return this.terrainDef.allowedCategories.includes(category);
   }
 
-  // Czy pole jest zajęte przez budynek?
-  get isOccupied() { return this.buildingId !== null; }
+  // Czy pole jest zajęte przez budynek lub budowę w toku?
+  get isOccupied() { return this.buildingId !== null || this.underConstruction !== null; }
 
   // Unikalny string-klucz do Map (używany w HexGrid)
   get key() { return `${this.q},${this.r}`; }
@@ -208,6 +212,7 @@ export class HexTile {
       damaged:           this.damaged,
       capitalBase:       this.capitalBase,
       anomaly:           this.anomaly,
+      underConstruction: this.underConstruction,
     };
   }
 
@@ -220,6 +225,7 @@ export class HexTile {
     tile.damaged           = data.damaged           ?? false;
     tile.capitalBase       = data.capitalBase       ?? false;
     tile.anomaly           = data.anomaly           ?? null;
+    tile.underConstruction = data.underConstruction ?? null;
     return tile;
   }
 }

@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 8;
+export const CURRENT_VERSION     = 11;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -23,6 +23,9 @@ const MIGRATIONS = {
   5: _migrateV5toV6,
   6: _migrateV6toV7,
   7: _migrateV7toV8,
+  8: _migrateV8toV9,
+  9: _migrateV9toV10,
+  10: _migrateV10toV11,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -247,6 +250,92 @@ function _migrateV7toV8(data) {
         col.factorySystem.queue = [];
       }
     }
+  }
+
+  return data;
+}
+
+// ── Migracja v8 → v9 ────────────────────────────────────────────────────────
+// Dodaje nowe commodities do inventory, migracja mining_robots → robots
+
+function _migrateV8toV9(data) {
+  const c4x = data.civ4x;
+  if (!c4x) return data;
+
+  // Nowe commodity klucze dodane w v9
+  const NEW_COMMODITIES = [
+    'concrete_mix', 'copper_wiring', 'habitat_modules', 'water_recyclers',
+    'robots', 'fusion_cores', 'nanotech_filters', 'antimatter_cells',
+  ];
+
+  if (c4x.colonies) {
+    for (const col of c4x.colonies) {
+      const inv = col.resources?.inventory;
+      if (inv) {
+        // Dodaj nowe commodity klucze z default 0
+        for (const key of NEW_COMMODITIES) {
+          if (inv[key] === undefined) inv[key] = 0;
+        }
+        // Migracja: mining_robots → robots (defensywne)
+        if (inv.mining_robots !== undefined) {
+          inv.robots = (inv.robots || 0) + inv.mining_robots;
+          delete inv.mining_robots;
+        }
+      }
+    }
+  }
+
+  return data;
+}
+
+// ── Migracja v9 → v10 ───────────────────────────────────────────────────────
+// Dodaje: constructionQueue per kolonia, prefab commodities w inventory, cargo w vessels
+
+function _migrateV9toV10(data) {
+  const c4x = data.civ4x;
+  if (!c4x) return data;
+
+  // Nowe commodity klucze (prefabrykaty)
+  const PREFAB_COMMODITIES = [
+    'prefab_mine', 'prefab_solar_farm', 'prefab_habitat', 'prefab_autonomous_mine',
+    'prefab_autonomous_solar_farm',
+  ];
+
+  if (c4x.colonies) {
+    for (const col of c4x.colonies) {
+      // Dodaj constructionQueue jeśli brak
+      if (!col.constructionQueue) col.constructionQueue = [];
+
+      // Dodaj prefab klucze do inventory
+      const inv = col.resources?.inventory;
+      if (inv) {
+        for (const key of PREFAB_COMMODITIES) {
+          if (inv[key] === undefined) inv[key] = 0;
+        }
+      }
+    }
+  }
+
+  // Dodaj cargo do vessels (stare save'y nie mają)
+  if (c4x.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v.cargo) v.cargo = {};
+      if (v.cargoUsed === undefined) v.cargoUsed = 0;
+    }
+  }
+
+  return data;
+}
+
+// ── Migracja v10 → v11 ──────────────────────────────────────────────────────
+// Dodaje: isOutpost flag per kolonia
+
+function _migrateV10toV11(data) {
+  const c4x = data.civ4x;
+  if (!c4x?.colonies) return data;
+
+  for (const col of c4x.colonies) {
+    if (col.isOutpost === undefined) col.isOutpost = false;
   }
 
   return data;

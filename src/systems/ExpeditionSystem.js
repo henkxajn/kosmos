@@ -53,6 +53,7 @@ import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
+import { COMMODITIES }   from '../data/CommoditiesData.js';
 
 // Koszt ekspedycji mining/scientific (stały, niezależnie od celu)
 const LAUNCH_COST          = { Fe: 50, C: 20 };
@@ -101,9 +102,6 @@ export class ExpeditionSystem {
     EventBus.on('expedition:orderRedirect', ({ expeditionId, targetId }) =>
       this._orderRedirect(expeditionId, targetId));
 
-    // Obsługa dostarczenia ładunku (transport do ciała bez kolonii → teraz ma kolonię)
-    EventBus.on('expedition:deliverCargo', ({ expeditionId }) =>
-      this._deliverCargo(expeditionId));
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────
@@ -644,27 +642,7 @@ export class ExpeditionSystem {
     EventBus.emit('expedition:redirected', { expedition: exp });
   }
 
-  // Dostarczenie ładunku z orbity (transport do ciała bez kolonii, teraz ma kolonię)
-  _deliverCargo(expeditionId) {
-    const exp = this._expeditions.find(e => e.id === expeditionId);
-    if (!exp || exp.status !== 'orbiting' || !exp.pendingDelivery) return;
-
-    const colMgr = window.KOSMOS?.colonyManager;
-    const targetCol = colMgr?.getColony(exp.targetId);
-    if (!targetCol) {
-      EventBus.emit('expedition:deliverFailed', { reason: 'Brak kolonii docelowej' });
-      return;
-    }
-
-    // Dostarczenie ładunku
-    if (exp.cargo) {
-      targetCol.resourceSystem.receive(exp.cargo);
-    }
-    exp.pendingDelivery = false;
-    exp.gained = exp.cargo || {};
-
-    EventBus.emit('expedition:cargoDelivered', { expedition: exp, gained: exp.gained });
-  }
+  // _deliverCargo — usunięte: statek transportowy teraz dostarcza ładunek natychmiast
 
   // Wyślij misję rozpoznawczą
   // scope: 'nearest' | 'full_system' | konkretne body.id
@@ -1015,11 +993,45 @@ export class ExpeditionSystem {
 
   // Przetwórz przybycie ekspedycji kolonizacyjnej
   _processColonyArrival(exp) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vMgr   = window.KOSMOS?.vesselManager;
+
+    // ── Upgrade outpost → pełna kolonia ──────────────────────────
+    const existingCol = colMgr?.getColony(exp.targetId);
+    if (existingCol?.isOutpost) {
+      // Oblicz mnożnik zasobów startowych (uproszczony — bez katastrofy)
+      const roll = Math.random() * 100;
+      let resourceMult;
+      if      (roll < 15) resourceMult = 0.5;
+      else if (roll < 85) resourceMult = 1.0;
+      else                resourceMult = 1.5;
+
+      const startResources = {};
+      for (const [key, val] of Object.entries(COLONY_START_RESOURCES)) {
+        startResources[key] = Math.floor(val * resourceMult);
+      }
+      existingCol.resourceSystem.receive(startResources);
+      colMgr.upgradeOutpostToColony(exp.targetId, exp.crewCost);
+
+      EventBus.emit('civ:unlockPops', { amount: exp.crewCost });
+      if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
+
+      exp.status = 'completed';
+      exp.gained = startResources;
+
+      EventBus.emit('expedition:missionReport', {
+        expedition: exp,
+        gained: startResources,
+        multiplier: resourceMult,
+        text: 'Placówka rozbudowana do pełnej kolonii!',
+      });
+      return;
+    }
+
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
 
     // Zniszcz vessel (colony_ship nie wraca — zużyty przy kolonizacji)
-    const vMgr = window.KOSMOS?.vesselManager;
     if (exp.vesselId && vMgr) {
       vMgr.destroyVessel(exp.vesselId);
     }
@@ -1076,35 +1088,82 @@ export class ExpeditionSystem {
   // Przetwórz przybycie transportu zasobów
   _processTransportArrival(exp) {
     const colMgr = window.KOSMOS?.colonyManager;
+    const vMgr   = window.KOSMOS?.vesselManager;
     const targetCol = colMgr?.getColony(exp.targetId);
 
-    if (targetCol && exp.cargo) {
-      // Dostarczenie ładunku do kolonii docelowej
-      targetCol.resourceSystem.receive(exp.cargo);
+    if (targetCol) {
+      // Cel ma kolonię/outpost — dostarczenie ładunku
+      if (exp.cargo) {
+        targetCol.resourceSystem.receive(exp.cargo);
+      }
       exp.gained = exp.cargo || {};
-      exp.status = 'returning';
-
-      // Vessel: dotarł do celu → zaczyna powrót
-      const vMgr = window.KOSMOS?.vesselManager;
-      if (exp.vesselId && vMgr) {
-        vMgr.arriveAtTarget(exp.vesselId);
-        vMgr.startReturn(exp.vesselId);
-      }
-    } else {
-      // Cel bez kolonii — statek orbituje z ładunkiem (pendingDelivery)
-      exp.gained = {};
       exp.status = 'orbiting';
-      exp.pendingDelivery = true;
+      if (exp.vesselId && vMgr) vMgr.arriveAtTarget(exp.vesselId);
+    } else if (colMgr) {
+      // Cel BEZ kolonii — utwórz outpost
+      const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
 
-      const vMgr = window.KOSMOS?.vesselManager;
-      if (exp.vesselId && vMgr) {
-        vMgr.arriveAtTarget(exp.vesselId);
+      // Rozdziel cargo: prefaby zostają na statku, reszta → zasoby outpost
+      const outpostResources = {};
+      const prefabsOnShip = {};
+
+      if (vessel?.cargo) {
+        for (const [comId, qty] of Object.entries(vessel.cargo)) {
+          if (qty <= 0) continue;
+          const com = COMMODITIES[comId];
+          if (com?.isPrefab) {
+            prefabsOnShip[comId] = qty;
+          } else {
+            outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
+          }
+        }
       }
+
+      // Dodaj cargo z ekspedycji (zasoby transportowe)
+      if (exp.cargo) {
+        for (const [key, val] of Object.entries(exp.cargo)) {
+          if (val > 0) outpostResources[key] = (outpostResources[key] ?? 0) + val;
+        }
+      }
+
+      const gameYear = Math.floor(this._gameYear);
+      colMgr.createOutpost(exp.targetId, outpostResources, gameYear);
+
+      // Przenieś statek z floty macierzystej kolonii do outpost
+      if (exp.vesselId && vMgr) {
+        // Usuń z floty starej kolonii
+        const oldColonyId = vessel?.colonyId;
+        const oldCol = oldColonyId ? colMgr.getColony(oldColonyId) : null;
+        if (oldCol) {
+          const idx = oldCol.fleet.indexOf(exp.vesselId);
+          if (idx !== -1) oldCol.fleet.splice(idx, 1);
+        }
+
+        // Dock statek w outpost
+        vMgr.dockAtColony(exp.vesselId, exp.targetId);
+
+        // Zaktualizuj cargo statku — tylko prefaby
+        if (vessel) {
+          vessel.cargo = prefabsOnShip;
+          let used = 0;
+          for (const qty of Object.values(prefabsOnShip)) used += qty;
+          vessel.cargoUsed = used;
+        }
+
+        // Dodaj do floty outpost
+        const outpostCol = colMgr.getColony(exp.targetId);
+        if (outpostCol && !outpostCol.fleet.includes(exp.vesselId)) {
+          outpostCol.fleet.push(exp.vesselId);
+        }
+      }
+
+      exp.gained = outpostResources;
+      exp.status = 'orbiting';
     }
 
     EventBus.emit('expedition:arrived', {
       expedition: exp,
-      gained: exp.cargo,
+      gained: exp.gained ?? exp.cargo,
       multiplier: 1.0,
     });
   }

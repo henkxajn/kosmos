@@ -290,6 +290,83 @@ export class ColonyManager {
     return colony;
   }
 
+  // Utwórz outpost (mini-kolonia bez POPów)
+  createOutpost(planetId, startResources, gameYear) {
+    const entity = this._findEntity(planetId);
+    if (!entity) {
+      console.warn('[ColonyManager] Nie znaleziono encji dla outpost:', planetId);
+      return null;
+    }
+
+    // ResourceSystem per-outpost (magazyn)
+    const resSys = new ResourceSystem(startResources);
+
+    // CivilizationSystem — zamrożona (pop=0, housing=0)
+    const civSys = new CivilizationSystem({
+      population: 0,
+      housing:    0,
+    }, this.techSystem);
+
+    // BuildingSystem per-outpost — flaga _isOutpost pomija POP
+    const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
+    bSys._isOutpost = true;
+    bSys.setDeposits(entity.deposits ?? []);
+
+    // FactorySystem per-outpost
+    const factSys = new FactorySystem(resSys);
+    bSys.setFactorySystem(factSys);
+
+    // Oznacz ciało jako zbadane
+    entity.explored = true;
+
+    const colony = {
+      planetId,
+      planet:          entity,
+      isHomePlanet:    false,
+      isOutpost:       true,
+      name:            entity.name,
+      founded:         gameYear,
+      resourceSystem:  resSys,
+      civSystem:       civSys,
+      buildingSystem:  bSys,
+      factorySystem:   factSys,
+      grid:            null,
+      allowImmigration: false,
+      allowEmigration:  false,
+      fleet:           [],
+      shipQueues:      [],
+    };
+
+    this._colonies.set(planetId, colony);
+
+    EventBus.emit('outpost:founded', { colony });
+    EventBus.emit('colony:listChanged', {});
+
+    return colony;
+  }
+
+  // Upgrade outpost do pełnej kolonii (np. po przybyciu colony_ship)
+  upgradeOutpostToColony(planetId, startPop) {
+    const colony = this.getColony(planetId);
+    if (!colony || !colony.isOutpost) return false;
+
+    colony.isOutpost = false;
+    colony.civSystem.population = startPop;
+    colony.allowImmigration = true;
+    colony.allowEmigration  = true;
+
+    // Wyłącz flagę outpost w BuildingSystem
+    if (colony.buildingSystem) {
+      colony.buildingSystem._isOutpost = false;
+      colony.buildingSystem._reapplyAllRates();
+    }
+
+    EventBus.emit('colony:founded', { colony });
+    EventBus.emit('colony:listChanged', {});
+
+    return true;
+  }
+
   // ── Drogi handlowe ────────────────────────────────────────────────
 
   // Pobierz listę dróg handlowych
@@ -576,8 +653,8 @@ export class ColonyManager {
     if (colonies.length < 2) return;
 
     // Znajdź kolonie z wysokim i niskim morale
-    const high = colonies.filter(c => (c.civSystem?.morale ?? 50) > MIGRATION_MORALE_HIGH && c.allowImmigration);
-    const low  = colonies.filter(c => (c.civSystem?.morale ?? 50) < MIGRATION_MORALE_LOW  && c.allowEmigration);
+    const high = colonies.filter(c => !c.isOutpost && (c.civSystem?.morale ?? 50) > MIGRATION_MORALE_HIGH && c.allowImmigration);
+    const low  = colonies.filter(c => !c.isOutpost && (c.civSystem?.morale ?? 50) < MIGRATION_MORALE_LOW  && c.allowEmigration);
 
     for (const src of low) {
       if (src.civSystem.population <= 2) continue; // nie opuści małej kolonii
@@ -610,11 +687,13 @@ export class ColonyManager {
       colonies.push({
         planetId:         col.planetId,
         isHomePlanet:     col.isHomePlanet,
+        isOutpost:        col.isOutpost ?? false,
         name:             col.name,
         founded:          col.founded,
         resources:        col.resourceSystem.serialize(),
         civ:              col.civSystem.serialize(),
         buildings:        col.buildingSystem?.serialize() ?? [],
+        constructionQueue: col.buildingSystem?.serializeQueue() ?? [],
         factorySystem:    col.factorySystem?.serialize() ?? null,
         allowImmigration: col.allowImmigration,
         allowEmigration:  col.allowEmigration,
@@ -652,16 +731,25 @@ export class ColonyManager {
       if (colData.buildings?.length > 0) {
         bSys.restoreFromSave(colData.buildings);
       }
+      // Przywróć kolejkę budowy
+      if (colData.constructionQueue?.length > 0) {
+        bSys.restoreQueue(colData.constructionQueue);
+      }
 
       // FactorySystem per-kolonia
       const factSys = new FactorySystem(resSys);
       bSys.setFactorySystem(factSys);
       if (colData.factorySystem) factSys.restore(colData.factorySystem);
 
+      // Flaga outpost na BuildingSystem
+      const isOutpost = colData.isOutpost ?? false;
+      if (isOutpost) bSys._isOutpost = true;
+
       const colony = {
         planetId:         colData.planetId,
         planet:           entity,
         isHomePlanet:     colData.isHomePlanet ?? false,
+        isOutpost,
         name:             colData.name ?? entity.name,
         founded:          colData.founded ?? 0,
         resourceSystem:   resSys,

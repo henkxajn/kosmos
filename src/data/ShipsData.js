@@ -17,13 +17,13 @@ export const SHIPS = {
     namePL:        'Statek Naukowy',
     icon:          '🛸',
     cost:          { Fe: 100, Ti: 20, Cu: 15 },
-    commodityCost: { hull_armor: 3, electronics: 2, power_cells: 1 },
+    commodityCost: { hull_armor: 4, electronics: 3, power_cells: 2, semiconductors: 1 },
     buildTime:     8,
     fuelCapacity:  8,            // max power_cells
     fuelPerAU:     0.4,          // power_cells / AU → zasięg 20 AU
     range:         20,           // AU (fallback = fuelCapacity / fuelPerAU)
     speedAU:       0.4,          // AU/rok — zwiadowca
-    cargoCapacity: 50,           // tony
+    cargoCapacity: 0,            // brak ładowni — statek badawczy
     requires:      'exploration',
     description:   'Orbitalny statek badawczy. Wymagany do ekspedycji naukowych.',
   },
@@ -33,7 +33,14 @@ export const SHIPS = {
     namePL:        'Statek Kolonijny',
     icon:          '🚢',
     cost:          { Fe: 200, Ti: 40, Cu: 20, Si: 20 },
-    commodityCost: { hull_armor: 8, electronics: 4, power_cells: 4 },
+    commodityCost: {
+      hull_armor:        10,
+      habitat_modules:    6,
+      electronics:        5,
+      power_cells:        4,
+      water_recyclers:    3,
+      food_synthesizers:  2,
+    },
     buildTime:     12,
     fuelCapacity:  8,            // max power_cells
     fuelPerAU:     0.7,          // power_cells / AU → zasięg ~11.4 AU
@@ -49,7 +56,7 @@ export const SHIPS = {
     namePL:        'Statek Transportowy',
     icon:          '📦',
     cost:          { Fe: 150, Ti: 25, Cu: 15 },
-    commodityCost: { hull_armor: 5, power_cells: 3 },
+    commodityCost: { hull_armor: 7, power_cells: 4, electronics: 2, copper_wiring: 1 },
     buildTime:     6,
     fuelCapacity:  10,           // max power_cells
     fuelPerAU:     0.5,          // power_cells / AU → zasięg 20 AU
@@ -60,15 +67,47 @@ export const SHIPS = {
     description:   'Wielki frachtowiec do transferu surowców między koloniami.',
   },
 
-  // ── Tier 2: placeholder na przyszłość (napęd fusion) ─────────────────
-  // fusion_cruiser: {
-  //   id:            'fusion_cruiser',
-  //   namePL:        'Krążownik Fuzyjny',
-  //   icon:          '⚡',
-  //   fuelType:      'deuterium_fuel', // Tier 2 paliwo (commodity Tier 3)
-  //   fuelCapacity:  20,
-  //   fuelPerAU:     0.2,
-  //   range:         100,
-  //   ...
-  // },
+  fusion_cruiser: {
+    id:            'fusion_cruiser',
+    namePL:        'Krążownik Fuzyjny',
+    icon:          '⚡',
+    cost:          { Fe: 200, Ti: 60, W: 30, Li: 20 },
+    commodityCost: {
+      hull_armor:     10,
+      ion_thrusters:   6,
+      fusion_cores:    4,
+      electronics:     3,
+      semiconductors:  2,
+    },
+    buildTime:     16,
+    fuelCapacity:  20,           // max power_cells
+    fuelPerAU:     0.2,          // power_cells / AU → zasięg 100 AU
+    range:         100,          // AU (fallback)
+    speedAU:       0.8,          // AU/rok — szybki
+    cargoCapacity: 300,          // tony
+    requires:      'fusion_drive',
+    description:   'Krążownik z napędem fuzyjnym — daleki zasięg i duże cargo.',
+  },
+
+  ftl_ship: {
+    id:            'ftl_ship',
+    namePL:        'Okręt FTL',
+    icon:          '🌌',
+    cost:          { Fe: 300, Ti: 80, Nt: 40, Xe: 30 },
+    commodityCost: {
+      hull_armor:       12,
+      quantum_cores:     6,
+      antimatter_cells:  5,
+      ion_thrusters:     4,
+      semiconductors:    3,
+    },
+    buildTime:     24,
+    fuelCapacity:  30,           // max power_cells
+    fuelPerAU:     0.05,         // power_cells / AU → zasięg 600 AU
+    range:         600,          // AU (fallback)
+    speedAU:       5.0,          // AU/rok — nadświetlny
+    cargoCapacity: 400,          // tony
+    requires:      'ftl_drive',
+    description:   'Okręt z napędem nadświetlnym — eksploracja odległych układów.',
+  },
 };

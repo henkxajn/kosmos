@@ -13,10 +13,10 @@ import EventBus            from '../core/EventBus.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
-const TIME_W    = 280;  // szerokość bloku czasu (prawa strona)
-const GROUP_PAD = 8;    // padding między grupami
-const ITEM_W    = 80;   // bazowa szerokość jednego zasobu
-const ITEM_W_SM = 56;   // kompaktowa szerokość (wąski ekran)
+const TIME_W    = 220;  // szerokość bloku czasu (prawa strona) — kompaktowa
+const GROUP_PAD = 5;    // padding między grupami
+const ITEM_W    = 68;   // bazowa szerokość jednego zasobu — węższa
+const ITEM_W_SM = 50;   // kompaktowa szerokość (wąski ekran)
 
 // ── Kolory proxy ──────────────────────────────────────────
 const C = {
@@ -62,15 +62,15 @@ export class TopBar {
     ctx.beginPath(); ctx.moveTo(0, BAR_H); ctx.lineTo(W, BAR_H); ctx.stroke();
 
     // Logo KOSMOS (lewa strona) — tylko gdy brak customowego startX
-    const LOGO_W = startX > 0 ? startX : 80;
+    const LOGO_W = startX > 0 ? startX : 56;
     if (startX <= 0) {
-      ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
+      ctx.font = `bold ${THEME.fontSizeNormal + 2}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.title;
       ctx.textAlign = 'left';
-      ctx.fillText('KOSMOS', 10, 20);
+      ctx.fillText('KOSMOS', 6, 20);
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.label;
-      ctx.fillText('4X', 10, 32);
+      ctx.fillText('4X', 6, 32);
     }
 
     // Kontrolki czasu (prawa strona)
@@ -290,10 +290,12 @@ export class TopBar {
   // ── Blok kontrolek czasu (prawa strona) ─────────────────
   _drawTimeBlock(ctx, W, timeState) {
     const { isPaused, multiplierIndex, displayText } = timeState;
-    const LABELS = GAME_CONFIG.TIME_MULTIPLIER_LABELS;
 
     const blockX = W - TIME_W;
-    const midY   = BAR_H / 2;
+    const btnH = 16;        // wysokość przycisków
+    const btnY = 6;         // pozycja Y przycisków (górny rząd)
+    const btnGap = 2;       // odstęp między przyciskami
+    const btnR = 3;         // zaokrąglenie rogów
 
     // Separator pionowy
     ctx.strokeStyle = THEME.borderLight;
@@ -303,36 +305,69 @@ export class TopBar {
     ctx.lineTo(blockX, BAR_H - 6);
     ctx.stroke();
 
-    // Przycisk PAUZA/GRAJ
-    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.textAlign = 'left';
-    ctx.fillStyle = isPaused ? C.title : C.text;
-    ctx.fillText(isPaused ? '▶' : '⏸', blockX + 8, midY - 6);
+    // Przycisk PAUZA/GRAJ (kwadratowy)
+    const playX = blockX + 6;
+    const playW = 20;
+    const playActive = isPaused;
+    this._drawBtn(ctx, playX, btnY, playW, btnH, btnR,
+      isPaused ? '▶' : '⏸',
+      playActive ? THEME.accent : THEME.textDim,
+      playActive ? THEME.bgSecondary : null);
 
-    // Przyciski prędkości
-    const speedX = blockX + 28;
-    const speedLabels = ['×1', '×2', '×4', '×8', '×16'];
+    // Przyciski prędkości — kompaktowe
+    const speedLabels = ['1d', '1m', '1r', '10r', '10k'];
+    const speedBtnW = 24;
+    let sx = playX + playW + btnGap + 2;
     for (let i = 0; i < speedLabels.length; i++) {
-      const sx = speedX + i * 32;
       const isActive = !isPaused && multiplierIndex === i + 1;
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = isActive ? C.title : C.dim;
-      ctx.fillText(speedLabels[i], sx, midY - 6);
+      this._drawBtn(ctx, sx, btnY, speedBtnW, btnH, btnR,
+        speedLabels[i],
+        isActive ? THEME.bgPrimary : THEME.textDim,
+        isActive ? THEME.accent : null);
+      sx += speedBtnW + btnGap;
     }
 
-    // Czas (rok, dzień)
+    // Dolny rząd: data + AutoSlow
+    const row2Y = btnY + btnH + 5;
+
+    // Data (lewa strona bloku czasu)
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.bright;
-    ctx.textAlign = 'right';
-    ctx.fillText(displayText || '', W - 8, midY - 6);
+    ctx.textAlign = 'left';
+    ctx.fillText(displayText || '', blockX + 8, row2Y + 9);
 
-    // AutoSlow wskaźnik
+    // AutoSlow wskaźnik (prawa strona)
     const autoSlow = timeState.autoSlow;
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = autoSlow ? THEME.successDim : C.dim;
-    ctx.textAlign = 'right';
-    ctx.fillText(autoSlow ? 'AUT' : 'aut', W - 8, midY + 8);
+    this._drawBtn(ctx, W - 30, row2Y, 24, 14, 2,
+      'AUT',
+      autoSlow ? THEME.bgPrimary : THEME.textDim,
+      autoSlow ? THEME.successDim : null,
+      THEME.fontSizeSmall - 2);
 
+    ctx.textAlign = 'left';
+  }
+
+  // Rysuj mini-przycisk z opcjonalnym tłem
+  _drawBtn(ctx, x, y, w, h, r, label, textColor, bgColor, fontSize) {
+    // Tło (jeśli podane)
+    if (bgColor) {
+      ctx.fillStyle = bgColor;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      ctx.fill();
+    } else {
+      // Obramowanie (subtelne)
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      ctx.stroke();
+    }
+    // Tekst wyśrodkowany
+    ctx.font = `${fontSize ?? (THEME.fontSizeSmall - 1)}px ${THEME.fontFamily}`;
+    ctx.fillStyle = textColor;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + w / 2, y + h / 2 + 3);
     ctx.textAlign = 'left';
   }
 
@@ -462,28 +497,33 @@ export class TopBar {
 
   _hitTestTime(x, y, W) {
     const blockX = W - TIME_W;
-    const midY = BAR_H / 2;
+    const btnY = 6;
+    const btnH = 16;
+    const btnGap = 2;
 
     // Przycisk PAUZA/GRAJ
-    if (x >= blockX + 4 && x <= blockX + 26) {
+    const playX = blockX + 6;
+    const playW = 20;
+    if (x >= playX && x <= playX + playW && y >= btnY && y <= btnY + btnH) {
       const isPaused = window.KOSMOS?.timeSystem?.isPaused ?? false;
       isPaused ? EventBus.emit('time:play') : EventBus.emit('time:pause');
       return true;
     }
 
     // Przyciski prędkości
-    const speedX = blockX + 28;
+    const speedBtnW = 24;
+    let sx = playX + playW + btnGap + 2;
     for (let i = 0; i < 5; i++) {
-      const sx = speedX + i * 32;
-      if (x >= sx - 4 && x <= sx + 28) {
+      if (x >= sx && x <= sx + speedBtnW && y >= btnY && y <= btnY + btnH) {
         EventBus.emit('time:setMultiplier', { index: i + 1 });
         EventBus.emit('time:play');
         return true;
       }
+      sx += speedBtnW + btnGap;
     }
 
-    // AutoSlow toggle (w prawym dolnym rogu bloku)
-    if (x >= W - 36 && y >= midY + 2) {
+    // AutoSlow toggle (dolny rząd, prawy róg)
+    if (x >= W - 30 && y >= btnY + btnH + 5) {
       EventBus.emit('time:autoSlowToggle');
       return true;
     }

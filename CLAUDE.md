@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v8
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v11
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -226,6 +226,7 @@ SaveSystem._serializeCiv4x()
 | `factory:dequeue { index }` | CivPanelDrawer | FactorySystem |
 | `tradeRoute:create/pause/resume/delete` | TradeRouteModal | TradeRouteManager |
 | `expedition:deliverCargo { expeditionId }` | UIManager | ExpeditionSystem |
+| `outpost:founded { colony }` | ColonyManager | GameScene |
 
 ---
 

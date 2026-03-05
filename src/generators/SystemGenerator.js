@@ -179,7 +179,8 @@ export class SystemGenerator {
     const albedo     = typeConfig.albedo;
     const tempK      = this.calcEquilibriumTemp(star.luminosity, a, albedo);
     const color      = this.getPlanetColor(planetType, tempK, nameIndex);
-    const atmosphere = this.getAtmosphere(planetType, tempK);
+    const atmosphere = this.getAtmosphere(planetType, tempK, mass);
+    const breathableAtmosphere = this.isBreathable(atmosphere, planetType, tempK, mass);
 
     // Skład chemiczny — inicjalizowany wg typu planety i odległości od HZ
     // Lekkie losowe wahania (±20% wartości bazowej) dla różnorodności układów
@@ -202,6 +203,7 @@ export class SystemGenerator {
       temperatureK:      tempK,
       albedo,
       atmosphere,
+      breathableAtmosphere,
       color,
       glowColor:         typeConfig.glowColor || null,
       visualRadius:      this.getVisualRadius(mass, planetType),
@@ -241,13 +243,60 @@ export class SystemGenerator {
     return           pick([0x8898b0, 0x90a0b8, 0x7888a8, 0x98a8c0]);       // lodowata
   }
 
-  // Typ atmosfery na podstawie planety i temperatury
-  getAtmosphere(planetType, T_K) {
-    if (planetType === 'gas')  return 'dense';
-    if (planetType === 'ice')  return 'thin';
-    const T_C = T_K - 273;
-    if (T_C > -60 && T_C < 400) return 'thin';
+  // Typ atmosfery na podstawie planety, temperatury i masy
+  // Retencja atmosfery zależy od grawitacji (masa) i prędkości cząsteczek (temp)
+  // Niska temperatura kompensuje małą masę (jak Tytan w Układzie Słonecznym)
+  getAtmosphere(planetType, T_K, mass) {
+    if (planetType === 'gas') return 'none';
+
+    const r = Math.random();
+
+    // Duże planety (>0.5 M⊕): łatwo utrzymują atmosferę
+    if (mass > 0.5) {
+      if (T_K >= 200 && T_K <= 350)      return r < 0.10 ? 'dense' : r < 0.85 ? 'thin' : 'none';
+      if (T_K > 350 && T_K <= 600)       return r < 0.05 ? 'dense' : r < 0.50 ? 'thin' : 'none';
+      if (T_K < 200)                     return r < 0.65 ? 'thin' : 'none';
+      return r < 0.15 ? 'thin' : 'none'; // >600K — ekstremalnie gorące
+    }
+
+    // Średnie (0.1–0.5 M⊕, Mars-like): trudniej utrzymać
+    if (mass > 0.1) {
+      if (T_K >= 200 && T_K <= 350) return r < 0.55 ? 'thin' : 'none';
+      if (T_K < 200)                return r < 0.40 ? 'thin' : 'none';
+      return r < 0.15 ? 'thin' : 'none';
+    }
+
+    // Małe (<0.1 M⊕, Merkury-like): prawie nigdy
+    if (T_K < 150) return r < 0.10 ? 'thin' : 'none'; // ekstremalnie zimne (Triton-like)
     return 'none';
+  }
+
+  // Atmosfera księżyca — zależy od masy i temperatury
+  getAtmosphereMoon(mass, T_K) {
+    const r = Math.random();
+    // Duże księżyce (>0.02 M⊕, Tytan/Ganimedes-scale)
+    if (mass > 0.02) {
+      if (T_K < 150) return r < 0.55 ? 'thin' : 'none';
+      if (T_K < 300) return r < 0.25 ? 'thin' : 'none';
+      return r < 0.08 ? 'thin' : 'none';
+    }
+    // Średnie (0.005–0.02 M⊕, Io/Europa-scale)
+    if (mass > 0.005) {
+      if (T_K < 150) return r < 0.20 ? 'thin' : 'none';
+      if (T_K < 300) return r < 0.05 ? 'thin' : 'none';
+      return 'none';
+    }
+    // Małe (<0.005 M⊕) — zawsze brak
+    return 'none';
+  }
+
+  // Czy atmosfera jest zdatna do życia (oddychalna)
+  isBreathable(atmosphere, planetType, T_K, mass) {
+    if (atmosphere === 'none') return false;
+    if (planetType !== 'rocky' && planetType !== 'ice') return false;
+    if (T_K < 233 || T_K > 323) return false;  // -40°C do +50°C
+    if (mass < 0.3) return false;               // za słaba grawitacja
+    return true;
   }
 
   // Typ planety na podstawie odległości od gwiazdy + element losowości
@@ -478,6 +527,7 @@ export class SystemGenerator {
     bestPlanet.surface          = bestPlanet.surface || {};
     bestPlanet.surface.hasWater = true;
     if (bestPlanet.atmosphere === 'none') bestPlanet.atmosphere = 'thin';
+    bestPlanet.breathableAtmosphere = true;
 
     // Ustaw flagę globalną scenariusza
     window.KOSMOS.scenario = 'civilization';
@@ -524,6 +574,7 @@ export class SystemGenerator {
     bestPlanet.surface          = bestPlanet.surface || {};
     bestPlanet.surface.hasWater = true;
     if (bestPlanet.atmosphere === 'none') bestPlanet.atmosphere = 'thin';
+    bestPlanet.breathableAtmosphere = true;
 
     window.KOSMOS.scenario = 'power_test';  // POWER TEST
 
@@ -630,8 +681,10 @@ export class SystemGenerator {
     const albedo  = moonType === 'icy' ? 0.6 : 0.12;
     const temperatureK = this.calcEquilibriumTemp(star.luminosity, parentA, albedo);
 
-    // Atmosfera — większość księżyców nie ma; masywne mogą mieć cienką
-    const atmosphere = mass > 0.01 ? 'thin' : 'none';
+    // Atmosfera — zależy od masy i temperatury (jak Tytan: zimny + masywny = atmosfera)
+    const atmosphere = this.getAtmosphereMoon(mass, temperatureK);
+    const breathableAtmosphere = atmosphere !== 'none'
+      && temperatureK >= 233 && temperatureK <= 323 && mass > 0.01;
 
     const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
     return new Moon({
@@ -647,6 +700,7 @@ export class SystemGenerator {
       composition:       normComp,
       temperatureK,
       atmosphere,
+      breathableAtmosphere,
     });
   }
 

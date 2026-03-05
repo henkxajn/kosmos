@@ -45,6 +45,15 @@ function _truncate(str, maxLen) {
   return str.length <= maxLen ? str : str.slice(0, maxLen - 1) + '…';
 }
 
+// Formatuj atmosferę z etykietą PL + info o zdatności do życia
+function _formatAtmosphere(entity) {
+  const atm = entity.atmosphere || 'none';
+  const labels = { dense: 'Gęsta', thin: 'Cienka', none: 'Brak' };
+  const label = labels[atm] || atm;
+  if (entity.breathableAtmosphere) return label + ' (zdatna)';
+  return label;
+}
+
 export class BottomContext {
   constructor() {
     this._tab         = 'orbit'; // 'orbit' | 'physics' | 'composition'
@@ -300,7 +309,7 @@ export class BottomContext {
       return [
         { k: 'Masa', v: `${(entity.physics?.mass || 0).toFixed(2)} M⊕` },
         { k: 'Temp', v: entity.temperatureK ? `${Math.round(entity.temperatureK - 273)} °C` : '—' },
-        { k: 'Atm', v: entity.atmosphere || '—' },
+        { k: 'Atm', v: _formatAtmosphere(entity) },
         { k: 'Życie', v: `${Math.round(ls)}%  ${lifeLabel}`,
           vc: ls > 80 ? C.yellow : ls > 0 ? C.green : C.text },
       ];

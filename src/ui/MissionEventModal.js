@@ -193,8 +193,13 @@ function _buildBodyHTML(body) {
   lines.push('<div class="mm-row"><span class="mm-label">Odl. od bazy</span><span class="mm-value">' +
     _distFromHome(body) + ' AU</span></div>');
 
-  // Atmosfera — top 3
-  if (body.atmosphere && typeof body.atmosphere === 'object') {
+  // Atmosfera — string (thin/dense/none) lub obiekt (stary format)
+  if (body.atmosphere && typeof body.atmosphere === 'string' && body.atmosphere !== 'none') {
+    const atmLabels = { dense: 'Gęsta', thin: 'Cienka' };
+    let atmLabel = atmLabels[body.atmosphere] || body.atmosphere;
+    if (body.breathableAtmosphere) atmLabel += ' — zdatna do życia ✅';
+    lines.push('<div class="mm-row"><span class="mm-label">Atmosfera</span><span class="mm-value">' + atmLabel + '</span></div>');
+  } else if (body.atmosphere && typeof body.atmosphere === 'object') {
     const atmoEntries = Object.entries(body.atmosphere)
       .filter(([k]) => k !== 'pressure' && k !== 'total')
       .sort((a, b) => b[1] - a[1])
@@ -207,6 +212,8 @@ function _buildBodyHTML(body) {
       }
       lines.push('</div>');
     }
+  } else {
+    lines.push('<div class="mm-row"><span class="mm-label">Atmosfera</span><span class="mm-value">Brak</span></div>');
   }
 
   // Skład chemiczny — top 5

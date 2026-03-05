@@ -246,9 +246,11 @@ export class VesselManager {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return;
 
-    const entity = this._findEntity(colonyId ?? vessel.colonyId);
+    const targetId = colonyId ?? vessel.colonyId;
+    const entity = this._findEntity(targetId);
+    vessel.colonyId = targetId;
     vessel.position.state = 'docked';
-    vessel.position.dockedAt = colonyId ?? vessel.colonyId;
+    vessel.position.dockedAt = targetId;
     vessel.position.x = entity?.x ?? 0;
     vessel.position.y = entity?.y ?? 0;
     vessel.status = 'idle';
@@ -312,6 +314,8 @@ export class VesselManager {
         mission:    missionData,
         status:     v.status,
         experience: v.experience,
+        cargo:      v.cargo ?? {},
+        cargoUsed:  v.cargoUsed ?? 0,
       });
     }
     return {
@@ -347,6 +351,8 @@ export class VesselManager {
         mission:    missionData,
         status:     vd.status ?? 'idle',
         experience: vd.experience ?? 0,
+        cargo:      vd.cargo ?? {},
+        cargoUsed:  vd.cargoUsed ?? 0,
       };
       this._vessels.set(vessel.id, vessel);
     }

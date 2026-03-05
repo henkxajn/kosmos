@@ -80,6 +80,8 @@ export class PlanetGlobeScene {
     this._buildPanelScrollY = 0;
     this._buildPanelMouseX = -1;  // pozycja kursora w panelu budowania (do tooltip)
     this._buildPanelMouseY = -1;
+    this._buildPanelTab    = 'build'; // 'build' | 'deploy'
+    this._deployBtns       = [];     // hit areas dla przycisków deploy
 
     // Stan kontrolek czasu
     this._timeState = { isPaused: true, multiplierIndex: 1, displayText: '' };
@@ -179,14 +181,26 @@ export class PlanetGlobeScene {
       });
     }
 
-    // Auto-place Stolicy przy pierwszym otwarciu mapy
-    const isNewColony = bSys && bSys._active.size === 0 && window.KOSMOS?.civMode;
-    if (isNewColony) {
+    // Auto-place Stolicy przy pierwszym otwarciu mapy (pomiń outpost)
+    const colony = window.KOSMOS?.colonyManager?.getColony(planet.id);
+    const isOutpost = colony?.isOutpost ?? false;
+    // Stolica potrzebna: nowa kolonia (brak budynków) LUB upgraded outpost (budynki są, ale brak stolicy)
+    let hasCapital = false;
+    if (bSys) {
+      for (const key of bSys._active.keys()) {
+        if (key.startsWith('capital_')) { hasCapital = true; break; }
+      }
+    }
+    const needsCapital = bSys && window.KOSMOS?.civMode && !isOutpost && !hasCapital;
+    if (needsCapital) {
       const baseTile = this._findColonyBaseTile();
       if (baseTile) {
         EventBus.emit('planet:buildRequest', { tile: baseTile, buildingId: 'colony_base' });
       }
     }
+
+    // Outpost: auto-select zakładka ZAINSTALUJ
+    if (isOutpost) this._buildPanelTab = 'deploy';
 
     // Ustaw rozdzielczość canvas
     this.canvas.width  = W;
@@ -314,11 +328,17 @@ export class PlanetGlobeScene {
           this._buildPanelMouseX = -1;
           this._buildPanelMouseY = -1;
         }
-        // Deleguj hover do UIManager (tooltip katalogu ciał w zakładce Ekspedycje)
-        if (this._civTab === 'expeditions' && this.uiManager) {
+        // Deleguj hover do UIManager (tooltipy w zakładkach CivPanel)
+        if (this.uiManager) {
           this.uiManager._tooltipMouseX = mx;
           this.uiManager._tooltipMouseY = my;
-          this.uiManager._tooltip = this.uiManager._detectCatalogTooltip(mx, my);
+          if (this._civTab === 'expeditions') {
+            this.uiManager._tooltip = this.uiManager._detectCatalogTooltip(mx, my);
+          } else if (this._civTab === 'economy') {
+            this.uiManager._tooltip = this.uiManager._detectFactoryTooltip(mx, my);
+          } else {
+            this.uiManager._tooltip = null;
+          }
         }
         layer.style.cursor = 'default';
         return;
@@ -326,6 +346,8 @@ export class PlanetGlobeScene {
       // Kursor poza panelami — reset hover budowania
       this._buildPanelMouseX = -1;
       this._buildPanelMouseY = -1;
+      // Reset tooltipa CivPanel
+      if (this.uiManager) this.uiManager._tooltip = null;
 
       // W obszarze globusa → raycasting
       this._globeRenderer?.handleExternalMouseMove(e.clientX, e.clientY);
@@ -360,6 +382,7 @@ export class PlanetGlobeScene {
           this._selectedTile   = tile;
           this._buildPanelTile = tile;
           this._buildPanelScrollY = 0;
+          this._buildPanelTab    = 'build';
         } else {
           this._selectedTile   = null;
           this._buildPanelTile = null;
@@ -472,6 +495,12 @@ export class PlanetGlobeScene {
     // Zamknięcie globusa z EventBus (np. klik w katalogu ciał)
     this._onCloseGlobe = () => { if (this.isOpen) this._close(); };
 
+    // Budowa zakończona — resync widoku
+    this._onConstructionComplete = ({ tileKey }) => {
+      this._syncBuildingIds();
+      this._globeRenderer?.refreshTexture();
+    };
+
     // Podpięcie
     if (layer) {
       layer.addEventListener('mousedown',  this._onMouseDown);
@@ -488,6 +517,7 @@ export class PlanetGlobeScene {
     EventBus.on('time:stateChanged',    this._onTimeState);
     EventBus.on('time:display',         this._onTimeDisplay);
     EventBus.on('planet:closeGlobe',    this._onCloseGlobe);
+    EventBus.on('planet:constructionComplete', this._onConstructionComplete);
   }
 
   _unregisterEvents(layer) {
@@ -507,6 +537,7 @@ export class PlanetGlobeScene {
     EventBus.off('time:stateChanged',    this._onTimeState);
     EventBus.off('time:display',         this._onTimeDisplay);
     EventBus.off('planet:closeGlobe',    this._onCloseGlobe);
+    EventBus.off('planet:constructionComplete', this._onConstructionComplete);
   }
 
   // ── Synchronizacja budynków z BuildingSystem ──────────────────
@@ -521,6 +552,7 @@ export class PlanetGlobeScene {
       t.buildingId = null;
       t.buildingLevel = 1;
       t.capitalBase = false;
+      t.underConstruction = null;
     });
 
     // Ustaw buildingId / capitalBase / buildingLevel z _active
@@ -541,6 +573,22 @@ export class PlanetGlobeScene {
         tile.buildingLevel = entry.level ?? 1;
       }
     });
+
+    // Sync underConstruction z kolejki budowy
+    if (bSys._constructionQueue) {
+      bSys._constructionQueue.forEach((entry, tileKey) => {
+        const [q, r] = tileKey.split(',').map(Number);
+        const tile = this.grid.get(q, r);
+        if (tile) {
+          tile.underConstruction = {
+            buildingId: entry.buildingId,
+            progress:   entry.progress,
+            buildTime:  entry.buildTime,
+            isUpgrade:  entry.isUpgrade,
+          };
+        }
+      });
+    }
   }
 
   // ── Sprawdzenie czy punkt w panelach ──────────────────────────
@@ -772,11 +820,13 @@ export class PlanetGlobeScene {
     // Nazwa planety + typ + temperatura (pod przyciskiem)
     if (this.planet) {
       ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textSecondary;
+      const outpostFlag = window.KOSMOS?.colonyManager?.getColony(this.planet.id)?.isOutpost;
+      ctx.fillStyle = outpostFlag ? THEME.warning : THEME.textSecondary;
       const temp = this.planet.temperatureK
         ? ` ${Math.round(this.planet.temperatureK - 273)}°C`
         : '';
-      ctx.fillText(`${this.planet.name}${temp} ✏`, 10, 34);
+      const prefix = outpostFlag ? '🏗 PLACÓWKA — ' : '';
+      ctx.fillText(`${prefix}${this.planet.name}${temp} ✏`, 10, 34);
     }
 
     ctx.textAlign = 'left';
@@ -833,11 +883,13 @@ export class PlanetGlobeScene {
     // Gdy zakładka CivPanel aktywna — treść rysowana w overlay, pomijamy POP/budynki
     if (this._civTab) return;
 
-    // ── Widget POP ──────────────────────────────────────────────
+    // ── Widget POP (ukryty w outpost) ───────────────────────────
     const tabBarOffset = window.KOSMOS?.civMode ? CIV_TAB_BAR_H + 6 : 0;
     let y = HEADER_H + 6 + tabBarOffset;
 
-    if (cSys) {
+    const isOutpostView = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
+
+    if (cSys && !isOutpostView) {
       ctx.font      = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(`👤 POP: ${cSys.population} / ${cSys.housing}`, 12, y + 12);
@@ -1084,6 +1136,62 @@ export class PlanetGlobeScene {
       buildListY += 14;
     }
 
+    // Budowa w toku — pasek postępu i przycisk anulowania
+    if (tile.underConstruction) {
+      const uc = tile.underConstruction;
+      const ucBuilding = BUILDINGS[uc.buildingId];
+      const ucName = ucBuilding?.namePL ?? uc.buildingId;
+      const ucIcon = ucBuilding?.icon ?? '🔨';
+      const pct = uc.buildTime > 0 ? Math.min(1, uc.progress / uc.buildTime) : 1;
+      const remaining = Math.max(0, uc.buildTime - uc.progress);
+
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText(`🔨 ${ucIcon} ${ucName}`, BPX + 8, buildListY);
+      buildListY += 12;
+
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillText(uc.isUpgrade ? 'Ulepszenie w toku...' : 'W budowie...', BPX + 8, buildListY);
+      buildListY += 10;
+
+      // Pasek postępu
+      const barW = RIGHT_W - 24;
+      const barH = 8;
+      ctx.fillStyle = THEME.bgTertiary;
+      ctx.fillRect(BPX + 8, buildListY, barW, barH);
+      ctx.fillStyle = THEME.warning;
+      ctx.fillRect(BPX + 8, buildListY, Math.round(barW * pct), barH);
+      ctx.strokeStyle = THEME.border;
+      ctx.strokeRect(BPX + 8, buildListY, barW, barH);
+      buildListY += 14;
+
+      // Procent i pozostały czas
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(`${Math.round(pct * 100)}%  ~${remaining.toFixed(1)} lat`, BPX + 8, buildListY);
+      buildListY += 14;
+
+      // Przycisk anulowania
+      const cancelY = buildListY;
+      ctx.fillStyle = 'rgba(100,30,30,0.8)';
+      ctx.fillRect(BPX + 8, cancelY, RIGHT_W - 16, 18);
+      ctx.strokeStyle = THEME.dangerDim;
+      ctx.strokeRect(BPX + 8, cancelY, RIGHT_W - 16, 18);
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#ff8888';
+      ctx.textAlign = 'center';
+      ctx.fillText('[ Anuluj budowę ]', BPX + RIGHT_W / 2, cancelY + 13);
+      ctx.textAlign = 'left';
+
+      // Jeśli to upgrade, pokaż też istniejący budynek poniżej
+      if (uc.isUpgrade && tile.buildingId && BUILDINGS[tile.buildingId]) {
+        buildListY = cancelY + 28;
+        // Kontynuuj do rysowania istniejącego budynku poniżej
+      } else {
+        return; // Nowa budowa — nie ma nic więcej do rysowania
+      }
+    }
+
     // Aktualny budynek — z poziomem i przyciskiem ulepszenia
     if (tile.buildingId && BUILDINGS[tile.buildingId]) {
       const b = BUILDINGS[tile.buildingId];
@@ -1147,7 +1255,8 @@ export class PlanetGlobeScene {
 
         // Sprawdź czy stać (surowce + POP)
         const upgPopCost = b.popCost ?? 0.25;
-        const upgPopOk   = upgPopCost <= 0 || (cSys && cSys.freePops >= upgPopCost);
+        const isOutpostUpg = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
+        const upgPopOk   = isOutpostUpg || upgPopCost <= 0 || (cSys && cSys.freePops >= upgPopCost);
         const canAfford  = Object.entries(upgCost).every(([k, v]) => (inv[k] ?? 0) >= v) && upgPopOk;
 
         // Hover detection
@@ -1219,6 +1328,38 @@ export class PlanetGlobeScene {
         }
       }
     } else {
+      // Zakładki BUDUJ / ZAINSTALUJ
+      const tabY = buildListY - 2;
+      const tabW = (RIGHT_W - 16) / 2;
+      const tabH = 16;
+      this._buildTabRect = { x: BPX + 8, y: tabY, w: tabW, h: tabH }; // do hit test
+
+      // BUDUJ tab
+      ctx.fillStyle = this._buildPanelTab === 'build' ? 'rgba(20,50,80,0.95)' : 'rgba(10,20,30,0.7)';
+      ctx.fillRect(BPX + 8, tabY, tabW, tabH);
+      ctx.strokeStyle = this._buildPanelTab === 'build' ? THEME.accent : THEME.border;
+      ctx.strokeRect(BPX + 8, tabY, tabW, tabH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = this._buildPanelTab === 'build' ? THEME.accent : THEME.textSecondary;
+      ctx.textAlign = 'center';
+      ctx.fillText('🔨 BUDUJ', BPX + 8 + tabW / 2, tabY + 11);
+
+      // ZAINSTALUJ tab
+      ctx.fillStyle = this._buildPanelTab === 'deploy' ? 'rgba(20,50,80,0.95)' : 'rgba(10,20,30,0.7)';
+      ctx.fillRect(BPX + 8 + tabW, tabY, tabW, tabH);
+      ctx.strokeStyle = this._buildPanelTab === 'deploy' ? THEME.accent : THEME.border;
+      ctx.strokeRect(BPX + 8 + tabW, tabY, tabW, tabH);
+      ctx.fillStyle = this._buildPanelTab === 'deploy' ? THEME.accent : THEME.textSecondary;
+      ctx.fillText('📦 ZAINSTALUJ', BPX + 8 + tabW + tabW / 2, tabY + 11);
+      ctx.textAlign = 'left';
+      buildListY = tabY + tabH + 6;
+
+      if (this._buildPanelTab === 'deploy') {
+        // Panel deploy — prefabrykaty z cargo statków zadokowanych na tej planecie
+        this._drawDeployPanel(ctx, tile, BPX, buildListY);
+        return;
+      }
+
       // Lista budynków (dostępne + niedostępne z powodem) — ze scrollem
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.borderLight;
@@ -1258,7 +1399,8 @@ export class PlanetGlobeScene {
           const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
           const commodityOk = Object.entries(b.commodityCost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
           const popCost = b.popCost ?? 0.25;
-          const popOk   = popCost <= 0 || (cSys && cSys.freePops >= popCost);
+          const isOutpostBuild = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
+          const popOk   = isOutpostBuild || popCost <= 0 || (cSys && cSys.freePops >= popCost);
           if (!resourceOk || !commodityOk) reason = 'Brak surowców';
           else if (!popOk) reason = 'Brak POPów';
         }
@@ -1371,6 +1513,118 @@ export class PlanetGlobeScene {
     };
   }
 
+  // ── Panel deploy — prefabrykaty z cargo statków ──────────────
+  _drawDeployPanel(ctx, tile, BPX, startY) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    const bSys = window.KOSMOS?.buildingSystem;
+    const planetId = this.planet?.id;
+    if (!vMgr || !planetId) return;
+
+    this._deployBtns = [];
+
+    // Zbierz statki zadokowane na tej planecie z prefabami w cargo
+    const docked = vMgr.getAllVessels().filter(v =>
+      v.position.dockedAt === planetId && v.position.state === 'docked' && v.cargo
+    );
+
+    let yy = startY;
+    let anyPrefab = false;
+
+    for (const vessel of docked) {
+      if (!vessel.cargo || Object.keys(vessel.cargo).length === 0) continue;
+
+      // Szukaj prefabów w cargo
+      const prefabs = Object.entries(vessel.cargo).filter(([comId, qty]) => {
+        const com = COMMODITIES[comId];
+        return qty > 0 && com?.isPrefab;
+      });
+      if (prefabs.length === 0) continue;
+
+      anyPrefab = true;
+
+      // Nagłówek statku
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.info;
+      ctx.fillText(`🚀 ${vessel.name}`, BPX + 8, yy + 10);
+      yy += 16;
+
+      for (const [comId, qty] of prefabs) {
+        const com = COMMODITIES[comId];
+        const deploysBuildingId = com.deploysBuilding;
+        const buildingDef = BUILDINGS[deploysBuildingId];
+        if (!buildingDef) continue;
+
+        // Sprawdź czy deploy jest możliwy (teren, tech, POP)
+        let canDeploy = true;
+        let reason = '';
+        if (!bSys._canBuildOnTile(tile, buildingDef)) {
+          canDeploy = false;
+          reason = 'Zły teren';
+        } else if (buildingDef.requires && !window.KOSMOS?.techSystem?.isResearched(buildingDef.requires)) {
+          canDeploy = false;
+          reason = 'Wymaga tech';
+        } else {
+          const popCost = buildingDef.popCost ?? 0.25;
+          const isOutpostCol = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
+          if (popCost > 0 && !isOutpostCol && window.KOSMOS?.civSystem?.freePops < popCost) {
+            canDeploy = false;
+            reason = 'Brak POPów';
+          }
+        }
+
+        const rowH = 24;
+        ctx.fillStyle = canDeploy ? 'rgba(13,36,26,0.90)' : 'rgba(20,14,14,0.85)';
+        ctx.fillRect(BPX + 8, yy, RIGHT_W - 16, rowH);
+        ctx.strokeStyle = canDeploy ? '#2a6040' : '#331818';
+        ctx.strokeRect(BPX + 8, yy, RIGHT_W - 16, rowH);
+
+        // Ikona + nazwa + ilość
+        ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = canDeploy ? THEME.successDim : '#663333';
+        ctx.fillText(`${com.icon} ${buildingDef.icon} ${buildingDef.namePL} ×${qty}`, BPX + 14, yy + 10);
+
+        if (canDeploy) {
+          // Przycisk DEPLOY
+          const btnW = 52;
+          const btnX = BPX + RIGHT_W - 16 - btnW;
+          const btnY = yy + 2;
+          const btnH = rowH - 4;
+
+          ctx.fillStyle = 'rgba(40,80,60,0.9)';
+          ctx.fillRect(btnX, btnY, btnW, btnH);
+          ctx.strokeStyle = THEME.successDim;
+          ctx.strokeRect(btnX, btnY, btnW, btnH);
+          ctx.fillStyle = THEME.successDim;
+          ctx.textAlign = 'center';
+          ctx.fillText('DEPLOY', btnX + btnW / 2, btnY + 13);
+          ctx.textAlign = 'left';
+
+          this._deployBtns.push({
+            x: btnX, y: btnY, w: btnW, h: btnH,
+            vesselId: vessel.id, prefabId: comId, buildingId: deploysBuildingId,
+          });
+        } else {
+          ctx.fillStyle = '#663333';
+          ctx.fillText(`❌ ${reason}`, BPX + RIGHT_W - 80, yy + 10);
+        }
+        yy += rowH + 2;
+      }
+      yy += 4;
+    }
+
+    if (!anyPrefab) {
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText('Brak prefabów w cargo', BPX + 8, yy + 10);
+      yy += 14;
+      ctx.fillStyle = THEME.borderLight;
+      ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillText('Załaduj prefabrykaty na', BPX + 8, yy + 6);
+      yy += 10;
+      ctx.fillText('statek cargo w panelu floty.', BPX + 8, yy + 6);
+    }
+  }
+
   // ── Tooltip budynku (szczegółowe koszty + czego brakuje) ──────
   _drawBuildTooltip(ctx, building, inv, cSys) {
     const BPX = LW - RIGHT_W;
@@ -1412,9 +1666,10 @@ export class PlanetGlobeScene {
       });
     }
 
-    // POP
+    // POP (pomiń w outpost)
     const popCost = building.popCost ?? 0.25;
-    if (popCost > 0) {
+    const isOutpostTooltip = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
+    if (popCost > 0 && !isOutpostTooltip) {
       const freePops = cSys?.freePops ?? 0;
       const ok = freePops >= popCost;
       lines.push({
@@ -1520,7 +1775,23 @@ export class PlanetGlobeScene {
       moraleData: ui?._moraleData,
     };
 
-    if (this._civTab === 'economy')     this._factoryBtns = drawEconomyTab(ctx, bodyY, bodyX, bodyW, state);
+    if (this._civTab === 'economy') {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.clip();
+      this._factoryBtns = drawEconomyTab(ctx, bodyY, bodyX, bodyW, state);
+      ctx.restore();
+      // Synchronizuj factoryBtns do UIManager (do detekcji tooltipa)
+      if (ui) ui._factoryBtns = this._factoryBtns;
+      // Rysuj tooltip commodity/factory (jeśli aktywny — poza clip)
+      if (ui?._tooltip?.type === 'factory' || ui?._tooltip?.type === 'commodity') {
+        const savedCtx = ui.ctx;
+        ui.ctx = ctx;
+        ui._drawTooltip();
+        ui.ctx = savedCtx;
+      }
+    }
     if (this._civTab === 'population')  drawPopulationTab(ctx, bodyY, bodyX, bodyW, state);
     if (this._civTab === 'tech')        drawTechTab(ctx, bodyY, bodyX, bodyW);
     if (this._civTab === 'buildings')   drawBuildingsTab(ctx, bodyY, bodyX, bodyW);
@@ -1629,6 +1900,34 @@ export class PlanetGlobeScene {
     return true;
   }
 
+  // ── Deploy prefabu z cargo statku ──────────────────────────
+  _handleDeploy(vesselId, prefabId, buildingId, tile) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    const bSys = window.KOSMOS?.buildingSystem;
+    if (!vMgr || !bSys) return;
+
+    const vessel = vMgr.getVessel(vesselId);
+    if (!vessel?.cargo?.[prefabId] || vessel.cargo[prefabId] <= 0) {
+      this._flashMsg = 'Brak prefabu w cargo';
+      this._flashEnd = Date.now() + 2500;
+      return;
+    }
+
+    const result = bSys.deployFromCargo(tile, buildingId);
+    if (result.success) {
+      // Zużyj prefab z cargo
+      vessel.cargo[prefabId] -= 1;
+      if (vessel.cargo[prefabId] <= 0) delete vessel.cargo[prefabId];
+      vessel.cargoUsed = Math.max(0, (vessel.cargoUsed ?? 0) - (COMMODITIES[prefabId]?.weight ?? 0));
+
+      this._syncBuildingIds();
+      this._globeRenderer?.refreshTexture();
+    } else {
+      this._flashMsg = result.reason;
+      this._flashEnd = Date.now() + 2500;
+    }
+  }
+
   _hitTestLeftPanel(mx, my) {
     // Pochłoń kliknięcia w lewym panelu (nie propaguj do globusa)
     if (mx < LEFT_W && my > HEADER_H && my < LH - BOTTOM_BAR_H) {
@@ -1652,6 +1951,23 @@ export class PlanetGlobeScene {
       if (deposits.length > 5) offsetY += 10;
     }
     if (tile.capitalBase) offsetY += 14;
+
+    // Budowa w toku — przycisk anulowania
+    if (tile.underConstruction) {
+      // Wysokość sekcji budowy: nagłówek(12) + tekst(10) + pasek(14) + procent(14) + przycisk(18) = ~68
+      const cancelY = offsetY + 50;
+      if (mx >= BPX + 8 && mx <= LW - 8 && my >= cancelY && my <= cancelY + 18) {
+        const key = `${tile.q},${tile.r}`;
+        EventBus.emit('planet:demolishRequest', { planet: this.planet, tileKey: key, tile });
+        return true;
+      }
+      // Jeśli to upgrade — przesunięcie do istniejącego budynku poniżej
+      if (tile.underConstruction.isUpgrade && tile.buildingId) {
+        offsetY += 78; // przesunięcie po sekcji budowy
+      } else {
+        return true; // pochłoń klik (nowa budowa — brak budynku pod spodem)
+      }
+    }
 
     if (tile.buildingId && BUILDINGS[tile.buildingId]) {
       const bDef = BUILDINGS[tile.buildingId];
@@ -1690,8 +2006,30 @@ export class PlanetGlobeScene {
       }
       return true; // pochłoń kliknięcie w prawy panel
     } else {
+      // Sprawdź klik na zakładkach BUDUJ/ZAINSTALUJ
+      if (this._buildTabRect) {
+        const tr = this._buildTabRect;
+        if (my >= tr.y && my <= tr.y + tr.h && mx >= tr.x && mx <= tr.x + tr.w * 2) {
+          // Lewa zakładka = BUDUJ, prawa = ZAINSTALUJ
+          this._buildPanelTab = mx < tr.x + tr.w ? 'build' : 'deploy';
+          this._buildPanelScrollY = 0;
+          return true;
+        }
+      }
+
+      // Panel deploy — sprawdź klik na przyciskach DEPLOY
+      if (this._buildPanelTab === 'deploy') {
+        for (const btn of this._deployBtns) {
+          if (mx >= btn.x && mx <= btn.x + btn.w && my >= btn.y && my <= btn.y + btn.h) {
+            this._handleDeploy(btn.vesselId, btn.prefabId, btn.buildingId, tile);
+            return true;
+          }
+        }
+        return true; // pochłoń klik w panelu deploy
+      }
+
       // Buduj — iteruj przez WSZYSTKIE budynki (z uwzględnieniem scrolla)
-      let yy   = offsetY + 12 - this._buildPanelScrollY;
+      let yy   = offsetY + 12 + 20 - this._buildPanelScrollY; // +20 na tab bar
       const tSys = window.KOSMOS?.techSystem;
       const cSys = window.KOSMOS?.civSystem;
       for (const b of Object.values(BUILDINGS)) {
@@ -1712,7 +2050,8 @@ export class PlanetGlobeScene {
           const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
           const commodityOk = Object.entries(b.commodityCost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
           const popCost = b.popCost ?? 0.25;
-          const popOk   = popCost <= 0 || (cSys && cSys.freePops >= popCost);
+          const isOutpostClick = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
+          const popOk   = isOutpostClick || popCost <= 0 || (cSys && cSys.freePops >= popCost);
           if (!resourceOk || !commodityOk || !popOk) reason = 'unaffordable';
         }
 

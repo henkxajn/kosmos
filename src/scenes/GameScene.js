@@ -235,6 +235,12 @@ export class GameScene {
       const idx = this.timeSystem.multiplierIndex;
       this.planetGlobeScene.open(colony.planet, idx);
     });
+    // Otwórz mapę outpost po założeniu
+    EventBus.on('outpost:founded', ({ colony }) => {
+      if (this.planetGlobeScene?.isOpen || this.planetScene?.isOpen) return;
+      const idx = this.timeSystem.multiplierIndex;
+      this.planetGlobeScene.open(colony.planet, idx);
+    });
 
     // Kolizja — akrecja nowej planety z ThreeRenderer (EventBus obsługuje wewnątrz)
     EventBus.on('accretion:newPlanet', (planet) => {
@@ -377,6 +383,9 @@ export class GameScene {
         // Otwórz globus 3D mapy planety
         const idx = this.timeSystem.multiplierIndex;
         this.planetGlobeScene.open(civPlanet, idx);
+        // Auto-budowa startowych budynków (farm, well, solar_farm)
+        await new Promise(r => setTimeout(r, 200));
+        this._autoPlaceStarterBuildings();
       }, 100);
     }
     // Przywrócenie civName z save
@@ -406,9 +415,11 @@ export class GameScene {
     this.resourceSystem.receive({
       Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10,
       food: 100, water: 100, research: 100,
-      steel_plates: 20, polymer_composites: 20,
-      power_cells: 20, electronics: 20, food_synthesizers: 20,
-      mining_drills: 20, hull_armor: 20,
+      steel_plates: 15, polymer_composites: 10, concrete_mix: 8, copper_wiring: 8,
+      power_cells: 12, electronics: 6, food_synthesizers: 3,
+      mining_drills: 5, hull_armor: 4, habitat_modules: 4, water_recyclers: 3,
+      robots: 0, semiconductors: 0, ion_thrusters: 0,
+      fusion_cores: 0, nanotech_filters: 0, quantum_cores: 0, antimatter_cells: 0,
     });
     // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
     this.buildingSystem.setDeposits(planet.deposits ?? []);
@@ -437,10 +448,14 @@ export class GameScene {
   _setupPowerTestResources() {
     this.resourceSystem.receive({
       Fe: 99999, C: 99999, Si: 99999, Cu: 99999, Ti: 99999, Li: 99999,
+      W: 99999, Pt: 99999, Xe: 99999, Nt: 99999,
       food: 99999, water: 99999, research: 10000,
-      steel_plates: 9999, polymer_composites: 9999,
+      steel_plates: 9999, polymer_composites: 9999, concrete_mix: 9999, copper_wiring: 9999,
       power_cells: 9999, electronics: 9999, food_synthesizers: 9999,
-      mining_drills: 9999, hull_armor: 9999,
+      mining_drills: 9999, hull_armor: 9999, habitat_modules: 9999, water_recyclers: 9999,
+      robots: 9999, semiconductors: 9999, ion_thrusters: 9999,
+      fusion_cores: 9999, nanotech_filters: 9999, quantum_cores: 9999, antimatter_cells: 9999,
+      prefab_mine: 50, prefab_solar_farm: 50, prefab_habitat: 50, prefab_autonomous_mine: 50,
     });
   }
 
@@ -455,7 +470,7 @@ export class GameScene {
     const vMgr = window.KOSMOS?.vesselManager;
     const colony = this.colonyManager.getColony(planetId);
     if (!vMgr || !colony) return;
-    for (const shipId of ['science_vessel', 'colony_ship', 'cargo_ship']) {
+    for (const shipId of ['science_vessel', 'colony_ship', 'cargo_ship', 'fusion_cruiser', 'ftl_ship']) {
       const vessel = vMgr.createAndRegister(shipId, planetId);
       colony.fleet.push(vessel.id);
     }
@@ -558,6 +573,81 @@ export class GameScene {
       if (terrain.allowedCategories.includes(building.category)) return tile;
     }
     return null;
+  }
+
+  // ── Auto-budowa startowych budynków (nowa gra, scenariusz Cywilizacja) ──
+  // Stawia farm, well, solar_farm na odpowiednich hexach — bez kosztów surowcowych
+  _autoPlaceStarterBuildings() {
+    const grid = this.planetGlobeScene?.grid;
+    const bSys = window.KOSMOS?.buildingSystem;
+    if (!grid || !bSys) return;
+
+    const allTiles = grid.toArray();
+    const freeTiles = allTiles.filter(t => {
+      const terrain = TERRAIN_TYPES[t.type];
+      return terrain?.buildable && !t.isOccupied && !t.damaged;
+    });
+
+    // Sortuj: tereny z bonusami najpierw
+    const terrainPriority = ['plains', 'desert', 'ice_sheet', 'forest', 'mountains', 'tundra', 'crater', 'wasteland', 'volcano'];
+    freeTiles.sort((a, b) => {
+      const ai = terrainPriority.indexOf(a.type);
+      const bi = terrainPriority.indexOf(b.type);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    // Farm na hex ze stolicą (wirtualna — hex wolny), well i solar_farm na osobnych hexach
+    const buildPlan = [
+      { id: 'farm',       level: 1, count: 1 },
+      { id: 'well',       level: 1, count: 1 },
+      { id: 'solar_farm', level: 1, count: 1 },
+    ];
+
+    const entries = [];
+    const usedTiles = new Set();
+
+    // Stolica jest wirtualna (capitalBase=true, ale hex wolny) — farm na niej
+    const capitalTile = allTiles.find(t => t.capitalBase === true);
+
+    for (const plan of buildPlan) {
+      const building = BUILDINGS[plan.id];
+      if (!building) continue;
+
+      let tile;
+      // Farm → na hex ze stolicą (najlepsza lokalizacja, plains z bonusem food)
+      if (plan.id === 'farm' && capitalTile && !usedTiles.has(capitalTile.key)) {
+        tile = capitalTile;
+      } else {
+        tile = this._findTileForBuilding(freeTiles, building, usedTiles);
+      }
+      if (!tile) continue;
+
+      usedTiles.add(tile.key);
+      tile.buildingId    = plan.id;
+      tile.buildingLevel = plan.level;
+
+      const baseRates = bSys._calcBaseRates(building, tile, plan.level);
+      const housing   = (building.housing || 0) * plan.level;
+
+      entries.push({
+        tileKey:    tile.key,
+        buildingId: plan.id,
+        baseRates,
+        housing,
+        popCost:    building.popCost ?? 0.25,
+        level:      plan.level,
+      });
+    }
+
+    if (entries.length > 0) {
+      bSys.restoreFromSave(entries);
+    }
+
+    // Odśwież overlay globusa
+    if (this.planetGlobeScene._globeRenderer) {
+      this.planetGlobeScene._syncBuildingIds();
+      this.planetGlobeScene._globeRenderer.refreshTexture();
+    }
   }
 
   // ── Generowanie / przywracanie układu ─────────────────────────

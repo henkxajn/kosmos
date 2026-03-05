@@ -76,14 +76,7 @@ export class TimeSystem {
 
   // Formatuj czas gry do czytelnej postaci
   _formatTime(years) {
-    if (years < 1 / 12) {
-      const days = Math.floor(years * 365.25);
-      return `Rok 0, dzień ${days}`;
-    }
-    if (years < 1) {
-      const months = Math.floor(years * 12);
-      return `Rok 0, mies. ${months}`;
-    }
+    // Duże skale czasowe — format skrócony
     if (years >= 1_000_000_000) {
       return `${(years / 1_000_000_000).toFixed(2)} mld lat`;
     }
@@ -93,8 +86,17 @@ export class TimeSystem {
     if (years >= 10_000) {
       return `${Math.floor(years / 1000).toLocaleString('pl-PL')} tys. lat`;
     }
+    // Format DD/MM/YYYY — czytelny jak kalendarz
+    const totalDays = Math.floor(years * 365.25);
     const wholeYears = Math.floor(years);
-    return `Rok ${wholeYears.toLocaleString('pl-PL')}`;
+    const dayOfYear = totalDays - Math.floor(wholeYears * 365.25);
+    // Przybliżony dzień i miesiąc (30.44 dni/miesiąc)
+    const month = Math.min(12, Math.floor(dayOfYear / 30.44) + 1);
+    const day = Math.max(1, Math.min(30, dayOfYear - Math.floor((month - 1) * 30.44) + 1));
+    const dd = String(day).padStart(2, '0');
+    const mm = String(month).padStart(2, '0');
+    const yyyy = String(wholeYears).padStart(4, '0');
+    return `${dd}/${mm}/${yyyy}`;
   }
 
   pause() {

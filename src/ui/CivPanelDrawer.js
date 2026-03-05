@@ -205,9 +205,12 @@ export function drawEconomyTab(ctx, bodyY, bodyX, bodyW, state) {
   y2 += LH + 2;
 
   const COMM_LIST = [
-    'steel_plates', 'polymer_composites', 'power_cells', 'electronics',
-    'food_synthesizers', 'mining_drills', 'hull_armor',
-    'semiconductors', 'ion_thrusters', 'quantum_cores',
+    'steel_plates', 'polymer_composites', 'concrete_mix', 'copper_wiring',
+    'power_cells', 'electronics', 'food_synthesizers', 'mining_drills', 'hull_armor',
+    'habitat_modules', 'water_recyclers', 'robots',
+    'prefab_mine', 'prefab_solar_farm', 'prefab_habitat', 'prefab_autonomous_mine',
+    'semiconductors', 'ion_thrusters', 'fusion_cores', 'nanotech_filters',
+    'quantum_cores', 'antimatter_cells',
   ];
 
   for (const cid of COMM_LIST) {
@@ -220,6 +223,8 @@ export function drawEconomyTab(ctx, bodyY, bodyX, bodyW, state) {
     ctx.fillText(`${icon} ${name}`, x2, y2);
     ctx.fillStyle = amt < 1 ? C.dim : C.bright;
     ctx.fillText(`${Math.floor(amt)}`, x2 + 90, y2);
+    // Hit rect do tooltipa (commodity info)
+    factoryBtns.push({ x: x2, y: y2 - 10, w: colW - PAD * 2, h: LH, commodityId: cid, isTooltipOnly: true });
     y2 += LH;
   }
 
@@ -758,6 +763,7 @@ export function handleTechClick(x, y, bodyY, bodyX, bodyW) {
 // ── Hit test fabryk ────────────────────────────────────────
 export function handleFactoryClick(x, y, factoryBtns) {
   for (const btn of factoryBtns) {
+    if (btn.isTooltipOnly) continue; // Pomiń hit recty tylko do tooltipa
     if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
       const fSys = window.KOSMOS?.factorySystem;
       if (!fSys) return false;
