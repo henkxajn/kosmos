@@ -1310,6 +1310,11 @@ export class PlanetGlobeScene {
         }
 
         // Surowce
+        if (rawEntries.length > 0) {
+          ctx.fillStyle = THEME.textSecondary;
+          ctx.fillText('Surowce:', BPX + 8, buildListY);
+          buildListY += 12;
+        }
         for (const [resId, amt] of rawEntries) {
           const have = Math.floor(inv[resId] ?? 0);
           const icon = RESOURCE_ICONS[resId] ?? resId;
@@ -2060,11 +2065,12 @@ export class PlanetGlobeScene {
         }
         // Pomiń przycisk + linie kosztów ulepszenia (+ nagłówek Towary + linia POP)
         const rawCount = Object.keys(bDef.cost || {}).length;
+        const rawHeader = rawCount > 0 ? 1 : 0; // nagłówek "Surowce:"
         const hasCom   = ((tile.buildingLevel ?? 1) + 1) >= 3 && Object.keys(bDef.commodityCost || {}).length > 0;
         const comCount = hasCom ? Object.keys(bDef.commodityCost).length : 0;
         const comHeader = hasCom ? 1 : 0; // nagłówek "Towary:"
         const upgPopLine = (bDef.popCost ?? 0.25) > 0 ? 1 : 0;
-        btnY = upgradeY + 32 + (rawCount + comCount + comHeader + upgPopLine) * 12 + 4;
+        btnY = upgradeY + 32 + (rawHeader + rawCount + comCount + comHeader + upgPopLine) * 12 + 4;
       }
 
       // Rozbiórka
