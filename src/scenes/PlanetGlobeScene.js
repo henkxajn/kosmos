@@ -501,18 +501,22 @@ export class PlanetGlobeScene {
       this._globeRenderer?.refreshTexture();
     };
 
-    // Postęp budowy — aktualizuj progress na tile'ach (pasek progresu)
+    // Postęp budowy — aktualizuj progress na tile'ach (pasek progresu + overlay)
     this._onConstructionProgress = () => {
       if (!this.grid) return;
       const bSys = window.KOSMOS?.buildingSystem;
       if (!bSys?._constructionQueue) return;
+      let anyUpdate = false;
       bSys._constructionQueue.forEach((entry, tileKey) => {
         const [q, r] = tileKey.split(',').map(Number);
         const tile = this.grid.get(q, r);
         if (tile?.underConstruction) {
           tile.underConstruction.progress = entry.progress;
+          anyUpdate = true;
         }
       });
+      // Odśwież overlay globusa aby zaktualizować markery budowy
+      if (anyUpdate) this._globeRenderer?.refreshTexture();
     };
 
     // Podpięcie
@@ -1963,8 +1967,7 @@ export class PlanetGlobeScene {
     const deposits = this.planet?.deposits ?? [];
     let offsetY = HEADER_H + 48;
     if (deposits.length > 0) {
-      offsetY += 14 + Math.min(deposits.length, 5) * 10;
-      if (deposits.length > 5) offsetY += 10;
+      offsetY += 14 + deposits.length * 10;
     }
     if (tile.capitalBase) offsetY += 14;
 
