@@ -1285,12 +1285,14 @@ export class PlanetGlobeScene {
           && this._buildPanelMouseY >= upgradeY
           && this._buildPanelMouseY <= upgradeY + 18;
 
-        ctx.fillStyle = isHover ? 'rgba(26,50,76,0.95)' : 'rgba(20,40,60,0.8)';
+        ctx.fillStyle = canAfford
+          ? (isHover ? 'rgba(26,50,76,0.95)' : 'rgba(20,40,60,0.8)')
+          : 'rgba(30,20,20,0.7)';
         ctx.fillRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
-        ctx.strokeStyle = canAfford ? (isHover ? THEME.accent : THEME.successDim) : '#553322';
+        ctx.strokeStyle = canAfford ? (isHover ? THEME.accent : THEME.successDim) : '#442222';
         ctx.strokeRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
         ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = canAfford ? THEME.accent : '#884433';
+        ctx.fillStyle = canAfford ? THEME.accent : '#664444';
         ctx.textAlign = 'center';
         ctx.fillText(`[ Ulepsz do Lv.${nextLvl} ]`, BPX + RIGHT_W / 2, upgradeY + 13);
         ctx.textAlign = 'left';
@@ -2006,6 +2008,28 @@ export class PlanetGlobeScene {
       if (lvl < maxLvl) {
         const upgradeY = btnY + 2;
         if (mx >= BPX + 8 && mx <= LW - 8 && my >= upgradeY && my <= upgradeY + 18) {
+          // Sprawdź czy stać — oblicz koszt (ta sama formuła co _drawBuildPanel)
+          const upgCost = {};
+          if (bDef.cost) {
+            for (const [k, v] of Object.entries(bDef.cost)) upgCost[k] = Math.ceil(v * (lvl + 1) * 1.2);
+          }
+          if ((lvl + 1) >= 3 && bDef.commodityCost) {
+            for (const [k, v] of Object.entries(bDef.commodityCost)) upgCost[k] = Math.ceil(v * lvl);
+          }
+          const upgPopCost = bDef.popCost ?? 0.25;
+          const isOutpost = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
+          const cSys = window.KOSMOS?.civSystem;
+          const popOk = isOutpost || upgPopCost <= 0 || (cSys && cSys.freePops >= upgPopCost);
+          const afford = Object.entries(upgCost).every(([k, v]) => (inv[k] ?? 0) >= v) && popOk;
+          if (!afford) {
+            // Pokaż flash z brakującymi zasobami
+            const missing = Object.entries(upgCost)
+              .filter(([k, v]) => (inv[k] ?? 0) < v)
+              .map(([k, v]) => k);
+            this._flashMsg = `Brak: ${missing.join(', ')}`;
+            this._flashEnd = Date.now() + 2000;
+            return true;
+          }
           EventBus.emit('planet:upgradeRequest', { planet: this.planet, tile });
           return true;
         }
