@@ -17,7 +17,7 @@ export const SHIPS = {
     namePL:        'Statek Naukowy',
     icon:          '🛸',
     cost:          { Fe: 100, Ti: 20, Cu: 15 },
-    commodityCost: { hull_armor: 4, electronics: 3, power_cells: 2, semiconductors: 1 },
+    commodityCost: { hull_armor: 4, electronics: 3, power_cells: 2, copper_wiring: 2 },
     buildTime:     8,
     fuelCapacity:  8,            // max power_cells
     fuelPerAU:     0.4,          // power_cells / AU → zasięg 20 AU
