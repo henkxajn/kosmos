@@ -1117,19 +1117,8 @@ export class ExpeditionSystem {
       }
       exp.gained = exp.cargo || {};
 
-      // Transport automatycznie wraca do bazy po dostarczeniu ładunku
+      exp.status = 'orbiting';
       if (exp.vesselId && vMgr) vMgr.arriveAtTarget(exp.vesselId);
-      const shipSpeed = this._getShipSpeed(exp.vesselId);
-      const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, exp.distance / shipSpeed).toFixed(3));
-      exp.status = 'returning';
-      exp.returnYear = this._gameYear + returnTime;
-      if (vMgr && exp.vesselId) {
-        const vessel = vMgr.getVessel(exp.vesselId);
-        if (vessel?.mission) {
-          vessel.mission.returnYear = exp.returnYear;
-        }
-        vMgr.startReturn(exp.vesselId);
-      }
     } else if (colMgr) {
       // Cel BEZ kolonii — utwórz outpost
       const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;

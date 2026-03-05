@@ -223,6 +223,7 @@ export class VesselManager {
     const m = vessel.mission;
     m.returnStartX = vessel.position.x;
     m.returnStartY = vessel.position.y;
+    m.returnDepartYear = window.KOSMOS?.timeSystem?.gameTime ?? m.arrivalYear; // moment startu powrotu
     // Cel powrotu = predykowana pozycja kolonii macierzystej w momencie przylotu
     const predictedHome = this._predictPosition(vessel.colonyId, m.returnYear);
     m.returnTargetX = predictedHome.x || m.startX;
@@ -470,10 +471,11 @@ export class VesselManager {
       if (vessel.position.state === 'in_transit' && m) {
         if (m.phase === 'returning') {
           // Powrót: interpolacja returnStart → (waypoints) → returnTarget
-          const totalReturn = (m.returnYear ?? m.arrivalYear) - (m.arrivalYear ?? m.departYear);
+          const returnDepart = m.returnDepartYear ?? m.arrivalYear ?? m.departYear;
+          const totalReturn = (m.returnYear ?? m.arrivalYear) - returnDepart;
           if (totalReturn > 0) {
             const t = Math.max(0, Math.min(1,
-              (gameYear - (m.arrivalYear ?? m.departYear)) / totalReturn
+              (gameYear - returnDepart) / totalReturn
             ));
             const rp = this._interpolateWaypoints(
               m.returnStartX, m.returnStartY,
