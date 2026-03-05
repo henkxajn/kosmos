@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 11;
+export const CURRENT_VERSION     = 12;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -26,6 +26,7 @@ const MIGRATIONS = {
   8: _migrateV8toV9,
   9: _migrateV9toV10,
   10: _migrateV10toV11,
+  11: _migrateV11toV12,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -336,6 +337,28 @@ function _migrateV10toV11(data) {
 
   for (const col of c4x.colonies) {
     if (col.isOutpost === undefined) col.isOutpost = false;
+  }
+
+  return data;
+}
+
+// ── Migracja v11 → v12 ──────────────────────────────────────────────────────
+// Dodaje 2 półprzewodniki do inventory kolonii macierzystej (jeśli brak)
+
+function _migrateV11toV12(data) {
+  const c4x = data.civ4x;
+  if (!c4x?.colonies) return data;
+
+  for (const col of c4x.colonies) {
+    const inv = col.resources?.inventory;
+    if (inv && (inv.semiconductors === undefined || inv.semiconductors === 0)) {
+      // Tylko kolonia macierzysta dostaje bonus startowy
+      if (col.isHomePlanet) {
+        inv.semiconductors = 2;
+      } else if (inv.semiconductors === undefined) {
+        inv.semiconductors = 0;
+      }
+    }
   }
 
   return data;

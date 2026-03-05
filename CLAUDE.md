@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v11
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v12
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -227,6 +227,8 @@ SaveSystem._serializeCiv4x()
 | `tradeRoute:create/pause/resume/delete` | TradeRouteModal | TradeRouteManager |
 | `expedition:deliverCargo { expeditionId }` | UIManager | ExpeditionSystem |
 | `outpost:founded { colony }` | ColonyManager | GameScene |
+| `planet:constructionProgress` | BuildingSystem | PlanetGlobeScene |
+| `planet:constructionComplete { tileKey, buildingId }` | BuildingSystem | PlanetGlobeScene |
 
 ---
 
@@ -326,6 +328,8 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 ### Gameplay i UI (✅ ukończone)
 - [x] **Etap 34** — 8 zadań gameplay: kolejka produkcji, usunięcie mining, trasy handlowe, scroll misji, stocznia speed, popup theming, linia trasy, cargo bez limitu
 - [x] **Etap 35** — Branding KOSMOS: TitleScene z animowanym tłem, hero planet, paleta ciepły bursztyn; unifikacja THEME tokenów we wszystkich plikach UI Canvas 2D; scenariusz Power Test
+- [x] **Etap 36** — Czas budowy budynków + Deploy prefabów z cargo
+- [x] **Etap 37** — System Outpost: mini-kolonia bez POPów, transport tworzy outpost, colony ship upgraduje do kolonii
 
 ### Następne etapy (plan)
 - [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
@@ -377,3 +381,7 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 | Statki orbitują cel (nie auto-return) | Recon i inne misje: po dotarciu `status='orbiting'`; gracz decyduje: powrót lub redirect do nowego celu |
 | Centralny SaveMigration (nie ad-hoc) | Łańcuchowa migracja v4→v5→v6→v7→...; backup w localStorage; wywołanie w BootScene przed GameScene |
 | Popupy misji z pauzą (MissionEventModal) | Każde ważne zdarzenie misji pauzuje grę, popup z danymi, kolejka wielu zdarzeń, czas wraca po ostatnim OK |
+| Autonomiczne budynki bez employmentPenalty | Budynki z `isAutonomous: true` lub `popCost === 0` nie tracą produkcji gdy brakuje POPów — logiczne, bo nie potrzebują pracowników |
+| Czas budowy budynków (buildTime) | Budynki z `buildTime > 0` nie powstają natychmiast — `_constructionQueue` w BuildingSystem; event `planet:constructionProgress` co tick aktualizuje pasek progresu |
+| Prefabrykaty deployowane z cargo | isPrefab commodities → `deploysBuilding` → `BuildingSystem.deployFromCargo()` — natychmiastowa budowa bez kosztu surowcowego |
+| Outpost (mini-kolonia bez POPów) | `isOutpost: true` → BuildingSystem._isOutpost pomija POP; upgrade do pełnej kolonii przez colony_ship |
