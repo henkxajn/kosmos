@@ -1300,17 +1300,42 @@ export class PlanetGlobeScene {
 
         // Koszty ulepszenia — widoczne pod przyciskiem
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+
+        // Rozdziel surowce i towary
+        const rawEntries = [];
+        const comEntries = [];
         for (const [resId, amt] of Object.entries(upgCost)) {
+          if (COMMODITIES[resId]) comEntries.push([resId, amt]);
+          else rawEntries.push([resId, amt]);
+        }
+
+        // Surowce
+        for (const [resId, amt] of rawEntries) {
           const have = Math.floor(inv[resId] ?? 0);
           const icon = RESOURCE_ICONS[resId] ?? resId;
           const resDef = ALL_RESOURCES[resId];
-          const comDef = COMMODITIES[resId];
-          const name = resDef?.namePL ?? (comDef ? (COMMODITY_SHORT[resId] ?? resId) : resId);
-          const dispIcon = comDef?.icon ?? icon;
+          const name = resDef?.namePL ?? resId;
           const ok = have >= amt;
           ctx.fillStyle = ok ? '#448866' : '#cc4422';
-          ctx.fillText(`${dispIcon} ${name}: ${have}/${amt}`, BPX + 14, buildListY);
+          ctx.fillText(`${icon} ${name}: ${have}/${amt}`, BPX + 14, buildListY);
           buildListY += 12;
+        }
+
+        // Towary (commodities)
+        if (comEntries.length > 0) {
+          ctx.fillStyle = THEME.textSecondary;
+          ctx.fillText('Towary:', BPX + 8, buildListY);
+          buildListY += 12;
+          for (const [resId, amt] of comEntries) {
+            const have = Math.floor(inv[resId] ?? 0);
+            const comDef = COMMODITIES[resId];
+            const name = COMMODITY_SHORT[resId] ?? resId;
+            const dispIcon = comDef?.icon ?? resId;
+            const ok = have >= amt;
+            ctx.fillStyle = ok ? '#448866' : '#cc4422';
+            ctx.fillText(`${dispIcon} ${name}: ${have}/${amt}`, BPX + 14, buildListY);
+            buildListY += 12;
+          }
         }
         // Koszt POP
         if (upgPopCost > 0) {
@@ -2033,11 +2058,13 @@ export class PlanetGlobeScene {
           EventBus.emit('planet:upgradeRequest', { planet: this.planet, tile });
           return true;
         }
-        // Pomiń przycisk + linie kosztów ulepszenia (+ linia POP)
-        const upgCostCount = Object.keys(bDef.cost || {}).length
-          + (((tile.buildingLevel ?? 1) + 1) >= 3 ? Object.keys(bDef.commodityCost || {}).length : 0);
+        // Pomiń przycisk + linie kosztów ulepszenia (+ nagłówek Towary + linia POP)
+        const rawCount = Object.keys(bDef.cost || {}).length;
+        const hasCom   = ((tile.buildingLevel ?? 1) + 1) >= 3 && Object.keys(bDef.commodityCost || {}).length > 0;
+        const comCount = hasCom ? Object.keys(bDef.commodityCost).length : 0;
+        const comHeader = hasCom ? 1 : 0; // nagłówek "Towary:"
         const upgPopLine = (bDef.popCost ?? 0.25) > 0 ? 1 : 0;
-        btnY = upgradeY + 32 + (upgCostCount + upgPopLine) * 12 + 4;
+        btnY = upgradeY + 32 + (rawCount + comCount + comHeader + upgPopLine) * 12 + 4;
       }
 
       // Rozbiórka
