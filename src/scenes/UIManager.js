@@ -1573,6 +1573,25 @@ export class UIManager {
       y += cbH + 4;
     }
 
+    // Przycisk "Rozformuj" — zwrot surowców i POP
+    {
+      const dbH = 15;
+      ctx.fillStyle = 'rgba(60,20,20,0.6)';
+      ctx.fillRect(px, y, panelW, dbH);
+      ctx.strokeStyle = THEME.danger ?? '#c44';
+      ctx.strokeRect(px, y, panelW, dbH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger ?? '#c44';
+      ctx.textAlign = 'center';
+      ctx.fillText('🗑 Rozformuj (100% zwrot)', px + panelW / 2, y + 10);
+      ctx.textAlign = 'left';
+      this._vesselActionBtns.push({
+        x: px, y, w: panelW, h: dbH,
+        action: 'disbandVessel', vesselId: vessel.id,
+      });
+      y += dbH + 4;
+    }
+
     // Określ dostępne typy misji wg typu statku
     const missionTypes = [];
     if (vessel.shipId === 'science_vessel') {
@@ -2621,6 +2640,13 @@ export class UIManager {
       if (vessel && colony) {
         showCargoLoadModal(vessel, colony);
       }
+      return;
+    }
+
+    if (btn.action === 'disbandVessel') {
+      EventBus.emit('fleet:disbandRequest', { vesselId: btn.vesselId });
+      this._selectedVesselId = null;
+      this._vesselMissionType = null;
       return;
     }
 

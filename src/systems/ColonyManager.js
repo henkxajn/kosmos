@@ -104,6 +104,11 @@ export class ColonyManager {
       this.startShipBuild(this._activePlanetId, shipId);
     });
 
+    // Nasłuch rozformowania statku
+    EventBus.on('fleet:disbandRequest', ({ vesselId }) => {
+      this._disbandVessel(vesselId);
+    });
+
     // Tick budowy statków (deltaYears)
     EventBus.on('time:tick', ({ deltaYears }) => {
       this._tickShipBuilds(deltaYears);
@@ -538,6 +543,40 @@ export class ColonyManager {
     colony.fleet.splice(idx, 1);
     EventBus.emit('fleet:shipConsumed', { planetId, shipId: shipIdOrVesselId });
     return true;
+  }
+
+  // Rozformuj statek — zwrot 100% surowców/commodities, odblokowanie POP
+  _disbandVessel(vesselId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return;
+    const vessel = vMgr.getVessel(vesselId);
+    if (!vessel) return;
+
+    // Tylko zadokowane statki (idle/refueling)
+    if (vessel.position.state !== 'docked') return;
+
+    const colony = this.getColony(vessel.colonyId);
+    if (!colony) return;
+
+    const shipDef = SHIPS[vessel.shipId];
+    if (!shipDef) return;
+
+    // Zwrot surowców i commodities (100%)
+    const refund = { ...(shipDef.cost || {}), ...(shipDef.commodityCost || {}) };
+    // Dodaj cargo statku do zwrotu
+    if (vessel.cargo) {
+      for (const [resId, qty] of Object.entries(vessel.cargo)) {
+        if (qty > 0) refund[resId] = (refund[resId] ?? 0) + qty;
+      }
+    }
+    colony.resourceSystem.receive(refund);
+
+    // Usuń statek
+    const fleetIdx = colony.fleet.indexOf(vesselId);
+    if (fleetIdx !== -1) colony.fleet.splice(fleetIdx, 1);
+    vMgr.destroyVessel(vesselId);
+
+    EventBus.emit('fleet:disbanded', { vesselId, shipId: vessel.shipId, planetId: vessel.colonyId });
   }
 
   // Sprawdź czy kolonia ma statek danego typu w hangarze (idle, docked)
