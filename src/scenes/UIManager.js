@@ -1129,12 +1129,16 @@ export class UIManager {
           const sd = SHIPS[v.shipId];
           const rowH = 16;
           const rx = bodyX + PAD; const ry = y;
-          ctx.fillStyle = 'rgba(15,25,50,0.4)';
+          const isSelected = this._selectedVesselId === v.id;
+          ctx.fillStyle = isSelected ? 'rgba(20,40,80,0.6)' : 'rgba(15,25,50,0.4)';
           ctx.fillRect(rx, ry, fullW, rowH);
+          if (isSelected) { ctx.strokeStyle = THEME.info; ctx.strokeRect(rx, ry, fullW, rowH); }
           ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.info;
           const targetName = v.mission?.targetName ?? '?';
-          ctx.fillText(`${sd?.icon ?? '🚀'} ${_truncate(v.name, 10)} → ${_truncate(targetName, 8)}`, rx + 2, ry + 11);
+          const phaseIcon = v.mission?.phase === 'returning' ? '↩' : '→';
+          ctx.fillText(`${sd?.icon ?? '🚀'} ${_truncate(v.name, 10)} ${phaseIcon} ${_truncate(targetName, 8)}`, rx + 2, ry + 11);
+          this._vesselRows.push({ x: rx, y: ry, w: fullW, h: rowH, vesselId: v.id });
           y += rowH + 1;
         }
         y += 2;
@@ -1143,7 +1147,7 @@ export class UIManager {
       // ── Panel akcji wybranego statku ────────────────────────────────
       if (this._selectedVesselId && vMgr) {
         const sv = vMgr.getVessel(this._selectedVesselId);
-        if (sv && (sv.position.state === 'docked' || sv.position.state === 'orbiting')) {
+        if (sv && (sv.position.state === 'docked' || sv.position.state === 'orbiting' || sv.position.state === 'in_transit')) {
           y = this._drawVesselActionPanel(ctx, sv, bodyX + PAD, y, fullW);
         }
       } else if (vessels.length > 0) {
@@ -1493,6 +1497,45 @@ export class UIManager {
     const exSys = window.KOSMOS?.expeditionSystem;
     const colMgr = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
+
+    // ── Statek w locie — przycisk zawrócenia ────────────────────────
+    if (vessel.position.state === 'in_transit') {
+      const phase = vessel.mission?.phase;
+      const targetName = vessel.mission?.targetName ?? '?';
+
+      if (phase === 'returning') {
+        // Statek już wraca — info
+        ctx.fillStyle = THEME.info;
+        ctx.fillText(`↩ Wraca do bazy`, px + 2, y); y += LH;
+      } else {
+        // Statek leci do celu — można zawrócić
+        ctx.fillStyle = THEME.info;
+        ctx.fillText(`→ Cel: ${targetName}`, px + 2, y); y += LH;
+
+        // Znajdź ekspedycję powiązaną ze statkiem
+        let exp = this._expeditions.find(e => e.vesselId === vessel.id && e.status === 'en_route');
+        if (!exp && exSys) {
+          const active = exSys.getActive?.() ?? [];
+          exp = active.find(e => e.vesselId === vessel.id && e.status === 'en_route');
+        }
+
+        if (exp) {
+          const btnH = 15;
+          ctx.fillStyle = 'rgba(60,50,10,0.7)'; ctx.fillRect(px, y, panelW, btnH);
+          ctx.strokeStyle = C.yellow; ctx.strokeRect(px, y, panelW, btnH);
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = C.yellow; ctx.textAlign = 'center';
+          ctx.fillText('↩ Zawróć do bazy', px + panelW / 2, y + 11);
+          ctx.textAlign = 'left';
+          this._vesselActionBtns.push({
+            x: px, y, w: panelW, h: btnH,
+            action: 'orbitReturn', expId: exp.id, vesselId: vessel.id,
+          });
+          y += btnH + 4;
+        }
+      }
+      return y;
+    }
 
     // ── Statek na orbicie — rozkazy zamiast listy misji ────────────
     if (vessel.position.state === 'orbiting') {

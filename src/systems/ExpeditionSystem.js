@@ -568,24 +568,41 @@ export class ExpeditionSystem {
   // Rozkaz powrotu statku z orbity (gracz ręcznie wywołuje)
   _orderReturn(expeditionId) {
     const exp = this._expeditions.find(e => e.id === expeditionId);
-    if (!exp || exp.status !== 'orbiting') return;
+    if (!exp || (exp.status !== 'orbiting' && exp.status !== 'en_route')) return;
 
-    // Oblicz czas powrotu (taki sam jak droga tam)
-    const shipSpeed  = this._getShipSpeed(exp.vesselId);
-    const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, exp.distance / shipSpeed).toFixed(3));
-
-    exp.status     = 'returning';
-    exp.returnYear = this._gameYear + returnTime;
-
-    // Vessel wyrusza w powrotną drogę
     const vMgr = window.KOSMOS?.vesselManager;
-    if (exp.vesselId && vMgr) {
-      // Zaktualizuj misję o returnYear
-      const vessel = vMgr.getVessel(exp.vesselId);
+    const shipSpeed = this._getShipSpeed(exp.vesselId);
+
+    if (exp.status === 'en_route') {
+      // Zawrócenie w locie — oblicz dystans z bieżącej pozycji statku do bazy
+      const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+      const homeEntity = vessel ? EntityManager.getById(vessel.colonyId) : null;
+      let returnDist = exp.distance; // fallback
+      if (vessel && homeEntity) {
+        returnDist = DistanceUtils.euclideanAU(
+          { x: vessel.position.x, y: vessel.position.y },
+          homeEntity
+        );
+      }
+      const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, returnDist / shipSpeed).toFixed(3));
+      exp.status = 'returning';
+      exp.returnYear = this._gameYear + returnTime;
       if (vessel?.mission) {
         vessel.mission.returnYear = exp.returnYear;
       }
-      vMgr.startReturn(exp.vesselId);
+      if (vMgr && exp.vesselId) vMgr.startReturn(exp.vesselId);
+    } else {
+      // Z orbity — standardowy powrót (dystans = droga tam)
+      const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, exp.distance / shipSpeed).toFixed(3));
+      exp.status = 'returning';
+      exp.returnYear = this._gameYear + returnTime;
+      if (vMgr && exp.vesselId) {
+        const vessel = vMgr.getVessel(exp.vesselId);
+        if (vessel?.mission) {
+          vessel.mission.returnYear = exp.returnYear;
+        }
+        vMgr.startReturn(exp.vesselId);
+      }
     }
 
     EventBus.emit('expedition:returnOrdered', { expedition: exp });
