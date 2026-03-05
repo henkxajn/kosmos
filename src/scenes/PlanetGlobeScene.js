@@ -1287,14 +1287,14 @@ export class PlanetGlobeScene {
 
         ctx.fillStyle = canAfford
           ? (isHover ? 'rgba(26,50,76,0.95)' : 'rgba(20,40,60,0.8)')
-          : 'rgba(30,20,20,0.7)';
+          : 'rgba(60,20,20,0.85)';
         ctx.fillRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
-        ctx.strokeStyle = canAfford ? (isHover ? THEME.accent : THEME.successDim) : '#442222';
+        ctx.strokeStyle = canAfford ? (isHover ? THEME.accent : THEME.successDim) : '#882222';
         ctx.strokeRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
         ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = canAfford ? THEME.accent : '#664444';
+        ctx.fillStyle = canAfford ? THEME.accent : '#aa5555';
         ctx.textAlign = 'center';
-        ctx.fillText(`[ Ulepsz do Lv.${nextLvl} ]`, BPX + RIGHT_W / 2, upgradeY + 13);
+        ctx.fillText(canAfford ? `[ Ulepsz do Lv.${nextLvl} ]` : `[ Ulepsz do Lv.${nextLvl} ] ✕`, BPX + RIGHT_W / 2, upgradeY + 13);
         ctx.textAlign = 'left';
         buildListY = upgradeY + 32;
 
