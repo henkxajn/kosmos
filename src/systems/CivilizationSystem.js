@@ -242,6 +242,9 @@ export class CivilizationSystem {
   }
 
   _yearlyUpdate() {
+    // Outposty (pop=0) nie mają głodu, morale ani wzrostu
+    if (this.population <= 0) return;
+
     // Cache resource ratios raz na yearly update (unika wielokrotnego obliczania)
     const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
 
