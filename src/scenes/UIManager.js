@@ -2410,7 +2410,7 @@ export class UIManager {
     if (body.composition) {
       const topComp = Object.entries(body.composition).sort((a, b) => b[1] - a[1]).slice(0, 5);
       if (topComp.length > 0) {
-        const compStr = topComp.map(([e, v]) => `${e}:${(v * 100).toFixed(0)}%`).join(' ');
+        const compStr = topComp.map(([e, v]) => `${e}:${v.toFixed(0)}%`).join(' ');
         lines.push({ type: 'line', text: `Skład: ${compStr}`, color: C.label });
       }
     }
