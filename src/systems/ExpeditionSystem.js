@@ -91,8 +91,8 @@ export class ExpeditionSystem {
       this._launch(type, targetId, cargo, vesselId));
 
     // Obsługa żądania transferu zasobów
-    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId }) =>
-      this._launchTransport(targetId, cargo, vesselId));
+    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded }) =>
+      this._launchTransport(targetId, cargo, vesselId, cargoPreloaded));
 
     // Obsługa rozkazu powrotu z orbity
     EventBus.on('expedition:orderReturn', ({ expeditionId }) =>
@@ -493,7 +493,7 @@ export class ExpeditionSystem {
   }
 
   // Wyślij transport zasobów między koloniami
-  _launchTransport(targetId, cargo, vesselId) {
+  _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false) {
     if (!cargo || Object.keys(cargo).length === 0) {
       EventBus.emit('expedition:launchFailed', { reason: 'Brak ładunku do transportu' });
       return;
@@ -513,12 +513,14 @@ export class ExpeditionSystem {
 
     const colMgr = window.KOSMOS?.colonyManager;
 
-    // Pobierz zasoby z bieżącej kolonii
-    if (this.resourceSystem && !this.resourceSystem.canAfford(cargo)) {
-      EventBus.emit('expedition:launchFailed', { reason: 'Brak surowców do transportu' });
-      return;
+    // Pobierz zasoby z kolonii — pomiń jeśli cargo już załadowane na statek
+    if (!cargoPreloaded) {
+      if (this.resourceSystem && !this.resourceSystem.canAfford(cargo)) {
+        EventBus.emit('expedition:launchFailed', { reason: 'Brak surowców do transportu' });
+        return;
+      }
+      if (this.resourceSystem) this.resourceSystem.spend(cargo);
     }
-    if (this.resourceSystem) this.resourceSystem.spend(cargo);
 
     // Zablokuj POPy na czas transportu
     EventBus.emit('civ:lockPops', { amount: EXPEDITION_CREW_COST });

@@ -2746,6 +2746,7 @@ export class UIManager {
       if (hasExistingCargo) {
         EventBus.emit('expedition:transportRequest', {
           targetId: btn.targetId, cargo: { ...existingCargo }, vesselId: btn.vesselId,
+          cargoPreloaded: true,
         });
         this._selectedVesselId = null;
         this._vesselMissionType = null;
