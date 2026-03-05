@@ -164,22 +164,8 @@ export class PlanetGlobeScene {
       window.KOSMOS.buildingSystem.setDeposits(planet.deposits ?? []);
     }
 
-    // Synchronizuj budynki z BuildingSystem
-    const bSys = window.KOSMOS?.buildingSystem;
-    if (bSys) {
-      bSys._active.forEach((entry, activeKey) => {
-        if (activeKey.startsWith('capital_')) {
-          const coordKey = activeKey.replace('capital_', '');
-          const [q, r] = coordKey.split(',').map(Number);
-          const tile = this.grid.get(q, r);
-          if (tile) tile.capitalBase = true;
-          return;
-        }
-        const [q, r] = activeKey.split(',').map(Number);
-        const tile = this.grid.get(q, r);
-        if (tile) tile.buildingId = entry.building.id;
-      });
-    }
+    // Synchronizuj budynki z BuildingSystem (pełny sync: id + level + capital + underConstruction)
+    this._syncBuildingIds();
 
     // Auto-place Stolicy przy pierwszym otwarciu mapy (pomiń outpost)
     const colony = window.KOSMOS?.colonyManager?.getColony(planet.id);
