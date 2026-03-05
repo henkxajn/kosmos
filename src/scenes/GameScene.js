@@ -413,7 +413,7 @@ export class GameScene {
     // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
     // Startowe zasoby (surowce + commodities T1/T2)
     this.resourceSystem.receive({
-      Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10,
+      Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10, Pt: 4,
       food: 100, water: 100, research: 100,
       steel_plates: 15, polymer_composites: 10, concrete_mix: 8, copper_wiring: 8,
       power_cells: 12, electronics: 6, food_synthesizers: 3,

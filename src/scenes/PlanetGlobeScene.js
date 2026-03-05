@@ -501,6 +501,20 @@ export class PlanetGlobeScene {
       this._globeRenderer?.refreshTexture();
     };
 
+    // Postęp budowy — aktualizuj progress na tile'ach (pasek progresu)
+    this._onConstructionProgress = () => {
+      if (!this.grid) return;
+      const bSys = window.KOSMOS?.buildingSystem;
+      if (!bSys?._constructionQueue) return;
+      bSys._constructionQueue.forEach((entry, tileKey) => {
+        const [q, r] = tileKey.split(',').map(Number);
+        const tile = this.grid.get(q, r);
+        if (tile?.underConstruction) {
+          tile.underConstruction.progress = entry.progress;
+        }
+      });
+    };
+
     // Podpięcie
     if (layer) {
       layer.addEventListener('mousedown',  this._onMouseDown);
@@ -518,6 +532,7 @@ export class PlanetGlobeScene {
     EventBus.on('time:display',         this._onTimeDisplay);
     EventBus.on('planet:closeGlobe',    this._onCloseGlobe);
     EventBus.on('planet:constructionComplete', this._onConstructionComplete);
+    EventBus.on('planet:constructionProgress', this._onConstructionProgress);
   }
 
   _unregisterEvents(layer) {
@@ -538,6 +553,7 @@ export class PlanetGlobeScene {
     EventBus.off('time:display',         this._onTimeDisplay);
     EventBus.off('planet:closeGlobe',    this._onCloseGlobe);
     EventBus.off('planet:constructionComplete', this._onConstructionComplete);
+    EventBus.off('planet:constructionProgress', this._onConstructionProgress);
   }
 
   // ── Synchronizacja budynków z BuildingSystem ──────────────────

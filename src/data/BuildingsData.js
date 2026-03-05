@@ -204,7 +204,7 @@ export const BUILDINGS = {
     cost:        { Fe: 30, Cu: 10, Si: 10 },
     commodityCost: { steel_plates: 5, power_cells: 3, electronics: 2 },
     energyCost:  5,
-    buildTime:   1.5,      // lata gry
+    buildTime:   0.5,      // lata gry
     rates:       {},       // produkcja via FactorySystem, nie rates
     housing:     0,
     popCost:     0.5,

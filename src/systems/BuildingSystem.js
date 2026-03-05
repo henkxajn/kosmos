@@ -628,6 +628,11 @@ export class BuildingSystem {
       }
     }
 
+    // Powiadom UI o postępie budowy (pasek progresu)
+    if (completed.length < this._constructionQueue.size) {
+      EventBus.emit('planet:constructionProgress');
+    }
+
     for (const tileKey of completed) {
       const entry = this._constructionQueue.get(tileKey);
       this._constructionQueue.delete(tileKey);
