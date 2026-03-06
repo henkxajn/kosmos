@@ -931,22 +931,40 @@ export class UIManager {
       ctx.fillText('Brak aktywnych misji', bodyX + PAD, y);
       y += LH;
     } else {
+      const vMgrMis = window.KOSMOS?.vesselManager;
       for (const exp of this._expeditions.slice(0, 10)) {
         const icon = exp.type === 'scientific' ? '🔬' : exp.type === 'colony' ? '🚢'
           : exp.type === 'transport' ? '📦' : exp.type === 'recon' ? '🔭' : '⛏';
-        const arrow = exp.status === 'returning' ? '↩' : exp.status === 'orbiting' ? '⊙' : '→';
-        const color = exp.status === 'returning' ? C.mint
-          : exp.status === 'orbiting' ? C.yellow : THEME.textPrimary;
+
+        // Nazwa statku
+        const vessel = exp.vesselId ? vMgrMis?.getVessel(exp.vesselId) : null;
+        const shipName = vessel?.name ? _truncate(vessel.name, 10) : null;
+
+        // Status i kolor
+        const isOrbiting = exp.status === 'orbiting';
+        const isReturning = exp.status === 'returning';
+        const color = isReturning ? C.mint : isOrbiting ? C.yellow : THEME.textPrimary;
+
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = color;
-        // Dla full_system recon pokaż postęp
-        let displayName = _truncate(exp.targetName ?? '?', 14);
-        if (exp.scope === 'full_system' && exp.bodiesDiscovered) {
-          displayName = `Recon (${exp.bodiesDiscovered.length} zbad.)`;
-        }
-        ctx.fillText(`${arrow} ${icon} ${displayName}`, bodyX + PAD, y);
 
-        if (exp.status === 'orbiting') {
+        // Linia 1: nazwa statku + status
+        let statusText;
+        if (isOrbiting) {
+          statusText = `⊙ ${icon} ${shipName ?? '?'} — orbita: ${_truncate(exp.targetName ?? '?', 10)}`;
+        } else if (isReturning) {
+          statusText = `↩ ${icon} ${shipName ?? '?'} — powrót`;
+        } else {
+          // Dla full_system recon pokaż postęp
+          let targetDisp = _truncate(exp.targetName ?? '?', 10);
+          if (exp.scope === 'full_system' && exp.bodiesDiscovered) {
+            targetDisp = `Recon (${exp.bodiesDiscovered.length} zbad.)`;
+          }
+          statusText = `→ ${icon} ${shipName ?? '?'} → ${targetDisp}`;
+        }
+        ctx.fillText(statusText, bodyX + PAD, y);
+
+        if (isOrbiting) {
           // Dwa przyciski: Powrót + Cel
           const btnW = 34; const btnH = 12; const gap = 2;
           const btnRetX = bodyX + halfW - PAD - btnW * 2 - gap;
@@ -972,7 +990,7 @@ export class UIManager {
           ctx.textAlign = 'left';
           this._orbitRedirectBtns.push({ x: btnRedX, y: btnY, w: btnW, h: btnH, expId: exp.id });
         } else {
-          const eta = exp.status === 'returning'
+          const eta = isReturning
             ? `↩ ${_shortYear(exp.returnYear ?? 0)}`
             : `▶ ${_shortYear(exp.arrivalYear ?? 0)}`;
           ctx.fillStyle = C.label;
@@ -1564,43 +1582,90 @@ export class UIManager {
       ctx.fillStyle = C.yellow;
       ctx.fillText(`⊙ Na orbicie: ${targetName}`, px + 2, y); y += LH;
 
-      // Dwa przyciski: Powrót i Zmień cel
+      // Przycisk Cargo — załaduj/rozładuj na orbicie (jeśli cel ma kolonię)
+      const shipDefOrb = SHIPS[vessel.shipId];
+      const colMgrOrb = window.KOSMOS?.colonyManager;
+      const orbitColony = colMgrOrb?.getColony(vessel.position.dockedAt);
+      if (shipDefOrb?.cargoCapacity > 0 && orbitColony) {
+        const cbH = 15;
+        ctx.fillStyle = 'rgba(30,60,40,0.6)';
+        ctx.fillRect(px, y, panelW, cbH);
+        ctx.strokeStyle = THEME.successDim;
+        ctx.strokeRect(px, y, panelW, cbH);
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.successDim;
+        ctx.textAlign = 'center';
+        const cargoUsed = vessel.cargoUsed ?? 0;
+        ctx.fillText(`📦 Cargo (${cargoUsed.toFixed(0)}/${shipDefOrb.cargoCapacity}t)`, px + panelW / 2, y + 10);
+        ctx.textAlign = 'left';
+        this._vesselActionBtns.push({
+          x: px, y, w: panelW, h: cbH,
+          action: 'openCargoModal', vesselId: vessel.id,
+        });
+        y += cbH + 4;
+      }
+
+      // Trzy przyciski: Powrót, Zmień cel, Transport (jeśli cargo ship przy kolonii)
       const btnH = 15; const gap = 4;
-      const halfW = Math.floor((panelW - gap) / 2);
+      const canTransport = vessel.shipId === 'cargo_ship' && orbitColony;
+      const btnCount = canTransport ? 3 : 2;
+      const btnW = Math.floor((panelW - gap * (btnCount - 1)) / btnCount);
+
       // Powrót
       const bRetX = px; const bRetY = y;
-      ctx.fillStyle = 'rgba(60,50,10,0.7)'; ctx.fillRect(bRetX, bRetY, halfW, btnH);
-      ctx.strokeStyle = C.yellow; ctx.strokeRect(bRetX, bRetY, halfW, btnH);
+      ctx.fillStyle = 'rgba(60,50,10,0.7)'; ctx.fillRect(bRetX, bRetY, btnW, btnH);
+      ctx.strokeStyle = C.yellow; ctx.strokeRect(bRetX, bRetY, btnW, btnH);
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.yellow; ctx.textAlign = 'center';
-      ctx.fillText('↩ Powrót do bazy', bRetX + halfW / 2, bRetY + 11);
+      ctx.fillText('↩ Baza', bRetX + btnW / 2, bRetY + 11);
       ctx.textAlign = 'left';
       if (orbExp) {
         this._vesselActionBtns.push({
-          x: bRetX, y: bRetY, w: halfW, h: btnH,
+          x: bRetX, y: bRetY, w: btnW, h: btnH,
           action: 'orbitReturn', expId: orbExp.id, vesselId: vessel.id,
         });
       }
       // Zmień cel
-      const bRedX = px + halfW + gap; const bRedY = y;
+      const bRedX = px + btnW + gap; const bRedY = y;
       const isRedirectActive = this._redirectTargetExpId === orbExp?.id;
       ctx.fillStyle = isRedirectActive ? 'rgba(20,50,80,0.8)' : 'rgba(10,30,60,0.7)';
-      ctx.fillRect(bRedX, bRedY, halfW, btnH);
-      ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(bRedX, bRedY, halfW, btnH);
+      ctx.fillRect(bRedX, bRedY, btnW, btnH);
+      ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(bRedX, bRedY, btnW, btnH);
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
-      ctx.fillText('➡ Zmień cel', bRedX + halfW / 2, bRedY + 11);
+      ctx.fillText('➡ Cel', bRedX + btnW / 2, bRedY + 11);
       ctx.textAlign = 'left';
       if (orbExp) {
         this._vesselActionBtns.push({
-          x: bRedX, y: bRedY, w: halfW, h: btnH,
+          x: bRedX, y: bRedY, w: btnW, h: btnH,
           action: 'orbitRedirect', expId: orbExp.id, vesselId: vessel.id,
+        });
+      }
+      // Transport (cargo ship przy kolonii) — otwiera wybór celu transportu
+      if (canTransport) {
+        const bTrX = px + (btnW + gap) * 2; const bTrY = y;
+        const isTrActive = this._vesselMissionType === 'transport_orbit';
+        ctx.fillStyle = isTrActive ? 'rgba(40,60,30,0.8)' : 'rgba(20,40,20,0.7)';
+        ctx.fillRect(bTrX, bTrY, btnW, btnH);
+        ctx.strokeStyle = THEME.successDim; ctx.strokeRect(bTrX, bTrY, btnW, btnH);
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.successDim; ctx.textAlign = 'center';
+        ctx.fillText('📦 Wyślij', bTrX + btnW / 2, bTrY + 11);
+        ctx.textAlign = 'left';
+        this._vesselActionBtns.push({
+          x: bTrX, y: bTrY, w: btnW, h: btnH,
+          action: 'orbitTransport', vesselId: vessel.id, expId: orbExp?.id,
         });
       }
       y += btnH + 4;
 
       // Jeśli tryb wyboru celu → rysuj listę celów
       if (isRedirectActive && orbExp) {
+        y = this._drawRedirectTargetPicker(ctx, orbExp, px, y, panelW);
+      }
+
+      // Jeśli tryb transportu z orbity → rysuj listę celów transportu
+      if (this._vesselMissionType === 'transport_orbit' && orbExp) {
         y = this._drawRedirectTargetPicker(ctx, orbExp, px, y, panelW);
       }
 
@@ -2697,6 +2762,7 @@ export class UIManager {
       if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
         EventBus.emit('expedition:orderRedirect', { expeditionId: btn.expId, targetId: btn.targetId });
         this._redirectTargetExpId = null;
+        this._vesselMissionType = null;
         this._redirectScrollY = 0;
         return;
       }
@@ -2760,7 +2826,16 @@ export class UIManager {
     // Toggle trybu wyboru celu redirect (z panelu floty)
     if (btn.action === 'orbitRedirect') {
       this._redirectTargetExpId = this._redirectTargetExpId === btn.expId ? null : btn.expId;
-      this._redirectScrollY = 0; // reset scrolla listy celów
+      this._vesselMissionType = null; // wyłącz transport_orbit
+      this._redirectScrollY = 0;
+      return;
+    }
+
+    // Toggle trybu transportu z orbity (cargo ship)
+    if (btn.action === 'orbitTransport') {
+      this._vesselMissionType = this._vesselMissionType === 'transport_orbit' ? null : 'transport_orbit';
+      this._redirectTargetExpId = null; // wyłącz redirect
+      this._redirectScrollY = 0;
       return;
     }
 
