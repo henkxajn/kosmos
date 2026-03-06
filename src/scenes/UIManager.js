@@ -1070,7 +1070,6 @@ export class UIManager {
     ctx.clip();
     y -= (this._fleetScrollY || 0);
 
-    const activePid = colMgr?.activePlanetId;
     const activeCol = colMgr?.getColony(activePid);
     // Pobierz poziom stoczni (0 = brak) — deleguj do ColonyManager
     const shipyardLevel = colMgr?._getShipyardLevel?.(activeCol) ?? (() => {
