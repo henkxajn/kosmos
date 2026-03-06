@@ -81,8 +81,9 @@ export class ThreeRenderer {
     this._star      = null;
     this._starGroup = null;
     this._starLight = null;
-    this._starCoronaUniform = null;  // referencja do uTime korony
-    this._starPromCount     = 0;     // liczba protuberancji
+    this._starCoronaUniform  = null;  // referencja do uTime korony
+    this._starTwinkleUniform = null;  // referencja do uTime migotania gwiazd tła
+    this._starPromCount      = 0;     // liczba protuberancji
 
     // ── Raycaster ─────────────────────────────────────────────
     this._ray   = new THREE.Raycaster();
@@ -106,11 +107,15 @@ export class ThreeRenderer {
 
   // ── Tło: galaktyczne gwiazdy + mgławica ─────────────────────
   _buildBackground() {
-    // 6000 gwiazd tła (sfera r=300-1000)
+    // 6000 gwiazd tła (sfera r=300-1000) z migotaniem (twinkle)
     const N   = 6000;
     const pos = new Float32Array(N * 3);
     const col = new Float32Array(N * 3);
-    const sz  = new Float32Array(N);
+
+    // Atrybuty migotania per gwiazda
+    const phase      = new Float32Array(N);
+    const speed      = new Float32Array(N);
+    const brightness = new Float32Array(N);
 
     for (let i = 0; i < N; i++) {
       const r     = 300 + Math.random() * 700;
@@ -124,17 +129,67 @@ export class ThreeRenderer {
       if (temp < 0.2) { col[i*3]=0.6; col[i*3+1]=0.7; col[i*3+2]=1.0; }
       else if (temp < 0.5) { col[i*3]=1.0; col[i*3+1]=0.95; col[i*3+2]=0.8; }
       else { col[i*3]=1.0; col[i*3+1]=1.0; col[i*3+2]=1.0; }
-      sz[i] = 0.3 + Math.random() * 1.5;
+
+      phase[i]      = Math.random() * Math.PI * 2;
+      speed[i]      = 0.3 + Math.random() * 0.9;
+      brightness[i] = 0.5 + Math.random() * 0.5;
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
-    const mat = new THREE.PointsMaterial({
-      size: 0.8, vertexColors: true,
-      transparent: true, opacity: 0.9, sizeAttenuation: true,
+    geo.setAttribute('position',    new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color',       new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('aPhase',      new THREE.BufferAttribute(phase, 1));
+    geo.setAttribute('aSpeed',      new THREE.BufferAttribute(speed, 1));
+    geo.setAttribute('aBrightness', new THREE.BufferAttribute(brightness, 1));
+
+    const starMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0.0 },
+        uSize: { value: 0.8 },
+      },
+      vertexShader: `
+        attribute float aPhase;
+        attribute float aSpeed;
+        attribute float aBrightness;
+        varying vec3  vColor;
+        varying float vAlpha;
+        uniform float uTime;
+        uniform float uSize;
+
+        void main() {
+          vColor = color;
+
+          // Migotanie: sin z indywidualną fazą i prędkością
+          // Zakres alpha: brightness ± 0.25, zawsze >= 0.1
+          float twinkle = sin(uTime * aSpeed + aPhase) * 0.25;
+          vAlpha = clamp(aBrightness + twinkle, 0.1, 1.0);
+
+          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = uSize * (300.0 / -mvPos.z);
+          gl_Position  = projectionMatrix * mvPos;
+        }
+      `,
+      fragmentShader: `
+        varying vec3  vColor;
+        varying float vAlpha;
+
+        void main() {
+          // Okrągły punkt z miękką krawędzią
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          float alpha = vAlpha * (1.0 - smoothstep(0.3, 0.5, d));
+          gl_FragColor = vec4(vColor, alpha);
+        }
+      `,
+      transparent: true,
+      vertexColors: true,
+      depthWrite: false,
     });
-    this.scene.add(new THREE.Points(geo, mat));
+
+    // Referencja do uniforma — aktualizowana w render loop
+    this._starTwinkleUniform = starMat.uniforms.uTime;
+
+    this.scene.add(new THREE.Points(geo, starMat));
 
   }
 
@@ -1212,6 +1267,9 @@ export class ThreeRenderer {
     const loop = () => {
       requestAnimationFrame(loop);
       const t = this._clock.getElapsedTime();
+
+      // Aktualizuj migotanie gwiazd tła
+      if (this._starTwinkleUniform) this._starTwinkleUniform.value = t;
 
       // Animacja gwiazdy — [0]=rdzeń, [1]=innerGlow, [2]=midGlow, [3]=outerGlow
       if (this._starGroup) {
