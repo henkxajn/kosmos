@@ -161,12 +161,12 @@ export class ThreeRenderer {
 
           // Migotanie: sin z indywidualną fazą i prędkością
           float wave = sin(uTime * aSpeed + aPhase);
-          float twinkle = wave * 0.1;
-          vAlpha = clamp(aBrightness + twinkle, 0.2, 1.0);
+          float twinkle = wave * 0.15;
+          vAlpha = clamp(aBrightness + twinkle, 0.15, 1.0);
 
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          // Delikatna modulacja rozmiaru — widoczna przy statycznej kamerze
-          float sizeMod = 1.0 + wave * 0.15;
+          // Modulacja rozmiaru — widoczna przy statycznej kamerze
+          float sizeMod = 1.0 + wave * 0.25;
           gl_PointSize = uSize * sizeMod * (300.0 / -mvPos.z);
           gl_Position  = projectionMatrix * mvPos;
         }

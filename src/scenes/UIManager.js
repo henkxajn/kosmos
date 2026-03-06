@@ -888,10 +888,10 @@ export class UIManager {
     const exSys  = window.KOSMOS?.expeditionSystem;
     const colMgr = window.KOSMOS?.colonyManager;
 
-    // Synchronizuj listę ekspedycji z ExpeditionSystem (po save/restore)
-    if (exSys && this._expeditions.length === 0) {
+    // Synchronizuj listę ekspedycji z ExpeditionSystem co frame (source of truth)
+    if (exSys) {
       const active = exSys.getActive?.() ?? [];
-      if (active.length > 0) this._expeditions = active.map(e => ({ ...e }));
+      this._expeditions = active;
     }
     const PAD    = 14;
     const LH     = 14;
