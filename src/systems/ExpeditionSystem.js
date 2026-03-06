@@ -646,6 +646,14 @@ export class ExpeditionSystem {
     const shipSpeed = this._getShipSpeed(exp.vesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, dist / shipSpeed).toFixed(3));
 
+    // Zsynchronizuj cargo ekspedycji z aktualnym cargo statku (po załadunku na orbicie)
+    if (exp.type === 'transport' && exp.vesselId && vMgr) {
+      const vessel = vMgr.getVessel(exp.vesselId);
+      if (vessel) {
+        exp.cargo = vessel.cargo ? { ...vessel.cargo } : {};
+      }
+    }
+
     exp.targetId    = newTargetId;
     exp.targetName  = target.name ?? '???';
     exp.distance    = parseFloat(dist.toFixed(4));
@@ -1116,6 +1124,16 @@ export class ExpeditionSystem {
         targetCol.resourceSystem.receive(exp.cargo);
       }
       exp.gained = exp.cargo || {};
+
+      // Wyczyść cargo statku i ekspedycji po dostarczeniu (zapobiega podwójnemu dostarczeniu przy redirect)
+      if (exp.vesselId && vMgr) {
+        const vessel = vMgr.getVessel(exp.vesselId);
+        if (vessel) {
+          vessel.cargo = {};
+          vessel.cargoUsed = 0;
+        }
+      }
+      exp.cargo = null;
 
       exp.status = 'orbiting';
       if (exp.vesselId && vMgr) vMgr.arriveAtTarget(exp.vesselId);

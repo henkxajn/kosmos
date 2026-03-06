@@ -1946,9 +1946,28 @@ export class UIManager {
     const TYPES = ['planet', 'moon', 'planetoid'];
     const targets = [];
 
+    // Dodaj kolonie/outposty gracza jako cele (🏠/🏗)
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (colMgr) {
+      for (const col of colMgr.getAllColonies()) {
+        if (col.planetId === exp.targetId) continue; // pomiń bieżący cel
+        const colBody = this._findTargetBody(col.planetId);
+        if (!colBody) continue;
+        const fromEntity = currentBody ?? homePl;
+        if (!fromEntity) continue;
+        const dist = Math.max(0.001, DistanceUtils.euclideanAU(fromEntity, colBody));
+        const fuelNeeded = dist * vessel.fuel.consumption;
+        const inRange = vessel.fuel.current >= fuelNeeded;
+        const icon = col.isOutpost ? '🏗' : '🏠';
+        targets.push({ id: col.planetId, name: col.name ?? colBody.name, dist, inRange, icon, explored: true, isColony: true });
+      }
+    }
+
     for (const t of TYPES) {
       for (const body of EntityManager.getByType(t)) {
         if (body.id === exp.targetId) continue;
+        // Pomiń ciała, które już dodano jako kolonie
+        if (targets.some(tg => tg.id === body.id)) continue;
         const fromEntity = currentBody ?? homePl;
         if (!fromEntity) continue;
         const dist = Math.max(0.001, DistanceUtils.euclideanAU(fromEntity, body));
@@ -1959,7 +1978,8 @@ export class UIManager {
       }
     }
 
-    targets.sort((a, b) => a.dist - b.dist);
+    // Kolonie gracza na górze, potem reszta — wewnątrz grup sortuj po dystansie
+    targets.sort((a, b) => (b.isColony ? 1 : 0) - (a.isColony ? 1 : 0) || a.dist - b.dist);
 
     if (!this._redirectTargetBtns) this._redirectTargetBtns = [];
     this._redirectTargetBtns = [];
@@ -2676,10 +2696,13 @@ export class UIManager {
     }
 
     if (btn.action === 'openCargoModal') {
-      // Otwórz modal załadunku cargo
+      // Otwórz modal załadunku cargo (orbiting → kolonia przy której orbituje)
       const vessel = vMgr.getVessel(btn.vesselId);
       const colMgr = window.KOSMOS?.colonyManager;
-      const colony = colMgr?.getColony(vessel?.colonyId);
+      const orbitColonyId = (vessel?.position?.state === 'orbiting')
+        ? vessel.position.dockedAt
+        : vessel.colonyId;
+      const colony = colMgr?.getColony(orbitColonyId);
       if (vessel && colony) {
         showCargoLoadModal(vessel, colony);
       }
