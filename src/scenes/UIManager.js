@@ -202,6 +202,11 @@ export class UIManager {
     this._fleetVisibleH = 0;
     this._fleetClipRect = { y: 0, h: 0 };
 
+    // ── Scroll listy celów redirect ─────────────────────────
+    this._redirectScrollY = 0;
+    this._redirectContentH = 0;
+    this._redirectClipRect = null; // { x, y, w, h } — ustawiane przy rysowaniu
+
     this._setupEvents();
     this._startDrawLoop();
 
@@ -660,6 +665,13 @@ export class UIManager {
         this._catalogScrollY = Math.max(0, Math.min(maxScroll, this._catalogScrollY + deltaY * 0.5));
         return true;
       }
+      // Redirect target picker — scroll w liście celów
+      const rc = this._redirectClipRect;
+      if (rc && rc.h > 0 && x >= rc.x && x <= rc.x + rc.w && y >= rc.y && y <= rc.y + rc.h) {
+        const maxScroll = Math.max(0, this._redirectContentH - rc.h);
+        this._redirectScrollY = Math.max(0, Math.min(maxScroll, (this._redirectScrollY || 0) + deltaY * 0.5));
+        return true;
+      }
       // Flota — scroll w dolnej sekcji
       const fc = this._fleetClipRect;
       if (fc && fc.h > 0 && x >= rect.x && x <= rect.x + rect.w && y >= fc.y && y <= fc.y + fc.h) {
@@ -870,6 +882,9 @@ export class UIManager {
 
   // Ekspedycje — zachowana w UIManager (ma dużo stanu)
   _drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, bodyH) {
+    // Reset clip rect listy celów (wyczyść gdy picker nieaktywny)
+    this._redirectClipRect = null;
+
     const exSys  = window.KOSMOS?.expeditionSystem;
     const colMgr = window.KOSMOS?.colonyManager;
 
@@ -1984,27 +1999,75 @@ export class UIManager {
     if (!this._redirectTargetBtns) this._redirectTargetBtns = [];
     this._redirectTargetBtns = [];
 
+    // Ograniczona lista ze scrollem — max 12 widocznych wierszy
+    const btnH = 14;
+    const GAP = 1;
+    const MAX_VISIBLE = 12;
+    const totalH = targets.length * (btnH + GAP);
+    const maxH = Math.min(totalH, MAX_VISIBLE * (btnH + GAP));
+
+    // Tło panelu listy celów
+    ctx.fillStyle = 'rgba(5,10,20,0.85)';
+    ctx.fillRect(px - 2, y - 2, panelW + 4, maxH + 4);
+    ctx.strokeStyle = THEME.borderActive;
+    ctx.strokeRect(px - 2, y - 2, panelW + 4, maxH + 4);
+
+    // Clip region + scroll
+    const clipY = y;
+    this._redirectClipRect = { x: px - 2, y: clipY, w: panelW + 4, h: maxH };
+    this._redirectContentH = totalH;
+    const scrollY = this._redirectScrollY || 0;
+
+    // Clamp scroll
+    const maxScroll = Math.max(0, totalH - maxH);
+    if (scrollY > maxScroll) this._redirectScrollY = maxScroll;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(px - 2, clipY, panelW + 4, maxH);
+    ctx.clip();
+
+    let iy = y - scrollY;
     for (const t of targets) {
-      const btnH = 13;
-      const bx = px; const by = y;
-      ctx.fillStyle = t.inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
-      ctx.fillRect(bx, by, panelW, btnH);
-      ctx.strokeStyle = t.inRange ? THEME.textLabel : THEME.dangerDim; ctx.strokeRect(bx, by, panelW, btnH);
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = t.inRange ? THEME.textPrimary : THEME.textDim;
-      const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
-      const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
-      const nameStr = t.explored ? `${t.icon} ${_truncate(t.name, 8)}` : `${t.icon} ???`;
-      ctx.fillText(`${nameStr} ${distStr}AU ⛽${fuelCost}`, bx + 2, by + 9);
-      if (t.inRange) {
-        this._redirectTargetBtns.push({
-          x: bx, y: by, w: panelW, h: btnH, targetId: t.id, expId: exp.id,
-        });
+      const bx = px; const by = iy;
+      // Pomiń niewidoczne elementy (optymalizacja)
+      if (by + btnH >= clipY && by <= clipY + maxH) {
+        ctx.fillStyle = t.inRange
+          ? (t.isColony ? 'rgba(20,50,30,0.7)' : 'rgba(20,40,60,0.6)')
+          : 'rgba(20,15,15,0.5)';
+        ctx.fillRect(bx, by, panelW, btnH);
+        ctx.strokeStyle = t.inRange ? THEME.textLabel : THEME.dangerDim;
+        ctx.strokeRect(bx, by, panelW, btnH);
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = t.inRange ? (t.isColony ? THEME.successDim : THEME.textPrimary) : THEME.textDim;
+        const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
+        const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
+        const nameStr = t.explored ? `${t.icon} ${_truncate(t.name, 10)}` : `${t.icon} ???`;
+        ctx.fillText(`${nameStr}  ${distStr}AU  ⛽${fuelCost}`, bx + 3, by + 10);
+        if (t.inRange) {
+          this._redirectTargetBtns.push({
+            x: bx, y: by, w: panelW, h: btnH, targetId: t.id, expId: exp.id,
+          });
+        }
       }
-      y += btnH + 1;
+      iy += btnH + GAP;
     }
 
-    return y;
+    ctx.restore();
+
+    // Scrollbar wizualny (jeśli lista jest dłuższa niż widoczna)
+    if (totalH > maxH) {
+      const sbW = 3;
+      const sbX = px + panelW;
+      const thumbH = Math.max(10, maxH * (maxH / totalH));
+      const thumbY = clipY + (maxScroll > 0 ? scrollY / maxScroll : 0) * (maxH - thumbH);
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(sbX, clipY, sbW, maxH);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillRect(sbX, thumbY, sbW, thumbH);
+    }
+
+    return y + maxH + 6;
   }
 
   // Helper: znajdź ciało po id (dla redirect target picker)
@@ -2622,14 +2685,19 @@ export class UIManager {
       if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
         // Toggle tryb wyboru celu
         this._redirectTargetExpId = this._redirectTargetExpId === btn.expId ? null : btn.expId;
+        this._redirectScrollY = 0;
         return;
       }
     }
-    // Redirect target picker — inline lista celów (górna strefa, bez scrollu)
+    // Redirect target picker — lista celów z clipem
+    const rc2 = this._redirectClipRect;
     for (const btn of (this._redirectTargetBtns ?? [])) {
+      // Sprawdź czy klik jest w widocznym obszarze clip
+      if (rc2 && (y < rc2.y || y > rc2.y + rc2.h)) continue;
       if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
         EventBus.emit('expedition:orderRedirect', { expeditionId: btn.expId, targetId: btn.targetId });
         this._redirectTargetExpId = null;
+        this._redirectScrollY = 0;
         return;
       }
     }
@@ -2692,6 +2760,7 @@ export class UIManager {
     // Toggle trybu wyboru celu redirect (z panelu floty)
     if (btn.action === 'orbitRedirect') {
       this._redirectTargetExpId = this._redirectTargetExpId === btn.expId ? null : btn.expId;
+      this._redirectScrollY = 0; // reset scrolla listy celów
       return;
     }
 

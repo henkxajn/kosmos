@@ -131,7 +131,7 @@ export class ThreeRenderer {
       else { col[i*3]=1.0; col[i*3+1]=1.0; col[i*3+2]=1.0; }
 
       phase[i]      = Math.random() * Math.PI * 2;
-      speed[i]      = 0.2 + Math.random() * 0.5;
+      speed[i]      = 0.15 + Math.random() * 0.4;
       brightness[i] = 0.6 + Math.random() * 0.4;
     }
 
@@ -160,13 +160,13 @@ export class ThreeRenderer {
           vColor = color;
 
           // Migotanie: sin z indywidualną fazą i prędkością
-          // Delikatna amplituda ± 0.15, zawsze >= 0.15
-          float twinkle = sin(uTime * aSpeed + aPhase) * 0.15;
-          vAlpha = clamp(aBrightness + twinkle, 0.15, 1.0);
+          float wave = sin(uTime * aSpeed + aPhase);
+          float twinkle = wave * 0.1;
+          vAlpha = clamp(aBrightness + twinkle, 0.2, 1.0);
 
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          // Lekka modulacja rozmiaru — widoczna przy statycznej kamerze
-          float sizeMod = 1.0 + twinkle * 0.3;
+          // Delikatna modulacja rozmiaru — widoczna przy statycznej kamerze
+          float sizeMod = 1.0 + wave * 0.15;
           gl_PointSize = uSize * sizeMod * (300.0 / -mvPos.z);
           gl_Position  = projectionMatrix * mvPos;
         }
