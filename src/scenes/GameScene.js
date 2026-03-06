@@ -19,7 +19,7 @@ import { ResourceSystem }    from '../systems/ResourceSystem.js';
 import { CivilizationSystem } from '../systems/CivilizationSystem.js';
 import { BuildingSystem }    from '../systems/BuildingSystem.js';
 import { TechSystem }        from '../systems/TechSystem.js';
-import { ExpeditionSystem }  from '../systems/ExpeditionSystem.js';
+import { MissionSystem }    from '../systems/MissionSystem.js';
 import { ColonyManager }      from '../systems/ColonyManager.js';
 import { VesselManager }      from '../systems/VesselManager.js';
 import { RandomEventSystem }  from '../systems/RandomEventSystem.js';
@@ -122,7 +122,8 @@ export class GameScene {
     this.buildingSystem  = new BuildingSystem(this.resourceSystem, this.civSystem, this.techSystem);
     this.factorySystem   = new FactorySystem(this.resourceSystem);
     this.buildingSystem.setFactorySystem(this.factorySystem);
-    this.expeditionSystem = new ExpeditionSystem(this.resourceSystem);
+    this.expeditionSystem = new MissionSystem(this.resourceSystem);
+    this.missionSystem    = this.expeditionSystem; // alias — ten sam obiekt
     this.colonyManager   = new ColonyManager(this.techSystem);
     this.vesselManager   = new VesselManager();
     this.tradeRouteManager = new TradeRouteManager();
@@ -137,8 +138,10 @@ export class GameScene {
     window.KOSMOS.techSystem       = this.techSystem;
     window.KOSMOS.factorySystem    = this.factorySystem;
     window.KOSMOS.expeditionSystem = this.expeditionSystem;
+    window.KOSMOS.missionSystem    = this.missionSystem;
     window.KOSMOS.colonyManager    = this.colonyManager;
     window.KOSMOS.vesselManager    = this.vesselManager;
+    window.KOSMOS.overlayManager   = this.uiManager.overlayManager;
     window.KOSMOS.tradeRouteManager = this.tradeRouteManager;
     window.KOSMOS.timeSystem       = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
@@ -185,7 +188,7 @@ export class GameScene {
           }
         }, 0);
       }
-      if (c4x.expeditions) this.expeditionSystem.restore(c4x.expeditions);
+      if (c4x.missions || c4x.expeditions) this.expeditionSystem.restore(c4x.missions ?? c4x.expeditions);
       // Przywróć VesselManager
       if (c4x.vesselManager) {
         this.vesselManager.restore(c4x.vesselManager);
@@ -796,6 +799,17 @@ export class GameScene {
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
+      // Escape — zamknij aktywny overlay
+      if (e.key === 'Escape' && this.uiManager.overlayManager.isAnyOpen()) {
+        this.uiManager.overlayManager.closeActive();
+        return;
+      }
+
+      // Klawisze overlay (F/P/E/T) — civMode
+      if (window.KOSMOS?.civMode) {
+        if (this.uiManager.overlayManager.handleKey(e.key)) return;
+      }
+
       const ts = this.timeSystem;
       switch (e.code) {
         case 'Space':
@@ -813,7 +827,6 @@ export class GameScene {
         case 'Digit5': EventBus.emit('time:setMultiplier', { index: 5 }); EventBus.emit('time:play'); break;
         case 'BracketLeft':  EventBus.emit('time:slower'); break;
         case 'BracketRight': EventBus.emit('time:faster'); break;
-        // Akcje gracza zablokowane w trybie 4X (civMode)
         case 'KeyQ': if (!window.KOSMOS?.civMode) EventBus.emit('action:stabilize');  break;
         case 'KeyW': if (!window.KOSMOS?.civMode) EventBus.emit('action:nudgeToHz');  break;
         case 'KeyE': if (!window.KOSMOS?.civMode) EventBus.emit('action:bombard');    break;
@@ -841,7 +854,9 @@ export class GameScene {
       // Ignoruj gdy PlanetScene lub PlanetGlobeScene jest aktywne
       if (this.planetScene?.isOpen || this.planetGlobeScene?.isOpen) return;
       // Ignoruj jeśli to był drag kamery (nie kliknięcie)
-      if (this.cameraController.wasDrag) return;
+      const wasDrag = this.cameraController.wasDrag;
+      this.cameraController._hasMoved = false; // reset po odczytaniu — zapobiega zamrażaniu kliknięć
+      if (wasDrag) return;
 
       const x = e.clientX;
       const y = e.clientY;
@@ -876,6 +891,16 @@ export class GameScene {
       if (!window.KOSMOS?.civMode && entity.type === 'planet' && entity.lifeScore > 80) {
         EventBus.emit('planet:colonize', { planet: entity });
       }
+    });
+
+    window.addEventListener('mousedown', (e) => {
+      if (this.planetScene?.isOpen || this.planetGlobeScene?.isOpen) return;
+      this.uiManager.handleMouseDown(e.clientX, e.clientY);
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (this.planetScene?.isOpen || this.planetGlobeScene?.isOpen) return;
+      this.uiManager.handleMouseUp(e.clientX, e.clientY);
     });
 
     window.addEventListener('mousemove', (e) => {

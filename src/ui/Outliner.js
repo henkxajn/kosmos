@@ -271,6 +271,12 @@ export class Outliner {
     for (const t of this._clickTargets) {
       if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) {
         if (t.type === 'section') {
+          if (t.sectionId === 'fleet') {
+            const om = window.KOSMOS?.overlayManager;
+            if (om) om.openPanel('fleet');
+            else EventBus.emit('civpanel:openTab', { tabId: 'fleet' });
+            return true;
+          }
           this._sections[t.sectionId] = !this._sections[t.sectionId];
           return true;
         }

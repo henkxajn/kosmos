@@ -30,6 +30,7 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import {
   createVessel, effectiveRange, canReach, consumeFuel, refuel,
   needsRefuel, getShipDef, setNextVesselId, getNextVesselId,
+  addMissionLog,
 } from '../entities/Vessel.js';
 import {
   serializeNameCounters, restoreNameCounters,
@@ -193,6 +194,10 @@ export class VesselManager {
     vessel.position.state = 'in_transit';
     vessel.position.dockedAt = null;
 
+    // Wpis do dziennika
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    addMissionLog(vessel, gameYear, `Wyruszył na misję: ${mission.type} → ${mission.targetName ?? mission.targetId}`, 'info');
+
     EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
     return true;
   }
@@ -208,6 +213,10 @@ export class VesselManager {
     vessel.position.dockedAt = vessel.mission.targetId;
     vessel.position.x = vessel.mission.targetX;
     vessel.position.y = vessel.mission.targetY;
+
+    // Wpis do dziennika
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    addMissionLog(vessel, gameYear, `Dotarł do ${vessel.mission.targetName ?? vessel.mission.targetId}`, 'success');
 
     EventBus.emit('vessel:arrived', { vessel, mission: vessel.mission });
   }
@@ -257,6 +266,11 @@ export class VesselManager {
     vessel.status = 'idle';
     vessel.mission = null;
     vessel.experience += 1;
+    if (vessel.stats) vessel.stats.missionsComplete += 1;
+
+    // Wpis do dziennika misji
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    addMissionLog(vessel, gameYear, `Zadokował w ${targetId}`, 'success');
 
     EventBus.emit('vessel:docked', { vessel });
   }
@@ -306,17 +320,21 @@ export class VesselManager {
         if (missionData.returnWaypoints) missionData.returnWaypoints = missionData.returnWaypoints.map(w => ({ ...w }));
       }
       vessels.push({
-        id:         v.id,
-        shipId:     v.shipId,
-        name:       v.name,
-        colonyId:   v.colonyId,
-        position:   { ...v.position },
-        fuel:       { ...v.fuel },
-        mission:    missionData,
-        status:     v.status,
-        experience: v.experience,
-        cargo:      v.cargo ?? {},
-        cargoUsed:  v.cargoUsed ?? 0,
+        id:           v.id,
+        shipId:       v.shipId,
+        name:         v.name,
+        colonyId:     v.colonyId,
+        homeColonyId: v.homeColonyId ?? v.colonyId,
+        position:     { ...v.position },
+        fuel:         { ...v.fuel },
+        mission:      missionData,
+        status:       v.status,
+        experience:   v.experience,
+        cargo:        v.cargo ?? {},
+        cargoUsed:    v.cargoUsed ?? 0,
+        automation:   v.automation ? { ...v.automation } : { autoReturn: false, autoRefuel: true },
+        missionLog:   v.missionLog ? [...v.missionLog] : [],
+        stats:        v.stats ? { ...v.stats } : { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 },
       });
     }
     return {
@@ -343,17 +361,21 @@ export class VesselManager {
         if (!missionData.originId) missionData.originId = vd.colonyId;
       }
       const vessel = {
-        id:         vd.id,
-        shipId:     vd.shipId,
-        name:       vd.name,
-        colonyId:   vd.colonyId,
-        position:   { ...vd.position },
-        fuel:       { ...vd.fuel },
-        mission:    missionData,
-        status:     vd.status ?? 'idle',
-        experience: vd.experience ?? 0,
-        cargo:      vd.cargo ?? {},
-        cargoUsed:  vd.cargoUsed ?? 0,
+        id:           vd.id,
+        shipId:       vd.shipId,
+        name:         vd.name,
+        colonyId:     vd.colonyId,
+        homeColonyId: vd.homeColonyId ?? vd.colonyId,
+        position:     { ...vd.position },
+        fuel:         { ...vd.fuel },
+        mission:      missionData,
+        status:       vd.status ?? 'idle',
+        experience:   vd.experience ?? 0,
+        cargo:        vd.cargo ?? {},
+        cargoUsed:    vd.cargoUsed ?? 0,
+        automation:   vd.automation ? { ...vd.automation } : { autoReturn: false, autoRefuel: true },
+        missionLog:   vd.missionLog ? [...vd.missionLog] : [],
+        stats:        vd.stats ? { ...vd.stats } : { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 },
       };
       this._vessels.set(vessel.id, vessel);
     }
@@ -469,6 +491,10 @@ export class VesselManager {
       }
 
       if (vessel.position.state === 'in_transit' && m) {
+        // Śledź dystans (delta pozycji → AU)
+        const prevX = vessel.position.x;
+        const prevY = vessel.position.y;
+
         if (m.phase === 'returning') {
           // Powrót: interpolacja returnStart → (waypoints) → returnTarget
           const returnDepart = m.returnDepartYear ?? m.arrivalYear ?? m.departYear;
@@ -501,6 +527,12 @@ export class VesselManager {
             vessel.position.y = op.y;
           }
         }
+        // Akumuluj przebytą odległość (AU)
+        if (vessel.stats) {
+          const dPx = Math.hypot(vessel.position.x - prevX, vessel.position.y - prevY);
+          vessel.stats.distanceTraveled += dPx / AU_TO_PX;
+        }
+
         // Aktualizuj linie trasy dla latających
         this._updateRouteLine(vessel, m);
         moving.push(vessel);

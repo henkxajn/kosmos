@@ -6,21 +6,18 @@
 // Wszystkie dane UI aktualizowane przez EventBus.
 
 import EventBus    from '../core/EventBus.js';
-import EntityManager from '../core/EntityManager.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { TECHS, TECH_BRANCHES } from '../data/TechData.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { SHIPS } from '../data/ShipsData.js';
-import { SaveSystem } from '../systems/SaveSystem.js';
-import { showRenameModal } from '../ui/ModalInput.js';
-import { showTransportModal } from '../ui/TransportModal.js';
-import { showTradeRouteModal } from '../ui/TradeRouteModal.js';
-import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { FleetTabPanel }  from '../ui/FleetTabPanel.js';
 import { COSMIC }          from '../config/LayoutConfig.js';
+import { OverlayManager }  from '../ui/OverlayManager.js';
+import { FleetManagerOverlay } from '../ui/FleetManagerOverlay.js';
 
 // Nowe komponenty UI
 import { TopBar }        from '../ui/TopBar.js';
@@ -176,36 +173,16 @@ export class UIManager {
     this._tooltipMouseX = 0;
     this._tooltipMouseY = 0;
 
-    // ── Ekspedycje zakładka ──────────────────────────────────
-    this._reconBtns = [];
-    this._fleetBuildBtns = [];
-    this._vesselRows = [];
-    this._vesselActionBtns = [];
-    this._orbitReturnBtns = [];
-    this._orbitRedirectBtns = [];
-    this._redirectTargetBtns = [];
-    this._redirectTargetExpId = null;  // ID ekspedycji w trybie wyboru celu
-    this._selectedVesselId = null;
-    this._vesselMissionType = null;
-    this._colonyListItems = [];
-    this._transportBtnRect = null;
+    // ── Zakładka Flota (FleetTabPanel) ──────────────────────
+    this._fleetTab = new FleetTabPanel();
+    EventBus.on('civpanel:openTab', ({ tabId }) => {
+      this._civPanelTab = this._civPanelTab === tabId ? null : tabId;
+      if (tabId === 'fleet') this._fleetTab.reset();
+    });
 
-    // ── Katalog zbadanych ciał (scroll) ────────────────────
-    this._catalogScrollY = 0;
-    this._catalogContentH = 0;
-    this._catalogVisibleH = 0;
-    this._catalogRowRects = [];  // hit rects wierszy katalogu
-
-    // ── Scroll sekcji FLOTA ──────────────────────────────────
-    this._fleetScrollY = 0;
-    this._fleetContentH = 0;
-    this._fleetVisibleH = 0;
-    this._fleetClipRect = { y: 0, h: 0 };
-
-    // ── Scroll listy celów redirect ─────────────────────────
-    this._redirectScrollY = 0;
-    this._redirectContentH = 0;
-    this._redirectClipRect = null; // { x, y, w, h } — ustawiane przy rysowaniu
+    // ── OverlayManager (panele pełnoekranowe) ─────────────
+    this.overlayManager = new OverlayManager();
+    this.overlayManager.register('fleet', new FleetManagerOverlay());
 
     this._setupEvents();
     this._startDrawLoop();
@@ -595,7 +572,7 @@ export class UIManager {
     }
     // CivPanel body
     if (window.KOSMOS?.civMode && this._civPanelTab !== null) {
-      const bodyH = (this._civPanelTab === 'expeditions' || this._civPanelTab === 'economy')
+      const bodyH = (this._civPanelTab === 'fleet' || this._civPanelTab === 'economy')
         ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
       const panelBottom = CIV_PANEL_Y + bodyH;
       if (x >= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= panelBottom) return true;
@@ -629,6 +606,11 @@ export class UIManager {
       return this._hitTestConfirm(x, y);
     }
 
+    // Overlay pełnoekranowy (FleetManager itp.) — przed resztą UI
+    if (this.overlayManager.isAnyOpen()) {
+      if (this.overlayManager.handleClick(x, y)) return true;
+    }
+
     // TopBar (zasoby + czas)
     if (this._topBar.hitTest(x, y, W)) return true;
 
@@ -654,31 +636,13 @@ export class UIManager {
   handleWheel(rawX, rawY, deltaY) {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
-    // Ekspedycje — scroll katalogu (prawa kolumna) lub floty (dolna sekcja)
-    if (this._civPanelTab === 'expeditions') {
-      const rect = this._civPanelBodyRect();
-      const halfW = Math.floor(rect.w / 2);
-      const upperZoneH = 200;
-      // Katalog — scroll w prawej kolumnie górnej strefy
-      if (x >= rect.x + halfW && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + upperZoneH) {
-        const maxScroll = Math.max(0, this._catalogContentH - this._catalogVisibleH);
-        this._catalogScrollY = Math.max(0, Math.min(maxScroll, this._catalogScrollY + deltaY * 0.5));
-        return true;
-      }
-      // Redirect target picker — scroll w liście celów
-      const rc = this._redirectClipRect;
-      if (rc && rc.h > 0 && x >= rc.x && x <= rc.x + rc.w && y >= rc.y && y <= rc.y + rc.h) {
-        const maxScroll = Math.max(0, this._redirectContentH - rc.h);
-        this._redirectScrollY = Math.max(0, Math.min(maxScroll, (this._redirectScrollY || 0) + deltaY * 0.5));
-        return true;
-      }
-      // Flota — scroll w dolnej sekcji
-      const fc = this._fleetClipRect;
-      if (fc && fc.h > 0 && x >= rect.x && x <= rect.x + rect.w && y >= fc.y && y <= fc.y + fc.h) {
-        const maxScroll = Math.max(0, this._fleetContentH - this._fleetVisibleH);
-        this._fleetScrollY = Math.max(0, Math.min(maxScroll, (this._fleetScrollY || 0) + deltaY * 0.5));
-        return true;
-      }
+    // Overlay pełnoekranowy — scroll
+    if (this.overlayManager.isAnyOpen()) {
+      if (this.overlayManager.handleScroll(deltaY, x, y)) return true;
+    }
+    // Zakładka Flota — deleguj scroll do FleetTabPanel
+    if (this._civPanelTab === 'fleet') {
+      if (this._fleetTab.handleScroll(deltaY, x, y)) return true;
     }
     // BottomContext scroll
     if (this._selectedEntity) {
@@ -687,10 +651,35 @@ export class UIManager {
     return false;
   }
 
+  openCivTab(tabId) {
+    if (this._civPanelTab !== tabId) {
+      this._civPanelTab = tabId;
+      if (tabId === 'fleet') this._fleetTab.reset();
+    }
+  }
+
+  handleMouseDown(rawX, rawY) {
+    const x = rawX / UI_SCALE;
+    const y = rawY / UI_SCALE;
+    if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseDown(x, y); return; }
+    if (this._civPanelTab === 'fleet') this._fleetTab.handleMouseDown(x, y);
+  }
+
+  handleMouseUp(rawX, rawY) {
+    const x = rawX / UI_SCALE;
+    const y = rawY / UI_SCALE;
+    if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y); return; }
+    if (this._civPanelTab === 'fleet') this._fleetTab.handleMouseUp(x, y);
+  }
+
   handleMouseMove(x, y) {
     x /= UI_SCALE; y /= UI_SCALE;
     this._tooltipMouseX = x;
     this._tooltipMouseY = y;
+    // Overlay pełnoekranowy — hover
+    if (this.overlayManager.isAnyOpen()) {
+      this.overlayManager.handleMouseMove(x, y);
+    }
     const prev = this._hoveredBtn;
     this._hoveredBtn = this._detectHoverBtn(x, y);
     if (this._hoveredBtn !== prev) {
@@ -703,6 +692,8 @@ export class UIManager {
     this._topBar.updateHover(x, y);
     // Outliner hover (tooltip kolonii)
     if (this._outliner) this._outliner.updateHover(x, y, W, H);
+    // Fleet tab hover (mapa, statki)
+    if (this._civPanelTab === 'fleet') this._fleetTab.handleMouseMove(x, y);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -779,6 +770,9 @@ export class UIManager {
       civMode,
     });
 
+    // ── Overlay pełnoekranowy (FleetManager itp.) ────────────
+    if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
+
     // ── Panel akcji gracza (tylko tryb Generator) ────────────
     if (!civMode) this._drawActionPanel();
 
@@ -845,7 +839,7 @@ export class UIManager {
   // CivPanel — panel informacyjny cywilizacji
   // ══════════════════════════════════════════════════════════════
   _civPanelBodyRect() {
-    const h = (this._civPanelTab === 'expeditions' || this._civPanelTab === 'economy')
+    const h = (this._civPanelTab === 'fleet' || this._civPanelTab === 'economy')
       ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
     return { x: CIV_SIDEBAR_W, y: CIV_PANEL_Y, w: W - CIV_SIDEBAR_W - COSMIC.OUTLINER_W, h };
   }
@@ -884,1283 +878,7 @@ export class UIManager {
     if (this._civPanelTab === 'population')  drawPopulationTab(ctx, bodyY, bodyX, bodyW, state);
     if (this._civPanelTab === 'tech')        drawTechTab(ctx, bodyY, bodyX, bodyW);
     if (this._civPanelTab === 'buildings')   drawBuildingsTab(ctx, bodyY, bodyX, bodyW);
-    if (this._civPanelTab === 'expeditions') this._drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, bodyH);
-  }
-
-  // Ekspedycje — zachowana w UIManager (ma dużo stanu)
-  _drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, bodyH) {
-    // Reset clip rect listy celów (wyczyść gdy picker nieaktywny)
-    this._redirectClipRect = null;
-
-    const exSys  = window.KOSMOS?.expeditionSystem;
-    const colMgr = window.KOSMOS?.colonyManager;
-
-    // Synchronizuj listę ekspedycji z ExpeditionSystem co frame (source of truth)
-    if (exSys) {
-      const active = exSys.getActive?.() ?? [];
-      this._expeditions = active;
-    }
-
-    // Filtruj po aktywnej kolonii — pokaż tylko ekspedycje statków z tej kolonii
-    const activePid = colMgr?.activePlanetId;
-    const vMgrRef = window.KOSMOS?.vesselManager;
-    const colonyExps = this._expeditions.filter(exp => {
-      if (!exp.vesselId || !vMgrRef) return false;
-      const v = vMgrRef.getVessel(exp.vesselId);
-      return v && v.colonyId === activePid;
-    });
-
-    const PAD    = 14;
-    const LH     = 14;
-    const halfW  = Math.floor(bodyW / 2);
-    const upperZoneH = 200; // wysokość górnej strefy (misje + katalog)
-    let y = bodyY + 16;
-
-    // ═══════════════════════════════════════════════════════════════
-    // GÓRNA STREFA: dwie kolumny
-    // ═══════════════════════════════════════════════════════════════
-
-    // ── LEWA KOLUMNA: AKTYWNE MISJE ──────────────────────────────
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.title;
-    ctx.fillText('AKTYWNE MISJE', bodyX + PAD, y);
-
-    const count = colonyExps.length;
-    const orbitCount = colonyExps.filter(e => e.status === 'orbiting').length;
-    const statusText = orbitCount > 0 ? `${count - orbitCount} w locie, ${orbitCount} na orbicie` : `${count} w locie`;
-    ctx.fillStyle = count > 0 ? C.mint : C.label;
-    ctx.textAlign = 'right';
-    ctx.fillText(statusText, bodyX + halfW - PAD, y);
-    ctx.textAlign = 'left';
-    y += 4;
-
-    ctx.strokeStyle = C.border; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + halfW - PAD, y); ctx.stroke();
-    y += 10;
-
-    // Przyciski powrotu i redirect (orbiting) — zbierane do hitTest
-    this._orbitReturnBtns = [];
-    this._orbitRedirectBtns = [];
-
-    if (count === 0) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.text;
-      ctx.fillText('Brak aktywnych misji', bodyX + PAD, y);
-      y += LH;
-    } else {
-      const vMgrMis = window.KOSMOS?.vesselManager;
-      for (const exp of colonyExps.slice(0, 10)) {
-        const icon = exp.type === 'scientific' ? '🔬' : exp.type === 'colony' ? '🚢'
-          : exp.type === 'transport' ? '📦' : exp.type === 'recon' ? '🔭' : '⛏';
-
-        // Nazwa statku
-        const vessel = exp.vesselId ? vMgrMis?.getVessel(exp.vesselId) : null;
-        const shipName = vessel?.name ? _truncate(vessel.name, 10) : null;
-
-        // Status i kolor
-        const isOrbiting = exp.status === 'orbiting';
-        const isReturning = exp.status === 'returning';
-        const color = isReturning ? C.mint : isOrbiting ? C.yellow : THEME.textPrimary;
-
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = color;
-
-        // Linia 1: nazwa statku + status
-        let statusText;
-        if (isOrbiting) {
-          statusText = `⊙ ${icon} ${shipName ?? '?'} — orbita: ${_truncate(exp.targetName ?? '?', 10)}`;
-        } else if (isReturning) {
-          statusText = `↩ ${icon} ${shipName ?? '?'} — powrót`;
-        } else {
-          // Dla full_system recon pokaż aktualny cel + postęp
-          let targetDisp = _truncate(exp.targetName ?? '?', 10);
-          if (exp.scope === 'full_system' && exp.bodiesDiscovered) {
-            const currentTarget = _truncate(exp.targetName ?? '?', 8);
-            targetDisp = `${currentTarget} (${exp.bodiesDiscovered.length} zbad.)`;
-          }
-          statusText = `→ ${icon} ${shipName ?? '?'} → ${targetDisp}`;
-        }
-        ctx.fillText(statusText, bodyX + PAD, y);
-
-        if (isOrbiting) {
-          // Dwa przyciski: Powrót + Cel
-          const btnW = 34; const btnH = 12; const gap = 2;
-          const btnRetX = bodyX + halfW - PAD - btnW * 2 - gap;
-          const btnRedX = bodyX + halfW - PAD - btnW;
-          const btnY = y - 9;
-          // Powrót
-          ctx.fillStyle = 'rgba(60,50,10,0.7)';
-          ctx.fillRect(btnRetX, btnY, btnW, btnH);
-          ctx.strokeStyle = C.yellow; ctx.strokeRect(btnRetX, btnY, btnW, btnH);
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = C.yellow; ctx.textAlign = 'center';
-          ctx.fillText('↩ Baza', btnRetX + btnW / 2, btnY + 9);
-          ctx.textAlign = 'left';
-          this._orbitReturnBtns.push({ x: btnRetX, y: btnY, w: btnW, h: btnH, expId: exp.id });
-          // Zmień cel
-          const isRedirectActive = this._redirectTargetExpId === exp.id;
-          ctx.fillStyle = isRedirectActive ? 'rgba(20,50,80,0.8)' : 'rgba(10,30,60,0.7)';
-          ctx.fillRect(btnRedX, btnY, btnW, btnH);
-          ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(btnRedX, btnY, btnW, btnH);
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
-          ctx.fillText('➡ Cel', btnRedX + btnW / 2, btnY + 9);
-          ctx.textAlign = 'left';
-          this._orbitRedirectBtns.push({ x: btnRedX, y: btnY, w: btnW, h: btnH, expId: exp.id });
-        } else {
-          const eta = isReturning
-            ? `↩ ${_shortYear(exp.returnYear ?? 0)}`
-            : `▶ ${_shortYear(exp.arrivalYear ?? 0)}`;
-          ctx.fillStyle = C.label;
-          ctx.textAlign = 'right';
-          ctx.fillText(eta, bodyX + halfW - PAD, y);
-          ctx.textAlign = 'left';
-        }
-        y += LH;
-      }
-      if (count > 10) { ctx.fillStyle = C.text; ctx.fillText(`...i ${count - 10} więcej`, bodyX + PAD, y); y += LH; }
-
-      // Inline target picker — gdy redirectTargetExpId jest ustawiony
-      if (this._redirectTargetExpId) {
-        const redExp = this._expeditions.find(e => e.id === this._redirectTargetExpId);
-        if (redExp && redExp.status === 'orbiting') {
-          y = this._drawRedirectTargetPicker(ctx, redExp, bodyX + PAD, y, halfW - PAD * 2);
-        }
-      }
-    }
-
-    // ── PRAWA KOLUMNA: KATALOG CIAŁ NIEBIESKICH ──────────────────
-    const catalogX = bodyX + halfW;
-    const catalogW = halfW - PAD;
-    const catalogMaxH = upperZoneH - 20; // margines
-    this._drawBodyCatalog(ctx, bodyY, catalogX, catalogW, catalogMaxH);
-
-    // ═══════════════════════════════════════════════════════════════
-    // DOLNA STREFA: FLOTA + STOCZNIA (pełna szerokość)
-    // ═══════════════════════════════════════════════════════════════
-    y = bodyY + upperZoneH;
-    const fullW = bodyW - PAD * 2;
-
-    // Separator
-    ctx.strokeStyle = C.border; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + PAD + fullW, y); ctx.stroke();
-    y += 10;
-
-    this._fleetBuildBtns = [];
-    this._vesselRows = [];
-    this._vesselActionBtns = [];
-    const tSys = window.KOSMOS?.techSystem;
-    const vMgr = window.KOSMOS?.vesselManager;
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.title; ctx.fillText('FLOTA', bodyX + PAD, y);
-    y += 4;
-    ctx.strokeStyle = C.border;
-    ctx.beginPath(); ctx.moveTo(bodyX + PAD, y); ctx.lineTo(bodyX + PAD + fullW, y); ctx.stroke();
-    y += 10;
-
-    // === Strefa scrollowalna FLOTA ===
-    const CLIP_PAD = 12; // zapas na ascenders tekstu (górna krawędź liter)
-    const fleetContentY = y;
-    const fleetMaxH = bodyY + bodyH - fleetContentY;
-    this._fleetVisibleH = fleetMaxH;
-    this._fleetClipRect = { y: fleetContentY - CLIP_PAD, h: fleetMaxH + CLIP_PAD };
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(bodyX, fleetContentY - CLIP_PAD, bodyW, fleetMaxH + CLIP_PAD);
-    ctx.clip();
-    y -= (this._fleetScrollY || 0);
-
-    const activeCol = colMgr?.getColony(activePid);
-    // Pobierz poziom stoczni (0 = brak) — deleguj do ColonyManager
-    const shipyardLevel = colMgr?._getShipyardLevel?.(activeCol) ?? (() => {
-      if (!activeCol?.buildingSystem) return 0;
-      let total = 0;
-      for (const [, e] of activeCol.buildingSystem._active) {
-        if (e.building?.id === 'shipyard') total += e.level ?? 1;
-      }
-      return total;
-    })();
-    const hasShipyard = shipyardLevel > 0;
-    const hasExploration = tSys?.isResearched('exploration') ?? false;
-
-    if (!hasExploration) { ctx.fillStyle = C.orange; ctx.fillText('🔒 Wymaga: Eksploracja', bodyX + PAD, y); y += LH; }
-    else if (!hasShipyard) { ctx.fillStyle = C.orange; ctx.fillText('⚓ Stocznia: ❌ (zbuduj)', bodyX + PAD, y); y += LH; }
-    else {
-      const queues = colMgr?.getShipQueues(activePid) ?? [];
-      const usedSlots = queues.length || 1;
-      const speedBonus = Math.max(1, Math.floor(shipyardLevel / usedSlots));
-      const bonusStr = speedBonus > 1 ? ` ×${speedBonus}⚡` : '';
-      ctx.fillStyle = C.green; ctx.fillText(`⚓ Stocznia ✅ (${queues.length}/${shipyardLevel} slotów${bonusStr})`, bodyX + PAD, y); y += LH;
-      for (const q of queues) {
-        const shipDef = SHIPS[q.shipId];
-        const effectiveTime = speedBonus > 1 ? (q.buildTime / speedBonus) : q.buildTime;
-        const frac = effectiveTime > 0 ? q.progress / q.buildTime : 0;
-        ctx.fillStyle = THEME.textPrimary; ctx.fillText(`Budowa: ${shipDef?.icon ?? '🚀'} ${shipDef?.namePL ?? q.shipId}`, bodyX + PAD, y); y += LH - 2;
-        drawMiniBar(ctx, bodyX + PAD, y, fullW - PAD, 6, frac, THEME.borderActive); y += 8;
-        const remaining = Math.max(0, effectiveTime - q.progress / speedBonus);
-        ctx.fillStyle = C.text; ctx.fillText(`~${remaining.toFixed(1)} lat (×${speedBonus}⚡)`, bodyX + PAD, y); y += LH;
-      }
-
-      // ── Hangar — indywidualne statki ────────────────────────────────
-      const vessels = vMgr?.getVesselsAt(activePid) ?? [];
-      ctx.fillStyle = C.label; ctx.fillText(`Hangar (${vessels.length}):`, bodyX + PAD, y); y += LH - 2;
-
-      if (vessels.length === 0) {
-        ctx.fillStyle = C.dim; ctx.fillText('Brak statków — zbuduj w Stoczni', bodyX + PAD, y); y += LH - 2;
-      } else {
-        for (const v of vessels) {
-          const sd = SHIPS[v.shipId];
-          const rowH = 16;
-          const rx = bodyX + PAD;
-          const ry = y;
-          const isSelected = this._selectedVesselId === v.id;
-
-          ctx.fillStyle = isSelected ? 'rgba(40,80,120,0.5)' : 'rgba(15,25,40,0.4)';
-          ctx.fillRect(rx, ry, fullW, rowH);
-          if (isSelected) { ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(rx, ry, fullW, rowH); }
-
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          const statusColor = v.status === 'idle' ? THEME.successDim
-            : v.status === 'refueling' ? THEME.yellow
-            : v.status === 'on_mission' ? THEME.info
-            : THEME.dangerDim;
-          ctx.fillStyle = statusColor;
-          ctx.fillText(`${sd?.icon ?? '🚀'} ${_truncate(v.name, 14)}`, rx + 2, ry + 11);
-
-          // Pasek paliwa (mini)
-          const barW = 40;
-          const barX = rx + fullW - barW - 4;
-          const barY = ry + 4;
-          const barH = 6;
-          const fuelFrac = v.fuel.max > 0 ? v.fuel.current / v.fuel.max : 0;
-          const fuelColor = fuelFrac > 0.5 ? THEME.successDim : fuelFrac > 0.2 ? THEME.yellow : THEME.dangerDim;
-          ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(barX, barY, barW, barH);
-          ctx.fillStyle = fuelColor; ctx.fillRect(barX, barY, barW * fuelFrac, barH);
-          ctx.strokeStyle = THEME.textLabel; ctx.strokeRect(barX, barY, barW, barH);
-          ctx.font = '7px monospace'; ctx.fillStyle = C.label;
-          ctx.fillText(`⛽${v.fuel.current.toFixed(1)}/${v.fuel.max}`, barX - 2, ry + 15);
-
-          this._vesselRows.push({ x: rx, y: ry, w: fullW, h: rowH, vesselId: v.id });
-          y += rowH + 1;
-        }
-      }
-      y += 4;
-
-      // ── Na orbicie (statki z tej kolonii orbitujące cele) ────────────
-      const allVessels = vMgr?.getAllVessels() ?? [];
-      const orbitingVessels = allVessels.filter(v => v.colonyId === activePid && v.position.state === 'orbiting');
-      const inTransitVessels = allVessels.filter(v => v.colonyId === activePid && v.position.state === 'in_transit');
-
-      if (orbitingVessels.length > 0) {
-        ctx.fillStyle = C.yellow; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillText(`Na orbicie (${orbitingVessels.length}):`, bodyX + PAD, y); y += LH - 2;
-        for (const v of orbitingVessels) {
-          const sd = SHIPS[v.shipId];
-          const rowH = 16;
-          const rx = bodyX + PAD; const ry = y;
-          const isSelected = this._selectedVesselId === v.id;
-          ctx.fillStyle = isSelected ? 'rgba(60,60,20,0.5)' : 'rgba(30,30,10,0.4)';
-          ctx.fillRect(rx, ry, fullW, rowH);
-          if (isSelected) { ctx.strokeStyle = C.yellow; ctx.strokeRect(rx, ry, fullW, rowH); }
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = C.yellow;
-          const targetName = v.mission?.targetName ?? '?';
-          ctx.fillText(`${sd?.icon ?? '🚀'} ${_truncate(v.name, 10)} ⊙ ${_truncate(targetName, 8)}`, rx + 2, ry + 11);
-          this._vesselRows.push({ x: rx, y: ry, w: fullW, h: rowH, vesselId: v.id });
-          y += rowH + 1;
-        }
-        y += 2;
-      }
-
-      if (inTransitVessels.length > 0) {
-        ctx.fillStyle = THEME.info; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillText(`W locie (${inTransitVessels.length}):`, bodyX + PAD, y); y += LH - 2;
-        for (const v of inTransitVessels) {
-          const sd = SHIPS[v.shipId];
-          const rowH = 16;
-          const rx = bodyX + PAD; const ry = y;
-          const isSelected = this._selectedVesselId === v.id;
-          ctx.fillStyle = isSelected ? 'rgba(20,40,80,0.6)' : 'rgba(15,25,50,0.4)';
-          ctx.fillRect(rx, ry, fullW, rowH);
-          if (isSelected) { ctx.strokeStyle = THEME.info; ctx.strokeRect(rx, ry, fullW, rowH); }
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.info;
-          const targetName = v.mission?.targetName ?? '?';
-          const phaseIcon = v.mission?.phase === 'returning' ? '↩' : '→';
-          ctx.fillText(`${sd?.icon ?? '🚀'} ${_truncate(v.name, 10)} ${phaseIcon} ${_truncate(targetName, 8)}`, rx + 2, ry + 11);
-          this._vesselRows.push({ x: rx, y: ry, w: fullW, h: rowH, vesselId: v.id });
-          y += rowH + 1;
-        }
-        y += 2;
-      }
-
-      // ── Panel akcji wybranego statku ────────────────────────────────
-      if (this._selectedVesselId && vMgr) {
-        const sv = vMgr.getVessel(this._selectedVesselId);
-        if (sv && (sv.position.state === 'docked' || sv.position.state === 'orbiting' || sv.position.state === 'in_transit')) {
-          y = this._drawVesselActionPanel(ctx, sv, bodyX + PAD, y, fullW);
-        }
-      } else if (vessels.length > 0) {
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = C.dim;
-        ctx.fillText('Wybierz statek aby rozpocząć misję', bodyX + PAD, y);
-        y += LH;
-      }
-
-      y += 4;
-      // ── Budowa statków ─────────────────────────────────────────────
-      const canBuildAny = hasShipyard && queues.length < shipyardLevel;
-      const inv = activeCol?.resourceSystem?.inventorySnapshot() ?? {};
-
-      for (const ship of Object.values(SHIPS)) {
-        const hasTech = !ship.requires || (tSys?.isResearched(ship.requires) ?? false);
-        if (!hasTech) continue;
-
-        const allCosts = { ...(ship.cost || {}), ...(ship.commodityCost || {}) };
-        const canAfford = Object.entries(allCosts).every(([k, v]) => (inv[k] ?? 0) >= v);
-        const canBuild = canBuildAny && canAfford;
-
-        const btnH = 18;
-        const bx = bodyX + PAD; const by = y;
-        ctx.fillStyle = canBuild ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.6)';
-        ctx.fillRect(bx, by, fullW, btnH);
-        ctx.strokeStyle = canBuild ? THEME.borderActive : THEME.textLabel;
-        ctx.strokeRect(bx, by, fullW, btnH);
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = canBuild ? THEME.textPrimary : THEME.textDim;
-        ctx.textAlign = 'center';
-        ctx.fillText(`Buduj ${ship.icon} ${ship.namePL}`, bx + fullW / 2, by + 12);
-        ctx.textAlign = 'left';
-        this._fleetBuildBtns.push({ x: bx, y: by, w: fullW, h: btnH, shipId: ship.id, enabled: canBuild });
-        y += btnH + 2;
-
-        // Koszt
-        const costParts = [];
-        for (const [resId, amt] of Object.entries(ship.cost || {})) {
-          const have = Math.floor(inv[resId] ?? 0);
-          const icon = RESOURCE_ICONS[resId] ?? resId;
-          const name = ALL_RESOURCES[resId]?.namePL ?? resId;
-          const ok = have >= amt;
-          costParts.push({ text: `${icon}${name}:${have}/${amt}`, ok });
-        }
-        for (const [comId, amt] of Object.entries(ship.commodityCost || {})) {
-          const have = Math.floor(inv[comId] ?? 0);
-          const icon = COMMODITIES[comId]?.icon ?? '📦';
-          const name = COMMODITY_SHORT[comId] ?? comId;
-          const ok = have >= amt;
-          costParts.push({ text: `${icon}${name}:${have}/${amt}`, ok });
-        }
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        let cx = bodyX + PAD + 2;
-        let costLineY = y;
-        for (const part of costParts) {
-          ctx.fillStyle = part.ok ? THEME.successDim : THEME.dangerDim;
-          const tw = ctx.measureText(part.text).width;
-          if (cx + tw > bodyX + PAD + fullW - 2) {
-            costLineY += LH - 4; cx = bodyX + PAD + 2;
-          }
-          ctx.fillText(part.text, cx, costLineY + 9);
-          cx += tw + 6;
-        }
-        y = costLineY + LH;
-
-        ctx.fillStyle = C.dim;
-        const effectiveBuildTime = speedBonus > 1 ? (ship.buildTime / speedBonus).toFixed(1) : ship.buildTime;
-        ctx.fillText(`⏱${effectiveBuildTime} lat${speedBonus > 1 ? ` (×${speedBonus}⚡)` : ''}`, bodyX + PAD + 2, y + 8);
-        y += LH;
-      }
-    }
-
-    // ── Aktywne trasy handlowe ──────────────────────────────────
-    const trMgr = window.KOSMOS?.tradeRouteManager;
-    const trRoutes = trMgr?.getRoutes()?.filter(r => r.status === 'active' || r.status === 'paused') ?? [];
-    if (trRoutes.length > 0) {
-      y += 4;
-      ctx.fillStyle = THEME.accent; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillText(`🔄 Trasy handlowe (${trRoutes.length}):`, bodyX + PAD, y); y += LH - 2;
-      for (const tr of trRoutes) {
-        const vName = vMgr?.getVessel(tr.vesselId)?.name ?? '?';
-        const statusIcon = tr.status === 'paused' ? '⏸' : '▶';
-        const tripsStr = tr.tripsTotal ? `${tr.tripsCompleted}/${tr.tripsTotal}` : `${tr.tripsCompleted}/∞`;
-        const rowH = 14; const rx = bodyX + PAD; const ry = y;
-        ctx.fillStyle = 'rgba(20,40,30,0.4)'; ctx.fillRect(rx, ry, fullW, rowH);
-        ctx.strokeStyle = THEME.textLabel; ctx.strokeRect(rx, ry, fullW, rowH);
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = tr.status === 'paused' ? THEME.textDim : THEME.mint;
-        ctx.fillText(`${statusIcon} ${_truncate(vName, 8)} → ${_truncate(tr.targetBodyId, 8)} [${tripsStr}]`, rx + 2, ry + 10);
-        // Przycisk pauza/wznów + usuń
-        const delBtnW = 14;
-        const delBtnX = rx + fullW - delBtnW - 1;
-        ctx.fillStyle = 'rgba(80,20,20,0.6)'; ctx.fillRect(delBtnX, ry + 1, delBtnW, rowH - 2);
-        ctx.fillStyle = THEME.dangerDim; ctx.textAlign = 'center';
-        ctx.fillText('✕', delBtnX + delBtnW / 2, ry + 10);
-        ctx.textAlign = 'left';
-        this._vesselActionBtns.push({ x: delBtnX, y: ry, w: delBtnW, h: rowH, action: 'deleteTradeRoute', routeId: tr.id });
-        y += rowH + 1;
-      }
-    }
-
-    // === Koniec strefy scrollowalnej FLOTA ===
-    this._fleetContentH = y - fleetContentY + (this._fleetScrollY || 0);
-    // Clamp scroll — zabezpieczenie gdy content się skurczył
-    const maxFleetScroll = Math.max(0, this._fleetContentH - fleetMaxH);
-    if (this._fleetScrollY > maxFleetScroll) this._fleetScrollY = maxFleetScroll;
-    ctx.restore();
-
-    // Scrollbar wizualny (3px pasek po prawej)
-    if (this._fleetContentH > fleetMaxH) {
-      const sbH = Math.max(12, fleetMaxH * (fleetMaxH / this._fleetContentH));
-      const maxScroll = this._fleetContentH - fleetMaxH;
-      const scrollFrac = maxScroll > 0 ? (this._fleetScrollY || 0) / maxScroll : 0;
-      const sbY = fleetContentY + scrollFrac * (fleetMaxH - sbH);
-      ctx.fillStyle = 'rgba(100,140,180,0.3)';
-      ctx.fillRect(bodyX + bodyW - 3, sbY, 3, sbH);
-    }
-  }
-
-  // ── Katalog WSZYSTKICH ciał niebieskich (bez homePlanet) ──────────
-  _getAllCatalogBodies() {
-    const homePl = window.KOSMOS?.homePlanet;
-
-    // Zbierz planety i planetoidy (ciała "główne")
-    const planets = [];
-    for (const t of ['planet', 'planetoid']) {
-      for (const body of EntityManager.getByType(t)) {
-        if (body === homePl) continue;
-        planets.push({ body, explored: !!body.explored });
-      }
-    }
-    // Sortuj główne ciała: explored najpierw, potem wg odległości orbitalnej
-    planets.sort((a, b) => {
-      if (a.explored !== b.explored) return a.explored ? -1 : 1;
-      return (a.body.orbital?.a ?? 0) - (b.body.orbital?.a ?? 0);
-    });
-
-    // Zbierz księżyce pogrupowane wg parentPlanetId
-    const moonsByParent = new Map();
-    for (const moon of EntityManager.getByType('moon')) {
-      const pid = moon.parentPlanetId;
-      if (!moonsByParent.has(pid)) moonsByParent.set(pid, []);
-      moonsByParent.get(pid).push({ body: moon, explored: !!moon.explored, isMoon: true });
-    }
-    // Sortuj księżyce każdej planety wg odległości orbitalnej
-    for (const moons of moonsByParent.values()) {
-      moons.sort((a, b) => (a.body.orbital?.a ?? 0) - (b.body.orbital?.a ?? 0));
-    }
-
-    // Buduj wynikową listę: planeta → jej księżyce → następna planeta...
-    const result = [];
-    // Księżyce homePlanet (bez samej planety)
-    const homeMoons = homePl ? (moonsByParent.get(homePl.id) ?? []) : [];
-    if (homeMoons.length > 0) {
-      for (const m of homeMoons) result.push(m);
-      moonsByParent.delete(homePl.id);
-    }
-    for (const entry of planets) {
-      result.push(entry);
-      const moons = moonsByParent.get(entry.body.id) ?? [];
-      for (const m of moons) result.push(m);
-    }
-    return result;
-  }
-
-  // ── Rysowanie katalogu ciał niebieskich (prawa kolumna, scrollowalna) ──
-  _drawBodyCatalog(ctx, bodyY, catalogX, catalogW, maxH) {
-    const PAD = 8;
-    const LH = 14;
-    const ROW_H = 28; // 2 wiersze na ciało
-    let cy = bodyY + 16;
-    this._catalogRowRects = [];  // reset hit rects
-
-    // Nagłówek
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.title;
-    ctx.fillText('KATALOG CIAŁ', catalogX + PAD, cy);
-
-    const entries = this._getAllCatalogBodies();
-    const exploredCount = entries.filter(e => e.explored).length;
-    ctx.fillStyle = C.label;
-    ctx.textAlign = 'right';
-    ctx.fillText(`${exploredCount}/${entries.length}`, catalogX + catalogW - PAD, cy);
-    ctx.textAlign = 'left';
-    cy += 4;
-
-    ctx.strokeStyle = C.border; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(catalogX + PAD, cy); ctx.lineTo(catalogX + catalogW - PAD, cy); ctx.stroke();
-    cy += 6;
-
-    if (entries.length === 0) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.dim;
-      ctx.fillText('Brak ciał w układzie', catalogX + PAD, cy);
-      this._catalogContentH = 0;
-      this._catalogVisibleH = 0;
-      return;
-    }
-
-    // Strefa scrollowalna z clippingiem
-    const catClipPad = 4; // zapas na ascenders
-    const visibleH = maxH - (cy - bodyY);
-    this._catalogVisibleH = visibleH;
-    this._catalogContentH = entries.length * ROW_H;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(catalogX, cy - catClipPad, catalogW, visibleH + catClipPad);
-    ctx.clip();
-
-    const scrollY = this._catalogScrollY || 0;
-    let ry = cy - scrollY;
-
-    for (const entry of entries) {
-      const { body, explored } = entry;
-      const isMoon = !!entry.isMoon;
-      // Wcięcie dla księżyców
-      const indent = isMoon ? 12 : 0;
-
-      // Pomiń elementy poza widocznym obszarem (optymalizacja)
-      if (ry + ROW_H < cy - 2) { ry += ROW_H; continue; }
-      if (ry > cy + visibleH + 2) break;
-
-      const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
-      const typeStr = body.planetType ?? body.type;
-      const orbA = body.orbital?.a ?? 0;
-      const distHome = DistanceUtils.orbitalFromHomeAU(body);
-
-      // Prefix dla księżyców — wizualna gałąź drzewa
-      const namePrefix = isMoon ? '└ ' : '';
-
-      if (explored) {
-        // ── Zbadane ciało — pełne dane ──
-        const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
-        const tempStr = tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : '—';
-
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = isMoon ? THEME.textLabel : THEME.textPrimary;
-        ctx.fillText(`${namePrefix}${icon} ${_truncate(body.name, isMoon ? 10 : 12)}`, catalogX + PAD + indent, ry + 10);
-        ctx.fillStyle = C.dim;
-        ctx.fillText(typeStr, catalogX + PAD + 90 + indent, ry + 10);
-
-        // Ikona atmosfery obok typu
-        const atm = body.atmosphere || 'none';
-        if (atm !== 'none') {
-          const atmIcon = body.breathableAtmosphere ? '☁✓' : '☁';
-          ctx.fillStyle = body.breathableAtmosphere ? THEME.success : THEME.info;
-          ctx.fillText(atmIcon, catalogX + PAD + 125 + indent, ry + 10);
-        }
-
-        ctx.fillStyle = tempC !== null && tempC > -20 && tempC < 60 ? THEME.successDim : C.label;
-        ctx.textAlign = 'right';
-        ctx.fillText(tempStr, catalogX + catalogW - PAD - 3, ry + 10);
-        ctx.textAlign = 'left';
-
-        // Wiersz 2: masa + AU od gwiazdy + AU od gracza + złoża
-        const mass = body.physics?.mass ?? 0;
-        const massStr = mass > 0 ? `${mass.toFixed(1)}M⊕` : '—';
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = C.dim;
-        ctx.fillText(`${massStr}  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2 + indent, ry + 22);
-
-        // Złoża (top 3 wg richness)
-        const deps = body.deposits ?? [];
-        if (deps.length > 0) {
-          const topDeps = [...deps]
-            .filter(d => d.remaining > 0)
-            .sort((a, b) => b.richness - a.richness)
-            .slice(0, 3);
-          let depStr = '';
-          for (const d of topDeps) {
-            const stars = d.richness >= 0.7 ? '★★★' : d.richness >= 0.4 ? '★★' : '★';
-            depStr += `${d.resourceId}${stars} `;
-          }
-          ctx.fillStyle = THEME.yellow;
-          ctx.textAlign = 'right';
-          ctx.fillText(depStr.trim(), catalogX + catalogW - PAD - 3, ry + 22);
-          ctx.textAlign = 'left';
-        }
-      } else {
-        // ── Niezbadane ciało — ukryte dane ──
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText(`${namePrefix}${icon} ???`, catalogX + PAD + indent, ry + 10);
-        ctx.fillStyle = THEME.textLabel;
-        ctx.fillText(typeStr, catalogX + PAD + 90 + indent, ry + 10);
-        ctx.textAlign = 'right';
-        ctx.fillText('???', catalogX + catalogW - PAD - 3, ry + 10);
-        ctx.textAlign = 'left';
-
-        // Wiersz 2: odległość widoczna, masa/złoża ukryte
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textLabel;
-        ctx.fillText(`???  ☀${orbA.toFixed(1)}AU  🏠${distHome.toFixed(1)}AU`, catalogX + PAD + 2 + indent, ry + 22);
-      }
-
-      // Hit rect (widoczne wiersze — po clipping pozycje to ry, nie screen-y)
-      this._catalogRowRects.push({ x: catalogX, y: ry, w: catalogW, h: ROW_H, body, explored });
-
-      ry += ROW_H;
-    }
-
-    ctx.restore();
-
-    // Scrollbar wizualny (3px pasek po prawej)
-    if (this._catalogContentH > visibleH) {
-      const sbH = Math.max(12, visibleH * (visibleH / this._catalogContentH));
-      const maxScroll = this._catalogContentH - visibleH;
-      const sbY = cy + (scrollY / maxScroll) * (visibleH - sbH);
-      ctx.fillStyle = 'rgba(100,140,180,0.3)';
-      ctx.fillRect(catalogX + catalogW - 3, sbY, 3, sbH);
-    }
-  }
-
-  // ── Panel akcji wybranego statku (misje) ───────────────────────────
-  _drawVesselActionPanel(ctx, vessel, px, py, panelW) {
-    const LH = 14;
-    const sd = SHIPS[vessel.shipId];
-    let y = py;
-
-    // Separator + tło panelu akcji
-    ctx.fillStyle = 'rgba(10,20,40,0.85)';
-    ctx.fillRect(px, y, panelW, 4); // separator
-    y += 6;
-
-    // Nagłówek
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = vessel.position.state === 'orbiting' ? C.yellow : THEME.textPrimary;
-    ctx.fillText(`${sd?.icon ?? '🚀'} ${vessel.name}`, px + 2, y);
-    y += LH;
-
-    // Info
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.text;
-    const range = vessel.fuel.consumption > 0
-      ? (vessel.fuel.current / vessel.fuel.consumption).toFixed(1) : '∞';
-    ctx.fillText(`Typ: ${sd?.namePL ?? vessel.shipId}  Zasięg: ${range} AU`, px + 2, y);
-    y += LH;
-    ctx.fillText(`⛽ ${vessel.fuel.current.toFixed(1)}/${vessel.fuel.max} power_cells`, px + 2, y);
-    y += LH;
-
-    // Przyciski misji
-    if (!this._vesselActionBtns) this._vesselActionBtns = [];
-    this._vesselActionBtns = [];
-
-    const exSys = window.KOSMOS?.expeditionSystem;
-    const colMgr = window.KOSMOS?.colonyManager;
-    const activePid = colMgr?.activePlanetId;
-
-    // ── Statek w locie — przycisk zawrócenia ────────────────────────
-    if (vessel.position.state === 'in_transit') {
-      const phase = vessel.mission?.phase;
-      const targetName = vessel.mission?.targetName ?? '?';
-
-      if (phase === 'returning') {
-        // Statek już wraca — info
-        ctx.fillStyle = THEME.info;
-        ctx.fillText(`↩ Wraca do bazy`, px + 2, y); y += LH;
-      } else {
-        // Statek leci do celu — można zawrócić
-        ctx.fillStyle = THEME.info;
-        ctx.fillText(`→ Cel: ${targetName}`, px + 2, y); y += LH;
-
-        // Znajdź ekspedycję powiązaną ze statkiem
-        let exp = this._expeditions.find(e => e.vesselId === vessel.id && e.status === 'en_route');
-        if (!exp && exSys) {
-          const active = exSys.getActive?.() ?? [];
-          exp = active.find(e => e.vesselId === vessel.id && e.status === 'en_route');
-        }
-
-        if (exp) {
-          const btnH = 15;
-          ctx.fillStyle = 'rgba(60,50,10,0.7)'; ctx.fillRect(px, y, panelW, btnH);
-          ctx.strokeStyle = C.yellow; ctx.strokeRect(px, y, panelW, btnH);
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = C.yellow; ctx.textAlign = 'center';
-          ctx.fillText('↩ Zawróć do bazy', px + panelW / 2, y + 11);
-          ctx.textAlign = 'left';
-          this._vesselActionBtns.push({
-            x: px, y, w: panelW, h: btnH,
-            action: 'orbitReturn', expId: exp.id, vesselId: vessel.id,
-          });
-          y += btnH + 4;
-        }
-      }
-      return y;
-    }
-
-    // ── Statek na orbicie — rozkazy zamiast listy misji ────────────
-    if (vessel.position.state === 'orbiting') {
-      // Znajdź powiązaną ekspedycję (UIManager cache → fallback do ExpeditionSystem)
-      let orbExp = this._expeditions.find(e => e.vesselId === vessel.id && e.status === 'orbiting');
-      if (!orbExp && exSys) {
-        const active = exSys.getActive?.() ?? [];
-        orbExp = active.find(e => e.vesselId === vessel.id && e.status === 'orbiting');
-      }
-      const targetName = orbExp?.targetName ?? vessel.mission?.targetName ?? '?';
-      ctx.fillStyle = C.yellow;
-      ctx.fillText(`⊙ Na orbicie: ${targetName}`, px + 2, y); y += LH;
-
-      // Przycisk Cargo — załaduj/rozładuj na orbicie (jeśli cel ma kolonię)
-      const shipDefOrb = SHIPS[vessel.shipId];
-      const colMgrOrb = window.KOSMOS?.colonyManager;
-      const orbitColony = colMgrOrb?.getColony(vessel.position.dockedAt);
-      if (shipDefOrb?.cargoCapacity > 0 && orbitColony) {
-        const cbH = 15;
-        ctx.fillStyle = 'rgba(30,60,40,0.6)';
-        ctx.fillRect(px, y, panelW, cbH);
-        ctx.strokeStyle = THEME.successDim;
-        ctx.strokeRect(px, y, panelW, cbH);
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.successDim;
-        ctx.textAlign = 'center';
-        const cargoUsed = vessel.cargoUsed ?? 0;
-        ctx.fillText(`📦 Cargo (${cargoUsed.toFixed(0)}/${shipDefOrb.cargoCapacity}t)`, px + panelW / 2, y + 10);
-        ctx.textAlign = 'left';
-        this._vesselActionBtns.push({
-          x: px, y, w: panelW, h: cbH,
-          action: 'openCargoModal', vesselId: vessel.id,
-        });
-        y += cbH + 4;
-      }
-
-      // Trzy przyciski: Powrót, Zmień cel, Transport (jeśli cargo ship przy kolonii)
-      const btnH = 15; const gap = 4;
-      const canTransport = vessel.shipId === 'cargo_ship' && orbitColony;
-      const btnCount = canTransport ? 3 : 2;
-      const btnW = Math.floor((panelW - gap * (btnCount - 1)) / btnCount);
-
-      // Powrót
-      const bRetX = px; const bRetY = y;
-      ctx.fillStyle = 'rgba(60,50,10,0.7)'; ctx.fillRect(bRetX, bRetY, btnW, btnH);
-      ctx.strokeStyle = C.yellow; ctx.strokeRect(bRetX, bRetY, btnW, btnH);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.yellow; ctx.textAlign = 'center';
-      ctx.fillText('↩ Baza', bRetX + btnW / 2, bRetY + 11);
-      ctx.textAlign = 'left';
-      if (orbExp) {
-        this._vesselActionBtns.push({
-          x: bRetX, y: bRetY, w: btnW, h: btnH,
-          action: 'orbitReturn', expId: orbExp.id, vesselId: vessel.id,
-        });
-      }
-      // Zmień cel
-      const bRedX = px + btnW + gap; const bRedY = y;
-      const isRedirectActive = this._redirectTargetExpId === orbExp?.id;
-      ctx.fillStyle = isRedirectActive ? 'rgba(20,50,80,0.8)' : 'rgba(10,30,60,0.7)';
-      ctx.fillRect(bRedX, bRedY, btnW, btnH);
-      ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(bRedX, bRedY, btnW, btnH);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
-      ctx.fillText('➡ Cel', bRedX + btnW / 2, bRedY + 11);
-      ctx.textAlign = 'left';
-      if (orbExp) {
-        this._vesselActionBtns.push({
-          x: bRedX, y: bRedY, w: btnW, h: btnH,
-          action: 'orbitRedirect', expId: orbExp.id, vesselId: vessel.id,
-        });
-      }
-      // Transport (cargo ship przy kolonii) — otwiera wybór celu transportu
-      if (canTransport) {
-        const bTrX = px + (btnW + gap) * 2; const bTrY = y;
-        const isTrActive = this._vesselMissionType === 'transport_orbit';
-        ctx.fillStyle = isTrActive ? 'rgba(40,60,30,0.8)' : 'rgba(20,40,20,0.7)';
-        ctx.fillRect(bTrX, bTrY, btnW, btnH);
-        ctx.strokeStyle = THEME.successDim; ctx.strokeRect(bTrX, bTrY, btnW, btnH);
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.successDim; ctx.textAlign = 'center';
-        ctx.fillText('📦 Wyślij', bTrX + btnW / 2, bTrY + 11);
-        ctx.textAlign = 'left';
-        this._vesselActionBtns.push({
-          x: bTrX, y: bTrY, w: btnW, h: btnH,
-          action: 'orbitTransport', vesselId: vessel.id, expId: orbExp?.id,
-        });
-      }
-      y += btnH + 4;
-
-      // Jeśli tryb wyboru celu → rysuj listę celów
-      if (isRedirectActive && orbExp) {
-        y = this._drawRedirectTargetPicker(ctx, orbExp, px, y, panelW);
-      }
-
-      // Jeśli tryb transportu z orbity → rysuj listę celów transportu
-      if (this._vesselMissionType === 'transport_orbit' && orbExp) {
-        y = this._drawRedirectTargetPicker(ctx, orbExp, px, y, panelW);
-      }
-
-      return y;
-    }
-
-    // ── Statek w hangarze — normalna lista misji ─────────────────
-
-    // Przycisk "Załaduj cargo" dla statków z ładownią
-    const shipDef2 = SHIPS[vessel.shipId];
-    if (shipDef2?.cargoCapacity > 0) {
-      const cbH = 15;
-      const cbW = panelW;
-      ctx.fillStyle = 'rgba(30,60,40,0.6)';
-      ctx.fillRect(px, y, cbW, cbH);
-      ctx.strokeStyle = THEME.successDim;
-      ctx.strokeRect(px, y, cbW, cbH);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.successDim;
-      ctx.textAlign = 'center';
-      const cargoUsed = vessel.cargoUsed ?? 0;
-      ctx.fillText(`📦 Cargo (${cargoUsed.toFixed(0)}/${shipDef2.cargoCapacity}t)`, px + cbW / 2, y + 10);
-      ctx.textAlign = 'left';
-      this._vesselActionBtns.push({
-        x: px, y: y, w: cbW, h: cbH,
-        action: 'openCargoModal', vesselId: vessel.id,
-      });
-      y += cbH + 4;
-    }
-
-    // Przycisk "Rozformuj" — zwrot surowców i POP
-    {
-      const dbH = 15;
-      ctx.fillStyle = 'rgba(60,20,20,0.6)';
-      ctx.fillRect(px, y, panelW, dbH);
-      ctx.strokeStyle = THEME.danger ?? '#c44';
-      ctx.strokeRect(px, y, panelW, dbH);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.danger ?? '#c44';
-      ctx.textAlign = 'center';
-      ctx.fillText('🗑 Rozformuj (100% zwrot)', px + panelW / 2, y + 10);
-      ctx.textAlign = 'left';
-      this._vesselActionBtns.push({
-        x: px, y, w: panelW, h: dbH,
-        action: 'disbandVessel', vesselId: vessel.id,
-      });
-      y += dbH + 4;
-    }
-
-    // Określ dostępne typy misji wg typu statku
-    const missionTypes = [];
-    if (vessel.shipId === 'science_vessel') {
-      missionTypes.push({ type: 'recon', label: '🔭 Rozpoznanie', icon: '🔭' });
-    }
-    if (vessel.shipId === 'cargo_ship') {
-      missionTypes.push({ type: 'transport', label: '📦 Transport', icon: '📦' });
-      missionTypes.push({ type: 'tradeRoute', label: '🔄 Trasa', icon: '🔄' });
-    }
-    if (vessel.shipId === 'colony_ship') {
-      missionTypes.push({ type: 'colony', label: '🚢 Kolonizacja', icon: '🚢' });
-    }
-
-    const btnH = 15;
-    const gap = 2;
-    const bw = Math.floor((panelW - gap * (missionTypes.length - 1)) / missionTypes.length);
-
-    for (let i = 0; i < missionTypes.length; i++) {
-      const mt = missionTypes[i];
-      const bx = px + i * (bw + gap);
-      const by = y;
-      const isActive = this._vesselMissionType === mt.type;
-      ctx.fillStyle = isActive ? 'rgba(40,80,120,0.8)' : 'rgba(20,40,60,0.6)';
-      ctx.fillRect(bx, by, bw, btnH);
-      ctx.strokeStyle = isActive ? THEME.borderActive : THEME.textLabel;
-      ctx.strokeRect(bx, by, bw, btnH);
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = isActive ? THEME.textPrimary : THEME.textSecondary;
-      ctx.textAlign = 'center';
-      ctx.fillText(mt.label, bx + bw / 2, by + 10);
-      ctx.textAlign = 'left';
-      this._vesselActionBtns.push({
-        x: bx, y: by, w: bw, h: btnH,
-        action: 'missionType', missionType: mt.type, vesselId: vessel.id,
-      });
-    }
-    y += btnH + 10;
-
-    // Lista celów (jeśli wybrany typ misji)
-    if (this._vesselMissionType) {
-      y = this._drawMissionTargets(ctx, vessel, this._vesselMissionType, px, y, panelW);
-    }
-
-    return y;
-  }
-
-  // ── Lista celów misji dla wybranego statku ─────────────────────────
-  _drawMissionTargets(ctx, vessel, missionType, px, py, panelW) {
-    const LH = 13;
-    let y = py;
-    const colMgr = window.KOSMOS?.colonyManager;
-
-    // Recon — przyciski nearest / full_system + lista ciał do rozpoznania
-    if (missionType === 'recon') {
-      const exSys = window.KOSMOS?.expeditionSystem;
-      const unexplored = exSys?.getUnexploredCount() ?? { total: 0 };
-      if (unexplored.total === 0) {
-        ctx.fillStyle = C.green; ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillText('✅ Układ w pełni zbadany', px + 2, y); y += LH;
-      } else {
-        const btnH = 15; const halfW = Math.floor((panelW - 4) / 2);
-        for (const scope of ['nearest', 'full_system']) {
-          const label = scope === 'nearest' ? '🔭 Najbliższe' : '☀ Cały układ';
-          const bx = scope === 'nearest' ? px : px + halfW + 4;
-          const by = y;
-          ctx.fillStyle = 'rgba(20,40,60,0.8)'; ctx.fillRect(bx, by, halfW, btnH);
-          ctx.strokeStyle = THEME.borderActive; ctx.strokeRect(bx, by, halfW, btnH);
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
-          ctx.fillText(label, bx + halfW / 2, by + 10); ctx.textAlign = 'left';
-          this._vesselActionBtns.push({
-            x: bx, y: by, w: halfW, h: btnH,
-            action: 'launchRecon', scope, vesselId: vessel.id,
-          });
-        }
-        y += btnH + 4;
-
-        // Lista konkretnych ciał do rozpoznania (explored + unexplored)
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = C.label; ctx.fillText('Lub wybierz konkretne ciało:', px + 2, y); y += LH;
-
-        const reconTargets = this._getReconTargets(vessel);
-        for (const t of reconTargets) {
-          const btnH2 = 14;
-          const bx = px; const by = y;
-          const inRange = t.inRange;
-          const isExplored = t.explored;
-          ctx.fillStyle = isExplored ? 'rgba(15,25,15,0.4)'
-            : inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
-          ctx.fillRect(bx, by, panelW, btnH2);
-          ctx.strokeStyle = isExplored ? THEME.successDim
-            : inRange ? THEME.textLabel : THEME.dangerDim;
-          ctx.strokeRect(bx, by, panelW, btnH2);
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = isExplored ? THEME.successDim
-            : inRange ? THEME.textPrimary : THEME.textDim;
-          const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
-          const fuelCost = (t.dist * 2 * vessel.fuel.consumption).toFixed(1); // ×2: tam + powrót
-          const shipSpeed = SHIPS[vessel.shipId]?.speedAU ?? 1.0;
-          const eta = t.dist / shipSpeed;
-          const etaStr = eta < 0.05 ? `${Math.round(eta * 365)}d` : `${eta.toFixed(1)}y`;
-          const nameStr = isExplored ? `✓${_truncate(t.name, 10)}` : `${t.icon} ???`;
-          ctx.fillText(`${nameStr} ${distStr}AU ⛽${fuelCost} ⏱${etaStr}`, bx + 2, by + 10);
-          // Tylko niezbadane ciała + w zasięgu → klikalny przycisk
-          if (!isExplored && inRange) {
-            this._vesselActionBtns.push({
-              x: bx, y: by, w: panelW, h: btnH2,
-              action: 'launchRecon', scope: t.id, vesselId: vessel.id,
-            });
-          }
-          y += btnH2 + 1;
-        }
-      }
-      return y;
-    }
-
-    // Trasa handlowa — lista explored bodies z ≥2 wizytami
-    if (missionType === 'tradeRoute') {
-      const exSys = window.KOSMOS?.expeditionSystem;
-      const targets = this._getMissionTargets(vessel, 'transport');
-      // Filtruj: tylko ciała z ≥2 wizytami
-      const tradeTargets = targets.filter(t => (exSys?.getVisitCount(t.id) ?? 0) >= 2);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.label; ctx.fillText('Cel trasy handlowej (≥2 wizyty):', px + 2, y); y += LH;
-      if (tradeTargets.length === 0) {
-        ctx.fillStyle = C.dim; ctx.fillText('Brak celów (wymagane ≥2 wizyty)', px + 2, y);
-        y += LH;
-      } else {
-        for (const t of tradeTargets) {
-          const btnH = 14;
-          const bx = px; const by = y;
-          const inRange = t.inRange;
-          ctx.fillStyle = inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
-          ctx.fillRect(bx, by, panelW, btnH);
-          ctx.strokeStyle = inRange ? THEME.textLabel : THEME.dangerDim; ctx.strokeRect(bx, by, panelW, btnH);
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = inRange ? THEME.textPrimary : THEME.textDim;
-          const visits = exSys?.getVisitCount(t.id) ?? 0;
-          ctx.fillText(`🔄 → ${_truncate(t.name, 12)} (${visits}×)`, bx + 2, by + 10);
-          if (inRange) {
-            this._vesselActionBtns.push({
-              x: bx, y: by, w: panelW, h: btnH,
-              action: 'setupTradeRoute', targetId: t.id, targetName: t.name, vesselId: vessel.id,
-            });
-          }
-          y += btnH + 1;
-        }
-      }
-      return y;
-    }
-
-    // Transport — lista wszystkich explored bodies
-    if (missionType === 'transport') {
-      const targets = this._getMissionTargets(vessel, 'transport');
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.label; ctx.fillText('Cel transportu:', px + 2, y); y += LH;
-      if (targets.length === 0) {
-        ctx.fillStyle = C.dim;
-        ctx.fillText('Brak zbadanych celów — wyślij', px + 2, y); y += LH;
-        ctx.fillText('najpierw misję rozpoznawczą 🔭', px + 2, y);
-        y += LH;
-      } else {
-        for (const t of targets) {
-          const btnH = 14;
-          const bx = px; const by = y;
-          const inRange = t.inRange;
-          const hasColony = !!colMgr?.hasColony(t.id);
-          ctx.fillStyle = inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
-          ctx.fillRect(bx, by, panelW, btnH);
-          ctx.strokeStyle = inRange ? THEME.textLabel : THEME.dangerDim; ctx.strokeRect(bx, by, panelW, btnH);
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = inRange ? (hasColony ? THEME.textPrimary : THEME.textSecondary) : THEME.textDim;
-          const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
-          const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
-          const colIcon = hasColony ? '🏠' : '📦';
-          ctx.fillText(`${colIcon} → ${_truncate(t.name, 10)} ${distStr}AU ⛽${fuelCost}`, bx + 2, by + 10);
-          if (inRange) {
-            this._vesselActionBtns.push({
-              x: bx, y: by, w: panelW, h: btnH,
-              action: 'launchTransport', targetId: t.id, vesselId: vessel.id,
-            });
-          }
-          y += btnH + 1;
-        }
-      }
-      return y;
-    }
-
-    // Mining / Scientific / Colony — lista explored bodies w zasięgu
-    const targets = this._getMissionTargets(vessel, missionType);
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.label; ctx.fillText('Wybierz cel:', px + 2, y); y += LH;
-
-    if (targets.length === 0) {
-      ctx.fillStyle = C.dim; ctx.fillText('Brak dostępnych celów', px + 2, y);
-      y += LH;
-    } else {
-      for (const t of targets) {
-        const btnH = 14;
-        const bx = px; const by = y;
-        const inRange = t.inRange;
-        ctx.fillStyle = inRange ? 'rgba(20,40,60,0.6)' : 'rgba(20,15,15,0.5)';
-        ctx.fillRect(bx, by, panelW, btnH);
-        ctx.strokeStyle = inRange ? THEME.textLabel : THEME.dangerDim; ctx.strokeRect(bx, by, panelW, btnH);
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = inRange ? THEME.textPrimary : THEME.textDim;
-        const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
-        const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
-        const shipSpeed = SHIPS[vessel.shipId]?.speedAU ?? 1.0;
-        const eta = t.dist / shipSpeed;
-        const etaStr = eta < 0.05 ? `${Math.round(eta * 365)}d` : `${eta.toFixed(1)}y`;
-        ctx.fillText(`${t.icon} ${_truncate(t.name, 12)} ${distStr}AU ⛽${fuelCost} ⏱${etaStr}`, bx + 2, by + 10);
-        if (inRange) {
-          this._vesselActionBtns.push({
-            x: bx, y: by, w: panelW, h: btnH,
-            action: 'launchMission', missionType, targetId: t.id, vesselId: vessel.id,
-          });
-        }
-        y += btnH + 1;
-      }
-    }
-    return y;
-  }
-
-  // ── Pobierz cele misji dla statku ─────────────────────────────────
-  _getMissionTargets(vessel, missionType) {
-    const homePl = window.KOSMOS?.homePlanet;
-    const colMgr = window.KOSMOS?.colonyManager;
-    const activePid = colMgr?.activePlanetId ?? homePl?.id;
-    const targets = [];
-    const TYPES = ['planet', 'moon', 'asteroid', 'comet', 'planetoid'];
-
-    for (const t of TYPES) {
-      for (const body of EntityManager.getByType(t)) {
-        // Wyklucz aktywną kolonię (źródło) — nie homePlanet ogólnie
-        if (body.id === activePid) continue;
-        if (!body.explored) continue;
-
-        // Filtruj wg typu misji
-        if (missionType === 'colony') {
-          if (colMgr?.hasColony(body.id)) continue;
-          if (body.type === 'planet' && body.planetType !== 'rocky' && body.planetType !== 'ice') continue;
-        }
-
-        // Euclidean — spójne z ExpeditionSystem._calcDistance()
-        const dist = Math.max(0.001, DistanceUtils.euclideanAU(homePl, body));
-        const fuelNeeded = dist * vessel.fuel.consumption;
-        const inRange = vessel.fuel.current >= fuelNeeded;
-        const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙'
-          : body.type === 'planetoid' ? '🪨' : body.type === 'comet' ? '☄' : '🪨';
-        targets.push({ id: body.id, name: body.name, dist, inRange, icon });
-      }
-    }
-
-    targets.sort((a, b) => a.dist - b.dist);
-    return targets;
-  }
-
-  // ── Pobierz cele rozpoznania (WSZYSTKIE ciała, explored + unexplored) ──
-  _getReconTargets(vessel) {
-    const homePl = window.KOSMOS?.homePlanet;
-    const targets = [];
-    const TYPES = ['planet', 'moon', 'planetoid'];
-
-    for (const t of TYPES) {
-      for (const body of EntityManager.getByType(t)) {
-        if (body === homePl) continue;
-        // Euclidean — spójne z ExpeditionSystem._calcDistance()
-        const dist = Math.max(0.001, DistanceUtils.euclideanAU(homePl, body));
-        // Paliwo na lot + powrót (2× dystans)
-        const fuelNeeded = dist * 2 * vessel.fuel.consumption;
-        const inRange = vessel.fuel.current >= fuelNeeded;
-        const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
-        targets.push({
-          id: body.id, name: body.name, dist, inRange, icon,
-          explored: !!body.explored,
-        });
-      }
-    }
-
-    // Niezbadane najpierw, potem wg dystansu
-    targets.sort((a, b) => {
-      if (a.explored !== b.explored) return a.explored ? 1 : -1;
-      return a.dist - b.dist;
-    });
-    return targets;
-  }
-
-  // ── Inline target picker dla redirect z orbity ────────────────────
-  _drawRedirectTargetPicker(ctx, exp, px, py, panelW) {
-    const LH = 13;
-    let y = py;
-
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.label;
-    ctx.fillText(`Nowy cel dla: ${_truncate(exp.targetName ?? '?', 12)}`, px, y); y += LH;
-
-    // Pobierz vessel
-    const vMgr = window.KOSMOS?.vesselManager;
-    const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
-    if (!vessel) {
-      ctx.fillStyle = C.dim; ctx.fillText('Statek niedostępny', px, y);
-      return y + LH;
-    }
-
-    // Oblicz dystanse od bieżącej pozycji (orbiting body)
-    const currentBody = this._findTargetBody(exp.targetId);
-    const homePl = window.KOSMOS?.homePlanet;
-    const TYPES = ['planet', 'moon', 'planetoid'];
-    const targets = [];
-
-    // Dodaj kolonie/outposty gracza jako cele (🏠/🏗)
-    const colMgr = window.KOSMOS?.colonyManager;
-    if (colMgr) {
-      for (const col of colMgr.getAllColonies()) {
-        if (col.planetId === exp.targetId) continue; // pomiń bieżący cel
-        const colBody = this._findTargetBody(col.planetId);
-        if (!colBody) continue;
-        const fromEntity = currentBody ?? homePl;
-        if (!fromEntity) continue;
-        const dist = Math.max(0.001, DistanceUtils.euclideanAU(fromEntity, colBody));
-        const fuelNeeded = dist * vessel.fuel.consumption;
-        const inRange = vessel.fuel.current >= fuelNeeded;
-        const icon = col.isOutpost ? '🏗' : '🏠';
-        targets.push({ id: col.planetId, name: col.name ?? colBody.name, dist, inRange, icon, explored: true, isColony: true });
-      }
-    }
-
-    for (const t of TYPES) {
-      for (const body of EntityManager.getByType(t)) {
-        if (body.id === exp.targetId) continue;
-        // Pomiń ciała, które już dodano jako kolonie
-        if (targets.some(tg => tg.id === body.id)) continue;
-        const fromEntity = currentBody ?? homePl;
-        if (!fromEntity) continue;
-        const dist = Math.max(0.001, DistanceUtils.euclideanAU(fromEntity, body));
-        const fuelNeeded = dist * vessel.fuel.consumption;
-        const inRange = vessel.fuel.current >= fuelNeeded;
-        const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
-        targets.push({ id: body.id, name: body.name, dist, inRange, icon, explored: !!body.explored });
-      }
-    }
-
-    // Kolonie gracza na górze, potem reszta — wewnątrz grup sortuj po dystansie
-    targets.sort((a, b) => (b.isColony ? 1 : 0) - (a.isColony ? 1 : 0) || a.dist - b.dist);
-
-    if (!this._redirectTargetBtns) this._redirectTargetBtns = [];
-    this._redirectTargetBtns = [];
-
-    // Ograniczona lista ze scrollem — max 12 widocznych wierszy
-    const btnH = 14;
-    const GAP = 1;
-    const MAX_VISIBLE = 12;
-    const totalH = targets.length * (btnH + GAP);
-    const maxH = Math.min(totalH, MAX_VISIBLE * (btnH + GAP));
-
-    // Tło panelu listy celów
-    ctx.fillStyle = 'rgba(5,10,20,0.85)';
-    ctx.fillRect(px - 2, y - 2, panelW + 4, maxH + 4);
-    ctx.strokeStyle = THEME.borderActive;
-    ctx.strokeRect(px - 2, y - 2, panelW + 4, maxH + 4);
-
-    // Clip region + scroll
-    const clipY = y;
-    this._redirectClipRect = { x: px - 2, y: clipY, w: panelW + 4, h: maxH };
-    this._redirectContentH = totalH;
-    const scrollY = this._redirectScrollY || 0;
-
-    // Clamp scroll
-    const maxScroll = Math.max(0, totalH - maxH);
-    if (scrollY > maxScroll) this._redirectScrollY = maxScroll;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(px - 2, clipY, panelW + 4, maxH);
-    ctx.clip();
-
-    let iy = y - scrollY;
-    for (const t of targets) {
-      const bx = px; const by = iy;
-      // Pomiń niewidoczne elementy (optymalizacja)
-      if (by + btnH >= clipY && by <= clipY + maxH) {
-        ctx.fillStyle = t.inRange
-          ? (t.isColony ? 'rgba(20,50,30,0.7)' : 'rgba(20,40,60,0.6)')
-          : 'rgba(20,15,15,0.5)';
-        ctx.fillRect(bx, by, panelW, btnH);
-        ctx.strokeStyle = t.inRange ? THEME.textLabel : THEME.dangerDim;
-        ctx.strokeRect(bx, by, panelW, btnH);
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = t.inRange ? (t.isColony ? THEME.successDim : THEME.textPrimary) : THEME.textDim;
-        const distStr = t.dist < 0.1 ? t.dist.toFixed(3) : t.dist.toFixed(1);
-        const fuelCost = (t.dist * vessel.fuel.consumption).toFixed(1);
-        const nameStr = t.explored ? `${t.icon} ${_truncate(t.name, 10)}` : `${t.icon} ???`;
-        ctx.fillText(`${nameStr}  ${distStr}AU  ⛽${fuelCost}`, bx + 3, by + 10);
-        if (t.inRange) {
-          this._redirectTargetBtns.push({
-            x: bx, y: by, w: panelW, h: btnH, targetId: t.id, expId: exp.id,
-          });
-        }
-      }
-      iy += btnH + GAP;
-    }
-
-    ctx.restore();
-
-    // Scrollbar wizualny (jeśli lista jest dłuższa niż widoczna)
-    if (totalH > maxH) {
-      const sbW = 3;
-      const sbX = px + panelW;
-      const thumbH = Math.max(10, maxH * (maxH / totalH));
-      const thumbY = clipY + (maxScroll > 0 ? scrollY / maxScroll : 0) * (maxH - thumbH);
-      ctx.fillStyle = 'rgba(255,255,255,0.15)';
-      ctx.fillRect(sbX, clipY, sbW, maxH);
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.fillRect(sbX, thumbY, sbW, thumbH);
-    }
-
-    return y + maxH + 6;
-  }
-
-  // Helper: znajdź ciało po id (dla redirect target picker)
-  _findTargetBody(targetId) {
-    const TYPES = ['planet', 'moon', 'asteroid', 'comet', 'planetoid'];
-    for (const t of TYPES) {
-      for (const body of EntityManager.getByType(t)) {
-        if (body.id === targetId) return body;
-      }
-    }
-    return null;
+    if (this._civPanelTab === 'fleet') this._fleetTab.draw(ctx, bodyX, bodyY, bodyW, bodyH);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -2371,7 +1089,7 @@ export class UIManager {
     if (this._civPanelTab === 'economy')     return this._detectFactoryTooltip(x, y);
     if (this._civPanelTab === 'buildings')  return this._detectBuildingTooltip(x, y, bodyY, bodyX, bodyW);
     if (this._civPanelTab === 'tech')       return this._detectTechTooltip(x, y, bodyY, bodyX, bodyW);
-    if (this._civPanelTab === 'expeditions') return this._detectCatalogTooltip(x, y);
+    if (this._civPanelTab === 'fleet') return this._fleetTab.detectCatalogTooltip(x, y);
     return null;
   }
 
@@ -2439,14 +1157,6 @@ export class UIManager {
     return null;
   }
 
-  _detectCatalogTooltip(x, y) {
-    for (const row of (this._catalogRowRects ?? [])) {
-      if (x >= row.x && x <= row.x + row.w && y >= row.y && y <= row.y + row.h) {
-        return { type: 'catalogBody', data: { body: row.body, explored: row.explored } };
-      }
-    }
-    return null;
-  }
 
   _drawTooltip() {
     const tt = this._tooltip;
@@ -2732,8 +1442,7 @@ export class UIManager {
       if (result === 'sidebar') return true;
       // Toggle zakładki
       this._civPanelTab = (this._civPanelTab === result) ? null : result;
-      this._catalogScrollY = 0; // reset scrolla katalogu przy zmianie zakładki
-      this._fleetScrollY = 0;   // reset scrolla floty
+      if (result === 'fleet') this._fleetTab.reset();
       return true;
     }
 
@@ -2744,8 +1453,8 @@ export class UIManager {
           handleFactoryClick(x, y, this._factoryBtns);
         } else if (this._civPanelTab === 'tech') {
           handleTechClick(x, y, by, bx, bw);
-        } else if (this._civPanelTab === 'expeditions') {
-          this._handleExpeditionsClick(x, y);
+        } else if (this._civPanelTab === 'fleet') {
+          this._fleetTab.handleClick(x, y);
         }
         return true;
       }
@@ -2753,222 +1462,6 @@ export class UIManager {
     return false;
   }
 
-  _handleExpeditionsClick(x, y) {
-    // Orbit return buttons — przycisk "Powrót" dla orbiting (górna strefa, bez scrollu)
-    for (const btn of (this._orbitReturnBtns ?? [])) {
-      if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
-        EventBus.emit('expedition:orderReturn', { expeditionId: btn.expId });
-        this._redirectTargetExpId = null;
-        return;
-      }
-    }
-    // Orbit redirect buttons — przycisk "Cel" w AKTYWNE MISJE
-    for (const btn of (this._orbitRedirectBtns ?? [])) {
-      if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
-        // Toggle tryb wyboru celu
-        this._redirectTargetExpId = this._redirectTargetExpId === btn.expId ? null : btn.expId;
-        this._redirectScrollY = 0;
-        return;
-      }
-    }
-    // Redirect target picker — lista celów z clipem
-    const rc2 = this._redirectClipRect;
-    for (const btn of (this._redirectTargetBtns ?? [])) {
-      // Sprawdź czy klik jest w widocznym obszarze clip
-      if (rc2 && (y < rc2.y || y > rc2.y + rc2.h)) continue;
-      if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
-        EventBus.emit('expedition:orderRedirect', { expeditionId: btn.expId, targetId: btn.targetId });
-        this._redirectTargetExpId = null;
-        this._vesselMissionType = null;
-        this._redirectScrollY = 0;
-        return;
-      }
-    }
-    // Elementy sekcji FLOTA — tylko gdy klik w widocznym obszarze scrollu
-    const fc = this._fleetClipRect;
-    const inFleetArea = fc && fc.h > 0 && y >= fc.y && y <= fc.y + fc.h;
-    if (inFleetArea) {
-      // Vessel action buttons (typ misji, cel, launch)
-      for (const btn of (this._vesselActionBtns ?? [])) {
-        if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
-          this._handleVesselAction(btn);
-          return;
-        }
-      }
-      // Vessel row click → select/deselect
-      for (const vr of (this._vesselRows ?? [])) {
-        if (x >= vr.x && x <= vr.x + vr.w && y >= vr.y && y <= vr.y + vr.h) {
-          if (this._selectedVesselId === vr.vesselId) {
-            this._selectedVesselId = null; // toggle off
-            this._vesselMissionType = null;
-          } else {
-            this._selectedVesselId = vr.vesselId;
-            this._vesselMissionType = null;
-          }
-          return;
-        }
-      }
-      // Fleet build buttons
-      for (const fb of (this._fleetBuildBtns ?? [])) {
-        if (fb.enabled && x >= fb.x && x <= fb.x + fb.w && y >= fb.y && y <= fb.y + fb.h) {
-          EventBus.emit('fleet:buildRequest', { shipId: fb.shipId });
-          return;
-        }
-      }
-    }
-    // Klik w wiersz katalogu ciał → focus kamery na ciało
-    for (const row of (this._catalogRowRects ?? [])) {
-      if (x >= row.x && x <= row.x + row.w && y >= row.y && y <= row.y + row.h) {
-        EventBus.emit('body:selected', { entity: row.body });
-        // Zamknij globus jeśli otwarty
-        if (window.KOSMOS?.planetGlobeOpen) EventBus.emit('planet:closeGlobe');
-        return;
-      }
-    }
-  }
-
-  // Obsługa kliknięcia w panel akcji statku
-  _handleVesselAction(btn) {
-    const vMgr = window.KOSMOS?.vesselManager;
-    if (!vMgr) return;
-
-    // Rozkaz powrotu z orbity (z panelu floty)
-    if (btn.action === 'orbitReturn') {
-      EventBus.emit('expedition:orderReturn', { expeditionId: btn.expId });
-      this._selectedVesselId = null;
-      this._redirectTargetExpId = null;
-      return;
-    }
-
-    // Toggle trybu wyboru celu redirect (z panelu floty)
-    if (btn.action === 'orbitRedirect') {
-      this._redirectTargetExpId = this._redirectTargetExpId === btn.expId ? null : btn.expId;
-      this._vesselMissionType = null; // wyłącz transport_orbit
-      this._redirectScrollY = 0;
-      return;
-    }
-
-    // Toggle trybu transportu z orbity (cargo ship)
-    if (btn.action === 'orbitTransport') {
-      this._vesselMissionType = this._vesselMissionType === 'transport_orbit' ? null : 'transport_orbit';
-      this._redirectTargetExpId = null; // wyłącz redirect
-      this._redirectScrollY = 0;
-      return;
-    }
-
-    if (btn.action === 'openCargoModal') {
-      // Otwórz modal załadunku cargo (orbiting → kolonia przy której orbituje)
-      const vessel = vMgr.getVessel(btn.vesselId);
-      const colMgr = window.KOSMOS?.colonyManager;
-      const orbitColonyId = (vessel?.position?.state === 'orbiting')
-        ? vessel.position.dockedAt
-        : vessel.colonyId;
-      const colony = colMgr?.getColony(orbitColonyId);
-      if (vessel && colony) {
-        showCargoLoadModal(vessel, colony);
-      }
-      return;
-    }
-
-    if (btn.action === 'disbandVessel') {
-      EventBus.emit('fleet:disbandRequest', { vesselId: btn.vesselId });
-      this._selectedVesselId = null;
-      this._vesselMissionType = null;
-      return;
-    }
-
-    if (btn.action === 'missionType') {
-      // Zmień wybrany typ misji
-      this._vesselMissionType = this._vesselMissionType === btn.missionType ? null : btn.missionType;
-      return;
-    }
-
-    if (btn.action === 'launchRecon') {
-      // Recon z konkretnego statku — wyślij żądanie
-      EventBus.emit('expedition:sendRequest', {
-        type: 'recon', targetId: btn.scope, vesselId: btn.vesselId,
-      });
-      this._selectedVesselId = null;
-      this._vesselMissionType = null;
-      return;
-    }
-
-    if (btn.action === 'setupTradeRoute') {
-      // Otwórz modal konfiguracji trasy handlowej
-      const colMgr = window.KOSMOS?.colonyManager;
-      const activePid = colMgr?.activePlanetId;
-      const sourceCol = colMgr?.getColony(activePid);
-      if (sourceCol) {
-        showTradeRouteModal(sourceCol, btn.targetId, btn.targetName).then(result => {
-          if (result) {
-            EventBus.emit('tradeRoute:create', {
-              vesselId: btn.vesselId,
-              sourceColonyId: activePid,
-              targetBodyId: btn.targetId,
-              cargo: result.cargo,
-              tripsTotal: result.trips,
-            });
-          }
-        });
-      }
-      this._selectedVesselId = null;
-      this._vesselMissionType = null;
-      return;
-    }
-
-    if (btn.action === 'launchTransport') {
-      const colMgr = window.KOSMOS?.colonyManager;
-      const activePid = colMgr?.activePlanetId;
-      const sourceCol = colMgr?.getColony(activePid);
-      const vMgr = window.KOSMOS?.vesselManager;
-      const vessel = vMgr?.getVessel(btn.vesselId);
-
-      // Jeśli statek ma już załadowane cargo → wyślij bezpośrednio (bez modala)
-      const existingCargo = vessel?.cargo ?? {};
-      const hasExistingCargo = Object.values(existingCargo).some(qty => qty > 0);
-
-      if (hasExistingCargo) {
-        EventBus.emit('expedition:transportRequest', {
-          targetId: btn.targetId, cargo: { ...existingCargo }, vesselId: btn.vesselId,
-          cargoPreloaded: true,
-        });
-        this._selectedVesselId = null;
-        this._vesselMissionType = null;
-        return;
-      }
-
-      // Brak cargo → otwórz modal transportu (jak dotychczas)
-      if (sourceCol) {
-        const targetCol = colMgr?.getColony(btn.targetId);
-        const targetsList = targetCol ? [targetCol] : [];
-        showTransportModal(sourceCol, targetsList, btn.targetId).then(result => {
-          if (result) {
-            EventBus.emit('expedition:transportRequest', {
-              targetId: btn.targetId, cargo: result.cargo, vesselId: btn.vesselId,
-            });
-          }
-        });
-      }
-      this._selectedVesselId = null;
-      this._vesselMissionType = null;
-      return;
-    }
-
-    if (btn.action === 'deleteTradeRoute') {
-      EventBus.emit('tradeRoute:delete', { routeId: btn.routeId });
-      return;
-    }
-
-    if (btn.action === 'launchMission') {
-      // Mining / Scientific / Colony z konkretnym statkiem
-      EventBus.emit('expedition:sendRequest', {
-        type: btn.missionType, targetId: btn.targetId, vesselId: btn.vesselId,
-      });
-      this._selectedVesselId = null;
-      this._vesselMissionType = null;
-      return;
-    }
-  }
 
   _hitTestConfirm(x, y) {
     const DW = 300, DH = 90;
@@ -3010,7 +1503,7 @@ export class UIManager {
                      + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
       if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarH) return 'civpanel';
       if (this._civPanelTab) {
-        const bodyH = (this._civPanelTab === 'expeditions' || this._civPanelTab === 'economy')
+        const bodyH = (this._civPanelTab === 'fleet' || this._civPanelTab === 'economy')
           ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
         if (x >= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + bodyH) return 'civpanel';
       }

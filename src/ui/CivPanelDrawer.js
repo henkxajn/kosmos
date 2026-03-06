@@ -23,7 +23,7 @@ export const CIV_TABS = [
   { id: 'population',  icon: '👤', label: 'Populacja' },
   { id: 'tech',        icon: '🧬', label: 'Technologie' },
   { id: 'buildings',   icon: '🔧', label: 'Budowle' },
-  { id: 'expeditions', icon: '🚀', label: 'Ekspedycje' },
+  { id: 'fleet', icon: '🚀', label: 'Flota' },
 ];
 
 const MORALE_MAX = { housing: 20, food: 20, water: 15, energy: 15, employment: 15, safety: 15 };

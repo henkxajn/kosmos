@@ -39,6 +39,7 @@ export function createVessel(shipId, colonyId, opts = {}) {
     shipId,
     name,
     colonyId,
+    homeColonyId: colonyId, // kolonia macierzysta (stała — nie zmienia się przy relokacji)
 
     // Pozycja fizyczna w układzie (px, jak entity.x/y)
     position: {
@@ -64,6 +65,23 @@ export function createVessel(shipId, colonyId, opts = {}) {
     // Cargo — towary na pokładzie (commodityId → ilość sztuk)
     cargo: {},
     cargoUsed: 0, // tony (suma weight × qty)
+
+    // Automatyzacja zachowań
+    automation: {
+      autoReturn: false,  // auto-powrót po zakończeniu misji
+      autoRefuel: true,   // auto-tankowanie w hangarze
+    },
+
+    // Dziennik misji (max 20 wpisów, ring buffer)
+    missionLog: [],
+
+    // Statystyki statku
+    stats: {
+      distanceTraveled: 0, // AU
+      missionsComplete: 0,
+      resourcesHauled: 0,
+      bodiesSurveyed: 0,
+    },
 
     // Doświadczenie (przyszłość — weteran = bonus)
     experience: 0,
@@ -121,6 +139,24 @@ export function needsRefuel(vessel) {
  */
 export function getShipDef(vessel) {
   return SHIPS[vessel.shipId] ?? null;
+}
+
+// ── Dziennik misji ───────────────────────────────────────────────────────────
+
+const MAX_LOG_ENTRIES = 20;
+
+/**
+ * Dodaj wpis do dziennika misji statku.
+ * @param {object} vessel — instancja statku
+ * @param {number} year — rok gry
+ * @param {string} text — treść wpisu
+ * @param {string} [type='info'] — typ: 'info'|'success'|'warning'|'danger'
+ */
+export function addMissionLog(vessel, year, text, type = 'info') {
+  vessel.missionLog.push({ year, text, type });
+  if (vessel.missionLog.length > MAX_LOG_ENTRIES) {
+    vessel.missionLog = vessel.missionLog.slice(-MAX_LOG_ENTRIES);
+  }
 }
 
 // ── Cargo ────────────────────────────────────────────────────────────────────

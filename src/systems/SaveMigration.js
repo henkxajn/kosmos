@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 12;
+export const CURRENT_VERSION     = 13;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -27,6 +27,7 @@ const MIGRATIONS = {
   9: _migrateV9toV10,
   10: _migrateV10toV11,
   11: _migrateV11toV12,
+  12: _migrateV12toV13,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -359,6 +360,32 @@ function _migrateV11toV12(data) {
         inv.semiconductors = 0;
       }
     }
+  }
+
+  return data;
+}
+
+// ── Migracja v12 → v13 ──────────────────────────────────────────────────────
+// Dodaje: vessel fields (homeColonyId, automation, missionLog, stats)
+// Rename: expeditions → missions (backward compat)
+
+function _migrateV12toV13(data) {
+  const c4x = data.civ4x;
+  if (!c4x) return data;
+
+  // Dodaj nowe pola do vessels
+  if (c4x.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v.homeColonyId) v.homeColonyId = v.colonyId;
+      if (!v.automation) v.automation = { autoReturn: false, autoRefuel: true };
+      if (!v.missionLog) v.missionLog = [];
+      if (!v.stats) v.stats = { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 };
+    }
+  }
+
+  // Rename expeditions → missions (zachowaj oba klucze dla backward compat)
+  if (c4x.expeditions && !c4x.missions) {
+    c4x.missions = c4x.expeditions;
   }
 
   return data;
