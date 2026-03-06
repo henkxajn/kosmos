@@ -27,6 +27,7 @@ import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }         from '../systems/DepositSystem.js';
 import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
 import { TradeRouteManager }    from '../systems/TradeRouteManager.js';
+import { ResearchSystem }      from '../systems/ResearchSystem.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification, showImpactNotification } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
@@ -129,6 +130,7 @@ export class GameScene {
     this.tradeRouteManager = new TradeRouteManager();
     this.randomEventSystem = new RandomEventSystem();
     this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
+    this.researchSystem    = new ResearchSystem(this.techSystem);
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -145,6 +147,7 @@ export class GameScene {
     window.KOSMOS.tradeRouteManager = this.tradeRouteManager;
     window.KOSMOS.timeSystem       = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
+    window.KOSMOS.researchSystem   = this.researchSystem;
 
     // ── Przywrócenie stanu 4X ──────────────────────────────────
     const c4x = savedData?.civ4x;
@@ -154,6 +157,7 @@ export class GameScene {
       // Po migracji SaveMigration: save zawsze ma colonies[] (v5+)
       // Przywróć tech (globalne)
       if (c4x.techs) this.techSystem.restore(c4x.techs);
+      if (c4x.researchSystem) this.researchSystem.restore(c4x.researchSystem);
       // Przywróć kolonie przez ColonyManager (tworzy per-kolonia ResourceSystem, CivSystem, BuildingSystem)
       if (c4x.colonies?.length > 0) {
         this.colonyManager.restore(c4x, this.buildingSystem);
@@ -799,10 +803,15 @@ export class GameScene {
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-      // Escape — zamknij aktywny overlay
-      if (e.key === 'Escape' && this.uiManager.overlayManager.isAnyOpen()) {
-        this.uiManager.overlayManager.closeActive();
-        return;
+      // Deleguj klawisze do aktywnego overlay (np. Escape w buildMode, strzałki)
+      if (this.uiManager.overlayManager.isAnyOpen()) {
+        const ov = this.uiManager.overlayManager.overlays[this.uiManager.overlayManager.active];
+        if (ov?.handleKeyDown && ov.handleKeyDown(e.key)) return;
+        // Escape — zamknij aktywny overlay (jeśli overlay nie skonsumował)
+        if (e.key === 'Escape') {
+          this.uiManager.overlayManager.closeActive();
+          return;
+        }
       }
 
       // Klawisze overlay (F/P/E/T) — civMode

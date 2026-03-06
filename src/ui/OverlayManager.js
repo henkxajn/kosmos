@@ -13,6 +13,7 @@ export class OverlayManager {
       'p': 'population',
       'e': 'economy',
       't': 'tech',
+      'c': 'colony',
     };
   }
 

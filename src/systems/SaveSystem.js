@@ -101,6 +101,7 @@ export class SaveSystem {
       lastMigrationYear: coloniesData.lastMigrationYear ?? 0,
       // Globalne
       techs:          tSys?.serialize()    ?? null,
+      researchSystem: window.KOSMOS?.researchSystem?.serialize() ?? null,
       expeditions:    eSys?.serialize()    ?? null,
       vesselManager:  vMgr?.serialize()    ?? null,
       tradeRouteManager: window.KOSMOS?.tradeRouteManager?.serialize() ?? null,

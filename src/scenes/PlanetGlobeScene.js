@@ -22,11 +22,6 @@ import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { GLOBE }         from '../config/LayoutConfig.js';
 import { TopBar }        from '../ui/TopBar.js';
-import {
-  CIV_TABS,
-  drawEconomyTab, drawPopulationTab, drawTechTab, drawBuildingsTab,
-  handleTechClick, handleFactoryClick,
-} from '../ui/CivPanelDrawer.js';
 
 // ── Stałe layoutu (z LayoutConfig — spójne z nowym UI) ────────
 const TOP_BAR_H    = GLOBE.TOP_BAR_H;     // 50
@@ -40,11 +35,6 @@ const H = window.innerHeight;
 const PS_SCALE = Math.min(W / 1280, H / 720);
 const LW = Math.round(W / PS_SCALE);
 const LH = Math.round(H / PS_SCALE);
-
-// CivPanel — zakładki (z CivPanelDrawer)
-const CIV_TAB_ICONS = CIV_TABS; // [{ id, icon, label }]
-const CIV_TAB_BTN_W  = 40;  // szerokość jednego przycisku
-const CIV_TAB_BAR_H  = 26;  // wysokość paska ikon
 
 // Kolory kategorii budynków
 const CAT_COLORS = {
@@ -90,13 +80,10 @@ export class PlanetGlobeScene {
     this._topBar = new TopBar();
     this._invPerYear  = {};
     this._energyFlow  = {};
-    this._factoryBtns = [];
 
     // PlanetGlobeRenderer (tworzony w open)
     this._globeRenderer = null;
 
-    // CivPanel — zakładki widoczne na mapie planety
-    this._civTab = null; // null | 'economy' | 'population' | 'tech' | 'buildings' | 'expeditions'
     this.uiManager = null; // referencja ustawiana przez GameScene
 
     // Toggle siatki hex (domyślnie OFF — czysty PBR)
@@ -142,7 +129,6 @@ export class PlanetGlobeScene {
     this._buildPanelScrollY  = 0;
     this._isDragging         = false;
     this._showGrid           = false;
-    this._civTab             = null;
 
     // Flaga: UIManager NIE rysuje CivPanel (rysuje PlanetGlobeScene)
     if (window.KOSMOS) window.KOSMOS.planetGlobeOpen = true;
@@ -238,7 +224,6 @@ export class PlanetGlobeScene {
 
   _close() {
     this.isOpen = false;
-    this._civTab = null;
     this.canvas.style.display = 'none';
     if (window.KOSMOS) window.KOSMOS.planetGlobeOpen = false;
 
@@ -319,18 +304,6 @@ export class PlanetGlobeScene {
           this._buildPanelMouseX = -1;
           this._buildPanelMouseY = -1;
         }
-        // Deleguj hover do UIManager (tooltipy w zakładkach CivPanel)
-        if (this.uiManager) {
-          this.uiManager._tooltipMouseX = mx;
-          this.uiManager._tooltipMouseY = my;
-          if (this._civTab === 'expeditions') {
-            this.uiManager._tooltip = this.uiManager._detectCatalogTooltip(mx, my);
-          } else if (this._civTab === 'economy') {
-            this.uiManager._tooltip = this.uiManager._detectFactoryTooltip(mx, my);
-          } else {
-            this.uiManager._tooltip = null;
-          }
-        }
         layer.style.cursor = 'default';
         return;
       }
@@ -358,7 +331,6 @@ export class PlanetGlobeScene {
 
       // Panele UI — działają zawsze (wasDrag nie blokuje)
       if (this._hitTestClose(mx, my))      return;
-      if (this._hitTestCivTabs(mx, my))    return;
       if (this._hitTestTimeBar(mx, my))    return;
       if (this._hitTestBuildPanel(mx, my)) return;
       if (this._hitTestLeftPanel(mx, my))  return;
@@ -390,28 +362,6 @@ export class PlanetGlobeScene {
         this._buildPanelScrollY = Math.max(0, this._buildPanelScrollY + e.deltaY * 0.5);
         e.preventDefault();
         return;
-      }
-      // Scroll w zakładce Ekspedycje (katalog ciał / flota)
-      if (this._civTab === 'expeditions' && this.uiManager) {
-        const { x: ovX, y: ovY, w: ovW, h: ovH } = this._civOverlayRect();
-        const halfW = Math.floor(ovW / 2);
-        const upperZoneH = 200;
-        const ui = this.uiManager;
-        // Katalog — prawa kolumna górnej strefy overlay
-        if (mx >= ovX + halfW && mx <= ovX + ovW && my >= ovY && my <= ovY + upperZoneH) {
-          const maxScroll = Math.max(0, (ui._catalogContentH ?? 0) - (ui._catalogVisibleH ?? 0));
-          ui._catalogScrollY = Math.max(0, Math.min(maxScroll, (ui._catalogScrollY ?? 0) + e.deltaY * 0.5));
-          e.preventDefault();
-          return;
-        }
-        // Flota — dolna strefa overlay
-        const fc = ui._fleetClipRect;
-        if (fc && fc.h > 0 && mx >= ovX && mx <= ovX + ovW && my >= fc.y && my <= fc.y + fc.h) {
-          const maxScroll = Math.max(0, (ui._fleetContentH ?? 0) - (ui._fleetVisibleH ?? 0));
-          ui._fleetScrollY = Math.max(0, Math.min(maxScroll, (ui._fleetScrollY || 0) + e.deltaY * 0.5));
-          e.preventDefault();
-          return;
-        }
       }
       if (!this._isInPanel(mx, my)) {
         e.preventDefault();
@@ -613,11 +563,6 @@ export class PlanetGlobeScene {
     if (mx < LEFT_W) return true;
     // Right panel (gdy aktywny)
     if (this._buildPanelTile && mx > LW - RIGHT_W) return true;
-    // CivPanel overlay (gdy zakładka otwarta — blokuj interakcję z globem)
-    if (this._civTab) {
-      const { x, y, w, h } = this._civOverlayRect();
-      if (mx >= x && mx <= x + w && my >= y && my <= y + h) return true;
-    }
     return false;
   }
 
@@ -747,11 +692,6 @@ export class PlanetGlobeScene {
       ctx.fillText('aby zobaczyć opcje', LW - RIGHT_W + 8, HEADER_H + 34);
     }
 
-    // CivPanel overlay — rysuj treść zakładki nad globem
-    if (this._civTab) {
-      this._drawCivTabOverlay(ctx);
-    }
-
     // Flash message (błąd budowy/ulepszenia/rozbiórki)
     if (this._flashMsg && Date.now() < this._flashEnd) {
       const fAlpha = Math.min(1, (this._flashEnd - Date.now()) / 800);
@@ -781,7 +721,7 @@ export class PlanetGlobeScene {
 
     // Dynamiczny z-index globusa: obniż gdy tooltip lub CivPanel zasłaniałyby canvas 2D
     if (this._globeRenderer?._canvas) {
-      const needLower = this._civTab || this._buildTooltipVisible || this._topBar?._tooltip;
+      const needLower = this._buildTooltipVisible || this._topBar?._tooltip;
       this._globeRenderer._canvas.style.zIndex = needLower ? '3' : '5';
     }
 
@@ -856,47 +796,8 @@ export class PlanetGlobeScene {
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(LEFT_W, HEADER_H); ctx.lineTo(LEFT_W, LH); ctx.stroke();
 
-    // ── CivPanel — pasek ikon zakładek ──────────────────────────
-    if (window.KOSMOS?.civMode) {
-      const tabY = HEADER_H + 2;
-      const padX = (LEFT_W - CIV_TAB_ICONS.length * CIV_TAB_BTN_W) / 2;
-
-      for (let i = 0; i < CIV_TAB_ICONS.length; i++) {
-        const tab = CIV_TAB_ICONS[i];
-        const btnX = padX + i * CIV_TAB_BTN_W;
-        const active = this._civTab === tab.id;
-
-        ctx.fillStyle = active ? 'rgba(26,48,80,0.95)' : 'rgba(8,14,24,0.80)';
-        ctx.fillRect(btnX, tabY, CIV_TAB_BTN_W - 2, CIV_TAB_BAR_H);
-
-        if (active) {
-          ctx.fillStyle = THEME.info;
-          ctx.fillRect(btnX, tabY + CIV_TAB_BAR_H - 2, CIV_TAB_BTN_W - 2, 2);
-        }
-
-        ctx.font      = `${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
-        ctx.fillStyle = active ? THEME.textPrimary : THEME.textSecondary;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(tab.icon, btnX + (CIV_TAB_BTN_W - 2) / 2, tabY + CIV_TAB_BAR_H / 2);
-      }
-      ctx.textAlign    = 'left';
-      ctx.textBaseline = 'alphabetic';
-
-      // Separator pod ikonami
-      ctx.strokeStyle = THEME.border;
-      ctx.beginPath();
-      ctx.moveTo(4, tabY + CIV_TAB_BAR_H + 2);
-      ctx.lineTo(LEFT_W - 4, tabY + CIV_TAB_BAR_H + 2);
-      ctx.stroke();
-    }
-
-    // Gdy zakładka CivPanel aktywna — treść rysowana w overlay, pomijamy POP/budynki
-    if (this._civTab) return;
-
     // ── Widget POP (ukryty w outpost) ───────────────────────────
-    const tabBarOffset = window.KOSMOS?.civMode ? CIV_TAB_BAR_H + 6 : 0;
-    let y = HEADER_H + 6 + tabBarOffset;
+    let y = HEADER_H + 6;
 
     const isOutpostView = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
 
@@ -1551,27 +1452,6 @@ export class PlanetGlobeScene {
     }
   }
 
-  // ── CivPanel overlay — treść zakładki nad globem ───────────────
-
-  // Przełącz zakładkę CivPanel (toggle)
-  _toggleCivTab(tabId) {
-    this._civTab = (this._civTab === tabId) ? null : tabId;
-    // Z-index globusa zarządzany dynamicznie w _draw() —
-    // obniżany gdy civTab / tooltip / TopBar hover zasłaniałyby canvas 2D.
-  }
-
-  _civOverlayRect() {
-    // Panel boczny — pokrywa lewy panel + część globusa
-    const tabBarH = CIV_TAB_BAR_H + 6;
-    const panelW = Math.min(Math.round(LW * 0.38), 460);
-    return {
-      x: 0,
-      y: HEADER_H + tabBarH,
-      w: panelW,
-      h: LH - HEADER_H - tabBarH - BOTTOM_BAR_H,
-    };
-  }
-
   // ── Panel deploy — prefabrykaty z cargo statków ──────────────
   _drawDeployPanel(ctx, tile, BPX, startY) {
     const vMgr = window.KOSMOS?.vesselManager;
@@ -1798,117 +1678,7 @@ export class PlanetGlobeScene {
     }
   }
 
-  _drawCivTabOverlay(ctx) {
-    if (!this._civTab) return;
-
-    const { x, y, w, h } = this._civOverlayRect();
-
-    // Tło panelu bocznego (półprzezroczyste — globus widoczny obok)
-    ctx.fillStyle = 'rgba(6,10,20,0.94)';
-    ctx.fillRect(x, y, w, h);
-    // Prawa krawędź panelu
-    ctx.strokeStyle = THEME.border;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + w, y); ctx.lineTo(x + w, y + h);
-    ctx.stroke();
-
-    // Nagłówek zakładki
-    const tabDef = CIV_TAB_ICONS.find(t => t.id === this._civTab);
-    ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(`${tabDef?.icon ?? ''} ${tabDef?.label ?? ''}`, x + 10, y + 16);
-
-    // Rysuj treść zakładki (CivPanelDrawer lub UIManager dla Expeditions)
-    const bodyX = x;
-    const bodyY = y + 20;
-    const bodyW = w;
-
-    const ui = this.uiManager;
-    const state = {
-      inventory: this._inventory,
-      invPerYear: this._invPerYear,
-      energyFlow: this._energyFlow,
-      factoryData: ui?._factoryData,
-      civData: ui?._civData,
-      moraleData: ui?._moraleData,
-    };
-
-    if (this._civTab === 'economy') {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x, y, w, h);
-      ctx.clip();
-      this._factoryBtns = drawEconomyTab(ctx, bodyY, bodyX, bodyW, state);
-      ctx.restore();
-      // Synchronizuj factoryBtns do UIManager (do detekcji tooltipa)
-      if (ui) ui._factoryBtns = this._factoryBtns;
-      // Rysuj tooltip commodity/factory (jeśli aktywny — poza clip)
-      if (ui?._tooltip?.type === 'factory' || ui?._tooltip?.type === 'commodity') {
-        const savedCtx = ui.ctx;
-        ui.ctx = ctx;
-        ui._drawTooltip();
-        ui.ctx = savedCtx;
-      }
-    }
-    if (this._civTab === 'population')  drawPopulationTab(ctx, bodyY, bodyX, bodyW, state);
-    if (this._civTab === 'tech')        drawTechTab(ctx, bodyY, bodyX, bodyW);
-    if (this._civTab === 'buildings')   drawBuildingsTab(ctx, bodyY, bodyX, bodyW);
-    if (this._civTab === 'expeditions' && ui) {
-      ui._drawExpeditionsTab(ctx, bodyY, bodyX, bodyW, h - 20);
-      // Rysuj tooltip katalogu ciał (jeśli aktywny)
-      if (ui._tooltip?.type === 'catalogBody') {
-        const savedCtx = ui.ctx;
-        ui.ctx = ctx;
-        ui._drawTooltip();
-        ui.ctx = savedCtx;
-      }
-    }
-  }
-
   // ── Hit testing ───────────────────────────────────────────────
-
-  _hitTestCivTabs(mx, my) {
-    if (!window.KOSMOS?.civMode) return false;
-
-    const tabY = HEADER_H + 2;
-    const padX = (LEFT_W - CIV_TAB_ICONS.length * CIV_TAB_BTN_W) / 2;
-
-    // Klik w pasek ikon
-    if (my >= tabY && my <= tabY + CIV_TAB_BAR_H && mx >= padX && mx <= padX + CIV_TAB_ICONS.length * CIV_TAB_BTN_W) {
-      const idx = Math.floor((mx - padX) / CIV_TAB_BTN_W);
-      if (idx >= 0 && idx < CIV_TAB_ICONS.length) {
-        this._toggleCivTab(CIV_TAB_ICONS[idx].id);
-        return true;
-      }
-    }
-
-    // Klik w overlay (gdy zakładka otwarta)
-    if (this._civTab) {
-      const { x, y, w, h } = this._civOverlayRect();
-      if (mx >= x && mx <= x + w && my >= y && my <= y + h) {
-        // Przekaż do UIManager (przelicz na rawX/rawY)
-        this._handleCivOverlayClick(mx, my);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Obsługa kliknięcia w panelu CivPanel — CivPanelDrawer / UIManager
-  _handleCivOverlayClick(mx, my) {
-    const { x, y, w } = this._civOverlayRect();
-    const bodyY = y + 8;
-    const bodyW = w;
-
-    if (this._civTab === 'economy') {
-      handleFactoryClick(mx, my, this._factoryBtns);
-    } else if (this._civTab === 'tech') {
-      handleTechClick(mx, my, bodyY, x, bodyW);
-    } else if (this._civTab === 'expeditions') {
-      this.uiManager?._handleExpeditionsClick?.(mx, my);
-    }
-  }
 
   _hitTestClose(mx, my) {
     const BACK_W = 130;

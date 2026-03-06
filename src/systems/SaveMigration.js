@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 13;
+export const CURRENT_VERSION     = 14;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -28,6 +28,7 @@ const MIGRATIONS = {
   10: _migrateV10toV11,
   11: _migrateV11toV12,
   12: _migrateV12toV13,
+  13: _migrateV13toV14,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -386,6 +387,24 @@ function _migrateV12toV13(data) {
   // Rename expeditions → missions (zachowaj oba klucze dla backward compat)
   if (c4x.expeditions && !c4x.missions) {
     c4x.missions = c4x.expeditions;
+  }
+
+  return data;
+}
+
+// ── Migracja v13 → v14 ──────────────────────────────────────────────────────
+// Dodaje: researchSystem (kolejka badań) do civ4x
+
+function _migrateV13toV14(data) {
+  const c4x = data.civ4x;
+  if (!c4x) return data;
+
+  if (!c4x.researchSystem) {
+    c4x.researchSystem = {
+      currentResearch: null,
+      researchProgress: 0,
+      researchQueue: [],
+    };
   }
 
   return data;

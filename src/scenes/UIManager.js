@@ -7,17 +7,20 @@
 
 import EventBus    from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
-import { TECHS, TECH_BRANCHES } from '../data/TechData.js';
+import { TECHS } from '../data/TechData.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
-import { FleetTabPanel }  from '../ui/FleetTabPanel.js';
 import { COSMIC }          from '../config/LayoutConfig.js';
 import { OverlayManager }  from '../ui/OverlayManager.js';
 import { FleetManagerOverlay } from '../ui/FleetManagerOverlay.js';
+import { PopulationOverlay }   from '../ui/PopulationOverlay.js';
+import { EconomyOverlay }      from '../ui/EconomyOverlay.js';
+import { TechOverlay }         from '../ui/TechOverlay.js';
+import { ColonyOverlay }       from '../ui/ColonyOverlay.js';
 
 // Nowe komponenty UI
 import { TopBar }        from '../ui/TopBar.js';
@@ -26,11 +29,9 @@ import { BottomContext }  from '../ui/BottomContext.js';
 import { Outliner }       from '../ui/Outliner.js';
 import {
   CIV_SIDEBAR_W, CIV_SIDEBAR_BTN, CIV_SIDEBAR_GAP, CIV_SIDEBAR_PAD,
-  CIV_PANEL_BODY_H, CIV_TABS,
-  drawCivPanelSidebar, drawCivPanelBody,
-  drawEconomyTab, drawPopulationTab, drawTechTab, drawBuildingsTab,
-  drawMiniBar, getBuildingGroups, formatGroupRates, techEffectSummary,
-  hitTestSidebar, handleTechClick, handleFactoryClick,
+  CIV_TABS,
+  drawCivPanelSidebar,
+  hitTestSidebar,
 } from '../ui/CivPanelDrawer.js';
 
 // Wymiary fizyczne canvas (piksele urządzenia)
@@ -94,7 +95,6 @@ const ACTION_COSTS = { stabilize: 25, nudgeToHz: 35, bombard: 20 };
 
 // Pozycja CivPanel (pod TopBar)
 const CIV_PANEL_Y = COSMIC.TOP_BAR_H;
-const CIV_EXPEDITIONS_H = H - CIV_PANEL_Y - 15; // dynamiczna wysokość — panel rozciąga się do dołu ekranu
 
 // ── Tooltip CivPanel ────────────────────────────────────────────
 const TOOLTIP_PAD    = 8;
@@ -154,10 +154,8 @@ export class UIManager {
 
     // ── Stan fabryk ────────────────────────────────────────────
     this._factoryData = null;
-    this._factoryBtns = [];
 
     // ── Stan CivPanel ──────
-    this._civPanelTab = null;
     this._civData     = null;
     this._moraleData  = null;
 
@@ -173,16 +171,13 @@ export class UIManager {
     this._tooltipMouseX = 0;
     this._tooltipMouseY = 0;
 
-    // ── Zakładka Flota (FleetTabPanel) ──────────────────────
-    this._fleetTab = new FleetTabPanel();
-    EventBus.on('civpanel:openTab', ({ tabId }) => {
-      this._civPanelTab = this._civPanelTab === tabId ? null : tabId;
-      if (tabId === 'fleet') this._fleetTab.reset();
-    });
-
     // ── OverlayManager (panele pełnoekranowe) ─────────────
     this.overlayManager = new OverlayManager();
     this.overlayManager.register('fleet', new FleetManagerOverlay());
+    this.overlayManager.register('population', new PopulationOverlay());
+    this.overlayManager.register('economy', new EconomyOverlay());
+    this.overlayManager.register('tech', new TechOverlay());
+    this.overlayManager.register('colony', new ColonyOverlay());
 
     this._setupEvents();
     this._startDrawLoop();
@@ -564,18 +559,14 @@ export class UIManager {
     // BottomContext (dolny panel kontekstowy — gdy encja zaznaczona)
     if (this._bottomContext.isOver(x, y, W, H, this._selectedEntity)) return true;
 
+    // Overlay otwarty — blokuj kamerę
+    if (this.overlayManager?.isAnyOpen()) return true;
+
     // CivPanel sidebar (zawsze widoczny gdy civMode)
     if (window.KOSMOS?.civMode) {
       const sidebarH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
                      + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
       if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarH) return true;
-    }
-    // CivPanel body
-    if (window.KOSMOS?.civMode && this._civPanelTab !== null) {
-      const bodyH = (this._civPanelTab === 'fleet' || this._civPanelTab === 'economy')
-        ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
-      const panelBottom = CIV_PANEL_Y + bodyH;
-      if (x >= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= panelBottom) return true;
     }
 
     // Akcje gracza (lewy panel gdy nie civMode)
@@ -640,10 +631,6 @@ export class UIManager {
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleScroll(deltaY, x, y)) return true;
     }
-    // Zakładka Flota — deleguj scroll do FleetTabPanel
-    if (this._civPanelTab === 'fleet') {
-      if (this._fleetTab.handleScroll(deltaY, x, y)) return true;
-    }
     // BottomContext scroll
     if (this._selectedEntity) {
       if (this._bottomContext.handleWheel(x, y, deltaY, W, H, this._selectedEntity)) return true;
@@ -651,25 +638,16 @@ export class UIManager {
     return false;
   }
 
-  openCivTab(tabId) {
-    if (this._civPanelTab !== tabId) {
-      this._civPanelTab = tabId;
-      if (tabId === 'fleet') this._fleetTab.reset();
-    }
-  }
-
   handleMouseDown(rawX, rawY) {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseDown(x, y); return; }
-    if (this._civPanelTab === 'fleet') this._fleetTab.handleMouseDown(x, y);
   }
 
   handleMouseUp(rawX, rawY) {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y); return; }
-    if (this._civPanelTab === 'fleet') this._fleetTab.handleMouseUp(x, y);
   }
 
   handleMouseMove(x, y) {
@@ -692,8 +670,6 @@ export class UIManager {
     this._topBar.updateHover(x, y);
     // Outliner hover (tooltip kolonii)
     if (this._outliner) this._outliner.updateHover(x, y, W, H);
-    // Fleet tab hover (mapa, statki)
-    if (this._civPanelTab === 'fleet') this._fleetTab.handleMouseMove(x, y);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -838,47 +814,10 @@ export class UIManager {
   // ══════════════════════════════════════════════════════════════
   // CivPanel — panel informacyjny cywilizacji
   // ══════════════════════════════════════════════════════════════
-  _civPanelBodyRect() {
-    const h = (this._civPanelTab === 'fleet' || this._civPanelTab === 'economy')
-      ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
-    return { x: CIV_SIDEBAR_W, y: CIV_PANEL_Y, w: W - CIV_SIDEBAR_W - COSMIC.OUTLINER_W, h };
-  }
-
   _drawCivPanel() {
     const ctx = this.ctx;
-
-    // Sidebar (z CivPanelDrawer)
-    drawCivPanelSidebar(ctx, CIV_PANEL_Y, this._civPanelTab);
-
-    if (!this._civPanelTab) return;
-
-    const { x: bodyX, y: bodyY, w: bodyW, h: bodyH } = this._civPanelBodyRect();
-
-    // Tło treści (z CivPanelDrawer)
-    drawCivPanelBody(ctx, bodyX, bodyY, bodyW, bodyH);
-
-    // Rysuj zakładkę (z CivPanelDrawer)
-    const state = {
-      inventory: this._inventory,
-      invPerYear: this._invPerYear,
-      energyFlow: this._energyFlow,
-      factoryData: this._factoryData,
-      civData: this._civData,
-      moraleData: this._moraleData,
-    };
-
-    if (this._civPanelTab === 'economy') {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(bodyX, bodyY, bodyW, bodyH);
-      ctx.clip();
-      this._factoryBtns = drawEconomyTab(ctx, bodyY, bodyX, bodyW, state);
-      ctx.restore();
-    }
-    if (this._civPanelTab === 'population')  drawPopulationTab(ctx, bodyY, bodyX, bodyW, state);
-    if (this._civPanelTab === 'tech')        drawTechTab(ctx, bodyY, bodyX, bodyW);
-    if (this._civPanelTab === 'buildings')   drawBuildingsTab(ctx, bodyY, bodyX, bodyW);
-    if (this._civPanelTab === 'fleet') this._fleetTab.draw(ctx, bodyX, bodyY, bodyW, bodyH);
+    // Sidebar — aktywny przycisk = aktywny overlay
+    drawCivPanelSidebar(ctx, CIV_PANEL_Y, this.overlayManager.active);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1069,34 +1008,25 @@ export class UIManager {
   // ══════════════════════════════════════════════════════════════
   _detectCivPanelTooltip(x, y) {
     if (!window.KOSMOS?.civMode) return null;
-    const { x: bodyX, y: bodyY, w: bodyW, h: bodyH } = this._civPanelBodyRect();
 
-    // Sidebar ikona
+    // Sidebar ikona — tooltip z nazwą zakładki
     const sidebarH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
                    + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
     if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarH) {
       for (let i = 0; i < CIV_TABS.length; i++) {
         const btnY = CIV_PANEL_Y + CIV_SIDEBAR_PAD + i * (CIV_SIDEBAR_BTN + CIV_SIDEBAR_GAP);
         if (y >= btnY && y <= btnY + CIV_SIDEBAR_BTN) {
-          return { type: 'sidebar_tab', data: { label: CIV_TABS[i].label } };
+          return { type: 'sidebar_tab', data: { label: `${CIV_TABS[i].label} (${CIV_TABS[i].key})` } };
         }
       }
-      return null;
     }
-
-    if (!this._civPanelTab) return null;
-    if (x < bodyX || y < bodyY || y > bodyY + bodyH) return null;
-    if (this._civPanelTab === 'economy')     return this._detectFactoryTooltip(x, y);
-    if (this._civPanelTab === 'buildings')  return this._detectBuildingTooltip(x, y, bodyY, bodyX, bodyW);
-    if (this._civPanelTab === 'tech')       return this._detectTechTooltip(x, y, bodyY, bodyX, bodyW);
-    if (this._civPanelTab === 'fleet') return this._fleetTab.detectCatalogTooltip(x, y);
     return null;
   }
 
   _detectFactoryTooltip(x, y) {
     const allocs = this._factoryData?.allocations
       ?? window.KOSMOS?.factorySystem?.getAllocations?.() ?? [];
-    for (const btn of this._factoryBtns) {
+    for (const btn of (this._factoryBtns ?? [])) {
       // Tooltip-only rects (TOWARY kolumna) — ścisły hit test
       if (btn.isTooltipOnly) {
         if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
@@ -1117,46 +1047,6 @@ export class UIManager {
     }
     return null;
   }
-
-  _detectBuildingTooltip(x, y, bodyY, bodyX, bodyW) {
-    const bSys = window.KOSMOS?.buildingSystem;
-    if (!bSys) return null;
-    const PAD = 14, LH = 13;
-    const firstRowY = bodyY + 30;
-    if (x < bodyX + PAD || x > bodyX + bodyW - PAD) return null;
-    if (y < firstRowY || y > firstRowY + 9 * LH) return null;
-    const rowIndex = Math.floor((y - firstRowY) / LH);
-    const { groups } = getBuildingGroups(bSys);
-    const groupArr = [...groups.values()];
-    if (rowIndex < 0 || rowIndex >= groupArr.length) return null;
-    return { type: 'building', data: { building: groupArr[rowIndex].building, group: groupArr[rowIndex] } };
-  }
-
-  _detectTechTooltip(x, y, bodyY, bodyX, bodyW) {
-    const tSys = window.KOSMOS?.techSystem;
-    if (!tSys) return null;
-    const branches = Object.entries(TECH_BRANCHES);
-    const colW = Math.floor(bodyW / branches.length);
-    const PAD = 8;
-    for (let bi = 0; bi < branches.length; bi++) {
-      const [branchId] = branches[bi];
-      const bx = bodyX + bi * colW + PAD;
-      if (x < bx || x > bx + colW - PAD * 2) continue;
-      let by = bodyY + 30;
-      const techs = Object.values(TECHS).filter(t => t.branch === branchId).sort((a, b) => a.tier - b.tier);
-      for (const tech of techs) {
-        const rowH = 26;
-        if (y >= by - 10 && y < by + rowH - 10) {
-          const researched = tSys.isResearched(tech.id);
-          const available  = !researched && tech.requires.every(r => tSys.isResearched(r));
-          return { type: 'tech', data: { tech, researched, available } };
-        }
-        by += rowH;
-      }
-    }
-    return null;
-  }
-
 
   _drawTooltip() {
     const tt = this._tooltip;
@@ -1440,24 +1330,13 @@ export class UIManager {
     const result = hitTestSidebar(x, y, sy);
     if (result) {
       if (result === 'sidebar') return true;
-      // Toggle zakładki
-      this._civPanelTab = (this._civPanelTab === result) ? null : result;
-      if (result === 'fleet') this._fleetTab.reset();
-      return true;
-    }
-
-    if (this._civPanelTab) {
-      const { x: bx, y: by, w: bw, h: bh } = this._civPanelBodyRect();
-      if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
-        if (this._civPanelTab === 'economy') {
-          handleFactoryClick(x, y, this._factoryBtns);
-        } else if (this._civPanelTab === 'tech') {
-          handleTechClick(x, y, by, bx, bw);
-        } else if (this._civPanelTab === 'fleet') {
-          this._fleetTab.handleClick(x, y);
-        }
-        return true;
+      // Toggle overlay — klik na aktywny zamyka, inny otwiera
+      if (this.overlayManager.active === result) {
+        this.overlayManager.closeActive();
+      } else {
+        this.overlayManager.openPanel(result);
       }
+      return true;
     }
     return false;
   }
@@ -1502,11 +1381,6 @@ export class UIManager {
       const sidebarH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
                      + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
       if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarH) return 'civpanel';
-      if (this._civPanelTab) {
-        const bodyH = (this._civPanelTab === 'fleet' || this._civPanelTab === 'economy')
-          ? CIV_EXPEDITIONS_H : CIV_PANEL_BODY_H;
-        if (x >= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + bodyH) return 'civpanel';
-      }
     }
     // Outliner
     if (window.KOSMOS?.civMode && x >= W - COSMIC.OUTLINER_W && y >= COSMIC.TOP_BAR_H) return 'outliner';
