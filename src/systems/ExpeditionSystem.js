@@ -237,6 +237,15 @@ export class ExpeditionSystem {
     this._expeditions = data.expeditions ?? [];
     this._nextId      = data.nextId ?? (this._expeditions.length + 1);
 
+    // Walidacja: usuń ekspedycje z nieistniejącymi statkami
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr) {
+      this._expeditions = this._expeditions.filter(exp => {
+        if (!exp.vesselId) return false;
+        return !!vMgr.getVessel(exp.vesselId);
+      });
+    }
+
     // Przywróć visitCounts
     this._visitCounts.clear();
     if (data.visitCounts) {

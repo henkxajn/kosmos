@@ -748,9 +748,16 @@ export class UIManager {
     if (civMode && !globeOpen) {
       const colMgr = window.KOSMOS?.colonyManager;
       const activePid = colMgr?.activePlanetId;
+      // Filtruj ekspedycje po aktywnej kolonii (spójność z AKTYWNE MISJE)
+      const vMgrOut = window.KOSMOS?.vesselManager;
+      const outlinerExps = this._expeditions.filter(exp => {
+        if (!exp.vesselId || !vMgrOut) return false;
+        const v = vMgrOut.getVessel(exp.vesselId);
+        return v && v.colonyId === activePid;
+      });
       this._outliner.draw(ctx, W, H, {
         colonies: colMgr?.getAllColonies() ?? [],
-        expeditions: this._expeditions,
+        expeditions: outlinerExps,
         fleet: colMgr?.getFleet(activePid) ?? [],
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
       });
@@ -893,6 +900,16 @@ export class UIManager {
       const active = exSys.getActive?.() ?? [];
       this._expeditions = active;
     }
+
+    // Filtruj po aktywnej kolonii — pokaż tylko ekspedycje statków z tej kolonii
+    const activePid = colMgr?.activePlanetId;
+    const vMgrRef = window.KOSMOS?.vesselManager;
+    const colonyExps = this._expeditions.filter(exp => {
+      if (!exp.vesselId || !vMgrRef) return false;
+      const v = vMgrRef.getVessel(exp.vesselId);
+      return v && v.colonyId === activePid;
+    });
+
     const PAD    = 14;
     const LH     = 14;
     const halfW  = Math.floor(bodyW / 2);
@@ -908,8 +925,8 @@ export class UIManager {
     ctx.fillStyle = C.title;
     ctx.fillText('AKTYWNE MISJE', bodyX + PAD, y);
 
-    const count = this._expeditions.length;
-    const orbitCount = this._expeditions.filter(e => e.status === 'orbiting').length;
+    const count = colonyExps.length;
+    const orbitCount = colonyExps.filter(e => e.status === 'orbiting').length;
     const statusText = orbitCount > 0 ? `${count - orbitCount} w locie, ${orbitCount} na orbicie` : `${count} w locie`;
     ctx.fillStyle = count > 0 ? C.mint : C.label;
     ctx.textAlign = 'right';
@@ -932,7 +949,7 @@ export class UIManager {
       y += LH;
     } else {
       const vMgrMis = window.KOSMOS?.vesselManager;
-      for (const exp of this._expeditions.slice(0, 10)) {
+      for (const exp of colonyExps.slice(0, 10)) {
         const icon = exp.type === 'scientific' ? '🔬' : exp.type === 'colony' ? '🚢'
           : exp.type === 'transport' ? '📦' : exp.type === 'recon' ? '🔭' : '⛏';
 
@@ -955,10 +972,11 @@ export class UIManager {
         } else if (isReturning) {
           statusText = `↩ ${icon} ${shipName ?? '?'} — powrót`;
         } else {
-          // Dla full_system recon pokaż postęp
+          // Dla full_system recon pokaż aktualny cel + postęp
           let targetDisp = _truncate(exp.targetName ?? '?', 10);
           if (exp.scope === 'full_system' && exp.bodiesDiscovered) {
-            targetDisp = `Recon (${exp.bodiesDiscovered.length} zbad.)`;
+            const currentTarget = _truncate(exp.targetName ?? '?', 8);
+            targetDisp = `${currentTarget} (${exp.bodiesDiscovered.length} zbad.)`;
           }
           statusText = `→ ${icon} ${shipName ?? '?'} → ${targetDisp}`;
         }

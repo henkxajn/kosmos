@@ -53,6 +53,8 @@ export class ThreeRenderer {
       this.renderer.setSize(nW, nH);
       this.camera.aspect = nW / nH;
       this.camera.updateProjectionMatrix();
+      // Aktualizuj skalę gwiazd tła (jak Three.js PointsMaterial)
+      if (this._starScaleUniform) this._starScaleUniform.value = nH * 0.5;
     });
 
     // ── Mapy encji → obiekty Three.js ─────────────────────────
@@ -144,8 +146,9 @@ export class ThreeRenderer {
 
     const starMat = new THREE.ShaderMaterial({
       uniforms: {
-        uTime: { value: 0.0 },
-        uSize: { value: 0.8 },
+        uTime:  { value: 0.0 },
+        uSize:  { value: 0.8 },
+        uScale: { value: window.innerHeight * 0.5 },
       },
       vertexShader: `
         attribute float aPhase;
@@ -155,6 +158,7 @@ export class ThreeRenderer {
         varying float vAlpha;
         uniform float uTime;
         uniform float uSize;
+        uniform float uScale;
 
         void main() {
           vColor = color;
@@ -167,7 +171,7 @@ export class ThreeRenderer {
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
           // Modulacja rozmiaru — widoczna przy statycznej kamerze
           float sizeMod = 1.0 + wave * 0.25;
-          gl_PointSize = uSize * sizeMod * (300.0 / -mvPos.z);
+          gl_PointSize = uSize * sizeMod * (uScale / -mvPos.z);
           gl_Position  = projectionMatrix * mvPos;
         }
       `,
@@ -188,8 +192,9 @@ export class ThreeRenderer {
       depthWrite: false,
     });
 
-    // Referencja do uniforma — aktualizowana w render loop
+    // Referencje do uniformów — aktualizowane w render loop i resize
     this._starTwinkleUniform = starMat.uniforms.uTime;
+    this._starScaleUniform   = starMat.uniforms.uScale;
 
     this.scene.add(new THREE.Points(geo, starMat));
 
