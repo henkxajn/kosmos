@@ -933,17 +933,22 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
     if (zone.type === 'upgrade') {
-      EventBus.emit('planet:upgradeRequest', {
-        tile: { q: zone.data.q, r: zone.data.r },
-        buildingId: zone.data.buildingId,
-      });
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colony = colMgr?.getColony(this._selectedColonyId);
+      const grid = colony ? this._getGrid(colony) : null;
+      const tile = grid?.get(zone.data.q, zone.data.r);
+      if (!tile) return;
+      EventBus.emit('planet:upgradeRequest', { tile });
       return;
     }
 
     if (zone.type === 'demolish') {
-      EventBus.emit('planet:demolishRequest', {
-        tile: { q: zone.data.q, r: zone.data.r },
-      });
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colony = colMgr?.getColony(this._selectedColonyId);
+      const grid = colony ? this._getGrid(colony) : null;
+      const tile = grid?.get(zone.data.q, zone.data.r);
+      if (!tile) return;
+      EventBus.emit('planet:demolishRequest', { tile });
       this._selectedHex = null;
       if (this._globeRenderer) this._globeRenderer.setSelectedTile(null);
       return;
