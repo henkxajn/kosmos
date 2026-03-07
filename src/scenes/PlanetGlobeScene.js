@@ -663,7 +663,7 @@ export class PlanetGlobeScene {
 
     // Tło pod panelami (nie pod globem — ten ma własny WebGL canvas)
     // Top area
-    ctx.fillStyle = 'rgba(6,8,16,0.96)';
+    ctx.fillStyle = 'rgba(2,4,5,0.96)';
     ctx.fillRect(0, 0, LW, HEADER_H);
     // Bottom area
     ctx.fillRect(0, LH - BOTTOM_BAR_H, LW, BOTTOM_BAR_H);
@@ -699,13 +699,13 @@ export class PlanetGlobeScene {
       const fW = ctx.measureText(this._flashMsg).width + 24;
       const fX = (LW - fW) / 2;
       const fY = HEADER_H + 8;
-      ctx.fillStyle = 'rgba(80,20,10,0.92)';
+      ctx.fillStyle = 'rgba(40,10,10,0.92)';
       ctx.fillRect(fX, fY, fW, 22);
-      ctx.strokeStyle = '#cc4422';
+      ctx.strokeStyle = '#ff3344';
       ctx.lineWidth = 1;
       ctx.strokeRect(fX, fY, fW, 22);
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = '#ffaa88';
+      ctx.fillStyle = '#ff8888';
       ctx.textAlign = 'center';
       ctx.fillText(this._flashMsg, LW / 2, fY + 15);
       ctx.textAlign = 'left';
@@ -757,9 +757,9 @@ export class PlanetGlobeScene {
     }
 
     // Blok "← Wróć" + nazwa planety (na lewo, nad zasobami)
-    ctx.fillStyle = 'rgba(6,8,16,0.92)';
+    ctx.fillStyle = 'rgba(2,4,5,0.92)';
     ctx.fillRect(0, 0, BACK_W, TOP_BAR_H);
-    ctx.strokeStyle = 'rgba(42,64,96,0.5)';
+    ctx.strokeStyle = 'rgba(0,255,180,0.07)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(BACK_W, 6); ctx.lineTo(BACK_W, TOP_BAR_H - 6); ctx.stroke();
 
@@ -842,7 +842,7 @@ export class PlanetGlobeScene {
         y += 12;
       }
       if (cSys.isFamine) {
-        ctx.fillStyle = '#ff8800';
+        ctx.fillStyle = '#ffcc44';
         ctx.fillText('⚠ GŁÓD!', 12, y + 6);
         y += 12;
       }
@@ -950,7 +950,7 @@ export class PlanetGlobeScene {
       if (yieldParts.length > 0 || modParts.length > 0) {
         const infoW = ctx.measureText(info).width;
         ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = '#88aacc';
+        ctx.fillStyle = '#aac8c0';
         const allParts = [...yieldParts, ...modParts].join('  ');
         ctx.fillText(allParts, infoX + infoW + 10, BY + 14);
       }
@@ -968,7 +968,7 @@ export class PlanetGlobeScene {
     const gridBtnY = BY + 3;
     const gridBtnW = 58;
     const gridBtnH = 16;
-    ctx.fillStyle   = this._showGrid ? 'rgba(26,48,80,0.95)' : 'rgba(13,20,30,0.80)';
+    ctx.fillStyle   = this._showGrid ? 'rgba(0,255,180,0.13)' : 'rgba(0,255,180,0.04)';
     ctx.fillRect(gridBtnX, gridBtnY, gridBtnW, gridBtnH);
     ctx.strokeStyle = this._showGrid ? THEME.info : THEME.borderLight;
     ctx.lineWidth   = 1;
@@ -1122,7 +1122,7 @@ export class PlanetGlobeScene {
 
       // Przycisk anulowania
       const cancelY = buildListY;
-      ctx.fillStyle = 'rgba(100,30,30,0.8)';
+      ctx.fillStyle = 'rgba(40,10,10,0.8)';
       ctx.fillRect(BPX + 8, cancelY, RIGHT_W - 16, 18);
       ctx.strokeStyle = THEME.dangerDim;
       ctx.strokeRect(BPX + 8, cancelY, RIGHT_W - 16, 18);
@@ -1179,7 +1179,7 @@ export class PlanetGlobeScene {
       if (bPopCost > 0) {
         const totalPop = bPopCost * lvl;
         ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = '#4488cc';
+        ctx.fillStyle = '#00ccff';
         ctx.fillText(`👤 ${totalPop} POP`, BPX + 8, buildListY);
         buildListY += 10;
       }
@@ -1215,13 +1215,13 @@ export class PlanetGlobeScene {
           && this._buildPanelMouseY <= upgradeY + 18;
 
         ctx.fillStyle = canAfford
-          ? (isHover ? 'rgba(26,50,76,0.95)' : 'rgba(20,40,60,0.8)')
-          : 'rgba(60,20,20,0.85)';
+          ? (isHover ? 'rgba(0,255,180,0.13)' : 'rgba(0,255,180,0.07)')
+          : 'rgba(40,10,10,0.85)';
         ctx.fillRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
-        ctx.strokeStyle = canAfford ? (isHover ? THEME.accent : THEME.successDim) : '#882222';
+        ctx.strokeStyle = canAfford ? (isHover ? THEME.accent : THEME.successDim) : '#662233';
         ctx.strokeRect(BPX + 8, upgradeY, RIGHT_W - 16, 18);
         ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = canAfford ? THEME.accent : '#aa5555';
+        ctx.fillStyle = canAfford ? THEME.accent : '#aa4455';
         ctx.textAlign = 'center';
         ctx.fillText(canAfford ? `[ Ulepsz do Lv.${nextLvl} ]` : `[ Ulepsz do Lv.${nextLvl} ] ✕`, BPX + RIGHT_W / 2, upgradeY + 13);
         ctx.textAlign = 'left';
@@ -1250,7 +1250,7 @@ export class PlanetGlobeScene {
           const resDef = ALL_RESOURCES[resId];
           const name = resDef?.namePL ?? resId;
           const ok = have >= amt;
-          ctx.fillStyle = ok ? '#448866' : '#cc4422';
+          ctx.fillStyle = ok ? '#00ee88' : '#ff3344';
           ctx.fillText(`${icon} ${name}: ${have}/${amt}`, BPX + 14, buildListY);
           buildListY += 12;
         }
@@ -1266,7 +1266,7 @@ export class PlanetGlobeScene {
             const name = COMMODITY_SHORT[resId] ?? resId;
             const dispIcon = comDef?.icon ?? resId;
             const ok = have >= amt;
-            ctx.fillStyle = ok ? '#448866' : '#cc4422';
+            ctx.fillStyle = ok ? '#00ee88' : '#ff3344';
             ctx.fillText(`${dispIcon} ${name}: ${have}/${amt}`, BPX + 14, buildListY);
             buildListY += 12;
           }
@@ -1274,7 +1274,7 @@ export class PlanetGlobeScene {
         // Koszt POP
         if (upgPopCost > 0) {
           const freePops = cSys?.freePops ?? 0;
-          ctx.fillStyle = upgPopOk ? '#448866' : '#cc4422';
+          ctx.fillStyle = upgPopOk ? '#00ee88' : '#ff3344';
           ctx.fillText(`👤 POP: ${freePops >= upgPopCost ? '✓' : `${freePops}/${upgPopCost}`}`, BPX + 14, buildListY);
           buildListY += 12;
         }
@@ -1286,9 +1286,9 @@ export class PlanetGlobeScene {
         const demolishY = buildListY + 2;
         if (lvl > 1) {
           // Obniżenie poziomu — żółto-pomarańczowy
-          ctx.fillStyle = 'rgba(80,60,20,0.8)';
+          ctx.fillStyle = 'rgba(0,255,180,0.10)';
           ctx.fillRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
-          ctx.strokeStyle = '#aa8822';
+          ctx.strokeStyle = 'rgba(0,255,180,0.30)';
           ctx.strokeRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
           ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = '#ffcc44';
@@ -1297,7 +1297,7 @@ export class PlanetGlobeScene {
           ctx.textAlign = 'left';
         } else {
           // Pełna rozbiórka — czerwony
-          ctx.fillStyle = 'rgba(100,30,30,0.8)';
+          ctx.fillStyle = 'rgba(40,10,10,0.8)';
           ctx.fillRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
           ctx.strokeStyle = THEME.dangerDim;
           ctx.strokeRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
@@ -1316,7 +1316,7 @@ export class PlanetGlobeScene {
       this._buildTabRect = { x: BPX + 8, y: tabY, w: tabW, h: tabH }; // do hit test
 
       // BUDUJ tab
-      ctx.fillStyle = this._buildPanelTab === 'build' ? 'rgba(20,50,80,0.95)' : 'rgba(10,20,30,0.7)';
+      ctx.fillStyle = this._buildPanelTab === 'build' ? 'rgba(0,255,180,0.13)' : 'rgba(0,255,180,0.04)';
       ctx.fillRect(BPX + 8, tabY, tabW, tabH);
       ctx.strokeStyle = this._buildPanelTab === 'build' ? THEME.accent : THEME.border;
       ctx.strokeRect(BPX + 8, tabY, tabW, tabH);
@@ -1326,7 +1326,7 @@ export class PlanetGlobeScene {
       ctx.fillText('🔨 BUDUJ', BPX + 8 + tabW / 2, tabY + 11);
 
       // ZAINSTALUJ tab
-      ctx.fillStyle = this._buildPanelTab === 'deploy' ? 'rgba(20,50,80,0.95)' : 'rgba(10,20,30,0.7)';
+      ctx.fillStyle = this._buildPanelTab === 'deploy' ? 'rgba(0,255,180,0.13)' : 'rgba(0,255,180,0.04)';
       ctx.fillRect(BPX + 8 + tabW, tabY, tabW, tabH);
       ctx.strokeStyle = this._buildPanelTab === 'deploy' ? THEME.accent : THEME.border;
       ctx.strokeRect(BPX + 8 + tabW, tabY, tabW, tabH);
@@ -1383,15 +1383,15 @@ export class PlanetGlobeScene {
 
         // Tło i ramka
         const isHovered = hoveredBuilding === b;
-        ctx.fillStyle   = blocked ? 'rgba(30,8,8,0.85)' : isHovered ? 'rgba(20,36,60,0.95)' : (affordable ? 'rgba(13,26,46,0.90)' : 'rgba(8,14,24,0.90)');
+        ctx.fillStyle   = blocked ? 'rgba(5,2,2,0.85)' : isHovered ? 'rgba(0,255,180,0.05)' : (affordable ? 'rgba(0,255,180,0.03)' : 'rgba(2,4,5,0.90)');
         ctx.fillRect(BPX + 8, yy, RIGHT_W - 16, rowH);
-        ctx.strokeStyle = blocked ? '#441818' : isHovered ? '#4488cc' : (affordable ? '#2a5080' : '#111828');
+        ctx.strokeStyle = blocked ? 'rgba(255,51,68,0.15)' : isHovered ? 'rgba(0,255,180,0.25)' : (affordable ? 'rgba(0,255,180,0.10)' : 'rgba(0,255,180,0.04)');
         ctx.lineWidth   = 1;
         ctx.strokeRect(BPX + 8, yy, RIGHT_W - 16, rowH);
 
         // Nazwa budynku + koszt energii
         ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = blocked ? '#663333' : (affordable ? (CAT_COLORS[b.category] || '#fff') : '#2a3050');
+        ctx.fillStyle = blocked ? 'rgba(255,51,68,0.5)' : (affordable ? (CAT_COLORS[b.category] || '#fff') : 'rgba(160,200,190,0.25)');
         let nameStr = `${b.icon} ${b.namePL}`;
         if (b.energyCost > 0) nameStr += `  ⚡−${b.energyCost}`;
         ctx.fillText(nameStr, BPX + 14, yy + 12);
@@ -1399,13 +1399,13 @@ export class PlanetGlobeScene {
         // Koszt surowców
         const costStr = Object.entries(b.cost || {}).map(([k, v]) => `${RESOURCE_ICONS?.[k] ?? k}${v}`).join(' ');
         ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = blocked ? '#442222' : (affordable ? THEME.borderLight : '#181e28');
+        ctx.fillStyle = blocked ? 'rgba(255,51,68,0.25)' : (affordable ? THEME.borderLight : 'rgba(160,200,190,0.15)');
         ctx.fillText(costStr, BPX + 14, yy + 23);
 
         const popCost = b.popCost ?? 0.25;
         if (popCost > 0) {
           const hasFreePops = cSys && cSys.freePops >= popCost;
-          ctx.fillStyle = blocked ? '#442222' : (hasFreePops ? '#448866' : '#884422');
+          ctx.fillStyle = blocked ? 'rgba(255,51,68,0.25)' : (hasFreePops ? '#00ee88' : '#ff3344');
           ctx.fillText(`${popCost}👤`, BPX + RIGHT_W - 48, yy + 23);
         }
 
@@ -1416,14 +1416,14 @@ export class PlanetGlobeScene {
             const name = COMMODITY_SHORT[k] ?? k;
             return `${v}×${icon}${name}`;
           }).join(' ');
-          ctx.fillStyle = affordable ? '#6a5a40' : '#181e28';
+          ctx.fillStyle = affordable ? 'rgba(160,200,190,0.45)' : 'rgba(160,200,190,0.15)';
           ctx.fillText(comStr, BPX + 14, yy + 33);
         }
 
         // Powód blokady
         if (blocked) {
           ctx.font      = '7px monospace';
-          ctx.fillStyle = '#884444';
+          ctx.fillStyle = 'rgba(255,51,68,0.35)';
           ctx.fillText(`❌ ${reason}`, BPX + 14, yy + 35);
         }
 
@@ -1446,7 +1446,7 @@ export class PlanetGlobeScene {
       if (maxScroll > 0) {
         const barH = Math.max(20, viewH * (viewH / (totalContentH + 12)));
         const barY = clipTop + (this._buildPanelScrollY / maxScroll) * (viewH - barH);
-        ctx.fillStyle = 'rgba(136,255,204,0.25)';
+        ctx.fillStyle = 'rgba(0,255,180,0.25)';
         ctx.fillRect(BPX + RIGHT_W - 6, barY, 4, barH);
       }
     }
@@ -1512,9 +1512,9 @@ export class PlanetGlobeScene {
         }
 
         const rowH = 24;
-        ctx.fillStyle = canDeploy ? 'rgba(13,36,26,0.90)' : 'rgba(20,14,14,0.85)';
+        ctx.fillStyle = canDeploy ? 'rgba(0,255,180,0.07)' : 'rgba(15,5,5,0.85)';
         ctx.fillRect(BPX + 8, yy, RIGHT_W - 16, rowH);
-        ctx.strokeStyle = canDeploy ? '#2a6040' : '#331818';
+        ctx.strokeStyle = canDeploy ? 'rgba(0,255,180,0.18)' : '#331818';
         ctx.strokeRect(BPX + 8, yy, RIGHT_W - 16, rowH);
 
         // Ikona + nazwa + ilość
@@ -1529,7 +1529,7 @@ export class PlanetGlobeScene {
           const btnY = yy + 2;
           const btnH = rowH - 4;
 
-          ctx.fillStyle = 'rgba(40,80,60,0.9)';
+          ctx.fillStyle = 'rgba(0,255,180,0.13)';
           ctx.fillRect(btnX, btnY, btnW, btnH);
           ctx.strokeStyle = THEME.successDim;
           ctx.strokeRect(btnX, btnY, btnW, btnH);
@@ -1641,7 +1641,7 @@ export class PlanetGlobeScene {
     }
 
     if (building.isMine) {
-      lines.push({ text: '⛏ Wydobycie zależy od złóż', color: '#88aacc' });
+      lines.push({ text: '⛏ Wydobycie zależy od złóż', color: '#aac8c0' });
     }
 
     // Rozmiar tooltip
@@ -1659,9 +1659,9 @@ export class PlanetGlobeScene {
     if (ttY + ttH > LH - BOTTOM_BAR_H) ttY = LH - BOTTOM_BAR_H - ttH;
 
     // Rysuj tło
-    ctx.fillStyle = 'rgba(6,10,20,0.95)';
+    ctx.fillStyle = 'rgba(2,4,5,0.95)';
     ctx.fillRect(ttX, ttY, ttW, ttH);
-    ctx.strokeStyle = '#3a5a80';
+    ctx.strokeStyle = 'rgba(0,255,180,0.40)';
     ctx.lineWidth = 1;
     ctx.strokeRect(ttX, ttY, ttW, ttH);
 

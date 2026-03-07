@@ -16,7 +16,7 @@ export function showRenameModal(currentName) {
     const overlay = document.createElement('div');
     Object.assign(overlay.style, {
       position: 'fixed', inset: '0',
-      background: 'rgba(0,0,0,0.6)',
+      background: 'rgba(2,4,5,0.75)',
       zIndex: '100',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     });

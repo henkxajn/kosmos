@@ -531,7 +531,7 @@ export class FleetTabPanel {
     for (const fb of FILTER_BTNS) {
       const active = this._filter === fb.id;
       const tw = ctx.measureText(fb.label).width + 8;
-      ctx.fillStyle = active ? 'rgba(136,255,204,0.15)' : 'rgba(20,30,40,0.6)';
+      ctx.fillStyle = active ? 'rgba(0,255,180,0.15)' : 'rgba(20,30,40,0.6)';
       ctx.fillRect(fx, cy - 4, tw, 16);
       ctx.strokeStyle = active ? THEME.borderActive : THEME.border;
       ctx.lineWidth = 1;
@@ -614,7 +614,7 @@ export class FleetTabPanel {
 
       // Tło wiersza
       if (isSelected) {
-        ctx.fillStyle = 'rgba(136,255,204,0.1)';
+        ctx.fillStyle = 'rgba(0,255,180,0.1)';
         ctx.fillRect(x + 1, ly, w - 2, ROW_H);
         ctx.fillStyle = THEME.borderActive;
         ctx.fillRect(x + 1, ly, 2, ROW_H);
@@ -876,7 +876,7 @@ export class FleetTabPanel {
       const on = this._mapToggles[tid];
       const tw = ctx.measureText(label).width + 10;
       tx -= tw + 3;
-      ctx.fillStyle = on ? 'rgba(136,255,204,0.15)' : 'rgba(20,30,40,0.6)';
+      ctx.fillStyle = on ? 'rgba(0,255,180,0.15)' : 'rgba(20,30,40,0.6)';
       ctx.fillRect(tx, cy, tw, 16);
       ctx.strokeStyle = on ? THEME.borderActive : C.border;
       ctx.lineWidth = 1;
@@ -1014,7 +1014,7 @@ export class FleetTabPanel {
         if (target) {
           const tx = target.physics?.x ?? 0; const ty = target.physics?.y ?? 0;
           const { sx: tsx, sy: tsy } = toScreen(tx, ty);
-          ctx.strokeStyle = v.mission?.phase === 'returning' ? 'rgba(136,255,204,0.4)' : 'rgba(255,180,60,0.4)';
+          ctx.strokeStyle = v.mission?.phase === 'returning' ? 'rgba(0,255,180,0.4)' : 'rgba(255,180,60,0.4)';
           ctx.lineWidth = 1;
           ctx.setLineDash([4, 3]);
           ctx.beginPath(); ctx.moveTo(vsx, vsy); ctx.lineTo(tsx, tsy); ctx.stroke();
@@ -1040,7 +1040,7 @@ export class FleetTabPanel {
           : (vessel.position?.y ?? 0);
         const { sx, sy } = toScreen(vx, vy);
         const rPx = rangeAU * scale;
-        ctx.strokeStyle = 'rgba(136,255,204,0.25)';
+        ctx.strokeStyle = 'rgba(0,255,180,0.25)';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
         ctx.beginPath(); ctx.arc(sx, sy, rPx, 0, Math.PI * 2); ctx.stroke();

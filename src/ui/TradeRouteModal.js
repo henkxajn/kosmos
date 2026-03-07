@@ -25,7 +25,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
     const overlay = document.createElement('div');
     overlay.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0,0,0,0.6); z-index: 100;
+      background: rgba(2,4,5,0.75); z-index: 100;
       display: flex; justify-content: center; align-items: center;
     `;
 
@@ -35,7 +35,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
       border-radius: 6px; padding: 20px; width: 420px; max-height: 80vh;
       overflow-y: auto;
       font-family: ${THEME.fontFamily}; color: ${THEME.textPrimary};
-      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+      box-shadow: 0 0 30px rgba(2,4,5,0.88);
     `;
 
     // Tytuł

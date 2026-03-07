@@ -61,9 +61,9 @@ const FILTER_BTNS = [
 // ── Styl akcji wg typu ──────────────────────────────────────────────────────
 function _actionStyle(actionId, ok) {
   if (!ok) return { bg: THEME.bgTertiary, fg: THEME.textDim, border: THEME.border };
-  if (actionId === 'return_home') return { bg: 'rgba(255,68,68,0.12)', fg: THEME.danger, border: THEME.dangerDim };
-  if (actionId === 'colonize')    return { bg: 'rgba(204,136,255,0.12)', fg: THEME.purple, border: THEME.purple };
-  return { bg: 'rgba(136,255,204,0.06)', fg: THEME.accent, border: THEME.borderActive };
+  if (actionId === 'return_home') return { bg: 'rgba(255,51,68,0.12)', fg: THEME.danger, border: THEME.dangerDim };
+  if (actionId === 'colonize')    return { bg: 'rgba(170,136,255,0.12)', fg: THEME.purple, border: THEME.purple };
+  return { bg: 'rgba(0,255,180,0.06)', fg: THEME.accent, border: THEME.borderActive };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -137,7 +137,7 @@ export class FleetManagerOverlay {
     const centerW = ow - LEFT_W - RIGHT_W;
 
     // ── Tło ──────────────────────────────────────────────────
-    ctx.fillStyle = 'rgba(3,10,20,0.97)';
+    ctx.fillStyle = 'rgba(2,4,5,0.97)';
     ctx.fillRect(ox, oy, ow, oh);
 
     // Obramowanie
@@ -509,7 +509,7 @@ export class FleetManagerOverlay {
       const tw = ctx.measureText(btn.label).width + 12;
       const bw = Math.max(tw, 28);
 
-      ctx.fillStyle = active ? 'rgba(136,255,204,0.12)' : THEME.bgTertiary;
+      ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : THEME.bgTertiary;
       ctx.fillRect(fx, filterY, bw, 20);
       ctx.strokeStyle = active ? THEME.accent : THEME.border;
       ctx.lineWidth = 1;
@@ -543,13 +543,13 @@ export class FleetManagerOverlay {
 
       // Tło wiersza
       if (selected) {
-        ctx.fillStyle = 'rgba(136,255,204,0.06)';
+        ctx.fillStyle = 'rgba(0,255,180,0.06)';
         ctx.fillRect(x, ry, w, rowH);
         // Border-left accent
         ctx.fillStyle = THEME.accent;
         ctx.fillRect(x, ry, 2, rowH);
       } else if (hovered) {
-        ctx.fillStyle = 'rgba(136,255,204,0.03)';
+        ctx.fillStyle = 'rgba(0,255,180,0.03)';
         ctx.fillRect(x, ry, w, rowH);
       }
 
@@ -602,7 +602,7 @@ export class FleetManagerOverlay {
       ctx.textAlign = 'left';
 
       // Separator
-      ctx.strokeStyle = 'rgba(26,48,80,0.4)';
+      ctx.strokeStyle = 'rgba(0,255,180,0.07)';
       ctx.beginPath(); ctx.moveTo(x + pad, ry + rowH - 1); ctx.lineTo(x + w - pad, ry + rowH - 1); ctx.stroke();
 
       this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rowH, type: 'vessel', data: { vesselId: vessel.id } });
@@ -620,7 +620,7 @@ export class FleetManagerOverlay {
       const totalContentH = vessels.length * rowH;
       const thumbH = Math.max(20, (listH / totalContentH) * listH);
       const thumbY = listY + (this._scrollOffset / totalContentH) * listH;
-      ctx.fillStyle = 'rgba(136,255,204,0.15)';
+      ctx.fillStyle = 'rgba(0,255,180,0.15)';
       ctx.fillRect(x + w - 4, thumbY, 3, thumbH);
     }
   }
@@ -667,7 +667,7 @@ export class FleetManagerOverlay {
       const active = this._mapToggles[key];
       const tw = 50;
       tbx -= tw + 4;
-      ctx.fillStyle = active ? 'rgba(136,255,204,0.12)' : 'transparent';
+      ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : 'transparent';
       ctx.fillRect(tbx, toggleY, tw, 18);
       ctx.strokeStyle = active ? THEME.accent : THEME.border;
       ctx.lineWidth = 1;
@@ -691,7 +691,7 @@ export class FleetManagerOverlay {
     const mapRadius = baseRadius * this._mapZoom;
 
     // Tło mapy — nieprzezroczyste
-    ctx.fillStyle = 'rgba(3,10,20,0.97)';
+    ctx.fillStyle = 'rgba(2,4,5,0.97)';
     ctx.fillRect(x + 1, mapY, w - 2, mapH - 1);
 
     // Clip do obszaru mapy
@@ -749,7 +749,7 @@ export class FleetManagerOverlay {
     }
 
     // ── Orbity planet ───────────────────────────────────────
-    ctx.strokeStyle = 'rgba(42,64,96,0.3)';
+    ctx.strokeStyle = 'rgba(0,255,180,0.055)';
     ctx.lineWidth = 1;
     for (const p of planets) {
       const orbitR = (p.orbital?.a ?? 0) * auToPx;
@@ -842,12 +842,12 @@ export class FleetManagerOverlay {
         const isSel = vessel.id === this._selectedVesselId;
 
         // Kolor wg typu misji
-        let routeColor = 'rgba(255,170,68,0.4)';
+        let routeColor = 'rgba(255,204,68,0.4)';
         if (m.type === 'recon' || m.type === 'survey' || m.type === 'deep_scan')
-          routeColor = 'rgba(68,136,255,0.5)';
-        else if (m.type === 'colony') routeColor = 'rgba(204,136,255,0.5)';
-        else if (m.type === 'transport') routeColor = 'rgba(255,170,68,0.5)';
-        else if (m.type === 'scientific') routeColor = 'rgba(68,255,136,0.5)';
+          routeColor = 'rgba(0,204,255,0.5)';
+        else if (m.type === 'colony') routeColor = 'rgba(170,136,255,0.5)';
+        else if (m.type === 'transport') routeColor = 'rgba(255,204,68,0.5)';
+        else if (m.type === 'scientific') routeColor = 'rgba(0,238,136,0.5)';
         if (isSel) routeColor = THEME.accent;
 
         ctx.setLineDash([4, 4]);
@@ -890,7 +890,7 @@ export class FleetManagerOverlay {
         const rangeR = range * auToPx;
         const svx = toSx(selV.position.x), svy = toSy(selV.position.y);
         ctx.setLineDash([6, 3]);
-        ctx.strokeStyle = 'rgba(136,255,204,0.3)';
+        ctx.strokeStyle = 'rgba(0,255,180,0.3)';
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(svx, svy, rangeR, 0, Math.PI * 2); ctx.stroke();
         ctx.setLineDash([]);
@@ -935,7 +935,7 @@ export class FleetManagerOverlay {
     // ── Legenda (poza clip) ─────────────────────────────────
     const legX = x + w - 140;
     const legY2 = mapY + 8;
-    ctx.fillStyle = 'rgba(3,10,20,0.88)';
+    ctx.fillStyle = 'rgba(2,4,5,0.88)';
     ctx.fillRect(legX, legY2, 132, 90);
     ctx.strokeStyle = THEME.border;
     ctx.lineWidth = 1;
@@ -1040,7 +1040,7 @@ export class FleetManagerOverlay {
     if (ttY < areaY + 4) ttY = areaY + 4;
 
     // Tło
-    ctx.fillStyle = 'rgba(4,12,24,0.95)';
+    ctx.fillStyle = 'rgba(2,4,5,0.95)';
     ctx.fillRect(ttX, ttY, ttW, ttH);
     ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
@@ -1175,7 +1175,7 @@ export class FleetManagerOverlay {
       const cargoUsed = vessel.cargoUsed ?? 0;
       const cargoBtnW = w - pad * 2;
       const cargoBtnH = 24;
-      ctx.fillStyle = 'rgba(255,170,68,0.08)';
+      ctx.fillStyle = 'rgba(255,204,68,0.08)';
       ctx.fillRect(x + pad, cy, cargoBtnW, cargoBtnH);
       ctx.strokeStyle = THEME.warning;
       ctx.lineWidth = 1;
@@ -1421,7 +1421,7 @@ export class FleetManagerOverlay {
       }
 
       // Separator
-      ctx.strokeStyle = 'rgba(26,48,80,0.3)';
+      ctx.strokeStyle = 'rgba(0,255,180,0.07)';
       ctx.beginPath(); ctx.moveTo(x + pad, ry + rowH - 1); ctx.lineTo(x + w - pad, ry + rowH - 1); ctx.stroke();
 
       ry += rowH;
@@ -1511,7 +1511,7 @@ export class FleetManagerOverlay {
     // Przycisk ▶ WYŚLIJ MISJĘ
     const sendW = w - pad * 2;
     const sendH = 30;
-    ctx.fillStyle = 'rgba(136,255,204,0.12)';
+    ctx.fillStyle = 'rgba(0,255,180,0.12)';
     ctx.fillRect(x + pad, cy, sendW, sendH);
     ctx.strokeStyle = THEME.accent;
     ctx.lineWidth = 1;

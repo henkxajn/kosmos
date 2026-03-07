@@ -56,7 +56,7 @@ export class EconomyOverlay extends BaseOverlay {
     const centerW = ow - LEFT_W - RIGHT_W;
 
     // Tło
-    ctx.fillStyle = 'rgba(3,10,20,0.97)';
+    ctx.fillStyle = 'rgba(2,4,5,0.97)';
     ctx.fillRect(ox, oy, ow, oh);
     ctx.strokeStyle = THEME.border;
     ctx.lineWidth = 1;
@@ -208,7 +208,7 @@ export class EconomyOverlay extends BaseOverlay {
     const pad = 14;
 
     // Nagłówek kategorii
-    ctx.fillStyle = 'rgba(10,22,40,0.8)';
+    ctx.fillStyle = 'rgba(0,255,180,0.07)';
     ctx.fillRect(x, ry, w, CAT_H);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
@@ -356,7 +356,7 @@ export class EconomyOverlay extends BaseOverlay {
 
   _drawColonyFilter(ctx, x, y, w, h, colonies) {
     const pad = 10;
-    ctx.fillStyle = 'rgba(10,22,40,0.6)';
+    ctx.fillStyle = 'rgba(0,255,180,0.05)';
     ctx.fillRect(x, y, w, h);
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -365,7 +365,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Chip: GLOBALNY
     const globalActive = this._selectedColonyId === null;
     const glW = 72;
-    ctx.fillStyle = globalActive ? 'rgba(136,255,204,0.12)' : 'rgba(255,255,255,0.03)';
+    ctx.fillStyle = globalActive ? 'rgba(0,255,180,0.12)' : 'rgba(0,255,180,0.04)';
     ctx.fillRect(cx, y + 4, glW, h - 8);
     ctx.strokeStyle = globalActive ? THEME.accent : THEME.border;
     ctx.lineWidth = 1;
@@ -387,7 +387,7 @@ export class EconomyOverlay extends BaseOverlay {
       if (cx + cw > x + w - pad) break; // nie mieści się
 
       const active = this._selectedColonyId === col.planetId;
-      ctx.fillStyle = active ? 'rgba(136,255,204,0.12)' : 'rgba(255,255,255,0.03)';
+      ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : 'rgba(0,255,180,0.04)';
       ctx.fillRect(cx, y + 4, cw, h - 8);
       ctx.strokeStyle = active ? THEME.accent : THEME.border;
       ctx.strokeRect(cx, y + 4, cw, h - 8);
@@ -821,27 +821,27 @@ export class EconomyOverlay extends BaseOverlay {
     let bgColor, borderColor, textColor;
     switch (style) {
       case 'primary':
-        bgColor = isHover ? 'rgba(136,255,204,0.15)' : 'rgba(136,255,204,0.05)';
+        bgColor = isHover ? 'rgba(0,255,180,0.15)' : 'rgba(0,255,180,0.05)';
         borderColor = THEME.accent;
         textColor = THEME.accent;
         break;
       case 'danger':
-        bgColor = isHover ? 'rgba(255,68,68,0.15)' : 'rgba(255,68,68,0.05)';
+        bgColor = isHover ? 'rgba(255,51,68,0.15)' : 'rgba(255,51,68,0.05)';
         borderColor = THEME.danger;
         textColor = THEME.danger;
         break;
       case 'unique':
-        bgColor = isHover ? 'rgba(100,200,255,0.15)' : 'rgba(100,200,255,0.05)';
-        borderColor = '#64c8ff';
-        textColor = '#64c8ff';
+        bgColor = isHover ? 'rgba(0,204,255,0.15)' : 'rgba(0,204,255,0.05)';
+        borderColor = '#00ccff';
+        textColor = '#00ccff';
         break;
       case 'disabled':
         bgColor = 'transparent';
-        borderColor = 'rgba(255,255,255,0.1)';
-        textColor = 'rgba(255,255,255,0.2)';
+        borderColor = 'rgba(0,255,180,0.07)';
+        textColor = 'rgba(160,200,190,0.25)';
         break;
       default: // secondary
-        bgColor = isHover ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.02)';
+        bgColor = isHover ? 'rgba(0,255,180,0.07)' : 'rgba(0,255,180,0.03)';
         borderColor = THEME.border;
         textColor = THEME.textSecondary;
     }
@@ -1195,8 +1195,8 @@ export class EconomyOverlay extends BaseOverlay {
 
       for (const alert of alerts) {
         const isCrit = alert.level === 'critical';
-        const borderC = isCrit ? 'rgba(255,68,68,0.2)' : 'rgba(255,170,68,0.2)';
-        const bgC = isCrit ? 'rgba(255,68,68,0.04)' : 'rgba(255,170,68,0.04)';
+        const borderC = isCrit ? 'rgba(255,51,68,0.2)' : 'rgba(255,204,68,0.2)';
+        const bgC = isCrit ? 'rgba(255,51,68,0.04)' : 'rgba(255,204,68,0.04)';
         const textC = isCrit ? THEME.danger : THEME.warning;
 
         ctx.fillStyle = bgC;

@@ -68,22 +68,22 @@ export class TitleScene {
         rgba(0,0,0,0.4) 60%,rgba(0,0,0,0.85) 100%);pointer-events:none;"></div>
 
       <div style="position:absolute;top:-20%;left:20%;width:60%;height:50%;
-        background:radial-gradient(ellipse,rgba(255,180,100,0.025) 0%,transparent 70%);
+        background:radial-gradient(ellipse,rgba(0,255,180,0.015) 0%,transparent 70%);
         pointer-events:none;animation:kosmos-breathe 8s ease-in-out infinite;"></div>
 
       <div style="position:absolute;top:30%;left:50%;width:40%;height:40%;
-        background:radial-gradient(ellipse,rgba(100,140,220,0.02) 0%,transparent 60%);
+        background:radial-gradient(ellipse,rgba(0,200,255,0.015) 0%,transparent 60%);
         pointer-events:none;"></div>
 
       <div style="position:absolute;top:20%;left:50%;width:1px;height:30%;
         transform:translateX(-50%);pointer-events:none;
-        background:linear-gradient(180deg,transparent,rgba(240,200,140,0.03) 30%,
-        rgba(240,200,140,0.05) 50%,rgba(240,200,140,0.03) 70%,transparent);"></div>
+        background:linear-gradient(180deg,transparent,rgba(0,255,180,0.03) 30%,
+        rgba(0,255,180,0.05) 50%,rgba(0,255,180,0.03) 70%,transparent);"></div>
 
       <div style="position:absolute;bottom:44%;left:0;width:100%;height:1px;
         pointer-events:none;
-        background:linear-gradient(90deg,transparent 10%,rgba(200,160,100,0.06) 30%,
-        rgba(255,200,140,0.12) 50%,rgba(200,160,100,0.06) 70%,transparent 90%);"></div>
+        background:linear-gradient(90deg,transparent 10%,rgba(0,255,180,0.06) 30%,
+        rgba(0,255,180,0.12) 50%,rgba(0,255,180,0.06) 70%,transparent 90%);"></div>
     `);
 
     // Overlay z tytułem
@@ -162,28 +162,28 @@ export class TitleScene {
           font-family:'Cinzel',serif; font-weight:400;
           font-size:clamp(50px,11vw,140px); letter-spacing:42px; text-indent:42px;
           color:transparent; line-height:1; text-transform:uppercase;
-          background:linear-gradient(180deg,rgba(255,245,230,0.95),rgba(240,210,170,0.85) 40%,rgba(200,160,120,0.55) 70%,rgba(140,100,70,0.2));
+          background:linear-gradient(180deg,rgba(200,255,230,0.95),rgba(100,255,200,0.85) 40%,rgba(0,180,130,0.55) 70%,rgba(0,100,70,0.2));
           -webkit-background-clip:text; background-clip:text;
           animation: kosmos-title 3s ease-out forwards; opacity:0;
         }
         .kosmos-subtitle {
           font-family:'Outfit',sans-serif; font-weight:200;
           font-size:clamp(10px,1.6vw,16px); letter-spacing:14px; text-indent:14px;
-          text-transform:uppercase; color:rgba(200,175,140,0.35);
+          text-transform:uppercase; color:rgba(160,200,190,0.35);
           animation: kosmos-sub 2s ease-out 2s forwards; opacity:0;
           margin-top:12px;
         }
         .kosmos-divider {
           width:200px; height:1px; margin:20px auto 0;
-          background:linear-gradient(90deg,transparent,rgba(220,180,130,0.25),transparent);
+          background:linear-gradient(90deg,transparent,rgba(0,255,180,0.25),transparent);
           animation: kosmos-line 1.5s ease-out 2.5s forwards; opacity:0;
           position:relative;
         }
         .kosmos-divider::after {
           content:''; position:absolute; top:-2px; left:50%; transform:translateX(-50%);
           width:5px; height:5px; border-radius:50%;
-          background:rgba(255,200,120,0.2);
-          box-shadow:0 0 10px rgba(255,200,120,0.15);
+          background:rgba(0,255,180,0.2);
+          box-shadow:0 0 10px rgba(0,255,180,0.15);
         }
         .kosmos-buttons {
           position:absolute; top:60%; left:50%; transform:translateX(-50%);
@@ -193,29 +193,29 @@ export class TitleScene {
         .kosmos-btn {
           font-family:'Outfit',sans-serif; font-weight:400;
           font-size:13px; letter-spacing:6px; text-transform:uppercase;
-          color:rgba(200,175,140,0.5); background:none; border:none;
+          color:rgba(160,200,190,0.5); background:none; border:none;
           padding:10px 30px; cursor:pointer; transition:all 0.4s;
-          border:1px solid rgba(200,175,140,0.08); border-radius:2px;
+          border:1px solid rgba(0,255,180,0.08); border-radius:0;
           pointer-events:all;
         }
         .kosmos-btn:hover {
-          color:rgba(255,245,230,0.9); border-color:rgba(255,220,160,0.2);
-          background:rgba(255,255,255,0.03);
-          box-shadow:0 0 30px rgba(255,200,120,0.05);
+          color:rgba(200,255,230,0.9); border-color:rgba(0,255,180,0.2);
+          background:rgba(0,255,180,0.03);
+          box-shadow:0 0 30px rgba(0,255,180,0.05);
           letter-spacing:8px;
         }
-        .kosmos-btn.primary { color:rgba(230,200,160,0.7); border-color:rgba(220,180,130,0.15); }
-        .kosmos-btn.primary:hover { color:#fff; border-color:rgba(255,220,160,0.3); }
+        .kosmos-btn.primary { color:rgba(160,230,200,0.7); border-color:rgba(0,255,180,0.15); }
+        .kosmos-btn.primary:hover { color:#fff; border-color:rgba(0,255,180,0.3); }
         .kosmos-save-info {
           font-family:'Outfit',sans-serif; font-weight:300;
           font-size:11px; letter-spacing:4px; text-transform:uppercase;
-          color:rgba(200,175,140,0.3); margin-bottom:4px;
+          color:rgba(160,200,190,0.3); margin-bottom:4px;
         }
         .kosmos-footer {
           position:fixed; bottom:5%; left:0; right:0; text-align:center;
           font-family:'Outfit',sans-serif; font-weight:200;
           font-size:10px; letter-spacing:5px; text-transform:uppercase;
-          color:rgba(180,160,130,0.15);
+          color:rgba(160,200,190,0.15);
           animation: kosmos-fade 2s ease-out 5s forwards; opacity:0;
           pointer-events:none;
         }
@@ -389,8 +389,8 @@ export class TitleScene {
         brightness: 0.2 + depth * 0.6 + rand() * 0.2,
         twinkleSpeed: 0.5 + rand() * 3,
         twinkleOffset: rand() * Math.PI * 2,
-        // 12% kolorowych, więcej ciepłych
-        hue: rand() < 0.12 ? (rand() < 0.4 ? 30 + rand() * 20 : 210 + rand() * 30) : 0,
+        // 12% kolorowych, więcej chłodnych
+        hue: rand() < 0.12 ? (rand() < 0.4 ? 160 + rand() * 30 : 200 + rand() * 30) : 0,
         saturation: rand() < 0.12 ? 30 + rand() * 40 : 0,
       });
     }
@@ -404,8 +404,8 @@ export class TitleScene {
       this._dust.push({
         x: 0.1 + rand() * 0.8, y: 0.15 + rand() * 0.7,
         radius: 0.05 + rand() * 0.15,
-        // Pół amber, pół niebieskie
-        hue: rand() < 0.5 ? 25 + rand() * 25 : 220 + rand() * 30,
+        // Pół teal, pół blue-teal
+        hue: rand() < 0.5 ? 160 + rand() * 20 : 190 + rand() * 30,
         alpha: 0.008 + rand() * 0.012,
         drift: (rand() - 0.5) * 0.00002,
       });
@@ -419,8 +419,8 @@ export class TitleScene {
     const W = this._canvas.width;
     const H = this._canvas.height;
 
-    // Cieplejsze tło
-    ctx.fillStyle = '#030208';
+    // Tło — teal dark
+    ctx.fillStyle = '#020405';
     ctx.fillRect(0, 0, W, H);
 
     // Dust clouds
@@ -474,7 +474,7 @@ export class TitleScene {
       // Orbit ring
       ctx.beginPath();
       ctx.ellipse(scx, scy, rx, ry, 0, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(180,160,130,${0.02 + i * 0.005})`;
+      ctx.strokeStyle = `rgba(0,255,180,${0.02 + i * 0.005})`;
       ctx.lineWidth = 0.5;
       ctx.stroke();
 
@@ -485,7 +485,7 @@ export class TitleScene {
       const ps = 1.2 + i * 0.4;
       ctx.beginPath();
       ctx.arc(px, py, ps, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(200,190,170,${0.2 + i * 0.08})`;
+      ctx.fillStyle = `rgba(160,200,190,${0.2 + i * 0.08})`;
       ctx.fill();
     }
 
@@ -513,7 +513,7 @@ export class TitleScene {
       else ctx.fillRect(sx - s/2, sy - s/2, s, s);
     }
 
-    // Shooting star — ciepłe kolory
+    // Shooting star — chłodne kolory
     if (time > this._nextShootTime && !this._shootingStar) {
       this._shootingStar = {
         x: 0.1 + Math.random() * 0.6, y: 0.05 + Math.random() * 0.3,
@@ -537,12 +537,12 @@ export class TitleScene {
         const ty = sy - Math.sin(s.angle) * tailLen;
         const grad = ctx.createLinearGradient(tx, ty, sx, sy);
         grad.addColorStop(0, 'rgba(255,255,255,0)');
-        grad.addColorStop(0.7, `rgba(255,220,160,${0.15 * fade * s.brightness})`);
-        grad.addColorStop(1, `rgba(255,245,220,${0.6 * fade * s.brightness})`);
+        grad.addColorStop(0.7, `rgba(0,255,180,${0.15 * fade * s.brightness})`);
+        grad.addColorStop(1, `rgba(160,255,220,${0.6 * fade * s.brightness})`);
         ctx.strokeStyle = grad; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(sx, sy); ctx.stroke();
         ctx.beginPath(); ctx.arc(sx, sy, 2, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,245,220,${0.5 * fade * s.brightness})`; ctx.fill();
+        ctx.fillStyle = `rgba(160,255,220,${0.5 * fade * s.brightness})`; ctx.fill();
       }
     }
   }

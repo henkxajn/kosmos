@@ -302,7 +302,7 @@ export class ColonyOverlay extends BaseOverlay {
     const centerW = ow - LEFT_W - RIGHT_W;
 
     // Tło
-    ctx.fillStyle = 'rgba(3,10,20,0.97)';
+    ctx.fillStyle = 'rgba(2,4,5,0.97)';
     ctx.fillRect(ox, oy, ow, oh);
     ctx.strokeStyle = THEME.border;
     ctx.lineWidth = 1;
@@ -341,7 +341,7 @@ export class ColonyOverlay extends BaseOverlay {
       const tw = ctx.measureText(this._flashMsg).width;
       const fx = ox + ow / 2 - tw / 2 - 10;
       const fy = oy + oh - 40;
-      ctx.fillStyle = 'rgba(120,30,30,0.92)';
+      ctx.fillStyle = 'rgba(40,10,10,0.92)';
       ctx.fillRect(fx, fy, tw + 20, 24);
       ctx.strokeStyle = THEME.danger;
       ctx.strokeRect(fx, fy, tw + 20, 24);
@@ -434,12 +434,12 @@ export class ColonyOverlay extends BaseOverlay {
 
       // Tło wiersza
       if (isSel) {
-        ctx.fillStyle = 'rgba(136,255,204,0.05)';
+        ctx.fillStyle = 'rgba(0,255,180,0.05)';
         ctx.fillRect(x, ry, w, ROW_H);
         ctx.fillStyle = THEME.accent;
         ctx.fillRect(x, ry, 2, ROW_H);
       } else if (isHov) {
-        ctx.fillStyle = 'rgba(255,255,255,0.015)';
+        ctx.fillStyle = 'rgba(0,255,180,0.03)';
         ctx.fillRect(x, ry, w, ROW_H);
       }
 
@@ -541,7 +541,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (this._buildMode && this._pendingBuildingId) {
       const pB = BUILDINGS[this._pendingBuildingId];
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = 'rgba(3,10,20,0.85)';
+      ctx.fillStyle = 'rgba(2,4,5,0.85)';
       ctx.fillRect(mapX, mapY + mapH - 28, mapW, 28);
       ctx.fillStyle = THEME.warning;
       ctx.fillText(`🏗 Tryb budowy: ${pB?.icon} ${pB?.namePL} — Kliknij hex · Esc anuluj`, mapX + 10, mapY + mapH - 10);
@@ -624,7 +624,7 @@ export class ColonyOverlay extends BaseOverlay {
 
       // Nagłówek kategorii
       if (ly + 22 > startY - 40) {
-        ctx.fillStyle = 'rgba(255,255,255,0.02)';
+        ctx.fillStyle = 'rgba(0,255,180,0.03)';
         ctx.fillRect(x, ly, w, 22);
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = cat.color;
@@ -651,7 +651,7 @@ export class ColonyOverlay extends BaseOverlay {
 
         // Obramowanie
         if (locked) ctx.strokeStyle = THEME.border;
-        else if (!canAfford) ctx.strokeStyle = 'rgba(255,68,68,0.3)';
+        else if (!canAfford) ctx.strokeStyle = 'rgba(255,51,68,0.3)';
         else ctx.strokeStyle = THEME.borderLight;
         ctx.lineWidth = 1;
         ctx.strokeRect(x + 4, ly, w - 8, cardH);

@@ -99,13 +99,13 @@ export class PlanetGlobeRenderer {
 
     // Scena
     this._scene = new THREE.Scene();
-    this._scene.background = new THREE.Color(0x060810);
+    this._scene.background = new THREE.Color(0x020405);
 
     // Kamera
     this._camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100);
 
     // Oświetlenie — dostosowane do PBR
-    this._scene.add(new THREE.AmbientLight(0x334466, 0.5));
+    this._scene.add(new THREE.AmbientLight(0x1a3330, 0.5));
     const dirLight = new THREE.DirectionalLight(0xffeedd, 1.5);
     dirLight.position.set(3, 2, 4);
     this._scene.add(dirLight);

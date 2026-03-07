@@ -43,7 +43,7 @@ function _createOverlay() {
   const overlay = document.createElement('div');
   Object.assign(overlay.style, {
     position: 'fixed', inset: '0',
-    background: 'rgba(0,0,0,0.75)',
+    background: 'rgba(2,4,5,0.85)',
     zIndex: '100',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   });

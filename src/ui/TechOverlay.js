@@ -49,7 +49,7 @@ export class TechOverlay extends BaseOverlay {
     const centerW = ow - LEFT_W - RIGHT_W;
 
     // Tło
-    ctx.fillStyle = 'rgba(3,10,20,0.97)';
+    ctx.fillStyle = 'rgba(2,4,5,0.97)';
     ctx.fillRect(ox, oy, ow, oh);
     ctx.strokeStyle = THEME.border;
     ctx.lineWidth = 1;

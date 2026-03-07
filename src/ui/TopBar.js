@@ -13,7 +13,7 @@ import EventBus            from '../core/EventBus.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
-const TIME_W    = 220;  // szerokość bloku czasu (prawa strona) — kompaktowa
+const TIME_W    = COSMIC.OUTLINER_W;  // szerokość bloku czasu = outliner (wyrównanie)
 const GROUP_PAD = 5;    // padding między grupami
 const ITEM_W    = 68;   // bazowa szerokość jednego zasobu — węższa
 const ITEM_W_SM = 50;   // kompaktowa szerokość (wąski ekran)
@@ -295,7 +295,7 @@ export class TopBar {
     const btnH = 16;        // wysokość przycisków
     const btnY = 6;         // pozycja Y przycisków (górny rząd)
     const btnGap = 2;       // odstęp między przyciskami
-    const btnR = 3;         // zaokrąglenie rogów
+    const btnR = 0;         // brak zaokrągleń (spec: zero border-radius)
 
     // Separator pionowy
     ctx.strokeStyle = THEME.borderLight;
@@ -316,7 +316,7 @@ export class TopBar {
 
     // Przyciski prędkości — kompaktowe
     const speedLabels = ['1d', '1m', '1r', '10r', '10k'];
-    const speedBtnW = 24;
+    const speedBtnW = 22;
     let sx = playX + playW + btnGap + 2;
     for (let i = 0; i < speedLabels.length; i++) {
       const isActive = !isPaused && multiplierIndex === i + 1;
@@ -338,7 +338,7 @@ export class TopBar {
 
     // AutoSlow wskaźnik (prawa strona)
     const autoSlow = timeState.autoSlow;
-    this._drawBtn(ctx, W - 30, row2Y, 24, 14, 2,
+    this._drawBtn(ctx, W - 30, row2Y, 24, 14, 0,
       'AUT',
       autoSlow ? THEME.bgPrimary : THEME.textDim,
       autoSlow ? THEME.successDim : null,
@@ -377,7 +377,7 @@ export class TopBar {
     for (const [id, def] of Object.entries(MINED_RESOURCES)) {
       const amt = inv[id] ?? 0;
       const dlt = perYear[id] ?? 0;
-      if (amt < 0.5 && Math.abs(dlt) < 0.01) continue; // ukryj zerowe
+      // Pokaż wszystkie surowce — gracz widzi pełny bilans
       items.push({
         icon: def.icon, symbol: id, value: amt, delta: dlt,
         color: def.color || C.text,
@@ -511,7 +511,7 @@ export class TopBar {
     }
 
     // Przyciski prędkości
-    const speedBtnW = 24;
+    const speedBtnW = 22;
     let sx = playX + playW + btnGap + 2;
     for (let i = 0; i < 5; i++) {
       if (x >= sx && x <= sx + speedBtnW && y >= btnY && y <= btnY + btnH) {

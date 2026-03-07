@@ -96,7 +96,7 @@ export class ThemeOverlay {
       fontFamily: 'monospace',
       fontSize: '10px',
       color: THEME.textPrimary,
-      boxShadow: '-4px 0 20px rgba(0,0,0,0.5)',
+      boxShadow: '-4px 0 20px rgba(2,4,5,0.65)',
       padding: '8px',
       boxSizing: 'border-box',
     });

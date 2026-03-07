@@ -235,7 +235,7 @@ export class Outliner {
     const open = this._sections[sectionId];
 
     // Nagłówek sekcji
-    ctx.fillStyle = 'rgba(10,18,30,0.6)';
+    ctx.fillStyle = THEME.accentDim ?? 'rgba(0,255,180,0.07)';
     ctx.fillRect(x, cy, OUTLINER_W, SECTION_HDR_H);
     ctx.strokeStyle = C.border;
     ctx.lineWidth = 1;
@@ -424,7 +424,7 @@ export class Outliner {
     if (ttY < 4) ttY = 4;
 
     // Tło
-    ctx.fillStyle = 'rgba(6,10,20,0.95)';
+    ctx.fillStyle = bgAlpha(0.95);
     ctx.fillRect(ttX, ttY, ttW, ttH);
     ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;

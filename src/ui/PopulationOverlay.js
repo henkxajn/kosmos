@@ -95,7 +95,7 @@ export class PopulationOverlay extends BaseOverlay {
     const centerW = ow - LEFT_W - RIGHT_W;
 
     // Tło
-    ctx.fillStyle = 'rgba(3,10,20,0.97)';
+    ctx.fillStyle = 'rgba(2,4,5,0.97)';
     ctx.fillRect(ox, oy, ow, oh);
     ctx.strokeStyle = THEME.border;
     ctx.lineWidth = 1;
@@ -199,12 +199,12 @@ export class PopulationOverlay extends BaseOverlay {
 
       // Tło wiersza
       if (isSel) {
-        ctx.fillStyle = 'rgba(136,255,204,0.05)';
+        ctx.fillStyle = 'rgba(0,255,180,0.05)';
         ctx.fillRect(x, ry, w, ROW_H);
         ctx.fillStyle = THEME.accent;
         ctx.fillRect(x, ry, 2, ROW_H);
       } else if (isHov) {
-        ctx.fillStyle = 'rgba(255,255,255,0.015)';
+        ctx.fillStyle = 'rgba(0,255,180,0.03)';
         ctx.fillRect(x, ry, w, ROW_H);
       }
 
@@ -335,7 +335,7 @@ export class PopulationOverlay extends BaseOverlay {
         const by = cy + sparkH - bh;
         const isLast = i === hist.length - 1;
         const alpha = isLast ? 1.0 : 0.3 + (i / hist.length) * 0.3;
-        ctx.fillStyle = `rgba(136,255,204,${alpha})`;
+        ctx.fillStyle = `rgba(0,255,180,${alpha})`;
         ctx.fillRect(bx, by, Math.max(2, barW - 1), bh);
       }
     } else {
@@ -638,7 +638,7 @@ export class PopulationOverlay extends BaseOverlay {
 
     // Przykryj część za wartością morale ciemnym prostokątem
     const moraleX = barX + (morale / 100) * barW;
-    ctx.fillStyle = 'rgba(6,13,24,0.75)';
+    ctx.fillStyle = 'rgba(2,4,5,0.75)';
     ctx.fillRect(moraleX, cy, barX + barW - moraleX, barH);
 
     // Notch na 50%

@@ -942,7 +942,7 @@ export class UIManager {
     const DW = 420, DH = 180;
     const DX = W / 2 - DW / 2, DY = H / 2 - DH / 2;
 
-    ctx.fillStyle = 'rgba(10,4,4,0.95)';
+    ctx.fillStyle = 'rgba(5,2,2,0.95)';
     ctx.fillRect(DX, DY, DW, DH);
     ctx.strokeStyle = THEME.danger;
     ctx.lineWidth = 2;

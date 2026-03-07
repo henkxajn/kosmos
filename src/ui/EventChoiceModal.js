@@ -46,7 +46,7 @@ export function showEventNotification(event, colonyName) {
       background: ${bgColor}; border: 1px solid ${borderColor};
       border-radius: 6px; padding: 16px 24px; max-width: 400px; min-width: 280px;
       font-family: ${THEME.fontFamily}; color: ${THEME.textPrimary}; pointer-events: auto;
-      box-shadow: 0 0 20px rgba(0,0,0,0.7); animation: slideDown 0.3s ease-out;
+      box-shadow: 0 0 20px rgba(2,4,5,0.88); animation: slideDown 0.3s ease-out;
     `;
 
     // Nagłówek
@@ -181,7 +181,7 @@ export function showImpactNotification(data) {
       background: ${cfg.bgColor}; border: 2px solid ${cfg.borderColor};
       border-radius: 6px; padding: 18px 26px; max-width: 420px; min-width: 300px;
       font-family: ${THEME.fontFamily}; color: ${THEME.textPrimary}; pointer-events: auto;
-      box-shadow: 0 0 30px rgba(0,0,0,0.8), 0 0 60px ${cfg.borderColor}33;
+      box-shadow: 0 0 30px rgba(2,4,5,0.88), 0 0 60px ${cfg.borderColor}33;
       animation: slideDown 0.3s ease-out;
     `;
 
@@ -223,7 +223,7 @@ export function showImpactNotification(data) {
 
       const dmgBox = document.createElement('div');
       dmgBox.style.cssText = `
-        background: rgba(0,0,0,0.3); border: 1px solid ${cfg.borderColor}44;
+        background: rgba(2,4,5,0.45); border: 1px solid ${cfg.borderColor}44;
         border-radius: 4px; padding: 8px 10px; margin-bottom: 14px;
         font-size: 12px; line-height: 1.6;
       `;

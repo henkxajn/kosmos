@@ -348,14 +348,14 @@ export class PlanetScene {
     ctx.clearRect(0, 0, LW, LH);
 
     // Tło
-    ctx.fillStyle = 'rgba(6,8,16,0.96)';
+    ctx.fillStyle = 'rgba(2,4,5,0.96)';
     ctx.fillRect(0, 0, LW, LH);
 
     // Panel za siatką
     if (this.grid) {
       const gs  = this.grid.gridPixelSize(this._hexSize);
       const pad = 18;
-      ctx.fillStyle = 'rgba(13,21,32,0.85)';
+      ctx.fillStyle = 'rgba(5,10,8,0.85)';
       ctx.fillRect(
         this._screenCX - gs.w / 2 - pad,
         this._screenCY - gs.h / 2 - pad,
@@ -429,7 +429,7 @@ export class PlanetScene {
 
     // Hover/selected overlay
     if (isSelected) {
-      ctx.fillStyle = 'rgba(136,255,204,0.18)';
+      ctx.fillStyle = 'rgba(0,255,180,0.18)';
       ctx.fill();
     } else if (isHovered) {
       ctx.fillStyle = 'rgba(255,255,255,0.10)';
@@ -437,7 +437,7 @@ export class PlanetScene {
     }
 
     // Obramowanie
-    ctx.strokeStyle = isSelected ? THEME.accent : isHovered ? '#ffffff' : '#1a2a3a';
+    ctx.strokeStyle = isSelected ? THEME.accent : isHovered ? '#ffffff' : 'rgba(0,255,180,0.07)';
     ctx.lineWidth   = isSelected ? 2 : 1;
     ctx.stroke();
 
@@ -609,7 +609,7 @@ export class PlanetScene {
       const dlt = rSys?.resources?.[r]?.perYear  ?? 0;
 
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = '#6a8aaa';
+      ctx.fillStyle = '#aac8c0';
       ctx.textAlign = 'center';
       ctx.fillText(icons[r] + ' ' + r.toUpperCase(), cx, Y + 12);
 
@@ -797,7 +797,7 @@ export class PlanetScene {
       if (yieldParts.length > 0 || modParts.length > 0) {
         const infoW = ctx.measureText(info).width;
         ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = '#88aacc';
+        ctx.fillStyle = '#aac8c0';
         const allParts = [...yieldParts, ...modParts].join('  ');
         ctx.fillText(allParts, infoX + infoW + 10, BY + 14);
       }
@@ -888,7 +888,7 @@ export class PlanetScene {
       // Przycisk rozbiórki (nie dla Stolicy)
       const demolishY = buildListY + 6;
       if (!b.isColonyBase && !b.isCapital) {
-        ctx.fillStyle = 'rgba(100,30,30,0.8)';
+        ctx.fillStyle = 'rgba(50,10,10,0.8)';
         ctx.fillRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
         ctx.strokeStyle = THEME.dangerDim;
         ctx.strokeRect(BPX + 8, demolishY, RIGHT_W - 16, 18);
@@ -935,25 +935,25 @@ export class PlanetScene {
         const affordable = !reason;
         const rowH = blocked ? 36 : 28;
 
-        ctx.fillStyle   = blocked ? 'rgba(30,8,8,0.85)' : (affordable ? 'rgba(13,26,46,0.90)' : 'rgba(8,14,24,0.90)');
+        ctx.fillStyle   = blocked ? 'rgba(10,2,2,0.85)' : (affordable ? 'rgba(2,8,6,0.90)' : 'rgba(2,4,5,0.90)');
         ctx.fillRect(BPX + 8, yy, RIGHT_W - 16, rowH);
-        ctx.strokeStyle = blocked ? '#441818' : (affordable ? '#2a5080' : '#111828');
+        ctx.strokeStyle = blocked ? 'rgba(255,51,68,0.4)' : (affordable ? 'rgba(0,255,180,0.18)' : 'rgba(0,255,180,0.07)');
         ctx.lineWidth   = 1;
         ctx.strokeRect(BPX + 8, yy, RIGHT_W - 16, rowH);
 
         ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = blocked ? '#663333' : (affordable ? CAT_COLORS[b.category] : '#2a3050');
+        ctx.fillStyle = blocked ? '#663333' : (affordable ? CAT_COLORS[b.category] : 'rgba(0,255,180,0.12)');
         ctx.fillText(`${b.icon} ${b.namePL}`, BPX + 14, yy + 12);
 
         const costStr = Object.entries(b.cost || {}).map(([k, v]) => `${RESOURCE_ICONS?.[k] ?? k}${v}`).join(' ');
         ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = blocked ? '#442222' : (affordable ? THEME.borderLight : '#181e28');
+        ctx.fillStyle = blocked ? '#442222' : (affordable ? THEME.borderLight : 'rgba(0,255,180,0.07)');
         ctx.fillText(costStr, BPX + 14, yy + 23);
 
         const popCost = b.popCost ?? 0.25;
         if (popCost > 0) {
           const hasFreePops = cSys && cSys.freePops >= popCost;
-          ctx.fillStyle = blocked ? '#442222' : (hasFreePops ? '#448866' : '#884422');
+          ctx.fillStyle = blocked ? '#442222' : (hasFreePops ? '#00ee88' : '#ff3344');
           ctx.fillText(`${popCost}👤`, BPX + RIGHT_W - 48, yy + 23);
         }
 

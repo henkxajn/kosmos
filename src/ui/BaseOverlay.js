@@ -86,10 +86,10 @@ export class BaseOverlay {
     const isHover = this._hoverZone?.data?.label === label &&
                     this._hoverZone?.x === x;
     const S = {
-      primary:   { b: THEME.accent,       t: THEME.accent,         bg: isHover ? 'rgba(136,255,204,0.08)' : 'transparent' },
-      secondary: { b: THEME.borderLight,  t: THEME.textSecondary,  bg: isHover ? 'rgba(255,255,255,0.03)' : 'transparent' },
-      danger:    { b: 'rgba(255,68,68,0.4)', t: THEME.danger,      bg: isHover ? 'rgba(255,68,68,0.08)' : 'transparent' },
-      unique:    { b: 'rgba(136,255,204,0.4)', t: THEME.accent,    bg: isHover ? 'rgba(136,255,204,0.08)' : 'transparent' },
+      primary:   { b: THEME.accent,       t: THEME.accent,         bg: isHover ? 'rgba(0,255,180,0.08)' : 'transparent' },
+      secondary: { b: THEME.borderLight,  t: THEME.textSecondary,  bg: isHover ? 'rgba(0,255,180,0.04)' : 'transparent' },
+      danger:    { b: 'rgba(255,51,68,0.4)', t: THEME.danger,      bg: isHover ? 'rgba(255,51,68,0.08)' : 'transparent' },
+      unique:    { b: 'rgba(0,255,180,0.4)', t: THEME.accent,      bg: isHover ? 'rgba(0,255,180,0.08)' : 'transparent' },
       disabled:  { b: THEME.border,       t: THEME.textDim,        bg: 'transparent' },
     }[style] ?? { b: THEME.border, t: THEME.textDim, bg: 'transparent' };
 

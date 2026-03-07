@@ -260,7 +260,7 @@ export class PlanetGlobeTexture {
           for (let i = 0; i < dotCount; i++) {
             ctx.beginPath();
             ctx.arc(startX + i * spacing, dotY, dotR, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 240, 220, 0.9)';
+            ctx.fillStyle = 'rgba(200, 255, 230, 0.9)';
             ctx.fill();
           }
         }
@@ -380,9 +380,9 @@ export class PlanetGlobeTexture {
     ctx.closePath();
 
     if (type === 'selected') {
-      ctx.fillStyle   = 'rgba(136, 255, 204, 0.25)';
+      ctx.fillStyle   = 'rgba(0, 255, 180, 0.25)';
       ctx.fill();
-      ctx.strokeStyle = 'rgba(136, 255, 204, 0.8)';
+      ctx.strokeStyle = 'rgba(0, 255, 180, 0.8)';
       ctx.lineWidth   = 2 * Math.max(scaleX, scaleY);
     } else {
       ctx.fillStyle   = 'rgba(255, 255, 255, 0.12)';

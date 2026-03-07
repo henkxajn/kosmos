@@ -7,9 +7,9 @@
 import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
 
 // ── Stałe ──────────────────────────────────────────────────
-export const CIV_SIDEBAR_W    = 40;
-export const CIV_SIDEBAR_BTN  = 36;
-export const CIV_SIDEBAR_GAP  = 2;
+export const CIV_SIDEBAR_W    = 30;
+export const CIV_SIDEBAR_BTN  = 28;
+export const CIV_SIDEBAR_GAP  = 1;
 export const CIV_SIDEBAR_PAD  = 2;
 
 export const CIV_TABS = [

@@ -8,38 +8,46 @@
 
 export const THEME = {
   // Powierzchnie
-  bgPrimary:    '#060d18',   // główne tło paneli
-  bgSecondary:  '#0a1628',   // tło modali/inputów
-  bgTertiary:   '#0d1520',   // tło przycisków
+  bgPrimary:    '#020405',   // główne tło (canvas, sidebary)
+  bgSecondary:  '#050b08',   // panele, nagłówki sekcji
+  bgTertiary:   '#091210',   // nagłówki kolumn overlayów
   // Obramowania
-  border:       '#1a3050',   // główna ramka
-  borderLight:  '#2a4060',   // jaśniejsza ramka (labele)
-  borderActive: '#3a6090',   // aktywna/focused
+  border:       'rgba(0,255,180,0.07)',   // linie separatorów
+  borderLight:  'rgba(0,255,180,0.18)',   // hover krawędź
+  borderActive: 'rgba(0,255,180,0.40)',   // aktywna zakładka / zaznaczony element
   // Tekst
-  textPrimary:  '#c8e8ff',   // jasny tekst
-  textSecondary:'#6888aa',   // zwykły tekst
-  textLabel:    '#2a4060',   // labele, disabled
-  textDim:      '#3a5a7a',   // przygaszony tekst
-  textHeader:   '#2a6080',   // nagłówki sekcji
+  textPrimary:  '#aac8c0',   // główny tekst (wartości, nazwy)
+  textSecondary:'rgba(160,200,190,0.65)', // drugorzędny tekst
+  textLabel:    'rgba(160,200,190,0.45)', // etykiety, ikony nieaktywne
+  textDim:      'rgba(160,200,190,0.45)', // etykiety, ikony nieaktywne
+  textHeader:   '#00ffb4',   // nagłówki sekcji (accent)
   // Akcenty
-  accent:       '#88ffcc',   // tytuły, wyróżnienia
+  accent:       '#00ffb4',   // aktywne elementy, podświetlenia
+  accentDim:    'rgba(0,255,180,0.07)',   // tło hover
+  accentMed:    'rgba(0,255,180,0.13)',   // tło aktywne (zaznaczony wiersz)
   // Statusy
-  success:      '#44ff88',   // pozytywne
-  successDim:   '#44cc66',   // pozytywne (przyciemnione)
-  danger:       '#ff4444',   // błędy/krytyczne
-  dangerDim:    '#cc4422',   // błędy (przyciemnione)
-  warning:      '#ffaa44',   // ostrzeżenia
+  success:      '#00ee88',   // wartości pozytywne, POP, wzrost
+  successDim:   '#00cc66',   // pozytywne (przyciemnione)
+  danger:       '#ff3344',   // wartości ujemne, alerty, głód
+  dangerDim:    '#cc2233',   // błędy (przyciemnione)
+  warning:      '#ffcc44',   // pasek stabilności, niski zasób
   yellow:       '#ffcc44',   // info/zdarzenia
-  info:         '#4488ff',   // info akcent
-  purple:       '#cc88ff',   // specjalne
-  mint:         '#44ffaa',   // pozytywne alt
+  info:         '#00ccff',   // informacje neutralne
+  purple:       '#aa88ff',   // badania / technologia
+  mint:         '#00ee88',   // pozytywne alt
+  // Mapa kosmiczna
+  orbitLine:    'rgba(0,255,180,0.055)',  // orbity planet (nieaktywne)
+  orbitColony:  'rgba(0,255,180,0.16)',   // orbita z kolonią
+  starfield:    '#b0f0e0',   // kolor gwiazd w tle
+  vignetteEnd:  'rgba(2,4,5,0.88)',       // ciemna winietka na krawędziach
   // Fonty
-  fontFamily:   'monospace',
+  fontFamily:   "'Space Mono', monospace",
+  fontSizeTiny:   8,
   fontSizeSmall:  9,
-  fontSizeNormal: 10,
-  fontSizeMedium: 12,
-  fontSizeLarge:  13,
-  fontSizeTitle:  15,
+  fontSizeNormal: 11,
+  fontSizeMedium: 13,
+  fontSizeLarge:  16,
+  fontSizeTitle:  16,
 };
 
 // ── Zamrożona kopia domyślnych wartości ──────────────────────────
@@ -296,8 +304,15 @@ export const PRESET_THEMES = {
 
 // ── Pomocnicze: hex → RGB ───────────────────────────────────────
 
-export function hexToRgb(hex) {
-  const h = hex.replace('#', '');
+export function hexToRgb(color) {
+  if (!color) return { r: 0, g: 0, b: 0 };
+  // Obsługa rgba(r,g,b,a) i rgb(r,g,b)
+  const rgbaMatch = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (rgbaMatch) {
+    return { r: +rgbaMatch[1], g: +rgbaMatch[2], b: +rgbaMatch[3] };
+  }
+  // Obsługa hex (#rrggbb)
+  const h = color.replace('#', '');
   return {
     r: parseInt(h.substring(0, 2), 16),
     g: parseInt(h.substring(2, 4), 16),

@@ -42,7 +42,7 @@ function _injectCSS() {
     }
     .mission-modal-overlay {
       position: fixed; inset: 0;
-      background: rgba(0,0,0,0.6);
+      background: rgba(2,4,5,0.75);
       z-index: 100;
       display: flex; align-items: center; justify-content: center;
     }
@@ -53,7 +53,7 @@ function _injectCSS() {
       font-family: ${THEME.fontFamily};
       color: ${THEME.textPrimary};
       animation: missionFadeIn 0.35s ease-out;
-      box-shadow: 0 0 30px rgba(0,0,0,0.8);
+      box-shadow: 0 0 30px rgba(2,4,5,0.88);
     }
     .mission-modal-panel .mm-header {
       font-size: ${THEME.fontSizeTitle + 2}px; font-weight: bold;

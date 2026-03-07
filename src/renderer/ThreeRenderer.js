@@ -38,6 +38,7 @@ export class ThreeRenderer {
     // Poprawne zarządzanie kolorami dla MeshStandardMaterial (PBR)
     this.renderer.toneMapping    = THREE.NoToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.setClearColor(0x020405, 1); // tło: #020405 (spec bg)
 
     // ── Scena ─────────────────────────────────────────────────
     this.scene = new THREE.Scene();
@@ -127,10 +128,11 @@ export class ThreeRenderer {
       pos[i*3+1]  = r * Math.sin(phi) * Math.sin(theta);
       pos[i*3+2]  = r * Math.cos(phi);
 
+      // Kolory gwiazd tła — chłodne teal (#b0f0e0)
       const temp = Math.random();
-      if (temp < 0.2) { col[i*3]=0.6; col[i*3+1]=0.7; col[i*3+2]=1.0; }
-      else if (temp < 0.5) { col[i*3]=1.0; col[i*3+1]=0.95; col[i*3+2]=0.8; }
-      else { col[i*3]=1.0; col[i*3+1]=1.0; col[i*3+2]=1.0; }
+      if (temp < 0.2) { col[i*3]=0.55; col[i*3+1]=0.75; col[i*3+2]=0.85; }       // chłodne błękitne
+      else if (temp < 0.5) { col[i*3]=0.69; col[i*3+1]=0.94; col[i*3+2]=0.88; }  // teal #b0f0e0
+      else { col[i*3]=0.85; col[i*3+1]=0.95; col[i*3+2]=0.92; }                   // jasny teal-biały
 
       phase[i]      = Math.random() * Math.PI * 2;
       speed[i]      = 0.15 + Math.random() * 0.4;
@@ -203,7 +205,7 @@ export class ThreeRenderer {
   // ── Oświetlenie ──────────────────────────────────────────────
   _buildLights() {
     // Ambient — bardzo słabe wypełnienie (nocna strona ledwo widoczna)
-    this.scene.add(new THREE.AmbientLight(0x111122, 0.15));
+    this.scene.add(new THREE.AmbientLight(0x0a1812, 0.15));
     // PointLight od gwiazdy — decay=0: brak fizycznego tłumienia (r171 domyślnie decay=2
     // co przy intensity=2.0 i odl.=11j daje 2/121≈0.017 = czarny).
     // distance=0 = brak limitu zasięgu.
@@ -920,9 +922,9 @@ export class ThreeRenderer {
     const dc  = c.getContext('2d');
 
     const grd = dc.createRadialGradient(16, 16, 3, 16, 16, 14);
-    grd.addColorStop(0, 'rgba(136,255,204,0.9)');
-    grd.addColorStop(0.5, 'rgba(68,255,136,0.4)');
-    grd.addColorStop(1,   'rgba(68,255,136,0)');
+    grd.addColorStop(0, 'rgba(0,255,180,0.9)');
+    grd.addColorStop(0.5, 'rgba(0,238,136,0.4)');
+    grd.addColorStop(1,   'rgba(0,238,136,0)');
     dc.fillStyle = grd;
     dc.fillRect(0, 0, 32, 32);
 
@@ -942,9 +944,9 @@ export class ThreeRenderer {
 
     // Zewnętrzna poświata — złoto-żółta
     const grd = dc.createRadialGradient(16, 16, 3, 16, 16, 14);
-    grd.addColorStop(0, 'rgba(255,220,68,0.95)');
-    grd.addColorStop(0.5, 'rgba(255,180,34,0.5)');
-    grd.addColorStop(1,   'rgba(255,150,0,0)');
+    grd.addColorStop(0, 'rgba(0,204,255,0.95)');
+    grd.addColorStop(0.5, 'rgba(0,180,220,0.5)');
+    grd.addColorStop(1,   'rgba(0,150,200,0)');
     dc.fillStyle = grd;
     dc.fillRect(0, 0, 32, 32);
 
@@ -976,12 +978,12 @@ export class ThreeRenderer {
     const cx    = S(star.x) - c * Math.cos(angle);
     const cz    = S(star.y) - c * Math.sin(angle);
 
-    let color = 0x1a3a5a;
-    if (planet.lifeScore > 0)          color = 0x226622;
-    // Złoty kolor orbity dla planety gracza
-    if (planet.id === window.KOSMOS?.homePlanet?.id) color = 0x7a6a22;
-    if (planet.orbitalStability < 0.5) color = 0x774422;
-    if (planet.isSelected)             color = 0x4a8ae8;
+    let color = 0x003828;       // domyślna orbita — ciemny teal
+    if (planet.lifeScore > 0)          color = 0x005540;   // życie — jaśniejszy teal
+    // Orbita planety gracza — jasny teal (orbitColony)
+    if (planet.id === window.KOSMOS?.homePlanet?.id) color = 0x007852;
+    if (planet.orbitalStability < 0.5) color = 0x553322;   // niestabilna — ciemny czerwony
+    if (planet.isSelected)             color = 0x00ccff;   // zaznaczona — info blue
 
     const STEPS  = 128;
     const points = [];
