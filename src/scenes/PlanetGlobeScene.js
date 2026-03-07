@@ -30,11 +30,21 @@ const BOTTOM_BAR_H = GLOBE.BOTTOM_BAR_H;  // 44
 const LEFT_W       = GLOBE.LEFT_W;        // 240
 const RIGHT_W      = GLOBE.RIGHT_W;       // 220
 
-const W = window.innerWidth;
-const H = window.innerHeight;
-const PS_SCALE = Math.min(W / 1280, H / 720);
-const LW = Math.round(W / PS_SCALE);
-const LH = Math.round(H / PS_SCALE);
+let W = window.innerWidth;
+let H = window.innerHeight;
+let PS_SCALE = Math.min(W / 1280, H / 720);
+let LW = Math.round(W / PS_SCALE);
+let LH = Math.round(H / PS_SCALE);
+
+// Przelicz wymiary przy resize/fullscreen
+function _recalcGlobeDimensions() {
+  W = window.innerWidth;
+  H = window.innerHeight;
+  PS_SCALE = Math.min(W / 1280, H / 720);
+  LW = Math.round(W / PS_SCALE);
+  LH = Math.round(H / PS_SCALE);
+}
+window.addEventListener('resize', _recalcGlobeDimensions);
 
 // Kolory kategorii budynków
 const CAT_COLORS = {

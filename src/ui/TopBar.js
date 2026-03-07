@@ -81,10 +81,6 @@ export class TopBar {
     const resEndX   = W - TIME_W - 4;
     const resW      = resEndX - resStartX;
 
-    // Grupy zasobów
-    const compact = resW < 700;
-    const iw = compact ? ITEM_W_SM : ITEM_W;
-
     // Zbierz widoczne zasoby per grupę
     const mined     = this._getVisibleMined(inventory, invPerYear);
     const harvested = this._getVisibleHarvested(inventory, invPerYear);
@@ -95,6 +91,14 @@ export class TopBar {
       { items: harvested, label: 'ZASOBY',   color: THEME.textHeader },
       { items: utility,   label: 'SYSTEMY',  color: THEME.textHeader },
     ];
+
+    // Policz łączną liczbę itemów + separatorów → dopasuj iw dynamicznie
+    const totalItems = groups.reduce((s, g) => s + g.items.length, 0);
+    const numSeps = groups.filter(g => g.items.length > 0).length - 1;
+    const sepSpace = Math.max(0, numSeps) * GROUP_PAD;
+    const availForItems = resW - sepSpace;
+    let iw = Math.min(ITEM_W, Math.floor(availForItems / Math.max(totalItems, 1)));
+    if (iw < 36) iw = 36; // minimum czytelności
 
     let x = resStartX;
 
@@ -124,7 +128,7 @@ export class TopBar {
       const row1Y = 22;
       const row2Y = 36;
 
-      for (let i = 0; i < grp.items.length && ix + iw <= resEndX + iw; i++) {
+      for (let i = 0; i < grp.items.length; i++) {
         const item = grp.items[i];
 
         // Zapamiętaj prostokąt do hover/tooltip

@@ -395,7 +395,8 @@ export class BottomContext {
         return true;
       }
       if (civMode && (isHome || colMgr?.hasColony(entity.id))) {
-        EventBus.emit('planet:openGlobe', { planet: entity });
+        if (colMgr) colMgr.switchActiveColony(entity.id);
+        window.KOSMOS?.overlayManager?.openPanel('colony');
         return true;
       }
     }

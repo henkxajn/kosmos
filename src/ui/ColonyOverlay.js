@@ -18,8 +18,11 @@ const RIGHT_W = 260;
 const HDR_H   = 44;
 const ROW_H   = 56;
 
-// Skala UI (identyczna jak w UIManager)
-const _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+// Skala UI (identyczna jak w UIManager) — dynamiczna przy resize/fullscreen
+let _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+window.addEventListener('resize', () => {
+  _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+});
 
 // Kategorie budynków do wyświetlenia
 const BUILDING_CATEGORIES = [
@@ -56,6 +59,11 @@ export class ColonyOverlay extends BaseOverlay {
     this._scrollRight      = 0;      // scroll prawego panelu
     this._hoverRowId       = null;
     this._collapsedCategories = new Set();
+
+    // Tooltip budynku (build list hover)
+    this._tooltipBuildingId = null;
+    this._tooltipX = 0;
+    this._tooltipY = 0;
 
     // Cache siatki hex (per kolonia)
     this._gridCache = {};  // planetId → HexGrid
@@ -95,13 +103,14 @@ export class ColonyOverlay extends BaseOverlay {
       if (!e.success && e.reason) this._showFlash(e.reason);
     });
     EventBus.on('planet:constructionComplete', () => this._onBuildingChanged());
+    EventBus.on('planet:constructionProgress', () => this._onBuildingChanged());
   }
 
   show() {
     super.show();
-    // Auto-wybierz aktywną kolonię
+    // Zawsze synchronizuj z aktywną kolonią (mogła się zmienić przez switchActiveColony)
     const colMgr = window.KOSMOS?.colonyManager;
-    if (colMgr && !this._selectedColonyId) {
+    if (colMgr) {
       this._selectedColonyId = colMgr.activePlanetId;
     }
     this._buildMode = false;
@@ -115,6 +124,7 @@ export class ColonyOverlay extends BaseOverlay {
     this._hoveredHex = null;
     this._buildMode = false;
     this._pendingBuildingId = null;
+    this._tooltipBuildingId = null;
     this._closeGlobe();
   }
 
@@ -275,17 +285,19 @@ export class ColonyOverlay extends BaseOverlay {
         }
       }
     }
-    // Budowa w toku
+    // Budowa w toku (Map: tileKey → { buildingId, progress, buildTime, isUpgrade })
     const queue = bSys._constructionQueue;
     if (queue) {
-      for (const item of queue) {
-        const tile = grid.get(item.q, item.r);
+      for (const [tileKey, entry] of queue) {
+        const coords = tileKey.split(',');
+        const q = parseInt(coords[0]), r = parseInt(coords[1]);
+        const tile = grid.get(q, r);
         if (tile) {
           tile.underConstruction = {
-            buildingId: item.buildingId,
-            progress: item.progress ?? 0,
-            buildTime: item.buildTime ?? 1,
-            isUpgrade: item.isUpgrade ?? false,
+            buildingId: entry.buildingId,
+            progress: entry.progress ?? 0,
+            buildTime: entry.buildTime ?? 1,
+            isUpgrade: entry.isUpgrade ?? false,
           };
         }
       }
@@ -352,6 +364,11 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.restore();
     }
 
+    // Tooltip budynku (hover nad kartą w build list)
+    if (this._tooltipBuildingId) {
+      this._drawBuildingTooltip(ctx, W, H);
+    }
+
     // Zarządzaj globusem 3D w środkowej kolumnie
     this._manageGlobe(selCol, ox + LEFT_W, oy, centerW, oh);
   }
@@ -397,9 +414,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.fillStyle = THEME.bgSecondary;
     ctx.fillRect(x, y, w, HDR_H);
 
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText('KOLONIE', x + pad, y + 18);
+    this._drawText(ctx, 'KOLONIE', x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
 
     const totalBuildings = colonies.reduce((s, c) => s + (c.buildingSystem?._active?.size ?? 0), 0);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -636,7 +651,7 @@ export class ColonyOverlay extends BaseOverlay {
       if (collapsed) continue;
 
       for (const b of buildings) {
-        const cardH = 58;
+        const cardH = 46;
         if (ly + cardH < startY) { ly += cardH + 2; continue; }
         if (ly > startY + listH + 20) { ly += cardH + 2; continue; }
 
@@ -673,36 +688,145 @@ export class ColonyOverlay extends BaseOverlay {
           ctx.fillText(desc, x + pad + 4, ly + 28);
         }
 
-        // Koszt
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = canAfford ? THEME.warning : THEME.danger;
-        const costStr = formatCost(b.cost, b.popCost, b.commodityCost);
-        ctx.fillText(costStr.slice(0, 32), x + pad + 4, ly + 42);
-
         // Produkcja
         if (b.rates && Object.keys(b.rates).length > 0) {
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.success;
-          ctx.fillText(formatRates(b.rates), x + pad + 4, ly + 52);
+          ctx.fillText(formatRates(b.rates), x + pad + 4, ly + 40);
         }
 
         // Wymagana tech
         if (b.requires && !techOk) {
           ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`wymaga: ${b.requires}`, x + pad + 4, ly + 52);
+          ctx.fillText(`wymaga: ${b.requires}`, x + pad + 4, ly + 40);
         }
 
         ctx.globalAlpha = 1;
 
-        // Hit zone — tylko jeśli nie zablokowany
-        if (!locked) {
-          this._addHit(x + 4, ly, w - 8, cardH, 'selectBuilding', { buildingId: b.id });
-        }
+        // Hit zone — budynki (tooltip + kliknięcie)
+        this._addHit(x + 4, ly, w - 8, cardH, 'selectBuilding', { buildingId: b.id, locked });
 
         ly += cardH + 2;
       }
     }
 
+    ctx.restore();
+  }
+
+  // ── Tooltip budynku (hover w build list) ────────────────────────────
+
+  _drawBuildingTooltip(ctx, W, H) {
+    const b = BUILDINGS[this._tooltipBuildingId];
+    if (!b) return;
+
+    const PAD = 8;
+    const LINE_H = 13;
+    const HDR_H_T = 16;
+    const SEP_H = 6;
+    const MAX_W = 260;
+    const OFS = 14;
+
+    // Buduj linie tooltipa
+    const lines = [];
+    lines.push({ type: 'header', text: `${b.icon} ${b.namePL}` });
+    lines.push({ type: 'sep' });
+
+    if (b.description) {
+      const words = b.description.split(' ');
+      let cur = '';
+      for (const word of words) {
+        if (cur.length + word.length + 1 > 36 && cur.length > 0) {
+          lines.push({ type: 'line', text: cur, color: THEME.textSecondary });
+          cur = word;
+        } else {
+          cur = cur ? cur + ' ' + word : word;
+        }
+      }
+      if (cur) lines.push({ type: 'line', text: cur, color: THEME.textSecondary });
+      lines.push({ type: 'sep' });
+    }
+
+    // Koszt surowców + commodities
+    const costStr = formatCost(b.cost, b.popCost, b.commodityCost);
+    if (costStr) lines.push({ type: 'line', text: `Koszt: ${costStr}`, color: THEME.warning });
+
+    // Produkcja
+    if (b.rates && Object.keys(b.rates).length > 0) {
+      const rStr = formatRates(b.rates);
+      if (rStr) lines.push({ type: 'line', text: `Produkcja: ${rStr}`, color: THEME.success });
+    }
+
+    // Housing
+    if (b.housing > 0) lines.push({ type: 'line', text: `Mieszkania: +${b.housing} POP`, color: THEME.info ?? THEME.accent });
+
+    // Czas budowy
+    if (b.buildTime > 0) lines.push({ type: 'line', text: `Budowa: ${b.buildTime} lat`, color: THEME.textSecondary });
+
+    // Wymagana tech
+    if (b.requires) lines.push({ type: 'line', text: `Wymaga: ${b.requires}`, color: THEME.purple ?? '#cc66ff' });
+
+    // Oblicz wymiary
+    ctx.save();
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    let maxTW = 0;
+    let totalH = PAD * 2;
+    for (const ln of lines) {
+      if (ln.type === 'sep') { totalH += SEP_H; continue; }
+      if (ln.type === 'header') {
+        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        maxTW = Math.max(maxTW, ctx.measureText(ln.text).width);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        totalH += HDR_H_T;
+      } else {
+        maxTW = Math.max(maxTW, ctx.measureText(ln.text).width);
+        totalH += LINE_H;
+      }
+    }
+    const tw = Math.min(MAX_W, maxTW + PAD * 2 + 4);
+    const th = totalH;
+
+    // Pozycja (unikaj wyjścia poza ekran)
+    let tx = this._tooltipX + OFS;
+    let ty = this._tooltipY + OFS;
+    if (tx + tw > W - 4) tx = this._tooltipX - tw - 4;
+    if (ty + th > H - 4) ty = this._tooltipY - th - 4;
+    if (tx < 4) tx = 4;
+    if (ty < 4) ty = 4;
+
+    // Tło
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = THEME.bgPrimary;
+    ctx.fillRect(tx, ty, tw, th);
+    ctx.strokeStyle = THEME.borderActive ?? THEME.accent;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tx + 0.5, ty + 0.5, tw - 1, th - 1);
+    ctx.globalAlpha = 1;
+
+    // Rysuj linie
+    let cy = ty + PAD;
+    for (const ln of lines) {
+      if (ln.type === 'sep') {
+        cy += 2;
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(tx + 6, cy);
+        ctx.lineTo(tx + tw - 6, cy);
+        ctx.stroke();
+        cy += SEP_H - 2;
+      } else if (ln.type === 'header') {
+        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textPrimary;
+        ctx.fillText(ln.text, tx + PAD, cy + 11);
+        cy += HDR_H_T;
+      } else {
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = ln.color ?? THEME.textPrimary;
+        ctx.fillText(ln.text, tx + PAD, cy + 9);
+        cy += LINE_H;
+      }
+    }
     ctx.restore();
   }
 
@@ -956,6 +1080,7 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
     if (zone.type === 'selectBuilding') {
+      if (zone.data.locked) return; // zablokowany tech — nie buduj
       this._buildMode = true;
       this._pendingBuildingId = zone.data.buildingId;
       return;
@@ -1014,10 +1139,16 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Hover nad wierszem kolonii
     this._hoverRowId = null;
+    this._tooltipBuildingId = null;
     for (const z of this._hitZones) {
       if (z.type === 'colony' && x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
         this._hoverRowId = z.data.planetId;
         break;
+      }
+      if (z.type === 'selectBuilding' && x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
+        this._tooltipBuildingId = z.data.buildingId;
+        this._tooltipX = x;
+        this._tooltipY = y;
       }
     }
 

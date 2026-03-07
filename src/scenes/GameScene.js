@@ -41,11 +41,11 @@ import { ThreeRenderer }     from '../renderer/ThreeRenderer.js';
 import { ThreeCameraController } from '../renderer/ThreeCameraController.js';
 import { UIManager }         from './UIManager.js';
 import { PlanetScene }       from './PlanetScene.js';
-import { PlanetGlobeScene }    from './PlanetGlobeScene.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
 import { TECHS }             from '../data/TechData.js';          // POWER TEST
 import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
 import { TERRAIN_TYPES }     from '../map/HexTile.js';            // POWER TEST
+import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do auto-build
 
 export class GameScene {
   // canvas3D — element #three-canvas
@@ -213,40 +213,27 @@ export class GameScene {
     const planetCanvas = document.getElementById('planet-canvas');
     this.planetScene   = new PlanetScene(planetCanvas, this.timeSystem);
 
-    // ── PlanetGlobeScene (3D mapa planety) ──────────────────────
-    this.planetGlobeScene = new PlanetGlobeScene(planetCanvas, this.timeSystem);
-    this.planetGlobeScene.uiManager = this.uiManager;
-
-    // Przejście do mapy planety — globus 3D jako domyślna mapa
+    // ── Nawigacja do kolonii → ColonyOverlay ─────────────────────
     EventBus.on('planet:colonize', ({ planet }) => {
-      if (this.planetScene.isOpen || this.planetGlobeScene?.isOpen) return;
       this._setupColony(planet);
-      const idx = this.timeSystem.multiplierIndex;
-      this.planetGlobeScene.open(planet, idx);
+      this.colonyManager.switchActiveColony(planet.id);
+      this.uiManager?.overlayManager?.openPanel('colony');
     });
     EventBus.on('planet:openMap', ({ planet }) => {
-      if (this.planetScene.isOpen || this.planetGlobeScene?.isOpen) return;
-      const idx = this.timeSystem.multiplierIndex;
-      this.planetGlobeScene.open(planet, idx);
+      this.colonyManager.switchActiveColony(planet.id);
+      this.uiManager?.overlayManager?.openPanel('colony');
     });
     EventBus.on('planet:openGlobe', ({ planet }) => {
-      if (this.planetGlobeScene.isOpen) return;
-      if (this.planetScene.isOpen) return;
-      const idx = this.timeSystem.multiplierIndex;
-      this.planetGlobeScene.open(planet, idx);
+      this.colonyManager.switchActiveColony(planet.id);
+      this.uiManager?.overlayManager?.openPanel('colony');
     });
-    // Otwórz mapę kolonii po założeniu
     EventBus.on('colony:founded', ({ colony }) => {
-      if (this.planetGlobeScene?.isOpen || this.planetScene?.isOpen) return;
-      // Automatycznie otwórz mapę nowo założonej kolonii
-      const idx = this.timeSystem.multiplierIndex;
-      this.planetGlobeScene.open(colony.planet, idx);
+      this.colonyManager.switchActiveColony(colony.planetId);
+      this.uiManager?.overlayManager?.openPanel('colony');
     });
-    // Otwórz mapę outpost po założeniu
     EventBus.on('outpost:founded', ({ colony }) => {
-      if (this.planetGlobeScene?.isOpen || this.planetScene?.isOpen) return;
-      const idx = this.timeSystem.multiplierIndex;
-      this.planetGlobeScene.open(colony.planet, idx);
+      this.colonyManager.switchActiveColony(colony.planetId);
+      this.uiManager?.overlayManager?.openPanel('colony');
     });
 
     // Kolizja — akrecja nowej planety z ThreeRenderer (EventBus obsługuje wewnątrz)
@@ -288,9 +275,9 @@ export class GameScene {
       this._gameOver = true;
       // Pauzuj grę
       EventBus.emit('time:pause');
-      // Zamknij mapę planety jeśli otwarta
-      if (this.planetGlobeScene?.isOpen) this.planetGlobeScene.close();
-      if (this.planetScene?.isOpen)      this.planetScene.close();
+      // Zamknij mapę planety / overlay jeśli otwarte
+      this.uiManager?.overlayManager?.closeActive();
+      if (this.planetScene?.isOpen) this.planetScene.close();
       // Wyłącz tryb 4X
       window.KOSMOS.civMode = false;
       // Emituj event game over — UIManager pokaże ekran końca gry
@@ -363,12 +350,12 @@ export class GameScene {
           if (colony) colony.name = 'Test Capital';
           // Flota startowa: 1× science_vessel, 1× colony_ship, 1× cargo_ship
           this._spawnPowerTestFleet(civPlanet.id);
-          // Otwórz globus i auto-build budynków
-          const idx = this.timeSystem.multiplierIndex;
-          this.planetGlobeScene.open(civPlanet, idx);
-          // Czekaj na otwarcie globusa (grid musi istnieć)
-          await new Promise(r => setTimeout(r, 200));
-          this._autoBuildPowerTest();
+          // Generuj grid i auto-buduj (bez PlanetGlobeScene)
+          const grid = PlanetMapGenerator.generate(civPlanet, true);
+          this._autoBuildPowerTest(grid);
+          // Otwórz ColonyOverlay
+          this.colonyManager.switchActiveColony(civPlanet.id);
+          this.uiManager?.overlayManager?.openPanel('colony');
           return;
         }
 
@@ -387,12 +374,12 @@ export class GameScene {
         const colony = this.colonyManager.getColony(civPlanet.id);
         if (colony) colony.name = capitalName;
 
-        // Otwórz globus 3D mapy planety
-        const idx = this.timeSystem.multiplierIndex;
-        this.planetGlobeScene.open(civPlanet, idx);
-        // Auto-budowa startowych budynków (farm, well, solar_farm)
-        await new Promise(r => setTimeout(r, 200));
-        this._autoPlaceStarterBuildings();
+        // Generuj grid i postaw budynki startowe (bez PlanetGlobeScene)
+        const grid = PlanetMapGenerator.generate(civPlanet, true);
+        this._autoPlaceStarterBuildings(grid);
+        // Otwórz ColonyOverlay
+        this.colonyManager.switchActiveColony(civPlanet.id);
+        this.uiManager?.overlayManager?.openPanel('colony');
       }, 100);
     }
     // Przywrócenie civName z save
@@ -483,9 +470,8 @@ export class GameScene {
     }
   }
 
-  // POWER TEST — auto-budowa budynków na globusie po otwarciu mapy
-  _autoBuildPowerTest() {
-    const grid = this.planetGlobeScene?.grid;
+  // POWER TEST — auto-budowa budynków (grid przekazany jako parametr)
+  _autoBuildPowerTest(grid) {
     const bSys = window.KOSMOS?.buildingSystem;
     if (!grid || !bSys) return;
 
@@ -554,12 +540,7 @@ export class GameScene {
     if (entries.length > 0) {
       bSys.restoreFromSave(entries);
     }
-
-    // Odśwież stan budynków na globusie (grid → overlay)
-    if (this.planetGlobeScene._globeRenderer) {
-      this.planetGlobeScene._syncBuildingIds();
-      this.planetGlobeScene._globeRenderer.refreshTexture();
-    }
+    // ColonyOverlay odświeży globus automatycznie przy otwarciu
   }
 
   // POWER TEST — znajdź wolny tile pasujący do budynku
@@ -584,8 +565,7 @@ export class GameScene {
 
   // ── Auto-budowa startowych budynków (nowa gra, scenariusz Cywilizacja) ──
   // Stawia farm, well, solar_farm na odpowiednich hexach — bez kosztów surowcowych
-  _autoPlaceStarterBuildings() {
-    const grid = this.planetGlobeScene?.grid;
+  _autoPlaceStarterBuildings(grid) {
     const bSys = window.KOSMOS?.buildingSystem;
     if (!grid || !bSys) return;
 
@@ -650,11 +630,7 @@ export class GameScene {
       bSys.restoreFromSave(entries);
     }
 
-    // Odśwież overlay globusa
-    if (this.planetGlobeScene._globeRenderer) {
-      this.planetGlobeScene._syncBuildingIds();
-      this.planetGlobeScene._globeRenderer.refreshTexture();
-    }
+    // ColonyOverlay odświeży globus automatycznie przy otwarciu
   }
 
   // ── Generowanie / przywracanie układu ─────────────────────────
@@ -860,12 +836,12 @@ export class GameScene {
   // Nasłuchuje na window (gwarantuje odbiór niezależnie od z-index warstw)
   _setupMouseInput(eventLayer) {
     window.addEventListener('click', (e) => {
-      // Ignoruj gdy PlanetScene lub PlanetGlobeScene jest aktywne
-      if (this.planetScene?.isOpen || this.planetGlobeScene?.isOpen) return;
-      // Ignoruj jeśli to był drag kamery (nie kliknięcie)
+      if (this.planetScene?.isOpen) return;
+      // Ignoruj drag kamery — ale NIE gdy overlay jest otwarty
+      // (overlay blokuje kamerę przez isOverUI, więc _hasMoved jest stałe)
       const wasDrag = this.cameraController.wasDrag;
-      this.cameraController._hasMoved = false; // reset po odczytaniu — zapobiega zamrażaniu kliknięć
-      if (wasDrag) return;
+      this.cameraController._hasMoved = false;
+      if (wasDrag && !this.uiManager.overlayManager.isAnyOpen()) return;
 
       const x = e.clientX;
       const y = e.clientY;
@@ -876,45 +852,43 @@ export class GameScene {
       }
     });
 
-    // Dwuklik na planetę/księżyc → od razu otwórz mapę/globus
-    // Fallback: jeśli raycast nie trafi (planeta za mała przy dalekim zoomie),
-    // użyj encji zaznaczonej przez klik (który fire'uje przed dblclick)
+    // Dwuklik na planetę/księżyc → otwórz ColonyOverlay
     window.addEventListener('dblclick', (e) => {
-      if (this.planetScene?.isOpen || this.planetGlobeScene?.isOpen) return;
+      if (this.planetScene?.isOpen) return;
+      if (this.uiManager?.overlayManager?.isAnyOpen()) return;
 
       let entity = this.threeRenderer.getEntityAtScreen(e.clientX, e.clientY);
       if (!entity || (entity.type !== 'planet' && entity.type !== 'moon')) {
-        // Fallback: użyj aktualnie zaznaczonej encji (z klik → body:selected)
         const focusId = this.threeRenderer._focusEntityId;
         if (focusId) entity = EntityManager.get(focusId);
       }
       if (!entity) return;
 
-      // Tryb cywilizacyjny + ciało z kolonią → otwórz globus
+      // Tryb cywilizacyjny + ciało z kolonią → otwórz ColonyOverlay
       if (window.KOSMOS?.civMode && this.colonyManager.hasColony(entity.id)) {
-        EventBus.emit('planet:openGlobe', { planet: entity });
+        this.colonyManager.switchActiveColony(entity.id);
+        this.uiManager.overlayManager.openPanel('colony');
         return;
       }
 
-      // Planeta z życiem (lifeScore > 80) → kolonizuj (otworzy globus)
+      // Planeta z życiem (lifeScore > 80) → kolonizuj
       if (!window.KOSMOS?.civMode && entity.type === 'planet' && entity.lifeScore > 80) {
         EventBus.emit('planet:colonize', { planet: entity });
       }
     });
 
     window.addEventListener('mousedown', (e) => {
-      if (this.planetScene?.isOpen || this.planetGlobeScene?.isOpen) return;
+      if (this.planetScene?.isOpen) return;
       this.uiManager.handleMouseDown(e.clientX, e.clientY);
     });
 
     window.addEventListener('mouseup', (e) => {
-      if (this.planetScene?.isOpen || this.planetGlobeScene?.isOpen) return;
+      if (this.planetScene?.isOpen) return;
       this.uiManager.handleMouseUp(e.clientX, e.clientY);
     });
 
     window.addEventListener('mousemove', (e) => {
-      // Ignoruj gdy PlanetScene lub PlanetGlobeScene jest aktywne
-      if (this.planetScene?.isOpen || this.planetGlobeScene?.isOpen) return;
+      if (this.planetScene?.isOpen) return;
 
       const x = e.clientX;
       const y = e.clientY;

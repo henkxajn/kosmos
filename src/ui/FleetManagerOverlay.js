@@ -7,6 +7,7 @@
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC }          from '../config/LayoutConfig.js';
+import { CIV_SIDEBAR_W }  from './CivPanelDrawer.js';
 import { SHIPS }           from '../data/ShipsData.js';
 import { effectiveRange }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
@@ -127,10 +128,10 @@ export class FleetManagerOverlay {
 
     this._hitZones = [];
 
-    // Bounds overlay — nie nakrywamy TopBar, BottomBar, Outliner
-    const ox = 0;
+    // Bounds overlay — nie nakrywamy TopBar, BottomBar, Outliner, Sidebar
+    const ox = CIV_SIDEBAR_W;
     const oy = TOP_PAD;
-    const ow = W - OUTLINER_W;
+    const ow = W - OUTLINER_W - CIV_SIDEBAR_W;
     const oh = H - TOP_PAD - BOTTOM_PAD;
     this._bounds = { x: ox, y: oy, w: ow, h: oh };
 
@@ -483,7 +484,7 @@ export class FleetManagerOverlay {
     const pad = 8;
 
     // ── Nagłówek (h=36) ──────────────────────────────────────
-    ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
+    ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
     ctx.fillText(`FLOTA [${vessels.length}]`, x + pad, y + 22);
 

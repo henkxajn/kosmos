@@ -134,9 +134,7 @@ export class PopulationOverlay extends BaseOverlay {
     ctx.fillStyle = THEME.bgSecondary;
     ctx.fillRect(x, y, w, HDR_H);
 
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText('POPULACJA', x + pad, y + 20);
+    this._drawText(ctx, 'POPULACJA', x + pad, y + 20, THEME.accent, THEME.fontSizeMedium);
 
     const totalPop = colonies.reduce((s, c) => s + (c.civSystem?.population ?? 0), 0);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;

@@ -284,9 +284,11 @@ export class Outliner {
           const colMgr = window.KOSMOS?.colonyManager;
           const colony = colMgr?.getColony(t.planetId);
           if (!colony?.planet) return true;
-          // Klik na ikonę 🗺 → otwórz mapę planety
+          // Klik na ikonę 🗺 → otwórz ColonyOverlay
           if (t.mapIconX && x >= t.mapIconX) {
-            EventBus.emit('planet:openGlobe', { planet: colony.planet });
+            const colMgr2 = window.KOSMOS?.colonyManager;
+            if (colMgr2) colMgr2.switchActiveColony(t.planetId);
+            window.KOSMOS?.overlayManager?.openPanel('colony');
           } else {
             // Klik na nazwę kolonii → przełącz aktywną kolonię (bez otwierania mapy)
             if (colMgr.switchActiveColony(t.planetId)) {

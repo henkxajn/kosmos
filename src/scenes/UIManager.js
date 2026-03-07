@@ -34,14 +34,23 @@ import {
   hitTestSidebar,
 } from '../ui/CivPanelDrawer.js';
 
-// Wymiary fizyczne canvas (piksele urządzenia)
-const _PW = window.innerWidth;
-const _PH = window.innerHeight;
+// Wymiary fizyczne canvas (piksele urządzenia) — aktualizowane przy resize/fullscreen
+let _PW = window.innerWidth;
+let _PH = window.innerHeight;
 // Skala UI względem bazowego 1280×720 — automatycznie skaluje tekst i panele
-const UI_SCALE = Math.min(_PW / 1280, _PH / 720);
+let UI_SCALE = Math.min(_PW / 1280, _PH / 720);
 // Wymiary logiczne (używane w kodzie rysującym — niezależne od DPI/rozdzielczości)
-const W = Math.round(_PW / UI_SCALE);
-const H = Math.round(_PH / UI_SCALE);
+let W = Math.round(_PW / UI_SCALE);
+let H = Math.round(_PH / UI_SCALE);
+
+// Przelicz wymiary przy zmianie rozmiaru okna / fullscreen
+function _recalcDimensions() {
+  _PW = window.innerWidth;
+  _PH = window.innerHeight;
+  UI_SCALE = Math.min(_PW / 1280, _PH / 720);
+  W = Math.round(_PW / UI_SCALE);
+  H = Math.round(_PH / UI_SCALE);
+}
 
 // ── Kolory i style UI ────────────────────────────────────────
 const C = {
@@ -117,6 +126,13 @@ export class UIManager {
     uiCanvas.height = _PH;
     this.canvas = uiCanvas;
     this.ctx    = uiCanvas.getContext('2d');
+
+    // Resize handler — aktualizuj wymiary canvas przy fullscreen / resize
+    window.addEventListener('resize', () => {
+      _recalcDimensions();
+      this.canvas.width  = _PW;
+      this.canvas.height = _PH;
+    });
 
     // ── Nowe komponenty UI ───────────────────────────────
     this._topBar       = new TopBar();
@@ -748,6 +764,8 @@ export class UIManager {
 
     // ── Overlay pełnoekranowy (FleetManager itp.) ────────────
     if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
+    // ── Przerysuj sidebar nad overlayem (zawsze widoczny) ───
+    if (civMode && !globeOpen && this.overlayManager.active) this._drawCivPanel();
 
     // ── Panel akcji gracza (tylko tryb Generator) ────────────
     if (!civMode) this._drawActionPanel();

@@ -92,9 +92,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Nagłówek
     ctx.fillStyle = THEME.bgSecondary;
     ctx.fillRect(x, y, w, 44);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText('SUROWCE', x + pad, y + 18);
+    this._drawText(ctx, 'EKONOMIA', x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     ctx.fillText('globalne · wszystkie kolonie', x + pad, y + 32);

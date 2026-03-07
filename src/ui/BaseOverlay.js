@@ -5,6 +5,7 @@
 
 import { THEME }  from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
+import { CIV_SIDEBAR_W } from './CivPanelDrawer.js';
 
 export class BaseOverlay {
   constructor(state) {
@@ -108,9 +109,9 @@ export class BaseOverlay {
   // Pomocniczy — oblicz wymiary overlay na podstawie canvas
   _getOverlayBounds(W, H) {
     return {
-      ox: 0,
+      ox: CIV_SIDEBAR_W,
       oy: COSMIC.TOP_BAR_H,
-      ow: W - COSMIC.OUTLINER_W,
+      ow: W - COSMIC.OUTLINER_W - CIV_SIDEBAR_W,
       oh: H - COSMIC.TOP_BAR_H - COSMIC.BOTTOM_BAR_H,
     };
   }
