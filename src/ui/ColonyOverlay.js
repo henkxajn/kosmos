@@ -69,9 +69,31 @@ export class ColonyOverlay extends BaseOverlay {
     this._lastRawX = 0;
     this._lastRawY = 0;
 
+    // Flash message (błąd upgrade/build/demolish)
+    this._flashMsg = null;
+    this._flashEnd = 0;
+
     // Nasłuchuj na zmiany budynków
-    EventBus.on('planet:buildResult', () => this._onBuildingChanged());
-    EventBus.on('planet:demolishResult', () => this._onBuildingChanged());
+    EventBus.on('planet:buildResult', (e) => {
+      this._onBuildingChanged();
+      if (!e.success && e.reason) this._showFlash(e.reason);
+    });
+    EventBus.on('planet:demolishResult', (e) => {
+      this._onBuildingChanged();
+      if (e.success) {
+        // Jeśli pełna rozbiórka — deselect hex; downgrade — odśwież panel
+        if (!e.downgrade) {
+          this._selectedHex = null;
+          if (this._globeRenderer) this._globeRenderer.setSelectedTile(null);
+        }
+      } else if (e.reason) {
+        this._showFlash(e.reason);
+      }
+    });
+    EventBus.on('planet:upgradeResult', (e) => {
+      this._onBuildingChanged();
+      if (!e.success && e.reason) this._showFlash(e.reason);
+    });
     EventBus.on('planet:constructionComplete', () => this._onBuildingChanged());
   }
 
@@ -164,6 +186,11 @@ export class ColonyOverlay extends BaseOverlay {
         }
       }
     }
+  }
+
+  _showFlash(msg) {
+    this._flashMsg = msg;
+    this._flashEnd = Date.now() + 2500;
   }
 
   _handleGlobeTileClick(tile, colony) {
@@ -304,6 +331,26 @@ export class ColonyOverlay extends BaseOverlay {
     this._drawLeft(ctx, ox, oy, LEFT_W, oh, colonies);
     this._drawCenter(ctx, ox + LEFT_W, oy, centerW, oh, selCol, colonies);
     this._drawRight(ctx, ox + ow - RIGHT_W, oy, RIGHT_W, oh, selCol);
+
+    // Flash message (błąd upgrade/build/demolish)
+    if (this._flashMsg && Date.now() < this._flashEnd) {
+      const fAlpha = Math.min(1, (this._flashEnd - Date.now()) / 500);
+      ctx.save();
+      ctx.globalAlpha = fAlpha;
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      const tw = ctx.measureText(this._flashMsg).width;
+      const fx = ox + ow / 2 - tw / 2 - 10;
+      const fy = oy + oh - 40;
+      ctx.fillStyle = 'rgba(120,30,30,0.92)';
+      ctx.fillRect(fx, fy, tw + 20, 24);
+      ctx.strokeStyle = THEME.danger;
+      ctx.strokeRect(fx, fy, tw + 20, 24);
+      ctx.fillStyle = '#ffaaaa';
+      ctx.textAlign = 'center';
+      ctx.fillText(this._flashMsg, ox + ow / 2, fy + 16);
+      ctx.textAlign = 'left';
+      ctx.restore();
+    }
 
     // Zarządzaj globusem 3D w środkowej kolumnie
     this._manageGlobe(selCol, ox + LEFT_W, oy, centerW, oh);
@@ -949,8 +996,6 @@ export class ColonyOverlay extends BaseOverlay {
       const tile = grid?.get(zone.data.q, zone.data.r);
       if (!tile) return;
       EventBus.emit('planet:demolishRequest', { tile });
-      this._selectedHex = null;
-      if (this._globeRenderer) this._globeRenderer.setSelectedTile(null);
       return;
     }
   }
