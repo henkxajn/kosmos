@@ -1027,7 +1027,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     const colMgr = window.KOSMOS?.colonyManager;
     const colony = colMgr?.getColony(this._selectedColonyId);
-    const inv = colony?.resourceSystem?.getInventory?.() ?? {};
+    const inv = colony?.resourceSystem?.inventorySnapshot?.() ?? {};
     const tSys = window.KOSMOS?.techSystem;
     const techOk = !b.requires || (tSys?.isResearched(b.requires) ?? false);
 
@@ -1129,7 +1129,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (nextLevel > maxLvl) { this._hideDomTooltip(); return; }
 
     const upgCostMult = nextLevel * 1.2;
-    const inv = colony?.resourceSystem?.getInventory?.() ?? {};
+    const inv = colony?.resourceSystem?.inventorySnapshot?.() ?? {};
 
     let canAffordAll = true;
     let html = `<div style="color:${THEME.warning};font-size:13px;margin-bottom:4px"><b>▲ Ulepszenie → Poz. ${nextLevel}</b></div>`;
@@ -1300,7 +1300,7 @@ export class ColonyOverlay extends BaseOverlay {
       ly += 14;
 
       // Koszt surowców
-      const inv = colony?.resourceSystem?.getInventory?.() ?? {};
+      const inv = colony?.resourceSystem?.inventorySnapshot?.() ?? {};
       const upgCostParts = [];
       let canAffordAll = true;
       for (const [k, v] of Object.entries(bDef.cost)) {
@@ -1411,7 +1411,7 @@ export class ColonyOverlay extends BaseOverlay {
   // ══════════════════════════════════════════════════════════════════════
 
   _canAfford(colony, building) {
-    const inv = colony?.resourceSystem?.getInventory?.() ?? {};
+    const inv = colony?.resourceSystem?.inventorySnapshot?.() ?? {};
     for (const [k, v] of Object.entries(building.cost ?? {})) {
       if ((inv[k] ?? 0) < v) return false;
     }
