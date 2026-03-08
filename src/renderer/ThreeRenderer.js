@@ -40,6 +40,20 @@ export class ThreeRenderer {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setClearColor(0x020405, 1); // tło: #020405 (spec bg)
 
+    // ── Obsługa utraty/odzyskania kontekstu WebGL ───────────
+    this._contextLost = false;
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault(); // pozwól przeglądarce odzyskać kontekst
+      this._contextLost = true;
+      console.warn('[ThreeRenderer] WebGL context lost');
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      this._contextLost = false;
+      console.info('[ThreeRenderer] WebGL context restored');
+      // Three.js sam odbuduje wewnętrzne zasoby po restore
+      this.renderer.setClearColor(0x020405, 1);
+    });
+
     // ── Scena ─────────────────────────────────────────────────
     this.scene = new THREE.Scene();
 
@@ -1275,37 +1289,45 @@ export class ThreeRenderer {
   _startLoop() {
     const loop = () => {
       requestAnimationFrame(loop);
-      const t = this._clock.getElapsedTime();
 
-      // Aktualizuj migotanie gwiazd tła
-      if (this._starTwinkleUniform) this._starTwinkleUniform.value = t;
+      // Pomiń rendering gdy kontekst WebGL utracony
+      if (this._contextLost) return;
 
-      // Animacja gwiazdy — [0]=rdzeń, [1]=innerGlow, [2]=midGlow, [3]=outerGlow
-      if (this._starGroup) {
-        const sg = this._starGroup;
-        // Rdzeń — powolna rotacja (granulacja widoczna przy zoom-in)
-        if (sg.children[0]) sg.children[0].rotation.y += 0.0005;
-        // Glow pulsowanie — delikatne "oddychanie"
-        for (let gi = 1; gi <= 3 && gi < sg.children.length; gi++) {
-          const spr = sg.children[gi];
-          if (!spr.material) continue;
-          if (spr.material._baseOpacity === undefined) {
-            spr.material._baseOpacity = spr.material.opacity;
-            spr.userData.baseScale = spr.scale.x;
+      try {
+        const t = this._clock.getElapsedTime();
+
+        // Aktualizuj migotanie gwiazd tła
+        if (this._starTwinkleUniform) this._starTwinkleUniform.value = t;
+
+        // Animacja gwiazdy — [0]=rdzeń, [1]=innerGlow, [2]=midGlow, [3]=outerGlow
+        if (this._starGroup) {
+          const sg = this._starGroup;
+          // Rdzeń — powolna rotacja (granulacja widoczna przy zoom-in)
+          if (sg.children[0]) sg.children[0].rotation.y += 0.0005;
+          // Glow pulsowanie — delikatne "oddychanie"
+          for (let gi = 1; gi <= 3 && gi < sg.children.length; gi++) {
+            const spr = sg.children[gi];
+            if (!spr.material) continue;
+            if (spr.material._baseOpacity === undefined) {
+              spr.material._baseOpacity = spr.material.opacity;
+              spr.userData.baseScale = spr.scale.x;
+            }
+            const speed = 1.6 - gi * 0.3;  // inner szybszy, outer wolniejszy
+            spr.material.opacity = spr.material._baseOpacity
+              + Math.sin(t * speed) * 0.03;
+            spr.scale.setScalar(
+              spr.userData.baseScale * (1 + Math.sin(t * speed * 0.8) * 0.015)
+            );
           }
-          const speed = 1.6 - gi * 0.3;  // inner szybszy, outer wolniejszy
-          spr.material.opacity = spr.material._baseOpacity
-            + Math.sin(t * speed) * 0.03;
-          spr.scale.setScalar(
-            spr.userData.baseScale * (1 + Math.sin(t * speed * 0.8) * 0.015)
-          );
         }
+
+        // Aktualizuj kamerę (płynny zoom + orbit)
+        if (this._cameraController) this._cameraController.update();
+
+        this.renderer.render(this.scene, this.camera);
+      } catch (err) {
+        console.error('[ThreeRenderer] Render loop error:', err);
       }
-
-      // Aktualizuj kamerę (płynny zoom + orbit)
-      if (this._cameraController) this._cameraController.update();
-
-      this.renderer.render(this.scene, this.camera);
     };
     loop();
   }

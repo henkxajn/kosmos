@@ -73,15 +73,15 @@ export class PlanetGlobeRenderer {
     const W = bounds ? Math.round(bounds.w) : window.innerWidth;
     const H = bounds ? Math.round(bounds.h) : window.innerHeight;
 
-    // Dynamiczny canvas
+    // Dynamiczny canvas (background jako fallback przy utracie kontekstu WebGL)
     this._canvas = document.createElement('canvas');
     if (bounds) {
       this._canvas.style.cssText =
         `position:absolute;left:${Math.round(bounds.x)}px;top:${Math.round(bounds.y)}px;` +
-        `width:${Math.round(bounds.w)}px;height:${Math.round(bounds.h)}px;z-index:1;`;
+        `width:${Math.round(bounds.w)}px;height:${Math.round(bounds.h)}px;z-index:1;background:#020405;`;
     } else {
       this._canvas.style.cssText =
-        'position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;';
+        'position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;background:#020405;';
     }
     document.getElementById('game-container').appendChild(this._canvas);
 
@@ -332,8 +332,12 @@ export class PlanetGlobeRenderer {
   _startLoop() {
     const loop = () => {
       if (!this._renderer) return;
-      this._cameraCtrl?.update();
-      this._renderer.render(this._scene, this._camera);
+      try {
+        this._cameraCtrl?.update();
+        this._renderer.render(this._scene, this._camera);
+      } catch (err) {
+        console.error('[PlanetGlobeRenderer] Render loop error:', err);
+      }
       this._animFrameId = requestAnimationFrame(loop);
     };
     this._animFrameId = requestAnimationFrame(loop);
