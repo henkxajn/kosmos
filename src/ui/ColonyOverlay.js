@@ -48,12 +48,12 @@ const TILE_NAMES = {
 
 // Kategorie budynków do wyświetlenia
 const BUILDING_CATEGORIES = [
-  { id: 'mining',      label: '⛏ Wydobycie',    color: '#cc9944' },
-  { id: 'energy',      label: '⚡ Energia',       color: '#ffdd44' },
-  { id: 'food',        label: '🌾 Żywność',      color: '#44cc66' },
-  { id: 'population',  label: '🏠 Populacja',    color: '#4488ff' },
-  { id: 'research',    label: '🔬 Badania',      color: '#cc66ff' },
-  { id: 'space',       label: '🚀 Kosmos',       color: '#8888ff' },
+  { id: 'mining',      label: '⛏ Wydobycie' },
+  { id: 'energy',      label: '⚡ Energia' },
+  { id: 'food',        label: '🌾 Żywność' },
+  { id: 'population',  label: '🏠 Populacja' },
+  { id: 'research',    label: '🔬 Badania' },
+  { id: 'space',       label: '🚀 Kosmos' },
 ];
 
 // Typy planet → ikona + label
@@ -863,13 +863,20 @@ export class ColonyOverlay extends BaseOverlay {
 
       const collapsed = this._collapsedCategories.has(cat.id);
 
-      // Nagłówek kategorii
+      // Nagłówek kategorii — monochromatyczny (Industrial Blueprint)
       if (ly + 20 > startY - 40) {
-        ctx.fillStyle = 'rgba(0,255,180,0.03)';
-        ctx.fillRect(x, ly, w, 20);
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = cat.color;
+        ctx.fillStyle = THEME.accent;
+        ctx.globalAlpha = 0.7;
         ctx.fillText(`${collapsed ? '▸' : '▾'} ${cat.label}`, x + pad + 4, ly + 14);
+        ctx.globalAlpha = 1;
+        // Cienka linia separatora pod nagłówkiem
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x + pad, ly + 18);
+        ctx.lineTo(x + w - pad, ly + 18);
+        ctx.stroke();
         this._addHit(x, ly, w, 20, 'toggleCat', { catId: cat.id });
       }
       ly += 20;
@@ -897,33 +904,25 @@ export class ColonyOverlay extends BaseOverlay {
         const isHovered = (this._tileTooltipId === b.id);
         const isSelected = (this._pendingBuildingId === b.id && this._buildMode);
 
-        // --- Tło kafelka ---
+        // --- Tło kafelka (Industrial Blueprint — jednolite, monochromatyczne) ---
         ctx.globalAlpha = locked ? 0.2 : 1;
 
-        // Górna część (ikona) — ciemniejsze tło
-        ctx.fillStyle = isSelected ? 'rgba(0,255,180,0.08)' : 'rgba(6,12,18,0.95)';
-        ctx.fillRect(tx, ty, TILE_W, ICON_H);
+        // Jednolite tło
+        if (isSelected) {
+          ctx.fillStyle = 'rgba(0,255,180,0.06)';
+        } else if (isHovered && !locked) {
+          ctx.fillStyle = 'rgba(0,255,180,0.04)';
+        } else {
+          ctx.fillStyle = 'rgba(6,12,18,0.85)';
+        }
+        ctx.fillRect(tx, ty, TILE_W, TILE_H);
 
-        // Dolna część (tekst) — nieco jaśniejsze
-        ctx.fillStyle = isSelected ? 'rgba(0,255,180,0.05)' : 'rgba(10,18,24,0.9)';
-        ctx.fillRect(tx, ty + ICON_H, TILE_W, TILE_H - ICON_H);
-
-        // Obramowanie
-        if (isSelected) ctx.strokeStyle = THEME.accent;
-        else if (locked) ctx.strokeStyle = THEME.border;
-        else if (!canAfford) ctx.strokeStyle = 'rgba(255,51,68,0.25)';
-        else ctx.strokeStyle = THEME.borderLight ?? THEME.border;
+        // Obramowanie — monochromatyczne
+        if (isSelected) ctx.strokeStyle = THEME.borderActive;
+        else if (isHovered && !locked) ctx.strokeStyle = THEME.borderLight;
+        else ctx.strokeStyle = THEME.border;
         ctx.lineWidth = isSelected ? 1.5 : 1;
         ctx.strokeRect(tx + 0.5, ty + 0.5, TILE_W - 1, TILE_H - 1);
-
-        // Hover glow od dołu (subtelny gradient)
-        if (isHovered && !locked) {
-          const grd = ctx.createLinearGradient(tx, ty + TILE_H - 16, tx, ty + TILE_H);
-          grd.addColorStop(0, 'rgba(0,255,180,0)');
-          grd.addColorStop(1, 'rgba(0,255,180,0.12)');
-          ctx.fillStyle = grd;
-          ctx.fillRect(tx + 1, ty + TILE_H - 16, TILE_W - 2, 16);
-        }
 
         // --- Ikona wyśrodkowana w górnej połowie ---
         ctx.font = `${Math.round(TILE_W * 0.38)}px ${THEME.fontFamily}`;
@@ -946,10 +945,10 @@ export class ColonyOverlay extends BaseOverlay {
         const shortName = TILE_NAMES[b.id] ?? b.namePL;
         ctx.fillText(shortName, tx + TILE_W / 2, ty + ICON_H + 11);
 
-        // --- Produkcja / koszt ---
+        // --- Produkcja / koszt (stonowane, monochromatyczne) ---
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         if (b.rates && Object.keys(b.rates).length > 0) {
-          ctx.fillStyle = THEME.success;
+          ctx.fillStyle = THEME.textSecondary;
           const rateStr = formatRates(b.rates);
           ctx.fillText(rateStr, tx + TILE_W / 2, ty + ICON_H + 22);
         } else if (b.isMine) {
@@ -959,7 +958,7 @@ export class ColonyOverlay extends BaseOverlay {
           ctx.fillStyle = THEME.textDim;
           ctx.fillText('+1PP/r', tx + TILE_W / 2, ty + ICON_H + 22);
         } else if (b.housing > 0) {
-          ctx.fillStyle = THEME.info ?? THEME.accent;
+          ctx.fillStyle = THEME.textSecondary;
           ctx.fillText(`+${b.housing}🏠`, tx + TILE_W / 2, ty + ICON_H + 22);
         }
 
