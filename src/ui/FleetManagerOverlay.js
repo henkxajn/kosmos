@@ -1547,6 +1547,9 @@ export class FleetManagerOverlay {
     const btnH = 28;
     const gap = 4;
 
+    // Zbierz powody blokad (do wyświetlenia pod przyciskami)
+    const disabledReasons = [];
+
     for (let i = 0; i < actions.length; i++) {
       const { action, ok, reason } = actions[i];
       const col = i % 2;
@@ -1574,11 +1577,25 @@ export class FleetManagerOverlay {
           type: 'action',
           data: { actionId: action.id, vessel },
         });
+      } else if (reason) {
+        // Zbierz unikalne powody blokad
+        if (!disabledReasons.includes(reason)) disabledReasons.push(reason);
       }
     }
 
     const rows = Math.ceil(actions.length / 2);
-    cy += rows * (btnH + gap) + 8;
+    cy += rows * (btnH + gap) + 4;
+
+    // Wyświetl powody blokad pod przyciskami
+    if (disabledReasons.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger ?? '#ff4444';
+      for (const reason of disabledReasons) {
+        ctx.fillText(`⚠ ${reason}`, x + pad, cy + 10);
+        cy += 14;
+      }
+      cy += 4;
+    }
 
     return cy;
   }
