@@ -9,6 +9,8 @@ import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC }          from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W }  from './CivPanelDrawer.js';
 import { SHIPS }           from '../data/ShipsData.js';
+import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
+import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { effectiveRange }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import EntityManager       from '../core/EntityManager.js';
@@ -294,6 +296,11 @@ export class FleetManagerOverlay {
     switch (zone.type) {
       case 'close':
         this.close();
+        break;
+      case 'build_ship':
+        if (zone.data.enabled) {
+          EventBus.emit('fleet:buildRequest', { shipId: zone.data.shipId });
+        }
         break;
       case 'filter':
         this._filter = zone.data.filterId;
@@ -1072,12 +1079,7 @@ export class FleetManagerOverlay {
     const pad = 10;
 
     if (!this._selectedVesselId) {
-      // Brak zaznaczenia
-      ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText('Wybierz statek', x + w / 2, y + h / 2);
-      ctx.textAlign = 'left';
+      this._drawShipyard(ctx, x, y, w, h, colMgr, activePid);
       return;
     }
 
@@ -1216,6 +1218,154 @@ export class FleetManagerOverlay {
     const logSpace = h - (cy - y);
     if (logSpace > 30 && vessel.missionLog.length > 0) {
       this._drawMissionLog(ctx, x, cy, w, logSpace, pad, vessel);
+    }
+  }
+
+  // ── Stocznia (prawa kolumna gdy brak selekcji) ─────────────────────────────
+
+  _drawShipyard(ctx, x, y, w, h, colMgr, activePid) {
+    const PAD = 10;
+    const LH = 16;
+    let cy = y + 12;
+
+    const tSys = window.KOSMOS?.techSystem;
+    const activeCol = colMgr?.getColony(activePid);
+
+    // Nagłówek
+    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textHeader;
+    ctx.fillText('⚓ STOCZNIA', x + PAD, cy + 10);
+    cy += LH + 8;
+
+    // Sprawdź warunki wstępne
+    const hasExploration = tSys?.isResearched('exploration') ?? false;
+    if (!hasExploration) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText('🔒 Wymaga technologii: Eksploracja', x + PAD, cy + 8);
+      cy += LH + 8;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText('Wybierz statek z listy po lewej', x + PAD, cy + 8);
+      return;
+    }
+
+    // Oblicz poziom stoczni
+    let shipyardLevel = 0;
+    if (activeCol?.buildingSystem) {
+      for (const [, e] of activeCol.buildingSystem._active) {
+        if (e.building?.id === 'shipyard') shipyardLevel += e.level ?? 1;
+      }
+    }
+
+    if (shipyardLevel === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText('⚓ Brak stoczni — zbuduj na planecie', x + PAD, cy + 8);
+      cy += LH + 8;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText('Wybierz statek z listy po lewej', x + PAD, cy + 8);
+      return;
+    }
+
+    // Status stoczni — sloty
+    const queues = colMgr?.getShipQueues(activePid) ?? [];
+    const usedSlots = queues.length || 1;
+    const speedBonus = Math.max(1, Math.floor(shipyardLevel / usedSlots));
+    const bonusStr = speedBonus > 1 ? ` ×${speedBonus}⚡` : '';
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.success;
+    ctx.fillText(`Sloty: ${queues.length}/${shipyardLevel}${bonusStr}`, x + PAD, cy + 8);
+    cy += LH;
+
+    // Aktywne budowy — paski progresu
+    if (queues.length > 0) {
+      for (const q of queues) {
+        if (cy > y + h - 30) break;
+        const shipDef = SHIPS[q.shipId];
+        const frac = q.buildTime > 0 ? Math.min(1, q.progress / q.buildTime) : 0;
+        const eta = q.buildTime > 0 ? ((q.buildTime - q.progress) / speedBonus).toFixed(1) : '?';
+
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textPrimary;
+        ctx.fillText(`${shipDef?.icon ?? '🚀'} ${shipDef?.namePL ?? q.shipId}`, x + PAD, cy + 8);
+
+        // Pasek progresu
+        const barX = x + PAD;
+        const barY = cy + 13;
+        const barW = w - PAD * 2 - 50;
+        const barH = 6;
+        ctx.fillStyle = THEME.bgTertiary;
+        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillStyle = THEME.accent;
+        ctx.fillRect(barX, barY, Math.round(barW * frac), barH);
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(barX, barY, barW, barH);
+
+        // Procent + ETA
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.textAlign = 'right';
+        ctx.fillText(`${Math.round(frac * 100)}%`, x + w - PAD, cy + 8);
+        ctx.textAlign = 'left';
+
+        cy += LH + 8;
+      }
+    }
+
+    // Separator
+    cy += 4;
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
+    cy += 10;
+
+    // Nagłówek budowy
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textHeader;
+    ctx.fillText('BUDOWA STATKU', x + PAD, cy + 8);
+    cy += LH + 4;
+
+    const canBuildAny = queues.length < shipyardLevel;
+    const inv = activeCol?.resourceSystem?.inventorySnapshot() ?? {};
+
+    // Przyciski budowy statków
+    for (const ship of Object.values(SHIPS)) {
+      if (cy > y + h - 26) break;
+      const hasTech = !ship.requires || (tSys?.isResearched(ship.requires) ?? false);
+      if (!hasTech) continue;
+
+      const allCosts = { ...(ship.cost || {}), ...(ship.commodityCost || {}) };
+      const canAfford = Object.entries(allCosts).every(([k, v]) => (inv[k] ?? 0) >= v);
+      const canBuild = canBuildAny && canAfford;
+
+      const btnH = 24;
+      ctx.fillStyle = canBuild ? 'rgba(0,255,180,0.06)' : 'rgba(20,20,30,0.5)';
+      ctx.fillRect(x + PAD, cy, w - PAD * 2, btnH);
+      ctx.strokeStyle = canBuild ? THEME.borderActive : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + PAD, cy, w - PAD * 2, btnH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = canBuild ? THEME.accent : THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(`${ship.icon} ${ship.namePL}`, x + w / 2, cy + 16);
+      ctx.textAlign = 'left';
+
+      this._hitZones.push({
+        x: x + PAD, y: cy, w: w - PAD * 2, h: btnH,
+        type: 'build_ship', data: { shipId: ship.id, enabled: canBuild },
+      });
+      cy += btnH + 4;
+    }
+
+    // Wskazówka na dole
+    if (cy < y + h - 20) {
+      cy += 8;
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
+      cy += 12;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText('← Wybierz statek z listy', x + PAD, cy + 4);
     }
   }
 
