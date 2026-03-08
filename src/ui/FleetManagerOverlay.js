@@ -308,7 +308,18 @@ export class FleetManagerOverlay {
         this._scrollOffset = 0;
         break;
       case 'vessel':
-        this._selectedVesselId = zone.data.vesselId;
+        // Toggle — kliknięcie tego samego statku odznacza go
+        if (this._selectedVesselId === zone.data.vesselId) {
+          this._selectedVesselId = null;
+        } else {
+          this._selectedVesselId = zone.data.vesselId;
+        }
+        this._missionConfig = null;
+        this._targetScrollOffset = 0;
+        this._cachedTargets = null;
+        break;
+      case 'back_to_shipyard':
+        this._selectedVesselId = null;
         this._missionConfig = null;
         this._targetScrollOffset = 0;
         this._cachedTargets = null;
@@ -1093,7 +1104,16 @@ export class FleetManagerOverlay {
     const ship = SHIPS[vessel.shipId];
     let cy = y + pad;
 
-    // ── Nagłówek (h=56) ──────────────────────────────────────
+    // ── Przycisk powrotu do Stoczni ────────────────────────
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    const backLabel = '← Stocznia';
+    ctx.fillText(backLabel, x + pad, cy + 10);
+    const backW = ctx.measureText(backLabel).width + 4;
+    this._hitZones.push({ x: x + pad - 2, y: cy, w: backW, h: 16, type: 'back_to_shipyard', data: {} });
+    cy += 18;
+
+    // ── Nagłówek ──────────────────────────────────────
     // Ikona + nazwa + typ
     ctx.font = `16px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
