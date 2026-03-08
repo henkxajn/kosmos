@@ -287,6 +287,34 @@ export class PlanetGlobeTexture {
         }
       }
 
+      // ─ Rozbudowa istniejącego budynku (upgrade w toku) ─
+      if (hasConstruction && hasBuilding) {
+        const pct = tile.underConstruction.buildTime > 0
+          ? Math.min(1, (tile.underConstruction.progress ?? 0) / tile.underConstruction.buildTime)
+          : 0;
+        // Pulsujący pierścień wokół ikony
+        const ringR = markerR * 1.15;
+        ctx.beginPath();
+        ctx.arc(texX, texY, ringR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
+        ctx.strokeStyle = `rgba(255,200,50,0.9)`;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        // Tło pierścienia (ciemniejsze)
+        ctx.beginPath();
+        ctx.arc(texX, texY, ringR, -Math.PI / 2 + Math.PI * 2 * pct, -Math.PI / 2 + Math.PI * 2);
+        ctx.strokeStyle = `rgba(255,200,50,0.2)`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Mini pasek pod ikoną
+        const barW2 = markerR * 1.6, barH2 = 2;
+        const bx2 = texX - barW2 / 2;
+        const by2 = texY + markerR + 3;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(bx2, by2, barW2, barH2);
+        ctx.fillStyle = 'rgba(255,200,50,0.9)';
+        ctx.fillRect(bx2, by2, barW2 * pct, barH2);
+      }
+
       // ─ Budowa w toku (Canvas 2D — dynamiczny progress) ─
       if (hasConstruction && !hasBuilding) {
         const cBuilding = BUILDINGS[tile.underConstruction.buildingId];

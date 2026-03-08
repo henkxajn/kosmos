@@ -7,6 +7,7 @@
 import { BaseOverlay }  from './BaseOverlay.js';
 import { THEME }        from '../config/ThemeConfig.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
+import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
@@ -23,6 +24,27 @@ let _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 window.addEventListener('resize', () => {
   _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 });
+
+// Krótkie nazwy budynków do siatki kafelków
+const TILE_NAMES = {
+  mine:                   'Kopalnia',
+  factory:                'Fabryka',
+  smelter:                'Huta',
+  launch_pad:             'Wyrzutnia',
+  autonomous_mine:        'Kop. Auto.',
+  solar_farm:             'El. Słoneczna',
+  geothermal:             'El. Geoterm.',
+  nuclear_plant:          'El. Jądrowa',
+  autonomous_solar_farm:  'El. Aut. Sł.',
+  fusion_reactor:         'Reaktor Fuz.',
+  farm:                   'Farma',
+  well:                   'Studnia',
+  synthesized_food_plant: 'Synt. Żywn.',
+  habitat:                'Habitat',
+  research_station:       'St. Badawcza',
+  shipyard:               'Stocznia',
+  terraformer:            'Terraformer',
+};
 
 // Kategorie budynków do wyświetlenia
 const BUILDING_CATEGORIES = [
@@ -65,6 +87,20 @@ export class ColonyOverlay extends BaseOverlay {
     this._tooltipX = 0;
     this._tooltipY = 0;
 
+    // Tooltip przycisku ULEPSZ (hover)
+    this._tooltipUpgradeData = null; // { q, r, buildingId }
+    this._tooltipUpgradeX = 0;
+    this._tooltipUpgradeY = 0;
+
+    // Tooltip kafelka budynku — z opóźnieniem 400ms
+    this._tileTooltipId = null;     // buildingId hovered
+    this._tileTooltipStart = 0;     // Date.now() gdy hover się zaczął
+    this._tileTooltipReady = false;  // true po 400ms
+
+    // DOM tooltip (nad globusem WebGL)
+    this._tooltipEl = null;
+    this._createTooltipEl();
+
     // Cache siatki hex (per kolonia)
     this._gridCache = {};  // planetId → HexGrid
 
@@ -106,6 +142,47 @@ export class ColonyOverlay extends BaseOverlay {
     EventBus.on('planet:constructionProgress', () => this._onBuildingChanged());
   }
 
+  _createTooltipEl() {
+    if (this._tooltipEl) return;
+    const el = document.createElement('div');
+    el.id = 'colony-tooltip';
+    el.style.cssText = `
+      position: fixed; z-index: 50; pointer-events: none;
+      display: none; max-width: 300px; padding: 8px 10px;
+      background: rgba(6,12,20,0.96); border: 1px solid #1a6e50;
+      border-radius: 4px; font-family: 'Courier New', monospace;
+      font-size: 11px; color: #b0c4b0; line-height: 1.45;
+      overflow-wrap: break-word; word-wrap: break-word;
+    `;
+    document.body.appendChild(el);
+    this._tooltipEl = el;
+  }
+
+  /** Pokaż DOM tooltip na podanych koordynatach ekranowych */
+  _showDomTooltip(html, sx, sy) {
+    if (!this._tooltipEl) return;
+    this._tooltipEl.innerHTML = html;
+    this._tooltipEl.style.display = 'block';
+
+    // Pozycjonowanie — po lewej od kursora, unikaj wyjścia poza ekran
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const rect = this._tooltipEl.getBoundingClientRect();
+    let tx = sx - rect.width - 12;
+    let ty = sy - rect.height / 2;
+    if (tx < 4) tx = sx + 14;
+    if (ty < 4) ty = 4;
+    if (ty + rect.height > H - 4) ty = H - rect.height - 4;
+    if (tx + rect.width > W - 4) tx = W - rect.width - 4;
+
+    this._tooltipEl.style.left = `${Math.round(tx)}px`;
+    this._tooltipEl.style.top = `${Math.round(ty)}px`;
+  }
+
+  _hideDomTooltip() {
+    if (this._tooltipEl) this._tooltipEl.style.display = 'none';
+  }
+
   show() {
     super.show();
     // Zawsze synchronizuj z aktywną kolonią (mogła się zmienić przez switchActiveColony)
@@ -125,6 +202,10 @@ export class ColonyOverlay extends BaseOverlay {
     this._buildMode = false;
     this._pendingBuildingId = null;
     this._tooltipBuildingId = null;
+    this._tooltipUpgradeData = null;
+    this._tileTooltipId = null;
+    this._tileTooltipReady = false;
+    this._hideDomTooltip();
     this._closeGlobe();
   }
 
@@ -134,6 +215,30 @@ export class ColonyOverlay extends BaseOverlay {
     if (!colony?.planet) return;
     const grid = this._getGrid(colony);
     if (!grid) return;
+
+    // Ustaw gridHeight i deposits w BuildingSystem
+    const bSys = colony.buildingSystem;
+    if (bSys) {
+      bSys._gridHeight = grid.height;
+      bSys.setDeposits(colony.planet.deposits ?? []);
+    }
+
+    // Auto-place stolicy przy pierwszym otwarciu (pomiń outpost)
+    const isOutpost = colony.isOutpost ?? false;
+    if (bSys && window.KOSMOS?.civMode && !isOutpost) {
+      let hasCapital = false;
+      for (const key of bSys._active.keys()) {
+        if (key.startsWith('capital_')) { hasCapital = true; break; }
+      }
+      if (!hasCapital) {
+        const baseTile = this._findColonyBaseTile(grid);
+        if (baseTile) {
+          EventBus.emit('planet:buildRequest', { tile: baseTile, buildingId: 'colony_base' });
+          // Odśwież grid cache po postawieniu stolicy
+          delete this._gridCache[colony.planetId];
+        }
+      }
+    }
 
     // Zamknij stary globus jeśli inna planeta
     if (this._globeRenderer && this._globePlanetId !== colony.planetId) {
@@ -237,6 +342,50 @@ export class ColonyOverlay extends BaseOverlay {
     }
   }
 
+  // ── Znajdź najlepszy hex na stolicę (centrum → spirala, preferuj plains/forest) ──
+  _findColonyBaseTile(grid) {
+    if (!grid) return null;
+    const w = grid.width;
+    const h = grid.height;
+    const centerQ = Math.floor(w / 2);
+    const centerR = Math.floor(h / 2);
+    const centerTile = grid.getOffset(centerQ, centerR);
+
+    const preferred = ['plains', 'forest', 'desert', 'tundra'];
+    const maxRadius = Math.max(w, h);
+
+    for (const prefType of preferred) {
+      if (centerTile && centerTile.type === prefType && !centerTile.isOccupied) {
+        const terrain = TERRAIN_TYPES[centerTile.type];
+        if (terrain?.buildable) return centerTile;
+      }
+      for (let radius = 1; radius <= maxRadius; radius++) {
+        const ring = grid.ring(centerTile?.q ?? 0, centerTile?.r ?? 0, radius);
+        for (const tile of ring) {
+          if (tile.type === prefType && !tile.isOccupied) {
+            const terrain = TERRAIN_TYPES[tile.type];
+            if (terrain?.buildable) return tile;
+          }
+        }
+      }
+    }
+    // Fallback — dowolny budowalny hex blisko centrum
+    if (centerTile && !centerTile.isOccupied) {
+      const terrain = TERRAIN_TYPES[centerTile.type];
+      if (terrain?.buildable) return centerTile;
+    }
+    for (let radius = 1; radius <= maxRadius; radius++) {
+      const ring = grid.ring(centerTile?.q ?? 0, centerTile?.r ?? 0, radius);
+      for (const tile of ring) {
+        if (!tile.isOccupied) {
+          const terrain = TERRAIN_TYPES[tile.type];
+          if (terrain?.buildable) return tile;
+        }
+      }
+    }
+    return null;
+  }
+
   // ── Pobierz grid kolonii (z cache lub generuj) ──────────────────────
   _getGrid(colony) {
     if (!colony) return null;
@@ -298,6 +447,7 @@ export class ColonyOverlay extends BaseOverlay {
             progress: entry.progress ?? 0,
             buildTime: entry.buildTime ?? 1,
             isUpgrade: entry.isUpgrade ?? false,
+            targetLevel: entry.targetLevel,
           };
         }
       }
@@ -313,9 +463,15 @@ export class ColonyOverlay extends BaseOverlay {
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
     const centerW = ow - LEFT_W - RIGHT_W;
 
-    // Tło
+    // Tło — trzy prostokąty: lewy panel, prawy panel, środkowy nagłówek
+    // Centrum body przezroczyste gdy globus aktywny — WebGL (z-index 1) świeci przez ui-canvas (z-index 2)
     ctx.fillStyle = 'rgba(2,4,5,0.97)';
-    ctx.fillRect(ox, oy, ow, oh);
+    ctx.fillRect(ox, oy, LEFT_W, oh);                           // lewa kolumna
+    ctx.fillRect(ox + ow - RIGHT_W, oy, RIGHT_W, oh);           // prawa kolumna
+    ctx.fillRect(ox + LEFT_W, oy, centerW, HDR_H);              // nagłówek środkowy
+    if (!this._globeRenderer) {
+      ctx.fillRect(ox + LEFT_W, oy + HDR_H, centerW, oh - HDR_H); // centrum body (gdy brak globusa)
+    }
     ctx.strokeStyle = THEME.border;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
@@ -364,9 +520,19 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.restore();
     }
 
-    // Tooltip budynku (hover nad kartą w build list)
+    // Auto-check tooltip delay (bo draw() jest wywoływany co frame, a handleMouseMove tylko przy ruchu)
+    if (this._tileTooltipId && !this._tileTooltipReady && Date.now() - this._tileTooltipStart >= 400) {
+      this._tileTooltipReady = true;
+      this._tooltipBuildingId = this._tileTooltipId;
+    }
+
+    // Tooltip budynku (hover nad kartą w build list) — DOM overlay
     if (this._tooltipBuildingId) {
-      this._drawBuildingTooltip(ctx, W, H);
+      this._updateBuildingTooltip();
+    } else if (this._tooltipUpgradeData) {
+      this._updateUpgradeTooltip();
+    } else {
+      this._hideDomTooltip();
     }
 
     // Zarządzaj globusem 3D w środkowej kolumnie
@@ -382,12 +548,11 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
     // Oblicz bounds w pikselach ekranowych (globus potrzebuje CSS px)
-    const hdrH = 36;
     const globeBounds = {
       x: (centerX) * _UI_SCALE,
-      y: (centerY + hdrH) * _UI_SCALE,
+      y: (centerY + HDR_H) * _UI_SCALE,
       w: (centerW) * _UI_SCALE,
-      h: (centerH - hdrH) * _UI_SCALE,
+      h: (centerH - HDR_H) * _UI_SCALE,
     };
 
     if (this._globePlanetId !== colony.planetId) {
@@ -434,28 +599,58 @@ export class ColonyOverlay extends BaseOverlay {
 
     let ry = listY - this._scrollOffset;
     for (const col of colonies) {
-      if (ry + ROW_H < listY) { ry += ROW_H; continue; }
-      if (ry > listY + listH) break;
-
       const isSel = col.planetId === this._selectedColonyId;
       const isHov = col.planetId === this._hoverRowId;
       const civ = col.civSystem;
       const bSys = col.buildingSystem;
       const pop = civ?.population ?? 0;
       const housing = civ?.housing ?? 0;
-      const buildingCount = bSys?._active?.size ?? 0;
       const rSys = col.resourceSystem;
       const energyBal = rSys?._energyFlow?.balance ?? 0;
+
+      // Zbierz listę budynków + budynki w budowie
+      const bldgs = [];
+      // Zbiór kluczy z upgrade w toku (aby oznaczyć na liście aktywnych)
+      const upgradingKeys = new Set();
+      if (bSys?._constructionQueue) {
+        for (const [tKey, entry] of bSys._constructionQueue) {
+          if (entry.isUpgrade) upgradingKeys.add(tKey);
+        }
+      }
+      if (bSys?._active) {
+        for (const [key, entry] of bSys._active) {
+          const isCapital = key.startsWith('capital_');
+          const b = entry.building;
+          const lvl = entry.level ?? 1;
+          // Sprawdź czy budynek ma upgrade w toku
+          const realKey = isCapital ? key.slice(8) : key;
+          const isUpgrading = upgradingKeys.has(realKey);
+          bldgs.push({ icon: isCapital ? '🏛' : (b?.icon ?? '🏗'), name: b?.namePL ?? '?', lvl, underConstruction: false, upgrading: isUpgrading });
+        }
+      }
+      if (bSys?._constructionQueue) {
+        for (const [, entry] of bSys._constructionQueue) {
+          if (entry.isUpgrade) continue; // upgrade już widoczny przy aktywnym budynku
+          const b = BUILDINGS[entry.buildingId];
+          if (b) bldgs.push({ icon: b.icon ?? '🏗', name: b.namePL ?? '?', lvl: 1, underConstruction: true, upgrading: false });
+        }
+      }
+
+      // Dynamiczna wysokość: nagłówek(16) + stats(14) + budynki (12px/linia, 1 per linia)
+      const rowH = 34 + Math.max(0, bldgs.length) * 12 + 4;
+
+      if (ry + rowH < listY) { ry += rowH; continue; }
+      if (ry > listY + listH) break;
 
       // Tło wiersza
       if (isSel) {
         ctx.fillStyle = 'rgba(0,255,180,0.05)';
-        ctx.fillRect(x, ry, w, ROW_H);
+        ctx.fillRect(x, ry, w, rowH);
         ctx.fillStyle = THEME.accent;
-        ctx.fillRect(x, ry, 2, ROW_H);
+        ctx.fillRect(x, ry, 2, rowH);
       } else if (isHov) {
         ctx.fillStyle = 'rgba(0,255,180,0.03)';
-        ctx.fillRect(x, ry, w, ROW_H);
+        ctx.fillRect(x, ry, w, rowH);
       }
 
       // Nazwa kolonii
@@ -471,29 +666,40 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillText(typeStr, x + w - 6, ry + 14);
       ctx.textAlign = 'left';
 
-      // Pasek zabudowania
-      const grid = this._getGrid(col);
-      const totalHexes = grid ? grid.filter(t => TERRAIN_TYPES[t.type]?.buildable).length : 1;
-      const usedHexes = buildingCount;
-      const fillPct = totalHexes > 0 ? usedHexes / totalHexes : 0;
-      const barColor = fillPct >= 0.9 ? THEME.danger : fillPct >= 0.6 ? THEME.warning : THEME.success;
-      this._drawBar(ctx, x + pad, ry + 20, w - pad * 2, 3, fillPct, barColor, THEME.border);
-
-      // Dolna linijka
+      // Stats: POP + energy
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(`👤${pop}/${housing}`, x + pad, ry + 28);
       const enColor = energyBal >= 0 ? THEME.success : THEME.danger;
-      ctx.fillText(`POP: ${pop}/${housing}`, x + pad, ry + 38);
-      ctx.fillText(`BUD: ${buildingCount}`, x + pad + 76, ry + 38);
       ctx.fillStyle = enColor;
-      ctx.fillText(`⚡${energyBal >= 0 ? '+' : ''}${energyBal.toFixed(0)}`, x + pad + 136, ry + 38);
+      ctx.fillText(`⚡${energyBal >= 0 ? '+' : ''}${energyBal.toFixed(0)}`, x + pad + 60, ry + 28);
+
+      // Drzewo budynków — jednolista, 1 budynek per linia
+      if (bldgs.length > 0) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        for (let i = 0; i < bldgs.length; i++) {
+          const b = bldgs[i];
+          const by = ry + 38 + i * 12;
+          if (b.underConstruction) {
+            ctx.fillStyle = THEME.warning;
+            ctx.fillText(`⏳ ${b.icon} ${b.name}`, x + pad, by);
+          } else if (b.upgrading) {
+            ctx.fillStyle = THEME.warning;
+            ctx.fillText(`${b.icon} ${b.name} Lv${b.lvl} 🔨`, x + pad, by);
+          } else {
+            ctx.fillStyle = THEME.textDim;
+            const lvlStr = b.lvl > 1 ? ` Lv${b.lvl}` : '';
+            ctx.fillText(`${b.icon} ${b.name}${lvlStr}`, x + pad, by);
+          }
+        }
+      }
 
       // Separator
-      this._drawSeparator(ctx, x + 4, ry + ROW_H - 1, x + w - 4, ry + ROW_H - 1);
+      this._drawSeparator(ctx, x + 4, ry + rowH - 1, x + w - 4, ry + rowH - 1);
 
       // Hit zone
-      this._addHit(x, ry, w, ROW_H, 'colony', { planetId: col.planetId });
-      ry += ROW_H;
+      this._addHit(x, ry, w, rowH, 'colony', { planetId: col.planetId });
+      ry += rowH;
     }
 
     ctx.restore();
@@ -504,8 +710,8 @@ export class ColonyOverlay extends BaseOverlay {
   // ══════════════════════════════════════════════════════════════════════
 
   _drawCenter(ctx, x, y, w, h, colony, colonies) {
-    // Nagłówek
-    const hdrH = 36;
+    // Nagłówek (wyrównany do HDR_H z lewego panelu)
+    const hdrH = HDR_H;
     ctx.fillStyle = THEME.bgSecondary;
     ctx.fillRect(x, y, w, hdrH);
     this._drawSeparator(ctx, x, y + hdrH, x + w, y + hdrH);
@@ -521,17 +727,18 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Nawigacja ←/→
     const colIdx = colonies.indexOf(colony);
+    const hdrMid = y + Math.round(hdrH / 2) + 4;
     if (colIdx > 0) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('← POPRZ.', x + 8, y + 22);
+      ctx.fillText('← POPRZ.', x + 8, hdrMid);
       this._addHit(x, y, 80, hdrH, 'prevColony');
     }
     if (colIdx < colonies.length - 1) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'right';
-      ctx.fillText('NAST. →', x + w - 8, y + 22);
+      ctx.fillText('NAST. →', x + w - 8, hdrMid);
       ctx.textAlign = 'left';
       this._addHit(x + w - 80, y, 80, hdrH, 'nextColony');
     }
@@ -541,7 +748,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
     ctx.textAlign = 'center';
-    ctx.fillText(`🌍 ${name}`, x + w / 2, y + 22);
+    ctx.fillText(`🌍 ${name}`, x + w / 2, hdrMid);
     ctx.textAlign = 'left';
 
     // Obszar mapy — tutaj rysuje się globus 3D (WebGL canvas)
@@ -590,36 +797,44 @@ export class ColonyOverlay extends BaseOverlay {
     this._drawEmptyHex(ctx, x, y, w, h, tile);
   }
 
-  // ── Lista budynków (panel budowania) ──────────────────────────────
+  // ── Lista budynków — siatka kafelków (panel budowania) ───────────
 
   _drawBuildList(ctx, x, y, w, h, colony, tile) {
-    const pad = 10;
+    const pad = 6;
+    const COLS = 3;
+    const GAP = 4;
+    const TILE_W = Math.floor((w - pad * 2 - GAP * (COLS - 1)) / COLS);
+    const TILE_H = TILE_W + 30;  // kwadrat ikony + dolna połowa na tekst
+    const ICON_H = TILE_W;        // górna kwadratowa część = ikona
 
-    // Nagłówek
+    // Nagłówek (wyrównany do HDR_H)
     ctx.fillStyle = THEME.bgSecondary;
-    ctx.fillRect(x, y, w, 32);
+    ctx.fillRect(x, y, w, HDR_H);
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
-    ctx.fillText('🏗 BUDUJ', x + pad, y + 20);
-    this._drawSeparator(ctx, x, y + 32, x + w, y + 32);
+    ctx.fillText('🏗 BUDUJ', x + pad + 4, y + Math.round(HDR_H / 2) + 4);
+    this._drawSeparator(ctx, x, y + HDR_H, x + w, y + HDR_H);
 
+    let headerExtra = 0;
     if (this._buildMode && this._pendingBuildingId) {
       const pB = BUILDINGS[this._pendingBuildingId];
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.warning;
-      ctx.fillText(`Tryb budowy: ${pB?.icon} ${pB?.namePL}`, x + pad, y + 46);
+      ctx.fillText(`Tryb: ${pB?.icon} ${pB?.namePL}`, x + pad + 4, y + HDR_H + 14);
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('Kliknij hex na mapie · Esc anuluj', x + pad, y + 58);
+      ctx.fillText('Kliknij hex · Esc anuluj', x + pad + 4, y + HDR_H + 26);
+      headerExtra = 32;
     }
 
     // Błąd budowy
     if (this._buildError && Date.now() < this._buildErrorTime) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
-      ctx.fillText(`⚠ ${this._buildError}`, x + pad, y + 70);
+      ctx.fillText(`⚠ ${this._buildError}`, x + pad + 4, y + HDR_H + headerExtra + 14);
+      headerExtra += 18;
     }
 
-    const startY = y + (this._buildMode ? 80 : 36);
+    const startY = y + HDR_H + headerExtra;
     const listH = h - (startY - y);
 
     ctx.save();
@@ -627,9 +842,20 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.rect(x, startY, w, listH);
     ctx.clip();
 
-    let ly = startY - this._scrollRight;
+    let ly = startY + 4 - this._scrollRight;
     const tSys = window.KOSMOS?.techSystem;
-    const inv = colony.resourceSystem?.getInventory?.() ?? {};
+    const bSys = colony.buildingSystem;
+    const now = Date.now();
+
+    // Zbierz budynki w budowie (id → { progress, buildTime })
+    const constructionByType = {};
+    if (bSys?._constructionQueue) {
+      for (const [, entry] of bSys._constructionQueue) {
+        if (!entry.isUpgrade) {
+          constructionByType[entry.buildingId] = entry;
+        }
+      }
+    }
 
     for (const cat of BUILDING_CATEGORIES) {
       const buildings = Object.values(BUILDINGS).filter(b => b.category === cat.id && b.id !== 'colony_base');
@@ -638,196 +864,315 @@ export class ColonyOverlay extends BaseOverlay {
       const collapsed = this._collapsedCategories.has(cat.id);
 
       // Nagłówek kategorii
-      if (ly + 22 > startY - 40) {
+      if (ly + 20 > startY - 40) {
         ctx.fillStyle = 'rgba(0,255,180,0.03)';
-        ctx.fillRect(x, ly, w, 22);
+        ctx.fillRect(x, ly, w, 20);
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = cat.color;
-        ctx.fillText(`${collapsed ? '▸' : '▾'} ${cat.label}`, x + pad, ly + 15);
-        this._addHit(x, ly, w, 22, 'toggleCat', { catId: cat.id });
+        ctx.fillText(`${collapsed ? '▸' : '▾'} ${cat.label}`, x + pad + 4, ly + 14);
+        this._addHit(x, ly, w, 20, 'toggleCat', { catId: cat.id });
       }
-      ly += 22;
+      ly += 20;
 
       if (collapsed) continue;
 
-      for (const b of buildings) {
-        const cardH = 46;
-        if (ly + cardH < startY) { ly += cardH + 2; continue; }
-        if (ly > startY + listH + 20) { ly += cardH + 2; continue; }
+      // Rysuj budynki w siatce 3-kolumnowej
+      for (let i = 0; i < buildings.length; i++) {
+        const b = buildings[i];
+        const col = i % COLS;
+        const row = Math.floor(i / COLS);
+
+        if (col === 0 && i > 0) ly += TILE_H + GAP;
+        if (col === 0 && row === 0) { /* pierwszy wiersz — ly już ustawione */ }
+
+        const tx = x + pad + col * (TILE_W + GAP);
+        const ty = ly;
+
+        if (ty + TILE_H < startY) { if (col === COLS - 1 || i === buildings.length - 1) { /* noop */ }; continue; }
+        if (ty > startY + listH + 40) { if (col === COLS - 1 || i === buildings.length - 1) { /* noop */ }; continue; }
 
         const techOk = !b.requires || (tSys?.isResearched(b.requires) ?? false);
         const canAfford = this._canAfford(colony, b);
         const locked = !techOk;
+        const isHovered = (this._tileTooltipId === b.id);
+        const isSelected = (this._pendingBuildingId === b.id && this._buildMode);
 
-        // Tło karty
-        ctx.globalAlpha = locked ? 0.4 : 1;
-        ctx.fillStyle = THEME.bgPrimary;
-        ctx.fillRect(x + 4, ly, w - 8, cardH);
+        // --- Tło kafelka ---
+        ctx.globalAlpha = locked ? 0.2 : 1;
+
+        // Górna część (ikona) — ciemniejsze tło
+        ctx.fillStyle = isSelected ? 'rgba(0,255,180,0.08)' : 'rgba(6,12,18,0.95)';
+        ctx.fillRect(tx, ty, TILE_W, ICON_H);
+
+        // Dolna część (tekst) — nieco jaśniejsze
+        ctx.fillStyle = isSelected ? 'rgba(0,255,180,0.05)' : 'rgba(10,18,24,0.9)';
+        ctx.fillRect(tx, ty + ICON_H, TILE_W, TILE_H - ICON_H);
 
         // Obramowanie
-        if (locked) ctx.strokeStyle = THEME.border;
-        else if (!canAfford) ctx.strokeStyle = 'rgba(255,51,68,0.3)';
-        else ctx.strokeStyle = THEME.borderLight;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x + 4, ly, w - 8, cardH);
+        if (isSelected) ctx.strokeStyle = THEME.accent;
+        else if (locked) ctx.strokeStyle = THEME.border;
+        else if (!canAfford) ctx.strokeStyle = 'rgba(255,51,68,0.25)';
+        else ctx.strokeStyle = THEME.borderLight ?? THEME.border;
+        ctx.lineWidth = isSelected ? 1.5 : 1;
+        ctx.strokeRect(tx + 0.5, ty + 0.5, TILE_W - 1, TILE_H - 1);
 
-        // Ikona + nazwa
-        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        // Hover glow od dołu (subtelny gradient)
+        if (isHovered && !locked) {
+          const grd = ctx.createLinearGradient(tx, ty + TILE_H - 16, tx, ty + TILE_H);
+          grd.addColorStop(0, 'rgba(0,255,180,0)');
+          grd.addColorStop(1, 'rgba(0,255,180,0.12)');
+          ctx.fillStyle = grd;
+          ctx.fillRect(tx + 1, ty + TILE_H - 16, TILE_W - 2, 16);
+        }
+
+        // --- Ikona wyśrodkowana w górnej połowie ---
+        ctx.font = `${Math.round(TILE_W * 0.38)}px ${THEME.fontFamily}`;
+        ctx.textAlign = 'center';
         ctx.fillStyle = THEME.textPrimary;
-        ctx.fillText(`${b.icon} ${b.namePL}`, x + pad, ly + 14);
+        ctx.fillText(b.icon, tx + TILE_W / 2, ty + ICON_H * 0.58);
+
+        // 🔒 w prawym górnym rogu jeśli locked
         if (locked) {
-          ctx.fillStyle = THEME.textDim;
-          ctx.fillText('🔒', x + w - 28, ly + 14);
-        }
-
-        // Opis
-        if (b.description) {
           ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textSecondary;
-          const desc = b.description.length > 40 ? b.description.slice(0, 40) + '…' : b.description;
-          ctx.fillText(desc, x + pad + 4, ly + 28);
+          ctx.fillStyle = THEME.textDim;
+          ctx.textAlign = 'right';
+          ctx.fillText('🔒', tx + TILE_W - 3, ty + 12);
         }
 
-        // Produkcja
+        // --- Dolna połowa: nazwa ---
+        ctx.textAlign = 'center';
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textPrimary;
+        const shortName = TILE_NAMES[b.id] ?? b.namePL;
+        ctx.fillText(shortName, tx + TILE_W / 2, ty + ICON_H + 11);
+
+        // --- Produkcja / koszt ---
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         if (b.rates && Object.keys(b.rates).length > 0) {
-          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.success;
-          ctx.fillText(formatRates(b.rates), x + pad + 4, ly + 40);
-        }
-
-        // Wymagana tech
-        if (b.requires && !techOk) {
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          const rateStr = formatRates(b.rates);
+          ctx.fillText(rateStr, tx + TILE_W / 2, ty + ICON_H + 22);
+        } else if (b.isMine) {
           ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`wymaga: ${b.requires}`, x + pad + 4, ly + 40);
+          ctx.fillText('⛏ złoża', tx + TILE_W / 2, ty + ICON_H + 22);
+        } else if (b.id === 'factory') {
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText('+1PP/r', tx + TILE_W / 2, ty + ICON_H + 22);
+        } else if (b.housing > 0) {
+          ctx.fillStyle = THEME.info ?? THEME.accent;
+          ctx.fillText(`+${b.housing}🏠`, tx + TILE_W / 2, ty + ICON_H + 22);
         }
 
+        // Krótki koszt (główne surowce)
+        const costParts = Object.entries(b.cost ?? {}).slice(0, 3).map(([k, v]) => `${v}${RESOURCE_ICONS[k] ?? ''}`);
+        if (costParts.length > 0) {
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(costParts.join(' '), tx + TILE_W / 2, ty + TILE_H - 3);
+        }
+
+        ctx.textAlign = 'left';
         ctx.globalAlpha = 1;
 
-        // Hit zone — budynki (tooltip + kliknięcie)
-        this._addHit(x + 4, ly, w - 8, cardH, 'selectBuilding', { buildingId: b.id, locked });
+        // Overlay "W BUDOWIE" + pasek postępu
+        const constr = constructionByType[b.id];
+        if (constr) {
+          const pct = constr.buildTime > 0 ? Math.min(1, (constr.progress ?? 0) / constr.buildTime) : 0;
+          // Ciemny overlay
+          ctx.globalAlpha = 0.75;
+          ctx.fillStyle = 'rgba(2,6,10,0.85)';
+          ctx.fillRect(tx + 1, ty + 1, TILE_W - 2, TILE_H - 2);
+          ctx.globalAlpha = 1;
 
-        ly += cardH + 2;
+          // Tekst "W BUDOWIE"
+          ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.textAlign = 'center';
+          ctx.fillStyle = THEME.warning;
+          ctx.fillText('W BUDOWIE', tx + TILE_W / 2, ty + ICON_H * 0.45);
+
+          // Pasek progresu
+          const barW = TILE_W - 12;
+          const barH = 5;
+          const barX = tx + 6;
+          const barY = ty + ICON_H * 0.55;
+          ctx.fillStyle = THEME.border;
+          ctx.fillRect(barX, barY, barW, barH);
+          ctx.fillStyle = THEME.warning;
+          ctx.fillRect(barX, barY, barW * pct, barH);
+
+          // Procent
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textSecondary;
+          ctx.fillText(`${Math.round(pct * 100)}%`, tx + TILE_W / 2, barY + barH + 11);
+          ctx.textAlign = 'left';
+        }
+
+        // Hit zone
+        this._addHit(tx, ty, TILE_W, TILE_H, 'selectBuilding', { buildingId: b.id, locked });
       }
+
+      // Po bloku kafelków — przesuń ly za ostatni wiersz
+      const rowCount = Math.ceil(buildings.length / COLS);
+      ly += TILE_H + GAP + 4;
     }
 
     ctx.restore();
   }
 
-  // ── Tooltip budynku (hover w build list) ────────────────────────────
+  // ── Tooltip budynku (hover w build list) — DOM ─────────────────────
 
-  _drawBuildingTooltip(ctx, W, H) {
+  _updateBuildingTooltip() {
+    if (!this._tileTooltipReady) { this._hideDomTooltip(); return; }
+
     const b = BUILDINGS[this._tooltipBuildingId];
-    if (!b) return;
+    if (!b) { this._hideDomTooltip(); return; }
 
-    const PAD = 8;
-    const LINE_H = 13;
-    const HDR_H_T = 16;
-    const SEP_H = 6;
-    const MAX_W = 260;
-    const OFS = 14;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const colony = colMgr?.getColony(this._selectedColonyId);
+    const inv = colony?.resourceSystem?.getInventory?.() ?? {};
+    const tSys = window.KOSMOS?.techSystem;
+    const techOk = !b.requires || (tSys?.isResearched(b.requires) ?? false);
 
-    // Buduj linie tooltipa
-    const lines = [];
-    lines.push({ type: 'header', text: `${b.icon} ${b.namePL}` });
-    lines.push({ type: 'sep' });
+    // Kompatybilność terenu
+    const grid = colony ? this._getGrid(colony) : null;
+    const tile = this._selectedHex && grid ? grid.get(this._selectedHex.q, this._selectedHex.r) : null;
+    const hovHex = this._hoveredHex && grid ? grid.get(this._hoveredHex.q, this._hoveredHex.r) : null;
+    const checkTile = hovHex ?? tile;
+
+    const ok = (v) => `<span style="color:${THEME.success}">✓</span>`;
+    const no = (v) => `<span style="color:${THEME.danger}">✗</span>`;
+    const ln = (check, text) => `<div>${check ? ok() : no()} ${text}</div>`;
+
+    let html = `<div style="color:${THEME.textPrimary};font-size:13px;margin-bottom:4px"><b>${b.icon} ${b.namePL}</b></div>`;
 
     if (b.description) {
-      const words = b.description.split(' ');
-      let cur = '';
-      for (const word of words) {
-        if (cur.length + word.length + 1 > 36 && cur.length > 0) {
-          lines.push({ type: 'line', text: cur, color: THEME.textSecondary });
-          cur = word;
-        } else {
-          cur = cur ? cur + ' ' + word : word;
-        }
-      }
-      if (cur) lines.push({ type: 'line', text: cur, color: THEME.textSecondary });
-      lines.push({ type: 'sep' });
+      html += `<div style="color:${THEME.textSecondary};margin-bottom:4px">${b.description}</div>`;
     }
 
-    // Koszt surowców + commodities
-    const costStr = formatCost(b.cost, b.popCost, b.commodityCost);
-    if (costStr) lines.push({ type: 'line', text: `Koszt: ${costStr}`, color: THEME.warning });
+    html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
+
+    // Surowce
+    if (b.cost && Object.keys(b.cost).length > 0) {
+      html += `<div style="color:${THEME.textDim};margin-bottom:2px">Surowce:</div>`;
+      for (const [k, v] of Object.entries(b.cost)) {
+        const have = Math.floor(inv[k] ?? 0);
+        const isOk = have >= v;
+        const icon = RESOURCE_ICONS[k] ?? k;
+        html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} ${icon} ${v} (masz: ${have})</div>`;
+      }
+    }
+
+    // Commodities
+    if (b.commodityCost && Object.keys(b.commodityCost).length > 0) {
+      for (const [k, v] of Object.entries(b.commodityCost)) {
+        const have = Math.floor(inv[k] ?? 0);
+        const isOk = have >= v;
+        const icon = COMMODITIES[k]?.icon ?? '📦';
+        const name = COMMODITY_SHORT[k] ?? k;
+        html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} ${icon}${name} ${v} (masz: ${have})</div>`;
+      }
+    }
+
+    // POP
+    if (b.popCost > 0) {
+      const civSys = colony?.civSystem;
+      const freePop = (civSys?.population ?? 0) - (civSys?.employedPop ?? 0);
+      const isOk = freePop >= b.popCost;
+      html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} 👤 ${b.popCost} POP (wolni: ${freePop.toFixed(1)})</div>`;
+    }
+
+    html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
 
     // Produkcja
     if (b.rates && Object.keys(b.rates).length > 0) {
-      const rStr = formatRates(b.rates);
-      if (rStr) lines.push({ type: 'line', text: `Produkcja: ${rStr}`, color: THEME.success });
+      html += `<div style="color:${THEME.success}">Produkcja: ${formatRates(b.rates)}</div>`;
+    }
+    if (b.housing > 0) html += `<div style="color:${THEME.info ?? THEME.accent}">Mieszkania: +${b.housing} POP</div>`;
+    if (b.buildTime > 0) html += `<div style="color:${THEME.textSecondary}">⏱ Budowa: ${b.buildTime} lat</div>`;
+
+    // Tech
+    if (b.requires) {
+      html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
+      html += `<div style="color:${techOk ? THEME.success : (THEME.purple ?? '#cc66ff')}">${techOk ? '✓' : '✗'} Wymaga: ${b.requires}</div>`;
     }
 
-    // Housing
-    if (b.housing > 0) lines.push({ type: 'line', text: `Mieszkania: +${b.housing} POP`, color: THEME.info ?? THEME.accent });
+    // Teren
+    if (checkTile) {
+      const terrain = TERRAIN_TYPES[checkTile.type];
+      let terrainOk = false;
+      if (terrain?.buildable) {
+        if (b.terrainOnly) terrainOk = b.terrainOnly.includes(checkTile.type);
+        else if (b.terrainAny) terrainOk = true;
+        else terrainOk = (terrain.allowedCategories ?? []).includes(b.category);
+      }
+      html += `<div style="color:${terrainOk ? THEME.success : THEME.danger}">${terrainOk ? '✓' : '✗'} Teren: ${terrain?.icon ?? ''} ${terrain?.namePL ?? checkTile.type}</div>`;
+    }
 
-    // Czas budowy
-    if (b.buildTime > 0) lines.push({ type: 'line', text: `Budowa: ${b.buildTime} lat`, color: THEME.textSecondary });
+    // Pokaż tooltip przy kursorze (screen coords)
+    this._showDomTooltip(html, this._tooltipX * _UI_SCALE, this._tooltipY * _UI_SCALE);
+  }
 
-    // Wymagana tech
-    if (b.requires) lines.push({ type: 'line', text: `Wymaga: ${b.requires}`, color: THEME.purple ?? '#cc66ff' });
+  // ── Tooltip przycisku ULEPSZ — DOM ───────────────────────────────
 
-    // Oblicz wymiary
-    ctx.save();
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    let maxTW = 0;
-    let totalH = PAD * 2;
-    for (const ln of lines) {
-      if (ln.type === 'sep') { totalH += SEP_H; continue; }
-      if (ln.type === 'header') {
-        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-        maxTW = Math.max(maxTW, ctx.measureText(ln.text).width);
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        totalH += HDR_H_T;
-      } else {
-        maxTW = Math.max(maxTW, ctx.measureText(ln.text).width);
-        totalH += LINE_H;
+  _updateUpgradeTooltip() {
+    const d = this._tooltipUpgradeData;
+    if (!d) { this._hideDomTooltip(); return; }
+
+    const bDef = BUILDINGS[d.buildingId];
+    if (!bDef) { this._hideDomTooltip(); return; }
+
+    const colMgr = window.KOSMOS?.colonyManager;
+    const colony = colMgr?.getColony(this._selectedColonyId);
+    const bSys = colony?.buildingSystem;
+    const entry = bSys?._active?.get(`${d.q},${d.r}`);
+    const level = entry?.level ?? 1;
+    const nextLevel = level + 1;
+    const maxLvl = bDef.maxLevel ?? 5;
+    if (nextLevel > maxLvl) { this._hideDomTooltip(); return; }
+
+    const upgCostMult = nextLevel * 1.2;
+    const inv = colony?.resourceSystem?.getInventory?.() ?? {};
+
+    let canAffordAll = true;
+    let html = `<div style="color:${THEME.warning};font-size:13px;margin-bottom:4px"><b>▲ Ulepszenie → Poz. ${nextLevel}</b></div>`;
+    html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
+
+    for (const [k, v] of Object.entries(bDef.cost ?? {})) {
+      const need = Math.ceil(v * upgCostMult);
+      const have = Math.floor(inv[k] ?? 0);
+      const isOk = have >= need;
+      if (!isOk) canAffordAll = false;
+      const icon = RESOURCE_ICONS[k] ?? k;
+      html += `<div style="color:${isOk ? THEME.success : THEME.danger}">${icon} ${need} (masz: ${have})</div>`;
+    }
+
+    if (nextLevel >= 3 && bDef.commodityCost) {
+      for (const [k, v] of Object.entries(bDef.commodityCost)) {
+        const need = Math.ceil(v * (nextLevel - 1));
+        const have = Math.floor(inv[k] ?? 0);
+        const isOk = have >= need;
+        if (!isOk) canAffordAll = false;
+        const icon = COMMODITIES[k]?.icon ?? '📦';
+        const name = COMMODITY_SHORT[k] ?? k;
+        html += `<div style="color:${isOk ? THEME.success : THEME.danger}">${icon}${name} ${need} (masz: ${have})</div>`;
       }
     }
-    const tw = Math.min(MAX_W, maxTW + PAD * 2 + 4);
-    const th = totalH;
 
-    // Pozycja (unikaj wyjścia poza ekran)
-    let tx = this._tooltipX + OFS;
-    let ty = this._tooltipY + OFS;
-    if (tx + tw > W - 4) tx = this._tooltipX - tw - 4;
-    if (ty + th > H - 4) ty = this._tooltipY - th - 4;
-    if (tx < 4) tx = 4;
-    if (ty < 4) ty = 4;
-
-    // Tło
-    ctx.globalAlpha = 0.95;
-    ctx.fillStyle = THEME.bgPrimary;
-    ctx.fillRect(tx, ty, tw, th);
-    ctx.strokeStyle = THEME.borderActive ?? THEME.accent;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(tx + 0.5, ty + 0.5, tw - 1, th - 1);
-    ctx.globalAlpha = 1;
-
-    // Rysuj linie
-    let cy = ty + PAD;
-    for (const ln of lines) {
-      if (ln.type === 'sep') {
-        cy += 2;
-        ctx.strokeStyle = THEME.border;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(tx + 6, cy);
-        ctx.lineTo(tx + tw - 6, cy);
-        ctx.stroke();
-        cy += SEP_H - 2;
-      } else if (ln.type === 'header') {
-        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textPrimary;
-        ctx.fillText(ln.text, tx + PAD, cy + 11);
-        cy += HDR_H_T;
-      } else {
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = ln.color ?? THEME.textPrimary;
-        ctx.fillText(ln.text, tx + PAD, cy + 9);
-        cy += LINE_H;
-      }
+    if (bDef.popCost > 0) {
+      const civSys = colony?.civSystem;
+      const freePop = (civSys?.population ?? 0) - (civSys?.employedPop ?? 0);
+      const isOk = freePop >= bDef.popCost;
+      html += `<div style="color:${isOk ? THEME.success : THEME.danger}">👤 ${bDef.popCost} POP (wolni: ${freePop.toFixed(1)})</div>`;
     }
-    ctx.restore();
+
+    if (bDef.buildTime > 0) {
+      html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
+      html += `<div style="color:${THEME.textSecondary}">⏱ Czas: ${(bDef.buildTime * 0.5).toFixed(1)} lat</div>`;
+    }
+
+    html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
+    html += `<div style="color:${canAffordAll ? THEME.success : THEME.danger}">${canAffordAll ? '✅ Wystarczające zasoby' : '❌ Brakuje zasobów'}</div>`;
+
+    this._showDomTooltip(html, this._tooltipUpgradeX * _UI_SCALE, this._tooltipUpgradeY * _UI_SCALE);
   }
 
   // ── Szczegóły budynku (wybrany hex) ────────────────────────────────
@@ -842,15 +1187,15 @@ export class ColonyOverlay extends BaseOverlay {
     const level = entry?.level ?? tile.buildingLevel ?? 1;
     const effectiveRates = entry?.effectiveRates ?? bDef.rates ?? {};
 
-    // Nagłówek
+    // Nagłówek (wyrównany do HDR_H)
     ctx.fillStyle = THEME.bgSecondary;
-    ctx.fillRect(x, y, w, 32);
+    ctx.fillRect(x, y, w, HDR_H);
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(`${bDef.icon} ${bDef.namePL}`, x + pad, y + 20);
-    this._drawSeparator(ctx, x, y + 32, x + w, y + 32);
+    ctx.fillText(`${bDef.icon} ${bDef.namePL}`, x + pad, y + Math.round(HDR_H / 2) + 4);
+    this._drawSeparator(ctx, x, y + HDR_H, x + w, y + HDR_H);
 
-    let ly = y + 40;
+    let ly = y + HDR_H + 8;
 
     // Typ i poziom
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -928,31 +1273,73 @@ export class ColonyOverlay extends BaseOverlay {
     }
     ly += 16;
 
-    // Ulepszenie
-    if (level < maxLvl) {
+    // Rozbudowa w toku — pasek progresu zamiast przycisku ULEPSZ
+    const isUpgrading = tile.underConstruction?.isUpgrade;
+    if (isUpgrading) {
+      const uc = tile.underConstruction;
+      const pct = uc.buildTime > 0 ? Math.min(1, (uc.progress ?? 0) / uc.buildTime) : 0;
+      const targetLvl = uc.targetLevel ?? (level + 1);
+
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText(`🔨 Rozbudowa → Poz. ${targetLvl}`, x + pad, ly);
+      ly += 14;
+
+      // Pasek progresu
+      this._drawBar(ctx, x + pad, ly, w - pad * 2, 6, pct, THEME.warning, THEME.border);
+      ly += 10;
+
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(`${Math.round(pct * 100)}% ukończono`, x + pad, ly);
+      ly += 18;
+    } else if (level < maxLvl) {
+      // Ulepszenie — koszt + przycisk
       const nextLevel = level + 1;
       const upgCostMult = nextLevel * 1.2;
       ctx.fillStyle = THEME.textSecondary;
       ctx.fillText(`Ulepszenie → Poz. ${nextLevel}`, x + pad, ly);
       ly += 14;
 
+      // Koszt surowców
+      const inv = colony?.resourceSystem?.getInventory?.() ?? {};
       const upgCostParts = [];
+      let canAffordAll = true;
       for (const [k, v] of Object.entries(bDef.cost)) {
-        upgCostParts.push(`${Math.ceil(v * upgCostMult)}${RESOURCE_ICONS[k] ?? k}`);
+        const need = Math.ceil(v * upgCostMult);
+        const have = Math.floor(inv[k] ?? 0);
+        const ok = have >= need;
+        if (!ok) canAffordAll = false;
+        upgCostParts.push({ text: `${need}${RESOURCE_ICONS[k] ?? k}`, ok });
       }
+      // Commodities od poziomu 3
+      if (nextLevel >= 3 && bDef.commodityCost) {
+        for (const [k, v] of Object.entries(bDef.commodityCost)) {
+          const need = Math.ceil(v * (nextLevel - 1));
+          const have = Math.floor(inv[k] ?? 0);
+          const ok = have >= need;
+          if (!ok) canAffordAll = false;
+          upgCostParts.push({ text: `${need}${RESOURCE_ICONS[k] ?? k}`, ok });
+        }
+      }
+
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.warning;
-      ctx.fillText(upgCostParts.join(' '), x + pad, ly);
+      let cx = x + pad;
+      for (const part of upgCostParts) {
+        ctx.fillStyle = part.ok ? THEME.success : THEME.danger;
+        ctx.fillText(part.text, cx, ly);
+        cx += ctx.measureText(part.text).width + 6;
+      }
       ly += 18;
 
-      // Przycisk ULEPSZ
-      this._drawButton(ctx, '▲ ULEPSZ', x + pad, ly, w - pad * 2, 24, 'primary');
+      // Przycisk ULEPSZ (wyłączony gdy brak surowców)
+      const btnStyle = canAffordAll ? 'primary' : 'disabled';
+      this._drawButton(ctx, '▲ ULEPSZ', x + pad, ly, w - pad * 2, 24, btnStyle);
       this._addHit(x + pad, ly, w - pad * 2, 24, 'upgrade', { q: tile.q, r: tile.r, buildingId: tile.buildingId });
       ly += 32;
     }
 
-    // Przycisk BURZ
-    if (!bDef.isCapital) {
+    // Przycisk BURZ (ukryj przy trwającej rozbudowie)
+    if (!bDef.isCapital && !isUpgrading) {
       this._drawButton(ctx, '🗑 BURZ', x + pad, ly, w - pad * 2, 24, 'danger');
       this._addHit(x + pad, ly, w - pad * 2, 24, 'demolish', { q: tile.q, r: tile.r });
     }
@@ -962,12 +1349,16 @@ export class ColonyOverlay extends BaseOverlay {
 
   _drawEmptyHex(ctx, x, y, w, h, tile) {
     const pad = 10;
-    let ly = y + 20;
 
+    // Nagłówek (wyrównany do HDR_H)
+    ctx.fillStyle = THEME.bgSecondary;
+    ctx.fillRect(x, y, w, HDR_H);
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('HEX PUSTY', x + pad, ly);
-    ly += 18;
+    ctx.fillText('HEX PUSTY', x + pad, y + Math.round(HDR_H / 2) + 4);
+    this._drawSeparator(ctx, x, y + HDR_H, x + w, y + HDR_H);
+
+    let ly = y + HDR_H + 14;
 
     // Info o terenie
     const terrain = TERRAIN_TYPES[tile.type];
@@ -1137,19 +1528,45 @@ export class ColonyOverlay extends BaseOverlay {
     if (!this.visible) return;
     super.handleMouseMove(x, y);
 
-    // Hover nad wierszem kolonii
+    // Hover nad wierszem kolonii / budynkiem / przyciskiem ULEPSZ
     this._hoverRowId = null;
-    this._tooltipBuildingId = null;
+    let hoveredBuildingId = null;
+    this._tooltipUpgradeData = null;
     for (const z of this._hitZones) {
       if (z.type === 'colony' && x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
         this._hoverRowId = z.data.planetId;
         break;
       }
       if (z.type === 'selectBuilding' && x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
-        this._tooltipBuildingId = z.data.buildingId;
+        hoveredBuildingId = z.data.buildingId;
         this._tooltipX = x;
         this._tooltipY = y;
       }
+      if (z.type === 'upgrade' && x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
+        this._tooltipUpgradeData = z.data;
+        this._tooltipUpgradeX = x;
+        this._tooltipUpgradeY = y;
+      }
+    }
+
+    // Logika opóźnienia tooltipa 400ms
+    const now = Date.now();
+    if (hoveredBuildingId !== this._tileTooltipId) {
+      // Zmienił się hovered kafelek — resetuj timer
+      this._tileTooltipId = hoveredBuildingId;
+      this._tileTooltipStart = hoveredBuildingId ? now : 0;
+      this._tileTooltipReady = false;
+      this._tooltipBuildingId = null;
+    } else if (hoveredBuildingId && !this._tileTooltipReady && now - this._tileTooltipStart >= 400) {
+      // 400ms upłynęło — pokaż tooltip
+      this._tileTooltipReady = true;
+    }
+
+    // Ustaw tooltipBuildingId tylko gdy gotowy (400ms)
+    if (this._tileTooltipReady && hoveredBuildingId) {
+      this._tooltipBuildingId = hoveredBuildingId;
+    } else {
+      this._tooltipBuildingId = null;
     }
 
     // Drag kamery globusa

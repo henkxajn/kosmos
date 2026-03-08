@@ -414,8 +414,8 @@ export class Outliner {
         maxTextW = Math.max(maxTextW, ctx.measureText(line.text).width);
       }
     }
-    const ttW = Math.min(400, maxTextW + padX * 2 + 4);
-    const ttH = padY * 2 + lines.length * lineH;
+    const ttW = Math.min(480, maxTextW + padX * 2 + 8);
+    const ttH = padY * 2 + lines.length * lineH + 2;
 
     // Pozycja — na lewo od Outlinera
     const logH = ctx.canvas.height / (ctx.getTransform().d || 1);

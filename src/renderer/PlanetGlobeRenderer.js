@@ -78,10 +78,10 @@ export class PlanetGlobeRenderer {
     if (bounds) {
       this._canvas.style.cssText =
         `position:absolute;left:${Math.round(bounds.x)}px;top:${Math.round(bounds.y)}px;` +
-        `width:${Math.round(bounds.w)}px;height:${Math.round(bounds.h)}px;z-index:5;`;
+        `width:${Math.round(bounds.w)}px;height:${Math.round(bounds.h)}px;z-index:1;`;
     } else {
       this._canvas.style.cssText =
-        'position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;';
+        'position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;';
     }
     document.getElementById('game-container').appendChild(this._canvas);
 

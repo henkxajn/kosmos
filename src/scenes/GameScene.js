@@ -350,10 +350,12 @@ export class GameScene {
           if (colony) colony.name = 'Test Capital';
           // Flota startowa: 1× science_vessel, 1× colony_ship, 1× cargo_ship
           this._spawnPowerTestFleet(civPlanet.id);
-          // Generuj grid i auto-buduj (bez PlanetGlobeScene)
+          // Generuj grid i auto-buduj
           const grid = PlanetMapGenerator.generate(civPlanet, true);
+          // Ustaw gridHeight w BuildingSystem (potrzebne do modyfikatora polarnego)
+          if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;
           this._autoBuildPowerTest(grid);
-          // Otwórz ColonyOverlay
+          // Otwórz ColonyOverlay (stolica auto-place w _openGlobe)
           this.colonyManager.switchActiveColony(civPlanet.id);
           this.uiManager?.overlayManager?.openPanel('colony');
           return;
@@ -374,10 +376,11 @@ export class GameScene {
         const colony = this.colonyManager.getColony(civPlanet.id);
         if (colony) colony.name = capitalName;
 
-        // Generuj grid i postaw budynki startowe (bez PlanetGlobeScene)
+        // Generuj grid i postaw budynki startowe
         const grid = PlanetMapGenerator.generate(civPlanet, true);
+        if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;
         this._autoPlaceStarterBuildings(grid);
-        // Otwórz ColonyOverlay
+        // Otwórz ColonyOverlay (stolica auto-place w _openGlobe)
         this.colonyManager.switchActiveColony(civPlanet.id);
         this.uiManager?.overlayManager?.openPanel('colony');
       }, 100);

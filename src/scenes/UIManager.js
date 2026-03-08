@@ -744,8 +744,6 @@ export class UIManager {
         fleet: colMgr?.getFleet(activePid) ?? [],
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
       });
-      // Tooltip kolonii (hover w Outliner)
-      this._outliner.drawTooltip(ctx);
     }
 
     // ── BottomContext (dolny panel info o encji) ──────────────
@@ -775,6 +773,9 @@ export class UIManager {
 
     // ── Tooltip TopBar (na wierzchu) ─────────────────────────
     if (civMode) this._topBar.drawTooltip(ctx, W);
+
+    // ── Tooltip kolonii (Outliner) — na wierzchu ────────────
+    if (civMode && this._outliner) this._outliner.drawTooltip(ctx);
 
     // ── Tooltip CivPanel ─────────────────────────────────────
     if (this._tooltip) this._drawTooltip();
