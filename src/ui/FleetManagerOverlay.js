@@ -80,6 +80,7 @@ export class FleetManagerOverlay {
     this._scrollOffset = 0;       // scroll listy statków (LEFT)
     this._selectedVesselId = null;
     this._hoverVesselId = null;
+    this._hoverShipId = null;       // hover na przycisku budowy statku → tooltip kosztów
     this._missionConfig = null;   // null | { actionId, targetId, step:'select'|'confirm' }
     this._targetScrollOffset = 0; // scroll listy celów
     this._mapToggles = { routes: true, range: false };
@@ -274,11 +275,11 @@ export class FleetManagerOverlay {
 
     // Hover na statku w LEFT
     this._hoverVesselId = null;
+    this._hoverShipId = null;
     for (const z of this._hitZones) {
-      if (z.type === 'vessel' && mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
-        this._hoverVesselId = z.data.vesselId;
-        break;
-      }
+      if (mx < z.x || mx > z.x + z.w || my < z.y || my > z.y + z.h) continue;
+      if (z.type === 'vessel') { this._hoverVesselId = z.data.vesselId; break; }
+      if (z.type === 'build_ship') { this._hoverShipId = z.data.shipId; break; }
     }
     // Hover na ciele na mapie
     this._mapHoverBody = null;
@@ -1366,6 +1367,86 @@ export class FleetManagerOverlay {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.fillText('← Wybierz statek z listy', x + PAD, cy + 4);
+    }
+
+    // Tooltip kosztów budowy — rysowany NA KOŃCU (z-order najwyższy)
+    if (this._hoverShipId) {
+      this._drawShipCostTooltip(ctx, x, y, w, h, this._hoverShipId, inv, canBuildAny);
+    }
+  }
+
+  // ── Tooltip kosztów budowy statku ───────────────────────────────────────────
+
+  _drawShipCostTooltip(ctx, panelX, panelY, panelW, panelH, shipId, inv, slotsOk) {
+    const ship = SHIPS[shipId];
+    if (!ship) return;
+
+    // Znajdź pozycję hovered buttona
+    const btnZone = this._hitZones.find(z => z.type === 'build_ship' && z.data.shipId === shipId);
+    if (!btnZone) return;
+
+    const PAD = 8;
+    const LH = 14;
+
+    // Zbierz linie kosztów
+    const lines = [];
+    // Surowce
+    if (ship.cost) {
+      for (const [k, v] of Object.entries(ship.cost)) {
+        const have = Math.floor(inv[k] ?? 0);
+        const ok = have >= v;
+        const icon = RESOURCE_ICONS[k] ?? k;
+        lines.push({ text: `${icon} ${k}: ${have}/${v}`, ok });
+      }
+    }
+    // Commodities
+    if (ship.commodityCost) {
+      for (const [k, v] of Object.entries(ship.commodityCost)) {
+        const have = Math.floor(inv[k] ?? 0);
+        const ok = have >= v;
+        const comDef = COMMODITIES[k];
+        const icon = comDef?.icon ?? '📦';
+        const name = COMMODITY_SHORT[k] ?? k;
+        lines.push({ text: `${icon} ${name}: ${have}/${v}`, ok });
+      }
+    }
+    // Czas budowy
+    lines.push({ text: `⏱ Budowa: ${ship.buildTime} lat`, ok: true, dim: true });
+    // Sloty
+    if (!slotsOk) {
+      lines.push({ text: '⚠ Brak wolnych slotów', ok: false });
+    }
+
+    // Wymiary tooltipa
+    const tipW = 200;
+    const tipH = 22 + lines.length * LH + 8;
+
+    // Pozycja: po lewej od panelu (lub wewnątrz jeśli nie mieści się)
+    let tipX = panelX - tipW - 6;
+    if (tipX < 4) tipX = panelX + 4;
+    let tipY = btnZone.y;
+    if (tipY + tipH > panelY + panelH) tipY = panelY + panelH - tipH - 4;
+
+    // Tło
+    ctx.fillStyle = 'rgba(6,12,20,0.96)';
+    ctx.fillRect(tipX, tipY, tipW, tipH);
+    ctx.strokeStyle = THEME.borderActive;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tipX, tipY, tipW, tipH);
+
+    // Nagłówek
+    let ty = tipY + 6;
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(`${ship.icon} ${ship.namePL}`, tipX + PAD, ty + 10);
+    ty += 18;
+
+    // Linie kosztów
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    for (const line of lines) {
+      ctx.fillStyle = line.dim ? THEME.textSecondary : (line.ok ? THEME.success : THEME.danger);
+      ctx.fillText(line.text, tipX + PAD, ty + 8);
+      ty += LH;
     }
   }
 
