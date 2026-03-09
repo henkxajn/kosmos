@@ -12,6 +12,9 @@ import EntityManager      from '../core/EntityManager.js';
 import { GAME_CONFIG, STAR_TYPES } from '../config/GameConfig.js';
 import { resolveTextureType, loadPlanetTextures, loadStarTextures, hashCode, TEXTURE_VARIANTS }
   from './PlanetTextureUtils.js';
+import { RegionGenerator }    from '../map/RegionSystem.js';
+import { BiomeMapGenerator }  from './BiomeMapGenerator.js';
+import { PlanetShader }       from './PlanetShader.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -541,6 +544,71 @@ export class ThreeRenderer {
     return Math.max(0.09, Math.min(0.16, 0.08 + mass * 0.011));
   }
 
+  // ── RTT Bake — renderuj proceduralny diffuse z PlanetShader na teksturę ────
+  // Generuje equirectangular diffuse texture identyczną z globusem (bez oświetlenia)
+  _bakePlanetTexture(planet) {
+    const BAKE_W = 1024, BAKE_H = 512;
+
+    // 1. Generuj regiony (deterministyczne z planet.id)
+    const isHome = planet.id === window.KOSMOS?.homePlanet?.id;
+    const regions = RegionGenerator.generate(planet, isHome);
+
+    // 2. Generuj BiomeMap (DataTexture)
+    const biomeMap = BiomeMapGenerator.generate(regions, planet);
+    if (!biomeMap) return null;
+
+    // 3. Bake material — shader z uniformami (bez oświetlenia)
+    const uniforms = PlanetShader.createBakeUniforms(planet, biomeMap);
+    const bakeMat = new THREE.ShaderMaterial({
+      vertexShader:   PlanetShader.bakeVertexShader,
+      fragmentShader: PlanetShader.bakeFragmentShader,
+      uniforms,
+    });
+
+    // 4. Fullscreen quad + ortho camera
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), bakeMat);
+    const cam  = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const bakeScene = new THREE.Scene();
+    bakeScene.add(quad);
+
+    // 5. Render do RenderTarget
+    const rt = new THREE.WebGLRenderTarget(BAKE_W, BAKE_H, {
+      format: THREE.RGBAFormat,
+      type:   THREE.UnsignedByteType,
+    });
+    this.renderer.setRenderTarget(rt);
+    this.renderer.render(bakeScene, cam);
+    this.renderer.setRenderTarget(null);
+
+    // 6. Odczytaj piksele → CanvasTexture (WebGL readPixels daje Y-flipped dane)
+    const pixels = new Uint8Array(BAKE_W * BAKE_H * 4);
+    this.renderer.readRenderTargetPixels(rt, 0, 0, BAKE_W, BAKE_H, pixels);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = BAKE_W;
+    canvas.height = BAKE_H;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(BAKE_W, BAKE_H);
+
+    for (let y = 0; y < BAKE_H; y++) {
+      const srcRow = (BAKE_H - 1 - y) * BAKE_W * 4;
+      const dstRow = y * BAKE_W * 4;
+      imgData.data.set(pixels.subarray(srcRow, srcRow + BAKE_W * 4), dstRow);
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+
+    // 7. Cleanup tymczasowych zasobów GPU
+    rt.dispose();
+    bakeMat.dispose();
+    quad.geometry.dispose();
+    biomeMap.dispose();
+
+    return tex;
+  }
+
   // ── Planeta mesh ─────────────────────────────────────────────
   addPlanetMesh(planet) {
     if (this._planets.has(planet.id)) return;
@@ -551,26 +619,49 @@ export class ThreeRenderer {
     const group = new THREE.Group();
     group.position.set(S(planet.x), 0, S(planet.y));
 
-    // Materiał: PBR (MeshStandardMaterial) — pre-generowane tekstury z plików
-    const texType = resolveTextureType(planet);
+    // Materiał: RTT bake dla rocky/ice (proceduralny diffuse z PlanetShader),
+    // PBR PNG dla gas, fallback solid color
+    const isGas = planet.planetType === 'gas';
     let material;
-    if (texType) {
-      const variant = (seed % TEXTURE_VARIANTS) + 1;
-      const maps    = loadPlanetTextures(texType, variant);
-      // Gas giganty: metalness=0 (chmury), reszta: 0.05
-      const isGas = planet.planetType === 'gas';
-      material = new THREE.MeshStandardMaterial({
-        map:          maps.diffuse,
-        normalMap:    maps.normal,
-        roughnessMap: maps.roughness,
-        metalness:    isGas ? 0.0 : 0.05,
-      });
-    } else {
-      // Fallback: solid color (nie powinno wystąpić — resolveTextureType pokrywa wszystkie typy)
-      material = new THREE.MeshStandardMaterial({
-        color: planet.visual?.color ?? 0x888888,
-        metalness: 0.05, roughness: 0.7,
-      });
+    if (!isGas) {
+      // RTT bake — proceduralny diffuse z BiomeMap + PlanetShader
+      const bakedDiffuse = this._bakePlanetTexture(planet);
+      if (bakedDiffuse) {
+        // Zachowaj normal+roughness z PBR jeśli dostępne
+        const texType = resolveTextureType(planet);
+        let normalMap = null, roughnessMap = null;
+        if (texType) {
+          const variant = (seed % TEXTURE_VARIANTS) + 1;
+          const maps    = loadPlanetTextures(texType, variant);
+          normalMap     = maps.normal;
+          roughnessMap  = maps.roughness;
+        }
+        material = new THREE.MeshStandardMaterial({
+          map:          bakedDiffuse,
+          normalMap,
+          roughnessMap,
+          metalness:    0.05,
+        });
+      }
+    }
+    // Fallback: gas lub bake failed → PBR PNG
+    if (!material) {
+      const texType = resolveTextureType(planet);
+      if (texType) {
+        const variant = (seed % TEXTURE_VARIANTS) + 1;
+        const maps    = loadPlanetTextures(texType, variant);
+        material = new THREE.MeshStandardMaterial({
+          map:          maps.diffuse,
+          normalMap:    maps.normal,
+          roughnessMap: maps.roughness,
+          metalness:    isGas ? 0.0 : 0.05,
+        });
+      } else {
+        material = new THREE.MeshStandardMaterial({
+          color: planet.visual?.color ?? 0x888888,
+          metalness: 0.05, roughness: 0.7,
+        });
+      }
     }
 
     const mesh = new THREE.Mesh(
