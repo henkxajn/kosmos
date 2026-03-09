@@ -490,7 +490,7 @@ export class GameScene {
     const vMgr = window.KOSMOS?.vesselManager;
     const colony = this.colonyManager.getColony(planetId);
     if (!vMgr || !colony) return;
-    for (const shipId of ['science_vessel', 'colony_ship', 'cargo_ship', 'fusion_cruiser', 'ftl_ship']) {
+    for (const shipId of ['science_vessel', 'colony_ship', 'cargo_ship']) {
       const vessel = vMgr.createAndRegister(shipId, planetId);
       colony.fleet.push(vessel.id);
     }

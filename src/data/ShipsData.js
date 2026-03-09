@@ -66,47 +66,4 @@ export const SHIPS = {
     description:   'Wielki frachtowiec do transferu surowców między koloniami.',
   },
 
-  fusion_cruiser: {
-    id:            'fusion_cruiser',
-    namePL:        'Krążownik Fuzyjny',
-    icon:          '⚡',
-    cost:          { Fe: 200, Ti: 60, W: 30, Li: 20 },
-    commodityCost: {
-      hull_armor:     10,
-      ion_thrusters:   6,
-      fusion_cores:    4,
-      electronics:     3,
-      semiconductors:  2,
-    },
-    buildTime:     8,
-    fuelCapacity:  20,           // max power_cells
-    fuelPerAU:     0.2,          // power_cells / AU → zasięg 100 AU
-    range:         100,          // AU (fallback)
-    speedAU:       0.8,          // AU/rok — szybki
-    cargoCapacity: 300,          // tony
-    requires:      'fusion_drive',
-    description:   'Krążownik z napędem fuzyjnym — daleki zasięg i duże cargo.',
-  },
-
-  ftl_ship: {
-    id:            'ftl_ship',
-    namePL:        'Okręt FTL',
-    icon:          '🌌',
-    cost:          { Fe: 300, Ti: 80, Nt: 40, Xe: 30 },
-    commodityCost: {
-      hull_armor:       12,
-      quantum_cores:     6,
-      antimatter_cells:  5,
-      ion_thrusters:     4,
-      semiconductors:    3,
-    },
-    buildTime:     12,
-    fuelCapacity:  30,           // max power_cells
-    fuelPerAU:     0.05,         // power_cells / AU → zasięg 600 AU
-    range:         600,          // AU (fallback)
-    speedAU:       5.0,          // AU/rok — nadświetlny
-    cargoCapacity: 400,          // tony
-    requires:      'ftl_drive',
-    description:   'Okręt z napędem nadświetlnym — eksploracja odległych układów.',
-  },
 };

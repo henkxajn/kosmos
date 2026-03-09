@@ -16,14 +16,6 @@ const NAME_POOLS = {
     'Handlarz', 'Kurier', 'Fracht', 'Karawana', 'Merkury',
     'Konwój', 'Transporter', 'Dostawca', 'Opat', 'Smok',
   ],
-  fusion_cruiser: [
-    'Feniks', 'Supernowa', 'Helios', 'Piorun', 'Taran',
-    'Balistyk', 'Wulkan', 'Orion', 'Stalowy', 'Grom',
-  ],
-  ftl_ship: [
-    'Infinit', 'Kwazar', 'Pulsar', 'Oblivion', 'Nexus',
-    'Leviatan', 'Tesseract', 'Warp', 'Zenith', 'Omega',
-  ],
 };
 
 // Licznik nazw per typ — inkrementowany przy każdej generacji
