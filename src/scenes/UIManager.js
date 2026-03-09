@@ -772,7 +772,7 @@ export class UIManager {
     this._drawNotifications();
 
     // ── Tooltip TopBar (na wierzchu) ─────────────────────────
-    if (civMode) this._topBar.drawTooltip(ctx, W);
+    if (civMode) this._topBar.drawTooltip(ctx, W, UI_SCALE);
 
     // ── Tooltip kolonii (Outliner) — na wierzchu ────────────
     if (civMode && this._outliner) this._outliner.drawTooltip(ctx);

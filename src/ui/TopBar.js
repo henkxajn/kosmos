@@ -45,6 +45,23 @@ export class TopBar {
     this._itemRects = [];     // [{x, y, w, h, item}] — do hit test hover
     this._tooltip   = null;   // {x, y, lines: [{text, color}]} — aktywny tooltip
     this._lastState = null;   // cache stanu do tooltipów
+    this._tooltipEl = null;   // DOM tooltip element (nad wszystkimi canvasami)
+    this._createTooltipEl();
+  }
+
+  _createTooltipEl() {
+    if (this._tooltipEl) return;
+    const el = document.createElement('div');
+    el.id = 'topbar-tooltip';
+    el.style.cssText = `
+      position: fixed; z-index: 50; pointer-events: none;
+      display: none; max-width: 260px; padding: 8px 10px;
+      background: rgba(6,12,20,0.96); border: 1px solid ${THEME.borderActive};
+      border-radius: 4px; font-family: 'Courier New', monospace;
+      font-size: 11px; color: ${THEME.textSecondary}; line-height: 1.5;
+    `;
+    document.body.appendChild(el);
+    this._tooltipEl = el;
   }
 
   // ── Rysowanie ───────────────────────────────────────────
@@ -169,53 +186,50 @@ export class TopBar {
     // Tooltip rysowany osobno przez drawTooltip() — na samym wierzchu
   }
 
-  // ── Tooltip ────────────────────────────────────────────
-  _drawTooltip(ctx, W) {
+  // ── Tooltip (DOM — nad wszystkimi canvasami) ───────────
+  _showDomTooltip(scale) {
     const tt = this._tooltip;
-    if (!tt || !tt.lines || tt.lines.length === 0) return;
-
-    const PAD = 8;
-    const LH = 14;
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-
-    // Oblicz wymiary tooltipa
-    let maxW = 0;
-    for (const line of tt.lines) {
-      const tw = ctx.measureText(line.text).width;
-      if (tw > maxW) maxW = tw;
+    if (!tt || !tt.lines || tt.lines.length === 0 || !this._tooltipEl) {
+      this._hideDomTooltip();
+      return;
     }
-    const boxW = maxW + PAD * 2;
-    const boxH = tt.lines.length * LH + PAD * 2 - 4;
 
-    // Pozycja — pod item, nie wychodząc poza ekran
-    let bx = tt.x;
-    let by = BAR_H + 4;
-    if (bx + boxW > W - 10) bx = W - boxW - 10;
-    if (bx < 4) bx = 4;
+    // Buduj HTML
+    const html = tt.lines.map(line => {
+      const weight = line.bold ? 'font-weight:bold;' : '';
+      const color  = line.color || THEME.textSecondary;
+      return `<div style="${weight}color:${color}">${line.text}</div>`;
+    }).join('');
 
-    // Tło
-    ctx.fillStyle = bgAlpha(0.95);
-    ctx.fillRect(bx, by, boxW, boxH);
-    ctx.strokeStyle = THEME.borderActive;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(bx, by, boxW, boxH);
+    this._tooltipEl.innerHTML = html;
+    this._tooltipEl.style.display = 'block';
 
-    // Linie tekstu
-    for (let i = 0; i < tt.lines.length; i++) {
-      const line = tt.lines[i];
-      ctx.font = line.bold
-        ? `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`
-        : `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = line.color || C.text;
-      ctx.textAlign = 'left';
-      ctx.fillText(line.text, bx + PAD, by + PAD + i * LH + 8);
-    }
-    ctx.textAlign = 'left';
+    // Przelicz logiczne koordynaty → piksele ekranowe
+    let tx = tt.x * scale;
+    let ty = (BAR_H + 4) * scale;
+
+    // Nie wychodź poza ekran
+    const rect = this._tooltipEl.getBoundingClientRect();
+    const W = window.innerWidth;
+    if (tx + rect.width > W - 10) tx = W - rect.width - 10;
+    if (tx < 4) tx = 4;
+
+    this._tooltipEl.style.left = `${Math.round(tx)}px`;
+    this._tooltipEl.style.top  = `${Math.round(ty)}px`;
   }
 
-  // Publiczny — rysuj tooltip na samym wierzchu (po wszystkich panelach)
-  drawTooltip(ctx, W) {
-    if (this._tooltip) this._drawTooltip(ctx, W);
+  _hideDomTooltip() {
+    if (this._tooltipEl) this._tooltipEl.style.display = 'none';
+  }
+
+  // Publiczny — aktualizuj DOM tooltip (wywoływany co frame z draw)
+  // scale = PS_SCALE (logiczne → ekranowe)
+  drawTooltip(ctx, W, scale = 1) {
+    if (this._tooltip) {
+      this._showDomTooltip(scale);
+    } else {
+      this._hideDomTooltip();
+    }
   }
 
   // Aktualizuj hover — wywoływane z UIManager/PlanetGlobeScene przy mousemove

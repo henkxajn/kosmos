@@ -100,18 +100,19 @@ export class PlanetGlobeRenderer {
     const W = bounds ? Math.round(bounds.w) : window.innerWidth;
     const H = bounds ? Math.round(bounds.h) : window.innerHeight;
 
-    // Dynamiczny canvas — z-index 5 (nad planet-canvas=4, pod event-layer=6)
+    // Dynamiczny canvas — z-index 3 (pod planet-canvas=4, nad ui-canvas=2)
+    // planet-canvas jest przeźroczysty w centrum → globus widoczny; panele/tooltips nad globusem
     this._canvas = document.createElement('canvas');
     if (bounds) {
       this._canvas.style.cssText =
         `position:absolute;left:${Math.round(bounds.x)}px;top:${Math.round(bounds.y)}px;` +
-        `width:${Math.round(bounds.w)}px;height:${Math.round(bounds.h)}px;z-index:5;background:#020405;`;
+        `width:${Math.round(bounds.w)}px;height:${Math.round(bounds.h)}px;z-index:3;background:transparent;`;
     } else {
       this._canvas.style.cssText =
-        'position:absolute;top:0;left:0;width:100%;height:100%;z-index:5;background:#020405;';
+        'position:absolute;top:0;left:0;width:100%;height:100%;z-index:3;background:transparent;';
     }
     document.getElementById('game-container').appendChild(this._canvas);
-    console.log('[PlanetGlobeRenderer] bounds:', bounds, 'W:', W, 'H:', H);
+    console.log('[PlanetGlobeRenderer] bounds:', bounds, 'W:', W, 'H:', H, 'z-index:', this._canvas.style.zIndex);
 
     // WebGL renderer — setPixelRatio PRZED setSize (ważna kolejność!)
     this._renderer = new THREE.WebGLRenderer({

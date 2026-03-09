@@ -119,12 +119,57 @@ export class PlanetGlobeScene {
     this._onTimeState      = null;
     this._onTimeDisplay    = null;
 
+    // DOM tooltip budynku (nad globusem WebGL)
+    this._buildTooltipEl = null;
+    this._createBuildTooltipEl();
+
     // Komunikat flash (błąd budowy/ulepszenia)
     this._flashMsg     = null;   // tekst
     this._flashEnd     = 0;      // timestamp zakończenia
 
     // Pętla rysowania
     this._animFrameId = null;
+  }
+
+  _createBuildTooltipEl() {
+    if (this._buildTooltipEl) return;
+    const el = document.createElement('div');
+    el.id = 'build-tooltip';
+    el.style.cssText = `
+      position: fixed; z-index: 50; pointer-events: none;
+      display: none; max-width: 220px; padding: 6px 8px;
+      background: rgba(2,4,5,0.95); border: 1px solid rgba(0,255,180,0.40);
+      border-radius: 3px; font-family: 'Courier New', monospace;
+      font-size: 10px; color: ${THEME.textSecondary}; line-height: 1.45;
+    `;
+    document.body.appendChild(el);
+    this._buildTooltipEl = el;
+  }
+
+  _showBuildDomTooltip(html, logicalX, logicalY) {
+    if (!this._buildTooltipEl) return;
+    this._buildTooltipEl.innerHTML = html;
+    this._buildTooltipEl.style.display = 'block';
+
+    // Przelicz logiczne koordynaty canvas → piksele ekranowe (PS_SCALE)
+    let tx = logicalX * PS_SCALE;
+    let ty = logicalY * PS_SCALE;
+
+    // Unikaj wyjścia poza ekran
+    const rect = this._buildTooltipEl.getBoundingClientRect();
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+    if (tx + rect.width > screenW - 4) tx = screenW - rect.width - 4;
+    if (tx < 4) tx = 4;
+    if (ty < 4) ty = 4;
+    if (ty + rect.height > screenH - 4) ty = screenH - rect.height - 4;
+
+    this._buildTooltipEl.style.left = `${Math.round(tx)}px`;
+    this._buildTooltipEl.style.top  = `${Math.round(ty)}px`;
+  }
+
+  _hideBuildDomTooltip() {
+    if (this._buildTooltipEl) this._buildTooltipEl.style.display = 'none';
   }
 
   // ── Otwiera scenę 3D globusa ──────────────────────────────────
@@ -248,6 +293,10 @@ export class PlanetGlobeScene {
       this._globeRenderer.close();
       this._globeRenderer = null;
     }
+
+    // Ukryj DOM tooltips
+    this._hideBuildDomTooltip();
+    this._topBar?._hideDomTooltip?.();
 
     // Usuń eventy
     this._unregisterEvents(layer);
@@ -716,6 +765,7 @@ export class PlanetGlobeScene {
       this._drawBuildPanel();
     } else {
       this._buildTooltipVisible = false;
+      this._hideBuildDomTooltip();
       // Podpowiedź w prawym panelu
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.borderLight;
@@ -745,16 +795,13 @@ export class PlanetGlobeScene {
       this._flashMsg = null;
     }
 
-    // Tooltip TopBar — na samym wierzchu (po wszystkich panelach)
+    // Tooltip TopBar — DOM element nad globusem
     if (window.KOSMOS?.civMode) {
-      this._topBar.drawTooltip(ctx, LW);
+      this._topBar.drawTooltip(ctx, LW, PS_SCALE);
     }
 
-    // Dynamiczny z-index globusa: obniż gdy tooltip lub CivPanel zasłaniałyby canvas 2D
-    if (this._globeRenderer?._canvas) {
-      const needLower = this._buildTooltipVisible || this._topBar?._tooltip;
-      this._globeRenderer._canvas.style.zIndex = needLower ? '3' : '5';
-    }
+    // z-index globusa stale pod planet-canvas (3 < 4) — tooltips i panele zawsze widoczne
+    // (planet-canvas jest przeźroczysty w centrum, więc globus świeci przez transparent piksele)
 
     ctx.restore();
   }
@@ -1060,6 +1107,7 @@ export class PlanetGlobeScene {
 
     // Reset flagi tooltip (ustawiana w else-branch — building list)
     this._buildTooltipVisible = false;
+    this._hideBuildDomTooltip();
 
     const BPX   = LW - RIGHT_W;
     const terrain = TERRAIN_TYPES[tile.type];
@@ -1684,38 +1732,16 @@ export class PlanetGlobeScene {
       lines.push({ text: '⛏ Wydobycie zależy od złóż', color: '#aac8c0' });
     }
 
-    // Rozmiar tooltip
-    const lineH   = 13;
-    const padX    = 8;
-    const padY    = 6;
-    const ttW     = 200;
-    const ttH     = padY * 2 + lines.length * lineH;
+    // Buduj HTML i pokaż DOM tooltip
+    const html = lines.map(line => {
+      const size = line.isDesc ? '9px' : '10px';
+      return `<div style="color:${line.color};font-size:${size}">${line.text}</div>`;
+    }).join('');
 
     // Pozycja — na lewo od panelu budowania
-    let ttX = BPX - ttW - 6;
-    let ttY = this._buildPanelMouseY - ttH / 2;
-    if (ttX < 0) ttX = mx + 12;
-    if (ttY < HEADER_H) ttY = HEADER_H;
-    if (ttY + ttH > LH - BOTTOM_BAR_H) ttY = LH - BOTTOM_BAR_H - ttH;
-
-    // Rysuj tło
-    ctx.fillStyle = 'rgba(2,4,5,0.95)';
-    ctx.fillRect(ttX, ttY, ttW, ttH);
-    ctx.strokeStyle = 'rgba(0,255,180,0.40)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(ttX, ttY, ttW, ttH);
-
-    // Rysuj linie
-    let ly = ttY + padY;
-    for (const line of lines) {
-      ctx.font = line.isDesc
-        ? `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`
-        : `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = line.color;
-      ctx.textAlign = 'left';
-      ctx.fillText(line.text, ttX + padX, ly + 9);
-      ly += lineH;
-    }
+    const ttX = BPX - 206;
+    const ttY = this._buildPanelMouseY;
+    this._showBuildDomTooltip(html, ttX, ttY);
   }
 
   // ── Hit testing ───────────────────────────────────────────────
