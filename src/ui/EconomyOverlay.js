@@ -743,11 +743,11 @@ export class EconomyOverlay extends BaseOverlay {
       const ids = COMMODITY_BY_TIER[tier];
       if (!ids || ids.length === 0) continue;
 
-      // Filtruj: pokaż tylko nie-prefab z recepturą, nie już alokowane
+      // Filtruj: pokaż tylko towary z recepturą, nie już alokowane
       const allocs = fs.getAllocations();
       const available = ids.filter(cId => {
         const def = COMMODITIES[cId];
-        if (!def || def.isPrefab) return false; // ukryj prefabrykaty
+        if (!def) return false;
         if (!def.recipe) return false;
         // Sprawdź czy towar jest już alokowany
         if (allocs.some(a => a.commodityId === cId)) return false;
