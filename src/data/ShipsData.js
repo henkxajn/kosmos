@@ -18,7 +18,7 @@ export const SHIPS = {
     icon:          '🛸',
     cost:          { Fe: 100, Ti: 20, Cu: 15 },
     commodityCost: { hull_armor: 4, electronics: 3, power_cells: 2, copper_wiring: 2 },
-    buildTime:     8,
+    buildTime:     4,
     fuelCapacity:  8,            // max power_cells
     fuelPerAU:     0.4,          // power_cells / AU → zasięg 20 AU
     range:         20,           // AU (fallback = fuelCapacity / fuelPerAU)
@@ -41,7 +41,7 @@ export const SHIPS = {
       water_recyclers:    3,
       food_synthesizers:  2,
     },
-    buildTime:     12,
+    buildTime:     6,
     fuelCapacity:  8,            // max power_cells
     fuelPerAU:     0.7,          // power_cells / AU → zasięg ~11.4 AU
     range:         12,           // AU (fallback)
@@ -57,7 +57,7 @@ export const SHIPS = {
     icon:          '📦',
     cost:          { Fe: 150, Ti: 25, Cu: 15 },
     commodityCost: { hull_armor: 7, power_cells: 4, electronics: 2, copper_wiring: 1 },
-    buildTime:     6,
+    buildTime:     3,
     fuelCapacity:  10,           // max power_cells
     fuelPerAU:     0.5,          // power_cells / AU → zasięg 20 AU
     range:         20,           // AU (fallback)
@@ -78,7 +78,7 @@ export const SHIPS = {
       electronics:     3,
       semiconductors:  2,
     },
-    buildTime:     16,
+    buildTime:     8,
     fuelCapacity:  20,           // max power_cells
     fuelPerAU:     0.2,          // power_cells / AU → zasięg 100 AU
     range:         100,          // AU (fallback)
@@ -100,7 +100,7 @@ export const SHIPS = {
       ion_thrusters:     4,
       semiconductors:    3,
     },
-    buildTime:     24,
+    buildTime:     12,
     fuelCapacity:  30,           // max power_cells
     fuelPerAU:     0.05,         // power_cells / AU → zasięg 600 AU
     range:         600,          // AU (fallback)

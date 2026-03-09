@@ -204,11 +204,22 @@ const ACTIONS = {
     canExecute(vessel, state) {
       // Dostępny gdy orbituje lub jest w locie
       if (vessel.position.state === 'docked') return { ok: false, reason: 'Statek w hangarze' };
-      // Znajdź misję statku
+
+      // Statek już wraca (vessel-level) — nie potrzebuje rozkazu
+      if (vessel.mission?.phase === 'returning') return { ok: false, reason: 'Już wraca' };
+
+      // Znajdź misję statku w systemie ekspedycji
       const ms = state.missionSystem;
-      if (!ms) return { ok: false, reason: 'Brak systemu misji' };
-      const mission = ms.getActive().find(m => m.vesselId === vessel.id);
-      if (!mission) return { ok: false, reason: 'Brak aktywnej misji' };
+      const mission = ms?.getActive().find(m => m.vesselId === vessel.id);
+
+      // Statek bez aktywnej ekspedycji ale wciąż w locie/na orbicie — pozwól wrócić bezpośrednio
+      if (!mission) {
+        // Statek ma vessel.mission (VesselManager) — można wydać rozkaz powrotu
+        if (vessel.mission) {
+          return { ok: true };
+        }
+        return { ok: false, reason: 'Brak aktywnej misji' };
+      }
       if (mission.status === 'returning') return { ok: false, reason: 'Już wraca' };
 
       // Sprawdź paliwo na powrót (ostrzeżenie, nie blokada — "lot awaryjny")
@@ -226,9 +237,25 @@ const ACTIONS = {
     },
     execute(vessel, state) {
       const ms = state.missionSystem;
-      const mission = ms.getActive().find(m => m.vesselId === vessel.id);
+      const mission = ms?.getActive().find(m => m.vesselId === vessel.id);
       if (mission) {
         ms.cancelMission(mission.id);
+      } else {
+        // Brak ekspedycji ale statek jest w kosmosie — bezpośredni powrót przez VesselManager
+        const vMgr = state.vesselManager;
+        if (vMgr && vessel.mission) {
+          const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+          const homeEntity = vMgr._findEntity(vessel.colonyId);
+          const hx = homeEntity?.x ?? 0;
+          const hy = homeEntity?.y ?? 0;
+          const distPx = Math.hypot(vessel.position.x - hx, vessel.position.y - hy);
+          const ship = SHIPS[vessel.shipId];
+          const speed = ship?.speedAU ?? 0.3;
+          const distAU = distPx / GAME_CONFIG.AU_TO_PX;
+          const travelYears = distAU / speed;
+          vessel.mission.returnYear = gameYear + travelYears;
+          vMgr.startReturn(vessel.id);
+        }
       }
     },
   },
