@@ -1198,6 +1198,11 @@ export class FleetManagerOverlay {
       ctx.fillStyle = 'rgba(0,255,180,0.25)';
       ctx.fillRect(x + w - 4, sbY, 3, sbH);
     }
+
+    // Tooltip ciała (na hover)
+    if (this._mapHoverBody) {
+      this._drawBodyTooltip(ctx, x, y, w, h);
+    }
   }
 
   _getAllCatalogBodies() {
@@ -1283,6 +1288,21 @@ export class FleetManagerOverlay {
         const col = colMgr.getColony(body.id);
         const pop = col?.civSystem?.population ?? 0;
         lines.push({ text: `Kolonia: ${pop} POP`, color: THEME.mint });
+      }
+      // Pełna lista złóż
+      const deps = body.deposits ?? [];
+      const activeDeps = deps.filter(d => d.remaining > 0).sort((a, b) => b.richness - a.richness);
+      if (activeDeps.length > 0) {
+        lines.push({ text: `── Złoża ──`, color: THEME.textDim });
+        for (const d of activeDeps) {
+          const stars = d.richness >= 0.7 ? '★★★' : d.richness >= 0.4 ? '★★' : '★';
+          const pct = Math.round((d.remaining / d.totalAmount) * 100);
+          lines.push({ text: `  ${d.resourceId} ${stars}  ${pct}% (${d.remaining}/${d.totalAmount})`, color: THEME.yellow });
+        }
+      } else if (deps.length > 0) {
+        lines.push({ text: `Złoża: wyczerpane`, color: THEME.textDim });
+      } else {
+        lines.push({ text: `Złoża: brak`, color: THEME.textDim });
       }
     } else {
       lines.push({ text: `Status: niezbadane`, color: THEME.warning });
