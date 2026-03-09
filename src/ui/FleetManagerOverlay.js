@@ -84,6 +84,10 @@ export class FleetManagerOverlay {
     this._missionConfig = null;   // null | { actionId, targetId, step:'select'|'confirm' }
     this._targetScrollOffset = 0; // scroll listy celów
     this._mapToggles = { routes: true, range: false };
+    this._showAtlas = false;      // toggle: mapa ↔ katalog ciał
+    this._atlasScrollY = 0;       // scroll katalogu ciał
+    this._atlasContentH = 0;      // wysokość zawartości katalogu
+    this._atlasVisibleH = 0;      // widoczna wysokość katalogu
     this._hitZones = [];          // { x,y,w,h, type, data }
     this._bounds = null;          // { x,y,w,h } — cały overlay
     this._cachedTargets = null;   // cache celów misji
@@ -219,18 +223,24 @@ export class FleetManagerOverlay {
       this._targetScrollOffset = Math.max(0, this._targetScrollOffset + delta * 0.5);
       return true;
     }
-    // Scroll w CENTER (zoom mapy)
+    // Scroll w CENTER
     const mb = this._mapBounds;
     if (mb && mx >= mb.x && mx <= mb.x + mb.w && my >= mb.y && my <= mb.y + mb.h) {
-      const zoomFactor = delta > 0 ? 0.85 : 1.18;
-      const oldZoom = this._mapZoom;
-      this._mapZoom = Math.max(0.3, Math.min(30, this._mapZoom * zoomFactor));
-      // Pan do punktu pod kursorem — proporcjonalnie do zmiany zoomu
-      const ratio = this._mapZoom / oldZoom;
-      const cx = mb.x + mb.w / 2;
-      const cy = mb.y + mb.h / 2;
-      this._mapPanX = (this._mapPanX + (mx - cx)) * ratio - (mx - cx);
-      this._mapPanY = (this._mapPanY + (my - cy)) * ratio - (my - cy);
+      if (this._showAtlas) {
+        // Scroll katalogu ciał
+        const maxScroll = Math.max(0, this._atlasContentH - this._atlasVisibleH);
+        this._atlasScrollY = Math.max(0, Math.min(maxScroll, this._atlasScrollY + delta * 0.5));
+      } else {
+        // Zoom mapy
+        const zoomFactor = delta > 0 ? 0.85 : 1.18;
+        const oldZoom = this._mapZoom;
+        this._mapZoom = Math.max(0.3, Math.min(30, this._mapZoom * zoomFactor));
+        const ratio = this._mapZoom / oldZoom;
+        const cx = mb.x + mb.w / 2;
+        const cy = mb.y + mb.h / 2;
+        this._mapPanX = (this._mapPanX + (mx - cx)) * ratio - (mx - cx);
+        this._mapPanY = (this._mapPanY + (my - cy)) * ratio - (my - cy);
+      }
       return true;
     }
     return true;
@@ -239,7 +249,7 @@ export class FleetManagerOverlay {
   handleMouseDown(mx, my) {
     if (!this._visible) return false;
     const mb = this._mapBounds;
-    if (mb && mx >= mb.x && mx <= mb.x + mb.w && my >= mb.y && my <= mb.y + mb.h) {
+    if (mb && !this._showAtlas && mx >= mb.x && mx <= mb.x + mb.w && my >= mb.y && my <= mb.y + mb.h) {
       this._mapDragging = true;
       this._mapDragStartX = mx;
       this._mapDragStartY = my;
@@ -330,6 +340,10 @@ export class FleetManagerOverlay {
         break;
       case 'map_toggle':
         this._mapToggles[zone.data.key] = !this._mapToggles[zone.data.key];
+        break;
+      case 'atlas_toggle':
+        this._showAtlas = !this._showAtlas;
+        this._atlasScrollY = 0;
         break;
       case 'action':
         this._handleAction(zone.data);
@@ -672,38 +686,68 @@ export class FleetManagerOverlay {
     // ── Nagłówek (h=32) ──────────────────────────────────────
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('WIDOK UKŁADU', x + pad, y + 20);
+    ctx.fillText(this._showAtlas ? 'STAR ATLAS' : 'WIDOK UKŁADU', x + pad, y + 20);
 
-    // Zoom label
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(`×${this._mapZoom.toFixed(1)}`, x + pad + 100, y + 20);
-
-    // Toggle: TRASY / ZASIĘG
-    const toggleY = y + 6;
-    let tbx = x + w - pad;
-    for (const key of ['range', 'routes']) {
-      const label = key === 'routes' ? 'TRASY' : 'ZASIĘG';
-      const active = this._mapToggles[key];
-      const tw = 50;
-      tbx -= tw + 4;
-      ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : 'transparent';
-      ctx.fillRect(tbx, toggleY, tw, 18);
-      ctx.strokeStyle = active ? THEME.accent : THEME.border;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(tbx, toggleY, tw, 18);
+    // Zoom label — tylko w trybie mapy
+    if (!this._showAtlas) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = active ? THEME.accent : THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(label, tbx + tw / 2, toggleY + 13);
-      ctx.textAlign = 'left';
-      this._hitZones.push({ x: tbx, y: toggleY, w: tw, h: 18, type: 'map_toggle', data: { key } });
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(`×${this._mapZoom.toFixed(1)}`, x + pad + 100, y + 20);
     }
 
-    // ── Obszar mapy (clip) ──────────────────────────────────
+    // Toggle: STAR ATLAS / TRASY / ZASIĘG
+    const toggleY = y + 6;
+    let tbx = x + w - pad;
+
+    // TRASY / ZASIĘG — widoczne tylko w trybie mapy
+    if (!this._showAtlas) {
+      for (const key of ['range', 'routes']) {
+        const label = key === 'routes' ? 'TRASY' : 'ZASIĘG';
+        const active = this._mapToggles[key];
+        const tw = 50;
+        tbx -= tw + 4;
+        ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : 'transparent';
+        ctx.fillRect(tbx, toggleY, tw, 18);
+        ctx.strokeStyle = active ? THEME.accent : THEME.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(tbx, toggleY, tw, 18);
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = active ? THEME.accent : THEME.textDim;
+        ctx.textAlign = 'center';
+        ctx.fillText(label, tbx + tw / 2, toggleY + 13);
+        ctx.textAlign = 'left';
+        this._hitZones.push({ x: tbx, y: toggleY, w: tw, h: 18, type: 'map_toggle', data: { key } });
+      }
+    }
+
+    // Przycisk STAR ATLAS
+    {
+      const atlasTw = 76;
+      tbx -= atlasTw + 4;
+      const atOn = this._showAtlas;
+      ctx.fillStyle = atOn ? 'rgba(0,255,180,0.15)' : 'transparent';
+      ctx.fillRect(tbx, toggleY, atlasTw, 18);
+      ctx.strokeStyle = atOn ? THEME.accent : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tbx, toggleY, atlasTw, 18);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = atOn ? THEME.accent : THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText('STAR ATLAS', tbx + atlasTw / 2, toggleY + 13);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: tbx, y: toggleY, w: atlasTw, h: 18, type: 'atlas_toggle', data: {} });
+    }
+
+    // ── Obszar mapy / katalogu (clip) ───────────────────────
     const mapY = y + 32;
     const mapH = h - 32;
     this._mapBounds = { x, y: mapY, w, h: mapH };
+
+    // Tryb STAR ATLAS — katalog ciał zamiast mapy
+    if (this._showAtlas) {
+      this._drawAtlasCatalog(ctx, x, mapY, w, mapH, allVessels);
+      return;
+    }
 
     const mapCx = x + w / 2 + this._mapPanX;
     const mapCy = mapY + mapH / 2 + this._mapPanY;
@@ -981,6 +1025,217 @@ export class FleetManagerOverlay {
     if (this._mapHoverBody) {
       this._drawBodyTooltip(ctx, x, mapY, w, mapH);
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // STAR ATLAS — katalog ciał niebieskich (zamiast mapy schematycznej)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _drawAtlasCatalog(ctx, x, y, w, h) {
+    const PAD = 10;
+    const ROW_H = 32;
+    let cy = y + 6;
+
+    // Tło
+    ctx.fillStyle = 'rgba(2,4,5,0.97)';
+    ctx.fillRect(x + 1, y, w - 2, h - 1);
+
+    // Nagłówek
+    const entries = this._getAllCatalogBodies();
+    const exploredCount = entries.filter(e => e.explored).length;
+
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textHeader;
+    ctx.fillText('KATALOG CIAŁ NIEBIESKICH', x + PAD, cy + 10);
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.textAlign = 'right';
+    ctx.fillText(`Zbadane: ${exploredCount}/${entries.length}`, x + w - PAD, cy + 10);
+    ctx.textAlign = 'left';
+    cy += 18;
+
+    // Separator
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
+    cy += 4;
+
+    if (entries.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText('Brak ciał w układzie', x + PAD, cy + 12);
+      this._atlasContentH = 0;
+      this._atlasVisibleH = 0;
+      return;
+    }
+
+    // Scroll + clip
+    const visibleH = h - (cy - y) - 2;
+    this._atlasVisibleH = visibleH;
+    this._atlasContentH = entries.length * ROW_H;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, cy, w, visibleH);
+    ctx.clip();
+
+    const scrollY = this._atlasScrollY || 0;
+    let ry = cy - scrollY;
+
+    const colMgr = window.KOSMOS?.colonyManager;
+
+    for (const entry of entries) {
+      const { body, explored } = entry;
+      const isMoon = !!entry.isMoon;
+      const indent = isMoon ? 14 : 0;
+
+      // Cull poza widocznością
+      if (ry + ROW_H < cy - 2) { ry += ROW_H; continue; }
+      if (ry > cy + visibleH + 2) break;
+
+      // Hover highlight
+      const isHover = this._mapHoverBody?.bodyId === body.id;
+      if (isHover) {
+        ctx.fillStyle = 'rgba(0,255,180,0.06)';
+        ctx.fillRect(x + 1, ry, w - 2, ROW_H);
+      }
+
+      // Kolonia marker
+      const hasColony = colMgr?.hasColony(body.id);
+
+      const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
+      const orbA = body.orbital?.a ?? 0;
+      const distHome = DistanceUtils.orbitalFromHomeAU(body);
+
+      if (explored) {
+        // Nazwa
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = hasColony ? THEME.mint : isMoon ? THEME.textSecondary : THEME.textPrimary;
+        const namePrefix = isMoon ? '└ ' : '';
+        const nameStr = `${namePrefix}${icon} ${(body.name ?? body.id).slice(0, isMoon ? 10 : 16)}`;
+        ctx.fillText(nameStr, x + PAD + indent, ry + 12);
+
+        // Typ + temperatura
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        const typeStr = body.planetType ?? body.subType ?? body.type;
+        const tempStr = body.temperatureK ? ` ${Math.round(body.temperatureK - 273)}°C` : '';
+        ctx.fillText(`${typeStr}${tempStr}`, x + PAD + indent, ry + 25);
+
+        // Odległości (prawo)
+        ctx.textAlign = 'right';
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`${orbA.toFixed(2)} AU`, x + w - PAD, ry + 12);
+
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(`🏠 ${distHome.toFixed(1)} AU`, x + w - PAD, ry + 25);
+
+        // Złoża (środek-prawo)
+        const deps = body.deposits ?? [];
+        if (deps.length > 0) {
+          const topDeps = [...deps].filter(d => d.remaining > 0).sort((a, b) => b.richness - a.richness).slice(0, 3);
+          const depStr = topDeps.map(d => {
+            const stars = d.richness >= 0.7 ? '★★★' : d.richness >= 0.4 ? '★★' : '★';
+            return `${d.resourceId}${stars}`;
+          }).join(' ');
+          ctx.fillStyle = THEME.yellow;
+          const depX = x + w / 2 + 30;
+          ctx.textAlign = 'left';
+          ctx.fillText(depStr, depX, ry + 25);
+        }
+
+        ctx.textAlign = 'left';
+
+        // Kolonia badge
+        if (hasColony) {
+          const col = colMgr.getColony(body.id);
+          const pop = col?.civSystem?.population ?? 0;
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.mint;
+          ctx.fillText(`● ${pop} POP`, x + PAD + indent + ctx.measureText(nameStr).width + 6, ry + 12);
+        }
+      } else {
+        // Niezbadane
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        const namePrefix = isMoon ? '└ ' : '';
+        ctx.fillText(`${namePrefix}${icon} ???`, x + PAD + indent, ry + 12);
+
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(body.type === 'planet' ? 'planeta' : body.type === 'moon' ? 'księżyc' : 'planetoid', x + PAD + indent, ry + 25);
+
+        ctx.textAlign = 'right';
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(`${orbA.toFixed(2)} AU`, x + w - PAD, ry + 12);
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(`🏠 ${distHome.toFixed(1)} AU`, x + w - PAD, ry + 25);
+        ctx.textAlign = 'left';
+      }
+
+      // Hit zone — do hover/tooltip i wyboru celu
+      this._hitZones.push({
+        x: x + 1, y: ry, w: w - 2, h: ROW_H,
+        type: 'map_body', data: { bodyId: body.id },
+      });
+
+      // Separator wierszy
+      ctx.strokeStyle = 'rgba(40,60,80,0.2)';
+      ctx.beginPath(); ctx.moveTo(x + PAD, ry + ROW_H - 1); ctx.lineTo(x + w - PAD, ry + ROW_H - 1); ctx.stroke();
+
+      ry += ROW_H;
+    }
+
+    ctx.restore();
+
+    // Scrollbar
+    if (this._atlasContentH > visibleH) {
+      const sbH = Math.max(10, visibleH * (visibleH / this._atlasContentH));
+      const maxScroll = this._atlasContentH - visibleH;
+      const sbY = cy + (scrollY / maxScroll) * (visibleH - sbH);
+      ctx.fillStyle = 'rgba(0,255,180,0.25)';
+      ctx.fillRect(x + w - 4, sbY, 3, sbH);
+    }
+  }
+
+  _getAllCatalogBodies() {
+    const homePl = window.KOSMOS?.homePlanet;
+    const planets = [];
+    for (const t of ['planet', 'planetoid']) {
+      for (const body of EntityManager.getByType(t)) {
+        if (body === homePl) continue;
+        planets.push({ body, explored: !!body.explored });
+      }
+    }
+    planets.sort((a, b) => {
+      if (a.explored !== b.explored) return a.explored ? -1 : 1;
+      return (a.body.orbital?.a ?? 0) - (b.body.orbital?.a ?? 0);
+    });
+
+    const moonsByParent = new Map();
+    for (const moon of EntityManager.getByType('moon')) {
+      const pid = moon.parentPlanetId;
+      if (!moonsByParent.has(pid)) moonsByParent.set(pid, []);
+      moonsByParent.get(pid).push({ body: moon, explored: !!moon.explored, isMoon: true });
+    }
+    for (const moons of moonsByParent.values()) {
+      moons.sort((a, b) => (a.body.orbital?.a ?? 0) - (b.body.orbital?.a ?? 0));
+    }
+
+    const result = [];
+    // Księżyce planety macierzystej na górze
+    const homeMoons = homePl ? (moonsByParent.get(homePl.id) ?? []) : [];
+    for (const m of homeMoons) result.push(m);
+    if (homeMoons.length > 0) moonsByParent.delete(homePl.id);
+
+    for (const entry of planets) {
+      result.push(entry);
+      const moons = moonsByParent.get(entry.body.id) ?? [];
+      for (const m of moons) result.push(m);
+    }
+    return result;
   }
 
   // ── Tooltip informacji o ciele niebieskim ─────────────────────────────────
