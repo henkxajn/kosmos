@@ -63,7 +63,6 @@ export const SHIPS = {
     range:         20,           // AU (fallback)
     speedAU:       0.3,          // AU/rok — pośredni, cargo
     cargoCapacity: 500,          // tony — główny transportowiec
-    requires:      'interplanetary_logistics',
     description:   'Wielki frachtowiec do transferu surowców między koloniami.',
   },
 

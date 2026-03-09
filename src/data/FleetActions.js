@@ -14,6 +14,7 @@
 
 import { SHIPS } from './ShipsData.js';
 import { effectiveRange } from '../entities/Vessel.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
 
 // ── Definicje akcji ─────────────────────────────────────────────────────────
@@ -209,6 +210,18 @@ const ACTIONS = {
       const mission = ms.getActive().find(m => m.vesselId === vessel.id);
       if (!mission) return { ok: false, reason: 'Brak aktywnej misji' };
       if (mission.status === 'returning') return { ok: false, reason: 'Już wraca' };
+
+      // Sprawdź paliwo na powrót (ostrzeżenie, nie blokada — "lot awaryjny")
+      const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
+      const homeEntity = state.vesselManager?._findEntity(vessel.colonyId);
+      if (homeEntity && vessel.fuel) {
+        const distPx = Math.hypot(vessel.position.x - homeEntity.x, vessel.position.y - homeEntity.y);
+        const distAU = distPx / AU_TO_PX;
+        const fuelNeeded = distAU * (vessel.fuel.consumption ?? 0);
+        if (vessel.fuel.current < fuelNeeded) {
+          return { ok: true, lowFuel: true, reason: `Mało paliwa (${vessel.fuel.current.toFixed(1)}/${fuelNeeded.toFixed(1)} pc)` };
+        }
+      }
       return { ok: true };
     },
     execute(vessel, state) {

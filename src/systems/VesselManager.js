@@ -243,6 +243,10 @@ export class VesselManager {
     const returnRoute = this._calcRoute(m.returnStartX, m.returnStartY, m.returnTargetX, m.returnTargetY);
     m.returnWaypoints = returnRoute.waypoints;
 
+    // Zużyj paliwo na powrót (dystans w AU × consumption)
+    const returnDistAU = returnRoute.totalDist / AU_TO_PX;
+    consumeFuel(vessel, returnDistAU);
+
     vessel.position.state = 'in_transit';
     vessel.position.dockedAt = null;
 
@@ -476,6 +480,16 @@ export class VesselManager {
 
     for (const vessel of this._vessels.values()) {
       const m = vessel.mission;
+
+      // Docked statki — synchronizuj pozycję z planetą macierzystą
+      if (vessel.position.state === 'docked' && vessel.position.dockedAt) {
+        const entity = this._findEntity(vessel.position.dockedAt);
+        if (entity) {
+          vessel.position.x = entity.x;
+          vessel.position.y = entity.y;
+        }
+        continue;
+      }
 
       // Orbitujące statki — podążają za ciałem, wokół którego krążą
       if (vessel.position.state === 'orbiting' && m) {
