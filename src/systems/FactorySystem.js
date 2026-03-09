@@ -157,7 +157,8 @@ export class FactorySystem {
     for (const [id, alloc] of this._allocations) {
       const def = COMMODITIES[id];
       if (!def) continue;
-      const timePerUnit = def.baseTime / alloc.points; // lata na 1 szt.
+      const speedMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
+      const timePerUnit = def.baseTime / (alloc.points * speedMult); // lata na 1 szt.
       result.push({
         commodityId: id,
         namePL:      def.namePL,
@@ -232,18 +233,19 @@ export class FactorySystem {
       }
 
       // Sprawdź czy mamy surowce na recepturę
-      const canProduce = this._hasIngredients(def.recipe);
+      const canProduce = this._hasIngredients(def.recipe, commodityId);
       alloc._paused = !canProduce;
       if (!canProduce) continue;
 
-      // Czas na 1 szt = baseTime / points
-      const timePerUnit = def.baseTime / alloc.points;
+      // Czas na 1 szt = baseTime / points; boosted: +50% szybkości
+      const speedMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
+      const timePerUnit = def.baseTime / (alloc.points * speedMult);
       alloc.progress += deltaYears;
 
       // Sprawdź czy ukończono produkcję
       while (alloc.progress >= timePerUnit) {
         // Sprawdź ponownie surowce (mogły się skończyć)
-        if (!this._hasIngredients(def.recipe)) {
+        if (!this._hasIngredients(def.recipe, commodityId)) {
           alloc._paused = true;
           break;
         }
@@ -256,7 +258,7 @@ export class FactorySystem {
         }
 
         // Zużyj surowce
-        this._consumeIngredients(def.recipe);
+        this._consumeIngredients(def.recipe, commodityId);
         alloc.progress -= timePerUnit;
         alloc.produced = (alloc.produced ?? 0) + 1;
 
@@ -303,18 +305,32 @@ export class FactorySystem {
     }
   }
 
-  _hasIngredients(recipe) {
-    if (!this.resourceSystem) return false;
+  // Skaluj recipe T1 w scenariuszu boosted (×5 surowców)
+  _getScaledRecipe(recipe, commodityId) {
+    const isBoosted = window.KOSMOS?.scenario === 'civilization_boosted';
+    if (!isBoosted) return recipe;
+    const def = COMMODITIES[commodityId];
+    if (!def || def.tier !== 1) return recipe;
+    const scaled = {};
     for (const resId in recipe) {
-      if ((this.resourceSystem.inventory.get(resId) ?? 0) < recipe[resId]) return false;
+      scaled[resId] = recipe[resId] * 5;
+    }
+    return scaled;
+  }
+
+  _hasIngredients(recipe, commodityId) {
+    if (!this.resourceSystem) return false;
+    const actual = this._getScaledRecipe(recipe, commodityId);
+    for (const resId in actual) {
+      if ((this.resourceSystem.inventory.get(resId) ?? 0) < actual[resId]) return false;
     }
     return true;
   }
 
-  _consumeIngredients(recipe) {
+  _consumeIngredients(recipe, commodityId) {
     if (!this.resourceSystem) return;
-    // Przekaż recipe bezpośrednio — spend() iteruje po Object.entries
-    this.resourceSystem.spend(recipe);
+    const actual = this._getScaledRecipe(recipe, commodityId);
+    this.resourceSystem.spend(actual);
   }
 
   _emitStatus() {

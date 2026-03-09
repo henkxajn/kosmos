@@ -74,7 +74,9 @@ export class DepositSystem {
       // Zasobność: proporcjonalna do composition / rarity
       // Fe(r1) 22% → 1.0, Cu(r2) 1.8% → 0.45, Ti(r3) 0.2% → 0.1
       const richness = Math.min(1.0, Math.max(0.1, compositionPct / (resDef.rarity * 2)));
-      const totalAmount = Math.round(richness * 10000 * (1 + rand() * 0.5));
+      // Boosted scenario: ×10 zasobów na ciałach niebieskich
+      const depositMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 10 : 1;
+      const totalAmount = Math.round(richness * 10000 * depositMult * (1 + rand() * 0.5));
 
       deposits.push({
         resourceId,
@@ -103,7 +105,9 @@ export class DepositSystem {
 
       // Output/rok = level × BASE_MINE_RATE × richness × (remaining / total)
       const depletion = dep.remaining / dep.totalAmount; // 1.0 → 0.0
-      const outputPerYear = mineLevel * BASE_MINE_RATE * dep.richness * depletion;
+      // Boosted scenario: ×5 wydobycia w kopalniach
+      const rateMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 5 : 1;
+      const outputPerYear = mineLevel * BASE_MINE_RATE * rateMult * dep.richness * depletion;
       const amount = outputPerYear * deltaYears;
 
       // Nie wydobywaj więcej niż remaining

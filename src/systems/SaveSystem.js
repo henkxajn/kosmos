@@ -51,6 +51,7 @@ export class SaveSystem {
       version:    CURRENT_VERSION,
       savedAt:    Date.now(),
       gameTime:   this.timeSystem.gameTime,
+      scenario:   window.KOSMOS?.scenario ?? 'civilization',
       star:       this._serializeStar(this.star),
       planets:    planets.map(p => this._serializePlanet(p)),
       moons:      moons.map(m => this._serializeMoon(m)),

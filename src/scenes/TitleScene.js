@@ -243,6 +243,7 @@ export class TitleScene {
           <div class="kosmos-save-info">Zapisana gra — ${years} lat</div>
           <button class="kosmos-btn primary" data-action="continue">Kontynuuj</button>
           <button class="kosmos-btn" data-action="new">Nowa gra</button>
+          <button class="kosmos-btn" data-action="new_boosted">Nowa gra 2</button>
           <button class="kosmos-btn" data-action="power_test">Power Test</button>
         </div>
       `;
@@ -250,6 +251,7 @@ export class TitleScene {
       buttons = `
         <div class="kosmos-buttons">
           <button class="kosmos-btn primary" data-action="new">Nowa gra</button>
+          <button class="kosmos-btn" data-action="new_boosted">Nowa gra 2</button>
           <button class="kosmos-btn" data-action="power_test">Power Test</button>
         </div>
       `;
@@ -282,11 +284,16 @@ export class TitleScene {
         }
       }
       window.KOSMOS.savedData = saveData;
-      window.KOSMOS.scenario  = 'civilization';
+      // Przywróć scenariusz z save (civilization_boosted, power_test, itp.)
+      window.KOSMOS.scenario  = saveData?.scenario ?? 'civilization';
     } else if (action === 'new') {
       SaveSystem.clearSave();
       window.KOSMOS.savedData = null;
       window.KOSMOS.scenario  = 'civilization';
+    } else if (action === 'new_boosted') {
+      SaveSystem.clearSave();
+      window.KOSMOS.savedData = null;
+      window.KOSMOS.scenario  = 'civilization_boosted';
     } else if (action === 'power_test') {
       SaveSystem.clearSave();
       window.KOSMOS.savedData = null;

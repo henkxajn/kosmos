@@ -529,8 +529,10 @@ export class SystemGenerator {
     if (bestPlanet.atmosphere === 'none') bestPlanet.atmosphere = 'thin';
     bestPlanet.breathableAtmosphere = true;
 
-    // Ustaw flagę globalną scenariusza
-    window.KOSMOS.scenario = 'civilization';
+    // Ustaw flagę globalną scenariusza (zachowaj civilization_boosted jeśli ustawiony)
+    if (window.KOSMOS.scenario !== 'civilization_boosted') {
+      window.KOSMOS.scenario = 'civilization';
+    }
 
     result.civPlanetId = bestPlanet.id;
     return result;

@@ -320,7 +320,8 @@ export class GameScene {
     // ── Auto-kolonizacja w scenariuszu Cywilizacja / Power Test ───────────
     // Nowa gra: intro (transmisja rządowa → nazwy) → kolonizacja → globus
     if (!savedData && this._civPlanetId) {
-      const isPowerTest = window.KOSMOS?.scenario === 'power_test';  // POWER TEST
+      const isPowerTest = window.KOSMOS?.scenario === 'power_test';
+      const isBoosted   = window.KOSMOS?.scenario === 'civilization_boosted';
 
       setTimeout(async () => {
         const civPlanet = EntityManager.get(this._civPlanetId);
@@ -356,6 +357,28 @@ export class GameScene {
           if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;
           this._autoBuildPowerTest(grid);
           // Otwórz ColonyOverlay (stolica auto-place w _openGlobe)
+          this.colonyManager.switchActiveColony(civPlanet.id);
+          this.uiManager?.overlayManager?.openPanel('colony');
+          return;
+        }
+
+        // BOOSTED — scenariusz "Nowa Gra 2": intro → boosted budynki + 3 POP + tech
+        if (isBoosted) {
+          await new Promise(r => setTimeout(r, 1200));
+          const { civName, capitalName } = await showIntroSequence();
+          this._setupColony(civPlanet);
+          window.KOSMOS.civName = civName;
+          civPlanet.name = capitalName;
+          const colony = this.colonyManager.getColony(civPlanet.id);
+          if (colony) colony.name = capitalName;
+          // Zbadaj technologie wymagane dla dodatkowych budynków
+          this._setupBoostedTechs();
+          // 4 POPy (3 zużyte przez budynki + 1 zapas na wzrost)
+          this.civSystem.population = 4;
+          // Generuj grid i postaw budynki (standardowe + boosted)
+          const grid = PlanetMapGenerator.generate(civPlanet, true);
+          if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;
+          this._autoPlaceBoostedBuildings(grid);
           this.colonyManager.switchActiveColony(civPlanet.id);
           this.uiManager?.overlayManager?.openPanel('colony');
           return;
@@ -636,6 +659,89 @@ export class GameScene {
     // ColonyOverlay odświeży globus automatycznie przy otwarciu
   }
 
+  // ── Auto-budowa startowych budynków — scenariusz "Nowa Gra 2" (boosted) ──
+  // Standardowe 3 + habitat Lv1, launch_pad Lv1, shipyard Lv1, solar_farm Lv3
+  _autoPlaceBoostedBuildings(grid) {
+    const bSys = window.KOSMOS?.buildingSystem;
+    if (!grid || !bSys) return;
+
+    const allTiles = grid.toArray();
+    const freeTiles = allTiles.filter(t => {
+      const terrain = TERRAIN_TYPES[t.type];
+      return terrain?.buildable && !t.isOccupied && !t.damaged;
+    });
+
+    const terrainPriority = ['plains', 'desert', 'ice_sheet', 'forest', 'mountains', 'tundra', 'crater', 'wasteland', 'volcano'];
+    freeTiles.sort((a, b) => {
+      const ai = terrainPriority.indexOf(a.type);
+      const bi = terrainPriority.indexOf(b.type);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    // Standardowe + dodatkowe budynki dla boosted
+    const buildPlan = [
+      { id: 'farm',          level: 1, count: 1 },
+      { id: 'well',          level: 1, count: 1 },
+      { id: 'solar_farm',    level: 1, count: 1 },
+      { id: 'habitat',       level: 1, count: 1 },
+      { id: 'launch_pad',    level: 1, count: 1 },
+      { id: 'shipyard',      level: 1, count: 1 },
+      { id: 'solar_farm',    level: 3, count: 1 },
+    ];
+
+    const entries = [];
+    const usedTiles = new Set();
+
+    // Stolica jest wirtualna (capitalBase=true, hex wolny) — farm na niej
+    const capitalTile = allTiles.find(t => t.capitalBase === true);
+
+    for (const plan of buildPlan) {
+      // Tymczasowo usuwamy requires z definicji — w boosted wszystkie budynki dostępne od startu
+      const building = { ...BUILDINGS[plan.id] };
+      if (!building.id) continue;
+      delete building.requires; // odblokuj budynek bez tech
+
+      for (let n = 0; n < plan.count; n++) {
+        let tile;
+        if (plan.id === 'farm' && n === 0 && capitalTile && !usedTiles.has(capitalTile.key)) {
+          tile = capitalTile;
+        } else {
+          tile = this._findTileForBuilding(freeTiles, building, usedTiles);
+        }
+        if (!tile) continue;
+
+        usedTiles.add(tile.key);
+        tile.buildingId    = plan.id;
+        tile.buildingLevel = plan.level;
+
+        const baseRates = bSys._calcBaseRates(building, tile, plan.level);
+        const housing   = (building.housing || 0) * plan.level;
+
+        entries.push({
+          tileKey:    tile.key,
+          buildingId: plan.id,
+          baseRates,
+          housing,
+          popCost:    building.popCost ?? 0.25,
+          level:      plan.level,
+        });
+      }
+    }
+
+    if (entries.length > 0) {
+      bSys.restoreFromSave(entries);
+    }
+  }
+
+  // ── Zbadaj technologie wymagane dla budynków boosted ──────────
+  _setupBoostedTechs() {
+    // Tech wymagane: orbital_survey → rocketry (launch_pad), exploration (shipyard)
+    // Odblokowane od startu — gracz nie musi ich badać
+    // Nuclear power NIE odblokowany — gracz musi sam zbadać
+    const techIds = ['orbital_survey', 'rocketry', 'exploration'];
+    this.techSystem.restore({ researched: techIds });
+  }
+
   // ── Generowanie / przywracanie układu ─────────────────────────
 
   _generateFreshSystem(cx, cy) {
@@ -643,6 +749,7 @@ export class GameScene {
 
     // POWER TEST — scenariusz testowy z dużym układem
     const isPowerTest = window.KOSMOS?.scenario === 'power_test';
+    const isBoosted   = window.KOSMOS?.scenario === 'civilization_boosted';
     const result = isPowerTest
       ? generator.generatePowerTestScenario()
       : generator.generateCivScenario();
