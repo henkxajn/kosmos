@@ -32,6 +32,7 @@ import { CivilizationSystem } from './CivilizationSystem.js';
 import { BuildingSystem } from './BuildingSystem.js';
 import { FactorySystem } from './FactorySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
+import { RegionSystem } from '../map/RegionSystem.js';
 
 // Rozmiary siatek hex per typ/masa ciała
 const GRID_SIZES = {
@@ -740,6 +741,8 @@ export class ColonyManager {
         allowEmigration:  col.allowEmigration,
         fleet:            col.fleet ?? [],
         shipQueues:       col.shipQueues ?? [],
+        // Grid regionów — opcjonalny, regenerowany deterministycznie przy otwarciu
+        grid:             col.grid ? col.grid.serialize() : null,
       });
     }
     return {
@@ -786,6 +789,19 @@ export class ColonyManager {
       const isOutpost = colData.isOutpost ?? false;
       if (isOutpost) bSys._isOutpost = true;
 
+      // Przywróć grid regionów jeśli zapisany
+      let savedGrid = null;
+      if (colData.grid) {
+        try {
+          if (colData.grid.version === 2) {
+            savedGrid = RegionSystem.restore(colData.grid);
+          }
+          // Stary format HexGrid — ignoruj, regeneruj przy otwarciu
+        } catch (e) {
+          console.warn('[ColonyManager] Grid restore failed, will regenerate:', e);
+        }
+      }
+
       const colony = {
         planetId:         colData.planetId,
         planet:           entity,
@@ -797,7 +813,7 @@ export class ColonyManager {
         civSystem:        civSys,
         buildingSystem:   bSys,
         factorySystem:    factSys,
-        grid:             null,
+        grid:             savedGrid,
         allowImmigration: colData.allowImmigration ?? true,
         allowEmigration:  colData.allowEmigration  ?? true,
         fleet:            colData.fleet ?? [],

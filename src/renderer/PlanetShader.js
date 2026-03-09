@@ -21,21 +21,21 @@ const TYPE_PRESETS = {
   rocky: {
     colorTint:    [[0.85, 1.15], [0.85, 1.15], [0.85, 1.15]],  // szeroki zakres
     noiseFreq:    [0.75, 1.40],
-    warpStrength: [0.08, 0.22],
+    warpStrength: [0.02, 0.06],
     polarCap:     [0.70, 0.82],
     atmTint:      [0.08, 0.08, 0.08],  // max odchylenie od bazowego koloru
   },
   hot_rocky: {
     colorTint:    [[0.95, 1.20], [0.80, 1.05], [0.75, 0.95]],  // ciepłe tony
     noiseFreq:    [0.80, 1.30],
-    warpStrength: [0.12, 0.24],
+    warpStrength: [0.03, 0.06],
     polarCap:     [0.0, 0.0],  // brak czap
     atmTint:      [0.06, 0.06, 0.06],
   },
   ice: {
     colorTint:    [[0.85, 1.00], [0.90, 1.10], [0.95, 1.15]],  // chłodne tony
     noiseFreq:    [0.70, 1.20],
-    warpStrength: [0.04, 0.14],
+    warpStrength: [0.02, 0.06],
     polarCap:     [0.78, 0.92],  // duże czapy
     atmTint:      [0.06, 0.06, 0.06],
   },
@@ -194,10 +194,14 @@ varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vViewDir;
 varying vec3 vSpherePos;  // pozycja na sferze (model space, ciągła — bez szwu UV)
+varying vec3 vWorldNormal;
+varying vec3 vWorldPos;
 
 void main() {
   vUv = uv;
   vNormal = normalize(normalMatrix * normal);
+  vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+  vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
   vSpherePos = normalize(position);  // unit sphere — ciągłe koordynaty
   vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
   vViewDir = normalize(-mvPos.xyz);
@@ -207,6 +211,8 @@ void main() {
 
 const fragmentShader = /* glsl */ `
 ${GLSL_LIB}
+uniform sampler2D uBuildingMap;
+uniform float uRotationSpeed;
 uniform vec3 uLightDir;
 uniform float uTime;
 uniform int uHasAtmosphere;
@@ -215,11 +221,17 @@ varying vec3 vNormal;
 varying vec3 vViewDir;
 varying vec3 vSpherePos;
 varying vec2 vUv;
+varying vec3 vWorldNormal;
+varying vec3 vWorldPos;
 
 void main() {
   vec3 sp = vSpherePos + uSeed;
   float fm = uNoiseFreqMult;
-  vec2 biomeUv = vec2(vUv.x, 1.0 - vUv.y);
+
+  // Rotacja planety — przesuń UV poziomo przez czas
+  // Bez fract() — RepeatWrapping na teksturze obsługuje wrap seamlessly
+  float rotationOffset = uTime * 0.008;
+  vec2 biomeUv = vec2(1.0 - vUv.x + rotationOffset, 1.0 - vUv.y);
 
   ${GLSL_COLOR_BODY}
 
@@ -230,33 +242,109 @@ void main() {
   if (bId >= 3.5 && bId < 4.5) bumpScale = 0.008;     // desert — wydmy
   if (bId >= 5.5 && bId < 6.5) bumpScale = 0.045;     // volcano — skaliste
 
+  float diff;
+  vec3 normal = vWorldNormal;
   if (bumpScale > 0.0) {
     float eps = 0.002;
     float bnx = sphereNoise(sp + vec3(eps, 0.0, 0.0), 12.0 * fm) - sphereNoise(sp - vec3(eps, 0.0, 0.0), 12.0 * fm);
     float bny = sphereNoise(sp + vec3(0.0, eps, 0.0), 12.0 * fm) - sphereNoise(sp - vec3(0.0, eps, 0.0), 12.0 * fm);
-    vec3 bumpNormal = normalize(vNormal + vec3(bnx, bny, 0.0) * bumpScale);
-    float diff = max(dot(bumpNormal, normalize(uLightDir)), 0.0);
-    float ambient = 0.25;
-    color = color * (ambient + (1.0 - ambient) * diff);
-  } else {
-    float diff = max(dot(vNormal, normalize(uLightDir)), 0.0);
-    float ambient = 0.25;
-    color = color * (ambient + (1.0 - ambient) * diff);
+    normal = normalize(vWorldNormal + vec3(bnx, bny, 0.0) * bumpScale);
   }
+  diff = dot(normal, normalize(uLightDir));
 
-  // 7. Specular — tylko ocean (bId ~2.0)
+  // Dzień/noc maska
+  float nightMask = smoothstep(-0.05, 0.20, -diff);
+  float dayMask   = 1.0 - nightMask;
+
+  // Dzień — normalne oświetlenie
+  float ambient = 0.25;
+  vec3 dayColor = color * (ambient + (1.0 - ambient) * max(diff, 0.0));
+
+  // Noc — ciemny granat
+  vec3 nightColor = color * 0.015 + vec3(0.005, 0.005, 0.012);
+
+  // Blend między dniem a nocą
+  color = mix(dayColor, nightColor, nightMask);
+
+  // 7. Specular — tylko ocean (bId ~2.0), tylko dzień
   if (bId >= 1.5 && bId < 2.5) {
     vec3 lightDir = normalize(uLightDir);
-    vec3 reflectDir = reflect(-lightDir, vNormal);
+    vec3 reflectDir = reflect(-lightDir, normal);
     float spec = pow(max(dot(vViewDir, reflectDir), 0.0), 48.0);
-    color += vec3(0.8, 0.9, 1.0) * spec * 0.45;
+    color += vec3(0.8, 0.9, 1.0) * spec * 0.45 * dayMask;
   }
 
-  // 10. Atmosfera — fresnel edge glow
+  // Światła budynków — tylko na nocnej stronie, tylko białe
+  vec4 buildingData = texture2D(uBuildingMap, biomeUv);
+  float hasBuilding = buildingData.r;
+
+  if (hasBuilding > 0.5 && nightMask > 0.15) {
+    // Gaussowski glow — miękki blask wokół punktu świetlnego
+    float glowSize = 3.0 / 512.0;
+    float glow = 0.0;
+    glow += texture2D(uBuildingMap, biomeUv + vec2(glowSize,  0.0)).r * 0.50;
+    glow += texture2D(uBuildingMap, biomeUv + vec2(-glowSize, 0.0)).r * 0.50;
+    glow += texture2D(uBuildingMap, biomeUv + vec2(0.0,  glowSize)).r * 0.50;
+    glow += texture2D(uBuildingMap, biomeUv + vec2(0.0, -glowSize)).r * 0.50;
+    glow += texture2D(uBuildingMap, biomeUv + vec2(glowSize,  glowSize)).r * 0.25;
+    glow += texture2D(uBuildingMap, biomeUv + vec2(-glowSize, glowSize)).r * 0.25;
+    glow += texture2D(uBuildingMap, biomeUv + vec2(glowSize, -glowSize)).r * 0.25;
+    glow += texture2D(uBuildingMap, biomeUv + vec2(-glowSize,-glowSize)).r * 0.25;
+
+    float intensity = nightMask * 0.90;
+    float glowIntensity = (glow / 3.0) * nightMask * 0.45;
+
+    // Tylko białe światło
+    color += vec3(1.0, 0.97, 0.90) * (intensity + glowIntensity);
+  }
+
+  // Terminator — delikatna pomarańczowa poświata na granicy dnia i nocy
+  float terminator = exp(-abs(diff) * 8.0);
+  color += vec3(0.4, 0.2, 0.05) * terminator * 0.15;
+
+  // 10. Atmosfera — fake Rayleigh scattering
   if (uHasAtmosphere == 1) {
-    float fresnel = 1.0 - max(dot(vNormal, vViewDir), 0.0);
-    fresnel = pow(fresnel, 3.0);
-    color = mix(color, uAtmosphereColor, fresnel * 0.35);
+    // Grubość atmosfery przez fresnel (kąt patrzenia)
+    float cosView = max(dot(vNormal, vViewDir), 0.0);
+    float fresnel = 1.0 - cosView;
+    fresnel = pow(fresnel, 2.2);
+
+    // Kąt słońca w tym punkcie atmosfery
+    float sunAngle = dot(vWorldNormal, normalize(uLightDir));
+
+    // Dzień — niebieski/cyan od strony słońca
+    float dayAtm = max(sunAngle, 0.0);
+    vec3 dayAtmColor = mix(
+      uAtmosphereColor,
+      uAtmosphereColor * vec3(1.2, 1.1, 0.9),
+      dayAtm * 0.6
+    );
+
+    // Terminator — pomarańczowo-czerwony pas na granicy dzień/noc
+    float termWidth = 0.18;
+    float atmTerminator = exp(-abs(sunAngle) / termWidth);
+    atmTerminator = pow(atmTerminator, 1.5);
+    vec3 terminatorColor = vec3(1.0, 0.45, 0.15);
+
+    // Noc — atmosfera prawie niewidoczna, delikatny granat
+    vec3 nightAtmColor = uAtmosphereColor * vec3(0.15, 0.18, 0.35);
+
+    // Blend wszystkich składowych atmosfery
+    vec3 atmColor = mix(dayAtmColor, nightAtmColor, smoothstep(-0.1, 0.3, -sunAngle));
+    atmColor = mix(atmColor, terminatorColor, atmTerminator * 0.65);
+
+    // Intensywność atmosfery przez fresnel + limb brightening
+    float atmStrength = fresnel * 0.50;
+    float limb = pow(fresnel, 5.0) * 0.35;
+    atmStrength += limb;
+
+    color = mix(color, atmColor, atmStrength);
+
+    // Zewnętrzny glow atmosfery — aureola na samej krawędzi
+    if (fresnel > 0.85) {
+      float outerGlow = (fresnel - 0.85) / 0.15;
+      color = mix(color, atmColor * 1.3, outerGlow * 0.4);
+    }
   }
 
   gl_FragColor = vec4(color, 1.0);
@@ -332,7 +420,7 @@ function _resolvePresetParams(planet) {
 }
 
 // ── createUniforms — obiekt uniforms dla THREE.ShaderMaterial (globus) ───────
-function createUniforms(planet, biomeMapTexture) {
+function createUniforms(planet, biomeMapTexture, buildingMapTexture) {
   const { rng, pType, preset, seed, colorTint, noiseFreqMult, warpStrength, polarCap } =
     _resolvePresetParams(planet);
 
@@ -349,8 +437,16 @@ function createUniforms(planet, biomeMapTexture) {
   const baseAtm = atmColors[pType] ?? atmColors.rocky;
   const atmC = baseAtm.map((c, i) => Math.max(0, Math.min(1, c + (rng() - 0.5) * 2 * preset.atmTint[i])));
 
+  // Pusta tekstura fallback jeśli brak buildingMapTexture
+  const emptyBuildingTex = buildingMapTexture ?? new THREE.DataTexture(
+    new Uint8Array(4), 1, 1, THREE.RGBAFormat
+  );
+  if (!buildingMapTexture) emptyBuildingTex.needsUpdate = true;
+
   return {
     uBiomeMap:        { value: biomeMapTexture },
+    uBuildingMap:     { value: emptyBuildingTex },
+    uRotationSpeed:   { value: 0.08 },
     uLightDir:        { value: new THREE.Vector3(3, 2, 4).normalize() },
     uTime:            { value: 0.0 },
     uPolarCap:        { value: polarCap },

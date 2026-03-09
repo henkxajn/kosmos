@@ -671,13 +671,98 @@ export class ThreeRenderer {
     mesh.rotation.z = 0.1 + (seed % 10) * 0.04;
     group.add(mesh);
 
-    // Atmosferyczny glow — Fresnel shader (jasne krawędzie od strony gwiazdy)
-    if (planet.atmosphere && planet.atmosphere !== 'none') {
+    // Warstwa chmur — tylko rocky z atmosferą (nie gas)
+    if (!isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak') {
+      const cloudMesh = this._createSystemCloudMesh(r);
+      if (cloudMesh) {
+        cloudMesh.userData.isCloud = true;
+        group.add(cloudMesh);
+      }
+    }
+
+    // Atmosfera Rayleigh — fake scattering (tylko rocky z atmosferą)
+    if (!isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak') {
       const gc = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
       const atmoMat = new THREE.ShaderMaterial({
         uniforms: {
           uColor:    { value: gc },
           uLightDir: { value: new THREE.Vector3(0, 0, 0) }, // aktualizowane w sync
+        },
+        vertexShader: `
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+          varying vec3 vWorldNormal;
+          varying vec3 vWorldPos;
+          varying float vFresnel;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+            vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+            vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+            vViewDir = normalize(-mvPos.xyz);
+            float NdotV = dot(vNormal, vViewDir);
+            float rim = 1.0 - abs(NdotV);
+            vFresnel = rim * rim * rim;
+            gl_Position = projectionMatrix * mvPos;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uColor;
+          uniform vec3 uLightDir;
+          varying vec3 vNormal;
+          varying vec3 vViewDir;
+          varying vec3 vWorldNormal;
+          varying vec3 vWorldPos;
+          varying float vFresnel;
+          void main() {
+            // Grubość atmosfery
+            float fresnel = vFresnel;
+
+            // Kąt słońca w tym punkcie atmosfery
+            vec3 toLight = normalize(uLightDir - vWorldPos);
+            float sunAngle = dot(vWorldNormal, toLight);
+
+            // Dzień — jaśniejszy kolor od strony słońca
+            float dayAtm = max(sunAngle, 0.0);
+            vec3 dayAtmColor = mix(uColor, uColor * vec3(1.2, 1.1, 0.9), dayAtm * 0.6);
+
+            // Terminator — pomarańczowy pas
+            float atmTerminator = exp(-abs(sunAngle) / 0.18);
+            atmTerminator = pow(atmTerminator, 1.5);
+            vec3 terminatorColor = vec3(1.0, 0.45, 0.15);
+
+            // Noc — ciemna atmosfera
+            vec3 nightAtmColor = uColor * vec3(0.15, 0.18, 0.35);
+
+            // Blend
+            vec3 atmColor = mix(dayAtmColor, nightAtmColor, smoothstep(-0.1, 0.3, -sunAngle));
+            atmColor = mix(atmColor, terminatorColor, atmTerminator * 0.65);
+
+            // Glow na krawędzi
+            float glow = fresnel * smoothstep(1.0, 0.6, fresnel);
+            float alpha = glow * 0.55;
+
+            gl_FragColor = vec4(atmColor, alpha);
+          }
+        `,
+        side: THREE.BackSide,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const atmoMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(r * 1.15, 32, 32), atmoMat
+      );
+      atmoMesh.userData.isAtmosphere = true;
+      group.add(atmoMesh);
+    }
+    // Gas / brak atmosfery — prosty fresnel glow (stary shader)
+    else if (planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak') {
+      const gc = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
+      const atmoMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uColor:    { value: gc },
+          uLightDir: { value: new THREE.Vector3(0, 0, 0) },
         },
         vertexShader: `
           varying vec3 vNormal;
@@ -689,11 +774,9 @@ export class ThreeRenderer {
             vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
             vViewDir = normalize(-mvPos.xyz);
             vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
-            // Fresnel w vertex — na BackSide normalna jest odwrócona
             float NdotV = dot(vNormal, vViewDir);
-            // Na BackSide NdotV jest ujemne w centrum, bliskie 0 na krawędziach
             float rim = 1.0 - abs(NdotV);
-            vFresnel = rim * rim * rim; // kubiczny falloff — max na krawędzi, 0 w centrum
+            vFresnel = rim * rim * rim;
             gl_Position = projectionMatrix * mvPos;
           }
         `,
@@ -705,14 +788,10 @@ export class ThreeRenderer {
           varying vec3 vWorldPos;
           varying float vFresnel;
           void main() {
-            // vFresnel: 0 w centrum sfery, ~1 na krawędziach
-            // Miękki fade-out na samej krawędzi (unika ostrego pierścienia)
             float glow = vFresnel * smoothstep(1.0, 0.6, vFresnel);
-            // Oświetlenie — miękkie przejście za terminator
             vec3 toLight = normalize(uLightDir - vWorldPos);
             float NdotL = dot(normalize(vWorldPos), toLight);
             float lit = smoothstep(-0.3, 0.8, NdotL);
-            // Łącznie: bazowa widoczność + oświetlona strona
             float alpha = glow * (0.2 + lit * 0.35);
             gl_FragColor = vec4(uColor, alpha);
           }
@@ -855,6 +934,83 @@ export class ThreeRenderer {
   }
 
   // ── Synchronizacja pozycji planet i księżyców ─────────────────
+  // ── Sfera chmur dla mapy układu — triplanar noise, animowane dryfowanie ─────
+  _createSystemCloudMesh(planetRadius) {
+    const cloudVert = `
+      varying vec3 vSpherePos;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      varying vec3 vWorldNormal;
+      varying vec3 vWorldPos;
+      void main() {
+        vSpherePos = normalize(position);
+        vNormal = normalize(normalMatrix * normal);
+        vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+        vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `;
+    const cloudFrag = `
+      uniform float uTime;
+      uniform vec3  uLightDir;
+      varying vec3  vSpherePos;
+      varying vec3  vNormal;
+      varying vec3  vViewDir;
+      varying vec3  vWorldNormal;
+      varying vec3  vWorldPos;
+
+      vec3 mod289v3(vec3 x){return x-floor(x*(1./289.))*289.;}
+      vec2 mod289v2(vec2 x){return x-floor(x*(1./289.))*289.;}
+      vec3 permute3(vec3 x){return mod289v3(((x*34.)+1.)*x);}
+      float snoise(vec2 v){
+        const vec4 C=vec4(0.211324865405187,0.366025403784439,-0.577350269189626,0.024390243902439);
+        vec2 i=floor(v+dot(v,C.yy));vec2 x0=v-i+dot(i,C.xx);
+        vec2 i1=(x0.x>x0.y)?vec2(1.,0.):vec2(0.,1.);
+        vec4 x12=x0.xyxy+C.xxzz;x12.xy-=i1;i=mod289v2(i);
+        vec3 p=permute3(permute3(i.y+vec3(0.,i1.y,1.))+i.x+vec3(0.,i1.x,1.));
+        vec3 m=max(0.5-vec3(dot(x0,x0),dot(x12.xy,x12.xy),dot(x12.zw,x12.zw)),0.);
+        m=m*m;m=m*m;
+        vec3 x2=2.*fract(p*C.www)-1.;vec3 h=abs(x2)-0.5;
+        vec3 ox=floor(x2+0.5);vec3 a0=x2-ox;
+        m*=1.79284291400159-0.85373472095314*(a0*a0+h*h);
+        vec3 g;g.x=a0.x*x0.x+h.x*x0.y;g.yz=a0.yz*x12.xz+h.yz*x12.yw;
+        return 130.*dot(m,g);
+      }
+      float sphereNoise(vec3 p,float s){
+        vec3 w=abs(p);w=w/(w.x+w.y+w.z+0.0001);
+        return snoise(p.yz*s)*w.x+snoise(p.xz*s)*w.y+snoise(p.xy*s)*w.z;
+      }
+      void main(){
+        vec3 sp=vSpherePos+vec3(uTime*0.012,0.0,uTime*0.004);
+        float n=sphereNoise(sp,3.0)*0.500+sphereNoise(sp,6.2)*0.250
+               +sphereNoise(sp,12.5)*0.125+sphereNoise(sp,25.0)*0.063;
+        n=n*0.5+0.5;
+        float cloudMask=smoothstep(0.50,0.72,n);
+        vec3 toStar=normalize(uLightDir-vWorldPos);
+        float rawDiff=dot(vWorldNormal,toStar);
+        float diff=max(rawDiff,0.0);
+        float lit=0.4+0.6*diff;
+        vec3 cloudColor=vec3(0.95,0.97,1.00)*lit;
+        float nightFade=smoothstep(-0.1,0.15,rawDiff);
+        float fresnel=1.0-max(dot(vNormal,vViewDir),0.0);
+        float edgeFade=1.0-pow(fresnel,2.5)*0.6;
+        float alpha=cloudMask*0.82*edgeFade*(0.06+0.94*nightFade);
+        gl_FragColor=vec4(cloudColor,alpha);
+      }
+    `;
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: cloudVert, fragmentShader: cloudFrag,
+      uniforms: {
+        uTime:     { value: 0.0 },
+        uLightDir: { value: new THREE.Vector3(0, 0, 0) },
+      },
+      transparent: true, depthWrite: false, side: THREE.FrontSide,
+    });
+    return new THREE.Mesh(new THREE.SphereGeometry(planetRadius * 1.02, 32, 32), mat);
+  }
+
   _syncPlanetMeshes(planets, moons = []) {
     const homePlanetId = window.KOSMOS?.homePlanet?.id;
 
@@ -868,10 +1024,15 @@ export class ThreeRenderer {
       entry.group.position.set(S(planet.x), 0, S(planet.y));
       entry.mesh.rotation.y += 0.003;
 
-      // Aktualizuj kierunek światła w atmosferze
+      // Aktualizuj kierunek światła w atmosferze i chmurach
       for (const child of entry.group.children) {
-        if (child.userData.isAtmosphere && child.material.uniforms) {
+        if (!child.material?.uniforms) continue;
+        if (child.userData.isAtmosphere) {
           child.material.uniforms.uLightDir.value.copy(starWPos);
+        }
+        if (child.userData.isCloud) {
+          child.material.uniforms.uLightDir.value.copy(starWPos);
+          child.material.uniforms.uTime.value += 0.016; // ~60fps krok
         }
       }
 

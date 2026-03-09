@@ -11,7 +11,7 @@
 import EventBus              from '../core/EventBus.js';
 import { HexGrid }           from '../map/HexGrid.js';
 import { TERRAIN_TYPES }     from '../map/HexTile.js';
-import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import { RegionSystem, RegionGenerator } from '../map/RegionSystem.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { showRenameModal } from '../ui/ModalInput.js';
 import { TECHS }             from '../data/TechData.js';
@@ -152,12 +152,13 @@ export class PlanetGlobeScene {
     // Zachowaj prędkość gry (bez wymuszania zwolnienia)
 
     // Generuj siatkę
-    this.grid = PlanetMapGenerator.generate(planet, true);
+    this.grid = RegionGenerator.generate(planet, true);
 
-    // Ustaw gridHeight i deposits w BuildingSystem
+    // Ustaw gridHeight, deposits i tryb regionów w BuildingSystem
     if (window.KOSMOS?.buildingSystem) {
-      window.KOSMOS.buildingSystem._gridHeight = this.grid.height;
+      window.KOSMOS.buildingSystem._gridHeight = this.grid.toArray().length;
       window.KOSMOS.buildingSystem.setDeposits(planet.deposits ?? []);
+      window.KOSMOS.buildingSystem.setRegionMode(!!this.grid.getByLatLon);
     }
 
     // Synchronizuj budynki z BuildingSystem (pełny sync: id + level + capital + underConstruction)
@@ -180,6 +181,8 @@ export class PlanetGlobeScene {
       const baseTile = this._findColonyBaseTile();
       if (baseTile) {
         EventBus.emit('planet:buildRequest', { tile: baseTile, buildingId: 'colony_base' });
+        // Re-sync po umieszczeniu stolicy (handler buildResult nie jest jeszcze zarejestrowany)
+        this._syncBuildingIds();
       }
     }
 
@@ -580,6 +583,23 @@ export class PlanetGlobeScene {
 
   _findColonyBaseTile() {
     if (!this.grid) return null;
+
+    // RegionSystem: przeszukaj regiony po priorytetach
+    if (this.grid.getByLatLon) {
+      const preferred = ['plains', 'forest', 'desert', 'tundra'];
+      for (const prefType of preferred) {
+        const found = this.grid.filter(r => r.type === prefType && !r.isOccupied);
+        if (found.length > 0) return found[0];
+      }
+      // Fallback: pierwszy budowalny
+      const any = this.grid.filter(r => {
+        const terrain = TERRAIN_TYPES[r.type];
+        return terrain?.buildable && !r.isOccupied;
+      });
+      return any[0] ?? null;
+    }
+
+    // HexGrid: stary kod (wsteczna kompatybilność)
     const w = this.grid.width;
     const h = this.grid.height;
     const centerQ = Math.floor(w / 2);
@@ -627,26 +647,27 @@ export class PlanetGlobeScene {
   _focusOnCapital() {
     if (!this.grid || !this._globeRenderer?.cameraCtrl) return;
 
-    // Znajdź tile ze stolicą
-    let capitalTile = null;
-    this.grid.forEach(tile => {
-      if (tile.capitalBase) capitalTile = tile;
-    });
-    if (!capitalTile) return;
+    // Znajdź tile/region ze stolicą
+    let capitalRegion = null;
+    this.grid.forEach(region => { if (region.capitalBase) capitalRegion = region; });
+    if (!capitalRegion) return;
 
-    // Hex → piksel → UV (0..1) na teksturze equirectangular
+    // RegionSystem: lon → yaw kamery (yaw = lon + π/2), lat → pitch
+    if (capitalRegion.centerLon !== undefined) {
+      const yaw   = capitalRegion.centerLon + Math.PI / 2;
+      const pitch = capitalRegion.centerLat;
+      this._globeRenderer.cameraCtrl.setYawPitch(yaw, pitch);
+      return;
+    }
+
+    // Fallback dla HexGrid (wsteczna kompatybilność)
     const hexSize = PlanetGlobeTexture.calcHexSize(this.grid);
     const gridPx  = this.grid.gridPixelSize(hexSize);
-    const center  = HexGrid.hexToPixel(capitalTile.q, capitalTile.r, hexSize);
-    const u = center.x / gridPx.w;  // 0..1 poziomo
-    const v = center.y / gridPx.h;  // 0..1 pionowo
-
-    // UV → sferyczne (yaw, pitch) — Three.js SphereGeometry mapping
-    // Three.js phi: uv.x=0→phi=0 (-X), uv.x=0.25→phi=π/2 (+Z), uv.x=0.5→phi=π (+X)
-    // Kamera yaw=0 patrzy na +Z = uv.x=0.25
+    const center  = HexGrid.hexToPixel(capitalRegion.q, capitalRegion.r, hexSize);
+    const u = center.x / gridPx.w;
+    const v = center.y / gridPx.h;
     const yaw   = (u - 0.25) * 2 * Math.PI;
     const pitch = Math.max(-1.0, Math.min(1.0, (0.5 - v) * Math.PI));
-
     this._globeRenderer.cameraCtrl.setYawPitch(yaw, pitch);
   }
 
@@ -946,7 +967,9 @@ export class PlanetGlobeScene {
 
       // Debuff polarny
       const gridH = this.grid?.height ?? 0;
-      const latMod = gridH > 0 ? HexGrid.getLatitudeModifier(t.r, gridH) : null;
+      const latMod = (!this.grid.getByLatLon && gridH > 0)
+        ? HexGrid.getLatitudeModifier(t.r, gridH)
+        : null; // RegionSystem: polarność wbudowana w biom regionu
       if (latMod?.label) modParts.push(latMod.label);
       if (latMod && latMod.buildCost !== 1.0) modParts.push(`Budowa×${latMod.buildCost}`);
 
@@ -1060,6 +1083,13 @@ export class PlanetGlobeScene {
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = STRAT_COLORS[tile.strategicResource] || '#fff';
       ctx.fillText(`Zasób: ${tile.strategicResource}`, BPX + 8, HEADER_H + 34);
+    }
+
+    // Debug: numer regionu (jeśli RegionSystem)
+    if (tile.centerLon !== undefined) {
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.borderLight;
+      ctx.fillText(`[Region ${tile.q}]`, BPX + 8, HEADER_H + 48);
     }
 
     // Złoża na ciele niebieskim (zawsze wyświetlane)

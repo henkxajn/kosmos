@@ -381,6 +381,7 @@ export class PlanetGlobeTexture {
   // ── Highlight hexa ──────────────────────────────────────────
 
   // Rysuje JEDEN hex jako Canvas 2D path (fill + stroke) — <1ms
+  // Rysuje też kopię wraparound jeśli hex jest blisko krawędzi tekstury
   static _drawHexHighlight(ctx, q, r, hexSize, gridPx, type) {
     // Centrum hexa w pikselach siatki → piksele tekstury
     const center = HexGrid.hexToPixel(q, r, hexSize);
@@ -391,33 +392,41 @@ export class PlanetGlobeTexture {
     const scaleX = TEX_W / gridPx.w;
     const scaleY = TEX_H / gridPx.h;
 
-    // 6 wierzchołków hexa (pointy-top, lekko mniejszy aby mieścił się wewnątrz krawędzi)
     const hexR = hexSize * 0.92;
-    const pts = [];
-    for (let i = 0; i < 6; i++) {
-      const angle = (Math.PI / 180) * (60 * i - 30);
-      pts.push({
-        x: texCX + hexR * Math.cos(angle) * scaleX,
-        y: texCY + hexR * Math.sin(angle) * scaleY,
-      });
-    }
+    const margin = hexR * scaleX;  // margines wykrywania krawędzi
 
-    // Fill + stroke
-    ctx.beginPath();
-    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-    ctx.closePath();
-
+    // Style
+    let fillStyle, strokeStyle, lineWidth;
     if (type === 'selected') {
-      ctx.fillStyle   = 'rgba(0, 255, 180, 0.25)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(0, 255, 180, 0.8)';
-      ctx.lineWidth   = 2 * Math.max(scaleX, scaleY);
+      fillStyle   = 'rgba(0, 255, 180, 0.25)';
+      strokeStyle = 'rgba(0, 255, 180, 0.8)';
+      lineWidth   = 2 * Math.max(scaleX, scaleY);
     } else {
-      ctx.fillStyle   = 'rgba(255, 255, 255, 0.12)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.lineWidth   = 1.5 * Math.max(scaleX, scaleY);
+      fillStyle   = 'rgba(255, 255, 255, 0.12)';
+      strokeStyle = 'rgba(255, 255, 255, 0.5)';
+      lineWidth   = 1.5 * Math.max(scaleX, scaleY);
     }
-    ctx.stroke();
+
+    // Rysuj hex w oryginalnej pozycji + kopie wraparound przy krawędzi
+    const offsets = [0];
+    if (texCX < margin)           offsets.push(TEX_W);   // hex blisko lewej → kopia po prawej
+    if (texCX > TEX_W - margin)   offsets.push(-TEX_W);  // hex blisko prawej → kopia po lewej
+
+    for (const ox of offsets) {
+      const cx = texCX + ox;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI / 180) * (60 * i - 30);
+        const px = cx + hexR * Math.cos(angle) * scaleX;
+        const py = texCY + hexR * Math.sin(angle) * scaleY;
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+    }
   }
 }

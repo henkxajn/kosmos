@@ -10,6 +10,7 @@ import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/Buil
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { HexGrid }      from '../map/HexGrid.js';
+import { PlanetGlobeTexture } from '../renderer/PlanetGlobeTexture.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import EventBus          from '../core/EventBus.js';
@@ -73,6 +74,8 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedColonyId = null;
     this._selectedHex      = null;   // { q, r }
     this._hoveredHex       = null;   // { q, r }
+    this._hoverMouseX      = 0;     // pozycja myszy przy hover na globie
+    this._hoverMouseY      = 0;
     this._buildMode        = false;
     this._pendingBuildingId = null;
     this._buildError       = null;
@@ -183,6 +186,48 @@ export class ColonyOverlay extends BaseOverlay {
     if (this._tooltipEl) this._tooltipEl.style.display = 'none';
   }
 
+  /** Tooltip terenu przy hover na hex globusa */
+  _updateHexHoverTooltip() {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const colony = colMgr?.getColony(this._selectedColonyId);
+    const grid = colony ? this._getGrid(colony) : null;
+    const hovTile = grid?.get(this._hoveredHex.q, this._hoveredHex.r);
+    if (!hovTile) { this._hideDomTooltip(); return; }
+
+    const terrain = TERRAIN_TYPES[hovTile.type];
+    const tName   = terrain?.namePL ?? hovTile.type;
+    const icon    = terrain?.icon ?? '';
+
+    let html = `<div style="color:${THEME.textPrimary};font-size:13px;margin-bottom:2px"><b>${icon} ${tName}</b></div>`;
+
+    // Budynek / stolica
+    const bldg    = hovTile.buildingId ? BUILDINGS[hovTile.buildingId] : null;
+    const capital = hovTile.capitalBase;
+    if (capital && bldg) {
+      html += `<div style="color:${THEME.textSecondary}">🏛 Stolica + ${bldg.icon ?? ''} ${bldg.namePL}</div>`;
+    } else if (capital) {
+      html += `<div style="color:${THEME.textSecondary}">🏛 Stolica</div>`;
+    } else if (bldg) {
+      const lvl = hovTile.buildingLevel > 1 ? ` Lv${hovTile.buildingLevel}` : '';
+      html += `<div style="color:${THEME.textSecondary}">${bldg.icon ?? ''} ${bldg.namePL}${lvl}</div>`;
+    }
+
+    // Zasoby bazowe terenu
+    const by = terrain?.baseYield ?? {};
+    const RI = { minerals: '⛏', energy: '⚡', organics: '🌿', water: '💧', research: '🔬' };
+    const yParts = Object.entries(by).filter(([,v]) => v).map(([r,v]) => `${RI[r]??r} ${v}`);
+    if (yParts.length) {
+      html += `<div style="color:${THEME.textDim};margin-top:2px">${yParts.join('  ')}</div>`;
+    }
+
+    // Deposits
+    if (hovTile.deposit) {
+      html += `<div style="color:#e8c870;margin-top:2px">💎 ${hovTile.deposit}</div>`;
+    }
+
+    this._showDomTooltip(html, this._hoverMouseX * _UI_SCALE, this._hoverMouseY * _UI_SCALE);
+  }
+
   show() {
     super.show();
     // Zawsze synchronizuj z aktywną kolonią (mogła się zmienić przez switchActiveColony)
@@ -213,14 +258,15 @@ export class ColonyOverlay extends BaseOverlay {
 
   _openGlobe(colony, bounds) {
     if (!colony?.planet) return;
-    const grid = this._getGrid(colony);
+    let grid = this._getGrid(colony);
     if (!grid) return;
 
-    // Ustaw gridHeight i deposits w BuildingSystem
+    // Ustaw gridHeight, deposits i tryb regionów w BuildingSystem
     const bSys = colony.buildingSystem;
     if (bSys) {
-      bSys._gridHeight = grid.height;
+      bSys._gridHeight = grid.height ?? grid.toArray().length;
       bSys.setDeposits(colony.planet.deposits ?? []);
+      bSys.setRegionMode(!!grid.getByLatLon);
     }
 
     // Auto-place stolicy przy pierwszym otwarciu (pomiń outpost)
@@ -234,8 +280,10 @@ export class ColonyOverlay extends BaseOverlay {
         const baseTile = this._findColonyBaseTile(grid);
         if (baseTile) {
           EventBus.emit('planet:buildRequest', { tile: baseTile, buildingId: 'colony_base' });
-          // Odśwież grid cache po postawieniu stolicy
+          // Re-sync grid po postawieniu stolicy (handler buildResult nie jest jeszcze aktywny)
           delete this._gridCache[colony.planetId];
+          grid = this._getGrid(colony);
+          this._syncTileBuildings(grid, bSys);
         }
       }
     }
@@ -249,8 +297,14 @@ export class ColonyOverlay extends BaseOverlay {
 
     this._globeRenderer = new PlanetGlobeRenderer();
     this._globeRenderer.open(colony.planet, grid, bounds, true);
-    this._globeRenderer.setShowGrid(true);
+    this._globeRenderer.setShowGrid(false);
     this._globePlanetId = colony.planetId;
+
+    // Obróć kamerę na stolicę
+    this._focusOnCapital(grid);
+
+    // Debug helper — do testów w konsoli (usuń po testach)
+    window._lastOpenedGrid = grid;
 
     // Globus nie powinien przechwytywać zdarzeń myszy (sterujemy z ColonyOverlay)
     if (this._globeRenderer._canvas) {
@@ -272,6 +326,33 @@ export class ColonyOverlay extends BaseOverlay {
       this._globeRenderer = null;
       this._globePlanetId = null;
     }
+  }
+
+  // Obróć kamerę globusa na stolicę
+  _focusOnCapital(grid) {
+    if (!grid || !this._globeRenderer?.cameraCtrl) return;
+
+    let capitalTile = null;
+    grid.forEach(tile => { if (tile.capitalBase) capitalTile = tile; });
+    if (!capitalTile) return;
+
+    // RegionSystem: lon → yaw kamery (yaw = lon + π/2), lat → pitch
+    if (capitalTile.centerLon !== undefined) {
+      const yaw   = capitalTile.centerLon + Math.PI / 2;
+      const pitch = capitalTile.centerLat;
+      this._globeRenderer.cameraCtrl.setYawPitch(yaw, pitch);
+      return;
+    }
+
+    // HexGrid: hex → UV → yaw/pitch
+    const hexSize = PlanetGlobeTexture.calcHexSize(grid);
+    const gridPx  = grid.gridPixelSize(hexSize);
+    const center  = HexGrid.hexToPixel(capitalTile.q, capitalTile.r, hexSize);
+    const u = center.x / gridPx.w;
+    const v = center.y / gridPx.h;
+    const yaw   = (u - 0.25) * 2 * Math.PI;
+    const pitch = Math.max(-1.0, Math.min(1.0, (0.5 - v) * Math.PI));
+    this._globeRenderer.cameraCtrl.setYawPitch(yaw, pitch);
   }
 
   _updateGlobeBounds(bounds) {
@@ -296,6 +377,9 @@ export class ColonyOverlay extends BaseOverlay {
       if (colony) {
         const grid = this._getGrid(colony);
         if (grid) {
+          // Synchronizuj buildingId z BuildingSystem._active → tile
+          // (constructionComplete aktywuje budynek ale nie aktualizuje tile)
+          this._syncTileBuildings(grid, colony.buildingSystem ?? window.KOSMOS?.buildingSystem);
           this._globeRenderer._grid = grid;
           this._globeRenderer.refreshTexture();
         }
@@ -345,6 +429,22 @@ export class ColonyOverlay extends BaseOverlay {
   // ── Znajdź najlepszy hex na stolicę (centrum → spirala, preferuj plains/forest) ──
   _findColonyBaseTile(grid) {
     if (!grid) return null;
+
+    // RegionSystem: przeszukaj regiony po priorytetach
+    if (grid.getByLatLon) {
+      const preferred = ['plains', 'forest', 'desert', 'tundra'];
+      for (const prefType of preferred) {
+        const found = grid.filter(r => r.type === prefType && !r.isOccupied);
+        if (found.length > 0) return found[0];
+      }
+      const any = grid.filter(r => {
+        const terrain = TERRAIN_TYPES[r.type];
+        return terrain?.buildable && !r.isOccupied;
+      });
+      return any[0] ?? null;
+    }
+
+    // HexGrid fallback
     const w = grid.width;
     const h = grid.height;
     const centerQ = Math.floor(w / 2);
@@ -369,7 +469,6 @@ export class ColonyOverlay extends BaseOverlay {
         }
       }
     }
-    // Fallback — dowolny budowalny hex blisko centrum
     if (centerTile && !centerTile.isOccupied) {
       const terrain = TERRAIN_TYPES[centerTile.type];
       if (terrain?.buildable) return centerTile;
@@ -390,16 +489,22 @@ export class ColonyOverlay extends BaseOverlay {
   _getGrid(colony) {
     if (!colony) return null;
     const pid = colony.planetId;
-    // Sprawdź czy BuildingSystem ma grid (aktywna kolonia)
-    if (colony.grid) return colony.grid;
+    // Grid zapisany na kolonii (z restore lub poprzedniej sesji)
+    if (colony.grid) {
+      // Upewnij się że buildingId są zsynchronizowane
+      this._syncTileBuildings(colony.grid, colony.buildingSystem);
+      return colony.grid;
+    }
     // Cache
     if (this._gridCache[pid]) return this._gridCache[pid];
     // Generuj (deterministyczny PRNG)
     if (colony.planet) {
-      const grid = PlanetMapGenerator.generate(colony.planet, true);
+      const grid = PlanetMapGenerator.generate(colony.planet);
       // Synchronizuj budynki z _active na tile
       this._syncTileBuildings(grid, colony.buildingSystem);
       this._gridCache[pid] = grid;
+      // Zapisz na kolonii dla serializacji (ColonyManager.serialize())
+      colony.grid = grid;
       return grid;
     }
     return null;
@@ -531,6 +636,8 @@ export class ColonyOverlay extends BaseOverlay {
       this._updateBuildingTooltip();
     } else if (this._tooltipUpgradeData) {
       this._updateUpgradeTooltip();
+    } else if (this._hoveredHex && !this._buildMode) {
+      this._updateHexHoverTooltip();
     } else {
       this._hideDomTooltip();
     }
@@ -760,13 +867,14 @@ export class ColonyOverlay extends BaseOverlay {
     this._addHit(mapX, mapY, mapW, mapH, 'globe');
 
     // BuildMode info (na dole środkowej kolumny)
+    const barH = 24;
     if (this._buildMode && this._pendingBuildingId) {
       const pB = BUILDINGS[this._pendingBuildingId];
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = 'rgba(2,4,5,0.85)';
-      ctx.fillRect(mapX, mapY + mapH - 28, mapW, 28);
+      ctx.fillRect(mapX, mapY + mapH - barH, mapW, barH);
       ctx.fillStyle = THEME.warning;
-      ctx.fillText(`🏗 Tryb budowy: ${pB?.icon} ${pB?.namePL} — Kliknij hex · Esc anuluj`, mapX + 10, mapY + mapH - 10);
+      ctx.fillText(`🏗 Tryb budowy: ${pB?.icon} ${pB?.namePL} — Kliknij hex · Esc anuluj`, mapX + 10, mapY + mapH - 8);
     }
   }
 
@@ -1574,12 +1682,14 @@ export class ColonyOverlay extends BaseOverlay {
       return;
     }
 
-    // Hover na globie — deleguj raycast
+    // Hover na globie — deleguj raycast + zapamiętaj pozycję myszy
     const globeZone = this._hitZones.find(z => z.type === 'globe');
     if (globeZone && this._globeRenderer) {
       if (x >= globeZone.x && x <= globeZone.x + globeZone.w &&
           y >= globeZone.y && y <= globeZone.y + globeZone.h) {
         this._globeRenderer.handleExternalMouseMove(x * _UI_SCALE, y * _UI_SCALE);
+        this._hoverMouseX = x;
+        this._hoverMouseY = y;
       } else {
         // Poza globem — wyczyść hover
         this._globeRenderer.handleExternalMouseMove(-9999, -9999);

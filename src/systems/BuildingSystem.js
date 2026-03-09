@@ -57,6 +57,9 @@ export class BuildingSystem {
     // Flaga outpost — pomija POP w build/deploy/upgrade/activate
     this._isOutpost = false;
 
+    // Flaga RegionSystem — dezaktywuje modyfikator polarny (region.r = 0 zawsze)
+    this._isRegionMode = false;
+
     // Guard: tylko aktywna kolonia przetwarza żądania budowy/rozbiórki
     EventBus.on('planet:buildRequest', ({ tile, buildingId }) => {
       if (window.KOSMOS?.buildingSystem !== this) return;
@@ -108,6 +111,7 @@ export class BuildingSystem {
   // ── Ustaw deposits i factorySystem ──────────────────────────────────────
   setDeposits(deposits) { this._deposits = deposits; }
   setFactorySystem(fs) { this._factorySystem = fs; }
+  setRegionMode(isRegion) { this._isRegionMode = !!isRegion; }
 
   // ── Pobierz max level budynku ────────────────────────────────────────────
   getMaxLevel() {
@@ -201,8 +205,8 @@ export class BuildingSystem {
       }
     }
 
-    // Modyfikator polarny
-    const latMod = this._gridHeight > 0
+    // Modyfikator polarny (wyłączony dla RegionSystem — polarność wbudowana w biom)
+    const latMod = (!this._isRegionMode && this._gridHeight > 0)
       ? HexGrid.getLatitudeModifier(tile.r, this._gridHeight)
       : { production: 1.0, buildCost: 1.0, label: null };
 
@@ -863,7 +867,7 @@ export class BuildingSystem {
     const bonuses = terrain?.yieldBonus ?? {};
     const multiplier = bonuses[building.category] ?? bonuses.default ?? 1.0;
 
-    const latMod = this._gridHeight > 0
+    const latMod = (!this._isRegionMode && this._gridHeight > 0)
       ? HexGrid.getLatitudeModifier(tile.r, this._gridHeight)
       : { production: 1.0, buildCost: 1.0, label: null };
 
