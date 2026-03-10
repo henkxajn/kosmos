@@ -1549,9 +1549,9 @@ export class PlanetGlobeScene {
 
     this._deployBtns = [];
 
-    // Zbierz statki zadokowane na tej planecie z prefabami w cargo
+    // Zbierz statki zadokowane/orbitujące na tej planecie z prefabami w cargo
     const docked = vMgr.getAllVessels().filter(v =>
-      v.position.dockedAt === planetId && v.position.state === 'docked' && v.cargo
+      v.position.dockedAt === planetId && (v.position.state === 'docked' || v.position.state === 'orbiting') && v.cargo
     );
 
     let yy = startY;

@@ -1489,7 +1489,7 @@ export class FleetManagerOverlay {
     cy += 32;
 
     // ── Przycisk Cargo (dla statków z ładownią) ──────────────
-    if (ship?.cargoCapacity > 0 && vessel.position.state === 'docked') {
+    if (ship?.cargoCapacity > 0 && (vessel.position.state === 'docked' || vessel.position.state === 'orbiting')) {
       const cargoUsed = vessel.cargoUsed ?? 0;
       const cargoBtnW = w - pad * 2;
       const cargoBtnH = 24;

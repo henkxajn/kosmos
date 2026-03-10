@@ -1195,19 +1195,47 @@ export class ExpeditionSystem {
         targetCol.resourceSystem.receive(exp.cargo);
       }
       exp.gained = exp.cargo || {};
+      exp.cargo = null;
 
-      // Wyczyść cargo statku i ekspedycji po dostarczeniu (zapobiega podwójnemu dostarczeniu przy redirect)
+      // Rozdziel cargo statku: prefaby zostają na pokładzie, reszta dostarczona
       if (exp.vesselId && vMgr) {
         const vessel = vMgr.getVessel(exp.vesselId);
         if (vessel) {
-          vessel.cargo = {};
-          vessel.cargoUsed = 0;
+          const prefabsOnShip = {};
+          let prefabWeight = 0;
+          if (vessel.cargo) {
+            for (const [comId, qty] of Object.entries(vessel.cargo)) {
+              if (qty <= 0) continue;
+              const com = COMMODITIES[comId];
+              if (com?.isPrefab) {
+                prefabsOnShip[comId] = qty;
+                prefabWeight += qty * (com.weight ?? 1);
+              }
+            }
+          }
+          vessel.cargo = prefabsOnShip;
+          vessel.cargoUsed = prefabWeight;
         }
       }
-      exp.cargo = null;
 
-      exp.status = 'orbiting';
-      if (exp.vesselId && vMgr) vMgr.arriveAtTarget(exp.vesselId);
+      // Dock statek w kolonii docelowej (transfer floty)
+      exp.status = 'completed';
+      // Odblokuj POPy — załoga dostarczona
+      EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
+
+      if (exp.vesselId && vMgr) {
+        const vessel = vMgr.getVessel(exp.vesselId);
+        const oldColonyId = vessel?.colonyId;
+        const oldCol = oldColonyId ? colMgr?.getColony(oldColonyId) : null;
+        if (oldCol) {
+          const idx = oldCol.fleet.indexOf(exp.vesselId);
+          if (idx !== -1) oldCol.fleet.splice(idx, 1);
+        }
+        vMgr.dockAtColony(exp.vesselId, exp.targetId);
+        if (!targetCol.fleet.includes(exp.vesselId)) {
+          targetCol.fleet.push(exp.vesselId);
+        }
+      }
     } else if (colMgr) {
       // Cel BEZ kolonii — utwórz outpost
       const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
