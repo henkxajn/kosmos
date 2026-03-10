@@ -1116,10 +1116,12 @@ export class FleetManagerOverlay {
       if (explored) {
         // Nazwa
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = hasColony ? THEME.mint : isMoon ? THEME.textSecondary : THEME.textPrimary;
+        const isHome = !!entry.isHome;
+        ctx.fillStyle = isHome ? THEME.accent : hasColony ? THEME.mint : isMoon ? THEME.textSecondary : THEME.textPrimary;
         const namePrefix = isMoon ? '└ ' : '';
+        const homeMark = isHome ? '🏛 ' : '';
         const targetMark = body._markedAsTarget ? '🎯' : '';
-        const nameStr = `${namePrefix}${icon} ${(body.name ?? body.id).slice(0, isMoon ? 10 : 16)}${targetMark}`;
+        const nameStr = `${namePrefix}${icon} ${homeMark}${(body.name ?? body.id).slice(0, isMoon ? 10 : 14)}${targetMark}`;
         ctx.fillText(nameStr, x + PAD + indent, ry + 12);
 
         // Typ + temperatura
@@ -1216,7 +1218,7 @@ export class FleetManagerOverlay {
     const planets = [];
     for (const t of ['planet', 'planetoid']) {
       for (const body of EntityManager.getByType(t)) {
-        if (body === homePl) continue;
+        if (body === homePl) continue; // planeta macierzysta dodana osobno na górze
         planets.push({ body, explored: !!body.explored });
       }
     }
@@ -1236,7 +1238,10 @@ export class FleetManagerOverlay {
     }
 
     const result = [];
-    // Księżyce planety macierzystej na górze
+    // Planeta macierzysta + jej księżyce na górze
+    if (homePl) {
+      result.push({ body: homePl, explored: true, isHome: true });
+    }
     const homeMoons = homePl ? (moonsByParent.get(homePl.id) ?? []) : [];
     for (const m of homeMoons) result.push(m);
     if (homeMoons.length > 0) moonsByParent.delete(homePl.id);
