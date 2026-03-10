@@ -203,6 +203,51 @@ export class VesselManager {
   }
 
   /**
+   * Re-dispatch statku z orbity na nową misję (np. transport po zakończeniu kolonizacji/recon).
+   * Nie wymaga idle+docked — akceptuje orbiting+on_mission.
+   */
+  redispatchFromOrbit(vesselId, mission) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return false;
+    if (vessel.position.state !== 'orbiting') return false;
+
+    // Pozycja startu = bieżąca pozycja orbity
+    const sx = vessel.position.x;
+    const sy = vessel.position.y;
+
+    // Pozycja celu — predykcja Keplera
+    const predicted = this._predictPosition(mission.targetId, mission.arrivalYear);
+    const tx = predicted.x;
+    const ty = predicted.y;
+
+    // Oblicz trasę z unikaniem Słońca
+    const route = this._calcRoute(sx, sy, tx, ty);
+
+    vessel.mission = {
+      ...mission,
+      startX: sx, startY: sy,
+      targetX: tx, targetY: ty,
+      waypoints: route.waypoints,
+      originId: vessel.position.dockedAt ?? vessel.colonyId,
+    };
+
+    // Zużyj paliwo
+    if (mission.fuelCost != null) {
+      vessel.fuel.current = Math.max(0, vessel.fuel.current - mission.fuelCost);
+    }
+
+    vessel.status = 'on_mission';
+    vessel.position.state = 'in_transit';
+    vessel.position.dockedAt = null;
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    addMissionLog(vessel, gameYear, `Wyruszył z orbity na misję: ${mission.type} → ${mission.targetName ?? mission.targetId}`, 'info');
+
+    EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
+    return true;
+  }
+
+  /**
    * Statek dotarł do celu — wywołaj z ExpeditionSystem.
    */
   arriveAtTarget(vesselId) {

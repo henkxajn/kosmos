@@ -555,32 +555,80 @@ export class MissionSystem {
       return;
     }
 
-    const padOk  = this._hasBuilding('launch_pad');
-    const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
-
-    if (!padOk) {
-      this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak budynku: Wyrzutnia Rakietowa' });
-      return;
-    }
-    if (!crewOk) {
-      this._emit('mission:failed', 'expedition:launchFailed', { reason: `Brak wolnych POPów (potrzeba ${EXPEDITION_CREW_COST})` });
-      return;
-    }
-
+    const vMgr   = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
 
-    if (!cargoPreloaded) {
-      if (this.resourceSystem && !this.resourceSystem.canAfford(cargo)) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak surowców do transportu' });
+    // Sprawdź czy statek jest na orbicie lub zadokowany w zdalnej lokalizacji (re-dispatch)
+    const vessel = vesselId ? vMgr?.getVessel(vesselId) : null;
+    const isOrbiting = vessel && vessel.position.state === 'orbiting' && vessel.status === 'on_mission';
+    const isRemoteDocked = vessel && vessel.position.state === 'docked' && vessel.status === 'idle'
+      && vessel.colonyId !== colMgr?.activePlanetId;
+    const isRedispatch = isOrbiting || isRemoteDocked;
+
+    if (!isRedispatch) {
+      // Standardowy launch z bazy — wymaga launch_pad i POPów
+      const padOk  = this._hasBuilding('launch_pad');
+      const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
+
+      if (!padOk) {
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak budynku: Wyrzutnia Rakietowa' });
         return;
       }
-      if (this.resourceSystem) this.resourceSystem.spend(cargo);
+      if (!crewOk) {
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: `Brak wolnych POPów (potrzeba ${EXPEDITION_CREW_COST})` });
+        return;
+      }
+
+      if (!cargoPreloaded) {
+        if (this.resourceSystem && !this.resourceSystem.canAfford(cargo)) {
+          this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak surowców do transportu' });
+          return;
+        }
+        if (this.resourceSystem) this.resourceSystem.spend(cargo);
+      }
+
+      // Zablokuj POPy na czas transportu
+      EventBus.emit('civ:lockPops', { amount: EXPEDITION_CREW_COST });
+    }
+    // Redispatch: POPy już zablokowane z oryginalnej misji, launch_pad nie potrzebny
+
+    // Oblicz dystans — z bieżącej pozycji statku (orbiting/remote) lub z bazy (standard)
+    const target = this._findTarget(targetId);
+    let distance;
+    if (isRedispatch && vessel) {
+      const targetEntity = target || { x: 0, y: 0 };
+      distance = Math.max(0.001, DistanceUtils.euclideanAU(
+        { x: vessel.position.x, y: vessel.position.y },
+        targetEntity
+      ));
+    } else {
+      distance = this._calcDistance(target || { orbital: { a: 2 } });
     }
 
-    EventBus.emit('civ:lockPops', { amount: EXPEDITION_CREW_COST });
+    // Sprawdź paliwo
+    if (vessel) {
+      const fuelNeeded = distance * vessel.fuel.consumption;
+      if (vessel.fuel.current < fuelNeeded) {
+        this._emit('mission:failed', 'expedition:launchFailed', {
+          reason: `Brak paliwa (potrzeba ${fuelNeeded.toFixed(1)} pc, ma ${vessel.fuel.current.toFixed(1)})`
+        });
+        return;
+      }
+    }
 
-    const target = this._findTarget(targetId);
-    const distance   = this._calcDistance(target || { orbital: { a: 2 } });
+    // Zamknij starą ekspedycję — przenieś crewCost do nowej misji
+    let inheritedCrewCost = 0;
+    if (isRedispatch && vesselId) {
+      const oldExp = this._missions.find(e =>
+        e.vesselId === vesselId && (e.status === 'orbiting' || e.status === 'en_route')
+      );
+      if (oldExp) {
+        inheritedCrewCost = oldExp.crewCost ?? 0;
+        oldExp.crewCost = 0; // POPy przejmuje nowa misja
+        oldExp.status = 'completed';
+      }
+    }
+
     const shipSpeed  = this._getShipSpeed(vesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
     const departYear = this._gameYear;
@@ -596,7 +644,7 @@ export class MissionSystem {
       returnYear:  departYear + travelTime * 2,
       distance:    parseFloat(distance.toFixed(2)),
       travelTime,
-      crewCost:    EXPEDITION_CREW_COST,
+      crewCost:    isRedispatch ? inheritedCrewCost : EXPEDITION_CREW_COST,
       vesselId:    vesselId ?? null,
       cargo:       { ...cargo },
       status:      'en_route',
@@ -606,15 +654,22 @@ export class MissionSystem {
 
     this._missions.push(mission);
 
-    const vMgr = window.KOSMOS?.vesselManager;
     if (vMgr && vesselId) {
-      vMgr.dispatchOnMission(vesselId, {
+      const fuelCost = distance * (vessel?.fuel?.consumption ?? 0);
+      const missionData = {
         type: 'transport', targetId,
         targetName: mission.targetName,
         departYear, arrivalYear: mission.arrivalYear, returnYear: mission.returnYear,
-        fuelCost: distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0),
+        fuelCost,
         cargo: { ...cargo },
-      });
+      };
+
+      if (isOrbiting) {
+        // Re-dispatch z orbity — nie wymaga idle+docked
+        vMgr.redispatchFromOrbit(vesselId, missionData);
+      } else {
+        vMgr.dispatchOnMission(vesselId, missionData);
+      }
     }
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
