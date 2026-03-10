@@ -547,9 +547,6 @@ export class VesselManager {
           vessel.stats.distanceTraveled += dPx / AU_TO_PX;
         }
 
-        // Korekta trasy mid-flight co ~0.5 roku gry
-        this._recalcRoute(vessel, gameYear);
-
         // Aktualizuj linie trasy dla latających
         this._updateRouteLine(vessel, m);
         moving.push(vessel);
@@ -582,105 +579,6 @@ export class VesselManager {
     if (targetEntity) {
       m.liveTargetX = targetEntity.x;
       m.liveTargetY = targetEntity.y;
-    }
-  }
-
-  /**
-   * Korekta trasy mid-flight — przelicza predykcję celu co ~0.5 roku gry.
-   * Zapobiega minięciu planety przy długich lotach (błąd predykcji rośnie z czasem).
-   */
-  _recalcRoute(vessel, gameYear) {
-    const m = vessel.mission;
-    if (!m) return;
-
-    // Inicjalizuj timer pierwszej korekty
-    if (m._lastRecalcYear == null) m._lastRecalcYear = m.departYear ?? gameYear;
-
-    const RECALC_INTERVAL = 0.5; // co pół roku gry
-    if (gameYear - m._lastRecalcYear < RECALC_INTERVAL) return;
-    m._lastRecalcYear = gameYear;
-
-    if (m.phase === 'returning') {
-      // Korekta powrotu — cel = macierzysta kolonia (ruchoma planeta)
-      const remainingYears = (m.returnYear ?? gameYear) - gameYear;
-      if (remainingYears <= 0.05) return; // za blisko celu — nie koryguj
-
-      const predicted = this._predictPosition(vessel.colonyId, gameYear + remainingYears);
-      if (!predicted.x && !predicted.y) return;
-
-      // Zaktualizuj cel powrotu
-      m.returnTargetX = predicted.x;
-      m.returnTargetY = predicted.y;
-
-      // Reset interpolacji: start = bieżąca pozycja statku
-      m.returnStartX = vessel.position.x;
-      m.returnStartY = vessel.position.y;
-      m.returnDepartYear = gameYear;
-
-      // Przelicz waypoints (unikanie Słońca mogło się zmienić)
-      const route = this._calcRoute(m.returnStartX, m.returnStartY, m.returnTargetX, m.returnTargetY);
-      m.returnWaypoints = route.waypoints;
-
-      // Skoryguj returnYear jeśli dystans się istotnie zmienił
-      const newDistAU = route.totalDist / AU_TO_PX;
-      const speed = this._getSpeed(vessel);
-      if (speed > 0) {
-        const newReturnYear = gameYear + newDistAU / speed;
-        m.returnYear = newReturnYear;
-        // Synchronizuj z ExpeditionSystem
-        this._syncExpeditionTiming(vessel, 'returnYear', newReturnYear);
-      }
-    } else {
-      // Korekta outbound — cel = ciało docelowe
-      const remainingYears = (m.arrivalYear ?? gameYear) - gameYear;
-      if (remainingYears <= 0.05) return; // za blisko celu — nie koryguj
-
-      const predicted = this._predictPosition(m.targetId, gameYear + remainingYears);
-      if (!predicted.x && !predicted.y) return;
-
-      // Zaktualizuj cel lotu
-      m.targetX = predicted.x;
-      m.targetY = predicted.y;
-
-      // Reset interpolacji: start = bieżąca pozycja statku
-      m.startX = vessel.position.x;
-      m.startY = vessel.position.y;
-      m.departYear = gameYear;
-
-      // Przelicz waypoints
-      const route = this._calcRoute(m.startX, m.startY, m.targetX, m.targetY);
-      m.waypoints = route.waypoints;
-
-      // Skoryguj arrivalYear
-      const newDistAU = route.totalDist / AU_TO_PX;
-      const speed = this._getSpeed(vessel);
-      if (speed > 0) {
-        const newArrivalYear = gameYear + newDistAU / speed;
-        m.arrivalYear = newArrivalYear;
-        // Synchronizuj z ExpeditionSystem
-        this._syncExpeditionTiming(vessel, 'arrivalYear', newArrivalYear);
-      }
-    }
-  }
-
-  /**
-   * Prędkość statku w AU/rok (z ShipsData).
-   */
-  _getSpeed(vessel) {
-    const def = SHIPS[vessel.shipId];
-    if (def?.speedAU) return def.speedAU;
-    return 1.0; // domyślna prędkość
-  }
-
-  /**
-   * Synchronizuj korektę czasu z ExpeditionSystem (jeśli istnieje powiązana ekspedycja).
-   */
-  _syncExpeditionTiming(vessel, field, value) {
-    const expSys = window.KOSMOS?.expeditionSystem;
-    if (!expSys?._expeditions) return;
-    const exp = expSys._expeditions.find(e => e.vesselId === vessel.id && e.status !== 'completed');
-    if (exp) {
-      exp[field] = value;
     }
   }
 
