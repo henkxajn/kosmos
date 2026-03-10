@@ -106,6 +106,19 @@ export class TechSystem {
     return m;
   }
 
+  // Łączna redukcja szansy katastrofy (w procentach) ze zbadanych technologii
+  getDisasterReduction() {
+    let total = 0;
+    for (const id of this._researched) {
+      const tech = TECHS[id];
+      if (!tech) continue;
+      for (const fx of tech.effects) {
+        if (fx.type === 'disasterReduction') total += fx.amount;
+      }
+    }
+    return total;
+  }
+
   // Łączny mnożnik prędkości statków ze zbadanych technologii napędowych
   getShipSpeedMultiplier() {
     let m = 1.0;

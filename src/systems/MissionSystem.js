@@ -33,6 +33,9 @@ const MIN_COLONY_TRAVEL    = 0.02;  // ~7 dni gry
 const EXPEDITION_CREW_COST = 0.5;
 const COLONY_CREW_COST     = 2.0;
 const RECON_CREW_COST      = 0.5;
+const BASE_DISASTER_CHANCE = 2.0;   // % — bazowe ryzyko katastrofy (było 5%)
+const MIN_DISASTER_CHANCE  = 0.1;   // % — minimum (nigdy nie spada do zera)
+const XP_REDUCTION_PER     = 0.1;   // % redukcji na punkt doświadczenia statku
 
 // Zasoby startowe nowej kolonii (przed mnożnikiem)
 const COLONY_START_RESOURCES = { Fe: 200, C: 150, Si: 100, Cu: 50, food: 100, water: 100, research: 50 };
@@ -1046,8 +1049,9 @@ export class MissionSystem {
 
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
+    const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
-    if (roll < 5) {
+    if (roll < disasterThreshold) {
       // KATASTROFA
       exp.status = 'completed';
       exp.gained = {};
@@ -1149,12 +1153,13 @@ export class MissionSystem {
 
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
+    const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
     if (exp.vesselId && vMgr) {
       vMgr.destroyVessel(exp.vesselId);
     }
 
-    if (roll < 5) {
+    if (roll < disasterThreshold) {
       // KATASTROFA — kolonia NIE powstaje
       exp.status = 'completed';
       exp.gained = {};
@@ -1291,8 +1296,9 @@ export class MissionSystem {
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
     const vMgr = window.KOSMOS?.vesselManager;
+    const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
-    if (roll < 5) {
+    if (roll < disasterThreshold) {
       // KATASTROFA
       exp.status = 'completed';
       exp.gained = {};
@@ -1553,6 +1559,24 @@ export class MissionSystem {
     // Mnożnik z technologii napędowych
     const techMult = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
     return base * techMult;
+  }
+
+  // Oblicz efektywne ryzyko katastrofy (%) z uwzględnieniem doświadczenia statku i tech
+  _getDisasterChance(vesselId) {
+    let chance = BASE_DISASTER_CHANCE;
+
+    // Redukcja z doświadczenia statku
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr && vesselId) {
+      const vessel = vMgr.getVessel(vesselId);
+      if (vessel) chance -= vessel.experience * XP_REDUCTION_PER;
+    }
+
+    // Redukcja z technologii
+    const techRed = window.KOSMOS?.techSystem?.getDisasterReduction() ?? 0;
+    chance -= techRed;
+
+    return Math.max(MIN_DISASTER_CHANCE, chance);
   }
 
   _isInRange(target, shipId) {

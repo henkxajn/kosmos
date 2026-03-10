@@ -65,6 +65,9 @@ const MIN_TRAVEL_YEARS     = 0.008; // ~3 dni gry — absolutne minimum podróż
 const MIN_COLONY_TRAVEL    = 0.02;  // ~7 dni gry — minimum podróży kolonizacyjnej
 const EXPEDITION_CREW_COST = 0.5;   // POP zablokowany na czas misji (mining/scientific)
 const COLONY_CREW_COST     = 2.0;   // POPy blokowane przez ekspedycję kolonizacyjną
+const BASE_DISASTER_CHANCE = 2.0;   // % — bazowe ryzyko katastrofy
+const MIN_DISASTER_CHANCE  = 0.1;   // % — minimum
+const XP_REDUCTION_PER     = 0.1;   // % redukcji na punkt doświadczenia statku
 const RECON_CREW_COST      = 0.5;   // POP zablokowany na czas misji rozpoznawczej
 
 // Zasoby startowe nowej kolonii (przed mnożnikiem zdarzenia)
@@ -1020,9 +1023,10 @@ export class ExpeditionSystem {
     exp.eventRoll = roll;
 
     const vMgr = window.KOSMOS?.vesselManager;
+    const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
-    if (roll < 5) {
-      // KATASTROFA (5%) — brak zarobku, załoga zaginiona → odblokuj POPy
+    if (roll < disasterThreshold) {
+      // KATASTROFA — brak zarobku, załoga zaginiona → odblokuj POPy
       exp.status = 'completed';
       exp.gained = {};
       EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
@@ -1118,14 +1122,15 @@ export class ExpeditionSystem {
 
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
+    const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
     // Zniszcz vessel (colony_ship nie wraca — zużyty przy kolonizacji)
     if (exp.vesselId && vMgr) {
       vMgr.destroyVessel(exp.vesselId);
     }
 
-    if (roll < 5) {
-      // KATASTROFA (5%) — kolonia NIE powstaje, POPy giną, zasoby stracone
+    if (roll < disasterThreshold) {
+      // KATASTROFA — kolonia NIE powstaje, POPy giną, zasoby stracone
       exp.status = 'completed';
       exp.gained = {};
       // POPy giną — nie odblokuj, ale zmniejsz populację
@@ -1272,9 +1277,10 @@ export class ExpeditionSystem {
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
     const vMgr = window.KOSMOS?.vesselManager;
+    const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
-    if (roll < 5) {
-      // KATASTROFA (5%) — statek utracony, załoga zaginiona
+    if (roll < disasterThreshold) {
+      // KATASTROFA — statek utracony, załoga zaginiona
       exp.status = 'completed';
       exp.gained = {};
       EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? RECON_CREW_COST });
@@ -1567,6 +1573,24 @@ export class ExpeditionSystem {
     // Mnożnik z technologii napędowych
     const techMult = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
     return base * techMult;
+  }
+
+  // Oblicz efektywne ryzyko katastrofy (%) z uwzględnieniem doświadczenia statku i tech
+  _getDisasterChance(vesselId) {
+    let chance = BASE_DISASTER_CHANCE;
+
+    // Redukcja z doświadczenia statku
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr && vesselId) {
+      const vessel = vMgr.getVessel(vesselId);
+      if (vessel) chance -= vessel.experience * XP_REDUCTION_PER;
+    }
+
+    // Redukcja z technologii
+    const techRed = window.KOSMOS?.techSystem?.getDisasterReduction() ?? 0;
+    chance -= techRed;
+
+    return Math.max(MIN_DISASTER_CHANCE, chance);
   }
 
   // Sprawdź czy cel jest w zasięgu statku (orbitalna, stabilna metryka)

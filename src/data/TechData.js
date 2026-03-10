@@ -31,6 +31,8 @@
 //     → mnoży konsumpcję surowca przez populację (0.8 = 20% mniej zużycia)
 //   { type: 'shipSpeedMultiplier', multiplier }
 //     → mnoży prędkość WSZYSTKICH statków (stackuje się multiplikatywnie)
+//   { type: 'disasterReduction', amount }
+//     → zmniejsza szansę katastrofy misji o amount punktów procentowych (addytywnie)
 
 export const TECH_BRANCHES = {
   mining:  { namePL: 'Wydobycie',  icon: '⛏', color: '#c8a870' },
@@ -320,6 +322,34 @@ export const TECHS = {
       { type: 'modifier', resource: 'energy', multiplier: 1.5 },
     ],
     description: 'Termojądrowa fuzja — odblokowanie Reaktora Fuzyjnego, +50% energii',
+  },
+
+  // ── Bezpieczeństwo misji ─────────────────────────────────────────────────
+
+  advanced_navigation: {
+    id:          'advanced_navigation',
+    namePL:      'Zaawansowana Nawigacja',
+    branch:      'space',
+    tier:        2,
+    cost:        { research: 180 },
+    requires:    ['rocketry'],
+    effects: [
+      { type: 'disasterReduction', amount: 0.5 },
+    ],
+    description: 'Precyzyjne systemy nawigacyjne — −0.5% ryzyko katastrofy misji',
+  },
+
+  emergency_protocols: {
+    id:          'emergency_protocols',
+    namePL:      'Protokoły Awaryjne',
+    branch:      'civil',
+    tier:        3,
+    cost:        { research: 280 },
+    requires:    ['advanced_navigation', 'arcology'],
+    effects: [
+      { type: 'disasterReduction', amount: 0.5 },
+    ],
+    description: 'Systemy ratunkowe i procedury awaryjne — dodatkowe −0.5% ryzyko katastrofy',
   },
 
   // ── Gałąź napędowa (space + energy) ─────────────────────────────────────
