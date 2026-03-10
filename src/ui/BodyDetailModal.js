@@ -300,6 +300,8 @@ export function showBodyDetailModal(body) {
   btnRow.appendChild(btnClose);
 
   panel.appendChild(btnRow);
+  // Blokuj propagację kliknięć z panelu do canvas/window
+  panel.addEventListener('click', (e) => e.stopPropagation());
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
 
