@@ -279,11 +279,14 @@ export class TopBar {
       lines.push({ text: `Bilans: ${e.balance >= 0 ? '+' : ''}${_fmtNum(e.balance)}/r`,
         color: e.balance >= 0 ? THEME.successDim : THEME.dangerDim });
       if (e.brownout) lines.push({ text: '⚠ BROWNOUT — produkcja wstrzymana', color: C.red });
+    }
 
-      // Rozbicie per budynek
+    // Rozbicie per budynek — dla energii i wszystkich zasobów z deltą
+    const breakdownKey = item._energyDetails ? 'energy' : item._breakdownKey;
+    if (breakdownKey) {
       const resSys = window.KOSMOS?.resourceSystem;
       if (resSys) {
-        const bd = resSys.getEnergyBreakdown();
+        const bd = resSys.getResourceBreakdown(breakdownKey);
         const prodKeys = Object.keys(bd.producers);
         const consKeys = Object.keys(bd.consumers);
         if (prodKeys.length > 0) {
@@ -436,6 +439,7 @@ export class TopBar {
         icon: def.icon, symbol: id, value: amt, delta: dlt,
         color: def.color || C.text,
         tooltipName: `${def.icon} ${def.namePL} (${id})`,
+        _breakdownKey: id,
       });
     }
     return items;
@@ -450,6 +454,7 @@ export class TopBar {
         icon: def.icon, symbol: '', value: amt, delta: dlt,
         color: def.color || C.text,
         tooltipName: `${def.icon} ${def.namePL}`,
+        _breakdownKey: id,
       });
     }
     return items;
@@ -495,6 +500,7 @@ export class TopBar {
       icon: '🔬', symbol: '', value: resAmt, delta: resDlt,
       color: THEME.purple,
       tooltipName: '🔬 Nauka (research)',
+      _breakdownKey: 'research',
     });
 
     // PC — Production Capacity (zawsze widoczne w civMode)
