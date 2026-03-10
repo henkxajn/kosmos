@@ -1284,6 +1284,14 @@ export class FleetManagerOverlay {
       if (body.orbital?.a) {
         lines.push({ text: `Orbita: ${body.orbital.a.toFixed(2)} AU`, color: THEME.textSecondary });
       }
+      // Atmosfera
+      const atm = body.atmosphere || 'none';
+      const atmLabels = { dense: 'Gęsta', thick: 'Gęsta', thin: 'Cienka', none: 'Brak' };
+      let atmText = atmLabels[atm] || atm;
+      if (body.breathableAtmosphere) atmText += ' ✅';
+      const atmIcon = atm === 'none' ? '' : '☁ ';
+      const atmColor = atm === 'none' ? THEME.textDim : body.breathableAtmosphere ? THEME.success : THEME.textSecondary;
+      lines.push({ text: `${atmIcon}Atmosfera: ${atmText}`, color: atmColor });
       if (hasColony) {
         const col = colMgr.getColony(body.id);
         const pop = col?.civSystem?.population ?? 0;

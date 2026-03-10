@@ -84,6 +84,9 @@ export class ColonyOverlay extends BaseOverlay {
     this._scrollRight      = 0;      // scroll prawego panelu
     this._hoverRowId       = null;
     this._collapsedCategories = new Set();
+    this._buildPanelTab    = 'build'; // 'build' | 'deploy'
+    this._deployBtns       = [];      // hit areas dla przycisków deploy
+    this._buildTabRect     = null;    // { x, y, w, h } — do hit test zakładek
 
     // Tooltip budynku (build list hover)
     this._tooltipBuildingId = null;
@@ -915,13 +918,44 @@ export class ColonyOverlay extends BaseOverlay {
     const TILE_H = TILE_W + 30;  // kwadrat ikony + dolna połowa na tekst
     const ICON_H = TILE_W;        // górna kwadratowa część = ikona
 
-    // Nagłówek (wyrównany do HDR_H)
+    // Nagłówek z zakładkami BUDUJ / ZAINSTALUJ
     ctx.fillStyle = THEME.bgSecondary;
     ctx.fillRect(x, y, w, HDR_H);
-    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText('🏗 BUDUJ', x + pad + 4, y + Math.round(HDR_H / 2) + 4);
+
+    const tabW = Math.floor((w - pad * 2) / 2);
+    const tabH = 16;
+    const tabY = y + Math.round((HDR_H - tabH) / 2);
+    const tabX = x + pad;
+    this._buildTabRect = { x: tabX, y: tabY, w: tabW, h: tabH };
+
+    // BUDUJ tab
+    ctx.fillStyle = this._buildPanelTab === 'build' ? 'rgba(0,255,180,0.13)' : 'rgba(0,255,180,0.04)';
+    ctx.fillRect(tabX, tabY, tabW, tabH);
+    ctx.strokeStyle = this._buildPanelTab === 'build' ? THEME.accent : THEME.border;
+    ctx.strokeRect(tabX, tabY, tabW, tabH);
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = this._buildPanelTab === 'build' ? THEME.accent : THEME.textSecondary;
+    ctx.textAlign = 'center';
+    ctx.fillText('🔨 BUDUJ', tabX + tabW / 2, tabY + 11);
+    this._addHit(tabX, tabY, tabW, tabH, 'buildTab', { tab: 'build' });
+
+    // ZAINSTALUJ tab
+    ctx.fillStyle = this._buildPanelTab === 'deploy' ? 'rgba(0,255,180,0.13)' : 'rgba(0,255,180,0.04)';
+    ctx.fillRect(tabX + tabW, tabY, tabW, tabH);
+    ctx.strokeStyle = this._buildPanelTab === 'deploy' ? THEME.accent : THEME.border;
+    ctx.strokeRect(tabX + tabW, tabY, tabW, tabH);
+    ctx.fillStyle = this._buildPanelTab === 'deploy' ? THEME.accent : THEME.textSecondary;
+    ctx.fillText('📦 ZAINSTALUJ', tabX + tabW + tabW / 2, tabY + 11);
+    ctx.textAlign = 'left';
+    this._addHit(tabX + tabW, tabY, tabW, tabH, 'buildTab', { tab: 'deploy' });
+
     this._drawSeparator(ctx, x, y + HDR_H, x + w, y + HDR_H);
+
+    // Zakładka ZAINSTALUJ → panel deploy
+    if (this._buildPanelTab === 'deploy') {
+      this._drawDeployPanel(ctx, x, y + HDR_H + 4, w, h - HDR_H - 4, colony);
+      return;
+    }
 
     let headerExtra = 0;
     if (this._buildMode && this._pendingBuildingId) {
@@ -1282,6 +1316,148 @@ export class ColonyOverlay extends BaseOverlay {
     this._showDomTooltip(html, this._tooltipUpgradeX * _UI_SCALE, this._tooltipUpgradeY * _UI_SCALE);
   }
 
+  // ── Panel deploy — prefabrykaty z cargo statków ───────────────────
+
+  _drawDeployPanel(ctx, x, y, w, h, colony) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    const bSys = colony?.buildingSystem;
+    const planetId = colony?.planetId;
+    if (!vMgr || !planetId) return;
+
+    this._deployBtns = [];
+    const pad = 8;
+    const tile = this._selectedHex && this._getGrid(colony)
+      ? this._getGrid(colony).get(this._selectedHex.q, this._selectedHex.r)
+      : null;
+
+    // Zbierz statki zadokowane na tej planecie z prefabami w cargo
+    const docked = vMgr.getAllVessels().filter(v =>
+      v.position.dockedAt === planetId && v.position.state === 'docked' && v.cargo
+    );
+
+    let yy = y + 4;
+    let anyPrefab = false;
+
+    for (const vessel of docked) {
+      if (!vessel.cargo || Object.keys(vessel.cargo).length === 0) continue;
+      const prefabs = Object.entries(vessel.cargo).filter(([comId, qty]) => {
+        const com = COMMODITIES[comId];
+        return qty > 0 && com?.isPrefab;
+      });
+      if (prefabs.length === 0) continue;
+      anyPrefab = true;
+
+      // Nagłówek statku
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.info;
+      ctx.fillText(`🚀 ${vessel.name}`, x + pad, yy + 10);
+      yy += 16;
+
+      for (const [comId, qty] of prefabs) {
+        const com = COMMODITIES[comId];
+        const deploysBuildingId = com.deploysBuilding;
+        const buildingDef = BUILDINGS[deploysBuildingId];
+        if (!buildingDef) continue;
+
+        // Sprawdź czy deploy jest możliwy
+        let canDeploy = !!tile;
+        let reason = tile ? '' : 'Wybierz hex';
+        if (tile && !bSys._canBuildOnTile(tile, buildingDef)) {
+          canDeploy = false;
+          reason = 'Zły teren';
+        } else if (tile && buildingDef.requires && !window.KOSMOS?.techSystem?.isResearched(buildingDef.requires)) {
+          canDeploy = false;
+          reason = 'Wymaga tech';
+        } else if (tile) {
+          const popCost = buildingDef.popCost ?? 0.25;
+          const isOutpostCol = colony.isOutpost;
+          if (popCost > 0 && !isOutpostCol && colony.civSystem?.freePops < popCost) {
+            canDeploy = false;
+            reason = 'Brak POPów';
+          }
+        }
+
+        const rowH = 24;
+        ctx.fillStyle = canDeploy ? 'rgba(0,255,180,0.07)' : 'rgba(15,5,5,0.85)';
+        ctx.fillRect(x + pad, yy, w - pad * 2, rowH);
+        ctx.strokeStyle = canDeploy ? 'rgba(0,255,180,0.18)' : '#331818';
+        ctx.strokeRect(x + pad, yy, w - pad * 2, rowH);
+
+        // Ikona + nazwa + ilość
+        ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = canDeploy ? THEME.successDim : '#663333';
+        ctx.fillText(`${com.icon} ${buildingDef.icon} ${buildingDef.namePL} ×${qty}`, x + pad + 6, yy + 10);
+
+        if (canDeploy) {
+          const btnW = 52;
+          const btnX = x + w - pad - btnW;
+          const btnY2 = yy + 2;
+          const btnH = rowH - 4;
+
+          ctx.fillStyle = 'rgba(0,255,180,0.13)';
+          ctx.fillRect(btnX, btnY2, btnW, btnH);
+          ctx.strokeStyle = THEME.successDim;
+          ctx.strokeRect(btnX, btnY2, btnW, btnH);
+          ctx.fillStyle = THEME.successDim;
+          ctx.textAlign = 'center';
+          ctx.fillText('DEPLOY', btnX + btnW / 2, btnY2 + 13);
+          ctx.textAlign = 'left';
+
+          this._addHit(btnX, btnY2, btnW, btnH, 'deployBtn', {
+            vesselId: vessel.id, prefabId: comId, buildingId: deploysBuildingId,
+          });
+        } else {
+          ctx.fillStyle = '#663333';
+          ctx.fillText(`❌ ${reason}`, x + w - pad - 80, yy + 10);
+        }
+        yy += rowH + 2;
+      }
+      yy += 4;
+    }
+
+    if (!anyPrefab) {
+      ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText('Brak prefabów w cargo', x + pad, yy + 10);
+      yy += 14;
+      ctx.fillStyle = THEME.borderLight;
+      ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillText('Załaduj prefabrykaty na', x + pad, yy + 6);
+      yy += 10;
+      ctx.fillText('statek cargo w panelu floty.', x + pad, yy + 6);
+    }
+  }
+
+  _handleDeploy(vesselId, prefabId, buildingId, colony) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    const bSys = colony?.buildingSystem;
+    if (!vMgr || !bSys) return;
+
+    const vessel = vMgr.getVessel(vesselId);
+    if (!vessel?.cargo?.[prefabId] || vessel.cargo[prefabId] <= 0) {
+      this._flashMsg = 'Brak prefabu w cargo';
+      this._flashEnd = Date.now() + 2500;
+      return;
+    }
+
+    const grid = this._getGrid(colony);
+    const tile = this._selectedHex && grid ? grid.get(this._selectedHex.q, this._selectedHex.r) : null;
+    if (!tile) return;
+
+    const result = bSys.deployFromCargo(tile, buildingId);
+    if (result.success) {
+      vessel.cargo[prefabId] -= 1;
+      if (vessel.cargo[prefabId] <= 0) delete vessel.cargo[prefabId];
+      vessel.cargoUsed = Math.max(0, (vessel.cargoUsed ?? 0) - (COMMODITIES[prefabId]?.weight ?? 0));
+      // Odśwież grid cache i globus
+      delete this._gridCache[colony.planetId];
+      if (this._globeRenderer) this._globeRenderer.refreshTexture();
+    } else {
+      this._flashMsg = result.reason;
+      this._flashEnd = Date.now() + 2500;
+    }
+  }
+
   // ── Szczegóły budynku (wybrany hex) ────────────────────────────────
 
   _drawBuildingDetails(ctx, x, y, w, h, colony, tile) {
@@ -1619,6 +1795,19 @@ export class ColonyOverlay extends BaseOverlay {
       const tile = grid?.get(zone.data.q, zone.data.r);
       if (!tile) return;
       EventBus.emit('planet:demolishRequest', { tile });
+      return;
+    }
+
+    if (zone.type === 'buildTab') {
+      this._buildPanelTab = zone.data.tab;
+      this._scrollRight = 0;
+      return;
+    }
+
+    if (zone.type === 'deployBtn') {
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colony = colMgr?.getColony(this._selectedColonyId);
+      if (colony) this._handleDeploy(zone.data.vesselId, zone.data.prefabId, zone.data.buildingId, colony);
       return;
     }
   }
