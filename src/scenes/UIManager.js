@@ -453,8 +453,8 @@ export class UIManager {
     });
 
 
-    EventBus.on('civ:epochChanged', ({ epoch }) => {
-      this._log(`Nowa epoka: ${epoch}`, 'civ_epoch');
+    EventBus.on('civ:epochChanged', ({ epoch, message }) => {
+      this._log(message || `Nowa epoka: ${epoch?.namePL ?? epoch}`, 'civ_epoch');
     });
     EventBus.on('civ:unrestStarted', () => {
       this._log('Niepokoje społeczne!', 'civ_unrest');

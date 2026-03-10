@@ -87,11 +87,12 @@ export class ThreeCameraController {
 
   _applyCamera() {
     const d = this._dist, p = this._phi, t = this._theta;
-    this.camera.position.set(
-      this._target.x + d * Math.sin(p) * Math.cos(t),
-      this._target.y + d * Math.cos(p),
-      this._target.z + d * Math.sin(p) * Math.sin(t),
-    );
+    const x = this._target.x + d * Math.sin(p) * Math.cos(t);
+    const y = this._target.y + d * Math.cos(p);
+    const z = this._target.z + d * Math.sin(p) * Math.sin(t);
+    // Guard NaN — zapobiega białemu ekranowi
+    if (isNaN(x) || isNaN(y) || isNaN(z)) return;
+    this.camera.position.set(x, y, z);
     this.camera.lookAt(this._target);
   }
 
@@ -101,7 +102,10 @@ export class ThreeCameraController {
   }
 
   // Ustaw docelowy punkt kamery (płynny lerp w update)
-  focusOn(worldX, worldZ) { this._goalTarget.set(worldX, 0, worldZ); }
+  focusOn(worldX, worldZ) {
+    if (isNaN(worldX) || isNaN(worldZ)) return; // guard NaN → biały ekran
+    this._goalTarget.set(worldX, 0, worldZ);
+  }
 
   // Ustaw minimalny dystans kamery (np. 0.5 dla księżyców, 3 domyślnie)
   setMinDist(val) { this._minDist = val; }

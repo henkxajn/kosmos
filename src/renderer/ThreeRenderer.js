@@ -1688,15 +1688,21 @@ export class ThreeRenderer {
         this._addVesselSprite(vessel);
         continue;
       }
-      entry.sprite.position.set(S(vessel.position.x), 0.3, S(vessel.position.y));
+      // Guard NaN — pozycja statku
+      const vx = isNaN(vessel.position.x) ? 0 : vessel.position.x;
+      const vy = isNaN(vessel.position.y) ? 0 : vessel.position.y;
+      entry.sprite.position.set(S(vx), 0.3, S(vy));
 
       // Aktualizuj linię trasy (2 punkty: statek → cel)
       if (vessel.mission) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
         // Cel: outbound → target (live), return → macierzysta (live)
-        const tx = isReturn ? (m.liveOriginX ?? m.returnTargetX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
-        const ty = isReturn ? (m.liveOriginY ?? m.returnTargetY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+        // Uwaga: ?? nie łapie NaN, trzeba explicit guard
+        let tx = isReturn ? (m.liveOriginX ?? m.returnTargetX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
+        let ty = isReturn ? (m.liveOriginY ?? m.returnTargetY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+        if (isNaN(tx)) tx = 0;
+        if (isNaN(ty)) ty = 0;
 
         if (!entry.routeLine) {
           // Stwórz nową linię
