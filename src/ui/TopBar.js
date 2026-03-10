@@ -9,6 +9,7 @@ import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { GAME_CONFIG }    from '../config/GameConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES } from '../data/ResourcesData.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
+import { BUILDINGS }      from '../data/BuildingsData.js';
 import EventBus            from '../core/EventBus.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
@@ -55,7 +56,7 @@ export class TopBar {
     el.id = 'topbar-tooltip';
     el.style.cssText = `
       position: fixed; z-index: 50; pointer-events: none;
-      display: none; max-width: 260px; padding: 8px 10px;
+      display: none; max-width: 320px; padding: 8px 10px;
       background: rgba(6,12,20,0.96); border: 1px solid ${THEME.borderActive};
       border-radius: 4px; font-family: 'Courier New', monospace;
       font-size: 11px; color: ${THEME.textSecondary}; line-height: 1.5;
@@ -278,6 +279,41 @@ export class TopBar {
       lines.push({ text: `Bilans: ${e.balance >= 0 ? '+' : ''}${_fmtNum(e.balance)}/r`,
         color: e.balance >= 0 ? THEME.successDim : THEME.dangerDim });
       if (e.brownout) lines.push({ text: '⚠ BROWNOUT — produkcja wstrzymana', color: C.red });
+
+      // Rozbicie per budynek
+      const resSys = window.KOSMOS?.resourceSystem;
+      if (resSys) {
+        const bd = resSys.getEnergyBreakdown();
+        const prodKeys = Object.keys(bd.producers);
+        const consKeys = Object.keys(bd.consumers);
+        if (prodKeys.length > 0) {
+          lines.push({ text: '─── Producenci ───', color: C.dim });
+          for (const type of prodKeys) {
+            const g = bd.producers[type];
+            const def = BUILDINGS[type];
+            const name = def?.namePL ?? type;
+            const icon = def?.icon ?? '?';
+            const cnt = g.count > 1 ? ` ×${g.count}` : '';
+            lines.push({ text: `${icon} ${name}${cnt}  +${_fmtNum(g.total)}/r`, color: THEME.successDim });
+          }
+        }
+        if (consKeys.length > 0) {
+          lines.push({ text: '─── Konsumenci ───', color: C.dim });
+          for (const type of consKeys) {
+            const g = bd.consumers[type];
+            let name, icon;
+            if (type === 'pop_consumption') {
+              name = 'Konsumpcja POP'; icon = '👥';
+            } else {
+              const def = BUILDINGS[type];
+              name = def?.namePL ?? type;
+              icon = def?.icon ?? '?';
+            }
+            const cnt = g.count > 1 ? ` ×${g.count}` : '';
+            lines.push({ text: `${icon} ${name}${cnt}  ${_fmtNum(g.total)}/r`, color: THEME.dangerDim });
+          }
+        }
+      }
     }
 
     // Szczegóły PC (fabryki)

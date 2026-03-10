@@ -56,7 +56,7 @@ import { POP_CONSUMPTION } from '../data/ResourcesData.js';
 // POP_CONSUMPTION = { food: 3.0, water: 1.5, energy: 1.0 }
 
 // Wzrost populacji
-const BASE_GROWTH_INTERVAL = 20;  // lat na nowego POPa przy bazowych warunkach
+const BASE_GROWTH_INTERVAL = 10;  // lat na nowego POPa przy bazowych warunkach
 const MIN_GROWTH_INTERVAL  = 5;   // minimalna liczba lat na POPa (cap)
 
 // Śmierć POPa

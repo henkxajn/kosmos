@@ -882,9 +882,8 @@ export class BuildingSystem {
         if (key === 'research') {
           base[key] = val * latMod.production * levelMult;
         } else if (val < 0) {
-          // Konsumpcja rośnie z levelem: 1 + 0.25 × (level-1)
-          const consLevelMult = 1 + 0.25 * (level - 1);
-          base[key] = val * consLevelMult;
+          // Konsumpcja rośnie liniowo z levelem: Lv2 = 2×, Lv3 = 3×
+          base[key] = val * levelMult;
         } else {
           base[key] = val * multiplier * latMod.production * levelMult;
         }
@@ -893,8 +892,7 @@ export class BuildingSystem {
 
     // Dodatkowa konsumpcja energii (energyCost z definicji budynku)
     if (hasEnergyCost) {
-      const consLevelMult = 1 + 0.25 * (level - 1);
-      base.energy = (base.energy ?? 0) - building.energyCost * consLevelMult;
+      base.energy = (base.energy ?? 0) - building.energyCost * levelMult;
     }
 
     return base;

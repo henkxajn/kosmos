@@ -53,7 +53,7 @@ export const BUILDINGS = {
     cost:        { Fe: 20, C: 10 },
     commodityCost: { steel_plates: 3, mining_drills: 2, power_cells: 1 },
     energyCost:  2,
-    buildTime:   0.75,     // lata gry
+    buildTime:   0.375,    // lata gry
     rates:       {},       // produkcja obliczana dynamicznie z deposits
     housing:     0,
     popCost:     0.25,
@@ -73,10 +73,10 @@ export const BUILDINGS = {
     category:    'energy',
     icon:        '☀',
     description: 'Zamienia promieniowanie gwiazdy w energię elektryczną',
-    cost:        { Si: 15, Cu: 5 },
-    commodityCost: { steel_plates: 3, power_cells: 2, copper_wiring: 1 },
+    cost:        { Fe: 15, Si: 20, Cu: 8 },
+    commodityCost: { steel_plates: 4, power_cells: 3, copper_wiring: 2 },
     energyCost:  0,
-    buildTime:   0.5,      // lata gry
+    buildTime:   0.375,    // lata gry
     rates:       { energy: 8 },
     housing:     0,
     popCost:     0.25,
@@ -84,6 +84,26 @@ export const BUILDINGS = {
     capacityBonus: null,
     terrainOnly: null,
     terrainAny:  false,
+    requires:    null,
+  },
+
+  coal_plant: {
+    id:          'coal_plant',
+    namePL:      'Elektrownia Węglowa',
+    category:    'energy',
+    icon:        '🏭',
+    description: 'Spala węgiel (C) produkując dużo energii. Wymaga stałego dopływu węgla.',
+    cost:        { Fe: 20, C: 8, Si: 5, Cu: 5 },
+    commodityCost: { steel_plates: 3, concrete_mix: 2, copper_wiring: 2 },
+    energyCost:  0,
+    buildTime:   0.5,      // lata gry
+    rates:       { energy: 18, C: -6 },  // +18 energii, -6 C/rok
+    housing:     0,
+    popCost:     0.25,
+    maxLevel:    10,
+    capacityBonus: null,
+    terrainOnly: null,
+    terrainAny:  true,
     requires:    null,
   },
 
@@ -96,7 +116,7 @@ export const BUILDINGS = {
     cost:        { Fe: 30, Ti: 5 },
     commodityCost: { steel_plates: 4, power_cells: 2, copper_wiring: 1 },
     energyCost:  0,
-    buildTime:   1.0,      // lata gry
+    buildTime:   0.5,      // lata gry
     rates:       { energy: 25 },
     housing:     0,
     popCost:     0.25,
@@ -118,7 +138,7 @@ export const BUILDINGS = {
     cost:        { Fe: 10, C: 5 },
     commodityCost: { steel_plates: 2, polymer_composites: 1 },
     energyCost:  1,
-    buildTime:   0.5,      // lata gry
+    buildTime:   0.25,     // lata gry
     rates:       { food: 10 },
     housing:     0,
     popCost:     0.25,
@@ -138,7 +158,7 @@ export const BUILDINGS = {
     cost:        { Fe: 15 },
     commodityCost: { steel_plates: 2, copper_wiring: 1 },
     energyCost:  1,
-    buildTime:   0.25,     // lata gry
+    buildTime:   0.125,    // lata gry
     rates:       { water: 6 },
     housing:     0,
     popCost:     0.25,
@@ -160,7 +180,7 @@ export const BUILDINGS = {
     cost:        { Fe: 25, Si: 10 },
     commodityCost: { steel_plates: 4, habitat_modules: 3, water_recyclers: 2, electronics: 1 },
     energyCost:  3,
-    buildTime:   1.0,      // lata gry
+    buildTime:   0.5,      // lata gry
     rates:       {},
     housing:     3,
     popCost:     0.25,
@@ -182,7 +202,7 @@ export const BUILDINGS = {
     cost:        { Si: 30, Cu: 15 },
     commodityCost: { steel_plates: 4, electronics: 3, semiconductors: 2, power_cells: 1 },
     energyCost:  10,
-    buildTime:   2.0,      // lata gry
+    buildTime:   1.0,      // lata gry
     rates:       { research: 8 },
     housing:     0,
     popCost:     0.25,
@@ -204,7 +224,7 @@ export const BUILDINGS = {
     cost:        { Fe: 30, Cu: 10, Si: 10 },
     commodityCost: { steel_plates: 5, power_cells: 3, electronics: 2 },
     energyCost:  5,
-    buildTime:   0.5,      // lata gry
+    buildTime:   0.25,     // lata gry
     rates:       {},       // produkcja via FactorySystem, nie rates
     housing:     0,
     popCost:     0.5,
@@ -226,7 +246,7 @@ export const BUILDINGS = {
     cost:        { Fe: 40, Si: 15, Cu: 5 },
     commodityCost: { steel_plates: 5, power_cells: 3, mining_drills: 2 },
     energyCost:  8,
-    buildTime:   1.5,      // lata gry
+    buildTime:   0.75,     // lata gry
     rates:       {},       // bonus do kopalni (przetwarzanie)
     housing:     0,
     popCost:     0.25,
@@ -246,7 +266,7 @@ export const BUILDINGS = {
     cost:        { Fe: 50, Ti: 20, Si: 15 },
     commodityCost: { steel_plates: 6, power_cells: 4, electronics: 3, fusion_cores: 2 },
     energyCost:  0,
-    buildTime:   3.0,      // lata gry
+    buildTime:   1.5,      // lata gry
     rates:       { energy: 60 },
     housing:     0,
     popCost:     0.5,
@@ -268,7 +288,7 @@ export const BUILDINGS = {
     cost:        { Fe: 60, Ti: 30, Cu: 15 },
     commodityCost: { steel_plates: 6, hull_armor: 4, electronics: 3, concrete_mix: 2 },
     energyCost:  10,
-    buildTime:   2.5,      // lata gry
+    buildTime:   1.25,     // lata gry
     rates:       {},
     housing:     0,
     popCost:     0.5,
@@ -290,7 +310,7 @@ export const BUILDINGS = {
     cost:        { Fe: 80, Ti: 30, Cu: 20 },
     commodityCost: { steel_plates: 8, hull_armor: 6, electronics: 4, power_cells: 3, copper_wiring: 2 },
     energyCost:  5,
-    buildTime:   2.5,      // lata gry
+    buildTime:   1.25,     // lata gry
     rates:       {},
     housing:     0,
     popCost:     0.5,
@@ -311,7 +331,7 @@ export const BUILDINGS = {
     cost:          { Fe: 40, Cu: 20, Si: 15, Ti: 5 },
     commodityCost: { steel_plates: 6, food_synthesizers: 5, electronics: 2, power_cells: 2 },
     energyCost:    8,
-    buildTime:     1.0,     // lata gry
+    buildTime:     0.5,     // lata gry
     rates:         { food: 6 },
     housing:       0,
     popCost:       0.5,
@@ -334,7 +354,7 @@ export const BUILDINGS = {
     cost:          { Fe: 30, Ti: 10, Cu: 5 },
     commodityCost: { steel_plates: 4, robots: 3, mining_drills: 2, power_cells: 1 },
     energyCost:    4,
-    buildTime:     2.0,     // lata gry
+    buildTime:     1.0,     // lata gry
     rates:         {},
     housing:       0,
     popCost:       0,
@@ -358,7 +378,7 @@ export const BUILDINGS = {
     cost:          { Si: 20, Cu: 8, Ti: 5 },
     commodityCost: { steel_plates: 4, robots: 3, power_cells: 2, copper_wiring: 2, electronics: 1 },
     energyCost:    0,
-    buildTime:     1.5,     // lata gry
+    buildTime:     0.75,    // lata gry
     rates:         { energy: 6 },
     housing:       0,
     popCost:       0,
@@ -381,7 +401,7 @@ export const BUILDINGS = {
     cost:          { Ti: 40, W: 20, Li: 15, Fe: 20 },
     commodityCost: { steel_plates: 6, fusion_cores: 4, copper_wiring: 3 },
     energyCost:    0,
-    buildTime:     3.0,     // lata gry
+    buildTime:     1.5,     // lata gry
     rates:         { energy: 100 },
     housing:       0,
     popCost:       0.5,
@@ -403,7 +423,7 @@ export const BUILDINGS = {
     cost:          { Ti: 50, Si: 30, W: 20, Fe: 30 },
     commodityCost: { steel_plates: 6, nanotech_filters: 4, fusion_cores: 3, electronics: 2 },
     energyCost:    20,
-    buildTime:     3.0,     // lata gry
+    buildTime:     1.5,     // lata gry
     rates:         {},
     housing:       0,
     popCost:       0.5,

@@ -244,6 +244,36 @@ export class ResourceSystem {
     }
   }
 
+  // Rozbicie energii per typ producenta/konsumenta
+  getEnergyBreakdown() {
+    const bSys = window.KOSMOS?.buildingSystem;
+    const active = bSys?._active;
+    const producers = {};
+    const consumers = {};
+    for (const [id, rates] of this._producers) {
+      const e = rates['energy'] ?? 0;
+      if (e === 0) continue;
+
+      // Rozwiąż typ budynku z id producenta
+      let type = id;
+      if (id.startsWith('building_')) {
+        const tileKey = id.slice('building_'.length);
+        const entry = active?.get(tileKey);
+        type = entry?.building?.id ?? 'unknown';
+      } else if (id.startsWith('capital_')) {
+        type = 'colony_base';
+      } else if (id === 'civilization_consumption') {
+        type = 'pop_consumption';
+      }
+
+      const target = e > 0 ? producers : consumers;
+      if (!target[type]) target[type] = { total: 0, count: 0 };
+      target[type].total += e;
+      target[type].count++;
+    }
+    return { producers, consumers };
+  }
+
   // ── Serializacja ─────────────────────────────────────────────────────────
 
   serialize() {
