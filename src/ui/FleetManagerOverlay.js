@@ -18,6 +18,7 @@ import EventBus            from '../core/EventBus.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
+import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
 const _BODY_TYPES = ['planet', 'moon', 'asteroid', 'comet', 'planetoid'];
@@ -334,6 +335,14 @@ export class FleetManagerOverlay {
         this._targetScrollOffset = 0;
         this._cachedTargets = null;
         break;
+      case 'map_body': {
+        const bodyEntity = _findBody(zone.data.bodyId);
+        if (bodyEntity) {
+          EventBus.emit('body:selected', { entity: bodyEntity });
+          showBodyDetailModal(bodyEntity);
+        }
+        break;
+      }
       case 'map_vessel':
         this._selectedVesselId = zone.data.vesselId;
         this._missionConfig = null;
@@ -1113,7 +1122,8 @@ export class FleetManagerOverlay {
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = hasColony ? THEME.mint : isMoon ? THEME.textSecondary : THEME.textPrimary;
         const namePrefix = isMoon ? '└ ' : '';
-        const nameStr = `${namePrefix}${icon} ${(body.name ?? body.id).slice(0, isMoon ? 10 : 16)}`;
+        const targetMark = body._markedAsTarget ? '🎯' : '';
+        const nameStr = `${namePrefix}${icon} ${(body.name ?? body.id).slice(0, isMoon ? 10 : 16)}${targetMark}`;
         ctx.fillText(nameStr, x + PAD + indent, ry + 12);
 
         // Typ + temperatura
