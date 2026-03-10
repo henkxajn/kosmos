@@ -244,15 +244,17 @@ export class ResourceSystem {
     }
   }
 
-  // Rozbicie energii per typ producenta/konsumenta
-  getEnergyBreakdown() {
+  // Rozbicie zasobu per typ producenta/konsumenta
+  getResourceBreakdown(resourceId) {
     const bSys = window.KOSMOS?.buildingSystem;
     const active = bSys?._active;
     const producers = {};
     const consumers = {};
+
+    // ── 1. Zarejestrowani producenci (budynki z rates, civ consumption) ──
     for (const [id, rates] of this._producers) {
-      const e = rates['energy'] ?? 0;
-      if (e === 0) continue;
+      const val = rates[resourceId] ?? 0;
+      if (val === 0) continue;
 
       // Rozwiąż typ budynku z id producenta
       let type = id;
@@ -266,11 +268,50 @@ export class ResourceSystem {
         type = 'pop_consumption';
       }
 
-      const target = e > 0 ? producers : consumers;
+      const target = val > 0 ? producers : consumers;
       if (!target[type]) target[type] = { total: 0, count: 0 };
-      target[type].total += e;
+      target[type].total += val;
       target[type].count++;
     }
+
+    // ── 2. Wydobycie z kopalni (nie rejestrowane jako producer — via receive()) ──
+    const deposits = bSys?._deposits;
+    if (deposits && bSys._cachedMineLevel > 0) {
+      const rateMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 5 : 1;
+      let mineOutput = 0;
+      for (const dep of deposits) {
+        if (dep.remaining <= 0 || dep.resourceId !== resourceId) continue;
+        const depletion = dep.remaining / dep.totalAmount;
+        mineOutput += bSys._cachedMineLevel * 10 * rateMult * dep.richness * depletion;
+      }
+      if (mineOutput > 0) {
+        if (!producers['mine']) producers['mine'] = { total: 0, count: 0 };
+        producers['mine'].total += mineOutput;
+        producers['mine'].count = bSys._cachedMineLevel;
+      }
+    }
+
+    // ── 3. Konsumpcja fabryk (via spend() — nie rejestrowana jako consumer) ──
+    const factSys = window.KOSMOS?.factorySystem;
+    if (factSys?._allocations) {
+      let factoryConsumption = 0;
+      for (const [commodityId, alloc] of factSys._allocations) {
+        if (alloc._paused) continue;
+        const def = COMMODITIES[commodityId];
+        if (!def?.recipe) continue;
+        const recipe = factSys._getScaledRecipe?.(def.recipe, commodityId) ?? def.recipe;
+        const needed = recipe[resourceId];
+        if (!needed || needed <= 0) continue;
+        // Stawka konsumpcji: units/rok = (points × speedMult / baseTime) × recipe[res]
+        const speedMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
+        const unitsPerYear = (alloc.points * speedMult / def.baseTime) * needed;
+        factoryConsumption += unitsPerYear;
+      }
+      if (factoryConsumption > 0) {
+        consumers['factory'] = { total: -factoryConsumption, count: 1 };
+      }
+    }
+
     return { producers, consumers };
   }
 
