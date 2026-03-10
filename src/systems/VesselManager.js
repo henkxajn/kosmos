@@ -162,7 +162,8 @@ export class VesselManager {
   dispatchOnMission(vesselId, mission) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return false;
-    if (vessel.status !== 'idle' || vessel.position.state !== 'docked') return false;
+    // Pozwól statkom tankującym na misję (przerwij tankowanie)
+    if ((vessel.status !== 'idle' && vessel.status !== 'refueling') || vessel.position.state !== 'docked') return false;
 
     // Pozycja startu (bieżąca pozycja kolonii)
     const startEntity = this._findEntity(vessel.position.dockedAt);

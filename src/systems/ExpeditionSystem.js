@@ -506,7 +506,8 @@ export class ExpeditionSystem {
     // Sprawdź czy statek jest na orbicie lub zadokowany w zdalnej lokalizacji (re-dispatch)
     const vessel = vesselId ? vMgr?.getVessel(vesselId) : null;
     const isOrbiting = vessel && vessel.position.state === 'orbiting' && vessel.status === 'on_mission';
-    const isRemoteDocked = vessel && vessel.position.state === 'docked' && vessel.status === 'idle'
+    const isRemoteDocked = vessel && vessel.position.state === 'docked'
+      && (vessel.status === 'idle' || vessel.status === 'refueling')
       && vessel.colonyId !== colMgr?.activePlanetId;
     const isRedispatch = isOrbiting || isRemoteDocked;
 

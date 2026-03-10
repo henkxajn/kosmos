@@ -146,7 +146,8 @@ const ACTIONS = {
       if (vessel.position.state !== 'docked' && vessel.position.state !== 'orbiting') {
         return { ok: false, reason: 'Statek w locie' };
       }
-      if (vessel.status !== 'idle' && vessel.status !== 'on_mission') {
+      // Pozwól tankującym statkom na misję — paliwo sprawdzane przy dispatchu
+      if (vessel.status !== 'idle' && vessel.status !== 'on_mission' && vessel.status !== 'refueling') {
         return { ok: false, reason: 'Statek zajęty' };
       }
       const ship = SHIPS[vessel.shipId];
