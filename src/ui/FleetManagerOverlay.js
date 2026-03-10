@@ -189,6 +189,8 @@ export class FleetManagerOverlay {
   handleClick(mx, my) {
     if (!this._visible) return false;
     if (!this._bounds) return false;
+    // Blokuj kliknięcia gdy DOM modal jest na wierzchu (MissionEventModal, BodyDetailModal itp.)
+    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return false;
     const b = this._bounds;
     if (mx < b.x || mx > b.x + b.w || my < b.y || my > b.y + b.h) return false;
 

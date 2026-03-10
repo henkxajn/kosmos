@@ -32,6 +32,7 @@ const PTYPE_ICONS = {
 export function showBodyDetailModal(body) {
   // ── Dimming overlay ───────────────────────────────────────
   const overlay = document.createElement('div');
+  overlay.className = 'kosmos-modal-overlay';
   Object.assign(overlay.style, {
     position: 'fixed', inset: '0',
     background: 'rgba(2,4,5,0.75)',
