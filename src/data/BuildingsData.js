@@ -31,7 +31,8 @@ export const BUILDINGS = {
     commodityCost: { steel_plates: 2, electronics: 1 },
     energyCost:  2,
     buildTime:   0,           // natychmiastowa
-    rates:       {},
+    rates:       { food: 3, research: 2 },  // bazowa produkcja: 1 POP wyżywiony + powolne badania
+    maintenance: {},           // Stolica bez maintenance
     housing:     4,
     popCost:     0,
     maxLevel:    1,
@@ -55,6 +56,7 @@ export const BUILDINGS = {
     energyCost:  2,
     buildTime:   0.375,    // lata gry
     rates:       {},       // produkcja obliczana dynamicznie z deposits
+    maintenance: { Fe: 1 },  // wiertła
     housing:     0,
     popCost:     0.25,
     maxLevel:    10,
@@ -78,6 +80,7 @@ export const BUILDINGS = {
     energyCost:  0,
     buildTime:   0.375,    // lata gry
     rates:       { energy: 8 },
+    maintenance: { Si: 1 },  // wymiana paneli
     housing:     0,
     popCost:     0.25,
     maxLevel:    10,
@@ -98,6 +101,7 @@ export const BUILDINGS = {
     energyCost:  0,
     buildTime:   0.5,      // lata gry
     rates:       { energy: 18, C: -6 },  // +18 energii, -6 C/rok
+    maintenance: { Fe: 1, C: 1 },  // piece, węgiel
     housing:     0,
     popCost:     0.25,
     maxLevel:    10,
@@ -118,6 +122,7 @@ export const BUILDINGS = {
     energyCost:  0,
     buildTime:   0.5,      // lata gry
     rates:       { energy: 25 },
+    maintenance: { Fe: 1 },  // rury, pompy
     housing:     0,
     popCost:     0.25,
     maxLevel:    10,
@@ -140,6 +145,7 @@ export const BUILDINGS = {
     energyCost:  1,
     buildTime:   0.25,     // lata gry
     rates:       { food: 10 },
+    maintenance: {},          // farma nie wymaga utrzymania
     housing:     0,
     popCost:     0.25,
     maxLevel:    10,
@@ -160,6 +166,7 @@ export const BUILDINGS = {
     energyCost:  1,
     buildTime:   0.125,    // lata gry
     rates:       { water: 6 },
+    maintenance: {},          // studnia nie wymaga utrzymania
     housing:     0,
     popCost:     0.25,
     maxLevel:    10,
@@ -182,6 +189,7 @@ export const BUILDINGS = {
     energyCost:  3,
     buildTime:   0.5,      // lata gry
     rates:       {},
+    maintenance: { Fe: 1 },  // naprawy habitat
     housing:     3,
     popCost:     0.25,
     maxLevel:    10,
@@ -199,11 +207,12 @@ export const BUILDINGS = {
     category:    'research',
     icon:        '🔬',
     description: 'Prowadzi badania naukowe — kosztowna, ale niezbędna',
-    cost:        { Si: 30, Cu: 15 },
-    commodityCost: { steel_plates: 4, electronics: 3, semiconductors: 2, power_cells: 1 },
-    energyCost:  10,
+    cost:        { Si: 20, Cu: 8 },
+    commodityCost: { steel_plates: 3 },
+    energyCost:  6,
     buildTime:   1.0,      // lata gry
     rates:       { research: 8 },
+    maintenance: { Cu: 1, Si: 1 },  // elektronika, czujniki
     housing:     0,
     popCost:     0.25,
     maxLevel:    10,
@@ -226,6 +235,7 @@ export const BUILDINGS = {
     energyCost:  5,
     buildTime:   0.25,     // lata gry
     rates:       {},       // produkcja via FactorySystem, nie rates
+    maintenance: { Fe: 1 },  // narzędzia, formy
     housing:     0,
     popCost:     0.5,
     maxLevel:    10,
@@ -248,6 +258,7 @@ export const BUILDINGS = {
     energyCost:  8,
     buildTime:   0.75,     // lata gry
     rates:       {},       // bonus do kopalni (przetwarzanie)
+    maintenance: { Fe: 2, C: 2 },  // piece, węgiel
     housing:     0,
     popCost:     0.25,
     maxLevel:    10,
@@ -268,6 +279,7 @@ export const BUILDINGS = {
     energyCost:  0,
     buildTime:   1.5,      // lata gry
     rates:       { energy: 60 },
+    maintenance: { Ti: 1, Li: 1 },  // paliwo, osłony
     housing:     0,
     popCost:     0.5,
     maxLevel:    10,
@@ -281,15 +293,17 @@ export const BUILDINGS = {
 
   launch_pad: {
     id:          'launch_pad',
-    namePL:      'Wyrzutnia Rakietowa',
+    namePL:      'Port Kosmiczny',
     category:    'mining',
     icon:        '🚀',
-    description: 'Baza startowa ekspedycji kosmicznych',
-    cost:        { Fe: 60, Ti: 30, Cu: 15 },
-    commodityCost: { steel_plates: 6, hull_armor: 4, electronics: 3, concrete_mix: 2 },
+    description: 'Port kosmiczny — baza startowa ekspedycji i lotów międzyplanetarnych',
+    isSpaceport: true,
+    cost:        { Fe: 1200, Ti: 600, Cu: 300 },
+    commodityCost: { steel_plates: 120, hull_armor: 80, electronics: 60, concrete_mix: 40 },
     energyCost:  10,
-    buildTime:   1.25,     // lata gry
+    buildTime:   2.5,      // lata gry
     rates:       {},
+    maintenance: { Fe: 4, Ti: 2 },  // rampy, sprzęt startowy
     housing:     0,
     popCost:     0.5,
     maxLevel:    5,
@@ -297,6 +311,29 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  true,
     requires:    'rocketry',
+  },
+
+  autonomous_spaceport: {
+    id:            'autonomous_spaceport',
+    namePL:        'Autonomiczny Port Kosmiczny',
+    category:      'mining',
+    icon:          '🛰',
+    description:   'Zautomatyzowany port kosmiczny — działa bez załogi. Wymaga robotów.',
+    isSpaceport:   true,
+    isAutonomous:  true,
+    cost:          { Fe: 1000, Ti: 500, Cu: 300, Si: 200 },
+    commodityCost: { steel_plates: 100, robots: 60, hull_armor: 60, electronics: 50, concrete_mix: 30 },
+    energyCost:    8,
+    buildTime:     2.0,      // lata gry
+    rates:         {},
+    maintenance:   { Fe: 3, Ti: 1 },
+    housing:       0,
+    popCost:       0,
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'rocketry',
   },
 
   // ── Stocznia ──────────────────────────────────────────────────────────────
@@ -312,6 +349,7 @@ export const BUILDINGS = {
     energyCost:  5,
     buildTime:   1.25,     // lata gry
     rates:       {},
+    maintenance: { Fe: 3, Ti: 1 },  // ciężki sprzęt
     housing:     0,
     popCost:     0.5,
     maxLevel:    5,
@@ -333,6 +371,7 @@ export const BUILDINGS = {
     energyCost:    8,
     buildTime:     0.5,     // lata gry
     rates:         { food: 6 },
+    maintenance:   { Cu: 1 },  // filtry syntetyczne
     housing:       0,
     popCost:       0.5,
     maxLevel:      10,
@@ -356,6 +395,7 @@ export const BUILDINGS = {
     energyCost:    4,
     buildTime:     1.0,     // lata gry
     rates:         {},
+    maintenance:   { Fe: 1 },  // konserwacja robotów
     housing:       0,
     popCost:       0,
     maxLevel:      10,
@@ -380,6 +420,7 @@ export const BUILDINGS = {
     energyCost:    0,
     buildTime:     0.75,    // lata gry
     rates:         { energy: 6 },
+    maintenance:   { Si: 1 },  // wymiana paneli
     housing:       0,
     popCost:       0,
     maxLevel:      10,
@@ -403,6 +444,7 @@ export const BUILDINGS = {
     energyCost:    0,
     buildTime:     1.5,     // lata gry
     rates:         { energy: 100 },
+    maintenance:   { Ti: 2, Li: 1 },  // paliwo fuzyjne, osłony
     housing:       0,
     popCost:       0.5,
     maxLevel:      5,
@@ -425,6 +467,7 @@ export const BUILDINGS = {
     energyCost:    20,
     buildTime:     1.5,     // lata gry
     rates:         {},
+    maintenance:   { Ti: 1, Si: 1 },  // filtry, komponenty
     housing:       0,
     popCost:       0.5,
     maxLevel:      5,

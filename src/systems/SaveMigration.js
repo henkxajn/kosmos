@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 14;
+export const CURRENT_VERSION     = 16;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -29,6 +29,8 @@ const MIGRATIONS = {
   11: _migrateV11toV12,
   12: _migrateV12toV13,
   13: _migrateV13toV14,
+  14: _migrateV14toV15,
+  15: _migrateV15toV16,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -405,6 +407,102 @@ function _migrateV13toV14(data) {
       researchProgress: 0,
       researchQueue: [],
     };
+  }
+
+  return data;
+}
+
+// ── Migracja v14 → v15 ──────────────────────────────────────────────────────
+// Dodaje: maintenance do budynków (ujemne stawki), colony_base rates (food+research)
+// Musi zmodyfikować zapisane baseRates/effectiveRates, bo restoreFromSave() ich nie przelicza
+
+function _migrateV14toV15(data) {
+  const c4x = data.civ4x;
+  if (!c4x) return data;
+
+  // Maintenance per budynek — wartości z BuildingsData.js v15
+  const MAINT = {
+    mine:           { Fe: 1 },
+    solar_farm:     { Si: 1 },
+    coal_plant:     { Fe: 1, C: 1 },
+    geothermal:     { Fe: 1 },
+    habitat:        { Fe: 1 },
+    research_station: { Cu: 1, Si: 1 },
+    factory:        { Fe: 1 },
+    smelter:        { Fe: 2, C: 2 },
+    nuclear_plant:  { Ti: 1, Li: 1 },
+    launch_pad:     { Fe: 2, Ti: 1 },
+    shipyard:       { Fe: 3, Ti: 1 },
+    synthesized_food_plant: { Cu: 1 },
+    autonomous_mine: { Fe: 1 },
+    autonomous_solar_farm: { Si: 1 },
+    fusion_reactor: { Ti: 2, Li: 1 },
+    terraformer:    { Ti: 1, Si: 1 },
+  };
+
+  // Iteruj kolonie i dodaj maintenance do baseRates/effectiveRates
+  const colonies = c4x.colonies ?? [];
+  for (const colony of colonies) {
+    const buildings = colony.buildings ?? [];
+    for (const b of buildings) {
+      const maint = MAINT[b.buildingId];
+      const level = b.level ?? 1;
+
+      // Dodaj maintenance jako ujemne stawki
+      if (maint && b.baseRates) {
+        for (const [res, amount] of Object.entries(maint)) {
+          b.baseRates[res] = (b.baseRates[res] ?? 0) - amount * level;
+        }
+      }
+      if (maint && b.effectiveRates) {
+        for (const [res, amount] of Object.entries(maint)) {
+          b.effectiveRates[res] = (b.effectiveRates[res] ?? 0) - amount * level;
+        }
+      }
+
+      // Colony base: dodaj bazową produkcję food+research
+      if (b.buildingId === 'colony_base') {
+        if (b.baseRates) {
+          b.baseRates.food = (b.baseRates.food ?? 0) + 3;
+          b.baseRates.research = (b.baseRates.research ?? 0) + 2;
+        }
+        if (b.effectiveRates) {
+          b.effectiveRates.food = (b.effectiveRates.food ?? 0) + 3;
+          b.effectiveRates.research = (b.effectiveRates.research ?? 0) + 2;
+        }
+      }
+    }
+  }
+
+  return data;
+}
+
+// ── Migracja v15 → v16 ──────────────────────────────────────────────────────
+// Dodaje: requiresSpaceportFirst per kolonia, nowe prefab commodities (spaceport)
+
+function _migrateV15toV16(data) {
+  const c4x = data.civ4x;
+  if (!c4x) return data;
+
+  const colonies = c4x.colonies ?? [];
+  for (const col of colonies) {
+    // Flaga requiresSpaceportFirst — home planet zwolniony, reszta: sprawdź czy ma launch_pad
+    if (col.isHomePlanet) {
+      col.requiresSpaceportFirst = false;
+    } else {
+      const buildings = col.buildings ?? [];
+      const hasPort = buildings.some(b =>
+        b.buildingId === 'launch_pad' || b.buildingId === 'autonomous_spaceport'
+      );
+      col.requiresSpaceportFirst = !hasPort;
+    }
+
+    // Dodaj nowe prefab klucze do inventory
+    const inv = col.resources?.inventory;
+    if (inv) {
+      if (inv.prefab_spaceport === undefined) inv.prefab_spaceport = 0;
+      if (inv.prefab_autonomous_spaceport === undefined) inv.prefab_autonomous_spaceport = 0;
+    }
   }
 
   return data;

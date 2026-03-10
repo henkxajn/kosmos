@@ -224,8 +224,9 @@ export const TECHS = {
     requires:    ['orbital_survey'],
     effects: [
       { type: 'unlockBuilding', buildingId: 'launch_pad' },
+      { type: 'unlockBuilding', buildingId: 'autonomous_spaceport' },
     ],
-    description: 'Rakiety i napęd jonowy — odblokowanie Wyrzutni Rakietowej',
+    description: 'Rakiety i napęd jonowy — odblokowanie Portu Kosmicznego',
   },
 
   // ── Tier 3: Materiały egzotyczne i fizyka kwantowa ────────────────────────

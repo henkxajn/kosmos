@@ -113,7 +113,7 @@ export class ExpeditionSystem {
   // Zwraca { ok, techOk, padOk, crewOk, vesselOk } — powody blokady jeśli !ok
   canLaunch(type = 'mining') {
     const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-    const padOk  = this._hasBuilding('launch_pad');
+    const padOk  = this._hasSpaceport();
     const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
     // Ekspedycje scientific wymagają statku naukowego w hangarze
     const colMgr = window.KOSMOS?.colonyManager;
@@ -125,7 +125,7 @@ export class ExpeditionSystem {
   // Sprawdź czy gracz może wysłać ekspedycję kolonizacyjną
   canLaunchColony(targetId) {
     const techOk   = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
-    const padOk    = this._hasBuilding('launch_pad');
+    const padOk    = this._hasSpaceport();
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const shipOk   = colMgr?.hasShip(activePid, 'colony_ship') ?? false;
@@ -148,7 +148,7 @@ export class ExpeditionSystem {
   // Sprawdź czy gracz może wysłać misję rozpoznawczą
   canLaunchRecon() {
     const techOk   = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-    const padOk    = this._hasBuilding('launch_pad');
+    const padOk    = this._hasSpaceport();
     const crewOk   = (window.KOSMOS?.civSystem?.freePops ?? 0) >= RECON_CREW_COST;
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
@@ -273,6 +273,11 @@ export class ExpeditionSystem {
     return false;
   }
 
+  _hasSpaceport() {
+    const bSys = window.KOSMOS?.buildingSystem;
+    return bSys ? bSys.hasSpaceport() : false;
+  }
+
   // Wyślij nową ekspedycję
   // vesselId: opcjonalny — konkretny statek do przypisania (nowy system)
   _launch(type, targetId, cargo, vesselId) {
@@ -294,7 +299,7 @@ export class ExpeditionSystem {
       const reason = !techOk
         ? 'Brak technologii: Rakietnictwo'
         : !padOk
-          ? 'Brak budynku: Wyrzutnia Rakietowa'
+          ? 'Brak budynku: Port Kosmiczny'
           : !vesselOk
             ? 'Brak statku: Statek Naukowy (zbuduj w Stoczni)'
             : `Brak wolnych POPów (potrzeba ${EXPEDITION_CREW_COST})`;
@@ -402,7 +407,7 @@ export class ExpeditionSystem {
       const reason = !check.techOk
         ? 'Brak technologii: Kolonizacja'
         : !check.padOk
-          ? 'Brak budynku: Wyrzutnia Rakietowa'
+          ? 'Brak budynku: Port Kosmiczny'
           : !check.shipOk
             ? 'Brak statku: Statek Kolonijny (zbuduj w Stoczni)'
             : !check.crewOk
@@ -517,11 +522,11 @@ export class ExpeditionSystem {
 
     if (!isRedispatch) {
       // Standardowy launch z bazy — wymaga launch_pad i POPów
-      const padOk  = this._hasBuilding('launch_pad');
+      const padOk  = this._hasSpaceport();
       const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
 
       if (!padOk) {
-        EventBus.emit('expedition:launchFailed', { reason: 'Brak budynku: Wyrzutnia Rakietowa' });
+        EventBus.emit('expedition:launchFailed', { reason: 'Brak budynku: Port Kosmiczny' });
         return;
       }
       if (!crewOk) {
@@ -743,7 +748,7 @@ export class ExpeditionSystem {
       const reason = !techOk
         ? 'Brak technologii: Rakietnictwo'
         : !padOk
-          ? 'Brak budynku: Wyrzutnia Rakietowa'
+          ? 'Brak budynku: Port Kosmiczny'
           : !vesselOk
             ? 'Brak statku: Statek Naukowy (zbuduj w Stoczni)'
             : `Brak wolnych POPów (potrzeba ${RECON_CREW_COST})`;

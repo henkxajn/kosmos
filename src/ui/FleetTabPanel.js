@@ -11,6 +11,7 @@ import EventBus            from '../core/EventBus.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showRenameModal }    from '../ui/ModalInput.js';
+import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { drawMiniBar }     from '../ui/CivPanelDrawer.js';
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
@@ -361,6 +362,10 @@ export class FleetTabPanel {
           const by = body.physics?.y ?? 0;
           this._mapPanX = -bx;
           this._mapPanY = -by;
+          // Otwórz panel szczegółów ciała (tylko z katalogu)
+          if (zone.type === 'catalog_body') {
+            showBodyDetailModal(body);
+          }
         }
         break;
       }
@@ -760,11 +765,14 @@ export class FleetTabPanel {
       const orbA = body.orbital?.a ?? 0;
       const distHome = DistanceUtils.orbitalFromHomeAU(body);
 
+      // Marker celu
+      const targetMark = body._markedAsTarget ? '🎯' : '';
+
       if (explored) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = isMoon ? C.label : C.bright;
         const namePrefix = isMoon ? '└ ' : '';
-        ctx.fillText(`${namePrefix}${icon} ${_truncate(body.name, isMoon ? 8 : 12)}`, x + PAD + indent, ry + 10);
+        ctx.fillText(`${namePrefix}${icon} ${_truncate(body.name, isMoon ? 8 : 12)}${targetMark}`, x + PAD + indent, ry + 10);
 
         ctx.fillStyle = C.dim;
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;

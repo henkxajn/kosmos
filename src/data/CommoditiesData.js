@@ -213,6 +213,32 @@ export const COMMODITIES = {
     description: 'Prefabrykowana autonomiczna elektrownia słoneczna — natychmiastowy deploy z cargo',
   },
 
+  prefab_spaceport: {
+    id:          'prefab_spaceport',
+    namePL:      'Prefab: Port Kosmiczny',
+    icon:        '📦🚀',
+    tier:        2,
+    recipe:      { Fe: 1200, Ti: 600, Cu: 300 },
+    baseTime:    0.5,
+    weight:      120.0,
+    isPrefab:    true,
+    deploysBuilding: 'launch_pad',
+    description: 'Prefabrykowany port kosmiczny — natychmiastowy deploy z cargo',
+  },
+
+  prefab_autonomous_spaceport: {
+    id:          'prefab_autonomous_spaceport',
+    namePL:      'Prefab: Aut. Port Kosmiczny',
+    icon:        '📦🛰',
+    tier:        2,
+    recipe:      { Fe: 1000, Ti: 500, Cu: 300, Si: 200 },
+    baseTime:    0.5,
+    weight:      130.0,
+    isPrefab:    true,
+    deploysBuilding: 'autonomous_spaceport',
+    description: 'Prefabrykowany autonomiczny port kosmiczny — natychmiastowy deploy z cargo',
+  },
+
   // ── Tier 3 — zaawansowana technologia ─────────────────────────────────────
 
   semiconductors: {
@@ -303,6 +329,8 @@ export const COMMODITY_SHORT = {
   prefab_habitat:     'Pref.Hab.',
   prefab_autonomous_mine: 'Pref.A.Kop.',
   prefab_autonomous_solar_farm: 'Pref.A.Sol.',
+  prefab_spaceport:             'Pref.Port',
+  prefab_autonomous_spaceport:  'Pref.A.Port',
   semiconductors:     'Półprzew.',
   ion_thrusters:      'Sil.jon.',
   fusion_cores:       'Rdz.fuzji',
@@ -319,7 +347,7 @@ export const COMMODITY_BY_TIER = {
   2: ['power_cells', 'electronics', 'food_synthesizers', 'mining_drills', 'hull_armor',
       'habitat_modules', 'water_recyclers', 'robots',
       'prefab_mine', 'prefab_solar_farm', 'prefab_habitat', 'prefab_autonomous_mine',
-      'prefab_autonomous_solar_farm'],
+      'prefab_autonomous_solar_farm', 'prefab_spaceport', 'prefab_autonomous_spaceport'],
   3: ['semiconductors', 'ion_thrusters', 'fusion_cores', 'nanotech_filters'],
   4: ['quantum_cores', 'antimatter_cells'],
 };
@@ -351,6 +379,8 @@ export const STARTING_COMMODITIES = {
   prefab_habitat:     0,
   prefab_autonomous_mine: 0,
   prefab_autonomous_solar_farm: 0,
+  prefab_spaceport:             0,
+  prefab_autonomous_spaceport:  0,
   semiconductors:     0,
   ion_thrusters:      0,
   fusion_cores:       0,

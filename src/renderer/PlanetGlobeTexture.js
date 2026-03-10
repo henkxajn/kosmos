@@ -36,7 +36,7 @@ const CAT_COLORS = {
 const _buildingIcons = new Map();
 const _ICON_IDS = [
   // mining
-  'mine', 'factory', 'smelter', 'launch_pad', 'autonomous_mine',
+  'mine', 'factory', 'smelter', 'launch_pad', 'autonomous_spaceport', 'autonomous_mine',
   // energy
   'solar_farm', 'geothermal', 'nuclear_plant', 'autonomous_solar_farm', 'fusion_reactor',
   // food

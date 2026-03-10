@@ -167,6 +167,19 @@ const ICONS = {
         fill="#FFF0DC" fill-opacity="0.95"/>`,
   },
 
+  // 🛰 Autonomiczny Port Kosmiczny — platforma z kółkiem auto
+  autonomous_spaceport: {
+    color: C_MINING,
+    symbol: `
+      <rect x="28" y="84" width="72" height="12" rx="4"
+        fill="#FFF0DC" fill-opacity="0.95"/>
+      <path d="M64,24 L76,50 L70,50 L70,72 L58,72 L58,50 L52,50 Z"
+        fill="#FFF0DC" fill-opacity="0.95"/>
+      <circle cx="86" cy="30" r="14" fill="none"
+        stroke="#FFF0DC" stroke-opacity="0.8" stroke-width="3"/>
+      <path d="M86,16 L90,22 L82,22 Z" fill="#FFF0DC" fill-opacity="0.8"/>`,
+  },
+
   // ⛏⟳ Kopalnia Autonomiczna — kilof z kółkiem auto
   autonomous_mine: {
     color: C_MINING,

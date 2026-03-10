@@ -57,6 +57,9 @@ export class BuildingSystem {
     // Flaga outpost — pomija POP w build/deploy/upgrade/activate
     this._isOutpost = false;
 
+    // Flaga: nowa kolonia wymaga portu kosmicznego jako pierwszej infrastruktury
+    this._requiresSpaceportFirst = false;
+
     // Flaga RegionSystem — dezaktywuje modyfikator polarny (region.r = 0 zawsze)
     this._isRegionMode = false;
 
@@ -112,6 +115,18 @@ export class BuildingSystem {
   setDeposits(deposits) { this._deposits = deposits; }
   setFactorySystem(fs) { this._factorySystem = fs; }
   setRegionMode(isRegion) { this._isRegionMode = !!isRegion; }
+
+  // ── Sprawdź czy kolonia ma port kosmiczny ────────────────────────────────
+  hasSpaceport() {
+    for (const [, entry] of this._active) {
+      if (entry.building.isSpaceport) return true;
+    }
+    // Sprawdź też w kolejce budowy
+    for (const [, constr] of this._constructionQueue) {
+      if (BUILDINGS[constr.buildingId]?.isSpaceport) return true;
+    }
+    return false;
+  }
 
   // ── Pobierz max level budynku ────────────────────────────────────────────
   getMaxLevel() {
@@ -203,6 +218,15 @@ export class BuildingSystem {
         EventBus.emit('planet:buildResult', { success: false, tile, reason: `Wymaga tech: ${techName}` });
         return;
       }
+    }
+
+    // Reguła "spaceport first" — nowe kolonie wymagają portu kosmicznego
+    if (this._requiresSpaceportFirst && !building.isSpaceport && !isCapital && !this.hasSpaceport()) {
+      EventBus.emit('planet:buildResult', {
+        success: false, tile,
+        reason: 'Najpierw wybuduj Port Kosmiczny!',
+      });
+      return;
     }
 
     // Modyfikator polarny (wyłączony dla RegionSystem — polarność wbudowana w biom)
@@ -509,6 +533,20 @@ export class BuildingSystem {
       return;
     }
 
+    // Nie pozwól na rozbiórkę ostatniego portu kosmicznego
+    if (buildingDef?.isSpaceport && this._requiresSpaceportFirst) {
+      let spaceportCount = 0;
+      for (const [, e] of this._active) {
+        if (e.building.isSpaceport) spaceportCount++;
+      }
+      if (spaceportCount <= 1) {
+        EventBus.emit('planet:demolishResult', {
+          success: false, tile, reason: 'Nie można rozebrać jedynego Portu Kosmicznego!',
+        });
+        return;
+      }
+    }
+
     const entry     = this._active.get(tile.key);
     const buildingId = tile.buildingId;
     const building  = BUILDINGS[buildingId];
@@ -691,6 +729,11 @@ export class BuildingSystem {
       }
     }
 
+    // Reguła "spaceport first" — nowe kolonie wymagają portu kosmicznego
+    if (this._requiresSpaceportFirst && !building.isSpaceport && !building.isCapital && !this.hasSpaceport()) {
+      return { success: false, reason: 'Najpierw zainstaluj Port Kosmiczny!' };
+    }
+
     // Sprawdzenie POPów (pomiń w outpost)
     const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
     if (popCost > 0) {
@@ -859,9 +902,10 @@ export class BuildingSystem {
   _calcBaseRates(building, tile, level = 1) {
     const hasRates = building.rates && hasKeys(building.rates);
     const hasEnergyCost = building.energyCost && building.energyCost > 0;
+    const hasMaintenance = building.maintenance && hasKeys(building.maintenance);
 
-    // Jeśli brak rates I brak energyCost → naprawdę puste
-    if (!hasRates && !hasEnergyCost) return {};
+    // Jeśli brak rates I brak energyCost I brak maintenance → naprawdę puste
+    if (!hasRates && !hasEnergyCost && !hasMaintenance) return {};
 
     const terrain = TERRAIN_TYPES[tile.type];
     const bonuses = terrain?.yieldBonus ?? {};
@@ -893,6 +937,13 @@ export class BuildingSystem {
     // Dodatkowa konsumpcja energii (energyCost z definicji budynku)
     if (hasEnergyCost) {
       base.energy = (base.energy ?? 0) - building.energyCost * levelMult;
+    }
+
+    // Maintenance — stały koszt utrzymania per level (ujemne stawki surowców)
+    if (hasMaintenance) {
+      for (const [res, amount] of Object.entries(building.maintenance)) {
+        base[res] = (base[res] ?? 0) - amount * levelMult;
+      }
     }
 
     return base;

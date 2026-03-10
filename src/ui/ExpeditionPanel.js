@@ -145,7 +145,7 @@ export class ExpeditionPanel {
     if (!civOk || !techOk) {
       this._addText(rowY, civOk ? '🔒 Wymaga: Rakietnictwo' : '', '#cc8844');
     } else if (!padOk) {
-      this._addText(rowY, '🔒 Wymaga: Wyrzutnia Rakietowa', '#cc8844');
+      this._addText(rowY, '🔒 Wymaga: Port Kosmiczny', '#cc8844');
     } else if (!crewOk) {
       this._addText(rowY, '🔒 Brak wolnych POPów (0.5👤)', '#cc8844');
     } else {

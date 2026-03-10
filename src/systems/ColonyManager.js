@@ -267,6 +267,7 @@ export class ColonyManager {
 
     // BuildingSystem per-kolonia — powiązany z własnymi ResourceSystem i CivilizationSystem
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
+    bSys._requiresSpaceportFirst = true;  // nowa kolonia wymaga portu kosmicznego
     bSys.setDeposits(entity.deposits ?? []);
 
     // FactorySystem per-kolonia
@@ -318,6 +319,7 @@ export class ColonyManager {
     // BuildingSystem per-outpost — flaga _isOutpost pomija POP
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
     bSys._isOutpost = true;
+    bSys._requiresSpaceportFirst = true;  // nowa kolonia wymaga portu kosmicznego
     bSys.setDeposits(entity.deposits ?? []);
 
     // FactorySystem per-outpost
@@ -741,6 +743,7 @@ export class ColonyManager {
         allowEmigration:  col.allowEmigration,
         fleet:            col.fleet ?? [],
         shipQueues:       col.shipQueues ?? [],
+        requiresSpaceportFirst: col.buildingSystem?._requiresSpaceportFirst ?? false,
         // Grid regionów — opcjonalny, regenerowany deterministycznie przy otwarciu
         grid:             col.grid ? col.grid.serialize() : null,
       });
@@ -788,6 +791,9 @@ export class ColonyManager {
       // Flaga outpost na BuildingSystem
       const isOutpost = colData.isOutpost ?? false;
       if (isOutpost) bSys._isOutpost = true;
+
+      // Flaga: nowa kolonia wymaga portu kosmicznego
+      bSys._requiresSpaceportFirst = colData.requiresSpaceportFirst ?? false;
 
       // Przywróć grid regionów jeśli zapisany
       let savedGrid = null;
