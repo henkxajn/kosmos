@@ -315,8 +315,12 @@ function _showNext() {
     _showNext();
   };
 
-  btn.addEventListener('click', dismiss);
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();  // nie propaguj do canvas/window
+    dismiss();
+  });
   overlay.addEventListener('click', (e) => {
+    e.stopPropagation();  // nie propaguj do canvas/window
     if (e.target === overlay) dismiss();
   });
 

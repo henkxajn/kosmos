@@ -310,6 +310,7 @@ export function showBodyDetailModal(body) {
 
   // Klik na dimming = zamknij
   overlay.addEventListener('click', (e) => {
+    e.stopPropagation();  // nie propaguj do canvas/window
     if (e.target === overlay) cleanup();
   });
 
