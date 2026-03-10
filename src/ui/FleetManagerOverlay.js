@@ -338,6 +338,14 @@ export class FleetManagerOverlay {
         this._cachedTargets = null;
         break;
       case 'map_body': {
+        // Gdy konfigurator aktywny i czeka na cel → wybierz cel z mapy
+        if (this._missionConfig?.step === 'select') {
+          this._missionConfig.targetId = zone.data.bodyId;
+          this._missionConfig.step = 'confirm';
+          this._mapHoverBody = null;
+          break;
+        }
+        // Normalny klik — pokaż szczegóły ciała
         const bodyEntity = _findBody(zone.data.bodyId);
         if (bodyEntity) {
           EventBus.emit('body:selected', { entity: bodyEntity });
@@ -381,21 +389,7 @@ export class FleetManagerOverlay {
       case 'rename':
         this._renameVessel(zone.data.vesselId);
         break;
-      case 'map_body':
-        // Gdy konfigurator aktywny i czeka na cel → wybierz cel z mapy
-        if (this._missionConfig?.step === 'select') {
-          this._missionConfig.targetId = zone.data.bodyId;
-          this._missionConfig.step = 'confirm';
-          this._mapHoverBody = null;
-          break;
-        }
-        // Klik na ciało — pokaż/ukryj tooltip
-        if (this._mapHoverBody?.bodyId === zone.data.bodyId) {
-          this._mapHoverBody = null;
-        } else {
-          this._mapHoverBody = { bodyId: zone.data.bodyId, screenX: zone.x + zone.w / 2, screenY: zone.y + zone.h };
-        }
-        break;
+      // (duplikat map_body usunięty — obsługa w pierwszym case powyżej)
       case 'map_planet':
         EventBus.emit('camera:focusTarget', { targetId: zone.data.planetId });
         break;
@@ -697,7 +691,7 @@ export class FleetManagerOverlay {
     // ── Nagłówek (h=32) ──────────────────────────────────────
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(this._showAtlas ? 'STAR ATLAS' : 'WIDOK UKŁADU', x + pad, y + 20);
+    ctx.fillText(this._showAtlas ? 'STAR ATLAS' : 'TACTICAL MAP', x + pad, y + 20);
 
     // Zoom label — tylko w trybie mapy
     if (!this._showAtlas) {

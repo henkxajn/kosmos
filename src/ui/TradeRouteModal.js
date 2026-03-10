@@ -138,6 +138,8 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
     btns.appendChild(cancelBtn);
     panel.appendChild(btns);
 
+    // Blokuj propagację kliknięć do canvas/window
+    panel.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
@@ -158,6 +160,6 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
     });
 
     cancelBtn.addEventListener('click', () => close(null));
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
+    overlay.addEventListener('click', (e) => { e.stopPropagation(); if (e.target === overlay) close(null); });
   });
 }

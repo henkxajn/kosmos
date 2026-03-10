@@ -182,6 +182,9 @@ function showTransmission() {
     btn.addEventListener('click', close);
     panel.appendChild(btn);
 
+    // Blokuj propagację kliknięć do canvas/window
+    panel.addEventListener('click', (e) => e.stopPropagation());
+    overlay.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
@@ -266,6 +269,9 @@ function showNameInput(title, defaultValue, placeholder) {
     btn.addEventListener('click', submit);
     panel.appendChild(btn);
 
+    // Blokuj propagację kliknięć do canvas/window
+    panel.addEventListener('click', (e) => e.stopPropagation());
+    overlay.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 

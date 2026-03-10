@@ -110,12 +110,14 @@ export function showRenameModal(currentName) {
     btnRow.appendChild(btnOk);
     panel.appendChild(btnRow);
 
+    // Blokuj propagację kliknięć do canvas/window
+    panel.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
     // ── Cleanup + resolve ─────────────────────────────────────
     const cleanup = () => {
-      document.body.removeChild(overlay);
+      if (overlay.parentNode) document.body.removeChild(overlay);
     };
 
     const submit = () => {
@@ -134,6 +136,7 @@ export function showRenameModal(currentName) {
 
     // Klik na dimming = anuluj
     overlay.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (e.target === overlay) cancel();
     });
 

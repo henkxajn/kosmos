@@ -875,7 +875,7 @@ export class FleetTabPanel {
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
     const zoomPct = Math.round(this._mapZoom * 100);
-    ctx.fillText(`WIDOK UKŁADU SŁONECZNEGO`, x + PAD + 4, cy + 8);
+    ctx.fillText(`TACTICAL MAP`, x + PAD + 4, cy + 8);
 
     // Togglei: TRASY, ZASIĘG
     let tx = x + w - PAD;

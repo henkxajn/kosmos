@@ -236,11 +236,14 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
     btnRow.appendChild(btnSend);
     panel.appendChild(btnRow);
 
+    // Blokuj propagację kliknięć do canvas/window
+    panel.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
     // Klik poza panel = anuluj
     overlay.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (e.target === overlay) close(null);
     });
 

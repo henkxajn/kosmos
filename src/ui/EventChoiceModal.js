@@ -86,6 +86,8 @@ export function showEventNotification(event, colonyName) {
     btn.onclick = close;
     panel.appendChild(btn);
 
+    // Blokuj propagację kliknięć do canvas/window
+    panel.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 

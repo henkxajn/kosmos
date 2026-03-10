@@ -293,11 +293,14 @@ export function showCargoLoadModal(vessel, colony) {
     footer.appendChild(btnClose);
     panel.appendChild(footer);
 
+    // Blokuj propagację kliknięć do canvas/window
+    panel.addEventListener('click', (e) => e.stopPropagation());
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
     // Klik poza panel = zamknij
     overlay.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (e.target === overlay) close();
     });
 
