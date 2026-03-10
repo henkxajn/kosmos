@@ -1182,7 +1182,7 @@ export class ColonyOverlay extends BaseOverlay {
     // POP
     if (b.popCost > 0) {
       const civSys = colony?.civSystem;
-      const freePop = (civSys?.population ?? 0) - (civSys?.employedPop ?? 0);
+      const freePop = civSys?.freePops ?? 0;
       const isOk = freePop >= b.popCost;
       html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} 👤 ${b.popCost} POP (wolni: ${freePop.toFixed(1)})</div>`;
     }
@@ -1266,7 +1266,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (bDef.popCost > 0) {
       const civSys = colony?.civSystem;
-      const freePop = (civSys?.population ?? 0) - (civSys?.employedPop ?? 0);
+      const freePop = civSys?.freePops ?? 0;
       const isOk = freePop >= bDef.popCost;
       html += `<div style="color:${isOk ? THEME.success : THEME.danger}">👤 ${bDef.popCost} POP (wolni: ${freePop.toFixed(1)})</div>`;
     }
