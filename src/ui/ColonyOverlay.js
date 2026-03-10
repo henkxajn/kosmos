@@ -233,7 +233,15 @@ export class ColonyOverlay extends BaseOverlay {
     // Zawsze synchronizuj z aktywną kolonią (mogła się zmienić przez switchActiveColony)
     const colMgr = window.KOSMOS?.colonyManager;
     if (colMgr) {
-      this._selectedColonyId = colMgr.activePlanetId;
+      let pid = colMgr.activePlanetId;
+      // Jeśli aktywna kolonia to outpost (odfiltrowany z listy) — wybierz home lub pierwszą pełną kolonię
+      const col = pid ? colMgr.getColony(pid) : null;
+      if (!col || col.isOutpost) {
+        const full = colMgr.getAllColonies().filter(c => !c.isOutpost);
+        const home = full.find(c => c.isHomePlanet);
+        pid = (home ?? full[0])?.planetId ?? pid;
+      }
+      this._selectedColonyId = pid;
     }
     this._buildMode = false;
     this._pendingBuildingId = null;
