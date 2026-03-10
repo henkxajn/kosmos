@@ -10,6 +10,7 @@
 // Serializacja: version 2 (odróżnia od HexGrid version 1)
 
 import { TERRAIN_TYPES } from './HexTile.js';
+import { getEffectivePlanetType } from '../utils/EntityUtils.js';
 
 // ── Seeded PRNG (Mulberry32) ───────────────────────────────────────────────────
 function makePRNG(seed) {
@@ -307,8 +308,11 @@ export class RegionGenerator {
     const rand = makePRNG(seed);
 
     // 1. Liczba regionów zależna od typu planety
-    const countMap = { rocky: 55, hot_rocky: 30, ice: 30, gas: 12 };
-    const count = countMap[planet.planetType] ?? 14;
+    const countMap = { rocky: 55, hot_rocky: 30, ice: 30, gas: 12, moon: 20, planetoid: 12 };
+    const sizeKey = planet.type === 'moon' ? 'moon'
+                  : planet.type === 'planetoid' ? 'planetoid'
+                  : getEffectivePlanetType(planet);
+    const count = countMap[sizeKey] ?? 14;
 
     // 2. Generuj punkty Fibonacci sphere (równomierne rozmieszczenie)
     const centers = RegionGenerator._fibonacciSphere(count, rand);
@@ -467,7 +471,7 @@ export class RegionGenerator {
     const life     = planet.lifeScore            ?? 0;
     const comp     = planet.composition          ?? {};
     const atmo     = planet.atmosphere           ?? 'none';
-    const type     = planet.planetType           ?? 'rocky';
+    const type     = getEffectivePlanetType(planet);
 
     const base = RegionGenerator._baseWeights(type);
 

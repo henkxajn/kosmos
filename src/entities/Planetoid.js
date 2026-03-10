@@ -34,8 +34,12 @@ export class Planetoid extends CelestialBody {
     // Exploration gating (recon missions)
     this.explored = config.explored || false;
 
-    // Minimalne pola powierzchniowe (kompatybilność z _resolveCollision)
-    this.surface = { hasWater: false, magneticField: 0 };
+    // Pola powierzchniowe (kompatybilność z PlanetMapGenerator / RegionSystem)
+    this.surface = {
+      hasWater:      false,
+      magneticField: 0,
+      temperature:   config.temperatureK ? config.temperatureK - 273 : -100, // °C
+    };
 
     // Skład chemiczny — generator nadpisuje wzbogaconym składem wg typu
     this.composition = config.composition || {

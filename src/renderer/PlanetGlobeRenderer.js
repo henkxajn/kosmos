@@ -22,6 +22,7 @@ import { resolveTextureType, loadPlanetTextures, hashCode, TEXTURE_VARIANTS }
   from './PlanetTextureUtils.js';
 import { BUILDINGS }                   from '../data/BuildingsData.js';
 import { SurfaceMarkers }              from './SurfaceMarkers.js';
+import { getEffectivePlanetType }      from '../utils/EntityUtils.js';
 import { BiomeMapGenerator }           from './BiomeMapGenerator.js';
 import { BuildingMapGenerator }        from './BuildingMapGenerator.js';
 import { PlanetShader }                from './PlanetShader.js';
@@ -140,7 +141,7 @@ export class PlanetGlobeRenderer {
     this._scene.add(dirLight);
 
     // ── Materiał sfery ────────────────────────────────────────────────────
-    this._isGas = (planet.planetType === 'gas');
+    this._isGas = (getEffectivePlanetType(planet) === 'gas');
     const geometry = new THREE.SphereGeometry(1.0, 64, 64);
     let material;
 

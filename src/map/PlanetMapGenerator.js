@@ -17,6 +17,7 @@
 
 import { HexGrid }  from './HexGrid.js';
 import { HexTile }  from './HexTile.js';
+import { getEffectivePlanetType } from '../utils/EntityUtils.js';
 
 // ── Rozmiary siatek per typ planety ───────────────────────────────────────────
 const GRID_SIZES = {
@@ -24,6 +25,8 @@ const GRID_SIZES = {
   hot_rocky: { width:  8, height:  6 },  // gorąca, wulkaniczna
   ice:       { width:  8, height:  6 },  // lodowa
   gas:       { width:  8, height:  6 },  // gazowy — platformy atmosferyczne
+  moon:      { width:  8, height:  6 },  // księżyc
+  planetoid: { width:  6, height:  4 },  // planetoida
 };
 
 // ── Seeded PRNG (Mulberry32) ───────────────────────────────────────────────────
@@ -76,8 +79,11 @@ export class PlanetMapGenerator {
   static generate(planet, homeWorld = false) {
     const rand = makePRNG(hashString(planet.id ?? 'planet_0'));
 
-    // 1. Rozmiar siatki
-    const size  = GRID_SIZES[planet.planetType] ?? GRID_SIZES.rocky;
+    // 1. Rozmiar siatki (moon/planetoid mają osobne rozmiary)
+    const sizeKey = planet.type === 'moon' ? 'moon'
+                  : planet.type === 'planetoid' ? 'planetoid'
+                  : getEffectivePlanetType(planet);
+    const size  = GRID_SIZES[sizeKey] ?? GRID_SIZES.rocky;
     const grid  = new HexGrid(size.width, size.height);
 
     // 2. Wyznacz wagi biomów
@@ -111,7 +117,7 @@ export class PlanetMapGenerator {
     const life      = planet.lifeScore            ?? 0;
     const comp      = planet.composition          ?? {};
     const atmo      = planet.atmosphere           ?? 'none';
-    const type      = planet.planetType           ?? 'rocky';
+    const type      = getEffectivePlanetType(planet);
 
     // Wagi startowe per typ planety
     const base = PlanetMapGenerator._baseWeights(type);

@@ -33,6 +33,15 @@ export class Moon extends CelestialBody {
     this.composition  = config.composition  || null;
     this.temperatureK = config.temperatureK || null;
     this.atmosphere   = config.atmosphere   || 'none';
+
+    // Pola powierzchniowe (kompatybilność z PlanetMapGenerator / RegionSystem)
+    this.surface = {
+      temperature:   this.temperatureK ? this.temperatureK - 273 : -50, // °C
+      hasWater:      this.moonType === 'icy',
+      magneticField: 0,
+    };
+
+    this.lifeScore = 0;
   }
 
   getDisplayInfo() {
