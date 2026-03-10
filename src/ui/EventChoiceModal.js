@@ -30,6 +30,7 @@ export function showEventNotification(event, colonyName) {
   return new Promise(resolve => {
     // Kontener
     const overlay = document.createElement('div');
+    overlay.className = 'kosmos-modal-overlay';
     overlay.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       z-index: 100; display: flex; justify-content: center; align-items: flex-start;
@@ -86,8 +87,10 @@ export function showEventNotification(event, colonyName) {
     btn.onclick = close;
     panel.appendChild(btn);
 
-    // Blokuj propagację kliknięć do canvas/window
-    panel.addEventListener('click', (e) => e.stopPropagation());
+    // Blokuj propagację kliknięć/mousedown do canvas/window
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      panel.addEventListener(evt, (e) => e.stopPropagation());
+    }
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
@@ -171,6 +174,7 @@ export function showImpactNotification(data) {
   return new Promise(resolve => {
     // Kontener
     const overlay = document.createElement('div');
+    overlay.className = 'kosmos-modal-overlay';
     overlay.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       z-index: 100; display: flex; justify-content: center; align-items: flex-start;
@@ -249,6 +253,10 @@ export function showImpactNotification(data) {
     btn.onclick = close;
     panel.appendChild(btn);
 
+    // Blokuj propagację kliknięć/mousedown do canvas/window
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      panel.addEventListener(evt, (e) => e.stopPropagation());
+    }
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 

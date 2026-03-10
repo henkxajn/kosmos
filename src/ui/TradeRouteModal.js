@@ -23,6 +23,7 @@ for (const [id, def] of Object.entries(COMMODITIES))          RES_ICONS[id] = de
 export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
+    overlay.className = 'kosmos-modal-overlay';
     overlay.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(2,4,5,0.75); z-index: 100;
@@ -138,8 +139,11 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
     btns.appendChild(cancelBtn);
     panel.appendChild(btns);
 
-    // Blokuj propagację kliknięć do canvas/window
-    panel.addEventListener('click', (e) => e.stopPropagation());
+    // Blokuj propagację kliknięć/mousedown do canvas/window
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      panel.addEventListener(evt, (e) => e.stopPropagation());
+      overlay.addEventListener(evt, (e) => e.stopPropagation());
+    }
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
@@ -160,6 +164,6 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
     });
 
     cancelBtn.addEventListener('click', () => close(null));
-    overlay.addEventListener('click', (e) => { e.stopPropagation(); if (e.target === overlay) close(null); });
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
   });
 }

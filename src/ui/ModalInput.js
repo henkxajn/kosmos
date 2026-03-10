@@ -14,6 +14,7 @@ export function showRenameModal(currentName) {
   return new Promise((resolve) => {
     // ── Dimming overlay ───────────────────────────────────────
     const overlay = document.createElement('div');
+    overlay.className = 'kosmos-modal-overlay';
     Object.assign(overlay.style, {
       position: 'fixed', inset: '0',
       background: 'rgba(2,4,5,0.75)',
@@ -110,8 +111,11 @@ export function showRenameModal(currentName) {
     btnRow.appendChild(btnOk);
     panel.appendChild(btnRow);
 
-    // Blokuj propagację kliknięć do canvas/window
-    panel.addEventListener('click', (e) => e.stopPropagation());
+    // Blokuj propagację kliknięć/mousedown do canvas/window
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      panel.addEventListener(evt, (e) => e.stopPropagation());
+      overlay.addEventListener(evt, (e) => e.stopPropagation());
+    }
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
@@ -136,7 +140,6 @@ export function showRenameModal(currentName) {
 
     // Klik na dimming = anuluj
     overlay.addEventListener('click', (e) => {
-      e.stopPropagation();
       if (e.target === overlay) cancel();
     });
 

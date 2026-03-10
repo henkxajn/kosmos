@@ -997,11 +997,13 @@ export class GameScene {
 
     window.addEventListener('mousedown', (e) => {
       if (this.planetScene?.isOpen) return;
+      if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
       this.uiManager.handleMouseDown(e.clientX, e.clientY);
     });
 
     window.addEventListener('mouseup', (e) => {
       if (this.planetScene?.isOpen) return;
+      if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
       this.uiManager.handleMouseUp(e.clientX, e.clientY);
     });
 

@@ -302,6 +302,11 @@ function _showNext() {
   btn.style.borderColor = sev.border;
   panel.appendChild(btn);
 
+  // Blokuj propagację kliknięć/mousedown do canvas/window
+  for (const evt of ['click', 'mousedown', 'mouseup']) {
+    panel.addEventListener(evt, (e) => e.stopPropagation());
+    overlay.addEventListener(evt, (e) => e.stopPropagation());
+  }
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
   _active = overlay;
@@ -315,12 +320,8 @@ function _showNext() {
     _showNext();
   };
 
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();  // nie propaguj do canvas/window
-    dismiss();
-  });
+  btn.addEventListener('click', () => dismiss());
   overlay.addEventListener('click', (e) => {
-    e.stopPropagation();  // nie propaguj do canvas/window
     if (e.target === overlay) dismiss();
   });
 

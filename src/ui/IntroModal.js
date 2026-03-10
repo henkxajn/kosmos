@@ -41,6 +41,7 @@ function _glowShadow(hex, spread = 40, alpha = 0.3) {
 
 function _createOverlay() {
   const overlay = document.createElement('div');
+  overlay.className = 'kosmos-modal-overlay';
   Object.assign(overlay.style, {
     position: 'fixed', inset: '0',
     background: 'rgba(2,4,5,0.85)',
@@ -182,9 +183,11 @@ function showTransmission() {
     btn.addEventListener('click', close);
     panel.appendChild(btn);
 
-    // Blokuj propagację kliknięć do canvas/window
-    panel.addEventListener('click', (e) => e.stopPropagation());
-    overlay.addEventListener('click', (e) => e.stopPropagation());
+    // Blokuj propagację kliknięć/mousedown do canvas/window
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      panel.addEventListener(evt, (e) => e.stopPropagation());
+      overlay.addEventListener(evt, (e) => e.stopPropagation());
+    }
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
@@ -269,9 +272,11 @@ function showNameInput(title, defaultValue, placeholder) {
     btn.addEventListener('click', submit);
     panel.appendChild(btn);
 
-    // Blokuj propagację kliknięć do canvas/window
-    panel.addEventListener('click', (e) => e.stopPropagation());
-    overlay.addEventListener('click', (e) => e.stopPropagation());
+    // Blokuj propagację kliknięć/mousedown do canvas/window
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      panel.addEventListener(evt, (e) => e.stopPropagation());
+      overlay.addEventListener(evt, (e) => e.stopPropagation());
+    }
     overlay.appendChild(panel);
     document.body.appendChild(overlay);
 

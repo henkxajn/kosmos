@@ -300,8 +300,11 @@ export function showBodyDetailModal(body) {
   btnRow.appendChild(btnClose);
 
   panel.appendChild(btnRow);
-  // Blokuj propagację kliknięć z panelu do canvas/window
-  panel.addEventListener('click', (e) => e.stopPropagation());
+  // Blokuj propagację kliknięć/mousedown do canvas/window
+  for (const evt of ['click', 'mousedown', 'mouseup']) {
+    panel.addEventListener(evt, (e) => e.stopPropagation());
+    overlay.addEventListener(evt, (e) => e.stopPropagation());
+  }
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
 
@@ -312,7 +315,6 @@ export function showBodyDetailModal(body) {
 
   // Klik na dimming = zamknij
   overlay.addEventListener('click', (e) => {
-    e.stopPropagation();  // nie propaguj do canvas/window
     if (e.target === overlay) cleanup();
   });
 
