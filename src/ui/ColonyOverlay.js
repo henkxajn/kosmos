@@ -233,15 +233,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Zawsze synchronizuj z aktywną kolonią (mogła się zmienić przez switchActiveColony)
     const colMgr = window.KOSMOS?.colonyManager;
     if (colMgr) {
-      let pid = colMgr.activePlanetId;
-      // Jeśli aktywna kolonia to outpost (odfiltrowany z listy) — wybierz home lub pierwszą pełną kolonię
-      const col = pid ? colMgr.getColony(pid) : null;
-      if (!col || col.isOutpost) {
-        const full = colMgr.getAllColonies().filter(c => !c.isOutpost);
-        const home = full.find(c => c.isHomePlanet);
-        pid = (home ?? full[0])?.planetId ?? pid;
-      }
-      this._selectedColonyId = pid;
+      this._selectedColonyId = colMgr.activePlanetId;
     }
     this._buildMode = false;
     this._pendingBuildingId = null;
@@ -605,7 +597,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Dane
     const colMgr = window.KOSMOS?.colonyManager;
-    const colonies = colMgr?.getAllColonies()?.filter(c => !c.isOutpost) ?? [];
+    const colonies = colMgr?.getAllColonies() ?? [];
     const selCol = colonies.find(c => c.planetId === this._selectedColonyId) ?? null;
 
     // Rysuj 3 kolumny
@@ -1564,7 +1556,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (zone.type === 'prevColony' || zone.type === 'nextColony') {
       const colMgr = window.KOSMOS?.colonyManager;
-      const colonies = colMgr?.getAllColonies()?.filter(c => !c.isOutpost) ?? [];
+      const colonies = colMgr?.getAllColonies() ?? [];
       const idx = colonies.findIndex(c => c.planetId === this._selectedColonyId);
       const newIdx = zone.type === 'prevColony' ? idx - 1 : idx + 1;
       if (newIdx >= 0 && newIdx < colonies.length) {
@@ -1773,7 +1765,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (key === 'ArrowLeft' || key === 'ArrowRight') {
       const colMgr = window.KOSMOS?.colonyManager;
-      const colonies = colMgr?.getAllColonies()?.filter(c => !c.isOutpost) ?? [];
+      const colonies = colMgr?.getAllColonies() ?? [];
       const idx = colonies.findIndex(c => c.planetId === this._selectedColonyId);
       const newIdx = key === 'ArrowLeft' ? idx - 1 : idx + 1;
       if (newIdx >= 0 && newIdx < colonies.length) {
