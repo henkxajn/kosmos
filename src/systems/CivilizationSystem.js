@@ -213,10 +213,10 @@ export class CivilizationSystem {
     this.epochIndex           = data.epochIndex           ?? 0;
     this._growthProgress      = data.growthProgress       ?? 0;
     this._starvationYears     = data.starvationYears      ?? 0;
-    // employedPops, lockedPops i housing ustawiane na 0 — zostaną ponownie
-    // obliczone przez BuildingSystem.restoreFromSave() i ExpeditionSystem.restore()
+    // employedPops ustawiane na 0 — zostanie ponownie obliczone przez BuildingSystem.restoreFromSave()
+    // lockedPops przywracane z save (EventBus guard blokuje emisję z ExpeditionSystem.restore())
     this._employedPops        = 0;
-    this._lockedPops          = 0;
+    this._lockedPops          = data.lockedPops ?? 0;
     this.housing              = DEFAULT_HOUSING;
     this._lowMoraleYears      = data.lowMoraleYears       ?? 0;
     this._unrestActive        = data.unrestActive         ?? false;

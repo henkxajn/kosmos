@@ -254,16 +254,8 @@ export class ExpeditionSystem {
       }
     }
 
-    // Przywróć lockedPops — aktywne ekspedycje blokują POPy
-    let totalLocked = 0;
-    for (const exp of this._expeditions) {
-      if (exp.status === 'en_route' || exp.status === 'returning' || exp.status === 'orbiting') {
-        totalLocked += exp.crewCost ?? EXPEDITION_CREW_COST;
-      }
-    }
-    if (totalLocked > 0) {
-      EventBus.emit('civ:lockPops', { amount: totalLocked });
-    }
+    // lockedPops przywracane bezpośrednio w CivilizationSystem.restore() z save
+    // (EventBus guard blokował emisję civ:lockPops bo KOSMOS nie był jeszcze swapnięty)
   }
 
   // ── Prywatne ──────────────────────────────────────────────────────────────
