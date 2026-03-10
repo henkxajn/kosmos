@@ -470,6 +470,27 @@ export class CivilizationSystem {
     });
   }
 
+  /**
+   * Wymuś rejestrację konsumpcji bezpośrednio w podanym ResourceSystem.
+   * Używane po restore(), gdy EventBus guard blokuje emit (KOSMOS jeszcze nie swapnięty).
+   */
+  forceConsumptionSync(resourceSystem) {
+    if (!resourceSystem) return;
+    const pop = this.population;
+    if (pop <= 0) return;
+    this._registeredPop = pop;
+
+    const foodMult = this.techSystem?.getConsumptionMultiplier('food') ??
+                     this.techSystem?.getConsumptionMultiplier('organics') ?? 1.0;
+    const watMult  = this.techSystem?.getConsumptionMultiplier('water') ?? 1.0;
+
+    resourceSystem.registerProducer('civilization_consumption', {
+      food:   -(pop * POP_CONSUMPTION.food   * foodMult),
+      water:  -(pop * POP_CONSUMPTION.water  * watMult),
+      energy: -(pop * POP_CONSUMPTION.energy),
+    });
+  }
+
   // ── Pomocnicze ──────────────────────────────────────────────────────────
 
   _resourceRatio(key) {

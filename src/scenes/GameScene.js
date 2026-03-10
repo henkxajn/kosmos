@@ -190,6 +190,12 @@ export class GameScene {
             this.buildingSystem._gridHeight = gridSizes[hp?.planetType] ?? 10;
             if (hp?.deposits) this.buildingSystem.setDeposits(hp.deposits);
           }
+          // Po swapie KOSMOS: wymuś ponowną rejestrację konsumpcji POP
+          // (przy restore() guard EventBus blokował emit bo KOSMOS wskazywał na stary ResourceSystem)
+          for (const col of this.colonyManager.getAllColonies()) {
+            col.civSystem._registeredPop = -1;
+            col.civSystem.forceConsumptionSync(col.resourceSystem);
+          }
         }, 0);
       }
       if (c4x.missions || c4x.expeditions) this.expeditionSystem.restore(c4x.missions ?? c4x.expeditions);
