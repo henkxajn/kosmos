@@ -1697,10 +1697,10 @@ export class ThreeRenderer {
       if (vessel.mission) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
-        // Cel: outbound → target (live), return → macierzysta (live)
-        // Uwaga: ?? nie łapie NaN, trzeba explicit guard
-        let tx = isReturn ? (m.liveOriginX ?? m.returnTargetX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
-        let ty = isReturn ? (m.liveOriginY ?? m.returnTargetY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+        // Cel: outbound → predykcyjny targetX/Y, return → predykcyjny returnTargetX/Y
+        // (nie live — linia trasy ma być stabilna, nie skakać z orbitą planety)
+        let tx = isReturn ? (m.returnTargetX ?? 0) : (m.targetX ?? 0);
+        let ty = isReturn ? (m.returnTargetY ?? 0) : (m.targetY ?? 0);
         if (isNaN(tx)) tx = 0;
         if (isNaN(ty)) ty = 0;
 
