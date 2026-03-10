@@ -106,6 +106,19 @@ export class TechSystem {
     return m;
   }
 
+  // Łączny mnożnik prędkości statków ze zbadanych technologii napędowych
+  getShipSpeedMultiplier() {
+    let m = 1.0;
+    for (const id of this._researched) {
+      const tech = TECHS[id];
+      if (!tech) continue;
+      for (const fx of tech.effects) {
+        if (fx.type === 'shipSpeedMultiplier') m *= fx.multiplier;
+      }
+    }
+    return m;
+  }
+
   // ── Serializacja ──────────────────────────────────────────────────────────
 
   serialize() {

@@ -509,7 +509,8 @@ export class MissionSystem {
 
     EventBus.emit('civ:lockPops', { amount: COLONY_CREW_COST });
 
-    const colonySpeed = SHIPS.colony_ship?.speedAU ?? 0.8;
+    const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
+    const colonySpeed = (SHIPS.colony_ship?.speedAU ?? 0.48) * techMult;
     const travelTime  = parseFloat(Math.max(MIN_COLONY_TRAVEL, distance / colonySpeed).toFixed(3));
     const departYear  = this._gameYear;
 
@@ -1541,14 +1542,17 @@ export class MissionSystem {
 
   _getShipSpeed(vesselId) {
     const vMgr = window.KOSMOS?.vesselManager;
+    let base = 1.0;
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
       if (vessel) {
         const shipDef = SHIPS[vessel.shipId];
-        return shipDef?.speedAU ?? 1.0;
+        base = shipDef?.speedAU ?? 1.0;
       }
     }
-    return 1.0;
+    // Mnożnik z technologii napędowych
+    const techMult = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
+    return base * techMult;
   }
 
   _isInRange(target, shipId) {

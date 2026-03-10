@@ -1331,7 +1331,8 @@ export class FleetTabPanel {
     cy += 12;
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = sColor; ctx.fillText(statusLabel, x + PAD, cy + 8);
-    ctx.fillStyle = C.bright; ctx.fillText(`${sd?.speedAU ?? '?'} AU/yr`, x + PAD + 140, cy + 8);
+    const _eff = ((sd?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1)).toFixed(1);
+    ctx.fillStyle = C.bright; ctx.fillText(`${_eff} AU/yr`, x + PAD + 140, cy + 8);
     cy += LH + 4;
 
     // Baza
@@ -1596,7 +1597,7 @@ export class FleetTabPanel {
       const dist = Math.max(0.001, DistanceUtils.euclideanAU(_findBody(vessel.colonyId) ?? window.KOSMOS?.homePlanet, target));
       const fuelCost = dist * vessel.fuel.consumption;
       const sd = SHIPS[vessel.shipId];
-      const eta = dist / (sd?.speedAU ?? 1.0);
+      const eta = dist / ((sd?.speedAU ?? 1.0) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1));
 
       ctx.fillStyle = C.text;
       ctx.fillText(`Dystans: ${dist.toFixed(2)} AU`, x + PAD, cy + 8); cy += LH;

@@ -1431,7 +1431,7 @@ export class FleetManagerOverlay {
     const gridH = 30;
     const stats = [
       { label: 'STATUS',      value: this._statusText(vessel), color: (STATUS_COLORS[vessel.position.state] ?? (() => THEME.textSecondary))() },
-      { label: 'PRĘDKOŚĆ',    value: `${ship?.speedAU ?? '?'} AU/r`, color: THEME.textPrimary },
+      { label: 'PRĘDKOŚĆ',    value: `${((ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1)).toFixed(1)} AU/r`, color: THEME.textPrimary },
       { label: 'BAZA',        value: this._baseText(vessel), color: THEME.textPrimary },
       { label: 'DOŚWIADCZENIE', value: this._xpStars(vessel), color: THEME.yellow },
     ];
@@ -2030,7 +2030,8 @@ export class FleetManagerOverlay {
     // Tabela: odległość, czas lotu, paliwo
     const ship = SHIPS[vessel.shipId];
     const distAU = this._calcDistAU(vessel, target);
-    const travelYears = ship?.speedAU > 0 ? distAU / ship.speedAU : Infinity;
+    const effectiveSpeed = (ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+    const travelYears = effectiveSpeed > 0 ? distAU / effectiveSpeed : Infinity;
     const fuelCost = distAU * (vessel.fuel.consumption ?? 0);
 
     const tableData = [

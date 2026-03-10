@@ -22,7 +22,7 @@ export const SHIPS = {
     fuelCapacity:  8,            // max power_cells
     fuelPerAU:     0.4,          // power_cells / AU → zasięg 20 AU
     range:         20,           // AU (fallback = fuelCapacity / fuelPerAU)
-    speedAU:       0.4,          // AU/rok — zwiadowca
+    speedAU:       1.2,          // AU/rok — zwiadowca (bazowa ×3)
     cargoCapacity: 0,            // brak ładowni — statek badawczy
     requires:      'exploration',
     description:   'Orbitalny statek badawczy. Wymagany do ekspedycji naukowych.',
@@ -45,7 +45,7 @@ export const SHIPS = {
     fuelCapacity:  8,            // max power_cells
     fuelPerAU:     0.7,          // power_cells / AU → zasięg ~11.4 AU
     range:         12,           // AU (fallback)
-    speedAU:       0.16,         // AU/rok — ciężki, wolny transportowiec kolonistów
+    speedAU:       0.48,         // AU/rok — ciężki transportowiec kolonistów (bazowa ×3)
     cargoCapacity: 200,          // tony
     requires:      'colonization',
     description:   'Transportuje kolonistów na nowe ciało. Zużywany przy wysłaniu.',
@@ -61,7 +61,7 @@ export const SHIPS = {
     fuelCapacity:  10,           // max power_cells
     fuelPerAU:     0.5,          // power_cells / AU → zasięg 20 AU
     range:         20,           // AU (fallback)
-    speedAU:       0.3,          // AU/rok — pośredni, cargo
+    speedAU:       0.9,          // AU/rok — cargo (bazowa ×3)
     cargoCapacity: 500,          // tony — główny transportowiec
     description:   'Wielki frachtowiec do transferu surowców między koloniami.',
   },

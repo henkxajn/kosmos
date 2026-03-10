@@ -452,8 +452,9 @@ export class ExpeditionSystem {
     // Zablokuj 2 POPy
     EventBus.emit('civ:lockPops', { amount: COLONY_CREW_COST });
 
-    // Czas podróży — colony_ship wolniejszy (speedAU = 0.8)
-    const colonySpeed = SHIPS.colony_ship?.speedAU ?? 0.8;
+    // Czas podróży — colony_ship + mnożnik tech napędowych
+    const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
+    const colonySpeed = (SHIPS.colony_ship?.speedAU ?? 0.48) * techMult;
     const travelTime  = parseFloat(Math.max(MIN_COLONY_TRAVEL, distance / colonySpeed).toFixed(3));
     const departYear  = this._gameYear;
 
@@ -1555,14 +1556,17 @@ export class ExpeditionSystem {
   // Pobierz prędkość statku w AU/rok (z ShipsData lub domyślna)
   _getShipSpeed(vesselId) {
     const vMgr = window.KOSMOS?.vesselManager;
+    let base = 1.0;
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
       if (vessel) {
         const shipDef = SHIPS[vessel.shipId];
-        return shipDef?.speedAU ?? 1.0;
+        base = shipDef?.speedAU ?? 1.0;
       }
     }
-    return 1.0; // domyślna prędkość
+    // Mnożnik z technologii napędowych
+    const techMult = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
+    return base * techMult;
   }
 
   // Sprawdź czy cel jest w zasięgu statku (orbitalna, stabilna metryka)

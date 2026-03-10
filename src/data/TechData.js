@@ -29,6 +29,8 @@
 //     → mnoży bazowy wskaźnik wzrostu populacji
 //   { type: 'consumptionMultiplier', resource, multiplier }
 //     → mnoży konsumpcję surowca przez populację (0.8 = 20% mniej zużycia)
+//   { type: 'shipSpeedMultiplier', multiplier }
+//     → mnoży prędkość WSZYSTKICH statków (stackuje się multiplikatywnie)
 
 export const TECH_BRANCHES = {
   mining:  { namePL: 'Wydobycie',  icon: '⛏', color: '#c8a870' },
@@ -47,7 +49,7 @@ export const TECHS = {
     namePL:      'Metalurgia',
     branch:      'mining',
     tier:        1,
-    cost:        { research: 60 },
+    cost:        { research: 50 },  // gateway tech — tańszy
     requires:    [],
     effects: [
       { type: 'unlockBuilding', buildingId: 'factory' },
@@ -60,12 +62,12 @@ export const TECHS = {
     namePL:      'Zaawansowane Wydobycie',
     branch:      'mining',
     tier:        1,
-    cost:        { research: 80 },
+    cost:        { research: 90 },  // droższy — mining silny sam z siebie
     requires:    [],
     effects: [
-      { type: 'modifier', resource: 'minerals', multiplier: 1.3 },
+      { type: 'modifier', resource: 'minerals', multiplier: 1.2 },
     ],
-    description: 'Ulepszone wiertła i materiały wybuchowe — +30% produkcji minerałów',
+    description: 'Ulepszone wiertła i materiały wybuchowe — +20% produkcji minerałów',
   },
 
   deep_drilling: {
@@ -76,11 +78,11 @@ export const TECHS = {
     cost:        { research: 200 },
     requires:    ['advanced_mining'],
     effects: [
-      { type: 'modifier', resource: 'minerals', multiplier: 1.5 },
+      { type: 'modifier', resource: 'minerals', multiplier: 1.3 },
       { type: 'unlockBuilding', buildingId: 'smelter' },
       { type: 'buildingLevelCap', maxLevel: 7 },
     ],
-    description: 'Wydobycie z głębin + odblokowanie Huty — +50% minerałów, max level 7',
+    description: 'Wydobycie z głębin + odblokowanie Huty — +30% minerałów, max level 7',
   },
 
   advanced_materials: {
@@ -101,12 +103,12 @@ export const TECHS = {
     namePL:      'Wydajne Panele Słoneczne',
     branch:      'energy',
     tier:        1,
-    cost:        { research: 80 },
+    cost:        { research: 70 },  // średni — energia ważna ale nie bottleneck
     requires:    [],
     effects: [
-      { type: 'modifier', resource: 'energy', multiplier: 1.3 },
+      { type: 'modifier', resource: 'energy', multiplier: 1.2 },
     ],
-    description: 'Nowa generacja ogniw fotowoltaicznych — +30% produkcji energii',
+    description: 'Nowa generacja ogniw fotowoltaicznych — +20% produkcji energii',
   },
 
   nuclear_power: {
@@ -117,10 +119,10 @@ export const TECHS = {
     cost:        { research: 220 },
     requires:    ['efficient_solar'],
     effects: [
-      { type: 'modifier', resource: 'energy', multiplier: 1.6 },
+      { type: 'modifier', resource: 'energy', multiplier: 1.4 },
       { type: 'unlockBuilding', buildingId: 'nuclear_plant' },
     ],
-    description: 'Rozszczepienie atomu — +60% energii, odblokowanie Elektrowni Jądrowej',
+    description: 'Rozszczepienie atomu — +40% energii, odblokowanie Elektrowni Jądrowej',
   },
 
   // ── Gałąź: Biologia ───────────────────────────────────────────────────────
@@ -130,13 +132,13 @@ export const TECHS = {
     namePL:      'Hydroponika',
     branch:      'biology',
     tier:        1,
-    cost:        { research: 80 },
+    cost:        { research: 60 },  // tańszy — krytyczny dla przetrwania
     requires:    [],
     effects: [
-      { type: 'modifier', resource: 'organics', multiplier: 1.4 },
+      { type: 'modifier', resource: 'food', multiplier: 1.25 },
       { type: 'consumptionMultiplier', resource: 'water', multiplier: 0.8 },
     ],
-    description: 'Uprawy bez gleby — +40% organiki, −20% zużycia wody',
+    description: 'Uprawy bez gleby — +25% produkcji żywności, −20% zużycia wody',
   },
 
   genetic_engineering: {
@@ -147,10 +149,10 @@ export const TECHS = {
     cost:        { research: 200 },
     requires:    ['hydroponics'],
     effects: [
-      { type: 'modifier', resource: 'organics', multiplier: 1.7 },
-      { type: 'popGrowthBonus', multiplier: 1.3 },
+      { type: 'modifier', resource: 'food', multiplier: 1.5 },
+      { type: 'popGrowthBonus', multiplier: 1.2 },
     ],
-    description: 'GMO i optymalizacja upraw — +70% organiki, +30% wzrost populacji',
+    description: 'GMO i optymalizacja upraw — +50% produkcji żywności, +20% wzrost populacji',
   },
 
   // ── Gałąź: Budownictwo ────────────────────────────────────────────────────
@@ -163,9 +165,9 @@ export const TECHS = {
     cost:        { research: 80 },
     requires:    [],
     effects: [
-      { type: 'moraleBonus', amount: 5 },
+      { type: 'moraleBonus', amount: 3 },
     ],
-    description: 'Efektywna organizacja przestrzeni miejskiej — +5 morale/rok',
+    description: 'Efektywna organizacja przestrzeni miejskiej — +3 morale/rok',
   },
 
   arcology: {
@@ -176,10 +178,10 @@ export const TECHS = {
     cost:        { research: 180 },
     requires:    ['urban_planning'],
     effects: [
-      { type: 'moraleBonus', amount: 8 },
-      { type: 'consumptionMultiplier', resource: 'organics', multiplier: 0.85 },
+      { type: 'moraleBonus', amount: 5 },
+      { type: 'consumptionMultiplier', resource: 'food', multiplier: 0.90 },
     ],
-    description: 'Samowystarczalne megastruktury — +8 morale/rok, −15% zużycia organiki',
+    description: 'Samowystarczalne megastruktury — +5 morale/rok, −10% zużycia żywności',
   },
 
   // ── Gałąź: Kosmos ─────────────────────────────────────────────────────────
@@ -189,7 +191,7 @@ export const TECHS = {
     namePL:      'Kartografia Orbitalna',
     branch:      'space',
     tier:        1,
-    cost:        { research: 100 },
+    cost:        { research: 110 },  // droższy — gateway do space branch
     requires:    [],
     effects: [
       { type: 'modifier', resource: 'research', multiplier: 1.4 },
@@ -205,10 +207,10 @@ export const TECHS = {
     cost:        { research: 250 },
     requires:    ['orbital_survey', 'advanced_mining'],
     effects: [
-      { type: 'modifier', resource: 'minerals', multiplier: 2.0 },
+      { type: 'modifier', resource: 'minerals', multiplier: 1.6 },
       { type: 'buildingLevelCap', maxLevel: 10 },
     ],
-    description: 'Wydobycie z asteroid — podwojenie produkcji minerałów, max level 10',
+    description: 'Wydobycie z asteroid — +60% produkcji minerałów, max level 10',
   },
 
   rocketry: {
@@ -288,5 +290,91 @@ export const TECHS = {
       { type: 'unlockFeature', feature: 'trade_routes' },
     ],
     description: 'Automatyczne drogi handlowe między koloniami — cykliczny transfer nadwyżek',
+  },
+
+  // ── Tier 3+4: Brakujące tech (odblokują istniejące budynki) ─────────────
+
+  food_synthesis: {
+    id:          'food_synthesis',
+    namePL:      'Synteza Żywności',
+    branch:      'biology',
+    tier:        3,
+    cost:        { research: 350 },
+    requires:    ['genetic_engineering'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'synthesized_food_plant' },
+      { type: 'modifier', resource: 'food', multiplier: 1.2 },
+    ],
+    description: 'Sztuczna żywność — odblokowanie Zakładu Syntetycznej Żywności, +20% food',
+  },
+
+  fusion_power: {
+    id:          'fusion_power',
+    namePL:      'Energia Fuzji',
+    branch:      'energy',
+    tier:        3,
+    cost:        { research: 400 },
+    requires:    ['nuclear_power'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'fusion_reactor' },
+      { type: 'modifier', resource: 'energy', multiplier: 1.5 },
+    ],
+    description: 'Termojądrowa fuzja — odblokowanie Reaktora Fuzyjnego, +50% energii',
+  },
+
+  // ── Gałąź napędowa (space + energy) ─────────────────────────────────────
+
+  ion_drives: {
+    id:          'ion_drives',
+    namePL:      'Napędy Jonowe',
+    branch:      'space',
+    tier:        3,
+    cost:        { research: 250 },
+    requires:    ['rocketry'],
+    effects: [
+      { type: 'shipSpeedMultiplier', multiplier: 1.5 },
+    ],
+    description: 'Wydajne silniki jonowe — ×1.5 prędkości wszystkich statków',
+  },
+
+  fusion_drives: {
+    id:          'fusion_drives',
+    namePL:      'Napędy Fuzyjne',
+    branch:      'energy',
+    tier:        3,
+    cost:        { research: 450 },
+    requires:    ['ion_drives', 'fusion_power'],
+    effects: [
+      { type: 'shipSpeedMultiplier', multiplier: 1.5 },
+    ],
+    description: 'Silniki na mikrofuzji — ×1.5 prędkości (łącznie ×2.25 z napędami jonowymi)',
+  },
+
+  antimatter_propulsion: {
+    id:          'antimatter_propulsion',
+    namePL:      'Napęd Antymaterii',
+    branch:      'space',
+    tier:        4,
+    cost:        { research: 700 },
+    requires:    ['fusion_drives', 'quantum_physics'],
+    effects: [
+      { type: 'shipSpeedMultiplier', multiplier: 2.0 },
+    ],
+    description: 'Anihilacja materia-antymateria — ×2 prędkości (łącznie ×4.5)',
+  },
+
+  // ── Tier 4: Terraformacja ──────────────────────────────────────────────
+
+  terraforming: {
+    id:          'terraforming',
+    namePL:      'Terraformacja',
+    branch:      'biology',
+    tier:        4,
+    cost:        { research: 500 },
+    requires:    ['food_synthesis', 'colonization'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'terraformer' },
+    ],
+    description: 'Przekształcanie atmosfer planet — odblokowanie Terraformera (mega-projekt)',
   },
 };
