@@ -141,13 +141,11 @@ export class ExpeditionPanel {
     this._addSeparator(rowY);
     rowY += 6;
 
-    const { techOk, padOk, crewOk } = exSys?.canLaunch() ?? { techOk: false, padOk: false, crewOk: false };
+    const { techOk, padOk } = exSys?.canLaunch() ?? { techOk: false, padOk: false };
     if (!civOk || !techOk) {
       this._addText(rowY, civOk ? '🔒 Wymaga: Rakietnictwo' : '', '#cc8844');
     } else if (!padOk) {
       this._addText(rowY, '🔒 Wymaga: Port Kosmiczny', '#cc8844');
-    } else if (!crewOk) {
-      this._addText(rowY, '🔒 Brak wolnych POPów (0.5👤)', '#cc8844');
     } else {
       this._addSendBtn(rowY);
     }

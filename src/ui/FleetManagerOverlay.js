@@ -21,7 +21,7 @@ import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
-const _BODY_TYPES = ['planet', 'moon', 'asteroid', 'comet', 'planetoid'];
+const _BODY_TYPES = ['star', 'planet', 'moon', 'asteroid', 'comet', 'planetoid'];
 function _findBody(id) {
   if (!id) return null;
   for (const t of _BODY_TYPES) {
@@ -96,9 +96,10 @@ export class FleetManagerOverlay {
 
     // Mapa — zoom i pan
     this._mapZoom = 1.0;          // 1.0 = fit all, >1 = zoom in
-    this._mapPanX = 0;            // pan offset w AU
+    this._mapPanX = 0;            // pan offset w px
     this._mapPanY = 0;
     this._mapBounds = null;       // { x,y,w,h } — bounds obszaru mapy (do scroll detect)
+    this._mapFocusBodyId = null;  // null = gwiazda, inaczej body.id — zoom utrzymuje focus
 
     // Tooltip ciała na mapie
     this._mapHoverBody = null;    // { body, screenX, screenY } — hover info
@@ -124,9 +125,41 @@ export class FleetManagerOverlay {
     this._mapZoom = 1.0;
     this._mapPanX = 0;
     this._mapPanY = 0;
+    this._mapFocusBodyId = null;
     this._mapHoverBody = null;
     this._mapDragging = false;
     this._mapDragWasDrag = false;
+  }
+
+  // Centruj mapę na ciele (AU → px pan offset)
+  // Oblicz maxOrbitAU (do skali mapy)
+  _getMaxOrbitAU() {
+    let maxAU = 1;
+    for (const p of (EntityManager.getByType('planet') ?? [])) {
+      const a = p.orbital?.a ?? 0; if (a > maxAU) maxAU = a;
+    }
+    for (const pd of (EntityManager.getByType('planetoid') ?? [])) {
+      const a = pd.orbital?.a ?? 0; if (a > maxAU) maxAU = a;
+    }
+    return maxAU * 1.15;
+  }
+
+  // Pozycja ciała w AU (body.x/y to px, trzeba przeliczyć)
+  _bodyAU(body) {
+    const bx = (body?.x ?? 0) / GAME_CONFIG.AU_TO_PX;
+    const by = (body?.y ?? 0) / GAME_CONFIG.AU_TO_PX;
+    return { x: bx, y: by };
+  }
+
+  _centerMapOnBody(body) {
+    const mb = this._mapBounds;
+    if (!mb) return;
+    const maxAU = this._getMaxOrbitAU();
+    const baseR = Math.min(mb.w / 2, mb.h / 2) - 20;
+    const auPx = baseR * this._mapZoom / maxAU;
+    const { x: bx, y: by } = this._bodyAU(body);
+    this._mapPanX = -bx * auPx;
+    this._mapPanY = -by * auPx;
   }
 
   // ── Główna metoda rysowania ────────────────────────────────────────────────
@@ -203,6 +236,8 @@ export class FleetManagerOverlay {
     // Szukaj hit zone (reverse — top-most first)
     for (let i = this._hitZones.length - 1; i >= 0; i--) {
       const z = this._hitZones[i];
+      // Pomiń map_vessel — wybór statku tylko z listy po lewej
+      if (z.type === 'map_vessel') continue;
       if (mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
         this._handleHit(z);
         return true;
@@ -234,15 +269,17 @@ export class FleetManagerOverlay {
         const maxScroll = Math.max(0, this._atlasContentH - this._atlasVisibleH);
         this._atlasScrollY = Math.max(0, Math.min(maxScroll, this._atlasScrollY + delta * 0.5));
       } else {
-        // Zoom mapy
+        // Zoom mapy — utrzymaj focus na wybranym ciele (domyślnie gwiazda)
         const zoomFactor = delta > 0 ? 0.85 : 1.18;
         const oldZoom = this._mapZoom;
         this._mapZoom = Math.max(0.3, Math.min(30, this._mapZoom * zoomFactor));
-        const ratio = this._mapZoom / oldZoom;
-        const cx = mb.x + mb.w / 2;
-        const cy = mb.y + mb.h / 2;
-        this._mapPanX = (this._mapPanX + (mx - cx)) * ratio - (mx - cx);
-        this._mapPanY = (this._mapPanY + (my - cy)) * ratio - (my - cy);
+        const focusBody = this._mapFocusBodyId ? _findBody(this._mapFocusBodyId) : null;
+        const { x: fAUx, y: fAUy } = this._bodyAU(focusBody);
+        const maxAU = this._getMaxOrbitAU();
+        const baseR = Math.min(mb.w / 2, mb.h / 2) - 20;
+        const dZoom = oldZoom - this._mapZoom;
+        this._mapPanX += fAUx * baseR * dZoom / maxAU;
+        this._mapPanY += fAUy * baseR * dZoom / maxAU;
       }
       return true;
     }
@@ -345,11 +382,14 @@ export class FleetManagerOverlay {
           this._mapHoverBody = null;
           break;
         }
-        // Normalny klik — pokaż szczegóły ciała
+        // Ustaw focus na klikniętym ciele (zoom utrzyma je na środku)
+        this._mapFocusBodyId = zone.data.bodyId;
+        // Normalny klik — pokaż szczegóły ciała + centruj mapę
         const bodyEntity = _findBody(zone.data.bodyId);
         if (bodyEntity) {
           EventBus.emit('body:selected', { entity: bodyEntity });
           showBodyDetailModal(bodyEntity);
+          this._centerMapOnBody(bodyEntity);
         }
         break;
       }
@@ -390,11 +430,20 @@ export class FleetManagerOverlay {
         this._renameVessel(zone.data.vesselId);
         break;
       // (duplikat map_body usunięty — obsługa w pierwszym case powyżej)
-      case 'map_planet':
+      case 'map_planet': {
+        this._mapFocusBodyId = zone.data.planetId;
+        const planetEntity = _findBody(zone.data.planetId);
+        if (planetEntity) this._centerMapOnBody(planetEntity);
         EventBus.emit('camera:focusTarget', { targetId: zone.data.planetId });
         break;
+      }
       case 'cargo_load':
         this._openCargoLoader(zone.data.vesselId);
+        break;
+      case 'disband':
+        EventBus.emit('fleet:disbandRequest', { vesselId: zone.data.vesselId });
+        this._selectedVesselId = null;
+        this._missionConfig = null;
         break;
     }
   }
@@ -836,7 +885,7 @@ export class FleetManagerOverlay {
       const px = toSx(pd.x), py = toSy(pd.y);
       const r = Math.max(2, 2.5 * Math.min(this._mapZoom, 2));
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = pd.explored ? 'rgba(160,180,200,0.6)' : 'rgba(100,136,170,0.3)';
+      ctx.fillStyle = pd.explored ? 'rgba(255,230,100,0.8)' : 'rgba(100,136,170,0.3)';
       ctx.fill();
       this._hitZones.push({ x: px - 8, y: py - 8, w: 16, h: 16, type: 'map_body', data: { bodyId: pd.id } });
     }
@@ -864,7 +913,7 @@ export class FleetManagerOverlay {
       const px = toSx(m.x), py = toSy(m.y);
       const r = Math.max(2, 2.5 * Math.min(this._mapZoom, 2));
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = m.explored ? 'rgba(180,200,220,0.7)' : 'rgba(120,150,180,0.4)';
+      ctx.fillStyle = m.explored ? 'rgba(255,230,100,0.8)' : 'rgba(120,150,180,0.4)';
       ctx.fill();
       if (this._mapZoom >= 2) {
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
@@ -882,7 +931,7 @@ export class FleetManagerOverlay {
       const r = Math.max(3, (isHome ? 5 : hasColony ? 4 : 3) * Math.min(this._mapZoom, 2.5));
 
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
-      ctx.fillStyle = isHome ? THEME.accent : hasColony ? THEME.mint : THEME.textSecondary;
+      ctx.fillStyle = isHome ? THEME.accent : hasColony ? THEME.mint : p.explored ? 'rgba(255,230,100,0.8)' : THEME.textSecondary;
       ctx.fill();
 
       // Label — widoczny zawsze
@@ -1651,7 +1700,9 @@ export class FleetManagerOverlay {
 
       const allCosts = { ...(ship.cost || {}), ...(ship.commodityCost || {}) };
       const canAfford = Object.entries(allCosts).every(([k, v]) => (inv[k] ?? 0) >= v);
-      const canBuild = canBuildAny && canAfford;
+      const crewCost = ship.crewCost ?? 0;
+      const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
+      const canBuild = canBuildAny && canAfford && hasCrew;
 
       const btnH = 24;
       ctx.fillStyle = canBuild ? 'rgba(0,255,180,0.06)' : 'rgba(20,20,30,0.5)';
@@ -1662,7 +1713,8 @@ export class FleetManagerOverlay {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = canBuild ? THEME.accent : THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText(`${ship.icon} ${ship.namePL}`, x + w / 2, cy + 16);
+      const crewLabel = crewCost > 0 ? ` (${crewCost}👤)` : '';
+      ctx.fillText(`${ship.icon} ${ship.namePL}${crewLabel}`, x + w / 2, cy + 16);
       ctx.textAlign = 'left';
 
       this._hitZones.push({
@@ -1910,6 +1962,38 @@ export class FleetManagerOverlay {
       }
       cy += 4;
     }
+
+    // ── Przycisk DISBAND (tylko zadokowany w kolonii ze stocznią) ──
+    cy += 4;
+    const isDocked = vessel.position.state === 'docked';
+    const colonyId = vessel.colonyId;
+    const colony = colonyId ? colMgr?.getColony(colonyId) : null;
+    const hasShipyard = colony ? colMgr._getShipyardLevel(colony) > 0 : false;
+    const canDisband = isDocked && hasShipyard;
+
+    const disbandW = w - pad * 2;
+    const disbandH = 24;
+    const dbx = x + pad;
+
+    if (canDisband) {
+      ctx.fillStyle = 'rgba(255,60,60,0.10)';
+      ctx.fillRect(dbx, cy, disbandW, disbandH);
+      ctx.strokeStyle = THEME.danger ?? '#ff4444';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(dbx, cy, disbandW, disbandH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger ?? '#ff4444';
+      ctx.fillText('🗑 Disband (zwrot 75%)', dbx + 8, cy + 16);
+      this._hitZones.push({
+        x: dbx, y: cy, w: disbandW, h: disbandH,
+        type: 'disband', data: { vesselId: vessel.id },
+      });
+    } else if (isDocked && !hasShipyard) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText('🗑 Disband — wymaga stoczni', dbx, cy + 14);
+    }
+    cy += disbandH + 4;
 
     return cy;
   }

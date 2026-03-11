@@ -55,7 +55,7 @@ export const BASE_MINE_RATE = 10; // jednostek surowca / rok / poziom kopalni pr
 
 // ── Konsumpcja POP per rok ─────────────────────────────────────────────────
 export const POP_CONSUMPTION = {
-  food:   3.0,  // z farm lub Food Synthesizers
+  food:   2.5,  // z farm lub Food Synthesizers (obniżone z 3.0 — szerszy margines)
   water:  1.5,  // ze studni
   energy: 1.0,  // z bilansu energii (flow)
 };

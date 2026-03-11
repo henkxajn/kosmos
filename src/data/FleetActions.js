@@ -38,7 +38,6 @@ const ACTIONS = {
       if (!check.ok) {
         if (!check.techOk)   return { ok: false, reason: 'Brak tech: Rakietnictwo' };
         if (!check.padOk)    return { ok: false, reason: 'Brak Wyrzutni' };
-        if (!check.crewOk)   return { ok: false, reason: 'Brak wolnych POPów' };
         if (!check.vesselOk) return { ok: false, reason: 'Wymaga Statku Naukowego' };
       }
       if (vessel.shipId !== 'science_vessel') {
@@ -66,7 +65,6 @@ const ACTIONS = {
       if (!check.ok) {
         if (!check.techOk)   return { ok: false, reason: 'Brak tech: Rakietnictwo' };
         if (!check.padOk)    return { ok: false, reason: 'Brak Wyrzutni' };
-        if (!check.crewOk)   return { ok: false, reason: 'Brak wolnych POPów' };
         if (!check.vesselOk) return { ok: false, reason: 'Wymaga Statku Naukowego' };
       }
       if (vessel.shipId !== 'science_vessel') {
@@ -95,7 +93,6 @@ const ACTIONS = {
       if (!check.ok) {
         if (!check.techOk)   return { ok: false, reason: 'Brak tech: Rakietnictwo' };
         if (!check.padOk)    return { ok: false, reason: 'Brak Wyrzutni' };
-        if (!check.crewOk)   return { ok: false, reason: 'Brak wolnych POPów' };
         if (!check.vesselOk) return { ok: false, reason: 'Wymaga Statku Naukowego' };
       }
       if (vessel.shipId !== 'science_vessel') {
@@ -125,7 +122,6 @@ const ACTIONS = {
       if (!check.ok) {
         if (!check.techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
         if (!check.padOk)  return { ok: false, reason: 'Brak Wyrzutni' };
-        if (!check.crewOk) return { ok: false, reason: 'Brak wolnych POPów' };
       }
       return { ok: true };
     },
@@ -150,8 +146,6 @@ const ACTIONS = {
       if (vessel.status !== 'idle' && vessel.status !== 'on_mission' && vessel.status !== 'refueling') {
         return { ok: false, reason: 'Statek zajęty' };
       }
-      const ship = SHIPS[vessel.shipId];
-      if (!ship?.cargoCapacity) return { ok: false, reason: 'Brak ładowni' };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -181,7 +175,6 @@ const ACTIONS = {
         if (!check.ok) {
           if (!check.techOk)      return { ok: false, reason: 'Brak tech: Kolonizacja' };
           if (!check.padOk)       return { ok: false, reason: 'Brak Wyrzutni' };
-          if (!check.crewOk)      return { ok: false, reason: 'Brak wolnych POPów (2)' };
           if (!check.exploredOk)  return { ok: false, reason: 'Cel niezbadany' };
           if (!check.typeOk)      return { ok: false, reason: 'Cel nie nadaje się' };
           if (!check.notColonized) return { ok: false, reason: 'Cel ma kolonię' };
@@ -307,22 +300,16 @@ export function getAvailableActions(vessel, state) {
     if (vessel.shipId === 'science_vessel') {
       result.push(_check(ACTIONS.survey, vessel, state));
       result.push(_check(ACTIONS.deep_scan, vessel, state));
-      result.push(_check(ACTIONS.scientific, vessel, state));
     }
     if (vessel.shipId === 'colony_ship') {
       result.push(_check(ACTIONS.colonize, vessel, state));
     }
-    if (shipDef?.cargoCapacity > 0) {
-      result.push(_check(ACTIONS.transport, vessel, state));
-    }
+    result.push(_check(ACTIONS.transport, vessel, state));
   } else if (vessel.position.state === 'orbiting') {
-    // Na orbicie — powrót, redirect, transport (jeśli ma cargo)
+    // Na orbicie — powrót, redirect, transport
     result.push(_check(ACTIONS.return_home, vessel, state));
     result.push(_check(ACTIONS.redirect, vessel, state));
-    const shipDef = SHIPS[vessel.shipId];
-    if (shipDef?.cargoCapacity > 0) {
-      result.push(_check(ACTIONS.transport, vessel, state));
-    }
+    result.push(_check(ACTIONS.transport, vessel, state));
   } else if (vessel.position.state === 'in_transit') {
     // W locie — tylko powrót
     result.push(_check(ACTIONS.return_home, vessel, state));

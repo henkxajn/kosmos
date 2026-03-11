@@ -477,8 +477,24 @@ export class ColonyManager {
       return { ok: false, reason };
     }
 
+    // Sprawdź POPy (załoga blokowana przy budowie)
+    const crewCost = ship.crewCost ?? 0;
+    if (crewCost > 0) {
+      const freePops = colony.civSystem?.freePops ?? 0;
+      if (freePops < crewCost) {
+        const reason = `Brak wolnych POPów (potrzeba ${crewCost})`;
+        EventBus.emit('fleet:buildFailed', { reason });
+        return { ok: false, reason };
+      }
+    }
+
     // Pobierz zasoby
     colony.resourceSystem.spend(allCosts);
+
+    // Zablokuj POPy — załoga przydzielona do statku
+    if (crewCost > 0) {
+      EventBus.emit('civ:lockPops', { amount: crewCost });
+    }
 
     // Dodaj do kolejki budowy
     colony.shipQueues.push({
@@ -561,18 +577,33 @@ export class ColonyManager {
     const colony = this.getColony(vessel.colonyId);
     if (!colony) return;
 
+    // Wymaga stoczni w kolonii
+    if (this._getShipyardLevel(colony) === 0) return;
+
     const shipDef = SHIPS[vessel.shipId];
     if (!shipDef) return;
 
-    // Zwrot surowców i commodities (100%)
-    const refund = { ...(shipDef.cost || {}), ...(shipDef.commodityCost || {}) };
-    // Dodaj cargo statku do zwrotu
+    // Zwrot 75% surowców i commodities budowy
+    const refund = {};
+    for (const [resId, qty] of Object.entries(shipDef.cost || {})) {
+      refund[resId] = Math.floor(qty * 0.75);
+    }
+    for (const [comId, qty] of Object.entries(shipDef.commodityCost || {})) {
+      refund[comId] = Math.floor(qty * 0.75);
+    }
+    // Cargo statku — zwrot 100%
     if (vessel.cargo) {
       for (const [resId, qty] of Object.entries(vessel.cargo)) {
         if (qty > 0) refund[resId] = (refund[resId] ?? 0) + qty;
       }
     }
     colony.resourceSystem.receive(refund);
+
+    // Odblokuj POPy (załoga wraca)
+    const crewCost = SHIPS[vessel.shipId]?.crewCost ?? 0;
+    if (crewCost > 0) {
+      EventBus.emit('civ:unlockPops', { amount: crewCost });
+    }
 
     // Usuń statek
     const fleetIdx = colony.fleet.indexOf(vesselId);

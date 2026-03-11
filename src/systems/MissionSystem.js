@@ -122,11 +122,10 @@ export class MissionSystem {
   canLaunch(type = 'mining') {
     const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
     const padOk  = this._hasSpaceport();
-    const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
     const colMgr = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const vesselOk = type !== 'scientific' || (colMgr?.hasShip(activePid, 'science_vessel') ?? false);
-    return { ok: techOk && padOk && crewOk && vesselOk, techOk, padOk, crewOk, vesselOk };
+    return { ok: techOk && padOk && vesselOk, techOk, padOk, crewOk: true, vesselOk };
   }
 
   // Sprawdź czy gracz może wysłać ekspedycję kolonizacyjną
@@ -136,7 +135,6 @@ export class MissionSystem {
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const shipOk   = colMgr?.hasShip(activePid, 'colony_ship') ?? false;
-    const crewOk   = (window.KOSMOS?.civSystem?.freePops ?? 0) >= COLONY_CREW_COST;
     const target   = this._findTarget(targetId);
     const exploredOk = target?.explored === true;
     const typeOk   = target
@@ -145,8 +143,8 @@ export class MissionSystem {
       : false;
     const notColonized = colMgr ? !colMgr.hasColony(targetId) : true;
     return {
-      ok: techOk && padOk && shipOk && crewOk && exploredOk && typeOk && notColonized,
-      techOk, padOk, shipOk, crewOk, exploredOk, typeOk, notColonized
+      ok: techOk && padOk && shipOk && exploredOk && typeOk && notColonized,
+      techOk, padOk, shipOk, crewOk: true, exploredOk, typeOk, notColonized
     };
   }
 
@@ -154,11 +152,10 @@ export class MissionSystem {
   canLaunchRecon() {
     const techOk   = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
     const padOk    = this._hasSpaceport();
-    const crewOk   = (window.KOSMOS?.civSystem?.freePops ?? 0) >= RECON_CREW_COST;
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const vesselOk = colMgr?.hasShip(activePid, 'science_vessel') ?? false;
-    return { ok: techOk && padOk && crewOk && vesselOk, techOk, padOk, crewOk, vesselOk };
+    return { ok: techOk && padOk && vesselOk, techOk, padOk, crewOk: true, vesselOk };
   }
 
   // Liczba niezbadanych ciał wg typu
@@ -314,16 +311,8 @@ export class MissionSystem {
       }
     }
 
-    // Przywróć lockedPops — aktywne misje blokują POPy
-    let totalLocked = 0;
-    for (const exp of this._missions) {
-      if (exp.status === 'en_route' || exp.status === 'returning' || exp.status === 'orbiting') {
-        totalLocked += exp.crewCost ?? EXPEDITION_CREW_COST;
-      }
-    }
-    if (totalLocked > 0) {
-      EventBus.emit('civ:lockPops', { amount: totalLocked });
-    }
+    // POPy blokowane przy budowie statku (ColonyManager) — nie przy starcie misji
+    // lockedPops przywracane z save CivilizationSystem
   }
 
   // ── Prywatne ──────────────────────────────────────────────────────────────
@@ -362,15 +351,13 @@ export class MissionSystem {
     }
 
     // mining/scientific
-    const { ok, techOk, padOk, crewOk, vesselOk } = this.canLaunch(type);
+    const { ok, techOk, padOk, vesselOk } = this.canLaunch(type);
     if (!ok) {
       const reason = !techOk
         ? 'Brak technologii: Rakietnictwo'
         : !padOk
           ? 'Brak budynku: Port Kosmiczny'
-          : !vesselOk
-            ? 'Brak statku: Statek Naukowy (zbuduj w Stoczni)'
-            : `Brak wolnych POPów (potrzeba ${EXPEDITION_CREW_COST})`;
+          : 'Brak statku: Statek Naukowy (zbuduj w Stoczni)';
       this._emit('mission:failed', 'expedition:launchFailed', { reason });
       return;
     }
@@ -418,8 +405,6 @@ export class MissionSystem {
       }
       this.resourceSystem.spend(LAUNCH_COST);
     }
-
-    EventBus.emit('civ:lockPops', { amount: EXPEDITION_CREW_COST });
 
     const shipSpeed  = this._getShipSpeed(assignedVesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
@@ -470,13 +455,11 @@ export class MissionSystem {
           ? 'Brak budynku: Port Kosmiczny'
           : !check.shipOk
             ? 'Brak statku: Statek Kolonijny (zbuduj w Stoczni)'
-            : !check.crewOk
-              ? `Brak wolnych POPów (potrzeba ${COLONY_CREW_COST})`
-              : !check.exploredOk
-                ? 'Cel nie został zbadany (wyślij najpierw ekspedycję naukową)'
-                : !check.typeOk
-                  ? 'Cel nie nadaje się do kolonizacji (wymagane skaliste ciało)'
-                  : 'Cel już posiada kolonię';
+            : !check.exploredOk
+              ? 'Cel nie został zbadany (wyślij najpierw ekspedycję naukową)'
+              : !check.typeOk
+                ? 'Cel nie nadaje się do kolonizacji (wymagane skaliste ciało)'
+                : 'Cel już posiada kolonię';
       this._emit('mission:failed', 'expedition:launchFailed', { reason });
       return;
     }
@@ -514,8 +497,6 @@ export class MissionSystem {
       }
       this.resourceSystem.spend(COLONY_LAUNCH_COST);
     }
-
-    EventBus.emit('civ:lockPops', { amount: COLONY_CREW_COST });
 
     const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
     const colonySpeed = (SHIPS.colony_ship?.speedAU ?? 0.48) * techMult;
@@ -559,10 +540,8 @@ export class MissionSystem {
 
   // ── Transport zasobów ──────────────────────────────────────────────────────
   _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false) {
-    if (!cargo || Object.keys(cargo).length === 0) {
-      this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak ładunku do transportu' });
-      return;
-    }
+    // Pusty cargo dozwolony — transport = też relokacja statku
+    if (!cargo) cargo = {};
 
     const vMgr   = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
@@ -576,16 +555,11 @@ export class MissionSystem {
     const isRedispatch = isOrbiting || isRemoteDocked;
 
     if (!isRedispatch) {
-      // Standardowy launch z bazy — wymaga launch_pad i POPów
+      // Standardowy launch z bazy — wymaga launch_pad
       const padOk  = this._hasSpaceport();
-      const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
 
       if (!padOk) {
         this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak budynku: Port Kosmiczny' });
-        return;
-      }
-      if (!crewOk) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: `Brak wolnych POPów (potrzeba ${EXPEDITION_CREW_COST})` });
         return;
       }
 
@@ -596,16 +570,12 @@ export class MissionSystem {
         }
         if (this.resourceSystem) this.resourceSystem.spend(cargo);
       }
-
-      // Zablokuj POPy na czas transportu
-      EventBus.emit('civ:lockPops', { amount: EXPEDITION_CREW_COST });
     }
-    // Redispatch: POPy już zablokowane z oryginalnej misji, launch_pad nie potrzebny
 
-    // Oblicz dystans — z bieżącej pozycji statku (orbiting/remote) lub z bazy (standard)
+    // Oblicz dystans — zawsze z bieżącej pozycji statku do celu
     const target = this._findTarget(targetId);
     let distance;
-    if (isRedispatch && vessel) {
+    if (vessel) {
       const targetEntity = target || { x: 0, y: 0 };
       distance = Math.max(0.001, DistanceUtils.euclideanAU(
         { x: vessel.position.x, y: vessel.position.y },
@@ -626,15 +596,12 @@ export class MissionSystem {
       }
     }
 
-    // Zamknij starą ekspedycję — przenieś crewCost do nowej misji
-    let inheritedCrewCost = 0;
+    // Zamknij starą ekspedycję
     if (isRedispatch && vesselId) {
       const oldExp = this._missions.find(e =>
         e.vesselId === vesselId && (e.status === 'orbiting' || e.status === 'en_route')
       );
       if (oldExp) {
-        inheritedCrewCost = oldExp.crewCost ?? 0;
-        oldExp.crewCost = 0; // POPy przejmuje nowa misja
         oldExp.status = 'completed';
       }
     }
@@ -654,7 +621,7 @@ export class MissionSystem {
       returnYear:  departYear + travelTime * 2,
       distance:    parseFloat(distance.toFixed(2)),
       travelTime,
-      crewCost:    isRedispatch ? inheritedCrewCost : EXPEDITION_CREW_COST,
+      crewCost:    EXPEDITION_CREW_COST,
       vesselId:    vesselId ?? null,
       cargo:       { ...cargo },
       status:      'en_route',
@@ -792,15 +759,13 @@ export class MissionSystem {
 
   // ── Recon (survey / deep_scan) ────────────────────────────────────────────
   _launchRecon(scope, vesselId) {
-    const { ok, techOk, padOk, crewOk, vesselOk } = this.canLaunchRecon();
+    const { ok, techOk, padOk, vesselOk } = this.canLaunchRecon();
     if (!ok) {
       const reason = !techOk
         ? 'Brak technologii: Rakietnictwo'
         : !padOk
           ? 'Brak budynku: Port Kosmiczny'
-          : !vesselOk
-            ? 'Brak statku: Statek Naukowy (zbuduj w Stoczni)'
-            : `Brak wolnych POPów (potrzeba ${RECON_CREW_COST})`;
+          : 'Brak statku: Statek Naukowy (zbuduj w Stoczni)';
       this._emit('mission:failed', 'expedition:launchFailed', { reason });
       return;
     }
@@ -831,8 +796,6 @@ export class MissionSystem {
       }
       this.resourceSystem.spend(RECON_COST);
     }
-
-    EventBus.emit('civ:lockPops', { amount: RECON_CREW_COST });
 
     const departYear = this._gameYear;
     const vMgr = window.KOSMOS?.vesselManager;
@@ -962,8 +925,6 @@ export class MissionSystem {
       this.resourceSystem.spend(RECON_COST);
     }
 
-    EventBus.emit('civ:lockPops', { amount: RECON_CREW_COST });
-
     const shipSpeed = this._getShipSpeed(vesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
     const departYear = this._gameYear;
@@ -1012,7 +973,7 @@ export class MissionSystem {
         changed = true;
       } else if (exp.status === 'returning' && exp.returnYear && this._gameYear >= exp.returnYear) {
         exp.status = 'completed';
-        EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
+        // POPy zablokowane przy budowie statku — odblokowane tylko przy disband/zniszczeniu
         if (exp.vesselId) {
           const vMgr = window.KOSMOS?.vesselManager;
           if (vMgr) vMgr.dockAtColony(exp.vesselId);
@@ -1214,27 +1175,61 @@ export class MissionSystem {
     const targetCol = colMgr?.getColony(exp.targetId);
 
     if (targetCol) {
+      // Dostarcz cargo — prefaby zostają na statku, reszta do inventory kolonii
+      const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+
       if (exp.cargo) {
-        targetCol.resourceSystem.receive(exp.cargo);
+        const deliverable = {};
+        for (const [key, val] of Object.entries(exp.cargo)) {
+          const com = COMMODITIES[key];
+          if (com?.isPrefab) continue; // prefaby nie do inventory
+          if (val > 0) deliverable[key] = val;
+        }
+        targetCol.resourceSystem.receive(deliverable);
+        exp.gained = deliverable;
+      } else {
+        exp.gained = {};
       }
-      exp.gained = exp.cargo || {};
 
       // Stats: resourcesHauled
-      if (exp.vesselId && vMgr) {
-        const vessel = vMgr.getVessel(exp.vesselId);
-        if (vessel?.stats && exp.cargo) {
-          for (const v of Object.values(exp.cargo)) vessel.stats.resourcesHauled += v;
+      if (vessel?.stats && exp.cargo) {
+        for (const v of Object.values(exp.cargo)) vessel.stats.resourcesHauled += v;
+      }
+
+      // Rozdziel cargo statku: prefaby zostają, reszta dostarczona
+      if (vessel) {
+        const prefabsOnShip = {};
+        let prefabWeight = 0;
+        if (vessel.cargo) {
+          for (const [comId, qty] of Object.entries(vessel.cargo)) {
+            if (qty <= 0) continue;
+            const com = COMMODITIES[comId];
+            if (com?.isPrefab) {
+              prefabsOnShip[comId] = qty;
+              prefabWeight += qty * (com.weight ?? 1);
+            }
+          }
         }
-        // Wyczyść cargo statku
-        if (vessel) {
-          vessel.cargo = {};
-          vessel.cargoUsed = 0;
-        }
+        vessel.cargo = prefabsOnShip;
+        vessel.cargoUsed = prefabWeight;
       }
       exp.cargo = null;
 
-      exp.status = 'orbiting';
-      if (exp.vesselId && vMgr) vMgr.arriveAtTarget(exp.vesselId);
+      // Dock statek w kolonii docelowej + transfer floty
+      exp.status = 'completed';
+
+      if (exp.vesselId && vMgr) {
+        const oldColonyId = vessel?.colonyId;
+        const oldCol = oldColonyId ? colMgr.getColony(oldColonyId) : null;
+        if (oldCol) {
+          const idx = oldCol.fleet.indexOf(exp.vesselId);
+          if (idx !== -1) oldCol.fleet.splice(idx, 1);
+        }
+        vMgr.dockAtColony(exp.vesselId, exp.targetId);
+        if (!targetCol.fleet.includes(exp.vesselId)) {
+          targetCol.fleet.push(exp.vesselId);
+        }
+      }
     } else if (colMgr) {
       // Cel BEZ kolonii — utwórz outpost
       const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
@@ -1256,8 +1251,15 @@ export class MissionSystem {
 
       if (exp.cargo) {
         for (const [key, val] of Object.entries(exp.cargo)) {
+          const com = COMMODITIES[key];
+          if (com?.isPrefab) continue; // prefaby nie do outpostu
           if (val > 0) outpostResources[key] = (outpostResources[key] ?? 0) + val;
         }
+      }
+
+      // Stats: resourcesHauled
+      if (vessel?.stats) {
+        for (const v of Object.values(outpostResources)) vessel.stats.resourcesHauled += v;
       }
 
       const gameYear = Math.floor(this._gameYear);
@@ -1275,7 +1277,9 @@ export class MissionSystem {
         if (vessel) {
           vessel.cargo = prefabsOnShip;
           let used = 0;
-          for (const qty of Object.values(prefabsOnShip)) used += qty;
+          for (const [comId, qty] of Object.entries(prefabsOnShip)) {
+            used += qty * (COMMODITIES[comId]?.weight ?? 1);
+          }
           vessel.cargoUsed = used;
         }
 
@@ -1286,7 +1290,7 @@ export class MissionSystem {
       }
 
       exp.gained = outpostResources;
-      exp.status = 'orbiting';
+      exp.status = 'completed';
     }
 
     this._emit('mission:arrived', 'expedition:arrived', {

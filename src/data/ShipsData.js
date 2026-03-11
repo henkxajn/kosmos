@@ -24,6 +24,7 @@ export const SHIPS = {
     range:         20,           // AU (fallback = fuelCapacity / fuelPerAU)
     speedAU:       1.2,          // AU/rok — zwiadowca (bazowa ×3)
     cargoCapacity: 0,            // brak ładowni — statek badawczy
+    crewCost:      0.5,          // POP zablokowany przy budowie statku
     requires:      'exploration',
     description:   'Orbitalny statek badawczy. Wymagany do ekspedycji naukowych.',
   },
@@ -47,6 +48,7 @@ export const SHIPS = {
     range:         12,           // AU (fallback)
     speedAU:       0.48,         // AU/rok — ciężki transportowiec kolonistów (bazowa ×3)
     cargoCapacity: 200,          // tony
+    crewCost:      2.0,          // POPy zablokowane przy budowie statku
     requires:      'colonization',
     description:   'Transportuje kolonistów na nowe ciało. Zużywany przy wysłaniu.',
   },
@@ -63,6 +65,7 @@ export const SHIPS = {
     range:         20,           // AU (fallback)
     speedAU:       0.9,          // AU/rok — cargo (bazowa ×3)
     cargoCapacity: 500,          // tony — główny transportowiec
+    crewCost:      0.5,          // POP zablokowany przy budowie statku
     description:   'Wielki frachtowiec do transferu surowców między koloniami.',
   },
 

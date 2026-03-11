@@ -288,6 +288,13 @@ export class ThreeRenderer {
     EventBus.on('vessel:launched', ({ vessel }) => {
       this._addVesselSprite(vessel);
     });
+    EventBus.on('vessel:returning', ({ vessel }) => {
+      // Przebuduj sprite + linię trasy aby celowała w punkt powrotu
+      if (this._vessels.has(vessel.id)) {
+        this._removeVesselSprite(vessel.id);
+      }
+      this._addVesselSprite(vessel);
+    });
     EventBus.on('vessel:docked', ({ vessel }) => {
       this._removeVesselSprite(vessel.id);
     });
@@ -1727,6 +1734,12 @@ export class ThreeRenderer {
           entry.routeLine.geometry.attributes.position.needsUpdate = true;
           entry.routeLine.computeLineDistances();
         }
+      } else if (entry.routeLine) {
+        // Misja zakończona — usuń linię trasy
+        this.scene.remove(entry.routeLine);
+        entry.routeLine.geometry.dispose();
+        entry.routeLine.material.dispose();
+        entry.routeLine = null;
       }
     }
   }

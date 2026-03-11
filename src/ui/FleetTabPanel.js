@@ -194,6 +194,8 @@ export class FleetTabPanel {
 
     for (let i = this._hitZones.length - 1; i >= 0; i--) {
       const z = this._hitZones[i];
+      // Pomiń map_vessel — wybór statku tylko z listy po lewej
+      if (z.type === 'map_vessel') continue;
       if (mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
         this._handleHit(z);
         return true;
@@ -345,10 +347,7 @@ export class FleetTabPanel {
         break;
 
       case 'map_vessel':
-        this._selectedVesselId = zone.data.vesselId;
-        this._missionConfig = null;
-        this._targetScrollOffset = 0;
-        this._rightScrollY = 0;
+        // Wybór statku na mapie wyłączony — tylko z listy po lewej
         break;
 
       case 'map_body':
@@ -356,6 +355,12 @@ export class FleetTabPanel {
       case 'catalog_body': {
         const body = zone.data.body;
         if (body) {
+          // Tryb wyboru celu misji — kliknięcie na ciele = wybór celu
+          if (this._missionConfig?.step === 'select' && (zone.type === 'map_body' || zone.type === 'map_planet' || zone.type === 'catalog_body')) {
+            this._missionConfig.targetId = body.id;
+            this._missionConfig.step = 'confirm';
+            break;
+          }
           EventBus.emit('body:selected', { entity: body });
           // Centruj mapę na wybranym ciele
           const bx = body.physics?.x ?? 0;
@@ -488,6 +493,7 @@ export class FleetTabPanel {
       colonyManager: window.KOSMOS?.colonyManager,
       techSystem: window.KOSMOS?.techSystem,
       activePlanetId: window.KOSMOS?.colonyManager?.activePlanetId,
+      cargo: vessel?.cargo ?? {},
     };
   }
 
@@ -1253,7 +1259,9 @@ export class FleetTabPanel {
       if (!hasTech) continue;
       const allCosts = { ...(ship.cost || {}), ...(ship.commodityCost || {}) };
       const canAfford = Object.entries(allCosts).every(([k, v]) => (inv[k] ?? 0) >= v);
-      const canBuild = canBuildAny && canAfford;
+      const crewCost = ship.crewCost ?? 0;
+      const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
+      const canBuild = canBuildAny && canAfford && hasCrew;
 
       const btnH = 20;
       ctx.fillStyle = canBuild ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.5)';
@@ -1264,7 +1272,8 @@ export class FleetTabPanel {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = canBuild ? C.bright : C.dim;
       ctx.textAlign = 'center';
-      ctx.fillText(`${ship.icon} ${ship.namePL}`, x + w / 2, cy + 13);
+      const crewLabel = crewCost > 0 ? ` (${crewCost}👤)` : '';
+      ctx.fillText(`${ship.icon} ${ship.namePL}${crewLabel}`, x + w / 2, cy + 13);
       ctx.textAlign = 'left';
       this._hitZones.push({ x: x + PAD, y: cy, w: w - PAD * 2, h: btnH, type: 'build_ship', data: { shipId: ship.id, enabled: canBuild } });
       cy += btnH + 3;

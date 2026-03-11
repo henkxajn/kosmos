@@ -249,12 +249,13 @@ export class CivilizationSystem {
     const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
 
     // 1. Oblicz moraleTarget z komponentów (przekaż cached ratios)
-    this.moraleTarget = this._calcMoraleTarget(foodRatio);
+    //    Tech bonus wliczony do targetu (statyczny offset, nie per-year)
+    const techMoraleBonus = this.techSystem?.getMoraleBonus() ?? 0;
+    this.moraleTarget = Math.min(100, this._calcMoraleTarget(foodRatio) + techMoraleBonus);
 
-    // 2. Zmiana morale (inercja + tech bonus)
-    const techBonus = this.techSystem?.getMoraleBonus() ?? 0;
+    // 2. Zmiana morale (inercja — bez osobnego tech bonus)
     const inertia   = (this.moraleTarget - this.morale) * MORALE_INERTIA;
-    this.morale     = Math.max(0, Math.min(100, this.morale + inertia + techBonus));
+    this.morale     = Math.max(0, Math.min(100, this.morale + inertia));
 
     // 3. Wzrost populacji (przekaż cached foodRatio)
     this._updatePopGrowth(foodRatio);
@@ -383,8 +384,11 @@ export class CivilizationSystem {
                     : stability > 0.40 ? 3
                     : 0;
 
-    this.moraleComponents = { housing, food, water, energy, employment, safety };
-    return housing + food + water + energy + employment + safety;
+    // 7. Crowding penalty (0 do -12) — więcej POPów = gorsza jakość życia
+    const crowdingPenalty = Math.min(12, Math.max(0, (this.population - 5) * 2));
+
+    this.moraleComponents = { housing, food, water, energy, employment, safety, crowding: -crowdingPenalty };
+    return housing + food + water + energy + employment + safety - crowdingPenalty;
   }
 
   // ── Kryzysy ─────────────────────────────────────────────────────────────
