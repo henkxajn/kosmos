@@ -374,7 +374,8 @@ export class MissionSystem {
 
     const distance = this._calcDistance(target);
 
-    const vMgr = window.KOSMOS?.vesselManager;
+    const vMgr  = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
     let assignedVesselId = vesselId ?? null;
     if (vMgr && assignedVesselId) {
       const vessel = vMgr.getVessel(assignedVesselId);
@@ -423,6 +424,7 @@ export class MissionSystem {
       travelTime,
       crewCost:    EXPEDITION_CREW_COST,
       vesselId:    assignedVesselId,
+      originColonyId: assignedVesselId ? (vMgr?.getVessel(assignedVesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
@@ -467,7 +469,8 @@ export class MissionSystem {
     const target = this._findTarget(targetId);
     const distance = this._calcDistance(target);
 
-    const vMgr = window.KOSMOS?.vesselManager;
+    const vMgr  = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
       if (!vessel || vessel.status !== 'idle') {
@@ -519,6 +522,7 @@ export class MissionSystem {
       gained:         null,
       eventRoll:      null,
       vesselId:       vesselId ?? null,
+      originColonyId: vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
     };
 
     this._missions.push(mission);
@@ -623,6 +627,7 @@ export class MissionSystem {
       travelTime,
       crewCost:    EXPEDITION_CREW_COST,
       vesselId:    vesselId ?? null,
+      originColonyId: vessel?.colonyId ?? colMgr?.activePlanetId,
       cargo:       { ...cargo },
       status:      'en_route',
       gained:      null,
@@ -798,7 +803,8 @@ export class MissionSystem {
     }
 
     const departYear = this._gameYear;
-    const vMgr = window.KOSMOS?.vesselManager;
+    const vMgr  = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
 
     if (scope === 'full_system') {
       // Sekwencyjny deep_scan
@@ -825,6 +831,7 @@ export class MissionSystem {
         travelTime,
         crewCost:         RECON_CREW_COST,
         vesselId:         vesselId ?? null,
+        originColonyId:   vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
         status:           'en_route',
         gained:           null,
         eventRoll:        null,
@@ -867,6 +874,7 @@ export class MissionSystem {
       travelTime,
       crewCost:    RECON_CREW_COST,
       vesselId:    vesselId ?? null,
+      originColonyId: vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
@@ -900,7 +908,8 @@ export class MissionSystem {
     }
 
     const distance = this._calcDistance(target);
-    const vMgr = window.KOSMOS?.vesselManager;
+    const vMgr  = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
 
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
@@ -943,6 +952,7 @@ export class MissionSystem {
       travelTime,
       crewCost:    RECON_CREW_COST,
       vesselId:    vesselId ?? null,
+      originColonyId: vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
@@ -976,7 +986,7 @@ export class MissionSystem {
         // POPy zablokowane przy budowie statku — odblokowane tylko przy disband/zniszczeniu
         if (exp.vesselId) {
           const vMgr = window.KOSMOS?.vesselManager;
-          if (vMgr) vMgr.dockAtColony(exp.vesselId);
+          if (vMgr) vMgr.dockAtColony(exp.vesselId, exp.originColonyId);
         }
         this._emit('mission:complete', 'expedition:returned', { expedition: exp });
         changed = true;

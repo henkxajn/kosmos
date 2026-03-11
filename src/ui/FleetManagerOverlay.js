@@ -1823,8 +1823,12 @@ export class FleetManagerOverlay {
   }
 
   _baseText(vessel) {
-    const body = _findBody(vessel.homeColonyId ?? vessel.colonyId);
-    return body?.name ?? vessel.colonyId;
+    const id = vessel.homeColonyId ?? vessel.colonyId;
+    const body = _findBody(id);
+    if (body?.name) return body.name;
+    // Fallback: nazwa kolonii z ColonyManager
+    const colony = window.KOSMOS?.colonyManager?.getColony(id);
+    return colony?.name ?? '???';
   }
 
   _xpStars(vessel) {

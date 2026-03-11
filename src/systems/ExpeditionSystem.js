@@ -377,6 +377,7 @@ export class ExpeditionSystem {
       travelTime,
       crewCost:    EXPEDITION_CREW_COST,
       vesselId:    assignedVesselId,
+      originColonyId: assignedVesselId ? (vMgr?.getVessel(assignedVesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
@@ -482,6 +483,7 @@ export class ExpeditionSystem {
       gained:         null,
       eventRoll:      null,
       vesselId:       vesselId ?? null,
+      originColonyId: vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
     };
 
     this._expeditions.push(expedition);
@@ -603,6 +605,7 @@ export class ExpeditionSystem {
       travelTime,
       crewCost:    isRedispatch ? inheritedCrewCost : EXPEDITION_CREW_COST,
       vesselId:    vesselId ?? null,
+      originColonyId: vessel?.colonyId ?? colMgr?.activePlanetId,
       cargo:       { ...cargo },
       status:      'en_route',
       gained:      null,
@@ -790,7 +793,8 @@ export class ExpeditionSystem {
     EventBus.emit('civ:lockPops', { amount: RECON_CREW_COST });
 
     const departYear = this._gameYear;
-    const vMgr = window.KOSMOS?.vesselManager;
+    const vMgr  = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
 
     if (scope === 'full_system') {
       // Sekwencyjny recon: pierwszy cel = najbliższy niezbadany od homePlanet
@@ -818,6 +822,7 @@ export class ExpeditionSystem {
         travelTime,
         crewCost:         RECON_CREW_COST,
         vesselId:         vesselId ?? null,
+        originColonyId:   vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
         status:           'en_route',
         gained:           null,
         eventRoll:        null,
@@ -862,6 +867,7 @@ export class ExpeditionSystem {
       travelTime,
       crewCost:    RECON_CREW_COST,
       vesselId:    vesselId ?? null,
+      originColonyId: vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
@@ -896,7 +902,8 @@ export class ExpeditionSystem {
     }
 
     const distance = this._calcDistance(target);
-    const vMgr = window.KOSMOS?.vesselManager;
+    const vMgr  = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
 
     // Sprawdź paliwo na lot + powrót
     if (vMgr && vesselId) {
@@ -944,6 +951,7 @@ export class ExpeditionSystem {
       travelTime,
       crewCost:    RECON_CREW_COST,
       vesselId:    vesselId ?? null,
+      originColonyId: vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
@@ -977,10 +985,10 @@ export class ExpeditionSystem {
         exp.status = 'completed';
         // Odblokuj POPy — załoga wraca
         EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
-        // Vessel wraca do hangaru
+        // Vessel wraca do hangaru (do kolonii macierzystej)
         if (exp.vesselId) {
           const vMgr = window.KOSMOS?.vesselManager;
-          if (vMgr) vMgr.dockAtColony(exp.vesselId);
+          if (vMgr) vMgr.dockAtColony(exp.vesselId, exp.originColonyId);
         }
         EventBus.emit('expedition:returned', { expedition: exp });
         changed = true;

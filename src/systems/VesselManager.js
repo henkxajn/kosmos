@@ -197,7 +197,7 @@ export class VesselManager {
 
     // Wpis do dziennika
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    addMissionLog(vessel, gameYear, `Wyruszył na misję: ${mission.type} → ${mission.targetName ?? mission.targetId}`, 'info');
+    addMissionLog(vessel, gameYear, `Wyruszył na misję: ${mission.type} → ${mission.targetName ?? this._resolveEntityName(mission.targetId)}`, 'info');
 
     EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
     return true;
@@ -242,7 +242,7 @@ export class VesselManager {
     vessel.position.dockedAt = null;
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    addMissionLog(vessel, gameYear, `Wyruszył z orbity na misję: ${mission.type} → ${mission.targetName ?? mission.targetId}`, 'info');
+    addMissionLog(vessel, gameYear, `Wyruszył z orbity na misję: ${mission.type} → ${mission.targetName ?? this._resolveEntityName(mission.targetId)}`, 'info');
 
     EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
     return true;
@@ -262,7 +262,7 @@ export class VesselManager {
 
     // Wpis do dziennika
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    addMissionLog(vessel, gameYear, `Dotarł do ${vessel.mission.targetName ?? vessel.mission.targetId}`, 'success');
+    addMissionLog(vessel, gameYear, `Dotarł do ${vessel.mission.targetName ?? this._resolveEntityName(vessel.mission.targetId)}`, 'success');
 
     EventBus.emit('vessel:arrived', { vessel, mission: vessel.mission });
   }
@@ -320,7 +320,7 @@ export class VesselManager {
 
     // Wpis do dziennika misji
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    const targetName = entity?.name ?? entity?.id ?? targetId;
+    const targetName = this._resolveEntityName(targetId);
     addMissionLog(vessel, gameYear, `Zadokował w ${targetName}`, 'success');
 
     EventBus.emit('vessel:docked', { vessel });
@@ -889,5 +889,19 @@ export class VesselManager {
   _findEntity(targetId) {
     if (!targetId) return null;
     return EntityManager.get(targetId);
+  }
+
+  /**
+   * Rozwiąż czytelną nazwę encji/kolonii po ID.
+   * Fallback: EntityManager → ColonyManager → raw ID.
+   */
+  _resolveEntityName(entityId) {
+    if (!entityId) return '???';
+    const entity = this._findEntity(entityId);
+    if (entity?.name) return entity.name;
+    // Fallback: kolonia może mieć nazwę w ColonyManager
+    const colony = window.KOSMOS?.colonyManager?.getColony(entityId);
+    if (colony?.name) return colony.name;
+    return entityId;
   }
 }

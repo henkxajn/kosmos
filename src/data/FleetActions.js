@@ -13,7 +13,6 @@
 // }
 
 import { SHIPS } from './ShipsData.js';
-import { effectiveRange } from '../entities/Vessel.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
 
@@ -34,10 +33,12 @@ const ACTIONS = {
       }
       const ms = state.missionSystem;
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
-      const check = ms.canLaunchRecon();
-      // Sprawdzamy tylko tech i pad — vesselOk pomijamy, bo mamy bezpośredni dostęp do vessel
-      if (!check.techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      if (!check.padOk)  return { ok: false, reason: 'Brak Wyrzutni' };
+      const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
+      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
+      // Sprawdź spaceport w kolonii statku (nie aktywnej)
+      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
+      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
+      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
       if (vessel.shipId !== 'science_vessel') {
         return { ok: false, reason: 'Wymaga Statku Naukowego' };
       }
@@ -59,10 +60,12 @@ const ACTIONS = {
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
       const ms = state.missionSystem;
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
-      const check = ms.canLaunchRecon();
-      // Sprawdzamy tylko tech i pad — vesselOk pomijamy, bo mamy bezpośredni dostęp do vessel
-      if (!check.techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      if (!check.padOk)  return { ok: false, reason: 'Brak Wyrzutni' };
+      const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
+      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
+      // Sprawdź spaceport w kolonii statku (nie aktywnej)
+      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
+      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
+      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
       if (vessel.shipId !== 'science_vessel') {
         return { ok: false, reason: 'Wymaga Statku Naukowego' };
       }
@@ -85,12 +88,12 @@ const ACTIONS = {
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
       const ms = state.missionSystem;
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
-      const check = ms.canLaunch('scientific');
-      if (!check.ok) {
-        if (!check.techOk)   return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-        if (!check.padOk)    return { ok: false, reason: 'Brak Wyrzutni' };
-        if (!check.vesselOk) return { ok: false, reason: 'Wymaga Statku Naukowego' };
-      }
+      const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
+      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
+      // Sprawdź spaceport w kolonii statku (nie aktywnej)
+      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
+      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
+      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
       if (vessel.shipId !== 'science_vessel') {
         return { ok: false, reason: 'Wymaga Statku Naukowego' };
       }
@@ -112,13 +115,12 @@ const ACTIONS = {
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
-      const ms = state.missionSystem;
-      if (!ms) return { ok: false, reason: 'Brak systemu misji' };
-      const check = ms.canLaunch('mining');
-      if (!check.ok) {
-        if (!check.techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-        if (!check.padOk)  return { ok: false, reason: 'Brak Wyrzutni' };
-      }
+      const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
+      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
+      // Sprawdź spaceport w kolonii statku (nie aktywnej)
+      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
+      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
+      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -166,11 +168,15 @@ const ACTIONS = {
       if (vessel.shipId !== 'colony_ship') return { ok: false, reason: 'Wymaga Statku Kolonijnego' };
       const ms = state.missionSystem;
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
+      const techOk = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
+      if (!techOk) return { ok: false, reason: 'Brak tech: Kolonizacja' };
+      // Sprawdź spaceport w kolonii statku (nie aktywnej)
+      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
+      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
+      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
       if (state.targetId) {
         const check = ms.canLaunchColony(state.targetId);
         if (!check.ok) {
-          if (!check.techOk)      return { ok: false, reason: 'Brak tech: Kolonizacja' };
-          if (!check.padOk)       return { ok: false, reason: 'Brak Wyrzutni' };
           if (!check.exploredOk)  return { ok: false, reason: 'Cel niezbadany' };
           if (!check.typeOk)      return { ok: false, reason: 'Cel nie nadaje się' };
           if (!check.notColonized) return { ok: false, reason: 'Cel ma kolonię' };
