@@ -57,6 +57,7 @@ export class Outliner {
     this._clickTargets = [];
     // Hover tooltip kolonii
     this._hoveredColonyId = null;
+    this._hoveredVesselId = null;
     this._colonyTooltip   = null;
     this._tooltipX        = 0;
     this._tooltipY        = 0;
@@ -179,25 +180,34 @@ export class Outliner {
 
       let dy = 0;
 
-      // Pogrupuj statki wg typu (fleet zawiera vessel IDs — rozwiąż przez VesselManager)
-      const counts = {};
+      // Lista indywidualnych statków (klikalne → centruj kamerę)
       const vMgr = window.KOSMOS?.vesselManager;
       if (fleet) {
         for (const vid of fleet) {
           const vessel = vMgr?.getVessel(vid);
-          const shipId = vessel?.shipId ?? vid;
-          counts[shipId] = (counts[shipId] || 0) + 1;
+          if (!vessel) continue;
+          const iy = startY + dy;
+          const ship = SHIPS[vessel.shipId];
+          const icon = ship?.icon ?? '🚀';
+          const vName = _truncate(vessel.name ?? ship?.namePL ?? vessel.shipId, 14);
+          // Status — ikona stanu
+          const stIco = vessel.position.state === 'in_transit' ? '→'
+                      : vessel.position.state === 'orbiting'   ? '⊙' : '';
+          // Hover highlight
+          const isHov = vid === this._hoveredVesselId;
+          if (isHov) {
+            ctx.fillStyle = 'rgba(0,255,180,0.08)';
+            ctx.fillRect(x, iy, OUTLINER_W, ITEM_H);
+          }
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = isHov ? C.bright : C.text;
+          ctx.fillText(`${icon} ${stIco}${vName}`, x + PAD, iy + 14);
+          this._clickTargets.push({
+            type: 'vessel', vesselId: vid,
+            x, y: iy, w: OUTLINER_W, h: ITEM_H,
+          });
+          dy += ITEM_H;
         }
-      }
-      for (const [sid, count] of Object.entries(counts)) {
-        const iy = startY + dy;
-        const ship = SHIPS[sid];
-        const icon = ship?.icon ?? '🚀';
-        const name = ship?.namePL ?? sid;
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = C.text;
-        ctx.fillText(`${icon} ${_truncate(name, 10)} ×${count}`, x + PAD, iy + 14);
-        dy += ITEM_H;
       }
 
       // Queues (budowa w toku — wiele slotów)
@@ -270,6 +280,11 @@ export class Outliner {
 
     for (const t of this._clickTargets) {
       if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) {
+        if (t.type === 'vessel') {
+          // Centruj kamerę 3D na statku — obsłuż PRZED sekcją
+          EventBus.emit('vessel:focus', { vesselId: t.vesselId });
+          return true;
+        }
         if (t.type === 'section') {
           if (t.sectionId === 'fleet') {
             const om = window.KOSMOS?.overlayManager;
@@ -290,7 +305,14 @@ export class Outliner {
             if (colMgr2) colMgr2.switchActiveColony(t.planetId);
             window.KOSMOS?.overlayManager?.openPanel('colony');
           } else {
-            // Klik na nazwę kolonii → przełącz aktywną kolonię (bez otwierania mapy)
+            // Klik na nazwę kolonii → otwórz Ekonomię z filtrem na tę kolonię
+            const om = window.KOSMOS?.overlayManager;
+            const econOv = om?.overlays?.['economy'];
+            if (econOv) {
+              econOv._selectedColonyId = t.planetId;
+              econOv._scrollLeft = 0;
+              om.openPanel('economy');
+            }
             if (colMgr.switchActiveColony(t.planetId)) {
               EventBus.emit('colony:switched', { planetId: t.planetId });
             }
@@ -319,15 +341,23 @@ export class Outliner {
       this._colonyTooltip = null;
       return;
     }
+    let foundVessel = null;
     for (const t of this._clickTargets) {
-      if (t.type === 'colony' && mx >= t.x && mx <= t.x + t.w && my >= t.y && my <= t.y + t.h) {
-        if (this._hoveredColonyId !== t.planetId) {
-          this._hoveredColonyId = t.planetId;
-          this._colonyTooltip = this._buildColonyTooltip(t.colony);
+      if (mx >= t.x && mx <= t.x + t.w && my >= t.y && my <= t.y + t.h) {
+        if (t.type === 'colony') {
+          if (this._hoveredColonyId !== t.planetId) {
+            this._hoveredColonyId = t.planetId;
+            this._colonyTooltip = this._buildColonyTooltip(t.colony);
+          }
+          this._hoveredVesselId = null;
+          return;
         }
-        return;
+        if (t.type === 'vessel') {
+          foundVessel = t.vesselId;
+        }
       }
     }
+    this._hoveredVesselId = foundVessel;
     this._hoveredColonyId = null;
     this._colonyTooltip = null;
   }
