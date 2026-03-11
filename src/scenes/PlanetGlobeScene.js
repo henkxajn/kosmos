@@ -254,6 +254,23 @@ export class PlanetGlobeScene {
     this._globeRenderer = new PlanetGlobeRenderer();
     this._globeRenderer.open(planet, this.grid, globeBounds, true);
 
+    // Resize handler — aktualizuj pozycję/rozmiar globusa przy zmianie okna/fullscreen
+    this._onGlobeResize = () => {
+      _recalcGlobeDimensions();
+      if (!this._globeRenderer) return;
+      this.canvas.width  = W;
+      this.canvas.height = H;
+      const nb = {
+        x: LEFT_W * PS_SCALE,
+        y: HEADER_H * PS_SCALE,
+        w: (LW - LEFT_W - RIGHT_W) * PS_SCALE,
+        h: (LH - HEADER_H - BOTTOM_BAR_H) * PS_SCALE,
+      };
+      this._globeRenderer.updateBounds(nb);
+    };
+    window.addEventListener('resize', this._onGlobeResize);
+    document.addEventListener('fullscreenchange', this._onGlobeResize);
+
     // Obróć globus na stolicę (jeśli istnieje)
     this._focusOnCapital();
 
@@ -288,7 +305,12 @@ export class PlanetGlobeScene {
     const layer = document.getElementById('event-layer');
     if (layer) layer.style.zIndex = '3';
 
-    // Zamknij globus
+    // Zamknij globus + usuń resize handler
+    if (this._onGlobeResize) {
+      window.removeEventListener('resize', this._onGlobeResize);
+      document.removeEventListener('fullscreenchange', this._onGlobeResize);
+      this._onGlobeResize = null;
+    }
     if (this._globeRenderer) {
       this._globeRenderer.close();
       this._globeRenderer = null;

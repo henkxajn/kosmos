@@ -263,7 +263,10 @@ export class PlanetGlobeRenderer {
 
     // Resize
     this._onResize = () => {
-      if (this._bounds) return; // embedded — resize obsługiwany przez PlanetGlobeScene
+      if (this._bounds) {
+        // Embedded — PlanetGlobeScene wywoła updateBounds()
+        return;
+      }
       const nW = window.innerWidth;
       const nH = window.innerHeight;
       this._renderer.setSize(nW, nH);
@@ -278,6 +281,21 @@ export class PlanetGlobeRenderer {
 
     // Pętla renderowania
     this._startLoop();
+  }
+
+  // ── Aktualizuj pozycję/rozmiar canvas (resize/fullscreen w trybie embedded) ──
+  updateBounds(bounds) {
+    if (!this._renderer || !this._canvas || !bounds) return;
+    this._bounds = bounds;
+    const nW = Math.round(bounds.w);
+    const nH = Math.round(bounds.h);
+    this._canvas.style.left   = `${Math.round(bounds.x)}px`;
+    this._canvas.style.top    = `${Math.round(bounds.y)}px`;
+    this._canvas.style.width  = `${nW}px`;
+    this._canvas.style.height = `${nH}px`;
+    this._renderer.setSize(nW, nH, false);
+    this._camera.aspect = nW / nH;
+    this._camera.updateProjectionMatrix();
   }
 
   // ── Zamknij widok globu ─────────────────────────────────────
