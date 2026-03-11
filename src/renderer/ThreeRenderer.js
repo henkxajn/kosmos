@@ -1814,9 +1814,10 @@ export class ThreeRenderer {
 
     // Kolor wg typu statku
     const typeColors = {
-      science_vessel: 0x4488ff,
-      colony_ship:    0xff8800,
-      cargo_ship:     0x44cc66,
+      science_vessel:  0x4488ff,
+      colony_ship:     0xff8800,
+      cargo_ship:      0x44cc66,
+      heavy_freighter: 0x88aa44,
     };
     const color = typeColors[vessel.shipId] ?? 0xaaaaaa;
 
@@ -1834,6 +1835,13 @@ export class ThreeRenderer {
       c.beginPath();
       c.moveTo(16, 4); c.lineTo(28, 28); c.lineTo(4, 28);
       c.closePath(); c.fill(); c.stroke();
+    } else if (vessel.shipId === 'heavy_freighter') {
+      // Duży prostokąt z podwójną ładownią — ciężki frachtowiec
+      c.fillRect(5, 2, 22, 12);
+      c.fillRect(5, 15, 22, 12);
+      c.fillRect(10, 28, 12, 3);
+      c.strokeRect(5, 2, 22, 12);
+      c.strokeRect(5, 15, 22, 12);
     } else if (vessel.shipId === 'cargo_ship') {
       // Prostokąt z ładownią
       c.fillRect(7, 4, 18, 16);

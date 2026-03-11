@@ -69,4 +69,27 @@ export const SHIPS = {
     description:   'Wielki frachtowiec do transferu surowców między koloniami.',
   },
 
+  heavy_freighter: {
+    id:            'heavy_freighter',
+    namePL:        'Ciężki Frachtowiec',
+    icon:          '🚛',
+    cost:          { Fe: 500, Ti: 80, Pt: 100, Cu: 40, Si: 30 },
+    commodityCost: {
+      hull_armor:        20,
+      power_cells:        8,
+      electronics:        8,
+      habitat_modules:    6,
+      robots:             4,
+    },
+    buildTime:     4,
+    fuelCapacity:  25,           // max power_cells
+    fuelPerAU:     1.5,          // power_cells / AU → zasięg ~16.7 AU
+    range:         16,           // AU (fallback)
+    speedAU:       0.52,         // AU/rok — ciężki, wolny masowy transport
+    cargoCapacity: 10000,        // tony — mega-frachtowiec
+    crewCost:      1.5,          // POP zablokowane przy budowie statku
+    requires:      'interplanetary_logistics',
+    description:   'Ogromny frachtowiec do masowego transportu surowców między koloniami.',
+  },
+
 };

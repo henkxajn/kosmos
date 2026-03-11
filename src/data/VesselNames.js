@@ -16,6 +16,10 @@ const NAME_POOLS = {
     'Handlarz', 'Kurier', 'Fracht', 'Karawana', 'Merkury',
     'Konwój', 'Transporter', 'Dostawca', 'Opat', 'Smok',
   ],
+  heavy_freighter: [
+    'Mamut', 'Behemot', 'Kolos', 'Tytan', 'Lewiatan',
+    'Golem', 'Atlas', 'Juggernaut', 'Moloch', 'Kraken',
+  ],
 };
 
 // Licznik nazw per typ — inkrementowany przy każdej generacji

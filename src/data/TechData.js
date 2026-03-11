@@ -291,8 +291,9 @@ export const TECHS = {
     requires:    ['colonization'],
     effects: [
       { type: 'unlockFeature', feature: 'trade_routes' },
+      { type: 'unlockShip', shipId: 'heavy_freighter' },
     ],
-    description: 'Automatyczne drogi handlowe między koloniami — cykliczny transfer nadwyżek',
+    description: 'Automatyczne drogi handlowe + Ciężki Frachtowiec (10k cargo)',
   },
 
   // ── Tier 3+4: Brakujące tech (odblokują istniejące budynki) ─────────────

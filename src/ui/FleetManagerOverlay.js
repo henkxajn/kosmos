@@ -68,6 +68,7 @@ const FILTER_BTNS = [
   { id: 'all',             label: 'WSZYSTKIE' },
   { id: 'science_vessel',  label: '🛸' },
   { id: 'cargo_ship',      label: '📦' },
+  { id: 'heavy_freighter', label: '🚛' },
   { id: 'colony_ship',     label: '🚢' },
   { id: 'here',            label: '◈ TU' },
 ];
