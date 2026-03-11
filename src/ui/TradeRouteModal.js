@@ -5,6 +5,7 @@
 
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
+import { SHIPS } from '../data/ShipsData.js';
 import { THEME } from '../config/ThemeConfig.js';
 
 // Ikony zasobów
@@ -18,9 +19,10 @@ for (const [id, def] of Object.entries(COMMODITIES))          RES_ICONS[id] = de
  * @param {Object} sourceColony — kolonia źródłowa
  * @param {string} targetBodyId — id ciała docelowego
  * @param {string} targetName — nazwa ciała docelowego
+ * @param {Object} [vessel] — opcjonalny statek (info o ładowności)
  * @returns {Promise<{cargo, trips}|null>}
  */
-export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
+export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vessel) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'kosmos-modal-overlay';
@@ -50,6 +52,17 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
     info.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary}; margin-bottom: 12px;`;
     info.innerHTML = `Z: 🏛 ${sourceColony.name}<br>Do: 📦 ${targetName}`;
     panel.appendChild(info);
+
+    // Info o ładowności statku
+    const shipDef = vessel ? SHIPS[vessel.shipId] : null;
+    const cargoCapacity = shipDef?.cargoCapacity ?? 0;
+    let cargoInfo = null;
+    if (vessel && cargoCapacity > 0) {
+      cargoInfo = document.createElement('div');
+      cargoInfo.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
+      cargoInfo.textContent = `${shipDef?.namePL ?? vessel.shipId} — ładowność: 0 / ${cargoCapacity} t`;
+      panel.appendChild(cargoInfo);
+    }
 
     // Separator
     const sep = document.createElement('hr');
@@ -152,13 +165,34 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName) {
       resolve(result);
     };
 
+    // Aktualizacja wagi przy zmianie inputów
+    const _updateWeight = () => {
+      if (!cargoInfo || cargoCapacity <= 0) return;
+      let total = 0;
+      for (const [, inp] of Object.entries(inputs)) {
+        total += parseInt(inp.value) || 0;
+      }
+      const overweight = total > cargoCapacity;
+      cargoInfo.textContent = `${shipDef?.namePL ?? vessel?.shipId ?? ''} — ładowność: ${total} / ${cargoCapacity} t`;
+      cargoInfo.style.color = overweight ? THEME.danger : THEME.textSecondary;
+      confirmBtn.disabled = overweight;
+      confirmBtn.style.opacity = overweight ? '0.4' : '1';
+    };
+    // Nasłuchuj zmian w inputach
+    for (const inp of Object.values(inputs)) {
+      inp.addEventListener('input', _updateWeight);
+    }
+
     confirmBtn.addEventListener('click', () => {
       const cargo = {};
+      let totalWeight = 0;
       for (const [id, inp] of Object.entries(inputs)) {
         const val = parseInt(inp.value) || 0;
-        if (val > 0) cargo[id] = val;
+        if (val > 0) { cargo[id] = val; totalWeight += val; }
       }
       if (Object.keys(cargo).length === 0) return; // brak ładunku
+      // Blokuj jeśli przekroczona ładowność
+      if (cargoCapacity > 0 && totalWeight > cargoCapacity) return;
       const trips = tripsInput.value ? parseInt(tripsInput.value) || null : null;
       close({ cargo, trips });
     });

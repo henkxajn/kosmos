@@ -256,6 +256,26 @@ const ACTIONS = {
     },
   },
 
+  trade_route: {
+    id: 'trade_route',
+    label: 'Trasa handlowa',
+    icon: '🔄',
+    requiresTarget: true,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
+      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      if (vessel.shipId !== 'cargo_ship' && vessel.shipId !== 'heavy_freighter') {
+        return { ok: false, reason: 'Wymaga statku cargo' };
+      }
+      const techOk = window.KOSMOS?.techSystem?.isResearched('interplanetary_logistics') ?? false;
+      if (!techOk) return { ok: false, reason: 'Brak tech: Logistyka' };
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      // Obsługa w FleetTabPanel — otwiera TradeRouteModal
+    },
+  },
+
   redirect: {
     id: 'redirect',
     label: 'Zmień cel',
@@ -307,6 +327,10 @@ export function getAvailableActions(vessel, state) {
       result.push(_check(ACTIONS.colonize, vessel, state));
     }
     result.push(_check(ACTIONS.transport, vessel, state));
+    // Trasa handlowa — tylko cargo/heavy_freighter
+    if (vessel.shipId === 'cargo_ship' || vessel.shipId === 'heavy_freighter') {
+      result.push(_check(ACTIONS.trade_route, vessel, state));
+    }
   } else if (vessel.position.state === 'orbiting') {
     // Na orbicie — powrót, redirect, transport
     result.push(_check(ACTIONS.return_home, vessel, state));

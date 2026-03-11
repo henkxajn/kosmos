@@ -1064,8 +1064,37 @@ export class EconomyOverlay extends BaseOverlay {
       ctx.fillText(trips, x + w - pad, ry + 26);
       ctx.textAlign = 'left';
 
+      // Przyciski: ⏸/▶ + ✕
+      const btnW = 20; const btnH2 = 16;
+      const delX = x + w - pad - btnW;
+      const pauseX = delX - btnW - 4;
+
+      // ⏸ / ▶ (pause/resume)
+      const isPaused = route.status === 'paused';
+      ctx.fillStyle = isPaused ? 'rgba(20,60,40,0.6)' : 'rgba(60,50,10,0.6)';
+      ctx.fillRect(pauseX, ry + 30, btnW, btnH2);
+      ctx.strokeStyle = isPaused ? THEME.success : THEME.warning;
+      ctx.strokeRect(pauseX, ry + 30, btnW, btnH2);
+      ctx.fillStyle = isPaused ? THEME.success : THEME.warning;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(isPaused ? '▶' : '⏸', pauseX + btnW / 2, ry + 30 + btnH2 - 3);
+      ctx.textAlign = 'left';
+      this._addHit(pauseX, ry + 30, btnW, btnH2, 'trade_toggle_pause', { routeId: route.id, paused: isPaused });
+
+      // ✕ (delete)
+      ctx.fillStyle = 'rgba(80,20,20,0.6)';
+      ctx.fillRect(delX, ry + 30, btnW, btnH2);
+      ctx.strokeStyle = THEME.danger;
+      ctx.strokeRect(delX, ry + 30, btnW, btnH2);
+      ctx.fillStyle = THEME.danger;
+      ctx.textAlign = 'center';
+      ctx.fillText('✕', delX + btnW / 2, ry + 30 + btnH2 - 3);
+      ctx.textAlign = 'left';
+      this._addHit(delX, ry + 30, btnW, btnH2, 'trade_delete', { routeId: route.id });
+
       // Separator
-      ry += 34;
+      ry += 34 + btnH2 + 4;
       ctx.strokeStyle = THEME.border;
       ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
       ry += 6;
@@ -1335,6 +1364,16 @@ export class EconomyOverlay extends BaseOverlay {
         break;
       case 'factory_btn':
         this._handleFactoryBtn(zone.data);
+        break;
+      case 'trade_toggle_pause':
+        if (zone.data.paused) {
+          EventBus.emit('tradeRoute:resume', { routeId: zone.data.routeId });
+        } else {
+          EventBus.emit('tradeRoute:pause', { routeId: zone.data.routeId });
+        }
+        break;
+      case 'trade_delete':
+        EventBus.emit('tradeRoute:delete', { routeId: zone.data.routeId });
         break;
     }
   }

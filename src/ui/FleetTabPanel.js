@@ -11,6 +11,7 @@ import EventBus            from '../core/EventBus.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showRenameModal }    from '../ui/ModalInput.js';
+import { showTradeRouteModal } from '../ui/TradeRouteModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { drawMiniBar }     from '../ui/CivPanelDrawer.js';
 
@@ -417,6 +418,12 @@ export class FleetTabPanel {
       case 'delete_trade_route':
         EventBus.emit('tradeRoute:delete', { routeId: zone.data.routeId });
         break;
+
+      case 'toggle_repeat':
+        if (this._missionConfig) {
+          this._missionConfig.repeat = !this._missionConfig.repeat;
+        }
+        break;
     }
   }
 
@@ -433,6 +440,13 @@ export class FleetTabPanel {
 
     if (actionId === 'transport') {
       this._openCargoThenTarget(vessel);
+      return;
+    }
+    if (actionId === 'trade_route') {
+      // Wybierz cel → potem TradeRouteModal (bez ładowania cargo wcześniej)
+      this._missionConfig = { actionId: 'trade_route', vesselId: vessel.id, targetId: null, step: 'select' };
+      this._targetScrollOffset = 0;
+      this._cachedTargets = null;
       return;
     }
     if (action.requiresTarget) {
@@ -474,15 +488,53 @@ export class FleetTabPanel {
   _executeMission() {
     const cfg = this._missionConfig;
     if (!cfg || !cfg.targetId) return;
-    const action = FLEET_ACTIONS[cfg.actionId];
-    if (!action) return;
     const vMgr = window.KOSMOS?.vesselManager;
     const vessel = vMgr?.getVessel(cfg.vesselId);
     if (!vessel) return;
+
+    // Trasa handlowa — otwórz TradeRouteModal
+    if (cfg.actionId === 'trade_route') {
+      this._openTradeRouteModal(vessel, cfg.targetId);
+      return;
+    }
+
+    // Transport z powtarzaniem → utwórz trasę handlową
+    if (cfg.actionId === 'transport' && cfg.repeat) {
+      const colony = this._getVesselColony(vessel);
+      EventBus.emit('tradeRoute:create', {
+        vesselId: vessel.id,
+        sourceColonyId: vessel.colonyId,
+        targetBodyId: cfg.targetId,
+        cargo: vessel.cargo ?? {},
+        tripsTotal: null, // nieskończone
+      });
+    }
+
+    const action = FLEET_ACTIONS[cfg.actionId];
+    if (!action) return;
     const state = this._buildActionState(vessel);
     state.targetId = cfg.targetId;
     state.targetBody = _findBody(cfg.targetId);
     action.execute(vessel, state);
+    this._selectedVesselId = null;
+    this._missionConfig = null;
+  }
+
+  async _openTradeRouteModal(vessel, targetId) {
+    const colony = this._getVesselColony(vessel);
+    if (!colony) return;
+    const targetBody = _findBody(targetId);
+    const targetName = targetBody?.name ?? targetId;
+    const result = await showTradeRouteModal(colony, targetId, targetName, vessel);
+    if (result) {
+      EventBus.emit('tradeRoute:create', {
+        vesselId: vessel.id,
+        sourceColonyId: vessel.colonyId,
+        targetBodyId: targetId,
+        cargo: result.cargo,
+        tripsTotal: result.trips,
+      });
+    }
     this._selectedVesselId = null;
     this._missionConfig = null;
   }
@@ -1628,6 +1680,31 @@ export class FleetTabPanel {
 
     cy += 10;
 
+    // Checkbox "Powtarzaj" — tylko dla transportu (cargo_ship/heavy_freighter z tech logistyka)
+    if (cfg.actionId === 'transport' && vessel &&
+        (vessel.shipId === 'cargo_ship' || vessel.shipId === 'heavy_freighter') &&
+        (window.KOSMOS?.techSystem?.isResearched('interplanetary_logistics') ?? false)) {
+      const cbSize = 14;
+      const cbX = x + PAD;
+      const cbY = cy;
+      const checked = cfg.repeat ?? false;
+      // Ramka checkbox
+      ctx.fillStyle = checked ? 'rgba(20,60,40,0.8)' : 'rgba(20,20,30,0.5)';
+      ctx.fillRect(cbX, cbY, cbSize, cbSize);
+      ctx.strokeStyle = checked ? THEME.success : THEME.border;
+      ctx.strokeRect(cbX, cbY, cbSize, cbSize);
+      if (checked) {
+        ctx.font = `bold ${cbSize - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.success; ctx.textAlign = 'center';
+        ctx.fillText('✓', cbX + cbSize / 2, cbY + cbSize - 2); ctx.textAlign = 'left';
+      }
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.text;
+      ctx.fillText('Powtarzaj automatycznie', cbX + cbSize + 6, cbY + 11);
+      this._hitZones.push({ x: cbX, y: cbY, w: w - PAD * 2, h: cbSize, type: 'toggle_repeat' });
+      cy += cbSize + 8;
+    }
+
     // WYŚLIJ
     const btnH = 26;
     ctx.fillStyle = 'rgba(20,60,40,0.8)';
@@ -1696,8 +1773,8 @@ export class FleetTabPanel {
           if (!body.explored) continue;
           if (colMgr?.hasColony(body.id)) continue;
           if (body.type === 'planet' && body.planetType !== 'rocky' && body.planetType !== 'ice') continue;
-        } else if (actionId === 'transport' || actionId === 'redirect') {
-          if (!body.explored && actionId === 'transport') continue;
+        } else if (actionId === 'transport' || actionId === 'redirect' || actionId === 'trade_route') {
+          if (!body.explored && (actionId === 'transport' || actionId === 'trade_route')) continue;
         }
 
         const dist = fromBody ? Math.max(0.001, DistanceUtils.euclideanAU(fromBody, body)) : 99;
