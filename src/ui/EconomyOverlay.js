@@ -93,17 +93,22 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.fillStyle = THEME.bgSecondary;
     ctx.fillRect(x, y, w, 44);
     this._drawText(ctx, 'EKONOMIA', x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
+
+    const colMgr = window.KOSMOS?.colonyManager;
+    const selCol = this._selectedColonyId
+      ? colMgr?.getColony(this._selectedColonyId) : null;
+
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText('globalne · wszystkie kolonie', x + pad, y + 32);
+    ctx.fillText(selCol ? `📍 ${selCol.name ?? selCol.planetId}` : 'globalne · wszystkie kolonie', x + pad, y + 32);
 
-    // Zbierz globalne dane ze wszystkich kolonii
-    const colMgr = window.KOSMOS?.colonyManager;
+    // Zbierz dane: per-kolonia lub globalne
     const colonies = colMgr?.getAllColonies() ?? [];
+    const sourceColonies = selCol ? [selCol] : colonies;
     const globalInv = {};   // id → amount
     const globalRate = {};  // id → perYear
 
-    for (const col of colonies) {
+    for (const col of sourceColonies) {
       const rs = col.resourceSystem;
       if (!rs) continue;
       // Inventory
@@ -146,8 +151,9 @@ export class EconomyOverlay extends BaseOverlay {
       Object.values(HARVESTED_RESOURCES), globalInv, globalRate);
 
     // ── Kategoria: TOWARY ─────────────────────────────────
+    // Przy wybranej kolonii pokaż WSZYSTKIE towary (widać stan zapasów)
     const comItems = Object.values(COMMODITIES).filter(c =>
-      (globalInv[c.id] ?? 0) > 0 || (globalRate[c.id] ?? 0) !== 0
+      selCol ? true : ((globalInv[c.id] ?? 0) > 0 || (globalRate[c.id] ?? 0) !== 0)
     );
     ry = this._drawCategory(ctx, x, ry, w, '🔧 TOWARY', 'commodities',
       comItems, globalInv, globalRate);
@@ -161,10 +167,10 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.strokeStyle = THEME.border;
     ctx.beginPath(); ctx.moveTo(x, eY); ctx.lineTo(x + w, eY); ctx.stroke();
 
-    // Globalna energia
+    // Energia (globalna lub per-kolonia)
     let totalEnergyBal = 0;
     let anyBrownout = false;
-    for (const col of colonies) {
+    for (const col of sourceColonies) {
       const e = col.resourceSystem?.energy;
       if (e) {
         totalEnergyBal += e.balance;
@@ -309,7 +315,7 @@ export class EconomyOverlay extends BaseOverlay {
 
   _drawFactoriesTab(ctx, x, y, w, h) {
     const colMgr = window.KOSMOS?.colonyManager;
-    const colonies = colMgr?.getAllColonies()?.filter(c => !c.isOutpost) ?? [];
+    const colonies = colMgr?.getAllColonies() ?? [];
 
     // ── Filtr kolonii (góra) ──────────────────────────────
     this._drawColonyFilter(ctx, x, y, w, FILTER_H, colonies);
@@ -375,11 +381,8 @@ export class EconomyOverlay extends BaseOverlay {
     this._addHit(cx, y + 2, glW, h - 4, 'colony_filter', { colonyId: null });
     cx += glW + 4;
 
-    // Chipy per kolonia
+    // Chipy per kolonia (wszystkie, w tym bez fabryk)
     for (const col of colonies) {
-      const fs = col.factorySystem;
-      if (!fs || fs.totalPoints <= 0) continue;
-
       const label = (col.name ?? col.planetId).slice(0, 12);
       const cw = Math.min(ctx.measureText(label).width + 14, 100);
       if (cx + cw > x + w - pad) break; // nie mieści się
@@ -1326,6 +1329,7 @@ export class EconomyOverlay extends BaseOverlay {
         break;
       case 'colony_filter':
         this._selectedColonyId = zone.data.colonyId;
+        this._scrollLeft = 0;
         this._scrollCenterTop = 0;
         this._scrollCenterBot = 0;
         break;
