@@ -32,6 +32,16 @@ function _findBody(id) {
   return null;
 }
 
+// Helper: rozwiąż czytelną nazwę ciała/kolonii po ID (fallback ColonyManager)
+function _resolveName(id) {
+  if (!id) return '???';
+  const body = _findBody(id);
+  if (body?.name) return body.name;
+  const colony = window.KOSMOS?.colonyManager?.getColony(id);
+  if (colony?.name) return colony.name;
+  return id;
+}
+
 // ── Stałe layoutu ────────────────────────────────────────────────────────────
 const LEFT_W    = 280;
 const RIGHT_W   = 300;
@@ -715,17 +725,14 @@ export class FleetManagerOverlay {
 
   _getLocationText(vessel) {
     if (vessel.position.state === 'docked') {
-      const body = _findBody(vessel.position.dockedAt);
-      return `Hangar: ${body?.name ?? vessel.position.dockedAt}`;
+      return `Hangar: ${_resolveName(vessel.position.dockedAt)}`;
     }
     if (vessel.position.state === 'orbiting') {
-      const body = _findBody(vessel.position.dockedAt);
-      return `Orbita: ${body?.name ?? '?'}`;
+      return `Orbita: ${_resolveName(vessel.position.dockedAt)}`;
     }
     // W locie — pokaż cel
     if (vessel.mission?.targetId) {
-      const target = _findBody(vessel.mission.targetId);
-      return `→ ${target?.name ?? vessel.mission.targetId}`;
+      return `→ ${vessel.mission.targetName ?? _resolveName(vessel.mission.targetId)}`;
     }
     return 'W locie';
   }
@@ -1823,12 +1830,7 @@ export class FleetManagerOverlay {
   }
 
   _baseText(vessel) {
-    const id = vessel.homeColonyId ?? vessel.colonyId;
-    const body = _findBody(id);
-    if (body?.name) return body.name;
-    // Fallback: nazwa kolonii z ColonyManager
-    const colony = window.KOSMOS?.colonyManager?.getColony(id);
-    return colony?.name ?? '???';
+    return _resolveName(vessel.homeColonyId ?? vessel.colonyId);
   }
 
   _xpStars(vessel) {
@@ -1844,11 +1846,11 @@ export class FleetManagerOverlay {
     ctx.fillStyle = THEME.textDim;
     ctx.fillText('AKTYWNA MISJA', x + pad, cy + 10);
 
-    const target = _findBody(mission.targetId);
+    const targetName = mission.targetName ?? _resolveName(mission.targetId);
     const typeName = this._missionTypeName(mission.type);
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(`${typeName} → ${target?.name ?? mission.targetId ?? '?'}`, x + pad, cy + 26);
+    ctx.fillText(`${typeName} → ${targetName}`, x + pad, cy + 26);
 
     // Faza + ETA
     const phase = mission.status ?? 'transit';
