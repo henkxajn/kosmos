@@ -35,11 +35,9 @@ const ACTIONS = {
       const ms = state.missionSystem;
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
       const check = ms.canLaunchRecon();
-      if (!check.ok) {
-        if (!check.techOk)   return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-        if (!check.padOk)    return { ok: false, reason: 'Brak Wyrzutni' };
-        if (!check.vesselOk) return { ok: false, reason: 'Wymaga Statku Naukowego' };
-      }
+      // Sprawdzamy tylko tech i pad — vesselOk pomijamy, bo mamy bezpośredni dostęp do vessel
+      if (!check.techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
+      if (!check.padOk)  return { ok: false, reason: 'Brak Wyrzutni' };
       if (vessel.shipId !== 'science_vessel') {
         return { ok: false, reason: 'Wymaga Statku Naukowego' };
       }
@@ -62,11 +60,9 @@ const ACTIONS = {
       const ms = state.missionSystem;
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
       const check = ms.canLaunchRecon();
-      if (!check.ok) {
-        if (!check.techOk)   return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-        if (!check.padOk)    return { ok: false, reason: 'Brak Wyrzutni' };
-        if (!check.vesselOk) return { ok: false, reason: 'Wymaga Statku Naukowego' };
-      }
+      // Sprawdzamy tylko tech i pad — vesselOk pomijamy, bo mamy bezpośredni dostęp do vessel
+      if (!check.techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
+      if (!check.padOk)  return { ok: false, reason: 'Brak Wyrzutni' };
       if (vessel.shipId !== 'science_vessel') {
         return { ok: false, reason: 'Wymaga Statku Naukowego' };
       }

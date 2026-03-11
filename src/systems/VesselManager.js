@@ -320,7 +320,8 @@ export class VesselManager {
 
     // Wpis do dziennika misji
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    addMissionLog(vessel, gameYear, `Zadokował w ${targetId}`, 'success');
+    const targetName = entity?.name ?? entity?.id ?? targetId;
+    addMissionLog(vessel, gameYear, `Zadokował w ${targetName}`, 'success');
 
     EventBus.emit('vessel:docked', { vessel });
   }
