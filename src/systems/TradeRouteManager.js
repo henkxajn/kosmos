@@ -28,6 +28,14 @@ export class TradeRouteManager {
     EventBus.on('tradeRoute:pause', ({ routeId }) => this.pauseRoute(routeId));
     EventBus.on('tradeRoute:resume', ({ routeId }) => this.resumeRoute(routeId));
     EventBus.on('tradeRoute:delete', ({ routeId }) => this.deleteRoute(routeId));
+
+    // Cleanup tras przy zniszczeniu kolonii
+    EventBus.on('colony:destroyed', ({ planetId }) => {
+      this._routes = this._routes.filter(
+        r => r.sourceColonyId !== planetId && r.targetBodyId !== planetId
+      );
+      this._emitStatus();
+    });
   }
 
   // ── API publiczne ──────────────────────────────────────────

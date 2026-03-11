@@ -31,7 +31,7 @@ import { ResearchSystem }      from '../systems/ResearchSystem.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification, showImpactNotification } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
-import { initMissionEvents }    from '../ui/MissionEventModal.js';
+import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
@@ -262,6 +262,44 @@ export class GameScene {
 
     // Popupy misji (pauza + powiadomienie)
     initMissionEvents();
+
+    // Popup: kolonia/placówka utracona (zniszczenie ciała niebieskiego)
+    EventBus.on('colony:destroyed', ({ planetId, colonyName, reason, isOutpost, population, destroyedVesselIds }) => {
+      // Zamknij ColonyOverlay (removeColony przełączyła aktywną kolonię, ale overlay jest stale)
+      if (this.uiManager?.overlayManager?.isAnyOpen()) {
+        this.uiManager.overlayManager.closeActive();
+      }
+
+      const reasonPL = reason === 'collision' ? 'Kolizja planetarna'
+        : reason === 'ejected' ? 'Wyrzucenie z układu'
+        : 'Zniszczenie ciała niebieskiego';
+
+      const typeLabel = isOutpost ? 'Placówka' : 'Kolonia';
+      const vesselCount = destroyedVesselIds?.length ?? 0;
+
+      let html = `
+        <div class="mm-row"><span class="mm-label">${typeLabel}</span><span class="mm-value mm-danger">${colonyName}</span></div>
+        <div class="mm-row"><span class="mm-label">Przyczyna</span><span class="mm-value">${reasonPL}</span></div>
+      `;
+      if (population > 0) {
+        html += `<div class="mm-row"><span class="mm-label">Utracona populacja</span><span class="mm-value mm-danger">${population} POP</span></div>`;
+      }
+      if (vesselCount > 0) {
+        html += `<div class="mm-row"><span class="mm-label">Utracone statki</span><span class="mm-value mm-danger">${vesselCount}</span></div>`;
+      }
+      html += `
+        <div class="mm-section" style="text-align:center; padding: 12px 0;">
+          <span class="mm-danger" style="font-size:13px;">${typeLabel} została bezpowrotnie utracona.</span>
+        </div>
+      `;
+
+      queueMissionEvent({
+        severity: 'danger',
+        icon: '💥',
+        title: `${typeLabel} ${colonyName} utracona`,
+        html,
+      });
+    });
 
     // Keyboard input (DOM)
     this._setupKeyboard();

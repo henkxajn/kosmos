@@ -86,6 +86,10 @@ export class MissionSystem {
 
     EventBus.on('expedition:deliverCargo', ({ expeditionId }) =>
       this._deliverCargo(expeditionId));
+
+    // Cleanup misji przy zniszczeniu kolonii
+    EventBus.on('colony:destroyed', ({ planetId }) =>
+      this._onColonyDestroyed(planetId));
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────
@@ -971,6 +975,28 @@ export class MissionSystem {
     }
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
+  }
+
+  // ── Obsługa zniszczenia kolonii ─────────────────────────────────────────
+  _onColonyDestroyed(planetId) {
+    const homePlanetId = window.KOSMOS?.homePlanet?.id;
+
+    for (const exp of this._missions) {
+      if (exp.status === 'completed') continue;
+
+      // Misje lecące DO zniszczonego ciała → anuluj
+      if (exp.targetId === planetId && (exp.status === 'en_route' || exp.status === 'orbiting')) {
+        exp.status = 'completed';
+        // Odblokuj POPy — crewCost pochodzi z misji, nie ze statku
+        // (POPy statku odblokowywane przy disband, tu chodzi o POPy misji)
+        // VesselManager sam obsługuje powrót statku
+      }
+
+      // Misje z originColonyId = zniszczona kolonia → reassign na homePlanet
+      if (exp.originColonyId === planetId && homePlanetId) {
+        exp.originColonyId = homePlanetId;
+      }
+    }
   }
 
   // ── Sprawdzanie przybycz i powrotów ───────────────────────────────────────

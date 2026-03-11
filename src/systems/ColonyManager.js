@@ -128,6 +128,28 @@ export class ColonyManager {
     EventBus.on('planet:upgradeResult', invalidateShipyard);
     // Budynki z buildTime kończą budowę asynchronicznie — invaliduj też po zakończeniu
     EventBus.on('planet:constructionComplete', invalidateShipyard);
+
+    // ── Zniszczenie ciała niebieskiego z kolonią ────────────────────────────
+    EventBus.on('body:collision', ({ loser }) => {
+      if (loser && this._colonies.has(loser.id)) {
+        this.removeColony(loser.id, 'collision');
+      }
+    });
+    EventBus.on('planet:ejected', ({ planet }) => {
+      if (planet && this._colonies.has(planet.id)) {
+        this.removeColony(planet.id, 'ejected');
+      }
+    });
+    // Fallback: entity usunięty z EntityManager (np. kolizja bez body:collision)
+    EventBus.on('entity:removed', ({ entity }) => {
+      if (entity && this._colonies.has(entity.id)) {
+        queueMicrotask(() => {
+          if (this._colonies.has(entity.id)) {
+            this.removeColony(entity.id, 'destroyed');
+          }
+        });
+      }
+    });
   }
 
   // ── API publiczne ───────────────────────────────────────────────────────
@@ -375,6 +397,61 @@ export class ColonyManager {
     EventBus.emit('colony:listChanged', {});
 
     return true;
+  }
+
+  // ── Zniszczenie kolonii ──────────────────────────────────────────────
+
+  // Usuń kolonię (ciało niebieskie zniszczone/wyrzucone)
+  // Pomija homePlanet — game over obsługiwany w GameScene
+  removeColony(planetId, reason = 'destroyed') {
+    const colony = this._colonies.get(planetId);
+    if (!colony) return;
+
+    // HomePlanet → game over (obsługa w GameScene)
+    if (colony.isHomePlanet) return;
+
+    const vMgr = window.KOSMOS?.vesselManager;
+    const destroyedVesselIds = [];
+
+    // Zniszcz statki w hangarze tej kolonii
+    if (vMgr && colony.fleet?.length > 0) {
+      for (const vesselId of [...colony.fleet]) {
+        const vessel = vMgr.getVessel(vesselId);
+        if (vessel && vessel.position.state === 'docked') {
+          destroyedVesselIds.push(vesselId);
+          vMgr.destroyVessel(vesselId);
+        }
+      }
+    }
+
+    // Usuń drogi handlowe dotyczące tej kolonii (stary system ColonyManager)
+    this._tradeRoutes = this._tradeRoutes.filter(
+      r => r.colonyA !== planetId && r.colonyB !== planetId
+    );
+
+    // Jeśli aktywna kolonia = zniszczona → przełącz na homePlanet
+    if (this._activePlanetId === planetId) {
+      const homePlanetId = window.KOSMOS?.homePlanet?.id;
+      if (homePlanetId && this._colonies.has(homePlanetId)) {
+        this.switchActiveColony(homePlanetId);
+      }
+    }
+
+    const colonyName = colony.name ?? planetId;
+    const isOutpost  = colony.isOutpost ?? false;
+    const population = colony.civSystem?.population ?? 0;
+
+    this._colonies.delete(planetId);
+
+    EventBus.emit('colony:destroyed', {
+      planetId,
+      colonyName,
+      reason,
+      isOutpost,
+      population,
+      destroyedVesselIds,
+    });
+    EventBus.emit('colony:listChanged', {});
   }
 
   // ── Drogi handlowe ────────────────────────────────────────────────

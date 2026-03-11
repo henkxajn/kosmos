@@ -62,6 +62,10 @@ export class VesselManager {
 
     EventBus.on('vessel:rename', ({ vesselId, name }) =>
       this._renameVessel(vesselId, name));
+
+    // Cleanup statków przy zniszczeniu kolonii
+    EventBus.on('colony:destroyed', ({ planetId, destroyedVesselIds }) =>
+      this._onColonyDestroyed(planetId, destroyedVesselIds ?? []));
   }
 
   // ── API publiczne ─────────────────────────────────────────────────────────
@@ -346,6 +350,68 @@ export class VesselManager {
 
     // Usuń sprite z renderera
     EventBus.emit('vessel:docked', { vessel }); // reuse — usunie sprite
+  }
+
+  /**
+   * Obsługa zniszczenia kolonii — przekieruj/reassign statki w locie.
+   * Statki w hangarze (docked) już zniszczone przez ColonyManager.removeColony().
+   */
+  _onColonyDestroyed(planetId, destroyedVesselIds) {
+    const homePlanetId = window.KOSMOS?.homePlanet?.id;
+    if (!homePlanetId) return;
+
+    const alreadyDestroyed = new Set(destroyedVesselIds);
+
+    for (const vessel of this._vessels.values()) {
+      if (alreadyDestroyed.has(vessel.id)) continue;
+
+      // Statki w tranzycie/orbitujące DO zniszczonego ciała → awaryjny powrót
+      if (vessel.mission?.targetId === planetId &&
+          (vessel.position.state === 'in_transit' || vessel.position.state === 'orbiting')) {
+        // Zmień cel powrotu na homePlanet
+        vessel.colonyId = homePlanetId;
+        // Dodaj do floty homePlanet
+        const homeColony = window.KOSMOS?.colonyManager?.getColony(homePlanetId);
+        if (homeColony && !homeColony.fleet.includes(vessel.id)) {
+          homeColony.fleet.push(vessel.id);
+        }
+        // Wymuś powrót
+        this.startReturn(vessel.id);
+        const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+        addMissionLog(vessel, gameYear, `Awaryjny powrót — cel zniszczony`, 'danger');
+        continue;
+      }
+
+      // Statki wracające DO zniszczonej kolonii → zmień cel powrotu
+      if (vessel.colonyId === planetId && vessel.mission?.phase === 'returning') {
+        vessel.colonyId = homePlanetId;
+        // Przelicz punkt docelowy powrotu
+        const homeEntity = this._findEntity(homePlanetId);
+        if (homeEntity && vessel.mission) {
+          vessel.mission.returnTargetX = homeEntity.x;
+          vessel.mission.returnTargetY = homeEntity.y;
+        }
+        const homeColony = window.KOSMOS?.colonyManager?.getColony(homePlanetId);
+        if (homeColony && !homeColony.fleet.includes(vessel.id)) {
+          homeColony.fleet.push(vessel.id);
+        }
+        const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+        addMissionLog(vessel, gameYear, `Przekierowano do bazy — kolonia macierzysta zniszczona`, 'danger');
+        continue;
+      }
+
+      // Statki należące do zniszczonej kolonii (na innej misji) → reassign
+      if (vessel.colonyId === planetId) {
+        vessel.colonyId = homePlanetId;
+        vessel.homeColonyId = homePlanetId;
+        const homeColony = window.KOSMOS?.colonyManager?.getColony(homePlanetId);
+        if (homeColony && !homeColony.fleet.includes(vessel.id)) {
+          homeColony.fleet.push(vessel.id);
+        }
+        const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+        addMissionLog(vessel, gameYear, `Reassigned do ${this._resolveEntityName(homePlanetId)} — kolonia macierzysta zniszczona`, 'warning');
+      }
+    }
   }
 
   /**

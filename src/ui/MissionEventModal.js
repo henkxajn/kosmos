@@ -355,7 +355,7 @@ function _restoreTime() {
 
 // ── Publiczne API — dodaj popup do kolejki ───────────────────────────────
 
-function queueMissionEvent(config) {
+export function queueMissionEvent(config) {
   _queue.push(config);
   if (!_active) _showNext();
 }

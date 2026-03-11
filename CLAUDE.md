@@ -227,6 +227,7 @@ SaveSystem._serializeCiv4x()
 | `tradeRoute:create/pause/resume/delete` | TradeRouteModal | TradeRouteManager |
 | `expedition:deliverCargo { expeditionId }` | UIManager | ExpeditionSystem |
 | `outpost:founded { colony }` | ColonyManager | GameScene |
+| `colony:destroyed { planetId, colonyName, reason, isOutpost, population, destroyedVesselIds }` | ColonyManager | GameScene, VesselManager, MissionSystem, TradeRouteManager |
 | `planet:constructionProgress` | BuildingSystem | PlanetGlobeScene |
 | `planet:constructionComplete { tileKey, buildingId }` | BuildingSystem | PlanetGlobeScene |
 
