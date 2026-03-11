@@ -626,7 +626,7 @@ export class VesselManager {
           // Powrót: interpolacja returnStart → (waypoints) → returnTarget
           const returnDepart = m.returnDepartYear ?? m.arrivalYear ?? m.departYear;
           const totalReturn = (m.returnYear ?? m.arrivalYear) - returnDepart;
-          if (totalReturn > 0) {
+          if (totalReturn > 0.0001) {
             const t = Math.max(0, Math.min(1,
               (gameYear - returnDepart) / totalReturn
             ));
@@ -637,11 +637,15 @@ export class VesselManager {
             );
             vessel.position.x = rp.x;
             vessel.position.y = rp.y;
+          } else {
+            // Prawie zerowy czas powrotu — snap do celu
+            vessel.position.x = m.returnTargetX ?? m.startX;
+            vessel.position.y = m.returnTargetY ?? m.startY;
           }
         } else {
           // W drodze do celu: interpolacja start → (waypoints) → target
           const totalTravel = (m.arrivalYear ?? 1) - (m.departYear ?? 0);
-          if (totalTravel > 0) {
+          if (totalTravel > 0.0001) {
             const t = Math.max(0, Math.min(1,
               (gameYear - m.departYear) / totalTravel
             ));
@@ -652,6 +656,10 @@ export class VesselManager {
             );
             vessel.position.x = op.x;
             vessel.position.y = op.y;
+          } else {
+            // Prawie zerowy czas podróży — snap do celu
+            vessel.position.x = m.targetX ?? vessel.position.x;
+            vessel.position.y = m.targetY ?? vessel.position.y;
           }
         }
         // Akumuluj przebytą odległość (AU)
@@ -718,7 +726,8 @@ export class VesselManager {
       segLens.push(d);
       totalLen += d;
     }
-    if (totalLen < 1) return { x: sx, y: sy };
+    // Trasa krótsza niż 1 px — interpoluj liniowo wg t (unikaj zamrożenia na starcie)
+    if (totalLen < 1) return { x: sx + (tx - sx) * t, y: sy + (ty - sy) * t };
 
     // Znajdź segment odpowiadający postępowi t
     let traveled = t * totalLen;
@@ -743,7 +752,8 @@ export class VesselManager {
     const dx = tx - sx, dy = ty - sy;
     const lenSq = dx * dx + dy * dy;
     const directDist = Math.sqrt(lenSq);
-    if (lenSq < 1) return { waypoints: [], totalDist: directDist };
+    // Bardzo krótki dystans — linia prosta, bez unikania (zapobiega NaN z division by ~0)
+    if (lenSq < 1 || directDist < 0.01) return { waypoints: [], totalDist: Math.max(directDist, 0) };
 
     // Krótkie dystanse (< 0.5 AU) → linia prosta, bez unikania
     // (np. lot planeta→księżyc — oba blisko gwiazdy, nie trzeba omijać)

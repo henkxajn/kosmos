@@ -116,8 +116,17 @@ export class TradeRouteManager {
       return;
     }
 
-    // Auto-dispatch następnego kursu
-    this._dispatchRoute(route);
+    // Statek zadokował w źródle → załaduj cargo i wyślij do celu
+    if (vessel.position.dockedAt === route.sourceColonyId) {
+      this._dispatchRoute(route);
+    } else {
+      // Statek zadokował w celu (lub gdzie indziej) → pusty powrót do źródła
+      EventBus.emit('expedition:transportRequest', {
+        targetId: route.sourceColonyId,
+        cargo: {},
+        vesselId: route.vesselId,
+      });
+    }
   }
 
   _dispatchRoute(route) {
