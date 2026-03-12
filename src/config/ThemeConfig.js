@@ -48,6 +48,13 @@ export const THEME = {
   fontSizeMedium: 13,
   fontSizeLarge:  16,
   fontSizeTitle:  16,
+  // Efekty CRT (terminal)
+  crtEnabled:     false,      // master toggle — włącza scanlines/vignette/sweep
+  crtScanlines:   true,       // paski skanowania
+  crtVignette:    true,       // ciemne krawędzie
+  crtSweep:       true,       // animowana linia przesuwająca się w dół
+  crtSweepColor:  '#ffaa40',  // kolor linii sweep
+  crtGlow:        0,          // intensywność poświaty tekstu (0 = wyłączone)
 };
 
 // ── Zamrożona kopia domyślnych wartości ──────────────────────────
@@ -300,6 +307,152 @@ export const PRESET_THEMES = {
     fontSizeLarge:  13,
     fontSizeTitle:  15,
   },
+
+  // ── Presety terminalowe (CRT) ───────────────────────────────
+
+  terminal_amber: {
+    bgPrimary:    '#090700',
+    bgSecondary:  '#110e06',
+    bgTertiary:   '#1a1408',
+    border:       '#b8600020',
+    borderLight:  '#b8600040',
+    borderActive: '#b86000',
+    textPrimary:  '#ffdd99',
+    textSecondary:'#997730',
+    textLabel:    '#b8600040',
+    textDim:      '#b8600030',
+    textHeader:   '#b86000',
+    accent:       '#ffaa40',
+    accentDim:    '#b8600020',
+    accentMed:    '#b8600030',
+    success:      '#44aa00',
+    successDim:   '#338800',
+    danger:       '#cc3300',
+    dangerDim:    '#991f00',
+    warning:      '#b86000',
+    yellow:       '#ffaa40',
+    info:         '#b86000',
+    purple:       '#cc8844',
+    mint:         '#88cc44',
+    fontFamily:   "'VT323', monospace",
+    fontSizeTiny:   10,
+    fontSizeSmall:  12,
+    fontSizeNormal: 14,
+    fontSizeMedium: 16,
+    fontSizeLarge:  20,
+    fontSizeTitle:  20,
+    crtEnabled:     true,
+    crtSweepColor:  '#ffaa40',
+    crtGlow:        8,
+  },
+
+  terminal_red: {
+    bgPrimary:    '#090200',
+    bgSecondary:  '#110500',
+    bgTertiary:   '#1a0800',
+    border:       '#cc330020',
+    borderLight:  '#cc330040',
+    borderActive: '#cc3300',
+    textPrimary:  '#ffaa88',
+    textSecondary:'#cc6644',
+    textLabel:    '#cc330040',
+    textDim:      '#cc330030',
+    textHeader:   '#cc3300',
+    accent:       '#ff4400',
+    accentDim:    '#cc330020',
+    accentMed:    '#cc330030',
+    success:      '#44aa00',
+    successDim:   '#338800',
+    danger:       '#ff4400',
+    dangerDim:    '#cc3300',
+    warning:      '#ff6622',
+    yellow:       '#ff8844',
+    info:         '#cc4400',
+    purple:       '#cc4422',
+    mint:         '#ff6644',
+    fontFamily:   "'VT323', monospace",
+    fontSizeTiny:   10,
+    fontSizeSmall:  12,
+    fontSizeNormal: 14,
+    fontSizeMedium: 16,
+    fontSizeLarge:  20,
+    fontSizeTitle:  20,
+    crtEnabled:     true,
+    crtSweepColor:  '#ff4400',
+    crtGlow:        8,
+  },
+
+  terminal_green: {
+    bgPrimary:    '#020900',
+    bgSecondary:  '#051100',
+    bgTertiary:   '#081a00',
+    border:       '#44aa0020',
+    borderLight:  '#44aa0040',
+    borderActive: '#44aa00',
+    textPrimary:  '#ccff99',
+    textSecondary:'#558833',
+    textLabel:    '#44aa0040',
+    textDim:      '#44aa0030',
+    textHeader:   '#44aa00',
+    accent:       '#88ff44',
+    accentDim:    '#44aa0020',
+    accentMed:    '#44aa0030',
+    success:      '#88ff44',
+    successDim:   '#66cc33',
+    danger:       '#ff4400',
+    dangerDim:    '#cc3300',
+    warning:      '#aacc00',
+    yellow:       '#88ff44',
+    info:         '#44cc00',
+    purple:       '#66aa44',
+    mint:         '#88ff44',
+    fontFamily:   "'VT323', monospace",
+    fontSizeTiny:   10,
+    fontSizeSmall:  12,
+    fontSizeNormal: 14,
+    fontSizeMedium: 16,
+    fontSizeLarge:  20,
+    fontSizeTitle:  20,
+    crtEnabled:     true,
+    crtSweepColor:  '#88ff44',
+    crtGlow:        8,
+  },
+
+  terminal_gold: {
+    bgPrimary:    '#090800',
+    bgSecondary:  '#111000',
+    bgTertiary:   '#1a1800',
+    border:       '#ffd70020',
+    borderLight:  '#ffd70040',
+    borderActive: '#ffd700',
+    textPrimary:  '#fff8cc',
+    textSecondary:'#aa8820',
+    textLabel:    '#ffd70040',
+    textDim:      '#ffd70030',
+    textHeader:   '#c8900a',
+    accent:       '#ffe060',
+    accentDim:    '#ffd70020',
+    accentMed:    '#ffd70030',
+    success:      '#88ff44',
+    successDim:   '#66cc33',
+    danger:       '#ff4400',
+    dangerDim:    '#cc3300',
+    warning:      '#ffd700',
+    yellow:       '#ffe060',
+    info:         '#c8900a',
+    purple:       '#ccaa44',
+    mint:         '#aacc44',
+    fontFamily:   "'VT323', monospace",
+    fontSizeTiny:   10,
+    fontSizeSmall:  12,
+    fontSizeNormal: 14,
+    fontSizeMedium: 16,
+    fontSizeLarge:  20,
+    fontSizeTitle:  20,
+    crtEnabled:     true,
+    crtSweepColor:  '#ffd700',
+    crtGlow:        8,
+  },
 };
 
 // ── Pomocnicze: hex → RGB ───────────────────────────────────────
@@ -327,6 +480,11 @@ export function bgAlpha(alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+// ── CRT overlay callback (ustawiana przez CrtOverlay.init()) ────
+
+let _crtUpdateFn = null;
+export function setCrtUpdateCallback(fn) { _crtUpdateFn = fn; }
+
 // ── Aplikowanie motywu ──────────────────────────────────────────
 
 export function applyTheme(partial) {
@@ -335,6 +493,23 @@ export function applyTheme(partial) {
       THEME[key] = partial[key];
     }
   }
+  // Synchronizuj CRT overlay z aktualnym stanem THEME
+  if (_crtUpdateFn) _crtUpdateFn();
+}
+
+// Pełne zastosowanie presetu — reset do domyślnych, potem nadpisanie.
+// Gwarantuje, że tokeny nieobecne w presecie wracają do defaults
+// (np. CRT tokeny znikają przy przejściu terminal → klasyczny).
+export function applyPreset(preset) {
+  for (const key of Object.keys(DEFAULT_THEME)) {
+    THEME[key] = DEFAULT_THEME[key];
+  }
+  for (const key of Object.keys(preset)) {
+    if (key in THEME) {
+      THEME[key] = preset[key];
+    }
+  }
+  if (_crtUpdateFn) _crtUpdateFn();
 }
 
 // ── Persystencja localStorage ───────────────────────────────────

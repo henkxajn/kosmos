@@ -4,7 +4,7 @@
 // Color pickery + presety + eksport/import/reset.
 // Gra działa normalnie po lewej stronie.
 
-import { THEME, DEFAULT_THEME, PRESET_THEMES, applyTheme, saveTheme, resetTheme, hexToRgb } from '../config/ThemeConfig.js';
+import { THEME, DEFAULT_THEME, PRESET_THEMES, applyTheme, applyPreset, saveTheme, resetTheme, hexToRgb } from '../config/ThemeConfig.js';
 
 // ── Sekcje edytora ──────────────────────────────────────────────
 
@@ -132,32 +132,71 @@ export class ThemeOverlay {
     const wrap = this._el('div', {
       style: 'margin-bottom:8px;padding:6px;border:1px solid ' + THEME.border + ';border-radius:4px;',
     });
-    const label = this._el('div', {
-      textContent: 'PRESETY',
-      style: `color:${THEME.textHeader};font-size:9px;margin-bottom:6px;font-weight:bold;`,
-    });
-    wrap.appendChild(label);
 
-    const row = this._el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;' });
+    // Podział presetów na klasyczne i terminalowe
+    const classic  = [];
+    const terminal = [];
     for (const [name, preset] of Object.entries(PRESET_THEMES)) {
-      const btn = this._el('button', {
-        textContent: name.charAt(0).toUpperCase() + name.slice(1),
-        style: `
-          background:${THEME.bgTertiary};border:1px solid ${THEME.border};border-radius:3px;
-          color:${THEME.textPrimary};font-family:monospace;font-size:9px;padding:4px 10px;cursor:pointer;
-        `,
-      });
-      btn.addEventListener('click', () => {
-        applyTheme(preset);
-        this._syncAll();
-        saveTheme();
-      });
-      btn.addEventListener('mouseenter', () => { btn.style.borderColor = THEME.borderActive; });
-      btn.addEventListener('mouseleave', () => { btn.style.borderColor = THEME.border; });
-      row.appendChild(btn);
+      if (name.startsWith('terminal_')) {
+        terminal.push([name, preset]);
+      } else {
+        classic.push([name, preset]);
+      }
     }
-    wrap.appendChild(row);
+
+    // Nazwy wyświetlane (ładniejsze)
+    const DISPLAY = {
+      default: 'Default', cyberpunk: 'Cyberpunk', arctic: 'Arctic', amber: 'Amber',
+      emerald: 'Emerald', crimson: 'Crimson', midnight: 'Midnight', kosmos: 'Kosmos', solar: 'Solar',
+      terminal_amber: '🖥 Amber', terminal_red: '🖥 Red',
+      terminal_green: '🖥 Green', terminal_gold: '🖥 Gold',
+    };
+
+    // — Sekcja: Klasyczne —
+    const classicLabel = this._el('div', {
+      textContent: 'KLASYCZNE',
+      style: `color:${THEME.textHeader};font-size:9px;margin-bottom:4px;font-weight:bold;`,
+    });
+    wrap.appendChild(classicLabel);
+
+    const classicRow = this._el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px;' });
+    for (const [name, preset] of classic) {
+      classicRow.appendChild(this._presetBtn(name, preset, DISPLAY[name] || name));
+    }
+    wrap.appendChild(classicRow);
+
+    // — Sekcja: Terminal (CRT) —
+    const termLabel = this._el('div', {
+      textContent: 'TERMINAL (CRT)',
+      style: `color:${THEME.textHeader};font-size:9px;margin-bottom:4px;font-weight:bold;`,
+    });
+    wrap.appendChild(termLabel);
+
+    const termRow = this._el('div', { style: 'display:flex;gap:4px;flex-wrap:wrap;' });
+    for (const [name, preset] of terminal) {
+      termRow.appendChild(this._presetBtn(name, preset, DISPLAY[name] || name));
+    }
+    wrap.appendChild(termRow);
+
     return wrap;
+  }
+
+  _presetBtn(name, preset, displayName) {
+    const btn = this._el('button', {
+      textContent: displayName,
+      style: `
+        background:${THEME.bgTertiary};border:1px solid ${THEME.border};border-radius:3px;
+        color:${THEME.textPrimary};font-family:monospace;font-size:9px;padding:4px 10px;cursor:pointer;
+      `,
+    });
+    btn.addEventListener('click', () => {
+      applyPreset(preset);
+      this._syncAll();
+      saveTheme();
+    });
+    btn.addEventListener('mouseenter', () => { btn.style.borderColor = THEME.borderActive; });
+    btn.addEventListener('mouseleave', () => { btn.style.borderColor = THEME.border; });
+    return btn;
   }
 
   // ── Sekcja kolorów ────────────────────────────────────────────

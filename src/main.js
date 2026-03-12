@@ -4,6 +4,7 @@
 import { TitleScene } from './scenes/TitleScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { loadTheme } from './config/ThemeConfig.js';
+import { initCrt } from './ui/CrtOverlay.js';
 
 // Globalny stan gry (dostępny przez window.KOSMOS)
 window.KOSMOS = {
@@ -18,8 +19,9 @@ const uiCanvas    = document.getElementById('ui-canvas');
 const threeCanvas = document.getElementById('three-canvas');
 const eventLayer  = document.getElementById('event-layer');
 
-// Przywróć zapisany motyw kolorystyczny
+// Przywróć zapisany motyw kolorystyczny + zainicjuj CRT overlay
 loadTheme();
+initCrt();
 
 const title = new TitleScene();
 title.show();
