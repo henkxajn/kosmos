@@ -1179,7 +1179,7 @@ export class FleetTabPanel {
     lines.push(`${icon} ${name}`);
     lines.push(`Typ: ${body.planetType ?? body.type}`);
     if (body.explored) {
-      const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
+      const tempC = body.temperatureC != null ? Math.round(body.temperatureC) : (body.temperatureK ? Math.round(body.temperatureK - 273) : null);
       if (tempC !== null) lines.push(`Temp: ${tempC > 0 ? '+' : ''}${tempC}°C`);
     }
     const orbA = body.orbital?.a ?? 0;

@@ -168,7 +168,7 @@ function _buildBodyHTML(body) {
   const lines = [];
 
   // Typ + temperatura + masa + orbita
-  const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
+  const tempC = body.temperatureC != null ? Math.round(body.temperatureC) : (body.temperatureK ? Math.round(body.temperatureK - 273) : null);
   // Planety/księżyce/planetoidy mają masę w M⊕, gwiazdy w M☉
   const rawMass = body.physics?.mass;
   let massE = null;
@@ -195,9 +195,9 @@ function _buildBodyHTML(body) {
 
   // Atmosfera — string (thin/dense/none) lub obiekt (stary format)
   if (body.atmosphere && typeof body.atmosphere === 'string' && body.atmosphere !== 'none') {
-    const atmLabels = { dense: 'Gęsta', thin: 'Cienka' };
+    const atmLabels = { dense: 'Gęsta', thin: 'Cienka', breathable: 'Oddychalna' };
     let atmLabel = atmLabels[body.atmosphere] || body.atmosphere;
-    if (body.breathableAtmosphere) atmLabel += ' — zdatna do życia ✅';
+    if (body.atmosphere === 'breathable' || body.breathableAtmosphere) atmLabel += ' — zdatna do życia ✅';
     lines.push('<div class="mm-row"><span class="mm-label">Atmosfera</span><span class="mm-value">' + atmLabel + '</span></div>');
   } else if (body.atmosphere && typeof body.atmosphere === 'object') {
     const atmoEntries = Object.entries(body.atmosphere)

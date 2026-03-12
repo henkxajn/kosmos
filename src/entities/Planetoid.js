@@ -27,6 +27,14 @@ export class Planetoid extends CelestialBody {
     // Typ planetoidy (metallic / carbonaceous / silicate)
     this.planetoidType = config.planetoidType || 'silicate';
 
+    // Promień powierzchniowy (R⊕) i grawitacja powierzchniowa (g)
+    this.surfaceRadius  = config.surfaceRadius  ?? null;
+    this.surfaceGravity = config.surfaceGravity ?? null;
+
+    // Temperatura (K i °C)
+    this.temperatureK = config.temperatureK ?? null;
+    this.temperatureC = config.temperatureC ?? (this.temperatureK != null ? this.temperatureK - 273.15 : null);
+
     // Pola wymagane przez OrbitRenderer / StabilitySystem
     this.lifeScore        = 0;
     this.orbitalStability = 1.0;
@@ -38,7 +46,7 @@ export class Planetoid extends CelestialBody {
     this.surface = {
       hasWater:      false,
       magneticField: 0,
-      temperature:   config.temperatureK ? config.temperatureK - 273 : -100, // °C
+      temperature:   this.temperatureC ?? -100, // °C
     };
 
     // Skład chemiczny — generator nadpisuje wzbogaconym składem wg typu

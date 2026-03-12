@@ -31,9 +31,9 @@ export function resolveTextureType(planet) {
 
   // Gas giganty — pod-typ wg temperatury
   if (type === 'gas') {
-    const tempK = planet.temperatureK || 150;
-    if (tempK > 200) return 'gas_warm';
-    if (tempK < 80)  return 'gas_cold';
+    const tempC = planet.temperatureC ?? (planet.temperatureK ? planet.temperatureK - 273.15 : -123);
+    if (tempC > -73)  return 'gas_warm';   // >-73°C (było >200K)
+    if (tempC < -193) return 'gas_cold';   // <-193°C (było <80K)
     return 'gas_giant';
   }
 
@@ -44,13 +44,13 @@ export function resolveTextureType(planet) {
   }
   if (type === 'ice')       return 'ice';
 
-  // rocky — zależne od temperatury
-  const tempK = planet.temperatureK || 300;
-  if (tempK > 473) return 'lava-ocean'; // >200°C — mocno gorąca
-  if (tempK > 383) return 'toxic';      // 110–200°C — toksyczna atmosfera (Wenus-like)
-  if (tempK > 333) return 'desert';     // 60–110°C — pustynna
-  if (tempK > 283) return 'ocean';      // 10–60°C (strefa zamieszkiwalna)
-  if (tempK > 253) return 'rocky';      // −20–10°C
+  // rocky — zależne od temperatury (progi °C, równoważne starym progom K)
+  const tempC = planet.temperatureC ?? (planet.temperatureK ? planet.temperatureK - 273.15 : 27);
+  if (tempC > 200) return 'lava-ocean'; // >200°C — mocno gorąca
+  if (tempC > 110) return 'toxic';      // 110–200°C — toksyczna atmosfera (Wenus-like)
+  if (tempC > 60)  return 'desert';     // 60–110°C — pustynna
+  if (tempC > 10)  return 'ocean';      // 10–60°C (strefa zamieszkiwalna)
+  if (tempC > -20) return 'rocky';      // −20–10°C
   return 'iron';                        // <−20°C — zimna, ciemna
 }
 

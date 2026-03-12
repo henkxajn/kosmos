@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 16;
+export const CURRENT_VERSION     = 17;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -31,6 +31,7 @@ const MIGRATIONS = {
   13: _migrateV13toV14,
   14: _migrateV14toV15,
   15: _migrateV15toV16,
+  16: _migrateV16toV17,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -505,5 +506,62 @@ function _migrateV15toV16(data) {
     }
   }
 
+  return data;
+}
+
+// ── Migracja v16 → v17 ──────────────────────────────────────────────────────
+// Dodaje: surfaceRadius, surfaceGravity, temperatureC do planet/księżyców/planetoidów
+// Konwertuje: breathableAtmosphere → atmosphere='breathable'
+
+function _migrateV16toV17(data) {
+  // Helper: promień z masy (bez jitter — deterministyczny dla migracji)
+  function calcR(mass, type) {
+    if (type === 'gas') return 3.5 * Math.pow(mass, 0.12);
+    if (type === 'ice') return Math.pow(mass, 0.24);
+    return Math.pow(mass, 0.27);
+  }
+
+  // Planety
+  for (const p of (data.planets || [])) {
+    const mass = p.mass ?? 1;
+    const R = calcR(mass, p.planetType ?? 'rocky');
+    if (p.surfaceRadius  == null) p.surfaceRadius  = R;
+    if (p.surfaceGravity == null) p.surfaceGravity = mass / (R * R);
+    if (p.temperatureC   == null) p.temperatureC   = (p.temperatureK ?? 273) - 273.15;
+    // breathableAtmosphere → atmosphere = 'breathable'
+    if (p.breathableAtmosphere && p.atmosphere !== 'breathable') {
+      p.atmosphere = 'breathable';
+    }
+    // Zsynchronizuj surface.temperature
+    if (p.surface) p.surface.temperature = p.temperatureC;
+  }
+
+  // Księżyce
+  for (const m of (data.moons || [])) {
+    const mass = m.mass ?? 0.001;
+    const type = m.moonType === 'icy' ? 'ice' : 'rocky';
+    const R = calcR(mass, type);
+    if (m.surfaceRadius  == null) m.surfaceRadius  = R;
+    if (m.surfaceGravity == null) m.surfaceGravity = mass / (R * R);
+    if (m.temperatureC   == null) m.temperatureC   = (m.temperatureK ?? 223) - 273.15;
+    if (m.surface) m.surface.temperature = m.temperatureC;
+  }
+
+  // Planetoidy
+  for (const p of (data.planetoids || [])) {
+    const mass = p.mass ?? 0.01;
+    const R = calcR(mass, 'rocky');
+    if (p.surfaceRadius  == null) p.surfaceRadius  = R;
+    if (p.surfaceGravity == null) p.surfaceGravity = mass / (R * R);
+    if (p.temperatureK   == null && p.surface?.temperature != null) {
+      p.temperatureK = p.surface.temperature + 273.15;
+    }
+    if (p.temperatureC == null) {
+      p.temperatureC = p.temperatureK != null ? p.temperatureK - 273.15 : (p.surface?.temperature ?? -100);
+    }
+    if (p.surface) p.surface.temperature = p.temperatureC;
+  }
+
+  data.version = 17;
   return data;
 }

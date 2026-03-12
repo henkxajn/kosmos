@@ -114,12 +114,13 @@ export class LifeSystem {
       * Math.pow(this.star.luminosity, 0.25)
       / Math.sqrt(a);
 
-    // Bonus cieplarniany: none +0°, thin +15°, thick +35°, dense +60°
-    const greenhouse = { none: 0, thin: 15, thick: 35, dense: 60 };
-    const bonus = greenhouse[planet.atmosphere] ?? 0;
+    // Bonus cieplarniany wg typu atmosfery
+    const greenhouse = { none: 0, thin: 15, breathable: 20, dense: 60, thick: 35 };
+    const T_base_C = T_rad - 273.15;
 
-    planet.temperatureK        = T_rad + bonus;
-    planet.surface.temperature = planet.temperatureK - 273;
+    planet.temperatureC        = T_base_C + (greenhouse[planet.atmosphere] ?? 0);
+    planet.temperatureK        = planet.temperatureC + 273.15;
+    planet.surface.temperature = planet.temperatureC;
   }
 
   // ── Potencjał życia [0.0 – 1.0] ──────────────────────────────
@@ -156,7 +157,7 @@ export class LifeSystem {
     const hzScore = inHZ ? 1.0 : Math.max(0, 1 - nearDist / 0.6);
 
     // Składowa atmosfery
-    const atmMap   = { none: 0.05, thin: 0.55, thick: 1.0, dense: 0.7 };
+    const atmMap   = { none: 0.05, thin: 0.55, breathable: 1.0, thick: 1.0, dense: 0.7 };
     const atmScore = atmMap[planet.atmosphere] ?? 0.1;
 
     // Ważona suma (temperatura + HZ = 60% ważności)

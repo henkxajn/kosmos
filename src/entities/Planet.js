@@ -26,19 +26,25 @@ export class Planet extends CelestialBody {
     // Typ planety: 'hot_rocky' | 'rocky' | 'gas' | 'ice'
     this.planetType = config.planetType || 'rocky';
 
+    // Promień powierzchniowy (R⊕) i grawitacja powierzchniowa (g)
+    this.surfaceRadius  = config.surfaceRadius  ?? 1.0;   // R⊕
+    this.surfaceGravity = config.surfaceGravity ?? 1.0;   // g (ziemskich)
+
     // Temperatura równowagowa (obliczona przez SystemGenerator)
     // T_eq(K) = 278 × (1−albedo)^0.25 × L^0.25 / √a
     this.temperatureK = config.temperatureK || 0;  // Kelwiny
+    // Temperatura w °C (primary — greenhouse wliczony)
+    this.temperatureC = config.temperatureC ?? (this.temperatureK - 273.15);
 
     // Albedo — współczynnik odbicia światła [0=czarne ciało, 1=pełne odbicie]
     this.albedo = config.albedo || 0.15;
 
-    // Typ atmosfery: 'none' | 'thin' | 'thick' | 'dense'
+    // Typ atmosfery: 'none' | 'thin' | 'breathable' | 'dense' | 'thick' (legacy)
     this.atmosphere = config.atmosphere || 'none';
 
     // Warunki powierzchniowe
     this.surface = {
-      temperature:        this.temperatureK - 273,  // °C
+      temperature:        this.temperatureC,   // °C
       hasWater:           false,
       magneticField:      0,    // 0-1
     };
@@ -55,7 +61,7 @@ export class Planet extends CelestialBody {
   }
 
   getDisplayInfo() {
-    const tempC   = this.surface.temperature;
+    const tempC   = this.temperatureC ?? this.surface.temperature;
     const tempStr = tempC > 0 ? `+${tempC.toFixed(0)} °C` : `${tempC.toFixed(0)} °C`;
 
     // Etap życia (inline, by uniknąć cyklicznego importu LifeSystem)
@@ -72,6 +78,7 @@ export class Planet extends CelestialBody {
       'Rok (okres)': this.orbital.T.toFixed(2) + ' lat',
       'Typ':         this.planetType,
       'Temperatura': tempStr,
+      'Grawitacja':  this.surfaceGravity.toFixed(2) + ' g',
       'Albedo':      this.albedo.toFixed(2),
       'Stabilność':  Math.round(this.orbitalStability * 100) + '%',
       'Życie':       ls > 0 ? `${lifeLabel} (${Math.round(ls)}%)` : 'Jałowa',

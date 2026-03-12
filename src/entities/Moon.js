@@ -29,14 +29,19 @@ export class Moon extends CelestialBody {
     // Typ: 'rocky' | 'icy' (wpływa na kolor i skład)
     this.moonType = config.moonType || 'rocky';
 
+    // Promień powierzchniowy (R⊕) i grawitacja powierzchniowa (g)
+    this.surfaceRadius  = config.surfaceRadius  ?? null;
+    this.surfaceGravity = config.surfaceGravity ?? null;
+
     // Skład chemiczny, temperatura, atmosfera (Etap 31)
     this.composition  = config.composition  || null;
     this.temperatureK = config.temperatureK || null;
+    this.temperatureC = config.temperatureC ?? (this.temperatureK != null ? this.temperatureK - 273.15 : null);
     this.atmosphere   = config.atmosphere   || 'none';
 
     // Pola powierzchniowe (kompatybilność z PlanetMapGenerator / RegionSystem)
     this.surface = {
-      temperature:   this.temperatureK ? this.temperatureK - 273 : -50, // °C
+      temperature:   this.temperatureC ?? (this.temperatureK ? this.temperatureK - 273 : -50), // °C
       hasWater:      this.moonType === 'icy',
       magneticField: 0,
     };
@@ -54,7 +59,9 @@ export class Moon extends CelestialBody {
       'Mimośród':         this.orbital.e.toFixed(3),
       'Okres':            `${periodDays} dni`,
     };
-    if (this.temperatureK) info['Temperatura'] = `${Math.round(this.temperatureK - 273)}°C`;
+    const tempC = this.temperatureC ?? (this.temperatureK ? this.temperatureK - 273.15 : null);
+    if (tempC != null) info['Temperatura'] = `${Math.round(tempC)}°C`;
+    if (this.surfaceGravity != null) info['Grawitacja'] = `${this.surfaceGravity.toFixed(3)} g`;
     if (this.atmosphere && this.atmosphere !== 'none') info['Atmosfera'] = this.atmosphere;
     return info;
   }

@@ -576,9 +576,8 @@ export class PlanetScene {
 
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      const temp = this.planet.temperatureK
-        ? `${Math.round(this.planet.temperatureK - 273)} °C`
-        : '';
+      const _tC = this.planet.temperatureC ?? (this.planet.temperatureK ? this.planet.temperatureK - 273 : null);
+      const temp = _tC != null ? `${Math.round(_tC)} °C` : '';
       ctx.fillText(`${this.planet.planetType ?? ''} ${temp}`, LW / 2, TOP_BAR_H / 2 + 18);
     }
 

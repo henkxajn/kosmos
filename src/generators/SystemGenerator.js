@@ -15,6 +15,10 @@ import EntityManager     from '../core/EntityManager.js';
 import { getCompositionTemplate, normalizeComposition, getPlanetoidComposition, getMoonComposition } from '../data/ElementsData.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
 
+// Bonus cieplarniany wg typu atmosfery (°C)
+// thick zachowany dla backward compat (stare save'y)
+const GREENHOUSE = { none: 0, thin: 15, breathable: 20, dense: 60, thick: 35 };
+
 export class SystemGenerator {
 
   // Wygeneruj kompletny układ: gwiazda + protoplanety + księżyce + dysk + pasy
@@ -117,13 +121,16 @@ export class SystemGenerator {
       count > 5 ? [1.35, 1.62, 0.14] :
                   [1.50, 2.00, 0.20];
 
+    // Licznik breathable atmosfer w układzie (max 2)
+    const breathableCount = { value: 0 };
+
     for (let i = 0; i < count; i++) {
       const ratio = minRatio + Math.random() * (maxRatio - minRatio);
       const a     = Math.max(currentAU * ratio, currentAU + minGap);
 
       if (a > GAME_CONFIG.MAX_ORBIT_AU) break;
 
-      planets.push(this._makePlanet(star, a, i));
+      planets.push(this._makePlanet(star, a, i, null, breathableCount));
       currentAU = a;
     }
 
@@ -136,7 +143,7 @@ export class SystemGenerator {
     if (!hasRockyHZ) {
       const hzA = hz.min + Math.random() * (hz.max - hz.min);
       // forceType='rocky' — gwarancja: HZ musi mieć skalistą planetę
-      const hzP = this._makePlanet(star, hzA, planets.length, 'rocky');
+      const hzP = this._makePlanet(star, hzA, planets.length, 'rocky', breathableCount);
       const insertAt = planets.findIndex(p => p.orbital.a > hzA);
       if (insertAt === -1) planets.push(hzP);
       else planets.splice(insertAt, 0, hzP);
@@ -154,7 +161,7 @@ export class SystemGenerator {
         const outerA = frostLine * (1.2 + Math.random() * 2.5); // 1.2–3.7× frostLine
         if (outerA > GAME_CONFIG.MAX_ORBIT_AU) continue;
         const outerType = Math.random() < 0.65 ? 'gas' : 'ice';
-        const outerP = this._makePlanet(star, outerA, planets.length + oi, outerType);
+        const outerP = this._makePlanet(star, outerA, planets.length + oi, outerType, breathableCount);
         planets.push(outerP);
       }
       // Posortuj po półosi
@@ -166,7 +173,8 @@ export class SystemGenerator {
 
   // Pomocnik: stwórz planetę na podanej orbicie (unika duplikacji kodu)
   // forceType — opcjonalne nadpisanie typu (np. 'rocky' dla gwarancji HZ)
-  _makePlanet(star, a, nameIndex, forceType = null) {
+  // breathableCount — ref object { value: N } limitujący breathable atmosphere w układzie
+  _makePlanet(star, a, nameIndex, forceType = null, breathableCount = { value: 0 }) {
     // Niski mimośród jak w realnym układzie słonecznym (Ziemia=0.017, Jowisz=0.049)
     // POWER TEST: bardziej kołowe orbity → mniej przecięć → mniej kolizji
     const e          = this._powerTest
@@ -177,10 +185,18 @@ export class SystemGenerator {
     const mass       = this.getPlanetMass(planetType);
     const typeConfig = PLANET_TYPE_CONFIG[planetType];
     const albedo     = typeConfig.albedo;
-    const tempK      = this.calcEquilibriumTemp(star.luminosity, a, albedo);
-    const color      = this.getPlanetColor(planetType, tempK, nameIndex);
-    const atmosphere = this.getAtmosphere(planetType, tempK, mass);
-    const breathableAtmosphere = this.isBreathable(atmosphere, planetType, tempK, mass);
+
+    // Nowy pipeline: mass → R → g → T_base_C → atmosphere → temperatureC
+    const surfaceRadius  = this.calcSurfaceRadius(mass, planetType);
+    const surfaceGravity = this.calcSurfaceGravity(mass, surfaceRadius);
+    const T_rad_K        = this.calcEquilibriumTemp(star.luminosity, a, albedo);
+    const T_base_C       = T_rad_K - 273.15;
+    const atmosphere     = this.getAtmosphere(planetType, surfaceGravity, T_base_C, mass, breathableCount);
+    const temperatureC   = T_base_C + (GREENHOUSE[atmosphere] ?? 0);
+    const temperatureK   = temperatureC + 273.15;
+    const breathableAtmosphere = atmosphere === 'breathable';
+
+    const color = this.getPlanetColor(planetType, temperatureK, nameIndex);
 
     // Skład chemiczny — inicjalizowany wg typu planety i odległości od HZ
     // Lekkie losowe wahania (±20% wartości bazowej) dla różnorodności układów
@@ -200,7 +216,10 @@ export class SystemGenerator {
       inclinationOffset: Math.random() * Math.PI * 2,
       mass,
       planetType,
-      temperatureK:      tempK,
+      surfaceRadius,
+      surfaceGravity,
+      temperatureK,
+      temperatureC,
       albedo,
       atmosphere,
       breathableAtmosphere,
@@ -215,6 +234,19 @@ export class SystemGenerator {
   // L = lumineszencja gwiazdy (L_słoneczne), a = półoś (AU), albedo = odbicie
   calcEquilibriumTemp(L, a, albedo) {
     return 278 * Math.pow(1 - albedo, 0.25) * Math.pow(L, 0.25) / Math.sqrt(a);
+  }
+
+  // Promień powierzchniowy w R⊕ (zależy od masy i typu planety)
+  calcSurfaceRadius(mass, planetType) {
+    const jitter = 0.9 + Math.random() * 0.2;  // ±10% rozrzut
+    if (planetType === 'gas')  return 3.5 * Math.pow(mass, 0.12) * jitter;
+    if (planetType === 'ice')  return Math.pow(mass, 0.24) * jitter;
+    return Math.pow(mass, 0.27) * jitter;  // rocky / hot_rocky
+  }
+
+  // Grawitacja powierzchniowa w g (ziemskich) — g = M / R²
+  calcSurfaceGravity(mass, surfaceRadius) {
+    return mass / (surfaceRadius * surfaceRadius);
   }
 
   // Kolor planety per typ (i temperatura dla rocky)
@@ -243,60 +275,46 @@ export class SystemGenerator {
     return           pick([0x8898b0, 0x90a0b8, 0x7888a8, 0x98a8c0]);       // lodowata
   }
 
-  // Typ atmosfery na podstawie planety, temperatury i masy
-  // Retencja atmosfery zależy od grawitacji (masa) i prędkości cząsteczek (temp)
-  // Niska temperatura kompensuje małą masę (jak Tytan w Układzie Słonecznym)
-  getAtmosphere(planetType, T_K, mass) {
+  // Typ atmosfery na podstawie grawitacji, temperatury bazowej (°C) i masy
+  // Retencja atmosfery zależy od grawitacji powierzchniowej (nie samej masy)
+  // breathableCount = { value: N } — ref object, max 2 breathable per układ
+  getAtmosphere(planetType, gravity, T_base_C, mass, breathableCount = { value: 0 }) {
     if (planetType === 'gas') return 'none';
+    if (gravity < 0.15) return 'none';
 
     const r = Math.random();
 
-    // Duże planety (>0.5 M⊕): łatwo utrzymują atmosferę
-    if (mass > 0.5) {
-      if (T_K >= 200 && T_K <= 350)      return r < 0.10 ? 'dense' : r < 0.85 ? 'thin' : 'none';
-      if (T_K > 350 && T_K <= 600)       return r < 0.05 ? 'dense' : r < 0.50 ? 'thin' : 'none';
-      if (T_K < 200)                     return r < 0.65 ? 'thin' : 'none';
-      return r < 0.15 ? 'thin' : 'none'; // >600K — ekstremalnie gorące
+    // Breathable: rocky + g≥0.5 + mass≥0.5 + T∈[-30,+50] + limit 2 per układ
+    if (planetType === 'rocky' && gravity >= 0.5 && mass >= 0.5 &&
+        T_base_C >= -30 && T_base_C <= 50 && r < 0.30 && breathableCount.value < 2) {
+      breathableCount.value++;
+      return 'breathable';
     }
 
-    // Średnie (0.1–0.5 M⊕, Mars-like): trudniej utrzymać
-    if (mass > 0.1) {
-      if (T_K >= 200 && T_K <= 350) return r < 0.55 ? 'thin' : 'none';
-      if (T_K < 200)                return r < 0.40 ? 'thin' : 'none';
-      return r < 0.15 ? 'thin' : 'none';
-    }
+    // Dense: duża grawitacja + duża masa
+    if (gravity >= 0.80 && mass >= 2.0 && r < 0.30) return 'dense';
+    if (gravity >= 0.50 && r < 0.15) return 'dense';
 
-    // Małe (<0.1 M⊕, Merkury-like): prawie nigdy
-    if (T_K < 150) return r < 0.10 ? 'thin' : 'none'; // ekstremalnie zimne (Triton-like)
+    // Thin: umiarkowana grawitacja
+    if (gravity >= 0.50) return r < 0.80 ? 'thin' : 'none';
+    if (gravity >= 0.30) return r < 0.70 ? 'thin' : 'none';
+    if (gravity >= 0.15) return Math.random() < gravity * 3 ? 'thin' : 'none';
+
     return 'none';
   }
 
-  // Atmosfera księżyca — zależy od masy i temperatury
-  getAtmosphereMoon(mass, T_K) {
+  // Atmosfera księżyca — zależy od grawitacji, temperatury bazowej i masy
+  getAtmosphereMoon(gravity, T_base_C, mass) {
+    if (gravity < 0.05) return 'none';
+
     const r = Math.random();
-    // Duże księżyce (>0.02 M⊕, Tytan/Ganimedes-scale)
-    if (mass > 0.02) {
-      if (T_K < 150) return r < 0.55 ? 'thin' : 'none';
-      if (T_K < 300) return r < 0.25 ? 'thin' : 'none';
-      return r < 0.08 ? 'thin' : 'none';
-    }
-    // Średnie (0.005–0.02 M⊕, Io/Europa-scale)
-    if (mass > 0.005) {
-      if (T_K < 150) return r < 0.20 ? 'thin' : 'none';
-      if (T_K < 300) return r < 0.05 ? 'thin' : 'none';
-      return 'none';
-    }
-    // Małe (<0.005 M⊕) — zawsze brak
-    return 'none';
-  }
 
-  // Czy atmosfera jest zdatna do życia (oddychalna)
-  isBreathable(atmosphere, planetType, T_K, mass) {
-    if (atmosphere === 'none') return false;
-    if (planetType !== 'rocky' && planetType !== 'ice') return false;
-    if (T_K < 233 || T_K > 323) return false;  // -40°C do +50°C
-    if (mass < 0.3) return false;               // za słaba grawitacja
-    return true;
+    // Duże księżyce w niskich temperaturach (Tytan-like)
+    if (mass > 0.012 && T_base_C < -100) return r < 0.15 ? 'thin' : 'none';
+    // Umiarkowana grawitacja + zimno
+    if (gravity >= 0.10 && T_base_C < -50)  return r < 0.10 ? 'thin' : 'none';
+
+    return 'none';
   }
 
   // Typ planety na podstawie odległości od gwiazdy + element losowości
@@ -450,14 +468,22 @@ export class SystemGenerator {
         occupiedAU.some(pA => Math.abs(pA - a) < 0.4)
       );
 
-      const e           = 0.05 + Math.random() * 0.20;
-      const T           = KeplerMath.orbitalPeriod(a, star.physics.mass);
-      const mass        = 0.005 + Math.random() * 0.075;  // 0.005–0.08 M⊕
+      const e            = 0.05 + Math.random() * 0.20;
+      const T            = KeplerMath.orbitalPeriod(a, star.physics.mass);
+      const mass         = 0.005 + Math.random() * 0.075;  // 0.005–0.08 M⊕
       const visualRadius = mass > 0.05 ? 5 : mass > 0.02 ? 4 : 3;
 
       // Losowy typ: metallic 30%, carbonaceous 40%, silicate 30%
       const r = Math.random();
       const planetoidType = r < 0.30 ? 'metallic' : r < 0.70 ? 'carbonaceous' : 'silicate';
+
+      // Temperatura i grawitacja powierzchniowa
+      const pAlbedo = { metallic: 0.15, carbonaceous: 0.05, silicate: 0.12 }[planetoidType];
+      const T_rad_K        = this.calcEquilibriumTemp(star.luminosity, a, pAlbedo);
+      const surfaceRadius  = this.calcSurfaceRadius(mass, 'rocky');
+      const surfaceGravity = this.calcSurfaceGravity(mass, surfaceRadius);
+      const temperatureK   = T_rad_K;          // brak atmosfery
+      const temperatureC   = T_rad_K - 273.15;
 
       // Skład chemiczny wg typu + jitter ±20%
       const baseComp = getPlanetoidComposition(planetoidType);
@@ -482,6 +508,10 @@ export class SystemGenerator {
         visualRadius,
         color,
         planetoidType,
+        surfaceRadius,
+        surfaceGravity,
+        temperatureK,
+        temperatureC,
         composition:       normComp,
       }));
     }
@@ -498,7 +528,7 @@ export class SystemGenerator {
     const { star, planets } = result;
     const hz = star.habitableZone;
 
-    // Znajdź najlepszą planetę rocky w HZ (scoring: temp 273–323K, atmosfera, stabilność)
+    // Znajdź najlepszą planetę rocky w HZ (scoring: temp 0–50°C, atmosfera, stabilność)
     let bestPlanet = null;
     let bestScore  = -Infinity;
     for (const p of planets) {
@@ -506,11 +536,12 @@ export class SystemGenerator {
       let score = 0;
       // Bonus: w strefie HZ
       if (p.orbital.a >= hz.min && p.orbital.a <= hz.max) score += 50;
-      // Bonus: temperatura 273–323K (0–50°C)
-      const T = p.temperatureK ?? 0;
-      if (T >= 273 && T <= 323) score += 30;
-      else if (T >= 250 && T <= 350) score += 15;
+      // Bonus: temperatura 0–50°C
+      const TC = p.temperatureC ?? (p.temperatureK ? p.temperatureK - 273.15 : -999);
+      if (TC >= 0 && TC <= 50) score += 30;
+      else if (TC >= -23 && TC <= 77) score += 15;
       // Bonus: atmosfera
+      if (p.atmosphere === 'breathable') score += 20;
       if (p.atmosphere === 'thin') score += 10;
       if (p.atmosphere === 'dense') score += 5;
       // Bonus: stabilność orbitalna
@@ -526,8 +557,27 @@ export class SystemGenerator {
     bestPlanet.orbitalStability = Math.max(0.9, bestPlanet.orbitalStability ?? 0.5);
     bestPlanet.surface          = bestPlanet.surface || {};
     bestPlanet.surface.hasWater = true;
-    if (bestPlanet.atmosphere === 'none') bestPlanet.atmosphere = 'thin';
-    bestPlanet.breathableAtmosphere = true;
+    // Atmosfera breathable (nie thin) — cywilizacja wymaga oddychalnej atmosfery
+    // Przelicz temperatureC: odejmij stary greenhouse, dodaj breathable
+    if (bestPlanet.temperatureK != null) {
+      const oldGreenhouse = GREENHOUSE[bestPlanet.atmosphere] ?? 0;
+      bestPlanet.atmosphere = 'breathable';
+      bestPlanet.breathableAtmosphere = true;
+      const T_base_C = bestPlanet.temperatureK - 273.15 - oldGreenhouse;
+      bestPlanet.temperatureC = T_base_C + GREENHOUSE.breathable;
+      bestPlanet.temperatureK = bestPlanet.temperatureC + 273.15;
+      bestPlanet.surface.temperature = bestPlanet.temperatureC;
+    } else {
+      bestPlanet.atmosphere = 'breathable';
+      bestPlanet.breathableAtmosphere = true;
+    }
+    // Defensywne: dodaj surfaceRadius/surfaceGravity jeśli brakuje
+    if (!bestPlanet.surfaceRadius) {
+      bestPlanet.surfaceRadius = this.calcSurfaceRadius(bestPlanet.physics.mass, bestPlanet.planetType);
+    }
+    if (!bestPlanet.surfaceGravity) {
+      bestPlanet.surfaceGravity = this.calcSurfaceGravity(bestPlanet.physics.mass, bestPlanet.surfaceRadius);
+    }
 
     // Ustaw flagę globalną scenariusza (zachowaj civilization_boosted jeśli ustawiony)
     if (window.KOSMOS.scenario !== 'civilization_boosted') {
@@ -560,9 +610,10 @@ export class SystemGenerator {
       if (p.planetType !== 'rocky') continue;
       let score = 0;
       if (p.orbital.a >= hz.min && p.orbital.a <= hz.max) score += 50;
-      const T = p.temperatureK ?? 0;
-      if (T >= 273 && T <= 323) score += 30;
-      else if (T >= 250 && T <= 350) score += 15;
+      const TC = p.temperatureC ?? (p.temperatureK ? p.temperatureK - 273.15 : -999);
+      if (TC >= 0 && TC <= 50) score += 30;
+      else if (TC >= -23 && TC <= 77) score += 15;
+      if (p.atmosphere === 'breathable') score += 20;
       if (p.atmosphere === 'thin') score += 10;
       if (p.atmosphere === 'dense') score += 5;
       score += (p.orbitalStability ?? 0.5) * 10;
@@ -575,8 +626,24 @@ export class SystemGenerator {
     bestPlanet.orbitalStability = Math.max(0.9, bestPlanet.orbitalStability ?? 0.5);
     bestPlanet.surface          = bestPlanet.surface || {};
     bestPlanet.surface.hasWater = true;
-    if (bestPlanet.atmosphere === 'none') bestPlanet.atmosphere = 'thin';
-    bestPlanet.breathableAtmosphere = true;
+    if (bestPlanet.temperatureK != null) {
+      const oldGreenhouse = GREENHOUSE[bestPlanet.atmosphere] ?? 0;
+      bestPlanet.atmosphere = 'breathable';
+      bestPlanet.breathableAtmosphere = true;
+      const T_base_C = bestPlanet.temperatureK - 273.15 - oldGreenhouse;
+      bestPlanet.temperatureC = T_base_C + GREENHOUSE.breathable;
+      bestPlanet.temperatureK = bestPlanet.temperatureC + 273.15;
+      bestPlanet.surface.temperature = bestPlanet.temperatureC;
+    } else {
+      bestPlanet.atmosphere = 'breathable';
+      bestPlanet.breathableAtmosphere = true;
+    }
+    if (!bestPlanet.surfaceRadius) {
+      bestPlanet.surfaceRadius = this.calcSurfaceRadius(bestPlanet.physics.mass, bestPlanet.planetType);
+    }
+    if (!bestPlanet.surfaceGravity) {
+      bestPlanet.surfaceGravity = this.calcSurfaceGravity(bestPlanet.physics.mass, bestPlanet.surfaceRadius);
+    }
 
     window.KOSMOS.scenario = 'power_test';  // POWER TEST
 
@@ -681,12 +748,17 @@ export class SystemGenerator {
     // Temperatura równowagowa — przybliżona z orbity planety-rodzica
     const parentA = planet.orbital?.a ?? 1.0;
     const albedo  = moonType === 'icy' ? 0.6 : 0.12;
-    const temperatureK = this.calcEquilibriumTemp(star.luminosity, parentA, albedo);
+    const T_rad_K = this.calcEquilibriumTemp(star.luminosity, parentA, albedo);
 
-    // Atmosfera — zależy od masy i temperatury (jak Tytan: zimny + masywny = atmosfera)
-    const atmosphere = this.getAtmosphereMoon(mass, temperatureK);
-    const breathableAtmosphere = atmosphere !== 'none'
-      && temperatureK >= 233 && temperatureK <= 323 && mass > 0.01;
+    // Nowy pipeline: mass → R → g → T_base_C → atmosphere → temperatureC
+    const surfaceRadius  = this.calcSurfaceRadius(mass, moonType === 'icy' ? 'ice' : 'rocky');
+    const surfaceGravity = this.calcSurfaceGravity(mass, surfaceRadius);
+    const T_base_C       = T_rad_K - 273.15;
+    const atmosphere     = this.getAtmosphereMoon(surfaceGravity, T_base_C, mass);
+    const temperatureC   = T_base_C + (GREENHOUSE[atmosphere] ?? 0);
+    const temperatureK   = temperatureC + 273.15;
+    // Księżyce: praktycznie zawsze false (g za małe dla breathable)
+    const breathableAtmosphere = atmosphere === 'breathable';
 
     const romanNumerals = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
     return new Moon({
@@ -700,7 +772,10 @@ export class SystemGenerator {
       parentPlanetId:    planet.id,
       moonType,
       composition:       normComp,
+      surfaceRadius,
+      surfaceGravity,
       temperatureK,
+      temperatureC,
       atmosphere,
       breathableAtmosphere,
     });

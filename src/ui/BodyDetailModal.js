@@ -146,15 +146,20 @@ export function showBodyDetailModal(body) {
   // ── Dane zbadanego ciała ──────────────────────────────────
   if (explored) {
     // Temperatura
-    if (body.temperatureK != null) {
-      const tempC = (body.temperatureK - 273.15).toFixed(0);
-      addRow('Temperatura', `${body.temperatureK.toFixed(0)} K (${tempC}°C)`);
+    if (body.temperatureC != null || body.temperatureK != null) {
+      const tempC = body.temperatureC ?? (body.temperatureK - 273.15);
+      addRow('Temperatura', `${tempC > 0 ? '+' : ''}${tempC.toFixed(0)}°C`);
+    }
+
+    // Grawitacja powierzchniowa
+    if (body.surfaceGravity != null) {
+      addRow('Grawitacja', `${body.surfaceGravity.toFixed(2)} g`);
     }
 
     // Atmosfera
     if (body.atmosphere) {
       const atmoNames = {
-        none: 'Brak', thin: 'Rzadka', thick: 'Gęsta', dense: 'Bardzo gęsta',
+        none: 'Brak', thin: 'Rzadka', breathable: 'Oddychalna', thick: 'Gęsta', dense: 'Bardzo gęsta',
       };
       addRow('Atmosfera', atmoNames[body.atmosphere] ?? body.atmosphere);
     }

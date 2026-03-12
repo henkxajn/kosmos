@@ -836,6 +836,9 @@ export class GameScene {
         color:             pd.color,
         glowColor:         pd.glowColor,
         temperatureK:      pd.temperatureK,
+        temperatureC:      pd.temperatureC,
+        surfaceRadius:     pd.surfaceRadius,
+        surfaceGravity:    pd.surfaceGravity,
         composition:       pd.composition,
       });
       p.lifeScore        = pd.lifeScore        || 0;
@@ -869,6 +872,9 @@ export class GameScene {
         moonType:          md.moonType || 'rocky',
         composition:       md.composition || null,
         temperatureK:      md.temperatureK || null,
+        temperatureC:      md.temperatureC ?? null,
+        surfaceRadius:     md.surfaceRadius ?? null,
+        surfaceGravity:    md.surfaceGravity ?? null,
         atmosphere:        md.atmosphere || 'none',
       });
       m.age      = md.age      || 0;
@@ -895,6 +901,10 @@ export class GameScene {
         mass:              pd.mass,
         visualRadius:      pd.visualRadius,
         color:             pd.color,
+        temperatureK:      pd.temperatureK,
+        temperatureC:      pd.temperatureC,
+        surfaceRadius:     pd.surfaceRadius,
+        surfaceGravity:    pd.surfaceGravity,
         composition:       pd.composition,
       });
       p.explored = pd.explored || false;

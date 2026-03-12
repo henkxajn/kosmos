@@ -144,8 +144,11 @@ export class SaveSystem {
       // Wizualizacja
       color:     p.visual.color,
       glowColor: p.visual.glowColor,
-      // Temperatura
+      // Temperatura + fizyka powierzchniowa
       temperatureK: p.temperatureK,
+      temperatureC: p.temperatureC,
+      surfaceRadius:  p.surfaceRadius,
+      surfaceGravity: p.surfaceGravity,
       // Skład chemiczny
       composition: { ...(p.composition || {}) },
       // Życie
@@ -182,6 +185,9 @@ export class SaveSystem {
       explored:          m.explored || false,
       composition:       m.composition || null,
       temperatureK:      m.temperatureK || null,
+      temperatureC:      m.temperatureC ?? null,
+      surfaceRadius:     m.surfaceRadius ?? null,
+      surfaceGravity:    m.surfaceGravity ?? null,
       atmosphere:        m.atmosphere || 'none',
       deposits: m.deposits ? m.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
@@ -203,6 +209,10 @@ export class SaveSystem {
       mass:              p.physics.mass,
       visualRadius:      p.visual.radius,
       color:             p.visual.color,
+      temperatureK:      p.temperatureK ?? null,
+      temperatureC:      p.temperatureC ?? null,
+      surfaceRadius:     p.surfaceRadius ?? null,
+      surfaceGravity:    p.surfaceGravity ?? null,
       composition:       { ...(p.composition || {}) },
       explored:          p.explored || false,
       deposits: p.deposits ? p.deposits.map(d => ({

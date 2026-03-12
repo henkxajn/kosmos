@@ -1185,7 +1185,7 @@ export class FleetManagerOverlay {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
         const typeStr = body.planetType ?? body.subType ?? body.type;
-        const tempStr = body.temperatureK ? ` ${Math.round(body.temperatureK - 273)}°C` : '';
+        const tempStr = (body.temperatureC != null || body.temperatureK) ? ` ${Math.round(body.temperatureC ?? (body.temperatureK - 273))}°C` : '';
         ctx.fillText(`${typeStr}${tempStr}`, x + PAD + indent, ry + 25);
 
         // Odległości (prawo)
@@ -1345,8 +1345,8 @@ export class FleetManagerOverlay {
 
     if (explored) {
       lines.push({ text: `Status: zbadane ✓`, color: THEME.success });
-      if (body.temperatureK) {
-        const tempC = Math.round(body.temperatureK - 273);
+      if (body.temperatureC != null || body.temperatureK) {
+        const tempC = Math.round(body.temperatureC ?? (body.temperatureK - 273));
         lines.push({ text: `Temp: ${tempC > 0 ? '+' : ''}${tempC}°C`, color: THEME.textSecondary });
       }
       if (body.orbital?.a) {
@@ -1354,11 +1354,11 @@ export class FleetManagerOverlay {
       }
       // Atmosfera
       const atm = body.atmosphere || 'none';
-      const atmLabels = { dense: 'Gęsta', thick: 'Gęsta', thin: 'Cienka', none: 'Brak' };
+      const atmLabels = { dense: 'Gęsta', thick: 'Gęsta', thin: 'Cienka', breathable: 'Oddychalna', none: 'Brak' };
       let atmText = atmLabels[atm] || atm;
-      if (body.breathableAtmosphere) atmText += ' ✅';
+      if (atm === 'breathable' || body.breathableAtmosphere) atmText += ' ✅';
       const atmIcon = atm === 'none' ? '' : '☁ ';
-      const atmColor = atm === 'none' ? THEME.textDim : body.breathableAtmosphere ? THEME.success : THEME.textSecondary;
+      const atmColor = atm === 'none' ? THEME.textDim : (atm === 'breathable' || body.breathableAtmosphere) ? THEME.success : THEME.textSecondary;
       lines.push({ text: `${atmIcon}Atmosfera: ${atmText}`, color: atmColor });
       if (hasColony) {
         const col = colMgr.getColony(body.id);

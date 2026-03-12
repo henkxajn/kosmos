@@ -301,20 +301,29 @@ export class Outliner {
           if (!colony?.planet) return true;
           // Klik na ikonę 🗺 → otwórz ColonyOverlay
           if (t.mapIconX && x >= t.mapIconX) {
-            const colMgr2 = window.KOSMOS?.colonyManager;
-            if (colMgr2) colMgr2.switchActiveColony(t.planetId);
+            if (colMgr) colMgr.switchActiveColony(t.planetId);
             window.KOSMOS?.overlayManager?.openPanel('colony');
           } else {
-            // Klik na nazwę kolonii → otwórz Ekonomię z filtrem na tę kolonię
-            const om = window.KOSMOS?.overlayManager;
-            const econOv = om?.overlays?.['economy'];
-            if (econOv) {
-              econOv._selectedColonyId = t.planetId;
-              econOv._scrollLeft = 0;
-              om.openPanel('economy');
-            }
+            // Klik na nazwę kolonii → przełącz kontekst kolonii, zachowaj aktywny panel
             if (colMgr.switchActiveColony(t.planetId)) {
               EventBus.emit('colony:switched', { planetId: t.planetId });
+            }
+            const om = window.KOSMOS?.overlayManager;
+            if (om) {
+              if (om.active) {
+                // Panel jest otwarty — odśwież go (zamknij+otwórz ten sam)
+                const currentPanel = om.active;
+                // Dla ekonomii zaktualizuj filtr kolonii
+                const econOv = om.overlays?.['economy'];
+                if (currentPanel === 'economy' && econOv) {
+                  econOv._selectedColonyId = t.planetId;
+                  econOv._scrollLeft = 0;
+                }
+                om.openPanel(currentPanel);
+              } else {
+                // Brak aktywnego panelu → otwórz domyślny (Kolonia)
+                om.openPanel('colony');
+              }
             }
           }
           return true;
@@ -371,7 +380,7 @@ export class Outliner {
     // Typ planety + temperatura
     const planet = colony.planet;
     if (planet) {
-      const tempC = planet.temperatureK ? Math.round(planet.temperatureK - 273) : null;
+      const tempC = planet.temperatureC != null ? Math.round(planet.temperatureC) : (planet.temperatureK ? Math.round(planet.temperatureK - 273) : null);
       const tempStr = tempC !== null ? `${tempC > 0 ? '+' : ''}${tempC}°C` : '';
       lines.push({ text: `${planet.planetType ?? planet.type} ${tempStr}`, color: C.dim });
     }

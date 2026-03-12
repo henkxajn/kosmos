@@ -873,9 +873,8 @@ export class PlanetGlobeScene {
       ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       const outpostFlag = window.KOSMOS?.colonyManager?.getColony(this.planet.id)?.isOutpost;
       ctx.fillStyle = outpostFlag ? THEME.warning : THEME.textSecondary;
-      const temp = this.planet.temperatureK
-        ? ` ${Math.round(this.planet.temperatureK - 273)}°C`
-        : '';
+      const tempC = this.planet.temperatureC ?? (this.planet.temperatureK ? this.planet.temperatureK - 273 : null);
+      const temp = tempC != null ? ` ${Math.round(tempC)}°C` : '';
       const prefix = outpostFlag ? '🏗 PLACÓWKA — ' : '';
       ctx.fillText(`${prefix}${this.planet.name}${temp} ✏`, 10, 34);
     }
@@ -1780,9 +1779,8 @@ export class PlanetGlobeScene {
       const ctx = this.ctx;
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       const nameTxt = this.planet.name;
-      const temp = this.planet.temperatureK
-        ? ` ${Math.round(this.planet.temperatureK - 273)}°C`
-        : '';
+      const _tC = this.planet.temperatureC ?? (this.planet.temperatureK ? this.planet.temperatureK - 273 : null);
+      const temp = _tC != null ? ` ${Math.round(_tC)}°C` : '';
       const fullTxt = `${nameTxt}${temp}`;
       const fullW = ctx.measureText(fullTxt).width;
       const editX = 10 + fullW + 2;

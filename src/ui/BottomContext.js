@@ -48,8 +48,9 @@ function _truncate(str, maxLen) {
 // Formatuj atmosferę z etykietą PL + info o zdatności do życia
 function _formatAtmosphere(entity) {
   const atm = entity.atmosphere || 'none';
-  const labels = { dense: 'Gęsta', thin: 'Cienka', none: 'Brak' };
+  const labels = { dense: 'Gęsta', thin: 'Cienka', breathable: 'Oddychalna', none: 'Brak' };
   const label = labels[atm] || atm;
+  if (atm === 'breathable') return label + ' (zdatna)';
   if (entity.breathableAtmosphere) return label + ' (zdatna)';
   return label;
 }
@@ -308,7 +309,7 @@ export class BottomContext {
         ls <= 80 ? 'Złożone życie' : 'Cywilizacja';
       return [
         { k: 'Masa', v: `${(entity.physics?.mass || 0).toFixed(2)} M⊕` },
-        { k: 'Temp', v: entity.temperatureK ? `${Math.round(entity.temperatureK - 273)} °C` : '—' },
+        { k: 'Temp', v: (entity.temperatureC != null || entity.temperatureK != null) ? `${Math.round(entity.temperatureC ?? (entity.temperatureK - 273))} °C` : '—' },
         { k: 'Atm', v: _formatAtmosphere(entity) },
         { k: 'Życie', v: `${Math.round(ls)}%  ${lifeLabel}`,
           vc: ls > 80 ? C.yellow : ls > 0 ? C.green : C.text },

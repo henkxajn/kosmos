@@ -1266,7 +1266,7 @@ export class UIManager {
     lines.push({ type: 'separator' });
     lines.push({ type: 'line', text: `Typ: ${typeStr}`, color: C.text });
 
-    const tempC = body.temperatureK ? Math.round(body.temperatureK - 273) : null;
+    const tempC = body.temperatureC != null ? Math.round(body.temperatureC) : (body.temperatureK ? Math.round(body.temperatureK - 273) : null);
     if (tempC !== null) {
       const tempColor = tempC > -20 && tempC < 60 ? C.green : C.label;
       lines.push({ type: 'line', text: `Temperatura: ${tempC > 0 ? '+' : ''}${tempC}°C`, color: tempColor });
@@ -1282,10 +1282,10 @@ export class UIManager {
 
     // Atmosfera (string: 'none'/'thin'/'dense')
     const atm = body.atmosphere || 'none';
-    const atmLabels = { dense: 'Gęsta', thin: 'Cienka', none: 'Brak' };
+    const atmLabels = { dense: 'Gęsta', thin: 'Cienka', breathable: 'Oddychalna', none: 'Brak' };
     let atmText = atmLabels[atm] || atm;
-    if (body.breathableAtmosphere) atmText += ' — zdatna do życia ✅';
-    const atmColor = atm === 'none' ? C.dim : body.breathableAtmosphere ? C.green : C.text;
+    if (atm === 'breathable' || body.breathableAtmosphere) atmText += ' — zdatna do życia ✅';
+    const atmColor = atm === 'none' ? C.dim : (atm === 'breathable' || body.breathableAtmosphere) ? C.green : C.text;
     lines.push({ type: 'line', text: `Atmosfera: ${atmText}`, color: atmColor });
 
     // Skład chemiczny (top 5)
