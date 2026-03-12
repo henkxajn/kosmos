@@ -1,24 +1,17 @@
 // EventChoiceModal — modal DOM do wyświetlania zdarzeń losowych
 //
 // Wyświetla powiadomienie o zdarzeniu losowym z opcjonalnym wyborem gracza.
-// Styl: sci-fi, ciemny panel, z-index 100. Kolory z THEME.
+// Styl: Amber Terminal (2-kolumnowy layout, CRT wewnątrz panelu).
 
-import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import { THEME } from '../config/ThemeConfig.js';
+import {
+  buildTerminalPopup,
+  formatStatLine,
+  formatStatLineWithCursor,
+  formatSectionTitle,
+} from './TerminalPopupBase.js';
 
 const MODAL_TIMEOUT = 8000; // ms — auto-zamknięcie po 8 sekundach
-
-// ── Helpery kolorów ─────────────────────────────────────────────────────
-function _bgAlpha(hex, alpha) {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-function _sevBg(colorHex) {
-  // Ciemne tło z lekkim odcieniem severity
-  const base = hexToRgb(THEME.bgPrimary);
-  const sev = hexToRgb(colorHex);
-  return `rgba(${Math.round(base.r * 0.7 + sev.r * 0.15)},${Math.round(base.g * 0.7 + sev.g * 0.15)},${Math.round(base.b * 0.7 + sev.b * 0.15)},0.95)`;
-}
 
 /**
  * Pokaż powiadomienie o zdarzeniu losowym.
@@ -28,134 +21,97 @@ function _sevBg(colorHex) {
  */
 export function showEventNotification(event, colonyName) {
   return new Promise(resolve => {
-    // Kontener
-    const overlay = document.createElement('div');
-    overlay.className = 'kosmos-modal-overlay';
-    overlay.style.cssText = `
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      z-index: 100; display: flex; justify-content: center; align-items: flex-start;
-      padding-top: 80px; pointer-events: none;
-    `;
+    const severity = event.severity === 'danger' ? 'danger'
+                   : event.severity === 'warning' ? 'info'
+                   : 'info';
 
-    // Panel
-    const panel = document.createElement('div');
-    const borderColor = event.severity === 'danger' ? THEME.danger
-                      : event.severity === 'warning' ? THEME.warning
-                      : THEME.info;
-    const bgColor = _sevBg(borderColor);
-    panel.style.cssText = `
-      background: ${bgColor}; border: 1px solid ${borderColor};
-      border-radius: 6px; padding: 16px 24px; max-width: 400px; min-width: 280px;
-      font-family: ${THEME.fontFamily}; color: ${THEME.textPrimary}; pointer-events: auto;
-      box-shadow: 0 0 20px rgba(2,4,5,0.88); animation: slideDown 0.3s ease-out;
-    `;
-
-    // Nagłówek
-    const header = document.createElement('div');
-    header.style.cssText = 'font-size: 14px; margin-bottom: 8px; font-weight: bold;';
-    header.textContent = `${event.icon} ${event.namePL}`;
-    panel.appendChild(header);
-
-    // Kolonia
-    const colony = document.createElement('div');
-    colony.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
-    colony.textContent = `Kolonia: ${colonyName}`;
-    panel.appendChild(colony);
-
-    // Opis
-    const desc = document.createElement('div');
-    desc.style.cssText = `font-size: ${THEME.fontSizeNormal + 1}px; color: ${THEME.textSecondary}; margin-bottom: 12px; line-height: 1.4;`;
-    desc.textContent = event.description;
-    panel.appendChild(desc);
-
-    // Czas trwania
+    let stats = '';
+    stats += formatStatLine('KOLONIA', colonyName);
     if (event.duration > 0) {
-      const dur = document.createElement('div');
-      dur.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
-      dur.textContent = `Czas trwania: ${event.duration} lat`;
-      panel.appendChild(dur);
+      stats += formatStatLine('CZAS', `${event.duration} lat`, 'at-stat-neu');
+    }
+    stats += formatStatLineWithCursor('STATUS', 'AKTYWNE', 'at-stat-neu');
+
+    const { overlay, dismiss, btnElements } = buildTerminalPopup({
+      severity,
+      barTitle: 'KOSMOS OS  ▌ POWIADOMIENIE',
+      svgKey: severity === 'danger' ? 'alert' : 'report',
+      svgLabel: severity === 'danger' ? 'ALARM' : 'ZDARZENIE',
+      prompt: '> EVENT_SYS.LOG_',
+      headline: (event.namePL ?? event.name ?? 'ZDARZENIE').toUpperCase(),
+      description: event.description,
+      contentHTML: stats,
+      buttons: [{ label: '[ENTER] PRZYJMIJ', primary: true }],
+      onDismiss: () => {
+        clearTimeout(timer);
+        resolve();
+      },
+    });
+
+    // Podłącz dismiss do przycisku
+    for (const btn of btnElements) {
+      btn.addEventListener('click', () => dismiss());
     }
 
-    // Przycisk OK
-    const btn = document.createElement('button');
-    btn.style.cssText = `
-      background: ${_bgAlpha(THEME.bgTertiary, 0.9)}; border: 1px solid ${borderColor};
-      color: ${THEME.accent}; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
-      font-size: ${THEME.fontSizeNormal + 1}px; border-radius: 3px;
-    `;
-    btn.textContent = 'OK';
-    btn.onclick = close;
-    panel.appendChild(btn);
+    // Klik na overlay = zamknij
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) dismiss();
+    });
 
-    // Blokuj propagację kliknięć/mousedown do canvas/window
-    for (const evt of ['click', 'mousedown', 'mouseup']) {
-      panel.addEventListener(evt, (e) => e.stopPropagation());
-    }
-    overlay.appendChild(panel);
-    document.body.appendChild(overlay);
-
-    // Auto-zamknięcie po timeout
-    const timer = setTimeout(close, MODAL_TIMEOUT);
-
-    function close() {
-      clearTimeout(timer);
-      if (overlay.parentNode) {
-        overlay.parentNode.removeChild(overlay);
-      }
-      resolve();
-    }
-
-    // Keydown: Enter/Escape zamyka
+    // Keyboard
     const onKey = (e) => {
       if (e.code === 'Enter' || e.code === 'Escape') {
         e.stopPropagation();
         document.removeEventListener('keydown', onKey);
-        close();
+        dismiss();
       }
     };
     document.addEventListener('keydown', onKey);
+
+    document.body.appendChild(overlay);
+
+    // Auto-zamknięcie po timeout
+    const timer = setTimeout(() => dismiss(), MODAL_TIMEOUT);
+
+    requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
   });
 }
 
-// ── Konfiguracja uderzeń kosmicznych ─────────────────────────────────────
-// Kolory severity dynamiczne — generowane z THEME w runtime
+// ── Konfiguracja uderzeń kosmicznych ────────────────────────────────────
+
 function _getImpactConfig() {
   return {
     light: {
       icon: '☄',
-      title: 'Uderzenie meteorytyczne',
+      title: 'UDERZENIE METEORYTYCZNE',
       desc: 'Niewielki obiekt kosmiczny uderzył w powierzchnię planety. Szkody są ograniczone.',
-      borderColor: THEME.warning,
-      bgColor: _sevBg(THEME.warning),
+      severity: 'info',
+      svgLabel: 'UDERZENIE<br>LEKKIE',
       autoClose: 6000,
-      pause: false,
     },
     moderate: {
       icon: '💥',
-      title: 'Bombardowanie kosmiczne!',
+      title: 'BOMBARDOWANIE KOSMICZNE!',
       desc: 'Znaczący obiekt uderzył w planetę powodując poważne zniszczenia infrastruktury i straty wśród populacji.',
-      borderColor: THEME.dangerDim,
-      bgColor: _sevBg(THEME.dangerDim),
+      severity: 'danger',
+      svgLabel: 'UDERZENIE<br>ŚREDNIE',
       autoClose: 10000,
-      pause: true,
     },
     heavy: {
       icon: '🔥',
       title: 'KATASTROFALNE UDERZENIE!',
       desc: 'Ogromne ciało kosmiczne uderzyło w planetę. Większość infrastruktury i populacji została zniszczona. Cywilizacja walczy o przetrwanie.',
-      borderColor: THEME.danger,
-      bgColor: _sevBg(THEME.danger),
+      severity: 'danger',
+      svgLabel: 'UDERZENIE<br>KRYTYCZNE',
       autoClose: 0,
-      pause: true,
     },
     extinction: {
       icon: '☠',
       title: 'APOKALIPSA — ZAGŁADA!',
       desc: 'Masywne ciało planetarne uderzyło w planetę. Cała cywilizacja została unicestwiona. Powierzchnia planety jest pokryta morzem lawy.',
-      borderColor: THEME.danger,
-      bgColor: _sevBg(THEME.danger),
+      severity: 'danger',
+      svgLabel: 'ZAGŁADA',
       autoClose: 0,
-      pause: true,
     },
   };
 }
@@ -172,130 +128,64 @@ export function showImpactNotification(data) {
   if (!cfg) return Promise.resolve();
 
   return new Promise(resolve => {
-    // Kontener
-    const overlay = document.createElement('div');
-    overlay.className = 'kosmos-modal-overlay';
-    overlay.style.cssText = `
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      z-index: 100; display: flex; justify-content: center; align-items: flex-start;
-      padding-top: 80px; pointer-events: none;
-    `;
+    let stats = '';
+    stats += formatStatLine('KOLONIA', planetName ?? '?');
 
-    // Panel
-    const panel = document.createElement('div');
-    panel.style.cssText = `
-      background: ${cfg.bgColor}; border: 2px solid ${cfg.borderColor};
-      border-radius: 6px; padding: 18px 26px; max-width: 420px; min-width: 300px;
-      font-family: ${THEME.fontFamily}; color: ${THEME.textPrimary}; pointer-events: auto;
-      box-shadow: 0 0 30px rgba(2,4,5,0.88), 0 0 60px ${cfg.borderColor}33;
-      animation: slideDown 0.3s ease-out;
-    `;
-
-    // Nagłówek (ikona + tytuł)
-    const header = document.createElement('div');
-    header.style.cssText = `font-size: 16px; margin-bottom: 6px; font-weight: bold; color: ${cfg.borderColor};`;
-    header.textContent = `${cfg.icon}  ${cfg.title}`;
-    panel.appendChild(header);
-
-    // Kolonia
-    const colEl = document.createElement('div');
-    colEl.style.cssText = `font-size: 12px; color: ${THEME.textSecondary}; margin-bottom: 10px;`;
-    colEl.textContent = `Kolonia: ${planetName ?? '?'}`;
-    panel.appendChild(colEl);
-
-    // Opis fabularny
-    const desc = document.createElement('div');
-    desc.style.cssText = `font-size: 12px; color: ${THEME.textSecondary}; margin-bottom: 14px; line-height: 1.5;`;
-    desc.textContent = cfg.desc;
-    panel.appendChild(desc);
-
-    // Raport szkód
-    const dmgLines = [];
     if (popLost > 0) {
-      dmgLines.push(`👤 Stracono ${popLost} POP${popLost > 1 ? 'ów' : 'a'} (pozostało: ${popRemaining ?? '?'})`);
+      stats += formatStatLine('POPULACJA', `−${popLost} POP (${popRemaining ?? '?'} pozostało)`, 'at-stat-neg');
     }
     if (buildingsDestroyed > 0) {
-      dmgLines.push(`🏗 Zniszczono ${buildingsDestroyed} budynk${buildingsDestroyed === 1 ? '' : buildingsDestroyed < 5 ? 'i' : 'ów'}`);
+      stats += formatStatLine('BUDYNKI', `−${buildingsDestroyed} zniszczonych`, 'at-stat-neg');
     }
     if (resourceLossPercent > 0) {
-      dmgLines.push(`📦 Utracono ${resourceLossPercent}% zgromadzonych zasobów`);
+      stats += formatStatLine('ZASOBY', `−${resourceLossPercent}% utraconych`, 'at-stat-neg');
+    }
+    stats += formatStatLineWithCursor('RYZYKO', severity === 'extinction' ? 'ZAGŁADA' : 'KRYTYCZNE', 'at-stat-neg');
+
+    const { overlay, dismiss, btnElements } = buildTerminalPopup({
+      severity: cfg.severity,
+      barTitle: `⚠ ${cfg.title} ⚠`,
+      svgKey: 'impact',
+      svgLabel: cfg.svgLabel,
+      prompt: '> IMPACT_ALERT.EXE_',
+      headline: cfg.title,
+      description: cfg.desc,
+      contentHTML: stats,
+      buttons: [{ label: '[ENTER] PRZYJMUJĘ DO WIADOMOŚCI', primary: true }],
+      onDismiss: () => {
+        if (timer) clearTimeout(timer);
+        document.removeEventListener('keydown', onKey);
+        resolve();
+      },
+    });
+
+    // Podłącz dismiss do przycisku
+    for (const btn of btnElements) {
+      btn.addEventListener('click', () => dismiss());
     }
 
-    if (dmgLines.length > 0) {
-      const dmgHeader = document.createElement('div');
-      dmgHeader.style.cssText = `font-size: 11px; color: ${THEME.textLabel}; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px;`;
-      dmgHeader.textContent = 'Raport szkód';
-      panel.appendChild(dmgHeader);
+    // Klik na overlay = zamknij
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) dismiss();
+    });
 
-      const dmgBox = document.createElement('div');
-      dmgBox.style.cssText = `
-        background: rgba(2,4,5,0.45); border: 1px solid ${cfg.borderColor}44;
-        border-radius: 4px; padding: 8px 10px; margin-bottom: 14px;
-        font-size: 12px; line-height: 1.6;
-      `;
-      for (const line of dmgLines) {
-        const row = document.createElement('div');
-        row.style.color = THEME.textPrimary;
-        row.textContent = line;
-        dmgBox.appendChild(row);
+    // Keyboard
+    const onKey = (e) => {
+      if (e.code === 'Enter' || e.code === 'Escape') {
+        e.stopPropagation();
+        dismiss();
       }
-      panel.appendChild(dmgBox);
-    }
+    };
+    document.addEventListener('keydown', onKey);
 
-    // Przycisk OK
-    const btn = document.createElement('button');
-    btn.style.cssText = `
-      background: ${_bgAlpha(THEME.bgTertiary, 0.9)}; border: 1px solid ${cfg.borderColor};
-      color: ${THEME.accent}; padding: 6px 20px; cursor: pointer; font-family: ${THEME.fontFamily};
-      font-size: 13px; border-radius: 3px; display: block; margin: 0 auto;
-    `;
-    btn.textContent = 'Przyjmuję do wiadomości';
-    btn.onclick = close;
-    panel.appendChild(btn);
-
-    // Blokuj propagację kliknięć/mousedown do canvas/window
-    for (const evt of ['click', 'mousedown', 'mouseup']) {
-      panel.addEventListener(evt, (e) => e.stopPropagation());
-    }
-    overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
     // Auto-zamknięcie (0 = brak — gracz musi kliknąć)
     let timer = null;
     if (cfg.autoClose > 0) {
-      timer = setTimeout(close, cfg.autoClose);
+      timer = setTimeout(() => dismiss(), cfg.autoClose);
     }
 
-    function close() {
-      if (timer) clearTimeout(timer);
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      document.removeEventListener('keydown', onKey);
-      resolve();
-    }
-
-    const onKey = (e) => {
-      if (e.code === 'Enter' || e.code === 'Escape') {
-        e.stopPropagation();
-        close();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-
-    // Focus na przycisku
-    setTimeout(() => btn.focus(), 50);
+    requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
   });
 }
-
-// Animacja CSS wstrzykiwana do <head>
-(function injectStyle() {
-  if (document.getElementById('event-modal-style')) return;
-  const style = document.createElement('style');
-  style.id = 'event-modal-style';
-  style.textContent = `
-    @keyframes slideDown {
-      from { transform: translateY(-30px); opacity: 0; }
-      to   { transform: translateY(0);     opacity: 1; }
-    }
-  `;
-  document.head.appendChild(style);
-})();

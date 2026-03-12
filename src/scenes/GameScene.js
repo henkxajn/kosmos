@@ -32,6 +32,7 @@ import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification, showImpactNotification } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
+import { formatStatLine, formatStatLineWithCursor } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
@@ -281,27 +282,26 @@ export class GameScene {
       const typeLabel = isOutpost ? 'Placówka' : 'Kolonia';
       const vesselCount = destroyedVesselIds?.length ?? 0;
 
-      let html = `
-        <div class="mm-row"><span class="mm-label">${typeLabel}</span><span class="mm-value mm-danger">${colonyName}</span></div>
-        <div class="mm-row"><span class="mm-label">Przyczyna</span><span class="mm-value">${reasonPL}</span></div>
-      `;
+      let stats = '';
+      stats += formatStatLine(typeLabel.toUpperCase(), colonyName, 'at-stat-neg');
+      stats += formatStatLine('PRZYCZYNA', reasonPL, 'at-stat-neg');
       if (population > 0) {
-        html += `<div class="mm-row"><span class="mm-label">Utracona populacja</span><span class="mm-value mm-danger">${population} POP</span></div>`;
+        stats += formatStatLine('POPULACJA', `−${population} POP`, 'at-stat-neg');
       }
       if (vesselCount > 0) {
-        html += `<div class="mm-row"><span class="mm-label">Utracone statki</span><span class="mm-value mm-danger">${vesselCount}</span></div>`;
+        stats += formatStatLine('STATKI', `−${vesselCount} utraconych`, 'at-stat-neg');
       }
-      html += `
-        <div class="mm-section" style="text-align:center; padding: 12px 0;">
-          <span class="mm-danger" style="font-size:13px;">${typeLabel} została bezpowrotnie utracona.</span>
-        </div>
-      `;
+      stats += formatStatLineWithCursor('STATUS', 'BEZPOWROTNIE UTRACONA', 'at-stat-neg');
 
       queueMissionEvent({
         severity: 'danger',
-        icon: '💥',
-        title: `${typeLabel} ${colonyName} utracona`,
-        html,
+        barTitle: '⚠ ALARM KRYTYCZNY ⚠',
+        svgKey: 'disaster',
+        svgLabel: typeLabel.toUpperCase() + '<br>UTRACONA',
+        prompt: '> COLONY_LOST.EXE_',
+        headline: `${typeLabel.toUpperCase()}<br>UTRACONA`,
+        description: `${typeLabel} ${colonyName} została bezpowrotnie utracona.`,
+        contentHTML: stats,
       });
     });
 
