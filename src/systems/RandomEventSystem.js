@@ -209,9 +209,7 @@ export class RandomEventSystem {
           break;
 
         case 'morale':
-          if (civSys) {
-            civSys.morale = Math.max(0, Math.min(100, civSys.morale + fx.delta));
-          }
+          // Morale usunięte — efekt ignorowany (RandomEventSystem disabled)
           break;
 
         case 'pop':

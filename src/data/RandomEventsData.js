@@ -215,7 +215,7 @@ export const RANDOM_EVENTS = {
     severity:    'info',
     weight:      5,
     duration:    5,
-    condition:   (col) => (col?.civSystem?.morale ?? 0) >= 70,
+    condition:   (col) => (col?.prosperitySystem?.prosperity ?? 0) >= 70,
     effects: [
       { type: 'pop', delta: 1 },
       { type: 'morale', delta: 5 },
@@ -231,7 +231,7 @@ export const RANDOM_EVENTS = {
     severity:    'danger',
     weight:      4,
     duration:    3,
-    condition:   (col) => (col?.civSystem?.morale ?? 50) < 30,
+    condition:   (col) => (col?.prosperitySystem?.prosperity ?? 50) < 30,
     effects: [
       { type: 'production', resource: 'all', multiplier: 0.5 },
       { type: 'morale', delta: -10 },

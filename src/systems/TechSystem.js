@@ -4,7 +4,7 @@
 //   - śledzenie zbadanych technologii
 //   - sprawdzanie warunków (prerequisites, koszt badań)
 //   - obliczanie mnożników produkcji i konsumpcji
-//   - stały bonus morale / wzrostu populacji dla CivilizationSystem
+//   - stały bonus wzrostu populacji dla CivilizationSystem
 //
 // Komunikacja:
 //   Nasłuchuje: 'tech:researchRequest' { techId } → próba zbadania
@@ -17,7 +17,7 @@
 //   getAvailable()   → [] dostępne techs (prereqs OK, nie zbadane)
 //   getProductionMultiplier(resource) → łączny mnożnik dla resource
 //   getConsumptionMultiplier(resource) → łączny mnożnik konsumpcji
-//   getMoraleBonus()      → suma stałych bonusów morale (na rok)
+//   getMoraleBonus()      → suma bonusów moraleBonus (legacy)
 //   getPopGrowthMultiplier() → łączny mnożnik wzrostu populacji
 //   serialize() → { researched: [] }
 //   restore(data) → wczytaj stan, emit tech:researched z restored:true
@@ -80,7 +80,7 @@ export class TechSystem {
     return m;
   }
 
-  // Suma stałych bonusów morale ze zbadanych technologii (na rok)
+  // Suma bonusów moraleBonus (legacy — teraz wpływa na prosperity)
   getMoraleBonus() {
     let total = 0;
     for (const id of this._researched) {

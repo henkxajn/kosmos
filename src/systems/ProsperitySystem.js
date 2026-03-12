@@ -1,0 +1,597 @@
+// ProsperitySystem — dobrobyt kolonii oparty na konsumpcji dóbr (per-kolonia)
+//
+// Oblicza demand na dobra konsumpcyjne, satisfaction, prosperity score.
+// Consumer Factory auto-alokuje produkcję proporcjonalnie do demand.
+//
+// Komunikacja:
+//   Nasłuchuje: 'time:tick'           → _update(deltaYears)
+//   Emituje:    'prosperity:changed'  { prosperity, delta, planetId }
+//               'epoch:changed'       { epoch, oldEpoch, epochScore }
+//               'consumer:demandUpdate' { demands }
+//               'consumer:shortage'   { goodId, ratio }
+//               'resource:registerProducer' — rejestracja konsumpcji i produkcji
+
+import EventBus from '../core/EventBus.js';
+import { COMMODITIES } from '../data/CommoditiesData.js';
+import {
+  BASE_DEMAND,
+  TEMP_MULTIPLIERS,
+  ATMO_MULTIPLIERS,
+  GRAV_MULTIPLIERS,
+  EPOCHS,
+  PROSPERITY_WEIGHTS,
+  SATISFACTION_THRESHOLDS,
+  LAYER_GOODS,
+  PROSPERITY_EFFECTS,
+} from '../data/ConsumerGoodsData.js';
+
+export class ProsperitySystem {
+  constructor(resourceSystem, civSystem, techSystem, planet) {
+    this.resourceSystem = resourceSystem;
+    this.civSystem = civSystem;
+    this.techSystem = techSystem;
+    this.planet = planet;  // potrzebny do mnożników środowiskowych
+
+    this.prosperity = 50;        // początkowy score
+    this.targetProsperity = 50;
+    this.epoch = 'early';
+    this.epochScore = 0;
+
+    this._consumerDemand = {};    // demand per good per rok
+    this._consumerProduction = {}; // produkcja per good per rok
+    this._satisfaction = {};       // satisfaction per good (0-1)
+    this._layerScores = {};        // score per warstwa
+
+    // Akumulator czasu (roczne przeliczanie)
+    this._accumYears = 0;
+    this._lastRegisteredDemand = null;  // guard: unikaj re-rejestracji
+    this._lastRegisteredProd = null;
+
+    this._setupListeners();
+  }
+
+  // ── Nasłuch zdarzeń ─────────────────────────────────────────────────────
+
+  _setupListeners() {
+    EventBus.on('time:tick', ({ deltaYears }) => this._update(deltaYears));
+  }
+
+  // ── Główna pętla ────────────────────────────────────────────────────────
+
+  _update(deltaYears) {
+    if (!window.KOSMOS?.civMode) return;
+
+    this._accumYears += deltaYears;
+    if (this._accumYears < 1) return;
+    const years = Math.floor(this._accumYears);
+    this._accumYears -= years;
+
+    for (let y = 0; y < years; y++) this._yearlyUpdate();
+  }
+
+  _yearlyUpdate() {
+    const oldProsperity = this.prosperity;
+    const oldEpoch = this.epoch;
+
+    // 1. Oblicz demand
+    this._calcAllDemands();
+
+    // 2. Oblicz produkcję consumer factory
+    this._updateConsumerProduction();
+
+    // 3. Oblicz satisfaction per towar
+    this._calcSatisfaction();
+
+    // 4. Oblicz prosperity score per warstwa
+    this._calcLayerScores();
+
+    // 5. Zastosuj inercję: prosperity dąży do target
+    const delta = (this.targetProsperity - this.prosperity) * 0.15;
+    this.prosperity = Math.max(0, Math.min(100, this.prosperity + delta));
+
+    // 6. Zarejestruj konsumpcję i produkcję w ResourceSystem
+    this._syncConsumption();
+    this._syncProduction();
+
+    // 7. Emit events jeśli prosperity się zmieniło znacząco
+    if (window.KOSMOS?.prosperitySystem === this) {
+      const absDelta = Math.abs(this.prosperity - oldProsperity);
+      if (absDelta >= 0.5) {
+        EventBus.emit('prosperity:changed', {
+          prosperity: this.prosperity,
+          delta: this.prosperity - oldProsperity,
+          planetId: this.planet?.id,
+        });
+      }
+
+      // Sprawdź zmianę epoki
+      const epochData = this._getCurrentEpoch();
+      if (epochData.key !== oldEpoch) {
+        this.epoch = epochData.key;
+        EventBus.emit('epoch:changed', {
+          epoch: this.epoch,
+          oldEpoch,
+          epochScore: this.epochScore,
+        });
+      }
+
+      // Emit demand update (UI)
+      EventBus.emit('consumer:demandUpdate', { demands: { ...this._consumerDemand } });
+
+      // Shortage alerts
+      for (const goodId in this._satisfaction) {
+        if (this._satisfaction[goodId] < 0.3 && (this._consumerDemand[goodId] ?? 0) > 0) {
+          const ratio = this._satisfaction[goodId];
+          EventBus.emit('consumer:shortage', { goodId, ratio });
+        }
+      }
+    }
+  }
+
+  // ── Obliczanie demand ───────────────────────────────────────────────────
+
+  _calcAllDemands() {
+    const pop = this.civSystem?.population ?? 0;
+    const epochData = this._getCurrentEpoch();
+    const unlockedGoods = epochData.unlockedGoods;
+    const epochMult = epochData.demandMult;
+
+    // Mnożniki środowiskowe z planety
+    const tempKey = this._getTempKey(this.planet?.temperatureC);
+    const atmoKey = this.planet?.atmosphere || 'none';
+    const gravKey = this._getGravKey(this.planet?.surfaceGravity);
+
+    const maturity = this._getMaturityFactor();
+
+    // Wyczyść stare
+    this._consumerDemand = {};
+
+    for (const goodId of unlockedGoods) {
+      const base = BASE_DEMAND[goodId] ?? 0;
+      const tMult = TEMP_MULTIPLIERS[tempKey]?.[goodId] ?? 1.0;
+      const aMult = ATMO_MULTIPLIERS[atmoKey]?.[goodId] ?? 1.0;
+      const gMult = GRAV_MULTIPLIERS[gravKey]?.[goodId] ?? 1.0;
+
+      this._consumerDemand[goodId] = base * tMult * aMult * gMult * epochMult * maturity * pop;
+    }
+  }
+
+  _getTempKey(temperatureC) {
+    if (temperatureC == null) return 'moderate';
+    if (temperatureC > 77) return 'hot';
+    if (temperatureC < -53) return 'cold';
+    return 'moderate';
+  }
+
+  _getGravKey(surfaceGravity) {
+    if (surfaceGravity == null) return 'normal';
+    if (surfaceGravity < 0.4) return 'low';
+    if (surfaceGravity > 1.5) return 'high';
+    return 'normal';
+  }
+
+  _getMaturityFactor() {
+    // Wiek kolonii (tymczasowo: totalYears jako przybliżenie)
+    const age = window.KOSMOS.timeSystem?.gameTime ?? 0;
+    const pop = this.civSystem?.population ?? 0;
+
+    // Startuje od 0.3 — pionierzy mają podstawowe potrzeby od dnia 1
+    // Rośnie do 1.0: ageFactor osiąga 1.0 po ~53 latach
+    const ageFactor = Math.min(1.0, 0.3 + (age / 75));
+
+    // popFactor: 0.3 przy pop=0, 1.0 przy pop>=10.5
+    const popFactor = Math.min(1.0, 0.3 + (pop / 15));
+
+    // Odległość od macierzystej — hamuje TYLKO młode/małe kolonie
+    let distFactor = 1.0;
+    if (pop < 15 && this.prosperity < 50) {
+      const dist = this._getDistanceFromHome();
+      distFactor = Math.max(0.6, 1.0 - dist * 0.03);
+    }
+
+    // ŚREDNIA zamiast mnożenia — unika katastrofy "0 × cokolwiek = 0"
+    return ((ageFactor + popFactor) / 2) * distFactor;
+  }
+
+  _getDistanceFromHome() {
+    if (!this.planet) return 0;
+    try {
+      // Dynamiczny import nie jest potrzebny — użyj DistanceUtils jeśli dostępny
+      const home = window.KOSMOS?.homePlanet;
+      if (!home || home === this.planet) return 0;
+      // Prosta odległość orbitalna
+      const aHome = home.orbital?.a ?? 0;
+      const aPlanet = this.planet.orbital?.a ?? 0;
+      return Math.abs(aHome - aPlanet);
+    } catch {
+      return 0;
+    }
+  }
+
+  // ── Satisfaction ────────────────────────────────────────────────────────
+
+  _calcSatisfaction() {
+    // Wyczyść stare
+    this._satisfaction = {};
+
+    for (const goodId in this._consumerDemand) {
+      const demand = this._consumerDemand[goodId];
+      if (demand <= 0) {
+        // NIE dodawaj do _satisfaction — pomijany w calcLayerSatisfaction
+        continue;
+      }
+
+      // Satisfaction = ciągła zdolność pokrycia popytu (produkcja vs demand)
+      // Stock NIE liczy się — jednorazowy zapas nie oznacza trwałej satysfakcji
+      const production = this._consumerProduction[goodId] ?? 0;
+      const ratio = production / demand;
+
+      this._satisfaction[goodId] = this._ratioToSatisfaction(ratio);
+    }
+  }
+
+  _ratioToSatisfaction(ratio) {
+    // Progi z SATISFACTION_THRESHOLDS (od najwyższego)
+    for (const threshold of SATISFACTION_THRESHOLDS) {
+      if (ratio >= threshold.minRatio) return threshold.satisfaction;
+    }
+    return 0;
+  }
+
+  // ── Layer scores i prosperity ───────────────────────────────────────────
+
+  _calcLayerScores() {
+    // Wymarła kolonia — zeruj wszystko
+    if ((this.civSystem?.population ?? 0) <= 0) {
+      this._layerScores = { survival: 0, infrastructure: 0, functioning: 0, comfort: 0, luxury: 0 };
+      this.targetProsperity = 0;
+      return;
+    }
+
+    // Survival (food, water, energy) — z ResourceSystem
+    const survivalSat = this._calcSurvivalSatisfaction();
+
+    // Infrastructure (housing, employment) — z CivSystem
+    const infraSat = this._calcInfrastructureSatisfaction();
+
+    // Consumer goods layers
+    const funcSat = this._calcLayerSatisfaction('functioning');
+    const comfSat = this._calcLayerSatisfaction('comfort');
+    const luxSat = this._calcLayerSatisfaction('luxury');
+
+    this._layerScores = {
+      survival: survivalSat,
+      infrastructure: infraSat,
+      functioning: funcSat,
+      comfort: comfSat,
+      luxury: luxSat,
+    };
+
+    this.targetProsperity =
+      survivalSat * PROSPERITY_WEIGHTS.survival +
+      infraSat * PROSPERITY_WEIGHTS.infrastructure +
+      funcSat * PROSPERITY_WEIGHTS.functioning +
+      comfSat * PROSPERITY_WEIGHTS.comfort +
+      luxSat * PROSPERITY_WEIGHTS.luxury;
+  }
+
+  _calcSurvivalSatisfaction() {
+    // Sprawdź bilans food, water, energy
+    const pop = this.civSystem?.population ?? 1;
+    let total = 0;
+    let count = 0;
+
+    // Food
+    const foodStock = this.resourceSystem?.inventory?.get('food') ?? 0;
+    const foodRate = this._getPerYear('food');
+    const foodNeed = pop * 3.0;  // POP_CONSUMPTION.food
+    if (foodNeed > 0) {
+      total += this._ratioToSatisfaction((foodStock + Math.max(0, foodRate)) / foodNeed);
+      count++;
+    }
+
+    // Water
+    const waterStock = this.resourceSystem?.inventory?.get('water') ?? 0;
+    const waterRate = this._getPerYear('water');
+    const waterNeed = pop * 1.5;  // POP_CONSUMPTION.water
+    if (waterNeed > 0) {
+      total += this._ratioToSatisfaction((waterStock + Math.max(0, waterRate)) / waterNeed);
+      count++;
+    }
+
+    // Energy — bilans (nie inventory)
+    const energyBalance = this.resourceSystem?.energy?.balance ?? 0;
+    const energyProd = this.resourceSystem?.energy?.production ?? 1;
+    if (energyProd > 0) {
+      total += this._ratioToSatisfaction((energyProd + energyBalance) / energyProd);
+      count++;
+    }
+
+    return count > 0 ? total / count : 1.0;
+  }
+
+  _calcInfrastructureSatisfaction() {
+    const pop = this.civSystem?.population ?? 1;
+    const housing = this.civSystem?.housing ?? 0;
+    const employed = this.civSystem?.employedPops ?? 0;
+    const locked = this.civSystem?.lockedPops ?? 0;
+
+    // Housing ratio
+    const housingRatio = pop > 0 ? housing / pop : 1.0;
+    const housingSat = this._ratioToSatisfaction(housingRatio);
+
+    // Employment — freePops > 0 to dobrze (nie ma przeludnienia bezrobotnych)
+    const totalNeeded = employed + locked;
+    const empRatio = pop > 0 ? Math.min(1.5, pop / Math.max(1, totalNeeded)) : 1.0;
+    const empSat = this._ratioToSatisfaction(empRatio);
+
+    return (housingSat + empSat) / 2;
+  }
+
+  _calcLayerSatisfaction(layerKey) {
+    const goods = LAYER_GOODS[layerKey];
+    if (!goods || goods.length === 0) return 0;
+
+    const epochData = this._getCurrentEpoch();
+    const unlockedGoods = epochData.unlockedGoods;
+
+    let total = 0;
+    let count = 0;
+    for (const goodId of goods) {
+      // Licz tylko ODBLOKOWANE towary w tej epoce
+      if (!unlockedGoods.includes(goodId)) continue;
+
+      if (goodId in this._satisfaction) {
+        total += this._satisfaction[goodId];
+        count++;
+      } else {
+        // Odblokowany ale demand = 0 (np. maturity niska) → sat = 0
+        total += 0;
+        count++;
+      }
+    }
+    return count > 0 ? total / count : 0;
+  }
+
+  _getPerYear(resourceId) {
+    // Oblicz netto perYear dla zasobu z producentów
+    const producers = this.resourceSystem?._producers;
+    if (!producers) return 0;
+    let sum = 0;
+    for (const rates of producers.values()) {
+      if (rates[resourceId]) sum += rates[resourceId];
+    }
+    return sum;
+  }
+
+  // ── Consumer Factory: auto-produkcja ────────────────────────────────────
+
+  _updateConsumerProduction() {
+    // Policz łączne CFP z consumer_factory budynków
+    const totalCFP = this._getTotalCFP();
+    this._consumerProduction = {};
+    if (totalCFP <= 0) return;
+
+    const totalDemand = Object.values(this._consumerDemand).reduce((s, d) => s + d, 0);
+    if (totalDemand <= 0) return;
+
+    for (const goodId in this._consumerDemand) {
+      const demand = this._consumerDemand[goodId];
+      const allocatedCFP = totalCFP * (demand / totalDemand);
+      const commodity = COMMODITIES[goodId];
+      if (!commodity) continue;
+
+      const productionPerYear = allocatedCFP / commodity.baseTime;
+
+      // Sprawdź czy mamy surowce na produkcję
+      if (this._hasIngredients(commodity.recipe, productionPerYear)) {
+        this._consumerProduction[goodId] = productionPerYear;
+
+        // Konsumuj surowce proporcjonalnie do produkcji
+        this._consumeIngredients(commodity.recipe, productionPerYear);
+
+        // Dodaj wyprodukowane towary do inventory
+        if (this.resourceSystem) {
+          this.resourceSystem.receive({ [goodId]: productionPerYear });
+        }
+      } else {
+        // Częściowa produkcja — ile możemy wyprodukować?
+        const fraction = this._maxProducibleFraction(commodity.recipe, productionPerYear);
+        if (fraction > 0) {
+          const actual = productionPerYear * fraction;
+          this._consumerProduction[goodId] = actual;
+          this._consumeIngredients(commodity.recipe, actual);
+          if (this.resourceSystem) {
+            this.resourceSystem.receive({ [goodId]: actual });
+          }
+        } else {
+          this._consumerProduction[goodId] = 0;
+        }
+      }
+    }
+  }
+
+  _getTotalCFP() {
+    // Suma levelów WSZYSTKICH consumer_factory w kolonii
+    // Analogicznie do _getShipyardLevel w ColonyManager
+    const bSys = this._getBuildingSystem();
+    if (!bSys?._active) return 0;
+
+    let totalCFP = 0;
+    for (const entry of bSys._active.values()) {
+      if (entry.building.id === 'consumer_factory') {
+        totalCFP += entry.level ?? 1;
+      }
+    }
+    return totalCFP;
+  }
+
+  _getBuildingSystem() {
+    // Znajdź BuildingSystem dla tej kolonii
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return null;
+    for (const col of colMgr.getAllColonies()) {
+      if (col.planet === this.planet || col.planetId === this.planet?.id) {
+        return col.buildingSystem;
+      }
+    }
+    return null;
+  }
+
+  _hasIngredients(recipe, productionAmount) {
+    if (!this.resourceSystem) return false;
+    for (const resId in recipe) {
+      const needed = recipe[resId] * productionAmount;
+      if ((this.resourceSystem.inventory.get(resId) ?? 0) < needed) return false;
+    }
+    return true;
+  }
+
+  _maxProducibleFraction(recipe, productionAmount) {
+    if (!this.resourceSystem) return 0;
+    let minFraction = 1.0;
+    for (const resId in recipe) {
+      const needed = recipe[resId] * productionAmount;
+      if (needed <= 0) continue;
+      const available = this.resourceSystem.inventory.get(resId) ?? 0;
+      const fraction = available / needed;
+      if (fraction < minFraction) minFraction = fraction;
+    }
+    return Math.max(0, Math.min(1, minFraction));
+  }
+
+  _consumeIngredients(recipe, productionAmount) {
+    if (!this.resourceSystem) return;
+    const costs = {};
+    for (const resId in recipe) {
+      costs[resId] = recipe[resId] * productionAmount;
+    }
+    this.resourceSystem.spend(costs);
+  }
+
+  // ── Rejestracja konsumpcji/produkcji w ResourceSystem ───────────────────
+
+  _syncConsumption() {
+    if (!window.KOSMOS?.civMode) return;
+    // Guard: tylko aktywna kolonia rejestruje przez EventBus
+    if (window.KOSMOS?.prosperitySystem !== this) return;
+
+    const rates = {};
+    for (const goodId in this._consumerDemand) {
+      rates[goodId] = -this._consumerDemand[goodId];  // ujemny = konsumpcja
+    }
+
+    // Unikaj re-rejestracji identycznych stawek
+    const key = JSON.stringify(rates);
+    if (key === this._lastRegisteredDemand) return;
+    this._lastRegisteredDemand = key;
+
+    EventBus.emit('resource:registerProducer', {
+      id: 'prosperity_consumption',
+      rates,
+    });
+  }
+
+  _syncProduction() {
+    if (!window.KOSMOS?.civMode) return;
+    // Guard: tylko aktywna kolonia rejestruje przez EventBus
+    if (window.KOSMOS?.prosperitySystem !== this) return;
+
+    const rates = {};
+    for (const goodId in this._consumerProduction) {
+      if (this._consumerProduction[goodId] > 0) {
+        rates[goodId] = this._consumerProduction[goodId];
+      }
+    }
+
+    const key = JSON.stringify(rates);
+    if (key === this._lastRegisteredProd) return;
+    this._lastRegisteredProd = key;
+
+    EventBus.emit('resource:registerProducer', {
+      id: 'consumer_factory_production',
+      rates,
+    });
+  }
+
+  // ── Epoki ───────────────────────────────────────────────────────────────
+
+  _getCurrentEpoch() {
+    this._recalcEpochScore();
+
+    // Znajdź najwyższą epokę której próg spełniony
+    const epochs = Object.entries(EPOCHS).reverse();
+    for (const [key, data] of epochs) {
+      if (this.epochScore >= data.minScore) return { ...data, key };
+    }
+    return { ...EPOCHS.early, key: 'early' };
+  }
+
+  _recalcEpochScore() {
+    // UWAGA: tymczasowo obliczane per-kolonia; docelowo globalnie
+    const techPoints = (this.techSystem?._researched?.size ?? 0) * 20;
+    const avgProsperity = this.prosperity;
+    const totalPop = this.civSystem?.population ?? 0;
+
+    this.epochScore = techPoints + Math.floor(avgProsperity / 10) * 15 + Math.floor(totalPop / 5) * 10;
+  }
+
+  // ── Metody publiczne ────────────────────────────────────────────────────
+
+  getGrowthMultiplier() {
+    for (const effect of PROSPERITY_EFFECTS) {
+      if (this.prosperity <= effect.maxProsperity) return effect.growthMult;
+    }
+    return PROSPERITY_EFFECTS[PROSPERITY_EFFECTS.length - 1].growthMult;
+  }
+
+  getResearchMultiplier() {
+    for (const effect of PROSPERITY_EFFECTS) {
+      if (this.prosperity <= effect.maxProsperity) return effect.researchMult;
+    }
+    return PROSPERITY_EFFECTS[PROSPERITY_EFFECTS.length - 1].researchMult;
+  }
+
+  hasCrisisRisk() {
+    return this.prosperity < 15;
+  }
+
+  getDemand(goodId) {
+    return this._consumerDemand[goodId] ?? 0;
+  }
+
+  getProduction(goodId) {
+    return this._consumerProduction[goodId] ?? 0;
+  }
+
+  getSatisfaction(goodId) {
+    return this._satisfaction[goodId] ?? 0;
+  }
+
+  getLayerScores() {
+    return { ...this._layerScores };
+  }
+
+  // ── Serializacja ────────────────────────────────────────────────────────
+
+  serialize() {
+    return {
+      prosperity: this.prosperity,
+      targetProsperity: this.targetProsperity,
+      epoch: this.epoch,
+      epochScore: this.epochScore,
+      consumerDemand: { ...this._consumerDemand },
+      consumerProduction: { ...this._consumerProduction },
+    };
+  }
+
+  restore(data) {
+    if (!data) return;
+    this.prosperity = data.prosperity ?? 50;
+    this.targetProsperity = data.targetProsperity ?? 50;
+    this.epoch = data.epoch ?? 'early';
+    this.epochScore = data.epochScore ?? 0;
+    this._consumerDemand = data.consumerDemand ?? {};
+    this._consumerProduction = data.consumerProduction ?? {};
+  }
+}

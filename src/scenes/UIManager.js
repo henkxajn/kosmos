@@ -173,7 +173,7 @@ export class UIManager {
 
     // ── Stan CivPanel ──────
     this._civData     = null;
-    this._moraleData  = null;
+    this._prosperityData = null;
 
     // ── EventLog ──────────────────────────────────────────────
     this._logEntries = [];
@@ -296,7 +296,7 @@ export class UIManager {
 
     // CivPanel
     EventBus.on('civ:populationChanged', (data) => { this._civData = data; });
-    EventBus.on('civ:moraleChanged',     (data) => { this._moraleData = data; });
+    EventBus.on('prosperity:changed',    (data) => { this._prosperityData = data; });
 
     // Fabryki
     EventBus.on('factory:statusChanged', (data) => { this._factoryData = data; });
@@ -507,15 +507,10 @@ export class UIManager {
     // Przełączenie aktywnej kolonii z Outliner → odśwież wszystkie dane UI
     EventBus.on('colony:switched', () => {
       EventBus.emit('resource:requestSnapshot');
-      // Odśwież dane populacji i morale z nowej kolonii
+      // Odśwież dane populacji z nowej kolonii
       const cSys = window.KOSMOS?.civSystem;
       if (cSys) {
         this._civData = cSys._popSnapshot();
-        this._moraleData = {
-          morale:     cSys.morale,
-          target:     cSys.moraleTarget,
-          components: { ...cSys.moraleComponents },
-        };
       }
       // Odśwież dane fabryk
       const fSys = window.KOSMOS?.factorySystem;
@@ -533,6 +528,44 @@ export class UIManager {
     });
     EventBus.on('colony:migration', ({ from, to, count }) => {
       this._log(`👤 Migracja: ${count} POP z ${from} → ${to}`, 'info');
+    });
+
+    // Prosperity events
+    EventBus.on('epoch:changed', ({ epoch, oldEpoch }) => {
+      const epochNames = { early: 'Wczesna', developing: 'Rozwijająca', advanced: 'Zaawansowana', cosmic: 'Kosmiczna' };
+      const goodsNames = {
+        developing: 'Tworzyw i Elektroniki',
+        advanced: 'Żywności Premium i Stymulatorów',
+        cosmic: 'Półprzewodników',
+      };
+      const msg = `⭐ Epoka ${epochNames[epoch] ?? epoch}`;
+      const detail = goodsNames[epoch] ? ` — populacja oczekuje ${goodsNames[epoch]}` : '';
+      this._log(msg + detail, 'civ_epoch');
+    });
+
+    // Anti-spam: max 1 wpis per towar per 5 lat
+    this._lastShortageLog = {};
+    EventBus.on('consumer:shortage', ({ goodId }) => {
+      const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const last = this._lastShortageLog[goodId] ?? -999;
+      if (now - last < 5) return;
+      this._lastShortageLog[goodId] = now;
+      const colonyName = window.KOSMOS?.colonyManager?.getActiveColony?.()?.name ?? '';
+      const goodName = COMMODITIES[goodId]?.namePL ?? goodId;
+      this._log(`⚠ Deficyt ${goodName} w ${colonyName}`, 'civ_famine');
+    });
+
+    // Milestone prosperity
+    this._lastProsperity = {};
+    EventBus.on('prosperity:changed', ({ prosperity, delta, planetId }) => {
+      const oldP = prosperity - (delta ?? 0);
+      const milestones = [30, 50, 65, 80];
+      for (const m of milestones) {
+        if (oldP < m && prosperity >= m) {
+          const colonyName = window.KOSMOS?.colonyManager?.getColony?.(planetId)?.name ?? '';
+          this._log(`⭐ Prosperity ${colonyName} osiągnęło ${m}`, 'civ_epoch');
+        }
+      }
     });
   }
 
@@ -1322,7 +1355,7 @@ export class UIManager {
       case 'modifier': return `+${Math.round((fx.multiplier - 1) * 100)}% ${icons[fx.resource] ?? fx.resource} produkcji`;
       case 'unlockBuilding': { const b = BUILDINGS[fx.buildingId]; return `Odblokowanie: ${b?.namePL ?? fx.buildingId}`; }
       case 'unlockShip': { const s = SHIPS[fx.shipId]; return `Odblokowanie statku: ${s?.icon ?? '🚀'} ${s?.namePL ?? fx.shipId}`; }
-      case 'moraleBonus': return `+${fx.amount} morale/rok`;
+      case 'moraleBonus': return `+${fx.amount} prosperity bonus`;
       case 'popGrowthBonus': return `+${Math.round((fx.multiplier - 1) * 100)}% wzrost populacji`;
       case 'consumptionMultiplier': return `${Math.round((fx.multiplier - 1) * 100)}% zużycie ${icons[fx.resource] ?? fx.resource}`;
       default: return fx.type;

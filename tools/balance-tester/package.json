@@ -1,0 +1,13 @@
+{
+  "name": "kosmos-balance-tester",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Automatyczny playtester i analizator balansu gry KOSMOS",
+  "main": "run.js",
+  "scripts": {
+    "quick": "node run.js --suite quick",
+    "full": "node run.js --suite full",
+    "stress": "node run.js --suite stress",
+    "debug": "node run.js --bot BalancedBot --runs 1 --years 100 --verbose"
+  }
+}

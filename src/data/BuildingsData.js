@@ -245,6 +245,36 @@ export const BUILDINGS = {
     requires:    'metallurgy',
   },
 
+  // ── Fabryka konsumpcyjna (produkuje dobra konsumpcyjne) ───────────────────
+
+  consumer_factory: {
+    id:          'consumer_factory',
+    namePL:      'Fabryka Konsumpcyjna',
+    category:    'mining',
+    icon:        '🏪',
+    description: 'Produkuje dobra konsumpcyjne dla populacji.',
+    cost:        { Fe: 35, Cu: 10, Si: 8, Ti: 5 },
+    commodityCost: {
+      steel_plates: 5,
+      electronics: 3,
+      copper_wiring: 2,
+      polymer_composites: 2,
+    },
+    energyCost:  8,
+    buildTime:   0.5,
+    rates:       {},       // produkcja via FactorySystem, nie rates
+    maintenance: { Fe: 2, Cu: 1 },
+    housing:     0,
+    popCost:     0.5,
+    maxLevel:    10,
+    capacityBonus: null,
+    terrainOnly: null,
+    terrainAny:  false,
+    requires:    'metallurgy',
+    allowedTerrain: ['plains', 'desert', 'tundra', 'volcanic', 'mesa', 'ice'],
+    isAutonomous: false,
+  },
+
   // ── Zaawansowane (wymagają technologii) ──────────────────────────────────
 
   smelter: {

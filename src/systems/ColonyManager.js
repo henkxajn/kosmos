@@ -2,7 +2,7 @@
 //
 // Centralny rejestr kolonii. Każda kolonia ma własny:
 //   - ResourceSystem (zasoby per-kolonia)
-//   - CivilizationSystem (populacja, morale, wzrost per-kolonia)
+//   - CivilizationSystem (populacja, wzrost per-kolonia)
 //   - Listę budynków (zarządzaną przez BuildingSystem)
 //   - Siatkę hex (HexGrid)
 //   - Flotę statków (fleet) i kolejki budowy (shipQueues — 1 slot per poziom stoczni)
@@ -31,6 +31,7 @@ import { ResourceSystem } from './ResourceSystem.js';
 import { CivilizationSystem } from './CivilizationSystem.js';
 import { BuildingSystem } from './BuildingSystem.js';
 import { FactorySystem } from './FactorySystem.js';
+import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 
@@ -55,8 +56,8 @@ const TRADE_BASE_AMOUNT   = 50;   // bazowa ilość per transfer per zasób
 
 // Migracja POP — stałe
 const MIGRATION_INTERVAL    = 20;   // co ile lat sprawdzenie migracji
-const MIGRATION_MORALE_HIGH = 70;   // morale powyżej = przyciąga
-const MIGRATION_MORALE_LOW  = 40;   // morale poniżej = odpycha
+const MIGRATION_PROSPERITY_HIGH = 70;   // prosperity powyżej = przyciąga
+const MIGRATION_PROSPERITY_LOW  = 40;   // prosperity poniżej = odpycha
 const MIGRATION_CHANCE      = 0.10; // 10% szans na migrację
 
 export class ColonyManager {
@@ -201,7 +202,8 @@ export class ColonyManager {
     window.KOSMOS.resourceSystem  = colony.resourceSystem;
     window.KOSMOS.civSystem       = colony.civSystem;
     if (colony.buildingSystem) window.KOSMOS.buildingSystem = colony.buildingSystem;
-    if (colony.factorySystem)  window.KOSMOS.factorySystem  = colony.factorySystem;
+    if (colony.factorySystem)     window.KOSMOS.factorySystem     = colony.factorySystem;
+    if (colony.prosperitySystem)  window.KOSMOS.prosperitySystem  = colony.prosperitySystem;
     if (window.KOSMOS.expeditionSystem) window.KOSMOS.expeditionSystem.resourceSystem = colony.resourceSystem;
     if (window.KOSMOS.techSystem)       window.KOSMOS.techSystem.resourceSystem       = colony.resourceSystem;
     return true;
@@ -248,6 +250,9 @@ export class ColonyManager {
     const factSys = new FactorySystem(resourceSystem);
     if (buildingSystem) buildingSystem.setFactorySystem(factSys);
 
+    // ProsperitySystem per-kolonia
+    const prospSys = new ProsperitySystem(resourceSystem, civSystem, this.techSystem, planet);
+
     const colony = {
       planetId:        planet.id,
       planet:          planet,
@@ -258,6 +263,7 @@ export class ColonyManager {
       civSystem:       civSystem,
       buildingSystem:  buildingSystem,  // per-kolonia BuildingSystem
       factorySystem:   factSys,
+      prosperitySystem: prospSys,
       grid:            null,  // ustawiane przy otwarciu mapy
       allowImmigration: true,
       allowEmigration:  true,
@@ -267,6 +273,7 @@ export class ColonyManager {
     this._colonies.set(planet.id, colony);
     this._activePlanetId = planet.id;
     window.KOSMOS.factorySystem = factSys;
+    window.KOSMOS.prosperitySystem = prospSys;
     return colony;
   }
 
@@ -285,7 +292,7 @@ export class ColonyManager {
     const civSys = new CivilizationSystem({
       population: startPop,
       housing:    0,  // Stolica doda 4
-    }, this.techSystem);
+    }, this.techSystem, entity);
 
     // BuildingSystem per-kolonia — powiązany z własnymi ResourceSystem i CivilizationSystem
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
@@ -295,6 +302,9 @@ export class ColonyManager {
     // FactorySystem per-kolonia
     const factSys = new FactorySystem(resSys);
     bSys.setFactorySystem(factSys);
+
+    // ProsperitySystem per-kolonia
+    const prospSys = new ProsperitySystem(resSys, civSys, this.techSystem, entity);
 
     const colony = {
       planetId,
@@ -306,6 +316,7 @@ export class ColonyManager {
       civSystem:       civSys,
       buildingSystem:  bSys,
       factorySystem:   factSys,
+      prosperitySystem: prospSys,
       grid:            null,
       allowImmigration: true,
       allowEmigration:  true,
@@ -336,7 +347,7 @@ export class ColonyManager {
     const civSys = new CivilizationSystem({
       population: 0,
       housing:    0,
-    }, this.techSystem);
+    }, this.techSystem, entity);
 
     // BuildingSystem per-outpost — flaga _isOutpost pomija POP
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
@@ -347,6 +358,9 @@ export class ColonyManager {
     // FactorySystem per-outpost
     const factSys = new FactorySystem(resSys);
     bSys.setFactorySystem(factSys);
+
+    // ProsperitySystem per-outpost (pop=0 → demand=0, ale gotowy na upgrade)
+    const prospSys = new ProsperitySystem(resSys, civSys, this.techSystem, entity);
 
     // Oznacz ciało jako zbadane
     entity.explored = true;
@@ -362,6 +376,7 @@ export class ColonyManager {
       civSystem:       civSys,
       buildingSystem:  bSys,
       factorySystem:   factSys,
+      prosperitySystem: prospSys,
       grid:            null,
       allowImmigration: false,
       allowEmigration:  false,
@@ -804,9 +819,9 @@ export class ColonyManager {
     const colonies = this.getAllColonies();
     if (colonies.length < 2) return;
 
-    // Znajdź kolonie z wysokim i niskim morale
-    const high = colonies.filter(c => !c.isOutpost && (c.civSystem?.morale ?? 50) > MIGRATION_MORALE_HIGH && c.allowImmigration);
-    const low  = colonies.filter(c => !c.isOutpost && (c.civSystem?.morale ?? 50) < MIGRATION_MORALE_LOW  && c.allowEmigration);
+    // Znajdź kolonie z wysokim i niskim prosperity
+    const high = colonies.filter(c => !c.isOutpost && (c.prosperitySystem?.prosperity ?? 50) > MIGRATION_PROSPERITY_HIGH && c.allowImmigration);
+    const low  = colonies.filter(c => !c.isOutpost && (c.prosperitySystem?.prosperity ?? 50) < MIGRATION_PROSPERITY_LOW  && c.allowEmigration);
 
     for (const src of low) {
       if (src.civSystem.population <= 2) continue; // nie opuści małej kolonii
@@ -847,6 +862,7 @@ export class ColonyManager {
         buildings:        col.buildingSystem?.serialize() ?? [],
         constructionQueue: col.buildingSystem?.serializeQueue() ?? [],
         factorySystem:    col.factorySystem?.serialize() ?? null,
+        prosperitySystem: col.prosperitySystem?.serialize() ?? null,
         allowImmigration: col.allowImmigration,
         allowEmigration:  col.allowEmigration,
         fleet:            col.fleet ?? [],
@@ -876,8 +892,8 @@ export class ColonyManager {
       const resSys = new ResourceSystem();
       if (colData.resources) resSys.restore(colData.resources);
 
-      // CivilizationSystem per-kolonia
-      const civSys = new CivilizationSystem({}, this.techSystem);
+      // CivilizationSystem per-kolonia (entity = planeta/księżyc/planetoid)
+      const civSys = new CivilizationSystem({}, this.techSystem, entity);
       if (colData.civ) civSys.restore(colData.civ);
 
       // BuildingSystem per-kolonia — powiązany z własnymi systemami
@@ -895,6 +911,10 @@ export class ColonyManager {
       const factSys = new FactorySystem(resSys);
       bSys.setFactorySystem(factSys);
       if (colData.factorySystem) factSys.restore(colData.factorySystem);
+
+      // ProsperitySystem per-kolonia
+      const prospSys = new ProsperitySystem(resSys, civSys, this.techSystem, entity);
+      if (colData.prosperitySystem) prospSys.restore(colData.prosperitySystem);
 
       // Flaga outpost na BuildingSystem
       const isOutpost = colData.isOutpost ?? false;
@@ -927,6 +947,7 @@ export class ColonyManager {
         civSystem:        civSys,
         buildingSystem:   bSys,
         factorySystem:    factSys,
+        prosperitySystem: prospSys,
         grid:             savedGrid,
         allowImmigration: colData.allowImmigration ?? true,
         allowEmigration:  colData.allowEmigration  ?? true,
@@ -939,6 +960,7 @@ export class ColonyManager {
       if (colData.isHomePlanet) {
         this._activePlanetId = colData.planetId;
         window.KOSMOS.factorySystem = factSys;
+        window.KOSMOS.prosperitySystem = prospSys;
       }
     }
 

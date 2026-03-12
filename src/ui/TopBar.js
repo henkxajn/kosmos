@@ -539,6 +539,19 @@ export class TopBar {
       });
     }
 
+    // Prosperity (zawsze widoczne w civMode)
+    const prospSys = window.KOSMOS?.prosperitySystem;
+    if (window.KOSMOS?.civMode && prospSys) {
+      const pVal = Math.round(prospSys.prosperity ?? 50);
+      const pColor = pVal < 30 ? THEME.dangerDim : pVal < 60 ? C.orange : THEME.successDim;
+      items.push({
+        icon: '⭐', symbol: '',
+        value: pVal,
+        color: pColor,
+        tooltipName: '⭐ Prosperity',
+      });
+    }
+
     return items;
   }
 

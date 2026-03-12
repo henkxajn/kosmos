@@ -1,11 +1,13 @@
 // PopulationOverlay — panel Populacji (klawisz P)
 //
-// Trójdzielny overlay: lista kolonii (L), szczegóły populacji (C), morale + zdarzenia (R).
+// Trójdzielny overlay: lista kolonii (L), szczegóły populacji (C), prosperity + zdarzenia (R).
 // Dane czytane LIVE z ColonyManager / CivilizationSystem / ResourceSystem.
 
 import { BaseOverlay } from './BaseOverlay.js';
 import { THEME }       from '../config/ThemeConfig.js';
 import EventBus        from '../core/EventBus.js';
+import { COMMODITIES } from '../data/CommoditiesData.js';
+import { PROSPERITY_WEIGHTS } from '../data/ConsumerGoodsData.js';
 
 const LEFT_W   = 260;
 const RIGHT_W  = 260;
@@ -18,15 +20,15 @@ const TAB_H    = 32;
 const MAX_HISTORY = 20;
 
 // ── Cache historii populacji (per kolonia, nie serializowany) ────────────
-// Klucz = planetId, wartość = [{ year, pop, housing, morale }]
+// Klucz = planetId, wartość = [{ year, pop, housing, prosperity }]
 const _popHistory = {};
 
-function _recordHistory(planetId, year, pop, housing, morale) {
+function _recordHistory(planetId, year, pop, housing, prosperity) {
   if (!_popHistory[planetId]) _popHistory[planetId] = [];
   const h = _popHistory[planetId];
   // Tylko 1 wpis na rok
   if (h.length > 0 && h[h.length - 1].year >= year) return;
-  h.push({ year, pop, housing, morale });
+  h.push({ year, pop, housing, prosperity });
   if (h.length > MAX_HISTORY) h.shift();
 }
 
@@ -44,14 +46,16 @@ function _ensureHistoryListener() {
 
     // Rejestruj dla aktywnej kolonii (dane z eventu)
     const pid = colMgr.activePlanetId;
-    if (pid) _recordHistory(pid, year, data.population, data.housing, data.morale);
+    const prosp = Math.round(window.KOSMOS?.prosperitySystem?.prosperity ?? 50);
+    if (pid) _recordHistory(pid, year, data.population, data.housing, prosp);
 
     // Rejestruj dla WSZYSTKICH pozostałych kolonii (dane bezpośrednio z civSystem)
     for (const col of colMgr.getAllColonies()) {
       if (col.planetId === pid || col.isOutpost) continue;
       const civ = col.civSystem;
       if (civ) {
-        _recordHistory(col.planetId, year, civ.population, civ.housing, Math.round(civ.morale));
+        const colProsp = Math.round(col.prosperitySystem?.prosperity ?? 50);
+        _recordHistory(col.planetId, year, civ.population, civ.housing, colProsp);
       }
     }
   });
@@ -147,15 +151,15 @@ export class PopulationOverlay extends BaseOverlay {
     const cellH = Math.floor(STAT_H / 2);
 
     const totalHousing = colonies.reduce((s, c) => s + (c.civSystem?.housing ?? 0), 0);
-    const avgMorale = colonies.length > 0
-      ? Math.round(colonies.reduce((s, c) => s + (c.civSystem?.morale ?? 50), 0) / colonies.length)
+    const avgProsperity = colonies.length > 0
+      ? Math.round(colonies.reduce((s, c) => s + (c.prosperitySystem?.prosperity ?? 50), 0) / colonies.length)
       : 50;
     const totalGrowth = colonies.reduce((s, c) => s + (c.civSystem?._growthProgress ?? 0), 0);
 
     const stats = [
       { label: 'ŁĄCZNIE POP', value: `${totalPop}`, color: THEME.textPrimary },
       { label: 'WZROST/ROK',  value: `+${totalGrowth.toFixed(2)}`, color: THEME.success },
-      { label: 'MORALE śr.',  value: `${avgMorale}%`, color: avgMorale > 60 ? THEME.success : avgMorale > 30 ? THEME.warning : THEME.danger },
+      { label: 'PROSPERITY śr.',  value: `${avgProsperity}`, color: avgProsperity > 60 ? THEME.success : avgProsperity > 30 ? THEME.warning : THEME.danger },
       { label: 'SLOTY MIESZK.', value: `${totalPop}/${totalHousing}`, color: THEME.textPrimary },
     ];
 
@@ -345,13 +349,13 @@ export class PopulationOverlay extends BaseOverlay {
     // ── Siatka 3 statystyk ────────────────────────────────
     const pop = civ?.population ?? 0;
     const housing = civ?.housing ?? 0;
-    const morale = Math.round(civ?.morale ?? 50);
+    const prosp = Math.round(col?.prosperitySystem?.prosperity ?? 50);
 
     const cellW = Math.floor((w - pad * 2) / 3);
     const statItems = [
       { label: 'POP AKTUALNA', value: `${pop}`, color: THEME.textPrimary },
       { label: 'SLOTY MIESZK.', value: `${pop}/${housing}`, color: pop >= housing ? THEME.danger : THEME.textPrimary },
-      { label: 'MORALE', value: `${morale}%`, color: morale > 60 ? THEME.success : morale > 30 ? THEME.warning : THEME.danger },
+      { label: 'PROSPERITY', value: `${prosp}`, color: prosp > 60 ? THEME.success : prosp > 30 ? THEME.warning : THEME.danger },
     ];
 
     for (let i = 0; i < 3; i++) {
@@ -406,7 +410,7 @@ export class PopulationOverlay extends BaseOverlay {
       if (need.ratio < 0.5) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.danger;
-        ctx.fillText(`⚠ Deficyt ${need.name} — morale ${need.penalty}`, nx + 18, cy + 2);
+        ctx.fillText(`⚠ Deficyt ${need.name} — prosperity ${need.penalty}`, nx + 18, cy + 2);
         cy += 12;
       }
     }
@@ -424,6 +428,109 @@ export class PopulationOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.danger;
       ctx.fillText('💀 GŁÓD — populacja umiera', x + pad, cy + 10);
       cy += 16;
+    }
+
+    // ── Sekcja PROSPERITY BREAKDOWN ──────────────────────────
+    const ps = col?.prosperitySystem;
+    if (ps) {
+      cy += 10;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textHeader;
+      ctx.fillText('PROSPERITY', x + pad, cy + 10);
+      cy += 16;
+
+      // Pasek główny prosperity (0-100)
+      const pVal = Math.round(ps.prosperity ?? 50);
+      const pColor = pVal < 30 ? THEME.danger : pVal < 60 ? THEME.warning : THEME.success;
+      this._drawBar(ctx, x + pad, cy, w - pad * 2, 8, pVal / 100, pColor, THEME.border);
+      ctx.fillStyle = pColor;
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${pVal} / 100`, x + w - pad, cy + 8);
+      ctx.textAlign = 'left';
+      cy += 16;
+
+      // Warstwy (5 wierszy)
+      const layers = ps.getLayerScores?.() ?? {};
+      const layerData = [
+        { key: 'survival',       label: '🍎 Przetrwanie',    max: PROSPERITY_WEIGHTS.survival },
+        { key: 'infrastructure', label: '🏠 Infrastruktura', max: PROSPERITY_WEIGHTS.infrastructure },
+        { key: 'functioning',    label: '🔩 Funkcjonowanie', max: PROSPERITY_WEIGHTS.functioning },
+        { key: 'comfort',        label: '👕 Komfort',        max: PROSPERITY_WEIGHTS.comfort },
+        { key: 'luxury',         label: '🍽️ Luksus',         max: PROSPERITY_WEIGHTS.luxury },
+      ];
+
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      for (const layer of layerData) {
+        const score = layers[layer.key] ?? 0;
+        const ratio = score;  // score jest już 0-1 (satisfaction)
+        const weighted = Math.round(score * layer.max * 10) / 10;
+        const color = ratio >= 0.7 ? THEME.success : ratio >= 0.3 ? THEME.warning : THEME.danger;
+
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(layer.label, x + pad, cy + 9);
+
+        const mbX = x + pad + 110;
+        const mbW = w - pad * 2 - 150;
+        this._drawBar(ctx, mbX, cy + 3, mbW, 4, ratio, color, THEME.border);
+
+        ctx.fillStyle = color;
+        ctx.textAlign = 'right';
+        ctx.fillText(`${weighted.toFixed(0)}/${layer.max}`, x + w - pad, cy + 9);
+        ctx.textAlign = 'left';
+
+        cy += 14;
+      }
+
+      // Dobra konsumpcyjne
+      cy += 8;
+      ctx.fillStyle = THEME.textHeader;
+      ctx.fillText('DOBRA KONSUMPCYJNE', x + pad, cy + 10);
+      cy += 14;
+
+      const epoch = ps._getCurrentEpoch?.() ?? { unlockedGoods: [] };
+      const allConsumerGoods = [
+        'spare_parts', 'pharmaceuticals', 'life_support_filters',
+        'synthetics', 'personal_electronics',
+        'gourmet_food', 'stimulants', 'semiconductors',
+      ];
+
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      for (const goodId of allConsumerGoods) {
+        const unlocked = epoch.unlockedGoods?.includes(goodId);
+        const commodity = COMMODITIES[goodId];
+        if (!commodity) continue;
+
+        if (!unlocked) {
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(`${commodity.icon ?? '?'} ${commodity.namePL ?? goodId}  🔒`, x + pad, cy + 9);
+        } else {
+          const demand = ps.getDemand?.(goodId) ?? 0;
+          const production = ps.getProduction?.(goodId) ?? 0;
+          const satisfaction = ps.getSatisfaction?.(goodId) ?? 0;
+          const sColor = satisfaction >= 0.8 ? THEME.success
+                       : satisfaction >= 0.5 ? THEME.warning
+                       : THEME.danger;
+
+          ctx.fillStyle = THEME.textPrimary;
+          ctx.fillText(`${commodity.icon ?? '?'} ${commodity.namePL ?? goodId}`, x + pad, cy + 9);
+
+          ctx.fillStyle = sColor;
+          ctx.textAlign = 'right';
+          ctx.fillText(`${production.toFixed(1)}/rok  dem: ${demand.toFixed(1)}`, x + w - pad, cy + 9);
+          ctx.textAlign = 'left';
+        }
+        cy += 14;
+      }
+
+      // Podsumowanie
+      cy += 8;
+      ctx.fillStyle = THEME.textDim;
+      const totalCFP = ps._getTotalCFP?.() ?? 0;
+      ctx.fillText(`Consumer Factory: ${totalCFP} CFP`, x + pad, cy + 9);
+      cy += 14;
+      const epochNames = { early: 'Wczesna', developing: 'Rozwijająca', advanced: 'Zaawansowana', cosmic: 'Kosmiczna' };
+      ctx.fillText(`Epoka: ${epochNames[epoch.key] ?? epoch.key} (score: ${Math.round(ps.epochScore ?? 0)})`, x + pad, cy + 9);
     }
   }
 
@@ -494,14 +601,14 @@ export class PopulationOverlay extends BaseOverlay {
       ctx.fill();
     }
 
-    // Linia morale (szara, na tym samym wykresie, skala 0-100)
+    // Linia prosperity (szara, na tym samym wykresie, skala 0-100)
     ctx.strokeStyle = THEME.warning;
     ctx.lineWidth = 1;
     ctx.setLineDash([3, 3]);
     ctx.beginPath();
     for (let i = 0; i < hist.length; i++) {
       const hx = chartX + ((hist[i].year - minYear) / yearSpan) * chartW;
-      const hy = chartY + chartH - ((hist[i].morale ?? 50) / 100) * chartH;
+      const hy = chartY + chartH - ((hist[i].prosperity ?? 50) / 100) * chartH;
       if (i === 0) ctx.moveTo(hx, hy);
       else ctx.lineTo(hx, hy);
     }
@@ -514,7 +621,7 @@ export class PopulationOverlay extends BaseOverlay {
     ctx.fillStyle = THEME.accent;
     ctx.fillText('── Populacja', chartX, legY);
     ctx.fillStyle = THEME.warning;
-    ctx.fillText('--- Morale', chartX + 90, legY);
+    ctx.fillText('--- Prosperity', chartX + 90, legY);
   }
 
   // ── Zakładka SLOTY ──────────────────────────────────────────────────────
@@ -590,12 +697,13 @@ export class PopulationOverlay extends BaseOverlay {
     ctx.textAlign = 'left';
   }
 
-  // ── PRAWA KOLUMNA: morale + zdarzenia ───────────────────────────────────
+  // ── PRAWA KOLUMNA: prosperity + zdarzenia ───────────────────────────────────
 
   _drawRight(ctx, x, y, w, h) {
     const pad = 14;
     const col = this._getSelectedColony();
     const civ = col?.civSystem;
+    const pSys = col?.prosperitySystem;
 
     // ── Nagłówek ──────────────────────────────────────────
     ctx.fillStyle = THEME.bgSecondary;
@@ -606,22 +714,21 @@ export class PopulationOverlay extends BaseOverlay {
 
     let cy = y + TAB_H + 8;
 
-    // ── Sekcja morale ─────────────────────────────────────
-    const morale = Math.round(civ?.morale ?? 50);
-    const moraleTarget = Math.round(civ?.moraleTarget ?? 50);
-    const comp = civ?.moraleComponents ?? {};
+    // ── Sekcja prosperity ─────────────────────────────────────
+    const prosperity = Math.round(pSys?.prosperity ?? 50);
+    const target = Math.round(pSys?.targetProsperity ?? 50);
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('MORALE', x + pad, cy + 10);
+    ctx.fillText('PROSPERITY', x + pad, cy + 10);
     ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = morale > 60 ? THEME.success : morale > 30 ? THEME.warning : THEME.danger;
+    ctx.fillStyle = prosperity > 60 ? THEME.success : prosperity > 30 ? THEME.warning : THEME.danger;
     ctx.textAlign = 'right';
-    ctx.fillText(`${morale}`, x + w - pad, cy + 10);
+    ctx.fillText(`${prosperity}`, x + w - pad, cy + 10);
     ctx.textAlign = 'left';
     cy += 18;
 
-    // Pasek gradientowy morale
+    // Pasek gradientowy prosperity
     const barX = x + pad;
     const barW = w - pad * 2;
     const barH = 10;
@@ -634,10 +741,10 @@ export class PopulationOverlay extends BaseOverlay {
     ctx.fillStyle = grad;
     ctx.fillRect(barX, cy, barW, barH);
 
-    // Przykryj część za wartością morale ciemnym prostokątem
-    const moraleX = barX + (morale / 100) * barW;
+    // Przykryj część za wartością prosperity ciemnym prostokątem
+    const prospX = barX + (prosperity / 100) * barW;
     ctx.fillStyle = 'rgba(2,4,5,0.75)';
-    ctx.fillRect(moraleX, cy, barX + barW - moraleX, barH);
+    ctx.fillRect(prospX, cy, barX + barW - prospX, barH);
 
     // Notch na 50%
     const notchX = barX + barW * 0.5;
@@ -645,32 +752,31 @@ export class PopulationOverlay extends BaseOverlay {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(notchX, cy); ctx.lineTo(notchX, cy + barH); ctx.stroke();
 
-    // Wskaźnik pozycji morale
+    // Wskaźnik pozycji prosperity
     ctx.fillStyle = THEME.textPrimary;
     ctx.beginPath();
-    ctx.moveTo(moraleX, cy - 2);
-    ctx.lineTo(moraleX - 3, cy - 6);
-    ctx.lineTo(moraleX + 3, cy - 6);
+    ctx.moveTo(prospX, cy - 2);
+    ctx.lineTo(prospX - 3, cy - 6);
+    ctx.lineTo(prospX + 3, cy - 6);
     ctx.fill();
 
     cy += barH + 8;
 
-    // Rozbicie składowych morale
-    const COMP_LABELS = {
-      housing:    '🏠 Mieszkania',
-      food:       '🍖 Żywność',
-      water:      '💧 Woda',
-      energy:     '⚡ Energia',
-      employment: '👷 Zatrudnienie',
-      safety:     '🛡 Bezpiecz.',
+    // Rozbicie warstw prosperity
+    const layerScores = pSys?.getLayerScores?.() ?? {};
+    const LAYER_LABELS = {
+      survival:       '🛡 Przetrwanie',
+      infrastructure: '🏗 Infrastruktura',
+      functioning:    '⚙ Funkcjonowanie',
+      comfort:        '🛋 Komfort',
+      luxury:         '💎 Luksus',
     };
-    const COMP_MAX = { housing: 20, food: 20, water: 15, energy: 15, employment: 15, safety: 15 };
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    for (const [key, label] of Object.entries(COMP_LABELS)) {
-      const val = comp[key] ?? 0;
-      const max = COMP_MAX[key] ?? 15;
-      const color = val >= max * 0.7 ? THEME.success : val >= max * 0.3 ? THEME.warning : THEME.danger;
+    for (const [key, label] of Object.entries(LAYER_LABELS)) {
+      const val = layerScores[key] ?? 0;
+      const pct = Math.round(val * 100);
+      const color = val >= 0.7 ? THEME.success : val >= 0.3 ? THEME.warning : THEME.danger;
 
       ctx.fillStyle = THEME.textSecondary;
       ctx.fillText(label, x + pad, cy + 9);
@@ -678,11 +784,11 @@ export class PopulationOverlay extends BaseOverlay {
       // Mini pasek
       const mbX = x + pad + 110;
       const mbW = w - pad * 2 - 140;
-      this._drawBar(ctx, mbX, cy + 3, mbW, 4, val / max, color, THEME.border);
+      this._drawBar(ctx, mbX, cy + 3, mbW, 4, val, color, THEME.border);
 
       ctx.fillStyle = color;
       ctx.textAlign = 'right';
-      ctx.fillText(`${val}/${max}`, x + w - pad, cy + 9);
+      ctx.fillText(`${pct}%`, x + w - pad, cy + 9);
       ctx.textAlign = 'left';
 
       cy += 14;
@@ -690,19 +796,16 @@ export class PopulationOverlay extends BaseOverlay {
 
     cy += 6;
 
-    // Target morale
+    // Epoka i wzrost POP
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(`Cel morale: ${moraleTarget} (suma składowych)`, x + pad, cy + 8);
+    const epochNames = { early: 'Wczesna', developing: 'Rozwijająca', advanced: 'Zaawansowana', cosmic: 'Kosmiczna' };
+    const epochKey = pSys?._getCurrentEpoch?.()?.key ?? 'early';
+    ctx.fillText(`Epoka: ${epochNames[epochKey] ?? epochKey}`, x + pad, cy + 8);
     cy += 14;
-
-    // Tech bonus
-    const techBonus = civ?.techSystem?.getMoraleBonus?.() ?? 0;
-    if (techBonus !== 0) {
-      ctx.fillStyle = techBonus > 0 ? THEME.success : THEME.danger;
-      ctx.fillText(`${techBonus > 0 ? '+' : ''}${techBonus.toFixed(1)} bonus tech`, x + pad, cy + 8);
-      cy += 14;
-    }
+    const growthMult = pSys?.getGrowthMultiplier?.() ?? 1.0;
+    ctx.fillText(`Wzrost POP: x${growthMult.toFixed(1)}`, x + pad, cy + 8);
+    cy += 14;
 
     // Separator
     cy += 4;

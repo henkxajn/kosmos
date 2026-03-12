@@ -9,7 +9,7 @@
 //   _growthProgress += growthRate per rok
 //   growthRate = 1 / effectiveInterval
 //   effectiveInterval = BASE_GROWTH_INTERVAL / (conditionMult × techMult)
-//   conditionMult = (morale/60) × foodMod × housingMod
+//   conditionMult = prosperityGrowthMult × foodMod × housingMod
 //   Gdy _growthProgress >= 1.0 → nowy POP
 //
 // ŚMIERĆ POPa
@@ -22,18 +22,14 @@
 //   freePops     = population - employedPops - lockedPops
 //   employmentPenalty = min(1, pop / (employed + locked)) — skaluje produkcję
 //
-// MODEL MORALE (6 składników → suma 0–100)
-//   housing 0–20, food 0–20, water 0–15, energy 0–15,
-//   employment 0–15 (nowy: oparty na freeRatio), safety 0–15
-//
 // KRYZYSY
-//   Niepokoje: morale < 30 przez 5 lat → −30% efficiency przez 10 lat
+//   Niepokoje: prosperity < 15 przez 5 lat → −30% efficiency przez 10 lat
 //   Głód: organics ≈ 0 przez 2 lata → emit civ:famine
 //
 // Komunikacja:
 //   Nasłuchuje: time:tick, resource:changed, civ:addHousing, civ:removeHousing,
 //               civ:employmentChanged, civ:lockPops, civ:unlockPops
-//   Emituje:    civ:populationChanged, civ:moraleChanged, civ:epochChanged,
+//   Emituje:    civ:populationChanged, civ:epochChanged,
 //               civ:popBorn, civ:popDied, civ:unrest, civ:unrestLifted, civ:famine
 
 import EventBus from '../core/EventBus.js';
@@ -62,35 +58,23 @@ const MIN_GROWTH_INTERVAL  = 5;   // minimalna liczba lat na POPa (cap)
 // Śmierć POPa
 const STARVATION_YEARS = 5;  // lat głodu do straty POPa
 
-// ── Stałe morale ────────────────────────────────────────────────────────────
-const MORALE_INERTIA = 0.12;  // ile % dystansu do celu morale zmienia się na rok
-
 // ── Progi kryzysów ──────────────────────────────────────────────────────────
-const UNREST_THRESHOLD_MORALE = 30;
+const UNREST_PROSPERITY_THRESHOLD = 15;  // prosperity poniżej = ryzyko niepokojów
 const UNREST_YEARS_NEEDED     = 5;
 const UNREST_DURATION         = 10;
 const FAMINE_YEARS_NEEDED     = 2;
-const UNREST_RECOVERY_MORALE  = 40;
-
-// Startowe wartości
-const DEFAULT_MORALE = 50;
+const UNREST_RECOVERY_PROSPERITY = 25;   // prosperity powyżej = koniec licznika
 
 export class CivilizationSystem {
-  constructor(initialOverride = {}, techSystem = null) {
+  constructor(initialOverride = {}, techSystem = null, planet = null) {
     this.techSystem = techSystem;
+    this.planet = planet;  // referencja do planety — potrzebna do sprawdzania atmosfery
 
     // Populacja: dyskretne POPy (start: 2)
     this.population = initialOverride.population ?? DEFAULT_POP;
 
     // Miejsca mieszkalne (start: 4 — na 2 POPy + 2 miejsce na wzrost)
     this.housing = initialOverride.housing ?? DEFAULT_HOUSING;
-
-    // Morale 0–100
-    this.morale       = initialOverride.morale ?? DEFAULT_MORALE;
-    this.moraleTarget = this.morale;
-
-    // Komponenty morale — publiczne, czytane przez PlanetScene widget
-    this.moraleComponents = { housing: 0, food: 0, water: 0, energy: 0, employment: 0, safety: 0 };
 
     // Epoka (indeks do CIV_EPOCHS)
     this.epochIndex = 0;
@@ -112,7 +96,7 @@ export class CivilizationSystem {
     this._registeredPop = -1;
 
     // ── Stan kryzysów ───────────────────────────────────────────────────
-    this._lowMoraleYears      = 0;
+    this._lowProsperityYears  = 0;
     this._unrestActive        = false;
     this._unrestRemainingYears = 0;
     this._famineYears         = 0;
@@ -167,9 +151,6 @@ export class CivilizationSystem {
   get isUnrest()  { return this._unrestActive; }
   get isFamine()  { return this._famineActive; }
 
-  // Efektywność produkcji: morale/100
-  get productionEfficiency() { return this.morale / 100; }
-
   // Wolne POPy dostępne do budowy/ekspedycji
   get freePops() {
     return Math.max(0, this.population - this._employedPops - this._lockedPops);
@@ -190,13 +171,12 @@ export class CivilizationSystem {
       popFormat:            'discrete',   // marker formatu POP (v4+)
       population:           this.population,
       housing:              this.housing,
-      morale:               this.morale,
       epochIndex:           this.epochIndex,
       growthProgress:       this._growthProgress,
       starvationYears:      this._starvationYears,
       employedPops:         this._employedPops,
       lockedPops:           this._lockedPops,
-      lowMoraleYears:       this._lowMoraleYears,
+      lowProsperityYears:   this._lowProsperityYears,
       unrestActive:         this._unrestActive,
       unrestRemainingYears: this._unrestRemainingYears,
       famineYears:          this._famineYears,
@@ -209,7 +189,6 @@ export class CivilizationSystem {
     // Po migracji SaveMigration: zawsze discrete POP (v6+)
     this.population = data.population ?? DEFAULT_POP;
 
-    this.morale               = data.morale               ?? DEFAULT_MORALE;
     this.epochIndex           = data.epochIndex           ?? 0;
     this._growthProgress      = data.growthProgress       ?? 0;
     this._starvationYears     = data.starvationYears      ?? 0;
@@ -218,12 +197,11 @@ export class CivilizationSystem {
     this._employedPops        = 0;
     this._lockedPops          = data.lockedPops ?? 0;
     this.housing              = DEFAULT_HOUSING;
-    this._lowMoraleYears      = data.lowMoraleYears       ?? 0;
+    this._lowProsperityYears  = data.lowProsperityYears   ?? 0;
     this._unrestActive        = data.unrestActive         ?? false;
     this._unrestRemainingYears= data.unrestRemainingYears ?? 0;
     this._famineYears         = data.famineYears          ?? 0;
     this._famineActive        = data.famineActive         ?? false;
-    this.moraleTarget         = this.morale;
     this._registeredPop       = -1;
     this._syncConsumption();
   }
@@ -242,51 +220,38 @@ export class CivilizationSystem {
   }
 
   _yearlyUpdate() {
-    // Outposty (pop=0) nie mają głodu, morale ani wzrostu
+    // Outposty (pop=0) nie mają głodu ani wzrostu
     if (this.population <= 0) return;
 
     // Cache resource ratios raz na yearly update (unika wielokrotnego obliczania)
     const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
 
-    // 1. Oblicz moraleTarget z komponentów (przekaż cached ratios)
-    //    Tech bonus wliczony do targetu (statyczny offset, nie per-year)
-    const techMoraleBonus = this.techSystem?.getMoraleBonus() ?? 0;
-    this.moraleTarget = Math.min(100, this._calcMoraleTarget(foodRatio) + techMoraleBonus);
-
-    // 2. Zmiana morale (inercja — bez osobnego tech bonus)
-    const inertia   = (this.moraleTarget - this.morale) * MORALE_INERTIA;
-    this.morale     = Math.max(0, Math.min(100, this.morale + inertia));
-
-    // 3. Wzrost populacji (przekaż cached foodRatio)
+    // 1. Wzrost populacji (przekaż cached foodRatio)
     this._updatePopGrowth(foodRatio);
 
-    // 4. Śmierć POPa (głód) — przekaż cached foodRatio
+    // 2. Śmierć POPa (głód) — przekaż cached foodRatio
     this._updatePopDeath(foodRatio);
 
-    // 5. Kryzysy
+    // 3. Kryzysy (prosperity-based)
     this._updateUnrest();
     this._updateFamine(foodRatio);
 
-    // 6. Epoka
+    // 4. Epoka
     this._checkEpoch();
 
-    // 7. Emituj (tylko aktywna kolonia → UI i BuildingSystem)
+    // 5. Emituj (tylko aktywna kolonia → UI i BuildingSystem)
     if (window.KOSMOS?.civSystem === this) {
       EventBus.emit('civ:populationChanged', this._popSnapshot());
-      EventBus.emit('civ:moraleChanged', {
-        morale:     this.morale,
-        target:     this.moraleTarget,
-        components: this.moraleComponents, // referencja — bez kopiowania (read-only w UI)
-        efficiency: this.productionEfficiency,
-      });
     }
   }
 
   // ── Wzrost populacji (akumulator) ───────────────────────────────────────
 
   _updatePopGrowth(foodRatio) {
-    // Brak miejsca → zero wzrostu
-    if (this.population >= this.housing) {
+    // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą)
+    const atmo = this.planet?.atmosphere ?? 'breathable';
+    const canLiveOutside = (atmo === 'breathable');
+    if (!canLiveOutside && this.population >= this.housing) {
       this._lastGrowth = 0;
       return;
     }
@@ -298,7 +263,7 @@ export class CivilizationSystem {
     const housingMod = this._housingGrowthModifier();
     if (housingMod <= 0) { this._lastGrowth = 0; return; }
 
-    const conditionMult = (this.morale / 60) * foodMod * housingMod;
+    const conditionMult = (window.KOSMOS?.prosperitySystem?.getGrowthMultiplier() ?? 1.0) * foodMod * housingMod;
     const techMult      = this.techSystem?.getPopGrowthMultiplier() ?? 1.0;
 
     const effectiveInterval = BASE_GROWTH_INTERVAL / Math.max(0.01, conditionMult * techMult);
@@ -322,8 +287,24 @@ export class CivilizationSystem {
   // ── Śmierć POPa ────────────────────────────────────────────────────────
 
   _updatePopDeath(cachedFoodRatio) {
-    if (this.population <= 1) return;  // minimum 1 POP
+    if (this.population <= 0) return;  // kolonia wymarła
 
+    // Śmierć z braku atmosfery + habitatu — natychmiastowa (1 POP/rok)
+    // Na planecie bez oddychalnej atmosfery, housing = 0 oznacza brak schronienia
+    // W przeciwieństwie do głodu, brak powietrza ZABIJA WSZYSTKICH (min 0, nie 1)
+    const atmo = this.planet?.atmosphere ?? 'breathable';
+    const needsShelter = (atmo === 'none' || atmo === 'thin' || atmo === 'dense' || atmo === 'toxic');
+    if (needsShelter && this.housing <= 0) {
+      this.population = Math.max(0, this.population - 1);
+      if (window.KOSMOS?.civSystem === this) {
+        EventBus.emit('civ:popDied', { cause: 'exposure', population: this.population });
+      }
+      return;
+    }
+
+    if (this.population <= 1) return;  // minimum 1 POP (głód nie zabija ostatniego)
+
+    // Śmierć z głodu — 5 lat bez jedzenia
     const foodRatio = cachedFoodRatio ?? (this._resourceRatio('food') || this._resourceRatio('organics'));
 
     if (foodRatio < 0.02) {
@@ -340,83 +321,34 @@ export class CivilizationSystem {
     }
   }
 
-  // ── Morale (6 składników → 0–100) ──────────────────────────────────────
-
-  _calcMoraleTarget(cachedFoodRatio) {
-    // 1. Housing (0–20)
-    const popRatio = this.housing > 0 ? this.population / this.housing : 1;
-    const housing  = popRatio <= 0.50 ? 20
-                   : popRatio <= 0.80 ? 10
-                   : 0;
-
-    // 2. Żywność (0–20) — nowy system: food (fallback: organics)
-    const orgRatio = cachedFoodRatio ?? (this._resourceRatio('food') || this._resourceRatio('organics'));
-    const food     = orgRatio > 0.50 ? 20
-                   : orgRatio > 0.20 ? 12
-                   : orgRatio > 0.05 ? 4
-                   : 0;
-
-    // 3. Woda (0–15)
-    const watRatio = this._resourceRatio('water');
-    const water    = watRatio > 0.40 ? 15
-                   : watRatio > 0.15 ? 9
-                   : watRatio > 0.05 ? 3
-                   : 0;
-
-    // 4. Energia (0–15)
-    const engRatio = this._resourceRatio('energy');
-    const energy   = engRatio > 0.20 ? 15
-                   : engRatio > 0.10 ? 8
-                   : engRatio > 0.05 ? 3
-                   : 0;
-
-    // 5. Zatrudnienie (0–15) — niski freeRatio = pełne zatrudnienie = dobrze
-    const freeRatio  = this.population > 0 ? this.freePops / this.population : 1;
-    const employment = freeRatio <= 0.1 ? 15
-                     : freeRatio <= 0.3 ? 8
-                     : freeRatio <= 0.5 ? 3
-                     : 0;
-
-    // 6. Bezpieczeństwo (0–15)
-    const stability = window.KOSMOS?.homePlanet?.orbitalStability ?? 1.0;
-    const safety    = stability > 0.80 ? 15
-                    : stability > 0.60 ? 8
-                    : stability > 0.40 ? 3
-                    : 0;
-
-    // 7. Crowding penalty (0 do -12) — więcej POPów = gorsza jakość życia
-    const crowdingPenalty = Math.min(12, Math.max(0, (this.population - 5) * 2));
-
-    this.moraleComponents = { housing, food, water, energy, employment, safety, crowding: -crowdingPenalty };
-    return housing + food + water + energy + employment + safety - crowdingPenalty;
-  }
-
   // ── Kryzysy ─────────────────────────────────────────────────────────────
 
   _updateUnrest() {
+    const prosperity = window.KOSMOS?.prosperitySystem?.prosperity ?? 50;
+
     if (this._unrestActive) {
       this._unrestRemainingYears--;
       if (this._unrestRemainingYears <= 0) {
         this._unrestActive = false;
-        this._lowMoraleYears = 0;
+        this._lowProsperityYears = 0;
         EventBus.emit('civ:unrestLifted', {});
       }
       return;
     }
 
-    if (this.morale < UNREST_THRESHOLD_MORALE) {
-      this._lowMoraleYears++;
-      if (this._lowMoraleYears >= UNREST_YEARS_NEEDED) {
+    if (prosperity < UNREST_PROSPERITY_THRESHOLD) {
+      this._lowProsperityYears++;
+      if (this._lowProsperityYears >= UNREST_YEARS_NEEDED) {
         this._unrestActive         = true;
         this._unrestRemainingYears = UNREST_DURATION;
-        this._lowMoraleYears       = 0;
+        this._lowProsperityYears   = 0;
         EventBus.emit('civ:unrest', {
-          reason:       `Morale cywilizacji zbyt niskie przez ${UNREST_YEARS_NEEDED} lat`,
+          reason:       `Prosperity cywilizacji zbyt niskie przez ${UNREST_YEARS_NEEDED} lat`,
           yearsInCrisis: UNREST_YEARS_NEEDED,
         });
       }
-    } else if (this.morale >= UNREST_RECOVERY_MORALE) {
-      this._lowMoraleYears = 0;
+    } else if (prosperity >= UNREST_RECOVERY_PROSPERITY) {
+      this._lowProsperityYears = 0;
     }
   }
 
@@ -520,12 +452,18 @@ export class CivilizationSystem {
   }
 
   // Modyfikator wzrostu na podstawie dostępnego housingu
+  // Na planecie z oddychalną atmosferą ludzie mogą żyć na zewnątrz — housing to bonus, nie wymóg
   _housingGrowthModifier() {
-    if (this.housing <= 0) return 0.0;
+    const atmo = this.planet?.atmosphere ?? 'breathable';
+    const canLiveOutside = (atmo === 'breathable');
+
+    if (this.housing <= 0) {
+      return canLiveOutside ? 0.7 : 0.0;  // na zewnątrz wolniej, ale mogą
+    }
     const ratio = this.population / this.housing;
     if (ratio < 0.70) return 1.3;  // dużo miejsca
     if (ratio < 1.00) return 1.0;  // wystarczy
-    return 0.0;                     // brak miejsca
+    return canLiveOutside ? 0.7 : 0.0;  // przekroczony housing — na zewnątrz wolniej
   }
 
   // Snapshot dla civ:populationChanged
@@ -538,9 +476,6 @@ export class CivilizationSystem {
       freePops:       this.freePops,
       employedPops:   this._employedPops,
       lockedPops:     this._lockedPops,
-      morale:         this.morale,
-      moraleTarget:   this.moraleTarget,
-      efficiency:     this.productionEfficiency,
       epoch:          this.epochName,
       isUnrest:       this._unrestActive,
       isFamine:       this._famineActive,

@@ -585,7 +585,7 @@ export class TechOverlay extends BaseOverlay {
         return { text: `[odblokuj statek] ${s?.namePL ?? fx.shipId}`, color: THEME.info };
       }
       case 'moraleBonus':
-        return { text: `morale +${fx.amount}`, color: THEME.purple };
+        return { text: `prosperity +${fx.amount}`, color: THEME.purple };
       case 'popGrowthBonus':
         return { text: `wzrost pop ×${fx.multiplier}`, color: '#88dd88' };
       case 'consumptionMultiplier':

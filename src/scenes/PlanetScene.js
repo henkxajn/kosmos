@@ -668,13 +668,13 @@ export class PlanetScene {
       ctx.fillText(`Zatrudn: ${emp.toFixed(2)}  Wolni: ${free.toFixed(2)}`, 12, y + 6);
       y += 14;
 
-      // Morale
-      const morale = Math.round(cSys.morale ?? 50);
-      const moraleColor = morale >= 60 ? THEME.successDim : morale >= 30 ? THEME.warning : THEME.dangerDim;
-      ctx.fillStyle = moraleColor;
-      ctx.fillText(`Morale: ${morale}%`, 12, y + 6);
+      // Prosperity
+      const prosperity = Math.round(window.KOSMOS?.prosperitySystem?.prosperity ?? 50);
+      const prosperityColor = prosperity >= 60 ? THEME.successDim : prosperity >= 30 ? THEME.warning : THEME.dangerDim;
+      ctx.fillStyle = prosperityColor;
+      ctx.fillText(`Prosperity: ${prosperity}`, 12, y + 6);
 
-      // Epoka (obok morale)
+      // Epoka (obok prosperity)
       ctx.fillStyle = THEME.purple;
       ctx.fillText(`Epoka: ${cSys.epochName}`, 110, y + 6);
       y += 14;

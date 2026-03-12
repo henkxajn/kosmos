@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 17;
+export const CURRENT_VERSION     = 18;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -32,6 +32,7 @@ const MIGRATIONS = {
   14: _migrateV14toV15,
   15: _migrateV15toV16,
   16: _migrateV16toV17,
+  17: _migrateV17toV18,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -563,5 +564,54 @@ function _migrateV16toV17(data) {
   }
 
   data.version = 17;
+  return data;
+}
+
+// ── Migracja v17 → v18 ──────────────────────────────────────────────────────
+// Dodaje: prosperity defaults per kolonia, usuwa morale z civ, dodaje nowe consumer goods
+
+function _migrateV17toV18(data) {
+  const c4x = data.civ4x;
+  if (!c4x?.colonies) return data;
+
+  // Nowe consumer goods commodity klucze
+  const NEW_CONSUMER_GOODS = [
+    'spare_parts', 'pharmaceuticals', 'life_support_filters',
+    'synthetics', 'personal_electronics', 'gourmet_food', 'stimulants',
+  ];
+
+  for (const colony of c4x.colonies) {
+    // Dodaj prosperity defaults
+    if (!colony.prosperity) {
+      colony.prosperity = {
+        score: 50,
+        targetProsperity: 50,
+        epoch: 'early',
+        epochScore: 0,
+        consumerDemand: {},
+        consumerProduction: {},
+      };
+    }
+
+    // Usuń morale z civ
+    if (colony.civ) {
+      delete colony.civ.morale;
+      delete colony.civ.moraleComponents;
+      // Rename lowMoraleYears → lowProsperityYears
+      if (colony.civ.lowMoraleYears !== undefined) {
+        colony.civ.lowProsperityYears = colony.civ.lowMoraleYears;
+        delete colony.civ.lowMoraleYears;
+      }
+    }
+
+    // Dodaj nowe commodity klucze do inventory
+    const inv = colony.resources?.inventory;
+    if (inv) {
+      for (const g of NEW_CONSUMER_GOODS) {
+        if (inv[g] === undefined) inv[g] = 0;
+      }
+    }
+  }
+
   return data;
 }

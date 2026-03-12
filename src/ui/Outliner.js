@@ -95,7 +95,7 @@ export class Outliner {
         const iy = startY + dy;
         const icon = col.isHomePlanet ? '🏛' : '🏙';
         const pop = col.civSystem?.population ?? 0;
-        const mor = Math.round(col.civSystem?.morale ?? 50);
+        const prosp = Math.round(col.prosperitySystem?.prosperity ?? 50);
 
         // Ikona mapy (🗺) po prawej — klik otwiera globus
         const mapIconX = x + OUTLINER_W - PAD - 12;
@@ -108,10 +108,10 @@ export class Outliner {
         ctx.fillStyle = C.bright;
         ctx.fillText(`${icon} ${_truncate(col.name, 8)}`, x + PAD, iy + 14);
 
-        // POP + morale (przesunięte w lewo — miejsce na ikonę mapy)
-        ctx.fillStyle = mor < 30 ? C.red : mor < 60 ? C.orange : C.text;
+        // POP + prosperity (przesunięte w lewo — miejsce na ikonę mapy)
+        ctx.fillStyle = prosp < 30 ? C.red : prosp < 60 ? C.orange : C.text;
         ctx.textAlign = 'right';
-        ctx.fillText(`${pop}👤${mor}%`, mapIconX - 4, iy + 14);
+        ctx.fillText(`${pop}👤⭐${prosp}`, mapIconX - 4, iy + 14);
         ctx.textAlign = 'left';
 
         this._clickTargets.push({
@@ -385,13 +385,16 @@ export class Outliner {
       lines.push({ text: `${planet.planetType ?? planet.type} ${tempStr}`, color: C.dim });
     }
 
-    // Populacja + morale
+    // Populacja + prosperity
     const cSys = colony.civSystem;
     if (cSys) {
       const pop = cSys.population ?? 0;
       const housing = cSys.housing ?? 0;
-      const morale = Math.round(cSys.morale ?? 50);
-      lines.push({ text: `👤 POP: ${pop}/${housing}  Morale: ${morale}%`, color: C.text });
+      const prosp = Math.round(colony.prosperitySystem?.prosperity ?? 50);
+      lines.push({ text: `👤 POP: ${pop}/${housing}  Prosperity: ${prosp}`, color: C.text });
+      const epoch = colony.prosperitySystem?._getCurrentEpoch?.()?.key ?? 'early';
+      const epochNames = { early: 'Wczesna', developing: 'Rozwijająca', advanced: 'Zaawansowana', cosmic: 'Kosmiczna' };
+      lines.push({ text: `⭐ Epoka: ${epochNames[epoch] ?? epoch}`, color: C.text });
     }
 
     // Zasoby (z inventory) — kolorowane ikony, łamane po 4/wiersz

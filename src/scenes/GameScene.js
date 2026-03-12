@@ -139,6 +139,7 @@ export class GameScene {
     window.KOSMOS.civSystem        = this.civSystem;
     window.KOSMOS.techSystem       = this.techSystem;
     window.KOSMOS.factorySystem    = this.factorySystem;
+    window.KOSMOS.prosperitySystem = null;  // tworzony per-kolonia w ColonyManager
     window.KOSMOS.expeditionSystem = this.expeditionSystem;
     window.KOSMOS.missionSystem    = this.missionSystem;
     window.KOSMOS.colonyManager    = this.colonyManager;
@@ -180,6 +181,9 @@ export class GameScene {
             if (homeCol.factorySystem) {
               window.KOSMOS.factorySystem = homeCol.factorySystem;
               this.factorySystem = homeCol.factorySystem;
+            }
+            if (homeCol.prosperitySystem) {
+              window.KOSMOS.prosperitySystem = homeCol.prosperitySystem;
             }
             this.resourceSystem  = homeCol.resourceSystem;
             this.civSystem       = homeCol.civSystem;
@@ -474,6 +478,8 @@ export class GameScene {
     window.KOSMOS.civMode    = true;
     window.KOSMOS.homePlanet = planet;
     planet.explored = true;
+    // Podłącz referencję planety do CivSystem (potrzebne do sprawdzania atmosfery)
+    this.civSystem.planet = planet;
     // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
     // Startowe zasoby (surowce + commodities T1/T2)
     this.resourceSystem.receive({

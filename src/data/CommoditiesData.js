@@ -21,6 +21,7 @@ export const COMMODITIES = {
     baseTime:    0.1875,
     weight:      3.0,
     description: 'Podstawowy materiał budowlany — stal z żelaza i węgla',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   polymer_composites: {
@@ -32,6 +33,7 @@ export const COMMODITIES = {
     baseTime:    0.1875,
     weight:      1.5,
     description: 'Lekkie kompozyty węglowo-krzemowe — izolacja i obudowy',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   concrete_mix: {
@@ -43,6 +45,7 @@ export const COMMODITIES = {
     baseTime:    0.1875,
     weight:      5.0,
     description: 'Ciężka mieszanka budowlana — fundamenty i ściany',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   copper_wiring: {
@@ -54,6 +57,7 @@ export const COMMODITIES = {
     baseTime:    0.125,
     weight:      1.5,
     description: 'Okablowanie elektryczne — niezbędne w każdym budynku energetycznym',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   // ── Tier 2 — komponenty zaawansowane ──────────────────────────────────────
@@ -67,6 +71,7 @@ export const COMMODITIES = {
     baseTime:    0.375,
     weight:      2.0,
     description: 'Litowo-miedziowe ogniwa akumulatorowe — zasilanie mobilne',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   electronics: {
@@ -78,6 +83,7 @@ export const COMMODITIES = {
     baseTime:    0.375,
     weight:      1.0,
     description: 'Układy scalone i systemy sterowania',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   food_synthesizers: {
@@ -89,6 +95,7 @@ export const COMMODITIES = {
     baseTime:    0.375,
     weight:      2.5,
     description: 'Syntetyczna produkcja żywności na jałowych ciałach',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   mining_drills: {
@@ -100,6 +107,7 @@ export const COMMODITIES = {
     baseTime:    0.375,
     weight:      4.0,
     description: 'Zaawansowane wiertła do głębokich złóż',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   hull_armor: {
@@ -111,6 +119,7 @@ export const COMMODITIES = {
     baseTime:    0.375,
     weight:      5.0,
     description: 'Tytanowo-wolframowy pancerz kadłubów statków',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   habitat_modules: {
@@ -122,6 +131,7 @@ export const COMMODITIES = {
     baseTime:    0.5,
     weight:      6.0,
     description: 'Ciśnieniowe moduły mieszkalne — umożliwiają życie w próżni i wrogiej atmosferze',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   water_recyclers: {
@@ -133,6 +143,7 @@ export const COMMODITIES = {
     baseTime:    0.375,
     weight:      2.0,
     description: 'Zamknięty obieg wody — niezbędny na ciałach bez zasobów wodnych',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   robots: {
@@ -144,6 +155,7 @@ export const COMMODITIES = {
     baseTime:    0.625,
     weight:      3.5,
     description: 'Autonomiczne roboty — do kopalń, automatyzacji i innych zastosowań',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   // ── Prefabrykaty (Tier 2) — deployowane z cargo na kolonie ─────────────────
@@ -159,6 +171,7 @@ export const COMMODITIES = {
     isPrefab:    true,
     deploysBuilding: 'mine',
     description: 'Prefabrykowana kopalnia — natychmiastowy deploy z cargo',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   prefab_solar_farm: {
@@ -172,6 +185,7 @@ export const COMMODITIES = {
     isPrefab:    true,
     deploysBuilding: 'solar_farm',
     description: 'Prefabrykowana elektrownia — natychmiastowy deploy z cargo',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   prefab_habitat: {
@@ -185,6 +199,7 @@ export const COMMODITIES = {
     isPrefab:    true,
     deploysBuilding: 'habitat',
     description: 'Prefabrykowany habitat — natychmiastowy deploy z cargo',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   prefab_autonomous_mine: {
@@ -198,6 +213,7 @@ export const COMMODITIES = {
     isPrefab:    true,
     deploysBuilding: 'autonomous_mine',
     description: 'Prefabrykowana kopalnia autonomiczna — natychmiastowy deploy z cargo',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   prefab_autonomous_solar_farm: {
@@ -211,6 +227,7 @@ export const COMMODITIES = {
     isPrefab:    true,
     deploysBuilding: 'autonomous_solar_farm',
     description: 'Prefabrykowana autonomiczna elektrownia słoneczna — natychmiastowy deploy z cargo',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   prefab_spaceport: {
@@ -224,6 +241,7 @@ export const COMMODITIES = {
     isPrefab:    true,
     deploysBuilding: 'launch_pad',
     description: 'Prefabrykowany port kosmiczny — natychmiastowy deploy z cargo',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   prefab_autonomous_spaceport: {
@@ -237,6 +255,93 @@ export const COMMODITIES = {
     isPrefab:    true,
     deploysBuilding: 'autonomous_spaceport',
     description: 'Prefabrykowany autonomiczny port kosmiczny — natychmiastowy deploy z cargo',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
+  // ── Dobra konsumpcyjne (Tier 1–2) ─────────────────────────────────────────
+
+  spare_parts: {
+    id:          'spare_parts',
+    namePL:      'Części Zamienne',
+    icon:        '🔩',
+    tier:        1,
+    recipe:      { Fe: 4, Cu: 2, C: 1 },
+    baseTime:    0.20,
+    weight:      2.0,
+    description: 'Filtry, uszczelki, przewody - utrzymują infrastrukturę',
+    isConsumerGood: true, consumptionLayer: 'functioning',
+  },
+
+  pharmaceuticals: {
+    id:          'pharmaceuticals',
+    namePL:      'Farmaceutyki',
+    icon:        '💊',
+    tier:        1,
+    recipe:      { C: 4, water: 2, Si: 1 },
+    baseTime:    0.25,
+    weight:      1.0,
+    description: 'Leki, środki higieny, antybiotyki',
+    isConsumerGood: true, consumptionLayer: 'functioning',
+  },
+
+  life_support_filters: {
+    id:          'life_support_filters',
+    namePL:      'Filtry Życiowe',
+    icon:        '🫁',
+    tier:        1,
+    recipe:      { Fe: 2, C: 3, Cu: 1 },
+    baseTime:    0.20,
+    weight:      1.5,
+    description: 'Systemy filtracji powietrza i oczyszczania',
+    isConsumerGood: true, consumptionLayer: 'functioning',
+  },
+
+  synthetics: {
+    id:          'synthetics',
+    namePL:      'Tworzywa',
+    icon:        '👕',
+    tier:        1,
+    recipe:      { C: 5, Si: 2 },
+    baseTime:    0.20,
+    weight:      1.5,
+    description: 'Ubrania, meble, naczynia - tworzywa codziennego użytku',
+    isConsumerGood: true, consumptionLayer: 'comfort',
+  },
+
+  personal_electronics: {
+    id:          'personal_electronics',
+    namePL:      'Elektronika Osobista',
+    icon:        '📱',
+    tier:        2,
+    recipe:      { Si: 4, Cu: 3, Li: 1 },
+    baseTime:    0.40,
+    weight:      1.0,
+    description: 'Komunikatory, rozrywka, urządzenia osobiste',
+    isConsumerGood: true, consumptionLayer: 'comfort',
+  },
+
+  gourmet_food: {
+    id:          'gourmet_food',
+    namePL:      'Żywność Premium',
+    icon:        '🍽️',
+    tier:        2,
+    recipe:      { food: 4, C: 2, water: 1 },
+    baseTime:    0.40,
+    weight:      2.0,
+    description: 'Przetworzona żywność z teksturą i smakiem',
+    isConsumerGood: true, consumptionLayer: 'luxury',
+  },
+
+  stimulants: {
+    id:          'stimulants',
+    namePL:      'Stymulatory',
+    icon:        '☕',
+    tier:        1,
+    recipe:      { C: 3, water: 1, Si: 1 },
+    baseTime:    0.30,
+    weight:      0.5,
+    description: 'Kawa syntetyczna, nootropiki, suplementy',
+    isConsumerGood: true, consumptionLayer: 'luxury',
   },
 
   // ── Tier 3 — zaawansowana technologia ─────────────────────────────────────
@@ -250,6 +355,7 @@ export const COMMODITIES = {
     baseTime:    3.0,
     weight:      0.5,
     description: 'Ultra-czyste kryształy do zaawansowanej elektroniki',
+    isConsumerGood: true, consumptionLayer: 'luxury',
   },
 
   ion_thrusters: {
@@ -261,6 +367,7 @@ export const COMMODITIES = {
     baseTime:    3.0,
     weight:      3.0,
     description: 'Ksenonowe silniki jonowe — napęd statków dalekiego zasięgu',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   fusion_cores: {
@@ -272,6 +379,7 @@ export const COMMODITIES = {
     baseTime:    4.0,
     weight:      4.0,
     description: 'Reaktory termojądrowe — nieograniczone źródło energii',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   nanotech_filters: {
@@ -283,6 +391,7 @@ export const COMMODITIES = {
     baseTime:    3.0,
     weight:      0.3,
     description: 'Filtry nanotechnologiczne — oczyszczanie powietrza i wody, terraforming',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   // ── Tier 4 — technologia przełomowa ───────────────────────────────────────
@@ -296,6 +405,7 @@ export const COMMODITIES = {
     baseTime:    6.0,
     weight:      1.0,
     description: 'Procesory kwantowe — klucz do teleportacji i FTL',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   antimatter_cells: {
@@ -307,6 +417,7 @@ export const COMMODITIES = {
     baseTime:    7.5,
     weight:      0.5,
     description: 'Ogniwa antymaterii — napęd FTL i mega-źródło energii',
+    isConsumerGood: false, consumptionLayer: null,
   },
 };
 
@@ -331,6 +442,13 @@ export const COMMODITY_SHORT = {
   prefab_autonomous_solar_farm: 'Pref.A.Sol.',
   prefab_spaceport:             'Pref.Port',
   prefab_autonomous_spaceport:  'Pref.A.Port',
+  spare_parts:        'Cz.zamien.',
+  pharmaceuticals:    'Farmaceut.',
+  life_support_filters: 'Filtry żyć.',
+  synthetics:         'Tworzywa',
+  personal_electronics: 'El.osobista',
+  gourmet_food:       'Żywn.prem.',
+  stimulants:         'Stymulat.',
   semiconductors:     'Półprzew.',
   ion_thrusters:      'Sil.jon.',
   fusion_cores:       'Rdz.fuzji',
@@ -343,11 +461,13 @@ export const COMMODITY_SHORT = {
 
 // Lista commodity IDs pogrupowana wg tieru
 export const COMMODITY_BY_TIER = {
-  1: ['steel_plates', 'polymer_composites', 'concrete_mix', 'copper_wiring'],
+  1: ['steel_plates', 'polymer_composites', 'concrete_mix', 'copper_wiring',
+      'spare_parts', 'pharmaceuticals', 'life_support_filters', 'synthetics', 'stimulants'],
   2: ['power_cells', 'electronics', 'food_synthesizers', 'mining_drills', 'hull_armor',
       'habitat_modules', 'water_recyclers', 'robots',
       'prefab_mine', 'prefab_solar_farm', 'prefab_habitat', 'prefab_autonomous_mine',
-      'prefab_autonomous_solar_farm', 'prefab_spaceport', 'prefab_autonomous_spaceport'],
+      'prefab_autonomous_solar_farm', 'prefab_spaceport', 'prefab_autonomous_spaceport',
+      'personal_electronics', 'gourmet_food'],
   3: ['semiconductors', 'ion_thrusters', 'fusion_cores', 'nanotech_filters'],
   4: ['quantum_cores', 'antimatter_cells'],
 };
@@ -381,6 +501,13 @@ export const STARTING_COMMODITIES = {
   prefab_autonomous_solar_farm: 0,
   prefab_spaceport:             0,
   prefab_autonomous_spaceport:  0,
+  spare_parts:        0,
+  pharmaceuticals:    0,
+  life_support_filters: 0,
+  synthetics:         0,
+  personal_electronics: 0,
+  gourmet_food:       0,
+  stimulants:         0,
   semiconductors:     0,
   ion_thrusters:      0,
   fusion_cores:       0,

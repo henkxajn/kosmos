@@ -926,10 +926,10 @@ export class PlanetGlobeScene {
       ctx.fillText(`Zatrudn: ${emp.toFixed(2)}  Wolni: ${free.toFixed(2)}`, 12, y + 6);
       y += 14;
 
-      const morale = Math.round(cSys.morale ?? 50);
-      const moraleColor = morale >= 60 ? THEME.successDim : morale >= 30 ? THEME.warning : THEME.dangerDim;
-      ctx.fillStyle = moraleColor;
-      ctx.fillText(`Morale: ${morale}%`, 12, y + 6);
+      const prosperity = Math.round(window.KOSMOS?.prosperitySystem?.prosperity ?? 50);
+      const prosperityColor = prosperity >= 60 ? THEME.successDim : prosperity >= 30 ? THEME.warning : THEME.dangerDim;
+      ctx.fillStyle = prosperityColor;
+      ctx.fillText(`Prosperity: ${prosperity}`, 12, y + 6);
 
       ctx.fillStyle = THEME.purple;
       ctx.fillText(`Epoka: ${cSys.epochName}`, 110, y + 6);
@@ -1291,6 +1291,29 @@ export class PlanetGlobeScene {
         ctx.fillStyle = '#00ccff';
         ctx.fillText(`👤 ${totalPop} POP`, BPX + 8, buildListY);
         buildListY += 10;
+      }
+
+      // Consumer factory — produkcja per towar
+      if (b.id === 'consumer_factory') {
+        const ps = window.KOSMOS?.prosperitySystem;
+        if (ps) {
+          ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(`CFP: ${lvl}`, BPX + 8, buildListY);
+          buildListY += 10;
+          ctx.fillText('Produkcja:', BPX + 8, buildListY);
+          buildListY += 10;
+          const prod = ps._consumerProduction ?? {};
+          for (const [goodId, val] of Object.entries(prod)) {
+            if (val <= 0) continue;
+            const com = COMMODITIES[goodId];
+            const icon = com?.icon ?? '?';
+            const name = com?.namePL ?? goodId;
+            ctx.fillStyle = THEME.successDim;
+            ctx.fillText(`  ${icon} ${name}  ${val.toFixed(1)}/rok`, BPX + 8, buildListY);
+            buildListY += 10;
+          }
+        }
       }
 
       // Przycisk ulepszenia (jeśli nie max)

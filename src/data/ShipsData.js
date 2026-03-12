@@ -65,7 +65,7 @@ export const SHIPS = {
     range:         20,           // AU (fallback)
     speedAU:       0.9,          // AU/rok — cargo (bazowa ×3)
     cargoCapacity: 500,          // tony — główny transportowiec
-    crewCost:      0.5,          // POP zablokowany przy budowie statku
+    crewCost:      0.25,         // POP zablokowany przy budowie statku
     description:   'Wielki frachtowiec do transferu surowców między koloniami.',
   },
 
@@ -87,7 +87,7 @@ export const SHIPS = {
     range:         16,           // AU (fallback)
     speedAU:       0.52,         // AU/rok — ciężki, wolny masowy transport
     cargoCapacity: 10000,        // tony — mega-frachtowiec
-    crewCost:      1.5,          // POP zablokowane przy budowie statku
+    crewCost:      1.0,          // POP zablokowane przy budowie statku
     requires:      'interplanetary_logistics',
     description:   'Ogromny frachtowiec do masowego transportu surowców między koloniami.',
   },
