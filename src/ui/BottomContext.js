@@ -12,6 +12,7 @@ import { DistanceUtils }  from '../utils/DistanceUtils.js';
 import { RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { showRenameModal } from '../ui/ModalInput.js';
 import EventBus            from '../core/EventBus.js';
+import { CIV_SIDEBAR_W }  from '../ui/CivPanelDrawer.js';
 
 const CTX_H   = COSMIC.BOTTOM_CTX_H; // 120px
 const BAR_H   = COSMIC.BOTTOM_BAR_H; // 30px
@@ -63,6 +64,11 @@ export class BottomContext {
     this._prevEntity  = null;    // poprzednia encja (do detekcji zmiany)
   }
 
+  // Lewy offset — nie nachodzić na sidebar w civMode
+  _leftX() {
+    return window.KOSMOS?.civMode ? CIV_SIDEBAR_W : 0;
+  }
+
   // ── Rysowanie ───────────────────────────────────────────
   draw(ctx, W, H, entity) {
     // Animacja slide-up/down
@@ -82,45 +88,46 @@ export class BottomContext {
       this._prevEntity = entity;
     }
 
-    const panelW = W - OUTLINER_W;
+    const lx = this._leftX();
+    const panelW = W - OUTLINER_W - lx;
     const panelH = Math.round(CTX_H * this._slideProgress);
     const panelY = H - BAR_H - panelH;
 
     // Tło
     ctx.fillStyle = bgAlpha(0.92);
-    ctx.fillRect(0, panelY, panelW, panelH);
+    ctx.fillRect(lx, panelY, panelW, panelH);
     ctx.strokeStyle = C.border;
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, panelY); ctx.lineTo(panelW, panelY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lx, panelY); ctx.lineTo(lx + panelW, panelY); ctx.stroke();
     // Prawa krawędź (oddzielenie od Outlinera)
-    ctx.beginPath(); ctx.moveTo(panelW, panelY); ctx.lineTo(panelW, panelY + panelH); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lx + panelW, panelY); ctx.lineTo(lx + panelW, panelY + panelH); ctx.stroke();
 
     if (!entity || this._slideProgress < 0.3) return;
 
     // Clipping do panelu
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, panelY, panelW, panelH);
+    ctx.rect(lx, panelY, panelW, panelH);
     ctx.clip();
 
     const sectionW = Math.floor(panelW / 3);
 
     // ── Lewo (33%): Nagłówek encji ──
-    this._drawEntityHeader(ctx, 0, panelY, sectionW, panelH, entity);
+    this._drawEntityHeader(ctx, lx, panelY, sectionW, panelH, entity);
 
     // Separator pionowy
     ctx.strokeStyle = C.border;
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(sectionW, panelY + 8); ctx.lineTo(sectionW, panelY + panelH - 8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lx + sectionW, panelY + 8); ctx.lineTo(lx + sectionW, panelY + panelH - 8); ctx.stroke();
 
     // ── Centrum (33%): Zakładki + treść ──
-    this._drawTabContent(ctx, sectionW, panelY, sectionW, panelH, entity);
+    this._drawTabContent(ctx, lx + sectionW, panelY, sectionW, panelH, entity);
 
     // Separator pionowy
-    ctx.beginPath(); ctx.moveTo(sectionW * 2, panelY + 8); ctx.lineTo(sectionW * 2, panelY + panelH - 8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(lx + sectionW * 2, panelY + 8); ctx.lineTo(lx + sectionW * 2, panelY + panelH - 8); ctx.stroke();
 
     // ── Prawo (33%): Akcje + złoża ──
-    this._drawActionSection(ctx, sectionW * 2, panelY, panelW - sectionW * 2, panelH, entity);
+    this._drawActionSection(ctx, lx + sectionW * 2, panelY, panelW - sectionW * 2, panelH, entity);
 
     ctx.restore();
   }
@@ -338,23 +345,24 @@ export class BottomContext {
   hitTest(x, y, W, H, entity) {
     if (!entity || this._slideProgress <= 0) return false;
 
-    const panelW = W - OUTLINER_W;
+    const lx = this._leftX();
+    const panelW = W - OUTLINER_W - lx;
     const panelH = Math.round(CTX_H * this._slideProgress);
     const panelY = H - BAR_H - panelH;
 
-    if (x > panelW || y < panelY || y > panelY + panelH) return false;
+    if (x < lx || x > lx + panelW || y < panelY || y > panelY + panelH) return false;
 
     const sectionW = Math.floor(panelW / 3);
 
     // Zakładki (centrum, górny rząd)
     const tabY = panelY + 6;
-    if (y >= tabY && y <= tabY + 16 && x >= sectionW && x < sectionW * 2) {
+    if (y >= tabY && y <= tabY + 16 && x >= lx + sectionW && x < lx + sectionW * 2) {
       const tabs = ['orbit', 'physics'];
       if (entity.composition) tabs.push('composition');
       const PAD = 8;
       const tabW = Math.floor((sectionW - PAD * 2) / tabs.length);
       for (let i = 0; i < tabs.length; i++) {
-        const tx = sectionW + PAD + i * (tabW + 2);
+        const tx = lx + sectionW + PAD + i * (tabW + 2);
         if (x >= tx && x <= tx + tabW) {
           this._tab = tabs[i];
           this._scrollY = 0;
@@ -364,7 +372,7 @@ export class BottomContext {
     }
 
     // Rename ✏ (lewa sekcja, prawy górny róg)
-    if (x >= sectionW - 22 && x <= sectionW && y >= panelY + 8 && y <= panelY + 28) {
+    if (x >= lx + sectionW - 22 && x <= lx + sectionW && y >= panelY + 8 && y <= panelY + 28) {
       showRenameModal(entity.name).then(newName => {
         if (newName) entity.name = newName;
       });
@@ -372,8 +380,8 @@ export class BottomContext {
     }
 
     // Przycisk akcji (prawa sekcja)
-    if (x >= sectionW * 2) {
-      return this._hitTestAction(x, y, sectionW * 2, panelY, panelW - sectionW * 2, panelH, entity);
+    if (x >= lx + sectionW * 2) {
+      return this._hitTestAction(x, y, lx + sectionW * 2, panelY, panelW - sectionW * 2, panelH, entity);
     }
 
     return true; // pochłoń klik w panelu
@@ -407,12 +415,13 @@ export class BottomContext {
   // Obsługa scrolla
   handleWheel(x, y, deltaY, W, H, entity) {
     if (!entity || this._slideProgress <= 0) return false;
-    const panelW = W - OUTLINER_W;
+    const lx = this._leftX();
+    const panelW = W - OUTLINER_W - lx;
     const panelH = Math.round(CTX_H * this._slideProgress);
     const panelY = H - BAR_H - panelH;
     const sectionW = Math.floor(panelW / 3);
     // Tylko w środkowej sekcji (zakładki)
-    if (x >= sectionW && x < sectionW * 2 && y >= panelY && y <= panelY + panelH) {
+    if (x >= lx + sectionW && x < lx + sectionW * 2 && y >= panelY && y <= panelY + panelH) {
       this._scrollY = Math.max(0, this._scrollY + deltaY * 0.3);
       return true;
     }
@@ -422,9 +431,10 @@ export class BottomContext {
   // Sprawdza czy punkt nad panelem
   isOver(x, y, W, H, entity) {
     if (!entity || this._slideProgress <= 0) return false;
-    const panelW = W - OUTLINER_W;
+    const lx = this._leftX();
+    const panelW = W - OUTLINER_W - lx;
     const panelH = Math.round(CTX_H * this._slideProgress);
     const panelY = H - BAR_H - panelH;
-    return x < panelW && y >= panelY && y <= panelY + panelH;
+    return x >= lx && x < lx + panelW && y >= panelY && y <= panelY + panelH;
   }
 }
