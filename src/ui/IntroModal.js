@@ -4,290 +4,203 @@
 // 2. Nazwij swoją cywilizację
 // 3. Nazwij swoją stolicę
 //
-// Styl: sci-fi terminal, kolory z THEME.
+// Styl: Amber Terminal (CRT) — via TerminalPopupBase.
 
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import {
+  buildTerminalPopup,
+  injectTerminalPopupCSS,
+} from './TerminalPopupBase.js';
 
-// ── Helpery kolorów z THEME ──────────────────────────────────────────────
-function _bgAlpha(hex, alpha) {
+// ── Helpery ─────────────────────────────────────────────────────────────
+
+function _rgba(hex, alpha) {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r},${g},${b},${alpha})`;
-}
-
-function _glowShadow(hex, spread = 40, alpha = 0.3) {
-  const { r, g, b } = hexToRgb(hex);
-  return `0 0 ${spread}px rgba(${r},${g},${b},${alpha})`;
-}
-
-// ── Inject CSS animacji ─────────────────────────────────────────────────
-(function injectStyle() {
-  if (document.getElementById('intro-modal-style')) return;
-  const style = document.createElement('style');
-  style.id = 'intro-modal-style';
-  style.textContent = `
-    @keyframes introFadeIn {
-      from { transform: translateY(-20px); opacity: 0; }
-      to   { transform: translateY(0);     opacity: 1; }
-    }
-    @keyframes terminalType {
-      from { opacity: 0; }
-      to   { opacity: 1; }
-    }
-  `;
-  document.head.appendChild(style);
-})();
-
-// ── Helpers ─────────────────────────────────────────────────────────────
-
-function _createOverlay() {
-  const overlay = document.createElement('div');
-  overlay.className = 'kosmos-modal-overlay';
-  Object.assign(overlay.style, {
-    position: 'fixed', inset: '0',
-    background: 'rgba(2,4,5,0.85)',
-    zIndex: '100',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  });
-  return overlay;
-}
-
-function _createPanel(maxWidth = '520px') {
-  const panel = document.createElement('div');
-  Object.assign(panel.style, {
-    background: _bgAlpha(THEME.bgPrimary, 0.97),
-    border: `1px solid ${THEME.borderActive}`,
-    borderRadius: '6px',
-    boxShadow: `${_glowShadow(THEME.borderActive, 40, 0.3)}, inset ${_glowShadow(THEME.borderActive, 30, 0.1)}`,
-    padding: '24px 32px',
-    maxWidth,
-    width: '90%',
-    fontFamily: THEME.fontFamily,
-    animation: 'introFadeIn 0.4s ease-out',
-  });
-  return panel;
-}
-
-function _createBtn(label, isPrimary = true) {
-  const btn = document.createElement('button');
-  const bg = isPrimary ? _bgAlpha(THEME.bgTertiary, 0.9) : _bgAlpha(THEME.bgSecondary, 0.8);
-  const bgHover = isPrimary ? _bgAlpha(THEME.borderActive, 0.3) : _bgAlpha(THEME.bgTertiary, 0.8);
-  Object.assign(btn.style, {
-    display: 'block',
-    margin: '0 auto',
-    background: bg,
-    border: `1px solid ${isPrimary ? THEME.borderActive : THEME.border}`,
-    borderRadius: '4px',
-    color: isPrimary ? THEME.accent : THEME.textSecondary,
-    fontFamily: THEME.fontFamily,
-    fontSize: '14px',
-    padding: '8px 32px',
-    cursor: 'pointer',
-    letterSpacing: '1px',
-  });
-  btn.textContent = label;
-  btn.addEventListener('mouseenter', () => btn.style.background = bgHover);
-  btn.addEventListener('mouseleave', () => btn.style.background = bg);
-  return btn;
 }
 
 // ── Ekran 1: Transmisja rządowa ─────────────────────────────────────────
 
 function showTransmission() {
   return new Promise(resolve => {
-    const overlay = _createOverlay();
-    const panel = _createPanel('560px');
-
-    // Terminal header (monospace, akcent)
-    const terminal = document.createElement('div');
-    Object.assign(terminal.style, {
-      fontFamily: '"Courier New", Consolas, monospace',
-      fontSize: '11px',
-      color: THEME.success,
-      marginBottom: '16px',
-      lineHeight: '1.7',
-      whiteSpace: 'pre',
-    });
-    terminal.textContent = [
+    // Terminal header w monospace
+    const terminalLines = [
       '> INICJALIZACJA SYSTEMU . . . . . . . . . OK',
       '> ŁĄCZNOŚĆ Z RADĄ FEDERACJI . . . . . . . OK',
       '> AUTORYZACJA PRZYWÓDCY . . . . . . . . . OCZEKUJE',
       '>',
       '> TRANSMISJA ZASZYFROWANA — PRIORYTET: ALFA',
     ].join('\n');
-    panel.appendChild(terminal);
+
+    const terminalHTML = `<pre style="
+      font-family: 'Courier New', Consolas, monospace;
+      font-size: 11px;
+      color: ${THEME.success};
+      margin: 0 0 10px 0;
+      line-height: 1.7;
+      white-space: pre;
+    ">${terminalLines}</pre>`;
 
     // Separator
-    const sep = document.createElement('hr');
-    Object.assign(sep.style, {
-      border: 'none', borderTop: `1px solid ${THEME.border}`,
-      margin: '12px 0',
-    });
-    panel.appendChild(sep);
-
-    // Nagłówek
-    const greeting = document.createElement('div');
-    Object.assign(greeting.style, {
-      fontSize: '16px',
-      fontWeight: 'bold',
-      color: THEME.accent,
-      marginBottom: '14px',
-    });
-    greeting.textContent = 'Drogi Przywódco,';
-    panel.appendChild(greeting);
+    const sepHTML = `<hr style="border:none; border-top:1px solid ${THEME.border}; margin:8px 0;">`;
 
     // Treść transmisji
-    const body = document.createElement('div');
-    Object.assign(body.style, {
-      fontSize: '13px',
-      color: THEME.textSecondary,
-      lineHeight: '1.65',
-      marginBottom: '16px',
+    const bodyHTML = `
+      <div style="font-size:13px; color:${THEME.textSecondary}; line-height:1.65; margin-bottom:8px;">
+        Ludzkość w końcu wyrwała się z kołyski. Po wiekach wojen, podziałów i uporu — opracowaliśmy technologię podróży planetarnych. Nasz układ gwiezdny stoi przed nami otwarty.
+      </div>
+      <div style="font-size:13px; color:${THEME.textSecondary}; line-height:1.65; margin-bottom:8px;">
+        Od tego momentu przejmujesz kontrolę nad losem naszej cywilizacji. Jedna planeta, miliardy istnień i cały układ do zbadania. Podróże międzygwiezdne pozostają poza naszym zasięgiem — ale to, co kryje się na okolicznych planetach i księżycach, może to zmienić.
+      </div>
+      <div style="font-size:13px; color:${THEME.textSecondary}; line-height:1.65; margin-bottom:8px;">
+        Jedna planeta to za mało, by zagwarantować przetrwanie naszego gatunku. Jedno uderzenie asteroidy, jedna katastrofa — i wszystko, czym jesteśmy, zniknie na zawsze. Musimy się rozprzestrzenić.
+      </div>
+      <div style="font-size:13px; color:${THEME.textPrimary}; font-style:italic; line-height:1.65; margin-bottom:10px;">
+        Eksploruj, kolonizuj, rozwijaj — rób co musisz, by ludzkość sięgnęła dalej niż kiedykolwiek.
+      </div>
+      <div style="font-size:14px; font-weight:bold; color:${THEME.warning}; margin-bottom:10px;">
+        Nie zawiódź nas.
+      </div>
+      <pre style="
+        font-family: 'Courier New', Consolas, monospace;
+        font-size: 11px;
+        color: ${THEME.success};
+        margin: 0;
+        white-space: pre;
+        line-height: 1.5;
+      ">> — Rada Najwyższa\n> KONIEC TRANSMISJI</pre>
+    `;
+
+    const contentHTML = terminalHTML + sepHTML + bodyHTML;
+
+    const { overlay, dismiss, btnElements } = buildTerminalPopup({
+      severity: 'info',
+      barTitle: 'TRANSMISJA ZASZYFROWANA',
+      barRight: 'PRIORYTET: ALFA',
+      svgKey: 'alert',
+      svgLabel: 'RADA<br>NAJWYŻSZA',
+      headline: 'Drogi Przywódco,',
+      contentHTML,
+      buttons: [{ label: '[ DALEJ ]', primary: true }],
+      onDismiss: () => resolve(),
     });
-    body.innerHTML = [
-      'Ludzkość w końcu wyrwała się z kołyski. Po wiekach wojen, podziałów i uporu — opracowaliśmy technologię podróży planetarnych. Nasz układ gwiezdny stoi przed nami otwarty.',
-      '',
-      'Od tego momentu przejmujesz kontrolę nad losem naszej cywilizacji. Jedna planeta, miliardy istnień i cały układ do zbadania. Podróże międzygwiezdne pozostają poza naszym zasięgiem — ale to, co kryje się na okolicznych planetach i księżycach, może to zmienić.',
-      '',
-      'Jedna planeta to za mało, by zagwarantować przetrwanie naszego gatunku. Jedno uderzenie asteroidy, jedna katastrofa — i wszystko, czym jesteśmy, zniknie na zawsze. Musimy się rozprzestrzenić.',
-      '',
-      `<span style="color:${THEME.textPrimary};font-style:italic;">Eksploruj, kolonizuj, rozwijaj — rób co musisz, by ludzkość sięgnęła dalej niż kiedykolwiek.</span>`,
-    ].join('<br>');
-    panel.appendChild(body);
 
-    // Ostrzeżenie
-    const warning = document.createElement('div');
-    Object.assign(warning.style, {
-      fontSize: '14px',
-      fontWeight: 'bold',
-      color: THEME.warning,
-      marginBottom: '16px',
-    });
-    warning.textContent = 'Nie zawiódź nas.';
-    panel.appendChild(warning);
-
-    // Terminal footer
-    const footer = document.createElement('div');
-    Object.assign(footer.style, {
-      fontFamily: '"Courier New", Consolas, monospace',
-      fontSize: '11px',
-      color: THEME.success,
-      marginBottom: '20px',
-      whiteSpace: 'pre',
-      lineHeight: '1.5',
-    });
-    footer.textContent = '> — Rada Najwyższa\n> KONIEC TRANSMISJI';
-    panel.appendChild(footer);
-
-    // Przycisk DALEJ
-    const btn = _createBtn('DALEJ');
-    btn.addEventListener('click', close);
-    panel.appendChild(btn);
-
-    // Blokuj propagację kliknięć/mousedown do canvas/window
-    for (const evt of ['click', 'mousedown', 'mouseup']) {
-      panel.addEventListener(evt, (e) => e.stopPropagation());
-      overlay.addEventListener(evt, (e) => e.stopPropagation());
-    }
-    overlay.appendChild(panel);
-    document.body.appendChild(overlay);
-
-    function close() {
-      document.removeEventListener('keydown', onKey);
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      resolve();
+    // Podłącz dismiss do przycisku
+    for (const btn of btnElements) {
+      btn.addEventListener('click', () => dismiss());
     }
 
+    // Keyboard: Enter/Space/Escape
     const onKey = (e) => {
       if (e.code === 'Enter' || e.code === 'Space' || e.code === 'Escape') {
         e.stopPropagation();
         e.preventDefault();
-        close();
+        document.removeEventListener('keydown', onKey, true);
+        dismiss();
       }
     };
-    document.addEventListener('keydown', onKey);
+    document.addEventListener('keydown', onKey, true);
 
-    requestAnimationFrame(() => btn.focus());
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
   });
 }
 
 // ── Ekran z inputem nazwy ───────────────────────────────────────────────
 
-function showNameInput(title, defaultValue, placeholder) {
+function showNameInput(title, defaultValue, placeholder, svgLabel) {
   return new Promise(resolve => {
-    const overlay = _createOverlay();
-    const panel = _createPanel('420px');
+    // Input HTML — zostanie osadzony w contentHTML
+    const inputId = 'intro-name-input-' + Date.now();
 
-    // Tytuł
-    const titleEl = document.createElement('div');
-    Object.assign(titleEl.style, {
-      color: THEME.accent,
-      fontSize: '16px',
-      fontWeight: 'bold',
-      marginBottom: '16px',
-      letterSpacing: '1px',
-      textAlign: 'center',
-    });
-    titleEl.textContent = title;
-    panel.appendChild(titleEl);
+    const contentHTML = `
+      <div style="margin-top:8px;">
+        <input id="${inputId}" type="text" value="${defaultValue}" maxlength="30"
+          placeholder="${placeholder || ''}"
+          style="
+            width: 100%;
+            box-sizing: border-box;
+            background: ${THEME.bgPrimary};
+            border: 1px solid ${THEME.border};
+            border-radius: 2px;
+            color: ${THEME.textPrimary};
+            font-family: ${THEME.fontFamily};
+            font-size: 15px;
+            padding: 10px 12px;
+            outline: none;
+            text-align: center;
+            transition: border-color 0.2s, box-shadow 0.2s;
+          "
+        />
+      </div>
+    `;
 
-    // Input
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = defaultValue;
-    input.maxLength = 30;
-    input.placeholder = placeholder || '';
-    Object.assign(input.style, {
-      width: '100%',
-      boxSizing: 'border-box',
-      background: THEME.bgPrimary,
-      border: `1px solid ${THEME.border}`,
-      borderRadius: '4px',
-      color: THEME.textPrimary,
-      fontFamily: THEME.fontFamily,
-      fontSize: '15px',
-      padding: '10px 12px',
-      outline: 'none',
-      marginBottom: '20px',
-      textAlign: 'center',
-    });
-    input.addEventListener('focus', () => {
-      input.style.borderColor = THEME.borderActive;
-      input.style.boxShadow = _glowShadow(THEME.borderActive, 10, 0.3);
-    });
-    input.addEventListener('blur', () => {
-      input.style.borderColor = THEME.border;
-      input.style.boxShadow = 'none';
-    });
-    panel.appendChild(input);
+    let resolved = false;
 
-    // Przycisk DALEJ
-    const btn = _createBtn('DALEJ');
+    const { overlay, dismiss, btnElements } = buildTerminalPopup({
+      severity: 'discovery',
+      barTitle: title,
+      svgKey: 'colony',
+      svgLabel: svgLabel || 'NOWA<br>ERA',
+      headline: title,
+      contentHTML,
+      buttons: [{ label: '[ DALEJ ]', primary: true }],
+      onDismiss: () => {
+        if (!resolved) {
+          resolved = true;
+          resolve(defaultValue);
+        }
+      },
+    });
+
+    document.body.appendChild(overlay);
+
+    // Znajdź input po wstawieniu do DOM
+    const input = document.getElementById(inputId);
+
+    // Stylizacja focus inputu
+    if (input) {
+      input.addEventListener('focus', () => {
+        input.style.borderColor = THEME.borderActive;
+        input.style.boxShadow = `0 0 10px ${_rgba(THEME.borderActive, 0.3)}`;
+      });
+      input.addEventListener('blur', () => {
+        input.style.borderColor = THEME.border;
+        input.style.boxShadow = 'none';
+      });
+    }
 
     const submit = () => {
-      const val = input.value.trim();
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (resolved) return;
+      resolved = true;
+      const val = input ? input.value.trim() : '';
+      document.removeEventListener('keydown', onKey, true);
+      dismiss();
       resolve(val || defaultValue);
     };
 
-    btn.addEventListener('click', submit);
-    panel.appendChild(btn);
-
-    // Blokuj propagację kliknięć/mousedown do canvas/window
-    for (const evt of ['click', 'mousedown', 'mouseup']) {
-      panel.addEventListener(evt, (e) => e.stopPropagation());
-      overlay.addEventListener(evt, (e) => e.stopPropagation());
+    // Przycisk DALEJ
+    for (const btn of btnElements) {
+      btn.addEventListener('click', submit);
     }
-    overlay.appendChild(panel);
-    document.body.appendChild(overlay);
 
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); submit(); }
-      e.stopPropagation(); // blokuj propagację do GameScene (Space, 1-5, etc.)
-    });
+    // Keyboard — Enter w inpucie = submit, inne klawisze blokuj propagację
+    const onKey = (e) => {
+      // Pozwól na pisanie w inpucie — blokuj tylko propagację do gry
+      e.stopPropagation();
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
 
+    // Focus na input
     requestAnimationFrame(() => {
-      input.focus();
-      input.select();
+      if (input) {
+        input.focus();
+        input.select();
+      }
     });
   });
 }
@@ -303,6 +216,9 @@ function showNameInput(title, defaultValue, placeholder) {
  * @returns {Promise<{ civName: string, capitalName: string }>}
  */
 export async function showIntroSequence() {
+  // Upewnij się że CSS jest załadowany
+  injectTerminalPopupCSS();
+
   // 1. Transmisja rządowa
   await showTransmission();
 
@@ -310,14 +226,16 @@ export async function showIntroSequence() {
   const civName = await showNameInput(
     'NAZWIJ SWOJĄ CYWILIZACJĘ',
     'Zjednoczona Federacja',
-    'Wprowadź nazwę cywilizacji...'
+    'Wprowadź nazwę cywilizacji...',
+    'CYWILI-<br>ZACJA'
   );
 
   // 3. Nazwij stolicę
   const capitalName = await showNameInput(
     'NAZWIJ SWOJĄ STOLICĘ',
     'Nowa Ziemia',
-    'Wprowadź nazwę stolicy...'
+    'Wprowadź nazwę stolicy...',
+    'STOLICA'
   );
 
   return { civName, capitalName };
