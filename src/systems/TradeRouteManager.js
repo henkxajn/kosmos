@@ -220,17 +220,20 @@ export class TradeRouteManager {
     const vessel = vMgr?.getVessel(route.vesselId);
     if (!vessel || vessel.position.state !== 'docked') return;
 
-    // Sprawdź czy stać na ładunek
+    // Sprawdź czy stać na ładunek i odejmij zasoby
     const resSys = sourceCol.resourceSystem;
     if (!resSys || !resSys.canAfford(route.cargo)) return;
+    resSys.spend(route.cargo);
 
-    // Załaduj i wyślij
+    // Załaduj i wyślij (cargoPreloaded — zasoby już odjęte, isTradeRoute — pomija spaceport/POP)
     route.tripsCompleted++;
 
     EventBus.emit('expedition:transportRequest', {
       targetId: route.targetBodyId,
       cargo: { ...route.cargo },
       vesselId: route.vesselId,
+      cargoPreloaded: true,
+      isTradeRoute: true,
     });
 
     EventBus.emit('tradeRoute:dispatched', { routeId: route.id, vesselId: route.vesselId });
@@ -244,49 +247,32 @@ export class TradeRouteManager {
   _dispatchReturn(route) {
     const hasReturn = route.returnCargo && Object.keys(route.returnCargo).length > 0;
 
-    if (!hasReturn) {
-      // Pusty powrót — jak dotychczas
-      EventBus.emit('expedition:transportRequest', {
-        targetId: route.sourceColonyId,
-        cargo: {},
-        vesselId: route.vesselId,
-      });
-      return;
-    }
-
-    const colMgr = window.KOSMOS?.colonyManager;
-    const targetCol = colMgr?.getColony(route.targetBodyId);
-    if (!targetCol) {
-      // Brak kolonii w celu — pusty powrót
-      EventBus.emit('expedition:transportRequest', {
-        targetId: route.sourceColonyId,
-        cargo: {},
-        vesselId: route.vesselId,
-      });
-      return;
+    // Zbierz ładunek powrotny (jeśli jest i kolonia docelowa stać)
+    let returnPayload = {};
+    if (hasReturn) {
+      const colMgr = window.KOSMOS?.colonyManager;
+      const targetCol = colMgr?.getColony(route.targetBodyId);
+      if (targetCol) {
+        const resSys = targetCol.resourceSystem;
+        if (resSys && resSys.canAfford(route.returnCargo)) {
+          resSys.spend(route.returnCargo);
+          returnPayload = { ...route.returnCargo };
+        }
+        // Brak zasobów → pusty powrót (nie blokuj trasy)
+      }
     }
 
     const vMgr = window.KOSMOS?.vesselManager;
     const vessel = vMgr?.getVessel(route.vesselId);
     if (!vessel || vessel.position.state !== 'docked') return;
 
-    // Sprawdź czy kolonia docelowa ma wystarczające zasoby na return cargo
-    const resSys = targetCol.resourceSystem;
-    if (!resSys || !resSys.canAfford(route.returnCargo)) {
-      // Brak zasobów — wyślij pusty powrót (nie blokuj trasy)
-      EventBus.emit('expedition:transportRequest', {
-        targetId: route.sourceColonyId,
-        cargo: {},
-        vesselId: route.vesselId,
-      });
-      return;
-    }
-
-    // Załaduj returnCargo i wyślij do źródła
+    // Wyślij powrót (cargo może być puste — isTradeRoute pozwala na to)
     EventBus.emit('expedition:transportRequest', {
       targetId: route.sourceColonyId,
-      cargo: { ...route.returnCargo },
+      cargo: returnPayload,
       vesselId: route.vesselId,
+      cargoPreloaded: true,
+      isTradeRoute: true,
     });
 
     EventBus.emit('tradeRoute:dispatched', { routeId: route.id, vesselId: route.vesselId });

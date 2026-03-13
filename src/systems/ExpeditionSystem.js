@@ -94,8 +94,8 @@ export class ExpeditionSystem {
       this._launch(type, targetId, cargo, vesselId));
 
     // Obsługa żądania transferu zasobów
-    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded }) =>
-      this._launchTransport(targetId, cargo, vesselId, cargoPreloaded));
+    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded, isTradeRoute }) =>
+      this._launchTransport(targetId, cargo, vesselId, cargoPreloaded, isTradeRoute));
 
     // Obsługa rozkazu powrotu z orbity
     EventBus.on('expedition:orderReturn', ({ expeditionId }) =>
@@ -505,8 +505,9 @@ export class ExpeditionSystem {
   }
 
   // Wyślij transport zasobów między koloniami
-  _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false) {
-    if (!cargo || Object.keys(cargo).length === 0) {
+  _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false, isTradeRoute = false) {
+    // Trasy handlowe mogą wysyłać pusty powrót (statek wraca bez ładunku)
+    if (!isTradeRoute && (!cargo || Object.keys(cargo).length === 0)) {
       EventBus.emit('expedition:launchFailed', { reason: 'Brak ładunku do transportu' });
       return;
     }
@@ -522,7 +523,7 @@ export class ExpeditionSystem {
       && vessel.colonyId !== colMgr?.activePlanetId;
     const isRedispatch = isOrbiting || isRemoteDocked;
 
-    if (!isRedispatch) {
+    if (!isRedispatch && !isTradeRoute) {
       // Standardowy launch z bazy — wymaga launch_pad i POPów
       const padOk  = this._hasSpaceport();
       const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
@@ -603,7 +604,7 @@ export class ExpeditionSystem {
       returnYear:  departYear + travelTime * 2,
       distance:    parseFloat(distance.toFixed(2)),
       travelTime,
-      crewCost:    isRedispatch ? inheritedCrewCost : EXPEDITION_CREW_COST,
+      crewCost:    isTradeRoute ? 0 : (isRedispatch ? inheritedCrewCost : EXPEDITION_CREW_COST),
       vesselId:    vesselId ?? null,
       originColonyId: vessel?.colonyId ?? colMgr?.activePlanetId,
       cargo:       { ...cargo },
