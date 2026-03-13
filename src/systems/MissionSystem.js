@@ -71,8 +71,8 @@ export class MissionSystem {
     EventBus.on('expedition:sendRequest', ({ type, targetId, cargo, vesselId }) =>
       this._launch(type, targetId, cargo, vesselId));
 
-    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded }) =>
-      this._launchTransport(targetId, cargo, vesselId, cargoPreloaded));
+    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded, isTradeRoute, sourceColonyId }) =>
+      this._launchTransport(targetId, cargo, vesselId, cargoPreloaded, isTradeRoute, sourceColonyId));
 
     EventBus.on('expedition:orderReturn', ({ expeditionId }) =>
       this._orderReturn(expeditionId));
@@ -547,15 +547,81 @@ export class MissionSystem {
   }
 
   // ── Transport zasobów ──────────────────────────────────────────────────────
-  _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false) {
+  _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false, isTradeRoute = false, sourceColonyId = null) {
     // Pusty cargo dozwolony — transport = też relokacja statku
     if (!cargo) cargo = {};
+    const hasCargo = Object.keys(cargo).length > 0;
 
     const vMgr   = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
+    const vessel = vesselId ? vMgr?.getVessel(vesselId) : null;
+
+    // ── Trasy handlowe — osobna ścieżka (bez POP, spaceport, active colony) ──
+    if (isTradeRoute) {
+      if (!vessel || vessel.position.state !== 'docked') return;
+
+      // Oblicz dystans od pozycji statku do celu
+      const target = this._findTarget(targetId);
+      const targetEntity = target || { x: 0, y: 0 };
+      const distance = Math.max(0.001, DistanceUtils.euclideanAU(
+        { x: vessel.position.x, y: vessel.position.y },
+        targetEntity
+      ));
+
+      // Sprawdź paliwo
+      const fuelNeeded = distance * (vessel.fuel?.consumption ?? 0);
+      if (vessel.fuel && vessel.fuel.current < fuelNeeded) return; // retry w TradeRouteManager
+
+      // Sprawdź i odejmij zasoby z kolonii, w której statek jest zadokowany
+      if (hasCargo) {
+        const dockedColony = sourceColonyId ? colMgr?.getColony(sourceColonyId) : null;
+        const resSys = dockedColony?.resourceSystem;
+        if (resSys) {
+          if (!resSys.canAfford(cargo)) return; // retry w TradeRouteManager
+          resSys.spend(cargo);
+        }
+      }
+
+      const shipSpeed  = this._getShipSpeed(vesselId);
+      const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
+      const departYear = this._gameYear;
+
+      const mission = {
+        id:          `exp_${this._nextId++}`,
+        type:        'transport',
+        targetId,
+        targetName:  target?.name ?? colMgr?.getColony(targetId)?.name ?? targetId,
+        targetType:  target?.type ?? 'colony',
+        departYear,
+        arrivalYear: departYear + travelTime,
+        returnYear:  null, // TradeRouteManager zarządza powrotami
+        distance:    parseFloat(distance.toFixed(2)),
+        travelTime,
+        crewCost:    0, // trasy handlowe nie blokują POPów
+        vesselId,
+        originColonyId: vessel.colonyId,
+        cargo:       { ...cargo },
+        status:      'en_route',
+        gained:      null,
+        eventRoll:   null,
+      };
+      this._missions.push(mission);
+
+      vMgr.dispatchOnMission(vesselId, {
+        type: 'transport', targetId,
+        targetName: mission.targetName,
+        departYear, arrivalYear: mission.arrivalYear, returnYear: null,
+        fuelCost: fuelNeeded,
+        cargo: { ...cargo },
+      });
+
+      this._emit('mission:started', 'expedition:launched', { expedition: mission });
+      return;
+    }
+
+    // ── Standardowy transport (nie trasa handlowa) ──────────────────
 
     // Sprawdź czy statek jest na orbicie lub zadokowany w zdalnej lokalizacji (re-dispatch)
-    const vessel = vesselId ? vMgr?.getVessel(vesselId) : null;
     const isOrbiting = vessel && vessel.position.state === 'orbiting' && vessel.status === 'on_mission';
     const isRemoteDocked = vessel && vessel.position.state === 'docked'
       && (vessel.status === 'idle' || vessel.status === 'refueling')
