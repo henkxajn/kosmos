@@ -613,7 +613,7 @@ export class UIManager {
 
     // CivPanel sidebar — pełna wysokość (zawsze widoczny gdy civMode)
     if (window.KOSMOS?.civMode) {
-      const sidebarFullH = this.canvas.height - CIV_PANEL_Y - COSMIC.BOTTOM_BAR_H;
+      const sidebarFullH = H - CIV_PANEL_Y - COSMIC.BOTTOM_BAR_H;
       if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarFullH) return true;
     }
 
@@ -868,7 +868,7 @@ export class UIManager {
   _drawCivPanel() {
     const ctx = this.ctx;
     // Sidebar — aktywny przycisk = aktywny overlay
-    const sidebarFullH = this.canvas.height - CIV_PANEL_Y - COSMIC.BOTTOM_BAR_H;
+    const sidebarFullH = H - CIV_PANEL_Y - COSMIC.BOTTOM_BAR_H;
     drawCivPanelSidebar(ctx, CIV_PANEL_Y, this.overlayManager.active, sidebarFullH);
   }
 
@@ -1379,7 +1379,7 @@ export class UIManager {
   // ══════════════════════════════════════════════════════════════
   _hitTestCivPanel(x, y) {
     const sy = CIV_PANEL_Y;
-    const fullH = this.canvas.height - sy - COSMIC.BOTTOM_BAR_H;
+    const fullH = H - sy - COSMIC.BOTTOM_BAR_H;
     const result = hitTestSidebar(x, y, sy, fullH);
     if (result) {
       if (result === 'sidebar') return true;
