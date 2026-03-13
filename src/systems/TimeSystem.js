@@ -42,8 +42,8 @@ export class TimeSystem {
       this._triggerAutoSlow(`Wymieranie na ${planet?.name ?? 'planecie'}`));
     EventBus.on('disk:phaseChanged',  ({ newPhasePL }) =>
       this._triggerAutoSlow(`Faza dysku: ${newPhasePL}`));
-    EventBus.on('resource:shortage',  ({ resource }) =>
-      this._triggerAutoSlow(`Krytyczny niedobór: ${resource}`));
+    // resource:shortage — NIE zwalniaj czasu; gracz sam kontroluje prędkość
+    // EventBus.on('resource:shortage', ...) — usunięte na życzenie gracza
   }
 
   get multiplier() {

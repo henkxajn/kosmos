@@ -70,6 +70,10 @@ export class ProsperitySystem {
   }
 
   _yearlyUpdate() {
+    // Outposty (pop=0) nie mają prosperity — brak konsumpcji, epok, demand
+    const pop = this.civSystem?.population ?? 0;
+    if (pop <= 0) return;
+
     const oldProsperity = this.prosperity;
     const oldEpoch = this.epoch;
 
