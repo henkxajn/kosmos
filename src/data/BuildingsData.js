@@ -195,7 +195,7 @@ export const BUILDINGS = {
     maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
-    terrainAny:  false,
+    terrainAny:  true,       // habitat można postawić na każdym terenie poza oceanem
     requires:    null,
   },
 
