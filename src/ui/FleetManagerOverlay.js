@@ -1745,13 +1745,13 @@ export class FleetManagerOverlay {
 
     // Tooltip kosztów budowy — rysowany NA KOŃCU (z-order najwyższy)
     if (this._hoverShipId) {
-      this._drawShipCostTooltip(ctx, x, y, w, h, this._hoverShipId, inv, canBuildAny);
+      this._drawShipCostTooltip(ctx, x, y, w, h, this._hoverShipId, inv, canBuildAny, activeCol);
     }
   }
 
   // ── Tooltip kosztów budowy statku ───────────────────────────────────────────
 
-  _drawShipCostTooltip(ctx, panelX, panelY, panelW, panelH, shipId, inv, slotsOk) {
+  _drawShipCostTooltip(ctx, panelX, panelY, panelW, panelH, shipId, inv, slotsOk, activeCol) {
     const ship = SHIPS[shipId];
     if (!ship) return;
 
@@ -1786,6 +1786,13 @@ export class FleetManagerOverlay {
     }
     // Czas budowy
     lines.push({ text: `⏱ Budowa: ${ship.buildTime} lat`, ok: true, dim: true });
+    // Załoga (POPy)
+    const crewCost = ship.crewCost ?? 0;
+    if (crewCost > 0) {
+      const freePops = activeCol?.civSystem?.freePops ?? 0;
+      const ok = freePops >= crewCost;
+      lines.push({ text: `👤 Załoga: ${freePops.toFixed(2)}/${crewCost}`, ok });
+    }
     // Sloty
     if (!slotsOk) {
       lines.push({ text: '⚠ Brak wolnych slotów', ok: false });
