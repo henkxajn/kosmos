@@ -611,11 +611,10 @@ export class UIManager {
     // Overlay otwarty — blokuj kamerę
     if (this.overlayManager?.isAnyOpen()) return true;
 
-    // CivPanel sidebar (zawsze widoczny gdy civMode)
+    // CivPanel sidebar — pełna wysokość (zawsze widoczny gdy civMode)
     if (window.KOSMOS?.civMode) {
-      const sidebarH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
-                     + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
-      if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarH) return true;
+      const sidebarFullH = this.canvas.height - CIV_PANEL_Y - COSMIC.BOTTOM_BAR_H;
+      if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarFullH) return true;
     }
 
     // Akcje gracza (lewy panel gdy nie civMode)
@@ -869,7 +868,8 @@ export class UIManager {
   _drawCivPanel() {
     const ctx = this.ctx;
     // Sidebar — aktywny przycisk = aktywny overlay
-    drawCivPanelSidebar(ctx, CIV_PANEL_Y, this.overlayManager.active);
+    const sidebarFullH = this.canvas.height - CIV_PANEL_Y - COSMIC.BOTTOM_BAR_H;
+    drawCivPanelSidebar(ctx, CIV_PANEL_Y, this.overlayManager.active, sidebarFullH);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1379,7 +1379,8 @@ export class UIManager {
   // ══════════════════════════════════════════════════════════════
   _hitTestCivPanel(x, y) {
     const sy = CIV_PANEL_Y;
-    const result = hitTestSidebar(x, y, sy);
+    const fullH = this.canvas.height - sy - COSMIC.BOTTOM_BAR_H;
+    const result = hitTestSidebar(x, y, sy, fullH);
     if (result) {
       if (result === 'sidebar') return true;
       // Toggle overlay — klik na aktywny zamyka, inny otwiera
@@ -1428,11 +1429,10 @@ export class UIManager {
     if (y >= H - COSMIC.BOTTOM_BAR_H) return 'bottombar';
     // TopBar
     if (y <= COSMIC.TOP_BAR_H) return 'topbar';
-    // CivPanel sidebar
+    // CivPanel sidebar — pełna wysokość
     if (window.KOSMOS?.civMode) {
-      const sidebarH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
-                     + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
-      if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarH) return 'civpanel';
+      const sidebarFullH = H - CIV_PANEL_Y - COSMIC.BOTTOM_BAR_H;
+      if (x <= CIV_SIDEBAR_W && y >= CIV_PANEL_Y && y <= CIV_PANEL_Y + sidebarFullH) return 'civpanel';
     }
     // Outliner
     if (window.KOSMOS?.civMode && x >= W - COSMIC.OUTLINER_W && y >= COSMIC.TOP_BAR_H) return 'outliner';

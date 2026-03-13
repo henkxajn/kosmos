@@ -21,13 +21,15 @@ export const CIV_TABS = [
 ];
 
 // ── Sidebar ────────────────────────────────────────────────
-export function drawCivPanelSidebar(ctx, panelY, activeTab) {
+// fullH — opcjonalna pełna wysokość sidebara (od panelY do dolnego paska)
+export function drawCivPanelSidebar(ctx, panelY, activeTab, fullH) {
   const sx = 0;
   const sy = panelY;
-  const sidebarH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
+  const buttonsH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
                  + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
+  const sidebarH = fullH || buttonsH;
 
-  // Tło sidebara
+  // Tło sidebara — pełna wysokość
   ctx.fillStyle = bgAlpha(0.92);
   ctx.fillRect(sx, sy, CIV_SIDEBAR_W, sidebarH);
   ctx.strokeStyle = THEME.border;
@@ -73,9 +75,11 @@ export function drawCivPanelSidebar(ctx, panelY, activeTab) {
 }
 
 // ── Hit test sidebar ───────────────────────────────────────
-export function hitTestSidebar(x, y, panelY) {
-  const sidebarH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
+// fullH — opcjonalna pełna wysokość sidebara
+export function hitTestSidebar(x, y, panelY, fullH) {
+  const buttonsH = CIV_SIDEBAR_PAD + CIV_TABS.length * CIV_SIDEBAR_BTN
                  + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
+  const sidebarH = fullH || buttonsH;
 
   if (x >= 0 && x <= CIV_SIDEBAR_W && y >= panelY && y <= panelY + sidebarH) {
     for (let i = 0; i < CIV_TABS.length; i++) {
