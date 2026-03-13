@@ -50,13 +50,14 @@ export class TradeRouteManager {
 
   // ── API publiczne ──────────────────────────────────────────
 
-  createRoute({ vesselId, sourceColonyId, targetBodyId, cargo, tripsTotal }) {
+  createRoute({ vesselId, sourceColonyId, targetBodyId, cargo, returnCargo, tripsTotal }) {
     const route = {
       id: `tr_${_nextRouteId++}`,
       vesselId,
       sourceColonyId,
       targetBodyId,
       cargo: { ...cargo },
+      returnCargo: { ...(returnCargo ?? {}) }, // ładunek powrotny: cel → źródło
       tripsTotal: tripsTotal ?? null, // null = nieskończoność
       tripsCompleted: 0,
       status: 'active',
@@ -106,7 +107,10 @@ export class TradeRouteManager {
 
   restore(data) {
     if (!data) return;
-    this._routes = data.routes ?? [];
+    this._routes = (data.routes ?? []).map(r => ({
+      ...r,
+      returnCargo: r.returnCargo ?? {},  // kompatybilność ze starymi save'ami
+    }));
     _nextRouteId = data.nextRouteId ?? (this._routes.length + 1);
   }
 
@@ -138,7 +142,11 @@ export class TradeRouteManager {
     this._pendingRefuel.delete(route.id);
 
     if (vessel?.position?.dockedAt === route.sourceColonyId) {
+      // Statek w źródle → wyślij outbound (źródło → cel)
       this._dispatchRoute(route);
+    } else if (vessel?.position?.dockedAt === route.targetBodyId) {
+      // Statek w celu → wyślij return (cel → źródło) z returnCargo
+      this._dispatchReturn(route);
     } else if (vessel?.position?.state === 'docked') {
       // Statek w innej lokalizacji (np. outpost) → pusty powrót do źródła
       EventBus.emit('expedition:transportRequest', {
@@ -222,6 +230,62 @@ export class TradeRouteManager {
     EventBus.emit('expedition:transportRequest', {
       targetId: route.targetBodyId,
       cargo: { ...route.cargo },
+      vesselId: route.vesselId,
+    });
+
+    EventBus.emit('tradeRoute:dispatched', { routeId: route.id, vesselId: route.vesselId });
+    this._emitStatus();
+  }
+
+  /**
+   * Wyślij statek z celu z powrotem do źródła z returnCargo.
+   * Nie inkrementuje tripsCompleted (to robi outbound).
+   */
+  _dispatchReturn(route) {
+    const hasReturn = route.returnCargo && Object.keys(route.returnCargo).length > 0;
+
+    if (!hasReturn) {
+      // Pusty powrót — jak dotychczas
+      EventBus.emit('expedition:transportRequest', {
+        targetId: route.sourceColonyId,
+        cargo: {},
+        vesselId: route.vesselId,
+      });
+      return;
+    }
+
+    const colMgr = window.KOSMOS?.colonyManager;
+    const targetCol = colMgr?.getColony(route.targetBodyId);
+    if (!targetCol) {
+      // Brak kolonii w celu — pusty powrót
+      EventBus.emit('expedition:transportRequest', {
+        targetId: route.sourceColonyId,
+        cargo: {},
+        vesselId: route.vesselId,
+      });
+      return;
+    }
+
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(route.vesselId);
+    if (!vessel || vessel.position.state !== 'docked') return;
+
+    // Sprawdź czy kolonia docelowa ma wystarczające zasoby na return cargo
+    const resSys = targetCol.resourceSystem;
+    if (!resSys || !resSys.canAfford(route.returnCargo)) {
+      // Brak zasobów — wyślij pusty powrót (nie blokuj trasy)
+      EventBus.emit('expedition:transportRequest', {
+        targetId: route.sourceColonyId,
+        cargo: {},
+        vesselId: route.vesselId,
+      });
+      return;
+    }
+
+    // Załaduj returnCargo i wyślij do źródła
+    EventBus.emit('expedition:transportRequest', {
+      targetId: route.sourceColonyId,
+      cargo: { ...route.returnCargo },
       vesselId: route.vesselId,
     });
 

@@ -525,13 +525,17 @@ export class FleetTabPanel {
     if (!colony) return;
     const targetBody = _findBody(targetId);
     const targetName = targetBody?.name ?? targetId;
-    const result = await showTradeRouteModal(colony, targetId, targetName, vessel);
+    // Pobierz kolonię docelową (jeśli istnieje) — do konfiguracji returnCargo
+    const colMgr = window.KOSMOS?.colonyManager;
+    const targetColony = colMgr?.getColony(targetId) ?? null;
+    const result = await showTradeRouteModal(colony, targetId, targetName, vessel, targetColony);
     if (result) {
       EventBus.emit('tradeRoute:create', {
         vesselId: vessel.id,
         sourceColonyId: vessel.colonyId,
         targetBodyId: targetId,
         cargo: result.cargo,
+        returnCargo: result.returnCargo ?? {},
         tripsTotal: result.trips,
       });
     }

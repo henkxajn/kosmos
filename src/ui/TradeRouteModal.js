@@ -20,9 +20,10 @@ for (const [id, def] of Object.entries(COMMODITIES))          RES_ICONS[id] = de
  * @param {string} targetBodyId — id ciała docelowego
  * @param {string} targetName — nazwa ciała docelowego
  * @param {Object} [vessel] — opcjonalny statek (info o ładowności)
- * @returns {Promise<{cargo, trips}|null>}
+ * @param {Object} [targetColony] — kolonia docelowa (jeśli istnieje) — dla returnCargo
+ * @returns {Promise<{cargo, returnCargo, trips}|null>}
  */
-export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vessel) {
+export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vessel, targetColony) {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.className = 'kosmos-modal-overlay';
@@ -95,7 +96,12 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
     tripsDiv.appendChild(infBtn);
     panel.appendChild(tripsDiv);
 
-    // Zasoby do transportu
+    // ── Sekcja outbound ─────────────────────────────────────────
+    const outLabel = document.createElement('div');
+    outLabel.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.accent}; margin-bottom: 6px; font-weight: bold;`;
+    outLabel.textContent = `➡ ŁADUNEK (${sourceColony.name} → ${targetName})`;
+    panel.appendChild(outLabel);
+
     const resSys = sourceColony.resourceSystem;
     const inventory = resSys?.inventory ?? new Map();
     const inputs = {};
@@ -130,16 +136,96 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
     addSection('Zbierane', Object.entries(HARVESTED_RESOURCES));
     addSection('Towary', Object.entries(COMMODITIES));
 
-    // Przyciski
-    const btns = document.createElement('div');
-    btns.style.cssText = 'display: flex; gap: 8px; justify-content: center; margin-top: 16px;';
-
+    // Pre-deklaracja confirmBtn (potrzebna w sekcji returnCargo do blokady overweight)
     const confirmBtn = document.createElement('button');
     confirmBtn.textContent = '🔄 Ustaw trasę';
     confirmBtn.style.cssText = `
       padding: 8px 20px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.borderActive};
       border-radius: 4px; color: ${THEME.accent}; font-family: ${THEME.fontFamily}; cursor: pointer;
     `;
+
+    // ── Sekcja powrotna (returnCargo) ─────────────────────────────
+    const returnInputs = {};
+    if (targetColony) {
+      const sep2 = document.createElement('hr');
+      sep2.style.cssText = `border: none; border-top: 1px solid ${THEME.border}; margin: 12px 0;`;
+      panel.appendChild(sep2);
+
+      const retTitle = document.createElement('div');
+      retTitle.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.accent}; margin-bottom: 6px; font-weight: bold;`;
+      retTitle.textContent = `⬅ POWRÓT (${targetName} → ${sourceColony.name})`;
+      panel.appendChild(retTitle);
+
+      // Info o ładowności powrotnej
+      let returnCargoInfo = null;
+      if (vessel && cargoCapacity > 0) {
+        returnCargoInfo = document.createElement('div');
+        returnCargoInfo.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
+        returnCargoInfo.textContent = `Ładowność powrotna: 0 / ${cargoCapacity} t`;
+        panel.appendChild(returnCargoInfo);
+      }
+
+      const targetInv = targetColony.resourceSystem?.inventory ?? new Map();
+
+      const addReturnSection = (label, items) => {
+        const filteredItems = items.filter(([id]) => (targetInv.get(id) ?? 0) > 0);
+        if (filteredItems.length === 0) return;
+        const sec = document.createElement('div');
+        sec.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textHeader}; margin: 6px 0 4px; text-transform: uppercase; letter-spacing: 1px;`;
+        sec.textContent = label;
+        panel.appendChild(sec);
+        for (const [id] of filteredItems) {
+          const have = targetInv.get(id) ?? 0;
+          const icon = RES_ICONS[id] ?? '';
+          const row = document.createElement('div');
+          row.style.cssText = 'display: flex; align-items: center; gap: 6px; margin: 2px 0;';
+          row.innerHTML = `<span style="width: 80px; font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}">${icon} ${id} (${have})</span>`;
+          const inp = document.createElement('input');
+          inp.type = 'number'; inp.min = 0; inp.max = have; inp.value = 0;
+          inp.style.cssText = `
+            width: 60px; padding: 2px 4px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.border};
+            color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily}; font-size: ${THEME.fontSizeSmall}px;
+            text-align: center;
+          `;
+          returnInputs[id] = inp;
+          row.appendChild(inp);
+          panel.appendChild(row);
+        }
+      };
+
+      addReturnSection('Wydobyte', Object.entries(MINED_RESOURCES));
+      addReturnSection('Zbierane', Object.entries(HARVESTED_RESOURCES));
+      addReturnSection('Towary', Object.entries(COMMODITIES));
+
+      // Jeśli cel nie ma zasobów
+      if (Object.keys(returnInputs).length === 0) {
+        const noRes = document.createElement('div');
+        noRes.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textDim}; font-style: italic; margin: 4px 0;`;
+        noRes.textContent = 'Brak zasobów w kolonii docelowej';
+        panel.appendChild(noRes);
+      }
+
+      // Aktualizacja wagi powrotnej
+      const _updateReturnWeight = () => {
+        if (!returnCargoInfo || cargoCapacity <= 0) return;
+        let total = 0;
+        for (const [, inp] of Object.entries(returnInputs)) {
+          total += parseInt(inp.value) || 0;
+        }
+        const overweight = total > cargoCapacity;
+        returnCargoInfo.textContent = `Ładowność powrotna: ${total} / ${cargoCapacity} t`;
+        returnCargoInfo.style.color = overweight ? THEME.danger : THEME.textSecondary;
+        confirmBtn.disabled = overweight;
+        confirmBtn.style.opacity = overweight ? '0.4' : '1';
+      };
+      for (const inp of Object.values(returnInputs)) {
+        inp.addEventListener('input', _updateReturnWeight);
+      }
+    }
+
+    // Przyciski
+    const btns = document.createElement('div');
+    btns.style.cssText = 'display: flex; gap: 8px; justify-content: center; margin-top: 16px;';
 
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Anuluj';
@@ -190,11 +276,24 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
         const val = parseInt(inp.value) || 0;
         if (val > 0) { cargo[id] = val; totalWeight += val; }
       }
-      if (Object.keys(cargo).length === 0) return; // brak ładunku
-      // Blokuj jeśli przekroczona ładowność
+      // Blokuj jeśli przekroczona ładowność outbound
       if (cargoCapacity > 0 && totalWeight > cargoCapacity) return;
+
+      // Zbierz returnCargo
+      const returnCargo = {};
+      let returnWeight = 0;
+      for (const [id, inp] of Object.entries(returnInputs)) {
+        const val = parseInt(inp.value) || 0;
+        if (val > 0) { returnCargo[id] = val; returnWeight += val; }
+      }
+      // Blokuj jeśli przekroczona ładowność powrotna
+      if (cargoCapacity > 0 && returnWeight > cargoCapacity) return;
+
+      // Wymaga przynajmniej jednego kierunku z ładunkiem
+      if (Object.keys(cargo).length === 0 && Object.keys(returnCargo).length === 0) return;
+
       const trips = tripsInput.value ? parseInt(tripsInput.value) || null : null;
-      close({ cargo, trips });
+      close({ cargo, returnCargo, trips });
     });
 
     cancelBtn.addEventListener('click', () => close(null));
