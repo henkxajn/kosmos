@@ -27,6 +27,16 @@ export function resolveTextureType(planet) {
     return `planetoid_${planet.planetoidType || 'silicate'}`;
   }
 
+  // Księżyce — mapowanie wg moonType + temperatureK na istniejące tekstury planet
+  if (planet.type === 'moon') {
+    if (planet.moonType === 'icy') return 'ice';
+    // rocky moon — temperatura decyduje o wyglądzie
+    const tempC = planet.temperatureC ?? (planet.temperatureK ? planet.temperatureK - 273.15 : -50);
+    if (tempC > 200) return 'volcanic'; // gorący → wulkaniczny
+    if (tempC > 60)  return 'rocky';    // umiarkowany → skalny
+    return 'iron';                      // zimny → ciemny, żelazisty (jak Merkury)
+  }
+
   const type = planet.planetType;
 
   // Gas giganty — pod-typ wg temperatury

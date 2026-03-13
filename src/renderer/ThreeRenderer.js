@@ -1328,8 +1328,25 @@ export class ThreeRenderer {
     // Sfera księżyca — w scenie, pozycja synchronizowana z moon.x/y
     // Promień oparty o masę: 0.0001–0.015 M⊕ → r = 0.015–0.04 (zawsze mniejsze od planet)
     const r   = Math.max(0.015, Math.min(0.04, 0.015 + (moon.physics?.mass ?? 0.001) * 1.5));
-    const geo = new THREE.SphereGeometry(r, 12, 8);
-    const mat = new THREE.MeshPhongMaterial({ color: moon.visual.color, shininess: 15 });
+    const geo = new THREE.SphereGeometry(r, 24, 16);
+
+    // PBR tekstury — re-use istniejących tekstur planet (rocky/ice/iron/volcanic)
+    const texType = resolveTextureType(moon);
+    let mat;
+    if (texType) {
+      const seed    = hashCode(moon.id || 'moon');
+      const variant = (seed % TEXTURE_VARIANTS) + 1;
+      const maps    = loadPlanetTextures(texType, variant);
+      mat = new THREE.MeshStandardMaterial({
+        map:          maps.diffuse,
+        normalMap:    maps.normal,
+        roughnessMap: maps.roughness,
+        metalness:    0.02,
+      });
+    } else {
+      // fallback — stary kolor
+      mat = new THREE.MeshStandardMaterial({ color: moon.visual.color, roughness: 0.85, metalness: 0.02 });
+    }
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(S(moon.x), 0, S(moon.y));
     this.scene.add(mesh);
