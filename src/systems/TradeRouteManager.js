@@ -9,20 +9,29 @@
 //               'tradeRoute:pause'       → pauza trasy
 //               'tradeRoute:resume'      → wznowienie
 //               'tradeRoute:delete'      → usunięcie
+//               'time:tick'              → sprawdza tankujące statki tras
 //   Emituje:    'tradeRoute:dispatched'  { routeId, vesselId }
 //               'tradeRoute:completed'   { routeId }
 //               'tradeRoute:statusChanged'
 
 import EventBus from '../core/EventBus.js';
+import { needsRefuel } from '../entities/Vessel.js';
 
 let _nextRouteId = 1;
+
+// Minimalna frakcja baku wymagana do wylotu trasy (80% — bezpieczny margines)
+const MIN_FUEL_FRACTION = 0.8;
 
 export class TradeRouteManager {
   constructor() {
     // Lista tras: [{id, vesselId, sourceColonyId, targetBodyId, cargo, tripsTotal, tripsCompleted, status}]
     this._routes = [];
 
+    // Trasy czekające na zatankowanie statku (routeId → vesselId)
+    this._pendingRefuel = new Set();
+
     EventBus.on('vessel:docked', ({ vessel }) => this._onVesselDocked(vessel));
+    EventBus.on('time:tick', () => this._checkRefueledRoutes());
 
     EventBus.on('tradeRoute:create', (data) => this.createRoute(data));
     EventBus.on('tradeRoute:pause', ({ routeId }) => this.pauseRoute(routeId));
@@ -34,6 +43,7 @@ export class TradeRouteManager {
       this._routes = this._routes.filter(
         r => r.sourceColonyId !== planetId && r.targetBodyId !== planetId
       );
+      this._pendingRefuel.clear();
       this._emitStatus();
     });
   }
@@ -53,8 +63,8 @@ export class TradeRouteManager {
     };
     this._routes.push(route);
 
-    // Natychmiast wyślij pierwszy kurs (jeśli statek w hangarze)
-    this._dispatchRoute(route);
+    // Natychmiast wyślij pierwszy kurs (jeśli statek w hangarze i zatankowany)
+    this._tryDispatchOrRefuel(route);
     this._emitStatus();
     return route;
   }
@@ -63,6 +73,7 @@ export class TradeRouteManager {
     const route = this._routes.find(r => r.id === routeId);
     if (route) {
       route.status = 'paused';
+      this._pendingRefuel.delete(routeId);
       this._emitStatus();
     }
   }
@@ -77,6 +88,7 @@ export class TradeRouteManager {
 
   deleteRoute(routeId) {
     this._routes = this._routes.filter(r => r.id !== routeId);
+    this._pendingRefuel.delete(routeId);
     this._emitStatus();
   }
 
@@ -100,6 +112,43 @@ export class TradeRouteManager {
 
   // ── Prywatne ───────────────────────────────────────────────
 
+  /**
+   * Sprawdź czy statek ma wystarczająco paliwa na kolejny kurs.
+   * Wymaga ≥80% baku aby uniknąć wysyłania na pustym baku.
+   */
+  _hasEnoughFuel(vessel) {
+    if (!vessel || !vessel.fuel) return true;
+    return vessel.fuel.current >= vessel.fuel.max * MIN_FUEL_FRACTION;
+  }
+
+  /**
+   * Próbuj wysłać trasę lub poczekaj na tankowanie.
+   */
+  _tryDispatchOrRefuel(route) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(route.vesselId);
+
+    if (vessel && !this._hasEnoughFuel(vessel)) {
+      // Statek potrzebuje tankowania — poczekaj
+      this._pendingRefuel.add(route.id);
+      return;
+    }
+
+    // Paliwo OK — wyślij
+    this._pendingRefuel.delete(route.id);
+
+    if (vessel?.position?.dockedAt === route.sourceColonyId) {
+      this._dispatchRoute(route);
+    } else if (vessel?.position?.state === 'docked') {
+      // Statek w innej lokalizacji (np. outpost) → pusty powrót do źródła
+      EventBus.emit('expedition:transportRequest', {
+        targetId: route.sourceColonyId,
+        cargo: {},
+        vesselId: route.vesselId,
+      });
+    }
+  }
+
   _onVesselDocked(vessel) {
     if (!vessel) return;
     // Szukaj aktywnej trasy dla tego statku
@@ -111,21 +160,45 @@ export class TradeRouteManager {
     // Sprawdź czy ukończono wymaganą liczbę kursów
     if (route.tripsTotal !== null && route.tripsCompleted >= route.tripsTotal) {
       route.status = 'completed';
+      this._pendingRefuel.delete(route.id);
       EventBus.emit('tradeRoute:completed', { routeId: route.id });
       this._emitStatus();
       return;
     }
 
-    // Statek zadokował w źródle → załaduj cargo i wyślij do celu
-    if (vessel.position.dockedAt === route.sourceColonyId) {
-      this._dispatchRoute(route);
-    } else {
-      // Statek zadokował w celu (lub gdzie indziej) → pusty powrót do źródła
-      EventBus.emit('expedition:transportRequest', {
-        targetId: route.sourceColonyId,
-        cargo: {},
-        vesselId: route.vesselId,
-      });
+    // Sprawdź paliwo i wyślij lub poczekaj na tankowanie
+    this._tryDispatchOrRefuel(route);
+  }
+
+  /**
+   * Co tick sprawdza trasy czekające na tankowanie.
+   * Gdy statek się zatankuje (≥80% baku), wysyła go na kolejny kurs.
+   */
+  _checkRefueledRoutes() {
+    if (this._pendingRefuel.size === 0) return;
+
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return;
+
+    for (const routeId of [...this._pendingRefuel]) {
+      const route = this._routes.find(r => r.id === routeId);
+      if (!route || route.status !== 'active') {
+        this._pendingRefuel.delete(routeId);
+        continue;
+      }
+
+      const vessel = vMgr.getVessel(route.vesselId);
+      if (!vessel || vessel.position.state !== 'docked') {
+        // Statek nie jest w hangarze — usuń z oczekujących
+        this._pendingRefuel.delete(routeId);
+        continue;
+      }
+
+      if (this._hasEnoughFuel(vessel)) {
+        // Zatankowany — wyślij
+        this._pendingRefuel.delete(routeId);
+        this._tryDispatchOrRefuel(route);
+      }
     }
   }
 

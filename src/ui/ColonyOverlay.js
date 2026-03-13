@@ -1602,7 +1602,9 @@ export class ColonyOverlay extends BaseOverlay {
           const have = Math.floor(inv[k] ?? 0);
           const ok = have >= need;
           if (!ok) canAffordAll = false;
-          upgCostParts.push({ text: `${need}${RESOURCE_ICONS[k] ?? k}`, ok });
+          const icon = COMMODITIES[k]?.icon ?? '📦';
+          const name = COMMODITY_SHORT[k] ?? k;
+          upgCostParts.push({ text: `${need}${icon}${name}`, ok });
         }
       }
 
