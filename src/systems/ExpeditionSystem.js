@@ -94,8 +94,8 @@ export class ExpeditionSystem {
       this._launch(type, targetId, cargo, vesselId));
 
     // Obsługa żądania transferu zasobów
-    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded, isTradeRoute }) =>
-      this._launchTransport(targetId, cargo, vesselId, cargoPreloaded, isTradeRoute));
+    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded, isTradeRoute, sourceColonyId }) =>
+      this._launchTransport(targetId, cargo, vesselId, cargoPreloaded, isTradeRoute, sourceColonyId));
 
     // Obsługa rozkazu powrotu z orbity
     EventBus.on('expedition:orderReturn', ({ expeditionId }) =>
@@ -505,9 +505,10 @@ export class ExpeditionSystem {
   }
 
   // Wyślij transport zasobów między koloniami
-  _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false, isTradeRoute = false) {
+  _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false, isTradeRoute = false, sourceColonyId = null) {
     // Trasy handlowe mogą wysyłać pusty powrót (statek wraca bez ładunku)
-    if (!isTradeRoute && (!cargo || Object.keys(cargo).length === 0)) {
+    const hasCargo = cargo && Object.keys(cargo).length > 0;
+    if (!isTradeRoute && !hasCargo) {
       EventBus.emit('expedition:launchFailed', { reason: 'Brak ładunku do transportu' });
       return;
     }
@@ -523,7 +524,84 @@ export class ExpeditionSystem {
       && vessel.colonyId !== colMgr?.activePlanetId;
     const isRedispatch = isOrbiting || isRemoteDocked;
 
-    if (!isRedispatch && !isTradeRoute) {
+    // ── Trasy handlowe — osobna ścieżka walidacji ──────────────────
+    if (isTradeRoute) {
+      if (!vessel || vessel.position.state !== 'docked') return;
+
+      // Oblicz dystans od pozycji statku do celu (nie od homePlanet!)
+      const target = this._findTarget(targetId);
+      const targetEntity = target || colMgr?.getColony(targetId) || { x: 0, y: 0 };
+      // Pobierz pozycję celu (entity ma x/y, kolonia nie — szukamy entity planety)
+      let tx = targetEntity.x ?? 0;
+      let ty = targetEntity.y ?? 0;
+      if (!target && colMgr) {
+        // Cel to kolonia — znajdź entity planety
+        const tgtPlanet = this._findTarget(targetId);
+        if (tgtPlanet) { tx = tgtPlanet.x ?? 0; ty = tgtPlanet.y ?? 0; }
+      }
+      const distance = Math.max(0.001, DistanceUtils.euclideanAU(
+        { x: vessel.position.x, y: vessel.position.y },
+        { x: tx, y: ty }
+      ));
+
+      // Sprawdź paliwo
+      const fuelNeeded = distance * (vessel.fuel?.consumption ?? 0);
+      if (vessel.fuel && vessel.fuel.current < fuelNeeded) {
+        // Brak paliwa — nie ruszaj (TradeRouteManager doda do pending retry)
+        return;
+      }
+
+      // Sprawdź i odejmij zasoby z kolonii, w której statek jest zadokowany
+      if (hasCargo) {
+        const dockedColony = sourceColonyId ? colMgr?.getColony(sourceColonyId) : null;
+        const resSys = dockedColony?.resourceSystem;
+        if (resSys) {
+          if (!resSys.canAfford(cargo)) return; // Brak zasobów — retry później
+          resSys.spend(cargo);
+        }
+      }
+
+      // Utwórz ekspedycję transportową (bez POP lock)
+      const shipSpeed  = this._getShipSpeed(vesselId);
+      const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
+      const departYear = this._gameYear;
+
+      const expedition = {
+        id:          `exp_${this._nextId++}`,
+        type:        'transport',
+        targetId,
+        targetName:  target?.name ?? colMgr?.getColony(targetId)?.name ?? targetId,
+        targetType:  target?.type ?? 'colony',
+        departYear,
+        arrivalYear: departYear + travelTime,
+        returnYear:  null, // TradeRouteManager zarządza powrotami
+        distance:    parseFloat(distance.toFixed(2)),
+        travelTime,
+        crewCost:    0,    // Trasy handlowe nie blokują POPów
+        vesselId:    vesselId,
+        originColonyId: vessel.colonyId,
+        cargo:       { ...(cargo ?? {}) },
+        status:      'en_route',
+        gained:      null,
+        eventRoll:   null,
+      };
+      this._expeditions.push(expedition);
+
+      vMgr.dispatchOnMission(vesselId, {
+        type: 'transport', targetId,
+        targetName: expedition.targetName,
+        departYear, arrivalYear: expedition.arrivalYear, returnYear: null,
+        fuelCost: fuelNeeded,
+        cargo: { ...(cargo ?? {}) },
+      });
+
+      EventBus.emit('expedition:launched', { expedition });
+      return;
+    }
+
+    // ── Standardowy transport (nie trasa handlowa) ──────────────────
+
+    if (!isRedispatch) {
       // Standardowy launch z bazy — wymaga launch_pad i POPów
       const padOk  = this._hasSpaceport();
       const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
@@ -604,7 +682,7 @@ export class ExpeditionSystem {
       returnYear:  departYear + travelTime * 2,
       distance:    parseFloat(distance.toFixed(2)),
       travelTime,
-      crewCost:    isTradeRoute ? 0 : (isRedispatch ? inheritedCrewCost : EXPEDITION_CREW_COST),
+      crewCost:    isRedispatch ? inheritedCrewCost : EXPEDITION_CREW_COST,
       vesselId:    vesselId ?? null,
       originColonyId: vessel?.colonyId ?? colMgr?.activePlanetId,
       cargo:       { ...cargo },
