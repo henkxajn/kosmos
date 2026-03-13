@@ -783,6 +783,9 @@ export class UIManager {
       this._bottomContext.draw(ctx, W, H, this._selectedEntity);
     }
 
+    // ── Przerysuj sidebar nad BottomContext (zawsze na wierzchu) ──
+    if (civMode && !globeOpen) this._drawCivPanel();
+
     // ── BottomBar (stabilność + EventLog + przyciski) ────────
     this._bottomBar.draw(ctx, W, H, {
       stability: this._stability,
