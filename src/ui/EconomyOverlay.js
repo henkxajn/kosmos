@@ -1100,8 +1100,8 @@ export class EconomyOverlay extends BaseOverlay {
     for (const col of colonies) {
       const rs = col.resourceSystem;
       if (!rs?._producers) continue;
-      for (const [pid, p] of rs._producers) {
-        for (const [resId, rate] of Object.entries(p.rates ?? {})) {
+      for (const [pid, rates] of rs._producers) {
+        for (const [resId, rate] of Object.entries(rates)) {
           if (resId === 'energy' || resId === 'research') continue;
           if (!flows[resId]) flows[resId] = { prod: 0, cons: 0 };
           if (rate > 0) flows[resId].prod += rate;

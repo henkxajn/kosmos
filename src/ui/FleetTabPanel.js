@@ -1522,7 +1522,8 @@ export class FleetTabPanel {
 
   _drawActions(ctx, x, y, w, maxH, vessel) {
     const actions = getAvailableActions(vessel, this._buildActionState(vessel));
-    const btnH = 24; const gap = 3;
+    const hasDisabled = actions.some(a => !a.ok && a.reason);
+    const btnH = hasDisabled ? 32 : 24; const gap = 3;
     const cols = 2;
     const btnW = Math.floor((w - gap * (cols - 1)) / cols);
     let row = 0; let col = 0;
@@ -1550,6 +1551,13 @@ export class FleetTabPanel {
           x: bx, y: by, w: btnW, h: btnH,
           type: 'action', data: { actionId: action.id, vesselId: vessel.id },
         });
+      } else if (reason) {
+        // Powód blokady — mała czcionka wewnątrz przycisku (druga linia)
+        ctx.font = `${THEME.fontSizeSmall - 3}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.textAlign = 'center';
+        ctx.fillText(reason, bx + btnW / 2, by + btnH - 2);
+        ctx.textAlign = 'left';
       }
 
       col++;
