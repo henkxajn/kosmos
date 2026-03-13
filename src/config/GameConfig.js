@@ -121,10 +121,27 @@ export const PLANET_TYPE_CONFIG = {
   gas: {
     albedo:        0.35,
     glowColor:     null,
-    // beż/złoto (Jowisz), pomarańcz (Saturn), niebiesko-szary (Uran), różowawy, brązowy, kremowy
-    colorVariants: [0xd4b080, 0xb89060, 0xe8c090, 0xa08850, 0xc8a870,
-                    0xb8c8d8, 0xc8a8a0, 0xd0b0c0, 0x9ab8c0, 0xa8c0b0,
-                    0xe0c8a8, 0xc0a878, 0xd8b898],
+    // Paleta zróżnicowana — inspirowane realnymi egzoplanetami i ciałami Układu Słonecznego
+    // Ciepłe    (~20%): klasyczny Jowisz/Saturn — złoto, beż, karmel
+    // Chłodne   (~25%): Uran/Neptun-like — błękit, teal, akwamaryn
+    // Rdzawe    (~20%): brązowe karły, żelaziste — ceglaste, terakota, rdzawy brąz
+    // Fioletowe (~15%): egzotyczne atmosfery z siarką/jodem — liliowe, śliwkowe
+    // Zielone   (~10%): metan/chlor — oliwkowe, ciemnozielone
+    // Szare     (~10%): chłodne gazowe, chmury amoniakalowe — grafitowe, stalowe
+    colorVariants: [
+      // Ciepłe — Jowisz/Saturn
+      0xd4a860, 0xc89848, 0xe8c070, 0xb88840,
+      // Chłodne — Uran/Neptun
+      0x50a8d0, 0x4090c0, 0x60b8d8, 0x38a0c8, 0x70c0d0,
+      // Rdzawe — brązowe karły, żelaziste atmosfery
+      0xb86040, 0xc87050, 0xa05030, 0xd08060, 0x904028,
+      // Fioletowe — egzotyczne (siarka, jod, fotochemia)
+      0x9060b0, 0xa870c0, 0x7850a0, 0xb880c8, 0x806098,
+      // Zielone — metan, chlor, siarkowodór
+      0x608050, 0x507040, 0x6a9058, 0x486038,
+      // Szare/stalowe — zimne gazowe, chmury amoniakalowe
+      0x7888a0, 0x6878a8, 0x8898b0, 0x586880,
+    ],
     hasRings:      false,
     glowIntensity: 0,
   },
