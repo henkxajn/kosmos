@@ -114,6 +114,17 @@ export class TradeRouteManager {
     _nextRouteId = data.nextRouteId ?? (this._routes.length + 1);
   }
 
+  /**
+   * Kick po restore — sprawdź wszystkie aktywne trasy i spróbuj wysłać
+   * zadokowane statki. Wywoływane z GameScene po pełnym restore.
+   */
+  kickAfterRestore() {
+    for (const route of this._routes) {
+      if (route.status !== 'active') continue;
+      this._tryDispatchOrRefuel(route);
+    }
+  }
+
   // ── Prywatne ───────────────────────────────────────────────
 
   /**

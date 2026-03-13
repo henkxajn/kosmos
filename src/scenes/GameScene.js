@@ -214,6 +214,8 @@ export class GameScene {
       }
       // Migracja starych save: fleet[] ze stringami → vessel instances
       this._migrateStringFleets();
+      // Kick tras handlowych — po restore nie ma vessel:docked, trzeba ręcznie
+      this.tradeRouteManager.kickAfterRestore();
       if (c4x.civ?.unrestActive) {
         this.buildingSystem._civPenalty = 0.7;
         this.buildingSystem._reapplyAllRates();
