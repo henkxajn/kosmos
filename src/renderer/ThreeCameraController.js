@@ -82,6 +82,12 @@ export class ThreeCameraController {
     this._dist += (this._targetDist - this._dist) * 0.08;
     // Płynne przesuwanie celu kamery (śledzenie planety/księżyca)
     this._target.lerp(this._goalTarget, 0.08);
+    // Odzyskaj stan po propagacji NaN (zapobiega trwałemu białemu ekranowi)
+    if (isNaN(this._target.x) || isNaN(this._target.z)) {
+      this._target.set(0, 0, 0);
+      this._goalTarget.set(0, 0, 0);
+      this._dist = this._targetDist = 85;
+    }
     this._applyCamera();
   }
 

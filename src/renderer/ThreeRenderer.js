@@ -954,23 +954,20 @@ export class ThreeRenderer {
   _updateCameraFocus() {
     if (!this._focusEntityId || !this._cameraController) return;
 
+    // Helper: focusOn z guardem NaN
+    const safeFocus = (x, z) => {
+      if (!isNaN(x) && !isNaN(z)) this._cameraController.focusOn(x, z);
+    };
+
     // Sprawdź planety
     const pEntry = this._planets.get(this._focusEntityId);
-    if (pEntry) {
-      this._cameraController.focusOn(pEntry.group.position.x, pEntry.group.position.z);
-      return;
-    }
+    if (pEntry) { safeFocus(pEntry.group.position.x, pEntry.group.position.z); return; }
     // Sprawdź księżyce
     const mEntry = this._moons.get(this._focusEntityId);
-    if (mEntry) {
-      this._cameraController.focusOn(mEntry.mesh.position.x, mEntry.mesh.position.z);
-      return;
-    }
+    if (mEntry) { safeFocus(mEntry.mesh.position.x, mEntry.mesh.position.z); return; }
     // Sprawdź planetoidy
     const pdEntry = this._planetoids.get(this._focusEntityId);
-    if (pdEntry) {
-      this._cameraController.focusOn(pdEntry.mesh.position.x, pdEntry.mesh.position.z);
-    }
+    if (pdEntry) { safeFocus(pdEntry.mesh.position.x, pdEntry.mesh.position.z); }
   }
 
   // ── Synchronizacja pozycji planet i księżyców ─────────────────
@@ -1061,6 +1058,8 @@ export class ThreeRenderer {
     planets.forEach(planet => {
       const entry = this._planets.get(planet.id);
       if (!entry) return;
+      // Guard NaN z fizyki — zapobiega propagacji do kamery → biały ekran
+      if (isNaN(planet.x) || isNaN(planet.y)) return;
       entry.group.position.set(S(planet.x), 0, S(planet.y));
       entry.mesh.rotation.y += 0.003;
 
@@ -1092,6 +1091,7 @@ export class ThreeRenderer {
     moons.forEach(moon => {
       const entry = this._moons.get(moon.id);
       if (!entry) return;
+      if (isNaN(moon.x) || isNaN(moon.y)) return;
       entry.mesh.position.set(S(moon.x), 0, S(moon.y));
     });
 
@@ -1577,7 +1577,7 @@ export class ThreeRenderer {
     const planetoids = EntityManager.getByType('planetoid');
     planetoids.forEach(p => {
       const entry = this._planetoids.get(p.id);
-      if (entry) {
+      if (entry && !isNaN(p.x) && !isNaN(p.y)) {
         entry.mesh.position.set(S(p.x), 0, S(p.y));
       }
     });
