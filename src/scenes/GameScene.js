@@ -208,6 +208,8 @@ export class GameScene {
       if (c4x.vesselManager) {
         this.vesselManager.restore(c4x.vesselManager);
       }
+      // Walidacja misji — teraz VesselManager jest przywrócony, można sprawdzić statki
+      this.expeditionSystem.validateMissions();
       // Przywróć TradeRouteManager
       if (c4x.tradeRouteManager) {
         this.tradeRouteManager.restore(c4x.tradeRouteManager);

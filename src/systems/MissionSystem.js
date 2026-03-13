@@ -298,14 +298,8 @@ export class MissionSystem {
     this._missions = data.missions ?? data.expeditions ?? [];
     this._nextId   = data.nextId ?? (this._missions.length + 1);
 
-    // Walidacja: usuń misje z nieistniejącymi statkami
-    const vMgr = window.KOSMOS?.vesselManager;
-    if (vMgr) {
-      this._missions = this._missions.filter(exp => {
-        if (!exp.vesselId) return false;
-        return !!vMgr.getVessel(exp.vesselId);
-      });
-    }
+    // UWAGA: walidacja statków odroczona do validateMissions() — VesselManager
+    // może nie być jeszcze przywrócony w momencie wywołania restore().
 
     // Przywróć visitCounts
     this._visitCounts.clear();
@@ -317,6 +311,19 @@ export class MissionSystem {
 
     // POPy blokowane przy budowie statku (ColonyManager) — nie przy starcie misji
     // lockedPops przywracane z save CivilizationSystem
+  }
+
+  /**
+   * Walidacja misji po pełnym restore (VesselManager musi być przywrócony).
+   * Wywołaj z GameScene PO vesselManager.restore().
+   */
+  validateMissions() {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return;
+    this._missions = this._missions.filter(exp => {
+      if (!exp.vesselId) return false;
+      return !!vMgr.getVessel(exp.vesselId);
+    });
   }
 
   // ── Prywatne ──────────────────────────────────────────────────────────────
