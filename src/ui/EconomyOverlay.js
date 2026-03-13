@@ -10,6 +10,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES, ALL_RESOURCES }
                          from '../data/ResourcesData.js';
 import { COMMODITIES, formatRecipe, COMMODITY_BY_TIER }
                          from '../data/CommoditiesData.js';
+import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 
@@ -44,6 +45,157 @@ export class EconomyOverlay extends BaseOverlay {
     this._selectedColonyId = null; // null = globalny, string = konkretna kolonia
     this._scrollCenterTop = 0;     // scroll przeglądu produkcji
     this._scrollCenterBot = 0;     // scroll zarządzania produkcją
+
+    // Tooltip DOM (hover na wierszach surowców/towarów)
+    this._hoverResourceId = null;
+    this._mouseScreenX = 0;
+    this._mouseScreenY = 0;
+    this._createTooltipEl();
+  }
+
+  // ── Tooltip DOM ─────────────────────────────────────────────────────────
+
+  hide() {
+    super.hide();
+    this._hoverResourceId = null;
+    this._hideTooltip();
+  }
+
+  _createTooltipEl() {
+    if (this._tooltipEl) return;
+    const el = document.createElement('div');
+    el.id = 'economy-tooltip';
+    el.style.cssText = `
+      position: fixed; z-index: 200; pointer-events: none;
+      display: none; max-width: 340px; padding: 8px 10px;
+      background: rgba(6,12,20,0.96); border: 1px solid ${THEME.borderActive};
+      border-radius: 4px; font-family: 'Courier New', monospace;
+      font-size: 11px; color: ${THEME.textSecondary}; line-height: 1.5;
+    `;
+    document.body.appendChild(el);
+    this._tooltipEl = el;
+  }
+
+  _showTooltip() {
+    if (!this._hoverResourceId || !this._tooltipEl) {
+      this._hideTooltip();
+      return;
+    }
+    const html = this._buildResourceTooltip(this._hoverResourceId);
+    if (!html) { this._hideTooltip(); return; }
+
+    this._tooltipEl.innerHTML = html;
+    this._tooltipEl.style.display = 'block';
+
+    // Pozycjonowanie — obok kursora, nie wychodząc poza ekran
+    const rect = this._tooltipEl.getBoundingClientRect();
+    let tx = this._mouseScreenX + 16;
+    let ty = this._mouseScreenY - 8;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    if (tx + rect.width > W - 10) tx = this._mouseScreenX - rect.width - 12;
+    if (ty + rect.height > H - 10) ty = H - rect.height - 10;
+    if (ty < 4) ty = 4;
+    if (tx < 4) tx = 4;
+
+    this._tooltipEl.style.left = `${Math.round(tx)}px`;
+    this._tooltipEl.style.top  = `${Math.round(ty)}px`;
+  }
+
+  _hideTooltip() {
+    if (this._tooltipEl) this._tooltipEl.style.display = 'none';
+  }
+
+  _buildResourceTooltip(resourceId) {
+    // Określ źródło danych: per-kolonia lub globalne
+    const colMgr = window.KOSMOS?.colonyManager;
+    const selCol = this._selectedColonyId
+      ? colMgr?.getColony(this._selectedColonyId) : null;
+    const colonies = colMgr?.getAllColonies() ?? [];
+    const sourceColonies = selCol ? [selCol] : colonies;
+
+    // Szukaj definicji zasobu/towaru
+    const resDef = ALL_RESOURCES[resourceId];
+    const comDef = COMMODITIES[resourceId];
+    const def = resDef || comDef;
+    if (!def) return '';
+
+    const icon = def.icon ?? '·';
+    const name = def.namePL ?? resourceId;
+
+    // Zbierz ilość i stawkę (jak _drawLeft)
+    let totalAmt = 0;
+    let totalRate = 0;
+    for (const col of sourceColonies) {
+      const rs = col.resourceSystem;
+      if (!rs) continue;
+      totalAmt += rs.inventory?.get(resourceId) ?? 0;
+      const observed = rs._deltaTracker?.observedPerYear;
+      if (observed?.size > 0) {
+        totalRate += observed.get(resourceId) ?? 0;
+      } else if (rs._inventoryPerYear) {
+        totalRate += rs._inventoryPerYear.get(resourceId) ?? 0;
+      }
+    }
+
+    // Zbierz breakdown ze wszystkich źródłowych kolonii
+    const allProducers = {};
+    const allConsumers = {};
+    for (const col of sourceColonies) {
+      const rs = col.resourceSystem;
+      if (!rs) continue;
+      const bd = rs.getResourceBreakdown(resourceId);
+      for (const [type, g] of Object.entries(bd.producers)) {
+        if (!allProducers[type]) allProducers[type] = { total: 0, count: 0 };
+        allProducers[type].total += g.total;
+        allProducers[type].count += g.count;
+      }
+      for (const [type, g] of Object.entries(bd.consumers)) {
+        if (!allConsumers[type]) allConsumers[type] = { total: 0, count: 0 };
+        allConsumers[type].total += g.total;
+        allConsumers[type].count += g.count;
+      }
+    }
+
+    // Buduj HTML
+    const lines = [];
+    lines.push(`<div style="font-weight:bold;color:${THEME.accent}">${icon} ${name}</div>`);
+    lines.push(`<div>Ilość: ${_fmtAmt(totalAmt)}</div>`);
+
+    const rateColor = totalRate > 0 ? THEME.success : totalRate < 0 ? THEME.danger : THEME.textDim;
+    const rateSign = totalRate > 0 ? '+' : '';
+    lines.push(`<div style="color:${rateColor}">Bilans: ${rateSign}${totalRate.toFixed(1)}/rok</div>`);
+
+    // Producenci
+    const prodKeys = Object.keys(allProducers);
+    if (prodKeys.length > 0) {
+      lines.push(`<div style="color:${THEME.textDim};margin-top:4px">─── Producenci ───</div>`);
+      for (const type of prodKeys) {
+        const g = allProducers[type];
+        const { icon: bIcon, name: bName } = _resolveTypeName(type);
+        const cnt = g.count > 1 ? ` ×${g.count}` : '';
+        lines.push(`<div style="color:${THEME.success}">${bIcon} ${bName}${cnt}  +${g.total.toFixed(1)}/r</div>`);
+      }
+    }
+
+    // Konsumenci
+    const consKeys = Object.keys(allConsumers);
+    if (consKeys.length > 0) {
+      lines.push(`<div style="color:${THEME.textDim};margin-top:4px">─── Konsumenci ───</div>`);
+      for (const type of consKeys) {
+        const g = allConsumers[type];
+        const { icon: bIcon, name: bName } = _resolveTypeName(type);
+        const cnt = g.count > 1 ? ` ×${g.count}` : '';
+        const val = Math.abs(g.total).toFixed(1);
+        lines.push(`<div style="color:${THEME.danger}">${bIcon} ${bName}${cnt}  -${val}/r</div>`);
+      }
+    }
+
+    if (prodKeys.length === 0 && consKeys.length === 0) {
+      lines.push(`<div style="color:${THEME.textDim};margin-top:4px">Brak aktywnych producentów/konsumentów</div>`);
+    }
+
+    return lines.join('');
   }
 
   // ── Główna metoda rysowania ──────────────────────────────────────────────
@@ -235,13 +387,20 @@ export class EconomyOverlay extends BaseOverlay {
       const amt = globalInv[res.id] ?? 0;
       const rate = globalRate[res.id] ?? 0;
 
+      // Highlight wiersza pod kursorem
+      const isHovered = this._hoverResourceId === res.id;
+      if (isHovered) {
+        ctx.fillStyle = 'rgba(0,255,180,0.06)';
+        ctx.fillRect(x, ry, w, ROW_H);
+      }
+
       // Ikona
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
       ctx.fillText(res.icon ?? '·', x + pad, ry + 15);
 
       // Nazwa (skrócona)
-      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillStyle = isHovered ? THEME.accent : THEME.textSecondary;
       ctx.fillText((res.namePL ?? res.id).slice(0, 10), x + 30, ry + 15);
 
       // Ilość
@@ -257,6 +416,9 @@ export class EconomyOverlay extends BaseOverlay {
       ctx.fillStyle = rateColor;
       const rateStr = rate > 0 ? `+${rate.toFixed(1)}` : rate < 0 ? rate.toFixed(1) : '0';
       ctx.fillText(rateStr, x + 155, ry + 15);
+
+      // Hit zone do tooltipa
+      this._addHit(x, ry, w, ROW_H, 'resource_hover', { resourceId: res.id });
 
       ry += ROW_H;
     }
@@ -1379,8 +1541,34 @@ export class EconomyOverlay extends BaseOverlay {
   }
 
   handleMouseMove(x, y) {
-    if (!this.visible) return;
+    if (!this.visible) {
+      this._hoverResourceId = null;
+      this._hideTooltip();
+      return;
+    }
     this._hoverZone = this._hitTest(x, y);
+
+    // Pozycja myszy w pikselach ekranowych (do pozycjonowania tooltipa)
+    const scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    this._mouseScreenX = x * scale;
+    this._mouseScreenY = y * scale;
+
+    // Sprawdź hover na wierszu surowca/towaru
+    if (this._hoverZone?.type === 'resource_hover') {
+      const rid = this._hoverZone.data.resourceId;
+      if (this._hoverResourceId !== rid) {
+        this._hoverResourceId = rid;
+        this._showTooltip();
+      } else {
+        // Tylko aktualizuj pozycję
+        this._showTooltip();
+      }
+    } else {
+      if (this._hoverResourceId) {
+        this._hoverResourceId = null;
+        this._hideTooltip();
+      }
+    }
   }
 
   handleScroll(delta, x, y) {
@@ -1425,6 +1613,16 @@ export class EconomyOverlay extends BaseOverlay {
     }
     return true;
   }
+}
+
+// ── Rozwiąż nazwę i ikonę typu producenta/konsumenta ──────────────────────
+function _resolveTypeName(type) {
+  if (type === 'pop_consumption') return { icon: '👥', name: 'Konsumpcja POPów' };
+  if (type === 'prosperity_consumption') return { icon: '🏠', name: 'Dobra konsumpcyjne' };
+  if (type === 'factory') return { icon: '🏭', name: 'Fabryki' };
+  if (type === 'mine') return { icon: '⛏', name: 'Kopalnia' };
+  const def = BUILDINGS[type];
+  return { icon: def?.icon ?? '?', name: def?.namePL ?? type };
 }
 
 // ── Formatowanie ilości ───────────────────────────────────────────────────
