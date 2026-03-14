@@ -15,7 +15,7 @@ const SS_THEMES = [
     sunGrad: 'radial-gradient(circle at 35% 35%, #ffe090, #c49830, #8a6010)',
     sunGlow: '#c4983025',
     planets: ['#b06040', '#5888a8', '#c8a050', '#9060a8'],
-    presetKey: 'ss_amber_noir',
+    presetKey: 'ambient_1',
   },
   {
     id: 'cold_blue', label: 'COLD BLUE', dot: '#4090c0',
@@ -23,7 +23,7 @@ const SS_THEMES = [
     sunGrad: 'radial-gradient(circle at 35% 35%, #e0f0ff, #60a8d8, #2060a0)',
     sunGlow: '#4090c025',
     planets: ['#c07040', '#78a870', '#4090c0', '#2870b8'],
-    presetKey: 'ss_cold_blue',
+    presetKey: 'ambient_2',
   },
   {
     id: 'galactic_violet', label: 'GALACTIC VIOLET', dot: '#a060b0',
@@ -31,7 +31,7 @@ const SS_THEMES = [
     sunGrad: 'radial-gradient(circle at 35% 35%, #f0d0ff, #c080e0, #6030a0)',
     sunGlow: '#a060c025',
     planets: ['#c07050', '#6898a8', '#a060c0', '#7040a0'],
-    presetKey: 'ss_galactic_violet',
+    presetKey: 'ambient_3',
   },
   {
     id: 'biopunk_green', label: 'BIOPUNK GREEN', dot: '#508050',
@@ -39,7 +39,7 @@ const SS_THEMES = [
     sunGrad: 'radial-gradient(circle at 35% 35%, #d0ffe0, #60c080, #208040)',
     sunGlow: '#50a06025',
     planets: ['#b86040', '#50a060', '#38a870', '#2890b8'],
-    presetKey: 'ss_biopunk_green',
+    presetKey: 'ambient_4',
   },
 ];
 
@@ -165,7 +165,7 @@ export class TitleScene {
       <div class="ss-scanlines"></div>
       <div class="ss-vignette"></div>
       <div class="ss-noise"></div>
-      <div class="ss-sweep"></div>
+      <!-- sweep usunięty -->
       <div class="ss-stars"></div>
 
       <div class="ss-topbar">
