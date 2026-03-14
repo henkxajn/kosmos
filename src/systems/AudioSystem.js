@@ -4,7 +4,7 @@
 // Muzyka: plik MP3 z assets/sounds/ ładowany i odtwarzany w pętli
 //
 // Inicjalizacja: AudioContext tworzony LAZILY (przy pierwszym call)
-//   → wymóg Chrome autoplay policy (kontekst musi być z gestem użytkownika)
+//   → wymóg Chrome/Edge autoplay policy (kontekst musi być z gestem użytkownika)
 //
 // Dwa osobne kanały:
 //   _masterGain  → efekty dźwiękowe (toggle: [DZW])
@@ -38,6 +38,7 @@ export class AudioSystem {
     this._musicLoaded  = false; // czy plik załadowany
     this._musicLoading = false; // guard — trwa ładowanie (zapobiega wielokrotnemu fetch)
     this._musicPlaying = false; // czy gra
+    this._musicPausedByGame = false; // czy wyciszony przez pauzę gry
 
     // ── Subskrypcje ──────────────────────────────────────────────
     EventBus.on('body:collision', ({ type }) => {
@@ -65,16 +66,20 @@ export class AudioSystem {
     EventBus.on('audio:toggle', () => this.toggle());
     EventBus.on('music:toggle', () => this.toggleMusic());
 
-    // Muzyka pauzuje się razem z grą
+    // Muzyka wyciszana przy pauzie gry, wznawiana przy play
     EventBus.on('time:stateChanged', ({ isPaused }) => {
-      if (isPaused && this._musicPlaying && this._ctx) {
+      if (!this._musicPlaying || !this._musicEnabled || !this._ctx || !this._musicGain) return;
+      const now = this._ctx.currentTime;
+      if (isPaused && !this._musicPausedByGame) {
         // Fade-out przy pauzie
-        const now = this._ctx.currentTime;
-        this._musicGain.gain.setValueAtTime(this._musicGain.gain.value || 0.001, now);
+        this._musicPausedByGame = true;
+        this._musicGain.gain.cancelScheduledValues(now);
+        this._musicGain.gain.setValueAtTime(this._musicGain.gain.value, now);
         this._musicGain.gain.exponentialRampToValueAtTime(0.001, now + MUSIC_FADE_OUT);
-      } else if (!isPaused && this._musicPlaying && this._musicEnabled && this._ctx) {
+      } else if (!isPaused && this._musicPausedByGame) {
         // Fade-in przy wznowieniu
-        const now = this._ctx.currentTime;
+        this._musicPausedByGame = false;
+        this._musicGain.gain.cancelScheduledValues(now);
         this._musicGain.gain.setValueAtTime(0.001, now);
         this._musicGain.gain.exponentialRampToValueAtTime(this._musicVolume, now + MUSIC_FADE_IN);
       }
@@ -99,8 +104,10 @@ export class AudioSystem {
       this._musicGain.gain.value = this._musicEnabled ? this._musicVolume : 0;
       this._musicGain.connect(this._ctx.destination);
 
+      console.log('[AudioSystem] AudioContext utworzony, state:', this._ctx.state);
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('[AudioSystem] Nie udało się utworzyć AudioContext:', err);
       return false;
     }
   }
@@ -132,8 +139,9 @@ export class AudioSystem {
   // ── Mute / unmute muzyki ───────────────────────────────────
   toggleMusic() {
     this._musicEnabled = !this._musicEnabled;
-    if (this._musicGain) {
+    if (this._musicGain && this._ctx) {
       const now = this._ctx.currentTime;
+      this._musicGain.gain.cancelScheduledValues(now);
       if (this._musicEnabled) {
         // Fade-in
         this._musicGain.gain.setValueAtTime(0.001, now);
@@ -156,37 +164,51 @@ export class AudioSystem {
 
   // ── Ładowanie i odtwarzanie muzyki ─────────────────────────
 
-  /** Załaduj plik muzyczny i zacznij grać w pętli */
-  async startMusic(trackId = 'main') {
-    if (!this._ensureContext()) return;
+  /** Preloaduj muzykę (bez odtwarzania) — wywołaj z gestem użytkownika */
+  async preloadMusic(trackId = 'main') {
+    if (!this._ensureContext()) return false;
 
-    // Wznów suspended context (Chrome autoplay policy)
+    // Wznów suspended context (autoplay policy)
     if (this._ctx.state === 'suspended') {
       await this._ctx.resume();
     }
 
-    // Jeśli już gra lub trwa ładowanie — ignoruj
-    if (this._musicPlaying || this._musicLoading) return;
+    if (this._musicLoaded || this._musicLoading) return this._musicLoaded;
 
-    // Załaduj jeśli jeszcze nie załadowane
-    if (!this._musicLoaded) {
-      this._musicLoading = true;
-      const path = MUSIC_TRACKS[trackId];
-      if (!path) { console.warn(`[AudioSystem] Brak ścieżki muzycznej: ${trackId}`); return; }
-
-      try {
-        const response = await fetch(path);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const arrayBuffer = await response.arrayBuffer();
-        this._musicBuffer = await this._ctx.decodeAudioData(arrayBuffer);
-        this._musicLoaded = true;
-        console.log(`[AudioSystem] Muzyka załadowana: ${path} (${this._musicBuffer.duration.toFixed(1)}s)`);
-      } catch (err) {
-        console.warn('[AudioSystem] Nie udało się załadować muzyki:', err);
-        this._musicLoading = false;
-        return;
-      }
+    this._musicLoading = true;
+    const path = MUSIC_TRACKS[trackId];
+    if (!path) {
+      console.warn(`[AudioSystem] Brak ścieżki muzycznej: ${trackId}`);
       this._musicLoading = false;
+      return false;
+    }
+
+    try {
+      console.log(`[AudioSystem] Ładowanie muzyki: ${path}...`);
+      const response = await fetch(path);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const arrayBuffer = await response.arrayBuffer();
+      this._musicBuffer = await this._ctx.decodeAudioData(arrayBuffer);
+      this._musicLoaded = true;
+      this._musicLoading = false;
+      console.log(`[AudioSystem] Muzyka załadowana: ${path} (${this._musicBuffer.duration.toFixed(1)}s)`);
+      return true;
+    } catch (err) {
+      console.warn('[AudioSystem] Nie udało się załadować muzyki:', err);
+      this._musicLoading = false;
+      return false;
+    }
+  }
+
+  /** Załaduj plik muzyczny i zacznij grać w pętli */
+  async startMusic(trackId = 'main') {
+    // Jeśli już gra — ignoruj
+    if (this._musicPlaying) return;
+
+    // Załaduj jeśli trzeba
+    if (!this._musicLoaded) {
+      const ok = await this.preloadMusic(trackId);
+      if (!ok) return;
     }
 
     if (this._musicEnabled) {
@@ -196,11 +218,16 @@ export class AudioSystem {
 
   /** Wewnętrzne: uruchom playback (loop) */
   _startMusicPlayback() {
-    if (!this._musicBuffer || !this._musicGain) return;
+    if (!this._musicBuffer || !this._musicGain || !this._ctx) return;
 
     // Zatrzymaj poprzedni source jeśli istnieje
     if (this._musicSource) {
       try { this._musicSource.stop(); } catch { /* ignoruj */ }
+    }
+
+    // Wznów suspended context
+    if (this._ctx.state === 'suspended') {
+      this._ctx.resume();
     }
 
     const source = this._ctx.createBufferSource();
@@ -210,18 +237,22 @@ export class AudioSystem {
 
     // Fade-in od ciszy
     const now = this._ctx.currentTime;
+    this._musicGain.gain.cancelScheduledValues(now);
     this._musicGain.gain.setValueAtTime(0.001, now);
     this._musicGain.gain.exponentialRampToValueAtTime(this._musicVolume, now + MUSIC_FADE_IN);
 
     source.start(0);
     this._musicSource = source;
     this._musicPlaying = true;
+    this._musicPausedByGame = false;
+    console.log('[AudioSystem] ▶ Muzyka uruchomiona');
   }
 
   /** Zatrzymaj muzykę z fade-out */
   stopMusic() {
     if (!this._musicPlaying || !this._musicSource || !this._ctx) return;
     const now = this._ctx.currentTime;
+    this._musicGain.gain.cancelScheduledValues(now);
     this._musicGain.gain.setValueAtTime(this._musicGain.gain.value || 0.001, now);
     this._musicGain.gain.exponentialRampToValueAtTime(0.001, now + MUSIC_FADE_OUT);
 
@@ -232,6 +263,8 @@ export class AudioSystem {
 
     this._musicSource = null;
     this._musicPlaying = false;
+    this._musicPausedByGame = false;
+    console.log('[AudioSystem] ⏹ Muzyka zatrzymana');
   }
 
   // ── Prymitywy dźwiękowe ──────────────────────────────────────
