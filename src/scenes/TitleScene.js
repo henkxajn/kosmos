@@ -357,19 +357,25 @@ export class TitleScene {
 
       /* ── Theme picker ── */
       .ss-theme-picker {
-        display: flex; gap: 10px; align-items: center;
+        display: flex; gap: 14px; align-items: center;
+        padding: 4px 12px;
+        border: 1px solid var(--bdr);
+        border-radius: 20px;
       }
       .ss-theme-dot {
-        width: 10px; height: 10px; border-radius: 50%; border: none; padding: 0;
-        background: var(--dot-color); opacity: 0.35; cursor: pointer;
+        width: 14px; height: 14px; border-radius: 50%;
+        border: 2px solid transparent; padding: 0;
+        background: var(--dot-color); opacity: 0.5; cursor: pointer;
         transition: all 0.25s; box-shadow: none;
       }
       .ss-theme-dot:hover {
-        opacity: 0.7; transform: scale(1.3);
+        opacity: 0.85; transform: scale(1.3);
+        box-shadow: 0 0 10px var(--dot-color);
       }
       .ss-theme-dot.active {
         opacity: 1; transform: scale(1.4);
-        box-shadow: 0 0 8px var(--dot-color);
+        box-shadow: 0 0 12px var(--dot-color);
+        border-color: var(--dot-color);
       }
 
       /* ── Center (uklad sloneczny) ── */
