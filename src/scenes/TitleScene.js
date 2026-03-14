@@ -109,9 +109,7 @@ export class TitleScene {
     const glow = el.querySelector('.ss-sun-glow');
     if (glow) glow.style.background = `radial-gradient(circle, ${theme.sunGlow} 0%, transparent 70%)`;
 
-    // Sweep
-    const sweep = el.querySelector('.ss-sweep');
-    if (sweep) sweep.style.background = `linear-gradient(180deg, transparent, ${theme.acc}10, transparent)`;
+    // Sweep usunięty
 
     // Planety
     el.querySelectorAll('.ss-planet').forEach((p, i) => {
@@ -335,11 +333,7 @@ export class TitleScene {
         background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)'/%3E%3C/svg%3E");
         background-size: 200px 200px;
       }
-      .ss-sweep {
-        position: absolute; left: 0; right: 0; height: 100px; pointer-events: none; z-index: 47;
-        animation: ss-sweep 12s linear infinite;
-      }
-      @keyframes ss-sweep { 0%{top:-100px} 100%{top:100%} }
+      /* sweep usunięty */
 
       /* ── Gwiazdy ── */
       .ss-stars { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
