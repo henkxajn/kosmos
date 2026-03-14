@@ -13,6 +13,7 @@ import { RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { showRenameModal } from '../ui/ModalInput.js';
 import EventBus            from '../core/EventBus.js';
 import { CIV_SIDEBAR_W }  from '../ui/CivPanelDrawer.js';
+import { t }              from '../i18n/i18n.js';
 
 const CTX_H   = COSMIC.BOTTOM_CTX_H; // 120px
 const BAR_H   = COSMIC.BOTTOM_BAR_H; // 30px
@@ -49,10 +50,9 @@ function _truncate(str, maxLen) {
 // Formatuj atmosferę z etykietą PL + info o zdatności do życia
 function _formatAtmosphere(entity) {
   const atm = entity.atmosphere || 'none';
-  const labels = { dense: 'Gęsta', thin: 'Cienka', breathable: 'Oddychalna', none: 'Brak' };
-  const label = labels[atm] || atm;
-  if (atm === 'breathable') return label + ' (zdatna)';
-  if (entity.breathableAtmosphere) return label + ' (zdatna)';
+  const label = t(`atmosphere.${atm}`);
+  if (atm === 'breathable') return label + ' ' + t('atmosphere.habitable');
+  if (entity.breathableAtmosphere) return label + ' ' + t('atmosphere.habitable');
   return label;
 }
 
@@ -167,7 +167,7 @@ export class BottomContext {
       if (window.KOSMOS?.civMode && homePl && entity !== homePl) {
         const dist = DistanceUtils.fromHomePlanetAU(entity);
         ctx.fillStyle = dist > 15 ? C.orange : C.text;
-        ctx.fillText(`Odl: ${dist.toFixed(2)} AU`, x + PAD, ly);
+        ctx.fillText(t('ui.distShort', dist.toFixed(2)), x + PAD, ly);
       }
     }
   }
@@ -179,7 +179,7 @@ export class BottomContext {
     // Zakładki
     const tabs = ['orbit', 'physics'];
     if (entity.composition) tabs.push('composition');
-    const tabLabels = { orbit: 'ORBITA', physics: 'FIZYKA', composition: 'SKŁAD' };
+    const tabLabels = { orbit: t('context.orbit'), physics: t('context.physics'), composition: t('context.composition') };
     const tabW = Math.floor((w - PAD * 2) / tabs.length);
 
     tabs.forEach((tab, i) => {
@@ -235,9 +235,9 @@ export class BottomContext {
     // Przycisk akcji
     let actionLabel = null;
     if (!civMode && entity.type === 'planet' && (entity.lifeScore ?? 0) > 80) {
-      actionLabel = '► Przejmij cywilizację';
+      actionLabel = t('context.takeCiv');
     } else if (civMode && (isHome || colMgr?.hasColony(entity.id))) {
-      actionLabel = '► Mapa planety';
+      actionLabel = t('context.openMap');
     }
 
     if (actionLabel) {
@@ -261,7 +261,7 @@ export class BottomContext {
     if (deposits.length > 0 && (entity.explored || !civMode || isHome)) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.label;
-      ctx.fillText('ZŁOŻA:', x + PAD, ly);
+      ctx.fillText(t('ui.deposits'), x + PAD, ly);
       ly += 12;
       const colW = Math.floor((w - PAD * 2) / 2); // szerokość kolumny
       const useTwoCols = deposits.length > 5;
@@ -290,11 +290,11 @@ export class BottomContext {
     if (tab === 'orbit' && entity.orbital) {
       const orb = entity.orbital;
       return [
-        { k: 'Orbita', v: `${orb.a.toFixed(3)} AU` },
-        { k: 'Mimośród', v: orb.e.toFixed(3) },
-        { k: 'Okres', v: `${orb.T.toFixed(2)} lat` },
-        { k: 'Stabilność', v: `${Math.round((entity.orbitalStability || 1) * 100)}%` },
-        { k: 'Wiek', v: `${Math.floor(entity.age || 0).toLocaleString()} lat` },
+        { k: t('context.orbitLabel'), v: `${orb.a.toFixed(3)} AU` },
+        { k: t('context.eccentricity'), v: orb.e.toFixed(3) },
+        { k: t('context.period'), v: `${orb.T.toFixed(2)} lat` },
+        { k: t('context.stability'), v: `${Math.round((entity.orbitalStability || 1) * 100)}%` },
+        { k: t('context.age'), v: `${Math.floor(entity.age || 0).toLocaleString()} lat` },
       ];
     }
 
@@ -302,23 +302,23 @@ export class BottomContext {
       const homePl = window.KOSMOS?.homePlanet;
       if (window.KOSMOS?.civMode && entity !== homePl && !entity.explored) {
         return [
-          { k: 'Masa', v: `${(entity.physics?.mass || 0).toFixed(2)} M⊕` },
-          { k: 'Typ', v: entity.planetType || '—' },
-          { k: 'Temp', v: '???', vc: C.orange },
-          { k: 'Atm', v: '???', vc: C.orange },
-          { k: 'Życie', v: '??? (wymaga rozpoznania)', vc: C.orange },
+          { k: t('context.mass'), v: `${(entity.physics?.mass || 0).toFixed(2)} M⊕` },
+          { k: t('context.type'), v: entity.planetType || '—' },
+          { k: t('context.temp'), v: '???', vc: C.orange },
+          { k: t('context.atm'), v: '???', vc: C.orange },
+          { k: t('context.life'), v: t('ui.unexplored'), vc: C.orange },
         ];
       }
       const ls = entity.lifeScore || 0;
-      const lifeLabel = ls <= 0 ? 'Jałowa' :
-        ls <= 20 ? 'Chemia prebiotyczna' :
-        ls <= 50 ? 'Mikroorganizmy' :
-        ls <= 80 ? 'Złożone życie' : 'Cywilizacja';
+      const lifeLabel = ls <= 0 ? t('life.barren') :
+        ls <= 20 ? t('life.prebiotic') :
+        ls <= 50 ? t('life.microorganisms') :
+        ls <= 80 ? t('life.complex') : t('life.civilization');
       return [
-        { k: 'Masa', v: `${(entity.physics?.mass || 0).toFixed(2)} M⊕` },
-        { k: 'Temp', v: (entity.temperatureC != null || entity.temperatureK != null) ? `${Math.round(entity.temperatureC ?? (entity.temperatureK - 273))} °C` : '—' },
-        { k: 'Atm', v: _formatAtmosphere(entity) },
-        { k: 'Życie', v: `${Math.round(ls)}%  ${lifeLabel}`,
+        { k: t('context.mass'), v: `${(entity.physics?.mass || 0).toFixed(2)} M⊕` },
+        { k: t('context.temp'), v: (entity.temperatureC != null || entity.temperatureK != null) ? `${Math.round(entity.temperatureC ?? (entity.temperatureK - 273))} °C` : '—' },
+        { k: t('context.atm'), v: _formatAtmosphere(entity) },
+        { k: t('context.life'), v: `${Math.round(ls)}%  ${lifeLabel}`,
           vc: ls > 80 ? C.yellow : ls > 0 ? C.green : C.text },
       ];
     }
@@ -326,7 +326,7 @@ export class BottomContext {
     if (tab === 'composition' && entity.composition) {
       const homePl = window.KOSMOS?.homePlanet;
       if (window.KOSMOS?.civMode && entity !== homePl && !entity.explored) {
-        return [{ k: 'Skład', v: '??? (wymaga rozpoznania)', vc: C.orange }];
+        return [{ k: t('context.composition'), v: t('ui.unexplored'), vc: C.orange }];
       }
       const entries = Object.entries(entity.composition)
         .filter(([, v]) => v > 0)
@@ -338,7 +338,7 @@ export class BottomContext {
       }));
     }
 
-    return [{ k: 'Typ', v: entity.type || '—' }];
+    return [{ k: t('context.type'), v: entity.type || '—' }];
   }
 
   // ── Hit testing ──────────────────────────────────────────

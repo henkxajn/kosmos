@@ -21,17 +21,18 @@ import EventBus from '../core/EventBus.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES, ALL_RESOURCES }
   from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
+import { t } from '../i18n/i18n.js';
 
 // ── Jak często emitujemy resource:changed (co ile lat gry) ─────────────────
 const EMIT_THROTTLE_YEARS = 1 / 365.25; // co dzień gry
 
 // ── Stare klucze zasobów (do kompatybilności z istniejącym kodem) ──────────
 export const RESOURCE_DEFS = {
-  minerals: { namePL: 'Minerały', icon: '⛏', color: 0x8B7355 },
-  energy:   { namePL: 'Energia',  icon: '⚡', color: 0xFFD700 },
-  organics: { namePL: 'Organika', icon: '🌿', color: 0x44AA44 },
-  water:    { namePL: 'Woda',     icon: '💧', color: 0x4488FF },
-  research: { namePL: 'Nauka',    icon: '🔬', color: 0xAA44FF },
+  minerals: { get namePL() { return t('resource.minerals'); }, icon: '⛏', color: 0x8B7355 },
+  energy:   { get namePL() { return t('resource.energy'); },   icon: '⚡', color: 0xFFD700 },
+  organics: { get namePL() { return t('resource.organics'); }, icon: '🌿', color: 0x44AA44 },
+  water:    { get namePL() { return t('resource.water'); },    icon: '💧', color: 0x4488FF },
+  research: { get namePL() { return t('resource.research'); }, icon: '🔬', color: 0xAA44FF },
 };
 
 export class ResourceSystem {

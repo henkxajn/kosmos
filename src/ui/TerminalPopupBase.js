@@ -5,6 +5,7 @@
 // Używany przez MissionEventModal i EventChoiceModal.
 
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import { t }              from '../i18n/i18n.js';
 
 // ── Inline SVG ikony (monochrome, currentColor) ─────────────────────
 
@@ -130,7 +131,7 @@ export function getSeverityConfig(severity) {
       panelClass:   'at-flicker',
       fanfare:      false,
       defaultSvg:   'alert',
-      defaultLabel: 'ALARM',
+      defaultLabel: t('terminal.alarm'),
       sweepColor:   THEME.danger,
     },
     success: {
@@ -143,21 +144,21 @@ export function getSeverityConfig(severity) {
       panelClass:   '',
       fanfare:      false,
       defaultSvg:   'colony',
-      defaultLabel: 'OK',
+      defaultLabel: t('terminal.ok'),
       sweepColor:   THEME.success,
     },
     info: {
-      borderColor:  THEME.warning,
-      accentColor:  THEME.warning,
-      barBg:        THEME.warning,
+      borderColor:  THEME.accent,
+      accentColor:  THEME.accent,
+      barBg:        THEME.accent,
       barClass:     '',
       barTextColor: darkText,
-      glowShadow:   `0 0 20px ${_rgba(THEME.warning, 0.08)}`,
+      glowShadow:   `0 0 20px ${_rgba(THEME.accent, 0.08)}`,
       panelClass:   '',
       fanfare:      false,
       defaultSvg:   'report',
-      defaultLabel: 'INFO',
-      sweepColor:   THEME.warning,
+      defaultLabel: t('terminal.info'),
+      sweepColor:   THEME.accent,
     },
     discovery: {
       borderColor:  THEME.accent,
@@ -169,7 +170,7 @@ export function getSeverityConfig(severity) {
       panelClass:   'at-gold-aura',
       fanfare:      true,
       defaultSvg:   'discovery',
-      defaultLabel: 'NOWE',
+      defaultLabel: t('terminal.new'),
       sweepColor:   THEME.accent,
     },
   };
@@ -549,7 +550,7 @@ export function buildTerminalPopup(config) {
   const barTitle = document.createElement('div');
   barTitle.className = 'at-bar-title';
   barTitle.style.color = sev.barTextColor;
-  barTitle.textContent = config.barTitle ?? 'RAPORT';
+  barTitle.textContent = config.barTitle ?? t('terminal.report');
   bar.appendChild(barTitle);
 
   if (config.barRight) {
@@ -629,7 +630,7 @@ export function buildTerminalPopup(config) {
   panel.appendChild(body);
 
   // ── Footer z przyciskami ──
-  const buttons = config.buttons ?? [{ label: '[ENTER] OK', primary: true }];
+  const buttons = config.buttons ?? [{ label: `[ENTER] ${t('terminal.ok')}`, primary: true }];
   const footer = document.createElement('div');
   footer.className = 'at-footer';
   footer.style.borderTop = `1px solid ${_rgba(sev.borderColor, 0.12)}`;

@@ -7,15 +7,13 @@
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { showRenameModal } from './ModalInput.js';
 import EventBus from '../core/EventBus.js';
+import { t } from '../i18n/i18n.js';
 
-// Mapowanie typów ciał na polskie nazwy
-const TYPE_NAMES = {
-  planet:    'Planeta',
-  moon:      'Księżyc',
-  planetoid: 'Planetoid',
-  asteroid:  'Asteroida',
-  comet:     'Kometa',
-};
+// Mapowanie typów ciał na klucze i18n
+function _typeName(type) {
+  const key = `bodyType.${type.charAt(0).toUpperCase()}${type.slice(1)}`;
+  return t(key) || type;
+}
 
 // Ikony typów planet
 const PTYPE_ICONS = {
@@ -57,7 +55,7 @@ export function showBodyDetailModal(body) {
   });
 
   const explored = body.explored === true;
-  const typeName = TYPE_NAMES[body.type] ?? body.type;
+  const typeName = _typeName(body.type);
   const ptypeIcon = PTYPE_ICONS[body.planetType] ?? '';
   const displayName = explored ? body.name : '???';
 
@@ -132,7 +130,7 @@ export function showBodyDetailModal(body) {
   // ── Dane orbitalne (zawsze widoczne) ──────────────────────
   addSep();
   const orbA = body.orbital?.a ?? 0;
-  addRow('Orbita', `${orbA.toFixed(2)} AU`);
+  addRow(t('bodyDetail.orbit'), `${orbA.toFixed(2)} AU`);
 
   // Odległość od bazy
   const homePl = window.KOSMOS?.homePlanet;
@@ -140,7 +138,7 @@ export function showBodyDetailModal(body) {
     const dx = (body.physics?.x ?? 0) - (homePl.physics?.x ?? 0);
     const dy = (body.physics?.y ?? 0) - (homePl.physics?.y ?? 0);
     const dist = Math.sqrt(dx * dx + dy * dy);
-    addRow('Odległość od bazy', `${dist.toFixed(2)} AU`);
+    addRow(t('bodyDetail.distFromBase'), `${dist.toFixed(2)} AU`);
   }
 
   // ── Dane zbadanego ciała ──────────────────────────────────
@@ -148,25 +146,23 @@ export function showBodyDetailModal(body) {
     // Temperatura
     if (body.temperatureC != null || body.temperatureK != null) {
       const tempC = body.temperatureC ?? (body.temperatureK - 273.15);
-      addRow('Temperatura', `${tempC > 0 ? '+' : ''}${tempC.toFixed(0)}°C`);
+      addRow(t('bodyDetail.temperature'), `${tempC > 0 ? '+' : ''}${tempC.toFixed(0)}°C`);
     }
 
     // Grawitacja powierzchniowa
     if (body.surfaceGravity != null) {
-      addRow('Grawitacja', `${body.surfaceGravity.toFixed(2)} g`);
+      addRow(t('bodyDetail.gravity'), `${body.surfaceGravity.toFixed(2)} g`);
     }
 
     // Atmosfera
     if (body.atmosphere) {
-      const atmoNames = {
-        none: 'Brak', thin: 'Rzadka', breathable: 'Oddychalna', thick: 'Gęsta', dense: 'Bardzo gęsta',
-      };
-      addRow('Atmosfera', atmoNames[body.atmosphere] ?? body.atmosphere);
+      const atmoLabel = t(`atmosphere.${body.atmosphere}`) || body.atmosphere;
+      addRow(t('bodyDetail.atmosphere'), atmoLabel);
     }
 
     // Masa
     if (body.physics?.mass != null) {
-      addRow('Masa', `${body.physics.mass.toExponential(2)} M☉`);
+      addRow(t('bodyDetail.mass'), `${body.physics.mass.toExponential(2)} M☉`);
     }
 
     // Kolonia/outpost
@@ -174,8 +170,8 @@ export function showBodyDetailModal(body) {
     if (colMgr) {
       const colony = colMgr.getColony(body.id);
       if (colony) {
-        const status = colony.isOutpost ? 'Outpost' : 'Kolonia';
-        addRow('Status', status, THEME.success);
+        const status = colony.isOutpost ? t('bodyDetail.outpost') : t('colony.colony');
+        addRow(t('bodyDetail.status'), status, THEME.success);
       }
     }
 
@@ -184,7 +180,7 @@ export function showBodyDetailModal(body) {
     if (deposits.length > 0) {
       addSep();
       const depTitle = document.createElement('div');
-      depTitle.textContent = 'ZŁOŻA';
+      depTitle.textContent = t('ui.depositsHeader');
       Object.assign(depTitle.style, {
         color: THEME.accent,
         fontSize: `${THEME.fontSizeSmall}px`,
@@ -206,7 +202,7 @@ export function showBodyDetailModal(body) {
     if (comp && Object.keys(comp).length > 0) {
       addSep();
       const compTitle = document.createElement('div');
-      compTitle.textContent = 'SKŁAD';
+      compTitle.textContent = t('ui.compositionHeader');
       Object.assign(compTitle.style, {
         color: THEME.accent,
         fontSize: `${THEME.fontSizeSmall}px`,
@@ -228,7 +224,7 @@ export function showBodyDetailModal(body) {
     // Niezbadane ciało
     addSep();
     const unknownDiv = document.createElement('div');
-    unknownDiv.textContent = 'Ciało niezbadane — wyślij misję rozpoznawczą';
+    unknownDiv.textContent = t('ui.unexploredBody');
     Object.assign(unknownDiv.style, {
       color: THEME.textDim,
       fontSize: `${THEME.fontSizeSmall + 1}px`,
@@ -273,7 +269,7 @@ export function showBodyDetailModal(body) {
 
   // Przycisk: Zmień nazwę (tylko zbadane)
   if (explored) {
-    const btnRename = makeBtn('ZMIEŃ NAZWĘ', THEME.accent, THEME.accent);
+    const btnRename = makeBtn(t('ui.rename'), THEME.accent, THEME.accent);
     btnRename.addEventListener('click', async () => {
       const newName = await showRenameModal(body.name);
       if (newName) {
@@ -288,7 +284,7 @@ export function showBodyDetailModal(body) {
   // Przycisk: Oznacz/Odznacz jako cel
   const isTarget = !!body._markedAsTarget;
   const btnTarget = makeBtn(
-    isTarget ? 'ODZNACZ CEL' : '🎯 OZNACZ CEL',
+    isTarget ? t('ui.unmarkTarget') : t('ui.markTarget'),
     isTarget ? THEME.textDim : THEME.yellow,
     isTarget ? THEME.textSecondary : THEME.yellow
   );
@@ -300,7 +296,7 @@ export function showBodyDetailModal(body) {
   btnRow.appendChild(btnTarget);
 
   // Przycisk: Zamknij
-  const btnClose = makeBtn('ZAMKNIJ', THEME.textDim, THEME.textSecondary);
+  const btnClose = makeBtn(t('ui.close'), THEME.textDim, THEME.textSecondary);
   btnClose.addEventListener('click', () => cleanup());
   btnRow.appendChild(btnClose);
 

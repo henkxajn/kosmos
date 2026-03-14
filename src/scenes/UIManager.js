@@ -22,6 +22,7 @@ import { EconomyOverlay }      from '../ui/EconomyOverlay.js';
 import { TechOverlay }         from '../ui/TechOverlay.js';
 import { ColonyOverlay }       from '../ui/ColonyOverlay.js';
 import { GalaxyMapScene }      from './GalaxyMapScene.js';
+import { t }                   from '../i18n/i18n.js';
 
 // Nowe komponenty UI
 import { TopBar }        from '../ui/TopBar.js';
@@ -276,9 +277,9 @@ export class UIManager {
           this._energyFlow = { ...inventory._energy };
           const isNow = !!this._energyFlow.brownout;
           if (isNow && !wasBefore) {
-            this._log('⚠ BROWNOUT! Deficyt energii — produkcja wstrzymana', 'civ_unrest');
+            this._log(t('log.brownoutStart'), 'civ_unrest');
           } else if (!isNow && wasBefore) {
-            this._log('✅ Energia: bilans dodatni — brownout zakończony', 'expedition_ok');
+            this._log(t('log.brownoutEnd'), 'expedition_ok');
           }
           this._wasBrownout = isNow;
         }
@@ -425,7 +426,7 @@ export class UIManager {
     });
 
     EventBus.on('planet:ejected', ({ planet }) => {
-      this._log(`${planet.name} wyrzucona z układu`, 'ejection');
+      this._log(t('log.planetEjected', planet.name), 'ejection');
     });
 
     // Uderzenia kosmiczne na kolonie
@@ -847,7 +848,7 @@ export class UIManager {
     ctx.fillText('K O S M O S', 14, 20);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
-    ctx.fillText('Symulator Układu Słonecznego', 14, 34);
+    ctx.fillText(t('title.subtitle'), 14, 34);
 
     // Czas (prawa strona) — prosta wersja
     const { isPaused, multiplierIndex, displayText } = this._timeState;
@@ -856,7 +857,7 @@ export class UIManager {
     ctx.font = `${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
     ctx.fillStyle = isPaused ? C.title : C.text;
     ctx.textAlign = 'center';
-    ctx.fillText(isPaused ? '▶ GRAJ' : '⏸ PAUZA', W - 220, 20);
+    ctx.fillText(isPaused ? t('ui.play') : t('ui.pause'), W - 220, 20);
 
     LABELS.slice(1).forEach((label, i) => {
       const bx = W - 160 + i * 34;
@@ -976,10 +977,10 @@ export class UIManager {
 
     ctx.font = `${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.bright; ctx.textAlign = 'center';
-    ctx.fillText('Rozpocząć nową grę?', W / 2, DY + 22);
+    ctx.fillText(t('dialog.newGameConfirm'), W / 2, DY + 22);
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.text;
-    ctx.fillText('Aktualny postęp zostanie utracony.', W / 2, DY + 40);
+    ctx.fillText(t('dialog.progressLost'), W / 2, DY + 40);
     ctx.font = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.red; ctx.fillText('[ TAK ]', W / 2 - 50, DY + 62);
     ctx.fillStyle = C.title; ctx.fillText('[ ANULUJ ]', W / 2 + 50, DY + 62);
@@ -1015,18 +1016,18 @@ export class UIManager {
     ctx.font = `bold ${THEME.fontSizeTitle + 4}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.danger;
     ctx.textAlign = 'center';
-    ctx.fillText('CYWILIZACJA ZNISZCZONA', W / 2, DY + 36);
+    ctx.fillText(t('dialog.civDestroyed'), W / 2, DY + 36);
 
     // Opis
     const reasonText = d.reason === 'collision'
-      ? `Kolizja planetarna zniszczyła planetę ${d.planetName}.`
+      ? t('dialog.civDestroyedCollision', d.planetName)
       : d.reason === 'ejected'
-        ? `Planeta ${d.planetName} została wyrzucona z układu.`
-        : `Życie na planecie ${d.planetName} wymarło.`;
+        ? t('dialog.civDestroyedEjected', d.planetName)
+        : t('dialog.civDestroyedExtinction', d.planetName);
     ctx.font = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     ctx.fillText(reasonText, W / 2, DY + 64);
-    ctx.fillText('Twoja cywilizacja nie przetrwała.', W / 2, DY + 84);
+    ctx.fillText(t('dialog.civDead'), W / 2, DY + 84);
 
     // Czas przetrwania
     const gameTime = window.KOSMOS?.timeSystem?.gameTime ?? 0;
@@ -1079,7 +1080,7 @@ export class UIManager {
       for (let i = 0; i < CIV_TABS.length; i++) {
         const btnY = CIV_PANEL_Y + CIV_SIDEBAR_PAD + i * (CIV_SIDEBAR_BTN + CIV_SIDEBAR_GAP);
         if (y >= btnY && y <= btnY + CIV_SIDEBAR_BTN) {
-          return { type: 'sidebar_tab', data: { label: `${CIV_TABS[i].label} (${CIV_TABS[i].key})` } };
+          return { type: 'sidebar_tab', data: { label: `${t(CIV_TABS[i].labelKey)} (${CIV_TABS[i].key})` } };
         }
       }
     }

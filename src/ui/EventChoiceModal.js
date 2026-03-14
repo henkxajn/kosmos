@@ -4,6 +4,7 @@
 // Styl: Amber Terminal (2-kolumnowy layout, CRT wewnątrz panelu).
 
 import { THEME } from '../config/ThemeConfig.js';
+import { t } from '../i18n/i18n.js';
 import {
   buildTerminalPopup,
   formatStatLine,
@@ -26,22 +27,22 @@ export function showEventNotification(event, colonyName) {
                    : 'info';
 
     let stats = '';
-    stats += formatStatLine('KOLONIA', colonyName);
+    stats += formatStatLine(t('eventChoice.colony'), colonyName);
     if (event.duration > 0) {
-      stats += formatStatLine('CZAS', `${event.duration} lat`, 'at-stat-neu');
+      stats += formatStatLine(t('eventChoice.time'), `${event.duration} lat`, 'at-stat-neu');
     }
-    stats += formatStatLineWithCursor('STATUS', 'AKTYWNE', 'at-stat-neu');
+    stats += formatStatLineWithCursor(t('eventChoice.statusLabel'), t('eventChoice.active'), 'at-stat-neu');
 
     const { overlay, dismiss, btnElements } = buildTerminalPopup({
       severity,
-      barTitle: 'KOSMOS OS  ▌ POWIADOMIENIE',
+      barTitle: t('eventChoice.barTitle'),
       svgKey: severity === 'danger' ? 'alert' : 'report',
-      svgLabel: severity === 'danger' ? 'ALARM' : 'ZDARZENIE',
-      prompt: '> EVENT_SYS.LOG_',
-      headline: (event.namePL ?? event.name ?? 'ZDARZENIE').toUpperCase(),
+      svgLabel: severity === 'danger' ? t('eventChoice.alarm') : t('eventChoice.event'),
+      prompt: t('eventChoice.prompt'),
+      headline: (event.namePL ?? event.name ?? t('eventChoice.event')).toUpperCase(),
       description: event.description,
       contentHTML: stats,
-      buttons: [{ label: '[ENTER] PRZYJMIJ', primary: true }],
+      buttons: [{ label: t('ui.accept'), primary: true }],
       onDismiss: () => {
         clearTimeout(timer);
         resolve();
@@ -83,34 +84,34 @@ function _getImpactConfig() {
   return {
     light: {
       icon: '☄',
-      title: 'UDERZENIE METEORYTYCZNE',
-      desc: 'Niewielki obiekt kosmiczny uderzył w powierzchnię planety. Szkody są ograniczone.',
+      title: t('impact.light.title'),
+      desc: t('impact.light.desc'),
       severity: 'info',
-      svgLabel: 'UDERZENIE<br>LEKKIE',
+      svgLabel: t('impact.light.label').replace(/\n/g, '<br>'),
       autoClose: 6000,
     },
     moderate: {
       icon: '💥',
-      title: 'BOMBARDOWANIE KOSMICZNE!',
-      desc: 'Znaczący obiekt uderzył w planetę powodując poważne zniszczenia infrastruktury i straty wśród populacji.',
+      title: t('impact.medium.title'),
+      desc: t('impact.medium.desc'),
       severity: 'danger',
-      svgLabel: 'UDERZENIE<br>ŚREDNIE',
+      svgLabel: t('impact.medium.label').replace(/\n/g, '<br>'),
       autoClose: 10000,
     },
     heavy: {
       icon: '🔥',
-      title: 'KATASTROFALNE UDERZENIE!',
-      desc: 'Ogromne ciało kosmiczne uderzyło w planetę. Większość infrastruktury i populacji została zniszczona. Cywilizacja walczy o przetrwanie.',
+      title: t('impact.heavy.title'),
+      desc: t('impact.heavy.desc'),
       severity: 'danger',
-      svgLabel: 'UDERZENIE<br>KRYTYCZNE',
+      svgLabel: t('impact.heavy.label').replace(/\n/g, '<br>'),
       autoClose: 0,
     },
     extinction: {
       icon: '☠',
-      title: 'APOKALIPSA — ZAGŁADA!',
-      desc: 'Masywne ciało planetarne uderzyło w planetę. Cała cywilizacja została unicestwiona. Powierzchnia planety jest pokryta morzem lawy.',
+      title: t('impact.extinction.title'),
+      desc: t('impact.extinction.desc'),
       severity: 'danger',
-      svgLabel: 'ZAGŁADA',
+      svgLabel: t('impact.extinction.label').replace(/\n/g, '<br>'),
       autoClose: 0,
     },
   };
@@ -129,29 +130,29 @@ export function showImpactNotification(data) {
 
   return new Promise(resolve => {
     let stats = '';
-    stats += formatStatLine('KOLONIA', planetName ?? '?');
+    stats += formatStatLine(t('eventChoice.colony'), planetName ?? '?');
 
     if (popLost > 0) {
-      stats += formatStatLine('POPULACJA', `−${popLost} POP (${popRemaining ?? '?'} pozostało)`, 'at-stat-neg');
+      stats += formatStatLine(t('eventChoice.population'), t('eventChoice.popLost', popLost, popRemaining ?? '?'), 'at-stat-neg');
     }
     if (buildingsDestroyed > 0) {
-      stats += formatStatLine('BUDYNKI', `−${buildingsDestroyed} zniszczonych`, 'at-stat-neg');
+      stats += formatStatLine(t('eventChoice.buildings'), t('eventChoice.buildingsDestroyed', buildingsDestroyed), 'at-stat-neg');
     }
     if (resourceLossPercent > 0) {
-      stats += formatStatLine('ZASOBY', `−${resourceLossPercent}% utraconych`, 'at-stat-neg');
+      stats += formatStatLine(t('eventChoice.resources'), t('eventChoice.resourcesLost', resourceLossPercent), 'at-stat-neg');
     }
-    stats += formatStatLineWithCursor('RYZYKO', severity === 'extinction' ? 'ZAGŁADA' : 'KRYTYCZNE', 'at-stat-neg');
+    stats += formatStatLineWithCursor(t('eventChoice.riskLabel'), severity === 'extinction' ? t('eventChoice.extinction') : t('eventChoice.critical'), 'at-stat-neg');
 
     const { overlay, dismiss, btnElements } = buildTerminalPopup({
       severity: cfg.severity,
       barTitle: `⚠ ${cfg.title} ⚠`,
       svgKey: 'impact',
       svgLabel: cfg.svgLabel,
-      prompt: '> IMPACT_ALERT.EXE_',
+      prompt: t('eventChoice.impactPrompt'),
       headline: cfg.title,
       description: cfg.desc,
       contentHTML: stats,
-      buttons: [{ label: '[ENTER] PRZYJMUJĘ DO WIADOMOŚCI', primary: true }],
+      buttons: [{ label: t('ui.acknowledge'), primary: true }],
       onDismiss: () => {
         if (timer) clearTimeout(timer);
         document.removeEventListener('keydown', onKey);

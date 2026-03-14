@@ -10,6 +10,7 @@ import { SHIPS }          from '../data/ShipsData.js';
 import { ALL_RESOURCES }  from '../data/ResourcesData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
 import EventBus            from '../core/EventBus.js';
+import { t, getName }     from '../i18n/i18n.js';
 
 const OUTLINER_W = COSMIC.OUTLINER_W;   // 180px
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;   // 50px
@@ -83,11 +84,11 @@ export class Outliner {
     let cy = y + 4;
 
     // ── KOLONIE ──────────────────────────────────────────
-    cy = this._drawSection(ctx, x, cy, 'colonies', `KOLONIE [${colonies.length}]`, (startY) => {
+    cy = this._drawSection(ctx, x, cy, 'colonies', t('outliner.colonies', colonies.length), (startY) => {
       if (colonies.length === 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.dim;
-        ctx.fillText('Brak kolonii', x + PAD, startY + 14);
+        ctx.fillText(t('outliner.noColonies'), x + PAD, startY + 14);
         return ITEM_H;
       }
       let dy = 0;
@@ -125,11 +126,11 @@ export class Outliner {
     });
 
     // ── EKSPEDYCJE ───────────────────────────────────────
-    cy = this._drawSection(ctx, x, cy, 'expeditions', `EKSPEDYCJE [${expeditions.length}]`, (startY) => {
+    cy = this._drawSection(ctx, x, cy, 'expeditions', t('outliner.expeditions', expeditions.length), (startY) => {
       if (expeditions.length === 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.dim;
-        ctx.fillText('Brak misji', x + PAD, startY + 14);
+        ctx.fillText(t('outliner.noMissions'), x + PAD, startY + 14);
         return ITEM_H;
       }
       let dy = 0;
@@ -151,7 +152,7 @@ export class Outliner {
         const eta = exp.status === 'returning'
           ? `↩${_shortYear(exp.returnYear ?? 0)}`
           : exp.status === 'orbiting'
-            ? '⊙ orbita'
+            ? t('outliner.orbiting')
             : `${_shortYear(exp.arrivalYear ?? 0)}`;
         ctx.fillStyle = C.label;
         ctx.textAlign = 'right';
@@ -169,12 +170,12 @@ export class Outliner {
 
     // ── FLOTA ────────────────────────────────────────────
     const totalShips = fleet ? fleet.length : 0;
-    cy = this._drawSection(ctx, x, cy, 'fleet', `FLOTA [${totalShips}]`, (startY) => {
+    cy = this._drawSection(ctx, x, cy, 'fleet', t('outliner.fleet', totalShips), (startY) => {
       const queues = shipQueues ?? [];
       if (totalShips === 0 && queues.length === 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.dim;
-        ctx.fillText('Brak statków', x + PAD, startY + 14);
+        ctx.fillText(t('outliner.noShips'), x + PAD, startY + 14);
         return ITEM_H;
       }
 
@@ -189,7 +190,7 @@ export class Outliner {
           const iy = startY + dy;
           const ship = SHIPS[vessel.shipId];
           const icon = ship?.icon ?? '🚀';
-          const vName = _truncate(vessel.name ?? ship?.namePL ?? vessel.shipId, 14);
+          const vName = _truncate(vessel.name ?? (ship ? getName(ship, 'ship') : vessel.shipId), 14);
           // Status — ikona stanu
           const stIco = vessel.position.state === 'in_transit' ? '→'
                       : vessel.position.state === 'orbiting'   ? '⊙' : '';
@@ -217,7 +218,7 @@ export class Outliner {
         const frac = q.buildTime > 0 ? q.progress / q.buildTime : 0;
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textPrimary;
-        ctx.fillText(`⚓ ${shipDef?.icon ?? '🚀'} budowa`, x + PAD, iy + 14);
+        ctx.fillText(t('vessel.status.building', shipDef?.icon ?? '🚀'), x + PAD, iy + 14);
 
         // Mini pasek
         const barX = x + PAD;
@@ -391,10 +392,9 @@ export class Outliner {
       const pop = cSys.population ?? 0;
       const housing = cSys.housing ?? 0;
       const prosp = Math.round(colony.prosperitySystem?.prosperity ?? 50);
-      lines.push({ text: `👤 POP: ${pop}/${housing}  Prosperity: ${prosp}`, color: C.text });
+      lines.push({ text: t('outliner.popInfo', pop, housing, prosp), color: C.text });
       const epoch = colony.prosperitySystem?._getCurrentEpoch?.()?.key ?? 'early';
-      const epochNames = { early: 'Wczesna', developing: 'Rozwijająca', advanced: 'Zaawansowana', cosmic: 'Kosmiczna' };
-      lines.push({ text: `⭐ Epoka: ${epochNames[epoch] ?? epoch}`, color: C.text });
+      lines.push({ text: t('outliner.epoch', t(`epoch.${epoch}`)), color: C.text });
     }
 
     // Zasoby (z inventory) — kolorowane ikony, łamane po 4/wiersz
@@ -423,7 +423,7 @@ export class Outliner {
       bSys._active.forEach((entry) => {
         const lvl = entry.level ?? 1;
         const lvlStr = lvl > 1 ? ` Lv${lvl}` : '';
-        bList.push(`${entry.building.icon ?? '🏗'}${entry.building.namePL}${lvlStr}`);
+        bList.push(`${entry.building.icon ?? '🏗'}${getName(entry.building, 'building')}${lvlStr}`);
       });
       for (let i = 0; i < bList.length; i += 3) {
         lines.push({ text: bList.slice(i, i + 3).join(', '), color: C.dim });

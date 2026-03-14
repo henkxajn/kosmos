@@ -10,6 +10,7 @@ import EntityManager from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
 import { THEME }     from '../config/ThemeConfig.js';
+import { t, getName } from '../i18n/i18n.js';
 import {
   buildTerminalPopup,
   formatStatLine,
@@ -36,7 +37,7 @@ function _findBody(bodyId) {
 }
 
 function _getVesselName(vesselId) {
-  return window.KOSMOS?.vesselManager?.getVessel(vesselId)?.name ?? 'Nieznany';
+  return window.KOSMOS?.vesselManager?.getVessel(vesselId)?.name ?? t('vessel.unknown');
 }
 
 function _typeIcon(body) {
@@ -46,13 +47,13 @@ function _typeIcon(body) {
   return '🪐';
 }
 
-function _missionTypePL(type) {
+function _missionTypeLabel(type) {
   switch (type) {
-    case 'mining':     return 'Wydobycie';
-    case 'scientific': return 'Naukowa';
-    case 'recon':      return 'Rozpoznanie';
-    case 'colony':     return 'Kolonizacja';
-    case 'transport':  return 'Transport';
+    case 'mining':     return t('mission.mining');
+    case 'scientific': return t('mission.scientific');
+    case 'recon':      return t('mission.recon');
+    case 'colony':     return t('mission.colonization');
+    case 'transport':  return t('mission.transport');
     default:           return type;
   }
 }
@@ -78,7 +79,7 @@ function _gameYear() {
 // ── Budowa HTML statystyk ciała (reużywalna) ────────────────────────────
 
 function _buildBodyStats(body) {
-  if (!body) return '<span class="at-stat-dim">Brak danych</span>';
+  if (!body) return `<span class="at-stat-dim">${t('missionPopup.noData')}</span>`;
 
   const lines = [];
 
@@ -94,33 +95,32 @@ function _buildBodyStats(body) {
   }
   const orbitAU = body.orbital?.a?.toFixed(2) ?? '?';
 
-  lines.push(formatStatLine('TYP', `${_typeIcon(body)} ${body.planetType ?? body.type ?? '?'}`));
+  lines.push(formatStatLine(t('missionPopup.type'), `${_typeIcon(body)} ${body.planetType ?? body.type ?? '?'}`));
   if (tempC !== null)
-    lines.push(formatStatLine('TEMP', `${tempC} °C`));
+    lines.push(formatStatLine(t('missionPopup.temp'), `${tempC} °C`));
   if (massE !== null)
-    lines.push(formatStatLine('MASA', `${massE} M⊕`));
-  lines.push(formatStatLine('ORBITA', `${orbitAU} AU`));
-  lines.push(formatStatLine('ODL', `${_distFromHome(body)} AU`));
+    lines.push(formatStatLine(t('missionPopup.mass'), `${massE} M⊕`));
+  lines.push(formatStatLine(t('missionPopup.orbit'), `${orbitAU} AU`));
+  lines.push(formatStatLine(t('missionPopup.dist'), `${_distFromHome(body)} AU`));
 
   // Atmosfera
   if (body.atmosphere && typeof body.atmosphere === 'string' && body.atmosphere !== 'none') {
-    const atmLabels = { dense: 'Gęsta', thin: 'Cienka', breathable: 'Oddychalna' };
-    let atmLabel = atmLabels[body.atmosphere] || body.atmosphere;
-    if (body.atmosphere === 'breathable' || body.breathableAtmosphere) atmLabel += ' ✅';
-    lines.push(formatStatLine('ATM', atmLabel));
+    const atmLabel = t(`atmosphere.${body.atmosphere}`) || body.atmosphere;
+    const atmSuffix = (body.atmosphere === 'breathable' || body.breathableAtmosphere) ? ' ✅' : '';
+    lines.push(formatStatLine(t('missionPopup.atm'), atmLabel + atmSuffix));
   } else if (body.atmosphere && typeof body.atmosphere === 'object') {
     const atmoEntries = Object.entries(body.atmosphere)
       .filter(([k]) => k !== 'pressure' && k !== 'total')
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3);
     if (atmoEntries.length > 0) {
-      lines.push(formatSectionTitle('ATMOSFERA'));
+      lines.push(formatSectionTitle(t('missionPopup.atmosphereSection')));
       for (const [gas, pct] of atmoEntries) {
         lines.push(formatStatLine(gas, (pct * 100).toFixed(1) + '%'));
       }
     }
   } else {
-    lines.push(formatStatLine('ATM', 'Brak'));
+    lines.push(formatStatLine(t('missionPopup.atm'), t('atmosphere.none')));
   }
 
   // Skład chemiczny — top 5
@@ -129,7 +129,7 @@ function _buildBodyStats(body) {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
     if (compEntries.length > 0) {
-      lines.push(formatSectionTitle('SKŁAD'));
+      lines.push(formatSectionTitle(t('ui.compositionHeader')));
       for (const [elem, pct] of compEntries) {
         lines.push(formatStatLine(elem, pct.toFixed(1) + '%'));
       }
@@ -140,10 +140,10 @@ function _buildBodyStats(body) {
   if (body.deposits && body.deposits.length > 0) {
     const summary = DepositSystem.getDepositsSummary(body.deposits);
     if (summary.length > 0) {
-      lines.push(formatSectionTitle('ZŁOŻA'));
+      lines.push(formatSectionTitle(t('ui.depositsHeader')));
       for (const dep of summary) {
         lines.push(formatStatLine(
-          `${dep.icon} ${dep.namePL}`,
+          `${dep.icon} ${getName({ id: dep.resourceId, namePL: dep.namePL }, 'resource')}`,
           `${_richStars(dep.richness)} ${dep.remaining}`,
           'at-stat-pos'
         ));
@@ -233,20 +233,20 @@ function _onDisaster({ expedition: exp }) {
   const vesselName = exp.vesselId ? _getVesselName(exp.vesselId) : null;
 
   let stats = '';
-  stats += formatStatLine('MISJA', _missionTypePL(exp.type));
-  if (vesselName) stats += formatStatLine('STATEK', vesselName, 'at-stat-neg');
-  stats += formatStatLine('CEL', exp.targetName ?? '?');
-  stats += formatStatLineWithCursor('STATUS', 'UTRACONY', 'at-stat-neg');
+  stats += formatStatLine(t('missionPopup.mission'), _missionTypeLabel(exp.type));
+  if (vesselName) stats += formatStatLine(t('missionPopup.vessel'), vesselName, 'at-stat-neg');
+  stats += formatStatLine(t('missionPopup.target'), exp.targetName ?? '?');
+  stats += formatStatLineWithCursor(t('missionPopup.status'), t('missionPopup.lost'), 'at-stat-neg');
 
   queueMissionEvent({
     severity: 'danger',
-    barTitle: '⚠ ALARM KRYTYCZNY ⚠',
+    barTitle: t('missionPopup.criticalAlarm'),
     barRight: _gameYear(),
     svgKey: 'disaster',
-    svgLabel: 'STATEK<br>UTRACONY',
+    svgLabel: t('missionPopup.vesselLost').replace(/\n/g, '<br>'),
     prompt: '> ALERT_CORE.EXE_',
-    headline: 'KATASTROFA',
-    description: 'Statek utracony. Załoga zaginiona.',
+    headline: t('missionPopup.disaster'),
+    description: t('missionPopup.disasterDesc'),
     contentHTML: stats,
   });
 }
@@ -257,42 +257,42 @@ function _onColonyFounded({ expedition: exp, planetId, startResources, startPop,
 
   let qualityText, qualityClass;
   if (resourceMult <= 0.5) {
-    qualityText = 'Trudne warunki';
+    qualityText = t('missionPopup.harsh');
     qualityClass = 'at-stat-neg';
   } else if (resourceMult >= 1.5) {
-    qualityText = 'Świetne warunki!';
+    qualityText = t('missionPopup.excellent');
     qualityClass = 'at-stat-pos';
   } else {
-    qualityText = 'Normalne warunki';
+    qualityText = t('missionPopup.normal');
     qualityClass = 'at-stat-gld';
   }
 
   let stats = '';
-  stats += formatStatLine('PLANETA', planetName, 'at-stat-gld');
-  stats += formatStatLine('JAKOŚĆ', `${qualityText} (×${resourceMult})`, qualityClass);
-  stats += formatStatLine('POP', `${startPop}`, 'at-stat-pos');
+  stats += formatStatLine(t('missionPopup.planet'), planetName, 'at-stat-gld');
+  stats += formatStatLine(t('missionPopup.quality'), `${qualityText} (×${resourceMult})`, qualityClass);
+  stats += formatStatLine(t('missionPopup.pop'), `${startPop}`, 'at-stat-pos');
 
   if (startResources) {
     const entries = Object.entries(startResources)
       .filter(([, v]) => v > 0)
       .map(([key, val]) => ({ label: key, value: `+${val}`, cssClass: 'at-stat-pos' }));
     if (entries.length > 0) {
-      stats += formatSectionTitle('ZASOBY STARTOWE');
+      stats += formatSectionTitle(t('missionPopup.startResources'));
       stats += formatStatsGrid(entries);
     }
   }
 
-  stats += formatStatLineWithCursor('STATUS', 'AKTYWNA', 'at-stat-pos');
+  stats += formatStatLineWithCursor(t('missionPopup.status'), t('missionPopup.active'), 'at-stat-pos');
 
   queueMissionEvent({
     severity: 'success',
-    barTitle: '✓ KOLONIA ZAŁOŻONA',
+    barTitle: t('missionPopup.colonyFounded'),
     barRight: _gameYear(),
     svgKey: 'colony',
-    svgLabel: 'KOLONIA<br>ZAŁOŻONA!',
+    svgLabel: t('missionPopup.colonyFoundedLabel').replace(/\n/g, '<br>'),
     prompt: '> COLONY_INIT.EXE_',
-    headline: `NOWA KOLONIA<br>${planetName.toUpperCase()}`,
-    description: 'Historyczny moment — nowa kolonia założona pomyślnie.',
+    headline: t('missionPopup.newColony', planetName.toUpperCase()).replace(/\n/g, '<br>'),
+    description: t('missionPopup.colonyFoundedDesc'),
     contentHTML: stats,
   });
 }
@@ -302,43 +302,43 @@ function _onMissionReport({ expedition: exp, gained, multiplier }) {
 
   let multText, multClass;
   if (multiplier <= 0.5) {
-    multText = 'Częściowy sukces';
+    multText = t('missionPopup.partialSuccess');
     multClass = 'at-stat-neu';
   } else if (multiplier >= 1.5) {
-    multText = 'Wybitny sukces!';
+    multText = t('missionPopup.outstandingSuccess');
     multClass = 'at-stat-pos';
   } else {
-    multText = 'Sukces';
+    multText = t('missionPopup.success');
     multClass = 'at-stat-gld';
   }
 
   const icon = exp.type === 'mining' ? 'deposit' : 'report';
 
   let stats = '';
-  stats += formatStatLine('CEL', exp.targetName ?? '?');
-  if (vesselName) stats += formatStatLine('STATEK', vesselName);
-  stats += formatStatLine('WYNIK', `${multText} (×${multiplier})`, multClass);
+  stats += formatStatLine(t('missionPopup.target'), exp.targetName ?? '?');
+  if (vesselName) stats += formatStatLine(t('missionPopup.vessel'), vesselName);
+  stats += formatStatLine(t('missionPopup.result'), `${multText} (×${multiplier})`, multClass);
 
   if (gained && Object.keys(gained).length > 0) {
     const entries = Object.entries(gained)
       .filter(([, v]) => v > 0)
       .map(([key, val]) => ({ label: key, value: `+${val}`, cssClass: 'at-stat-pos' }));
     if (entries.length > 0) {
-      stats += formatSectionTitle('POZYSKANE ZASOBY');
+      stats += formatSectionTitle(t('missionPopup.acquiredResources'));
       stats += formatStatsGrid(entries);
     }
   }
 
-  stats += formatStatLineWithCursor('ORBITA', 'czeka na rozkazy', 'at-stat-dim');
+  stats += formatStatLineWithCursor(t('missionPopup.orbit'), t('missionPopup.awaitingOrders'), 'at-stat-dim');
 
   queueMissionEvent({
     severity: 'info',
-    barTitle: 'KOSMOS OS  ▌ RAPORT',
+    barTitle: t('missionPopup.reportBar'),
     barRight: _gameYear(),
     svgKey: icon,
-    svgLabel: exp.type === 'mining' ? 'WYDOBYCIE<br>ZAKOŃCZONE' : 'BADANIA<br>ZAKOŃCZONE',
-    prompt: '> MISJA_RAPORT.LOG_',
-    headline: `RAPORT<br>${_missionTypePL(exp.type).toUpperCase()}`,
+    svgLabel: (exp.type === 'mining' ? t('missionPopup.miningComplete') : t('missionPopup.researchComplete')).replace(/\n/g, '<br>'),
+    prompt: `> ${t('missionPopup.reportPrompt')}`,
+    headline: t('missionPopup.reportHeadline', _missionTypeLabel(exp.type).toUpperCase()).replace(/\n/g, '<br>'),
     contentHTML: stats,
   });
 }
@@ -347,15 +347,15 @@ function _onReconProgress({ expedition: exp, body, discovered }) {
   const bodyName = body?.name ?? '?';
 
   let stats = _buildBodyStats(body);
-  stats += formatStatLineWithCursor('ODKRYTO', `${discovered} ciał`, 'at-stat-gld');
+  stats += formatStatLineWithCursor(t('missionPopup.discovered'), `${discovered} ${t('missionPopup.bodies')}`, 'at-stat-gld');
 
   queueMissionEvent({
     severity: 'discovery',
-    barTitle: '★ ODKRYCIE ★',
+    barTitle: t('missionPopup.discoveryBar'),
     barRight: _gameYear(),
     svgKey: 'recon',
-    svgLabel: 'CIAŁO<br>WYKRYTE',
-    fanfareText: `★ ODKRYCIE ★ ${bodyName.toUpperCase()} ★ NOWE CIAŁO W KATALOGU ★ ODKRYCIE ★ ${bodyName.toUpperCase()} ★`,
+    svgLabel: t('missionPopup.bodyDetected').replace(/\n/g, '<br>'),
+    fanfareText: t('missionPopup.discoveryFanfare', bodyName.toUpperCase(), bodyName.toUpperCase()),
     prompt: '> SCAN_COMPLETE.LOG_',
     headline: `${_typeIcon(body)} ${bodyName.toUpperCase()}`,
     contentHTML: stats,
@@ -367,11 +367,11 @@ function _onReconComplete({ expedition: exp, scope, discovered }) {
   if (scope === 'full_system') {
     const vesselName = exp.vesselId ? _getVesselName(exp.vesselId) : null;
     let stats = '';
-    if (vesselName) stats += formatStatLine('STATEK', vesselName);
-    stats += formatStatLine('ODKRYTO', `${discovered?.length ?? 0} ciał`, 'at-stat-pos');
+    if (vesselName) stats += formatStatLine(t('missionPopup.vessel'), vesselName);
+    stats += formatStatLine(t('missionPopup.discovered'), `${discovered?.length ?? 0} ${t('missionPopup.bodies')}`, 'at-stat-pos');
 
     if (discovered && discovered.length > 0) {
-      stats += formatSectionTitle('ZBADANE CIAŁA');
+      stats += formatSectionTitle(t('missionPopup.exploredBodies'));
       for (const id of discovered) {
         const b = _findBody(id);
         if (b) {
@@ -380,16 +380,16 @@ function _onReconComplete({ expedition: exp, scope, discovered }) {
       }
     }
 
-    stats += formatStatLineWithCursor('ORBITA', 'czeka na rozkazy', 'at-stat-dim');
+    stats += formatStatLineWithCursor(t('missionPopup.orbit'), t('missionPopup.awaitingOrders'), 'at-stat-dim');
 
     queueMissionEvent({
       severity: 'info',
-      barTitle: 'KOSMOS OS  ▌ ROZPOZNANIE',
+      barTitle: t('missionPopup.reconBar'),
       barRight: _gameYear(),
       svgKey: 'recon',
-      svgLabel: 'SKAN<br>UKOŃCZONY',
+      svgLabel: t('missionPopup.scanComplete').replace(/\n/g, '<br>'),
       prompt: '> RECON_DONE.EXE_',
-      headline: 'ROZPOZNANIE<br>ZAKOŃCZONE',
+      headline: t('missionPopup.reconComplete').replace(/\n/g, '<br>'),
       contentHTML: stats,
     });
     return;
@@ -402,15 +402,15 @@ function _onReconComplete({ expedition: exp, scope, discovered }) {
     const bodyName = body?.name ?? bodyId;
 
     let stats = _buildBodyStats(body);
-    stats += formatStatLineWithCursor('ORBITA', 'czeka na rozkazy', 'at-stat-dim');
+    stats += formatStatLineWithCursor(t('missionPopup.orbit'), t('missionPopup.awaitingOrders'), 'at-stat-dim');
 
     queueMissionEvent({
       severity: 'discovery',
-      barTitle: '★ ODKRYCIE ★',
+      barTitle: t('missionPopup.discoveryBar'),
       barRight: _gameYear(),
       svgKey: 'recon',
-      svgLabel: 'CIAŁO<br>WYKRYTE',
-      fanfareText: `★ ODKRYCIE ★ ${bodyName.toUpperCase()} ★ NOWE CIAŁO W KATALOGU ★`,
+      svgLabel: t('missionPopup.bodyDetected').replace(/\n/g, '<br>'),
+      fanfareText: t('missionPopup.discoveryFanfareShort', bodyName.toUpperCase()),
       prompt: '> SCAN_COMPLETE.LOG_',
       headline: `${_typeIcon(body)} ${bodyName.toUpperCase()}`,
       contentHTML: stats,

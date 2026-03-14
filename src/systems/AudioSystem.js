@@ -16,7 +16,9 @@ import EventBus from '../core/EventBus.js';
 
 // ── Definicje ścieżek muzycznych ──────────────────────────────
 const MUSIC_TRACKS = {
-  main: 'assets/sounds/amber_terminals.mp3',
+  main:  'assets/sounds/amber_terminals.mp3',
+  menu:  'assets/sounds/signal_main_menu.mp3',
+  game:  'assets/sounds/signal_new_game.mp3',
 };
 
 const MUSIC_FADE_IN  = 2.0;  // sekundy fade-in
@@ -33,11 +35,11 @@ export class AudioSystem {
     this._musicEnabled = true;  // false = mute muzyka
 
     // ── Stan muzyki ──────────────────────────────────────────────
-    this._musicBuffer  = null;  // zdekodowany AudioBuffer
+    this._musicBuffers = {};    // cache zdekodowanych AudioBuffer per trackId
+    this._musicLoadingSet = new Set(); // guard — trwa ładowanie (zapobiega wielokrotnemu fetch)
     this._musicSource  = null;  // aktywny BufferSourceNode
-    this._musicLoaded  = false; // czy plik załadowany
-    this._musicLoading = false; // guard — trwa ładowanie (zapobiega wielokrotnemu fetch)
     this._musicPlaying = false; // czy gra
+    this._currentTrackId = null; // aktualnie grający trackId
     this._musicPausedByGame = false; // czy wyciszony przez pauzę gry
 
     // ── Subskrypcje ──────────────────────────────────────────────
@@ -147,7 +149,7 @@ export class AudioSystem {
         this._musicGain.gain.setValueAtTime(0.001, now);
         this._musicGain.gain.exponentialRampToValueAtTime(this._musicVolume, now + MUSIC_FADE_IN);
         // Autostart jeśli nie gra
-        if (!this._musicPlaying && this._musicLoaded) {
+        if (!this._musicPlaying && this._currentTrackId && this._musicBuffers[this._currentTrackId]) {
           this._startMusicPlayback();
         }
       } else {
@@ -173,13 +175,16 @@ export class AudioSystem {
       await this._ctx.resume();
     }
 
-    if (this._musicLoaded || this._musicLoading) return this._musicLoaded;
+    // Już załadowany lub w trakcie ładowania
+    if (this._musicBuffers[trackId] || this._musicLoadingSet.has(trackId)) {
+      return !!this._musicBuffers[trackId];
+    }
 
-    this._musicLoading = true;
+    this._musicLoadingSet.add(trackId);
     const path = MUSIC_TRACKS[trackId];
     if (!path) {
       console.warn(`[AudioSystem] Brak ścieżki muzycznej: ${trackId}`);
-      this._musicLoading = false;
+      this._musicLoadingSet.delete(trackId);
       return false;
     }
 
@@ -188,29 +193,37 @@ export class AudioSystem {
       const response = await fetch(path);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const arrayBuffer = await response.arrayBuffer();
-      this._musicBuffer = await this._ctx.decodeAudioData(arrayBuffer);
-      this._musicLoaded = true;
-      this._musicLoading = false;
-      console.log(`[AudioSystem] Muzyka załadowana: ${path} (${this._musicBuffer.duration.toFixed(1)}s)`);
+      this._musicBuffers[trackId] = await this._ctx.decodeAudioData(arrayBuffer);
+      this._musicLoadingSet.delete(trackId);
+      console.log(`[AudioSystem] Muzyka załadowana: ${path} (${this._musicBuffers[trackId].duration.toFixed(1)}s)`);
       return true;
     } catch (err) {
       console.warn('[AudioSystem] Nie udało się załadować muzyki:', err);
-      this._musicLoading = false;
+      this._musicLoadingSet.delete(trackId);
       return false;
     }
   }
 
-  /** Załaduj plik muzyczny i zacznij grać w pętli */
+  /** Załaduj plik muzyczny i zacznij grać w pętli.
+   *  Jeśli inny track już gra — crossfade (stop + start). */
   async startMusic(trackId = 'main') {
-    // Jeśli już gra — ignoruj
-    if (this._musicPlaying) return;
+    // Jeśli ten sam track już gra — ignoruj
+    if (this._musicPlaying && this._currentTrackId === trackId) return;
+
+    // Jeśli inny track gra — zatrzymaj z fade-out, potem start nowego
+    if (this._musicPlaying && this._currentTrackId !== trackId) {
+      this.stopMusic();
+      // Daj czas na fade-out przed startem nowego
+      await new Promise(r => setTimeout(r, (MUSIC_FADE_OUT + 0.1) * 1000));
+    }
 
     // Załaduj jeśli trzeba
-    if (!this._musicLoaded) {
+    if (!this._musicBuffers[trackId]) {
       const ok = await this.preloadMusic(trackId);
       if (!ok) return;
     }
 
+    this._currentTrackId = trackId;
     if (this._musicEnabled) {
       this._startMusicPlayback();
     }
@@ -218,7 +231,8 @@ export class AudioSystem {
 
   /** Wewnętrzne: uruchom playback (loop) */
   _startMusicPlayback() {
-    if (!this._musicBuffer || !this._musicGain || !this._ctx) return;
+    const buffer = this._musicBuffers[this._currentTrackId];
+    if (!buffer || !this._musicGain || !this._ctx) return;
 
     // Zatrzymaj poprzedni source jeśli istnieje
     if (this._musicSource) {
@@ -231,7 +245,7 @@ export class AudioSystem {
     }
 
     const source = this._ctx.createBufferSource();
-    source.buffer = this._musicBuffer;
+    source.buffer = buffer;
     source.loop = true;
     source.connect(this._musicGain);
 

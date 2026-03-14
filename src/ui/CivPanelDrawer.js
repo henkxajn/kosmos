@@ -5,6 +5,7 @@
 // Czyste funkcje importowane przez UIManager.
 
 import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
+import { t } from '../i18n/i18n.js';
 
 // ── Stałe ──────────────────────────────────────────────────
 export const CIV_SIDEBAR_W    = 30;
@@ -13,12 +14,12 @@ export const CIV_SIDEBAR_GAP  = 1;
 export const CIV_SIDEBAR_PAD  = 2;
 
 export const CIV_TABS = [
-  { id: 'economy',    icon: '⚙', label: 'Gospodarka',   key: 'E' },
-  { id: 'population', icon: '👤', label: 'Populacja',    key: 'P' },
-  { id: 'tech',       icon: '🧬', label: 'Technologie',  key: 'T' },
-  { id: 'fleet',      icon: '🚀', label: 'Flota',        key: 'F' },
-  { id: 'colony',     icon: '🏠', label: 'Kolonie',      key: 'C' },
-  { id: 'galaxy',     icon: '🌌', label: 'Galaktyka',    key: 'G' },
+  { id: 'economy',    icon: '⚙', labelKey: 'civPanel.economy',    key: 'E' },
+  { id: 'population', icon: '👤', labelKey: 'civPanel.population', key: 'P' },
+  { id: 'tech',       icon: '🧬', labelKey: 'civPanel.tech',       key: 'T' },
+  { id: 'fleet',      icon: '🚀', labelKey: 'civPanel.fleet',      key: 'F' },
+  { id: 'colony',     icon: '🏠', labelKey: 'civPanel.colonies',   key: 'C' },
+  { id: 'galaxy',     icon: '🌌', labelKey: 'civPanel.galaxy',     key: 'G' },
 ];
 
 // ── Sidebar ────────────────────────────────────────────────

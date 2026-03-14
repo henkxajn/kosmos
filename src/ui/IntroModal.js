@@ -11,6 +11,7 @@ import {
   buildTerminalPopup,
   injectTerminalPopupCSS,
 } from './TerminalPopupBase.js';
+import { t } from '../i18n/i18n.js';
 
 // ── Helpery ─────────────────────────────────────────────────────────────
 
@@ -25,11 +26,11 @@ function showTransmission() {
   return new Promise(resolve => {
     // Terminal header w monospace
     const terminalLines = [
-      '> INICJALIZACJA SYSTEMU . . . . . . . . . OK',
-      '> ŁĄCZNOŚĆ Z RADĄ FEDERACJI . . . . . . . OK',
-      '> AUTORYZACJA PRZYWÓDCY . . . . . . . . . OCZEKUJE',
+      t('intro.sysInit'),
+      t('intro.sysFed'),
+      t('intro.sysAuth'),
       '>',
-      '> TRANSMISJA ZASZYFROWANA — PRIORYTET: ALFA',
+      t('intro.sysEncrypted'),
     ].join('\n');
 
     const terminalHTML = `<pre style="
@@ -47,19 +48,19 @@ function showTransmission() {
     // Treść transmisji
     const bodyHTML = `
       <div style="font-size:13px; color:${THEME.textSecondary}; line-height:1.65; margin-bottom:8px;">
-        Ludzkość w końcu wyrwała się z kołyski. Po wiekach wojen, podziałów i uporu — opracowaliśmy technologię podróży planetarnych. Nasz układ gwiezdny stoi przed nami otwarty.
+        ${t('intro.msg1')}
       </div>
       <div style="font-size:13px; color:${THEME.textSecondary}; line-height:1.65; margin-bottom:8px;">
-        Od tego momentu przejmujesz kontrolę nad losem naszej cywilizacji. Jedna planeta, miliardy istnień i cały układ do zbadania. Podróże międzygwiezdne pozostają poza naszym zasięgiem — ale to, co kryje się na okolicznych planetach i księżycach, może to zmienić.
+        ${t('intro.msg2')}
       </div>
       <div style="font-size:13px; color:${THEME.textSecondary}; line-height:1.65; margin-bottom:8px;">
-        Jedna planeta to za mało, by zagwarantować przetrwanie naszego gatunku. Jedno uderzenie asteroidy, jedna katastrofa — i wszystko, czym jesteśmy, zniknie na zawsze. Musimy się rozprzestrzenić.
+        ${t('intro.msg3')}
       </div>
       <div style="font-size:13px; color:${THEME.textPrimary}; font-style:italic; line-height:1.65; margin-bottom:10px;">
-        Eksploruj, kolonizuj, rozwijaj — rób co musisz, by ludzkość sięgnęła dalej niż kiedykolwiek.
+        ${t('intro.msg4')}
       </div>
       <div style="font-size:14px; font-weight:bold; color:${THEME.warning}; margin-bottom:10px;">
-        Nie zawiódź nas.
+        ${t('intro.msg5')}
       </div>
       <pre style="
         font-family: 'Courier New', Consolas, monospace;
@@ -68,20 +69,20 @@ function showTransmission() {
         margin: 0;
         white-space: pre;
         line-height: 1.5;
-      ">> — Rada Najwyższa\n> KONIEC TRANSMISJI</pre>
+      ">${t('intro.council')}</pre>
     `;
 
     const contentHTML = terminalHTML + sepHTML + bodyHTML;
 
     const { overlay, dismiss, btnElements } = buildTerminalPopup({
       severity: 'info',
-      barTitle: 'TRANSMISJA ZASZYFROWANA',
-      barRight: 'PRIORYTET: ALFA',
+      barTitle: t('intro.barTitle'),
+      barRight: t('intro.barRight'),
       svgKey: 'alert',
-      svgLabel: 'RADA<br>NAJWYŻSZA',
-      headline: 'Drogi Przywódco,',
+      svgLabel: t('intro.svgLabel').replace(/\n/g, '<br>'),
+      headline: t('intro.headline'),
       contentHTML,
-      buttons: [{ label: '[ DALEJ ]', primary: true }],
+      buttons: [{ label: t('ui.continue'), primary: true }],
       onDismiss: () => resolve(),
     });
 
@@ -141,10 +142,10 @@ function showNameInput(title, defaultValue, placeholder, svgLabel) {
       severity: 'discovery',
       barTitle: title,
       svgKey: 'colony',
-      svgLabel: svgLabel || 'NOWA<br>ERA',
+      svgLabel: svgLabel,
       headline: title,
       contentHTML,
-      buttons: [{ label: '[ DALEJ ]', primary: true }],
+      buttons: [{ label: t('ui.continue'), primary: true }],
       onDismiss: () => {
         if (!resolved) {
           resolved = true;
@@ -224,18 +225,18 @@ export async function showIntroSequence() {
 
   // 2. Nazwij cywilizację
   const civName = await showNameInput(
-    'NAZWIJ SWOJĄ CYWILIZACJĘ',
-    'Zjednoczona Federacja',
-    'Wprowadź nazwę cywilizacji...',
-    'CYWILI-<br>ZACJA'
+    t('intro.nameCivTitle'),
+    t('intro.defaultCivName'),
+    t('intro.civPlaceholder'),
+    t('intro.civSvg').replace(/\n/g, '<br>')
   );
 
   // 3. Nazwij stolicę
   const capitalName = await showNameInput(
-    'NAZWIJ SWOJĄ STOLICĘ',
-    'Nowa Ziemia',
-    'Wprowadź nazwę stolicy...',
-    'STOLICA'
+    t('intro.nameCapitalTitle'),
+    t('intro.defaultCapitalName'),
+    t('intro.capitalPlaceholder'),
+    t('intro.capitalSvg').replace(/\n/g, '<br>')
   );
 
   return { civName, capitalName };

@@ -17,6 +17,7 @@
 import EventBus from '../core/EventBus.js';
 import { RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { RESOURCE_DEFS }  from '../systems/ResourceSystem.js';
+import { t }              from '../i18n/i18n.js';
 
 // Pozycja i wymiary paska (muszą być spójne z PlanetScene)
 export const RESOURCE_BAR_H = 44;   // eksportowana — używana w PlanetScene
@@ -78,8 +79,8 @@ export class ResourcePanel {
         sep.lineBetween(Math.round(i * colW), this.barY + 4, Math.round(i * colW), this.barY + RESOURCE_BAR_H - 4);
       }
 
-      // Etykieta — polska nazwa surowca
-      add(scene.add.text(cx - 90, midY, `${ico} ${def.namePL}`, {
+      // Etykieta — nazwa surowca (i18n)
+      add(scene.add.text(cx - 90, midY, `${ico} ${t('resource.' + key)}`, {
         fontSize: '11px', fontFamily: 'monospace', color: COL_LABEL,
       }).setOrigin(0, 0.5).setDepth(DEPTH + 1));
 
@@ -122,7 +123,7 @@ export class ResourcePanel {
       } else {
         const sign = perYear > 0 ? '+' : '';
         elems.tDelta
-          .setText(`${sign}${_fmt(perYear)}/r`)
+          .setText(`${sign}${_fmt(perYear)}${t('resource.perYear')}`)
           .setColor(perYear > 0 ? COL_POS : COL_NEG);
       }
     }

@@ -7,6 +7,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { THEME } from '../config/ThemeConfig.js';
+import { t, getName } from '../i18n/i18n.js';
 
 // Ikony zasobów
 const RES_ICONS = {};
@@ -45,13 +46,13 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
     // Tytuł
     const title = document.createElement('div');
     title.style.cssText = 'font-size: 14px; margin-bottom: 12px; font-weight: bold; text-align: center;';
-    title.textContent = '🔄 TRASA HANDLOWA';
+    title.textContent = t('tradeRoute.title');
     panel.appendChild(title);
 
     // Info: Z → Do
     const info = document.createElement('div');
     info.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary}; margin-bottom: 12px;`;
-    info.innerHTML = `Z: 🏛 ${sourceColony.name}<br>Do: 📦 ${targetName}`;
+    info.innerHTML = `${t('tradeRoute.from', sourceColony.name)}<br>${t('tradeRoute.to', targetName)}`;
     panel.appendChild(info);
 
     // Info o ładowności statku
@@ -61,7 +62,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
     if (vessel && cargoCapacity > 0) {
       cargoInfo = document.createElement('div');
       cargoInfo.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
-      cargoInfo.textContent = `${shipDef?.namePL ?? vessel.shipId} — ładowność: 0 / ${cargoCapacity} t`;
+      cargoInfo.textContent = t('tradeRoute.shipInfo', getName({ id: vessel.shipId, namePL: shipDef?.namePL }, 'ship'), 0, cargoCapacity);
       panel.appendChild(cargoInfo);
     }
 
@@ -73,7 +74,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
     // Liczba kursów
     const tripsDiv = document.createElement('div');
     tripsDiv.style.cssText = `display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: ${THEME.fontSizeNormal}px;`;
-    tripsDiv.innerHTML = `<span style="color:${THEME.textSecondary}">Kursy:</span>`;
+    tripsDiv.innerHTML = `<span style="color:${THEME.textSecondary}">${t('tradeRoute.trips')}</span>`;
     const tripsInput = document.createElement('input');
     tripsInput.type = 'number';
     tripsInput.min = 1;
@@ -92,14 +93,14 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
       padding: 3px 10px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.border};
       color: ${THEME.accent}; font-family: ${THEME.fontFamily}; cursor: pointer;
     `;
-    infBtn.addEventListener('click', () => { tripsInput.value = ''; tripsInput.placeholder = '∞'; });
+    infBtn.addEventListener('click', () => { tripsInput.value = ''; tripsInput.placeholder = t('tradeRoute.infinity'); });
     tripsDiv.appendChild(infBtn);
     panel.appendChild(tripsDiv);
 
     // ── Sekcja outbound ─────────────────────────────────────────
     const outLabel = document.createElement('div');
     outLabel.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.accent}; margin-bottom: 6px; font-weight: bold;`;
-    outLabel.textContent = `➡ ŁADUNEK (${sourceColony.name} → ${targetName})`;
+    outLabel.textContent = t('tradeRoute.cargoSection', sourceColony.name, targetName);
     panel.appendChild(outLabel);
 
     const resSys = sourceColony.resourceSystem;
@@ -132,13 +133,13 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
       }
     };
 
-    addSection('Wydobyte', Object.entries(MINED_RESOURCES));
-    addSection('Zbierane', Object.entries(HARVESTED_RESOURCES));
-    addSection('Towary', Object.entries(COMMODITIES));
+    addSection(t('tradeRoute.mined'), Object.entries(MINED_RESOURCES));
+    addSection(t('tradeRoute.harvested'), Object.entries(HARVESTED_RESOURCES));
+    addSection(t('tradeRoute.commodities'), Object.entries(COMMODITIES));
 
     // Pre-deklaracja confirmBtn (potrzebna w sekcji returnCargo do blokady overweight)
     const confirmBtn = document.createElement('button');
-    confirmBtn.textContent = '🔄 Ustaw trasę';
+    confirmBtn.textContent = t('tradeRoute.setRoute');
     confirmBtn.style.cssText = `
       padding: 8px 20px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.borderActive};
       border-radius: 4px; color: ${THEME.accent}; font-family: ${THEME.fontFamily}; cursor: pointer;
@@ -153,7 +154,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
 
       const retTitle = document.createElement('div');
       retTitle.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.accent}; margin-bottom: 6px; font-weight: bold;`;
-      retTitle.textContent = `⬅ POWRÓT (${targetName} → ${sourceColony.name})`;
+      retTitle.textContent = t('tradeRoute.returnSection', targetName, sourceColony.name);
       panel.appendChild(retTitle);
 
       // Info o ładowności powrotnej
@@ -161,7 +162,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
       if (vessel && cargoCapacity > 0) {
         returnCargoInfo = document.createElement('div');
         returnCargoInfo.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
-        returnCargoInfo.textContent = `Ładowność powrotna: 0 / ${cargoCapacity} t`;
+        returnCargoInfo.textContent = t('tradeRoute.returnCapacity', 0, cargoCapacity);
         panel.appendChild(returnCargoInfo);
       }
 
@@ -193,15 +194,15 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
         }
       };
 
-      addReturnSection('Wydobyte', Object.entries(MINED_RESOURCES));
-      addReturnSection('Zbierane', Object.entries(HARVESTED_RESOURCES));
-      addReturnSection('Towary', Object.entries(COMMODITIES));
+      addReturnSection(t('tradeRoute.mined'), Object.entries(MINED_RESOURCES));
+      addReturnSection(t('tradeRoute.harvested'), Object.entries(HARVESTED_RESOURCES));
+      addReturnSection(t('tradeRoute.commodities'), Object.entries(COMMODITIES));
 
       // Jeśli cel nie ma zasobów
       if (Object.keys(returnInputs).length === 0) {
         const noRes = document.createElement('div');
         noRes.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textDim}; font-style: italic; margin: 4px 0;`;
-        noRes.textContent = 'Brak zasobów w kolonii docelowej';
+        noRes.textContent = t('tradeRoute.noTargetResources');
         panel.appendChild(noRes);
       }
 
@@ -213,7 +214,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
           total += parseInt(inp.value) || 0;
         }
         const overweight = total > cargoCapacity;
-        returnCargoInfo.textContent = `Ładowność powrotna: ${total} / ${cargoCapacity} t`;
+        returnCargoInfo.textContent = t('tradeRoute.returnCapacity', total, cargoCapacity);
         returnCargoInfo.style.color = overweight ? THEME.danger : THEME.textSecondary;
         confirmBtn.disabled = overweight;
         confirmBtn.style.opacity = overweight ? '0.4' : '1';
@@ -228,7 +229,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
     btns.style.cssText = 'display: flex; gap: 8px; justify-content: center; margin-top: 16px;';
 
     const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Anuluj';
+    cancelBtn.textContent = t('tradeRoute.cancel');
     cancelBtn.style.cssText = `
       padding: 8px 20px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.border};
       border-radius: 4px; color: ${THEME.textSecondary}; font-family: ${THEME.fontFamily}; cursor: pointer;
@@ -259,7 +260,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
         total += parseInt(inp.value) || 0;
       }
       const overweight = total > cargoCapacity;
-      cargoInfo.textContent = `${shipDef?.namePL ?? vessel?.shipId ?? ''} — ładowność: ${total} / ${cargoCapacity} t`;
+      cargoInfo.textContent = t('tradeRoute.shipInfo', getName({ id: vessel?.shipId, namePL: shipDef?.namePL }, 'ship'), total, cargoCapacity);
       cargoInfo.style.color = overweight ? THEME.danger : THEME.textSecondary;
       confirmBtn.disabled = overweight;
       confirmBtn.style.opacity = overweight ? '0.4' : '1';

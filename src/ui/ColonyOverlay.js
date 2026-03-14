@@ -14,6 +14,7 @@ import { PlanetGlobeTexture } from '../renderer/PlanetGlobeTexture.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import EventBus          from '../core/EventBus.js';
+import { t, getName }   from '../i18n/i18n.js';
 
 const LEFT_W  = 220;
 const RIGHT_W = 260;
@@ -26,47 +27,30 @@ window.addEventListener('resize', () => {
   _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 });
 
-// Krótkie nazwy budynków do siatki kafelków
-const TILE_NAMES = {
-  mine:                   'Kopalnia',
-  factory:                'Fabryka',
-  smelter:                'Huta',
-  launch_pad:             'Port Kosm.',
-  autonomous_spaceport:   'A.Port Kosm.',
-  autonomous_mine:        'Kop. Auto.',
-  solar_farm:             'El. Słoneczna',
-  geothermal:             'El. Geoterm.',
-  nuclear_plant:          'El. Jądrowa',
-  autonomous_solar_farm:  'El. Aut. Sł.',
-  fusion_reactor:         'Reaktor Fuz.',
-  farm:                   'Farma',
-  well:                   'Studnia',
-  synthesized_food_plant: 'Synt. Żywn.',
-  habitat:                'Habitat',
-  research_station:       'St. Badawcza',
-  shipyard:               'Stocznia',
-  terraformer:            'Terraformer',
-};
+// Krótkie nazwy budynków do siatki kafelków (i18n)
+function _tileName(buildingId) {
+  return t(`building.${buildingId}.tile`);
+}
 
-// Kategorie budynków do wyświetlenia
+// Kategorie budynków do wyświetlenia (i18n)
 const BUILDING_CATEGORIES = [
-  { id: 'mining',      label: '⛏ Wydobycie' },
-  { id: 'energy',      label: '⚡ Energia' },
-  { id: 'food',        label: '🌾 Żywność' },
-  { id: 'population',  label: '🏠 Populacja' },
-  { id: 'research',    label: '🔬 Badania' },
-  { id: 'space',       label: '🚀 Kosmos' },
+  { id: 'mining',      labelKey: 'category.mining' },
+  { id: 'energy',      labelKey: 'category.energy' },
+  { id: 'food',        labelKey: 'category.food' },
+  { id: 'population',  labelKey: 'category.population' },
+  { id: 'research',    labelKey: 'category.research' },
+  { id: 'space',       labelKey: 'category.space' },
 ];
 
-// Typy planet → ikona + label
+// Typy planet → ikona + label (i18n)
 function _planetTypeLabel(planet) {
   if (!planet) return '';
-  const t = planet.planetType || planet.type || '';
-  if (t.includes('ice'))     return '🧊 lodowa';
-  if (t.includes('gas'))     return '🌀 gazowa';
-  if (t.includes('volcanic'))return '🌋 wulkan.';
-  if (planet.lifeScore > 50) return '🌿 życie';
-  return '⛰ skalna';
+  const pt = planet.planetType || planet.type || '';
+  if (pt.includes('ice'))      return t('planetType.ice');
+  if (pt.includes('gas'))      return t('planetType.gas');
+  if (pt.includes('volcanic')) return t('planetType.volcanic');
+  if (planet.lifeScore > 50)   return t('planetType.life');
+  return t('planetType.rocky');
 }
 
 export class ColonyOverlay extends BaseOverlay {
@@ -199,7 +183,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (!hovTile) { this._hideDomTooltip(); return; }
 
     const terrain = TERRAIN_TYPES[hovTile.type];
-    const tName   = terrain?.namePL ?? hovTile.type;
+    const tName   = t(`terrain.${hovTile.type}.name`);
     const icon    = terrain?.icon ?? '';
 
     let html = `<div style="color:${THEME.textPrimary};font-size:13px;margin-bottom:2px"><b>${icon} ${tName}</b></div>`;
@@ -208,12 +192,12 @@ export class ColonyOverlay extends BaseOverlay {
     const bldg    = hovTile.buildingId ? BUILDINGS[hovTile.buildingId] : null;
     const capital = hovTile.capitalBase;
     if (capital && bldg) {
-      html += `<div style="color:${THEME.textSecondary}">🏛 Stolica + ${bldg.icon ?? ''} ${bldg.namePL}</div>`;
+      html += `<div style="color:${THEME.textSecondary}">🏛 ${t('building.colony_base.tile')} + ${bldg.icon ?? ''} ${getName(bldg, 'building')}</div>`;
     } else if (capital) {
-      html += `<div style="color:${THEME.textSecondary}">🏛 Stolica</div>`;
+      html += `<div style="color:${THEME.textSecondary}">🏛 ${t('building.colony_base.tile')}</div>`;
     } else if (bldg) {
       const lvl = hovTile.buildingLevel > 1 ? ` Lv${hovTile.buildingLevel}` : '';
-      html += `<div style="color:${THEME.textSecondary}">${bldg.icon ?? ''} ${bldg.namePL}${lvl}</div>`;
+      html += `<div style="color:${THEME.textSecondary}">${bldg.icon ?? ''} ${getName(bldg, 'building')}${lvl}</div>`;
     }
 
     // Zasoby bazowe terenu
@@ -414,7 +398,7 @@ export class ColonyOverlay extends BaseOverlay {
         this._pendingBuildingId = null;
         return;
       } else {
-        this._buildError = 'Nie można budować na tym terenie';
+        this._buildError = t('colonyPanel.badTerrain');
         this._buildErrorTime = Date.now() + 2000;
         return;
       }
@@ -690,12 +674,12 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.fillStyle = THEME.bgSecondary;
     ctx.fillRect(x, y, w, HDR_H);
 
-    this._drawText(ctx, 'KOLONIE', x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
+    this._drawText(ctx, t('colonyPanel.header'), x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
 
     const totalBuildings = colonies.reduce((s, c) => s + (c.buildingSystem?._active?.size ?? 0), 0);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(`${colonies.length} kolonii · ${totalBuildings} budynków`, x + pad, y + 32);
+    ctx.fillText(t('colonyPanel.summary', colonies.length, totalBuildings), x + pad, y + 32);
 
     this._drawSeparator(ctx, x, y + HDR_H, x + w, y + HDR_H);
 
@@ -736,14 +720,14 @@ export class ColonyOverlay extends BaseOverlay {
           // Sprawdź czy budynek ma upgrade w toku
           const realKey = isCapital ? key.slice(8) : key;
           const isUpgrading = upgradingKeys.has(realKey);
-          bldgs.push({ icon: isCapital ? '🏛' : (b?.icon ?? '🏗'), name: b?.namePL ?? '?', lvl, underConstruction: false, upgrading: isUpgrading });
+          bldgs.push({ icon: isCapital ? '🏛' : (b?.icon ?? '🏗'), name: b ? getName(b, 'building') : '?', lvl, underConstruction: false, upgrading: isUpgrading });
         }
       }
       if (bSys?._constructionQueue) {
         for (const [, entry] of bSys._constructionQueue) {
           if (entry.isUpgrade) continue; // upgrade już widoczny przy aktywnym budynku
           const b = BUILDINGS[entry.buildingId];
-          if (b) bldgs.push({ icon: b.icon ?? '🏗', name: b.namePL ?? '?', lvl: 1, underConstruction: true, upgrading: false });
+          if (b) bldgs.push({ icon: b.icon ?? '🏗', name: getName(b, 'building'), lvl: 1, underConstruction: true, upgrading: false });
         }
       }
 
@@ -831,7 +815,7 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Wybierz kolonię z listy', x + w / 2, y + h / 2);
+      ctx.fillText(t('colonyPanel.selectColony'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
@@ -842,14 +826,14 @@ export class ColonyOverlay extends BaseOverlay {
     if (colIdx > 0) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('← POPRZ.', x + 8, hdrMid);
+      ctx.fillText(t('colonyPanel.prev'), x + 8, hdrMid);
       this._addHit(x, y, 80, hdrH, 'prevColony');
     }
     if (colIdx < colonies.length - 1) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'right';
-      ctx.fillText('NAST. →', x + w - 8, hdrMid);
+      ctx.fillText(t('colonyPanel.next'), x + w - 8, hdrMid);
       ctx.textAlign = 'left';
       this._addHit(x + w - 80, y, 80, hdrH, 'nextColony');
     }
@@ -878,7 +862,7 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillStyle = 'rgba(2,4,5,0.85)';
       ctx.fillRect(mapX, mapY + mapH - barH, mapW, barH);
       ctx.fillStyle = THEME.warning;
-      ctx.fillText(`🏗 Tryb budowy: ${pB?.icon} ${pB?.namePL} — Kliknij hex · Esc anuluj`, mapX + 10, mapY + mapH - 8);
+      ctx.fillText(`🏗 ${t('colonyPanel.buildMode')}: ${pB?.icon} ${pB ? getName(pB, 'building') : '?'} — ${t('colonyPanel.buildHint')}`, mapX + 10, mapY + mapH - 8);
     }
   }
 
@@ -937,7 +921,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = this._buildPanelTab === 'build' ? THEME.accent : THEME.textSecondary;
     ctx.textAlign = 'center';
-    ctx.fillText('🔨 BUDUJ', tabX + tabW / 2, tabY + 11);
+    ctx.fillText(t('ui.buildTab'), tabX + tabW / 2, tabY + 11);
     this._addHit(tabX, tabY, tabW, tabH, 'buildTab', { tab: 'build' });
 
     // ZAINSTALUJ tab
@@ -946,7 +930,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.strokeStyle = this._buildPanelTab === 'deploy' ? THEME.accent : THEME.border;
     ctx.strokeRect(tabX + tabW, tabY, tabW, tabH);
     ctx.fillStyle = this._buildPanelTab === 'deploy' ? THEME.accent : THEME.textSecondary;
-    ctx.fillText('📦 ZAINSTALUJ', tabX + tabW + tabW / 2, tabY + 11);
+    ctx.fillText(t('ui.deployTab'), tabX + tabW + tabW / 2, tabY + 11);
     ctx.textAlign = 'left';
     this._addHit(tabX + tabW, tabY, tabW, tabH, 'buildTab', { tab: 'deploy' });
 
@@ -963,9 +947,9 @@ export class ColonyOverlay extends BaseOverlay {
       const pB = BUILDINGS[this._pendingBuildingId];
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.warning;
-      ctx.fillText(`Tryb: ${pB?.icon} ${pB?.namePL}`, x + pad + 4, y + HDR_H + 14);
+      ctx.fillText(`${t('colonyPanel.mode')}: ${pB?.icon} ${pB ? getName(pB, 'building') : '?'}`, x + pad + 4, y + HDR_H + 14);
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('Kliknij hex · Esc anuluj', x + pad + 4, y + HDR_H + 26);
+      ctx.fillText(t('colonyPanel.buildHint'), x + pad + 4, y + HDR_H + 26);
       headerExtra = 32;
     }
 
@@ -1011,7 +995,7 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.accent;
         ctx.globalAlpha = 0.7;
-        ctx.fillText(`${collapsed ? '▸' : '▾'} ${cat.label}`, x + pad + 4, ly + 14);
+        ctx.fillText(`${collapsed ? '▸' : '▾'} ${t(cat.labelKey)}`, x + pad + 4, ly + 14);
         ctx.globalAlpha = 1;
         // Cienka linia separatora pod nagłówkiem
         ctx.strokeStyle = THEME.border;
@@ -1085,7 +1069,7 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.textAlign = 'center';
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textPrimary;
-        const shortName = TILE_NAMES[b.id] ?? b.namePL;
+        const shortName = _tileName(b.id);
         ctx.fillText(shortName, tx + TILE_W / 2, ty + ICON_H + 11);
 
         // --- Produkcja / koszt (stonowane, monochromatyczne) ---
@@ -1184,7 +1168,7 @@ export class ColonyOverlay extends BaseOverlay {
     const no = (v) => `<span style="color:${THEME.danger}">✗</span>`;
     const ln = (check, text) => `<div>${check ? ok() : no()} ${text}</div>`;
 
-    let html = `<div style="color:${THEME.textPrimary};font-size:13px;margin-bottom:4px"><b>${b.icon} ${b.namePL}</b></div>`;
+    let html = `<div style="color:${THEME.textPrimary};font-size:13px;margin-bottom:4px"><b>${b.icon} ${getName(b, 'building')}</b></div>`;
 
     if (b.description) {
       html += `<div style="color:${THEME.textSecondary};margin-bottom:4px">${b.description}</div>`;
@@ -1199,7 +1183,7 @@ export class ColonyOverlay extends BaseOverlay {
         const have = Math.floor(inv[k] ?? 0);
         const isOk = have >= v;
         const icon = RESOURCE_ICONS[k] ?? k;
-        html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} ${icon} ${v} (masz: ${have})</div>`;
+        html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} ${icon} ${v} (${t('colonyPanel.have')}: ${have})</div>`;
       }
     }
 
@@ -1210,7 +1194,7 @@ export class ColonyOverlay extends BaseOverlay {
         const isOk = have >= v;
         const icon = COMMODITIES[k]?.icon ?? '📦';
         const name = COMMODITY_SHORT[k] ?? k;
-        html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} ${icon}${name} ${v} (masz: ${have})</div>`;
+        html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} ${icon}${name} ${v} (${t('colonyPanel.have')}: ${have})</div>`;
       }
     }
 
@@ -1219,22 +1203,22 @@ export class ColonyOverlay extends BaseOverlay {
       const civSys = colony?.civSystem;
       const freePop = civSys?.freePops ?? 0;
       const isOk = freePop >= b.popCost;
-      html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} 👤 ${b.popCost} POP (wolni: ${freePop.toFixed(1)})</div>`;
+      html += `<div style="color:${isOk ? THEME.success : THEME.danger};padding-left:6px">${isOk ? '✓' : '✗'} 👤 ${b.popCost} POP (${t('colonyPanel.free')}: ${freePop.toFixed(1)})</div>`;
     }
 
     html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
 
     // Produkcja
     if (b.rates && Object.keys(b.rates).length > 0) {
-      html += `<div style="color:${THEME.success}">Produkcja: ${formatRates(b.rates)}</div>`;
+      html += `<div style="color:${THEME.success}">${t('colonyPanel.production')}: ${formatRates(b.rates)}</div>`;
     }
-    if (b.housing > 0) html += `<div style="color:${THEME.info ?? THEME.accent}">Mieszkania: +${b.housing} POP</div>`;
-    if (b.buildTime > 0) html += `<div style="color:${THEME.textSecondary}">⏱ Budowa: ${b.buildTime} lat</div>`;
+    if (b.housing > 0) html += `<div style="color:${THEME.info ?? THEME.accent}">${t('colonyPanel.housing')}: +${b.housing} POP</div>`;
+    if (b.buildTime > 0) html += `<div style="color:${THEME.textSecondary}">⏱ ${t('colonyPanel.buildTime')}: ${b.buildTime} ${t('colonyPanel.years')}</div>`;
 
     // Tech
     if (b.requires) {
       html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
-      html += `<div style="color:${techOk ? THEME.success : (THEME.purple ?? '#cc66ff')}">${techOk ? '✓' : '✗'} Wymaga: ${b.requires}</div>`;
+      html += `<div style="color:${techOk ? THEME.success : (THEME.purple ?? '#cc66ff')}">${techOk ? '✓' : '✗'} ${t('colonyPanel.requires')}: ${b.requires}</div>`;
     }
 
     // Teren
@@ -1246,7 +1230,7 @@ export class ColonyOverlay extends BaseOverlay {
         else if (b.terrainAny) terrainOk = true;
         else terrainOk = (terrain.allowedCategories ?? []).includes(b.category);
       }
-      html += `<div style="color:${terrainOk ? THEME.success : THEME.danger}">${terrainOk ? '✓' : '✗'} Teren: ${terrain?.icon ?? ''} ${terrain?.namePL ?? checkTile.type}</div>`;
+      html += `<div style="color:${terrainOk ? THEME.success : THEME.danger}">${terrainOk ? '✓' : '✗'} ${t('colonyPanel.terrain')}: ${terrain?.icon ?? ''} ${t(`terrain.${checkTile.type}.name`)}</div>`;
     }
 
     // Pokaż tooltip przy kursorze (screen coords)
@@ -1275,7 +1259,7 @@ export class ColonyOverlay extends BaseOverlay {
     const inv = colony?.resourceSystem?.inventorySnapshot?.() ?? {};
 
     let canAffordAll = true;
-    let html = `<div style="color:${THEME.warning};font-size:13px;margin-bottom:4px"><b>▲ Ulepszenie → Poz. ${nextLevel}</b></div>`;
+    let html = `<div style="color:${THEME.warning};font-size:13px;margin-bottom:4px"><b>▲ ${t('colonyPanel.upgradeTo', nextLevel)}</b></div>`;
     html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
 
     for (const [k, v] of Object.entries(bDef.cost ?? {})) {
@@ -1284,7 +1268,7 @@ export class ColonyOverlay extends BaseOverlay {
       const isOk = have >= need;
       if (!isOk) canAffordAll = false;
       const icon = RESOURCE_ICONS[k] ?? k;
-      html += `<div style="color:${isOk ? THEME.success : THEME.danger}">${icon} ${need} (masz: ${have})</div>`;
+      html += `<div style="color:${isOk ? THEME.success : THEME.danger}">${icon} ${need} (${t('colonyPanel.have')}: ${have})</div>`;
     }
 
     if (nextLevel >= 3 && bDef.commodityCost) {
@@ -1295,7 +1279,7 @@ export class ColonyOverlay extends BaseOverlay {
         if (!isOk) canAffordAll = false;
         const icon = COMMODITIES[k]?.icon ?? '📦';
         const name = COMMODITY_SHORT[k] ?? k;
-        html += `<div style="color:${isOk ? THEME.success : THEME.danger}">${icon}${name} ${need} (masz: ${have})</div>`;
+        html += `<div style="color:${isOk ? THEME.success : THEME.danger}">${icon}${name} ${need} (${t('colonyPanel.have')}: ${have})</div>`;
       }
     }
 
@@ -1303,16 +1287,16 @@ export class ColonyOverlay extends BaseOverlay {
       const civSys = colony?.civSystem;
       const freePop = civSys?.freePops ?? 0;
       const isOk = freePop >= bDef.popCost;
-      html += `<div style="color:${isOk ? THEME.success : THEME.danger}">👤 ${bDef.popCost} POP (wolni: ${freePop.toFixed(1)})</div>`;
+      html += `<div style="color:${isOk ? THEME.success : THEME.danger}">👤 ${bDef.popCost} POP (${t('colonyPanel.free')}: ${freePop.toFixed(1)})</div>`;
     }
 
     if (bDef.buildTime > 0) {
       html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
-      html += `<div style="color:${THEME.textSecondary}">⏱ Czas: ${(bDef.buildTime * 0.5).toFixed(1)} lat</div>`;
+      html += `<div style="color:${THEME.textSecondary}">⏱ ${t('colonyPanel.time')}: ${(bDef.buildTime * 0.5).toFixed(1)} ${t('colonyPanel.years')}</div>`;
     }
 
     html += `<div style="border-top:1px solid ${THEME.border};margin:4px 0"></div>`;
-    html += `<div style="color:${canAffordAll ? THEME.success : THEME.danger}">${canAffordAll ? '✅ Wystarczające zasoby' : '❌ Brakuje zasobów'}</div>`;
+    html += `<div style="color:${canAffordAll ? THEME.success : THEME.danger}">${canAffordAll ? `✅ ${t('colonyPanel.enoughResources')}` : `❌ ${t('colonyPanel.notEnoughResources')}`}</div>`;
 
     this._showDomTooltip(html, this._tooltipUpgradeX * _UI_SCALE, this._tooltipUpgradeY * _UI_SCALE);
   }
@@ -1362,19 +1346,19 @@ export class ColonyOverlay extends BaseOverlay {
 
         // Sprawdź czy deploy jest możliwy
         let canDeploy = !!tile;
-        let reason = tile ? '' : 'Wybierz hex';
+        let reason = tile ? '' : t('colonyPanel.selectHex');
         if (tile && !bSys._canBuildOnTile(tile, buildingDef)) {
           canDeploy = false;
-          reason = 'Zły teren';
+          reason = t('colonyPanel.wrongTerrain');
         } else if (tile && buildingDef.requires && !window.KOSMOS?.techSystem?.isResearched(buildingDef.requires)) {
           canDeploy = false;
-          reason = 'Wymaga tech';
+          reason = t('colonyPanel.needsTech');
         } else if (tile) {
           const popCost = buildingDef.popCost ?? 0.25;
           const isOutpostCol = colony.isOutpost;
           if (popCost > 0 && !isOutpostCol && colony.civSystem?.freePops < popCost) {
             canDeploy = false;
-            reason = 'Brak POPów';
+            reason = t('colonyPanel.noPops');
           }
         }
 
@@ -1387,7 +1371,7 @@ export class ColonyOverlay extends BaseOverlay {
         // Ikona + nazwa + ilość
         ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = canDeploy ? THEME.successDim : '#663333';
-        ctx.fillText(`${com.icon} ${buildingDef.icon} ${buildingDef.namePL} ×${qty}`, x + pad + 6, yy + 10);
+        ctx.fillText(`${com.icon} ${buildingDef.icon} ${getName(buildingDef, 'building')} ×${qty}`, x + pad + 6, yy + 10);
 
         if (canDeploy) {
           const btnW = 52;
@@ -1419,13 +1403,13 @@ export class ColonyOverlay extends BaseOverlay {
     if (!anyPrefab) {
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText('Brak prefabów w cargo', x + pad, yy + 10);
+      ctx.fillText(t('colonyPanel.noPrefabs'), x + pad, yy + 10);
       yy += 14;
       ctx.fillStyle = THEME.borderLight;
       ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillText('Załaduj prefabrykaty na', x + pad, yy + 6);
+      ctx.fillText(t('colonyPanel.loadPrefabs'), x + pad, yy + 6);
       yy += 10;
-      ctx.fillText('statek cargo w panelu floty.', x + pad, yy + 6);
+      ctx.fillText(t('ui.loadPrefabOnShip'), x + pad, yy + 6);
     }
   }
 
@@ -1436,7 +1420,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     const vessel = vMgr.getVessel(vesselId);
     if (!vessel?.cargo?.[prefabId] || vessel.cargo[prefabId] <= 0) {
-      this._flashMsg = 'Brak prefabu w cargo';
+      this._flashMsg = t('colonyPanel.noPrefabCargo');
       this._flashEnd = Date.now() + 2500;
       return;
     }
@@ -1476,7 +1460,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.fillRect(x, y, w, HDR_H);
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(`${bDef.icon} ${bDef.namePL}`, x + pad, y + Math.round(HDR_H / 2) + 4);
+    ctx.fillText(`${bDef.icon} ${getName(bDef, 'building')}`, x + pad, y + Math.round(HDR_H / 2) + 4);
     this._drawSeparator(ctx, x, y + HDR_H, x + w, y + HDR_H);
 
     let ly = y + HDR_H + 8;
@@ -1485,7 +1469,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     const catDef = BUILDING_CATEGORIES.find(c => c.id === bDef.category);
-    ctx.fillText(`${catDef?.label ?? bDef.category} · Poz. ${level}`, x + pad, ly);
+    ctx.fillText(`${catDef ? t(catDef.labelKey) : bDef.category} · ${t('colonyPanel.level')} ${level}`, x + pad, ly);
     ly += 14;
 
     // Opis
@@ -1546,7 +1530,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Pasek poziomu
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText('Poziom:', x + pad, ly);
+    ctx.fillText(t('colonyPanel.levelLabel'), x + pad, ly);
     const maxLvl = bDef.maxLevel ?? 10;
     const sqSize = 8;
     const sqGap = 3;
@@ -1566,7 +1550,7 @@ export class ColonyOverlay extends BaseOverlay {
 
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.warning;
-      ctx.fillText(`🔨 Rozbudowa → Poz. ${targetLvl}`, x + pad, ly);
+      ctx.fillText(`🔨 ${t('colonyPanel.upgradingTo', targetLvl)}`, x + pad, ly);
       ly += 14;
 
       // Pasek progresu
@@ -1574,14 +1558,14 @@ export class ColonyOverlay extends BaseOverlay {
       ly += 10;
 
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`${Math.round(pct * 100)}% ukończono`, x + pad, ly);
+      ctx.fillText(`${Math.round(pct * 100)}% ${t('colonyPanel.completed')}`, x + pad, ly);
       ly += 18;
     } else if (level < maxLvl) {
       // Ulepszenie — koszt + przycisk
       const nextLevel = level + 1;
       const upgCostMult = nextLevel * 1.2;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`Ulepszenie → Poz. ${nextLevel}`, x + pad, ly);
+      ctx.fillText(t('colonyPanel.upgradeTo', nextLevel), x + pad, ly);
       ly += 14;
 
       // Koszt surowców
@@ -1619,14 +1603,14 @@ export class ColonyOverlay extends BaseOverlay {
 
       // Przycisk ULEPSZ (wyłączony gdy brak surowców)
       const btnStyle = canAffordAll ? 'primary' : 'disabled';
-      this._drawButton(ctx, '▲ ULEPSZ', x + pad, ly, w - pad * 2, 24, btnStyle);
+      this._drawButton(ctx, `▲ ${t('colonyPanel.upgrade')}`, x + pad, ly, w - pad * 2, 24, btnStyle);
       this._addHit(x + pad, ly, w - pad * 2, 24, 'upgrade', { q: tile.q, r: tile.r, buildingId: tile.buildingId });
       ly += 32;
     }
 
     // Przycisk BURZ (ukryj przy trwającej rozbudowie)
     if (!bDef.isCapital && !isUpgrading) {
-      this._drawButton(ctx, '🗑 BURZ', x + pad, ly, w - pad * 2, 24, 'danger');
+      this._drawButton(ctx, `🗑 ${t('colonyPanel.demolish')}`, x + pad, ly, w - pad * 2, 24, 'danger');
       this._addHit(x + pad, ly, w - pad * 2, 24, 'demolish', { q: tile.q, r: tile.r });
     }
   }
@@ -1641,7 +1625,7 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.fillRect(x, y, w, HDR_H);
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('HEX PUSTY', x + pad, y + Math.round(HDR_H / 2) + 4);
+    ctx.fillText(t('colonyPanel.emptyHex'), x + pad, y + Math.round(HDR_H / 2) + 4);
     this._drawSeparator(ctx, x, y + HDR_H, x + w, y + HDR_H);
 
     let ly = y + HDR_H + 14;
@@ -1651,7 +1635,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (terrain) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`${terrain.icon} ${terrain.namePL}`, x + pad, ly);
+      ctx.fillText(`${terrain.icon} ${t(`terrain.${tile.type}.name`)}`, x + pad, ly);
       ly += 14;
       if (terrain.description) {
         ctx.fillStyle = THEME.textDim;
@@ -1662,7 +1646,7 @@ export class ColonyOverlay extends BaseOverlay {
       // Dozwolone kategorie
       if (terrain.allowedCategories?.length > 0) {
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(`Kategorie: ${terrain.allowedCategories.join(', ')}`, x + pad, ly);
+        ctx.fillText(`${t('colonyPanel.categories')}: ${terrain.allowedCategories.join(', ')}`, x + pad, ly);
         ly += 14;
       }
       // Bonus
@@ -1679,17 +1663,17 @@ export class ColonyOverlay extends BaseOverlay {
     ly += 10;
 
     if (terrain?.buildable && !tile.underConstruction) {
-      this._drawButton(ctx, '+ ZBUDUJ TUTAJ', x + pad, ly, w - pad * 2, 28, 'primary');
+      this._drawButton(ctx, `+ ${t('colonyPanel.buildHere')}`, x + pad, ly, w - pad * 2, 28, 'primary');
       this._addHit(x + pad, ly, w - pad * 2, 28, 'enterBuildMode');
     } else if (tile.underConstruction) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.warning;
       const pct = Math.round((tile.underConstruction.progress / tile.underConstruction.buildTime) * 100);
-      ctx.fillText(`🔨 Budowa w toku: ${pct}%`, x + pad, ly);
+      ctx.fillText(`🔨 ${t('colonyPanel.buildInProgress')}: ${pct}%`, x + pad, ly);
     } else {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('Teren nie do zabudowy', x + pad, ly);
+      ctx.fillText(t('colonyPanel.unbuildable'), x + pad, ly);
     }
   }
 

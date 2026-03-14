@@ -34,6 +34,7 @@ import { FactorySystem } from './FactorySystem.js';
 import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { RegionSystem } from '../map/RegionSystem.js';
+import { t } from '../i18n/i18n.js';
 
 // Rozmiary siatek hex per typ/masa ciała
 const GRID_SIZES = {
@@ -528,19 +529,19 @@ export class ColonyManager {
   startShipBuild(planetId, shipId) {
     const colony = this.getColony(planetId);
     if (!colony) {
-      EventBus.emit('fleet:buildFailed', { reason: 'Nie znaleziono kolonii' });
-      return { ok: false, reason: 'Nie znaleziono kolonii' };
+      EventBus.emit('fleet:buildFailed', { reason: t('fleet.colonyNotFound') });
+      return { ok: false, reason: t('fleet.colonyNotFound') };
     }
 
     const ship = SHIPS[shipId];
     if (!ship) {
-      EventBus.emit('fleet:buildFailed', { reason: 'Nieznany typ statku' });
-      return { ok: false, reason: 'Nieznany typ statku' };
+      EventBus.emit('fleet:buildFailed', { reason: t('fleet.unknownShip') });
+      return { ok: false, reason: t('fleet.unknownShip') };
     }
 
     // Sprawdź tech
     if (ship.requires && !this.techSystem?.isResearched(ship.requires)) {
-      const reason = `Wymaga technologii: ${ship.requires}`;
+      const reason = t('fleet.requiresTech', ship.requires);
       EventBus.emit('fleet:buildFailed', { reason });
       return { ok: false, reason };
     }
@@ -548,7 +549,7 @@ export class ColonyManager {
     // Sprawdź czy stocznia istnieje i ile slotów ma
     const shipyardLevel = this._getShipyardLevel(colony);
     if (shipyardLevel === 0) {
-      const reason = 'Brak Stoczni w tej kolonii';
+      const reason = t('fleet.noShipyard');
       EventBus.emit('fleet:buildFailed', { reason });
       return { ok: false, reason };
     }
@@ -556,7 +557,7 @@ export class ColonyManager {
     // Sprawdź czy są wolne sloty (1 slot per poziom stoczni)
     if (!colony.shipQueues) colony.shipQueues = [];
     if (colony.shipQueues.length >= shipyardLevel) {
-      const reason = `Stocznia pełna: ${colony.shipQueues.length}/${shipyardLevel} slotów`;
+      const reason = t('fleet.shipyardFull', colony.shipQueues.length, shipyardLevel);
       EventBus.emit('fleet:buildFailed', { reason });
       return { ok: false, reason };
     }
@@ -564,7 +565,7 @@ export class ColonyManager {
     // Sprawdź czy stać na koszt (surowce + commodities)
     const allCosts = { ...ship.cost, ...(ship.commodityCost || {}) };
     if (!colony.resourceSystem.canAfford(allCosts)) {
-      const reason = 'Brak surowców na budowę statku';
+      const reason = t('fleet.noResources');
       EventBus.emit('fleet:buildFailed', { reason });
       return { ok: false, reason };
     }
@@ -574,7 +575,7 @@ export class ColonyManager {
     if (crewCost > 0) {
       const freePops = colony.civSystem?.freePops ?? 0;
       if (freePops < crewCost) {
-        const reason = `Brak wolnych POPów (potrzeba ${crewCost})`;
+        const reason = t('fleet.noCrewPops', crewCost);
         EventBus.emit('fleet:buildFailed', { reason });
         return { ok: false, reason };
       }

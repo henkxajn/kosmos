@@ -33,13 +33,14 @@
 //               civ:popBorn, civ:popDied, civ:unrest, civ:unrestLifted, civ:famine
 
 import EventBus from '../core/EventBus.js';
+import { t } from '../i18n/i18n.js';
 
 // ── Epoki cywilizacyjne (progi POPowe) ──────────────────────────────────────
 export const CIV_EPOCHS = [
-  { id: 0, namePL: 'Pierwotna',    minPop:  0 },
-  { id: 1, namePL: 'Industrialna', minPop: 10 },
-  { id: 2, namePL: 'Kosmiczna',    minPop: 30 },
-  { id: 3, namePL: 'Międzyplan.',  minPop: 80 },
+  { id: 0, namePL: 'Pierwotna',    key: 'epoch.primitive',      minPop:  0 },
+  { id: 1, namePL: 'Industrialna', key: 'epoch.industrial',     minPop: 10 },
+  { id: 2, namePL: 'Kosmiczna',    key: 'epoch.space',          minPop: 30 },
+  { id: 3, namePL: 'Międzyplan.',  key: 'epoch.interplanetary', minPop: 80 },
 ];
 
 // ── Stałe populacji POP ─────────────────────────────────────────────────────
@@ -147,7 +148,10 @@ export class CivilizationSystem {
 
   // ── Gettery publiczne ───────────────────────────────────────────────────
 
-  get epochName() { return CIV_EPOCHS[this.epochIndex]?.namePL ?? 'Pierwotna'; }
+  get epochName() {
+    const epoch = CIV_EPOCHS[this.epochIndex];
+    return epoch?.key ? t(epoch.key) : (epoch?.namePL ?? t('epoch.primitive'));
+  }
   get isUnrest()  { return this._unrestActive; }
   get isFamine()  { return this._famineActive; }
 
@@ -373,9 +377,11 @@ export class CivilizationSystem {
     for (let i = CIV_EPOCHS.length - 1; i > this.epochIndex; i--) {
       if (this.population >= CIV_EPOCHS[i].minPop) {
         this.epochIndex = i;
+        const epochObj = CIV_EPOCHS[i];
+        const epochName = epochObj.key ? t(epochObj.key) : epochObj.namePL;
         EventBus.emit('civ:epochChanged', {
-          epoch:   CIV_EPOCHS[i],
-          message: `Cywilizacja wkroczyła w epokę: ${CIV_EPOCHS[i].namePL}`,
+          epoch:   epochObj,
+          message: t('epoch.entered', epochName),
         });
         break;
       }

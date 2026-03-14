@@ -5,45 +5,51 @@
 // Gra działa normalnie po lewej stronie.
 
 import { THEME, DEFAULT_THEME, PRESET_THEMES, applyTheme, applyPreset, saveTheme, resetTheme, hexToRgb } from '../config/ThemeConfig.js';
+import { t } from '../i18n/i18n.js';
 
 // ── Sekcje edytora ──────────────────────────────────────────────
 
-const SECTIONS = [
-  {
-    label: 'Powierzchnie',
-    keys: ['bgPrimary', 'bgSecondary', 'bgTertiary'],
-    labels: { bgPrimary: 'Tło główne', bgSecondary: 'Tło modali', bgTertiary: 'Tło przycisków' },
-  },
-  {
-    label: 'Obramowania',
-    keys: ['border', 'borderLight', 'borderActive'],
-    labels: { border: 'Ramka', borderLight: 'Ramka jasna', borderActive: 'Ramka aktywna' },
-  },
-  {
-    label: 'Tekst',
-    keys: ['textPrimary', 'textSecondary', 'textLabel', 'textDim', 'textHeader', 'accent'],
-    labels: {
-      textPrimary: 'Jasny', textSecondary: 'Zwykły', textLabel: 'Label',
-      textDim: 'Przyciemniony', textHeader: 'Nagłówek', accent: 'Akcent',
+// Sekcje budowane dynamicznie — etykiety z i18n
+function _getSections() {
+  return [
+    {
+      label: t('theme.surfaces'),
+      keys: ['bgPrimary', 'bgSecondary', 'bgTertiary'],
+      labels: { bgPrimary: t('theme.bgPrimary'), bgSecondary: t('theme.bgSecondary'), bgTertiary: t('theme.bgTertiary') },
     },
-  },
-  {
-    label: 'Statusy',
-    keys: ['success', 'successDim', 'danger', 'dangerDim', 'warning', 'yellow', 'info', 'purple', 'mint'],
-    labels: {
-      success: 'Sukces', successDim: 'Sukces dim', danger: 'Błąd', dangerDim: 'Błąd dim',
-      warning: 'Ostrzeżenie', yellow: 'Żółty', info: 'Info', purple: 'Specjalny', mint: 'Mint',
+    {
+      label: t('theme.borders'),
+      keys: ['border', 'borderLight', 'borderActive'],
+      labels: { border: t('theme.border'), borderLight: t('theme.borderLight'), borderActive: t('theme.borderActive') },
     },
-  },
-];
+    {
+      label: t('theme.text'),
+      keys: ['textPrimary', 'textSecondary', 'textLabel', 'textDim', 'textHeader', 'accent'],
+      labels: {
+        textPrimary: t('theme.textPrimary'), textSecondary: t('theme.textSecondary'), textLabel: t('theme.textLabel'),
+        textDim: t('theme.textDim'), textHeader: t('theme.textHeader'), accent: t('theme.accent'),
+      },
+    },
+    {
+      label: t('theme.statuses'),
+      keys: ['success', 'successDim', 'danger', 'dangerDim', 'warning', 'yellow', 'info', 'purple', 'mint'],
+      labels: {
+        success: t('theme.success'), successDim: t('theme.successDim'), danger: t('theme.danger'), dangerDim: t('theme.dangerDim'),
+        warning: t('theme.warning'), yellow: t('theme.yellow'), info: t('theme.info'), purple: t('theme.purple'), mint: t('theme.mint'),
+      },
+    },
+  ];
+}
 
-const FONT_KEYS = [
-  { key: 'fontSizeSmall',  label: 'Mały',  min: 6, max: 16 },
-  { key: 'fontSizeNormal', label: 'Normalny', min: 7, max: 18 },
-  { key: 'fontSizeMedium', label: 'Średni', min: 8, max: 20 },
-  { key: 'fontSizeLarge',  label: 'Duży',  min: 10, max: 24 },
-  { key: 'fontSizeTitle',  label: 'Tytuł', min: 12, max: 30 },
-];
+function _getFontKeys() {
+  return [
+    { key: 'fontSizeSmall',  label: t('theme.small'),  min: 6, max: 16 },
+    { key: 'fontSizeNormal', label: t('theme.normal'), min: 7, max: 18 },
+    { key: 'fontSizeMedium', label: t('theme.medium'), min: 8, max: 20 },
+    { key: 'fontSizeLarge',  label: t('theme.large'),  min: 10, max: 24 },
+    { key: 'fontSizeTitle',  label: t('theme.title'), min: 12, max: 30 },
+  ];
+}
 
 // ── ThemeOverlay class ──────────────────────────────────────────
 
@@ -103,7 +109,7 @@ export class ThemeOverlay {
 
     // Nagłówek
     const header = this._el('div', {
-      textContent: 'MOTYW [F7]',
+      textContent: t('theme.header'),
       style: `color:${THEME.accent};font-size:14px;font-weight:bold;text-align:center;margin-bottom:8px;padding:6px 0;border-bottom:1px solid ${THEME.border};letter-spacing:2px;`,
     });
     root.appendChild(header);
@@ -112,7 +118,7 @@ export class ThemeOverlay {
     root.appendChild(this._buildPresets());
 
     // Sekcje kolorów
-    for (const section of SECTIONS) {
+    for (const section of _getSections()) {
       root.appendChild(this._buildColorSection(section));
     }
 
@@ -139,7 +145,7 @@ export class ThemeOverlay {
     for (const [name, preset] of Object.entries(PRESET_THEMES)) {
       if (name.startsWith('terminal_')) {
         terminal.push([name, preset]);
-      } else {
+      } else if (!name.startsWith('ss_') && !name.startsWith('ambient_')) {
         classic.push([name, preset]);
       }
     }
@@ -148,13 +154,14 @@ export class ThemeOverlay {
     const DISPLAY = {
       default: 'Default', cyberpunk: 'Cyberpunk', arctic: 'Arctic', amber: 'Amber',
       emerald: 'Emerald', crimson: 'Crimson', midnight: 'Midnight', kosmos: 'Kosmos', solar: 'Solar',
+      neon_cyber: '⚡ Neon Cyber',
       terminal_amber: '🖥 Amber', terminal_red: '🖥 Red',
       terminal_green: '🖥 Green', terminal_gold: '🖥 Gold',
     };
 
     // — Sekcja: Klasyczne —
     const classicLabel = this._el('div', {
-      textContent: 'KLASYCZNE',
+      textContent: t('theme.classic'),
       style: `color:${THEME.textHeader};font-size:9px;margin-bottom:4px;font-weight:bold;`,
     });
     wrap.appendChild(classicLabel);
@@ -167,7 +174,7 @@ export class ThemeOverlay {
 
     // — Sekcja: Terminal (CRT) —
     const termLabel = this._el('div', {
-      textContent: 'TERMINAL (CRT)',
+      textContent: t('theme.terminal'),
       style: `color:${THEME.textHeader};font-size:9px;margin-bottom:4px;font-weight:bold;`,
     });
     wrap.appendChild(termLabel);
@@ -285,7 +292,7 @@ export class ThemeOverlay {
     const headerRow = this._el('div', {
       style: `display:flex;justify-content:space-between;cursor:pointer;color:${THEME.textHeader};font-size:9px;font-weight:bold;margin-bottom:4px;`,
     });
-    const headerLabel = this._el('span', { textContent: 'FONTY' });
+    const headerLabel = this._el('span', { textContent: t('theme.fonts') });
     const arrow = this._el('span', { textContent: '▼', style: 'font-size:8px;' });
     headerRow.appendChild(headerLabel);
     headerRow.appendChild(arrow);
@@ -305,7 +312,7 @@ export class ThemeOverlay {
       style: 'display:flex;align-items:center;margin-bottom:6px;gap:4px;',
     });
     const famLbl = this._el('span', {
-      textContent: 'Rodzina',
+      textContent: t('theme.fontFamily'),
       style: `width:60px;color:${THEME.textSecondary};font-size:9px;`,
     });
     famRow.appendChild(famLbl);
@@ -324,7 +331,7 @@ export class ThemeOverlay {
     this._inputs.fontFamily = { text: famInput };
 
     // Slidery rozmiarów
-    for (const { key, label, min, max } of FONT_KEYS) {
+    for (const { key, label, min, max } of _getFontKeys()) {
       const row = this._el('div', {
         style: 'display:flex;align-items:center;margin-bottom:3px;gap:4px;',
       });
@@ -376,24 +383,24 @@ export class ThemeOverlay {
     `;
 
     // Eksport
-    const btnExport = this._el('button', { textContent: 'EKSPORTUJ (schowek)', style: btnStyle });
+    const btnExport = this._el('button', { textContent: t('theme.export'), style: btnStyle });
     btnExport.addEventListener('click', () => {
       const data = {};
       for (const key of Object.keys(DEFAULT_THEME)) {
         data[key] = THEME[key];
       }
       navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
-        btnExport.textContent = 'Skopiowano!';
-        setTimeout(() => { btnExport.textContent = 'EKSPORTUJ (schowek)'; }, 1500);
+        btnExport.textContent = t('theme.exported');
+        setTimeout(() => { btnExport.textContent = t('theme.export'); }, 1500);
       }).catch(() => {
-        btnExport.textContent = 'Błąd kopiowania';
-        setTimeout(() => { btnExport.textContent = 'EKSPORTUJ (schowek)'; }, 1500);
+        btnExport.textContent = t('theme.exportError');
+        setTimeout(() => { btnExport.textContent = t('theme.export'); }, 1500);
       });
     });
     wrap.appendChild(btnExport);
 
     // Import
-    const btnImport = this._el('button', { textContent: 'IMPORTUJ (ze schowka)', style: btnStyle });
+    const btnImport = this._el('button', { textContent: t('theme.import'), style: btnStyle });
     btnImport.addEventListener('click', () => {
       navigator.clipboard.readText().then(text => {
         try {
@@ -401,21 +408,21 @@ export class ThemeOverlay {
           applyTheme(data);
           this._syncAll();
           saveTheme();
-          btnImport.textContent = 'Zaimportowano!';
+          btnImport.textContent = t('theme.imported');
         } catch {
-          btnImport.textContent = 'Błędny JSON!';
+          btnImport.textContent = t('theme.importError');
         }
-        setTimeout(() => { btnImport.textContent = 'IMPORTUJ (ze schowka)'; }, 1500);
+        setTimeout(() => { btnImport.textContent = t('theme.import'); }, 1500);
       }).catch(() => {
-        btnImport.textContent = 'Brak dostępu do schowka';
-        setTimeout(() => { btnImport.textContent = 'IMPORTUJ (ze schowka)'; }, 1500);
+        btnImport.textContent = t('theme.importNoAccess');
+        setTimeout(() => { btnImport.textContent = t('theme.import'); }, 1500);
       });
     });
     wrap.appendChild(btnImport);
 
     // Reset
     const btnReset = this._el('button', {
-      textContent: 'RESET DO DOMYŚLNYCH',
+      textContent: t('theme.reset'),
       style: btnStyle.replace(THEME.border, THEME.dangerDim),
     });
     btnReset.addEventListener('click', () => {

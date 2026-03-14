@@ -14,13 +14,14 @@ import { showRenameModal }    from '../ui/ModalInput.js';
 import { showTradeRouteModal } from '../ui/TradeRouteModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { drawMiniBar }     from '../ui/CivPanelDrawer.js';
+import { t, getName }     from '../i18n/i18n.js';
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
 const _BODY_TYPES = ['planet', 'moon', 'asteroid', 'comet', 'planetoid'];
 function _findBody(id) {
   if (!id) return null;
-  for (const t of _BODY_TYPES) {
-    for (const b of EntityManager.getByType(t)) {
+  for (const btype of _BODY_TYPES) {
+    for (const b of EntityManager.getByType(btype)) {
       if (b.id === id) return b;
     }
   }
@@ -45,14 +46,17 @@ const STATUS_ICONS = {
   refueling:  '⚡',
 };
 
-const FILTER_BTNS = [
-  { id: 'all',    label: 'WSZYSTKIE' },
-  { id: 'science_vessel', label: '🔬' },
-  { id: 'cargo_ship',     label: '📦' },
-  { id: 'heavy_freighter', label: '🚛' },
-  { id: 'colony_ship',    label: '🏠' },
-  { id: 'here',           label: '• TU' },
-];
+// Filtr — labele dynamiczne (i18n)
+function _getFilterBtns() {
+  return [
+    { id: 'all',    label: t('fleet.filterAll') },
+    { id: 'science_vessel', label: '🔬' },
+    { id: 'cargo_ship',     label: '📦' },
+    { id: 'heavy_freighter', label: '🚛' },
+    { id: 'colony_ship',    label: '🏠' },
+    { id: 'here',           label: t('fleet.filterHereAlt') },
+  ];
+}
 
 // Kolory alias — krótsze odwołania do THEME
 const C = {
@@ -584,19 +588,19 @@ export class FleetTabPanel {
     let cy = y + 4;
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.title;
-    ctx.fillText('FLOTA', x + PAD, cy + 8);
+    ctx.fillText(t('fleet.header'), x + PAD, cy + 8);
 
     // Liczba statków
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
     ctx.textAlign = 'right';
-    ctx.fillText(`${vessels.length} statków`, x + w - PAD, cy + 8);
+    ctx.fillText(t('fleet.shipsCount', vessels.length), x + w - PAD, cy + 8);
     ctx.textAlign = 'left';
     cy += LH + 2;
 
     // ── Filtry ──
     let fx = x + PAD;
-    for (const fb of FILTER_BTNS) {
+    for (const fb of _getFilterBtns()) {
       const active = this._filter === fb.id;
       const tw = ctx.measureText(fb.label).width + 8;
       ctx.fillStyle = active ? 'rgba(0,255,180,0.15)' : 'rgba(20,30,40,0.6)';
@@ -618,11 +622,11 @@ export class FleetTabPanel {
     const orbiting = vessels.filter(v => v.position.state === 'orbiting').length;
     ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
-    ctx.fillText(`IDLE`, x + PAD, cy + 6);
+    ctx.fillText(t('fleet.statusIdle'), x + PAD, cy + 6);
     ctx.fillStyle = C.dim;
-    ctx.fillText(`W MISJI`, x + PAD + 50, cy + 6);
+    ctx.fillText(t('fleet.statusInMission'), x + PAD + 50, cy + 6);
     ctx.fillStyle = C.dim;
-    ctx.fillText(`ORBITA`, x + PAD + 120, cy + 6);
+    ctx.fillText(t('fleet.statusOrbit'), x + PAD + 120, cy + 6);
     cy += 10;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.green;
@@ -722,9 +726,9 @@ export class FleetTabPanel {
 
       // Wiersz 2: status + lokalizacja
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      const statusLabel = vessel.position.state === 'docked' ? 'Bezczynny'
-        : vessel.position.state === 'orbiting' ? 'Na orbicie'
-        : 'W MISJI';
+      const statusLabel = vessel.position.state === 'docked' ? t('fleet.statusTextDocked')
+        : vessel.position.state === 'orbiting' ? t('fleet.statusTextOrbiting')
+        : t('fleet.statusTextInMission');
       ctx.fillStyle = sColor;
       ctx.fillText(statusLabel, x + PAD + 12, ly + 26);
 
@@ -772,7 +776,7 @@ export class FleetTabPanel {
     // Nagłówek
     ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.title;
-    ctx.fillText('KATALOG CIAŁ', x + PAD, cy + 8);
+    ctx.fillText(t('fleet.catalogHeader'), x + PAD, cy + 8);
 
     const entries = this._getAllCatalogBodies();
     const exploredCount = entries.filter(e => e.explored).length;
@@ -790,7 +794,7 @@ export class FleetTabPanel {
     if (entries.length === 0) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.dim;
-      ctx.fillText('Brak ciał', x + PAD, cy + 8);
+      ctx.fillText(t('fleet.catalogNoBodies'), x + PAD, cy + 8);
       this._catalogContentH = 0;
       this._catalogVisibleH = 0;
       return;
@@ -893,8 +897,8 @@ export class FleetTabPanel {
   _getAllCatalogBodies() {
     const homePl = window.KOSMOS?.homePlanet;
     const planets = [];
-    for (const t of ['planet', 'planetoid']) {
-      for (const body of EntityManager.getByType(t)) {
+    for (const btype of ['planet', 'planetoid']) {
+      for (const body of EntityManager.getByType(btype)) {
         if (body === homePl) continue;
         planets.push({ body, explored: !!body.explored });
       }
@@ -938,12 +942,12 @@ export class FleetTabPanel {
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
     const zoomPct = Math.round(this._mapZoom * 100);
-    ctx.fillText(`TACTICAL MAP`, x + PAD + 4, cy + 8);
+    ctx.fillText(t('fleet.tacticalMap'), x + PAD + 4, cy + 8);
 
     // Togglei: TRASY, ZASIĘG
     let tx = x + w - PAD;
     for (const tid of ['range', 'routes']) {
-      const label = tid === 'routes' ? 'TRASY' : 'ZASIĘG';
+      const label = tid === 'routes' ? t('fleet.toggleRoutes') : t('fleet.toggleRange');
       const on = this._mapToggles[tid];
       const tw = ctx.measureText(label).width + 10;
       tx -= tw + 3;
@@ -1170,9 +1174,9 @@ export class FleetTabPanel {
     ctx.strokeStyle = 'rgba(40,60,80,0.4)';
     ctx.strokeRect(legX, legY, 86, 40);
     ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.success;   ctx.fillText('● hangar', legX + 10, legY + 12);
-    ctx.fillStyle = THEME.warning;   ctx.fillText('● w locie', legX + 10, legY + 24);
-    ctx.fillStyle = THEME.mint;      ctx.fillText('● orbita', legX + 10, legY + 36);
+    ctx.fillStyle = THEME.success;   ctx.fillText(t('fleet.legendHangar'), legX + 10, legY + 12);
+    ctx.fillStyle = THEME.warning;   ctx.fillText(t('fleet.legendInFlight'), legX + 10, legY + 24);
+    ctx.fillStyle = THEME.mint;      ctx.fillText(t('fleet.legendOrbit'), legX + 10, legY + 36);
   }
 
   _drawBodyTooltip(ctx, { body, screenX, screenY }) {
@@ -1181,14 +1185,14 @@ export class FleetTabPanel {
     const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
     const name = body.explored ? body.name : '???';
     lines.push(`${icon} ${name}`);
-    lines.push(`Typ: ${body.planetType ?? body.type}`);
+    lines.push(t('fleet.tooltipType', body.planetType ?? body.type));
     if (body.explored) {
       const tempC = body.temperatureC != null ? Math.round(body.temperatureC) : (body.temperatureK ? Math.round(body.temperatureK - 273) : null);
-      if (tempC !== null) lines.push(`Temp: ${tempC > 0 ? '+' : ''}${tempC}°C`);
+      if (tempC !== null) lines.push(t('fleet.tooltipTemp', `${tempC > 0 ? '+' : ''}${tempC}`));
     }
     const orbA = body.orbital?.a ?? 0;
-    lines.push(`Orbita: ${orbA.toFixed(2)} AU`);
-    if (!body.explored) lines.push('Niezbadane');
+    lines.push(t('fleet.tooltipOrbit', orbA.toFixed(2)));
+    if (!body.explored) lines.push(t('fleet.tooltipUnexplored'));
 
     const ttW = 140; const ttH = lines.length * 13 + 8;
     let tx = screenX - ttW / 2; let ty = screenY - ttH - 8;
@@ -1248,7 +1252,7 @@ export class FleetTabPanel {
     // Nagłówek
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.title;
-    ctx.fillText('STOCZNIA', x + PAD, cy + 8);
+    ctx.fillText(t('fleet.shipyardHeader'), x + PAD, cy + 8);
     cy += LH + 6;
 
     const shipyardLevel = colMgr?._getShipyardLevel?.(activeCol) ?? (() => {
@@ -1265,13 +1269,13 @@ export class FleetTabPanel {
     if (!hasExploration) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.orange;
-      ctx.fillText('🔒 Wymaga: Eksploracja', x + PAD, cy + 8);
+      ctx.fillText(t('fleet.shipyardRequiresExploration'), x + PAD, cy + 8);
       return;
     }
     if (!hasShipyard) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.orange;
-      ctx.fillText('⚓ Stocznia: ❌ (zbuduj)', x + PAD, cy + 8);
+      ctx.fillText(t('fleet.shipyardNone'), x + PAD, cy + 8);
       return;
     }
 
@@ -1282,7 +1286,7 @@ export class FleetTabPanel {
     const bonusStr = speedBonus > 1 ? ` ×${speedBonus}⚡` : '';
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.green;
-    ctx.fillText(`⚓ Sloty: ${queues.length}/${shipyardLevel}${bonusStr}`, x + PAD, cy + 8);
+    ctx.fillText(t('fleet.shipyardSlotsAnchored', `${queues.length}/${shipyardLevel}`) + bonusStr, x + PAD, cy + 8);
     cy += LH;
 
     // Aktywne budowy
@@ -1291,7 +1295,7 @@ export class FleetTabPanel {
       const frac = q.buildTime > 0 ? q.progress / q.buildTime : 0;
       ctx.fillStyle = C.text;
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillText(`${shipDef?.icon ?? '🚀'} ${_truncate(shipDef?.namePL ?? q.shipId, 12)}`, x + PAD, cy + 8);
+      ctx.fillText(`${shipDef?.icon ?? '🚀'} ${_truncate(shipDef ? getName(shipDef, 'ship') : q.shipId, 12)}`, x + PAD, cy + 8);
       drawMiniBar(ctx, x + PAD + 100, cy + 2, w - PAD * 2 - 100, 6, frac, THEME.borderActive);
       cy += LH;
     }
@@ -1304,7 +1308,7 @@ export class FleetTabPanel {
     // Przyciski budowy
     ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
-    ctx.fillText('BUDOWA STATKU', x + PAD, cy + 8);
+    ctx.fillText(t('fleet.buildShipHeader'), x + PAD, cy + 8);
     cy += LH + 2;
 
     const canBuildAny = hasShipyard && queues.length < shipyardLevel;
@@ -1330,7 +1334,7 @@ export class FleetTabPanel {
       ctx.fillStyle = canBuild ? C.bright : C.dim;
       ctx.textAlign = 'center';
       const crewLabel = crewCost > 0 ? ` (${crewCost}👤)` : '';
-      ctx.fillText(`${ship.icon} ${ship.namePL}${crewLabel}`, x + w / 2, cy + 13);
+      ctx.fillText(`${ship.icon} ${getName(ship, 'ship')}${crewLabel}`, x + w / 2, cy + 13);
       ctx.textAlign = 'left';
       this._hitZones.push({ x: x + PAD, y: cy, w: w - PAD * 2, h: btnH, type: 'build_ship', data: { shipId: ship.id, enabled: canBuild } });
       cy += btnH + 3;
@@ -1347,7 +1351,7 @@ export class FleetTabPanel {
       cy += 8;
       ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.title;
-      ctx.fillText(`🔄 TRASY HANDLOWE (${trRoutes.length})`, x + PAD, cy + 8);
+      ctx.fillText(t('fleet.tradeRoutesHeader', trRoutes.length), x + PAD, cy + 8);
       cy += LH;
       for (const tr of trRoutes) {
         if (cy > y + h - 16) break;
@@ -1392,16 +1396,16 @@ export class FleetTabPanel {
     // Typ statku
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.dim;
-    ctx.fillText(`${sd?.namePL ?? vessel.shipId}`.toUpperCase(), x + PAD, cy + 8);
+    ctx.fillText(`${sd ? getName(sd, 'ship') : vessel.shipId}`.toUpperCase(), x + PAD, cy + 8);
     cy += LH;
 
     // Status + Prędkość (inline)
     const sColor = STATUS_COLORS[vessel.position.state]?.() ?? C.text;
-    const statusLabel = vessel.position.state === 'docked' ? 'W HANGARZE'
-      : vessel.position.state === 'orbiting' ? 'NA ORBICIE'
-      : 'W LOCIE';
-    ctx.fillStyle = C.label; ctx.fillText('STATUS', x + PAD, cy + 8);
-    ctx.fillStyle = C.label; ctx.fillText('PRĘDKOŚĆ', x + PAD + 140, cy + 8);
+    const statusLabel = vessel.position.state === 'docked' ? t('fleet.statusTextInHangar')
+      : vessel.position.state === 'orbiting' ? t('fleet.statusTextOnOrbit')
+      : t('fleet.statusTextFlying');
+    ctx.fillStyle = C.label; ctx.fillText(t('fleet.labelStatus'), x + PAD, cy + 8);
+    ctx.fillStyle = C.label; ctx.fillText(t('fleet.labelSpeed'), x + PAD + 140, cy + 8);
     cy += 12;
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = sColor; ctx.fillText(statusLabel, x + PAD, cy + 8);
@@ -1411,7 +1415,7 @@ export class FleetTabPanel {
 
     // Baza
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.label; ctx.fillText('BAZA', x + PAD, cy + 8);
+    ctx.fillStyle = C.label; ctx.fillText(t('fleet.labelBase'), x + PAD, cy + 8);
     cy += 12;
     const colMgr = window.KOSMOS?.colonyManager;
     const col = colMgr?.getColony(vessel.colonyId);
@@ -1427,7 +1431,7 @@ export class FleetTabPanel {
     // Pasek paliwa
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
-    ctx.fillText('PALIWO (OGNIWA ZASILAJĄCE)', x + PAD, cy + 8);
+    ctx.fillText(t('fleet.labelFuelCells'), x + PAD, cy + 8);
     const fuelFrac = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
     const fuelColor = fuelFrac > 0.5 ? THEME.success : fuelFrac > 0.2 ? THEME.warning : THEME.danger;
     ctx.fillStyle = fuelColor;
@@ -1472,7 +1476,7 @@ export class FleetTabPanel {
     // Dostępne akcje
     ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
-    ctx.fillText('DOSTĘPNE AKCJE', x + PAD, cy + 8);
+    ctx.fillText(t('fleet.availableActions'), x + PAD, cy + 8);
     cy += LH + 2;
 
     const availableH = h - (cy - y) - 4;
@@ -1489,12 +1493,12 @@ export class FleetTabPanel {
   _drawActiveMission(ctx, x, y, w, exp, vessel) {
     const LH = 15;
     let cy = y;
-    const typeNames = { recon: 'Rozpoznanie', mining: 'Wydobycie', scientific: 'Naukowa', transport: 'Transport', colony: 'Kolonizacja' };
+    const typeNames = { recon: t('fleet.missionTypeRecon'), mining: t('fleet.missionTypeMining'), scientific: t('fleet.missionTypeScientific'), transport: t('fleet.missionTypeTransport'), colony: t('fleet.missionTypeColony') };
     const typeName = typeNames[exp.type] ?? exp.type;
 
     ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
-    ctx.fillText('AKTYWNA MISJA', x, cy + 8); cy += LH;
+    ctx.fillText(t('fleet.activeMission'), x, cy + 8); cy += LH;
 
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.title;
@@ -1502,21 +1506,21 @@ export class FleetTabPanel {
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     if (exp.status === 'orbiting') {
-      ctx.fillStyle = C.label; ctx.fillText('FAZA:', x, cy + 8);
-      ctx.fillStyle = C.mint; ctx.fillText('NA ORBICIE CELU', x + 45, cy + 8);
+      ctx.fillStyle = C.label; ctx.fillText(t('fleet.phaseLabel'), x, cy + 8);
+      ctx.fillStyle = C.mint; ctx.fillText(t('fleet.phaseOnTargetOrbit'), x + 45, cy + 8);
       cy += LH;
     } else if (exp.status === 'returning') {
-      ctx.fillStyle = C.label; ctx.fillText('FAZA:', x, cy + 8);
-      ctx.fillStyle = C.green; ctx.fillText('POWRÓT', x + 45, cy + 8);
+      ctx.fillStyle = C.label; ctx.fillText(t('fleet.phaseLabel'), x, cy + 8);
+      ctx.fillStyle = C.green; ctx.fillText(t('fleet.phaseReturn'), x + 45, cy + 8);
       ctx.fillStyle = C.dim; ctx.textAlign = 'right';
-      ctx.fillText(`ETA: rok ${_shortYear(exp.returnYear ?? 0)}`, x + w, cy + 8);
+      ctx.fillText(t('fleet.etaYearLabel', _shortYear(exp.returnYear ?? 0)), x + w, cy + 8);
       ctx.textAlign = 'left';
       cy += LH;
     } else {
-      ctx.fillStyle = C.label; ctx.fillText('FAZA:', x, cy + 8);
-      ctx.fillStyle = C.orange; ctx.fillText('LOT DO CELU', x + 45, cy + 8);
+      ctx.fillStyle = C.label; ctx.fillText(t('fleet.phaseLabel'), x, cy + 8);
+      ctx.fillStyle = C.orange; ctx.fillText(t('fleet.phaseFlyToTarget'), x + 45, cy + 8);
       ctx.fillStyle = C.dim; ctx.textAlign = 'right';
-      ctx.fillText(`ETA: rok ${_shortYear(exp.arrivalYear ?? 0)}`, x + w, cy + 8);
+      ctx.fillText(t('fleet.etaYearLabel', _shortYear(exp.arrivalYear ?? 0)), x + w, cy + 8);
       ctx.textAlign = 'left';
       cy += LH;
     }
@@ -1586,11 +1590,11 @@ export class FleetTabPanel {
 
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.title;
-    ctx.fillText(`WYBIERZ CEL`, x + PAD, cy + 8);
+    ctx.fillText(t('fleet.selectTarget'), x + PAD, cy + 8);
     cy += 6;
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
-    ctx.fillText(`Misja: ${action?.label ?? cfg.actionId}`, x + PAD, cy + 8);
+    ctx.fillText(t('fleet.missionLabel', action?.label ?? cfg.actionId), x + PAD, cy + 8);
     cy += LH + 4;
 
     const targets = this._getValidTargets(cfg.vesselId, cfg.actionId);
@@ -1605,36 +1609,36 @@ export class FleetTabPanel {
     const btnH = 24; const gap = 2;
     let iy = cy - scrollY;
 
-    for (const t of targets) {
+    for (const tgt of targets) {
       if (iy + btnH < cy - 2) { iy += btnH + gap; continue; }
       if (iy > cy + listH + 2) break;
 
-      ctx.fillStyle = t.reachable ? 'rgba(20,40,60,0.7)' : 'rgba(20,15,15,0.5)';
+      ctx.fillStyle = tgt.reachable ? 'rgba(20,40,60,0.7)' : 'rgba(20,15,15,0.5)';
       ctx.fillRect(x + PAD, iy, w - PAD * 2, btnH);
-      ctx.strokeStyle = t.reachable ? THEME.borderActive : THEME.dangerDim;
+      ctx.strokeStyle = tgt.reachable ? THEME.borderActive : THEME.dangerDim;
       ctx.strokeRect(x + PAD, iy, w - PAD * 2, btnH);
 
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = t.reachable ? C.bright : C.dim;
-      const icon = t.body?.type === 'planet' ? '🪐' : t.body?.type === 'moon' ? '🌙' : '🪨';
-      const name = t.body?.explored ? _truncate(t.body.name, 10) : '???';
+      ctx.fillStyle = tgt.reachable ? C.bright : C.dim;
+      const icon = tgt.body?.type === 'planet' ? '🪐' : tgt.body?.type === 'moon' ? '🌙' : '🪨';
+      const name = tgt.body?.explored ? _truncate(tgt.body.name, 10) : '???';
       ctx.fillText(`${icon} ${name}`, x + PAD + 4, iy + 10);
 
-      ctx.fillStyle = t.reachable ? C.text : C.dim;
+      ctx.fillStyle = tgt.reachable ? C.text : C.dim;
       ctx.textAlign = 'right';
-      ctx.fillText(`${t.distAU.toFixed(1)}AU ⛽${t.fuelCost.toFixed(1)}`, x + w - PAD - 4, iy + 10);
+      ctx.fillText(`${tgt.distAU.toFixed(1)}AU ⛽${tgt.fuelCost.toFixed(1)}`, x + w - PAD - 4, iy + 10);
       ctx.textAlign = 'left';
 
-      if (!t.reachable) {
+      if (!tgt.reachable) {
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.dangerDim;
-        ctx.fillText('⛽ brak paliwa', x + PAD + 4, iy + 21);
+        ctx.fillText(t('fleet.fuelInsufficient'), x + PAD + 4, iy + 21);
       }
 
-      if (t.reachable) {
+      if (tgt.reachable) {
         this._hitZones.push({
           x: x + PAD, y: iy, w: w - PAD * 2, h: btnH,
-          type: 'select_target', data: { targetId: t.id },
+          type: 'select_target', data: { targetId: tgt.id },
         });
       }
       iy += btnH + gap;
@@ -1649,7 +1653,7 @@ export class FleetTabPanel {
     ctx.strokeRect(x + PAD, cancelY, w - PAD * 2, 18);
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.danger; ctx.textAlign = 'center';
-    ctx.fillText('✕ Anuluj', x + w / 2, cancelY + 12);
+    ctx.fillText(t('fleet.cancelShort'), x + w / 2, cancelY + 12);
     ctx.textAlign = 'left';
     this._hitZones.push({ x: x + PAD, y: cancelY, w: w - PAD * 2, h: 18, type: 'cancel_config' });
   }
@@ -1666,14 +1670,14 @@ export class FleetTabPanel {
 
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.title;
-    ctx.fillText('POTWIERDŹ MISJĘ', x + PAD, cy + 8);
+    ctx.fillText(t('fleet.confirmMission'), x + PAD, cy + 8);
     cy += LH + 6;
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.label; ctx.fillText(`Typ: ${action?.label ?? cfg.actionId}`, x + PAD, cy + 8); cy += LH;
+    ctx.fillStyle = C.label; ctx.fillText(t('fleet.typeLabel', action?.label ?? cfg.actionId), x + PAD, cy + 8); cy += LH;
 
     const icon = target?.type === 'planet' ? '🪐' : target?.type === 'moon' ? '🌙' : '🪨';
-    ctx.fillStyle = C.bright; ctx.fillText(`Cel: ${icon} ${target?.name ?? '???'}`, x + PAD, cy + 8); cy += LH;
+    ctx.fillStyle = C.bright; ctx.fillText(t('fleet.targetLabel', icon, target?.name ?? '???'), x + PAD, cy + 8); cy += LH;
 
     if (vessel && target) {
       const dist = Math.max(0.001, DistanceUtils.euclideanAU(_findBody(vessel.colonyId) ?? window.KOSMOS?.homePlanet, target));
@@ -1682,12 +1686,12 @@ export class FleetTabPanel {
       const eta = dist / ((sd?.speedAU ?? 1.0) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1));
 
       ctx.fillStyle = C.text;
-      ctx.fillText(`Dystans: ${dist.toFixed(2)} AU`, x + PAD, cy + 8); cy += LH;
+      ctx.fillText(t('fleet.distAULabel', dist.toFixed(2)), x + PAD, cy + 8); cy += LH;
       ctx.fillStyle = fuelCost <= vessel.fuel.current ? THEME.successDim : THEME.danger;
-      ctx.fillText(`Paliwo: ${fuelCost.toFixed(1)} / ${vessel.fuel.current.toFixed(1)} pc`, x + PAD, cy + 8); cy += LH;
+      ctx.fillText(t('fleet.fuelCostLabel', fuelCost.toFixed(1), vessel.fuel.current.toFixed(1)), x + PAD, cy + 8); cy += LH;
       ctx.fillStyle = C.text;
-      const etaStr = eta < 0.1 ? `${Math.round(eta * 365)}d` : `${eta.toFixed(1)} lat`;
-      ctx.fillText(`ETA: ${etaStr}`, x + PAD, cy + 8); cy += LH;
+      const etaStr = eta < 0.1 ? t('fleet.etaDays', Math.round(eta * 365)) : t('fleet.etaYears', eta.toFixed(1));
+      ctx.fillText(t('fleet.etaPrefix', etaStr), x + PAD, cy + 8); cy += LH;
     }
 
     cy += 10;
@@ -1712,7 +1716,7 @@ export class FleetTabPanel {
       }
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.text;
-      ctx.fillText('Powtarzaj automatycznie', cbX + cbSize + 6, cbY + 11);
+      ctx.fillText(t('fleet.repeatAuto'), cbX + cbSize + 6, cbY + 11);
       this._hitZones.push({ x: cbX, y: cbY, w: w - PAD * 2, h: cbSize, type: 'toggle_repeat' });
       cy += cbSize + 8;
     }
@@ -1725,7 +1729,7 @@ export class FleetTabPanel {
     ctx.strokeRect(x + PAD, cy, w - PAD * 2, btnH);
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.success; ctx.textAlign = 'center';
-    ctx.fillText('✓ WYŚLIJ MISJĘ', x + w / 2, cy + 17);
+    ctx.fillText(t('fleet.sendMissionCheck'), x + w / 2, cy + 17);
     ctx.textAlign = 'left';
     this._hitZones.push({ x: x + PAD, y: cy, w: w - PAD * 2, h: btnH, type: 'confirm_mission' });
     cy += btnH + 6;
@@ -1738,7 +1742,7 @@ export class FleetTabPanel {
     ctx.strokeRect(x + PAD, cy, halfW, 20);
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.text; ctx.textAlign = 'center';
-    ctx.fillText('← Zmień cel', x + PAD + halfW / 2, cy + 13);
+    ctx.fillText(t('fleet.changeTargetShort'), x + PAD + halfW / 2, cy + 13);
     ctx.textAlign = 'left';
     this._hitZones.push({ x: x + PAD, y: cy, w: halfW, h: 20, type: 'change_target' });
 
@@ -1747,7 +1751,7 @@ export class FleetTabPanel {
     ctx.strokeStyle = THEME.dangerDim;
     ctx.strokeRect(x + PAD + halfW + 4, cy, halfW, 20);
     ctx.fillStyle = THEME.danger; ctx.textAlign = 'center';
-    ctx.fillText('✕ Anuluj', x + PAD + halfW + 4 + halfW / 2, cy + 13);
+    ctx.fillText(t('fleet.cancelShort'), x + PAD + halfW + 4 + halfW / 2, cy + 13);
     ctx.textAlign = 'left';
     this._hitZones.push({ x: x + PAD + halfW + 4, y: cy, w: halfW, h: 20, type: 'cancel_config' });
   }
@@ -1773,8 +1777,8 @@ export class FleetTabPanel {
       ? _findBody(vessel.position.dockedAt)
       : _findBody(vessel.colonyId) ?? homePl;
 
-    for (const t of _BODY_TYPES) {
-      for (const body of EntityManager.getByType(t)) {
+    for (const btype of _BODY_TYPES) {
+      for (const body of EntityManager.getByType(btype)) {
         if (body.id === activePid) continue;
 
         if (actionId === 'survey' || actionId === 'deep_scan') {

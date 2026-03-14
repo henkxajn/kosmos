@@ -1,5 +1,7 @@
 // Konfiguracja gry i stałe fizyczne projektu KOSMOS
 
+import { t } from '../i18n/i18n.js';
+
 export const GAME_CONFIG = {
   // Wymiary ekranu (piksele)
   WIDTH: 1280,
@@ -34,7 +36,7 @@ export const GAME_CONFIG = {
 // masa: masy słoneczne | luminosity: jasności słoneczne | temperature: Kelwiny
 export const STAR_TYPES = {
   M: {
-    name: 'Czerwony karzeł',
+    get name() { return t('star.M'); },
     mass: 0.3,
     luminosity: 0.04,
     temperature: 3500,
@@ -50,7 +52,7 @@ export const STAR_TYPES = {
     },
   },
   K: {
-    name: 'Pomarańczowy karzeł',
+    get name() { return t('star.K'); },
     mass: 0.7,
     luminosity: 0.4,
     temperature: 4500,
@@ -66,7 +68,7 @@ export const STAR_TYPES = {
     },
   },
   G: {
-    name: 'Żółty karzeł (jak Słońce)',
+    get name() { return t('star.G'); },
     mass: 1.0,
     luminosity: 1.0,
     temperature: 5800,
@@ -82,7 +84,7 @@ export const STAR_TYPES = {
     },
   },
   F: {
-    name: 'Żółto-biały karzeł',
+    get name() { return t('star.F'); },
     mass: 1.4,
     luminosity: 3.0,
     temperature: 7000,

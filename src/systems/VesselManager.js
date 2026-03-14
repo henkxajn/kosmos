@@ -35,6 +35,7 @@ import {
 import {
   serializeNameCounters, restoreNameCounters,
 } from '../data/VesselNames.js';
+import { t } from '../i18n/i18n.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
@@ -201,7 +202,7 @@ export class VesselManager {
 
     // Wpis do dziennika
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    addMissionLog(vessel, gameYear, `Wyruszył na misję: ${mission.type} → ${mission.targetName ?? this._resolveEntityName(mission.targetId)}`, 'info');
+    addMissionLog(vessel, gameYear, t('vessel.launchedMission', mission.type, mission.targetName ?? this._resolveEntityName(mission.targetId)), 'info');
 
     EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
     return true;
@@ -246,7 +247,7 @@ export class VesselManager {
     vessel.position.dockedAt = null;
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    addMissionLog(vessel, gameYear, `Wyruszył z orbity na misję: ${mission.type} → ${mission.targetName ?? this._resolveEntityName(mission.targetId)}`, 'info');
+    addMissionLog(vessel, gameYear, t('vessel.dispatchedFromOrbit', mission.type, mission.targetName ?? this._resolveEntityName(mission.targetId)), 'info');
 
     EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
     return true;
@@ -266,7 +267,7 @@ export class VesselManager {
 
     // Wpis do dziennika
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    addMissionLog(vessel, gameYear, `Dotarł do ${vessel.mission.targetName ?? this._resolveEntityName(vessel.mission.targetId)}`, 'success');
+    addMissionLog(vessel, gameYear, t('vessel.arrived', vessel.mission.targetName ?? this._resolveEntityName(vessel.mission.targetId)), 'success');
 
     EventBus.emit('vessel:arrived', { vessel, mission: vessel.mission });
   }
@@ -325,7 +326,7 @@ export class VesselManager {
     // Wpis do dziennika misji
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const targetName = this._resolveEntityName(targetId);
-    addMissionLog(vessel, gameYear, `Zadokował w ${targetName}`, 'success');
+    addMissionLog(vessel, gameYear, t('vessel.docked', targetName), 'success');
 
     EventBus.emit('vessel:docked', { vessel });
   }
@@ -378,7 +379,7 @@ export class VesselManager {
         // Wymuś powrót
         this.startReturn(vessel.id);
         const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-        addMissionLog(vessel, gameYear, `Awaryjny powrót — cel zniszczony`, 'danger');
+        addMissionLog(vessel, gameYear, t('vessel.emergencyReturn'), 'danger');
         continue;
       }
 
@@ -396,7 +397,7 @@ export class VesselManager {
           homeColony.fleet.push(vessel.id);
         }
         const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-        addMissionLog(vessel, gameYear, `Przekierowano do bazy — kolonia macierzysta zniszczona`, 'danger');
+        addMissionLog(vessel, gameYear, t('vessel.redirectedBase'), 'danger');
         continue;
       }
 
@@ -409,7 +410,7 @@ export class VesselManager {
           homeColony.fleet.push(vessel.id);
         }
         const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-        addMissionLog(vessel, gameYear, `Reassigned do ${this._resolveEntityName(homePlanetId)} — kolonia macierzysta zniszczona`, 'warning');
+        addMissionLog(vessel, gameYear, t('vessel.reassigned', this._resolveEntityName(homePlanetId)), 'warning');
       }
     }
   }

@@ -12,6 +12,7 @@ import { CIV_SIDEBAR_W }      from '../ui/CivPanelDrawer.js';
 import { GalaxyMapRenderer }   from '../renderer/GalaxyMapRenderer.js';
 import { STAR_TYPES }          from '../config/GameConfig.js';
 import EventBus                from '../core/EventBus.js';
+import { t }                   from '../i18n/i18n.js';
 
 // ── Layout ────────────────────────────────────────────────────────────────────
 const HDR_H   = 44;    // nagłówek
@@ -24,12 +25,12 @@ window.addEventListener('resize', () => {
   _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 });
 
-// Etykiety typów spektralnych
+// Etykiety typów spektralnych — runtime getter (i18n)
 const SPECTRAL_LABELS = {
-  M: 'Czerwony karzeł (M)',
-  K: 'Pomarańczowy karzeł (K)',
-  G: 'Żółty karzeł (G)',
-  F: 'Żółto-biały karzeł (F)',
+  get M() { return t('galaxy.starM'); },
+  get K() { return t('galaxy.starK'); },
+  get G() { return t('galaxy.starG'); },
+  get F() { return t('galaxy.starF'); },
 };
 
 // Kolory typów do legendy (CSS hex)
@@ -121,14 +122,15 @@ export class GalaxyMapScene extends BaseOverlay {
     ctx.fillStyle = THEME.accent;
     ctx.font = `bold ${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
     ctx.textAlign = 'left';
-    ctx.fillText('🌌 MAPA GALAKTYCZNA', ox + 12, HDR_H / 2 + 5);
+    ctx.fillText(t('galaxy.title'), ox + 12, HDR_H / 2 + 5);
 
     // Przycisk zamknij [ESC ×]
     const closeW = 60, closeH = 22;
     const closeX = W - closeW - 10;
     const closeY = (HDR_H - closeH) / 2;
-    this._drawButton(ctx, 'ESC ×', closeX, closeY, closeW, closeH, 'secondary');
-    this._addHit(closeX, closeY, closeW, closeH, 'close', { label: 'ESC ×' });
+    const closeLabel = t('galaxy.close');
+    this._drawButton(ctx, closeLabel, closeX, closeY, closeW, closeH, 'secondary');
+    this._addHit(closeX, closeY, closeW, closeH, 'close', { label: closeLabel });
 
     // ── Lewy panel (info o wybranym systemie) ─────────────────────────────
     const panelY = HDR_H;
@@ -174,21 +176,21 @@ export class GalaxyMapScene extends BaseOverlay {
 
       // Masa
       ctx.fillStyle = THEME.textLabel;
-      ctx.fillText('Masa:', px, py);
+      ctx.fillText(t('galaxy.mass'), px, py);
       ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(`${sys.mass} M☉`, px + 65, py);
       py += 16;
 
       // Luminosity
       ctx.fillStyle = THEME.textLabel;
-      ctx.fillText('Jasność:', px, py);
+      ctx.fillText(t('galaxy.luminosity'), px, py);
       ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(`${sys.luminosity} L☉`, px + 65, py);
       py += 16;
 
       // Odległość
       ctx.fillStyle = THEME.textLabel;
-      ctx.fillText('Odległość:', px, py);
+      ctx.fillText(t('galaxy.distance'), px, py);
       ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(`${sys.distanceLY} ly`, px + 80, py);
       py += 20;
@@ -203,17 +205,17 @@ export class GalaxyMapScene extends BaseOverlay {
 
       // Status
       ctx.fillStyle = THEME.textLabel;
-      ctx.fillText('Status:', px, py);
+      ctx.fillText(t('galaxy.status'), px, py);
       py += 16;
       if (sys.isHome) {
         ctx.fillStyle = THEME.accent;
-        ctx.fillText('🏠 TWÓJ UKŁAD', px, py);
+        ctx.fillText(t('galaxy.yourSystem'), px, py);
       } else if (sys.explored) {
         ctx.fillStyle = THEME.success;
-        ctx.fillText('✅ ZBADANY', px, py);
+        ctx.fillText(t('galaxy.explored'), px, py);
       } else {
         ctx.fillStyle = THEME.warning;
-        ctx.fillText('❓ NIEZBADANY', px, py);
+        ctx.fillText(t('galaxy.unexplored'), px, py);
       }
       py += 24;
 
@@ -221,7 +223,7 @@ export class GalaxyMapScene extends BaseOverlay {
       if (!sys.isHome) {
         ctx.fillStyle = THEME.textDim;
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        const lines = this._wrapText(ctx, 'Ekspedycja międzygwiezdna — wkrótce', LEFT_W - 24);
+        const lines = this._wrapText(ctx, t('galaxy.interstellarSoon'), LEFT_W - 24);
         for (const line of lines) {
           ctx.fillText(line, px, py);
           py += 14;
@@ -232,7 +234,7 @@ export class GalaxyMapScene extends BaseOverlay {
       // Nic nie wybrane
       ctx.fillStyle = THEME.textDim;
       ctx.font = `${THEME.fontSize}px ${THEME.fontFamily}`;
-      const lines = this._wrapText(ctx, 'Kliknij gwiazdę aby zobaczyć szczegóły', LEFT_W - 24);
+      const lines = this._wrapText(ctx, t('galaxy.clickStar'), LEFT_W - 24);
       for (const line of lines) {
         ctx.fillText(line, px, py);
         py += 16;
@@ -267,7 +269,7 @@ export class GalaxyMapScene extends BaseOverlay {
     const sysCount = window.KOSMOS?.galaxyData?.systems?.length ?? 0;
     ctx.fillStyle = THEME.textDim;
     ctx.textAlign = 'right';
-    ctx.fillText(`${sysCount} układów w zasięgu`, W - 12, ly);
+    ctx.fillText(t('galaxy.systemsInRange', sysCount), W - 12, ly);
     ctx.textAlign = 'left';
   }
 

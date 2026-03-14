@@ -24,6 +24,7 @@ import { TECHS }          from '../data/TechData.js';
 import { HexGrid }        from '../map/HexGrid.js';
 import { POP_PER_BUILDING } from '../systems/CivilizationSystem.js';
 import { DepositSystem }    from '../systems/DepositSystem.js';
+import { t, getName }      from '../i18n/i18n.js';
 
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
 const BASE_MAX_LEVEL = 10;
@@ -194,19 +195,19 @@ export class BuildingSystem {
   _build(tile, buildingId) {
     const building = BUILDINGS[buildingId];
     if (!building) {
-      EventBus.emit('planet:buildResult', { success: false, tile, reason: 'Nieznany budynek' });
+      EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.unknownBuilding') });
       return;
     }
 
     const isCapital = !!building.isCapital;
 
     if (!isCapital && tile.isOccupied) {
-      EventBus.emit('planet:buildResult', { success: false, tile, reason: 'Pole zajęte' });
+      EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.tileOccupied') });
       return;
     }
 
     if (!this._canBuildOnTile(tile, building)) {
-      EventBus.emit('planet:buildResult', { success: false, tile, reason: 'Teren niedozwolony' });
+      EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.terrainForbidden') });
       return;
     }
 
@@ -214,8 +215,9 @@ export class BuildingSystem {
     if (building.requires) {
       const hastech = this.techSystem?.isResearched(building.requires) ?? false;
       if (!hastech) {
-        const techName = TECHS[building.requires]?.namePL ?? building.requires;
-        EventBus.emit('planet:buildResult', { success: false, tile, reason: `Wymaga tech: ${techName}` });
+        const tech = TECHS[building.requires];
+        const techName = tech ? getName(tech, 'tech') : building.requires;
+        EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.requiresTech', techName) });
         return;
       }
     }
@@ -224,7 +226,7 @@ export class BuildingSystem {
     if (this._requiresSpaceportFirst && !building.isSpaceport && !isCapital && !this.hasSpaceport()) {
       EventBus.emit('planet:buildResult', {
         success: false, tile,
-        reason: 'Najpierw wybuduj Port Kosmiczny!',
+        reason: t('ui.buildSpaceportFirst'),
       });
       return;
     }
@@ -262,7 +264,7 @@ export class BuildingSystem {
         if (entry.building.id === 'farm') {
           EventBus.emit('planet:buildResult', {
             success: false, tile,
-            reason: 'Na tej planecie działa Farma — nie można budować Zakładu Syntetycznej Żywności',
+            reason: t('ui.farmConflictSynth'),
           });
           return;
         }
@@ -273,7 +275,7 @@ export class BuildingSystem {
         if (entry.building.isSynthFood) {
           EventBus.emit('planet:buildResult', {
             success: false, tile,
-            reason: 'Na tej planecie działa Zakład Syntetycznej Żywności — nie można budować Farmy',
+            reason: t('ui.synthConflictFarm'),
           });
           return;
         }
@@ -282,7 +284,7 @@ export class BuildingSystem {
 
     // Sprawdzenie środków
     if (this.resourceSystem && hasKeys(actualCost) && !this.resourceSystem.canAfford(actualCost)) {
-      EventBus.emit('planet:buildResult', { success: false, tile, reason: 'Brak surowców' });
+      EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.noResources') });
       return;
     }
 
@@ -292,7 +294,7 @@ export class BuildingSystem {
       const civSys = this.civSystem;
       if (civSys && civSys.freePops < popCost) {
         EventBus.emit('planet:buildResult', {
-          success: false, tile, reason: `Brak wolnych POPów (potrzeba ${popCost})`,
+          success: false, tile, reason: t('ui.noFreePops', popCost),
         });
         return;
       }
@@ -337,19 +339,19 @@ export class BuildingSystem {
 
   _upgrade(tile) {
     if (!tile.buildingId) {
-      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: 'Brak budynku' });
+      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.noBuilding') });
       return;
     }
 
     // Nie można ulepszać podczas trwającej budowy/upgrade na tym hexie
     if (tile.underConstruction) {
-      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: 'Trwa budowa na tym polu' });
+      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.constructionInProgress') });
       return;
     }
 
     const entry = this._active.get(tile.key);
     if (!entry) {
-      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: 'Brak aktywnego budynku' });
+      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.noActiveBuilding') });
       return;
     }
 
@@ -358,7 +360,7 @@ export class BuildingSystem {
     const maxLevel = this.getMaxLevel();
 
     if (currentLevel >= maxLevel) {
-      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: `Max poziom (${maxLevel})` });
+      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.maxLevel', maxLevel) });
       return;
     }
 
@@ -387,7 +389,7 @@ export class BuildingSystem {
       }
       const detail = missing.length ? ` (${missing.join(', ')})` : '';
       console.warn(`[BuildingSystem] Upgrade ${building.id} Lv${nextLevel}: brak surowców${detail}`, upgradeCost);
-      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: `Brak surowców na ulepszenie${detail}` });
+      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.noUpgradeResources', detail) });
       return;
     }
 
@@ -397,7 +399,7 @@ export class BuildingSystem {
       const civSys = this.civSystem;
       if (civSys && civSys.freePops < popCost) {
         EventBus.emit('planet:upgradeResult', {
-          success: false, tile, reason: `Brak wolnych POPów (potrzeba ${popCost})`,
+          success: false, tile, reason: t('ui.noFreePops', popCost),
         });
         return;
       }
@@ -523,13 +525,13 @@ export class BuildingSystem {
     }
 
     if (!tile.buildingId) {
-      EventBus.emit('planet:demolishResult', { success: false, tile, reason: 'Brak budynku' });
+      EventBus.emit('planet:demolishResult', { success: false, tile, reason: t('ui.noBuilding') });
       return;
     }
 
     const buildingDef = BUILDINGS[tile.buildingId];
     if (buildingDef?.isColonyBase || buildingDef?.isCapital) {
-      EventBus.emit('planet:demolishResult', { success: false, tile, reason: 'Stolica jest niezbywalna' });
+      EventBus.emit('planet:demolishResult', { success: false, tile, reason: t('ui.capitalIndestructible') });
       return;
     }
 
@@ -541,7 +543,7 @@ export class BuildingSystem {
       }
       if (spaceportCount <= 1) {
         EventBus.emit('planet:demolishResult', {
-          success: false, tile, reason: 'Nie można rozebrać jedynego Portu Kosmicznego!',
+          success: false, tile, reason: t('ui.cannotDemolishSpaceport'),
         });
         return;
       }
@@ -712,26 +714,27 @@ export class BuildingSystem {
 
   deployFromCargo(tile, buildingId) {
     const building = BUILDINGS[buildingId];
-    if (!building) return { success: false, reason: 'Nieznany budynek' };
+    if (!building) return { success: false, reason: t('ui.unknownBuilding') };
 
-    if (tile.isOccupied) return { success: false, reason: 'Pole zajęte' };
+    if (tile.isOccupied) return { success: false, reason: t('ui.tileOccupied') };
 
     if (!this._canBuildOnTile(tile, building)) {
-      return { success: false, reason: 'Teren niedozwolony' };
+      return { success: false, reason: t('ui.terrainForbidden') };
     }
 
     // Sprawdzenie tech
     if (building.requires) {
       const hastech = this.techSystem?.isResearched(building.requires) ?? false;
       if (!hastech) {
-        const techName = TECHS[building.requires]?.namePL ?? building.requires;
-        return { success: false, reason: `Wymaga tech: ${techName}` };
+        const tech = TECHS[building.requires];
+        const techName = tech ? getName(tech, 'tech') : building.requires;
+        return { success: false, reason: t('ui.requiresTech', techName) };
       }
     }
 
     // Reguła "spaceport first" — nowe kolonie wymagają portu kosmicznego
     if (this._requiresSpaceportFirst && !building.isSpaceport && !building.isCapital && !this.hasSpaceport()) {
-      return { success: false, reason: 'Najpierw zainstaluj Port Kosmiczny!' };
+      return { success: false, reason: t('ui.installSpaceportFirst') };
     }
 
     // Sprawdzenie POPów (pomiń w outpost)
@@ -739,7 +742,7 @@ export class BuildingSystem {
     if (popCost > 0) {
       const civSys = this.civSystem;
       if (civSys && civSys.freePops < popCost) {
-        return { success: false, reason: `Brak wolnych POPów (potrzeba ${popCost})` };
+        return { success: false, reason: t('ui.noFreePops', popCost) };
       }
     }
 

@@ -7,6 +7,7 @@ import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { SaveSystem }     from '../systems/SaveSystem.js';
 import EventBus            from '../core/EventBus.js';
+import { t }              from '../i18n/i18n.js';
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 30px
 const LOG_INLINE = 2; // ile wpisów widocznych inline
@@ -83,7 +84,7 @@ export class BottomBar {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
     ctx.textAlign = 'left';
-    ctx.fillText('STAB:', 10, textY);
+    ctx.fillText(t('bottomBar.stab'), 10, textY);
 
     ctx.fillStyle = tColor;
     ctx.fillText(`${score}${arrow}`, 46, textY);
@@ -137,19 +138,19 @@ export class BottomBar {
     if (!civMode) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.label;
-      ctx.fillText('scroll:zoom │ PPM:pan │ klik:zaznacz', 10, barY + BAR_H - 4);
+      ctx.fillText(t('ui.hintControls'), 10, barY + BAR_H - 4);
     }
   }
 
   _getButtonDefs(W, audioEnabled, musicEnabled, autoSlow) {
     const BTN_W = 38, GAP = 4;
     return [
-      { id: 'sound', label: '[DZW]', x: W - 10,                      active: audioEnabled },
-      { id: 'music', label: '[MUZ]', x: W - 10 - (BTN_W + GAP),      active: musicEnabled },
-      { id: 'new',   label: '[NOW]', x: W - 10 - (BTN_W + GAP) * 2,  active: undefined },
-      { id: 'load',  label: '[WCZ]', x: W - 10 - (BTN_W + GAP) * 3,  active: undefined },
-      { id: 'save',  label: '[ZAP]', x: W - 10 - (BTN_W + GAP) * 4,  active: undefined },
-      { id: 'auto',  label: '[AUT]', x: W - 10 - (BTN_W + GAP) * 5,  active: autoSlow },
+      { id: 'sound', label: t('ui.sound'), x: W - 10,                      active: audioEnabled },
+      { id: 'music', label: t('ui.music'), x: W - 10 - (BTN_W + GAP),      active: musicEnabled },
+      { id: 'new',   label: t('ui.newGame'), x: W - 10 - (BTN_W + GAP) * 2,  active: undefined },
+      { id: 'load',  label: t('ui.load'), x: W - 10 - (BTN_W + GAP) * 3,  active: undefined },
+      { id: 'save',  label: t('ui.save'), x: W - 10 - (BTN_W + GAP) * 4,  active: undefined },
+      { id: 'auto',  label: t('ui.auto'), x: W - 10 - (BTN_W + GAP) * 5,  active: autoSlow },
     ];
   }
 

@@ -23,6 +23,7 @@ import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { addMissionLog } from '../entities/Vessel.js';
+import { t }             from '../i18n/i18n.js';
 
 // ── Koszty misji ─────────────────────────────────────────────────────────────
 const LAUNCH_COST          = { Fe: 50, C: 20 };
@@ -365,21 +366,21 @@ export class MissionSystem {
     const { ok, techOk, padOk, vesselOk } = this.canLaunch(type);
     if (!ok) {
       const reason = !techOk
-        ? 'Brak technologii: Rakietnictwo'
+        ? t('mission.noTechRocketry')
         : !padOk
-          ? 'Brak budynku: Port Kosmiczny'
-          : 'Brak statku: Statek Naukowy (zbuduj w Stoczni)';
+          ? t('mission.noSpaceport')
+          : t('mission.noScienceVessel');
       this._emit('mission:failed', 'expedition:launchFailed', { reason });
       return;
     }
 
     const target = this._findTarget(targetId);
     if (!target) {
-      this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Nieznany cel ekspedycji' });
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.unknownTarget') });
       return;
     }
     if (!target.explored) {
-      this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Cel nie został zbadany (wyślij misję rozpoznawczą)' });
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.targetNotExplored') });
       return;
     }
 
@@ -391,13 +392,13 @@ export class MissionSystem {
     if (vMgr && assignedVesselId) {
       const vessel = vMgr.getVessel(assignedVesselId);
       if (!vessel || vessel.status !== 'idle') {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Statek niedostępny' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.shipUnavailable') });
         return;
       }
       const fuelNeeded = distance * vessel.fuel.consumption;
       if (vessel.fuel.current < fuelNeeded) {
         this._emit('mission:failed', 'expedition:launchFailed', {
-          reason: `Brak paliwa (potrzeba ${fuelNeeded.toFixed(1)} pc, ma ${vessel.fuel.current.toFixed(1)})`
+          reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
         });
         return;
       }
@@ -405,14 +406,14 @@ export class MissionSystem {
       const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
       const range = SHIPS.science_vessel.range;
       this._emit('mission:failed', 'expedition:launchFailed', {
-        reason: `Cel poza zasięgiem statku (${dist} AU, zasięg: ${range} AU)`
+        reason: t('mission.targetOutOfRange', dist, range)
       });
       return;
     }
 
     if (this.resourceSystem) {
       if (!this.resourceSystem.canAfford(LAUNCH_COST)) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak surowców startowych' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStartupResources') });
         return;
       }
       this.resourceSystem.spend(LAUNCH_COST);
@@ -463,16 +464,16 @@ export class MissionSystem {
     const check = this.canLaunchColony(targetId);
     if (!check.ok) {
       const reason = !check.techOk
-        ? 'Brak technologii: Kolonizacja'
+        ? t('mission.noTechColonization')
         : !check.padOk
-          ? 'Brak budynku: Port Kosmiczny'
+          ? t('mission.noSpaceport')
           : !check.shipOk
-            ? 'Brak statku: Statek Kolonijny (zbuduj w Stoczni)'
+            ? t('mission.noColonyShip')
             : !check.exploredOk
-              ? 'Cel nie został zbadany (wyślij najpierw ekspedycję naukową)'
+              ? t('mission.targetNotExploredScience')
               : !check.typeOk
-                ? 'Cel nie nadaje się do kolonizacji (wymagane skaliste ciało)'
-                : 'Cel już posiada kolonię';
+                ? t('mission.targetNotSuitable')
+                : t('mission.targetHasColony');
       this._emit('mission:failed', 'expedition:launchFailed', { reason });
       return;
     }
@@ -485,13 +486,13 @@ export class MissionSystem {
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
       if (!vessel || vessel.status !== 'idle') {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Statek niedostępny' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.shipUnavailable') });
         return;
       }
       const fuelNeeded = distance * vessel.fuel.consumption;
       if (vessel.fuel.current < fuelNeeded) {
         this._emit('mission:failed', 'expedition:launchFailed', {
-          reason: `Brak paliwa (potrzeba ${fuelNeeded.toFixed(1)} pc, ma ${vessel.fuel.current.toFixed(1)})`
+          reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
         });
         return;
       }
@@ -499,14 +500,14 @@ export class MissionSystem {
       const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
       const range = SHIPS.colony_ship.range;
       this._emit('mission:failed', 'expedition:launchFailed', {
-        reason: `Cel poza zasięgiem statku (${dist} AU, zasięg: ${range} AU)`
+        reason: t('mission.targetOutOfRange', dist, range)
       });
       return;
     }
 
     if (this.resourceSystem) {
       if (!this.resourceSystem.canAfford(COLONY_LAUNCH_COST)) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak surowców startowych' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStartupResources') });
         return;
       }
       this.resourceSystem.spend(COLONY_LAUNCH_COST);
@@ -640,13 +641,13 @@ export class MissionSystem {
       const padOk  = this._hasSpaceport();
 
       if (!padOk) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak budynku: Port Kosmiczny' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noSpaceport') });
         return;
       }
 
       if (!cargoPreloaded) {
         if (this.resourceSystem && !this.resourceSystem.canAfford(cargo)) {
-          this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak surowców do transportu' });
+          this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noResourcesToTransport') });
           return;
         }
         if (this.resourceSystem) this.resourceSystem.spend(cargo);
@@ -671,7 +672,7 @@ export class MissionSystem {
       const fuelNeeded = distance * vessel.fuel.consumption;
       if (vessel.fuel.current < fuelNeeded) {
         this._emit('mission:failed', 'expedition:launchFailed', {
-          reason: `Brak paliwa (potrzeba ${fuelNeeded.toFixed(1)} pc, ma ${vessel.fuel.current.toFixed(1)})`
+          reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
         });
         return;
       }
@@ -786,7 +787,7 @@ export class MissionSystem {
 
     const target = this._findTarget(newTargetId);
     if (!target) {
-      this._emit('mission:redirectFailed', 'expedition:redirectFailed', { reason: 'Nieznany cel' });
+      this._emit('mission:redirectFailed', 'expedition:redirectFailed', { reason: t('mission.unknownTarget') });
       return;
     }
 
@@ -802,7 +803,7 @@ export class MissionSystem {
         const fuelNeeded = dist * vessel.fuel.consumption;
         if (vessel.fuel.current < fuelNeeded) {
           this._emit('mission:redirectFailed', 'expedition:redirectFailed', {
-            reason: `Brak paliwa (potrzeba ${fuelNeeded.toFixed(1)} pc, ma ${vessel.fuel.current.toFixed(1)})`
+            reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
           });
           return;
         }
@@ -844,10 +845,10 @@ export class MissionSystem {
     const { ok, techOk, padOk, vesselOk } = this.canLaunchRecon();
     if (!ok) {
       const reason = !techOk
-        ? 'Brak technologii: Rakietnictwo'
+        ? t('mission.noTechRocketry')
         : !padOk
-          ? 'Brak budynku: Port Kosmiczny'
-          : 'Brak statku: Statek Naukowy (zbuduj w Stoczni)';
+          ? t('mission.noSpaceport')
+          : t('mission.noScienceVessel');
       this._emit('mission:failed', 'expedition:launchFailed', { reason });
       return;
     }
@@ -857,11 +858,11 @@ export class MissionSystem {
 
     if (!isSpecificTarget) {
       if (scope === 'nearest' && unexplored.planets === 0 && unexplored.moons === 0) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak niezbadanych ciał niebieskich' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noUnexploredBodies') });
         return;
       }
       if (unexplored.total === 0) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Układ w pełni zbadany' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.systemFullyExplored') });
         return;
       }
     }
@@ -873,7 +874,7 @@ export class MissionSystem {
 
     if (this.resourceSystem) {
       if (!this.resourceSystem.canAfford(RECON_COST)) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak surowców startowych' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStartupResources') });
         return;
       }
       this.resourceSystem.spend(RECON_COST);
@@ -887,7 +888,7 @@ export class MissionSystem {
       // Sekwencyjny deep_scan
       const firstTarget = this._findNearestUnexplored(null);
       if (!firstTarget) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak niezbadanych ciał' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noUnexplored') });
         return;
       }
       const distance = this._calcDistance(firstTarget);
@@ -899,7 +900,7 @@ export class MissionSystem {
         type:             'recon',
         scope:            'full_system',
         targetId:         firstTarget.id,
-        targetName:       'Cały układ',
+        targetName:       t('mission.fullSystem'),
         targetType:       'recon',
         departYear,
         arrivalYear:      departYear + travelTime,
@@ -942,7 +943,7 @@ export class MissionSystem {
       type:        'recon',
       scope:       'nearest',
       targetId:    nearest?.id ?? 'nearest',
-      targetName:  nearest?.name ?? 'Najbliższe ciało',
+      targetName:  nearest?.name ?? t('mission.nearestBody'),
       targetType:  'recon',
       departYear,
       arrivalYear: departYear + travelTime,
@@ -976,11 +977,11 @@ export class MissionSystem {
   _launchReconTarget(targetId, vesselId) {
     const target = this._findTarget(targetId);
     if (!target) {
-      this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Nieznany cel rozpoznania' });
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.unknownTarget') });
       return;
     }
     if (target.explored) {
-      this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Ciało już zbadane' });
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.bodyAlreadyExplored') });
       return;
     }
 
@@ -991,13 +992,13 @@ export class MissionSystem {
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
       if (!vessel || vessel.status !== 'idle') {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Statek niedostępny' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.shipUnavailable') });
         return;
       }
       const fuelNeeded = distance * 2 * vessel.fuel.consumption;
       if (vessel.fuel.current < fuelNeeded) {
         this._emit('mission:failed', 'expedition:launchFailed', {
-          reason: `Brak paliwa na lot i powrót (potrzeba ${fuelNeeded.toFixed(1)} pc)`
+          reason: t('mission.insufficientFuelRoundTrip', fuelNeeded.toFixed(1))
         });
         return;
       }
@@ -1005,7 +1006,7 @@ export class MissionSystem {
 
     if (this.resourceSystem) {
       if (!this.resourceSystem.canAfford(RECON_COST)) {
-        this._emit('mission:failed', 'expedition:launchFailed', { reason: 'Brak surowców startowych' });
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStartupResources') });
         return;
       }
       this.resourceSystem.spend(RECON_COST);
@@ -1221,7 +1222,7 @@ export class MissionSystem {
         expedition: exp,
         gained: startResources,
         multiplier: resourceMult,
-        text: 'Placówka rozbudowana do pełnej kolonii!',
+        text: t('colony.outpostUpgraded'),
       });
       return;
     }

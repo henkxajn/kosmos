@@ -24,6 +24,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { TECHS } from '../data/TechData.js';
+import { t, getName } from '../i18n/i18n.js';
 
 export class TechSystem {
   constructor(resourceSystem = null) {
@@ -155,19 +156,19 @@ export class TechSystem {
   _research(techId) {
     const tech = TECHS[techId];
     if (!tech) {
-      EventBus.emit('tech:researchFailed', { techId, reason: 'Nieznana technologia' });
+      EventBus.emit('tech:researchFailed', { techId, reason: t('tech.unknownTech') });
       return;
     }
     if (this._researched.has(techId)) {
-      EventBus.emit('tech:researchFailed', { techId, reason: 'Już zbadana' });
+      EventBus.emit('tech:researchFailed', { techId, reason: t('tech.alreadyResearched') });
       return;
     }
 
     // Sprawdź prerequisites
     for (const req of tech.requires) {
       if (!this._researched.has(req)) {
-        const reqName = TECHS[req]?.namePL ?? req;
-        EventBus.emit('tech:researchFailed', { techId, reason: `Wymaga: ${reqName}` });
+        const reqName = getName(TECHS[req] ?? { id: req }, 'tech');
+        EventBus.emit('tech:researchFailed', { techId, reason: t('tech.requires', reqName) });
         return;
       }
     }
@@ -175,7 +176,7 @@ export class TechSystem {
     // Sprawdź koszt badań
     if (this.resourceSystem) {
       if (!this.resourceSystem.canAfford(tech.cost)) {
-        EventBus.emit('tech:researchFailed', { techId, reason: 'Brak punktów badań' });
+        EventBus.emit('tech:researchFailed', { techId, reason: t('tech.noResearchPoints') });
         return;
       }
       this.resourceSystem.spend(tech.cost);

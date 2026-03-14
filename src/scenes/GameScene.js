@@ -48,6 +48,7 @@ import { TECHS }             from '../data/TechData.js';          // POWER TEST
 import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
 import { TERRAIN_TYPES }     from '../map/HexTile.js';            // POWER TEST
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do auto-build
+import { t } from '../i18n/i18n.js';
 
 export class GameScene {
   // canvas3D — element #three-canvas
@@ -92,7 +93,7 @@ export class GameScene {
 
     // ── UI ─────────────────────────────────────────────────────
     this.uiManager = new UIManager(uiCanvas);
-    this.uiManager.addInfo('Układ planetarny uformowany');
+    this.uiManager.addInfo(t('dialog.systemFormed'));
 
     // Blokada kamery gdy kursor nad elementem UI
     this.cameraController._isOverUI = (x, y) => this.uiManager.isOverUI(x, y);
@@ -284,23 +285,23 @@ export class GameScene {
         this.uiManager.overlayManager.closeActive();
       }
 
-      const reasonPL = reason === 'collision' ? 'Kolizja planetarna'
-        : reason === 'ejected' ? 'Wyrzucenie z układu'
-        : 'Zniszczenie ciała niebieskiego';
+      const reasonPL = reason === 'collision' ? t('log.planetaryCollision')
+        : reason === 'ejected' ? t('log.ejectedFromSystem')
+        : t('log.bodyDestroyed');
 
-      const typeLabel = isOutpost ? 'Placówka' : 'Kolonia';
+      const typeLabel = isOutpost ? t('colony.outpost') : t('colony.colony');
       const vesselCount = destroyedVesselIds?.length ?? 0;
 
       let stats = '';
       stats += formatStatLine(typeLabel.toUpperCase(), colonyName, 'at-stat-neg');
-      stats += formatStatLine('PRZYCZYNA', reasonPL, 'at-stat-neg');
+      stats += formatStatLine(t('colony.reason'), reasonPL, 'at-stat-neg');
       if (population > 0) {
         stats += formatStatLine('POPULACJA', `−${population} POP`, 'at-stat-neg');
       }
       if (vesselCount > 0) {
         stats += formatStatLine('STATKI', `−${vesselCount} utraconych`, 'at-stat-neg');
       }
-      stats += formatStatLineWithCursor('STATUS', 'BEZPOWROTNIE UTRACONA', 'at-stat-neg');
+      stats += formatStatLineWithCursor('STATUS', t('colony.irrecoverablyLost'), 'at-stat-neg');
 
       queueMissionEvent({
         severity: 'danger',
@@ -472,7 +473,7 @@ export class GameScene {
 
     // ── Muzyka tła ─────────────────────────────────────────────
     // Ładuj i startuj muzykę (autoplay po kliknięciu użytkownika w TitleScene)
-    this.audioSystem.startMusic('main');
+    this.audioSystem.startMusic('game');
 
     // ── Pętla gry ─────────────────────────────────────────────
     // TimeSystem.update(deltaMs) emituje 'time:tick' → wszystkie systemy

@@ -10,6 +10,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import { t, getName } from '../i18n/i18n.js';
 
 // Ikony zasobów (wszystkie kategorie)
 const RES_ICONS = {};
@@ -68,19 +69,19 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
     // Tytuł
     const title = document.createElement('div');
     title.style.cssText = 'font-size: 14px; margin-bottom: 12px; font-weight: bold; text-align: center;';
-    title.textContent = '🚀 TRANSPORT ZASOBÓW';
+    title.textContent = t('transport.title');
     panel.appendChild(title);
 
     // Z: kolonia źródłowa
     const fromDiv = document.createElement('div');
     fromDiv.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary}; margin-bottom: 8px;`;
-    fromDiv.textContent = `Z: 🏛 ${sourceColony.name}`;
+    fromDiv.textContent = t('transport.from', sourceColony.name);
     panel.appendChild(fromDiv);
 
     // Do: wybór kolonii docelowej
     const toLabel = document.createElement('div');
     toLabel.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary}; margin-bottom: 4px;`;
-    toLabel.textContent = 'Do:';
+    toLabel.textContent = t('transport.to');
     panel.appendChild(toLabel);
 
     const targetSelect = document.createElement('select');
@@ -109,7 +110,7 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
     // Cargo info
     const cargoInfo = document.createElement('div');
     cargoInfo.style.cssText = `font-size: ${THEME.fontSizeNormal}px; color: ${THEME.accent}; margin-bottom: 8px; text-align: center;`;
-    cargoInfo.textContent = `Ładowność: 0 / ${cargoCapacity} ton`;
+    cargoInfo.textContent = t('transport.capacity', 0, cargoCapacity);
     panel.appendChild(cargoInfo);
 
     // Separator
@@ -148,7 +149,7 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
 
         const name = document.createElement('span');
         name.style.cssText = `width: 90px; font-size: ${THEME.fontSizeNormal}px; color: ${THEME.textSecondary};`;
-        name.textContent = def.namePL ?? id;
+        name.textContent = getName({ id, namePL: def.namePL }, COMMODITIES[id] ? 'commodity' : 'resource');
         row.appendChild(name);
 
         const input = document.createElement('input');
@@ -179,9 +180,9 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
     };
 
     // Sekcje zasobów
-    addSection('SUROWCE', Object.entries(MINED_RESOURCES));
-    addSection('ZBIERANE', Object.entries(HARVESTED_RESOURCES));
-    addSection('TOWARY', Object.entries(COMMODITIES));
+    addSection(t('transport.rawMaterials'), Object.entries(MINED_RESOURCES));
+    addSection(t('transport.harvested'), Object.entries(HARVESTED_RESOURCES));
+    addSection(t('transport.commodities'), Object.entries(COMMODITIES));
 
     function updateWeight() {
       totalWeight = 0;
@@ -190,7 +191,7 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
         totalWeight += val * weight;
       }
       const overweight = totalWeight > cargoCapacity;
-      cargoInfo.textContent = `Ładowność: ${totalWeight.toFixed(1)} / ${cargoCapacity} ton`;
+      cargoInfo.textContent = t('transport.capacity', totalWeight.toFixed(1), cargoCapacity);
       cargoInfo.style.color = overweight ? THEME.dangerDim : THEME.accent;
       btnSend.disabled = overweight;
       btnSend.style.opacity = overweight ? '0.5' : '1';
@@ -199,7 +200,7 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
     // Info
     const info = document.createElement('div');
     info.style.cssText = `font-size: ${THEME.fontSizeSmall}px; color: ${THEME.textSecondary}; margin: 8px 0;`;
-    info.textContent = 'Koszt załogi: 0.5 POP (zablokowany na czas podróży)';
+    info.textContent = t('transport.crewCost');
     panel.appendChild(info);
 
     // Przyciski
@@ -213,7 +214,7 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
       color: ${THEME.danger}; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
       font-size: ${THEME.fontSizeNormal + 1}px; border-radius: 3px;
     `;
-    btnCancel.textContent = 'Anuluj';
+    btnCancel.textContent = t('ui.cancel');
     btnCancel.onclick = () => close(null);
     btnRow.appendChild(btnCancel);
 
@@ -224,7 +225,7 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
       color: ${THEME.accent}; padding: 4px 16px; cursor: pointer; font-family: ${THEME.fontFamily};
       font-size: ${THEME.fontSizeNormal + 1}px; border-radius: 3px;
     `;
-    btnSend.textContent = 'WYŚLIJ';
+    btnSend.textContent = t('transport.send');
     btnSend.onclick = () => {
       const cargo = {};
       for (const [id, { input }] of Object.entries(inputs)) {

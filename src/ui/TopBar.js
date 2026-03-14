@@ -11,6 +11,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES } from '../data
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { BUILDINGS }      from '../data/BuildingsData.js';
 import EventBus            from '../core/EventBus.js';
+import { t, getName }     from '../i18n/i18n.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
@@ -105,9 +106,9 @@ export class TopBar {
     const utility   = this._getVisibleUtility(energyFlow, resources, resDelta, factoryData);
 
     const groups = [
-      { items: mined,     label: 'SUROWCE',  color: THEME.textHeader },
-      { items: harvested, label: 'ZASOBY',   color: THEME.textHeader },
-      { items: utility,   label: 'SYSTEMY',  color: THEME.textHeader },
+      { items: mined,     label: t('topBar.resources'),  color: THEME.textHeader },
+      { items: harvested, label: t('topBar.stocks'),   color: THEME.textHeader },
+      { items: utility,   label: t('topBar.systems'),  color: THEME.textHeader },
     ];
 
     // Policz łączną liczbę itemów + separatorów → dopasuj iw dynamicznie
@@ -262,23 +263,23 @@ export class TopBar {
     lines.push({ text: name, color: C.bright, bold: true });
 
     // Ilość
-    lines.push({ text: `Ilość: ${_fmtNum(item.value)}`, color: C.text });
+    lines.push({ text: t('ui.amount', _fmtNum(item.value)), color: C.text });
 
     // Delta / Flow
     if (item.delta !== undefined && Math.abs(item.delta) > 0.01) {
       const sign = item.delta >= 0 ? '+' : '';
       const color = item.delta >= 0 ? THEME.successDim : THEME.dangerDim;
-      lines.push({ text: `Zmiana: ${sign}${item.delta.toFixed(1)}/r`, color });
+      lines.push({ text: t('ui.change', sign + item.delta.toFixed(1)), color });
     }
 
     // Szczegóły energii
     if (item._energyDetails) {
       const e = item._energyDetails;
-      lines.push({ text: `Produkcja: +${_fmtNum(e.production)}/r`, color: THEME.successDim });
-      lines.push({ text: `Konsumpcja: -${_fmtNum(e.consumption)}/r`, color: THEME.dangerDim });
-      lines.push({ text: `Bilans: ${e.balance >= 0 ? '+' : ''}${_fmtNum(e.balance)}/r`,
+      lines.push({ text: t('ui.production', _fmtNum(e.production)), color: THEME.successDim });
+      lines.push({ text: t('ui.consumption', _fmtNum(e.consumption)), color: THEME.dangerDim });
+      lines.push({ text: t('ui.balance', (e.balance >= 0 ? '+' : '') + _fmtNum(e.balance)),
         color: e.balance >= 0 ? THEME.successDim : THEME.dangerDim });
-      if (e.brownout) lines.push({ text: '⚠ BROWNOUT — produkcja wstrzymana', color: C.red });
+      if (e.brownout) lines.push({ text: t('topBar.brownoutWarning'), color: C.red });
     }
 
     // Rozbicie per budynek — dla energii i wszystkich zasobów z deltą
@@ -290,26 +291,26 @@ export class TopBar {
         const prodKeys = Object.keys(bd.producers);
         const consKeys = Object.keys(bd.consumers);
         if (prodKeys.length > 0) {
-          lines.push({ text: '─── Producenci ───', color: C.dim });
+          lines.push({ text: t('econPanel.producers'), color: C.dim });
           for (const type of prodKeys) {
             const g = bd.producers[type];
             const def = BUILDINGS[type];
-            const name = def?.namePL ?? type;
+            const name = def ? getName(def, 'building') : type;
             const icon = def?.icon ?? '?';
             const cnt = g.count > 1 ? ` ×${g.count}` : '';
             lines.push({ text: `${icon} ${name}${cnt}  +${_fmtNum(g.total)}/r`, color: THEME.successDim });
           }
         }
         if (consKeys.length > 0) {
-          lines.push({ text: '─── Konsumenci ───', color: C.dim });
+          lines.push({ text: t('econPanel.consumers'), color: C.dim });
           for (const type of consKeys) {
             const g = bd.consumers[type];
             let name, icon;
             if (type === 'pop_consumption') {
-              name = 'Konsumpcja POP'; icon = '👥';
+              name = t('topBar.popConsumption'); icon = '👥';
             } else {
               const def = BUILDINGS[type];
-              name = def?.namePL ?? type;
+              name = def ? getName(def, 'building') : type;
               icon = def?.icon ?? '?';
             }
             const cnt = g.count > 1 ? ` ×${g.count}` : '';
@@ -322,18 +323,18 @@ export class TopBar {
     // Szczegóły PC (fabryki)
     if (item._pcDetails) {
       const pc = item._pcDetails;
-      lines.push({ text: `Używane: ${pc.used}`, color: C.text });
-      lines.push({ text: `Dostępne: ${pc.total}`, color: C.text });
-      lines.push({ text: `Wolne: ${pc.total - pc.used}`, color: pc.total - pc.used > 0 ? THEME.successDim : C.orange });
+      lines.push({ text: `${t('topBar.used')} ${pc.used}`, color: C.text });
+      lines.push({ text: `${t('topBar.available')} ${pc.total}`, color: C.text });
+      lines.push({ text: `${t('topBar.free')} ${pc.total - pc.used}`, color: pc.total - pc.used > 0 ? THEME.successDim : C.orange });
     }
 
     // Szczegóły POP
     if (item._popDetails) {
       const p = item._popDetails;
-      lines.push({ text: `Zatrudnieni: ${p.employed}`, color: C.text });
-      lines.push({ text: `Zablokowani (misje): ${p.locked}`, color: p.locked > 0 ? C.orange : C.text });
-      lines.push({ text: `Wolni: ${p.free}`, color: p.free > 0 ? THEME.successDim : C.orange });
-      lines.push({ text: `Mieszkania: ${p.housing}`, color: p.pop >= p.housing ? C.orange : C.text });
+      lines.push({ text: `${t('topBar.employed')} ${p.employed}`, color: C.text });
+      lines.push({ text: `${t('topBar.locked')} ${p.locked}`, color: p.locked > 0 ? C.orange : C.text });
+      lines.push({ text: `${t('topBar.freePops')} ${p.free}`, color: p.free > 0 ? THEME.successDim : C.orange });
+      lines.push({ text: `${t('topBar.housingLabel')} ${p.housing}`, color: p.pop >= p.housing ? C.orange : C.text });
     }
 
     // Flow label (dla elementów z flowLabel ale bez delta)
@@ -372,7 +373,7 @@ export class TopBar {
       playActive ? THEME.bgSecondary : null);
 
     // Przyciski prędkości — kompaktowe
-    const speedLabels = ['1d', '1m', '1r', '10r', '10k'];
+    const speedLabels = [t('speed.1d'), t('speed.1m'), t('speed.1y'), t('speed.10y'), t('speed.10k')];
     const speedBtnW = 22;
     let sx = playX + playW + btnGap + 2;
     for (let i = 0; i < speedLabels.length; i++) {
@@ -438,7 +439,7 @@ export class TopBar {
       items.push({
         icon: def.icon, symbol: id, value: amt, delta: dlt,
         color: def.color || C.text,
-        tooltipName: `${def.icon} ${def.namePL} (${id})`,
+        tooltipName: `${def.icon} ${getName(def, 'resource')} (${id})`,
         _breakdownKey: id,
       });
     }
@@ -453,7 +454,7 @@ export class TopBar {
       items.push({
         icon: def.icon, symbol: '', value: amt, delta: dlt,
         color: def.color || C.text,
-        tooltipName: `${def.icon} ${def.namePL}`,
+        tooltipName: `${def.icon} ${getName(def, 'resource')}`,
         _breakdownKey: id,
       });
     }
@@ -484,7 +485,7 @@ export class TopBar {
       icon: eIcon, symbol: '', value: eVal,
       color: eColor,
       flowLabel: eFlowLabel, flowColor: eFlowColor,
-      tooltipName: '⚡ Energia',
+      tooltipName: `⚡ ${t('resource.energy')}`,
       _energyDetails: {
         production: energyFlow.production ?? 0,
         consumption: energyFlow.consumption ?? 0,
@@ -499,7 +500,7 @@ export class TopBar {
     items.push({
       icon: '🔬', symbol: '', value: resAmt, delta: resDlt,
       color: THEME.purple,
-      tooltipName: '🔬 Nauka (research)',
+      tooltipName: `🔬 ${t('resource.research')}`,
       _breakdownKey: 'research',
     });
 
@@ -514,7 +515,7 @@ export class TopBar {
         color: usedPts >= totalPts && totalPts > 0 ? C.orange : THEME.textSecondary,
         flowLabel: `${usedPts}/${totalPts}`,
         flowColor: usedPts >= totalPts && totalPts > 0 ? C.orange : C.dim,
-        tooltipName: '🏭 Punkty Produkcji (PC)',
+        tooltipName: `🏭 ${t('topBar.productionPoints')}`,
         _pcDetails: { used: usedPts, total: totalPts },
       });
     }
@@ -534,7 +535,7 @@ export class TopBar {
         color: atCap ? C.orange : free > 0 ? THEME.successDim : THEME.textSecondary,
         flowLabel: `${free}/${pop}`,
         flowColor: free > 0 ? THEME.successDim : C.orange,
-        tooltipName: '👤 Populacja (POP)',
+        tooltipName: `👤 ${t('topBar.populationLabel')}`,
         _popDetails: { pop, free, employed, locked, housing },
       });
     }

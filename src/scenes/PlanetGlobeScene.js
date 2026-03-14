@@ -17,11 +17,11 @@ import { showRenameModal } from '../ui/ModalInput.js';
 import { TECHS }             from '../data/TechData.js';
 import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import { PlanetGlobeTexture } from '../renderer/PlanetGlobeTexture.js';
-import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
-import { ALL_RESOURCES } from '../data/ResourcesData.js';
+import { COMMODITIES } from '../data/CommoditiesData.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { GLOBE }         from '../config/LayoutConfig.js';
 import { TopBar }        from '../ui/TopBar.js';
+import { t, getName, getDesc, getShort } from '../i18n/i18n.js';
 
 // ── Stałe layoutu (z LayoutConfig — spójne z nowym UI) ────────
 const TOP_BAR_H    = GLOBE.TOP_BAR_H;     // 50
@@ -791,7 +791,7 @@ export class PlanetGlobeScene {
       // Podpowiedź w prawym panelu
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.borderLight;
-      ctx.fillText('Kliknij hex', LW - RIGHT_W + 8, HEADER_H + 20);
+      ctx.fillText(t('ui.clickHex'), LW - RIGHT_W + 8, HEADER_H + 20);
       ctx.fillText('aby zobaczyć opcje', LW - RIGHT_W + 8, HEADER_H + 34);
     }
 
@@ -866,7 +866,7 @@ export class PlanetGlobeScene {
     ctx.font      = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
     ctx.textAlign = 'left';
-    ctx.fillText('← Wróć', 10, 20);
+    ctx.fillText(t('ui.back'), 10, 20);
 
     // Nazwa planety + typ + temperatura (pod przyciskiem)
     if (this.planet) {
@@ -875,7 +875,7 @@ export class PlanetGlobeScene {
       ctx.fillStyle = outpostFlag ? THEME.warning : THEME.textSecondary;
       const tempC = this.planet.temperatureC ?? (this.planet.temperatureK ? this.planet.temperatureK - 273 : null);
       const temp = tempC != null ? ` ${Math.round(tempC)}°C` : '';
-      const prefix = outpostFlag ? '🏗 PLACÓWKA — ' : '';
+      const prefix = outpostFlag ? t('ui.outpostPrefix') : '';
       ctx.fillText(`${prefix}${this.planet.name}${temp} ✏`, 10, 34);
     }
 
@@ -961,7 +961,7 @@ export class PlanetGlobeScene {
     if (!bSys || bSys._active.size === 0) {
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.borderLight;
-      ctx.fillText('Brak instalacji', 12, y + 8);
+      ctx.fillText(t('ui.noInstallations'), 12, y + 8);
       return;
     }
 
@@ -973,7 +973,7 @@ export class PlanetGlobeScene {
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = CAT_COLORS[b.category] || '#888';
       const lvlStr = lvl > 1 ? ` Lv${lvl}` : '';
-      ctx.fillText(`${b.icon || '🏗'} ${b.namePL}${lvlStr}`, 12, y + 8);
+      ctx.fillText(`${b.icon || '🏗'} ${getName(b, 'building')}${lvlStr}`, 12, y + 8);
       ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.borderLight;
       const popStr = pop > 0 ? `  👤${pop}` : '';
@@ -999,15 +999,15 @@ export class PlanetGlobeScene {
     ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     ctx.textAlign = 'left';
-    ctx.fillText('Klik: wybierz  |  ESC: wróć', 14, BY + 14);
+    ctx.fillText(t('ui.clickSelect'), 14, BY + 14);
 
     // ── Wiersz 2: info terenu (gdy hover) ────────
     if (this._hoveredTile) {
-      const t       = this._hoveredTile;
-      const terrain = TERRAIN_TYPES[t.type];
-      const name    = terrain?.namePL ?? t.type;
-      const bldg    = t.buildingId ? BUILDINGS[t.buildingId]?.namePL : null;
-      const capital = t.capitalBase ? '🏛 Stolica' : null;
+      const ht      = this._hoveredTile;
+      const terrain = TERRAIN_TYPES[ht.type];
+      const name    = t('terrain.' + ht.type + '.name');
+      const bldg    = ht.buildingId ? getName(BUILDINGS[ht.buildingId], 'building') : null;
+      const capital = ht.capitalBase ? t('ui.capitalLabel') : null;
 
       let info = name;
       if (capital && bldg) info += ` → ${capital} + ${bldg}`;
@@ -1036,10 +1036,10 @@ export class PlanetGlobeScene {
       // Debuff polarny
       const gridH = this.grid?.height ?? 0;
       const latMod = (!this.grid.getByLatLon && gridH > 0)
-        ? HexGrid.getLatitudeModifier(t.r, gridH)
+        ? HexGrid.getLatitudeModifier(ht.r, gridH)
         : null; // RegionSystem: polarność wbudowana w biom regionu
       if (latMod?.label) modParts.push(latMod.label);
-      if (latMod && latMod.buildCost !== 1.0) modParts.push(`Budowa×${latMod.buildCost}`);
+      if (latMod && latMod.buildCost !== 1.0) modParts.push(t('ui.buildCostMult', latMod.buildCost));
 
       // Info terenu
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -1077,7 +1077,7 @@ export class PlanetGlobeScene {
     ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = this._showGrid ? THEME.accent : THEME.textSecondary;
     ctx.textAlign = 'center';
-    ctx.fillText('SIATKA', gridBtnX + gridBtnW / 2, gridBtnY + 12);
+    ctx.fillText(t('ui.gridToggle'), gridBtnX + gridBtnW / 2, gridBtnY + 12);
 
     ctx.textAlign = 'left';
   }
@@ -1095,25 +1095,27 @@ export class PlanetGlobeScene {
         : b.terrainOnly ? b.terrainOnly.includes(tile.type)
         : b.terrainAny  ? true
         : terrainDef.allowedCategories.includes(b.category);
+      let isBlocked = false;
       if (!terrainOk) {
-        reason = 'Zły teren';
+        reason = t('ui.badTerrain');
+        isBlocked = true;
       } else if (b.requires && !tSys?.isResearched(b.requires)) {
-        const techName = TECHS[b.requires]?.namePL ?? b.requires;
-        reason = `Wymaga: ${techName} (🔬 NAUKA)`;
+        const techName = getName(TECHS[b.requires], 'tech');
+        reason = t('ui.requiresTechScience', techName);
+        isBlocked = true;
       } else {
         const resourceOk = Object.entries(b.cost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
         const commodityOk = Object.entries(b.commodityCost || {}).every(([res, amt]) => (inv[res] ?? 0) >= amt);
         const popCost = b.popCost ?? 0.25;
         const isOutpost = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
         const popOk = isOutpost || popCost <= 0 || (cSys && cSys.freePops >= popCost);
-        if (!resourceOk || !commodityOk) reason = 'Brak surowców';
-        else if (!popOk) reason = 'Brak POPów';
+        if (!resourceOk || !commodityOk) reason = t('ui.noResources');
+        else if (!popOk) reason = t('ui.noPops');
       }
 
       // Priorytet sortowania: 0 = affordable, 1 = unaffordable, 2 = blocked
-      const blocked = reason === 'Zły teren' || (reason && reason.startsWith('Wymaga'));
-      const priority = !reason ? 0 : blocked ? 2 : 1;
-      result.push({ b, reason, priority });
+      const priority = !reason ? 0 : isBlocked ? 2 : 1;
+      result.push({ b, reason, priority, isBlocked });
     }
     result.sort((a, b) => a.priority - b.priority);
     return result;
@@ -1146,12 +1148,12 @@ export class PlanetGlobeScene {
     // Nagłówek pola
     ctx.font      = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(terrain?.namePL ?? tile.type, BPX + 8, HEADER_H + 20);
+    ctx.fillText(t('terrain.' + tile.type + '.name'), BPX + 8, HEADER_H + 20);
 
     if (tile.strategicResource) {
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = STRAT_COLORS[tile.strategicResource] || '#fff';
-      ctx.fillText(`Zasób: ${tile.strategicResource}`, BPX + 8, HEADER_H + 34);
+      ctx.fillText(t('ui.strategicResource', tile.strategicResource), BPX + 8, HEADER_H + 34);
     }
 
     // Debug: numer regionu (jeśli RegionSystem)
@@ -1167,7 +1169,7 @@ export class PlanetGlobeScene {
     if (deposits.length > 0) {
       ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText('ZŁOŻA:', BPX + 8, buildListY);
+      ctx.fillText(t('ui.deposits'), BPX + 8, buildListY);
       buildListY += 10;
       for (const d of deposits) {
         const pct = d.totalAmount > 0 ? Math.round(d.remaining / d.totalAmount * 100) : 0;
@@ -1175,7 +1177,7 @@ export class PlanetGlobeScene {
         const icon = RESOURCE_ICONS[d.resourceId] ?? d.resourceId;
         if (pct <= 0) {
           ctx.fillStyle = '#666666';
-          ctx.fillText(`${icon} ${d.resourceId}: WYCZERPANE`, BPX + 14, buildListY);
+          ctx.fillText(`${icon} ${d.resourceId}: ${t('ui.depleted')}`, BPX + 14, buildListY);
         } else {
           const stars = richness >= 0.7 ? '★★★' : richness >= 0.4 ? '★★' : '★';
           ctx.fillStyle = richness >= 0.7 ? THEME.successDim : richness >= 0.4 ? THEME.warning : THEME.dangerDim;
@@ -1190,7 +1192,7 @@ export class PlanetGlobeScene {
     if (tile.capitalBase) {
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.info;
-      ctx.fillText('🏛 Stolica', BPX + 8, buildListY);
+      ctx.fillText(t('ui.capitalLabel'), BPX + 8, buildListY);
       buildListY += 14;
     }
 
@@ -1198,7 +1200,7 @@ export class PlanetGlobeScene {
     if (tile.underConstruction) {
       const uc = tile.underConstruction;
       const ucBuilding = BUILDINGS[uc.buildingId];
-      const ucName = ucBuilding?.namePL ?? uc.buildingId;
+      const ucName = ucBuilding ? getName(ucBuilding, 'building') : uc.buildingId;
       const ucIcon = ucBuilding?.icon ?? '🔨';
       const pct = uc.buildTime > 0 ? Math.min(1, uc.progress / uc.buildTime) : 1;
       const remaining = Math.max(0, uc.buildTime - uc.progress);
@@ -1210,7 +1212,7 @@ export class PlanetGlobeScene {
 
       ctx.fillStyle = THEME.textSecondary;
       ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillText(uc.isUpgrade ? 'Ulepszenie w toku...' : 'W budowie...', BPX + 8, buildListY);
+      ctx.fillText(uc.isUpgrade ? t('ui.upgradeInProgress') : t('ui.inConstruction'), BPX + 8, buildListY);
       buildListY += 10;
 
       // Pasek postępu
@@ -1238,7 +1240,7 @@ export class PlanetGlobeScene {
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = '#ff8888';
       ctx.textAlign = 'center';
-      ctx.fillText('[ Anuluj budowę ]', BPX + RIGHT_W / 2, cancelY + 13);
+      ctx.fillText(t('ui.cancelBuild'), BPX + RIGHT_W / 2, cancelY + 13);
       ctx.textAlign = 'left';
 
       // Jeśli to upgrade, pokaż też istniejący budynek poniżej
@@ -1258,7 +1260,7 @@ export class PlanetGlobeScene {
 
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = CAT_COLORS[b.category] || '#fff';
-      ctx.fillText(`${b.icon} ${b.namePL}  Lv.${lvl}/${maxLvl}`, BPX + 8, buildListY);
+      ctx.fillText(`${b.icon} ${getName(b, 'building')}  Lv.${lvl}/${maxLvl}`, BPX + 8, buildListY);
       buildListY += 4;
 
       // Pasek poziomu
@@ -1301,14 +1303,14 @@ export class PlanetGlobeScene {
           ctx.fillStyle = THEME.textDim;
           ctx.fillText(`CFP: ${lvl}`, BPX + 8, buildListY);
           buildListY += 10;
-          ctx.fillText('Produkcja:', BPX + 8, buildListY);
+          ctx.fillText(t('ui.productionLabel'), BPX + 8, buildListY);
           buildListY += 10;
           const prod = ps._consumerProduction ?? {};
           for (const [goodId, val] of Object.entries(prod)) {
             if (val <= 0) continue;
             const com = COMMODITIES[goodId];
             const icon = com?.icon ?? '?';
-            const name = com?.namePL ?? goodId;
+            const name = com ? getName(com, 'commodity') : goodId;
             ctx.fillStyle = THEME.successDim;
             ctx.fillText(`  ${icon} ${name}  ${val.toFixed(1)}/rok`, BPX + 8, buildListY);
             buildListY += 10;
@@ -1355,7 +1357,7 @@ export class PlanetGlobeScene {
         ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = canAfford ? THEME.accent : '#aa4455';
         ctx.textAlign = 'center';
-        ctx.fillText(canAfford ? `[ Ulepsz do Lv.${nextLvl} ]` : `[ Ulepsz do Lv.${nextLvl} ] ✕`, BPX + RIGHT_W / 2, upgradeY + 13);
+        ctx.fillText(canAfford ? t('ui.upgradeToLv', nextLvl) : t('ui.upgradeToLvFail', nextLvl), BPX + RIGHT_W / 2, upgradeY + 13);
         ctx.textAlign = 'left';
         buildListY = upgradeY + 32;
 
@@ -1373,14 +1375,13 @@ export class PlanetGlobeScene {
         // Surowce
         if (rawEntries.length > 0) {
           ctx.fillStyle = THEME.textSecondary;
-          ctx.fillText('Surowce:', BPX + 8, buildListY);
+          ctx.fillText(t('ui.rawResources'), BPX + 8, buildListY);
           buildListY += 12;
         }
         for (const [resId, amt] of rawEntries) {
           const have = Math.floor(inv[resId] ?? 0);
           const icon = RESOURCE_ICONS[resId] ?? resId;
-          const resDef = ALL_RESOURCES[resId];
-          const name = resDef?.namePL ?? resId;
+          const name = t('resource.' + resId);
           const ok = have >= amt;
           ctx.fillStyle = ok ? '#00ee88' : '#ff3344';
           ctx.fillText(`${icon} ${name}: ${have}/${amt}`, BPX + 14, buildListY);
@@ -1390,12 +1391,12 @@ export class PlanetGlobeScene {
         // Towary (commodities)
         if (comEntries.length > 0) {
           ctx.fillStyle = THEME.textSecondary;
-          ctx.fillText('Towary:', BPX + 8, buildListY);
+          ctx.fillText(t('ui.commoditiesLabel'), BPX + 8, buildListY);
           buildListY += 12;
           for (const [resId, amt] of comEntries) {
             const have = Math.floor(inv[resId] ?? 0);
             const comDef = COMMODITIES[resId];
-            const name = COMMODITY_SHORT[resId] ?? resId;
+            const name = getShort(resId);
             const dispIcon = comDef?.icon ?? resId;
             const ok = have >= amt;
             ctx.fillStyle = ok ? '#00ee88' : '#ff3344';
@@ -1425,7 +1426,7 @@ export class PlanetGlobeScene {
           ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = '#ffcc44';
           ctx.textAlign = 'center';
-          ctx.fillText(`[ Obniż Lv ${lvl} → ${lvl - 1} ]`, BPX + RIGHT_W / 2, demolishY + 11);
+          ctx.fillText(t('ui.downgrade', lvl, lvl - 1), BPX + RIGHT_W / 2, demolishY + 11);
           ctx.textAlign = 'left';
         } else {
           // Pełna rozbiórka — czerwony
@@ -1436,7 +1437,7 @@ export class PlanetGlobeScene {
           ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = '#ff8888';
           ctx.textAlign = 'center';
-          ctx.fillText('[ Rozbiórka ]', BPX + RIGHT_W / 2, demolishY + 11);
+          ctx.fillText(t('ui.demolishBtn'), BPX + RIGHT_W / 2, demolishY + 11);
           ctx.textAlign = 'left';
         }
       }
@@ -1455,7 +1456,7 @@ export class PlanetGlobeScene {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = this._buildPanelTab === 'build' ? THEME.accent : THEME.textSecondary;
       ctx.textAlign = 'center';
-      ctx.fillText('🔨 BUDUJ', BPX + 8 + tabW / 2, tabY + 11);
+      ctx.fillText(t('ui.buildTab'), BPX + 8 + tabW / 2, tabY + 11);
 
       // ZAINSTALUJ tab
       ctx.fillStyle = this._buildPanelTab === 'deploy' ? 'rgba(0,255,180,0.13)' : 'rgba(0,255,180,0.04)';
@@ -1463,7 +1464,7 @@ export class PlanetGlobeScene {
       ctx.strokeStyle = this._buildPanelTab === 'deploy' ? THEME.accent : THEME.border;
       ctx.strokeRect(BPX + 8 + tabW, tabY, tabW, tabH);
       ctx.fillStyle = this._buildPanelTab === 'deploy' ? THEME.accent : THEME.textSecondary;
-      ctx.fillText('📦 ZAINSTALUJ', BPX + 8 + tabW + tabW / 2, tabY + 11);
+      ctx.fillText(t('ui.deployTab'), BPX + 8 + tabW + tabW / 2, tabY + 11);
       ctx.textAlign = 'left';
       buildListY = tabY + tabH + 6;
 
@@ -1476,7 +1477,7 @@ export class PlanetGlobeScene {
       // Lista budynków (dostępne + niedostępne z powodem) — ze scrollem
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.borderLight;
-      ctx.fillText('Budynki:', BPX + 8, buildListY);
+      ctx.fillText(t('ui.buildingsLabel'), BPX + 8, buildListY);
 
       const clipTop = buildListY + 4;
       const clipBot = LH - BOTTOM_BAR_H;
@@ -1495,9 +1496,9 @@ export class PlanetGlobeScene {
       // Sortowanie budynków wg dostępności: affordable → unaffordable → blocked
       const sortedBuildings = this._getSortedBuildings(tile, tSys, cSys, inv);
 
-      sortedBuildings.forEach(({ b, reason }) => {
+      sortedBuildings.forEach(({ b, reason, isBlocked }) => {
 
-        const blocked  = reason === 'Zły teren' || (reason && reason.startsWith('Wymaga'));
+        const blocked  = isBlocked;
         const affordable = !reason;
         // Większy wiersz dla nowych kosztów
         const hasCommodity = b.commodityCost && Object.keys(b.commodityCost).length > 0;
@@ -1524,7 +1525,7 @@ export class PlanetGlobeScene {
         // Nazwa budynku + koszt energii
         ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = blocked ? 'rgba(255,51,68,0.5)' : (affordable ? (CAT_COLORS[b.category] || '#fff') : 'rgba(160,200,190,0.25)');
-        let nameStr = `${b.icon} ${b.namePL}`;
+        let nameStr = `${b.icon} ${getName(b, 'building')}`;
         if (b.energyCost > 0) nameStr += `  ⚡−${b.energyCost}`;
         ctx.fillText(nameStr, BPX + 14, yy + 12);
 
@@ -1545,7 +1546,7 @@ export class PlanetGlobeScene {
         if (hasCommodity && !blocked) {
           const comStr = Object.entries(b.commodityCost).map(([k, v]) => {
             const icon = COMMODITIES[k]?.icon ?? '📦';
-            const name = COMMODITY_SHORT[k] ?? k;
+            const name = getShort(k);
             return `${v}×${icon}${name}`;
           }).join(' ');
           ctx.fillStyle = affordable ? 'rgba(160,200,190,0.45)' : 'rgba(160,200,190,0.15)';
@@ -1630,16 +1631,16 @@ export class PlanetGlobeScene {
         let reason = '';
         if (!bSys._canBuildOnTile(tile, buildingDef)) {
           canDeploy = false;
-          reason = 'Zły teren';
+          reason = t('ui.badTerrain');
         } else if (buildingDef.requires && !window.KOSMOS?.techSystem?.isResearched(buildingDef.requires)) {
           canDeploy = false;
-          reason = 'Wymaga tech';
+          reason = t('ui.requiresTechShort');
         } else {
           const popCost = buildingDef.popCost ?? 0.25;
           const isOutpostCol = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.isOutpost;
           if (popCost > 0 && !isOutpostCol && window.KOSMOS?.civSystem?.freePops < popCost) {
             canDeploy = false;
-            reason = 'Brak POPów';
+            reason = t('ui.noPops');
           }
         }
 
@@ -1652,7 +1653,7 @@ export class PlanetGlobeScene {
         // Ikona + nazwa + ilość
         ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = canDeploy ? THEME.successDim : '#663333';
-        ctx.fillText(`${com.icon} ${buildingDef.icon} ${buildingDef.namePL} ×${qty}`, BPX + 14, yy + 10);
+        ctx.fillText(`${com.icon} ${buildingDef.icon} ${getName(buildingDef, 'building')} ×${qty}`, BPX + 14, yy + 10);
 
         if (canDeploy) {
           // Przycisk DEPLOY
@@ -1686,13 +1687,13 @@ export class PlanetGlobeScene {
     if (!anyPrefab) {
       ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText('Brak prefabów w cargo', BPX + 8, yy + 10);
+      ctx.fillText(t('ui.noPrefabsInCargo'), BPX + 8, yy + 10);
       yy += 14;
       ctx.fillStyle = THEME.borderLight;
       ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillText('Załaduj prefabrykaty na', BPX + 8, yy + 6);
+      ctx.fillText(t('ui.loadPrefabsOn', ''), BPX + 8, yy + 6);
       yy += 10;
-      ctx.fillText('statek cargo w panelu floty.', BPX + 8, yy + 6);
+      ctx.fillText(t('ui.loadPrefabOnShip'), BPX + 8, yy + 6);
     }
   }
 
@@ -1705,17 +1706,18 @@ export class PlanetGlobeScene {
     const lines = [];
 
     // Opis budynku
-    if (building.description) {
-      lines.push({ text: building.description, color: THEME.textSecondary, isDesc: true });
+    const bDesc = getDesc(building, 'building');
+    if (bDesc) {
+      lines.push({ text: bDesc, color: THEME.textSecondary, isDesc: true });
     }
 
-    lines.push({ text: '── Koszty budowy ──', color: THEME.borderLight });
+    lines.push({ text: t('ui.buildCostsHeader'), color: THEME.borderLight });
 
     // Surowce (cost)
     for (const [resId, amt] of Object.entries(building.cost || {})) {
       const have = Math.floor(inv[resId] ?? 0);
       const icon = RESOURCE_ICONS[resId] ?? resId;
-      const name = ALL_RESOURCES[resId]?.namePL ?? resId;
+      const name = t('resource.' + resId);
       const ok   = have >= amt;
       lines.push({
         text: `${icon} ${name}: ${have}/${amt}`,
@@ -1728,7 +1730,7 @@ export class PlanetGlobeScene {
     for (const [comId, amt] of Object.entries(building.commodityCost || {})) {
       const have = Math.floor(inv[comId] ?? 0);
       const icon = COMMODITIES[comId]?.icon ?? '📦';
-      const name = COMMODITY_SHORT[comId] ?? comId;
+      const name = getShort(comId);
       const ok   = have >= amt;
       lines.push({
         text: `${icon} ${name}: ${have}/${amt}`,
@@ -1744,7 +1746,7 @@ export class PlanetGlobeScene {
       const freePops = cSys?.freePops ?? 0;
       const ok = freePops >= popCost;
       lines.push({
-        text: `👤 Populacja: ${freePops.toFixed(2)}/${popCost}`,
+        text: t('ui.popCostDisplay', freePops.toFixed(2), popCost),
         color: ok ? THEME.successDim : '#ff6644',
         missing: !ok,
       });
@@ -1753,17 +1755,17 @@ export class PlanetGlobeScene {
     // Energia (energyCost)
     if (building.energyCost > 0) {
       lines.push({
-        text: `⚡ Energia: −${building.energyCost}/rok`,
+        text: t('ui.energyCostYearly', building.energyCost),
         color: THEME.warning,
       });
     }
 
     // Produkcja (rates)
     if (building.rates && Object.keys(building.rates).length > 0) {
-      lines.push({ text: '── Produkcja ──', color: THEME.borderLight });
+      lines.push({ text: t('ui.productionHeader'), color: THEME.borderLight });
       for (const [resId, val] of Object.entries(building.rates)) {
         const icon = RESOURCE_ICONS[resId] ?? resId;
-        const name = ALL_RESOURCES[resId]?.namePL ?? resId;
+        const name = t('resource.' + resId);
         const sign = val >= 0 ? '+' : '';
         lines.push({
           text: `${icon} ${name}: ${sign}${val}/rok`,
@@ -1773,7 +1775,7 @@ export class PlanetGlobeScene {
     }
 
     if (building.isMine) {
-      lines.push({ text: '⛏ Wydobycie zależy od złóż', color: '#aac8c0' });
+      lines.push({ text: t('ui.miningDependsOnDeposits'), color: '#aac8c0' });
     }
 
     // Buduj HTML i pokaż DOM tooltip
@@ -1846,7 +1848,7 @@ export class PlanetGlobeScene {
 
     const vessel = vMgr.getVessel(vesselId);
     if (!vessel?.cargo?.[prefabId] || vessel.cargo[prefabId] <= 0) {
-      this._flashMsg = 'Brak prefabu w cargo';
+      this._flashMsg = t('ui.noPrefabInCargo');
       this._flashEnd = Date.now() + 2500;
       return;
     }
@@ -1942,7 +1944,7 @@ export class PlanetGlobeScene {
             const missing = Object.entries(upgCost)
               .filter(([k, v]) => (inv[k] ?? 0) < v)
               .map(([k, v]) => k);
-            this._flashMsg = `Brak: ${missing.join(', ')}`;
+            this._flashMsg = t('ui.missingLabel', missing.join(', '));
             this._flashEnd = Date.now() + 2000;
             return true;
           }
@@ -1995,8 +1997,8 @@ export class PlanetGlobeScene {
       const tSys = window.KOSMOS?.techSystem;
       const cSys = window.KOSMOS?.civSystem;
       const sortedClick = this._getSortedBuildings(tile, tSys, cSys, inv);
-      for (const { b, reason } of sortedClick) {
-        const blocked = reason === 'Zły teren' || (reason && reason.startsWith('Wymaga'));
+      for (const { b, reason, isBlocked } of sortedClick) {
+        const blocked = isBlocked;
         const hasCommodity = b.commodityCost && Object.keys(b.commodityCost).length > 0;
         const rowH = blocked ? 42 : (hasCommodity ? 38 : 28);
 

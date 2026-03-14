@@ -1,1 +1,11 @@
-{"version":"0.0.1","configurations":[{"name":"kosmos","runtimeExecutable":"node","runtimeArgs":["node_modules/serve/build/main.js","-p","5500","."],"port":5500}]}
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "kosmos",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/serve/build/main.js", "."],
+      "port": 3000
+    }
+  ]
+}

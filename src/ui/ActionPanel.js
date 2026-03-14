@@ -5,32 +5,33 @@
 
 import EventBus         from '../core/EventBus.js';
 import { ACTION_COSTS } from '../systems/PlayerActionSystem.js';
+import { t }            from '../i18n/i18n.js';
 
 // Definicje przycisków
 const ACTIONS = [
   {
     id:      'stabilize',
-    label:   'STABILIZUJ',
+    labelKey: 'action.stabilize',
     key:     'Q',
     cost:    ACTION_COSTS.stabilize,
     color:   '#44aaff',
-    desc:    'Okrągla orbitę (−e)',
+    descKey: 'action.stabilizeDesc',
   },
   {
     id:      'nudgeToHz',
-    label:   'PCHNIJ → HZ',
+    labelKey: 'action.pushHZ',
     key:     'W',
     cost:    ACTION_COSTS.nudgeToHz,
     color:   '#88ffcc',
-    desc:    'Przesuń ku strefie życia',
+    descKey: 'action.pushHZDesc',
   },
   {
     id:      'bombard',
-    label:   'BOMBARDUJ',
+    labelKey: 'action.bombard',
     key:     'E',
     cost:    ACTION_COSTS.bombard,
     color:   '#ffaa44',
-    desc:    'Rój asteroid (+masa)',
+    descKey: 'action.bombardDesc',
   },
 ];
 
@@ -71,7 +72,7 @@ export class ActionPanel {
     ).setDepth(19).setScrollFactor(0);
 
     // Nagłówek
-    scene.add.text(panelX + PADDING, panelY + 7, 'AKCJE GRACZA', {
+    scene.add.text(panelX + PADDING, panelY + 7, t('action.header'), {
       fontSize:   '9px',
       fontFamily: 'monospace',
       color:      '#2a4060',
@@ -109,14 +110,14 @@ export class ActionPanel {
     const bg = scene.add.graphics().setDepth(20).setScrollFactor(0);
 
     // Etykieta
-    const lbl = scene.add.text(x + 8, y + 7, action.label, {
+    const lbl = scene.add.text(x + 8, y + 7, t(action.labelKey), {
       fontSize:   '11px',
       fontFamily: 'monospace',
       color:      action.color,
     }).setDepth(22).setScrollFactor(0);
 
     // Opis
-    const desc = scene.add.text(x + 8, y + 20, action.desc, {
+    const desc = scene.add.text(x + 8, y + 20, t(action.descKey), {
       fontSize:   '9px',
       fontFamily: 'monospace',
       color:      '#3a5070',
@@ -186,7 +187,7 @@ export class ActionPanel {
     EventBus.on('player:actionResult', ({ success, action, planet, reason, detail }) => {
       let text, color;
       if (success) {
-        const actionLabels = { stabilize: 'Stabilizacja', nudgeToHz: 'Pchnięcie', bombard: 'Bombardowanie' };
+        const actionLabels = { stabilize: t('action.stabilizeResult'), nudgeToHz: t('action.pushHZResult'), bombard: t('action.bombardResult') };
         const extra = detail ? ` (${detail})` : '';
         text  = `✓ ${actionLabels[action] ?? action}: ${planet}${extra}`;
         color = '#88ffcc';

@@ -4,6 +4,7 @@
 // Zwraca Promise<string|null> — nowa nazwa lub null (anulowano).
 
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import { t } from '../i18n/i18n.js';
 
 /**
  * Wyświetla modal do zmiany nazwy obiektu.
@@ -36,7 +37,7 @@ export function showRenameModal(currentName) {
 
     // ── Tytuł ─────────────────────────────────────────────────
     const title = document.createElement('div');
-    title.textContent = 'ZMIEŃ NAZWĘ';
+    title.textContent = t('modal.rename');
     Object.assign(title.style, {
       color: THEME.accent,
       fontSize: `${THEME.fontSizeLarge}px`,
@@ -104,7 +105,7 @@ export function showRenameModal(currentName) {
       return btn;
     };
 
-    const btnCancel = makeBtn('ANULUJ', THEME.textDim, THEME.textSecondary);
+    const btnCancel = makeBtn(t('ui.cancel'), THEME.textDim, THEME.textSecondary);
     const btnOk     = makeBtn('OK', THEME.successDim, THEME.success);
 
     btnRow.appendChild(btnCancel);

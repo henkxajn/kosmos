@@ -8,6 +8,7 @@ import { THEME }       from '../config/ThemeConfig.js';
 import EventBus        from '../core/EventBus.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { PROSPERITY_WEIGHTS } from '../data/ConsumerGoodsData.js';
+import { t, getName } from '../i18n/i18n.js';
 
 const LEFT_W   = 260;
 const RIGHT_W  = 260;
@@ -138,12 +139,12 @@ export class PopulationOverlay extends BaseOverlay {
     ctx.fillStyle = THEME.bgSecondary;
     ctx.fillRect(x, y, w, HDR_H);
 
-    this._drawText(ctx, 'POPULACJA', x + pad, y + 20, THEME.accent, THEME.fontSizeMedium);
+    this._drawText(ctx, t('popPanel.header'), x + pad, y + 20, THEME.accent, THEME.fontSizeMedium);
 
     const totalPop = colonies.reduce((s, c) => s + (c.civSystem?.population ?? 0), 0);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(`${colonies.length} kolonii · łącznie ${totalPop} POP`, x + pad, y + 36);
+    ctx.fillText(t('popPanel.summary', colonies.length, totalPop), x + pad, y + 36);
 
     // ── Siatka statystyk 2×2 ──────────────────────────────
     const sy = y + HDR_H;
@@ -157,10 +158,10 @@ export class PopulationOverlay extends BaseOverlay {
     const totalGrowth = colonies.reduce((s, c) => s + (c.civSystem?._growthProgress ?? 0), 0);
 
     const stats = [
-      { label: 'ŁĄCZNIE POP', value: `${totalPop}`, color: THEME.textPrimary },
-      { label: 'WZROST/ROK',  value: `+${totalGrowth.toFixed(2)}`, color: THEME.success },
-      { label: 'PROSPERITY śr.',  value: `${avgProsperity}`, color: avgProsperity > 60 ? THEME.success : avgProsperity > 30 ? THEME.warning : THEME.danger },
-      { label: 'SLOTY MIESZK.', value: `${totalPop}/${totalHousing}`, color: THEME.textPrimary },
+      { label: t('popPanel.totalPop'), value: `${totalPop}`, color: THEME.textPrimary },
+      { label: t('popPanel.growthPerYear'),  value: `+${totalGrowth.toFixed(2)}`, color: THEME.success },
+      { label: t('popPanel.avgProsperity'),  value: `${avgProsperity}`, color: avgProsperity > 60 ? THEME.success : avgProsperity > 30 ? THEME.warning : THEME.danger },
+      { label: t('popPanel.housingSlots'), value: `${totalPop}/${totalHousing}`, color: THEME.textPrimary },
     ];
 
     for (let i = 0; i < 4; i++) {
@@ -218,7 +219,7 @@ export class PopulationOverlay extends BaseOverlay {
       // POP / sloty
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`POP: ${pop} / ${housing} slotów`, x + pad, ry + 28);
+      ctx.fillText(t('popPanel.popHousing', pop, housing), x + pad, ry + 28);
 
       // Pasek housing
       const barW = w - pad * 2 - 50;
@@ -259,7 +260,7 @@ export class PopulationOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Wybierz kolonię z listy', x + w / 2, y + h / 2);
+      ctx.fillText(t('popPanel.selectColony'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
@@ -277,9 +278,9 @@ export class PopulationOverlay extends BaseOverlay {
 
     // Zakładki
     const tabs = [
-      { id: 'needs',   label: 'POTRZEBY' },
-      { id: 'history', label: 'HISTORIA' },
-      { id: 'slots',   label: 'SLOTY' },
+      { id: 'needs',   label: t('popPanel.tabNeeds') },
+      { id: 'history', label: t('popPanel.tabHistory') },
+      { id: 'slots',   label: t('popPanel.tabSlots') },
     ];
     let tx = x + w - pad;
     for (let i = tabs.length - 1; i >= 0; i--) {
@@ -320,7 +321,7 @@ export class PopulationOverlay extends BaseOverlay {
     // ── Sparkline: historia populacji ──────────────────────
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('WZROST — OSTATNIE 20 LAT', x + pad, cy + 10);
+    ctx.fillText(t('popPanel.growthHistory'), x + pad, cy + 10);
     cy += 16;
 
     const hist = _popHistory[this._selectedColonyId] ?? [];
@@ -342,7 +343,7 @@ export class PopulationOverlay extends BaseOverlay {
       }
     } else {
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('Zbierane dane...', x + pad, cy + sparkH / 2);
+      ctx.fillText(t('popPanel.collectingData'), x + pad, cy + sparkH / 2);
     }
     cy += sparkH + 10;
 
@@ -353,9 +354,9 @@ export class PopulationOverlay extends BaseOverlay {
 
     const cellW = Math.floor((w - pad * 2) / 3);
     const statItems = [
-      { label: 'POP AKTUALNA', value: `${pop}`, color: THEME.textPrimary },
-      { label: 'SLOTY MIESZK.', value: `${pop}/${housing}`, color: pop >= housing ? THEME.danger : THEME.textPrimary },
-      { label: 'PROSPERITY', value: `${prosp}`, color: prosp > 60 ? THEME.success : prosp > 30 ? THEME.warning : THEME.danger },
+      { label: t('popPanel.currentPop'), value: `${pop}`, color: THEME.textPrimary },
+      { label: t('popPanel.housingSlots'), value: `${pop}/${housing}`, color: pop >= housing ? THEME.danger : THEME.textPrimary },
+      { label: t('popPanel.prosperity'), value: `${prosp}`, color: prosp > 60 ? THEME.success : prosp > 30 ? THEME.warning : THEME.danger },
     ];
 
     for (let i = 0; i < 3; i++) {
@@ -377,7 +378,7 @@ export class PopulationOverlay extends BaseOverlay {
     // ── Sekcja POTRZEBY POPULACJI ─────────────────────────
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('POTRZEBY POPULACJI', x + pad, cy + 10);
+    ctx.fillText(t('popPanel.needsTitle'), x + pad, cy + 10);
     cy += 18;
 
     // Oblicz satisfaction z resource ratios
@@ -410,7 +411,7 @@ export class PopulationOverlay extends BaseOverlay {
       if (need.ratio < 0.5) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.danger;
-        ctx.fillText(`⚠ Deficyt ${need.name} — prosperity ${need.penalty}`, nx + 18, cy + 2);
+        ctx.fillText(t('popPanel.deficit', need.name, need.penalty), nx + 18, cy + 2);
         cy += 12;
       }
     }
@@ -420,13 +421,13 @@ export class PopulationOverlay extends BaseOverlay {
     if (civ?.isUnrest) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
-      ctx.fillText('🔥 ZAMIESZKI — efektywność -30%', x + pad, cy + 10);
+      ctx.fillText(t('popPanel.unrest'), x + pad, cy + 10);
       cy += 16;
     }
     if (civ?.isFamine) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
-      ctx.fillText('💀 GŁÓD — populacja umiera', x + pad, cy + 10);
+      ctx.fillText(t('popPanel.famine'), x + pad, cy + 10);
       cy += 16;
     }
 
@@ -436,7 +437,7 @@ export class PopulationOverlay extends BaseOverlay {
       cy += 10;
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textHeader;
-      ctx.fillText('PROSPERITY', x + pad, cy + 10);
+      ctx.fillText(t('popPanel.prosperityHeader'), x + pad, cy + 10);
       cy += 16;
 
       // Pasek główny prosperity (0-100)
@@ -453,11 +454,11 @@ export class PopulationOverlay extends BaseOverlay {
       // Warstwy (5 wierszy)
       const layers = ps.getLayerScores?.() ?? {};
       const layerData = [
-        { key: 'survival',       label: '🍎 Przetrwanie',    max: PROSPERITY_WEIGHTS.survival },
-        { key: 'infrastructure', label: '🏠 Infrastruktura', max: PROSPERITY_WEIGHTS.infrastructure },
-        { key: 'functioning',    label: '🔩 Funkcjonowanie', max: PROSPERITY_WEIGHTS.functioning },
-        { key: 'comfort',        label: '👕 Komfort',        max: PROSPERITY_WEIGHTS.comfort },
-        { key: 'luxury',         label: '🍽️ Luksus',         max: PROSPERITY_WEIGHTS.luxury },
+        { key: 'survival',       label: t('popPanel.layerSurvival'),    max: PROSPERITY_WEIGHTS.survival },
+        { key: 'infrastructure', label: t('popPanel.layerInfra'), max: PROSPERITY_WEIGHTS.infrastructure },
+        { key: 'functioning',    label: t('popPanel.layerFunctioning'), max: PROSPERITY_WEIGHTS.functioning },
+        { key: 'comfort',        label: t('popPanel.layerComfort'),        max: PROSPERITY_WEIGHTS.comfort },
+        { key: 'luxury',         label: t('popPanel.layerLuxury'),         max: PROSPERITY_WEIGHTS.luxury },
       ];
 
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -485,7 +486,7 @@ export class PopulationOverlay extends BaseOverlay {
       // Dobra konsumpcyjne
       cy += 8;
       ctx.fillStyle = THEME.textHeader;
-      ctx.fillText('DOBRA KONSUMPCYJNE', x + pad, cy + 10);
+      ctx.fillText(t('popPanel.consumerGoods'), x + pad, cy + 10);
       cy += 14;
 
       const epoch = ps._getCurrentEpoch?.() ?? { unlockedGoods: [] };
@@ -503,7 +504,7 @@ export class PopulationOverlay extends BaseOverlay {
 
         if (!unlocked) {
           ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`${commodity.icon ?? '?'} ${commodity.namePL ?? goodId}  🔒`, x + pad, cy + 9);
+          ctx.fillText(`${commodity.icon ?? '?'} ${getName(commodity, 'commodity')}  🔒`, x + pad, cy + 9);
         } else {
           const demand = ps.getDemand?.(goodId) ?? 0;
           const production = ps.getProduction?.(goodId) ?? 0;
@@ -513,7 +514,7 @@ export class PopulationOverlay extends BaseOverlay {
                        : THEME.danger;
 
           ctx.fillStyle = THEME.textPrimary;
-          ctx.fillText(`${commodity.icon ?? '?'} ${commodity.namePL ?? goodId}`, x + pad, cy + 9);
+          ctx.fillText(`${commodity.icon ?? '?'} ${getName(commodity, 'commodity')}`, x + pad, cy + 9);
 
           ctx.fillStyle = sColor;
           ctx.textAlign = 'right';
@@ -527,10 +528,10 @@ export class PopulationOverlay extends BaseOverlay {
       cy += 8;
       ctx.fillStyle = THEME.textDim;
       const totalCFP = ps._getTotalCFP?.() ?? 0;
-      ctx.fillText(`Consumer Factory: ${totalCFP} CFP`, x + pad, cy + 9);
+      ctx.fillText(t('popPanel.cfpLabel', totalCFP), x + pad, cy + 9);
       cy += 14;
-      const epochNames = { early: 'Wczesna', developing: 'Rozwijająca', advanced: 'Zaawansowana', cosmic: 'Kosmiczna' };
-      ctx.fillText(`Epoka: ${epochNames[epoch.key] ?? epoch.key} (score: ${Math.round(ps.epochScore ?? 0)})`, x + pad, cy + 9);
+      const epochNames2 = { early: t('epoch.early'), developing: t('epoch.developing'), advanced: t('epoch.advanced'), cosmic: t('epoch.space') };
+      ctx.fillText(t('popPanel.epochScoreLabel', epochNames2[epoch.key] ?? epoch.key, Math.round(ps.epochScore ?? 0)), x + pad, cy + 9);
     }
   }
 
@@ -542,13 +543,13 @@ export class PopulationOverlay extends BaseOverlay {
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('HISTORIA POPULACJI', x + pad, y + 18);
+    ctx.fillText(t('popPanel.historyTitle'), x + pad, y + 18);
 
     if (hist.length < 2) {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Zbyt mało danych — odczekaj kilka lat', x + w / 2, y + h / 2);
+      ctx.fillText(t('popPanel.historyNoData'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
@@ -619,9 +620,9 @@ export class PopulationOverlay extends BaseOverlay {
     const legY = chartY + chartH + 16;
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
-    ctx.fillText('── Populacja', chartX, legY);
+    ctx.fillText(t('popPanel.legendPop'), chartX, legY);
     ctx.fillStyle = THEME.warning;
-    ctx.fillText('--- Prosperity', chartX + 90, legY);
+    ctx.fillText(t('popPanel.legendProsp'), chartX + 90, legY);
   }
 
   // ── Zakładka SLOTY ──────────────────────────────────────────────────────
@@ -630,14 +631,14 @@ export class PopulationOverlay extends BaseOverlay {
     const pad = 14;
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('BUDYNKI MIESZKALNE', x + pad, y + 18);
+    ctx.fillText(t('popPanel.housingTitle'), x + pad, y + 18);
 
     const bs = col.buildingSystem;
     if (!bs) {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Brak danych budynków', x + w / 2, y + h / 2);
+      ctx.fillText(t('popPanel.noHousingData'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
@@ -650,7 +651,7 @@ export class PopulationOverlay extends BaseOverlay {
         const def = entry.def;
         if (def && def.housing && def.housing > 0) {
           housingBuildings.push({
-            name: def.namePL ?? def.id,
+            name: getName(def, 'building'),
             level: entry.level ?? 1,
             housing: def.housing * (entry.level ?? 1),
           });
@@ -662,7 +663,7 @@ export class PopulationOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Brak budynków mieszkalnych', x + w / 2, y + 60);
+      ctx.fillText(t('popPanel.noHousingBuildings'), x + w / 2, y + 60);
       ctx.textAlign = 'left';
       return;
     }
@@ -677,7 +678,7 @@ export class PopulationOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.accent;
       ctx.textAlign = 'right';
-      ctx.fillText(`+${b.housing} slotów`, x + w - pad, ry + 12);
+      ctx.fillText(t('popPanel.slotsCount', b.housing), x + w - pad, ry + 12);
       ctx.textAlign = 'left';
 
       ry += 20;
@@ -690,10 +691,10 @@ export class PopulationOverlay extends BaseOverlay {
     ry += 10;
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText('RAZEM', x + pad, ry + 10);
+    ctx.fillText(t('popPanel.totalLabel'), x + pad, ry + 10);
     ctx.fillStyle = THEME.accent;
     ctx.textAlign = 'right';
-    ctx.fillText(`${totalHousing} slotów`, x + w - pad, ry + 10);
+    ctx.fillText(t('popPanel.totalSlots', totalHousing), x + w - pad, ry + 10);
     ctx.textAlign = 'left';
   }
 
@@ -710,7 +711,7 @@ export class PopulationOverlay extends BaseOverlay {
     ctx.fillRect(x, y, w, TAB_H);
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('ZDARZENIA SPOŁECZNE', x + pad, y + 20);
+    ctx.fillText(t('popPanel.eventsTitle'), x + pad, y + 20);
 
     let cy = y + TAB_H + 8;
 
@@ -720,7 +721,7 @@ export class PopulationOverlay extends BaseOverlay {
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('PROSPERITY', x + pad, cy + 10);
+    ctx.fillText(t('popPanel.prosperityLabel'), x + pad, cy + 10);
     ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
     ctx.fillStyle = prosperity > 60 ? THEME.success : prosperity > 30 ? THEME.warning : THEME.danger;
     ctx.textAlign = 'right';
@@ -765,11 +766,11 @@ export class PopulationOverlay extends BaseOverlay {
     // Rozbicie warstw prosperity
     const layerScores = pSys?.getLayerScores?.() ?? {};
     const LAYER_LABELS = {
-      survival:       '🛡 Przetrwanie',
-      infrastructure: '🏗 Infrastruktura',
-      functioning:    '⚙ Funkcjonowanie',
-      comfort:        '🛋 Komfort',
-      luxury:         '💎 Luksus',
+      survival:       t('popPanel.layerSurvival'),
+      infrastructure: t('popPanel.layerInfra'),
+      functioning:    t('popPanel.layerFunctioning'),
+      comfort:        t('popPanel.layerComfort'),
+      luxury:         t('popPanel.layerLuxury'),
     };
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -799,12 +800,12 @@ export class PopulationOverlay extends BaseOverlay {
     // Epoka i wzrost POP
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    const epochNames = { early: 'Wczesna', developing: 'Rozwijająca', advanced: 'Zaawansowana', cosmic: 'Kosmiczna' };
+    const epochNames = { early: t('epoch.early'), developing: t('epoch.developing'), advanced: t('epoch.advanced'), cosmic: t('epoch.space') };
     const epochKey = pSys?._getCurrentEpoch?.()?.key ?? 'early';
-    ctx.fillText(`Epoka: ${epochNames[epochKey] ?? epochKey}`, x + pad, cy + 8);
+    ctx.fillText(t('popPanel.epochLabel', epochNames[epochKey] ?? epochKey), x + pad, cy + 8);
     cy += 14;
     const growthMult = pSys?.getGrowthMultiplier?.() ?? 1.0;
-    ctx.fillText(`Wzrost POP: x${growthMult.toFixed(1)}`, x + pad, cy + 8);
+    ctx.fillText(t('popPanel.growthMultLabel', growthMult.toFixed(1)), x + pad, cy + 8);
     cy += 14;
 
     // Separator
@@ -816,28 +817,28 @@ export class PopulationOverlay extends BaseOverlay {
     // ── Lista zdarzeń społecznych ─────────────────────────
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('ZDARZENIA AKTYWNE', x + pad, cy + 8);
+    ctx.fillText(t('popPanel.activeEvents'), x + pad, cy + 8);
     cy += 16;
 
     // Zbierz kryzysy jako "zdarzenia"
     const events = [];
     if (civ?.isUnrest) {
-      events.push({ icon: '🔥', name: 'Zamieszki', desc: 'Efektywność produkcji -30%', active: true });
+      events.push({ icon: '🔥', name: t('popPanel.crisisUnrest'), desc: t('popPanel.crisisUnrestDesc'), active: true });
     }
     if (civ?.isFamine) {
-      events.push({ icon: '💀', name: 'Głód', desc: 'Populacja umiera z głodu', active: true });
+      events.push({ icon: '💀', name: t('popPanel.crisisFamine'), desc: t('popPanel.crisisFamineDesc'), active: true });
     }
     // Brownout z resource system
     const rs = col?.resourceSystem;
     if (rs?.energy?.brownout) {
-      events.push({ icon: '⚡', name: 'Brownout', desc: 'Deficyt energii — produkcja wstrzymana', active: true });
+      events.push({ icon: '⚡', name: t('popPanel.crisisBrownout'), desc: t('popPanel.crisisBrownoutDesc'), active: true });
     }
 
     if (events.length === 0) {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Brak zdarzeń', x + w / 2, cy + 30);
+      ctx.fillText(t('popPanel.noEvents'), x + w / 2, cy + 30);
       ctx.textAlign = 'left';
     } else {
       for (const ev of events) {
@@ -851,7 +852,7 @@ export class PopulationOverlay extends BaseOverlay {
         if (ev.active) {
           ctx.fillStyle = THEME.danger;
           ctx.textAlign = 'right';
-          ctx.fillText('AKTYWNE', x + w - pad, cy + 12);
+          ctx.fillText(t('popPanel.activeLabel'), x + w - pad, cy + 12);
         }
         ctx.textAlign = 'left';
 
@@ -870,9 +871,9 @@ export class PopulationOverlay extends BaseOverlay {
   _calcNeeds(civ, rs, pop) {
     if (!rs || pop <= 0) {
       return [
-        { icon: '🍖', name: 'Żywność', ratio: 1, penalty: '-15/rok' },
-        { icon: '💧', name: 'Woda',    ratio: 1, penalty: '-10/rok' },
-        { icon: '⚡', name: 'Energia', ratio: 1, penalty: '-15/rok' },
+        { icon: '🍖', name: t('popPanel.needFood'), ratio: 1, penalty: '-15/rok' },
+        { icon: '💧', name: t('popPanel.needWater'),    ratio: 1, penalty: '-10/rok' },
+        { icon: '⚡', name: t('popPanel.needEnergy'), ratio: 1, penalty: '-15/rok' },
       ];
     }
 
@@ -893,9 +894,9 @@ export class PopulationOverlay extends BaseOverlay {
     const energyRatio = energyCons > 0 ? Math.min(1, Math.max(0, (energyBal + energyCons) / (energyCons * 2))) : 1;
 
     return [
-      { icon: '🍖', name: 'Żywność', ratio: foodRatio,   penalty: '-15/rok' },
-      { icon: '💧', name: 'Woda',    ratio: waterRatio,  penalty: '-10/rok' },
-      { icon: '⚡', name: 'Energia', ratio: energyRatio, penalty: '-15/rok' },
+      { icon: '🍖', name: t('popPanel.needFood'), ratio: foodRatio,   penalty: '-15/rok' },
+      { icon: '💧', name: t('popPanel.needWater'),    ratio: waterRatio,  penalty: '-10/rok' },
+      { icon: '⚡', name: t('popPanel.needEnergy'), ratio: energyRatio, penalty: '-15/rok' },
     ];
   }
 

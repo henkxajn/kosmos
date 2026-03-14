@@ -6,6 +6,7 @@ import { SaveSystem } from '../systems/SaveSystem.js';
 import { migrate }    from '../systems/SaveMigration.js';
 import { PRESET_THEMES, applyPreset, saveTheme } from '../config/ThemeConfig.js';
 import { updateCrt } from '../ui/CrtOverlay.js';
+import { t, getLocale, setLocale } from '../i18n/i18n.js';
 
 // ── 4 warianty kolorystyczne ekranu startowego ────────────────
 const SS_THEMES = [
@@ -40,6 +41,16 @@ const SS_THEMES = [
     sunGlow: '#50a06025',
     planets: ['#b86040', '#50a060', '#38a870', '#2890b8'],
     presetKey: 'ambient_4',
+  },
+  {
+    id: 'neon_cyber', label: 'NEON CYBER', dot: '#ff2288',
+    acc: '#ff2288', bg: '#08020a',
+    sunGrad: 'radial-gradient(circle at 35% 35%, #ff88bb, #ff2288, #880044)',
+    sunGlow: '#ff228825',
+    planets: ['#44ffaa', '#44aaff', '#cc88ff', '#ff4466'],
+    presetKey: 'neon_cyber',
+    fontDisplay: "'Audiowide', sans-serif",
+    fontBody:    "'Rajdhani', sans-serif",
   },
 ];
 
@@ -79,7 +90,7 @@ export class TitleScene {
     if (this._musicStarted) return;
     this._musicStarted = true;
     const audio = window.KOSMOS?.audioSystem;
-    if (audio) audio.startMusic('main');
+    if (audio) audio.startMusic('menu');
   }
 
   // ── Zmiana motywu ─────────────────────────────────────────────
@@ -97,6 +108,9 @@ export class TitleScene {
     el.style.setProperty('--bg-hover', theme.acc + '08');
     el.style.setProperty('--acc-glow', theme.acc + '40');
     el.style.setProperty('--acc-glow2', theme.acc + '15');
+    // Fonty — per wariant (domyślnie Orbitron / Share Tech Mono)
+    el.style.setProperty('--ss-font-display', theme.fontDisplay || "'Orbitron', monospace");
+    el.style.setProperty('--ss-font-body', theme.fontBody || "'Share Tech Mono', monospace");
     el.style.background = theme.bg;
 
     // Słońce
@@ -147,7 +161,8 @@ export class TitleScene {
     }
 
     const hasSave = SaveSystem.hasSave();
-    const saveYears = hasSave !== null ? Math.round(hasSave).toLocaleString('pl-PL') : null;
+    const saveYears = hasSave !== null ? Math.round(hasSave).toLocaleString(getLocale() === 'pl' ? 'pl-PL' : 'en-US') : null;
+    const curLang = getLocale().toUpperCase();
 
     const c = document.createElement('div');
     c.id = 'start-screen';
@@ -169,6 +184,7 @@ export class TitleScene {
       <div class="ss-topbar">
         <span class="ss-logo-small">KOSMOS</span>
         <div class="ss-theme-picker">${dots}</div>
+        <button class="ss-lang-btn" id="ss-lang-btn">${curLang}</button>
         <span class="ss-build">BUILD 2026.03 // 4X STRATEGY</span>
       </div>
 
@@ -198,17 +214,17 @@ export class TitleScene {
         ${hasSave !== null ? `
         <button class="ss-menu-item" data-action="continue">
           <span class="ss-item-num">01</span>
-          <span class="ss-item-label">KONTYNUUJ</span>
-          <span class="ss-item-info">${saveYears} lat</span>
+          <span class="ss-item-label">${t('title.continue', 'CONTINUE')}</span>
+          <span class="ss-item-info">${saveYears} ${t('title.years', 'lat')}</span>
         </button>
         ` : ''}
         <button class="ss-menu-item" data-action="new">
           <span class="ss-item-num">${hasSave !== null ? '02' : '01'}</span>
-          <span class="ss-item-label">NOWA GRA</span>
+          <span class="ss-item-label">${t('title.newGameLabel', 'NOWA GRA')}</span>
         </button>
         <button class="ss-menu-item" data-action="new_boosted">
           <span class="ss-item-num">${hasSave !== null ? '03' : '02'}</span>
-          <span class="ss-item-label">NOWA GRA +</span>
+          <span class="ss-item-label">${t('title.newGameBoosted', 'NOWA GRA +')}</span>
         </button>
         <button class="ss-menu-item" data-action="power_test">
           <span class="ss-item-num">${hasSave !== null ? '04' : '03'}</span>
@@ -235,6 +251,16 @@ export class TitleScene {
         this._applyTheme(+dot.dataset.theme);
       });
     });
+
+    // Bind language toggle (PL/EN)
+    const langBtn = c.querySelector('#ss-lang-btn');
+    if (langBtn) {
+      langBtn.addEventListener('click', () => {
+        const newLang = getLocale() === 'pl' ? 'en' : 'pl';
+        setLocale(newLang);
+        window.location.reload();
+      });
+    }
 
     // Startuj muzykę przy pierwszym kliknięciu gdziekolwiek (Chrome autoplay)
     c.addEventListener('click', () => this._ensureMusic(), { once: true });
@@ -314,7 +340,7 @@ export class TitleScene {
         background: #060504;
         display: flex; flex-direction: column;
         overflow: hidden;
-        font-family: 'Share Tech Mono', monospace;
+        font-family: var(--ss-font-body, 'Share Tech Mono', monospace);
       }
 
       /* ── CRT efekty ── */
@@ -346,12 +372,19 @@ export class TitleScene {
         border-bottom: 1px solid var(--bdr);
       }
       .ss-logo-small {
-        font-family: 'Orbitron', monospace; font-size: 12px; font-weight: 700;
+        font-family: var(--ss-font-display, 'Orbitron', monospace); font-size: 12px; font-weight: 700;
         letter-spacing: 6px; color: var(--acc); opacity: 0.6;
       }
       .ss-build {
         font-size: 9px; letter-spacing: 3px; color: var(--acc); opacity: 0.2;
       }
+      .ss-lang-btn {
+        font-family: var(--ss-font-display, 'Orbitron', monospace); font-size: 11px; font-weight: 700;
+        letter-spacing: 2px; color: var(--acc); background: transparent;
+        border: 1px solid var(--acc); border-radius: 4px; padding: 3px 10px;
+        cursor: pointer; opacity: 0.6; transition: all 0.2s;
+      }
+      .ss-lang-btn:hover { opacity: 1; background: var(--bg-hover); }
 
       /* ── Theme picker ── */
       .ss-theme-picker {
@@ -445,7 +478,7 @@ export class TitleScene {
         text-align: center; white-space: nowrap; z-index: 10; pointer-events: none;
       }
       .ss-logo-text {
-        font-family: 'Orbitron', monospace; font-size: 36px; font-weight: 900;
+        font-family: var(--ss-font-display, 'Orbitron', monospace); font-size: 36px; font-weight: 900;
         letter-spacing: 10px; color: var(--acc);
         text-shadow: 0 0 60px var(--acc-glow);
         animation: ss-logo-breath 4s ease-in-out infinite alternate;
@@ -456,7 +489,7 @@ export class TitleScene {
       }
       .ss-logo-sub {
         display: block; font-size: 9px; letter-spacing: 5px;
-        font-family: 'Share Tech Mono', monospace; color: var(--acc); opacity: 0.25; margin-top: 6px;
+        font-family: var(--ss-font-body, 'Share Tech Mono', monospace); color: var(--acc); opacity: 0.25; margin-top: 6px;
       }
 
       /* ── Menu dolne ── */
@@ -480,15 +513,15 @@ export class TitleScene {
       .ss-menu-item:hover { background: var(--bg-hover); }
 
       .ss-item-num {
-        display: block; font-family: 'Orbitron', monospace; font-size: 9px;
+        display: block; font-family: var(--ss-font-display, 'Orbitron', monospace); font-size: 9px;
         letter-spacing: 2px; color: var(--acc); opacity: 0.3; margin-bottom: 5px; transition: opacity 0.2s;
       }
       .ss-item-label {
-        display: block; font-family: 'VT323', monospace; font-size: 17px;
+        display: block; font-family: var(--ss-font-body, 'VT323', monospace); font-size: 17px;
         letter-spacing: 3px; color: var(--acc); opacity: 0.5; transition: opacity 0.2s;
       }
       .ss-item-info {
-        display: block; font-family: 'Share Tech Mono', monospace; font-size: 9px;
+        display: block; font-family: var(--ss-font-body, 'Share Tech Mono', monospace); font-size: 9px;
         letter-spacing: 2px; color: var(--acc); opacity: 0.2; margin-top: 4px;
       }
       .ss-menu-item:hover .ss-item-num { opacity: 0.7; }

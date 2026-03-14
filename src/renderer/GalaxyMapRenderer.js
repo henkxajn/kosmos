@@ -7,7 +7,6 @@
 import * as THREE from 'three';
 
 // ── Stałe ─────────────────────────────────────────────────────────────────────
-const NEBULA_COUNT = 5;      // mgławice
 const LABEL_DIST   = 40;     // zoom bliższy niż ta wartość → etykiety widoczne
 const CONSTEL_MAX_LY = 4;    // max odl. do rysowania linii konstelacji
 
@@ -41,8 +40,6 @@ export class GalaxyMapRenderer {
     this._labels        = [];     // { sprite, system }
     this._homeGlow      = null;   // pulsujący glow home
     this._callbacks     = {};     // { onSelect }
-    this._nebulaSprites = [];
-
     // Animacja
     this._clock = new THREE.Clock();
   }
@@ -88,7 +85,6 @@ export class GalaxyMapRenderer {
     this._updateCamera();
 
     // Buduj zawartość sceny
-    this._buildNebulae();
     this._buildStars();
     this._buildConstellationLines();
     this._buildLabels();
@@ -132,7 +128,6 @@ export class GalaxyMapRenderer {
     this._clickableMeshes = [];
     this._meshToSystem.clear();
     this._labels = [];
-    this._nebulaSprites = [];
     this._homeGlow = null;
     this._scene  = null;
     this._camera = null;
@@ -200,51 +195,6 @@ export class GalaxyMapRenderer {
   }
 
   // ── Budowanie sceny ───────────────────────────────────────────────────────
-
-  _buildNebulae() {
-    // 4-5 dużych Sprite z radial gradient — AdditiveBlending
-    for (let i = 0; i < NEBULA_COUNT; i++) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 256;
-      canvas.height = 256;
-      const ctx = canvas.getContext('2d');
-
-      // Losowy kolor mgławicy
-      const hue = Math.random() * 360;
-      const sat = 30 + Math.random() * 40;
-
-      const grad = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-      grad.addColorStop(0,   `hsla(${hue}, ${sat}%, 60%, 0.3)`);
-      grad.addColorStop(0.3, `hsla(${hue}, ${sat}%, 40%, 0.15)`);
-      grad.addColorStop(0.7, `hsla(${hue}, ${sat}%, 30%, 0.05)`);
-      grad.addColorStop(1,   `hsla(${hue}, ${sat}%, 20%, 0.0)`);
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 256, 256);
-
-      const tex = new THREE.CanvasTexture(canvas);
-      const mat = new THREE.SpriteMaterial({
-        map: tex,
-        blending: THREE.AdditiveBlending,
-        transparent: true,
-        opacity: 0.04 + Math.random() * 0.08,
-        depthWrite: false,
-      });
-
-      const sprite = new THREE.Sprite(mat);
-      // Pozycja na obrzeżach sceny
-      const angle = (i / NEBULA_COUNT) * Math.PI * 2 + Math.random() * 0.5;
-      const r = 30 + Math.random() * 60;
-      sprite.position.set(
-        r * Math.cos(angle),
-        (Math.random() - 0.5) * 10,
-        r * Math.sin(angle)
-      );
-      sprite.scale.set(40 + Math.random() * 40, 40 + Math.random() * 40, 1);
-
-      this._scene.add(sprite);
-      this._nebulaSprites.push({ sprite, rotSpeed: 0.001 + Math.random() * 0.003 });
-    }
-  }
 
   _buildStars() {
     this._clickableMeshes = [];
@@ -407,11 +357,6 @@ export class GalaxyMapRenderer {
       const pulse = 1 + Math.sin(t * 1.8) * 0.15;
       const s = this._homeGlow.baseScale * pulse;
       this._homeGlow.sprite.scale.set(s, s, 1);
-    }
-
-    // Wolna rotacja mgławic
-    for (const n of this._nebulaSprites) {
-      n.sprite.material.rotation += n.rotSpeed;
     }
 
     // Widoczność etykiet (zależna od zoomu)

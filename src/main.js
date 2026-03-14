@@ -7,6 +7,9 @@ import { AudioSystem } from './systems/AudioSystem.js';
 import { loadTheme } from './config/ThemeConfig.js';
 import { initCrt } from './ui/CrtOverlay.js';
 
+// Inicjalizacja i18n — import wymusza rejestrację słowników
+import './i18n/i18n.js';
+
 // Globalny stan gry (dostępny przez window.KOSMOS)
 window.KOSMOS = {
   scenario:     'civilization',   // 'civilization' (aktywny) | 'generator' (zamrożony)

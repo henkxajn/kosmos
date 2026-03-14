@@ -63,7 +63,15 @@
       "Bash(node --input-type=module -e \":*)",
       "Bash(node -e \":*)",
       "Bash(git add:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(where serve:*)",
+      "Bash(find E:programyClaude_kodykosmosassets -type f \\\\\\(-iname *.mp3 -o -iname *.wav -o -iname *.ogg -o -iname *.m4a \\\\\\))",
+      "Read(//c/Users/Komputer/Downloads/**)",
+      "Bash(ffprobe -v quiet -print_format json -show_format -show_streams \"C:/Users/Komputer/Downloads/Signal in the Static.mp3\")",
+      "WebFetch(domain:asignalinthestatic.com)",
+      "Bash(sed:*)",
+      "Bash(cp \"/c/Users/Komputer/Downloads/Signal in the Static Main Menu.mp3\" \"E:/programy/Claude_kody/kosmos/assets/sounds/signal_main_menu.mp3\")",
+      "Bash(cp \"/c/Users/Komputer/Downloads/Signal in the Static New Game.mp3\" \"E:/programy/Claude_kody/kosmos/assets/sounds/signal_new_game.mp3\")"
     ]
   }
 }

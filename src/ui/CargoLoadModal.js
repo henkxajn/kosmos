@@ -8,6 +8,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { loadCargo, unloadCargo } from '../entities/Vessel.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
+import { t, getName } from '../i18n/i18n.js';
 
 // Ikony zasobów (wszystkie kategorie)
 const RES_ICONS = {};
@@ -21,11 +22,12 @@ for (const [id, def] of Object.entries(MINED_RESOURCES))     WEIGHTS[id] = def.w
 for (const [id, def] of Object.entries(HARVESTED_RESOURCES))  WEIGHTS[id] = def.weight ?? 1;
 for (const [id, def] of Object.entries(COMMODITIES))          WEIGHTS[id] = def.weight ?? 1;
 
-// Nazwy zasobów
-const RES_NAMES = {};
-for (const [id, def] of Object.entries(MINED_RESOURCES))     RES_NAMES[id] = def.namePL;
-for (const [id, def] of Object.entries(HARVESTED_RESOURCES))  RES_NAMES[id] = def.namePL;
-for (const [id, def] of Object.entries(COMMODITIES))          RES_NAMES[id] = def.namePL;
+// Nazwa zasobu z i18n
+function _resName(id) {
+  const def = MINED_RESOURCES[id] ?? HARVESTED_RESOURCES[id] ?? COMMODITIES[id];
+  if (def) return getName({ id, namePL: def.namePL }, def === COMMODITIES[id] ? 'commodity' : 'resource');
+  return id;
+}
 
 // Styl scrollbara w tematyce gry (wstrzykiwany raz)
 let _scrollStyleInjected = false;
@@ -98,12 +100,12 @@ export function showCargoLoadModal(vessel, colony) {
 
     const title = document.createElement('div');
     title.style.cssText = `font-size: 13px; font-weight: bold; text-align: center; color: ${THEME.accent}; letter-spacing: 1px;`;
-    title.textContent = `📦 CARGO — ${vessel.name}`;
+    title.textContent = t('cargo.title', vessel.name);
     header.appendChild(title);
 
     const info = document.createElement('div');
     info.style.cssText = `font-size: 10px; color: ${THEME.textSecondary}; margin-top: 4px; text-align: center;`;
-    info.textContent = `${ship?.namePL ?? vessel.shipId} • ładowność: ${cargoCapacity} ton`;
+    info.textContent = t('cargo.shipInfo', getName({ id: vessel.shipId, namePL: ship?.namePL }, 'ship'), cargoCapacity);
     header.appendChild(info);
 
     // Pasek ładowności (wizualny)
@@ -145,7 +147,7 @@ export function showCargoLoadModal(vessel, colony) {
 
     const cargoHeader = document.createElement('div');
     cargoHeader.style.cssText = `font-size: 10px; color: ${THEME.textDim}; margin-bottom: 4px; font-weight: bold; letter-spacing: 0.5px;`;
-    cargoHeader.textContent = 'NA POKŁADZIE:';
+    cargoHeader.textContent = t('cargo.onBoard');
     cargoSection.appendChild(cargoHeader);
 
     const cargoList = document.createElement('div');
@@ -158,7 +160,7 @@ export function showCargoLoadModal(vessel, colony) {
       if (entries.length === 0) {
         const empty = document.createElement('div');
         empty.style.cssText = `font-size: 10px; color: ${THEME.textDim}; padding: 2px 0; font-style: italic;`;
-        empty.textContent = 'Ładownia pusta';
+        empty.textContent = t('cargo.empty');
         cargoList.appendChild(empty);
         return;
       }
@@ -174,10 +176,10 @@ export function showCargoLoadModal(vessel, colony) {
 
         const name = document.createElement('span');
         name.style.cssText = `flex: 1; font-size: 10px; color: ${THEME.textSecondary};`;
-        name.textContent = `${RES_NAMES[comId] ?? comId} ×${qty} (${(qty * w).toFixed(1)}t)`;
+        name.textContent = `${_resName(comId)} ×${qty} (${(qty * w).toFixed(1)}t)`;
         row.appendChild(name);
 
-        const btnUnload = _makeBtn('Rozładuj', THEME.yellow, () => {
+        const btnUnload = _makeBtn(t('cargo.unload'), THEME.yellow, () => {
           const actual = unloadCargo(vessel, comId, qty, resSys);
           if (actual > 0) { changed = true; updateCargoBar(); refreshCargoList(); refreshLoadSection(); }
         });
@@ -195,7 +197,7 @@ export function showCargoLoadModal(vessel, colony) {
     // ── Załaduj z inventory ───────────────────────────────────────────────────
     const loadHeader = document.createElement('div');
     loadHeader.style.cssText = `font-size: 10px; color: ${THEME.textDim}; margin-bottom: 4px; font-weight: bold; letter-spacing: 0.5px;`;
-    loadHeader.textContent = 'ZAŁADUJ Z KOLONII:';
+    loadHeader.textContent = t('cargo.loadFrom');
     content.appendChild(loadHeader);
 
     const loadSection = document.createElement('div');
@@ -236,7 +238,7 @@ export function showCargoLoadModal(vessel, colony) {
 
           const name = document.createElement('span');
           name.style.cssText = `flex: 1; font-size: 10px; color: ${THEME.textSecondary}; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`;
-          name.textContent = def.namePL ?? id;
+          name.textContent = _resName(id);
           row.appendChild(name);
 
           const availSpan = document.createElement('span');
@@ -273,10 +275,10 @@ export function showCargoLoadModal(vessel, colony) {
         else otherCommodities[id] = def;
       }
 
-      addGroup('PREFABRYKATY', prefabs);
-      addGroup('TOWARY', otherCommodities);
-      addGroup('SUROWCE', MINED_RESOURCES);
-      addGroup('ZBIERANE', HARVESTED_RESOURCES);
+      addGroup(t('cargo.prefabs'), prefabs);
+      addGroup(t('cargo.goods'), otherCommodities);
+      addGroup(t('cargo.rawMaterials'), MINED_RESOURCES);
+      addGroup(t('cargo.harvested'), HARVESTED_RESOURCES);
     }
     refreshLoadSection();
 
@@ -289,7 +291,7 @@ export function showCargoLoadModal(vessel, colony) {
       display: flex; justify-content: center; flex-shrink: 0;
     `;
 
-    const btnClose = _makeBtn('ZAMKNIJ', THEME.accent, () => close(), true);
+    const btnClose = _makeBtn(t('ui.close'), THEME.accent, () => close(), true);
     btnClose.style.cssText += `padding: 4px 28px; font-size: 11px; letter-spacing: 1px;`;
     footer.appendChild(btnClose);
     panel.appendChild(footer);

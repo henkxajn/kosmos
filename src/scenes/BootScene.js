@@ -4,6 +4,7 @@
 import { SaveSystem } from '../systems/SaveSystem.js';
 import { migrate } from '../systems/SaveMigration.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { t } from '../i18n/i18n.js';
 
 const W = window.innerWidth;
 const H = window.innerHeight;
@@ -37,7 +38,7 @@ export class BootScene {
 
     ctx.font      = `${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText('Symulator Układu Słonecznego', W / 2, H / 2 - 20);
+    ctx.fillText(t('boot.subtitle'), W / 2, H / 2 - 20);
 
     ctx.textAlign = 'left';
 
@@ -60,30 +61,30 @@ export class BootScene {
     ctx.font      = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     ctx.textAlign = 'center';
-    ctx.fillText('Wybierz tryb gry:', W / 2, PY + 22);
+    ctx.fillText(t('boot.chooseMode'), W / 2, PY + 22);
 
     // Aktywny przycisk — nowa gra (scenariusz Cywilizacja)
-    this._drawBtn(ctx, W / 2, PY + 52, '[ NOWA GRA ]', THEME.accent, 'civ');
+    this._drawBtn(ctx, W / 2, PY + 52, t('boot.newGame'), THEME.accent, 'civ');
 
     ctx.font      = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = '#4a6a8a';
     ctx.textAlign = 'center';
-    ctx.fillText('losowy układ z cywilizacją', W / 2, PY + 68);
+    ctx.fillText(t('boot.civDesc'), W / 2, PY + 68);
 
     // Wyszarzony przycisk — Generator (zamrożony)
     ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = '#445566';
-    ctx.fillText('[ GENERATOR ]', W / 2, PY + 96);
+    ctx.fillText(t('boot.generator'), W / 2, PY + 96);
     ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = '#2a3a4a';
-    ctx.fillText('wkrótce', W / 2, PY + 110);
+    ctx.fillText(t('boot.comingSoon'), W / 2, PY + 110);
 
     // POWER TEST — przycisk testowy (magenta)
-    this._drawBtn(ctx, W / 2, PY + 140, '[ POWER TEST ]', '#ff44ff', 'power_test');
+    this._drawBtn(ctx, W / 2, PY + 140, t('boot.powerTest'), '#ff44ff', 'power_test');
     ctx.font      = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = '#8a4a8a';
     ctx.textAlign = 'center';
-    ctx.fillText('scenariusz testowy — rozwinięta cywilizacja', W / 2, PY + 156);
+    ctx.fillText(t('boot.powerTestDesc'), W / 2, PY + 156);
 
     ctx.textAlign = 'left';
   }
@@ -100,14 +101,14 @@ export class BootScene {
     ctx.font      = `${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
     ctx.textAlign = 'center';
-    ctx.fillText(`Zapisana gra: ${years} lat`, W / 2, PY + 22);
+    ctx.fillText(t('boot.savedGame', years), W / 2, PY + 22);
 
     ctx.font      = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText('Kontynuować tę grę?', W / 2, PY + 40);
+    ctx.fillText(t('boot.continueQuestion'), W / 2, PY + 40);
 
-    this._drawBtn(ctx, W / 2 - 70,  PY + 66, '[ TAK — KONTYNUUJ ]', THEME.accent, 'yes');
-    this._drawBtn(ctx, W / 2 + 55,  PY + 66, '[ NOWA GRA ]',         '#ff8888', 'new');
+    this._drawBtn(ctx, W / 2 - 70,  PY + 66, t('boot.continueYes'), THEME.accent, 'yes');
+    this._drawBtn(ctx, W / 2 + 55,  PY + 66, t('boot.newGame'),       '#ff8888', 'new');
 
     ctx.textAlign = 'left';
   }

@@ -8,6 +8,7 @@ import { THEME }        from '../config/ThemeConfig.js';
 import { TECHS, TECH_BRANCHES } from '../data/TechData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { SHIPS }     from '../data/ShipsData.js';
+import { t, getName, getDesc } from '../i18n/i18n.js';
 
 const LEFT_W   = 200;
 const RIGHT_W  = 280;
@@ -21,9 +22,9 @@ const TIER_LABEL_H = 24;
 const BRANCH_ORDER = ['mining', 'energy', 'biology', 'civil', 'space'];
 
 const TIER_DESC = {
-  1: 'Podstawowe',
-  2: 'Zaawansowane',
-  3: 'Endgame',
+  1: () => t('tech.tier.1'),
+  2: () => t('tech.tier.2'),
+  3: () => t('tech.tier.3'),
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -72,9 +73,9 @@ export class TechOverlay extends BaseOverlay {
     const rSys = this._getResearchSystem();
 
     // Nagłówek
-    this._drawText(ctx, 'TECHNOLOGIA', x + 12, y + 18, THEME.accent, THEME.fontSizeMedium);
+    this._drawText(ctx, t('techPanel.header'), x + 12, y + 18, THEME.accent, THEME.fontSizeMedium);
     const totalRate = rSys?.getTotalRate() ?? 0;
-    this._drawText(ctx, `🔬 +${totalRate.toFixed(1)} pkt/rok`, x + 12, y + 34,
+    this._drawText(ctx, t('techPanel.researchRate', totalRate.toFixed(1)), x + 12, y + 34,
       THEME.textSecondary, THEME.fontSizeSmall);
     this._drawSeparator(ctx, x, y + HDR_H, x + LEFT_W, y + HDR_H);
 
@@ -98,7 +99,7 @@ export class TechOverlay extends BaseOverlay {
       }
 
       // Ikona + nazwa
-      this._drawText(ctx, `${br.icon} ${br.namePL}`, x + 12, by + 18, br.color, THEME.fontSizeNormal);
+      this._drawText(ctx, `${br.icon} ${t('techBranch.' + brId)}`, x + 12, by + 18, br.color, THEME.fontSizeNormal);
 
       // Statystyki: X/Y odkryte
       const { done, total } = this._branchStats(brId);
@@ -108,7 +109,7 @@ export class TechOverlay extends BaseOverlay {
       this._drawBar(ctx, x + 12, by + 28, LEFT_W - 24, 4, pct, br.color, THEME.border);
 
       // Tekst
-      this._drawText(ctx, `${done}/${total} odkryte`, x + 12, by + 46,
+      this._drawText(ctx, t('techPanel.discovered', done, total), x + 12, by + 46,
         THEME.textSecondary, THEME.fontSizeSmall - 1);
       this._drawText(ctx, `${Math.round(pct * 100)}%`, x + LEFT_W - 12, by + 46,
         THEME.textDim, THEME.fontSizeSmall - 1, 'right');
@@ -127,11 +128,11 @@ export class TechOverlay extends BaseOverlay {
     if (!br) return;
 
     // Nagłówek
-    this._drawText(ctx, `${br.icon} ${br.namePL.toUpperCase()} — DRZEWO TECHNOLOGII`,
+    this._drawText(ctx, t('techPanel.treeHeader', br.icon, t('techBranch.' + this._selectedBranch).toUpperCase()),
       x + 12, y + 20, THEME.textPrimary, THEME.fontSizeNormal);
     const rate = rSys?.getTotalRate() ?? 0;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    const rateLabel = 'Badania: ';
+    const rateLabel = t('techPanel.research');
     const rateVal = `+${rate.toFixed(1)} pkt/rok`;
     const rateLabelW = ctx.measureText(rateLabel).width;
     this._drawText(ctx, rateLabel, x + w - 12 - ctx.measureText(rateLabel + rateVal).width, y + 20,
@@ -163,7 +164,7 @@ export class TechOverlay extends BaseOverlay {
       let ty = startY;
 
       // Label tieru
-      this._drawText(ctx, `◈ TIER ${tier} — ${TIER_DESC[tier]}`,
+      this._drawText(ctx, t('techPanel.tierLabel', tier, TIER_DESC[tier]()),
         tx, ty + 10, THEME.textDim, THEME.fontSizeSmall - 1);
       ty += TIER_LABEL_H;
 
@@ -206,7 +207,8 @@ export class TechOverlay extends BaseOverlay {
     // Prefix + nazwa
     const prefix = { done: '✓ ', active: '⟳ ', queued: '', available: '', locked: '' }[state];
     const prefixColor = { done: THEME.success, active: THEME.purple }[state] ?? s.text;
-    const name = tech.namePL.length > 18 ? tech.namePL.slice(0, 17) + '…' : tech.namePL;
+    const techName = getName(tech, 'tech');
+    const name = techName.length > 18 ? techName.slice(0, 17) + '…' : techName;
 
     if (prefix) {
       this._drawText(ctx, prefix, x + 6, y + 14, prefixColor, THEME.fontSizeNormal);
@@ -239,7 +241,7 @@ export class TechOverlay extends BaseOverlay {
       // Pasek postępu na dole
       this._drawBar(ctx, x + 1, y + h - 4, w - 2, 3, pct, THEME.purple, THEME.border);
     } else if (state === 'done') {
-      this._drawText(ctx, '✓ Odkryte', x + 6, y + 58, THEME.success, THEME.fontSizeSmall);
+      this._drawText(ctx, t('techPanel.done'), x + 6, y + 58, THEME.success, THEME.fontSizeSmall);
     } else {
       this._drawText(ctx, costStr, x + 6, y + 58, THEME.textDim, THEME.fontSizeSmall);
       if (state === 'available') {
@@ -312,9 +314,9 @@ export class TechOverlay extends BaseOverlay {
     } else {
       // Brak wybranej — wskazówka
       this._drawRect(ctx, x, y, w, HDR_H, THEME.bgSecondary);
-      this._drawText(ctx, 'Wybierz technologię', x + 12, y + 16,
+      this._drawText(ctx, t('techPanel.selectTech'), x + 12, y + 16,
         THEME.textDim, THEME.fontSizeMedium);
-      this._drawText(ctx, 'Kliknij węzeł w drzewie', x + 12, y + 30,
+      this._drawText(ctx, t('techPanel.clickNode'), x + 12, y + 30,
         THEME.textDim, THEME.fontSizeSmall);
       cy = y + HDR_H;
     }
@@ -335,15 +337,15 @@ export class TechOverlay extends BaseOverlay {
 
     // Nagłówek
     this._drawRect(ctx, x, y, w, HDR_H, THEME.bgSecondary);
-    this._drawText(ctx, tech.namePL, x + 12, y + 16, THEME.textPrimary, THEME.fontSizeMedium);
-    this._drawText(ctx, `${br?.icon ?? ''} ${br?.namePL ?? ''} — Tier ${tech.tier}`,
+    this._drawText(ctx, getName(tech, 'tech'), x + 12, y + 16, THEME.textPrimary, THEME.fontSizeMedium);
+    this._drawText(ctx, `${br?.icon ?? ''} ${tech.branch ? t('techBranch.' + tech.branch) : ''} — Tier ${tech.tier}`,
       x + 12, y + 30, br?.color ?? THEME.textDim, THEME.fontSizeSmall);
 
     let cy = y + HDR_H + 4;
 
     // Opis
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    const descLines = this._wrapText(tech.description ?? '', 38);
+    const descLines = this._wrapText(getDesc(tech, 'tech') || tech.description || '', 38);
     for (let i = 0; i < Math.min(3, descLines.length); i++) {
       this._drawText(ctx, descLines[i], x + 12, cy + 12 + i * 13,
         THEME.textSecondary, THEME.fontSizeSmall);
@@ -352,7 +354,7 @@ export class TechOverlay extends BaseOverlay {
 
     // Efekty
     if (tech.effects.length > 0) {
-      this._drawText(ctx, 'EFEKTY PO ODKRYCIU', x + 12, cy + 8, THEME.textDim, 8);
+      this._drawText(ctx, t('techPanel.effects'), x + 12, cy + 8, THEME.textDim, 8);
       cy += 16;
       for (const fx of tech.effects) {
         const { text, color } = this._formatEffect(fx);
@@ -364,14 +366,14 @@ export class TechOverlay extends BaseOverlay {
 
     // Wymagania
     if (tech.requires.length > 0) {
-      this._drawText(ctx, 'WYMAGANIA', x + 12, cy + 8, THEME.textDim, 8);
+      this._drawText(ctx, t('techPanel.requirements'), x + 12, cy + 8, THEME.textDim, 8);
       cy += 16;
       for (const reqId of tech.requires) {
         const reqTech = TECHS[reqId];
         const done = tSys?.isResearched(reqId);
         const icon = done ? '✓' : '✗';
         const col = done ? THEME.success : THEME.danger;
-        this._drawText(ctx, `${icon} ${reqTech?.namePL ?? reqId}`, x + 16, cy + 10, col, THEME.fontSizeSmall);
+        this._drawText(ctx, `${icon} ${reqTech ? getName(reqTech, 'tech') : reqId}`, x + 16, cy + 10, col, THEME.fontSizeSmall);
         cy += 18;
       }
       cy += 4;
@@ -380,7 +382,7 @@ export class TechOverlay extends BaseOverlay {
     // Postęp + przyciski
     cy += 4;
     if (state === 'done') {
-      this._drawText(ctx, '✓ ODKRYTE', x + 12, cy + 12, THEME.success, THEME.fontSizeSmall);
+      this._drawText(ctx, t('techPanel.doneLabel'), x + 12, cy + 12, THEME.success, THEME.fontSizeSmall);
       cy += 24;
     } else if (state === 'active') {
       const pct = rSys?.getProgress() ?? 0;
@@ -390,24 +392,24 @@ export class TechOverlay extends BaseOverlay {
       cy += 16;
       this._drawBar(ctx, x + 12, cy, w - 24, 8, pct, THEME.purple, THEME.border);
       cy += 14;
-      this._drawText(ctx, 'W BADANIU', x + 12, cy + 10, THEME.purple, THEME.fontSizeSmall);
+      this._drawText(ctx, t('techPanel.researching'), x + 12, cy + 10, THEME.purple, THEME.fontSizeSmall);
       cy += 20;
       // Przycisk anuluj
       this._drawButton(ctx, '✕ ANULUJ', x + 12, cy, w - 24, 22, 'danger');
       this._addHit(x + 12, cy, w - 24, 22, 'cancelResearch', { techId: tech.id, label: '✕ ANULUJ' });
       cy += 28;
     } else if (state === 'available') {
-      this._drawButton(ctx, '▶ BADAJ', x + 12, cy, (w - 32) / 2, 24, 'primary');
-      this._addHit(x + 12, cy, (w - 32) / 2, 24, 'startResearch', { techId: tech.id, label: '▶ BADAJ' });
-      this._drawButton(ctx, '+ DO KOLEJKI', x + 16 + (w - 32) / 2, cy, (w - 32) / 2, 24, 'secondary');
-      this._addHit(x + 16 + (w - 32) / 2, cy, (w - 32) / 2, 24, 'queueResearch', { techId: tech.id, label: '+ DO KOLEJKI' });
+      this._drawButton(ctx, t('techPanel.researchBtn'), x + 12, cy, (w - 32) / 2, 24, 'primary');
+      this._addHit(x + 12, cy, (w - 32) / 2, 24, 'startResearch', { techId: tech.id, label: t('techPanel.researchBtn') });
+      this._drawButton(ctx, t('techPanel.queueBtn'), x + 16 + (w - 32) / 2, cy, (w - 32) / 2, 24, 'secondary');
+      this._addHit(x + 16 + (w - 32) / 2, cy, (w - 32) / 2, 24, 'queueResearch', { techId: tech.id, label: t('techPanel.queueBtn') });
       cy += 30;
     } else if (state === 'queued') {
-      this._drawButton(ctx, 'USUŃ Z KOLEJKI', x + 12, cy, w - 24, 24, 'danger');
-      this._addHit(x + 12, cy, w - 24, 24, 'dequeueResearch', { techId: tech.id, label: 'USUŃ Z KOLEJKI' });
+      this._drawButton(ctx, t('techPanel.dequeueBtn'), x + 12, cy, w - 24, 24, 'danger');
+      this._addHit(x + 12, cy, w - 24, 24, 'dequeueResearch', { techId: tech.id, label: t('techPanel.dequeueBtn') });
       cy += 30;
     } else { // locked
-      this._drawText(ctx, '🔒 WYMAGANIA NIESPEŁNIONE', x + 12, cy + 12, THEME.textDim, THEME.fontSizeSmall);
+      this._drawText(ctx, t('techPanel.locked'), x + 12, cy + 12, THEME.textDim, THEME.fontSizeSmall);
       cy += 24;
     }
 
@@ -415,7 +417,7 @@ export class TechOverlay extends BaseOverlay {
   }
 
   _drawQueue(ctx, x, y, w, maxH, rSys, tSys) {
-    this._drawText(ctx, 'KOLEJKA BADAŃ', x + 12, y + 12, THEME.textDim, THEME.fontSizeSmall);
+    this._drawText(ctx, t('techPanel.queueHeader'), x + 12, y + 12, THEME.textDim, THEME.fontSizeSmall);
 
     let cy = y + 20;
     const queue = rSys?.researchQueue ?? [];
@@ -428,7 +430,7 @@ export class TechOverlay extends BaseOverlay {
       if (tech) {
         const pct = rSys?.getProgress() ?? 0;
         const eta = rSys?.getETA(year);
-        const etaStr = eta != null && eta !== Infinity ? `rok ${Math.ceil(eta)}` : '∞';
+        const etaStr = eta != null && eta !== Infinity ? t('techPanel.queueEta', Math.ceil(eta)) : '∞';
 
         ctx.fillStyle = 'rgba(204,136,255,0.06)';
         ctx.fillRect(x + 4, cy, w - 8, 28);
@@ -437,7 +439,7 @@ export class TechOverlay extends BaseOverlay {
         ctx.strokeRect(x + 4.5, cy + 0.5, w - 9, 27);
 
         this._drawText(ctx, '⟳', x + 10, cy + 16, THEME.purple, THEME.fontSizeSmall);
-        this._drawText(ctx, tech.namePL, x + 24, cy + 12, THEME.textPrimary, THEME.fontSizeSmall);
+        this._drawText(ctx, getName(tech, 'tech'), x + 24, cy + 12, THEME.textPrimary, THEME.fontSizeSmall);
         this._drawText(ctx, etaStr, x + w - 10, cy + 12, THEME.textSecondary, THEME.fontSizeSmall - 1, 'right');
 
         // Mini pasek postępu
@@ -463,7 +465,7 @@ export class TechOverlay extends BaseOverlay {
 
       accCost += tech.cost.research;
       const etaYears = rate > 0 ? Math.ceil(accCost / rate) : '∞';
-      const etaStr = rate > 0 ? `~${etaYears} lat` : '∞';
+      const etaStr = rate > 0 ? t('techPanel.eta', etaYears) : '∞';
 
       const isHover = this._hoverZone?.type === 'queueItem' && this._hoverZone?.data?.techId === techId;
       if (isHover) {
@@ -472,7 +474,7 @@ export class TechOverlay extends BaseOverlay {
       }
 
       this._drawText(ctx, `${i + 1}.`, x + 10, cy + 16, THEME.purple, THEME.fontSizeSmall);
-      this._drawText(ctx, tech.namePL, x + 26, cy + 12, THEME.textPrimary, THEME.fontSizeSmall);
+      this._drawText(ctx, getName(tech, 'tech'), x + 26, cy + 12, THEME.textPrimary, THEME.fontSizeSmall);
       this._drawText(ctx, etaStr, x + w - 32, cy + 12, THEME.textSecondary, THEME.fontSizeSmall - 1, 'right');
 
       // Przycisk ✕
@@ -487,7 +489,7 @@ export class TechOverlay extends BaseOverlay {
 
     // Komunikat jeśli pusta
     if (!current && queue.length === 0) {
-      this._drawText(ctx, 'Brak badań w kolejce', x + 12, cy + 14,
+      this._drawText(ctx, t('techPanel.emptyQueue'), x + 12, cy + 14,
         THEME.textDim, THEME.fontSizeSmall);
     }
   }
@@ -578,11 +580,11 @@ export class TechOverlay extends BaseOverlay {
         return { text: `+${Math.round((fx.multiplier - 1) * 100)}% ${fx.resource}`, color: THEME.success };
       case 'unlockBuilding': {
         const b = BUILDINGS[fx.buildingId];
-        return { text: `[odblokuj] ${b?.namePL ?? fx.buildingId}`, color: THEME.accent };
+        return { text: `[odblokuj] ${b ? getName(b, 'building') : fx.buildingId}`, color: THEME.accent };
       }
       case 'unlockShip': {
         const s = SHIPS[fx.shipId];
-        return { text: `[odblokuj statek] ${s?.namePL ?? fx.shipId}`, color: THEME.info };
+        return { text: `[odblokuj statek] ${s ? getName(s, 'ship') : fx.shipId}`, color: THEME.info };
       }
       case 'moraleBonus':
         return { text: `prosperity +${fx.amount}`, color: THEME.purple };

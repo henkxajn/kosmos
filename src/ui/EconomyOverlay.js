@@ -13,6 +13,7 @@ import { COMMODITIES, formatRecipe, COMMODITY_BY_TIER }
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
+import { t, getName }    from '../i18n/i18n.js';
 
 const LEFT_W   = 220;
 const RIGHT_W  = 260;
@@ -121,7 +122,7 @@ export class EconomyOverlay extends BaseOverlay {
     if (!def) return '';
 
     const icon = def.icon ?? '·';
-    const name = def.namePL ?? resourceId;
+    const name = getName(def, resDef ? 'resource' : 'commodity');
 
     // Zbierz ilość i stawkę (jak _drawLeft)
     let totalAmt = 0;
@@ -160,16 +161,16 @@ export class EconomyOverlay extends BaseOverlay {
     // Buduj HTML
     const lines = [];
     lines.push(`<div style="font-weight:bold;color:${THEME.accent}">${icon} ${name}</div>`);
-    lines.push(`<div>Ilość: ${_fmtAmt(totalAmt)}</div>`);
+    lines.push(`<div>${t('econPanel.tooltipAmount')} ${_fmtAmt(totalAmt)}</div>`);
 
     const rateColor = totalRate > 0 ? THEME.success : totalRate < 0 ? THEME.danger : THEME.textDim;
     const rateSign = totalRate > 0 ? '+' : '';
-    lines.push(`<div style="color:${rateColor}">Bilans: ${rateSign}${totalRate.toFixed(1)}/rok</div>`);
+    lines.push(`<div style="color:${rateColor}">${t('econPanel.tooltipBalance')} ${rateSign}${totalRate.toFixed(1)}${t('econPanel.perYear')}</div>`);
 
     // Producenci
     const prodKeys = Object.keys(allProducers);
     if (prodKeys.length > 0) {
-      lines.push(`<div style="color:${THEME.textDim};margin-top:4px">─── Producenci ───</div>`);
+      lines.push(`<div style="color:${THEME.textDim};margin-top:4px">${t('econPanel.producers')}</div>`);
       for (const type of prodKeys) {
         const g = allProducers[type];
         const { icon: bIcon, name: bName } = _resolveTypeName(type);
@@ -181,7 +182,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Konsumenci
     const consKeys = Object.keys(allConsumers);
     if (consKeys.length > 0) {
-      lines.push(`<div style="color:${THEME.textDim};margin-top:4px">─── Konsumenci ───</div>`);
+      lines.push(`<div style="color:${THEME.textDim};margin-top:4px">${t('econPanel.consumers')}</div>`);
       for (const type of consKeys) {
         const g = allConsumers[type];
         const { icon: bIcon, name: bName } = _resolveTypeName(type);
@@ -192,7 +193,7 @@ export class EconomyOverlay extends BaseOverlay {
     }
 
     if (prodKeys.length === 0 && consKeys.length === 0) {
-      lines.push(`<div style="color:${THEME.textDim};margin-top:4px">Brak aktywnych producentów/konsumentów</div>`);
+      lines.push(`<div style="color:${THEME.textDim};margin-top:4px">${t('econPanel.noActiveProducers')}</div>`);
     }
 
     return lines.join('');
@@ -244,7 +245,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Nagłówek
     ctx.fillStyle = THEME.bgSecondary;
     ctx.fillRect(x, y, w, 44);
-    this._drawText(ctx, 'EKONOMIA', x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
+    this._drawText(ctx, t('econPanel.header'), x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
 
     const colMgr = window.KOSMOS?.colonyManager;
     const selCol = this._selectedColonyId
@@ -252,7 +253,7 @@ export class EconomyOverlay extends BaseOverlay {
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(selCol ? `📍 ${selCol.name ?? selCol.planetId}` : 'globalne · wszystkie kolonie', x + pad, y + 32);
+    ctx.fillText(selCol ? t('econPanel.colonyLabel', selCol.name ?? selCol.planetId) : t('econPanel.globalLabel'), x + pad, y + 32);
 
     // Zbierz dane: per-kolonia lub globalne
     const colonies = colMgr?.getAllColonies() ?? [];
@@ -295,11 +296,11 @@ export class EconomyOverlay extends BaseOverlay {
     let ry = listY - this._scrollLeft;
 
     // ── Kategoria: WYDOBYWALNE ────────────────────────────
-    ry = this._drawCategory(ctx, x, ry, w, '⛏ WYDOBYWALNE', 'mined',
+    ry = this._drawCategory(ctx, x, ry, w, t('econPanel.mined'), 'mined',
       Object.values(MINED_RESOURCES), globalInv, globalRate);
 
     // ── Kategoria: ZBIERALNE ──────────────────────────────
-    ry = this._drawCategory(ctx, x, ry, w, '🌾 ZBIERALNE', 'harvested',
+    ry = this._drawCategory(ctx, x, ry, w, t('econPanel.harvested'), 'harvested',
       Object.values(HARVESTED_RESOURCES), globalInv, globalRate);
 
     // ── Kategoria: TOWARY ─────────────────────────────────
@@ -307,7 +308,7 @@ export class EconomyOverlay extends BaseOverlay {
     const comItems = Object.values(COMMODITIES).filter(c =>
       selCol ? true : ((globalInv[c.id] ?? 0) > 0 || (globalRate[c.id] ?? 0) !== 0)
     );
-    ry = this._drawCategory(ctx, x, ry, w, '🔧 TOWARY', 'commodities',
+    ry = this._drawCategory(ctx, x, ry, w, t('econPanel.commodities'), 'commodities',
       comItems, globalInv, globalRate);
 
     ctx.restore();
@@ -332,7 +333,7 @@ export class EconomyOverlay extends BaseOverlay {
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('ENERGIA (bilans)', x + pad, eY + 14);
+    ctx.fillText(t('econPanel.energyBalance'), x + pad, eY + 14);
 
     ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
     if (totalEnergyBal > 0) {
@@ -340,13 +341,13 @@ export class EconomyOverlay extends BaseOverlay {
       ctx.fillText(`+${totalEnergyBal.toFixed(1)}`, x + pad, eY + 32);
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.success;
-      ctx.fillText('NADWYŻKA', x + pad + 70, eY + 32);
+      ctx.fillText(t('econPanel.surplus'), x + pad + 70, eY + 32);
     } else if (totalEnergyBal < 0) {
       ctx.fillStyle = THEME.danger;
       ctx.fillText(`${totalEnergyBal.toFixed(1)}`, x + pad, eY + 32);
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
-      ctx.fillText('DEFICYT', x + pad + 70, eY + 32);
+      ctx.fillText(t('econPanel.deficit'), x + pad + 70, eY + 32);
     } else {
       ctx.fillStyle = THEME.textSecondary;
       ctx.fillText('0.0', x + pad, eY + 32);
@@ -355,7 +356,7 @@ export class EconomyOverlay extends BaseOverlay {
     if (anyBrownout) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
-      ctx.fillText('⚠ BROWNOUT', x + pad, eY + 44);
+      ctx.fillText(t('econPanel.brownout'), x + pad, eY + 44);
     }
   }
 
@@ -401,7 +402,7 @@ export class EconomyOverlay extends BaseOverlay {
 
       // Nazwa (skrócona)
       ctx.fillStyle = isHovered ? THEME.accent : THEME.textSecondary;
-      ctx.fillText((res.namePL ?? res.id).slice(0, 10), x + 30, ry + 15);
+      ctx.fillText(getName(res, COMMODITIES[res.id] ? 'commodity' : 'resource').slice(0, 10), x + 30, ry + 15);
 
       // Ilość
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
@@ -439,12 +440,12 @@ export class EconomyOverlay extends BaseOverlay {
 
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText('🏭 PRODUKCJA TOWARÓW', x + pad, y + 20);
+    ctx.fillText(t('econPanel.productionHeader'), x + pad, y + 20);
 
     const tabs = [
-      { id: 'factories', label: 'FABRYKI' },
-      { id: 'flows',     label: 'PRZEPŁYWY' },
-      { id: 'trade',     label: 'HANDEL' },
+      { id: 'factories', label: t('econPanel.tabFactories') },
+      { id: 'flows',     label: t('econPanel.tabFlows') },
+      { id: 'trade',     label: t('econPanel.tabTrade') },
     ];
     let tx = x + w - pad;
     for (let i = tabs.length - 1; i >= 0; i--) {
@@ -538,7 +539,7 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.strokeRect(cx, y + 4, glW, h - 8);
     ctx.fillStyle = globalActive ? THEME.accent : THEME.textSecondary;
     ctx.textAlign = 'center';
-    ctx.fillText('🌍 GLOBALNY', cx + glW / 2, y + h - 7);
+    ctx.fillText(t('econPanel.globalFilter'), cx + glW / 2, y + h - 7);
     ctx.textAlign = 'left';
     this._addHit(cx, y + 2, glW, h - 4, 'colony_filter', { colonyId: null });
     cx += glW + 4;
@@ -602,7 +603,7 @@ export class EconomyOverlay extends BaseOverlay {
       if (allocs.length === 0 && queue.length === 0) {
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText('Brak aktywnej produkcji', x + pad + 10, ry + 12);
+        ctx.fillText(t('econPanel.noActiveProduction'), x + pad + 10, ry + 12);
         ry += 22;
       }
 
@@ -615,13 +616,13 @@ export class EconomyOverlay extends BaseOverlay {
       if (queue.length > 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText('KOLEJKA:', x + pad + 10, ry + 10);
+        ctx.fillText(t('econPanel.queueLabel'), x + pad + 10, ry + 10);
         ry += 14;
         for (const q of queue) {
           const def = COMMODITIES[q.commodityId];
           if (!def) continue;
           ctx.fillStyle = THEME.textSecondary;
-          ctx.fillText(`${def.icon} ${def.namePL} ×${q.qty}`, x + pad + 20, ry + 10);
+          ctx.fillText(`${def.icon} ${getName(def, 'commodity')} ×${q.qty}`, x + pad + 20, ry + 10);
           ry += 16;
         }
       }
@@ -634,7 +635,7 @@ export class EconomyOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Brak fabryk w żadnej kolonii', x + w / 2, y + h / 2);
+      ctx.fillText(t('econPanel.noFactories'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
     }
 
@@ -656,7 +657,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Nazwa + receptura
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(def.namePL, x + 24, y + 12);
+    ctx.fillText(getName(def, 'commodity'), x + 24, y + 12);
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
@@ -678,7 +679,7 @@ export class EconomyOverlay extends BaseOverlay {
     if (isStall) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
-      ctx.fillText('BRAK SUROWCÓW', barX, y + 24);
+      ctx.fillText(t('econPanel.noResources'), barX, y + 24);
     }
 
     // Output / rok
@@ -686,11 +687,11 @@ export class EconomyOverlay extends BaseOverlay {
     const outputX = barX + barW + 8;
     if (isStall) {
       ctx.fillStyle = THEME.danger;
-      ctx.fillText('STALL', outputX, y + 12);
+      ctx.fillText(t('econPanel.stall'), outputX, y + 12);
     } else {
       const rate = alloc.points / (def.baseTime || 1);
       ctx.fillStyle = THEME.success;
-      ctx.fillText(`+${rate.toFixed(1)}/rok`, outputX, y + 12);
+      ctx.fillText(`+${rate.toFixed(1)}${t('econPanel.perYear')}`, outputX, y + 12);
     }
   }
 
@@ -713,10 +714,10 @@ export class EconomyOverlay extends BaseOverlay {
     // ── Nagłówek zarządzania ──────────────────────────────
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
-    ctx.fillText('ZARZĄDZANIE PRODUKCJĄ', x + pad, ry + 12);
+    ctx.fillText(t('econPanel.managementHeader'), x + pad, ry + 12);
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(`FP: ${fs.freePoints} wolnych / ${fs.totalPoints} łącznie`, x + pad + 160, ry + 12);
+    ctx.fillText(t('econPanel.fpFree', fs.freePoints, fs.totalPoints), x + pad + 160, ry + 12);
     ry += 20;
 
     // ── Aktywne alokacje z przyciskami ────────────────────
@@ -724,7 +725,7 @@ export class EconomyOverlay extends BaseOverlay {
     if (allocs.length > 0) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('AKTYWNE:', x + pad, ry + 10);
+      ctx.fillText(t('econPanel.activeLabel'), x + pad, ry + 10);
       ry += 14;
 
       for (const a of allocs) {
@@ -738,7 +739,7 @@ export class EconomyOverlay extends BaseOverlay {
       ry += 4;
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('KOLEJKA:', x + pad, ry + 10);
+      ctx.fillText(t('econPanel.queueLabel'), x + pad, ry + 10);
       ry += 14;
 
       for (let i = 0; i < queue.length; i++) {
@@ -757,7 +758,7 @@ export class EconomyOverlay extends BaseOverlay {
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('URUCHOM PRODUKCJĘ:', x + pad, ry + 10);
+    ctx.fillText(t('econPanel.startProduction'), x + pad, ry + 10);
     ry += 14;
 
     ry = this._drawAddProduction(ctx, x + pad, ry, w - pad * 2, colony);
@@ -777,7 +778,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Ikona + nazwa
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = isStall ? THEME.danger : THEME.textPrimary;
-    ctx.fillText(`${def.icon} ${def.namePL}`, x, y + 12);
+    ctx.fillText(`${def.icon} ${getName(def, 'commodity')}`, x, y + 12);
 
     // Punkty (np. "3 FP")
     ctx.fillStyle = THEME.textSecondary;
@@ -863,7 +864,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Numer + ikona + nazwa + ilość
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(`${index + 1}. ${def.icon} ${def.namePL} ×${item.qty}`, x + 4, y + 12);
+    ctx.fillText(`${index + 1}. ${def.icon} ${getName(def, 'commodity')} ×${item.qty}`, x + 4, y + 12);
 
     // Przyciski z prawej: [↑] [↓] [✕]
     const btnY = y;
@@ -934,7 +935,7 @@ export class EconomyOverlay extends BaseOverlay {
         // Ikona + nazwa
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = hasFree ? THEME.textSecondary : THEME.textDim;
-        ctx.fillText(`${def.icon} ${def.namePL}`, x + 4, ry + 12);
+        ctx.fillText(`${def.icon} ${getName(def, 'commodity')}`, x + 4, ry + 12);
 
         // Receptura
         ctx.fillStyle = THEME.textDim;
@@ -1117,7 +1118,7 @@ export class EconomyOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Brak przepływów surowców', x + w / 2, y + h / 2);
+      ctx.fillText(t('econPanel.noFlows'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
@@ -1127,11 +1128,11 @@ export class EconomyOverlay extends BaseOverlay {
     let ry = y + 8;
 
     // Nagłówki kolumn
-    ctx.fillText('SUROWIEC', x + pad, ry + 10);
+    ctx.fillText(t('econPanel.colResource'), x + pad, ry + 10);
     ctx.textAlign = 'center';
-    ctx.fillText('PRODUKCJA', x + w * 0.45, ry + 10);
-    ctx.fillText('KONSUMPCJA', x + w * 0.65, ry + 10);
-    ctx.fillText('BILANS', x + w * 0.85, ry + 10);
+    ctx.fillText(t('econPanel.colProduction'), x + w * 0.45, ry + 10);
+    ctx.fillText(t('econPanel.colConsumption'), x + w * 0.65, ry + 10);
+    ctx.fillText(t('econPanel.colBalance'), x + w * 0.85, ry + 10);
     ctx.textAlign = 'left';
     ry += 18;
 
@@ -1142,7 +1143,7 @@ export class EconomyOverlay extends BaseOverlay {
     for (const [resId, f] of items) {
       const def = ALL_RESOURCES[resId] ?? COMMODITIES[resId];
       const icon = def?.icon ?? '·';
-      const name = (def?.namePL ?? resId).slice(0, 10);
+      const name = (def ? getName(def, COMMODITIES[resId] ? 'commodity' : 'resource') : resId).slice(0, 10);
       const balance = f.prod - f.cons;
 
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -1174,7 +1175,7 @@ export class EconomyOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Brak aktywnych tras handlowych', x + w / 2, y + h / 2);
+      ctx.fillText(t('econPanel.noTradeRoutes'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
@@ -1218,8 +1219,8 @@ export class EconomyOverlay extends BaseOverlay {
       }
 
       // Status
-      const status = route.status === 'active' ? 'AKTYWNA'
-                   : route.status === 'paused' ? 'WSTRZYMANA' : 'UKOŃCZONA';
+      const status = route.status === 'active' ? t('econPanel.routeActive')
+                   : route.status === 'paused' ? t('econPanel.routePaused') : t('econPanel.routeCompleted');
       const statusColor = route.status === 'active' ? THEME.accent
                         : route.status === 'paused' ? THEME.warning : THEME.textDim;
 
@@ -1286,7 +1287,7 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.fillRect(x, y, w, TAB_H);
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('BILANS ENERGII · ALERTY', x + pad, y + 20);
+    ctx.fillText(t('econPanel.alertsHeader'), x + pad, y + 20);
 
     let cy = y + TAB_H + 8;
 
@@ -1294,11 +1295,11 @@ export class EconomyOverlay extends BaseOverlay {
     const colMgr = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const activeCol = colMgr?.getColony(activePid);
-    const colName = activeCol?.name ?? 'Brak';
+    const colName = activeCol?.name ?? t('econPanel.noColony');
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(`BILANS ENERGII — ${colName}`, x + pad, cy + 10);
+    ctx.fillText(t('econPanel.energyBalanceCol', colName), x + pad, cy + 10);
     cy += 16;
 
     // Zbierz producentów/konsumentów energii
@@ -1311,7 +1312,7 @@ export class EconomyOverlay extends BaseOverlay {
         const buildId = entry.building?.id ?? entry.def?.id ?? '?';
         const energyRate = entry.effectiveRates?.energy ?? entry.baseRates?.energy ?? 0;
         if (energyRate === 0) continue;
-        if (!grouped[buildId]) grouped[buildId] = { name: entry.building?.namePL ?? entry.def?.namePL ?? buildId, count: 0, total: 0 };
+        if (!grouped[buildId]) grouped[buildId] = { name: getName(entry.building ?? entry.def ?? { id: buildId }, 'building'), count: 0, total: 0 };
         grouped[buildId].count++;
         grouped[buildId].total += energyRate;
       }
@@ -1323,13 +1324,13 @@ export class EconomyOverlay extends BaseOverlay {
     // POP konsumpcja energii
     const pop = activeCol?.civSystem?.population ?? 0;
     if (pop > 0) {
-      energyItems.push({ name: `POPy (×${pop})`, count: 1, total: -(pop * 1.0) });
+      energyItems.push({ name: t('econPanel.popConsumption', pop), count: 1, total: -(pop * 1.0) });
     }
 
     if (energyItems.length === 0) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('Brak danych', x + pad, cy + 10);
+      ctx.fillText(t('econPanel.noData'), x + pad, cy + 10);
       cy += 18;
     } else {
       // Sortuj: producenci pierwsi, potem konsumenci
@@ -1359,7 +1360,7 @@ export class EconomyOverlay extends BaseOverlay {
 
       ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText('BILANS', x + pad, cy + 10);
+      ctx.fillText(t('econPanel.totalBalance'), x + pad, cy + 10);
       ctx.fillStyle = totalE >= 0 ? THEME.success : THEME.danger;
       ctx.textAlign = 'right';
       ctx.fillText(`${totalE >= 0 ? '+' : ''}${totalE.toFixed(1)}`, x + w - pad, cy + 10);
@@ -1375,7 +1376,7 @@ export class EconomyOverlay extends BaseOverlay {
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('ALERTY PRODUKCJI', x + pad, cy + 8);
+    ctx.fillText(t('econPanel.alertsTitle'), x + pad, cy + 8);
     cy += 16;
 
     const alerts = this._generateAlerts();
@@ -1384,7 +1385,7 @@ export class EconomyOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Brak alertów', x + w / 2, cy + 20);
+      ctx.fillText(t('econPanel.noAlerts'), x + w / 2, cy + 20);
       ctx.textAlign = 'left';
     } else {
       // Clip alerty
@@ -1453,8 +1454,8 @@ export class EconomyOverlay extends BaseOverlay {
           }
           alerts.push({
             level: 'critical',
-            title: `⚠ ${def.icon} ${def.namePL} — STALL`,
-            desc: `${col.name}: brak ${missingRes ?? 'surowców'} do produkcji`,
+            title: t('econPanel.alertStall', def.icon, getName(def, 'commodity')),
+            desc: t('econPanel.alertStallDesc', col.name, missingRes ?? '?'),
           });
         } else if (!a.paused) {
           // Ostrzeżenie o niskich stanach składników
@@ -1465,8 +1466,8 @@ export class EconomyOverlay extends BaseOverlay {
           if (lowIngredient) {
             alerts.push({
               level: 'warning',
-              title: `⚡ ${def.icon} ${def.namePL} — niskie stany`,
-              desc: `${col.name}: niski zapas ${lowIngredient}`,
+              title: t('econPanel.alertLow', def.icon, getName(def, 'commodity')),
+              desc: t('econPanel.alertLowDesc', col.name, lowIngredient),
             });
           }
         }
@@ -1476,8 +1477,8 @@ export class EconomyOverlay extends BaseOverlay {
       if (rs.energy?.brownout) {
         alerts.push({
           level: 'critical',
-          title: `⚠ Brownout — ${col.name}`,
-          desc: 'Deficyt energii — produkcja wstrzymana',
+          title: t('econPanel.alertBrownout', col.name),
+          desc: t('econPanel.alertBrownoutDesc'),
         });
       }
     }
@@ -1628,12 +1629,12 @@ export class EconomyOverlay extends BaseOverlay {
 
 // ── Rozwiąż nazwę i ikonę typu producenta/konsumenta ──────────────────────
 function _resolveTypeName(type) {
-  if (type === 'pop_consumption') return { icon: '👥', name: 'Konsumpcja POPów' };
-  if (type === 'prosperity_consumption') return { icon: '🏠', name: 'Dobra konsumpcyjne' };
-  if (type === 'factory') return { icon: '🏭', name: 'Fabryki' };
-  if (type === 'mine') return { icon: '⛏', name: 'Kopalnia' };
+  if (type === 'pop_consumption') return { icon: '👥', name: t('econPanel.resolvePopConsumption') };
+  if (type === 'prosperity_consumption') return { icon: '🏠', name: t('econPanel.resolveProsperityConsumption') };
+  if (type === 'factory') return { icon: '🏭', name: t('econPanel.resolveFactory') };
+  if (type === 'mine') return { icon: '⛏', name: t('econPanel.resolveMine') };
   const def = BUILDINGS[type];
-  return { icon: def?.icon ?? '?', name: def?.namePL ?? type };
+  return { icon: def?.icon ?? '?', name: def ? getName(def, 'building') : type };
 }
 
 // ── Formatowanie ilości ───────────────────────────────────────────────────
