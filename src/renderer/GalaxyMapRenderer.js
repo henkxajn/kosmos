@@ -7,7 +7,6 @@
 import * as THREE from 'three';
 
 // ── Stałe ─────────────────────────────────────────────────────────────────────
-const BG_STARS     = 2000;   // tło gwiazdozbioru
 const NEBULA_COUNT = 5;      // mgławice
 const LABEL_DIST   = 40;     // zoom bliższy niż ta wartość → etykiety widoczne
 const CONSTEL_MAX_LY = 4;    // max odl. do rysowania linii konstelacji
@@ -89,7 +88,6 @@ export class GalaxyMapRenderer {
     this._updateCamera();
 
     // Buduj zawartość sceny
-    this._buildBackground();
     this._buildNebulae();
     this._buildStars();
     this._buildConstellationLines();
@@ -202,51 +200,6 @@ export class GalaxyMapRenderer {
   }
 
   // ── Budowanie sceny ───────────────────────────────────────────────────────
-
-  _buildBackground() {
-    // Proste tło gwiazdozbioru (PointsMaterial — bez migotania)
-    const N = BG_STARS;
-    const pos = new Float32Array(N * 3);
-    const col = new Float32Array(N * 3);
-    const sizes = new Float32Array(N);
-
-    for (let i = 0; i < N; i++) {
-      const r     = 400 + Math.random() * 600;
-      const theta = Math.random() * Math.PI * 2;
-      const phi   = Math.acos(2 * Math.random() - 1);
-      pos[i*3  ]  = r * Math.sin(phi) * Math.cos(theta);
-      pos[i*3+1]  = r * Math.sin(phi) * Math.sin(theta);
-      pos[i*3+2]  = r * Math.cos(phi);
-
-      // Kolory: ciepły bursztyn, blade niebieskie, białe
-      const t = Math.random();
-      if (t < 0.3) {
-        col[i*3]=0.85; col[i*3+1]=0.75; col[i*3+2]=0.55;  // ciepłe
-      } else if (t < 0.5) {
-        col[i*3]=0.6; col[i*3+1]=0.7; col[i*3+2]=0.9;     // zimne niebieskie
-      } else {
-        col[i*3]=0.8; col[i*3+1]=0.85; col[i*3+2]=0.82;   // białawe
-      }
-
-      sizes[i] = 0.5 + Math.random() * 1.5;
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('color',    new THREE.BufferAttribute(col, 3));
-    geo.setAttribute('size',     new THREE.BufferAttribute(sizes, 1));
-
-    const mat = new THREE.PointsMaterial({
-      size: 1.0,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.6,
-      depthWrite: false,
-      sizeAttenuation: false,
-    });
-
-    this._scene.add(new THREE.Points(geo, mat));
-  }
 
   _buildNebulae() {
     // 4-5 dużych Sprite z radial gradient — AdditiveBlending
