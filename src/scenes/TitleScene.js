@@ -101,7 +101,10 @@ export class TitleScene {
 
     // Słońce
     const sun = el.querySelector('.ss-sun');
-    if (sun) sun.style.background = theme.sunGrad;
+    if (sun) {
+      sun.style.background = theme.sunGrad;
+      sun.style.boxShadow = `0 0 40px ${theme.acc}80, 0 0 80px ${theme.acc}30`;
+    }
 
     const glow = el.querySelector('.ss-sun-glow');
     if (glow) glow.style.background = `radial-gradient(circle, ${theme.sunGlow} 0%, transparent 70%)`;
@@ -310,6 +313,7 @@ export class TitleScene {
       /* ── Kontener główny ── */
       #start-screen {
         position: fixed; inset: 0; z-index: 1000;
+        background: #060504;
         display: flex; flex-direction: column;
         overflow: hidden;
         font-family: 'Share Tech Mono', monospace;
@@ -396,8 +400,6 @@ export class TitleScene {
       .ss-sun {
         position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
         width: 38px; height: 38px; border-radius: 50%; z-index: 5;
-        box-shadow: 0 0 40px color-mix(in srgb, var(--acc) 50%, transparent),
-                    0 0 80px color-mix(in srgb, var(--acc) 19%, transparent);
         animation: ss-sun-pulse 4s ease-in-out infinite alternate;
       }
       @keyframes ss-sun-pulse {
