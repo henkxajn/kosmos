@@ -42,7 +42,7 @@ export class BottomBar {
 
   // ── Rysowanie ───────────────────────────────────────────
   draw(ctx, W, H, state) {
-    const { stability, logEntries, audioEnabled, autoSlow, civMode } = state;
+    const { stability, logEntries, audioEnabled, musicEnabled, autoSlow, civMode } = state;
     const barY = H - BAR_H;
 
     // Rozwinięty log — dodatkowe tło nad paskiem
@@ -124,7 +124,7 @@ export class BottomBar {
     ctx.fillText(this._expanded ? '▼' : '▲', expandBtnX, textY);
 
     // ── Sekcja prawa: Przyciski gry ──
-    const btns = this._getButtonDefs(W, audioEnabled, autoSlow);
+    const btns = this._getButtonDefs(W, audioEnabled, musicEnabled, autoSlow);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     btns.forEach(b => {
       ctx.fillStyle = b.active === false ? THEME.dangerDim : C.label;
@@ -141,19 +141,20 @@ export class BottomBar {
     }
   }
 
-  _getButtonDefs(W, audioEnabled, autoSlow) {
+  _getButtonDefs(W, audioEnabled, musicEnabled, autoSlow) {
     const BTN_W = 38, GAP = 4;
     return [
-      { id: 'sound', label: '[DZW]', x: W - 10,                    active: audioEnabled },
-      { id: 'new',   label: '[NOW]', x: W - 10 - (BTN_W + GAP),    active: undefined },
-      { id: 'load',  label: '[WCZ]', x: W - 10 - (BTN_W + GAP) * 2, active: undefined },
-      { id: 'save',  label: '[ZAP]', x: W - 10 - (BTN_W + GAP) * 3, active: undefined },
-      { id: 'auto',  label: '[AUT]', x: W - 10 - (BTN_W + GAP) * 4, active: autoSlow },
+      { id: 'sound', label: '[DZW]', x: W - 10,                      active: audioEnabled },
+      { id: 'music', label: '[MUZ]', x: W - 10 - (BTN_W + GAP),      active: musicEnabled },
+      { id: 'new',   label: '[NOW]', x: W - 10 - (BTN_W + GAP) * 2,  active: undefined },
+      { id: 'load',  label: '[WCZ]', x: W - 10 - (BTN_W + GAP) * 3,  active: undefined },
+      { id: 'save',  label: '[ZAP]', x: W - 10 - (BTN_W + GAP) * 4,  active: undefined },
+      { id: 'auto',  label: '[AUT]', x: W - 10 - (BTN_W + GAP) * 5,  active: autoSlow },
     ];
   }
 
   // ── Hit testing ──────────────────────────────────────────
-  hitTest(x, y, W, H, audioEnabled, autoSlow) {
+  hitTest(x, y, W, H, audioEnabled, musicEnabled, autoSlow) {
     const barY = H - BAR_H;
     if (y < barY) {
       // Rozwinięty EventLog
@@ -172,7 +173,7 @@ export class BottomBar {
     }
 
     // Przyciski gry
-    const btns = this._getButtonDefs(W, audioEnabled, autoSlow);
+    const btns = this._getButtonDefs(W, audioEnabled, musicEnabled, autoSlow);
     for (const b of btns) {
       if (x >= b.x - 40 && x <= b.x) {
         this._handleButton(b.id);
@@ -193,6 +194,8 @@ export class BottomBar {
       EventBus.emit('ui:confirmNew');
     } else if (id === 'sound') {
       EventBus.emit('audio:toggle');
+    } else if (id === 'music') {
+      EventBus.emit('music:toggle');
     } else if (id === 'auto') {
       EventBus.emit('time:autoSlowToggle');
     }

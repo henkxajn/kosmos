@@ -21,6 +21,7 @@ import { PopulationOverlay }   from '../ui/PopulationOverlay.js';
 import { EconomyOverlay }      from '../ui/EconomyOverlay.js';
 import { TechOverlay }         from '../ui/TechOverlay.js';
 import { ColonyOverlay }       from '../ui/ColonyOverlay.js';
+import { GalaxyMapScene }      from './GalaxyMapScene.js';
 
 // Nowe komponenty UI
 import { TopBar }        from '../ui/TopBar.js';
@@ -151,6 +152,7 @@ export class UIManager {
     this._energyMax       = 100;
     this._hoverAction     = null;
     this._audioEnabled    = true;
+    this._musicEnabled    = true;
     this._notifications   = [];
     this._confirmDialog   = null;
     this._gameOverData    = null;   // { reason, planetName } — ekran końca gry
@@ -194,6 +196,7 @@ export class UIManager {
     this.overlayManager.register('economy', new EconomyOverlay());
     this.overlayManager.register('tech', new TechOverlay());
     this.overlayManager.register('colony', new ColonyOverlay());
+    this.overlayManager.register('galaxy', new GalaxyMapScene());
 
     this._setupEvents();
     this._startDrawLoop();
@@ -243,6 +246,10 @@ export class UIManager {
       if (this._selectedEntity?.id === planet.id) this._selectedEntity = planet;
     });
     EventBus.on('body:collision', () => {});
+
+    // Synchronizacja stanu audio/muzyka z UI
+    EventBus.on('audio:toggle', () => { this._audioEnabled = !this._audioEnabled; });
+    EventBus.on('music:toggled', ({ enabled }) => { this._musicEnabled = enabled; });
 
     // Energia gracza
     EventBus.on('player:energyChanged', ({ energy, max }) => {
@@ -654,7 +661,7 @@ export class UIManager {
     if (this._topBar.hitTest(x, y, W)) return true;
 
     // BottomBar (stabilność + EventLog + przyciski)
-    if (this._bottomBar.hitTest(x, y, W, H, this._audioEnabled, this._timeState.autoSlow)) return true;
+    if (this._bottomBar.hitTest(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) return true;
 
     // Outliner (prawy panel — kolonie/ekspedycje)
     if (window.KOSMOS?.civMode && this._outliner.hitTest(x, y, W, H)) return true;
@@ -791,6 +798,7 @@ export class UIManager {
       stability: this._stability,
       logEntries: this._logEntries,
       audioEnabled: this._audioEnabled,
+      musicEnabled: this._musicEnabled,
       autoSlow: this._timeState.autoSlow,
       civMode,
     });

@@ -149,15 +149,32 @@ export class ThreeRenderer {
       pos[i*3+1]  = r * Math.sin(phi) * Math.sin(theta);
       pos[i*3+2]  = r * Math.cos(phi);
 
-      // Kolory gwiazd tła — chłodne teal (#b0f0e0)
+      // Kolory gwiazd tła — dominujące teal + rzadkie kolorowe (jak w rzeczywistości)
       const temp = Math.random();
-      if (temp < 0.2) { col[i*3]=0.55; col[i*3+1]=0.75; col[i*3+2]=0.85; }       // chłodne błękitne
-      else if (temp < 0.5) { col[i*3]=0.69; col[i*3+1]=0.94; col[i*3+2]=0.88; }  // teal #b0f0e0
-      else { col[i*3]=0.85; col[i*3+1]=0.95; col[i*3+2]=0.92; }                   // jasny teal-biały
+      if (temp < 0.03) {
+        // Czerwone karły (~3%) — ciepły czerwony
+        col[i*3]=0.95; col[i*3+1]=0.45; col[i*3+2]=0.35;
+      } else if (temp < 0.06) {
+        // Diamentowe/białe (~3%) — jasny czysto-biały z lekkim ciepłem
+        col[i*3]=1.0; col[i*3+1]=0.98; col[i*3+2]=0.95;
+      } else if (temp < 0.09) {
+        // Niebieskie gorące (~3%) — intensywny błękit
+        col[i*3]=0.4; col[i*3+1]=0.55; col[i*3+2]=1.0;
+      } else if (temp < 0.29) {
+        // Chłodne błękitne (20%)
+        col[i*3]=0.55; col[i*3+1]=0.75; col[i*3+2]=0.85;
+      } else if (temp < 0.59) {
+        // Teal #b0f0e0 (30%)
+        col[i*3]=0.69; col[i*3+1]=0.94; col[i*3+2]=0.88;
+      } else {
+        // Jasny teal-biały (41%)
+        col[i*3]=0.85; col[i*3+1]=0.95; col[i*3+2]=0.92;
+      }
 
       phase[i]      = Math.random() * Math.PI * 2;
       speed[i]      = 0.15 + Math.random() * 0.4;
-      brightness[i] = 0.6 + Math.random() * 0.4;
+      // Kolorowe gwiazdy jaśniejsze — bardziej wyraziste na tle teal
+      brightness[i] = temp < 0.09 ? (0.8 + Math.random() * 0.2) : (0.6 + Math.random() * 0.4);
     }
 
     const geo = new THREE.BufferGeometry();

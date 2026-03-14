@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 18;
+export const CURRENT_VERSION     = 19;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -33,6 +33,7 @@ const MIGRATIONS = {
   15: _migrateV15toV16,
   16: _migrateV16toV17,
   17: _migrateV17toV18,
+  18: _migrateV18toV19,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -613,5 +614,11 @@ function _migrateV17toV18(data) {
     }
   }
 
+  return data;
+}
+
+// v18 → v19: mapa galaktyczna (galaxyData) — no-op
+// Brak galaxyData w starym save = generator odtworzy ze starego seed gwiazdy
+function _migrateV18toV19(data) {
   return data;
 }

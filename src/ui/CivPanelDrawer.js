@@ -18,6 +18,7 @@ export const CIV_TABS = [
   { id: 'tech',       icon: '🧬', label: 'Technologie',  key: 'T' },
   { id: 'fleet',      icon: '🚀', label: 'Flota',        key: 'F' },
   { id: 'colony',     icon: '🏠', label: 'Kolonie',      key: 'C' },
+  { id: 'galaxy',     icon: '🌌', label: 'Galaktyka',    key: 'G' },
 ];
 
 // ── Sidebar ────────────────────────────────────────────────

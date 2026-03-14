@@ -107,6 +107,7 @@ export class SaveSystem {
       vesselManager:  vMgr?.serialize()    ?? null,
       tradeRouteManager: window.KOSMOS?.tradeRouteManager?.serialize() ?? null,
       exploredBodies,
+      galaxyData: window.KOSMOS.galaxyData ?? null,
     };
   }
 
