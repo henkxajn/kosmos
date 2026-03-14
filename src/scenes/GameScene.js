@@ -34,6 +34,7 @@ import { showIntroSequence }     from '../ui/IntroModal.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
 import { formatStatLine, formatStatLineWithCursor } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
+import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
 import { Moon }              from '../entities/Moon.js';
@@ -108,7 +109,7 @@ export class GameScene {
     }
 
     this.lifeSystem        = new LifeSystem(star);
-    this.audioSystem       = new AudioSystem();
+    this.audioSystem       = window.KOSMOS.audioSystem || new AudioSystem();
     this.diskPhaseSystem   = new DiskPhaseSystem(this.timeSystem);
     this.saveSystem        = new SaveSystem(star, this.timeSystem);
 
@@ -150,6 +151,10 @@ export class GameScene {
     window.KOSMOS.timeSystem       = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
     window.KOSMOS.researchSystem   = this.researchSystem;
+
+    // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
+    window.KOSMOS.galaxyData = savedData?.civ4x?.galaxyData
+      ?? GalaxyGenerator.generate(star.id, star.name, star.spectralType);
 
     // ── Przywrócenie stanu 4X ──────────────────────────────────
     const c4x = savedData?.civ4x;
@@ -464,6 +469,10 @@ export class GameScene {
     if (savedData?.civ4x?.civName) {
       window.KOSMOS.civName = savedData.civ4x.civName;
     }
+
+    // ── Muzyka tła ─────────────────────────────────────────────
+    // Ładuj i startuj muzykę (autoplay po kliknięciu użytkownika w TitleScene)
+    this.audioSystem.startMusic('main');
 
     // ── Pętla gry ─────────────────────────────────────────────
     // TimeSystem.update(deltaMs) emituje 'time:tick' → wszystkie systemy

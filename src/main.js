@@ -3,6 +3,7 @@
 
 import { TitleScene } from './scenes/TitleScene.js';
 import { GameScene } from './scenes/GameScene.js';
+import { AudioSystem } from './systems/AudioSystem.js';
 import { loadTheme } from './config/ThemeConfig.js';
 import { initCrt } from './ui/CrtOverlay.js';
 
@@ -22,6 +23,9 @@ const eventLayer  = document.getElementById('event-layer');
 // Przywróć zapisany motyw kolorystyczny + zainicjuj CRT overlay
 loadTheme();
 initCrt();
+
+// AudioSystem globalny — tworzony raz, reużywany przez GameScene
+window.KOSMOS.audioSystem = new AudioSystem();
 
 const title = new TitleScene();
 title.show();
