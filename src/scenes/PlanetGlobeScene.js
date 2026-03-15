@@ -903,7 +903,9 @@ export class PlanetGlobeScene {
     if (cSys && !isOutpostView) {
       ctx.font      = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`👤 POP: ${cSys.population} / ${cSys.housing}`, 12, y + 12);
+      const isHome = (this.planet && this.planet === window.KOSMOS?.homePlanet);
+      const housingLabel = isHome ? '∞' : cSys.housing;
+      ctx.fillText(`👤 POP: ${cSys.population} / ${housingLabel}`, 12, y + 12);
       y += 18;
 
       const barW = LEFT_W - 24;

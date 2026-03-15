@@ -252,10 +252,13 @@ export class CivilizationSystem {
   // ── Wzrost populacji (akumulator) ───────────────────────────────────────
 
   _updatePopGrowth(foodRatio) {
-    // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą)
+    // Macierzysta planeta — nieograniczony housing, pomijamy blokadę
+    const isHomePlanet = (this.planet && this.planet === window.KOSMOS?.homePlanet);
+
+    // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą ani macierzystej)
     const atmo = this.planet?.atmosphere ?? 'breathable';
     const canLiveOutside = (atmo === 'breathable');
-    if (!canLiveOutside && this.population >= this.housing) {
+    if (!isHomePlanet && !canLiveOutside && this.population >= this.housing) {
       this._lastGrowth = 0;
       return;
     }
@@ -459,7 +462,11 @@ export class CivilizationSystem {
 
   // Modyfikator wzrostu na podstawie dostępnego housingu
   // Na planecie z oddychalną atmosferą ludzie mogą żyć na zewnątrz — housing to bonus, nie wymóg
+  // Na macierzystej planecie (homePlanet) housing jest nieograniczony — nie trzeba budować habitatów
   _housingGrowthModifier() {
+    // Macierzysta planeta — nieograniczony housing
+    if (this.planet && this.planet === window.KOSMOS?.homePlanet) return 1.3;
+
     const atmo = this.planet?.atmosphere ?? 'breathable';
     const canLiveOutside = (atmo === 'breathable');
 
