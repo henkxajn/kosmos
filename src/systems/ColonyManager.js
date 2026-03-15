@@ -112,6 +112,16 @@ export class ColonyManager {
       this._disbandVessel(vesselId);
     });
 
+    // Synchronizuj nazwę kolonii po rename ciała niebieskiego
+    EventBus.on('body:renamed', ({ entity, name }) => {
+      if (!entity?.id || !name) return;
+      const colony = this._colonies.get(entity.id);
+      if (colony) {
+        colony.name = name;
+        EventBus.emit('colony:listChanged', {});
+      }
+    });
+
     // Tick budowy statków (deltaYears)
     EventBus.on('time:tick', ({ deltaYears }) => {
       this._tickShipBuilds(deltaYears);
