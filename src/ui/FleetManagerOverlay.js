@@ -2262,8 +2262,11 @@ export class FleetManagerOverlay {
       if (actionId === 'transport') {
         if (!colMgr?.hasColony(body.id)) continue;
       }
-      // Kolonizacja — nie pokazuj istniejących kolonii
-      if (actionId === 'colonize' && colMgr?.hasColony(body.id)) continue;
+      // Kolonizacja — nie pokazuj pełnych kolonii (outposty można upgrade'ować)
+      if (actionId === 'colonize') {
+        const col = colMgr?.getColony(body.id);
+        if (col && !col.isOutpost) continue;
+      }
       // Survey/scientific — wszystkie ciała (zbadane i niezbadane)
       // Mining — tylko zbadane (ale pokazuj wszystkie, badge powie)
 

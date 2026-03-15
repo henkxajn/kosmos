@@ -1787,7 +1787,8 @@ export class FleetTabPanel {
           if (!body.explored) continue;
         } else if (actionId === 'colonize') {
           if (!body.explored) continue;
-          if (colMgr?.hasColony(body.id)) continue;
+          const col = colMgr?.getColony(body.id);
+          if (col && !col.isOutpost) continue;
           if (body.type === 'planet' && body.planetType !== 'rocky' && body.planetType !== 'ice') continue;
         } else if (actionId === 'transport' || actionId === 'redirect' || actionId === 'trade_route') {
           if (!body.explored && (actionId === 'transport' || actionId === 'trade_route')) continue;
