@@ -1168,21 +1168,185 @@ export class EconomyOverlay extends BaseOverlay {
 
   _drawTradeTab(ctx, x, y, w, h) {
     const pad = 14;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vMgr = window.KOSMOS?.vesselManager;
+    const tradeLog = window.KOSMOS?.tradeLog;
+    const activeColId = colMgr?.activePlanetId;
+
+    // Pobierz dane
     const trm = window.KOSMOS?.tradeRouteManager;
     const routes = trm?.getRoutes() ?? [];
+    const log = tradeLog?.getLog(activeColId, 30) ?? [];
+    const yearly = tradeLog?.getYearlyAggregation(activeColId, 10) ?? [];
 
-    if (routes.length === 0) {
+    const hasData = log.length > 0 || routes.length > 0;
+    if (!hasData) {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText(t('econPanel.noTradeRoutes'), x + w / 2, y + h / 2);
+      ctx.fillText(t('econPanel.noTradeHistory'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
 
-    let ry = y + 8;
-    const colMgr = window.KOSMOS?.colonyManager;
-    const vMgr = window.KOSMOS?.vesselManager;
+    let ry = y + 4 - this._scrollCenter;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // A) WYKRESY — stacked bar charts (EKSPORT | IMPORT)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    if (yearly.length > 0) {
+      const chartH = 90;
+      const halfW = Math.floor((w - pad * 3) / 2);
+
+      // Nagłówki
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText(`↑ ${t('econPanel.tradeExports')}`, x + pad, ry + 12);
+      ctx.fillStyle = THEME.info;
+      ctx.fillText(`↓ ${t('econPanel.tradeImports')}`, x + pad * 2 + halfW, ry + 12);
+      ry += 18;
+
+      // Oblicz max wartość do normalizacji
+      let maxVal = 1;
+      for (const yr of yearly) {
+        if (yr.exports > maxVal) maxVal = yr.exports;
+        if (yr.imports > maxVal) maxVal = yr.imports;
+      }
+
+      const barW = Math.max(4, Math.floor(halfW / yearly.length) - 2);
+
+      // Rysuj wykres EKSPORT (lewy)
+      this._drawBarChart(ctx, x + pad, ry, halfW, chartH, yearly, 'exports', 'exportItems', barW, maxVal, THEME.warning);
+
+      // Rysuj wykres IMPORT (prawy)
+      this._drawBarChart(ctx, x + pad * 2 + halfW, ry, halfW, chartH, yearly, 'imports', 'importItems', barW, maxVal, THEME.info);
+
+      ry += chartH + 8;
+
+      // Separator
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
+      ry += 8;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // B) LOG TRANSAKCJI — lista ostatnich wpisów
+    // ═══════════════════════════════════════════════════════════════════════
+
+    if (log.length > 0) {
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textHeader;
+      ctx.fillText(t('econPanel.tradeLogHeader'), x + pad, ry + 11);
+      ry += 18;
+
+      // Ostatnie wpisy (najnowsze na górze)
+      const reversed = [...log].reverse();
+      const maxLogEntries = 15;
+      for (let i = 0; i < Math.min(reversed.length, maxLogEntries); i++) {
+        const entry = reversed[i];
+        const isExport = entry.type === 'export';
+
+        // Ikona + rok
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = isExport ? THEME.warning : THEME.info;
+        const arrow = isExport ? '↑' : '↓';
+        const yearStr = `${t('econPanel.tradeYear')} ${entry.year.toFixed(1)}`;
+        ctx.fillText(`${arrow} ${yearStr}`, x + pad, ry + 10);
+
+        // Statek + partner
+        ctx.fillStyle = THEME.textSecondary;
+        const partnerDir = isExport ? '→' : '←';
+        const partnerStr = `${entry.vesselName} ${partnerDir} ${entry.partnerName}`;
+        ctx.fillText(partnerStr.slice(0, 28), x + pad + 90, ry + 10);
+
+        // Ładunek
+        ctx.fillStyle = THEME.textDim;
+        const itemsStr = Object.entries(entry.items)
+          .map(([id, qty]) => `${id}:${qty}`)
+          .join(' ');
+        ctx.fillText(`[${itemsStr}]`.slice(0, 30), x + pad + 4, ry + 22);
+
+        ry += 26;
+      }
+
+      if (reversed.length > maxLogEntries) {
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(`... +${reversed.length - maxLogEntries}`, x + pad, ry + 10);
+        ry += 16;
+      }
+
+      // Separator
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
+      ry += 8;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // C) TRASY HANDLOWE — istniejący kod
+    // ═══════════════════════════════════════════════════════════════════════
+
+    if (routes.length > 0) {
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textHeader;
+      ctx.fillText(t('econPanel.tradeRoutesHeader'), x + pad, ry + 11);
+      ry += 18;
+
+      this._drawTradeRoutes(ctx, x, ry, w, routes, colMgr, vMgr);
+    }
+  }
+
+  // ── Rysuj wykres słupkowy ─────────────────────────────────────────────
+
+  _drawBarChart(ctx, x, y, w, h, yearly, totalKey, itemsKey, barW, maxVal, color) {
+    const pad = 4;
+
+    // Oś Y (linia)
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x, y + h);
+    ctx.lineTo(x + w, y + h);
+    ctx.stroke();
+
+    // Słupki
+    const barSpacing = Math.floor(w / yearly.length);
+    for (let i = 0; i < yearly.length; i++) {
+      const yr = yearly[i];
+      const val = yr[totalKey];
+      if (val <= 0) continue;
+
+      const barH = Math.max(2, Math.floor((val / maxVal) * (h - 14)));
+      const bx = x + i * barSpacing + pad;
+      const by = y + h - barH;
+
+      // Gradient: ciemniejszy na dole, jaśniejszy na górze
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = color;
+      ctx.fillRect(bx, by, barW, barH);
+      ctx.globalAlpha = 1.0;
+
+      // Etykieta roku pod osią
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(`${yr.year}`, bx + barW / 2, y + h + 10);
+      ctx.textAlign = 'left';
+
+      // Wartość na szczycie słupka (jeśli jest miejsce)
+      if (barH > 14) {
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textPrimary;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${val}`, bx + barW / 2, by - 2);
+        ctx.textAlign = 'left';
+      }
+    }
+  }
+
+  // ── Rysuj trasy handlowe (wyodrębnione z _drawTradeTab) ──────────────
+
+  _drawTradeRoutes(ctx, x, ry, w, routes, colMgr, vMgr) {
+    const pad = 14;
 
     for (const route of routes) {
       const sourceCol = colMgr?.getColony(route.sourceColonyId);
@@ -1239,7 +1403,7 @@ export class EconomyOverlay extends BaseOverlay {
 
       // Przyciski: ⏸/▶ + ✕
       const btnW = 20; const btnH2 = 16;
-      const btnY = ry + (hasReturn ? 44 : 30); // przesunięcie gdy jest returnCargo
+      const btnY = ry + (hasReturn ? 44 : 30);
       const delX = x + w - pad - btnW;
       const pauseX = delX - btnW - 4;
 

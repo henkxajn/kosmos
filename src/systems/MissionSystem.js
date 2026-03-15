@@ -624,6 +624,17 @@ export class MissionSystem {
       });
 
       this._emit('mission:started', 'expedition:launched', { expedition: mission });
+
+      // Loguj eksport (trasa handlowa)
+      if (hasCargo) {
+        EventBus.emit('trade:exported', {
+          colonyId: sourceColonyId ?? vessel.colonyId,
+          year: departYear,
+          items: { ...cargo },
+          vesselName: vessel?.name ?? vesselId,
+          targetName: mission.targetName,
+        });
+      }
       return;
     }
 
@@ -733,6 +744,18 @@ export class MissionSystem {
     }
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
+
+    // Loguj eksport (standardowy transport)
+    if (hasCargo) {
+      const originId = mission.originColonyId ?? colMgr?.activePlanetId;
+      EventBus.emit('trade:exported', {
+        colonyId: originId,
+        year: departYear,
+        items: { ...cargo },
+        vesselName: vessel?.name ?? vesselId,
+        targetName: mission.targetName,
+      });
+    }
   }
 
   // ── Rozkaz powrotu ────────────────────────────────────────────────────────
@@ -1297,6 +1320,18 @@ export class MissionSystem {
         }
         targetCol.resourceSystem.receive(deliverable);
         exp.gained = deliverable;
+
+        // Loguj import (cargo dostarczone do kolonii)
+        if (Object.keys(deliverable).length > 0) {
+          const originCol = colMgr?.getColony(exp.originColonyId);
+          EventBus.emit('trade:imported', {
+            colonyId: exp.targetId,
+            year: this._gameYear,
+            items: { ...deliverable },
+            vesselName: vessel?.name ?? exp.vesselId ?? '?',
+            sourceName: originCol?.name ?? exp.originColonyId ?? '?',
+          });
+        }
       } else {
         exp.gained = {};
       }
