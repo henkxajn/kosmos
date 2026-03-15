@@ -96,8 +96,9 @@ export class ThreeCameraController {
     const x = this._target.x + d * Math.sin(p) * Math.cos(t);
     const y = this._target.y + d * Math.cos(p);
     const z = this._target.z + d * Math.sin(p) * Math.sin(t);
-    // Guard NaN — zapobiega białemu ekranowi
+    // Guard NaN — zapobiega białemu/czarnemu ekranowi
     if (isNaN(x) || isNaN(y) || isNaN(z)) return;
+    if (isNaN(this._target.x) || isNaN(this._target.z)) return;
     this.camera.position.set(x, y, z);
     this.camera.lookAt(this._target);
   }

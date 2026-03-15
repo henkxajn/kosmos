@@ -52,9 +52,26 @@ export class ThreeRenderer {
     });
     canvas.addEventListener('webglcontextrestored', () => {
       this._contextLost = false;
-      console.info('[ThreeRenderer] WebGL context restored');
-      // Three.js sam odbuduje wewnętrzne zasoby po restore
+      console.info('[ThreeRenderer] WebGL context restored — rebuilding scene');
       this.renderer.setClearColor(0x020405, 1);
+      // Odbuduj tekstury — Three.js nie robi tego automatycznie po context loss
+      try {
+        this.scene.traverse((obj) => {
+          if (obj.material) {
+            const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+            for (const mat of mats) {
+              mat.needsUpdate = true;
+              if (mat.map) mat.map.needsUpdate = true;
+              if (mat.normalMap) mat.normalMap.needsUpdate = true;
+              if (mat.roughnessMap) mat.roughnessMap.needsUpdate = true;
+              if (mat.emissiveMap) mat.emissiveMap.needsUpdate = true;
+            }
+          }
+          if (obj.geometry) obj.geometry.attributes?.position?.needsUpdate = true;
+        });
+      } catch (e) {
+        console.error('[ThreeRenderer] Error rebuilding after context restore:', e);
+      }
     });
 
     // ── Scena ─────────────────────────────────────────────────
@@ -254,77 +271,82 @@ export class ThreeRenderer {
 
   // ── EventBus ─────────────────────────────────────────────────
   _setupEventBus() {
-    EventBus.on('physics:updated', ({ planets, star, moons = [] }) => {
+    // Helper — opakowuje handler w try/catch (zapobiega crashowi renderera)
+    const safe = (fn) => (...args) => {
+      try { fn(...args); } catch (e) { console.error('[ThreeRenderer] EventBus handler error:', e); }
+    };
+
+    EventBus.on('physics:updated', safe(({ planets, star, moons = [] }) => {
       this._syncPlanetMeshes(planets, moons);
       if (star) this._syncStarPosition(star);
-    });
+    }));
 
-    EventBus.on('body:collision', ({ winner, loser, type }) => {
+    EventBus.on('body:collision', safe(({ winner, loser, type }) => {
       if (type === 'absorb' || type === 'eject') {
         if (loser) this._removePlanetMesh(loser.id);
       }
       if (winner) this._updatePlanetMesh(winner);
       this._rebuildAllOrbits();
-    });
+    }));
 
-    EventBus.on('accretion:newPlanet', (planet) => {
+    EventBus.on('accretion:newPlanet', safe((planet) => {
       this.addPlanetMesh(planet);
       this._rebuildAllOrbits();
-    });
+    }));
 
-    EventBus.on('life:updated', ({ planet }) => {
+    EventBus.on('life:updated', safe(({ planet }) => {
       this._updateLifeGlow(planet);
       this._rebuildAllOrbits();
-    });
+    }));
 
-    EventBus.on('disk:updated', ({ planetesimals }) => {
+    EventBus.on('disk:updated', safe(({ planetesimals }) => {
       this._updateDiskPoints(planetesimals);
-    });
+    }));
 
-    EventBus.on('player:planetUpdated', ({ planet }) => {
+    EventBus.on('player:planetUpdated', safe(({ planet }) => {
       this._updatePlanetMesh(planet);
       this._rebuildAllOrbits();
-    });
+    }));
 
-    EventBus.on('entity:removed', ({ entity }) => {
+    EventBus.on('entity:removed', safe(({ entity }) => {
       this._removePlanetMesh(entity.id);
       this._removePlanetoidMesh(entity.id);
-    });
+    }));
 
-    EventBus.on('orbits:stabilityChanged', () => {
+    EventBus.on('orbits:stabilityChanged', safe(() => {
       this._rebuildAllOrbits();
-    });
+    }));
 
     // Gracz przejmuje planetę → zmień zieloną kropkę na żółtą + odśwież orbity
-    EventBus.on('planet:colonize', ({ planet }) => {
+    EventBus.on('planet:colonize', safe(({ planet }) => {
       this._updateLifeGlow(planet);
       this._rebuildAllOrbits();
-    });
+    }));
 
-    EventBus.on('planet:ejected', ({ planet }) => {
+    EventBus.on('planet:ejected', safe(({ planet }) => {
       this._removePlanetMesh(planet.id);
-    });
+    }));
 
     // ── Vessel sprites ──────────────────────────────────────────
-    EventBus.on('vessel:launched', ({ vessel }) => {
+    EventBus.on('vessel:launched', safe(({ vessel }) => {
       this._addVesselSprite(vessel);
-    });
-    EventBus.on('vessel:returning', ({ vessel }) => {
+    }));
+    EventBus.on('vessel:returning', safe(({ vessel }) => {
       // Przebuduj sprite + linię trasy aby celowała w punkt powrotu
       if (this._vessels.has(vessel.id)) {
         this._removeVesselSprite(vessel.id);
       }
       this._addVesselSprite(vessel);
-    });
-    EventBus.on('vessel:docked', ({ vessel }) => {
+    }));
+    EventBus.on('vessel:docked', safe(({ vessel }) => {
       this._removeVesselSprite(vessel.id);
-    });
-    EventBus.on('vessel:positionUpdate', ({ vessels }) => {
+    }));
+    EventBus.on('vessel:positionUpdate', safe(({ vessels }) => {
       this._syncVesselPositions(vessels);
-    });
+    }));
 
     // ── Śledzenie kamery po kliknięciu ciała ─────────────────
-    EventBus.on('body:selected', ({ entity }) => {
+    EventBus.on('body:selected', safe(({ entity }) => {
       this._focusEntityId = entity.id;
       // Księżyce — pozwól na głębszy zoom (r=0.015–0.04, potrzeba bliskiej kamery)
       if (this._cameraController) {
@@ -338,9 +360,9 @@ export class ThreeRenderer {
       if (entity.type === 'moon') this._showMoonOrbit(entity.id);
       // Odśwież orbitę planety gracza (żółty kolor)
       this._rebuildAllOrbits();
-    });
+    }));
 
-    EventBus.on('body:deselected', () => {
+    EventBus.on('body:deselected', safe(() => {
       this._focusEntityId = null;
       // Przywróć domyślny min zoom
       if (this._cameraController) {
@@ -353,10 +375,10 @@ export class ThreeRenderer {
       this._hideAllPlanetoidOrbits();
       this._hideAllMoonOrbits();
       this._rebuildAllOrbits();
-    });
+    }));
 
     // Centruj kamerę na statku (kliknięcie w liście floty / Outliner)
-    EventBus.on('vessel:focus', ({ vesselId }) => {
+    EventBus.on('vessel:focus', safe(({ vesselId }) => {
       if (!this._cameraController) return;
       const entry = this._vessels.get(vesselId);
       if (entry) {
@@ -382,10 +404,10 @@ export class ThreeRenderer {
           }
         }
       }
-    });
+    }));
 
     // Hover na planetoidzie → pokaż orbitę jaśniej
-    EventBus.on('planet:hover', ({ entityId }) => {
+    EventBus.on('planet:hover', safe(({ entityId }) => {
       // Przywróć domyślną widoczność orbit planetoidów (nie zaznaczonych)
       this._planetoidOrbits.forEach((line, id) => {
         if (id !== this._focusEntityId) {
@@ -394,7 +416,7 @@ export class ThreeRenderer {
         }
       });
       if (entityId) this._showPlanetoidOrbit(entityId, 0.20);
-    });
+    }));
   }
 
   // ── Inicjalizacja układu ─────────────────────────────────────
@@ -1185,7 +1207,7 @@ export class ThreeRenderer {
 
       this.scene.add(sprite);
       this._clickable.push(sprite);
-      this._entityByUUID.set(sprite.uuid, col.planet);
+      if (col.planet) this._entityByUUID.set(sprite.uuid, col.planet);
       this._colonyLabels.set(pid, { sprite, isMoon });
     }
   }
@@ -1485,11 +1507,13 @@ export class ThreeRenderer {
     const orb  = planet.orbital;
     const star = this._star;
     if (!orb || !star) return;
+    // Guard NaN w parametrach orbitalnych — zapobiega geometrii z Infinity
+    if (isNaN(orb.a) || isNaN(orb.e) || orb.a <= 0) return;
 
+    const angle = orb.inclinationOffset ?? 0;
     const a     = S(orb.a * AU);
     const b     = a * Math.sqrt(1 - orb.e * orb.e);
     const c     = a * orb.e;
-    const angle = orb.inclinationOffset;
     const cx    = S(star.x) - c * Math.cos(angle);
     const cz    = S(star.y) - c * Math.sin(angle);
 
@@ -1720,7 +1744,9 @@ export class ThreeRenderer {
     const pos = new Float32Array(bodies.length * 3);
     const col = new Float32Array(bodies.length * 3);
     bodies.forEach((b, i) => {
-      pos[i*3] = S(b.x); pos[i*3+1] = 0; pos[i*3+2] = S(b.y);
+      const bx = isNaN(b.x) ? 0 : b.x;
+      const by = isNaN(b.y) ? 0 : b.y;
+      pos[i*3] = S(bx); pos[i*3+1] = 0; pos[i*3+2] = S(by);
       if (b.type === 'comet') { col[i*3]=0.7; col[i*3+1]=0.8; col[i*3+2]=1.0; }
       else { const v = 0.45; col[i*3]=v; col[i*3+1]=v; col[i*3+2]=v; }
     });
