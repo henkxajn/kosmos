@@ -230,7 +230,7 @@ export class AudioSystem {
   }
 
   /** Wewnętrzne: uruchom playback (loop) */
-  _startMusicPlayback() {
+  async _startMusicPlayback() {
     const buffer = this._musicBuffers[this._currentTrackId];
     if (!buffer || !this._musicGain || !this._ctx) return;
 
@@ -239,9 +239,14 @@ export class AudioSystem {
       try { this._musicSource.stop(); } catch { /* ignoruj */ }
     }
 
-    // Wznów suspended context
+    // Wznów suspended context — MUSI być await, inaczej source.start() nie zadziała
     if (this._ctx.state === 'suspended') {
-      this._ctx.resume();
+      try {
+        await this._ctx.resume();
+      } catch (err) {
+        console.warn('[AudioSystem] Nie udało się wznowić AudioContext:', err);
+        return;
+      }
     }
 
     const source = this._ctx.createBufferSource();

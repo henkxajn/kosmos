@@ -76,6 +76,10 @@ export class TitleScene {
     this._buildDOM();
     this._generateStars();
     this._applyTheme(this._currentTheme);
+
+    // Próbuj uruchomić muzykę od razu (Chrome pozwoli jeśli użytkownik
+    // wcześniej interakcjonował ze stroną). Jeśli nie — czeka na klik.
+    this._ensureMusic();
   }
 
   destroy() {
@@ -86,11 +90,13 @@ export class TitleScene {
 
   // ── Muzyka ────────────────────────────────────────────────────
 
-  _ensureMusic() {
+  /** Próbuje uruchomić muzykę menu. Jeśli AudioContext jest zablokowany
+   *  (autoplay policy), preloaduje plik i czeka na kliknięcie. */
+  async _ensureMusic() {
     if (this._musicStarted) return;
     this._musicStarted = true;
     const audio = window.KOSMOS?.audioSystem;
-    if (audio) audio.startMusic('menu');
+    if (audio) await audio.startMusic('menu');
   }
 
   // ── Zmiana motywu ─────────────────────────────────────────────
