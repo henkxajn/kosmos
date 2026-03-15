@@ -138,8 +138,9 @@ export class ExpeditionSystem {
       ? (target.type === 'planetoid' || target.type === 'moon' ||
          (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
       : false;
-    // Nie można kolonizować ciała, które już ma kolonię
-    const notColonized = colMgr ? !colMgr.hasColony(targetId) : true;
+    // Outposty można upgrade'ować colony shipem — blokuj tylko pełne kolonie
+    const existingCol = colMgr?.getColony(targetId);
+    const notColonized = existingCol ? existingCol.isOutpost === true : true;
     return {
       ok: techOk && padOk && shipOk && crewOk && exploredOk && typeOk && notColonized,
       techOk, padOk, shipOk, crewOk, exploredOk, typeOk, notColonized

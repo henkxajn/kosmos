@@ -146,7 +146,9 @@ export class MissionSystem {
       ? (target.type === 'planetoid' || target.type === 'moon' ||
          (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
       : false;
-    const notColonized = colMgr ? !colMgr.hasColony(targetId) : true;
+    // Outposty można upgrade'ować colony shipem — blokuj tylko pełne kolonie
+    const existingCol = colMgr?.getColony(targetId);
+    const notColonized = existingCol ? existingCol.isOutpost === true : true;
     return {
       ok: techOk && padOk && shipOk && exploredOk && typeOk && notColonized,
       techOk, padOk, shipOk, crewOk: true, exploredOk, typeOk, notColonized
