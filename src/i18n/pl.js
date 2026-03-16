@@ -1143,6 +1143,7 @@ export default {
   'techPanel.fxDisasterReduc': 'redukcja katastrof',
   'techPanel.fxResearchCost': 'koszt badań',
   'techPanel.fxSingularity': 'OSOBLIWOŚĆ: wszystkie budynki autonomiczne',
+  'techPanel.allBranches': 'Wszystkie',
 
   // === PopulationOverlay ===
   'popPanel.header': 'POPULACJA',

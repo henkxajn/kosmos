@@ -1,10 +1,9 @@
 // TechOverlay — panel Technologii (klawisz T)
 //
-// Trójdzielny overlay: lista gałęzi (L), drzewo technologii (C), szczegóły + kolejka (R).
-// Dane czytane LIVE z TechSystem / ResearchSystem / ColonyManager.
+// SVG Neural Network: neurony (tech nodes) + synapsy (prereq edges)
+// z animowanymi impulsami świetlnymi. DOM overlay z-index 100.
 // Etap 38: 7 gałęzi, tier 1-5, OR prerequisites, discovery soft-gate.
 
-import { BaseOverlay }  from './BaseOverlay.js';
 import { THEME }        from '../config/ThemeConfig.js';
 import { TECHS, TECH_BRANCHES } from '../data/TechData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
@@ -12,618 +11,1186 @@ import { SHIPS }     from '../data/ShipsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { t, getName, getDesc } from '../i18n/i18n.js';
 
-const LEFT_W   = 200;
-const RIGHT_W  = 280;
-const BRANCH_H = 44;
-const HDR_H    = 44;
-const NODE_W   = 120;
-const NODE_H   = 72;
-const NODE_GAP = 12;
-const TIER_LABEL_H = 24;
-
 const BRANCH_ORDER = ['mining', 'energy', 'biology', 'civil', 'space', 'computing', 'defense'];
 
-const TIER_DESC = {
-  1: () => t('tech.tier.1'),
-  2: () => t('tech.tier.2'),
-  3: () => t('tech.tier.3'),
-  4: () => t('tech.tier.4'),
-  5: () => t('tech.tier.5'),
-};
+// Layout — rozmiary neuronów i odstępy
+const NODE_R = 26;          // promień koła neuronu
+const TIER_GAP_X = 180;     // odległość między tierami (X)
+const BRANCH_GAP_Y = 80;    // odległość między techami w gałęzi (Y)
+const MARGIN_LEFT = 120;     // margines lewy
+const MARGIN_TOP = 80;       // margines górny
 
 // ══════════════════════════════════════════════════════════════════════════════
-// TechOverlay
+// TechOverlay — SVG Neural Network
 // ══════════════════════════════════════════════════════════════════════════════
 
-export class TechOverlay extends BaseOverlay {
+export class TechOverlay {
   constructor() {
-    super(null);
-    this._selectedBranch = 'mining';
+    this.visible = false;
     this._selectedTechId = null;
-    this._scrollCenter = 0;
-    this._scrollRight = 0;
+    this._selectedBranch = null;  // null = ALL
+    this._container = null;
+    this._svg = null;
+    this._detailsPanel = null;
+    this._nodes = {};             // techId → SVG <g>
+    this._edgePaths = [];         // [{from, to, pathEl, isOr}]
+    this._layout = {};            // techId → {x, y}
+    this._animFrame = null;
+
+    // Pan / zoom
+    this._viewX = 0;
+    this._viewY = 0;
+    this._zoom = 1.0;
+    this._dragging = false;
+    this._dragStartX = 0;
+    this._dragStartY = 0;
+    this._viewStartX = 0;
+    this._viewStartY = 0;
+
+    // Bound handlers do cleanup
+    this._onKeyDown = this._handleKeyDown.bind(this);
+    this._onWheel = this._handleWheel.bind(this);
+    this._onMouseDown = this._handleMouseDown.bind(this);
+    this._onMouseMove = this._handleMouseMove.bind(this);
+    this._onMouseUp = this._handleMouseUp.bind(this);
   }
 
-  // ── Główna metoda rysowania ──────────────────────────────────────────────
+  // ── OverlayManager API ──────────────────────────────────────────────────
+  toggle() { this.visible ? this.hide() : this.show(); }
+  show()   { this.visible = true; this._createDOM(); this._startSyncLoop(); }
+  hide()   { this.visible = false; this._destroyDOM(); this._stopSyncLoop(); }
 
-  draw(ctx, W, H) {
-    if (!this.visible) return;
-    this._hitZones = [];
-
-    const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
-    const centerW = ow - LEFT_W - RIGHT_W;
-
-    // Tło
-    ctx.fillStyle = 'rgba(2,4,5,0.97)';
-    ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = THEME.border;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(ox, oy, ow, oh);
-
-    // Separatory kolumn
-    ctx.beginPath();
-    ctx.moveTo(ox + LEFT_W, oy); ctx.lineTo(ox + LEFT_W, oy + oh);
-    ctx.moveTo(ox + ow - RIGHT_W, oy); ctx.lineTo(ox + ow - RIGHT_W, oy + oh);
-    ctx.stroke();
-
-    this._drawLeft(ctx, ox, oy, oh);
-    this._drawCenter(ctx, ox + LEFT_W, oy, centerW, oh);
-    this._drawRight(ctx, ox + ow - RIGHT_W, oy, RIGHT_W, oh);
+  // Wywoływane co ramkę przez OverlayManager — lekka synchronizacja stanów
+  draw() {
+    if (!this.visible || !this._svg) return;
+    this._syncStates();
   }
 
-  // ── LEWA KOLUMNA — lista gałęzi ─────────────────────────────────────────
+  // Blokuj canvas clicks gdy overlay jest widoczny
+  handleClick()     { return this.visible; }
+  handleMouseMove() {}
+  handleScroll()    { return this.visible; }
 
-  _drawLeft(ctx, x, y, oh) {
-    const rSys = this._getResearchSystem();
+  // ── Budowa DOM ──────────────────────────────────────────────────────────
 
-    // Nagłówek
-    this._drawText(ctx, t('techPanel.header'), x + 12, y + 18, THEME.accent, THEME.fontSizeMedium);
-    const totalRate = rSys?.getTotalRate() ?? 0;
-    this._drawText(ctx, t('techPanel.researchRate', totalRate.toFixed(1)), x + 12, y + 34,
-      THEME.textSecondary, THEME.fontSizeSmall);
-    this._drawSeparator(ctx, x, y + HDR_H, x + LEFT_W, y + HDR_H);
+  _createDOM() {
+    if (this._container) return;
 
-    // 7 wierszy gałęzi (mniejsze BRANCH_H)
-    let by = y + HDR_H + 2;
-    for (const brId of BRANCH_ORDER) {
-      const br = TECH_BRANCHES[brId];
-      const isSelected = this._selectedBranch === brId;
-      const isHover = this._hoverZone?.type === 'branch' && this._hoverZone?.data?.branchId === brId;
+    // Kontener + dimming
+    const c = document.createElement('div');
+    c.id = 'tech-overlay';
+    c.style.cssText = `
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(2,4,5,0.95);
+      display: flex; flex-direction: column;
+      font-family: ${THEME.fontFamily};
+      color: ${THEME.textPrimary};
+      user-select: none;
+    `;
+    this._container = c;
 
-      // Tło
-      if (isSelected) {
-        ctx.fillStyle = 'rgba(136,255,204,0.05)';
-        ctx.fillRect(x, by, LEFT_W, BRANCH_H);
-        ctx.fillStyle = THEME.accent;
-        ctx.fillRect(x, by, 2, BRANCH_H);
-      } else if (isHover) {
-        ctx.fillStyle = 'rgba(255,255,255,0.015)';
-        ctx.fillRect(x, by, LEFT_W, BRANCH_H);
-      }
+    // Górny pasek (branch tabs + zamknij)
+    c.appendChild(this._buildHeader());
 
-      // Ikona + nazwa
-      this._drawText(ctx, `${br.icon} ${t('techBranch.' + brId)}`, x + 12, by + 16, br.color, THEME.fontSizeSmall);
+    // Środek: SVG graph + details panel
+    const mid = document.createElement('div');
+    mid.style.cssText = 'flex:1; display:flex; overflow:hidden; position:relative;';
 
-      // Statystyki: X/Y odkryte
-      const { done, total } = this._branchStats(brId);
-      const pct = total > 0 ? done / total : 0;
+    // SVG
+    const svgWrap = document.createElement('div');
+    svgWrap.style.cssText = 'flex:1; position:relative; overflow:hidden; cursor:grab;';
+    this._svgWrap = svgWrap;
 
-      // Pasek postępu
-      this._drawBar(ctx, x + 12, by + 24, LEFT_W - 24, 3, pct, br.color, THEME.border);
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('height', '100%');
+    svg.style.cssText = 'position:absolute; inset:0;';
+    this._svg = svg;
 
-      // Tekst
-      this._drawText(ctx, t('techPanel.discovered', done, total), x + 12, by + 36,
-        THEME.textSecondary, THEME.fontSizeSmall - 2);
-      this._drawText(ctx, `${Math.round(pct * 100)}%`, x + LEFT_W - 12, by + 36,
-        THEME.textDim, THEME.fontSizeSmall - 2, 'right');
+    // Defs — filtry glow + animacje
+    svg.appendChild(this._buildDefs());
 
-      this._addHit(x, by, LEFT_W, BRANCH_H, 'branch', { branchId: brId });
-      by += BRANCH_H;
-    }
+    // Grupa transformacji (pan/zoom)
+    this._graphGroup = document.createElementNS(ns, 'g');
+    this._graphGroup.setAttribute('class', 'graph-root');
+    svg.appendChild(this._graphGroup);
+
+    svgWrap.appendChild(svg);
+    mid.appendChild(svgWrap);
+
+    // Details panel (prawa strona)
+    this._detailsPanel = this._buildDetailsPanel();
+    mid.appendChild(this._detailsPanel);
+
+    c.appendChild(mid);
+
+    // Dolny pasek — kolejka badań
+    this._queueBar = this._buildQueueBar();
+    c.appendChild(this._queueBar);
+
+    // Inject CSS
+    this._injectStyles();
+
+    document.body.appendChild(c);
+
+    // Zbuduj graf
+    this._layoutGraph();
+    this._renderGraph();
+    // Auto-fit po krótkim delay (czekamy na layout DOM)
+    requestAnimationFrame(() => this._autoFit());
+
+    // Event listeners
+    document.addEventListener('keydown', this._onKeyDown);
+    svgWrap.addEventListener('wheel', this._onWheel, { passive: false });
+    svgWrap.addEventListener('mousedown', this._onMouseDown);
+    document.addEventListener('mousemove', this._onMouseMove);
+    document.addEventListener('mouseup', this._onMouseUp);
   }
 
-  // ── ŚRODKOWA KOLUMNA — drzewo technologii ────────────────────────────────
-
-  _drawCenter(ctx, x, y, w, oh) {
-    const rSys = this._getResearchSystem();
-    const tSys = this._getTechSystem();
-    const br = TECH_BRANCHES[this._selectedBranch];
-    if (!br) return;
-
-    // Nagłówek
-    this._drawText(ctx, t('techPanel.treeHeader', br.icon, t('techBranch.' + this._selectedBranch).toUpperCase()),
-      x + 12, y + 20, THEME.textPrimary, THEME.fontSizeNormal);
-    const rate = rSys?.getTotalRate() ?? 0;
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    const rateLabel = t('techPanel.research');
-    const rateVal = `+${rate.toFixed(1)} pkt/rok`;
-    this._drawText(ctx, rateLabel, x + w - 12 - ctx.measureText(rateLabel + rateVal).width, y + 20,
-      THEME.textSecondary, THEME.fontSizeSmall);
-    this._drawText(ctx, rateVal, x + w - 12 - ctx.measureText(rateVal).width, y + 20,
-      THEME.purple, THEME.fontSizeSmall);
-
-    this._drawSeparator(ctx, x, y + 32, x + w, y + 32);
-
-    // Clip — obszar drzewa
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, y + 32, w, oh - 32);
-    ctx.clip();
-
-    // Filtruj tech po gałęzi
-    const branchTechs = Object.values(TECHS).filter(t => t.branch === this._selectedBranch);
-
-    // Dynamiczny maxTier
-    let maxTier = 1;
-    for (const t of branchTechs) { if (t.tier > maxTier) maxTier = t.tier; }
-
-    const tiers = {};
-    for (let i = 1; i <= maxTier; i++) tiers[i] = [];
-    for (const t of branchTechs) {
-      if (tiers[t.tier]) tiers[t.tier].push(t);
-    }
-
-    // Rysuj kolumny tierów (dynamiczna szerokość)
-    const tierW = Math.floor((w - 20 - maxTier * 4) / maxTier);
-    const startY = y + 40 + this._scrollCenter;
-
-    for (let tier = 1; tier <= maxTier; tier++) {
-      const tx = x + 8 + (tier - 1) * (tierW + 4);
-      let ty = startY;
-
-      // Label tieru
-      const tierLabel = TIER_DESC[tier] ? TIER_DESC[tier]() : `Tier ${tier}`;
-      this._drawText(ctx, t('techPanel.tierLabel', tier, tierLabel),
-        tx, ty + 10, THEME.textDim, THEME.fontSizeSmall - 1);
-      ty += TIER_LABEL_H;
-
-      // Węzły
-      const nodeW = Math.min(NODE_W, tierW - 4);
-      for (const tech of tiers[tier]) {
-        this._drawTechNode(ctx, tech, tx, ty, nodeW, tSys, rSys);
-        ty += NODE_H + NODE_GAP;
-      }
-    }
-
-    // Łączniki (requires z tej samej gałęzi)
-    this._drawConnectors(ctx, branchTechs, x, startY, tierW, tiers, tSys, maxTier);
-
-    ctx.restore();
+  _destroyDOM() {
+    if (!this._container) return;
+    document.removeEventListener('keydown', this._onKeyDown);
+    this._svgWrap?.removeEventListener('wheel', this._onWheel);
+    this._svgWrap?.removeEventListener('mousedown', this._onMouseDown);
+    document.removeEventListener('mousemove', this._onMouseMove);
+    document.removeEventListener('mouseup', this._onMouseUp);
+    this._container.remove();
+    this._container = null;
+    this._svg = null;
+    this._graphGroup = null;
+    this._detailsPanel = null;
+    this._queueBar = null;
+    this._svgWrap = null;
+    this._nodes = {};
+    this._edgePaths = [];
+    if (this._styleEl) { this._styleEl.remove(); this._styleEl = null; }
   }
 
-  _drawTechNode(ctx, tech, x, y, w, tSys, rSys) {
-    const state = this._getTechState(tech, tSys, rSys);
-    const h = NODE_H;
+  // ── Nagłówek (branch tabs) ──────────────────────────────────────────────
 
-    // Tło + border wg stanu
-    const styles = {
-      done:      { border: 'rgba(68,255,136,0.3)', bg: 'rgba(68,255,136,0.04)', text: THEME.success },
-      active:    { border: THEME.purple,            bg: 'rgba(204,136,255,0.06)', text: THEME.purple },
-      available: { border: THEME.borderLight,       bg: THEME.bgSecondary,        text: THEME.textPrimary },
-      queued:    { border: THEME.borderLight,       bg: THEME.bgSecondary,        text: THEME.textPrimary },
-      locked:    { border: THEME.border,            bg: THEME.bgPrimary,          text: THEME.textDim },
-    };
-    const s = styles[state] ?? styles.locked;
+  _buildHeader() {
+    const hdr = document.createElement('div');
+    hdr.style.cssText = `
+      display:flex; align-items:center; gap:4px;
+      padding: 8px 16px; border-bottom: 1px solid ${THEME.border};
+      background: ${THEME.bgSecondary};
+    `;
 
-    // Opacity dla locked
-    if (state === 'locked') ctx.globalAlpha = 0.5;
+    // Tytuł
+    const title = document.createElement('span');
+    title.textContent = t('techPanel.header');
+    title.style.cssText = `
+      color: ${THEME.accent}; font-size: 14px; font-weight: bold;
+      margin-right: 12px; letter-spacing: 2px;
+    `;
+    hdr.appendChild(title);
 
-    ctx.fillStyle = s.bg;
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = s.border;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-
-    // Prefix + nazwa
-    const prefix = { done: '✓ ', active: '⟳ ', queued: '', available: '', locked: '' }[state];
-    const prefixColor = { done: THEME.success, active: THEME.purple }[state] ?? s.text;
-    const techName = getName(tech, 'tech');
-    const maxNameLen = Math.max(12, Math.floor(w / 7));
-    const name = techName.length > maxNameLen ? techName.slice(0, maxNameLen - 1) + '…' : techName;
-
-    if (prefix) {
-      this._drawText(ctx, prefix, x + 4, y + 14, prefixColor, THEME.fontSizeSmall);
-      const pw = ctx.measureText(prefix).width;
-      this._drawText(ctx, name, x + 4 + pw, y + 14, s.text, THEME.fontSizeSmall);
-    } else {
-      this._drawText(ctx, name, x + 4, y + 14, s.text, THEME.fontSizeSmall);
-    }
-
-    // Discovery badge
-    if (tech.requiresDiscovery && state !== 'done') {
-      const discovSys = window.KOSMOS?.discoverySystem;
-      const discovered = discovSys?.isDiscovered(tech.requiresDiscovery);
-      const badge = discovered ? '🔓' : '🔒';
-      this._drawText(ctx, badge, x + w - 14, y + 14, discovered ? '#ffcc44' : THEME.textDim,
-        THEME.fontSizeSmall - 1, 'right');
-    }
-
-    // Opis (max 2 linie)
-    const descFont = (THEME.fontSizeSmall - 2);
-    ctx.font = `${descFont}px ${THEME.fontFamily}`;
-    const desc = tech.description ?? '';
-    const maxDescChars = Math.max(16, Math.floor(w / 5));
-    const lines = this._wrapText(desc, maxDescChars);
-    for (let i = 0; i < Math.min(2, lines.length); i++) {
-      this._drawText(ctx, lines[i], x + 4, y + 26 + i * 10, THEME.textSecondary, descFont);
-    }
-
-    // Koszt / ETA — używaj efektywnego kosztu (discovery soft-gate)
-    const effectiveCost = tSys ? tSys.getEffectiveCost(tech).research : tech.cost.research;
-    const costStr = `${effectiveCost} pkt`;
-    if (state === 'active') {
-      const pct = rSys ? rSys.getProgress() : 0;
-      const eta = rSys?.getETA(this._getYear()) ?? null;
-      const etaStr = eta !== null && eta !== Infinity ? `~${Math.ceil(eta - this._getYear())} lat` : '';
-      this._drawText(ctx, `${Math.floor(rSys.researchProgress)}/${effectiveCost}`, x + 4, y + 58,
-        THEME.textDim, THEME.fontSizeSmall - 1);
-      if (etaStr) {
-        this._drawText(ctx, etaStr, x + w - 4, y + 58, THEME.textSecondary, THEME.fontSizeSmall - 1, 'right');
-      }
-      // Pasek postępu na dole
-      this._drawBar(ctx, x + 1, y + h - 4, w - 2, 3, pct, THEME.purple, THEME.border);
-    } else if (state === 'done') {
-      this._drawText(ctx, t('techPanel.done'), x + 4, y + 58, THEME.success, THEME.fontSizeSmall - 1);
-    } else {
-      this._drawText(ctx, costStr, x + 4, y + 58, THEME.textDim, THEME.fontSizeSmall - 1);
-      // Pokaż mnożnik kosztu discovery
-      if (tech.requiresDiscovery && state !== 'locked') {
-        const discovSys = window.KOSMOS?.discoverySystem;
-        const discovered = discovSys?.isDiscovered(tech.requiresDiscovery);
-        const multLabel = discovered ? '−50%' : '×2';
-        const multColor = discovered ? THEME.success : '#ff8844';
-        this._drawText(ctx, multLabel, x + w - 4, y + 48, multColor, THEME.fontSizeSmall - 2, 'right');
-      }
-      if (state === 'available') {
-        const rate = rSys?.getTotalRate() ?? 0;
-        if (rate > 0) {
-          const etaYears = Math.ceil(effectiveCost / rate);
-          this._drawText(ctx, `~${etaYears} lat`, x + w - 4, y + 58,
-            THEME.textSecondary, THEME.fontSizeSmall - 1, 'right');
-        }
-      }
-    }
-
-    // Numer kolejki (queued)
-    if (state === 'queued') {
-      const idx = rSys?.researchQueue?.indexOf(tech.id) ?? -1;
-      if (idx >= 0) {
-        this._drawText(ctx, `#${idx + 1}`, x + w - 6, y + 14,
-          THEME.accent, THEME.fontSizeSmall - 1, 'right');
-      }
-    }
-
-    if (state === 'locked') ctx.globalAlpha = 1;
-
-    // Hit zone (nie dla locked)
-    if (state !== 'locked') {
-      this._addHit(x, y, w, h, 'techNode', { techId: tech.id, state });
-    }
-  }
-
-  _drawConnectors(ctx, branchTechs, areaX, startY, tierW, tiers, tSys, maxTier) {
-    // Pozycje węzłów
-    const positions = {};
-    for (let tier = 1; tier <= maxTier; tier++) {
-      let ty = startY + TIER_LABEL_H;
-      const nodeW = Math.min(NODE_W, tierW - 4);
-      for (const tech of (tiers[tier] ?? [])) {
-        const tx = areaX + 8 + (tier - 1) * (tierW + 4);
-        positions[tech.id] = { x: tx, y: ty, w: nodeW };
-        ty += NODE_H + NODE_GAP;
-      }
-    }
-
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    for (const tech of branchTechs) {
-      const to = positions[tech.id];
-      if (!to) continue;
-      for (const req of tech.requires) {
-        // OR prerequisites: tablica w tablicy
-        const reqIds = Array.isArray(req) ? req : [req];
-        for (const reqId of reqIds) {
-          const from = positions[reqId];
-          if (!from) continue; // requires z innej gałęzi — pomijamy
-          const bothDone = tSys?.isResearched(tech.id) && tSys?.isResearched(reqId);
-          const isOr = Array.isArray(req);
-          ctx.strokeStyle = bothDone ? 'rgba(68,255,136,0.3)' : THEME.borderLight;
-          if (isOr) ctx.setLineDash([3, 3]); // przerywana linia dla OR
-          ctx.beginPath();
-          ctx.moveTo(from.x + from.w, from.y + NODE_H / 2);
-          ctx.lineTo(to.x, to.y + NODE_H / 2);
-          ctx.stroke();
-          if (isOr) ctx.setLineDash([]);
-        }
-      }
-    }
-  }
-
-  // ── PRAWA KOLUMNA — szczegóły + kolejka ──────────────────────────────────
-
-  _drawRight(ctx, x, y, w, oh) {
-    const rSys = this._getResearchSystem();
-    const tSys = this._getTechSystem();
-    let cy = y;
-
-    // Szczegóły wybranej tech
-    if (this._selectedTechId) {
-      cy = this._drawTechDetails(ctx, x, y, w, tSys, rSys);
-    } else {
-      // Brak wybranej — wskazówka
-      this._drawRect(ctx, x, y, w, HDR_H, THEME.bgSecondary);
-      this._drawText(ctx, t('techPanel.selectTech'), x + 12, y + 16,
-        THEME.textDim, THEME.fontSizeMedium);
-      this._drawText(ctx, t('techPanel.clickNode'), x + 12, y + 30,
-        THEME.textDim, THEME.fontSizeSmall);
-      cy = y + HDR_H;
-    }
+    // Research rate
+    this._rateLabel = document.createElement('span');
+    this._rateLabel.style.cssText = `
+      color: ${THEME.textSecondary}; font-size: 11px; margin-right: 16px;
+    `;
+    hdr.appendChild(this._rateLabel);
 
     // Separator
-    this._drawSeparator(ctx, x, cy, x + w, cy);
-    cy += 4;
+    const sep = document.createElement('div');
+    sep.style.cssText = `width:1px; height:20px; background:${THEME.border}; margin:0 8px;`;
+    hdr.appendChild(sep);
 
-    // Kolejka badań
-    this._drawQueue(ctx, x, cy, w, y + oh - cy, rSys, tSys);
+    // Tab "ALL"
+    this._branchTabs = {};
+    const allTab = this._makeTab(null, '◉', t('techPanel.allBranches'), '#aac8c0');
+    hdr.appendChild(allTab);
+
+    // Per-branch tabs
+    for (const brId of BRANCH_ORDER) {
+      const br = TECH_BRANCHES[brId];
+      const tab = this._makeTab(brId, br.icon, t('techBranch.' + brId), br.color);
+      hdr.appendChild(tab);
+    }
+
+    // Spacer
+    const spacer = document.createElement('div');
+    spacer.style.flex = '1';
+    hdr.appendChild(spacer);
+
+    // Zamknij ×
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = `
+      background:none; border:1px solid ${THEME.border}; color:${THEME.textDim};
+      cursor:pointer; font-size:14px; padding:4px 10px; font-family:${THEME.fontFamily};
+    `;
+    closeBtn.addEventListener('click', () => this.hide());
+    closeBtn.addEventListener('mouseenter', () => { closeBtn.style.color = THEME.danger; closeBtn.style.borderColor = THEME.danger; });
+    closeBtn.addEventListener('mouseleave', () => { closeBtn.style.color = THEME.textDim; closeBtn.style.borderColor = THEME.border; });
+    hdr.appendChild(closeBtn);
+
+    return hdr;
   }
 
-  _drawTechDetails(ctx, x, y, w, tSys, rSys) {
+  _makeTab(branchId, icon, label, color) {
+    const btn = document.createElement('button');
+    btn.className = 'tech-branch-tab';
+    btn.dataset.branch = branchId ?? 'all';
+    btn.innerHTML = `<span style="font-size:14px">${icon}</span> <span style="font-size:10px">${label}</span>`;
+    btn.style.cssText = `
+      background: transparent; border: 1px solid ${THEME.border};
+      color: ${color}; cursor: pointer; padding: 4px 10px;
+      font-family: ${THEME.fontFamily}; display:flex; align-items:center; gap:4px;
+      transition: background 0.2s, border-color 0.2s;
+    `;
+
+    const isActive = branchId === this._selectedBranch;
+    if (isActive) {
+      btn.style.background = `${color}15`;
+      btn.style.borderColor = color;
+    }
+
+    btn.addEventListener('click', () => {
+      this._selectedBranch = branchId;
+      this._updateBranchTabs();
+      this._renderGraph();
+      this._autoFit();
+    });
+
+    btn.addEventListener('mouseenter', () => {
+      if (this._selectedBranch !== branchId) {
+        btn.style.background = `${color}10`;
+      }
+    });
+    btn.addEventListener('mouseleave', () => {
+      if (this._selectedBranch !== branchId) {
+        btn.style.background = 'transparent';
+      }
+    });
+
+    this._branchTabs[branchId ?? 'all'] = btn;
+    return btn;
+  }
+
+  _updateBranchTabs() {
+    for (const [key, btn] of Object.entries(this._branchTabs)) {
+      const brId = key === 'all' ? null : key;
+      const isActive = brId === this._selectedBranch;
+      const br = brId ? TECH_BRANCHES[brId] : null;
+      const color = br?.color ?? '#aac8c0';
+      btn.style.background = isActive ? `${color}15` : 'transparent';
+      btn.style.borderColor = isActive ? color : THEME.border;
+    }
+  }
+
+  // ── SVG defs (filtry, gradienty) ────────────────────────────────────────
+
+  _buildDefs() {
+    const ns = 'http://www.w3.org/2000/svg';
+    const defs = document.createElementNS(ns, 'defs');
+
+    // Filtr glow dla zbadanych
+    const glow = document.createElementNS(ns, 'filter');
+    glow.id = 'glow';
+    glow.innerHTML = `
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    `;
+    defs.appendChild(glow);
+
+    // Filtr glow aktywny (badanie w toku)
+    const glowActive = document.createElementNS(ns, 'filter');
+    glowActive.id = 'glow-active';
+    glowActive.innerHTML = `
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    `;
+    defs.appendChild(glowActive);
+
+    return defs;
+  }
+
+  // ── Panel szczegółów (prawa strona) ─────────────────────────────────────
+
+  _buildDetailsPanel() {
+    const panel = document.createElement('div');
+    panel.className = 'tech-details-panel';
+    panel.style.cssText = `
+      width: 280px; min-width: 280px;
+      border-left: 1px solid ${THEME.border};
+      background: ${THEME.bgSecondary};
+      overflow-y: auto; padding: 0;
+      display: flex; flex-direction: column;
+    `;
+
+    // Zawartość — aktualizowana dynamicznie
+    this._detailsContent = document.createElement('div');
+    this._detailsContent.style.cssText = 'flex:1; overflow-y:auto; padding:12px;';
+    panel.appendChild(this._detailsContent);
+
+    this._updateDetails();
+    return panel;
+  }
+
+  // ── Pasek kolejki (dolny) ───────────────────────────────────────────────
+
+  _buildQueueBar() {
+    const bar = document.createElement('div');
+    bar.className = 'tech-queue-bar';
+    bar.style.cssText = `
+      border-top: 1px solid ${THEME.border};
+      background: ${THEME.bgSecondary};
+      padding: 8px 16px;
+      min-height: 42px; max-height: 120px; overflow-y: auto;
+      display: flex; flex-direction: column; gap: 4px;
+    `;
+
+    this._queueContent = document.createElement('div');
+    this._queueContent.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; align-items:center;';
+    bar.appendChild(this._queueContent);
+
+    this._updateQueue();
+    return bar;
+  }
+
+  // ── Layout grafu ────────────────────────────────────────────────────────
+
+  _layoutGraph() {
+    this._layout = {};
+    const techs = this._getVisibleTechs();
+
+    // Grupuj po gałęzi i tierze
+    const branchTechs = {};
+    for (const brId of BRANCH_ORDER) {
+      branchTechs[brId] = {};
+      for (let tier = 1; tier <= 5; tier++) branchTechs[brId][tier] = [];
+    }
+    for (const tech of techs) {
+      if (branchTechs[tech.branch]?.[tech.tier]) {
+        branchTechs[tech.branch][tech.tier].push(tech);
+      }
+    }
+
+    // Pozycje: tier = X, branch wewnątrz tiera = Y
+    // Tylko widoczne gałęzie biorą udział w layoucie
+    const visibleBranches = this._selectedBranch
+      ? [this._selectedBranch]
+      : BRANCH_ORDER;
+
+    const branchOffsets = {};
+    let cumulY = 0;
+    for (const brId of visibleBranches) {
+      let maxInTier = 0;
+      for (let tier = 1; tier <= 5; tier++) {
+        maxInTier = Math.max(maxInTier, (branchTechs[brId]?.[tier] ?? []).length);
+      }
+      branchOffsets[brId] = cumulY;
+      cumulY += Math.max(1, maxInTier) * BRANCH_GAP_Y + 30;
+    }
+
+    // Teraz pozycje per tech
+    for (const brId of visibleBranches) {
+      for (let tier = 1; tier <= 5; tier++) {
+        const arr = branchTechs[brId]?.[tier] ?? [];
+        for (let i = 0; i < arr.length; i++) {
+          const tech = arr[i];
+          const x = MARGIN_LEFT + (tier - 1) * TIER_GAP_X;
+          const y = MARGIN_TOP + branchOffsets[brId] + i * BRANCH_GAP_Y;
+          this._layout[tech.id] = { x, y };
+        }
+      }
+    }
+  }
+
+  _getVisibleTechs() {
+    if (this._selectedBranch) {
+      return Object.values(TECHS).filter(t => t.branch === this._selectedBranch);
+    }
+    return Object.values(TECHS);
+  }
+
+  // ── Render SVG ──────────────────────────────────────────────────────────
+
+  _renderGraph() {
+    const ns = 'http://www.w3.org/2000/svg';
+    // Wyczyść
+    while (this._graphGroup.firstChild) this._graphGroup.removeChild(this._graphGroup.firstChild);
+    this._nodes = {};
+    this._edgePaths = [];
+
+    // Przelicz layout
+    this._layoutGraph();
+
+    const tSys = this._getTechSystem();
+    const rSys = this._getResearchSystem();
+    const techs = this._getVisibleTechs();
+
+    // Tier labels w tle
+    const tierLabels = document.createElementNS(ns, 'g');
+    tierLabels.setAttribute('class', 'tier-labels');
+    const maxTier = techs.reduce((m, t) => Math.max(m, t.tier), 1);
+    for (let tier = 1; tier <= maxTier; tier++) {
+      const x = MARGIN_LEFT + (tier - 1) * TIER_GAP_X;
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', x);
+      label.setAttribute('y', 30);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('fill', THEME.textDim);
+      label.setAttribute('font-size', '10');
+      label.setAttribute('font-family', THEME.fontFamily);
+      label.textContent = `TIER ${tier}`;
+      tierLabels.appendChild(label);
+    }
+    this._graphGroup.appendChild(tierLabels);
+
+    // Gałąź labels (pionowe, z lewej)
+    if (!this._selectedBranch) {
+      const brLabels = document.createElementNS(ns, 'g');
+      brLabels.setAttribute('class', 'branch-labels');
+      for (const brId of BRANCH_ORDER) {
+        const br = TECH_BRANCHES[brId];
+        const brTechs = techs.filter(t => t.branch === brId);
+        if (brTechs.length === 0) continue;
+        // Średnia Y dla gałęzi
+        const avgY = brTechs.reduce((s, t) => s + (this._layout[t.id]?.y ?? 0), 0) / brTechs.length;
+        const label = document.createElementNS(ns, 'text');
+        label.setAttribute('x', 20);
+        label.setAttribute('y', avgY + 4);
+        label.setAttribute('text-anchor', 'start');
+        label.setAttribute('fill', br.color);
+        label.setAttribute('font-size', '11');
+        label.setAttribute('font-family', THEME.fontFamily);
+        label.setAttribute('opacity', '0.7');
+        label.textContent = `${br.icon} ${t('techBranch.' + brId)}`;
+        brLabels.appendChild(label);
+      }
+      this._graphGroup.appendChild(brLabels);
+    }
+
+    // Rysuj krawędzie (synapsy) — najpierw żeby były pod nodami
+    const edgeGroup = document.createElementNS(ns, 'g');
+    edgeGroup.setAttribute('class', 'edges');
+    for (const tech of techs) {
+      const to = this._layout[tech.id];
+      if (!to) continue;
+      for (const req of (tech.requires ?? [])) {
+        const reqIds = Array.isArray(req) ? req : [req];
+        const isOr = Array.isArray(req);
+        for (const reqId of reqIds) {
+          const from = this._layout[reqId];
+          if (!from) continue;
+          const bothDone = tSys?.isResearched(tech.id) && tSys?.isResearched(reqId);
+
+          // Ścieżka Béziera
+          const path = document.createElementNS(ns, 'path');
+          const dx = (to.x - from.x) * 0.4;
+          const d = `M ${from.x} ${from.y} C ${from.x + dx} ${from.y}, ${to.x - dx} ${to.y}, ${to.x} ${to.y}`;
+          path.setAttribute('d', d);
+          path.setAttribute('class', `synapse ${bothDone ? 'done' : ''} ${isOr ? 'or' : ''}`);
+          path.setAttribute('data-from', reqId);
+          path.setAttribute('data-to', tech.id);
+          edgeGroup.appendChild(path);
+
+          // Animowany impuls (tylko na zbadanych ścieżkach)
+          if (bothDone) {
+            const impulse = document.createElementNS(ns, 'circle');
+            impulse.setAttribute('r', '2.5');
+            impulse.setAttribute('class', 'impulse');
+            const anim = document.createElementNS(ns, 'animateMotion');
+            anim.setAttribute('dur', `${2 + Math.random() * 2}s`);
+            anim.setAttribute('repeatCount', 'indefinite');
+            anim.setAttribute('begin', `${Math.random() * 3}s`);
+            const mpath = document.createElementNS(ns, 'mpath');
+            // Potrzebujemy ID dla ścieżki
+            const pathId = `edge-${reqId}-${tech.id}`;
+            path.id = pathId;
+            mpath.setAttributeNS('http://www.w3.org/1999/xlink', 'href', `#${pathId}`);
+            anim.appendChild(mpath);
+            impulse.appendChild(anim);
+            edgeGroup.appendChild(impulse);
+          }
+
+          this._edgePaths.push({ from: reqId, to: tech.id, pathEl: path, isOr });
+        }
+      }
+    }
+    this._graphGroup.appendChild(edgeGroup);
+
+    // Rysuj węzły (neurony)
+    const nodeGroup = document.createElementNS(ns, 'g');
+    nodeGroup.setAttribute('class', 'nodes');
+    for (const tech of techs) {
+      const pos = this._layout[tech.id];
+      if (!pos) continue;
+      const state = this._getTechState(tech, tSys, rSys);
+      const br = TECH_BRANCHES[tech.branch];
+
+      const g = document.createElementNS(ns, 'g');
+      g.setAttribute('class', `tech-node`);
+      g.setAttribute('data-id', tech.id);
+      g.setAttribute('data-state', state);
+      g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+
+      // Okrąg zewnętrzny (glow ring) — tylko dla done/active
+      if (state === 'done' || state === 'active') {
+        const outerRing = document.createElementNS(ns, 'circle');
+        outerRing.setAttribute('r', NODE_R + 4);
+        outerRing.setAttribute('class', 'outer-ring');
+        g.appendChild(outerRing);
+      }
+
+      // Główny okrąg
+      const circle = document.createElementNS(ns, 'circle');
+      circle.setAttribute('r', NODE_R);
+      circle.setAttribute('class', 'node-circle');
+      g.appendChild(circle);
+
+      // Pasek postępu (arc) — dla active
+      if (state === 'active') {
+        const pct = rSys?.getProgress() ?? 0;
+        const progressArc = this._createProgressArc(NODE_R + 1, pct);
+        progressArc.setAttribute('class', 'progress-arc');
+        g.appendChild(progressArc);
+      }
+
+      // Ikona gałęzi
+      const icon = document.createElementNS(ns, 'text');
+      icon.setAttribute('y', '-4');
+      icon.setAttribute('text-anchor', 'middle');
+      icon.setAttribute('font-size', '14');
+      icon.setAttribute('class', 'node-icon');
+      icon.textContent = br?.icon ?? '?';
+      g.appendChild(icon);
+
+      // Nazwa (skrócona)
+      const name = document.createElementNS(ns, 'text');
+      name.setAttribute('y', '12');
+      name.setAttribute('text-anchor', 'middle');
+      name.setAttribute('font-size', '8');
+      name.setAttribute('font-family', THEME.fontFamily);
+      name.setAttribute('class', 'node-name');
+      const techName = getName(tech, 'tech');
+      name.textContent = techName.length > 14 ? techName.slice(0, 13) + '…' : techName;
+      g.appendChild(name);
+
+      // Status badge
+      if (state === 'done') {
+        const badge = document.createElementNS(ns, 'text');
+        badge.setAttribute('y', '-16');
+        badge.setAttribute('x', '16');
+        badge.setAttribute('text-anchor', 'middle');
+        badge.setAttribute('font-size', '10');
+        badge.textContent = '✓';
+        badge.setAttribute('fill', THEME.success);
+        g.appendChild(badge);
+      } else if (state === 'queued') {
+        const idx = rSys?.researchQueue?.indexOf(tech.id) ?? -1;
+        if (idx >= 0) {
+          const badge = document.createElementNS(ns, 'text');
+          badge.setAttribute('y', '-16');
+          badge.setAttribute('x', '16');
+          badge.setAttribute('text-anchor', 'middle');
+          badge.setAttribute('font-size', '9');
+          badge.setAttribute('font-family', THEME.fontFamily);
+          badge.textContent = `#${idx + 1}`;
+          badge.setAttribute('fill', THEME.accent);
+          g.appendChild(badge);
+        }
+      }
+
+      // Discovery badge
+      if (tech.requiresDiscovery && state !== 'done') {
+        const discovSys = window.KOSMOS?.discoverySystem;
+        const discovered = discovSys?.isDiscovered(tech.requiresDiscovery);
+        const dbadge = document.createElementNS(ns, 'text');
+        dbadge.setAttribute('y', '-16');
+        dbadge.setAttribute('x', '-16');
+        dbadge.setAttribute('text-anchor', 'middle');
+        dbadge.setAttribute('font-size', '10');
+        dbadge.textContent = discovered ? '🔓' : '🔒';
+        g.appendChild(dbadge);
+      }
+
+      // Kliknięcie
+      g.style.cursor = state !== 'locked' ? 'pointer' : 'default';
+      g.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._selectedTechId = tech.id;
+        this._updateDetails();
+        this._highlightSelected();
+      });
+
+      // Hover
+      g.addEventListener('mouseenter', () => { g.classList.add('hovered'); });
+      g.addEventListener('mouseleave', () => { g.classList.remove('hovered'); });
+
+      nodeGroup.appendChild(g);
+      this._nodes[tech.id] = g;
+    }
+    this._graphGroup.appendChild(nodeGroup);
+
+    // Highlight wybranego
+    this._highlightSelected();
+  }
+
+  _createProgressArc(r, pct) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const path = document.createElementNS(ns, 'path');
+    if (pct <= 0) {
+      path.setAttribute('d', 'M 0 0');
+      return path;
+    }
+    const angle = Math.PI * 2 * Math.min(pct, 0.999);
+    const startX = 0;
+    const startY = -r;
+    const endX = r * Math.sin(angle);
+    const endY = -r * Math.cos(angle);
+    const largeArc = angle > Math.PI ? 1 : 0;
+    path.setAttribute('d', `M ${startX} ${startY} A ${r} ${r} 0 ${largeArc} 1 ${endX} ${endY}`);
+    return path;
+  }
+
+  _highlightSelected() {
+    for (const [id, g] of Object.entries(this._nodes)) {
+      g.classList.toggle('selected', id === this._selectedTechId);
+    }
+  }
+
+  // ── Aktualizacja szczegółów ─────────────────────────────────────────────
+
+  _updateDetails() {
+    const el = this._detailsContent;
+    if (!el) return;
+    el.innerHTML = '';
+
+    const tSys = this._getTechSystem();
+    const rSys = this._getResearchSystem();
+
+    if (!this._selectedTechId) {
+      el.innerHTML = `
+        <div style="color:${THEME.textDim}; padding:20px 0; text-align:center; font-size:11px;">
+          <div style="font-size:20px; margin-bottom:8px;">◉</div>
+          ${t('techPanel.selectTech')}<br>
+          <span style="font-size:9px; opacity:0.5;">${t('techPanel.clickNode')}</span>
+        </div>
+      `;
+      return;
+    }
+
     const tech = TECHS[this._selectedTechId];
-    if (!tech) return y + HDR_H;
+    if (!tech) return;
+
     const state = this._getTechState(tech, tSys, rSys);
     const br = TECH_BRANCHES[tech.branch];
 
     // Nagłówek
-    this._drawRect(ctx, x, y, w, HDR_H, THEME.bgSecondary);
-    this._drawText(ctx, getName(tech, 'tech'), x + 12, y + 16, THEME.textPrimary, THEME.fontSizeMedium);
-    this._drawText(ctx, `${br?.icon ?? ''} ${tech.branch ? t('techBranch.' + tech.branch) : ''} — Tier ${tech.tier}`,
-      x + 12, y + 30, br?.color ?? THEME.textDim, THEME.fontSizeSmall);
+    let html = `
+      <div style="border-bottom:1px solid ${THEME.border}; padding-bottom:8px; margin-bottom:8px;">
+        <div style="color:${THEME.textPrimary}; font-size:13px; font-weight:bold;">
+          ${getName(tech, 'tech')}
+        </div>
+        <div style="color:${br?.color ?? THEME.textDim}; font-size:10px; margin-top:2px;">
+          ${br?.icon ?? ''} ${t('techBranch.' + tech.branch)} — Tier ${tech.tier}
+        </div>
+      </div>
+    `;
 
-    let cy = y + HDR_H + 4;
-
-    // Discovery badge
+    // Discovery
     if (tech.requiresDiscovery) {
       const discovSys = window.KOSMOS?.discoverySystem;
       const discovered = discovSys?.isDiscovered(tech.requiresDiscovery);
-      const badgeText = discovered
-        ? `🔓 ${t('techPanel.discoveryFound')} (−50%)`
-        : `🔒 ${t('techPanel.discoveryNeeded')} (×2)`;
-      const badgeColor = discovered ? '#ffcc44' : '#ff8844';
-      this._drawText(ctx, badgeText, x + 12, cy + 10, badgeColor, THEME.fontSizeSmall);
-      cy += 18;
+      const badge = discovered
+        ? `<span style="color:#ffcc44;">🔓 ${t('techPanel.discoveryFound')} (−50%)</span>`
+        : `<span style="color:#ff8844;">🔒 ${t('techPanel.discoveryNeeded')} (×2)</span>`;
+      html += `<div style="font-size:10px; margin-bottom:6px;">${badge}</div>`;
     }
 
     // Opis
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    const descLines = this._wrapText(getDesc(tech, 'tech') || tech.description || '', 38);
-    for (let i = 0; i < Math.min(3, descLines.length); i++) {
-      this._drawText(ctx, descLines[i], x + 12, cy + 12 + i * 13,
-        THEME.textSecondary, THEME.fontSizeSmall);
-    }
-    cy += Math.min(3, descLines.length) * 13 + 16;
+    const desc = getDesc(tech, 'tech') || tech.description || '';
+    html += `<div style="color:${THEME.textSecondary}; font-size:10px; margin-bottom:8px; line-height:1.4;">${desc}</div>`;
 
     // Efekty
     if (tech.effects.length > 0) {
-      this._drawText(ctx, t('techPanel.effects'), x + 12, cy + 8, THEME.textDim, 8);
-      cy += 16;
+      html += `<div style="color:${THEME.textDim}; font-size:8px; letter-spacing:1px; margin-bottom:4px;">${t('techPanel.effects')}</div>`;
       for (const fx of tech.effects) {
         const { text, color } = this._formatEffect(fx);
-        this._drawText(ctx, text, x + 16, cy + 10, color, THEME.fontSizeSmall);
-        cy += 18;
+        html += `<div style="color:${color}; font-size:10px; padding:1px 0;">• ${text}</div>`;
       }
-      cy += 4;
+      html += '<div style="height:6px;"></div>';
     }
 
-    // Wymagania (z obsługą OR)
+    // Wymagania
     if (tech.requires.length > 0) {
-      this._drawText(ctx, t('techPanel.requirements'), x + 12, cy + 8, THEME.textDim, 8);
-      cy += 16;
+      html += `<div style="color:${THEME.textDim}; font-size:8px; letter-spacing:1px; margin-bottom:4px;">${t('techPanel.requirements')}</div>`;
       for (const req of tech.requires) {
         if (Array.isArray(req)) {
-          // OR group
           const anyDone = req.some(r => tSys?.isResearched(r));
-          const names = req.map(r => {
-            const rt = TECHS[r];
-            return rt ? getName(rt, 'tech') : r;
-          }).join(' / ');
+          const names = req.map(r => { const rt = TECHS[r]; return rt ? getName(rt, 'tech') : r; }).join(' / ');
           const icon = anyDone ? '✓' : '✗';
           const col = anyDone ? THEME.success : THEME.danger;
-          this._drawText(ctx, `${icon} ${names}`, x + 16, cy + 10, col, THEME.fontSizeSmall);
-          this._drawText(ctx, t('techPanel.orAny'), x + w - 12, cy + 10,
-            THEME.textDim, THEME.fontSizeSmall - 2, 'right');
-          cy += 18;
+          html += `<div style="color:${col}; font-size:10px;">${icon} ${names} <span style="color:${THEME.textDim}; font-size:8px;">${t('techPanel.orAny')}</span></div>`;
         } else {
-          const reqTech = TECHS[req];
           const done = tSys?.isResearched(req);
           const icon = done ? '✓' : '✗';
           const col = done ? THEME.success : THEME.danger;
-          this._drawText(ctx, `${icon} ${reqTech ? getName(reqTech, 'tech') : req}`, x + 16, cy + 10, col, THEME.fontSizeSmall);
-          cy += 18;
+          const reqTech = TECHS[req];
+          html += `<div style="color:${col}; font-size:10px;">${icon} ${reqTech ? getName(reqTech, 'tech') : req}</div>`;
         }
       }
-      cy += 4;
+      html += '<div style="height:6px;"></div>';
     }
 
-    // Efektywny koszt
+    // Koszt
     const effectiveCost = tSys ? tSys.getEffectiveCost(tech).research : tech.cost.research;
+    html += `<div style="color:${THEME.textDim}; font-size:9px; margin-bottom:8px;">${t('techPanel.research')} ${effectiveCost} pkt</div>`;
 
-    // Postęp + przyciski
-    cy += 4;
+    // Przyciski akcji
     if (state === 'done') {
-      this._drawText(ctx, t('techPanel.doneLabel'), x + 12, cy + 12, THEME.success, THEME.fontSizeSmall);
-      cy += 24;
+      html += `<div style="color:${THEME.success}; font-size:11px; text-align:center; padding:8px;">✓ ${t('techPanel.doneLabel')}</div>`;
     } else if (state === 'active') {
       const pct = rSys?.getProgress() ?? 0;
       const prog = Math.floor(rSys?.researchProgress ?? 0);
-      this._drawText(ctx, `${prog} / ${effectiveCost} pkt`, x + 12, cy + 10,
-        THEME.textPrimary, THEME.fontSizeSmall);
-      cy += 16;
-      this._drawBar(ctx, x + 12, cy, w - 24, 8, pct, THEME.purple, THEME.border);
-      cy += 14;
-      this._drawText(ctx, t('techPanel.researching'), x + 12, cy + 10, THEME.purple, THEME.fontSizeSmall);
-      cy += 20;
-      // Przycisk anuluj
-      this._drawButton(ctx, '✕ ANULUJ', x + 12, cy, w - 24, 22, 'danger');
-      this._addHit(x + 12, cy, w - 24, 22, 'cancelResearch', { techId: tech.id, label: '✕ ANULUJ' });
-      cy += 28;
+      html += `
+        <div style="color:${THEME.purple}; font-size:10px; margin-bottom:4px;">
+          ${t('techPanel.researching')} ${prog}/${effectiveCost}
+        </div>
+        <div style="background:${THEME.border}; height:6px; margin-bottom:8px; position:relative;">
+          <div style="background:${THEME.purple}; height:100%; width:${Math.round(pct * 100)}%;"></div>
+        </div>
+      `;
+      html += this._actionButton('✕ ' + t('techPanel.dequeueBtn'), 'danger', `cancel:${tech.id}`);
     } else if (state === 'available') {
-      this._drawButton(ctx, t('techPanel.researchBtn'), x + 12, cy, (w - 32) / 2, 24, 'primary');
-      this._addHit(x + 12, cy, (w - 32) / 2, 24, 'startResearch', { techId: tech.id, label: t('techPanel.researchBtn') });
-      this._drawButton(ctx, t('techPanel.queueBtn'), x + 16 + (w - 32) / 2, cy, (w - 32) / 2, 24, 'secondary');
-      this._addHit(x + 16 + (w - 32) / 2, cy, (w - 32) / 2, 24, 'queueResearch', { techId: tech.id, label: t('techPanel.queueBtn') });
-      cy += 30;
+      html += `<div style="display:flex; gap:6px;">`;
+      html += this._actionButton('▶ ' + t('techPanel.researchBtn'), 'primary', `research:${tech.id}`);
+      html += this._actionButton('+ ' + t('techPanel.queueBtn'), 'secondary', `queue:${tech.id}`);
+      html += `</div>`;
     } else if (state === 'queued') {
-      this._drawButton(ctx, t('techPanel.dequeueBtn'), x + 12, cy, w - 24, 24, 'danger');
-      this._addHit(x + 12, cy, w - 24, 24, 'dequeueResearch', { techId: tech.id, label: t('techPanel.dequeueBtn') });
-      cy += 30;
-    } else { // locked
-      this._drawText(ctx, t('techPanel.locked'), x + 12, cy + 12, THEME.textDim, THEME.fontSizeSmall);
-      cy += 24;
+      html += this._actionButton('✕ ' + t('techPanel.dequeueBtn'), 'danger', `dequeue:${tech.id}`);
+    } else {
+      html += `<div style="color:${THEME.textDim}; font-size:10px; text-align:center; padding:8px;">${t('techPanel.locked')}</div>`;
     }
 
-    return cy;
+    el.innerHTML = html;
+
+    // Hookuj przyciski
+    el.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const [action, techId] = btn.dataset.action.split(':');
+        this._handleAction(action, techId);
+      });
+    });
   }
 
-  _drawQueue(ctx, x, y, w, maxH, rSys, tSys) {
-    this._drawText(ctx, t('techPanel.queueHeader'), x + 12, y + 12, THEME.textDim, THEME.fontSizeSmall);
+  _actionButton(label, style, action) {
+    const styles = {
+      primary:   { bg: `${THEME.accent}15`, border: THEME.accent, color: THEME.accent },
+      secondary: { bg: 'transparent', border: THEME.borderLight, color: THEME.textSecondary },
+      danger:    { bg: 'rgba(255,51,68,0.08)', border: 'rgba(255,51,68,0.4)', color: THEME.danger },
+    };
+    const s = styles[style] ?? styles.secondary;
+    return `<button data-action="${action}" style="
+      flex:1; background:${s.bg}; border:1px solid ${s.border}; color:${s.color};
+      cursor:pointer; padding:6px 8px; font-size:10px; font-family:${THEME.fontFamily};
+      transition: background 0.2s;
+    " onmouseenter="this.style.background='${s.border}22'" onmouseleave="this.style.background='${s.bg}'"
+    >${label}</button>`;
+  }
 
-    let cy = y + 20;
-    const queue = rSys?.researchQueue ?? [];
-    const current = rSys?.currentResearch;
-    const year = this._getYear();
+  _handleAction(action, techId) {
+    const rSys = this._getResearchSystem();
+    if (!rSys) return;
 
-    // Aktualnie badana (na szczycie)
+    switch (action) {
+      case 'research':
+      case 'queue':
+        rSys.queueTech(techId);
+        break;
+      case 'cancel':
+      case 'dequeue':
+        rSys.dequeueTech(techId);
+        break;
+    }
+
+    // Odśwież po akcji
+    this._renderGraph();
+    this._applyTransform();
+    this._updateDetails();
+    this._updateQueue();
+  }
+
+  // ── Kolejka badań (dolny pasek) ─────────────────────────────────────────
+
+  _updateQueue() {
+    const el = this._queueContent;
+    if (!el) return;
+    el.innerHTML = '';
+
+    const rSys = this._getResearchSystem();
+    const tSys = this._getTechSystem();
+    if (!rSys) return;
+
+    const current = rSys.currentResearch;
+    const queue = rSys.researchQueue ?? [];
+
+    // Header
+    const hdr = document.createElement('span');
+    hdr.style.cssText = `color:${THEME.textDim}; font-size:9px; letter-spacing:1px; margin-right:8px;`;
+    hdr.textContent = t('techPanel.queueHeader') + ':';
+    el.appendChild(hdr);
+
+    // Aktualnie badane
     if (current) {
       const tech = TECHS[current];
       if (tech) {
-        const pct = rSys?.getProgress() ?? 0;
-        const eta = rSys?.getETA(year);
-        const etaStr = eta != null && eta !== Infinity ? t('techPanel.queueEta', Math.ceil(eta)) : '∞';
-
-        ctx.fillStyle = 'rgba(204,136,255,0.06)';
-        ctx.fillRect(x + 4, cy, w - 8, 28);
-        ctx.strokeStyle = THEME.purple;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x + 4.5, cy + 0.5, w - 9, 27);
-
-        this._drawText(ctx, '⟳', x + 10, cy + 16, THEME.purple, THEME.fontSizeSmall);
-        this._drawText(ctx, getName(tech, 'tech'), x + 24, cy + 12, THEME.textPrimary, THEME.fontSizeSmall);
-        this._drawText(ctx, etaStr, x + w - 10, cy + 12, THEME.textSecondary, THEME.fontSizeSmall - 1, 'right');
-
-        // Mini pasek postępu
-        this._drawBar(ctx, x + 24, cy + 20, w - 60, 3, pct, THEME.purple, THEME.border);
-
-        cy += 32;
+        const pct = rSys.getProgress();
+        const chip = this._queueChip(tech, `⟳ ${Math.round(pct * 100)}%`, THEME.purple, current);
+        el.appendChild(chip);
       }
     }
 
-    // Reszta kolejki
-    let accCost = 0;
-    if (current) {
-      const ct = TECHS[current];
-      if (ct) {
-        const eCost = tSys ? tSys.getEffectiveCost(ct).research : ct.cost.research;
-        accCost = Math.max(0, eCost - (rSys?.researchProgress ?? 0));
-      }
-    }
-    const rate = rSys?.getTotalRate() ?? 0;
-
+    // Kolejka
     for (let i = 0; i < queue.length; i++) {
-      if (cy + 28 > y + maxH) break;
-      const techId = queue[i];
-      const tech = TECHS[techId];
+      const tech = TECHS[queue[i]];
       if (!tech) continue;
+      const chip = this._queueChip(tech, `#${i + 1}`, THEME.textSecondary, queue[i]);
+      el.appendChild(chip);
+    }
 
-      const eCost = tSys ? tSys.getEffectiveCost(tech).research : tech.cost.research;
-      accCost += eCost;
-      const etaYears = rate > 0 ? Math.ceil(accCost / rate) : '∞';
-      const etaStr = rate > 0 ? t('techPanel.eta', etaYears) : '∞';
+    if (!current && queue.length === 0) {
+      const empty = document.createElement('span');
+      empty.style.cssText = `color:${THEME.textDim}; font-size:9px;`;
+      empty.textContent = t('techPanel.emptyQueue');
+      el.appendChild(empty);
+    }
+  }
 
-      const isHover = this._hoverZone?.type === 'queueItem' && this._hoverZone?.data?.techId === techId;
-      if (isHover) {
-        ctx.fillStyle = 'rgba(255,255,255,0.02)';
-        ctx.fillRect(x + 4, cy, w - 8, 28);
+  _queueChip(tech, prefix, prefixColor, techId) {
+    const chip = document.createElement('span');
+    chip.style.cssText = `
+      display:inline-flex; align-items:center; gap:4px;
+      background:${THEME.bgPrimary}; border:1px solid ${THEME.border};
+      padding:2px 8px; font-size:9px; cursor:pointer;
+    `;
+    chip.innerHTML = `
+      <span style="color:${prefixColor}">${prefix}</span>
+      <span style="color:${THEME.textPrimary}">${getName(tech, 'tech')}</span>
+      <span class="queue-remove" style="color:${THEME.danger}; cursor:pointer; margin-left:4px;">✕</span>
+    `;
+
+    // Kliknięcie na chip — podgląd
+    chip.addEventListener('click', (e) => {
+      if (e.target.classList.contains('queue-remove')) {
+        e.stopPropagation();
+        this._handleAction('dequeue', techId);
+        return;
+      }
+      this._selectedTechId = techId;
+      this._updateDetails();
+      this._highlightSelected();
+    });
+
+    return chip;
+  }
+
+  // ── Synchronizacja stanów (co frame) ────────────────────────────────────
+
+  _syncStates() {
+    const tSys = this._getTechSystem();
+    const rSys = this._getResearchSystem();
+
+    // Aktualizuj stany nodów
+    for (const tech of this._getVisibleTechs()) {
+      const g = this._nodes[tech.id];
+      if (!g) continue;
+      const state = this._getTechState(tech, tSys, rSys);
+      if (g.getAttribute('data-state') !== state) {
+        // Stan się zmienił — pełen re-render
+        this._renderGraph();
+        this._applyTransform();
+        this._updateDetails();
+        this._updateQueue();
+        return;
+      }
+    }
+
+    // Lekka aktualizacja — postęp badań
+    if (rSys?.currentResearch) {
+      const pct = rSys.getProgress();
+      const g = this._nodes[rSys.currentResearch];
+      if (g) {
+        const arc = g.querySelector('.progress-arc');
+        if (arc) {
+          const r = NODE_R + 1;
+          const angle = Math.PI * 2 * Math.min(pct, 0.999);
+          if (pct > 0) {
+            const startX = 0, startY = -r;
+            const endX = r * Math.sin(angle), endY = -r * Math.cos(angle);
+            const largeArc = angle > Math.PI ? 1 : 0;
+            arc.setAttribute('d', `M ${startX} ${startY} A ${r} ${r} 0 ${largeArc} 1 ${endX} ${endY}`);
+          }
+        }
+      }
+    }
+
+    // Aktualizuj rate label
+    if (this._rateLabel) {
+      const rate = rSys?.getTotalRate() ?? 0;
+      this._rateLabel.textContent = t('techPanel.researchRate', rate.toFixed(1));
+    }
+
+    // Aktualizuj kolejkę (progress %)
+    this._updateQueue();
+  }
+
+  _startSyncLoop() {
+    this._stopSyncLoop();
+    const loop = () => {
+      if (!this.visible) return;
+      this._syncStates();
+      this._animFrame = requestAnimationFrame(loop);
+    };
+    this._animFrame = requestAnimationFrame(loop);
+  }
+
+  _stopSyncLoop() {
+    if (this._animFrame) {
+      cancelAnimationFrame(this._animFrame);
+      this._animFrame = null;
+    }
+  }
+
+  // ── Pan / Zoom ──────────────────────────────────────────────────────────
+
+  _handleMouseDown(e) {
+    if (e.button !== 0) return;
+    this._dragging = true;
+    this._dragStartX = e.clientX;
+    this._dragStartY = e.clientY;
+    this._viewStartX = this._viewX;
+    this._viewStartY = this._viewY;
+    this._svgWrap.style.cursor = 'grabbing';
+  }
+
+  _handleMouseMove(e) {
+    if (!this._dragging) return;
+    const dx = e.clientX - this._dragStartX;
+    const dy = e.clientY - this._dragStartY;
+    this._viewX = this._viewStartX + dx / this._zoom;
+    this._viewY = this._viewStartY + dy / this._zoom;
+    this._applyTransform();
+  }
+
+  _handleMouseUp() {
+    this._dragging = false;
+    if (this._svgWrap) this._svgWrap.style.cursor = 'grab';
+  }
+
+  _handleWheel(e) {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    this._zoom = Math.max(0.3, Math.min(3.0, this._zoom * delta));
+    this._applyTransform();
+  }
+
+  _handleKeyDown(e) {
+    if (e.key === 'Escape') {
+      this.hide();
+    }
+  }
+
+  _applyTransform() {
+    if (!this._graphGroup) return;
+    this._graphGroup.setAttribute('transform',
+      `translate(${this._viewX * this._zoom}, ${this._viewY * this._zoom}) scale(${this._zoom})`
+    );
+  }
+
+  /** Dopasuj zoom i pan aby cały graf mieścił się w widoku */
+  _autoFit() {
+    const positions = Object.values(this._layout);
+    if (positions.length === 0) return;
+
+    // Bounding box grafu
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of positions) {
+      minX = Math.min(minX, p.x - NODE_R);
+      maxX = Math.max(maxX, p.x + NODE_R);
+      minY = Math.min(minY, p.y - NODE_R);
+      maxY = Math.max(maxY, p.y + NODE_R);
+    }
+
+    const graphW = maxX - minX + 60;  // margines
+    const graphH = maxY - minY + 60;
+
+    // Wymiary SVG wrap
+    const wrapRect = this._svgWrap?.getBoundingClientRect();
+    if (!wrapRect || wrapRect.width === 0) {
+      this._viewX = 0; this._viewY = 0; this._zoom = 1.0;
+      this._applyTransform();
+      return;
+    }
+
+    const viewW = wrapRect.width;
+    const viewH = wrapRect.height;
+
+    // Zoom aby zmieścić
+    this._zoom = Math.min(viewW / graphW, viewH / graphH, 1.5);
+    this._zoom = Math.max(0.3, Math.min(this._zoom, 1.5));
+
+    // Centruj
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    this._viewX = (viewW / (2 * this._zoom)) - centerX;
+    this._viewY = (viewH / (2 * this._zoom)) - centerY;
+
+    this._applyTransform();
+  }
+
+  // ── CSS Styles ──────────────────────────────────────────────────────────
+
+  _injectStyles() {
+    if (this._styleEl) return;
+    const style = document.createElement('style');
+    style.textContent = `
+      /* ── Neural Network Tech Tree ─────────────────────────────── */
+
+      #tech-overlay * { box-sizing: border-box; }
+
+      /* Węzły — stany */
+      .tech-node .node-circle {
+        fill: ${THEME.bgPrimary};
+        stroke: ${THEME.border};
+        stroke-width: 1.5;
+        transition: fill 0.3s, stroke 0.3s;
+      }
+      .tech-node .outer-ring {
+        fill: none;
+        stroke: transparent;
+        stroke-width: 1;
+      }
+      .tech-node .node-icon { fill: ${THEME.textDim}; pointer-events: none; }
+      .tech-node .node-name { fill: ${THEME.textDim}; pointer-events: none; }
+
+      /* done */
+      .tech-node[data-state="done"] .node-circle {
+        fill: rgba(68,255,136,0.08);
+        stroke: rgba(68,255,136,0.5);
+        filter: url(#glow);
+      }
+      .tech-node[data-state="done"] .outer-ring {
+        stroke: rgba(68,255,136,0.15);
+      }
+      .tech-node[data-state="done"] .node-icon { fill: ${THEME.success}; }
+      .tech-node[data-state="done"] .node-name { fill: ${THEME.success}; }
+
+      /* active */
+      .tech-node[data-state="active"] .node-circle {
+        fill: rgba(170,136,255,0.1);
+        stroke: ${THEME.purple};
+        filter: url(#glow-active);
+        animation: node-pulse 2s ease-in-out infinite;
+      }
+      .tech-node[data-state="active"] .outer-ring {
+        stroke: rgba(170,136,255,0.2);
+        animation: ring-pulse 2s ease-in-out infinite;
+      }
+      .tech-node[data-state="active"] .node-icon { fill: ${THEME.purple}; }
+      .tech-node[data-state="active"] .node-name { fill: ${THEME.purple}; }
+
+      /* available */
+      .tech-node[data-state="available"] .node-circle {
+        fill: rgba(170,200,192,0.04);
+        stroke: ${THEME.borderLight};
+      }
+      .tech-node[data-state="available"] .node-icon { fill: ${THEME.textPrimary}; }
+      .tech-node[data-state="available"] .node-name { fill: ${THEME.textPrimary}; }
+
+      /* queued */
+      .tech-node[data-state="queued"] .node-circle {
+        fill: rgba(0,255,180,0.04);
+        stroke: ${THEME.accent};
+        stroke-dasharray: 4 2;
+      }
+      .tech-node[data-state="queued"] .node-icon { fill: ${THEME.textPrimary}; }
+      .tech-node[data-state="queued"] .node-name { fill: ${THEME.textPrimary}; }
+
+      /* locked */
+      .tech-node[data-state="locked"] { opacity: 0.35; }
+      .tech-node[data-state="locked"] .node-circle {
+        fill: ${THEME.bgPrimary};
+        stroke: ${THEME.border};
       }
 
-      this._drawText(ctx, `${i + 1}.`, x + 10, cy + 16, THEME.purple, THEME.fontSizeSmall);
-      this._drawText(ctx, getName(tech, 'tech'), x + 26, cy + 12, THEME.textPrimary, THEME.fontSizeSmall);
-      this._drawText(ctx, etaStr, x + w - 32, cy + 12, THEME.textSecondary, THEME.fontSizeSmall - 1, 'right');
+      /* hover */
+      .tech-node.hovered .node-circle {
+        stroke-width: 2.5;
+      }
+      .tech-node.hovered:not([data-state="locked"]) .node-circle {
+        fill: rgba(0,255,180,0.06);
+      }
 
-      // Przycisk ✕
-      this._drawText(ctx, '✕', x + w - 14, cy + 14, THEME.danger, THEME.fontSizeSmall, 'right');
-      this._addHit(x + w - 24, cy, 20, 28, 'removeFromQueue', { techId, label: '✕' });
+      /* selected */
+      .tech-node.selected .node-circle {
+        stroke-width: 3;
+        stroke: ${THEME.accent} !important;
+      }
 
-      // Kliknięcie na nazwę — podgląd
-      this._addHit(x + 4, cy, w - 32, 28, 'queueItem', { techId });
+      /* Synapsy */
+      .synapse {
+        fill: none;
+        stroke: rgba(170,200,192,0.08);
+        stroke-width: 1;
+        transition: stroke 0.3s;
+      }
+      .synapse.or {
+        stroke-dasharray: 4 3;
+      }
+      .synapse.done {
+        stroke: rgba(68,255,136,0.2);
+        stroke-width: 1.5;
+      }
 
-      cy += 28;
-    }
+      /* Impulsy */
+      .impulse {
+        fill: rgba(68,255,136,0.7);
+      }
 
-    // Komunikat jeśli pusta
-    if (!current && queue.length === 0) {
-      this._drawText(ctx, t('techPanel.emptyQueue'), x + 12, cy + 14,
-        THEME.textDim, THEME.fontSizeSmall);
-    }
+      /* Progress arc */
+      .progress-arc {
+        fill: none;
+        stroke: ${THEME.purple};
+        stroke-width: 3;
+        stroke-linecap: round;
+      }
+
+      /* Animacje */
+      @keyframes node-pulse {
+        0%, 100% { opacity: 0.85; }
+        50% { opacity: 1; }
+      }
+      @keyframes ring-pulse {
+        0%, 100% { stroke-opacity: 0.15; }
+        50% { stroke-opacity: 0.4; }
+      }
+
+      /* Scrollbar dla panelu szczegółów */
+      .tech-details-panel::-webkit-scrollbar { width: 6px; }
+      .tech-details-panel::-webkit-scrollbar-track { background: ${THEME.bgPrimary}; }
+      .tech-details-panel::-webkit-scrollbar-thumb { background: ${THEME.border}; }
+      .tech-details-panel::-webkit-scrollbar-thumb:hover { background: ${THEME.accent}; }
+
+      .tech-queue-bar::-webkit-scrollbar { height: 4px; }
+      .tech-queue-bar::-webkit-scrollbar-track { background: ${THEME.bgPrimary}; }
+      .tech-queue-bar::-webkit-scrollbar-thumb { background: ${THEME.border}; }
+    `;
+    document.head.appendChild(style);
+    this._styleEl = style;
   }
 
-  // ── Obsługa kliknięć ────────────────────────────────────────────────────
+  // ── Helpery (zachowane z Canvas wersji) ─────────────────────────────────
 
-  _onHit(zone) {
-    const rSys = this._getResearchSystem();
-    switch (zone.type) {
-      case 'branch':
-        this._selectedBranch = zone.data.branchId;
-        break;
-      case 'techNode':
-        this._selectedTechId = zone.data.techId;
-        break;
-      case 'startResearch':
-        rSys?.queueTech(zone.data.techId);
-        break;
-      case 'queueResearch':
-        rSys?.queueTech(zone.data.techId);
-        break;
-      case 'dequeueResearch':
-      case 'cancelResearch':
-      case 'removeFromQueue':
-        rSys?.dequeueTech(zone.data.techId);
-        break;
-      case 'queueItem':
-        this._selectedTechId = zone.data.techId;
-        break;
-    }
-  }
-
-  handleScroll(delta, x, y) {
-    if (!this.visible) return false;
-    const { ox, oy, ow, oh } = this._getOverlayBounds(
-      window.innerWidth / this._getScale(),
-      window.innerHeight / this._getScale()
-    );
-    // Scroll środkowej kolumny
-    if (x >= ox + LEFT_W && x < ox + ow - RIGHT_W) {
-      this._scrollCenter = Math.min(0, this._scrollCenter - delta * 0.3);
-      return true;
-    }
-    // Scroll prawej kolumny
-    if (x >= ox + ow - RIGHT_W) {
-      this._scrollRight = Math.min(0, this._scrollRight - delta * 0.3);
-      return true;
-    }
-    return true; // konsumuj scroll
-  }
-
-  // ── Helpery ──────────────────────────────────────────────────────────────
-
-  _getTechSystem() { return window.KOSMOS?.techSystem ?? null; }
-  _getResearchSystem() { return window.KOSMOS?.researchSystem ?? null; }
-  _getYear() { return window.KOSMOS?.timeSystem?.gameTime ?? 0; }
-
-  _getScale() {
-    const pw = window.innerWidth;
-    const ph = window.innerHeight;
-    return Math.min(pw / 1280, ph / 720);
-  }
+  _getTechSystem()    { return window.KOSMOS?.techSystem ?? null; }
+  _getResearchSystem(){ return window.KOSMOS?.researchSystem ?? null; }
+  _getYear()          { return window.KOSMOS?.timeSystem?.gameTime ?? 0; }
 
   _getTechState(tech, tSys, rSys) {
     if (tSys?.isResearched(tech.id)) return 'done';
@@ -636,7 +1203,6 @@ export class TechOverlay extends BaseOverlay {
   _canResearch(tech, tSys) {
     if (!tSys) return false;
     if (tSys.isResearched(tech.id)) return false;
-    // Deleguj do TechSystem.checkPrerequisites (obsługuje OR)
     return tSys.checkPrerequisites(tech);
   }
 
@@ -657,7 +1223,7 @@ export class TechOverlay extends BaseOverlay {
       }
       case 'unlockShip': {
         const s = SHIPS[fx.shipId];
-        return { text: `[${t('techPanel.fxUnlockShip')}] ${s ? getName(s, 'ship') : fx.shipId}`, color: THEME.info };
+        return { text: `[${t('techPanel.fxUnlockShip')}] ${s ? getName(s, 'ship') : fx.shipId}`, color: '#88ddff' };
       }
       case 'unlockCommodity': {
         const c = COMMODITIES[fx.commodityId];
@@ -668,7 +1234,7 @@ export class TechOverlay extends BaseOverlay {
       case 'popGrowthBonus':
         return { text: `${t('techPanel.fxPopGrowth')} ×${fx.multiplier}`, color: '#88dd88' };
       case 'consumptionMultiplier':
-        return { text: `${Math.round((1 - fx.multiplier) * 100)}% ${t('techPanel.fxLess')} ${fx.resource}`, color: THEME.info };
+        return { text: `${Math.round((1 - fx.multiplier) * 100)}% ${t('techPanel.fxLess')} ${fx.resource}`, color: '#88ddff' };
       case 'buildingLevelCap':
         return { text: `${t('techPanel.fxMaxLevel')}: ${fx.maxLevel}`, color: THEME.accent };
       case 'unlockFeature':
@@ -678,15 +1244,15 @@ export class TechOverlay extends BaseOverlay {
       case 'factorySpeedMultiplier':
         return { text: `${t('techPanel.fxFactorySpeed')} ×${fx.multiplier}`, color: '#ffcc66' };
       case 'buildTimeMultiplier':
-        return { text: `${t('techPanel.fxBuildTime')} ×${fx.multiplier}`, color: THEME.info };
+        return { text: `${t('techPanel.fxBuildTime')} ×${fx.multiplier}`, color: '#88ddff' };
       case 'autonomousEfficiency':
         return { text: `${t('techPanel.fxAutoEfficiency')} ×${fx.multiplier}`, color: '#88dd88' };
       case 'fuelEfficiency':
-        return { text: `${t('techPanel.fxFuelEff')} ×${fx.multiplier}`, color: THEME.info };
+        return { text: `${t('techPanel.fxFuelEff')} ×${fx.multiplier}`, color: '#88ddff' };
       case 'shipSurvival':
         return { text: `${t('techPanel.fxShipSurvival')} +${Math.round(fx.amount * 100)}%`, color: '#ffcc66' };
       case 'shipSpeedMultiplier':
-        return { text: `${t('techPanel.fxShipSpeed')} ×${fx.multiplier}`, color: THEME.info };
+        return { text: `${t('techPanel.fxShipSpeed')} ×${fx.multiplier}`, color: '#88ddff' };
       case 'disasterReduction':
         return { text: `${t('techPanel.fxDisasterReduc')} −${fx.amount}%`, color: THEME.success };
       case 'researchCostMultiplier':
@@ -696,22 +1262,5 @@ export class TechOverlay extends BaseOverlay {
       default:
         return { text: JSON.stringify(fx), color: THEME.textDim };
     }
-  }
-
-  _wrapText(text, maxChars) {
-    if (text.length <= maxChars) return [text];
-    const words = text.split(' ');
-    const lines = [];
-    let line = '';
-    for (const w of words) {
-      if ((line + ' ' + w).trim().length > maxChars) {
-        if (line) lines.push(line);
-        line = w;
-      } else {
-        line = line ? line + ' ' + w : w;
-      }
-    }
-    if (line) lines.push(line);
-    return lines;
   }
 }

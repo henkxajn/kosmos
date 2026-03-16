@@ -1143,6 +1143,7 @@ export default {
   'techPanel.fxDisasterReduc': 'disaster reduction',
   'techPanel.fxResearchCost': 'research cost',
   'techPanel.fxSingularity': 'SINGULARITY: all buildings autonomous',
+  'techPanel.allBranches': 'All',
 
   // === PopulationOverlay ===
   'popPanel.header': 'POPULATION',
