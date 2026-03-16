@@ -18,6 +18,7 @@ import { resolveTextureType } from './PlanetTextureUtils.js';
 const _gasTextureCache = new Map();
 
 // ── Presets per pod-typ gazowego giganta ──────────────────────────────────────
+// Każdy preset ma wiele palet — PRNG z planet.id losuje jedną z nich.
 const GAS_PRESETS = {
   gas_warm: {
     bandCount:   [8, 14],
@@ -25,16 +26,73 @@ const GAS_PRESETS = {
     stormProb:   0.6,
     stormMax:    5,
     polarDark:   [0.15, 0.30],
-    // Paleta: gorące Jowiszowe — czerwone, brązowe, pomarańczowe
-    palette: [
-      [0.55, 0.25, 0.12],  // brick red
-      [0.45, 0.22, 0.10],  // deep russet
-      [0.75, 0.55, 0.30],  // tan-orange
-      [0.80, 0.65, 0.35],  // gold
-      [0.65, 0.35, 0.15],  // burnt orange
-      [0.85, 0.75, 0.50],  // pale gold
-      [0.50, 0.28, 0.12],  // dark brown
-      [0.70, 0.48, 0.22],  // amber
+    palettes: [
+      // 0: Klasyczny gorący Jowisz — czerwono-brązowo-pomarańczowy
+      [
+        [0.55, 0.25, 0.12],  // brick red
+        [0.45, 0.22, 0.10],  // deep russet
+        [0.75, 0.55, 0.30],  // tan-orange
+        [0.80, 0.65, 0.35],  // gold
+        [0.65, 0.35, 0.15],  // burnt orange
+        [0.85, 0.75, 0.50],  // pale gold
+        [0.50, 0.28, 0.12],  // dark brown
+        [0.70, 0.48, 0.22],  // amber
+      ],
+      // 1: Lawa — intensywne czerwienie i czernie (bardzo gorący)
+      [
+        [0.70, 0.12, 0.05],  // magma red
+        [0.35, 0.08, 0.04],  // dark crimson
+        [0.85, 0.30, 0.08],  // bright orange-red
+        [0.20, 0.06, 0.03],  // almost black-red
+        [0.60, 0.18, 0.06],  // rust
+        [0.92, 0.45, 0.12],  // flame orange
+        [0.28, 0.10, 0.05],  // charcoal red
+        [0.75, 0.22, 0.07],  // scarlet
+      ],
+      // 2: Miedziany — ciepłe złoto z zielonkawymi odcieniami
+      [
+        [0.72, 0.52, 0.22],  // copper
+        [0.55, 0.40, 0.18],  // bronze
+        [0.85, 0.70, 0.35],  // brass gold
+        [0.45, 0.38, 0.20],  // olive bronze
+        [0.78, 0.58, 0.25],  // golden amber
+        [0.38, 0.32, 0.15],  // dark olive
+        [0.65, 0.48, 0.20],  // antique gold
+        [0.90, 0.78, 0.42],  // light gold
+      ],
+      // 3: Magentowy — fioletowo-różowe tony (egzotyczny)
+      [
+        [0.55, 0.18, 0.35],  // plum
+        [0.72, 0.28, 0.45],  // magenta pink
+        [0.40, 0.12, 0.25],  // dark berry
+        [0.85, 0.45, 0.55],  // rose
+        [0.60, 0.22, 0.40],  // wine
+        [0.75, 0.35, 0.50],  // hot pink muted
+        [0.48, 0.15, 0.30],  // maroon-purple
+        [0.90, 0.55, 0.60],  // salmon pink
+      ],
+      // 4: Rdzawy Mars — brązy i pomarańcze z szarym pyłem
+      [
+        [0.62, 0.35, 0.18],  // rusty orange
+        [0.48, 0.28, 0.15],  // raw sienna
+        [0.75, 0.48, 0.22],  // clay orange
+        [0.35, 0.25, 0.18],  // dusty brown
+        [0.58, 0.38, 0.20],  // terracotta
+        [0.82, 0.60, 0.32],  // sand
+        [0.42, 0.30, 0.20],  // umber
+        [0.70, 0.42, 0.18],  // burnt sienna
+      ],
+      // 5: Siarkowo-żółty — żółcie z oliwkowym i brązem
+      [
+        [0.78, 0.72, 0.20],  // sulfur yellow
+        [0.55, 0.50, 0.12],  // olive yellow
+        [0.88, 0.82, 0.35],  // pale lemon
+        [0.45, 0.40, 0.10],  // dark mustard
+        [0.70, 0.62, 0.15],  // gold-olive
+        [0.60, 0.52, 0.14],  // khaki
+        [0.82, 0.75, 0.28],  // saffron
+        [0.50, 0.45, 0.12],  // dark olive-gold
+      ],
     ],
   },
   gas_giant: {
@@ -43,16 +101,95 @@ const GAS_PRESETS = {
     stormProb:   0.4,
     stormMax:    4,
     polarDark:   [0.10, 0.25],
-    // Paleta: Jupiter-like — tan, cream, brąz, pomarańcz, biel
-    palette: [
-      [0.85, 0.78, 0.65],  // cream
-      [0.50, 0.38, 0.25],  // coffee brown
-      [0.80, 0.72, 0.58],  // pale tan
-      [0.65, 0.45, 0.25],  // rusty orange
-      [0.90, 0.88, 0.82],  // white zone
-      [0.75, 0.50, 0.25],  // orange belt
-      [0.70, 0.62, 0.48],  // warm tan
-      [0.58, 0.42, 0.28],  // medium brown
+    palettes: [
+      // 0: Klasyczny Jupiter — tan, cream, brąz, pomarańcz
+      [
+        [0.85, 0.78, 0.65],  // cream
+        [0.50, 0.38, 0.25],  // coffee brown
+        [0.80, 0.72, 0.58],  // pale tan
+        [0.65, 0.45, 0.25],  // rusty orange
+        [0.90, 0.88, 0.82],  // white zone
+        [0.75, 0.50, 0.25],  // orange belt
+        [0.70, 0.62, 0.48],  // warm tan
+        [0.58, 0.42, 0.28],  // medium brown
+      ],
+      // 1: Saturn — blady żółto-złoty, pastelowy
+      [
+        [0.90, 0.85, 0.68],  // pale gold
+        [0.82, 0.78, 0.62],  // wheat
+        [0.75, 0.70, 0.55],  // dusty gold
+        [0.88, 0.82, 0.60],  // champagne
+        [0.70, 0.65, 0.48],  // warm khaki
+        [0.95, 0.90, 0.75],  // ivory
+        [0.78, 0.72, 0.52],  // harvest gold
+        [0.85, 0.80, 0.65],  // pale butter
+      ],
+      // 2: Kremowo-oliwkowy — zielonkawe brązy (nietypowy)
+      [
+        [0.65, 0.62, 0.45],  // olive tan
+        [0.50, 0.48, 0.32],  // dark olive
+        [0.78, 0.75, 0.58],  // light olive cream
+        [0.55, 0.52, 0.35],  // sage brown
+        [0.85, 0.82, 0.68],  // pale olive cream
+        [0.45, 0.42, 0.28],  // moss
+        [0.72, 0.68, 0.50],  // khaki
+        [0.60, 0.58, 0.40],  // army tan
+      ],
+      // 3: Łososiowy — ciepłe różowo-pomarańczowe tony
+      [
+        [0.88, 0.72, 0.62],  // peach
+        [0.75, 0.55, 0.45],  // muted salmon
+        [0.92, 0.80, 0.70],  // light peach
+        [0.65, 0.45, 0.38],  // dusty rose
+        [0.82, 0.65, 0.55],  // warm pink-tan
+        [0.95, 0.88, 0.80],  // cream pink
+        [0.70, 0.50, 0.42],  // sienna pink
+        [0.85, 0.70, 0.60],  // nude
+      ],
+      // 4: Czekoladowy — głębokie brązy z kremem
+      [
+        [0.40, 0.25, 0.15],  // dark chocolate
+        [0.55, 0.35, 0.20],  // milk chocolate
+        [0.75, 0.60, 0.42],  // mocha
+        [0.30, 0.18, 0.10],  // espresso
+        [0.85, 0.75, 0.58],  // latte cream
+        [0.48, 0.30, 0.18],  // cocoa
+        [0.65, 0.48, 0.30],  // caramel
+        [0.90, 0.82, 0.65],  // vanilla
+      ],
+      // 5: Szaro-biały — minimalistyczny, subtelne pasy
+      [
+        [0.82, 0.80, 0.78],  // light grey
+        [0.92, 0.90, 0.88],  // off-white
+        [0.70, 0.68, 0.65],  // medium grey
+        [0.88, 0.86, 0.83],  // warm white
+        [0.75, 0.72, 0.68],  // silver tan
+        [0.95, 0.93, 0.90],  // near-white
+        [0.65, 0.62, 0.58],  // cool grey
+        [0.85, 0.82, 0.78],  // pearl
+      ],
+      // 6: Bursztynowy — intensywne pomarańcze z brązem
+      [
+        [0.85, 0.55, 0.15],  // amber
+        [0.65, 0.38, 0.10],  // dark amber
+        [0.92, 0.68, 0.25],  // golden amber
+        [0.55, 0.30, 0.08],  // brown-amber
+        [0.78, 0.48, 0.12],  // burnt amber
+        [0.95, 0.75, 0.35],  // light amber
+        [0.70, 0.42, 0.10],  // whiskey
+        [0.88, 0.62, 0.20],  // honey
+      ],
+      // 7: Fioletowo-brązowy — egzotyczny gas giant
+      [
+        [0.52, 0.38, 0.48],  // dusty mauve
+        [0.65, 0.50, 0.55],  // muted purple-brown
+        [0.42, 0.30, 0.38],  // dark plum-brown
+        [0.78, 0.68, 0.70],  // pale lavender-grey
+        [0.58, 0.42, 0.50],  // wine-brown
+        [0.72, 0.60, 0.62],  // rose grey
+        [0.48, 0.35, 0.42],  // purple-umber
+        [0.85, 0.78, 0.78],  // pale pink-grey
+      ],
     ],
   },
   gas_cold: {
@@ -61,16 +198,73 @@ const GAS_PRESETS = {
     stormProb:   0.2,
     stormMax:    2,
     polarDark:   [0.05, 0.15],
-    // Paleta: Neptune/Uranus-like — niebiesko-biała, subtelna
-    palette: [
-      [0.35, 0.55, 0.80],  // medium blue
-      [0.55, 0.70, 0.85],  // pale blue
-      [0.18, 0.38, 0.62],  // deep blue
-      [0.75, 0.82, 0.90],  // ice white
-      [0.25, 0.48, 0.72],  // teal blue
-      [0.65, 0.78, 0.88],  // light blue
-      [0.15, 0.32, 0.55],  // dark navy
-      [0.45, 0.62, 0.78],  // sky blue
+    palettes: [
+      // 0: Klasyczny Neptune — niebieski
+      [
+        [0.35, 0.55, 0.80],  // medium blue
+        [0.55, 0.70, 0.85],  // pale blue
+        [0.18, 0.38, 0.62],  // deep blue
+        [0.75, 0.82, 0.90],  // ice white
+        [0.25, 0.48, 0.72],  // teal blue
+        [0.65, 0.78, 0.88],  // light blue
+        [0.15, 0.32, 0.55],  // dark navy
+        [0.45, 0.62, 0.78],  // sky blue
+      ],
+      // 1: Uranus — cyjanowo-zielonkawy
+      [
+        [0.45, 0.72, 0.75],  // teal
+        [0.55, 0.78, 0.78],  // aqua
+        [0.30, 0.58, 0.62],  // dark cyan
+        [0.70, 0.85, 0.85],  // pale aqua
+        [0.38, 0.65, 0.68],  // ocean teal
+        [0.60, 0.80, 0.80],  // light cyan
+        [0.25, 0.50, 0.55],  // deep teal
+        [0.50, 0.75, 0.76],  // turquoise
+      ],
+      // 2: Lodowy biały — prawie monochromatyczny z niebieskim odcieniem
+      [
+        [0.85, 0.88, 0.92],  // ice white
+        [0.72, 0.76, 0.85],  // frosty blue
+        [0.90, 0.92, 0.95],  // snow
+        [0.65, 0.70, 0.80],  // steel blue
+        [0.80, 0.84, 0.90],  // pale ice
+        [0.75, 0.78, 0.86],  // light steel
+        [0.88, 0.90, 0.94],  // white-blue
+        [0.68, 0.72, 0.82],  // cool grey-blue
+      ],
+      // 3: Głęboki atrament — ciemny niebieski z purpurą
+      [
+        [0.12, 0.18, 0.42],  // deep indigo
+        [0.22, 0.28, 0.55],  // indigo
+        [0.08, 0.12, 0.32],  // midnight blue
+        [0.32, 0.38, 0.65],  // medium indigo
+        [0.15, 0.20, 0.48],  // dark royal
+        [0.28, 0.32, 0.58],  // blue-purple
+        [0.10, 0.15, 0.38],  // navy-indigo
+        [0.35, 0.42, 0.68],  // soft indigo
+      ],
+      // 4: Turkusowo-szmaragdowy — zielono-niebieski
+      [
+        [0.15, 0.55, 0.50],  // emerald teal
+        [0.25, 0.65, 0.58],  // sea green
+        [0.10, 0.42, 0.38],  // dark emerald
+        [0.40, 0.75, 0.68],  // light sea
+        [0.18, 0.58, 0.52],  // jade
+        [0.35, 0.70, 0.62],  // mint teal
+        [0.12, 0.48, 0.42],  // deep jade
+        [0.30, 0.68, 0.60],  // aquamarine
+      ],
+      // 5: Lawendowy — fioletowo-niebieski
+      [
+        [0.45, 0.40, 0.72],  // lavender
+        [0.55, 0.50, 0.80],  // light purple
+        [0.32, 0.28, 0.60],  // dark lavender
+        [0.68, 0.65, 0.88],  // pale lavender
+        [0.40, 0.35, 0.68],  // purple blue
+        [0.60, 0.55, 0.82],  // wisteria
+        [0.28, 0.25, 0.55],  // deep purple-blue
+        [0.50, 0.48, 0.75],  // medium lavender
+      ],
     ],
   },
 };
@@ -275,11 +469,14 @@ function createGasBakeUniforms(planet) {
     rngRange(rng, -50, 50),
   );
 
+  // Losuj paletę z tablicy palet (deterministycznie z seeda)
+  const palette = preset.palettes[Math.floor(rng() * preset.palettes.length)];
+
   // Paleta pasów → DataTexture (bandCount × 1, RGBA)
   const bandData = new Uint8Array(bandCount * 4);
   for (let i = 0; i < bandCount; i++) {
-    const palIdx = Math.floor(rng() * preset.palette.length);
-    const col = preset.palette[palIdx];
+    const palIdx = Math.floor(rng() * palette.length);
+    const col = palette[palIdx];
     // Jitter per-band: ±10% na każdym kanale
     const jR = 0.9 + rng() * 0.2;
     const jG = 0.9 + rng() * 0.2;
