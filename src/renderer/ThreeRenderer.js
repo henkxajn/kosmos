@@ -67,7 +67,7 @@ export class ThreeRenderer {
               if (mat.emissiveMap) mat.emissiveMap.needsUpdate = true;
             }
           }
-          if (obj.geometry) obj.geometry.attributes?.position?.needsUpdate = true;
+          if (obj.geometry?.attributes?.position) obj.geometry.attributes.position.needsUpdate = true;
         });
       } catch (e) {
         console.error('[ThreeRenderer] Error rebuilding after context restore:', e);
