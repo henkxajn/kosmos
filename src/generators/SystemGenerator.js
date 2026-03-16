@@ -102,36 +102,33 @@ export class SystemGenerator {
     return       9 + Math.floor(Math.random() * 3);          // 9, 10 lub 11
   }
 
-  // Wygeneruj 1–11 protoplanet (liczba losowana z rozkładu)
+  // Wygeneruj 1–11 protoplanet z rozkładem Titiusa-Bode'a
+  // a_n = 0.4 + 0.3 × 2^n (AU), skalowane do HZ gwiazdy, z perturbacją ±15%
   // Gwarantuje przynajmniej jedną planetę w strefie HZ (wymagane dla emergencji życia)
   generateProtoPlanets(star) {
     const count = this._rollPlanetCount();
     const hz    = star.habitableZone;
     const planets = [];
 
-    // Start od połowy wewnętrznej krawędzi HZ — daje szansę dotarcia do HZ
-    // Minimum 0.15 AU (Merkury ma 0.39 AU — bliżej byłoby nierealistycznie)
-    let currentAU = Math.max(0.15, hz.min * 0.5);
-
-    // Rozstaw orbit: mniejszy ratio dla dużych układów (by zmieścić wiele planet w MAX_ORBIT_AU)
-    // POWER TEST: szerszy rozstaw → stabilniejsze orbity (mniej kolizji)
-    const [minRatio, maxRatio, minGap] =
-      this._powerTest ? [1.35, 1.55, 0.15] :
-      count > 8 ? [1.22, 1.42, 0.10] :
-      count > 5 ? [1.35, 1.62, 0.14] :
-                  [1.50, 2.00, 0.20];
+    // Skalowanie Titius-Bode: n=2 wypada na środku HZ gwiazdy
+    // Bazowy TB: a_2 = 0.4 + 0.3 × 4 = 1.6 → skaluj do hzMid
+    const hzMid    = (hz.min + hz.max) / 2;
+    const tbBase_2 = 0.4 + 0.3 * Math.pow(2, 2);  // = 1.6
+    const hzScale  = hzMid / tbBase_2;              // skaluj cały wzorzec do HZ gwiazdy
 
     // Licznik breathable atmosfer w układzie (max 2)
     const breathableCount = { value: 0 };
 
     for (let i = 0; i < count; i++) {
-      const ratio = minRatio + Math.random() * (maxRatio - minRatio);
-      const a     = Math.max(currentAU * ratio, currentAU + minGap);
+      // Titius-Bode z perturbacją ±15%
+      const tbRaw   = (0.4 + 0.3 * Math.pow(2, i)) * hzScale;
+      const perturb = 0.85 + Math.random() * 0.30;  // 0.85–1.15
+      const a       = tbRaw * perturb;
 
+      if (a < 0.15) continue;                        // za blisko gwiazdy
       if (a > GAME_CONFIG.MAX_ORBIT_AU) break;
 
       planets.push(this._makePlanet(star, a, i, null, breathableCount));
-      currentAU = a;
     }
 
     // ── Gwarancja SKALISTEJ planety w HZ ──────────────────────────────
@@ -182,7 +179,7 @@ export class SystemGenerator {
       : 0.01 + Math.random() * 0.08;
     const T          = KeplerMath.orbitalPeriod(a, star.physics.mass);
     const planetType = forceType || this.getPlanetType(a, star);
-    const mass       = this.getPlanetMass(planetType);
+    const mass       = this.getPlanetMass(planetType, a, star);
     const typeConfig = PLANET_TYPE_CONFIG[planetType];
     const albedo     = typeConfig.albedo;
 
@@ -317,34 +314,40 @@ export class SystemGenerator {
     return 'none';
   }
 
-  // Typ planety na podstawie odległości od gwiazdy + element losowości
-  // Oparty na statystykach misji Kepler: różnorodność typów nawet w tej samej strefie
+  // Typ planety na podstawie odległości od gwiazdy — model 5 stref
+  // Realistyczna dystrybucja: rocky blisko, gas daleko, brak gas w HZ
   getPlanetType(a, star) {
     const hz        = star.habitableZone;
     const frostLine = hz.max * 2.2;
     const r         = Math.random();
 
-    // Bardzo blisko gwiazdy: skaliste gorące, rzadkie gorące Jowisze (~7%)
-    if (a < hz.min * 0.4)    return r < 0.07 ? 'gas' : 'hot_rocky';
-    // Wewnętrzna strefa: gorące skaliste, okazjonalne bliskie gazy (~12%)
-    if (a < hz.min)          return r < 0.12 ? 'gas' : 'hot_rocky';
-    // Strefa HZ: głównie skaliste, rzadziej gazy (~10%)
-    if (a <= hz.max)         return r < 0.10 ? 'gas' : 'rocky';
-    // Post-HZ do linii mrozu: mix skalistych i gazowych (mini-Neptyny są tu częste ~28%)
-    if (a < frostLine)       return r < 0.28 ? 'gas' : 'rocky';
-    // Strefa gazowych olbrzymów: głównie gaz, trochę lód
-    if (a < frostLine * 3.5) return r < 0.78 ? 'gas' : 'ice';
-    // Zewnętrzny układ: lodowe olbrzymy z domieszką gazowych (Neptun/Uran-like)
-    return r < 0.55 ? 'gas' : 'ice';
+    // 1. Gorąca strefa (< 0.5 × HZ): gorące skaliste, rzadkie hot Jowisze (~5%)
+    if (a < hz.min * 0.5)    return r < 0.05 ? 'gas' : (r < 0.85 ? 'hot_rocky' : 'rocky');
+    // 2. Ciepła strefa (0.5–0.85 × HZ): skaliste, rzadko gorące
+    if (a < hz.min * 0.85)   return r < 0.10 ? 'hot_rocky' : 'rocky';
+    // 3. Habitowalna strefa (0.85–1.3 × HZ): 100% rocky (gwarancja)
+    if (a <= hz.max * 1.3)   return 'rocky';
+    // 4. Strefa przejściowa (1.3×HZ – frost_line): mix rocky/ice/gas
+    if (a < frostLine)       return r < 0.20 ? 'gas' : (r < 0.60 ? 'rocky' : 'ice');
+    // 5. Zimna strefa (> frost_line) — 3 pod-strefy wg odległości
+    if (a < frostLine * 3)   return r < 0.50 ? 'gas' : (r < 0.80 ? 'ice' : 'rocky'); // bliższa: duże gazy
+    if (a < frostLine * 6)   return r < 0.30 ? 'gas' : (r < 0.80 ? 'ice' : 'rocky'); // dalsza: Neptun-like
+    return r < 0.30 ? 'ice' : 'rocky';  // bardzo daleko: lodowe/skaliste
   }
 
-  // Masa planety (masy Ziemi) — szersze zakresy dla większej różnorodności
-  getPlanetMass(type) {
+  // Masa planety (masy Ziemi) — zależy od typu i odległości (a) od gwiazdy
+  // Gas bliski (Jowisz/Saturn): 50–330 M⊕, gas daleki (Neptun/Uran): 10–50 M⊕
+  getPlanetMass(type, a, star) {
     switch (type) {
-      case 'gas':       return 30  + Math.random() * 300;  // Jowisz–Saturn: 30–330 M⊕
-      case 'ice':       return 8   + Math.random() * 60;   // Neptun–Uran: 8–68 M⊕
-      case 'hot_rocky': return 0.1 + Math.random() * 3;    // Merkury–super-Ziemia: 0.1–3.1 M⊕
-      default:          return 0.2 + Math.random() * 8;    // rocky — super-Ziemie możliwe: 0.2–8 M⊕
+      case 'gas': {
+        // Frost line: gazy blisko → duże (Jowisz), daleko → małe (Neptun)
+        const frostLine = star ? star.habitableZone.max * 2.2 : 4.0;
+        if (a && a > frostLine * 3) return 10 + Math.random() * 40;   // 10–50 M⊕ (Neptun/Uran)
+        return 50 + Math.random() * 280;                               // 50–330 M⊕ (Jowisz/Saturn)
+      }
+      case 'ice':       return 2   + Math.random() * 18;   // 2–20 M⊕
+      case 'hot_rocky': return 0.1 + Math.random() * 1.9;  // 0.1–2.0 M⊕
+      default:          return 0.3 + Math.random() * 5.7;  // rocky: 0.3–6.0 M⊕
     }
   }
 
@@ -706,7 +709,7 @@ export class SystemGenerator {
   // maxOrbitAU: max orbita w AU (25% dystansu do najbliższego sąsiada)
   _makeMoon(planet, moonIndex, star, maxOrbitAU = 0.15, moonCount = 1) {
     // Przybliżony promień planety w Three.js units (spójny z ThreeRenderer._planetRadius)
-    const planetR3D = { gas: 0.45, ice: 0.26, rocky: 0.14, hot_rocky: 0.10 }[planet.planetType] ?? 0.14;
+    const planetR3D = { gas: 0.48, ice: 0.20, rocky: 0.10, hot_rocky: 0.07 }[planet.planetType] ?? 0.10;
     const minOrbit3D = planetR3D * 2.5;                              // min: 2.5× promień planety
     const maxOrbit3D = Math.min(maxOrbitAU * 11, 3.0);              // max: z sąsiadów, cap 3 units
     const safeMax    = Math.max(minOrbit3D + 0.2, maxOrbit3D);      // zawsze min 0.2 j. przestrzeni

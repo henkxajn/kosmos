@@ -602,25 +602,114 @@ export class ThreeRenderer {
   }
 
   // Rozmiary 3D planet per typ — logarytmiczna skala masy
-  // Gwiazda = 1.6 → planety ZAWSZE mniejsze (gas max 0.55 = 1/3 gwiazdy)
-  // Hierarchia: gas > ice > rocky > hot_rocky (wyraźna różnica wizualna)
+  // Gwiazda = 1.6 → planety ZAWSZE mniejsze (gas max 0.60 = 3/8 gwiazdy)
+  // Hierarchia: gas(Jowisz) > gas_cold(Neptun) > ice > rocky > hot_rocky
   static _planetRadius(planet) {
     const mass = planet.physics?.mass ?? 1;
     const type = planet.planetType;
     if (type === 'gas') {
-      // 30–330 M⊕ → promień 0.30–0.50 (gwiazda 3.2–5.3× większa)
-      return Math.max(0.30, Math.min(0.50, 0.22 + Math.log10(Math.max(1, mass)) * 0.11));
+      // Rozróżnienie Jowisz/Saturn (duże) vs Neptun/Uran (małe) wg masy
+      if (mass < 50) {
+        // Neptun/Uran-like: 10–50 M⊕ → promień 0.20–0.35
+        return Math.max(0.20, Math.min(0.35, 0.15 + Math.log10(Math.max(1, mass)) * 0.11));
+      }
+      // Jowisz/Saturn-like: 50–330 M⊕ → promień 0.35–0.60
+      return Math.max(0.35, Math.min(0.60, 0.20 + Math.log10(Math.max(1, mass)) * 0.16));
     }
     if (type === 'ice') {
-      // 8–68 M⊕ → promień 0.18–0.28 (gwiazda 5.7–8.9× większa)
-      return Math.max(0.18, Math.min(0.28, 0.13 + Math.log10(Math.max(1, mass)) * 0.08));
+      // 2–20 M⊕ → promień 0.14–0.24
+      return Math.max(0.14, Math.min(0.24, 0.10 + Math.log10(Math.max(1, mass)) * 0.10));
     }
     if (type === 'hot_rocky') {
-      // 0.1–3 M⊕ → promień 0.06–0.11 (gwiazda 14.5–26.7× większa)
-      return Math.max(0.06, Math.min(0.11, 0.06 + mass * 0.015));
+      // 0.1–2 M⊕ → promień 0.04–0.10
+      return Math.max(0.04, Math.min(0.10, 0.04 + mass * 0.025));
     }
-    // rocky: 0.2–8 M⊕ → promień 0.09–0.16 (gwiazda 10–17.8× większa)
-    return Math.max(0.09, Math.min(0.16, 0.08 + mass * 0.011));
+    // rocky: 0.3–6 M⊕ → promień 0.06–0.14
+    return Math.max(0.06, Math.min(0.14, 0.05 + mass * 0.012));
+  }
+
+  // ── Pierścienie planet (gas 60%, ice 40%) ──────────────────────────────
+  // Parametry (innerMult, outerMult, tilt, kolory, szczeliny) z deterministycznego hasha
+  _addRings(group, planet, r, seed) {
+    const type = planet.planetType;
+    if (type !== 'gas' && type !== 'ice') return;
+
+    // Szansa na pierścienie: gas 60%, ice 40% (deterministycznie z seed)
+    const chance = type === 'gas' ? 60 : 40;
+    if ((seed % 100) >= chance) return;
+
+    // Parametry geometrii z hasha
+    const h2 = hashCode(String(seed * 7 + 13));
+    const innerMult = 1.20 + (h2 % 30) / 100;        // 1.20–1.50
+    const outerMult = 1.80 + (h2 % 50) / 100;        // 1.80–2.30
+    const tiltDeg   = 10 + (h2 % 20);                 // 10°–30°
+    const gapCount  = 3 + (h2 % 3);                   // 3–5 szczelin
+
+    // Paleta kolorów per pod-typ
+    const texType = resolveTextureType(planet);
+    let ringR, ringG, ringB;
+    if (texType === 'gas_warm') {
+      // Ciepłe: brązy, beże, złoto (Saturn-like)
+      ringR = 200 + (h2 % 40); ringG = 170 + (h2 % 40); ringB = 120 + (h2 % 30);
+    } else if (texType === 'gas_cold') {
+      // Lodowe: blado-niebieskie, białawe (Uran/Neptun)
+      ringR = 160 + (h2 % 40); ringG = 190 + (h2 % 40); ringB = 220 + (h2 % 30);
+    } else if (texType === 'gas_giant') {
+      // Neutralne: jasne brązy, szarości (Jowisz)
+      ringR = 190 + (h2 % 35); ringG = 185 + (h2 % 35); ringB = 165 + (h2 % 30);
+    } else {
+      // Ice — jasne lodowe
+      ringR = 180 + (h2 % 40); ringG = 200 + (h2 % 40); ringB = 230 + (h2 % 25);
+    }
+
+    // Canvas tekstura 512×1 z przezroczystymi szczelinami
+    const ringCanvas = document.createElement('canvas');
+    ringCanvas.width = 512; ringCanvas.height = 1;
+    const rc = ringCanvas.getContext('2d');
+
+    // Generuj pozycje szczelin (deterministyczne)
+    const gaps = [];
+    for (let g = 0; g < gapCount; g++) {
+      const gapCenter = 60 + hashCode(String(seed + g * 31)) % 380;  // 60–440
+      const gapWidth  = 4 + hashCode(String(seed + g * 17)) % 12;    // 4–16 px
+      gaps.push({ center: gapCenter, width: gapWidth });
+    }
+
+    for (let x = 0; x < 512; x++) {
+      // Bazowa przezroczystość — łuk sinusoidalny (gęstszy w środku)
+      const t = x / 512;
+      let alpha = Math.sin(t * Math.PI) * 0.50;
+
+      // Drobna modulacja gęstości (substruktura pierścieni)
+      const fineNoise = (hashCode(String(x * 3 + seed)) % 100) / 200; // 0–0.5
+      alpha *= (0.5 + fineNoise);
+
+      // Szczeliny — zeruj alpha
+      for (const gap of gaps) {
+        if (Math.abs(x - gap.center) < gap.width / 2) { alpha = 0; break; }
+      }
+
+      // Lekka wariacja koloru wzdłuż promienia
+      const cVar = (hashCode(String(x + seed * 3)) % 20) - 10; // ±10
+      const cr = Math.min(255, Math.max(0, ringR + cVar));
+      const cg = Math.min(255, Math.max(0, ringG + cVar));
+      const cb = Math.min(255, Math.max(0, ringB + cVar));
+
+      rc.fillStyle = `rgba(${cr},${cg},${cb},${alpha.toFixed(3)})`;
+      rc.fillRect(x, 0, 1, 1);
+    }
+
+    const rTex = new THREE.CanvasTexture(ringCanvas);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(r * innerMult, r * outerMult, 64),
+      new THREE.MeshStandardMaterial({
+        map: rTex, transparent: true,
+        side: THREE.DoubleSide, depthWrite: false,
+        metalness: 0, roughness: 0.8,
+      })
+    );
+    ring.rotation.x = -Math.PI * (tiltDeg / 90);  // konwersja: 10°→-0.35, 30°→-1.05 rad
+    group.add(ring);
   }
 
   // ── RTT Bake — renderuj proceduralny diffuse z PlanetShader na teksturę ────
@@ -759,13 +848,36 @@ export class ThreeRenderer {
       }
     }
 
-    // Atmosfera Rayleigh — fake scattering (tylko rocky z atmosferą)
-    if (!isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak') {
-      const gc = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
+    // Atmosfera Rayleigh — pełny shader zarówno dla rocky jak i gas
+    // Gas giganty: grubsza atmosfera, kolor per pod-typ (warm/cold/giant)
+    const hasAtmo = planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
+    if (hasAtmo || isGas) {
+      // Kolor atmosfery: gas giganty mają specyficzny kolor per pod-typ
+      let atmoColor;
+      let atmoScale;    // grubość sfery atmosfery (mnożnik promienia)
+      let atmoStrength; // mnożnik alpha
+      if (isGas) {
+        const texType = resolveTextureType(planet);
+        if (texType === 'gas_warm') {
+          atmoColor = new THREE.Color(0.8, 0.5, 0.2);   // pomarańczowo-złoty
+        } else if (texType === 'gas_cold') {
+          atmoColor = new THREE.Color(0.2, 0.4, 0.9);   // niebieski/cyjanowy (Neptun/Uran)
+        } else {
+          atmoColor = new THREE.Color(0.6, 0.6, 0.5);   // jasno-żółtawy (Saturn)
+        }
+        atmoScale    = 1.08;  // grubsza atmosfera niż rocky
+        atmoStrength = 0.70;  // intensywniejsza
+      } else {
+        atmoColor    = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
+        atmoScale    = 1.15;
+        atmoStrength = 0.55;
+      }
+
       const atmoMat = new THREE.ShaderMaterial({
         uniforms: {
-          uColor:    { value: gc },
-          uLightDir: { value: new THREE.Vector3(0, 0, 0) }, // aktualizowane w sync
+          uColor:     { value: atmoColor },
+          uLightDir:  { value: new THREE.Vector3(0, 0, 0) },
+          uStrength:  { value: atmoStrength },
         },
         vertexShader: `
           varying vec3 vNormal;
@@ -788,13 +900,13 @@ export class ThreeRenderer {
         fragmentShader: `
           uniform vec3 uColor;
           uniform vec3 uLightDir;
+          uniform float uStrength;
           varying vec3 vNormal;
           varying vec3 vViewDir;
           varying vec3 vWorldNormal;
           varying vec3 vWorldPos;
           varying float vFresnel;
           void main() {
-            // Grubość atmosfery
             float fresnel = vFresnel;
 
             // Kąt słońca w tym punkcie atmosfery
@@ -819,7 +931,7 @@ export class ThreeRenderer {
 
             // Glow na krawędzi
             float glow = fresnel * smoothstep(1.0, 0.6, fresnel);
-            float alpha = glow * 0.55;
+            float alpha = glow * uStrength;
 
             gl_FragColor = vec4(atmColor, alpha);
           }
@@ -830,85 +942,14 @@ export class ThreeRenderer {
         depthWrite: false,
       });
       const atmoMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(r * 1.15, 32, 32), atmoMat
-      );
-      atmoMesh.userData.isAtmosphere = true;
-      group.add(atmoMesh);
-    }
-    // Gas / brak atmosfery — prosty fresnel glow (stary shader)
-    else if (planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak') {
-      const gc = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
-      const atmoMat = new THREE.ShaderMaterial({
-        uniforms: {
-          uColor:    { value: gc },
-          uLightDir: { value: new THREE.Vector3(0, 0, 0) },
-        },
-        vertexShader: `
-          varying vec3 vNormal;
-          varying vec3 vViewDir;
-          varying vec3 vWorldPos;
-          varying float vFresnel;
-          void main() {
-            vNormal = normalize(normalMatrix * normal);
-            vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-            vViewDir = normalize(-mvPos.xyz);
-            vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
-            float NdotV = dot(vNormal, vViewDir);
-            float rim = 1.0 - abs(NdotV);
-            vFresnel = rim * rim * rim;
-            gl_Position = projectionMatrix * mvPos;
-          }
-        `,
-        fragmentShader: `
-          uniform vec3 uColor;
-          uniform vec3 uLightDir;
-          varying vec3 vNormal;
-          varying vec3 vViewDir;
-          varying vec3 vWorldPos;
-          varying float vFresnel;
-          void main() {
-            float glow = vFresnel * smoothstep(1.0, 0.6, vFresnel);
-            vec3 toLight = normalize(uLightDir - vWorldPos);
-            float NdotL = dot(normalize(vWorldPos), toLight);
-            float lit = smoothstep(-0.3, 0.8, NdotL);
-            float alpha = glow * (0.2 + lit * 0.35);
-            gl_FragColor = vec4(uColor, alpha);
-          }
-        `,
-        side: THREE.BackSide,
-        transparent: true,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const atmoMesh = new THREE.Mesh(
-        new THREE.SphereGeometry(r * 1.15, 32, 32), atmoMat
+        new THREE.SphereGeometry(r * atmoScale, 32, 32), atmoMat
       );
       atmoMesh.userData.isAtmosphere = true;
       group.add(atmoMesh);
     }
 
-    // Pierścienie dla planet lodowych — reagują na oświetlenie
-    if (planet.planetType === 'ice') {
-      const ringCanvas = document.createElement('canvas');
-      ringCanvas.width = 256; ringCanvas.height = 1;
-      const rc = ringCanvas.getContext('2d');
-      for (let x = 0; x < 256; x++) {
-        const a = Math.sin(x / 256 * Math.PI) * 0.45 * (0.4 + (hashCode(x + seed) % 100) / 200);
-        rc.fillStyle = `rgba(200,220,255,${a.toFixed(3)})`;
-        rc.fillRect(x, 0, 1, 1);
-      }
-      const rTex = new THREE.CanvasTexture(ringCanvas);
-      const ring = new THREE.Mesh(
-        new THREE.RingGeometry(r * 1.4, r * 2.2, 64),
-        new THREE.MeshStandardMaterial({
-          map: rTex, transparent: true,
-          side: THREE.DoubleSide, depthWrite: false,
-          metalness: 0, roughness: 0.8,
-        })
-      );
-      ring.rotation.x = -Math.PI * 0.42;
-      group.add(ring);
-    }
+    // Pierścienie — gas (60%) i ice (40%), warianty per pod-typ
+    this._addRings(group, planet, r, seed);
 
     this._clickable.push(mesh);
     this._entityByUUID.set(mesh.uuid, planet);
