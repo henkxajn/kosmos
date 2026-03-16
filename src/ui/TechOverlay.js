@@ -5,11 +5,13 @@
 // Etap 38: 7 gałęzi, tier 1-5, OR prerequisites, discovery soft-gate.
 
 import { THEME }        from '../config/ThemeConfig.js';
+import { COSMIC }       from '../config/LayoutConfig.js';
 import { TECHS, TECH_BRANCHES } from '../data/TechData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { SHIPS }     from '../data/ShipsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { t, getName, getDesc } from '../i18n/i18n.js';
+import { CIV_SIDEBAR_W } from './CivPanelDrawer.js';
 
 const BRANCH_ORDER = ['mining', 'energy', 'biology', 'civil', 'space', 'computing', 'defense'];
 
@@ -76,11 +78,16 @@ export class TechOverlay {
   _createDOM() {
     if (this._container) return;
 
-    // Kontener + dimming
+    // Kontener — dopasowany do bounds overlay (sidebar + topbar + outliner + bottombar)
     const c = document.createElement('div');
     c.id = 'tech-overlay';
     c.style.cssText = `
-      position: fixed; inset: 0; z-index: 100;
+      position: fixed;
+      top: ${COSMIC.TOP_BAR_H}px;
+      left: ${CIV_SIDEBAR_W}px;
+      right: ${COSMIC.OUTLINER_W}px;
+      bottom: ${COSMIC.BOTTOM_BAR_H}px;
+      z-index: 50;
       background: rgba(2,4,5,0.95);
       display: flex; flex-direction: column;
       font-family: ${THEME.fontFamily};
