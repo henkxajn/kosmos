@@ -26,6 +26,7 @@ import { getEffectivePlanetType }      from '../utils/EntityUtils.js';
 import { BiomeMapGenerator }           from './BiomeMapGenerator.js';
 import { BuildingMapGenerator }        from './BuildingMapGenerator.js';
 import { PlanetShader }                from './PlanetShader.js';
+import { GasGiantShader }             from './GasGiantShader.js';
 
 // Eksport do konsoli przeglądarki (debug/test)
 window.PlanetTerrainTexture = PlanetTerrainTexture;
@@ -175,8 +176,24 @@ export class PlanetGlobeRenderer {
           roughness: 0.75,
         });
       }
+    } else if (this._isGas) {
+      // Gas giant: procedural RTT bake (pasy + burze + normal + roughness)
+      const baked = GasGiantShader.bakeGasGiantTextures(planet, this._renderer);
+      if (baked) {
+        material = new THREE.MeshStandardMaterial({
+          map:          baked.diffuse,
+          normalMap:    baked.normal,
+          roughnessMap: baked.roughness,
+          metalness:    0.0,
+        });
+      } else {
+        material = new THREE.MeshStandardMaterial({
+          color: planet.visual?.color ?? 0x888888,
+          metalness: 0.0, roughness: 0.6,
+        });
+      }
     } else {
-      // Gas giant lub brak grida: pre-generowane tekstury PBR z plików
+      // Brak grida (nie-gas): pre-generowane tekstury PBR z plików
       const texType = resolveTextureType(planet);
       if (texType) {
         const seed    = hashCode(String(planet.id));
@@ -186,10 +203,9 @@ export class PlanetGlobeRenderer {
           map:          maps.diffuse,
           normalMap:    maps.normal,
           roughnessMap: maps.roughness,
-          metalness:    this._isGas ? 0.0 : 0.05,
+          metalness:    0.05,
         });
       } else {
-        // Fallback: solid color
         material = new THREE.MeshStandardMaterial({
           color: planet.visual?.color ?? 0x888888,
           metalness: 0.05, roughness: 0.7,

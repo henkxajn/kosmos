@@ -137,7 +137,7 @@ export const TECHS = {
     branch:      'mining',
     tier:        3,
     cost:        { research: 250 },
-    requires:    ['orbital_survey', 'deep_drilling'],
+    requires:    ['rocketry', 'deep_drilling'],
     effects: [
       { type: 'unlockBuilding', buildingId: 'orbital_mine' },
       { type: 'buildingLevelCap', maxLevel: 10 },
@@ -443,7 +443,7 @@ export const TECHS = {
     branch:      'civil',
     tier:        3,
     cost:        { research: 250 },
-    requires:    ['colonization'],
+    requires:    ['colonization', 'bureaucracy'],
     effects: [
       { type: 'unlockFeature', feature: 'trade_routes' },
       { type: 'unlockShip', shipId: 'heavy_freighter' },
@@ -801,7 +801,7 @@ export const TECHS = {
     branch:      'defense',
     tier:        5,
     cost:        { research: 1000 },
-    requires:    ['planetary_defense', 'zero_point_energy'],
+    requires:    ['planetary_defense', 'antimatter_containment'],
     requiresDiscovery: 'manipulacja_pol',
     effects: [
       { type: 'shipSurvival', amount: 1.0 },
@@ -820,7 +820,7 @@ export const TECHS = {
     branch:      'energy',
     tier:        3,
     cost:        { research: 500 },
-    requires:    ['nuclear_power', 'exotic_materials'],
+    requires:    ['nuclear_power', 'data_networks'],
     effects: [
       { type: 'unlockCommodity', commodityId: 'quantum_processors' },
     ],

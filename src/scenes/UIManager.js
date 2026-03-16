@@ -153,7 +153,7 @@ export class UIManager {
     this._energyMax       = 100;
     this._hoverAction     = null;
     this._audioEnabled    = true;
-    this._musicEnabled    = true;
+    this._musicEnabled    = window.KOSMOS?.audioSystem?.isMusicEnabled ?? true;
     this._notifications   = [];
     this._confirmDialog   = null;
     this._gameOverData    = null;   // { reason, planetName } — ekran końca gry

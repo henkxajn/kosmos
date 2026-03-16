@@ -15,6 +15,7 @@ import { resolveTextureType, loadPlanetTextures, loadStarTextures, hashCode, TEX
 import { RegionGenerator }    from '../map/RegionSystem.js';
 import { BiomeMapGenerator }  from './BiomeMapGenerator.js';
 import { PlanetShader }       from './PlanetShader.js';
+import { GasGiantShader }    from './GasGiantShader.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -787,11 +788,22 @@ export class ThreeRenderer {
     const group = new THREE.Group();
     group.position.set(S(planet.x), 0, S(planet.y));
 
-    // Materiał: RTT bake dla rocky/ice (proceduralny diffuse z PlanetShader),
-    // PBR PNG dla gas, fallback solid color
+    // Materiał: RTT bake — proceduralny diffuse
+    // Gas giganty: GasGiantShader (pasy + burze), rocky/ice: PlanetShader (biomy)
     const isGas = planet.planetType === 'gas';
     let material;
-    if (!isGas) {
+    if (isGas) {
+      // RTT bake — proceduralny gas giant (diffuse + normal + roughness)
+      const baked = GasGiantShader.bakeGasGiantTextures(planet, this.renderer);
+      if (baked) {
+        material = new THREE.MeshStandardMaterial({
+          map:          baked.diffuse,
+          normalMap:    baked.normal,
+          roughnessMap: baked.roughness,
+          metalness:    0.0,
+        });
+      }
+    } else {
       // RTT bake — proceduralny diffuse z BiomeMap + PlanetShader
       const bakedDiffuse = this._bakePlanetTexture(planet);
       if (bakedDiffuse) {
@@ -812,26 +824,18 @@ export class ThreeRenderer {
         });
       }
     }
-    // Fallback: gas lub bake failed → PBR PNG
+    // Fallback: bake failed → PBR PNG
     if (!material) {
       const texType = resolveTextureType(planet);
       if (texType) {
         const variant = (seed % TEXTURE_VARIANTS) + 1;
         const maps    = loadPlanetTextures(texType, variant);
-        const matOpts = {
+        material = new THREE.MeshStandardMaterial({
           map:          maps.diffuse,
           normalMap:    maps.normal,
           roughnessMap: maps.roughness,
           metalness:    isGas ? 0.0 : 0.05,
-        };
-        // Gas giganty: lekki emissive żeby nocna strona nie była czarna
-        // (wewnętrzne ciepło planety + odbite światło od pierścieni/księżyców)
-        if (isGas) {
-          matOpts.emissiveMap      = maps.diffuse;
-          matOpts.emissive         = new THREE.Color(0xffffff);
-          matOpts.emissiveIntensity = 0.07;
-        }
-        material = new THREE.MeshStandardMaterial(matOpts);
+        });
       } else {
         material = new THREE.MeshStandardMaterial({
           color: planet.visual?.color ?? 0x888888,
@@ -976,29 +980,36 @@ export class ThreeRenderer {
     mesh.geometry = new THREE.SphereGeometry(r, 48, 48);
 
     // Odtwórz materiał z odpowiednimi teksturami
-    const texType = resolveTextureType(planet);
     mesh.material.dispose();
-    if (texType) {
-      const variant = (seed % TEXTURE_VARIANTS) + 1;
-      const maps    = loadPlanetTextures(texType, variant);
-      const isGas = planet.planetType === 'gas';
-      const matOpts = {
-        map:          maps.diffuse,
-        normalMap:    maps.normal,
-        roughnessMap: maps.roughness,
-        metalness:    isGas ? 0.0 : 0.05,
-      };
-      if (isGas) {
-        matOpts.emissiveMap      = maps.diffuse;
-        matOpts.emissive         = new THREE.Color(0xffffff);
-        matOpts.emissiveIntensity = 0.07;
+    const isGas = planet.planetType === 'gas';
+    if (isGas) {
+      // Gas giant — procedural RTT bake
+      const baked = GasGiantShader.bakeGasGiantTextures(planet, this.renderer);
+      if (baked) {
+        mesh.material = new THREE.MeshStandardMaterial({
+          map: baked.diffuse, normalMap: baked.normal,
+          roughnessMap: baked.roughness, metalness: 0.0,
+        });
+      } else {
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: planet.visual?.color ?? 0x888888, metalness: 0.0, roughness: 0.6,
+        });
       }
-      mesh.material = new THREE.MeshStandardMaterial(matOpts);
     } else {
-      mesh.material = new THREE.MeshStandardMaterial({
-        color: planet.visual?.color ?? 0x888888,
-        metalness: 0.05, roughness: 0.7,
-      });
+      const texType = resolveTextureType(planet);
+      if (texType) {
+        const variant = (seed % TEXTURE_VARIANTS) + 1;
+        const maps    = loadPlanetTextures(texType, variant);
+        mesh.material = new THREE.MeshStandardMaterial({
+          map: maps.diffuse, normalMap: maps.normal,
+          roughnessMap: maps.roughness, metalness: 0.05,
+        });
+      } else {
+        mesh.material = new THREE.MeshStandardMaterial({
+          color: planet.visual?.color ?? 0x888888,
+          metalness: 0.05, roughness: 0.7,
+        });
+      }
     }
   }
 

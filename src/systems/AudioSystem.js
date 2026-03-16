@@ -24,6 +24,8 @@ const MUSIC_TRACKS = {
 const MUSIC_FADE_IN  = 2.0;  // sekundy fade-in
 const MUSIC_FADE_OUT = 1.5;  // sekundy fade-out
 
+const MUSIC_STORAGE_KEY = 'kosmos_music_enabled';
+
 export class AudioSystem {
   constructor() {
     this._ctx         = null;   // AudioContext (lazy init)
@@ -32,7 +34,11 @@ export class AudioSystem {
     this._volume      = 0.40;   // głośność efektów (0-1)
     this._musicVolume = 0.25;   // głośność muzyki (0-1) — cichsza niż efekty
     this._enabled     = true;   // false = mute efekty
-    this._musicEnabled = true;  // false = mute muzyka
+
+    // Przywróć stan muzyki z localStorage
+    let savedMusic = true;
+    try { const v = localStorage.getItem(MUSIC_STORAGE_KEY); if (v === 'false') savedMusic = false; } catch { /* ignoruj */ }
+    this._musicEnabled = savedMusic;
 
     // ── Stan muzyki ──────────────────────────────────────────────
     this._musicBuffers = {};    // cache zdekodowanych AudioBuffer per trackId
@@ -41,6 +47,12 @@ export class AudioSystem {
     this._musicPlaying = false; // czy gra
     this._currentTrackId = null; // aktualnie grający trackId
     this._musicPausedByGame = false; // czy wyciszony przez pauzę gry
+
+    // Zamknij AudioContext przy zamykaniu strony
+    window.addEventListener('beforeunload', () => {
+      this._forceStopMusic();
+      if (this._ctx) { try { this._ctx.close(); } catch { /* ignoruj */ } }
+    });
 
     // ── Subskrypcje ──────────────────────────────────────────────
     EventBus.on('body:collision', ({ type }) => {
@@ -141,22 +153,17 @@ export class AudioSystem {
   // ── Mute / unmute muzyki ───────────────────────────────────
   toggleMusic() {
     this._musicEnabled = !this._musicEnabled;
-    if (this._musicGain && this._ctx) {
-      const now = this._ctx.currentTime;
-      this._musicGain.gain.cancelScheduledValues(now);
-      if (this._musicEnabled) {
-        // Fade-in
-        this._musicGain.gain.setValueAtTime(0.001, now);
-        this._musicGain.gain.exponentialRampToValueAtTime(this._musicVolume, now + MUSIC_FADE_IN);
-        // Autostart jeśli nie gra
-        if (!this._musicPlaying && this._currentTrackId && this._musicBuffers[this._currentTrackId]) {
-          this._startMusicPlayback();
-        }
-      } else {
-        // Fade-out
-        this._musicGain.gain.setValueAtTime(this._musicGain.gain.value || 0.001, now);
-        this._musicGain.gain.exponentialRampToValueAtTime(0.001, now + MUSIC_FADE_OUT);
+    // Persystuj stan do localStorage
+    try { localStorage.setItem(MUSIC_STORAGE_KEY, String(this._musicEnabled)); } catch { /* ignoruj */ }
+
+    if (this._musicEnabled) {
+      // Włącz muzykę — uruchom playback jeśli jest wybrany utwór
+      if (this._currentTrackId && this._musicBuffers[this._currentTrackId]) {
+        this._startMusicPlayback();
       }
+    } else {
+      // Wyłącz muzykę — całkowicie zatrzymaj źródło (nie tylko wycisz gain)
+      this._forceStopMusic();
     }
     EventBus.emit('music:toggled', { enabled: this._musicEnabled });
   }
@@ -284,6 +291,19 @@ export class AudioSystem {
     this._musicPlaying = false;
     this._musicPausedByGame = false;
     console.log('[AudioSystem] ⏹ Muzyka zatrzymana');
+  }
+
+  /** Natychmiastowe zatrzymanie muzyki — bez fade-out (np. toggle off, unload) */
+  _forceStopMusic() {
+    if (this._musicSource) {
+      try { this._musicSource.stop(); } catch { /* ignoruj */ }
+      this._musicSource = null;
+    }
+    this._musicPlaying = false;
+    this._musicPausedByGame = false;
+    if (this._musicGain) {
+      try { this._musicGain.gain.cancelScheduledValues(0); this._musicGain.gain.value = 0; } catch { /* ignoruj */ }
+    }
   }
 
   // ── Prymitywy dźwiękowe ──────────────────────────────────────

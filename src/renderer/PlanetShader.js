@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { hashCode } from './PlanetTextureUtils.js';
 
 // ── Deterministyczny PRNG (mulberry32) ────────────────────────────────────────
-function mulberry32(seed) {
+export function mulberry32(seed) {
   let s = seed | 0;
   return () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
@@ -55,15 +55,8 @@ const TYPE_PRESETS = {
   },
 };
 
-// ── Wspólny kod GLSL: uniformy biome, noise, biomeColor ──────────────────────
-const GLSL_LIB = /* glsl */ `
-uniform sampler2D uBiomeMap;
-uniform vec3 uSeed;
-uniform vec3 uColorTint;
-uniform float uNoiseFreqMult;
-uniform float uWarpStrength;
-uniform float uPolarCap;
-
+// ── Wspólne funkcje noise GLSL (eksportowane — współdzielone z GasGiantShader) ──
+export const GLSL_NOISE_LIB = /* glsl */ `
 // ── Simplex noise 2D — Stefan Gustavson (public domain) ──────────────────────
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec2 mod289(vec2 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -103,6 +96,18 @@ float sphereNoise(vec3 p, float scale) {
        + snoise(p.xz * scale) * w.y
        + snoise(p.xy * scale) * w.z;
 }
+`;
+
+// ── Wspólny kod GLSL: uniformy biome, noise, biomeColor ──────────────────────
+const GLSL_LIB = /* glsl */ `
+uniform sampler2D uBiomeMap;
+uniform vec3 uSeed;
+uniform vec3 uColorTint;
+uniform float uNoiseFreqMult;
+uniform float uWarpStrength;
+uniform float uPolarCap;
+
+${GLSL_NOISE_LIB}
 
 // ── Kolor bazowy biomu (if/else — WebGL 1 kompatybilne) ──────────────────────
 vec3 biomeColor(float bId, float height, float humidity) {
@@ -382,7 +387,7 @@ void main() {
 `;
 
 // ── Helper: losowa wartość z zakresu ──────────────────────────────────────────
-function rngRange(rng, min, max) { return min + rng() * (max - min); }
+export function rngRange(rng, min, max) { return min + rng() * (max - min); }
 
 // ── Wspólna logika generowania parametrów presetu ────────────────────────────
 function _resolvePresetParams(planet) {
