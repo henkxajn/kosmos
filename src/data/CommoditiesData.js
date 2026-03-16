@@ -344,6 +344,34 @@ export const COMMODITIES = {
     isConsumerGood: true, consumptionLayer: 'luxury',
   },
 
+  // ── Tier 2 — nowe komponenty (Etap 38) ────────────────────────────────────
+
+  composite_alloy: {
+    id:          'composite_alloy',
+    namePL:      'Stop Kompozytowy',
+    icon:        '🔩',
+    tier:        2,
+    recipe:      { Ti: 6, Fe: 4, Cu: 3 },
+    baseTime:    0.5,
+    weight:      3.0,
+    description: 'Lekki, trwały stop — potrzebny do statków Gen II',
+    isConsumerGood: false, consumptionLayer: null,
+    requiresTech: 'advanced_materials',
+  },
+
+  bio_samples: {
+    id:          'bio_samples',
+    namePL:      'Próbki Biologiczne',
+    icon:        '🧫',
+    tier:        2,
+    recipe:      { C: 6, water: 4, food: 3 },
+    baseTime:    0.5,
+    weight:      1.0,
+    description: 'Materiał biologiczny do badań genetycznych i medycyny',
+    isConsumerGood: false, consumptionLayer: null,
+    requiresTech: 'genetic_engineering',
+  },
+
   // ── Tier 3 — zaawansowana technologia ─────────────────────────────────────
 
   semiconductors: {
@@ -392,6 +420,71 @@ export const COMMODITIES = {
     weight:      0.3,
     description: 'Filtry nanotechnologiczne — oczyszczanie powietrza i wody, terraforming',
     isConsumerGood: false, consumptionLayer: null,
+    requiresTech: 'nanofabrication',
+  },
+
+  power_cells_mk2: {
+    id:          'power_cells_mk2',
+    namePL:      'Ogniwa Zasilające Mk2',
+    icon:        '🔋⚡',
+    tier:        3,
+    recipe:      { Li: 8, Cu: 6, Si: 4, electronics: 2 },
+    baseTime:    1.5,
+    weight:      2.0,
+    description: 'Ogniwa nowej generacji — 2× pojemność, paliwo statków Gen II',
+    isConsumerGood: false, consumptionLayer: null,
+    requiresTech: 'battery_tech',
+  },
+
+  exotic_alloy: {
+    id:          'exotic_alloy',
+    namePL:      'Stop Egzotyczny',
+    icon:        '✨',
+    tier:        3,
+    recipe:      { Ti: 6, W: 4, Pt: 3, Xe: 2 },
+    baseTime:    3.0,
+    weight:      2.5,
+    description: 'Zaawansowany stop z egzotycznych metali — statki Gen III+, budynki T4+',
+    isConsumerGood: false, consumptionLayer: null,
+    requiresTech: 'exotic_materials',
+  },
+
+  quantum_processors: {
+    id:          'quantum_processors',
+    namePL:      'Procesory Kwantowe',
+    icon:        '⚛💻',
+    tier:        3,
+    recipe:      { Si: 8, Pt: 4, Xe: 3, Nt: 2 },
+    baseTime:    4.0,
+    weight:      0.5,
+    description: 'Procesory kwantowe — AI Core, obliczenia kwantowe',
+    isConsumerGood: false, consumptionLayer: null,
+    requiresTech: 'quantum_physics',
+  },
+
+  fusion_cells: {
+    id:          'fusion_cells',
+    namePL:      'Ogniwa Fuzyjne',
+    icon:        '🔆🔋',
+    tier:        3,
+    recipe:      { Li: 6, Ti: 4, fusion_cores: 1 },
+    baseTime:    2.0,
+    weight:      2.5,
+    description: 'Ogniwa fuzyjne — paliwo statków Gen III',
+    isConsumerGood: false, consumptionLayer: null,
+    requiresTech: 'fusion_drives',
+  },
+
+  superconductors: {
+    id:          'superconductors',
+    namePL:      'Nadprzewodniki',
+    icon:        '❄🔌',
+    tier:        3,
+    recipe:      { Pt: 6, Cu: 4, W: 3 },
+    baseTime:    3.0,
+    weight:      1.5,
+    description: 'Materiały nadprzewodzące — statki Gen IV, zaawansowana elektronika',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   // ── Tier 4 — technologia przełomowa ───────────────────────────────────────
@@ -416,8 +509,24 @@ export const COMMODITIES = {
     recipe:      { Nt: 4, Xe: 4, Pt: 3, Li: 2 },
     baseTime:    7.5,
     weight:      0.5,
-    description: 'Ogniwa antymaterii — napęd FTL i mega-źródło energii',
+    description: 'Ogniwa antymaterii — paliwo statków Gen IV i mega-źródło energii',
     isConsumerGood: false, consumptionLayer: null,
+    requiresTech: 'antimatter_containment',
+  },
+
+  // ── Tier 5 — technologia endgame ─────────────────────────────────────────
+
+  warp_cores: {
+    id:          'warp_cores',
+    namePL:      'Rdzenie Warp',
+    icon:        '🌀',
+    tier:        5,
+    recipe:      { quantum_cores: 2, antimatter_cells: 2, Ti: 8 },
+    baseTime:    10.0,
+    weight:      3.0,
+    description: 'Rdzenie napędu skokowego — paliwo statków Gen V',
+    isConsumerGood: false, consumptionLayer: null,
+    requiresTech: 'warp_drive',
   },
 };
 
@@ -455,6 +564,14 @@ export const COMMODITY_SHORT = {
   nanotech_filters:   'Nanofiltr.',
   quantum_cores:      'Rdzenie Q',
   antimatter_cells:   'Antymat.',
+  composite_alloy:    'St.komp.',
+  bio_samples:        'Próbki bio',
+  power_cells_mk2:    'Ogniwa Mk2',
+  exotic_alloy:       'St.egzot.',
+  quantum_processors: 'Proc.Q',
+  fusion_cells:       'Ogn.fuz.',
+  superconductors:    'Nadprzew.',
+  warp_cores:         'Rdz.warp',
 };
 
 // ── Pomocniki ───────────────────────────────────────────────────────────────
@@ -467,9 +584,12 @@ export const COMMODITY_BY_TIER = {
       'habitat_modules', 'water_recyclers', 'robots',
       'prefab_mine', 'prefab_solar_farm', 'prefab_habitat', 'prefab_autonomous_mine',
       'prefab_autonomous_solar_farm', 'prefab_spaceport', 'prefab_autonomous_spaceport',
-      'personal_electronics', 'gourmet_food'],
-  3: ['semiconductors', 'ion_thrusters', 'fusion_cores', 'nanotech_filters'],
+      'personal_electronics', 'gourmet_food',
+      'composite_alloy', 'bio_samples'],
+  3: ['semiconductors', 'ion_thrusters', 'fusion_cores', 'nanotech_filters',
+      'power_cells_mk2', 'exotic_alloy', 'quantum_processors', 'fusion_cells', 'superconductors'],
   4: ['quantum_cores', 'antimatter_cells'],
+  5: ['warp_cores'],
 };
 
 // Formatuj recepturę jako czytelny string
@@ -514,4 +634,12 @@ export const STARTING_COMMODITIES = {
   nanotech_filters:   0,
   quantum_cores:      0,
   antimatter_cells:   0,
+  composite_alloy:    0,
+  bio_samples:        0,
+  power_cells_mk2:    0,
+  exotic_alloy:       0,
+  quantum_processors: 0,
+  fusion_cells:       0,
+  superconductors:    0,
+  warp_cores:         0,
 };

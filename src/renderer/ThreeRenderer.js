@@ -1872,14 +1872,23 @@ export class ThreeRenderer {
   _addVesselSprite(vessel) {
     if (this._vessels.has(vessel.id)) return;
 
-    // Kolor wg typu statku
+    // Kolor wg generacji statku (trail + sprite)
+    const GEN_COLORS = { 1: 0xffffff, 2: 0x4488ff, 3: 0xff44aa, 4: 0xffdd44, 5: 0x44ffdd };
     const typeColors = {
-      science_vessel:  0x4488ff,
-      colony_ship:     0xff8800,
-      cargo_ship:      0x44cc66,
-      heavy_freighter: 0x88aa44,
+      science_vessel:      0x4488ff,
+      colony_ship:         0xff8800,
+      cargo_ship:          0x44cc66,
+      heavy_freighter:     0x88aa44,
+      fast_scout:          0x4488ff,
+      bulk_freighter:      0x4488ff,
+      fusion_explorer:     0xff44aa,
+      heavy_colony_ship:   0xff44aa,
+      antimatter_cruiser:  0xffdd44,
+      starship:            0x44ffdd,
+      ark_ship:            0x44ffdd,
     };
-    const color = typeColors[vessel.shipId] ?? 0xaaaaaa;
+    const gen = vessel.generation ?? 1;
+    const color = typeColors[vessel.shipId] ?? GEN_COLORS[gen] ?? 0xaaaaaa;
 
     // Stwórz sprite (billboard) — kształt per typ statku
     const canvas = document.createElement('canvas');

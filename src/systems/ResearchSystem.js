@@ -49,6 +49,9 @@ export class ResearchSystem {
     const tech = TECHS[this.currentResearch];
     if (!tech) { this.currentResearch = null; return; }
 
+    // Efektywny koszt z discovery soft-gate + research cost multiplier
+    const effectiveCost = this.techSystem.getEffectiveCost(tech).research;
+
     // Pobierz punkty badań z puli research.amount (zużyj wyprodukowane)
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return;
@@ -58,7 +61,7 @@ export class ResearchSystem {
       if (!rs) continue;
       const available = rs.research?.amount ?? 0;
       if (available > 0) {
-        const needed = tech.cost.research - this.researchProgress - pointsThisTick;
+        const needed = effectiveCost - this.researchProgress - pointsThisTick;
         const drain = Math.min(available, Math.max(0, needed));
         if (drain > 0) {
           rs.research.amount -= drain;
@@ -68,7 +71,7 @@ export class ResearchSystem {
     }
     this.researchProgress += pointsThisTick;
 
-    if (this.researchProgress >= tech.cost.research) {
+    if (this.researchProgress >= effectiveCost) {
       this._completeTech(tech);
     }
   }
@@ -94,6 +97,7 @@ export class ResearchSystem {
     if (!this.currentResearch) return;
     const tech = TECHS[this.currentResearch];
     if (!tech) return;
+    const effectiveCost = this.techSystem.getEffectiveCost(tech).research;
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return;
 
@@ -102,7 +106,7 @@ export class ResearchSystem {
       if (!rs) continue;
       const available = rs.research?.amount ?? 0;
       if (available > 0) {
-        const needed = tech.cost.research - this.researchProgress;
+        const needed = effectiveCost - this.researchProgress;
         const drain = Math.min(available, Math.max(0, needed));
         if (drain > 0) {
           rs.research.amount -= drain;
@@ -112,7 +116,7 @@ export class ResearchSystem {
     }
 
     // Natychmiastowe odkrycie jeśli pula wystarczyła
-    if (this.researchProgress >= tech.cost.research) {
+    if (this.researchProgress >= effectiveCost) {
       this._completeTech(tech);
     }
   }
@@ -123,7 +127,8 @@ export class ResearchSystem {
     const tech = TECHS[techId];
     if (!tech) return false;
     if (this.techSystem.isResearched(techId)) return false;
-    return tech.requires.every(req => this.techSystem.isResearched(req));
+    // Deleguj do TechSystem.checkPrerequisites (obsługuje OR)
+    return this.techSystem.checkPrerequisites(tech);
   }
 
   queueTech(techId) {
@@ -158,14 +163,17 @@ export class ResearchSystem {
   getProgress() {
     if (!this.currentResearch) return 0;
     const tech = TECHS[this.currentResearch];
-    return tech ? this.researchProgress / tech.cost.research : 0;
+    if (!tech) return 0;
+    const effectiveCost = this.techSystem.getEffectiveCost(tech).research;
+    return this.researchProgress / effectiveCost;
   }
 
   getETA(currentYear) {
     if (!this.currentResearch) return null;
     const tech = TECHS[this.currentResearch];
     if (!tech) return null;
-    const remaining = tech.cost.research - this.researchProgress;
+    const effectiveCost = this.techSystem.getEffectiveCost(tech).research;
+    const remaining = effectiveCost - this.researchProgress;
     const rate = this.getTotalRate();
     if (rate <= 0) return Infinity;
     return currentYear + remaining / rate;

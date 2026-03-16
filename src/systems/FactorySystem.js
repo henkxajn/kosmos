@@ -157,7 +157,9 @@ export class FactorySystem {
     for (const [id, alloc] of this._allocations) {
       const def = COMMODITIES[id];
       if (!def) continue;
-      const speedMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
+      const scenarioMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
+      const techSpeedMult = window.KOSMOS?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
+      const speedMult = scenarioMult * techSpeedMult;
       const timePerUnit = def.baseTime / (alloc.points * speedMult); // lata na 1 szt.
       result.push({
         commodityId: id,
@@ -177,6 +179,18 @@ export class FactorySystem {
 
   // Pobierz kolejkę (do UI)
   getQueue() { return [...this._queue]; }
+
+  /**
+   * Filtruj receptury dostępne do produkcji (unlockCommodity z tech).
+   * Commodity z `requiresTech` widoczna dopiero po zbadaniu tech.
+   */
+  isRecipeAvailable(commodityId) {
+    const def = COMMODITIES[commodityId];
+    if (!def) return false;
+    if (!def.requiresTech) return true;
+    const techSys = window.KOSMOS?.techSystem;
+    return techSys?.isResearched(def.requiresTech) ?? false;
+  }
 
   // ── Serializacja ─────────────────────────────────────────────────────────
 
@@ -238,7 +252,9 @@ export class FactorySystem {
       if (!canProduce) continue;
 
       // Czas na 1 szt = baseTime / points; boosted: +50% szybkości
-      const speedMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
+      const scenarioMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
+      const techSpeedMult = window.KOSMOS?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
+      const speedMult = scenarioMult * techSpeedMult;
       const timePerUnit = def.baseTime / (alloc.points * speedMult);
       alloc.progress += deltaYears;
 

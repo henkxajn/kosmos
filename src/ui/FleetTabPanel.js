@@ -1007,16 +1007,47 @@ export class FleetTabPanel {
       sy: cy + (auY + panY) * scale,
     });
 
+    // ── Stałe kolory Tactical Map (niezależne od THEME) ──
+    const MAP_STAR_COLOR     = '#ffdd00';       // Słońce — zawsze żółte
+    const MAP_STAR_GLOW      = 'rgba(255,221,0,0.5)';
+    const MAP_COLONY_COLOR   = '#00dd55';       // Nasze kolonie — zawsze zielone
+    const MAP_UNEXPLORED     = '#ffffff';       // Nieodkryte ciała — białe
+    const MAP_EXPLORED_OTHER = '#eedd88';       // Odkryte ciała (nie kolonie) — jasnożółte
+    // Paleta kolorów planet (bez żółtego i zielonego — zarezerwowane)
+    const PLANET_PALETTE = [
+      '#ff6666', '#6699ff', '#cc66ff', '#ff9944', '#66cccc',
+      '#ff66aa', '#8888ff', '#cc8844', '#66aaff', '#dd77cc',
+      '#77bbbb', '#bb7777', '#9999dd', '#cc6699', '#7799cc',
+    ];
+
+    // Zbuduj zbiór ID kolonii
+    const colMgr = window.KOSMOS?.colonyManager;
+    const colonyIds = new Set();
+    if (colMgr) {
+      for (const col of colMgr.getAllColonies()) {
+        colonyIds.add(col.planetId);
+      }
+    }
+
+    // Deterministyczny kolor planety wg indeksu (pomija żółty/zielony)
+    const allPlanets = EntityManager.getByType('planet');
+    const _planetColorMap = new Map();
+    let _palIdx = 0;
+    for (const p of allPlanets) {
+      _planetColorMap.set(p.id, PLANET_PALETTE[_palIdx % PLANET_PALETTE.length]);
+      _palIdx++;
+    }
+
     // Gwiazda
     const star = EntityManager.getByType('star')[0];
     const { sx: starSx, sy: starSy } = toScreen(0, 0);
     if (starSx >= x - 20 && starSx <= x + w + 20 && starSy >= y - 20 && starSy <= y + h + 20) {
       const grad = ctx.createRadialGradient(starSx, starSy, 0, starSx, starSy, 16);
-      grad.addColorStop(0, 'rgba(255,200,80,0.6)');
-      grad.addColorStop(1, 'rgba(255,200,80,0)');
+      grad.addColorStop(0, MAP_STAR_GLOW);
+      grad.addColorStop(1, 'rgba(255,221,0,0)');
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.arc(starSx, starSy, 16, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffc850';
+      ctx.fillStyle = MAP_STAR_COLOR;
       ctx.beginPath(); ctx.arc(starSx, starSy, 4, 0, Math.PI * 2); ctx.fill();
     }
 
@@ -1037,23 +1068,27 @@ export class FleetTabPanel {
     }
 
     // Planety
-    for (const p of EntityManager.getByType('planet')) {
+    for (const p of allPlanets) {
       const px = p.physics?.x ?? 0; const py = p.physics?.y ?? 0;
       const { sx, sy } = toScreen(px, py);
       if (sx < x - 10 || sx > x + w + 10 || sy < y - 10 || sy > y + h + 10) continue;
 
       const r = Math.max(3, Math.min(8, scale * 0.15));
-      const isGas = p.planetType === 'gas';
-      // Kolory planet wg typu
-      const planetColor = isGas ? '#6688bb'
-        : p.explored ? (p.lifeScore > 50 ? '#55cc88' : '#aaccee')
-        : '#556677';
+      // Stałe kolory Tactical Map: kolonia=zielona, inna=paleta per planeta
+      const isColony = colonyIds.has(p.id);
+      const planetColor = isColony ? MAP_COLONY_COLOR : _planetColorMap.get(p.id);
       ctx.fillStyle = planetColor;
       ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+      // Obwódka kolonii
+      if (isColony) {
+        ctx.strokeStyle = 'rgba(0,221,85,0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(sx, sy, r + 2, 0, Math.PI * 2); ctx.stroke();
+      }
 
       // Etykieta
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = p.explored ? C.text : C.dim;
+      ctx.fillStyle = isColony ? MAP_COLONY_COLOR : (p.explored ? C.text : C.dim);
       ctx.fillText(_truncate(p.name, 8), sx + r + 3, sy + 3);
 
       this._hitZones.push({ x: sx - r - 2, y: sy - r - 2, w: r * 2 + 4, h: r * 2 + 4, type: 'map_body', data: { body: p } });
@@ -1064,7 +1099,8 @@ export class FleetTabPanel {
       const px = p.physics?.x ?? 0; const py = p.physics?.y ?? 0;
       const { sx, sy } = toScreen(px, py);
       if (sx < x - 4 || sx > x + w + 4 || sy < y - 4 || sy > y + h + 4) continue;
-      ctx.fillStyle = p.explored ? '#887766' : '#554433';
+      const isOutpost = colonyIds.has(p.id);
+      ctx.fillStyle = isOutpost ? MAP_COLONY_COLOR : (p.explored ? MAP_EXPLORED_OTHER : MAP_UNEXPLORED);
       ctx.beginPath(); ctx.arc(sx, sy, 1.5, 0, Math.PI * 2); ctx.fill();
       this._hitZones.push({ x: sx - 4, y: sy - 4, w: 8, h: 8, type: 'map_body', data: { body: p } });
     }
@@ -1074,7 +1110,8 @@ export class FleetTabPanel {
       const mx = m.physics?.x ?? 0; const my = m.physics?.y ?? 0;
       const { sx, sy } = toScreen(mx, my);
       if (sx < x - 4 || sx > x + w + 4 || sy < y - 4 || sy > y + h + 4) continue;
-      ctx.fillStyle = m.explored ? '#99aacc' : '#445566';
+      const isMoonColony = colonyIds.has(m.id);
+      ctx.fillStyle = isMoonColony ? MAP_COLONY_COLOR : (m.explored ? MAP_EXPLORED_OTHER : MAP_UNEXPLORED);
       ctx.beginPath(); ctx.arc(sx, sy, 1.5, 0, Math.PI * 2); ctx.fill();
       this._hitZones.push({ x: sx - 4, y: sy - 4, w: 8, h: 8, type: 'map_body', data: { body: m } });
     }

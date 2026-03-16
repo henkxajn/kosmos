@@ -453,6 +453,10 @@ export class VesselManager {
         automation:   v.automation ? { ...v.automation } : { autoReturn: false, autoRefuel: true },
         missionLog:   v.missionLog ? [...v.missionLog] : [],
         stats:        v.stats ? { ...v.stats } : { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 },
+        generation:   v.generation ?? 1,
+        fuelType:     v.fuelType ?? 'power_cells',
+        damaged:      v.damaged ?? false,
+        _repairProgress: v._repairProgress ?? 0,
       });
     }
     return {
@@ -494,6 +498,10 @@ export class VesselManager {
         automation:   vd.automation ? { ...vd.automation } : { autoReturn: false, autoRefuel: true },
         missionLog:   vd.missionLog ? [...vd.missionLog] : [],
         stats:        vd.stats ? { ...vd.stats } : { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 },
+        generation:   vd.generation ?? 1,
+        fuelType:     vd.fuelType ?? 'power_cells',
+        damaged:      vd.damaged ?? false,
+        _repairProgress: vd._repairProgress ?? 0,
       };
       this._vessels.set(vessel.id, vessel);
     }
@@ -536,11 +544,43 @@ export class VesselManager {
   }
 
   /**
-   * Tick gry — tankowanie + interpolacja pozycji.
+   * Tick gry — tankowanie + naprawa + interpolacja pozycji.
    */
   _tick(deltaYears) {
     this._tickRefueling(deltaYears);
+    this._tickRepair(deltaYears);
     this._updatePositions(deltaYears);
+  }
+
+  /**
+   * Naprawa uszkodzonych statków docked w kolonii ze stocznią.
+   * Wymagane: 1 rok docked → vessel.damaged = false.
+   */
+  _tickRepair(deltaYears) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return;
+
+    for (const vessel of this._vessels.values()) {
+      if (!vessel.damaged) continue;
+      if (vessel.position.state !== 'docked') continue;
+
+      // Sprawdź czy kolonia ma stocznię
+      const colony = colMgr.getColony(vessel.position.dockedAt);
+      if (!colony?.buildingSystem) continue;
+      let hasShipyard = false;
+      for (const entry of colony.buildingSystem._active.values()) {
+        if (entry.buildingId === 'shipyard') { hasShipyard = true; break; }
+      }
+      if (!hasShipyard) continue;
+
+      // Akumuluj czas naprawy
+      vessel._repairProgress = (vessel._repairProgress ?? 0) + deltaYears;
+      if (vessel._repairProgress >= 1.0) {
+        vessel.damaged = false;
+        vessel._repairProgress = 0;
+        addMissionLog(vessel, window.KOSMOS?.timeSystem?.gameTime ?? 0, 'Repair complete', 'success');
+      }
+    }
   }
 
   /**
@@ -563,22 +603,23 @@ export class VesselManager {
       const inv = colony.resourceSystem?.inventory;
       if (!inv) continue;
 
-      // Sprawdź power_cells w inventory — użyj bezpośrednio
-      const pcAvailable = inv.get('power_cells') ?? 0;
-      if (pcAvailable <= 0) {
-        // Brak power_cells — status refueling ale nie może ładować
+      // Sprawdź odpowiedni typ paliwa w inventory
+      const ft = vessel.fuelType ?? vessel.fuel?.fuelType ?? 'power_cells';
+      const fuelAvailable = inv.get(ft) ?? 0;
+      if (fuelAvailable <= 0) {
+        // Brak paliwa — status refueling ale nie może ładować
         if (vessel.status === 'idle') vessel.status = 'refueling';
         continue;
       }
 
       // Ile chcemy zatankować w tym ticku
-      const wantPC = REFUEL_RATE * deltaYears;
-      const canPC = Math.min(wantPC, pcAvailable, vessel.fuel.max - vessel.fuel.current);
+      const wantFuel = REFUEL_RATE * deltaYears;
+      const canFuel = Math.min(wantFuel, fuelAvailable, vessel.fuel.max - vessel.fuel.current);
 
-      if (canPC > 0) {
-        // Pobierz power_cells z inventory
-        colony.resourceSystem.spend({ power_cells: canPC });
-        refuel(vessel, canPC);
+      if (canFuel > 0) {
+        // Pobierz paliwo z inventory
+        colony.resourceSystem.spend({ [ft]: canFuel });
+        refuel(vessel, canFuel);
         vessel.status = needsRefuel(vessel) ? 'refueling' : 'idle';
       }
     }

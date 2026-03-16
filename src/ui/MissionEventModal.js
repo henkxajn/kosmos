@@ -10,7 +10,7 @@ import EntityManager from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
 import { THEME }     from '../config/ThemeConfig.js';
-import { t, getName } from '../i18n/i18n.js';
+import { t, getName, getLocale } from '../i18n/i18n.js';
 import {
   buildTerminalPopup,
   formatStatLine,
@@ -229,12 +229,36 @@ export function queueMissionEvent(config) {
 
 // ── Handlery EventBus ───────────────────────────────────────────────────
 
-function _onDisaster({ expedition: exp }) {
+function _onDisaster({ expedition: exp, survived }) {
   const vesselName = exp.vesselId ? _getVesselName(exp.vesselId) : null;
+
+  if (survived) {
+    // Statek przeżył dzięki emergency_protocols / force_fields
+    let stats = '';
+    stats += formatStatLine(t('missionPopup.mission'), _missionTypeLabel(exp.type));
+    if (vesselName) stats += formatStatLine(t('missionPopup.vessel'), vesselName, 'at-stat-neu');
+    stats += formatStatLine(t('missionPopup.target'), exp.targetName ?? '?');
+    stats += formatStatLineWithCursor(t('missionPopup.status'), t('missionPopup.damaged') ?? 'DAMAGED', 'at-stat-neu');
+
+    queueMissionEvent({
+      severity: 'warning',
+      barTitle: t('missionPopup.emergencyProtocol') ?? 'EMERGENCY',
+      barRight: _gameYear(),
+      svgKey: 'disaster',
+      svgLabel: (t('missionPopup.vesselDamaged') ?? 'VESSEL\nDAMAGED').replace(/\n/g, '<br>'),
+      prompt: '> EMERGENCY_PROTOCOL.EXE_',
+      headline: t('missionPopup.survived') ?? 'VESSEL SURVIVED',
+      description: t('missionPopup.survivedDesc') ?? 'Emergency protocols activated. Vessel damaged but crew safe.',
+      contentHTML: stats,
+    });
+    return;
+  }
+
+  const vesselName2 = exp.vesselId ? _getVesselName(exp.vesselId) : null;
 
   let stats = '';
   stats += formatStatLine(t('missionPopup.mission'), _missionTypeLabel(exp.type));
-  if (vesselName) stats += formatStatLine(t('missionPopup.vessel'), vesselName, 'at-stat-neg');
+  if (vesselName2) stats += formatStatLine(t('missionPopup.vessel'), vesselName2, 'at-stat-neg');
   stats += formatStatLine(t('missionPopup.target'), exp.targetName ?? '?');
   stats += formatStatLineWithCursor(t('missionPopup.status'), t('missionPopup.lost'), 'at-stat-neg');
 
@@ -426,6 +450,54 @@ function _onTimeStateChanged({ isPaused, multiplierIndex }) {
   }
 }
 
+// ── Handler odkrycia naukowego ────────────────────────────────────────
+
+function _onDiscoveryFound({ discovery, expedition, bodyId }) {
+  const disc = discovery;
+  const body = _findBody(bodyId);
+  const bodyName = body?.name ?? bodyId ?? '?';
+  const vesselName = expedition?.vesselId ? _getVesselName(expedition.vesselId) : null;
+
+  // Nazwa i opis odkrycia wg locale
+  const isEN = getLocale() === 'en';
+  const discName = isEN ? disc.nameEN : disc.namePL;
+  const discDesc = isEN ? disc.descriptionEN : disc.descriptionPL;
+
+  let stats = '';
+  stats += formatStatLine(t('missionPopup.target'), `${_typeIcon(body)} ${bodyName}`);
+  if (vesselName) stats += formatStatLine(t('missionPopup.vessel'), vesselName);
+
+  // Efekty odkrycia
+  const eff = disc.effects;
+  if (eff.research) stats += formatStatLine('Research', `+${eff.research}`, 'at-stat-pos');
+  if (eff.morale) stats += formatStatLine('Morale', `+${eff.morale}`, 'at-stat-pos');
+  if (eff.unlockTech && eff.unlockTech.length > 0) {
+    stats += formatSectionTitle(t('discovery.unlockedTech'));
+    for (const techId of eff.unlockTech) {
+      stats += formatStatLine('🔓', techId, 'at-stat-gld');
+    }
+  }
+  if (eff.deposit) {
+    stats += formatStatLine(t('missionPopup.deposit') ?? 'Deposit', `${eff.deposit} ★`, 'at-stat-pos');
+  }
+  if (eff.milestone) {
+    stats += formatStatLineWithCursor('🏆', t('discovery.milestone'), 'at-stat-gld');
+  }
+
+  queueMissionEvent({
+    severity: 'discovery',
+    barTitle: t('discovery.found'),
+    barRight: _gameYear(),
+    svgKey: 'recon',
+    svgLabel: t('discovery.scientificBreakthrough').replace(/\n/g, '<br>'),
+    fanfareText: `✦ ${discName.toUpperCase()} ✦`,
+    prompt: '> DISCOVERY.LOG_',
+    headline: discName,
+    description: discDesc,
+    contentHTML: stats,
+  });
+}
+
 // ── Inicjalizacja — podłączenie EventBus ────────────────────────────────
 
 export function initMissionEvents() {
@@ -434,5 +506,6 @@ export function initMissionEvents() {
   EventBus.on('expedition:missionReport',  _onMissionReport);
   EventBus.on('expedition:reconProgress',  _onReconProgress);
   EventBus.on('expedition:reconComplete',  _onReconComplete);
+  EventBus.on('discovery:found',           _onDiscoveryFound);
   EventBus.on('time:stateChanged',         _onTimeStateChanged);
 }

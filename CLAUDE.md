@@ -133,6 +133,7 @@ Projekt realizuje podejście **MDA (Mechanics → Dynamics → Aesthetics)**:
 - Dane (stałe obiektów) — `WIELKIE_LITERY`
 - Klasy — `PascalCase`
 - Prywatne metody — `_prefixUnderscore`
+- **Dwujęzyczność (PL + EN) — ZAWSZE**: każdy tekst widoczny w UI musi istnieć w obu wersjach językowych (polskiej i angielskiej). Dotyczy: nazw budynków (`namePL`/`nameEN`), technologii, surowców, komunikatów, tooltipów, etykiet przycisków, opisów w panelach. Przy dodawaniu nowej funkcji — od razu tworzyć oba warianty językowe.
 
 ---
 

@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 19;
+export const CURRENT_VERSION     = 20;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -34,6 +34,7 @@ const MIGRATIONS = {
   16: _migrateV16toV17,
   17: _migrateV17toV18,
   18: _migrateV18toV19,
+  19: _migrateV19toV20,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -620,5 +621,14 @@ function _migrateV17toV18(data) {
 // v18 → v19: mapa galaktyczna (galaxyData) — no-op
 // Brak galaxyData w starym save = generator odtworzy ze starego seed gwiazdy
 function _migrateV18toV19(data) {
+  return data;
+}
+
+// ── Migracja v19 → v20 ──────────────────────────────────────────────────────
+// Wielka reforma technologii (Etap 38): nowe drzewo tech (~55), nowe budynki,
+// commodities, statki, generacje. Stary stan c4x niekompatybilny — kasujemy.
+function _migrateV19toV20(data) {
+  if (data.civ4x) data.civ4x = null;
+  data.version = 20;
   return data;
 }

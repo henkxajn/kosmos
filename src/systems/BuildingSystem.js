@@ -64,6 +64,9 @@ export class BuildingSystem {
     // Flaga RegionSystem — dezaktywuje modyfikator polarny (region.r = 0 zawsze)
     this._isRegionMode = false;
 
+    // Referencja na HexGrid — potrzebna do adjacency bonus (ustawiana z PlanetGlobeScene)
+    this._grid = null;
+
     // Guard: tylko aktywna kolonia przetwarza żądania budowy/rozbiórki
     EventBus.on('planet:buildRequest', ({ tile, buildingId }) => {
       if (window.KOSMOS?.buildingSystem !== this) return;
@@ -150,9 +153,9 @@ export class BuildingSystem {
     const tileLike = { r: tileR, type: tileType, key: tileKey };
 
     const baseRates      = this._calcBaseRates(building, tileLike, level);
-    const effectiveRates = this._applyTechMultipliers(baseRates, building);
-
     const activeKey  = isCapital ? `capital_${tileKey}` : tileKey;
+    const effectiveRates = this._applyTechMultipliers(baseRates, building, activeKey);
+
     const producerId = isCapital ? `capital_${tileKey}` : `building_${tileKey}`;
 
     // Zarejestruj produkcję
@@ -188,6 +191,9 @@ export class BuildingSystem {
 
     // Invaliduj cache mine level jeśli zbudowano kopalnię
     if (building.isMine || buildingId === 'mine') this._mineLevelDirty = true;
+
+    // Przelicz stawki sąsiadów (adjacency bonus — Etap 38)
+    this._reapplyNeighborRates(tileKey);
   }
 
   // ── Budowa ──────────────────────────────────────────────────────────────
@@ -305,8 +311,10 @@ export class BuildingSystem {
       this.resourceSystem.spend(actualCost);
     }
 
-    // Czas budowy
-    const buildTime = building.buildTime ?? 0;
+    // Czas budowy (z mnożnikiem tech — AI Core itp.)
+    const rawBuildTime = building.buildTime ?? 0;
+    const btMult = this.techSystem?.getBuildTimeMultiplier() ?? 1.0;
+    const buildTime = rawBuildTime * btMult;
 
     if (buildTime > 0 && !isCapital) {
       // Budowa z opóźnieniem — dodaj do kolejki
@@ -897,7 +905,11 @@ export class BuildingSystem {
     if (tile.damaged)        return false;
     if (building.terrainOnly) return building.terrainOnly.includes(tile.type);
     if (building.terrainAny) return true;
-    return terrain.allowedCategories.includes(building.category);
+    // Sprawdź standardowe allowedCategories terenu
+    if (terrain.allowedCategories.includes(building.category)) return true;
+    // Sprawdź terrain unlock z technologii (Etap 38)
+    const techUnlocks = this.techSystem?.getTerrainUnlocks(tile.type) ?? [];
+    return techUnlocks.includes(building.category);
   }
 
   // Oblicz stawki bazowe z uwzględnieniem poziomu budynku
@@ -952,19 +964,79 @@ export class BuildingSystem {
     return base;
   }
 
-  _applyTechMultipliers(baseRates, building) {
+  /**
+   * Oblicz mnożnik adjacency bonus dla budynku na danym hexie.
+   * Warunek: zbadane urban_planning.
+   * Bonus: 1.0 + (count sąsiadów tej samej kategorii × adjMultiplier)
+   */
+  _calcAdjacencyBonus(tileKey, building) {
+    const adjMult = this.techSystem?.getAdjacencyMultiplier() ?? 0;
+    if (adjMult === 0 || !this._grid) return 1.0;
+
+    const parts = tileKey.split(',');
+    const q = parseInt(parts[0], 10);
+    const r = parseInt(parts[1], 10);
+    if (isNaN(q) || isNaN(r)) return 1.0;
+
+    const neighbors = this._grid.getNeighbors(q, r);
+    let count = 0;
+    for (const nb of neighbors) {
+      const nbKey = `${nb.q},${nb.r}`;
+      const nbEntry = this._active.get(nbKey);
+      if (nbEntry && nbEntry.building.category === building.category) {
+        count++;
+      }
+    }
+    return 1.0 + count * adjMult;
+  }
+
+  /**
+   * Przelicz stawki sąsiadów danego hexa (po budowie/rozbiórce).
+   */
+  _reapplyNeighborRates(tileKey) {
+    if (!this._grid) return;
+    const parts = tileKey.split(',');
+    const q = parseInt(parts[0], 10);
+    const r = parseInt(parts[1], 10);
+    if (isNaN(q) || isNaN(r)) return;
+
+    const neighbors = this._grid.getNeighbors(q, r);
+    for (const nb of neighbors) {
+      const nbKey = `${nb.q},${nb.r}`;
+      const entry = this._active.get(nbKey);
+      if (!entry) continue;
+      const newEffective = this._applyTechMultipliers(entry.baseRates, entry.building, nbKey);
+      entry.effectiveRates = newEffective;
+      if (hasKeys(newEffective) && this.resourceSystem) {
+        const pid = entry.producerId ?? `building_${nbKey}`;
+        this.resourceSystem.registerProducer(pid, newEffective);
+      }
+    }
+  }
+
+  _applyTechMultipliers(baseRates, building, tileKey = null) {
     if (!hasKeys(baseRates)) return {};
 
     // Autonomiczne budynki (popCost=0, isAutonomous) nie podlegają karze za brak POPów
     const isAutonomous = building.isAutonomous || building.popCost === 0;
-    const empPenalty = isAutonomous ? 1.0 : (this.civSystem?.employmentPenalty ?? 1.0);
+    // Singularność: wszystkie budynki autonomiczne
+    const isSingularity = this.techSystem?.isAllAutonomous() ?? false;
+    const empPenalty = (isAutonomous || isSingularity) ? 1.0 : (this.civSystem?.employmentPenalty ?? 1.0);
+
+    // Adjacency bonus (Etap 38) — mnożnik produkcji z sąsiadów tej samej kategorii
+    const adjBonus = tileKey ? this._calcAdjacencyBonus(tileKey, building) : 1.0;
+
+    // Autonomiczna wydajność bonus (AI tech)
+    const autoEfficiency = (isAutonomous && !isSingularity)
+      ? (this.techSystem?.getAutonomousEfficiency() ?? 1.0)
+      : 1.0;
 
     const effective = {};
     for (const key in baseRates) {
       const val = baseRates[key];
       if (val > 0) {
         const techMult = this.techSystem?.getProductionMultiplier(key) ?? 1.0;
-        effective[key] = val * techMult * this._civPenalty * empPenalty;
+        effective[key] = val * techMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency;
       } else if (val < 0) {
         const techMult = this.techSystem?.getConsumptionMultiplier(key) ?? 1.0;
         effective[key] = val * techMult;
@@ -977,7 +1049,7 @@ export class BuildingSystem {
 
   _reapplyAllRates() {
     for (const [activeKey, entry] of this._active) {
-      const newEffective = this._applyTechMultipliers(entry.baseRates, entry.building);
+      const newEffective = this._applyTechMultipliers(entry.baseRates, entry.building, activeKey);
       entry.effectiveRates = newEffective;
 
       if (hasKeys(newEffective) && this.resourceSystem) {

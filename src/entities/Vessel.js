@@ -49,11 +49,16 @@ export function createVessel(shipId, colonyId, opts = {}) {
       dockedAt: colonyId,  // id ciała gdy docked/orbiting
     },
 
-    // Paliwo (Tier 1: power_cells)
+    // Generacja i typ paliwa (z ShipsData)
+    generation: ship.generation ?? 1,
+    fuelType: ship.fuelType ?? 'power_cells',
+
+    // Paliwo
     fuel: {
       current: fuelCurrent,
       max: fuelMax,
-      consumption: ship.fuelPerAU ?? 0.5, // power_cells / AU
+      consumption: ship.fuelPerAU ?? 0.5, // jednostki paliwa / AU
+      fuelType: ship.fuelType ?? 'power_cells', // duplikat dla backward compat
     },
 
     // Misja (null gdy w hangarze)

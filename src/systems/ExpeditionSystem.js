@@ -1120,6 +1120,22 @@ export class ExpeditionSystem {
     const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
     if (roll < disasterThreshold) {
+      // Sprawdź emergency_protocols / force_fields — statek przeżywa uszkodzony
+      const survivalChance = window.KOSMOS?.techSystem?.getShipSurvivalChance?.() ?? 0;
+      if (survivalChance > 0 && Math.random() * 100 < survivalChance) {
+        // Statek przeżywa — uszkodzony, wraca do bazy
+        exp.status = 'orbiting';
+        exp.gained = {};
+        if (exp.vesselId && vMgr) {
+          const vessel = vMgr.getVessel(exp.vesselId);
+          if (vessel) {
+            vessel.damaged = true;
+            vMgr.arriveAtTarget(exp.vesselId);
+          }
+        }
+        EventBus.emit('expedition:disaster', { expedition: exp, survived: true });
+        return;
+      }
       // KATASTROFA — brak zarobku, załoga zaginiona → odblokuj POPy
       exp.status = 'completed';
       exp.gained = {};
@@ -1173,6 +1189,17 @@ export class ExpeditionSystem {
       expedition: exp, gained, multiplier,
       text: `${icon} ${targetName}: ${gainParts}${multStr}`,
     });
+
+    // Odkrycie naukowe — losuj po misji scientific
+    if (exp.type === 'scientific' && target) {
+      const distAU = target.orbital?.a ?? 1.0;
+      EventBus.emit('discovery:roll', {
+        expedition: exp,
+        bodyId: exp.targetId,
+        bodyType: target.type,
+        distanceAU: distAU,
+      });
+    }
 
     EventBus.emit('expedition:arrived', { expedition: exp, gained, multiplier });
   }
@@ -1689,7 +1716,11 @@ export class ExpeditionSystem {
       const vessel = vMgr.getVessel(vesselId);
       if (vessel) {
         const shipDef = SHIPS[vessel.shipId];
+        // Warp = natychmiastowy lot (bardzo duża prędkość → travelTime ≈ 0)
+        if (shipDef?.warpCapable) return 99999;
         base = shipDef?.speedAU ?? 1.0;
+        // Uszkodzony statek — 50% prędkości
+        if (vessel.damaged) base *= 0.5;
       }
     }
     // Mnożnik z technologii napędowych

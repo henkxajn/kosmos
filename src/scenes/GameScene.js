@@ -29,6 +29,7 @@ import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
 import { TradeRouteManager }    from '../systems/TradeRouteManager.js';
 import TradeLog                 from '../systems/TradeLog.js';
 import { ResearchSystem }      from '../systems/ResearchSystem.js';
+import { DiscoverySystem }     from '../systems/DiscoverySystem.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification, showImpactNotification } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
@@ -136,6 +137,7 @@ export class GameScene {
     this.randomEventSystem = new RandomEventSystem();
     this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
     this.researchSystem    = new ResearchSystem(this.techSystem);
+    this.discoverySystem   = new DiscoverySystem();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -155,6 +157,7 @@ export class GameScene {
     window.KOSMOS.timeSystem       = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
     window.KOSMOS.researchSystem   = this.researchSystem;
+    window.KOSMOS.discoverySystem  = this.discoverySystem;
 
     // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
     window.KOSMOS.galaxyData = savedData?.civ4x?.galaxyData
@@ -216,6 +219,10 @@ export class GameScene {
       // Przywróć VesselManager
       if (c4x.vesselManager) {
         this.vesselManager.restore(c4x.vesselManager);
+      }
+      // Przywróć DiscoverySystem
+      if (c4x.discoverySystem) {
+        this.discoverySystem.restore(c4x.discoverySystem);
       }
       // Walidacja misji — teraz VesselManager jest przywrócony, można sprawdzić statki
       this.expeditionSystem.validateMissions();
@@ -546,6 +553,10 @@ export class GameScene {
       mining_drills: 9999, hull_armor: 9999, habitat_modules: 9999, water_recyclers: 9999,
       robots: 9999, semiconductors: 9999, ion_thrusters: 9999,
       fusion_cores: 9999, nanotech_filters: 9999, quantum_cores: 9999, antimatter_cells: 9999,
+      // Nowe commodities (Etap 38)
+      composite_alloy: 9999, bio_samples: 9999, power_cells_mk2: 9999,
+      exotic_alloy: 9999, quantum_processors: 9999, fusion_cells: 9999,
+      superconductors: 9999, warp_cores: 9999,
       prefab_mine: 50, prefab_solar_farm: 50, prefab_habitat: 50, prefab_autonomous_mine: 50,
     });
   }
@@ -561,7 +572,7 @@ export class GameScene {
     const vMgr = window.KOSMOS?.vesselManager;
     const colony = this.colonyManager.getColony(planetId);
     if (!vMgr || !colony) return;
-    for (const shipId of ['science_vessel', 'colony_ship', 'cargo_ship']) {
+    for (const shipId of ['science_vessel', 'colony_ship', 'cargo_ship', 'fast_scout', 'fusion_explorer', 'antimatter_cruiser']) {
       const vessel = vMgr.createAndRegister(shipId, planetId);
       colony.fleet.push(vessel.id);
     }
@@ -809,7 +820,7 @@ export class GameScene {
     // Tech wymagane: orbital_survey → rocketry (launch_pad), exploration (shipyard)
     // Odblokowane od startu — gracz nie musi ich badać
     // Nuclear power NIE odblokowany — gracz musi sam zbadać
-    const techIds = ['orbital_survey', 'rocketry', 'exploration'];
+    const techIds = ['orbital_survey', 'rocketry', 'exploration', 'basic_computing', 'automation'];
     this.techSystem.restore({ researched: techIds });
   }
 

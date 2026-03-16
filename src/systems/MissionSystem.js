@@ -1153,6 +1153,23 @@ export class MissionSystem {
     const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
     if (roll < disasterThreshold) {
+      // Sprawdź emergency_protocols / force_fields — statek przeżywa uszkodzony
+      const survivalChance = window.KOSMOS?.techSystem?.getShipSurvivalChance?.() ?? 0;
+      if (survivalChance > 0 && Math.random() * 100 < survivalChance) {
+        // Statek przeżywa — uszkodzony, zostaje na orbicie
+        exp.status = 'orbiting';
+        exp.gained = {};
+        if (exp.vesselId && vMgr) {
+          const vessel = vMgr.getVessel(exp.vesselId);
+          if (vessel) {
+            vessel.damaged = true;
+            addMissionLog(vessel, this._gameYear, 'Protokół awaryjny — statek uszkodzony', 'warning');
+            vMgr.arriveAtTarget(exp.vesselId);
+          }
+        }
+        this._emit('mission:disaster', 'expedition:disaster', { expedition: exp, survived: true });
+        return;
+      }
       // KATASTROFA
       exp.status = 'completed';
       exp.gained = {};
@@ -1212,6 +1229,17 @@ export class MissionSystem {
       expedition: exp, gained, multiplier,
       text: `${icon} ${targetName}: ${gainParts}${multStr}`,
     });
+
+    // Odkrycie naukowe — losuj po misji scientific
+    if (exp.type === 'scientific' && target) {
+      const distAU = target.orbital?.a ?? 1.0;
+      EventBus.emit('discovery:roll', {
+        expedition: exp,
+        bodyId: exp.targetId,
+        bodyType: target.type,
+        distanceAU: distAU,
+      });
+    }
 
     this._emit('mission:arrived', 'expedition:arrived', { expedition: exp, gained, multiplier });
   }
@@ -1709,7 +1737,11 @@ export class MissionSystem {
       const vessel = vMgr.getVessel(vesselId);
       if (vessel) {
         const shipDef = SHIPS[vessel.shipId];
+        // Warp = natychmiastowy lot (bardzo duża prędkość → travelTime ≈ 0)
+        if (shipDef?.warpCapable) return 99999;
         base = shipDef?.speedAU ?? 1.0;
+        // Uszkodzony statek — 50% prędkości
+        if (vessel.damaged) base *= 0.5;
       }
     }
     // Mnożnik z technologii napędowych
