@@ -259,8 +259,8 @@ export class ThreeRenderer {
 
   // ── Oświetlenie ──────────────────────────────────────────────
   _buildLights() {
-    // Ambient — bardzo słabe wypełnienie (nocna strona ledwo widoczna)
-    this.scene.add(new THREE.AmbientLight(0x0a1812, 0.15));
+    // Ambient — słabe wypełnienie (nocna strona delikatnie widoczna)
+    this.scene.add(new THREE.AmbientLight(0x1a2832, 0.25));
     // PointLight od gwiazdy — decay=0: brak fizycznego tłumienia (r171 domyślnie decay=2
     // co przy intensity=2.0 i odl.=11j daje 2/121≈0.017 = czarny).
     // distance=0 = brak limitu zasięgu.
@@ -818,12 +818,20 @@ export class ThreeRenderer {
       if (texType) {
         const variant = (seed % TEXTURE_VARIANTS) + 1;
         const maps    = loadPlanetTextures(texType, variant);
-        material = new THREE.MeshStandardMaterial({
+        const matOpts = {
           map:          maps.diffuse,
           normalMap:    maps.normal,
           roughnessMap: maps.roughness,
           metalness:    isGas ? 0.0 : 0.05,
-        });
+        };
+        // Gas giganty: lekki emissive żeby nocna strona nie była czarna
+        // (wewnętrzne ciepło planety + odbite światło od pierścieni/księżyców)
+        if (isGas) {
+          matOpts.emissiveMap      = maps.diffuse;
+          matOpts.emissive         = new THREE.Color(0xffffff);
+          matOpts.emissiveIntensity = 0.07;
+        }
+        material = new THREE.MeshStandardMaterial(matOpts);
       } else {
         material = new THREE.MeshStandardMaterial({
           color: planet.visual?.color ?? 0x888888,
@@ -974,12 +982,18 @@ export class ThreeRenderer {
       const variant = (seed % TEXTURE_VARIANTS) + 1;
       const maps    = loadPlanetTextures(texType, variant);
       const isGas = planet.planetType === 'gas';
-      mesh.material = new THREE.MeshStandardMaterial({
+      const matOpts = {
         map:          maps.diffuse,
         normalMap:    maps.normal,
         roughnessMap: maps.roughness,
         metalness:    isGas ? 0.0 : 0.05,
-      });
+      };
+      if (isGas) {
+        matOpts.emissiveMap      = maps.diffuse;
+        matOpts.emissive         = new THREE.Color(0xffffff);
+        matOpts.emissiveIntensity = 0.07;
+      }
+      mesh.material = new THREE.MeshStandardMaterial(matOpts);
     } else {
       mesh.material = new THREE.MeshStandardMaterial({
         color: planet.visual?.color ?? 0x888888,
