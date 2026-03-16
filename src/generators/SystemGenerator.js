@@ -89,21 +89,22 @@ export class SystemGenerator {
     return weighted[Math.floor(Math.random() * weighted.length)];
   }
 
-  // Losuj liczbę planet wg rozkładu prawdopodobieństwa opartego na statystykach egzoplanet
-  // Kubełki: 1 planeta=1%, 2-3=15%, 3-4=30%, 4-6=20%, 6-9=24%, 9-11=10%
+  // Losuj liczbę planet wg rozkładu — pik na 8–11 (realistyczne systemy wieloplanetarne)
+  // Kubełki: 5-6=3%, 7=10%, 8=22%, 9=27%, 10=23%, 11=15%
   _rollPlanetCount() {
     if (this._powerTest) return 11;  // POWER TEST — zawsze 11 planet
     const r = Math.random() * 100;
-    if (r < 1)  return 1;
-    if (r < 16) return 2 + Math.floor(Math.random() * 2);   // 2 lub 3
-    if (r < 46) return 3 + Math.floor(Math.random() * 2);   // 3 lub 4
-    if (r < 66) return 4 + Math.floor(Math.random() * 3);   // 4, 5 lub 6
-    if (r < 90) return 6 + Math.floor(Math.random() * 4);   // 6, 7, 8 lub 9
-    return       9 + Math.floor(Math.random() * 3);          // 9, 10 lub 11
+    if (r < 3)  return 5 + Math.floor(Math.random() * 2);   // 5 lub 6
+    if (r < 13) return 7;                                     // 7
+    if (r < 35) return 8;                                     // 8
+    if (r < 62) return 9;                                     // 9
+    if (r < 85) return 10;                                    // 10
+    return       11;                                           // 11
   }
 
-  // Wygeneruj 1–11 protoplanet z rozkładem Titiusa-Bode'a
-  // a_n = 0.4 + 0.3 × 2^n (AU), skalowane do HZ gwiazdy, z perturbacją ±15%
+  // Wygeneruj 5–11 protoplanet z rozkładem Titiusa-Bode'a (baza 1.5)
+  // a_n = 0.4 + 0.3 × 1.5^n (AU), skalowane do HZ gwiazdy, z perturbacją ±15%
+  // Baza 1.5 (zamiast 2.0) daje gęstsze orbity → 12 slotów w 35 AU (zamiast 7 w 25 AU)
   // Gwarantuje przynajmniej jedną planetę w strefie HZ (wymagane dla emergencji życia)
   generateProtoPlanets(star) {
     const count = this._rollPlanetCount();
@@ -111,17 +112,18 @@ export class SystemGenerator {
     const planets = [];
 
     // Skalowanie Titius-Bode: n=2 wypada na środku HZ gwiazdy
-    // Bazowy TB: a_2 = 0.4 + 0.3 × 4 = 1.6 → skaluj do hzMid
+    // Bazowy TB: a_2 = 0.4 + 0.3 × 1.5^2 = 1.075 → skaluj do hzMid
+    const TB_BASE  = 1.5;                                      // baza wykładnicza (gęstsza niż klasyczne 2.0)
     const hzMid    = (hz.min + hz.max) / 2;
-    const tbBase_2 = 0.4 + 0.3 * Math.pow(2, 2);  // = 1.6
-    const hzScale  = hzMid / tbBase_2;              // skaluj cały wzorzec do HZ gwiazdy
+    const tbBase_2 = 0.4 + 0.3 * Math.pow(TB_BASE, 2);        // = 1.075
+    const hzScale  = hzMid / tbBase_2;                          // skaluj cały wzorzec do HZ gwiazdy
 
     // Licznik breathable atmosfer w układzie (max 2)
     const breathableCount = { value: 0 };
 
     for (let i = 0; i < count; i++) {
       // Titius-Bode z perturbacją ±15%
-      const tbRaw   = (0.4 + 0.3 * Math.pow(2, i)) * hzScale;
+      const tbRaw   = (0.4 + 0.3 * Math.pow(TB_BASE, i)) * hzScale;
       const perturb = 0.85 + Math.random() * 0.30;  // 0.85–1.15
       const a       = tbRaw * perturb;
 
@@ -146,18 +148,18 @@ export class SystemGenerator {
       else planets.splice(insertAt, 0, hzP);
     }
 
-    // ── Gwarancja ZEWNĘTRZNEJ planety (gas/ice) ──────────────────────
-    // Przy 4+ planetach, jeśli żadna nie leży za linią mrozu → dodaj gazowego/lodowego olbrzyma
-    // Daje różnorodność wizualną (chłodne planety = inne kolory) + cele ekspedycji
+    // ── Gwarancja ≥3 gazowych/lodowych olbrzymów ──────────────────────
+    // Realistyczne układy mają 3–4+ olbrzymy za linią mrozu (Jowisz/Saturn/Uran/Neptun)
     const frostLine = hz.max * 2.2;
-    const hasOuter = planets.some(p => p.orbital.a > frostLine);
-    if (!hasOuter && planets.length >= 4) {
-      // Umieść 1-2 planety w strefie gazowych olbrzymów
-      const outerCount = 1 + (Math.random() < 0.5 ? 1 : 0);
-      for (let oi = 0; oi < outerCount; oi++) {
-        const outerA = frostLine * (1.2 + Math.random() * 2.5); // 1.2–3.7× frostLine
+    const MIN_GAS_ICE = 3;
+    const gasIceCount = planets.filter(p => p.planetType === 'gas' || p.planetType === 'ice').length;
+    if (gasIceCount < MIN_GAS_ICE) {
+      const toAdd = MIN_GAS_ICE - gasIceCount;
+      for (let oi = 0; oi < toAdd; oi++) {
+        // Rozmieść za linią mrozu z rosnącymi odległościami
+        const outerA = frostLine * (1.3 + (oi + 1) * 0.8 + Math.random() * 1.5);
         if (outerA > GAME_CONFIG.MAX_ORBIT_AU) continue;
-        const outerType = Math.random() < 0.65 ? 'gas' : 'ice';
+        const outerType = Math.random() < 0.60 ? 'gas' : 'ice'; // 60% gas, 40% ice
         const outerP = this._makePlanet(star, outerA, planets.length + oi, outerType, breathableCount);
         planets.push(outerP);
       }
@@ -315,7 +317,8 @@ export class SystemGenerator {
   }
 
   // Typ planety na podstawie odległości od gwiazdy — model 5 stref
-  // Realistyczna dystrybucja: rocky blisko, gas daleko, brak gas w HZ
+  // Realistyczna dystrybucja: rocky blisko, gas/ice za linią mrozu
+  // Za frostLine niemal brak planet skalistych (jak w Układzie Słonecznym)
   getPlanetType(a, star) {
     const hz        = star.habitableZone;
     const frostLine = hz.max * 2.2;
@@ -327,12 +330,12 @@ export class SystemGenerator {
     if (a < hz.min * 0.85)   return r < 0.10 ? 'hot_rocky' : 'rocky';
     // 3. Habitowalna strefa (0.85–1.3 × HZ): 100% rocky (gwarancja)
     if (a <= hz.max * 1.3)   return 'rocky';
-    // 4. Strefa przejściowa (1.3×HZ – frost_line): mix rocky/ice/gas
-    if (a < frostLine)       return r < 0.20 ? 'gas' : (r < 0.60 ? 'rocky' : 'ice');
-    // 5. Zimna strefa (> frost_line) — 3 pod-strefy wg odległości
-    if (a < frostLine * 3)   return r < 0.50 ? 'gas' : (r < 0.80 ? 'ice' : 'rocky'); // bliższa: duże gazy
-    if (a < frostLine * 6)   return r < 0.30 ? 'gas' : (r < 0.80 ? 'ice' : 'rocky'); // dalsza: Neptun-like
-    return r < 0.30 ? 'ice' : 'rocky';  // bardzo daleko: lodowe/skaliste
+    // 4. Strefa przejściowa (1.3×HZ – frost_line): Mars-like, ale dopuszcza wczesne olbrzymy
+    if (a < frostLine)       return r < 0.20 ? 'gas' : (r < 0.45 ? 'ice' : 'rocky');
+    // 5. Zimna strefa (> frost_line) — 3 pod-strefy, dominacja gas/ice (brak rocky w kosmosie)
+    if (a < frostLine * 3)   return r < 0.60 ? 'gas' : (r < 0.95 ? 'ice' : 'rocky'); // Jowisz/Saturn
+    if (a < frostLine * 6)   return r < 0.30 ? 'gas' : (r < 0.95 ? 'ice' : 'rocky'); // Uran/Neptun
+    return r < 0.10 ? 'gas' : (r < 0.95 ? 'ice' : 'rocky');   // bardzo daleko: lodowe olbrzymy
   }
 
   // Masa planety (masy Ziemi) — zależy od typu i odległości (a) od gwiazdy

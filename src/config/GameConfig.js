@@ -19,7 +19,7 @@ export const GAME_CONFIG = {
 
   // Generacja układu planetarnego — liczba planet ustalana przez _rollPlanetCount() w SystemGenerator
   MIN_ORBIT_AU: 0.3,   // minimalna orbita od gwiazdy (AU)
-  MAX_ORBIT_AU: 25.0,  // maksymalna orbita (AU) — zwiększone dla układów 9–11 planet
+  MAX_ORBIT_AU: 35.0,  // maksymalna orbita (AU) — zwiększone dla układów 8–11 planet (Neptun ~30 AU)
 
   // Dysk protoplanetarny
   DISK_MIN_PLANETESIMALS: 40,
