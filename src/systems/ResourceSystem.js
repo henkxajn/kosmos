@@ -101,7 +101,8 @@ export class ResourceSystem {
     this.resources = this._buildLegacyProxy();
 
     // ── Nasłuch zdarzeń ──────────────────────────────────────────────────
-    EventBus.on('time:tick', ({ deltaYears }) => this._update(deltaYears));
+    // civDeltaYears = deltaYears × CIV_TIME_SCALE — produkcja/konsumpcja 4X biegną szybciej
+    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
 
     EventBus.on('resource:registerProducer', ({ id, rates }) => {
       if (window.KOSMOS?.resourceSystem !== this) return;

@@ -58,7 +58,8 @@ export class VesselManager {
     EventBus.on('fleet:shipCompleted', ({ planetId, shipId }) =>
       this._onShipCompleted(planetId, shipId));
 
-    EventBus.on('time:tick', ({ deltaYears }) =>
+    // civDeltaYears = deltaYears × CIV_TIME_SCALE — tankowanie i naprawa biegną szybciej
+    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) =>
       this._tick(deltaYears));
 
     EventBus.on('vessel:rename', ({ vesselId, name }) =>

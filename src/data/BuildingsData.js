@@ -54,7 +54,7 @@ export const BUILDINGS = {
     cost:        { Fe: 20, C: 10 },
     commodityCost: { steel_plates: 3, mining_drills: 2, power_cells: 1 },
     energyCost:  2,
-    buildTime:   0.375,    // lata gry
+    buildTime:   1.0,      // lata gry (efektywnie ~30s przy 1d/s dzięki CIV_TIME_SCALE)
     rates:       {},       // produkcja obliczana dynamicznie z deposits
     maintenance: { Fe: 1 },  // wiertła
     housing:     0,
@@ -78,7 +78,7 @@ export const BUILDINGS = {
     cost:        { Fe: 15, Si: 20, Cu: 8 },
     commodityCost: { steel_plates: 4, power_cells: 3, copper_wiring: 2 },
     energyCost:  0,
-    buildTime:   0.375,    // lata gry
+    buildTime:   1.0,      // lata gry (efektywnie ~30s przy 1d/s dzięki CIV_TIME_SCALE)
     rates:       { energy: 8 },
     maintenance: { Si: 1 },  // wymiana paneli
     housing:     0,
@@ -143,7 +143,7 @@ export const BUILDINGS = {
     cost:        { Fe: 10, C: 5 },
     commodityCost: { steel_plates: 2, polymer_composites: 1 },
     energyCost:  1,
-    buildTime:   0.25,     // lata gry
+    buildTime:   1.0,      // lata gry (efektywnie ~30s przy 1d/s dzięki CIV_TIME_SCALE)
     rates:       { food: 10 },
     maintenance: {},          // farma nie wymaga utrzymania
     housing:     0,
@@ -164,7 +164,7 @@ export const BUILDINGS = {
     cost:        { Fe: 15 },
     commodityCost: { steel_plates: 2, copper_wiring: 1 },
     energyCost:  1,
-    buildTime:   0.125,    // lata gry
+    buildTime:   1.0,      // lata gry (efektywnie ~30s przy 1d/s dzięki CIV_TIME_SCALE)
     rates:       { water: 6 },
     maintenance: {},          // studnia nie wymaga utrzymania
     housing:     0,
@@ -187,7 +187,7 @@ export const BUILDINGS = {
     cost:        { Fe: 25, Si: 10 },
     commodityCost: { steel_plates: 4, habitat_modules: 3, water_recyclers: 2, electronics: 1 },
     energyCost:  3,
-    buildTime:   0.5,      // lata gry
+    buildTime:   1.0,      // lata gry (efektywnie ~30s przy 1d/s dzięki CIV_TIME_SCALE)
     rates:       {},
     maintenance: { Fe: 1 },  // naprawy habitat
     housing:     3,

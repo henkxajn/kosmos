@@ -54,7 +54,10 @@ import EntityManager     from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
+import { GAME_CONFIG }   from '../config/GameConfig.js';
 import { t }             from '../i18n/i18n.js';
+
+const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE; // 12 — skala czasu cywilizacyjnego
 
 // Koszt ekspedycji mining/scientific (stały, niezależnie od celu)
 const LAUNCH_COST          = { Fe: 50, C: 20 };
@@ -463,9 +466,9 @@ export class ExpeditionSystem {
     // Zablokuj 2 POPy
     EventBus.emit('civ:lockPops', { amount: COLONY_CREW_COST });
 
-    // Czas podróży — colony_ship + mnożnik tech napędowych
+    // Czas podróży — colony_ship + mnożnik tech napędowych + CIV_TIME_SCALE
     const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
-    const colonySpeed = (SHIPS.colony_ship?.speedAU ?? 0.48) * techMult;
+    const colonySpeed = (SHIPS.colony_ship?.speedAU ?? 0.48) * techMult * CIV_TIME_SCALE;
     const travelTime  = parseFloat(Math.max(MIN_COLONY_TRAVEL, distance / colonySpeed).toFixed(3));
     const departYear  = this._gameYear;
 
@@ -1709,6 +1712,7 @@ export class ExpeditionSystem {
   }
 
   // Pobierz prędkość statku w AU/rok (z ShipsData lub domyślna)
+  // Uwzględnia CIV_TIME_SCALE — travelTime w gameTime jest CIV_TIME_SCALE× krótszy
   _getShipSpeed(vesselId) {
     const vMgr = window.KOSMOS?.vesselManager;
     let base = 1.0;
@@ -1725,7 +1729,7 @@ export class ExpeditionSystem {
     }
     // Mnożnik z technologii napędowych
     const techMult = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
-    return base * techMult;
+    return base * techMult * CIV_TIME_SCALE;
   }
 
   // Oblicz efektywne ryzyko katastrofy (%) z uwzględnieniem doświadczenia statku i tech

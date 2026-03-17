@@ -1007,11 +1007,12 @@ export class GameScene {
           this.threeRenderer._focusEntityId = null;
           this.cameraController.resetToCenter();
           break;
-        case 'Digit1': EventBus.emit('time:setMultiplier', { index: 1 }); EventBus.emit('time:play'); break;
-        case 'Digit2': EventBus.emit('time:setMultiplier', { index: 2 }); EventBus.emit('time:play'); break;
-        case 'Digit3': EventBus.emit('time:setMultiplier', { index: 3 }); EventBus.emit('time:play'); break;
-        case 'Digit4': EventBus.emit('time:setMultiplier', { index: 4 }); EventBus.emit('time:play'); break;
-        case 'Digit5': EventBus.emit('time:setMultiplier', { index: 5 }); EventBus.emit('time:play'); break;
+        case 'Digit1': EventBus.emit('time:setMultiplier', { index: 1 }); EventBus.emit('time:play'); break; // 1d/s
+        case 'Digit2': EventBus.emit('time:setMultiplier', { index: 2 }); EventBus.emit('time:play'); break; // 1t/s
+        case 'Digit3': EventBus.emit('time:setMultiplier', { index: 3 }); EventBus.emit('time:play'); break; // 1m/s
+        case 'Digit4': EventBus.emit('time:setMultiplier', { index: 4 }); EventBus.emit('time:play'); break; // 1r/s
+        case 'Digit5': EventBus.emit('time:setMultiplier', { index: 5 }); EventBus.emit('time:play'); break; // 10r/s
+        case 'Digit6': EventBus.emit('time:setMultiplier', { index: 6 }); EventBus.emit('time:play'); break; // 10kr/s
         case 'BracketLeft':  EventBus.emit('time:slower'); break;
         case 'BracketRight': EventBus.emit('time:faster'); break;
         case 'KeyQ': if (!window.KOSMOS?.civMode) EventBus.emit('action:stabilize');  break;

@@ -109,7 +109,8 @@ export class BuildingSystem {
     });
 
     // Tick: budowa + wydobycie surowców z deposits przez kopalnie
-    EventBus.on('time:tick', ({ deltaYears }) => {
+    // civDeltaYears = deltaYears × CIV_TIME_SCALE — mechaniki 4X biegną szybciej
+    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => {
       this._tickConstruction(deltaYears);
       this._tickMineExtraction(deltaYears);
     });

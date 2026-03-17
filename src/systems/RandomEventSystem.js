@@ -38,7 +38,8 @@ export class RandomEventSystem {
     this._gameYear = 0;
 
     // Nasłuch czasu
-    EventBus.on('time:tick', ({ deltaYears }) => this._update(deltaYears));
+    // civDeltaYears = deltaYears × CIV_TIME_SCALE — zdarzenia losowe biegną szybciej
+    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
     EventBus.on('time:display', ({ gameTime }) => { this._gameYear = gameTime; });
   }
 

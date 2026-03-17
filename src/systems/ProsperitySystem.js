@@ -53,7 +53,8 @@ export class ProsperitySystem {
   // ── Nasłuch zdarzeń ─────────────────────────────────────────────────────
 
   _setupListeners() {
-    EventBus.on('time:tick', ({ deltaYears }) => this._update(deltaYears));
+    // civDeltaYears = deltaYears × CIV_TIME_SCALE — prosperity biegnie szybciej
+    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
   }
 
   // ── Główna pętla ────────────────────────────────────────────────────────

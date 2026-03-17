@@ -860,7 +860,7 @@ export class UIManager {
     ctx.fillText(isPaused ? t('ui.play') : t('ui.pause'), W - 220, 20);
 
     LABELS.slice(1).forEach((label, i) => {
-      const bx = W - 160 + i * 34;
+      const bx = W - 175 + i * 29;
       const isActive = !isPaused && multiplierIndex === i + 1;
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = isActive ? C.title : C.text;

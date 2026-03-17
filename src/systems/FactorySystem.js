@@ -58,7 +58,8 @@ export class FactorySystem {
       else this.moveDown(index);
     });
 
-    EventBus.on('time:tick', ({ deltaYears }) => this._update(deltaYears));
+    // civDeltaYears = deltaYears × CIV_TIME_SCALE — produkcja commodities biegnie szybciej
+    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
   }
 
   // ── API publiczne ────────────────────────────────────────────────────────

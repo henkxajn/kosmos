@@ -104,7 +104,8 @@ export class CivilizationSystem {
     this._famineActive        = false;
 
     // ── Nasłuch zdarzeń ─────────────────────────────────────────────────
-    EventBus.on('time:tick', ({ deltaYears }) => this._update(deltaYears));
+    // civDeltaYears = deltaYears × CIV_TIME_SCALE — wzrost POP, kryzysy biegną szybciej
+    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
 
     // Zasoby — tylko aktywna kolonia nasłuchuje
     EventBus.on('resource:changed', ({ resources }) => {

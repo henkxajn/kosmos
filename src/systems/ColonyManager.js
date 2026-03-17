@@ -122,8 +122,8 @@ export class ColonyManager {
       }
     });
 
-    // Tick budowy statków (deltaYears)
-    EventBus.on('time:tick', ({ deltaYears }) => {
+    // Tick budowy statków — civDeltaYears = deltaYears × CIV_TIME_SCALE
+    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => {
       this._tickShipBuilds(deltaYears);
     });
 

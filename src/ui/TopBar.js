@@ -372,9 +372,9 @@ export class TopBar {
       playActive ? THEME.accent : THEME.textDim,
       playActive ? THEME.bgSecondary : null);
 
-    // Przyciski prędkości — kompaktowe
-    const speedLabels = [t('speed.1d'), t('speed.1m'), t('speed.1y'), t('speed.10y'), t('speed.10k')];
-    const speedBtnW = 22;
+    // Przyciski prędkości — kompaktowe (6 przycisków: 1d, 1t, 1m, 1r, 10r, 10k)
+    const speedLabels = [t('speed.1d'), t('speed.1w'), t('speed.1m'), t('speed.1y'), t('speed.10y'), t('speed.10k')];
+    const speedBtnW = 20;
     let sx = playX + playW + btnGap + 2;
     for (let i = 0; i < speedLabels.length; i++) {
       const isActive = !isPaused && multiplierIndex === i + 1;
@@ -584,10 +584,10 @@ export class TopBar {
       return true;
     }
 
-    // Przyciski prędkości
-    const speedBtnW = 22;
+    // Przyciski prędkości (6 przycisków)
+    const speedBtnW = 20;
     let sx = playX + playW + btnGap + 2;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       if (x >= sx && x <= sx + speedBtnW && y >= btnY && y <= btnY + btnH) {
         EventBus.emit('time:setMultiplier', { index: i + 1 });
         EventBus.emit('time:play');

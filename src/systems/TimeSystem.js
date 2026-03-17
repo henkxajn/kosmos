@@ -11,6 +11,8 @@
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
+const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE; // 12 — mechaniki 4X biegną szybciej
+
 export class TimeSystem {
   constructor() {
     this.gameTime        = 0;     // całkowity czas gry (lata)
@@ -60,6 +62,7 @@ export class TimeSystem {
 
     EventBus.emit('time:tick', {
       deltaYears,
+      civDeltaYears: deltaYears * CIV_TIME_SCALE,
       gameTime:   this.gameTime,
       multiplier: this.multiplier,
     });
