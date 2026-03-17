@@ -55,6 +55,9 @@ export class BuildingSystem {
     // Referencja na factorySystem (do punktów produkcji)
     this._factorySystem = null;
 
+    // ID planety (do filtrowania zdarzeń losowych)
+    this._planetId = null;
+
     // Flaga outpost — pomija POP w build/deploy/upgrade/activate
     this._isOutpost = false;
 
@@ -108,6 +111,14 @@ export class BuildingSystem {
       this._reapplyAllRates();
     });
 
+    // Przelicz raty po zdarzeniu losowym (production multiplier)
+    EventBus.on('randomEvent:occurred', ({ planetId }) => {
+      if (this._planetId && planetId === this._planetId) this._reapplyAllRates();
+    });
+    EventBus.on('randomEvent:expired', ({ planetId }) => {
+      if (this._planetId && planetId === this._planetId) this._reapplyAllRates();
+    });
+
     // Tick: budowa + wydobycie surowców z deposits przez kopalnie
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — mechaniki 4X biegną szybciej
     EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => {
@@ -120,6 +131,7 @@ export class BuildingSystem {
   setDeposits(deposits) { this._deposits = deposits; }
   setFactorySystem(fs) { this._factorySystem = fs; }
   setRegionMode(isRegion) { this._isRegionMode = !!isRegion; }
+  setPlanetId(id) { this._planetId = id; }
 
   // ── Sprawdź czy kolonia ma port kosmiczny ────────────────────────────────
   hasSpaceport() {
@@ -1037,7 +1049,11 @@ export class BuildingSystem {
       const val = baseRates[key];
       if (val > 0) {
         const techMult = this.techSystem?.getProductionMultiplier(key) ?? 1.0;
-        effective[key] = val * techMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency;
+        // Mnożnik z aktywnych zdarzeń losowych (per-kolonia)
+        const eventMult = this._planetId
+          ? (window.KOSMOS?.randomEventSystem?.getProductionMultiplierForColony(this._planetId, key) ?? 1.0)
+          : 1.0;
+        effective[key] = val * techMult * eventMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency;
       } else if (val < 0) {
         const techMult = this.techSystem?.getConsumptionMultiplier(key) ?? 1.0;
         effective[key] = val * techMult;

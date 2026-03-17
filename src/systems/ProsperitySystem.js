@@ -42,6 +42,9 @@ export class ProsperitySystem {
     this._satisfaction = {};       // satisfaction per good (0-1)
     this._layerScores = {};        // score per warstwa
 
+    // Bonusy prosperity z zdarzeń losowych: sourceId → { delta, remainingYears }
+    this._eventBonuses = new Map();
+
     // Akumulator czasu (roczne przeliczanie)
     this._accumYears = 0;
     this._lastRegisteredDemand = null;  // guard: unikaj re-rejestracji
@@ -89,6 +92,16 @@ export class ProsperitySystem {
 
     // 4. Oblicz prosperity score per warstwa
     this._calcLayerScores();
+
+    // 4b. Tick bonusów z zdarzeń losowych i dodaj do target
+    for (const [sourceId, bonus] of this._eventBonuses) {
+      bonus.remainingYears--;
+      if (bonus.remainingYears <= 0) this._eventBonuses.delete(sourceId);
+    }
+    const eventBonus = this.getEventBonusTotal();
+    if (eventBonus !== 0) {
+      this.targetProsperity = Math.max(0, Math.min(100, this.targetProsperity + eventBonus));
+    }
 
     // 5. Zastosuj inercję: prosperity dąży do target
     const delta = (this.targetProsperity - this.prosperity) * 0.15;
@@ -543,6 +556,24 @@ export class ProsperitySystem {
 
   // ── Metody publiczne ────────────────────────────────────────────────────
 
+  // ── Event bonuses (zdarzenia losowe) ────────────────────────────────
+
+  addEventBonus(sourceId, delta, durationYears) {
+    this._eventBonuses.set(sourceId, { delta, remainingYears: durationYears });
+  }
+
+  removeEventBonus(sourceId) {
+    this._eventBonuses.delete(sourceId);
+  }
+
+  getEventBonusTotal() {
+    let total = 0;
+    for (const bonus of this._eventBonuses.values()) {
+      total += bonus.delta;
+    }
+    return total;
+  }
+
   getGrowthMultiplier() {
     for (const effect of PROSPERITY_EFFECTS) {
       if (this.prosperity <= effect.maxProsperity) return effect.growthMult;
@@ -580,6 +611,11 @@ export class ProsperitySystem {
   // ── Serializacja ────────────────────────────────────────────────────────
 
   serialize() {
+    // Serializuj event bonuses jako plain object
+    const eventBonuses = {};
+    for (const [k, v] of this._eventBonuses) {
+      eventBonuses[k] = { delta: v.delta, remainingYears: v.remainingYears };
+    }
     return {
       prosperity: this.prosperity,
       targetProsperity: this.targetProsperity,
@@ -587,6 +623,7 @@ export class ProsperitySystem {
       epochScore: this.epochScore,
       consumerDemand: { ...this._consumerDemand },
       consumerProduction: { ...this._consumerProduction },
+      eventBonuses,
     };
   }
 
@@ -598,5 +635,12 @@ export class ProsperitySystem {
     this.epochScore = data.epochScore ?? 0;
     this._consumerDemand = data.consumerDemand ?? {};
     this._consumerProduction = data.consumerProduction ?? {};
+    // Przywróć event bonuses
+    this._eventBonuses = new Map();
+    if (data.eventBonuses) {
+      for (const [k, v] of Object.entries(data.eventBonuses)) {
+        this._eventBonuses.set(k, { delta: v.delta, remainingYears: v.remainingYears });
+      }
+    }
   }
 }

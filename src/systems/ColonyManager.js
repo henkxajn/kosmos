@@ -259,7 +259,10 @@ export class ColonyManager {
   registerHomePlanet(planet, resourceSystem, civSystem, buildingSystem = null) {
     // FactorySystem per-kolonia
     const factSys = new FactorySystem(resourceSystem);
-    if (buildingSystem) buildingSystem.setFactorySystem(factSys);
+    if (buildingSystem) {
+      buildingSystem.setFactorySystem(factSys);
+      buildingSystem.setPlanetId(planet.id);
+    }
 
     // ProsperitySystem per-kolonia
     const prospSys = new ProsperitySystem(resourceSystem, civSystem, this.techSystem, planet);
@@ -309,6 +312,7 @@ export class ColonyManager {
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
     bSys._requiresSpaceportFirst = true;  // nowa kolonia wymaga portu kosmicznego
     bSys.setDeposits(entity.deposits ?? []);
+    bSys.setPlanetId(planetId);
 
     // FactorySystem per-kolonia
     const factSys = new FactorySystem(resSys);
@@ -365,6 +369,7 @@ export class ColonyManager {
     bSys._isOutpost = true;
     bSys._requiresSpaceportFirst = true;  // nowa kolonia wymaga portu kosmicznego
     bSys.setDeposits(entity.deposits ?? []);
+    bSys.setPlanetId(planetId);
 
     // FactorySystem per-outpost
     const factSys = new FactorySystem(resSys);
@@ -910,6 +915,7 @@ export class ColonyManager {
       // BuildingSystem per-kolonia — powiązany z własnymi systemami
       const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
       bSys.setDeposits(entity.deposits ?? []);
+      bSys.setPlanetId(colData.planetId);
       if (colData.buildings?.length > 0) {
         bSys.restoreFromSave(colData.buildings);
       }

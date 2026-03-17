@@ -26,11 +26,28 @@ export function showEventNotification(event, colonyName) {
                    : event.severity === 'warning' ? 'info'
                    : 'info';
 
+    // Nazwa i opis z i18n (fallback na pola obiektu)
+    const eventName = t(`event.${event.id}.name`) !== `event.${event.id}.name`
+      ? t(`event.${event.id}.name`)
+      : (event.namePL ?? event.id);
+    const eventDesc = t(`event.${event.id}.desc`) !== `event.${event.id}.desc`
+      ? t(`event.${event.id}.desc`)
+      : (event.descriptionPL ?? event.description ?? '');
+
     let stats = '';
     stats += formatStatLine(t('eventChoice.colony'), colonyName);
     if (event.duration > 0) {
-      stats += formatStatLine(t('eventChoice.time'), `${event.duration} lat`, 'at-stat-neu');
+      stats += formatStatLine(t('eventChoice.time'), t('eventChoice.duration', event.duration), 'at-stat-neu');
     }
+
+    // Prosperity delta z efektów
+    const prosperityFx = event.effects?.find(fx => fx.type === 'prosperity');
+    if (prosperityFx) {
+      const sign = prosperityFx.delta > 0 ? '+' : '';
+      const cls = prosperityFx.delta > 0 ? 'at-stat-pos' : 'at-stat-neg';
+      stats += formatStatLine(t('eventChoice.prosperity'), `${sign}${prosperityFx.delta}`, cls);
+    }
+
     stats += formatStatLineWithCursor(t('eventChoice.statusLabel'), t('eventChoice.active'), 'at-stat-neu');
 
     const { overlay, dismiss, btnElements } = buildTerminalPopup({
@@ -39,8 +56,8 @@ export function showEventNotification(event, colonyName) {
       svgKey: severity === 'danger' ? 'alert' : 'report',
       svgLabel: severity === 'danger' ? t('eventChoice.alarm') : t('eventChoice.event'),
       prompt: t('eventChoice.prompt'),
-      headline: (event.namePL ?? event.name ?? t('eventChoice.event')).toUpperCase(),
-      description: event.description,
+      headline: eventName.toUpperCase(),
+      description: eventDesc,
       contentHTML: stats,
       buttons: [{ label: t('ui.accept'), primary: true }],
       onDismiss: () => {

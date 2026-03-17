@@ -224,6 +224,10 @@ export class GameScene {
       if (c4x.discoverySystem) {
         this.discoverySystem.restore(c4x.discoverySystem);
       }
+      // Przywróć RandomEventSystem
+      if (c4x.randomEventSystem) {
+        this.randomEventSystem.restore(c4x.randomEventSystem);
+      }
       // Walidacja misji — teraz VesselManager jest przywrócony, można sprawdzić statki
       this.expeditionSystem.validateMissions();
       // Przywróć TradeRouteManager
@@ -279,6 +283,12 @@ export class GameScene {
     // Powiadomienia o zdarzeniach losowych
     EventBus.on('randomEvent:occurred', ({ event, colonyName }) => {
       showEventNotification(event, colonyName);
+    });
+    // Zdarzenie zablokowane przez obronę
+    EventBus.on('randomEvent:blocked', ({ event, colonyName }) => {
+      const name = t(`event.${event.id}.name`) !== `event.${event.id}.name`
+        ? t(`event.${event.id}.name`) : (event.namePL ?? event.id);
+      this.uiManager?.addInfo(`🛡 ${name} — ${t('eventChoice.blocked')} [${colonyName}]`);
     });
 
     // Powiadomienia o uderzeniach kosmicznych (pauzuj grę przy poważnych)

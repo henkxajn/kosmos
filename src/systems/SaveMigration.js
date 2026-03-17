@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 20;
+export const CURRENT_VERSION     = 21;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -35,6 +35,7 @@ const MIGRATIONS = {
   17: _migrateV17toV18,
   18: _migrateV18toV19,
   19: _migrateV19toV20,
+  20: _migrateV20toV21,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -630,5 +631,32 @@ function _migrateV18toV19(data) {
 function _migrateV19toV20(data) {
   if (data.civ4x) data.civ4x = null;
   data.version = 20;
+  return data;
+}
+
+// ── Migracja v20 → v21 ──────────────────────────────────────────────────────
+// Dodaje: randomEventSystem (globalne), eventBonuses do prosperity per kolonia
+function _migrateV20toV21(data) {
+  const c4x = data.civ4x;
+  if (!c4x) return data;
+
+  // Dodaj randomEventSystem (null = brak aktywnych zdarzeń)
+  if (!c4x.randomEventSystem) {
+    c4x.randomEventSystem = null;
+  }
+
+  // Dodaj eventBonuses do prosperity per kolonia
+  if (c4x.colonies) {
+    for (const col of c4x.colonies) {
+      if (col.prosperity && !col.prosperity.eventBonuses) {
+        col.prosperity.eventBonuses = {};
+      }
+      // Alias: stare save mogą mieć col.prosperitySystem zamiast col.prosperity
+      if (col.prosperitySystem && !col.prosperitySystem.eventBonuses) {
+        col.prosperitySystem.eventBonuses = {};
+      }
+    }
+  }
+
   return data;
 }

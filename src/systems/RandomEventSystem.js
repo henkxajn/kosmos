@@ -6,8 +6,8 @@
 //
 // Komunikacja:
 //   Nasłuchuje: 'time:tick'     → sprawdzenie czy wylosować zdarzenie
-//   Emituje:    'randomEvent:occurred' { event, colony, effects }
-//               'randomEvent:expired'  { event }
+//   Emituje:    'randomEvent:occurred' { event, colony, effects, planetId }
+//               'randomEvent:expired'  { event, planetId }
 
 import EventBus from '../core/EventBus.js';
 import { RANDOM_EVENTS, DRAWABLE_EVENTS, TOTAL_WEIGHT } from '../data/RandomEventsData.js';
@@ -19,11 +19,15 @@ const MAX_COOLDOWN = 25;
 // Szansa na zdarzenie per sprawdzenie (per rok gry, po cooldownie)
 const EVENT_CHANCE = 0.15;  // 15% na rok
 
+// Redukcja szansy za defense_tower per level (5%)
+const DEFENSE_TOWER_REDUCTION = 0.05;
+// Redukcja szansy za defense_grid per level (15%)
+const DEFENSE_GRID_REDUCTION = 0.15;
+// Maksymalna łączna redukcja szansy (90%)
+const MAX_DEFENSE_REDUCTION = 0.9;
+
 export class RandomEventSystem {
   constructor() {
-    // System wstrzymany — zdarzenia losowe wyłączone do czasu dopracowania
-    this.disabled = true;
-
     // Cooldown — ile lat do następnego możliwego zdarzenia
     this._cooldown = MIN_COOLDOWN + Math.random() * (MAX_COOLDOWN - MIN_COOLDOWN);
     this._accumYears = 0;
@@ -50,10 +54,26 @@ export class RandomEventSystem {
     return [...this._activeEvents];
   }
 
-  // Mnożnik produkcji dla danego zasobu z aktywnych zdarzeń
+  // Mnożnik produkcji dla danego zasobu z aktywnych zdarzeń (wszystkie kolonie)
   getProductionMultiplier(resource) {
     let mult = 1.0;
     for (const ae of this._activeEvents) {
+      for (const fx of ae.event.effects) {
+        if (fx.type === 'production') {
+          if (fx.resource === resource || fx.resource === 'all') {
+            mult *= fx.multiplier;
+          }
+        }
+      }
+    }
+    return mult;
+  }
+
+  // Mnożnik produkcji dla konkretnej kolonii (filtruje po planetId)
+  getProductionMultiplierForColony(planetId, resource) {
+    let mult = 1.0;
+    for (const ae of this._activeEvents) {
+      if (ae.planetId !== planetId) continue;
       for (const fx of ae.event.effects) {
         if (fx.type === 'production') {
           if (fx.resource === resource || fx.resource === 'all') {
@@ -104,7 +124,6 @@ export class RandomEventSystem {
   // ── Prywatne ──────────────────────────────────────────────────────────
 
   _update(deltaYears) {
-    if (this.disabled) return;
     if (!window.KOSMOS?.civMode) return;
 
     this._accumYears += deltaYears;
@@ -144,9 +163,6 @@ export class RandomEventSystem {
     this._cooldown -= 1;
     if (this._cooldown > 0) return;
 
-    // Szansa na zdarzenie
-    if (Math.random() > EVENT_CHANCE) return;
-
     // Wybierz losową kolonię
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr || colMgr.colonyCount === 0) return;
@@ -154,9 +170,28 @@ export class RandomEventSystem {
     const colonies = colMgr.getAllColonies();
     const colony   = colonies[Math.floor(Math.random() * colonies.length)];
 
+    // Redukcja szansy z obrony kolonii
+    const defenseReduction = this._getColonyDefenseReduction(colony);
+    const adjustedChance = EVENT_CHANCE * (1 - defenseReduction);
+
+    // Szansa na zdarzenie
+    if (Math.random() > adjustedChance) return;
+
     // Losuj zdarzenie ważone
     const event = this._rollEvent(colony);
     if (!event) return;
+
+    // Sprawdź czy obrona blokuje to zdarzenie całkowicie
+    if (this._isEventBlockedByDefense(event, colony)) {
+      // Zdarzenie zablokowane — loguj i pomiń
+      EventBus.emit('randomEvent:blocked', {
+        event,
+        planetId: colony.planetId,
+        colonyName: colony.name,
+      });
+      this._cooldown = MIN_COOLDOWN + Math.random() * (MAX_COOLDOWN - MIN_COOLDOWN);
+      return;
+    }
 
     // Aplikuj zdarzenie
     this._triggerEvent(event, colony.planetId);
@@ -165,9 +200,68 @@ export class RandomEventSystem {
     this._cooldown = MIN_COOLDOWN + Math.random() * (MAX_COOLDOWN - MIN_COOLDOWN);
   }
 
+  // ── Obrona kolonii ──────────────────────────────────────────────────
+
+  // Oblicz procentową redukcję szansy na zdarzenie z budynków obronnych i technologii
+  _getColonyDefenseReduction(colony) {
+    let reduction = 0;
+
+    const bSys = colony?.buildingSystem;
+    if (bSys?._active) {
+      for (const entry of bSys._active.values()) {
+        const bId = entry.building.id;
+        const level = entry.level ?? 1;
+        if (bId === 'defense_tower') {
+          reduction += DEFENSE_TOWER_REDUCTION * level;
+        } else if (bId === 'defense_grid') {
+          reduction += DEFENSE_GRID_REDUCTION * level;
+        }
+      }
+    }
+
+    // Bonus z technologii (disasterReduction w procentach → 0.01)
+    const techRed = window.KOSMOS?.techSystem?.getDisasterReduction() ?? 0;
+    reduction += techRed * 0.01;
+
+    return Math.min(MAX_DEFENSE_REDUCTION, reduction);
+  }
+
+  // Czy zdarzenie jest całkowicie zablokowane przez konkretną obronę
+  _isEventBlockedByDefense(event, colony) {
+    const tag = event.defenseTag;
+    if (!tag) return false;
+
+    const bSys = colony?.buildingSystem;
+    const tSys = window.KOSMOS?.techSystem;
+
+    switch (tag) {
+      case 'kinetic': {
+        // Blokowane przez defense_grid
+        if (bSys?._active) {
+          for (const entry of bSys._active.values()) {
+            if (entry.building.id === 'defense_grid') return true;
+          }
+        }
+        return false;
+      }
+      case 'radiation': {
+        // Blokowane przez tech magnetic_shielding
+        return tSys?.isResearched('magnetic_shielding') ?? false;
+      }
+      case 'biological': {
+        // Blokowane przez tech medicine
+        return tSys?.isResearched('medicine') ?? false;
+      }
+      default:
+        return false;
+    }
+  }
+
+  // ── Losowanie ───────────────────────────────────────────────────────
+
   // Losuj zdarzenie ważone, sprawdzając warunki
   _rollEvent(colony) {
-    // Filtruj zdarzenia spełniające warunki
+    // Filtruj zdarzenia spełniające warunki i nie zablokowane
     const eligible = DRAWABLE_EVENTS.filter(e => {
       try {
         return e.condition(colony);
@@ -189,6 +283,8 @@ export class RandomEventSystem {
     return eligible[eligible.length - 1];
   }
 
+  // ── Aplikacja zdarzenia ─────────────────────────────────────────────
+
   // Aplikuj zdarzenie do kolonii
   _triggerEvent(event, planetId) {
     const colMgr = window.KOSMOS?.colonyManager;
@@ -209,9 +305,13 @@ export class RandomEventSystem {
           }
           break;
 
-        case 'morale':
-          // Morale usunięte — efekt ignorowany (RandomEventSystem disabled)
+        case 'prosperity': {
+          // Dodaj bonus prosperity (lub jednorazowy gdy brak duration)
+          const duration = event.duration > 0 ? event.duration : 3;
+          const sourceId = `event_${event.id}_${Date.now()}`;
+          colony.prosperitySystem?.addEventBonus(sourceId, fx.delta, duration);
           break;
+        }
 
         case 'pop':
           if (civSys) {
@@ -226,15 +326,7 @@ export class RandomEventSystem {
           break;
 
         case 'building_damage':
-          this._damageBuildings(planetId, fx.count, fx.chance ?? 1.0);
-          break;
-
-        case 'hex_change':
-          this._changeHexes(planetId, fx.terrain, fx.count);
-          break;
-
-        case 'anomaly':
-          this._addAnomaly(planetId, fx.anomalyType);
+          this._damageBuildings(colony, fx.count, fx.chance ?? 1.0);
           break;
 
         // production — obsługiwane przez aktywne zdarzenie (duration > 0)
@@ -270,15 +362,16 @@ export class RandomEventSystem {
     });
   }
 
-  // Zniszcz N losowych budynków na kolonii
-  _damageBuildings(planetId, count, chance) {
-    const bSys = window.KOSMOS?.buildingSystem;
+  // Zniszcz N losowych budynków na kolonii (bezpośrednio na BuildingSystem kolonii)
+  _damageBuildings(colony, count, chance) {
+    const bSys = colony?.buildingSystem;
     if (!bSys) return;
 
-    // Zbierz budynki tej kolonii (bez Stolicy)
+    // Zbierz budynki tej kolonii (bez Stolicy i budynków obronnych)
     const candidates = [];
     for (const [activeKey, entry] of bSys._active) {
       if (entry.building.isCapital || entry.building.isColonyBase) continue;
+      if (entry.building.id === 'defense_tower' || entry.building.id === 'defense_grid') continue;
       candidates.push({ activeKey, entry });
     }
 
@@ -287,23 +380,30 @@ export class RandomEventSystem {
     for (let i = 0; i < count && candidates.length > 0; i++) {
       if (Math.random() > chance) continue;
       const idx = Math.floor(Math.random() * candidates.length);
-      const { activeKey } = candidates.splice(idx, 1)[0];
-      // Parsuj q,r z klucza
-      const [q, r] = activeKey.split(',').map(Number);
-      const fakeTile = { q, r, key: activeKey, buildingId: activeKey, isOccupied: true };
-      EventBus.emit('planet:demolishRequest', { tile: fakeTile });
+      const { activeKey, entry } = candidates.splice(idx, 1)[0];
+      const level = entry.level ?? 1;
+
+      if (level > 1) {
+        // Downgrade o 1 level (bez zwrotu surowców — katastrofa)
+        entry.level = level - 1;
+        entry.baseRates = bSys._calcBaseRates(entry.building, { r: 0, type: 'plains', key: activeKey }, entry.level);
+        entry.effectiveRates = bSys._applyTechMultipliers(entry.baseRates, entry.building, activeKey);
+        const pid = entry.producerId ?? `building_${activeKey}`;
+        if (bSys.resourceSystem) {
+          bSys.resourceSystem.registerProducer(pid, entry.effectiveRates);
+        }
+      } else {
+        // Pełne zniszczenie Lv1 budynku
+        EventBus.emit('resource:removeProducer', { id: entry.producerId ?? `building_${activeKey}` });
+        if (entry.housing > 0) {
+          EventBus.emit('civ:removeHousing', { amount: entry.housing });
+        }
+        const popCost = entry.popCost ?? 0;
+        if (popCost > 0) {
+          EventBus.emit('civ:employmentChanged', { delta: -popCost });
+        }
+        bSys._active.delete(activeKey);
+      }
     }
-  }
-
-  // Zmień N losowych hexów na dany teren
-  _changeHexes(planetId, terrain, count) {
-    // To będzie działać gdy globus jest otwarty — zmiana terenu na siatce
-    // Efekt wizualny przy następnym otwarciu mapy
-    EventBus.emit('randomEvent:hexChange', { planetId, terrain, count });
-  }
-
-  // Dodaj anomalię na losowy hex
-  _addAnomaly(planetId, anomalyType) {
-    EventBus.emit('randomEvent:anomaly', { planetId, anomalyType });
   }
 }
