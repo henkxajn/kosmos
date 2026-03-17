@@ -361,8 +361,11 @@ export class ExpeditionSystem {
       this.resourceSystem.spend(LAUNCH_COST);
     }
 
-    // Zablokuj POPy na czas misji
-    EventBus.emit('civ:lockPops', { amount: EXPEDITION_CREW_COST });
+    // Zablokuj POPy na czas misji (bezpośrednio na kolonii źródłowej)
+    const originCol = window.KOSMOS?.colonyManager?.getColony(
+      assignedVesselId ? (window.KOSMOS?.vesselManager?.getVessel(assignedVesselId)?.colonyId ?? window.KOSMOS?.colonyManager?.activePlanetId) : window.KOSMOS?.colonyManager?.activePlanetId
+    );
+    if (originCol?.civSystem) originCol.civSystem.lockPops(EXPEDITION_CREW_COST);
 
     // Czas podróży — nowa formuła: dystans / prędkość statku
     const shipSpeed  = this._getShipSpeed(assignedVesselId);
@@ -463,8 +466,11 @@ export class ExpeditionSystem {
       this.resourceSystem.spend(COLONY_LAUNCH_COST);
     }
 
-    // Zablokuj 2 POPy
-    EventBus.emit('civ:lockPops', { amount: COLONY_CREW_COST });
+    // Zablokuj 2 POPy (bezpośrednio na kolonii źródłowej)
+    const originColC = window.KOSMOS?.colonyManager?.getColony(
+      vesselId ? (window.KOSMOS?.vesselManager?.getVessel(vesselId)?.colonyId ?? window.KOSMOS?.colonyManager?.activePlanetId) : window.KOSMOS?.colonyManager?.activePlanetId
+    );
+    if (originColC?.civSystem) originColC.civSystem.lockPops(COLONY_CREW_COST);
 
     // Czas podróży — colony_ship + mnożnik tech napędowych + CIV_TIME_SCALE
     const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
@@ -629,8 +635,9 @@ export class ExpeditionSystem {
         if (this.resourceSystem) this.resourceSystem.spend(cargo);
       }
 
-      // Zablokuj POPy na czas transportu
-      EventBus.emit('civ:lockPops', { amount: EXPEDITION_CREW_COST });
+      // Zablokuj POPy na czas transportu (bezpośrednio na kolonii źródłowej)
+      const originColT = window.KOSMOS?.colonyManager?.getColony(vessel?.colonyId);
+      if (originColT?.civSystem) originColT.civSystem.lockPops(EXPEDITION_CREW_COST);
     }
     // Orbiting: POPy już zablokowane z oryginalnej misji, launch_pad nie potrzebny
 
@@ -873,12 +880,15 @@ export class ExpeditionSystem {
       this.resourceSystem.spend(RECON_COST);
     }
 
-    // Zablokuj POPy
-    EventBus.emit('civ:lockPops', { amount: RECON_CREW_COST });
+    // Zablokuj POPy (bezpośrednio na kolonii źródłowej)
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vMgr  = window.KOSMOS?.vesselManager;
+    const originColR = colMgr?.getColony(
+      vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId
+    );
+    if (originColR?.civSystem) originColR.civSystem.lockPops(RECON_CREW_COST);
 
     const departYear = this._gameYear;
-    const vMgr  = window.KOSMOS?.vesselManager;
-    const colMgr = window.KOSMOS?.colonyManager;
 
     if (scope === 'full_system') {
       // Sekwencyjny recon: pierwszy cel = najbliższy niezbadany od homePlanet
@@ -1014,8 +1024,11 @@ export class ExpeditionSystem {
       this.resourceSystem.spend(RECON_COST);
     }
 
-    // Zablokuj POPy
-    EventBus.emit('civ:lockPops', { amount: RECON_CREW_COST });
+    // Zablokuj POPy (bezpośrednio na kolonii źródłowej)
+    const originColRT = colMgr?.getColony(
+      vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId
+    );
+    if (originColRT?.civSystem) originColRT.civSystem.lockPops(RECON_CREW_COST);
 
     const shipSpeed = this._getShipSpeed(vesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
@@ -1067,8 +1080,9 @@ export class ExpeditionSystem {
         changed = true;
       } else if (exp.status === 'returning' && exp.returnYear && this._gameYear >= exp.returnYear) {
         exp.status = 'completed';
-        // Odblokuj POPy — załoga wraca
-        EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
+        // Odblokuj POPy — załoga wraca (bezpośrednio na kolonii źródłowej)
+        const retCol = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
+        if (retCol?.civSystem) retCol.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST);
         // Vessel wraca do hangaru (do kolonii macierzystej)
         if (exp.vesselId) {
           const vMgr = window.KOSMOS?.vesselManager;
@@ -1139,10 +1153,11 @@ export class ExpeditionSystem {
         EventBus.emit('expedition:disaster', { expedition: exp, survived: true });
         return;
       }
-      // KATASTROFA — brak zarobku, załoga zaginiona → odblokuj POPy
+      // KATASTROFA — brak zarobku, załoga zaginiona → odblokuj POPy (bezpośrednio)
       exp.status = 'completed';
       exp.gained = {};
-      EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
+      const disCol = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
+      if (disCol?.civSystem) disCol.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST);
       // Statek utracony
       if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
       EventBus.emit('expedition:disaster', { expedition: exp });
@@ -1229,7 +1244,9 @@ export class ExpeditionSystem {
       existingCol.resourceSystem.receive(startResources);
       colMgr.upgradeOutpostToColony(exp.targetId, exp.crewCost);
 
-      EventBus.emit('civ:unlockPops', { amount: exp.crewCost });
+      // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
+      const upgradeCol = colMgr?.getColony(exp.originColonyId);
+      if (upgradeCol?.civSystem) upgradeCol.civSystem.unlockPops(exp.crewCost);
       if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
 
       exp.status = 'completed';
@@ -1257,8 +1274,9 @@ export class ExpeditionSystem {
       // KATASTROFA — kolonia NIE powstaje, POPy giną, zasoby stracone
       exp.status = 'completed';
       exp.gained = {};
-      // POPy giną — nie odblokuj, ale zmniejsz populację
-      EventBus.emit('civ:unlockPops', { amount: exp.crewCost });
+      // POPy giną — odblokuj (potem giną w civ:popDied)
+      const disColC = colMgr?.getColony(exp.originColonyId);
+      if (disColC?.civSystem) disColC.civSystem.unlockPops(exp.crewCost);
       // Emituj śmierć za każdy POP
       for (let i = 0; i < exp.crewCost; i++) {
         EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: 0 });
@@ -1282,8 +1300,9 @@ export class ExpeditionSystem {
     exp.gained = startResources;
     exp.status = 'completed';   // ekspedycja kolonizacyjna nie wraca
 
-    // Odblokuj POPy ze źródła (zostaną przeniesione do nowej kolonii)
-    EventBus.emit('civ:unlockPops', { amount: exp.crewCost });
+    // Odblokuj POPy ze źródła (zostaną przeniesione do nowej kolonii — bezpośrednio)
+    const foundCol = colMgr?.getColony(exp.originColonyId);
+    if (foundCol?.civSystem) foundCol.civSystem.unlockPops(exp.crewCost);
 
     // Emituj zdarzenie założenia kolonii — ColonyManager obsłuży
     EventBus.emit('expedition:colonyFounded', {
@@ -1339,8 +1358,9 @@ export class ExpeditionSystem {
 
       // Dock statek w kolonii docelowej (transfer floty)
       exp.status = 'completed';
-      // Odblokuj POPy — załoga dostarczona
-      EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
+      // Odblokuj POPy — załoga dostarczona (bezpośrednio na kolonii źródłowej)
+      const transCol = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
+      if (transCol?.civSystem) transCol.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST);
 
       if (exp.vesselId && vMgr) {
         const vessel = vMgr.getVessel(exp.vesselId);
@@ -1435,7 +1455,9 @@ export class ExpeditionSystem {
       // KATASTROFA — statek utracony, załoga zaginiona
       exp.status = 'completed';
       exp.gained = {};
-      EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? RECON_CREW_COST });
+      // Odblokuj POPy (bezpośrednio na kolonii źródłowej)
+      const reconDisCol = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
+      if (reconDisCol?.civSystem) reconDisCol.civSystem.unlockPops(exp.crewCost ?? RECON_CREW_COST);
       if (exp.vesselId && vMgr) {
         vMgr.destroyVessel(exp.vesselId);
       } else {

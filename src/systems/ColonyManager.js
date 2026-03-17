@@ -601,9 +601,9 @@ export class ColonyManager {
     // Pobierz zasoby
     colony.resourceSystem.spend(allCosts);
 
-    // Zablokuj POPy — załoga przydzielona do statku
-    if (crewCost > 0) {
-      EventBus.emit('civ:lockPops', { amount: crewCost });
+    // Zablokuj POPy — załoga przydzielona do statku (bezpośrednio na kolonii)
+    if (crewCost > 0 && colony.civSystem) {
+      colony.civSystem.lockPops(crewCost);
     }
 
     // Dodaj do kolejki budowy
@@ -709,10 +709,10 @@ export class ColonyManager {
     }
     colony.resourceSystem.receive(refund);
 
-    // Odblokuj POPy (załoga wraca)
+    // Odblokuj POPy (załoga wraca) — bezpośrednio na kolonii właściciela
     const crewCost = SHIPS[vessel.shipId]?.crewCost ?? 0;
-    if (crewCost > 0) {
-      EventBus.emit('civ:unlockPops', { amount: crewCost });
+    if (crewCost > 0 && colony.civSystem) {
+      colony.civSystem.unlockPops(crewCost);
     }
 
     // Usuń statek

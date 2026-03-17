@@ -171,14 +171,14 @@ export class BuildingSystem {
 
     const producerId = isCapital ? `capital_${tileKey}` : `building_${tileKey}`;
 
-    // Zarejestruj produkcję
-    if (hasKeys(effectiveRates)) {
-      EventBus.emit('resource:registerProducer', { id: producerId, rates: effectiveRates });
+    // Zarejestruj produkcję (bezpośrednio — unika cross-colony bleed)
+    if (hasKeys(effectiveRates) && this.resourceSystem) {
+      this.resourceSystem.registerProducer(producerId, effectiveRates);
     }
 
-    // Housing
-    if (building.housing > 0) {
-      EventBus.emit('civ:addHousing', { amount: building.housing });
+    // Housing (bezpośrednio na własnym civSystem)
+    if (building.housing > 0 && this.civSystem) {
+      this.civSystem.addHousing(building.housing);
     }
 
     // Fabryka: dodaj punkt produkcji
@@ -197,9 +197,9 @@ export class BuildingSystem {
       producerId,
     });
 
-    // Zatrudnienie (pomiń w outpost)
-    if (popCost > 0 && !this._isOutpost) {
-      EventBus.emit('civ:employmentChanged', { delta: popCost });
+    // Zatrudnienie (pomiń w outpost) — bezpośrednio na własnym civSystem
+    if (popCost > 0 && !this._isOutpost && this.civSystem) {
+      this.civSystem.changeEmployment(popCost);
     }
 
     // Invaliduj cache mine level jeśli zbudowano kopalnię
@@ -458,9 +458,9 @@ export class BuildingSystem {
 
   // Wspólna logika natychmiastowego ulepszenia
   _applyUpgrade(tile, entry, building, nextLevel, popCost) {
-    // Zatrudnienie — upgrade wymaga dodatkowego POPa
-    if (popCost > 0) {
-      EventBus.emit('civ:employmentChanged', { delta: popCost });
+    // Zatrudnienie — upgrade wymaga dodatkowego POPa (bezpośrednio)
+    if (popCost > 0 && this.civSystem) {
+      this.civSystem.changeEmployment(popCost);
     }
 
     // Aktualizuj level
@@ -479,7 +479,7 @@ export class BuildingSystem {
     // Housing: każdy kolejny level dodaje housing (np. habitat +3/lv)
     if (building.housing > 0) {
       entry.housing = (entry.housing || 0) + building.housing;
-      EventBus.emit('civ:addHousing', { amount: building.housing });
+      if (this.civSystem) this.civSystem.addHousing(building.housing);
     }
 
     // Fabryka: dodaj punkt produkcji za każdy level powyżej 1
@@ -619,13 +619,13 @@ export class BuildingSystem {
       // Odejmij housing za obniżony poziom (np. habitat -3/lv)
       if (building?.housing > 0) {
         entry.housing = Math.max(0, (entry.housing || 0) - building.housing);
-        EventBus.emit('civ:removeHousing', { amount: building.housing });
+        if (this.civSystem) this.civSystem.removeHousing(building.housing);
       }
 
-      // Zwolnij POPy za obniżony poziom
+      // Zwolnij POPy za obniżony poziom (bezpośrednio)
       const downgradePop = entry.popCost ?? building?.popCost ?? POP_PER_BUILDING;
-      if (downgradePop > 0) {
-        EventBus.emit('civ:employmentChanged', { delta: -downgradePop });
+      if (downgradePop > 0 && this.civSystem) {
+        this.civSystem.changeEmployment(-downgradePop);
       }
 
       // Invaliduj cache mine level jeśli rozebrano kopalnię
@@ -640,11 +640,14 @@ export class BuildingSystem {
 
     // ── Pełna rozbiórka (Lv 1) ──────────────────────────────────────
 
-    EventBus.emit('resource:removeProducer', { id: `building_${tile.key}` });
+    // Usuń producenta (bezpośrednio)
+    if (this.resourceSystem) {
+      this.resourceSystem.removeProducer(`building_${tile.key}`);
+    }
 
-    // Housing
-    if (entry?.housing > 0) {
-      EventBus.emit('civ:removeHousing', { amount: entry.housing });
+    // Housing (bezpośrednio)
+    if (entry?.housing > 0 && this.civSystem) {
+      this.civSystem.removeHousing(entry.housing);
     }
 
     // Zwrot 50% kosztu budowy (surowce + commodities)
@@ -670,10 +673,10 @@ export class BuildingSystem {
       this._recalcFactoryPoints();
     }
 
-    // Zwolnij POPy
+    // Zwolnij POPy (bezpośrednio)
     const popCost = entry?.popCost ?? building?.popCost ?? POP_PER_BUILDING;
-    if (popCost > 0) {
-      EventBus.emit('civ:employmentChanged', { delta: -popCost });
+    if (popCost > 0 && this.civSystem) {
+      this.civSystem.changeEmployment(-popCost);
     }
 
     // Invaliduj cache mine level jeśli rozebrano kopalnię

@@ -393,14 +393,16 @@ export class RandomEventSystem {
           bSys.resourceSystem.registerProducer(pid, entry.effectiveRates);
         }
       } else {
-        // Pełne zniszczenie Lv1 budynku
-        EventBus.emit('resource:removeProducer', { id: entry.producerId ?? `building_${activeKey}` });
-        if (entry.housing > 0) {
-          EventBus.emit('civ:removeHousing', { amount: entry.housing });
+        // Pełne zniszczenie Lv1 budynku (bezpośrednio — unika cross-colony bleed)
+        if (bSys.resourceSystem) {
+          bSys.resourceSystem.removeProducer(entry.producerId ?? `building_${activeKey}`);
+        }
+        if (entry.housing > 0 && bSys.civSystem) {
+          bSys.civSystem.removeHousing(entry.housing);
         }
         const popCost = entry.popCost ?? 0;
-        if (popCost > 0) {
-          EventBus.emit('civ:employmentChanged', { delta: -popCost });
+        if (popCost > 0 && bSys.civSystem) {
+          bSys.civSystem.changeEmployment(-popCost);
         }
         bSys._active.delete(activeKey);
       }

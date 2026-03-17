@@ -1173,7 +1173,9 @@ export class MissionSystem {
       // KATASTROFA
       exp.status = 'completed';
       exp.gained = {};
-      EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? EXPEDITION_CREW_COST });
+      // Odblokuj POPy na kolonii źródłowej (nie przez EventBus — unika cross-colony bleed)
+      const originCol1 = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
+      if (originCol1) originCol1.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST);
       if (exp.vesselId && vMgr) {
         addMissionLog(vMgr.getVessel(exp.vesselId), this._gameYear, 'KATASTROFA — statek utracony!', 'danger');
         vMgr.destroyVessel(exp.vesselId);
@@ -1265,7 +1267,9 @@ export class MissionSystem {
       existingCol.resourceSystem.receive(startResources);
       colMgr.upgradeOutpostToColony(exp.targetId, exp.crewCost);
 
-      EventBus.emit('civ:unlockPops', { amount: exp.crewCost });
+      // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
+      const originColUpgrade = colMgr?.getColony(exp.originColonyId);
+      if (originColUpgrade) originColUpgrade.civSystem.unlockPops(exp.crewCost);
       if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
 
       exp.status = 'completed';
@@ -1292,7 +1296,9 @@ export class MissionSystem {
       // KATASTROFA — kolonia NIE powstaje
       exp.status = 'completed';
       exp.gained = {};
-      EventBus.emit('civ:unlockPops', { amount: exp.crewCost });
+      // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
+      const originColDisaster = colMgr?.getColony(exp.originColonyId);
+      if (originColDisaster) originColDisaster.civSystem.unlockPops(exp.crewCost);
       for (let i = 0; i < exp.crewCost; i++) {
         EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: 0 });
       }
@@ -1313,7 +1319,9 @@ export class MissionSystem {
     exp.gained = startResources;
     exp.status = 'completed';
 
-    EventBus.emit('civ:unlockPops', { amount: exp.crewCost });
+    // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
+    const originColFounded = colMgr?.getColony(exp.originColonyId);
+    if (originColFounded) originColFounded.civSystem.unlockPops(exp.crewCost);
 
     this._emit('expedition:colonyFounded', null, {
       expedition:     exp,
@@ -1486,7 +1494,9 @@ export class MissionSystem {
       // KATASTROFA
       exp.status = 'completed';
       exp.gained = {};
-      EventBus.emit('civ:unlockPops', { amount: exp.crewCost ?? RECON_CREW_COST });
+      // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
+      const originColRecon = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
+      if (originColRecon) originColRecon.civSystem.unlockPops(exp.crewCost ?? RECON_CREW_COST);
       if (exp.vesselId && vMgr) {
         vMgr.destroyVessel(exp.vesselId);
       } else {

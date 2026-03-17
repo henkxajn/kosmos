@@ -148,6 +148,31 @@ export class CivilizationSystem {
     });
   }
 
+  // ── Publiczne metody modyfikacji stanu (bezpośrednie wywołania, bez EventBus) ──
+
+  addHousing(amount) {
+    this.housing += amount;
+    EventBus.emit('civ:populationChanged', this._popSnapshot());
+  }
+
+  removeHousing(amount) {
+    this.housing = Math.max(this.population, this.housing - amount);
+    EventBus.emit('civ:populationChanged', this._popSnapshot());
+  }
+
+  changeEmployment(delta) {
+    this._employedPops = Math.max(0, this._employedPops + delta);
+    EventBus.emit('civ:populationChanged', this._popSnapshot());
+  }
+
+  lockPops(amount) {
+    this._lockedPops += amount;
+  }
+
+  unlockPops(amount) {
+    this._lockedPops = Math.max(0, this._lockedPops - amount);
+  }
+
   // ── Gettery publiczne ───────────────────────────────────────────────────
 
   get epochName() {
