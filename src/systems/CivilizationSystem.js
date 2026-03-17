@@ -70,6 +70,7 @@ export class CivilizationSystem {
   constructor(initialOverride = {}, techSystem = null, planet = null) {
     this.techSystem = techSystem;
     this.planet = planet;  // referencja do planety — potrzebna do sprawdzania atmosfery
+    this.resourceSystem = null; // ustawiane przez ColonyManager / GameScene
 
     // Populacja: dyskretne POPy (start: 2)
     this.population = initialOverride.population ?? DEFAULT_POP;
@@ -406,14 +407,18 @@ export class CivilizationSystem {
                      this.techSystem?.getConsumptionMultiplier('organics') ?? 1.0;
     const watMult  = this.techSystem?.getConsumptionMultiplier('water') ?? 1.0;
 
-    EventBus.emit('resource:registerProducer', {
-      id:    'civilization_consumption',
-      rates: {
-        food:   -(pop * POP_CONSUMPTION.food   * foodMult),
-        water:  -(pop * POP_CONSUMPTION.water  * watMult),
-        energy: -(pop * POP_CONSUMPTION.energy),
-      },
-    });
+    const rates = {
+      food:   -(pop * POP_CONSUMPTION.food   * foodMult),
+      water:  -(pop * POP_CONSUMPTION.water  * watMult),
+      energy: -(pop * POP_CONSUMPTION.energy),
+    };
+
+    // Rejestruj bezpośrednio w swoim ResourceSystem (nie EventBus — unika cross-colony bleed)
+    if (this.resourceSystem) {
+      this.resourceSystem.registerProducer('civilization_consumption', rates);
+    } else {
+      EventBus.emit('resource:registerProducer', { id: 'civilization_consumption', rates });
+    }
   }
 
   /**

@@ -307,6 +307,7 @@ export class ColonyManager {
       population: startPop,
       housing:    0,  // Stolica doda 4
     }, this.techSystem, entity);
+    civSys.resourceSystem = resSys;
 
     // BuildingSystem per-kolonia — powiązany z własnymi ResourceSystem i CivilizationSystem
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
@@ -363,6 +364,7 @@ export class ColonyManager {
       population: 0,
       housing:    0,
     }, this.techSystem, entity);
+    civSys.resourceSystem = resSys;
 
     // BuildingSystem per-outpost — flaga _isOutpost pomija POP
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
@@ -910,6 +912,7 @@ export class ColonyManager {
 
       // CivilizationSystem per-kolonia (entity = planeta/księżyc/planetoid)
       const civSys = new CivilizationSystem({}, this.techSystem, entity);
+      civSys.resourceSystem = resSys;
       if (colData.civ) civSys.restore(colData.civ);
 
       // BuildingSystem per-kolonia — powiązany z własnymi systemami

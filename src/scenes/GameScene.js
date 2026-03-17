@@ -125,6 +125,7 @@ export class GameScene {
     this.resourceSystem  = new ResourceSystem();
     this.techSystem      = new TechSystem(this.resourceSystem);
     this.civSystem       = new CivilizationSystem({}, this.techSystem);
+    this.civSystem.resourceSystem = this.resourceSystem;
     this.buildingSystem  = new BuildingSystem(this.resourceSystem, this.civSystem, this.techSystem);
     this.factorySystem   = new FactorySystem(this.resourceSystem);
     this.buildingSystem.setFactorySystem(this.factorySystem);
