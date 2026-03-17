@@ -753,11 +753,15 @@ export class TechOverlay {
     if (state === 'done') {
       html += `<div style="color:${THEME.success}; font-size:11px; text-align:center; padding:8px;">✓ ${t('techPanel.doneLabel')}</div>`;
     } else if (state === 'active') {
-      const pct = rSys?.getProgress() ?? 0;
-      const prog = Math.floor(rSys?.researchProgress ?? 0);
+      const pct = rSys?.getProgress?.(tech.id) ?? 0;
+      const slot = rSys?.activeResearch?.find(s => s.techId === tech.id);
+      const prog = Math.floor(slot?.progress ?? 0);
+      const slotInfo = (rSys?.getMaxSlots?.() ?? 1) > 1
+        ? ` (${rSys.activeResearch.length}/${rSys.getMaxSlots()} ${t('techPanel.slots')})`
+        : '';
       html += `
         <div style="color:${THEME.purple}; font-size:10px; margin-bottom:4px;">
-          ${t('techPanel.researching')} ${prog}/${effectiveCost}
+          ${t('techPanel.researching')} ${prog}/${effectiveCost}${slotInfo}
         </div>
         <div style="background:${THEME.border}; height:6px; margin-bottom:8px; position:relative;">
           <div style="background:${THEME.purple}; height:100%; width:${Math.round(pct * 100)}%;"></div>
@@ -835,23 +839,24 @@ export class TechOverlay {
     const tSys = this._getTechSystem();
     if (!rSys) return;
 
-    const current = rSys.currentResearch;
+    const active = rSys.activeResearch ?? [];
     const queue = rSys.researchQueue ?? [];
+    const maxSlots = rSys.getMaxSlots?.() ?? 1;
 
-    // Header
+    // Header z info o slotach
     const hdr = document.createElement('span');
     hdr.style.cssText = `color:${THEME.textDim}; font-size:9px; letter-spacing:1px; margin-right:8px;`;
-    hdr.textContent = t('techPanel.queueHeader') + ':';
+    const slotsLabel = maxSlots > 1 ? ` (${active.length}/${maxSlots})` : '';
+    hdr.textContent = t('techPanel.queueHeader') + slotsLabel + ':';
     el.appendChild(hdr);
 
-    // Aktualnie badane
-    if (current) {
-      const tech = TECHS[current];
-      if (tech) {
-        const pct = rSys.getProgress();
-        const chip = this._queueChip(tech, `⟳ ${Math.round(pct * 100)}%`, THEME.purple, current);
-        el.appendChild(chip);
-      }
+    // Aktywnie badane (wszystkie sloty)
+    for (const slot of active) {
+      const tech = TECHS[slot.techId];
+      if (!tech) continue;
+      const pct = rSys.getProgress(slot.techId);
+      const chip = this._queueChip(tech, `⟳ ${Math.round(pct * 100)}%`, THEME.purple, slot.techId);
+      el.appendChild(chip);
     }
 
     // Kolejka
@@ -862,7 +867,7 @@ export class TechOverlay {
       el.appendChild(chip);
     }
 
-    if (!current && queue.length === 0) {
+    if (active.length === 0 && queue.length === 0) {
       const empty = document.createElement('span');
       empty.style.cssText = `color:${THEME.textDim}; font-size:9px;`;
       empty.textContent = t('techPanel.emptyQueue');
@@ -919,10 +924,11 @@ export class TechOverlay {
       }
     }
 
-    // Lekka aktualizacja — postęp badań
-    if (rSys?.currentResearch) {
-      const pct = rSys.getProgress();
-      const g = this._nodes[rSys.currentResearch];
+    // Lekka aktualizacja — postęp badań (wszystkie aktywne sloty)
+    const activeSlots = rSys?.activeResearch ?? [];
+    for (const slot of activeSlots) {
+      const pct = rSys.getProgress(slot.techId);
+      const g = this._nodes[slot.techId];
       if (g) {
         const arc = g.querySelector('.progress-arc');
         if (arc) {
@@ -1201,7 +1207,7 @@ export class TechOverlay {
 
   _getTechState(tech, tSys, rSys) {
     if (tSys?.isResearched(tech.id)) return 'done';
-    if (rSys?.currentResearch === tech.id) return 'active';
+    if (rSys?.isActive?.(tech.id)) return 'active';
     if (rSys?.researchQueue?.includes(tech.id)) return 'queued';
     if (this._canResearch(tech, tSys)) return 'available';
     return 'locked';
@@ -1266,6 +1272,8 @@ export class TechOverlay {
         return { text: `${t('techPanel.fxResearchCost')} ×${fx.multiplier}`, color: THEME.purple };
       case 'allBuildingsAutonomous':
         return { text: t('techPanel.fxSingularity'), color: '#ffdd44' };
+      case 'researchSlots':
+        return { text: `+${fx.amount} ${t('techPanel.fxResearchSlots')}`, color: THEME.purple };
       default:
         return { text: JSON.stringify(fx), color: THEME.textDim };
     }

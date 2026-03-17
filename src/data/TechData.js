@@ -661,8 +661,9 @@ export const TECHS = {
     requires:    [],
     effects: [
       { type: 'unlockBuilding', buildingId: 'data_center' },
+      { type: 'researchSlots', amount: 1 },
     ],
-    description: 'Centrum Danych (+3 research) — cyfrowe obliczenia',
+    description: 'Centrum Danych (+3 research) + drugi slot badawczy (2 tech jednocześnie)',
   },
 
   data_networks: {

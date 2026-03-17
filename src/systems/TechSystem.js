@@ -282,6 +282,19 @@ export class TechSystem {
     return false;
   }
 
+  /** Ile slotów badawczych (1 bazowo + bonusy z tech, np. basic_computing) */
+  getResearchSlots() {
+    let slots = 1;
+    for (const id of this._researched) {
+      const tech = TECHS[id];
+      if (!tech) continue;
+      for (const fx of tech.effects) {
+        if (fx.type === 'researchSlots') slots += fx.amount;
+      }
+    }
+    return slots;
+  }
+
   /** Bazowy mnożnik adjacency (0 jeśli urban_planning nie zbadane, 0.1 domyślnie) */
   getAdjacencyMultiplier() {
     if (!this._researched.has('urban_planning')) return 0;

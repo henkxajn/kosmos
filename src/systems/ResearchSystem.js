@@ -1,20 +1,25 @@
-// ResearchSystem — zarządzanie kolejką i postępem badań
+// ResearchSystem — zarządzanie kolejką i postępem badań (multi-slot)
 //
 // Globalny system: jedna kolejka badań dla całej cywilizacji.
 // Stawka badań = suma research.perYear ze WSZYSTKICH kolonii.
+// Punkty dzielone równo między aktywne sloty.
+//
+// Sloty: bazowo 1, basic_computing dodaje +1 (łącznie 2).
+// TechSystem.getResearchSlots() → maksymalna liczba równoczesnych badań.
 //
 // Komunikacja:
 //   Nasłuchuje: 'time:tick' → postęp badań
 //   Emituje:    'tech:researched' { tech, restored: false }
-//               'research:progressed' { techId, progress, cost }
 //               'research:started' { techId }
 //
 // API:
-//   queueTech(techId)    → dodaj do kolejki (lub startuj jeśli nic nie badane)
+//   queueTech(techId)    → dodaj do kolejki (lub aktywuj jeśli wolny slot)
 //   dequeueTech(techId)  → usuń z kolejki / anuluj aktywne
 //   canResearch(techId)  → bool
-//   getProgress()        → 0..1
-//   getETA(currentYear)  → rok zakończenia lub null
+//   getActiveResearch()  → [{ techId, progress }]
+//   getProgressOf(techId)→ 0..1
+//   getMaxSlots()        → int
+//   getETAof(techId, yr) → rok zakończenia lub null
 //   getTotalRate()       → suma research/rok ze wszystkich kolonii
 //   serialize() / restore(data)
 
@@ -25,9 +30,20 @@ export class ResearchSystem {
   constructor(techSystem) {
     this.techSystem = techSystem;
 
-    this.currentResearch = null;   // string | null — aktualnie badana tech
-    this.researchProgress = 0;     // punkty zainwestowane w current
-    this.researchQueue = [];       // string[] — kolejka tech IDs
+    // Aktywne badania: tablica { techId, progress }
+    this.activeResearch = [];   // max = getMaxSlots()
+    this.researchQueue = [];    // string[] — kolejka tech IDs
+
+    // Kompatybilność wsteczna — stare API (read-only gettery)
+    // TechOverlay i inne systemy mogą nadal czytać currentResearch/researchProgress
+    Object.defineProperty(this, 'currentResearch', {
+      get: () => this.activeResearch.length > 0 ? this.activeResearch[0].techId : null,
+      enumerable: false,
+    });
+    Object.defineProperty(this, 'researchProgress', {
+      get: () => this.activeResearch.length > 0 ? this.activeResearch[0].progress : 0,
+      enumerable: false,
+    });
 
     // Nasłuch time:tick
     EventBus.on('time:tick', ({ deltaYears }) => this._tick(deltaYears));
@@ -38,109 +54,166 @@ export class ResearchSystem {
   _tick(deltaYears) {
     if (!window.KOSMOS?.civMode) return;
 
-    // Auto-start następnej z kolejki
-    if (!this.currentResearch && this.researchQueue.length > 0) {
-      this.currentResearch = this.researchQueue.shift();
-      this.researchProgress = 0;
-      EventBus.emit('research:started', { techId: this.currentResearch });
-    }
-    if (!this.currentResearch) return;
+    // Auto-fill wolnych slotów z kolejki
+    this._fillSlots();
+    if (this.activeResearch.length === 0) return;
 
-    const tech = TECHS[this.currentResearch];
-    if (!tech) { this.currentResearch = null; return; }
-
-    // Efektywny koszt z discovery soft-gate + research cost multiplier
-    const effectiveCost = this.techSystem.getEffectiveCost(tech).research;
-
-    // Pobierz punkty badań z puli research.amount (zużyj wyprodukowane)
+    // Zbierz punkty badań ze wszystkich kolonii
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return;
-    let pointsThisTick = 0;
+    let totalPoints = 0;
     for (const col of colMgr.getAllColonies()) {
       const rs = col.resourceSystem;
       if (!rs) continue;
       const available = rs.research?.amount ?? 0;
       if (available > 0) {
-        const needed = effectiveCost - this.researchProgress - pointsThisTick;
-        const drain = Math.min(available, Math.max(0, needed));
-        if (drain > 0) {
-          rs.research.amount -= drain;
-          pointsThisTick += drain;
-        }
+        rs.research.amount = 0;
+        totalPoints += available;
       }
     }
-    this.researchProgress += pointsThisTick;
+    if (totalPoints <= 0) return;
 
-    if (this.researchProgress >= effectiveCost) {
-      this._completeTech(tech);
+    // Podziel punkty równo między aktywne sloty
+    const activeCount = this.activeResearch.length;
+    const perSlot = totalPoints / activeCount;
+
+    // Rozdziel i sprawdź ukończenie (iteracja od końca — splice bezpieczny)
+    const completed = [];
+    for (let i = 0; i < this.activeResearch.length; i++) {
+      const slot = this.activeResearch[i];
+      const tech = TECHS[slot.techId];
+      if (!tech) { completed.push(i); continue; }
+      const cost = this.techSystem.getEffectiveCost(tech).research;
+      const needed = cost - slot.progress;
+      const applied = Math.min(perSlot, needed);
+      slot.progress += applied;
+
+      // Zwróć nadmiar do pierwszej kolonii (rzadkie, ale czyste)
+      const surplus = perSlot - applied;
+      if (surplus > 0) {
+        const firstCol = colMgr.getAllColonies()[0];
+        if (firstCol?.resourceSystem) {
+          firstCol.resourceSystem.research.amount += surplus;
+        }
+      }
+
+      if (slot.progress >= cost) {
+        completed.push(i);
+      }
+    }
+
+    // Ukończ badania (od końca, żeby indeksy się nie przesuwały)
+    for (let i = completed.length - 1; i >= 0; i--) {
+      const idx = completed[i];
+      const slot = this.activeResearch[idx];
+      const tech = TECHS[slot.techId];
+      this.activeResearch.splice(idx, 1);
+      if (tech) {
+        this.techSystem._researched.add(tech.id);
+        EventBus.emit('tech:researched', { tech, restored: false });
+      }
+    }
+
+    // Uzupełnij sloty po ukończeniach
+    if (completed.length > 0) {
+      this._fillSlots();
     }
   }
 
-  _completeTech(tech) {
-    // Deleguj odkrycie do TechSystem (efekty, mnożniki)
-    this.techSystem._researched.add(tech.id);
-    this.currentResearch = null;
-    this.researchProgress = 0;
-
-    EventBus.emit('tech:researched', { tech, restored: false });
-
-    // Auto-start następnej
-    if (this.researchQueue.length > 0) {
-      this.currentResearch = this.researchQueue.shift();
-      this.researchProgress = 0;
-      EventBus.emit('research:started', { techId: this.currentResearch });
+  /** Uzupełnij wolne sloty z kolejki */
+  _fillSlots() {
+    const maxSlots = this.getMaxSlots();
+    while (this.activeResearch.length < maxSlots && this.researchQueue.length > 0) {
+      const techId = this.researchQueue.shift();
+      // Sprawdź czy tech nadal ważne (mogło się odkryć z drugiego slotu)
+      if (this.techSystem.isResearched(techId)) continue;
+      this.activeResearch.push({ techId, progress: 0 });
+      EventBus.emit('research:started', { techId });
     }
   }
 
-  // Zużyj zgromadzone punkty badań ze wszystkich kolonii jako natychmiastowy postęp
+  /** Zużyj zgromadzone punkty badań jako natychmiastowy postęp (przy queueTech) */
   _consumeAccumulatedResearch() {
-    if (!this.currentResearch) return;
-    const tech = TECHS[this.currentResearch];
-    if (!tech) return;
-    const effectiveCost = this.techSystem.getEffectiveCost(tech).research;
+    if (this.activeResearch.length === 0) return;
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return;
 
+    let totalPoints = 0;
     for (const col of colMgr.getAllColonies()) {
       const rs = col.resourceSystem;
       if (!rs) continue;
       const available = rs.research?.amount ?? 0;
       if (available > 0) {
-        const needed = effectiveCost - this.researchProgress;
-        const drain = Math.min(available, Math.max(0, needed));
-        if (drain > 0) {
-          rs.research.amount -= drain;
-          this.researchProgress += drain;
-        }
+        rs.research.amount = 0;
+        totalPoints += available;
       }
     }
+    if (totalPoints <= 0) return;
 
-    // Natychmiastowe odkrycie jeśli pula wystarczyła
-    if (this.researchProgress >= effectiveCost) {
-      this._completeTech(tech);
+    const activeCount = this.activeResearch.length;
+    const perSlot = totalPoints / activeCount;
+
+    const completed = [];
+    for (let i = 0; i < this.activeResearch.length; i++) {
+      const slot = this.activeResearch[i];
+      const tech = TECHS[slot.techId];
+      if (!tech) { completed.push(i); continue; }
+      const cost = this.techSystem.getEffectiveCost(tech).research;
+      const needed = cost - slot.progress;
+      const applied = Math.min(perSlot, needed);
+      slot.progress += applied;
+      const surplus = perSlot - applied;
+      if (surplus > 0) {
+        const firstCol = colMgr.getAllColonies()[0];
+        if (firstCol?.resourceSystem) {
+          firstCol.resourceSystem.research.amount += surplus;
+        }
+      }
+      if (slot.progress >= cost) completed.push(i);
+    }
+
+    for (let i = completed.length - 1; i >= 0; i--) {
+      const idx = completed[i];
+      const slot = this.activeResearch[idx];
+      const tech = TECHS[slot.techId];
+      this.activeResearch.splice(idx, 1);
+      if (tech) {
+        this.techSystem._researched.add(tech.id);
+        EventBus.emit('tech:researched', { tech, restored: false });
+      }
     }
   }
 
   // ── API publiczne ────────────────────────────────────────────────────────
 
+  getMaxSlots() {
+    return this.techSystem?.getResearchSlots() ?? 1;
+  }
+
+  getActiveResearch() {
+    return this.activeResearch;
+  }
+
   canResearch(techId) {
     const tech = TECHS[techId];
     if (!tech) return false;
     if (this.techSystem.isResearched(techId)) return false;
-    // Deleguj do TechSystem.checkPrerequisites (obsługuje OR)
     return this.techSystem.checkPrerequisites(tech);
+  }
+
+  isActive(techId) {
+    return this.activeResearch.some(s => s.techId === techId);
   }
 
   queueTech(techId) {
     if (!this.canResearch(techId)) return false;
     if (this.researchQueue.includes(techId)) return false;
-    if (this.currentResearch === techId) return false;
+    if (this.isActive(techId)) return false;
 
-    if (!this.currentResearch) {
-      // Nic nie jest badane — startuj od razu
-      this.currentResearch = techId;
-      this.researchProgress = 0;
-      // Zużyj zgromadzone punkty badań jako natychmiastowy postęp
+    const maxSlots = this.getMaxSlots();
+    if (this.activeResearch.length < maxSlots) {
+      // Wolny slot — startuj od razu
+      this.activeResearch.push({ techId, progress: 0 });
       this._consumeAccumulatedResearch();
       EventBus.emit('research:started', { techId });
     } else {
@@ -150,33 +223,58 @@ export class ResearchSystem {
   }
 
   dequeueTech(techId) {
+    // Usuń z kolejki
     this.researchQueue = this.researchQueue.filter(id => id !== techId);
-    if (this.currentResearch === techId) {
-      this.currentResearch = this.researchQueue.shift() ?? null;
-      this.researchProgress = 0;
-      if (this.currentResearch) {
-        EventBus.emit('research:started', { techId: this.currentResearch });
-      }
+
+    // Usuń z aktywnych
+    const idx = this.activeResearch.findIndex(s => s.techId === techId);
+    if (idx !== -1) {
+      this.activeResearch.splice(idx, 1);
+      // Uzupełnij z kolejki
+      this._fillSlots();
     }
   }
 
-  getProgress() {
-    if (!this.currentResearch) return 0;
-    const tech = TECHS[this.currentResearch];
+  /** Postęp 0..1 dla konkretnego techId (lub pierwszego aktywnego jeśli brak arg) */
+  getProgress(techId) {
+    if (techId) {
+      const slot = this.activeResearch.find(s => s.techId === techId);
+      if (!slot) return 0;
+      const tech = TECHS[slot.techId];
+      if (!tech) return 0;
+      return slot.progress / this.techSystem.getEffectiveCost(tech).research;
+    }
+    // Kompatybilność wsteczna — pierwszy slot
+    if (this.activeResearch.length === 0) return 0;
+    const slot = this.activeResearch[0];
+    const tech = TECHS[slot.techId];
     if (!tech) return 0;
-    const effectiveCost = this.techSystem.getEffectiveCost(tech).research;
-    return this.researchProgress / effectiveCost;
+    return slot.progress / this.techSystem.getEffectiveCost(tech).research;
   }
 
-  getETA(currentYear) {
-    if (!this.currentResearch) return null;
-    const tech = TECHS[this.currentResearch];
+  getProgressOf(techId) {
+    return this.getProgress(techId);
+  }
+
+  getETA(currentYear, techId) {
+    const slot = techId
+      ? this.activeResearch.find(s => s.techId === techId)
+      : this.activeResearch[0];
+    if (!slot) return null;
+    const tech = TECHS[slot.techId];
     if (!tech) return null;
-    const effectiveCost = this.techSystem.getEffectiveCost(tech).research;
-    const remaining = effectiveCost - this.researchProgress;
+    const cost = this.techSystem.getEffectiveCost(tech).research;
+    const remaining = cost - slot.progress;
     const rate = this.getTotalRate();
     if (rate <= 0) return Infinity;
-    return currentYear + remaining / rate;
+    // Punkty dzielone między sloty
+    const activeCount = this.activeResearch.length;
+    const ratePerSlot = rate / activeCount;
+    return currentYear + remaining / ratePerSlot;
+  }
+
+  getETAof(techId, currentYear) {
+    return this.getETA(currentYear, techId);
   }
 
   getTotalRate() {
@@ -193,16 +291,25 @@ export class ResearchSystem {
 
   serialize() {
     return {
-      currentResearch: this.currentResearch,
-      researchProgress: this.researchProgress,
+      activeResearch: this.activeResearch.map(s => ({ techId: s.techId, progress: s.progress })),
       researchQueue: [...this.researchQueue],
     };
   }
 
   restore(data) {
     if (!data) return;
-    this.currentResearch = data.currentResearch ?? null;
-    this.researchProgress = data.researchProgress ?? 0;
+
+    // Kompatybilność z v19 (stary format: currentResearch + researchProgress)
+    if (data.currentResearch !== undefined && data.activeResearch === undefined) {
+      this.activeResearch = data.currentResearch
+        ? [{ techId: data.currentResearch, progress: data.researchProgress ?? 0 }]
+        : [];
+    } else {
+      this.activeResearch = (data.activeResearch ?? []).map(s => ({
+        techId: s.techId,
+        progress: s.progress ?? 0,
+      }));
+    }
     this.researchQueue = data.researchQueue ?? [];
   }
 }

@@ -1123,6 +1123,8 @@ export default {
   'techPanel.queueHeader': 'RESEARCH QUEUE',
   'techPanel.queueEta': 'year {0}',
   'techPanel.emptyQueue': 'No research in queue',
+  'techPanel.slots': 'slots',
+  'techPanel.fxResearchSlots': 'research slots',
   // TechOverlay — new strings (Stage 38)
   'techPanel.discoveryFound': 'Discovery made',
   'techPanel.discoveryNeeded': 'Requires discovery',

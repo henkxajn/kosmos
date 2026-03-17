@@ -1123,6 +1123,8 @@ export default {
   'techPanel.queueHeader': 'KOLEJKA BADAŃ',
   'techPanel.queueEta': 'rok {0}',
   'techPanel.emptyQueue': 'Brak badań w kolejce',
+  'techPanel.slots': 'slotów',
+  'techPanel.fxResearchSlots': 'slotów badawczych',
   // TechOverlay — nowe stringi (Etap 38)
   'techPanel.discoveryFound': 'Odkrycie dokonane',
   'techPanel.discoveryNeeded': 'Wymaga odkrycia',
