@@ -464,6 +464,9 @@ export class FleetManagerOverlay {
       case 'set_return_cargo':
         this._openReturnCargoModal();
         break;
+      case 'delete_trade_route':
+        EventBus.emit('tradeRoute:delete', { routeId: zone.data.routeId });
+        break;
       case 'disband':
         EventBus.emit('fleet:disbandRequest', { vesselId: zone.data.vesselId });
         this._selectedVesselId = null;
@@ -1615,6 +1618,47 @@ export class FleetManagerOverlay {
     const mission = activeMissions.find(m => m.vesselId === vessel.id);
     if (mission) {
       cy = this._drawActiveMission(ctx, x, cy, w, pad, mission, vessel);
+    }
+
+    // ── Aktywna trasa handlowa ────────────────────────────────
+    const trMgr = window.KOSMOS?.tradeRouteManager;
+    const activeRoute = trMgr?.getRoutes()?.find(r => r.vesselId === vessel.id && (r.status === 'active' || r.status === 'paused'));
+    if (activeRoute) {
+      cy += 4;
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+      cy += 8;
+
+      // Nagłówek trasy
+      const routeIcon = activeRoute.status === 'paused' ? '⏸' : '🔄';
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      ctx.fillText(`${routeIcon} ${t('fleet.activeRouteLabel')}`, x + pad, cy + 10);
+      cy += 18;
+
+      // Cel trasy
+      const routeTarget = _findBody(activeRoute.targetBodyId);
+      const routeTargetName = routeTarget?.name ?? activeRoute.targetBodyId;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(`→ ${routeTargetName}  (${t('fleet.tripsLabel', activeRoute.tripsCompleted)})`, x + pad, cy + 10);
+      cy += 16;
+
+      // Przycisk ZATRZYMAJ
+      const stopW = w - pad * 2;
+      const stopH = 22;
+      ctx.fillStyle = 'rgba(80,20,20,0.5)';
+      ctx.fillRect(x + pad, cy, stopW, stopH);
+      ctx.strokeStyle = THEME.danger;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad, cy, stopW, stopH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.stopRoute'), x + w / 2, cy + 15);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: x + pad, y: cy, w: stopW, h: stopH, type: 'delete_trade_route', data: { routeId: activeRoute.id } });
+      cy += stopH + 6;
     }
 
     // ── Konfigurator misji (jeśli aktywny) ───────────────────
