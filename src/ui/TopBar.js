@@ -56,7 +56,7 @@ export class TopBar {
     const el = document.createElement('div');
     el.id = 'topbar-tooltip';
     el.style.cssText = `
-      position: fixed; z-index: 50; pointer-events: none;
+      position: fixed; z-index: 60; pointer-events: none;
       display: none; max-width: 320px; padding: 8px 10px;
       background: rgba(6,12,20,0.96); border: 1px solid ${THEME.borderActive};
       border-radius: 4px; font-family: 'Courier New', monospace;
