@@ -67,7 +67,7 @@ export class PlanetGlobeCameraController {
 
     this._onWheel = (e) => {
       e.preventDefault();
-      this._targetDist = Math.max(1.5, Math.min(8.0, this._targetDist + e.deltaY * 0.003));
+      this._targetDist = Math.max(1.2, Math.min(8.0, this._targetDist + e.deltaY * 0.003));
     };
 
     container.addEventListener('mousedown', this._onMouseDown);
@@ -105,7 +105,7 @@ export class PlanetGlobeCameraController {
   }
 
   applyZoom(deltaY) {
-    this._targetDist = Math.max(1.5, Math.min(8.0, this._targetDist + deltaY * 0.003));
+    this._targetDist = Math.max(1.15, Math.min(8.0, this._targetDist + deltaY * 0.003));
   }
 
   // Ustaw obrót kamery (radiany) — do programowego focusu na tile
