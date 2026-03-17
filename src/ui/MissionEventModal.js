@@ -8,6 +8,7 @@
 import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
+import { TECH_BRANCHES } from '../data/TechData.js';
 import { DepositSystem } from '../systems/DepositSystem.js';
 import { THEME }     from '../config/ThemeConfig.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
@@ -498,6 +499,88 @@ function _onDiscoveryFound({ discovery, expedition, bodyId }) {
   });
 }
 
+// ── Handler ukończenia badań technologicznych ────────────────────────────
+
+function _onTechResearched({ tech, restored }) {
+  if (restored) return;  // nie pokazuj popupu przy wczytywaniu zapisu
+
+  const isEN = getLocale() === 'en';
+  const techName = isEN
+    ? (t(`tech.${tech.id}.name`) || tech.namePL)
+    : (tech.namePL || t(`tech.${tech.id}.name`));
+  const techDesc = isEN
+    ? (t(`tech.${tech.id}.desc`) || tech.description)
+    : (tech.description || t(`tech.${tech.id}.desc`));
+  const branch = TECH_BRANCHES[tech.branch];
+  const branchName = isEN
+    ? (t(`techBranch.${tech.branch}`) || branch?.namePL || tech.branch)
+    : (branch?.namePL || tech.branch);
+  const branchIcon = branch?.icon ?? '🔬';
+
+  let stats = '';
+  stats += formatStatLine(t('techPopup.branch'), `${branchIcon} ${branchName}`);
+  stats += formatStatLine(t('techPopup.tier'), `${tech.tier}`);
+
+  // Lista efektów technologii
+  const effs = tech.effects || [];
+  if (effs.length > 0) {
+    stats += formatSectionTitle(t('techPopup.effects'));
+    for (const eff of effs) {
+      const line = _formatTechEffect(eff, isEN);
+      if (line) stats += formatStatLine(line.icon, line.text, 'at-stat-pos');
+    }
+  }
+
+  queueMissionEvent({
+    severity:    'success',
+    barTitle:    t('techPopup.barTitle'),
+    barRight:    _gameYear(),
+    svgKey:      'discovery',
+    svgLabel:    t('techPopup.svgLabel').replace(/\n/g, '<br>'),
+    fanfareText: `✦ ${techName.toUpperCase()} ✦`,
+    prompt:      '> RESEARCH_COMPLETE.LOG_',
+    headline:    techName,
+    description: techDesc,
+    contentHTML:  stats,
+  });
+}
+
+/** Formatuje pojedynczy efekt technologii na czytelny tekst */
+function _formatTechEffect(eff, isEN) {
+  switch (eff.type) {
+    case 'unlockBuilding':
+      return { icon: '🔓', text: t(`building.${eff.buildingId}.name`) || eff.buildingId };
+    case 'unlockShip':
+      return { icon: '🚀', text: t(`ship.${eff.shipId}.name`) || eff.shipId };
+    case 'unlockCommodity':
+      return { icon: '📦', text: t(`commodity.${eff.commodityId}.name`) || eff.commodityId };
+    case 'unlockFeature':
+      return { icon: '✨', text: t(`feature.${eff.feature}`) || eff.feature };
+    case 'modifier':
+      return { icon: '📈', text: `${t(`resource.${eff.resource}`) || eff.resource} ×${eff.multiplier}` };
+    case 'moraleBonus':
+      return { icon: '😊', text: `${isEN ? 'Morale' : 'Morale'} +${eff.amount}` };
+    case 'shipSpeedMultiplier':
+      return { icon: '⚡', text: `${isEN ? 'Ship speed' : 'Prędkość statków'} ×${eff.multiplier}` };
+    case 'disasterReduction':
+      return { icon: '🛡', text: `${isEN ? 'Disaster risk' : 'Ryzyko katastrof'} -${eff.amount}%` };
+    case 'buildTimeMultiplier':
+      return { icon: '🏗', text: `${isEN ? 'Build time' : 'Czas budowy'} ×${eff.multiplier}` };
+    case 'terrainUnlock':
+      return { icon: '🗺', text: `${isEN ? 'Terrain' : 'Teren'}: ${eff.terrain} → ${eff.categories.join(', ')}` };
+    case 'consumptionMultiplier':
+      return { icon: '📉', text: `${t(`resource.${eff.resource}`) || eff.resource} ${isEN ? 'consumption' : 'zużycie'} ×${eff.multiplier}` };
+    case 'popGrowthBonus':
+      return { icon: '👶', text: `${isEN ? 'Pop growth' : 'Wzrost populacji'} ×${eff.multiplier}` };
+    case 'buildingLevelCap':
+      return { icon: '🔝', text: `${isEN ? 'Max building level' : 'Maks. poziom budynku'}: ${eff.maxLevel}` };
+    case 'factorySpeedMultiplier':
+      return { icon: '⚙', text: `${isEN ? 'Factory speed' : 'Prędkość fabryki'} ×${eff.multiplier}` };
+    default:
+      return null;
+  }
+}
+
 // ── Inicjalizacja — podłączenie EventBus ────────────────────────────────
 
 export function initMissionEvents() {
@@ -507,5 +590,6 @@ export function initMissionEvents() {
   EventBus.on('expedition:reconProgress',  _onReconProgress);
   EventBus.on('expedition:reconComplete',  _onReconComplete);
   EventBus.on('discovery:found',           _onDiscoveryFound);
+  EventBus.on('tech:researched',           _onTechResearched);
   EventBus.on('time:stateChanged',         _onTimeStateChanged);
 }
