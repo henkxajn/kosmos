@@ -732,6 +732,7 @@ export default {
   'log.ejectedFromSystem': 'Wyrzucenie z układu',
   'log.bodyDestroyed': 'Zniszczenie ciała niebieskiego',
   'log.planetEjected': '{0} wyrzucona z układu',
+  'log.vesselDocked': 'wylądował',
 
   // === Kolonia / status ===
   'colony.outpost': 'Placówka',

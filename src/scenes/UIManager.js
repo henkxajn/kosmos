@@ -99,6 +99,7 @@ const LOG_COLORS = {
   get expedition_fail()    { return THEME.danger; },
   get pop_born()           { return THEME.success; },
   get pop_died()           { return THEME.danger; },
+  get fleet()              { return THEME.info; },
 };
 
 // Koszty akcji gracza (zsynchronizowane z PlayerActionSystem)
@@ -561,6 +562,20 @@ export class UIManager {
       const colonyName = window.KOSMOS?.colonyManager?.getActiveColony?.()?.name ?? '';
       const goodName = COMMODITIES[goodId]?.namePL ?? goodId;
       this._log(`⚠ Deficyt ${goodName} w ${colonyName}`, 'civ_famine');
+    });
+
+    // Lądowanie statku + raport cargo
+    EventBus.on('vessel:docked', ({ vessel }) => {
+      if (!vessel) return;
+      this._log(`↩ ${vessel.name} ${t('log.vesselDocked')}`, 'fleet');
+    });
+    EventBus.on('trade:imported', ({ vesselName, colonyId, items }) => {
+      if (!items || Object.keys(items).length === 0) return;
+      const colName = window.KOSMOS?.colonyManager?.getColony?.(colonyId)?.name ?? colonyId;
+      const summary = Object.entries(items)
+        .map(([id, qty]) => `${id}:${qty}`)
+        .join(', ');
+      this._log(`📦 ${vesselName} → ${colName}: ${summary}`, 'fleet');
     });
 
     // Milestone prosperity

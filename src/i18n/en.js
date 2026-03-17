@@ -731,6 +731,7 @@ export default {
   'log.planetaryCollision': 'Planetary collision',
   'log.ejectedFromSystem': 'Ejected from system',
   'log.planetEjected': '{0} ejected from system',
+  'log.vesselDocked': 'has landed',
   'log.bodyDestroyed': 'Celestial body destroyed',
 
   // === Colony / status ===
