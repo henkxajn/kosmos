@@ -68,10 +68,10 @@ export class TechOverlay {
     this._syncStates();
   }
 
-  // Blokuj canvas clicks gdy overlay jest widoczny
-  handleClick()     { return this.visible; }
+  // Blokuj canvas clicks gdy overlay jest widoczny (ale przepuść sidebar)
+  handleClick(x)     { return this.visible && x >= CIV_SIDEBAR_W; }
   handleMouseMove() {}
-  handleScroll()    { return this.visible; }
+  handleScroll(delta, x) { return this.visible && x >= CIV_SIDEBAR_W; }
 
   // ── Budowa DOM ──────────────────────────────────────────────────────────
 
