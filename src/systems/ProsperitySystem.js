@@ -50,6 +50,9 @@ export class ProsperitySystem {
     this._lastRegisteredDemand = null;  // guard: unikaj re-rejestracji
     this._lastRegisteredProd = null;
 
+    // Permanentny bonus prosperity z odkryć (akumulowany)
+    this._discoveryProsperityBonus = 0;
+
     this._setupListeners();
   }
 
@@ -103,9 +106,15 @@ export class ProsperitySystem {
       this.targetProsperity = Math.max(0, Math.min(100, this.targetProsperity + eventBonus));
     }
 
+    // 4c. Permanentny bonus z technologii + odkryć (floor prosperity)
+    const techBonus = this.techSystem?.getProsperityBonus() ?? 0;
+    const permBonus = techBonus + this._discoveryProsperityBonus;
+    const prosperityFloor = Math.min(100, 50 + permBonus);  // bazowe 50 + bonus
+    this.targetProsperity = Math.max(prosperityFloor, this.targetProsperity);
+
     // 5. Zastosuj inercję: prosperity dąży do target
     const delta = (this.targetProsperity - this.prosperity) * 0.15;
-    this.prosperity = Math.max(0, Math.min(100, this.prosperity + delta));
+    this.prosperity = Math.max(prosperityFloor, Math.min(100, this.prosperity + delta));
 
     // 6. Zarejestruj konsumpcję i produkcję w ResourceSystem
     this._syncConsumption();
@@ -556,6 +565,17 @@ export class ProsperitySystem {
 
   // ── Metody publiczne ────────────────────────────────────────────────────
 
+  // ── Permanentny bonus z odkryć ──────────────────────────────────────
+
+  addDiscoveryBonus(amount) {
+    this._discoveryProsperityBonus += amount;
+  }
+
+  getPermanentBonus() {
+    const techBonus = this.techSystem?.getProsperityBonus() ?? 0;
+    return techBonus + this._discoveryProsperityBonus;
+  }
+
   // ── Event bonuses (zdarzenia losowe) ────────────────────────────────
 
   addEventBonus(sourceId, delta, durationYears) {
@@ -624,6 +644,7 @@ export class ProsperitySystem {
       consumerDemand: { ...this._consumerDemand },
       consumerProduction: { ...this._consumerProduction },
       eventBonuses,
+      discoveryProsperityBonus: this._discoveryProsperityBonus,
     };
   }
 
@@ -635,6 +656,7 @@ export class ProsperitySystem {
     this.epochScore = data.epochScore ?? 0;
     this._consumerDemand = data.consumerDemand ?? {};
     this._consumerProduction = data.consumerProduction ?? {};
+    this._discoveryProsperityBonus = data.discoveryProsperityBonus ?? 0;
     // Przywróć event bonuses
     this._eventBonuses = new Map();
     if (data.eventBonuses) {

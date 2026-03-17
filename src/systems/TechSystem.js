@@ -120,14 +120,14 @@ export class TechSystem {
     return m;
   }
 
-  // Suma bonusów moraleBonus
-  getMoraleBonus() {
+  // Suma permanentnych bonusów prosperity z technologii
+  getProsperityBonus() {
     let total = 0;
     for (const id of this._researched) {
       const tech = TECHS[id];
       if (!tech) continue;
       for (const fx of tech.effects) {
-        if (fx.type === 'moraleBonus') total += fx.amount;
+        if (fx.type === 'prosperityBonus') total += fx.amount;
       }
     }
     return total;

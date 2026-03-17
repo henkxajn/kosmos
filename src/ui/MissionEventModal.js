@@ -471,7 +471,7 @@ function _onDiscoveryFound({ discovery, expedition, bodyId }) {
   // Efekty odkrycia
   const eff = disc.effects;
   if (eff.research) stats += formatStatLine('Research', `+${eff.research}`, 'at-stat-pos');
-  if (eff.morale) stats += formatStatLine('Morale', `+${eff.morale}`, 'at-stat-pos');
+  if (eff.prosperity) stats += formatStatLine('Prosperity', `+${eff.prosperity}`, 'at-stat-pos');
   if (eff.unlockTech && eff.unlockTech.length > 0) {
     stats += formatSectionTitle(t('discovery.unlockedTech'));
     for (const techId of eff.unlockTech) {
@@ -558,8 +558,8 @@ function _formatTechEffect(eff, isEN) {
       return { icon: '✨', text: t(`feature.${eff.feature}`) || eff.feature };
     case 'modifier':
       return { icon: '📈', text: `${t(`resource.${eff.resource}`) || eff.resource} ×${eff.multiplier}` };
-    case 'moraleBonus':
-      return { icon: '😊', text: `${isEN ? 'Morale' : 'Morale'} +${eff.amount}` };
+    case 'prosperityBonus':
+      return { icon: '😊', text: `${isEN ? 'Prosperity' : 'Dobrobyt'} +${eff.amount}` };
     case 'shipSpeedMultiplier':
       return { icon: '⚡', text: `${isEN ? 'Ship speed' : 'Prędkość statków'} ×${eff.multiplier}` };
     case 'disasterReduction':

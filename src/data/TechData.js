@@ -25,7 +25,7 @@
 //   { type: 'unlockBuilding', buildingId }
 //   { type: 'unlockShip', shipId }
 //   { type: 'unlockFeature', feature }
-//   { type: 'moraleBonus', amount }
+//   { type: 'prosperityBonus', amount }
 //   { type: 'popGrowthBonus', multiplier }
 //   { type: 'consumptionMultiplier', resource, multiplier }
 //   { type: 'shipSpeedMultiplier', multiplier }
@@ -329,10 +329,10 @@ export const TECHS = {
     cost:        { research: 180 },
     requires:    ['bio_recycling'],
     effects: [
-      { type: 'moraleBonus', amount: 5 },
+      { type: 'prosperityBonus', amount: 5 },
       { type: 'popGrowthBonus', multiplier: 1.1 },
     ],
-    description: 'POPy odporniejsze na głód + morale +5',
+    description: 'POPy odporniejsze na głód + dobrobyt +5',
   },
 
   food_synthesis: {
@@ -388,7 +388,7 @@ export const TECHS = {
     cost:        { research: 80 },
     requires:    [],
     effects: [
-      { type: 'moraleBonus', amount: 3 },
+      { type: 'prosperityBonus', amount: 3 },
       { type: 'unlockFeature', feature: 'adjacency_bonus' },
     ],
     description: 'Budynki sąsiadujące z tym samym typem +10% bonus (adjacency)',
@@ -418,7 +418,7 @@ export const TECHS = {
     requires:    ['urban_planning'],
     effects: [
       { type: 'unlockBuilding', buildingId: 'arcology_building' },
-      { type: 'moraleBonus', amount: 5 },
+      { type: 'prosperityBonus', amount: 5 },
       { type: 'consumptionMultiplier', resource: 'food', multiplier: 0.90 },
     ],
     description: 'Arkologia (housing 8 + food 5) — samowystarczalny megablok',
@@ -750,9 +750,9 @@ export const TECHS = {
     effects: [
       { type: 'terrainUnlock', terrain: 'ice_sheet', categories: ['population', 'research'] },
       { type: 'terrainUnlock', terrain: 'crater', categories: ['population', 'research'] },
-      { type: 'moraleBonus', amount: 2 },
+      { type: 'prosperityBonus', amount: 2 },
     ],
-    description: 'Budowa na lodowcu i kraterze (osłony radiacyjne) — morale +2',
+    description: 'Budowa na lodowcu i kraterze (osłony radiacyjne) — dobrobyt +2',
   },
 
   point_defense: {
@@ -791,9 +791,9 @@ export const TECHS = {
     requires:    ['magnetic_shielding'],
     effects: [
       { type: 'unlockBuilding', buildingId: 'defense_grid' },
-      { type: 'moraleBonus', amount: 8 },
+      { type: 'prosperityBonus', amount: 8 },
     ],
-    description: 'Siatka Obronna — morale +8, kolonia chroniona przed katastrofami',
+    description: 'Siatka Obronna — dobrobyt +8, kolonia chroniona przed katastrofami',
   },
 
   force_fields: {

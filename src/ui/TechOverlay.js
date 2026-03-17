@@ -1244,8 +1244,8 @@ export class TechOverlay {
         const c = COMMODITIES[fx.commodityId];
         return { text: `[${t('techPanel.fxUnlockRecipe')}] ${c ? (c.namePL ?? fx.commodityId) : fx.commodityId}`, color: '#ffcc66' };
       }
-      case 'moraleBonus':
-        return { text: `prosperity +${fx.amount}`, color: THEME.purple };
+      case 'prosperityBonus':
+        return { text: `${t('techPanel.fxProsperity') || 'prosperity'} +${fx.amount}`, color: THEME.purple };
       case 'popGrowthBonus':
         return { text: `${t('techPanel.fxPopGrowth')} ×${fx.multiplier}`, color: '#88dd88' };
       case 'consumptionMultiplier':

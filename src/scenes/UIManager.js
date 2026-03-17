@@ -117,11 +117,6 @@ const TOOLTIP_SEP_H  = 8;
 const TOOLTIP_WRAP   = 30;
 const TOOLTIP_OFS    = 14;
 
-const MORALE_MAX = { housing: 20, food: 20, water: 15, energy: 15, employment: 15, safety: 15 };
-const MORALE_LABELS = {
-  housing: '🏠 Mieszkania', food: '🌿 Żywność', water: '💧 Woda',
-  energy: '⚡ Energia', employment: '👷 Zatrudnienie', safety: '🛡 Bezpiecz.',
-};
 
 export class UIManager {
   constructor(uiCanvas) {
@@ -1382,7 +1377,7 @@ export class UIManager {
       case 'modifier': return `+${Math.round((fx.multiplier - 1) * 100)}% ${icons[fx.resource] ?? fx.resource} produkcji`;
       case 'unlockBuilding': { const b = BUILDINGS[fx.buildingId]; return `Odblokowanie: ${b?.namePL ?? fx.buildingId}`; }
       case 'unlockShip': { const s = SHIPS[fx.shipId]; return `Odblokowanie statku: ${s?.icon ?? '🚀'} ${s?.namePL ?? fx.shipId}`; }
-      case 'moraleBonus': return `+${fx.amount} prosperity bonus`;
+      case 'prosperityBonus': return `+${fx.amount} dobrobyt (permanentny)`;
       case 'popGrowthBonus': return `+${Math.round((fx.multiplier - 1) * 100)}% wzrost populacji`;
       case 'consumptionMultiplier': return `${Math.round((fx.multiplier - 1) * 100)}% zużycie ${icons[fx.resource] ?? fx.resource}`;
       default: return fx.type;

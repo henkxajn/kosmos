@@ -666,7 +666,7 @@ export const BUILDINGS = {
     namePL:        'Siatka Obronna',
     category:      'military',
     icon:          '🛡',
-    description:   'Globalna obrona koloni — morale +8, ochrona przed katastrofami',
+    description:   'Globalna obrona kolonii — dobrobyt +8, ochrona przed katastrofami',
     cost:          { Fe: 80, Ti: 40, Cu: 30, W: 15 },
     commodityCost: { steel_plates: 10, hull_armor: 8, electronics: 6, superconductors: 4 },
     energyCost:    20,

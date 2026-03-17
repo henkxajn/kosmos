@@ -22,7 +22,7 @@
  * @property {number} chance — bazowy % per misja naukowa
  * @property {object} effects — efekty odkrycia
  * @property {number} [effects.research] — bonus research natychmiastowy
- * @property {number} [effects.morale] — bonus morale permanentny
+ * @property {number} [effects.prosperity] — bonus prosperity permanentny
  * @property {string[]} [effects.unlockTech] — tech odblokowane (discovery soft-gate)
  * @property {string} [effects.deposit] — nowy deposit na celu (resourceId)
  * @property {number} [effects.depositRichness] — richness nowego depositu
@@ -194,7 +194,7 @@ export const DISCOVERIES = {
     chance: 3,
     effects: {
       research: 500,
-      morale: 20,
+      prosperity: 20,
       milestone: true,
       milestoneId: 'not_alone',
     },
@@ -264,7 +264,7 @@ export const DISCOVERIES = {
     chance: 15,
     effects: {
       research: 80,
-      morale: 5,
+      prosperity: 5,
     },
   },
 

@@ -135,11 +135,11 @@ export class DiscoverySystem {
       if (resSys) resSys.receive({ research: effects.research });
     }
 
-    // Bonus morale permanentny (do aktywnej kolonii)
-    if (effects.morale && effects.morale > 0) {
-      const civSys = window.KOSMOS?.civSystem;
-      if (civSys) {
-        civSys._discoveryMoraleBonus = (civSys._discoveryMoraleBonus ?? 0) + effects.morale;
+    // Bonus prosperity permanentny (do aktywnej kolonii)
+    if (effects.prosperity && effects.prosperity > 0) {
+      const prospSys = window.KOSMOS?.prosperitySystem;
+      if (prospSys) {
+        prospSys.addDiscoveryBonus(effects.prosperity);
       }
     }
 
