@@ -25,7 +25,7 @@ export class ThreeCameraController {
     this._lastY      = 0;
 
     // Dynamiczny min zoom — mniejszy gdy focus na księżycu
-    this._minDist    = 1;      // domyślny min zoom (jednostki Three.js)
+    this._minDist    = 0.3;    // domyślny min zoom (jednostki Three.js)
 
     // Callback: (clientX, clientY) => bool — blokuje kamerę gdy kursor nad UI
     this._isOverUI = null;
