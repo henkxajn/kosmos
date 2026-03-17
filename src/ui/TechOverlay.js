@@ -79,14 +79,16 @@ export class TechOverlay {
     if (this._container) return;
 
     // Kontener — dopasowany do bounds overlay (sidebar + topbar + outliner + bottombar)
+    // Skalujemy pozycje tak samo jak Canvas UI (UI_SCALE)
+    const S = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     const c = document.createElement('div');
     c.id = 'tech-overlay';
     c.style.cssText = `
       position: fixed;
-      top: ${COSMIC.TOP_BAR_H}px;
-      left: ${CIV_SIDEBAR_W}px;
-      right: ${COSMIC.OUTLINER_W}px;
-      bottom: ${COSMIC.BOTTOM_BAR_H}px;
+      top: ${Math.round(COSMIC.TOP_BAR_H * S)}px;
+      left: ${Math.round(CIV_SIDEBAR_W * S)}px;
+      right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
+      bottom: ${Math.round(COSMIC.BOTTOM_BAR_H * S)}px;
       z-index: 50;
       background: rgba(2,4,5,0.95);
       display: flex; flex-direction: column;
