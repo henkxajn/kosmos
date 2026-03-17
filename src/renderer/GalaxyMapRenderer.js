@@ -23,7 +23,7 @@ export class GalaxyMapRenderer {
     this._theta = 0;
     this._phi   = 0.9;     // lekko z góry
     this._dist  = 60;
-    this._minDist = 10;
+    this._minDist = 2;
     this._maxDist = 150;
     this._target = new THREE.Vector3(0, 0, 0);
 

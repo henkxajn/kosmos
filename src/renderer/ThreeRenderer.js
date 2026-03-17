@@ -351,7 +351,7 @@ export class ThreeRenderer {
       this._focusEntityId = entity.id;
       // Księżyce — pozwól na głębszy zoom (r=0.015–0.04, potrzeba bliskiej kamery)
       if (this._cameraController) {
-        this._cameraController.setMinDist(entity.type === 'moon' ? 0.15 : 1);
+        this._cameraController.setMinDist(entity.type === 'moon' ? 0.15 : 0.3);
       }
       this._updateCameraFocus();
       // Pokaż orbitę planetoidy po kliknięciu
@@ -367,7 +367,7 @@ export class ThreeRenderer {
       this._focusEntityId = null;
       // Przywróć domyślny min zoom
       if (this._cameraController) {
-        this._cameraController.setMinDist(1);
+        this._cameraController.setMinDist(0.3);
         const sx = this._starGroup ? this._starGroup.position.x : 0;
         const sz = this._starGroup ? this._starGroup.position.z : 0;
         this._cameraController.focusOn(sx, sz);
