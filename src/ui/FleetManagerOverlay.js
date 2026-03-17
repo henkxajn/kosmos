@@ -19,6 +19,7 @@ import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
+import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
 import { t, getName } from '../i18n/i18n.js';
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
@@ -455,11 +456,34 @@ export class FleetManagerOverlay {
       case 'cargo_load':
         this._openCargoLoader(zone.data.vesselId);
         break;
+      case 'toggle_repeat':
+        if (this._missionConfig) {
+          this._missionConfig.repeat = !this._missionConfig.repeat;
+        }
+        break;
+      case 'set_return_cargo':
+        this._openReturnCargoModal();
+        break;
       case 'disband':
         EventBus.emit('fleet:disbandRequest', { vesselId: zone.data.vesselId });
         this._selectedVesselId = null;
         this._missionConfig = null;
         break;
+    }
+  }
+
+  async _openReturnCargoModal() {
+    const cfg = this._missionConfig;
+    if (!cfg || !cfg.targetId) return;
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(this._selectedVesselId);
+    if (!vessel) return;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const targetColony = colMgr?.getColony(cfg.targetId) ?? null;
+    if (!targetColony) return;
+    const result = await showReturnCargoModal(targetColony, vessel);
+    if (result) {
+      cfg.returnCargo = result.returnCargo;
     }
   }
 
@@ -541,6 +565,18 @@ export class FleetManagerOverlay {
     const vMgr = window.KOSMOS?.vesselManager;
     const vessel = vMgr?.getVessel(this._selectedVesselId);
     if (!vessel) return;
+
+    // Transport z powtarzaniem → utwórz trasę handlową
+    if (actionId === 'transport' && this._missionConfig.repeat) {
+      EventBus.emit('tradeRoute:create', {
+        vesselId: vessel.id,
+        sourceColonyId: vessel.colonyId,
+        targetBodyId: targetId,
+        cargo: vessel.cargo ?? {},
+        returnCargo: this._missionConfig.returnCargo ?? {},
+        tripsTotal: null, // nieskończone
+      });
+    }
 
     const ms = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
     const colMgr = window.KOSMOS?.colonyManager;
@@ -2173,6 +2209,57 @@ export class FleetManagerOverlay {
     ctx.fillText(t('fleet.etaYearLabel', Math.ceil(eta)), x + w / 2, cy + 22);
     ctx.textAlign = 'left';
     cy += 34;
+
+    // Checkbox "Powtarzaj" — dla transportu ze statkami z ładownią
+    const config = this._missionConfig;
+    if (config.actionId === 'transport' && vessel && (ship?.cargoCapacity ?? 0) > 0) {
+      const cbSize = 14;
+      const cbX = x + pad;
+      const cbY = cy;
+      const checked = config.repeat ?? false;
+      ctx.fillStyle = checked ? 'rgba(20,60,40,0.8)' : 'rgba(20,20,30,0.5)';
+      ctx.fillRect(cbX, cbY, cbSize, cbSize);
+      ctx.strokeStyle = checked ? THEME.success : THEME.border;
+      ctx.strokeRect(cbX, cbY, cbSize, cbSize);
+      if (checked) {
+        ctx.font = `bold ${cbSize - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.success; ctx.textAlign = 'center';
+        ctx.fillText('✓', cbX + cbSize / 2, cbY + cbSize - 2); ctx.textAlign = 'left';
+      }
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(t('fleet.repeatAuto'), cbX + cbSize + 6, cbY + 11);
+      this._hitZones.push({ x: cbX, y: cbY, w: w - pad * 2, h: cbSize, type: 'toggle_repeat', data: {} });
+      cy += cbSize + 8;
+
+      // Przycisk "Ustaw ładunek powrotny" — gdy repeat zaznaczony i cel ma kolonię
+      if (checked) {
+        const colMgr = window.KOSMOS?.colonyManager;
+        const targetColony = colMgr?.getColony(config.targetId) ?? null;
+        if (targetColony) {
+          const rcCount = config.returnCargo ? Object.keys(config.returnCargo).length : 0;
+          const rcLabel = rcCount > 0
+            ? t('fleet.returnCargoStatus', rcCount)
+            : t('fleet.returnCargoNone');
+          const btnRetH = 22;
+          ctx.fillStyle = 'rgba(20,40,60,0.7)';
+          ctx.fillRect(cbX, cy, w - pad * 2, btnRetH);
+          ctx.strokeStyle = THEME.borderActive;
+          ctx.strokeRect(cbX, cy, w - pad * 2, btnRetH);
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.accent; ctx.textAlign = 'center';
+          ctx.fillText(t('fleet.setReturnCargo'), x + w / 2, cy + 15);
+          ctx.textAlign = 'left';
+          this._hitZones.push({ x: cbX, y: cy, w: w - pad * 2, h: btnRetH, type: 'set_return_cargo', data: {} });
+          cy += btnRetH + 4;
+          // Status ładunku powrotnego
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(rcLabel, cbX, cy + 8);
+          cy += 14;
+        }
+      }
+    }
 
     // Przycisk ▶ WYŚLIJ MISJĘ
     const sendW = w - pad * 2;
