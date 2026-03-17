@@ -12,6 +12,7 @@ import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showRenameModal }    from '../ui/ModalInput.js';
 import { showTradeRouteModal } from '../ui/TradeRouteModal.js';
+import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { drawMiniBar }     from '../ui/CivPanelDrawer.js';
 import { t, getName }     from '../i18n/i18n.js';
@@ -428,6 +429,25 @@ export class FleetTabPanel {
           this._missionConfig.repeat = !this._missionConfig.repeat;
         }
         break;
+
+      case 'set_return_cargo':
+        this._openReturnCargoModal();
+        break;
+    }
+  }
+
+  async _openReturnCargoModal() {
+    const cfg = this._missionConfig;
+    if (!cfg || !cfg.targetId) return;
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(cfg.vesselId);
+    if (!vessel) return;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const targetColony = colMgr?.getColony(cfg.targetId) ?? null;
+    if (!targetColony) return;
+    const result = await showReturnCargoModal(targetColony, vessel);
+    if (result) {
+      cfg.returnCargo = result.returnCargo;
     }
   }
 
@@ -510,6 +530,7 @@ export class FleetTabPanel {
         sourceColonyId: vessel.colonyId,
         targetBodyId: cfg.targetId,
         cargo: vessel.cargo ?? {},
+        returnCargo: cfg.returnCargo ?? {},
         tripsTotal: null, // nieskończone
       });
     }
@@ -1733,10 +1754,9 @@ export class FleetTabPanel {
 
     cy += 10;
 
-    // Checkbox "Powtarzaj" — tylko dla transportu (cargo_ship/heavy_freighter z tech logistyka)
-    if (cfg.actionId === 'transport' && vessel &&
-        (vessel.shipId === 'cargo_ship' || vessel.shipId === 'heavy_freighter') &&
-        (window.KOSMOS?.techSystem?.isResearched('interplanetary_logistics') ?? false)) {
+    // Checkbox "Powtarzaj" — dla transportu ze statkami z ładownią
+    const shipDef = vessel ? SHIPS[vessel.shipId] : null;
+    if (cfg.actionId === 'transport' && vessel && (shipDef?.cargoCapacity ?? 0) > 0) {
       const cbSize = 14;
       const cbX = x + PAD;
       const cbY = cy;
@@ -1756,6 +1776,34 @@ export class FleetTabPanel {
       ctx.fillText(t('fleet.repeatAuto'), cbX + cbSize + 6, cbY + 11);
       this._hitZones.push({ x: cbX, y: cbY, w: w - PAD * 2, h: cbSize, type: 'toggle_repeat' });
       cy += cbSize + 8;
+
+      // Przycisk "Ustaw ładunek powrotny" — gdy repeat zaznaczony i cel ma kolonię
+      if (checked) {
+        const colMgr = window.KOSMOS?.colonyManager;
+        const targetColony = colMgr?.getColony(cfg.targetId) ?? null;
+        if (targetColony) {
+          const rcCount = cfg.returnCargo ? Object.keys(cfg.returnCargo).length : 0;
+          const rcLabel = rcCount > 0
+            ? t('fleet.returnCargoStatus', rcCount)
+            : t('fleet.returnCargoNone');
+          const btnRetH = 22;
+          ctx.fillStyle = 'rgba(20,40,60,0.7)';
+          ctx.fillRect(cbX, cy, w - PAD * 2, btnRetH);
+          ctx.strokeStyle = THEME.borderActive;
+          ctx.strokeRect(cbX, cy, w - PAD * 2, btnRetH);
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.accent; ctx.textAlign = 'center';
+          ctx.fillText(t('fleet.setReturnCargo'), x + w / 2, cy + 15);
+          ctx.textAlign = 'left';
+          this._hitZones.push({ x: cbX, y: cy, w: w - PAD * 2, h: btnRetH, type: 'set_return_cargo' });
+          cy += btnRetH + 4;
+          // Status ładunku powrotnego
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(rcLabel, cbX, cy + 8);
+          cy += 14;
+        }
+      }
     }
 
     // WYŚLIJ

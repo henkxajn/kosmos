@@ -887,6 +887,9 @@ export default {
   'fleet.disbandRequiresShipyard': '🗑 Disband — wymaga stoczni',
   'fleet.tradeRoutesHeader': '🔄 TRASY HANDLOWE ({0})',
   'fleet.repeatAuto': 'Powtarzaj automatycznie',
+  'fleet.setReturnCargo': 'Ustaw ładunek powrotny',
+  'fleet.returnCargoStatus': 'Powrót: {0} pozycji',
+  'fleet.returnCargoNone': 'Powrót: pusty',
   'fleet.selectFromList': '← Wybierz statek z listy',
   'fleet.typeLabel': 'Typ: {0}',
   'fleet.targetLabel': 'Cel: {0} {1}',
@@ -1102,6 +1105,13 @@ export default {
   'tradeRoute.returnCapacity': 'Ładowność powrotna: {0} / {1} t',
   'tradeRoute.noTargetResources': 'Brak zasobów w kolonii docelowej',
   'tradeRoute.cancel': 'Anuluj',
+
+  // === ReturnCargoModal ===
+  'returnCargo.title': '⬅ ŁADUNEK POWROTNY',
+  'returnCargo.capacity': 'Ładowność: {0} / {1} t',
+  'returnCargo.confirm': '✓ Zatwierdź',
+  'returnCargo.cancel': 'Anuluj',
+  'returnCargo.noResources': 'Brak zasobów w kolonii docelowej',
 
   // === BodyDetailModal ===
   'bodyDetail.orbit': 'Orbita',

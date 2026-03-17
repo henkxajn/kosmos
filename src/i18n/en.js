@@ -887,6 +887,9 @@ export default {
   'fleet.disbandRequiresShipyard': '🗑 Disband — requires shipyard',
   'fleet.tradeRoutesHeader': '🔄 TRADE ROUTES ({0})',
   'fleet.repeatAuto': 'Repeat automatically',
+  'fleet.setReturnCargo': 'Set return cargo',
+  'fleet.returnCargoStatus': 'Return: {0} items',
+  'fleet.returnCargoNone': 'Return: empty',
   'fleet.selectFromList': '← Select a ship from the list',
   'fleet.typeLabel': 'Type: {0}',
   'fleet.targetLabel': 'Target: {0} {1}',
@@ -1102,6 +1105,13 @@ export default {
   'tradeRoute.returnCapacity': 'Return capacity: {0} / {1} t',
   'tradeRoute.noTargetResources': 'No resources in target colony',
   'tradeRoute.cancel': 'Cancel',
+
+  // === ReturnCargoModal ===
+  'returnCargo.title': '⬅ RETURN CARGO',
+  'returnCargo.capacity': 'Capacity: {0} / {1} t',
+  'returnCargo.confirm': '✓ Confirm',
+  'returnCargo.cancel': 'Cancel',
+  'returnCargo.noResources': 'No resources in target colony',
 
   // === BodyDetailModal ===
   'bodyDetail.orbit': 'Orbit',
