@@ -662,6 +662,11 @@ export class UIManager {
       return this._hitTestConfirm(x, y);
     }
 
+    // Panel MENU — priorytet nad overlayami (rysowany na wierzchu)
+    if (this._bottomBar.menuOpen && this._bottomBar.hitTestMenu(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) {
+      return true;
+    }
+
     // Overlay pełnoekranowy (FleetManager itp.) — przed resztą UI
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleClick(x, y)) return true;
@@ -823,6 +828,12 @@ export class UIManager {
     if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
     // ── Przerysuj sidebar nad overlayem (zawsze widoczny) ───
     if (civMode && !globeOpen && this.overlayManager.active) this._drawCivPanel();
+
+    // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──
+    this._bottomBar.drawMenu(ctx, W, H, {
+      audioEnabled: this._audioEnabled,
+      musicEnabled: this._musicEnabled,
+    });
 
     // ── Panel akcji gracza (tylko tryb Generator) ────────────
     if (!civMode) this._drawActionPanel();

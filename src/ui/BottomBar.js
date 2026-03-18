@@ -162,10 +162,13 @@ export class BottomBar {
       ctx.fillText(t('ui.hintControls'), 10, barY + BAR_H - 4);
     }
 
-    // ── Panel MENU (nad paskiem dolnym) ──
-    if (this._menuOpen) {
-      this._drawMenuPanel(ctx, W, H, state);
-    }
+    // Panel MENU rysowany osobno przez UIManager (nad overlayami)
+  }
+
+  // Rysuj panel MENU — wywoływane przez UIManager po overlayach (z-order na wierzchu)
+  drawMenu(ctx, W, H, state) {
+    if (!this._menuOpen) return;
+    this._drawMenuPanel(ctx, W, H, state);
   }
 
   // ── Przycisk MENU w prawym rogu paska ──
@@ -266,6 +269,32 @@ export class BottomBar {
       case '10y':   return t('menu.autosave10y');
       default:      return t('menu.autosaveYear');
     }
+  }
+
+  // Hit test TYLKO panelu menu + przycisku MENU (priorytet nad overlayami)
+  hitTestMenu(x, y, W, H, audioEnabled, musicEnabled) {
+    if (!this._menuOpen) return false;
+
+    // Panel menu
+    const menuX = W - MENU_W - 6;
+    const menuY = H - BAR_H - MENU_H - 4;
+    if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) {
+      this._handleMenuClick(x, y, menuX, menuY, audioEnabled, musicEnabled);
+      return true;
+    }
+
+    // Przycisk MENU (toggle)
+    const btnW = 64;
+    const btnX = W - btnW - 6;
+    const barY = H - BAR_H;
+    if (y >= barY && x >= btnX && x <= btnX + btnW) {
+      this._menuOpen = false;
+      return true;
+    }
+
+    // Klik poza menu — zamknij
+    this._menuOpen = false;
+    return false;
   }
 
   // ── Hit testing ──────────────────────────────────────────
