@@ -667,6 +667,9 @@ export class UIManager {
       return true;
     }
 
+    // BottomBar (menu button) — priorytet nad overlayami
+    if (y >= H - COSMIC.BOTTOM_BAR_H && this._bottomBar.hitTest(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) return true;
+
     // Overlay pełnoekranowy (FleetManager itp.) — przed resztą UI
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleClick(x, y)) return true;
