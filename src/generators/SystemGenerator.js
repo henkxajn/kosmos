@@ -19,6 +19,19 @@ import { DepositSystem } from '../systems/DepositSystem.js';
 // thick zachowany dla backward compat (stare save'y)
 const GREENHOUSE = { none: 0, thin: 15, breathable: 20, dense: 60, thick: 35 };
 
+// Minimalna pół-separacja orbitalna per typ planety (AU)
+// Suma half-sep dwóch sąsiadów = min odległość między ich orbitami
+// Oparte na kryterium stabilności Hilla — gas giganty mają największe sfery Hilla
+// gas: m≈50–330 M⊕ → R_Hill ≈ 0.3–0.7 AU, ×3.5 ≈ 1.0–2.5 AU
+// ice: m≈2–20 M⊕  → R_Hill ≈ 0.05–0.2 AU
+// rocky: m≈0.3–6 M⊕ → R_Hill ≈ 0.01–0.05 AU
+const MIN_ORBIT_HALF_SEP = {
+  gas:       1.2,   // AU — Jowisz/Saturn: duża masa, dominujące sfery Hilla
+  ice:       0.7,   // AU — Uran/Neptun: umiarkowane masy, lodowe olbrzymy
+  rocky:     0.25,  // AU — Ziemia/Wenus: małe masy (Wenus–Ziemia ≈ 0.28 AU)
+  hot_rocky: 0.20,  // AU — bliskie gwiazdy, bardzo małe masy
+};
+
 // Mulberry32 PRNG — deterministyczny generator liczb pseudolosowych
 function mulberry32(seed) {
   let s = seed | 0;
@@ -187,6 +200,9 @@ export class SystemGenerator {
       planets.sort((a, b) => a.orbital.a - b.orbital.a);
     }
 
+    // ── Wymuszenie minimalnej separacji orbit (kryterium stabilności Hilla) ──
+    this._enforceMinSeparation(planets, star);
+
     return planets;
   }
 
@@ -247,6 +263,54 @@ export class SystemGenerator {
       visualRadius:      this.getVisualRadius(mass, planetType),
       composition:       normComp,
     });
+  }
+
+  // ── Wymuszenie minimalnej separacji orbit ────────────────────────────
+  // Iteruje po posortowanych planetach i przesuwa za bliskie orbity na zewnątrz.
+  // Separacja = suma pół-separacji dwóch sąsiadów (zależna od typu planety).
+  // Planety wypchnięte poza MAX_ORBIT_AU zostają usunięte.
+  _enforceMinSeparation(planets, star) {
+    if (planets.length < 2) return;
+
+    // Upewnij się, że posortowane po półosi
+    planets.sort((a, b) => a.orbital.a - b.orbital.a);
+
+    for (let i = 1; i < planets.length; i++) {
+      const prev = planets[i - 1];
+      const curr = planets[i];
+      const minSep = (MIN_ORBIT_HALF_SEP[prev.planetType] || 0.25)
+                   + (MIN_ORBIT_HALF_SEP[curr.planetType] || 0.25);
+
+      const actualSep = curr.orbital.a - prev.orbital.a;
+      if (actualSep < minSep) {
+        const newA = prev.orbital.a + minSep;
+        if (newA > GAME_CONFIG.MAX_ORBIT_AU) {
+          // Za daleko — usuń planetę
+          planets.splice(i, 1);
+          i--;
+          continue;
+        }
+        this._adjustOrbit(curr, newA, star);
+      }
+    }
+  }
+
+  // Przesuń orbitę planety na nową półoś i przelicz zależne parametry
+  // (okres orbitalny, temperatura równowagowa z greenhouse)
+  _adjustOrbit(planet, newA, star) {
+    planet.orbital.a = newA;
+    planet.orbital.T = KeplerMath.orbitalPeriod(newA, star.physics.mass);
+
+    // Przelicz temperaturę: T_rad → T_base_C → + greenhouse → T_C / T_K
+    const albedo     = planet.albedo ?? (PLANET_TYPE_CONFIG[planet.planetType]?.albedo ?? 0.3);
+    const T_rad_K    = this.calcEquilibriumTemp(star.luminosity, newA, albedo);
+    const greenhouse = GREENHOUSE[planet.atmosphere] ?? 0;
+    const T_base_C   = T_rad_K - 273.15;
+    planet.temperatureC = T_base_C + greenhouse;
+    planet.temperatureK = planet.temperatureC + 273.15;
+    if (planet.surface) {
+      planet.surface.temperature = planet.temperatureC;
+    }
   }
 
   // Oblicz temperaturę równowagową planety (Kelwiny)
@@ -469,13 +533,31 @@ export class SystemGenerator {
     return comets;
   }
 
-  // ── Planetoidy (a=3.5–8 AU, 3 typy: metallic/carbonaceous/silicate) ──────
+  // ── Planetoidy (luki między planetami, 3 typy: metallic/carbonaceous/silicate) ──
   // Bogate w rzadkie surowce (Cu, Ti, W, Pt, Li) — motywacja do ekspedycji.
-  // Unikają nakładania z istniejącymi planetami (odstęp ± 0.4 AU).
+  // Generowane w lukach między planetami — margines zależny od typu sąsiada
+  // (gas giganty czyszczą szerszą strefę niż skaliste planety).
   _generatePlanetoids(star, planets) {
     const count = this._powerTest ? 40 : 15 + Math.floor(Math.random() * 26);  // POWER TEST: 40, normalnie 15–40
     const planetoids = [];
-    const occupiedAU  = planets.map(p => p.orbital.a);
+
+    // Margines bezpieczeństwa od planety — planetoidy nie orbitują w sferze Hilla
+    const PLANET_MARGIN = {
+      gas:       0.8,   // AU — gas giganty czyszczą szeroką strefę
+      ice:       0.5,   // AU — lodowe olbrzymy
+      rocky:     0.3,   // AU — skaliste planety
+      hot_rocky: 0.2,   // AU — małe gorące skaliste
+    };
+
+    // Zakres planetoidów: od 2.5 AU (za strefą wewnętrzną) do MAX_ORBIT_AU
+    const PLANETOID_MIN_AU = 2.5;
+    const PLANETOID_MAX_AU = Math.min(GAME_CONFIG.MAX_ORBIT_AU, 25); // max 25 AU
+
+    // Zbuduj listę zabronionych stref (planeta ± margines)
+    const forbidden = planets.map(p => ({
+      center: p.orbital.a,
+      margin: PLANET_MARGIN[p.planetType] || 0.3,
+    }));
 
     // Palety kolorów per typ planetoidy
     const TYPE_COLORS = {
@@ -487,11 +569,11 @@ export class SystemGenerator {
     for (let i = 0; i < count; i++) {
       let a, attempts = 0;
       do {
-        a = 3.5 + Math.random() * 4.5;  // 3.5–8.0 AU
+        a = PLANETOID_MIN_AU + Math.random() * (PLANETOID_MAX_AU - PLANETOID_MIN_AU);
         attempts++;
       } while (
-        attempts < 20 &&
-        occupiedAU.some(pA => Math.abs(pA - a) < 0.4)
+        attempts < 30 &&
+        forbidden.some(f => Math.abs(f.center - a) < f.margin)
       );
 
       const e            = 0.05 + Math.random() * 0.20;
