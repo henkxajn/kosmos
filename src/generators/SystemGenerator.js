@@ -147,7 +147,7 @@ export class SystemGenerator {
       const perturb = 0.85 + Math.random() * 0.30;  // 0.85–1.15
       const a       = tbRaw * perturb;
 
-      if (a < 0.15) continue;                        // za blisko gwiazdy
+      if (a < 0.25) continue;                        // za blisko gwiazdy (min 0.25 AU → 2.75 j. 3D)
       if (a > GAME_CONFIG.MAX_ORBIT_AU) break;
 
       planets.push(this._makePlanet(star, a, i, null, breathableCount));
@@ -784,8 +784,10 @@ export class SystemGenerator {
     // Przybliżony promień planety w Three.js units (spójny z ThreeRenderer._planetRadius)
     const planetR3D = { gas: 0.48, ice: 0.20, rocky: 0.10, hot_rocky: 0.07 }[planet.planetType] ?? 0.10;
     const minOrbit3D = planetR3D * 2.5;                              // min: 2.5× promień planety
-    const maxOrbit3D = Math.min(maxOrbitAU * 11, 3.0);              // max: z sąsiadów, cap 3 units
-    const safeMax    = Math.max(minOrbit3D + 0.2, maxOrbit3D);      // zawsze min 0.2 j. przestrzeni
+    // Cap dynamiczny: max 3 j. dla gas gigantów, mniejszy dla mniejszych planet
+    const typeCap    = { gas: 3.0, ice: 1.5, rocky: 0.8, hot_rocky: 0.5 }[planet.planetType] ?? 1.0;
+    const maxOrbit3D = Math.min(maxOrbitAU * 11, typeCap);           // max: z sąsiadów, cap per typ
+    const safeMax    = Math.max(minOrbit3D + 0.15, maxOrbit3D);      // zawsze min 0.15 j. przestrzeni
 
     // Rozłóż księżyce równomiernie w zakresie [minOrbit3D, safeMax]
     const frac    = moonCount <= 1 ? 0.35 : (moonIndex + 0.5) / moonCount;

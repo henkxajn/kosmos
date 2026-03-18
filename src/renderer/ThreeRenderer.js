@@ -566,7 +566,9 @@ export class ThreeRenderer {
   // ── Gwiazda (kolorowy rdzeń + białe centrum + kolorowe promieniowanie) ──
   renderStar(star) {
     this._star = star;
-    const r     = 1.6;   // stały promień 3D
+    // Promień gwiazdy skalowany masą: M(0.3)→0.8, K(0.7)→1.0, G(1.0)→1.2, F(1.4)→1.4
+    const starMass = star.mass ?? 1.0;
+    const r = Math.max(0.6, Math.min(1.6, 0.6 + starMass * 0.6));
     const color = new THREE.Color(star.visual.color);
     const glow  = new THREE.Color(star.visual.glowColor ?? star.visual.color);
 
