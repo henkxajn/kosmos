@@ -1027,30 +1027,12 @@ export class ThreeRenderer {
       }
     }
 
-    // Atmosfera Rayleigh — pełny shader zarówno dla rocky jak i gas
-    // Gas giganty: grubsza atmosfera, kolor per pod-typ (warm/cold/giant)
-    const hasAtmo = planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
-    if (hasAtmo || isGas) {
-      // Kolor atmosfery: gas giganty mają specyficzny kolor per pod-typ
-      let atmoColor;
-      let atmoScale;    // grubość sfery atmosfery (mnożnik promienia)
-      let atmoStrength; // mnożnik alpha
-      if (isGas) {
-        const texType = resolveTextureType(planet);
-        if (texType === 'gas_warm') {
-          atmoColor = new THREE.Color(0.8, 0.5, 0.2);   // pomarańczowo-złoty
-        } else if (texType === 'gas_cold') {
-          atmoColor = new THREE.Color(0.2, 0.4, 0.9);   // niebieski/cyjanowy (Neptun/Uran)
-        } else {
-          atmoColor = new THREE.Color(0.6, 0.6, 0.5);   // jasno-żółtawy (Saturn)
-        }
-        atmoScale    = 1.08;  // grubsza atmosfera niż rocky
-        atmoStrength = 0.70;  // intensywniejsza
-      } else {
-        atmoColor    = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
-        atmoScale    = 1.15;
-        atmoStrength = 0.55;
-      }
+    // Atmosfera Rayleigh — tylko planety skaliste z atmosferą (NIE gas giganty)
+    const hasAtmo = !isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
+    if (hasAtmo) {
+      const atmoColor    = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
+      const atmoScale    = 1.15;
+      const atmoStrength = 0.55;
 
       const atmoMat = new THREE.ShaderMaterial({
         uniforms: {

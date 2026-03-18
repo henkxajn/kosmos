@@ -362,25 +362,28 @@ void main() {
     float bandIdx = floor(bandFloat);
     float bandFrac = fract(bandFloat);
 
-    // 2. Kolor pasa — sample z DataTexture (blend między sąsiednimi pasami)
+    // 2. Kolor pasa — sample z DataTexture (ostrzejszy blend = widoczniejsze pasy)
     float u0 = (bandIdx + 0.5) / uBandCount;
     float u1 = (bandIdx + 1.5) / uBandCount;
     vec3 c0 = texture2D(uBandColors, vec2(u0, 0.5)).rgb;
     vec3 c1 = texture2D(uBandColors, vec2(u1, 0.5)).rgb;
 
-    // Miękki blend na krawędziach pasów
-    float edge = smoothstep(0.35, 0.65, bandFrac);
+    // Ostrzejszy blend — widoczne przejścia między pasami jak na Jowiszu
+    float edge = smoothstep(0.15, 0.85, bandFrac);
     vec3 color = mix(c0, c1, edge);
 
-    // 3. Within-band FBM variation (subtelna modulacja koloru)
-    float fbm = sphereNoise(sp, 8.0)  * 0.50
-              + sphereNoise(sp, 16.0) * 0.25
-              + sphereNoise(sp, 32.0) * 0.125;
+    // 3. Within-band FBM variation (subtelna modulacja koloru wewnątrz pasa)
+    // Rozciągnięte horyzontalnie — symulacja wiatrów równoleżnikowych
+    vec3 spStretched = sp * vec3(0.25, 1.0, 0.25);
+    float fbm = sphereNoise(spStretched, 6.0)  * 0.50
+              + sphereNoise(spStretched, 12.0) * 0.25
+              + sphereNoise(spStretched, 24.0) * 0.125;
     fbm = fbm * 0.5 + 0.5;  // 0..1
-    color *= (0.85 + fbm * 0.30);
+    color *= (0.90 + fbm * 0.20);
 
     // 4. Zonal flow — podłużne rozciąganie (wiatr równoleżnikowy)
-    float zonalNoise = sphereNoise(sp * vec3(0.3, 1.0, 0.3), 5.0) * 0.08;
+    vec3 spZonal = sp * vec3(0.15, 1.0, 0.15);
+    float zonalNoise = sphereNoise(spZonal, 4.0) * 0.06;
     color *= (1.0 + zonalNoise);
 
     // 5. Burze — overlay wirów
@@ -404,46 +407,46 @@ void main() {
   }
 
   // ── NORMAL MAP (mode 1) ────────────────────────────────────────────────────
+  // Gazowe giganty to chmury — bardzo subtelny bump, prawie płaski
   else if (uOutputMode == 1) {
     float eps = 0.003;
     float h0 = bandHeight(latNorm, sp);
 
-    // Przesunięcie w UV → przelicz na sferę
     vec3 spDx = vec3(sin(lat) * cos(lon + eps), cos(lat), sin(lat) * sin(lon + eps)) + uSeed;
     vec3 spDy = vec3(sin(lat - eps) * cos(lon), cos(lat - eps), sin(lat - eps) * sin(lon)) + uSeed;
     float hDx = bandHeight(latNorm, spDx);
     float hDy = bandHeight(latNorm + eps * 0.5, spDy);
 
-    // Central differences → tangent-space normal
     float dHdx = (hDx - h0) / eps;
     float dHdy = (hDy - h0) / eps;
-    float bumpScale = 0.15;
+    // Bardzo niski bump — chmury, nie skaliste podłoże
+    float bumpScale = 0.04;
     vec3 normal = normalize(vec3(-dHdx * bumpScale, -dHdy * bumpScale, 1.0));
 
-    // Zakoduj normal w zakresie [0,1]
     gl_FragColor = vec4(normal * 0.5 + 0.5, 1.0);
   }
 
   // ── ROUGHNESS MAP (mode 2) ─────────────────────────────────────────────────
+  // Chmury gazowego giganta — gładkie, niska roughness (chmury odbijają światło)
   else {
     float h = bandHeight(latNorm, sp);
-    // Bazowy roughness: pasy ciemne gładsze, jasne szorstsze
-    float roughness = 0.55 + h * 0.20;
+    // Bazowa roughness: niższa = gładsze, chmurne szczyty
+    float roughness = 0.35 + h * 0.15;
 
-    // Burze — gładsze (niższy roughness)
+    // Burze — jeszcze gładsze (wyższe, bardziej refleksyjne chmury)
     vec2 s;
     s = stormEffect(uStorm0, latNorm, lon, sp);
-    roughness -= s.x * 0.15;
+    roughness -= s.x * 0.10;
     s = stormEffect(uStorm1, latNorm, lon, sp);
-    roughness -= s.x * 0.15;
+    roughness -= s.x * 0.10;
     s = stormEffect(uStorm2, latNorm, lon, sp);
-    roughness -= s.x * 0.15;
+    roughness -= s.x * 0.10;
 
-    // Krawędzie pasów — szorstsze (turbulencja)
+    // Krawędzie pasów — lekko szorstsze (turbulencja)
     float edgeNoise = abs(sphereNoise(sp, 6.0));
-    roughness += edgeNoise * uTurbulence * 0.5;
+    roughness += edgeNoise * uTurbulence * 0.3;
 
-    gl_FragColor = vec4(vec3(clamp(roughness, 0.3, 0.9)), 1.0);
+    gl_FragColor = vec4(vec3(clamp(roughness, 0.25, 0.65)), 1.0);
   }
 }
 `;
