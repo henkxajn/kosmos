@@ -200,7 +200,7 @@ export const SHIPS = {
     fuelCapacity:  20,
     fuelPerAU:     0.8,
     range:         25,
-    speedAU:       0.6,
+    speedAU:       1.8,            // AU/rok — Gen III fuzyjny, szybszy od Gen I
     cargoCapacity: 500,
     crewCost:      5.0,
     requires:      'cryogenics',
