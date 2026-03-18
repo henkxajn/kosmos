@@ -521,6 +521,57 @@ export class FleetManagerOverlay {
         }
         break;
       }
+      case 'foreign_recon_body': {
+        EventBus.emit('expedition:foreignRecon', {
+          vesselId: zone.data.vesselId,
+          targetId: zone.data.targetId,
+          scope: 'target',
+        });
+        break;
+      }
+      case 'foreign_recon_system': {
+        EventBus.emit('expedition:foreignRecon', {
+          vesselId: zone.data.vesselId,
+          targetId: null,
+          scope: 'full_system',
+        });
+        break;
+      }
+      case 'foreign_colonize': {
+        EventBus.emit('expedition:foreignColonize', {
+          vesselId: zone.data.vesselId,
+          targetId: zone.data.targetId,
+        });
+        this._selectedVesselId = null;
+        break;
+      }
+      case 'foreign_unload': {
+        EventBus.emit('expedition:foreignUnload', {
+          vesselId: zone.data.vesselId,
+          targetId: zone.data.targetId,
+        });
+        break;
+      }
+      case 'foreign_redirect': {
+        // Redirect do innego ciała w tym samym układzie (reuse interstellar redirect)
+        EventBus.emit('vessel:interstellarRedirect', {
+          vesselId: zone.data.vesselId,
+          targetId: zone.data.targetId,
+        });
+        break;
+      }
+      case 'foreign_return': {
+        // Powrót do macierzystego układu
+        const vMgr4 = window.KOSMOS?.vesselManager;
+        const v2 = vMgr4?.getVessel(zone.data.vesselId);
+        if (v2) {
+          v2.status = 'idle';
+          v2.position.state = 'docked';
+          v2.mission = null;
+          vMgr4.dispatchInterstellar(zone.data.vesselId, zone.data.fromSystemId);
+        }
+        break;
+      }
       case 'action':
         this._handleAction(zone.data);
         break;
@@ -2144,6 +2195,192 @@ export class FleetManagerOverlay {
         type: 'interstellar_return', data: { vesselId: vessel.id, fromSystemId: isMission.fromSystemId },
       });
       cy += retBtnH + 8;
+    }
+
+    // ── Panel orbiting_body — rozkazy kontekstowe w obcym układzie ──
+    if (isMission?.type === 'exploration' && isMission.phase === 'orbiting_body') {
+      cy += 4;
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+      cy += 8;
+
+      // Nagłówek — na orbicie ciała
+      const orbitBody = _findBody(isMission.targetId);
+      const orbitName = orbitBody ? getName(orbitBody) : isMission.targetId;
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.purple;
+      ctx.fillText(`🌍 ${t('fleet.orbitingBody', orbitName)}`, x + pad, cy + 10);
+      cy += 18;
+
+      const ship = SHIPS[vessel.shipId];
+      const caps = ship?.capabilities ?? [];
+      const btnW = w - pad * 2;
+      const btnH = 22;
+
+      // ── Recon ciała (recon/scientific cap) ──
+      if (caps.includes('recon') || caps.includes('scientific')) {
+        const isExplored = orbitBody?.explored ?? false;
+        ctx.fillStyle = isExplored ? 'rgba(100,100,100,0.08)' : 'rgba(0,180,255,0.08)';
+        ctx.fillRect(x + pad, cy, btnW, btnH);
+        ctx.strokeStyle = isExplored ? THEME.textDim : THEME.info;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + pad, cy, btnW, btnH);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = isExplored ? THEME.textDim : THEME.info;
+        ctx.textAlign = 'center';
+        ctx.fillText(t('fleet.foreignReconBody'), x + w / 2, cy + 15);
+        ctx.textAlign = 'left';
+        if (!isExplored) {
+          this._hitZones.push({ x: x + pad, y: cy, w: btnW, h: btnH,
+            type: 'foreign_recon_body', data: { vesselId: vessel.id, targetId: isMission.targetId } });
+        }
+        cy += btnH + 4;
+
+        // Recon układu
+        ctx.fillStyle = 'rgba(0,180,255,0.08)';
+        ctx.fillRect(x + pad, cy, btnW, btnH);
+        ctx.strokeStyle = THEME.info;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + pad, cy, btnW, btnH);
+        ctx.fillStyle = THEME.info;
+        ctx.textAlign = 'center';
+        ctx.fillText(t('fleet.foreignReconSystem'), x + w / 2, cy + 15);
+        ctx.textAlign = 'left';
+        this._hitZones.push({ x: x + pad, y: cy, w: btnW, h: btnH,
+          type: 'foreign_recon_system', data: { vesselId: vessel.id } });
+        cy += btnH + 4;
+      }
+
+      // ── Kolonizacja (colony cap) ──
+      if (caps.includes('colony')) {
+        const colMgr4 = window.KOSMOS?.colonyManager;
+        const isExploredCol = orbitBody?.explored ?? false;
+        const isColonized = colMgr4?.getColony(isMission.targetId) != null;
+        const validType = orbitBody && (
+          ['rocky', 'ice'].includes(orbitBody.planetType) || orbitBody.type === 'planetoid'
+        );
+        const canColonize = isExploredCol && !isColonized && validType;
+
+        ctx.fillStyle = canColonize ? 'rgba(0,255,120,0.08)' : 'rgba(100,100,100,0.08)';
+        ctx.fillRect(x + pad, cy, btnW, btnH);
+        ctx.strokeStyle = canColonize ? THEME.accent : THEME.textDim;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + pad, cy, btnW, btnH);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = canColonize ? THEME.accent : THEME.textDim;
+        ctx.textAlign = 'center';
+        let colLabel = t('fleet.foreignColonize');
+        if (!isExploredCol) colLabel += ` (${t('fleet.requiresExplored')})`;
+        else if (isColonized) colLabel += ` (${t('fleet.alreadyColonized')})`;
+        ctx.fillText(colLabel, x + w / 2, cy + 15);
+        ctx.textAlign = 'left';
+        if (canColonize) {
+          this._hitZones.push({ x: x + pad, y: cy, w: btnW, h: btnH,
+            type: 'foreign_colonize', data: { vesselId: vessel.id, targetId: isMission.targetId } });
+        }
+        cy += btnH + 4;
+      }
+
+      // ── Rozładunek cargo ──
+      if (caps.includes('cargo') && (vessel.cargoUsed ?? 0) > 0) {
+        ctx.fillStyle = 'rgba(255,204,68,0.08)';
+        ctx.fillRect(x + pad, cy, btnW, btnH);
+        ctx.strokeStyle = THEME.warning;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + pad, cy, btnW, btnH);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.warning;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${t('fleet.foreignUnload')} (${Math.round(vessel.cargoUsed ?? 0)}t)`, x + w / 2, cy + 15);
+        ctx.textAlign = 'left';
+        this._hitZones.push({ x: x + pad, y: cy, w: btnW, h: btnH,
+          type: 'foreign_unload', data: { vesselId: vessel.id, targetId: isMission.targetId } });
+        cy += btnH + 4;
+      }
+
+      // ── Separator ──
+      cy += 2;
+
+      // ── Leć do innego ciała (lista planet) ──
+      const sysId = vessel.systemId;
+      const planetsOrbit = EntityManager.getByType('planet')?.filter(p => p.systemId === sysId && p.id !== isMission.targetId) ?? [];
+      if (planetsOrbit.length > 0) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(t('fleet.foreignRedirect'), x + pad, cy + 10);
+        cy += 16;
+
+        for (const planet of planetsOrbit.slice(0, 6)) {
+          const pBtnH2 = 20;
+          if (cy + pBtnH2 > y + h - 40) break;
+          ctx.fillStyle = 'rgba(170,136,255,0.06)';
+          ctx.fillRect(x + pad, cy, btnW, pBtnH2);
+          ctx.strokeStyle = THEME.border;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + pad, cy, btnW, pBtnH2);
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textPrimary;
+          ctx.fillText(`🪐 ${getName(planet)}`, x + pad + 6, cy + 14);
+          ctx.textAlign = 'right';
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(`${(planet.orbital?.a ?? 0).toFixed(1)} AU`, x + w - pad - 4, cy + 14);
+          ctx.textAlign = 'left';
+          this._hitZones.push({
+            x: x + pad, y: cy, w: btnW, h: pBtnH2,
+            type: 'foreign_redirect', data: { vesselId: vessel.id, targetId: planet.id },
+          });
+          cy += pBtnH2 + 2;
+        }
+      }
+
+      // ── Powrót do bazy ──
+      cy += 4;
+      ctx.fillStyle = 'rgba(255,51,68,0.08)';
+      ctx.fillRect(x + pad, cy, btnW, btnH);
+      ctx.strokeStyle = THEME.danger;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad, cy, btnW, btnH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.foreignReturn'), x + w / 2, cy + 15);
+      ctx.textAlign = 'left';
+      this._hitZones.push({
+        x: x + pad, y: cy, w: btnW, h: btnH,
+        type: 'foreign_return', data: { vesselId: vessel.id, fromSystemId: isMission.originId },
+      });
+      cy += btnH + 8;
+    }
+
+    // ── Panel foreign_recon w trakcie ──
+    if (isMission?.type === 'foreign_recon') {
+      cy += 4;
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+      cy += 8;
+
+      if (isMission.scope === 'target') {
+        const scanBody = _findBody(isMission.targetId);
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.info;
+        ctx.fillText(t('fleet.foreignScanning', scanBody ? getName(scanBody) : '...'), x + pad, cy + 10);
+        cy += 18;
+      } else if (isMission.scope === 'full_system') {
+        const curId = isMission.targets?.[isMission.currentIdx];
+        const curBody = curId ? _findBody(curId) : null;
+        const label = isMission.phase === 'scanning'
+          ? t('fleet.foreignScanning', curBody ? getName(curBody) : '...')
+          : t('fleet.foreignTraveling', curBody ? getName(curBody) : '...');
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.info;
+        ctx.fillText(label, x + pad, cy + 10);
+        cy += 14;
+        // Postęp
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(`${(isMission.currentIdx ?? 0) + 1} / ${isMission.targets?.length ?? '?'}`, x + pad, cy + 10);
+        cy += 18;
+      }
     }
 
     // ── Aktywna trasa handlowa ────────────────────────────────

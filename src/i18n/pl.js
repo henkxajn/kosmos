@@ -930,6 +930,28 @@ export default {
   'vessel.interstellarLaunch': 'Skok warp do {0} ({1} LY)',
   'vessel.interstellarArrived': 'Dotarł do układu {0}',
   'vessel.interstellarTransit': 'Tranzyt warp → {0}',
+  'vessel.foreignReconStart': 'Rozpoczęto recon: {0}',
+  'vessel.foreignReconDone': 'Zbadano: {0}',
+  'vessel.foreignReconAllDone': 'Wszystkie ciała w układzie zbadane',
+  'vessel.foreignReconSystemStart': 'Recon układu: {0} ciał do zbadania',
+  'vessel.foreignReconSystemDone': 'Recon układu zakończony',
+  'vessel.foreignColonized': 'Skolonizowano: {0}',
+  'vessel.foreignUnloadOutpost': 'Rozładowano cargo → nowy outpost: {0}',
+  'vessel.foreignUnloadColony': 'Rozładowano cargo do kolonii: {0}',
+
+  // === Rozkazy w obcym układzie ===
+  'fleet.orbitingBody': 'Na orbicie: {0}',
+  'fleet.foreignReconBody': '🔭 Recon ciała',
+  'fleet.foreignReconSystem': '🔭 Recon układu',
+  'fleet.foreignColonize': '🏙 Kolonizuj',
+  'fleet.foreignUnload': '📦 Rozładuj cargo',
+  'fleet.foreignRedirect': '🪐 Leć do innego ciała',
+  'fleet.foreignReturn': '↩ Powrót do bazy',
+  'fleet.foreignScanning': '🔭 Skanowanie... {0}',
+  'fleet.foreignTraveling': '🚀 W drodze do: {0}',
+  'fleet.requiresExplored': 'Wymaga zbadania',
+  'fleet.alreadyColonized': 'Już skolonizowane',
+  'fleet.noCargo': 'Brak cargo',
 
   // === Statusy statku ===
   'vessel.status.return': 'Powrót',

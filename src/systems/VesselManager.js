@@ -72,6 +72,14 @@ export class VesselManager {
     // Redirect statku po przylecie międzygwiezdnym (do planety w nowym układzie)
     EventBus.on('vessel:interstellarRedirect', ({ vesselId, targetId }) =>
       this._redirectInterstellarVessel(vesselId, targetId));
+
+    // Rozkazy w obcym układzie
+    EventBus.on('expedition:foreignRecon', ({ vesselId, targetId, scope }) =>
+      this._startForeignRecon(vesselId, targetId, scope));
+    EventBus.on('expedition:foreignColonize', ({ vesselId, targetId }) =>
+      this._startForeignColonize(vesselId, targetId));
+    EventBus.on('expedition:foreignUnload', ({ vesselId, targetId }) =>
+      this._startForeignUnload(vesselId, targetId));
   }
 
   // ── API publiczne ─────────────────────────────────────────────────────────
@@ -789,6 +797,10 @@ export class VesselManager {
           vessel.position.x = body.x;
           vessel.position.y = body.y;
         }
+        // Tick foreign_recon (scope='target') — skanowanie na orbicie
+        if (m.type === 'foreign_recon' && m.scope === 'target') {
+          this._tickForeignRecon(vessel, m, gameYear);
+        }
         // Aktualizuj linie trasy dla orbitujących
         this._updateRouteLine(vessel, m);
         moving.push(vessel);
@@ -851,6 +863,32 @@ export class VesselManager {
         if (vessel.stats) {
           const dPx = Math.hypot(vessel.position.x - prevX, vessel.position.y - prevY);
           vessel.stats.distanceTraveled += dPx / AU_TO_PX;
+        }
+
+        // ── Detekcja przylotu dla exploration mission (obcy układ) ──
+        if (m.type === 'exploration' && !m.phase?.startsWith('return') && gameYear >= m.arrivalYear) {
+          const target = this._findEntity(m.targetId);
+          vessel.position.state = 'orbiting';
+          vessel.position.dockedAt = m.targetId;
+          vessel.position.x = target?.x ?? m.targetX;
+          vessel.position.y = target?.y ?? m.targetY;
+          vessel.status = 'on_mission';
+          m.phase = 'orbiting_body';
+
+          addMissionLog(vessel, gameYear,
+            t('vessel.arrived', target?.name ?? this._resolveEntityName(m.targetId)),
+            'success');
+
+          EventBus.emit('vessel:arrived', { vessel, mission: m });
+          moving.push(vessel);
+          continue;
+        }
+
+        // ── Tick foreign_recon misji ──
+        if (m.type === 'foreign_recon') {
+          this._tickForeignRecon(vessel, m, gameYear);
+          moving.push(vessel);
+          continue;
         }
 
         // Aktualizuj linie trasy dla latających
@@ -945,15 +983,20 @@ export class VesselManager {
         ssMgr.generateAndRegister(targetStar);
       }
 
-      // Ustaw statek w nowym układzie (pozycja = gwiazda, "orbiting" gwiazdę)
+      // Ustaw statek w nowym układzie (pozycja = obrzeża, wolna przestrzeń)
       const sysData = ssMgr?.getSystem(m.toSystemId);
       const star    = sysData ? EntityManager.get(sysData.starEntityId) : null;
 
+      // Obrzeża układu (~MAX_ORBIT_AU) zamiast centrum gwiazdy
+      const edgeAU = 30; // AU — obrzeża układu
+      const angle = Math.random() * Math.PI * 2;
+      const edgePx = edgeAU * AU_TO_PX;
+
       vessel.systemId = m.toSystemId;
       vessel.position.state = 'orbiting';
-      vessel.position.x = star?.x ?? 0;
-      vessel.position.y = star?.y ?? 0;
-      vessel.position.dockedAt = sysData?.starEntityId ?? null;
+      vessel.position.x = (star?.x ?? 0) + Math.cos(angle) * edgePx;
+      vessel.position.y = (star?.y ?? 0) + Math.sin(angle) * edgePx;
+      vessel.position.dockedAt = null; // nie orbituje gwiazdy — wolna przestrzeń
       vessel.status = 'on_mission'; // nadal na misji — gracz musi zdecydować co dalej
       m.phase = 'in_system';
 
@@ -1164,13 +1207,17 @@ export class VesselManager {
 
   /**
    * Przekieruj statek po przylecie międzygwiezdnym do planety w nowym układzie.
-   * Statek musi mieć mission.type=interstellar_jump, phase=in_system i status=on_mission.
+   * Akceptuje: interstellar_jump(in_system), exploration(orbiting_body), foreign_recon(orbiting_body).
    */
   _redirectInterstellarVessel(vesselId, targetId) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return;
     const m = vessel.mission;
-    if (!m || m.type !== 'interstellar_jump' || m.phase !== 'in_system') return;
+    if (!m) return;
+    // Akceptuj różne fazy przylotu w obcym układzie
+    const isInterstellar = m.type === 'interstellar_jump' && m.phase === 'in_system';
+    const isOrbiting = (m.type === 'exploration' || m.type === 'foreign_recon') && m.phase === 'orbiting_body';
+    if (!isInterstellar && !isOrbiting) return;
 
     const target = this._findEntity(targetId);
     if (!target) return;
@@ -1207,7 +1254,7 @@ export class VesselManager {
       departYear:  gameYear,
       arrivalYear,
       waypoints:   route.waypoints,
-      originId:    m.fromSystemId, // macierzysty układ
+      originId:    m.fromSystemId ?? m.originId ?? vessel.colonyId, // macierzysty układ
       fuelCost,
     };
 
@@ -1219,6 +1266,336 @@ export class VesselManager {
       t('vessel.arrived', target.name ?? targetId), 'info');
 
     EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
+  }
+
+  // ── Rozkazy w obcym układzie ───────────────────────────────────────────
+
+  /**
+   * Recon ciała lub całego układu z obcego systemu.
+   * @param {string} vesselId
+   * @param {string|null} targetId — id ciała (scope='target') lub null (scope='full_system')
+   * @param {'target'|'full_system'} scope
+   */
+  _startForeignRecon(vesselId, targetId, scope) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return;
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const systemId = vessel.systemId;
+
+    if (scope === 'target' && targetId) {
+      // Recon konkretnego ciała — 0.2 roku na zbadanie
+      vessel.mission = {
+        type: 'foreign_recon',
+        scope: 'target',
+        targetId,
+        systemId,
+        startYear: gameYear,
+        completeYear: gameYear + 0.2,
+        phase: 'scanning',
+      };
+      vessel.status = 'on_mission';
+
+      addMissionLog(vessel, gameYear,
+        t('vessel.foreignReconStart', this._resolveEntityName(targetId)), 'info');
+      return;
+    }
+
+    if (scope === 'full_system') {
+      // Recon całego układu — zbierz niezbadane ciała, greedy NN
+      const allBodies = [
+        ...EntityManager.getByTypeInSystem('planet', systemId),
+        ...EntityManager.getByTypeInSystem('moon', systemId),
+        ...EntityManager.getByTypeInSystem('planetoid', systemId),
+      ].filter(b => !b.explored);
+
+      if (allBodies.length === 0) {
+        addMissionLog(vessel, gameYear, t('vessel.foreignReconAllDone'), 'info');
+        return;
+      }
+
+      // Greedy nearest neighbor
+      const targets = [];
+      const remaining = [...allBodies];
+      let cx = vessel.position.x, cy = vessel.position.y;
+      while (remaining.length > 0) {
+        let bestIdx = 0, bestDist = Infinity;
+        for (let i = 0; i < remaining.length; i++) {
+          const d = Math.hypot(remaining[i].x - cx, remaining[i].y - cy);
+          if (d < bestDist) { bestDist = d; bestIdx = i; }
+        }
+        const chosen = remaining.splice(bestIdx, 1)[0];
+        targets.push(chosen.id);
+        cx = chosen.x; cy = chosen.y;
+      }
+
+      // Oblicz czas do pierwszego ciała
+      const firstTarget = this._findEntity(targets[0]);
+      const ship = SHIPS[vessel.shipId];
+      const speedAU = (ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+      const distAU = Math.hypot(
+        (firstTarget.x - vessel.position.x) / AU_TO_PX,
+        (firstTarget.y - vessel.position.y) / AU_TO_PX
+      );
+      const travelYears = distAU / speedAU;
+
+      vessel.mission = {
+        type: 'foreign_recon',
+        scope: 'full_system',
+        systemId,
+        targets,          // id ciał w kolejności odwiedzania
+        currentIdx: 0,
+        phase: 'traveling', // traveling → scanning → traveling → ...
+        startX: vessel.position.x,
+        startY: vessel.position.y,
+        targetX: firstTarget.x,
+        targetY: firstTarget.y,
+        departYear: gameYear,
+        arrivalYear: gameYear + travelYears,
+        scanCompleteYear: null,
+      };
+      vessel.status = 'on_mission';
+      vessel.position.state = 'in_transit';
+      vessel.position.dockedAt = null;
+
+      addMissionLog(vessel, gameYear,
+        t('vessel.foreignReconSystemStart', targets.length), 'info');
+    }
+  }
+
+  /**
+   * Tick logiki foreign_recon (scope='target' i 'full_system').
+   */
+  _tickForeignRecon(vessel, m, gameYear) {
+    if (m.scope === 'target') {
+      // Czekaj na zakończenie skanowania
+      if (gameYear >= m.completeYear) {
+        const target = this._findEntity(m.targetId);
+        if (target) {
+          target.explored = true;
+          // Auto-discover księżyce
+          const moons = EntityManager.getByTypeInSystem('moon', m.systemId)
+            .filter(moon => moon.parentPlanetId === m.targetId);
+          moons.forEach(moon => { moon.explored = true; });
+
+          const discovered = [target, ...moons];
+          EventBus.emit('expedition:reconProgress', {
+            body: target,
+            discovered,
+          });
+          addMissionLog(vessel, gameYear,
+            t('vessel.foreignReconDone', target.name ?? m.targetId), 'success');
+        }
+        // Zakończ misję — statek gotowy na nowe rozkazy
+        vessel.position.state = 'orbiting';
+        vessel.position.dockedAt = m.targetId;
+        m.phase = 'orbiting_body';
+        m.type = 'exploration'; // przywróć typ aby UI pokazywał panel orbiting_body
+      }
+      return;
+    }
+
+    // full_system
+    if (m.phase === 'traveling') {
+      // Interpolacja pozycji do bieżącego celu
+      const totalTravel = (m.arrivalYear ?? 1) - (m.departYear ?? 0);
+      if (totalTravel > 0.0001) {
+        const t2 = Math.max(0, Math.min(1, (gameYear - m.departYear) / totalTravel));
+        const pos = this._interpolateWaypoints(
+          m.startX, m.startY, m.targetX, m.targetY,
+          m.waypoints ?? [], t2
+        );
+        vessel.position.x = pos.x;
+        vessel.position.y = pos.y;
+      }
+
+      // Przylot do ciała
+      if (gameYear >= m.arrivalYear) {
+        const bodyId = m.targets[m.currentIdx];
+        const body = this._findEntity(bodyId);
+        if (body) {
+          vessel.position.x = body.x;
+          vessel.position.y = body.y;
+        }
+        m.phase = 'scanning';
+        m.scanCompleteYear = gameYear + 0.2; // 0.2 roku na skan
+      }
+      return;
+    }
+
+    if (m.phase === 'scanning') {
+      if (gameYear >= m.scanCompleteYear) {
+        const bodyId = m.targets[m.currentIdx];
+        const body = this._findEntity(bodyId);
+        if (body) {
+          body.explored = true;
+          // Auto-discover księżyce
+          const moons = EntityManager.getByTypeInSystem('moon', m.systemId)
+            .filter(moon => moon.parentPlanetId === bodyId);
+          moons.forEach(moon => { moon.explored = true; });
+
+          const discovered = [body, ...moons];
+          EventBus.emit('expedition:reconProgress', {
+            body,
+            discovered,
+          });
+          addMissionLog(vessel, gameYear,
+            t('vessel.foreignReconDone', body.name ?? bodyId), 'success');
+        }
+
+        // Następne ciało lub koniec
+        m.currentIdx++;
+        if (m.currentIdx >= m.targets.length) {
+          // Cały układ zbadany
+          EventBus.emit('expedition:reconComplete', {
+            scope: 'full_system',
+            discovered: m.targets.map(id => this._findEntity(id)).filter(Boolean),
+          });
+          addMissionLog(vessel, gameYear, t('vessel.foreignReconSystemDone'), 'success');
+
+          // Statek przechodzi w orbiting ostatniego ciała
+          vessel.position.state = 'orbiting';
+          vessel.position.dockedAt = bodyId;
+          m.phase = 'orbiting_body';
+          m.type = 'exploration'; // przywróć typ
+          return;
+        }
+
+        // Leć do następnego ciała
+        const nextId = m.targets[m.currentIdx];
+        const nextBody = this._findEntity(nextId);
+        const ship = SHIPS[vessel.shipId];
+        const speedAU = (ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+        const distAU = Math.hypot(
+          ((nextBody?.x ?? 0) - vessel.position.x) / AU_TO_PX,
+          ((nextBody?.y ?? 0) - vessel.position.y) / AU_TO_PX
+        );
+        const travelYears = Math.max(0.01, distAU / speedAU);
+
+        m.phase = 'traveling';
+        m.startX = vessel.position.x;
+        m.startY = vessel.position.y;
+        m.targetX = nextBody?.x ?? 0;
+        m.targetY = nextBody?.y ?? 0;
+        m.departYear = gameYear;
+        m.arrivalYear = gameYear + travelYears;
+        m.waypoints = [];
+        vessel.position.state = 'in_transit';
+        vessel.position.dockedAt = null;
+      }
+    }
+  }
+
+  /**
+   * Kolonizacja ciała w obcym układzie.
+   */
+  _startForeignColonize(vesselId, targetId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return;
+    const target = this._findEntity(targetId);
+    if (!target || !target.explored) return;
+
+    // Sprawdź typ ciała — rocky, ice, lub planetoid
+    const validTypes = ['rocky', 'ice', 'planetoid'];
+    if (!validTypes.includes(target.planetType) && target.type !== 'planetoid') return;
+
+    // Sprawdź czy nie jest już skolonizowany
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return;
+    if (colMgr.getColony(targetId)) return;
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const ship = SHIPS[vessel.shipId];
+    const startPop = ship?.colonists ?? 2;
+
+    // Zasoby startowe
+    const startResources = {
+      Fe: 200, C: 100, Si: 80, Cu: 30, Ti: 10,
+      food: 80, water: 80,
+    };
+
+    // Dodaj cargo jako dodatkowe zasoby
+    if (vessel.cargo) {
+      for (const [key, qty] of Object.entries(vessel.cargo)) {
+        if (qty > 0) startResources[key] = (startResources[key] ?? 0) + qty;
+      }
+      vessel.cargo = {};
+      vessel.cargoUsed = 0;
+    }
+
+    // Utwórz outpost lub pełną kolonię
+    if (startPop >= 2) {
+      // Colony ship — pełna kolonia
+      colMgr.createOutpost(targetId, startResources, gameYear);
+      colMgr.upgradeOutpostToColony(targetId, startPop);
+    } else {
+      // Mały statek — outpost
+      colMgr.createOutpost(targetId, startResources, gameYear);
+    }
+
+    addMissionLog(vessel, gameYear,
+      t('vessel.foreignColonized', target.name ?? targetId), 'success');
+
+    EventBus.emit('expedition:colonyFounded', {
+      planetId: targetId,
+      startResources,
+      startPop,
+    });
+
+    // Zniszcz statek (colony ship jest jednorazowy)
+    const colonyId = vessel.colonyId;
+    const colony = colMgr.getColony(colonyId);
+    if (colony) {
+      const idx = colony.fleet.indexOf(vesselId);
+      if (idx !== -1) colony.fleet.splice(idx, 1);
+    }
+    this._vessels.delete(vesselId);
+    EventBus.emit('vessel:docked', { vessel }); // usunie sprite
+  }
+
+  /**
+   * Rozładunek cargo w obcym układzie.
+   */
+  _startForeignUnload(vesselId, targetId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel || !vessel.cargo) return;
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const target = this._findEntity(targetId);
+    if (!target) return;
+
+    let colony = colMgr?.getColony(targetId);
+
+    // Jeśli brak kolonii — utwórz outpost z cargo jako zasoby startowe
+    if (!colony && colMgr) {
+      const startRes = {};
+      for (const [key, qty] of Object.entries(vessel.cargo)) {
+        if (qty > 0) startRes[key] = qty;
+      }
+      colMgr.createOutpost(targetId, startRes, gameYear);
+      vessel.cargo = {};
+      vessel.cargoUsed = 0;
+
+      addMissionLog(vessel, gameYear,
+        t('vessel.foreignUnloadOutpost', target.name ?? targetId), 'success');
+      return;
+    }
+
+    // Jest kolonia — dodaj cargo do zasobów
+    if (colony) {
+      const resSys = colony.resourceSystem;
+      for (const [key, qty] of Object.entries(vessel.cargo)) {
+        if (qty > 0 && resSys) {
+          const current = resSys.getAmount?.(key) ?? resSys.resources?.[key] ?? 0;
+          if (resSys.resources) resSys.resources[key] = current + qty;
+        }
+      }
+      vessel.cargo = {};
+      vessel.cargoUsed = 0;
+
+      addMissionLog(vessel, gameYear,
+        t('vessel.foreignUnloadColony', target.name ?? targetId), 'success');
+    }
   }
 
   /**

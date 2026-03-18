@@ -930,6 +930,28 @@ export default {
   'vessel.interstellarLaunch': 'Warp jump to {0} ({1} LY)',
   'vessel.interstellarArrived': 'Arrived at system {0}',
   'vessel.interstellarTransit': 'Warp transit → {0}',
+  'vessel.foreignReconStart': 'Recon started: {0}',
+  'vessel.foreignReconDone': 'Explored: {0}',
+  'vessel.foreignReconAllDone': 'All bodies in system explored',
+  'vessel.foreignReconSystemStart': 'System recon: {0} bodies to scan',
+  'vessel.foreignReconSystemDone': 'System recon complete',
+  'vessel.foreignColonized': 'Colonized: {0}',
+  'vessel.foreignUnloadOutpost': 'Cargo unloaded → new outpost: {0}',
+  'vessel.foreignUnloadColony': 'Cargo unloaded to colony: {0}',
+
+  // === Foreign system orders ===
+  'fleet.orbitingBody': 'Orbiting: {0}',
+  'fleet.foreignReconBody': '🔭 Recon body',
+  'fleet.foreignReconSystem': '🔭 Recon system',
+  'fleet.foreignColonize': '🏙 Colonize',
+  'fleet.foreignUnload': '📦 Unload cargo',
+  'fleet.foreignRedirect': '🪐 Fly to another body',
+  'fleet.foreignReturn': '↩ Return to base',
+  'fleet.foreignScanning': '🔭 Scanning... {0}',
+  'fleet.foreignTraveling': '🚀 En route to: {0}',
+  'fleet.requiresExplored': 'Requires exploration',
+  'fleet.alreadyColonized': 'Already colonized',
+  'fleet.noCargo': 'No cargo',
 
   // === Vessel statuses ===
   'vessel.status.return': 'Return',
