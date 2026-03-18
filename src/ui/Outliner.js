@@ -101,21 +101,20 @@ export class Outliner {
       }
       let dy = 0;
       for (const [sysId, sysCols] of bySystem) {
-        // Nagłówek gwiazdy (tylko gdy >1 systemów)
-        if (bySystem.size > 1) {
-          const star = EntityManager.getStarOfSystem(sysId);
-          const starName = star?.name ?? sysId;
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = C.label;
-          ctx.fillText(`⭐ ${_truncate(starName, 14)}`, x + PAD, startY + dy + 13);
-          dy += 16;
-        }
+        // Nagłówek gwiazdy — zawsze widoczny
+        const star = EntityManager.getStarOfSystem(sysId);
+        const starName = star?.name ?? sysId;
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.label;
+        ctx.fillText(`⭐ ${_truncate(starName, 14)}`, x + PAD, startY + dy + 13);
+        dy += 16;
+
         for (const col of sysCols) {
           const iy = startY + dy;
           const icon = col.isHomePlanet ? '🏛' : '🏙';
           const pop = col.civSystem?.population ?? 0;
           const prosp = Math.round(col.prosperitySystem?.prosperity ?? 50);
-          const indent = bySystem.size > 1 ? 8 : 0; // wcięcie pod nagłówkiem gwiazdy
+          const indent = 8; // wcięcie pod nagłówkiem gwiazdy
 
           // Ikona mapy (🗺) po prawej — klik otwiera globus
           const mapIconX = x + OUTLINER_W - PAD - 12;

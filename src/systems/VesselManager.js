@@ -815,6 +815,13 @@ export class VesselManager {
           continue;
         }
 
+        // ── Foreign recon (full_system) — własna logika interpolacji i skanowania ──
+        if (m.type === 'foreign_recon' && m.scope === 'full_system') {
+          this._tickForeignRecon(vessel, m, gameYear);
+          moving.push(vessel);
+          continue;
+        }
+
         // Śledź dystans (delta pozycji → AU)
         const prevX = vessel.position.x;
         const prevY = vessel.position.y;
@@ -880,13 +887,6 @@ export class VesselManager {
             'success');
 
           EventBus.emit('vessel:arrived', { vessel, mission: m });
-          moving.push(vessel);
-          continue;
-        }
-
-        // ── Tick foreign_recon misji ──
-        if (m.type === 'foreign_recon') {
-          this._tickForeignRecon(vessel, m, gameYear);
           moving.push(vessel);
           continue;
         }
@@ -991,11 +991,10 @@ export class VesselManager {
       const edgeAU = 30; // AU — obrzeża układu
       const angle = Math.random() * Math.PI * 2;
       const edgePx = edgeAU * AU_TO_PX;
-
       vessel.systemId = m.toSystemId;
       vessel.position.state = 'orbiting';
-      vessel.position.x = (star?.x ?? 0) + Math.cos(angle) * edgePx;
-      vessel.position.y = (star?.y ?? 0) + Math.sin(angle) * edgePx;
+      vessel.position.x = Math.cos(angle) * edgePx;  // gwiazda zawsze w (0,0)
+      vessel.position.y = Math.sin(angle) * edgePx;
       vessel.position.dockedAt = null; // nie orbituje gwiazdy — wolna przestrzeń
       vessel.status = 'on_mission'; // nadal na misji — gracz musi zdecydować co dalej
       m.phase = 'in_system';
@@ -1283,14 +1282,14 @@ export class VesselManager {
     const systemId = vessel.systemId;
 
     if (scope === 'target' && targetId) {
-      // Recon konkretnego ciała — 0.2 roku na zbadanie
+      // Recon konkretnego ciała — 0.02 roku (~7 dni) na zbadanie
       vessel.mission = {
         type: 'foreign_recon',
         scope: 'target',
         targetId,
         systemId,
         startYear: gameYear,
-        completeYear: gameYear + 0.2,
+        completeYear: gameYear + 0.02,
         phase: 'scanning',
       };
       vessel.status = 'on_mission';
@@ -1417,7 +1416,7 @@ export class VesselManager {
           vessel.position.y = body.y;
         }
         m.phase = 'scanning';
-        m.scanCompleteYear = gameYear + 0.2; // 0.2 roku na skan
+        m.scanCompleteYear = gameYear + 0.02; // ~7 dni na skan
       }
       return;
     }

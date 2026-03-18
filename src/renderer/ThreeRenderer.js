@@ -692,7 +692,7 @@ export class ThreeRenderer {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({
         map: new THREE.CanvasTexture(c),
         transparent: true, opacity,
-        blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false,
+        blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
       }));
       sp.scale.setScalar(scale);
       return sp;
