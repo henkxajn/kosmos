@@ -703,12 +703,12 @@ export class ThreeRenderer {
       [0.0,  `rgba(255,255,255,1.0)`],
       [0.06, `rgba(255,255,255,0.9)`],
       [0.12, `rgba(255,255,255,0.6)`],
-      [0.18, `rgba(${cr},${cg},${cb},0.35)`],
-      [0.28, `rgba(${cr},${cg},${cb},0.15)`],
-      [0.42, `rgba(${glR},${glG},${glB},0.05)`],
-      [0.65, `rgba(${glR},${glG},${glB},0.01)`],
+      [0.20, `rgba(${cr},${cg},${cb},0.30)`],
+      [0.32, `rgba(${cr},${cg},${cb},0.10)`],
+      [0.50, `rgba(${glR},${glG},${glB},0.03)`],
+      [0.75, `rgba(${glR},${glG},${glB},0.005)`],
       [1.0,  `rgba(${glR},${glG},${glB},0.0)`],
-    ], 1.0, r * 9.0));
+    ], 1.0, r * 7.0));
 
     // ── [2] Glow średni — kolorowa poświata ──
     group.add(_glowSprite(512, [

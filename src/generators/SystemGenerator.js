@@ -154,15 +154,17 @@ export class SystemGenerator {
     // Licznik breathable atmosfer w układzie (max 2)
     const breathableCount = { value: 0 };
 
+    // Min orbit skalowane masą gwiazdy — cięższe gwiazdy mają większy promień wizualny
+    // Poza zasięgiem wewnętrznego glow gwiazdy (r * 9 / 2 w Three.js → ~r * 4.5 / 11 AU)
+    // M(0.3)→0.35, K(0.7)→0.43, G(1.0)→0.55, F(1.4)→0.71 AU
+    const minOrbitAU = Math.max(0.35, 0.15 + (star.mass ?? 1.0) * 0.4);
+
     for (let i = 0; i < count; i++) {
       // Titius-Bode z perturbacją ±15%
       const tbRaw   = (0.4 + 0.3 * Math.pow(TB_BASE, i)) * hzScale;
       const perturb = 0.85 + Math.random() * 0.30;  // 0.85–1.15
       const a       = tbRaw * perturb;
 
-      // Min orbit skalowane masą gwiazdy — cięższe gwiazdy mają większy promień wizualny
-      // M(0.3)→0.30, K(0.7)→0.37, G(1.0)→0.45, F(1.4)→0.55 AU
-      const minOrbitAU = Math.max(0.30, 0.15 + (star.mass ?? 1.0) * 0.3);
       if (a < minOrbitAU) continue;
       if (a > GAME_CONFIG.MAX_ORBIT_AU) break;
 
@@ -176,7 +178,10 @@ export class SystemGenerator {
       p.orbital.a >= hz.min && p.orbital.a <= hz.max && p.planetType === 'rocky'
     );
     if (!hasRockyHZ) {
-      const hzA = hz.min + Math.random() * (hz.max - hz.min);
+      // Ogranicz od dołu minOrbitAU — planeta nie może wypaść w glow gwiazdy
+      const hzLow = Math.max(hz.min, minOrbitAU);
+      const hzHigh = Math.max(hzLow, hz.max); // safety: hzLow nie może być > hzHigh
+      const hzA = hzLow + Math.random() * (hzHigh - hzLow);
       // forceType='rocky' — gwarancja: HZ musi mieć skalistą planetę
       const hzP = this._makePlanet(star, hzA, planets.length, 'rocky', breathableCount);
       const insertAt = planets.findIndex(p => p.orbital.a > hzA);
