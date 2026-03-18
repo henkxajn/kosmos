@@ -1,17 +1,29 @@
-// BottomBar — cienki pasek dolny (30px): stabilność + EventLog + przyciski gry
+// BottomBar — cienki pasek dolny (26px): stabilność + EventLog + przycisk MENU
 //
 // Zastępuje: _drawStabilityBar(), _drawEventLog(), _drawGameButtons(), _drawHint()
 // Zintegrowane w jednym pasku na dole ekranu.
+// Przycisk MENU otwiera panel z opcjami: Nowa gra, Zapisz, Autozapis, Muzyka, Dźwięki.
 
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
-import { SaveSystem }     from '../systems/SaveSystem.js';
 import EventBus            from '../core/EventBus.js';
 import { t }              from '../i18n/i18n.js';
 
-const BAR_H = COSMIC.BOTTOM_BAR_H; // 30px
+const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline
 const LOG_EXPANDED = 6; // ile wpisów po rozwinięciu
+
+// Wymiary panelu MENU
+const MENU_W = 220;
+const MENU_ROW_H = 28;
+const MENU_PAD = 8;
+const MENU_ROWS = 5; // Nowa gra, Zapisz, Autozapis, Muzyka, Dźwięki
+const MENU_H = MENU_PAD * 2 + MENU_ROWS * MENU_ROW_H;
+
+// Opcje interwału autozapisu
+const AUTOSAVE_OPTIONS = ['off', 'month', 'year', '10y'];
+const AUTOSAVE_INTERVALS = { off: 0, month: 1 / 12, year: 1, '10y': 10 };
+const AUTOSAVE_STORAGE_KEY = 'kosmos_autosave_interval';
 
 const C = {
   get bg()     { return THEME.bgPrimary; },
@@ -39,7 +51,23 @@ function _truncate(str, maxLen) {
 export class BottomBar {
   constructor() {
     this._expanded = false; // rozwinięty EventLog
+    this._menuOpen = false; // panel menu otwarty
+    this._hoverRow = -1;    // podświetlony wiersz menu (-1 = żaden)
+
+    // Wczytaj ustawienie autozapisu z localStorage
+    this._autosaveOption = 'year'; // domyślnie co rok
+    try {
+      const stored = localStorage.getItem(AUTOSAVE_STORAGE_KEY);
+      if (stored && AUTOSAVE_OPTIONS.includes(stored)) {
+        this._autosaveOption = stored;
+      }
+    } catch (e) { /* cicho */ }
+    // Wyemituj interwał przy starcie (SaveSystem nasłuchuje)
+    this._emitAutosaveInterval();
   }
+
+  // ── Getter: czy menu otwarte ──
+  get menuOpen() { return this._menuOpen; }
 
   // ── Rysowanie ───────────────────────────────────────────
   draw(ctx, W, H, state) {
@@ -105,7 +133,7 @@ export class BottomBar {
 
     // ── Sekcja centralna: EventLog (inline) ──
     const logX = 140;
-    const logW = W - 340; // dostępna szerokość na log
+    const logW = W - 240; // więcej miejsca (był W-340)
     const maxChars = Math.floor(logW / 6);
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -124,15 +152,8 @@ export class BottomBar {
     ctx.fillStyle = this._expanded ? C.title : C.label;
     ctx.fillText(this._expanded ? '▼' : '▲', expandBtnX, textY);
 
-    // ── Sekcja prawa: Przyciski gry ──
-    const btns = this._getButtonDefs(W, audioEnabled, musicEnabled, autoSlow);
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    btns.forEach(b => {
-      ctx.fillStyle = b.active === false ? THEME.dangerDim : C.label;
-      ctx.textAlign = 'right';
-      ctx.fillText(b.label, b.x, textY);
-    });
-    ctx.textAlign = 'left';
+    // ── Sekcja prawa: przycisk MENU ──
+    this._drawMenuButton(ctx, W, H, textY);
 
     // Hint (jeśli nie civMode)
     if (!civMode) {
@@ -140,22 +161,128 @@ export class BottomBar {
       ctx.fillStyle = C.label;
       ctx.fillText(t('ui.hintControls'), 10, barY + BAR_H - 4);
     }
+
+    // ── Panel MENU (nad paskiem dolnym) ──
+    if (this._menuOpen) {
+      this._drawMenuPanel(ctx, W, H, state);
+    }
   }
 
-  _getButtonDefs(W, audioEnabled, musicEnabled, autoSlow) {
-    const BTN_W = 38, GAP = 4;
+  // ── Przycisk MENU w prawym rogu paska ──
+  _drawMenuButton(ctx, W, H, textY) {
+    const btnW = 64;
+    const btnH = 20;
+    const btnX = W - btnW - 6;
+    const btnY = H - BAR_H + 3;
+
+    // Tło przycisku
+    ctx.fillStyle = this._menuOpen ? THEME.accentMed : THEME.bgTertiary;
+    ctx.fillRect(btnX, btnY, btnW, btnH);
+    ctx.strokeStyle = this._menuOpen ? THEME.borderActive : THEME.borderLight;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(btnX, btnY, btnW, btnH);
+
+    // Tekst
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = this._menuOpen ? THEME.accent : C.bright;
+    ctx.textAlign = 'center';
+    ctx.fillText(t('ui.menu'), btnX + btnW / 2, textY);
+    ctx.textAlign = 'left';
+  }
+
+  // ── Panel MENU ──
+  _drawMenuPanel(ctx, W, H, state) {
+    const { audioEnabled, musicEnabled } = state;
+    const menuX = W - MENU_W - 6;
+    const menuY = H - BAR_H - MENU_H - 4;
+
+    // Tło panelu
+    ctx.fillStyle = bgAlpha(0.95);
+    ctx.fillRect(menuX, menuY, MENU_W, MENU_H);
+    ctx.strokeStyle = THEME.borderActive;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(menuX, menuY, MENU_W, MENU_H);
+
+    // Wiersze menu
+    const rows = this._getMenuRows(audioEnabled, musicEnabled);
+    rows.forEach((row, i) => {
+      const rowY = menuY + MENU_PAD + i * MENU_ROW_H;
+      const isHover = this._hoverRow === i;
+
+      // Podświetlenie hover
+      if (isHover) {
+        ctx.fillStyle = THEME.accentDim;
+        ctx.fillRect(menuX + 2, rowY, MENU_W - 4, MENU_ROW_H);
+      }
+
+      // Separator (oprócz ostatniego wiersza)
+      if (i < rows.length - 1) {
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(menuX + 10, rowY + MENU_ROW_H);
+        ctx.lineTo(menuX + MENU_W - 10, rowY + MENU_ROW_H);
+        ctx.stroke();
+      }
+
+      const textY = rowY + 18;
+
+      // Etykieta (lewa)
+      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      ctx.fillStyle = isHover ? THEME.textPrimary : THEME.textSecondary;
+      ctx.textAlign = 'left';
+      ctx.fillText(row.label, menuX + 12, textY);
+
+      // Wartość (prawa) — dla toggle/cycle
+      if (row.value !== undefined) {
+        const valColor = row.valueOn ? THEME.success : THEME.dangerDim;
+        ctx.fillStyle = valColor;
+        ctx.textAlign = 'right';
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillText(row.value, menuX + MENU_W - 12, textY);
+      }
+    });
+    ctx.textAlign = 'left';
+  }
+
+  // ── Definicje wierszy menu ──
+  _getMenuRows(audioEnabled, musicEnabled) {
+    const autosaveLabel = this._getAutosaveLabel();
+    const autosaveOn = this._autosaveOption !== 'off';
     return [
-      { id: 'sound', label: t('ui.sound'), x: W - 10,                      active: audioEnabled },
-      { id: 'music', label: t('ui.music'), x: W - 10 - (BTN_W + GAP),      active: musicEnabled },
-      { id: 'new',   label: t('ui.newGame'), x: W - 10 - (BTN_W + GAP) * 2,  active: undefined },
-      { id: 'load',  label: t('ui.load'), x: W - 10 - (BTN_W + GAP) * 3,  active: undefined },
-      { id: 'save',  label: t('ui.save'), x: W - 10 - (BTN_W + GAP) * 4,  active: undefined },
-      { id: 'auto',  label: t('ui.auto'), x: W - 10 - (BTN_W + GAP) * 5,  active: autoSlow },
+      { id: 'newGame', label: t('menu.newGame') },
+      { id: 'save',    label: t('menu.save') },
+      { id: 'autosave', label: t('menu.autosave'), value: autosaveLabel, valueOn: autosaveOn },
+      { id: 'music',   label: t('menu.music'), value: musicEnabled ? t('menu.on') : t('menu.off'), valueOn: musicEnabled },
+      { id: 'sfx',     label: t('menu.sfx'),   value: audioEnabled ? t('menu.on') : t('menu.off'), valueOn: audioEnabled },
     ];
+  }
+
+  _getAutosaveLabel() {
+    switch (this._autosaveOption) {
+      case 'off':   return t('menu.autosaveOff');
+      case 'month': return t('menu.autosaveMonth');
+      case 'year':  return t('menu.autosaveYear');
+      case '10y':   return t('menu.autosave10y');
+      default:      return t('menu.autosaveYear');
+    }
   }
 
   // ── Hit testing ──────────────────────────────────────────
   hitTest(x, y, W, H, audioEnabled, musicEnabled, autoSlow) {
+    // Panel menu otwarty — sprawdź kliknięcia w panelu
+    if (this._menuOpen) {
+      const menuX = W - MENU_W - 6;
+      const menuY = H - BAR_H - MENU_H - 4;
+      if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) {
+        this._handleMenuClick(x, y, menuX, menuY, audioEnabled, musicEnabled);
+        return true;
+      }
+      // Kliknięcie poza menu — zamknij
+      this._menuOpen = false;
+      // Kontynuuj — sprawdź czy kliknięto w pasek dolny
+    }
+
     const barY = H - BAR_H;
     if (y < barY) {
       // Rozwinięty EventLog
@@ -166,6 +293,15 @@ export class BottomBar {
       return false;
     }
 
+    // Przycisk MENU
+    const btnW = 64;
+    const btnX = W - btnW - 6;
+    if (x >= btnX && x <= btnX + btnW) {
+      this._menuOpen = !this._menuOpen;
+      this._hoverRow = -1;
+      return true;
+    }
+
     // Przycisk rozwinięcia EventLog
     const logExpandX = 126;
     if (x >= logExpandX - 8 && x <= logExpandX + 12) {
@@ -173,39 +309,79 @@ export class BottomBar {
       return true;
     }
 
-    // Przyciski gry
-    const btns = this._getButtonDefs(W, audioEnabled, musicEnabled, autoSlow);
-    for (const b of btns) {
-      if (x >= b.x - 40 && x <= b.x) {
-        this._handleButton(b.id);
-        return true;
-      }
-    }
-
     return true; // pochłoń klik w pasku dolnym
   }
 
-  _handleButton(id) {
-    if (id === 'save') {
-      EventBus.emit('game:save');
-    } else if (id === 'load') {
-      if (!SaveSystem.hasSave()) return;
-      window.location.reload();
-    } else if (id === 'new') {
-      EventBus.emit('ui:confirmNew');
-    } else if (id === 'sound') {
-      EventBus.emit('audio:toggle');
-    } else if (id === 'music') {
-      EventBus.emit('music:toggle');
-    } else if (id === 'auto') {
-      EventBus.emit('time:autoSlowToggle');
+  _handleMenuClick(x, y, menuX, menuY, audioEnabled, musicEnabled) {
+    const rowIdx = Math.floor((y - menuY - MENU_PAD) / MENU_ROW_H);
+    if (rowIdx < 0 || rowIdx >= MENU_ROWS) return;
+
+    const rows = this._getMenuRows(audioEnabled, musicEnabled);
+    const row = rows[rowIdx];
+    if (!row) return;
+
+    switch (row.id) {
+      case 'newGame':
+        this._menuOpen = false;
+        EventBus.emit('ui:confirmNew');
+        break;
+      case 'save':
+        EventBus.emit('game:save');
+        this._menuOpen = false;
+        break;
+      case 'autosave':
+        this._cycleAutosave();
+        break;
+      case 'music':
+        EventBus.emit('music:toggle');
+        break;
+      case 'sfx':
+        EventBus.emit('audio:toggle');
+        break;
     }
   }
 
-  // Sprawdza czy punkt jest nad BottomBar
-  isOver(x, y, H) {
+  // ── Cyklowanie opcji autozapisu ──
+  _cycleAutosave() {
+    const idx = AUTOSAVE_OPTIONS.indexOf(this._autosaveOption);
+    this._autosaveOption = AUTOSAVE_OPTIONS[(idx + 1) % AUTOSAVE_OPTIONS.length];
+    try {
+      localStorage.setItem(AUTOSAVE_STORAGE_KEY, this._autosaveOption);
+    } catch (e) { /* cicho */ }
+    this._emitAutosaveInterval();
+  }
+
+  _emitAutosaveInterval() {
+    const interval = AUTOSAVE_INTERVALS[this._autosaveOption] || 0;
+    EventBus.emit('autosave:intervalChanged', { interval });
+  }
+
+  // ── Hover tracking (wywoływany z UIManager) ──
+  handleMouseMove(x, y, W, H) {
+    if (!this._menuOpen) {
+      this._hoverRow = -1;
+      return;
+    }
+    const menuX = W - MENU_W - 6;
+    const menuY = H - BAR_H - MENU_H - 4;
+    if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) {
+      this._hoverRow = Math.floor((y - menuY - MENU_PAD) / MENU_ROW_H);
+      if (this._hoverRow < 0 || this._hoverRow >= MENU_ROWS) this._hoverRow = -1;
+    } else {
+      this._hoverRow = -1;
+    }
+  }
+
+  // Sprawdza czy punkt jest nad BottomBar (lub otwartym menu)
+  isOver(x, y, W, H) {
     const barY = H - BAR_H;
     if (y >= barY) return true;
+    // Otwarty panel menu
+    if (this._menuOpen) {
+      const menuX = W - MENU_W - 6;
+      const menuY = H - BAR_H - MENU_H - 4;
+      if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) return true;
+    }
     // Rozwinięty EventLog
     if (this._expanded) {
       const expandedH = LOG_EXPANDED * 14 + 8;

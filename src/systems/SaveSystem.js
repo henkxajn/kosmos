@@ -15,7 +15,8 @@ import EntityManager from '../core/EntityManager.js';
 import { CURRENT_VERSION } from './SaveMigration.js';
 
 const SAVE_KEY           = 'kosmos_save_v1';
-const AUTOSAVE_INTERVAL  = 10000;  // lat gry między autosave'ami
+const DEFAULT_AUTOSAVE   = 1;  // lat gry między autosave'ami (domyślnie co rok)
+const AUTOSAVE_INTERVALS = { off: 0, month: 1 / 12, year: 1, '10y': 10 };
 
 export class SaveSystem {
   constructor(star, timeSystem) {
@@ -23,13 +24,28 @@ export class SaveSystem {
     this.timeSystem  = timeSystem;
     this._accumYears = 0;
 
-    // Autosave przez czas gry
+    // Wczytaj interwał autozapisu z localStorage (BottomBar emituje event za wcześnie)
+    let savedInterval = DEFAULT_AUTOSAVE;
+    try {
+      const stored = localStorage.getItem('kosmos_autosave_interval');
+      if (stored && stored in AUTOSAVE_INTERVALS) savedInterval = AUTOSAVE_INTERVALS[stored];
+    } catch (e) { /* cicho */ }
+    this._autosaveInterval = savedInterval; // 0 = wyłączony
+
+    // Autosave przez czas gry (interwał konfigurowalny z menu)
     EventBus.on('time:tick', ({ deltaYears }) => {
+      if (this._autosaveInterval <= 0) return; // wyłączony
       this._accumYears += deltaYears;
-      if (this._accumYears >= AUTOSAVE_INTERVAL) {
+      if (this._accumYears >= this._autosaveInterval) {
         this._accumYears = 0;
         this.save();
       }
+    });
+
+    // Zmiana interwału autozapisu z menu
+    EventBus.on('autosave:intervalChanged', ({ interval }) => {
+      this._autosaveInterval = interval;
+      this._accumYears = 0; // reset akumulatora
     });
 
     // Ręczny zapis z UI

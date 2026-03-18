@@ -616,8 +616,8 @@ export class UIManager {
     // TopBar (zawsze widoczny)
     if (this._topBar.isOver(x, y)) return true;
 
-    // BottomBar (zawsze widoczny)
-    if (this._bottomBar.isOver(x, y, H)) return true;
+    // BottomBar (zawsze widoczny) + panel menu
+    if (this._bottomBar.isOver(x, y, W, H)) return true;
 
     // Outliner (prawy panel — tylko civMode)
     if (window.KOSMOS?.civMode && this._outliner.isOver(x, y, W, H)) return true;
@@ -668,9 +668,13 @@ export class UIManager {
     }
 
     // TopBar (zasoby + czas)
-    if (this._topBar.hitTest(x, y, W)) return true;
+    if (this._topBar.hitTest(x, y, W)) {
+      // Zamknij menu jeśli kliknięto poza nim
+      if (this._bottomBar.menuOpen) this._bottomBar._menuOpen = false;
+      return true;
+    }
 
-    // BottomBar (stabilność + EventLog + przyciski)
+    // BottomBar (stabilność + EventLog + menu)
     if (this._bottomBar.hitTest(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) return true;
 
     // Outliner (prawy panel — kolonie/ekspedycje)
@@ -723,6 +727,8 @@ export class UIManager {
     if (this.overlayManager.isAnyOpen()) {
       this.overlayManager.handleMouseMove(x, y);
     }
+    // Hover w panelu menu
+    this._bottomBar.handleMouseMove(x, y, W, H);
     const prev = this._hoveredBtn;
     this._hoveredBtn = this._detectHoverBtn(x, y);
     if (this._hoveredBtn !== prev) {
