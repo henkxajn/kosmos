@@ -93,11 +93,19 @@ export class Outliner {
         if (!bySystem.has(sysId)) bySystem.set(sysId, []);
         bySystem.get(sysId).push(col);
       }
-      // Dodaj odwiedzone układy bez kolonii
+      // Dodaj odwiedzone układy bez kolonii (z StarSystemManager)
       const ssMgr = window.KOSMOS?.starSystemManager;
       if (ssMgr) {
         for (const sys of ssMgr.getAllSystems()) {
           if (!bySystem.has(sys.systemId)) bySystem.set(sys.systemId, []);
+        }
+      }
+      // Dodaj układy w których przebywają statki (fallback gdy SSM nie ma wpisu)
+      const vMgr = window.KOSMOS?.vesselManager;
+      if (vMgr) {
+        for (const v of vMgr.getAllVessels()) {
+          const vsId = v.systemId;
+          if (vsId && !bySystem.has(vsId)) bySystem.set(vsId, []);
         }
       }
       const activeSystemId = ssMgr?.activeSystemId ?? 'sys_home';
@@ -331,6 +339,14 @@ export class Outliner {
           this._sections[t.sectionId] = !this._sections[t.sectionId];
           return true;
         }
+        if (t.type === 'system') {
+          // Klik na nagłówek gwiazdy → przełącz widok na ten układ
+          const ssMgr = window.KOSMOS?.starSystemManager;
+          if (ssMgr && ssMgr.activeSystemId !== t.systemId) {
+            ssMgr.switchActiveSystem(t.systemId);
+          }
+          return true;
+        }
         if (t.type === 'colony') {
           const colMgr = window.KOSMOS?.colonyManager;
           const colony = colMgr?.getColony(t.planetId);
@@ -341,15 +357,16 @@ export class Outliner {
             window.KOSMOS?.overlayManager?.openPanel('colony');
           } else {
             // Klik na nazwę kolonii → focus kamery na planecie (nie otwieramy globusa)
+            // Przełącz układ jeśli kolonia w innym systemie
+            const colSysId = colony.systemId ?? 'sys_home';
+            const curSysId = window.KOSMOS?.starSystemManager?.activeSystemId;
+            if (curSysId && colSysId !== curSysId) {
+              window.KOSMOS.starSystemManager.switchActiveSystem(colSysId);
+            }
             if (colMgr) colMgr.switchActiveColony(t.planetId);
             EventBus.emit('colony:switched', { planetId: t.planetId });
             EventBus.emit('camera:focusTarget', { targetId: t.planetId });
           }
-          return true;
-        }
-        if (t.type === 'system') {
-          const ssMgr = window.KOSMOS?.starSystemManager;
-          if (ssMgr) ssMgr.switchActiveSystem(t.systemId);
           return true;
         }
         if (t.type === 'expedition') {
