@@ -288,24 +288,61 @@ export class GalaxyMapScene extends BaseOverlay {
         if (hasWarpTech && vMgr) {
           const warpShips = this._getAvailableWarpShips();
           if (warpShips.length > 0) {
-            const btnW = LEFT_W - 24;
-            const btnH = 24;
-            this._drawButton(ctx, t('galaxy.sendShip'), px, py, btnW, btnH, 'unique');
-            this._addHit(px, py, btnW, btnH, 'sendShip', { systemId: sys.id, ships: warpShips });
-            py += btnH + 6;
+            // Nagłówek
+            ctx.fillStyle = THEME.accent;
+            ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+            ctx.fillText(t('galaxy.sendShip'), px, py);
+            py += 18;
 
-            // Lista dostępnych statków
-            ctx.fillStyle = THEME.textDim;
-            ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-            for (const v of warpShips.slice(0, 3)) {
+            // Klikalna lista statków
+            const btnW = LEFT_W - 24;
+            const shipBtnH = 32;
+            for (const v of warpShips.slice(0, 5)) {
               const shipDef = SHIPS[v.shipId];
-              const range = (v.fuel.current / (shipDef?.fuelPerLY ?? 0.5)).toFixed(1);
-              ctx.fillText(`  ${v.name} (${range} LY)`, px, py);
-              py += 14;
+              const rangeLY = (v.fuel.current / (shipDef?.fuelPerLY ?? 0.5)).toFixed(1);
+
+              // Sprawdź paliwo na dystans
+              let hasFuel = true;
+              const gd = window.KOSMOS?.galaxyData;
+              const fromStar = gd?.systems?.find(s => s.id === (v.systemId ?? 'sys_home'));
+              if (fromStar && sys) {
+                const dx = sys.x - fromStar.x;
+                const dy = sys.y - fromStar.y;
+                const dz = (sys.z ?? 0) - (fromStar.z ?? 0);
+                const distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                hasFuel = v.fuel.current >= distLY * (shipDef?.fuelPerLY ?? 0.5);
+              }
+
+              // Tło przycisku
+              ctx.fillStyle = hasFuel ? 'rgba(0,255,180,0.06)' : 'rgba(60,60,60,0.15)';
+              ctx.fillRect(px, py, btnW, shipBtnH);
+              ctx.strokeStyle = hasFuel ? THEME.accent : THEME.border;
+              ctx.lineWidth = 1;
+              ctx.strokeRect(px, py, btnW, shipBtnH);
+
+              // Ikona + nazwa
+              ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+              ctx.fillStyle = hasFuel ? THEME.textPrimary : THEME.textDim;
+              const icon = shipDef?.icon ?? '🚀';
+              const name = v.name.length > 16 ? v.name.slice(0, 15) + '…' : v.name;
+              ctx.fillText(`${icon} ${name}`, px + 4, py + 13);
+
+              // Zasięg
+              ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+              ctx.fillStyle = hasFuel ? THEME.textSecondary : THEME.textDim;
+              ctx.fillText(`⛽ ${rangeLY} LY`, px + 4, py + 26);
+
+              if (hasFuel) {
+                this._addHit(px, py, btnW, shipBtnH, 'sendShipSelect', { vesselId: v.id, systemId: sys.id });
+              }
+
+              py += shipBtnH + 3;
             }
-            if (warpShips.length > 3) {
-              ctx.fillText(`  +${warpShips.length - 3} ${t('galaxy.more')}...`, px, py);
-              py += 14;
+            if (warpShips.length > 5) {
+              ctx.fillStyle = THEME.textDim;
+              ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+              ctx.fillText(`  +${warpShips.length - 5} ${t('galaxy.more')}...`, px, py + 10);
+              py += 16;
             }
           } else {
             // Brak statków warpowych
@@ -437,6 +474,10 @@ export class GalaxyMapScene extends BaseOverlay {
       this._handleSendShip(zone.systemId, zone.ships);
     }
 
+    if (zone.type === 'sendShipSelect') {
+      this._handleSendShipDirect(zone.data.vesselId, zone.data.systemId);
+    }
+
     if (zone.type === 'buildBeacon') {
       // TODO: sprawdź koszty zasobów i odejmij (na razie: bezkosztowo dla prototypu)
       EventBus.emit('orbital:buildBeacon', { systemId: zone.systemId });
@@ -482,6 +523,21 @@ export class GalaxyMapScene extends BaseOverlay {
           }
           return;
         }
+      }
+    }
+  }
+
+  /**
+   * Wyślij konkretny statek do wybranego układu.
+   */
+  _handleSendShipDirect(vesselId, targetSystemId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return;
+    const ok = vMgr.dispatchInterstellar(vesselId, targetSystemId);
+    if (ok) {
+      this.hide();
+      if (window.KOSMOS?.overlayManager) {
+        window.KOSMOS.overlayManager.active = null;
       }
     }
   }

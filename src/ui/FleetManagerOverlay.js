@@ -117,6 +117,7 @@ export class FleetManagerOverlay {
     this._bounds = null;          // { x,y,w,h } — cały overlay
     this._cachedTargets = null;   // cache celów misji
     this._cachedTargetsKey = '';   // klucz walidacji cache
+    this._pendingSendSystemId = null; // ID systemu do wysyłki — pokazuje ship picker w prawym panelu
 
     // Mapa — zoom i pan
     this._mapZoom = 1.0;          // 1.0 = fit all, >1 = zoom in
@@ -160,6 +161,7 @@ export class FleetManagerOverlay {
     this._clusterPanY = 0;
     this._selectedClusterSystem = null;
     this._clusterHoverSystem = null;
+    this._pendingSendSystemId = null;
   }
 
   // Centruj mapę na ciele (AU → px pan offset)
@@ -477,20 +479,35 @@ export class FleetManagerOverlay {
         break;
       }
       case 'cluster_send': {
-        // Wysyłka statku międzygwiezdnego — dispatch do VesselManager
+        // Wysyłka statku międzygwiezdnego — jeśli wybrany statek jest warp-capable, wyślij go
         const vMgr2 = window.KOSMOS?.vesselManager;
-        const colMgr2 = window.KOSMOS?.colonyManager;
-        if (!vMgr2 || !colMgr2 || !zone.data.systemId) break;
-        // Znajdź dostępny statek z capability 'interstellar' lub dowolny science_vessel
-        const activePid2 = colMgr2.activePlanetId;
-        const avail = vMgr2.getAvailable(activePid2);
-        const warpShip = avail.find(v => {
-          const def = SHIPS[v.shipId];
-          return def?.fuelPerLY > 0; // potrafi latać międzygwiezdnie
-        });
-        if (warpShip) {
-          vMgr2.dispatchInterstellar(warpShip.id, zone.data.systemId);
+        if (!vMgr2 || !zone.data.systemId) break;
+
+        if (this._selectedVesselId) {
+          const selV = vMgr2.getVessel(this._selectedVesselId);
+          const selDef = selV ? SHIPS[selV.shipId] : null;
+          if (selV && selDef?.fuelPerLY > 0 &&
+              selV.position.state === 'docked' &&
+              (selV.status === 'idle' || selV.status === 'refueling')) {
+            vMgr2.dispatchInterstellar(selV.id, zone.data.systemId);
+            break;
+          }
         }
+        // Brak wybranego statku lub nie spełnia wymagań → pokaż ship picker
+        this._pendingSendSystemId = zone.data.systemId;
+        break;
+      }
+      case 'cluster_send_pick': {
+        // Wybór konkretnego statku z pickera
+        const vMgr2b = window.KOSMOS?.vesselManager;
+        if (vMgr2b && zone.data.vesselId && zone.data.systemId) {
+          vMgr2b.dispatchInterstellar(zone.data.vesselId, zone.data.systemId);
+          this._pendingSendSystemId = null;
+        }
+        break;
+      }
+      case 'cluster_send_cancel': {
+        this._pendingSendSystemId = null;
         break;
       }
       case 'cluster_beacon': {
@@ -1969,6 +1986,12 @@ export class FleetManagerOverlay {
   _drawRight(ctx, x, y, w, h, vMgr, ms, colMgr, activePid) {
     const pad = 8;
 
+    // Tryb ship picker — wybór statku do wysyłki międzygwiezdnej
+    if (this._pendingSendSystemId) {
+      this._drawShipPicker(ctx, x, y, w, h, vMgr, colMgr, activePid);
+      return;
+    }
+
     if (!this._selectedVesselId) {
       this._drawShipyard(ctx, x, y, w, h, colMgr, activePid);
       return;
@@ -2016,6 +2039,11 @@ export class FleetManagerOverlay {
     ctx.fillText(ship ? getName(ship, 'ship') : vessel.shipId, x + pad + 24, cy + 32);
 
     cy += 44;
+
+    // ── Ship specs panel ─────────────────────────────────────
+    if (ship) {
+      cy = this._drawShipSpecs(ctx, x, cy, w, pad, ship, vessel);
+    }
 
     // Separator
     ctx.strokeStyle = THEME.border;
@@ -2444,6 +2472,242 @@ export class FleetManagerOverlay {
     if (logSpace > 30 && vessel.missionLog.length > 0) {
       this._drawMissionLog(ctx, x, cy, w, logSpace, pad, vessel);
     }
+  }
+
+  // ── Ship picker (prawy panel — wybór statku do wysyłki warp) ───────────────
+
+  _drawShipPicker(ctx, x, y, w, h, vMgr, colMgr, activePid) {
+    const PAD = 8;
+    let cy = y + PAD;
+
+    // Nagłówek
+    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(`🚀 ${t('fleet.selectShipToSend')}`, x + PAD, cy + 12);
+    cy += 22;
+
+    // Info o celu
+    const galaxyData = window.KOSMOS?.galaxyData;
+    const targetStar = galaxyData?.systems?.find(s => s.id === this._pendingSendSystemId);
+    if (targetStar) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(`→ ${targetStar.name}  (${targetStar.distanceLY} LY)`, x + PAD, cy + 10);
+      cy += 18;
+    }
+
+    // Separator
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
+    cy += 8;
+
+    // Pobierz dostępne statki warp
+    const allVessels = vMgr?.getAllVessels() ?? [];
+    const warpShips = allVessels.filter(v => {
+      if (v.position.state !== 'docked') return false;
+      if (v.status !== 'idle' && v.status !== 'refueling') return false;
+      const def = SHIPS[v.shipId];
+      return def?.fuelPerLY > 0;
+    });
+
+    if (warpShips.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.noWarpShipsAvailable'), x + PAD, cy + 10);
+      cy += 20;
+    } else {
+      // Lista statków — klikalne
+      const btnW = w - PAD * 2;
+      const btnH = 36;
+      for (const v of warpShips) {
+        if (cy + btnH > y + h - 40) break;
+
+        const shipDef = SHIPS[v.shipId];
+        const rangeLY = shipDef?.fuelPerLY ? (v.fuel.current / shipDef.fuelPerLY).toFixed(1) : '?';
+        const fuelPct = v.fuel.max > 0 ? v.fuel.current / v.fuel.max : 0;
+
+        // Sprawdź czy starczy paliwa
+        let hasFuel = true;
+        if (targetStar) {
+          const fromStar = galaxyData.systems.find(s => s.id === (v.systemId ?? 'sys_home'));
+          if (fromStar) {
+            const dx = targetStar.x - fromStar.x;
+            const dy = targetStar.y - fromStar.y;
+            const dz = (targetStar.z ?? 0) - (fromStar.z ?? 0);
+            const distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            hasFuel = v.fuel.current >= distLY * (shipDef?.fuelPerLY ?? 0.5);
+          }
+        }
+
+        // Tło
+        ctx.fillStyle = hasFuel ? 'rgba(0,255,180,0.06)' : 'rgba(60,60,60,0.15)';
+        ctx.fillRect(x + PAD, cy, btnW, btnH);
+        ctx.strokeStyle = hasFuel ? THEME.accent : THEME.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + PAD, cy, btnW, btnH);
+
+        // Ikona + nazwa
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = hasFuel ? THEME.textPrimary : THEME.textDim;
+        const icon = shipDef?.icon ?? '🚀';
+        const name = v.name.length > 14 ? v.name.slice(0, 13) + '…' : v.name;
+        ctx.fillText(`${icon} ${name}`, x + PAD + 4, cy + 14);
+
+        // Zasięg + paliwo
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = hasFuel ? THEME.textSecondary : THEME.textDim;
+        ctx.fillText(`⛽ ${rangeLY} LY  (${(fuelPct * 100).toFixed(0)}%)`, x + PAD + 4, cy + 28);
+
+        if (!hasFuel) {
+          ctx.fillStyle = THEME.danger;
+          ctx.textAlign = 'right';
+          ctx.fillText(t('fleet.fuelInsufficient'), x + w - PAD - 4, cy + 14);
+          ctx.textAlign = 'left';
+        }
+
+        if (hasFuel) {
+          this._hitZones.push({
+            x: x + PAD, y: cy, w: btnW, h: btnH,
+            type: 'cluster_send_pick',
+            data: { vesselId: v.id, systemId: this._pendingSendSystemId },
+          });
+        }
+
+        cy += btnH + 4;
+      }
+    }
+
+    // Przycisk Anuluj
+    cy += 4;
+    const cancelW = w - PAD * 2;
+    const cancelH = 22;
+    ctx.fillStyle = 'rgba(255,51,68,0.08)';
+    ctx.fillRect(x + PAD, cy, cancelW, cancelH);
+    ctx.strokeStyle = THEME.danger;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + PAD, cy, cancelW, cancelH);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.danger;
+    ctx.textAlign = 'center';
+    ctx.fillText(t('fleet.cancelSend'), x + w / 2, cy + 15);
+    ctx.textAlign = 'left';
+    this._hitZones.push({ x: x + PAD, y: cy, w: cancelW, h: cancelH, type: 'cluster_send_cancel', data: {} });
+  }
+
+  // ── Specyfikacja statku (panel prawy) ──────────────────────────────────────
+
+  _drawShipSpecs(ctx, x, cy, w, pad, ship, vessel) {
+    const specFont = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    const valFont  = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const lineH = 14;
+    const labelX = x + pad;
+    const valX   = x + pad + 58;
+    const maxW   = w - pad * 2;
+
+    // Opis statku (wrapped, dimmed)
+    if (ship.description) {
+      ctx.font = specFont;
+      ctx.fillStyle = THEME.textDim;
+      const descLines = this._wrapTextWidth(ctx, ship.description, maxW);
+      for (const line of descLines) {
+        ctx.fillText(line, labelX, cy + 10);
+        cy += lineH;
+      }
+      cy += 4;
+    }
+
+    // Generacja
+    const genLabels = ['', 'I', 'II', 'III', 'IV', 'V'];
+    ctx.font = specFont;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('fleet.shipGeneration'), labelX, cy + 10);
+    ctx.font = valFont;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(`Gen ${genLabels[ship.generation] ?? ship.generation}`, valX, cy + 10);
+    cy += lineH;
+
+    // Typ paliwa
+    const fuelComm = COMMODITIES[ship.fuelType];
+    const fuelName = fuelComm ? (COMMODITY_SHORT[ship.fuelType] ?? fuelComm.namePL ?? ship.fuelType) : ship.fuelType;
+    ctx.font = specFont;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('fleet.shipFuelType'), labelX, cy + 10);
+    ctx.font = valFont;
+    ctx.fillStyle = THEME.textPrimary;
+    ctx.fillText(fuelName, valX, cy + 10);
+    cy += lineH;
+
+    // Zasięg
+    const range = ship.range ?? (ship.fuelCapacity / (ship.fuelPerAU || 1));
+    ctx.font = specFont;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('fleet.shipRange'), labelX, cy + 10);
+    ctx.font = valFont;
+    ctx.fillStyle = THEME.textPrimary;
+    let rangeText = `${range} AU`;
+    if (ship.warpCapable && ship.fuelPerLY) {
+      const rangeLY = (ship.fuelCapacity / ship.fuelPerLY).toFixed(1);
+      rangeText += ` / ${rangeLY} LY`;
+    }
+    ctx.fillText(rangeText, valX, cy + 10);
+    cy += lineH;
+
+    // Ładownia (jeśli > 0)
+    if (ship.cargoCapacity > 0) {
+      ctx.font = specFont;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.shipCargo'), labelX, cy + 10);
+      ctx.font = valFont;
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(`${ship.cargoCapacity} t`, valX, cy + 10);
+      cy += lineH;
+    }
+
+    // Załoga
+    ctx.font = specFont;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('fleet.shipCrew'), labelX, cy + 10);
+    ctx.font = valFont;
+    ctx.fillStyle = THEME.textPrimary;
+    ctx.fillText(`${ship.crewCost} POP`, valX, cy + 10);
+    cy += lineH;
+
+    // Zdolności
+    if (ship.capabilities?.length > 0) {
+      ctx.font = specFont;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.shipCapabilities'), labelX, cy + 10);
+      ctx.font = valFont;
+      ctx.fillStyle = THEME.mint ?? THEME.accent;
+      const capIcons = {
+        recon: '🔭', scientific: '🔬', survey: '📡', deep_scan: '🛰',
+        colony: '🏗', cargo: '📦',
+      };
+      const capText = ship.capabilities.map(c => capIcons[c] ?? c).join(' ');
+      ctx.fillText(capText, valX, cy + 10);
+      cy += lineH;
+    }
+
+    cy += 6;
+    return cy;
+  }
+
+  // Helper: wrap text do zadanej szerokości (piksele)
+  _wrapTextWidth(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
   }
 
   // ── Stocznia (prawa kolumna gdy brak selekcji) ─────────────────────────────
