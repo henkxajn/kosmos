@@ -735,6 +735,7 @@ export default {
   'dialog.civDestroyedCollision': 'Kolizja planetarna zniszczyła planetę {0}.',
   'dialog.civDestroyedEjected': 'Planeta {0} została wyrzucona z układu.',
   'dialog.civDestroyedExtinction': 'Życie na planecie {0} wymarło.',
+  'dialog.civDestroyedPopulation': 'Populacja na planecie {0} wyginęła.',
   'dialog.systemFormed': 'Układ planetarny uformowany',
 
   // === EventLog / komunikaty wewnątrzgry ===

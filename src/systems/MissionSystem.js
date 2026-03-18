@@ -780,6 +780,13 @@ export class MissionSystem {
           homeEntity
         );
       }
+      // Statek nie zdążył odlecieć (dystans ≈ 0) — natychmiastowy powrót do hangaru
+      if (returnDist < 0.01 && vMgr && exp.vesselId) {
+        exp.status = 'completed';
+        vMgr.dockAtColony(exp.vesselId, exp.originColonyId);
+        this._emit('mission:cancelled', 'expedition:returnOrdered', { expedition: exp });
+        return;
+      }
       const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, returnDist / shipSpeed).toFixed(3));
       exp.status = 'returning';
       exp._returnDepartYear = this._gameYear;
@@ -1174,9 +1181,14 @@ export class MissionSystem {
       // KATASTROFA
       exp.status = 'completed';
       exp.gained = {};
-      // Odblokuj POPy na kolonii źródłowej (nie przez EventBus — unika cross-colony bleed)
+      // Odblokuj POPy na kolonii źródłowej i zabij załogę
       const originCol1 = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
-      if (originCol1) originCol1.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST);
+      const crew1 = exp.crewCost ?? EXPEDITION_CREW_COST;
+      if (originCol1?.civSystem) {
+        originCol1.civSystem.unlockPops(crew1);
+        originCol1.civSystem.population = Math.max(0, originCol1.civSystem.population - crew1);
+        EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originCol1.civSystem.population });
+      }
       if (exp.vesselId && vMgr) {
         addMissionLog(vMgr.getVessel(exp.vesselId), this._gameYear, 'KATASTROFA — statek utracony!', 'danger');
         vMgr.destroyVessel(exp.vesselId);
@@ -1297,11 +1309,12 @@ export class MissionSystem {
       // KATASTROFA — kolonia NIE powstaje
       exp.status = 'completed';
       exp.gained = {};
-      // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
+      // Odblokuj POPy na kolonii źródłowej i zabij załogę
       const originColDisaster = colMgr?.getColony(exp.originColonyId);
-      if (originColDisaster) originColDisaster.civSystem.unlockPops(exp.crewCost);
-      for (let i = 0; i < exp.crewCost; i++) {
-        EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: 0 });
+      if (originColDisaster?.civSystem) {
+        originColDisaster.civSystem.unlockPops(exp.crewCost);
+        originColDisaster.civSystem.population = Math.max(0, originColDisaster.civSystem.population - exp.crewCost);
+        EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: originColDisaster.civSystem.population });
       }
       this._emit('mission:disaster', 'expedition:disaster', { expedition: exp });
       return;
@@ -1508,9 +1521,14 @@ export class MissionSystem {
       // KATASTROFA
       exp.status = 'completed';
       exp.gained = {};
-      // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
+      // Odblokuj POPy na kolonii źródłowej i zabij załogę
       const originColRecon = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
-      if (originColRecon) originColRecon.civSystem.unlockPops(exp.crewCost ?? RECON_CREW_COST);
+      const crewRecon = exp.crewCost ?? RECON_CREW_COST;
+      if (originColRecon?.civSystem) {
+        originColRecon.civSystem.unlockPops(crewRecon);
+        originColRecon.civSystem.population = Math.max(0, originColRecon.civSystem.population - crewRecon);
+        EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originColRecon.civSystem.population });
+      }
       if (exp.vesselId && vMgr) {
         vMgr.destroyVessel(exp.vesselId);
       } else {

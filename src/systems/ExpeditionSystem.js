@@ -189,16 +189,17 @@ export class ExpeditionSystem {
   // Szacowany czas misji rozpoznawczej
   getReconTime(scope, vesselId) {
     const speed = this._getShipSpeed(vesselId);
+    const origin = this._getVesselOrigin(vesselId);
     if (scope === 'nearest') {
       // Dynamiczny: dystans do najbliższej niezbadanej planety / prędkość
-      const nearest = this._findNearestUnexplored();
-      const dist = nearest ? this._calcDistance(nearest) : 2.0;
+      const nearest = this._findNearestUnexplored(null, origin);
+      const dist = nearest ? this._calcDistance(nearest, origin) : 2.0;
       return parseFloat(Math.max(0.05, dist / speed).toFixed(3));
     }
     if (scope === 'full_system') {
       // Szacunek: dystans do najbliższego × ~N (sekwencyjne odkrywanie)
-      const nearest = this._findNearestUnexplored();
-      const dist = nearest ? this._calcDistance(nearest) : 2.0;
+      const nearest = this._findNearestUnexplored(null, origin);
+      const dist = nearest ? this._calcDistance(nearest, origin) : 2.0;
       const unexploredTotal = this.getUnexploredCount().total;
       // Optymistyczny szacunek: średni dystans × liczba ciał
       return parseFloat(Math.max(0.1, (dist / speed) * Math.max(1, unexploredTotal * 0.7)).toFixed(1));
@@ -206,7 +207,7 @@ export class ExpeditionSystem {
     // Konkretne ciało (targetId) — dystans do celu × 2 (tam i z powrotem)
     const target = this._findTarget(scope);
     if (target) {
-      const dist = this._calcDistance(target);
+      const dist = this._calcDistance(target, origin);
       return parseFloat(Math.max(0.05, (dist / speed) * 2).toFixed(3));
     }
     return 1.0;
@@ -329,12 +330,13 @@ export class ExpeditionSystem {
       return;
     }
 
-    // Oblicz odległość
-    const distance = this._calcDistance(target);
-
-    // Sprawdź zasięg: jeśli podano vessel → sprawdź paliwo, inaczej stary system (range)
+    // Oblicz odległość od pozycji statku (nie od homePlanet!)
     const vMgr = window.KOSMOS?.vesselManager;
     let assignedVesselId = vesselId ?? null;
+    const vesselOrigin = this._getVesselOrigin(assignedVesselId);
+    const distance = this._calcDistance(target, vesselOrigin);
+
+    // Sprawdź zasięg: jeśli podano vessel → sprawdź paliwo, inaczej stary system (range)
     if (vMgr && assignedVesselId) {
       const vessel = vMgr.getVessel(assignedVesselId);
       if (!vessel || vessel.status !== 'idle') {
@@ -443,10 +445,11 @@ export class ExpeditionSystem {
     }
 
     const target = this._findTarget(targetId);
-    const distance = this._calcDistance(target);
+    const vMgr = window.KOSMOS?.vesselManager;
+    const colVesselOrigin = this._getVesselOrigin(vesselId);
+    const distance = this._calcDistance(target, colVesselOrigin);
 
     // Sprawdź zasięg: vessel → paliwo, fallback → stary range
-    const vMgr = window.KOSMOS?.vesselManager;
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
       if (!vessel || vessel.status !== 'idle') {
@@ -676,7 +679,9 @@ export class ExpeditionSystem {
         targetEntity
       ));
     } else {
-      distance = this._calcDistance(target || { orbital: { a: 2 } });
+      // Standardowy launch — dystans od pozycji statku (nie homePlanet)
+      const transportOrigin = this._getVesselOrigin(vesselId);
+      distance = this._calcDistance(target || { orbital: { a: 2 } }, transportOrigin);
     }
 
     // Sprawdź paliwo
@@ -810,9 +815,8 @@ export class ExpeditionSystem {
 
     // Oblicz dystans od bieżącej pozycji (orbiting body) do nowego celu
     const currentBody = this._findTarget(exp.targetId);
-    const dist = currentBody
-      ? DistanceUtils.euclideanAU(currentBody, target)
-      : this._calcDistance(target);
+    const redirectOrigin = currentBody || this._getVesselOrigin(exp.vesselId);
+    const dist = this._calcDistance(target, redirectOrigin);
 
     // Sprawdź paliwo (tylko w jedną stronę — statek będzie orbitował nowy cel)
     const vMgr = window.KOSMOS?.vesselManager;
@@ -913,16 +917,17 @@ export class ExpeditionSystem {
     if (originColR?.civSystem) originColR.civSystem.lockPops(RECON_CREW_COST);
 
     const departYear = this._gameYear;
+    const reconOrigin = this._getVesselOrigin(vesselId);
 
     if (scope === 'full_system') {
-      // Sekwencyjny recon: pierwszy cel = najbliższy niezbadany od homePlanet
+      // Sekwencyjny recon: pierwszy cel = najbliższy niezbadany od pozycji statku
       // Pomija ciała będące celami innych aktywnych recon ekspedycji
-      const firstTarget = this._findNearestUnexplored(null);
+      const firstTarget = this._findNearestUnexplored(null, reconOrigin);
       if (!firstTarget) {
         EventBus.emit('expedition:launchFailed', { reason: t('expedition.noUnexplored') });
         return;
       }
-      const distance = this._calcDistance(firstTarget);
+      const distance = this._calcDistance(firstTarget, reconOrigin);
       const shipSpeed = this._getShipSpeed(vesselId);
       const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
 
@@ -966,8 +971,8 @@ export class ExpeditionSystem {
 
     // scope === 'nearest' — pojedynczy lot do najbliższego ciała
     // Pomija ciała będące celami innych aktywnych recon ekspedycji
-    const nearest = this._findNearestUnexplored(null);
-    const distance = nearest ? this._calcDistance(nearest) : 0.1;
+    const nearest = this._findNearestUnexplored(null, reconOrigin);
+    const distance = nearest ? this._calcDistance(nearest, reconOrigin) : 0.1;
     const shipSpeed = this._getShipSpeed(vesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
 
@@ -1019,9 +1024,10 @@ export class ExpeditionSystem {
       return;
     }
 
-    const distance = this._calcDistance(target);
     const vMgr  = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
+    const reconTgtOrigin = this._getVesselOrigin(vesselId);
+    const distance = this._calcDistance(target, reconTgtOrigin);
 
     // Sprawdź paliwo na lot + powrót
     if (vMgr && vesselId) {
@@ -1558,10 +1564,12 @@ export class ExpeditionSystem {
       if (nextTarget) {
         // Sprawdź czy statek ma paliwo na lot do następnego + powrót do bazy
         const vessel = vMgr?.getVessel(exp.vesselId);
-        const homePl = window.KOSMOS?.homePlanet;
-        if (vessel && homePl) {
+        // Powrót do kolonii macierzystej (nie zawsze homePlanet)
+        const originEntity = exp.originColonyId
+          ? EntityManager.get(exp.originColonyId) : window.KOSMOS?.homePlanet;
+        if (vessel && originEntity) {
           const distNext = DistanceUtils.euclideanAU(target, nextTarget);
-          const distReturn = DistanceUtils.euclideanAU(nextTarget, homePl);
+          const distReturn = DistanceUtils.euclideanAU(nextTarget, originEntity);
           const fuelNeeded = (distNext + distReturn) * vessel.fuel.consumption;
 
           if (vessel.fuel.current >= fuelNeeded) {
@@ -1617,10 +1625,11 @@ export class ExpeditionSystem {
     return targets;
   }
 
-  // Znajdź najbliższe niezbadane ciało — planetę lub księżyc (wg odległości od homePlanet)
+  // Znajdź najbliższe niezbadane ciało — planetę lub księżyc (wg odległości od źródła)
   // Księżyce planety domowej są dosłownie najbliższe — odkrywane jako pierwsze.
   // excludeExpId — pomija cele innych aktywnych recon ekspedycji
-  _findNearestUnexplored(excludeExpId = null) {
+  // from — encja/obiekt {x,y} źródła (pozycja statku); null → homePlanet
+  _findNearestUnexplored(excludeExpId = null, from = null) {
     const homePl = window.KOSMOS?.homePlanet;
     const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const activeTargets = this._getActiveReconTargets(excludeExpId);
@@ -1643,7 +1652,7 @@ export class ExpeditionSystem {
     }
 
     if (candidates.length === 0) return null;
-    candidates.sort((a, b) => this._calcDistance(a) - this._calcDistance(b));
+    candidates.sort((a, b) => this._calcDistance(a, from) - this._calcDistance(b, from));
     return candidates[0];
   }
 
@@ -1750,13 +1759,30 @@ export class ExpeditionSystem {
     return gained;
   }
 
-  // Oblicz odległość od planety domowej do celu w AU (euklidesowa, dynamiczna)
-  _calcDistance(target) {
-    const home = window.KOSMOS?.homePlanet;
-    if (!home || !target) return 0.1;
-    const dist = DistanceUtils.euclideanAU(home, target);
+  // Oblicz odległość od źródła do celu w AU (euklidesowa, dynamiczna)
+  // from — encja/obiekt z x,y (kolonia startowa lub pozycja statku); null → homePlanet
+  _calcDistance(target, from = null) {
+    const source = from || window.KOSMOS?.homePlanet;
+    if (!source || !target) return 0.1;
+    const dist = DistanceUtils.euclideanAU(source, target);
     // Minimum 0.001 AU — księżyce mogą być bardzo blisko
     return Math.max(0.001, dist);
+  }
+
+  // Pobierz encję startową statku (planeta, w której jest zadokowany)
+  _getVesselOrigin(vesselId) {
+    if (!vesselId) return null;
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return null;
+    const vessel = vMgr.getVessel(vesselId);
+    if (!vessel) return null;
+    // Statek zadokowany → pozycja planety macierzystej
+    if (vessel.position.dockedAt) {
+      const entity = EntityManager.get(vessel.position.dockedAt);
+      if (entity) return entity;
+    }
+    // Fallback: użyj pozycji statku bezpośrednio
+    return { x: vessel.position.x, y: vessel.position.y };
   }
 
   // Pobierz prędkość statku w AU/rok (z ShipsData lub domyślna)

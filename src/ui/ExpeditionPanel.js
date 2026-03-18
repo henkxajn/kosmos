@@ -440,13 +440,17 @@ export class ExpeditionPanel {
     const homePl = window.KOSMOS?.homePlanet;
     const results = [];
 
+    // Odległości od aktywnej kolonii (nie zawsze homePlanet)
+    const activePlanetId = window.KOSMOS?.colonyManager?.activePlanetId;
+    const activeColonyPlanet = activePlanetId ? EntityManager.get(activePlanetId) : homePl;
+
     const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     for (const t of ['asteroid', 'comet', 'planetoid', 'planet']) {
       for (const body of EntityManager.getByTypeInSystem(t, sysId)) {
-        if (body === homePl) continue;
+        if (body === activeColonyPlanet) continue;
         if (!body.orbital?.a)  continue;
         if (!body.explored) continue;  // tylko zbadane ciała jako cele
-        const dist  = exSys?._calcDistance(body) ?? Math.abs(body.orbital.a - 1.0);
+        const dist  = exSys?._calcDistance(body, activeColonyPlanet) ?? Math.abs(body.orbital.a - 1.0);
         const travel = Math.max(2, Math.ceil(dist * 2));
         results.push({
           id: body.id, name: body.name, type: body.type,

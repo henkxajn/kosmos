@@ -1048,11 +1048,12 @@ export class UIManager {
     ctx.fillText(t('dialog.civDestroyed'), W / 2, DY + 36);
 
     // Opis
-    const reasonText = d.reason === 'collision'
-      ? t('dialog.civDestroyedCollision', d.planetName)
-      : d.reason === 'ejected'
-        ? t('dialog.civDestroyedEjected', d.planetName)
-        : t('dialog.civDestroyedExtinction', d.planetName);
+    let reasonKey = 'dialog.civDestroyedExtinction';
+    if (d.reason === 'collision') reasonKey = 'dialog.civDestroyedCollision';
+    else if (d.reason === 'ejected') reasonKey = 'dialog.civDestroyedEjected';
+    else if (['extinction_impact','colony_destroyed','colony_disaster','expedition_disaster','starvation','exposure','population_extinct','epidemic'].includes(d.reason))
+      reasonKey = 'dialog.civDestroyedPopulation';
+    const reasonText = t(reasonKey, d.planetName);
     ctx.font = `${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     ctx.fillText(reasonText, W / 2, DY + 64);

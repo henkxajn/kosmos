@@ -425,6 +425,21 @@ export class GameScene {
       checkHomeDestroyed(planet, 'ejected');
     });
 
+    // Populacja macierzystej planety spadła do 0 (katastrofa ekspedycji, głód, ekspozycja, zdarzenie losowe)
+    EventBus.on('civ:popDied', ({ cause, population }) => {
+      if (this._gameOver) return;
+      if (!window.KOSMOS?.civMode || !window.KOSMOS?.homePlanet) return;
+      // Sprawdź populację kolonii macierzystej (nie aktywnej kolonii — ta może być inna)
+      const homePlanetId = window.KOSMOS.homePlanet.id;
+      const colMgr = window.KOSMOS.colonyManager;
+      const homeColony = colMgr?.getColony(homePlanetId);
+      if (!homeColony) return;
+      const homePop = homeColony.civSystem?.population ?? 0;
+      if (homePop <= 0) {
+        checkHomeDestroyed(window.KOSMOS.homePlanet, cause ?? 'population_extinct');
+      }
+    });
+
     // Focus kamery na encji (z Outlinera — klik na ekspedycję)
     EventBus.on('camera:focusTarget', ({ targetId }) => {
       if (!targetId) return;

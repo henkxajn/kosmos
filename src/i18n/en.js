@@ -735,6 +735,7 @@ export default {
   'dialog.civDestroyedCollision': 'Planetary collision destroyed planet {0}.',
   'dialog.civDestroyedEjected': 'Planet {0} was ejected from the system.',
   'dialog.civDestroyedExtinction': 'Life on planet {0} went extinct.',
+  'dialog.civDestroyedPopulation': 'Population on planet {0} has perished.',
   'dialog.systemFormed': 'Planetary system formed',
 
   // === EventLog / in-game messages ===

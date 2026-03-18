@@ -8,6 +8,7 @@ import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { showRenameModal } from './ModalInput.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
+import { DistanceUtils } from '../utils/DistanceUtils.js';
 
 // Mapowanie typów ciał na klucze i18n
 function _typeName(type) {
@@ -132,12 +133,10 @@ export function showBodyDetailModal(body) {
   const orbA = body.orbital?.a ?? 0;
   addRow(t('bodyDetail.orbit'), `${orbA.toFixed(2)} AU`);
 
-  // Odległość od bazy
+  // Odległość od bazy (euklidesowa, w AU)
   const homePl = window.KOSMOS?.homePlanet;
   if (homePl && body !== homePl) {
-    const dx = (body.physics?.x ?? 0) - (homePl.physics?.x ?? 0);
-    const dy = (body.physics?.y ?? 0) - (homePl.physics?.y ?? 0);
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const dist = DistanceUtils.fromHomePlanetAU(body);
     addRow(t('bodyDetail.distFromBase'), `${dist.toFixed(2)} AU`);
   }
 

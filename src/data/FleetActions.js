@@ -244,14 +244,19 @@ const ACTIONS = {
         // Brak ekspedycji ale statek jest w kosmosie — bezpośredni powrót przez VesselManager
         const vMgr = state.vesselManager;
         if (vMgr && vessel.mission) {
-          const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
           const homeEntity = vMgr._findEntity(vessel.colonyId);
           const hx = homeEntity?.x ?? 0;
           const hy = homeEntity?.y ?? 0;
           const distPx = Math.hypot(vessel.position.x - hx, vessel.position.y - hy);
+          const distAU = distPx / GAME_CONFIG.AU_TO_PX;
+          // Statek nie zdążył odlecieć — natychmiastowy powrót
+          if (distAU < 0.01) {
+            vMgr.dockAtColony(vessel.id, vessel.colonyId);
+            return;
+          }
+          const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
           const ship = SHIPS[vessel.shipId];
           const speed = (ship?.speedAU ?? 0.3) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
-          const distAU = distPx / GAME_CONFIG.AU_TO_PX;
           const travelYears = distAU / speed;
           vessel.mission.returnYear = gameYear + travelYears;
           vMgr.startReturn(vessel.id);
