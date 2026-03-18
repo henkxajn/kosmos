@@ -1474,6 +1474,7 @@ export default {
   // === Outliner ===
   'outliner.colonies': 'COLONIES [{0}]',
   'outliner.noColonies': 'No colonies',
+  'outliner.noColoniesHere': '— no colonies —',
   'outliner.expeditions': 'EXPEDITIONS [{0}]',
   'outliner.noMissions': 'No missions',
   'outliner.orbiting': '⊙ orbit',

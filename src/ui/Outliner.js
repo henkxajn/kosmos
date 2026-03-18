@@ -86,12 +86,6 @@ export class Outliner {
 
     // ── KOLONIE ──────────────────────────────────────────
     cy = this._drawSection(ctx, x, cy, 'colonies', t('outliner.colonies', colonies.length), (startY) => {
-      if (colonies.length === 0) {
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = C.dim;
-        ctx.fillText(t('outliner.noColonies'), x + PAD, startY + 14);
-        return ITEM_H;
-      }
       // Grupuj kolonie wg systemu gwiezdnego
       const bySystem = new Map();
       for (const col of colonies) {
@@ -99,15 +93,37 @@ export class Outliner {
         if (!bySystem.has(sysId)) bySystem.set(sysId, []);
         bySystem.get(sysId).push(col);
       }
+      // Dodaj odwiedzone układy bez kolonii
+      const ssMgr = window.KOSMOS?.starSystemManager;
+      if (ssMgr) {
+        for (const sys of ssMgr.getAllSystems()) {
+          if (!bySystem.has(sys.systemId)) bySystem.set(sys.systemId, []);
+        }
+      }
+      const activeSystemId = ssMgr?.activeSystemId ?? 'sys_home';
       let dy = 0;
       for (const [sysId, sysCols] of bySystem) {
-        // Nagłówek gwiazdy — zawsze widoczny
+        // Nagłówek gwiazdy — klikalny (przełącza układ)
         const star = EntityManager.getStarOfSystem(sysId);
         const starName = star?.name ?? sysId;
+        const isActive = sysId === activeSystemId;
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = C.label;
-        ctx.fillText(`⭐ ${_truncate(starName, 14)}`, x + PAD, startY + dy + 13);
+        ctx.fillStyle = isActive ? C.title : C.label;
+        const prefix = isActive ? '⭐▸' : '⭐';
+        ctx.fillText(`${prefix} ${_truncate(starName, 13)}`, x + PAD, startY + dy + 13);
+        this._clickTargets.push({
+          type: 'system', systemId: sysId,
+          x: x, y: startY + dy, w: OUTLINER_W, h: 16,
+        });
         dy += 16;
+
+        if (sysCols.length === 0) {
+          // Odwiedzony układ bez kolonii — info
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = C.dim;
+          ctx.fillText(t('outliner.noColoniesHere'), x + PAD + 8, startY + dy + 12);
+          dy += 16;
+        }
 
         for (const col of sysCols) {
           const iy = startY + dy;
@@ -141,7 +157,7 @@ export class Outliner {
           dy += ITEM_H;
         }
       }
-      return dy;
+      return Math.max(ITEM_H, dy);
     });
 
     // ── EKSPEDYCJE ───────────────────────────────────────
@@ -329,6 +345,11 @@ export class Outliner {
             EventBus.emit('colony:switched', { planetId: t.planetId });
             EventBus.emit('camera:focusTarget', { targetId: t.planetId });
           }
+          return true;
+        }
+        if (t.type === 'system') {
+          const ssMgr = window.KOSMOS?.starSystemManager;
+          if (ssMgr) ssMgr.switchActiveSystem(t.systemId);
           return true;
         }
         if (t.type === 'expedition') {
