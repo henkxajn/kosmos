@@ -35,6 +35,7 @@ export const SHIPS = {
     cargoCapacity: 0,            // brak ładowni
     crewCost:      0.5,          // POP
     requires:      'exploration',
+    capabilities:  ['recon', 'scientific', 'survey', 'deep_scan'],
     description:   'Orbitalny statek badawczy. Wymagany do ekspedycji naukowych.',
   },
 
@@ -61,6 +62,7 @@ export const SHIPS = {
     cargoCapacity: 200,
     crewCost:      2.0,
     requires:      'colonization',
+    capabilities:  ['colony'],
     description:   'Transportuje kolonistów na nowe ciało. Zużywany przy wysłaniu.',
   },
 
@@ -79,6 +81,7 @@ export const SHIPS = {
     speedAU:       0.9,
     cargoCapacity: 500,
     crewCost:      0.25,
+    capabilities:  ['cargo'],
     description:   'Wielki frachtowiec do transferu surowców między koloniami.',
   },
 
@@ -104,6 +107,7 @@ export const SHIPS = {
     cargoCapacity: 10000,
     crewCost:      1.0,
     requires:      'interplanetary_logistics',
+    capabilities:  ['cargo'],
     description:   'Ogromny frachtowiec do masowego transportu surowców między koloniami.',
   },
 
@@ -127,6 +131,7 @@ export const SHIPS = {
     cargoCapacity: 0,
     crewCost:      0.25,
     requires:      'ion_drives',
+    capabilities:  ['recon', 'survey', 'deep_scan'],
     description:   'Szybki zwiadowca Gen II — recon ×2 szybciej, dalszy zasięg.',
   },
 
@@ -146,6 +151,7 @@ export const SHIPS = {
     cargoCapacity: 2000,
     crewCost:      0.5,
     requires:      'ion_drives',
+    capabilities:  ['cargo'],
     description:   'Frachtowiec Gen II — 2000t cargo, lepszy zasięg.',
   },
 
@@ -170,6 +176,7 @@ export const SHIPS = {
     crewCost:      0.5,
     requires:      'fusion_drives',
     discoveryBonus: 0.5,  // +50% szans na odkrycie naukowe
+    capabilities:  ['recon', 'scientific', 'survey', 'deep_scan'],
     description:   'Eksplorator Gen III — +50% szans odkrycia naukowego, ogromny zasięg.',
   },
 
@@ -197,6 +204,7 @@ export const SHIPS = {
     cargoCapacity: 500,
     crewCost:      5.0,
     requires:      'cryogenics',
+    capabilities:  ['colony'],
     description:   'Ciężki kolonizator Gen III — 5 POPów, 500t cargo (hibernacja kriogeniczna).',
   },
 
@@ -227,6 +235,7 @@ export const SHIPS = {
     cargoCapacity: 2000,
     crewCost:      4.0,
     requires:      'antimatter_propulsion',
+    capabilities:  ['recon', 'scientific', 'colony', 'cargo'],
     description:   'Krążownik Gen IV — wielozadaniowy, szybki, 2000t cargo.',
   },
 
@@ -259,6 +268,7 @@ export const SHIPS = {
     crewCost:      10.0,
     requires:      'warp_drive',
     warpCapable:   true,
+    capabilities:  ['recon', 'scientific', 'colony', 'cargo'],
     description:   'Gwiezdny statek Gen V — natychmiastowy skok w granicach układu.',
   },
 
@@ -292,6 +302,7 @@ export const SHIPS = {
     requires:      'interstellar_colonization',
     warpCapable:   true,
     isVictoryShip: true,
+    capabilities:  ['colony', 'cargo'],
     description:   'Arka — masowy statek kolonizacyjny. Warunek zwycięstwa: wyślij Arkę.',
   },
 

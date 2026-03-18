@@ -1994,6 +1994,65 @@ export class ThreeRenderer {
         if (i === 0) c.moveTo(sx, sy); else c.lineTo(sx, sy);
       }
       c.closePath(); c.fill(); c.stroke();
+    } else if (vessel.shipId === 'fast_scout') {
+      // Cienki trójkąt (strzała) — szybki zwiadowca Gen II
+      c.beginPath();
+      c.moveTo(16, 2); c.lineTo(22, 30); c.lineTo(16, 24); c.lineTo(10, 30);
+      c.closePath(); c.fill(); c.stroke();
+    } else if (vessel.shipId === 'bulk_freighter') {
+      // 3 bloki cargo — frachtowiec masowy Gen II
+      c.fillRect(6, 3, 20, 8);
+      c.fillRect(6, 12, 20, 8);
+      c.fillRect(6, 21, 20, 8);
+      c.strokeRect(6, 3, 20, 8);
+      c.strokeRect(6, 12, 20, 8);
+      c.strokeRect(6, 21, 20, 8);
+    } else if (vessel.shipId === 'fusion_explorer') {
+      // Trójkąt ze skrzydłami — eksplorator fuzyjny Gen III
+      c.beginPath();
+      c.moveTo(16, 3); c.lineTo(28, 22); c.lineTo(30, 28); c.lineTo(16, 20);
+      c.lineTo(2, 28); c.lineTo(4, 22);
+      c.closePath(); c.fill(); c.stroke();
+    } else if (vessel.shipId === 'heavy_colony_ship') {
+      // Duży pentagon + koło habitatu — ciężki kolonizator Gen III
+      c.beginPath();
+      const hpr = 14;
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * 2 * Math.PI / 5) - Math.PI / 2;
+        const hx = 16 + hpr * Math.cos(angle);
+        const hy = 16 + hpr * Math.sin(angle);
+        if (i === 0) c.moveTo(hx, hy); else c.lineTo(hx, hy);
+      }
+      c.closePath(); c.fill(); c.stroke();
+      // Koło habitatu
+      c.beginPath(); c.arc(16, 16, 6, 0, Math.PI * 2); c.stroke();
+    } else if (vessel.shipId === 'antimatter_cruiser') {
+      // Sześciokąt — krążownik antymaterii Gen IV
+      c.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = (i * Math.PI / 3) - Math.PI / 2;
+        const hx = 16 + 13 * Math.cos(angle);
+        const hy = 16 + 13 * Math.sin(angle);
+        if (i === 0) c.moveTo(hx, hy); else c.lineTo(hx, hy);
+      }
+      c.closePath(); c.fill(); c.stroke();
+    } else if (vessel.shipId === 'starship') {
+      // Gwiazda 8-ramienna — gwiezdny statek Gen V
+      c.beginPath();
+      for (let i = 0; i < 16; i++) {
+        const angle = (i * Math.PI / 8) - Math.PI / 2;
+        const r = i % 2 === 0 ? 14 : 7;
+        const sx = 16 + r * Math.cos(angle);
+        const sy = 16 + r * Math.sin(angle);
+        if (i === 0) c.moveTo(sx, sy); else c.lineTo(sx, sy);
+      }
+      c.closePath(); c.fill(); c.stroke();
+    } else if (vessel.shipId === 'ark_ship') {
+      // Elipsa z ramionami — arka Gen V
+      c.beginPath(); c.ellipse(16, 16, 14, 9, 0, 0, Math.PI * 2); c.closePath(); c.fill(); c.stroke();
+      // Ramiona
+      c.fillRect(2, 14, 6, 4); c.strokeRect(2, 14, 6, 4);
+      c.fillRect(24, 14, 6, 4); c.strokeRect(24, 14, 6, 4);
     } else {
       // Domyślny romb
       c.beginPath();
@@ -2007,7 +2066,9 @@ export class ThreeRenderer {
       depthWrite: false,
     });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(0.4, 0.4, 1);
+    // Skalowanie sprite wg generacji statku
+    const genScale = { 1: 0.4, 2: 0.45, 3: 0.5, 4: 0.6, 5: 0.75 };
+    sprite.scale.set(genScale[gen] ?? 0.4, genScale[gen] ?? 0.4, 1);
 
     // Pozycja startowa
     const px = S(vessel.position.x);

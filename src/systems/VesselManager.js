@@ -142,6 +142,26 @@ export class VesselManager {
   }
 
   /**
+   * Czy kolonia ma idle statek z daną capability (np. 'recon', 'colony', 'cargo')?
+   */
+  hasAvailableShipWithCapability(colonyId, capability) {
+    return this.getFirstAvailableWithCapability(colonyId, capability) !== null;
+  }
+
+  /**
+   * Pierwszy idle statek z daną capability w kolonii.
+   */
+  getFirstAvailableWithCapability(colonyId, capability) {
+    const docked = this.getVesselsAt(colonyId);
+    for (const v of docked) {
+      if (v.status !== 'idle') continue;
+      const caps = SHIPS[v.shipId]?.capabilities;
+      if (caps && caps.includes(capability)) return v;
+    }
+    return null;
+  }
+
+  /**
    * Wszystkie statki w tranzycie.
    */
   getInTransit() {
@@ -170,6 +190,10 @@ export class VesselManager {
     if (!vessel) return false;
     // Pozwól statkom tankującym na misję (przerwij tankowanie)
     if ((vessel.status !== 'idle' && vessel.status !== 'refueling') || vessel.position.state !== 'docked') return false;
+
+    // Zastosuj fuel efficiency z tech (np. plasma_drives -30% zużycie)
+    const fuelEffMult = window.KOSMOS?.techSystem?.getFuelEfficiency() ?? 1.0;
+    vessel.fuel.consumption = (SHIPS[vessel.shipId]?.fuelPerAU ?? vessel.fuel.consumption) * fuelEffMult;
 
     // Pozycja startu (bieżąca pozycja kolonii)
     const startEntity = this._findEntity(vessel.position.dockedAt);

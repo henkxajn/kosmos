@@ -254,7 +254,7 @@ export const TECHS = {
     requires:    ['fusion_power', 'quantum_physics'],
     requiresDiscovery: 'pulapka_antymaterii',
     effects: [
-      { type: 'unlockCommodity', commodityId: 'antimatter_capsules' },
+      { type: 'unlockCommodity', commodityId: 'antimatter_cells' },
       { type: 'unlockBuilding', buildingId: 'antimatter_factory' },
     ],
     description: 'Fabryka Antymaterii — paliwo Gen IV, pochłania ogromnie energii',

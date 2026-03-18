@@ -39,8 +39,9 @@ const ACTIONS = {
       const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
       const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
       if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
-      if (vessel.shipId !== 'science_vessel') {
-        return { ok: false, reason: 'Wymaga Statku Naukowego' };
+      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
+      if (!caps.includes('survey')) {
+        return { ok: false, reason: 'Statek nie ma zdolności zwiadowczych' };
       }
       return { ok: true };
     },
@@ -66,8 +67,9 @@ const ACTIONS = {
       const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
       const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
       if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
-      if (vessel.shipId !== 'science_vessel') {
-        return { ok: false, reason: 'Wymaga Statku Naukowego' };
+      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
+      if (!caps.includes('deep_scan')) {
+        return { ok: false, reason: 'Statek nie ma zdolności skanowania' };
       }
       const unexplored = ms.getUnexploredCount();
       if (unexplored.total === 0) return { ok: false, reason: 'Układ w pełni zbadany' };
@@ -94,8 +96,9 @@ const ACTIONS = {
       const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
       const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
       if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
-      if (vessel.shipId !== 'science_vessel') {
-        return { ok: false, reason: 'Wymaga Statku Naukowego' };
+      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
+      if (!caps.includes('scientific')) {
+        return { ok: false, reason: 'Statek nie ma zdolności naukowych' };
       }
       return { ok: true };
     },
@@ -165,7 +168,8 @@ const ACTIONS = {
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
-      if (vessel.shipId !== 'colony_ship') return { ok: false, reason: 'Wymaga Statku Kolonijnego' };
+      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
+      if (!caps.includes('colony')) return { ok: false, reason: 'Statek nie ma zdolności kolonizacyjnych' };
       const ms = state.missionSystem;
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
       const techOk = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
@@ -264,7 +268,8 @@ const ACTIONS = {
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
-      if (vessel.shipId !== 'cargo_ship' && vessel.shipId !== 'heavy_freighter') {
+      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
+      if (!caps.includes('cargo')) {
         return { ok: false, reason: 'Wymaga statku cargo' };
       }
       const techOk = window.KOSMOS?.techSystem?.isResearched('interplanetary_logistics') ?? false;
@@ -317,18 +322,22 @@ export function getAvailableActions(vessel, state) {
 
   // Akcje wg stanu statku
   if (vessel.position.state === 'docked') {
-    // W hangarze — akcje misji
-    const shipDef = SHIPS[vessel.shipId];
-    if (vessel.shipId === 'science_vessel') {
+    // W hangarze — akcje misji wg capabilities statku
+    const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
+    if (caps.includes('survey')) {
       result.push(_check(ACTIONS.survey, vessel, state));
+    }
+    if (caps.includes('deep_scan')) {
       result.push(_check(ACTIONS.deep_scan, vessel, state));
     }
-    if (vessel.shipId === 'colony_ship') {
+    if (caps.includes('scientific')) {
+      result.push(_check(ACTIONS.scientific, vessel, state));
+    }
+    if (caps.includes('colony')) {
       result.push(_check(ACTIONS.colonize, vessel, state));
     }
     result.push(_check(ACTIONS.transport, vessel, state));
-    // Trasa handlowa — tylko cargo/heavy_freighter
-    if (vessel.shipId === 'cargo_ship' || vessel.shipId === 'heavy_freighter') {
+    if (caps.includes('cargo')) {
       result.push(_check(ACTIONS.trade_route, vessel, state));
     }
   } else if (vessel.position.state === 'orbiting') {

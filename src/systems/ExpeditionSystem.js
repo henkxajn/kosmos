@@ -119,10 +119,10 @@ export class ExpeditionSystem {
     const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
     const padOk  = this._hasSpaceport();
     const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
-    // Ekspedycje scientific wymagają statku naukowego w hangarze
+    // Ekspedycje scientific wymagają statku z capability 'scientific'
     const colMgr = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
-    const vesselOk = type !== 'scientific' || (colMgr?.hasShip(activePid, 'science_vessel') ?? false);
+    const vesselOk = type !== 'scientific' || (colMgr?.hasShipWithCapability(activePid, 'scientific') ?? false);
     return { ok: techOk && padOk && crewOk && vesselOk, techOk, padOk, crewOk, vesselOk };
   }
 
@@ -132,8 +132,12 @@ export class ExpeditionSystem {
     const padOk    = this._hasSpaceport();
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
-    const shipOk   = colMgr?.hasShip(activePid, 'colony_ship') ?? false;
-    const crewOk   = (window.KOSMOS?.civSystem?.freePops ?? 0) >= COLONY_CREW_COST;
+    const shipOk   = colMgr?.hasShipWithCapability(activePid, 'colony') ?? false;
+    // Dynamiczny crewCost z definicji statku (jeśli dostępny)
+    const vMgr     = window.KOSMOS?.vesselManager;
+    const colonyVessel = vMgr?.getFirstAvailableWithCapability(activePid, 'colony');
+    const dynCrewCost = colonyVessel ? (SHIPS[colonyVessel.shipId]?.crewCost ?? COLONY_CREW_COST) : COLONY_CREW_COST;
+    const crewOk   = (window.KOSMOS?.civSystem?.freePops ?? 0) >= dynCrewCost;
     const target   = this._findTarget(targetId);
     const exploredOk = target?.explored === true;
     // Cel musi być skalisty (planet rocky/ice, moon, planetoid)
@@ -157,7 +161,7 @@ export class ExpeditionSystem {
     const crewOk   = (window.KOSMOS?.civSystem?.freePops ?? 0) >= RECON_CREW_COST;
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
-    const vesselOk = colMgr?.hasShip(activePid, 'science_vessel') ?? false;
+    const vesselOk = colMgr?.hasShipWithCapability(activePid, 'recon') ?? false;
     return { ok: techOk && padOk && crewOk && vesselOk, techOk, padOk, crewOk, vesselOk };
   }
 
@@ -343,13 +347,20 @@ export class ExpeditionSystem {
         });
         return;
       }
-    } else if (type === 'scientific' && !this._isInRange(target, 'science_vessel')) {
-      const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
-      const range = SHIPS.science_vessel.range;
-      EventBus.emit('expedition:launchFailed', {
-        reason: t('expedition.outOfRange', dist, range)
-      });
-      return;
+    } else if (type === 'scientific') {
+      // Fallback range check: znajdź pierwszy dostępny statek z 'scientific'
+      const fallbackVessel = window.KOSMOS?.vesselManager?.getFirstAvailableWithCapability(
+        colMgr?.activePlanetId, 'scientific'
+      );
+      const fallbackShipId = fallbackVessel?.shipId ?? 'science_vessel';
+      if (!this._isInRange(target, fallbackShipId)) {
+        const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
+        const range = SHIPS[fallbackShipId]?.range ?? SHIPS.science_vessel?.range ?? 20;
+        EventBus.emit('expedition:launchFailed', {
+          reason: t('expedition.outOfRange', dist, range)
+        });
+        return;
+      }
     }
 
     // Sprawdź i pobierz koszt startowy
@@ -448,13 +459,20 @@ export class ExpeditionSystem {
         });
         return;
       }
-    } else if (!this._isInRange(target, 'colony_ship')) {
-      const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
-      const range = SHIPS.colony_ship.range;
-      EventBus.emit('expedition:launchFailed', {
-        reason: t('expedition.outOfRange', dist, range)
-      });
-      return;
+    } else {
+      // Fallback range check: znajdź pierwszy dostępny statek z 'colony'
+      const fallbackColVessel = window.KOSMOS?.vesselManager?.getFirstAvailableWithCapability(
+        colMgr?.activePlanetId, 'colony'
+      );
+      const fallbackColShipId = fallbackColVessel?.shipId ?? 'colony_ship';
+      if (!this._isInRange(target, fallbackColShipId)) {
+        const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
+        const range = SHIPS[fallbackColShipId]?.range ?? SHIPS.colony_ship?.range ?? 12;
+        EventBus.emit('expedition:launchFailed', {
+          reason: t('expedition.outOfRange', dist, range)
+        });
+        return;
+      }
     }
 
     // Pobierz zasoby
@@ -466,15 +484,20 @@ export class ExpeditionSystem {
       this.resourceSystem.spend(COLONY_LAUNCH_COST);
     }
 
-    // Zablokuj 2 POPy (bezpośrednio na kolonii źródłowej)
+    // Zablokuj POPy (dynamiczny crewCost z definicji statku)
+    const assignedVessel = vesselId ? vMgr?.getVessel(vesselId) : null;
+    const vesselShipDef  = assignedVessel ? SHIPS[assignedVessel.shipId] : null;
+    const actualCrewCost = vesselShipDef?.crewCost ?? COLONY_CREW_COST;
     const originColC = window.KOSMOS?.colonyManager?.getColony(
-      vesselId ? (window.KOSMOS?.vesselManager?.getVessel(vesselId)?.colonyId ?? window.KOSMOS?.colonyManager?.activePlanetId) : window.KOSMOS?.colonyManager?.activePlanetId
+      vesselId ? (assignedVessel?.colonyId ?? window.KOSMOS?.colonyManager?.activePlanetId) : window.KOSMOS?.colonyManager?.activePlanetId
     );
-    if (originColC?.civSystem) originColC.civSystem.lockPops(COLONY_CREW_COST);
+    if (originColC?.civSystem) originColC.civSystem.lockPops(actualCrewCost);
 
-    // Czas podróży — colony_ship + mnożnik tech napędowych + CIV_TIME_SCALE
+    // Czas podróży — prędkość przypisanego statku + mnożnik tech napędowych + CIV_TIME_SCALE
     const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
-    const colonySpeed = (SHIPS.colony_ship?.speedAU ?? 0.48) * techMult * CIV_TIME_SCALE;
+    // Warp = natychmiastowy lot
+    const baseColSpeed   = vesselShipDef?.warpCapable ? 99999 : (vesselShipDef?.speedAU ?? SHIPS.colony_ship?.speedAU ?? 0.48);
+    const colonySpeed    = baseColSpeed * techMult * CIV_TIME_SCALE;
     const travelTime  = parseFloat(Math.max(MIN_COLONY_TRAVEL, distance / colonySpeed).toFixed(3));
     const departYear  = this._gameYear;
 
@@ -489,12 +512,12 @@ export class ExpeditionSystem {
       returnYear:     null,   // ekspedycja kolonizacyjna nie wraca
       distance:       parseFloat(distance.toFixed(2)),
       travelTime,
-      crewCost:       COLONY_CREW_COST,
+      crewCost:       actualCrewCost,
       status:         'en_route',
       gained:         null,
       eventRoll:      null,
       vesselId:       vesselId ?? null,
-      originColonyId: vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
+      originColonyId: vesselId ? (assignedVessel?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
     };
 
     this._expeditions.push(expedition);

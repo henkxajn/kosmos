@@ -129,7 +129,7 @@ export class MissionSystem {
     const padOk  = this._hasSpaceport();
     const colMgr = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
-    const vesselOk = type !== 'scientific' || (colMgr?.hasShip(activePid, 'science_vessel') ?? false);
+    const vesselOk = type !== 'scientific' || (colMgr?.hasShipWithCapability(activePid, 'scientific') ?? false);
     return { ok: techOk && padOk && vesselOk, techOk, padOk, crewOk: true, vesselOk };
   }
 
@@ -139,7 +139,7 @@ export class MissionSystem {
     const padOk    = this._hasSpaceport();
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
-    const shipOk   = colMgr?.hasShip(activePid, 'colony_ship') ?? false;
+    const shipOk   = colMgr?.hasShipWithCapability(activePid, 'colony') ?? false;
     const target   = this._findTarget(targetId);
     const exploredOk = target?.explored === true;
     const typeOk   = target
@@ -161,7 +161,7 @@ export class MissionSystem {
     const padOk    = this._hasSpaceport();
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
-    const vesselOk = colMgr?.hasShip(activePid, 'science_vessel') ?? false;
+    const vesselOk = colMgr?.hasShipWithCapability(activePid, 'recon') ?? false;
     return { ok: techOk && padOk && vesselOk, techOk, padOk, crewOk: true, vesselOk };
   }
 

@@ -735,6 +735,15 @@ export class ColonyManager {
     return colony.fleet.includes(shipId);
   }
 
+  // Sprawdź czy kolonia ma statek z daną capability (idle, docked)
+  hasShipWithCapability(planetId, capability) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr) {
+      return vMgr.hasAvailableShipWithCapability(planetId, capability);
+    }
+    return false;
+  }
+
   // Pobierz flotę kolonii (vessel IDs lub stare string types)
   getFleet(planetId) {
     const colony = this.getColony(planetId);
