@@ -165,11 +165,12 @@ export class FleetManagerOverlay {
   // Centruj mapę na ciele (AU → px pan offset)
   // Oblicz maxOrbitAU (do skali mapy)
   _getMaxOrbitAU() {
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     let maxAU = 1;
-    for (const p of (EntityManager.getByType('planet') ?? [])) {
+    for (const p of (EntityManager.getByTypeInSystem('planet', sysId))) {
       const a = p.orbital?.a ?? 0; if (a > maxAU) maxAU = a;
     }
-    for (const pd of (EntityManager.getByType('planetoid') ?? [])) {
+    for (const pd of (EntityManager.getByTypeInSystem('planetoid', sysId))) {
       const a = pd.orbital?.a ?? 0; if (a > maxAU) maxAU = a;
     }
     return maxAU * 1.15;
@@ -461,7 +462,18 @@ export class FleetManagerOverlay {
         break;
       case 'cluster_switch': {
         const ssMgr = window.KOSMOS?.starSystemManager;
-        if (ssMgr && zone.data.systemId) ssMgr.switchActiveSystem(zone.data.systemId);
+        if (ssMgr && zone.data.systemId) {
+          ssMgr.switchActiveSystem(zone.data.systemId);
+          // Reset tactical map po przełączeniu układu
+          this._mapZoom = 1.0;
+          this._mapPanX = 0;
+          this._mapPanY = 0;
+          this._mapFocusBodyId = null;
+          this._mapHoverBody = null;
+          // Przełącz na tactical map żeby gracz widział nowy układ
+          this._showCluster = false;
+          this._showAtlas = false;
+        }
         break;
       }
       case 'cluster_send': {
@@ -984,13 +996,14 @@ export class FleetManagerOverlay {
     ctx.rect(x + 1, mapY, w - 2, mapH - 1);
     ctx.clip();
 
-    // ── Zbierz WSZYSTKIE ciała ──────────────────────────────
-    const planets    = EntityManager.getByType('planet') ?? [];
-    const moons      = EntityManager.getByType('moon') ?? [];
-    const planetoids = EntityManager.getByType('planetoid') ?? [];
-    const asteroids  = EntityManager.getByType('asteroid') ?? [];
-    const comets     = EntityManager.getByType('comet') ?? [];
-    const stars      = EntityManager.getByType('star') ?? [];
+    // ── Zbierz ciała AKTYWNEGO układu ──────────────────────────
+    const sysId      = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    const planets    = EntityManager.getByTypeInSystem('planet', sysId);
+    const moons      = EntityManager.getByTypeInSystem('moon', sysId);
+    const planetoids = EntityManager.getByTypeInSystem('planetoid', sysId);
+    const asteroids  = EntityManager.getByTypeInSystem('asteroid', sysId);
+    const comets     = EntityManager.getByTypeInSystem('comet', sysId);
+    const stars      = EntityManager.getByType('star')?.filter(s => s.systemId === sysId) ?? [];
 
     // Skala: max orbit AU → mapRadius (base, bez zoom)
     let maxOrbitAU = 1;
@@ -1430,9 +1443,10 @@ export class FleetManagerOverlay {
 
   _getAllCatalogBodies() {
     const homePl = window.KOSMOS?.homePlanet;
+    const sysId  = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const planets = [];
     for (const btype of ['planet', 'planetoid']) {
-      for (const body of EntityManager.getByType(btype)) {
+      for (const body of EntityManager.getByTypeInSystem(btype, sysId)) {
         if (body === homePl) continue; // planeta macierzysta dodana osobno na górze
         planets.push({ body, explored: !!body.explored });
       }
@@ -1443,7 +1457,7 @@ export class FleetManagerOverlay {
     });
 
     const moonsByParent = new Map();
-    for (const moon of EntityManager.getByType('moon')) {
+    for (const moon of EntityManager.getByTypeInSystem('moon', sysId)) {
       const pid = moon.parentPlanetId;
       if (!moonsByParent.has(pid)) moonsByParent.set(pid, []);
       moonsByParent.get(pid).push({ body: moon, explored: !!moon.explored, isMoon: true });
@@ -1453,11 +1467,12 @@ export class FleetManagerOverlay {
     }
 
     const result = [];
-    // Planeta macierzysta + jej księżyce na górze
-    if (homePl) {
+    // Planeta macierzysta + jej księżyce na górze (tylko jeśli w aktywnym układzie)
+    const homeInSystem = homePl && (homePl.systemId === sysId);
+    if (homeInSystem) {
       result.push({ body: homePl, explored: true, isHome: true });
     }
-    const homeMoons = homePl ? (moonsByParent.get(homePl.id) ?? []) : [];
+    const homeMoons = homeInSystem ? (moonsByParent.get(homePl.id) ?? []) : [];
     for (const m of homeMoons) result.push(m);
     if (homeMoons.length > 0) moonsByParent.delete(homePl.id);
 
@@ -2887,13 +2902,14 @@ export class FleetManagerOverlay {
     const homePid = window.KOSMOS?.homePlanet?.id;
     const colMgr  = window.KOSMOS?.colonyManager;
 
-    // Zbierz wszystkie ciała
+    // Zbierz ciała aktywnego układu
+    const activeSysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const bodies = [
-      ...EntityManager.getByType('planet'),
-      ...EntityManager.getByType('moon'),
-      ...EntityManager.getByType('planetoid'),
-      ...EntityManager.getByType('asteroid'),
-      ...EntityManager.getByType('comet'),
+      ...EntityManager.getByTypeInSystem('planet', activeSysId),
+      ...EntityManager.getByTypeInSystem('moon', activeSysId),
+      ...EntityManager.getByTypeInSystem('planetoid', activeSysId),
+      ...EntityManager.getByTypeInSystem('asteroid', activeSysId),
+      ...EntityManager.getByTypeInSystem('comet', activeSysId),
     ];
 
     for (const body of bodies) {

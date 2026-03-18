@@ -362,7 +362,7 @@ export class GameScene {
     EventBus.on('game:new', () => { SaveSystem.clearSave(); window.location.reload(); });
 
     // ── Przełączenie układu — aktywuj pierwszą kolonię w nowym układzie ──
-    EventBus.on('system:switched', ({ systemId }) => {
+    EventBus.on('system:switched', ({ systemId, star }) => {
       const colMgr = window.KOSMOS?.colonyManager;
       if (!colMgr) return;
       const cols = colMgr.getAllColonies().filter(c => {
@@ -371,6 +371,15 @@ export class GameScene {
       });
       if (cols.length > 0) {
         colMgr.switchActiveColony(cols[0].planetId);
+      } else {
+        // Brak kolonii w tym układzie — wyzeruj dane zasobów w UI
+        EventBus.emit('resource:changed', {
+          resources: { minerals: 0, energy: 0, organics: 0, water: 0, research: 0 },
+          deltaPerYear: { minerals: 0, energy: 0, organics: 0, water: 0, research: 0 },
+          inventory: {},
+          invPerYear: {},
+          energyFlow: { production: 0, consumption: 0, net: 0 },
+        });
       }
     });
 
