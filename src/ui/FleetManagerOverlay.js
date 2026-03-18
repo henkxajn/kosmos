@@ -288,7 +288,7 @@ export class FleetManagerOverlay {
         // Zoom mapy — utrzymaj focus na wybranym ciele (domyślnie gwiazda)
         const zoomFactor = delta > 0 ? 0.85 : 1.18;
         const oldZoom = this._mapZoom;
-        this._mapZoom = Math.max(0.3, Math.min(30, this._mapZoom * zoomFactor));
+        this._mapZoom = Math.max(0.3, Math.min(80, this._mapZoom * zoomFactor));
         const focusBody = this._mapFocusBodyId ? _findBody(this._mapFocusBodyId) : null;
         const { x: fAUx, y: fAUy } = this._bodyAU(focusBody);
         const maxAU = this._getMaxOrbitAU();
