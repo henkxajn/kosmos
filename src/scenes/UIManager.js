@@ -662,8 +662,8 @@ export class UIManager {
       return this._hitTestConfirm(x, y);
     }
 
-    // Panel MENU — priorytet nad overlayami (rysowany na wierzchu)
-    if (this._bottomBar.menuOpen && this._bottomBar.hitTestMenu(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) {
+    // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
+    if (this._bottomBar.menuOpen && this._bottomBar.hitTestMenu(x, y, W, H)) {
       return true;
     }
 

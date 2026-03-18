@@ -53,6 +53,7 @@ export class BottomBar {
     this._expanded = false; // rozwinięty EventLog
     this._menuOpen = false; // panel menu otwarty
     this._hoverRow = -1;    // podświetlony wiersz menu (-1 = żaden)
+    this._domMenu = null;   // DOM element panelu menu (z-index nad wszystkimi canvasami)
 
     // Wczytaj ustawienie autozapisu z localStorage
     this._autosaveOption = 'year'; // domyślnie co rok
@@ -71,6 +72,7 @@ export class BottomBar {
 
   // ── Rysowanie ───────────────────────────────────────────
   draw(ctx, W, H, state) {
+    this._lastState = state; // zachowaj do DOM menu
     const { stability, logEntries, audioEnabled, musicEnabled, autoSlow, civMode } = state;
     const barY = H - BAR_H;
 
@@ -162,14 +164,114 @@ export class BottomBar {
       ctx.fillText(t('ui.hintControls'), 10, barY + BAR_H - 4);
     }
 
-    // Panel MENU rysowany osobno przez UIManager (nad overlayami)
+    // Panel MENU — DOM overlay (nad wszystkimi canvasami)
+    this._syncDomMenu();
   }
 
-  // Rysuj panel MENU — wywoływane przez UIManager po overlayach (z-order na wierzchu)
-  drawMenu(ctx, W, H, state) {
-    if (!this._menuOpen) return;
-    this._drawMenuPanel(ctx, W, H, state);
+  // Synchronizuj widoczność DOM panelu menu
+  _syncDomMenu() {
+    if (this._menuOpen) {
+      this._showDomMenu();
+    } else {
+      this._hideDomMenu();
+    }
   }
+
+  // Pokaż DOM menu (tworzy jeśli nie istnieje)
+  _showDomMenu() {
+    if (!this._domMenu) this._createDomMenu();
+    this._updateDomMenu();
+    this._domMenu.style.display = 'block';
+  }
+
+  _hideDomMenu() {
+    if (this._domMenu) this._domMenu.style.display = 'none';
+  }
+
+  _createDomMenu() {
+    const el = document.createElement('div');
+    el.className = 'kosmos-menu-panel';
+    el.style.cssText = `
+      position: fixed; z-index: 100; display: none;
+      bottom: ${BAR_H + 4}px; right: 6px;
+      width: ${MENU_W}px; padding: ${MENU_PAD}px 0;
+      background: rgba(2,4,5,0.96);
+      border: 1px solid ${THEME.borderActive};
+      font-family: ${THEME.fontFamily};
+      pointer-events: auto; user-select: none;
+    `;
+    // Kliknięcia w panelu nie propagują się do event-layer
+    el.addEventListener('mousedown', e => e.stopPropagation());
+    el.addEventListener('click', e => e.stopPropagation());
+    document.body.appendChild(el);
+    this._domMenu = el;
+  }
+
+  _updateDomMenu() {
+    if (!this._domMenu) return;
+    const audioEnabled = this._lastState?.audioEnabled ?? true;
+    const musicEnabled = this._lastState?.musicEnabled ?? true;
+    const rows = this._getMenuRows(audioEnabled, musicEnabled);
+
+    let html = '';
+    rows.forEach((row, i) => {
+      const sep = i < rows.length - 1
+        ? `border-bottom: 1px solid ${THEME.border};` : '';
+      const valHtml = row.value !== undefined
+        ? `<span style="color:${row.valueOn ? THEME.success : THEME.dangerDim};font-size:${THEME.fontSizeSmall}px">${row.value}</span>`
+        : '';
+      html += `<div data-idx="${i}" style="
+        display:flex; justify-content:space-between; align-items:center;
+        padding: 4px 12px; height:${MENU_ROW_H}px; box-sizing:border-box;
+        cursor:pointer; color:${THEME.textSecondary}; font-size:${THEME.fontSizeNormal}px;
+        ${sep}
+      " onmouseenter="this.style.background='${THEME.accentDim}';this.style.color='${THEME.textPrimary}'"
+         onmouseleave="this.style.background='transparent';this.style.color='${THEME.textSecondary}'"
+      ><span>${row.label}</span>${valHtml}</div>`;
+    });
+    this._domMenu.innerHTML = html;
+
+    // Dodaj click handlery
+    this._domMenu.querySelectorAll('[data-idx]').forEach(div => {
+      div.addEventListener('click', () => {
+        const idx = parseInt(div.dataset.idx);
+        const r = rows[idx];
+        if (!r) return;
+        this._executeMenuAction(r.id);
+      });
+    });
+  }
+
+  _executeMenuAction(actionId) {
+    switch (actionId) {
+      case 'newGame':
+        this._menuOpen = false;
+        this._syncDomMenu();
+        EventBus.emit('ui:confirmNew');
+        break;
+      case 'save':
+        EventBus.emit('game:save');
+        this._menuOpen = false;
+        this._syncDomMenu();
+        break;
+      case 'autosave':
+        this._cycleAutosave();
+        this._updateDomMenu(); // odśwież wartość
+        break;
+      case 'music':
+        EventBus.emit('music:toggle');
+        // Wartości odświeżą się przy następnym otwarciu
+        setTimeout(() => this._updateDomMenu(), 50);
+        break;
+      case 'sfx':
+        EventBus.emit('audio:toggle');
+        setTimeout(() => this._updateDomMenu(), 50);
+        break;
+    }
+  }
+
+  // Rysuj panel MENU — stub (menu jest teraz DOM, nie canvas)
+  drawMenu() { /* noop — DOM menu zarządzane przez _syncDomMenu() */ }
 
   // ── Przycisk MENU w prawym rogu paska ──
   _drawMenuButton(ctx, W, H, textY) {
@@ -190,61 +292,6 @@ export class BottomBar {
     ctx.fillStyle = this._menuOpen ? THEME.accent : C.bright;
     ctx.textAlign = 'center';
     ctx.fillText(t('ui.menu'), btnX + btnW / 2, textY);
-    ctx.textAlign = 'left';
-  }
-
-  // ── Panel MENU ──
-  _drawMenuPanel(ctx, W, H, state) {
-    const { audioEnabled, musicEnabled } = state;
-    const menuX = W - MENU_W - 6;
-    const menuY = H - BAR_H - MENU_H - 4;
-
-    // Tło panelu
-    ctx.fillStyle = bgAlpha(0.95);
-    ctx.fillRect(menuX, menuY, MENU_W, MENU_H);
-    ctx.strokeStyle = THEME.borderActive;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(menuX, menuY, MENU_W, MENU_H);
-
-    // Wiersze menu
-    const rows = this._getMenuRows(audioEnabled, musicEnabled);
-    rows.forEach((row, i) => {
-      const rowY = menuY + MENU_PAD + i * MENU_ROW_H;
-      const isHover = this._hoverRow === i;
-
-      // Podświetlenie hover
-      if (isHover) {
-        ctx.fillStyle = THEME.accentDim;
-        ctx.fillRect(menuX + 2, rowY, MENU_W - 4, MENU_ROW_H);
-      }
-
-      // Separator (oprócz ostatniego wiersza)
-      if (i < rows.length - 1) {
-        ctx.strokeStyle = THEME.border;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(menuX + 10, rowY + MENU_ROW_H);
-        ctx.lineTo(menuX + MENU_W - 10, rowY + MENU_ROW_H);
-        ctx.stroke();
-      }
-
-      const textY = rowY + 18;
-
-      // Etykieta (lewa)
-      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.fillStyle = isHover ? THEME.textPrimary : THEME.textSecondary;
-      ctx.textAlign = 'left';
-      ctx.fillText(row.label, menuX + 12, textY);
-
-      // Wartość (prawa) — dla toggle/cycle
-      if (row.value !== undefined) {
-        const valColor = row.valueOn ? THEME.success : THEME.dangerDim;
-        ctx.fillStyle = valColor;
-        ctx.textAlign = 'right';
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillText(row.value, menuX + MENU_W - 12, textY);
-      }
-    });
     ctx.textAlign = 'left';
   }
 
@@ -272,43 +319,39 @@ export class BottomBar {
   }
 
   // Hit test TYLKO panelu menu + przycisku MENU (priorytet nad overlayami)
-  hitTestMenu(x, y, W, H, audioEnabled, musicEnabled) {
+  // DOM menu obsługuje swoje kliknięcia — tu zamykamy na klik poza menu
+  hitTestMenu(x, y, W, H) {
     if (!this._menuOpen) return false;
 
-    // Panel menu
+    // Klik w obszarze DOM menu — pochłoń (DOM sam obsłuży)
     const menuX = W - MENU_W - 6;
     const menuY = H - BAR_H - MENU_H - 4;
     if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) {
-      this._handleMenuClick(x, y, menuX, menuY, audioEnabled, musicEnabled);
       return true;
     }
 
-    // Przycisk MENU (toggle)
+    // Przycisk MENU (toggle zamknij)
     const btnW = 64;
     const btnX = W - btnW - 6;
     const barY = H - BAR_H;
     if (y >= barY && x >= btnX && x <= btnX + btnW) {
       this._menuOpen = false;
+      this._syncDomMenu();
       return true;
     }
 
     // Klik poza menu — zamknij
     this._menuOpen = false;
+    this._syncDomMenu();
     return false;
   }
 
   // ── Hit testing ──────────────────────────────────────────
   hitTest(x, y, W, H, audioEnabled, musicEnabled, autoSlow) {
-    // Panel menu otwarty — sprawdź kliknięcia w panelu
+    // Panel menu otwarty — zamknij przy kliknięciu poza nim
     if (this._menuOpen) {
-      const menuX = W - MENU_W - 6;
-      const menuY = H - BAR_H - MENU_H - 4;
-      if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) {
-        this._handleMenuClick(x, y, menuX, menuY, audioEnabled, musicEnabled);
-        return true;
-      }
-      // Kliknięcie poza menu — zamknij
       this._menuOpen = false;
+      this._syncDomMenu();
       // Kontynuuj — sprawdź czy kliknięto w pasek dolny
     }
 
@@ -327,6 +370,7 @@ export class BottomBar {
     const btnX = W - btnW - 6;
     if (x >= btnX && x <= btnX + btnW) {
       this._menuOpen = !this._menuOpen;
+      this._syncDomMenu();
       this._hoverRow = -1;
       return true;
     }
@@ -339,35 +383,6 @@ export class BottomBar {
     }
 
     return true; // pochłoń klik w pasku dolnym
-  }
-
-  _handleMenuClick(x, y, menuX, menuY, audioEnabled, musicEnabled) {
-    const rowIdx = Math.floor((y - menuY - MENU_PAD) / MENU_ROW_H);
-    if (rowIdx < 0 || rowIdx >= MENU_ROWS) return;
-
-    const rows = this._getMenuRows(audioEnabled, musicEnabled);
-    const row = rows[rowIdx];
-    if (!row) return;
-
-    switch (row.id) {
-      case 'newGame':
-        this._menuOpen = false;
-        EventBus.emit('ui:confirmNew');
-        break;
-      case 'save':
-        EventBus.emit('game:save');
-        this._menuOpen = false;
-        break;
-      case 'autosave':
-        this._cycleAutosave();
-        break;
-      case 'music':
-        EventBus.emit('music:toggle');
-        break;
-      case 'sfx':
-        EventBus.emit('audio:toggle');
-        break;
-    }
   }
 
   // ── Cyklowanie opcji autozapisu ──
@@ -386,19 +401,9 @@ export class BottomBar {
   }
 
   // ── Hover tracking (wywoływany z UIManager) ──
-  handleMouseMove(x, y, W, H) {
-    if (!this._menuOpen) {
-      this._hoverRow = -1;
-      return;
-    }
-    const menuX = W - MENU_W - 6;
-    const menuY = H - BAR_H - MENU_H - 4;
-    if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) {
-      this._hoverRow = Math.floor((y - menuY - MENU_PAD) / MENU_ROW_H);
-      if (this._hoverRow < 0 || this._hoverRow >= MENU_ROWS) this._hoverRow = -1;
-    } else {
-      this._hoverRow = -1;
-    }
+  // DOM menu obsługuje hover samodzielnie — tu tylko reset _hoverRow
+  handleMouseMove() {
+    this._hoverRow = -1;
   }
 
   // Sprawdza czy punkt jest nad BottomBar (lub otwartym menu)
