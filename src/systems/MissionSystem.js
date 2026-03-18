@@ -1415,66 +1415,79 @@ export class MissionSystem {
         }
       }
     } else if (colMgr) {
-      // Cel BEZ kolonii — utwórz outpost
+      // Cel BEZ kolonii — sprawdź czy cel jest w tym samym układzie co kolonia macierzysta
       const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+      const originCol = colMgr.getColony(exp.originColonyId);
+      const targetBody = this._findTarget(exp.targetId);
+      const originSysId = originCol?.systemId ?? 'sys_home';
+      const targetSysId = targetBody?.systemId ?? 'sys_home';
 
-      const outpostResources = {};
-      const prefabsOnShip = {};
+      if (originSysId !== targetSysId) {
+        // Obcy układ — statek orbituje cel, NIE tworzymy outpostu (wymaga colony_ship)
+        exp.status = 'orbiting';
+        if (exp.vesselId && vMgr) {
+          vMgr.arriveAtTarget(exp.vesselId, exp.targetId);
+        }
+      } else {
+        // Ten sam układ — utwórz outpost z cargo
+        const outpostResources = {};
+        const prefabsOnShip = {};
 
-      if (vessel?.cargo) {
-        for (const [comId, qty] of Object.entries(vessel.cargo)) {
-          if (qty <= 0) continue;
-          const com = COMMODITIES[comId];
-          if (com?.isPrefab) {
-            prefabsOnShip[comId] = qty;
-          } else {
-            outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
+        if (vessel?.cargo) {
+          for (const [comId, qty] of Object.entries(vessel.cargo)) {
+            if (qty <= 0) continue;
+            const com = COMMODITIES[comId];
+            if (com?.isPrefab) {
+              prefabsOnShip[comId] = qty;
+            } else {
+              outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
+            }
           }
         }
-      }
 
-      if (exp.cargo) {
-        for (const [key, val] of Object.entries(exp.cargo)) {
-          const com = COMMODITIES[key];
-          if (com?.isPrefab) continue; // prefaby nie do outpostu
-          if (val > 0) outpostResources[key] = (outpostResources[key] ?? 0) + val;
-        }
-      }
-
-      // Stats: resourcesHauled
-      if (vessel?.stats) {
-        for (const v of Object.values(outpostResources)) vessel.stats.resourcesHauled += v;
-      }
-
-      const gameYear = Math.floor(this._gameYear);
-      colMgr.createOutpost(exp.targetId, outpostResources, gameYear);
-
-      if (exp.vesselId && vMgr) {
-        const oldColonyId = vessel?.colonyId;
-        const oldCol = oldColonyId ? colMgr.getColony(oldColonyId) : null;
-        if (oldCol) {
-          const idx = oldCol.fleet.indexOf(exp.vesselId);
-          if (idx !== -1) oldCol.fleet.splice(idx, 1);
-        }
-        vMgr.dockAtColony(exp.vesselId, exp.targetId);
-
-        if (vessel) {
-          vessel.cargo = prefabsOnShip;
-          let used = 0;
-          for (const [comId, qty] of Object.entries(prefabsOnShip)) {
-            used += qty * (COMMODITIES[comId]?.weight ?? 1);
+        if (exp.cargo) {
+          for (const [key, val] of Object.entries(exp.cargo)) {
+            const com = COMMODITIES[key];
+            if (com?.isPrefab) continue; // prefaby nie do outpostu
+            if (val > 0) outpostResources[key] = (outpostResources[key] ?? 0) + val;
           }
-          vessel.cargoUsed = used;
         }
 
-        const outpostCol = colMgr.getColony(exp.targetId);
-        if (outpostCol && !outpostCol.fleet.includes(exp.vesselId)) {
-          outpostCol.fleet.push(exp.vesselId);
+        // Stats: resourcesHauled
+        if (vessel?.stats) {
+          for (const v of Object.values(outpostResources)) vessel.stats.resourcesHauled += v;
         }
+
+        const gameYear = Math.floor(this._gameYear);
+        colMgr.createOutpost(exp.targetId, outpostResources, gameYear);
+
+        if (exp.vesselId && vMgr) {
+          const oldColonyId = vessel?.colonyId;
+          const oldCol2 = oldColonyId ? colMgr.getColony(oldColonyId) : null;
+          if (oldCol2) {
+            const idx = oldCol2.fleet.indexOf(exp.vesselId);
+            if (idx !== -1) oldCol2.fleet.splice(idx, 1);
+          }
+          vMgr.dockAtColony(exp.vesselId, exp.targetId);
+
+          if (vessel) {
+            vessel.cargo = prefabsOnShip;
+            let used = 0;
+            for (const [comId, qty] of Object.entries(prefabsOnShip)) {
+              used += qty * (COMMODITIES[comId]?.weight ?? 1);
+            }
+            vessel.cargoUsed = used;
+          }
+
+          const outpostCol = colMgr.getColony(exp.targetId);
+          if (outpostCol && !outpostCol.fleet.includes(exp.vesselId)) {
+            outpostCol.fleet.push(exp.vesselId);
+          }
+        }
+
+        exp.gained = outpostResources;
+        exp.status = 'completed';
       }
-
-      exp.gained = outpostResources;
-      exp.status = 'completed';
     }
 
     this._emit('mission:arrived', 'expedition:arrived', {
