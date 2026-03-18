@@ -45,8 +45,8 @@ function _resolveName(id) {
 }
 
 // ── Stałe layoutu ────────────────────────────────────────────────────────────
-const LEFT_W    = 280;
-const RIGHT_W   = 300;
+const LEFT_W    = 210;
+const RIGHT_W   = 234;
 const TOP_PAD   = COSMIC.TOP_BAR_H;   // 50
 const BOTTOM_PAD = COSMIC.BOTTOM_BAR_H; // 30
 const OUTLINER_W = COSMIC.OUTLINER_W;  // 180
@@ -864,21 +864,25 @@ export class FleetManagerOverlay {
       // Nazwa statku
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textPrimary;
-      const vName = vessel.name.length > 16 ? vessel.name.slice(0, 15) + '…' : vessel.name;
+      const maxNameLen = 12;
+      const vName = vessel.name.length > maxNameLen ? vessel.name.slice(0, maxNameLen - 1) + '…' : vessel.name;
       ctx.fillText(vName, x + pad + 32, ry + 18);
 
       // Lokalizacja (mniejszy tekst)
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       const locText = this._getLocationText(vessel);
-      ctx.fillText(locText, x + pad + 32, ry + 32);
+      const locMax = w - pad * 2 - 32;
+      const locTrunc = ctx.measureText(locText).width > locMax
+        ? locText.slice(0, 18) + '…' : locText;
+      ctx.fillText(locTrunc, x + pad + 32, ry + 32);
 
-      // Pasek paliwa (60px)
+      // Pasek paliwa (kompaktowy)
       const fuelPct = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
-      const barX = x + w - pad - 64;
+      const barX = x + w - pad - 50;
       const barY = ry + 14;
-      const barW = 56;
-      const barH = 6;
+      const barW = 42;
+      const barH = 5;
       ctx.fillStyle = THEME.bgTertiary;
       ctx.fillRect(barX, barY, barW, barH);
       const fuelColor = fuelPct > 0.5 ? THEME.success : fuelPct > 0.2 ? THEME.warning : THEME.danger;
@@ -888,11 +892,11 @@ export class FleetManagerOverlay {
       ctx.lineWidth = 1;
       ctx.strokeRect(barX, barY, barW, barH);
 
-      // Fuel text
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      // Fuel text (kompaktowy)
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'right';
-      ctx.fillText(`${vessel.fuel.current.toFixed(1)}/${vessel.fuel.max}`, barX + barW, ry + 34);
+      ctx.fillText(`${Math.round(vessel.fuel.current)}/${vessel.fuel.max}`, barX + barW, ry + 32);
       ctx.textAlign = 'left';
 
       // Separator
@@ -1995,7 +1999,7 @@ export class FleetManagerOverlay {
 
     ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
-    const nameText = vessel.name.length > 18 ? vessel.name.slice(0, 17) + '…' : vessel.name;
+    const nameText = vessel.name.length > 14 ? vessel.name.slice(0, 13) + '…' : vessel.name;
     ctx.fillText(nameText, x + pad + 24, cy + 16);
 
     // Przycisk rename (✎)
@@ -2705,7 +2709,12 @@ export class FleetManagerOverlay {
     const typeName = this._missionTypeName(mission.type);
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(`${typeName} → ${targetName}`, x + pad, cy + 26);
+    let missionLabel = `${typeName} → ${targetName}`;
+    const maxMissionW = w - pad * 2;
+    while (missionLabel.length > 6 && ctx.measureText(missionLabel).width > maxMissionW) {
+      missionLabel = missionLabel.slice(0, -2) + '…';
+    }
+    ctx.fillText(missionLabel, x + pad, cy + 26);
 
     // Faza + ETA
     const phase = mission.status ?? 'transit';
@@ -2793,10 +2802,15 @@ export class FleetManagerOverlay {
       ctx.lineWidth = 1;
       ctx.strokeRect(bx, by, btnW, btnH);
 
-      // Tekst
+      // Tekst (obcinaj jeśli nie mieści się w przycisku)
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = style.fg;
-      ctx.fillText(`${action.icon} ${action.label}`, bx + 6, by + 18);
+      let aLabel = `${action.icon} ${action.label}`;
+      const maxLabelW = btnW - 12;
+      while (aLabel.length > 4 && ctx.measureText(aLabel).width > maxLabelW) {
+        aLabel = aLabel.slice(0, -2) + '…';
+      }
+      ctx.fillText(aLabel, bx + 6, by + 18);
 
       if (ok) {
         this._hitZones.push({
@@ -2903,7 +2917,7 @@ export class FleetManagerOverlay {
       const icon = tgt.type === 'planet' ? '🌍' : tgt.type === 'moon' ? '🌙' : tgt.type === 'planetoid' ? '🪨' : '☄';
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = tgt.reachable ? THEME.textPrimary : THEME.textDim;
-      ctx.fillText(`${icon} ${(tgt.name ?? '?').slice(0, 14)}`, x + pad, ry + 16);
+      ctx.fillText(`${icon} ${(tgt.name ?? '?').slice(0, 12)}`, x + pad, ry + 16);
 
       // Odległość
       ctx.textAlign = 'right';
@@ -3122,7 +3136,7 @@ export class FleetManagerOverlay {
       ctx.fillText(yearStr, x + pad, cy + 10);
 
       ctx.fillStyle = colors[entry.type] ?? THEME.textSecondary;
-      const text = (entry.text ?? '').slice(0, 32);
+      const text = (entry.text ?? '').slice(0, 24);
       ctx.fillText(text, x + pad + 40, cy + 10);
       cy += lineH;
     }
