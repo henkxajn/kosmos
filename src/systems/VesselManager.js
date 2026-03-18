@@ -68,6 +68,10 @@ export class VesselManager {
     // Cleanup statków przy zniszczeniu kolonii
     EventBus.on('colony:destroyed', ({ planetId, destroyedVesselIds }) =>
       this._onColonyDestroyed(planetId, destroyedVesselIds ?? []));
+
+    // Redirect statku po przylecie międzygwiezdnym (do planety w nowym układzie)
+    EventBus.on('vessel:interstellarRedirect', ({ vesselId, targetId }) =>
+      this._redirectInterstellarVessel(vesselId, targetId));
   }
 
   // ── API publiczne ─────────────────────────────────────────────────────────
@@ -108,6 +112,28 @@ export class VesselManager {
       if (v.position.dockedAt === colonyId && v.position.state === 'docked') {
         result.push(v);
       }
+    }
+    return result;
+  }
+
+  /**
+   * Wszystkie statki w danym układzie gwiezdnym.
+   */
+  getVesselsInSystem(systemId) {
+    const result = [];
+    for (const v of this._vessels.values()) {
+      if ((v.systemId ?? 'sys_home') === systemId) result.push(v);
+    }
+    return result;
+  }
+
+  /**
+   * Statki w tranzycie międzygwiezdnym (nie przypisane do żadnego układu).
+   */
+  getInterstellarVessels() {
+    const result = [];
+    for (const v of this._vessels.values()) {
+      if (v.mission?.type === 'interstellar_jump') result.push(v);
     }
     return result;
   }
@@ -356,6 +382,86 @@ export class VesselManager {
     EventBus.emit('vessel:docked', { vessel });
   }
 
+  // ── Misje międzygwiezdne ────────────────────────────────────────────────────
+
+  /**
+   * Wyślij statek w podróż międzygwiezdną (warp jump).
+   * @param {string} vesselId — id statku (musi być warpCapable, docked, idle)
+   * @param {string} targetSystemId — id docelowego układu (z GalaxyGenerator)
+   * @returns {boolean} sukces
+   */
+  dispatchInterstellar(vesselId, targetSystemId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return false;
+    if (vessel.status !== 'idle' && vessel.status !== 'refueling') return false;
+    if (vessel.position.state !== 'docked') return false;
+
+    const shipDef = SHIPS[vessel.shipId];
+    if (!shipDef?.warpCapable) return false;
+
+    // Dane docelowej gwiazdy z galaxyData
+    const gd = window.KOSMOS?.galaxyData;
+    if (!gd) return false;
+    const targetStar = gd.systems.find(s => s.id === targetSystemId);
+    if (!targetStar) return false;
+
+    // Oblicz odległość w LY (3D)
+    const homeStar = gd.systems.find(s => s.id === (vessel.systemId ?? 'sys_home'));
+    if (!homeStar) return false;
+    const dx = targetStar.x - homeStar.x;
+    const dy = targetStar.y - homeStar.y;
+    const dz = (targetStar.z ?? 0) - (homeStar.z ?? 0);
+    const distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+    // Sprawdź paliwo (warp_cores)
+    const fuelPerLY = shipDef.fuelPerLY ?? 0.5;
+    const fuelCost = distLY * fuelPerLY;
+    if (vessel.fuel.current < fuelCost) return false;
+
+    // Prędkość warp (z bonusem beacon)
+    const baseSpeed = shipDef.warpSpeedLY ?? 2.5; // LY/rok
+    const ssMgr = window.KOSMOS?.starSystemManager;
+    const beaconBonus = ssMgr?.hasBeacon(targetSystemId) ? 3.0 : 1.0;
+    const warpSpeed = baseSpeed * beaconBonus;
+    const travelYears = distLY / warpSpeed;
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+
+    // Zużyj paliwo
+    vessel.fuel.current = Math.max(0, vessel.fuel.current - fuelCost);
+
+    // Ustaw misję
+    vessel.mission = {
+      type:          'interstellar_jump',
+      fromSystemId:  vessel.systemId ?? 'sys_home',
+      toSystemId:    targetSystemId,
+      targetName:    targetStar.name,
+      departYear:    gameYear,
+      arrivalYear:   gameYear + travelYears,
+      warpSpeed,
+      distLY,
+      fuelCost,
+      phase:         'warp_transit',
+      // Pozycje galaktyczne (LY) — do interpolacji na mapie galaktyki
+      fromGalX: homeStar.x, fromGalY: homeStar.y,
+      toGalX:   targetStar.x, toGalY:   targetStar.y,
+    };
+
+    vessel.status = 'on_mission';
+    vessel.position.state = 'in_transit';
+    vessel.position.dockedAt = null;
+    // systemId = null podczas tranzytu międzygwiezdnego (statek "między" układami)
+    vessel.systemId = null;
+
+    addMissionLog(vessel, gameYear,
+      t('vessel.interstellarLaunch', targetStar.name, distLY.toFixed(1)),
+      'info');
+
+    EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
+    EventBus.emit('interstellar:departed', { vessel, targetSystemId, arrivalYear: gameYear + travelYears });
+    return true;
+  }
+
   /**
    * Oznacz statek jako zużyty/zniszczony (colony_ship, katastrofa).
    * Usuwa z rejestru + z colony.fleet.
@@ -468,6 +574,7 @@ export class VesselManager {
         name:         v.name,
         colonyId:     v.colonyId,
         homeColonyId: v.homeColonyId ?? v.colonyId,
+        systemId:     v.systemId ?? 'sys_home',
         position:     { ...v.position },
         fuel:         { ...v.fuel },
         mission:      missionData,
@@ -513,6 +620,7 @@ export class VesselManager {
         name:         vd.name,
         colonyId:     vd.colonyId,
         homeColonyId: vd.homeColonyId ?? vd.colonyId,
+        systemId:     vd.systemId ?? 'sys_home',
         position:     { ...vd.position },
         fuel:         { ...vd.fuel },
         mission:      missionData,
@@ -685,6 +793,13 @@ export class VesselManager {
       }
 
       if (vessel.position.state === 'in_transit' && m) {
+        // ── Misja międzygwiezdna (warp transit) ──
+        if (m.type === 'interstellar_jump' && m.phase === 'warp_transit') {
+          this._tickInterstellar(vessel, m, gameYear);
+          moving.push(vessel);
+          continue;
+        }
+
         // Śledź dystans (delta pozycji → AU)
         const prevX = vessel.position.x;
         const prevY = vessel.position.y;
@@ -809,6 +924,63 @@ export class VesselManager {
       traveled -= segLens[i];
     }
     return { x: tx, y: ty };
+  }
+
+  /**
+   * Tick statku w tranzycie międzygwiezdnym.
+   * Interpolacja pozycji galaktycznej, sprawdzenie przylotu.
+   */
+  _tickInterstellar(vessel, m, gameYear) {
+    if (gameYear >= m.arrivalYear) {
+      // ── Przylot do nowego układu ──
+      const ssMgr = window.KOSMOS?.starSystemManager;
+      const gd    = window.KOSMOS?.galaxyData;
+      const targetStar = gd?.systems?.find(s => s.id === m.toSystemId);
+
+      // Leniwa generacja układu (jeśli jeszcze nie wygenerowany)
+      if (ssMgr && targetStar && !ssMgr.getSystem(m.toSystemId)) {
+        ssMgr.generateAndRegister(targetStar);
+      }
+
+      // Ustaw statek w nowym układzie (pozycja = gwiazda, "orbiting" gwiazdę)
+      const sysData = ssMgr?.getSystem(m.toSystemId);
+      const star    = sysData ? EntityManager.get(sysData.starEntityId) : null;
+
+      vessel.systemId = m.toSystemId;
+      vessel.position.state = 'orbiting';
+      vessel.position.x = star?.x ?? 0;
+      vessel.position.y = star?.y ?? 0;
+      vessel.position.dockedAt = sysData?.starEntityId ?? null;
+      vessel.status = 'on_mission'; // nadal na misji — gracz musi zdecydować co dalej
+      m.phase = 'in_system';
+
+      // Wpis do dziennika
+      addMissionLog(vessel, gameYear,
+        t('vessel.interstellarArrived', m.targetName ?? m.toSystemId),
+        'success');
+
+      // Stats
+      if (vessel.stats) vessel.stats.distanceTraveled += (m.distLY ?? 0) * AU_TO_PX;
+
+      // Event — UI pokaże popup
+      EventBus.emit('interstellar:arrived', {
+        vessel,
+        systemId: m.toSystemId,
+        star,
+        targetName: m.targetName,
+      });
+      return;
+    }
+
+    // Interpolacja pozycji galaktycznej (do wizualizacji na mapie galaktyki)
+    const totalTravel = (m.arrivalYear ?? 1) - (m.departYear ?? 0);
+    if (totalTravel > 0.0001) {
+      const progress = Math.max(0, Math.min(1, (gameYear - m.departYear) / totalTravel));
+      m.galProgress = progress;
+      // Pozycja w przestrzeni galaktycznej (LY) — do rysowania na mapie
+      m.currentGalX = (m.fromGalX ?? 0) + ((m.toGalX ?? 0) - (m.fromGalX ?? 0)) * progress;
+      m.currentGalY = (m.fromGalY ?? 0) + ((m.toGalY ?? 0) - (m.fromGalY ?? 0)) * progress;
+    }
   }
 
   /**
@@ -986,6 +1158,64 @@ export class VesselManager {
   }
 
   /**
+   * Przekieruj statek po przylecie międzygwiezdnym do planety w nowym układzie.
+   * Statek musi mieć mission.type=interstellar_jump, phase=in_system i status=on_mission.
+   */
+  _redirectInterstellarVessel(vesselId, targetId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return;
+    const m = vessel.mission;
+    if (!m || m.type !== 'interstellar_jump' || m.phase !== 'in_system') return;
+
+    const target = this._findEntity(targetId);
+    if (!target) return;
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const ship = SHIPS[vessel.shipId];
+    const speedAU = (ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+
+    // Odległość od gwiazdy (pozycja statku) do planety (AU)
+    const dx = (target.x - vessel.position.x) / AU_TO_PX;
+    const dy = (target.y - vessel.position.y) / AU_TO_PX;
+    const distAU = Math.sqrt(dx * dx + dy * dy);
+    const travelYears = distAU / speedAU;
+    const arrivalYear = gameYear + travelYears;
+
+    // Zużyj paliwo in-system (pc/AU)
+    const fuelEffMult = window.KOSMOS?.techSystem?.getFuelEfficiency?.() ?? 1.0;
+    const fuelPerAU = (ship?.fuelPerAU ?? 1) * fuelEffMult;
+    const fuelCost = distAU * fuelPerAU;
+    vessel.fuel.current = Math.max(0, vessel.fuel.current - fuelCost);
+
+    // Przygotuj standardową misję in-system (exploration/transit)
+    const predicted = this._predictPosition(targetId, arrivalYear);
+    const route = this._calcRoute(vessel.position.x, vessel.position.y, predicted.x, predicted.y);
+
+    vessel.mission = {
+      type:        'exploration',
+      targetId,
+      startX:      vessel.position.x,
+      startY:      vessel.position.y,
+      targetX:     predicted.x,
+      targetY:     predicted.y,
+      departYear:  gameYear,
+      arrivalYear,
+      waypoints:   route.waypoints,
+      originId:    m.fromSystemId, // macierzysty układ
+      fuelCost,
+    };
+
+    vessel.status = 'on_mission';
+    vessel.position.state = 'in_transit';
+    vessel.position.dockedAt = null;
+
+    addMissionLog(vessel, gameYear,
+      t('vessel.arrived', target.name ?? targetId), 'info');
+
+    EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
+  }
+
+  /**
    * Predykcja pozycji ciała niebieskiego w przyszłości (Kepler).
    * Zwraca {x, y} w pikselach (układ fizyki gry).
    * @param {string} entityId — id ciała (planet, moon, planetoid)
@@ -1015,9 +1245,11 @@ export class VesselManager {
       };
     }
 
-    // Planeta/planetoid: orbita wokół gwiazdy (cache z getByType)
-    const stars = EntityManager.getByType('star');
-    const star = stars[0];
+    // Planeta/planetoid: orbita wokół gwiazdy (znajdź gwiazdę tego układu)
+    const sysId = entity.systemId;
+    const star = sysId
+      ? EntityManager.getStarOfSystem(sysId)
+      : EntityManager.getByType('star')[0];
     const starX = star?.x ?? 0;
     const starY = star?.y ?? 0;
     return {

@@ -191,6 +191,11 @@ export class ColonyManager {
     return [...this._colonies.values()];
   }
 
+  // Kolonie w danym układzie gwiezdnym
+  getColoniesInSystem(systemId) {
+    return this.getAllColonies().filter(c => (c.systemId ?? 'sys_home') === systemId);
+  }
+
   // Liczba kolonii
   get colonyCount() {
     return this._colonies.size;
@@ -272,6 +277,7 @@ export class ColonyManager {
       planet:          planet,
       isHomePlanet:    true,
       name:            planet.name,
+      systemId:        planet.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home',
       founded:         Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0),
       resourceSystem:  resourceSystem,
       civSystem:       civSystem,
@@ -327,6 +333,7 @@ export class ColonyManager {
       planet:          entity,
       isHomePlanet:    false,
       name:            entity.name,
+      systemId:        entity.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home',
       founded:         gameYear,
       resourceSystem:  resSys,
       civSystem:       civSys,
@@ -389,6 +396,7 @@ export class ColonyManager {
       isHomePlanet:    false,
       isOutpost:       true,
       name:            entity.name,
+      systemId:        entity.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home',
       founded:         gameYear,
       resourceSystem:  resSys,
       civSystem:       civSys,
@@ -883,6 +891,7 @@ export class ColonyManager {
         isHomePlanet:     col.isHomePlanet,
         isOutpost:        col.isOutpost ?? false,
         name:             col.name,
+        systemId:         col.systemId ?? 'sys_home',
         founded:          col.founded,
         resources:        col.resourceSystem.serialize(),
         civ:              col.civSystem.serialize(),
@@ -971,6 +980,7 @@ export class ColonyManager {
         isHomePlanet:     colData.isHomePlanet ?? false,
         isOutpost,
         name:             colData.name ?? entity.name,
+        systemId:         colData.systemId ?? entity.systemId ?? 'sys_home',
         founded:          colData.founded ?? 0,
         resourceSystem:   resSys,
         civSystem:        civSys,

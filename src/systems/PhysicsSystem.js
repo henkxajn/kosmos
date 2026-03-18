@@ -20,51 +20,76 @@ export class PhysicsSystem {
   }
 
   update(deltaYears) {
-    const stars   = EntityManager.getByType('star');
-    const planets = EntityManager.getByType('planet');
-
+    const stars = EntityManager.getByType('star');
     if (stars.length === 0) return;
-    const star = stars[0];
 
-    // Ruch kepleriański — planety
-    planets.forEach(planet => {
-      this.updatePlanetPosition(planet, deltaYears, star.x, star.y);
-    });
+    // Multi-star: tickuj Keplera per gwiazda (każdy układ niezależnie)
+    const allPlanets = EntityManager.getByType('planet');
+    const allMoons   = EntityManager.getByType('moon');
 
-    // Ruch kepleriański — księżyce (PO planetach — parent.x/y musi być aktualne)
-    const moons = EntityManager.getByType('moon');
-    moons.forEach(moon => {
-      const parent = EntityManager.get(moon.parentPlanetId);
-      if (!parent) { EntityManager.remove(moon.id); return; }
-      this.updatePlanetPosition(moon, deltaYears, parent.x, parent.y);
-    });
+    for (const star of stars) {
+      const sysId = star.systemId;
 
-    // Ruch kepleriański — małe ciała (asteroidy, komety, planetoidy)
-    const smallBodies = [
-      ...EntityManager.getByType('asteroid'),
-      ...EntityManager.getByType('comet'),
-      ...EntityManager.getByType('planetoid'),
-    ];
-    smallBodies.forEach(body => {
-      this.updatePlanetPosition(body, deltaYears, star.x, star.y);
-    });
+      // Planety tego układu
+      const planets = sysId
+        ? allPlanets.filter(p => p.systemId === sysId)
+        : allPlanets;
 
-    // Kolizje planet-planeta (max 1 na klatkę)
-    this.checkCollisions(planets, star);
+      planets.forEach(planet => {
+        this.updatePlanetPosition(planet, deltaYears, star.x, star.y);
+      });
 
-    // Kolizje małych ciał z planetami (max 1 na klatkę)
-    this.checkSmallBodyCollisions(planets, smallBodies, star);
+      // Księżyce tego układu (PO planetach)
+      const moons = sysId
+        ? allMoons.filter(m => m.systemId === sysId)
+        : allMoons;
 
-    // Perturbacje co 20 000 lat gry (pominięte w power_test — stabilność priorytetem)
-    if (window.KOSMOS?.scenario !== 'power_test') {
-      this._perturbAccum += deltaYears;
-      if (this._perturbAccum >= this.PERTURB_INTERVAL) {
-        this._perturbAccum = 0;
-        this.applyPerturbations(planets, star);
+      moons.forEach(moon => {
+        const parent = EntityManager.get(moon.parentPlanetId);
+        if (!parent) { EntityManager.remove(moon.id); return; }
+        this.updatePlanetPosition(moon, deltaYears, parent.x, parent.y);
+      });
+
+      // Małe ciała tego układu
+      const smallBodies = [
+        ...EntityManager.getByType('asteroid').filter(a => !sysId || a.systemId === sysId),
+        ...EntityManager.getByType('comet').filter(c => !sysId || c.systemId === sysId),
+        ...EntityManager.getByType('planetoid').filter(p => !sysId || p.systemId === sysId),
+      ];
+      smallBodies.forEach(body => {
+        this.updatePlanetPosition(body, deltaYears, star.x, star.y);
+      });
+
+      // Kolizje — tylko w aktywnym układzie (oszczędność CPU)
+      const activeId = window.KOSMOS?.activeSystemId;
+      if (!activeId || sysId === activeId) {
+        this.checkCollisions(planets, star);
+        this.checkSmallBodyCollisions(planets, smallBodies, star);
       }
     }
 
-    EventBus.emit('physics:updated', { planets, star, moons });
+    // Perturbacje co 20 000 lat gry (pominięte w power_test)
+    if (window.KOSMOS?.scenario !== 'power_test') {
+      const activeStar = stars.find(s => s.systemId === window.KOSMOS?.activeSystemId) || stars[0];
+      const activePlanets = activeStar?.systemId
+        ? allPlanets.filter(p => p.systemId === activeStar.systemId)
+        : allPlanets;
+      this._perturbAccum += deltaYears;
+      if (this._perturbAccum >= this.PERTURB_INTERVAL) {
+        this._perturbAccum = 0;
+        this.applyPerturbations(activePlanets, activeStar);
+      }
+    }
+
+    // Emit z danymi aktywnego układu (UI)
+    const activeStar = stars.find(s => s.systemId === window.KOSMOS?.activeSystemId) || stars[0];
+    const activePlanets = activeStar?.systemId
+      ? allPlanets.filter(p => p.systemId === activeStar.systemId)
+      : allPlanets;
+    const activeMoons = activeStar?.systemId
+      ? allMoons.filter(m => m.systemId === activeStar.systemId)
+      : allMoons;
+    EventBus.emit('physics:updated', { planets: activePlanets, star: activeStar, moons: activeMoons });
   }
 
   // Pozycja planety wg prawa Keplera (5 kroków)

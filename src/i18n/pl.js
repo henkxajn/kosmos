@@ -897,6 +897,26 @@ export default {
   'fleet.selectFromList': '← Wybierz statek z listy',
   'fleet.typeLabel': 'Typ: {0}',
   'fleet.targetLabel': 'Cel: {0} {1}',
+  'fleet.starCluster': 'STAR CLUSTER',
+  'fleet.clusterSend': '🚀 Wyślij statek',
+  'fleet.clusterSwitch': '🔭 Przełącz widok',
+  'fleet.clusterReturn': '↩ Powrót do bazy',
+  'fleet.arrivedAt': 'Dotarł do {0}',
+  'fleet.clusterSelectTarget': 'Wybierz cel w układzie',
+  'fleet.clusterDistance': '{0} LY',
+  'fleet.clusterSpectral': 'Typ: {0}',
+  'fleet.clusterMass': 'Masa: {0} M☉',
+  'fleet.clusterExplored': 'Zbadany',
+  'fleet.clusterUnexplored': 'Niezbadany',
+  'fleet.clusterHome': 'Układ macierzysty',
+  'fleet.clusterColony': 'Kolonia',
+  'fleet.clusterBeacon': '📡 Beacon',
+  'fleet.clusterGate': '🌀 Jump Gate',
+  'fleet.clusterBuildBeacon': '📡 Buduj Beacon',
+  'fleet.clusterBuildGate': '🌀 Buduj Gate',
+  'fleet.interstellarArrival': 'PRZYLOT MIĘDZYGWIEZDNY',
+  'fleet.redirectToBody': 'Przekieruj do {0}',
+  'fleet.systemPlanets': 'Planety w układzie:',
 
   // === Statek / VesselManager ===
   'vessel.launchedMission': 'Wyruszył na misję: {0} → {1}',
@@ -907,6 +927,9 @@ export default {
   'vessel.redirectedBase': 'Przekierowano do bazy \u2014 kolonia macierzysta zniszczona',
   'vessel.reassigned': 'Reassigned do {0} \u2014 kolonia macierzysta zniszczona',
   'vessel.unknown': 'Nieznany',
+  'vessel.interstellarLaunch': 'Skok warp do {0} ({1} LY)',
+  'vessel.interstellarArrived': 'Dotarł do układu {0}',
+  'vessel.interstellarTransit': 'Tranzyt warp → {0}',
 
   // === Statusy statku ===
   'vessel.status.return': 'Powrót',
@@ -1027,6 +1050,15 @@ export default {
   'missionPopup.bodies': 'ciał',
   'missionPopup.discoveryFanfare': '★ ODKRYCIE ★ {0} ★ NOWE CIAŁO W KATALOGU ★ ODKRYCIE ★ {1} ★',
   'missionPopup.discoveryFanfareShort': '★ ODKRYCIE ★ {0} ★ NOWE CIAŁO W KATALOGU ★',
+
+  // === Interstellar popups ===
+  'missionPopup.interstellarArrival': 'KOSMOS OS  ▌ PRZYLOT MIĘDZYGWIEZDNY',
+  'missionPopup.newSystem': 'NOWY\nUKŁAD',
+  'missionPopup.interstellarPlanets': 'PLANETY',
+  'missionPopup.interstellarMoons': 'KSIĘŻYCE',
+  'missionPopup.interstellarHZ': 'W STREFIE HZ',
+  'missionPopup.interstellarDesc': '{0} zakończył skok warp i wszedł w układ {1}.',
+  'galaxy.starType': 'TYP GWIAZDY',
 
   // === EventChoiceModal ===
   'eventChoice.colony': 'KOLONIA',
@@ -1523,6 +1555,17 @@ export default {
   'galaxy.yourSystem': '🏠 TWÓJ UKŁAD',
   'galaxy.explored': '✅ ZBADANY',
   'galaxy.unexplored': '❓ NIEZBADANY',
+  'galaxy.hasColony': 'Kolonia',
+  'galaxy.warpBeacon': 'Warp Beacon',
+  'galaxy.jumpGate': 'Jump Gate',
+  'galaxy.switchView': '🔭 Przełącz widok',
+  'galaxy.sendShip': '🚀 Wyślij statek',
+  'galaxy.noWarpShips': 'Brak statków z napędem warp',
+  'galaxy.needWarpTech': 'Wymagana technologia: Napęd Warp',
+  'galaxy.inTransit': 'W tranzycie:',
+  'galaxy.more': 'więcej',
+  'galaxy.buildBeacon': 'Buduj Beacon',
+  'galaxy.buildGate': 'Buduj Jump Gate',
 
   // === ActionPanel (generator, nie aktywne) ===
   'action.header': 'AKCJE GRACZA',

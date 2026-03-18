@@ -747,6 +747,58 @@ export const BUILDINGS = {
     isOrbital:     true,   // nie zajmuje hexa, limit 3 per kolonia
     maxPerColony:  3,
   },
+
+  // ── Budynki międzygwiezdne (Etap 40) ─────────────────────────────────────
+
+  warp_beacon: {
+    id:            'warp_beacon',
+    namePL:        'Radiolatarnia Osnowy',
+    nameEN:        'Warp Beacon',
+    category:      'infrastructure',
+    icon:          '📡',
+    description:   'Przyspieszenie skoków warp ×3 DO tego układu. Budynek orbitalny per-układ.',
+    cost:          { Fe: 500, Ti: 100, Pt: 50 },
+    commodityCost: { exotic_alloy: 20, warp_cores: 5, quantum_processors: 4 },
+    energyCost:    20,
+    buildTime:     5.0,
+    rates:         {},
+    housing:       0,
+    popCost:       0,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'warp_theory',
+    isOrbital:     true,
+    isSystemWide:  true,   // jeden per układ (nie per kolonia)
+    maxPerSystem:  1,
+    isAutonomous:  true,
+  },
+
+  jump_gate: {
+    id:            'jump_gate',
+    namePL:        'Brama Skokowa',
+    nameEN:        'Jump Gate',
+    category:      'infrastructure',
+    icon:          '🌀',
+    description:   'Natychmiastowy skok DO tego układu (wymaga bramy na OBU końcach trasy).',
+    cost:          { Fe: 2000, Ti: 400, Pt: 150, W: 100 },
+    commodityCost: { exotic_alloy: 40, quantum_processors: 15, warp_cores: 20, superconductors: 10 },
+    energyCost:    50,
+    buildTime:     15.0,
+    rates:         {},
+    housing:       0,
+    popCost:       0,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'interstellar_colonization',
+    isOrbital:     true,
+    isSystemWide:  true,
+    maxPerSystem:  1,
+    isAutonomous:  true,
+  },
 };
 
 // ── Ikony zasobów — rozszerzony zestaw ──────────────────────────────────────

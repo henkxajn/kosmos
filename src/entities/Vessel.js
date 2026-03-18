@@ -9,6 +9,7 @@
 
 import { SHIPS } from '../data/ShipsData.js';
 import { getNextName } from '../data/VesselNames.js';
+import EntityManager from '../core/EntityManager.js';
 
 let _nextVesselId = 1;
 
@@ -34,12 +35,17 @@ export function createVessel(shipId, colonyId, opts = {}) {
   const fuelMax = ship.fuelCapacity ?? 8;
   const fuelCurrent = opts.fuel ?? fuelMax;
 
+  // Sprawdź systemId z encji kolonii lub z aktywnego układu
+  const entity = EntityManager.get(colonyId);
+  const systemId = opts.systemId ?? entity?.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home';
+
   return {
     id,
     shipId,
     name,
     colonyId,
     homeColonyId: colonyId, // kolonia macierzysta (stała — nie zmienia się przy relokacji)
+    systemId,               // układ gwiezdny w którym jest statek
 
     // Pozycja fizyczna w układzie (px, jak entity.x/y)
     position: {

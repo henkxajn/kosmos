@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 21;
+export const CURRENT_VERSION     = 22;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -36,6 +36,7 @@ const MIGRATIONS = {
   18: _migrateV18toV19,
   19: _migrateV19toV20,
   20: _migrateV20toV21,
+  21: _migrateV21toV22,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -656,6 +657,55 @@ function _migrateV20toV21(data) {
         col.prosperitySystem.eventBonuses = {};
       }
     }
+  }
+
+  return data;
+}
+
+// ── v21 → v22: Podróże międzygwiezdne — systemId na encjach, koloniach, statkach ──
+function _migrateV21toV22(data) {
+  const c4x = data.civ4x;
+
+  // Dodaj systemId do kolonii
+  if (c4x?.colonies) {
+    for (const col of c4x.colonies) {
+      if (!col.systemId) col.systemId = 'sys_home';
+    }
+  }
+
+  // Dodaj systemId do statków
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v.systemId) v.systemId = 'sys_home';
+    }
+  }
+
+  // Dodaj activeSystemId
+  if (c4x && !c4x.activeSystemId) {
+    c4x.activeSystemId = 'sys_home';
+  }
+
+  // Dodaj starSystemManager z jednym układem (home)
+  if (c4x && !c4x.starSystemManager) {
+    // Zbierz ID encji z danych save (gwiazda, planety, księżyce, planetoidy)
+    const planetIds    = (data.planets || []).map(p => p.id);
+    const moonIds      = (data.moons || []).map(m => m.id);
+    const planetoidIds = (data.planetoids || []).map(p => p.id);
+    const starId       = data.star?.id ?? null;
+
+    c4x.starSystemManager = {
+      activeSystemId: 'sys_home',
+      systems: [{
+        systemId:     'sys_home',
+        starEntityId: starId,
+        planetIds,
+        moonIds,
+        planetoidIds,
+        explored:     true,
+        warpBeacon:   null,
+        jumpGate:     null,
+      }],
+    };
   }
 
   return data;

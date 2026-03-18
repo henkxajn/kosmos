@@ -102,9 +102,17 @@ export class FleetManagerOverlay {
     this._targetScrollOffset = 0; // scroll listy celów
     this._mapToggles = { routes: true, range: false };
     this._showAtlas = false;      // toggle: mapa ↔ katalog ciał
+    this._showCluster = false;    // toggle: mapa ↔ star cluster (pobliskie gwiazdy)
     this._atlasScrollY = 0;       // scroll katalogu ciał
     this._atlasContentH = 0;      // wysokość zawartości katalogu
     this._atlasVisibleH = 0;      // widoczna wysokość katalogu
+
+    // Star Cluster — zoom, pan, selekcja
+    this._clusterZoom = 1;
+    this._clusterPanX = 0;
+    this._clusterPanY = 0;
+    this._selectedClusterSystem = null;
+    this._clusterHoverSystem = null;
     this._hitZones = [];          // { x,y,w,h, type, data }
     this._bounds = null;          // { x,y,w,h } — cały overlay
     this._cachedTargets = null;   // cache celów misji
@@ -120,11 +128,12 @@ export class FleetManagerOverlay {
     // Tooltip ciała na mapie
     this._mapHoverBody = null;    // { body, screenX, screenY } — hover info
 
-    // Drag do przesuwania mapy
+    // Drag do przesuwania mapy / cluster
     this._mapDragging = false;
     this._mapDragStartX = 0;
     this._mapDragStartY = 0;
     this._mapDragWasDrag = false; // odróżnienie klik od drag
+    this._clusterDrag = false;   // czy drag dotyczy cluster (nie tactical map)
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────
@@ -145,6 +154,12 @@ export class FleetManagerOverlay {
     this._mapHoverBody = null;
     this._mapDragging = false;
     this._mapDragWasDrag = false;
+    this._showCluster = false;
+    this._clusterZoom = 1;
+    this._clusterPanX = 0;
+    this._clusterPanY = 0;
+    this._selectedClusterSystem = null;
+    this._clusterHoverSystem = null;
   }
 
   // Centruj mapę na ciele (AU → px pan offset)
@@ -280,7 +295,11 @@ export class FleetManagerOverlay {
     // Scroll w CENTER
     const mb = this._mapBounds;
     if (mb && mx >= mb.x && mx <= mb.x + mb.w && my >= mb.y && my <= mb.y + mb.h) {
-      if (this._showAtlas) {
+      if (this._showCluster) {
+        // Zoom star cluster
+        const zf = delta > 0 ? 0.85 : 1.18;
+        this._clusterZoom = Math.max(0.3, Math.min(8, this._clusterZoom * zf));
+      } else if (this._showAtlas) {
         // Scroll katalogu ciał
         const maxScroll = Math.max(0, this._atlasContentH - this._atlasVisibleH);
         this._atlasScrollY = Math.max(0, Math.min(maxScroll, this._atlasScrollY + delta * 0.5));
@@ -306,6 +325,7 @@ export class FleetManagerOverlay {
     if (!this._visible) return false;
     const mb = this._mapBounds;
     if (mb && !this._showAtlas && mx >= mb.x && mx <= mb.x + mb.w && my >= mb.y && my <= mb.y + mb.h) {
+      this._clusterDrag = this._showCluster; // zapamiętaj, który tryb dragujemy
       this._mapDragging = true;
       this._mapDragStartX = mx;
       this._mapDragStartY = my;
@@ -327,13 +347,18 @@ export class FleetManagerOverlay {
   handleMouseMove(mx, my) {
     if (!this._visible) return;
 
-    // Drag mapy
+    // Drag mapy / cluster
     if (this._mapDragging) {
       const dx = mx - this._mapDragStartX;
       const dy = my - this._mapDragStartY;
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) this._mapDragWasDrag = true;
-      this._mapPanX += dx;
-      this._mapPanY += dy;
+      if (this._clusterDrag) {
+        this._clusterPanX += dx;
+        this._clusterPanY += dy;
+      } else {
+        this._mapPanX += dx;
+        this._mapPanY += dy;
+      }
       this._mapDragStartX = mx;
       this._mapDragStartY = my;
       return;
@@ -349,9 +374,14 @@ export class FleetManagerOverlay {
     }
     // Hover na ciele na mapie
     this._mapHoverBody = null;
+    this._clusterHoverSystem = null;
     for (const z of this._hitZones) {
       if (z.type === 'map_body' && mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
         this._mapHoverBody = { bodyId: z.data.bodyId, screenX: z.x + z.w / 2, screenY: z.y + z.h };
+        break;
+      }
+      if (z.type === 'cluster_star' && mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
+        this._clusterHoverSystem = z.data.systemId;
         break;
       }
     }
@@ -418,8 +448,67 @@ export class FleetManagerOverlay {
         break;
       case 'atlas_toggle':
         this._showAtlas = !this._showAtlas;
+        this._showCluster = false;
         this._atlasScrollY = 0;
         break;
+      case 'cluster_toggle':
+        this._showCluster = !this._showCluster;
+        this._showAtlas = false;
+        this._selectedClusterSystem = null;
+        break;
+      case 'cluster_star':
+        this._selectedClusterSystem = zone.data.systemId;
+        break;
+      case 'cluster_switch': {
+        const ssMgr = window.KOSMOS?.starSystemManager;
+        if (ssMgr && zone.data.systemId) ssMgr.switchActiveSystem(zone.data.systemId);
+        break;
+      }
+      case 'cluster_send': {
+        // Wysyłka statku międzygwiezdnego — dispatch do VesselManager
+        const vMgr2 = window.KOSMOS?.vesselManager;
+        const colMgr2 = window.KOSMOS?.colonyManager;
+        if (!vMgr2 || !colMgr2 || !zone.data.systemId) break;
+        // Znajdź dostępny statek z capability 'interstellar' lub dowolny science_vessel
+        const activePid2 = colMgr2.activePlanetId;
+        const avail = vMgr2.getAvailable(activePid2);
+        const warpShip = avail.find(v => {
+          const def = SHIPS[v.shipId];
+          return def?.fuelPerLY > 0; // potrafi latać międzygwiezdnie
+        });
+        if (warpShip) {
+          vMgr2.dispatchInterstellar(warpShip.id, zone.data.systemId);
+        }
+        break;
+      }
+      case 'cluster_beacon': {
+        EventBus.emit('orbital:buildBeacon', { systemId: zone.data.systemId });
+        break;
+      }
+      case 'cluster_gate': {
+        EventBus.emit('orbital:buildJumpGate', { systemId: zone.data.systemId });
+        break;
+      }
+      case 'interstellar_redirect': {
+        EventBus.emit('vessel:interstellarRedirect', {
+          vesselId: zone.data.vesselId,
+          targetId: zone.data.targetId,
+        });
+        break;
+      }
+      case 'interstellar_return': {
+        // Powrót międzygwiezdny do macierzystego układu
+        const vMgr3 = window.KOSMOS?.vesselManager;
+        const v = vMgr3?.getVessel(zone.data.vesselId);
+        if (v) {
+          // Reset statusu — dispatchInterstellar wymaga idle+docked
+          v.status = 'idle';
+          v.position.state = 'docked';
+          v.mission = null;
+          vMgr3.dispatchInterstellar(zone.data.vesselId, zone.data.fromSystemId);
+        }
+        break;
+      }
       case 'action':
         this._handleAction(zone.data);
         break;
@@ -791,21 +880,23 @@ export class FleetManagerOverlay {
     // ── Nagłówek (h=32) ──────────────────────────────────────
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(this._showAtlas ? t('fleet.starAtlas') : t('fleet.tacticalMap'), x + pad, y + 20);
+    const centerTitle = this._showCluster ? t('fleet.starCluster') : this._showAtlas ? t('fleet.starAtlas') : t('fleet.tacticalMap');
+    ctx.fillText(centerTitle, x + pad, y + 20);
 
-    // Zoom label — tylko w trybie mapy
+    // Zoom label — tylko w trybie mapy lub cluster
     if (!this._showAtlas) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`×${this._mapZoom.toFixed(1)}`, x + pad + 100, y + 20);
+      const zoomVal = this._showCluster ? this._clusterZoom : this._mapZoom;
+      ctx.fillText(`×${zoomVal.toFixed(1)}`, x + pad + 110, y + 20);
     }
 
     // Toggle: STAR ATLAS / TRASY / ZASIĘG
     const toggleY = y + 6;
     let tbx = x + w - pad;
 
-    // TRASY / ZASIĘG — widoczne tylko w trybie mapy
-    if (!this._showAtlas) {
+    // TRASY / ZASIĘG — widoczne tylko w trybie tactical map
+    if (!this._showAtlas && !this._showCluster) {
       for (const key of ['range', 'routes']) {
         const label = key === 'routes' ? t('fleet.toggleRoutes') : t('fleet.toggleRange');
         const active = this._mapToggles[key];
@@ -823,6 +914,24 @@ export class FleetManagerOverlay {
         ctx.textAlign = 'left';
         this._hitZones.push({ x: tbx, y: toggleY, w: tw, h: 18, type: 'map_toggle', data: { key } });
       }
+    }
+
+    // Przycisk STAR CLUSTER (mapa pobliskich gwiazd)
+    {
+      const clTw = 86;
+      tbx -= clTw + 4;
+      const clOn = this._showCluster;
+      ctx.fillStyle = clOn ? 'rgba(170,136,255,0.15)' : 'transparent';
+      ctx.fillRect(tbx, toggleY, clTw, 18);
+      ctx.strokeStyle = clOn ? THEME.purple : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tbx, toggleY, clTw, 18);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = clOn ? THEME.purple : THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.starCluster'), tbx + clTw / 2, toggleY + 13);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: tbx, y: toggleY, w: clTw, h: 18, type: 'cluster_toggle', data: {} });
     }
 
     // Przycisk STAR ATLAS
@@ -851,6 +960,12 @@ export class FleetManagerOverlay {
     // Tryb STAR ATLAS — katalog ciał zamiast mapy
     if (this._showAtlas) {
       this._drawAtlasCatalog(ctx, x, mapY, w, mapH, allVessels);
+      return;
+    }
+
+    // Tryb STAR CLUSTER — mapa pobliskich gwiazd
+    if (this._showCluster) {
+      this._drawStarCluster(ctx, x, mapY, w, mapH);
       return;
     }
 
@@ -1354,6 +1469,305 @@ export class FleetManagerOverlay {
     return result;
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // STAR CLUSTER — minimapa pobliskich gwiazd (2D Canvas)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _drawStarCluster(ctx, x, y, w, h) {
+    const PAD = 10;
+
+    // Tło
+    ctx.fillStyle = 'rgba(2,4,5,0.97)';
+    ctx.fillRect(x + 1, y, w - 2, h - 1);
+
+    const gd = window.KOSMOS?.galaxyData;
+    if (!gd?.systems?.length) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText('No galaxy data', x + PAD, y + 20);
+      return;
+    }
+
+    const systems = gd.systems;
+    const ssMgr = window.KOSMOS?.starSystemManager;
+    const vMgr  = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
+
+    // Clip
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + 1, y, w - 2, h - 1);
+    ctx.clip();
+
+    // Oblicz skalę — zmieść wszystkie gwiazdy w widoku
+    let maxLY = 1;
+    for (const s of systems) {
+      const d = Math.sqrt(s.x * s.x + s.y * s.y);
+      if (d > maxLY) maxLY = d;
+    }
+    maxLY *= 1.15;
+
+    const cx = x + w / 2 + this._clusterPanX;
+    const cy = y + h / 2 + this._clusterPanY;
+    const baseR = Math.min(w / 2, h / 2) - 20;
+    const scale = (baseR * this._clusterZoom) / maxLY; // px per LY
+
+    // Pomocnicza: LY → px
+    const toSx = (lx) => cx + lx * scale;
+    const toSy = (ly) => cy + ly * scale;
+
+    // ── Jump gate lines (fioletowe) ──
+    const gates = systems.filter(s => s.jumpGate);
+    for (const g of gates) {
+      // Szukaj sparowanego gate w innym systemie
+      const sys = ssMgr?.getSystem(g.id);
+      const connTo = sys?.jumpGate?.connectedTo;
+      if (connTo) {
+        const other = systems.find(s => s.id === connTo);
+        if (other) {
+          ctx.strokeStyle = 'rgba(170,136,255,0.4)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(toSx(g.x), toSy(g.y));
+          ctx.lineTo(toSx(other.x), toSy(other.y));
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
+    // ── Interstellar transit lines (pomarańczowe) ──
+    const interVessels = vMgr?.getInterstellarVessels() ?? [];
+    for (const v of interVessels) {
+      const m = v.mission;
+      if (!m || m.phase !== 'warp_transit') continue;
+      const fromS = systems.find(s => s.id === m.fromSystemId);
+      const toS   = systems.find(s => s.id === m.toSystemId);
+      if (!fromS || !toS) continue;
+
+      // Linia trasy
+      ctx.strokeStyle = 'rgba(255,170,50,0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(toSx(fromS.x), toSy(fromS.y));
+      ctx.lineTo(toSx(toS.x), toSy(toS.y));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Punkt pozycji statku
+      const vsx = toSx(m.currentGalX ?? fromS.x);
+      const vsy = toSy(m.currentGalY ?? fromS.y);
+      ctx.fillStyle = THEME.warning;
+      ctx.beginPath();
+      ctx.arc(vsx, vsy, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Etykieta statku
+      if (this._clusterZoom > 1.5) {
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText(v.name, vsx + 5, vsy - 3);
+      }
+    }
+
+    // ── Gwiazdy ──
+    const selSys = this._selectedClusterSystem;
+    for (const s of systems) {
+      const sx = toSx(s.x);
+      const sy = toSy(s.y);
+
+      // Cull poza widocznością
+      if (sx < x - 20 || sx > x + w + 20 || sy < y - 20 || sy > y + h + 20) continue;
+
+      const isHome = !!s.isHome;
+      const isExplored = !!s.explored;
+      const isSelected = selSys === s.id;
+      const isHover = this._clusterHoverSystem === s.id;
+      const hasCol = colMgr?.getAllColonies().some(c => {
+        const body = EntityManager.get(c.planetId);
+        return body?.systemId === s.id;
+      }) ?? false;
+
+      // Promień gwiazdy
+      let r = isHome ? 6 : isExplored ? 4 : 3;
+      if (isSelected || isHover) r += 1;
+
+      // Glow
+      if (isHome || isSelected) {
+        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 3);
+        grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.3)' : 'rgba(170,136,255,0.3)');
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Kolor gwiazdy
+      ctx.fillStyle = s.colorHex ?? (isExplored ? THEME.accent : THEME.textDim);
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Obwódka selekcji
+      if (isSelected) {
+        ctx.strokeStyle = THEME.accent;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r + 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Ikony infrastruktury
+      const sysData = ssMgr?.getSystem(s.id);
+      if (hasCol) {
+        ctx.font = `8px ${THEME.fontFamily}`;
+        ctx.fillText('🏗', sx + r + 2, sy - r);
+      }
+      if (sysData?.warpBeacon || s.warpBeacon) {
+        ctx.font = `7px ${THEME.fontFamily}`;
+        ctx.fillText('📡', sx + r + 2, sy + 2);
+      }
+      if (sysData?.jumpGate || s.jumpGate) {
+        ctx.font = `7px ${THEME.fontFamily}`;
+        ctx.fillText('🌀', sx + r + 2, sy + 10);
+      }
+
+      // Nazwa (widoczna przy bliskim zoom lub dla wybranych/home)
+      if (this._clusterZoom > 0.8 || isHome || isSelected || isHover) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = isHome ? THEME.yellow : isExplored ? THEME.textPrimary : THEME.textDim;
+        ctx.textAlign = 'center';
+        ctx.fillText(s.name, sx, sy + r + 12);
+        ctx.textAlign = 'left';
+      }
+
+      // Hit zone
+      const hitR = Math.max(r + 4, 10);
+      this._hitZones.push({
+        x: sx - hitR, y: sy - hitR, w: hitR * 2, h: hitR * 2,
+        type: 'cluster_star', data: { systemId: s.id },
+      });
+    }
+
+    // ── Panel inline: info o zaznaczonym systemie ──
+    if (selSys) {
+      const selData = systems.find(s => s.id === selSys);
+      if (selData) {
+        this._drawClusterInfoPanel(ctx, x, y, w, h, selData, ssMgr, vMgr, colMgr);
+      }
+    }
+
+    // ── Legenda (lewy-dolny) ──
+    {
+      const lx = x + PAD;
+      let ly = y + h - 60;
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      const items = [
+        { color: THEME.yellow, label: t('fleet.clusterHome') },
+        { color: THEME.accent, label: t('fleet.clusterExplored') },
+        { color: THEME.textDim, label: t('fleet.clusterUnexplored') },
+      ];
+      for (const it of items) {
+        ctx.fillStyle = it.color;
+        ctx.beginPath();
+        ctx.arc(lx + 4, ly + 4, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(it.label, lx + 12, ly + 7);
+        ly += 14;
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // Panel informacyjny o zaznaczonym systemie w star cluster
+  _drawClusterInfoPanel(ctx, areaX, areaY, areaW, areaH, sys, ssMgr, vMgr, colMgr) {
+    const panelW = 200;
+    const panelH = 160;
+    const px = areaX + areaW - panelW - 8;
+    const py = areaY + 8;
+    const PAD = 8;
+
+    // Tło panelu
+    ctx.fillStyle = 'rgba(8,12,18,0.92)';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px, py, panelW, panelH);
+
+    let iy = py + PAD;
+
+    // Nazwa gwiazdy
+    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = sys.colorHex ?? THEME.textPrimary;
+    ctx.fillText(`⭐ ${sys.name}`, px + PAD, iy + 12);
+    iy += 20;
+
+    // Typ, masa, odległość
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(t('fleet.clusterSpectral', sys.spectralType ?? '?'), px + PAD, iy + 10);
+    iy += 14;
+    ctx.fillText(t('fleet.clusterMass', (sys.mass ?? 1).toFixed(2)), px + PAD, iy + 10);
+    iy += 14;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('fleet.clusterDistance', (sys.distanceLY ?? 0).toFixed(1)), px + PAD, iy + 10);
+    iy += 18;
+
+    // Status
+    const sysReg = ssMgr?.getSystem(sys.id);
+    const isExplored = !!sysReg?.explored || !!sys.explored;
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = isExplored ? THEME.success : THEME.textDim;
+    ctx.fillText(isExplored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10);
+    iy += 16;
+
+    // Przyciski akcji
+    const btnW = panelW - PAD * 2;
+    const btnH = 18;
+
+    // Przycisk: Wyślij statek (jeśli tech + statek)
+    if (!sys.isHome) {
+      const canSend = vMgr && colMgr;
+      const activePid = colMgr?.activePlanetId;
+      const avail = activePid ? (vMgr?.getAvailable(activePid) ?? []) : [];
+      const hasWarpShip = avail.some(v => SHIPS[v.shipId]?.fuelPerLY > 0);
+
+      ctx.fillStyle = hasWarpShip ? 'rgba(0,255,180,0.08)' : 'rgba(60,60,60,0.3)';
+      ctx.fillRect(px + PAD, iy, btnW, btnH);
+      ctx.strokeStyle = hasWarpShip ? THEME.accent : THEME.border;
+      ctx.strokeRect(px + PAD, iy, btnW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = hasWarpShip ? THEME.accent : THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.clusterSend'), px + PAD + btnW / 2, iy + 13);
+      ctx.textAlign = 'left';
+      if (hasWarpShip) {
+        this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'cluster_send', data: { systemId: sys.id } });
+      }
+      iy += btnH + 4;
+    }
+
+    // Przycisk: Przełącz widok (jeśli odwiedzony)
+    if (isExplored && sysReg) {
+      ctx.fillStyle = 'rgba(0,255,180,0.08)';
+      ctx.fillRect(px + PAD, iy, btnW, btnH);
+      ctx.strokeStyle = THEME.accent;
+      ctx.strokeRect(px + PAD, iy, btnW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.clusterSwitch'), px + PAD + btnW / 2, iy + 13);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'cluster_switch', data: { systemId: sys.id } });
+      iy += btnH + 4;
+    }
+  }
+
   // ── Tooltip informacji o ciele niebieskim ─────────────────────────────────
 
   _drawBodyTooltip(ctx, areaX, areaY, areaW, areaH) {
@@ -1618,6 +2032,103 @@ export class FleetManagerOverlay {
     const mission = activeMissions.find(m => m.vesselId === vessel.id);
     if (mission) {
       cy = this._drawActiveMission(ctx, x, cy, w, pad, mission, vessel);
+    }
+
+    // ── Panel po przylecie międzygwiezdnym ────────────────────
+    const isMission = vessel.mission;
+    if (isMission?.type === 'interstellar_jump' && isMission.phase === 'in_system') {
+      cy += 4;
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+      cy += 8;
+
+      // Nagłówek
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.purple;
+      ctx.fillText(`🌟 ${t('fleet.interstellarArrival')}`, x + pad, cy + 10);
+      cy += 18;
+
+      // Info: dotarł do układu
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(t('fleet.arrivedAt', isMission.targetName ?? isMission.toSystemId), x + pad, cy + 10);
+      cy += 16;
+
+      // Przycisk: Przełącz widok
+      const ssMgr = window.KOSMOS?.starSystemManager;
+      const sysReg = ssMgr?.getSystem(isMission.toSystemId);
+      if (sysReg) {
+        const switchBtnW = w - pad * 2;
+        const switchBtnH = 22;
+        ctx.fillStyle = 'rgba(0,255,180,0.08)';
+        ctx.fillRect(x + pad, cy, switchBtnW, switchBtnH);
+        ctx.strokeStyle = THEME.accent;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + pad, cy, switchBtnW, switchBtnH);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.accent;
+        ctx.textAlign = 'center';
+        ctx.fillText(t('fleet.clusterSwitch'), x + w / 2, cy + 15);
+        ctx.textAlign = 'left';
+        this._hitZones.push({ x: x + pad, y: cy, w: switchBtnW, h: switchBtnH, type: 'cluster_switch', data: { systemId: isMission.toSystemId } });
+        cy += switchBtnH + 4;
+      }
+
+      // Lista planet w nowym układzie — redirect
+      const planets = EntityManager.getByType('planet')?.filter(p => p.systemId === isMission.toSystemId) ?? [];
+      if (planets.length > 0) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(t('fleet.systemPlanets'), x + pad, cy + 10);
+        cy += 16;
+
+        for (const planet of planets.slice(0, 6)) {
+          const pBtnW = w - pad * 2;
+          const pBtnH = 20;
+          if (cy + pBtnH > y + h - 40) break; // nie wychodź poza panel
+
+          ctx.fillStyle = 'rgba(170,136,255,0.06)';
+          ctx.fillRect(x + pad, cy, pBtnW, pBtnH);
+          ctx.strokeStyle = THEME.border;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + pad, cy, pBtnW, pBtnH);
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textPrimary;
+          ctx.fillText(`🪐 ${planet.name ?? planet.id}`, x + pad + 6, cy + 14);
+
+          // Odległość od gwiazdy
+          ctx.textAlign = 'right';
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(`${(planet.orbital?.a ?? 0).toFixed(1)} AU`, x + w - pad - 4, cy + 14);
+          ctx.textAlign = 'left';
+
+          this._hitZones.push({
+            x: x + pad, y: cy, w: pBtnW, h: pBtnH,
+            type: 'interstellar_redirect', data: { vesselId: vessel.id, targetId: planet.id },
+          });
+          cy += pBtnH + 2;
+        }
+      }
+
+      // Przycisk: Powrót do bazy
+      cy += 4;
+      const retBtnW = w - pad * 2;
+      const retBtnH = 22;
+      ctx.fillStyle = 'rgba(255,51,68,0.08)';
+      ctx.fillRect(x + pad, cy, retBtnW, retBtnH);
+      ctx.strokeStyle = THEME.danger;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad, cy, retBtnW, retBtnH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.clusterReturn'), x + w / 2, cy + 15);
+      ctx.textAlign = 'left';
+      this._hitZones.push({
+        x: x + pad, y: cy, w: retBtnW, h: retBtnH,
+        type: 'interstellar_return', data: { vesselId: vessel.id, fromSystemId: isMission.fromSystemId },
+      });
+      cy += retBtnH + 8;
     }
 
     // ── Aktywna trasa handlowa ────────────────────────────────

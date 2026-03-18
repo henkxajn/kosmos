@@ -897,6 +897,26 @@ export default {
   'fleet.selectFromList': '← Select a ship from the list',
   'fleet.typeLabel': 'Type: {0}',
   'fleet.targetLabel': 'Target: {0} {1}',
+  'fleet.starCluster': 'STAR CLUSTER',
+  'fleet.clusterSend': '🚀 Send ship',
+  'fleet.clusterSwitch': '🔭 Switch view',
+  'fleet.clusterReturn': '↩ Return to base',
+  'fleet.arrivedAt': 'Arrived at {0}',
+  'fleet.clusterSelectTarget': 'Select target in system',
+  'fleet.clusterDistance': '{0} LY',
+  'fleet.clusterSpectral': 'Type: {0}',
+  'fleet.clusterMass': 'Mass: {0} M☉',
+  'fleet.clusterExplored': 'Explored',
+  'fleet.clusterUnexplored': 'Unexplored',
+  'fleet.clusterHome': 'Home system',
+  'fleet.clusterColony': 'Colony',
+  'fleet.clusterBeacon': '📡 Beacon',
+  'fleet.clusterGate': '🌀 Jump Gate',
+  'fleet.clusterBuildBeacon': '📡 Build Beacon',
+  'fleet.clusterBuildGate': '🌀 Build Gate',
+  'fleet.interstellarArrival': 'INTERSTELLAR ARRIVAL',
+  'fleet.redirectToBody': 'Redirect to {0}',
+  'fleet.systemPlanets': 'Planets in system:',
 
   // === Vessel / VesselManager ===
   'vessel.launchedMission': 'Launched on mission: {0} → {1}',
@@ -907,6 +927,9 @@ export default {
   'vessel.redirectedBase': 'Redirected to base — home colony destroyed',
   'vessel.reassigned': 'Reassigned to {0} — home colony destroyed',
   'vessel.unknown': 'Unknown',
+  'vessel.interstellarLaunch': 'Warp jump to {0} ({1} LY)',
+  'vessel.interstellarArrived': 'Arrived at system {0}',
+  'vessel.interstellarTransit': 'Warp transit → {0}',
 
   // === Vessel statuses ===
   'vessel.status.return': 'Return',
@@ -1027,6 +1050,15 @@ export default {
   'missionPopup.bodies': 'bodies',
   'missionPopup.discoveryFanfare': '★ DISCOVERY ★ {0} ★ NEW BODY IN CATALOG ★ DISCOVERY ★ {1} ★',
   'missionPopup.discoveryFanfareShort': '★ DISCOVERY ★ {0} ★ NEW BODY IN CATALOG ★',
+
+  // === Interstellar popups ===
+  'missionPopup.interstellarArrival': 'KOSMOS OS  ▌ INTERSTELLAR ARRIVAL',
+  'missionPopup.newSystem': 'NEW\nSYSTEM',
+  'missionPopup.interstellarPlanets': 'PLANETS',
+  'missionPopup.interstellarMoons': 'MOONS',
+  'missionPopup.interstellarHZ': 'IN HZ',
+  'missionPopup.interstellarDesc': '{0} completed warp jump and entered system {1}.',
+  'galaxy.starType': 'STAR TYPE',
 
   // === EventChoiceModal ===
   'eventChoice.colony': 'COLONY',
@@ -1523,6 +1555,17 @@ export default {
   'galaxy.yourSystem': '🏠 YOUR SYSTEM',
   'galaxy.explored': '✅ EXPLORED',
   'galaxy.unexplored': '❓ UNEXPLORED',
+  'galaxy.hasColony': 'Colony',
+  'galaxy.warpBeacon': 'Warp Beacon',
+  'galaxy.jumpGate': 'Jump Gate',
+  'galaxy.switchView': '🔭 Switch view',
+  'galaxy.sendShip': '🚀 Send ship',
+  'galaxy.noWarpShips': 'No warp-capable ships available',
+  'galaxy.needWarpTech': 'Requires technology: Warp Drive',
+  'galaxy.inTransit': 'In transit:',
+  'galaxy.more': 'more',
+  'galaxy.buildBeacon': 'Build Beacon',
+  'galaxy.buildGate': 'Build Jump Gate',
 
   // === ActionPanel (generator, not active) ===
   'action.header': 'PLAYER ACTIONS',

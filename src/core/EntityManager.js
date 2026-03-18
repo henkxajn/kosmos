@@ -78,6 +78,21 @@ class EntityManager {
     return result;
   }
 
+  // Pobierz encje po typie w danym układzie gwiezdnym
+  getByTypeInSystem(type, systemId) {
+    return this.getByType(type).filter(e => e.systemId === systemId);
+  }
+
+  // Pobierz gwiazdę danego układu
+  getStarOfSystem(systemId) {
+    return this.getByType('star').find(s => s.systemId === systemId) || null;
+  }
+
+  // Pobierz wszystkie encje w danym układzie
+  getEntitiesInSystem(systemId) {
+    return this.getAll().filter(e => e.systemId === systemId);
+  }
+
   // Liczba encji
   get count() {
     return this.entities.size;

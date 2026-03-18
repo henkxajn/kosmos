@@ -101,6 +101,11 @@ export class GalaxyMapRenderer {
     };
     window.addEventListener('resize', this._onResize);
 
+    // Infrastruktura międzygwiezdna (linie jump gate, transit vessels)
+    this._gateLines = null;
+    this._transitLines = null;
+    this._buildInfrastructure();
+
     // Animacja
     this._clock.start();
     this._animate();
@@ -328,6 +333,110 @@ export class GalaxyMapRenderer {
     }
   }
 
+  // ── Infrastruktura międzygwiezdna (jump gate lines, transit indicators) ──
+
+  _buildInfrastructure() {
+    this._updateJumpGateLines();
+    this._updateTransitLines();
+  }
+
+  /**
+   * Linie łączące układy połączone jump gate (fioletowe).
+   * Przebudowywane co ramkę (tanie — max kilka linii).
+   */
+  _updateJumpGateLines() {
+    // Usuń stare
+    if (this._gateLines) {
+      this._scene.remove(this._gateLines);
+      this._gateLines.geometry.dispose();
+      this._gateLines.material.dispose();
+      this._gateLines = null;
+    }
+
+    const ssMgr = window.KOSMOS?.starSystemManager;
+    if (!ssMgr) return;
+
+    const points = [];
+    const allSys = ssMgr.getAllSystems();
+    const processed = new Set();
+
+    for (const sys of allSys) {
+      if (!sys.jumpGate) continue;
+      // Szukaj drugiego systemu z jump gate (paired)
+      for (const other of allSys) {
+        if (other.systemId === sys.systemId) continue;
+        if (!other.jumpGate) continue;
+        const pairKey = [sys.systemId, other.systemId].sort().join('-');
+        if (processed.has(pairKey)) continue;
+        processed.add(pairKey);
+
+        const a = this._systems.find(s => s.id === sys.systemId);
+        const b = this._systems.find(s => s.id === other.systemId);
+        if (a && b) {
+          points.push(
+            new THREE.Vector3(a.x, (a.z ?? 0) * 0.5, a.y),
+            new THREE.Vector3(b.x, (b.z ?? 0) * 0.5, b.y)
+          );
+        }
+      }
+    }
+
+    if (points.length === 0) return;
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xcc88ff,
+      transparent: true,
+      opacity: 0.4,
+      depthWrite: false,
+    });
+    this._gateLines = new THREE.LineSegments(geo, mat);
+    this._scene.add(this._gateLines);
+  }
+
+  /**
+   * Linie tranzytowe statków warp (pomarańczowe przerywane).
+   */
+  _updateTransitLines() {
+    if (this._transitLines) {
+      this._scene.remove(this._transitLines);
+      this._transitLines.geometry.dispose();
+      this._transitLines.material.dispose();
+      this._transitLines = null;
+    }
+
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return;
+
+    const transit = vMgr.getInterstellarVessels();
+    if (transit.length === 0) return;
+
+    const points = [];
+    for (const v of transit) {
+      const m = v.mission;
+      if (!m) continue;
+      const fromX = m.fromGalX ?? 0, fromY = m.fromGalY ?? 0;
+      const toX = m.toGalX ?? 0, toY = m.toGalY ?? 0;
+      const curX = m.currentGalX ?? fromX, curY = m.currentGalY ?? fromY;
+
+      // Linia: aktualna pozycja → cel
+      points.push(
+        new THREE.Vector3(curX, 0, curY),
+        new THREE.Vector3(toX, 0, toY)
+      );
+    }
+
+    if (points.length === 0) return;
+    const geo = new THREE.BufferGeometry().setFromPoints(points);
+    const mat = new THREE.LineBasicMaterial({
+      color: 0xff8844,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+    });
+    this._transitLines = new THREE.LineSegments(geo, mat);
+    this._scene.add(this._transitLines);
+  }
+
   // ── Kamera ────────────────────────────────────────────────────────────────
 
   _updateCamera() {
@@ -363,6 +472,12 @@ export class GalaxyMapRenderer {
     const showLabels = this._dist < LABEL_DIST;
     for (const l of this._labels) {
       l.sprite.visible = showLabels;
+    }
+
+    // Aktualizuj infrastrukturę (jump gate lines, transit) co 30 ramek
+    if (Math.floor(t * 60) % 30 === 0) {
+      this._updateJumpGateLines();
+      this._updateTransitLines();
     }
 
     this._renderer.render(this._scene, this._camera);

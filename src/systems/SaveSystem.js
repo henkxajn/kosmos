@@ -44,6 +44,7 @@ export class SaveSystem {
 
   // ── Zapis ────────────────────────────────────────────────────
   save() {
+    const allStars   = EntityManager.getByType('star');
     const planets    = EntityManager.getByType('planet');
     const moons      = EntityManager.getByType('moon');
     const planetoids = EntityManager.getByType('planetoid');
@@ -53,6 +54,10 @@ export class SaveSystem {
       gameTime:   this.timeSystem.gameTime,
       scenario:   window.KOSMOS?.scenario ?? 'civilization',
       star:       this._serializeStar(this.star),
+      // Dodatkowe gwiazdy (inne układy) — serializowane osobno
+      stars:      allStars.length > 1
+        ? allStars.filter(s => s.id !== this.star.id).map(s => this._serializeStar(s))
+        : [],
       planets:    planets.map(p => this._serializePlanet(p)),
       moons:      moons.map(m => this._serializeMoon(m)),
       planetoids: planetoids.map(p => this._serializePlanetoid(p)),
@@ -111,6 +116,8 @@ export class SaveSystem {
       randomEventSystem: window.KOSMOS?.randomEventSystem?.serialize() ?? null,
       exploredBodies,
       galaxyData: window.KOSMOS.galaxyData ?? null,
+      activeSystemId: window.KOSMOS.activeSystemId ?? 'sys_home',
+      starSystemManager: window.KOSMOS.starSystemManager?.serialize() ?? null,
     };
   }
 
@@ -123,6 +130,7 @@ export class SaveSystem {
       luminosity:   star.luminosity,
       x:            star.x,
       y:            star.y,
+      systemId:     star.systemId ?? 'sys_home',
     };
   }
 
@@ -163,6 +171,8 @@ export class SaveSystem {
       surface: { ...(p.surface || {}) },
       // Eksploracja (Etap 14)
       explored: p.explored || false,
+      // Układ gwiezdny (Etap 40)
+      systemId: p.systemId ?? 'sys_home',
       // Złoża (Etap 26 — gospodarka)
       deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
@@ -193,6 +203,7 @@ export class SaveSystem {
       surfaceRadius:     m.surfaceRadius ?? null,
       surfaceGravity:    m.surfaceGravity ?? null,
       atmosphere:        m.atmosphere || 'none',
+      systemId:          m.systemId ?? 'sys_home',
       deposits: m.deposits ? m.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,
@@ -219,6 +230,7 @@ export class SaveSystem {
       surfaceGravity:    p.surfaceGravity ?? null,
       composition:       { ...(p.composition || {}) },
       explored:          p.explored || false,
+      systemId:          p.systemId ?? 'sys_home',
       deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,
         totalAmount: d.totalAmount, remaining: d.remaining,

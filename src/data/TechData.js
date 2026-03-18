@@ -611,18 +611,22 @@ export const TECHS = {
   warp_theory: {
     id:          'warp_theory',
     namePL:      'Teoria Osnowy',
+    nameEN:      'Warp Theory',
     branch:      'space',
     tier:        5,
     cost:        { research: 900 },
     requires:    ['antimatter_propulsion', 'quantum_physics'],
     requiresDiscovery: 'zakrzywienie_czasoprzestrzeni',
-    effects: [],
-    description: 'Teoretyczne podstawy napędu skokowego — prereq do Warp Drive',
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'warp_beacon' },
+    ],
+    description: 'Teoretyczne podstawy osnowy — prereq do Warp Drive + Warp Beacon',
   },
 
   warp_drive: {
     id:          'warp_drive',
     namePL:      'Napęd Skokowy',
+    nameEN:      'Warp Drive',
     branch:      'space',
     tier:        5,
     cost:        { research: 1500 },
@@ -630,13 +634,15 @@ export const TECHS = {
     effects: [
       { type: 'unlockShip', shipId: 'starship' },
       { type: 'unlockCommodity', commodityId: 'warp_cores' },
+      { type: 'unlockFeature', feature: 'interstellar_travel' },
     ],
-    description: 'Statki Gen V: Starship — natychmiastowy lot w granicach układu',
+    description: 'Statki Gen V: Starship + podróże międzygwiezdne (2.5 LY/rok)',
   },
 
   interstellar_colonization: {
     id:          'interstellar_colonization',
     namePL:      'Kolonizacja Gwiezdna',
+    nameEN:      'Interstellar Colonization',
     branch:      'space',
     tier:        5,
     cost:        { research: 2000 },
@@ -644,8 +650,9 @@ export const TECHS = {
     effects: [
       { type: 'unlockShip', shipId: 'ark_ship' },
       { type: 'unlockFeature', feature: 'victory_exodus' },
+      { type: 'unlockBuilding', buildingId: 'jump_gate' },
     ],
-    description: 'Arka — masowa kolonizacja międzygwiezdna. Warunek zwycięstwa: Exodus',
+    description: 'Arka + Jump Gate — kolonizacja i natychmiastowe skoki międzygwiezdne',
   },
 
   // ══════════════════════════════════════════════════════════════════════════

@@ -19,6 +19,26 @@ import { DepositSystem } from '../systems/DepositSystem.js';
 // thick zachowany dla backward compat (stare save'y)
 const GREENHOUSE = { none: 0, thin: 15, breathable: 20, dense: 60, thick: 35 };
 
+// Mulberry32 PRNG — deterministyczny generator liczb pseudolosowych
+function mulberry32(seed) {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Hash string → number
+function hashString(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  }
+  return h;
+}
+
 export class SystemGenerator {
 
   // Wygeneruj kompletny układ: gwiazda + protoplanety + księżyce + dysk + pasy
@@ -655,6 +675,56 @@ export class SystemGenerator {
 
     result.civPlanetId = bestPlanet.id;
     return result;
+  }
+
+  // ── Generowanie układu dla obcej gwiazdy (mapa galaktyczna) ───────────────
+  // Seeded PRNG z galaxyStar.id → deterministyczny układ.
+  // Parametryzacja: typ spektralny → masa/luminosity → HZ → typy planet.
+  // Encje dodawane do EntityManager (jak generate()).
+  generateForStar(galaxyStar) {
+    // Seeded PRNG → deterministyczna generacja
+    const seed = hashString(galaxyStar.id);
+    const rng  = mulberry32(seed);
+
+    // Nadpisz Math.random tymczasowo (generate() i podsystemy używają Math.random)
+    const origRandom = Math.random;
+    Math.random = rng;
+
+    try {
+      // Stwórz gwiazdę z danych galaktycznych (nie losowy typ)
+      const star = new Star({
+        id:           EntityManager.generateId(),
+        name:         galaxyStar.name,
+        spectralType: galaxyStar.spectralType,
+        mass:         galaxyStar.mass,
+        luminosity:   galaxyStar.luminosity,
+        x: 0,
+        y: 0,
+      });
+
+      // Generuj planety, księżyce, itp. (metody generate*() użyją seeded rng)
+      const planets       = this.generateProtoPlanets(star);
+      const moons         = this.generateMoonsForPlanets(planets, star);
+      const planetesimals = this.generateDisk(star);
+      const asteroids     = this._generateAsteroidBelt(star, planets);
+      const comets        = this._generateComets(star);
+      const planetoids    = this._generatePlanetoids(star, planets);
+
+      EntityManager.add(star);
+      planets.forEach(p => EntityManager.add(p));
+      moons.forEach(m => EntityManager.add(m));
+      asteroids.forEach(a => EntityManager.add(a));
+      comets.forEach(c => EntityManager.add(c));
+      planetoids.forEach(p => EntityManager.add(p));
+
+      // Generuj złoża surowców
+      this._generateDepositsForAll(planets, moons, planetoids, asteroids);
+
+      return { star, planets, moons, planetesimals, asteroids, comets, planetoids };
+    } finally {
+      // Przywróć oryginalne Math.random
+      Math.random = origRandom;
+    }
   }
 
   // ── Generowanie księżyców ──────────────────────────────────────

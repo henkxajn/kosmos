@@ -431,6 +431,138 @@ export class ThreeRenderer {
     if (planetesimals?.length > 0) this._updateDiskPoints(planetesimals);
   }
 
+  // ── Przełączanie układu gwiezdnego (dispose + reinit) ──────────────────
+  // Wywoływane przez StarSystemManager.switchActiveSystem()
+  switchSystem(star, planets, planetesimals, moons = []) {
+    this._disposeAllMeshes();
+    this.initSystem(star, planets, planetesimals, moons);
+  }
+
+  // Usuń wszystkie meshe z bieżącej sceny (planety, księżyce, gwiazda, orbity, itp.)
+  _disposeAllMeshes() {
+    // Planety
+    for (const [id, entry] of this._planets) {
+      if (entry.group) {
+        entry.group.traverse(obj => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) obj.material.dispose();
+        });
+        this.scene.remove(entry.group);
+      }
+    }
+    this._planets.clear();
+
+    // Orbity planet
+    for (const [id, line] of this._orbits) {
+      line.geometry.dispose();
+      line.material.dispose();
+      this.scene.remove(line);
+    }
+    this._orbits.clear();
+
+    // Księżyce
+    for (const [id, entry] of this._moons) {
+      if (entry.mesh) {
+        entry.mesh.geometry.dispose();
+        entry.mesh.material.dispose();
+        this.scene.remove(entry.mesh);
+      }
+      if (entry.ring) {
+        entry.ring.geometry?.dispose();
+        entry.ring.material?.dispose();
+      }
+    }
+    this._moons.clear();
+
+    // Planetoidy
+    for (const [id, entry] of this._planetoids) {
+      if (entry.mesh) {
+        entry.mesh.geometry.dispose();
+        entry.mesh.material.dispose();
+        this.scene.remove(entry.mesh);
+      }
+    }
+    this._planetoids.clear();
+
+    for (const [id, line] of this._planetoidOrbits) {
+      line.geometry.dispose();
+      line.material.dispose();
+      this.scene.remove(line);
+    }
+    this._planetoidOrbits.clear();
+
+    // Life glows
+    for (const [id, sprite] of this._lifeGlows) {
+      sprite.material?.dispose();
+    }
+    this._lifeGlows.clear();
+
+    // Colony labels
+    for (const [id, entry] of this._colonyLabels) {
+      if (entry.sprite) {
+        entry.sprite.material?.map?.dispose();
+        entry.sprite.material?.dispose();
+        this.scene.remove(entry.sprite);
+      }
+    }
+    this._colonyLabels.clear();
+
+    // Vessels
+    for (const [id, entry] of this._vessels) {
+      if (entry.sprite) {
+        entry.sprite.material?.map?.dispose();
+        entry.sprite.material?.dispose();
+        this.scene.remove(entry.sprite);
+      }
+      if (entry.routeLine) {
+        entry.routeLine.geometry?.dispose();
+        entry.routeLine.material?.dispose();
+        this.scene.remove(entry.routeLine);
+      }
+    }
+    this._vessels.clear();
+
+    // Gwiazda
+    if (this._starGroup) {
+      this._starGroup.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+      this.scene.remove(this._starGroup);
+      this._starGroup = null;
+    }
+
+    // HZ ring
+    if (this._hzRing) {
+      this._hzRing.geometry?.dispose();
+      this._hzRing.material?.dispose();
+      this.scene.remove(this._hzRing);
+      this._hzRing = null;
+    }
+
+    // Dysk planetezymali
+    if (this._diskPoints) {
+      this._diskPoints.geometry?.dispose();
+      this._diskPoints.material?.dispose();
+      this.scene.remove(this._diskPoints);
+      this._diskPoints = null;
+    }
+
+    // Małe ciała (asteroidy, komety)
+    if (this._smallBodyPoints) {
+      this._smallBodyPoints.geometry?.dispose();
+      this._smallBodyPoints.material?.dispose();
+      this.scene.remove(this._smallBodyPoints);
+      this._smallBodyPoints = null;
+    }
+
+    // Reset
+    this._entityByUUID.clear();
+    this._clickable = [];
+    this._focusEntityId = null;
+    this._star = null;
+  }
+
   // ── Gwiazda (kolorowy rdzeń + białe centrum + kolorowe promieniowanie) ──
   renderStar(star) {
     this._star = star;

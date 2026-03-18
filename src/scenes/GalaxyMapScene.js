@@ -13,6 +13,7 @@ import { GalaxyMapRenderer }   from '../renderer/GalaxyMapRenderer.js';
 import { STAR_TYPES }          from '../config/GameConfig.js';
 import EventBus                from '../core/EventBus.js';
 import { t }                   from '../i18n/i18n.js';
+import { SHIPS }               from '../data/ShipsData.js';
 
 // ── Layout ────────────────────────────────────────────────────────────────────
 const HDR_H   = 44;    // nagłówek
@@ -219,14 +220,128 @@ export class GalaxyMapScene extends BaseOverlay {
       }
       py += 24;
 
-      // Przyszłość (wyszarzony)
+      // ── Infrastruktura ──
+      const ssMgr = window.KOSMOS?.starSystemManager;
+      if (ssMgr && !sys.isHome) {
+        const hasBeacon = ssMgr.hasBeacon(sys.id);
+        const hasGate   = ssMgr.hasJumpGate(sys.id);
+        const sysData   = ssMgr.getSystem(sys.id);
+        const hasColony = sysData ? ssMgr.getSystemColonies(sys.id).length > 0 : false;
+
+        // Ikony infrastruktury
+        ctx.font = `${THEME.fontSize}px ${THEME.fontFamily}`;
+        if (hasColony) {
+          ctx.fillStyle = THEME.accent;
+          ctx.fillText('🏗 ' + t('galaxy.hasColony'), px, py);
+          py += 16;
+        }
+        if (hasBeacon) {
+          ctx.fillStyle = '#66ccff';
+          ctx.fillText('📡 ' + t('galaxy.warpBeacon'), px, py);
+          py += 16;
+        }
+        if (hasGate) {
+          ctx.fillStyle = '#cc88ff';
+          ctx.fillText('🌀 ' + t('galaxy.jumpGate'), px, py);
+          py += 16;
+        }
+
+        // Przyciski budowy orbitalnej (jeśli kolonia w tym układzie)
+        const tSys0 = window.KOSMOS?.techSystem;
+        if (hasColony && !hasBeacon && tSys0?.isResearched('warp_theory')) {
+          const btnW = LEFT_W - 24;
+          const btnH = 22;
+          this._drawButton(ctx, '📡 ' + t('galaxy.buildBeacon'), px, py, btnW, btnH, 'primary');
+          this._addHit(px, py, btnW, btnH, 'buildBeacon', { systemId: sys.id });
+          py += btnH + 4;
+        }
+        if (hasColony && !hasGate && tSys0?.isResearched('interstellar_colonization')) {
+          const btnW = LEFT_W - 24;
+          const btnH = 22;
+          this._drawButton(ctx, '🌀 ' + t('galaxy.buildGate'), px, py, btnW, btnH, 'primary');
+          this._addHit(px, py, btnW, btnH, 'buildGate', { systemId: sys.id });
+          py += btnH + 4;
+        }
+        py += 4;
+      }
+
+      // ── Przyciski akcji ──
       if (!sys.isHome) {
-        ctx.fillStyle = THEME.textDim;
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        const lines = this._wrapText(ctx, t('galaxy.interstellarSoon'), LEFT_W - 24);
-        for (const line of lines) {
-          ctx.fillText(line, px, py);
+        const ssMgr2  = window.KOSMOS?.starSystemManager;
+        const sysData = ssMgr2?.getSystem(sys.id);
+        const vMgr    = window.KOSMOS?.vesselManager;
+        const tSys    = window.KOSMOS?.techSystem;
+
+        // Czy interstellar odblokowany (tech warp_drive)
+        const hasWarpTech = tSys?.isResearched('warp_drive') ?? false;
+
+        // Przycisk "Przełącz widok" — tylko dla odwiedzonych układów
+        if (sysData) {
+          const btnW = LEFT_W - 24;
+          const btnH = 24;
+          this._drawButton(ctx, t('galaxy.switchView'), px, py, btnW, btnH, 'primary');
+          this._addHit(px, py, btnW, btnH, 'switchView', { systemId: sys.id });
+          py += btnH + 8;
+        }
+
+        // Przycisk "Wyślij statek" — potrzebna tech warp_drive + warpCapable ship
+        if (hasWarpTech && vMgr) {
+          const warpShips = this._getAvailableWarpShips();
+          if (warpShips.length > 0) {
+            const btnW = LEFT_W - 24;
+            const btnH = 24;
+            this._drawButton(ctx, t('galaxy.sendShip'), px, py, btnW, btnH, 'unique');
+            this._addHit(px, py, btnW, btnH, 'sendShip', { systemId: sys.id, ships: warpShips });
+            py += btnH + 6;
+
+            // Lista dostępnych statków
+            ctx.fillStyle = THEME.textDim;
+            ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+            for (const v of warpShips.slice(0, 3)) {
+              const shipDef = SHIPS[v.shipId];
+              const range = (v.fuel.current / (shipDef?.fuelPerLY ?? 0.5)).toFixed(1);
+              ctx.fillText(`  ${v.name} (${range} LY)`, px, py);
+              py += 14;
+            }
+            if (warpShips.length > 3) {
+              ctx.fillText(`  +${warpShips.length - 3} ${t('galaxy.more')}...`, px, py);
+              py += 14;
+            }
+          } else {
+            // Brak statków warpowych
+            ctx.fillStyle = THEME.textDim;
+            ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+            ctx.fillText(t('galaxy.noWarpShips'), px, py);
+            py += 16;
+          }
+        } else if (!hasWarpTech) {
+          // Tech nie zbadana
+          ctx.fillStyle = THEME.textDim;
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          const lines = this._wrapText(ctx, t('galaxy.needWarpTech'), LEFT_W - 24);
+          for (const line of lines) {
+            ctx.fillText(line, px, py);
+            py += 14;
+          }
+        }
+
+        // ── Statki w tranzycie do tego systemu ──
+        py += 8;
+        const transitVessels = vMgr?.getInterstellarVessels()?.filter(
+          v => v.mission?.toSystemId === sys.id
+        ) ?? [];
+        if (transitVessels.length > 0) {
+          ctx.fillStyle = THEME.textLabel;
+          ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillText(t('galaxy.inTransit'), px, py);
           py += 14;
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          for (const v of transitVessels) {
+            const progress = v.mission?.galProgress ?? 0;
+            ctx.fillStyle = THEME.textSecondary;
+            ctx.fillText(`  ${v.name} (${(progress * 100).toFixed(0)}%)`, px, py);
+            py += 14;
+          }
         }
       }
 
@@ -302,11 +417,88 @@ export class GalaxyMapScene extends BaseOverlay {
   _onHit(zone) {
     if (zone.type === 'close') {
       this.hide();
-      // OverlayManager musi wyczyścić active
       if (window.KOSMOS?.overlayManager) {
         window.KOSMOS.overlayManager.active = null;
       }
     }
+
+    if (zone.type === 'switchView') {
+      const ssMgr = window.KOSMOS?.starSystemManager;
+      if (ssMgr) {
+        ssMgr.switchActiveSystem(zone.systemId);
+        this.hide();
+        if (window.KOSMOS?.overlayManager) {
+          window.KOSMOS.overlayManager.active = null;
+        }
+      }
+    }
+
+    if (zone.type === 'sendShip') {
+      this._handleSendShip(zone.systemId, zone.ships);
+    }
+
+    if (zone.type === 'buildBeacon') {
+      // TODO: sprawdź koszty zasobów i odejmij (na razie: bezkosztowo dla prototypu)
+      EventBus.emit('orbital:buildBeacon', { systemId: zone.systemId });
+    }
+
+    if (zone.type === 'buildGate') {
+      EventBus.emit('orbital:buildJumpGate', { systemId: zone.systemId, connectedTo: null });
+    }
+  }
+
+  /**
+   * Wyślij pierwszy dostępny statek warpowy do wybranego układu.
+   * (Przyszłość: dialog wyboru statku; na razie — pierwszy z listy)
+   */
+  _handleSendShip(targetSystemId, ships) {
+    if (!ships || ships.length === 0) return;
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return;
+
+    // Wybierz pierwszy statek z wystarczającym paliwem
+    const gd = window.KOSMOS?.galaxyData;
+    const targetStar = gd?.systems?.find(s => s.id === targetSystemId);
+    if (!targetStar) return;
+
+    // Odległość od systemu statku do celu
+    for (const v of ships) {
+      const fromStar = gd.systems.find(s => s.id === (v.systemId ?? 'sys_home'));
+      if (!fromStar) continue;
+      const dx = targetStar.x - fromStar.x;
+      const dy = targetStar.y - fromStar.y;
+      const dz = (targetStar.z ?? 0) - (fromStar.z ?? 0);
+      const distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const shipDef = SHIPS[v.shipId];
+      const fuelCost = distLY * (shipDef?.fuelPerLY ?? 0.5);
+
+      if (v.fuel.current >= fuelCost) {
+        const ok = vMgr.dispatchInterstellar(v.id, targetSystemId);
+        if (ok) {
+          // Zamknij mapę po wysłaniu
+          this.hide();
+          if (window.KOSMOS?.overlayManager) {
+            window.KOSMOS.overlayManager.active = null;
+          }
+          return;
+        }
+      }
+    }
+  }
+
+  /**
+   * Pobierz listę statków warpCapable docked + idle w dowolnej kolonii.
+   */
+  _getAvailableWarpShips() {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return [];
+    const all = vMgr.getAllVessels();
+    return all.filter(v => {
+      if (v.position.state !== 'docked') return false;
+      if (v.status !== 'idle' && v.status !== 'refueling') return false;
+      const def = SHIPS[v.shipId];
+      return def?.warpCapable === true;
+    });
   }
 
   handleMouseMove(x, y) {

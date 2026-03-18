@@ -268,8 +268,10 @@ export const SHIPS = {
     crewCost:      10.0,
     requires:      'warp_drive',
     warpCapable:   true,
+    warpSpeedLY:   2.5,           // prędkość warp: 2.5 LY/rok (bazowa)
+    fuelPerLY:     0.5,           // zużycie: 0.5 warp_core / LY
     capabilities:  ['recon', 'scientific', 'colony', 'cargo'],
-    description:   'Gwiezdny statek Gen V — natychmiastowy skok w granicach układu.',
+    description:   'Gwiezdny statek Gen V — podróże międzygwiezdne 2.5 LY/rok.',
   },
 
   ark_ship: {
@@ -301,9 +303,11 @@ export const SHIPS = {
     crewCost:      20.0,
     requires:      'interstellar_colonization',
     warpCapable:   true,
+    warpSpeedLY:   2.0,           // wolniejsza od starshipa (większa masa)
+    fuelPerLY:     1.0,           // 1 warp_core / LY
     isVictoryShip: true,
     capabilities:  ['colony', 'cargo'],
-    description:   'Arka — masowy statek kolonizacyjny. Warunek zwycięstwa: wyślij Arkę.',
+    description:   'Arka — masowy statek kolonizacyjny + podróże międzygwiezdne.',
   },
 
 };

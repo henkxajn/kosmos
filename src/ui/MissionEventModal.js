@@ -581,6 +581,46 @@ function _formatTechEffect(eff, isEN) {
   }
 }
 
+// ── Popup: przylot międzygwiezdny ────────────────────────────────────────
+
+function _onInterstellarArrived({ vessel, systemId, star, targetName }) {
+  const vesselName = vessel?.name ?? t('vessel.unknown');
+  const sysName = targetName ?? systemId;
+
+  // Zbierz statystyki nowego układu
+  const planets = EntityManager.getByType('planet').filter(p => p.systemId === systemId);
+  const moons   = EntityManager.getByType('moon').filter(m => m.systemId === systemId);
+
+  let stats = '';
+  stats += formatStatLine(t('missionPopup.vessel'), vesselName, 'at-stat-neu');
+  stats += formatStatLine(t('galaxy.starType') ?? t('galaxy.status'), star?.spectralType ?? '?');
+  stats += formatStatLine(t('missionPopup.interstellarPlanets') ?? 'Planets', `${planets.length}`);
+  stats += formatStatLine(t('missionPopup.interstellarMoons') ?? 'Moons', `${moons.length}`);
+
+  // Planety w strefie zamieszkiwalnej
+  const hzPlanets = planets.filter(p => {
+    if (!star) return false;
+    const hz = Math.sqrt(star.luminosity ?? 1);
+    const d = p.orbital?.a ?? 0;
+    return d >= hz * 0.7 && d <= hz * 1.5;
+  });
+  if (hzPlanets.length > 0) {
+    stats += formatStatLine(t('missionPopup.interstellarHZ') ?? 'In HZ', `${hzPlanets.length}`, 'at-stat-pos');
+  }
+
+  queueMissionEvent({
+    severity: 'success',
+    barTitle: t('missionPopup.interstellarArrival') ?? 'INTERSTELLAR ARRIVAL',
+    barRight: _gameYear(),
+    svgKey: 'colony',
+    svgLabel: (t('missionPopup.newSystem') ?? 'NEW\nSYSTEM').replace(/\n/g, '<br>'),
+    prompt: '> WARP_EXIT.EXE_',
+    headline: `${t('vessel.interstellarArrived', sysName)}`,
+    description: t('missionPopup.interstellarDesc', vesselName, sysName) ?? `${vesselName} has arrived at ${sysName}.`,
+    contentHTML: stats,
+  });
+}
+
 // ── Inicjalizacja — podłączenie EventBus ────────────────────────────────
 
 export function initMissionEvents() {
@@ -591,5 +631,6 @@ export function initMissionEvents() {
   EventBus.on('expedition:reconComplete',  _onReconComplete);
   EventBus.on('discovery:found',           _onDiscoveryFound);
   EventBus.on('tech:researched',           _onTechResearched);
+  EventBus.on('interstellar:arrived',      _onInterstellarArrived);
   EventBus.on('time:stateChanged',         _onTimeStateChanged);
 }

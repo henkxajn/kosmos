@@ -37,6 +37,7 @@ import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js
 import { formatStatLine, formatStatLineWithCursor } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
+import { StarSystemManager } from '../systems/StarSystemManager.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
 import { Moon }              from '../entities/Moon.js';
@@ -76,6 +77,12 @@ export class GameScene {
         : this._generateFreshSystem(cx, cy);
 
     this.star = star;
+
+    // ── StarSystemManager — rejestr układów gwiezdnych ───────
+    this.starSystemManager = new StarSystemManager();
+    this.starSystemManager.registerHomeSystem(star, planets, moons, planetoids);
+    window.KOSMOS.starSystemManager = this.starSystemManager;
+    window.KOSMOS.activeSystemId    = 'sys_home';
 
     // ── Three.js renderer ──────────────────────────────────────
     this.threeRenderer = new ThreeRenderer(canvas3D);
@@ -159,6 +166,7 @@ export class GameScene {
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
     window.KOSMOS.researchSystem   = this.researchSystem;
     window.KOSMOS.discoverySystem  = this.discoverySystem;
+    window.KOSMOS.threeRenderer    = this.threeRenderer;
 
     // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
     window.KOSMOS.galaxyData = savedData?.civ4x?.galaxyData
@@ -246,6 +254,10 @@ export class GameScene {
       if (c4x.civ?.unrestActive) {
         this.buildingSystem._civPenalty = 0.7;
         this.buildingSystem._reapplyAllRates();
+      }
+      // Przywróć StarSystemManager (wieloukładowy save)
+      if (c4x.starSystemManager) {
+        this.starSystemManager.restore(c4x.starSystemManager);
       }
     }
 
@@ -349,6 +361,19 @@ export class GameScene {
     // Nowa gra
     EventBus.on('game:new', () => { SaveSystem.clearSave(); window.location.reload(); });
 
+    // ── Przełączenie układu — aktywuj pierwszą kolonię w nowym układzie ──
+    EventBus.on('system:switched', ({ systemId }) => {
+      const colMgr = window.KOSMOS?.colonyManager;
+      if (!colMgr) return;
+      const cols = colMgr.getAllColonies().filter(c => {
+        const body = EntityManager.get(c.planetId);
+        return body?.systemId === systemId;
+      });
+      if (cols.length > 0) {
+        colMgr.switchActiveColony(cols[0].planetId);
+      }
+    });
+
     // ── Game Over — planeta gracza zniszczona ──────────────────
     this._gameOver = false;
     const checkHomeDestroyed = (planet, reason) => {
@@ -425,8 +450,8 @@ export class GameScene {
           this._setupPowerTestResources();
           // Zbadaj WSZYSTKIE technologie
           this._setupPowerTestTechs();
-          // Populacja 30 POP
-          this.civSystem.population = 30;
+          // Populacja 100 POP (wystarczająca na wszystkie budynki)
+          this.civSystem.population = 100;
           // Domyślne nazwy
           window.KOSMOS.civName = 'Test Empire';
           civPlanet.name = 'Test Capital';
@@ -583,7 +608,11 @@ export class GameScene {
     const vMgr = window.KOSMOS?.vesselManager;
     const colony = this.colonyManager.getColony(planetId);
     if (!vMgr || !colony) return;
-    for (const shipId of ['science_vessel', 'colony_ship', 'cargo_ship', 'fast_scout', 'fusion_explorer', 'antimatter_cruiser']) {
+    for (const shipId of [
+      'science_vessel', 'colony_ship', 'cargo_ship', 'heavy_freighter',
+      'fast_scout', 'bulk_freighter', 'fusion_explorer', 'heavy_colony_ship',
+      'antimatter_cruiser', 'starship', 'ark_ship',
+    ]) {
       const vessel = vMgr.createAndRegister(shipId, planetId);
       colony.fleet.push(vessel.id);
     }
@@ -609,17 +638,50 @@ export class GameScene {
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
 
-    // Lista budynków do postawienia
+    // Lista budynków do postawienia — WSZYSTKIE dostępne typy
     const buildPlan = [
-      { id: 'habitat',          level: 10, count: 1 },
-      { id: 'solar_farm',       level: 10, count: 2 },
-      { id: 'mine',             level: 10, count: 2 },
-      { id: 'farm',             level: 10, count: 1 },
-      { id: 'well',             level: 10, count: 1 },
-      { id: 'factory',          level: 10, count: 1 },
-      { id: 'research_station', level: 10, count: 1 },
-      { id: 'launch_pad',       level: 1,  count: 1 },
-      { id: 'shipyard',         level: 1,  count: 2 },
+      // Podstawowe (wysoki poziom)
+      { id: 'habitat',               level: 10, count: 2 },
+      { id: 'solar_farm',            level: 10, count: 2 },
+      { id: 'mine',                  level: 10, count: 2 },
+      { id: 'farm',                  level: 10, count: 1 },
+      { id: 'well',                  level: 10, count: 1 },
+      { id: 'factory',               level: 10, count: 2 },
+      { id: 'research_station',      level: 10, count: 1 },
+      { id: 'launch_pad',            level: 3,  count: 1 },
+      { id: 'shipyard',              level: 3,  count: 2 },
+      // Energetyka
+      { id: 'coal_plant',            level: 3,  count: 1 },
+      { id: 'geothermal',            level: 3,  count: 1 },
+      { id: 'nuclear_plant',         level: 3,  count: 1 },
+      { id: 'fusion_reactor',        level: 3,  count: 1 },
+      // Przemysł
+      { id: 'consumer_factory',      level: 3,  count: 1 },
+      { id: 'smelter',               level: 3,  count: 1 },
+      { id: 'antimatter_factory',    level: 1,  count: 1 },
+      // Autonomiczne
+      { id: 'autonomous_mine',       level: 3,  count: 1 },
+      { id: 'autonomous_solar_farm', level: 3,  count: 1 },
+      { id: 'autonomous_spaceport',  level: 1,  count: 1 },
+      { id: 'synthesized_food_plant',level: 3,  count: 1 },
+      // Badawcze
+      { id: 'observatory',           level: 1,  count: 1 },
+      { id: 'data_center',           level: 1,  count: 1 },
+      { id: 'genetics_lab',          level: 1,  count: 1 },
+      { id: 'ai_core',               level: 1,  count: 1 },
+      // Populacja / mega
+      { id: 'arcology_building',     level: 1,  count: 1 },
+      { id: 'orbital_habitat',       level: 1,  count: 1 },
+      // Kosmiczne
+      { id: 'orbital_mine',          level: 1,  count: 1 },
+      { id: 'terraformer',           level: 1,  count: 1 },
+      { id: 'vacuum_generator',      level: 1,  count: 1 },
+      // Obrona
+      { id: 'defense_tower',         level: 3,  count: 1 },
+      { id: 'defense_grid',          level: 1,  count: 1 },
+      // Infrastruktura międzygwiezdna
+      { id: 'warp_beacon',           level: 1,  count: 1 },
+      { id: 'jump_gate',             level: 1,  count: 1 },
     ];
 
     const entries = [];  // dane do restoreFromSave
@@ -866,7 +928,22 @@ export class GameScene {
     // Gwiazda zawsze w centrum Three.js (0, 0)
     star.x = 0;
     star.y = 0;
+    star.systemId = data.star.systemId ?? 'sys_home';
     EntityManager.add(star);
+
+    // Przywróć dodatkowe gwiazdy (inne układy, Etap 40)
+    if (data.stars?.length > 0) {
+      for (const sd of data.stars) {
+        const otherStar = new Star({
+          id: sd.id, name: sd.name, spectralType: sd.spectralType,
+          mass: sd.mass, luminosity: sd.luminosity,
+        });
+        otherStar.x = 0;
+        otherStar.y = 0;
+        otherStar.systemId = sd.systemId ?? 'sys_home';
+        EntityManager.add(otherStar);
+      }
+    }
 
     const planets = data.planets.map(pd => {
       const p = new Planet({
@@ -895,6 +972,7 @@ export class GameScene {
       p.age              = pd.age              || 0;
       p.surface          = { ...(pd.surface || {}) };
       p.explored         = pd.explored         || false;
+      p.systemId         = pd.systemId         ?? 'sys_home';
       // Przywróć złoża z save (v6)
       if (pd.deposits?.length > 0) {
         p.deposits = pd.deposits.map(d => ({ ...d }));
@@ -928,6 +1006,7 @@ export class GameScene {
       });
       m.age      = md.age      || 0;
       m.explored = md.explored || false;
+      m.systemId = md.systemId ?? 'sys_home';
       // Przywróć złoża z save (v6)
       if (md.deposits?.length > 0) {
         m.deposits = md.deposits.map(d => ({ ...d }));
@@ -957,6 +1036,7 @@ export class GameScene {
         composition:       pd.composition,
       });
       p.explored = pd.explored || false;
+      p.systemId = pd.systemId ?? 'sys_home';
       // Przywróć złoża z save
       if (pd.deposits?.length > 0) {
         p.deposits = pd.deposits.map(d => ({ ...d }));

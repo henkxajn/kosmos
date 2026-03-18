@@ -11,6 +11,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES } from '../data
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { BUILDINGS }      from '../data/BuildingsData.js';
 import EventBus            from '../core/EventBus.js';
+import EntityManager       from '../core/EntityManager.js';
 import { t, getName }     from '../i18n/i18n.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
@@ -89,7 +90,17 @@ export class TopBar {
       ctx.fillText('KOSMOS', 6, 20);
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.label;
-      ctx.fillText('4X', 6, 32);
+      // Wskaźnik aktywnego układu gwiezdnego (Etap 40)
+      const ssMgr = window.KOSMOS?.starSystemManager;
+      const sysCount = ssMgr?.getAllSystems().length ?? 0;
+      if (sysCount > 1) {
+        const activeId = ssMgr?.activeSystemId ?? 'sys_home';
+        const activeStar = EntityManager.getStarOfSystem(activeId);
+        const starName = activeStar?.name ?? activeId;
+        ctx.fillText(`⭐ ${starName}`, 6, 32);
+      } else {
+        ctx.fillText('4X', 6, 32);
+      }
     }
 
     // Kontrolki czasu (prawa strona)
