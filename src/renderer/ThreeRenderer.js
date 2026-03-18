@@ -359,7 +359,9 @@ export class ThreeRenderer {
       // Pokaż orbitę księżyca po kliknięciu (ukryta domyślnie)
       this._hideAllMoonOrbits();
       if (entity.type === 'moon') this._showMoonOrbit(entity.id);
-      // Odśwież orbitę planety gracza (żółty kolor)
+      // HZ widoczny gdy zaznaczona gwiazda
+      if (this._hzRing) this._hzRing.visible = (entity.type === 'star');
+      // Odśwież orbity — zaznaczona planeta dostaje złotą orbitę
       this._rebuildAllOrbits();
     }));
 
@@ -372,7 +374,8 @@ export class ThreeRenderer {
         const sz = this._starGroup ? this._starGroup.position.z : 0;
         this._cameraController.focusOn(sx, sz);
       }
-      // Ukryj orbity planetoidów i księżyców
+      // Ukryj HZ, orbity planetoidów i księżyców
+      if (this._hzRing) this._hzRing.visible = false;
       this._hideAllPlanetoidOrbits();
       this._hideAllMoonOrbits();
       this._rebuildAllOrbits();
@@ -407,7 +410,7 @@ export class ThreeRenderer {
       }
     }));
 
-    // Hover na planetoidzie → pokaż orbitę jaśniej
+    // Hover na ciało → pokaż orbitę tymczasowo (planeta/planetoid) + HZ (gwiazda)
     EventBus.on('planet:hover', safe(({ entityId }) => {
       // Przywróć domyślną widoczność orbit planetoidów (nie zaznaczonych)
       this._planetoidOrbits.forEach((line, id) => {
@@ -417,6 +420,24 @@ export class ThreeRenderer {
         }
       });
       if (entityId) this._showPlanetoidOrbit(entityId, 0.20);
+
+      // Hover na planetę → pokaż jej orbitę złotą tymczasowo
+      this._orbits.forEach((line, id) => {
+        if (id === this._focusEntityId) return; // zaznaczona — nie ruszaj
+        if (id === entityId) {
+          line.visible = true;
+          line.material.color.setHex(0xffc832);
+          line.material.opacity = 0.5;
+        } else {
+          // Przywróć domyślny stan (ukryta chyba że home/kolonia)
+          this._restoreOrbitDefaults(id, line);
+        }
+      });
+
+      // Hover na gwiazdę → pokaż HZ (jeśli gwiazda nie jest zaznaczona)
+      if (this._hzRing && this._focusEntityId !== this._star?.id) {
+        this._hzRing.visible = (entityId === this._star?.id);
+      }
     }));
   }
 
@@ -561,6 +582,7 @@ export class ThreeRenderer {
     this._clickable = [];
     this._focusEntityId = null;
     this._star = null;
+    this._starClickMesh = null;
   }
 
   // ── Gwiazda (kolorowy rdzeń + białe centrum + kolorowe promieniowanie) ──
@@ -711,6 +733,15 @@ export class ThreeRenderer {
       [1.0,  `rgba(${glR},${glG},${glB},0.0)`],
     ], glowOpacity * 0.8, r * glowScale * 6.0));
 
+    // Niewidoczna sfera klikalna — większa od wizualnej gwiazdy
+    const clickGeo = new THREE.SphereGeometry(r * 2.5, 16, 16);
+    const clickMat = new THREE.MeshBasicMaterial({ visible: false });
+    const clickMesh = new THREE.Mesh(clickGeo, clickMat);
+    this._starClickMesh = clickMesh;
+    group.add(clickMesh);
+    this._clickable.push(clickMesh);
+    this._entityByUUID.set(clickMesh.uuid, star);
+
     this.scene.add(group);
     this._starGroup = group;
     this._starCoronaUniform = null;
@@ -733,7 +764,9 @@ export class ThreeRenderer {
     const ring = new THREE.Mesh(geo, mat);
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = -0.5;
+    ring.visible = false; // domyślnie ukryty — widoczny na hover/click gwiazdy
     this.scene.add(ring);
+    this._hzRing = ring;
   }
 
   // Rozmiary 3D planet per typ — logarytmiczna skala masy
@@ -1696,6 +1729,24 @@ export class ThreeRenderer {
     return new THREE.CanvasTexture(c);
   }
 
+  // Przywraca domyślny stan widoczności orbity (ukryta chyba że home/kolonia)
+  _restoreOrbitDefaults(planetId, line) {
+    const isHomePlanet = planetId === window.KOSMOS?.homePlanet?.id;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const isColonized = colMgr ? colMgr.getColony(planetId) != null : false;
+    if (isHomePlanet) {
+      line.visible = true;
+      line.material.color.setHex(0x007852);
+      line.material.opacity = 0.15;
+    } else if (isColonized) {
+      line.visible = true;
+      line.material.color.setHex(0x005540);
+      line.material.opacity = 0.10;
+    } else {
+      line.visible = false;
+    }
+  }
+
   // ── Orbity eliptyczne ─────────────────────────────────────────
   _rebuildAllOrbits() {
     this._orbits.forEach(line => this.scene.remove(line));
@@ -1720,10 +1771,24 @@ export class ThreeRenderer {
 
     let color = 0x003828;       // domyślna orbita — ciemny teal
     if (planet.lifeScore > 0)          color = 0x005540;   // życie — jaśniejszy teal
-    // Orbita planety gracza — jasny teal (orbitColony)
     if (planet.id === window.KOSMOS?.homePlanet?.id) color = 0x007852;
     if (planet.orbitalStability < 0.5) color = 0x553322;   // niestabilna — ciemny czerwony
     if (planet.isSelected)             color = 0x00ccff;   // zaznaczona — info blue
+
+    // Widoczność i jasność: domyślnie ukryte, wyjątki dla home/koloni
+    const isHomePlanet = planet.id === window.KOSMOS?.homePlanet?.id;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const isColonized = colMgr ? colMgr.getColony(planet.id) != null : false;
+    const isFocused = planet.id === this._focusEntityId;
+    let orbitVisible = false;
+    let orbitOpacity = 0.35;
+    if (isFocused) {
+      orbitVisible = true; orbitOpacity = 0.7; color = 0xffc832; // złota orbita — zaznaczona
+    } else if (isHomePlanet) {
+      orbitVisible = true; orbitOpacity = 0.15; // homePlanet — zawsze widoczna, przyciemniona
+    } else if (isColonized) {
+      orbitVisible = true; orbitOpacity = 0.10; // kolonizowana — widoczna, przyciemniona
+    }
 
     const STEPS  = 128;
     const points = [];
@@ -1739,9 +1804,10 @@ export class ThreeRenderer {
     const line = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(points),
       new THREE.LineBasicMaterial({
-        color: new THREE.Color(color), transparent: true, opacity: 0.35,
+        color: new THREE.Color(color), transparent: true, opacity: orbitOpacity,
       })
     );
+    line.visible = orbitVisible;
     this.scene.add(line);
     this._orbits.set(planet.id, line);
   }

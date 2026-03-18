@@ -45,7 +45,7 @@ export const STAR_TYPES = {
     temperature: 3500,
     color: 0xff6b47,
     glowColor: 0xff3311,
-    habitableZone: { min: 0.1, max: 0.4 },
+    habitableZone: { min: 0.10, max: 0.35 },
     weight: 3,
     texType: 'star_M',
     corona: {
@@ -61,7 +61,7 @@ export const STAR_TYPES = {
     temperature: 4500,
     color: 0xffaa55,
     glowColor: 0xff8822,
-    habitableZone: { min: 0.5, max: 0.9 },
+    habitableZone: { min: 0.40, max: 1.05 },
     weight: 2,
     texType: 'star_K',
     corona: {
@@ -77,7 +77,7 @@ export const STAR_TYPES = {
     temperature: 5800,
     color: 0xfffacd,
     glowColor: 0xffee66,
-    habitableZone: { min: 0.95, max: 1.4 },
+    habitableZone: { min: 0.85, max: 1.70 },
     weight: 2,
     texType: 'star_G',
     corona: {
@@ -93,7 +93,7 @@ export const STAR_TYPES = {
     temperature: 7000,
     color: 0xffffff,
     glowColor: 0xddddff,
-    habitableZone: { min: 1.5, max: 2.2 },
+    habitableZone: { min: 1.45, max: 2.95 },
     weight: 1,
     texType: 'star_F',
     corona: {

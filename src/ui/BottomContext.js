@@ -150,24 +150,36 @@ export class BottomContext {
     // Typ
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.label;
-    ctx.fillText(entity.planetType ?? entity.type ?? '—', x + PAD, y + 34);
+    const typeLabel = entity.type === 'star'
+      ? `${entity.spectralType ?? '?'}-type star`
+      : (entity.planetType ?? entity.type ?? '—');
+    ctx.fillText(typeLabel, x + PAD, y + 34);
 
-    // Kluczowe dane orbitalne
-    const orb = entity.orbital;
-    if (orb) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.text;
-      let ly = y + 50;
-      ctx.fillText(`a = ${orb.a.toFixed(3)} AU`, x + PAD, ly); ly += 14;
-      ctx.fillText(`e = ${orb.e.toFixed(3)}`, x + PAD, ly); ly += 14;
-      ctx.fillText(`T = ${orb.T.toFixed(2)} lat`, x + PAD, ly); ly += 14;
+    // Kluczowe dane — gwiazda vs ciało orbitalne
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = C.text;
+    let ly = y + 50;
+    if (entity.type === 'star') {
+      // Dane gwiazdy: masa, luminosity, temperatura, HZ
+      ctx.fillText(`${t('context.mass')}: ${(entity.physics?.mass ?? 0).toFixed(2)} M☉`, x + PAD, ly); ly += 14;
+      ctx.fillText(`L: ${(entity.luminosity ?? 0).toFixed(2)} L☉`, x + PAD, ly); ly += 14;
+      ctx.fillText(`T: ${(entity.temperature ?? 0).toLocaleString()} K`, x + PAD, ly); ly += 14;
+      const hz = entity.habitableZone;
+      if (hz) ctx.fillText(`HZ: ${hz.min.toFixed(2)}–${hz.max.toFixed(2)} AU`, x + PAD, ly);
+    } else {
+      const orb = entity.orbital;
+      if (orb) {
+        ctx.fillText(`a = ${orb.a.toFixed(3)} AU`, x + PAD, ly); ly += 14;
+        ctx.fillText(`e = ${orb.e.toFixed(3)}`, x + PAD, ly); ly += 14;
+        ctx.fillText(`T = ${orb.T.toFixed(2)} lat`, x + PAD, ly); ly += 14;
 
-      // Odległość od homePlanet
-      const homePl = window.KOSMOS?.homePlanet;
-      if (window.KOSMOS?.civMode && homePl && entity !== homePl) {
-        const dist = DistanceUtils.fromHomePlanetAU(entity);
-        ctx.fillStyle = dist > 15 ? C.orange : C.text;
-        ctx.fillText(t('ui.distShort', dist.toFixed(2)), x + PAD, ly);
+        // Odległość od homePlanet
+        const homePl = window.KOSMOS?.homePlanet;
+        if (window.KOSMOS?.civMode && homePl && entity !== homePl) {
+          const dist = DistanceUtils.fromHomePlanetAU(entity);
+          ctx.fillStyle = dist > 15 ? C.orange : C.text;
+          ctx.fillText(t('ui.distShort', dist.toFixed(2)), x + PAD, ly);
+        }
       }
     }
   }
@@ -286,6 +298,18 @@ export class BottomContext {
   // ── Linie informacyjne (jak stary _getInfoLines) ────────
   _getInfoLines(entity) {
     const tab = this._tab;
+
+    // Gwiazda — specjalne info (brak zakładek orbit/physics/composition)
+    if (entity.type === 'star') {
+      const hz = entity.habitableZone;
+      return [
+        { k: t('context.type'), v: `${entity.spectralType ?? '?'}-type` },
+        { k: t('context.mass'), v: `${(entity.physics?.mass ?? 0).toFixed(2)} M☉` },
+        { k: 'Luminosity', v: `${(entity.luminosity ?? 0).toFixed(2)} L☉` },
+        { k: t('context.temp'), v: `${(entity.temperature ?? 0).toLocaleString()} K` },
+        ...(hz ? [{ k: 'HZ', v: `${hz.min.toFixed(2)}–${hz.max.toFixed(2)} AU` }] : []),
+      ];
+    }
 
     if (tab === 'orbit' && entity.orbital) {
       const orb = entity.orbital;

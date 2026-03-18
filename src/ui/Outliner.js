@@ -10,6 +10,7 @@ import { SHIPS }          from '../data/ShipsData.js';
 import { ALL_RESOURCES }  from '../data/ResourcesData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
 import EventBus            from '../core/EventBus.js';
+import EntityManager       from '../core/EntityManager.js';
 import { t, getName }     from '../i18n/i18n.js';
 
 const OUTLINER_W = COSMIC.OUTLINER_W;   // 180px
@@ -91,36 +92,55 @@ export class Outliner {
         ctx.fillText(t('outliner.noColonies'), x + PAD, startY + 14);
         return ITEM_H;
       }
+      // Grupuj kolonie wg systemu gwiezdnego
+      const bySystem = new Map();
+      for (const col of colonies) {
+        const sysId = col.systemId ?? 'sys_home';
+        if (!bySystem.has(sysId)) bySystem.set(sysId, []);
+        bySystem.get(sysId).push(col);
+      }
       let dy = 0;
-      for (const col of colonies.slice(0, 8)) {
-        const iy = startY + dy;
-        const icon = col.isHomePlanet ? '🏛' : '🏙';
-        const pop = col.civSystem?.population ?? 0;
-        const prosp = Math.round(col.prosperitySystem?.prosperity ?? 50);
+      for (const [sysId, sysCols] of bySystem) {
+        // Nagłówek gwiazdy (tylko gdy >1 systemów)
+        if (bySystem.size > 1) {
+          const star = EntityManager.getStarOfSystem(sysId);
+          const starName = star?.name ?? sysId;
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = C.label;
+          ctx.fillText(`⭐ ${_truncate(starName, 14)}`, x + PAD, startY + dy + 13);
+          dy += 16;
+        }
+        for (const col of sysCols) {
+          const iy = startY + dy;
+          const icon = col.isHomePlanet ? '🏛' : '🏙';
+          const pop = col.civSystem?.population ?? 0;
+          const prosp = Math.round(col.prosperitySystem?.prosperity ?? 50);
+          const indent = bySystem.size > 1 ? 8 : 0; // wcięcie pod nagłówkiem gwiazdy
 
-        // Ikona mapy (🗺) po prawej — klik otwiera globus
-        const mapIconX = x + OUTLINER_W - PAD - 12;
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = this._hoveredColonyId === col.planetId ? C.bright : C.mint;
-        ctx.fillText('🗺', mapIconX, iy + 14);
+          // Ikona mapy (🗺) po prawej — klik otwiera globus
+          const mapIconX = x + OUTLINER_W - PAD - 12;
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = this._hoveredColonyId === col.planetId ? C.bright : C.mint;
+          ctx.fillText('🗺', mapIconX, iy + 14);
 
-        // Nazwa kolonii
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = C.bright;
-        ctx.fillText(`${icon} ${_truncate(col.name, 8)}`, x + PAD, iy + 14);
+          // Nazwa kolonii
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = C.bright;
+          ctx.fillText(`${icon} ${_truncate(col.name, 8)}`, x + PAD + indent, iy + 14);
 
-        // POP + prosperity (przesunięte w lewo — miejsce na ikonę mapy)
-        ctx.fillStyle = prosp < 30 ? C.red : prosp < 60 ? C.orange : C.text;
-        ctx.textAlign = 'right';
-        ctx.fillText(`${pop}👤⭐${prosp}`, mapIconX - 4, iy + 14);
-        ctx.textAlign = 'left';
+          // POP + prosperity (przesunięte w lewo — miejsce na ikonę mapy)
+          ctx.fillStyle = prosp < 30 ? C.red : prosp < 60 ? C.orange : C.text;
+          ctx.textAlign = 'right';
+          ctx.fillText(`${pop}👤⭐${prosp}`, mapIconX - 4, iy + 14);
+          ctx.textAlign = 'left';
 
-        this._clickTargets.push({
-          type: 'colony', planetId: col.planetId, colony: col,
-          x: x, y: iy, w: OUTLINER_W, h: ITEM_H,
-          mapIconX,
-        });
-        dy += ITEM_H;
+          this._clickTargets.push({
+            type: 'colony', planetId: col.planetId, colony: col,
+            x: x, y: iy, w: OUTLINER_W, h: ITEM_H,
+            mapIconX,
+          });
+          dy += ITEM_H;
+        }
       }
       return dy;
     });
@@ -300,32 +320,15 @@ export class Outliner {
           const colMgr = window.KOSMOS?.colonyManager;
           const colony = colMgr?.getColony(t.planetId);
           if (!colony?.planet) return true;
-          // Klik na ikonę 🗺 → otwórz ColonyOverlay
+          // Klik na ikonę 🗺 → otwórz ColonyOverlay (globus)
           if (t.mapIconX && x >= t.mapIconX) {
             if (colMgr) colMgr.switchActiveColony(t.planetId);
             window.KOSMOS?.overlayManager?.openPanel('colony');
           } else {
-            // Klik na nazwę kolonii → przełącz kontekst kolonii, zachowaj aktywny panel
-            if (colMgr.switchActiveColony(t.planetId)) {
-              EventBus.emit('colony:switched', { planetId: t.planetId });
-            }
-            const om = window.KOSMOS?.overlayManager;
-            if (om) {
-              if (om.active) {
-                // Panel jest otwarty — odśwież go (zamknij+otwórz ten sam)
-                const currentPanel = om.active;
-                // Dla ekonomii zaktualizuj filtr kolonii
-                const econOv = om.overlays?.['economy'];
-                if (currentPanel === 'economy' && econOv) {
-                  econOv._selectedColonyId = t.planetId;
-                  econOv._scrollLeft = 0;
-                }
-                om.openPanel(currentPanel);
-              } else {
-                // Brak aktywnego panelu → otwórz domyślny (Kolonia)
-                om.openPanel('colony');
-              }
-            }
+            // Klik na nazwę kolonii → focus kamery na planecie (nie otwieramy globusa)
+            if (colMgr) colMgr.switchActiveColony(t.planetId);
+            EventBus.emit('colony:switched', { planetId: t.planetId });
+            EventBus.emit('camera:focusTarget', { targetId: t.planetId });
           }
           return true;
         }
