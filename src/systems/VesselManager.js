@@ -232,7 +232,8 @@ export class VesselManager {
     const ty = predicted.y;
 
     // Oblicz trasę z unikaniem Słońca i ciał niebieskich
-    const route = this._calcRoute(sx, sy, tx, ty);
+    const vesselSysId = vessel.systemId ?? this._findEntity(vessel.position.dockedAt)?.systemId ?? 'sys_home';
+    const route = this._calcRoute(sx, sy, tx, ty, vesselSysId);
 
     vessel.mission = {
       ...mission,
@@ -278,7 +279,8 @@ export class VesselManager {
     const ty = predicted.y;
 
     // Oblicz trasę z unikaniem Słońca
-    const route = this._calcRoute(sx, sy, tx, ty);
+    const redispatchSysId = vessel.systemId ?? this._findEntity(vessel.position.dockedAt)?.systemId ?? 'sys_home';
+    const route = this._calcRoute(sx, sy, tx, ty, redispatchSysId);
 
     vessel.mission = {
       ...mission,
@@ -342,7 +344,8 @@ export class VesselManager {
     m.phase = 'returning';
 
     // Oblicz waypoints powrotne (unikanie Słońca + ciał niebieskich)
-    const returnRoute = this._calcRoute(m.returnStartX, m.returnStartY, m.returnTargetX, m.returnTargetY);
+    const returnSysId = vessel.systemId ?? this._findEntity(vessel.colonyId)?.systemId ?? 'sys_home';
+    const returnRoute = this._calcRoute(m.returnStartX, m.returnStartY, m.returnTargetX, m.returnTargetY, returnSysId);
     m.returnWaypoints = returnRoute.waypoints;
 
     // Zużyj paliwo na powrót (dystans w AU × consumption)
@@ -987,7 +990,7 @@ export class VesselManager {
    * Oblicz trasę z unikaniem Słońca i ciał niebieskich.
    * Zwraca { waypoints: [{x,y}], totalDist } w jednostkach fizyki gry (px).
    */
-  _calcRoute(sx, sy, tx, ty) {
+  _calcRoute(sx, sy, tx, ty, systemId) {
     const dx = tx - sx, dy = ty - sy;
     const lenSq = dx * dx + dy * dy;
     const directDist = Math.sqrt(lenSq);
@@ -1021,11 +1024,12 @@ export class VesselManager {
       sunWaypoints = [d1 <= d2 ? wp1 : wp2];
     }
 
-    // ── Krok 2: unikanie planet i księżyców ──
+    // ── Krok 2: unikanie planet i księżyców (tylko z aktywnego układu) ──
     const BODY_MARGIN = 0.15 * AU_TO_PX; // 0.15 AU margines
+    const routeSysId = systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home';
     const allBodies = [
-      ...EntityManager.getByType('planet'),
-      ...EntityManager.getByType('moon'),
+      ...EntityManager.getByTypeInSystem('planet', routeSysId),
+      ...EntityManager.getByTypeInSystem('moon', routeSysId),
     ];
     const waypoints = this._avoidBodies(sx, sy, tx, ty, sunWaypoints, allBodies, BODY_MARGIN);
 
@@ -1147,7 +1151,8 @@ export class VesselManager {
     m.phase = undefined; // outbound
 
     // Oblicz waypoints (unikanie Słońca + ciał niebieskich)
-    const route = this._calcRoute(m.startX, m.startY, m.targetX, m.targetY);
+    const redirectSysId = vessel.systemId ?? this._findEntity(vessel.colonyId)?.systemId ?? 'sys_home';
+    const route = this._calcRoute(m.startX, m.startY, m.targetX, m.targetY, redirectSysId);
     m.waypoints = route.waypoints;
 
     // Zużyj paliwo za nowy odcinek (consumption = pc/AU, totalDist w px)
@@ -1189,7 +1194,8 @@ export class VesselManager {
 
     // Przygotuj standardową misję in-system (exploration/transit)
     const predicted = this._predictPosition(targetId, arrivalYear);
-    const route = this._calcRoute(vessel.position.x, vessel.position.y, predicted.x, predicted.y);
+    const targetSysId = this._findEntity(targetId)?.systemId ?? vessel.systemId ?? 'sys_home';
+    const route = this._calcRoute(vessel.position.x, vessel.position.y, predicted.x, predicted.y, targetSysId);
 
     vessel.mission = {
       type:        'exploration',

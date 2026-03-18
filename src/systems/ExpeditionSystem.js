@@ -168,16 +168,17 @@ export class ExpeditionSystem {
   // Liczba niezbadanych ciał niebieskich wg typu
   getUnexploredCount() {
     const homePl = window.KOSMOS?.homePlanet;
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     let planets = 0, moons = 0, other = 0;
-    for (const p of EntityManager.getByType('planet')) {
+    for (const p of EntityManager.getByTypeInSystem('planet', sysId)) {
       if (p === homePl) continue;
       if (!p.explored) planets++;
     }
-    for (const m of EntityManager.getByType('moon')) {
+    for (const m of EntityManager.getByTypeInSystem('moon', sysId)) {
       if (!m.explored) moons++;
     }
     for (const t of ['asteroid', 'comet', 'planetoid']) {
-      for (const b of EntityManager.getByType(t)) {
+      for (const b of EntityManager.getByTypeInSystem(t, sysId)) {
         if (!b.explored) other++;
       }
     }
@@ -1621,21 +1622,22 @@ export class ExpeditionSystem {
   // excludeExpId — pomija cele innych aktywnych recon ekspedycji
   _findNearestUnexplored(excludeExpId = null) {
     const homePl = window.KOSMOS?.homePlanet;
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const activeTargets = this._getActiveReconTargets(excludeExpId);
     const candidates = [];
 
     // Planety (nie homePlanet — ta jest already explored)
-    for (const p of EntityManager.getByType('planet')) {
+    for (const p of EntityManager.getByTypeInSystem('planet', sysId)) {
       if (p === homePl || p.explored || activeTargets.has(p.id)) continue;
       candidates.push(p);
     }
     // Księżyce (w tym księżyce homePlanet — wymagają recon)
-    for (const m of EntityManager.getByType('moon')) {
+    for (const m of EntityManager.getByTypeInSystem('moon', sysId)) {
       if (m.explored || activeTargets.has(m.id)) continue;
       candidates.push(m);
     }
     // Planetoidy
-    for (const pl of EntityManager.getByType('planetoid')) {
+    for (const pl of EntityManager.getByTypeInSystem('planetoid', sysId)) {
       if (pl.explored || activeTargets.has(pl.id)) continue;
       candidates.push(pl);
     }
@@ -1651,18 +1653,19 @@ export class ExpeditionSystem {
   _findNearestUnexploredFrom(fromEntity, excludeExpId = null) {
     if (!fromEntity) return this._findNearestUnexplored(excludeExpId);
     const homePl = window.KOSMOS?.homePlanet;
+    const sysId = fromEntity.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home';
     const activeTargets = this._getActiveReconTargets(excludeExpId);
     const candidates = [];
 
-    for (const p of EntityManager.getByType('planet')) {
+    for (const p of EntityManager.getByTypeInSystem('planet', sysId)) {
       if (p === homePl || p.explored || activeTargets.has(p.id)) continue;
       candidates.push(p);
     }
-    for (const m of EntityManager.getByType('moon')) {
+    for (const m of EntityManager.getByTypeInSystem('moon', sysId)) {
       if (m.explored || activeTargets.has(m.id)) continue;
       candidates.push(m);
     }
-    for (const pl of EntityManager.getByType('planetoid')) {
+    for (const pl of EntityManager.getByTypeInSystem('planetoid', sysId)) {
       if (pl.explored || activeTargets.has(pl.id)) continue;
       candidates.push(pl);
     }

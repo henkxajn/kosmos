@@ -917,9 +917,10 @@ export class FleetTabPanel {
 
   _getAllCatalogBodies() {
     const homePl = window.KOSMOS?.homePlanet;
+    const sysId  = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const planets = [];
     for (const btype of ['planet', 'planetoid']) {
-      for (const body of EntityManager.getByType(btype)) {
+      for (const body of EntityManager.getByTypeInSystem(btype, sysId)) {
         if (body === homePl) continue;
         planets.push({ body, explored: !!body.explored });
       }
@@ -930,7 +931,7 @@ export class FleetTabPanel {
     });
 
     const moonsByParent = new Map();
-    for (const moon of EntityManager.getByType('moon')) {
+    for (const moon of EntityManager.getByTypeInSystem('moon', sysId)) {
       const pid = moon.parentPlanetId;
       if (!moonsByParent.has(pid)) moonsByParent.set(pid, []);
       moonsByParent.get(pid).push({ body: moon, explored: !!moon.explored, isMoon: true });
@@ -1002,12 +1003,13 @@ export class FleetTabPanel {
   }
 
   _getMaxOrbitalAU() {
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     let maxAU = 5;
-    for (const p of EntityManager.getByType('planet')) {
+    for (const p of EntityManager.getByTypeInSystem('planet', sysId)) {
       const a = p.orbital?.a ?? 0;
       if (a > maxAU) maxAU = a;
     }
-    for (const p of EntityManager.getByType('planetoid')) {
+    for (const p of EntityManager.getByTypeInSystem('planetoid', sysId)) {
       const a = p.orbital?.a ?? 0;
       if (a > maxAU) maxAU = a;
     }
@@ -1051,7 +1053,8 @@ export class FleetTabPanel {
     }
 
     // Deterministyczny kolor planety wg indeksu (pomija żółty/zielony)
-    const allPlanets = EntityManager.getByType('planet');
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    const allPlanets = EntityManager.getByTypeInSystem('planet', sysId);
     const _planetColorMap = new Map();
     let _palIdx = 0;
     for (const p of allPlanets) {
@@ -1059,8 +1062,8 @@ export class FleetTabPanel {
       _palIdx++;
     }
 
-    // Gwiazda
-    const star = EntityManager.getByType('star')[0];
+    // Gwiazda aktywnego układu
+    const star = EntityManager.getByType('star').find(s => s.systemId === sysId);
     const { sx: starSx, sy: starSy } = toScreen(0, 0);
     if (starSx >= x - 20 && starSx <= x + w + 20 && starSy >= y - 20 && starSy <= y + h + 20) {
       const grad = ctx.createRadialGradient(starSx, starSy, 0, starSx, starSy, 16);
@@ -1078,8 +1081,8 @@ export class FleetTabPanel {
     ctx.rect(x, y, w, h);
     ctx.clip();
 
-    // Orbity planet
-    for (const p of EntityManager.getByType('planet')) {
+    // Orbity planet (używamy przefiltrowane allPlanets)
+    for (const p of allPlanets) {
       const a = p.orbital?.a ?? 0;
       if (a <= 0) continue;
       const r = a * scale;
@@ -1115,8 +1118,8 @@ export class FleetTabPanel {
       this._hitZones.push({ x: sx - r - 2, y: sy - r - 2, w: r * 2 + 4, h: r * 2 + 4, type: 'map_body', data: { body: p } });
     }
 
-    // Planetoidy
-    for (const p of EntityManager.getByType('planetoid')) {
+    // Planetoidy aktywnego układu
+    for (const p of EntityManager.getByTypeInSystem('planetoid', sysId)) {
       const px = p.physics?.x ?? 0; const py = p.physics?.y ?? 0;
       const { sx, sy } = toScreen(px, py);
       if (sx < x - 4 || sx > x + w + 4 || sy < y - 4 || sy > y + h + 4) continue;
@@ -1126,8 +1129,8 @@ export class FleetTabPanel {
       this._hitZones.push({ x: sx - 4, y: sy - 4, w: 8, h: 8, type: 'map_body', data: { body: p } });
     }
 
-    // Księżyce
-    for (const m of EntityManager.getByType('moon')) {
+    // Księżyce aktywnego układu
+    for (const m of EntityManager.getByTypeInSystem('moon', sysId)) {
       const mx = m.physics?.x ?? 0; const my = m.physics?.y ?? 0;
       const { sx, sy } = toScreen(mx, my);
       if (sx < x - 4 || sx > x + w + 4 || sy < y - 4 || sy > y + h + 4) continue;

@@ -1698,7 +1698,8 @@ export class ThreeRenderer {
   _rebuildAllOrbits() {
     this._orbits.forEach(line => this.scene.remove(line));
     this._orbits.clear();
-    EntityManager.getByType('planet').forEach(p => this._buildOrbit(p));
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    EntityManager.getByTypeInSystem('planet', sysId).forEach(p => this._buildOrbit(p));
   }
 
   _buildOrbit(planet) {
@@ -1745,9 +1746,10 @@ export class ThreeRenderer {
 
   // ── Planetoidy: indywidualne meshe + ukryte orbity ───────────────
 
-  // Tworzy sfery mesh + orbit lines dla wszystkich planetoidów (orbity ukryte domyślnie)
+  // Tworzy sfery mesh + orbit lines dla planetoidów aktywnego układu (orbity ukryte domyślnie)
   _initPlanetoids() {
-    const planetoids = EntityManager.getByType('planetoid');
+    const activeSysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    const planetoids = EntityManager.getByTypeInSystem('planetoid', activeSysId);
     planetoids.forEach(p => {
       // Mesh sfery (r = 0.08–0.12 na podstawie masy — widoczne w zewnętrznym układzie)
       const mass = p.physics?.mass ?? 0.01;
@@ -1811,9 +1813,10 @@ export class ThreeRenderer {
     }
   }
 
-  // Synchronizuj pozycje meshów planetoidów z danymi fizyki
+  // Synchronizuj pozycje meshów planetoidów z danymi fizyki (tylko aktywny układ)
   _syncPlanetoidPositions() {
-    const planetoids = EntityManager.getByType('planetoid');
+    const activeSysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    const planetoids = EntityManager.getByTypeInSystem('planetoid', activeSysId);
     planetoids.forEach(p => {
       const entry = this._planetoids.get(p.id);
       if (entry && !isNaN(p.x) && !isNaN(p.y)) {
@@ -1850,7 +1853,8 @@ export class ThreeRenderer {
     });
     this._planetoidOrbits.clear();
 
-    EntityManager.getByType('planetoid').forEach(p => {
+    const rSysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    EntityManager.getByTypeInSystem('planetoid', rSysId).forEach(p => {
       this._buildPlanetoidOrbit(p);
       // Przywróć wcześniejszy stan widoczności
       const prev = wasVisible.get(p.id);
@@ -1927,9 +1931,10 @@ export class ThreeRenderer {
 
   // ── Małe ciała ────────────────────────────────────────────────
   _syncSmallBodies() {
+    const sbSysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const bodies = [
-      ...EntityManager.getByType('asteroid'),
-      ...EntityManager.getByType('comet'),
+      ...EntityManager.getByTypeInSystem('asteroid', sbSysId),
+      ...EntityManager.getByTypeInSystem('comet', sbSysId),
     ];
     if (this._smallBodyPoints) {
       this.scene.remove(this._smallBodyPoints);

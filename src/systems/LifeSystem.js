@@ -61,7 +61,8 @@ export class LifeSystem {
 
   // ── Pętla sprawdzania ─────────────────────────────────────────
   _checkAll() {
-    EntityManager.getByType('planet').forEach(planet => this._tick(planet));
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    EntityManager.getByTypeInSystem('planet', sysId).forEach(planet => this._tick(planet));
   }
 
   _tick(planet) {

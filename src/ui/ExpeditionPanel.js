@@ -440,8 +440,9 @@ export class ExpeditionPanel {
     const homePl = window.KOSMOS?.homePlanet;
     const results = [];
 
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     for (const t of ['asteroid', 'comet', 'planetoid', 'planet']) {
-      for (const body of EntityManager.getByType(t)) {
+      for (const body of EntityManager.getByTypeInSystem(t, sysId)) {
         if (body === homePl) continue;
         if (!body.orbital?.a)  continue;
         if (!body.explored) continue;  // tylko zbadane ciała jako cele

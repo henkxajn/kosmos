@@ -58,7 +58,8 @@ export class DiscoverySystem {
     const lifeScore  = body?.lifeScore ?? 0;
 
     // Policz planety w układzie
-    const planetCount = EntityManager.getByType('planet').length;
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    const planetCount = EntityManager.getByTypeInSystem('planet', sysId).length;
 
     // Bonus z Fusion Explorer (+50% szans)
     let discoveryBonus = 1.0;

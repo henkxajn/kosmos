@@ -90,10 +90,11 @@ export class DiskPhaseSystem {
 
   // Destabilizuj niestabilne małe ciała w fazie CLEARING
   _applyOrbitalClearing() {
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const smallBodies = [
-      ...EntityManager.getByType('asteroid'),
-      ...EntityManager.getByType('comet'),
-      ...EntityManager.getByType('planetoid'),
+      ...EntityManager.getByTypeInSystem('asteroid', sysId),
+      ...EntityManager.getByTypeInSystem('comet', sysId),
+      ...EntityManager.getByTypeInSystem('planetoid', sysId),
     ];
 
     let ejected = 0;
