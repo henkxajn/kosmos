@@ -1287,6 +1287,7 @@ export class VesselManager {
         type: 'foreign_recon',
         scope: 'target',
         targetId,
+        targetName: this._resolveEntityName(targetId),
         systemId,
         startYear: gameYear,
         completeYear: gameYear + 0.02,
@@ -1337,10 +1338,12 @@ export class VesselManager {
       );
       const travelYears = distAU / speedAU;
 
+      const star = EntityManager.getStarOfSystem(systemId);
       vessel.mission = {
         type: 'foreign_recon',
         scope: 'full_system',
         systemId,
+        targetName: star?.name ?? systemId,
         targets,          // id ciał w kolejności odwiedzania
         currentIdx: 0,
         phase: 'traveling', // traveling → scanning → traveling → ...
