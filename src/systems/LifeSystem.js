@@ -5,15 +5,21 @@
 import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { lifeBonus } from '../data/ElementsData.js';
+import { t }         from '../i18n/i18n.js';
 
 // Etapy ewolucji życia (lifeScore 0-100)
+// Klucze i18n etapów życia — label obliczany dynamicznie przez getLabel()
 export const LIFE_STAGES = [
-  { min: 0,  max: 0,   label: 'Jałowa',              emoji: '🪨', glowAlpha: 0     },
-  { min: 1,  max: 20,  label: 'Chemia prebiotyczna',  emoji: '🧪', glowAlpha: 0.10 },
-  { min: 21, max: 50,  label: 'Mikroorganizmy',        emoji: '🦠', glowAlpha: 0.22 },
-  { min: 51, max: 80,  label: 'Złożone życie',         emoji: '🌿', glowAlpha: 0.40 },
-  { min: 81, max: 100, label: 'Cywilizacja',           emoji: '🏙', glowAlpha: 0.60 },
+  { min: 0,  max: 0,   key: 'life.barren',          emoji: '🪨', glowAlpha: 0     },
+  { min: 1,  max: 20,  key: 'life.prebiotic',       emoji: '🧪', glowAlpha: 0.10 },
+  { min: 21, max: 50,  key: 'life.microorganisms',  emoji: '🦠', glowAlpha: 0.22 },
+  { min: 51, max: 80,  key: 'life.complexLife',      emoji: '🌿', glowAlpha: 0.40 },
+  { min: 81, max: 100, key: 'life.civilization',     emoji: '🏙', glowAlpha: 0.60 },
 ];
+// Getter — zwraca przetłumaczoną etykietę etapu życia
+LIFE_STAGES.forEach(s => {
+  Object.defineProperty(s, 'label', { get() { return t(this.key); }, enumerable: true });
+});
 
 // Kolor glowa życia (zielony — symbolizuje biosferę)
 export const LIFE_GLOW_COLOR = 0x44ff88;
@@ -40,7 +46,7 @@ export class LifeSystem {
       // Loser ZAWSZE traci życie
       if (loser && loser.type === 'planet' && loser.lifeScore > 0) {
         loser.lifeScore = 0;
-        EventBus.emit('life:extinct', { planet: loser, reason: 'kolizja planetarna' });
+        EventBus.emit('life:extinct', { planet: loser, reason: t('life.extinctCollision') });
         EventBus.emit('life:updated',  { planet: loser });
       }
 
@@ -53,7 +59,7 @@ export class LifeSystem {
       // Duże kolizje (deflection / duże absorpcje) — winner też traci życie
       if (winner && winner.type === 'planet' && winner.lifeScore > 0) {
         winner.lifeScore = 0;
-        EventBus.emit('life:extinct', { planet: winner, reason: 'kolizja planetarna' });
+        EventBus.emit('life:extinct', { planet: winner, reason: t('life.extinctCollision') });
         EventBus.emit('life:updated',  { planet: winner });
       }
     });
@@ -78,7 +84,7 @@ export class LifeSystem {
       if (planet.lifeScore > 0) {
         planet.lifeScore = Math.max(0, planet.lifeScore - 8);
         if (planet.lifeScore === 0) {
-          EventBus.emit('life:extinct', { planet, reason: 'niesprzyjające warunki' });
+          EventBus.emit('life:extinct', { planet, reason: t('life.extinctConditions') });
         }
         EventBus.emit('life:updated', { planet });
       }

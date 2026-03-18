@@ -733,6 +733,91 @@ export default {
   'log.planetEjected': '{0} ejected from system',
   'log.vesselDocked': 'has landed',
   'log.bodyDestroyed': 'Celestial body destroyed',
+  // Collisions and ejections
+  'log.absorbed': '{0} absorbed {1}',
+  'log.collisionRedirect': 'Collision: {0} ↔ {1} changed orbits',
+  'log.ejected': '{0} ejected!',
+  'log.newPlanet': 'New planet: {0}',
+  // Life
+  'log.lifeEmerged': 'First life on {0}!',
+  'log.lifeEvolved': '{0}: {1}',
+  'log.lifeExtinct': 'Life extinct: {0} ({1})',
+  'log.lifeExtinctShort': 'Extinction on {0}',
+  // Auto-slow
+  'log.autoSlow': '⏪ {0}',
+  'log.autoSlowCollision': 'Planetary collision',
+  'log.autoSlowLifeEmerged': 'First life on {0}',
+  'log.autoSlowLifeEvolved': 'Life evolution: {0}',
+  'log.autoSlowLifeExtinct': 'Extinction on {0}',
+  'log.autoSlowDiskPhase': 'Disk phase: {0}',
+  // Civilization
+  'log.epochChanged': '⭐ Epoch: {0}',
+  'log.unrest': '⚠ UNREST: {0}',
+  'log.unrestLifted': '✓ Unrest ended',
+  'log.unrestReason': 'Civilization prosperity too low for {0} years',
+  'log.famine': '💀 FAMINE — no food!',
+  'log.popBorn': 'New POP! Population: {0}',
+  'log.popDied': 'POP lost! Population: {0}',
+  'log.popDiedStarvation': 'POP lost (starvation)! Population: {0}',
+  'log.socialUnrest': 'Social unrest!',
+  'log.colonyFamine': 'Famine in colony!',
+  // Expeditions
+  'log.expeditionLaunch': '{0} Expedition → {1} ({2}y)',
+  'log.expeditionReturn': '{0} Expedition from {1}: {2}{3}',
+  'log.expeditionDisaster': '💥 DISASTER! Expedition to {0} — crew lost',
+  'log.expeditionReturned': '↩ Expedition returned from {0}',
+  'log.expeditionLaunchFailed': '⚠ Launch cancelled: {0}',
+  'log.expeditionBonusFull': ' ★ bonus!',
+  'log.expeditionBonusPartial': ' (partial)',
+  // Recon
+  'log.reconDiscovered': '🔭 Discovered: {0} ({1} explored)',
+  'log.reconComplete': '{0}: discovered {1} bodies',
+  'log.reconNearest': 'Recon',
+  'log.reconSystem': 'System recon',
+  // Expedition arrival types
+  'log.arrivalTransport': 'Transport delivered',
+  'log.arrivalColony': 'Colony founded',
+  'log.arrivalRecon': 'Recon complete',
+  'log.arrivalExpedition': 'Expedition arrived',
+  'log.arrivalDisaster': 'Disaster: {0}!',
+  // Colony and trade
+  'log.colonyFounded': '🏙 New colony: {0}',
+  'log.tradeExecuted': '📦 Trade route: transfer completed',
+  'log.migration': '👤 Migration: {0} POP from {1} → {2}',
+  // Prosperity and epochs
+  'log.prosperityMilestone': '⭐ Prosperity of {0} reached {1}',
+  'log.epochEarly': 'Early',
+  'log.epochDeveloping': 'Developing',
+  'log.epochAdvanced': 'Advanced',
+  'log.epochCosmic': 'Cosmic',
+  'log.epochEntered': '⭐ Epoch {0}',
+  'log.epochGoodsDeveloping': 'Plastics and Electronics',
+  'log.epochGoodsAdvanced': 'Premium Food and Stimulants',
+  'log.epochGoodsCosmic': 'Semiconductors',
+  'log.epochExpectsGoods': ' — population expects {0}',
+  // Shortage
+  'log.commodityShortage': '⚠ Shortage of {0} in {1}',
+  'log.resourceShortage': 'Shortage: {0}',
+  // Impact damage
+  'log.impactPopLost': '-{0} POP',
+  'log.impactBuildingsDestroyed': '-{0} buildings',
+  // Life stages
+  'life.barren': 'Barren',
+  'life.prebiotic': 'Prebiotic chemistry',
+  'life.microorganisms': 'Microorganisms',
+  'life.complexLife': 'Complex life',
+  'life.civilization': 'Civilization',
+  // Extinction causes
+  'life.extinctCollision': 'planetary collision',
+  'life.extinctConditions': 'unfavorable conditions',
+  // Time format
+  'time.billionYears': '{0} billion years',
+  'time.millionYears': '{0} million years',
+  'time.thousandYears': '{0} thousand years',
+  // Disk phases
+  'disk.protoplanetary': 'Protoplanetary disk',
+  'disk.clearing': 'Orbit clearing',
+  'disk.mature': 'Mature system',
 
   // === Colony / status ===
   'colony.outpost': 'Outpost',

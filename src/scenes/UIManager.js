@@ -22,7 +22,7 @@ import { EconomyOverlay }      from '../ui/EconomyOverlay.js';
 import { TechOverlay }         from '../ui/TechOverlay.js';
 import { ColonyOverlay }       from '../ui/ColonyOverlay.js';
 import { GalaxyMapScene }      from './GalaxyMapScene.js';
-import { t }                   from '../i18n/i18n.js';
+import { t, getName }          from '../i18n/i18n.js';
 
 // Nowe komponenty UI
 import { TopBar }        from '../ui/TopBar.js';
@@ -142,9 +142,9 @@ export class UIManager {
     this._selectedEntity  = null;
     this._infoPanelTab    = 'orbit';
     this._stability       = { score: 50, trend: 'stable' };
-    this._timeState       = { isPaused: false, multiplierIndex: 1, displayText: 'Rok 0, dzień 0', autoSlow: true };
+    this._timeState       = { isPaused: false, multiplierIndex: 1, displayText: '', autoSlow: true };
     this._diskPhase       = 'DISK';
-    this._diskPhasePL     = 'Dysk';
+    this._diskPhasePL     = t('disk.protoplanetary');
     this._energy          = 0;
     this._energyMax       = 100;
     this._hoverAction     = null;
@@ -404,20 +404,20 @@ export class UIManager {
   }
 
   _setupLogEvents() {
-    EventBus.on('time:display', ({ displayText }) => {
-      const m = displayText.match(/Rok\s+([\d\s,]+)/);
-      if (m) this._logYear = parseInt(m[1].replace(/[\s,]/g, '')) || this._logYear;
+    EventBus.on('time:display', ({ displayText, gameTime }) => {
+      // Użyj gameTime bezpośrednio zamiast parsowania tekstu (i18n-safe)
+      if (gameTime != null) this._logYear = Math.floor(gameTime);
     });
 
     EventBus.on('body:collision', ({ winner, loser, type }) => {
       const smallTypes = new Set(['asteroid', 'comet', 'planetesimal', 'planetoid']);
       if (loser && smallTypes.has(loser.type)) return;
       if (type === 'absorb') {
-        this._log(`${winner?.name ?? '?'} pochłonął ${loser?.name ?? '?'}`, 'collision_absorb');
+        this._log(t('log.absorbed', winner?.name ?? '?', loser?.name ?? '?'), 'collision_absorb');
       } else if (type === 'redirect') {
-        this._log(`Zderzenie: ${winner?.name ?? '?'} ↔ ${loser?.name ?? '?'}`, 'collision_redirect');
+        this._log(t('log.collisionRedirect', winner?.name ?? '?', loser?.name ?? '?'), 'collision_redirect');
       } else if (type === 'eject') {
-        this._log(`${loser?.name ?? '?'} wyrzucona!`, 'ejection');
+        this._log(t('log.ejected', loser?.name ?? '?'), 'ejection');
       }
     });
 
@@ -431,68 +431,68 @@ export class UIManager {
       let detail = message;
       if (popLost > 0 || buildingsDestroyed > 0) {
         const parts = [];
-        if (popLost > 0) parts.push(`-${popLost} POP`);
-        if (buildingsDestroyed > 0) parts.push(`-${buildingsDestroyed} budynków`);
+        if (popLost > 0) parts.push(t('log.impactPopLost', popLost));
+        if (buildingsDestroyed > 0) parts.push(t('log.impactBuildingsDestroyed', buildingsDestroyed));
         detail += ` (${parts.join(', ')})`;
       }
       this._log(detail, type);
     });
 
     EventBus.on('accretion:newPlanet', (planet) => {
-      this._log(`Nowa planeta: ${planet.name}`, 'new_planet');
+      this._log(t('log.newPlanet', planet.name), 'new_planet');
     });
 
     EventBus.on('life:emerged', ({ planet }) => {
-      this._log(`Życie na ${planet.name}!`, 'life_good');
+      this._log(t('log.lifeEmerged', planet.name), 'life_good');
     });
     EventBus.on('life:evolved', ({ planet, stage }) => {
-      this._log(`${planet.name}: ${stage.label}`, 'life_good');
+      this._log(t('log.lifeEvolved', planet.name, stage.label), 'life_good');
     });
     EventBus.on('life:extinct', ({ planet }) => {
-      this._log(`Wymieranie na ${planet.name}`, 'life_bad');
+      this._log(t('log.lifeExtinctShort', planet.name), 'life_bad');
     });
 
     EventBus.on('time:autoSlowTriggered', ({ reason }) => {
-      this._log(`Auto-slow: ${reason}`, 'auto_slow');
+      this._log(t('log.autoSlow', reason), 'auto_slow');
     });
 
 
     EventBus.on('civ:epochChanged', ({ epoch, message }) => {
-      this._log(message || `Nowa epoka: ${epoch?.namePL ?? epoch}`, 'civ_epoch');
+      this._log(message || t('log.epochChanged', epoch?.key ? t(epoch.key) : (epoch?.namePL ?? epoch)), 'civ_epoch');
     });
     EventBus.on('civ:unrestStarted', () => {
-      this._log('Niepokoje społeczne!', 'civ_unrest');
+      this._log(t('log.socialUnrest'), 'civ_unrest');
     });
     EventBus.on('civ:famine', () => {
-      this._log('Głód w kolonii!', 'civ_famine');
+      this._log(t('log.colonyFamine'), 'civ_famine');
     });
 
     EventBus.on('civ:popBorn', ({ population }) => {
-      this._log(`Nowy POP! Populacja: ${population}`, 'pop_born');
+      this._log(t('log.popBorn', population), 'pop_born');
     });
     EventBus.on('civ:popDied', ({ cause, population }) => {
-      const causeText = cause === 'starvation' ? ' (głód)' : '';
-      this._log(`Strata POPa${causeText}! Populacja: ${population}`, 'pop_died');
+      const key = cause === 'starvation' ? 'log.popDiedStarvation' : 'log.popDied';
+      this._log(t(key, population), 'pop_died');
     });
 
     EventBus.on('expedition:reconProgress', ({ body, discovered }) => {
       // Postęp sekwencyjnego recon — odkryto kolejne ciało
       const name = body?.name ?? '???';
-      this._log(`🔭 Odkryto: ${name} (${discovered} zbadanych)`, 'expedition_ok');
+      this._log(t('log.reconDiscovered', name, discovered), 'expedition_ok');
     });
     EventBus.on('expedition:reconComplete', ({ scope, discovered }) => {
-      const label = scope === 'nearest' ? 'Rozpoznanie' : 'Rozpoznanie układu';
+      const label = scope === 'nearest' ? t('log.reconNearest') : t('log.reconSystem');
       const count = Array.isArray(discovered) ? discovered.length : discovered;
-      this._log(`${label}: odkryto ${count} ciał`, 'expedition_ok');
+      this._log(t('log.reconComplete', label, count), 'expedition_ok');
     });
     EventBus.on('expedition:arrived', ({ expedition, multiplier }) => {
       // Orbiting nie loguje "wraca" — raport logowany osobno
       if (expedition.status === 'orbiting') return;
       const mult = multiplier != null ? ` ×${multiplier.toFixed(1)}` : '';
-      const typeLabel = expedition.type === 'transport' ? 'Transport dostarczony'
-        : expedition.type === 'colony' ? 'Kolonia założona'
-        : expedition.type === 'recon' ? 'Rozpoznanie zakończone'
-        : 'Ekspedycja dotarła';
+      const typeLabel = expedition.type === 'transport' ? t('log.arrivalTransport')
+        : expedition.type === 'colony' ? t('log.arrivalColony')
+        : expedition.type === 'recon' ? t('log.arrivalRecon')
+        : t('log.arrivalExpedition');
       this._log(`${typeLabel}: ${expedition.targetName}${mult}`, 'expedition_ok');
     });
     EventBus.on('expedition:missionReport', ({ text }) => {
@@ -500,13 +500,13 @@ export class UIManager {
       this._log(text, 'expedition_ok');
     });
     EventBus.on('expedition:disaster', ({ expedition }) => {
-      this._log(`Katastrofa: ${expedition.targetName}!`, 'expedition_fail');
+      this._log(t('log.arrivalDisaster', expedition.targetName), 'expedition_fail');
     });
     EventBus.on('expedition:launchFailed', ({ reason }) => {
-      this._log(`⚠ Start anulowany: ${reason}`, 'expedition_fail');
+      this._log(t('log.expeditionLaunchFailed', reason), 'expedition_fail');
     });
     EventBus.on('colony:founded', ({ colony }) => {
-      this._log(`🏙 Nowa kolonia: ${colony.name}`, 'new_planet');
+      this._log(t('log.colonyFounded', colony.name), 'new_planet');
     });
     // Przełączenie aktywnej kolonii z Outliner → odśwież wszystkie dane UI
     EventBus.on('colony:switched', () => {
@@ -528,22 +528,20 @@ export class UIManager {
       }
     });
     EventBus.on('colony:tradeExecuted', ({ route }) => {
-      this._log('📦 Droga handlowa: transfer wykonany', 'info');
+      this._log(t('log.tradeExecuted'), 'info');
     });
     EventBus.on('colony:migration', ({ from, to, count }) => {
-      this._log(`👤 Migracja: ${count} POP z ${from} → ${to}`, 'info');
+      this._log(t('log.migration', count, from, to), 'info');
     });
 
     // Prosperity events
     EventBus.on('epoch:changed', ({ epoch, oldEpoch }) => {
-      const epochNames = { early: 'Wczesna', developing: 'Rozwijająca', advanced: 'Zaawansowana', cosmic: 'Kosmiczna' };
-      const goodsNames = {
-        developing: 'Tworzyw i Elektroniki',
-        advanced: 'Żywności Premium i Stymulatorów',
-        cosmic: 'Półprzewodników',
-      };
-      const msg = `⭐ Epoka ${epochNames[epoch] ?? epoch}`;
-      const detail = goodsNames[epoch] ? ` — populacja oczekuje ${goodsNames[epoch]}` : '';
+      const epochKey = `log.epoch${epoch.charAt(0).toUpperCase() + epoch.slice(1)}`;
+      const epochName = t(epochKey);
+      const goodsKey = `log.epochGoods${epoch.charAt(0).toUpperCase() + epoch.slice(1)}`;
+      const goodsName = t(goodsKey);
+      const msg = t('log.epochEntered', epochName);
+      const detail = goodsName !== goodsKey ? t('log.epochExpectsGoods', goodsName) : '';
       this._log(msg + detail, 'civ_epoch');
     });
 
@@ -555,8 +553,9 @@ export class UIManager {
       if (now - last < 5) return;
       this._lastShortageLog[goodId] = now;
       const colonyName = window.KOSMOS?.colonyManager?.getActiveColony?.()?.name ?? '';
-      const goodName = COMMODITIES[goodId]?.namePL ?? goodId;
-      this._log(`⚠ Deficyt ${goodName} w ${colonyName}`, 'civ_famine');
+      const goodDef = COMMODITIES[goodId];
+      const goodName = goodDef ? getName({ id: goodId, namePL: goodDef.namePL }, 'commodity') : goodId;
+      this._log(t('log.commodityShortage', goodName, colonyName), 'civ_famine');
     });
 
     // Lądowanie statku + raport cargo
@@ -581,7 +580,7 @@ export class UIManager {
       for (const m of milestones) {
         if (oldP < m && prosperity >= m) {
           const colonyName = window.KOSMOS?.colonyManager?.getColony?.(planetId)?.name ?? '';
-          this._log(`⭐ Prosperity ${colonyName} osiągnęło ${m}`, 'civ_epoch');
+          this._log(t('log.prosperityMilestone', colonyName, m), 'civ_epoch');
         }
       }
     });
@@ -600,7 +599,7 @@ export class UIManager {
   }
 
   _flashResource(resource) {
-    this._log(`Niedobór: ${resource}`, 'civ_famine');
+    this._log(t('log.resourceShortage', resource), 'civ_famine');
   }
 
   // ══════════════════════════════════════════════════════════════

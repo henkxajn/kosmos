@@ -10,6 +10,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { t } from '../i18n/i18n.js';
 
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE; // 12 — mechaniki 4X biegną szybciej
 
@@ -34,16 +35,16 @@ export class TimeSystem {
     // ── Zdarzenia wyzwalające auto-slow ────────────────────────────────────
     EventBus.on('body:collision', ({ type }) => {
       if (type !== 'absorb') return;  // tylko poważne kolizje (nie microimpact)
-      this._triggerAutoSlow('Kolizja planetarna');
+      this._triggerAutoSlow(t('log.autoSlowCollision'));
     });
     EventBus.on('life:emerged',       ({ planet }) =>
-      this._triggerAutoSlow(`Pierwsze życie na ${planet?.name ?? 'planecie'}`));
+      this._triggerAutoSlow(t('log.autoSlowLifeEmerged', planet?.name ?? '?')));
     EventBus.on('life:evolved',       ({ planet }) =>
-      this._triggerAutoSlow(`Ewolucja życia: ${planet?.name ?? ''}`));
+      this._triggerAutoSlow(t('log.autoSlowLifeEvolved', planet?.name ?? '?')));
     EventBus.on('life:extinct',       ({ planet }) =>
-      this._triggerAutoSlow(`Wymieranie na ${planet?.name ?? 'planecie'}`));
-    EventBus.on('disk:phaseChanged',  ({ newPhasePL }) =>
-      this._triggerAutoSlow(`Faza dysku: ${newPhasePL}`));
+      this._triggerAutoSlow(t('log.autoSlowLifeExtinct', planet?.name ?? '?')));
+    EventBus.on('disk:phaseChanged',  ({ newPhase, newPhasePL }) =>
+      this._triggerAutoSlow(t('log.autoSlowDiskPhase', newPhasePL ?? newPhase)));
     // resource:shortage — NIE zwalniaj czasu; gracz sam kontroluje prędkość
     // EventBus.on('resource:shortage', ...) — usunięte na życzenie gracza
   }
@@ -79,15 +80,15 @@ export class TimeSystem {
 
   // Formatuj czas gry do czytelnej postaci
   _formatTime(years) {
-    // Duże skale czasowe — format skrócony
+    // Duże skale czasowe — format skrócony (i18n)
     if (years >= 1_000_000_000) {
-      return `${(years / 1_000_000_000).toFixed(2)} mld lat`;
+      return t('time.billionYears', (years / 1_000_000_000).toFixed(2));
     }
     if (years >= 1_000_000) {
-      return `${(years / 1_000_000).toFixed(2)} mln lat`;
+      return t('time.millionYears', (years / 1_000_000).toFixed(2));
     }
     if (years >= 10_000) {
-      return `${Math.floor(years / 1000).toLocaleString('pl-PL')} tys. lat`;
+      return t('time.thousandYears', Math.floor(years / 1000).toLocaleString());
     }
     // Format DD/MM/YYYY — czytelny jak kalendarz
     const totalDays = Math.floor(years * 365.25);

@@ -377,7 +377,7 @@ export class CivilizationSystem {
         this._unrestRemainingYears = UNREST_DURATION;
         this._lowProsperityYears   = 0;
         EventBus.emit('civ:unrest', {
-          reason:       `Prosperity cywilizacji zbyt niskie przez ${UNREST_YEARS_NEEDED} lat`,
+          reason:       t('log.unrestReason', UNREST_YEARS_NEEDED),
           yearsInCrisis: UNREST_YEARS_NEEDED,
         });
       }

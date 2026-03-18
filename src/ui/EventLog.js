@@ -5,6 +5,7 @@
 // Nie emituje żadnych zdarzeń — tylko wyświetla
 
 import EventBus from '../core/EventBus.js';
+import { t } from '../i18n/i18n.js';
 
 // Maksymalna liczba wpisów w dzienniku
 const MAX_ENTRIES = 12;
@@ -92,83 +93,80 @@ export class EventLog {
       if (type === 'absorb') {
         // Pomiń mikrouderzenia asteroid i komet — zbyt częste
         if (SMALL_BODY_TYPES.has(loser?.type)) return;
-        const big   = winner?.name ?? '?';
-        const small = loser?.name  ?? '?';
-        this._add(`${big} pochłonął ${small}`, 'collision_absorb');
+        this._add(t('log.absorbed', winner?.name ?? '?', loser?.name ?? '?'), 'collision_absorb');
       } else if (type === 'redirect') {
-        const a = winner?.name ?? '?';
-        const b = loser?.name  ?? '?';
-        this._add(`Zderzenie: ${a} ↔ ${b} zmieniły orbity`, 'collision_redirect');
+        this._add(t('log.collisionRedirect', winner?.name ?? '?', loser?.name ?? '?'), 'collision_redirect');
       }
       // type='eject' → obsługuje planet:ejected poniżej
     });
 
     EventBus.on('planet:ejected', ({ planet }) => {
-      this._add(`${planet?.name ?? 'Planeta'} wyrzucona z układu`, 'ejection');
+      this._add(t('log.planetEjected', planet?.name ?? '?'), 'ejection');
     });
 
     EventBus.on('accretion:newPlanet', ({ a }) => {
-      this._add(`Nowa planeta w odl. ${a.toFixed(2)} AU`, 'new_planet');
+      this._add(t('log.newPlanet', `${a.toFixed(2)} AU`), 'new_planet');
     });
 
     // ── Zdarzenia życia ──────────────────────────────────────────
     EventBus.on('life:emerged', ({ planet }) => {
-      this._add(`Pierwsze życie na ${planet.name}!`, 'life_good');
+      this._add(t('log.lifeEmerged', planet.name), 'life_good');
     });
 
     EventBus.on('life:evolved', ({ planet, stage }) => {
-      this._add(`${planet.name}: ${stage.label}`, 'life_good');
+      this._add(t('log.lifeEvolved', planet.name, stage.label), 'life_good');
     });
 
     EventBus.on('life:extinct', ({ planet, reason }) => {
       // Pomiń non-planet encje (asteroidy, komety) — nie mają prawdziwego życia
       if (!planet || planet.type !== 'planet') return;
-      this._add(`Życie wymarło: ${planet.name} (${reason})`, 'life_bad');
+      this._add(t('log.lifeExtinct', planet.name, reason), 'life_bad');
     });
 
     // Auto-slow — informuj gracza o zwolnieniu czasu
     EventBus.on('time:autoSlowed', ({ reason }) => {
-      this._add(`⏪ ${reason}`, 'auto_slow');
+      this._add(t('log.autoSlow', reason), 'auto_slow');
     });
 
     // ── Zdarzenia cywilizacyjne ───────────────────────────────────
     EventBus.on('civ:epochChanged', ({ epoch }) => {
-      this._add(`⭐ Epoka: ${epoch.namePL}`, 'civ_epoch');
+      const epochName = epoch?.key ? t(epoch.key) : (epoch?.namePL ?? '?');
+      this._add(t('log.epochChanged', epochName), 'civ_epoch');
     });
 
     EventBus.on('civ:unrest', ({ reason }) => {
-      this._add(`⚠ NIEPOKOJE: ${reason}`, 'civ_unrest');
+      this._add(t('log.unrest', reason), 'civ_unrest');
     });
 
     EventBus.on('civ:unrestLifted', () => {
-      this._add('✓ Niepokoje ustały', 'civ_unrest');
+      this._add(t('log.unrestLifted'), 'civ_unrest');
     });
 
     EventBus.on('civ:famine', () => {
-      this._add('💀 GŁÓD — brak żywności!', 'civ_famine');
+      this._add(t('log.famine'), 'civ_famine');
     });
 
     // ── Zdarzenia ekspedycji ──────────────────────────────────────
     EventBus.on('expedition:launched', ({ expedition }) => {
       const icon = expedition.type === 'scientific' ? '🔬' : '⛏';
-      this._add(`${icon} Ekspedycja → ${expedition.targetName} (${expedition.travelTime}l)`, 'expedition_ok');
+      this._add(t('log.expeditionLaunch', icon, expedition.targetName, expedition.travelTime), 'expedition_ok');
     });
 
     EventBus.on('expedition:arrived', ({ expedition, gained, multiplier }) => {
-      const icon    = expedition.type === 'scientific' ? '🔬' : '⛏';
-      const bonusStr = multiplier >= 1.5 ? ' ★ bonus!' : multiplier <= 0.5 ? ' (częściowy)' : '';
+      const icon     = expedition.type === 'scientific' ? '🔬' : '⛏';
+      const bonusStr = multiplier >= 1.5 ? t('log.expeditionBonusFull') : multiplier <= 0.5 ? t('log.expeditionBonusPartial') : '';
       const gainStr  = Object.entries(gained).filter(([,v]) => v > 0)
         .map(([k, v]) => `${v}${k === 'minerals' ? '⛏' : k === 'energy' ? '⚡' : k === 'organics' ? '🌿' : k === 'water' ? '💧' : k === 'research' ? '🔬' : k}`)
         .join(' ');
-      this._add(`${icon} Ekspedycja z ${expedition.targetName}: ${gainStr}${bonusStr}`, 'expedition_ok');
+      this._add(t('log.expeditionReturn', icon, expedition.targetName, gainStr, bonusStr), 'expedition_ok');
     });
 
     EventBus.on('expedition:disaster', ({ expedition }) => {
-      this._add(`💥 KATASTROFA! Ekspedycja do ${expedition.targetName} — utrata załogi`, 'expedition_fail');
+      this._add(t('log.expeditionDisaster', expedition.targetName), 'expedition_fail');
     });
 
     EventBus.on('expedition:returned', ({ expedition }) => {
-      this._add(`↩ Ekspedycja powróciła z ${expedition.targetName}`, 'info');
+      this._add(t('log.expeditionReturned', expedition.targetName), 'info');
     });
   }
 
@@ -193,10 +191,10 @@ export class EventLog {
 
   // ── Formatuj rok (skrócone) ───────────────────────────────────
   _formatYear(y) {
-    if (y < 1000)    return `${y}r`;
-    if (y < 1e6)     return `${(y / 1000).toFixed(1)}tys r`;
-    if (y < 1e9)     return `${(y / 1e6).toFixed(1)}M r`;
-    return `${(y / 1e9).toFixed(2)}G r`;
+    if (y < 1000)    return `${y}`;
+    if (y < 1e6)     return `${(y / 1000).toFixed(1)}k`;
+    if (y < 1e9)     return `${(y / 1e6).toFixed(1)}M`;
+    return `${(y / 1e9).toFixed(2)}G`;
   }
 
   // ── Przerysuj listę ───────────────────────────────────────────

@@ -733,6 +733,91 @@ export default {
   'log.bodyDestroyed': 'Zniszczenie ciała niebieskiego',
   'log.planetEjected': '{0} wyrzucona z układu',
   'log.vesselDocked': 'wylądował',
+  // Kolizje i ejekcje
+  'log.absorbed': '{0} pochłonął {1}',
+  'log.collisionRedirect': 'Zderzenie: {0} ↔ {1} zmieniły orbity',
+  'log.ejected': '{0} wyrzucona!',
+  'log.newPlanet': 'Nowa planeta: {0}',
+  // Życie
+  'log.lifeEmerged': 'Pierwsze życie na {0}!',
+  'log.lifeEvolved': '{0}: {1}',
+  'log.lifeExtinct': 'Życie wymarło: {0} ({1})',
+  'log.lifeExtinctShort': 'Wymieranie na {0}',
+  // Auto-slow
+  'log.autoSlow': '⏪ {0}',
+  'log.autoSlowCollision': 'Kolizja planetarna',
+  'log.autoSlowLifeEmerged': 'Pierwsze życie na {0}',
+  'log.autoSlowLifeEvolved': 'Ewolucja życia: {0}',
+  'log.autoSlowLifeExtinct': 'Wymieranie na {0}',
+  'log.autoSlowDiskPhase': 'Faza dysku: {0}',
+  // Cywilizacja
+  'log.epochChanged': '⭐ Epoka: {0}',
+  'log.unrest': '⚠ NIEPOKOJE: {0}',
+  'log.unrestLifted': '✓ Niepokoje ustały',
+  'log.unrestReason': 'Prosperity cywilizacji zbyt niskie przez {0} lat',
+  'log.famine': '💀 GŁÓD — brak żywności!',
+  'log.popBorn': 'Nowy POP! Populacja: {0}',
+  'log.popDied': 'Strata POPa! Populacja: {0}',
+  'log.popDiedStarvation': 'Strata POPa (głód)! Populacja: {0}',
+  'log.socialUnrest': 'Niepokoje społeczne!',
+  'log.colonyFamine': 'Głód w kolonii!',
+  // Ekspedycje
+  'log.expeditionLaunch': '{0} Ekspedycja → {1} ({2}l)',
+  'log.expeditionReturn': '{0} Ekspedycja z {1}: {2}{3}',
+  'log.expeditionDisaster': '💥 KATASTROFA! Ekspedycja do {0} — utrata załogi',
+  'log.expeditionReturned': '↩ Ekspedycja powróciła z {0}',
+  'log.expeditionLaunchFailed': '⚠ Start anulowany: {0}',
+  'log.expeditionBonusFull': ' ★ bonus!',
+  'log.expeditionBonusPartial': ' (częściowy)',
+  // Recon
+  'log.reconDiscovered': '🔭 Odkryto: {0} ({1} zbadanych)',
+  'log.reconComplete': '{0}: odkryto {1} ciał',
+  'log.reconNearest': 'Rozpoznanie',
+  'log.reconSystem': 'Rozpoznanie układu',
+  // Ekspedycje — typy dotarcia
+  'log.arrivalTransport': 'Transport dostarczony',
+  'log.arrivalColony': 'Kolonia założona',
+  'log.arrivalRecon': 'Rozpoznanie zakończone',
+  'log.arrivalExpedition': 'Ekspedycja dotarła',
+  'log.arrivalDisaster': 'Katastrofa: {0}!',
+  // Kolonia i handel
+  'log.colonyFounded': '🏙 Nowa kolonia: {0}',
+  'log.tradeExecuted': '📦 Droga handlowa: transfer wykonany',
+  'log.migration': '👤 Migracja: {0} POP z {1} → {2}',
+  // Prosperity i epoki
+  'log.prosperityMilestone': '⭐ Prosperity {0} osiągnęło {1}',
+  'log.epochEarly': 'Wczesna',
+  'log.epochDeveloping': 'Rozwijająca',
+  'log.epochAdvanced': 'Zaawansowana',
+  'log.epochCosmic': 'Kosmiczna',
+  'log.epochEntered': '⭐ Epoka {0}',
+  'log.epochGoodsDeveloping': 'Tworzyw i Elektroniki',
+  'log.epochGoodsAdvanced': 'Żywności Premium i Stymulatorów',
+  'log.epochGoodsCosmic': 'Półprzewodników',
+  'log.epochExpectsGoods': ' — populacja oczekuje {0}',
+  // Deficyt i niedobór
+  'log.commodityShortage': '⚠ Deficyt {0} w {1}',
+  'log.resourceShortage': 'Niedobór: {0}',
+  // Uderzenia kosmiczne
+  'log.impactPopLost': '-{0} POP',
+  'log.impactBuildingsDestroyed': '-{0} budynków',
+  // Etapy życia
+  'life.barren': 'Jałowa',
+  'life.prebiotic': 'Chemia prebiotyczna',
+  'life.microorganisms': 'Mikroorganizmy',
+  'life.complexLife': 'Złożone życie',
+  'life.civilization': 'Cywilizacja',
+  // Przyczyny wyginięcia
+  'life.extinctCollision': 'kolizja planetarna',
+  'life.extinctConditions': 'niesprzyjające warunki',
+  // Format czasu
+  'time.billionYears': '{0} mld lat',
+  'time.millionYears': '{0} mln lat',
+  'time.thousandYears': '{0} tys. lat',
+  // Fazy dysku
+  'disk.protoplanetary': 'Dysk protoplanetarny',
+  'disk.clearing': 'Oczyszczanie orbit',
+  'disk.mature': 'Układ dojrzały',
 
   // === Kolonia / status ===
   'colony.outpost': 'Placówka',

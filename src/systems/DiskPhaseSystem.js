@@ -18,6 +18,7 @@
 
 import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
+import { t }         from '../i18n/i18n.js';
 
 // ── Progi czasowe przejść między fazami (lata gry) ────────────────────────────
 const DISK_END     = 1_000_000;   // 1 milion lat → koniec fazy DISK
@@ -25,9 +26,9 @@ const CLEARING_END = 5_000_000;   // 5 milionów lat → koniec fazy CLEARING
 
 // ── Definicje faz ─────────────────────────────────────────────────────────────
 export const DISK_PHASES = {
-  DISK:     { id: 'DISK',     namePL: 'Dysk protoplanetarny', color: '#cc4422', icon: '🌑' },
-  CLEARING: { id: 'CLEARING', namePL: 'Oczyszczanie orbit',   color: '#ccaa22', icon: '🌓' },
-  MATURE:   { id: 'MATURE',   namePL: 'Układ dojrzały',       color: '#44cc66', icon: '🌍' },
+  DISK:     { id: 'DISK',     key: 'disk.protoplanetary', namePL: 'Dysk protoplanetarny', color: '#cc4422', icon: '🌑' },
+  CLEARING: { id: 'CLEARING', key: 'disk.clearing',       namePL: 'Oczyszczanie orbit',   color: '#ccaa22', icon: '🌓' },
+  MATURE:   { id: 'MATURE',   key: 'disk.mature',         namePL: 'Układ dojrzały',       color: '#44cc66', icon: '🌍' },
 };
 
 // Co ile lat gry sprawdzamy efekty fazowe (CLEARING)
@@ -72,8 +73,8 @@ export class DiskPhaseSystem {
       window.KOSMOS.diskPhase  = newPhase;
       EventBus.emit('disk:phaseChanged', {
         oldPhase, newPhase, gameTime,
-        oldPhasePL: DISK_PHASES[oldPhase].namePL,
-        newPhasePL: DISK_PHASES[newPhase].namePL,
+        oldPhasePL: t(DISK_PHASES[oldPhase].key),
+        newPhasePL: t(DISK_PHASES[newPhase].key),
       });
     }
 
