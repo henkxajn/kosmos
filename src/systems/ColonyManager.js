@@ -299,6 +299,10 @@ export class ColonyManager {
 
   // Utwórz nową kolonię (z ekspedycji kolonizacyjnej)
   createColony(planetId, startResources, startPop, gameYear) {
+    // Guard: nie nadpisuj istniejącej kolonii
+    if (this._colonies.has(planetId)) {
+      return this._colonies.get(planetId);
+    }
     const entity = this._findEntity(planetId);
     if (!entity) {
       console.warn('[ColonyManager] Nie znaleziono encji:', planetId);
@@ -357,6 +361,15 @@ export class ColonyManager {
 
   // Utwórz outpost (mini-kolonia bez POPów)
   createOutpost(planetId, startResources, gameYear) {
+    // Guard: nie nadpisuj istniejącej kolonii/outpostu
+    if (this._colonies.has(planetId)) {
+      const existing = this._colonies.get(planetId);
+      // Dostarcz zasoby do istniejącej kolonii zamiast nadpisywać
+      if (startResources && Object.keys(startResources).length > 0) {
+        existing.resourceSystem?.receive(startResources);
+      }
+      return existing;
+    }
     const entity = this._findEntity(planetId);
     if (!entity) {
       console.warn('[ColonyManager] Nie znaleziono encji dla outpost:', planetId);
