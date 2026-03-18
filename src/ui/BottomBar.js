@@ -198,10 +198,13 @@ export class BottomBar {
     }
   }
 
-  // Pokaż DOM menu (tworzy jeśli nie istnieje)
+  // Pokaż DOM menu (tworzy jeśli nie istnieje, odświeża zawartość tylko raz)
   _showDomMenu() {
     if (!this._domMenu) this._createDomMenu();
-    this._updateDomMenu();
+    if (this._domMenu.style.display !== 'block') {
+      // Odśwież zawartość tylko przy otwieraniu (nie co klatkę)
+      this._updateDomMenu();
+    }
     this._domMenu.style.display = 'block';
   }
 
