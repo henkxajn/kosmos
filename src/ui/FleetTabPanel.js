@@ -241,7 +241,7 @@ export class FleetTabPanel {
     // CENTER: zoom mapy
     if (mx >= centerX && mx < rightX) {
       const zoomFactor = delta > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(0.5, Math.min(40, this._mapZoom * zoomFactor));
+      const newZoom = Math.max(0.5, Math.min(80, this._mapZoom * zoomFactor));
       if (this._mapBounds) {
         const mb = this._mapBounds;
         const relX = (mx - mb.x) / mb.w - 0.5;
