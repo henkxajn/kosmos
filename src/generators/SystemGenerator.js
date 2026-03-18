@@ -160,7 +160,10 @@ export class SystemGenerator {
       const perturb = 0.85 + Math.random() * 0.30;  // 0.85–1.15
       const a       = tbRaw * perturb;
 
-      if (a < 0.25) continue;                        // za blisko gwiazdy (min 0.25 AU → 2.75 j. 3D)
+      // Min orbit skalowane masą gwiazdy — cięższe gwiazdy mają większy promień wizualny
+      // M(0.3)→0.30, K(0.7)→0.37, G(1.0)→0.45, F(1.4)→0.55 AU
+      const minOrbitAU = Math.max(0.30, 0.15 + (star.mass ?? 1.0) * 0.3);
+      if (a < minOrbitAU) continue;
       if (a > GAME_CONFIG.MAX_ORBIT_AU) break;
 
       planets.push(this._makePlanet(star, a, i, null, breathableCount));
