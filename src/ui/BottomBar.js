@@ -70,6 +70,12 @@ export class BottomBar {
   // ── Getter: czy menu otwarte ──
   get menuOpen() { return this._menuOpen; }
 
+  // ── Toggle menu (ESC) ──
+  toggleMenu() {
+    this._menuOpen = !this._menuOpen;
+    this._syncDomMenu();
+  }
+
   // ── Rysowanie ───────────────────────────────────────────
   draw(ctx, W, H, state) {
     this._lastState = state; // zachowaj do DOM menu

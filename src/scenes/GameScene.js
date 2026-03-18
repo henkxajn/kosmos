@@ -1092,6 +1092,14 @@ export class GameScene {
         }
       }
 
+      // Escape — toggle menu (gdy brak overlay i brak PlanetGlobeScene)
+      if (e.key === 'Escape') {
+        if (!this.planetScene?.isOpen) {
+          this.uiManager._bottomBar.toggleMenu();
+        }
+        return;
+      }
+
       // Klawisze overlay (F/P/E/T) — civMode
       if (window.KOSMOS?.civMode) {
         if (this.uiManager.overlayManager.handleKey(e.key)) return;
