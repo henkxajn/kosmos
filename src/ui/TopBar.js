@@ -81,15 +81,13 @@ export class TopBar {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, BAR_H); ctx.lineTo(W, BAR_H); ctx.stroke();
 
-    // Logo KOSMOS (lewa strona) — tylko gdy brak customowego startX
-    const LOGO_W = startX > 0 ? startX : 56;
+    // Logo KOSMOS + nazwa układu (lewa strona) — tylko gdy brak customowego startX
+    let LOGO_W = startX > 0 ? startX : 56;
     if (startX <= 0) {
       ctx.font = `bold ${THEME.fontSizeNormal + 2}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.title;
       ctx.textAlign = 'left';
       ctx.fillText('KOSMOS', 6, 20);
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.label;
       // Wskaźnik aktywnego układu gwiezdnego (Etap 40)
       const ssMgr = window.KOSMOS?.starSystemManager;
       const sysCount = ssMgr?.getAllSystems().length ?? 0;
@@ -97,8 +95,16 @@ export class TopBar {
         const activeId = ssMgr?.activeSystemId ?? 'sys_home';
         const activeStar = EntityManager.getStarOfSystem(activeId);
         const starName = activeStar?.name ?? activeId;
-        ctx.fillText(`⭐ ${starName}`, 6, 32);
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.accent;
+        const sysLabel = `⭐ ${starName}`;
+        ctx.fillText(sysLabel, 6, 34);
+        // Poszerzenie LOGO_W żeby zasoby nie nachodziły na nazwę układu
+        const sysLabelW = ctx.measureText(sysLabel).width + 12;
+        if (sysLabelW > LOGO_W) LOGO_W = sysLabelW;
       } else {
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.label;
         ctx.fillText('4X', 6, 32);
       }
     }
