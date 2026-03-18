@@ -104,6 +104,9 @@ export class ThreeRenderer {
     this._clickable    = [];
     this._vessels      = new Map();   // vesselId → { sprite, routeLine }
 
+    // Tryb widoczności orbit: 'all' | 'planets_moons' | 'planetoids'
+    this._orbitFilter = 'planetoids'; // domyślny — planetoidy widoczne, planety wg reguł
+
     // Współdzielona tekstura kropki życia — tworzona raz
     this._lifeDotTex    = ThreeRenderer._createLifeDotTexture();
     this._playerDotTex  = ThreeRenderer._createPlayerDotTexture();
@@ -410,13 +413,19 @@ export class ThreeRenderer {
       }
     }));
 
+    // Zmiana trybu widoczności orbit (z menu)
+    EventBus.on('orbits:filterChanged', safe(({ mode }) => {
+      this.setOrbitFilter(mode);
+    }));
+
     // Hover na ciało → pokaż orbitę tymczasowo (planeta/planetoid) + HZ (gwiazda)
     EventBus.on('planet:hover', safe(({ entityId }) => {
       // Przywróć domyślną widoczność orbit planetoidów (nie zaznaczonych)
+      const showPlanetoids = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
       this._planetoidOrbits.forEach((line, id) => {
         if (id !== this._focusEntityId) {
           line.material.opacity = 0.12;
-          line.visible = true;
+          line.visible = showPlanetoids;
         }
       });
       if (entityId) this._showPlanetoidOrbit(entityId, 0.20);
@@ -1576,7 +1585,9 @@ export class ThreeRenderer {
         color: 0x445566, transparent: true, opacity: 0.30,
       })
     );
-    ring.visible = false;  // ukryta domyślnie — widoczna po kliknięciu
+    const showMoons = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
+    ring.visible = showMoons;  // widoczność wg filtra orbit
+    ring.material.opacity = showMoons ? 0.15 : 0;
     parentEntry.group.add(ring);
 
     // Sfera księżyca — w scenie, pozycja synchronizowana z moon.x/y
@@ -1618,12 +1629,13 @@ export class ThreeRenderer {
     entry.ring.visible = true;
   }
 
-  // Ukryj wszystkie orbity księżyców
+  // Ukryj/pokaż orbity księżyców (wg filtra)
   _hideAllMoonOrbits() {
+    const show = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
     this._moons.forEach(entry => {
       if (entry.ring) {
-        entry.ring.material.opacity = 0;
-        entry.ring.visible = false;
+        entry.ring.material.opacity = show ? 0.15 : 0;
+        entry.ring.visible = show;
       }
     });
   }
@@ -1711,11 +1723,12 @@ export class ThreeRenderer {
     return new THREE.CanvasTexture(c);
   }
 
-  // Przywraca domyślny stan widoczności orbity (ukryta chyba że home/kolonia)
+  // Przywraca domyślny stan widoczności orbity (ukryta chyba że home/kolonia/orbitFilter)
   _restoreOrbitDefaults(planetId, line) {
     const isHomePlanet = planetId === window.KOSMOS?.homePlanet?.id;
     const colMgr = window.KOSMOS?.colonyManager;
     const isColonized = colMgr ? colMgr.getColony(planetId) != null : false;
+    const showAll = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
     if (isHomePlanet) {
       line.visible = true;
       line.material.color.setHex(0x007852);
@@ -1724,9 +1737,33 @@ export class ThreeRenderer {
       line.visible = true;
       line.material.color.setHex(0x005540);
       line.material.opacity = 0.10;
+    } else if (showAll) {
+      line.visible = true;
+      line.material.opacity = 0.08;
     } else {
       line.visible = false;
     }
+  }
+
+  // Zmienia tryb widoczności orbit: 'all' | 'planets_moons' | 'planetoids'
+  setOrbitFilter(mode) {
+    this._orbitFilter = mode;
+    this._applyOrbitFilter();
+  }
+
+  // Aktualizuje widoczność wszystkich orbit wg aktualnego filtra
+  _applyOrbitFilter() {
+    // Orbity planet — przebuduj (uwzględnia _orbitFilter w _restoreOrbitDefaults)
+    this._orbits.forEach((line, id) => {
+      if (id === this._focusEntityId) return; // zaznaczona — nie ruszaj
+      this._restoreOrbitDefaults(id, line);
+    });
+
+    // Orbity księżyców
+    this._hideAllMoonOrbits();
+
+    // Orbity planetoidów
+    this._hideAllPlanetoidOrbits();
   }
 
   // ── Orbity eliptyczne ─────────────────────────────────────────
@@ -1764,12 +1801,15 @@ export class ThreeRenderer {
     const isFocused = planet.id === this._focusEntityId;
     let orbitVisible = false;
     let orbitOpacity = 0.35;
+    const showPlanets = this._orbitFilter === 'all' || this._orbitFilter === 'planets_moons';
     if (isFocused) {
       orbitVisible = true; orbitOpacity = 0.7; color = 0xffc832; // złota orbita — zaznaczona
     } else if (isHomePlanet) {
       orbitVisible = true; orbitOpacity = 0.15; // homePlanet — zawsze widoczna, przyciemniona
     } else if (isColonized) {
       orbitVisible = true; orbitOpacity = 0.10; // kolonizowana — widoczna, przyciemniona
+    } else if (showPlanets) {
+      orbitVisible = true; orbitOpacity = 0.08; // filtr — przyciemniona
     }
 
     const STEPS  = 128;
@@ -1883,11 +1923,12 @@ export class ThreeRenderer {
     line.visible = true;
   }
 
-  // Przywróć domyślną widoczność orbit planetoidów (przyciemnione)
+  // Przywróć domyślną widoczność orbit planetoidów (wg filtra)
   _hideAllPlanetoidOrbits() {
+    const show = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
     this._planetoidOrbits.forEach(line => {
       line.material.opacity = 0.12;
-      line.visible = true;
+      line.visible = show;
     });
   }
 
@@ -1948,7 +1989,7 @@ export class ThreeRenderer {
         color: 0x554433, transparent: true, opacity: 0.12,
       })
     );
-    line.visible = true;
+    line.visible = this._orbitFilter === 'all' || this._orbitFilter === 'planetoids';
     this.scene.add(line);
     this._planetoidOrbits.set(planetoid.id, line);
   }

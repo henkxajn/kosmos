@@ -17,13 +17,17 @@ const LOG_EXPANDED = 6; // ile wpisów po rozwinięciu
 const MENU_W = 220;
 const MENU_ROW_H = 28;
 const MENU_PAD = 8;
-const MENU_ROWS = 5; // Nowa gra, Zapisz, Autozapis, Muzyka, Dźwięki
+const MENU_ROWS = 6; // Nowa gra, Zapisz, Autozapis, Orbity, Muzyka, Dźwięki
 const MENU_H = MENU_PAD * 2 + MENU_ROWS * MENU_ROW_H;
 
 // Opcje interwału autozapisu
 const AUTOSAVE_OPTIONS = ['off', 'month', 'year', '10y'];
 const AUTOSAVE_INTERVALS = { off: 0, month: 1 / 12, year: 1, '10y': 10 };
 const AUTOSAVE_STORAGE_KEY = 'kosmos_autosave_interval';
+
+// Opcje widoczności orbit
+const ORBIT_MODES = ['all', 'planets_moons', 'planetoids'];
+const ORBIT_STORAGE_KEY = 'kosmos_orbit_filter';
 
 const C = {
   get bg()     { return THEME.bgPrimary; },
@@ -63,8 +67,19 @@ export class BottomBar {
         this._autosaveOption = stored;
       }
     } catch (e) { /* cicho */ }
+
+    // Wczytaj ustawienie filtra orbit z localStorage
+    this._orbitMode = 'planetoids'; // domyślnie — tylko planetoidy
+    try {
+      const stored = localStorage.getItem(ORBIT_STORAGE_KEY);
+      if (stored && ORBIT_MODES.includes(stored)) {
+        this._orbitMode = stored;
+      }
+    } catch (e) { /* cicho */ }
     // Wyemituj interwał przy starcie (SaveSystem nasłuchuje)
     this._emitAutosaveInterval();
+    // Wyemituj filtr orbit przy starcie (ThreeRenderer nasłuchuje)
+    this._emitOrbitFilter();
   }
 
   // ── Getter: czy menu otwarte ──
@@ -264,6 +279,10 @@ export class BottomBar {
         this._cycleAutosave();
         this._updateDomMenu(); // odśwież wartość
         break;
+      case 'orbits':
+        this._cycleOrbitMode();
+        this._updateDomMenu();
+        break;
       case 'music':
         EventBus.emit('music:toggle');
         // Wartości odświeżą się przy następnym otwarciu
@@ -305,10 +324,12 @@ export class BottomBar {
   _getMenuRows(audioEnabled, musicEnabled) {
     const autosaveLabel = this._getAutosaveLabel();
     const autosaveOn = this._autosaveOption !== 'off';
+    const orbitLabel = this._getOrbitLabel();
     return [
       { id: 'newGame', label: t('menu.newGame') },
       { id: 'save',    label: t('menu.save') },
       { id: 'autosave', label: t('menu.autosave'), value: autosaveLabel, valueOn: autosaveOn },
+      { id: 'orbits',   label: t('menu.orbits'), value: orbitLabel, valueOn: true },
       { id: 'music',   label: t('menu.music'), value: musicEnabled ? t('menu.on') : t('menu.off'), valueOn: musicEnabled },
       { id: 'sfx',     label: t('menu.sfx'),   value: audioEnabled ? t('menu.on') : t('menu.off'), valueOn: audioEnabled },
     ];
@@ -404,6 +425,29 @@ export class BottomBar {
   _emitAutosaveInterval() {
     const interval = AUTOSAVE_INTERVALS[this._autosaveOption] || 0;
     EventBus.emit('autosave:intervalChanged', { interval });
+  }
+
+  // ── Cyklowanie trybu orbit ──
+  _cycleOrbitMode() {
+    const idx = ORBIT_MODES.indexOf(this._orbitMode);
+    this._orbitMode = ORBIT_MODES[(idx + 1) % ORBIT_MODES.length];
+    try {
+      localStorage.setItem(ORBIT_STORAGE_KEY, this._orbitMode);
+    } catch (e) { /* cicho */ }
+    this._emitOrbitFilter();
+  }
+
+  _emitOrbitFilter() {
+    EventBus.emit('orbits:filterChanged', { mode: this._orbitMode });
+  }
+
+  _getOrbitLabel() {
+    switch (this._orbitMode) {
+      case 'all':            return t('menu.orbitsAll');
+      case 'planets_moons':  return t('menu.orbitsPlanets');
+      case 'planetoids':     return t('menu.orbitsPlanetoids');
+      default:               return t('menu.orbitsPlanetoids');
+    }
   }
 
   // ── Hover tracking (wywoływany z UIManager) ──

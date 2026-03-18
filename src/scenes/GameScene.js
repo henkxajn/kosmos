@@ -1107,6 +1107,12 @@ export class GameScene {
         }
       }
 
+      // Escape — zamknij dialog potwierdzenia (jeśli widoczny)
+      if (e.key === 'Escape' && this.uiManager._confirmDialog?.visible) {
+        this.uiManager._confirmDialog = { visible: false };
+        return;
+      }
+
       // Escape — toggle menu (gdy brak overlay i brak PlanetGlobeScene)
       if (e.key === 'Escape') {
         if (!this.planetScene?.isOpen) {

@@ -667,8 +667,15 @@ export class UIManager {
       return true;
     }
 
-    // BottomBar (menu button) — priorytet nad overlayami
-    if (y >= H - COSMIC.BOTTOM_BAR_H && this._bottomBar.hitTest(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) return true;
+    // Przycisk MENU — priorytet nad overlayami (dostępny zawsze)
+    if (y >= H - COSMIC.BOTTOM_BAR_H) {
+      const btnW = 64, btnX = W - btnW - 6;
+      if (x >= btnX && x <= btnX + btnW) {
+        this._bottomBar._menuOpen = !this._bottomBar._menuOpen;
+        this._bottomBar._syncDomMenu();
+        return true;
+      }
+    }
 
     // Overlay pełnoekranowy (FleetManager itp.) — przed resztą UI
     if (this.overlayManager.isAnyOpen()) {
@@ -1440,7 +1447,11 @@ export class UIManager {
   _hitTestConfirm(x, y) {
     const DW = 300, DH = 90;
     const DX = W / 2 - DW / 2, DY = H / 2 - DH / 2;
-    if (x < DX || x > DX + DW || y < DY || y > DY + DH) return false;
+    // Klik poza dialogiem — zamknij (modal)
+    if (x < DX || x > DX + DW || y < DY || y > DY + DH) {
+      this._confirmDialog = { visible: false };
+      return true;
+    }
     const btnY = DY + 52;
     if (x >= W / 2 - 80 && x <= W / 2 - 10 && y >= btnY && y <= btnY + 20) {
       this._confirmDialog = { visible: false }; EventBus.emit('game:new'); return true;
