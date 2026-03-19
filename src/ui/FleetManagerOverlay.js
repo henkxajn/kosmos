@@ -78,6 +78,15 @@ function _getFilterBtns() {
   ];
 }
 
+// ── Formatowanie roku gry ────────────────────────────────────────────────────
+function _fmtYear(y) {
+  if (y == null) return '?';
+  if (y >= 1e9) return (y / 1e9).toFixed(1) + 'G';
+  if (y >= 1e6) return (y / 1e6).toFixed(1) + 'M';
+  if (y >= 1e4) return (y / 1e3).toFixed(0) + 'k';
+  return String(Math.round(y));
+}
+
 // ── Ikona i label typu misji (do sekcji W LOCIE) ────────────────────────────
 function _missionTypeIcon(type) {
   switch (type) {
@@ -817,8 +826,10 @@ export class FleetManagerOverlay {
 
   _drawLeft(ctx, x, y, w, h, vessels, ms) {
     const pad = 8;
-    const rowH = 44;
-    const SECTION_H = 20;
+    const ROW_HANGAR = 34;  // kompaktowy wiersz: nazwa + paliwo + lokalizacja
+    const ROW_ORBIT  = 34;
+    const ROW_FLIGHT = 46;  // wyższy: nazwa + paliwo + cel + typ misji + ETA
+    const SECTION_H  = 20;
 
     // ── Nagłówek (h=36) ──────────────────────────────────────
     ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
@@ -854,16 +865,16 @@ export class FleetManagerOverlay {
     const inFlight = vessels.filter(v => v.position.state === 'in_transit');
 
     const sections = [
-      { key: 'hangar', label: t('fleet.sectionHangar'), color: THEME.success,  vessels: hangar },
-      { key: 'orbit',  label: t('fleet.sectionOrbit'),  color: THEME.mint,     vessels: orbiting },
-      { key: 'flight', label: t('fleet.sectionFlight'), color: THEME.warning,  vessels: inFlight },
+      { key: 'hangar', label: t('fleet.sectionHangar'), color: THEME.success,  vessels: hangar,   rowH: ROW_HANGAR },
+      { key: 'orbit',  label: t('fleet.sectionOrbit'),  color: THEME.mint,     vessels: orbiting, rowH: ROW_ORBIT },
+      { key: 'flight', label: t('fleet.sectionFlight'), color: THEME.warning,  vessels: inFlight, rowH: ROW_FLIGHT },
     ];
 
     // Oblicz łączną wysokość contentu
     let totalContentH = 0;
     for (const sec of sections) {
       if (sec.vessels.length === 0) continue;
-      totalContentH += SECTION_H + sec.vessels.length * rowH;
+      totalContentH += SECTION_H + sec.vessels.length * sec.rowH;
     }
 
     // ── Lista scrollowalna ───────────────────────────────────
@@ -879,20 +890,18 @@ export class FleetManagerOverlay {
 
     for (const sec of sections) {
       if (sec.vessels.length === 0) continue;
+      const rH = sec.rowH;
 
       // ── Nagłówek sekcji ──
       if (ry + SECTION_H > listY - 2 && ry < listY + listH + 2) {
         ctx.fillStyle = 'rgba(20,30,45,0.8)';
         ctx.fillRect(x, ry, w, SECTION_H);
-        // Kolorowa linia pod nagłówkiem
         ctx.strokeStyle = sec.color; ctx.lineWidth = 1; ctx.globalAlpha = 0.35;
         ctx.beginPath(); ctx.moveTo(x + pad, ry + SECTION_H - 1); ctx.lineTo(x + w - pad, ry + SECTION_H - 1); ctx.stroke();
         ctx.globalAlpha = 1.0;
-        // Tekst
         ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = sec.color;
         ctx.fillText(`▸ ${sec.label}`, x + pad, ry + 14);
-        // Licznik
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
         ctx.textAlign = 'right';
@@ -903,54 +912,54 @@ export class FleetManagerOverlay {
 
       // ── Wiersze statków ──
       for (const vessel of sec.vessels) {
-        if (ry + rowH < listY) { ry += rowH; continue; }
-        if (ry > listY + listH) { ry += rowH; continue; }
+        if (ry + rH < listY) { ry += rH; continue; }
+        if (ry > listY + listH) { ry += rH; continue; }
 
         const selected = vessel.id === this._selectedVesselId;
         const hovered  = vessel.id === this._hoverVesselId;
 
-        // Tło wiersza
         if (selected) {
           ctx.fillStyle = 'rgba(0,255,180,0.06)';
-          ctx.fillRect(x, ry, w, rowH);
+          ctx.fillRect(x, ry, w, rH);
           ctx.fillStyle = THEME.accent;
-          ctx.fillRect(x, ry, 2, rowH);
+          ctx.fillRect(x, ry, 2, rH);
         } else if (hovered) {
           ctx.fillStyle = 'rgba(0,255,180,0.03)';
-          ctx.fillRect(x, ry, w, rowH);
+          ctx.fillRect(x, ry, w, rH);
         }
 
-        // Wiersz 1: ikona statku + nazwa
         const ship = SHIPS[vessel.shipId];
         const icon = ship?.icon ?? '🚀';
+
+        // ── Wiersz 1: ikona + nazwa + paliwo ──
         ctx.font = `13px ${THEME.fontFamily}`;
         ctx.fillStyle = selected ? THEME.textPrimary : THEME.textSecondary;
-        const maxNameLen = 11;
-        const vName = vessel.name.length > maxNameLen ? vessel.name.slice(0, maxNameLen - 1) + '…' : vessel.name;
-        ctx.fillText(`${icon} ${vName}`, x + pad, ry + 16);
+        const vName = vessel.name.length > 11 ? vessel.name.slice(0, 10) + '…' : vessel.name;
+        ctx.fillText(`${icon} ${vName}`, x + pad, ry + 14);
 
-        // Pasek paliwa + procent (prawy górny róg)
+        // Pasek paliwa
         const fuelPct = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
         const fuelColor = fuelPct > 0.5 ? THEME.success : fuelPct > 0.2 ? THEME.warning : THEME.danger;
-        const barW = 28; const barH = 3;
-        const barX = x + w - pad - barW - 24; const barBY = ry + 11;
+        const barW = 26; const barH = 3;
+        const barX = x + w - pad - barW - 24; const barBY = ry + 9;
         ctx.fillStyle = THEME.bgTertiary; ctx.fillRect(barX, barBY, barW, barH);
         ctx.fillStyle = fuelColor; ctx.fillRect(barX, barBY, Math.round(barW * fuelPct), barH);
-
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = fuelColor;
         ctx.textAlign = 'right';
-        ctx.fillText(`${Math.round(fuelPct * 100)}%`, x + w - pad, ry + 15);
+        ctx.fillText(`${Math.round(fuelPct * 100)}%`, x + w - pad, ry + 13);
         ctx.textAlign = 'left';
 
-        // Wiersz 2: info kontekstowe wg sekcji
+        // ── Wiersz 2: lokalizacja / cel ──
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         if (sec.key === 'hangar') {
           ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`◈ ${_resolveName(vessel.position.dockedAt)}`, x + pad + 2, ry + 32);
+          const locName = _resolveName(vessel.position.dockedAt);
+          ctx.fillText(`◈ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2, ry + 28);
         } else if (sec.key === 'orbit') {
           ctx.fillStyle = THEME.mint;
-          ctx.fillText(`⊙ ${_resolveName(vessel.position.dockedAt)}`, x + pad + 2, ry + 32);
+          const locName = _resolveName(vessel.position.dockedAt);
+          ctx.fillText(`⊙ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2, ry + 28);
         } else {
           // W locie: → cel + typ misji
           const targetName = vessel.mission?.targetName ?? _resolveName(vessel.mission?.targetId);
@@ -958,17 +967,28 @@ export class FleetManagerOverlay {
           const mIcon = _missionTypeIcon(mType);
           const mLabel = _missionTypeLabel(mType);
           ctx.fillStyle = THEME.warning;
-          ctx.fillText(`→ ${(targetName ?? '?').slice(0, 10)}`, x + pad + 2, ry + 32);
+          ctx.fillText(`→ ${(targetName ?? '?').slice(0, 12)}`, x + pad + 2, ry + 28);
           ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`${mIcon} ${mLabel}`, x + pad + 90, ry + 32);
+          ctx.fillText(`${mIcon} ${mLabel}`, x + pad + 95, ry + 28);
+
+          // ── Wiersz 3 (tylko flight): ETA ──
+          const m = vessel.mission;
+          const isReturning = m?.phase === 'returning';
+          const etaYear = isReturning ? m?.returnYear : m?.arrivalYear;
+          if (etaYear != null) {
+            ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+            ctx.fillStyle = THEME.textDim;
+            const label = isReturning ? '↩ ETA' : 'ETA';
+            ctx.fillText(`${label}: ${_fmtYear(etaYear)}`, x + pad + 2, ry + 40);
+          }
         }
 
         // Separator
         ctx.strokeStyle = 'rgba(0,255,180,0.05)';
-        ctx.beginPath(); ctx.moveTo(x + pad, ry + rowH - 1); ctx.lineTo(x + w - pad, ry + rowH - 1); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x + pad, ry + rH - 1); ctx.lineTo(x + w - pad, ry + rH - 1); ctx.stroke();
 
-        this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rowH, type: 'vessel', data: { vesselId: vessel.id } });
-        ry += rowH;
+        this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rH, type: 'vessel', data: { vesselId: vessel.id } });
+        ry += rH;
       }
     }
 
