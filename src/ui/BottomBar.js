@@ -26,7 +26,7 @@ const AUTOSAVE_INTERVALS = { off: 0, month: 1 / 12, year: 1, '10y': 10 };
 const AUTOSAVE_STORAGE_KEY = 'kosmos_autosave_interval';
 
 // Opcje widoczności orbit
-const ORBIT_MODES = ['all', 'planets_moons', 'planetoids'];
+const ORBIT_MODES = ['all', 'planets_moons', 'planetoids', 'none'];
 const ORBIT_STORAGE_KEY = 'kosmos_orbit_filter';
 
 const C = {
@@ -449,6 +449,7 @@ export class BottomBar {
       case 'all':            return t('menu.orbitsAll');
       case 'planets_moons':  return t('menu.orbitsPlanets');
       case 'planetoids':     return t('menu.orbitsPlanetoids');
+      case 'none':           return t('menu.orbitsNone');
       default:               return t('menu.orbitsPlanetoids');
     }
   }
