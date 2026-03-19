@@ -828,7 +828,7 @@ export class FleetManagerOverlay {
     const pad = 8;
     const ROW_HANGAR = 34;  // kompaktowy wiersz: nazwa + paliwo + lokalizacja
     const ROW_ORBIT  = 34;
-    const ROW_FLIGHT = 46;  // wyższy: nazwa + paliwo + cel + typ misji + ETA
+    const ROW_FLIGHT = 52;  // wyższy: nazwa + paliwo + cel + typ misji + ETA
     const SECTION_H  = 20;
 
     // ── Nagłówek (h=36) ──────────────────────────────────────
@@ -977,14 +977,14 @@ export class FleetManagerOverlay {
           const etaYear = isReturning
             ? (m?.returnYear ?? m?.arrivalYear)
             : (m?.arrivalYear ?? m?.returnYear);
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          const etaLabel = isReturning ? '↩ ETA' : 'ETA';
+          ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          const etaLabel = isReturning ? '↩ ETA' : '⏱ ETA';
           if (etaYear != null && etaYear > 0) {
-            ctx.fillStyle = THEME.accent;
-            ctx.fillText(`${etaLabel}: ${_fmtYear(etaYear)}`, x + pad + 2, ry + 41);
+            ctx.fillStyle = THEME.warning;
+            ctx.fillText(`${etaLabel}: rok ${_fmtYear(etaYear)}`, x + pad + 2, ry + 43);
           } else {
-            ctx.fillStyle = THEME.textDim;
-            ctx.fillText(`${etaLabel}: —`, x + pad + 2, ry + 41);
+            ctx.fillStyle = THEME.textSecondary;
+            ctx.fillText(`${etaLabel}: —`, x + pad + 2, ry + 43);
           }
         }
 
