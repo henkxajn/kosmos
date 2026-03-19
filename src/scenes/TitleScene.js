@@ -228,12 +228,8 @@ export class TitleScene {
           <span class="ss-item-num">${hasSave !== null ? '02' : '01'}</span>
           <span class="ss-item-label">${t('title.newGameLabel', 'NOWA GRA')}</span>
         </button>
-        <button class="ss-menu-item" data-action="new_boosted">
-          <span class="ss-item-num">${hasSave !== null ? '03' : '02'}</span>
-          <span class="ss-item-label">${t('title.newGameBoosted', 'NOWA GRA +')}</span>
-        </button>
         <button class="ss-menu-item" data-action="power_test">
-          <span class="ss-item-num">${hasSave !== null ? '04' : '03'}</span>
+          <span class="ss-item-num">${hasSave !== null ? '03' : '02'}</span>
           <span class="ss-item-label">POWER TEST</span>
         </button>
       </div>
@@ -312,10 +308,6 @@ export class TitleScene {
       window.KOSMOS.savedData = saveData;
       window.KOSMOS.scenario  = saveData?.scenario ?? 'civilization';
     } else if (action === 'new') {
-      SaveSystem.clearSave();
-      window.KOSMOS.savedData = null;
-      window.KOSMOS.scenario  = 'civilization';
-    } else if (action === 'new_boosted') {
       SaveSystem.clearSave();
       window.KOSMOS.savedData = null;
       window.KOSMOS.scenario  = 'civilization_boosted';

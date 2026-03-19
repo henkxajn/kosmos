@@ -97,6 +97,10 @@ export class BottomBar {
     const { stability, logEntries, audioEnabled, musicEnabled, autoSlow, civMode } = state;
     const barY = H - BAR_H;
 
+    // Czy tryb Generator (stabilność widoczna)
+    const isGenerator = window.KOSMOS?.scenario === 'generator';
+    const expandedLogX = isGenerator ? 160 : 10;
+
     // Rozwinięty log — dodatkowe tło nad paskiem
     const expandedH = this._expanded ? LOG_EXPANDED * 14 + 8 : 0;
 
@@ -114,7 +118,7 @@ export class BottomBar {
       entries.forEach((entry, i) => {
         ctx.fillStyle = entry.color || C.text;
         const yr = entry.year > 0 ? `${_shortYear(entry.year)} ` : '';
-        ctx.fillText(yr + _truncate(entry.text, 60), 160, expY + 12 + i * 14);
+        ctx.fillText(yr + _truncate(entry.text, 60), expandedLogX, expY + 12 + i * 14);
       });
     }
 
@@ -127,36 +131,41 @@ export class BottomBar {
 
     const textY = barY + 19;
 
-    // ── Sekcja lewa: Stabilność ──
-    const { score, trend } = stability || { score: 50, trend: 'stable' };
-    const arrow  = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '–';
-    const tColor = trend === 'up' ? THEME.successDim : trend === 'down' ? THEME.dangerDim : C.text;
+    // ── Sekcja lewa: Stabilność (tylko tryb Generator) ──
+    let logX = 10; // domyślnie log zaczyna się od lewej
 
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.label;
-    ctx.textAlign = 'left';
-    ctx.fillText(t('bottomBar.stab'), 10, textY);
+    if (isGenerator) {
+      const { score, trend } = stability || { score: 50, trend: 'stable' };
+      const arrow  = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '–';
+      const tColor = trend === 'up' ? THEME.successDim : trend === 'down' ? THEME.dangerDim : C.text;
 
-    ctx.fillStyle = tColor;
-    ctx.fillText(`${score}${arrow}`, 46, textY);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.label;
+      ctx.textAlign = 'left';
+      ctx.fillText(t('bottomBar.stab'), 10, textY);
 
-    // Mini-pasek stabilności
-    const sBarX = 80, sBarW = 50, sBarH = 5;
-    const sBarY = textY - 4;
-    ctx.fillStyle = THEME.bgTertiary;
-    ctx.fillRect(sBarX, sBarY, sBarW, sBarH);
-    const sFillW = Math.round((score / 100) * sBarW);
-    if (sFillW > 0) {
-      ctx.fillStyle = score >= 70 ? THEME.successDim : score >= 40 ? THEME.yellow : THEME.dangerDim;
-      ctx.fillRect(sBarX, sBarY, sFillW, sBarH);
+      ctx.fillStyle = tColor;
+      ctx.fillText(`${score}${arrow}`, 46, textY);
+
+      // Mini-pasek stabilności
+      const sBarX = 80, sBarW = 50, sBarH = 5;
+      const sBarY = textY - 4;
+      ctx.fillStyle = THEME.bgTertiary;
+      ctx.fillRect(sBarX, sBarY, sBarW, sBarH);
+      const sFillW = Math.round((score / 100) * sBarW);
+      if (sFillW > 0) {
+        ctx.fillStyle = score >= 70 ? THEME.successDim : score >= 40 ? THEME.yellow : THEME.dangerDim;
+        ctx.fillRect(sBarX, sBarY, sFillW, sBarH);
+      }
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sBarX, sBarY, sBarW, sBarH);
+
+      logX = 140;
     }
-    ctx.strokeStyle = THEME.border;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(sBarX, sBarY, sBarW, sBarH);
 
     // ── Sekcja centralna: EventLog (inline) ──
-    const logX = 140;
-    const logW = W - 240; // więcej miejsca (był W-340)
+    const logW = W - logX - 100; // dynamicznie zależne od logX
     const maxChars = Math.floor(logW / 6);
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;

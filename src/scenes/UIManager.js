@@ -846,7 +846,7 @@ export class UIManager {
     });
 
     // ── Panel akcji gracza (tylko tryb Generator) ────────────
-    if (!civMode) this._drawActionPanel();
+    if (!civMode && window.KOSMOS?.scenario === 'generator') this._drawActionPanel();
 
     // ── Powiadomienia (fade out) ─────────────────────────────
     this._drawNotifications();
@@ -1464,6 +1464,7 @@ export class UIManager {
 
   _hitTestActionPanel(x, y) {
     if (window.KOSMOS?.civMode) return false;
+    if (window.KOSMOS?.scenario !== 'generator') return false;
     const PW = 220, BTN_H = 36, BTN_G = 6, PAD = 10;
     const PH = PAD + 16 + 3 * (BTN_H + BTN_G) + PAD;
     const PX = W - COSMIC.OUTLINER_W - PW - 12;

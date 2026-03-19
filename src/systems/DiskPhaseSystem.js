@@ -41,7 +41,7 @@ export class DiskPhaseSystem {
     // Faza na starcie — scenariusz Cywilizacja zaczyna w MATURE (stabilny układ)
     // Generator: faza zależy od gameTime (wczytany save może być w MATURE)
     const scen = window.KOSMOS?.scenario;
-    this._currentPhase  = (scen === 'civilization' || scen === 'power_test')  // POWER TEST
+    this._currentPhase  = (scen === 'civilization' || scen === 'civilization_boosted' || scen === 'power_test')
       ? 'MATURE'
       : this._phaseForTime(timeSystem.gameTime);
     this._clearingAccum = 0;
