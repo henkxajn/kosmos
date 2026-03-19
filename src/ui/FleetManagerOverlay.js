@@ -974,12 +974,17 @@ export class FleetManagerOverlay {
           // ── Wiersz 3 (tylko flight): ETA ──
           const m = vessel.mission;
           const isReturning = m?.phase === 'returning';
-          const etaYear = isReturning ? m?.returnYear : m?.arrivalYear;
-          if (etaYear != null) {
-            ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          const etaYear = isReturning
+            ? (m?.returnYear ?? m?.arrivalYear)
+            : (m?.arrivalYear ?? m?.returnYear);
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          const etaLabel = isReturning ? '↩ ETA' : 'ETA';
+          if (etaYear != null && etaYear > 0) {
+            ctx.fillStyle = THEME.accent;
+            ctx.fillText(`${etaLabel}: ${_fmtYear(etaYear)}`, x + pad + 2, ry + 41);
+          } else {
             ctx.fillStyle = THEME.textDim;
-            const label = isReturning ? '↩ ETA' : 'ETA';
-            ctx.fillText(`${label}: ${_fmtYear(etaYear)}`, x + pad + 2, ry + 40);
+            ctx.fillText(`${etaLabel}: —`, x + pad + 2, ry + 41);
           }
         }
 
