@@ -1169,8 +1169,9 @@ export class GameScene {
   _setupMouseInput(eventLayer) {
     window.addEventListener('click', (e) => {
       if (this.planetScene?.isOpen) return;
-      // Blokuj kliknięcia gdy DOM modal jest na wierzchu
+      // Blokuj kliknięcia gdy DOM modal/menu jest na wierzchu
       if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
+      if (e.target.closest && e.target.closest('.kosmos-menu-panel')) return;
       // Ignoruj drag kamery — ale NIE gdy overlay jest otwarty
       // (overlay blokuje kamerę przez isOverUI, więc _hasMoved jest stałe)
       const wasDrag = this.cameraController.wasDrag;
