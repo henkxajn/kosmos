@@ -951,9 +951,9 @@ export class FleetManagerOverlay {
         ctx.textAlign = 'left';
 
         // ── Wiersz 2: lokalizacja / cel ──
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         if (sec.key === 'hangar') {
-          ctx.fillStyle = THEME.textDim;
+          ctx.fillStyle = THEME.success;
           const locName = _resolveName(vessel.position.dockedAt);
           ctx.fillText(`◈ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2, ry + 28);
         } else if (sec.key === 'orbit') {
