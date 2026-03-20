@@ -1210,6 +1210,12 @@ export class ExpeditionSystem {
     else if (roll < 90) multiplier = 1.0;    // normalny sukces (75%)
     else                multiplier = 1.5;    // bonus (10%)
 
+    // Bonus z obserwatorium w kolonii wysyłającej
+    const obsSys = window.KOSMOS?.observatorySystem;
+    if (obsSys && exp.originColonyId) {
+      multiplier += obsSys.getMissionYieldBonus(exp.originColonyId);
+    }
+
     const gained = {};
     for (const [key, val] of Object.entries(baseGains)) {
       gained[key] = Math.floor(val * multiplier);
@@ -1820,6 +1826,14 @@ export class ExpeditionSystem {
     // Redukcja z technologii
     const techRed = window.KOSMOS?.techSystem?.getDisasterReduction() ?? 0;
     chance -= techRed;
+
+    // Redukcja z obserwatorium w kolonii wysyłającej
+    const obsSys = window.KOSMOS?.observatorySystem;
+    if (obsSys && vMgr && vesselId) {
+      const vessel = vMgr.getVessel(vesselId);
+      const colId = vessel?.colonyId;
+      if (colId) chance -= obsSys.getDisasterReduction(colId);
+    }
 
     return Math.max(MIN_DISASTER_CHANCE, chance);
   }

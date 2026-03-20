@@ -507,7 +507,7 @@ export const TECHS = {
       { type: 'modifier', resource: 'research', multiplier: 1.4 },
       { type: 'unlockBuilding', buildingId: 'observatory' },
     ],
-    description: 'Katalog ciał pokazuje składy i złoża + Obserwatorium (research 12)',
+    description: 'Katalog ciał + Obserwatorium (auto-skan ciał, bonus misji, ostrzeżenia)',
   },
 
   rocketry: {

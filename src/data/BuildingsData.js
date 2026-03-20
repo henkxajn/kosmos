@@ -516,12 +516,12 @@ export const BUILDINGS = {
     namePL:        'Obserwatorium',
     category:      'research',
     icon:          '🔭',
-    description:   'Obserwatorium astronomiczne — badania naukowe i ujawnianie składów ciał',
+    description:   'Oczy cywilizacji — pasywne skanowanie ciał, bonus do misji, ostrzeżenia',
     cost:          { Fe: 25, Si: 15, Cu: 10 },
     commodityCost: { steel_plates: 4, electronics: 3, power_cells: 2 },
     energyCost:    4,
     buildTime:     0.75,
-    rates:         { research: 12 },
+    rates:         { research: 6 },
     maintenance:   { Si: 1 },
     housing:       0,
     popCost:       0.25,
@@ -530,6 +530,12 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    true,
     requires:      'orbital_survey',
+    // Unikalne mechaniki obserwatorium (logika w ObservatorySystem):
+    scanInterval:      0.5,    // civYears na odkrycie na Lv1 (dzielone przez level)
+    scanRange:         8,      // AU zasięgu na Lv1 (+ level×4, Lv5 = unlimited)
+    disasterReduction: 0.3,    // % redukcji ryzyka katastrofy per level
+    missionYieldBonus: 0.05,   // +5% yield misji per level
+    warningYears:      0.5,    // lat wyprzedzenia ostrzeżenia per level
   },
 
   data_center: {

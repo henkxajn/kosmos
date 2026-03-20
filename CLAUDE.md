@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v24
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v25
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -244,6 +244,10 @@ SaveSystem._serializeCiv4x()
 | `trade:transferExecuted { from, to, goodId, qty }` | CivilianTradeSystem | UIManager |
 | `trade:spendCredits { colonyId, amount, purpose }` | UIManager | CivilianTradeSystem |
 | `trade:setOverride { colonyId, goodId, mode }` | UIManager | CivilianTradeSystem |
+| `observatory:discovered { body, discovered, colonyName }` | ObservatorySystem | EventLog, UIManager |
+| `randomEvent:warning { event, planetId, colonyName, yearsUntil }` | RandomEventSystem | EventLog, GameScene |
+| `observatory:collisionAlert { bodyA, bodyB, yearsUntil, margin }` | CollisionForecast | EventLog, GameScene |
+| `observatory:alertCleared { alertId }` | CollisionForecast | UIManager |
 
 ---
 
@@ -349,6 +353,13 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 ### Ekonomia cywilna
 - [x] **Etap 39** — Cywilna Ekonomia: CivilianTradeSystem (auto-routing towarów, Kredyty Kr), budynki market (trade_hub/free_market/trade_beacon/commodity_nexus), tech advanced_trade, prosperity trade network bonus, SaveMigration v23, panel Handel w EconomyOverlay (kredyty/połączenia/ceny lokalne), linie handlu 3D w ThreeRenderer
 
+### Obserwatorium
+- [x] **Etap 40A** — ObservatorySystem: pasywne skanowanie ciał (auto-scan), research 6
+- [x] **Etap 40B** — Bonus do misji: −0.3%/lv katastrofa, +5%/lv yield mining/scientific
+- [x] **Etap 40C** — Wczesne ostrzeżenie: RandomEventSystem warningQueue, opóźnienie negatywnych eventów
+- [x] **Etap 40D** — Prognoza kolizji: CollisionForecast, inkrementalna symulacja KeplerMath, auto-pauza
+- [x] **Etap 40E** — Zakładka Observatory UI: ObservatoryOverlay (SKAN/ORBITY/ZAGROŻENIA), klawisz O
+
 ### Następne etapy (plan)
 - [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
 
@@ -407,3 +418,4 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 | Kredyty (Kr) — waluta handlowa | Eksporter: 6% wartości, Importer: 3%; scarcityMultiplier (0.2–5.0×) wg lat zapasu; wydawane na rush build, zakupy awaryjne |
 | Trade network bonus do prosperity | +3 per połączenie (max +15), upkeep 2×distFactor per połączenie; dalekie kolonie mogą tracić prosperity |
 | Kategoria 'market' w HexTile | Budynki handlowe: trade_hub (TC+zasięg), free_market (efektywność), trade_beacon (×1.5 zasięg), commodity_nexus (unlimited) |
+| Obserwatorium jako "oczy cywilizacji" | Auto-scan ciał (0.5/lv civYears), −0.3%/lv katastrofa, +5%/lv yield, research 6 (nie 12 — główna rola to mechaniki, nie research) |

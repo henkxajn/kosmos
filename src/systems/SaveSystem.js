@@ -130,6 +130,8 @@ export class SaveSystem {
       tradeLog:       window.KOSMOS?.tradeLog?.serialize() ?? null,
       discoverySystem: window.KOSMOS?.discoverySystem?.serialize() ?? null,
       randomEventSystem: window.KOSMOS?.randomEventSystem?.serialize() ?? null,
+      observatorySystem: window.KOSMOS?.observatorySystem?.serialize() ?? null,
+      collisionForecast: window.KOSMOS?.collisionForecast?.serialize() ?? null,
       exploredBodies,
       galaxyData: window.KOSMOS.galaxyData ?? null,
       activeSystemId: window.KOSMOS.activeSystemId ?? 'sys_home',

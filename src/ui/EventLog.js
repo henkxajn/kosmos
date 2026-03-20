@@ -168,6 +168,26 @@ export class EventLog {
     EventBus.on('expedition:returned', ({ expedition }) => {
       this._add(t('log.expeditionReturned', expedition.targetName), 'info');
     });
+
+    // ── Odkrycia obserwatorium ─────────────────────────────────────
+    EventBus.on('observatory:discovered', ({ body, discovered, colonyName }) => {
+      const count = discovered.length;
+      const extra = count > 1 ? ` (+${count - 1} ${t('log.observatoryMoons')})` : '';
+      this._add(t('log.observatoryDiscovered', body.name ?? '?', extra), 'expedition_ok');
+    });
+
+    // ── Ostrzeżenie obserwatorium ──────────────────────────────────
+    EventBus.on('randomEvent:warning', ({ event, colonyName, yearsUntil }) => {
+      const name = event.namePL ?? event.id;
+      this._add(t('log.observatoryWarning', event.icon ?? '⚠', name, colonyName, yearsUntil), 'civ_unrest');
+    });
+
+    // ── Prognoza kolizji ────────────────────────────────────────────
+    EventBus.on('observatory:collisionAlert', ({ bodyA, bodyB, yearsUntil, margin, isHomePlanet }) => {
+      const type = isHomePlanet ? 'expedition_fail' : 'civ_unrest';
+      this._add(t('log.collisionForecast', bodyA.name ?? '?', bodyB.name ?? '?',
+        Math.round(yearsUntil), margin), type);
+    });
   }
 
   // ── Dodaj wpis ────────────────────────────────────────────────

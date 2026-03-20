@@ -38,6 +38,10 @@ export class RandomEventSystem {
     // Zaplanowane chain events
     this._chainQueue = [];
 
+    // Kolejka ostrzeżeń obserwatorium:
+    //   [{ event, planetId, colonyName, remainingYears, totalYears }]
+    this._warningQueue = [];
+
     // Rok gry
     this._gameYear = 0;
 
@@ -52,6 +56,11 @@ export class RandomEventSystem {
   // Aktywne zdarzenia z efektami
   getActiveEvents() {
     return [...this._activeEvents];
+  }
+
+  // Ostrzeżenia obserwatorium (zdarzenia z opóźnieniem)
+  getWarnings() {
+    return [...this._warningQueue];
   }
 
   // Mnożnik produkcji dla danego zasobu z aktywnych zdarzeń (wszystkie kolonie)
@@ -101,6 +110,13 @@ export class RandomEventSystem {
         planetId:  cq.planetId,
         triggerYear: cq.triggerYear,
       })),
+      warningQueue: this._warningQueue.map(w => ({
+        eventId:        w.event.id,
+        planetId:       w.planetId,
+        colonyName:     w.colonyName,
+        remainingYears: w.remainingYears,
+        totalYears:     w.totalYears,
+      })),
     };
   }
 
@@ -119,6 +135,13 @@ export class RandomEventSystem {
       planetId:    cq.planetId,
       triggerYear: cq.triggerYear,
     }));
+    this._warningQueue = (data.warningQueue ?? []).map(w => ({
+      event:          RANDOM_EVENTS[w.eventId],
+      planetId:       w.planetId,
+      colonyName:     w.colonyName,
+      remainingYears: w.remainingYears,
+      totalYears:     w.totalYears,
+    })).filter(w => w.event);
   }
 
   // ── Prywatne ──────────────────────────────────────────────────────────
@@ -159,6 +182,16 @@ export class RandomEventSystem {
       }
     }
 
+    // Odliczaj ostrzeżenia obserwatorium — gdy timer = 0 → triggerEvent
+    for (let i = this._warningQueue.length - 1; i >= 0; i--) {
+      const w = this._warningQueue[i];
+      w.remainingYears--;
+      if (w.remainingYears <= 0) {
+        this._warningQueue.splice(i, 1);
+        this._triggerEvent(w.event, w.planetId);
+      }
+    }
+
     // Cooldown
     this._cooldown -= 1;
     if (this._cooldown > 0) return;
@@ -183,7 +216,6 @@ export class RandomEventSystem {
 
     // Sprawdź czy obrona blokuje to zdarzenie całkowicie
     if (this._isEventBlockedByDefense(event, colony)) {
-      // Zdarzenie zablokowane — loguj i pomiń
       EventBus.emit('randomEvent:blocked', {
         event,
         planetId: colony.planetId,
@@ -193,11 +225,36 @@ export class RandomEventSystem {
       return;
     }
 
-    // Aplikuj zdarzenie
+    // Ostrzeżenie obserwatorium — opóźnij negatywne zdarzenia
+    const warningYears = this._getWarningYears();
+    if (warningYears > 0 && event.severity !== 'info') {
+      this._warningQueue.push({
+        event,
+        planetId:       colony.planetId,
+        colonyName:     colony.name,
+        remainingYears: Math.ceil(warningYears),
+        totalYears:     Math.ceil(warningYears),
+      });
+      EventBus.emit('randomEvent:warning', {
+        event,
+        planetId:   colony.planetId,
+        colonyName: colony.name,
+        yearsUntil: Math.ceil(warningYears),
+      });
+      this._cooldown = MIN_COOLDOWN + Math.random() * (MAX_COOLDOWN - MIN_COOLDOWN);
+      return;
+    }
+
+    // Brak obserwatorium — aplikuj natychmiast
     this._triggerEvent(event, colony.planetId);
 
     // Reset cooldown
     this._cooldown = MIN_COOLDOWN + Math.random() * (MAX_COOLDOWN - MIN_COOLDOWN);
+  }
+
+  // Pobierz lata ostrzeżenia z ObservatorySystem (max w imperium)
+  _getWarningYears() {
+    return window.KOSMOS?.observatorySystem?.getWarningYears() ?? 0;
   }
 
   // ── Obrona kolonii ──────────────────────────────────────────────────

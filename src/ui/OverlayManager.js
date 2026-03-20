@@ -14,6 +14,7 @@ export class OverlayManager {
       'e': 'economy',
       't': 'tech',
       'c': 'colony',
+      'o': 'observatory',
       'g': 'galaxy',
     };
   }

@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 24;
+export const CURRENT_VERSION     = 26;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -39,6 +39,8 @@ const MIGRATIONS = {
   21: _migrateV21toV22,
   22: _migrateV22toV23,
   23: _migrateV23toV24,
+  24: _migrateV24toV25,
+  25: _migrateV25toV26,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -719,6 +721,30 @@ function _migrateV23toV24(data) {
     for (const c of data.civ4x.colonies) {
       c.pendingQueue      ??= [];
       c.pendingShipOrders ??= [];
+    }
+  }
+  return data;
+}
+
+// ── v24 → v25: ObservatorySystem (pasywne skanowanie ciał) ─────────────────
+function _migrateV24toV25(data) {
+  if (data.civ4x) {
+    data.civ4x.observatorySystem ??= { scanAccum: {}, discoveries: [] };
+  }
+  return data;
+}
+
+// ── v25 → v26: Outpost balans — prosperity=0, kara wydajności ────────────
+function _migrateV25toV26(data) {
+  if (data.civ4x?.colonies) {
+    for (const c of data.civ4x.colonies) {
+      if (c.isOutpost) {
+        // Outpost: prosperity=0 (zamrożone, bez POPów)
+        if (c.prosperitySystem) {
+          c.prosperitySystem.prosperity = 0;
+          c.prosperitySystem.targetProsperity = 0;
+        }
+      }
     }
   }
   return data;

@@ -31,6 +31,8 @@ import { CivilianTradeSystem }  from '../systems/CivilianTradeSystem.js';
 import TradeLog                 from '../systems/TradeLog.js';
 import { ResearchSystem }      from '../systems/ResearchSystem.js';
 import { DiscoverySystem }     from '../systems/DiscoverySystem.js';
+import { ObservatorySystem }  from '../systems/ObservatorySystem.js';
+import { CollisionForecast } from '../systems/CollisionForecast.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { showEventNotification, showImpactNotification } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
@@ -148,6 +150,8 @@ export class GameScene {
     this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
     this.researchSystem    = new ResearchSystem(this.techSystem);
     this.discoverySystem   = new DiscoverySystem();
+    this.observatorySystem = new ObservatorySystem();
+    this.collisionForecast = new CollisionForecast();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -169,6 +173,8 @@ export class GameScene {
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
     window.KOSMOS.researchSystem   = this.researchSystem;
     window.KOSMOS.discoverySystem  = this.discoverySystem;
+    window.KOSMOS.observatorySystem = this.observatorySystem;
+    window.KOSMOS.collisionForecast = this.collisionForecast;
     window.KOSMOS.threeRenderer    = this.threeRenderer;
 
     // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
@@ -240,6 +246,14 @@ export class GameScene {
       if (c4x.randomEventSystem) {
         this.randomEventSystem.restore(c4x.randomEventSystem);
       }
+      // Przywróć ObservatorySystem
+      if (c4x.observatorySystem) {
+        this.observatorySystem.restore(c4x.observatorySystem);
+      }
+      // Przywróć CollisionForecast
+      if (c4x.collisionForecast) {
+        this.collisionForecast.restore(c4x.collisionForecast);
+      }
       // Walidacja misji — teraz VesselManager jest przywrócony, można sprawdzić statki
       this.expeditionSystem.validateMissions();
       // Przywróć TradeRouteManager
@@ -299,6 +313,23 @@ export class GameScene {
     // Powiadomienia o zdarzeniach losowych
     EventBus.on('randomEvent:occurred', ({ event, colonyName }) => {
       showEventNotification(event, colonyName);
+    });
+    // Prognoza kolizji — alert z obserwatorium
+    EventBus.on('observatory:collisionAlert', ({ bodyA, bodyB, yearsUntil, margin, isHomePlanet }) => {
+      if (isHomePlanet) {
+        // Kolizja z planetą gracza — pauza + duży alert
+        this.timeSystem?.pause();
+        const nameA = bodyA.name ?? '?';
+        const nameB = bodyB.name ?? '?';
+        this.uiManager?.addInfo(`🔭 ${t('log.collisionForecastHome', nameA, nameB, Math.round(yearsUntil), margin)}`);
+      }
+    });
+
+    // Ostrzeżenie obserwatorium — zbliżające się zdarzenie
+    EventBus.on('randomEvent:warning', ({ event, colonyName, yearsUntil }) => {
+      const name = t(`event.${event.id}.name`) !== `event.${event.id}.name`
+        ? t(`event.${event.id}.name`) : (event.namePL ?? event.id);
+      this.uiManager?.addInfo(`🔭 ${t('log.observatoryWarning', event.icon ?? '⚠', name, colonyName, yearsUntil)}`);
     });
     // Zdarzenie zablokowane przez obronę
     EventBus.on('randomEvent:blocked', ({ event, colonyName }) => {
