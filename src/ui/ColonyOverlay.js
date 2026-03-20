@@ -1029,6 +1029,18 @@ export class ColonyOverlay extends BaseOverlay {
       headerExtra += 18;
     }
 
+    const isOutpost = colony.isOutpost ?? false;
+
+    // Outpost: pokaż limit budynków
+    if (isOutpost && colony.buildingSystem) {
+      const used = colony.buildingSystem._countOutpostBuildings();
+      const max = 5; // OUTPOST_MAX_BUILDINGS
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = used >= max ? THEME.danger : THEME.textSecondary;
+      ctx.fillText(`⚙ ${t('colonyPanel.outpostSlots')}: ${used}/${max}`, x + pad + 4, y + HDR_H + headerExtra + 14);
+      headerExtra += 18;
+    }
+
     const startY = y + HDR_H + headerExtra;
     const listH = h - (startY - y);
 
@@ -1053,7 +1065,11 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
     for (const cat of BUILDING_CATEGORIES) {
-      const buildings = Object.values(BUILDINGS).filter(b => b.category === cat.id && b.id !== 'colony_base');
+      let buildings = Object.values(BUILDINGS).filter(b => b.category === cat.id && b.id !== 'colony_base');
+      // Outpost: pokaż tylko budynki autonomiczne (popCost=0 lub isAutonomous)
+      if (isOutpost) {
+        buildings = buildings.filter(b => b.isAutonomous || b.popCost === 0 || b.isSpaceport);
+      }
       if (buildings.length === 0) continue;
 
       const collapsed = this._collapsedCategories.has(cat.id);

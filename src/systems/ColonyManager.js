@@ -408,8 +408,10 @@ export class ColonyManager {
     const factSys = new FactorySystem(resSys);
     bSys.setFactorySystem(factSys);
 
-    // ProsperitySystem per-outpost (pop=0 → demand=0, ale gotowy na upgrade)
+    // ProsperitySystem per-outpost (pop=0 → prosperity=0, brak demand/epoch)
     const prospSys = new ProsperitySystem(resSys, civSys, this.techSystem, entity);
+    prospSys.prosperity = 0;
+    prospSys.targetProsperity = 0;
 
     // Oznacz ciało jako zbadane
     entity.explored = true;
@@ -457,10 +459,16 @@ export class ColonyManager {
     colony.allowImmigration = true;
     colony.allowEmigration  = true;
 
-    // Wyłącz flagę outpost w BuildingSystem
+    // Wyłącz flagę outpost w BuildingSystem (usunięcie kary ×0.6)
     if (colony.buildingSystem) {
       colony.buildingSystem._isOutpost = false;
       colony.buildingSystem._reapplyAllRates();
+    }
+
+    // Prosperity: start od 30 (pionierska kolonia — ProsperitySystem teraz liczy normalnie)
+    if (colony.prosperitySystem) {
+      colony.prosperitySystem.prosperity = 30;
+      colony.prosperitySystem.targetProsperity = 30;
     }
 
     EventBus.emit('colony:founded', { colony });
@@ -1053,6 +1061,14 @@ export class ColonyManager {
       const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
       bSys.setDeposits(entity.deposits ?? []);
       bSys.setPlanetId(colData.planetId);
+
+      // Flaga outpost PRZED restoreFromSave — wpływa na kary wydajności (×0.6)
+      const isOutpost = colData.isOutpost ?? false;
+      if (isOutpost) bSys._isOutpost = true;
+
+      // Flaga: nowa kolonia wymaga portu kosmicznego
+      bSys._requiresSpaceportFirst = colData.requiresSpaceportFirst ?? false;
+
       if (colData.buildings?.length > 0) {
         bSys.restoreFromSave(colData.buildings);
       }
@@ -1073,13 +1089,6 @@ export class ColonyManager {
       // ProsperitySystem per-kolonia
       const prospSys = new ProsperitySystem(resSys, civSys, this.techSystem, entity);
       if (colData.prosperitySystem) prospSys.restore(colData.prosperitySystem);
-
-      // Flaga outpost na BuildingSystem
-      const isOutpost = colData.isOutpost ?? false;
-      if (isOutpost) bSys._isOutpost = true;
-
-      // Flaga: nowa kolonia wymaga portu kosmicznego
-      bSys._requiresSpaceportFirst = colData.requiresSpaceportFirst ?? false;
 
       // Przywróć grid regionów jeśli zapisany
       let savedGrid = null;

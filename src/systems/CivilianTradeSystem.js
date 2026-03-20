@@ -156,6 +156,13 @@ export class CivilianTradeSystem {
   // ── Trade Capacity ──────────────────────────────────────────────────────
 
   _allocateTC(colony) {
+    const isOutpost = colony.isOutpost ?? false;
+
+    if (isOutpost) {
+      // Outpost: TC wyłącznie z budynków handlowych (brak POPów = brak bazowego TC)
+      return this._getBuildingBonus(colony, 'tcBonus');
+    }
+
     const pop = colony.civSystem?.population ?? 0;
     const prosperity = colony.prosperitySystem?.prosperity ?? 50;
 
@@ -268,8 +275,8 @@ export class CivilianTradeSystem {
     );
 
     // Eksporter: 6% wartości, Importer: 3%
-    const exportCredits = actualQty * localPrice * 0.06;
-    const importCredits = actualQty * localPrice * 0.03;
+    const baseExportCredits = actualQty * localPrice * 0.06;
+    const baseImportCredits = actualQty * localPrice * 0.03;
 
     // Bonus za dalekie trasy (commodity_nexus)
     let distBonus = 1.0;
@@ -277,14 +284,60 @@ export class CivilianTradeSystem {
       distBonus += 0.30; // +30% Kr za dalekie trasy
     }
 
-    fromCol.credits = (fromCol.credits ?? 0) + exportCredits * distBonus;
-    toCol.credits = (toCol.credits ?? 0) + importCredits * distBonus;
+    // Outposty: handel KOSZTUJE Kr zamiast generować
+    // Koszt ponosi kolonia z POPami (partner handlowy), nie outpost
+    const fromIsOutpost = fromCol.isOutpost ?? false;
+    const toIsOutpost = toCol.isOutpost ?? false;
+
+    // Koszt transportu z/do outpostu: 2× normalna wartość Kr (brak cywilnego handlu)
+    const outpostTransportCost = (baseExportCredits + baseImportCredits) * distBonus * 2;
+
+    let exportKr = 0;
+    let importKr = 0;
+
+    if (fromIsOutpost && !toIsOutpost) {
+      // Outpost → Kolonia: kolonia płaci za transport, nie zarabia na imporcie
+      if ((toCol.credits ?? 0) >= outpostTransportCost) {
+        toCol.credits -= outpostTransportCost;
+        importKr = -outpostTransportCost;
+        exportKr = 0;  // outpost nie generuje Kr
+      } else {
+        // Kolonia nie stać — cofnij transfer
+        resSysFrom.receive({ [goodId]: actualQty });
+        resSysTo.spend({ [goodId]: actualQty });
+        return;
+      }
+    } else if (toIsOutpost && !fromIsOutpost) {
+      // Kolonia → Outpost: kolonia płaci za transport, ale zarabia na eksporcie (pomniejszone)
+      if ((fromCol.credits ?? 0) >= outpostTransportCost) {
+        const netExport = baseExportCredits * distBonus - outpostTransportCost;
+        fromCol.credits = (fromCol.credits ?? 0) + netExport;
+        exportKr = netExport;
+        importKr = 0;  // outpost nie generuje Kr
+      } else {
+        // Kolonia nie stać — cofnij transfer
+        resSysFrom.receive({ [goodId]: actualQty });
+        resSysTo.spend({ [goodId]: actualQty });
+        return;
+      }
+    } else if (fromIsOutpost && toIsOutpost) {
+      // Outpost → Outpost: brak handlu (żaden nie ma cywilnych handlarzy)
+      resSysFrom.receive({ [goodId]: actualQty });
+      resSysTo.spend({ [goodId]: actualQty });
+      return;
+    } else {
+      // Kolonia → Kolonia: normalny handel
+      exportKr = baseExportCredits * distBonus;
+      importKr = baseImportCredits * distBonus;
+      fromCol.credits = (fromCol.credits ?? 0) + exportKr;
+      toCol.credits = (toCol.credits ?? 0) + importKr;
+    }
 
     this._lastTransfers.push({
       goodId, qty: actualQty,
       fromId: fromCol.planetId, toId: toCol.planetId,
-      exportKr: exportCredits * distBonus,
-      importKr: importCredits * distBonus,
+      exportKr,
+      importKr,
     });
   }
 

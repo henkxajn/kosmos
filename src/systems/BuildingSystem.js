@@ -29,6 +29,12 @@ import { t, getName }      from '../i18n/i18n.js';
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
 const BASE_MAX_LEVEL = 10;
 
+// Outpost: max budynków (bez colony_base/stolica)
+const OUTPOST_MAX_BUILDINGS = 5;
+
+// Outpost: kara wydajności autonomicznych budynków (brak ludzi do nadzoru)
+const OUTPOST_EFFICIENCY = 0.6;
+
 // Helper: sprawdza czy obiekt ma klucze (bez alokacji tablicy)
 function hasKeys(obj) { for (const _ in obj) return true; return false; }
 
@@ -150,6 +156,23 @@ export class BuildingSystem {
     return false;
   }
 
+  // ── Licznik budynków na outpoście (bez stolica/spaceport) ────────────────
+  _countOutpostBuildings() {
+    let count = 0;
+    for (const [key, entry] of this._active) {
+      if (key.startsWith('capital_')) continue;
+      if (entry.building.isSpaceport) continue;
+      count++;
+    }
+    // Dolicz budynki w kolejce budowy
+    for (const [, constr] of this._constructionQueue) {
+      const b = BUILDINGS[constr.buildingId];
+      if (b?.isSpaceport) continue;
+      count++;
+    }
+    return count;
+  }
+
   // ── Pobierz max level budynku ────────────────────────────────────────────
   getMaxLevel() {
     return BASE_MAX_LEVEL;
@@ -253,6 +276,28 @@ export class BuildingSystem {
         reason: t('ui.buildSpaceportFirst'),
       });
       return;
+    }
+
+    // Outpost: tylko budynki autonomiczne (popCost=0 lub isAutonomous)
+    if (this._isOutpost && !isCapital && !building.isSpaceport) {
+      const isAllowedOnOutpost = building.isAutonomous || building.popCost === 0;
+      if (!isAllowedOnOutpost) {
+        EventBus.emit('planet:buildResult', {
+          success: false, tile,
+          reason: t('ui.outpostAutonomousOnly'),
+        });
+        return;
+      }
+
+      // Outpost: max OUTPOST_MAX_BUILDINGS budynków (bez stolica/spaceport)
+      const outpostCount = this._countOutpostBuildings();
+      if (outpostCount >= OUTPOST_MAX_BUILDINGS) {
+        EventBus.emit('planet:buildResult', {
+          success: false, tile,
+          reason: t('ui.outpostMaxBuildings', OUTPOST_MAX_BUILDINGS),
+        });
+        return;
+      }
     }
 
     // Modyfikator polarny (wyłączony dla RegionSystem — polarność wbudowana w biom)
@@ -879,6 +924,17 @@ export class BuildingSystem {
       return { success: false, reason: t('ui.installSpaceportFirst') };
     }
 
+    // Outpost: tylko budynki autonomiczne + limit budynków
+    if (this._isOutpost && !building.isCapital && !building.isSpaceport) {
+      const isAllowedOnOutpost = building.isAutonomous || building.popCost === 0;
+      if (!isAllowedOnOutpost) {
+        return { success: false, reason: t('ui.outpostAutonomousOnly') };
+      }
+      if (this._countOutpostBuildings() >= OUTPOST_MAX_BUILDINGS) {
+        return { success: false, reason: t('ui.outpostMaxBuildings', OUTPOST_MAX_BUILDINGS) };
+      }
+    }
+
     // Sprawdzenie POPów (pomiń w outpost)
     const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
     if (popCost > 0) {
@@ -1191,6 +1247,9 @@ export class BuildingSystem {
       ? (this.techSystem?.getAutonomousEfficiency() ?? 1.0)
       : 1.0;
 
+    // Outpost: kara wydajności ×0.6 — brak ludzi do nadzoru/konserwacji
+    const outpostPenalty = this._isOutpost ? OUTPOST_EFFICIENCY : 1.0;
+
     const effective = {};
     for (const key in baseRates) {
       const val = baseRates[key];
@@ -1200,7 +1259,7 @@ export class BuildingSystem {
         const eventMult = this._planetId
           ? (window.KOSMOS?.randomEventSystem?.getProductionMultiplierForColony(this._planetId, key) ?? 1.0)
           : 1.0;
-        effective[key] = val * techMult * eventMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency;
+        effective[key] = val * techMult * eventMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency * outpostPenalty;
       } else if (val < 0) {
         const techMult = this.techSystem?.getConsumptionMultiplier(key) ?? 1.0;
         effective[key] = val * techMult;
