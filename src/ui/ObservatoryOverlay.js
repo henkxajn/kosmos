@@ -44,7 +44,8 @@ export class ObservatoryOverlay {
   show()   { this.visible = true;  this._createDOM(); this._startSync(); }
   hide()   { this.visible = false; this._destroyDOM(); this._stopSync(); }
 
-  draw() { if (this.visible) this._refresh(); }
+  // DOM overlay — nie odświeżaj co klatkę (niszczy onclick bindings)
+  draw() {}
 
   handleClick(x)     { return this.visible && x >= CIV_SIDEBAR_W; }
   handleMouseMove()  {}
@@ -55,17 +56,31 @@ export class ObservatoryOverlay {
   _createDOM() {
     if (this._container) return;
 
-    const topH = COSMIC.TOP_BAR_H;
-    const botH = COSMIC.BOTTOM_BAR_H;
+    // Skalowanie identyczne jak TechOverlay (UI_SCALE)
+    const S = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 
     const c = document.createElement('div');
     c.id = 'observatory-overlay';
     c.style.cssText = `
-      position: fixed; top: ${topH}px; left: ${CIV_SIDEBAR_W}px; right: 0; bottom: ${botH}px;
-      background: ${C.bg}f0; color: ${C.text}; font-family: ${THEME.fontFamily};
-      z-index: 90; display: flex; flex-direction: column; padding: 10px 14px;
-      overflow: hidden; border-left: 1px solid ${C.border};
+      position: fixed;
+      top: ${Math.round(COSMIC.TOP_BAR_H * S)}px;
+      left: ${Math.round(CIV_SIDEBAR_W * S)}px;
+      right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
+      bottom: ${Math.round(COSMIC.BOTTOM_BAR_H * S)}px;
+      background: rgba(2,4,5,0.96); color: ${C.text}; font-family: ${THEME.fontFamily};
+      z-index: 50; display: flex; flex-direction: column; padding: 10px 14px;
+      overflow: hidden;
     `;
+
+    // Custom scrollbar CSS
+    const style = document.createElement('style');
+    style.textContent = `
+      #observatory-overlay ::-webkit-scrollbar { width: 4px; }
+      #observatory-overlay ::-webkit-scrollbar-track { background: transparent; }
+      #observatory-overlay ::-webkit-scrollbar-thumb { background: rgba(0,255,180,0.15); border-radius: 2px; }
+      #observatory-overlay ::-webkit-scrollbar-thumb:hover { background: rgba(0,255,180,0.3); }
+    `;
+    c.appendChild(style);
 
     // Nagłówek
     const header = document.createElement('div');
@@ -315,7 +330,7 @@ export class ObservatoryOverlay {
 
   _renderBodyDetails() {
     if (!this._selectedBodyId) {
-      return `<div style="flex:1; min-width:180px; max-width:260px; display:flex; align-items:center; justify-content:center; color:${C.dim}; font-size:11px; border-left:1px solid ${C.border}; padding-left:10px;">${t('observatory.selectBody')}</div>`;
+      return `<div style="width:200px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:${C.dim}; font-size:11px; border-left:1px solid ${C.border}; padding-left:10px;">${t('observatory.selectBody')}</div>`;
     }
 
     const body = EntityManager.get(this._selectedBodyId);
@@ -326,7 +341,7 @@ export class ObservatoryOverlay {
     const homePl = window.KOSMOS?.homePlanet;
     const distAU = homePl ? Math.abs((orb.a ?? 0) - (homePl.orbital?.a ?? 0)).toFixed(2) : '?';
 
-    let html = `<div style="flex:1; min-width:180px; max-width:260px; padding:8px 10px; border-left:1px solid ${C.border}; overflow-y:auto; min-height:0;">`;
+    let html = `<div style="width:200px; flex-shrink:0; padding:8px 10px; border-left:1px solid ${C.border}; overflow-y:auto; min-height:0;">`;
     html += `<div style="font-size:13px; font-weight:bold; color:${C.accent}; margin-bottom:8px;">${icon} ${body.name ?? body.id}</div>`;
     html += this._detailRow(t('observatory.type'), body.planetType ?? body.type);
     html += this._detailRow('a', `${(orb.a ?? 0).toFixed(3)} AU`);
