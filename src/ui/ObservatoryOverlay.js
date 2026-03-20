@@ -1,9 +1,7 @@
 // ObservatoryOverlay — zakładka Obserwatorium (klawisz O)
 //
-// DOM overlay z trzema kolumnami:
-//   Lewa:   Status obserwatoriów w imperium (poziomy, bonusy)
-//   Środek: 3 podzakładki: SKAN | ORBITY | ZAGROŻENIA
-//   Prawa:  Szczegóły wybranego ciała (po kliknięciu)
+// DOM overlay z podzakładkami: SKAN | ORBITY | ZAGROŻENIA
+// Prawa kolumna: szczegóły wybranego ciała
 //
 // Komunikacja:
 //   Czyta: window.KOSMOS.{observatorySystem, collisionForecast, colonyManager}
@@ -12,11 +10,25 @@
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { THEME }         from '../config/ThemeConfig.js';
+import { COSMIC }        from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W } from './CivPanelDrawer.js';
-import { t, getName }   from '../i18n/i18n.js';
+import { t }             from '../i18n/i18n.js';
 
 // Typy ciał wyświetlane w katalogu orbit
 const ORBIT_TYPES = ['planet', 'moon', 'planetoid'];
+
+// Kolory spójne z THEME
+const C = {
+  bg:     '#080c0a',
+  text:   '#aac8c0',
+  dim:    'rgba(160,200,190,0.45)',
+  accent: '#00ffb4',
+  border: 'rgba(0,255,180,0.12)',
+  danger: '#ff6644',
+  ok:     '#00cc88',
+  rowHover: 'rgba(0,255,180,0.06)',
+  rowSelected: 'rgba(0,255,180,0.15)',
+};
 
 export class ObservatoryOverlay {
   constructor() {
@@ -43,51 +55,61 @@ export class ObservatoryOverlay {
   _createDOM() {
     if (this._container) return;
 
+    const topH = COSMIC.TOP_BAR_H;
+    const botH = COSMIC.BOTTOM_BAR_H;
+
     const c = document.createElement('div');
     c.id = 'observatory-overlay';
     c.style.cssText = `
-      position: fixed; top: 0; left: ${CIV_SIDEBAR_W}px; right: 0; bottom: 40px;
-      background: rgba(10,12,18,0.95); color: ${THEME.text}; font-family: ${THEME.fontFamily};
-      z-index: 90; display: flex; flex-direction: column; padding: 12px 16px;
-      overflow: hidden;
+      position: fixed; top: ${topH}px; left: ${CIV_SIDEBAR_W}px; right: 0; bottom: ${botH}px;
+      background: ${C.bg}f0; color: ${C.text}; font-family: ${THEME.fontFamily};
+      z-index: 90; display: flex; flex-direction: column; padding: 10px 14px;
+      overflow: hidden; border-left: 1px solid ${C.border};
     `;
 
     // Nagłówek
     const header = document.createElement('div');
-    header.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:10px;';
+    header.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:8px; flex-shrink:0;';
     header.innerHTML = `
-      <span style="font-size:20px; font-weight:bold; color:${THEME.accent}">🔭 ${t('observatory.title')}</span>
-      <span id="obs-status" style="font-size:12px; color:${THEME.textDim}"></span>
+      <span style="font-size:16px; font-weight:bold; color:${C.accent}">🔭 ${t('observatory.title')}</span>
+      <span id="obs-status" style="font-size:11px; color:${C.dim}"></span>
     `;
     c.appendChild(header);
 
     // Podzakładki
     const tabs = document.createElement('div');
-    tabs.style.cssText = 'display:flex; gap:4px; margin-bottom:10px;';
+    tabs.id = 'obs-tabs';
+    tabs.style.cssText = 'display:flex; gap:2px; margin-bottom:8px; flex-shrink:0;';
     for (const tab of ['scan', 'orbits', 'threats']) {
       const btn = document.createElement('button');
       btn.dataset.tab = tab;
       btn.textContent = t(`observatory.tab.${tab}`);
-      btn.style.cssText = `
-        padding: 4px 12px; border: 1px solid ${THEME.border}; border-radius: 4px;
-        background: ${tab === this._subTab ? THEME.accent : 'transparent'};
-        color: ${tab === this._subTab ? '#000' : THEME.text};
-        cursor: pointer; font-size: 12px; font-family: ${THEME.fontFamily};
-      `;
+      btn.style.cssText = this._tabStyle(tab === this._subTab);
       btn.onclick = () => { this._subTab = tab; this._refresh(); };
       tabs.appendChild(btn);
     }
     c.appendChild(tabs);
 
-    // Treść (3 kolumny)
+    // Treść
     const body = document.createElement('div');
     body.id = 'obs-body';
-    body.style.cssText = 'display:flex; gap:12px; flex:1; overflow:hidden;';
+    body.style.cssText = 'display:flex; gap:10px; flex:1; min-height:0;';
     c.appendChild(body);
 
     document.body.appendChild(c);
     this._container = c;
     this._refresh();
+  }
+
+  _tabStyle(active) {
+    return `
+      padding: 5px 14px; border: 1px solid ${active ? C.accent : C.border};
+      border-radius: 3px; font-size: 11px; font-family: ${THEME.fontFamily};
+      background: ${active ? C.accent : 'transparent'};
+      color: ${active ? '#000' : C.text};
+      cursor: pointer; font-weight: ${active ? 'bold' : 'normal'};
+      transition: background 0.15s;
+    `;
   }
 
   _destroyDOM() {
@@ -129,12 +151,12 @@ export class ObservatoryOverlay {
     }
 
     // Aktualizuj podzakładki
-    const tabs = this._container.querySelectorAll('[data-tab]');
-    tabs.forEach(btn => {
-      const active = btn.dataset.tab === this._subTab;
-      btn.style.background = active ? THEME.accent : 'transparent';
-      btn.style.color = active ? '#000' : THEME.text;
-    });
+    const tabs = this._container.querySelector('#obs-tabs');
+    if (tabs) {
+      tabs.querySelectorAll('[data-tab]').forEach(btn => {
+        btn.style.cssText = this._tabStyle(btn.dataset.tab === this._subTab);
+      });
+    }
 
     // Treść
     const body = this._container.querySelector('#obs-body');
@@ -174,30 +196,27 @@ export class ObservatoryOverlay {
       }
     }
 
-    let html = `<div style="flex:1; overflow-y:auto; padding-right:8px;">`;
-    html += `<div style="color:${THEME.textDim}; margin-bottom:8px; font-size:12px;">`;
-    html += `${t('observatory.explored')}: ${exploredBodies}/${totalBodies}`;
+    let html = `<div style="flex:1; overflow-y:auto; padding-right:6px; min-height:0;">`;
+    html += `<div style="color:${C.dim}; margin-bottom:8px; font-size:12px;">`;
+    html += `${t('observatory.explored')}: <span style="color:${C.accent}">${exploredBodies}</span>/${totalBodies}`;
     html += `</div>`;
 
-    // Historia odkryć (najnowsze na górze)
-    html += `<div style="font-weight:bold; margin-bottom:6px; color:${THEME.accent}; font-size:13px;">${t('observatory.discoveryLog')}</div>`;
+    html += `<div style="font-weight:bold; margin-bottom:6px; color:${C.accent}; font-size:12px; text-transform:uppercase;">${t('observatory.discoveryLog')}</div>`;
 
     if (discoveries.length === 0) {
-      html += `<div style="color:${THEME.textDim}; font-size:11px;">${t('observatory.noDiscoveries')}</div>`;
+      html += `<div style="color:${C.dim}; font-size:11px; font-style:italic;">${t('observatory.noDiscoveries')}</div>`;
     } else {
-      const recent = discoveries.slice(-20).reverse();
+      const recent = discoveries.slice(-30).reverse();
       for (const d of recent) {
-        html += `<div data-bodyid="${d.bodyId}" style="padding:3px 6px; margin-bottom:2px; border-radius:3px; font-size:11px; border:1px solid ${THEME.border}30;">`;
-        html += `🔭 <span style="color:${THEME.accent}">${d.bodyName}</span>`;
-        html += ` <span style="color:${THEME.textDim}">— ${d.colonyName}, ${t('observatory.year')} ${Math.round(d.year)}</span>`;
+        html += `<div data-bodyid="${d.bodyId}" style="padding:4px 8px; margin-bottom:3px; border-radius:3px; font-size:11px; background:${C.rowHover}; border-left:2px solid ${C.accent};">`;
+        html += `<span style="color:${C.accent}">${d.bodyName}</span>`;
+        html += ` <span style="color:${C.dim}">— ${d.colonyName}, ${t('observatory.year')} ${Math.round(d.year)}</span>`;
         html += `</div>`;
       }
     }
     html += `</div>`;
 
-    // Prawa kolumna — szczegóły wybranego ciała
     html += this._renderBodyDetails();
-
     return html;
   }
 
@@ -214,37 +233,36 @@ export class ObservatoryOverlay {
     }
     bodies.sort((a, b) => (a.orbital?.a ?? 0) - (b.orbital?.a ?? 0));
 
-    let html = `<div style="flex:2; overflow-y:auto;">`;
-    html += `<table style="width:100%; border-collapse:collapse; font-size:11px;">`;
-    html += `<tr style="color:${THEME.accent}; border-bottom:1px solid ${THEME.border};">`;
-    html += `<th style="text-align:left; padding:4px;">${t('observatory.name')}</th>`;
-    html += `<th>${t('observatory.type')}</th>`;
-    html += `<th>a (AU)</th><th>e</th><th>T (${t('observatory.years')})</th>`;
-    html += `<th>\u03B8\u00B0</th>`;  // θ°
-    html += `</tr>`;
+    let html = `<div style="flex:2; overflow-y:auto; min-height:0;">`;
+    html += `<table style="width:100%; border-collapse:collapse; font-size:11px; color:${C.text};">`;
+    html += `<thead><tr style="color:${C.accent}; border-bottom:1px solid ${C.border}; position:sticky; top:0; background:${C.bg};">`;
+    html += `<th style="text-align:left; padding:5px 6px;">${t('observatory.name')}</th>`;
+    html += `<th style="padding:5px 4px;">${t('observatory.type')}</th>`;
+    html += `<th style="padding:5px 4px;">a (AU)</th>`;
+    html += `<th style="padding:5px 4px;">e</th>`;
+    html += `<th style="padding:5px 4px;">T (${t('observatory.years')})</th>`;
+    html += `<th style="padding:5px 4px;">\u03B8\u00B0</th>`;
+    html += `</tr></thead><tbody>`;
 
     for (const b of bodies) {
       const orb = b.orbital ?? {};
       const selected = this._selectedBodyId === b.id;
-      const bg = selected ? `${THEME.accent}30` : 'transparent';
+      const bg = selected ? C.rowSelected : 'transparent';
       const icon = b.type === 'planet' ? '🪐' : b.type === 'moon' ? '🌙' : '🪨';
       const thetaDeg = ((orb.theta ?? 0) * 180 / Math.PI) % 360;
 
-      html += `<tr data-bodyid="${b.id}" style="background:${bg}; border-bottom:1px solid ${THEME.border}20;">`;
-      html += `<td style="padding:3px 4px;">${icon} ${b.name ?? b.id}</td>`;
-      html += `<td style="text-align:center; color:${THEME.textDim}">${b.planetType ?? b.type}</td>`;
-      html += `<td style="text-align:center">${(orb.a ?? 0).toFixed(2)}</td>`;
-      html += `<td style="text-align:center">${(orb.e ?? 0).toFixed(3)}</td>`;
-      html += `<td style="text-align:center">${(orb.T ?? 0).toFixed(2)}</td>`;
-      html += `<td style="text-align:center">${thetaDeg.toFixed(0)}</td>`;
+      html += `<tr data-bodyid="${b.id}" style="background:${bg}; border-bottom:1px solid ${C.border};" onmouseover="this.style.background='${C.rowHover}'" onmouseout="this.style.background='${selected ? C.rowSelected : 'transparent'}'">`;
+      html += `<td style="padding:4px 6px; color:${C.text};">${icon} ${b.name ?? b.id}</td>`;
+      html += `<td style="text-align:center; color:${C.dim}; padding:4px;">${b.planetType ?? b.type}</td>`;
+      html += `<td style="text-align:center; padding:4px;">${(orb.a ?? 0).toFixed(2)}</td>`;
+      html += `<td style="text-align:center; padding:4px;">${(orb.e ?? 0).toFixed(3)}</td>`;
+      html += `<td style="text-align:center; padding:4px;">${(orb.T ?? 0).toFixed(2)}</td>`;
+      html += `<td style="text-align:center; padding:4px;">${thetaDeg.toFixed(0)}</td>`;
       html += `</tr>`;
     }
 
-    html += `</table></div>`;
-
-    // Prawa kolumna
+    html += `</tbody></table></div>`;
     html += this._renderBodyDetails();
-
     return html;
   }
 
@@ -254,35 +272,37 @@ export class ObservatoryOverlay {
     const alerts = forecast?.getAlerts() ?? [];
     const warnings = window.KOSMOS?.randomEventSystem?.getWarnings() ?? [];
 
-    let html = `<div style="flex:1; overflow-y:auto;">`;
+    let html = `<div style="flex:1; overflow-y:auto; min-height:0;">`;
 
     // Alerty kolizyjne
-    html += `<div style="font-weight:bold; margin-bottom:6px; color:${THEME.accent}; font-size:13px;">${t('observatory.collisionAlerts')}</div>`;
+    html += `<div style="font-weight:bold; margin-bottom:6px; color:${C.accent}; font-size:12px; text-transform:uppercase;">${t('observatory.collisionAlerts')}</div>`;
     if (alerts.length === 0) {
-      html += `<div style="color:#4a8; font-size:12px; margin-bottom:12px;">✓ ${t('observatory.systemStable')}</div>`;
+      html += `<div style="color:${C.ok}; font-size:12px; margin-bottom:14px;">✓ ${t('observatory.systemStable')}</div>`;
     } else {
       for (const a of alerts) {
         const isHome = a.bodyAId === window.KOSMOS?.homePlanet?.id || a.bodyBId === window.KOSMOS?.homePlanet?.id;
-        const color = isHome ? '#f44' : THEME.accent;
-        html += `<div style="padding:6px 8px; margin-bottom:4px; border:1px solid ${color}; border-radius:4px; font-size:12px;">`;
+        const color = isHome ? C.danger : C.accent;
+        const years = Math.max(0, Math.round(a.yearsUntil));
+        const margin = Math.max(1, a.margin);
+        html += `<div style="padding:6px 10px; margin-bottom:4px; border-radius:3px; font-size:11px; background:rgba(0,0,0,0.3); border-left:3px solid ${color};">`;
         html += `<span style="color:${color}; font-weight:bold;">${isHome ? '⚠' : '🔭'} ${a.bodyAName} → ${a.bodyBName}</span>`;
-        html += `<br><span style="color:${THEME.textDim}">${t('observatory.inYears', Math.round(a.yearsUntil), a.margin)}</span>`;
+        html += `<br><span style="color:${C.dim}">${t('observatory.inYears', years, margin)}</span>`;
         html += `</div>`;
       }
     }
 
     // Ostrzeżenia o zdarzeniach
-    html += `<div style="font-weight:bold; margin:12px 0 6px; color:${THEME.accent}; font-size:13px;">${t('observatory.eventWarnings')}</div>`;
+    html += `<div style="font-weight:bold; margin:14px 0 6px; color:${C.accent}; font-size:12px; text-transform:uppercase;">${t('observatory.eventWarnings')}</div>`;
     if (warnings.length === 0) {
-      html += `<div style="color:#4a8; font-size:12px;">✓ ${t('observatory.noWarnings')}</div>`;
+      html += `<div style="color:${C.ok}; font-size:12px;">✓ ${t('observatory.noWarnings')}</div>`;
     } else {
       for (const w of warnings) {
         const name = t(`event.${w.event.id}.name`) !== `event.${w.event.id}.name`
           ? t(`event.${w.event.id}.name`) : (w.event.namePL ?? w.event.id);
-        html += `<div style="padding:6px 8px; margin-bottom:4px; border:1px solid ${THEME.accent}80; border-radius:4px; font-size:12px;">`;
-        html += `${w.event.icon ?? '⚠'} <span style="color:${THEME.accent}">${name}</span>`;
-        html += ` → ${w.colonyName}`;
-        html += `<br><span style="color:${THEME.textDim}">${t('observatory.inYearsSimple', w.remainingYears)}</span>`;
+        html += `<div style="padding:6px 10px; margin-bottom:4px; border-radius:3px; font-size:11px; background:rgba(0,0,0,0.3); border-left:3px solid ${C.accent};">`;
+        html += `${w.event.icon ?? '⚠'} <span style="color:${C.accent}">${name}</span>`;
+        html += ` → <span style="color:${C.text}">${w.colonyName}</span>`;
+        html += `<br><span style="color:${C.dim}">${t('observatory.inYearsSimple', Math.max(0, w.remainingYears))}</span>`;
         html += `</div>`;
       }
     }
@@ -295,7 +315,7 @@ export class ObservatoryOverlay {
 
   _renderBodyDetails() {
     if (!this._selectedBodyId) {
-      return `<div style="flex:1; display:flex; align-items:center; justify-content:center; color:${THEME.textDim}; font-size:12px;">${t('observatory.selectBody')}</div>`;
+      return `<div style="flex:1; min-width:180px; max-width:260px; display:flex; align-items:center; justify-content:center; color:${C.dim}; font-size:11px; border-left:1px solid ${C.border}; padding-left:10px;">${t('observatory.selectBody')}</div>`;
     }
 
     const body = EntityManager.get(this._selectedBodyId);
@@ -306,29 +326,26 @@ export class ObservatoryOverlay {
     const homePl = window.KOSMOS?.homePlanet;
     const distAU = homePl ? Math.abs((orb.a ?? 0) - (homePl.orbital?.a ?? 0)).toFixed(2) : '?';
 
-    let html = `<div style="flex:1; padding:8px; border-left:1px solid ${THEME.border}40; overflow-y:auto;">`;
-    html += `<div style="font-size:14px; font-weight:bold; color:${THEME.accent}; margin-bottom:8px;">${icon} ${body.name ?? body.id}</div>`;
+    let html = `<div style="flex:1; min-width:180px; max-width:260px; padding:8px 10px; border-left:1px solid ${C.border}; overflow-y:auto; min-height:0;">`;
+    html += `<div style="font-size:13px; font-weight:bold; color:${C.accent}; margin-bottom:8px;">${icon} ${body.name ?? body.id}</div>`;
     html += this._detailRow(t('observatory.type'), body.planetType ?? body.type);
     html += this._detailRow('a', `${(orb.a ?? 0).toFixed(3)} AU`);
     html += this._detailRow('e', `${(orb.e ?? 0).toFixed(4)}`);
     html += this._detailRow('T', `${(orb.T ?? 0).toFixed(3)} ${t('observatory.years')}`);
     html += this._detailRow(t('observatory.distHome'), `${distAU} AU`);
 
-    // Temperatura
     if (body.temperatureK) {
       html += this._detailRow(t('observatory.temp'), `${Math.round(body.temperatureK)} K`);
     }
 
-    // Atmosfera
     if (body.atmosphere?.pressure > 0) {
       html += this._detailRow(t('observatory.atmo'), `${body.atmosphere.pressure.toFixed(2)} atm`);
     }
 
-    // Złoża
     if (body.deposits?.length > 0) {
-      html += `<div style="margin-top:8px; font-weight:bold; color:${THEME.accent}; font-size:12px;">${t('observatory.deposits')}</div>`;
+      html += `<div style="margin-top:8px; font-weight:bold; color:${C.accent}; font-size:11px; text-transform:uppercase;">${t('observatory.deposits')}</div>`;
       for (const d of body.deposits) {
-        html += `<div style="font-size:11px; color:${THEME.text}; padding:1px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${d.remaining ?? '?'})</div>`;
+        html += `<div style="font-size:11px; color:${C.text}; padding:2px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${d.remaining ?? '?'})</div>`;
       }
     }
 
@@ -337,9 +354,9 @@ export class ObservatoryOverlay {
   }
 
   _detailRow(label, value) {
-    return `<div style="display:flex; justify-content:space-between; font-size:11px; padding:2px 0; border-bottom:1px solid ${THEME.border}15;">
-      <span style="color:${THEME.textDim}">${label}</span>
-      <span>${value}</span>
+    return `<div style="display:flex; justify-content:space-between; font-size:11px; padding:3px 0; border-bottom:1px solid ${C.border};">
+      <span style="color:${C.dim}">${label}</span>
+      <span style="color:${C.text}">${value}</span>
     </div>`;
   }
 }

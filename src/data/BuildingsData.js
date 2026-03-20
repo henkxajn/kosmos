@@ -531,7 +531,7 @@ export const BUILDINGS = {
     terrainAny:    true,
     requires:      'orbital_survey',
     // Unikalne mechaniki obserwatorium (logika w ObservatorySystem):
-    scanInterval:      0.5,    // civYears na odkrycie na Lv1 (dzielone przez level)
+    scanInterval:      3.0,    // civYears na odkrycie na Lv1 (dzielone przez level)
     scanRange:         8,      // AU zasięgu na Lv1 (+ level×4, Lv5 = unlimited)
     disasterReduction: 0.3,    // % redukcji ryzyka katastrofy per level
     missionYieldBonus: 0.05,   // +5% yield misji per level
