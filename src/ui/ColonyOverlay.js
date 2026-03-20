@@ -268,8 +268,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (colMgr) {
       this._selectedColonyId = colMgr.activePlanetId;
     }
-    this._buildMode = false;
-    this._pendingBuildingId = null;
+    this._exitBuildMode();
     // Globus otworzy się w draw() gdy znamy bounds
   }
 
@@ -277,8 +276,7 @@ export class ColonyOverlay extends BaseOverlay {
     super.hide();
     this._hoverRowId = null;
     this._hoveredHex = null;
-    this._buildMode = false;
-    this._pendingBuildingId = null;
+    this._exitBuildMode();
     this._tooltipBuildingId = null;
     this._tooltipUpgradeData = null;
     this._tileTooltipId = null;
@@ -425,6 +423,19 @@ export class ColonyOverlay extends BaseOverlay {
     this._flashEnd = Date.now() + 2500;
   }
 
+  // Wejdź/wyjdź z trybu budowy — synchronizuje highlight na globie
+  _enterBuildMode(buildingId) {
+    this._buildMode = true;
+    this._pendingBuildingId = buildingId ?? null;
+    if (this._globeRenderer) this._globeRenderer.setBuildableHighlight(buildingId);
+  }
+
+  _exitBuildMode() {
+    this._buildMode = false;
+    this._pendingBuildingId = null;
+    if (this._globeRenderer) this._globeRenderer.clearBuildableHighlight();
+  }
+
   _handleGlobeTileClick(tile, colony) {
     if (!tile) {
       this._selectedHex = null;
@@ -439,8 +450,7 @@ export class ColonyOverlay extends BaseOverlay {
           tile,
           buildingId: this._pendingBuildingId,
         });
-        this._buildMode = false;
-        this._pendingBuildingId = null;
+        this._exitBuildMode();
         return;
       } else {
         this._buildError = t('colonyPanel.badTerrain');
@@ -1777,8 +1787,7 @@ export class ColonyOverlay extends BaseOverlay {
       this._selectedColonyId = zone.data.planetId;
       this._selectedHex = null;
       this._hoveredHex = null;
-      this._buildMode = false;
-      this._pendingBuildingId = null;
+      this._exitBuildMode();
       this._scrollRight = 0;
       // Highlight reset na globie
       if (this._globeRenderer) this._globeRenderer.setSelectedTile(null);
@@ -1796,7 +1805,7 @@ export class ColonyOverlay extends BaseOverlay {
       if (newIdx >= 0 && newIdx < colonies.length) {
         this._selectedColonyId = colonies[newIdx].planetId;
         this._selectedHex = null;
-        this._buildMode = false;
+        this._exitBuildMode();
         this._scrollRight = 0;
         if (this._globeRenderer) this._globeRenderer.setSelectedTile(null);
         if (colMgr) colMgr.switchActiveColony(colonies[newIdx].planetId);
@@ -1827,22 +1836,19 @@ export class ColonyOverlay extends BaseOverlay {
               tile,
               buildingId: zone.data.buildingId,
             });
-            this._buildMode = false;
-            this._pendingBuildingId = null;
+            this._exitBuildMode();
             return;
           }
         }
       }
 
       // Brak zaznaczonego hexa lub hex zajęty — wejdź w tryb budowy (klik na globus)
-      this._buildMode = true;
-      this._pendingBuildingId = zone.data.buildingId;
+      this._enterBuildMode(zone.data.buildingId);
       return;
     }
 
     if (zone.type === 'enterBuildMode') {
-      this._buildMode = true;
-      this._pendingBuildingId = null;
+      this._enterBuildMode(null);
       return;
     }
 
@@ -2034,8 +2040,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (key === 'Escape') {
       if (this._buildMode) {
-        this._buildMode = false;
-        this._pendingBuildingId = null;
+        this._exitBuildMode();
         return true; // NIE zamykaj panelu
       }
       // Standardowy Escape zamknie panel (przez OverlayManager)
@@ -2050,7 +2055,7 @@ export class ColonyOverlay extends BaseOverlay {
       if (newIdx >= 0 && newIdx < colonies.length) {
         this._selectedColonyId = colonies[newIdx].planetId;
         this._selectedHex = null;
-        this._buildMode = false;
+        this._exitBuildMode();
         if (this._globeRenderer) this._globeRenderer.setSelectedTile(null);
         if (colMgr) colMgr.switchActiveColony(colonies[newIdx].planetId);
       }

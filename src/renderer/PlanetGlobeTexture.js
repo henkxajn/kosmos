@@ -136,7 +136,12 @@ export class PlanetGlobeTexture {
       PlanetGlobeTexture._drawBuildingMarkers(ctx, grid, hexSize, gridPx);
     }
 
-    // 3. Highlight hexów (selected + hovered)
+    // 3. Podświetlenie dozwolonych hexów w trybie budowy
+    if (options.buildableTiles?.size > 0) {
+      PlanetGlobeTexture._drawBuildableTiles(ctx, grid, hexSize, gridPx, options.buildableTiles);
+    }
+
+    // 4. Highlight hexów (selected + hovered)
     if (options.selectedTile) {
       PlanetGlobeTexture._drawHexHighlight(ctx, options.selectedTile.q, options.selectedTile.r, hexSize, gridPx, 'selected');
     }
@@ -382,6 +387,44 @@ export class PlanetGlobeTexture {
 
   // Rysuje JEDEN hex jako Canvas 2D path (fill + stroke) — <1ms
   // Rysuje też kopię wraparound jeśli hex jest blisko krawędzi tekstury
+  // ── Podświetlenie dozwolonych hexów (build mode) ─────────────
+  static _drawBuildableTiles(ctx, grid, hexSize, gridPx, buildableTiles) {
+    const scaleX = TEX_W / gridPx.w;
+    const scaleY = TEX_H / gridPx.h;
+    const hexR = hexSize * 0.92;
+
+    grid.forEach(tile => {
+      const key = tile.key ?? `${tile.q},${tile.r}`;
+      if (!buildableTiles.has(key)) return;
+
+      const center = HexGrid.hexToPixel(tile.q, tile.r, hexSize);
+      const texCX = (center.x / gridPx.w) * TEX_W;
+      const texCY = (center.y / gridPx.h) * TEX_H;
+
+      const margin = hexR * scaleX;
+      const offsets = [0];
+      if (texCX < margin)           offsets.push(TEX_W);
+      if (texCX > TEX_W - margin)   offsets.push(-TEX_W);
+
+      for (const ox of offsets) {
+        const cx = texCX + ox;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const angle = (Math.PI / 180) * (60 * i - 30);
+          const px = cx + hexR * Math.cos(angle) * scaleX;
+          const py = texCY + hexR * Math.sin(angle) * scaleY;
+          i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(80, 255, 160, 0.18)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(80, 255, 160, 0.55)';
+        ctx.lineWidth = 1.5 * Math.max(scaleX, scaleY);
+        ctx.stroke();
+      }
+    });
+  }
+
   static _drawHexHighlight(ctx, q, r, hexSize, gridPx, type) {
     // Centrum hexa w pikselach siatki → piksele tekstury
     const center = HexGrid.hexToPixel(q, r, hexSize);

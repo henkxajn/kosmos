@@ -70,6 +70,7 @@ export class PlanetGlobeRenderer {
     this._showGrid  = false;      // toggle siatki hex / konturów regionów
     this._isGas     = false;      // czy planeta gazowa (proceduralna tekstura)
     this._isRegionMode = false;   // czy grid to RegionSystem (nie HexGrid)
+    this._buildableTiles = null;  // Set<tileKey> — hexy dozwolone do budowy (build mode)
 
     // Callbacki zewnętrzne
     this.onTileHover = null;   // (tile, screenX, screenY) => {}
@@ -446,6 +447,41 @@ export class PlanetGlobeRenderer {
     this._updateOverlay();
   }
 
+  // ── Podświetlenie dozwolonych hexów w trybie budowy ────────
+  // buildingId: string → oblicz zbiór dozwolonych hexów; null → wyczyść
+  setBuildableHighlight(buildingId) {
+    if (!buildingId || !this._grid || this._isRegionMode) {
+      this._buildableTiles = null;
+      this._updateOverlay();
+      return;
+    }
+    const building = BUILDINGS[buildingId];
+    if (!building) { this._buildableTiles = null; this._updateOverlay(); return; }
+
+    const bSys = window.KOSMOS?.buildingSystem;
+    const allowed = new Set();
+    this._grid.forEach(tile => {
+      if (tile.buildingId || tile.underConstruction || tile.pendingBuild) return;
+      if (tile.damaged) return;
+      // Użyj BuildingSystem._canBuildOnTile jeśli dostępne, inaczej prosta logika
+      if (bSys && typeof bSys._canBuildOnTile === 'function') {
+        if (bSys._canBuildOnTile(tile, building)) allowed.add(tile.key ?? `${tile.q},${tile.r}`);
+      } else {
+        const terrain = tile.terrainDef;
+        if (!terrain?.buildable) return;
+        if (building.terrainAny || terrain.allowedCategories.includes(building.category)) {
+          allowed.add(tile.key ?? `${tile.q},${tile.r}`);
+        }
+      }
+    });
+    this._buildableTiles = allowed.size > 0 ? allowed : null;
+    this._updateOverlay();
+  }
+
+  clearBuildableHighlight() {
+    this.setBuildableHighlight(null);
+  }
+
   // ── Odśwież overlay (np. po budowie budynku) ─────────────────
 
   refreshTexture() {
@@ -505,6 +541,7 @@ export class PlanetGlobeRenderer {
           showBuildings: false,  // markery budynków rysowane przez SurfaceMarkers (3D)
           selectedTile: this._selectedTileCoords,
           hoveredTile: this._hoveredTile ? { q: this._hoveredTile.q, r: this._hoveredTile.r } : null,
+          buildableTiles: this._buildableTiles,  // Set<tileKey> dozwolonych hexów (build mode)
         }
       );
     }
