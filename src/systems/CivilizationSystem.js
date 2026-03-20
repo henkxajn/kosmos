@@ -8,8 +8,9 @@
 // WZROST POPULACJI (akumulator ułamkowy)
 //   _growthProgress += growthRate per rok
 //   growthRate = 1 / effectiveInterval
-//   effectiveInterval = BASE_GROWTH_INTERVAL / (conditionMult × techMult)
+//   effectiveInterval = BASE_GROWTH_INTERVAL / (conditionMult × techMult × popScale)
 //   conditionMult = prosperityGrowthMult × foodMod × housingMod
+//   popScale = 1 / (1 + population / POP_SCALING_HALF) — logistyczne spowolnienie
 //   Gdy _growthProgress >= 1.0 → nowy POP
 //
 // ŚMIERĆ POPa
@@ -53,8 +54,9 @@ import { POP_CONSUMPTION } from '../data/ResourcesData.js';
 // POP_CONSUMPTION = { food: 3.0, water: 1.5, energy: 1.0 }
 
 // Wzrost populacji
-const BASE_GROWTH_INTERVAL = 10;  // lat na nowego POPa przy bazowych warunkach
-const MIN_GROWTH_INTERVAL  = 5;   // minimalna liczba lat na POPa (cap)
+const BASE_GROWTH_INTERVAL = 12;  // lat na nowego POPa przy bazowych warunkach
+const MIN_GROWTH_INTERVAL  = 8;   // minimalna liczba lat na POPa (cap)
+const POP_SCALING_HALF     = 20;  // populacja przy której wzrost spada o 50% (logistyczny)
 
 // Śmierć POPa
 const STARVATION_YEARS = 5;  // lat głodu do straty POPa
@@ -300,7 +302,10 @@ export class CivilizationSystem {
     const conditionMult = (window.KOSMOS?.prosperitySystem?.getGrowthMultiplier() ?? 1.0) * foodMod * housingMod;
     const techMult      = this.techSystem?.getPopGrowthMultiplier() ?? 1.0;
 
-    const effectiveInterval = BASE_GROWTH_INTERVAL / Math.max(0.01, conditionMult * techMult);
+    // Skalowanie logistyczne — im więcej POPów, tym wolniejszy wzrost
+    const popScale = 1.0 / (1 + this.population / POP_SCALING_HALF);
+
+    const effectiveInterval = BASE_GROWTH_INTERVAL / Math.max(0.01, conditionMult * techMult * popScale);
     const clampedInterval   = Math.max(MIN_GROWTH_INTERVAL, effectiveInterval);
     const growthRate        = 1.0 / clampedInterval;
 
@@ -485,7 +490,7 @@ export class CivilizationSystem {
 
   // Modyfikator wzrostu na podstawie zapasów jedzenia
   _foodGrowthModifier(orgRatio) {
-    if (orgRatio > 0.60) return 1.5;   // nadwyżka
+    if (orgRatio > 0.60) return 1.2;   // nadwyżka — umiarkowany bonus
     if (orgRatio > 0.30) return 1.0;   // wystarczy
     if (orgRatio > 0.10) return 0.4;   // racjonowanie
     return 0.0;                         // głód = zero wzrostu
@@ -493,10 +498,10 @@ export class CivilizationSystem {
 
   // Modyfikator wzrostu na podstawie dostępnego housingu
   // Na planecie z oddychalną atmosferą ludzie mogą żyć na zewnątrz — housing to bonus, nie wymóg
-  // Na macierzystej planecie (homePlanet) housing jest nieograniczony — nie trzeba budować habitatów
+  // Na macierzystej planecie (homePlanet) housing jest neutralny (1.0) — nie trzeba habitatów, ale nie daje bonusu
   _housingGrowthModifier() {
-    // Macierzysta planeta — nieograniczony housing
-    if (this.planet && this.planet === window.KOSMOS?.homePlanet) return 1.3;
+    // Macierzysta planeta — oddychalna atmosfera, ale housing nie daje darmowego bonusu
+    if (this.planet && this.planet === window.KOSMOS?.homePlanet) return 1.0;
 
     const atmo = this.planet?.atmosphere ?? 'breathable';
     const canLiveOutside = (atmo === 'breathable');
@@ -505,7 +510,7 @@ export class CivilizationSystem {
       return canLiveOutside ? 0.7 : 0.0;  // na zewnątrz wolniej, ale mogą
     }
     const ratio = this.population / this.housing;
-    if (ratio < 0.70) return 1.3;  // dużo miejsca
+    if (ratio < 0.70) return 1.2;  // dużo miejsca — bonus za inwestowanie w habitaty
     if (ratio < 1.00) return 1.0;  // wystarczy
     return canLiveOutside ? 0.7 : 0.0;  // przekroczony housing — na zewnątrz wolniej
   }

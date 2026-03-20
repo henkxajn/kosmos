@@ -71,10 +71,10 @@ export const LAYER_GOODS = {
 
 // Efekty prosperity na gameplay
 export const PROSPERITY_EFFECTS = [
-    { maxProsperity: 15,  growthMult: 0.3, researchMult: 1.0, crisisRisk: true },
-    { maxProsperity: 30,  growthMult: 0.6, researchMult: 1.0, crisisRisk: false },
-    { maxProsperity: 50,  growthMult: 0.8, researchMult: 1.0, crisisRisk: false },
-    { maxProsperity: 65,  growthMult: 1.0, researchMult: 1.0, crisisRisk: false },
-    { maxProsperity: 80,  growthMult: 1.2, researchMult: 1.05, crisisRisk: false },
-    { maxProsperity: 100, growthMult: 1.5, researchMult: 1.1, crisisRisk: false },
+    { maxProsperity: 15,  growthMult: 0.2, researchMult: 1.0, crisisRisk: true },
+    { maxProsperity: 30,  growthMult: 0.4, researchMult: 1.0, crisisRisk: false },
+    { maxProsperity: 50,  growthMult: 0.6, researchMult: 1.0, crisisRisk: false },
+    { maxProsperity: 65,  growthMult: 0.8, researchMult: 1.0, crisisRisk: false },
+    { maxProsperity: 80,  growthMult: 1.0, researchMult: 1.05, crisisRisk: false },
+    { maxProsperity: 100, growthMult: 1.2, researchMult: 1.1, crisisRisk: false },
 ];

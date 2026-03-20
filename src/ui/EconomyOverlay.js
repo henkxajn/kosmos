@@ -14,6 +14,7 @@ import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { t, getName }    from '../i18n/i18n.js';
+import { BASE_PRICE, scarcityMultiplier } from '../data/TradeValuesData.js';
 
 const LEFT_W   = 220;
 const RIGHT_W  = 260;
@@ -47,8 +48,9 @@ export class EconomyOverlay extends BaseOverlay {
     this._scrollCenterTop = 0;     // scroll przeglądu produkcji
     this._scrollCenterBot = 0;     // scroll zarządzania produkcją
 
-    // Tooltip DOM (hover na wierszach surowców/towarów)
+    // Tooltip DOM (hover na wierszach surowców/towarów i słupkach handlu)
     this._hoverResourceId = null;
+    this._hoverTradeBar = null;
     this._mouseScreenX = 0;
     this._mouseScreenY = 0;
     this._createTooltipEl();
@@ -59,6 +61,7 @@ export class EconomyOverlay extends BaseOverlay {
   hide() {
     super.hide();
     this._hoverResourceId = null;
+    this._hoverTradeBar = null;
     this._hideTooltip();
   }
 
@@ -105,6 +108,25 @@ export class EconomyOverlay extends BaseOverlay {
 
   _hideTooltip() {
     if (this._tooltipEl) this._tooltipEl.style.display = 'none';
+  }
+
+  _showTradeBarTooltip(data) {
+    if (!this._tooltipEl) return;
+    const html = this._buildTradeBarTooltip(data);
+    if (!html) { this._hideTooltip(); return; }
+    this._tooltipEl.innerHTML = html;
+    this._tooltipEl.style.display = 'block';
+    const rect = this._tooltipEl.getBoundingClientRect();
+    let tx = this._mouseScreenX + 16;
+    let ty = this._mouseScreenY - 8;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    if (tx + rect.width > W - 10) tx = this._mouseScreenX - rect.width - 12;
+    if (ty + rect.height > H - 10) ty = H - rect.height - 10;
+    if (ty < 4) ty = 4;
+    if (tx < 4) tx = 4;
+    this._tooltipEl.style.left = `${Math.round(tx)}px`;
+    this._tooltipEl.style.top  = `${Math.round(ty)}px`;
   }
 
   _buildResourceTooltip(resourceId) {
@@ -196,6 +218,27 @@ export class EconomyOverlay extends BaseOverlay {
       lines.push(`<div style="color:${THEME.textDim};margin-top:4px">${t('econPanel.noActiveProducers')}</div>`);
     }
 
+    return lines.join('');
+  }
+
+  _buildTradeBarTooltip(data) {
+    const { year, items, total, isExport } = data;
+    const lines = [];
+    const color = isExport ? THEME.warning : THEME.info;
+    const arrow = isExport ? '↑' : '↓';
+    const label = isExport ? t('econPanel.tradeExports') : t('econPanel.tradeImports');
+    lines.push(`<div style="font-weight:bold;color:${color}">${arrow} ${label} — ${t('econPanel.tradeYear')} ${year}</div>`);
+    lines.push(`<div style="color:${THEME.textDim};margin-bottom:2px">${t('econPanel.tooltipTotal')}: ${total}</div>`);
+
+    // Lista produktów posortowana malejąco wg ilości
+    const sorted = Object.entries(items).sort((a, b) => b[1] - a[1]);
+    for (const [id, qty] of sorted) {
+      const cd = COMMODITIES[id]; const rd = ALL_RESOURCES[id];
+      const icon = (cd ?? rd)?.icon ?? '';
+      const nm = cd ? getName(cd, 'commodity') : rd ? getName(rd, 'resource') : id;
+      const qStr = qty < 10 ? qty.toFixed(1) : Math.round(qty);
+      lines.push(`<div style="color:${THEME.textSecondary}">${icon} ${nm}: <span style="color:${THEME.textPrimary}">${qStr}</span></div>`);
+    }
     return lines.join('');
   }
 
@@ -1171,6 +1214,7 @@ export class EconomyOverlay extends BaseOverlay {
     const colMgr = window.KOSMOS?.colonyManager;
     const vMgr = window.KOSMOS?.vesselManager;
     const tradeLog = window.KOSMOS?.tradeLog;
+    const civTrade = window.KOSMOS?.civilianTradeSystem;
     const activeColId = colMgr?.activePlanetId;
 
     // Pobierz dane
@@ -1179,17 +1223,33 @@ export class EconomyOverlay extends BaseOverlay {
     const log = tradeLog?.getLog(activeColId, 30) ?? [];
     const yearly = tradeLog?.getYearlyAggregation(activeColId, 10) ?? [];
 
-    const hasData = log.length > 0 || routes.length > 0;
+    // Dane handlu cywilnego
+    const civCredits = civTrade?.getCredits(activeColId) ?? 0;
+    const civPerYear = civTrade?.getCreditsPerYear(activeColId) ?? 0;
+    const civTC = civTrade?.getTradeCapacity(activeColId) ?? 0;
+    const civConns = civTrade?.getConnections(activeColId) ?? [];
+    const hasCivTrade = civConns.length > 0 || civCredits > 0;
+
+    const hasData = log.length > 0 || routes.length > 0 || hasCivTrade;
     if (!hasData) {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText(t('econPanel.noTradeHistory'), x + w / 2, y + h / 2);
+      ctx.fillText(t('econPanel.civTradeNone'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
 
     let ry = y + 4 - this._scrollCenter;
+
+    // ═════════════════════════════════════════════════════════════════════
+    // 0) HANDEL CYWILNY — sekcja na górze
+    // ═════════════════════════════════════════════════════════════════════
+
+    if (hasCivTrade) {
+      ry = this._drawCivilianTradeSection(ctx, x, ry, w, pad,
+        civCredits, civPerYear, civTC, civConns, activeColId, civTrade);
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // A) WYKRESY — stacked bar charts (EKSPORT | IMPORT)
@@ -1260,12 +1320,16 @@ export class EconomyOverlay extends BaseOverlay {
         const partnerStr = `${entry.vesselName} ${partnerDir} ${entry.partnerName}`;
         ctx.fillText(partnerStr.slice(0, 28), x + pad + 90, ry + 10);
 
-        // Ładunek
+        // Ładunek (z lokalizowanymi nazwami)
         ctx.fillStyle = THEME.textDim;
         const itemsStr = Object.entries(entry.items)
-          .map(([id, qty]) => `${id}:${qty}`)
+          .map(([id, qty]) => {
+            const cd = COMMODITIES[id]; const rd = ALL_RESOURCES[id];
+            const nm = cd ? getName(cd, 'commodity') : rd ? getName(rd, 'resource') : id;
+            return `${nm}:${qty < 10 ? qty.toFixed(1) : Math.round(qty)}`;
+          })
           .join(' ');
-        ctx.fillText(`[${itemsStr}]`.slice(0, 30), x + pad + 4, ry + 22);
+        ctx.fillText(`[${itemsStr}]`.slice(0, 40), x + pad + 4, ry + 22);
 
         ry += 26;
       }
@@ -1294,6 +1358,150 @@ export class EconomyOverlay extends BaseOverlay {
 
       this._drawTradeRoutes(ctx, x, ry, w, routes, colMgr, vMgr);
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Sekcja handlu cywilnego (CivilianTradeSystem)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _drawCivilianTradeSection(ctx, x, ry, w, pad, credits, perYear, tc, connections, colonyId, civTrade) {
+    // Nagłówek
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('econPanel.civTradeHeader'), x + pad, ry + 12);
+    ry += 18;
+
+    // Kredyty + per year
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary;
+    const krStr = `${t('econPanel.civTradeCredits')}: ${credits.toFixed(0)} Kr`;
+    ctx.fillText(krStr, x + pad, ry + 12);
+    const perYearColor = perYear >= 0 ? THEME.success : THEME.danger;
+    ctx.fillStyle = perYearColor;
+    const sign = perYear >= 0 ? '+' : '';
+    ctx.fillText(`(${sign}${perYear.toFixed(1)}${t('econPanel.civTradePerYear')})`, x + pad + ctx.measureText(krStr).width + 8, ry + 12);
+    ry += 18;
+
+    // TC bar
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(`${t('econPanel.civTradeTC')}: ${tc.toFixed(0)} Kr/rok`, x + pad, ry + 10);
+    ry += 16;
+
+    // Separator
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
+    ry += 6;
+
+    // Połączenia
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textHeader;
+    ctx.fillText(t('econPanel.civTradeConnections'), x + pad, ry + 11);
+    ry += 16;
+
+    if (connections.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.civTradeNoConnections'), x + pad + 4, ry + 10);
+      ry += 16;
+    } else {
+      // Przepływy per rok (persystentne między tickami)
+      const flows = civTrade?.getFlowsForColony(colonyId) ?? [];
+
+      for (const conn of connections) {
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+
+        // Ikona + partner + odległość
+        ctx.fillStyle = THEME.textSecondary;
+        const distStr = `[${conn.distance.toFixed(1)} AU]`;
+        const nameStr = (conn.partnerName ?? '???').slice(0, 16);
+        ctx.fillText(`<-> ${nameStr} ${distStr}`, x + pad + 4, ry + 10);
+        ry += 14;
+
+        // Przepływy towarów per rok z/do tego partnera
+        const connFlows = flows.filter(f => f.partnerId === conn.partnerId);
+        if (connFlows.length > 0) {
+          for (const f of connFlows) {
+            const arrow = f.direction === 'export' ? '↑' : '↓';
+            const color = f.direction === 'export' ? THEME.warning : THEME.info;
+            const comDef = COMMODITIES[f.goodId];
+            const resDef = ALL_RESOURCES[f.goodId];
+            const goodName = comDef ? getName(comDef, 'commodity') : resDef ? getName(resDef, 'resource') : f.goodId;
+            ctx.fillStyle = color;
+            ctx.fillText(`  ${arrow} ${goodName}: ${f.qtyPerYear.toFixed(1)}/${t('econPanel.perYear')}`, x + pad + 8, ry + 10);
+            ry += 13;
+          }
+        } else {
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(`  ${t('econPanel.civTradeNoFlow')}`, x + pad + 8, ry + 10);
+          ry += 13;
+        }
+        ry += 2;
+      }
+    }
+
+    // Separator
+    ry += 4;
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
+    ry += 6;
+
+    // Ceny lokalne (top 3 drogie, top 3 tanie)
+    const colony = window.KOSMOS?.colonyManager?.getColony(colonyId);
+    if (colony?.resourceSystem) {
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textHeader;
+      ctx.fillText(t('econPanel.civTradeLocalPrices'), x + pad, ry + 11);
+      ry += 16;
+
+      const prices = this._calcLocalPrices(colony);
+      const sorted = [...prices].sort((a, b) => b.mult - a.mult);
+      const expensive = sorted.filter(p => p.mult > 1.5).slice(0, 3);
+      const cheap = sorted.filter(p => p.mult < 0.8).slice(-3).reverse();
+
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+
+      if (expensive.length > 0) {
+        ctx.fillStyle = THEME.danger;
+        const expStr = expensive.map(p => `${p.id} x${p.mult.toFixed(1)}`).join('  ');
+        ctx.fillText(`${t('econPanel.civTradeExpensive')}: ${expStr}`, x + pad + 4, ry + 10);
+        ry += 14;
+      }
+      if (cheap.length > 0) {
+        ctx.fillStyle = THEME.success;
+        const chpStr = cheap.map(p => `${p.id} x${p.mult.toFixed(1)}`).join('  ');
+        ctx.fillText(`${t('econPanel.civTradeCheap')}: ${chpStr}`, x + pad + 4, ry + 10);
+        ry += 14;
+      }
+
+      ry += 4;
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
+      ry += 8;
+    }
+
+    return ry;
+  }
+
+  _calcLocalPrices(colony) {
+    const resSys = colony.resourceSystem;
+    const producers = resSys?._producers;
+    if (!resSys || !producers) return [];
+
+    const results = [];
+    for (const goodId in BASE_PRICE) {
+      const stock = resSys.inventory?.get(goodId) ?? 0;
+      // Oblicz roczną konsumpcję
+      let consumption = 0;
+      for (const rates of producers.values()) {
+        if (rates[goodId] && rates[goodId] < 0) consumption += Math.abs(rates[goodId]);
+      }
+      const mult = scarcityMultiplier(stock, consumption);
+      if (mult !== 1.0) { // pokaż tylko nietypowe ceny
+        results.push({ id: goodId, mult });
+      }
+    }
+    return results;
   }
 
   // ── Rysuj wykres słupkowy ─────────────────────────────────────────────
@@ -1339,6 +1547,14 @@ export class EconomyOverlay extends BaseOverlay {
         ctx.textAlign = 'center';
         ctx.fillText(`${val}`, bx + barW / 2, by - 2);
         ctx.textAlign = 'left';
+      }
+
+      // Hit zone do tooltipa (szczegóły produktów)
+      const items = yr[itemsKey] ?? {};
+      if (Object.keys(items).length > 0) {
+        this._addHit(bx, by, barW, barH, 'trade_bar_hover', {
+          year: yr.year, items, total: val, isExport: totalKey === 'exports'
+        });
       }
     }
   }
@@ -1731,17 +1947,27 @@ export class EconomyOverlay extends BaseOverlay {
 
     // Sprawdź hover na wierszu surowca/towaru
     if (this._hoverZone?.type === 'resource_hover') {
+      this._hoverTradeBar = null;
       const rid = this._hoverZone.data.resourceId;
       if (this._hoverResourceId !== rid) {
         this._hoverResourceId = rid;
         this._showTooltip();
       } else {
-        // Tylko aktualizuj pozycję
         this._showTooltip();
       }
+    } else if (this._hoverZone?.type === 'trade_bar_hover') {
+      this._hoverResourceId = null;
+      const key = `${this._hoverZone.data.year}_${this._hoverZone.data.isExport}`;
+      if (this._hoverTradeBar !== key) {
+        this._hoverTradeBar = key;
+        this._showTradeBarTooltip(this._hoverZone.data);
+      } else {
+        this._showTradeBarTooltip(this._hoverZone.data);
+      }
     } else {
-      if (this._hoverResourceId) {
+      if (this._hoverResourceId || this._hoverTradeBar) {
         this._hoverResourceId = null;
+        this._hoverTradeBar = null;
         this._hideTooltip();
       }
     }

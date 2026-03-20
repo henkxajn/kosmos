@@ -106,15 +106,21 @@ export class ProsperitySystem {
       this.targetProsperity = Math.max(0, Math.min(100, this.targetProsperity + eventBonus));
     }
 
-    // 4c. Permanentny bonus z technologii + odkryć (floor prosperity)
+    // 4c. Permanentny bonus z technologii + odkryć — addytywny do targetProsperity
     const techBonus = this.techSystem?.getProsperityBonus() ?? 0;
     const permBonus = techBonus + this._discoveryProsperityBonus;
-    const prosperityFloor = Math.min(100, 50 + permBonus);  // bazowe 50 + bonus
-    this.targetProsperity = Math.max(prosperityFloor, this.targetProsperity);
+    this.targetProsperity = Math.min(100, this.targetProsperity + permBonus);
+
+    // 4d. Bonus/koszt sieci handlowej (trade network)
+    const tradeNetData = this._getTradeNetworkData();
+    const tradeNetBonus = tradeNetData.bonus - tradeNetData.upkeep;
+    if (tradeNetBonus !== 0) {
+      this.targetProsperity = Math.min(100, this.targetProsperity + Math.max(-10, tradeNetBonus));
+    }
 
     // 5. Zastosuj inercję: prosperity dąży do target
     const delta = (this.targetProsperity - this.prosperity) * 0.15;
-    this.prosperity = Math.max(prosperityFloor, Math.min(100, this.prosperity + delta));
+    this.prosperity = Math.max(0, Math.min(100, this.prosperity + delta));
 
     // 6. Zarejestruj konsumpcję i produkcję w ResourceSystem
     this._syncConsumption();
@@ -218,6 +224,34 @@ export class ProsperitySystem {
 
     // ŚREDNIA zamiast mnożenia — unika katastrofy "0 × cokolwiek = 0"
     return ((ageFactor + popFactor) / 2) * distFactor;
+  }
+
+  _getTradeNetworkData() {
+    // Odczytaj dane sieci handlowej z ColonyManager
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr || !this.planet) return { bonus: 0, upkeep: 0 };
+
+    const colony = colMgr.getColony(this.planet.id);
+    if (!colony) return { bonus: 0, upkeep: 0 };
+
+    const connections = colony.activeTradeConnections ?? [];
+    if (connections.length === 0) return { bonus: 0, upkeep: 0 };
+
+    // Bonus: min(15, count * 3)
+    const bonus = Math.min(15, connections.length * 3);
+
+    // Upkeep: sum(2 * distanceFactor per połączenie)
+    let upkeep = 0;
+    for (const conn of connections) {
+      const dist = conn.distance ?? 0;
+      let distFactor;
+      if (dist < 5) distFactor = 1.0;
+      else if (dist < 15) distFactor = 1.5;
+      else distFactor = 2.0;
+      upkeep += 2 * distFactor;
+    }
+
+    return { bonus, upkeep };
   }
 
   _getDistanceFromHome() {
