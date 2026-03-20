@@ -143,7 +143,7 @@ export class ObservatorySystem {
     const baseRange = def?.scanRange ?? 8;
     const range = bestLevel >= 5 ? Infinity : baseRange + bestLevel * 4;  // AU
 
-    // Akumuluj czas
+    // Akumuluj czas (max 1 odkrycie per tick — clamp nadmiar)
     const colId = bestColony.planetId;
     const accum = (this._scanAccum.get(colId) ?? 0) + civDeltaYears;
 
@@ -152,8 +152,8 @@ export class ObservatorySystem {
       return;
     }
 
-    // Reset akumulatora (zużywamy jeden interwał)
-    this._scanAccum.set(colId, accum - interval);
+    // Zużyj interwał, clamp resztę żeby nie kumulować przy szybkim czasie
+    this._scanAccum.set(colId, Math.min(accum - interval, interval * 0.5));
 
     // Znajdź niezbadane ciała w zasięgu
     const candidates = this._getUnexploredBodies(sysId, bestEntity, range);
