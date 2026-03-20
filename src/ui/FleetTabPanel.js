@@ -449,6 +449,12 @@ export class FleetTabPanel {
         if (zone.data.enabled) EventBus.emit('fleet:buildRequest', { shipId: zone.data.shipId });
         break;
 
+      case 'cancel_pending_ship': {
+        const colMgr = window.KOSMOS?.colonyManager;
+        if (colMgr) colMgr.cancelPendingShip(zone.data.planetId, zone.data.orderId);
+        break;
+      }
+
       case 'delete_trade_route':
         EventBus.emit('tradeRoute:delete', { routeId: zone.data.routeId });
         break;
@@ -1442,22 +1448,56 @@ export class FleetTabPanel {
       const canAfford = Object.entries(allCosts).every(([k, v]) => (inv[k] ?? 0) >= v);
       const crewCost = ship.crewCost ?? 0;
       const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
-      const canBuild = canBuildAny && canAfford && hasCrew;
+      const canBuildNow = canBuildAny && canAfford && hasCrew;
+      const canQueue = hasCrew && !canAfford;
+      const canClick = canBuildNow || canQueue;
 
       const btnH = 20;
-      ctx.fillStyle = canBuild ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.5)';
+      ctx.fillStyle = canBuildNow ? 'rgba(20,40,60,0.8)' : canQueue ? 'rgba(60,40,10,0.6)' : 'rgba(20,20,30,0.5)';
       ctx.fillRect(x + PAD, cy, w - PAD * 2, btnH);
-      ctx.strokeStyle = canBuild ? THEME.borderActive : C.border;
+      ctx.strokeStyle = canBuildNow ? THEME.borderActive : canQueue ? THEME.warning : C.border;
       ctx.lineWidth = 1;
       ctx.strokeRect(x + PAD, cy, w - PAD * 2, btnH);
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = canBuild ? C.bright : C.dim;
+      ctx.fillStyle = canBuildNow ? C.bright : canQueue ? THEME.warning : C.dim;
       ctx.textAlign = 'center';
       const crewLabel = crewCost > 0 ? ` (${crewCost}👤)` : '';
       ctx.fillText(`${ship.icon} ${getName(ship, 'ship')}${crewLabel}`, x + w / 2, cy + 13);
       ctx.textAlign = 'left';
-      this._hitZones.push({ x: x + PAD, y: cy, w: w - PAD * 2, h: btnH, type: 'build_ship', data: { shipId: ship.id, enabled: canBuild } });
+      this._hitZones.push({ x: x + PAD, y: cy, w: w - PAD * 2, h: btnH, type: 'build_ship', data: { shipId: ship.id, enabled: canClick } });
       cy += btnH + 3;
+    }
+
+    // Oczekujące zamówienia statków (pending)
+    const pendingOrders = activeCol?.pendingShipOrders ?? [];
+    if (pendingOrders.length > 0 && cy < y + h - 30) {
+      cy += 4;
+      ctx.strokeStyle = C.border; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
+      cy += 8;
+      ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText(`⏳ ${t('fleet.pendingOrders')} (${pendingOrders.length})`, x + PAD, cy + 8);
+      cy += LH;
+
+      for (const order of pendingOrders) {
+        if (cy > y + h - 20) break;
+        const shipDef = SHIPS[order.shipId];
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText(`${shipDef?.icon ?? '🚀'} ${shipDef ? getName(shipDef, 'ship') : order.shipId}`, x + PAD + 2, cy + 8);
+
+        // × anuluj
+        const cancelX = x + w - PAD - 16;
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = '#ff6666';
+        ctx.fillText('×', cancelX + 4, cy + 9);
+        this._hitZones.push({
+          x: cancelX, y: cy, w: 16, h: LH,
+          type: 'cancel_pending_ship', data: { planetId: activePid, orderId: order.id },
+        });
+        cy += LH;
+      }
     }
 
     // Trasy handlowe

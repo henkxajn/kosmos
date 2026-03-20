@@ -46,10 +46,14 @@ export class BuildingSystem {
     //   tileKey → { buildingId, progress, buildTime, tileR, tileType, isUpgrade?, targetLevel? }
     this._constructionQueue = new Map();
 
+    // Oczekujące zamówienia (brak surowców → czeka aż będą dostępne):
+    //   tileKey → { tileKey, buildingId, cost, isUpgrade, targetLevel, tileR, tileType, queuedAt }
+    this._pendingQueue = new Map();
+
     // Wysokość siatki (do obliczania modyfikatora polarnego)
     this._gridHeight = 0;
 
-    // Referencja na deposits ciała niebieskiego (ustawiana przez PlanetGlobeScene/GameScene)
+    // Referencja na deposits ciała niebieskiego (ustawiana przez GameScene)
     this._deposits = null;
 
     // Referencja na factorySystem (do punktów produkcji)
@@ -67,7 +71,7 @@ export class BuildingSystem {
     // Flaga RegionSystem — dezaktywuje modyfikator polarny (region.r = 0 zawsze)
     this._isRegionMode = false;
 
-    // Referencja na HexGrid — potrzebna do adjacency bonus (ustawiana z PlanetGlobeScene)
+    // Referencja na HexGrid — potrzebna do adjacency bonus (ustawiana z ColonyOverlay)
     this._grid = null;
 
     // Guard: tylko aktywna kolonia przetwarza żądania budowy/rozbiórki
@@ -119,11 +123,12 @@ export class BuildingSystem {
       if (this._planetId && planetId === this._planetId) this._reapplyAllRates();
     });
 
-    // Tick: budowa + wydobycie surowców z deposits przez kopalnie
+    // Tick: budowa + wydobycie surowców z deposits przez kopalnie + pending queue
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — mechaniki 4X biegną szybciej
     EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => {
       this._tickConstruction(deltaYears);
       this._tickMineExtraction(deltaYears);
+      this._tickPendingQueue();
     });
   }
 
@@ -301,22 +306,28 @@ export class BuildingSystem {
       }
     }
 
-    // Sprawdzenie środków
-    if (this.resourceSystem && hasKeys(actualCost) && !this.resourceSystem.canAfford(actualCost)) {
-      EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.noResources') });
-      return;
-    }
-
-    // Sprawdzenie POPów (pomiń w outpost)
+    // Sprawdzenie POPów i surowców — brak → dodaj do pending queue
     const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
-    if (popCost > 0) {
-      const civSys = this.civSystem;
-      if (civSys && civSys.freePops < popCost) {
-        EventBus.emit('planet:buildResult', {
-          success: false, tile, reason: t('ui.noFreePops', popCost),
-        });
-        return;
-      }
+    const canAffordResources = !(this.resourceSystem && hasKeys(actualCost) && !this.resourceSystem.canAfford(actualCost));
+    const hasFreePops = !(popCost > 0 && this.civSystem && this.civSystem.freePops < popCost);
+
+    if (!canAffordResources || !hasFreePops) {
+      const tileKey = tile.key;
+      this._pendingQueue.set(tileKey, {
+        tileKey,
+        buildingId,
+        cost: { ...actualCost },
+        popCost,
+        isUpgrade: false,
+        targetLevel: null,
+        tileR: tile.r,
+        tileType: tile.type,
+        queuedAt: window.KOSMOS?.timeSystem?.gameTime ?? 0,
+      });
+      tile.pendingBuild = buildingId;
+      EventBus.emit('planet:buildResult', { success: true, tile, buildingId, queued: true });
+      EventBus.emit('planet:buildQueued', { tile, buildingId, cost: { ...actualCost } });
+      return;
     }
 
     // Pobierz koszt
@@ -364,9 +375,13 @@ export class BuildingSystem {
       return;
     }
 
-    // Nie można ulepszać podczas trwającej budowy/upgrade na tym hexie
+    // Nie można ulepszać podczas trwającej budowy/upgrade/pending na tym hexie
     if (tile.underConstruction) {
       EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.constructionInProgress') });
+      return;
+    }
+    if (tile.pendingBuild) {
+      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.buildQueued') });
       return;
     }
 
@@ -401,29 +416,28 @@ export class BuildingSystem {
       }
     }
 
-    if (this.resourceSystem && hasKeys(upgradeCost) && !this.resourceSystem.canAfford(upgradeCost)) {
-      // Diagnostyka — który surowiec brakuje?
-      const missing = [];
-      for (const [k, need] of Object.entries(upgradeCost)) {
-        const have = this.resourceSystem.getAmount(k);
-        if (have < need) missing.push(`${k}: ${Math.floor(have)}/${need}`);
-      }
-      const detail = missing.length ? ` (${missing.join(', ')})` : '';
-      console.warn(`[BuildingSystem] Upgrade ${building.id} Lv${nextLevel}: brak surowców${detail}`, upgradeCost);
-      EventBus.emit('planet:upgradeResult', { success: false, tile, reason: t('ui.noUpgradeResources', detail) });
-      return;
-    }
-
-    // Sprawdzenie wolnych POPów (upgrade wymaga dodatkowego popCost; pomiń w outpost)
+    // Sprawdzenie POPów i surowców — brak → dodaj do pending queue
     const popCost = this._isOutpost ? 0 : (entry.popCost ?? building.popCost ?? POP_PER_BUILDING);
-    if (popCost > 0) {
-      const civSys = this.civSystem;
-      if (civSys && civSys.freePops < popCost) {
-        EventBus.emit('planet:upgradeResult', {
-          success: false, tile, reason: t('ui.noFreePops', popCost),
-        });
-        return;
-      }
+    const canAffordUpgrade = !(this.resourceSystem && hasKeys(upgradeCost) && !this.resourceSystem.canAfford(upgradeCost));
+    const hasFreePopsUpg = !(popCost > 0 && this.civSystem && this.civSystem.freePops < popCost);
+
+    if (!canAffordUpgrade || !hasFreePopsUpg) {
+      const tileKey = tile.key;
+      this._pendingQueue.set(tileKey, {
+        tileKey,
+        buildingId: building.id,
+        cost: { ...upgradeCost },
+        popCost,
+        isUpgrade: true,
+        targetLevel: nextLevel,
+        tileR: tile.r,
+        tileType: tile.type,
+        queuedAt: window.KOSMOS?.timeSystem?.gameTime ?? 0,
+      });
+      tile.pendingBuild = building.id;
+      EventBus.emit('planet:upgradeResult', { success: true, tile, queued: true });
+      EventBus.emit('planet:upgradeQueued', { tile, cost: { ...upgradeCost } });
+      return;
     }
 
     // Pobierz koszt
@@ -494,6 +508,14 @@ export class BuildingSystem {
   // ── Rozbiórka ───────────────────────────────────────────────────────────
 
   _demolish(tile) {
+    // Anulowanie oczekującego zamówienia (pending)
+    if (tile.pendingBuild) {
+      const pendingId = tile.pendingBuild;
+      this.cancelPending(tile.key);
+      EventBus.emit('planet:demolishResult', { success: true, tile, cancelled: true, buildingId: pendingId });
+      return;
+    }
+
     // Anulowanie budowy w toku
     if (tile.underConstruction) {
       const uc = tile.underConstruction;
@@ -734,6 +756,102 @@ export class BuildingSystem {
     }
   }
 
+  // ── Tick pending queue — sprawdź czy zamówienia mogą ruszyć ──────────
+
+  _tickPendingQueue() {
+    if (this._pendingQueue.size === 0) return;
+
+    // Zbierz klucze do iteracji (nie modyfikujemy Map podczas for..of)
+    const keys = [...this._pendingQueue.keys()];
+
+    for (const tileKey of keys) {
+      const order = this._pendingQueue.get(tileKey);
+      if (!order) continue;
+
+      // Sprawdź środki (re-check — stan mógł się zmienić po poprzednim fulfillment)
+      if (hasKeys(order.cost) && !this.resourceSystem?.canAfford(order.cost)) continue;
+
+      // Sprawdź POPy (re-check po każdym fulfillment)
+      const neededPop = order.popCost ?? 0;
+      if (neededPop > 0 && this.civSystem && this.civSystem.freePops < neededPop) continue;
+
+      // ── Fulfill — usuń z pending, pobierz koszt, uruchom budowę ──
+      this._pendingQueue.delete(tileKey);
+
+      if (hasKeys(order.cost)) {
+        this.resourceSystem.spend(order.cost);
+      }
+
+      if (order.isUpgrade) {
+        const entry = this._active.get(tileKey);
+        if (entry) {
+          const building = entry.building;
+          const upgradeTime = (building.buildTime ?? 0) * 0.5;
+
+          if (upgradeTime > 0) {
+            this._constructionQueue.set(tileKey, {
+              buildingId: building.id,
+              progress: 0,
+              buildTime: upgradeTime,
+              tileR: order.tileR,
+              tileType: order.tileType,
+              isUpgrade: true,
+              targetLevel: order.targetLevel,
+            });
+          } else {
+            const tileLike = { key: tileKey, r: order.tileR, type: order.tileType, buildingLevel: entry.level, buildingId: building.id };
+            this._applyUpgrade(tileLike, entry, building, order.targetLevel, neededPop);
+          }
+        }
+      } else {
+        const building = BUILDINGS[order.buildingId];
+        const rawBuildTime = building?.buildTime ?? 0;
+        const btMult = this.techSystem?.getBuildTimeMultiplier() ?? 1.0;
+        const buildTime = rawBuildTime * btMult;
+
+        if (buildTime > 0) {
+          this._constructionQueue.set(tileKey, {
+            buildingId: order.buildingId,
+            progress: 0,
+            buildTime,
+            tileR: order.tileR,
+            tileType: order.tileType,
+          });
+        } else {
+          this._activateBuilding(tileKey, order.buildingId, order.tileR, order.tileType, false);
+        }
+      }
+
+      EventBus.emit('planet:pendingFulfilled', {
+        tileKey,
+        buildingId: order.buildingId,
+        isUpgrade: order.isUpgrade,
+      });
+    }
+  }
+
+  // ── Anuluj oczekujące zamówienie ────────────────────────────────────────
+
+  cancelPending(tileKey) {
+    const order = this._pendingQueue.get(tileKey);
+    if (!order) return;
+    this._pendingQueue.delete(tileKey);
+    // Tile pendingBuild jest czyszczony przez _syncBuildingIds() po evencie
+    EventBus.emit('planet:pendingCancelled', { tileKey });
+  }
+
+  // ── Demand z pending orders (dla CivilianTradeSystem) ────────────────
+
+  getPendingDemand() {
+    const demand = {};
+    for (const [, order] of this._pendingQueue) {
+      for (const [resId, qty] of Object.entries(order.cost)) {
+        demand[resId] = (demand[resId] ?? 0) + qty;
+      }
+    }
+    return demand;
+  }
+
   // ── Deploy z prefabu (natychmiastowa budowa bez kosztu surowcowego) ────
 
   deployFromCargo(tile, buildingId) {
@@ -909,6 +1027,32 @@ export class BuildingSystem {
         tileType:   item.tileType ?? 'plains',
         isUpgrade:  item.isUpgrade ?? false,
         targetLevel: item.targetLevel,
+      });
+    }
+  }
+
+  // Serializacja pending queue (oddzielnie — przez ColonyManager)
+  serializePendingQueue() {
+    const pending = [];
+    for (const [, order] of this._pendingQueue) {
+      pending.push({ ...order });
+    }
+    return pending;
+  }
+
+  // Przywracanie pending queue (z ColonyManager.restore)
+  restorePendingQueue(pending) {
+    if (!Array.isArray(pending)) return;
+    for (const item of pending) {
+      this._pendingQueue.set(item.tileKey, {
+        tileKey:     item.tileKey,
+        buildingId:  item.buildingId,
+        cost:        item.cost ?? {},
+        isUpgrade:   item.isUpgrade ?? false,
+        targetLevel: item.targetLevel ?? null,
+        tileR:       item.tileR ?? 0,
+        tileType:    item.tileType ?? 'plains',
+        queuedAt:    item.queuedAt ?? 0,
       });
     }
   }

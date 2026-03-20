@@ -103,6 +103,13 @@ export class ThreeRenderer {
     this._entityByUUID = new Map();   // mesh.uuid → entity
     this._clickable    = [];
     this._vessels      = new Map();   // vesselId → { sprite, routeLine }
+    this._tradeLines   = [];          // THREE.Line[] — linie handlu cywilnego
+
+    // ── Cywilne świetliki handlowe ───────────────────────────
+    this._tradeFireflies   = [];     // Array of { sprite, route, t, speed }
+    this._tradeFireflyTex  = null;   // współdzielona tekstura glow
+    this._tradeRoutes      = [];     // dane tras: [{ fromId, toId, intensity, fromXZ, toXZ }]
+    this._tradeFireflyPool = 60;     // max cząsteczek
 
     // Tryb widoczności orbit: 'all' | 'planets_moons' | 'planetoids'
     this._orbitFilter = 'planetoids'; // domyślny — planetoidy widoczne, planety wg reguł
@@ -349,6 +356,12 @@ export class ThreeRenderer {
       this._syncVesselPositions(vessels);
     }));
 
+    // ── Handel cywilny: linie + świetliki ───────────────────
+    EventBus.on('trade:connectionsUpdated', safe(({ connections }) => {
+      this._updateTradeLines(connections);
+      this._updateTradeFireflyRoutes(connections);
+    }));
+
     // ── Śledzenie kamery po kliknięciu ciała ─────────────────
     EventBus.on('body:selected', safe(({ entity }) => {
       this._focusEntityId = entity.id;
@@ -551,6 +564,10 @@ export class ThreeRenderer {
       }
     }
     this._vessels.clear();
+
+    // Trade lines + fireflies
+    this._clearTradeLines();
+    this._clearTradeFireflies();
 
     // Gwiazda
     if (this._starGroup) {
@@ -1361,6 +1378,9 @@ export class ThreeRenderer {
     // Markery kolonii — pozycje (po aktualizacji planet i księżyców)
     if (this._colonyLabels.size > 0) this._updateColonyLabelPositions();
 
+    // Linie handlu cywilnego — aktualizuj pozycje endpointów
+    if (this._tradeLines.length > 0) this._syncTradeLinePositions();
+
     // Planetoidy: synchronizuj pozycje meshów
     this._syncPlanetoidPositions();
 
@@ -2145,6 +2165,9 @@ export class ThreeRenderer {
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();
 
+        // Animacja świetlików handlowych
+        if (this._tradeFireflies.length > 0) this._animateTradeFireflies(t);
+
         this.renderer.render(this.scene, this.camera);
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
@@ -2310,8 +2333,8 @@ export class ThreeRenderer {
     if (vessel.mission) {
       const m = vessel.mission;
       const isReturn = m.phase === 'returning';
-      const tx = isReturn ? (m.liveOriginX ?? m.returnTargetX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
-      const ty = isReturn ? (m.liveOriginY ?? m.returnTargetY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+      const tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
+      const ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
       const points = [
         new THREE.Vector3(S(vessel.position.x), 0.1, S(vessel.position.y)),
         new THREE.Vector3(S(tx), 0.1, S(ty)),
@@ -2405,6 +2428,292 @@ export class ThreeRenderer {
         entry.routeLine.material.dispose();
         entry.routeLine = null;
       }
+    }
+  }
+
+  // ── Linie handlu cywilnego ──────────────────────────────────────────
+
+  _syncTradeLinePositions() {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return;
+
+    for (const line of this._tradeLines) {
+      const ud = line.userData;
+      if (!ud?.fromId || !ud?.toId) continue;
+      const colA = colMgr.getColony(ud.fromId);
+      const colB = colMgr.getColony(ud.toId);
+      if (!colA?.planet || !colB?.planet) continue;
+      const posArr = line.geometry.attributes.position.array;
+      posArr[0] = S(colA.planet.x); posArr[1] = 0.05; posArr[2] = S(colA.planet.y);
+      posArr[3] = S(colB.planet.x); posArr[4] = 0.05; posArr[5] = S(colB.planet.y);
+      line.geometry.attributes.position.needsUpdate = true;
+      line.computeLineDistances();
+    }
+  }
+
+  _clearTradeLines() {
+    for (const line of this._tradeLines) {
+      line.geometry?.dispose();
+      line.material?.dispose();
+      this.scene.remove(line);
+    }
+    this._tradeLines = [];
+  }
+
+  _updateTradeLines(connections) {
+    this._clearTradeLines();
+    if (!connections || connections.length === 0) return;
+
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return;
+
+    for (const conn of connections) {
+      const colA = colMgr.getColony(conn.fromId);
+      const colB = colMgr.getColony(conn.toId);
+      if (!colA?.planet || !colB?.planet) continue;
+
+      const ax = colA.planet.x;
+      const ay = colA.planet.y;
+      const bx = colB.planet.x;
+      const by = colB.planet.y;
+      if (isNaN(ax) || isNaN(ay) || isNaN(bx) || isNaN(by)) continue;
+
+      // Kolor wg gradient (intensywność handlu)
+      const gradient = conn.gradient ?? 0;
+      const intensity = Math.min(1, gradient * 3); // 0→0.33 gradient = full intensity
+      const r = 0.3 + intensity * 0.7;
+      const g = 0.7 + intensity * 0.3;
+      const b = 0.3;
+      const color = new THREE.Color(r, g, b);
+
+      const points = [
+        new THREE.Vector3(S(ax), 0.05, S(ay)),
+        new THREE.Vector3(S(bx), 0.05, S(by)),
+      ];
+
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      const mat = new THREE.LineDashedMaterial({
+        color,
+        dashSize: 0.5,
+        gapSize: 0.3,
+        transparent: true,
+        opacity: 0.08 + intensity * 0.07, // subtelne — główny efekt to świetliki
+      });
+      const line = new THREE.Line(geo, mat);
+      line.computeLineDistances();
+      line.userData = { fromId: conn.fromId, toId: conn.toId };
+      this.scene.add(line);
+      this._tradeLines.push(line);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Cywilne świetliki handlowe (Trade Fireflies)
+  // ══════════════════════════════════════════════════════════════════════
+
+  /**
+   * Tworzy współdzieloną teksturę glow dla świetlików (Gaussian, 16×16).
+   */
+  static _createFireflyTexture() {
+    const size = 16;
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size;
+    const ctx = c.getContext('2d');
+    const half = size / 2;
+    const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
+    grad.addColorStop(0.0, 'rgba(255,230,140,1.0)');
+    grad.addColorStop(0.25, 'rgba(255,204,68,0.8)');
+    grad.addColorStop(0.6, 'rgba(255,170,40,0.25)');
+    grad.addColorStop(1.0, 'rgba(255,140,20,0.0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  /**
+   * Przelicz trasy i dopasuj pulę świetlików.
+   * Wywoływane z trade:connectionsUpdated.
+   */
+  _updateTradeFireflyRoutes(connections) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) { this._clearTradeFireflies(); return; }
+
+    // Oblicz transfers per trasa (dane z CivilianTradeSystem)
+    const civTrade = window.KOSMOS?.civilianTradeSystem;
+    const lastTransfers = civTrade?.getLastTransfers() ?? [];
+
+    // Buduj trasy z intensywnością
+    const newRoutes = [];
+    if (connections) {
+      for (const conn of connections) {
+        const colA = colMgr.getColony(conn.fromId);
+        const colB = colMgr.getColony(conn.toId);
+        if (!colA?.planet || !colB?.planet) continue;
+
+        // Oblicz intensywność handlu (sumuj Kr z transferów)
+        let krTotal = 0;
+        for (const tr of lastTransfers) {
+          if ((tr.fromId === conn.fromId && tr.toId === conn.toId) ||
+              (tr.fromId === conn.toId && tr.toId === conn.fromId)) {
+            krTotal += (tr.exportKr ?? 0) + (tr.importKr ?? 0);
+          }
+        }
+        // Przelicz na roczne (tick = 0.5 civYear)
+        const krPerYear = krTotal * 2;
+
+        // Ile świetlików per trasa
+        let count;
+        if (krPerYear < 10)       count = 1;
+        else if (krPerYear < 50)  count = 2;
+        else if (krPerYear < 100) count = 3;
+        else if (krPerYear < 200) count = 5;
+        else if (krPerYear < 500) count = 8;
+        else                      count = 12;
+
+        newRoutes.push({
+          fromId: conn.fromId,
+          toId: conn.toId,
+          count,
+          intensity: Math.min(1, krPerYear / 300),
+          distance: conn.distance ?? 5,
+        });
+      }
+    }
+    this._tradeRoutes = newRoutes;
+
+    // Przelicz łączną liczbę potrzebnych świetlików
+    let totalNeeded = 0;
+    for (const r of newRoutes) totalNeeded += r.count;
+    totalNeeded = Math.min(totalNeeded, this._tradeFireflyPool);
+
+    // Recycle / twórz / usuwaj świetliki
+    this._resizeFireflyPool(totalNeeded);
+
+    // Przydziel świetliki do tras
+    let idx = 0;
+    for (const route of this._tradeRoutes) {
+      for (let i = 0; i < route.count && idx < this._tradeFireflies.length; i++, idx++) {
+        const ff = this._tradeFireflies[idx];
+        ff.route = route;
+        ff.t = Math.random(); // losowa faza startowa
+        // Prędkość: szybsza na krótkich trasach, wolniejsza na długich
+        ff.speed = 0.15 + Math.random() * 0.1 + (1 / Math.max(1, route.distance)) * 0.1;
+        // Losowy kierunek (A→B lub B→A)
+        ff.reverse = Math.random() < 0.5;
+        // Losowa wysokość łuku
+        ff.arcHeight = 0.2 + Math.random() * 0.4 + Math.min(0.4, route.distance * 0.03);
+        // Intensywność → jasność
+        ff.brightness = 0.5 + route.intensity * 0.5;
+        ff.sprite.visible = true;
+      }
+    }
+    // Ukryj nadmiarowe
+    for (; idx < this._tradeFireflies.length; idx++) {
+      this._tradeFireflies[idx].sprite.visible = false;
+      this._tradeFireflies[idx].route = null;
+    }
+  }
+
+  _resizeFireflyPool(targetSize) {
+    // Lazy-init tekstury
+    if (!this._tradeFireflyTex) {
+      this._tradeFireflyTex = ThreeRenderer._createFireflyTexture();
+    }
+
+    const current = this._tradeFireflies.length;
+
+    // Dodaj brakujące
+    for (let i = current; i < targetSize; i++) {
+      const mat = new THREE.SpriteMaterial({
+        map: this._tradeFireflyTex,
+        blending: THREE.AdditiveBlending,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.setScalar(0.18);
+      sprite.visible = false;
+      this.scene.add(sprite);
+      this._tradeFireflies.push({
+        sprite,
+        route: null,
+        t: 0,
+        speed: 0.2,
+        reverse: false,
+        arcHeight: 0.3,
+        brightness: 0.7,
+      });
+    }
+
+    // Usuń nadmiarowe
+    while (this._tradeFireflies.length > targetSize) {
+      const ff = this._tradeFireflies.pop();
+      ff.sprite.material.dispose();
+      this.scene.remove(ff.sprite);
+    }
+  }
+
+  /**
+   * Animuj świetliki — wywoływane co frame w render loop.
+   * Każdy świetlik leci po łuku parabolicznym (oś Y) między dwoma koloniami.
+   */
+  _animateTradeFireflies(elapsedTime) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return;
+
+    const dt = 0.016; // ~60fps krok (stały, nie zależy od realnego dt)
+
+    for (const ff of this._tradeFireflies) {
+      if (!ff.route || !ff.sprite.visible) continue;
+
+      // Aktualizuj pozycję na trasie
+      ff.t += ff.speed * dt;
+      if (ff.t >= 1) {
+        ff.t -= 1;
+        ff.reverse = !ff.reverse; // odwróć kierunek po dotarciu
+      }
+
+      // Pobierz pozycje kolonii (aktualne — planety się ruszają)
+      const colA = colMgr.getColony(ff.route.fromId);
+      const colB = colMgr.getColony(ff.route.toId);
+      if (!colA?.planet || !colB?.planet) { ff.sprite.visible = false; continue; }
+
+      const ax = S(colA.planet.x), az = S(colA.planet.y);
+      const bx = S(colB.planet.x), bz = S(colB.planet.y);
+
+      // Parametr t (0→1) z opcjonalnym odwróceniem
+      const p = ff.reverse ? (1 - ff.t) : ff.t;
+
+      // Pozycja: interpolacja liniowa XZ + łuk paraboliczny Y
+      const px = ax + (bx - ax) * p;
+      const pz = az + (bz - az) * p;
+      const py = ff.arcHeight * Math.sin(p * Math.PI); // parabola: 0→max→0
+
+      ff.sprite.position.set(px, py, pz);
+
+      // Dynamiczny rozmiar: mniejszy na krańcach, większy w środku łuku
+      const scaleFactor = 0.14 + Math.sin(p * Math.PI) * 0.08;
+      ff.sprite.scale.setScalar(scaleFactor);
+
+      // Pulsowanie jasności: delikatne migotanie
+      const flicker = 0.85 + Math.sin(elapsedTime * 5 + ff.t * 20) * 0.15;
+      ff.sprite.material.opacity = ff.brightness * flicker;
+    }
+  }
+
+  _clearTradeFireflies() {
+    for (const ff of this._tradeFireflies) {
+      ff.sprite.material.dispose();
+      this.scene.remove(ff.sprite);
+    }
+    this._tradeFireflies = [];
+    this._tradeRoutes = [];
+    if (this._tradeFireflyTex) {
+      this._tradeFireflyTex.dispose();
+      this._tradeFireflyTex = null;
     }
   }
 }

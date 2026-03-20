@@ -370,6 +370,10 @@ export class UIManager {
     EventBus.on('fleet:buildFailed', ({ reason }) => {
       this._addNotification(`⚠ Stocznia: ${reason}`);
     });
+    EventBus.on('fleet:buildQueued', ({ shipId }) => {
+      const ship = SHIPS[shipId];
+      this._addNotification(`⏳ Stocznia: ${ship?.namePL ?? shipId} — oczekuje na surowce`);
+    });
 
     // Vessel events
     EventBus.on('vessel:launched', ({ vessel, mission }) => {

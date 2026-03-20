@@ -15,7 +15,7 @@
 // ── Typy terenu ───────────────────────────────────────────────────────────────
 // yieldBonus: mnożnik produkcji budynków stojących na tym terenie (1.0 = bez bonusu)
 // allowedCategories: które kategorie budynków mogą tu stanąć
-//   'mining' | 'energy' | 'food' | 'population' | 'research' | 'military' | 'space'
+//   'mining' | 'energy' | 'food' | 'population' | 'research' | 'military' | 'space' | 'market'
 // baseYield: pasywna produkcja bez budynku (per rok gry)
 export const TERRAIN_TYPES = {
   plains: {
@@ -24,7 +24,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x5a8a30,
     icon:              '🟢',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'food', 'population', 'research', 'military', 'space'],
+    allowedCategories: ['mining', 'energy', 'food', 'population', 'research', 'military', 'space', 'market'],
     yieldBonus:        { food: 1.4, default: 1.0 },  // bonus do żywności
     baseYield:         { organics: 0.5 },
     description:       'Płaski teren, idealny pod zabudowę i uprawy',
@@ -73,7 +73,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0xc8a850,
     icon:              '🏜',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'military', 'space'],
+    allowedCategories: ['mining', 'energy', 'military', 'space', 'market'],
     yieldBonus:        { energy: 1.5, default: 0.9 },  // doskonałe słońce
     baseYield:         { minerals: 0.3 },
     description:       'Idealne nasłonecznienie, bonus dla elektrowni słonecznych',
@@ -85,7 +85,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x88a8b8,
     icon:              '🧊',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'food', 'military'],
+    allowedCategories: ['mining', 'energy', 'food', 'military', 'market'],
     yieldBonus:        { mining: 1.2, default: 0.8 },
     baseYield:         { minerals: 0.4, water: 0.3 },
     description:       'Zimny teren z płytkimi złożami i lodem',
@@ -97,7 +97,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0xa82800,
     icon:              '🌋',
     buildable:         true,
-    allowedCategories: ['energy', 'mining'],
+    allowedCategories: ['energy', 'mining', 'market'],
     yieldBonus:        { energy: 2.0, mining: 1.3, default: 0.7 },  // geotermia!
     baseYield:         { energy: 1.5, minerals: 0.5 },
     description:       'Aktywność geotermiczna — ogromny bonus dla elektrowni',
@@ -177,6 +177,9 @@ export class HexTile {
 
     // Budowa w toku (null | { buildingId, progress, buildTime, isUpgrade? })
     this.underConstruction = null;
+
+    // Oczekujące zamówienie (null | buildingId string) — czeka na surowce
+    this.pendingBuild = null;
   }
 
   // Skrótowy dostęp do definicji terenu
@@ -189,12 +192,13 @@ export class HexTile {
     if (!this.terrainDef.buildable) return false;
     if (this.buildingId !== null) return false;           // zajęte przez budynek
     if (this.underConstruction !== null) return false;    // zajęte przez budowę w toku
+    if (this.pendingBuild !== null) return false;         // zajęte przez oczekujące zamówienie
     if (this.damaged) return false;
     return this.terrainDef.allowedCategories.includes(category);
   }
 
   // Czy pole jest zajęte przez budynek lub budowę w toku?
-  get isOccupied() { return this.buildingId !== null || this.underConstruction !== null; }
+  get isOccupied() { return this.buildingId !== null || this.underConstruction !== null || this.pendingBuild !== null; }
 
   // Unikalny string-klucz do Map (używany w HexGrid)
   get key() { return `${this.q},${this.r}`; }

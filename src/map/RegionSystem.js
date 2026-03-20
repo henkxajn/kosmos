@@ -82,6 +82,7 @@ class Region {
     this.strategicResource = null;
     this.anomaly           = null;
     this.underConstruction = null;
+    this.pendingBuild      = null;
 
     // Sąsiedzi (ids regionów)
     this.neighbors = [];
@@ -100,12 +101,13 @@ class Region {
     if (!this.terrainDef.buildable) return false;
     if (this.buildingId !== null) return false;
     if (this.underConstruction !== null) return false;
+    if (this.pendingBuild !== null) return false;
     if (this.damaged) return false;
     return this.terrainDef.allowedCategories.includes(category);
   }
 
   // Czy pole jest zajęte?
-  get isOccupied() { return this.buildingId !== null || this.underConstruction !== null; }
+  get isOccupied() { return this.buildingId !== null || this.underConstruction !== null || this.pendingBuild !== null; }
 
   // Serializacja
   serialize() {

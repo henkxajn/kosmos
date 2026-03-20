@@ -7,7 +7,7 @@
 //
 // Dwa tryby:
 //   1. Standalone (fullscreen) — open(planet, grid) — eventy na własnym canvasie
-//   2. Embedded (w PlanetGlobeScene) — open(planet, grid, bounds, true) — input z zewnątrz
+//   2. Embedded (w ColonyOverlay) — open(planet, grid, bounds, true) — input z zewnątrz
 //
 // Lifecycle: open(planet, grid, bounds?, externalInput?) → [interakcja] → close()
 // Komunikacja: EventBus('planet:closeGlobe') przy zamknięciu (tylko standalone)
@@ -84,12 +84,12 @@ export class PlanetGlobeRenderer {
     this.isOpen = false;
   }
 
-  // Getter — kontroler kamery (PlanetGlobeScene potrzebuje go do drag/zoom)
+  // Getter — kontroler kamery (ColonyOverlay potrzebuje go do drag/zoom)
   get cameraCtrl() { return this._cameraCtrl; }
 
   // ── Otwórz widok globu ──────────────────────────────────────
   // bounds: { x, y, w, h } w pikselach fizycznych (null → fullscreen)
-  // externalInput: true → nie podpinaj eventów myszy (PlanetGlobeScene steruje)
+  // externalInput: true → nie podpinaj eventów myszy (ColonyOverlay steruje)
   open(planet, grid, bounds = null, externalInput = false) {
     if (this.isOpen) return;
     this._planet  = planet;
@@ -280,7 +280,7 @@ export class PlanetGlobeRenderer {
     // Resize
     this._onResize = () => {
       if (this._bounds) {
-        // Embedded — PlanetGlobeScene wywoła updateBounds()
+        // Embedded — ColonyOverlay wywoła updateBounds()
         return;
       }
       const nW = window.innerWidth;
@@ -414,7 +414,7 @@ export class PlanetGlobeRenderer {
     }
   }
 
-  // ── External input API (PlanetGlobeScene steruje z event-layer) ──
+  // ── External input API (ColonyOverlay steruje z event-layer) ──
 
   handleExternalMouseMove(clientX, clientY) {
     const tile = this._raycastToTile(clientX, clientY);
@@ -538,7 +538,7 @@ export class PlanetGlobeRenderer {
   // ── Markery budynków na regionach ──────────────────────────────────────────
   _drawRegionBuildingMarkers(ctx, texW, texH) {
     this._grid.forEach(region => {
-      if (!region.buildingId && !region.capitalBase) return;
+      if (!region.buildingId && !region.capitalBase && !region.pendingBuild && !region.underConstruction) return;
 
       const u = region.centerLon / (2 * Math.PI);
       const v = 1 - (region.centerLat + Math.PI / 2) / Math.PI;
@@ -552,22 +552,81 @@ export class PlanetGlobeRenderer {
 
         // Kółko budynku
         ctx.beginPath();
-        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-        ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+        ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]}, 0.5)`;
         ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,0.6)';
         ctx.lineWidth = 1;
         ctx.stroke();
+        // Ikona budynku
+        if (bDef?.icon) {
+          ctx.font = '10px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#fff';
+          ctx.fillText(bDef.icon, cx, cy);
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'alphabetic';
+        }
       }
 
-      if (region.capitalBase) {
+      if (region.capitalBase && !region.buildingId) {
         ctx.beginPath();
-        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgb(68, 136, 255)';
+        ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(68, 136, 255, 0.5)';
         ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,0.6)';
         ctx.lineWidth = 1;
         ctx.stroke();
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#fff';
+        ctx.fillText('🏛', cx, cy);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+      }
+
+      // Oczekujący budynek (pending) — pomarańczowe kółko + ikona ⏳
+      if (region.pendingBuild && !region.buildingId) {
+        const pDef = BUILDINGS[region.pendingBuild];
+        ctx.beginPath();
+        ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 180, 0, 0.30)';
+        ctx.fill();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = 'rgb(255, 180, 0)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Ikona budynku
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(255, 200, 80, 0.9)';
+        ctx.fillText(pDef?.icon ?? '⏳', cx, cy);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+      }
+
+      // Budowa w toku — żółte kółko + ikona 🔨
+      if (region.underConstruction && !region.buildingId) {
+        const ucDef = BUILDINGS[region.underConstruction.buildingId];
+        ctx.beginPath();
+        ctx.arc(cx, cy, 8, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 220, 50, 0.30)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgb(255, 220, 50)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // Ikona budynku
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(255, 240, 100, 0.9)';
+        ctx.fillText(ucDef?.icon ?? '🔨', cx, cy);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
       }
     });
   }

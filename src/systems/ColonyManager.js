@@ -122,9 +122,10 @@ export class ColonyManager {
       }
     });
 
-    // Tick budowy statków — civDeltaYears = deltaYears × CIV_TIME_SCALE
+    // Tick budowy statków + pending ship orders — civDeltaYears = deltaYears × CIV_TIME_SCALE
     EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => {
       this._tickShipBuilds(deltaYears);
+      this._tickPendingShipOrders();
     });
 
     // Invaliduj cache shipyard level przy budowie/rozbiórce/upgrade stoczni
@@ -289,6 +290,11 @@ export class ColonyManager {
       allowEmigration:  true,
       fleet:           [],    // statki w hangarze: ['science_vessel', ...]
       shipQueues:      [],    // sloty budowy: [{ shipId, progress, buildTime }, ...]
+      credits:         0,     // Kredyty (Kr) z handlu cywilnego
+      creditsPerYear:  0,
+      tradeCapacity:   0,
+      activeTradeConnections: [],
+      tradeOverrides:  {},
     };
     this._colonies.set(planet.id, colony);
     this._activePlanetId = planet.id;
@@ -349,6 +355,11 @@ export class ColonyManager {
       allowEmigration:  true,
       fleet:           [],
       shipQueues:      [],
+      credits:         0,
+      creditsPerYear:  0,
+      tradeCapacity:   0,
+      activeTradeConnections: [],
+      tradeOverrides:  {},
     };
 
     this._colonies.set(planetId, colony);
@@ -421,6 +432,11 @@ export class ColonyManager {
       allowEmigration:  false,
       fleet:           [],
       shipQueues:      [],
+      credits:         0,
+      creditsPerYear:  0,
+      tradeCapacity:   0,
+      activeTradeConnections: [],
+      tradeOverrides:  {},
     };
 
     this._colonies.set(planetId, colony);
@@ -600,15 +616,7 @@ export class ColonyManager {
       return { ok: false, reason };
     }
 
-    // Sprawdź czy stać na koszt (surowce + commodities)
-    const allCosts = { ...ship.cost, ...(ship.commodityCost || {}) };
-    if (!colony.resourceSystem.canAfford(allCosts)) {
-      const reason = t('fleet.noResources');
-      EventBus.emit('fleet:buildFailed', { reason });
-      return { ok: false, reason };
-    }
-
-    // Sprawdź POPy (załoga blokowana przy budowie)
+    // Sprawdź POPy (załoga blokowana przy budowie) — hard fail
     const crewCost = ship.crewCost ?? 0;
     if (crewCost > 0) {
       const freePops = colony.civSystem?.freePops ?? 0;
@@ -617,6 +625,23 @@ export class ColonyManager {
         EventBus.emit('fleet:buildFailed', { reason });
         return { ok: false, reason };
       }
+    }
+
+    // Sprawdź czy stać na koszt (surowce + commodities)
+    const allCosts = { ...ship.cost, ...(ship.commodityCost || {}) };
+    if (!colony.resourceSystem.canAfford(allCosts)) {
+      // Brak surowców → dodaj do pending ship orders
+      if (!colony.pendingShipOrders) colony.pendingShipOrders = [];
+      const orderId = `pso_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      colony.pendingShipOrders.push({
+        id: orderId,
+        shipId: ship.id,
+        cost: { ...allCosts },
+        crewCost,
+        queuedAt: window.KOSMOS?.timeSystem?.gameTime ?? 0,
+      });
+      EventBus.emit('fleet:buildQueued', { planetId, shipId: ship.id, cost: { ...allCosts } });
+      return { ok: true, queued: true };
     }
 
     // Pobierz zasoby
@@ -659,6 +684,77 @@ export class ColonyManager {
         }
       }
     }
+  }
+
+  // Tick pending ship orders — sprawdź czy zamówienia mogą ruszyć
+  _tickPendingShipOrders() {
+    for (const colony of this._colonies.values()) {
+      const pending = colony.pendingShipOrders;
+      if (!pending || pending.length === 0) continue;
+
+      const shipyardLevel = this._getShipyardLevel(colony);
+      if (shipyardLevel === 0) continue;
+
+      // Iteruj od początku (FIFO) — zbierz indeksy do usunięcia
+      const toRemove = [];
+      if (!colony.shipQueues) colony.shipQueues = [];
+
+      for (let i = 0; i < pending.length; i++) {
+        const order = pending[i];
+
+        // Sprawdź wolne sloty stoczni
+        if (colony.shipQueues.length >= shipyardLevel) break;
+
+        // Sprawdź POPy (re-check — stan zmienia się po lockPops)
+        if (order.crewCost > 0) {
+          const freePops = colony.civSystem?.freePops ?? 0;
+          if (freePops < order.crewCost) continue;
+        }
+
+        // Sprawdź surowce (re-check — stan zmienia się po spend)
+        if (!colony.resourceSystem.canAfford(order.cost)) continue;
+
+        // Wszystko OK — uruchom budowę
+        colony.resourceSystem.spend(order.cost);
+
+        if (order.crewCost > 0 && colony.civSystem) {
+          colony.civSystem.lockPops(order.crewCost);
+        }
+
+        const ship = SHIPS[order.shipId];
+        colony.shipQueues.push({
+          shipId:    order.shipId,
+          progress:  0,
+          buildTime: ship?.buildTime ?? 5,
+        });
+
+        toRemove.push(i);
+        EventBus.emit('fleet:buildStarted', { planetId: colony.planetId, shipId: order.shipId });
+      }
+
+      // Usuń zrealizowane (od końca żeby indeksy się nie przesunęły)
+      for (let j = toRemove.length - 1; j >= 0; j--) {
+        pending.splice(toRemove[j], 1);
+      }
+    }
+  }
+
+  // Anuluj oczekujące zamówienie statku
+  cancelPendingShip(planetId, orderId) {
+    const colony = this.getColony(planetId);
+    if (!colony?.pendingShipOrders) return;
+
+    const idx = colony.pendingShipOrders.findIndex(o => o.id === orderId);
+    if (idx === -1) return;
+
+    colony.pendingShipOrders.splice(idx, 1);
+    EventBus.emit('fleet:pendingCancelled', { planetId, orderId });
+  }
+
+  // Pobierz oczekujące zamówienia statków dla kolonii
+  getPendingShipOrders(planetId) {
+    const colony = this.getColony(planetId);
+    return colony?.pendingShipOrders ?? [];
   }
 
   // Zużyj statek z floty (przy wysyłaniu ekspedycji — np. colony_ship)
@@ -910,12 +1006,19 @@ export class ColonyManager {
         civ:              col.civSystem.serialize(),
         buildings:        col.buildingSystem?.serialize() ?? [],
         constructionQueue: col.buildingSystem?.serializeQueue() ?? [],
+        pendingQueue:     col.buildingSystem?.serializePendingQueue() ?? [],
         factorySystem:    col.factorySystem?.serialize() ?? null,
         prosperitySystem: col.prosperitySystem?.serialize() ?? null,
         allowImmigration: col.allowImmigration,
         allowEmigration:  col.allowEmigration,
         fleet:            col.fleet ?? [],
         shipQueues:       col.shipQueues ?? [],
+        pendingShipOrders: col.pendingShipOrders ?? [],
+        credits:          col.credits ?? 0,
+        creditsPerYear:   col.creditsPerYear ?? 0,
+        tradeCapacity:    col.tradeCapacity ?? 0,
+        activeTradeConnections: col.activeTradeConnections ?? [],
+        tradeOverrides:   col.tradeOverrides ?? {},
         requiresSpaceportFirst: col.buildingSystem?._requiresSpaceportFirst ?? false,
         // Grid regionów — opcjonalny, regenerowany deterministycznie przy otwarciu
         grid:             col.grid ? col.grid.serialize() : null,
@@ -956,6 +1059,10 @@ export class ColonyManager {
       // Przywróć kolejkę budowy
       if (colData.constructionQueue?.length > 0) {
         bSys.restoreQueue(colData.constructionQueue);
+      }
+      // Przywróć pending queue
+      if (colData.pendingQueue?.length > 0) {
+        bSys.restorePendingQueue(colData.pendingQueue);
       }
 
       // FactorySystem per-kolonia
@@ -1005,6 +1112,12 @@ export class ColonyManager {
         allowEmigration:  colData.allowEmigration  ?? true,
         fleet:            colData.fleet ?? [],
         shipQueues:       colData.shipQueues ?? [],
+        pendingShipOrders: colData.pendingShipOrders ?? [],
+        credits:          colData.credits ?? 0,
+        creditsPerYear:   colData.creditsPerYear ?? 0,
+        tradeCapacity:    colData.tradeCapacity ?? 0,
+        activeTradeConnections: colData.activeTradeConnections ?? [],
+        tradeOverrides:   colData.tradeOverrides ?? {},
       };
 
       this._colonies.set(colData.planetId, colony);

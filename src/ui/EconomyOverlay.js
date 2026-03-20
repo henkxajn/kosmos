@@ -1491,11 +1491,15 @@ export class EconomyOverlay extends BaseOverlay {
     const results = [];
     for (const goodId in BASE_PRICE) {
       const stock = resSys.inventory?.get(goodId) ?? 0;
-      // Oblicz roczną konsumpcję
+      // Oblicz roczną konsumpcję i produkcję
       let consumption = 0;
+      let production = 0;
       for (const rates of producers.values()) {
         if (rates[goodId] && rates[goodId] < 0) consumption += Math.abs(rates[goodId]);
+        if (rates[goodId] && rates[goodId] > 0) production += rates[goodId];
       }
+      // Pomiń towary bez obecności w kolonii (brak zapasu, produkcji i konsumpcji)
+      if (stock <= 0 && consumption <= 0 && production <= 0) continue;
       const mult = scarcityMultiplier(stock, consumption);
       if (mult !== 1.0) { // pokaż tylko nietypowe ceny
         results.push({ id: goodId, mult });

@@ -34,13 +34,15 @@ export class SurfaceMarkers {
     if (!grid) return;
     this._grid = grid;
 
-    // Zbierz aktualny zbiór tile'ów z budynkami
-    const currentTiles = new Map();  // tileKey → { tile, building }
+    // Zbierz aktualny zbiór tile'ów z budynkami, budową w toku lub pending
+    const currentTiles = new Map();  // tileKey → { tile, building, state }
     grid.forEach(tile => {
-      if (!tile.buildingId && !tile.capitalBase) return;
+      if (!tile.buildingId && !tile.capitalBase && !tile.pendingBuild && !tile.underConstruction) return;
       const key = tile.key ?? `${tile.q},${tile.r}`;
-      const bDef = tile.buildingId ? BUILDINGS[tile.buildingId] : null;
-      currentTiles.set(key, { tile, building: bDef });
+      const effectiveId = tile.buildingId ?? tile.underConstruction?.buildingId ?? tile.pendingBuild;
+      const bDef = effectiveId ? BUILDINGS[effectiveId] : null;
+      const state = tile.pendingBuild ? 'pending' : tile.underConstruction ? 'construction' : 'active';
+      currentTiles.set(key, { tile, building: bDef, state });
     });
 
     // 1. Usuń markery których nie ma już w grid
@@ -54,15 +56,22 @@ export class SurfaceMarkers {
     }
 
     // 2. Dodaj/aktualizuj markery
-    for (const [key, { tile, building }] of currentTiles) {
-      if (this._markers.has(key)) {
-        // Marker istnieje — aktualizuj pozycję
-        const sprite = this._markers.get(key);
+    for (const [key, { tile, building, state }] of currentTiles) {
+      const existing = this._markers.get(key);
+      if (existing && existing.userData._state === state) {
+        // Marker istnieje i stan się nie zmienił — aktualizuj pozycję
         const pos = this._tileToXYZ(tile, 1.06);
-        if (pos) sprite.position.copy(pos);
+        if (pos) existing.position.copy(pos);
       } else {
+        // Usuń stary marker jeśli stan się zmienił
+        if (existing) {
+          existing.material.map?.dispose();
+          existing.material.dispose();
+          this._scene.remove(existing);
+          this._markers.delete(key);
+        }
         // Nowy marker
-        const sprite = this._createMarker(tile, building);
+        const sprite = this._createMarker(tile, building, state);
         if (sprite) {
           this._scene.add(sprite);
           this._markers.set(key, sprite);
@@ -106,17 +115,16 @@ export class SurfaceMarkers {
 
   // ── Prywatne ─────────────────────────────────────────────────────────
 
-  // Utwórz Sprite dla tile'a z budynkiem
-  _createMarker(tile, building) {
-    // Dla stolicy bez innego budynku — specjalny marker
+  // Utwórz Sprite dla tile'a z budynkiem/pending/construction
+  _createMarker(tile, building, state = 'active') {
     const icon = building?.icon ?? (tile.capitalBase ? '🏛' : '🏗');
     const category = building?.category ?? 'population';
 
-    const tex = this._createMarkerTexture(icon, category);
+    const tex = this._createMarkerTexture(icon, category, state);
     const mat = new THREE.SpriteMaterial({
       map: tex,
       transparent: true,
-      opacity: 0.75,
+      opacity: state === 'active' ? 0.75 : 0.65,
       depthWrite: false,
       sizeAttenuation: true,
     });
@@ -129,7 +137,6 @@ export class SurfaceMarkers {
     if (!pos) return null;
     sprite.position.copy(pos);
 
-    // Metadata
     const key = tile.key ?? `${tile.q},${tile.r}`;
     sprite.userData = {
       tileKey: key,
@@ -137,40 +144,56 @@ export class SurfaceMarkers {
       baseScale: 0.12,
       phase: this._hashPhase(key),
       pulse: true,
+      _state: state,
     };
 
     return sprite;
   }
 
   // Generuj teksturę markera (canvas 64×64)
-  _createMarkerTexture(icon, category) {
+  _createMarkerTexture(icon, category, state = 'active') {
     const size = 64;
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
 
-    const color = CAT_COLORS[category] ?? '#888888';
+    const catColor = CAT_COLORS[category] ?? '#888888';
+    const borderColor = state === 'pending' ? '#ffb400' : state === 'construction' ? '#ffdd44' : catColor;
+    const bgAlpha = state === 'active' ? 0.85 : 0.70;
 
     // Kółko tło
     ctx.beginPath();
     ctx.arc(32, 32, 28, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(6, 13, 24, 0.85)';
+    ctx.fillStyle = `rgba(6, 13, 24, ${bgAlpha})`;
     ctx.fill();
 
-    // Kółko obramowanie — kolor kategorii
+    // Kółko obramowanie
     ctx.beginPath();
     ctx.arc(32, 32, 28, 0, Math.PI * 2);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
+    if (state === 'pending') {
+      ctx.setLineDash([8, 6]);
+    }
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = state === 'active' ? 3 : 2.5;
     ctx.stroke();
+    ctx.setLineDash([]);
 
     // Ikona budynku (emoji) — wyśrodkowana
     ctx.font = '28px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = state === 'active' ? '#ffffff' : state === 'construction' ? '#ffee88' : '#ffcc66';
     ctx.fillText(icon, 32, 33);
+
+    // Mały znacznik stanu w rogu
+    if (state === 'pending') {
+      ctx.font = '16px serif';
+      ctx.fillText('⏳', 52, 14);
+    } else if (state === 'construction') {
+      ctx.font = '16px serif';
+      ctx.fillText('🔨', 52, 14);
+    }
 
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;

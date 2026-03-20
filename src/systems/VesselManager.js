@@ -347,8 +347,8 @@ export class VesselManager {
     m.returnDepartYear = window.KOSMOS?.timeSystem?.gameTime ?? m.arrivalYear; // moment startu powrotu
     // Cel powrotu = predykowana pozycja kolonii macierzystej w momencie przylotu
     const predictedHome = this._predictPosition(vessel.colonyId, m.returnYear);
-    m.returnTargetX = predictedHome.x || m.startX;
-    m.returnTargetY = predictedHome.y || m.startY;
+    m.returnTargetX = predictedHome.x ?? m.startX;
+    m.returnTargetY = predictedHome.y ?? m.startY;
     m.phase = 'returning';
 
     // Oblicz waypoints powrotne (unikanie Słońca + ciał niebieskich)
@@ -923,6 +923,14 @@ export class VesselManager {
     if (targetEntity) {
       m.liveTargetX = targetEntity.x;
       m.liveTargetY = targetEntity.y;
+    }
+    // Punkt powrotu → aktualna pozycja bazy macierzystej (dla returning)
+    if (m.phase === 'returning') {
+      const homeEntity = this._findEntity(vessel.colonyId);
+      if (homeEntity) {
+        m.returnTargetX = homeEntity.x;
+        m.returnTargetY = homeEntity.y;
+      }
     }
   }
 

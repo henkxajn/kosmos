@@ -451,6 +451,20 @@ export const TECHS = {
     description: 'Trasy handlowe + Ciężki Frachtowiec (10k cargo)',
   },
 
+  advanced_trade: {
+    id:          'advanced_trade',
+    namePL:      'Zaawansowany Handel',
+    branch:      'civil',
+    tier:        4,
+    cost:        { research: 350 },
+    requires:    ['interplanetary_logistics'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'trade_beacon' },
+      { type: 'unlockBuilding', buildingId: 'commodity_nexus' },
+    ],
+    description: 'Radiolatarnia Handlowa + Nexus Towarowy — rozszerzony zasięg i globalne dopasowanie',
+  },
+
   emergency_protocols: {
     id:          'emergency_protocols',
     namePL:      'Protokoły Awaryjne',

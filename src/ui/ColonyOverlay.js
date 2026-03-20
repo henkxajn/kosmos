@@ -40,6 +40,8 @@ const BUILDING_CATEGORIES = [
   { id: 'population',  labelKey: 'category.population' },
   { id: 'research',    labelKey: 'category.research' },
   { id: 'space',       labelKey: 'category.space' },
+  { id: 'military',   labelKey: 'category.military' },
+  { id: 'market',     labelKey: 'category.market' },
 ];
 
 // Typy planet → ikona + label (i18n)
@@ -111,7 +113,8 @@ export class ColonyOverlay extends BaseOverlay {
     // Nasłuchuj na zmiany budynków
     EventBus.on('planet:buildResult', (e) => {
       this._onBuildingChanged();
-      if (!e.success && e.reason) this._showFlash(e.reason);
+      if (e.success && e.queued) this._showFlash(t('ui.buildQueued'));
+      else if (!e.success && e.reason) this._showFlash(e.reason);
     });
     EventBus.on('planet:demolishResult', (e) => {
       this._onBuildingChanged();
@@ -127,8 +130,14 @@ export class ColonyOverlay extends BaseOverlay {
     });
     EventBus.on('planet:upgradeResult', (e) => {
       this._onBuildingChanged();
-      if (!e.success && e.reason) this._showFlash(e.reason);
+      if (e.success && e.queued) this._showFlash(t('ui.upgradeQueued'));
+      else if (!e.success && e.reason) this._showFlash(e.reason);
     });
+    EventBus.on('planet:pendingFulfilled', () => {
+      this._onBuildingChanged();
+      this._showFlash(t('ui.pendingFulfilled'));
+    });
+    EventBus.on('planet:pendingCancelled', () => this._onBuildingChanged());
     EventBus.on('planet:constructionComplete', () => this._onBuildingChanged());
     EventBus.on('planet:constructionProgress', () => this._onBuildingChanged());
   }
@@ -198,6 +207,42 @@ export class ColonyOverlay extends BaseOverlay {
     } else if (bldg) {
       const lvl = hovTile.buildingLevel > 1 ? ` Lv${hovTile.buildingLevel}` : '';
       html += `<div style="color:${THEME.textSecondary}">${bldg.icon ?? ''} ${getName(bldg, 'building')}${lvl}</div>`;
+    }
+
+    // Pending build — pokaż czego brakuje
+    if (hovTile.pendingBuild) {
+      const pendB = BUILDINGS[hovTile.pendingBuild];
+      const bSys = colony?.buildingSystem;
+      const pendOrder = bSys?._pendingQueue?.get(hovTile.key ?? `${hovTile.q},${hovTile.r}`);
+      html += `<div style="color:#ffb400;margin-top:3px">⏳ ${pendB?.icon ?? ''} ${pendB ? getName(pendB, 'building') : hovTile.pendingBuild}</div>`;
+      html += `<div style="color:#ffcc66;font-size:11px">${t('ui.buildQueued')}</div>`;
+      if (pendOrder?.cost) {
+        const inv = colony?.resourceSystem?.inventorySnapshot?.() ?? {};
+        const missing = [];
+        for (const [resId, need] of Object.entries(pendOrder.cost)) {
+          const have = inv[resId] ?? 0;
+          if (have < need) missing.push(`<span style="color:#ff6644">${resId}: ${Math.floor(have)}/${need}</span>`);
+        }
+        if (missing.length) {
+          html += `<div style="margin-top:2px;font-size:11px">${t('ui.awaiting')} ${missing.join(', ')}</div>`;
+        }
+      }
+      const neededPop = pendOrder?.popCost ?? 0;
+      if (neededPop > 0) {
+        const freePops = colony?.civSystem?.freePops ?? 0;
+        if (freePops < neededPop) {
+          html += `<div style="color:#ff6644;font-size:11px">👤 ${t('ui.awaitingPops', neededPop)} (${freePops.toFixed(1)} ${t('ui.free')})</div>`;
+        }
+      }
+    }
+
+    // Budowa w toku
+    if (hovTile.underConstruction && !hovTile.buildingId) {
+      const ucB = BUILDINGS[hovTile.underConstruction.buildingId];
+      const pct = hovTile.underConstruction.buildTime > 0
+        ? Math.round((hovTile.underConstruction.progress / hovTile.underConstruction.buildTime) * 100) : 0;
+      html += `<div style="color:#ffdd44;margin-top:3px">🔨 ${ucB?.icon ?? ''} ${ucB ? getName(ucB, 'building') : '?'}</div>`;
+      html += `<div style="color:#ffee88;font-size:11px">${t('ui.inConstruction')} ${pct}%</div>`;
     }
 
     // Zasoby bazowe terenu
@@ -387,7 +432,7 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
     // BuildMode — postaw budynek
-    if (this._buildMode && this._pendingBuildingId && !tile.buildingId && !tile.underConstruction) {
+    if (this._buildMode && this._pendingBuildingId && !tile.buildingId && !tile.underConstruction && !tile.pendingBuild) {
       const terrain = TERRAIN_TYPES[tile.type];
       if (terrain?.buildable) {
         EventBus.emit('planet:buildRequest', {
@@ -507,6 +552,7 @@ export class ColonyOverlay extends BaseOverlay {
       tile.capitalBase = false;
       tile.buildingLevel = 1;
       tile.underConstruction = null;
+      tile.pendingBuild = null;
     });
     // Ustaw z _active
     const active = bSys._active;
@@ -542,6 +588,18 @@ export class ColonyOverlay extends BaseOverlay {
             isUpgrade: entry.isUpgrade ?? false,
             targetLevel: entry.targetLevel,
           };
+        }
+      }
+    }
+    // Oczekujące zamówienia (pending queue)
+    const pending = bSys._pendingQueue;
+    if (pending) {
+      for (const [tileKey, order] of pending) {
+        const coords = tileKey.split(',');
+        const q = parseInt(coords[0]), r = parseInt(coords[1]);
+        const tile = grid.get(q, r);
+        if (tile) {
+          tile.pendingBuild = order.buildingId;
         }
       }
     }
@@ -624,7 +682,7 @@ export class ColonyOverlay extends BaseOverlay {
       this._updateBuildingTooltip();
     } else if (this._tooltipUpgradeData) {
       this._updateUpgradeTooltip();
-    } else if (this._hoveredHex && !this._buildMode) {
+    } else if (this._hoveredHex) {
       this._updateHexHoverTooltip();
     } else {
       this._hideDomTooltip();
@@ -1662,7 +1720,20 @@ export class ColonyOverlay extends BaseOverlay {
 
     ly += 10;
 
-    if (terrain?.buildable && !tile.underConstruction) {
+    if (tile.pendingBuild) {
+      // Oczekujące zamówienie — pokaż info i przycisk anulowania
+      const pendB = BUILDINGS[tile.pendingBuild];
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText(`⏳ ${pendB?.icon ?? '?'} ${pendB ? getName(pendB, 'building') : tile.pendingBuild}`, x + pad, ly);
+      ly += 14;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillText(t('ui.buildQueued'), x + pad, ly);
+      ly += 16;
+      this._drawButton(ctx, t('ui.pendingCancelled'), x + pad, ly, w - pad * 2, 22, 'danger');
+      this._addHit(x + pad, ly, w - pad * 2, 22, 'cancelPending');
+    } else if (terrain?.buildable && !tile.underConstruction) {
       this._drawButton(ctx, `+ ${t('colonyPanel.buildHere')}`, x + pad, ly, w - pad * 2, 28, 'primary');
       this._addHit(x + pad, ly, w - pad * 2, 28, 'enterBuildMode');
     } else if (tile.underConstruction) {
@@ -1742,6 +1813,28 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (zone.type === 'selectBuilding') {
       if (zone.data.locked) return; // zablokowany tech — nie buduj
+
+      // Jeśli hex jest zaznaczony i pusty — buduj od razu (bez dodatkowego kliknięcia)
+      if (this._selectedHex) {
+        const colMgr = window.KOSMOS?.colonyManager;
+        const colony = colMgr?.getColony(this._selectedColonyId);
+        const grid = colony ? this._getGrid(colony) : null;
+        const tile = grid?.get(this._selectedHex.q, this._selectedHex.r);
+        if (tile && !tile.buildingId && !tile.underConstruction && !tile.pendingBuild) {
+          const terrain = TERRAIN_TYPES[tile.type];
+          if (terrain?.buildable) {
+            EventBus.emit('planet:buildRequest', {
+              tile,
+              buildingId: zone.data.buildingId,
+            });
+            this._buildMode = false;
+            this._pendingBuildingId = null;
+            return;
+          }
+        }
+      }
+
+      // Brak zaznaczonego hexa lub hex zajęty — wejdź w tryb budowy (klik na globus)
       this._buildMode = true;
       this._pendingBuildingId = zone.data.buildingId;
       return;
@@ -1750,6 +1843,16 @@ export class ColonyOverlay extends BaseOverlay {
     if (zone.type === 'enterBuildMode') {
       this._buildMode = true;
       this._pendingBuildingId = null;
+      return;
+    }
+
+    if (zone.type === 'cancelPending') {
+      const hex = this._selectedHex;
+      if (hex) {
+        const tileKey = `${hex.q},${hex.r}`;
+        const bSys = window.KOSMOS?.buildingSystem;
+        if (bSys) bSys.cancelPending(tileKey);
+      }
       return;
     }
 

@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v12
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v24
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -83,6 +83,7 @@ window.KOSMOS = {
   buildingSystem,   // BuildingSystem
   techSystem,       // TechSystem
   vesselManager,    // VesselManager — rejestr statków (pozycje, paliwo, misje)
+  civilianTradeSystem, // CivilianTradeSystem — auto-routing towarów, Kredyty (Kr)
   savedData,        // dane z localStorage (BootScene → GameScene)
 }
 ```
@@ -160,6 +161,7 @@ GameScene.create()
   └─ TechSystem(resSys)     ← drzewo tech, mnożniki produkcji
   └─ CivilizationSystem({}, techSys)  ← POPy, morale, epoki, consumption
   └─ BuildingSystem(resSys, civSys, techSys)  ← budowa (wymaga POP), demolish, rateReapply
+  └─ CivilianTradeSystem(colMgr)  ← auto-routing towarów, Kredyty (Kr)
 
 PlanetScene
   └─ importuje: HexGrid, PlanetMapGenerator, BUILDINGS, TECHS, ResourcePanel
@@ -229,8 +231,19 @@ SaveSystem._serializeCiv4x()
 | `expedition:deliverCargo { expeditionId }` | UIManager | ExpeditionSystem |
 | `outpost:founded { colony }` | ColonyManager | GameScene |
 | `colony:destroyed { planetId, colonyName, reason, isOutpost, population, destroyedVesselIds }` | ColonyManager | GameScene, VesselManager, MissionSystem, TradeRouteManager |
-| `planet:constructionProgress` | BuildingSystem | PlanetGlobeScene |
-| `planet:constructionComplete { tileKey, buildingId }` | BuildingSystem | PlanetGlobeScene |
+| `planet:constructionProgress` | BuildingSystem | ColonyOverlay |
+| `planet:constructionComplete { tileKey, buildingId }` | BuildingSystem | ColonyOverlay |
+| `planet:buildQueued { tile, buildingId, cost }` | BuildingSystem | PlanetScene, EventLog |
+| `planet:upgradeQueued { tile, cost }` | BuildingSystem | PlanetScene, EventLog |
+| `planet:pendingFulfilled { tileKey, buildingId, isUpgrade }` | BuildingSystem | PlanetScene, EventLog |
+| `planet:pendingCancelled { tileKey }` | BuildingSystem | PlanetScene |
+| `fleet:buildQueued { planetId, shipId, cost }` | ColonyManager | UIManager, EventLog |
+| `fleet:pendingCancelled { planetId, orderId }` | ColonyManager | UIManager |
+| `trade:connectionsUpdated { connections[] }` | CivilianTradeSystem | UIManager |
+| `trade:creditsChanged { colonyId, credits, delta }` | CivilianTradeSystem | UIManager |
+| `trade:transferExecuted { from, to, goodId, qty }` | CivilianTradeSystem | UIManager |
+| `trade:spendCredits { colonyId, amount, purpose }` | UIManager | CivilianTradeSystem |
+| `trade:setOverride { colonyId, goodId, mode }` | UIManager | CivilianTradeSystem |
 
 ---
 
@@ -333,6 +346,9 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 - [x] **Etap 36** — Czas budowy budynków + Deploy prefabów z cargo
 - [x] **Etap 37** — System Outpost: mini-kolonia bez POPów, transport tworzy outpost, colony ship upgraduje do kolonii
 
+### Ekonomia cywilna
+- [x] **Etap 39** — Cywilna Ekonomia: CivilianTradeSystem (auto-routing towarów, Kredyty Kr), budynki market (trade_hub/free_market/trade_beacon/commodity_nexus), tech advanced_trade, prosperity trade network bonus, SaveMigration v23, panel Handel w EconomyOverlay (kredyty/połączenia/ceny lokalne), linie handlu 3D w ThreeRenderer
+
 ### Następne etapy (plan)
 - [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
 
@@ -387,3 +403,7 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 | Czas budowy budynków (buildTime) | Budynki z `buildTime > 0` nie powstają natychmiast — `_constructionQueue` w BuildingSystem; event `planet:constructionProgress` co tick aktualizuje pasek progresu |
 | Prefabrykaty deployowane z cargo | isPrefab commodities → `deploysBuilding` → `BuildingSystem.deployFromCargo()` — natychmiastowa budowa bez kosztu surowcowego |
 | Outpost (mini-kolonia bez POPów) | `isOutpost: true` → BuildingSystem._isOutpost pomija POP; upgrade do pełnej kolonii przez colony_ship |
+| Handel cywilny (prosperity gradients) | CivilianTradeSystem: towary płyną auto z nadwyżki do niedoboru, generując Kredyty (Kr); TC = 200×pop + budynki; tick co 0.5 civYear |
+| Kredyty (Kr) — waluta handlowa | Eksporter: 6% wartości, Importer: 3%; scarcityMultiplier (0.2–5.0×) wg lat zapasu; wydawane na rush build, zakupy awaryjne |
+| Trade network bonus do prosperity | +3 per połączenie (max +15), upkeep 2×distFactor per połączenie; dalekie kolonie mogą tracić prosperity |
+| Kategoria 'market' w HexTile | Budynki handlowe: trade_hub (TC+zasięg), free_market (efektywność), trade_beacon (×1.5 zasięg), commodity_nexus (unlimited) |

@@ -748,6 +748,104 @@ export const BUILDINGS = {
     maxPerColony:  3,
   },
 
+  // ── Budynki handlowe (market) ──────────────────────────────────────────────
+
+  trade_hub: {
+    id:            'trade_hub',
+    namePL:        'Centrum Handlowe',
+    nameEN:        'Trade Hub',
+    category:      'market',
+    icon:          '🏪',
+    description:   'Zwiększa Trade Capacity kolonii i zasięg handlu cywilnego',
+    cost:          { Fe: 40, C: 20, Cu: 5 },
+    commodityCost: { steel_plates: 4, electronics: 2, copper_wiring: 2 },
+    energyCost:    4,
+    buildTime:     1.0,
+    rates:         {},
+    maintenance:   { Fe: 1 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    false,
+    requires:      'interplanetary_logistics',
+    tcBonus:       200,          // +200 TC per level
+    tradeRangeBonus: 5,         // +5 AU zasięgu handlu per level
+  },
+
+  free_market: {
+    id:            'free_market',
+    namePL:        'Wolny Rynek',
+    nameEN:        'Free Market',
+    category:      'market',
+    icon:          '📊',
+    description:   'Zwiększa efektywność routingu i obniża koszty utrzymania sieci handlowej',
+    cost:          { Fe: 30, C: 15 },
+    commodityCost: { steel_plates: 3, concrete_mix: 2, electronics: 1 },
+    energyCost:    3,
+    buildTime:     0.75,
+    rates:         {},
+    maintenance:   { Fe: 1 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    false,
+    requires:      'interplanetary_logistics',
+    routingEfficiencyBonus: 0.30,  // +30% efektywność routingu per building
+    tradeUpkeepMult:       0.80,  // ×0.80 koszty utrzymania sieci per building
+  },
+
+  trade_beacon: {
+    id:            'trade_beacon',
+    namePL:        'Radiolatarnia Handlowa',
+    nameEN:        'Trade Beacon',
+    category:      'market',
+    icon:          '📡',
+    description:   'Rozszerza zasięg handlu ×1.5 — umożliwia handel z odległymi koloniami',
+    cost:          { Ti: 10, Cu: 8 },
+    commodityCost: { electronics: 3, copper_wiring: 4, power_cells: 2 },
+    energyCost:    6,
+    buildTime:     2.0,
+    rates:         {},
+    maintenance:   { Ti: 1, Cu: 1 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      3,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'advanced_trade',
+    tradeRangeMult: 1.5,        // ×1.5 zasięg handlu
+  },
+
+  commodity_nexus: {
+    id:            'commodity_nexus',
+    namePL:        'Nexus Towarowy',
+    nameEN:        'Commodity Nexus',
+    category:      'market',
+    icon:          '🌐',
+    description:   'Globalny routing towarów — eliminuje limit zasięgu i bonus Kr za dalekie trasy',
+    cost:          { Ti: 20, Si: 15, Pt: 5 },
+    commodityCost: { quantum_processors: 2, exotic_alloy: 1, electronics: 3 },
+    energyCost:    12,
+    buildTime:     4.0,
+    rates:         {},
+    maintenance:   { Ti: 2, Pt: 1 },
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'advanced_trade',
+    isUnique:      true,
+    empireWideMatching:    true,   // routing bez limitu zasięgu
+    creditBonusLongDist:   0.30,   // +30% Kr za trasy >10 AU
+  },
+
   // ── Budynki międzygwiezdne (Etap 40) ─────────────────────────────────────
 
   warp_beacon: {

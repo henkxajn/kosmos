@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 22;
+export const CURRENT_VERSION     = 24;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -37,6 +37,8 @@ const MIGRATIONS = {
   19: _migrateV19toV20,
   20: _migrateV20toV21,
   21: _migrateV21toV22,
+  22: _migrateV22toV23,
+  23: _migrateV23toV24,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -708,5 +710,30 @@ function _migrateV21toV22(data) {
     };
   }
 
+  return data;
+}
+
+// ── v23 → v24: Pending orders (budynki + statki) ─────────────────────────
+function _migrateV23toV24(data) {
+  if (data.civ4x?.colonies) {
+    for (const c of data.civ4x.colonies) {
+      c.pendingQueue      ??= [];
+      c.pendingShipOrders ??= [];
+    }
+  }
+  return data;
+}
+
+// ── v22 → v23: Pola handlu cywilnego per-kolonia ──────────────────────────
+function _migrateV22toV23(data) {
+  if (data.civ4x?.colonies) {
+    for (const c of data.civ4x.colonies) {
+      c.credits                 ??= 0;
+      c.creditsPerYear          ??= 0;
+      c.tradeCapacity           ??= 0;
+      c.activeTradeConnections  ??= [];
+      c.tradeOverrides          ??= {};
+    }
+  }
   return data;
 }

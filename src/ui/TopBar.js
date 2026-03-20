@@ -251,7 +251,7 @@ export class TopBar {
     }
   }
 
-  // Aktualizuj hover — wywoływane z UIManager/PlanetGlobeScene przy mousemove
+  // Aktualizuj hover — wywoływane z UIManager przy mousemove
   updateHover(mx, my) {
     if (my < 0 || my > BAR_H) {
       this._tooltip = null;

@@ -436,6 +436,11 @@ export class FleetManagerOverlay {
           EventBus.emit('fleet:buildRequest', { shipId: zone.data.shipId });
         }
         break;
+      case 'cancel_pending_ship': {
+        const colMgr = window.KOSMOS?.colonyManager;
+        if (colMgr) colMgr.cancelPendingShip(zone.data.planetId, zone.data.orderId);
+        break;
+      }
       case 'filter':
         this._filter = zone.data.filterId;
         this._scrollOffset = 0;
@@ -2897,16 +2902,19 @@ export class FleetManagerOverlay {
       const canAfford = Object.entries(allCosts).every(([k, v]) => (inv[k] ?? 0) >= v);
       const crewCost = ship.crewCost ?? 0;
       const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
-      const canBuild = canBuildAny && canAfford && hasCrew;
+      // Przycisk aktywny gdy: załoga OK + (slot wolny LUB brak surowców → kolejka)
+      const canBuildNow = canBuildAny && canAfford && hasCrew;
+      const canQueue = hasCrew && !canAfford;
+      const canClick = canBuildNow || canQueue;
 
       const btnH = 24;
-      ctx.fillStyle = canBuild ? 'rgba(0,255,180,0.06)' : 'rgba(20,20,30,0.5)';
+      ctx.fillStyle = canBuildNow ? 'rgba(0,255,180,0.06)' : canQueue ? 'rgba(255,180,0,0.06)' : 'rgba(20,20,30,0.5)';
       ctx.fillRect(x + PAD, cy, w - PAD * 2, btnH);
-      ctx.strokeStyle = canBuild ? THEME.borderActive : THEME.border;
+      ctx.strokeStyle = canBuildNow ? THEME.borderActive : canQueue ? THEME.warning : THEME.border;
       ctx.lineWidth = 1;
       ctx.strokeRect(x + PAD, cy, w - PAD * 2, btnH);
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = canBuild ? THEME.accent : THEME.textDim;
+      ctx.fillStyle = canBuildNow ? THEME.accent : canQueue ? THEME.warning : THEME.textDim;
       ctx.textAlign = 'center';
       const crewLabel = crewCost > 0 ? ` (${crewCost}👤)` : '';
       ctx.fillText(`${ship.icon} ${getName(ship, 'ship')}${crewLabel}`, x + w / 2, cy + 16);
@@ -2914,9 +2922,68 @@ export class FleetManagerOverlay {
 
       this._hitZones.push({
         x: x + PAD, y: cy, w: w - PAD * 2, h: btnH,
-        type: 'build_ship', data: { shipId: ship.id, enabled: canBuild },
+        type: 'build_ship', data: { shipId: ship.id, enabled: canClick },
       });
       cy += btnH + 4;
+    }
+
+    // Oczekujące zamówienia (pending ship orders)
+    const pendingOrders = activeCol?.pendingShipOrders ?? [];
+    if (pendingOrders.length > 0) {
+      cy += 4;
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
+      cy += 10;
+
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText(`⏳ ${t('fleet.pendingOrders')} (${pendingOrders.length})`, x + PAD, cy + 8);
+      cy += LH + 2;
+
+      for (const order of pendingOrders) {
+        if (cy > y + h - 30) break;
+        const shipDef = SHIPS[order.shipId];
+        const rowH = 22;
+
+        // Tło
+        ctx.fillStyle = 'rgba(60,40,5,0.5)';
+        ctx.fillRect(x + PAD, cy, w - PAD * 2, rowH);
+        ctx.strokeStyle = 'rgba(255,180,0,0.25)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + PAD, cy, w - PAD * 2, rowH);
+
+        // Nazwa statku
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText(`${shipDef?.icon ?? '🚀'} ${shipDef ? getName(shipDef, 'ship') : order.shipId}`, x + PAD + 4, cy + 14);
+
+        // Brakujące zasoby (krótka lista)
+        const missing = [];
+        for (const [k, need] of Object.entries(order.cost)) {
+          const have = inv[k] ?? 0;
+          if (have < need) missing.push(k);
+        }
+        if (missing.length > 0) {
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = '#ff8844';
+          ctx.textAlign = 'right';
+          ctx.fillText(missing.slice(0, 3).join(', '), x + w - PAD - 30, cy + 14);
+          ctx.textAlign = 'left';
+        }
+
+        // Przycisk anulowania (×)
+        const cancelX = x + w - PAD - 22;
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = '#ff6666';
+        ctx.fillText('×', cancelX + 6, cy + 15);
+        this._hitZones.push({
+          x: cancelX, y: cy, w: 22, h: rowH,
+          type: 'cancel_pending_ship', data: { planetId: activePid, orderId: order.id },
+        });
+
+        cy += rowH + 2;
+      }
     }
 
     // Wskazówka na dole

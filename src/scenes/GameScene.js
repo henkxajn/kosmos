@@ -27,6 +27,7 @@ import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }         from '../systems/DepositSystem.js';
 import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
 import { TradeRouteManager }    from '../systems/TradeRouteManager.js';
+import { CivilianTradeSystem }  from '../systems/CivilianTradeSystem.js';
 import TradeLog                 from '../systems/TradeLog.js';
 import { ResearchSystem }      from '../systems/ResearchSystem.js';
 import { DiscoverySystem }     from '../systems/DiscoverySystem.js';
@@ -141,6 +142,7 @@ export class GameScene {
     this.colonyManager   = new ColonyManager(this.techSystem);
     this.vesselManager   = new VesselManager();
     this.tradeRouteManager = new TradeRouteManager();
+    this.civilianTradeSystem = new CivilianTradeSystem(this.colonyManager);
     this.tradeLog          = new TradeLog();
     this.randomEventSystem = new RandomEventSystem();
     this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
@@ -161,6 +163,7 @@ export class GameScene {
     window.KOSMOS.vesselManager    = this.vesselManager;
     window.KOSMOS.overlayManager   = this.uiManager.overlayManager;
     window.KOSMOS.tradeRouteManager = this.tradeRouteManager;
+    window.KOSMOS.civilianTradeSystem = this.civilianTradeSystem;
     window.KOSMOS.tradeLog         = this.tradeLog;
     window.KOSMOS.timeSystem       = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
@@ -1113,7 +1116,7 @@ export class GameScene {
         return;
       }
 
-      // Escape — toggle menu (gdy brak overlay i brak PlanetGlobeScene)
+      // Escape — toggle menu (gdy brak overlay)
       if (e.key === 'Escape') {
         if (!this.planetScene?.isOpen) {
           this.uiManager._bottomBar.toggleMenu();

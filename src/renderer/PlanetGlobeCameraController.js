@@ -3,7 +3,7 @@
 // Sferyczny orbit: LMB drag = obrót (yaw/pitch), scroll = zoom.
 // Dwa tryby:
 //   1. attach(container) — eventy podpinane bezpośrednio do canvasa globu
-//   2. External input    — PlanetGlobeScene przekazuje drag/zoom z event-layer
+//   2. External input    — ColonyOverlay przekazuje drag/zoom z event-layer
 //      Metody: applyDrag(dx,dy), applyZoom(deltaY), startDrag(), endDrag()
 
 export class PlanetGlobeCameraController {
@@ -76,7 +76,7 @@ export class PlanetGlobeCameraController {
     container.addEventListener('wheel',     this._onWheel, { passive: false });
   }
 
-  // ── Tryb 2: external input (PlanetGlobeScene steruje z event-layer) ──
+  // ── Tryb 2: external input (ColonyOverlay steruje z event-layer) ──
 
   startDrag(clientX, clientY) {
     this._isDragging  = true;

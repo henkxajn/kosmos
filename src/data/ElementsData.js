@@ -144,18 +144,18 @@ export const PLANETOID_COMPOSITIONS = {
   metallic: {
     Fe: 35, Ni: 12, Cu: 8, Ti: 5, Si: 10, O: 8, Mg: 4,
     W: 3, Pt: 2, Li: 1.5, S: 2, C: 1, Ca: 1, Al: 1, Au: 0.5,
-    H2O: 0, N: 0, P: 0, H: 0, K: 0, Na: 0, U: 0, Xe: 0, Nt: 0, He: 0,
+    H2O: 0, N: 0, P: 0, H: 0, K: 0, Na: 0, U: 0, Xe: 2.5, Nt: 0, He: 0,
   },
   carbonaceous: {
     C: 18, Si: 14, O: 15, Fe: 12, H2O: 8, Mg: 5, N: 4,
     S: 3, Li: 3, Cu: 2, Ni: 2, H: 2, Ti: 1.5, P: 1.5,
-    Ca: 1.5, Al: 1.5, W: 0.5, K: 0.5, Na: 0.5, Pt: 0.1,
-    Au: 0, Xe: 0.1, Nt: 0, U: 0, He: 0,
+    Ca: 1.5, Al: 1.5, W: 0.5, K: 0.5, Na: 0.5, Pt: 0.15,
+    Au: 0, Xe: 2.5, Nt: 0, U: 0, He: 0,
   },
   silicate: {
     Si: 22, O: 20, Fe: 12, Mg: 8, Ca: 4, Al: 4,
     H2O: 5, Ti: 3, Cu: 3, Li: 2.5, S: 2, Ni: 2, C: 2,
-    W: 1, N: 1, H: 1, P: 0.5, K: 0.5, Na: 0.5, Xe: 0.5,
+    W: 1, N: 1, H: 1, P: 0.5, K: 0.5, Na: 0.5, Xe: 3.0,
     Pt: 0.3, Au: 0.2, U: 0.1, Nt: 0, He: 0,
   },
 };
@@ -174,14 +174,14 @@ export const MOON_COMPOSITIONS = {
     Cu: 1.2, Ti: 0.3, Li: 0.3, W: 0.1,
     H2O: 0.5, C: 0.3, N: 0.2, S: 1.0,
     Ni: 0.4, P: 0.1, H: 0, K: 0.1, Na: 0.2,
-    U: 0.05, Au: 0.02, Pt: 0.01, He: 0, Xe: 0, Nt: 0,
+    U: 0.05, Au: 0.02, Pt: 0.15, He: 0, Xe: 0, Nt: 0,
   },
   icy: {
     H2O: 55, N: 12, C: 8, H: 6,
     Si: 5, Fe: 4, Mg: 2, S: 1.5, O: 1.0,
     Cu: 0.2, Li: 0.5, Ca: 0.3, Al: 0.1,
     Ni: 0.1, Ti: 0.05, P: 0.3, K: 0, Na: 0, W: 0,
-    U: 0, Au: 0, Pt: 0, He: 0, Xe: 0, Nt: 0,
+    U: 0, Au: 0, Pt: 0, He: 0, Xe: 2.5, Nt: 0,
   },
 };
 
