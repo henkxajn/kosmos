@@ -231,14 +231,22 @@ export class CollisionForecast {
       this._alerts.set(alert.id, alert);
       if (existingId) oldAlertIds.delete(existingId);
 
+      // Sprawdź czy kolizja dotyczy jakiejkolwiek kolonii gracza
+      const colMgr = window.KOSMOS?.colonyManager;
+      const playerPlanetIds = new Set();
+      if (window.KOSMOS?.homePlanet?.id) playerPlanetIds.add(window.KOSMOS.homePlanet.id);
+      if (colMgr?.colonies) {
+        for (const c of colMgr.colonies.values()) playerPlanetIds.add(c.planetId);
+      }
+      const isPlayerColony = playerPlanetIds.has(col.bodyA.id) || playerPlanetIds.has(col.bodyB.id);
+
       // Emituj alert (nowy lub zaktualizowany)
       EventBus.emit('observatory:collisionAlert', {
         bodyA:      col.bodyA,
         bodyB:      col.bodyB,
         yearsUntil: col.yearsUntil,
         margin,
-        isHomePlanet: col.bodyA.id === window.KOSMOS?.homePlanet?.id ||
-                      col.bodyB.id === window.KOSMOS?.homePlanet?.id,
+        isHomePlanet: isPlayerColony,
       });
     }
 

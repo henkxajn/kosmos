@@ -41,13 +41,22 @@ export class ObservatoryOverlay {
 
   draw() {}
 
-  handleClick(x)     { return this.visible && x >= CIV_SIDEBAR_W; }
+  handleClick(x, y)  { return this.visible && this._isInOverlayArea(x, y); }
   handleMouseMove()  {}
-  handleScroll(delta, x) {
-    if (!this.visible || x < CIV_SIDEBAR_W) return false;
+  handleScroll(delta, x, y) {
+    if (!this.visible || !this._isInOverlayArea(x, y)) return false;
     const scrollEl = this._container?.querySelector('.obs-scroll-main');
     if (scrollEl) scrollEl.scrollTop += delta;
     return true;
+  }
+
+  /** Czy punkt (x,y) jest w obszarze overlaya (nie TopBar/BottomBar) */
+  _isInOverlayArea(x, y) {
+    const S = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const H = Math.round(window.innerHeight / S);
+    return x >= CIV_SIDEBAR_W &&
+           y >= COSMIC.TOP_BAR_H &&
+           y <= H - COSMIC.BOTTOM_BAR_H;
   }
 
   // ── Wheel handler (bezpośrednio na DOM) ─────────────────────────────
@@ -299,8 +308,9 @@ export class ObservatoryOverlay {
   // ── ZAGROŻENIA ──────────────────────────────────────────────────────
 
   _renderThreats(forecast) {
-    const alerts = forecast?.getAlerts() ?? [];
-    const warnings = window.KOSMOS?.randomEventSystem?.getWarnings() ?? [];
+    // Sortowanie od najwcześniejszych
+    const alerts = (forecast?.getAlerts() ?? []).slice().sort((a, b) => a.yearsUntil - b.yearsUntil);
+    const warnings = (window.KOSMOS?.randomEventSystem?.getWarnings() ?? []).slice().sort((a, b) => a.remainingYears - b.remainingYears);
 
     // Kolonie gracza
     const colMgr = window.KOSMOS?.colonyManager;

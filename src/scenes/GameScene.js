@@ -314,10 +314,10 @@ export class GameScene {
     EventBus.on('randomEvent:occurred', ({ event, colonyName }) => {
       showEventNotification(event, colonyName);
     });
-    // Prognoza kolizji — alert z obserwatorium
+    // Prognoza kolizji — alert z obserwatorium (isHomePlanet = dowolna kolonia gracza)
     EventBus.on('observatory:collisionAlert', ({ bodyA, bodyB, yearsUntil, margin, isHomePlanet }) => {
       if (isHomePlanet) {
-        // Kolizja z planetą gracza — pauza + duży alert
+        // Kolizja z planetą kolonii gracza — pauza + duży alert
         this.timeSystem?.pause();
         const nameA = bodyA.name ?? '?';
         const nameB = bodyB.name ?? '?';
