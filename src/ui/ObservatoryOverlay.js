@@ -19,24 +19,6 @@ import { resolveTextureType, hashCode, TEXTURE_VARIANTS }
 // Typy ciał wyświetlane w katalogu orbit
 const ORBIT_TYPES = ['planet', 'moon', 'planetoid'];
 
-// Kolory spójne z THEME
-const C = {
-  bg:     '#080c0a',
-  text:   '#aac8c0',
-  dim:    'rgba(160,200,190,0.45)',
-  accent: '#00ffb4',
-  border: 'rgba(0,255,180,0.12)',
-  danger: '#ff4444',
-  dangerBg: 'rgba(255,68,68,0.08)',
-  dangerBorder: 'rgba(255,68,68,0.5)',
-  warning: '#ffcc44',
-  warningBg: 'rgba(255,204,68,0.06)',
-  warningBorder: 'rgba(255,204,68,0.4)',
-  ok:     '#00cc88',
-  rowHover: 'rgba(0,255,180,0.06)',
-  rowSelected: 'rgba(0,255,180,0.15)',
-};
-
 // Ścieżka do tekstur planet
 const TEXTURE_DIR = 'assets/planet-textures';
 
@@ -48,6 +30,7 @@ export class ObservatoryOverlay {
     this._selectedBodyId = null;
     this._syncTimer = null;
     this._scrollPositions = {};  // zachowaj scroll per zakładka
+    this._onWheel = this._onWheel.bind(this);
   }
 
   // ── OverlayManager API ──────────────────────────────────────────────
@@ -60,7 +43,23 @@ export class ObservatoryOverlay {
 
   handleClick(x)     { return this.visible && x >= CIV_SIDEBAR_W; }
   handleMouseMove()  {}
-  handleScroll(delta, x) { return this.visible && x >= CIV_SIDEBAR_W; }
+  handleScroll(delta, x) {
+    if (!this.visible || x < CIV_SIDEBAR_W) return false;
+    // Przekaż scroll do kontenera DOM
+    const scrollEl = this._container?.querySelector('.obs-scroll-main');
+    if (scrollEl) scrollEl.scrollTop += delta;
+    return true;
+  }
+
+  // ── Wheel handler (bezpośrednio na DOM) ─────────────────────────────
+
+  _onWheel(e) {
+    const scrollEl = this._container?.querySelector('.obs-scroll-main');
+    if (!scrollEl) return;
+    e.preventDefault();
+    e.stopPropagation();
+    scrollEl.scrollTop += e.deltaY;
+  }
 
   // ── DOM ─────────────────────────────────────────────────────────────
 
@@ -78,18 +77,18 @@ export class ObservatoryOverlay {
       left: ${Math.round(CIV_SIDEBAR_W * S)}px;
       right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
       bottom: ${Math.round(COSMIC.BOTTOM_BAR_H * S)}px;
-      background: rgba(2,4,5,0.96); color: ${C.text}; font-family: ${THEME.fontFamily};
+      background: ${THEME.bgPrimary}ee; color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily};
       z-index: 50; display: flex; flex-direction: column; padding: 10px 14px;
       overflow: hidden;
     `;
 
-    // Custom scrollbar CSS
+    // Custom scrollbar CSS — kolory z THEME
     const style = document.createElement('style');
     style.textContent = `
       #observatory-overlay ::-webkit-scrollbar { width: 6px; }
-      #observatory-overlay ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 3px; }
-      #observatory-overlay ::-webkit-scrollbar-thumb { background: rgba(0,255,180,0.2); border-radius: 3px; }
-      #observatory-overlay ::-webkit-scrollbar-thumb:hover { background: rgba(0,255,180,0.4); }
+      #observatory-overlay ::-webkit-scrollbar-track { background: ${THEME.bgSecondary}; border-radius: 3px; }
+      #observatory-overlay ::-webkit-scrollbar-thumb { background: ${THEME.borderLight}; border-radius: 3px; }
+      #observatory-overlay ::-webkit-scrollbar-thumb:hover { background: ${THEME.borderActive}; }
     `;
     c.appendChild(style);
 
@@ -97,8 +96,8 @@ export class ObservatoryOverlay {
     const header = document.createElement('div');
     header.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:8px; flex-shrink:0;';
     header.innerHTML = `
-      <span style="font-size:16px; font-weight:bold; color:${C.accent}">🔭 ${t('observatory.title')}</span>
-      <span id="obs-status" style="font-size:11px; color:${C.dim}"></span>
+      <span style="font-size:16px; font-weight:bold; color:${THEME.accent}">🔭 ${t('observatory.title')}</span>
+      <span id="obs-status" style="font-size:11px; color:${THEME.textDim}"></span>
     `;
     c.appendChild(header);
 
@@ -122,6 +121,9 @@ export class ObservatoryOverlay {
     body.style.cssText = 'display:flex; gap:10px; flex:1; min-height:0;';
     c.appendChild(body);
 
+    // Wheel event — bezpośrednio na kontenerze (jak TechOverlay)
+    c.addEventListener('wheel', this._onWheel, { passive: false });
+
     document.body.appendChild(c);
     this._container = c;
     this._refresh();
@@ -129,10 +131,10 @@ export class ObservatoryOverlay {
 
   _tabStyle(active) {
     return `
-      padding: 5px 14px; border: 1px solid ${active ? C.accent : C.border};
+      padding: 5px 14px; border: 1px solid ${active ? THEME.accent : THEME.border};
       border-radius: 3px; font-size: 11px; font-family: ${THEME.fontFamily};
-      background: ${active ? C.accent : 'transparent'};
-      color: ${active ? '#000' : C.text};
+      background: ${active ? THEME.accent : 'transparent'};
+      color: ${active ? THEME.bgPrimary : THEME.textPrimary};
       cursor: pointer; font-weight: ${active ? 'bold' : 'normal'};
       transition: background 0.15s;
     `;
@@ -140,6 +142,7 @@ export class ObservatoryOverlay {
 
   _destroyDOM() {
     if (this._container) {
+      this._container.removeEventListener('wheel', this._onWheel);
       this._container.remove();
       this._container = null;
     }
@@ -227,8 +230,8 @@ export class ObservatoryOverlay {
       el.style.cursor = 'pointer';
     });
 
-    // Przywróć scroll po odświeżeniu
-    this._restoreScroll();
+    // Przywróć scroll po renderowaniu (po layout)
+    requestAnimationFrame(() => this._restoreScroll());
   }
 
   // ── SKAN ────────────────────────────────────────────────────────────
@@ -246,15 +249,16 @@ export class ObservatoryOverlay {
       }
     }
 
+    // Lista odkryć — flex:1 (mniejsza), szczegóły — flex:2 (większa)
     let html = `<div class="obs-scroll-main" style="flex:1; overflow-y:auto; padding-right:6px; min-height:0;">`;
-    html += `<div style="color:${C.dim}; margin-bottom:8px; font-size:12px;">`;
-    html += `${t('observatory.explored')}: <span style="color:${C.accent}">${exploredBodies}</span>/${totalBodies}`;
+    html += `<div style="color:${THEME.textDim}; margin-bottom:8px; font-size:12px;">`;
+    html += `${t('observatory.explored')}: <span style="color:${THEME.accent}">${exploredBodies}</span>/${totalBodies}`;
     html += `</div>`;
 
-    html += `<div style="font-weight:bold; margin-bottom:6px; color:${C.accent}; font-size:12px; text-transform:uppercase;">${t('observatory.discoveryLog')}</div>`;
+    html += `<div style="font-weight:bold; margin-bottom:6px; color:${THEME.textHeader}; font-size:12px; text-transform:uppercase;">${t('observatory.discoveryLog')}</div>`;
 
     if (discoveries.length === 0) {
-      html += `<div style="color:${C.dim}; font-size:11px; font-style:italic;">${t('observatory.noDiscoveries')}</div>`;
+      html += `<div style="color:${THEME.textDim}; font-size:11px; font-style:italic;">${t('observatory.noDiscoveries')}</div>`;
     } else {
       const recent = discoveries.slice(-30).reverse();
       for (const d of recent) {
@@ -262,13 +266,14 @@ export class ObservatoryOverlay {
         const bodyType = body?.planetType ?? body?.type ?? '?';
         const tempK = body?.temperatureK ? `${Math.round(body.temperatureK)} K` : '';
         const orbA = body?.orbital?.a ? `${body.orbital.a.toFixed(2)} AU` : '';
+        const selected = this._selectedBodyId === d.bodyId;
 
-        html += `<div data-bodyid="${d.bodyId}" style="padding:6px 8px; margin-bottom:3px; border-radius:3px; font-size:11px; background:${C.rowHover}; border-left:2px solid ${C.accent};">`;
-        html += `<span style="color:${C.accent}; font-weight:bold;">${d.bodyName}</span>`;
-        html += ` <span style="color:${C.dim}">— ${d.colonyName}, ${t('observatory.year')} ${Math.round(d.year)}</span>`;
+        html += `<div data-bodyid="${d.bodyId}" style="padding:6px 8px; margin-bottom:3px; border-radius:3px; font-size:11px; background:${selected ? THEME.accentMed : THEME.accentDim}; border-left:2px solid ${THEME.accent};">`;
+        html += `<span style="color:${THEME.accent}; font-weight:bold;">${d.bodyName}</span>`;
+        html += ` <span style="color:${THEME.textDim}">— ${d.colonyName}, ${t('observatory.year')} ${Math.round(d.year)}</span>`;
         // Dodatkowe info
         if (bodyType || tempK || orbA) {
-          html += `<div style="margin-top:2px; color:${C.text}; font-size:10px;">`;
+          html += `<div style="margin-top:2px; color:${THEME.textSecondary}; font-size:10px;">`;
           const parts = [];
           if (bodyType) parts.push(bodyType);
           if (orbA) parts.push(orbA);
@@ -299,8 +304,8 @@ export class ObservatoryOverlay {
     bodies.sort((a, b) => (a.orbital?.a ?? 0) - (b.orbital?.a ?? 0));
 
     let html = `<div class="obs-scroll-main" style="flex:2; overflow-y:auto; min-height:0;">`;
-    html += `<table style="width:100%; border-collapse:collapse; font-size:11px; color:${C.text};">`;
-    html += `<thead><tr style="color:${C.accent}; border-bottom:1px solid ${C.border}; position:sticky; top:0; background:${C.bg};">`;
+    html += `<table style="width:100%; border-collapse:collapse; font-size:11px; color:${THEME.textPrimary};">`;
+    html += `<thead><tr style="color:${THEME.textHeader}; border-bottom:1px solid ${THEME.border}; position:sticky; top:0; background:${THEME.bgSecondary};">`;
     html += `<th style="text-align:left; padding:5px 6px;">${t('observatory.name')}</th>`;
     html += `<th style="padding:5px 4px;">${t('observatory.type')}</th>`;
     html += `<th style="padding:5px 4px;">a (AU)</th>`;
@@ -312,13 +317,13 @@ export class ObservatoryOverlay {
     for (const b of bodies) {
       const orb = b.orbital ?? {};
       const selected = this._selectedBodyId === b.id;
-      const bg = selected ? C.rowSelected : 'transparent';
+      const bg = selected ? THEME.accentMed : 'transparent';
       const icon = b.type === 'planet' ? '🪐' : b.type === 'moon' ? '🌙' : '🪨';
       const thetaDeg = ((orb.theta ?? 0) * 180 / Math.PI) % 360;
 
-      html += `<tr data-bodyid="${b.id}" style="background:${bg}; border-bottom:1px solid ${C.border};" onmouseover="this.style.background='${C.rowHover}'" onmouseout="this.style.background='${selected ? C.rowSelected : 'transparent'}'">`;
-      html += `<td style="padding:4px 6px; color:${C.text};">${icon} ${b.name ?? b.id}</td>`;
-      html += `<td style="text-align:center; color:${C.dim}; padding:4px;">${b.planetType ?? b.type}</td>`;
+      html += `<tr data-bodyid="${b.id}" style="background:${bg}; border-bottom:1px solid ${THEME.border};" onmouseover="this.style.background='${THEME.accentDim}'" onmouseout="this.style.background='${selected ? THEME.accentMed : 'transparent'}'">`;
+      html += `<td style="padding:4px 6px; color:${THEME.textPrimary};">${icon} ${b.name ?? b.id}</td>`;
+      html += `<td style="text-align:center; color:${THEME.textDim}; padding:4px;">${b.planetType ?? b.type}</td>`;
       html += `<td style="text-align:center; padding:4px;">${(orb.a ?? 0).toFixed(2)}</td>`;
       html += `<td style="text-align:center; padding:4px;">${(orb.e ?? 0).toFixed(3)}</td>`;
       html += `<td style="text-align:center; padding:4px;">${(orb.T ?? 0).toFixed(2)}</td>`;
@@ -352,72 +357,72 @@ export class ObservatoryOverlay {
     // ── Podsumowanie zagrożeń ──
     const totalThreats = alerts.length + warnings.length;
     if (totalThreats === 0) {
-      html += `<div style="padding:12px; margin-bottom:12px; border-radius:4px; background:rgba(0,204,136,0.06); border:1px solid rgba(0,204,136,0.2); text-align:center;">`;
+      html += `<div style="padding:12px; margin-bottom:12px; border-radius:4px; background:${THEME.accentDim}; border:1px solid ${THEME.border}; text-align:center;">`;
       html += `<div style="font-size:16px; margin-bottom:4px;">✓</div>`;
-      html += `<div style="color:${C.ok}; font-size:12px; font-weight:bold;">${t('observatory.systemStable')}</div>`;
+      html += `<div style="color:${THEME.success}; font-size:12px; font-weight:bold;">${t('observatory.systemStable')}</div>`;
       html += `</div>`;
     } else {
       const dangerCount = alerts.filter(a => {
         return playerPlanetIds.has(a.bodyAId) || playerPlanetIds.has(a.bodyBId);
       }).length + warnings.filter(w => w.event?.severity === 'danger').length;
-      const warnCount = totalThreats - dangerCount;
 
-      html += `<div style="padding:8px 12px; margin-bottom:10px; border-radius:4px; background:${dangerCount > 0 ? C.dangerBg : C.warningBg}; border:1px solid ${dangerCount > 0 ? C.dangerBorder : C.warningBorder};">`;
-      html += `<span style="color:${dangerCount > 0 ? C.danger : C.warning}; font-weight:bold; font-size:13px;">`;
+      const hasDanger = dangerCount > 0;
+      html += `<div style="padding:8px 12px; margin-bottom:10px; border-radius:4px; background:${hasDanger ? THEME.danger + '12' : THEME.warning + '10'}; border:1px solid ${hasDanger ? THEME.danger + '55' : THEME.warning + '44'};">`;
+      html += `<span style="color:${hasDanger ? THEME.danger : THEME.warning}; font-weight:bold; font-size:13px;">`;
       html += `⚠ ${totalThreats} `;
       html += totalThreats === 1 ? t('observatory.threatSingular') : t('observatory.threatPlural');
       html += `</span>`;
       if (dangerCount > 0) {
-        html += ` <span style="color:${C.danger}; font-size:11px;">(${dangerCount} ${t('observatory.critical')})</span>`;
+        html += ` <span style="color:${THEME.danger}; font-size:11px;">(${dangerCount} ${t('observatory.critical')})</span>`;
       }
       html += `</div>`;
     }
 
     // ── Alerty kolizyjne ──
-    html += `<div style="font-weight:bold; margin-bottom:6px; color:${C.warning}; font-size:12px; text-transform:uppercase;">`;
+    html += `<div style="font-weight:bold; margin-bottom:6px; color:${THEME.warning}; font-size:12px; text-transform:uppercase;">`;
     html += `☄ ${t('observatory.collisionAlerts')}`;
     html += `</div>`;
 
     if (alerts.length === 0) {
-      html += `<div style="color:${C.dim}; font-size:11px; margin-bottom:14px; font-style:italic;">— ${t('observatory.noCollisions')}</div>`;
+      html += `<div style="color:${THEME.textDim}; font-size:11px; margin-bottom:14px; font-style:italic;">— ${t('observatory.noCollisions')}</div>`;
     } else {
       for (const a of alerts) {
         const isPlayerThreat = playerPlanetIds.has(a.bodyAId) || playerPlanetIds.has(a.bodyBId);
         const years = Math.max(0, Math.round(a.yearsUntil));
         const margin = Math.max(1, a.margin);
-        const urgency = years < 50 ? C.danger : years < 200 ? C.warning : '#cc8844';
+        const urgencyColor = years < 50 ? THEME.danger : years < 200 ? THEME.warning : THEME.textSecondary;
 
         // Kolor ramki i tła zależny od tego czy zagrożenie dotyczy gracza
-        const cardColor = isPlayerThreat ? C.danger : urgency;
-        const cardBg = isPlayerThreat ? C.dangerBg : 'rgba(0,0,0,0.3)';
+        const cardColor = isPlayerThreat ? THEME.danger : urgencyColor;
+        const cardBg = isPlayerThreat ? THEME.danger + '12' : THEME.bgSecondary;
 
         html += `<div style="padding:8px 10px; margin-bottom:5px; border-radius:4px; font-size:11px; background:${cardBg}; border-left:3px solid ${cardColor};">`;
         html += `<div style="display:flex; align-items:center; gap:6px;">`;
         html += `<span style="color:${cardColor}; font-weight:bold; font-size:12px;">${isPlayerThreat ? '🚨' : '☄'}</span>`;
         html += `<span style="color:${cardColor}; font-weight:bold;">${a.bodyAName} → ${a.bodyBName}</span>`;
         if (isPlayerThreat) {
-          html += `<span style="color:${C.danger}; font-size:9px; background:rgba(255,68,68,0.15); padding:1px 5px; border-radius:2px; font-weight:bold; text-transform:uppercase;">${t('observatory.yourColony')}</span>`;
+          html += `<span style="color:${THEME.danger}; font-size:9px; background:${THEME.danger}18; padding:1px 5px; border-radius:2px; font-weight:bold; text-transform:uppercase;">${t('observatory.yourColony')}</span>`;
         }
         html += `</div>`;
-        html += `<div style="color:${urgency}; margin-top:3px; font-size:11px;">⏱ ${t('observatory.inYears', years, margin)}</div>`;
+        html += `<div style="color:${urgencyColor}; margin-top:3px; font-size:11px;">⏱ ${t('observatory.inYears', years, margin)}</div>`;
         html += `</div>`;
       }
     }
 
     // ── Ostrzeżenia o zdarzeniach ──
-    html += `<div style="font-weight:bold; margin:14px 0 6px; color:${C.warning}; font-size:12px; text-transform:uppercase;">`;
+    html += `<div style="font-weight:bold; margin:14px 0 6px; color:${THEME.warning}; font-size:12px; text-transform:uppercase;">`;
     html += `⚡ ${t('observatory.eventWarnings')}`;
     html += `</div>`;
 
     if (warnings.length === 0) {
-      html += `<div style="color:${C.dim}; font-size:11px; font-style:italic;">— ${t('observatory.noWarnings')}</div>`;
+      html += `<div style="color:${THEME.textDim}; font-size:11px; font-style:italic;">— ${t('observatory.noWarnings')}</div>`;
     } else {
       for (const w of warnings) {
         const name = t(`event.${w.event.id}.name`) !== `event.${w.event.id}.name`
           ? t(`event.${w.event.id}.name`) : (w.event.namePL ?? w.event.id);
         const sev = w.event.severity ?? 'warning';
-        const sevColor = sev === 'danger' ? C.danger : sev === 'warning' ? C.warning : '#cc8844';
-        const sevBg = sev === 'danger' ? C.dangerBg : C.warningBg;
+        const sevColor = sev === 'danger' ? THEME.danger : sev === 'warning' ? THEME.warning : THEME.textSecondary;
+        const sevBg = sev === 'danger' ? THEME.danger + '12' : THEME.warning + '10';
         const remainYears = Math.max(0, Math.round(w.remainingYears));
 
         html += `<div style="padding:8px 10px; margin-bottom:5px; border-radius:4px; font-size:11px; background:${sevBg}; border-left:3px solid ${sevColor};">`;
@@ -425,16 +430,16 @@ export class ObservatoryOverlay {
         html += `<span style="font-size:13px;">${w.event.icon ?? '⚠'}</span>`;
         html += `<span style="color:${sevColor}; font-weight:bold;">${name}</span>`;
         if (sev === 'danger') {
-          html += `<span style="color:${C.danger}; font-size:9px; background:rgba(255,68,68,0.15); padding:1px 5px; border-radius:2px; font-weight:bold;">${t('observatory.dangerLabel')}</span>`;
+          html += `<span style="color:${THEME.danger}; font-size:9px; background:${THEME.danger}18; padding:1px 5px; border-radius:2px; font-weight:bold;">${t('observatory.dangerLabel')}</span>`;
         }
         html += `</div>`;
         html += `<div style="margin-top:3px;">`;
-        html += `<span style="color:${C.text}">→ ${w.colonyName}</span>`;
+        html += `<span style="color:${THEME.textPrimary}">→ ${w.colonyName}</span>`;
         html += ` · <span style="color:${sevColor};">⏱ ${t('observatory.inYearsSimple', remainYears)}</span>`;
         html += `</div>`;
         if (w.event.defenseTag) {
           const defenseLabel = t(`observatory.defense.${w.event.defenseTag}`);
-          html += `<div style="margin-top:3px; font-size:10px; color:${C.dim};">🛡 ${t('observatory.defendWith')}: ${defenseLabel}</div>`;
+          html += `<div style="margin-top:3px; font-size:10px; color:${THEME.textDim};">🛡 ${t('observatory.defendWith')}: ${defenseLabel}</div>`;
         }
         html += `</div>`;
       }
@@ -448,7 +453,7 @@ export class ObservatoryOverlay {
 
   _renderBodyDetails() {
     if (!this._selectedBodyId) {
-      return `<div style="width:220px; flex-shrink:0; display:flex; align-items:center; justify-content:center; color:${C.dim}; font-size:11px; border-left:1px solid ${C.border}; padding-left:10px;">${t('observatory.selectBody')}</div>`;
+      return `<div style="flex:2; display:flex; align-items:center; justify-content:center; color:${THEME.textDim}; font-size:11px; border-left:1px solid ${THEME.border}; padding-left:10px;">${t('observatory.selectBody')}</div>`;
     }
 
     const body = EntityManager.get(this._selectedBodyId);
@@ -459,14 +464,14 @@ export class ObservatoryOverlay {
     const homePl = window.KOSMOS?.homePlanet;
     const distAU = homePl ? Math.abs((orb.a ?? 0) - (homePl.orbital?.a ?? 0)).toFixed(2) : '?';
 
-    let html = `<div style="width:220px; flex-shrink:0; padding:8px 10px; border-left:1px solid ${C.border}; overflow-y:auto; min-height:0;">`;
-    html += `<div style="font-size:13px; font-weight:bold; color:${C.accent}; margin-bottom:8px;">${icon} ${body.name ?? body.id}</div>`;
+    let html = `<div style="flex:2; padding:8px 10px; border-left:1px solid ${THEME.border}; overflow-y:auto; min-height:0;">`;
+    html += `<div style="font-size:13px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:8px;">${icon} ${body.name ?? body.id}</div>`;
 
     // Miniatura tekstury ciała
     const thumbUrl = this._getBodyThumbnailUrl(body);
     if (thumbUrl) {
-      html += `<div style="text-align:center; margin-bottom:8px;">`;
-      html += `<img src="${thumbUrl}" style="width:100px; height:50px; object-fit:cover; border-radius:4px; border:1px solid ${C.border}; opacity:0.9;" alt="${body.name ?? body.id}" onerror="this.style.display='none'">`;
+      html += `<div style="text-align:center; margin-bottom:10px;">`;
+      html += `<img src="${thumbUrl}" style="width:160px; height:80px; object-fit:cover; border-radius:4px; border:1px solid ${THEME.border}; opacity:0.9;" alt="${body.name ?? body.id}" onerror="this.style.display='none'">`;
       html += `</div>`;
     }
 
@@ -502,17 +507,17 @@ export class ObservatoryOverlay {
     }
 
     if (body.lifeScore != null && body.lifeScore > 0) {
-      const lifeColor = body.lifeScore > 50 ? C.ok : C.warning;
-      html += `<div style="display:flex; justify-content:space-between; font-size:11px; padding:3px 0; border-bottom:1px solid ${C.border};">
-        <span style="color:${C.dim}">${t('observatory.life')}</span>
+      const lifeColor = body.lifeScore > 50 ? THEME.success : THEME.warning;
+      html += `<div style="display:flex; justify-content:space-between; font-size:11px; padding:3px 0; border-bottom:1px solid ${THEME.border};">
+        <span style="color:${THEME.textDim}">${t('observatory.life')}</span>
         <span style="color:${lifeColor}">${body.lifeScore.toFixed(0)}%</span>
       </div>`;
     }
 
     if (body.deposits?.length > 0) {
-      html += `<div style="margin-top:8px; font-weight:bold; color:${C.accent}; font-size:11px; text-transform:uppercase;">${t('observatory.deposits')}</div>`;
+      html += `<div style="margin-top:8px; font-weight:bold; color:${THEME.textHeader}; font-size:11px; text-transform:uppercase;">${t('observatory.deposits')}</div>`;
       for (const d of body.deposits) {
-        html += `<div style="font-size:11px; color:${C.text}; padding:2px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${d.remaining ?? '?'})</div>`;
+        html += `<div style="font-size:11px; color:${THEME.textPrimary}; padding:2px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${d.remaining ?? '?'})</div>`;
       }
     }
 
@@ -521,8 +526,8 @@ export class ObservatoryOverlay {
     if (colMgr?.colonies) {
       for (const col of colMgr.colonies.values()) {
         if (col.planetId === body.id) {
-          html += `<div style="margin-top:8px; padding:4px 6px; background:rgba(0,255,180,0.06); border-radius:3px; font-size:11px;">`;
-          html += `<span style="color:${C.accent};">🏠</span> <span style="color:${C.text};">${col.name ?? 'Kolonia'}</span>`;
+          html += `<div style="margin-top:8px; padding:4px 6px; background:${THEME.accentDim}; border-radius:3px; font-size:11px;">`;
+          html += `<span style="color:${THEME.accent};">🏠</span> <span style="color:${THEME.textPrimary};">${col.name ?? 'Kolonia'}</span>`;
           html += `</div>`;
         }
       }
@@ -545,9 +550,9 @@ export class ObservatoryOverlay {
   }
 
   _detailRow(label, value) {
-    return `<div style="display:flex; justify-content:space-between; font-size:11px; padding:3px 0; border-bottom:1px solid ${C.border};">
-      <span style="color:${C.dim}">${label}</span>
-      <span style="color:${C.text}">${value}</span>
+    return `<div style="display:flex; justify-content:space-between; font-size:11px; padding:3px 0; border-bottom:1px solid ${THEME.border};">
+      <span style="color:${THEME.textDim}">${label}</span>
+      <span style="color:${THEME.textPrimary}">${value}</span>
     </div>`;
   }
 }
