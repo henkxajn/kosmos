@@ -108,6 +108,12 @@ export class ThreeRenderer {
     // ── Cywilne świetliki handlowe ───────────────────────────
     this._tradeFireflies   = [];     // Array of { sprite, route, t, speed }
     this._tradeFireflyTex  = null;   // współdzielona tekstura glow
+
+    // ── Thumbnail cache (Observatory live preview) ──────────────
+    this._thumbCache = new Map();    // bodyId → { dataUrl, timestamp }
+    this._thumbRT    = null;         // współdzielony WebGLRenderTarget
+    this._thumbScene = null;         // tymczasowa scena do thumbnailów
+    this._thumbCam   = null;         // kamera do thumbnailów
     this._tradeRoutes      = [];     // dane tras: [{ fromId, toId, intensity, fromXZ, toXZ }]
     this._tradeFireflyPool = 60;     // max cząsteczek
 
@@ -2715,5 +2721,164 @@ export class ThreeRenderer {
       this._tradeFireflyTex.dispose();
       this._tradeFireflyTex = null;
     }
+  }
+
+  // ── Live thumbnail ciała niebieskiego (Observatory) ──────────────────
+  // Renderuje offscreen snapshot mesha planety/księżyca/planetoidu
+  // z oświetleniem zbliżonym do głównej sceny. Zwraca data URL (PNG).
+  // Cache: wynik ważny przez THUMB_TTL ms — nie renderuj co frame.
+
+  static THUMB_SIZE = 256;
+  static THUMB_TTL  = 10000; // 10s cache
+
+  /**
+   * Zwraca data URL (image/png) live-renderu danego ciała.
+   * Null jeśli mesh nie istnieje (np. niezbadane ciało).
+   */
+  renderBodyThumbnail(bodyId) {
+    // Sprawdź cache
+    const cached = this._thumbCache.get(bodyId);
+    if (cached && (performance.now() - cached.timestamp < ThreeRenderer.THUMB_TTL)) {
+      return cached.dataUrl;
+    }
+
+    // Znajdź mesh ciała
+    const meshInfo = this._findBodyMesh(bodyId);
+    if (!meshInfo) return null;
+
+    const SZ = ThreeRenderer.THUMB_SIZE;
+
+    // Lazy-init zasobów thumbnail
+    if (!this._thumbRT) {
+      this._thumbRT = new THREE.WebGLRenderTarget(SZ, SZ, {
+        format: THREE.RGBAFormat,
+        type:   THREE.UnsignedByteType,
+      });
+      this._thumbScene = new THREE.Scene();
+      this._thumbScene.background = new THREE.Color(0x020405);
+      this._thumbCam = new THREE.PerspectiveCamera(40, 1, 0.01, 100);
+    }
+
+    const scene = this._thumbScene;
+    const cam   = this._thumbCam;
+
+    // Wyczyść scenę z poprzednich obiektów
+    while (scene.children.length > 0) scene.remove(scene.children[0]);
+
+    // Sklonuj mesh planety (geometria + materiał współdzielone — bez kopiowania GPU)
+    const { mesh: srcMesh, radius, children } = meshInfo;
+    const clone = new THREE.Mesh(srcMesh.geometry, srcMesh.material);
+    clone.rotation.copy(srcMesh.rotation);
+
+    const thumbGroup = new THREE.Group();
+    thumbGroup.add(clone);
+
+    // Dodaj chmury i atmosferę (klony child meshy)
+    if (children) {
+      for (const child of children) {
+        const c = new THREE.Mesh(child.geometry, child.material);
+        c.rotation.copy(child.rotation);
+        c.scale.copy(child.scale);
+        c.renderOrder = child.renderOrder;
+        thumbGroup.add(c);
+      }
+    }
+
+    scene.add(thumbGroup);
+
+    // Oświetlenie — PointLight imituje gwiazdę z lewej-góry
+    const lightColor = this._starLight?.color?.clone() ?? new THREE.Color(0xffeedd);
+    const light = new THREE.PointLight(lightColor, 1.5, 0, 0);
+    light.position.set(-radius * 4, radius * 2, radius * 4);
+    scene.add(light);
+
+    // Delikatne ambient — żeby noc nie była całkowicie czarna
+    const ambient = new THREE.AmbientLight(0x222233, 0.15);
+    scene.add(ambient);
+
+    // Aktualizuj uLightDir dla atmosfery (jeśli jest shader z uniformem)
+    for (const child of thumbGroup.children) {
+      if (child.material?.uniforms?.uLightDir) {
+        child.material.uniforms.uLightDir.value.copy(light.position);
+      }
+    }
+
+    // Kamera — patrzy na planetę z dystansu proporcjonalnego do promienia
+    const dist = radius * 3.2;
+    cam.position.set(-dist * 0.3, dist * 0.15, dist);
+    cam.lookAt(0, 0, 0);
+    cam.updateProjectionMatrix();
+
+    // Render do offscreen RT
+    this.renderer.setRenderTarget(this._thumbRT);
+    this.renderer.render(scene, cam);
+    this.renderer.setRenderTarget(null);
+
+    // Odczytaj piksele → canvas → data URL
+    const pixels = new Uint8Array(SZ * SZ * 4);
+    this.renderer.readRenderTargetPixels(this._thumbRT, 0, 0, SZ, SZ, pixels);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = SZ; canvas.height = SZ;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(SZ, SZ);
+
+    // WebGL readPixels → Y-flipped
+    for (let y = 0; y < SZ; y++) {
+      const srcRow = (SZ - 1 - y) * SZ * 4;
+      const dstRow = y * SZ * 4;
+      imgData.data.set(pixels.subarray(srcRow, srcRow + SZ * 4), dstRow);
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const dataUrl = canvas.toDataURL('image/png');
+
+    // Cleanup tymczasowych obiektów ze sceny (materiały/geometrie NIE dispose — współdzielone)
+    while (scene.children.length > 0) scene.remove(scene.children[0]);
+    light.dispose();
+    ambient.dispose();
+
+    // Cache
+    this._thumbCache.set(bodyId, { dataUrl, timestamp: performance.now() });
+    return dataUrl;
+  }
+
+  /** Znajdź mesh ciała po ID — szuka w planetach, księżycach, planetoidach */
+  _findBodyMesh(bodyId) {
+    // Planety
+    const pEntry = this._planets.get(bodyId);
+    if (pEntry) {
+      const entity = EntityManager.get(bodyId);
+      const radius = entity ? ThreeRenderer._planetRadius(entity) : 1;
+      // Zbierz child meshe (chmury, atmosfera) z grupy
+      const children = [];
+      for (const child of pEntry.group.children) {
+        if (child !== pEntry.mesh && child.isMesh) {
+          children.push(child);
+        }
+      }
+      return { mesh: pEntry.mesh, radius, children };
+    }
+
+    // Księżyce
+    const mEntry = this._moons.get(bodyId);
+    if (mEntry) {
+      const r = mEntry.mesh.geometry.parameters?.radius ?? 0.05;
+      return { mesh: mEntry.mesh, radius: r, children: null };
+    }
+
+    // Planetoidy
+    const plEntry = this._planetoids.get(bodyId);
+    if (plEntry) {
+      const r = plEntry.mesh.geometry.parameters?.radius ?? 0.03;
+      return { mesh: plEntry.mesh, radius: r, children: null };
+    }
+
+    return null;
+  }
+
+  /** Wyczyść cache thumbnailów (np. przy zmianie sceny) */
+  clearThumbnailCache() {
+    this._thumbCache.clear();
   }
 }

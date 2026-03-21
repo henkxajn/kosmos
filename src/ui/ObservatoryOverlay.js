@@ -582,8 +582,17 @@ export class ObservatoryOverlay {
     `;
   }
 
-  /** Zwraca URL miniatury tekstury dla ciała niebieskiego */
+  /** Zwraca URL miniatury ciała — live render z ThreeRenderer, fallback na statyczny PNG */
   _getBodyThumbnailUrl(body) {
+    // Live render z głównej sceny 3D (offscreen snapshot)
+    const renderer = window.KOSMOS?.threeRenderer;
+    if (renderer) {
+      try {
+        const dataUrl = renderer.renderBodyThumbnail(body.id);
+        if (dataUrl) return dataUrl;
+      } catch { /* fallback poniżej */ }
+    }
+    // Fallback: statyczny PNG (equirectangular diffuse)
     try {
       const texType = resolveTextureType(body);
       const variant = (hashCode(body.id) % TEXTURE_VARIANTS) + 1;
