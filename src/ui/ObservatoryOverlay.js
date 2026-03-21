@@ -50,11 +50,13 @@ export class ObservatoryOverlay {
     return true;
   }
 
-  /** Czy punkt (x,y) jest w obszarze overlaya (nie TopBar/BottomBar) */
+  /** Czy punkt (x,y) jest w obszarze overlaya (nie TopBar/BottomBar/Outliner) */
   _isInOverlayArea(x, y) {
     const S = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const W = Math.round(window.innerWidth / S);
     const H = Math.round(window.innerHeight / S);
     return x >= CIV_SIDEBAR_W &&
+           x <= W - COSMIC.OUTLINER_W &&
            y >= COSMIC.TOP_BAR_H &&
            y <= H - COSMIC.BOTTOM_BAR_H;
   }
@@ -449,17 +451,13 @@ export class ObservatoryOverlay {
     // Nagłówek z nazwą
     html += `<div style="font-size:18px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:12px;">${icon} ${body.name ?? body.id}</div>`;
 
-    // Miniatura tekstury + wizualizacja orbity obok siebie
+    // Miniatura tekstury ciała — object-fit:contain aby widać całą planetę
     const thumbUrl = this._getBodyThumbnailUrl(body);
-    html += `<div style="display:flex; gap:14px; margin-bottom:14px; align-items:stretch;">`;
-
     if (thumbUrl) {
-      html += `<img src="${thumbUrl}" style="flex:1; min-width:0; height:160px; object-fit:cover; border-radius:6px; border:1px solid ${THEME.border};" alt="${body.name ?? body.id}" onerror="this.style.display='none'">`;
+      html += `<div style="text-align:center; margin-bottom:14px; background:${THEME.bgSecondary}; border-radius:6px; border:1px solid ${THEME.border}; padding:6px;">`;
+      html += `<img src="${thumbUrl}" style="width:100%; max-height:200px; object-fit:contain; border-radius:4px;" alt="${body.name ?? body.id}" onerror="this.parentElement.style.display='none'">`;
+      html += `</div>`;
     }
-
-    // Wizualizacja orbity SVG
-    html += this._renderOrbitSVG(body);
-    html += `</div>`;
 
     // Dane szczegółowe — większa czcionka
     html += this._detailRow(t('observatory.type'), body.planetType ?? body.type);
@@ -504,7 +502,8 @@ export class ObservatoryOverlay {
     if (body.deposits?.length > 0) {
       html += `<div style="margin-top:12px; font-weight:bold; color:${THEME.textHeader}; font-size:13px; text-transform:uppercase;">${t('observatory.deposits')}</div>`;
       for (const d of body.deposits) {
-        html += `<div style="font-size:13px; color:${THEME.textPrimary}; padding:3px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${d.remaining ?? '?'})</div>`;
+        const remaining = typeof d.remaining === 'number' ? Math.round(d.remaining) : '?';
+        html += `<div style="font-size:13px; color:${THEME.textPrimary}; padding:3px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${remaining})</div>`;
       }
     }
 
@@ -522,64 +521,6 @@ export class ObservatoryOverlay {
 
     html += `</div>`;
     return html;
-  }
-
-  // ── Wizualizacja orbity (SVG) ─────────────────────────────────────
-
-  _renderOrbitSVG(body) {
-    const orb = body.orbital ?? {};
-    const a = orb.a ?? 1;     // semi-major axis (AU)
-    const e = orb.e ?? 0;     // eccentricity
-    const theta = orb.theta ?? 0; // aktualna anomalia
-
-    const W = 220, H = 160;
-    const cx = W / 2, cy = H / 2;
-
-    // Skaluj elipsę do SVG — wypełnij ~80% viewboxa
-    const b = a * Math.sqrt(1 - e * e); // semi-minor
-    const maxDim = Math.max(a, b) || 1;
-    const scale = (Math.min(W, H) * 0.38) / maxDim;
-
-    const rx = a * scale;      // semi-major w px
-    const ry = b * scale;      // semi-minor w px
-    const focalShift = a * e * scale; // przesunięcie fokusa
-
-    // Pozycja ciała na orbicie (współrzędne Keplera)
-    const r = a * (1 - e * e) / (1 + e * Math.cos(theta));
-    const bx = cx - focalShift + r * Math.cos(theta) * scale;
-    const by = cy - r * Math.sin(theta) * scale;
-
-    // Pozycja HZ (strefa zamieszkiwalna) — jeśli dostępna
-    const star = EntityManager.getAll().find(e => e.type === 'star');
-    let hzHtml = '';
-    if (star?.luminosity) {
-      const hzInner = Math.sqrt(star.luminosity / 1.1);
-      const hzOuter = Math.sqrt(star.luminosity / 0.53);
-      const hzR1 = hzInner * scale;
-      const hzR2 = hzOuter * scale;
-      // Rysuj pierścień HZ jako dwa okręgi
-      if (hzR2 < W && hzR2 < H) {
-        hzHtml = `<circle cx="${cx - focalShift}" cy="${cy}" r="${hzR2}" fill="${THEME.success}08" stroke="${THEME.success}22" stroke-width="0.5"/>`;
-        hzHtml += `<circle cx="${cx - focalShift}" cy="${cy}" r="${hzR1}" fill="${THEME.bgPrimary}" stroke="${THEME.success}22" stroke-width="0.5"/>`;
-      }
-    }
-
-    return `
-      <svg viewBox="0 0 ${W} ${H}" style="flex:1; min-width:0; height:160px; border:1px solid ${THEME.border}; border-radius:6px; background:${THEME.bgSecondary};">
-        ${hzHtml}
-        <!-- Orbita -->
-        <ellipse cx="${cx - focalShift}" cy="${cy}" rx="${rx}" ry="${ry}"
-          fill="none" stroke="${THEME.accent}44" stroke-width="1.2" stroke-dasharray="4,2"/>
-        <!-- Gwiazda w fokusie -->
-        <circle cx="${cx}" cy="${cy}" r="4" fill="${THEME.warning}"/>
-        <!-- Ciało niebieskie -->
-        <circle cx="${bx}" cy="${by}" r="5" fill="${THEME.accent}" stroke="${THEME.accent}88" stroke-width="2"/>
-        <!-- Etykieta -->
-        <text x="${W - 6}" y="${H - 6}" text-anchor="end" font-size="10" fill="${THEME.textDim}" font-family="${THEME.fontFamily}">
-          a=${a.toFixed(2)} AU  e=${e.toFixed(3)}
-        </text>
-      </svg>
-    `;
   }
 
   /** Zwraca URL miniatury ciała — live render z ThreeRenderer, fallback na statyczny PNG */
