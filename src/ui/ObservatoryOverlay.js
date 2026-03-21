@@ -1,7 +1,8 @@
 // ObservatoryOverlay — zakładka Obserwatorium (klawisz O)
 //
-// DOM overlay z podzakładkami: SKAN | ORBITY | ZAGROŻENIA
-// Prawa kolumna: szczegóły wybranego ciała
+// DOM overlay z podzakładkami: KATALOG | ZAGROŻENIA
+// KATALOG = połączony SCAN+ORBITS: tabela ciał + log odkryć + szczegóły z orbitą SVG
+// Prawa kolumna: szczegóły wybranego ciała z miniaturą i wizualizacją orbity
 //
 // Komunikacja:
 //   Czyta: window.KOSMOS.{observatorySystem, collisionForecast, colonyManager}
@@ -16,7 +17,7 @@ import { t }             from '../i18n/i18n.js';
 import { resolveTextureType, hashCode, TEXTURE_VARIANTS }
                          from '../renderer/PlanetTextureUtils.js';
 
-// Typy ciał wyświetlane w katalogu orbit
+// Typy ciał wyświetlane w katalogu
 const ORBIT_TYPES = ['planet', 'moon', 'planetoid'];
 
 // Ścieżka do tekstur planet
@@ -26,10 +27,10 @@ export class ObservatoryOverlay {
   constructor() {
     this.visible = false;
     this._container = null;
-    this._subTab = 'scan';  // 'scan' | 'orbits' | 'threats'
+    this._subTab = 'catalog';  // 'catalog' | 'threats'
     this._selectedBodyId = null;
     this._syncTimer = null;
-    this._scrollPositions = {};  // zachowaj scroll per zakładka
+    this._scrollPositions = {};
     this._onWheel = this._onWheel.bind(this);
   }
 
@@ -38,14 +39,12 @@ export class ObservatoryOverlay {
   show()   { this.visible = true;  this._createDOM(); this._startSync(); }
   hide()   { this.visible = false; this._destroyDOM(); this._stopSync(); }
 
-  // DOM overlay — nie odświeżaj co klatkę (niszczy onclick bindings)
   draw() {}
 
   handleClick(x)     { return this.visible && x >= CIV_SIDEBAR_W; }
   handleMouseMove()  {}
   handleScroll(delta, x) {
     if (!this.visible || x < CIV_SIDEBAR_W) return false;
-    // Przekaż scroll do kontenera DOM
     const scrollEl = this._container?.querySelector('.obs-scroll-main');
     if (scrollEl) scrollEl.scrollTop += delta;
     return true;
@@ -66,7 +65,6 @@ export class ObservatoryOverlay {
   _createDOM() {
     if (this._container) return;
 
-    // Skalowanie identyczne jak TechOverlay (UI_SCALE)
     const S = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 
     const c = document.createElement('div');
@@ -82,7 +80,7 @@ export class ObservatoryOverlay {
       overflow: hidden;
     `;
 
-    // Custom scrollbar CSS — kolory z THEME
+    // Custom scrollbar CSS
     const style = document.createElement('style');
     style.textContent = `
       #observatory-overlay ::-webkit-scrollbar { width: 6px; }
@@ -101,11 +99,11 @@ export class ObservatoryOverlay {
     `;
     c.appendChild(header);
 
-    // Podzakładki
+    // Podzakładki — 2 zakładki: KATALOG | ZAGROŻENIA
     const tabs = document.createElement('div');
     tabs.id = 'obs-tabs';
     tabs.style.cssText = 'display:flex; gap:2px; margin-bottom:8px; flex-shrink:0;';
-    for (const tab of ['scan', 'orbits', 'threats']) {
+    for (const tab of ['catalog', 'threats']) {
       const btn = document.createElement('button');
       btn.dataset.tab = tab;
       btn.textContent = t(`observatory.tab.${tab}`);
@@ -121,7 +119,6 @@ export class ObservatoryOverlay {
     body.style.cssText = 'display:flex; gap:10px; flex:1; min-height:0;';
     c.appendChild(body);
 
-    // Wheel event — bezpośrednio na kontenerze (jak TechOverlay)
     c.addEventListener('wheel', this._onWheel, { passive: false });
 
     document.body.appendChild(c);
@@ -161,9 +158,7 @@ export class ObservatoryOverlay {
   _saveScroll() {
     if (!this._container) return;
     const scrollEl = this._container.querySelector('.obs-scroll-main');
-    if (scrollEl) {
-      this._scrollPositions[this._subTab] = scrollEl.scrollTop;
-    }
+    if (scrollEl) this._scrollPositions[this._subTab] = scrollEl.scrollTop;
   }
 
   _restoreScroll() {
@@ -178,8 +173,6 @@ export class ObservatoryOverlay {
 
   _refresh() {
     if (!this._container) return;
-
-    // Zachowaj scroll przed odświeżeniem
     this._saveScroll();
 
     const obsSys = window.KOSMOS?.observatorySystem;
@@ -213,9 +206,8 @@ export class ObservatoryOverlay {
     if (!body) return;
 
     switch (this._subTab) {
-      case 'scan':    body.innerHTML = this._renderScan(obsSys); break;
-      case 'orbits':  body.innerHTML = this._renderOrbits(); break;
-      case 'threats': body.innerHTML = this._renderThreats(forecast); break;
+      case 'catalog':  body.innerHTML = this._renderCatalog(obsSys); break;
+      case 'threats':  body.innerHTML = this._renderThreats(forecast); break;
     }
 
     // Bind kliki na ciałach
@@ -230,108 +222,76 @@ export class ObservatoryOverlay {
       el.style.cursor = 'pointer';
     });
 
-    // Przywróć scroll po renderowaniu (po layout)
     requestAnimationFrame(() => this._restoreScroll());
   }
 
-  // ── SKAN ────────────────────────────────────────────────────────────
+  // ── KATALOG (połączony SCAN + ORBITS) ──────────────────────────────
 
-  _renderScan(obsSys) {
+  _renderCatalog(obsSys) {
     const discoveries = obsSys?.getDiscoveries() ?? [];
     const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
 
+    // Zbierz ciała
+    const allBodies = [];
+    let exploredCount = 0;
+    for (const type of ORBIT_TYPES) {
+      for (const b of EntityManager.getByTypeInSystem(type, sysId)) {
+        allBodies.push(b);
+        if (b.explored) exploredCount++;
+      }
+    }
+    allBodies.sort((a, b) => (a.orbital?.a ?? 0) - (b.orbital?.a ?? 0));
+
+    // ── Lewa kolumna: tabela ciał + log odkryć ──
+    let html = `<div class="obs-scroll-main" style="flex:2; overflow-y:auto; min-height:0; padding-right:6px;">`;
+
     // Statystyki
-    let totalBodies = 0, exploredBodies = 0;
-    for (const type of ORBIT_TYPES) {
-      for (const b of EntityManager.getByTypeInSystem(type, sysId)) {
-        totalBodies++;
-        if (b.explored) exploredBodies++;
-      }
-    }
-
-    // Lista odkryć — flex:1 (mniejsza), szczegóły — flex:2 (większa)
-    let html = `<div class="obs-scroll-main" style="flex:1; overflow-y:auto; padding-right:6px; min-height:0;">`;
-    html += `<div style="color:${THEME.textDim}; margin-bottom:8px; font-size:12px;">`;
-    html += `${t('observatory.explored')}: <span style="color:${THEME.accent}">${exploredBodies}</span>/${totalBodies}`;
+    html += `<div style="color:${THEME.textDim}; margin-bottom:6px; font-size:12px;">`;
+    html += `${t('observatory.explored')}: <span style="color:${THEME.accent}">${exploredCount}</span>/${allBodies.length}`;
     html += `</div>`;
 
-    html += `<div style="font-weight:bold; margin-bottom:6px; color:${THEME.textHeader}; font-size:12px; text-transform:uppercase;">${t('observatory.discoveryLog')}</div>`;
-
-    if (discoveries.length === 0) {
-      html += `<div style="color:${THEME.textDim}; font-size:11px; font-style:italic;">${t('observatory.noDiscoveries')}</div>`;
-    } else {
-      const recent = discoveries.slice(-30).reverse();
-      for (const d of recent) {
-        const body = EntityManager.get(d.bodyId);
-        const bodyType = body?.planetType ?? body?.type ?? '?';
-        const tempK = body?.temperatureK ? `${Math.round(body.temperatureK)} K` : '';
-        const orbA = body?.orbital?.a ? `${body.orbital.a.toFixed(2)} AU` : '';
-        const selected = this._selectedBodyId === d.bodyId;
-
-        html += `<div data-bodyid="${d.bodyId}" style="padding:6px 8px; margin-bottom:3px; border-radius:3px; font-size:11px; background:${selected ? THEME.accentMed : THEME.accentDim}; border-left:2px solid ${THEME.accent};">`;
-        html += `<span style="color:${THEME.accent}; font-weight:bold;">${d.bodyName}</span>`;
-        html += ` <span style="color:${THEME.textDim}">— ${d.colonyName}, ${t('observatory.year')} ${Math.round(d.year)}</span>`;
-        // Dodatkowe info
-        if (bodyType || tempK || orbA) {
-          html += `<div style="margin-top:2px; color:${THEME.textSecondary}; font-size:10px;">`;
-          const parts = [];
-          if (bodyType) parts.push(bodyType);
-          if (orbA) parts.push(orbA);
-          if (tempK) parts.push(tempK);
-          html += parts.join(' · ');
-          html += `</div>`;
-        }
-        html += `</div>`;
-      }
-    }
-    html += `</div>`;
-
-    html += this._renderBodyDetails();
-    return html;
-  }
-
-  // ── ORBITY ──────────────────────────────────────────────────────────
-
-  _renderOrbits() {
-    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
-    const bodies = [];
-    for (const type of ORBIT_TYPES) {
-      for (const b of EntityManager.getByTypeInSystem(type, sysId)) {
-        if (!b.explored) continue;
-        bodies.push(b);
-      }
-    }
-    bodies.sort((a, b) => (a.orbital?.a ?? 0) - (b.orbital?.a ?? 0));
-
-    let html = `<div class="obs-scroll-main" style="flex:2; overflow-y:auto; min-height:0;">`;
+    // Tabela ciał
     html += `<table style="width:100%; border-collapse:collapse; font-size:11px; color:${THEME.textPrimary};">`;
     html += `<thead><tr style="color:${THEME.textHeader}; border-bottom:1px solid ${THEME.border}; position:sticky; top:0; background:${THEME.bgSecondary};">`;
-    html += `<th style="text-align:left; padding:5px 6px;">${t('observatory.name')}</th>`;
-    html += `<th style="padding:5px 4px;">${t('observatory.type')}</th>`;
-    html += `<th style="padding:5px 4px;">a (AU)</th>`;
-    html += `<th style="padding:5px 4px;">e</th>`;
-    html += `<th style="padding:5px 4px;">T (${t('observatory.years')})</th>`;
-    html += `<th style="padding:5px 4px;">\u03B8\u00B0</th>`;
+    html += `<th style="text-align:left; padding:4px 6px;">${t('observatory.name')}</th>`;
+    html += `<th style="padding:4px;">${t('observatory.type')}</th>`;
+    html += `<th style="padding:4px;">a (AU)</th>`;
+    html += `<th style="padding:4px;">e</th>`;
+    html += `<th style="padding:4px;">T (${t('observatory.years')})</th>`;
     html += `</tr></thead><tbody>`;
 
-    for (const b of bodies) {
+    for (const b of allBodies) {
       const orb = b.orbital ?? {};
       const selected = this._selectedBodyId === b.id;
       const bg = selected ? THEME.accentMed : 'transparent';
       const icon = b.type === 'planet' ? '🪐' : b.type === 'moon' ? '🌙' : '🪨';
-      const thetaDeg = ((orb.theta ?? 0) * 180 / Math.PI) % 360;
+      const explored = b.explored;
 
       html += `<tr data-bodyid="${b.id}" style="background:${bg}; border-bottom:1px solid ${THEME.border};" onmouseover="this.style.background='${THEME.accentDim}'" onmouseout="this.style.background='${selected ? THEME.accentMed : 'transparent'}'">`;
-      html += `<td style="padding:4px 6px; color:${THEME.textPrimary};">${icon} ${b.name ?? b.id}</td>`;
-      html += `<td style="text-align:center; color:${THEME.textDim}; padding:4px;">${b.planetType ?? b.type}</td>`;
-      html += `<td style="text-align:center; padding:4px;">${(orb.a ?? 0).toFixed(2)}</td>`;
-      html += `<td style="text-align:center; padding:4px;">${(orb.e ?? 0).toFixed(3)}</td>`;
-      html += `<td style="text-align:center; padding:4px;">${(orb.T ?? 0).toFixed(2)}</td>`;
-      html += `<td style="text-align:center; padding:4px;">${thetaDeg.toFixed(0)}</td>`;
+      html += `<td style="padding:3px 6px; color:${explored ? THEME.textPrimary : THEME.textDim};">${icon} ${explored ? (b.name ?? b.id) : '???'}</td>`;
+      html += `<td style="text-align:center; color:${THEME.textDim}; padding:3px;">${explored ? (b.planetType ?? b.type) : '—'}</td>`;
+      html += `<td style="text-align:center; padding:3px;">${(orb.a ?? 0).toFixed(2)}</td>`;
+      html += `<td style="text-align:center; padding:3px;">${explored ? (orb.e ?? 0).toFixed(3) : '—'}</td>`;
+      html += `<td style="text-align:center; padding:3px;">${explored ? (orb.T ?? 0).toFixed(2) : '—'}</td>`;
       html += `</tr>`;
     }
+    html += `</tbody></table>`;
 
-    html += `</tbody></table></div>`;
+    // Log odkryć (ostatnie)
+    if (discoveries.length > 0) {
+      html += `<div style="margin-top:12px; font-weight:bold; color:${THEME.textHeader}; font-size:11px; text-transform:uppercase; margin-bottom:4px;">${t('observatory.discoveryLog')}</div>`;
+      const recent = discoveries.slice(-10).reverse();
+      for (const d of recent) {
+        html += `<div data-bodyid="${d.bodyId}" style="padding:4px 8px; margin-bottom:2px; border-radius:3px; font-size:10px; background:${THEME.accentDim}; border-left:2px solid ${THEME.accent};">`;
+        html += `<span style="color:${THEME.accent}">${d.bodyName}</span>`;
+        html += ` <span style="color:${THEME.textDim}">— ${d.colonyName}, ${t('observatory.year')} ${Math.round(d.year)}</span>`;
+        html += `</div>`;
+      }
+    }
+
+    html += `</div>`;
+
+    // ── Prawa kolumna: szczegóły ──
     html += this._renderBodyDetails();
     return html;
   }
@@ -342,19 +302,17 @@ export class ObservatoryOverlay {
     const alerts = forecast?.getAlerts() ?? [];
     const warnings = window.KOSMOS?.randomEventSystem?.getWarnings() ?? [];
 
-    // Kolonie gracza — do sprawdzania czy zagrożenie dotyczy gracza
+    // Kolonie gracza
     const colMgr = window.KOSMOS?.colonyManager;
     const playerPlanetIds = new Set();
     if (colMgr?.colonies) {
-      for (const col of colMgr.colonies.values()) {
-        playerPlanetIds.add(col.planetId);
-      }
+      for (const col of colMgr.colonies.values()) playerPlanetIds.add(col.planetId);
     }
     if (window.KOSMOS?.homePlanet?.id) playerPlanetIds.add(window.KOSMOS.homePlanet.id);
 
     let html = `<div class="obs-scroll-main" style="flex:1; overflow-y:auto; min-height:0; padding-right:4px;">`;
 
-    // ── Podsumowanie zagrożeń ──
+    // ── Podsumowanie ──
     const totalThreats = alerts.length + warnings.length;
     if (totalThreats === 0) {
       html += `<div style="padding:12px; margin-bottom:12px; border-radius:4px; background:${THEME.accentDim}; border:1px solid ${THEME.border}; text-align:center;">`;
@@ -362,9 +320,9 @@ export class ObservatoryOverlay {
       html += `<div style="color:${THEME.success}; font-size:12px; font-weight:bold;">${t('observatory.systemStable')}</div>`;
       html += `</div>`;
     } else {
-      const dangerCount = alerts.filter(a => {
-        return playerPlanetIds.has(a.bodyAId) || playerPlanetIds.has(a.bodyBId);
-      }).length + warnings.filter(w => w.event?.severity === 'danger').length;
+      const dangerCount = alerts.filter(a =>
+        playerPlanetIds.has(a.bodyAId) || playerPlanetIds.has(a.bodyBId)
+      ).length + warnings.filter(w => w.event?.severity === 'danger').length;
 
       const hasDanger = dangerCount > 0;
       html += `<div style="padding:8px 12px; margin-bottom:10px; border-radius:4px; background:${hasDanger ? THEME.danger + '12' : THEME.warning + '10'}; border:1px solid ${hasDanger ? THEME.danger + '55' : THEME.warning + '44'};">`;
@@ -388,23 +346,22 @@ export class ObservatoryOverlay {
     } else {
       for (const a of alerts) {
         const isPlayerThreat = playerPlanetIds.has(a.bodyAId) || playerPlanetIds.has(a.bodyBId);
-        const years = Math.max(0, Math.round(a.yearsUntil));
-        const margin = Math.max(1, a.margin);
-        const urgencyColor = years < 50 ? THEME.danger : years < 200 ? THEME.warning : THEME.textSecondary;
+        const years = Math.max(0, a.yearsUntil);
+        const timeStr = this._formatThreatTime(years);
+        const urgencyColor = years < 5 ? THEME.danger : years < 50 ? THEME.warning : THEME.textSecondary;
 
-        // Kolor ramki i tła zależny od tego czy zagrożenie dotyczy gracza
         const cardColor = isPlayerThreat ? THEME.danger : urgencyColor;
         const cardBg = isPlayerThreat ? THEME.danger + '12' : THEME.bgSecondary;
 
-        html += `<div style="padding:8px 10px; margin-bottom:5px; border-radius:4px; font-size:11px; background:${cardBg}; border-left:3px solid ${cardColor};">`;
+        html += `<div style="padding:8px 10px; margin-bottom:5px; border-radius:4px; font-size:12px; background:${cardBg}; border-left:3px solid ${cardColor};">`;
         html += `<div style="display:flex; align-items:center; gap:6px;">`;
-        html += `<span style="color:${cardColor}; font-weight:bold; font-size:12px;">${isPlayerThreat ? '🚨' : '☄'}</span>`;
+        html += `<span style="color:${cardColor}; font-weight:bold; font-size:13px;">${isPlayerThreat ? '🚨' : '☄'}</span>`;
         html += `<span style="color:${cardColor}; font-weight:bold;">${a.bodyAName} → ${a.bodyBName}</span>`;
         if (isPlayerThreat) {
           html += `<span style="color:${THEME.danger}; font-size:9px; background:${THEME.danger}18; padding:1px 5px; border-radius:2px; font-weight:bold; text-transform:uppercase;">${t('observatory.yourColony')}</span>`;
         }
         html += `</div>`;
-        html += `<div style="color:${urgencyColor}; margin-top:3px; font-size:11px;">⏱ ${t('observatory.inYears', years, margin)}</div>`;
+        html += `<div style="color:${urgencyColor}; margin-top:4px; font-size:12px; font-weight:bold;">⏱ ${timeStr}</div>`;
         html += `</div>`;
       }
     }
@@ -423,9 +380,10 @@ export class ObservatoryOverlay {
         const sev = w.event.severity ?? 'warning';
         const sevColor = sev === 'danger' ? THEME.danger : sev === 'warning' ? THEME.warning : THEME.textSecondary;
         const sevBg = sev === 'danger' ? THEME.danger + '12' : THEME.warning + '10';
-        const remainYears = Math.max(0, Math.round(w.remainingYears));
+        const remainYears = Math.max(0, w.remainingYears);
+        const timeStr = this._formatThreatTime(remainYears);
 
-        html += `<div style="padding:8px 10px; margin-bottom:5px; border-radius:4px; font-size:11px; background:${sevBg}; border-left:3px solid ${sevColor};">`;
+        html += `<div style="padding:8px 10px; margin-bottom:5px; border-radius:4px; font-size:12px; background:${sevBg}; border-left:3px solid ${sevColor};">`;
         html += `<div style="display:flex; align-items:center; gap:6px;">`;
         html += `<span style="font-size:13px;">${w.event.icon ?? '⚠'}</span>`;
         html += `<span style="color:${sevColor}; font-weight:bold;">${name}</span>`;
@@ -433,9 +391,9 @@ export class ObservatoryOverlay {
           html += `<span style="color:${THEME.danger}; font-size:9px; background:${THEME.danger}18; padding:1px 5px; border-radius:2px; font-weight:bold;">${t('observatory.dangerLabel')}</span>`;
         }
         html += `</div>`;
-        html += `<div style="margin-top:3px;">`;
+        html += `<div style="margin-top:4px;">`;
         html += `<span style="color:${THEME.textPrimary}">→ ${w.colonyName}</span>`;
-        html += ` · <span style="color:${sevColor};">⏱ ${t('observatory.inYearsSimple', remainYears)}</span>`;
+        html += ` · <span style="color:${sevColor}; font-weight:bold;">⏱ ${timeStr}</span>`;
         html += `</div>`;
         if (w.event.defenseTag) {
           const defenseLabel = t(`observatory.defense.${w.event.defenseTag}`);
@@ -449,11 +407,20 @@ export class ObservatoryOverlay {
     return html;
   }
 
+  /** Formatuje czas do kolizji/zdarzenia czytelnie */
+  _formatThreatTime(years) {
+    if (years < 1)    return t('observatory.timeImminent');
+    if (years < 5)    return t('observatory.timeLessThan', 5);
+    if (years < 20)   return t('observatory.timeAbout', Math.round(years));
+    if (years < 100)  return t('observatory.timeAbout', Math.round(years / 5) * 5);
+    return t('observatory.timeAbout', Math.round(years / 10) * 10);
+  }
+
   // ── Szczegóły ciała (prawa kolumna) ─────────────────────────────────
 
   _renderBodyDetails() {
     if (!this._selectedBodyId) {
-      return `<div style="flex:2; display:flex; align-items:center; justify-content:center; color:${THEME.textDim}; font-size:11px; border-left:1px solid ${THEME.border}; padding-left:10px;">${t('observatory.selectBody')}</div>`;
+      return `<div style="flex:3; display:flex; align-items:center; justify-content:center; color:${THEME.textDim}; font-size:12px; border-left:1px solid ${THEME.border}; padding-left:10px;">${t('observatory.selectBody')}</div>`;
     }
 
     const body = EntityManager.get(this._selectedBodyId);
@@ -464,21 +431,28 @@ export class ObservatoryOverlay {
     const homePl = window.KOSMOS?.homePlanet;
     const distAU = homePl ? Math.abs((orb.a ?? 0) - (homePl.orbital?.a ?? 0)).toFixed(2) : '?';
 
-    let html = `<div style="flex:2; padding:8px 10px; border-left:1px solid ${THEME.border}; overflow-y:auto; min-height:0;">`;
-    html += `<div style="font-size:13px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:8px;">${icon} ${body.name ?? body.id}</div>`;
+    let html = `<div style="flex:3; padding:10px 14px; border-left:1px solid ${THEME.border}; overflow-y:auto; min-height:0;">`;
 
-    // Miniatura tekstury ciała
+    // Nagłówek z nazwą
+    html += `<div style="font-size:15px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:10px;">${icon} ${body.name ?? body.id}</div>`;
+
+    // Miniatura tekstury + wizualizacja orbity obok siebie
     const thumbUrl = this._getBodyThumbnailUrl(body);
+    html += `<div style="display:flex; gap:12px; margin-bottom:12px; align-items:flex-start;">`;
+
     if (thumbUrl) {
-      html += `<div style="text-align:center; margin-bottom:10px;">`;
-      html += `<img src="${thumbUrl}" style="width:160px; height:80px; object-fit:cover; border-radius:4px; border:1px solid ${THEME.border}; opacity:0.9;" alt="${body.name ?? body.id}" onerror="this.style.display='none'">`;
-      html += `</div>`;
+      html += `<img src="${thumbUrl}" style="width:180px; height:90px; object-fit:cover; border-radius:6px; border:1px solid ${THEME.border}; flex-shrink:0;" alt="${body.name ?? body.id}" onerror="this.style.display='none'">`;
     }
 
+    // Wizualizacja orbity SVG
+    html += this._renderOrbitSVG(body);
+    html += `</div>`;
+
+    // Dane szczegółowe — większa czcionka
     html += this._detailRow(t('observatory.type'), body.planetType ?? body.type);
-    html += this._detailRow('a', `${(orb.a ?? 0).toFixed(3)} AU`);
-    html += this._detailRow('e', `${(orb.e ?? 0).toFixed(4)}`);
-    html += this._detailRow('T', `${(orb.T ?? 0).toFixed(3)} ${t('observatory.years')}`);
+    html += this._detailRow(t('observatory.semiMajor'), `${(orb.a ?? 0).toFixed(3)} AU`);
+    html += this._detailRow(t('observatory.eccentricity'), `${(orb.e ?? 0).toFixed(4)}`);
+    html += this._detailRow(t('observatory.period'), `${(orb.T ?? 0).toFixed(3)} ${t('observatory.years')}`);
     html += this._detailRow(t('observatory.distHome'), `${distAU} AU`);
 
     if (body.temperatureK) {
@@ -508,16 +482,16 @@ export class ObservatoryOverlay {
 
     if (body.lifeScore != null && body.lifeScore > 0) {
       const lifeColor = body.lifeScore > 50 ? THEME.success : THEME.warning;
-      html += `<div style="display:flex; justify-content:space-between; font-size:11px; padding:3px 0; border-bottom:1px solid ${THEME.border};">
+      html += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid ${THEME.border};">
         <span style="color:${THEME.textDim}">${t('observatory.life')}</span>
-        <span style="color:${lifeColor}">${body.lifeScore.toFixed(0)}%</span>
+        <span style="color:${lifeColor}; font-weight:bold;">${body.lifeScore.toFixed(0)}%</span>
       </div>`;
     }
 
     if (body.deposits?.length > 0) {
-      html += `<div style="margin-top:8px; font-weight:bold; color:${THEME.textHeader}; font-size:11px; text-transform:uppercase;">${t('observatory.deposits')}</div>`;
+      html += `<div style="margin-top:10px; font-weight:bold; color:${THEME.textHeader}; font-size:12px; text-transform:uppercase;">${t('observatory.deposits')}</div>`;
       for (const d of body.deposits) {
-        html += `<div style="font-size:11px; color:${THEME.textPrimary}; padding:2px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${d.remaining ?? '?'})</div>`;
+        html += `<div style="font-size:12px; color:${THEME.textPrimary}; padding:2px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${d.remaining ?? '?'})</div>`;
       }
     }
 
@@ -526,7 +500,7 @@ export class ObservatoryOverlay {
     if (colMgr?.colonies) {
       for (const col of colMgr.colonies.values()) {
         if (col.planetId === body.id) {
-          html += `<div style="margin-top:8px; padding:4px 6px; background:${THEME.accentDim}; border-radius:3px; font-size:11px;">`;
+          html += `<div style="margin-top:10px; padding:5px 8px; background:${THEME.accentDim}; border-radius:3px; font-size:12px;">`;
           html += `<span style="color:${THEME.accent};">🏠</span> <span style="color:${THEME.textPrimary};">${col.name ?? 'Kolonia'}</span>`;
           html += `</div>`;
         }
@@ -535,6 +509,64 @@ export class ObservatoryOverlay {
 
     html += `</div>`;
     return html;
+  }
+
+  // ── Wizualizacja orbity (SVG) ─────────────────────────────────────
+
+  _renderOrbitSVG(body) {
+    const orb = body.orbital ?? {};
+    const a = orb.a ?? 1;     // semi-major axis (AU)
+    const e = orb.e ?? 0;     // eccentricity
+    const theta = orb.theta ?? 0; // aktualna anomalia
+
+    const W = 160, H = 120;
+    const cx = W / 2, cy = H / 2;
+
+    // Skaluj elipsę do SVG — wypełnij ~80% viewboxa
+    const b = a * Math.sqrt(1 - e * e); // semi-minor
+    const maxDim = Math.max(a, b) || 1;
+    const scale = (Math.min(W, H) * 0.38) / maxDim;
+
+    const rx = a * scale;      // semi-major w px
+    const ry = b * scale;      // semi-minor w px
+    const focalShift = a * e * scale; // przesunięcie fokusa
+
+    // Pozycja ciała na orbicie (współrzędne Keplera)
+    const r = a * (1 - e * e) / (1 + e * Math.cos(theta));
+    const bx = cx - focalShift + r * Math.cos(theta) * scale;
+    const by = cy - r * Math.sin(theta) * scale;
+
+    // Pozycja HZ (strefa zamieszkiwalna) — jeśli dostępna
+    const star = EntityManager.getAll().find(e => e.type === 'star');
+    let hzHtml = '';
+    if (star?.luminosity) {
+      const hzInner = Math.sqrt(star.luminosity / 1.1);
+      const hzOuter = Math.sqrt(star.luminosity / 0.53);
+      const hzR1 = hzInner * scale;
+      const hzR2 = hzOuter * scale;
+      // Rysuj pierścień HZ jako dwa okręgi
+      if (hzR2 < W && hzR2 < H) {
+        hzHtml = `<circle cx="${cx - focalShift}" cy="${cy}" r="${hzR2}" fill="${THEME.success}08" stroke="${THEME.success}22" stroke-width="0.5"/>`;
+        hzHtml += `<circle cx="${cx - focalShift}" cy="${cy}" r="${hzR1}" fill="${THEME.bgPrimary}" stroke="${THEME.success}22" stroke-width="0.5"/>`;
+      }
+    }
+
+    return `
+      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="flex-shrink:0; border:1px solid ${THEME.border}; border-radius:6px; background:${THEME.bgSecondary};">
+        ${hzHtml}
+        <!-- Orbita -->
+        <ellipse cx="${cx - focalShift}" cy="${cy}" rx="${rx}" ry="${ry}"
+          fill="none" stroke="${THEME.accent}44" stroke-width="1" stroke-dasharray="3,2"/>
+        <!-- Gwiazda w fokusie -->
+        <circle cx="${cx}" cy="${cy}" r="3" fill="${THEME.warning}"/>
+        <!-- Ciało niebieskie -->
+        <circle cx="${bx}" cy="${by}" r="4" fill="${THEME.accent}" stroke="${THEME.accent}88" stroke-width="1.5"/>
+        <!-- Etykieta -->
+        <text x="${W - 4}" y="${H - 4}" text-anchor="end" font-size="8" fill="${THEME.textDim}" font-family="${THEME.fontFamily}">
+          a=${a.toFixed(2)} e=${e.toFixed(2)}
+        </text>
+      </svg>
+    `;
   }
 
   /** Zwraca URL miniatury tekstury dla ciała niebieskiego */
@@ -550,9 +582,9 @@ export class ObservatoryOverlay {
   }
 
   _detailRow(label, value) {
-    return `<div style="display:flex; justify-content:space-between; font-size:11px; padding:3px 0; border-bottom:1px solid ${THEME.border};">
+    return `<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid ${THEME.border};">
       <span style="color:${THEME.textDim}">${label}</span>
-      <span style="color:${THEME.textPrimary}">${value}</span>
+      <span style="color:${THEME.textPrimary}; font-weight:500;">${value}</span>
     </div>`;
   }
 }
