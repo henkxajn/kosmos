@@ -860,8 +860,8 @@ export class UIManager {
     // ── Tooltip TopBar (na wierzchu) ─────────────────────────
     if (civMode) this._topBar.drawTooltip(ctx, W, UI_SCALE);
 
-    // ── Tooltip kolonii (Outliner) — na wierzchu ────────────
-    if (civMode && this._outliner) this._outliner.drawTooltip(ctx);
+    // ── Tooltip kolonii (Outliner) — na wierzchu (pomijaj gdy DOM overlay je zasłania)
+    if (civMode && this._outliner && !this.overlayManager.isAnyOpen()) this._outliner.drawTooltip(ctx);
 
     // ── Tooltip CivPanel ─────────────────────────────────────
     if (this._tooltip) this._drawTooltip();

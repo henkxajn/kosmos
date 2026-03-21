@@ -398,7 +398,10 @@ export class BottomContext {
     // Rename ✏ (lewa sekcja, prawy górny róg)
     if (x >= lx + sectionW - 22 && x <= lx + sectionW && y >= panelY + 8 && y <= panelY + 28) {
       showRenameModal(entity.name).then(newName => {
-        if (newName) entity.name = newName;
+        if (newName) {
+          entity.name = newName;
+          EventBus.emit('body:renamed', { entity, name: newName });
+        }
       });
       return true;
     }
