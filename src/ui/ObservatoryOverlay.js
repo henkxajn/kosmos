@@ -86,7 +86,7 @@ export class ObservatoryOverlay {
       left: ${Math.round(CIV_SIDEBAR_W * S)}px;
       right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
       bottom: ${Math.round(COSMIC.BOTTOM_BAR_H * S)}px;
-      background: ${THEME.bgPrimary}ee; color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily};
+      background: rgba(6,12,20,0.96); color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily};
       z-index: 50; display: flex; flex-direction: column; padding: 10px 14px;
       overflow: hidden;
     `;
@@ -504,12 +504,10 @@ export class ObservatoryOverlay {
     }
     html += `</div>`; // koniec lewej kolumny
 
-    // Zdjęcie (prawa kolumna) — dopasowane do rozmiaru, bez tła
+    // Zdjęcie (prawa kolumna) — duże, ramka = rozmiar zdjęcia
     const thumbUrl = this._getBodyThumbnailUrl(body);
     if (thumbUrl) {
-      html += `<div style="flex-shrink:0; display:flex; align-items:flex-start;">`;
-      html += `<img src="${thumbUrl}" style="width:220px; height:auto; max-height:180px; object-fit:contain; border-radius:6px; border:1px solid ${THEME.border};" alt="${body.name ?? body.id}" onerror="this.parentElement.style.display='none'">`;
-      html += `</div>`;
+      html += `<img src="${thumbUrl}" style="width:320px; flex-shrink:0; border-radius:6px; border:1px solid ${THEME.border};" alt="${body.name ?? body.id}" onerror="this.style.display='none'">`;
     }
 
     html += `</div>`; // koniec flex row
