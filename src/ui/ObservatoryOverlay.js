@@ -292,7 +292,7 @@ export class ObservatoryOverlay {
       const recent = discoveries.slice(-10).reverse();
       for (const d of recent) {
         html += `<div data-bodyid="${d.bodyId}" style="padding:4px 8px; margin-bottom:2px; border-radius:3px; font-size:10px; background:${THEME.accentDim}; border-left:2px solid ${THEME.accent};">`;
-        html += `<span style="color:${THEME.accent}">${d.bodyName}</span>`;
+        html += `<span style="color:${THEME.accent}">${EntityManager.get(d.bodyId)?.name ?? d.bodyName}</span>`;
         html += ` <span style="color:${THEME.textDim}">— ${d.colonyName}, ${t('observatory.year')} ${Math.round(d.year)}</span>`;
         html += `</div>`;
       }
@@ -359,6 +359,9 @@ export class ObservatoryOverlay {
         const years = Math.max(0, a.yearsUntil);
         const timeStr = this._formatThreatTime(years);
         const urgencyColor = years < 5 ? THEME.danger : years < 50 ? THEME.warning : THEME.textSecondary;
+        // Aktualne nazwy z EntityManager (mogły zostać zmienione)
+        const nameA = EntityManager.get(a.bodyAId)?.name ?? a.bodyAName;
+        const nameB = EntityManager.get(a.bodyBId)?.name ?? a.bodyBName;
 
         const cardColor = isPlayerThreat ? THEME.danger : urgencyColor;
         const cardBg = isPlayerThreat ? THEME.danger + '12' : THEME.bgSecondary;
@@ -366,7 +369,7 @@ export class ObservatoryOverlay {
         html += `<div style="padding:8px 10px; margin-bottom:5px; border-radius:4px; font-size:12px; background:${cardBg}; border-left:3px solid ${cardColor};">`;
         html += `<div style="display:flex; align-items:center; gap:6px;">`;
         html += `<span style="color:${cardColor}; font-weight:bold; font-size:13px;">${isPlayerThreat ? '🚨' : '☄'}</span>`;
-        html += `<span style="color:${cardColor}; font-weight:bold;">${a.bodyAName} → ${a.bodyBName}</span>`;
+        html += `<span style="color:${cardColor}; font-weight:bold;">${nameA} → ${nameB}</span>`;
         if (isPlayerThreat) {
           html += `<span style="color:${THEME.danger}; font-size:9px; background:${THEME.danger}18; padding:1px 5px; border-radius:2px; font-weight:bold; text-transform:uppercase;">${t('observatory.yourColony')}</span>`;
         }
