@@ -451,11 +451,15 @@ export class ObservatoryOverlay {
     // Nagłówek z nazwą
     html += `<div style="font-size:18px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:12px;">${icon} ${body.name ?? body.id}</div>`;
 
-    // ── Górna sekcja: dane po lewej + zdjęcie po prawej ──
-    html += `<div style="display:flex; gap:16px; align-items:flex-start; margin-bottom:14px;">`;
+    // Zdjęcie — duże, na górze, pełna szerokość
+    const thumbUrl = this._getBodyThumbnailUrl(body);
+    if (thumbUrl) {
+      html += `<div style="text-align:center; margin-bottom:14px;">`;
+      html += `<img src="${thumbUrl}" style="max-width:100%; max-height:240px; border-radius:6px; border:1px solid ${THEME.borderLight};" alt="${body.name ?? body.id}" onerror="this.parentElement.style.display='none'">`;
+      html += `</div>`;
+    }
 
-    // Dane szczegółowe (lewa kolumna)
-    html += `<div style="flex:1; min-width:0;">`;
+    // Dane szczegółowe
     html += this._detailRow(t('observatory.type'), body.planetType ?? body.type);
     html += this._detailRow(t('observatory.semiMajor'), `${(orb.a ?? 0).toFixed(3)} AU`);
     html += this._detailRow(t('observatory.eccentricity'), `${(orb.e ?? 0).toFixed(4)}`);
@@ -491,6 +495,18 @@ export class ObservatoryOverlay {
       </div>`;
     }
 
+    // Depozyty
+    if (body.deposits?.length > 0) {
+      html += `<div style="margin-top:10px; padding-top:8px; border-top:1px solid ${THEME.border};">`;
+      html += `<div style="font-weight:bold; color:${THEME.textHeader}; font-size:12px; text-transform:uppercase; margin-bottom:4px;">${t('observatory.deposits')}</div>`;
+      html += `<div style="display:flex; flex-wrap:wrap; gap:3px 14px;">`;
+      for (const d of body.deposits) {
+        const remaining = typeof d.remaining === 'number' ? Math.round(d.remaining) : '?';
+        html += `<span style="font-size:12px; color:${THEME.textPrimary};">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${remaining})</span>`;
+      }
+      html += `</div></div>`;
+    }
+
     // Kolonie na tym ciele
     const colMgr = window.KOSMOS?.colonyManager;
     if (colMgr?.colonies) {
@@ -501,27 +517,6 @@ export class ObservatoryOverlay {
           html += `</div>`;
         }
       }
-    }
-    html += `</div>`; // koniec lewej kolumny
-
-    // Zdjęcie (prawa kolumna) — duże, ramka = rozmiar zdjęcia
-    const thumbUrl = this._getBodyThumbnailUrl(body);
-    if (thumbUrl) {
-      html += `<img src="${thumbUrl}" style="width:380px; flex-shrink:0; border-radius:6px; border:1px solid ${THEME.borderLight};" alt="${body.name ?? body.id}" onerror="this.style.display='none'">`;
-    }
-
-    html += `</div>`; // koniec flex row
-
-    // ── Depozyty — na dole, wycentrowane ──
-    if (body.deposits?.length > 0) {
-      html += `<div style="margin-top:6px; padding-top:8px; border-top:1px solid ${THEME.border};">`;
-      html += `<div style="font-weight:bold; color:${THEME.textHeader}; font-size:12px; text-transform:uppercase; text-align:center; margin-bottom:4px;">${t('observatory.deposits')}</div>`;
-      html += `<div style="display:flex; flex-wrap:wrap; gap:4px 16px; justify-content:center;">`;
-      for (const d of body.deposits) {
-        const remaining = typeof d.remaining === 'number' ? Math.round(d.remaining) : '?';
-        html += `<span style="font-size:12px; color:${THEME.textPrimary};">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${remaining})</span>`;
-      }
-      html += `</div></div>`;
     }
 
     html += `</div>`;
