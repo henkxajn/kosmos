@@ -451,15 +451,11 @@ export class ObservatoryOverlay {
     // Nagłówek z nazwą
     html += `<div style="font-size:18px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:12px;">${icon} ${body.name ?? body.id}</div>`;
 
-    // Miniatura tekstury ciała — object-fit:contain aby widać całą planetę
-    const thumbUrl = this._getBodyThumbnailUrl(body);
-    if (thumbUrl) {
-      html += `<div style="text-align:center; margin-bottom:14px; background:${THEME.bgSecondary}; border-radius:6px; border:1px solid ${THEME.border}; padding:6px;">`;
-      html += `<img src="${thumbUrl}" style="width:100%; max-height:200px; object-fit:contain; border-radius:4px;" alt="${body.name ?? body.id}" onerror="this.parentElement.style.display='none'">`;
-      html += `</div>`;
-    }
+    // ── Górna sekcja: dane po lewej + zdjęcie po prawej ──
+    html += `<div style="display:flex; gap:16px; align-items:flex-start; margin-bottom:14px;">`;
 
-    // Dane szczegółowe — większa czcionka
+    // Dane szczegółowe (lewa kolumna)
+    html += `<div style="flex:1; min-width:0;">`;
     html += this._detailRow(t('observatory.type'), body.planetType ?? body.type);
     html += this._detailRow(t('observatory.semiMajor'), `${(orb.a ?? 0).toFixed(3)} AU`);
     html += this._detailRow(t('observatory.eccentricity'), `${(orb.e ?? 0).toFixed(4)}`);
@@ -470,15 +466,12 @@ export class ObservatoryOverlay {
       const tempC = Math.round(body.temperatureK - 273.15);
       html += this._detailRow(t('observatory.temp'), `${Math.round(body.temperatureK)} K (${tempC}°C)`);
     }
-
     if (body.physics?.mass) {
       html += this._detailRow(t('observatory.mass'), `${body.physics.mass.toFixed(3)} M⊕`);
     }
-
     if (body.physics?.radius) {
       html += this._detailRow(t('observatory.radius'), `${body.physics.radius.toFixed(3)} R⊕`);
     }
-
     if (body.atmosphere?.pressure > 0) {
       html += this._detailRow(t('observatory.atmo'), `${body.atmosphere.pressure.toFixed(2)} atm`);
       if (body.atmosphere?.composition) {
@@ -490,7 +483,6 @@ export class ObservatoryOverlay {
         }
       }
     }
-
     if (body.lifeScore != null && body.lifeScore > 0) {
       const lifeColor = body.lifeScore > 50 ? THEME.success : THEME.warning;
       html += `<div style="display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px solid ${THEME.border};">
@@ -499,24 +491,39 @@ export class ObservatoryOverlay {
       </div>`;
     }
 
-    if (body.deposits?.length > 0) {
-      html += `<div style="margin-top:12px; font-weight:bold; color:${THEME.textHeader}; font-size:13px; text-transform:uppercase;">${t('observatory.deposits')}</div>`;
-      for (const d of body.deposits) {
-        const remaining = typeof d.remaining === 'number' ? Math.round(d.remaining) : '?';
-        html += `<div style="font-size:13px; color:${THEME.textPrimary}; padding:3px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${remaining})</div>`;
-      }
-    }
-
     // Kolonie na tym ciele
     const colMgr = window.KOSMOS?.colonyManager;
     if (colMgr?.colonies) {
       for (const col of colMgr.colonies.values()) {
         if (col.planetId === body.id) {
-          html += `<div style="margin-top:12px; padding:6px 10px; background:${THEME.accentDim}; border-radius:4px; font-size:13px;">`;
+          html += `<div style="margin-top:8px; padding:4px 8px; background:${THEME.accentDim}; border-radius:3px; font-size:12px;">`;
           html += `<span style="color:${THEME.accent};">🏠</span> <span style="color:${THEME.textPrimary};">${col.name ?? 'Kolonia'}</span>`;
           html += `</div>`;
         }
       }
+    }
+    html += `</div>`; // koniec lewej kolumny
+
+    // Zdjęcie (prawa kolumna) — dopasowane do rozmiaru, bez tła
+    const thumbUrl = this._getBodyThumbnailUrl(body);
+    if (thumbUrl) {
+      html += `<div style="flex-shrink:0; display:flex; align-items:flex-start;">`;
+      html += `<img src="${thumbUrl}" style="width:220px; height:auto; max-height:180px; object-fit:contain; border-radius:6px; border:1px solid ${THEME.border};" alt="${body.name ?? body.id}" onerror="this.parentElement.style.display='none'">`;
+      html += `</div>`;
+    }
+
+    html += `</div>`; // koniec flex row
+
+    // ── Depozyty — na dole, wycentrowane ──
+    if (body.deposits?.length > 0) {
+      html += `<div style="margin-top:6px; padding-top:8px; border-top:1px solid ${THEME.border};">`;
+      html += `<div style="font-weight:bold; color:${THEME.textHeader}; font-size:12px; text-transform:uppercase; text-align:center; margin-bottom:4px;">${t('observatory.deposits')}</div>`;
+      html += `<div style="display:flex; flex-wrap:wrap; gap:4px 16px; justify-content:center;">`;
+      for (const d of body.deposits) {
+        const remaining = typeof d.remaining === 'number' ? Math.round(d.remaining) : '?';
+        html += `<span style="font-size:12px; color:${THEME.textPrimary};">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${remaining})</span>`;
+      }
+      html += `</div></div>`;
     }
 
     html += `</div>`;
