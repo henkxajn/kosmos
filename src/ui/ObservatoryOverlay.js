@@ -420,7 +420,7 @@ export class ObservatoryOverlay {
 
   _renderBodyDetails() {
     if (!this._selectedBodyId) {
-      return `<div style="flex:3; display:flex; align-items:center; justify-content:center; color:${THEME.textDim}; font-size:12px; border-left:1px solid ${THEME.border}; padding-left:10px;">${t('observatory.selectBody')}</div>`;
+      return `<div style="flex:3; display:flex; align-items:center; justify-content:center; color:${THEME.textDim}; font-size:14px; border-left:1px solid ${THEME.border}; padding-left:10px;">${t('observatory.selectBody')}</div>`;
     }
 
     const body = EntityManager.get(this._selectedBodyId);
@@ -431,17 +431,17 @@ export class ObservatoryOverlay {
     const homePl = window.KOSMOS?.homePlanet;
     const distAU = homePl ? Math.abs((orb.a ?? 0) - (homePl.orbital?.a ?? 0)).toFixed(2) : '?';
 
-    let html = `<div style="flex:3; padding:10px 14px; border-left:1px solid ${THEME.border}; overflow-y:auto; min-height:0;">`;
+    let html = `<div style="flex:3; padding:12px 16px; border-left:1px solid ${THEME.border}; overflow-y:auto; min-height:0;">`;
 
     // Nagłówek z nazwą
-    html += `<div style="font-size:15px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:10px;">${icon} ${body.name ?? body.id}</div>`;
+    html += `<div style="font-size:18px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:12px;">${icon} ${body.name ?? body.id}</div>`;
 
     // Miniatura tekstury + wizualizacja orbity obok siebie
     const thumbUrl = this._getBodyThumbnailUrl(body);
-    html += `<div style="display:flex; gap:12px; margin-bottom:12px; align-items:flex-start;">`;
+    html += `<div style="display:flex; gap:14px; margin-bottom:14px; align-items:stretch;">`;
 
     if (thumbUrl) {
-      html += `<img src="${thumbUrl}" style="width:180px; height:90px; object-fit:cover; border-radius:6px; border:1px solid ${THEME.border}; flex-shrink:0;" alt="${body.name ?? body.id}" onerror="this.style.display='none'">`;
+      html += `<img src="${thumbUrl}" style="flex:1; min-width:0; height:160px; object-fit:cover; border-radius:6px; border:1px solid ${THEME.border};" alt="${body.name ?? body.id}" onerror="this.style.display='none'">`;
     }
 
     // Wizualizacja orbity SVG
@@ -482,16 +482,16 @@ export class ObservatoryOverlay {
 
     if (body.lifeScore != null && body.lifeScore > 0) {
       const lifeColor = body.lifeScore > 50 ? THEME.success : THEME.warning;
-      html += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid ${THEME.border};">
+      html += `<div style="display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px solid ${THEME.border};">
         <span style="color:${THEME.textDim}">${t('observatory.life')}</span>
         <span style="color:${lifeColor}; font-weight:bold;">${body.lifeScore.toFixed(0)}%</span>
       </div>`;
     }
 
     if (body.deposits?.length > 0) {
-      html += `<div style="margin-top:10px; font-weight:bold; color:${THEME.textHeader}; font-size:12px; text-transform:uppercase;">${t('observatory.deposits')}</div>`;
+      html += `<div style="margin-top:12px; font-weight:bold; color:${THEME.textHeader}; font-size:13px; text-transform:uppercase;">${t('observatory.deposits')}</div>`;
       for (const d of body.deposits) {
-        html += `<div style="font-size:12px; color:${THEME.textPrimary}; padding:2px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${d.remaining ?? '?'})</div>`;
+        html += `<div style="font-size:13px; color:${THEME.textPrimary}; padding:3px 0;">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${d.remaining ?? '?'})</div>`;
       }
     }
 
@@ -500,7 +500,7 @@ export class ObservatoryOverlay {
     if (colMgr?.colonies) {
       for (const col of colMgr.colonies.values()) {
         if (col.planetId === body.id) {
-          html += `<div style="margin-top:10px; padding:5px 8px; background:${THEME.accentDim}; border-radius:3px; font-size:12px;">`;
+          html += `<div style="margin-top:12px; padding:6px 10px; background:${THEME.accentDim}; border-radius:4px; font-size:13px;">`;
           html += `<span style="color:${THEME.accent};">🏠</span> <span style="color:${THEME.textPrimary};">${col.name ?? 'Kolonia'}</span>`;
           html += `</div>`;
         }
@@ -519,7 +519,7 @@ export class ObservatoryOverlay {
     const e = orb.e ?? 0;     // eccentricity
     const theta = orb.theta ?? 0; // aktualna anomalia
 
-    const W = 160, H = 120;
+    const W = 220, H = 160;
     const cx = W / 2, cy = H / 2;
 
     // Skaluj elipsę do SVG — wypełnij ~80% viewboxa
@@ -552,18 +552,18 @@ export class ObservatoryOverlay {
     }
 
     return `
-      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="flex-shrink:0; border:1px solid ${THEME.border}; border-radius:6px; background:${THEME.bgSecondary};">
+      <svg viewBox="0 0 ${W} ${H}" style="flex:1; min-width:0; height:160px; border:1px solid ${THEME.border}; border-radius:6px; background:${THEME.bgSecondary};">
         ${hzHtml}
         <!-- Orbita -->
         <ellipse cx="${cx - focalShift}" cy="${cy}" rx="${rx}" ry="${ry}"
-          fill="none" stroke="${THEME.accent}44" stroke-width="1" stroke-dasharray="3,2"/>
+          fill="none" stroke="${THEME.accent}44" stroke-width="1.2" stroke-dasharray="4,2"/>
         <!-- Gwiazda w fokusie -->
-        <circle cx="${cx}" cy="${cy}" r="3" fill="${THEME.warning}"/>
+        <circle cx="${cx}" cy="${cy}" r="4" fill="${THEME.warning}"/>
         <!-- Ciało niebieskie -->
-        <circle cx="${bx}" cy="${by}" r="4" fill="${THEME.accent}" stroke="${THEME.accent}88" stroke-width="1.5"/>
+        <circle cx="${bx}" cy="${by}" r="5" fill="${THEME.accent}" stroke="${THEME.accent}88" stroke-width="2"/>
         <!-- Etykieta -->
-        <text x="${W - 4}" y="${H - 4}" text-anchor="end" font-size="8" fill="${THEME.textDim}" font-family="${THEME.fontFamily}">
-          a=${a.toFixed(2)} e=${e.toFixed(2)}
+        <text x="${W - 6}" y="${H - 6}" text-anchor="end" font-size="10" fill="${THEME.textDim}" font-family="${THEME.fontFamily}">
+          a=${a.toFixed(2)} AU  e=${e.toFixed(3)}
         </text>
       </svg>
     `;
@@ -582,7 +582,7 @@ export class ObservatoryOverlay {
   }
 
   _detailRow(label, value) {
-    return `<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid ${THEME.border};">
+    return `<div style="display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px solid ${THEME.border};">
       <span style="color:${THEME.textDim}">${label}</span>
       <span style="color:${THEME.textPrimary}; font-weight:500;">${value}</span>
     </div>`;
