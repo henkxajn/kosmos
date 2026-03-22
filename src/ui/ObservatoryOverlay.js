@@ -263,7 +263,7 @@ export class ObservatoryOverlay {
 
     // Tabela ciał
     html += `<table style="width:100%; border-collapse:collapse; font-size:11px; color:${THEME.textPrimary};">`;
-    html += `<thead><tr style="color:${THEME.textHeader}; border-bottom:1px solid ${THEME.border}; position:sticky; top:0; background:${THEME.bgSecondary};">`;
+    html += `<thead><tr style="color:${THEME.textHeader}; border-bottom:1px solid ${THEME.border}; position:sticky; top:0; background:${bgAlpha(0.70)};">`;
     html += `<th style="text-align:left; padding:4px 6px;">${t('observatory.name')}</th>`;
     html += `<th style="padding:4px;">${t('observatory.type')}</th>`;
     html += `<th style="padding:4px;">a (AU)</th>`;
@@ -337,7 +337,7 @@ export class ObservatoryOverlay {
       ).length + warnings.filter(w => w.event?.severity === 'danger').length;
 
       const hasDanger = dangerCount > 0;
-      html += `<div style="padding:8px 12px; margin-bottom:10px; border-radius:4px; background:${hasDanger ? THEME.danger + '12' : THEME.warning + '10'}; border:1px solid ${hasDanger ? THEME.danger + '55' : THEME.warning + '44'};">`;
+      html += `<div style="padding:8px 12px; margin-bottom:10px; border-radius:4px; background:${hasDanger ? 'rgba(255,51,68,0.07)' : 'rgba(255,204,68,0.06)'}; border:1px solid ${hasDanger ? 'rgba(255,51,68,0.33)' : 'rgba(255,204,68,0.27)'};">`;
       html += `<span style="color:${hasDanger ? THEME.danger : THEME.warning}; font-weight:bold; font-size:13px;">`;
       html += `⚠ ${totalThreats} `;
       html += totalThreats === 1 ? t('observatory.threatSingular') : t('observatory.threatPlural');
@@ -366,7 +366,7 @@ export class ObservatoryOverlay {
         const nameB = EntityManager.get(a.bodyBId)?.name ?? a.bodyBName;
 
         const cardColor = isPlayerThreat ? THEME.danger : urgencyColor;
-        const cardBg = isPlayerThreat ? THEME.danger + '12' : THEME.bgSecondary;
+        const cardBg = isPlayerThreat ? 'rgba(255,51,68,0.07)' : 'transparent';
 
         html += `<div style="padding:8px 10px; margin-bottom:5px; border-radius:4px; font-size:12px; background:${cardBg}; border-left:3px solid ${cardColor};">`;
         html += `<div style="display:flex; align-items:center; gap:6px;">`;
@@ -394,7 +394,7 @@ export class ObservatoryOverlay {
           ? t(`event.${w.event.id}.name`) : (w.event.namePL ?? w.event.id);
         const sev = w.event.severity ?? 'warning';
         const sevColor = sev === 'danger' ? THEME.danger : sev === 'warning' ? THEME.warning : THEME.textSecondary;
-        const sevBg = sev === 'danger' ? THEME.danger + '12' : THEME.warning + '10';
+        const sevBg = sev === 'danger' ? 'rgba(255,51,68,0.07)' : 'rgba(255,204,68,0.06)';
         const remainYears = Math.max(0, w.remainingYears);
         const timeStr = this._formatThreatTime(remainYears);
 
