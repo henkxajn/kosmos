@@ -1,423 +1,430 @@
 // GalaxyMapScene — overlay mapy galaktycznej (klawisz G)
 //
-// Pełnoekranowa scena 3D z okolicznymi układami gwiezdnymi.
+// Widok Star Cluster: Canvas 2D z okolicznymi układami gwiezdnymi.
 // Extends BaseOverlay — OverlayManager zarządza show/hide.
-// Osadza GalaxyMapRenderer (WebGL canvas) + panele Canvas 2D na #ui-canvas.
 // Otwarcie pauzuje czas gry, zamknięcie wznawia.
 
 import { BaseOverlay }         from '../ui/BaseOverlay.js';
-import { THEME, bgAlpha, drawGlassPanel, GLASS_BORDER, GLASS_HIGHLIGHT } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, drawGlassPanel, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC }              from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W }      from '../ui/CivPanelDrawer.js';
-import { GalaxyMapRenderer }   from '../renderer/GalaxyMapRenderer.js';
 import { STAR_TYPES }          from '../config/GameConfig.js';
-import EventBus                from '../core/EventBus.js';
-import { t }                   from '../i18n/i18n.js';
 import { SHIPS }               from '../data/ShipsData.js';
-
-// ── Layout ────────────────────────────────────────────────────────────────────
-const HDR_H   = 44;    // nagłówek
-const LEFT_W  = 220;   // lewy panel info
-const BOT_H   = 36;    // dolny pasek (legenda)
-
-// Skala UI — dynamiczna
-let _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
-window.addEventListener('resize', () => {
-  _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
-});
-
-// Etykiety typów spektralnych — runtime getter (i18n)
-const SPECTRAL_LABELS = {
-  get M() { return t('galaxy.starM'); },
-  get K() { return t('galaxy.starK'); },
-  get G() { return t('galaxy.starG'); },
-  get F() { return t('galaxy.starF'); },
-};
-
-// Kolory typów do legendy (CSS hex)
-const SPECTRAL_COLORS = {
-  M: '#ff6b47',
-  K: '#ffaa55',
-  G: '#fffacd',
-  F: '#ffffff',
-};
+import EventBus                from '../core/EventBus.js';
+import EntityManager           from '../core/EntityManager.js';
+import { t }                   from '../i18n/i18n.js';
 
 export class GalaxyMapScene extends BaseOverlay {
   constructor() {
     super(null);
-    this._renderer       = new GalaxyMapRenderer();
     this._selectedSystem = null;
+    this._hoverSystem    = null;
     this._wasPaused      = false;
     this._lastW = 0;
     this._lastH = 0;
+
+    // Nawigacja (pan + zoom)
+    this._zoom = 1.0;
+    this._panX = 0;
+    this._panY = 0;
+    this._dragging = false;
+    this._dragStartX = 0;
+    this._dragStartY = 0;
+    this._wasDrag = false;
   }
 
   // ── show / hide ─────────────────────────────────────────────────────────
 
   show() {
     super.show();
-
     // Pauzuj czas gry
     this._wasPaused = window.KOSMOS?.timeSystem?.paused ?? false;
     if (!this._wasPaused) EventBus.emit('time:pause');
 
-    // Otwórz renderer 3D
-    const galaxyData = window.KOSMOS?.galaxyData;
-    if (!galaxyData) {
-      console.warn('[GalaxyMapScene] Brak galaxyData');
-      super.hide();
-      return;
-    }
-
-    this._renderer.open(galaxyData, {
-      onSelect: (sys) => this._selectSystem(sys),
-    });
-
     // Domyślnie zaznacz home
-    const home = galaxyData.systems.find(s => s.isHome);
+    const gd = window.KOSMOS?.galaxyData;
+    const home = gd?.systems?.find(s => s.isHome);
     if (home) this._selectedSystem = home;
   }
 
   hide() {
-    this._renderer.close();
-
     // Wznów czas jeśli nie był zapauzowany
     if (!this._wasPaused) EventBus.emit('time:resume');
-
     this._selectedSystem = null;
+    this._hoverSystem = null;
     super.hide();
   }
 
-  _selectSystem(sys) {
-    this._selectedSystem = sys;
-  }
-
-  // ── Rysowanie Canvas 2D (panele) ──────────────────────────────────────────
+  // ── Rysowanie Canvas 2D ──────────────────────────────────────────────────
 
   draw(ctx, W, H) {
     if (!this.visible) return;
     this._hitZones = [];
-
     this._lastW = W;
     this._lastH = H;
-    const ox = CIV_SIDEBAR_W; // offset za sidebar CivPanel
 
-    // ── Wyczyść środek — tu prześwituje WebGL galaktyki ──────────────────
-    const viewX = ox + LEFT_W;
-    const viewY = HDR_H;
-    const viewW = W - viewX;
-    const viewH = H - HDR_H - BOT_H;
-    ctx.clearRect(viewX, viewY, viewW, viewH);
+    const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
 
-    // ── Nagłówek (glass) ────────────────────────────────────────────────
-    drawGlassPanel(ctx, ox, 0, W - ox, HDR_H, { leftBorder: false });
+    // ── Tło glass ──────────────────────────────────────────────
+    drawGlassPanel(ctx, ox, oy, ow, oh);
+
+    // ── Nagłówek ───────────────────────────────────────────────
+    const HDR_H = 28;
+    drawGlassPanel(ctx, ox, oy, ow, HDR_H, { highlightTop: true, bottomBorder: GLASS_BORDER });
 
     ctx.fillStyle = THEME.accent;
-    ctx.font = `bold ${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
+    ctx.font = `bold ${THEME.fontSizeNormal + 2}px ${THEME.fontFamily}`;
     ctx.textAlign = 'left';
-    ctx.fillText(t('galaxy.title'), ox + 12, HDR_H / 2 + 5);
+    ctx.fillText(t('galaxy.title'), ox + 12, oy + HDR_H / 2 + 5);
 
     // Przycisk zamknij [ESC ×]
-    const closeW = 60, closeH = 22;
-    const closeX = W - closeW - 10;
-    const closeY = (HDR_H - closeH) / 2;
+    const closeW = 52, closeH = 18;
+    const closeX = ox + ow - closeW - 8;
+    const closeY = oy + (HDR_H - closeH) / 2;
     const closeLabel = t('galaxy.close');
     this._drawButton(ctx, closeLabel, closeX, closeY, closeW, closeH, 'secondary');
     this._addHit(closeX, closeY, closeW, closeH, 'close', { label: closeLabel });
 
-    // ── Lewy panel (info o wybranym systemie) ─────────────────────────────
-    const panelY = HDR_H;
-    const panelH = H - HDR_H - BOT_H;
+    // ── Obszar mapy ────────────────────────────────────────────
+    const mapX = ox;
+    const mapY = oy + HDR_H;
+    const mapW = ow;
+    const mapH = oh - HDR_H;
 
-    drawGlassPanel(ctx, ox, panelY, LEFT_W, panelH, { topBorder: false, leftBorder: false });
-
-    const px = ox + 10;
-    let py = panelY + 16;
-
-    if (this._selectedSystem) {
-      const sys = this._selectedSystem;
-
-      // Nazwa
-      ctx.fillStyle = THEME.accent;
-      ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-      ctx.textAlign = 'left';
-      ctx.fillText(sys.name, px, py);
-      py += 20;
-
-      // Typ spektralny z kolorową kropką
-      const specColor = SPECTRAL_COLORS[sys.spectralType] || '#fff';
-      ctx.fillStyle = specColor;
-      ctx.beginPath();
-      ctx.arc(px + 4, py - 3, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = THEME.textSecondary;
-      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.fillText(SPECTRAL_LABELS[sys.spectralType] || sys.spectralType, px + 14, py);
-      py += 18;
-
-      // Separator
-      ctx.strokeStyle = THEME.border;
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px + LEFT_W - 20, py);
-      ctx.stroke();
-      py += 12;
-
-      // Masa
-      ctx.fillStyle = THEME.textLabel;
-      ctx.fillText(t('galaxy.mass'), px, py);
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`${sys.mass} M☉`, px + 65, py);
-      py += 16;
-
-      // Luminosity
-      ctx.fillStyle = THEME.textLabel;
-      ctx.fillText(t('galaxy.luminosity'), px, py);
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`${sys.luminosity} L☉`, px + 65, py);
-      py += 16;
-
-      // Odległość
-      ctx.fillStyle = THEME.textLabel;
-      ctx.fillText(t('galaxy.distance'), px, py);
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`${sys.distanceLY} ly`, px + 80, py);
-      py += 20;
-
-      // Separator
-      ctx.strokeStyle = THEME.border;
-      ctx.beginPath();
-      ctx.moveTo(px, py);
-      ctx.lineTo(px + LEFT_W - 20, py);
-      ctx.stroke();
-      py += 14;
-
-      // Status
-      ctx.fillStyle = THEME.textLabel;
-      ctx.fillText(t('galaxy.status'), px, py);
-      py += 16;
-      if (sys.isHome) {
-        ctx.fillStyle = THEME.accent;
-        ctx.fillText(t('galaxy.yourSystem'), px, py);
-      } else if (sys.explored) {
-        ctx.fillStyle = THEME.success;
-        ctx.fillText(t('galaxy.explored'), px, py);
-      } else {
-        ctx.fillStyle = THEME.warning;
-        ctx.fillText(t('galaxy.unexplored'), px, py);
-      }
-      py += 24;
-
-      // ── Infrastruktura ──
-      const ssMgr = window.KOSMOS?.starSystemManager;
-      if (ssMgr && !sys.isHome) {
-        const hasBeacon = ssMgr.hasBeacon(sys.id);
-        const hasGate   = ssMgr.hasJumpGate(sys.id);
-        const sysData   = ssMgr.getSystem(sys.id);
-        const hasColony = sysData ? ssMgr.getSystemColonies(sys.id).length > 0 : false;
-
-        // Ikony infrastruktury
-        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-        if (hasColony) {
-          ctx.fillStyle = THEME.accent;
-          ctx.fillText('🏗 ' + t('galaxy.hasColony'), px, py);
-          py += 16;
-        }
-        if (hasBeacon) {
-          ctx.fillStyle = '#66ccff';
-          ctx.fillText('📡 ' + t('galaxy.warpBeacon'), px, py);
-          py += 16;
-        }
-        if (hasGate) {
-          ctx.fillStyle = '#cc88ff';
-          ctx.fillText('🌀 ' + t('galaxy.jumpGate'), px, py);
-          py += 16;
-        }
-
-        // Przyciski budowy orbitalnej (jeśli kolonia w tym układzie)
-        const tSys0 = window.KOSMOS?.techSystem;
-        if (hasColony && !hasBeacon && tSys0?.isResearched('warp_theory')) {
-          const btnW = LEFT_W - 24;
-          const btnH = 22;
-          this._drawButton(ctx, '📡 ' + t('galaxy.buildBeacon'), px, py, btnW, btnH, 'primary');
-          this._addHit(px, py, btnW, btnH, 'buildBeacon', { systemId: sys.id });
-          py += btnH + 4;
-        }
-        if (hasColony && !hasGate && tSys0?.isResearched('interstellar_colonization')) {
-          const btnW = LEFT_W - 24;
-          const btnH = 22;
-          this._drawButton(ctx, '🌀 ' + t('galaxy.buildGate'), px, py, btnW, btnH, 'primary');
-          this._addHit(px, py, btnW, btnH, 'buildGate', { systemId: sys.id });
-          py += btnH + 4;
-        }
-        py += 4;
-      }
-
-      // ── Przyciski akcji ──
-      if (!sys.isHome) {
-        const ssMgr2  = window.KOSMOS?.starSystemManager;
-        const sysData = ssMgr2?.getSystem(sys.id);
-        const vMgr    = window.KOSMOS?.vesselManager;
-        const tSys    = window.KOSMOS?.techSystem;
-
-        // Czy interstellar odblokowany (tech warp_drive)
-        const hasWarpTech = tSys?.isResearched('warp_drive') ?? false;
-
-        // Przycisk "Przełącz widok" — tylko dla odwiedzonych układów
-        if (sysData) {
-          const btnW = LEFT_W - 24;
-          const btnH = 24;
-          this._drawButton(ctx, t('galaxy.switchView'), px, py, btnW, btnH, 'primary');
-          this._addHit(px, py, btnW, btnH, 'switchView', { systemId: sys.id });
-          py += btnH + 8;
-        }
-
-        // Przycisk "Wyślij statek" — potrzebna tech warp_drive + warpCapable ship
-        if (hasWarpTech && vMgr) {
-          const warpShips = this._getAvailableWarpShips();
-          if (warpShips.length > 0) {
-            // Nagłówek
-            ctx.fillStyle = THEME.accent;
-            ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-            ctx.fillText(t('galaxy.sendShip'), px, py);
-            py += 18;
-
-            // Klikalna lista statków
-            const btnW = LEFT_W - 24;
-            const shipBtnH = 32;
-            for (const v of warpShips.slice(0, 5)) {
-              const shipDef = SHIPS[v.shipId];
-              const rangeLY = (v.fuel.current / (shipDef?.fuelPerLY ?? 0.5)).toFixed(1);
-
-              // Sprawdź paliwo na dystans
-              let hasFuel = true;
-              const gd = window.KOSMOS?.galaxyData;
-              const fromStar = gd?.systems?.find(s => s.id === (v.systemId ?? 'sys_home'));
-              if (fromStar && sys) {
-                const dx = sys.x - fromStar.x;
-                const dy = sys.y - fromStar.y;
-                const dz = (sys.z ?? 0) - (fromStar.z ?? 0);
-                const distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                hasFuel = v.fuel.current >= distLY * (shipDef?.fuelPerLY ?? 0.5);
-              }
-
-              // Tło przycisku
-              ctx.fillStyle = hasFuel ? 'rgba(0,255,180,0.06)' : 'rgba(60,60,60,0.15)';
-              ctx.fillRect(px, py, btnW, shipBtnH);
-              ctx.strokeStyle = hasFuel ? THEME.accent : THEME.border;
-              ctx.lineWidth = 1;
-              ctx.strokeRect(px, py, btnW, shipBtnH);
-
-              // Ikona + nazwa
-              ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-              ctx.fillStyle = hasFuel ? THEME.textPrimary : THEME.textDim;
-              const icon = shipDef?.icon ?? '🚀';
-              const name = v.name.length > 16 ? v.name.slice(0, 15) + '…' : v.name;
-              ctx.fillText(`${icon} ${name}`, px + 4, py + 13);
-
-              // Zasięg
-              ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-              ctx.fillStyle = hasFuel ? THEME.textSecondary : THEME.textDim;
-              ctx.fillText(`⛽ ${rangeLY} LY`, px + 4, py + 26);
-
-              if (hasFuel) {
-                this._addHit(px, py, btnW, shipBtnH, 'sendShipSelect', { vesselId: v.id, systemId: sys.id });
-              }
-
-              py += shipBtnH + 3;
-            }
-            if (warpShips.length > 5) {
-              ctx.fillStyle = THEME.textDim;
-              ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-              ctx.fillText(`  +${warpShips.length - 5} ${t('galaxy.more')}...`, px, py + 10);
-              py += 16;
-            }
-          } else {
-            // Brak statków warpowych
-            ctx.fillStyle = THEME.textDim;
-            ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-            ctx.fillText(t('galaxy.noWarpShips'), px, py);
-            py += 16;
-          }
-        } else if (!hasWarpTech) {
-          // Tech nie zbadana
-          ctx.fillStyle = THEME.textDim;
-          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          const lines = this._wrapText(ctx, t('galaxy.needWarpTech'), LEFT_W - 24);
-          for (const line of lines) {
-            ctx.fillText(line, px, py);
-            py += 14;
-          }
-        }
-
-        // ── Statki w tranzycie do tego systemu ──
-        py += 8;
-        const transitVessels = vMgr?.getInterstellarVessels()?.filter(
-          v => v.mission?.toSystemId === sys.id
-        ) ?? [];
-        if (transitVessels.length > 0) {
-          ctx.fillStyle = THEME.textLabel;
-          ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillText(t('galaxy.inTransit'), px, py);
-          py += 14;
-          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          for (const v of transitVessels) {
-            const progress = v.mission?.galProgress ?? 0;
-            ctx.fillStyle = THEME.textSecondary;
-            ctx.fillText(`  ${v.name} (${(progress * 100).toFixed(0)}%)`, px, py);
-            py += 14;
-          }
-        }
-      }
-
-    } else {
-      // Nic nie wybrane
-      ctx.fillStyle = THEME.textDim;
-      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      const lines = this._wrapText(ctx, t('galaxy.clickStar'), LEFT_W - 24);
-      for (const line of lines) {
-        ctx.fillText(line, px, py);
-        py += 16;
-      }
-    }
-
-    // ── Dolny pasek (legenda typów) ───────────────────────────────────────
-    const botY = H - BOT_H;
-    drawGlassPanel(ctx, ox, botY, W - ox, BOT_H, { leftBorder: false, bottomBorder: false });
-
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.textAlign = 'left';
-
-    let lx = ox + 12;
-    const ly = botY + BOT_H / 2 + 4;
-    for (const type of ['M', 'K', 'G', 'F']) {
-      // Kolorowa kropka
-      ctx.fillStyle = SPECTRAL_COLORS[type];
-      ctx.beginPath();
-      ctx.arc(lx + 4, ly - 3, 4, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(type, lx + 12, ly);
-      lx += 36;
-    }
-
-    // Informacja o ilości systemów
-    const sysCount = window.KOSMOS?.galaxyData?.systems?.length ?? 0;
-    ctx.fillStyle = THEME.textDim;
-    ctx.textAlign = 'right';
-    ctx.fillText(t('galaxy.systemsInRange', sysCount), W - 12, ly);
-    ctx.textAlign = 'left';
+    this._drawStarCluster(ctx, mapX, mapY, mapW, mapH);
   }
 
-  // ── Interakcje ────────────────────────────────────────────────────────────
+  // ── Star Cluster rendering ──────────────────────────────────────────────
+
+  _drawStarCluster(ctx, x, y, w, h) {
+    const PAD = 10;
+    const gd = window.KOSMOS?.galaxyData;
+    if (!gd?.systems?.length) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('galaxy.noData') || 'No galaxy data', x + PAD, y + 20);
+      return;
+    }
+
+    const systems = gd.systems;
+    const ssMgr  = window.KOSMOS?.starSystemManager;
+    const vMgr   = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
+
+    // Clip
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + 1, y, w - 2, h - 1);
+    ctx.clip();
+
+    // Skala — zmieść wszystkie gwiazdy w widoku
+    let maxLY = 1;
+    for (const s of systems) {
+      const d = Math.sqrt(s.x * s.x + s.y * s.y);
+      if (d > maxLY) maxLY = d;
+    }
+    maxLY *= 1.15;
+
+    const cx = x + w / 2 + this._panX;
+    const cy = y + h / 2 + this._panY;
+    const baseR = Math.min(w / 2, h / 2) - 20;
+    const scale = (baseR * this._zoom) / maxLY; // px per LY
+
+    const toSx = (lx) => cx + lx * scale;
+    const toSy = (ly) => cy + ly * scale;
+
+    // ── Jump gate lines (fioletowe) ──
+    const gates = systems.filter(s => s.jumpGate);
+    for (const g of gates) {
+      const sys = ssMgr?.getSystem(g.id);
+      const connTo = sys?.jumpGate?.connectedTo;
+      if (connTo) {
+        const other = systems.find(s => s.id === connTo);
+        if (other) {
+          ctx.strokeStyle = 'rgba(170,136,255,0.4)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(toSx(g.x), toSy(g.y));
+          ctx.lineTo(toSx(other.x), toSy(other.y));
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
+    // ── Interstellar transit lines (pomarańczowe) ──
+    const interVessels = vMgr?.getInterstellarVessels() ?? [];
+    for (const v of interVessels) {
+      const m = v.mission;
+      if (!m || m.phase !== 'warp_transit') continue;
+      const fromS = systems.find(s => s.id === m.fromSystemId);
+      const toS   = systems.find(s => s.id === m.toSystemId);
+      if (!fromS || !toS) continue;
+
+      ctx.strokeStyle = 'rgba(255,170,50,0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(toSx(fromS.x), toSy(fromS.y));
+      ctx.lineTo(toSx(toS.x), toSy(toS.y));
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Punkt pozycji statku
+      const vsx = toSx(m.currentGalX ?? fromS.x);
+      const vsy = toSy(m.currentGalY ?? fromS.y);
+      ctx.fillStyle = THEME.warning;
+      ctx.beginPath();
+      ctx.arc(vsx, vsy, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (this._zoom > 1.5) {
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText(v.name, vsx + 5, vsy - 3);
+      }
+    }
+
+    // ── Gwiazdy ──
+    const selId = this._selectedSystem?.id;
+    for (const s of systems) {
+      const sx = toSx(s.x);
+      const sy = toSy(s.y);
+
+      // Cull poza widocznością
+      if (sx < x - 20 || sx > x + w + 20 || sy < y - 20 || sy > y + h + 20) continue;
+
+      const isHome     = !!s.isHome;
+      const isExplored = !!s.explored;
+      const isSelected = selId === s.id;
+      const isHover    = this._hoverSystem === s.id;
+      const hasCol = colMgr?.getAllColonies().some(c => {
+        const body = EntityManager.get(c.planetId);
+        return body?.systemId === s.id;
+      }) ?? false;
+
+      // Promień gwiazdy
+      let r = isHome ? 6 : isExplored ? 4 : 3;
+      if (isSelected || isHover) r += 1;
+
+      // Glow
+      if (isHome || isSelected) {
+        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 3);
+        grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.3)' : 'rgba(170,136,255,0.3)');
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Kolor gwiazdy
+      ctx.fillStyle = s.colorHex ?? (isExplored ? THEME.accent : THEME.textDim);
+      ctx.beginPath();
+      ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Obwódka selekcji
+      if (isSelected) {
+        ctx.strokeStyle = THEME.accent;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r + 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Ikony infrastruktury
+      const sysData = ssMgr?.getSystem(s.id);
+      if (hasCol) {
+        ctx.font = `8px ${THEME.fontFamily}`;
+        ctx.fillText('🏗', sx + r + 2, sy - r);
+      }
+      if (sysData?.warpBeacon || s.warpBeacon) {
+        ctx.font = `7px ${THEME.fontFamily}`;
+        ctx.fillText('📡', sx + r + 2, sy + 2);
+      }
+      if (sysData?.jumpGate || s.jumpGate) {
+        ctx.font = `7px ${THEME.fontFamily}`;
+        ctx.fillText('🌀', sx + r + 2, sy + 10);
+      }
+
+      // Nazwa
+      if (this._zoom > 0.8 || isHome || isSelected || isHover) {
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = isHome ? THEME.yellow : isExplored ? THEME.textPrimary : THEME.textDim;
+        ctx.textAlign = 'center';
+        ctx.fillText(s.name, sx, sy + r + 12);
+        ctx.textAlign = 'left';
+      }
+
+      // Hit zone
+      const hitR = Math.max(r + 4, 10);
+      this._hitZones.push({
+        x: sx - hitR, y: sy - hitR, w: hitR * 2, h: hitR * 2,
+        type: 'star_select', data: { systemId: s.id },
+      });
+    }
+
+    // ── Legenda (lewy-dolny) ──
+    {
+      const lx = x + PAD;
+      let ly = y + h - 60;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      const items = [
+        { color: THEME.yellow, label: t('fleet.clusterHome') },
+        { color: THEME.accent, label: t('fleet.clusterExplored') },
+        { color: THEME.textDim, label: t('fleet.clusterUnexplored') },
+      ];
+      for (const it of items) {
+        ctx.fillStyle = it.color;
+        ctx.beginPath();
+        ctx.arc(lx + 4, ly + 4, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(it.label, lx + 12, ly + 7);
+        ly += 14;
+      }
+    }
+
+    // ── Info panel zaznaczonego systemu (prawy-górny) ──
+    if (this._selectedSystem) {
+      this._drawInfoPanel(ctx, x, y, w, h);
+    }
+
+    // ── Ilość systemów (prawy-dolny) ──
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.textAlign = 'right';
+    ctx.fillText(t('galaxy.systemsInRange', systems.length), x + w - PAD, y + h - 8);
+    ctx.textAlign = 'left';
+
+    ctx.restore();
+  }
+
+  // ── Panel informacyjny o zaznaczonym systemie ──────────────────────────
+
+  _drawInfoPanel(ctx, areaX, areaY, areaW, areaH) {
+    const sys = this._selectedSystem;
+    if (!sys) return;
+
+    const ssMgr  = window.KOSMOS?.starSystemManager;
+    const vMgr   = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
+
+    const panelW = 210;
+    let panelH = 160;
+    const px = areaX + areaW - panelW - 10;
+    const py = areaY + 10;
+    const PAD = 10;
+
+    // Oblicz dynamiczną wysokość panelu
+    const isExplored = !!(ssMgr?.getSystem(sys.id)?.explored || sys.explored);
+    const hasCol = colMgr?.getAllColonies().some(c => {
+      const body = EntityManager.get(c.planetId);
+      return body?.systemId === sys.id;
+    }) ?? false;
+    if (!sys.isHome) panelH += 28;
+    if (isExplored && ssMgr?.getSystem(sys.id)) panelH += 24;
+    if (hasCol) panelH += 16;
+    if (ssMgr?.hasBeacon(sys.id)) panelH += 14;
+    if (ssMgr?.hasJumpGate(sys.id)) panelH += 14;
+
+    // Tło glass
+    drawGlassPanel(ctx, px, py, panelW, panelH);
+
+    let iy = py + PAD;
+
+    // Nazwa gwiazdy
+    ctx.font = `bold ${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = sys.colorHex ?? THEME.textPrimary;
+    ctx.fillText(`⭐ ${sys.name}`, px + PAD, iy + 12);
+    iy += 22;
+
+    // Typ, masa, odległość
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(`${t('galaxy.spectral') || 'Typ'}: ${sys.spectralType ?? '?'}`, px + PAD, iy + 10);
+    iy += 16;
+    ctx.fillText(`${t('galaxy.mass')}: ${(sys.mass ?? 1).toFixed(2)} M☉`, px + PAD, iy + 10);
+    iy += 16;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(`${t('galaxy.distance')}: ${(sys.distanceLY ?? 0).toFixed(1)} ly`, px + PAD, iy + 10);
+    iy += 20;
+
+    // Separator
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath();
+    ctx.moveTo(px + PAD, iy);
+    ctx.lineTo(px + panelW - PAD, iy);
+    ctx.stroke();
+    iy += 10;
+
+    // Status
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    if (sys.isHome) {
+      ctx.fillStyle = THEME.accent;
+      ctx.fillText(t('galaxy.yourSystem'), px + PAD, iy + 10);
+    } else if (isExplored) {
+      ctx.fillStyle = THEME.success;
+      ctx.fillText(t('galaxy.explored'), px + PAD, iy + 10);
+    } else {
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText(t('galaxy.unexplored'), px + PAD, iy + 10);
+    }
+    iy += 18;
+
+    // Infrastruktura
+    if (hasCol) {
+      ctx.fillStyle = THEME.accent;
+      ctx.fillText('🏗 ' + t('galaxy.hasColony'), px + PAD, iy + 10);
+      iy += 16;
+    }
+    if (ssMgr?.hasBeacon(sys.id)) {
+      ctx.fillStyle = '#66ccff';
+      ctx.fillText('📡 ' + t('galaxy.warpBeacon'), px + PAD, iy + 10);
+      iy += 14;
+    }
+    if (ssMgr?.hasJumpGate(sys.id)) {
+      ctx.fillStyle = '#cc88ff';
+      ctx.fillText('🌀 ' + t('galaxy.jumpGate'), px + PAD, iy + 10);
+      iy += 14;
+    }
+
+    // Przyciski
+    const btnW = panelW - PAD * 2;
+    const btnH = 20;
+
+    // Przycisk: Przełącz widok (jeśli odwiedzony)
+    if (isExplored && ssMgr?.getSystem(sys.id) && !sys.isHome) {
+      this._drawButton(ctx, t('galaxy.switchView'), px + PAD, iy, btnW, btnH, 'primary');
+      this._addHit(px + PAD, iy, btnW, btnH, 'switchView', { systemId: sys.id });
+      iy += btnH + 6;
+    }
+
+    // Przycisk: Wyślij statek
+    if (!sys.isHome && vMgr) {
+      const warpShips = this._getAvailableWarpShips();
+      const hasWarp = warpShips.length > 0;
+      const style = hasWarp ? 'secondary' : 'disabled';
+      this._drawButton(ctx, t('galaxy.sendShip'), px + PAD, iy, btnW, btnH, style);
+      if (hasWarp) {
+        this._addHit(px + PAD, iy, btnW, btnH, 'sendShipPanel', { systemId: sys.id });
+      }
+    }
+  }
+
+  // ── Interakcje ──────────────────────────────────────────────────────────
 
   handleClick(x, y) {
     if (!this.visible) return false;
+    if (x < CIV_SIDEBAR_W) return false; // sidebar passthrough
 
-    // Nie przechwytuj kliknięć na CivPanel sidebar — pozwól UIManager je obsłużyć
-    if (x < CIV_SIDEBAR_W) return false;
+    // Jeśli był drag — nie dispatch kliknięcia
+    if (this._wasDrag) {
+      this._wasDrag = false;
+      return true;
+    }
 
     // Sprawdź hit zones panelowe
     const hit = this._hitTest(x, y);
@@ -426,72 +433,64 @@ export class GalaxyMapScene extends BaseOverlay {
       return true;
     }
 
-    // Klik w obszar 3D → raycasting (renderer oczekuje screen coords)
-    if (!this._renderer.wasDrag) {
-      const sys = this._renderer.handleClick(x * _UI_SCALE, y * _UI_SCALE);
-      if (sys) {
-        this._selectedSystem = sys;
-        if (this._renderer._callbacks.onSelect) {
-          this._renderer._callbacks.onSelect(sys);
-        }
-      }
-    }
-
-    return true; // przechwytuj klik w obszarze overlaya
+    // Klik na gwiazdy obsługiwany przez hit zones (star_select)
+    return true; // pochłoń klik w overlayu
   }
 
   _onHit(zone) {
-    if (zone.type === 'close') {
-      this.hide();
-      if (window.KOSMOS?.overlayManager) {
-        window.KOSMOS.overlayManager.active = null;
-      }
-    }
-
-    if (zone.type === 'switchView') {
-      const ssMgr = window.KOSMOS?.starSystemManager;
-      if (ssMgr) {
-        ssMgr.switchActiveSystem(zone.systemId);
+    switch (zone.type) {
+      case 'close':
         this.hide();
         if (window.KOSMOS?.overlayManager) {
           window.KOSMOS.overlayManager.active = null;
         }
+        break;
+
+      case 'star_select': {
+        const gd = window.KOSMOS?.galaxyData;
+        const sys = gd?.systems?.find(s => s.id === zone.data.systemId);
+        if (sys) this._selectedSystem = sys;
+        break;
       }
-    }
 
-    if (zone.type === 'sendShip') {
-      this._handleSendShip(zone.systemId, zone.ships);
-    }
+      case 'switchView': {
+        const ssMgr = window.KOSMOS?.starSystemManager;
+        if (ssMgr) {
+          ssMgr.switchActiveSystem(zone.data.systemId);
+          this.hide();
+          if (window.KOSMOS?.overlayManager) {
+            window.KOSMOS.overlayManager.active = null;
+          }
+        }
+        break;
+      }
 
-    if (zone.type === 'sendShipSelect') {
-      this._handleSendShipDirect(zone.data.vesselId, zone.data.systemId);
-    }
+      case 'sendShipPanel': {
+        // Wyślij pierwszy statek warpowy
+        const ships = this._getAvailableWarpShips();
+        this._handleSendShip(zone.data.systemId, ships);
+        break;
+      }
 
-    if (zone.type === 'buildBeacon') {
-      // TODO: sprawdź koszty zasobów i odejmij (na razie: bezkosztowo dla prototypu)
-      EventBus.emit('orbital:buildBeacon', { systemId: zone.systemId });
-    }
+      case 'buildBeacon':
+        EventBus.emit('orbital:buildBeacon', { systemId: zone.data.systemId });
+        break;
 
-    if (zone.type === 'buildGate') {
-      EventBus.emit('orbital:buildJumpGate', { systemId: zone.systemId, connectedTo: null });
+      case 'buildGate':
+        EventBus.emit('orbital:buildJumpGate', { systemId: zone.data.systemId, connectedTo: null });
+        break;
     }
   }
 
-  /**
-   * Wyślij pierwszy dostępny statek warpowy do wybranego układu.
-   * (Przyszłość: dialog wyboru statku; na razie — pierwszy z listy)
-   */
   _handleSendShip(targetSystemId, ships) {
     if (!ships || ships.length === 0) return;
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return;
 
-    // Wybierz pierwszy statek z wystarczającym paliwem
     const gd = window.KOSMOS?.galaxyData;
     const targetStar = gd?.systems?.find(s => s.id === targetSystemId);
     if (!targetStar) return;
 
-    // Odległość od systemu statku do celu
     for (const v of ships) {
       const fromStar = gd.systems.find(s => s.id === (v.systemId ?? 'sys_home'));
       if (!fromStar) continue;
@@ -505,7 +504,6 @@ export class GalaxyMapScene extends BaseOverlay {
       if (v.fuel.current >= fuelCost) {
         const ok = vMgr.dispatchInterstellar(v.id, targetSystemId);
         if (ok) {
-          // Zamknij mapę po wysłaniu
           this.hide();
           if (window.KOSMOS?.overlayManager) {
             window.KOSMOS.overlayManager.active = null;
@@ -516,29 +514,10 @@ export class GalaxyMapScene extends BaseOverlay {
     }
   }
 
-  /**
-   * Wyślij konkretny statek do wybranego układu.
-   */
-  _handleSendShipDirect(vesselId, targetSystemId) {
-    const vMgr = window.KOSMOS?.vesselManager;
-    if (!vMgr) return;
-    const ok = vMgr.dispatchInterstellar(vesselId, targetSystemId);
-    if (ok) {
-      this.hide();
-      if (window.KOSMOS?.overlayManager) {
-        window.KOSMOS.overlayManager.active = null;
-      }
-    }
-  }
-
-  /**
-   * Pobierz listę statków warpCapable docked + idle w dowolnej kolonii.
-   */
   _getAvailableWarpShips() {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return [];
-    const all = vMgr.getAllVessels();
-    return all.filter(v => {
+    return vMgr.getAllVessels().filter(v => {
       if (v.position.state !== 'docked') return false;
       if (v.status !== 'idle' && v.status !== 'refueling') return false;
       const def = SHIPS[v.shipId];
@@ -546,52 +525,56 @@ export class GalaxyMapScene extends BaseOverlay {
     });
   }
 
+  // ── Nawigacja (drag + zoom) ─────────────────────────────────────────────
+
   handleMouseMove(x, y) {
     if (!this.visible) return;
-    if (x < CIV_SIDEBAR_W) return; // nie blokuj hover nad sidebar
+    if (x < CIV_SIDEBAR_W) return;
+
+    // Drag
+    if (this._dragging) {
+      const dx = x - this._dragStartX;
+      const dy = y - this._dragStartY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) this._wasDrag = true;
+      this._panX += dx;
+      this._panY += dy;
+      this._dragStartX = x;
+      this._dragStartY = y;
+      return;
+    }
+
+    // Hover na gwiazdach
+    this._hoverSystem = null;
+    for (const z of this._hitZones) {
+      if (z.type === 'star_select' && x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
+        this._hoverSystem = z.data.systemId;
+        break;
+      }
+    }
+
     super.handleMouseMove(x, y);
-    this._renderer.applyDrag(x * _UI_SCALE, y * _UI_SCALE);
   }
 
   handleMouseDown(x, y) {
     if (!this.visible) return;
-    // Ignoruj klik na panel lewy / header / dolny
-    const ox = CIV_SIDEBAR_W;
-    if (x >= ox && x <= ox + LEFT_W && y >= HDR_H) return; // lewy panel
-    if (y < HDR_H) return; // nagłówek
-    if (this._lastH && y > this._lastH - BOT_H) return; // dolny pasek
+    if (x < CIV_SIDEBAR_W) return;
 
-    this._renderer.startDrag(x * _UI_SCALE, y * _UI_SCALE);
+    this._dragging = true;
+    this._dragStartX = x;
+    this._dragStartY = y;
+    this._wasDrag = false;
   }
 
   handleMouseUp(x, y) {
     if (!this.visible) return;
-    this._renderer.endDrag();
+    this._dragging = false;
   }
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
-    if (x < CIV_SIDEBAR_W) return false; // nie blokuj scrolla nad sidebare
-    this._renderer.applyZoom(delta);
+    if (x < CIV_SIDEBAR_W) return false;
+    const zf = delta > 0 ? 0.85 : 1.18;
+    this._zoom = Math.max(0.3, Math.min(8, this._zoom * zf));
     return true;
-  }
-
-  // ── Pomocnicze ────────────────────────────────────────────────────────────
-
-  _wrapText(ctx, text, maxWidth) {
-    const words = text.split(' ');
-    const lines = [];
-    let line = '';
-    for (const word of words) {
-      const test = line ? line + ' ' + word : word;
-      if (ctx.measureText(test).width > maxWidth && line) {
-        lines.push(line);
-        line = word;
-      } else {
-        line = test;
-      }
-    }
-    if (line) lines.push(line);
-    return lines;
   }
 }
