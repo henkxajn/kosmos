@@ -65,8 +65,9 @@ export class GalaxyMapScene extends BaseOverlay {
 
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
 
-    // ── Tło glass ──────────────────────────────────────────────
-    drawGlassPanel(ctx, ox, oy, ow, oh);
+    // ── Tło ciemne (mapa gwiezdna potrzebuje nieprzezroczystego tła) ──
+    ctx.fillStyle = bgAlpha(0.92);
+    ctx.fillRect(ox, oy, ow, oh);
 
     // ── Nagłówek ───────────────────────────────────────────────
     const HDR_H = 28;
