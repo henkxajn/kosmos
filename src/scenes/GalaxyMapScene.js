@@ -6,7 +6,7 @@
 // Otwarcie pauzuje czas gry, zamknięcie wznawia.
 
 import { BaseOverlay }         from '../ui/BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER }     from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, drawGlassPanel, GLASS_BORDER, GLASS_HIGHLIGHT } from '../config/ThemeConfig.js';
 import { COSMIC }              from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W }      from '../ui/CivPanelDrawer.js';
 import { GalaxyMapRenderer }   from '../renderer/GalaxyMapRenderer.js';
@@ -102,10 +102,6 @@ export class GalaxyMapScene extends BaseOverlay {
     this._lastH = H;
     const ox = CIV_SIDEBAR_W; // offset za sidebar CivPanel
 
-    // ── Tło overlay (za sidebar) ───────────────────────────────────────────
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(ox, 0, W - ox, H);
-
     // ── Wyczyść środek — tu prześwituje WebGL galaktyki ──────────────────
     const viewX = ox + LEFT_W;
     const viewY = HDR_H;
@@ -113,12 +109,8 @@ export class GalaxyMapScene extends BaseOverlay {
     const viewH = H - HDR_H - BOT_H;
     ctx.clearRect(viewX, viewY, viewW, viewH);
 
-    // ── Nagłówek ──────────────────────────────────────────────────────────
-    ctx.fillStyle = bgAlpha(0.45);
-    ctx.fillRect(ox, 0, W - ox, HDR_H);
-    ctx.strokeStyle = GLASS_BORDER;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(ox + 0.5, 0.5, W - ox - 1, HDR_H - 1);
+    // ── Nagłówek (glass) ────────────────────────────────────────────────
+    drawGlassPanel(ctx, ox, 0, W - ox, HDR_H, { leftBorder: false });
 
     ctx.fillStyle = THEME.accent;
     ctx.font = `bold ${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
@@ -137,10 +129,7 @@ export class GalaxyMapScene extends BaseOverlay {
     const panelY = HDR_H;
     const panelH = H - HDR_H - BOT_H;
 
-    ctx.fillStyle = bgAlpha(0.38);
-    ctx.fillRect(ox, panelY, LEFT_W, panelH);
-    ctx.strokeStyle = GLASS_BORDER;
-    ctx.strokeRect(ox + 0.5, panelY + 0.5, LEFT_W - 1, panelH - 1);
+    drawGlassPanel(ctx, ox, panelY, LEFT_W, panelH, { topBorder: false, leftBorder: false });
 
     const px = ox + 10;
     let py = panelY + 16;
@@ -395,10 +384,7 @@ export class GalaxyMapScene extends BaseOverlay {
 
     // ── Dolny pasek (legenda typów) ───────────────────────────────────────
     const botY = H - BOT_H;
-    ctx.fillStyle = bgAlpha(0.42);
-    ctx.fillRect(ox, botY, W - ox, BOT_H);
-    ctx.strokeStyle = GLASS_BORDER;
-    ctx.strokeRect(ox + 0.5, botY + 0.5, W - ox - 1, BOT_H - 1);
+    drawGlassPanel(ctx, ox, botY, W - ox, BOT_H, { leftBorder: false, bottomBorder: false });
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.textAlign = 'left';
