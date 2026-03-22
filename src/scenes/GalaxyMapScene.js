@@ -102,9 +102,9 @@ export class GalaxyMapScene extends BaseOverlay {
     this._lastH = H;
     const ox = CIV_SIDEBAR_W; // offset za sidebar CivPanel
 
-    // ── Pełnoekranowe tło — zakrywa cały HUD pod spodem ──────────────────
+    // ── Tło overlay (za sidebar) ───────────────────────────────────────────
     ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(ox, 0, W - ox, H);
 
     // ── Wyczyść środek — tu prześwituje WebGL galaktyki ──────────────────
     const viewX = ox + LEFT_W;
@@ -150,7 +150,7 @@ export class GalaxyMapScene extends BaseOverlay {
 
       // Nazwa
       ctx.fillStyle = THEME.accent;
-      ctx.font = `bold 13px ${THEME.fontFamily}`;
+      ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
       ctx.textAlign = 'left';
       ctx.fillText(sys.name, px, py);
       py += 20;
@@ -163,7 +163,7 @@ export class GalaxyMapScene extends BaseOverlay {
       ctx.fill();
 
       ctx.fillStyle = THEME.textSecondary;
-      ctx.font = `${THEME.fontSize}px ${THEME.fontFamily}`;
+      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillText(SPECTRAL_LABELS[sys.spectralType] || sys.spectralType, px + 14, py);
       py += 18;
 
@@ -229,7 +229,7 @@ export class GalaxyMapScene extends BaseOverlay {
         const hasColony = sysData ? ssMgr.getSystemColonies(sys.id).length > 0 : false;
 
         // Ikony infrastruktury
-        ctx.font = `${THEME.fontSize}px ${THEME.fontFamily}`;
+        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
         if (hasColony) {
           ctx.fillStyle = THEME.accent;
           ctx.fillText('🏗 ' + t('galaxy.hasColony'), px, py);
@@ -385,7 +385,7 @@ export class GalaxyMapScene extends BaseOverlay {
     } else {
       // Nic nie wybrane
       ctx.fillStyle = THEME.textDim;
-      ctx.font = `${THEME.fontSize}px ${THEME.fontFamily}`;
+      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       const lines = this._wrapText(ctx, t('galaxy.clickStar'), LEFT_W - 24);
       for (const line of lines) {
         ctx.fillText(line, px, py);
@@ -430,6 +430,9 @@ export class GalaxyMapScene extends BaseOverlay {
   handleClick(x, y) {
     if (!this.visible) return false;
 
+    // Nie przechwytuj kliknięć na CivPanel sidebar — pozwól UIManager je obsłużyć
+    if (x < CIV_SIDEBAR_W) return false;
+
     // Sprawdź hit zones panelowe
     const hit = this._hitTest(x, y);
     if (hit) {
@@ -448,7 +451,7 @@ export class GalaxyMapScene extends BaseOverlay {
       }
     }
 
-    return true; // zawsze przechwytuj klik (fullscreen overlay)
+    return true; // przechwytuj klik w obszarze overlaya
   }
 
   _onHit(zone) {
@@ -559,8 +562,8 @@ export class GalaxyMapScene extends BaseOverlay {
 
   handleMouseMove(x, y) {
     if (!this.visible) return;
+    if (x < CIV_SIDEBAR_W) return; // nie blokuj hover nad sidebar
     super.handleMouseMove(x, y);
-    // Jeśli dragging — deleguj do renderer (screen coords)
     this._renderer.applyDrag(x * _UI_SCALE, y * _UI_SCALE);
   }
 
@@ -582,8 +585,9 @@ export class GalaxyMapScene extends BaseOverlay {
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
+    if (x < CIV_SIDEBAR_W) return false; // nie blokuj scrolla nad sidebare
     this._renderer.applyZoom(delta);
-    return true; // przechwytuj scroll
+    return true;
   }
 
   // ── Pomocnicze ────────────────────────────────────────────────────────────
