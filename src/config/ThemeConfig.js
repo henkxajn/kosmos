@@ -807,6 +807,57 @@ export const PRESET_THEMES = {
   },
 };
 
+// ── Glass panel — efekt przeszklonego wyświetlacza holograficznego ──
+
+export const GLASS_BG_ALPHA    = 0.38;   // tło glass panelu
+export const GLASS_BORDER      = 'rgba(0,255,180,0.28)';  // obramowanie glass
+export const GLASS_BORDER_SIDE = 'rgba(0,255,180,0.18)';  // boczne krawędzie
+export const GLASS_HIGHLIGHT   = 'rgba(0,255,180,0.06)';  // blask na górze panelu
+export const GLASS_INNER_GLOW  = 'rgba(0,255,180,0.03)';  // subtelne wypełnienie
+
+// Rysuje panel w stylu glass — przeszklony wyświetlacz holograficzny
+// opts: { topBorder, bottomBorder, leftBorder, rightBorder, highlightTop }
+export function drawGlassPanel(ctx, x, y, w, h, opts = {}) {
+  const { r, g, b } = hexToRgb(THEME.bgPrimary);
+
+  // Tło — niska przezroczystość (efekt szyby)
+  ctx.fillStyle = `rgba(${r},${g},${b},${GLASS_BG_ALPHA})`;
+  ctx.fillRect(x, y, w, h);
+
+  // Delikatne wypełnienie (kolor theme)
+  ctx.fillStyle = GLASS_INNER_GLOW;
+  ctx.fillRect(x, y, w, h);
+
+  // Krawędzie — wyraźniejsze niż poprzednio
+  ctx.lineWidth = 1;
+
+  if (opts.topBorder !== false) {
+    ctx.strokeStyle = opts.topBorder || GLASS_BORDER;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w, y); ctx.stroke();
+  }
+  if (opts.bottomBorder !== false) {
+    ctx.strokeStyle = opts.bottomBorder || GLASS_BORDER;
+    ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x + w, y + h); ctx.stroke();
+  }
+  if (opts.leftBorder !== false) {
+    ctx.strokeStyle = opts.leftBorder || GLASS_BORDER_SIDE;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + h); ctx.stroke();
+  }
+  if (opts.rightBorder !== false) {
+    ctx.strokeStyle = opts.rightBorder || GLASS_BORDER_SIDE;
+    ctx.beginPath(); ctx.moveTo(x + w, y); ctx.lineTo(x + w, y + h); ctx.stroke();
+  }
+
+  // Blask na górnej krawędzi (efekt szkła)
+  if (opts.highlightTop !== false) {
+    const grad = ctx.createLinearGradient(x, y, x, y + Math.min(h, 18));
+    grad.addColorStop(0, GLASS_HIGHLIGHT);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, y, w, Math.min(h, 18));
+  }
+}
+
 // ── Pomocnicze: hex → RGB ───────────────────────────────────────
 
 export function hexToRgb(color) {

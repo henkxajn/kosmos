@@ -6,7 +6,7 @@
 // Otwarcie pauzuje czas gry, zamknięcie wznawia.
 
 import { BaseOverlay }         from '../ui/BaseOverlay.js';
-import { THEME, bgAlpha }     from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER }     from '../config/ThemeConfig.js';
 import { COSMIC }              from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W }      from '../ui/CivPanelDrawer.js';
 import { GalaxyMapRenderer }   from '../renderer/GalaxyMapRenderer.js';
@@ -103,7 +103,7 @@ export class GalaxyMapScene extends BaseOverlay {
     const ox = CIV_SIDEBAR_W; // offset za sidebar CivPanel
 
     // ── Pełnoekranowe tło — zakrywa cały HUD pod spodem ──────────────────
-    ctx.fillStyle = bgAlpha(0.98);
+    ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(0, 0, W, H);
 
     // ── Wyczyść środek — tu prześwituje WebGL galaktyki ──────────────────
@@ -114,9 +114,9 @@ export class GalaxyMapScene extends BaseOverlay {
     ctx.clearRect(viewX, viewY, viewW, viewH);
 
     // ── Nagłówek ──────────────────────────────────────────────────────────
-    ctx.fillStyle = bgAlpha(0.95);
+    ctx.fillStyle = bgAlpha(0.45);
     ctx.fillRect(ox, 0, W - ox, HDR_H);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox + 0.5, 0.5, W - ox - 1, HDR_H - 1);
 
@@ -137,9 +137,9 @@ export class GalaxyMapScene extends BaseOverlay {
     const panelY = HDR_H;
     const panelH = H - HDR_H - BOT_H;
 
-    ctx.fillStyle = bgAlpha(0.88);
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, panelY, LEFT_W, panelH);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.strokeRect(ox + 0.5, panelY + 0.5, LEFT_W - 1, panelH - 1);
 
     const px = ox + 10;
@@ -395,9 +395,9 @@ export class GalaxyMapScene extends BaseOverlay {
 
     // ── Dolny pasek (legenda typów) ───────────────────────────────────────
     const botY = H - BOT_H;
-    ctx.fillStyle = bgAlpha(0.92);
+    ctx.fillStyle = bgAlpha(0.42);
     ctx.fillRect(ox, botY, W - ox, BOT_H);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.strokeRect(ox + 0.5, botY + 0.5, W - ox - 1, BOT_H - 1);
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;

@@ -44,15 +44,16 @@ export function showBodyDetailModal(body) {
   const glowC = hexToRgb(THEME.borderActive);
   Object.assign(panel.style, {
     background: THEME.bgSecondary,
-    border: `1px solid ${THEME.border}`,
-    borderRadius: '6px',
-    boxShadow: `0 0 30px rgba(${glowC.r},${glowC.g},${glowC.b},0.3)`,
-    padding: '18px 24px',
-    width: '380px',
-    maxHeight: '80vh',
+    border: `1px solid ${THEME.borderLight}`,
+    borderRadius: '8px',
+    boxShadow: `0 0 40px rgba(${glowC.r},${glowC.g},${glowC.b},0.35), 0 0 80px rgba(${glowC.r},${glowC.g},${glowC.b},0.1)`,
+    padding: '24px 32px',
+    width: '520px',
+    maxHeight: '85vh',
     overflowY: 'auto',
     fontFamily: THEME.fontFamily,
     color: THEME.textPrimary,
+    fontSize: `${THEME.fontSizeNormal + 2}px`,
   });
 
   const explored = body.explored === true;
@@ -72,8 +73,8 @@ export function showBodyDetailModal(body) {
   titleText.textContent = `${ptypeIcon} ${displayName}`;
   Object.assign(titleText.style, {
     color: THEME.accent,
-    fontSize: `${THEME.fontSizeLarge + 2}px`,
-    letterSpacing: '1px',
+    fontSize: `${THEME.fontSizeLarge + 6}px`,
+    letterSpacing: '1.5px',
     fontWeight: 'bold',
   });
   titleDiv.appendChild(titleText);
@@ -82,8 +83,8 @@ export function showBodyDetailModal(body) {
   subText.textContent = `${typeName}${body.planetType ? ` (${body.planetType})` : ''}`;
   Object.assign(subText.style, {
     color: THEME.textDim,
-    fontSize: `${THEME.fontSizeSmall}px`,
-    marginTop: '2px',
+    fontSize: `${THEME.fontSizeNormal}px`,
+    marginTop: '4px',
   });
   titleDiv.appendChild(subText);
   header.appendChild(titleDiv);
@@ -104,7 +105,7 @@ export function showBodyDetailModal(body) {
     Object.assign(sep.style, {
       border: 'none',
       borderTop: `1px solid ${THEME.border}`,
-      margin: '10px 0',
+      margin: '14px 0',
     });
     panel.appendChild(sep);
   };
@@ -114,8 +115,8 @@ export function showBodyDetailModal(body) {
     const row = document.createElement('div');
     Object.assign(row.style, {
       display: 'flex', justifyContent: 'space-between',
-      fontSize: `${THEME.fontSizeSmall + 1}px`,
-      marginBottom: '4px',
+      fontSize: `${THEME.fontSizeNormal + 1}px`,
+      marginBottom: '6px',
     });
     const lbl = document.createElement('span');
     lbl.textContent = label;
@@ -182,9 +183,9 @@ export function showBodyDetailModal(body) {
       depTitle.textContent = t('ui.depositsHeader');
       Object.assign(depTitle.style, {
         color: THEME.accent,
-        fontSize: `${THEME.fontSizeSmall}px`,
+        fontSize: `${THEME.fontSizeNormal + 1}px`,
         letterSpacing: '1px',
-        marginBottom: '6px',
+        marginBottom: '8px',
       });
       panel.appendChild(depTitle);
 
@@ -204,9 +205,9 @@ export function showBodyDetailModal(body) {
       compTitle.textContent = t('ui.compositionHeader');
       Object.assign(compTitle.style, {
         color: THEME.accent,
-        fontSize: `${THEME.fontSizeSmall}px`,
+        fontSize: `${THEME.fontSizeNormal + 1}px`,
         letterSpacing: '1px',
-        marginBottom: '6px',
+        marginBottom: '8px',
       });
       panel.appendChild(compTitle);
 
@@ -226,10 +227,10 @@ export function showBodyDetailModal(body) {
     unknownDiv.textContent = t('ui.unexploredBody');
     Object.assign(unknownDiv.style, {
       color: THEME.textDim,
-      fontSize: `${THEME.fontSizeSmall + 1}px`,
+      fontSize: `${THEME.fontSizeNormal + 1}px`,
       fontStyle: 'italic',
       textAlign: 'center',
-      padding: '12px 0',
+      padding: '16px 0',
     });
     panel.appendChild(unknownDiv);
   }
@@ -250,8 +251,8 @@ export function showBodyDetailModal(body) {
       borderRadius: '3px',
       color: textColor,
       fontFamily: THEME.fontFamily,
-      fontSize: `${THEME.fontSizeNormal}px`,
-      padding: '6px 14px',
+      fontSize: `${THEME.fontSizeNormal + 1}px`,
+      padding: '8px 18px',
       cursor: 'pointer',
       letterSpacing: '0.5px',
       flex: '1',

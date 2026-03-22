@@ -5,7 +5,7 @@
 // Dane czytane LIVE z ColonyManager / BuildingSystem / HexGrid.
 
 import { BaseOverlay }  from './BaseOverlay.js';
-import { THEME }        from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
@@ -626,14 +626,14 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Tło — trzy prostokąty: lewy panel, prawy panel, środkowy nagłówek
     // Centrum body przezroczyste gdy globus aktywny — WebGL (z-index 1) świeci przez ui-canvas (z-index 2)
-    ctx.fillStyle = 'rgba(2,4,5,0.97)';
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, oy, LEFT_W, oh);                           // lewa kolumna
     ctx.fillRect(ox + ow - RIGHT_W, oy, RIGHT_W, oh);           // prawa kolumna
     ctx.fillRect(ox + LEFT_W, oy, centerW, HDR_H);              // nagłówek środkowy
     if (!this._globeRenderer) {
       ctx.fillRect(ox + LEFT_W, oy + HDR_H, centerW, oh - HDR_H); // centrum body (gdy brak globusa)
     }
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -927,7 +927,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (this._buildMode && this._pendingBuildingId) {
       const pB = BUILDINGS[this._pendingBuildingId];
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = 'rgba(2,4,5,0.85)';
+      ctx.fillStyle = bgAlpha(0.65);
       ctx.fillRect(mapX, mapY + mapH - barH, mapW, barH);
       ctx.fillStyle = THEME.warning;
       ctx.fillText(`🏗 ${t('colonyPanel.buildMode')}: ${pB?.icon} ${pB ? getName(pB, 'building') : '?'} — ${t('colonyPanel.buildHint')}`, mapX + 10, mapY + mapH - 8);

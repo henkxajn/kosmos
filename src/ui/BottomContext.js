@@ -6,7 +6,7 @@
 // Centrum: treść zakładki
 // Prawo: przycisk akcji + podsumowanie złóż
 
-import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { DistanceUtils }  from '../utils/DistanceUtils.js';
 import { RESOURCE_ICONS } from '../data/BuildingsData.js';
@@ -94,9 +94,9 @@ export class BottomContext {
     const panelY = H - BAR_H - panelH;
 
     // Tło
-    ctx.fillStyle = bgAlpha(0.92);
+    ctx.fillStyle = bgAlpha(0.42);
     ctx.fillRect(lx, panelY, panelW, panelH);
-    ctx.strokeStyle = C.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(lx, panelY); ctx.lineTo(lx + panelW, panelY); ctx.stroke();
     // Prawa krawędź (oddzielenie od Outlinera)

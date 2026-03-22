@@ -4,7 +4,7 @@
 // Zintegrowane w jednym pasku na dole ekranu.
 // Przycisk MENU otwiera panel z opcjami: Nowa gra, Zapisz, Autozapis, Muzyka, Dźwięki.
 
-import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import EventBus            from '../core/EventBus.js';
 import { t }              from '../i18n/i18n.js';
@@ -106,9 +106,9 @@ export class BottomBar {
 
     if (this._expanded && expandedH > 0) {
       const expY = barY - expandedH;
-      ctx.fillStyle = bgAlpha(0.88);
+      ctx.fillStyle = bgAlpha(0.42);
       ctx.fillRect(0, expY, W, expandedH);
-      ctx.strokeStyle = C.border;
+      ctx.strokeStyle = GLASS_BORDER;
       ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(0, expY); ctx.lineTo(W, expY); ctx.stroke();
 
@@ -123,9 +123,9 @@ export class BottomBar {
     }
 
     // Tło paska
-    ctx.fillStyle = bgAlpha(0.90);
+    ctx.fillStyle = bgAlpha(0.40);
     ctx.fillRect(0, barY, W, BAR_H);
-    ctx.strokeStyle = C.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, barY); ctx.lineTo(W, barY); ctx.stroke();
 

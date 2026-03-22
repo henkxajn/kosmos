@@ -127,7 +127,7 @@ export class BootScene {
   }
 
   _roundRect(ctx, x, y, w, h) {
-    ctx.fillStyle   = bgAlpha(0.95);
+    ctx.fillStyle   = bgAlpha(0.45);
     ctx.strokeStyle = THEME.borderLight;
     ctx.lineWidth   = 1;
     ctx.fillRect(x, y, w, h);

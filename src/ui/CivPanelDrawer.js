@@ -4,7 +4,7 @@
 // Gospodarka (E), Populacja (P), Technologie (T), Flota (F), Kolonie (C).
 // Czyste funkcje importowane przez UIManager.
 
-import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, hexToRgb, GLASS_BORDER_SIDE } from '../config/ThemeConfig.js';
 import { t } from '../i18n/i18n.js';
 
 // ── Stałe ──────────────────────────────────────────────────
@@ -32,10 +32,10 @@ export function drawCivPanelSidebar(ctx, panelY, activeTab, fullH) {
                  + (CIV_TABS.length - 1) * CIV_SIDEBAR_GAP;
   const sidebarH = fullH || buttonsH;
 
-  // Tło sidebara — pełna wysokość
-  ctx.fillStyle = bgAlpha(0.92);
+  // Tło sidebara — pełna wysokość (glass)
+  ctx.fillStyle = bgAlpha(0.42);
   ctx.fillRect(sx, sy, CIV_SIDEBAR_W, sidebarH);
-  ctx.strokeStyle = THEME.border;
+  ctx.strokeStyle = GLASS_BORDER_SIDE;
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(sx + CIV_SIDEBAR_W, sy);
@@ -50,8 +50,8 @@ export function drawCivPanelSidebar(ctx, panelY, activeTab, fullH) {
     const _bAc = hexToRgb(THEME.borderActive);
     const _bPr = hexToRgb(THEME.bgPrimary);
     ctx.fillStyle = active
-      ? `rgba(${_bAc.r},${_bAc.g},${_bAc.b},0.35)`
-      : `rgba(${_bPr.r},${_bPr.g},${_bPr.b},0.80)`;
+      ? `rgba(${_bAc.r},${_bAc.g},${_bAc.b},0.25)`
+      : `rgba(${_bPr.r},${_bPr.g},${_bPr.b},0.32)`;
     ctx.fillRect(sx, btnY, CIV_SIDEBAR_W, CIV_SIDEBAR_BTN);
 
     // Aktywny — border-left accent

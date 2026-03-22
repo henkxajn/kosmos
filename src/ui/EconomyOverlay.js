@@ -5,7 +5,7 @@
 // Zakładka FABRYKI: filtr kolonii + przegląd (góra) + zarządzanie produkcją (dół).
 
 import { BaseOverlay }   from './BaseOverlay.js';
-import { THEME }         from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES, ALL_RESOURCES }
                          from '../data/ResourcesData.js';
 import { COMMODITIES, formatRecipe, COMMODITY_BY_TIER }
@@ -252,9 +252,9 @@ export class EconomyOverlay extends BaseOverlay {
     const centerW = ow - LEFT_W - RIGHT_W;
 
     // Tło
-    ctx.fillStyle = 'rgba(2,4,5,0.97)';
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -286,7 +286,7 @@ export class EconomyOverlay extends BaseOverlay {
     const pad = 14;
 
     // Nagłówek
-    ctx.fillStyle = THEME.bgSecondary;
+    ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(x, y, w, 44);
     this._drawText(ctx, t('econPanel.header'), x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
 
@@ -358,7 +358,7 @@ export class EconomyOverlay extends BaseOverlay {
 
     // ── Dolna sekcja — bilans energii ─────────────────────
     const eY = y + h - energyH;
-    ctx.fillStyle = THEME.bgSecondary;
+    ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(x, eY, w, energyH);
     ctx.strokeStyle = THEME.border;
     ctx.beginPath(); ctx.moveTo(x, eY); ctx.lineTo(x + w, eY); ctx.stroke();
@@ -478,7 +478,7 @@ export class EconomyOverlay extends BaseOverlay {
     const pad = 14;
 
     // Nagłówek z zakładkami
-    ctx.fillStyle = THEME.bgSecondary;
+    ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(x, y, w, TAB_H);
 
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
@@ -629,7 +629,7 @@ export class EconomyOverlay extends BaseOverlay {
       const queue = fs.getQueue();
 
       // Nagłówek kolonii
-      ctx.fillStyle = THEME.bgSecondary;
+      ctx.fillStyle = bgAlpha(0.50);
       ctx.fillRect(x, ry, w, 20);
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
@@ -1667,7 +1667,7 @@ export class EconomyOverlay extends BaseOverlay {
     const pad = 14;
 
     // Nagłówek
-    ctx.fillStyle = THEME.bgSecondary;
+    ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(x, y, w, TAB_H);
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;

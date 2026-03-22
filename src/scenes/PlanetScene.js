@@ -11,7 +11,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { TECHS }             from '../data/TechData.js';
 import { showRenameModal }   from '../ui/ModalInput.js';
-import { THEME, bgAlpha }   from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER }   from '../config/ThemeConfig.js';
 
 // ── Stałe layoutu ───────────────────────────────────────────
 // HEX_SIZE dynamiczny — obliczany per planeta/rozdzielczość w _calcOptimalHexSize()
@@ -348,7 +348,7 @@ export class PlanetScene {
     ctx.clearRect(0, 0, LW, LH);
 
     // Tło
-    ctx.fillStyle = 'rgba(2,4,5,0.96)';
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(0, 0, LW, LH);
 
     // Panel za siatką
@@ -549,9 +549,9 @@ export class PlanetScene {
   _drawTopBar() {
     const ctx = this.ctx;
 
-    ctx.fillStyle = bgAlpha(0.95);
+    ctx.fillStyle = bgAlpha(0.45);
     ctx.fillRect(0, 0, LW, TOP_BAR_H);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(0, TOP_BAR_H); ctx.lineTo(LW, TOP_BAR_H); ctx.stroke();
 
@@ -591,9 +591,9 @@ export class PlanetScene {
     const Y    = TOP_BAR_H;
     const rSys = window.KOSMOS?.resourceSystem;
 
-    ctx.fillStyle = bgAlpha(0.90);
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(0, Y, LW, RES_BAR_H);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(0, Y + RES_BAR_H); ctx.lineTo(LW, Y + RES_BAR_H); ctx.stroke();
 
@@ -630,9 +630,9 @@ export class PlanetScene {
     const bSys = window.KOSMOS?.buildingSystem;
     const cSys = window.KOSMOS?.civSystem;
 
-    ctx.fillStyle = bgAlpha(0.88);
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(0, HEADER_H, LEFT_W, LH - HEADER_H);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(LEFT_W, HEADER_H); ctx.lineTo(LEFT_W, LH); ctx.stroke();
 
@@ -731,7 +731,7 @@ export class PlanetScene {
     const CX   = LW / 2;
 
     // Tło
-    ctx.fillStyle = bgAlpha(0.90);
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(0, BY, LW, BOTTOM_BAR_H);
 
     // Separator górny
@@ -851,9 +851,9 @@ export class PlanetScene {
     const bSys  = window.KOSMOS?.buildingSystem;
     const tSys  = window.KOSMOS?.techSystem;
 
-    ctx.fillStyle = bgAlpha(0.95);
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(BPX, HEADER_H, RIGHT_W, LH - HEADER_H);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth   = 1;
     ctx.beginPath(); ctx.moveTo(BPX, HEADER_H); ctx.lineTo(BPX, LH); ctx.stroke();
 

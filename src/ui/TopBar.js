@@ -5,7 +5,7 @@
 // Kontrolki czasu po prawej stronie.
 // Tooltip przy hover na zasobie — podsumowanie/bilans.
 
-import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { GAME_CONFIG }    from '../config/GameConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES } from '../data/ResourcesData.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
@@ -75,9 +75,9 @@ export class TopBar {
     this._itemRects = [];
 
     // Tło paska
-    ctx.fillStyle = bgAlpha(0.92);
+    ctx.fillStyle = bgAlpha(0.45);
     ctx.fillRect(0, 0, W, BAR_H);
-    ctx.strokeStyle = C.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, BAR_H); ctx.lineTo(W, BAR_H); ctx.stroke();
 

@@ -5,7 +5,7 @@
 // Rysowany na Canvas 2D (#ui-canvas), NA WIERZCHU istniejącego UI.
 // Logika misji delegowana do MissionSystem + FleetActions.
 
-import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC }          from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W }  from './CivPanelDrawer.js';
 import { SHIPS }           from '../data/ShipsData.js';
@@ -247,11 +247,11 @@ export class FleetManagerOverlay {
     const centerW = ow - LEFT_W - RIGHT_W;
 
     // ── Tło ──────────────────────────────────────────────────
-    ctx.fillStyle = 'rgba(2,4,5,0.97)';
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, oy, ow, oh);
 
-    // Obramowanie
-    ctx.strokeStyle = THEME.border;
+    // Obramowanie glass
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -470,14 +470,20 @@ export class FleetManagerOverlay {
           this._mapHoverBody = null;
           break;
         }
-        // Ustaw focus na klikniętym ciele (zoom utrzyma je na środku)
+        // Ustaw focus na klikniętym ciele (zoom + centruj mapę)
         this._mapFocusBodyId = zone.data.bodyId;
-        // Normalny klik — pokaż szczegóły ciała + centruj mapę
         const bodyEntity = _findBody(zone.data.bodyId);
         if (bodyEntity) {
           EventBus.emit('body:selected', { entity: bodyEntity });
-          showBodyDetailModal(bodyEntity);
           this._centerMapOnBody(bodyEntity);
+        }
+        break;
+      }
+      case 'atlas_report': {
+        // Ikona raportu 📋 w Star Atlas — otwórz modal ze szczegółami
+        const reportBody = _findBody(zone.data.bodyId);
+        if (reportBody) {
+          showBodyDetailModal(reportBody);
         }
         break;
       }
@@ -1135,7 +1141,7 @@ export class FleetManagerOverlay {
     const mapRadius = baseRadius * this._mapZoom;
 
     // Tło mapy — nieprzezroczyste
-    ctx.fillStyle = 'rgba(2,4,5,0.97)';
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(x + 1, mapY, w - 2, mapH - 1);
 
     // Clip do obszaru mapy
@@ -1380,9 +1386,9 @@ export class FleetManagerOverlay {
     // ── Legenda (poza clip) ─────────────────────────────────
     const legX = x + w - 140;
     const legY2 = mapY + 8;
-    ctx.fillStyle = 'rgba(2,4,5,0.88)';
+    ctx.fillStyle = bgAlpha(0.65);
     ctx.fillRect(legX, legY2, 132, 90);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(legX, legY2, 132, 90);
 
@@ -1414,11 +1420,11 @@ export class FleetManagerOverlay {
 
   _drawAtlasCatalog(ctx, x, y, w, h) {
     const PAD = 10;
-    const ROW_H = 32;
+    const ROW_H = 38;
     let cy = y + 6;
 
     // Tło
-    ctx.fillStyle = 'rgba(2,4,5,0.97)';
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(x + 1, y, w - 2, h - 1);
 
     // Nagłówek
@@ -1488,33 +1494,53 @@ export class FleetManagerOverlay {
       const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
       const orbA = body.orbital?.a ?? 0;
       const distHome = DistanceUtils.orbitalFromHomeAU(body);
+      let _reportX = null;
 
       if (explored) {
         // Nazwa
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.font = `${THEME.fontSizeSmall + 1}px ${THEME.fontFamily}`;
         const isHome = !!entry.isHome;
         ctx.fillStyle = isHome ? THEME.accent : hasColony ? THEME.mint : isMoon ? THEME.textSecondary : THEME.textPrimary;
         const namePrefix = isMoon ? '└ ' : '';
         const homeMark = isHome ? '🏛 ' : '';
-        const targetMark = body._markedAsTarget ? '🎯' : '';
-        const nameStr = `${namePrefix}${icon} ${homeMark}${(body.name ?? body.id).slice(0, isMoon ? 10 : 14)}${targetMark}`;
-        ctx.fillText(nameStr, x + PAD + indent, ry + 12);
+        const targetMark = body._markedAsTarget ? ' 🎯' : '';
+        const maxNameLen = isMoon ? 14 : 20;
+        const rawName = body.name ?? body.id;
+        const truncName = rawName.length > maxNameLen ? rawName.slice(0, maxNameLen) + '…' : rawName;
+        const nameStr = `${namePrefix}${icon} ${homeMark}${truncName}${targetMark}`;
+        ctx.fillText(nameStr, x + PAD + indent, ry + 14);
 
-        // Typ + temperatura
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        // Ikona raportu 📋 — obok nazwy (hit zone dodana po map_body)
+        const nameTextW = ctx.measureText(nameStr).width;
+        _reportX = x + PAD + indent + nameTextW + 8;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
+        ctx.fillText('📋', _reportX, ry + 14);
+
+        // Kolonia badge — pod nazwą, obok typu
+        let typeLineStr = '';
         const typeStr = body.planetType ?? body.subType ?? body.type;
         const tempStr = (body.temperatureC != null || body.temperatureK) ? ` ${Math.round(body.temperatureC ?? (body.temperatureK - 273))}°C` : '';
-        ctx.fillText(`${typeStr}${tempStr}`, x + PAD + indent, ry + 25);
+        typeLineStr = `${typeStr}${tempStr}`;
+
+        if (hasColony) {
+          const col = colMgr.getColony(body.id);
+          const pop = col?.civSystem?.population ?? 0;
+          typeLineStr += `  ● ${pop} POP`;
+        }
+
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = hasColony ? THEME.mint : THEME.textDim;
+        ctx.fillText(typeLineStr, x + PAD + indent, ry + 28);
 
         // Odległości (prawo)
         ctx.textAlign = 'right';
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`${orbA.toFixed(2)} AU`, x + w - PAD, ry + 12);
+        ctx.fillText(`${orbA.toFixed(2)} AU`, x + w - PAD, ry + 14);
 
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(`🏠 ${distHome.toFixed(1)} AU`, x + w - PAD, ry + 25);
+        ctx.fillText(`🏠 ${distHome.toFixed(1)} AU`, x + w - PAD, ry + 28);
 
         // Złoża (środek-prawo)
         const deps = body.deposits ?? [];
@@ -1527,43 +1553,42 @@ export class FleetManagerOverlay {
           ctx.fillStyle = THEME.yellow;
           const depX = x + w / 2 + 30;
           ctx.textAlign = 'left';
-          ctx.fillText(depStr, depX, ry + 25);
+          ctx.fillText(depStr, depX, ry + 28);
         }
 
         ctx.textAlign = 'left';
-
-        // Kolonia badge
-        if (hasColony) {
-          const col = colMgr.getColony(body.id);
-          const pop = col?.civSystem?.population ?? 0;
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.mint;
-          ctx.fillText(`● ${pop} POP`, x + PAD + indent + ctx.measureText(nameStr).width + 6, ry + 12);
-        }
       } else {
         // Niezbadane
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.font = `${THEME.fontSizeSmall + 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
         const namePrefix = isMoon ? '└ ' : '';
-        ctx.fillText(`${namePrefix}${icon} ???`, x + PAD + indent, ry + 12);
+        ctx.fillText(`${namePrefix}${icon} ???`, x + PAD + indent, ry + 14);
 
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(body.type === 'planet' ? t('fleet.bodyTypePlanet') : body.type === 'moon' ? t('fleet.bodyTypeMoon') : t('fleet.bodyTypePlanetoid'), x + PAD + indent, ry + 25);
+        ctx.fillText(body.type === 'planet' ? t('fleet.bodyTypePlanet') : body.type === 'moon' ? t('fleet.bodyTypeMoon') : t('fleet.bodyTypePlanetoid'), x + PAD + indent, ry + 28);
 
         ctx.textAlign = 'right';
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(`${orbA.toFixed(2)} AU`, x + w - PAD, ry + 12);
+        ctx.fillText(`${orbA.toFixed(2)} AU`, x + w - PAD, ry + 14);
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText(`🏠 ${distHome.toFixed(1)} AU`, x + w - PAD, ry + 25);
+        ctx.fillText(`🏠 ${distHome.toFixed(1)} AU`, x + w - PAD, ry + 28);
         ctx.textAlign = 'left';
       }
 
-      // Hit zone — do hover/tooltip i wyboru celu
+      // Hit zone — cały wiersz do hover/tooltip i wyboru celu
       this._hitZones.push({
         x: x + 1, y: ry, w: w - 2, h: ROW_H,
         type: 'map_body', data: { bodyId: body.id },
       });
+
+      // Hit zone raportu — NA WIERZCHU (po map_body, wyższy index = sprawdzany pierwszy w reverse)
+      if (_reportX !== null) {
+        this._hitZones.push({
+          x: _reportX - 2, y: ry + 4, w: 20, h: 16,
+          type: 'atlas_report', data: { bodyId: body.id },
+        });
+      }
 
       // Separator wierszy
       ctx.strokeStyle = 'rgba(40,60,80,0.2)';
@@ -1640,7 +1665,7 @@ export class FleetManagerOverlay {
     const PAD = 10;
 
     // Tło
-    ctx.fillStyle = 'rgba(2,4,5,0.97)';
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(x + 1, y, w - 2, h - 1);
 
     const gd = window.KOSMOS?.galaxyData;
@@ -2031,7 +2056,7 @@ export class FleetManagerOverlay {
     if (ttY < areaY + 4) ttY = areaY + 4;
 
     // Tło
-    ctx.fillStyle = 'rgba(2,4,5,0.95)';
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ttX, ttY, ttW, ttH);
     ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;

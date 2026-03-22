@@ -4,7 +4,7 @@
 // Dane czytane LIVE z ColonyManager / CivilizationSystem / ResourceSystem.
 
 import { BaseOverlay } from './BaseOverlay.js';
-import { THEME }       from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import EventBus        from '../core/EventBus.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { PROSPERITY_WEIGHTS } from '../data/ConsumerGoodsData.js';
@@ -100,9 +100,9 @@ export class PopulationOverlay extends BaseOverlay {
     const centerW = ow - LEFT_W - RIGHT_W;
 
     // Tło
-    ctx.fillStyle = 'rgba(2,4,5,0.97)';
+    ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = THEME.border;
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -136,7 +136,7 @@ export class PopulationOverlay extends BaseOverlay {
     const pad = 14;
 
     // ── Nagłówek ──────────────────────────────────────────
-    ctx.fillStyle = THEME.bgSecondary;
+    ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(x, y, w, HDR_H);
 
     this._drawText(ctx, t('popPanel.header'), x + pad, y + 20, THEME.accent, THEME.fontSizeMedium);
@@ -269,7 +269,7 @@ export class PopulationOverlay extends BaseOverlay {
     const rs = col.resourceSystem;
 
     // ── Nagłówek z zakładkami ──────────────────────────────
-    ctx.fillStyle = THEME.bgSecondary;
+    ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(x, y, w, TAB_H);
 
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
@@ -707,7 +707,7 @@ export class PopulationOverlay extends BaseOverlay {
     const pSys = col?.prosperitySystem;
 
     // ── Nagłówek ──────────────────────────────────────────
-    ctx.fillStyle = THEME.bgSecondary;
+    ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(x, y, w, TAB_H);
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;

@@ -4,7 +4,7 @@
 // Sekcje zwijalne: KOLONIE, EKSPEDYCJE, FLOTA.
 // Klik na kolonię → otwórz globus; klik na ekspedycję → focus kamera.
 
-import { THEME, bgAlpha } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, drawGlassPanel } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { SHIPS }          from '../data/ShipsData.js';
 import { ALL_RESOURCES }  from '../data/ResourcesData.js';
@@ -73,13 +73,10 @@ export class Outliner {
     const y = TOP_BAR_H;
     const h = H - TOP_BAR_H - BOTTOM_BAR_H;
 
-    // Tło
-    ctx.fillStyle = bgAlpha(0.88);
-    ctx.fillRect(x, y, OUTLINER_W, h);
-    // Lewa krawędź
-    ctx.strokeStyle = C.border;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + h); ctx.stroke();
+    // Tło glass
+    drawGlassPanel(ctx, x, y, OUTLINER_W, h, {
+      topBorder: false, bottomBorder: false, rightBorder: false,
+    });
 
     this._clickTargets = [];
     let cy = y + 4;
@@ -508,7 +505,7 @@ export class Outliner {
     if (ttY < 4) ttY = 4;
 
     // Tło
-    ctx.fillStyle = bgAlpha(0.95);
+    ctx.fillStyle = bgAlpha(0.82);
     ctx.fillRect(ttX, ttY, ttW, ttH);
     ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;

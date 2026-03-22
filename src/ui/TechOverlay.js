@@ -90,7 +90,7 @@ export class TechOverlay {
       right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
       bottom: ${Math.round(COSMIC.BOTTOM_BAR_H * S)}px;
       z-index: 50;
-      background: rgba(2,4,5,0.95);
+      background: rgba(2,4,5,0.38);
       display: flex; flex-direction: column;
       font-family: ${THEME.fontFamily};
       color: ${THEME.textPrimary};
