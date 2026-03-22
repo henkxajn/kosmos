@@ -13,7 +13,7 @@ import { t, getName } from '../i18n/i18n.js';
 const LEFT_W   = 260;
 const RIGHT_W  = 260;
 const ROW_H    = 52;
-const HDR_H    = 52;
+const HDR_H    = 44;
 const STAT_H   = 60;
 const TAB_H    = 32;
 
@@ -139,12 +139,12 @@ export class PopulationOverlay extends BaseOverlay {
     ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(x, y, w, HDR_H);
 
-    this._drawText(ctx, t('popPanel.header'), x + pad, y + 20, THEME.accent, THEME.fontSizeMedium);
+    this._drawText(ctx, t('popPanel.header'), x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
 
     const totalPop = colonies.reduce((s, c) => s + (c.civSystem?.population ?? 0), 0);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(t('popPanel.summary', colonies.length, totalPop), x + pad, y + 36);
+    ctx.fillText(t('popPanel.summary', colonies.length, totalPop), x + pad, y + 32);
 
     // ── Siatka statystyk 2×2 ──────────────────────────────
     const sy = y + HDR_H;

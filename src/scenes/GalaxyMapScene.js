@@ -70,13 +70,13 @@ export class GalaxyMapScene extends BaseOverlay {
     ctx.fillRect(ox, oy, ow, oh);
 
     // ── Nagłówek ───────────────────────────────────────────────
-    const HDR_H = 28;
+    const HDR_H = 44;
     drawGlassPanel(ctx, ox, oy, ow, HDR_H, { highlightTop: true, bottomBorder: GLASS_BORDER });
 
     ctx.fillStyle = THEME.accent;
-    ctx.font = `bold ${THEME.fontSizeNormal + 2}px ${THEME.fontFamily}`;
+    ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
     ctx.textAlign = 'left';
-    ctx.fillText(t('galaxy.title'), ox + 12, oy + HDR_H / 2 + 5);
+    ctx.fillText(t('galaxy.title'), ox + 14, oy + 18);
 
     // Przycisk zamknij [ESC ×]
     const closeW = 52, closeH = 18;

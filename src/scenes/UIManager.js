@@ -688,6 +688,15 @@ export class UIManager {
       }
     }
 
+    // MapModeBar (przełącznik trybu mapy) — ZAWSZE na wierzchu, przed overlayami
+    if (window.KOSMOS?.civMode) {
+      const modeHit = this._mapModeBar.onClick(x, y);
+      if (modeHit) {
+        this._handleMapModeChange(modeHit);
+        return true;
+      }
+    }
+
     // Overlay pełnoekranowy (FleetManager itp.) — przed resztą UI
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleClick(x, y)) return true;
@@ -698,15 +707,6 @@ export class UIManager {
       // Zamknij menu jeśli kliknięto poza nim
       if (this._bottomBar.menuOpen) this._bottomBar._menuOpen = false;
       return true;
-    }
-
-    // MapModeBar (przełącznik trybu mapy)
-    if (window.KOSMOS?.civMode) {
-      const modeHit = this._mapModeBar.onClick(x, y);
-      if (modeHit) {
-        this._handleMapModeChange(modeHit);
-        return true;
-      }
     }
 
     // BottomBar (stabilność + EventLog + menu)
@@ -816,19 +816,6 @@ export class UIManager {
       this._drawSimpleTopBar(ctx);
     }
 
-    // ── MapModeBar (pływający przełącznik trybu) ─────────────
-    if (civMode && !globeOpen) {
-      // Synchronizacja trybu mapy z aktualnym stanem UI
-      if (this.overlayManager.active === 'galaxy') {
-        this._mapModeBar.mode = 'galaxy';
-      } else if (this.overlayManager.active === 'colony') {
-        this._mapModeBar.mode = 'body';
-      } else {
-        this._mapModeBar.mode = 'system';
-      }
-      this._mapModeBar.draw(ctx, W, H);
-    }
-
     // ── CivPanel (sidebar + zakładki) ────────────────────────
     if (civMode && !globeOpen) this._drawCivPanel();
 
@@ -873,6 +860,18 @@ export class UIManager {
     if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
     // ── Przerysuj sidebar nad overlayem (zawsze widoczny) ───
     if (civMode && !globeOpen && this.overlayManager.active) this._drawCivPanel();
+
+    // ── MapModeBar (NA WIERZCHU — po overlayach) ───────────
+    if (civMode && !globeOpen) {
+      if (this.overlayManager.active === 'galaxy') {
+        this._mapModeBar.mode = 'galaxy';
+      } else if (this.overlayManager.active === 'colony') {
+        this._mapModeBar.mode = 'body';
+      } else {
+        this._mapModeBar.mode = 'system';
+      }
+      this._mapModeBar.draw(ctx, W, H);
+    }
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──
     this._bottomBar.drawMenu(ctx, W, H, {

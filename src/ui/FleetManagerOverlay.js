@@ -47,7 +47,7 @@ function _resolveName(id) {
 // ── Stałe layoutu ────────────────────────────────────────────────────────────
 const LEFT_W    = 170;
 const RIGHT_W   = 200;
-const TOP_PAD   = COSMIC.TOP_BAR_H;   // 50
+const TOP_PAD   = COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H;   // pod MapModeBar
 const BOTTOM_PAD = COSMIC.BOTTOM_BAR_H; // 30
 const OUTLINER_W = COSMIC.OUTLINER_W;  // 180
 

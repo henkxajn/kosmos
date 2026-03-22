@@ -1,10 +1,11 @@
 // LayoutConfig — stałe wymiarów paneli UI
 //
 // Dwa layouty: COSMIC (widok kosmiczny) i GLOBE (widok globusa planety).
-// Importowane przez UIManager, TopBar, Outliner, BottomContext, BottomBar, PlanetGlobeScene.
+// Importowane przez UIManager, TopBar, Outliner, BottomContext, BottomBar, ColonyOverlay.
 
 export const COSMIC = {
   TOP_BAR_H:     46,   // pasek zasobów + czas (góra)
+  MAP_MODE_H:    30,   // wysokość paska MapModeBar + margines pod TopBar
   OUTLINER_W:    170,  // panel prawy (kolonie/ekspedycje/flota)
   BOTTOM_CTX_H:  120,  // kontekstowy panel dolny (info o encji)
   BOTTOM_BAR_H:  26,   // cienki pasek dolny (stabilność + EventLog + przyciski)

@@ -85,7 +85,7 @@ export class TechOverlay {
     c.id = 'tech-overlay';
     c.style.cssText = `
       position: fixed;
-      top: ${Math.round(COSMIC.TOP_BAR_H * S)}px;
+      top: ${Math.round((COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H) * S)}px;
       left: ${Math.round(CIV_SIDEBAR_W * S)}px;
       right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
       bottom: ${Math.round(COSMIC.BOTTOM_BAR_H * S)}px;
@@ -190,8 +190,8 @@ export class TechOverlay {
     const title = document.createElement('span');
     title.textContent = t('techPanel.header');
     title.style.cssText = `
-      color: ${THEME.accent}; font-size: 14px; font-weight: bold;
-      margin-right: 12px; letter-spacing: 2px;
+      color: ${THEME.accent}; font-size: ${THEME.fontSizeMedium}px;
+      margin-right: 12px; letter-spacing: 1px;
     `;
     hdr.appendChild(title);
 

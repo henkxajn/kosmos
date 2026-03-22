@@ -108,11 +108,12 @@ export class BaseOverlay {
 
   // Pomocniczy — oblicz wymiary overlay na podstawie canvas
   _getOverlayBounds(W, H) {
+    const topOffset = COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H;
     return {
       ox: CIV_SIDEBAR_W,
-      oy: COSMIC.TOP_BAR_H,
+      oy: topOffset,
       ow: W - COSMIC.OUTLINER_W - CIV_SIDEBAR_W,
-      oh: H - COSMIC.TOP_BAR_H - COSMIC.BOTTOM_BAR_H,
+      oh: H - topOffset - COSMIC.BOTTOM_BAR_H,
     };
   }
 }

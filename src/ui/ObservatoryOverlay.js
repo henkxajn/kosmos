@@ -57,7 +57,7 @@ export class ObservatoryOverlay {
     const H = Math.round(window.innerHeight / S);
     return x >= CIV_SIDEBAR_W &&
            x <= W - COSMIC.OUTLINER_W &&
-           y >= COSMIC.TOP_BAR_H &&
+           y >= COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H &&
            y <= H - COSMIC.BOTTOM_BAR_H;
   }
 
@@ -82,7 +82,7 @@ export class ObservatoryOverlay {
     c.id = 'observatory-overlay';
     c.style.cssText = `
       position: fixed;
-      top: ${Math.round(COSMIC.TOP_BAR_H * S)}px;
+      top: ${Math.round((COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H) * S)}px;
       left: ${Math.round(CIV_SIDEBAR_W * S)}px;
       right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
       bottom: ${Math.round(COSMIC.BOTTOM_BAR_H * S)}px;
@@ -105,7 +105,7 @@ export class ObservatoryOverlay {
     const header = document.createElement('div');
     header.style.cssText = 'display:flex; align-items:center; gap:12px; margin-bottom:8px; flex-shrink:0;';
     header.innerHTML = `
-      <span style="font-size:16px; font-weight:bold; color:${THEME.accent}">🔭 ${t('observatory.title')}</span>
+      <span style="font-size:${THEME.fontSizeMedium}px; color:${THEME.accent}">🔭 ${t('observatory.title')}</span>
       <span id="obs-status" style="font-size:11px; color:${THEME.textDim}"></span>
     `;
     c.appendChild(header);
