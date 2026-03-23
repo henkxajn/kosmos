@@ -461,47 +461,6 @@ export class PopulationOverlay extends BaseOverlay {
       cy += 6;
     }
 
-    // ── Sekcja POTRZEBY POPULACJI ─────────────────────────
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('popPanel.needsTitle'), x + pad, cy + 10);
-    cy += 18;
-
-    // Oblicz satisfaction z resource ratios
-    const needs = this._calcNeeds(civ, rs, pop);
-
-    for (const need of needs) {
-      const nx = x + pad;
-      // Ikona + nazwa
-      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(need.icon, nx, cy + 12);
-      ctx.fillText(need.name, nx + 18, cy + 12);
-
-      // Pasek
-      const barX = nx + 100;
-      const barW = w - pad * 2 - 150;
-      const barColor = need.ratio > 0.8 ? THEME.success : need.ratio > 0.5 ? THEME.warning : THEME.danger;
-      this._drawBar(ctx, barX, cy + 5, barW, 6, need.ratio, barColor, THEME.border);
-
-      // Procent
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = barColor;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${Math.round(need.ratio * 100)}%`, x + w - pad, cy + 12);
-      ctx.textAlign = 'left';
-
-      cy += 22;
-
-      // Alert deficytu
-      if (need.ratio < 0.5) {
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.danger;
-        ctx.fillText(t('popPanel.deficit', need.name, need.penalty), nx + 18, cy + 2);
-        cy += 12;
-      }
-    }
-
     // ── Kryzysy aktywne ───────────────────────────────────
     cy += 10;
     if (civ?.isUnrest) {
