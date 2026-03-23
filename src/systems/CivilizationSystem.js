@@ -806,8 +806,10 @@ export class CivilizationSystem {
   _calcStrataGrowthRate(type) {
     const strata = this.strata[type];
     const demand  = this._calcStrataDemand(type);
-    // Brak zapotrzebowania → minimalny wzrost (nie zero), żeby populacja rosła naturalnie
-    const minDemand = type === 'laborer' ? 0.3 : 0.05;
+    // Brak zapotrzebowania → naturalny wzrost (nie zero), żeby populacja rosła
+    // laborer: 0.5 (główna siła robocza rośnie szybko)
+    // reszta: 0.15 (naturalny przyrost niezależnie od demand)
+    const minDemand = type === 'laborer' ? 0.5 : 0.15;
 
     const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
     const foodMod   = this._foodGrowthModifier(foodRatio);
