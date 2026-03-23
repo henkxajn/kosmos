@@ -461,6 +461,47 @@ export class PopulationOverlay extends BaseOverlay {
       cy += 6;
     }
 
+    // ── Sekcja POTRZEBY POPULACJI ─────────────────────────
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('popPanel.needsTitle'), x + pad, cy + 10);
+    cy += 18;
+
+    // Oblicz satisfaction z resource ratios
+    const needs = this._calcNeeds(civ, rs, pop);
+
+    for (const need of needs) {
+      const nx = x + pad;
+      // Ikona + nazwa
+      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(need.icon, nx, cy + 12);
+      ctx.fillText(need.name, nx + 18, cy + 12);
+
+      // Pasek
+      const barX = nx + 100;
+      const barW = w - pad * 2 - 150;
+      const barColor = need.ratio > 0.8 ? THEME.success : need.ratio > 0.5 ? THEME.warning : THEME.danger;
+      this._drawBar(ctx, barX, cy + 5, barW, 6, need.ratio, barColor, THEME.border);
+
+      // Procent
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = barColor;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.round(need.ratio * 100)}%`, x + w - pad, cy + 12);
+      ctx.textAlign = 'left';
+
+      cy += 22;
+
+      // Alert deficytu
+      if (need.ratio < 0.5) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.danger;
+        ctx.fillText(t('popPanel.deficit', need.name, need.penalty), nx + 18, cy + 2);
+        cy += 12;
+      }
+    }
+
     // ── Kryzysy aktywne ───────────────────────────────────
     cy += 10;
     if (civ?.isUnrest) {
@@ -476,58 +517,9 @@ export class PopulationOverlay extends BaseOverlay {
       cy += 16;
     }
 
-    // ── Sekcja PROSPERITY BREAKDOWN ──────────────────────────
+    // ── Sekcja DOBRA KONSUMPCYJNE ─────────────────────────────
     const ps = col?.prosperitySystem;
     if (ps) {
-      cy += 10;
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textHeader;
-      ctx.fillText(t('popPanel.prosperityHeader'), x + pad, cy + 10);
-      cy += 16;
-
-      // Pasek główny prosperity (0-100)
-      const pVal = Math.round(ps.prosperity ?? 50);
-      const pColor = pVal < 30 ? THEME.danger : pVal < 60 ? THEME.warning : THEME.success;
-      this._drawBar(ctx, x + pad, cy, w - pad * 2, 8, pVal / 100, pColor, THEME.border);
-      ctx.fillStyle = pColor;
-      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${pVal} / 100`, x + w - pad, cy + 8);
-      ctx.textAlign = 'left';
-      cy += 16;
-
-      // Warstwy (5 wierszy)
-      const layers = ps.getLayerScores?.() ?? {};
-      const layerData = [
-        { key: 'survival',       label: t('popPanel.layerSurvival'),    max: PROSPERITY_WEIGHTS.survival },
-        { key: 'infrastructure', label: t('popPanel.layerInfra'), max: PROSPERITY_WEIGHTS.infrastructure },
-        { key: 'functioning',    label: t('popPanel.layerFunctioning'), max: PROSPERITY_WEIGHTS.functioning },
-        { key: 'comfort',        label: t('popPanel.layerComfort'),        max: PROSPERITY_WEIGHTS.comfort },
-        { key: 'luxury',         label: t('popPanel.layerLuxury'),         max: PROSPERITY_WEIGHTS.luxury },
-      ];
-
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      for (const layer of layerData) {
-        const score = layers[layer.key] ?? 0;
-        const ratio = score;  // score jest już 0-1 (satisfaction)
-        const weighted = Math.round(score * layer.max * 10) / 10;
-        const color = ratio >= 0.7 ? THEME.success : ratio >= 0.3 ? THEME.warning : THEME.danger;
-
-        ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(layer.label, x + pad, cy + 9);
-
-        const mbX = x + pad + 110;
-        const mbW = w - pad * 2 - 150;
-        this._drawBar(ctx, mbX, cy + 3, mbW, 4, ratio, color, THEME.border);
-
-        ctx.fillStyle = color;
-        ctx.textAlign = 'right';
-        ctx.fillText(`${weighted.toFixed(0)}/${layer.max}`, x + w - pad, cy + 9);
-        ctx.textAlign = 'left';
-
-        cy += 14;
-      }
-
       // Dobra konsumpcyjne
       cy += 8;
       ctx.fillStyle = THEME.textHeader;
