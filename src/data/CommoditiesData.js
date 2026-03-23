@@ -146,15 +146,30 @@ export const COMMODITIES = {
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  robots: {
-    id:          'robots',
-    namePL:      'Roboty',
+  microcircuits: {
+    id:          'microcircuits',
+    namePL:      'Mikroobwody',
+    nameEN:      'Microcircuits',
+    icon:        '🔲',
+    tier:        2,
+    recipe:      { Si: 8, Cu: 4 },
+    baseTime:    0.375,
+    weight:      0.8,
+    description: 'Drukowane obwody scalone — podstawa robotyki i automatyzacji',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
+  automation_droid: {
+    id:          'automation_droid',
+    namePL:      'Droid Automatyzacyjny',
+    nameEN:      'Automation Droid',
     icon:        '🤖',
     tier:        2,
-    recipe:      { Fe: 4, Cu: 3, Si: 2, electronics: 2 },
-    baseTime:    0.625,
+    recipe:      { Fe: 8, Cu: 5, Si: 3, electronics: 3, microcircuits: 2, power_cells: 1 },
+    baseTime:    1.0,
     weight:      3.5,
-    description: 'Autonomiczne roboty — do kopalń, automatyzacji i innych zastosowań',
+    isDroidUnit: true, droidTier: 1,
+    description: 'Prosta jednostka automatyzacyjna — obsadza slot w budynku, +40% produkcji',
     isConsumerGood: false, consumptionLayer: null,
   },
 
@@ -207,7 +222,7 @@ export const COMMODITIES = {
     namePL:      'Prefab: Kopalnia Autonomiczna',
     icon:        '📦🤖',
     tier:        2,
-    recipe:      { Fe: 35, Cu: 8, Ti: 10 },
+    recipe:      { Fe: 35, Cu: 10, Ti: 10, microcircuits: 2, power_cells: 2 },
     baseTime:    0.25,
     weight:      55.0,
     isPrefab:    true,
@@ -221,7 +236,7 @@ export const COMMODITIES = {
     namePL:      'Prefab: Autonomiczna Elektrownia',
     icon:        '📦🤖☀',
     tier:        2,
-    recipe:      { Si: 22, Cu: 10, Ti: 6, Fe: 8 },
+    recipe:      { Si: 22, Cu: 12, Ti: 6, Fe: 8, microcircuits: 2, power_cells: 1 },
     baseTime:    0.2,
     weight:      40.0,
     isPrefab:    true,
@@ -383,7 +398,7 @@ export const COMMODITIES = {
     baseTime:    3.0,
     weight:      0.5,
     description: 'Ultra-czyste kryształy do zaawansowanej elektroniki',
-    isConsumerGood: true, consumptionLayer: 'luxury',
+    isConsumerGood: false, consumptionLayer: null,
   },
 
   ion_thrusters: {
@@ -462,6 +477,35 @@ export const COMMODITIES = {
     requiresTech: 'quantum_physics',
   },
 
+  android_worker: {
+    id:          'android_worker',
+    namePL:      'Android Robotniczy',
+    nameEN:      'Android Worker',
+    icon:        '🦾',
+    tier:        3,
+    recipe:      { Fe: 8, Cu: 6, Si: 5, electronics: 5, semiconductors: 3, polymer_composites: 2 },
+    baseTime:    2.5,
+    weight:      5.0,
+    isDroidUnit: true, droidTier: 2,
+    requiresTech: 'android_engineering',
+    description: 'Humanoidalny android — zajmuje pełny slot POP, +70% wydajności',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
+  ai_chips: {
+    id:          'ai_chips',
+    namePL:      'Chipy AI',
+    nameEN:      'AI Chips',
+    icon:        '🧠',
+    tier:        3,
+    recipe:      { semiconductors: 4, quantum_processors: 2, Pt: 4, Xe: 2 },
+    baseTime:    5.0,
+    weight:      0.3,
+    requiresTech: 'quantum_computing',
+    description: 'Procesory neuromorficzne — serce systemów sztucznej inteligencji',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
   fusion_cells: {
     id:          'fusion_cells',
     namePL:      'Ogniwa Fuzyjne',
@@ -514,6 +558,21 @@ export const COMMODITIES = {
     requiresTech: 'antimatter_containment',
   },
 
+  ai_collective_node: {
+    id:          'ai_collective_node',
+    namePL:      'Węzeł AI Collective',
+    nameEN:      'AI Collective Node',
+    icon:        '🌐',
+    tier:        4,
+    recipe:      { ai_chips: 5, quantum_processors: 3, electronics: 10, semiconductors: 8, exotic_alloy: 2 },
+    baseTime:    8.0,
+    weight:      2.0,
+    isDroidUnit: true, droidTier: 3,
+    requiresTech: 'artificial_intelligence',
+    description: 'Kolektyw AI — superinteligentna sieć. Produkcja ×2.5, ale egzystencjalne napięcia',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
   // ── Tier 5 — technologia endgame ─────────────────────────────────────────
 
   warp_cores: {
@@ -543,7 +602,8 @@ export const COMMODITY_SHORT = {
   hull_armor:         'Pancerz',
   habitat_modules:    'Hab.moduły',
   water_recyclers:    'Recykl.wody',
-  robots:             'Roboty',
+  microcircuits:      'Mikrobw.',
+  automation_droid:   'Droid aut.',
   prefab_mine:        'Pref.Kop.',
   prefab_solar_farm:  'Pref.Sol.',
   prefab_habitat:     'Pref.Hab.',
@@ -571,6 +631,9 @@ export const COMMODITY_SHORT = {
   quantum_processors: 'Proc.Q',
   fusion_cells:       'Ogn.fuz.',
   superconductors:    'Nadprzew.',
+  android_worker:     'Android',
+  ai_chips:           'Chipy AI',
+  ai_collective_node: 'Węzeł AI',
   warp_cores:         'Rdz.warp',
 };
 
@@ -581,14 +644,15 @@ export const COMMODITY_BY_TIER = {
   1: ['steel_plates', 'polymer_composites', 'concrete_mix', 'copper_wiring',
       'spare_parts', 'pharmaceuticals', 'life_support_filters', 'synthetics', 'stimulants'],
   2: ['power_cells', 'electronics', 'food_synthesizers', 'mining_drills', 'hull_armor',
-      'habitat_modules', 'water_recyclers', 'robots',
+      'habitat_modules', 'water_recyclers', 'microcircuits', 'automation_droid',
       'prefab_mine', 'prefab_solar_farm', 'prefab_habitat', 'prefab_autonomous_mine',
       'prefab_autonomous_solar_farm', 'prefab_spaceport', 'prefab_autonomous_spaceport',
       'personal_electronics', 'gourmet_food',
       'composite_alloy', 'bio_samples'],
   3: ['semiconductors', 'ion_thrusters', 'fusion_cores', 'nanotech_filters',
-      'power_cells_mk2', 'exotic_alloy', 'quantum_processors', 'fusion_cells', 'superconductors'],
-  4: ['quantum_cores', 'antimatter_cells'],
+      'power_cells_mk2', 'exotic_alloy', 'quantum_processors', 'android_worker', 'ai_chips',
+      'fusion_cells', 'superconductors'],
+  4: ['quantum_cores', 'antimatter_cells', 'ai_collective_node'],
   5: ['warp_cores'],
 };
 
@@ -613,7 +677,8 @@ export const STARTING_COMMODITIES = {
   hull_armor:         4,
   habitat_modules:    4,
   water_recyclers:    3,
-  robots:             0,
+  microcircuits:      0,
+  automation_droid:   0,
   prefab_mine:        0,
   prefab_solar_farm:  0,
   prefab_habitat:     0,
@@ -641,5 +706,8 @@ export const STARTING_COMMODITIES = {
   quantum_processors: 0,
   fusion_cells:       0,
   superconductors:    0,
+  android_worker:     0,
+  ai_chips:           0,
+  ai_collective_node: 0,
   warp_cores:         0,
 };

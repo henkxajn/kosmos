@@ -207,8 +207,7 @@ export class ImpactDamageSystem {
   _killPops(civSystem, killCount) {
     if (killCount <= 0 || civSystem.population <= 0) return 0;
     const killed = Math.min(civSystem.population, killCount);
-    civSystem.population -= killed;
-    if (civSystem.population < 0) civSystem.population = 0;
+    civSystem.removePop(null, killed);
     EventBus.emit('civ:popDied', { cause: 'impact', population: civSystem.population });
     EventBus.emit('civ:populationChanged', civSystem._popSnapshot());
     return killed;

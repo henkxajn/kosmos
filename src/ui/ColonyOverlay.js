@@ -832,7 +832,9 @@ export class ColonyOverlay extends BaseOverlay {
       // Stats: POP + energy
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`👤${pop}/${housing}`, x + pad, ry + 28);
+      const dPop = civ?.displayPopulation ?? 0;
+      const dStr = dPop >= 1_000_000 ? `${(dPop/1_000_000).toFixed(1)}M` : dPop >= 1_000 ? `${(dPop/1_000).toFixed(0)}k` : `${dPop}`;
+      ctx.fillText(`👤${dStr} (${pop}/${housing})`, x + pad, ry + 28);
       const enColor = energyBal >= 0 ? THEME.success : THEME.danger;
       ctx.fillStyle = enColor;
       ctx.fillText(`⚡${energyBal >= 0 ? '+' : ''}${energyBal.toFixed(0)}`, x + pad + 60, ry + 28);
@@ -1692,6 +1694,38 @@ export class ColonyOverlay extends BaseOverlay {
       ly += 32;
     }
 
+    // Przycisk ZAINSTALUJ / USUŃ DROID (tylko budynki z popCost > 0, nie autonomiczne)
+    if (bDef.popCost > 0 && !bDef.isAutonomous && !bDef.isCapital) {
+      if (tile.syntheticSlot) {
+        // Droid zainstalowany — pokaż info + przycisk usunięcia
+        const tierLabel = { 1: '🤖 Droid', 2: '🦾 Android', 3: '🌐 AI' }[tile.syntheticSlot.tier] ?? '🤖 Droid';
+        const effLabel = { 1: '×1.4', 2: '×1.7', 3: '×2.5' }[tile.syntheticSlot.tier] ?? '×1.4';
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.accent;
+        ctx.fillText(`${tierLabel} (${effLabel})`, x + pad, ly + 10);
+        ly += 16;
+        this._drawButton(ctx, `🗑 ${t('colonyPanel.removeSynthetic') || 'Usuń jednostkę'}`, x + pad, ly, w - pad * 2, 24, 'warning');
+        this._addHit(x + pad, ly, w - pad * 2, 24, 'removeSynthetic', { q: tile.q, r: tile.r });
+        ly += 32;
+      } else {
+        // Sprawdź dostępne droidy w inventory
+        const inv = colony?.resourceSystem?._inventory;
+        const droidTypes = [
+          { id: 'ai_collective_node', tier: 3, label: '🌐 AI Collective (×2.5)' },
+          { id: 'android_worker',     tier: 2, label: '🦾 Android (×1.7)' },
+          { id: 'automation_droid',   tier: 1, label: '🤖 Droid (×1.4)' },
+        ];
+        for (const dt of droidTypes) {
+          const qty = inv?.[dt.id] ?? 0;
+          if (qty <= 0) continue;
+          const style = 'accent';
+          this._drawButton(ctx, `${dt.label} [${qty}]`, x + pad, ly, w - pad * 2, 24, style);
+          this._addHit(x + pad, ly, w - pad * 2, 24, 'installSynthetic', { q: tile.q, r: tile.r, commodityId: dt.id });
+          ly += 28;
+        }
+      }
+    }
+
     // Przycisk BURZ (ukryj przy trwającej rozbudowie)
     if (!bDef.isCapital && !isUpgrading) {
       this._drawButton(ctx, `🗑 ${t('colonyPanel.demolish')}`, x + pad, ly, w - pad * 2, 24, 'danger');
@@ -1897,6 +1931,30 @@ export class ColonyOverlay extends BaseOverlay {
       const tile = grid?.get(zone.data.q, zone.data.r);
       if (!tile) return;
       EventBus.emit('planet:upgradeRequest', { tile });
+      return;
+    }
+
+    if (zone.type === 'installSynthetic') {
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colony = colMgr?.getColony(this._selectedColonyId);
+      if (colony?.buildingSystem) {
+        const tileKey = `${zone.data.q},${zone.data.r}`;
+        const result = colony.buildingSystem.installSynthetic(tileKey, zone.data.commodityId);
+        if (!result.success) {
+          this._flashMessage = result.reason;
+          this._flashTime = Date.now();
+        }
+      }
+      return;
+    }
+
+    if (zone.type === 'removeSynthetic') {
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colony = colMgr?.getColony(this._selectedColonyId);
+      if (colony?.buildingSystem) {
+        const tileKey = `${zone.data.q},${zone.data.r}`;
+        colony.buildingSystem.removeSynthetic(tileKey);
+      }
       return;
     }
 

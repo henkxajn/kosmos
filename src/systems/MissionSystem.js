@@ -1186,7 +1186,7 @@ export class MissionSystem {
       const crew1 = exp.crewCost ?? EXPEDITION_CREW_COST;
       if (originCol1?.civSystem) {
         originCol1.civSystem.unlockPops(crew1);
-        originCol1.civSystem.population = Math.max(0, originCol1.civSystem.population - crew1);
+        originCol1.civSystem.removePop(null, crew1);
         EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originCol1.civSystem.population });
       }
       if (exp.vesselId && vMgr) {
@@ -1319,7 +1319,7 @@ export class MissionSystem {
       const originColDisaster = colMgr?.getColony(exp.originColonyId);
       if (originColDisaster?.civSystem) {
         originColDisaster.civSystem.unlockPops(exp.crewCost);
-        originColDisaster.civSystem.population = Math.max(0, originColDisaster.civSystem.population - exp.crewCost);
+        originColDisaster.civSystem.removePop(null, exp.crewCost);
         EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: originColDisaster.civSystem.population });
       }
       this._emit('mission:disaster', 'expedition:disaster', { expedition: exp });
@@ -1542,7 +1542,7 @@ export class MissionSystem {
       const crewRecon = exp.crewCost ?? RECON_CREW_COST;
       if (originColRecon?.civSystem) {
         originColRecon.civSystem.unlockPops(crewRecon);
-        originColRecon.civSystem.population = Math.max(0, originColRecon.civSystem.population - crewRecon);
+        originColRecon.civSystem.removePop(null, crewRecon);
         EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originColRecon.civSystem.population });
       }
       if (exp.vesselId && vMgr) {

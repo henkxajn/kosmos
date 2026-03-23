@@ -1,6 +1,6 @@
 // TechData — definicje drzewa technologii (Etap 38 — Wielka Reforma)
 //
-// 7 gałęzi (branches):
+// 8 gałęzi (branches):
 //   mining    — wydobycie i metalurgia
 //   energy    — energetyka
 //   biology   — biologia i rolnictwo
@@ -8,6 +8,7 @@
 //   space     — ekspansja kosmiczna
 //   computing — informatyka i AI
 //   defense   — obronność i osłony
+//   synthetic — robotyka, androidy, AI
 //
 // Każda technologia ma:
 //   id:               unikalny string-klucz
@@ -53,6 +54,7 @@ export const TECH_BRANCHES = {
   space:     { namePL: 'Kosmos',       icon: '🚀', color: '#aaaaff' },
   computing: { namePL: 'Informatyka',  icon: '💻', color: '#ffcc66' },
   defense:   { namePL: 'Obronność',    icon: '🛡', color: '#ff8888' },
+  synthetic: { namePL: 'Synthetyka',   icon: '🤖', color: '#bb88ff' },
 };
 
 export const TECHS = {
@@ -710,8 +712,10 @@ export const TECHS = {
     effects: [
       { type: 'autonomousEfficiency', multiplier: 1.5 },
       { type: 'unlockBuilding', buildingId: 'ai_core' },
+      { type: 'unlockBuilding', buildingId: 'ai_nexus' },
+      { type: 'unlockCommodity', commodityId: 'ai_collective_node' },
     ],
-    description: 'Budynki autonomiczne +50% wydajności. AI Core: -30% czas budowy (1/kolonia)',
+    description: 'Budynki autonomiczne +50%. AI Core (-30% budowa). Centrum AI + Węzeł AI Collective',
   },
 
   quantum_computing: {
@@ -725,8 +729,9 @@ export const TECHS = {
     effects: [
       { type: 'researchCostMultiplier', multiplier: 0.7 },
       { type: 'unlockCommodity', commodityId: 'quantum_processors' },
+      { type: 'unlockCommodity', commodityId: 'ai_chips' },
     ],
-    description: 'Badania -30% research cost. Procesory kwantowe — prereq do nanofabrykacji',
+    description: 'Badania -30% research cost. Procesory kwantowe + chipy AI',
   },
 
   predictive_modeling: {
@@ -848,4 +853,43 @@ export const TECHS = {
     ],
     description: 'Gateway do endgame — prereq: quantum_computing, antimatter_containment, warp_theory',
   },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── GAŁĄŹ: SYNTHETYKA (synthetic) 🤖 — 4 tech ─────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+
+  robotics: {
+    id:          'robotics',
+    namePL:      'Robotyka',
+    nameEN:      'Robotics',
+    branch:      'synthetic',
+    tier:        2,
+    cost:        { research: 120 },
+    requires:    ['metallurgy'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'robot_assembly' },
+      { type: 'unlockCommodity', commodityId: 'microcircuits' },
+      { type: 'unlockCommodity', commodityId: 'automation_droid' },
+      { type: 'modifier', resource: 'minerals', multiplier: 1.10 },
+    ],
+    description: 'Automatyzacja procesów przemysłowych',
+  },
+
+  android_engineering: {
+    id:          'android_engineering',
+    namePL:      'Inżynieria Androidów',
+    nameEN:      'Android Engineering',
+    branch:      'synthetic',
+    tier:        3,
+    cost:        { research: 300 },
+    requires:    ['robotics', 'advanced_materials'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'android_lab' },
+      { type: 'unlockCommodity', commodityId: 'android_worker' },
+    ],
+    description: 'Projektowanie humanoidalnych androidów roboczych',
+  },
+
+  // ai_chips odblokowywane przez istniejący quantum_computing (computing branch)
+  // ai_nexus + ai_collective_node odblokowywane przez istniejący artificial_intelligence (computing branch)
 };

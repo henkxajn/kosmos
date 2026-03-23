@@ -15,7 +15,7 @@
 // ── Typy terenu ───────────────────────────────────────────────────────────────
 // yieldBonus: mnożnik produkcji budynków stojących na tym terenie (1.0 = bez bonusu)
 // allowedCategories: które kategorie budynków mogą tu stanąć
-//   'mining' | 'energy' | 'food' | 'population' | 'research' | 'military' | 'space' | 'market'
+//   'mining' | 'energy' | 'food' | 'population' | 'research' | 'military' | 'space' | 'market' | 'synthetic' | 'governance'
 // baseYield: pasywna produkcja bez budynku (per rok gry)
 export const TERRAIN_TYPES = {
   plains: {
@@ -24,7 +24,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x5a8a30,
     icon:              '🟢',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'food', 'population', 'research', 'military', 'space', 'market'],
+    allowedCategories: ['mining', 'energy', 'food', 'population', 'research', 'military', 'space', 'market', 'synthetic', 'governance'],
     yieldBonus:        { food: 1.4, default: 1.0 },  // bonus do żywności
     baseYield:         { organics: 0.5 },
     description:       'Płaski teren, idealny pod zabudowę i uprawy',
@@ -36,7 +36,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x7e6e5e,
     icon:              '⛰',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'military'],  // brak rolnictwa
+    allowedCategories: ['mining', 'energy', 'military', 'synthetic', 'governance'],  // brak rolnictwa
     yieldBonus:        { mining: 1.6, default: 0.8 },     // trudniejsza budowa, ale więcej rud
     baseYield:         { minerals: 0.8 },
     description:       'Bogate złoża minerałów, trudna budowa',
@@ -60,7 +60,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x1d4e1d,
     icon:              '🌲',
     buildable:         true,         // wymaga karczowania (koszt minerałów)
-    allowedCategories: ['food', 'population', 'research'],
+    allowedCategories: ['food', 'population', 'research', 'governance'],
     yieldBonus:        { food: 1.3, default: 0.9 },
     baseYield:         { organics: 1.2 },
     clearCost:         { minerals: 30 },   // koszt karczowania przed budową
@@ -73,7 +73,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0xc8a850,
     icon:              '🏜',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'military', 'space', 'market'],
+    allowedCategories: ['mining', 'energy', 'military', 'space', 'market', 'synthetic'],
     yieldBonus:        { energy: 1.5, default: 0.9 },  // doskonałe słońce
     baseYield:         { minerals: 0.3 },
     description:       'Idealne nasłonecznienie, bonus dla elektrowni słonecznych',
@@ -85,7 +85,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x88a8b8,
     icon:              '🧊',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'food', 'military', 'market'],
+    allowedCategories: ['mining', 'energy', 'food', 'military', 'market', 'governance'],
     yieldBonus:        { mining: 1.2, default: 0.8 },
     baseYield:         { minerals: 0.4, water: 0.3 },
     description:       'Zimny teren z płytkimi złożami i lodem',
@@ -109,7 +109,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x5a4a3a,
     icon:              '☄',
     buildable:         true,
-    allowedCategories: ['mining', 'research', 'military'],
+    allowedCategories: ['mining', 'research', 'military', 'synthetic'],
     yieldBonus:        { mining: 1.8, default: 0.9 },  // skondensowane pierwiastki z impaktu
     baseYield:         { minerals: 1.5 },
     strategic:         true,         // może zawierać unikalne pierwiastki (Au, Pt)
@@ -134,7 +134,7 @@ export const TERRAIN_TYPES = {
     colorDark:         0x6a5a4a,
     icon:              '🌑',
     buildable:         true,
-    allowedCategories: ['mining', 'energy', 'military'],
+    allowedCategories: ['mining', 'energy', 'military', 'synthetic'],
     yieldBonus:        { default: 0.7 },
     baseYield:         {},
     description:       'Zdegradowany teren, niska wydajność',
@@ -180,6 +180,10 @@ export class HexTile {
 
     // Oczekujące zamówienie (null | buildingId string) — czeka na surowce
     this.pendingBuild = null;
+
+    // Syntetyczna jednostka zainstalowana w budynku (null | { commodityId, tier })
+    // tier: 1=automation_droid (×1.4), 2=android_worker (×1.7), 3=ai_collective_node (×2.5)
+    this.syntheticSlot = null;
   }
 
   // Skrótowy dostęp do definicji terenu
@@ -217,6 +221,7 @@ export class HexTile {
       capitalBase:       this.capitalBase,
       anomaly:           this.anomaly,
       underConstruction: this.underConstruction,
+      syntheticSlot:     this.syntheticSlot,
     };
   }
 
@@ -230,6 +235,7 @@ export class HexTile {
     tile.capitalBase       = data.capitalBase       ?? false;
     tile.anomaly           = data.anomaly           ?? null;
     tile.underConstruction = data.underConstruction ?? null;
+    tile.syntheticSlot     = data.syntheticSlot     ?? null;
     return tile;
   }
 }

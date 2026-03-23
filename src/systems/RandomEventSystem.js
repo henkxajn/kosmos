@@ -373,10 +373,10 @@ export class RandomEventSystem {
         case 'pop':
           if (civSys) {
             if (fx.delta > 0) {
-              civSys.population += fx.delta;
+              civSys.addPop('laborer', fx.delta);
               EventBus.emit('civ:popBorn', { population: civSys.population });
             } else if (fx.delta < 0 && civSys.population > 1) {
-              civSys.population = Math.max(1, civSys.population + fx.delta);
+              civSys.removePop(null, Math.min(Math.abs(fx.delta), civSys.population - 1));
               EventBus.emit('civ:popDied', { cause: event.id, population: civSys.population });
             }
           }

@@ -41,6 +41,7 @@ export const BUILDINGS = {
     terrainAny:  true,
     requires:    null,
     isColonyBase: true,
+    popType:     'laborer',
   },
 
   // ── Wydobycie ─────────────────────────────────────────────────────────────
@@ -65,6 +66,7 @@ export const BUILDINGS = {
     terrainAny:  false,
     requires:    null,
     isMine:      true,     // flaga: kopalnia wydobywa z deposits
+    popType:     'miner',
   },
 
   // ── Energia ───────────────────────────────────────────────────────────────
@@ -88,6 +90,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  false,
     requires:    null,
+    popType:     'laborer',
   },
 
   coal_plant: {
@@ -109,6 +112,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  true,
     requires:    null,
+    popType:     'laborer',
   },
 
   geothermal: {
@@ -130,6 +134,7 @@ export const BUILDINGS = {
     terrainOnly: ['volcano'],
     terrainAny:  false,
     requires:    null,
+    popType:     'laborer',
   },
 
   // ── Żywność / woda ────────────────────────────────────────────────────────
@@ -153,6 +158,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  false,
     requires:    null,
+    popType:     'laborer',
   },
 
   well: {
@@ -174,6 +180,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  false,
     requires:    null,
+    popType:     'laborer',
   },
 
   // ── Populacja ─────────────────────────────────────────────────────────────
@@ -197,6 +204,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  true,       // habitat można postawić na każdym terenie poza oceanem
     requires:    null,
+    popType:     'laborer',
   },
 
   // ── Nauka ─────────────────────────────────────────────────────────────────
@@ -220,6 +228,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  false,
     requires:    null,
+    popType:     'scientist',
   },
 
   // ── Fabryka (produkuje commodities) ───────────────────────────────────────
@@ -243,6 +252,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  false,
     requires:    'metallurgy',
+    popType:     'worker',
   },
 
   // ── Fabryka konsumpcyjna (produkuje dobra konsumpcyjne) ───────────────────
@@ -273,6 +283,7 @@ export const BUILDINGS = {
     requires:    'metallurgy',
     allowedTerrain: ['plains', 'desert', 'tundra', 'volcanic', 'mesa', 'ice'],
     isAutonomous: false,
+    popType:     'worker',
   },
 
   // ── Zaawansowane (wymagają technologii) ──────────────────────────────────
@@ -296,6 +307,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  false,
     requires:    'deep_drilling',
+    popType:     'miner',
   },
 
   nuclear_plant: {
@@ -317,6 +329,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  false,
     requires:    'nuclear_power',
+    popType:     'engineer',
   },
 
   // ── Kosmos ────────────────────────────────────────────────────────────────
@@ -341,6 +354,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  true,
     requires:    'rocketry',
+    popType:     'engineer',
   },
 
   autonomous_spaceport: {
@@ -352,7 +366,7 @@ export const BUILDINGS = {
     isSpaceport:   true,
     isAutonomous:  true,
     cost:          { Fe: 1000, Ti: 500, Cu: 300, Si: 200 },
-    commodityCost: { steel_plates: 100, robots: 60, hull_armor: 60, electronics: 50, concrete_mix: 30 },
+    commodityCost: { steel_plates: 100, automation_droid: 60, hull_armor: 60, electronics: 50, concrete_mix: 30 },
     energyCost:    8,
     buildTime:     2.0,      // lata gry
     rates:         {},
@@ -364,6 +378,7 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    true,
     requires:      'automation',
+    popType:       'engineer',
   },
 
   // ── Stocznia ──────────────────────────────────────────────────────────────
@@ -387,6 +402,7 @@ export const BUILDINGS = {
     terrainOnly: null,
     terrainAny:  true,
     requires:    'exploration',
+    popType:     'engineer',
   },
   // ── Syntetyczna żywność ───────────────────────────────────────────────────
 
@@ -410,6 +426,7 @@ export const BUILDINGS = {
     terrainAny:    true,
     requires:      'food_synthesis',
     isSynthFood:   true,
+    popType:       'worker',
   },
 
   // ── Kopalnia autonomiczna ────────────────────────────────────────────────
@@ -421,11 +438,11 @@ export const BUILDINGS = {
     icon:          '🤖',
     description:   'Wydobywa surowce bez POPów — wymaga Robotów i Wierteł.',
     cost:          { Fe: 30, Ti: 10, Cu: 5 },
-    commodityCost: { steel_plates: 4, robots: 3, mining_drills: 2, power_cells: 1 },
+    commodityCost: { steel_plates: 4, automation_droid: 3, mining_drills: 2, power_cells: 1 },
     energyCost:    4,
     buildTime:     1.0,     // lata gry
     rates:         {},
-    maintenance:   { Fe: 1 },  // konserwacja robotów
+    maintenance:   { Fe: 1 },  // konserwacja droidów
     housing:       0,
     popCost:       0,
     maxLevel:      10,
@@ -435,6 +452,7 @@ export const BUILDINGS = {
     requires:      'automation',
     isMine:        true,
     isAutonomous:  true,
+    popType:       'miner',
   },
 
   // ── Autonomiczna elektrownia słoneczna ────────────────────────────────────
@@ -446,7 +464,7 @@ export const BUILDINGS = {
     icon:          '🤖☀',
     description:   'Elektrownia słoneczna obsługiwana przez roboty — działa bez POPów.',
     cost:          { Si: 20, Cu: 8, Ti: 5 },
-    commodityCost: { steel_plates: 4, robots: 3, power_cells: 2, copper_wiring: 2, electronics: 1 },
+    commodityCost: { steel_plates: 4, automation_droid: 3, power_cells: 2, copper_wiring: 2, electronics: 1 },
     energyCost:    0,
     buildTime:     0.75,    // lata gry
     rates:         { energy: 6 },
@@ -459,6 +477,7 @@ export const BUILDINGS = {
     terrainAny:    false,
     requires:      'automation',
     isAutonomous:  true,
+    popType:       'laborer',
   },
 
   // ── Reaktor fuzyjny ─────────────────────────────────────────────────────
@@ -482,6 +501,7 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    true,
     requires:      'fusion_power',
+    popType:       'engineer',
   },
 
   // ── Terraformer ─────────────────────────────────────────────────────────
@@ -505,6 +525,7 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    true,
     requires:      'terraforming',
+    popType:       'scientist',
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -536,6 +557,7 @@ export const BUILDINGS = {
     disasterReduction: 0.3,    // % redukcji ryzyka katastrofy per level
     missionYieldBonus: 0.05,   // +5% yield misji per level
     warningYears:      0.5,    // lat wyprzedzenia ostrzeżenia per level
+    popType:           'scientist',
   },
 
   data_center: {
@@ -557,6 +579,7 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    false,
     requires:      'basic_computing',
+    popType:       'scientist',
   },
 
   genetics_lab: {
@@ -578,6 +601,7 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    false,
     requires:      'genetic_engineering',
+    popType:       'scientist',
   },
 
   arcology_building: {
@@ -599,6 +623,7 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    true,
     requires:      'arcology',
+    popType:       'laborer',
   },
 
   orbital_mine: {
@@ -608,7 +633,7 @@ export const BUILDINGS = {
     icon:          '🛰⛏',
     description:   'Automatyczne wydobycie z planetoidów — bez POPów, powolne ale darmowe',
     cost:          { Fe: 50, Ti: 20, Cu: 15 },
-    commodityCost: { steel_plates: 6, robots: 4, mining_drills: 3, hull_armor: 2 },
+    commodityCost: { steel_plates: 6, automation_droid: 4, mining_drills: 3, hull_armor: 2 },
     energyCost:    6,
     buildTime:     1.5,
     rates:         {},  // produkcja obliczana dynamicznie
@@ -622,6 +647,7 @@ export const BUILDINGS = {
     requires:      'space_mining',
     isMine:        true,
     isAutonomous:  true,
+    popType:       'miner',
   },
 
   ai_core: {
@@ -631,7 +657,7 @@ export const BUILDINGS = {
     icon:          '🧠',
     description:   'Sztuczna inteligencja — -30% czas budowy, auto-naprawa statków (unikalny: 1/kolonia)',
     cost:          { Ti: 30, Si: 25, Cu: 15, Pt: 5 },
-    commodityCost: { electronics: 6, quantum_processors: 3, robots: 4 },
+    commodityCost: { electronics: 6, quantum_processors: 3, automation_droid: 4 },
     energyCost:    15,
     buildTime:     2.0,
     rates:         { research: 5 },
@@ -644,6 +670,7 @@ export const BUILDINGS = {
     terrainAny:    true,
     requires:      'artificial_intelligence',
     isUnique:      true,  // max 1 per kolonia
+    popType:       'scientist',
   },
 
   defense_tower: {
@@ -665,6 +692,7 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    true,
     requires:      'point_defense',
+    popType:       'laborer',
   },
 
   defense_grid: {
@@ -687,6 +715,7 @@ export const BUILDINGS = {
     terrainAny:    true,
     requires:      'planetary_defense',
     isUnique:      true,
+    popType:       'laborer',
   },
 
   antimatter_factory: {
@@ -708,6 +737,7 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    true,
     requires:      'antimatter_containment',
+    popType:       'engineer',
   },
 
   vacuum_generator: {
@@ -729,6 +759,7 @@ export const BUILDINGS = {
     terrainOnly:   null,
     terrainAny:    true,
     requires:      'zero_point_energy',
+    popType:       'engineer',
   },
 
   orbital_habitat: {
@@ -738,7 +769,7 @@ export const BUILDINGS = {
     icon:          '🛸🏠',
     description:   'Stacja orbitalna — housing 20, nie zajmuje hexa na planecie (limit 3)',
     cost:          { Ti: 100, Fe: 80, Si: 50, Cu: 30 },
-    commodityCost: { habitat_modules: 10, hull_armor: 8, electronics: 6, fusion_cores: 4, robots: 4 },
+    commodityCost: { habitat_modules: 10, hull_armor: 8, electronics: 6, fusion_cores: 4, automation_droid: 4 },
     energyCost:    15,
     buildTime:     3.0,
     rates:         {},
@@ -752,6 +783,7 @@ export const BUILDINGS = {
     requires:      'megastructures',
     isOrbital:     true,   // nie zajmuje hexa, limit 3 per kolonia
     maxPerColony:  3,
+    popType:       'laborer',
   },
 
   // ── Budynki handlowe (market) ──────────────────────────────────────────────
@@ -778,6 +810,7 @@ export const BUILDINGS = {
     requires:      'interplanetary_logistics',
     tcBonus:       200,          // +200 TC per level
     tradeRangeBonus: 5,         // +5 AU zasięgu handlu per level
+    popType:         'merchant',
   },
 
   free_market: {
@@ -802,6 +835,7 @@ export const BUILDINGS = {
     requires:      'interplanetary_logistics',
     routingEfficiencyBonus: 0.30,  // +30% efektywność routingu per building
     tradeUpkeepMult:       0.80,  // ×0.80 koszty utrzymania sieci per building
+    popType:               'merchant',
   },
 
   trade_beacon: {
@@ -825,6 +859,7 @@ export const BUILDINGS = {
     terrainAny:    true,
     requires:      'advanced_trade',
     tradeRangeMult: 1.5,        // ×1.5 zasięg handlu
+    popType:        'merchant',
   },
 
   commodity_nexus: {
@@ -850,6 +885,7 @@ export const BUILDINGS = {
     isUnique:      true,
     empireWideMatching:    true,   // routing bez limitu zasięgu
     creditBonusLongDist:   0.30,   // +30% Kr za trasy >10 AU
+    popType:               'merchant',
   },
 
   // ── Budynki międzygwiezdne (Etap 40) ─────────────────────────────────────
@@ -877,6 +913,7 @@ export const BUILDINGS = {
     isSystemWide:  true,   // jeden per układ (nie per kolonia)
     maxPerSystem:  1,
     isAutonomous:  true,
+    popType:       'engineer',
   },
 
   jump_gate: {
@@ -902,6 +939,137 @@ export const BUILDINGS = {
     isSystemWide:  true,
     maxPerSystem:  1,
     isAutonomous:  true,
+    popType:       'engineer',
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── Synthetyka (Faza 1: Strata + Synthetic Units) ──────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+
+  robot_assembly: {
+    id:            'robot_assembly',
+    namePL:        'Montownia Robotów',
+    nameEN:        'Robot Assembly',
+    category:      'synthetic',
+    icon:          '🤖🏭',
+    description:   'Dedykowana montownia droidów automatyzacyjnych',
+    cost:          { Fe: 40, Cu: 15, Si: 20 },
+    commodityCost: { steel_plates: 6, electronics: 4, microcircuits: 3 },
+    energyCost:    8,
+    buildTime:     2.0,
+    rates:         {},
+    maintenance:   { Fe: 2, Cu: 1 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    false,
+    requires:      'robotics',
+    popType:       'engineer',
+    assemblyBonus: 2.0,  // 2× szybsza produkcja automation_droid niż fabryka generyczna
+  },
+
+  android_lab: {
+    id:            'android_lab',
+    namePL:        'Laboratorium Androidów',
+    nameEN:        'Android Laboratory',
+    category:      'synthetic',
+    icon:          '🦾🔬',
+    description:   'Laboratorium do projektowania i produkcji androidów humanoidalnych',
+    cost:          { Si: 50, Cu: 30, Ti: 20 },
+    commodityCost: { steel_plates: 8, electronics: 6, semiconductors: 4 },
+    energyCost:    12,
+    buildTime:     3.0,
+    rates:         {},
+    maintenance:   { Cu: 2, Si: 1 },
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      3,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    false,
+    requires:      'android_engineering',
+    popType:       'engineer',
+  },
+
+  ai_nexus: {
+    id:            'ai_nexus',
+    namePL:        'Centrum AI',
+    nameEN:        'AI Nexus',
+    category:      'synthetic',
+    icon:          '🌐🧠',
+    description:   'Centrum superinteligentnej sieci AI. Wymaga stałego zasilania',
+    cost:          { Ti: 100, Si: 80, Cu: 60, Pt: 20 },
+    commodityCost: { ai_chips: 10, quantum_processors: 5, semiconductors: 10, exotic_alloy: 3 },
+    energyCost:    25,
+    buildTime:     5.0,
+    rates:         {},
+    maintenance:   { Ti: 3, Pt: 1, Cu: 2 },
+    housing:       0,
+    popCost:       0,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'artificial_intelligence',
+    popType:       'engineer',
+    isAutonomous:  true,
+  },
+
+  // ── Governance (Faza 1: Strata + Synthetic Units) ─────────────────────
+
+  admin_office: {
+    id:            'admin_office',
+    namePL:        'Biuro Administracyjne',
+    nameEN:        'Administrative Office',
+    category:      'governance',
+    icon:          '🏢',
+    description:   'Centrum administracji kolonii. Stabilizuje lojalność',
+    cost:          { Fe: 20, Si: 10, Cu: 5 },
+    commodityCost: { steel_plates: 3, electronics: 2 },
+    energyCost:    2,
+    buildTime:     1.0,
+    rates:         {},
+    maintenance:   { Fe: 1 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      null,  // dostępny od początku
+    popType:       'bureaucrat',
+    governanceBonus:      15,
+    revolutionThreshold:  10,   // trudniej wywołać ruch społeczny
+  },
+
+  trade_union_hall: {
+    id:            'trade_union_hall',
+    namePL:        'Dom Związkowy',
+    nameEN:        'Trade Union Hall',
+    category:      'governance',
+    icon:          '✊',
+    description:   'Dom związkowy robotników. Redukuje napięcia, ale kosztem wydajności',
+    cost:          { Fe: 15, C: 5 },
+    commodityCost: { steel_plates: 2, concrete_mix: 2 },
+    energyCost:    1,
+    buildTime:     0.5,
+    rates:         {},
+    maintenance:   {},
+    housing:       0,
+    popCost:       0.10,
+    maxLevel:      3,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      null,  // dostępny od początku — "zawór bezpieczeństwa"
+    popType:       'laborer',
+    laborerSatisfactionBonus:  20,
+    workerSatisfactionBonus:   15,
+    minerSatisfactionBonus:    15,
+    allProductionPenalty:      -0.05,
+    displacementMitigation:    0.2,
   },
 };
 

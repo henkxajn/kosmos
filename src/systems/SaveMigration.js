@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 26;
+export const CURRENT_VERSION     = 28;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -41,6 +41,8 @@ const MIGRATIONS = {
   23: _migrateV23toV24,
   24: _migrateV24toV25,
   25: _migrateV25toV26,
+  26: _migrateV26toV27,
+  27: _migrateV27toV28,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -761,5 +763,95 @@ function _migrateV22toV23(data) {
       c.tradeOverrides          ??= {};
     }
   }
+  return data;
+}
+
+// ── v26 → v27: Strata system + robots→automation_droid + nowe commodities ───
+function _migrateV26toV27(data) {
+  const colonies = data.civ4x?.colonies;
+  if (!colonies) return data;
+
+  for (const col of colonies) {
+    // ── 1. Rename robots → automation_droid w inventory ──────────────────
+    const inv = col.resources?.inventory;
+    if (inv) {
+      if (inv.robots !== undefined) {
+        inv.automation_droid = (inv.automation_droid ?? 0) + inv.robots;
+        delete inv.robots;
+      }
+      // Nowe commodities — defaults
+      inv.microcircuits       ??= 0;
+      inv.automation_droid    ??= 0;
+      inv.android_worker      ??= 0;
+      inv.ai_chips            ??= 0;
+      inv.ai_collective_node  ??= 0;
+    }
+
+    // ── 2. Rename robots → automation_droid w FactorySystem ─────────────
+    const fs = col.factorySystem;
+    if (fs) {
+      // Alokacje
+      if (fs.allocations) {
+        for (const alloc of fs.allocations) {
+          if (alloc.commodityId === 'robots') alloc.commodityId = 'automation_droid';
+        }
+      }
+      // Kolejka
+      if (fs.queue) {
+        for (const item of fs.queue) {
+          if (item.commodityId === 'robots') item.commodityId = 'automation_droid';
+        }
+      }
+    }
+
+    // ── 3. Rename robots → automation_droid w commodityCost budynków ────
+    if (col.buildings) {
+      for (const b of col.buildings) {
+        if (b.commodityCost?.robots !== undefined) {
+          b.commodityCost.automation_droid = (b.commodityCost.automation_droid ?? 0) + b.commodityCost.robots;
+          delete b.commodityCost.robots;
+        }
+      }
+    }
+
+    // ── 4. Strata — rozbij population na 7 typów ───────────────────────
+    const civ = col.civ ?? {};
+    const pop = civ.population ?? 2;
+
+    if (!civ.strata) {
+      const laborerCount = Math.max(1, Math.ceil(pop * 0.5));
+      const minerCount   = Math.floor(pop * 0.2);
+      const workerCount  = Math.floor(pop * 0.1);
+      const sciCount     = Math.floor(pop * 0.1);
+      const merchCount   = Math.floor(pop * 0.05);
+      const engCount     = Math.floor(pop * 0.05);
+      const assigned     = laborerCount + minerCount + workerCount + sciCount + merchCount + engCount;
+
+      civ.strata = {
+        laborer:    { count: laborerCount + Math.max(0, pop - assigned), growthProgress: 0, satisfaction: 65 },
+        miner:      { count: minerCount,    growthProgress: 0, satisfaction: 55 },
+        worker:     { count: workerCount,   growthProgress: 0, satisfaction: 60 },
+        scientist:  { count: sciCount,      growthProgress: 0, satisfaction: 60 },
+        merchant:   { count: merchCount,    growthProgress: 0, satisfaction: 55 },
+        engineer:   { count: engCount,      growthProgress: 0, satisfaction: 60 },
+        bureaucrat: { count: 0,             growthProgress: 0, satisfaction: 65 },
+      };
+    }
+
+    // ── 5. Identity + Loyalty + Movements defaults ──────────────────────
+    civ.identity         ??= { score: 0, events: [], dominantType: 'laborer', traits: [] };
+    civ.loyaltyModifiers ??= [];
+    civ.activeMovements  ??= [];
+
+    col.civ = civ;
+  }
+
+  return data;
+}
+
+// ── v27 → v28: syntheticSlot na tile'ach ────────────────────────────────
+function _migrateV27toV28(data) {
+  // syntheticSlot = null domyślnie — HexTile.restore() obsługuje ?? null
+  // Brak dodatkowych zmian potrzebnych — pole jest opcjonalne
   return data;
 }

@@ -19,6 +19,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { BUILDINGS }      from '../data/BuildingsData.js';
+import { COMMODITIES }    from '../data/CommoditiesData.js';
 import { TERRAIN_TYPES }  from '../map/HexTile.js';
 import { TECHS }          from '../data/TechData.js';
 import { HexGrid }        from '../map/HexGrid.js';
@@ -111,7 +112,7 @@ export class BuildingSystem {
       this._civPenalty = 1.0; this._reapplyAllRates();
     });
 
-    // Przelicz raty po zmianie populacji (employmentPenalty)
+    // Przelicz raty po zmianie populacji (per-building laborEfficiency)
     EventBus.on('civ:popBorn', () => {
       if (window.KOSMOS?.buildingSystem !== this) return;
       this._reapplyAllRates();
@@ -181,6 +182,129 @@ export class BuildingSystem {
   // ── Pobierz level budynku na tile ───────────────────────────────────────
   getBuildingLevel(tileKey) {
     return this._active.get(tileKey)?.level ?? 1;
+  }
+
+  // ── Query metody dla CivilizationSystem (strata demand) ─────────────────
+
+  /** Zapotrzebowanie na dany typ straty (suma popCost budynków z matching popType) */
+  getSlotDemand(strataType) {
+    let demand = 0;
+    for (const entry of this._active.values()) {
+      const pType = entry.building?.popType ?? 'laborer';
+      if (pType === strataType && entry.popCost > 0) {
+        demand += entry.popCost * entry.level;
+      }
+    }
+    return demand;
+  }
+
+  /** Efektywność kopalń: ratio produkcji vs max capacity (0-1) */
+  getMineEfficiency() {
+    let total = 0, active = 0;
+    for (const entry of this._active.values()) {
+      if (entry.building?.isMine && entry.popCost > 0) {
+        total++;
+        // Kopalnia jest aktywna jeśli ma pracowników (nie ma syntheticSlot i empPenalty < 1)
+        active++;
+      }
+    }
+    return total > 0 ? active / total : 0.5;
+  }
+
+  /** Efektywność fabryk: ratio aktywnych vs total (0-1) */
+  getFactoryOutputRatio() {
+    let total = 0, producing = 0;
+    for (const entry of this._active.values()) {
+      const id = entry.building?.id;
+      if (id === 'factory' || id === 'consumer_factory') {
+        total++;
+        producing++;
+      }
+    }
+    return total > 0 ? producing / total : 0.5;
+  }
+
+  /** % zaawansowanych budynków działających (nuclear, fusion, shipyard etc.) */
+  getAdvancedBuildingsUptime() {
+    let total = 0, running = 0;
+    for (const entry of this._active.values()) {
+      const req = entry.building?.requires;
+      if (req && entry.popCost > 0) {
+        total++;
+        running++;  // na razie zakładamy 100% uptime — Faza 6 doda real check
+      }
+    }
+    return total > 0 ? running / total : 0.5;
+  }
+
+  // ── Synthetic units: install/remove ─────────────────────────────────────
+
+  /** Mapa tier → efficiency multiplier */
+  static SYNTH_EFFICIENCY = { 1: 1.4, 2: 1.7, 3: 2.5 };
+
+  /**
+   * Zainstaluj syntetyczną jednostkę w budynku.
+   * @param {string} tileKey — klucz hexa "q,r"
+   * @param {string} commodityId — np. 'automation_droid', 'android_worker', 'ai_collective_node'
+   * @returns {{ success: boolean, reason?: string }}
+   */
+  installSynthetic(tileKey, commodityId) {
+    const entry = this._active.get(tileKey);
+    if (!entry) return { success: false, reason: 'no_building' };
+
+    // Sprawdź czy budynek akceptuje syntetyki (musi mieć popCost > 0 i nie być autonomiczny)
+    if (entry.building.isAutonomous || entry.popCost === 0) {
+      return { success: false, reason: 'autonomous_building' };
+    }
+
+    // Sprawdź tile
+    const [q, r] = tileKey.split(',').map(Number);
+    const tile = this._grid?.get(q, r);
+    if (!tile) return { success: false, reason: 'no_tile' };
+    if (tile.syntheticSlot) return { success: false, reason: 'slot_occupied' };
+
+    // Sprawdź commodity w inventory
+    const inv = this.resourceSystem?._inventory;
+    if (!inv || (inv[commodityId] ?? 0) < 1) {
+      return { success: false, reason: 'no_commodity' };
+    }
+
+    // Pobierz tier z commodity definition
+    const tier = COMMODITIES[commodityId]?.droidTier ?? 1;
+
+    // Zużyj commodity
+    inv[commodityId] -= 1;
+
+    // Ustaw slot
+    tile.syntheticSlot = { commodityId, tier };
+
+    // Przelicz efficiency budynku
+    this._reapplyAllRates();
+
+    EventBus.emit('building:syntheticInstalled', { tileKey, commodityId, tier });
+    return { success: true };
+  }
+
+  /**
+   * Usuń syntetyczną jednostkę z budynku (zwrot 50%).
+   */
+  removeSynthetic(tileKey) {
+    const [q, r] = tileKey.split(',').map(Number);
+    const tile = this._grid?.get(q, r);
+    if (!tile?.syntheticSlot) return { success: false, reason: 'no_synthetic' };
+
+    const { commodityId } = tile.syntheticSlot;
+
+    // Zwrot 50% (zaokrąglenie w górę — minimum 0, max 1 dla 1 sztuki = 0 zwrotu)
+    // Dla 1 sztuki input: brak zwrotu (ceil(0.5) = 1, ale mamy tylko 1 → 0)
+    // Decyzja: brak zwrotu commodity (unit jest zużyty). Proste i jasne.
+    tile.syntheticSlot = null;
+
+    // Przelicz efficiency
+    this._reapplyAllRates();
+
+    EventBus.emit('building:syntheticRemoved', { tileKey, commodityId });
+    return { success: true };
   }
 
   // ── Aktywacja budynku (wspólna logika dla nowej budowy i zakończenia construction) ──
@@ -1230,14 +1354,39 @@ export class BuildingSystem {
     }
   }
 
+  /** Per-budynkowe labor efficiency oparte o matching strata type lub syntheticSlot */
+  _getBuildingLaborEfficiency(building, tileKey = null) {
+    if (!building || !this.civSystem?.strata) return 1.0;
+    // Autonomiczne / popCost=0 → pełna wydajność
+    if (building.isAutonomous || building.popCost === 0) return 1.0;
+    // Singularność: tech allBuildingsAutonomous
+    if (this.techSystem?.isAllAutonomous?.()) return 1.0;
+
+    // Synthetic unit zainstalowany → tier efficiency (×1.4 / ×1.7 / ×2.5)
+    if (tileKey && this._grid) {
+      const [q, r] = tileKey.split(',').map(Number);
+      const tile = this._grid.get(q, r);
+      if (tile?.syntheticSlot) {
+        return BuildingSystem.SYNTH_EFFICIENCY[tile.syntheticSlot.tier] ?? 1.4;
+      }
+    }
+
+    // Biologiczne strata: matching type
+    const strataType = building.popType ?? 'laborer';
+    const strataCount = this.civSystem.strata[strataType]?.count ?? 0;
+    const demand = this.getSlotDemand(strataType);
+    if (demand <= 0) return 1.0;
+    return Math.min(1.0, strataCount / demand);
+  }
+
   _applyTechMultipliers(baseRates, building, tileKey = null) {
     if (!hasKeys(baseRates)) return {};
 
-    // Autonomiczne budynki (popCost=0, isAutonomous) nie podlegają karze za brak POPów
+    // Per-budynkowe labor efficiency (zamiast globalnego employmentPenalty)
+    const empPenalty = this._getBuildingLaborEfficiency(building, tileKey);
+
     const isAutonomous = building.isAutonomous || building.popCost === 0;
-    // Singularność: wszystkie budynki autonomiczne
-    const isSingularity = this.techSystem?.isAllAutonomous() ?? false;
-    const empPenalty = (isAutonomous || isSingularity) ? 1.0 : (this.civSystem?.employmentPenalty ?? 1.0);
+    const isSingularity = this.techSystem?.isAllAutonomous?.() ?? false;
 
     // Adjacency bonus (Etap 38) — mnożnik produkcji z sąsiadów tej samej kategorii
     const adjBonus = tileKey ? this._calcAdjacencyBonus(tileKey, building) : 1.0;

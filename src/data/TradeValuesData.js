@@ -48,7 +48,7 @@ export const BASE_PRICE = {
   hull_armor:         16,
   habitat_modules:    18,
   water_recyclers:    12,
-  robots:             20,
+  automation_droid:   20,
   composite_alloy:    18,
   bio_samples:        16,
 

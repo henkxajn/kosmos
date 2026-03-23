@@ -10,6 +10,13 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { PROSPERITY_WEIGHTS } from '../data/ConsumerGoodsData.js';
 import { t, getName } from '../i18n/i18n.js';
 
+/** Formatuj liczbę mieszkańców (kompaktowy) */
+function _fmtInhab(n) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}k`;
+  return String(Math.round(n));
+}
+
 const LEFT_W   = 260;
 const RIGHT_W  = 260;
 const ROW_H    = 52;
@@ -97,11 +104,13 @@ export class PopulationOverlay extends BaseOverlay {
     this._hitZones = [];
 
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
+    this._lastBounds = { ox, oy, ow, oh };  // cache do handleScroll
     const centerW = ow - LEFT_W - RIGHT_W;
 
-    // Tło
-    ctx.fillStyle = bgAlpha(0.38);
+    // Tło (glass panel — spójne z innymi overlayami)
+    ctx.fillStyle = bgAlpha(0.82);
     ctx.fillRect(ox, oy, ow, oh);
+
     ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
@@ -128,6 +137,7 @@ export class PopulationOverlay extends BaseOverlay {
     this._drawLeft(ctx, ox, oy, LEFT_W, oh, colonies);
     this._drawCenter(ctx, ox + LEFT_W, oy, centerW, oh, colonies);
     this._drawRight(ctx, ox + ow - RIGHT_W, oy, RIGHT_W, oh);
+
   }
 
   // ── LEWA KOLUMNA: lista kolonii ─────────────────────────────────────────
@@ -142,9 +152,11 @@ export class PopulationOverlay extends BaseOverlay {
     this._drawText(ctx, t('popPanel.header'), x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
 
     const totalPop = colonies.reduce((s, c) => s + (c.civSystem?.population ?? 0), 0);
+    const totalDispPop = colonies.reduce((s, c) => s + (c.civSystem?.displayPopulation ?? 0), 0);
+    const totalGrowthRate = colonies.reduce((s, c) => s + (c.civSystem?.populationGrowthRate ?? 0), 0);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(t('popPanel.summary', colonies.length, totalPop), x + pad, y + 32);
+    ctx.fillText(t('popPanel.summary', colonies.length, _fmtInhab(totalDispPop)), x + pad, y + 32);
 
     // ── Siatka statystyk 2×2 ──────────────────────────────
     const sy = y + HDR_H;
@@ -155,13 +167,12 @@ export class PopulationOverlay extends BaseOverlay {
     const avgProsperity = colonies.length > 0
       ? Math.round(colonies.reduce((s, c) => s + (c.prosperitySystem?.prosperity ?? 50), 0) / colonies.length)
       : 50;
-    const totalGrowth = colonies.reduce((s, c) => s + (c.civSystem?._growthProgress ?? 0), 0);
 
     const stats = [
-      { label: t('popPanel.totalPop'), value: `${totalPop}`, color: THEME.textPrimary },
-      { label: t('popPanel.growthPerYear'),  value: `+${totalGrowth.toFixed(2)}`, color: THEME.success },
+      { label: t('popPanel.totalPop'), value: _fmtInhab(totalDispPop), color: THEME.textPrimary },
+      { label: t('popPanel.growthPerYear'),  value: `+${_fmtInhab(totalGrowthRate)}/yr`, color: THEME.success },
       { label: t('popPanel.avgProsperity'),  value: `${avgProsperity}`, color: avgProsperity > 60 ? THEME.success : avgProsperity > 30 ? THEME.warning : THEME.danger },
-      { label: t('popPanel.housingSlots'), value: `${totalPop}/${totalHousing}`, color: THEME.textPrimary },
+      { label: t('popPanel.housingSlots'), value: `${totalPop}/${totalHousing} POP`, color: THEME.textPrimary },
     ];
 
     for (let i = 0; i < 4; i++) {
@@ -216,10 +227,11 @@ export class PopulationOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(col.name ?? col.planetId, x + pad, ry + 14);
 
-      // POP / sloty
+      // Mieszkańcy + POP/housing
+      const dispPop = civ?.displayPopulation ?? 0;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(t('popPanel.popHousing', pop, housing), x + pad, ry + 28);
+      ctx.fillText(`${_fmtInhab(dispPop)}  (${pop}/${housing} POP)`, x + pad, ry + 28);
 
       // Pasek housing
       const barW = w - pad * 2 - 50;
@@ -229,11 +241,11 @@ export class PopulationOverlay extends BaseOverlay {
       const barColor = pct >= 1 ? THEME.danger : pct >= 0.8 ? THEME.warning : THEME.success;
       this._drawBar(ctx, barX, barY, barW, 3, Math.min(1, pct), barColor, THEME.border);
 
-      // Wzrost delta
-      const growth = civ?._growthProgress ?? 0;
-      const growthStr = growth > 0 ? `+${growth.toFixed(2)}/rok` : '0/rok';
+      // Wzrost delta (mieszkańcy/rok)
+      const growthRate = civ?.populationGrowthRate ?? 0;
+      const growthStr = growthRate > 0 ? `+${_fmtInhab(growthRate)}/yr` : '0/yr';
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = growth > 0 ? THEME.success : THEME.textDim;
+      ctx.fillStyle = growthRate > 0 ? THEME.success : THEME.textDim;
       ctx.textAlign = 'right';
       ctx.fillText(growthStr, x + w - 8, ry + 14);
       ctx.textAlign = 'left';
@@ -350,12 +362,13 @@ export class PopulationOverlay extends BaseOverlay {
     // ── Siatka 3 statystyk ────────────────────────────────
     const pop = civ?.population ?? 0;
     const housing = civ?.housing ?? 0;
+    const dispPop2 = civ?.displayPopulation ?? 0;
     const prosp = Math.round(col?.prosperitySystem?.prosperity ?? 50);
 
     const cellW = Math.floor((w - pad * 2) / 3);
     const statItems = [
-      { label: t('popPanel.currentPop'), value: `${pop}`, color: THEME.textPrimary },
-      { label: t('popPanel.housingSlots'), value: `${pop}/${housing}`, color: pop >= housing ? THEME.danger : THEME.textPrimary },
+      { label: t('popPanel.currentPop'), value: _fmtInhab(dispPop2), color: THEME.textPrimary },
+      { label: t('popPanel.housingSlots'), value: `${pop}/${housing} POP`, color: pop >= housing ? THEME.danger : THEME.textPrimary },
       { label: t('popPanel.prosperity'), value: `${prosp}`, color: prosp > 60 ? THEME.success : prosp > 30 ? THEME.warning : THEME.danger },
     ];
 
@@ -374,6 +387,79 @@ export class PopulationOverlay extends BaseOverlay {
       ctx.fillText(statItems[i].value, sx + 6, cy + 32);
     }
     cy += 50;
+
+    // ── Sekcja STRATA (grupy robocze) ───────────────────
+    const breakdown = civ?.getStrataBreakdown?.() ?? [];
+    const activeStrata = breakdown.filter(s => s.count > 0);
+    if (activeStrata.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('popPanel.strataTitle') || 'Strata', x + pad, cy + 10);
+      cy += 18;
+
+      for (const s of activeStrata) {
+        const nx = x + pad;
+        // Ikona + nazwa + count
+        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textPrimary;
+        ctx.fillText(`${s.icon} ${s.namePL}`, nx, cy + 12);
+
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`${s.count} (${_fmtInhab(s.displayPop)})`, nx + 130, cy + 12);
+
+        // Pasek satisfaction
+        const barX = nx + 220;
+        const barW = w - pad * 2 - 270;
+        const satRatio = s.satisfaction / 100;
+        const barColor = satRatio > 0.6 ? THEME.success : satRatio > 0.3 ? THEME.warning : THEME.danger;
+        this._drawBar(ctx, barX, cy + 5, Math.max(barW, 40), 6, satRatio, barColor, THEME.border);
+
+        // Procent satisfaction
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = barColor;
+        ctx.fillText(`${s.satisfaction}%`, barX + Math.max(barW, 40) + 4, cy + 12);
+
+        cy += 20;
+      }
+      cy += 6;
+    }
+
+    // ── Sekcja LOJALNOSC + RUCHY ───────────────────────────
+    if (civ) {
+      const loyalty = civ.loyalty ?? 80;
+      const movements = civ.activeMovements ?? [];
+      const identityScore = civ.identity?.score ?? 0;
+
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('popPanel.loyaltyTitle') || 'LOJALNOSC', x + pad, cy + 10);
+      cy += 16;
+
+      // Pasek loyalty
+      const loyBarW = w - pad * 2 - 50;
+      const loyRatio = loyalty / 100;
+      const loyColor = loyRatio > 0.6 ? THEME.success : loyRatio > 0.3 ? THEME.warning : THEME.danger;
+      this._drawBar(ctx, x + pad, cy, loyBarW, 8, loyRatio, loyColor, THEME.border);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = loyColor;
+      ctx.fillText(`${Math.round(loyalty)}%`, x + pad + loyBarW + 4, cy + 8);
+
+      // Identity score
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(`ID: ${identityScore}`, x + pad + loyBarW + 40, cy + 8);
+      cy += 16;
+
+      // Aktywne ruchy
+      if (movements.length > 0) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.danger;
+        for (const m of movements) {
+          ctx.fillText(`\u26A0 ${m.type}`, x + pad, cy + 10);
+          cy += 14;
+        }
+      }
+      cy += 6;
+    }
 
     // ── Sekcja POTRZEBY POPULACJI ─────────────────────────
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -911,19 +997,14 @@ export class PopulationOverlay extends BaseOverlay {
 
   handleClick(x, y) {
     if (!this.visible) return false;
-    const { ox, oy, ow, oh } = this._getOverlayBounds(
-      Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
-      Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))
-    );
-    // Pochłoń kliknięcia w obszarze overlay
-    if (x < ox || x > ox + ow || y < oy || y > oy + oh) return false;
-
+    const b = this._lastBounds;
+    if (!b) return false;
+    // Klik poza overlay → nie pochłaniaj (pozwól sidebar obsłużyć)
+    if (x < b.ox || x > b.ox + b.ow || y < b.oy || y > b.oy + b.oh) return false;
+    // Klik wewnątrz overlay → sprawdź hit zones
     const hit = this._hitTest(x, y);
-    if (hit) {
-      this._onHit(hit);
-      return true;
-    }
-    return true; // pochłoń klik w overlayu
+    if (hit) this._onHit(hit);
+    return true;  // zawsze pochłoń klik wewnątrz overlay (blokuj kamerę)
   }
 
   _onHit(zone) {
@@ -952,10 +1033,7 @@ export class PopulationOverlay extends BaseOverlay {
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
-    const { ox, oy } = this._getOverlayBounds(
-      Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
-      Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))
-    );
+    const { ox } = this._lastBounds ?? this._getOverlayBounds(1280, 720);
     // Scroll w lewej kolumnie
     if (x >= ox && x < ox + LEFT_W) {
       this._scrollOffset = Math.max(0, this._scrollOffset + delta * 0.5);

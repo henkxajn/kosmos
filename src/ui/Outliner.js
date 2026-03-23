@@ -133,7 +133,8 @@ export class Outliner {
         for (const col of sysCols) {
           const iy = startY + dy;
           const icon = col.isHomePlanet ? '🏛' : '🏙';
-          const pop = col.civSystem?.population ?? 0;
+          const dispPop = col.civSystem?.displayPopulation ?? 0;
+          const popStr = dispPop >= 1_000_000 ? `${(dispPop/1_000_000).toFixed(1)}M` : dispPop >= 1_000 ? `${(dispPop/1_000).toFixed(0)}k` : `${dispPop}`;
           const prosp = Math.round(col.prosperitySystem?.prosperity ?? 50);
           const indent = 8; // wcięcie pod nagłówkiem gwiazdy
 
@@ -151,7 +152,7 @@ export class Outliner {
           // POP + prosperity (przesunięte w lewo — miejsce na ikonę mapy)
           ctx.fillStyle = prosp < 30 ? C.red : prosp < 60 ? C.orange : C.text;
           ctx.textAlign = 'right';
-          ctx.fillText(`${pop}👤⭐${prosp}`, mapIconX - 4, iy + 14);
+          ctx.fillText(`${popStr}👤⭐${prosp}`, mapIconX - 4, iy + 14);
           ctx.textAlign = 'left';
 
           this._clickTargets.push({
@@ -427,9 +428,11 @@ export class Outliner {
     const cSys = colony.civSystem;
     if (cSys) {
       const pop = cSys.population ?? 0;
+      const dPop = cSys.displayPopulation ?? 0;
+      const dPopStr = dPop >= 1_000_000 ? `${(dPop/1_000_000).toFixed(1)}M` : dPop >= 1_000 ? `${(dPop/1_000).toFixed(0)}k` : `${dPop}`;
       const housing = cSys.housing ?? 0;
       const prosp = Math.round(colony.prosperitySystem?.prosperity ?? 50);
-      lines.push({ text: t('outliner.popInfo', pop, housing, prosp), color: C.text });
+      lines.push({ text: `👤 ${dPopStr} (${pop}/${housing} POP)  ⭐${prosp}`, color: C.text });
       const epoch = colony.prosperitySystem?._getCurrentEpoch?.()?.key ?? 'early';
       lines.push({ text: t('outliner.epoch', t(`epoch.${epoch}`)), color: C.text });
     }

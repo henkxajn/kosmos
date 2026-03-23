@@ -35,6 +35,13 @@ const C = {
   get dim()    { return THEME.textDim; },
 };
 
+/** Formatuj populację mieszkańców (kompaktowy format) */
+function _fmtPop(n) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}k`;
+  return String(Math.round(n));
+}
+
 function _fmtNum(n) {
   const abs = Math.abs(n);
   if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -175,10 +182,10 @@ export class TopBar {
         ctx.fillStyle = item.color || C.text;
         ctx.textAlign = 'left';
 
-        const valStr = _fmtNum(item.value);
+        const valStr = item._rawValue ? String(item.value) : _fmtNum(item.value);
         ctx.fillText(`${item.icon}${item.symbol}`, ix, row1Y);
 
-        ctx.fillStyle = item.value < 1 ? C.dim : C.bright;
+        ctx.fillStyle = (item._rawValue ? false : item.value < 1) ? C.dim : C.bright;
         const symW = ctx.measureText(`${item.icon}${item.symbol}`).width;
         ctx.fillText(valStr, ix + symW + 2, row1Y);
 
@@ -279,8 +286,10 @@ export class TopBar {
     const name = item.tooltipName || `${item.icon} ${item.symbol || ''}`.trim();
     lines.push({ text: name, color: C.bright, bold: true });
 
-    // Ilość
-    lines.push({ text: t('ui.amount', _fmtNum(item.value)), color: C.text });
+    // Ilość (pomijaj dla _rawValue — POP ma własne szczegóły)
+    if (!item._rawValue) {
+      lines.push({ text: t('ui.amount', _fmtNum(item.value)), color: C.text });
+    }
 
     // Delta / Flow
     if (item.delta !== undefined && Math.abs(item.delta) > 0.01) {
@@ -348,10 +357,19 @@ export class TopBar {
     // Szczegóły POP
     if (item._popDetails) {
       const p = item._popDetails;
-      lines.push({ text: `${t('topBar.employed')} ${p.employed}`, color: C.text });
+      lines.push({ text: `${t('topBar.populationLabel')}: ${_fmtPop(p.dispPop)} (+${_fmtPop(p.growthRate)}/yr)`, color: C.text });
+      lines.push({ text: `POP: ${p.pop} (${t('topBar.employed')} ${p.employed}, ${t('topBar.freePops')} ${p.free})`, color: C.text });
       lines.push({ text: `${t('topBar.locked')} ${p.locked}`, color: p.locked > 0 ? C.orange : C.text });
-      lines.push({ text: `${t('topBar.freePops')} ${p.free}`, color: p.free > 0 ? THEME.successDim : C.orange });
       lines.push({ text: `${t('topBar.housingLabel')} ${p.housing}`, color: p.pop >= p.housing ? C.orange : C.text });
+      // Strata breakdown
+      const breakdown = window.KOSMOS?.civSystem?.getStrataBreakdown?.();
+      if (breakdown) {
+        lines.push({ text: '─── Strata ───', color: C.dim });
+        for (const s of breakdown) {
+          if (s.count <= 0) continue;
+          lines.push({ text: `${s.icon} ${s.namePL}: ${s.count} (${s.satisfaction}%)`, color: s.satisfaction < 30 ? C.orange : C.text });
+        }
+      }
     }
 
     // Flow label (dla elementów z flowLabel ale bez delta)
@@ -537,23 +555,26 @@ export class TopBar {
       });
     }
 
-    // POP — Populacja (zawsze widoczne w civMode)
+    // POP — Populacja jako mieszkańcy (zawsze widoczne w civMode)
     const civSys = window.KOSMOS?.civSystem;
     if (window.KOSMOS?.civMode && civSys) {
-      const pop     = civSys.population ?? 0;
-      const free    = civSys.freePops ?? 0;
-      const housing = civSys.housing ?? 0;
-      const employed = civSys._employedPops ?? 0;
-      const locked   = civSys._lockedPops ?? 0;
-      const atCap    = pop >= housing && housing > 0;
+      const pop       = civSys.population ?? 0;
+      const free      = civSys.freePops ?? 0;
+      const housing   = civSys.housing ?? 0;
+      const employed  = civSys._employedPops ?? 0;
+      const locked    = civSys._lockedPops ?? 0;
+      const atCap     = pop >= housing && housing > 0;
+      const dispPop   = civSys.displayPopulation ?? 0;
+      const growthRate = civSys.populationGrowthRate ?? 0;
       items.push({
-        icon: '👤', symbol: 'POP',
-        value: pop,
+        icon: '👤', symbol: '',
+        value: _fmtPop(dispPop),
         color: atCap ? C.orange : free > 0 ? THEME.successDim : THEME.textSecondary,
-        flowLabel: `${free}/${pop}`,
-        flowColor: free > 0 ? THEME.successDim : C.orange,
+        flowLabel: growthRate > 0 ? `+${_fmtPop(growthRate)}/yr` : '',
+        flowColor: growthRate > 0 ? THEME.successDim : C.dim,
         tooltipName: `👤 ${t('topBar.populationLabel')}`,
-        _popDetails: { pop, free, employed, locked, housing },
+        _popDetails: { pop, free, employed, locked, housing, dispPop, growthRate },
+        _rawValue: true,  // wartość to string, nie number
       });
     }
 

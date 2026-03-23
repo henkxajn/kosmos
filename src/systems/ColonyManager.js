@@ -327,6 +327,7 @@ export class ColonyManager {
 
     // BuildingSystem per-kolonia — powiązany z własnymi ResourceSystem i CivilizationSystem
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
+    civSys.buildingSystem = bSys;  // referencja do strata demand
     bSys._requiresSpaceportFirst = true;  // nowa kolonia wymaga portu kosmicznego
     bSys.setDeposits(entity.deposits ?? []);
     bSys.setPlanetId(planetId);
@@ -399,6 +400,7 @@ export class ColonyManager {
 
     // BuildingSystem per-outpost — flaga _isOutpost pomija POP
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
+    civSys.buildingSystem = bSys;
     bSys._isOutpost = true;
     bSys._requiresSpaceportFirst = true;  // nowa kolonia wymaga portu kosmicznego
     bSys.setDeposits(entity.deposits ?? []);
@@ -455,7 +457,7 @@ export class ColonyManager {
     if (!colony || !colony.isOutpost) return false;
 
     colony.isOutpost = false;
-    colony.civSystem.population = startPop;
+    colony.civSystem.setPopulation(startPop);
     colony.allowImmigration = true;
     colony.allowEmigration  = true;
 
@@ -985,8 +987,8 @@ export class ColonyManager {
         if (Math.random() > MIGRATION_CHANCE) continue;
 
         // Migracja 1 POPa
-        src.civSystem.population -= 1;
-        dst.civSystem.population += 1;
+        src.civSystem.removePop();
+        dst.civSystem.addPop('laborer');
 
         EventBus.emit('colony:migration', {
           from:  src.name,
@@ -1059,6 +1061,7 @@ export class ColonyManager {
 
       // BuildingSystem per-kolonia — powiązany z własnymi systemami
       const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
+      civSys.buildingSystem = bSys;
       bSys.setDeposits(entity.deposits ?? []);
       bSys.setPlanetId(colData.planetId);
 

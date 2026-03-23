@@ -207,3 +207,69 @@ export function showImpactNotification(data) {
     requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
   });
 }
+
+// ── Modal ruchu spolecznego ───────────────────────────────────────────────
+
+/**
+ * Pokaz modal ruchu spolecznego z 3 opcjami (negotiate/suppress/ignore).
+ * @param {Object} data — dane z civ:movementStarted
+ * @returns {Promise<string>} — resolutionId ('negotiate'|'suppress'|'ignore')
+ */
+export function showMovementModal(data) {
+  return new Promise(resolve => {
+    const { movementId, namePL, nameEN, demands, strength } = data;
+    const isEN = (t('lang') === 'en');
+    const title = isEN ? (nameEN ?? namePL) : namePL;
+    const demandList = (demands ?? []).map(d => `\u2022 ${d}`).join('<br>');
+
+    let stats = '';
+    stats += formatStatLine(isEN ? 'Strength' : 'Sila', `${Math.round(strength * 100)}%`, 'at-stat-neg');
+    stats += formatSectionTitle(isEN ? 'DEMANDS' : 'ZADANIA');
+    stats += `<div style="padding:4px 8px;font-size:12px;color:${THEME.textSecondary}">${demandList}</div>`;
+
+    const { overlay, dismiss, btnElements } = buildTerminalPopup({
+      severity: 'danger',
+      barTitle: `\u270A ${title}`,
+      svgKey: 'alert',
+      svgLabel: isEN ? 'SOCIAL<br>MOVEMENT' : 'RUCH<br>SPOLECZNY',
+      prompt: isEN ? 'How do you respond?' : 'Jak reagujesz?',
+      headline: title,
+      description: isEN
+        ? 'Workers are demanding change. Choose your response carefully.'
+        : 'Robotnicy zadaja zmian. Wybierz odpowiedz ostroznie.',
+      contentHTML: stats,
+      buttons: [
+        { label: isEN ? 'Negotiate' : 'Negocjuj', primary: true },
+        { label: isEN ? 'Suppress' : 'Stlum', primary: false },
+        { label: isEN ? 'Ignore' : 'Ignoruj', primary: false },
+      ],
+      onDismiss: () => {
+        document.removeEventListener('keydown', onKey);
+        resolve(_chosenResolution);
+      },
+    });
+
+    let _chosenResolution = 'ignore';
+    const resolutionMap = ['negotiate', 'suppress', 'ignore'];
+    for (let i = 0; i < btnElements.length; i++) {
+      const resId = resolutionMap[i];
+      btnElements[i].addEventListener('click', () => {
+        _chosenResolution = resId;
+        dismiss();
+      });
+    }
+
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { _chosenResolution = 'ignore'; dismiss(); }
+    });
+
+    const onKey = (e) => {
+      if (e.code === 'Escape') { _chosenResolution = 'ignore'; dismiss(); }
+      if (e.code === 'Enter') { _chosenResolution = 'negotiate'; dismiss(); }
+    };
+    document.addEventListener('keydown', onKey);
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
+  });
+}

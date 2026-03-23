@@ -34,7 +34,7 @@ import { DiscoverySystem }     from '../systems/DiscoverySystem.js';
 import { ObservatorySystem }  from '../systems/ObservatorySystem.js';
 import { CollisionForecast } from '../systems/CollisionForecast.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
-import { showEventNotification, showImpactNotification } from '../ui/EventChoiceModal.js';
+import { showEventNotification, showImpactNotification, showMovementModal } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
 import { formatStatLine, formatStatLineWithCursor } from '../ui/TerminalPopupBase.js';
@@ -137,6 +137,7 @@ export class GameScene {
     this.civSystem       = new CivilizationSystem({}, this.techSystem);
     this.civSystem.resourceSystem = this.resourceSystem;
     this.buildingSystem  = new BuildingSystem(this.resourceSystem, this.civSystem, this.techSystem);
+    this.civSystem.buildingSystem = this.buildingSystem;
     this.factorySystem   = new FactorySystem(this.resourceSystem);
     this.buildingSystem.setFactorySystem(this.factorySystem);
     this.expeditionSystem = new MissionSystem(this.resourceSystem);
@@ -346,6 +347,14 @@ export class GameScene {
       showImpactNotification(data);
     });
 
+    // Ruchy spoleczne — modal z wyborem gracza
+    EventBus.on('civ:movementStarted', async (data) => {
+      EventBus.emit('time:pause');
+      const resolutionId = await showMovementModal(data);
+      EventBus.emit('civ:resolveMovement', { movementType: data.movementId, resolutionId });
+      EventBus.emit('time:resume');
+    });
+
     // Popupy misji (pauza + powiadomienie)
     initMissionEvents();
 
@@ -509,7 +518,7 @@ export class GameScene {
           // Zbadaj WSZYSTKIE technologie
           this._setupPowerTestTechs();
           // Populacja 100 POP (wystarczająca na wszystkie budynki)
-          this.civSystem.population = 100;
+          this.civSystem.setPopulation(100);
           // Domyślne nazwy
           window.KOSMOS.civName = 'Test Empire';
           civPlanet.name = 'Test Capital';
@@ -540,7 +549,7 @@ export class GameScene {
           // Zbadaj technologie wymagane dla dodatkowych budynków
           this._setupBoostedTechs();
           // 4 POPy (3 zużyte przez budynki + 1 zapas na wzrost)
-          this.civSystem.population = 4;
+          this.civSystem.setPopulation(4);
           // Generuj grid i postaw budynki (standardowe + boosted)
           const grid = PlanetMapGenerator.generate(civPlanet, true);
           if (this.buildingSystem) this.buildingSystem._gridHeight = grid.height;
@@ -610,7 +619,7 @@ export class GameScene {
       steel_plates: 15, polymer_composites: 10, concrete_mix: 8, copper_wiring: 8,
       power_cells: 12, electronics: 6, food_synthesizers: 3,
       mining_drills: 5, hull_armor: 4, habitat_modules: 4, water_recyclers: 3,
-      robots: 0, semiconductors: 2, ion_thrusters: 0,
+      automation_droid: 0, microcircuits: 0, semiconductors: 2, ion_thrusters: 0,
       fusion_cores: 0, nanotech_filters: 0, quantum_cores: 0, antimatter_cells: 0,
     });
     // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
@@ -645,7 +654,7 @@ export class GameScene {
       steel_plates: 9999, polymer_composites: 9999, concrete_mix: 9999, copper_wiring: 9999,
       power_cells: 9999, electronics: 9999, food_synthesizers: 9999,
       mining_drills: 9999, hull_armor: 9999, habitat_modules: 9999, water_recyclers: 9999,
-      robots: 9999, semiconductors: 9999, ion_thrusters: 9999,
+      automation_droid: 9999, microcircuits: 9999, semiconductors: 9999, ion_thrusters: 9999,
       fusion_cores: 9999, nanotech_filters: 9999, quantum_cores: 9999, antimatter_cells: 9999,
       // Nowe commodities (Etap 38)
       composite_alloy: 9999, bio_samples: 9999, power_cells_mk2: 9999,
