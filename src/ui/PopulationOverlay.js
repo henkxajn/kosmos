@@ -63,7 +63,7 @@ function _ensureHistoryListener() {
       const civ = col.civSystem;
       if (civ) {
         const colProsp = Math.round(col.prosperitySystem?.prosperity ?? 50);
-        _recordHistory(col.planetId, year, civ.population, civ.housing, colProsp);
+        _recordHistory(col.planetId, year, civ.population, civ.effectiveHousing, colProsp);
       }
     }
   });
@@ -163,7 +163,8 @@ export class PopulationOverlay extends BaseOverlay {
     const cellW = Math.floor((w - 2) / 2);
     const cellH = Math.floor(STAT_H / 2);
 
-    const totalHousing = colonies.reduce((s, c) => s + (c.civSystem?.housing ?? 0), 0);
+    const hasInfiniteHousing = colonies.some(c => c.civSystem?.effectiveHousing === Infinity);
+    const totalHousing = hasInfiniteHousing ? Infinity : colonies.reduce((s, c) => s + (c.civSystem?.effectiveHousing ?? 0), 0);
     const avgProsperity = colonies.length > 0
       ? Math.round(colonies.reduce((s, c) => s + (c.prosperitySystem?.prosperity ?? 50), 0) / colonies.length)
       : 50;
@@ -172,7 +173,7 @@ export class PopulationOverlay extends BaseOverlay {
       { label: t('popPanel.totalPop'), value: _fmtInhab(totalDispPop), color: THEME.textPrimary },
       { label: t('popPanel.growthPerYear'),  value: `+${_fmtInhab(totalGrowthRate)}/yr`, color: THEME.success },
       { label: t('popPanel.avgProsperity'),  value: `${avgProsperity}`, color: avgProsperity > 60 ? THEME.success : avgProsperity > 30 ? THEME.warning : THEME.danger },
-      { label: t('popPanel.housingSlots'), value: `${totalPop}/${totalHousing} POP`, color: THEME.textPrimary },
+      { label: t('popPanel.housingSlots'), value: `${totalPop}/${totalHousing === Infinity ? '∞' : totalHousing} POP`, color: THEME.textPrimary },
     ];
 
     for (let i = 0; i < 4; i++) {
@@ -209,7 +210,7 @@ export class PopulationOverlay extends BaseOverlay {
       const isHov = col.planetId === this._hoverRowId;
       const civ = col.civSystem;
       const pop = civ?.population ?? 0;
-      const housing = civ?.housing ?? 0;
+      const housing = civ?.effectiveHousing ?? 0;
 
       // Tło wiersza
       if (isSel) {
@@ -231,13 +232,13 @@ export class PopulationOverlay extends BaseOverlay {
       const dispPop = civ?.displayPopulation ?? 0;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`${_fmtInhab(dispPop)}  (${pop}/${housing} POP)`, x + pad, ry + 28);
+      ctx.fillText(`${_fmtInhab(dispPop)}  (${pop}/${housing === Infinity ? '∞' : housing} POP)`, x + pad, ry + 28);
 
       // Pasek housing
       const barW = w - pad * 2 - 50;
       const barX = x + pad;
       const barY = ry + 34;
-      const pct = housing > 0 ? pop / housing : 1;
+      const pct = (housing === Infinity || housing <= 0) ? 0 : pop / housing;
       const barColor = pct >= 1 ? THEME.danger : pct >= 0.8 ? THEME.warning : THEME.success;
       this._drawBar(ctx, barX, barY, barW, 3, Math.min(1, pct), barColor, THEME.border);
 
@@ -361,14 +362,15 @@ export class PopulationOverlay extends BaseOverlay {
 
     // ── Siatka 3 statystyk ────────────────────────────────
     const pop = civ?.population ?? 0;
-    const housing = civ?.housing ?? 0;
+    const housing = civ?.effectiveHousing ?? 0;
     const dispPop2 = civ?.displayPopulation ?? 0;
     const prosp = Math.round(col?.prosperitySystem?.prosperity ?? 50);
 
     const cellW = Math.floor((w - pad * 2) / 3);
+    const housingStr = housing === Infinity ? '∞' : housing;
     const statItems = [
       { label: t('popPanel.currentPop'), value: _fmtInhab(dispPop2), color: THEME.textPrimary },
-      { label: t('popPanel.housingSlots'), value: `${pop}/${housing} POP`, color: pop >= housing ? THEME.danger : THEME.textPrimary },
+      { label: t('popPanel.housingSlots'), value: `${pop}/${housingStr} POP`, color: (housing !== Infinity && pop >= housing) ? THEME.danger : THEME.textPrimary },
       { label: t('popPanel.prosperity'), value: `${prosp}`, color: prosp > 60 ? THEME.success : prosp > 30 ? THEME.warning : THEME.danger },
     ];
 

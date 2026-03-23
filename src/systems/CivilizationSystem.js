@@ -111,7 +111,7 @@ export class CivilizationSystem {
     this._growthProgress  = 0;     // akumulator wzrostu 0.0–1.0
     this._starvationYears = 0;     // licznik lat głodu
     this._employedPops    = 0;     // POPy zatrudnione przez budynki
-    this._lockedPops      = 0;     // POPy zablokowane (ekspedycje itp.)
+    this._lockedPerStrata = {};    // POPy zablokowane per strata (załogi statków itp.)
 
     // Bufor lat i ostatni przyrost
     this._accumYears = 0;
@@ -161,13 +161,14 @@ export class CivilizationSystem {
     });
 
     // Blokowanie/odblokowywanie POPów — tylko aktywna kolonia
-    EventBus.on('civ:lockPops',   ({ amount }) => {
+    // Strata-aware: { amount, strataType } lub legacy { amount }
+    EventBus.on('civ:lockPops',   ({ amount, strataType }) => {
       if (window.KOSMOS?.civSystem !== this) return;
-      this._lockedPops += amount;
+      this.lockPops(amount, strataType);
     });
-    EventBus.on('civ:unlockPops', ({ amount }) => {
+    EventBus.on('civ:unlockPops', ({ amount, strataType }) => {
       if (window.KOSMOS?.civSystem !== this) return;
-      this._lockedPops = Math.max(0, this._lockedPops - amount);
+      this.unlockPops(amount, strataType);
     });
 
     // Rozwiazanie ruchu spolecznego (z UI — EventChoiceModal)
@@ -194,12 +195,62 @@ export class CivilizationSystem {
     EventBus.emit('civ:populationChanged', this._popSnapshot());
   }
 
-  lockPops(amount) {
-    this._lockedPops += amount;
+  lockPops(amount, strataType = null) {
+    if (strataType && strataType !== 'mix') {
+      this._lockedPerStrata[strataType] = (this._lockedPerStrata[strataType] ?? 0) + amount;
+    } else {
+      // Legacy lub 'mix': rozłóż proporcjonalnie na strata z wolnymi POPami
+      this._distributeLock(amount);
+    }
   }
 
-  unlockPops(amount) {
-    this._lockedPops = Math.max(0, this._lockedPops - amount);
+  unlockPops(amount, strataType = null) {
+    if (strataType && strataType !== 'mix') {
+      this._lockedPerStrata[strataType] = Math.max(0, (this._lockedPerStrata[strataType] ?? 0) - amount);
+    } else {
+      // Legacy lub 'mix': odblokuj proporcjonalnie
+      this._distributeUnlock(amount);
+    }
+  }
+
+  /** Rozłóż lock na strata z wolnymi POPami (proporcjonalnie do surplus) */
+  _distributeLock(amount) {
+    const free = [];
+    for (const type of STRATA_TYPES) {
+      const avail = this.freeInStrata(type);
+      if (avail > 0) free.push({ type, avail });
+    }
+    if (free.length === 0) {
+      // Fallback: wrzuć do laborer
+      this._lockedPerStrata.laborer = (this._lockedPerStrata.laborer ?? 0) + amount;
+      return;
+    }
+    const total = free.reduce((s, e) => s + e.avail, 0);
+    let remaining = amount;
+    for (const { type, avail } of free) {
+      const share = Math.min(remaining, amount * (avail / total));
+      this._lockedPerStrata[type] = (this._lockedPerStrata[type] ?? 0) + share;
+      remaining -= share;
+    }
+    // Reszta (błędy zaokrągleń)
+    if (remaining > 0.001) {
+      this._lockedPerStrata[free[0].type] = (this._lockedPerStrata[free[0].type] ?? 0) + remaining;
+    }
+  }
+
+  /** Odblokuj proporcjonalnie z zablokowanych strat */
+  _distributeUnlock(amount) {
+    const locked = [];
+    for (const type of STRATA_TYPES) {
+      const val = this._lockedPerStrata[type] ?? 0;
+      if (val > 0) locked.push({ type, val });
+    }
+    if (locked.length === 0) return;
+    const total = locked.reduce((s, e) => s + e.val, 0);
+    for (const { type, val } of locked) {
+      const share = amount * (val / total);
+      this._lockedPerStrata[type] = Math.max(0, (this._lockedPerStrata[type] ?? 0) - share);
+    }
   }
 
   // ── Migracja cywilna (handel cywilny — CivilianTradeSystem) ─────────────
@@ -296,7 +347,7 @@ export class CivilizationSystem {
    */
   get needsImmigrants() {
     if (this.population <= 0) return false;
-    if (this.housing <= this.population) return false; // brak mieszkań
+    if (this.effectiveHousing <= this.population) return false; // brak mieszkań
     // Sprawdź czy budynki mają niezaspokojony demand
     const needed = this._employedPops + this._lockedPops;
     return needed > this.population * 0.85; // >85% zatrudnionych = brakuje rąk do pracy
@@ -383,9 +434,45 @@ export class CivilizationSystem {
   get isUnrest()  { return this._unrestActive; }
   get isFamine()  { return this._famineActive; }
 
+  // Suma zablokowanych POPów (backward compat)
+  get _lockedPops() {
+    let sum = 0;
+    for (const v of Object.values(this._lockedPerStrata)) sum += v;
+    return sum;
+  }
+
+  /** Czy to planeta macierzysta (nieograniczony housing) */
+  get isHomePlanet() {
+    return this.planet && this.planet === window.KOSMOS?.homePlanet;
+  }
+
+  /** Efektywny housing — ∞ na planecie macierzystej */
+  get effectiveHousing() {
+    if (this.isHomePlanet) return Infinity;
+    return this.housing;
+  }
+
   // Wolne POPy dostępne do budowy/ekspedycji
   get freePops() {
     return Math.max(0, this.population - this._employedPops - this._lockedPops);
+  }
+
+  /**
+   * Wolne POPy w danej strata (count - demand - locked)
+   */
+  freeInStrata(strataType) {
+    const s = this.strata[strataType];
+    if (!s) return 0;
+    const demand = this.buildingSystem?.getSlotDemand(strataType) ?? 0;
+    const locked = this._lockedPerStrata[strataType] ?? 0;
+    return Math.max(0, s.count - demand - locked);
+  }
+
+  /**
+   * Zablokowane POPy w danej strata
+   */
+  lockedInStrata(strataType) {
+    return this._lockedPerStrata[strataType] ?? 0;
   }
 
   // Kara za brak siły roboczej (gdy POP zginie a budynki stoją)
@@ -460,7 +547,8 @@ export class CivilizationSystem {
       growthProgress:       this._growthProgress,
       starvationYears:      this._starvationYears,
       employedPops:         this._employedPops,
-      lockedPops:           this._lockedPops,
+      lockedPops:           this._lockedPops,           // backward compat (sum)
+      lockedPerStrata:      { ...this._lockedPerStrata },
       lowProsperityYears:   this._lowProsperityYears,
       unrestActive:         this._unrestActive,
       unrestRemainingYears: this._unrestRemainingYears,
@@ -497,9 +585,16 @@ export class CivilizationSystem {
     this._growthProgress      = data.growthProgress       ?? 0;
     this._starvationYears     = data.starvationYears      ?? 0;
     // employedPops ustawiane na 0 — zostanie ponownie obliczone przez BuildingSystem.restoreFromSave()
-    // lockedPops przywracane z save (EventBus guard blokuje emisję z ExpeditionSystem.restore())
+    // lockedPerStrata przywracane z save (EventBus guard blokuje emisję z ExpeditionSystem.restore())
     this._employedPops        = 0;
-    this._lockedPops          = data.lockedPops ?? 0;
+    if (data.lockedPerStrata) {
+      this._lockedPerStrata = { ...data.lockedPerStrata };
+    } else {
+      // Legacy: cały lockedPops trafia do laborer
+      this._lockedPerStrata = {};
+      const legacyLocked = data.lockedPops ?? 0;
+      if (legacyLocked > 0) this._lockedPerStrata.laborer = legacyLocked;
+    }
     this.housing              = DEFAULT_HOUSING;
     this._lowProsperityYears  = data.lowProsperityYears   ?? 0;
     this._unrestActive        = data.unrestActive         ?? false;
@@ -558,13 +653,10 @@ export class CivilizationSystem {
   // ── Wzrost populacji (akumulator) ───────────────────────────────────────
 
   _updatePopGrowth(foodRatio) {
-    // Macierzysta planeta — nieograniczony housing, pomijamy blokadę
-    const isHomePlanet = (this.planet && this.planet === window.KOSMOS?.homePlanet);
-
     // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą ani macierzystej)
     const atmo = this.planet?.atmosphere ?? 'breathable';
     const canLiveOutside = (atmo === 'breathable');
-    if (!isHomePlanet && !canLiveOutside && this.population >= this.housing) {
+    if (!canLiveOutside && this.population >= this.effectiveHousing) {
       this._lastGrowth = 0;
       return;
     }
@@ -731,7 +823,7 @@ export class CivilizationSystem {
   _calcStrataSatisfaction(type) {
     const foodRatio  = Math.min(1, this._resourceRatio('food') || this._resourceRatio('organics'));
     const waterRatio = Math.min(1, this._resourceRatio('water'));
-    const housingOk  = this.housing >= this.population ? 1.0 : (this.housing / Math.max(1, this.population));
+    const housingOk  = this.effectiveHousing >= this.population ? 1.0 : (this.housing / Math.max(1, this.population));
     const energyOk   = (() => {
       const e = this._resourceSnap.energy;
       if (!e) return 0.5;
@@ -777,12 +869,11 @@ export class CivilizationSystem {
 
   /** Aktualizacja wzrostu per-strata (zastępuje stary akumulator) */
   _updateStrataGrowth() {
-    const isHomePlanet = (this.planet && this.planet === window.KOSMOS?.homePlanet);
     const atmo = this.planet?.atmosphere ?? 'breathable';
     const canLiveOutside = (atmo === 'breathable');
 
     // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą ani macierzystej)
-    if (!isHomePlanet && !canLiveOutside && this.population >= this.housing) {
+    if (!canLiveOutside && this.population >= this.effectiveHousing) {
       this._lastGrowth = 0;
       return;
     }
@@ -1102,7 +1193,7 @@ export class CivilizationSystem {
       population:        this.population,
       displayPopulation: this.displayPopulation,
       growthRate:        this.populationGrowthRate,
-      housing:           this.housing,
+      housing:           this.effectiveHousing,
       growth:            this._lastGrowth,
       growthProgress:    this._growthProgress,
       freePops:          this.freePops,

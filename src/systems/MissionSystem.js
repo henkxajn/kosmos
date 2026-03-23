@@ -1185,7 +1185,7 @@ export class MissionSystem {
       const originCol1 = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
       const crew1 = exp.crewCost ?? EXPEDITION_CREW_COST;
       if (originCol1?.civSystem) {
-        originCol1.civSystem.unlockPops(crew1);
+        originCol1.civSystem.unlockPops(crew1, exp.crewStrata);
         originCol1.civSystem.removePop(null, crew1);
         EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originCol1.civSystem.population });
       }
@@ -1288,7 +1288,7 @@ export class MissionSystem {
 
       // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
       const originColUpgrade = colMgr?.getColony(exp.originColonyId);
-      if (originColUpgrade) originColUpgrade.civSystem.unlockPops(exp.crewCost);
+      if (originColUpgrade) originColUpgrade.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
       if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
 
       exp.status = 'completed';
@@ -1318,7 +1318,7 @@ export class MissionSystem {
       // Odblokuj POPy na kolonii źródłowej i zabij załogę
       const originColDisaster = colMgr?.getColony(exp.originColonyId);
       if (originColDisaster?.civSystem) {
-        originColDisaster.civSystem.unlockPops(exp.crewCost);
+        originColDisaster.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
         originColDisaster.civSystem.removePop(null, exp.crewCost);
         EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: originColDisaster.civSystem.population });
       }
@@ -1341,7 +1341,7 @@ export class MissionSystem {
 
     // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
     const originColFounded = colMgr?.getColony(exp.originColonyId);
-    if (originColFounded) originColFounded.civSystem.unlockPops(exp.crewCost);
+    if (originColFounded) originColFounded.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
 
     this._emit('expedition:colonyFounded', null, {
       expedition:     exp,
@@ -1541,7 +1541,7 @@ export class MissionSystem {
       const originColRecon = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
       const crewRecon = exp.crewCost ?? RECON_CREW_COST;
       if (originColRecon?.civSystem) {
-        originColRecon.civSystem.unlockPops(crewRecon);
+        originColRecon.civSystem.unlockPops(crewRecon, exp.crewStrata);
         originColRecon.civSystem.removePop(null, crewRecon);
         EventBus.emit('civ:popDied', { cause: 'expedition_disaster', population: originColRecon.civSystem.population });
       }

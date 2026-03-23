@@ -33,7 +33,8 @@ export const SHIPS = {
     range:         20,           // AU (fallback = fuelCapacity / fuelPerAU)
     speedAU:       1.2,          // AU/rok
     cargoCapacity: 0,            // brak ładowni
-    crewCost:      0.5,          // POP
+    crewCost:      0.1,          // POP (1 000 ludzi)
+    crewStrata:    'scientist',
     requires:      'exploration',
     capabilities:  ['recon', 'scientific', 'survey', 'deep_scan'],
     description:   'Orbitalny statek badawczy. Wymagany do ekspedycji naukowych.',
@@ -61,6 +62,7 @@ export const SHIPS = {
     speedAU:       0.48,
     cargoCapacity: 200,
     crewCost:      2.0,
+    crewStrata:    'mix',         // koloniści — proporcjonalnie ze wszystkich strat
     requires:      'colonization',
     capabilities:  ['colony'],
     description:   'Transportuje kolonistów na nowe ciało. Zużywany przy wysłaniu.',
@@ -80,7 +82,8 @@ export const SHIPS = {
     range:         20,
     speedAU:       0.9,
     cargoCapacity: 500,
-    crewCost:      0.25,
+    crewCost:      0.05,         // POP (500 ludzi)
+    crewStrata:    'worker',
     capabilities:  ['cargo'],
     description:   'Wielki frachtowiec do transferu surowców między koloniami.',
   },
@@ -105,7 +108,8 @@ export const SHIPS = {
     range:         16,
     speedAU:       0.52,
     cargoCapacity: 10000,
-    crewCost:      1.0,
+    crewCost:      0.1,          // POP (1 000 ludzi)
+    crewStrata:    'worker',
     requires:      'interplanetary_logistics',
     capabilities:  ['cargo'],
     description:   'Ogromny frachtowiec do masowego transportu surowców między koloniami.',
@@ -129,7 +133,8 @@ export const SHIPS = {
     range:         40,           // AU — daleki zasięg
     speedAU:       2.4,          // AU/rok — szybki recon
     cargoCapacity: 0,
-    crewCost:      0.25,
+    crewCost:      0.03,         // POP (300 ludzi)
+    crewStrata:    'engineer',
     requires:      'ion_drives',
     capabilities:  ['recon', 'survey', 'deep_scan'],
     description:   'Szybki zwiadowca Gen II — recon ×2 szybciej, dalszy zasięg.',
@@ -149,7 +154,8 @@ export const SHIPS = {
     range:         30,
     speedAU:       0.7,
     cargoCapacity: 2000,
-    crewCost:      0.5,
+    crewCost:      0.05,         // POP (500 ludzi)
+    crewStrata:    'worker',
     requires:      'ion_drives',
     capabilities:  ['cargo'],
     description:   'Frachtowiec Gen II — 2000t cargo, lepszy zasięg.',
@@ -173,7 +179,8 @@ export const SHIPS = {
     range:         60,
     speedAU:       2.7,
     cargoCapacity: 0,
-    crewCost:      0.5,
+    crewCost:      0.1,          // POP (1 000 ludzi)
+    crewStrata:    'scientist',
     requires:      'fusion_drives',
     discoveryBonus: 0.5,  // +50% szans na odkrycie naukowe
     capabilities:  ['recon', 'scientific', 'survey', 'deep_scan'],
@@ -203,6 +210,7 @@ export const SHIPS = {
     speedAU:       1.8,            // AU/rok — Gen III fuzyjny, szybszy od Gen I
     cargoCapacity: 500,
     crewCost:      5.0,
+    crewStrata:    'mix',
     requires:      'cryogenics',
     capabilities:  ['colony'],
     description:   'Ciężki kolonizator Gen III — 5 POPów, 500t cargo (hibernacja kriogeniczna).',
@@ -233,7 +241,8 @@ export const SHIPS = {
     range:         80,
     speedAU:       3.6,
     cargoCapacity: 2000,
-    crewCost:      4.0,
+    crewCost:      0.5,          // POP (5 000 ludzi)
+    crewStrata:    'engineer',
     requires:      'antimatter_propulsion',
     capabilities:  ['recon', 'scientific', 'colony', 'cargo'],
     description:   'Krążownik Gen IV — wielozadaniowy, szybki, 2000t cargo.',
@@ -265,7 +274,8 @@ export const SHIPS = {
     range:         200,
     speedAU:       100,           // efektywnie natychmiastowy (100 AU/rok)
     cargoCapacity: 3000,
-    crewCost:      10.0,
+    crewCost:      1.0,          // POP (10 000 ludzi)
+    crewStrata:    'mix',
     requires:      'warp_drive',
     warpCapable:   true,
     warpSpeedLY:   2.5,           // prędkość warp: 2.5 LY/rok (bazowa)
@@ -301,6 +311,7 @@ export const SHIPS = {
     speedAU:       100,
     cargoCapacity: 5000,
     crewCost:      20.0,
+    crewStrata:    'mix',
     requires:      'interstellar_colonization',
     warpCapable:   true,
     warpSpeedLY:   2.0,           // wolniejsza od starshipa (większa masa)

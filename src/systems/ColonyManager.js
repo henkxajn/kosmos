@@ -628,12 +628,24 @@ export class ColonyManager {
 
     // Sprawdź POPy (załoga blokowana przy budowie) — hard fail
     const crewCost = ship.crewCost ?? 0;
+    const crewStrata = ship.crewStrata ?? null;
     if (crewCost > 0) {
-      const freePops = colony.civSystem?.freePops ?? 0;
-      if (freePops < crewCost) {
-        const reason = t('fleet.noCrewPops', crewCost);
-        EventBus.emit('fleet:buildFailed', { reason });
-        return { ok: false, reason };
+      const civSys = colony.civSystem;
+      if (crewStrata && crewStrata !== 'mix' && civSys) {
+        // Sprawdź wolne POPy w konkretnej strata
+        const freeInStrata = civSys.freeInStrata(crewStrata);
+        if (freeInStrata < crewCost) {
+          const reason = t('fleet.noCrewPops', crewCost);
+          EventBus.emit('fleet:buildFailed', { reason });
+          return { ok: false, reason };
+        }
+      } else {
+        const freePops = civSys?.freePops ?? 0;
+        if (freePops < crewCost) {
+          const reason = t('fleet.noCrewPops', crewCost);
+          EventBus.emit('fleet:buildFailed', { reason });
+          return { ok: false, reason };
+        }
       }
     }
 
@@ -659,7 +671,7 @@ export class ColonyManager {
 
     // Zablokuj POPy — załoga przydzielona do statku (bezpośrednio na kolonii)
     if (crewCost > 0 && colony.civSystem) {
-      colony.civSystem.lockPops(crewCost);
+      colony.civSystem.lockPops(crewCost, crewStrata);
     }
 
     // Dodaj do kolejki budowy
@@ -716,9 +728,14 @@ export class ColonyManager {
         if (colony.shipQueues.length >= shipyardLevel) break;
 
         // Sprawdź POPy (re-check — stan zmienia się po lockPops)
+        const orderStrata = SHIPS[order.shipId]?.crewStrata ?? null;
         if (order.crewCost > 0) {
-          const freePops = colony.civSystem?.freePops ?? 0;
-          if (freePops < order.crewCost) continue;
+          if (orderStrata && orderStrata !== 'mix' && colony.civSystem) {
+            if (colony.civSystem.freeInStrata(orderStrata) < order.crewCost) continue;
+          } else {
+            const freePops = colony.civSystem?.freePops ?? 0;
+            if (freePops < order.crewCost) continue;
+          }
         }
 
         // Sprawdź surowce (re-check — stan zmienia się po spend)
@@ -728,7 +745,7 @@ export class ColonyManager {
         colony.resourceSystem.spend(order.cost);
 
         if (order.crewCost > 0 && colony.civSystem) {
-          colony.civSystem.lockPops(order.crewCost);
+          colony.civSystem.lockPops(order.crewCost, orderStrata);
         }
 
         const ship = SHIPS[order.shipId];
@@ -838,8 +855,9 @@ export class ColonyManager {
 
     // Odblokuj POPy (załoga wraca) — bezpośrednio na kolonii właściciela
     const crewCost = SHIPS[vessel.shipId]?.crewCost ?? 0;
+    const crewStrata = SHIPS[vessel.shipId]?.crewStrata ?? null;
     if (crewCost > 0 && colony.civSystem) {
-      colony.civSystem.unlockPops(crewCost);
+      colony.civSystem.unlockPops(crewCost, crewStrata);
     }
 
     // Usuń statek

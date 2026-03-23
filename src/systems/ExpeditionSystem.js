@@ -284,6 +284,15 @@ export class ExpeditionSystem {
     return false;
   }
 
+  /** Pobierz crewStrata ze statku (vesselId → shipDef.crewStrata) */
+  _getCrewStrata(vesselId) {
+    if (!vesselId) return null;
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(vesselId);
+    if (!vessel) return null;
+    return SHIPS[vessel.shipId]?.crewStrata ?? null;
+  }
+
   _hasSpaceport() {
     const bSys = window.KOSMOS?.buildingSystem;
     return bSys ? bSys.hasSpaceport() : false;
@@ -379,7 +388,7 @@ export class ExpeditionSystem {
     const originCol = window.KOSMOS?.colonyManager?.getColony(
       assignedVesselId ? (window.KOSMOS?.vesselManager?.getVessel(assignedVesselId)?.colonyId ?? window.KOSMOS?.colonyManager?.activePlanetId) : window.KOSMOS?.colonyManager?.activePlanetId
     );
-    if (originCol?.civSystem) originCol.civSystem.lockPops(EXPEDITION_CREW_COST);
+    if (originCol?.civSystem) originCol.civSystem.lockPops(EXPEDITION_CREW_COST, this._getCrewStrata(assignedVesselId));
 
     // Czas podróży — nowa formuła: dystans / prędkość statku
     const shipSpeed  = this._getShipSpeed(assignedVesselId);
@@ -398,6 +407,7 @@ export class ExpeditionSystem {
       distance:    parseFloat(distance.toFixed(4)),
       travelTime,
       crewCost:    EXPEDITION_CREW_COST,
+      crewStrata:  this._getCrewStrata(assignedVesselId),
       vesselId:    assignedVesselId,
       originColonyId: assignedVesselId ? (vMgr?.getVessel(assignedVesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
       status:      'en_route',
@@ -495,7 +505,7 @@ export class ExpeditionSystem {
     const originColC = window.KOSMOS?.colonyManager?.getColony(
       vesselId ? (assignedVessel?.colonyId ?? window.KOSMOS?.colonyManager?.activePlanetId) : window.KOSMOS?.colonyManager?.activePlanetId
     );
-    if (originColC?.civSystem) originColC.civSystem.lockPops(actualCrewCost);
+    if (originColC?.civSystem) originColC.civSystem.lockPops(actualCrewCost, SHIPS[assignedVessel?.shipId]?.crewStrata ?? 'mix');
 
     // Czas podróży — prędkość przypisanego statku + mnożnik tech napędowych + CIV_TIME_SCALE
     const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
@@ -517,6 +527,7 @@ export class ExpeditionSystem {
       distance:       parseFloat(distance.toFixed(2)),
       travelTime,
       crewCost:       actualCrewCost,
+      crewStrata:     SHIPS[assignedVessel?.shipId]?.crewStrata ?? 'mix',
       status:         'en_route',
       gained:         null,
       eventRoll:      null,
@@ -616,6 +627,7 @@ export class ExpeditionSystem {
         distance:    parseFloat(distance.toFixed(2)),
         travelTime,
         crewCost:    0,    // Trasy handlowe nie blokują POPów
+        crewStrata:  null,
         vesselId:    vesselId,
         originColonyId: vessel.colonyId,
         cargo:       { ...(cargo ?? {}) },
@@ -664,7 +676,7 @@ export class ExpeditionSystem {
 
       // Zablokuj POPy na czas transportu (bezpośrednio na kolonii źródłowej)
       const originColT = window.KOSMOS?.colonyManager?.getColony(vessel?.colonyId);
-      if (originColT?.civSystem) originColT.civSystem.lockPops(EXPEDITION_CREW_COST);
+      if (originColT?.civSystem) originColT.civSystem.lockPops(EXPEDITION_CREW_COST, this._getCrewStrata(vesselId));
     }
     // Orbiting: POPy już zablokowane z oryginalnej misji, launch_pad nie potrzebny
 
@@ -724,6 +736,7 @@ export class ExpeditionSystem {
       distance:    parseFloat(distance.toFixed(2)),
       travelTime,
       crewCost:    isRedispatch ? inheritedCrewCost : EXPEDITION_CREW_COST,
+      crewStrata:  this._getCrewStrata(vesselId),
       vesselId:    vesselId ?? null,
       originColonyId: vessel?.colonyId ?? colMgr?.activePlanetId,
       cargo:       { ...cargo },
@@ -914,7 +927,7 @@ export class ExpeditionSystem {
     const originColR = colMgr?.getColony(
       vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId
     );
-    if (originColR?.civSystem) originColR.civSystem.lockPops(RECON_CREW_COST);
+    if (originColR?.civSystem) originColR.civSystem.lockPops(RECON_CREW_COST, this._getCrewStrata(vesselId));
 
     const departYear = this._gameYear;
     const reconOrigin = this._getVesselOrigin(vesselId);
@@ -944,6 +957,7 @@ export class ExpeditionSystem {
         distance:         parseFloat(distance.toFixed(4)),
         travelTime,
         crewCost:         RECON_CREW_COST,
+        crewStrata:       this._getCrewStrata(vesselId),
         vesselId:         vesselId ?? null,
         originColonyId:   vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
         status:           'en_route',
@@ -989,6 +1003,7 @@ export class ExpeditionSystem {
       distance:    parseFloat(distance.toFixed(4)),
       travelTime,
       crewCost:    RECON_CREW_COST,
+      crewStrata:  this._getCrewStrata(vesselId),
       vesselId:    vesselId ?? null,
       originColonyId: vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
       status:      'en_route',
@@ -1058,7 +1073,7 @@ export class ExpeditionSystem {
     const originColRT = colMgr?.getColony(
       vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId
     );
-    if (originColRT?.civSystem) originColRT.civSystem.lockPops(RECON_CREW_COST);
+    if (originColRT?.civSystem) originColRT.civSystem.lockPops(RECON_CREW_COST, this._getCrewStrata(vesselId));
 
     const shipSpeed = this._getShipSpeed(vesselId);
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
@@ -1077,6 +1092,7 @@ export class ExpeditionSystem {
       distance:    parseFloat(distance.toFixed(4)),
       travelTime,
       crewCost:    RECON_CREW_COST,
+      crewStrata:  this._getCrewStrata(vesselId),
       vesselId:    vesselId ?? null,
       originColonyId: vesselId ? (vMgr?.getVessel(vesselId)?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
       status:      'en_route',
@@ -1112,7 +1128,7 @@ export class ExpeditionSystem {
         exp.status = 'completed';
         // Odblokuj POPy — załoga wraca (bezpośrednio na kolonii źródłowej)
         const retCol = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
-        if (retCol?.civSystem) retCol.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST);
+        if (retCol?.civSystem) retCol.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST, exp.crewStrata);
         // Vessel wraca do hangaru (do kolonii macierzystej)
         if (exp.vesselId) {
           const vMgr = window.KOSMOS?.vesselManager;
@@ -1187,7 +1203,7 @@ export class ExpeditionSystem {
       exp.status = 'completed';
       exp.gained = {};
       const disCol = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
-      if (disCol?.civSystem) disCol.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST);
+      if (disCol?.civSystem) disCol.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST, exp.crewStrata);
       // Statek utracony
       if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
       EventBus.emit('expedition:disaster', { expedition: exp });
@@ -1282,7 +1298,7 @@ export class ExpeditionSystem {
 
       // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
       const upgradeCol = colMgr?.getColony(exp.originColonyId);
-      if (upgradeCol?.civSystem) upgradeCol.civSystem.unlockPops(exp.crewCost);
+      if (upgradeCol?.civSystem) upgradeCol.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
       if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
 
       exp.status = 'completed';
@@ -1312,7 +1328,7 @@ export class ExpeditionSystem {
       exp.gained = {};
       // POPy giną — odblokuj (potem giną w civ:popDied)
       const disColC = colMgr?.getColony(exp.originColonyId);
-      if (disColC?.civSystem) disColC.civSystem.unlockPops(exp.crewCost);
+      if (disColC?.civSystem) disColC.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
       // Emituj śmierć za każdy POP
       for (let i = 0; i < exp.crewCost; i++) {
         EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: 0 });
@@ -1338,7 +1354,7 @@ export class ExpeditionSystem {
 
     // Odblokuj POPy ze źródła (zostaną przeniesione do nowej kolonii — bezpośrednio)
     const foundCol = colMgr?.getColony(exp.originColonyId);
-    if (foundCol?.civSystem) foundCol.civSystem.unlockPops(exp.crewCost);
+    if (foundCol?.civSystem) foundCol.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
 
     // Emituj zdarzenie założenia kolonii — ColonyManager obsłuży
     EventBus.emit('expedition:colonyFounded', {
@@ -1396,7 +1412,7 @@ export class ExpeditionSystem {
       exp.status = 'completed';
       // Odblokuj POPy — załoga dostarczona (bezpośrednio na kolonii źródłowej)
       const transCol = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
-      if (transCol?.civSystem) transCol.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST);
+      if (transCol?.civSystem) transCol.civSystem.unlockPops(exp.crewCost ?? EXPEDITION_CREW_COST, exp.crewStrata);
 
       if (exp.vesselId && vMgr) {
         const vessel = vMgr.getVessel(exp.vesselId);
@@ -1493,7 +1509,7 @@ export class ExpeditionSystem {
       exp.gained = {};
       // Odblokuj POPy (bezpośrednio na kolonii źródłowej)
       const reconDisCol = window.KOSMOS?.colonyManager?.getColony(exp.originColonyId);
-      if (reconDisCol?.civSystem) reconDisCol.civSystem.unlockPops(exp.crewCost ?? RECON_CREW_COST);
+      if (reconDisCol?.civSystem) reconDisCol.civSystem.unlockPops(exp.crewCost ?? RECON_CREW_COST, exp.crewStrata);
       if (exp.vesselId && vMgr) {
         vMgr.destroyVessel(exp.vesselId);
       } else {
