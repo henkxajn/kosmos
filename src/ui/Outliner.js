@@ -430,9 +430,9 @@ export class Outliner {
       const pop = cSys.population ?? 0;
       const dPop = cSys.displayPopulation ?? 0;
       const dPopStr = dPop >= 1_000_000 ? `${(dPop/1_000_000).toFixed(1)}M` : dPop >= 1_000 ? `${(dPop/1_000).toFixed(0)}k` : `${dPop}`;
-      const housing = cSys.housing ?? 0;
+      const housing = cSys.effectiveHousing ?? 0;
       const prosp = Math.round(colony.prosperitySystem?.prosperity ?? 50);
-      lines.push({ text: `👤 ${dPopStr} (${pop}/${housing} POP)  ⭐${prosp}`, color: C.text });
+      lines.push({ text: `👤 ${dPopStr} (${pop}/${housing === Infinity ? '∞' : housing} POP)  ⭐${prosp}`, color: C.text });
       const epoch = colony.prosperitySystem?._getCurrentEpoch?.()?.key ?? 'early';
       lines.push({ text: t('outliner.epoch', t(`epoch.${epoch}`)), color: C.text });
     }

@@ -767,7 +767,7 @@ export class ColonyOverlay extends BaseOverlay {
       const civ = col.civSystem;
       const bSys = col.buildingSystem;
       const pop = civ?.population ?? 0;
-      const housing = civ?.housing ?? 0;
+      const housing = civ?.effectiveHousing ?? 0;
       const rSys = col.resourceSystem;
       const energyBal = rSys?._energyFlow?.balance ?? 0;
 
@@ -834,7 +834,7 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.textSecondary;
       const dPop = civ?.displayPopulation ?? 0;
       const dStr = dPop >= 1_000_000 ? `${(dPop/1_000_000).toFixed(1)}M` : dPop >= 1_000 ? `${(dPop/1_000).toFixed(0)}k` : `${dPop}`;
-      ctx.fillText(`👤${dStr} (${pop}/${housing})`, x + pad, ry + 28);
+      ctx.fillText(`👤${dStr} (${pop}/${housing === Infinity ? '∞' : housing})`, x + pad, ry + 28);
       const enColor = energyBal >= 0 ? THEME.success : THEME.danger;
       ctx.fillStyle = enColor;
       ctx.fillText(`⚡${energyBal >= 0 ? '+' : ''}${energyBal.toFixed(0)}`, x + pad + 60, ry + 28);

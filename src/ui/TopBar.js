@@ -360,7 +360,7 @@ export class TopBar {
       lines.push({ text: `${t('topBar.populationLabel')}: ${_fmtPop(p.dispPop)} (+${_fmtPop(p.growthRate)}/yr)`, color: C.text });
       lines.push({ text: `POP: ${p.pop} (${t('topBar.employed')} ${p.employed}, ${t('topBar.freePops')} ${p.free})`, color: C.text });
       lines.push({ text: `${t('topBar.locked')} ${p.locked}`, color: p.locked > 0 ? C.orange : C.text });
-      lines.push({ text: `${t('topBar.housingLabel')} ${p.housing}`, color: p.pop >= p.housing ? C.orange : C.text });
+      lines.push({ text: `${t('topBar.housingLabel')} ${p.housing === Infinity ? '∞' : p.housing}`, color: (p.housing !== Infinity && p.pop >= p.housing) ? C.orange : C.text });
       // Strata breakdown
       const breakdown = window.KOSMOS?.civSystem?.getStrataBreakdown?.();
       if (breakdown) {
@@ -560,10 +560,10 @@ export class TopBar {
     if (window.KOSMOS?.civMode && civSys) {
       const pop       = civSys.population ?? 0;
       const free      = civSys.freePops ?? 0;
-      const housing   = civSys.housing ?? 0;
+      const housing   = civSys.effectiveHousing ?? 0;
       const employed  = civSys._employedPops ?? 0;
       const locked    = civSys._lockedPops ?? 0;
-      const atCap     = pop >= housing && housing > 0;
+      const atCap     = housing !== Infinity && pop >= housing && housing > 0;
       const dispPop   = civSys.displayPopulation ?? 0;
       const growthRate = civSys.populationGrowthRate ?? 0;
       items.push({
