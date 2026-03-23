@@ -631,26 +631,15 @@ export class ColonyManager {
     let crewStrata = ship.crewStrata ?? null;
     if (crewCost > 0) {
       const civSys = colony.civSystem;
+      const freePops = civSys?.freePops ?? 0;
+      if (freePops < crewCost) {
+        const reason = t('fleet.noCrewPops', crewCost);
+        EventBus.emit('fleet:buildFailed', { reason });
+        return { ok: false, reason };
+      }
+      // Konwertuj wolnych POPów do wymaganej strata (jeśli brakuje)
       if (crewStrata && crewStrata !== 'mix' && civSys) {
-        // Sprawdź wolne POPy w konkretnej strata
-        const freeInStrata = civSys.freeInStrata(crewStrata);
-        if (freeInStrata < crewCost) {
-          // Fallback: mała załoga (<0.5 POP) może być z dowolnej strata
-          if (crewCost < 0.5 && civSys.freePops >= crewCost) {
-            crewStrata = 'mix'; // lockPops rozłoży na wolne strata
-          } else {
-            const reason = t('fleet.noCrewPops', crewCost);
-            EventBus.emit('fleet:buildFailed', { reason });
-            return { ok: false, reason };
-          }
-        }
-      } else {
-        const freePops = civSys?.freePops ?? 0;
-        if (freePops < crewCost) {
-          const reason = t('fleet.noCrewPops', crewCost);
-          EventBus.emit('fleet:buildFailed', { reason });
-          return { ok: false, reason };
-        }
+        civSys.convertToStrata(crewStrata, crewCost);
       }
     }
 
@@ -733,21 +722,10 @@ export class ColonyManager {
         if (colony.shipQueues.length >= shipyardLevel) break;
 
         // Sprawdź POPy (re-check — stan zmienia się po lockPops)
-        let orderStrata = SHIPS[order.shipId]?.crewStrata ?? null;
+        const orderStrata = SHIPS[order.shipId]?.crewStrata ?? null;
         if (order.crewCost > 0) {
-          if (orderStrata && orderStrata !== 'mix' && colony.civSystem) {
-            if (colony.civSystem.freeInStrata(orderStrata) < order.crewCost) {
-              // Fallback: mała załoga z dowolnej strata
-              if (order.crewCost < 0.5 && (colony.civSystem?.freePops ?? 0) >= order.crewCost) {
-                orderStrata = 'mix';
-              } else {
-                continue;
-              }
-            }
-          } else {
-            const freePops = colony.civSystem?.freePops ?? 0;
-            if (freePops < order.crewCost) continue;
-          }
+          const freePops = colony.civSystem?.freePops ?? 0;
+          if (freePops < order.crewCost) continue;
         }
 
         // Sprawdź surowce (re-check — stan zmienia się po spend)
@@ -757,6 +735,10 @@ export class ColonyManager {
         colony.resourceSystem.spend(order.cost);
 
         if (order.crewCost > 0 && colony.civSystem) {
+          // Konwertuj wolnych do wymaganej strata
+          if (orderStrata && orderStrata !== 'mix') {
+            colony.civSystem.convertToStrata(orderStrata, order.crewCost);
+          }
           colony.civSystem.lockPops(order.crewCost, orderStrata);
         }
 

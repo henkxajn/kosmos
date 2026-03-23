@@ -351,6 +351,9 @@ export class BuildingSystem {
 
     // Zatrudnienie (pomiń w outpost) — bezpośrednio na własnym civSystem
     if (popCost > 0 && !this._isOutpost && this.civSystem) {
+      // Konwertuj wolnego POPa z innej strata jeśli brakuje w wymaganej
+      const pType = building.popType ?? 'laborer';
+      this.civSystem.convertToStrata(pType, popCost);
       this.civSystem.changeEmployment(popCost);
     }
 
@@ -643,6 +646,8 @@ export class BuildingSystem {
   _applyUpgrade(tile, entry, building, nextLevel, popCost) {
     // Zatrudnienie — upgrade wymaga dodatkowego POPa (bezpośrednio)
     if (popCost > 0 && this.civSystem) {
+      const pType = building.popType ?? 'laborer';
+      this.civSystem.convertToStrata(pType, popCost);
       this.civSystem.changeEmployment(popCost);
     }
 
