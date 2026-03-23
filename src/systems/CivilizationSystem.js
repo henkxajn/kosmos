@@ -806,7 +806,8 @@ export class CivilizationSystem {
   _calcStrataGrowthRate(type) {
     const strata = this.strata[type];
     const demand  = this._calcStrataDemand(type);
-    if (demand <= 0 && strata.count > 0) return 0;  // brak zapotrzebowania, nie rośnie
+    // Brak zapotrzebowania → minimalny wzrost (nie zero), żeby populacja rosła naturalnie
+    const minDemand = type === 'laborer' ? 0.3 : 0.05;
 
     const foodRatio = this._resourceRatio('food') || this._resourceRatio('organics');
     const foodMod   = this._foodGrowthModifier(foodRatio);
@@ -816,7 +817,7 @@ export class CivilizationSystem {
                     : strata.satisfaction > 20 ? 0.5 : 0.1;
 
     const BASE = 0.08;  // bazowy przyrost per rok cywilny
-    return BASE * Math.max(demand, 0.05) * condMult * satMult;
+    return BASE * Math.max(demand, minDemand) * condMult * satMult;
   }
 
   /** Satisfakcja danej straty (0-1) → przechowywana jako 0-100 */
