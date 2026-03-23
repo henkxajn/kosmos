@@ -1388,6 +1388,22 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.fillText(`${t('econPanel.civTradeTC')}: ${tc.toFixed(0)} Kr/rok`, x + pad, ry + 10);
     ry += 16;
 
+    // Migracja cywilna — toggle blokady
+    const migCol = window.KOSMOS?.colonyManager?.getColony(colonyId);
+    const migBlocked = migCol?.tradeOverrides?.migration === 'block';
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = migBlocked ? THEME.danger : THEME.success;
+    const migLabel = migBlocked ? t('econPanel.civMigrationBlocked') : t('econPanel.civMigrationAllow');
+    ctx.fillText(`${t('econPanel.civMigration')}: ${migLabel}`, x + pad, ry + 10);
+    // Przycisk toggle
+    const toggleLabel = t('econPanel.civMigrationToggle');
+    const toggleX = x + pad + ctx.measureText(`${t('econPanel.civMigration')}: ${migLabel}`).width + 8;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(toggleLabel, toggleX, ry + 10);
+    const toggleW = ctx.measureText(toggleLabel).width + 4;
+    this._addHit(x + pad, ry - 2, toggleX - x - pad + toggleW + 4, 16, 'migration_toggle', { colonyId });
+    ry += 16;
+
     // Separator
     ctx.strokeStyle = THEME.border;
     ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
@@ -1923,6 +1939,19 @@ export class EconomyOverlay extends BaseOverlay {
       case 'factory_btn':
         this._handleFactoryBtn(zone.data);
         break;
+      case 'migration_toggle': {
+        const colId = zone.data.colonyId;
+        const col = window.KOSMOS?.colonyManager?.getColony(colId);
+        if (col) {
+          const isBlocked = col.tradeOverrides?.migration === 'block';
+          EventBus.emit('trade:setOverride', {
+            colonyId: colId,
+            goodId: 'migration',
+            mode: isBlocked ? null : 'block',
+          });
+        }
+        break;
+      }
       case 'trade_toggle_pause':
         if (zone.data.paused) {
           EventBus.emit('tradeRoute:resume', { routeId: zone.data.routeId });

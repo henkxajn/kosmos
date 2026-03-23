@@ -202,6 +202,106 @@ export class CivilizationSystem {
     this._lockedPops = Math.max(0, this._lockedPops - amount);
   }
 
+  // ── Migracja cywilna (handel cywilny — CivilianTradeSystem) ─────────────
+
+  /**
+   * Emigracja: zabierz ułamek POPa z kolonii (nadreprezentowane strata).
+   * @param {number} fraction — ułamek POPa do emigracji (np. 0.1)
+   * @returns {{ breakdown: Object<string,number> }} — ile zabrano z każdej strata
+   */
+  emigrate(fraction) {
+    if (fraction <= 0 || this.population <= 0) return { breakdown: {} };
+
+    // Oblicz nadreprezentację: strata z największym surplus (count - demand)
+    const surpluses = [];
+    for (const type of STRATA_TYPES) {
+      const s = this.strata[type];
+      if (s.count <= 0) continue;
+      const demand = this.buildingSystem?.getSlotDemand(type) ?? 0;
+      const surplus = (s.count + s.growthProgress) - demand;
+      if (surplus > 0) surpluses.push({ type, surplus, available: s.count + s.growthProgress });
+    }
+
+    if (surpluses.length === 0) return { breakdown: {} };
+
+    // Rozdziel fraction proporcjonalnie do surplus
+    const totalSurplus = surpluses.reduce((s, e) => s + e.surplus, 0);
+    const breakdown = {};
+    let remaining = fraction;
+
+    for (const { type, surplus, available } of surpluses) {
+      const share = Math.min(remaining, fraction * (surplus / totalSurplus));
+      const take = Math.min(share, available - 0.01); // zostaw minimum
+      if (take <= 0) continue;
+
+      // Zabierz z growthProgress najpierw, potem z count
+      let toTake = take;
+      const gp = this.strata[type].growthProgress;
+      if (gp > 0) {
+        const fromGP = Math.min(gp, toTake);
+        this.strata[type].growthProgress -= fromGP;
+        toTake -= fromGP;
+      }
+      if (toTake > 0 && this.strata[type].count > 0) {
+        const fromCount = Math.min(this.strata[type].count, Math.ceil(toTake));
+        this.strata[type].count -= fromCount;
+        // Nadmiar wraca do growthProgress
+        const overshoot = fromCount - toTake;
+        if (overshoot > 0) this.strata[type].growthProgress += overshoot;
+      }
+
+      breakdown[type] = take;
+      remaining -= take;
+    }
+
+    this._registeredPop = -1; // wymuś przeliczenie konsumpcji
+    this._syncConsumption();
+    EventBus.emit('civ:populationChanged', this._popSnapshot());
+    return { breakdown };
+  }
+
+  /**
+   * Imigracja: dodaj ułamek POPa do kolonii (rozkład strata z emigracji).
+   * @param {Object<string,number>} breakdown — ile dodać do każdej strata
+   */
+  immigrate(breakdown) {
+    if (!breakdown) return;
+    for (const [type, amount] of Object.entries(breakdown)) {
+      if (amount <= 0) continue;
+      if (!this.strata[type]) continue;
+      // Dodaj do growthProgress; jeśli ≥1 → promuj do count
+      this.strata[type].growthProgress += amount;
+      while (this.strata[type].growthProgress >= 1.0) {
+        this.strata[type].growthProgress -= 1.0;
+        this.strata[type].count += 1;
+      }
+    }
+
+    this._registeredPop = -1;
+    this._syncConsumption();
+    EventBus.emit('civ:populationChanged', this._popSnapshot());
+  }
+
+  /**
+   * Wskaźnik bezrobocia: freePops / population
+   */
+  get unemploymentRate() {
+    if (this.population <= 0) return 0;
+    return this.freePops / this.population;
+  }
+
+  /**
+   * Czy kolonia potrzebuje imigrantów (jest demand na POPy)?
+   * housing > population ORAZ budynki potrzebują więcej ludzi niż mają
+   */
+  get needsImmigrants() {
+    if (this.population <= 0) return false;
+    if (this.housing <= this.population) return false; // brak mieszkań
+    // Sprawdź czy budynki mają niezaspokojony demand
+    const needed = this._employedPops + this._lockedPops;
+    return needed > this.population * 0.85; // >85% zatrudnionych = brakuje rąk do pracy
+  }
+
   // ── Strata: inicjalizacja i mutacja ─────────────────────────────────────
 
   /** Inicjalizacja strat — startowa populacja trafia do laborer */

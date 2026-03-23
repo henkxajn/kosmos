@@ -94,10 +94,13 @@ export class CivilianTradeSystem {
     this._lastTransfers = [];
     this._routeGoods(tradingColonies);
 
-    // 3b. Oblicz persystentne przepływy per rok (do UI)
+    // 3b. Migracja cywilna POPów
+    this._routeMigration(tradingColonies);
+
+    // 3c. Oblicz persystentne przepływy per rok (do UI)
     this._calcFlowsPerYear();
 
-    // 3c. Loguj transfery cywilne do TradeLog (zagregowane per para kolonii)
+    // 3d. Loguj transfery cywilne do TradeLog (zagregowane per para kolonii)
     this._logCivilianTransfers();
 
     // 4. Aktualizuj dane handlowe na koloniach
@@ -339,6 +342,133 @@ export class CivilianTradeSystem {
       exportKr,
       importKr,
     });
+  }
+
+  // ── Migracja cywilna POPów ──────────────────────────────────────────────
+
+  // Stałe migracji
+  static MIGRATION_UNEMPLOYMENT_THRESHOLD = 0.25; // 25% bezrobocia
+  static MIGRATION_MIN_POP = 3;                    // min populacja źródła
+  static MIGRATION_MAX_PER_TICK = 0.1;             // max 0.1 POPa per tick per połączenie
+  static MIGRATION_COST_PER_POP = 50;              // 50 Kr za pełnego POPa
+  static MIGRATION_TC_WEIGHT = 166;                // ton na POPa (10 000 ludzi × 60kg ÷ 1000)
+
+  _routeMigration(colonies) {
+    // Zbierz kandydatów do emigracji i imigracji
+    const emigrants = [];  // kolonie z bezrobociem ≥25%
+    const immigrants = []; // kolonie potrzebujące POPów
+
+    for (const col of colonies) {
+      if (col.isOutpost) continue; // outposty nie mają POPów
+      if (col.tradeOverrides?.migration === 'block') continue;
+
+      const civSys = col.civSystem;
+      if (!civSys) continue;
+
+      const pop = civSys.population;
+      if (pop <= 0) continue;
+
+      if (civSys.unemploymentRate >= CivilianTradeSystem.MIGRATION_UNEMPLOYMENT_THRESHOLD
+          && pop > CivilianTradeSystem.MIGRATION_MIN_POP) {
+        emigrants.push(col);
+      }
+
+      if (civSys.needsImmigrants) {
+        immigrants.push(col);
+      }
+    }
+
+    if (emigrants.length === 0 || immigrants.length === 0) return;
+
+    // Dla każdej pary (emigrant → imigrant) sprawdź połączenie i przeprowadź migrację
+    const migrations = [];
+    for (const conn of this._connections) {
+      const fromCol = emigrants.includes(conn.from) ? conn.from :
+                      emigrants.includes(conn.to)   ? conn.to   : null;
+      const toCol   = fromCol === conn.from ? conn.to :
+                      fromCol === conn.to   ? conn.from : null;
+
+      if (!fromCol || !toCol) continue;
+      if (!immigrants.includes(toCol)) continue;
+      if (toCol.tradeOverrides?.migration === 'block') continue;
+
+      const fromCiv = fromCol.civSystem;
+      const toCiv   = toCol.civSystem;
+      if (!fromCiv || !toCiv) continue;
+
+      // Oblicz score: bezrobocie źródła × zapotrzebowanie celu
+      const score = fromCiv.unemploymentRate * (toCiv.housing - toCiv.population);
+      migrations.push({ fromCol, toCol, conn, score });
+    }
+
+    // Sortuj wg score malejąco
+    migrations.sort((a, b) => b.score - a.score);
+
+    // Wykonaj migracje
+    for (const { fromCol, toCol, conn } of migrations) {
+      const fromCiv = fromCol.civSystem;
+      const toCiv   = toCol.civSystem;
+
+      // Ponownie sprawdź warunki (mogły się zmienić po wcześniejszej migracji w tym tiku)
+      if (fromCiv.unemploymentRate < CivilianTradeSystem.MIGRATION_UNEMPLOYMENT_THRESHOLD) continue;
+      if (fromCiv.population <= CivilianTradeSystem.MIGRATION_MIN_POP) continue;
+      if (toCiv.housing <= toCiv.population) continue;
+
+      // Ile POPa migruje (max 0.1 per tick)
+      const maxByHousing = toCiv.housing - toCiv.population;
+      const fraction = Math.min(
+        CivilianTradeSystem.MIGRATION_MAX_PER_TICK,
+        maxByHousing,
+        fromCiv.freePops * 0.5 // max 50% wolnych POPów naraz
+      );
+      if (fraction < 0.01) continue;
+
+      // Sprawdź TC (waga POPa w tonach × koszt)
+      const tcCost = fraction * CivilianTradeSystem.MIGRATION_TC_WEIGHT;
+      const fromTcAvail = (fromCol._tcPool ?? 0) - (fromCol._tcUsed ?? 0);
+      const toTcAvail   = (toCol._tcPool ?? 0)   - (toCol._tcUsed ?? 0);
+      if (tcCost > fromTcAvail || tcCost > toTcAvail) continue;
+
+      // Koszt w Kredytach (płaci kolonia docelowa — "ściąga" ludzi)
+      const krCost = fraction * CivilianTradeSystem.MIGRATION_COST_PER_POP;
+      if ((toCol.credits ?? 0) < krCost) continue;
+
+      // Wykonaj emigrację
+      const { breakdown } = fromCiv.emigrate(fraction);
+      const totalMigrated = Object.values(breakdown).reduce((s, v) => s + v, 0);
+      if (totalMigrated < 0.001) continue;
+
+      // Wykonaj imigrację
+      toCiv.immigrate(breakdown);
+
+      // Pobierz TC
+      fromCol._tcUsed = (fromCol._tcUsed ?? 0) + tcCost;
+      toCol._tcUsed   = (toCol._tcUsed ?? 0)   + tcCost;
+
+      // Pobierz Kr z kolonii docelowej
+      toCol.credits = (toCol.credits ?? 0) - krCost;
+
+      // Emit event
+      EventBus.emit('trade:migrationExecuted', {
+        fromId:   fromCol.planetId,
+        toId:     toCol.planetId,
+        fromName: fromCol.name,
+        toName:   toCol.name,
+        popQty:   totalMigrated,
+        krCost,
+        breakdown,
+      });
+
+      // Log do EventLog
+      this._lastTransfers.push({
+        goodId: '_migration',
+        qty: totalMigrated,
+        fromId: fromCol.planetId,
+        toId: toCol.planetId,
+        exportKr: 0,
+        importKr: -krCost,
+      });
+    }
   }
 
   // ── Metryki per-towar per-kolonia ───────────────────────────────────────

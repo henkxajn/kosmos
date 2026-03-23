@@ -541,6 +541,9 @@ export class UIManager {
     EventBus.on('colony:migration', ({ from, to, count }) => {
       this._log(t('log.migration', count, from, to), 'info');
     });
+    EventBus.on('trade:migrationExecuted', ({ fromName, toName, popQty, krCost }) => {
+      this._log(t('log.civMigration', popQty.toFixed(2), fromName, toName, krCost.toFixed(0)), 'info');
+    });
 
     // Prosperity events
     EventBus.on('epoch:changed', ({ epoch, oldEpoch }) => {
