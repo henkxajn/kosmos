@@ -23,6 +23,7 @@ import { TechOverlay }         from '../ui/TechOverlay.js';
 import { ColonyOverlay }       from '../ui/ColonyOverlay.js';
 import { ObservatoryOverlay }  from '../ui/ObservatoryOverlay.js';
 import { TradeOverlay }        from '../ui/TradeOverlay.js';
+import { CivilizationOverlay } from '../ui/CivilizationOverlay.js';
 import { GalaxyMapScene }      from './GalaxyMapScene.js';
 import { t, getName }          from '../i18n/i18n.js';
 
@@ -199,6 +200,7 @@ export class UIManager {
     this.overlayManager.register('colony', new ColonyOverlay());
     this.overlayManager.register('observatory', new ObservatoryOverlay());
     this.overlayManager.register('trade', new TradeOverlay());
+    this.overlayManager.register('civilization', new CivilizationOverlay());
     this.overlayManager.register('galaxy', new GalaxyMapScene());
 
     this._setupEvents();
