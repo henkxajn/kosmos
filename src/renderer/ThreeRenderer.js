@@ -346,6 +346,10 @@ export class ThreeRenderer {
 
     // ── Vessel sprites ──────────────────────────────────────────
     EventBus.on('vessel:launched', safe(({ vessel }) => {
+      // Usuń stary sprite jeśli istnieje (np. redispatch z orbity)
+      if (this._vessels.has(vessel.id)) {
+        this._removeVesselSprite(vessel.id);
+      }
       this._addVesselSprite(vessel);
     }));
     EventBus.on('vessel:returning', safe(({ vessel }) => {
@@ -2339,10 +2343,15 @@ export class ThreeRenderer {
     if (vessel.mission) {
       const m = vessel.mission;
       const isReturn = m.phase === 'returning';
-      const tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
-      const ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+      let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
+      let ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+      if (isNaN(tx)) tx = 0;
+      if (isNaN(ty)) ty = 0;
+      let vx = vessel.position.x, vy = vessel.position.y;
+      if (isNaN(vx)) vx = 0;
+      if (isNaN(vy)) vy = 0;
       const points = [
-        new THREE.Vector3(S(vessel.position.x), 0.1, S(vessel.position.y)),
+        new THREE.Vector3(S(vx), 0.1, S(vy)),
         new THREE.Vector3(S(tx), 0.1, S(ty)),
       ];
 
@@ -2397,10 +2406,9 @@ export class ThreeRenderer {
       if (vessel.mission) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
-        // Cel: outbound → predykcyjny targetX/Y, return → predykcyjny returnTargetX/Y
-        // (nie live — linia trasy ma być stabilna, nie skakać z orbitą planety)
-        let tx = isReturn ? (m.returnTargetX ?? 0) : (m.targetX ?? 0);
-        let ty = isReturn ? (m.returnTargetY ?? 0) : (m.targetY ?? 0);
+        // Cel: outbound → liveTargetX/Y (aktualizowany co tick), return → returnTargetX/Y (śledzony live)
+        let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
+        let ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
         if (isNaN(tx)) tx = 0;
         if (isNaN(ty)) ty = 0;
 
@@ -2518,21 +2526,91 @@ export class ThreeRenderer {
   // ══════════════════════════════════════════════════════════════════════
 
   /**
-   * Tworzy współdzieloną teksturę glow dla świetlików (Gaussian, 16×16).
+   * Tworzy współdzieloną teksturę diamentowej gwiazdki dla świetlików handlu (32×32).
+   * Kształt: romb (diament) z 4 promieniami krzyżowymi, białe/niebieskawe centrum.
    */
   static _createFireflyTexture() {
-    const size = 16;
+    const size = 32;
     const c = document.createElement('canvas');
     c.width = size; c.height = size;
     const ctx = c.getContext('2d');
-    const half = size / 2;
-    const grad = ctx.createRadialGradient(half, half, 0, half, half, half);
-    grad.addColorStop(0.0, 'rgba(255,230,140,1.0)');
-    grad.addColorStop(0.25, 'rgba(255,204,68,0.8)');
-    grad.addColorStop(0.6, 'rgba(255,170,40,0.25)');
-    grad.addColorStop(1.0, 'rgba(255,140,20,0.0)');
-    ctx.fillStyle = grad;
+    const cx = size / 2;
+    const cy = size / 2;
+
+    // Czyste tło
+    ctx.clearRect(0, 0, size, size);
+
+    // 1. Delikatna poświata (duży radial gradient)
+    const glowGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cx * 0.9);
+    glowGrad.addColorStop(0.0, 'rgba(200,220,255,0.35)');
+    glowGrad.addColorStop(0.3, 'rgba(160,200,255,0.15)');
+    glowGrad.addColorStop(0.7, 'rgba(120,170,255,0.05)');
+    glowGrad.addColorStop(1.0, 'rgba(100,150,255,0.0)');
+    ctx.fillStyle = glowGrad;
     ctx.fillRect(0, 0, size, size);
+
+    // 2. Cztery promienie krzyżowe (cienkie linie glow)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let angle = 0; angle < 4; angle++) {
+      const rad = (angle * Math.PI) / 2;
+      const dx = Math.cos(rad);
+      const dy = Math.sin(rad);
+      const rayLen = cx * 0.85;
+      const rayGrad = ctx.createLinearGradient(
+        cx, cy, cx + dx * rayLen, cy + dy * rayLen
+      );
+      rayGrad.addColorStop(0.0, 'rgba(220,235,255,0.9)');
+      rayGrad.addColorStop(0.3, 'rgba(180,210,255,0.5)');
+      rayGrad.addColorStop(0.7, 'rgba(140,180,255,0.15)');
+      rayGrad.addColorStop(1.0, 'rgba(100,150,255,0.0)');
+      ctx.strokeStyle = rayGrad;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + dx * rayLen, cy + dy * rayLen);
+      ctx.stroke();
+    }
+
+    // 3. Cztery ukośne promienie (krótsze, cieńsze — efekt diamentu)
+    for (let angle = 0; angle < 4; angle++) {
+      const rad = (angle * Math.PI) / 2 + Math.PI / 4;
+      const dx = Math.cos(rad);
+      const dy = Math.sin(rad);
+      const rayLen = cx * 0.5;
+      const rayGrad = ctx.createLinearGradient(
+        cx, cy, cx + dx * rayLen, cy + dy * rayLen
+      );
+      rayGrad.addColorStop(0.0, 'rgba(200,220,255,0.6)');
+      rayGrad.addColorStop(0.5, 'rgba(160,190,255,0.2)');
+      rayGrad.addColorStop(1.0, 'rgba(120,160,255,0.0)');
+      ctx.strokeStyle = rayGrad;
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + dx * rayLen, cy + dy * rayLen);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 4. Jasne centrum — mały romb (diament)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const dSize = 3.0;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - dSize);       // góra
+    ctx.lineTo(cx + dSize, cy);       // prawo
+    ctx.lineTo(cx, cy + dSize);       // dół
+    ctx.lineTo(cx - dSize, cy);       // lewo
+    ctx.closePath();
+    const diamGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, dSize);
+    diamGrad.addColorStop(0.0, 'rgba(255,255,255,1.0)');
+    diamGrad.addColorStop(0.5, 'rgba(220,240,255,0.8)');
+    diamGrad.addColorStop(1.0, 'rgba(180,210,255,0.3)');
+    ctx.fillStyle = diamGrad;
+    ctx.fill();
+    ctx.restore();
+
     const tex = new THREE.CanvasTexture(c);
     tex.needsUpdate = true;
     return tex;
@@ -2569,12 +2647,13 @@ export class ThreeRenderer {
         // Przelicz na roczne (tick = 0.5 civYear)
         const krPerYear = krTotal * 2;
 
-        // Ile świetlików per trasa
+        // Ile świetlików per trasa — 0 gdy brak realnego handlu
         let count;
-        if (krPerYear < 10)       count = 1;
-        else if (krPerYear < 50)  count = 2;
-        else if (krPerYear < 100) count = 3;
-        else if (krPerYear < 200) count = 5;
+        if (krPerYear < 1)        count = 0;  // brak transferu → brak wizualizacji
+        else if (krPerYear < 20)  count = 1;
+        else if (krPerYear < 60)  count = 2;
+        else if (krPerYear < 120) count = 3;
+        else if (krPerYear < 250) count = 5;
         else if (krPerYear < 500) count = 8;
         else                      count = 12;
 
@@ -2612,13 +2691,16 @@ export class ThreeRenderer {
         ff.arcHeight = 0.2 + Math.random() * 0.4 + Math.min(0.4, route.distance * 0.03);
         // Intensywność → jasność
         ff.brightness = 0.5 + route.intensity * 0.5;
+        // Fade-in: nowe gwiazdki pojawiają się płynnie
+        if (ff.fadeAlpha === undefined || ff.fadeAlpha < 0.01) ff.fadeAlpha = 0;
+        ff.fadeTarget = 1;
         ff.sprite.visible = true;
       }
     }
-    // Ukryj nadmiarowe
+    // Nadmiarowe: fade-out zamiast natychmiastowego ukrywania
     for (; idx < this._tradeFireflies.length; idx++) {
-      this._tradeFireflies[idx].sprite.visible = false;
-      this._tradeFireflies[idx].route = null;
+      this._tradeFireflies[idx].fadeTarget = 0;
+      // route zostawiamy do animacji fade-out (usuniemy po zaniku)
     }
   }
 
@@ -2640,7 +2722,7 @@ export class ThreeRenderer {
         depthWrite: false,
       });
       const sprite = new THREE.Sprite(mat);
-      sprite.scale.setScalar(0.18);
+      sprite.scale.setScalar(0.25);
       sprite.visible = false;
       this.scene.add(sprite);
       this._tradeFireflies.push({
@@ -2651,6 +2733,8 @@ export class ThreeRenderer {
         reverse: false,
         arcHeight: 0.3,
         brightness: 0.7,
+        fadeAlpha: 0,
+        fadeTarget: 0,
       });
     }
 
@@ -2673,6 +2757,19 @@ export class ThreeRenderer {
     const dt = 0.016; // ~60fps krok (stały, nie zależy od realnego dt)
 
     for (const ff of this._tradeFireflies) {
+      // Animuj fadeAlpha w stronę fadeTarget (fade-in / fade-out)
+      const target = ff.fadeTarget ?? 1;
+      if (ff.fadeAlpha === undefined) ff.fadeAlpha = 1;
+      if (ff.fadeAlpha < target)      ff.fadeAlpha = Math.min(target, ff.fadeAlpha + dt * 1.5);
+      else if (ff.fadeAlpha > target) ff.fadeAlpha = Math.max(target, ff.fadeAlpha - dt * 1.5);
+
+      // Po pełnym fade-out: ukryj i zwolnij trasę
+      if (ff.fadeAlpha < 0.01 && target === 0) {
+        ff.sprite.visible = false;
+        ff.route = null;
+        continue;
+      }
+
       if (!ff.route || !ff.sprite.visible) continue;
 
       // Aktualizuj pozycję na trasie
@@ -2701,12 +2798,16 @@ export class ThreeRenderer {
       ff.sprite.position.set(px, py, pz);
 
       // Dynamiczny rozmiar: mniejszy na krańcach, większy w środku łuku
-      const scaleFactor = 0.14 + Math.sin(p * Math.PI) * 0.08;
+      const scaleFactor = 0.18 + Math.sin(p * Math.PI) * 0.12;
       ff.sprite.scale.setScalar(scaleFactor);
 
-      // Pulsowanie jasności: delikatne migotanie
-      const flicker = 0.85 + Math.sin(elapsedTime * 5 + ff.t * 20) * 0.15;
-      ff.sprite.material.opacity = ff.brightness * flicker;
+      // Fade-in/out na krańcach trasy + iskrzenie gwiazdki
+      const edgeFade = Math.sin(p * Math.PI);  // 0→1→0
+      const sparkle = 0.7 + Math.sin(elapsedTime * 8 + ff.t * 30) * 0.2
+                          + Math.sin(elapsedTime * 13 + ff.t * 17) * 0.1;
+      // Płynne pojawianie/znikanie (fadeAlpha animowane w _updateTradeFireflyRoutes)
+      const fadeAlpha = ff.fadeAlpha ?? 1;
+      ff.sprite.material.opacity = ff.brightness * edgeFade * sparkle * fadeAlpha;
     }
   }
 
