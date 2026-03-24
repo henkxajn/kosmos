@@ -99,8 +99,13 @@ export class CollisionForecast {
     const maxSteps = Math.floor(horizon / SIM_STEP);
 
     // Zbierz ciała z bieżącymi danymi orbitalnymi (snapshot)
+    // Księżyce: ich orbital.a to odległość od planety-rodzica, nie od gwiazdy.
+    // Nie da się ich porównać z planetami/planetoidami bez konwersji,
+    // a kolizje księżyc–księżyc różnych planet nie mają fizycznego sensu
+    // → pomijamy typ 'moon' w prognozie kolizji.
     const bodies = [];
     for (const type of FORECAST_TYPES) {
+      if (type === 'moon') continue;  // orbita wokół planety, nie gwiazdy
       for (const body of EntityManager.getByTypeInSystem(type, sysId)) {
         if (!body.orbital) continue;
         bodies.push({
@@ -275,8 +280,13 @@ export class CollisionForecast {
     if (!data) return;
     this._recalcAccum = data.recalcAccum ?? 0;
     this._nextAlertId = data.nextAlertId ?? 1;
+    // Zbuduj zbiór ID księżyców, aby odfiltrować stare fałszywe alerty
+    const moonIds = new Set();
+    for (const m of EntityManager.getByType('moon')) moonIds.add(m.id);
     if (Array.isArray(data.alerts)) {
       for (const a of data.alerts) {
+        // Filtruj stare alerty dotyczące księżyców (fałszywe — orbita wokół planety, nie gwiazdy)
+        if (moonIds.has(a.bodyAId) || moonIds.has(a.bodyBId)) continue;
         this._alerts.set(a.id, a);
       }
     }
