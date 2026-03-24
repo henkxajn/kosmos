@@ -842,7 +842,8 @@ export class UIManager {
     }
 
     // ── BottomContext (dolny panel info o encji) ──────────────
-    if (!globeOpen) {
+    // Ukryj gdy aktywny overlay (Ekonomia, Flota itp.) — przeszkadza
+    if (!globeOpen && !this.overlayManager.isAnyOpen()) {
       this._bottomContext.draw(ctx, W, H, this._selectedEntity);
     }
 

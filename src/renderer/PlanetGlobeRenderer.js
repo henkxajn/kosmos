@@ -129,9 +129,9 @@ export class PlanetGlobeRenderer {
     // Poprawne kolory dla PBR (MeshStandardMaterial)
     this._renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-    // Scena
+    // Scena — tło przezroczyste (kosmos widoczny pod globusem, efekt "glass")
     this._scene = new THREE.Scene();
-    this._scene.background = new THREE.Color(0x020405);
+    this._scene.background = null;
 
     // Kamera
     this._camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100);
