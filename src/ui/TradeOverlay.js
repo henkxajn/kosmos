@@ -7,7 +7,7 @@ import { BaseOverlay }   from './BaseOverlay.js';
 import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { ALL_RESOURCES }  from '../data/ResourcesData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
-import { BASE_PRICE, scarcityMultiplier } from '../data/TradeValuesData.js';
+import { BASE_PRICE, scarcityMultiplier, TRADEABLE_GOODS } from '../data/TradeValuesData.js';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
 import { t, getName }     from '../i18n/i18n.js';
@@ -268,7 +268,7 @@ export class TradeOverlay extends BaseOverlay {
     ry += 6;
 
     // ── Ceny lokalne ─────────────────────────────────────────────────────
-    const colony = colMgr?.getColony(activeColId);
+    const colony = colMgr?.getColony(activeColId); // potrzebne też poniżej (Wydaj / Kontrola)
     if (colony?.resourceSystem) {
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textHeader;
@@ -304,7 +304,119 @@ export class TradeOverlay extends BaseOverlay {
       }
     }
 
+    // ── Wydaj Kredyty ──────────────────────────────────────────────────────
+    ry += 8;
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
+    ry += 8;
+
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('tradePanel.spendHeader'), x + pad, ry + 11);
+    ry += 18;
+
+    const krAvail = civCredits;
+    const btnH = 22;
+    const btnW = w - pad * 2 - 4;
+
+    // 1. Rush Build — przyspieszenie budowy o 50%
+    const RUSH_COST = 30;
+    const buildSys = window.KOSMOS?.buildingSystem;
+    const hasConstruction = buildSys && buildSys._constructionQueue?.size > 0;
+    const canRush = hasConstruction && krAvail >= RUSH_COST;
+
+    this._drawSpendButton(ctx, x + pad + 2, ry, btnW, btnH,
+      `${t('tradePanel.rushBuild')} (${RUSH_COST} Kr)`,
+      hasConstruction ? t('tradePanel.rushBuildDesc') : t('tradePanel.rushBuildNone'),
+      canRush);
+    if (hasConstruction) {
+      this._addHit(x + pad + 2, ry, btnW, btnH, 'spend_rush', { cost: RUSH_COST, colonyId: activeColId });
+    }
+    ry += btnH + 4;
+
+    // 2. Awaryjny zakup — 50 jedn. najdroższego brakującego surowca
+    const buyPrices = colony?.resourceSystem ? this._calcLocalPrices(colony) : [];
+    const scarce = buyPrices.filter(p => p.mult >= 2.0).sort((a, b) => b.mult - a.mult);
+    const buyTarget = scarce.length > 0 ? scarce[0] : null;
+    const BUY_QTY = 50;
+    const buyCost = buyTarget ? Math.ceil(BASE_PRICE[buyTarget.id] * buyTarget.mult * BUY_QTY * 0.15) : 0;
+    const canBuy = buyTarget && krAvail >= buyCost;
+
+    const buyLabel = buyTarget
+      ? `${t('tradePanel.buyResource')} ${buyTarget.id} ×${BUY_QTY} (${buyCost} Kr)`
+      : `${t('tradePanel.buyResource')} — ${t('tradePanel.cheap')}`;
+    this._drawSpendButton(ctx, x + pad + 2, ry, btnW, btnH, buyLabel, t('tradePanel.buyResourceDesc'), canBuy);
+    if (buyTarget) {
+      this._addHit(x + pad + 2, ry, btnW, btnH, 'spend_buy', { cost: buyCost, goodId: buyTarget.id, qty: BUY_QTY, colonyId: activeColId });
+    }
+    ry += btnH + 4;
+
+    // 3. Festyn — +5 prosperity na 3 lata
+    const FEST_COST = 80;
+    const prospSys = window.KOSMOS?.prosperitySystem;
+    const festivalActive = prospSys?._eventBonuses?.has('trade_festival');
+    const canFest = !festivalActive && krAvail >= FEST_COST;
+
+    const festLabel = `${t('tradePanel.festival')} (${FEST_COST} Kr)` + (festivalActive ? ` ${t('tradePanel.festivalActive')}` : '');
+    this._drawSpendButton(ctx, x + pad + 2, ry, btnW, btnH, festLabel, t('tradePanel.festivalDesc'), canFest);
+    if (!festivalActive) {
+      this._addHit(x + pad + 2, ry, btnW, btnH, 'spend_festival', { cost: FEST_COST, colonyId: activeColId });
+    }
+    ry += btnH + 6;
+
+    // ── Kontrola handlu towarami ───────────────────────────────────────────
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
+    ry += 8;
+
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('tradePanel.tradeControlHeader'), x + pad, ry + 11);
+    ry += 18;
+
+    const overrides = civTrade?.getOverrides(activeColId) ?? {};
+    const toggleSize = 16;
+    const colW = Math.floor((w - pad * 2) / 2); // 2 kolumny
+
+    for (let i = 0; i < TRADEABLE_GOODS.length; i++) {
+      const goodId = TRADEABLE_GOODS[i];
+      const colIdx = i % 2;
+      const gx = x + pad + colIdx * colW;
+      const gy = ry + Math.floor(i / 2) * (toggleSize + 3);
+
+      const isBlocked = overrides[goodId] === 'block';
+      const icon = isBlocked ? t('tradePanel.goodBlocked') : t('tradePanel.goodAllowed');
+
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = isBlocked ? THEME.danger : THEME.success;
+      ctx.fillText(icon, gx, gy + 12);
+
+      ctx.fillStyle = isBlocked ? THEME.textDim : THEME.textSecondary;
+      const cd = COMMODITIES[goodId]; const rd = ALL_RESOURCES[goodId];
+      const goodName = cd ? getName(cd, 'commodity') : rd ? getName(rd, 'resource') : goodId;
+      ctx.fillText(goodName.slice(0, 14), gx + 18, gy + 12);
+
+      this._addHit(gx, gy, colW - 4, toggleSize, 'trade_toggle_good', { goodId, colonyId: activeColId, blocked: isBlocked });
+    }
+    ry += Math.ceil(TRADEABLE_GOODS.length / 2) * (toggleSize + 3) + 4;
+
     ctx.restore();
+  }
+
+  // ── Przycisk wydawania Kr ──────────────────────────────────────────────
+
+  _drawSpendButton(ctx, bx, by, bw, bh, label, desc, enabled) {
+    // Tło przycisku
+    ctx.fillStyle = enabled ? 'rgba(255,200,60,0.12)' : 'rgba(80,80,80,0.1)';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = enabled ? THEME.accent : THEME.border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    // Etykieta
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = enabled ? THEME.textPrimary : THEME.textDim;
+    ctx.fillText(label, bx + 6, by + 14);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -675,6 +787,52 @@ export class TradeOverlay extends BaseOverlay {
       case 'trade_delete':
         EventBus.emit('tradeRoute:delete', { routeId: zone.data.routeId });
         break;
+
+      // ── Wydawanie Kredytów ─────────────────────────────────────────────
+      case 'spend_rush': {
+        const { cost, colonyId } = zone.data;
+        const civTrade = window.KOSMOS?.civilianTradeSystem;
+        if (!civTrade || civTrade.getCredits(colonyId) < cost) break;
+        const bSys = window.KOSMOS?.buildingSystem;
+        if (!bSys || bSys._constructionQueue?.size === 0) break;
+        // Przyspiesz wszystkie budowy o 50% postępu
+        for (const [, entry] of bSys._constructionQueue) {
+          entry.progress += entry.buildTime * 0.5;
+        }
+        EventBus.emit('trade:spendCredits', { colonyId, amount: cost, purpose: 'rush_build' });
+        break;
+      }
+      case 'spend_buy': {
+        const { cost, goodId, qty, colonyId } = zone.data;
+        const civTrade = window.KOSMOS?.civilianTradeSystem;
+        if (!civTrade || civTrade.getCredits(colonyId) < cost) break;
+        const resSys = window.KOSMOS?.resourceSystem;
+        if (!resSys) break;
+        resSys.receive({ [goodId]: qty });
+        EventBus.emit('trade:spendCredits', { colonyId, amount: cost, purpose: 'emergency_buy' });
+        break;
+      }
+      case 'spend_festival': {
+        const { cost, colonyId } = zone.data;
+        const civTrade = window.KOSMOS?.civilianTradeSystem;
+        if (!civTrade || civTrade.getCredits(colonyId) < cost) break;
+        const prospSys = window.KOSMOS?.prosperitySystem;
+        if (!prospSys) break;
+        prospSys.addEventBonus('trade_festival', 5, 3);
+        EventBus.emit('trade:spendCredits', { colonyId, amount: cost, purpose: 'festival' });
+        break;
+      }
+
+      // ── Toggle blokady handlu towarem ──────────────────────────────────
+      case 'trade_toggle_good': {
+        const { goodId, colonyId, blocked } = zone.data;
+        EventBus.emit('trade:setOverride', {
+          colonyId,
+          goodId,
+          mode: blocked ? null : 'block',
+        });
+        break;
+      }
     }
   }
 
