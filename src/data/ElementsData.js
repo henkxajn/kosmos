@@ -144,7 +144,7 @@ export const PLANETOID_COMPOSITIONS = {
   metallic: {
     Fe: 35, Ni: 12, Cu: 8, Ti: 5, Si: 10, O: 8, Mg: 4,
     W: 3, Pt: 2, Li: 1.5, S: 2, C: 1, Ca: 1, Al: 1, Au: 0.5,
-    H2O: 0, N: 0, P: 0, H: 0, K: 0, Na: 0, U: 0, Xe: 2.5, Nt: 0, He: 0,
+    H2O: 0, N: 0, P: 0, H: 0, K: 0, Na: 0, U: 0, Xe: 2.5, Nt: 2.5, He: 0,
   },
   carbonaceous: {
     C: 18, Si: 14, O: 15, Fe: 12, H2O: 8, Mg: 5, N: 4,
