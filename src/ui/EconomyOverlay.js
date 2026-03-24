@@ -25,6 +25,18 @@ const MGMT_ROW_H = 32;     // wiersz alokacji w zarządzaniu
 const QUEUE_ROW_H = 22;    // wiersz kolejki
 const ADD_ROW_H = 20;      // wiersz dostępnego towaru
 
+// Sortowanie towarów: commodities wg tier → consumer goods wg tier → prefabrykaty wg tier
+function _commodityGroup(c) {
+  if (c.isPrefab) return 2;
+  if (c.isConsumerGood) return 1;
+  return 0;
+}
+function _commoditySortFn(a, b) {
+  const ga = _commodityGroup(a), gb = _commodityGroup(b);
+  if (ga !== gb) return ga - gb;
+  return (a.tier ?? 0) - (b.tier ?? 0);
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // EconomyOverlay
 // ══════════════════════════════════════════════════════════════════════════════
@@ -304,9 +316,10 @@ export class EconomyOverlay extends BaseOverlay {
 
     // ── Kategoria: TOWARY ─────────────────────────────────
     // Przy wybranej kolonii pokaż WSZYSTKIE towary (widać stan zapasów)
+    // Sortowanie: commodities wg tier → consumer goods wg tier → prefabrykaty wg tier
     const comItems = Object.values(COMMODITIES).filter(c =>
       selCol ? true : ((globalInv[c.id] ?? 0) > 0 || (globalRate[c.id] ?? 0) !== 0)
-    );
+    ).sort(_commoditySortFn);
     ry = this._drawCategory(ctx, x, ry, w, t('econPanel.commodities'), 'commodities',
       comItems, globalInv, globalRate);
 
@@ -896,81 +909,108 @@ export class EconomyOverlay extends BaseOverlay {
     return y + QUEUE_ROW_H;
   }
 
-  // ── Dostępne towary pogrupowane po tier ───────────────────────────────────
+  // ── Dostępne towary: commodities → consumer goods → prefabrykaty ─────────
 
   _drawAddProduction(ctx, x, y, w, colony) {
     const fs = colony.factorySystem;
+    const allocs = fs.getAllocations();
     let ry = y;
 
-    for (const tier of [1, 2, 3, 4]) {
+    // Zbierz wszystkie dostępne towary i podziel na grupy
+    const allAvailable = [];
+    for (const tier of [1, 2, 3, 4, 5]) {
       const ids = COMMODITY_BY_TIER[tier];
-      if (!ids || ids.length === 0) continue;
-
-      // Filtruj: pokaż tylko towary z recepturą, nie już alokowane
-      const allocs = fs.getAllocations();
-      const available = ids.filter(cId => {
+      if (!ids) continue;
+      for (const cId of ids) {
         const def = COMMODITIES[cId];
-        if (!def) return false;
-        if (!def.recipe) return false;
-        // Sprawdź czy towar jest już alokowany
-        if (allocs.some(a => a.commodityId === cId)) return false;
-        return true;
-      });
+        if (!def || !def.recipe) continue;
+        if (allocs.some(a => a.commodityId === cId)) continue;
+        allAvailable.push(cId);
+      }
+    }
 
-      if (available.length === 0) continue;
+    // Podział na 3 grupy
+    const regular = allAvailable.filter(id => { const d = COMMODITIES[id]; return !d.isPrefab && !d.isConsumerGood; });
+    const consumer = allAvailable.filter(id => COMMODITIES[id].isConsumerGood);
+    const prefabs = allAvailable.filter(id => COMMODITIES[id].isPrefab);
 
-      // Nagłówek tieru
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`TIER ${tier}`, x, ry + 10);
-      ry += 14;
+    const groups = [
+      { ids: regular,  label: null },       // commodities wg tier (nagłówki TIER N)
+      { ids: consumer, label: 'CONSUMER' },
+      { ids: prefabs,  label: 'PREFAB' },
+    ];
 
-      for (const cId of available) {
-        const def = COMMODITIES[cId];
-        const hasFree = fs.freePoints > 0;
+    for (const group of groups) {
+      if (group.ids.length === 0) continue;
 
-        // Ikona + nazwa
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = hasFree ? THEME.textSecondary : THEME.textDim;
-        ctx.fillText(`${def.icon} ${getName(def, 'commodity')}`, x + 4, ry + 12);
-
-        // Receptura
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText(formatRecipe(def.recipe), x + 140, ry + 12);
-
-        // Przycisk [▶] uruchom (1 FP) / [+Q] do kolejki
-        const colId = colony.planetId;
-        if (hasFree) {
-          const bx = x + w - BTN_S * 2 - 6;
-          this._drawSmallBtn(ctx, bx, ry, '▶', 'primary');
-          this._addHit(bx, ry, BTN_S, BTN_S, 'factory_btn', {
-            action: 'allocate_new', colonyId: colId, commodityId: cId,
-            label: '▶', x: bx,
-          });
-          // [+Q] do kolejki
-          const qx = bx + BTN_S + 2;
-          this._drawSmallBtn(ctx, qx, ry, '+Q', 'secondary');
-          this._addHit(qx, ry, BTN_S, BTN_S, 'factory_btn', {
-            action: 'enqueue_new', colonyId: colId, commodityId: cId,
-            label: '+Q', x: qx,
-          });
-        } else {
-          // Brak wolnych FP — tylko do kolejki
-          const qx = x + w - BTN_S - 2;
-          this._drawSmallBtn(ctx, qx, ry, '+Q', 'secondary');
-          this._addHit(qx, ry, BTN_S, BTN_S, 'factory_btn', {
-            action: 'enqueue_new', colonyId: colId, commodityId: cId,
-            label: '+Q', x: qx,
-          });
-        }
-
-        ry += ADD_ROW_H;
+      // Pogrupuj po tierach wewnątrz grupy
+      const byTier = {};
+      for (const cId of group.ids) {
+        const tr = COMMODITIES[cId].tier;
+        (byTier[tr] ??= []).push(cId);
       }
 
-      ry += 4;
+      for (const tier of Object.keys(byTier).map(Number).sort()) {
+        // Nagłówek
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        const hdr = group.label ? `${group.label} T${tier}` : `TIER ${tier}`;
+        ctx.fillText(hdr, x, ry + 10);
+        ry += 14;
+
+        for (const cId of byTier[tier]) {
+          ry = this._drawAddRow(ctx, x, w, ry, cId, colony, fs);
+        }
+        ry += 4;
+      }
     }
 
     return ry;
+  }
+
+  // Pojedynczy wiersz dostępnego towaru (przyciski + nazwa + receptura)
+  _drawAddRow(ctx, x, w, ry, cId, colony, fs) {
+    const def = COMMODITIES[cId];
+    const hasFree = fs.freePoints > 0;
+    const colId = colony.planetId;
+
+    // Przyciski po lewej stronie (przed ikoną/nazwą)
+    let bx = x + 2;
+    if (hasFree) {
+      this._drawSmallBtn(ctx, bx, ry, '▶', 'primary');
+      this._addHit(bx, ry, BTN_S, BTN_S, 'factory_btn', {
+        action: 'allocate_new', colonyId: colId, commodityId: cId,
+        label: '▶', x: bx,
+      });
+      bx += BTN_S + 2;
+      this._drawSmallBtn(ctx, bx, ry, '+Q', 'secondary');
+      this._addHit(bx, ry, BTN_S, BTN_S, 'factory_btn', {
+        action: 'enqueue_new', colonyId: colId, commodityId: cId,
+        label: '+Q', x: bx,
+      });
+      bx += BTN_S + 4;
+    } else {
+      this._drawSmallBtn(ctx, bx, ry, '+Q', 'secondary');
+      this._addHit(bx, ry, BTN_S, BTN_S, 'factory_btn', {
+        action: 'enqueue_new', colonyId: colId, commodityId: cId,
+        label: '+Q', x: bx,
+      });
+      bx += BTN_S + 4;
+    }
+
+    // Ikona + nazwa (po przyciskach)
+    const nameX = bx;
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = hasFree ? THEME.textSecondary : THEME.textDim;
+    const nameStr = `${def.icon} ${getName(def, 'commodity')}`;
+    ctx.fillText(nameStr, nameX, ry + 12);
+
+    // Receptura — po nazwie z odstępem
+    const nameWidth = ctx.measureText(nameStr).width;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(formatRecipe(def.recipe), nameX + nameWidth + 8, ry + 12);
+
+    return ry + ADD_ROW_H;
   }
 
   // ── Mały przycisk 16×16 ───────────────────────────────────────────────────
