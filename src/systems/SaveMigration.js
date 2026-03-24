@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 28;
+export const CURRENT_VERSION     = 29;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -43,6 +43,7 @@ const MIGRATIONS = {
   25: _migrateV25toV26,
   26: _migrateV26toV27,
   27: _migrateV27toV28,
+  28: _migrateV28toV29,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -853,5 +854,41 @@ function _migrateV26toV27(data) {
 function _migrateV27toV28(data) {
   // syntheticSlot = null domyślnie — HexTile.restore() obsługuje ?? null
   // Brak dodatkowych zmian potrzebnych — pole jest opcjonalne
+  return data;
+}
+
+// ── v28 → v29: Dodaj złoże Neutronium do metalicznych planetoidów ───────
+function _migrateV28toV29(data) {
+  const planetoids = data.planetoids || [];
+  let ntCount = 0;
+  const NT_MAX = 2;
+
+  for (const p of planetoids) {
+    if (p.planetoidType !== 'metallic') continue;
+    if (!p.deposits) p.deposits = [];
+    // Pomijaj jeśli już ma Nt
+    if (p.deposits.some(d => d.resourceId === 'Nt')) { ntCount++; continue; }
+    if (ntCount >= NT_MAX) continue;
+
+    // Aktualizuj composition
+    if (p.composition) p.composition.Nt = 2.5;
+
+    // Deterministyczny PRNG z id (jak w DepositSystem)
+    const seed = typeof p.id === 'string'
+      ? p.id.split('').reduce((acc, ch) => acc * 31 + ch.charCodeAt(0), 0)
+      : (p.id || 0);
+    const a = 1664525, c = 1013904223, m = 2 ** 32;
+    let s = ((seed >>> 0) + 12345) >>> 0; // offset żeby nie powtórzyć istniejących losowań
+    const rand = () => { s = (a * s + c) % m; return s / m; };
+
+    // richness = 2.5 / (5 × 2) = 0.25 (niska zasobność)
+    const richness = 0.25;
+    const boosted = data.scenario === 'civilization_boosted' ? 10 : 1;
+    const totalAmount = Math.round(richness * 10000 * boosted * (1 + rand() * 0.5));
+
+    p.deposits.push({ resourceId: 'Nt', richness, totalAmount, remaining: totalAmount });
+    ntCount++;
+  }
+
   return data;
 }
