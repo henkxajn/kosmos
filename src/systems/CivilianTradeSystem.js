@@ -237,7 +237,10 @@ export class CivilianTradeSystem {
       // Max transfer z zapasu eksportera (30% nadwyżki × 0.5 bo half-year)
       const stock = this._getStock(goodId, fromCol);
       const consumption = this._getConsumption(goodId, fromCol);
-      const surplus = Math.max(0, stock - consumption * 2); // zachowaj 2-letni zapas
+      const ownPending = this._getPendingDemand(goodId, fromCol);
+      // Zachowaj 2-letni zapas konsumpcji + rezerwę na własne pending orders
+      const reserve = consumption * 2 + ownPending;
+      const surplus = Math.max(0, stock - reserve);
       const maxFromSurplus = surplus * 0.3 * this._TICK_INTERVAL;
 
       // Efektywność routingu
@@ -476,7 +479,16 @@ export class CivilianTradeSystem {
   _surplusScore(goodId, colony) {
     const stock = this._getStock(goodId, colony);
     const consumption = this._getConsumption(goodId, colony);
-    if (consumption <= 0) return stock > 0 ? 10 : 0;
+    const pendingDemand = this._getPendingDemand(goodId, colony);
+
+    // Nie eksportuj towaru, który sam potrzebujesz na pending orders
+    if (pendingDemand > 0 && stock <= pendingDemand * 1.5) return 0;
+
+    if (consumption <= 0) {
+      // Brak bieżącej konsumpcji — nadwyżka = stock minus pending reserve
+      const available = stock - pendingDemand;
+      return available > 0 ? 10 : 0;
+    }
     return stock / (consumption * 10); // >1.5 = eksportuj
   }
 
@@ -484,7 +496,16 @@ export class CivilianTradeSystem {
     const stock = this._getStock(goodId, colony);
     const consumption = this._getConsumption(goodId, colony);
     const pendingDemand = this._getPendingDemand(goodId, colony);
-    // Rozłóż jednorazowy demand na 5 lat → wirtualna konsumpcja
+
+    // Towary z pending demand ale bez bieżącej konsumpcji (commodities na budynki/statki)
+    // — porównaj stock bezpośrednio z demand, nie dziel na lata
+    if (consumption <= 0 && pendingDemand > 0) {
+      if (stock >= pendingDemand) return 0; // ma wystarczająco
+      // Im większy brak, tym wyższy score (max 10)
+      return ((pendingDemand - stock) / pendingDemand) * 10;
+    }
+
+    // Towary z bieżącą konsumpcją (food, water, energy, consumer goods)
     const effectiveConsumption = consumption + (pendingDemand / 5);
     if (effectiveConsumption <= 0) return 0; // nie potrzebuje
     const ratio = stock / effectiveConsumption;
