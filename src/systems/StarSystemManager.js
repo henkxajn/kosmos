@@ -249,7 +249,10 @@ export class StarSystemManager {
   restore(data) {
     if (!data?.systems) return;
 
-    this._activeSystemId = data.activeSystemId || 'sys_home';
+    // Zawsze startuj z home system — renderer jest inicjalizowany z home
+    // Użytkownik może przełączyć ręcznie przez Outliner/GalaxyMap
+    this._activeSystemId = 'sys_home';
+    window.KOSMOS.activeSystemId = 'sys_home';
 
     for (const sd of data.systems) {
       this._systems.set(sd.systemId, {

@@ -990,8 +990,6 @@ export class ThreeRenderer {
   addPlanetMesh(planet) {
     if (this._planets.has(planet.id)) return;
 
-    try {
-
     const seed = hashCode(String(planet.id));
     const r    = ThreeRenderer._planetRadius(planet);
 
@@ -1159,11 +1157,6 @@ export class ThreeRenderer {
     this._entityByUUID.set(mesh.uuid, planet);
     this._planets.set(planet.id, { group, mesh });
     this.scene.add(group);
-    console.log(`[ThreeRenderer] addPlanetMesh OK: ${planet.name} r=${r.toFixed(3)} pos=(${planet.x?.toFixed(1)},${planet.y?.toFixed(1)}) mat=${material?.type}`);
-
-    } catch (err) {
-      console.error(`[ThreeRenderer] addPlanetMesh FAILED for ${planet?.name}:`, err);
-    }
   }
 
   _updatePlanetMesh(planet) {
