@@ -2495,10 +2495,15 @@ export class ThreeRenderer {
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return;
 
+    const activeSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
+
     for (const conn of connections) {
       const colA = colMgr.getColony(conn.fromId);
       const colB = colMgr.getColony(conn.toId);
       if (!colA?.planet || !colB?.planet) continue;
+      // Pokaż tylko połączenia w aktywnym układzie
+      if ((colA.systemId ?? 'sys_home') !== activeSys) continue;
+      if ((colB.systemId ?? 'sys_home') !== activeSys) continue;
 
       const ax = colA.planet.x;
       const ay = colA.planet.y;
@@ -2644,11 +2649,15 @@ export class ThreeRenderer {
 
     // Buduj trasy z intensywnością
     const newRoutes = [];
+    const activeSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
     if (connections) {
       for (const conn of connections) {
         const colA = colMgr.getColony(conn.fromId);
         const colB = colMgr.getColony(conn.toId);
         if (!colA?.planet || !colB?.planet) continue;
+        // Pokaż tylko trasy w aktywnym układzie
+        if ((colA.systemId ?? 'sys_home') !== activeSys) continue;
+        if ((colB.systemId ?? 'sys_home') !== activeSys) continue;
 
         // Oblicz intensywność handlu (sumuj Kr z transferów)
         let krTotal = 0;
