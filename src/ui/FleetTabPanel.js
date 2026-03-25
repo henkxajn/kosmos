@@ -1205,9 +1205,10 @@ export class FleetTabPanel {
       this._hitZones.push({ x: sx - 4, y: sy - 4, w: 8, h: 8, type: 'map_body', data: { body: m } });
     }
 
-    // Trasy misji
+    // Trasy misji — tylko z aktywnego układu
     if (this._mapToggles.routes) {
       for (const v of allVessels) {
+        if ((v.systemId ?? 'sys_home') !== sysId) continue;
         if (v.position.state !== 'in_transit') continue;
         const vx = v.position?.x ?? 0; const vy = v.position?.y ?? 0;
         const { sx: vsx, sy: vsy } = toScreen(vx, vy);
@@ -1249,8 +1250,9 @@ export class FleetTabPanel {
       }
     }
 
-    // Statki na mapie
+    // Statki na mapie — tylko z aktywnego układu
     for (const v of allVessels) {
+      if ((v.systemId ?? 'sys_home') !== sysId) continue;
       let vx, vy;
       if (v.position.state === 'docked') {
         const colBody = _findBody(v.colonyId);
