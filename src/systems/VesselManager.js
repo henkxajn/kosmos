@@ -352,8 +352,16 @@ export class VesselManager {
     m.phase = 'returning';
 
     // Oblicz waypoints powrotne (unikanie Słońca + ciał niebieskich)
-    const returnSysId = vessel.systemId ?? this._findEntity(vessel.colonyId)?.systemId ?? 'sys_home';
-    const returnRoute = this._calcRoute(m.returnStartX, m.returnStartY, m.returnTargetX, m.returnTargetY, returnSysId);
+    let returnRoute = { waypoints: [], totalDist: 0 };
+    try {
+      const returnSysId = vessel.systemId ?? this._findEntity(vessel.colonyId)?.systemId ?? 'sys_home';
+      returnRoute = this._calcRoute(m.returnStartX, m.returnStartY, m.returnTargetX, m.returnTargetY, returnSysId);
+    } catch (e) {
+      console.warn('[VesselManager] _calcRoute failed in startReturn, using direct route:', e);
+      const dx = (m.returnTargetX ?? 0) - (m.returnStartX ?? 0);
+      const dy = (m.returnTargetY ?? 0) - (m.returnStartY ?? 0);
+      returnRoute = { waypoints: [], totalDist: Math.sqrt(dx * dx + dy * dy) };
+    }
     m.returnWaypoints = returnRoute.waypoints;
 
     // Zużyj paliwo na powrót (dystans w AU × consumption)
@@ -816,8 +824,10 @@ export class VesselManager {
         }
 
         // ── Foreign recon (full_system) — własna logika interpolacji i skanowania ──
-        if (m.type === 'foreign_recon' && m.scope === 'full_system') {
+        // Uwaga: returning phase przechodzi dalej do standardowej interpolacji powrotu
+        if (m.type === 'foreign_recon' && m.scope === 'full_system' && m.phase !== 'returning') {
           this._tickForeignRecon(vessel, m, gameYear);
+          this._updateRouteLine(vessel, m);
           moving.push(vessel);
           continue;
         }
@@ -1433,6 +1443,14 @@ export class VesselManager {
     }
 
     if (m.phase === 'scanning') {
+      // Podążaj za skanowanym ciałem (orbituje — pozycja się zmienia)
+      const scanBodyId = m.targets[m.currentIdx];
+      const scanBody = this._findEntity(scanBodyId);
+      if (scanBody) {
+        vessel.position.x = scanBody.x;
+        vessel.position.y = scanBody.y;
+      }
+
       if (gameYear >= m.scanCompleteYear) {
         const bodyId = m.targets[m.currentIdx];
         const body = this._findEntity(bodyId);
@@ -1493,6 +1511,37 @@ export class VesselManager {
         vessel.position.dockedAt = null;
       }
     }
+  }
+
+  /**
+   * Przerwij foreign_recon — statek przechodzi do orbiting_body z pełnym panelem akcji.
+   */
+  abortForeignRecon(vesselId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel || !vessel.mission) return false;
+    const m = vessel.mission;
+    if (m.type !== 'foreign_recon') return false;
+
+    // Znajdź najbliższe ciało (aktualny cel lub ostatnio zbadane)
+    const currentTargetId = m.targets?.[m.currentIdx] ?? m.targetId;
+    const body = this._findEntity(currentTargetId);
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+
+    // Snap do ciała (lub zostań w miejscu)
+    if (body) {
+      vessel.position.x = body.x;
+      vessel.position.y = body.y;
+    }
+    vessel.position.state = 'orbiting';
+    vessel.position.dockedAt = currentTargetId;
+    vessel.status = 'on_mission';
+    m.phase = 'orbiting_body';
+    m.type = 'exploration'; // UI pokaże panel orbiting_body z pełnymi akcjami
+
+    addMissionLog(vessel, gameYear, t('vessel.reconAborted'), 'warning');
+
+    EventBus.emit('vessel:positionUpdate', { vessels: [vessel] });
+    return true;
   }
 
   /**

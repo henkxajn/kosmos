@@ -622,16 +622,26 @@ export class FleetManagerOverlay {
         });
         break;
       }
-      case 'foreign_return': {
-        // Powrót do macierzystego układu
+      case 'foreign_return':
+      case 'foreign_return_from_recon': {
+        // Powrót do macierzystego układu (skok warp)
         const vMgr4 = window.KOSMOS?.vesselManager;
         const v2 = vMgr4?.getVessel(zone.data.vesselId);
         if (v2) {
+          // Przerwij rekon jeśli aktywny
+          if (v2.mission?.type === 'foreign_recon') {
+            vMgr4.abortForeignRecon(zone.data.vesselId);
+          }
           v2.status = 'idle';
           v2.position.state = 'docked';
           v2.mission = null;
           vMgr4.dispatchInterstellar(zone.data.vesselId, zone.data.fromSystemId);
         }
+        break;
+      }
+      case 'abort_foreign_recon': {
+        const vMgr5 = window.KOSMOS?.vesselManager;
+        vMgr5?.abortForeignRecon(zone.data.vesselId);
         break;
       }
       case 'action':
@@ -2517,6 +2527,35 @@ export class FleetManagerOverlay {
         ctx.fillStyle = THEME.textDim;
         ctx.fillText(`${(isMission.currentIdx ?? 0) + 1} / ${isMission.targets?.length ?? '?'}`, x + pad, cy + 10);
         cy += 18;
+      }
+
+      // ── Przyciski akcji dla foreign_recon ──
+      cy += 4;
+      const abortBtnW = w - pad * 2;
+
+      // Przerwij rekon → statek przechodzi do orbiting_body z pełnymi akcjami
+      ctx.fillStyle = THEME.warning;
+      ctx.fillRect(x + pad, cy, abortBtnW, btnH);
+      ctx.fillStyle = '#000';
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillText('⏹ ' + t('fleet.abortRecon'), x + pad + 8, cy + btnH / 2 + 4);
+      this._hitZones.push({ x: x + pad, y: cy, w: abortBtnW, h: btnH, type: 'abort_foreign_recon', data: { vesselId: vessel.id } });
+      cy += btnH + 4;
+
+      // Powrót do macierzystego układu (skok warp)
+      const homeCol = window.KOSMOS?.colonyManager?.getColony(vessel.colonyId);
+      const fromSysId = vessel.systemId;
+      if (fromSysId && fromSysId !== (homeCol?.systemId ?? 'sys_home')) {
+        ctx.fillStyle = THEME.danger;
+        ctx.fillRect(x + pad, cy, abortBtnW, btnH);
+        ctx.fillStyle = '#fff';
+        ctx.fillText('🏠 ' + t('fleet.returnHomeSystem'), x + pad + 8, cy + btnH / 2 + 4);
+        this._hitZones.push({
+          x: x + pad, y: cy, w: abortBtnW, h: btnH,
+          type: 'foreign_return_from_recon',
+          data: { vesselId: vessel.id, fromSystemId: homeCol?.systemId ?? 'sys_home' },
+        });
+        cy += btnH + 4;
       }
     }
 

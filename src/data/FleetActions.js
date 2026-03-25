@@ -222,9 +222,16 @@ const ACTIONS = {
       }
       if (mission.status === 'returning') return { ok: false, reason: 'Już wraca' };
 
+      // Statek w obcym układzie — powrót = skok warp (nie lokalny dystans)
+      const homeEntity = state.vesselManager?._findEntity(vessel.colonyId);
+      const homeSystemId = homeEntity?.systemId ?? 'sys_home';
+      const isForeign = vessel.systemId && vessel.systemId !== homeSystemId;
+      if (isForeign) {
+        return { ok: true }; // warp fuel sprawdzany w dispatchInterstellar
+      }
+
       // Sprawdź paliwo na powrót (ostrzeżenie, nie blokada — "lot awaryjny")
       const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
-      const homeEntity = state.vesselManager?._findEntity(vessel.colonyId);
       if (homeEntity && vessel.fuel) {
         const distPx = Math.hypot(vessel.position.x - homeEntity.x, vessel.position.y - homeEntity.y);
         const distAU = distPx / AU_TO_PX;
@@ -236,17 +243,36 @@ const ACTIONS = {
       return { ok: true };
     },
     execute(vessel, state) {
+      const vMgr = state.vesselManager;
+
+      // ── Statek w obcym układzie → skok warp do macierzystego ──
+      const homeColony = vMgr?._findEntity(vessel.colonyId);
+      const homeSystemId = homeColony?.systemId ?? 'sys_home';
+      const isForeign = vessel.systemId && vessel.systemId !== homeSystemId;
+
+      if (isForeign && vMgr) {
+        // Przerwij bieżącą misję (foreign_recon itp.)
+        if (vessel.mission?.type === 'foreign_recon') {
+          vMgr.abortForeignRecon(vessel.id);
+        }
+        // Resetuj stan do idle i odpal skok międzygwiezdny
+        vessel.status = 'idle';
+        vessel.position.state = 'docked';
+        vessel.mission = null;
+        vMgr.dispatchInterstellar(vessel.id, homeSystemId);
+        return;
+      }
+
+      // ── Lokalny powrót (w ramach tego samego układu) ──
       const ms = state.missionSystem;
       const mission = ms?.getActive().find(m => m.vesselId === vessel.id);
       if (mission) {
         ms.cancelMission(mission.id);
       } else {
         // Brak ekspedycji ale statek jest w kosmosie — bezpośredni powrót przez VesselManager
-        const vMgr = state.vesselManager;
         if (vMgr && vessel.mission) {
-          const homeEntity = vMgr._findEntity(vessel.colonyId);
-          const hx = homeEntity?.x ?? 0;
-          const hy = homeEntity?.y ?? 0;
+          const hx = homeColony?.x ?? 0;
+          const hy = homeColony?.y ?? 0;
           const distPx = Math.hypot(vessel.position.x - hx, vessel.position.y - hy);
           const distAU = distPx / GAME_CONFIG.AU_TO_PX;
           // Statek nie zdążył odlecieć — natychmiastowy powrót
