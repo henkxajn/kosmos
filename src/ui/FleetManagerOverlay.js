@@ -1283,6 +1283,8 @@ export class FleetManagerOverlay {
       const vMgr = window.KOSMOS?.vesselManager;
       const vessel = vMgr?.getVessel(m.vesselId);
       if (!vessel) continue;
+      // Pokaż tylko misje statków w aktywnym układzie
+      if ((vessel.systemId ?? 'sys_home') !== sysId) continue;
 
       const vx = toSx(vessel.position.x), vy = toSy(vessel.position.y);
       const target = _findBody(m.targetId);
@@ -1348,8 +1350,9 @@ export class FleetManagerOverlay {
       }
     }
 
-    // ── Statki (kropki — na wierzchu) ───────────────────────
+    // ── Statki (kropki — na wierzchu) — tylko z aktywnego układu ──
     for (const v of allVessels) {
+      if ((v.systemId ?? 'sys_home') !== sysId) continue;
       const vx = toSx(v.position.x), vy = toSy(v.position.y);
       const isSel = v.id === this._selectedVesselId;
       const r = isSel ? 4 : 3;
