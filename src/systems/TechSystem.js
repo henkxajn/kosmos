@@ -348,14 +348,44 @@ export class TechSystem {
       return;
     }
 
-    // Sprawdź koszt badań (z discovery soft-gate)
-    if (this.resourceSystem) {
-      const effectiveCost = this.getEffectiveCost(tech);
-      if (!this.resourceSystem.canAfford(effectiveCost)) {
+    // Sprawdź koszt badań (z discovery soft-gate) — sumuj research z WSZYSTKICH kolonii
+    const effectiveCost = this.getEffectiveCost(tech);
+    const researchNeeded = effectiveCost.research ?? 0;
+    if (researchNeeded > 0) {
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colonies = colMgr?.getAllColonies() ?? [];
+      // Zbierz łączny research z wszystkich kolonii
+      let totalResearch = 0;
+      const sources = []; // { resourceSystem, available }
+      for (const col of colonies) {
+        const rs = col.resourceSystem;
+        if (!rs) continue;
+        const avail = rs.research?.amount ?? 0;
+        if (avail > 0) {
+          sources.push({ rs, avail });
+          totalResearch += avail;
+        }
+      }
+      // Fallback: jeśli brak ColonyManager, użyj aktywnego resourceSystem
+      if (sources.length === 0 && this.resourceSystem) {
+        const avail = this.resourceSystem.research?.amount ?? 0;
+        sources.push({ rs: this.resourceSystem, avail });
+        totalResearch = avail;
+      }
+      if (totalResearch < researchNeeded) {
         EventBus.emit('tech:researchFailed', { techId, reason: t('tech.noResearchPoints') });
         return;
       }
-      this.resourceSystem.spend(effectiveCost);
+      // Pobierz koszt proporcjonalnie z każdej kolonii
+      let remaining = researchNeeded;
+      for (const src of sources) {
+        const take = Math.min(src.avail, remaining);
+        if (take > 0) {
+          src.rs.research.amount = Math.max(0, src.rs.research.amount - take);
+          remaining -= take;
+        }
+        if (remaining <= 0) break;
+      }
     }
 
     this._researched.add(techId);

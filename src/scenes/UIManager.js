@@ -287,9 +287,24 @@ export class UIManager {
           }
           this._wasBrownout = isNow;
         }
-        if (inventory._research) {
-          this._resources.research = inventory._research.amount ?? 0;
-          this._resDelta.research  = inventory._research.perYear ?? 0;
+        // Research: sumuj ze WSZYSTKICH kolonii (badania są globalne)
+        {
+          const colMgr = window.KOSMOS?.colonyManager;
+          const colonies = colMgr?.getAllColonies?.() ?? [];
+          if (colonies.length > 1) {
+            let totalAmt = 0, totalRate = 0;
+            for (const col of colonies) {
+              const rs = col.resourceSystem;
+              if (!rs?.research) continue;
+              totalAmt  += rs.research.amount  ?? 0;
+              totalRate += rs.research.perYear ?? 0;
+            }
+            this._resources.research = totalAmt;
+            this._resDelta.research  = totalRate;
+          } else if (inventory._research) {
+            this._resources.research = inventory._research.amount ?? 0;
+            this._resDelta.research  = inventory._research.perYear ?? 0;
+          }
         }
         // Preferuj obserwowane delty (uwzględniają mining + receive + spend)
         // Fallback na _perYear (tylko registrowane producenty)
