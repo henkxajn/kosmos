@@ -390,6 +390,7 @@ export class PlanetGlobeRenderer {
       this._overlayTexture = null;
     }
     if (this._renderer) {
+      this._renderer.forceContextLoss();
       this._renderer.dispose();
       this._renderer = null;
     }
