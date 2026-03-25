@@ -1131,7 +1131,28 @@ export class GameScene {
     EntityManager._nextId = maxId + 1;
 
     window.KOSMOS.savedData = null;
-    return { star, planets, moons, planetesimals: [], asteroids: [], comets: [], planetoids };
+
+    // Napraw systemId encji na podstawie StarSystemManager (obejście: registerHomeSystem nadpisuje)
+    const ssmData = data.civ4x?.starSystemManager;
+    if (ssmData?.systems) {
+      const idToSys = new Map();
+      for (const sys of ssmData.systems) {
+        if (!sys.systemId || sys.systemId === 'sys_home') continue;
+        for (const pid of (sys.planetIds || []))    idToSys.set(pid, sys.systemId);
+        for (const mid of (sys.moonIds || []))      idToSys.set(mid, sys.systemId);
+        for (const pid of (sys.planetoidIds || [])) idToSys.set(pid, sys.systemId);
+      }
+      for (const p of planets)    { const s = idToSys.get(p.id); if (s) p.systemId = s; }
+      for (const m of moons)      { const s = idToSys.get(m.id); if (s) m.systemId = s; }
+      for (const p of planetoids) { const s = idToSys.get(p.id); if (s) p.systemId = s; }
+    }
+
+    // Zwróć tylko encje home system (registerHomeSystem nadpisuje systemId!)
+    const homePlanets    = planets.filter(p => (p.systemId ?? 'sys_home') === 'sys_home');
+    const homeMoons      = moons.filter(m => (m.systemId ?? 'sys_home') === 'sys_home');
+    const homePlanetoids = planetoids.filter(p => (p.systemId ?? 'sys_home') === 'sys_home');
+
+    return { star, planets: homePlanets, moons: homeMoons, planetesimals: [], asteroids: [], comets: [], planetoids: homePlanetoids };
   }
 
   // ── Klawiatura ─────────────────────────────────────────────────
