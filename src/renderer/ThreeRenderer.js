@@ -346,6 +346,9 @@ export class ThreeRenderer {
 
     // ── Vessel sprites ──────────────────────────────────────────
     EventBus.on('vessel:launched', safe(({ vessel }) => {
+      const activeSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
+      // Pokaż sprite tylko jeśli statek jest w aktywnym układzie
+      if (vessel.systemId && vessel.systemId !== activeSys) return;
       // Usuń stary sprite jeśli istnieje (np. redispatch z orbity)
       if (this._vessels.has(vessel.id)) {
         this._removeVesselSprite(vessel.id);
@@ -353,6 +356,8 @@ export class ThreeRenderer {
       this._addVesselSprite(vessel);
     }));
     EventBus.on('vessel:returning', safe(({ vessel }) => {
+      const activeSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
+      if (vessel.systemId && vessel.systemId !== activeSys) return;
       // Przebuduj sprite + linię trasy aby celowała w punkt powrotu
       if (this._vessels.has(vessel.id)) {
         this._removeVesselSprite(vessel.id);
@@ -2390,8 +2395,17 @@ export class ThreeRenderer {
    * Synchronizuj pozycje vessel sprites z danymi z VesselManager.
    */
   _syncVesselPositions(vessels) {
+    const activeSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
     for (const vessel of vessels) {
+      const inActiveSys = vessel.systemId === activeSys;
       const entry = this._vessels.get(vessel.id);
+
+      // Statek nie należy do aktywnego układu → usuń sprite jeśli istnieje
+      if (!inActiveSys) {
+        if (entry) this._removeVesselSprite(vessel.id);
+        continue;
+      }
+
       if (!entry) {
         // Vessel w tranzycie ale nie ma sprite'a → stwórz
         this._addVesselSprite(vessel);
