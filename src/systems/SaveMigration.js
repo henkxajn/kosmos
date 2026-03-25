@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 29;
+export const CURRENT_VERSION     = 30;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -44,6 +44,7 @@ const MIGRATIONS = {
   26: _migrateV26toV27,
   27: _migrateV27toV28,
   28: _migrateV28toV29,
+  29: _migrateV29toV30,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -888,6 +889,48 @@ function _migrateV28toV29(data) {
 
     p.deposits.push({ resourceId: 'Nt', richness, totalAmount, remaining: totalAmount });
     ntCount++;
+  }
+
+  return data;
+}
+
+// ── v29 → v30: Napraw systemId na planetach/księżycach/planetoidach ─────
+// Migracja v21→v22 dodała systemId do kolonii i statków, ale pominęła encje
+// ciał niebieskich. Planety z obcych układów miały systemId=undefined →
+// defaultowały do 'sys_home' przy save/restore.
+function _migrateV29toV30(data) {
+  const ssm = data.civ4x?.starSystemManager;
+  if (!ssm?.systems) return data;
+
+  // Zbuduj mapę entityId → systemId z danych StarSystemManager
+  const idToSys = new Map();
+  for (const sys of ssm.systems) {
+    const sysId = sys.systemId;
+    if (!sysId || sysId === 'sys_home') continue;
+    for (const pid of (sys.planetIds || []))    idToSys.set(pid, sysId);
+    for (const mid of (sys.moonIds || []))      idToSys.set(mid, sysId);
+    for (const pid of (sys.planetoidIds || [])) idToSys.set(pid, sysId);
+  }
+
+  // Napraw systemId na planetach
+  for (const p of (data.planets || [])) {
+    const correctSys = idToSys.get(p.id);
+    if (correctSys) p.systemId = correctSys;
+  }
+  // Napraw systemId na księżycach
+  for (const m of (data.moons || [])) {
+    const correctSys = idToSys.get(m.id);
+    if (correctSys) m.systemId = correctSys;
+  }
+  // Napraw systemId na planetoidach
+  for (const p of (data.planetoids || [])) {
+    const correctSys = idToSys.get(p.id);
+    if (correctSys) p.systemId = correctSys;
+  }
+  // Napraw systemId na dodatkowych gwiazdach
+  for (const s of (data.stars || [])) {
+    const sys = ssm.systems.find(ss => ss.starEntityId === s.id);
+    if (sys) s.systemId = sys.systemId;
   }
 
   return data;
