@@ -152,6 +152,9 @@ export class StarSystemManager {
     const moons      = EntityManager.getByTypeInSystem('moon', systemId);
     const planetoids = EntityManager.getByTypeInSystem('planetoid', systemId);
 
+    console.log(`[StarSystemManager] switchActiveSystem(${systemId}): star=${star.name}, planets=${planets.length}, moons=${moons.length}, planetoids=${planetoids.length}`);
+    planets.forEach(p => console.log(`  planet: ${p.name} sysId=${p.systemId} x=${p.x?.toFixed(1)} y=${p.y?.toFixed(1)} a=${p.orbital?.a?.toFixed(2)}`));
+
     // ThreeRenderer przebudowuje scenę
     const renderer = window.KOSMOS?.threeRenderer;
     if (renderer) {
