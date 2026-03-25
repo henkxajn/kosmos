@@ -372,7 +372,7 @@ function _onReconProgress({ expedition: exp, body, discovered }) {
   const bodyName = body?.name ?? '?';
 
   let stats = _buildBodyStats(body);
-  stats += formatStatLineWithCursor(t('missionPopup.discovered'), `${discovered} ${t('missionPopup.bodies')}`, 'at-stat-gld');
+  stats += formatStatLineWithCursor(t('missionPopup.discovered'), `${discovered?.length ?? 0} ${t('missionPopup.bodies')}`, 'at-stat-gld');
 
   queueMissionEvent({
     severity: 'discovery',
