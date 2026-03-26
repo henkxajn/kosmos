@@ -240,12 +240,12 @@ export class BuildingSystem {
   // ── Synthetic units: install/remove ─────────────────────────────────────
 
   /** Mapa tier → efficiency multiplier */
-  static SYNTH_EFFICIENCY = { 1: 1.4, 2: 1.7, 3: 2.5 };
+  static SYNTH_EFFICIENCY = { 2: 1.7 };
 
   /**
    * Zainstaluj syntetyczną jednostkę w budynku.
    * @param {string} tileKey — klucz hexa "q,r"
-   * @param {string} commodityId — np. 'automation_droid', 'android_worker', 'ai_collective_node'
+   * @param {string} commodityId — np. 'android_worker'
    * @returns {{ success: boolean, reason?: string }}
    */
   installSynthetic(tileKey, commodityId) {
@@ -450,8 +450,13 @@ export class BuildingSystem {
     if (buildingId === 'habitat') {
       const atmo = window.KOSMOS?.homePlanet?.atmosphere;
       if (atmo === 'thick' || atmo === 'dense') {
-        delete actualCost.habitat_modules;
+        delete actualCost.pressure_modules;
       }
+    }
+
+    // Surcharge Si na ekstremalnych planetach (brak atmo, gorąco, zimno)
+    if (this._isPlanetExtreme() && building.popCost > 0 && !building.isAutonomous) {
+      actualCost.Si = (actualCost.Si || 0) + 5;
     }
 
     // Mutex: farm vs synthesized_food_plant (nie mogą istnieć na tej samej planecie)
@@ -1026,61 +1031,6 @@ export class BuildingSystem {
     return demand;
   }
 
-  // ── Deploy z prefabu (natychmiastowa budowa bez kosztu surowcowego) ────
-
-  deployFromCargo(tile, buildingId) {
-    const building = BUILDINGS[buildingId];
-    if (!building) return { success: false, reason: t('ui.unknownBuilding') };
-
-    if (tile.isOccupied) return { success: false, reason: t('ui.tileOccupied') };
-
-    if (!this._canBuildOnTile(tile, building)) {
-      return { success: false, reason: t('ui.terrainForbidden') };
-    }
-
-    // Sprawdzenie tech
-    if (building.requires) {
-      const hastech = this.techSystem?.isResearched(building.requires) ?? false;
-      if (!hastech) {
-        const tech = TECHS[building.requires];
-        const techName = tech ? getName(tech, 'tech') : building.requires;
-        return { success: false, reason: t('ui.requiresTech', techName) };
-      }
-    }
-
-    // Reguła "spaceport first" — nowe kolonie wymagają portu kosmicznego
-    if (this._requiresSpaceportFirst && !building.isSpaceport && !building.isCapital && !this.hasSpaceport()) {
-      return { success: false, reason: t('ui.installSpaceportFirst') };
-    }
-
-    // Outpost: tylko budynki autonomiczne + limit budynków
-    if (this._isOutpost && !building.isCapital && !building.isSpaceport) {
-      const isAllowedOnOutpost = building.isAutonomous || building.popCost === 0;
-      if (!isAllowedOnOutpost) {
-        return { success: false, reason: t('ui.outpostAutonomousOnly') };
-      }
-      if (this._countOutpostBuildings() >= OUTPOST_MAX_BUILDINGS) {
-        return { success: false, reason: t('ui.outpostMaxBuildings', OUTPOST_MAX_BUILDINGS) };
-      }
-    }
-
-    // Sprawdzenie POPów (pomiń w outpost)
-    const popCost = this._isOutpost ? 0 : (building.popCost ?? POP_PER_BUILDING);
-    if (popCost > 0) {
-      const civSys = this.civSystem;
-      if (civSys && civSys.freePops < popCost) {
-        return { success: false, reason: t('ui.noFreePops', popCost) };
-      }
-    }
-
-    // Natychmiastowa aktywacja (bez kosztu surowcowego — prefab pokrywa)
-    tile.buildingId = buildingId;
-    tile.buildingLevel = 1;
-    this._activateBuilding(tile.key, buildingId, tile.r, tile.type, false);
-
-    return { success: true };
-  }
-
   // ── Przywracanie zapisanego stanu ───────────────────────────────────────
 
   restoreFromSave(buildings) {
@@ -1243,6 +1193,14 @@ export class BuildingSystem {
   }
 
   // ── Prywatne ────────────────────────────────────────────────────────────
+
+  _isPlanetExtreme() {
+    const planet = window.KOSMOS?.homePlanet;
+    if (!planet) return false;
+    return planet.atmosphere === 'none'
+      || (planet.temperatureC != null && planet.temperatureC > 150)
+      || (planet.temperatureC != null && planet.temperatureC < -100);
+  }
 
   _canBuildOnTile(tile, building) {
     const terrain = TERRAIN_TYPES[tile.type];

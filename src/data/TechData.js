@@ -25,6 +25,7 @@
 //   { type: 'modifier', resource, multiplier }
 //   { type: 'unlockBuilding', buildingId }
 //   { type: 'unlockShip', shipId }
+//   { type: 'unlockShipModule', moduleId }
 //   { type: 'unlockFeature', feature }
 //   { type: 'prosperityBonus', amount }
 //   { type: 'popGrowthBonus', multiplier }
@@ -115,9 +116,8 @@ export const TECHS = {
     cost:        { research: 150 },
     requires:    ['metallurgy'],
     effects: [
-      { type: 'unlockCommodity', commodityId: 'composite_alloy' },
     ],
-    description: 'Nowy stop kompozytowy (Ti+Fe+Cu) — potrzebny do statków Gen II',
+    description: 'Zaawansowane stopy (Hv+Fe+Cu) — potrzebne do statków Gen II',
   },
 
   rare_earth_processing: {
@@ -130,7 +130,7 @@ export const TECHS = {
     effects: [
       { type: 'unlockFeature', feature: 'rare_earth_mining' },
     ],
-    description: 'Ekspedycje mining zwracają rzadkie metale (Pt, W, Li)',
+    description: 'Ekspedycje mining zwracają rzadkie metale (Metale Ciężkie, Li)',
   },
 
   space_mining: {
@@ -155,9 +155,9 @@ export const TECHS = {
     cost:        { research: 350 },
     requires:    ['advanced_materials', 'space_mining'],
     effects: [
-      { type: 'unlockCommodity', commodityId: 'exotic_alloy' },
+      { type: 'unlockCommodity', commodityId: 'metamaterials' },
     ],
-    description: 'Nowy stop egzotyczny (Ti+W+Pt+Xe) — prereq do budynków T4+ i statków Gen III+',
+    description: 'Metamateriały (Hv+Xe) — prereq do budynków T4+ i statków Gen III+',
   },
 
   nanofabrication: {
@@ -170,9 +170,8 @@ export const TECHS = {
     requiresDiscovery: 'anomalia_kwantowa',
     effects: [
       { type: 'factorySpeedMultiplier', multiplier: 2.0 },
-      { type: 'unlockCommodity', commodityId: 'nanotech_filters' },
     ],
-    description: 'Fabryki produkują ×2 szybciej. Odblokowanie filtrów nanotechnologicznych',
+    description: 'Fabryki produkują ×2 szybciej — nanotechnologia w produkcji',
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -200,9 +199,8 @@ export const TECHS = {
     cost:        { research: 60 },
     requires:    [],
     effects: [
-      { type: 'unlockCommodity', commodityId: 'power_cells_mk2' },
     ],
-    description: 'Nowe ogniwa mk2 — 2× pojemność, statki lecą dalej na jednym tankowaniu',
+    description: 'Ulepszona technologia magazynowania energii — statki lecą dalej na jednym tankowaniu',
   },
 
   nuclear_power: {
@@ -255,6 +253,7 @@ export const TECHS = {
     cost:        { research: 600 },
     requires:    ['fusion_power', 'quantum_physics'],
     requiresDiscovery: 'pulapka_antymaterii',
+    requiresInventory: { plasma_cores: 5 },
     effects: [
       { type: 'unlockCommodity', commodityId: 'antimatter_cells' },
       { type: 'unlockBuilding', buildingId: 'antimatter_factory' },
@@ -317,10 +316,9 @@ export const TECHS = {
     requires:    ['hydroponics'],
     effects: [
       { type: 'unlockBuilding', buildingId: 'genetics_lab' },
-      { type: 'unlockCommodity', commodityId: 'bio_samples' },
       { type: 'popGrowthBonus', multiplier: 1.3 },
     ],
-    description: 'Laboratorium Genetyczne + bio_samples + wzrost POPów ×1.3',
+    description: 'Laboratorium Genetyczne + wzrost POPów ×1.3',
   },
 
   medicine: {
@@ -360,9 +358,9 @@ export const TECHS = {
     requires:    ['medicine'],
     requiresDiscovery: 'extremofil_lodowy',
     effects: [
-      { type: 'unlockShip', shipId: 'heavy_colony_ship' },
+      { type: 'unlockShipModule', moduleId: 'cryo_pod' },
     ],
-    description: 'Hibernacja załóg — Heavy Colony Ship (5 POPów, 500t cargo)',
+    description: 'Hibernacja załóg — moduł kriogeniczny (więcej POPów na pokładzie)',
   },
 
   terraforming: {
@@ -448,9 +446,9 @@ export const TECHS = {
     requires:    ['colonization', 'bureaucracy'],
     effects: [
       { type: 'unlockFeature', feature: 'trade_routes' },
-      { type: 'unlockShip', shipId: 'heavy_freighter' },
+      { type: 'unlockShipModule', moduleId: 'cargo_mass' },
     ],
-    description: 'Trasy handlowe + Ciężki Frachtowiec (10k cargo)',
+    description: 'Trasy handlowe + moduł ładunkowy masowy (duże ładownie)',
   },
 
   advanced_trade: {
@@ -547,9 +545,8 @@ export const TECHS = {
     requires:    ['rocketry'],
     effects: [
       { type: 'unlockBuilding', buildingId: 'shipyard' },
-      { type: 'unlockShip', shipId: 'science_vessel' },
     ],
-    description: 'Stocznia + Statek Naukowy Gen I — zwiad i misje naukowe',
+    description: 'Stocznia — budowa statków, misje kosmiczne',
   },
 
   colonization: {
@@ -560,9 +557,9 @@ export const TECHS = {
     cost:        { research: 300 },
     requires:    ['exploration'],
     effects: [
-      { type: 'unlockShip', shipId: 'colony_ship' },
+      { type: 'unlockShipModule', moduleId: 'habitat_pod' },
     ],
-    description: 'Statek Kolonijny — zakładanie osad na zbadanych ciałach',
+    description: 'Moduł habitatu — zakładanie osad na zbadanych ciałach',
   },
 
   ion_drives: {
@@ -574,10 +571,9 @@ export const TECHS = {
     requires:    ['rocketry'],
     effects: [
       { type: 'shipSpeedMultiplier', multiplier: 1.5 },
-      { type: 'unlockShip', shipId: 'fast_scout' },
-      { type: 'unlockShip', shipId: 'bulk_freighter' },
+      { type: 'unlockShipModule', moduleId: 'engine_ion' },
     ],
-    description: 'Statki Gen II: Fast Scout + Bulk Freighter — ×1.5 prędkość, trail niebieski',
+    description: 'Napęd jonowy — ×1.5 prędkość, moduł silnika Gen II',
   },
 
   plasma_drives: {
@@ -603,10 +599,9 @@ export const TECHS = {
     requires:    [['ion_drives', 'plasma_drives'], 'fusion_power'],  // OR: ion LUB plasma
     effects: [
       { type: 'shipSpeedMultiplier', multiplier: 1.5 },
-      { type: 'unlockShip', shipId: 'fusion_explorer' },
-      { type: 'unlockCommodity', commodityId: 'fusion_cells' },
+      { type: 'unlockShipModule', moduleId: 'engine_fusion' },
     ],
-    description: 'Statki Gen III: Fusion Explorer (+50% odkrycia) — ×1.5 prędkość (stackuje)',
+    description: 'Napęd fuzyjny — ×1.5 prędkość (stackuje), moduł silnika Gen III',
   },
 
   antimatter_propulsion: {
@@ -619,9 +614,8 @@ export const TECHS = {
     requiresDiscovery: 'anihilacja_kontrolowana',
     effects: [
       { type: 'shipSpeedMultiplier', multiplier: 2.0 },
-      { type: 'unlockShip', shipId: 'antimatter_cruiser' },
     ],
-    description: 'Statki Gen IV: Antimatter Cruiser — ×2.0 prędkość (łącznie ×4.5)',
+    description: 'Napęd antymaterii — ×2.0 prędkość (łącznie ×4.5)',
   },
 
   warp_theory: {
@@ -629,10 +623,11 @@ export const TECHS = {
     namePL:      'Teoria Osnowy',
     nameEN:      'Warp Theory',
     branch:      'space',
-    tier:        5,
+    tier:        3,
     cost:        { research: 900 },
-    requires:    ['antimatter_propulsion', 'quantum_physics'],
+    requires:    ['ion_drives', 'quantum_physics'],
     requiresDiscovery: 'zakrzywienie_czasoprzestrzeni',
+    requiresInventory: { metamaterials: 8, quantum_processors: 1 },
     effects: [
       { type: 'unlockBuilding', buildingId: 'warp_beacon' },
     ],
@@ -644,15 +639,15 @@ export const TECHS = {
     namePL:      'Napęd Skokowy',
     nameEN:      'Warp Drive',
     branch:      'space',
-    tier:        5,
+    tier:        4,
     cost:        { research: 1500 },
     requires:    ['warp_theory'],
     effects: [
-      { type: 'unlockShip', shipId: 'starship' },
+      { type: 'unlockShipModule', moduleId: 'engine_warp' },
       { type: 'unlockCommodity', commodityId: 'warp_cores' },
       { type: 'unlockFeature', feature: 'interstellar_travel' },
     ],
-    description: 'Statki Gen V: Starship + podróże międzygwiezdne (2.5 LY/rok)',
+    description: 'Moduł napędu skokowego + podróże międzygwiezdne (2.5 LY/rok)',
   },
 
   interstellar_colonization: {
@@ -662,13 +657,13 @@ export const TECHS = {
     branch:      'space',
     tier:        5,
     cost:        { research: 2000 },
-    requires:    ['warp_drive', 'megastructures'],
+    requires:    ['warp_drive'],
+    requiresInventory: { warp_cores: 5 },
     effects: [
-      { type: 'unlockShip', shipId: 'ark_ship' },
       { type: 'unlockFeature', feature: 'victory_exodus' },
       { type: 'unlockBuilding', buildingId: 'jump_gate' },
     ],
-    description: 'Arka + Jump Gate — kolonizacja i natychmiastowe skoki międzygwiezdne',
+    description: 'Jump Gate — kolonizacja i natychmiastowe skoki międzygwiezdne',
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -713,9 +708,8 @@ export const TECHS = {
       { type: 'autonomousEfficiency', multiplier: 1.5 },
       { type: 'unlockBuilding', buildingId: 'ai_core' },
       { type: 'unlockBuilding', buildingId: 'ai_nexus' },
-      { type: 'unlockCommodity', commodityId: 'ai_collective_node' },
     ],
-    description: 'Budynki autonomiczne +50%. AI Core (-30% budowa). Centrum AI + Węzeł AI Collective',
+    description: 'Budynki autonomiczne +50%. AI Core (-30% budowa). Centrum AI',
   },
 
   quantum_computing: {
@@ -729,9 +723,8 @@ export const TECHS = {
     effects: [
       { type: 'researchCostMultiplier', multiplier: 0.7 },
       { type: 'unlockCommodity', commodityId: 'quantum_processors' },
-      { type: 'unlockCommodity', commodityId: 'ai_chips' },
     ],
-    description: 'Badania -30% research cost. Procesory kwantowe + chipy AI',
+    description: 'Badania -30% research cost. Procesory kwantowe',
   },
 
   predictive_modeling: {
@@ -868,11 +861,10 @@ export const TECHS = {
     requires:    ['metallurgy'],
     effects: [
       { type: 'unlockBuilding', buildingId: 'robot_assembly' },
-      { type: 'unlockCommodity', commodityId: 'microcircuits' },
-      { type: 'unlockCommodity', commodityId: 'automation_droid' },
+      { type: 'unlockCommodity', commodityId: 'android_worker' },
       { type: 'modifier', resource: 'minerals', multiplier: 1.10 },
     ],
-    description: 'Automatyzacja procesów przemysłowych',
+    description: 'Automatyzacja procesów przemysłowych — androidy robocze',
   },
 
   android_engineering: {
@@ -890,6 +882,5 @@ export const TECHS = {
     description: 'Projektowanie humanoidalnych androidów roboczych',
   },
 
-  // ai_chips odblokowywane przez istniejący quantum_computing (computing branch)
-  // ai_nexus + ai_collective_node odblokowywane przez istniejący artificial_intelligence (computing branch)
+  // ai_nexus odblokowywane przez istniejący artificial_intelligence (computing branch)
 };

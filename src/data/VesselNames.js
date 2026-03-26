@@ -12,17 +12,9 @@ const NAME_POOLS = {
     'Odkrywca', 'Zwiadowca', 'Pionier', 'Horyzon', 'Voyager',
     'Poszukiwacz', 'Obserwator', 'Promień', 'Ikarus', 'Kopernik',
   ],
-  colony_ship: [
-    'Nadzieja', 'Osadnik', 'Arka', 'Nowy Świt', 'Exodus',
-    'Kolumb', 'Magellanus', 'Pielgrzym', 'Jutrznia', 'Genesis',
-  ],
   cargo_ship: [
     'Handlarz', 'Kurier', 'Fracht', 'Karawana', 'Merkury',
     'Konwój', 'Transporter', 'Dostawca', 'Opat', 'Smok',
-  ],
-  heavy_freighter: [
-    'Mamut', 'Behemot', 'Kolos', 'Tytan', 'Lewiatan',
-    'Golem', 'Atlas', 'Juggernaut', 'Moloch', 'Kraken',
   ],
 };
 

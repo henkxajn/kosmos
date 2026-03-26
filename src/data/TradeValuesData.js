@@ -3,7 +3,7 @@
 // BASE_PRICE:         goodId → cena bazowa (Kr) — podstawa do kalkulacji wartości transferów
 // scarcityMultiplier: stock vs roczna konsumpcja → mnożnik ceny (dynamiczny)
 // routingPriority:    goodId → priorytet routingu (wyższy = pilniejszy transfer)
-// TRADEABLE_GOODS:    lista goodId dopuszczonych do handlu (bez prefabów)
+// TRADEABLE_GOODS:    lista goodId dopuszczonych do handlu
 
 import { COMMODITIES } from './CommoditiesData.js';
 
@@ -17,8 +17,7 @@ export const BASE_PRICE = {
   Cu:   2,
   Ti:   4,
   Li:   5,
-  W:    6,
-  Pt:   10,
+  Hv:   8,
   Xe:   12,
   Nt:   15,
 
@@ -28,51 +27,39 @@ export const BASE_PRICE = {
   energy: 1,
 
   // ── T1 commodities ────────────────────────────────────────
-  steel_plates:       5,
-  polymer_composites: 5,
-  concrete_mix:       6,
-  copper_wiring:      5,
+  structural_alloys:    5,
+  polymer_composites:   5,
+  conductor_bundles:    5,
+  extraction_systems:   7,
 
   // ── T1 consumer goods ─────────────────────────────────────
-  spare_parts:          4,
-  pharmaceuticals:      5,
-  life_support_filters: 4,
-  synthetics:           4,
-  stimulants:           5,
+  basic_supplies:       4,
+  civilian_goods:       5,
 
   // ── T2 commodities ────────────────────────────────────────
-  power_cells:        12,
-  electronics:        15,
-  food_synthesizers:  14,
-  mining_drills:      13,
-  hull_armor:         16,
-  habitat_modules:    18,
-  water_recyclers:    12,
-  automation_droid:   20,
-  composite_alloy:    18,
-  bio_samples:        16,
+  power_cells:          12,
+  pressure_modules:     18,
+  electronic_systems:   15,
+  reactive_armor:       16,
+  compact_bioreactor:   14,
 
   // ── T2 consumer goods ─────────────────────────────────────
-  personal_electronics: 14,
-  gourmet_food:         12,
+  neurostimulants:      10,
 
   // ── T3 commodities ────────────────────────────────────────
-  semiconductors:      35,
-  ion_thrusters:       40,
-  fusion_cores:        50,
-  nanotech_filters:    45,
-  power_cells_mk2:     30,
-  exotic_alloy:        55,
-  quantum_processors:  60,
-  fusion_cells:        45,
-  superconductors:     50,
+  android_worker:       40,
+  plasma_cores:         50,
+  semiconductor_arrays: 35,
+  propulsion_systems:   40,
+  quantum_processors:   60,
+  metamaterials:        55,
 
   // ── T4 commodities ────────────────────────────────────────
-  quantum_cores:       100,
-  antimatter_cells:    120,
+  quantum_cores:        100,
+  antimatter_cells:     120,
 
   // ── T5 commodities ────────────────────────────────────────
-  warp_cores:          200,
+  warp_cores:           200,
 };
 
 // ── Mnożnik niedoboru (dynamiczny) ──────────────────────────────────────────
@@ -92,11 +79,11 @@ export function scarcityMultiplier(stock, annualConsumption) {
 const PRIORITY_MAP = {
   food: 5, water: 5, energy: 4,
   // functioning consumer goods
-  spare_parts: 3, pharmaceuticals: 3, life_support_filters: 3,
+  basic_supplies: 3,
   // comfort consumer goods
-  synthetics: 2, personal_electronics: 2,
+  civilian_goods: 2,
   // luxury consumer goods
-  gourmet_food: 1, stimulants: 1, semiconductors: 1,
+  neurostimulants: 1,
 };
 
 export function routingPriority(goodId) {
@@ -113,10 +100,7 @@ export function routingPriority(goodId) {
 }
 
 // ── Lista towarów dopuszczonych do handlu ───────────────────────────────────
-// Explicite: bez prefabów (isPrefab), bez research
 export const TRADEABLE_GOODS = Object.keys(BASE_PRICE).filter(id => {
-  if (id === 'research') return false;  // research nie handluje
-  const comm = COMMODITIES[id];
-  if (comm?.isPrefab) return false;
+  if (id === 'research') return false;
   return true;
 });

@@ -30,12 +30,12 @@ export const ELEMENTS = {
   Ti:  { symbol: 'Ti',  nazwaPL: 'Tytan',     kat: 'metal',         zycie: 0 },
   U:   { symbol: 'U',   nazwaPL: 'Uran',      kat: 'radioaktywny',  zycie: 0 },
   Au:  { symbol: 'Au',  nazwaPL: 'Złoto',     kat: 'rzadki',        zycie: 0 },
-  Pt:  { symbol: 'Pt',  nazwaPL: 'Platyna',   kat: 'rzadki',        zycie: 0 },
+  Hv:  { symbol: 'Hv',  nazwaPL: 'Metale Ciężkie', kat: 'metal',    zycie: 0 },
   He:  { symbol: 'He',  nazwaPL: 'Hel',       kat: 'gazSzlachetny', zycie: 0 },
   // ── 5 nowych pierwiastków (gospodarka 4X) ──────────────────────────────
   Cu:  { symbol: 'Cu',  nazwaPL: 'Miedź',     kat: 'metal',         zycie: 0 },
   Li:  { symbol: 'Li',  nazwaPL: 'Lit',       kat: 'metal',         zycie: 0 },
-  W:   { symbol: 'W',   nazwaPL: 'Wolfram',   kat: 'metal',         zycie: 0 },
+  // W i Pt zastąpione przez Hv (Metale Ciężkie)
   Xe:  { symbol: 'Xe',  nazwaPL: 'Ksenon',    kat: 'gazSzlachetny', zycie: 0 },
   Nt:  { symbol: 'Nt',  nazwaPL: 'Neutronium',kat: 'egzotyczny',    zycie: 0 },
 };
@@ -49,8 +49,7 @@ export const ELEMENT_TO_RESOURCE = {
   Cu: 'Cu',
   Ti: 'Ti',
   Li: 'Li',
-  W:  'W',
-  Pt: 'Pt',
+  Hv: 'Hv',
   Xe: 'Xe',
   Nt: 'Nt',
 };
@@ -90,41 +89,41 @@ export const PLANET_COMPOSITIONS = {
 
   // Merkury-podobne: bogate w żelazo, prawie bez wody i organiki
   hot_rocky: {
-    Fe: 33, Si: 20, O: 17, Ni: 9.5, S: 5.5, Mg: 4.5, Ti: 2, Au: 0.8, Pt: 0.5, Ca: 0.7,
-    Cu: 2.5, W: 1.2, Li: 0.3, Xe: 0, Nt: 0,
+    Fe: 33, Si: 20, O: 17, Ni: 9.5, S: 5.5, Mg: 4.5, Ti: 2, Au: 0.8, Ca: 0.7,
+    Cu: 2.5, Hv: 0.85, Li: 0.3, Xe: 0, Nt: 0,
     C: 0, H: 0, H2O: 0, N: 0, P: 0, Al: 0, K: 0, Na: 0, U: 0, He: 0,
   },
 
   // Ziemia-podobne (strefa HZ): różnorodne, z wodą i pierwiastkami biogennymi
   rocky: {
     Fe: 22, Si: 22, O: 25, Mg: 7, Ca: 3, Al: 3,
-    Cu: 1.8, Li: 0.5, W: 0.3, Xe: 0.01, Nt: 0,
+    Cu: 1.8, Li: 0.5, Hv: 0.175, Xe: 0.01, Nt: 0,
     H2O: 2.5, C: 1.5, N: 0.8, P: 0.3, H: 1.0, S: 0.9,
-    K: 0.3, Na: 0.4, Ni: 0.5, U: 0.1, Ti: 0.2, Au: 0.1, Pt: 0.05, He: 0,
+    K: 0.3, Na: 0.4, Ni: 0.5, U: 0.1, Ti: 0.2, Au: 0.1, He: 0,
   },
 
   // Zimne, lodowate skaliste (za strefą HZ): bogaty w lód wodny i organikę
   rocky_cold: {
     Fe: 13, Si: 13, O: 13, Mg: 5.5,
-    Cu: 0.8, Li: 1.2, W: 0.2, Xe: 0.05, Nt: 0,
+    Cu: 0.8, Li: 1.2, Hv: 0.1, Xe: 0.05, Nt: 0,
     H2O: 28, C: 8, N: 7, H: 5,
-    Ca: 1.5, S: 1.2, P: 0.5, Al: 0.3, K: 0.1, Na: 0.1, Ni: 0.1, U: 0.05, Ti: 0.05, Au: 0, Pt: 0, He: 0,
+    Ca: 1.5, S: 1.2, P: 0.5, Al: 0.3, K: 0.1, Na: 0.1, Ni: 0.1, U: 0.05, Ti: 0.05, Au: 0, He: 0,
   },
 
   // Gazowe olbrzymy: głównie wodór i hel
   gas: {
     H: 61, He: 27, C: 4, N: 3, O: 2, S: 0.6,
     Fe: 0.15, Si: 0.15, Mg: 0.05, Ni: 0.05,
-    Cu: 0.05, Li: 0.5, W: 0, Xe: 0.8, Nt: 0,
-    H2O: 0, P: 0, Ca: 0, Al: 0, K: 0, Na: 0, U: 0, Ti: 0, Au: 0, Pt: 0,
+    Cu: 0.05, Li: 0.5, Hv: 0, Xe: 0.8, Nt: 0,
+    H2O: 0, P: 0, Ca: 0, Al: 0, K: 0, Na: 0, U: 0, Ti: 0, Au: 0,
   },
 
   // Lodowe: woda, azot, węgiel dominują
   ice: {
     H2O: 49, N: 16.5, C: 12, H: 9,
     Si: 4, Fe: 3.5, Mg: 2, S: 1.2, P: 0.5, O: 0.5,
-    Cu: 0.3, Li: 0.6, W: 0.1, Xe: 0.3, Nt: 0,
-    Ca: 0.1, Al: 0.1, Ni: 0.05, U: 0, Ti: 0.05, K: 0, Na: 0, He: 0, Au: 0, Pt: 0,
+    Cu: 0.3, Li: 0.6, Hv: 0.05, Xe: 0.3, Nt: 0,
+    Ca: 0.1, Al: 0.1, Ni: 0.05, U: 0, Ti: 0.05, K: 0, Na: 0, He: 0, Au: 0,
   },
 };
 
@@ -132,31 +131,31 @@ export const PLANET_COMPOSITIONS = {
 // Bogaty w H₂O, C, N, P — kluczowe dla powstawania życia
 export const COMET_COMPOSITION = {
   H2O: 40, C: 22, N: 14, O: 10, Si: 4, Fe: 3, S: 3, P: 2.5, H: 1.5,
-  Mg: 0, Ca: 0, Al: 0, K: 0, Na: 0, Ni: 0, Ti: 0, U: 0, Au: 0, Pt: 0, He: 0,
-  Cu: 0, Li: 0, W: 0, Xe: 0, Nt: 0,
+  Mg: 0, Ca: 0, Al: 0, K: 0, Na: 0, Ni: 0, Ti: 0, U: 0, Au: 0, He: 0,
+  Cu: 0, Li: 0, Hv: 0, Xe: 0, Nt: 0,
 };
 
 // ── Składy planetoidów (taksonomia Tholena) ────────────────────────
-// M-type: metaliczne — koncentracja rzadkich metali (Cu, Ti, W, Pt)
+// M-type: metaliczne — koncentracja rzadkich metali (Cu, Ti, Hv)
 // C-type: węgliste — organika, lit, woda
 // S-type: krzemianowe — mieszane, z ksenonem i tytanem
 export const PLANETOID_COMPOSITIONS = {
   metallic: {
     Fe: 35, Ni: 12, Cu: 8, Ti: 5, Si: 10, O: 8, Mg: 4,
-    W: 3, Pt: 2, Li: 1.5, S: 2, C: 1, Ca: 1, Al: 1, Au: 0.5,
+    Hv: 2.5, Li: 1.5, S: 2, C: 1, Ca: 1, Al: 1, Au: 0.5,
     H2O: 0, N: 0, P: 0, H: 0, K: 0, Na: 0, U: 0, Xe: 2.5, Nt: 2.5, He: 0,
   },
   carbonaceous: {
     C: 18, Si: 14, O: 15, Fe: 12, H2O: 8, Mg: 5, N: 4,
     S: 3, Li: 3, Cu: 2, Ni: 2, H: 2, Ti: 1.5, P: 1.5,
-    Ca: 1.5, Al: 1.5, W: 0.5, K: 0.5, Na: 0.5, Pt: 0.15,
+    Ca: 1.5, Al: 1.5, Hv: 0.325, K: 0.5, Na: 0.5,
     Au: 0, Xe: 2.5, Nt: 0, U: 0, He: 0,
   },
   silicate: {
     Si: 22, O: 20, Fe: 12, Mg: 8, Ca: 4, Al: 4,
     H2O: 5, Ti: 3, Cu: 3, Li: 2.5, S: 2, Ni: 2, C: 2,
-    W: 1, N: 1, H: 1, P: 0.5, K: 0.5, Na: 0.5, Xe: 3.0,
-    Pt: 0.3, Au: 0.2, U: 0.1, Nt: 0, He: 0,
+    Hv: 0.65, N: 1, H: 1, P: 0.5, K: 0.5, Na: 0.5, Xe: 3.0,
+    Au: 0.2, U: 0.1, Nt: 0, He: 0,
   },
 };
 
@@ -171,17 +170,17 @@ export function getPlanetoidComposition(planetoidType) {
 export const MOON_COMPOSITIONS = {
   rocky: {
     Fe: 18, Si: 20, O: 24, Mg: 8, Ca: 4, Al: 3,
-    Cu: 1.2, Ti: 0.3, Li: 0.3, W: 0.1,
+    Cu: 1.2, Ti: 0.3, Li: 0.3, Hv: 0.125,
     H2O: 0.5, C: 0.3, N: 0.2, S: 1.0,
     Ni: 0.4, P: 0.1, H: 0, K: 0.1, Na: 0.2,
-    U: 0.05, Au: 0.02, Pt: 0.15, He: 0, Xe: 0, Nt: 0,
+    U: 0.05, Au: 0.02, He: 0, Xe: 0, Nt: 0,
   },
   icy: {
     H2O: 55, N: 12, C: 8, H: 6,
     Si: 5, Fe: 4, Mg: 2, S: 1.5, O: 1.0,
     Cu: 0.2, Li: 0.5, Ca: 0.3, Al: 0.1,
-    Ni: 0.1, Ti: 0.05, P: 0.3, K: 0, Na: 0, W: 0,
-    U: 0, Au: 0, Pt: 0, He: 0, Xe: 2.5, Nt: 0,
+    Ni: 0.1, Ti: 0.05, P: 0.3, K: 0, Na: 0, Hv: 0,
+    U: 0, Au: 0, He: 0, Xe: 2.5, Nt: 0,
   },
 };
 

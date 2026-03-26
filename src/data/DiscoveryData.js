@@ -212,7 +212,7 @@ export const DISCOVERIES = {
     chance: 12,
     effects: {
       research: 100,
-      deposit: 'Pt',
+      deposit: 'Hv',
       depositRichness: 0.7,
     },
   },

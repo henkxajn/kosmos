@@ -44,8 +44,12 @@ const SUN_EXCLUSION_AU = 0.3;                           // AU
 const SUN_EXCLUSION    = SUN_EXCLUSION_AU * AU_TO_PX;   // px — promień strefy
 const SUN_MARGIN       = 0.1 * AU_TO_PX;                // margines ominięcia
 
-// Tankowanie: ile power_cells/rok docked vessel ładuje (z energii kolonii)
-const REFUEL_RATE = 2; // pc/rok
+// Tankowanie: ile jednostek paliwa/rok docked vessel ładuje (z inventory kolonii)
+const REFUEL_RATES = {
+  power_cells:  3,    // jednostek/rok
+  plasma_cores: 1,    // jednostek/rok
+  warp_cores:   0.5,  // jednostek/rok
+};
 // Koszt energetyczny: ile energy z inventory kolonii za 1 power_cell
 const ENERGY_PER_PC = 5;
 
@@ -765,7 +769,8 @@ export class VesselManager {
       }
 
       // Ile chcemy zatankować w tym ticku
-      const wantFuel = REFUEL_RATE * deltaYears;
+      const refuelRate = REFUEL_RATES[ft] ?? 2;
+      const wantFuel = refuelRate * deltaYears;
       const canFuel = Math.min(wantFuel, fuelAvailable, vessel.fuel.max - vessel.fuel.current);
 
       if (canFuel > 0) {

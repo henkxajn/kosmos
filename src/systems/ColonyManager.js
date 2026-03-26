@@ -33,6 +33,7 @@ import { BuildingSystem } from './BuildingSystem.js';
 import { FactorySystem } from './FactorySystem.js';
 import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
+import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 import { t } from '../i18n/i18n.js';
 
@@ -103,8 +104,8 @@ export class ColonyManager {
     });
 
     // Nasłuch budowy statku z UI
-    EventBus.on('fleet:buildRequest', ({ shipId }) => {
-      this.startShipBuild(this._activePlanetId, shipId);
+    EventBus.on('fleet:buildRequest', ({ shipId, modules }) => {
+      this.startShipBuild(this._activePlanetId, shipId, modules ?? []);
     });
 
     // Nasłuch rozformowania statku
@@ -590,7 +591,7 @@ export class ColonyManager {
   }
 
   // Rozpocznij budowę statku w stoczni danej kolonii
-  startShipBuild(planetId, shipId) {
+  startShipBuild(planetId, shipId, moduleIds = []) {
     const colony = this.getColony(planetId);
     if (!colony) {
       EventBus.emit('fleet:buildFailed', { reason: t('fleet.colonyNotFound') });
@@ -643,8 +644,14 @@ export class ColonyManager {
       }
     }
 
-    // Sprawdź czy stać na koszt (surowce + commodities)
+    // Sprawdź czy stać na koszt (surowce + commodities + moduły)
     const allCosts = { ...ship.cost, ...(ship.commodityCost || {}) };
+    for (const mId of moduleIds) {
+      const mod = SHIP_MODULES?.[mId];
+      if (!mod) continue;
+      if (mod.cost) for (const [k, v] of Object.entries(mod.cost)) allCosts[k] = (allCosts[k] ?? 0) + v;
+      if (mod.commodityCost) for (const [k, v] of Object.entries(mod.commodityCost)) allCosts[k] = (allCosts[k] ?? 0) + v;
+    }
     if (!colony.resourceSystem.canAfford(allCosts)) {
       // Brak surowców → dodaj do pending ship orders
       if (!colony.pendingShipOrders) colony.pendingShipOrders = [];
@@ -654,6 +661,7 @@ export class ColonyManager {
         shipId: ship.id,
         cost: { ...allCosts },
         crewCost,
+        modules: moduleIds,
         queuedAt: window.KOSMOS?.timeSystem?.gameTime ?? 0,
       });
       EventBus.emit('fleet:buildQueued', { planetId, shipId: ship.id, cost: { ...allCosts } });
@@ -673,6 +681,7 @@ export class ColonyManager {
       shipId:    ship.id,
       progress:  0,
       buildTime: ship.buildTime,
+      modules:   moduleIds,
     });
 
     EventBus.emit('fleet:buildStarted', { planetId, shipId: ship.id });
@@ -940,7 +949,7 @@ export class ColonyManager {
   // Wykonaj automatyczne transfery na drogach handlowych (nowy model inventory)
   _executeTradeRoutes() {
     // Zasoby podlegające handlowi (inventory items)
-    const TRADE_RESOURCES = ['Fe', 'C', 'Si', 'Cu', 'Ti', 'Li', 'W', 'Pt', 'food', 'water'];
+    const TRADE_RESOURCES = ['Fe', 'C', 'Si', 'Cu', 'Ti', 'Li', 'Hv', 'food', 'water'];
 
     for (const route of this._tradeRoutes) {
       if (!route.active) continue;

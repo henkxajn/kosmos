@@ -9,6 +9,7 @@ import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC }          from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W }  from './CivPanelDrawer.js';
 import { SHIPS }           from '../data/ShipsData.js';
+import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots } from '../data/ShipModulesData.js';
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { effectiveRange }  from '../entities/Vessel.js';
@@ -72,8 +73,6 @@ function _getFilterBtns() {
     { id: 'all',             label: t('fleet.filterAll') },
     { id: 'science_vessel',  label: '🛸' },
     { id: 'cargo_ship',      label: '📦' },
-    { id: 'heavy_freighter', label: '🚛' },
-    { id: 'colony_ship',     label: '🚢' },
     { id: 'here',            label: t('fleet.filterHere') },
   ];
 }
@@ -149,6 +148,12 @@ export class FleetManagerOverlay {
     this._clusterHoverSystem = null;
     this._hitZones = [];          // { x,y,w,h, type, data }
     this._bounds = null;          // { x,y,w,h } — cały overlay
+
+    // Designer modułowy statku
+    this._designStep = 'list';    // 'list' | 'modules' | 'summary'
+    this._designHullId = null;
+    this._designModules = [];
+    this._designModuleScroll = 0;
     this._cachedTargets = null;   // cache celów misji
     this._cachedTargetsKey = '';   // klucz walidacji cache
     this._pendingSendSystemId = null; // ID systemu do wysyłki — pokazuje ship picker w prawym panelu
@@ -433,7 +438,49 @@ export class FleetManagerOverlay {
         break;
       case 'build_ship':
         if (zone.data.enabled) {
-          EventBus.emit('fleet:buildRequest', { shipId: zone.data.shipId });
+          const shipDef = SHIPS[zone.data.shipId];
+          const modules = zone.data.modules ?? shipDef?.defaultModules ?? [];
+          EventBus.emit('fleet:buildRequest', { shipId: zone.data.shipId, modules });
+        }
+        break;
+      case 'design_hull':
+        if (zone.data.enabled) {
+          this._designHullId = zone.data.shipId;
+          this._designModules = [...(SHIPS[zone.data.shipId]?.defaultModules ?? [])];
+          this._designStep = 'modules';
+        }
+        break;
+      case 'design_module': {
+        const modId = zone.data.moduleId;
+        const idx = this._designModules.indexOf(modId);
+        if (idx >= 0) {
+          this._designModules.splice(idx, 1);
+        } else {
+          const hull = SHIPS[this._designHullId];
+          if (this._designModules.length < (hull?.baseModuleSlots ?? 4)) {
+            this._designModules.push(modId);
+          }
+        }
+        break;
+      }
+      case 'design_back':
+        if (this._designStep === 'modules') {
+          this._designStep = 'list';
+          this._designHullId = null;
+          this._designModules = [];
+        } else if (this._designStep === 'summary') {
+          this._designStep = 'modules';
+        }
+        break;
+      case 'design_next':
+        this._designStep = 'summary';
+        break;
+      case 'design_build':
+        if (zone.data.shipId) {
+          EventBus.emit('fleet:buildRequest', { shipId: zone.data.shipId, modules: zone.data.modules });
+          this._designStep = 'list';
+          this._designHullId = null;
+          this._designModules = [];
         }
         break;
       case 'cancel_pending_ship': {
@@ -2950,48 +2997,251 @@ export class FleetManagerOverlay {
     ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
     cy += 10;
 
-    // Nagłówek budowy
-    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('fleet.buildShipHeader'), x + PAD, cy + 8);
-    cy += LH + 4;
-
     const canBuildAny = queues.length < shipyardLevel;
     const inv = activeCol?.resourceSystem?.inventorySnapshot() ?? {};
 
-    // Przyciski budowy statków
-    for (const ship of Object.values(SHIPS)) {
-      if (cy > y + h - 26) break;
-      const hasTech = !ship.requires || (tSys?.isResearched(ship.requires) ?? false);
-      if (!hasTech) continue;
+    // ── 3-krokowy designer statku ──────────────────────────────────────────
+    if (this._designStep === 'list') {
+      // KROK 1: Wybór kadłuba
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textHeader;
+      ctx.fillText('PROJEKTUJ STATEK', x + PAD, cy + 8);
+      cy += LH + 4;
 
-      const allCosts = { ...(ship.cost || {}), ...(ship.commodityCost || {}) };
-      const canAfford = Object.entries(allCosts).every(([k, v]) => (inv[k] ?? 0) >= v);
-      const crewCost = ship.crewCost ?? 0;
+      for (const ship of Object.values(SHIPS)) {
+        if (cy > y + h - 40) break;
+        const hasTech = !ship.requires || (tSys?.isResearched(ship.requires) ?? false);
+        if (!hasTech) continue;
+
+        const btnH = 34;
+        const bx = x + PAD, bw = w - PAD * 2;
+        ctx.fillStyle = canBuildAny ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.5)';
+        ctx.fillRect(bx, cy, bw, btnH);
+        ctx.strokeStyle = canBuildAny ? THEME.borderActive : THEME.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, cy, bw, btnH);
+
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = canBuildAny ? THEME.accent : THEME.textDim;
+        ctx.fillText(`${ship.icon} ${getName(ship, 'ship')}`, bx + 6, cy + 14);
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`${ship.baseModuleSlots} slotów  ⚡${ship.baseSpeedAU} AU/y  ⛽${ship.baseFuelCapacity}`, bx + 6, cy + 27);
+
+        this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH,
+          type: 'design_hull', data: { shipId: ship.id, enabled: canBuildAny } });
+        cy += btnH + 4;
+      }
+
+    } else if (this._designStep === 'modules') {
+      // KROK 2: Wybór modułów
+      const hull = SHIPS[this._designHullId];
+      if (!hull) { this._designStep = 'list'; return; }
+      const maxSlots = hull.baseModuleSlots ?? 4;
+      const usedSlots = this._designModules.length;
+
+      // Przycisk powrotu
+      ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText('← Kadłub', x + PAD, cy + 8);
+      this._hitZones.push({ x: x + PAD, y: cy - 4, w: 80, h: 18, type: 'design_back', data: {} });
+      cy += LH + 2;
+
+      // Nagłówek + sloty
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textHeader;
+      ctx.fillText(`${hull.icon} MODUŁY: ${usedSlots}/${maxSlots}`, x + PAD, cy + 8);
+      cy += LH + 4;
+
+      // Lista modułów — kompaktowa
+      const categories = ['propulsion', 'cargo', 'science', 'habitat', 'armor', 'fuel'];
+      const catNames = { propulsion: '🔥 Napęd', cargo: '📦 Cargo', science: '🔬 Nauka',
+                         habitat: '🏠 Habitat', armor: '🛡 Pancerz', fuel: '⛽ Paliwo' };
+
+      for (const cat of categories) {
+        const mods = Object.values(SHIP_MODULES).filter(m => m.slotType === cat);
+        if (mods.length === 0) continue;
+        if (cy > y + h - 50) break;
+
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(catNames[cat] ?? cat, x + PAD, cy + 8);
+        cy += 12;
+
+        for (const mod of mods) {
+          if (cy > y + h - 30) break;
+          const isSelected = this._designModules.includes(mod.id);
+          const techOk = !mod.requires || (tSys?.isResearched(mod.requires) ?? false);
+          const slotsOk = isSelected || usedSlots < maxSlots;
+          const enabled = techOk && slotsOk;
+
+          const btnH = 22;
+          const bx = x + PAD, bw = w - PAD * 2;
+          ctx.fillStyle = isSelected ? 'rgba(0,255,180,0.12)' : enabled ? 'rgba(20,40,60,0.6)' : 'rgba(20,20,30,0.3)';
+          ctx.fillRect(bx, cy, bw, btnH);
+          ctx.strokeStyle = isSelected ? THEME.accent : enabled ? THEME.border : 'rgba(40,40,50,0.5)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(bx, cy, bw, btnH);
+
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = isSelected ? THEME.accent : enabled ? THEME.textPrimary : THEME.textDim;
+          const check = isSelected ? '✓ ' : '';
+          const lock = !techOk ? '🔒 ' : '';
+          ctx.fillText(`${lock}${check}${mod.icon} ${mod.namePL}`, bx + 4, cy + 14);
+
+          // Krótka info o efekcie
+          ctx.textAlign = 'right';
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          let statTxt = '';
+          if (mod.stats.speedMult && mod.stats.speedMult !== 1) statTxt = `×${mod.stats.speedMult}⚡`;
+          else if (mod.stats.cargoAdd) statTxt = `+${mod.stats.cargoAdd}t`;
+          else if (mod.stats.discoveryBonus) statTxt = `+${Math.round(mod.stats.discoveryBonus * 100)}%🔬`;
+          else if (mod.stats.colonistCapacity) statTxt = `+${mod.stats.colonistCapacity}👤`;
+          else if (mod.stats.fuelCapacityAdd) statTxt = `+${mod.stats.fuelCapacityAdd}⛽`;
+          else if (mod.stats.survivalBonus) statTxt = `+${Math.round(mod.stats.survivalBonus * 100)}%🛡`;
+          ctx.fillText(statTxt, bx + bw - 4, cy + 14);
+          ctx.textAlign = 'left';
+
+          if (enabled) {
+            this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH,
+              type: 'design_module', data: { moduleId: mod.id } });
+          }
+          cy += btnH + 2;
+        }
+        cy += 2;
+      }
+
+      // Sprawdź czy jest silnik
+      const hasEngine = this._designModules.some(id => SHIP_MODULES[id]?.slotType === 'propulsion');
+
+      // Podgląd statystyk
+      if (cy < y + h - 60) {
+        cy += 4;
+        ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
+        cy += 6;
+
+        const stats = calcShipStats(hull, this._designModules);
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)}  📦${stats.cargo}t  🎯${Math.round(stats.range)} AU`, x + PAD, cy + 8);
+        cy += LH;
+
+        // Przycisk DALEJ
+        if (hasEngine) {
+          const btnH = 24, bx = x + PAD, bw = w - PAD * 2;
+          ctx.fillStyle = 'rgba(0,255,180,0.15)';
+          ctx.fillRect(bx, cy, bw, btnH);
+          ctx.strokeStyle = THEME.accent;
+          ctx.strokeRect(bx, cy, bw, btnH);
+          ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.accent;
+          ctx.textAlign = 'center';
+          ctx.fillText('Dalej →', bx + bw / 2, cy + 16);
+          ctx.textAlign = 'left';
+          this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH, type: 'design_next', data: {} });
+          cy += btnH + 4;
+        } else {
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.warning;
+          ctx.fillText('⚠ Wybierz napęd!', x + PAD, cy + 8);
+          cy += LH;
+        }
+      }
+
+    } else if (this._designStep === 'summary') {
+      // KROK 3: Podsumowanie + budowa
+      const hull = SHIPS[this._designHullId];
+      if (!hull) { this._designStep = 'list'; return; }
+
+      // Przycisk powrotu
+      ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText('← Moduły', x + PAD, cy + 8);
+      this._hitZones.push({ x: x + PAD, y: cy - 4, w: 80, h: 18, type: 'design_back', data: {} });
+      cy += LH + 2;
+
+      // Nazwa + moduły
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textHeader;
+      ctx.fillText(`${hull.icon} ${getName(hull, 'ship')}`, x + PAD, cy + 8);
+      cy += LH;
+
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      for (const modId of this._designModules) {
+        const mod = SHIP_MODULES[modId];
+        if (mod && cy < y + h - 80) {
+          ctx.fillText(`  ${mod.icon} ${mod.namePL}`, x + PAD, cy + 8);
+          cy += 12;
+        }
+      }
+
+      // Statystyki
+      const stats = calcShipStats(hull, this._designModules);
+      cy += 4;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)} (${stats.fuelType})`, x + PAD, cy + 8);
+      cy += LH;
+      ctx.fillText(`📦${stats.cargo}t  🎯${Math.round(stats.range)} AU  🛡+${Math.round(stats.survivalBonus * 100)}%`, x + PAD, cy + 8);
+      cy += LH;
+
+      // Koszt
+      cy += 4;
+      ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
+      cy += 6;
+
+      const { cost: rawC, commodityCost: comC } = calcShipCost(hull, this._designModules);
+      const allCosts = { ...rawC, ...comC };
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      let allAfford = true;
+      for (const [k, need] of Object.entries(allCosts)) {
+        if (cy > y + h - 40) break;
+        const have = inv[k] ?? 0;
+        const ok = have >= need;
+        if (!ok) allAfford = false;
+        ctx.fillStyle = ok ? THEME.success : '#ff4444';
+        const label = COMMODITIES[k]?.namePL ?? COMMODITY_SHORT[k] ?? k;
+        ctx.fillText(`${label}: ${have}/${need}`, x + PAD, cy + 8);
+        cy += 11;
+      }
+
+      // Crew check
+      const crewCost = hull.crewCost ?? 0;
       const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
-      // Przycisk aktywny gdy: załoga OK + (slot wolny LUB brak surowców → kolejka)
-      const canBuildNow = canBuildAny && canAfford && hasCrew;
-      const canQueue = hasCrew && !canAfford;
+
+      // Przycisk BUDUJ
+      cy += 4;
+      const canBuildNow = canBuildAny && allAfford && hasCrew;
+      const canQueue = hasCrew && !allAfford;
       const canClick = canBuildNow || canQueue;
 
-      const btnH = 24;
-      ctx.fillStyle = canBuildNow ? 'rgba(0,255,180,0.06)' : canQueue ? 'rgba(255,180,0,0.06)' : 'rgba(20,20,30,0.5)';
-      ctx.fillRect(x + PAD, cy, w - PAD * 2, btnH);
-      ctx.strokeStyle = canBuildNow ? THEME.borderActive : canQueue ? THEME.warning : THEME.border;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + PAD, cy, w - PAD * 2, btnH);
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = canBuildNow ? THEME.accent : canQueue ? THEME.warning : THEME.textDim;
-      ctx.textAlign = 'center';
-      const crewLabel = crewCost > 0 ? ` (${crewCost}👤)` : '';
-      ctx.fillText(`${ship.icon} ${getName(ship, 'ship')}${crewLabel}`, x + w / 2, cy + 16);
-      ctx.textAlign = 'left';
+      if (canClick) {
+        const btnH = 28, bx = x + PAD, bw = w - PAD * 2;
+        const label = canBuildNow ? '🚀 BUDUJ' : '⏳ KOLEJKA';
+        ctx.fillStyle = canBuildNow ? 'rgba(0,255,180,0.15)' : 'rgba(255,180,0,0.1)';
+        ctx.fillRect(bx, cy, bw, btnH);
+        ctx.strokeStyle = canBuildNow ? THEME.accent : THEME.warning;
+        ctx.strokeRect(bx, cy, bw, btnH);
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = canBuildNow ? THEME.accent : THEME.warning;
+        ctx.textAlign = 'center';
+        ctx.fillText(label, bx + bw / 2, cy + 18);
+        ctx.textAlign = 'left';
+        this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH,
+          type: 'design_build', data: { shipId: this._designHullId, modules: [...this._designModules] } });
+        cy += btnH + 4;
+      }
 
-      this._hitZones.push({
-        x: x + PAD, y: cy, w: w - PAD * 2, h: btnH,
-        type: 'build_ship', data: { shipId: ship.id, enabled: canClick },
-      });
-      cy += btnH + 4;
+      if (!canBuildAny) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText('⚠ Brak wolnych slotów stoczni', x + PAD, cy + 8);
+        cy += LH;
+      }
     }
 
     // Oczekujące zamówienia (pending ship orders)

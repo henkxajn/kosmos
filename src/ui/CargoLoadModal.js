@@ -267,16 +267,7 @@ export function showCargoLoadModal(vessel, colony) {
         }
       };
 
-      // Priorytet: prefabrykaty na górze
-      const prefabs = {};
-      const otherCommodities = {};
-      for (const [id, def] of Object.entries(COMMODITIES)) {
-        if (def.isPrefab) prefabs[id] = def;
-        else otherCommodities[id] = def;
-      }
-
-      addGroup(t('cargo.prefabs'), prefabs);
-      addGroup(t('cargo.goods'), otherCommodities);
+      addGroup(t('cargo.goods'), COMMODITIES);
       addGroup(t('cargo.rawMaterials'), MINED_RESOURCES);
       addGroup(t('cargo.harvested'), HARVESTED_RESOURCES);
     }

@@ -530,9 +530,7 @@ export class PopulationOverlay extends BaseOverlay {
 
       const epoch = ps._getCurrentEpoch?.() ?? { unlockedGoods: [] };
       const allConsumerGoods = [
-        'spare_parts', 'pharmaceuticals', 'life_support_filters',
-        'synthetics', 'personal_electronics',
-        'gourmet_food', 'stimulants', 'semiconductors',
+        'basic_supplies', 'civilian_goods', 'neurostimulants',
       ];
 
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;

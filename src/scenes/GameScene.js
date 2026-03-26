@@ -524,7 +524,7 @@ export class GameScene {
           civPlanet.name = 'Test Capital';
           const colony = this.colonyManager.getColony(civPlanet.id);
           if (colony) colony.name = 'Test Capital';
-          // Flota startowa: 1× science_vessel, 1× colony_ship, 1× cargo_ship
+          // Flota startowa: 1× science_vessel, 1× cargo_ship
           this._spawnPowerTestFleet(civPlanet.id);
           // Generuj grid i auto-buduj
           const grid = PlanetMapGenerator.generate(civPlanet, true);
@@ -614,13 +614,13 @@ export class GameScene {
     // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
     // Startowe zasoby (surowce + commodities T1/T2)
     this.resourceSystem.receive({
-      Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10, Pt: 4,
+      Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10, Hv: 4,
       food: 100, water: 100, research: 100,
-      steel_plates: 15, polymer_composites: 10, concrete_mix: 8, copper_wiring: 8,
-      power_cells: 12, electronics: 6, food_synthesizers: 3,
-      mining_drills: 5, hull_armor: 4, habitat_modules: 4, water_recyclers: 3,
-      automation_droid: 0, microcircuits: 0, semiconductors: 2, ion_thrusters: 0,
-      fusion_cores: 0, nanotech_filters: 0, quantum_cores: 0, antimatter_cells: 0,
+      structural_alloys: 15, polymer_composites: 10, conductor_bundles: 8,
+      power_cells: 12, electronic_systems: 6, extraction_systems: 5,
+      pressure_modules: 4, reactive_armor: 4, compact_bioreactor: 3,
+      automation_droid: 0, semiconductor_arrays: 2, propulsion_systems: 0,
+      plasma_cores: 0, metamaterials: 0, quantum_processors: 0, warp_cores: 0,
     });
     // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
     this.buildingSystem.setDeposits(planet.deposits ?? []);
@@ -649,18 +649,15 @@ export class GameScene {
   _setupPowerTestResources() {
     this.resourceSystem.receive({
       Fe: 99999, C: 99999, Si: 99999, Cu: 99999, Ti: 99999, Li: 99999,
-      W: 99999, Pt: 99999, Xe: 99999, Nt: 99999,
+      Hv: 99999, Xe: 99999, Nt: 99999,
       food: 99999, water: 99999, research: 10000,
-      steel_plates: 9999, polymer_composites: 9999, concrete_mix: 9999, copper_wiring: 9999,
-      power_cells: 9999, electronics: 9999, food_synthesizers: 9999,
-      mining_drills: 9999, hull_armor: 9999, habitat_modules: 9999, water_recyclers: 9999,
-      automation_droid: 9999, microcircuits: 9999, semiconductors: 9999, ion_thrusters: 9999,
-      fusion_cores: 9999, nanotech_filters: 9999, quantum_cores: 9999, antimatter_cells: 9999,
-      // Nowe commodities (Etap 38)
-      composite_alloy: 9999, bio_samples: 9999, power_cells_mk2: 9999,
-      exotic_alloy: 9999, quantum_processors: 9999, fusion_cells: 9999,
-      superconductors: 9999, warp_cores: 9999,
-      prefab_mine: 50, prefab_solar_farm: 50, prefab_habitat: 50, prefab_autonomous_mine: 50,
+      structural_alloys: 9999, polymer_composites: 9999, conductor_bundles: 9999,
+      power_cells: 9999, electronic_systems: 9999, extraction_systems: 9999,
+      pressure_modules: 9999, reactive_armor: 9999, compact_bioreactor: 9999,
+      automation_droid: 9999, semiconductor_arrays: 9999, propulsion_systems: 9999,
+      plasma_cores: 9999, metamaterials: 9999,
+      android_worker: 9999, quantum_processors: 9999, warp_cores: 9999,
+      basic_supplies: 9999, civilian_goods: 9999, neurostimulants: 9999,
     });
   }
 
@@ -670,15 +667,13 @@ export class GameScene {
     this.techSystem.restore({ researched: allTechIds });
   }
 
-  // POWER TEST — flota startowa (1× science_vessel, 1× colony_ship, 1× cargo_ship)
+  // POWER TEST — flota startowa (1× science_vessel, 1× cargo_ship, 1× heavy_freighter)
   _spawnPowerTestFleet(planetId) {
     const vMgr = window.KOSMOS?.vesselManager;
     const colony = this.colonyManager.getColony(planetId);
     if (!vMgr || !colony) return;
     for (const shipId of [
-      'science_vessel', 'colony_ship', 'cargo_ship', 'heavy_freighter',
-      'fast_scout', 'bulk_freighter', 'fusion_explorer', 'heavy_colony_ship',
-      'antimatter_cruiser', 'starship', 'ark_ship',
+      'science_vessel', 'cargo_ship',
     ]) {
       const vessel = vMgr.createAndRegister(shipId, planetId);
       colony.fleet.push(vessel.id);

@@ -25,9 +25,8 @@ const MGMT_ROW_H = 32;     // wiersz alokacji w zarządzaniu
 const QUEUE_ROW_H = 22;    // wiersz kolejki
 const ADD_ROW_H = 20;      // wiersz dostępnego towaru
 
-// Sortowanie towarów: commodities wg tier → consumer goods wg tier → prefabrykaty wg tier
+// Sortowanie towarów: commodities wg tier → consumer goods wg tier
 function _commodityGroup(c) {
-  if (c.isPrefab) return 2;
   if (c.isConsumerGood) return 1;
   return 0;
 }
@@ -929,15 +928,13 @@ export class EconomyOverlay extends BaseOverlay {
       }
     }
 
-    // Podział na 3 grupy
-    const regular = allAvailable.filter(id => { const d = COMMODITIES[id]; return !d.isPrefab && !d.isConsumerGood; });
+    // Podział na 2 grupy
+    const regular = allAvailable.filter(id => !COMMODITIES[id].isConsumerGood);
     const consumer = allAvailable.filter(id => COMMODITIES[id].isConsumerGood);
-    const prefabs = allAvailable.filter(id => COMMODITIES[id].isPrefab);
 
     const groups = [
       { ids: regular,  label: null },       // commodities wg tier (nagłówki TIER N)
       { ids: consumer, label: 'CONSUMER' },
-      { ids: prefabs,  label: 'PREFAB' },
     ];
 
     for (const group of groups) {

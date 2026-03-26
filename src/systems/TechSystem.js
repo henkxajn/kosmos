@@ -301,6 +301,19 @@ export class TechSystem {
     return 0.1;  // +10% per sąsiad tej samej kategorii
   }
 
+  /** Sprawdź czy moduł statku jest odblokowany przez zbadaną technologię */
+  isModuleUnlocked(moduleId) {
+    // Szukaj wśród zbadanych technologii efektu unlockShipModule
+    for (const techId of this._researched) {
+      const tech = TECHS[techId];
+      if (!tech?.effects) continue;
+      for (const eff of tech.effects) {
+        if (eff.type === 'unlockShipModule' && eff.moduleId === moduleId) return true;
+      }
+    }
+    return false;
+  }
+
   // ── Serializacja ──────────────────────────────────────────────────────────
 
   serialize() {
@@ -346,6 +359,20 @@ export class TechSystem {
         }
       }
       return;
+    }
+
+    // Sprawdź wymóg inventory (nie zużywa — tylko sprawdza posiadanie)
+    if (tech.requiresInventory) {
+      const resSys = this.resourceSystem;
+      if (resSys) {
+        for (const [goodId, qty] of Object.entries(tech.requiresInventory)) {
+          const have = resSys.inventory?.get(goodId) ?? 0;
+          if (have < qty) {
+            EventBus.emit('tech:researchFailed', { techId, reason: `Wymaga w magazynie: ${goodId} ×${qty} (masz: ${have})` });
+            return;
+          }
+        }
+      }
     }
 
     // Sprawdź koszt badań (z discovery soft-gate) — sumuj research z WSZYSTKICH kolonii

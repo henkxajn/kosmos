@@ -55,17 +55,26 @@ export function createVessel(shipId, colonyId, opts = {}) {
       dockedAt: colonyId,  // id ciała gdy docked/orbiting
     },
 
-    // Generacja i typ paliwa (z ShipsData)
-    generation: ship.generation ?? 1,
-    fuelType: ship.fuelType ?? 'power_cells',
+    // Moduły zainstalowane na statku (lista ID z ShipModulesData)
+    modules: opts.modules || [],
 
-    // Paliwo
+    // Generacja i typ paliwa (z modułów lub kadłuba)
+    generation: ship.generation ?? 1,
+    fuelType: opts.fuelType ?? ship.fuelType ?? 'power_cells',
+
+    // Paliwo (stats mogą być nadpisane przez moduły)
     fuel: {
-      current: fuelCurrent,
-      max: fuelMax,
-      consumption: ship.fuelPerAU ?? 0.5, // jednostki paliwa / AU
-      fuelType: ship.fuelType ?? 'power_cells', // duplikat dla backward compat
+      current: opts.fuel ?? (opts.fuelMax ?? fuelMax),
+      max: opts.fuelMax ?? fuelMax,
+      consumption: opts.fuelPerAU ?? ship.fuelPerAU ?? 0.5,
+      fuelType: opts.fuelType ?? ship.fuelType ?? 'power_cells',
     },
+
+    // Prędkość (AU/rok) — z modułów lub kadłuba
+    speedAU: opts.speedAU ?? ship.speedAU ?? ship.baseSpeedAU ?? 1.0,
+
+    // Ładowność (tony) — z modułów lub kadłuba
+    cargoMax: opts.cargoMax ?? ship.cargoCapacity ?? ship.baseCargoCapacity ?? 0,
 
     // Misja (null gdy w hangarze)
     mission: null,

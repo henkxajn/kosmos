@@ -17,12 +17,12 @@
 //     - wolni POPowie: freePops >= 0.5
 //   colony:
 //     - technologia 'colonization' zbadana
-//     - budynek 'launch_pad' aktywny + statek 'colony_ship' w hangarze
+//     - budynek 'launch_pad' aktywny + statek z modułem kolonizacyjnym (habitat_pod/cryo_pod)
 //     - cel explored=true (wcześniejsza ekspedycja scientific)
 //     - cel: skaliste ciało (planet rocky/ice, moon, planetoid)
 //     - 2 wolne POPy (crewCost=2.0)
 //     - koszt: { Fe: 150, C: 50, Ti: 20, food: 100, water: 50 }
-//     - colony_ship zużywany z hangaru po wysłaniu!
+//     - statek zużywany z hangaru po wysłaniu!
 //
 // Czas podróży = odległość_AU × 2 lat (minimum 2 lata, colony: minimum 3)
 //
@@ -53,7 +53,6 @@ import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
-import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { GAME_CONFIG }   from '../config/GameConfig.js';
 import { t }             from '../i18n/i18n.js';
 
@@ -478,10 +477,10 @@ export class ExpeditionSystem {
       const fallbackColVessel = window.KOSMOS?.vesselManager?.getFirstAvailableWithCapability(
         colMgr?.activePlanetId, 'colony'
       );
-      const fallbackColShipId = fallbackColVessel?.shipId ?? 'colony_ship';
+      const fallbackColShipId = fallbackColVessel?.shipId ?? 'cargo_ship';
       if (!this._isInRange(target, fallbackColShipId)) {
         const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
-        const range = SHIPS[fallbackColShipId]?.range ?? SHIPS.colony_ship?.range ?? 12;
+        const range = SHIPS[fallbackColShipId]?.range ?? SHIPS.cargo_ship?.range ?? 12;
         EventBus.emit('expedition:launchFailed', {
           reason: t('expedition.outOfRange', dist, range)
         });
@@ -510,7 +509,7 @@ export class ExpeditionSystem {
     // Czas podróży — prędkość przypisanego statku + mnożnik tech napędowych + CIV_TIME_SCALE
     const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
     // Warp = natychmiastowy lot
-    const baseColSpeed   = vesselShipDef?.warpCapable ? 99999 : (vesselShipDef?.speedAU ?? SHIPS.colony_ship?.speedAU ?? 0.48);
+    const baseColSpeed   = vesselShipDef?.warpCapable ? 99999 : (vesselShipDef?.speedAU ?? SHIPS.cargo_ship?.baseSpeedAU ?? 0.9);
     const colonySpeed    = baseColSpeed * techMult * CIV_TIME_SCALE;
     const travelTime  = parseFloat(Math.max(MIN_COLONY_TRAVEL, distance / colonySpeed).toFixed(3));
     const departYear  = this._gameYear;
@@ -1317,7 +1316,7 @@ export class ExpeditionSystem {
     exp.eventRoll = roll;
     const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
-    // Zniszcz vessel (colony_ship nie wraca — zużyty przy kolonizacji)
+    // Zniszcz vessel (statek kolonizacyjny nie wraca — zużyty przy kolonizacji)
     if (exp.vesselId && vMgr) {
       vMgr.destroyVessel(exp.vesselId);
     }
@@ -1387,24 +1386,12 @@ export class ExpeditionSystem {
       exp.gained = exp.cargo || {};
       exp.cargo = null;
 
-      // Rozdziel cargo statku: prefaby zostają na pokładzie, reszta dostarczona
+      // Wyczyść cargo statku — wszystko dostarczone
       if (exp.vesselId && vMgr) {
         const vessel = vMgr.getVessel(exp.vesselId);
         if (vessel) {
-          const prefabsOnShip = {};
-          let prefabWeight = 0;
-          if (vessel.cargo) {
-            for (const [comId, qty] of Object.entries(vessel.cargo)) {
-              if (qty <= 0) continue;
-              const com = COMMODITIES[comId];
-              if (com?.isPrefab) {
-                prefabsOnShip[comId] = qty;
-                prefabWeight += qty * (com.weight ?? 1);
-              }
-            }
-          }
-          vessel.cargo = prefabsOnShip;
-          vessel.cargoUsed = prefabWeight;
+          vessel.cargo = {};
+          vessel.cargoUsed = 0;
         }
       }
 
@@ -1431,19 +1418,13 @@ export class ExpeditionSystem {
       // Cel BEZ kolonii — utwórz outpost
       const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
 
-      // Rozdziel cargo: prefaby zostają na statku, reszta → zasoby outpost
+      // Cargo statku → zasoby outpost
       const outpostResources = {};
-      const prefabsOnShip = {};
 
       if (vessel?.cargo) {
         for (const [comId, qty] of Object.entries(vessel.cargo)) {
           if (qty <= 0) continue;
-          const com = COMMODITIES[comId];
-          if (com?.isPrefab) {
-            prefabsOnShip[comId] = qty;
-          } else {
-            outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
-          }
+          outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
         }
       }
 
@@ -1470,12 +1451,10 @@ export class ExpeditionSystem {
         // Dock statek w outpost
         vMgr.dockAtColony(exp.vesselId, exp.targetId);
 
-        // Zaktualizuj cargo statku — tylko prefaby
+        // Wyczyść cargo statku — wszystko przekazane do outpostu
         if (vessel) {
-          vessel.cargo = prefabsOnShip;
-          let used = 0;
-          for (const qty of Object.values(prefabsOnShip)) used += qty;
-          vessel.cargoUsed = used;
+          vessel.cargo = {};
+          vessel.cargoUsed = 0;
         }
 
         // Dodaj do floty outpost

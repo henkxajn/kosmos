@@ -21,7 +21,6 @@ import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
-import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { addMissionLog } from '../entities/Vessel.js';
 import { t }             from '../i18n/i18n.js';
 
@@ -499,9 +498,9 @@ export class MissionSystem {
         });
         return;
       }
-    } else if (!this._isInRange(target, 'colony_ship')) {
+    } else if (!this._isInRange(target, 'cargo_ship')) {
       const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
-      const range = SHIPS.colony_ship.range;
+      const range = SHIPS.cargo_ship?.range ?? 12;
       this._emit('mission:failed', 'expedition:launchFailed', {
         reason: t('mission.targetOutOfRange', dist, range)
       });
@@ -517,7 +516,7 @@ export class MissionSystem {
     }
 
     const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
-    const colonySpeed = (SHIPS.colony_ship?.speedAU ?? 0.48) * techMult;
+    const colonySpeed = (SHIPS.cargo_ship?.baseSpeedAU ?? 0.9) * techMult;
     const travelTime  = parseFloat(Math.max(MIN_COLONY_TRAVEL, distance / colonySpeed).toFixed(3));
     const departYear  = this._gameYear;
 
@@ -1372,8 +1371,6 @@ export class MissionSystem {
       if (exp.cargo) {
         const deliverable = {};
         for (const [key, val] of Object.entries(exp.cargo)) {
-          const com = COMMODITIES[key];
-          if (com?.isPrefab) continue; // prefaby nie do inventory
           if (val > 0) deliverable[key] = val;
         }
         targetCol.resourceSystem.receive(deliverable);
@@ -1399,22 +1396,10 @@ export class MissionSystem {
         for (const v of Object.values(exp.cargo)) vessel.stats.resourcesHauled += v;
       }
 
-      // Rozdziel cargo statku: prefaby zostają, reszta dostarczona
+      // Wyczyść cargo statku — wszystko dostarczone
       if (vessel) {
-        const prefabsOnShip = {};
-        let prefabWeight = 0;
-        if (vessel.cargo) {
-          for (const [comId, qty] of Object.entries(vessel.cargo)) {
-            if (qty <= 0) continue;
-            const com = COMMODITIES[comId];
-            if (com?.isPrefab) {
-              prefabsOnShip[comId] = qty;
-              prefabWeight += qty * (com.weight ?? 1);
-            }
-          }
-        }
-        vessel.cargo = prefabsOnShip;
-        vessel.cargoUsed = prefabWeight;
+        vessel.cargo = {};
+        vessel.cargoUsed = 0;
       }
       exp.cargo = null;
 
@@ -1442,7 +1427,7 @@ export class MissionSystem {
       const targetSysId = targetBody?.systemId ?? 'sys_home';
 
       if (originSysId !== targetSysId) {
-        // Obcy układ — statek orbituje cel, NIE tworzymy outpostu (wymaga colony_ship)
+        // Obcy układ — statek orbituje cel, NIE tworzymy outpostu (wymaga moduł kolonizacyjny)
         exp.status = 'orbiting';
         if (exp.vesselId && vMgr) {
           vMgr.arriveAtTarget(exp.vesselId, exp.targetId);
@@ -1450,29 +1435,21 @@ export class MissionSystem {
       } else {
         // Ten sam układ — utwórz outpost z cargo (jeśli jest co dostarczyć)
         const outpostResources = {};
-        const prefabsOnShip = {};
 
         if (vessel?.cargo) {
           for (const [comId, qty] of Object.entries(vessel.cargo)) {
             if (qty <= 0) continue;
-            const com = COMMODITIES[comId];
-            if (com?.isPrefab) {
-              prefabsOnShip[comId] = qty;
-            } else {
-              outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
-            }
+            outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
           }
         }
 
         if (exp.cargo) {
           for (const [key, val] of Object.entries(exp.cargo)) {
-            const com = COMMODITIES[key];
-            if (com?.isPrefab) continue; // prefaby nie do outpostu
             if (val > 0) outpostResources[key] = (outpostResources[key] ?? 0) + val;
           }
         }
 
-        const hasCargo = Object.keys(outpostResources).length > 0 || Object.keys(prefabsOnShip).length > 0;
+        const hasCargo = Object.keys(outpostResources).length > 0;
 
         if (!hasCargo) {
           // Pusty transport bez cargo — statek orbituje cel, nie tworzy pustego outpostu
@@ -1499,12 +1476,8 @@ export class MissionSystem {
             vMgr.dockAtColony(exp.vesselId, exp.targetId);
 
             if (vessel) {
-              vessel.cargo = prefabsOnShip;
-              let used = 0;
-              for (const [comId, qty] of Object.entries(prefabsOnShip)) {
-                used += qty * (COMMODITIES[comId]?.weight ?? 1);
-              }
-              vessel.cargoUsed = used;
+              vessel.cargo = {};
+              vessel.cargoUsed = 0;
             }
 
             const outpostCol = colMgr.getColony(exp.targetId);

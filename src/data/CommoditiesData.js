@@ -1,713 +1,386 @@
-// CommoditiesData — definicje 17 towarów wytwarzanych w fabrykach
+// CommoditiesData — definicje 21 towarów wytwarzanych w fabrykach
 //
 // Towary (commodities) = produkty przetworzone z surowców wydobywalnych.
 // Wymagane do budowy zaawansowanych budynków i statków.
 //
-// Tier:       1–4 (wyższy = droższy)
-// Recipe:     { resourceId: ilość } — surowce zużywane na 1 sztukę
+// Tier:       1–5 (wyższy = droższy)
+// Recipe:     { resourceId: ilość } — surowce/towary zużywane na 1 sztukę
 // BaseTime:   lata gry na 1 sztukę przy 1 punkcie produkcji
 // Weight:     tony na sztukę (do cargo capacity statków)
 
+import { MINED_RESOURCES, HARVESTED_RESOURCES } from './ResourcesData.js';
+
 export const COMMODITIES = {
 
-  // ── Tier 1 — podstawowe materiały budowlane ──────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // TIER 1 — Materiały Strukturalne
+  // ══════════════════════════════════════════════════════════════════════════
 
-  steel_plates: {
-    id:          'steel_plates',
-    namePL:      'Płyty Stalowe',
+  structural_alloys: {
+    id:          'structural_alloys',
+    namePL:      'Stopy Konstrukcyjne',
+    nameEN:      'Structural Alloys',
     icon:        '🔧',
     tier:        1,
     recipe:      { Fe: 8, C: 4 },
-    baseTime:    0.1875,
-    weight:      3.0,
-    description: 'Podstawowy materiał budowlany — stal z żelaza i węgla',
+    baseTime:    0.20,
+    weight:      3.5,
+    description: 'Walcowana stal konstrukcyjna wzmacniana węglem. ' +
+                 'Fundament każdego budynku i każdej kolonii.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
   polymer_composites: {
     id:          'polymer_composites',
-    namePL:      'Polimery Kompozytowe',
+    namePL:      'Kompozyty Polimerowe',
+    nameEN:      'Polymer Composites',
     icon:        '🧪',
     tier:        1,
-    recipe:      { C: 12, Si: 4 },
-    baseTime:    0.1875,
+    recipe:      { C: 10, Si: 4 },
+    baseTime:    0.20,
     weight:      1.5,
-    description: 'Lekkie kompozyty węglowo-krzemowe — izolacja i obudowy',
+    description: 'Lekkie materiały węglowo-krzemowe do kadłubów statków ' +
+                 'i izolacji termicznej.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  concrete_mix: {
-    id:          'concrete_mix',
-    namePL:      'Mieszanka Betonowa',
-    icon:        '🪨',
-    tier:        1,
-    recipe:      { Si: 10, Fe: 6, C: 4 },
-    baseTime:    0.1875,
-    weight:      5.0,
-    description: 'Ciężka mieszanka budowlana — fundamenty i ściany',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  copper_wiring: {
-    id:          'copper_wiring',
-    namePL:      'Instalacje Miedziane',
+  conductor_bundles: {
+    id:          'conductor_bundles',
+    namePL:      'Wiązki Przewodzące',
+    nameEN:      'Conductor Bundles',
     icon:        '🔌',
     tier:        1,
-    recipe:      { Cu: 10, C: 2 },
-    baseTime:    0.125,
+    recipe:      { Cu: 8, C: 2 },
+    baseTime:    0.15,
     weight:      1.5,
-    description: 'Okablowanie elektryczne — niezbędne w każdym budynku energetycznym',
+    description: 'Ekranowane wiązki kabli i magistrali danych. ' +
+                 'Bez nich energia stoi w miejscu.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  // ── Tier 2 — komponenty zaawansowane ──────────────────────────────────────
+  extraction_systems: {
+    id:          'extraction_systems',
+    namePL:      'Systemy Wydobywcze',
+    nameEN:      'Extraction Systems',
+    icon:        '⛏',
+    tier:        1,
+    recipe:      { Fe: 6, C: 6, Hv: 2 },
+    baseTime:    0.25,
+    weight:      4.0,
+    description: 'Zestawy wierteł, sond sejsmicznych i separatorów mineralnych. ' +
+                 'Pierwszy krok do każdego wydobycia.',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TIER 2 — Komponenty Zaawansowane
+  // ══════════════════════════════════════════════════════════════════════════
 
   power_cells: {
     id:          'power_cells',
-    namePL:      'Ogniwa Zasilające',
+    namePL:      'Ogniwa Energetyczne',
+    nameEN:      'Power Cells',
     icon:        '🔋',
     tier:        2,
     recipe:      { Li: 6, Cu: 4, Si: 2 },
     baseTime:    0.375,
     weight:      2.0,
-    description: 'Litowo-miedziowe ogniwa akumulatorowe — zasilanie mobilne',
+    description: 'Litowo-miedziowe ogniwa wysokiej gęstości energetycznej. ' +
+                 'Paliwo statków Gen I i zasilanie budynków autonomicznych.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  electronics: {
-    id:          'electronics',
-    namePL:      'Elektronika',
-    icon:        '💻',
-    tier:        2,
-    recipe:      { Si: 8, Cu: 6, C: 2 },
-    baseTime:    0.375,
-    weight:      1.0,
-    description: 'Układy scalone i systemy sterowania',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  food_synthesizers: {
-    id:          'food_synthesizers',
-    namePL:      'Syntezatory Żywności',
-    icon:        '🧬',
-    tier:        2,
-    recipe:      { C: 10, Cu: 6, Fe: 2 },
-    baseTime:    0.375,
-    weight:      2.5,
-    description: 'Syntetyczna produkcja żywności na jałowych ciałach',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  mining_drills: {
-    id:          'mining_drills',
-    namePL:      'Wiertła Górnicze',
-    icon:        '⛏',
-    tier:        2,
-    recipe:      { C: 10, Fe: 6, W: 2 },
-    baseTime:    0.375,
-    weight:      4.0,
-    description: 'Zaawansowane wiertła do głębokich złóż',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  hull_armor: {
-    id:          'hull_armor',
-    namePL:      'Opancerzenie Kadłuba',
-    icon:        '🛡',
-    tier:        2,
-    recipe:      { Ti: 8, Fe: 6, W: 4 },
-    baseTime:    0.375,
-    weight:      5.0,
-    description: 'Tytanowo-wolframowy pancerz kadłubów statków',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  habitat_modules: {
-    id:          'habitat_modules',
-    namePL:      'Moduły Habitatu',
+  pressure_modules: {
+    id:          'pressure_modules',
+    namePL:      'Moduły Presuryzacyjne',
+    nameEN:      'Pressure Modules',
     icon:        '🏗',
     tier:        2,
-    recipe:      { Ti: 6, Fe: 5, Si: 4, Cu: 3 },
-    baseTime:    0.5,
+    recipe:      { Ti: 6, Fe: 4, Si: 4, Cu: 2 },
+    baseTime:    0.50,
     weight:      6.0,
-    description: 'Ciśnieniowe moduły mieszkalne — umożliwiają życie w próżni i wrogiej atmosferze',
+    description: 'Ciśnieniowe moduły mieszkalne z zintegrowanym recyklingiem wody. ' +
+                 'W próżni oddzielają żywych od martwych.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  water_recyclers: {
-    id:          'water_recyclers',
-    namePL:      'Recyklery Wody',
-    icon:        '♻',
+  electronic_systems: {
+    id:          'electronic_systems',
+    namePL:      'Układy Elektroniczne',
+    nameEN:      'Electronic Systems',
+    icon:        '💻',
     tier:        2,
-    recipe:      { Cu: 6, Si: 4, Fe: 2 },
+    recipe:      { Si: 8, Cu: 5, C: 2 },
     baseTime:    0.375,
-    weight:      2.0,
-    description: 'Zamknięty obieg wody — niezbędny na ciałach bez zasobów wodnych',
+    weight:      1.0,
+    description: 'Sterowniki, układy scalone i systemy sensoryczne do zarządzania ' +
+                 'budynkami, statkami i infrastrukturą kolonii.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  microcircuits: {
-    id:          'microcircuits',
-    namePL:      'Mikroobwody',
-    nameEN:      'Microcircuits',
-    icon:        '🔲',
+  reactive_armor: {
+    id:          'reactive_armor',
+    namePL:      'Pancerz Reaktywny',
+    nameEN:      'Reactive Armor',
+    icon:        '🛡',
     tier:        2,
-    recipe:      { Si: 8, Cu: 4 },
+    recipe:      { Ti: 7, Fe: 5, Hv: 3 },
     baseTime:    0.375,
-    weight:      0.8,
-    description: 'Drukowane obwody scalone — podstawa robotyki i automatyzacji',
+    weight:      5.0,
+    description: 'Wielowarstwowy pancerz tytanowo-wolframowy z aktywną absorpcją uderzeń. ' +
+                 'Chroni kadłuby statków i budynki obronne.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  automation_droid: {
-    id:          'automation_droid',
-    namePL:      'Droid Automatyzacyjny',
-    nameEN:      'Automation Droid',
-    icon:        '🤖',
+  compact_bioreactor: {
+    id:          'compact_bioreactor',
+    namePL:      'Bioreaktor Kompaktowy',
+    nameEN:      'Compact Bioreactor',
+    icon:        '🧬',
     tier:        2,
-    recipe:      { Fe: 8, Cu: 5, Si: 3, electronics: 3, microcircuits: 2, power_cells: 1 },
-    baseTime:    1.0,
-    weight:      3.5,
-    isDroidUnit: true, droidTier: 1,
-    description: 'Prosta jednostka automatyzacyjna — obsadza slot w budynku, +40% produkcji',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  // ── Prefabrykaty (Tier 2) — deployowane z cargo na kolonie ─────────────────
-
-  prefab_mine: {
-    id:          'prefab_mine',
-    namePL:      'Prefab: Kopalnia',
-    icon:        '📦⛏',
-    tier:        2,
-    recipe:      { Fe: 25, C: 12, W: 3, Ti: 3 },
-    baseTime:    0.15,
-    weight:      40.0,
-    isPrefab:    true,
-    deploysBuilding: 'mine',
-    description: 'Prefabrykowana kopalnia — natychmiastowy deploy z cargo',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  prefab_solar_farm: {
-    id:          'prefab_solar_farm',
-    namePL:      'Prefab: Elektrownia Słoneczna',
-    icon:        '📦☀',
-    tier:        2,
-    recipe:      { Si: 18, Cu: 8, Fe: 6 },
-    baseTime:    0.1,
-    weight:      25.0,
-    isPrefab:    true,
-    deploysBuilding: 'solar_farm',
-    description: 'Prefabrykowana elektrownia — natychmiastowy deploy z cargo',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  prefab_habitat: {
-    id:          'prefab_habitat',
-    namePL:      'Prefab: Habitat',
-    icon:        '📦🏠',
-    tier:        2,
-    recipe:      { Fe: 30, Ti: 8, Si: 12 },
-    baseTime:    0.2,
-    weight:      50.0,
-    isPrefab:    true,
-    deploysBuilding: 'habitat',
-    description: 'Prefabrykowany habitat — natychmiastowy deploy z cargo',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  prefab_autonomous_mine: {
-    id:          'prefab_autonomous_mine',
-    namePL:      'Prefab: Kopalnia Autonomiczna',
-    icon:        '📦🤖',
-    tier:        2,
-    recipe:      { Fe: 35, Cu: 10, Ti: 10, microcircuits: 2, power_cells: 2 },
-    baseTime:    0.25,
-    weight:      55.0,
-    isPrefab:    true,
-    deploysBuilding: 'autonomous_mine',
-    description: 'Prefabrykowana kopalnia autonomiczna — natychmiastowy deploy z cargo',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  prefab_autonomous_solar_farm: {
-    id:          'prefab_autonomous_solar_farm',
-    namePL:      'Prefab: Autonomiczna Elektrownia',
-    icon:        '📦🤖☀',
-    tier:        2,
-    recipe:      { Si: 22, Cu: 12, Ti: 6, Fe: 8, microcircuits: 2, power_cells: 1 },
-    baseTime:    0.2,
-    weight:      40.0,
-    isPrefab:    true,
-    deploysBuilding: 'autonomous_solar_farm',
-    description: 'Prefabrykowana autonomiczna elektrownia słoneczna — natychmiastowy deploy z cargo',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  prefab_spaceport: {
-    id:          'prefab_spaceport',
-    namePL:      'Prefab: Port Kosmiczny',
-    icon:        '📦🚀',
-    tier:        2,
-    recipe:      { Fe: 1200, Ti: 100, Cu: 300 },
-    baseTime:    0.5,
-    weight:      120.0,
-    isPrefab:    true,
-    deploysBuilding: 'launch_pad',
-    description: 'Prefabrykowany port kosmiczny — natychmiastowy deploy z cargo',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  prefab_autonomous_spaceport: {
-    id:          'prefab_autonomous_spaceport',
-    namePL:      'Prefab: Aut. Port Kosmiczny',
-    icon:        '📦🛰',
-    tier:        2,
-    recipe:      { Fe: 1000, Ti: 150, Cu: 300, Si: 200 },
-    baseTime:    0.5,
-    weight:      130.0,
-    isPrefab:    true,
-    deploysBuilding: 'autonomous_spaceport',
-    description: 'Prefabrykowany autonomiczny port kosmiczny — natychmiastowy deploy z cargo',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  // ── Dobra konsumpcyjne (Tier 1–2) ─────────────────────────────────────────
-
-  spare_parts: {
-    id:          'spare_parts',
-    namePL:      'Części Zamienne',
-    icon:        '🔩',
-    tier:        1,
-    recipe:      { Fe: 4, Cu: 2, C: 1 },
-    baseTime:    0.20,
-    weight:      2.0,
-    description: 'Filtry, uszczelki, przewody - utrzymują infrastrukturę',
-    isConsumerGood: true, consumptionLayer: 'functioning',
-  },
-
-  pharmaceuticals: {
-    id:          'pharmaceuticals',
-    namePL:      'Farmaceutyki',
-    icon:        '💊',
-    tier:        1,
-    recipe:      { C: 4, water: 2, Si: 1 },
-    baseTime:    0.25,
-    weight:      1.0,
-    description: 'Leki, środki higieny, antybiotyki',
-    isConsumerGood: true, consumptionLayer: 'functioning',
-  },
-
-  life_support_filters: {
-    id:          'life_support_filters',
-    namePL:      'Filtry Życiowe',
-    icon:        '🫁',
-    tier:        1,
-    recipe:      { Fe: 2, C: 3, Cu: 1 },
-    baseTime:    0.20,
-    weight:      1.5,
-    description: 'Systemy filtracji powietrza i oczyszczania',
-    isConsumerGood: true, consumptionLayer: 'functioning',
-  },
-
-  synthetics: {
-    id:          'synthetics',
-    namePL:      'Tworzywa',
-    icon:        '👕',
-    tier:        1,
-    recipe:      { C: 5, Si: 2 },
-    baseTime:    0.20,
-    weight:      1.5,
-    description: 'Ubrania, meble, naczynia - tworzywa codziennego użytku',
-    isConsumerGood: true, consumptionLayer: 'comfort',
-  },
-
-  personal_electronics: {
-    id:          'personal_electronics',
-    namePL:      'Elektronika Osobista',
-    icon:        '📱',
-    tier:        2,
-    recipe:      { Si: 4, Cu: 3, Li: 1 },
-    baseTime:    0.40,
-    weight:      1.0,
-    description: 'Komunikatory, rozrywka, urządzenia osobiste',
-    isConsumerGood: true, consumptionLayer: 'comfort',
-  },
-
-  gourmet_food: {
-    id:          'gourmet_food',
-    namePL:      'Żywność Premium',
-    icon:        '🍽️',
-    tier:        2,
-    recipe:      { food: 4, C: 2, water: 1 },
-    baseTime:    0.40,
-    weight:      2.0,
-    description: 'Przetworzona żywność z teksturą i smakiem',
-    isConsumerGood: true, consumptionLayer: 'luxury',
-  },
-
-  stimulants: {
-    id:          'stimulants',
-    namePL:      'Stymulatory',
-    icon:        '☕',
-    tier:        1,
-    recipe:      { C: 3, water: 1, Si: 1 },
-    baseTime:    0.30,
-    weight:      0.5,
-    description: 'Kawa syntetyczna, nootropiki, suplementy',
-    isConsumerGood: true, consumptionLayer: 'luxury',
-  },
-
-  // ── Tier 2 — nowe komponenty (Etap 38) ────────────────────────────────────
-
-  composite_alloy: {
-    id:          'composite_alloy',
-    namePL:      'Stop Kompozytowy',
-    icon:        '🔩',
-    tier:        2,
-    recipe:      { Ti: 6, Fe: 4, Cu: 3 },
-    baseTime:    0.5,
-    weight:      3.0,
-    description: 'Lekki, trwały stop — potrzebny do statków Gen II',
-    isConsumerGood: false, consumptionLayer: null,
-    requiresTech: 'advanced_materials',
-  },
-
-  bio_samples: {
-    id:          'bio_samples',
-    namePL:      'Próbki Biologiczne',
-    icon:        '🧫',
-    tier:        2,
-    recipe:      { C: 6, water: 4, food: 3 },
-    baseTime:    0.5,
-    weight:      1.0,
-    description: 'Materiał biologiczny do badań genetycznych i medycyny',
-    isConsumerGood: false, consumptionLayer: null,
-    requiresTech: 'genetic_engineering',
-  },
-
-  // ── Tier 3 — zaawansowana technologia ─────────────────────────────────────
-
-  semiconductors: {
-    id:          'semiconductors',
-    namePL:      'Półprzewodniki',
-    icon:        '🔬',
-    tier:        3,
-    recipe:      { Si: 10, Cu: 4, Pt: 3, Xe: 1 },
-    baseTime:    3.0,
-    weight:      0.5,
-    description: 'Ultra-czyste kryształy do zaawansowanej elektroniki',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  ion_thrusters: {
-    id:          'ion_thrusters',
-    namePL:      'Silniki Jonowe',
-    icon:        '🚀',
-    tier:        3,
-    recipe:      { Ti: 6, Xe: 4, Cu: 4, W: 3, Li: 2 },
-    baseTime:    3.0,
-    weight:      3.0,
-    description: 'Ksenonowe silniki jonowe — napęd statków dalekiego zasięgu',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  fusion_cores: {
-    id:          'fusion_cores',
-    namePL:      'Rdzenie Fuzyjne',
-    icon:        '🔆',
-    tier:        3,
-    recipe:      { Ti: 8, W: 6, Li: 4, Nt: 3 },
-    baseTime:    4.0,
-    weight:      4.0,
-    description: 'Reaktory termojądrowe — nieograniczone źródło energii',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  nanotech_filters: {
-    id:          'nanotech_filters',
-    namePL:      'Filtry Nanotechnologiczne',
-    icon:        '🌫',
-    tier:        3,
-    recipe:      { Si: 6, Pt: 4, Cu: 3, Nt: 1 },
-    baseTime:    3.0,
-    weight:      0.3,
-    description: 'Filtry nanotechnologiczne — oczyszczanie powietrza i wody, terraforming',
-    isConsumerGood: false, consumptionLayer: null,
-    requiresTech: 'nanofabrication',
-  },
-
-  power_cells_mk2: {
-    id:          'power_cells_mk2',
-    namePL:      'Ogniwa Zasilające Mk2',
-    icon:        '🔋⚡',
-    tier:        3,
-    recipe:      { Li: 8, Cu: 6, Si: 4, electronics: 2 },
-    baseTime:    1.5,
-    weight:      2.0,
-    description: 'Ogniwa nowej generacji — 2× pojemność, paliwo statków Gen II',
-    isConsumerGood: false, consumptionLayer: null,
-    requiresTech: 'battery_tech',
-  },
-
-  exotic_alloy: {
-    id:          'exotic_alloy',
-    namePL:      'Stop Egzotyczny',
-    icon:        '✨',
-    tier:        3,
-    recipe:      { Ti: 6, W: 4, Pt: 3, Xe: 2 },
-    baseTime:    3.0,
+    recipe:      { C: 8, water: 3, Cu: 3, Li: 1 },
+    baseTime:    0.375,
     weight:      2.5,
-    description: 'Zaawansowany stop z egzotycznych metali — statki Gen III+, budynki T4+',
+    description: 'Zamknięty system syntezy żywności i recyklingu biologicznego. ' +
+                 'Na księżycach bez gleby i powietrza to jedyna droga do jedzenia.',
     isConsumerGood: false, consumptionLayer: null,
-    requiresTech: 'exotic_materials',
   },
 
-  quantum_processors: {
-    id:          'quantum_processors',
-    namePL:      'Procesory Kwantowe',
-    icon:        '⚛💻',
-    tier:        3,
-    recipe:      { Si: 8, Pt: 4, Xe: 3, Nt: 2 },
-    baseTime:    4.0,
-    weight:      0.5,
-    description: 'Procesory kwantowe — AI Core, obliczenia kwantowe',
-    isConsumerGood: false, consumptionLayer: null,
-    requiresTech: 'quantum_physics',
-  },
+  // ══════════════════════════════════════════════════════════════════════════
+  // TIER 3 — Technologia Zaawansowana
+  // ══════════════════════════════════════════════════════════════════════════
 
   android_worker: {
     id:          'android_worker',
     namePL:      'Android Robotniczy',
     nameEN:      'Android Worker',
-    icon:        '🦾',
+    icon:        '🤖',
     tier:        3,
-    recipe:      { Fe: 8, Cu: 6, Si: 5, electronics: 5, semiconductors: 3, polymer_composites: 2 },
+    recipe:      { Fe: 8, Cu: 6, Si: 5, electronic_systems: 5, semiconductor_arrays: 3, polymer_composites: 2 },
     baseTime:    2.5,
     weight:      5.0,
-    isDroidUnit: true, droidTier: 2,
-    requiresTech: 'android_engineering',
-    description: 'Humanoidalny android — zajmuje pełny slot POP, +70% wydajności',
+    isDroidUnit:      true,
+    droidTier:        2,
+    efficiencyBonus:  0.70,   // +70% wydajności budynku, zajmuje pełny slot POP
+    requiresTech:     'android_engineering',
+    description: 'Humanoidalny android zdolny do złożonej pracy. ' +
+                 'Zajmuje pełny slot POP ale wydajność przekracza ludzką o 70%.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  ai_chips: {
-    id:          'ai_chips',
-    namePL:      'Chipy AI',
-    nameEN:      'AI Chips',
-    icon:        '🧠',
+  plasma_cores: {
+    id:          'plasma_cores',
+    namePL:      'Rdzenie Plazmatyczne',
+    nameEN:      'Plasma Cores',
+    icon:        '🔆',
     tier:        3,
-    recipe:      { semiconductors: 4, quantum_processors: 2, Pt: 4, Xe: 2 },
-    baseTime:    5.0,
-    weight:      0.3,
-    requiresTech: 'quantum_computing',
-    description: 'Procesory neuromorficzne — serce systemów sztucznej inteligencji',
-    isConsumerGood: false, consumptionLayer: null,
-  },
-
-  fusion_cells: {
-    id:          'fusion_cells',
-    namePL:      'Ogniwa Fuzyjne',
-    icon:        '🔆🔋',
-    tier:        3,
-    recipe:      { Li: 6, Ti: 4, fusion_cores: 1 },
+    recipe:      { Ti: 8, Hv: 6, Li: 4 },
     baseTime:    2.0,
-    weight:      2.5,
-    description: 'Ogniwa fuzyjne — paliwo statków Gen III',
+    weight:      4.0,
+    requiresTech: 'nuclear_power',
+    description: 'Reaktory plazmowe w skali przemysłowej. ' +
+                 'Serce elektrowni jądrowych i napędów statków Gen III.',
     isConsumerGood: false, consumptionLayer: null,
-    requiresTech: 'fusion_drives',
   },
 
-  superconductors: {
-    id:          'superconductors',
-    namePL:      'Nadprzewodniki',
-    icon:        '❄🔌',
+  semiconductor_arrays: {
+    id:          'semiconductor_arrays',
+    namePL:      'Układy Półprzewodnikowe',
+    nameEN:      'Semiconductor Arrays',
+    icon:        '🔬',
     tier:        3,
-    recipe:      { Pt: 6, Cu: 4, W: 3 },
+    recipe:      { Si: 10, Cu: 4, Hv: 2, Xe: 1 },
     baseTime:    3.0,
-    weight:      1.5,
-    description: 'Materiały nadprzewodzące — statki Gen IV, zaawansowana elektronika',
+    weight:      0.5,
+    requiresTech: 'basic_computing',
+    description: 'Ultra-czyste kryształy półprzewodnikowe produkowane w próżni. ' +
+                 'Bez nich nie ma zaawansowanej elektroniki ani AI.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  // ── Tier 4 — technologia przełomowa ───────────────────────────────────────
+  propulsion_systems: {
+    id:          'propulsion_systems',
+    namePL:      'Systemy Napędowe',
+    nameEN:      'Propulsion Systems',
+    icon:        '🚀',
+    tier:        3,
+    recipe:      { Ti: 6, Xe: 4, Hv: 3, Cu: 4, Li: 2 },
+    baseTime:    3.0,
+    weight:      3.0,
+    requiresTech: 'ion_drives',
+    description: 'Jonowe i plazmowe silniki do statków dalekiego zasięgu. ' +
+                 'Bez nich galaktyka kończy się za rogiem.',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
+  quantum_processors: {
+    id:          'quantum_processors',
+    namePL:      'Procesory Kwantowe',
+    nameEN:      'Quantum Processors',
+    icon:        '⚛',
+    tier:        3,
+    recipe:      { Si: 8, Hv: 4, Xe: 3, Nt: 2 },
+    baseTime:    4.0,
+    weight:      0.5,
+    requiresTech: 'quantum_computing',
+    description: 'Procesory kwantowe na bazie qbitów krzemowych. ' +
+                 'Klucz do sztucznej inteligencji i nawigacji warp.',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
+  metamaterials: {
+    id:          'metamaterials',
+    namePL:      'Metamateriały',
+    nameEN:      'Metamaterials',
+    icon:        '✨',
+    tier:        3,
+    recipe:      { Ti: 6, Hv: 5, Xe: 2, Si: 4 },
+    baseTime:    3.0,
+    weight:      2.5,
+    requiresTech: 'exotic_materials',
+    description: 'Stopy o właściwościach niemożliwych w naturze — ' +
+                 'ujemny współczynnik załamania, zerowa rezystancja. ' +
+                 'Statki Gen IV i bramy skokowe są z nich zbudowane.',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TIER 4 — Technologia Przełomowa
+  // ══════════════════════════════════════════════════════════════════════════
 
   quantum_cores: {
     id:          'quantum_cores',
     namePL:      'Rdzenie Kwantowe',
-    icon:        '⚛',
+    nameEN:      'Quantum Cores',
+    icon:        '🌟',
     tier:        4,
-    recipe:      { Si: 6, Nt: 4, Pt: 4, Xe: 3, Ti: 2, Li: 2 },
-    baseTime:    6.0,
+    recipe:      { Si: 6, Nt: 4, Hv: 4, Xe: 3, Ti: 2, Li: 2 },
+    baseTime:    8.0,
     weight:      1.0,
-    description: 'Procesory kwantowe — klucz do teleportacji i FTL',
+    requiresTech: 'quantum_computing',
+    description: 'Procesory następnej generacji — qbity utrzymują koherencję latami. ' +
+                 'Każdy kosztuje dziesięć lat wysiłku cywilizacji.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
   antimatter_cells: {
     id:          'antimatter_cells',
     namePL:      'Ogniwa Antymaterii',
-    icon:        '💫',
+    nameEN:      'Antimatter Cells',
+    icon:        '☢',
     tier:        4,
-    recipe:      { Nt: 4, Xe: 4, Pt: 3, Li: 2 },
-    baseTime:    7.5,
-    weight:      0.5,
-    description: 'Ogniwa antymaterii — paliwo statków Gen IV i mega-źródło energii',
-    isConsumerGood: false, consumptionLayer: null,
-    requiresTech: 'antimatter_containment',
-  },
-
-  ai_collective_node: {
-    id:          'ai_collective_node',
-    namePL:      'Węzeł AI Collective',
-    nameEN:      'AI Collective Node',
-    icon:        '🌐',
-    tier:        4,
-    recipe:      { ai_chips: 5, quantum_processors: 3, electronics: 10, semiconductors: 8, exotic_alloy: 2 },
+    recipe:      { Nt: 4, Xe: 4, Hv: 3, Li: 2 },
     baseTime:    8.0,
-    weight:      2.0,
-    isDroidUnit: true, droidTier: 3,
-    requiresTech: 'artificial_intelligence',
-    description: 'Kolektyw AI — superinteligentna sieć. Produkcja ×2.5, ale egzystencjalne napięcia',
+    weight:      0.5,
+    requiresTech: 'antimatter_containment',
+    description: 'Magnetyczne pułapki utrzymujące antymaterię w separacji od materii. ' +
+                 'Jeden błąd w polu magnetycznym — i nie ma niczego w pobliżu.',
     isConsumerGood: false, consumptionLayer: null,
   },
 
-  // ── Tier 5 — technologia endgame ─────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // TIER 5 — Endgame
+  // ══════════════════════════════════════════════════════════════════════════
 
   warp_cores: {
     id:          'warp_cores',
     namePL:      'Rdzenie Warp',
+    nameEN:      'Warp Cores',
     icon:        '🌀',
     tier:        5,
     recipe:      { quantum_cores: 2, antimatter_cells: 2, Ti: 8 },
-    baseTime:    10.0,
+    baseTime:    12.0,
     weight:      3.0,
-    description: 'Rdzenie napędu skokowego — paliwo statków Gen V',
-    isConsumerGood: false, consumptionLayer: null,
     requiresTech: 'warp_drive',
+    description: 'Zakrzywiacze czasoprzestrzeni w skali statkowej. ' +
+                 'Kto je posiada, może dosięgnąć gwiazd.',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DOBRA KONSUMPCYJNE (3 towary)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  basic_supplies: {
+    id:          'basic_supplies',
+    namePL:      'Zaopatrzenie Bytowe',
+    nameEN:      'Basic Supplies',
+    icon:        '🔩',
+    tier:        1,
+    recipe:      { Fe: 3, C: 3, Cu: 1 },
+    baseTime:    0.20,
+    weight:      2.0,
+    isConsumerGood: true, consumptionLayer: 'functioning',
+    description: 'Filtry, leki, uszczelki, narzędzia. Wszystko co sprawia że kolonia ' +
+                 'działa kolejny tydzień zamiast się rozpadać.',
+  },
+
+  civilian_goods: {
+    id:          'civilian_goods',
+    namePL:      'Dobra Cywilizacyjne',
+    nameEN:      'Civilian Goods',
+    icon:        '👕',
+    tier:        1,
+    recipe:      { C: 4, Si: 3, Li: 1 },
+    baseTime:    0.25,
+    weight:      1.5,
+    isConsumerGood: true, consumptionLayer: 'comfort',
+    description: 'Ubrania syntetyczne, komunikatory, przetworzona żywność. ' +
+                 'Rzeczy które odróżniają kolonię od obozu przetrwania.',
+  },
+
+  neurostimulants: {
+    id:          'neurostimulants',
+    namePL:      'Neurostymulatory',
+    nameEN:      'Neurostimulants',
+    icon:        '💊',
+    tier:        2,
+    recipe:      { Li: 3, C: 2, water: 1 },
+    baseTime:    0.30,
+    weight:      0.5,
+    isConsumerGood: true, consumptionLayer: 'luxury',
+    requiresTech: 'hydroponics',
+    description: 'Nootropiki, stabilizatory nastroju i suplementy kognitywne. ' +
+                 'Izolacja kosmiczna robi coś z ludzkim umysłem — opóźniają to co nieodwracalne.',
+    bonuses: {
+      scientist_research: 0.05,   // +5% research dla Naukowców
+      bureaucrat_loyalty: 0.10,   // +10% loyalty dla Urzędników
+    },
   },
 };
 
-// ── Krótkie nazwy PL do UI ────────────────────────────────────────────────
-export const COMMODITY_SHORT = {
-  steel_plates:       'Stal',
-  polymer_composites: 'Polimery',
-  concrete_mix:       'Beton',
-  copper_wiring:      'Kablowanie',
-  power_cells:        'Ogniwa',
-  electronics:        'Elektron.',
-  food_synthesizers:  'Synt.żyw.',
-  mining_drills:      'Wiertła',
-  hull_armor:         'Pancerz',
-  habitat_modules:    'Hab.moduły',
-  water_recyclers:    'Recykl.wody',
-  microcircuits:      'Mikrobw.',
-  automation_droid:   'Droid aut.',
-  prefab_mine:        'Pref.Kop.',
-  prefab_solar_farm:  'Pref.Sol.',
-  prefab_habitat:     'Pref.Hab.',
-  prefab_autonomous_mine: 'Pref.A.Kop.',
-  prefab_autonomous_solar_farm: 'Pref.A.Sol.',
-  prefab_spaceport:             'Pref.Port',
-  prefab_autonomous_spaceport:  'Pref.A.Port',
-  spare_parts:        'Cz.zamien.',
-  pharmaceuticals:    'Farmaceut.',
-  life_support_filters: 'Filtry żyć.',
-  synthetics:         'Tworzywa',
-  personal_electronics: 'El.osobista',
-  gourmet_food:       'Żywn.prem.',
-  stimulants:         'Stymulat.',
-  semiconductors:     'Półprzew.',
-  ion_thrusters:      'Sil.jon.',
-  fusion_cores:       'Rdz.fuzji',
-  nanotech_filters:   'Nanofiltr.',
-  quantum_cores:      'Rdzenie Q',
-  antimatter_cells:   'Antymat.',
-  composite_alloy:    'St.komp.',
-  bio_samples:        'Próbki bio',
-  power_cells_mk2:    'Ogniwa Mk2',
-  exotic_alloy:       'St.egzot.',
-  quantum_processors: 'Proc.Q',
-  fusion_cells:       'Ogn.fuz.',
-  superconductors:    'Nadprzew.',
-  android_worker:     'Android',
-  ai_chips:           'Chipy AI',
-  ai_collective_node: 'Węzeł AI',
-  warp_cores:         'Rdz.warp',
-};
-
-// ── Pomocniki ───────────────────────────────────────────────────────────────
-
-// Lista commodity IDs pogrupowana wg tieru
-export const COMMODITY_BY_TIER = {
-  1: ['steel_plates', 'polymer_composites', 'concrete_mix', 'copper_wiring',
-      'spare_parts', 'pharmaceuticals', 'life_support_filters', 'synthetics', 'stimulants'],
-  2: ['power_cells', 'electronics', 'food_synthesizers', 'mining_drills', 'hull_armor',
-      'habitat_modules', 'water_recyclers', 'microcircuits', 'automation_droid',
-      'prefab_mine', 'prefab_solar_farm', 'prefab_habitat', 'prefab_autonomous_mine',
-      'prefab_autonomous_solar_farm', 'prefab_spaceport', 'prefab_autonomous_spaceport',
-      'personal_electronics', 'gourmet_food',
-      'composite_alloy', 'bio_samples'],
-  3: ['semiconductors', 'ion_thrusters', 'fusion_cores', 'nanotech_filters',
-      'power_cells_mk2', 'exotic_alloy', 'quantum_processors', 'android_worker', 'ai_chips',
-      'fusion_cells', 'superconductors'],
-  4: ['quantum_cores', 'antimatter_cells', 'ai_collective_node'],
-  5: ['warp_cores'],
-};
-
-// Formatuj recepturę jako czytelny string
-// np. { Fe: 8, C: 4 } → "8 Fe + 4 C"
-export function formatRecipe(recipe) {
-  return Object.entries(recipe)
-    .map(([res, qty]) => `${qty} ${res}`)
-    .join(' + ');
+// ── Skrócone nazwy (PL) — do UI topbar ────────────────────────────────────
+export const COMMODITY_SHORT = {};
+for (const [id, def] of Object.entries(COMMODITIES)) {
+  COMMODITY_SHORT[id] = def.namePL;
 }
 
-// Zasoby startowe (commodities) dla nowych gier
-export const STARTING_COMMODITIES = {
-  steel_plates:       15,
-  polymer_composites: 10,
-  concrete_mix:       8,
-  copper_wiring:      8,
-  power_cells:        12,
-  electronics:        6,
-  food_synthesizers:  3,
-  mining_drills:      5,
-  hull_armor:         4,
-  habitat_modules:    4,
-  water_recyclers:    3,
-  microcircuits:      0,
-  automation_droid:   0,
-  prefab_mine:        0,
-  prefab_solar_farm:  0,
-  prefab_habitat:     0,
-  prefab_autonomous_mine: 0,
-  prefab_autonomous_solar_farm: 0,
-  prefab_spaceport:             0,
-  prefab_autonomous_spaceport:  0,
-  spare_parts:        0,
-  pharmaceuticals:    0,
-  life_support_filters: 0,
-  synthetics:         0,
-  personal_electronics: 0,
-  gourmet_food:       0,
-  stimulants:         0,
-  semiconductors:     0,
-  ion_thrusters:      0,
-  fusion_cores:       0,
-  nanotech_filters:   0,
-  quantum_cores:      0,
-  antimatter_cells:   0,
-  composite_alloy:    0,
-  bio_samples:        0,
-  power_cells_mk2:    0,
-  exotic_alloy:       0,
-  quantum_processors: 0,
-  fusion_cells:       0,
-  superconductors:    0,
-  android_worker:     0,
-  ai_chips:           0,
-  ai_collective_node: 0,
-  warp_cores:         0,
-};
+// ── Towary wg tierów — do menu produkcji ──────────────────────────────────
+export const COMMODITY_BY_TIER = {};
+for (const [id, def] of Object.entries(COMMODITIES)) {
+  const t = def.tier;
+  if (!COMMODITY_BY_TIER[t]) COMMODITY_BY_TIER[t] = [];
+  COMMODITY_BY_TIER[t].push(id);
+}
+
+// ── Startowy stan magazynu towarów (nowa kolonia) ─────────────────────────
+export const STARTING_COMMODITIES = {};
+for (const id of Object.keys(COMMODITIES)) {
+  STARTING_COMMODITIES[id] = 0;
+}
+
+// ── Pomocnik: formatuj recepturę jako string ──────────────────────────────
+export function formatRecipe(recipe) {
+  if (!recipe) return '';
+  return Object.entries(recipe)
+    .map(([id, qty]) => {
+      // Sprawdź czy to surowiec
+      const res = MINED_RESOURCES[id] || HARVESTED_RESOURCES[id];
+      if (res) return `${res.symbol ?? id}×${qty}`;
+      // Sprawdź czy to towar
+      const com = COMMODITIES[id];
+      if (com) return `${com.icon ?? id}×${qty}`;
+      return `${id}×${qty}`;
+    })
+    .join(' ');
+}

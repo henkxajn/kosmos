@@ -1,7 +1,7 @@
 // ResourcesData — definicje 10 surowców wydobywalnych + 2 zbieralnych + 2 utility
 //
 // 4 kategorie zasobów:
-//   MINED (10)      — z kopalni, zależy od złóż na ciele niebieskim
+//   MINED (9)       — z kopalni, zależy od złóż na ciele niebieskim
 //   HARVESTED (2)   — z farm/studni, NIE kopane
 //   COMMODITIES     → patrz CommoditiesData.js
 //   UTILITY (2)     — flow (energia) / accumulator (nauka), nie w inventory
@@ -18,10 +18,9 @@ export const MINED_RESOURCES = {
   Cu: { id: 'Cu', namePL: 'Miedź',        icon: '🟤', symbol: 'Cu', rarity: 2, weight: 1.8, element: 'Cu', color: '#cc7744' },
   Ti: { id: 'Ti', namePL: 'Tytan',        icon: '⬜', symbol: 'Ti', rarity: 3, weight: 2.2, element: 'Ti', color: '#aabbcc' },
   Li: { id: 'Li', namePL: 'Lit',          icon: '🔋', symbol: 'Li', rarity: 3, weight: 0.8, element: 'Li', color: '#88aadd' },
-  W:  { id: 'W',  namePL: 'Wolfram',      icon: '⚙',  symbol: 'W',  rarity: 4, weight: 3.0, element: 'W',  color: '#6677aa' },
-  Pt: { id: 'Pt', namePL: 'Platyna',      icon: '✨', symbol: 'Pt', rarity: 4, weight: 2.5, element: 'Pt', color: '#ccddee' },
+  Hv: { id: 'Hv', namePL: 'Metale Ciężkie', nameEN: 'Heavy Metals', icon: '⚙', symbol: 'Hv', rarity: 4, weight: 2.8, element: 'Hv', color: '#8899bb' },
   Xe: { id: 'Xe', namePL: 'Ksenon',       icon: '💜', symbol: 'Xe', rarity: 5, weight: 0.1, element: 'Xe', color: '#9966cc' },
-  Nt: { id: 'Nt', namePL: 'Neutronium',   icon: '⚛',  symbol: 'Nt', rarity: 5, weight: 5.0, element: 'Nt', color: '#ff44aa' },
+  Nt: { id: 'Nt', namePL: 'Neutronium',   icon: '⚛',  symbol: 'Nt', rarity: 5, weight: 5.0, element: 'Nt', color: '#ff44aa', maxRichness: 0.3, missionReward: true },
 };
 
 // ── 2 surowce zbieralne (HARVESTED) ────────────────────────────────────────
