@@ -73,7 +73,6 @@ export const TECHS = {
     requires:    [],
     effects: [
       { type: 'unlockBuilding', buildingId: 'factory' },
-      { type: 'unlockBuilding', buildingId: 'consumer_factory' },
     ],
     description: 'Wytop metali i produkcja komponentów — odblokowanie Fabryki',
   },

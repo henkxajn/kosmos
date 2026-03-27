@@ -718,7 +718,6 @@ export class GameScene {
       { id: 'nuclear_plant',         level: 3,  count: 1 },
       { id: 'fusion_reactor',        level: 3,  count: 1 },
       // Przemysł
-      { id: 'consumer_factory',      level: 3,  count: 1 },
       { id: 'smelter',               level: 3,  count: 1 },
       { id: 'antimatter_factory',    level: 1,  count: 1 },
       // Autonomiczne

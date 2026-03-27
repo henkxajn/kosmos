@@ -255,37 +255,6 @@ export const BUILDINGS = {
     popType:     'worker',
   },
 
-  // ── Fabryka konsumpcyjna (produkuje dobra konsumpcyjne) ───────────────────
-
-  consumer_factory: {
-    id:          'consumer_factory',
-    namePL:      'Fabryka Konsumpcyjna',
-    category:    'mining',
-    icon:        '🏪',
-    description: 'Produkuje dobra konsumpcyjne dla populacji.',
-    cost:        { Fe: 35, Cu: 10, Si: 8, Ti: 5 },
-    commodityCost: {
-      structural_alloys: 5,
-      electronic_systems: 3,
-      conductor_bundles: 2,
-      polymer_composites: 2,
-    },
-    energyCost:  8,
-    buildTime:   0.5,
-    rates:       {},       // produkcja via FactorySystem, nie rates
-    maintenance: { Fe: 2, Cu: 1 },
-    housing:     0,
-    popCost:     0.5,
-    maxLevel:    10,
-    capacityBonus: null,
-    terrainOnly: null,
-    terrainAny:  false,
-    requires:    'metallurgy',
-    allowedTerrain: ['plains', 'desert', 'tundra', 'volcanic', 'mesa', 'ice'],
-    isAutonomous: false,
-    popType:     'worker',
-  },
-
   // ── Zaawansowane (wymagają technologii) ──────────────────────────────────
 
   smelter: {

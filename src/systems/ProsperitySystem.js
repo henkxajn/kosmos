@@ -473,18 +473,9 @@ export class ProsperitySystem {
   }
 
   _getTotalCFP() {
-    // Suma levelów WSZYSTKICH consumer_factory w kolonii
-    // Analogicznie do _getShipyardLevel w ColonyManager
-    const bSys = this._getBuildingSystem();
-    if (!bSys?._active) return 0;
-
-    let totalCFP = 0;
-    for (const entry of bSys._active.values()) {
-      if (entry.building.id === 'consumer_factory') {
-        totalCFP += entry.level ?? 1;
-      }
-    }
-    return totalCFP;
+    // Consumer factory usunięta — produkcja consumer goods via FactorySystem (tryb reaktywny/priorytetowy)
+    // Metoda zachowana dla kompatybilności — zawsze zwraca 0
+    return 0;
   }
 
   _getBuildingSystem() {

@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 32;
+export const CURRENT_VERSION     = 33;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -47,6 +47,7 @@ const MIGRATIONS = {
   29: _migrateV29toV30,
   30: _migrateV30toV31,
   31: _migrateV31toV32,
+  32: _migrateV32toV33,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -958,6 +959,40 @@ function _migrateV31toV32(data) {
     if (!col.factory.customTemplates) col.factory.customTemplates = [];
     if (!col.factory.reactiveSourceOrder) {
       col.factory.reactiveSourceOrder = ['build', 'fuel', 'consumption', 'trade', 'safety'];
+    }
+  }
+
+  return data;
+}
+
+// ── Migracja v32 → v33 ────────────────────────────────────────────────────────
+// Usunięcie consumer_factory — konwersja na factory
+function _migrateV32toV33(data) {
+  const colonies = data.civ4x?.colonies;
+  if (!colonies) return data;
+
+  for (const col of colonies) {
+    if (!col.buildings) continue;
+    for (const b of col.buildings) {
+      if (b.buildingId === 'consumer_factory') {
+        b.buildingId = 'factory';
+      }
+    }
+    // Konwersja w constructionQueue
+    if (col.constructionQueue) {
+      for (const entry of Object.values(col.constructionQueue)) {
+        if (entry.buildingId === 'consumer_factory') {
+          entry.buildingId = 'factory';
+        }
+      }
+    }
+    // Konwersja w pendingQueue
+    if (col.pendingQueue) {
+      for (const entry of Object.values(col.pendingQueue)) {
+        if (entry.buildingId === 'consumer_factory') {
+          entry.buildingId = 'factory';
+        }
+      }
     }
   }
 

@@ -216,7 +216,7 @@ export class BuildingSystem {
     let total = 0, producing = 0;
     for (const entry of this._active.values()) {
       const id = entry.building?.id;
-      if (id === 'factory' || id === 'consumer_factory') {
+      if (id === 'factory') {
         total++;
         producing++;
       }
