@@ -1758,26 +1758,26 @@ export class FleetTabPanel {
     }
 
     // Przycisk Dalej → (wymaga co najmniej 1 silnika)
+    // Zawsze rysuj na dole panelu (sticky footer) — nie chowaj gdy brakuje miejsca
     const hasEngine = this._designModules.some(id => SHIP_MODULES[id]?.slotType === 'propulsion');
     const nextBtnH = 20;
-    if (cy < maxY - nextBtnH - 4) {
-      const nbx = x + PAD;
-      const nbw = w - PAD * 2;
-      ctx.fillStyle = hasEngine ? 'rgba(20,50,40,0.8)' : 'rgba(20,20,30,0.5)';
-      ctx.fillRect(nbx, cy, nbw, nextBtnH);
-      ctx.strokeStyle = hasEngine ? C.green : C.border;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(nbx, cy, nbw, nextBtnH);
-      ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = hasEngine ? C.green : C.dim;
-      ctx.textAlign = 'center';
-      ctx.fillText(hasEngine ? t('fleet.designNext') : t('fleet.designNeedEngine'), nbx + nbw / 2, cy + 13);
-      ctx.textAlign = 'left';
-      if (hasEngine) {
-        this._hitZones.push({ x: nbx, y: cy, w: nbw, h: nextBtnH, type: 'design_next', data: {} });
-      }
-      cy += nextBtnH + 4;
+    const btnY = Math.max(cy, maxY - nextBtnH - 4);
+    const nbx = x + PAD;
+    const nbw = w - PAD * 2;
+    ctx.fillStyle = hasEngine ? 'rgba(20,50,40,0.8)' : 'rgba(20,20,30,0.5)';
+    ctx.fillRect(nbx, btnY, nbw, nextBtnH);
+    ctx.strokeStyle = hasEngine ? C.green : C.border;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(nbx, btnY, nbw, nextBtnH);
+    ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = hasEngine ? C.green : C.dim;
+    ctx.textAlign = 'center';
+    ctx.fillText(hasEngine ? t('fleet.designNext') : t('fleet.designNeedEngine'), nbx + nbw / 2, btnY + 13);
+    ctx.textAlign = 'left';
+    if (hasEngine) {
+      this._hitZones.push({ x: nbx, y: btnY, w: nbw, h: nextBtnH, type: 'design_next', data: {} });
     }
+    cy = btnY + nextBtnH + 4;
 
     return cy;
   }

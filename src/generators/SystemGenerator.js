@@ -687,6 +687,13 @@ export class SystemGenerator {
       bestPlanet.atmosphere = 'breathable';
       bestPlanet.breathableAtmosphere = true;
     }
+    // Gwarancja minimalnego Ti w composition — żeby gracz nie utknął bez tego surowca
+    if (bestPlanet.composition) {
+      if ((bestPlanet.composition.Ti ?? 0) < 0.08) {
+        bestPlanet.composition.Ti = 0.08; // 8% — tuż nad progiem złoża (5%)
+      }
+    }
+
     // Defensywne: dodaj surfaceRadius/surfaceGravity jeśli brakuje
     if (!bestPlanet.surfaceRadius) {
       bestPlanet.surfaceRadius = this.calcSurfaceRadius(bestPlanet.physics.mass, bestPlanet.planetType);
@@ -759,6 +766,10 @@ export class SystemGenerator {
     }
     if (!bestPlanet.surfaceGravity) {
       bestPlanet.surfaceGravity = this.calcSurfaceGravity(bestPlanet.physics.mass, bestPlanet.surfaceRadius);
+    }
+    // Gwarancja minimalnego Ti w composition (POWER TEST)
+    if (bestPlanet.composition && (bestPlanet.composition.Ti ?? 0) < 0.08) {
+      bestPlanet.composition.Ti = 0.08;
     }
 
     window.KOSMOS.scenario = 'power_test';  // POWER TEST

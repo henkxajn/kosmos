@@ -10,6 +10,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES, ALL_RESOURCES }
                          from '../data/ResourcesData.js';
 import { COMMODITIES, formatRecipe, COMMODITY_BY_TIER }
                          from '../data/CommoditiesData.js';
+import { PRIORITY_TEMPLATES } from '../systems/FactorySystem.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import { t, getName }    from '../i18n/i18n.js';
@@ -56,6 +57,10 @@ export class EconomyOverlay extends BaseOverlay {
     this._selectedColonyId = null; // null = globalny, string = konkretna kolonia
     this._scrollCenterTop = 0;     // scroll przeglądu produkcji
     this._scrollCenterBot = 0;     // scroll zarządzania produkcją
+
+    // Tryby fabryki — panele modalne
+    this._showAddPriority = false; // panel dodawania towaru do listy priorytetów
+    this._showTemplates = false;   // panel szablonów
 
     // Tooltip DOM (hover na wierszach surowców/towarów)
     this._hoverResourceId = null;
@@ -720,7 +725,7 @@ export class EconomyOverlay extends BaseOverlay {
 
     let ry = y - this._scrollCenterBot + 4;
 
-    // ── Nagłówek zarządzania ──────────────────────────────
+    // ── Nagłówek + FP ──────────────────────────────────────
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
     ctx.fillText(t('econPanel.managementHeader'), x + pad, ry + 12);
@@ -729,7 +734,68 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.fillText(t('econPanel.fpFree', fs.freePoints, fs.totalPoints), x + pad + 160, ry + 12);
     ry += 20;
 
-    // ── Aktywne alokacje z przyciskami ────────────────────
+    // ── Pasek trybów [Manual] [Priorytet] [Reaktywny] ────
+    ry = this._drawModeBar(ctx, x + pad, ry, w - pad * 2, fs, colony);
+    ry += 4;
+
+    // ── Zawartość wg trybu ──────────────────────────────────
+    const mode = fs.mode ?? 'manual';
+    if (mode === 'manual') {
+      ry = this._drawManualMode(ctx, x, ry, w, colony, fs);
+    } else if (mode === 'priority') {
+      ry = this._drawPriorityMode(ctx, x, ry, w, colony, fs);
+    } else if (mode === 'reactive') {
+      ry = this._drawReactiveMode(ctx, x, ry, w, colony, fs);
+    }
+
+    ctx.restore();
+  }
+
+  // ── Pasek przełączania trybów ──────────────────────────────────────────────
+
+  _drawModeBar(ctx, x, y, w, fs, colony) {
+    const mode = fs.mode ?? 'manual';
+    const modes = [
+      { id: 'manual',   label: t('econPanel.modeManual') },
+      { id: 'priority', label: t('econPanel.modePriority') },
+      { id: 'reactive', label: t('econPanel.modeReactive') },
+    ];
+
+    const btnW = Math.floor((w - 8) / 3);
+    let bx = x;
+
+    for (const m of modes) {
+      const active = mode === m.id;
+      ctx.fillStyle = active ? 'rgba(0,255,180,0.14)' : 'rgba(0,255,180,0.03)';
+      ctx.fillRect(bx, y, btnW, 18);
+      ctx.strokeStyle = active ? THEME.accent : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, y, btnW, 18);
+
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
+      ctx.textAlign = 'center';
+      ctx.fillText(m.label, bx + btnW / 2, y + 13);
+      ctx.textAlign = 'left';
+
+      this._addHit(bx, y, btnW, 18, 'factory_btn', {
+        action: 'setMode', colonyId: colony.planetId, mode: m.id,
+        label: m.label, x: bx,
+      });
+      bx += btnW + 4;
+    }
+
+    return y + 22;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TRYB MANUALNY (istniejący system)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _drawManualMode(ctx, x, ry, w, colony, fs) {
+    const pad = 14;
+
+    // Aktywne alokacje z przyciskami
     const allocs = fs.getAllocations();
     if (allocs.length > 0) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -742,7 +808,7 @@ export class EconomyOverlay extends BaseOverlay {
       }
     }
 
-    // ── Kolejka z reorderem ───────────────────────────────
+    // Kolejka z reorderem
     const queue = fs.getQueue();
     if (queue.length > 0) {
       ry += 4;
@@ -756,7 +822,7 @@ export class EconomyOverlay extends BaseOverlay {
       }
     }
 
-    // ── Dostępne towary do uruchomienia ───────────────────
+    // Dostępne towary do uruchomienia
     ry += 6;
     ctx.strokeStyle = THEME.border;
     ctx.beginPath();
@@ -771,8 +837,466 @@ export class EconomyOverlay extends BaseOverlay {
     ry += 14;
 
     ry = this._drawAddProduction(ctx, x + pad, ry, w - pad * 2, colony);
+    return ry;
+  }
 
-    ctx.restore();
+  // ══════════════════════════════════════════════════════════════════════════
+  // TRYB PRIORYTETOWY — lista celów zapasowych + auto-łańcuch
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _drawPriorityMode(ctx, x, ry, w, colony, fs) {
+    const pad = 14;
+    const list = fs.priorityList;
+    const colId = colony.planetId;
+
+    // Nagłówek
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('econPanel.priorityHeader'), x + pad, ry + 10);
+
+    // Przyciski: [Szablony] [Wyczyść] [Zapisz]
+    let btnX = x + w - pad;
+
+    // [Zapisz szablon]
+    const saveW = 42;
+    btnX -= saveW;
+    this._drawSmallBtnWide(ctx, btnX, ry - 2, saveW, t('econPanel.saveTemplate'), 'secondary');
+    this._addHit(btnX, ry - 2, saveW, BTN_S, 'factory_btn', {
+      action: 'saveCustomTemplate', colonyId: colId, label: t('econPanel.saveTemplate'), x: btnX,
+    });
+    btnX -= 4;
+
+    // [Wyczyść]
+    const clearW = 48;
+    btnX -= clearW;
+    this._drawSmallBtnWide(ctx, btnX, ry - 2, clearW, t('econPanel.clearList'), 'danger');
+    this._addHit(btnX, ry - 2, clearW, BTN_S, 'factory_btn', {
+      action: 'clearPriorityList', colonyId: colId, label: t('econPanel.clearList'), x: btnX,
+    });
+    btnX -= 4;
+
+    // [Szablony]
+    const tplW = 68;
+    btnX -= tplW;
+    this._drawSmallBtnWide(ctx, btnX, ry - 2, tplW, t('econPanel.templates'), 'unique');
+    this._addHit(btnX, ry - 2, tplW, BTN_S, 'factory_btn', {
+      action: 'toggleTemplates', colonyId: colId, label: t('econPanel.templates'), x: btnX,
+    });
+
+    ry += 18;
+
+    // Panel szablonów (toggle)
+    if (this._showTemplates) {
+      ry = this._drawTemplatePanel(ctx, x + pad, ry, w - pad * 2, fs, colId);
+    }
+
+    // Pusta lista
+    if (list.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.priorityNone'), x + pad, ry + 12);
+      ry += 20;
+    }
+
+    // Lista priorytetów
+    for (let i = 0; i < list.length; i++) {
+      ry = this._drawPriorityRow(ctx, x + pad, ry, w - pad * 2, list[i], i, list.length, fs, colId);
+    }
+
+    // [+ Dodaj towar]
+    ry += 4;
+    const addW = 100;
+    this._drawSmallBtnWide(ctx, x + pad, ry, addW, t('econPanel.addPriority'), 'primary');
+    this._addHit(x + pad, ry, addW, BTN_S, 'factory_btn', {
+      action: 'toggleAddPriority', colonyId: colId, label: t('econPanel.addPriority'), x: x + pad,
+    });
+    ry += 22;
+
+    // Panel dodawania towaru (toggle)
+    if (this._showAddPriority) {
+      ry = this._drawAddPriorityPanel(ctx, x + pad, ry, w - pad * 2, fs, colId);
+    }
+
+    // Auto-łańcuch
+    const chain = fs.autoChain;
+    if (chain.length > 0) {
+      ry += 4;
+      ctx.strokeStyle = THEME.border;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath();
+      ctx.moveTo(x + pad, ry);
+      ctx.lineTo(x + w - pad, ry);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ry += 6;
+
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.warning;
+      ctx.fillText(t('econPanel.autoChainHeader'), x + pad, ry + 10);
+      ry += 14;
+
+      for (const ch of chain) {
+        const def = COMMODITIES[ch.commodityId];
+        const forDef = COMMODITIES[ch.forCommodityId];
+        if (!def) continue;
+
+        ctx.fillStyle = THEME.textSecondary;
+        const label = `${def.icon} ${getName(def, 'commodity')} ×${ch.qty}`;
+        ctx.fillText(label, x + pad + 6, ry + 10);
+
+        if (forDef) {
+          ctx.fillStyle = THEME.textDim;
+          ctx.fillText(t('econPanel.autoChainFor', getName(forDef, 'commodity')), x + pad + 180, ry + 10);
+        }
+        ry += 16;
+      }
+    }
+
+    // Aktywne alokacje (read-only w trybie priorytetowym)
+    const allocs = fs.getAllocations();
+    if (allocs.length > 0) {
+      ry += 4;
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath();
+      ctx.moveTo(x + pad, ry);
+      ctx.lineTo(x + w - pad, ry);
+      ctx.stroke();
+      ry += 6;
+
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.activeLabel'), x + pad, ry + 10);
+      ry += 14;
+
+      for (const a of allocs) {
+        this._drawAllocRow(ctx, x + pad, ry, w - pad * 2, a, colony);
+        ry += 40;
+      }
+    }
+
+    return ry;
+  }
+
+  // Wiersz listy priorytetów: [≡] Icon Name  Zapas/Cel  [−][+][↑][↓][✕]
+  _drawPriorityRow(ctx, x, y, w, item, index, total, fs, colId) {
+    const def = COMMODITIES[item.commodityId];
+    if (!def) return y + MGMT_ROW_H;
+
+    const stock = fs.getStock?.(item.commodityId) ?? 0;
+    const deficit = Math.max(0, item.stockTarget - stock);
+    const isDone = deficit <= 0;
+
+    // Drag handle ≡
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText('≡', x, y + 14);
+
+    // Numer + ikona + nazwa
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = isDone ? THEME.textDim : THEME.textPrimary;
+    ctx.fillText(`${index + 1}. ${def.icon} ${getName(def, 'commodity')}`, x + 16, y + 12);
+
+    // Zapas / Cel
+    ctx.fillStyle = isDone ? THEME.success : (stock === 0 ? THEME.danger : THEME.warning);
+    ctx.fillText(`${stock}/${item.stockTarget}`, x + 170, y + 12);
+
+    if (isDone) {
+      ctx.fillStyle = THEME.success;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillText(t('econPanel.priorityDone'), x + 210, y + 12);
+    }
+
+    // Przyciski z prawej: [−cel] [+cel] [↑] [↓] [✕]
+    const btnY = y + 1;
+    let bx = x + w - (BTN_S + 2) * 5;
+
+    // [−] zmniejsz cel o 5
+    this._drawSmallBtn(ctx, bx, btnY, '−5', 'secondary');
+    this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
+      action: 'priority_target_minus', colonyId: colId, commodityId: item.commodityId,
+      label: '−5', x: bx,
+    });
+    bx += BTN_S + 2;
+
+    // [+] zwiększ cel o 5
+    this._drawSmallBtn(ctx, bx, btnY, '+5', 'unique');
+    this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
+      action: 'priority_target_plus', colonyId: colId, commodityId: item.commodityId,
+      label: '+5', x: bx,
+    });
+    bx += BTN_S + 2;
+
+    // [↑]
+    const canUp = index > 0;
+    this._drawSmallBtn(ctx, bx, btnY, '↑', canUp ? 'secondary' : 'disabled');
+    if (canUp) {
+      this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
+        action: 'priority_up', colonyId: colId, commodityId: item.commodityId,
+        fromIdx: index, label: '↑', x: bx,
+      });
+    }
+    bx += BTN_S + 2;
+
+    // [↓]
+    const canDown = index < total - 1;
+    this._drawSmallBtn(ctx, bx, btnY, '↓', canDown ? 'secondary' : 'disabled');
+    if (canDown) {
+      this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
+        action: 'priority_down', colonyId: colId, commodityId: item.commodityId,
+        fromIdx: index, label: '↓', x: bx,
+      });
+    }
+    bx += BTN_S + 2;
+
+    // [✕] usuń z listy
+    this._drawSmallBtn(ctx, bx, btnY, '✕', 'danger');
+    this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
+      action: 'priority_remove', colonyId: colId, commodityId: item.commodityId,
+      label: '✕', x: bx,
+    });
+
+    return y + MGMT_ROW_H;
+  }
+
+  // Panel dodawania towaru do priorytetów
+  _drawAddPriorityPanel(ctx, x, ry, w, fs, colId) {
+    ctx.fillStyle = 'rgba(0,255,180,0.04)';
+    ctx.fillRect(x, ry, w, 0); // dynamiczna wysokość
+
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('econPanel.selectCommodity'), x + 4, ry + 10);
+    ry += 14;
+
+    const existingIds = new Set(fs.priorityList.map(p => p.commodityId));
+
+    for (const tier of [1, 2, 3, 4, 5]) {
+      const ids = COMMODITY_BY_TIER[tier];
+      if (!ids) continue;
+      const available = ids.filter(id => !existingIds.has(id) && fs.isRecipeAvailable(id));
+      if (available.length === 0) continue;
+
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(`T${tier}`, x + 2, ry + 10);
+      ry += 12;
+
+      for (const cId of available) {
+        const def = COMMODITIES[cId];
+        if (!def) continue;
+
+        // [+] ikona nazwa
+        this._drawSmallBtn(ctx, x + 4, ry, '+', 'primary');
+        this._addHit(x + 4, ry, BTN_S, BTN_S, 'factory_btn', {
+          action: 'addPriority', colonyId: colId, commodityId: cId,
+          label: '+', x: x + 4,
+        });
+
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`${def.icon} ${getName(def, 'commodity')}`, x + 24, ry + 12);
+        ry += 16;
+      }
+    }
+    return ry;
+  }
+
+  // Panel szablonów
+  _drawTemplatePanel(ctx, x, ry, w, fs, colId) {
+    ctx.fillStyle = 'rgba(0,204,255,0.04)';
+    ctx.fillRect(x, ry, w, 0); // dynamiczna wysokość
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('econPanel.templateHeader'), x + 4, ry + 10);
+    ry += 14;
+
+    // Predefiniowane szablony
+    for (const [tplId, tpl] of Object.entries(PRIORITY_TEMPLATES)) {
+      const tplName = tpl.namePL ?? tpl.nameEN ?? tplId;
+      const label = `${tpl.icon} ${tplName}`;
+      const btnW = Math.min(ctx.measureText(label).width + 14, w);
+
+      this._drawSmallBtnWide(ctx, x + 4, ry, btnW, label, 'unique');
+      this._addHit(x + 4, ry, btnW, BTN_S, 'factory_btn', {
+        action: 'applyTemplate', colonyId: colId, templateId: tplId,
+        label, x: x + 4,
+      });
+      ry += 20;
+    }
+
+    // Custom szablony
+    const customs = fs.customTemplates;
+    if (customs.length > 0) {
+      ry += 4;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.templateCustom'), x + 4, ry + 10);
+      ry += 14;
+
+      for (let i = 0; i < customs.length; i++) {
+        const tpl = customs[i];
+        const label = `📄 ${tpl.name}`;
+        const btnW = Math.min(ctx.measureText(label).width + 14, w - 24);
+
+        this._drawSmallBtnWide(ctx, x + 4, ry, btnW, label, 'secondary');
+        this._addHit(x + 4, ry, btnW, BTN_S, 'factory_btn', {
+          action: 'applyTemplate', colonyId: colId, templateId: `custom_${i}`,
+          label, x: x + 4,
+        });
+
+        // [✕] usuń custom
+        this._drawSmallBtn(ctx, x + 4 + btnW + 4, ry, '✕', 'danger');
+        this._addHit(x + 4 + btnW + 4, ry, BTN_S, BTN_S, 'factory_btn', {
+          action: 'deleteCustomTemplate', colonyId: colId, index: i,
+          label: '✕', x: x + 4 + btnW + 4,
+        });
+        ry += 20;
+      }
+    }
+
+    ry += 4;
+    return ry;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TRYB REAKTYWNY — auto-detekcja zapotrzebowania (read-only)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _drawReactiveMode(ctx, x, ry, w, colony, fs) {
+    const pad = 14;
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('econPanel.reactiveHeader'), x + pad, ry + 10);
+    ry += 18;
+
+    const demand = fs.reactiveDemand;
+
+    if (demand.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.reactiveNoNeeds'), x + pad, ry + 12);
+      ry += 20;
+    } else {
+      // Nagłówki kolumn
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      const colW = w - pad * 2;
+      ctx.fillText('Źródło', x + pad, ry + 10);
+      ctx.fillText('Towar', x + pad + 100, ry + 10);
+      ctx.fillText('Potrzeba', x + pad + colW - 80, ry + 10);
+      ry += 14;
+
+      // Grupuj wg source
+      const sourceLabels = {
+        build: t('econPanel.reactiveSource.build'),
+        fuel: t('econPanel.reactiveSource.fuel'),
+        consumption: t('econPanel.reactiveSource.consumption'),
+        trade: t('econPanel.reactiveSource.trade'),
+        safety: t('econPanel.reactiveSource.safety'),
+      };
+
+      for (const d of demand) {
+        const def = COMMODITIES[d.commodityId];
+        if (!def) continue;
+
+        const srcLabel = sourceLabels[d.source] ?? d.source;
+        const stock = fs.getStock?.(d.commodityId) ?? 0;
+
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+
+        // Źródło
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(srcLabel, x + pad, ry + 10);
+
+        // Towar
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`${def.icon} ${getName(def, 'commodity')}`, x + pad + 100, ry + 10);
+
+        // Potrzeba (stock/need) — zaokrąglone
+        const stockR = Math.round(stock * 10) / 10;
+        const qtyR = Math.round(d.qty * 10) / 10;
+        const color = stock >= d.qty ? THEME.success : (stock > 0 ? THEME.warning : THEME.danger);
+        ctx.fillStyle = color;
+        ctx.fillText(`${stockR}/${qtyR}`, x + pad + colW - 80, ry + 10);
+        ry += 18;
+      }
+    }
+
+    // Idle FP
+    const idle = fs.freePoints;
+    if (idle > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.reactiveIdle', idle), x + pad, ry + 10);
+      ry += 14;
+    }
+
+    // Aktywne alokacje (read-only)
+    const allocs = fs.getAllocations();
+    if (allocs.length > 0) {
+      ry += 4;
+      ctx.strokeStyle = THEME.border;
+      ctx.beginPath();
+      ctx.moveTo(x + pad, ry);
+      ctx.lineTo(x + w - pad, ry);
+      ctx.stroke();
+      ry += 6;
+
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.activeLabel'), x + pad, ry + 10);
+      ry += 14;
+
+      for (const a of allocs) {
+        this._drawAllocRow(ctx, x + pad, ry, w - pad * 2, a, colony);
+        ry += 40;
+      }
+    }
+
+    return ry;
+  }
+
+  // ── Przycisk szeroki (do szablonów/dodaj) ──────────────────────────────────
+
+  _drawSmallBtnWide(ctx, bx, by, bw, label, style) {
+    const isHover = this._hoverZone?.data?.label === label &&
+                    this._hoverZone?.data?.x === bx;
+
+    let bgColor, borderColor, textColor;
+    switch (style) {
+      case 'primary':
+        bgColor = isHover ? 'rgba(0,255,180,0.15)' : 'rgba(0,255,180,0.05)';
+        borderColor = THEME.accent;
+        textColor = THEME.accent;
+        break;
+      case 'danger':
+        bgColor = isHover ? 'rgba(255,51,68,0.15)' : 'rgba(255,51,68,0.05)';
+        borderColor = THEME.danger;
+        textColor = THEME.danger;
+        break;
+      case 'unique':
+        bgColor = isHover ? 'rgba(0,204,255,0.15)' : 'rgba(0,204,255,0.05)';
+        borderColor = '#00ccff';
+        textColor = '#00ccff';
+        break;
+      default:
+        bgColor = isHover ? 'rgba(0,255,180,0.07)' : 'rgba(0,255,180,0.03)';
+        borderColor = THEME.border;
+        textColor = THEME.textSecondary;
+    }
+
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(bx, by, bw, BTN_S);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, bw, BTN_S);
+
+    ctx.font = `${BTN_S - 6}px ${THEME.fontFamily}`;
+    ctx.fillStyle = textColor;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, bx + bw / 2, by + BTN_S - 4);
+    ctx.textAlign = 'left';
   }
 
   // ── Wiersz alokacji z przyciskami [+][-][🎯][✕] ──────────────────────────
@@ -1067,59 +1591,97 @@ export class EconomyOverlay extends BaseOverlay {
     if (!fs) return;
 
     switch (data.action) {
+      // ── Przełączanie trybów ──────────────────────────
+      case 'setMode':
+        fs.setMode(data.mode);
+        this._showAddPriority = false;
+        this._showTemplates = false;
+        break;
+
+      // ── Tryb manualny ────────────────────────────────
       case 'allocate_plus': {
-        // Zwiększ o 1 FP
         const cur = fs.getAllocations().find(a => a.commodityId === data.commodityId);
         if (cur) fs.allocate(data.commodityId, cur.points + 1);
         break;
       }
       case 'allocate_minus': {
-        // Zmniejsz o 1 FP (min 0 = usuń)
         const cur = fs.getAllocations().find(a => a.commodityId === data.commodityId);
         if (cur) fs.allocate(data.commodityId, cur.points - 1);
         break;
       }
-      case 'allocate_new': {
-        // Nowa alokacja z 1 FP + domyślny target 10
+      case 'allocate_new':
         fs.allocate(data.commodityId, 1);
         fs.setTarget(data.commodityId, 10);
         break;
-      }
-      case 'allocate_remove': {
-        // Usuń alokację (0 FP)
+      case 'allocate_remove':
         fs.allocate(data.commodityId, 0);
         break;
-      }
       case 'setTarget': {
-        // Zwiększ cel o podaną ilość (+5/+10/+50)
         const cur = fs.getAllocations().find(a => a.commodityId === data.commodityId);
         const amt = data.amount ?? 10;
         const newTarget = (cur?.targetQty ?? 0) + amt;
         fs.setTarget(data.commodityId, newTarget);
         break;
       }
-      case 'clearTarget': {
-        // Wyczyść cel (nieskończona produkcja)
+      case 'clearTarget':
         fs.setTarget(data.commodityId, null);
         break;
-      }
-      case 'enqueue_new': {
-        // Dodaj 10 szt. do kolejki
+      case 'enqueue_new':
         fs.enqueue(data.commodityId, 10);
         break;
-      }
-      case 'dequeue': {
+      case 'dequeue':
         fs.dequeue(data.index);
         break;
-      }
-      case 'queueUp': {
+      case 'queueUp':
         fs.moveUp(data.index);
         break;
-      }
-      case 'queueDown': {
+      case 'queueDown':
         fs.moveDown(data.index);
         break;
-      }
+
+      // ── Tryb priorytetowy ────────────────────────────
+      case 'addPriority':
+        fs.addPriority(data.commodityId, 10);
+        this._showAddPriority = false;
+        break;
+      case 'priority_remove':
+        fs.removePriority(data.commodityId);
+        break;
+      case 'priority_up':
+        fs.reorderPriority(data.fromIdx, data.fromIdx - 1);
+        break;
+      case 'priority_down':
+        fs.reorderPriority(data.fromIdx, data.fromIdx + 1);
+        break;
+      case 'priority_target_plus':
+        fs.setPriorityTarget(data.commodityId, (fs.priorityList.find(p => p.commodityId === data.commodityId)?.stockTarget ?? 10) + 5);
+        break;
+      case 'priority_target_minus':
+        fs.setPriorityTarget(data.commodityId, (fs.priorityList.find(p => p.commodityId === data.commodityId)?.stockTarget ?? 10) - 5);
+        break;
+      case 'clearPriorityList':
+        while (fs.priorityList.length > 0) {
+          fs.removePriority(fs.priorityList[0].commodityId);
+        }
+        break;
+      case 'toggleAddPriority':
+        this._showAddPriority = !this._showAddPriority;
+        this._showTemplates = false;
+        break;
+      case 'toggleTemplates':
+        this._showTemplates = !this._showTemplates;
+        this._showAddPriority = false;
+        break;
+      case 'applyTemplate':
+        fs.applyTemplate(data.templateId);
+        this._showTemplates = false;
+        break;
+      case 'saveCustomTemplate':
+        fs.saveCustomTemplate(null);
+        break;
+      case 'deleteCustomTemplate':
+        fs.deleteCustomTemplate(data.index);
+        break;
     }
   }
 

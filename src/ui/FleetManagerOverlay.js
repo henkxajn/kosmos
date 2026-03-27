@@ -3115,40 +3115,40 @@ export class FleetManagerOverlay {
       // Sprawdź czy jest silnik
       const hasEngine = this._designModules.some(id => SHIP_MODULES[id]?.slotType === 'propulsion');
 
-      // Podgląd statystyk
-      if (cy < y + h - 60) {
-        cy += 4;
-        ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
-        cy += 6;
+      // Przycisk DALEJ / info o napędzie — zawsze na dole panelu (sticky)
+      const nextBtnH = 24;
+      const footerH = nextBtnH + 20; // przycisk + statystyki
+      const footerY = Math.max(cy + 4, y + h - footerH - 4);
 
+      // Statystyki (kompaktowe, nad przyciskiem)
+      if (this._designModules.length > 0) {
         const stats = calcShipStats(hull, this._designModules);
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)}  📦${stats.cargo}t  🎯${Math.round(stats.range)} AU`, x + PAD, cy + 8);
-        cy += LH;
-
-        // Przycisk DALEJ
-        if (hasEngine) {
-          const btnH = 24, bx = x + PAD, bw = w - PAD * 2;
-          ctx.fillStyle = 'rgba(0,255,180,0.15)';
-          ctx.fillRect(bx, cy, bw, btnH);
-          ctx.strokeStyle = THEME.accent;
-          ctx.strokeRect(bx, cy, bw, btnH);
-          ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.accent;
-          ctx.textAlign = 'center';
-          ctx.fillText('Dalej →', bx + bw / 2, cy + 16);
-          ctx.textAlign = 'left';
-          this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH, type: 'design_next', data: {} });
-          cy += btnH + 4;
-        } else {
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.warning;
-          ctx.fillText('⚠ Wybierz napęd!', x + PAD, cy + 8);
-          cy += LH;
-        }
+        ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)}  📦${stats.cargo}t  🎯${Math.round(stats.range)} AU`, x + PAD, footerY + 8);
       }
+      const btnY = footerY + 14;
+
+      // Przycisk DALEJ
+      if (hasEngine) {
+        const bx = x + PAD, bw = w - PAD * 2;
+        ctx.fillStyle = 'rgba(0,255,180,0.15)';
+        ctx.fillRect(bx, btnY, bw, nextBtnH);
+        ctx.strokeStyle = THEME.accent;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, btnY, bw, nextBtnH);
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.accent;
+        ctx.textAlign = 'center';
+        ctx.fillText('Dalej →', bx + bw / 2, btnY + 16);
+        ctx.textAlign = 'left';
+        this._hitZones.push({ x: bx, y: btnY, w: bw, h: nextBtnH, type: 'design_next', data: {} });
+      } else {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText('⚠ Wybierz napęd!', x + PAD, btnY + 8);
+      }
+      cy = btnY + nextBtnH + 4;
 
     } else if (this._designStep === 'summary') {
       // KROK 3: Podsumowanie + budowa

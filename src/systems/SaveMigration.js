@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 31;
+export const CURRENT_VERSION     = 32;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -45,6 +45,8 @@ const MIGRATIONS = {
   27: _migrateV27toV28,
   28: _migrateV28toV29,
   29: _migrateV29toV30,
+  30: _migrateV30toV31,
+  31: _migrateV31toV32,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -931,6 +933,32 @@ function _migrateV29toV30(data) {
   for (const s of (data.stars || [])) {
     const sys = ssm.systems.find(ss => ss.starEntityId === s.id);
     if (sys) s.systemId = sys.systemId;
+  }
+
+  return data;
+}
+
+// ── Migracja v30 → v31 ────────────────────────────────────────────────────────
+// Tożsamościowa (brak zmian strukturalnych)
+function _migrateV30toV31(data) {
+  return data;
+}
+
+// ── Migracja v31 → v32 ────────────────────────────────────────────────────────
+// Automatyzacja fabryk: dodanie mode, priorityList, customTemplates, reactiveSourceOrder
+function _migrateV31toV32(data) {
+  const colonies = data.civ4x?.colonies;
+  if (!colonies) return data;
+
+  for (const col of colonies) {
+    if (!col.factory) continue;
+    // Dodaj nowe pola jeśli nie istnieją
+    if (col.factory.mode === undefined) col.factory.mode = 'manual';
+    if (!col.factory.priorityList) col.factory.priorityList = [];
+    if (!col.factory.customTemplates) col.factory.customTemplates = [];
+    if (!col.factory.reactiveSourceOrder) {
+      col.factory.reactiveSourceOrder = ['build', 'fuel', 'consumption', 'trade', 'safety'];
+    }
   }
 
   return data;
