@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 33;
+export const CURRENT_VERSION     = 34;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -48,6 +48,7 @@ const MIGRATIONS = {
   30: _migrateV30toV31,
   31: _migrateV31toV32,
   32: _migrateV32toV33,
+  33: _migrateV33toV34,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -994,6 +995,20 @@ function _migrateV32toV33(data) {
         }
       }
     }
+  }
+
+  return data;
+}
+
+// ── Migracja v33 → v34 ────────────────────────────────────────────────────────
+// Dodanie pola colonists + modules do statków
+function _migrateV33toV34(data) {
+  const vm = data.civ4x?.vesselManager;
+  if (!vm?.vessels) return data;
+
+  for (const v of vm.vessels) {
+    if (v.colonists === undefined) v.colonists = 0;
+    if (!v.modules) v.modules = [];
   }
 
   return data;

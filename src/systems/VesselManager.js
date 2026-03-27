@@ -32,6 +32,7 @@ import {
   needsRefuel, getShipDef, setNextVesselId, getNextVesselId,
   addMissionLog,
 } from '../entities/Vessel.js';
+import { getModuleCapabilities, SHIP_MODULES } from '../data/ShipModulesData.js';
 import {
   serializeNameCounters, restoreNameCounters,
 } from '../data/VesselNames.js';
@@ -102,6 +103,17 @@ export class VesselManager {
     const y = opts.y ?? (entity?.y ?? 0);
 
     const vessel = createVessel(shipId, colonyId, { ...opts, x, y });
+
+    // Oblicz colonistCapacity z modułów (habitat_pod, cryo_pod)
+    let colCap = 0;
+    if (vessel.modules?.length) {
+      for (const modId of vessel.modules) {
+        const mod = SHIP_MODULES[modId];
+        if (mod?.stats?.colonistCapacity) colCap += mod.stats.colonistCapacity;
+      }
+    }
+    vessel.colonistCapacity = colCap;
+
     this._vessels.set(vessel.id, vessel);
 
     EventBus.emit('vessel:created', { vessel });
@@ -193,8 +205,14 @@ export class VesselManager {
     const docked = this.getVesselsAt(colonyId);
     for (const v of docked) {
       if (v.status !== 'idle') continue;
-      const caps = SHIPS[v.shipId]?.capabilities;
-      if (caps && caps.includes(capability)) return v;
+      // Sprawdź capability z hull definition
+      const hullCaps = SHIPS[v.shipId]?.capabilities ?? [];
+      if (hullCaps.includes(capability)) return v;
+      // Sprawdź capability z modułów (habitat_pod → 'colony', cargo → 'cargo', etc.)
+      if (v.modules?.length) {
+        const moduleCaps = getModuleCapabilities(v.modules);
+        if (moduleCaps.has(capability)) return v;
+      }
     }
     return null;
   }
@@ -603,8 +621,10 @@ export class VesselManager {
         mission:      missionData,
         status:       v.status,
         experience:   v.experience,
+        modules:      v.modules ?? [],
         cargo:        v.cargo ?? {},
         cargoUsed:    v.cargoUsed ?? 0,
+        colonists:    v.colonists ?? 0,
         automation:   v.automation ? { ...v.automation } : { autoReturn: false, autoRefuel: true },
         missionLog:   v.missionLog ? [...v.missionLog] : [],
         stats:        v.stats ? { ...v.stats } : { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 },
@@ -649,8 +669,11 @@ export class VesselManager {
         mission:      missionData,
         status:       vd.status ?? 'idle',
         experience:   vd.experience ?? 0,
+        modules:      vd.modules ?? [],
         cargo:        vd.cargo ?? {},
         cargoUsed:    vd.cargoUsed ?? 0,
+        colonists:    vd.colonists ?? 0,
+        colonistCapacity: 0,  // obliczane poniżej z modułów
         automation:   vd.automation ? { ...vd.automation } : { autoReturn: false, autoRefuel: true },
         missionLog:   vd.missionLog ? [...vd.missionLog] : [],
         stats:        vd.stats ? { ...vd.stats } : { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 },
@@ -659,6 +682,16 @@ export class VesselManager {
         damaged:      vd.damaged ?? false,
         _repairProgress: vd._repairProgress ?? 0,
       };
+      // Oblicz colonistCapacity z modułów
+      if (vessel.modules?.length) {
+        let cap = 0;
+        for (const modId of vessel.modules) {
+          const mod = SHIP_MODULES[modId];
+          if (mod?.stats?.colonistCapacity) cap += mod.stats.colonistCapacity;
+        }
+        vessel.colonistCapacity = cap;
+      }
+
       this._vessels.set(vessel.id, vessel);
     }
   }

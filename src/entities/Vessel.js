@@ -86,6 +86,9 @@ export function createVessel(shipId, colonyId, opts = {}) {
     cargo: {},
     cargoUsed: 0, // tony (suma weight × qty)
 
+    // Koloniści na pokładzie (POPy, osobne od cargo)
+    colonists: 0,
+
     // Automatyzacja zachowań
     automation: {
       autoReturn: false,  // auto-powrót po zakończeniu misji
@@ -252,6 +255,46 @@ export function unloadCargo(vessel, commodityId, qty, resSys) {
   vessel.cargoUsed = Math.max(0, (vessel.cargoUsed ?? 0) - actual * weight);
 
   return actual;
+}
+
+// ── Koloniści ─────────────────────────────────────────────────────────────────
+
+/**
+ * Załaduj kolonistów na statek (zablokuj POPy w kolonii źródłowej).
+ * @param {object} vessel
+ * @param {number} count — ile POPów załadować
+ * @param {object} civSystem — CivilizationSystem kolonii źródłowej
+ * @returns {number} faktycznie załadowanych
+ */
+export function loadColonists(vessel, count, civSystem) {
+  if (count <= 0 || !civSystem) return 0;
+  const cap = vessel.colonistCapacity ?? 0;
+  const actual = Math.min(count, cap - (vessel.colonists ?? 0));
+  if (actual <= 0) return 0;
+
+  civSystem.lockPops?.(actual, 'colonist');
+  vessel.colonists = (vessel.colonists ?? 0) + actual;
+  return actual;
+}
+
+/**
+ * Rozładuj kolonistów do kolonii docelowej.
+ * @param {object} vessel
+ * @param {object} civSystem — CivilizationSystem kolonii docelowej (null = POPy tracone)
+ * @returns {number} rozładowanych
+ */
+export function unloadColonists(vessel, civSystem) {
+  const count = vessel.colonists ?? 0;
+  if (count <= 0) return 0;
+
+  if (civSystem?.immigrate) {
+    // Dodaj POPy do kolonii docelowej
+    civSystem.immigrate({ colonists: count });
+  } else if (civSystem?.unlockPops) {
+    civSystem.unlockPops(count, 'colonist');
+  }
+  vessel.colonists = 0;
+  return count;
 }
 
 // ── Zarządzanie ID ───────────────────────────────────────────────────────────
