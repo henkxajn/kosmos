@@ -823,7 +823,10 @@ export class FactorySystem {
   // WAŻNE: qty = CAŁKOWITA potrzeba (nie deficyt) — deficyt liczy alokator
   _scanBuildDemand() {
     const items = [];
-    const bSys = window.KOSMOS?.buildingSystem;
+    const colony = this._getOwnerColony();
+
+    // Pending buildings (budynki czekające na surowce/commodities)
+    const bSys = colony?.buildingSystem ?? window.KOSMOS?.buildingSystem;
     if (bSys?.getPendingDemand) {
       const demand = bSys.getPendingDemand();
       for (const [resId, qty] of Object.entries(demand)) {
@@ -834,11 +837,11 @@ export class FactorySystem {
       }
     }
 
-    // Pending ship orders
+    // Pending ship orders (statki czekające na surowce/commodities)
     const colMgr = window.KOSMOS?.colonyManager;
-    const homePlanet = window.KOSMOS?.homePlanet;
-    if (colMgr && homePlanet) {
-      const pending = colMgr.getPendingShipOrders?.(homePlanet.id) ?? [];
+    const planetId = colony?.planetId;
+    if (colMgr && planetId) {
+      const pending = colMgr.getPendingShipOrders?.(planetId) ?? [];
       for (const order of pending) {
         for (const [resId, qty] of Object.entries(order.cost ?? {})) {
           if (!COMMODITIES[resId]) continue;
@@ -851,6 +854,16 @@ export class FactorySystem {
     return items;
   }
 
+  // Znajdź kolonię do której należy ten FactorySystem
+  _getOwnerColony() {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return null;
+    for (const col of colMgr.getAllColonies()) {
+      if (col.factorySystem === this) return col;
+    }
+    return null;
+  }
+
   // Źródło 2: Paliwo — power_cells potrzebne do tankowania floty
   // qty = CAŁKOWITA potrzeba (deficyt liczy alokator)
   _scanFuelDemand() {
@@ -858,9 +871,13 @@ export class FactorySystem {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return items;
 
+    const colony = this._getOwnerColony();
+    const planetId = colony?.planetId;
+
     let fuelNeeded = 0;
     for (const vessel of vMgr.getAllVessels()) {
-      if (vessel.position?.state === 'docked') {
+      // Tylko statki zadokowane w NASZEJ kolonii
+      if (vessel.position?.state === 'docked' && vessel.position?.dockedAt === planetId) {
         const max = vessel.fuel?.max ?? 0;
         const current = vessel.fuel?.current ?? 0;
         if (current < max * 0.5) {
@@ -880,7 +897,8 @@ export class FactorySystem {
   // qty = CAŁKOWITA potrzeba (deficyt liczy alokator)
   _scanConsumptionDemand() {
     const items = [];
-    const civSys = window.KOSMOS?.civSystem;
+    const colony = this._getOwnerColony();
+    const civSys = colony?.civSystem ?? window.KOSMOS?.civSystem;
     if (!civSys) return items;
 
     const pop = civSys.population ?? 0;
