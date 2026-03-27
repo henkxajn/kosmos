@@ -291,9 +291,10 @@ export class PopulationOverlay extends BaseOverlay {
 
     // Zakładki
     const tabs = [
-      { id: 'needs',   label: t('popPanel.tabNeeds') },
-      { id: 'history', label: t('popPanel.tabHistory') },
-      { id: 'slots',   label: t('popPanel.tabSlots') },
+      { id: 'needs',     label: t('popPanel.tabNeeds') },
+      { id: 'chronicle', label: t('popPanel.tabChronicle') || 'KRONIKA' },
+      { id: 'history',   label: t('popPanel.tabHistory') },
+      { id: 'slots',     label: t('popPanel.tabSlots') },
     ];
     let tx = x + w - pad;
     for (let i = tabs.length - 1; i >= 0; i--) {
@@ -318,6 +319,8 @@ export class PopulationOverlay extends BaseOverlay {
 
     if (this._centerTab === 'needs') {
       this._drawNeedsTab(ctx, x, cy, w, ch, col, civ, rs);
+    } else if (this._centerTab === 'chronicle') {
+      this._drawChronicleTab(ctx, x, cy, w, ch, col, civ);
     } else if (this._centerTab === 'history') {
       this._drawHistoryTab(ctx, x, cy, w, ch, col);
     } else {
@@ -426,37 +429,66 @@ export class PopulationOverlay extends BaseOverlay {
       cy += 6;
     }
 
-    // ── Sekcja LOJALNOSC + RUCHY ───────────────────────────
+    // ── Sekcja LOJALNOŚĆ + TOŻSAMOŚĆ ───────────────────────
     if (civ) {
       const loyalty = civ.loyalty ?? 80;
       const movements = civ.activeMovements ?? [];
       const identityScore = civ.identity?.score ?? 0;
+      const traits = civ.identity?.traits ?? [];
 
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('popPanel.loyaltyTitle') || 'LOJALNOSC', x + pad, cy + 10);
+      ctx.fillText(t('popPanel.loyaltyIdentityTitle') || 'LOJALNOŚĆ I TOŻSAMOŚĆ', x + pad, cy + 10);
       cy += 16;
 
       // Pasek loyalty
-      const loyBarW = w - pad * 2 - 50;
+      const barW = w - pad * 2 - 45;
       const loyRatio = loyalty / 100;
-      const loyColor = loyRatio > 0.6 ? THEME.success : loyRatio > 0.3 ? THEME.warning : THEME.danger;
-      this._drawBar(ctx, x + pad, cy, loyBarW, 8, loyRatio, loyColor, THEME.border);
+      const loyColor = loyRatio > 0.7 ? THEME.success : loyRatio > 0.3 ? THEME.warning : THEME.danger;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(t('popPanel.loyaltyLabel') || 'Lojalność', x + pad, cy + 7);
+      this._drawBar(ctx, x + pad + 65, cy, barW - 65, 8, loyRatio, loyColor, THEME.border);
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = loyColor;
-      ctx.fillText(`${Math.round(loyalty)}%`, x + pad + loyBarW + 4, cy + 8);
+      ctx.fillText(`${Math.round(loyalty)}%`, x + pad + barW + 4, cy + 8);
+      cy += 14;
 
-      // Identity score
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`ID: ${identityScore}`, x + pad + loyBarW + 40, cy + 8);
-      cy += 16;
+      // Pasek identity
+      const idRatio = identityScore / 100;
+      const idColor = idRatio > 0.5 ? '#c8a050' : idRatio > 0.2 ? '#a08040' : THEME.textDim;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(t('popPanel.identityLabel') || 'Tożsamość', x + pad, cy + 7);
+      this._drawBar(ctx, x + pad + 65, cy, barW - 65, 8, idRatio, idColor, THEME.border);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = idColor;
+      ctx.fillText(`${identityScore}`, x + pad + barW + 4, cy + 8);
+      cy += 14;
 
-      // Aktywne ruchy
+      // Cechy kulturowe
+      if (traits.length > 0) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.accent;
+        let traitStr = '';
+        for (const traitId of traits) {
+          const lang = window.KOSMOS?.lang ?? 'pl';
+          const CULTURAL_TRAITS = window.KOSMOS?.civSystem?.identity?.traits ? null : null;
+          // Bezpośredni import jest w MilestonesData, ale tutaj czytamy z civ
+          traitStr += `${traitId}  `;
+        }
+        if (traitStr) ctx.fillText(traitStr.trim(), x + pad, cy + 8);
+        cy += 12;
+      }
+
+      // Aktywne ruchy — z ikoną
       if (movements.length > 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.danger;
         for (const m of movements) {
-          ctx.fillText(`\u26A0 ${m.type}`, x + pad, cy + 10);
+          const icon = m.icon ?? '⚠';
+          const name = m.namePL ?? m.type;
+          ctx.fillText(`${icon} ${name}`, x + pad, cy + 10);
           cy += 14;
         }
       }
@@ -572,7 +604,157 @@ export class PopulationOverlay extends BaseOverlay {
     }
   }
 
-  // ── Zakładka HISTORIA ───────────────────────────────────────────────────
+  // ── Zakładka KRONIKA — timeline milestones ───────────────────────────────
+
+  _drawChronicleTab(ctx, x, y, w, h, col, civ) {
+    const pad = 14;
+    let cy = y + 8;
+
+    if (!civ) return;
+    const loyalty = civ.loyalty ?? 80;
+    const identityScore = civ.identity?.score ?? 0;
+    const history = civ.colonyHistory ?? [];
+    const traits = civ.identity?.traits ?? [];
+    const currentYear = Math.floor(window.KOSMOS?.game?.gameYear ?? 0);
+    const lang = window.KOSMOS?.lang ?? 'pl';
+
+    // ── Pasek LOJALNOŚĆ ──────────────────────────────────
+    const barW = w - pad * 2 - 45;
+    const loyRatio = loyalty / 100;
+    const loyColor = loyRatio > 0.7 ? THEME.success : loyRatio > 0.3 ? THEME.warning : THEME.danger;
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('popPanel.loyaltyLabel') || 'LOJALNOŚĆ', x + pad, cy + 8);
+    this._drawBar(ctx, x + pad + 70, cy + 1, barW - 70, 8, loyRatio, loyColor, THEME.border);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = loyColor;
+    ctx.fillText(`${Math.round(loyalty)}%`, x + pad + barW + 4, cy + 8);
+
+    // Breakdown pod paskiem
+    cy += 12;
+    const histOffset = history.reduce((s, m) => s + (m.loyaltyPerm ?? 0), 0);
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    const histColor = histOffset >= 0 ? THEME.success : THEME.danger;
+    ctx.fillText(`perm: `, x + pad + 70, cy + 7);
+    ctx.fillStyle = histColor;
+    ctx.fillText(`${histOffset >= 0 ? '+' : ''}${histOffset}`, x + pad + 95, cy + 7);
+    cy += 14;
+
+    // ── Pasek TOŻSAMOŚĆ ──────────────────────────────────
+    const idRatio = identityScore / 100;
+    const idColor = idRatio > 0.5 ? '#c8a050' : idRatio > 0.2 ? '#a08040' : THEME.textDim;
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('popPanel.identityLabel') || 'TOŻSAMOŚĆ', x + pad, cy + 8);
+    this._drawBar(ctx, x + pad + 70, cy + 1, barW - 70, 8, idRatio, idColor, THEME.border);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = idColor;
+    ctx.fillText(`${identityScore}`, x + pad + barW + 4, cy + 8);
+    cy += 16;
+
+    // ── CECHY KULTUROWE ──────────────────────────────────
+    if (traits.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('popPanel.traitsLabel') || 'CECHY', x + pad, cy + 8);
+      cy += 12;
+
+      for (const traitId of traits) {
+        // Import dynamiczny — używamy window cache (CULTURAL_TRAITS z MilestonesData)
+        ctx.fillStyle = THEME.accent;
+        ctx.fillText(`  ${traitId}`, x + pad, cy + 8);
+        cy += 12;
+      }
+      cy += 4;
+    }
+
+    // ── TIMELINE HISTORII ─────────────────────────────────
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('popPanel.chronicleTitle') || 'HISTORIA KOLONII', x + pad, cy + 8);
+    cy += 14;
+
+    if (history.length === 0) {
+      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('popPanel.noMilestones') || 'Brak wydarzeń', x + pad + 20, cy + 20);
+      return;
+    }
+
+    // Scrollable timeline — max widocznych = ile się mieści
+    const entryH = 32;
+    const maxVisible = Math.floor((y + h - cy - 30) / entryH);
+    const scrollOffset = this._chronicleScroll ?? 0;
+    const startIdx = Math.max(0, history.length - maxVisible - scrollOffset);
+    const endIdx = Math.min(history.length, startIdx + maxVisible);
+
+    // Linia pionowa (oś czasu)
+    const lineX = x + pad + 8;
+    const lineTop = cy + 4;
+    const lineBot = cy + 4 + (endIdx - startIdx) * entryH;
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(lineX, lineTop);
+    ctx.lineTo(lineX, lineBot);
+    ctx.stroke();
+
+    // Wpisy
+    for (let i = startIdx; i < endIdx; i++) {
+      const m = history[i];
+      const ey = cy + (i - startIdx) * entryH;
+
+      // Oczko na osi
+      ctx.fillStyle = THEME.accent;
+      ctx.beginPath();
+      ctx.arc(lineX, ey + 12, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Ikona + Rok
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
+      const mileName = lang === 'en' ? (m.nameEN ?? m.namePL) : m.namePL;
+      ctx.fillText(`${m.icon ?? '●'} Rok ${m.year}`, lineX + 10, ey + 8);
+
+      // Nazwa
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      const nameStr = mileName.length > 35 ? mileName.substring(0, 33) + '…' : mileName;
+      ctx.fillText(nameStr, lineX + 10, ey + 20);
+
+      // Efekty (prawy margin)
+      const effX = x + w - pad - 5;
+      ctx.textAlign = 'right';
+      let effStr = '';
+      if (m.identityValue > 0) effStr += `+${m.identityValue}id `;
+      if (m.identityValue < 0) effStr += `${m.identityValue}id `;
+      if (m.loyaltyPerm > 0) effStr += `+${m.loyaltyPerm}loj`;
+      if (m.loyaltyPerm < 0) effStr += `${m.loyaltyPerm}loj`;
+
+      ctx.fillStyle = (m.loyaltyPerm ?? 0) >= 0 ? THEME.success : THEME.danger;
+      ctx.fillText(effStr.trim(), effX, ey + 14);
+      ctx.textAlign = 'left';
+    }
+
+    // Marker "teraz" na dole
+    const nowY = cy + (endIdx - startIdx) * entryH;
+    ctx.fillStyle = THEME.accent;
+    ctx.beginPath();
+    ctx.arc(lineX, nowY + 8, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = THEME.accent;
+    ctx.stroke();
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(`◎ Rok ${currentYear} (teraz)`, lineX + 10, nowY + 12);
+
+    // Hit zone dla scroll
+    this._addHit(x, cy, w, y + h - cy, 'chronicleScroll', {});
+  }
+
+  // ── Zakładka HISTORIA (wykres populacji) ──────────────────────────────────
 
   _drawHistoryTab(ctx, x, y, w, h, col) {
     const pad = 14;
@@ -989,6 +1171,14 @@ export class PopulationOverlay extends BaseOverlay {
     if (x >= ox && x < ox + LEFT_W) {
       this._scrollOffset = Math.max(0, this._scrollOffset + delta * 0.5);
       return true;
+    }
+    // Scroll w zakładce KRONIKA (chronicle timeline)
+    if (this._centerTab === 'chronicle') {
+      const hit = this._hitTest(x, y);
+      if (hit?.type === 'chronicleScroll') {
+        this._chronicleScroll = Math.max(0, (this._chronicleScroll ?? 0) + Math.sign(delta));
+        return true;
+      }
     }
     return false;
   }

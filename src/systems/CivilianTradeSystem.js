@@ -820,6 +820,20 @@ export class CivilianTradeSystem {
     return [...this._connections];
   }
 
+  /** Zlicz aktywne połączenia handlowe danej kolonii z homeworld */
+  getConnectionsToHome(colonyId) {
+    const homeId = window.KOSMOS?.homePlanet?.id;
+    if (!homeId || !colonyId || colonyId === homeId) return 0;
+    let count = 0;
+    for (const conn of this._connections) {
+      if ((conn.fromId === colonyId && conn.toId === homeId) ||
+          (conn.toId === colonyId && conn.fromId === homeId)) {
+        count++;
+      }
+    }
+    return count;
+  }
+
   // ── Cleanup ─────────────────────────────────────────────────────────────
 
   destroy() {

@@ -464,6 +464,32 @@ export const TECHS = {
     description: 'Radiolatarnia Handlowa + Nexus Towarowy — rozszerzony zasięg i globalne dopasowanie',
   },
 
+  colonial_governance: {
+    id:          'colonial_governance',
+    namePL:      'Administracja Kolonialna',
+    branch:      'civil',
+    tier:        2,
+    cost:        { research: 100 },
+    requires:    ['urban_planning'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'cultural_center' },
+    ],
+    description: 'Struktury administracyjne — Centrum Kulturalne buduje tożsamość kolonii',
+  },
+
+  cultural_heritage: {
+    id:          'cultural_heritage',
+    namePL:      'Dziedzictwo Kulturowe',
+    branch:      'civil',
+    tier:        3,
+    cost:        { research: 200 },
+    requires:    ['colonial_governance'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'historical_archive' },
+    ],
+    description: 'Archiwum Historyczne — szybsze odkrywanie milestones, bonus badań',
+  },
+
   emergency_protocols: {
     id:          'emergency_protocols',
     namePL:      'Protokoły Awaryjne',

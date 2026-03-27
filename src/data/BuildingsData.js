@@ -1040,6 +1040,56 @@ export const BUILDINGS = {
     allProductionPenalty:      -0.05,
     displacementMitigation:    0.2,
   },
+
+  // ── Budynki kulturowe ───────────────────────────────────────────────────────
+
+  cultural_center: {
+    id:            'cultural_center',
+    namePL:        'Centrum Kulturalne',
+    nameEN:        'Cultural Center',
+    category:      'civil',
+    icon:          '🎭',
+    description:   'Buduje tożsamość kulturową kolonii — przyspiesza milestones',
+    cost:          { Fe: 30, Si: 20 },
+    commodityCost: { structural_alloys: 3 },
+    energyCost:    2,
+    buildTime:     1.5,
+    rates:         { research: 1 },
+    maintenance:   {},
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'colonial_governance',
+    popType:       'bureaucrat',
+    isCultural:    true,  // specjalny efekt: milestone cultural_center_built + identity bonus
+  },
+  historical_archive: {
+    id:            'historical_archive',
+    namePL:        'Archiwum Historyczne',
+    nameEN:        'Historical Archive',
+    category:      'civil',
+    icon:          '📜',
+    description:   'Przechowuje historię kolonii — przyspiesza sprawdzanie milestones',
+    cost:          { Fe: 60, Si: 40, Cu: 20 },
+    commodityCost: { electronic_systems: 5, structural_alloys: 3 },
+    energyCost:    3,
+    buildTime:     3.0,
+    rates:         { research: 3 },
+    maintenance:   { Si: 1 },
+    housing:       0,
+    popCost:       1.0,
+    maxLevel:      3,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'cultural_heritage',
+    isUnique:      true,  // max 1 per kolonia
+    popType:       'scientist',
+    isCultural:    true,
+  },
 };
 
 // ── Ikony zasobów — rozszerzony zestaw ──────────────────────────────────────

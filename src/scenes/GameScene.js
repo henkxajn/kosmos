@@ -355,6 +355,34 @@ export class GameScene {
       EventBus.emit('time:resume');
     });
 
+    // Milestones historii kolonii — log + opcjonalnie pauza
+    EventBus.on('civ:milestoneReached', ({ colonyName, milestone, crisis }) => {
+      const lang = window.KOSMOS?.lang ?? 'pl';
+      const name = lang === 'en' ? milestone.nameEN : milestone.namePL;
+      const icon = milestone.icon ?? '●';
+      this.uiManager?.addInfo(`${icon} ${colonyName}: ${name}`);
+      if (crisis) {
+        EventBus.emit('time:pause');
+      }
+    });
+
+    // Cechy kulturowe — log
+    EventBus.on('civ:traitUnlocked', ({ colonyName, trait }) => {
+      const lang = window.KOSMOS?.lang ?? 'pl';
+      const name = lang === 'en' ? trait.nameEN : trait.namePL;
+      this.uiManager?.addInfo(`${trait.icon} ${colonyName}: ${t('eventLog.traitUnlocked') || 'Nowa cecha'} — ${name}`);
+    });
+
+    // Flaga przetrwania katastrofy — z RandomEventSystem do CivilizationSystem
+    EventBus.on('randomEvent:occurred', ({ event }) => {
+      if (event?.severity === 'catastrophe' || event?.severity === 'heavy') {
+        const civ = window.KOSMOS?.civSystem;
+        if (civ?._milestoneState) {
+          civ._milestoneState.justSurvivedDisaster = true;
+        }
+      }
+    });
+
     // Popupy misji (pauza + powiadomienie)
     initMissionEvents();
 

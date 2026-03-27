@@ -264,6 +264,9 @@ export class ColonyManager {
 
   // Zarejestruj homePlanet jako pierwszą kolonię (przy civMode=true)
   registerHomePlanet(planet, resourceSystem, civSystem, buildingSystem = null) {
+    // Milestone founding dla home planet
+    civSystem.initFoundingMilestone?.();
+
     // FactorySystem per-kolonia
     const factSys = new FactorySystem(resourceSystem);
     if (buildingSystem) {
@@ -325,6 +328,7 @@ export class ColonyManager {
       housing:    0,  // Stolica doda 4
     }, this.techSystem, entity);
     civSys.resourceSystem = resSys;
+    civSys.initFoundingMilestone();  // milestone 'founding' w historii kolonii
 
     // BuildingSystem per-kolonia — powiązany z własnymi ResourceSystem i CivilizationSystem
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);

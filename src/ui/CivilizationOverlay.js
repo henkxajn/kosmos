@@ -134,6 +134,11 @@ export class CivilizationOverlay extends BaseOverlay {
         pop, maxPop, prosperity, epoch, credits,
         fleetCount,
         buildings: col.buildingSystem?._active?.size ?? 0,
+        loyalty: civ?.loyalty ?? 80,
+        identityScore: civ?.identity?.score ?? 0,
+        milestones: civ?.colonyHistory?.length ?? 0,
+        traits: civ?.identity?.traits ?? [],
+        isAutonomous: civ?.isAutonomous ?? false,
       });
     }
 
@@ -206,7 +211,29 @@ export class CivilizationOverlay extends BaseOverlay {
 
     this._statRow(ctx, x + pad, ry, w, t('civOverlay.avgProsperity'),
       `${data.avgProsperity.toFixed(1)} / 100`, this._prosperityColor(data.avgProsperity));
-    ry += ROW_H + 4;
+    ry += ROW_H;
+
+    // Średnia lojalność + tożsamość (Kronika Imperium)
+    const fullCols = data.perColony.filter(c => !c.isOutpost);
+    if (fullCols.length > 0) {
+      const avgLoyalty = fullCols.reduce((s, c) => s + (c.loyalty ?? 80), 0) / fullCols.length;
+      const avgIdentity = fullCols.reduce((s, c) => s + (c.identityScore ?? 0), 0) / fullCols.length;
+      const atRisk = fullCols.filter(c => (c.loyalty ?? 80) < 30).length;
+
+      const loyColor = avgLoyalty > 70 ? THEME.success : avgLoyalty > 30 ? THEME.warning : THEME.danger;
+      this._statRow(ctx, x + pad, ry, w, t('civOverlay.avgLoyalty') || 'Śr. lojalność',
+        `${avgLoyalty.toFixed(0)}%`, loyColor);
+      ry += ROW_H;
+      this._statRow(ctx, x + pad, ry, w, t('civOverlay.avgIdentity') || 'Śr. tożsamość',
+        `${avgIdentity.toFixed(0)}`, '#c8a050');
+      ry += ROW_H;
+      if (atRisk > 0) {
+        this._statRow(ctx, x + pad, ry, w, t('civOverlay.atRisk') || '⚠ W ryzyku',
+          `${atRisk} ${atRisk === 1 ? 'kolonia' : 'kolonie'}`, THEME.danger);
+        ry += ROW_H;
+      }
+    }
+    ry += 4;
 
     // ── EKONOMIA ────────────────────────────────────────────────────────
     this._sectionHeader(ctx, x + pad, ry, t('civOverlay.economy'));
@@ -372,10 +399,53 @@ export class CivilizationOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.textSecondary;
       ctx.fillText(`${col.buildings}`, x + pad + cols[5], ry + 10);
 
-      // Klik — przejdź do kolonii
-      this._addHit(x + 2, ry - 2, w - 4, ROW_H + 2, 'goto_colony', { planetId: col.planetId });
+      // Loyalty + Identity mini-paski (pod głównym wierszem)
+      if (!col.isOutpost) {
+        ry += ROW_H - 2;
+        const barStartX = x + pad + cols[0] + 16;
+        const barW = 60;
 
-      ry += ROW_H + 2;
+        // Mini pasek loyalty
+        const loyRatio = (col.loyalty ?? 80) / 100;
+        const loyColor = loyRatio > 0.7 ? THEME.success : loyRatio > 0.3 ? THEME.warning : THEME.danger;
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(barStartX, ry, barW, 4);
+        ctx.fillStyle = loyColor;
+        ctx.fillRect(barStartX, ry, barW * loyRatio, 4);
+
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = loyColor;
+        ctx.fillText(`L:${Math.round(col.loyalty)}%`, barStartX + barW + 3, ry + 4);
+
+        // Mini pasek identity
+        const idBarX = barStartX + barW + 40;
+        const idRatio = (col.identityScore ?? 0) / 100;
+        const idColor = idRatio > 0.5 ? '#c8a050' : '#a08040';
+        ctx.fillStyle = 'rgba(255,255,255,0.08)';
+        ctx.fillRect(idBarX, ry, barW, 4);
+        ctx.fillStyle = idColor;
+        ctx.fillRect(idBarX, ry, barW * idRatio, 4);
+
+        ctx.fillStyle = idColor;
+        ctx.fillText(`T:${col.identityScore}`, idBarX + barW + 3, ry + 4);
+
+        // Flaga ryzyka
+        if (col.loyalty < 30) {
+          ctx.fillStyle = THEME.danger;
+          ctx.fillText('⚠', idBarX + barW + 30, ry + 4);
+        }
+        if (col.isAutonomous) {
+          ctx.fillStyle = THEME.warning;
+          ctx.fillText('🏴', idBarX + barW + 40, ry + 4);
+        }
+
+        ry += 6;
+      }
+
+      // Klik — przejdź do kolonii
+      this._addHit(x + 2, ry - ROW_H - 4, w - 4, ROW_H + 10, 'goto_colony', { planetId: col.planetId });
+
+      ry += 4;
     }
 
     ctx.restore();

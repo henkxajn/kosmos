@@ -36,6 +36,7 @@
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { MOVEMENT_TYPES, IDENTITY_WEIGHTS, RESOLUTION_OPTIONS } from '../data/MovementsData.js';
+import { MILESTONE_DEFINITIONS, MILESTONE_BY_TYPE, CULTURAL_TRAITS } from '../data/MilestonesData.js';
 
 // ── Epoki cywilizacyjne (progi POPowe) ──────────────────────────────────────
 export const CIV_EPOCHS = [
@@ -96,10 +97,19 @@ export class CivilizationSystem {
     // Miejsca mieszkalne (start: 4 — na 2 POPy + 2 miejsce na wzrost)
     this.housing = initialOverride.housing ?? DEFAULT_HOUSING;
 
-    // Identity + Loyalty + Movements (Faza 8 — defaults)
+    // Identity + Loyalty + Movements
     this.identity          = { score: 0, events: [], dominantType: 'laborer', traits: [] };
     this._loyaltyModifiers = [];
     this.activeMovements   = [];
+
+    // Historia kolonii (milestones) — permanentne wpisy kształtujące identity i loyalty
+    this.colonyHistory     = [];
+    this._milestoneState   = this._defaultMilestoneState();
+    this._smoothedLoyalty  = 80;  // wygładzony loyalty (inercja)
+    this._suppressHistory  = [];  // [{ year, movementType }] do eskalacji suppress
+    this._productionPenalties = [];  // [{ mult, remainingYears }] z negotiate resolution
+    this._autonomousState  = false;
+    this._traitCheckAccum  = 0;  // akumulator lat do sprawdzania traitów (co 10 lat)
 
     // Epoka (indeks do CIV_EPOCHS)
     this.epochIndex = 0;
@@ -126,6 +136,9 @@ export class CivilizationSystem {
     this._unrestRemainingYears = 0;
     this._famineYears         = 0;
     this._famineActive        = false;
+
+    // Jeśli nowa kolonia (nie restore) — dodaj milestone founding
+    // (wywoływane po ustawieniu window.KOSMOS.game przez kolonie tworzone z poziomu kodu)
 
     // ── Nasłuch zdarzeń ─────────────────────────────────────────────────
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — wzrost POP, kryzysy biegną szybciej
@@ -591,6 +604,32 @@ export class CivilizationSystem {
     return result;
   }
 
+  /** Domyślny stan counterów do milestones */
+  _defaultMilestoneState() {
+    return {
+      consecutiveHighProsperityYears: 0,
+      consecutiveLowProsperityYears: 0,
+      consecutiveFamineYears: 0,
+      yearsWithoutTrade: 0,
+      consecutiveHighTradeYears: 0,
+      consecutiveHighResearchYears: 0,
+      popAtReference: 0,
+      popReferenceYear: 0,
+      lastMilestoneYear: {},    // { type → year } dla cooldownów
+      colonyAge: 0,             // lata istnienia kolonii (civYears)
+      justSurvivedDisaster: false,
+      justSurvivedCrisis: false,
+    };
+  }
+
+  /** Dodaj milestone founding (wywoływać po utworzeniu kolonii, nie przy restore) */
+  initFoundingMilestone() {
+    if (this.colonyHistory.length > 0) return;  // już ma historię (restore)
+    this.addMilestone('founding');
+    this._milestoneState.popAtReference = this.population;
+    this._milestoneState.popReferenceYear = 0;
+  }
+
   // ── Serializacja ────────────────────────────────────────────────────────
 
   serialize() {
@@ -601,6 +640,12 @@ export class CivilizationSystem {
       identity:             this.identity ? JSON.parse(JSON.stringify(this.identity)) : null,
       loyaltyModifiers:     this._loyaltyModifiers ? [...this._loyaltyModifiers] : [],
       activeMovements:      this.activeMovements ? [...this.activeMovements] : [],
+      colonyHistory:        JSON.parse(JSON.stringify(this.colonyHistory)),
+      milestoneState:       JSON.parse(JSON.stringify(this._milestoneState)),
+      smoothedLoyalty:      this._smoothedLoyalty,
+      suppressHistory:      [...this._suppressHistory],
+      productionPenalties:  [...this._productionPenalties],
+      autonomousState:      this._autonomousState,
       housing:              this.housing,
       epochIndex:           this.epochIndex,
       growthProgress:       this._growthProgress,
@@ -635,10 +680,19 @@ export class CivilizationSystem {
       this._initStrata(data.population ?? DEFAULT_POP);
     }
 
-    // Identity + Loyalty + Movements (Faza 8 — defaults na razie)
+    // Identity + Loyalty + Movements
     this.identity          = data.identity         ?? { score: 0, events: [], dominantType: 'laborer', traits: [] };
     this._loyaltyModifiers = data.loyaltyModifiers ?? [];
     this.activeMovements   = data.activeMovements  ?? [];
+
+    // Historia kolonii (milestones)
+    this.colonyHistory        = data.colonyHistory        ?? [];
+    this._milestoneState      = { ...this._defaultMilestoneState(), ...(data.milestoneState ?? {}) };
+    this._smoothedLoyalty     = data.smoothedLoyalty       ?? 80;
+    this._suppressHistory     = data.suppressHistory      ?? [];
+    this._productionPenalties = data.productionPenalties  ?? [];
+    this._autonomousState     = data.autonomousState      ?? false;
+    this._traitCheckAccum     = 0;
 
     this.epochIndex           = data.epochIndex           ?? 0;
     this._growthProgress      = data.growthProgress       ?? 0;
@@ -700,7 +754,19 @@ export class CivilizationSystem {
     // 4. Ruchy spoleczne + loyalty
     this._updateMovementsAndLoyalty();
 
-    // 5. Epoka
+    // 5. Milestones + identity + cultural traits
+    this._yearlyMilestoneCheck();
+    this._updateIdentityFromHistory();
+    this._tickProductionPenalties();
+
+    // 5b. Cultural traits (co 10 lat cywilnych)
+    this._traitCheckAccum = (this._traitCheckAccum ?? 0) + 1;
+    if (this._traitCheckAccum >= 10) {
+      this._traitCheckAccum = 0;
+      this._checkTraitsFromHistory();
+    }
+
+    // 6. Epoka
     this._checkEpoch();
 
     // 6. Emituj (tylko aktywna kolonia → UI i BuildingSystem)
@@ -974,15 +1040,70 @@ export class CivilizationSystem {
 
   /** Lojalnosc kolonii (0-100): srednia wazona satisfaction + modifiers historyczne */
   get loyalty() {
+    return Math.max(0, Math.min(100, this._smoothedLoyalty ?? 80));
+  }
+
+  /** Oblicz docelową lojalność i wygładź (wywoływane w _updateMovementsAndLoyalty) */
+  _recalcLoyalty() {
     const total = this.population;
-    if (total === 0) return 80;
+    if (total === 0) { this._smoothedLoyalty = 80; return; }
+
+    // Baza: weighted avg satisfaction strat
     let weighted = 0;
     for (const [, s] of Object.entries(this.strata)) {
       weighted += s.count * s.satisfaction;
     }
-    const base = weighted / total;
+    const baseLoyalty = weighted / total;
+
+    // Permanentne modyfikatory z historii
+    const historyOffset = (this.colonyHistory ?? []).reduce((sum, m) => sum + (m.loyaltyPerm ?? 0), 0);
+
+    // Dynamiczne czynniki (prosperity, handel, odległość)
+    let dynamicDelta = 0;
+    const prosperity = window.KOSMOS?.prosperitySystem?.prosperity ?? 50;
+    if (prosperity > 70)      dynamicDelta += 1.5;
+    else if (prosperity > 50) dynamicDelta += 0.3;
+    else if (prosperity > 25) dynamicDelta -= 0.5;
+    else                      dynamicDelta -= 2.0;
+
+    // Trasy handlowe z homeworld
+    const tradeSys = window.KOSMOS?.civilianTradeSystem;
+    const homeTradeCount = tradeSys?.getConnectionsToHome?.(this._colonyId) ?? 0;
+    dynamicDelta += Math.min(5, homeTradeCount * 1.0);
+    const colonyAge = this._milestoneState?.colonyAge ?? 0;
+    if (homeTradeCount === 0 && colonyAge > 20) dynamicDelta -= 1.0;
+
+    // Odległość od homeworld
+    const homePlanet = window.KOSMOS?.homePlanet;
+    if (homePlanet && this.planet && this.planet !== homePlanet) {
+      const dx = (this.planet.physics?.x ?? 0) - (homePlanet.physics?.x ?? 0);
+      const dy = (this.planet.physics?.y ?? 0) - (homePlanet.physics?.y ?? 0);
+      const distAU = Math.sqrt(dx * dx + dy * dy);
+      dynamicDelta -= 0.1 * distAU;
+    }
+
+    // Amplifikator identity: wysoka tożsamość = namiętne zmiany lojalności
+    const amplifier = 0.5 + (this.identity?.score ?? 0) / 100;
+    const amplifiedDelta = dynamicDelta * amplifier;
+
+    // Decaying modifiers (z ruchów społecznych)
     const modSum = (this._loyaltyModifiers ?? []).reduce((s, m) => s + m.value, 0);
-    return Math.max(0, Math.min(100, base + modSum));
+
+    // Penalty z cech kulturowych (martyrs_colony -10)
+    let traitPenalty = 0;
+    for (const traitId of (this.identity?.traits ?? [])) {
+      const trait = CULTURAL_TRAITS[traitId];
+      if (trait?.loyaltyPenalty) traitPenalty += trait.loyaltyPenalty;
+    }
+
+    // Autonomia: cap loyalty na 55
+    const autonomyCap = this._autonomousState ? 55 : 100;
+
+    const target = Math.min(autonomyCap, baseLoyalty + historyOffset + amplifiedDelta + modSum + traitPenalty);
+
+    // Inercja — loyalty dąży do target (15% per rok)
+    this._smoothedLoyalty += (target - this._smoothedLoyalty) * 0.15;
+    this._smoothedLoyalty = Math.max(0, Math.min(100, this._smoothedLoyalty));
   }
 
   /** Dodaj modifier lojalnosci (zanika decayPerYear per rok) */
@@ -1049,6 +1170,13 @@ export class CivilizationSystem {
     };
     this.activeMovements.push(movement);
 
+    // Milestone: revolution (lub separatism_crisis)
+    const milestoneType = forceType === 'separatism' ? 'separatism_crisis' : 'revolution';
+    this.addMilestone(milestoneType, {
+      movementName: movDef.namePL,
+      movementNameEN: movDef.nameEN,
+    });
+
     if (window.KOSMOS?.civSystem === this) {
       EventBus.emit('civ:movementStarted', {
         colony:     this._colonyId,
@@ -1070,14 +1198,36 @@ export class CivilizationSystem {
     const resolution = RESOLUTION_OPTIONS[resolutionId];
     if (!resolution) return;
 
-    // Modyfikator lojalnosci
+    // Modyfikator lojalnosci (decaying)
     if (resolution.loyaltyDelta !== 0) {
       this.addLoyaltyModifier(resolution.loyaltyDelta, `movement_${movementType}_${resolutionId}`);
     }
 
-    // Identity event
+    // Identity event (legacy system — zachowany dla kompatybilności)
     if (resolution.identityEvent) {
       this._addIdentityEvent(resolution.identityEvent);
+    }
+
+    // Milestone z resolution
+    if (resolutionId === 'negotiate') {
+      this.addMilestone('reconciliation');
+      // Kara produkcji -5% na 5 lat
+      if (resolution.productionMult && resolution.productionYears) {
+        this._productionPenalties.push({
+          mult: resolution.productionMult,
+          remainingYears: resolution.productionYears,
+        });
+      }
+    } else if (resolutionId === 'suppress') {
+      this.addMilestone('suppression');
+      // Zapamiętaj suppress do eskalacji
+      const year = window.KOSMOS?.game?.gameYear ?? 0;
+      this._suppressHistory.push({ year, movementType });
+      // Eskalacja: 2× suppress w 30 lat → automatyczny separatyzm
+      const recent = this._suppressHistory.filter(s => (year - s.year) < 30);
+      if (recent.length >= 2 && !this.activeMovements.find(m => m.type === 'separatism')) {
+        this._triggerMovement(null, 'separatism');
+      }
     }
 
     // Usun ruch
@@ -1144,6 +1294,9 @@ export class CivilizationSystem {
       }
       if (Math.abs(m.value) < 0.5) this._loyaltyModifiers.splice(i, 1);
     }
+
+    // Przelicz loyalty (nowy system z historyOffset + dynamiczne)
+    this._recalcLoyalty();
 
     // Sprawdz nowe ruchy
     this._checkMovements();
@@ -1269,4 +1422,229 @@ export class CivilizationSystem {
       identityScore:     this.identity.score,
     };
   }
+
+  // ── Milestones — kamienie milowe historii kolonii ─────────────────────────
+
+  /** Dodaj milestone do historii (ręcznie — z ruchów, budynków itp.) */
+  addMilestone(type, extraContext = {}) {
+    const def = MILESTONE_BY_TYPE[type];
+    if (!def) return;
+
+    const year = window.KOSMOS?.game?.gameYear ?? 0;
+
+    // Sprawdź cooldown
+    const lastYear = this._milestoneState.lastMilestoneYear[type] ?? -Infinity;
+    if (def.cooldown && (year - lastYear) < def.cooldown) return;
+
+    // Sprawdź unikalność
+    if (def.unique && this.colonyHistory.some(h => h.type === type)) return;
+
+    const colName = this.planet?.name ?? 'Kolonia';
+    const col = { name: colName, year, ...extraContext };
+
+    const entry = {
+      year,
+      type,
+      namePL:        typeof def.namePL === 'function' ? def.namePL(col) : def.namePL,
+      nameEN:        typeof def.nameEN === 'function' ? def.nameEN(col) : def.nameEN,
+      icon:          def.icon,
+      loyaltyPerm:   def.loyaltyPerm ?? 0,
+      identityValue: def.identityValue ?? 0,
+    };
+    this.colonyHistory.push(entry);
+    this._milestoneState.lastMilestoneYear[type] = year;
+
+    // Callback po triggerze (np. reset counterów)
+    if (def.onTrigger) def.onTrigger(this._milestoneState);
+
+    // Emit event (EventLog + opcjonalnie auto-pause)
+    if (window.KOSMOS?.civSystem === this) {
+      EventBus.emit('civ:milestoneReached', {
+        colony: this._colonyId,
+        colonyName: colName,
+        milestone: entry,
+        crisis: !!def.crisis,
+      });
+    }
+  }
+
+  /** Sprawdź milestones co rok — aktualizuj countery i triggeruj automatyczne */
+  _yearlyMilestoneCheck() {
+    const st = this._milestoneState;
+    st.colonyAge = (st.colonyAge ?? 0) + 1;
+
+    // Aktualizuj countery na podstawie bieżącego stanu
+    const prosperity = window.KOSMOS?.prosperitySystem?.prosperity ?? 50;
+    if (prosperity > 80) {
+      st.consecutiveHighProsperityYears = (st.consecutiveHighProsperityYears ?? 0) + 1;
+      st.consecutiveLowProsperityYears = 0;
+    } else if (prosperity < 25) {
+      st.consecutiveLowProsperityYears = (st.consecutiveLowProsperityYears ?? 0) + 1;
+      st.consecutiveHighProsperityYears = 0;
+    } else {
+      st.consecutiveHighProsperityYears = 0;
+      st.consecutiveLowProsperityYears = 0;
+    }
+
+    // Głód
+    if (this._famineActive) {
+      st.consecutiveFamineYears = (st.consecutiveFamineYears ?? 0) + 1;
+    } else {
+      // Jeśli famine się skończyło właśnie — milestone crisis_survived
+      if (st.consecutiveFamineYears > 0) {
+        st.justSurvivedCrisis = true;
+      }
+      st.consecutiveFamineYears = 0;
+    }
+
+    // Unrest end → crisis_survived
+    if (!this._unrestActive && st._wasUnrest) {
+      st.justSurvivedCrisis = true;
+    }
+    st._wasUnrest = this._unrestActive;
+
+    // Handel
+    const tradeSys = window.KOSMOS?.civilianTradeSystem;
+    const tradeCount = tradeSys?.getConnectionsToHome?.(this._colonyId) ?? 0;
+    if (tradeCount > 0) {
+      st.consecutiveHighTradeYears = (st.consecutiveHighTradeYears ?? 0) + 1;
+      st.yearsWithoutTrade = 0;
+    } else {
+      st.yearsWithoutTrade = (st.yearsWithoutTrade ?? 0) + 1;
+      st.consecutiveHighTradeYears = 0;
+    }
+    st.activeTradeRoutes = tradeCount;
+
+    // Research output
+    const resSnap = this._resourceSnap?.research;
+    const researchPerYear = resSnap?.perYear ?? 0;
+    if (researchPerYear >= 200) {
+      st.consecutiveHighResearchYears = (st.consecutiveHighResearchYears ?? 0) + 1;
+    } else {
+      st.consecutiveHighResearchYears = 0;
+    }
+
+    // Population boom (×3 w ciągu 30 lat)
+    if (st.popAtReference <= 0 || st.popReferenceYear <= 0) {
+      st.popAtReference = this.population;
+      st.popReferenceYear = st.colonyAge;
+    }
+    const popAge = st.colonyAge - st.popReferenceYear;
+    if (popAge >= 30) {
+      if (this.population >= st.popAtReference * 3) {
+        st.popTripled = true;
+      }
+      // Reset reference co 30 lat
+      st.popAtReference = this.population;
+      st.popReferenceYear = st.colonyAge;
+    }
+
+    // Sprawdź każdy milestone z condition
+    for (const def of MILESTONE_DEFINITIONS) {
+      if (typeof def.condition !== 'function') continue;
+      if (!def.condition(st)) continue;
+
+      // Unique check
+      if (def.unique && this.colonyHistory.some(h => h.type === def.type)) continue;
+
+      // Cooldown check
+      const year = window.KOSMOS?.game?.gameYear ?? 0;
+      const lastYear = st.lastMilestoneYear[def.type] ?? -Infinity;
+      if (def.cooldown && (year - lastYear) < def.cooldown) continue;
+
+      this.addMilestone(def.type);
+    }
+  }
+
+  /** Przelicz identity z historii kolonii */
+  _updateIdentityFromHistory() {
+    if (!this.colonyHistory || this.colonyHistory.length === 0) return;
+
+    this.identity.score = Math.min(100, Math.max(0,
+      this.colonyHistory.reduce((sum, m) => sum + (m.identityValue ?? 0), 0)
+    ));
+
+    // Dominant type: strata z największą populacją
+    let maxCount = 0;
+    for (const [type, s] of Object.entries(this.strata)) {
+      if (s.count > maxCount) {
+        maxCount = s.count;
+        this.identity.dominantType = type;
+      }
+    }
+  }
+
+  /** Sprawdź cechy kulturowe na podstawie historii (co 10 lat civYears) */
+  _checkTraitsFromHistory() {
+    if (!this.colonyHistory || this.colonyHistory.length === 0) return;
+    if (!this.identity.traits) this.identity.traits = [];
+
+    for (const [id, trait] of Object.entries(CULTURAL_TRAITS)) {
+      if (this.identity.traits.includes(id)) continue;
+      if (typeof trait.condition !== 'function') continue;
+
+      if (trait.condition(this.colonyHistory, this.identity.score)) {
+        this.identity.traits.push(id);
+
+        if (window.KOSMOS?.civSystem === this) {
+          EventBus.emit('civ:traitUnlocked', {
+            colony: this._colonyId,
+            colonyName: this.planet?.name ?? 'Kolonia',
+            traitId: id,
+            trait,
+          });
+        }
+      }
+    }
+  }
+
+  /** Tick production penalties (z negotiate resolution — -5% na 5 lat) */
+  _tickProductionPenalties() {
+    if (!this._productionPenalties) return;
+    for (let i = this._productionPenalties.length - 1; i >= 0; i--) {
+      this._productionPenalties[i].remainingYears--;
+      if (this._productionPenalties[i].remainingYears <= 0) {
+        this._productionPenalties.splice(i, 1);
+      }
+    }
+  }
+
+  // ── Publiczne API dla BuildingSystem ──────────────────────────────────────
+
+  /** Mnożnik produkcji z lojalności (0.6 do 1.05) */
+  getLoyaltyProductionMultiplier() {
+    const l = this.loyalty;
+    if (l > 70) return 1.05;
+    if (l > 30) return 1.0;
+    if (l > 15) return 0.80;
+    return 0.60;
+  }
+
+  /** Mnożnik produkcji z production penalties (negotiate) */
+  getProductionPenaltyMultiplier() {
+    if (!this._productionPenalties || this._productionPenalties.length === 0) return 1.0;
+    let mult = 1.0;
+    for (const p of this._productionPenalties) {
+      mult += p.mult;
+    }
+    return Math.max(0.5, mult);
+  }
+
+  /** Bonusy produkcji z cech kulturowych { mining, factory, research, trade, all, hostile } */
+  getTraitProductionBonus() {
+    const bonus = { mining: 0, factory: 0, research: 0, trade: 0, all: 0, hostile: 0 };
+    if (!this.identity?.traits) return bonus;
+    for (const traitId of this.identity.traits) {
+      const trait = CULTURAL_TRAITS[traitId];
+      if (!trait?.productionBonus) continue;
+      for (const [key, val] of Object.entries(trait.productionBonus)) {
+        bonus[key] = (bonus[key] ?? 0) + val;
+      }
+    }
+    return bonus;
+  }
+
+  /** Czy kolonia jest autonomiczna (separatyzm) */
+  get isAutonomous() { return this._autonomousState; }
+  set isAutonomous(val) { this._autonomousState = !!val; }
 }

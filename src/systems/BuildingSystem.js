@@ -1417,6 +1417,10 @@ export class BuildingSystem {
     // Outpost: kara wydajności ×0.6 — brak ludzi do nadzoru/konserwacji
     const outpostPenalty = this._isOutpost ? OUTPOST_EFFICIENCY : 1.0;
 
+    // Mnożnik lojalności (0.6 do 1.05) i kara z negocjacji ruchów społecznych
+    const loyaltyMult = this.civSystem?.getLoyaltyProductionMultiplier?.() ?? 1.0;
+    const penaltyMult = this.civSystem?.getProductionPenaltyMultiplier?.() ?? 1.0;
+
     const effective = {};
     for (const key in baseRates) {
       const val = baseRates[key];
@@ -1426,7 +1430,7 @@ export class BuildingSystem {
         const eventMult = this._planetId
           ? (window.KOSMOS?.randomEventSystem?.getProductionMultiplierForColony(this._planetId, key) ?? 1.0)
           : 1.0;
-        effective[key] = val * techMult * eventMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency * outpostPenalty;
+        effective[key] = val * techMult * eventMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency * outpostPenalty * loyaltyMult * penaltyMult;
       } else if (val < 0) {
         const techMult = this.techSystem?.getConsumptionMultiplier(key) ?? 1.0;
         effective[key] = val * techMult;

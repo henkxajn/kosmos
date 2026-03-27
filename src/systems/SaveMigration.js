@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 34;
+export const CURRENT_VERSION     = 35;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -49,6 +49,7 @@ const MIGRATIONS = {
   31: _migrateV31toV32,
   32: _migrateV32toV33,
   33: _migrateV33toV34,
+  34: _migrateV34toV35,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1009,6 +1010,69 @@ function _migrateV33toV34(data) {
   for (const v of vm.vessels) {
     if (v.colonists === undefined) v.colonists = 0;
     if (!v.modules) v.modules = [];
+  }
+
+  return data;
+}
+
+// v34→v35: System milestones — historia kolonii, smoothedLoyalty, suppress history
+function _migrateV34toV35(data) {
+  const colonies = data.civ4x?.colonies;
+  if (!colonies) return data;
+
+  for (const col of colonies) {
+    const civ = col.civ;
+    if (!civ) continue;
+
+    // Domyślna historia: milestone founding
+    if (!civ.colonyHistory) {
+      const foundingYear = data.gameYear ?? 0;
+      civ.colonyHistory = [{
+        year: foundingYear,
+        type: 'founding',
+        namePL: `Założenie kolonii ${col.name ?? 'Kolonia'}`,
+        nameEN: `Founding of ${col.name ?? 'Colony'}`,
+        icon: '🏗',
+        loyaltyPerm: 0,
+        identityValue: 3,
+      }];
+    }
+
+    // Domyślny stan milestones
+    if (!civ.milestoneState) {
+      civ.milestoneState = {
+        consecutiveHighProsperityYears: 0,
+        consecutiveLowProsperityYears: 0,
+        consecutiveFamineYears: 0,
+        yearsWithoutTrade: 0,
+        consecutiveHighTradeYears: 0,
+        consecutiveHighResearchYears: 0,
+        popAtReference: civ.population ?? 2,
+        popReferenceYear: 0,
+        lastMilestoneYear: {},
+        colonyAge: 0,
+        justSurvivedDisaster: false,
+        justSurvivedCrisis: false,
+      };
+    }
+
+    // Wygładzony loyalty
+    if (civ.smoothedLoyalty === undefined) {
+      // Oblicz z istniejących danych: weighted avg satisfaction
+      let weighted = 0, total = 0;
+      if (civ.strata) {
+        for (const s of Object.values(civ.strata)) {
+          weighted += (s.count ?? 0) * (s.satisfaction ?? 50);
+          total += (s.count ?? 0);
+        }
+      }
+      civ.smoothedLoyalty = total > 0 ? weighted / total : 80;
+    }
+
+    // Nowe tablice
+    civ.suppressHistory     ??= [];
+    civ.productionPenalties ??= [];
+    civ.autonomousState     ??= false;
   }
 
   return data;
