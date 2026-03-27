@@ -839,10 +839,13 @@ export class FactorySystem {
 
     // Pending ship orders (statki czekające na surowce/commodities)
     const colMgr = window.KOSMOS?.colonyManager;
-    const planetId = colony?.planetId;
+    const planetId = colony?.planetId ?? colMgr?.activePlanetId;
     if (colMgr && planetId) {
       const pending = colMgr.getPendingShipOrders?.(planetId) ?? [];
-      for (const order of pending) {
+      // Fallback: sprawdź bezpośrednio colony.pendingShipOrders
+      const directPending = colony?.pendingShipOrders ?? [];
+      const allPending = pending.length > 0 ? pending : directPending;
+      for (const order of allPending) {
         for (const [resId, qty] of Object.entries(order.cost ?? {})) {
           if (!COMMODITIES[resId]) continue;
           if (qty > 0) {
@@ -856,6 +859,13 @@ export class FactorySystem {
 
   // Znajdź kolonię do której należy ten FactorySystem
   _getOwnerColony() {
+    // Szybka ścieżka: aktywna kolonia
+    if (window.KOSMOS?.factorySystem === this) {
+      const colMgr = window.KOSMOS?.colonyManager;
+      const activePid = colMgr?.activePlanetId;
+      if (activePid) return colMgr.getColony(activePid);
+    }
+    // Fallback: przeszukaj wszystkie kolonie
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return null;
     for (const col of colMgr.getAllColonies()) {
