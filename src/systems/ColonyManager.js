@@ -1175,9 +1175,14 @@ export class ColonyManager {
   // ── Prywatne ──────────────────────────────────────────────────────────
 
   // Obsługa zdarzenia założenia kolonii z ekspedycji
-  _onColonyFounded({ planetId, startResources, startPop }) {
+  _onColonyFounded({ planetId, startResources, startPop, autoSpaceport }) {
     const gameYear = Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0);
     const colony = this.createColony(planetId, startResources, startPop, gameYear);
+
+    // Auto-spaceport: statek kolonizacyjny staje się portem kosmicznym
+    if (autoSpaceport && colony?.buildingSystem) {
+      colony.buildingSystem.autoPlaceBuilding?.('launch_pad');
+    }
 
     // Automatycznie utwórz drogi handlowe z nową kolonią (jeśli tech jest zbadany)
     if (colony && this.techSystem?.isResearched('interplanetary_logistics')) {

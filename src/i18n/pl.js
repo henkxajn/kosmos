@@ -1986,4 +1986,19 @@ export default {
   'expedition.alreadyExplored': 'Ciało już zbadane',
   'expedition.noFuelRoundTrip': 'Brak paliwa na lot i powrót (potrzeba {0} pc)',
   'expedition.outpostUpgraded': 'Placówka rozbudowana do pełnej kolonii!',
+  'expedition.colonistsDelivered': '{0} kolonistów dostarczonych do kolonii',
+  'expedition.noColonistsLoaded': 'Załaduj kolonistów na statek przed wysłaniem',
+  'expedition.foundOutpost': 'Założono placówkę + zbudowano {0}',
+  'expedition.foundOutpostFailed': 'Nie udało się zbudować — brak odpowiedniego terenu',
+  'expedition.outpostBuildingMissing': 'Brak towarów na budowę {0}',
+
+  // Colonist Load Modal
+  'colonistModal.title': '🏠 ZAŁADUJ KOLONISTÓW',
+  'colonistModal.info': 'Pojemność statku: max {0} POP',
+  'colonistModal.confirm': '✓ Załaduj',
+  'colonistModal.cancel': '✕ Anuluj',
+
+  // Outpost Building Picker
+  'outpostPicker.title': '🏗 WYBIERZ BUDYNEK DLA PLACÓWKI',
+  'outpostPicker.cancel': '✕ Anuluj',
 };

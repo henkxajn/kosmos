@@ -1986,4 +1986,19 @@ export default {
   'expedition.alreadyExplored': 'Body already explored',
   'expedition.noFuelRoundTrip': 'Not enough fuel for round trip (need {0} pc)',
   'expedition.outpostUpgraded': 'Outpost upgraded to full colony!',
+  'expedition.colonistsDelivered': '{0} colonists delivered to colony',
+  'expedition.noColonistsLoaded': 'Load colonists onto ship before sending',
+  'expedition.foundOutpost': 'Outpost founded + built {0}',
+  'expedition.foundOutpostFailed': 'Build failed — no suitable terrain',
+  'expedition.outpostBuildingMissing': 'Missing commodities for {0}',
+
+  // Colonist Load Modal
+  'colonistModal.title': '🏠 LOAD COLONISTS',
+  'colonistModal.info': 'Ship capacity: max {0} POP',
+  'colonistModal.confirm': '✓ Load',
+  'colonistModal.cancel': '✕ Cancel',
+
+  // Outpost Building Picker
+  'outpostPicker.title': '🏗 SELECT OUTPOST BUILDING',
+  'outpostPicker.cancel': '✕ Cancel',
 };

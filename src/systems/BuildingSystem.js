@@ -1021,6 +1021,61 @@ export class BuildingSystem {
 
   // ── Demand z pending orders (dla CivilianTradeSystem) ────────────────
 
+  /**
+   * Auto-umieść budynek na pierwszym pasującym hexie (bez kosztu surowców).
+   * Używane przy: auto-spaceport z colony ship, outpost + budynek z cargo.
+   * @param {string} buildingId
+   * @returns {boolean} true jeśli udało się postawić
+   */
+  autoPlaceBuilding(buildingId) {
+    const building = BUILDINGS[buildingId];
+    if (!building) return false;
+
+    const grid = this._grid;
+    if (!grid) return false;
+
+    // Znajdź pierwszy wolny hex pasujący do budynku
+    for (const [key, tile] of grid.tiles) {
+      if (tile.buildingId) continue;         // zajęty
+      if (tile.capitalBase) continue;        // stolica
+      if (tile.underConstruction) continue;  // w budowie
+
+      // Sprawdź czy teren pasuje
+      const allowed = building.allowedTerrain;
+      if (allowed && !allowed.includes(tile.terrain)) continue;
+
+      // Postaw budynek natychmiast (bez kosztu, bez czasu budowy)
+      tile.buildingId = buildingId;
+      tile.buildingLevel = 1;
+
+      // Zarejestruj w _active
+      const rates = this._calcBaseRates(building, tile, 1);
+      const effectiveRates = this._applyTechMultipliers(rates, building);
+      const entry = {
+        building, def: building, level: 1, tile, tileKey: key,
+        baseRates: { ...rates }, effectiveRates: { ...effectiveRates },
+        popCost: building.popCost ?? 0,
+      };
+      this._active.set(key, entry);
+
+      // Zarejestruj producenta
+      if (this.resourceSystem) {
+        this.resourceSystem.registerProducer(key, rates);
+      }
+
+      // Housing
+      if (building.housing > 0) {
+        EventBus.emit('civ:addHousing', { amount: building.housing });
+      }
+
+      // Przelicz factory points jeśli to fabryka
+      if (building.id === 'factory') this._recalcFactoryPoints();
+
+      return true;
+    }
+    return false;
+  }
+
   getPendingDemand() {
     const demand = {};
     for (const [, order] of this._pendingQueue) {

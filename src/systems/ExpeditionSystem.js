@@ -53,28 +53,29 @@ import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
+import { BUILDINGS }     from '../data/BuildingsData.js';
+import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { GAME_CONFIG }   from '../config/GameConfig.js';
 import { t }             from '../i18n/i18n.js';
+import { loadCargo }     from '../entities/Vessel.js';
 
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE; // 12 — skala czasu cywilizacyjnego
 
 // Koszt ekspedycji mining/scientific (stały, niezależnie od celu)
 const LAUNCH_COST          = { Fe: 50, C: 20 };
-// Koszt ekspedycji kolonizacyjnej
-const COLONY_LAUNCH_COST   = { Fe: 150, C: 50, Ti: 20, food: 100, water: 50 };
-// Koszt misji rozpoznawczej (symboliczny — energia flow nie pobierana z inventory)
+// Koszt misji rozpoznawczej (symboliczny)
 const RECON_COST           = { Fe: 10 };
 const MIN_TRAVEL_YEARS     = 0.008; // ~3 dni gry — absolutne minimum podróży
 const MIN_COLONY_TRAVEL    = 0.02;  // ~7 dni gry — minimum podróży kolonizacyjnej
 const EXPEDITION_CREW_COST = 0.5;   // POP zablokowany na czas misji (mining/scientific)
-const COLONY_CREW_COST     = 2.0;   // POPy blokowane przez ekspedycję kolonizacyjną
 const BASE_DISASTER_CHANCE = 2.0;   // % — bazowe ryzyko katastrofy
 const MIN_DISASTER_CHANCE  = 0.1;   // % — minimum
 const XP_REDUCTION_PER     = 0.1;   // % redukcji na punkt doświadczenia statku
 const RECON_CREW_COST      = 0.5;   // POP zablokowany na czas misji rozpoznawczej
 
-// Zasoby startowe nowej kolonii (przed mnożnikiem zdarzenia)
-const COLONY_START_RESOURCES = { Fe: 200, C: 150, Si: 100, Cu: 50, food: 100, water: 100, research: 50 };
+// Zasoby startowe nowej kolonii (per POP, przed mnożnikiem zdarzenia)
+// Skalowane: startResources = BASE × colonists
+const COLONY_START_PER_POP = { Fe: 100, C: 75, Si: 50, Cu: 25, food: 50, water: 50, research: 25 };
 
 export class ExpeditionSystem {
   constructor(resourceSystem = null) {
@@ -99,6 +100,10 @@ export class ExpeditionSystem {
     // Obsługa żądania transferu zasobów
     EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded, isTradeRoute, sourceColonyId }) =>
       this._launchTransport(targetId, cargo, vesselId, cargoPreloaded, isTradeRoute, sourceColonyId));
+
+    // Obsługa żądania założenia outpostu (cargo ship + budynek)
+    EventBus.on('expedition:foundOutpostRequest', ({ targetId, buildingId, vesselId }) =>
+      this._launchFoundOutpost(targetId, buildingId, vesselId));
 
     // Obsługa rozkazu powrotu z orbity
     EventBus.on('expedition:orderReturn', ({ expeditionId }) =>
@@ -126,17 +131,17 @@ export class ExpeditionSystem {
   }
 
   // Sprawdź czy gracz może wysłać ekspedycję kolonizacyjną
-  canLaunchColony(targetId) {
+  // colonistOk = statek ma załadowanych kolonistów (ładowanie przez UI przed wywołaniem)
+  canLaunchColony(targetId, vesselId) {
     const techOk   = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
     const padOk    = this._hasSpaceport();
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
-    const shipOk   = colMgr?.hasShipWithCapability(activePid, 'colony') ?? false;
-    // Dynamiczny crewCost z definicji statku (jeśli dostępny)
     const vMgr     = window.KOSMOS?.vesselManager;
-    const colonyVessel = vMgr?.getFirstAvailableWithCapability(activePid, 'colony');
-    const dynCrewCost = colonyVessel ? (SHIPS[colonyVessel.shipId]?.crewCost ?? COLONY_CREW_COST) : COLONY_CREW_COST;
-    const crewOk   = (window.KOSMOS?.civSystem?.freePops ?? 0) >= dynCrewCost;
+    const shipOk   = vMgr?.hasAvailableShipWithCapability(activePid, 'colony') ?? false;
+    // Koloniści załadowani na statek (min 1 POP)
+    const vessel = vesselId ? vMgr?.getVessel(vesselId) : vMgr?.getFirstAvailableWithCapability(activePid, 'colony');
+    const colonistOk = (vessel?.colonists ?? 0) >= 1;
     const target   = this._findTarget(targetId);
     const exploredOk = target?.explored === true;
     // Cel musi być skalisty (planet rocky/ice, moon, planetoid)
@@ -144,12 +149,14 @@ export class ExpeditionSystem {
       ? (target.type === 'planetoid' || target.type === 'moon' ||
          (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
       : false;
-    // Outposty można upgrade'ować colony shipem — blokuj tylko pełne kolonie
+    // Pełne kolonie można zasilić kolonistami; outposty → upgrade; nowe ciała → nowa kolonia
     const existingCol = colMgr?.getColony(targetId);
-    const notColonized = existingCol ? existingCol.isOutpost === true : true;
+    const isFullColony = existingCol && !existingCol.isOutpost;
+    // Dopuszczamy wysyłkę do istniejącej kolonii (rozładunek POPów) i outpostów (upgrade)
     return {
-      ok: techOk && padOk && shipOk && crewOk && exploredOk && typeOk && notColonized,
-      techOk, padOk, shipOk, crewOk, exploredOk, typeOk, notColonized
+      ok: techOk && padOk && shipOk && colonistOk && exploredOk && typeOk,
+      techOk, padOk, shipOk, colonistOk, exploredOk, typeOk,
+      isFullColony, // info: cel to istniejąca kolonia (rozładunek, nie nowa)
     };
   }
 
@@ -163,6 +170,47 @@ export class ExpeditionSystem {
     const vesselOk = colMgr?.hasShipWithCapability(activePid, 'recon') ?? false;
     return { ok: techOk && padOk && crewOk && vesselOk, techOk, padOk, crewOk, vesselOk };
   }
+
+  // Sprawdź czy gracz może założyć outpost (cargo ship + budynek)
+  // Nie wymaga spaceport — cargo ship leci bezpośrednio
+  canFoundOutpost(targetId, buildingId) {
+    const techOk   = window.KOSMOS?.techSystem?.isResearched('exploration') ?? false;
+    const colMgr   = window.KOSMOS?.colonyManager;
+    const activePid = colMgr?.activePlanetId;
+    const vMgr     = window.KOSMOS?.vesselManager;
+    const shipOk   = vMgr?.hasAvailableShipWithCapability(activePid, 'cargo') ?? false;
+    const target   = this._findTarget(targetId);
+    const exploredOk = target?.explored === true;
+    const typeOk   = target
+      ? (target.type === 'planetoid' || target.type === 'moon' ||
+         (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
+      : false;
+    // Cel nie może mieć kolonii (outpost OK → upgrade)
+    const existingCol = colMgr?.getColony(targetId);
+    const notColonized = !existingCol;
+    // Budynek musi istnieć
+    const bDef = BUILDINGS[buildingId];
+    const buildingOk = !!bDef;
+    // Sprawdź czy kolonia ma commodities na budynek
+    const resSys = this.resourceSystem;
+    let canAfford = true;
+    const totalCost = {};
+    if (bDef) {
+      // Koszt surowców + commodities
+      for (const [resId, qty] of Object.entries(bDef.cost ?? {})) {
+        totalCost[resId] = (totalCost[resId] ?? 0) + qty;
+      }
+      for (const [comId, qty] of Object.entries(bDef.commodityCost ?? {})) {
+        totalCost[comId] = (totalCost[comId] ?? 0) + qty;
+      }
+      if (resSys) canAfford = resSys.canAfford(totalCost);
+    }
+    return {
+      ok: techOk && shipOk && exploredOk && typeOk && notColonized && buildingOk && canAfford,
+      techOk, shipOk, exploredOk, typeOk, notColonized, buildingOk, canAfford, totalCost,
+    };
+  }
+
 
   // Liczba niezbadanych ciał niebieskich wg typu
   getUnexploredCount() {
@@ -434,7 +482,7 @@ export class ExpeditionSystem {
 
   // Wyślij ekspedycję kolonizacyjną
   _launchColony(targetId, vesselId) {
-    const check = this.canLaunchColony(targetId);
+    const check = this.canLaunchColony(targetId, vesselId);
     if (!check.ok) {
       const reason = !check.techOk
         ? t('expedition.noTechColonization')
@@ -442,23 +490,22 @@ export class ExpeditionSystem {
           ? t('expedition.noSpaceport')
           : !check.shipOk
             ? t('expedition.noColonyShip')
-            : !check.crewOk
-              ? t('expedition.noFreePops', COLONY_CREW_COST)
+            : !check.colonistOk
+              ? t('expedition.noColonistsLoaded')
               : !check.exploredOk
                 ? t('expedition.targetNotExploredColony')
-                : !check.typeOk
-                  ? t('expedition.targetNotColonizable')
-                  : t('expedition.targetAlreadyColonized');
+                : t('expedition.targetNotColonizable');
       EventBus.emit('expedition:launchFailed', { reason });
       return;
     }
 
     const target = this._findTarget(targetId);
     const vMgr = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
     const colVesselOrigin = this._getVesselOrigin(vesselId);
     const distance = this._calcDistance(target, colVesselOrigin);
 
-    // Sprawdź zasięg: vessel → paliwo, fallback → stary range
+    // Sprawdź zasięg: vessel → paliwo
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
       if (!vessel || vessel.status !== 'idle') {
@@ -472,47 +519,32 @@ export class ExpeditionSystem {
         });
         return;
       }
-    } else {
-      // Fallback range check: znajdź pierwszy dostępny statek z 'colony'
-      const fallbackColVessel = window.KOSMOS?.vesselManager?.getFirstAvailableWithCapability(
-        colMgr?.activePlanetId, 'colony'
-      );
-      const fallbackColShipId = fallbackColVessel?.shipId ?? 'cargo_ship';
-      if (!this._isInRange(target, fallbackColShipId)) {
-        const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
-        const range = SHIPS[fallbackColShipId]?.range ?? SHIPS.cargo_ship?.range ?? 12;
-        EventBus.emit('expedition:launchFailed', {
-          reason: t('expedition.outOfRange', dist, range)
-        });
-        return;
-      }
     }
 
-    // Pobierz zasoby
-    if (this.resourceSystem) {
-      if (!this.resourceSystem.canAfford(COLONY_LAUNCH_COST)) {
-        EventBus.emit('expedition:launchFailed', { reason: t('expedition.noLaunchResources') });
-        return;
-      }
-      this.resourceSystem.spend(COLONY_LAUNCH_COST);
-    }
-
-    // Zablokuj POPy (dynamiczny crewCost z definicji statku)
     const assignedVessel = vesselId ? vMgr?.getVessel(vesselId) : null;
     const vesselShipDef  = assignedVessel ? SHIPS[assignedVessel.shipId] : null;
-    const actualCrewCost = vesselShipDef?.crewCost ?? COLONY_CREW_COST;
-    const originColC = window.KOSMOS?.colonyManager?.getColony(
-      vesselId ? (assignedVessel?.colonyId ?? window.KOSMOS?.colonyManager?.activePlanetId) : window.KOSMOS?.colonyManager?.activePlanetId
-    );
-    if (originColC?.civSystem) originColC.civSystem.lockPops(actualCrewCost, SHIPS[assignedVessel?.shipId]?.crewStrata ?? 'mix');
+    const colonists      = assignedVessel?.colonists ?? 1;
 
-    // Czas podróży — prędkość przypisanego statku + mnożnik tech napędowych + CIV_TIME_SCALE
+    // POPy już zablokowane przy loadColonists (w UI) — nie blokujemy ponownie
+    // Minimalny koszt załogi (pilot statku) — crewCost z definicji hull
+    const pilotCost = vesselShipDef?.crewCost ?? 0.05;
+    const originColC = colMgr?.getColony(
+      vesselId ? (assignedVessel?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId
+    );
+    if (originColC?.civSystem && pilotCost > 0) {
+      originColC.civSystem.lockPops(pilotCost, vesselShipDef?.crewStrata ?? 'mix');
+    }
+
+    // Czas podróży
     const techMult    = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
-    // Warp = natychmiastowy lot
-    const baseColSpeed   = vesselShipDef?.warpCapable ? 99999 : (vesselShipDef?.speedAU ?? SHIPS.cargo_ship?.baseSpeedAU ?? 0.9);
+    const baseColSpeed   = vesselShipDef?.warpCapable ? 99999 : (assignedVessel?.speedAU ?? vesselShipDef?.baseSpeedAU ?? 0.9);
     const colonySpeed    = baseColSpeed * techMult * CIV_TIME_SCALE;
     const travelTime  = parseFloat(Math.max(MIN_COLONY_TRAVEL, distance / colonySpeed).toFixed(3));
     const departYear  = this._gameYear;
+
+    // Czy cel to istniejąca kolonia (rozładunek POPów, nie nowa kolonia)
+    const existingCol = colMgr?.getColony(targetId);
+    const isDelivery  = existingCol && !existingCol.isOutpost;
 
     const expedition = {
       id:             `exp_${this._nextId++}`,
@@ -522,21 +554,23 @@ export class ExpeditionSystem {
       targetType:     target.type,
       departYear,
       arrivalYear:    departYear + travelTime,
-      returnYear:     null,   // ekspedycja kolonizacyjna nie wraca
+      returnYear:     null,
       distance:       parseFloat(distance.toFixed(2)),
       travelTime,
-      crewCost:       actualCrewCost,
-      crewStrata:     SHIPS[assignedVessel?.shipId]?.crewStrata ?? 'mix',
+      crewCost:       pilotCost,
+      colonists,                    // ile POPów na pokładzie
+      crewStrata:     vesselShipDef?.crewStrata ?? 'mix',
       status:         'en_route',
       gained:         null,
       eventRoll:      null,
       vesselId:       vesselId ?? null,
       originColonyId: vesselId ? (assignedVessel?.colonyId ?? colMgr?.activePlanetId) : colMgr?.activePlanetId,
+      isDelivery,                   // true = rozładunek do istniejącej kolonii
     };
 
     this._expeditions.push(expedition);
 
-    // Wyślij vessel na misję (widoczny na mapie 3D podczas lotu)
+    // Wyślij vessel na misję
     if (vMgr && vesselId) {
       vMgr.dispatchOnMission(vesselId, {
         type:        'colony',
@@ -544,10 +578,111 @@ export class ExpeditionSystem {
         targetName:  target.name,
         departYear,
         arrivalYear: expedition.arrivalYear,
-        returnYear:  null,
+        returnYear:  isDelivery ? expedition.arrivalYear + travelTime : null, // delivery = wraca
         fuelCost:    distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0),
       });
     }
+
+    EventBus.emit('expedition:launched', { expedition });
+  }
+
+  // ── Założenie outpostu (cargo ship + budynek) ─────────────────────────────
+
+  _launchFoundOutpost(targetId, buildingId, vesselId) {
+    const check = this.canFoundOutpost(targetId, buildingId);
+    if (!check.ok) {
+      const reason = !check.techOk ? t('expedition.noTechColonization')
+        : !check.shipOk ? t('expedition.noColonyShip')
+        : !check.exploredOk ? t('expedition.targetNotExploredColony')
+        : !check.typeOk ? t('expedition.targetNotColonizable')
+        : !check.notColonized ? t('expedition.targetAlreadyColonized')
+        : !check.canAfford ? t('expedition.outpostBuildingMissing', buildingId)
+        : t('expedition.targetNotColonizable');
+      EventBus.emit('expedition:launchFailed', { reason });
+      return;
+    }
+
+    const target = this._findTarget(targetId);
+    const vMgr = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const activePid = colMgr?.activePlanetId;
+
+    // Znajdź cargo ship
+    let vessel;
+    if (vesselId) {
+      vessel = vMgr?.getVessel(vesselId);
+    } else {
+      vessel = vMgr?.getFirstAvailableWithCapability(activePid, 'cargo');
+    }
+    if (!vessel || vessel.status !== 'idle') {
+      EventBus.emit('expedition:launchFailed', { reason: t('expedition.vesselUnavailable') });
+      return;
+    }
+
+    const distance = this._calcDistance(target, this._getVesselOrigin(vessel.id));
+
+    // Sprawdź paliwo
+    const fuelNeeded = distance * vessel.fuel.consumption;
+    if (vessel.fuel.current < fuelNeeded) {
+      EventBus.emit('expedition:launchFailed', {
+        reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
+      });
+      return;
+    }
+
+    // Pobierz surowce z kolonii i załaduj na statek (auto-load)
+    const bDef = BUILDINGS[buildingId];
+    const totalCost = check.totalCost;
+    if (this.resourceSystem) {
+      this.resourceSystem.spend(totalCost);
+    }
+    // Załaduj na statek jako cargo (surowce → commodity names)
+    for (const [resId, qty] of Object.entries(totalCost)) {
+      if (qty > 0) {
+        vessel.cargo[resId] = (vessel.cargo[resId] ?? 0) + qty;
+        const weight = COMMODITIES[resId]?.weight ?? 1;
+        vessel.cargoUsed = (vessel.cargoUsed ?? 0) + qty * weight;
+      }
+    }
+
+    // Czas podróży
+    const techMult = window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1.0;
+    const speed = (vessel.speedAU ?? 1.0) * techMult * CIV_TIME_SCALE;
+    const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / speed).toFixed(3));
+    const departYear = this._gameYear;
+
+    const expedition = {
+      id:             `exp_${this._nextId++}`,
+      type:           'found_outpost',
+      targetId,
+      targetName:     target.name,
+      targetType:     target.type,
+      buildingId,     // budynek do postawienia
+      departYear,
+      arrivalYear:    departYear + travelTime,
+      returnYear:     null,
+      distance:       parseFloat(distance.toFixed(2)),
+      travelTime,
+      crewCost:       0, // bez POPów
+      status:         'en_route',
+      gained:         null,
+      eventRoll:      null,
+      vesselId:       vessel.id,
+      originColonyId: activePid,
+    };
+
+    this._expeditions.push(expedition);
+
+    // Wyślij statek
+    vMgr.dispatchOnMission(vessel.id, {
+      type:        'found_outpost',
+      targetId,
+      targetName:  target.name,
+      departYear,
+      arrivalYear: expedition.arrivalYear,
+      returnYear:  null,
+      fuelCost:    fuelNeeded,
+    });
 
     EventBus.emit('expedition:launched', { expedition });
   }
@@ -1169,6 +1304,12 @@ export class ExpeditionSystem {
       return;
     }
 
+    // Założenie outpostu — cargo ship + budynek
+    if (exp.type === 'found_outpost') {
+      this._processFoundOutpostArrival(exp);
+      return;
+    }
+
     // Misja rozpoznawcza — osobna obsługa
     if (exp.type === 'recon') {
       this._processReconArrival(exp);
@@ -1277,11 +1418,43 @@ export class ExpeditionSystem {
   _processColonyArrival(exp) {
     const colMgr = window.KOSMOS?.colonyManager;
     const vMgr   = window.KOSMOS?.vesselManager;
+    const colonists = exp.colonists ?? 1;
+
+    // ── Rozładunek POPów do istniejącej kolonii ─────────────────
+    if (exp.isDelivery) {
+      const targetCol = colMgr?.getColony(exp.targetId);
+      if (targetCol?.civSystem) {
+        // Dodaj kolonistów do kolonii docelowej
+        for (let i = 0; i < colonists; i++) {
+          targetCol.civSystem.addPop?.() ?? EventBus.emit('civ:popBorn', { population: targetCol.civSystem.population });
+        }
+      }
+      // Odblokuj pilota na kolonii źródłowej
+      const originCol = colMgr?.getColony(exp.originColonyId);
+      if (originCol?.civSystem && exp.crewCost > 0) originCol.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
+
+      // Statek przeżywa — dokuje w kolonii docelowej
+      if (exp.vesselId && vMgr) {
+        const vessel = vMgr.getVessel(exp.vesselId);
+        if (vessel) vessel.colonists = 0;
+        vMgr.dockAtColony(exp.vesselId, exp.targetId);
+      }
+
+      exp.status = 'completed';
+      exp.gained = {};
+
+      EventBus.emit('expedition:missionReport', {
+        expedition: exp,
+        gained: {},
+        multiplier: 1.0,
+        text: t('expedition.colonistsDelivered', colonists),
+      });
+      return;
+    }
 
     // ── Upgrade outpost → pełna kolonia ──────────────────────────
     const existingCol = colMgr?.getColony(exp.targetId);
     if (existingCol?.isOutpost) {
-      // Oblicz mnożnik zasobów startowych (uproszczony — bez katastrofy)
       const roll = Math.random() * 100;
       let resourceMult;
       if      (roll < 15) resourceMult = 0.5;
@@ -1289,15 +1462,16 @@ export class ExpeditionSystem {
       else                resourceMult = 1.5;
 
       const startResources = {};
-      for (const [key, val] of Object.entries(COLONY_START_RESOURCES)) {
-        startResources[key] = Math.floor(val * resourceMult);
+      for (const [key, val] of Object.entries(COLONY_START_PER_POP)) {
+        startResources[key] = Math.floor(val * colonists * resourceMult);
       }
       existingCol.resourceSystem.receive(startResources);
-      colMgr.upgradeOutpostToColony(exp.targetId, exp.crewCost);
+      colMgr.upgradeOutpostToColony(exp.targetId, colonists);
 
-      // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
+      // Odblokuj pilota na kolonii źródłowej
       const upgradeCol = colMgr?.getColony(exp.originColonyId);
-      if (upgradeCol?.civSystem) upgradeCol.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
+      if (upgradeCol?.civSystem && exp.crewCost > 0) upgradeCol.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
+      // Statek zniszczony — budulec spaceportu
       if (exp.vesselId && vMgr) vMgr.destroyVessel(exp.vesselId);
 
       exp.status = 'completed';
@@ -1312,57 +1486,58 @@ export class ExpeditionSystem {
       return;
     }
 
+    // ── Nowa kolonia ────────────────────────────────────────────
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
     const disasterThreshold = this._getDisasterChance(exp.vesselId);
 
-    // Zniszcz vessel (statek kolonizacyjny nie wraca — zużyty przy kolonizacji)
+    // Statek zniszczony — staje się budulcem kolonii + auto-spaceport
     if (exp.vesselId && vMgr) {
       vMgr.destroyVessel(exp.vesselId);
     }
 
     if (roll < disasterThreshold) {
-      // KATASTROFA — kolonia NIE powstaje, POPy giną, zasoby stracone
+      // KATASTROFA — kolonia NIE powstaje, POPy giną
       exp.status = 'completed';
       exp.gained = {};
-      // POPy giną — odblokuj (potem giną w civ:popDied)
       const disColC = colMgr?.getColony(exp.originColonyId);
-      if (disColC?.civSystem) disColC.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
-      // Emituj śmierć za każdy POP
-      for (let i = 0; i < exp.crewCost; i++) {
+      if (disColC?.civSystem && exp.crewCost > 0) disColC.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
+      for (let i = 0; i < colonists; i++) {
         EventBus.emit('civ:popDied', { cause: 'colony_disaster', population: 0 });
       }
       EventBus.emit('expedition:disaster', { expedition: exp });
       return;
     }
 
-    // Oblicz mnożnik zasobów startowych
+    // Mnożnik zasobów startowych
     let resourceMult;
-    if      (roll < 20) resourceMult = 0.5;   // trudny start (15%)
-    else if (roll < 90) resourceMult = 1.0;   // normalny (70%)
-    else                resourceMult = 1.5;   // świetne warunki (10%)
+    if      (roll < 20) resourceMult = 0.5;
+    else if (roll < 90) resourceMult = 1.0;
+    else                resourceMult = 1.5;
 
-    // Zasoby startowe z mnożnikiem
+    // Zasoby startowe skalowane liczbą kolonistów
     const startResources = {};
-    for (const [key, val] of Object.entries(COLONY_START_RESOURCES)) {
-      startResources[key] = Math.floor(val * resourceMult);
+    for (const [key, val] of Object.entries(COLONY_START_PER_POP)) {
+      startResources[key] = Math.floor(val * colonists * resourceMult);
     }
 
     exp.gained = startResources;
-    exp.status = 'completed';   // ekspedycja kolonizacyjna nie wraca
+    exp.status = 'completed';
 
-    // Odblokuj POPy ze źródła (zostaną przeniesione do nowej kolonii — bezpośrednio)
+    // Odblokuj pilota na kolonii źródłowej
     const foundCol = colMgr?.getColony(exp.originColonyId);
-    if (foundCol?.civSystem) foundCol.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
+    if (foundCol?.civSystem && exp.crewCost > 0) foundCol.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
 
-    // Emituj zdarzenie założenia kolonii — ColonyManager obsłuży
+    // Emituj zdarzenie założenia kolonii
+    // autoSpaceport: true — ColonyManager auto-buduje launch_pad
     EventBus.emit('expedition:colonyFounded', {
       expedition:     exp,
       planetId:       exp.targetId,
       startResources,
-      startPop:       exp.crewCost,   // 2 POPy
-      roll:           roll,
+      startPop:       colonists,
+      roll,
       resourceMult,
+      autoSpaceport:  true,  // statek staje się spaceportem
     });
 
     EventBus.emit('expedition:arrived', {
@@ -1370,6 +1545,73 @@ export class ExpeditionSystem {
       gained: startResources,
       multiplier: resourceMult,
     });
+  }
+
+  // Przetwórz przybycie outpost founding (cargo ship + budynek)
+  _processFoundOutpostArrival(exp) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vMgr   = window.KOSMOS?.vesselManager;
+    const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+    const buildingId = exp.buildingId;
+    const bDef = BUILDINGS[buildingId];
+
+    // Utwórz outpost
+    const gameYear = Math.floor(this._gameYear);
+    const outpost = colMgr?.createOutpost(exp.targetId, {}, gameYear);
+
+    if (outpost) {
+      // Rozładuj cargo z vessel do outpost inventory
+      if (vessel) {
+        const resSys = outpost.resourceSystem;
+        if (resSys) {
+          for (const [resId, qty] of Object.entries(vessel.cargo ?? {})) {
+            if (qty > 0) resSys.receive({ [resId]: qty });
+          }
+        }
+        // Wyczyść cargo statku
+        vessel.cargo = {};
+        vessel.cargoUsed = 0;
+      }
+
+      // Auto-budowa budynku na outpoście
+      let buildSuccess = false;
+      if (bDef && outpost.buildingSystem) {
+        buildSuccess = outpost.buildingSystem.autoPlaceBuilding(buildingId);
+      }
+
+      // Statek dokuje na outpoście (przeżywa)
+      if (vessel && vMgr) {
+        vMgr.dockAtColony(vessel.id, exp.targetId);
+      }
+
+      exp.status = 'completed';
+      exp.gained = {};
+
+      const bName = bDef?.namePL ?? buildingId;
+      EventBus.emit('expedition:missionReport', {
+        expedition: exp,
+        gained: {},
+        multiplier: 1.0,
+        text: buildSuccess
+          ? t('expedition.foundOutpost', bName)
+          : t('expedition.foundOutpostFailed'),
+      });
+
+      // Emituj zdarzenie nowego outpostu
+      EventBus.emit('outpost:founded', { colony: outpost });
+    } else {
+      // Outpost nie utworzony (cel już zajęty?) — statek wraca
+      exp.status = 'completed';
+      if (vessel && vMgr) {
+        vMgr.dockAtColony(vessel.id, exp.originColonyId);
+      }
+      EventBus.emit('expedition:missionReport', {
+        expedition: exp,
+        gained: {},
+        multiplier: 0,
+        text: t('expedition.targetAlreadyColonized'),
+      });
+    }
   }
 
   // Przetwórz przybycie transportu zasobów
