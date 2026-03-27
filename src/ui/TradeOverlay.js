@@ -722,7 +722,8 @@ export class TradeOverlay extends BaseOverlay {
       }
       if (stock <= 0 && consumption <= 0 && production <= 0) continue;
       const mult = scarcityMultiplier(stock, consumption);
-      if (mult !== 1.0) {
+      // Pokaż towary z wyraźnym odchyleniem od ceny bazowej (>10% w górę/dół)
+      if (mult > 1.1 || mult < 0.9) {
         results.push({ id: goodId, mult });
       }
     }
