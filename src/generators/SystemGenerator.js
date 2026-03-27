@@ -688,9 +688,13 @@ export class SystemGenerator {
       bestPlanet.breathableAtmosphere = true;
     }
     // Gwarancja minimalnego Ti w composition — żeby gracz nie utknął bez tego surowca
+    // Złoża generowane w generate() → trzeba regenerować po modyfikacji composition
     if (bestPlanet.composition) {
       if ((bestPlanet.composition.Ti ?? 0) < 0.08) {
         bestPlanet.composition.Ti = 0.08; // 8% — tuż nad progiem złoża (5%)
+        // Regeneruj złoża — stare nie zawierały Ti
+        const depSys = new DepositSystem();
+        depSys.generateDeposits(bestPlanet);
       }
     }
 
@@ -770,6 +774,8 @@ export class SystemGenerator {
     // Gwarancja minimalnego Ti w composition (POWER TEST)
     if (bestPlanet.composition && (bestPlanet.composition.Ti ?? 0) < 0.08) {
       bestPlanet.composition.Ti = 0.08;
+      const depSys = new DepositSystem();
+      depSys.generateDeposits(bestPlanet);
     }
 
     window.KOSMOS.scenario = 'power_test';  // POWER TEST
