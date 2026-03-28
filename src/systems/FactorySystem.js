@@ -854,6 +854,21 @@ export class FactorySystem {
         }
       }
     }
+
+    // Pending outpost orders (placówki czekające na surowce/commodities)
+    if (colMgr && planetId) {
+      const outpostPending = colMgr.getPendingOutpostOrders?.(planetId)
+                          ?? colony?.pendingOutpostOrders ?? [];
+      for (const order of outpostPending) {
+        for (const [resId, qty] of Object.entries(order.cost ?? {})) {
+          if (!COMMODITIES[resId]) continue;
+          if (qty > 0) {
+            items.push({ commodityId: resId, qty });
+          }
+        }
+      }
+    }
+
     return items;
   }
 

@@ -2009,5 +2009,14 @@ export default {
 
   // Outpost Building Picker
   'outpostPicker.title': '🏗 WYBIERZ BUDYNEK DLA PLACÓWKI',
+  'outpostPicker.titleFor': '🏗 BUDYNEK DLA PLACÓWKI: {0}',
   'outpostPicker.cancel': '✕ Anuluj',
+  'outpostPicker.groupAutonomous': '⚙ Autonomiczne',
+  'outpostPicker.groupCrew': '👷 Wymagają załogi',
+  'outpostPicker.crewWarning': 'Wymaga kolonii',
+  'outpostPicker.noTerrain': 'Brak odpowiedniego terenu',
+  'outpostPicker.noVolcano': 'Brak wulkanów',
+  'outpostPicker.noAtmosphere': 'Brak atmosfery',
+  'outpostPicker.queuePending': 'Kolejkuj — brakujące zasoby będą produkowane',
+  'expedition.outpostQueued': 'Zamówienie placówki w kolejce — brakujące zasoby będą produkowane',
 };

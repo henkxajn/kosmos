@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 35;
+export const CURRENT_VERSION     = 36;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -50,6 +50,7 @@ const MIGRATIONS = {
   32: _migrateV32toV33,
   33: _migrateV33toV34,
   34: _migrateV34toV35,
+  35: _migrateV35toV36,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1075,5 +1076,15 @@ function _migrateV34toV35(data) {
     civ.autonomousState     ??= false;
   }
 
+  return data;
+}
+
+// ── v35 → v36: pendingOutpostOrders per kolonia ─────────────────────────────
+function _migrateV35toV36(data) {
+  const colonies = data.civ4x?.colonies;
+  if (!colonies) return data;
+  for (const col of colonies) {
+    if (!col.pendingOutpostOrders) col.pendingOutpostOrders = [];
+  }
   return data;
 }

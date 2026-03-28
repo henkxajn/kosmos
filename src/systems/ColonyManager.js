@@ -123,10 +123,11 @@ export class ColonyManager {
       }
     });
 
-    // Tick budowy statków + pending ship orders — civDeltaYears = deltaYears × CIV_TIME_SCALE
+    // Tick budowy statków + pending ship/outpost orders — civDeltaYears = deltaYears × CIV_TIME_SCALE
     EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => {
       this._tickShipBuilds(deltaYears);
       this._tickPendingShipOrders();
+      this._tickPendingOutpostOrders();
     });
 
     // Invaliduj cache shipyard level przy budowie/rozbiórce/upgrade stoczni
@@ -791,6 +792,99 @@ export class ColonyManager {
     return colony?.pendingShipOrders ?? [];
   }
 
+  // ── Pending Outpost Orders ──────────────────────────────────────────────────
+
+  /**
+   * Dodaj zamówienie placówki do kolejki (brakuje zasobów — fabryki wyprodukują).
+   */
+  addPendingOutpostOrder(planetId, { targetId, buildingId, vesselId, cost }) {
+    const colony = this.getColony(planetId);
+    if (!colony) return null;
+    if (!colony.pendingOutpostOrders) colony.pendingOutpostOrders = [];
+
+    const orderId = `poo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const order = {
+      id: orderId,
+      targetId,
+      buildingId,
+      vesselId,
+      cost: { ...cost },
+      queuedAt: window.KOSMOS?.timeSystem?.gameTime ?? 0,
+    };
+    colony.pendingOutpostOrders.push(order);
+    EventBus.emit('outpost:orderQueued', { planetId, order });
+    return orderId;
+  }
+
+  /**
+   * Anuluj oczekujące zamówienie placówki.
+   */
+  cancelPendingOutpostOrder(planetId, orderId) {
+    const colony = this.getColony(planetId);
+    if (!colony?.pendingOutpostOrders) return;
+
+    const idx = colony.pendingOutpostOrders.findIndex(o => o.id === orderId);
+    if (idx === -1) return;
+
+    colony.pendingOutpostOrders.splice(idx, 1);
+    EventBus.emit('outpost:orderCancelled', { planetId, orderId });
+  }
+
+  /**
+   * Pobierz oczekujące zamówienia placówek dla kolonii.
+   */
+  getPendingOutpostOrders(planetId) {
+    const colony = this.getColony(planetId);
+    return colony?.pendingOutpostOrders ?? [];
+  }
+
+  /**
+   * Tick pending outpost orders — sprawdź czy zamówienia mogą ruszyć.
+   * Wzorzec identyczny jak _tickPendingShipOrders.
+   */
+  _tickPendingOutpostOrders() {
+    const vMgr = window.KOSMOS?.vesselManager;
+    for (const colony of this._colonies.values()) {
+      const pending = colony.pendingOutpostOrders;
+      if (!pending || pending.length === 0) continue;
+
+      const toRemove = [];
+      for (let i = 0; i < pending.length; i++) {
+        const order = pending[i];
+
+        // Sprawdź czy vessel nadal istnieje i jest dostępny
+        const vessel = vMgr?.getVessel(order.vesselId);
+        if (!vessel) {
+          // Statek zniszczony/utracony → anuluj zamówienie
+          toRemove.push(i);
+          EventBus.emit('outpost:orderCancelled', {
+            planetId: colony.planetId, orderId: order.id, reason: 'vessel_lost',
+          });
+          continue;
+        }
+        // Vessel musi być idle + docked w tej kolonii
+        if (vessel.status !== 'idle' || vessel.position?.state !== 'docked') continue;
+        if (vessel.colonyId !== colony.planetId) continue;
+
+        // Sprawdź surowce
+        if (!colony.resourceSystem.canAfford(order.cost)) continue;
+
+        // Wszystko OK — uruchom ekspedycję outpost
+        toRemove.push(i);
+        EventBus.emit('expedition:foundOutpostRequest', {
+          targetId:   order.targetId,
+          buildingId: order.buildingId,
+          vesselId:   order.vesselId,
+        });
+      }
+
+      // Usuń zrealizowane/anulowane (od końca)
+      for (let j = toRemove.length - 1; j >= 0; j--) {
+        pending.splice(toRemove[j], 1);
+      }
+    }
+  }
+
   // Zużyj statek z floty (przy wysyłaniu ekspedycji — np. colony_ship)
   // vesselId: konkretny vessel ID do zużycia, LUB shipId: typ do znalezienia pierwszego
   consumeShip(planetId, shipIdOrVesselId) {
@@ -1049,6 +1143,7 @@ export class ColonyManager {
         fleet:            col.fleet ?? [],
         shipQueues:       col.shipQueues ?? [],
         pendingShipOrders: col.pendingShipOrders ?? [],
+        pendingOutpostOrders: col.pendingOutpostOrders ?? [],
         credits:          col.credits ?? 0,
         creditsPerYear:   col.creditsPerYear ?? 0,
         tradeCapacity:    col.tradeCapacity ?? 0,
@@ -1150,6 +1245,7 @@ export class ColonyManager {
         fleet:            colData.fleet ?? [],
         shipQueues:       colData.shipQueues ?? [],
         pendingShipOrders: colData.pendingShipOrders ?? [],
+        pendingOutpostOrders: colData.pendingOutpostOrders ?? [],
         credits:          colData.credits ?? 0,
         creditsPerYear:   colData.creditsPerYear ?? 0,
         tradeCapacity:    colData.tradeCapacity ?? 0,

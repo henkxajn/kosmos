@@ -201,8 +201,6 @@ const ACTIONS = {
     label: 'Załóż placówkę',
     icon: '🏗',
     requiresTarget: true,
-    // Specjalna obsługa: najpierw OutpostBuildingPicker, potem target picker
-    needsBuildingPicker: true,
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };

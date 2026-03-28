@@ -2009,5 +2009,14 @@ export default {
 
   // Outpost Building Picker
   'outpostPicker.title': '🏗 SELECT OUTPOST BUILDING',
+  'outpostPicker.titleFor': '🏗 BUILDING FOR OUTPOST: {0}',
   'outpostPicker.cancel': '✕ Cancel',
+  'outpostPicker.groupAutonomous': '⚙ Autonomous',
+  'outpostPicker.groupCrew': '👷 Require Crew',
+  'outpostPicker.crewWarning': 'Requires colony',
+  'outpostPicker.noTerrain': 'No suitable terrain',
+  'outpostPicker.noVolcano': 'No volcanoes',
+  'outpostPicker.noAtmosphere': 'No atmosphere',
+  'outpostPicker.queuePending': 'Queue — missing resources will be produced',
+  'expedition.outpostQueued': 'Outpost order queued — missing resources will be produced',
 };

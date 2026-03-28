@@ -773,11 +773,8 @@ export class FleetManagerOverlay {
       return;
     }
 
-    // Założenie placówki — najpierw OutpostBuildingPicker, potem target picker
-    if (actionId === 'found_outpost') {
-      this._openOutpostBuildingThenTarget(vessel);
-      return;
-    }
+    // Założenie placówki — teraz standardowy target picker (building picker po wyborze celu)
+    // Flow obsługiwany w _executeMission()
 
     if (action.requiresTarget) {
       // Otwórz target picker
@@ -818,27 +815,56 @@ export class FleetManagerOverlay {
   }
 
   /**
-   * Założenie placówki: OutpostBuildingPicker → target picker.
+   * Założenie placówki (krok 2): po wyborze celu → otwórz OutpostBuildingPicker.
+   * Jeśli gracz może sobie pozwolić → launch. Jeśli nie → pending order.
    */
-  async _openOutpostBuildingThenTarget(vessel) {
+  async _openOutpostBuildingPicker(targetId, vessel) {
     try {
       const colony = this._getVesselColony(vessel);
       if (!colony) return;
+
+      // Znajdź encję ciała docelowego
+      const body = _findBody(targetId);
+      if (!body) return;
+
       const picker = OutpostBuildingPicker.getInstance();
-      const buildingId = await picker.show(colony.resourceSystem);
-      if (!buildingId) return; // anulowano
-      // Otwórz target picker z zapamiętanym buildingId
-      this._missionConfig = {
-        actionId: 'found_outpost',
-        targetId: null,
-        step: 'select',
-        buildingId,
-      };
-      this._targetScrollOffset = 0;
-      this._cachedTargets = null;
+      const result = await picker.show(colony.resourceSystem, body);
+      if (!result) return; // anulowano
+
+      const { buildingId, pending } = result;
+
+      if (pending) {
+        // Brak surowców — dodaj do pending outpost orders (fabryki wyprodukują)
+        const bDef = window.KOSMOS?.buildingsData?.[buildingId]
+                  ?? (await import('../data/BuildingsData.js')).BUILDINGS[buildingId];
+        const totalCost = {};
+        for (const [resId, qty] of Object.entries(bDef?.cost ?? {})) {
+          totalCost[resId] = (totalCost[resId] ?? 0) + qty;
+        }
+        for (const [comId, qty] of Object.entries(bDef?.commodityCost ?? {})) {
+          totalCost[comId] = (totalCost[comId] ?? 0) + qty;
+        }
+
+        const colMgr = window.KOSMOS?.colonyManager;
+        colMgr?.addPendingOutpostOrder(vessel.colonyId, {
+          targetId,
+          buildingId,
+          vesselId: vessel.id,
+          cost: totalCost,
+        });
+      } else {
+        // Ma surowce — od razu launch
+        EventBus.emit('expedition:foundOutpostRequest', {
+          targetId,
+          buildingId,
+          vesselId: vessel.id,
+        });
+      }
     } catch {
       // anulowano
     }
+    this._missionConfig = null;
+    this._targetScrollOffset = 0;
   }
 
   /**
@@ -871,6 +897,12 @@ export class FleetManagerOverlay {
     const vessel = vMgr?.getVessel(this._selectedVesselId);
     if (!vessel) return;
 
+    // Założenie placówki — po wyborze celu otwórz building picker (async)
+    if (actionId === 'found_outpost') {
+      this._openOutpostBuildingPicker(targetId, vessel);
+      return;
+    }
+
     // Transport z powtarzaniem → utwórz trasę handlową
     if (actionId === 'transport' && this._missionConfig.repeat) {
       EventBus.emit('tradeRoute:create', {
@@ -893,7 +925,6 @@ export class FleetManagerOverlay {
       activePlanetId: colMgr?.activePlanetId,
       targetId,
       cargo: vessel.cargo ?? {},
-      buildingId: this._missionConfig.buildingId ?? null,
     };
     action.execute(vessel, state);
     this._missionConfig = null;
