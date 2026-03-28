@@ -196,6 +196,36 @@ const ACTIONS = {
     },
   },
 
+  found_outpost: {
+    id: 'found_outpost',
+    label: 'Załóż placówkę',
+    icon: '🏗',
+    requiresTarget: true,
+    // Specjalna obsługa: najpierw OutpostBuildingPicker, potem target picker
+    needsBuildingPicker: true,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
+      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
+      if (!caps.includes('cargo')) return { ok: false, reason: 'Wymaga statku cargo' };
+      const techOk = window.KOSMOS?.techSystem?.isResearched('exploration') ?? false;
+      if (!techOk) return { ok: false, reason: 'Brak tech: Eksploracja' };
+      // Sprawdź spaceport w kolonii statku
+      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
+      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
+      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      if (!state.targetId || !state.buildingId) return;
+      EventBus.emit('expedition:foundOutpostRequest', {
+        targetId: state.targetId,
+        buildingId: state.buildingId,
+        vesselId: vessel.id,
+      });
+    },
+  },
+
   return_home: {
     id: 'return_home',
     label: 'Powrót',
@@ -369,6 +399,7 @@ export function getAvailableActions(vessel, state) {
     }
     result.push(_check(ACTIONS.transport, vessel, state));
     if (caps.includes('cargo')) {
+      result.push(_check(ACTIONS.found_outpost, vessel, state));
       result.push(_check(ACTIONS.trade_route, vessel, state));
     }
   } else if (vessel.position.state === 'orbiting') {

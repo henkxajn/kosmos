@@ -428,54 +428,35 @@ export class ProsperitySystem {
   // ── Consumer Factory: auto-produkcja ────────────────────────────────────
 
   _updateConsumerProduction() {
-    // Policz łączne CFP z consumer_factory budynków
-    const totalCFP = this._getTotalCFP();
+    // Odczytaj rzeczywistą produkcję consumer goods z FactorySystem
     this._consumerProduction = {};
-    if (totalCFP <= 0) return;
 
-    const totalDemand = Object.values(this._consumerDemand).reduce((s, d) => s + d, 0);
-    if (totalDemand <= 0) return;
+    const factSys = this._getFactorySystem();
+    if (!factSys) return;
 
-    for (const goodId in this._consumerDemand) {
-      const demand = this._consumerDemand[goodId];
-      const allocatedCFP = totalCFP * (demand / totalDemand);
-      const commodity = COMMODITIES[goodId];
-      if (!commodity) continue;
+    const allocs = factSys.getAllocations();
+    const CONSUMER_GOODS = ['basic_supplies', 'civilian_goods', 'neurostimulants'];
 
-      const productionPerYear = allocatedCFP / commodity.baseTime;
-
-      // Sprawdź czy mamy surowce na produkcję
-      if (this._hasIngredients(commodity.recipe, productionPerYear)) {
-        this._consumerProduction[goodId] = productionPerYear;
-
-        // Konsumuj surowce proporcjonalnie do produkcji
-        this._consumeIngredients(commodity.recipe, productionPerYear);
-
-        // Dodaj wyprodukowane towary do inventory
-        if (this.resourceSystem) {
-          this.resourceSystem.receive({ [goodId]: productionPerYear });
-        }
-      } else {
-        // Częściowa produkcja — ile możemy wyprodukować?
-        const fraction = this._maxProducibleFraction(commodity.recipe, productionPerYear);
-        if (fraction > 0) {
-          const actual = productionPerYear * fraction;
-          this._consumerProduction[goodId] = actual;
-          this._consumeIngredients(commodity.recipe, actual);
-          if (this.resourceSystem) {
-            this.resourceSystem.receive({ [goodId]: actual });
-          }
-        } else {
-          this._consumerProduction[goodId] = 0;
-        }
+    for (const alloc of allocs) {
+      if (!CONSUMER_GOODS.includes(alloc.commodityId)) continue;
+      if (alloc.paused) continue;
+      // timePerUnit = civYears na 1 sztukę; produkcja = 1 / timePerUnit per rok
+      if (alloc.timePerUnit > 0) {
+        this._consumerProduction[alloc.commodityId] = 1 / alloc.timePerUnit;
       }
     }
   }
 
-  _getTotalCFP() {
-    // Consumer factory usunięta — produkcja consumer goods via FactorySystem (tryb reaktywny/priorytetowy)
-    // Metoda zachowana dla kompatybilności — zawsze zwraca 0
-    return 0;
+  _getFactorySystem() {
+    // Znajdź FactorySystem dla tej kolonii
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return null;
+    for (const col of colMgr.getAllColonies()) {
+      if (col.planet === this.planet || col.planetId === this.planet?.id) {
+        return col.factorySystem;
+      }
+    }
+    return null;
   }
 
   _getBuildingSystem() {
@@ -545,25 +526,8 @@ export class ProsperitySystem {
   }
 
   _syncProduction() {
-    if (!window.KOSMOS?.civMode) return;
-    // Guard: tylko aktywna kolonia rejestruje przez EventBus
-    if (window.KOSMOS?.prosperitySystem !== this) return;
-
-    const rates = {};
-    for (const goodId in this._consumerProduction) {
-      if (this._consumerProduction[goodId] > 0) {
-        rates[goodId] = this._consumerProduction[goodId];
-      }
-    }
-
-    const key = JSON.stringify(rates);
-    if (key === this._lastRegisteredProd) return;
-    this._lastRegisteredProd = key;
-
-    EventBus.emit('resource:registerProducer', {
-      id: 'consumer_factory_production',
-      rates,
-    });
+    // Produkcja consumer goods realizowana przez FactorySystem (receive do inventory)
+    // ProsperitySystem tylko odczytuje stawki do satisfaction — nie rejestruje producenta
   }
 
   // ── Epoki ───────────────────────────────────────────────────────────────

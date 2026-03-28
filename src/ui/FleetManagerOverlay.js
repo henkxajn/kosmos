@@ -21,6 +21,7 @@ import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
+import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { t, getName } from '../i18n/i18n.js';
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
@@ -772,6 +773,12 @@ export class FleetManagerOverlay {
       return;
     }
 
+    // Założenie placówki — najpierw OutpostBuildingPicker, potem target picker
+    if (actionId === 'found_outpost') {
+      this._openOutpostBuildingThenTarget(vessel);
+      return;
+    }
+
     if (action.requiresTarget) {
       // Otwórz target picker
       this._missionConfig = { actionId, targetId: null, step: 'select' };
@@ -807,6 +814,30 @@ export class FleetManagerOverlay {
       this._cachedTargets = null;
     } catch {
       // Anulowano — nic nie rób
+    }
+  }
+
+  /**
+   * Założenie placówki: OutpostBuildingPicker → target picker.
+   */
+  async _openOutpostBuildingThenTarget(vessel) {
+    try {
+      const colony = this._getVesselColony(vessel);
+      if (!colony) return;
+      const picker = OutpostBuildingPicker.getInstance();
+      const buildingId = await picker.show(colony.resourceSystem);
+      if (!buildingId) return; // anulowano
+      // Otwórz target picker z zapamiętanym buildingId
+      this._missionConfig = {
+        actionId: 'found_outpost',
+        targetId: null,
+        step: 'select',
+        buildingId,
+      };
+      this._targetScrollOffset = 0;
+      this._cachedTargets = null;
+    } catch {
+      // anulowano
     }
   }
 
@@ -862,6 +893,7 @@ export class FleetManagerOverlay {
       activePlanetId: colMgr?.activePlanetId,
       targetId,
       cargo: vessel.cargo ?? {},
+      buildingId: this._missionConfig.buildingId ?? null,
     };
     action.execute(vessel, state);
     this._missionConfig = null;
@@ -3898,6 +3930,15 @@ export class FleetManagerOverlay {
       if (actionId === 'colonize') {
         const col = colMgr?.getColony(body.id);
         if (col && !col.isOutpost) continue;
+      }
+      // Założenie placówki — tylko zbadane ciała bez kolonii/outpostu
+      if (actionId === 'found_outpost') {
+        if (!body.explored) continue;
+        if (colMgr?.hasColony(body.id)) continue;
+        // Tylko odpowiednie typy (rocky, ice, moon, planetoid)
+        const pType = body.planetType ?? body.type;
+        const okTypes = ['rocky', 'ice', 'iron', 'volcanic', 'moon', 'planetoid'];
+        if (!okTypes.includes(pType) && body.type !== 'moon' && body.type !== 'planetoid') continue;
       }
       // Survey/scientific — wszystkie ciała (zbadane i niezbadane)
       // Mining — tylko zbadane (ale pokazuj wszystkie, badge powie)
