@@ -123,8 +123,7 @@ export class PlanetMapGenerator {
     // 5. Nałóż efekty biegunowe i specjalne
     PlanetMapGenerator._applyPolarEffects(grid, planet, rand);
 
-    // 6. Zasoby strategiczne z compositon planety
-    PlanetMapGenerator._placeStrategicResources(grid, planet, rand);
+    // 6. Zasoby strategiczne — usunięte (martwy feature, deposits w DepositSystem)
 
     // 7. Fog of war (odkryte tylko na planecie domowej)
     if (!homeWorld) {

@@ -495,12 +495,6 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
 
-    // Deposit
-    if (tile.strategicResource && r > 16) {
-      ctx.font = `bold ${Math.max(5, r * 0.18)}px ${THEME.fontFamily}`;
-      ctx.fillStyle = '#ffcc00'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      ctx.fillText(tile.strategicResource, cx - r * 0.55, cy - r * 0.7);
-    }
 
     // Fog
     if (tile.explored === false) { ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fill(); }
@@ -525,7 +519,6 @@ export class ColonyOverlay extends BaseOverlay {
     let h = 8; // padding top
     h += 20; // teren header
     h += 16; // koordynaty + modifier
-    if (tile.strategicResource) h += 16;
     if (terrain.yieldBonus) h += Object.keys(terrain.yieldBonus).length * 14 + 4;
     h += 10; // separator
 
@@ -603,11 +596,6 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.fillText(`(${tile.q},${tile.r})${latMod.label ? '  ' + latMod.label : ''}`, x + 8, cy);
     cy += 16;
 
-    // Deposit
-    if (tile.strategicResource) {
-      ctx.fillStyle = '#ffcc00';
-      ctx.fillText(`💎 Złoże: ${tile.strategicResource}`, x + 8, cy); cy += 16;
-    }
 
     // Yield bonus
     if (terrain.yieldBonus) {
@@ -1008,7 +996,6 @@ export class ColonyOverlay extends BaseOverlay {
           const b = BUILDINGS[tile.buildingId];
           html += `<br>${b?.icon ?? ''} ${(b?.namePL ?? b?.id)} Lv.${tile.buildingLevel ?? 1}`;
         }
-        if (tile.strategicResource) html += `<br>💎 ${tile.strategicResource}`;
         this._showTooltip(html, x * _UI_SCALE, y * _UI_SCALE);
       } else {
         this._hoveredHex = null;
