@@ -20,8 +20,8 @@
 export const TERRAIN_TYPES = {
   plains: {
     namePL:            'Równina',
-    color:             0x7ab648,   // zielony
-    colorDark:         0x5a8a30,
+    color:             0x6e9b55,   // stonowany zielony (bliski 3D teksturze ocean)
+    colorDark:         0x4e7b38,
     icon:              '🟢',
     buildable:         true,
     allowedCategories: ['mining', 'energy', 'food', 'population', 'research', 'military', 'space', 'market', 'synthetic', 'governance'],
@@ -32,8 +32,8 @@ export const TERRAIN_TYPES = {
 
   mountains: {
     namePL:            'Góry',
-    color:             0x9e8e7e,
-    colorDark:         0x7e6e5e,
+    color:             0x8a7e6e,   // ciemniejszy brąz (góry/kamień w 3D)
+    colorDark:         0x6a5e4e,
     icon:              '⛰',
     buildable:         true,
     allowedCategories: ['mining', 'energy', 'military', 'synthetic', 'governance'],  // brak rolnictwa
@@ -44,8 +44,8 @@ export const TERRAIN_TYPES = {
 
   ocean: {
     namePL:            'Ocean',
-    color:             0x3a78c9,
-    colorDark:         0x1a58a9,
+    color:             0x1e3c8c,   // głęboki niebieski (bliski 3D ocean palette [20,45,110])
+    colorDark:         0x142870,
     icon:              '🌊',
     buildable:         false,        // tylko ze specjalną technologią (etap późniejszy)
     allowedCategories: [],
@@ -56,8 +56,8 @@ export const TERRAIN_TYPES = {
 
   forest: {
     namePL:            'Las',
-    color:             0x2d6e2d,
-    colorDark:         0x1d4e1d,
+    color:             0x3c7838,   // ciemna zieleń (bliski [60,120,100] z 3D ocean)
+    colorDark:         0x285828,
     icon:              '🌲',
     buildable:         true,         // wymaga karczowania (koszt minerałów)
     allowedCategories: ['food', 'population', 'research', 'governance'],
@@ -69,8 +69,8 @@ export const TERRAIN_TYPES = {
 
   desert: {
     namePL:            'Pustynia',
-    color:             0xe8c870,
-    colorDark:         0xc8a850,
+    color:             0xc8b478,   // stonowany piasek (bliski [200,195,150] z 3D)
+    colorDark:         0xa89458,
     icon:              '🏜',
     buildable:         true,
     allowedCategories: ['mining', 'energy', 'military', 'space', 'market', 'synthetic'],
@@ -81,8 +81,8 @@ export const TERRAIN_TYPES = {
 
   tundra: {
     namePL:            'Tundra',
-    color:             0xa8c8d8,
-    colorDark:         0x88a8b8,
+    color:             0x8eaab8,   // chłodny szaro-błękitny
+    colorDark:         0x6e8a98,
     icon:              '🧊',
     buildable:         true,
     allowedCategories: ['mining', 'energy', 'food', 'military', 'market', 'governance'],
@@ -93,8 +93,8 @@ export const TERRAIN_TYPES = {
 
   volcano: {
     namePL:            'Wulkan',
-    color:             0xc84820,
-    colorDark:         0xa82800,
+    color:             0x8e3818,   // ciemny rdzawo-czerwony (bliski volcanic palette)
+    colorDark:         0x6e2008,
     icon:              '🌋',
     buildable:         true,
     allowedCategories: ['energy', 'mining', 'market'],
@@ -105,8 +105,8 @@ export const TERRAIN_TYPES = {
 
   crater: {
     namePL:            'Krater',
-    color:             0x7a6a5a,
-    colorDark:         0x5a4a3a,
+    color:             0x685848,   // ciemny brąz-szary (jak iron palette mid)
+    colorDark:         0x483828,
     icon:              '☄',
     buildable:         true,
     allowedCategories: ['mining', 'research', 'military', 'synthetic'],
@@ -118,8 +118,8 @@ export const TERRAIN_TYPES = {
 
   ice_sheet: {
     namePL:            'Czapa lodowa',
-    color:             0xd8eef8,
-    colorDark:         0xb8ced8,
+    color:             0xc8dce8,   // jasny szaro-błękitny (bliski ice palette [200,210,225])
+    colorDark:         0xa8bcc8,
     icon:              '❄',
     buildable:         true,
     allowedCategories: ['mining', 'energy', 'food'],
@@ -130,8 +130,8 @@ export const TERRAIN_TYPES = {
 
   wasteland: {
     namePL:            'Pustkowia',
-    color:             0x8a7a6a,
-    colorDark:         0x6a5a4a,
+    color:             0x787060,   // szaro-brązowy (bliski rocky palette mid)
+    colorDark:         0x585040,
     icon:              '🌑',
     buildable:         true,
     allowedCategories: ['mining', 'energy', 'military', 'synthetic'],

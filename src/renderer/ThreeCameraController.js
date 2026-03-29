@@ -118,6 +118,11 @@ export class ThreeCameraController {
   // Ustaw minimalny dystans kamery (np. 0.5 dla księżyców, 3 domyślnie)
   setMinDist(val) { this._minDist = val; }
 
+  // Ustaw docelowy dystans kamery (auto-zoom, płynny lerp w update)
+  setTargetDist(dist) {
+    this._targetDist = Math.max(this._minDist, Math.min(450, dist));
+  }
+
   get wasDrag()    { return this._hasMoved; }
   get isDragging() { return this._isDragging; }
 }

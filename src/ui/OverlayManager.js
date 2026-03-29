@@ -26,9 +26,9 @@ export class OverlayManager {
   }
 
   // ── Wewnętrzne — otwórz/zamknij overlay niezależnie od API ─────────
-  _showOverlay(ov) {
-    if (ov.show) ov.show();
-    else if (ov.open) ov.open();
+  _showOverlay(ov, opts = {}) {
+    if (ov.show) ov.show(opts);
+    else if (ov.open) ov.open(opts);
   }
 
   _hideOverlay(ov) {
@@ -55,10 +55,10 @@ export class OverlayManager {
     return true;
   }
 
-  openPanel(id) {
+  openPanel(id, opts = {}) {
     if (!this.overlays[id]) return;
     if (this.active && this.active !== id) this._hideOverlay(this.overlays[this.active]);
-    this._showOverlay(this.overlays[id]);
+    this._showOverlay(this.overlays[id], opts);
     this.active = id;
   }
 

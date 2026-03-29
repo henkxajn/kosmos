@@ -16,6 +16,7 @@ import { RegionGenerator }    from '../map/RegionSystem.js';
 import { BiomeMapGenerator }  from './BiomeMapGenerator.js';
 import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
+import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -116,6 +117,9 @@ export class ThreeRenderer {
     this._thumbCam   = null;         // kamera do thumbnailów
     this._tradeRoutes      = [];     // dane tras: [{ fromId, toId, intensity, fromXZ, toXZ }]
     this._tradeFireflyPool = 60;     // max cząsteczek
+
+    // ── Ikony budynków na planecie (widok kosmiczny, bliski zoom) ──
+    this._colonyMarkers = new ColonyBuildingMarkers();
 
     // Tryb widoczności orbit: 'all' | 'planets_moons' | 'planetoids'
     this._orbitFilter = 'planetoids'; // domyślny — planetoidy widoczne, planety wg reguł
@@ -385,6 +389,27 @@ export class ThreeRenderer {
         this._cameraController.setMinDist(entity.type === 'moon' ? 0.15 : 0.3);
       }
       this._updateCameraFocus();
+      // Auto-zoom na każde kliknięte ciało (oprócz gwiazdy)
+      if (this._cameraController && entity.type !== 'star') {
+        const r = this._getEntityRadius(entity);
+        const idealDist = Math.max(r * 6, 0.8);
+        // Zbliżaj gdy kamera daleko — nie cofaj jeśli gracz już blisko
+        if (this._cameraController._targetDist > idealDist * 1.5) {
+          this._cameraController.setTargetDist(idealDist);
+        }
+      }
+      // Ikony budynków na kolonizowaną planetę
+      const colMgr = window.KOSMOS?.colonyManager;
+      if (colMgr?.hasColony(entity.id)) {
+        const r = this._getEntityRadius(entity);
+        const colony = colMgr.getColony(entity.id);
+        const pEntry = this._planets.get(entity.id);
+        if (colony?.grid && pEntry) {
+          this._colonyMarkers.show(pEntry.group, r, colony.grid, entity.id);
+        }
+      } else {
+        this._colonyMarkers.hide();
+      }
       // Pokaż orbitę planetoidy po kliknięciu
       this._showPlanetoidOrbit(entity.id, 0.35);
       // Pokaż orbitę księżyca po kliknięciu (ukryta domyślnie)
@@ -398,6 +423,8 @@ export class ThreeRenderer {
 
     EventBus.on('body:deselected', safe(() => {
       this._focusEntityId = null;
+      // Ukryj ikony budynków kolonii
+      this._colonyMarkers.hide();
       // Przywróć domyślny min zoom
       if (this._cameraController) {
         this._cameraController.setMinDist(0.3);
@@ -411,6 +438,16 @@ export class ThreeRenderer {
       this._hideAllMoonOrbits();
       this._rebuildAllOrbits();
     }));
+
+    // Odśwież ikony budynków po budowie/rozbiórce (jeśli ta planeta jest focused)
+    const refreshMarkers = () => {
+      if (!this._colonyMarkers.entityId || !this._focusEntityId) return;
+      const colony = window.KOSMOS?.colonyManager?.getColony(this._colonyMarkers.entityId);
+      if (colony?.grid) this._colonyMarkers.refresh(colony.grid);
+    };
+    EventBus.on('planet:buildResult',          safe(refreshMarkers));
+    EventBus.on('planet:demolishResult',       safe(refreshMarkers));
+    EventBus.on('planet:constructionComplete', safe(refreshMarkers));
 
     // Centruj kamerę na statku (kliknięcie w liście floty / Outliner)
     EventBus.on('vessel:focus', safe(({ vesselId }) => {
@@ -835,6 +872,15 @@ export class ThreeRenderer {
     }
     // rocky: 0.3–6 M⊕ → promień 0.06–0.14
     return Math.max(0.06, Math.min(0.14, 0.05 + mass * 0.012));
+  }
+
+  // Promień encji w jednostkach Three.js (planeta/księżyc/planetoid/gwiazda)
+  _getEntityRadius(entity) {
+    if (entity.type === 'planet') return ThreeRenderer._planetRadius(entity);
+    if (entity.type === 'moon') return Math.max(0.015, Math.min(0.04, 0.015 + (entity.physics?.mass ?? 0.001) * 1.5));
+    if (entity.type === 'planetoid') return 0.02;
+    if (entity.type === 'star') return 1.6;
+    return 0.1;
   }
 
   // ── Pierścienie planet (gas 60%, ice 40%) ──────────────────────────────
@@ -2114,6 +2160,18 @@ export class ThreeRenderer {
   }
 
   // Zwraca encję pod kursorem BEZ emitowania eventów (do dblclick)
+  // Pozycja planety na ekranie (px) — dla animacji przejścia do ColonyOverlay
+  getScreenPosition(entityId) {
+    const pEntry = this._planets.get(entityId);
+    if (!pEntry) return null;
+    const pos = pEntry.group.position.clone();
+    pos.project(this.camera);
+    return {
+      x: (pos.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-pos.y * 0.5 + 0.5) * window.innerHeight,
+    };
+  }
+
   getEntityAtScreen(screenX, screenY) {
     this._mouse.x =  (screenX / window.innerWidth)  * 2 - 1;
     this._mouse.y = -(screenY / window.innerHeight) * 2 + 1;
@@ -2182,6 +2240,10 @@ export class ThreeRenderer {
 
         // Animacja świetlików handlowych
         if (this._tradeFireflies.length > 0) this._animateTradeFireflies(t);
+
+        // Ikony budynków na planecie (visibility + pulsowanie)
+        const camDist = this._cameraController?._dist ?? 100;
+        this._colonyMarkers.tick(0.016, camDist);
 
         this.renderer.render(this.scene, this.camera);
       } catch (err) {

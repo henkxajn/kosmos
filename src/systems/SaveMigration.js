@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 36;
+export const CURRENT_VERSION     = 37;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -51,6 +51,7 @@ const MIGRATIONS = {
   33: _migrateV33toV34,
   34: _migrateV34toV35,
   35: _migrateV35toV36,
+  36: _migrateV36toV37,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1076,6 +1077,21 @@ function _migrateV34toV35(data) {
     civ.autonomousState     ??= false;
   }
 
+  return data;
+}
+
+// ── v36 → v37: Tapered hex grid — wyczyść stare prostokątne gridy ──────────
+// Nowe gridy (tapered) generowane on-the-fly przy otwarciu ColonyOverlay.
+// Stare grid w save → null, wymusi regenerację z nowymi rozmiarami.
+function _migrateV36toV37(data) {
+  const colonies = data.civ4x?.colonies;
+  if (!colonies) return data;
+  for (const col of colonies) {
+    // Wyczyść stary prostokątny grid — nowy tapered wygeneruje się przy otwarciu
+    if (col.grid && !col.grid.tapered) {
+      col.grid = null;
+    }
+  }
   return data;
 }
 

@@ -1285,10 +1285,14 @@ export class GameScene {
       }
       if (!entity) return;
 
-      // Tryb cywilizacyjny + ciało z kolonią → otwórz ColonyOverlay
+      // Tryb cywilizacyjny + ciało z kolonią → otwórz ColonyOverlay z animacją
       if (window.KOSMOS?.civMode && this.colonyManager.hasColony(entity.id)) {
         this.colonyManager.switchActiveColony(entity.id);
-        this.uiManager.overlayManager.openPanel('colony');
+        const screenPos = this.threeRenderer.getScreenPosition(entity.id);
+        this.uiManager.overlayManager.openPanel('colony', {
+          originX: screenPos?.x ?? window.innerWidth / 2,
+          originY: screenPos?.y ?? window.innerHeight / 2,
+        });
         return;
       }
 

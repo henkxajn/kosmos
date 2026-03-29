@@ -19,14 +19,24 @@ import { HexGrid }  from './HexGrid.js';
 import { HexTile }  from './HexTile.js';
 import { getEffectivePlanetType } from '../utils/EntityUtils.js';
 
-// ── Rozmiary siatek per typ planety ───────────────────────────────────────────
+// ── Rozmiary siatek per typ planety (legacy prostokątny) ─────────────────────
 const GRID_SIZES = {
-  rocky:     { width: 12, height: 10 },  // planeta skalista habitable
-  hot_rocky: { width:  8, height:  6 },  // gorąca, wulkaniczna
-  ice:       { width:  8, height:  6 },  // lodowa
-  gas:       { width:  8, height:  6 },  // gazowy — platformy atmosferyczne
-  moon:      { width:  8, height:  6 },  // księżyc
-  planetoid: { width:  6, height:  4 },  // planetoida
+  rocky:     { width: 12, height: 10 },
+  hot_rocky: { width:  8, height:  6 },
+  ice:       { width:  8, height:  6 },
+  gas:       { width:  8, height:  6 },
+  moon:      { width:  8, height:  6 },
+  planetoid: { width:  6, height:  4 },
+};
+
+// ── Rozmiary tapered grid (equatorWidth × rows) — ambitne, skalowane z masą ──
+const TAPERED_SIZES = {
+  rocky:     { equatorWidth: 24, rows: 14 },  // ~244 hex (1M⊕ baseline)
+  hot_rocky: { equatorWidth: 16, rows: 10 },  // ~116 hex
+  ice:       { equatorWidth: 20, rows: 12 },  // ~168 hex
+  gas:       { equatorWidth: 14, rows: 10 },  // ~102 hex (platformy atmosf.)
+  moon:      { equatorWidth: 12, rows:  8 },  // ~72 hex
+  planetoid: { equatorWidth:  8, rows:  6 },  // ~36 hex
 };
 
 // ── Seeded PRNG (Mulberry32) ───────────────────────────────────────────────────
@@ -83,8 +93,23 @@ export class PlanetMapGenerator {
     const sizeKey = planet.type === 'moon' ? 'moon'
                   : planet.type === 'planetoid' ? 'planetoid'
                   : getEffectivePlanetType(planet);
-    const size  = GRID_SIZES[sizeKey] ?? GRID_SIZES.rocky;
-    const grid  = new HexGrid(size.width, size.height);
+
+    // Tapered grid — owalny kształt (bieguny wąskie, równik szeroki)
+    const tBase = TAPERED_SIZES[sizeKey] ?? TAPERED_SIZES.rocky;
+    const mass  = planet.physics?.mass ?? 1;
+
+    // Skalowanie z masą planety (rocky/ice): 0.8×–1.4× bazowego rozmiaru
+    let eqW  = tBase.equatorWidth;
+    let rows = tBase.rows;
+    if (sizeKey === 'rocky' || sizeKey === 'ice') {
+      const massScale = Math.max(0.8, Math.min(1.4, 0.8 + Math.log2(Math.max(0.3, mass)) * 0.3));
+      eqW  = Math.round(eqW * massScale);
+      rows = Math.round(rows * massScale);
+      // Zapewnij parzystość rows (symetryczne bieguny)
+      if (rows % 2 !== 0) rows++;
+    }
+
+    const grid = new HexGrid(eqW, rows, { tapered: true });
 
     // 2. Wyznacz wagi biomów
     const weights = PlanetMapGenerator._calcWeights(planet);

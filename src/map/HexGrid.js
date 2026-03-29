@@ -6,10 +6,12 @@
 // Orientacja: pointy-top (wierzchołek u góry, płaskie boki po bokach)
 //   Wygląda naturalnie w widoku "z góry", standardowa w grach strategicznych
 //
-// Kształt siatki: prostokątny (W × H pól) z offsetem co drugiego wiersza
-//   Konwersja: offset (col, row) ↔ cube (q, r)
+// Dwa tryby siatki:
+//   1. Prostokątny (klasyczny): W × H pól, wszystkie rzędy mają tę samą szerokość
+//   2. Tapered (owalny):  rzędy mają zmienną szerokość — bieguny wąskie, równik szeroki
+//      Daje efekt rozwiniętego globusa.
 //
-// Piksel ↔ hex: metody hexToPixel i pixelToHex dla Phaser (etap 6.5)
+// Piksel ↔ hex: metody hexToPixel i pixelToHex
 
 import { HexTile } from './HexTile.js';
 
@@ -25,24 +27,50 @@ export const HEX_DIRECTIONS = [
 ];
 
 export class HexGrid {
-  // width, height — liczba pól w poziomie i pionie (8–16 zgodnie z koncepcją)
-  constructor(width, height) {
-    this.width  = width;
+  // width, height — liczba pól w poziomie i pionie
+  // options.tapered = true → owalny grid ze zmienną szerokością rzędów
+  // options.rowWidths = [n, ...] — jawne szerokości (lub obliczone z width jako equatorWidth)
+  constructor(width, height, options = {}) {
+    this.width  = width;   // max szerokość (equatorWidth w tapered)
     this.height = height;
+
+    this.tapered = !!options.tapered;
+
+    // Oblicz szerokości rzędów
+    if (this.tapered) {
+      this._rowWidths = options.rowWidths
+        ?? HexGrid.calcTaperedWidths(width, height);
+    } else {
+      this._rowWidths = null; // prostokątny — wszystkie rzędy = width
+    }
 
     // Przechowujemy kafelki w Map: klucz = "q,r" → HexTile
     this._tiles = new Map();
 
     // Wypełnij siatkę pustymi kafelkami (plains domyślnie)
-    // PlanetMapGenerator (krok 6.4) nadpisze typy terenu
     this._initGrid();
+  }
+
+  // ── Oblicz szerokości rzędów dla tapered grid ───────────────────────────────
+  // Sinusoidalny profil: bieguny wąskie (min 33% equatorW), równik pełny
+  static calcTaperedWidths(equatorWidth, rows) {
+    const widths = [];
+    for (let r = 0; r < rows; r++) {
+      const lat = rows <= 1 ? Math.PI / 2 : (r / (rows - 1)) * Math.PI;
+      const scale = Math.sin(lat);
+      const w = Math.max(4, Math.round(equatorWidth * Math.max(0.33, scale)));
+      // Zapewnij parzystość (ładniejsze centrowanie)
+      widths.push(w % 2 === equatorWidth % 2 ? w : w + 1);
+    }
+    return widths;
   }
 
   // ── Inicjalizacja ──────────────────────────────────────────────────────────
 
   _initGrid() {
     for (let row = 0; row < this.height; row++) {
-      for (let col = 0; col < this.width; col++) {
+      const rowW = this.getRowWidth(row);
+      for (let col = 0; col < rowW; col++) {
         const { q, r } = HexGrid.offsetToCube(col, row);
         const tile = new HexTile(q, r, 'plains');
         this._tiles.set(tile.key, tile);
@@ -50,26 +78,41 @@ export class HexGrid {
     }
   }
 
+  // ── Szerokość rzędu ────────────────────────────────────────────────────────
+
+  getRowWidth(row) {
+    if (!this.tapered || !this._rowWidths) return this.width;
+    if (row < 0 || row >= this.height) return 0;
+    return this._rowWidths[row];
+  }
+
+  // ── Offset X rzędu (w pikselach) — centrowanie wąskich rzędów ─────────────
+  // Offset = ile pikseli przesunąć rząd w prawo, aby był wycentrowany
+  getRowPixelOffset(row, hexSize) {
+    if (!this.tapered) return 0;
+    const maxW = this.width;
+    const rowW = this.getRowWidth(row);
+    const diff = maxW - rowW;
+    // Przesunięcie = połowa różnicy w pikselach hexa
+    return diff * hexSize * Math.sqrt(3) / 2;
+  }
+
   // ── Dostęp do pól ──────────────────────────────────────────────────────────
 
-  // Pobierz pole po cube coordinates; null jeśli poza siatką
   get(q, r) {
     return this._tiles.get(`${q},${r}`) ?? null;
   }
 
-  // Pobierz pole po offset coordinates (col, row)
   getOffset(col, row) {
     const { q, r } = HexGrid.offsetToCube(col, row);
     return this.get(q, r);
   }
 
-  // Ustaw typ terenu pola (używane przez PlanetMapGenerator)
   setTerrain(q, r, type) {
     const tile = this.get(q, r);
     if (tile) tile.type = type;
   }
 
-  // Ustaw zasób strategiczny pola
   setStrategicResource(q, r, resourceKey) {
     const tile = this.get(q, r);
     if (tile) tile.strategicResource = resourceKey;
@@ -77,7 +120,6 @@ export class HexGrid {
 
   // ── Sąsiedzi i odległości ─────────────────────────────────────────────────
 
-  // Zwraca tablicę istniejących sąsiadów (max 6, mniej na krawędziach)
   getNeighbors(q, r) {
     const result = [];
     for (const dir of HEX_DIRECTIONS) {
@@ -87,23 +129,20 @@ export class HexGrid {
     return result;
   }
 
-  // Odległość hexagonalna między dwoma polami (cube distance)
   static distance(q1, r1, q2, r2) {
     return Math.max(
       Math.abs(q1 - q2),
       Math.abs(r1 - r2),
-      Math.abs((-q1 - r1) - (-q2 - r2))   // s = -q-r
+      Math.abs((-q1 - r1) - (-q2 - r2))
     );
   }
 
-  // Wszystkie pola dokładnie w odległości radius od (q, r)
   ring(q, r, radius) {
     if (radius === 0) {
       const t = this.get(q, r);
       return t ? [t] : [];
     }
     const results = [];
-    // Start od pola bezpośrednio na południe od centrum, idź ringiem
     let cur = { q: q + HEX_DIRECTIONS[4].q * radius,
                 r: r + HEX_DIRECTIONS[4].r * radius };
     for (let i = 0; i < 6; i++) {
@@ -117,7 +156,6 @@ export class HexGrid {
     return results;
   }
 
-  // Wszystkie pola w odległości <= maxRadius (spirala od centrum)
   spiral(q, r, maxRadius) {
     const results = [];
     const center = this.get(q, r);
@@ -130,10 +168,10 @@ export class HexGrid {
 
   // ── Iteracja ──────────────────────────────────────────────────────────────
 
-  // Iteruj po wszystkich polach (kolejność: wiersz po wierszu)
   forEach(callback) {
     for (let row = 0; row < this.height; row++) {
-      for (let col = 0; col < this.width; col++) {
+      const rowW = this.getRowWidth(row);
+      for (let col = 0; col < rowW; col++) {
         const { q, r } = HexGrid.offsetToCube(col, row);
         const tile = this.get(q, r);
         if (tile) callback(tile, col, row);
@@ -141,22 +179,19 @@ export class HexGrid {
     }
   }
 
-  // Zwróć tablicę wszystkich pól
   toArray() {
     const arr = [];
     this.forEach(tile => arr.push(tile));
     return arr;
   }
 
-  // Filtruj pola
   filter(predicate) {
     return this.toArray().filter(predicate);
   }
 
   // ── Konwersje współrzędnych ────────────────────────────────────────────────
 
-  // Offset (col, row) → cube (q, r)
-  // Używamy układu "odd-r" (nieparzyste wiersze przesunięte w prawo)
+  // Offset (col, row) → cube (q, r) — układ "odd-r"
   static offsetToCube(col, row) {
     const q = col - (row - (row & 1)) / 2;
     const r = row;
@@ -171,7 +206,6 @@ export class HexGrid {
   }
 
   // Cube (q, r) → piksel (x, y) — środek heksa, pointy-top
-  // size: promień koła opisanego na heksie (odległość środka do wierzchołka)
   static hexToPixel(q, r, size) {
     const x = size * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r);
     const y = size * (3 / 2 * r);
@@ -196,32 +230,67 @@ export class HexGrid {
     const rDiff = Math.abs(r - rFrac);
     const sDiff = Math.abs(s - sFrac);
 
-    // Koryguj komponent z największym odchyleniem (zachowanie q+r+s=0)
     if (qDiff > rDiff && qDiff > sDiff) {
       q = -r - s;
     } else if (rDiff > sDiff) {
       r = -q - s;
     }
-    // s nie jest przechowywane, można pominąć korektę s
-
     return { q, r };
   }
 
   // Pozycja środka siatki w pikselach (dla wycentrowania kamery)
   gridCenter(size) {
-    // Środek offset: col = width/2, row = height/2
-    const { q, r } = HexGrid.offsetToCube(
-      Math.floor(this.width  / 2),
-      Math.floor(this.height / 2)
-    );
-    return HexGrid.hexToPixel(q, r, size);
+    const midRow = Math.floor(this.height / 2);
+    const midCol = Math.floor(this.getRowWidth(midRow) / 2);
+    const { q, r } = HexGrid.offsetToCube(midCol, midRow);
+    const base = HexGrid.hexToPixel(q, r, size);
+    // Dodaj offset centrowania rzędu
+    base.x += this.getRowPixelOffset(midRow, size);
+    return base;
   }
 
-  // Rozmiar siatki w pikselach (bounding box)
+  // Rozmiar siatki w pikselach (bounding box — najszerszy rząd × height)
   gridPixelSize(size) {
-    const w = size * Math.sqrt(3) * (this.width + 0.5);
+    const maxW = this.tapered
+      ? Math.max(...this._rowWidths)
+      : this.width;
+    const w = size * Math.sqrt(3) * (maxW + 0.5);
     const h = size * 1.5 * this.height + size * 0.5;
     return { w, h };
+  }
+
+  // ── Pozycja hexa w pikselach z uwzględnieniem tapered offset ──────────────
+  // Zwraca {x, y} — gotowe do rysowania (z centrowania rzędu)
+  tilePixelPos(q, r, hexSize) {
+    const base = HexGrid.hexToPixel(q, r, hexSize);
+    base.x += this.getRowPixelOffset(r, hexSize);
+    return base;
+  }
+
+  // Piksel → tile z uwzględnieniem tapered offset
+  pixelToTile(px, py, hexSize) {
+    // Szukamy w którym rzędzie jest py
+    const row = Math.round(py / (hexSize * 1.5));
+    if (row < 0 || row >= this.height) return null;
+
+    // Odejmij offset centrowania rzędu
+    const adjX = px - this.getRowPixelOffset(row, hexSize);
+    const { q, r } = HexGrid.pixelToHex(adjX, py, hexSize);
+
+    // Sprawdź czy wynik jest w grid (i sąsiednie rzędy, bo rounding)
+    let tile = this.get(q, r);
+    if (tile) return tile;
+
+    // Fallback: sprawdź sąsiednie rzędy (rounding przy krawędziach tapered)
+    for (const dr of [-1, 1]) {
+      const altRow = row + dr;
+      if (altRow < 0 || altRow >= this.height) continue;
+      const altX = px - this.getRowPixelOffset(altRow, hexSize);
+      const alt = HexGrid.pixelToHex(altX, py, hexSize);
+      const altTile = this.get(alt.q, alt.r);
+      if (altTile) return altTile;
+    }
+    return null;
   }
 
   // ── Modyfikator polarny ───────────────────────────────────────────────────
@@ -236,15 +305,25 @@ export class HexGrid {
   // ── Serializacja ──────────────────────────────────────────────────────────
 
   serialize() {
-    return {
+    const data = {
       width:  this.width,
       height: this.height,
       tiles:  this.toArray().map(tile => tile.serialize()),
     };
+    if (this.tapered) {
+      data.tapered = true;
+      data.rowWidths = this._rowWidths;
+    }
+    return data;
   }
 
   static restore(data) {
-    const grid = new HexGrid(data.width, data.height);
+    const opts = {};
+    if (data.tapered) {
+      opts.tapered = true;
+      opts.rowWidths = data.rowWidths;
+    }
+    const grid = new HexGrid(data.width, data.height, opts);
     // Nadpisz kafelki z zapisu
     for (const tileData of data.tiles) {
       const tile = HexTile.restore(tileData);
