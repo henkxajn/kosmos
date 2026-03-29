@@ -233,3 +233,337 @@ To gwarantuje że oba systemy używają TEJ SAMEJ tekstury.
 - NIE jest 1:1 z 3D modelem
 - Stabilne, brak flashu, grywalne
 - Sampling tekstur USUNIĘTY (martwy kod w `_sampleTextureForBiomes_REMOVED`)
+
+---
+---
+
+# CZĘŚĆ 2: Kompletna dokumentacja pipeline'u grafik planet, księżyców i planetoidów
+
+## Przegląd architektury
+
+```
+CLI Generator (Node.js)          →  PNG files  →  Browser (Three.js WebGL)
+generate-planets.js + lib/          assets/        ThreeRenderer.js
+                                planet-textures/   PlanetTextureUtils.js
+```
+
+Pipeline ma 3 fazy:
+1. **Generacja offline** (Node.js CLI) → pliki PNG na dysku
+2. **Ładowanie w przeglądarce** → cache tekstur Three.js
+3. **Renderowanie 3D** → MeshStandardMaterial + chmury + atmosfera
+
+---
+
+## Faza 1: Generacja tekstur (Node.js CLI)
+
+### Wywołanie
+```bash
+node generate-planets.js --type ocean --count 3 --resolution 1024 --quality high --output ./assets/planet-textures
+```
+
+### Argumenty CLI
+| Argument | Opis | Domyślne |
+|----------|------|----------|
+| `--type <typ>` | Typ planety (lub 'all') | wymagany |
+| `--count <n>` | Ile wariantów wygenerować | 1 |
+| `--resolution <px>` | Szerokość tekstury | 2048 |
+| `--quality <q>` | low/medium/high/ultra | high |
+| `--seed <n>` | Bazowy seed PRNG | losowy |
+| `--output <dir>` | Katalog wyjściowy | ./planet-textures |
+| `--clouds` | Generuj warstwę chmur RGBA | false |
+| `--emission` | Generuj mapę emisji (lawa) | false |
+| `--all-maps` | Generuj wszystkie dodatkowe mapy | false |
+
+### 15 typów planet (PLANET_TYPES)
+
+Każdy typ ma: **palette** (tablica [R,G,B] 12-18 kolorów) + **features** (parametry terenu).
+
+#### Planety skaliste (9 typów):
+
+| Typ | Paleta | Kratery | Grzbiety | Tektonika | Lawa | Bieguny |
+|-----|--------|---------|----------|-----------|------|---------|
+| **rocky** | brąz→beż | 60 | tak (0.35) | tak (0.4) | nie | lód |
+| **mercury** | szary | 120 | nie | nie | nie | nie |
+| **volcanic** | czarny→pomarańcz | 25 | tak (0.5) | tak (0.85) | TAK | nie |
+| **desert** | piaskowy | 20 | tak (0.45) | tak (0.6) | nie | mróz |
+| **iron** | fioletowo-ciemny | 45 | tak (0.25) | tak (0.3) | nie | lód |
+| **ice** | jasnobłękitny | 30 | tak (0.2) | tak (0.7) | nie | TAK |
+| **ocean** | granat→zieleń→beż | 0 | tak (0.3) | nie | nie | lód+chmury |
+| **toxic** | żółto-zielony | 35 | tak (0.35) | nie | nie | chmury |
+| **lava-ocean** | ciemnoczerwony→pomarańcz | 15 | tak (0.6) | tak (0.9) | TAK | nie |
+
+#### Gazowe olbrzymy (3 typy):
+| Typ | Styl | Pasma | Burze |
+|-----|------|-------|-------|
+| **gas_warm** | Jowisz (brązy/złoto) | 12 | 10% szans |
+| **gas_cold** | Neptun (błękity) | 18 | 5% szans |
+| **gas_giant** | Saturn (beże) | 24 | 15% szans |
+
+#### Planetoidy (3 typy):
+| Typ | Wygląd | Kratery | Metaliczność |
+|-----|--------|---------|-------------|
+| **planetoid_metallic** | jasny, lśniący | 80 | 0.25 |
+| **planetoid_carbonaceous** | bardzo ciemny | 60 | 0.05 |
+| **planetoid_silicate** | szary | 70 | 0.05 |
+
+### Pipeline heightmap (10 faz) — `lib/terrain.js`
+
+```
+1. Base fBm          → szum simplex 3D, 6-12 oktaw
+2. Continental plates → niskofreq. fBm (1.2× skala), 9% wagi
+3. Ridge mountains   → ridgedFbm3d, maska Worley, blend 0.15-0.60
+4. Tectonic cracks   → turbulence3d + Worley krawędzie, siła 0.15-0.85
+5. Domain warping    → domainWarp3d, amplituda 0.8, 15% wagi
+6. Crater impacts    → 4 klasy (giant/large/medium/tiny), fizyczny profil
+7. Micro detail      → drobny fBm, 2.5% wagi
+8. Hydraulic erosion  → symulacja kropelek (10-50% pikseli, 50-100 kroków)
+9. Thermal erosion   → kąt talus (0.015-0.025), 40-200 iteracji
+10. Normalizacja     → liniowe skalowanie do [0, 1]
+```
+
+Heightmap: `Float32Array[W × H]`, wartości 0.0 (dno) – 1.0 (szczyt).
+
+### Pipeline kolorów — `lib/colors.js`
+
+Dla każdego piksela (u,v) na teksturze:
+
+```
+1. h = heightmap[pixel]                              // surowa wysokość 0-1
+2. hc = contrastCurve(h, 2.2)                        // S-krzywa: t^k/(t^k+(1-t)^k)
+3. color = gammaLerp(palette, hc)                     // interpolacja gamma-correct
+4. color = colorVariation(color, fbm_noise, ±12)      // regionalna zmiana odcienia
+5. color = colorJitter(color, worley_cellId, 0.6)     // per-biom HSV shift ±15°/±10%/±8%
+6. color = mineralStreaks(color, worley_f1_f2, 0.08)   // żyły kruszców na krawędziach Worley
+7. color = polarIce(color, latitude, noise)            // białe czapy, smoothstep 70-92% lat
+8. color = lavaFlow(color, tectonic_edge, height)      // lawa w niskich strefach (volcanic)
+9. post: unsharp mask + gamma 1.1                      // wyostrzenie + korekcja jasności
+```
+
+**Kluczowe funkcje:**
+- `gammaLerp(palette, t)` — linearyzacja RGB→gamma, interpolacja, re-gamma. Fizycznie poprawne mieszanie kolorów.
+- `contrastCurve(t, k)` — S-krzywa `t^k / (t^k + (1-t)^k)`. k=2.2: ciemne→ciemniejsze, jasne→jaśniejsze.
+- `colorJitter(rgb, cellId)` — Hash cellId → shift HSV. Tworzy naturalne zróżnicowanie regionalne.
+- `polarIce(rgb, lat, noise)` — Bieguny: smoothstep blend do białego [225,235,245].
+
+### Generacja dodatkowych map — `lib/maps.js`
+
+| Mapa | Metoda | Format | Zastosowanie |
+|------|--------|--------|-------------|
+| **Normal** | Sobel na heightmap | RGB | Szczegóły powierzchni w 3D |
+| **Height** | Bezpośredni rescale heightmap | Grayscale | Parallax/displacement |
+| **Roughness** | 0.55 + h×0.40 + crater mods | Grayscale | Mikropowierzchnia PBR |
+| **AO** | SSAO (12 kierunków, 8px radius) | Grayscale | Cieniowanie szczelin |
+| **Specular** | 0.3 + heightmap + Worley kruszce | Grayscale | Metaliczność PBR |
+| **Emission** | Lawa w niskch strefach + Worley crack | RGB | Świecenie wulkanów |
+| **Clouds** | fBm + domain warp, threshold 0.45 | RGBA | Warstwa chmur |
+| **Night lights** | Worley proximity w niskich strefach | Grayscale | Miasta nocą |
+
+### Kratery — `lib/craters.js`
+
+4 klasy wielkości: giant (5%), large (15%), medium (30%), tiny (50%).
+
+Profil kratera:
+- **Centralny peak** — stożkowy, 8% głębokości
+- **Dno** — paraboliczne wgłębienie
+- **Krawędź (rim)** — sinusoidalny wał, 8% rimHeight
+- **Ejecta** — promieniste smugi, cos^4 wzór, 2.5% rimHeight
+- **Degradacja** — starsze kratery: sharpness 0.6 (40% rozmycie)
+
+### Erozja — `lib/erosion.js`
+
+**Hydrauliczna** (kropelkowa): Losowe krople spływają po terenie. Pojemność nośna ∝ nachylenie × prędkość × woda. Nadwyżka sedymentu — deponuj. Niedobór — eroduj. 2% parowania/krok.
+
+**Termiczna** (talus): Jeśli nachylenie > kąt talus → materiał zsuwa się w dół. 40-200 iteracji wygładza klify.
+
+### Struktura plików wyjściowych
+
+```
+assets/planet-textures/
+├── ocean_01_diffuse.png      (1024×512, sRGB)
+├── ocean_01_normal.png       (1024×512, Linear)
+├── ocean_01_height.png       (1024×512, Grayscale)
+├── ocean_01_roughness.png    (1024×512, Linear)
+├── ocean_02_diffuse.png
+├── ...
+├── rocky_01_diffuse.png
+├── ...
+└── planetoid_silicate_03_roughness.png
+```
+
+**Łącznie: 180 PNG** (15 typów × 3 warianty × 4 mapy bazowe).
+
+---
+
+## Faza 2: Ładowanie w przeglądarce — `PlanetTextureUtils.js`
+
+### resolveTextureType(planet) → string
+
+Drzewo decyzyjne:
+
+```
+planetoid → "planetoid_{metallic|carbonaceous|silicate}"
+moon:
+  icy      → "ice"
+  temp>200 → "volcanic"
+  temp>60  → "rocky"
+  else     → "iron"
+gas:
+  temp>-73 → "gas_warm"
+  temp<-193→ "gas_cold"
+  else     → "gas_giant"
+hot_rocky:
+  mass<0.5 → "mercury"
+  else     → "volcanic"
+ice        → "ice"
+rocky:
+  temp>200 → "lava-ocean"
+  temp>110 → "toxic"
+  temp>60  → "desert"
+  temp>10  → "ocean"        ← STREFA ZAMIESZKIWALNA
+  temp>-20 → "rocky"
+  else     → "iron"
+```
+
+### Wybór wariantu (deterministyczny)
+```javascript
+const seed = hashCode(planet.id);     // hash z ID planety
+const variant = (seed % 3) + 1;       // 1, 2 lub 3
+```
+Ta sama planeta → zawsze ten sam wariant. Przetrwa save/load.
+
+### Cache tekstur
+```javascript
+_textureCache: Map<string, THREE.Texture>
+// Klucz: "ocean_01_diffuse", "rocky_02_normal" itd.
+// Współdzielone: wiele planet tego samego typu używa tych samych tekstur GPU
+```
+
+---
+
+## Faza 3: Renderowanie 3D — `ThreeRenderer.js`
+
+### Planeta (rocky/ice/hot_rocky)
+
+```
+SphereGeometry(radius, 48, 48)
+  + MeshStandardMaterial:
+      map: diffuse PNG (sRGB)
+      normalMap: normal PNG (Linear)
+      roughnessMap: roughness PNG (Linear)
+      metalness: 0.05
+  + Cloud mesh (r × 1.02):
+      Proceduralny shader, animowany (uTime)
+      Biały, semi-transparentny, depthWrite: false
+  + Atmosphere glow (r × 1.15):
+      Rayleigh scatter shader
+      Limb darkening + terminator orange
+  + Pierścienie (opcjonalne, gas 60% / ice 40%):
+      RingGeometry z canvas-generowaną teksturą
+```
+
+### Promień planety (skala logarytmiczna)
+```
+gas (>50 M⊕):     0.35 – 0.60   (Jowisz/Saturn)
+gas (<50 M⊕):     0.20 – 0.35   (Neptun/Uran)
+ice:               0.14 – 0.24
+rocky:             0.06 – 0.14
+hot_rocky:         0.04 – 0.10
+gwiazda:           1.6
+```
+
+### Księżyc
+```
+SphereGeometry(radius, 24, 16)      // mniejsza rozdzielczość
+  radius: 0.015 – 0.04              // DUŻO mniejszy od planet
+  + MeshStandardMaterial (ta sama tekstura co planety)
+  + Orbit ring: elliptyczny Line, dziecko grupy planety-rodzica
+  Pozycja: synchronizowana co frame z moon.x/y
+```
+
+### Planetoid
+```
+SphereGeometry(radius, 16, 12)      // najniższa rozdzielczość
+  radius: 0.08 – 0.12
+  metalness: 0.25 (metallic) / 0.05 (inne)
+  + Orbit ring: heliocentryczny, ukryty domyślnie
+  15-40 sztuk per układ, orbity 3.5-8 AU
+```
+
+### Gazowy olbrzym (proceduralny)
+```
+GasGiantShader.bakeGasGiantTextures(planet, renderer)
+  → RTT (render-to-texture) 1024×512
+  → 3 tekstury: diffuse, normal, roughness
+  → MeshStandardMaterial z baked textures
+  Pasma: bandFreq (12-24), turbulence (Worley+fBm), burze
+```
+
+### Oświetlenie sceny
+```
+DirectionalLight: pozycja = gwiazda, follow per frame
+AmbientLight: 0x1a3330, intensity 0.5
+Renderer: outputColorSpace = SRGBColorSpace, toneMapping = None
+```
+
+### Co widzi gracz vs co jest w plikach
+
+| Element wizualny | Źródło | W diffuse PNG? |
+|-----------------|--------|---------------|
+| Kolor powierzchni | diffuse.png + PBR lighting | TAK (surowy) |
+| Cienie/oświetlenie | DirectionalLight + normal map | NIE |
+| Chmury (białe) | Proceduralny shader, osobna sfera | NIE |
+| Atmosfera (niebieska obwódka) | Rayleigh scatter shader | NIE |
+| Pierścienie | Canvas-generowana tekstura | NIE |
+| Lśnienia/refleksy | roughnessMap + metalness | NIE |
+
+**WAŻNE:** Gracz widzi kombinację WIELU warstw. Diffuse PNG to tylko jedna z nich. Dlatego próbkowanie samego diffuse NIE oddaje tego co widzi gracz na 3D modelu.
+
+---
+
+## Diagram pełnego pipeline'u
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ GENERACJA OFFLINE (Node.js)                             │
+│                                                         │
+│ generate-planets.js                                     │
+│   ├─ lib/noise.js     → SimplexNoise3D, Worley, fBm    │
+│   ├─ lib/terrain.js   → 10-fazowy heightmap             │
+│   ├─ lib/craters.js   → fizyczne kratery (4 klasy)     │
+│   ├─ lib/erosion.js   → hydrauliczna + termiczna       │
+│   ├─ lib/colors.js    → palette lookup + modyfikatory   │
+│   ├─ lib/maps.js      → normal, roughness, AO, etc.    │
+│   └─ lib/postprocess.js → unsharp + gamma              │
+│                                                         │
+│   OUTPUT: assets/planet-textures/*.png                  │
+│           180 plików (15 typów × 3 warianty × 4 mapy)  │
+└──────────────────────┬──────────────────────────────────┘
+                       │ pliki PNG na dysku
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│ ŁADOWANIE (Przeglądarka)                                │
+│                                                         │
+│ PlanetTextureUtils.js                                   │
+│   ├─ resolveTextureType(planet) → "ocean"/"rocky"/...  │
+│   ├─ hashCode(planet.id) % 3 + 1 → wariant 1/2/3      │
+│   ├─ TextureLoader.load(url) → THREE.Texture           │
+│   └─ _textureCache (współdzielony, lazy-loaded)         │
+└──────────────────────┬──────────────────────────────────┘
+                       │ THREE.Texture w GPU
+                       ▼
+┌─────────────────────────────────────────────────────────┐
+│ RENDEROWANIE 3D (Three.js WebGL, 60 FPS)                │
+│                                                         │
+│ ThreeRenderer.js                                        │
+│   ├─ Planety: MeshStandardMaterial (PBR)               │
+│   │   + Cloud mesh (shader)                             │
+│   │   + Atmosphere glow (shader)                        │
+│   │   + Rings (canvas texture)                          │
+│   ├─ Księżyce: MeshStandardMaterial (mniejsze, 24×16)  │
+│   ├─ Planetoidy: MeshStandardMaterial (16×12)          │
+│   ├─ Gas giganty: RTT baked shader                     │
+│   └─ Oświetlenie: DirectionalLight z pozycji gwiazdy   │
+│                                                         │
+│   OUTPUT: #three-canvas (WebGL)                         │
+└─────────────────────────────────────────────────────────┘
+```
