@@ -1483,6 +1483,9 @@ export class ThreeRenderer {
     // Planetoidy: synchronizuj pozycje meshów
     this._syncPlanetoidPositions();
 
+    // Aktualizuj wizualne orbity statków (animacja co klatkę)
+    this._tickOrbitingVessels();
+
     // Aktualizuj śledzenie kamery (ciało się porusza → kamera za nim)
     this._updateCameraFocus();
 
@@ -2683,8 +2686,109 @@ export class ThreeRenderer {
   }
 
   /**
+   * Co-klatkowa animacja orbitujących statków (lekka — tylko pozycja+obrót).
+   */
+  _tickOrbitingVessels() {
+    for (const [id, entry] of this._vessels) {
+      if (!entry._orbiting) continue;
+      const orb = this._calcVisualOrbitFromCache(entry._orbiting, id);
+      if (orb) {
+        entry.sprite.position.set(orb.ox, orb.oy, orb.oz);
+        if (entry.isModel3D) {
+          entry.sprite.rotation.y = orb.angle + Math.PI;
+        }
+      }
+    }
+  }
+
+  /**
+   * Szybka wersja obliczenia orbity (z cache'owanych danych ciała, bez lookup entity).
+   */
+  _calcVisualOrbitFromCache(cache, vesselId) {
+    const { bodyId, orbitR } = cache;
+    // Zaktualizuj pozycję ciała (może się poruszać)
+    let bodyX, bodyZ;
+    const pEntry = this._planets.get(bodyId);
+    if (pEntry) { bodyX = pEntry.group.position.x; bodyZ = pEntry.group.position.z; }
+    if (bodyX == null) {
+      const mEntry = this._moons.get(bodyId);
+      if (mEntry) { bodyX = mEntry.mesh.position.x; bodyZ = mEntry.mesh.position.z; }
+    }
+    if (bodyX == null) {
+      const pdEntry = this._planetoids.get(bodyId);
+      if (pdEntry) { bodyX = pdEntry.mesh.position.x; bodyZ = pdEntry.mesh.position.z; }
+    }
+    if (bodyX == null) return null;
+
+    const idHash = hashCode(vesselId);
+    const phaseOffset = (idHash % 1000) / 1000 * Math.PI * 2;
+    const orbitSpeed = 0.4;
+    const angle = (performance.now() * 0.001) * orbitSpeed + phaseOffset;
+
+    return {
+      ox: bodyX + orbitR * Math.cos(angle),
+      oz: bodyZ + orbitR * Math.sin(angle),
+      oy: 0.02,
+      angle,
+    };
+  }
+
+  /**
    * Synchronizuj pozycje vessel sprites z danymi z VesselManager.
    */
+  /**
+   * Oblicz wizualną pozycję orbitalną statku wokół ciała.
+   * Czysto wizualne — nie zmienia danych w VesselManager.
+   * @returns {{ ox, oz, oy, angle }|null} — pozycja w Three.js lub null
+   */
+  _calcVisualOrbit(vessel, entry) {
+    const bodyId = vessel.position?.dockedAt ?? vessel.mission?.targetId;
+    if (!bodyId) return null;
+
+    // Znajdź wizualną pozycję i promień ciała
+    let bodyX, bodyZ, bodyR;
+    const pEntry = this._planets.get(bodyId);
+    if (pEntry) {
+      bodyX = pEntry.group.position.x;
+      bodyZ = pEntry.group.position.z;
+      const entity = this._entityByUUID.get(pEntry.mesh.uuid);
+      bodyR = entity ? this._getEntityRadius(entity) : 0.1;
+    }
+    if (bodyX == null) {
+      const mEntry = this._moons.get(bodyId);
+      if (mEntry) {
+        bodyX = mEntry.mesh.position.x;
+        bodyZ = mEntry.mesh.position.z;
+        const entity = this._entityByUUID.get(mEntry.mesh.uuid);
+        bodyR = entity ? this._getEntityRadius(entity) : 0.03;
+      }
+    }
+    if (bodyX == null) {
+      const pdEntry = this._planetoids.get(bodyId);
+      if (pdEntry) {
+        bodyX = pdEntry.mesh.position.x;
+        bodyZ = pdEntry.mesh.position.z;
+        bodyR = 0.02;
+      }
+    }
+    if (bodyX == null) return null;
+
+    // Promień orbity — 2× promień ciała (minimum 0.06 żeby nie wchodzić w mesh)
+    const orbitR = Math.max(0.06, bodyR * 2.0);
+
+    // Kąt orbity — czas + offset per statek (deterministyczny z ID)
+    const idHash = hashCode(vessel.id);
+    const phaseOffset = (idHash % 1000) / 1000 * Math.PI * 2; // unikalne fazy
+    const orbitSpeed = 0.4; // rad/s — pełna orbita ~15.7s
+    const angle = (performance.now() * 0.001) * orbitSpeed + phaseOffset;
+
+    const ox = bodyX + orbitR * Math.cos(angle);
+    const oz = bodyZ + orbitR * Math.sin(angle);
+    const oy = 0.02; // tuż nad równikiem
+
+    return { ox, oz, oy, angle, orbitR, bodyX, bodyZ };
+  }
+
   _syncVesselPositions(vessels) {
     const activeSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
     for (const vessel of vessels) {
@@ -2706,7 +2810,33 @@ export class ThreeRenderer {
       const vx = isNaN(vessel.position.x) ? 0 : vessel.position.x;
       const vy = isNaN(vessel.position.y) ? 0 : vessel.position.y;
 
-      // Aktualizuj linię trasy (2 punkty: statek → cel na równiku planety)
+      // ── Statek orbituje ciało — wizualna orbita ──────────────────
+      if (vessel.position?.state === 'orbiting') {
+        const orb = this._calcVisualOrbit(vessel, entry);
+        if (orb) {
+          entry.sprite.position.set(orb.ox, orb.oy, orb.oz);
+          if (entry.isModel3D) {
+            entry.sprite.rotation.y = orb.angle + Math.PI;
+          }
+          // Zapisz dane orbity do cache — animacja co klatkę w _tickOrbitingVessels
+          entry._orbiting = {
+            bodyId: vessel.position?.dockedAt ?? vessel.mission?.targetId,
+            orbitR: orb.orbitR,
+          };
+          // Usuń linię trasy przy orbitowaniu
+          if (entry.routeLine) {
+            this.scene.remove(entry.routeLine);
+            entry.routeLine.geometry.dispose();
+            entry.routeLine.material.dispose();
+            entry.routeLine = null;
+          }
+          continue;
+        }
+      }
+      // Statek nie orbituje — wyczyść cache orbity
+      entry._orbiting = null;
+
+      // ── Statek w locie — linia trasy + opadanie ku celowi ────────
       if (vessel.mission) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
@@ -2717,16 +2847,14 @@ export class ThreeRenderer {
         if (isNaN(ty)) ty = 0;
 
         // Oblicz wysokość Y — statek opada ku planecie w miarę zbliżania
-        // Daleko od celu → Y=0.3, przy celu → Y=0 (równik planety)
         const dx = tx - vx;
         const dy = ty - vy;
         const distToTarget = Math.sqrt(dx * dx + dy * dy);
         const ox = m.originX ?? m.liveOriginX ?? vx;
         const oy = m.originY ?? m.liveOriginY ?? vy;
         const totalDist = Math.sqrt((tx - ox) * (tx - ox) + (ty - oy) * (ty - oy));
-        // Proporcja: 1.0 = daleko od celu (start), 0.0 = przy celu
         const ratio = totalDist > 0 ? Math.min(1, distToTarget / totalDist) : 0;
-        const shipY = 0.3 * ratio; // opada od 0.3 do 0.0
+        const shipY = 0.3 * ratio;
 
         entry.sprite.position.set(S(vx), shipY, S(vy));
 
@@ -2738,11 +2866,10 @@ export class ThreeRenderer {
         }
 
         if (!entry.routeLine) {
-          // Stwórz nową linię
           const savedColor = entry.color ?? 0xaaaaaa;
           const pts = [
-            new THREE.Vector3(S(vx), shipY, S(vy)),    // statek (dynamiczna wysokość)
-            new THREE.Vector3(S(tx), 0.0, S(ty)),       // cel (równik planety)
+            new THREE.Vector3(S(vx), shipY, S(vy)),
+            new THREE.Vector3(S(tx), 0.0, S(ty)),
           ];
           const geo = new THREE.BufferGeometry().setFromPoints(pts);
           const lineMat = new THREE.LineDashedMaterial({
@@ -2753,7 +2880,6 @@ export class ThreeRenderer {
           entry.routeLine.computeLineDistances();
           this.scene.add(entry.routeLine);
         } else {
-          // Aktualizuj 2 punkty: statek → cel (równik planety)
           const posArr = entry.routeLine.geometry.attributes.position.array;
           posArr[0] = S(vx); posArr[1] = shipY; posArr[2] = S(vy);
           posArr[3] = S(tx); posArr[4] = 0.0;   posArr[5] = S(ty);
@@ -2764,7 +2890,6 @@ export class ThreeRenderer {
         // Brak misji — statek na stałej wysokości
         entry.sprite.position.set(S(vx), 0.3, S(vy));
         if (entry.routeLine) {
-          // Usuń linię trasy
           this.scene.remove(entry.routeLine);
           entry.routeLine.geometry.dispose();
           entry.routeLine.material.dispose();
