@@ -109,8 +109,23 @@ export class ColonyBuildingMarkers {
     }
   }
 
+  // ── Raycasting: znajdź marker pod kursorem ─────────────────────────────
+  // Zwraca { tileKey, buildingId } lub null
+  hitTest(raycaster) {
+    if (!this._shown || this._markers.size === 0) return null;
+    const sprites = [...this._markers.values()];
+    const hits = raycaster.intersectObjects(sprites);
+    if (hits.length === 0) return null;
+    const sprite = hits[0].object;
+    return {
+      tileKey: sprite.userData.tileKey,
+      buildingId: sprite.userData.buildingId,
+    };
+  }
+
   // ── Zwróć id aktualnie wyświetlanej planety ─────────────────────────────
   get entityId() { return this._entityId; }
+  get isShown() { return this._shown; }
 
   // ── Wyczyść zasoby (np. przy zamknięciu renderera) ──────────────────────
   dispose() {
@@ -166,6 +181,8 @@ export class ColonyBuildingMarkers {
       sprite.position.copy(pos);
       sprite.userData = {
         tileKey: key,
+        buildingId: effectiveId ?? (tile.capitalBase ? 'colony_base' : null),
+        level: tile.buildingLevel ?? 1,
         baseScale,
         phase: this._hashPhase(key),
       };

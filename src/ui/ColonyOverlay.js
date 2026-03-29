@@ -11,7 +11,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
-// Texture sampling usunięty — biomy z PlanetMapGenerator + dane planety
+import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { t }   from '../i18n/i18n.js';
 
@@ -177,7 +177,8 @@ export class ColonyOverlay extends BaseOverlay {
     this._gridCache[pid] = grid;
     colony.grid = grid;
 
-    // Biomy ustawione przez PlanetMapGenerator (wagi zależne od danych planety)
+    // Próbuj załadować biome map (1:1 z 3D teksturą) — fallback: PlanetMapGenerator biomy
+    this._loadBiomeMap(colony.planet, grid, pid);
 
     // Ustaw gridHeight, deposits i tryb w BuildingSystem (krytyczne!)
     const bSys = colony.buildingSystem;
@@ -1068,194 +1069,89 @@ export class ColonyOverlay extends BaseOverlay {
     return false;
   }
 
-  // Usunięto: _sampleTextureForBiomes — sampling tekstur był niestabilny.
-  // Biomy generowane przez PlanetMapGenerator z wagami zależnymi od danych planety.
-  _sampleTextureForBiomes_REMOVED(planet, grid) {
+  // ── Biome map loader — ładuje _biome.png i ustawia tile.type per hex ────
+  // Fallback: PlanetMapGenerator biomy (jeśli biome.png nie istnieje)
+  _loadBiomeMap(planet, grid, planetId) {
     if (!planet || !grid) return;
 
-    const texType = resolveTextureType(planet);
-    if (!texType || texType.startsWith('gas')) return;
+    const texType = planet._cachedTexType ?? null;
+    if (!texType || texType.startsWith('gas')) return; // gas giganty → PlanetMapGenerator
 
-    const seed = hashCode(planet.id || 'planet_0');
-    const variant = (seed % TEXTURE_VARIANTS) + 1;
+    const variant = planet._cachedTexVariant ?? ((hashCode(planet.id || 'p') % TEXTURE_VARIANTS) + 1);
     const vStr = String(variant).padStart(2, '0');
-    const heightUrl = `assets/planet-textures/${texType}_${vStr}_height.png`;
-    const diffuseUrl = `assets/planet-textures/${texType}_${vStr}_diffuse.png`;
+    const url = `assets/planet-textures/${texType}_${vStr}_biome.png`;
 
-    // Ile wpisów palety to woda (z generate-planets.js)
-    // ocean: 7 z 18 wpisów = woda. Palette index 7/17 ≈ 0.41
-    const WATER_PALETTE_PCT = {
-      ocean: 0.41, rocky: 0, desert: 0, iron: 0,
-      ice: 0.10, volcanic: 0, 'lava-ocean': 0, toxic: 0, mercury: 0,
-    };
-    const waterPalettePct = WATER_PALETTE_PCT[texType] ?? 0;
-    const life = planet.lifeScore ?? 0;
-    const temp = planet.surface?.temperature ?? 20;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width; canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, img.width, img.height);
 
-    // Ładuj OBIE tekstury równolegle
-    let heightData = null, diffData = null, texW = 0, texH = 0;
-    let loaded = 0;
-    const pid = planet.id ?? 'unknown';
-    const onBothLoaded = () => {
-      if (loaded < 2 || !heightData) return;
-      this._applyTextureMapping(grid, heightData, diffData, texW, texH,
-        waterPalettePct, life, temp);
-      this._texturesReady[pid] = true;
+      this._applyBiomeMap(grid, imageData);
     };
-
-    const hImg = new Image(); hImg.crossOrigin = 'anonymous';
-    hImg.onload = () => {
-      const c = document.createElement('canvas');
-      texW = hImg.width; texH = hImg.height;
-      c.width = texW; c.height = texH;
-      const ctx = c.getContext('2d');
-      ctx.drawImage(hImg, 0, 0);
-      heightData = ctx.getImageData(0, 0, texW, texH).data;
-      loaded++; onBothLoaded();
+    img.onerror = () => {
+      // Biome map nie istnieje — zachowaj PlanetMapGenerator biomy (fallback)
     };
-    hImg.onerror = () => { loaded++; onBothLoaded(); };
-    hImg.src = heightUrl;
-
-    const dImg = new Image(); dImg.crossOrigin = 'anonymous';
-    dImg.onload = () => {
-      const c = document.createElement('canvas');
-      c.width = dImg.width; c.height = dImg.height;
-      const ctx = c.getContext('2d');
-      ctx.drawImage(dImg, 0, 0);
-      diffData = ctx.getImageData(0, 0, c.width, c.height).data;
-      loaded++; onBothLoaded();
-    };
-    dImg.onerror = () => { loaded++; onBothLoaded(); };
-    dImg.src = diffuseUrl;
+    img.src = url;
   }
 
-  _applyTextureMapping(grid, heightData, diffData, texW, texH, waterPalettePct, life, temp) {
+  // Mapuj kolory biome map → TERRAIN_TYPES key
+  _applyBiomeMap(grid, imageData) {
+    const texW = imageData.width, texH = imageData.height;
+    const data = imageData.data;
     const hexSize = 32;
     const gridPx = grid.gridPixelSize(hexSize);
 
-    // Zbierz heightmap wartości + UV per hex
-    const hexData = [];
-    grid.forEach((tile, col, row) => {
+    // Kolory biomów z generatora (muszą matchować BIOME_COLORS w generate-planets.js)
+    const BIOME_RGB = [
+      { key: 'DEEP_OCEAN', rgb: [0, 40, 140] },
+      { key: 'OCEAN', rgb: [0, 80, 200] },
+      { key: 'COAST', rgb: [0, 130, 220] },
+      { key: 'PLAINS', rgb: [100, 180, 60] },
+      { key: 'FOREST', rgb: [30, 120, 40] },
+      { key: 'DESERT', rgb: [210, 170, 80] },
+      { key: 'SAVANNA', rgb: [180, 160, 60] },
+      { key: 'TUNDRA', rgb: [150, 170, 160] },
+      { key: 'MOUNTAINS', rgb: [120, 100, 80] },
+      { key: 'HIGH_PEAKS', rgb: [200, 200, 210] },
+      { key: 'VOLCANIC', rgb: [80, 20, 10] },
+      { key: 'ICE', rgb: [210, 230, 255] },
+      { key: 'TOXIC', rgb: [140, 200, 40] },
+      { key: 'CRATER', rgb: [80, 70, 60] },
+      { key: 'BARREN', rgb: [130, 110, 90] },
+    ];
+
+    // Biome key → TERRAIN_TYPES key (gameplay)
+    const BIOME_TO_TERRAIN = {
+      DEEP_OCEAN: 'ocean', OCEAN: 'ocean', COAST: 'ocean',
+      PLAINS: 'plains', FOREST: 'forest', DESERT: 'desert',
+      SAVANNA: 'plains', TUNDRA: 'tundra', MOUNTAINS: 'mountains',
+      HIGH_PEAKS: 'mountains', VOLCANIC: 'volcano', ICE: 'ice_sheet',
+      TOXIC: 'wasteland', CRATER: 'crater', BARREN: 'wasteland',
+    };
+
+    grid.forEach(tile => {
       const pos = grid.tilePixelPos(tile.q, tile.r, hexSize);
       const u = Math.max(0, Math.min(0.999, pos.x / gridPx.w));
       const v = Math.max(0, Math.min(0.999, pos.y / gridPx.h));
       const px = Math.floor(u * (texW - 1));
       const py = Math.floor(v * (texH - 1));
       const idx = (py * texW + px) * 4;
-      const h = heightData[idx] / 255;
 
-      // Ustaw KOLOR BEZPOŚREDNIO z diffuse (1:1 match z 3D!)
-      if (diffData) {
-        const r = diffData[idx], g = diffData[idx + 1], b = diffData[idx + 2];
-        tile._displayColor = (r << 16) | (g << 8) | b;
+      const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+
+      // Dopasuj kolor do najbliższego biome key (Euklidesowy)
+      let bestKey = 'PLAINS', bestDist = Infinity;
+      for (const { key, rgb } of BIOME_RGB) {
+        const d = (r - rgb[0]) ** 2 + (g - rgb[1]) ** 2 + (b - rgb[2]) ** 2;
+        if (d < bestDist) { bestDist = d; bestKey = key; }
       }
 
-      hexData.push({ tile, h, row });
-    });
-
-    // Percentylowy próg wody (heightmap)
-    let waterThreshold = 0;
-    if (waterPalettePct > 0) {
-      const sorted = hexData.map(d => d.h).sort((a, b) => a - b);
-      waterThreshold = sorted[Math.floor(sorted.length * waterPalettePct)] ?? 0;
-    }
-
-    // Ustaw terrain TYPE (dla gameplay: canBuild, yieldBonus)
-    for (const { tile, h, row } of hexData) {
-      const latPct = row / Math.max(1, grid.height - 1);
-      const polarDist = Math.abs(latPct - 0.5) * 2;
-      const landH = waterThreshold > 0 ? (h - waterThreshold) / (1 - waterThreshold) : h;
-
-      if (polarDist > 0.82 && temp < 25) tile.type = 'ice_sheet';
-      else if (waterPalettePct > 0 && h < waterThreshold) tile.type = 'ocean';
-      else if (landH > 0.75) tile.type = 'mountains';
-      else if (landH > 0.60) tile.type = life > 30 ? 'mountains' : 'crater';
-      else if (polarDist > 0.60 && temp < 10) tile.type = 'tundra';
-      else if (landH > 0.40) tile.type = life > 50 ? 'plains' : (temp > 50 ? 'desert' : 'wasteland');
-      else if (life > 60) tile.type = 'forest';
-      else if (life > 30) tile.type = 'plains';
-      else if (temp > 60) tile.type = 'desert';
-      else tile.type = 'plains';
-    }
-  }
-
-  // Regeneruj biomy gridu z podanymi wagami (Voronoi)
-  _regenerateBiomes(grid, weights, planet) {
-    // Seeded PRNG z planet.id (deterministyczny!)
-    let s = 5381;
-    const id = planet.id ?? 'p';
-    for (let i = 0; i < id.length; i++) s = (Math.imul(s, 33) ^ id.charCodeAt(i)) >>> 0;
-    const rand = () => { s += 0x6D2B79F5; let t = Math.imul(s ^ (s >>> 15), s | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-
-    // Losuj biom wg wag
-    const totalW = weights.reduce((sum, w) => sum + w.weight, 0);
-    const pickBiome = () => {
-      let roll = rand() * totalW;
-      for (const w of weights) { roll -= w.weight; if (roll <= 0) return w.type; }
-      return weights[weights.length - 1].type;
-    };
-
-    const allTiles = grid.toArray();
-    const seedCount = Math.max(8, Math.floor(allTiles.length / 4));
-
-    // Tasuj tile'y (Fisher-Yates)
-    const shuffled = [...allTiles];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    // Ziarna Voronoi
-    const seeds = shuffled.slice(0, seedCount).map(t => ({
-      q: t.q, r: t.r, type: pickBiome(),
-    }));
-
-    // Każdy tile → biom najbliższego ziarna
-    for (const tile of allTiles) {
-      let minDist = Infinity, chosen = seeds[0].type;
-      for (const s of seeds) {
-        const d = HexGrid.distance(tile.q, tile.r, s.q, s.r);
-        if (d < minDist) { minDist = d; chosen = s.type; }
-      }
-      tile.type = chosen;
-    }
-
-    // Wygładzanie (2 passy)
-    for (let pass = 0; pass < 2; pass++) {
-      const changes = [];
-      grid.forEach(tile => {
-        const neighbors = grid.getNeighbors(tile.q, tile.r);
-        if (neighbors.length < 2) return;
-        const freq = {};
-        for (const n of neighbors) freq[n.type] = (freq[n.type] ?? 0) + 1;
-        let maxCount = 0, dominant = tile.type;
-        for (const [t, cnt] of Object.entries(freq)) {
-          if (cnt > maxCount) { maxCount = cnt; dominant = t; }
-        }
-        if (maxCount >= 4 && dominant !== tile.type) changes.push({ tile, type: dominant });
-      });
-      for (const { tile, type } of changes) tile.type = type;
-    }
-
-    // Bieguny → lód (jeśli planeta zimna/umiarkowana)
-    const temp = planet.surface?.temperature ?? 20;
-    if (temp < 25) {
-      grid.forEach((tile, col, row) => {
-        if (row === 0 || row === grid.height - 1) tile.type = 'ice_sheet';
-        else if (row === 1 || row === grid.height - 2) {
-          if (temp < 5) tile.type = 'ice_sheet';
-          else if (rand() < 0.5) tile.type = 'tundra';
-        }
-      });
-    }
-
-    // Granice las↔pustynia → równina (naturalna przejście)
-    grid.forEach(tile => {
-      if (tile.type !== 'forest') return;
-      const hasDesert = grid.getNeighbors(tile.q, tile.r)
-        .some(n => n.type === 'desert' || n.type === 'volcano');
-      if (hasDesert && rand() < 0.5) tile.type = 'plains';
+      // Mapuj na TERRAIN_TYPES key
+      tile.type = BIOME_TO_TERRAIN[bestKey] ?? 'plains';
     });
   }
 }

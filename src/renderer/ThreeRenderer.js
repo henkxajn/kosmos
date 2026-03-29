@@ -17,6 +17,7 @@ import { BiomeMapGenerator }  from './BiomeMapGenerator.js';
 import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
+import { BUILDINGS } from '../data/BuildingsData.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -423,8 +424,9 @@ export class ThreeRenderer {
 
     EventBus.on('body:deselected', safe(() => {
       this._focusEntityId = null;
-      // Ukryj ikony budynków kolonii
+      // Ukryj ikony budynków kolonii + tooltip
       this._colonyMarkers.hide();
+      this._hideColonyTooltip();
       // Przywróć domyślny min zoom
       if (this._cameraController) {
         this._cameraController.setMinDist(0.3);
@@ -1038,6 +1040,12 @@ export class ThreeRenderer {
 
     const seed = hashCode(String(planet.id));
     const r    = ThreeRenderer._planetRadius(planet);
+
+    // Cache typ tekstury i wariant — inne systemy (ColonyOverlay) użyją tego samego
+    if (!planet._cachedTexType) {
+      planet._cachedTexType = resolveTextureType(planet);
+      planet._cachedTexVariant = (seed % TEXTURE_VARIANTS) + 1;
+    }
 
     const group = new THREE.Group();
     group.position.set(S(planet.x), 0, S(planet.y));
@@ -1677,11 +1685,15 @@ export class ThreeRenderer {
     const geo = new THREE.SphereGeometry(r, 24, 16);
 
     // PBR tekstury — re-use istniejących tekstur planet (rocky/ice/iron/volcanic)
-    const texType = resolveTextureType(moon);
+    if (!moon._cachedTexType) {
+      moon._cachedTexType = resolveTextureType(moon);
+      moon._cachedTexVariant = (hashCode(moon.id || 'moon') % TEXTURE_VARIANTS) + 1;
+    }
+    const texType = moon._cachedTexType;
     let mat;
     if (texType) {
       const seed    = hashCode(moon.id || 'moon');
-      const variant = (seed % TEXTURE_VARIANTS) + 1;
+      const variant = moon._cachedTexVariant;
       const maps    = loadPlanetTextures(texType, variant);
       mat = new THREE.MeshStandardMaterial({
         map:          maps.diffuse,
@@ -2189,6 +2201,7 @@ export class ThreeRenderer {
     this._mouse.y = -(screenY / window.innerHeight) * 2 + 1;
     this._ray.setFromCamera(this._mouse, this.camera);
 
+    // Standard hover na ciała niebieskie
     const hits  = this._ray.intersectObjects(this._clickable);
     const newId = hits.length > 0
       ? (this._entityByUUID.get(hits[0].object.uuid)?.id ?? null)
@@ -2197,6 +2210,141 @@ export class ThreeRenderer {
       this._hoverPlanetId = newId;
       EventBus.emit('planet:hover', { entityId: newId });
     }
+
+    // Tooltip — aktywny tylko przy bliskim zoomie i gdy overlay NIE jest otwarty
+    const focusId = this._focusEntityId;
+    if (!focusId || !this._colonyMarkers.isShown || window.KOSMOS?.overlayManager?.isAnyOpen()) {
+      this._hideColonyTooltip();
+      return;
+    }
+
+    // Sprawdź hover na marker budynku
+    const markerHit = this._colonyMarkers.hitTest(this._ray);
+    if (markerHit?.buildingId) {
+      this._showBuildingTooltip(markerHit, screenX, screenY);
+      return;
+    }
+
+    // Sprawdź hover na planetę (podsumowanie kolonii)
+    if (newId && newId === focusId) {
+      const colMgr = window.KOSMOS?.colonyManager;
+      if (colMgr?.hasColony(newId)) {
+        this._showColonyTooltip(newId, screenX, screenY);
+        return;
+      }
+    }
+
+    this._hideColonyTooltip();
+  }
+
+  // ── Tooltip budynku (hover na marker sprite) ──────────────────────────
+  _showBuildingTooltip(markerHit, sx, sy) {
+    const { buildingId, tileKey } = markerHit;
+    const b = BUILDINGS[buildingId];
+    if (!b) { this._hideColonyTooltip(); return; }
+
+    // Pobierz efektywne stawki z BuildingSystem
+    const colMgr = window.KOSMOS?.colonyManager;
+    const colony = colMgr?.getColony(this._colonyMarkers.entityId);
+    const bSys = colony?.buildingSystem;
+    const entry = bSys?._active?.get(tileKey);
+    const level = entry?.level ?? markerHit.level ?? 1;
+    const rates = entry?.effectiveRates ?? entry?.baseRates ?? b.rates;
+
+    let html = `<b>${b.icon ?? ''} ${b.namePL ?? b.id}</b> Lv.${level}`;
+
+    // Produkcja
+    if (rates) {
+      for (const [res, rate] of Object.entries(rates)) {
+        if (rate === 0) continue;
+        const color = rate > 0 ? '#88ff88' : '#ff8888';
+        const sign = rate > 0 ? '+' : '';
+        html += `<br><span style="color:${color}">${sign}${typeof rate === 'number' ? rate.toFixed(1) : rate} ${res}/rok</span>`;
+      }
+    }
+    // Maintenance
+    if (b.maintenance) {
+      for (const [res, cost] of Object.entries(b.maintenance)) {
+        html += `<br><span style="color:#ff8888">-${cost} ${res}/rok</span>`;
+      }
+    }
+    if (b.energyCost) html += `<br><span style="color:#ffdd44">⚡ -${b.energyCost} energy/rok</span>`;
+    if (b.popCost) html += `<br>👤 ${b.popCost} POP`;
+    if (b.housing) html += `<br>🏠 +${b.housing} housing`;
+
+    this._showColonyTooltipEl(html, sx, sy);
+  }
+
+  // ── Tooltip kolonii (hover na planetę) ────────────────────────────────
+  _showColonyTooltip(entityId, sx, sy) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const colony = colMgr?.getColony(entityId);
+    if (!colony) { this._hideColonyTooltip(); return; }
+
+    const civ = colony.civSystem;
+    const pop = civ?.population ?? 0;
+    const housing = civ?.housing ?? 0;
+    const freePops = Math.max(0, pop - (civ?._employedPops ?? 0));
+
+    let html = `<b>${colony.planet?.name ?? entityId}</b>`;
+    html += `<br>👤 POP: ${pop}/${housing} (wolne: ${freePops})`;
+
+    // Lista budynków
+    const buildingSummary = {};
+    let totalEnergy = 0;
+    if (colony.buildingSystem?._active) {
+      for (const [key, entry] of colony.buildingSystem._active) {
+        if (key.startsWith('capital_')) continue;
+        const bid = entry.building?.id;
+        if (!bid) continue;
+        const lv = entry.level ?? 1;
+        if (!buildingSummary[bid]) buildingSummary[bid] = [];
+        buildingSummary[bid].push(lv);
+        // Bilans energii
+        const rates = entry.effectiveRates ?? entry.baseRates;
+        if (rates?.energy) totalEnergy += rates.energy;
+      }
+    }
+
+    if (Object.keys(buildingSummary).length > 0) {
+      html += '<br><b>Budynki:</b>';
+      for (const [bid, levels] of Object.entries(buildingSummary)) {
+        const b = BUILDINGS[bid];
+        if (!b) continue;
+        const lvStr = levels.length === 1 ? `Lv.${levels[0]}` : levels.map(l => `Lv.${l}`).join(', ');
+        html += `<br>${b.icon ?? ''} ${b.namePL ?? bid} ${lvStr}`;
+      }
+    }
+
+    // Bilans energii
+    html += `<br><br><b>⚡ Energia:</b> <span style="color:${totalEnergy >= 0 ? '#88ff88' : '#ff8888'}">${totalEnergy >= 0 ? '+' : ''}${totalEnergy.toFixed(1)}/rok</span>`;
+
+    this._showColonyTooltipEl(html, sx, sy);
+  }
+
+  // ── DOM tooltip element ───────────────────────────────────────────────
+  _showColonyTooltipEl(html, sx, sy) {
+    if (!this._colonyTooltipEl) {
+      const el = document.createElement('div');
+      el.id = 'colony-3d-tooltip';
+      el.style.cssText = `
+        position:fixed; z-index:40; pointer-events:none;
+        display:none; max-width:280px; padding:8px 10px;
+        background:rgba(6,12,20,0.95); border:1px solid #1a6e50;
+        border-radius:4px; font-family:'Courier New',monospace;
+        font-size:11px; color:#b0c4b0; line-height:1.4;
+      `;
+      document.body.appendChild(el);
+      this._colonyTooltipEl = el;
+    }
+    this._colonyTooltipEl.innerHTML = html;
+    this._colonyTooltipEl.style.display = 'block';
+    this._colonyTooltipEl.style.left = `${Math.min(sx + 14, window.innerWidth - 300)}px`;
+    this._colonyTooltipEl.style.top = `${Math.min(sy - 10, window.innerHeight - 250)}px`;
+  }
+
+  _hideColonyTooltip() {
+    if (this._colonyTooltipEl) this._colonyTooltipEl.style.display = 'none';
   }
 
   // ── Pętla renderowania ────────────────────────────────────────

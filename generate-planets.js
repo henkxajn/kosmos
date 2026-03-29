@@ -84,6 +84,7 @@ OPCJE:
   --ao                 Generuj ambient occlusion map
   --specular           Generuj specular/metalness map
   --all-maps           Generuj wszystkie dodatkowe mapy
+  --biome-map          Generuj biome map (czysta mapa biomów, RGB)
   --workers <n>        Liczba wątków (domyślnie: CPU cores - 1)
 
   --help               Pokaż tę pomoc
@@ -108,6 +109,102 @@ PRZYKŁADY:
   node generate-planets.js --type desert --quality low --resolution 1024
 `);
   process.exit(0);
+}
+
+// ============================================
+// BIOME MAP — czysta mapa decyzyjna (bez jitter/variation/oświetlenia)
+// ============================================
+const BIOME_COLORS = {
+  DEEP_OCEAN:   [0,   40,  140],
+  OCEAN:        [0,   80,  200],
+  COAST:        [0,  130,  220],
+  PLAINS:       [100, 180,  60],
+  FOREST:       [30,  120,  40],
+  DESERT:       [210, 170,  80],
+  SAVANNA:      [180, 160,  60],
+  TUNDRA:       [150, 170, 160],
+  MOUNTAINS:    [120, 100,  80],
+  HIGH_PEAKS:   [200, 200, 210],
+  VOLCANIC:     [80,   20,  10],
+  ICE:          [210, 230, 255],
+  TOXIC:        [140, 200,  40],
+  CRATER:       [80,   70,  60],
+  BARREN:       [130, 110,  90],
+};
+
+function classifyBiome(h, hc, latitude, planetType) {
+  // Lód polarny
+  const icePlanetTypes = ['ocean', 'rocky', 'ice', 'desert'];
+  if (icePlanetTypes.includes(planetType) && latitude > 0.80) return 'ICE';
+
+  switch (planetType) {
+    case 'ocean':
+      if (hc < 0.38) return 'DEEP_OCEAN';
+      if (hc < 0.50) return 'OCEAN';
+      if (hc < 0.56) return 'COAST';
+      if (hc < 0.65) return 'PLAINS';
+      if (hc < 0.75) return 'FOREST';
+      if (hc < 0.85) return 'MOUNTAINS';
+      return 'HIGH_PEAKS';
+
+    case 'rocky':
+      if (hc < 0.30) return 'CRATER';
+      if (hc < 0.45) return 'BARREN';
+      if (hc < 0.65) return 'TUNDRA';
+      return 'MOUNTAINS';
+
+    case 'desert':
+      if (hc < 0.35) return 'BARREN';
+      if (hc < 0.60) return 'DESERT';
+      if (hc < 0.75) return 'SAVANNA';
+      return 'MOUNTAINS';
+
+    case 'volcanic':
+    case 'lava-ocean':
+      if (hc < 0.40) return 'VOLCANIC';
+      if (hc < 0.65) return 'BARREN';
+      return 'MOUNTAINS';
+
+    case 'ice':
+      if (hc < 0.45) return 'DEEP_OCEAN';
+      if (hc < 0.55) return 'OCEAN';
+      if (hc < 0.70) return 'ICE';
+      return 'HIGH_PEAKS';
+
+    case 'toxic':
+      if (hc < 0.40) return 'DEEP_OCEAN';
+      if (hc < 0.55) return 'OCEAN';
+      if (hc < 0.70) return 'TOXIC';
+      return 'MOUNTAINS';
+
+    case 'iron':
+      if (hc < 0.35) return 'CRATER';
+      if (hc < 0.60) return 'BARREN';
+      return 'MOUNTAINS';
+
+    case 'mercury':
+      if (hc < 0.40) return 'CRATER';
+      if (hc < 0.70) return 'BARREN';
+      return 'HIGH_PEAKS';
+
+    case 'gas_warm':
+    case 'gas_cold':
+    case 'gas_giant':
+      if (latitude < 0.15) return 'VOLCANIC';
+      if (latitude < 0.40) return 'DESERT';
+      if (latitude < 0.65) return 'TUNDRA';
+      return 'ICE';
+
+    case 'planetoid_metallic':
+    case 'planetoid_carbonaceous':
+    case 'planetoid_silicate':
+      return hc < 0.50 ? 'CRATER' : 'BARREN';
+
+    default:
+      if (hc < 0.45) return 'DEEP_OCEAN';
+      if (hc < 0.65) return 'PLAINS';
+      return 'MOUNTAINS';
+  }
 }
 
 // ============================================
@@ -427,7 +524,7 @@ if (flags['list-types']) {
  * @param {object} genOpts — flagi generacji
  * @returns {object} — { diffuse, normal?, height?, roughness?, ao?, specular?, emission?, clouds?, nightlights? }
  */
-function generatePlanet(planetType, W, H, seed, genOpts) {
+function generatePlanet(planetType, W, H, seed, genOpts, typeName = 'rocky') {
   const { palette, features } = planetType;
   const quality = genOpts.quality || 'high';
   const useGamma = quality === 'high' || quality === 'ultra';
@@ -437,9 +534,11 @@ function generatePlanet(planetType, W, H, seed, genOpts) {
     W, H, features, seed, quality, true
   );
 
-  // ── 2. Diffuse color ──
+  // ── 2. Diffuse color + biome map ──
   const t0 = Date.now();
   const diffuse = new Uint8Array(W * H * 3);
+  const genBiome = flags['biome-map'] || flags['all-maps'];
+  const biomeBuffer = genBiome ? new Uint8Array(W * H * 3) : null;
   const nColor = createNoise(seed + 7000);
   const nPolar = createNoise(seed + 7500);
 
@@ -508,16 +607,32 @@ function generatePlanet(planetType, W, H, seed, genOpts) {
         });
       }
 
-      // zapis
+      // zapis diffuse
       const idx = (py * W + px) * 3;
       diffuse[idx]     = clamp(Math.round(c[0]), 0, 255);
       diffuse[idx + 1] = clamp(Math.round(c[1]), 0, 255);
       diffuse[idx + 2] = clamp(Math.round(c[2]), 0, 255);
+
+      // zapis biome map (równoległy, te same dane h/hc/latitude)
+      if (biomeBuffer) {
+        const latitude = Math.abs(v - 0.5) * 2; // 0=równik, 1=biegun
+        const biomeKey = classifyBiome(h, hc, latitude, typeName);
+        const bc = BIOME_COLORS[biomeKey] || BIOME_COLORS.PLAINS;
+        biomeBuffer[idx]     = bc[0];
+        biomeBuffer[idx + 1] = bc[1];
+        biomeBuffer[idx + 2] = bc[2];
+      }
     }
   }
   progressDone('diffuse color', t0);
 
   const result = { diffuse };
+
+  // Biome map (czysta mapa biomów — bez jitter/variation)
+  if (biomeBuffer) {
+    result.biome = biomeBuffer;
+    console.log('  ✓ biome map');
+  }
 
   // ── 3. Normal map ──
   if (genOpts.normal !== false) {
@@ -992,7 +1107,7 @@ async function main() {
         ? generateStar(pType, W, H, seed, genOpts)
         : pType.isGas
           ? generateGasGiant(pType, W, H, seed, genOpts)
-          : generatePlanet(pType, W, H, seed, genOpts);
+          : generatePlanet(pType, W, H, seed, genOpts, type);
 
       // ── Zapis plików ──
       const postOpts = {
@@ -1058,6 +1173,13 @@ async function main() {
       if (result.nightlights) {
         const p = path.join(outputDir, `${fname}_nightlights.png`);
         const sz = await savePNG(p, result.nightlights, W, H, 1);
+        console.log(`    → ${p} (${(sz / 1024 / 1024).toFixed(1)} MB)`);
+      }
+
+      // Biome map (RGB, bez post-processingu)
+      if (result.biome) {
+        const p = path.join(outputDir, `${fname}_biome.png`);
+        const sz = await savePNG(p, result.biome, W, H, 3);
         console.log(`    → ${p} (${(sz / 1024 / 1024).toFixed(1)} MB)`);
       }
 
