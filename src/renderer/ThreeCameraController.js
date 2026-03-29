@@ -72,9 +72,11 @@ export class ThreeCameraController {
       // Blokuj zoom gdy kursor jest nad elementem UI
       if (this._isOverUI && this._isOverUI(e.clientX, e.clientY)) return;
       // Adaptacyjna czułość: wolniej przy bliskim zoomie → precyzja
-      const zoomSpeed = this._targetDist < 2  ? 0.005
-                      : this._targetDist < 5  ? 0.01
-                      : this._targetDist < 20 ? 0.02 : 0.05;
+      const zoomSpeed = this._targetDist < 0.1 ? 0.001
+                      : this._targetDist < 0.5 ? 0.002
+                      : this._targetDist < 2   ? 0.005
+                      : this._targetDist < 5   ? 0.01
+                      : this._targetDist < 20  ? 0.02 : 0.05;
       this._targetDist = Math.max(this._minDist, Math.min(450, this._targetDist + e.deltaY * zoomSpeed));
     }, { passive: false });
   }
@@ -113,6 +115,21 @@ export class ThreeCameraController {
   focusOn(worldX, worldZ) {
     if (isNaN(worldX) || isNaN(worldZ)) return; // guard NaN → biały ekran
     this._goalTarget.set(worldX, 0, worldZ);
+  }
+
+  // Natychmiastowe ustawienie celu kamery (bez lerpa) — do śledzenia statków
+  focusOnInstant(worldX, worldZ, worldY = 0) {
+    if (isNaN(worldX) || isNaN(worldZ)) return;
+    this._goalTarget.set(worldX, worldY, worldZ);
+    this._target.set(worldX, worldY, worldZ);
+  }
+
+  // Szybkie śledzenie celu (wygładzone) — eliminuje drganie float32
+  focusOnSmooth(worldX, worldZ, worldY = 0) {
+    if (isNaN(worldX) || isNaN(worldZ)) return;
+    this._goalTarget.set(worldX, worldY, worldZ);
+    // Szybki lerp — nadąża za ruchem ale wygładza mikro-drgania GPU
+    this._target.lerp(this._goalTarget, 0.4);
   }
 
   // Ustaw minimalny dystans kamery (np. 0.5 dla księżyców, 3 domyślnie)

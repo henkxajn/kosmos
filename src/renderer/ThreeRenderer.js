@@ -7,6 +7,7 @@
 //   → 1 AU = 11 jednostek Three.js (podobnie jak prototyp: dist 8-54)
 
 import * as THREE         from 'three';
+import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
 import { GAME_CONFIG, STAR_TYPES } from '../config/GameConfig.js';
@@ -38,7 +39,7 @@ export class ThreeRenderer {
     const H = window.innerHeight;
 
     // ── Renderer WebGL ─────────────────────────────────────────
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
     this.renderer.setSize(W, H);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     // Poprawne zarządzanie kolorami dla MeshStandardMaterial (PBR)
@@ -81,7 +82,7 @@ export class ThreeRenderer {
     this.scene = new THREE.Scene();
 
     // ── Kamera perspektywiczna ─────────────────────────────────
-    this.camera = new THREE.PerspectiveCamera(55, W / H, 0.1, 5000);
+    this.camera = new THREE.PerspectiveCamera(55, W / H, 0.001, 5000);
     this.camera.position.set(0, 35, 50);
     this.camera.lookAt(0, 0, 0);
 
@@ -106,6 +107,10 @@ export class ThreeRenderer {
     this._clickable    = [];
     this._vessels      = new Map();   // vesselId → { sprite, routeLine }
     this._tradeLines   = [];          // THREE.Line[] — linie handlu cywilnego
+
+    // ── Cache modeli 3D statków ─────────────────────────────────
+    this._shipModelTemplates = new Map(); // modelPath → THREE.Group (oryginał)
+    this._gltfLoader = new GLTFLoader();
 
     // ── Cywilne świetliki handlowe ───────────────────────────
     this._tradeFireflies   = [];     // Array of { sprite, route, t, speed }
@@ -153,8 +158,9 @@ export class ThreeRenderer {
     this._mouse = new THREE.Vector2();
     this._hoverPlanetId = null;
 
-    // ── Śledzenie kamery (focus na planecie/księżycu) ───────
+    // ── Śledzenie kamery (focus na planecie/księżycu/statku) ───────
     this._focusEntityId = null;
+    this._focusVesselId = null;  // śledzenie statku w locie
 
     // ── Referencja do kontrolera kamery (ustawiana z zewnątrz) ─
     this._cameraController = null;
@@ -370,6 +376,7 @@ export class ThreeRenderer {
       this._addVesselSprite(vessel);
     }));
     EventBus.on('vessel:docked', safe(({ vessel }) => {
+      if (this._focusVesselId === vessel.id) this._focusVesselId = null;
       this._removeVesselSprite(vessel.id);
     }));
     EventBus.on('vessel:positionUpdate', safe(({ vessels }) => {
@@ -385,6 +392,7 @@ export class ThreeRenderer {
     // ── Śledzenie kamery po kliknięciu ciała ─────────────────
     EventBus.on('body:selected', safe(({ entity }) => {
       this._focusEntityId = entity.id;
+      this._focusVesselId = null; // przerwij śledzenie statku
       // Księżyce — pozwól na głębszy zoom (r=0.015–0.04, potrzeba bliskiej kamery)
       if (this._cameraController) {
         this._cameraController.setMinDist(entity.type === 'moon' ? 0.15 : 0.3);
@@ -424,6 +432,7 @@ export class ThreeRenderer {
 
     EventBus.on('body:deselected', safe(() => {
       this._focusEntityId = null;
+      this._focusVesselId = null;
       // Ukryj ikony budynków kolonii + tooltip
       this._colonyMarkers.hide();
       this._hideColonyTooltip();
@@ -456,10 +465,14 @@ export class ThreeRenderer {
       if (!this._cameraController) return;
       const entry = this._vessels.get(vesselId);
       if (entry) {
-        // Statek w locie/orbicie — centruj na sprite
+        // Statek w locie/orbicie — śledź go (co klatkę, bez lerpa)
         const pos = entry.sprite.position;
         this._focusEntityId = null;
-        this._cameraController.focusOn(pos.x, pos.z);
+        this._focusVesselId = vesselId;
+        this._cameraController.setMinDist(0.005); // bardzo bliski zoom dla statków
+        this._cameraController.focusOnInstant(pos.x, pos.z, pos.y);
+        // Auto-zoom na statek — przybliż do widocznej odległości
+        this._cameraController.setTargetDist(Math.min(this._cameraController._targetDist, 0.5));
       } else {
         // Statek zadokowany — centruj na planecie hangaru + zaznacz ją
         const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
@@ -661,6 +674,7 @@ export class ThreeRenderer {
     this._entityByUUID.clear();
     this._clickable = [];
     this._focusEntityId = null;
+    this._focusVesselId = null;
     this._star = null;
     this._starClickMesh = null;
   }
@@ -1301,12 +1315,28 @@ export class ThreeRenderer {
 
   // ── Aktualizacja celu kamery na śledzonym ciele ──────────────
   _updateCameraFocus() {
-    if (!this._focusEntityId || !this._cameraController) return;
+    if (!this._cameraController) return;
 
     // Helper: focusOn z guardem NaN
     const safeFocus = (x, z) => {
       if (!isNaN(x) && !isNaN(z)) this._cameraController.focusOn(x, z);
     };
+
+    // Śledzenie statku w locie (co klatkę, wygładzone — eliminuje drganie)
+    if (this._focusVesselId) {
+      const vEntry = this._vessels.get(this._focusVesselId);
+      if (vEntry) {
+        const pos = vEntry.sprite.position;
+        if (!isNaN(pos.x) && !isNaN(pos.z)) {
+          this._cameraController.focusOnSmooth(pos.x, pos.z, pos.y);
+        }
+        return;
+      }
+      // Statek zniknął (zadokował) — przerwij śledzenie
+      this._focusVesselId = null;
+    }
+
+    if (!this._focusEntityId) return;
 
     // Sprawdź planety
     const pEntry = this._planets.get(this._focusEntityId);
@@ -2408,14 +2438,144 @@ export class ThreeRenderer {
 
   // ── Vessel sprites ──────────────────────────────────────────────────
 
+  // ── Mapowanie shipId → plik modelu 3D ──────────────────────────
+  // Wszystkie typy statków używają modelu 3D (tymczasowo cargo3d dla brakujących)
+  static VESSEL_MODEL_MAP = {
+    cargo_ship:      'assets/models/ships/cargo3d.glb',
+    heavy_freighter: 'assets/models/ships/cargo3d.glb',
+    bulk_freighter:  'assets/models/ships/cargo3d.glb',
+    science_vessel:  'assets/models/ships/research1.glb',
+    colony_ship:     'assets/models/ships/cargo3d.glb',
+  };
+  // Domyślny model dla nieznanych typów statków
+  static VESSEL_MODEL_DEFAULT = 'assets/models/ships/cargo3d.glb';
+
   /**
-   * Dodaj sprite statku na mapie 3D.
+   * Dodaj statek na mapie 3D — model GLB lub sprite (fallback).
    */
   _addVesselSprite(vessel) {
     if (this._vessels.has(vessel.id)) return;
 
+    const modelPath = ThreeRenderer.VESSEL_MODEL_MAP[vessel.shipId]
+                   ?? ThreeRenderer.VESSEL_MODEL_DEFAULT;
+    this._addVesselModel3D(vessel, modelPath);
+  }
+
+  /**
+   * Dodaj model 3D statku (GLB) na mapie.
+   */
+  _addVesselModel3D(vessel, modelPath) {
+    const color = 0x44cc66;  // kolor linii trasy — cargo green
+
+    // Pozycja startowa
+    const px = S(vessel.position?.x ?? 0);
+    const pz = S(vessel.position?.y ?? 0);
+
+    const placeModel = (template) => {
+      // Nie duplikuj jeśli async callback przyszedł za późno
+      if (this._vessels.has(vessel.id)) return;
+
+      // Wrapper Group — pozycja i obrót aplikowane na wrapperze,
+      // model wewnątrz wycentrowany przez offset
+      const wrapper = new THREE.Group();
+
+      const model = template.clone();
+
+      // Skala — mały obiekt na mapie, widoczny przy bliskim zoomie
+      model.scale.set(0.002, 0.002, 0.002);
+
+      // Wycentruj geometrię modelu (GLB może mieć offset)
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      model.position.sub(center); // przesunięcie do centrum (0,0,0)
+
+      wrapper.add(model);
+
+      // Pozycja — lekko nad płaszczyzną orbitalną
+      wrapper.position.set(px, 0.3, pz);
+
+      // Obrót dziobem w kierunku celu
+      if (vessel.mission) {
+        const m = vessel.mission;
+        const isReturn = m.phase === 'returning';
+        let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
+        let ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+        const dx = tx - (vessel.position?.x ?? 0);
+        const dy = ty - (vessel.position?.y ?? 0);
+        if (dx !== 0 || dy !== 0) {
+          // atan2 na płaszczyźnie XZ + korekta osi modelu (dziób wzdłuż +X w GLB)
+          wrapper.rotation.y = Math.atan2(dx, dy) + Math.PI / 2;
+        }
+      }
+
+      // Materiały: zachowaj oryginalne z GLB
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = false;
+          child.receiveShadow = false;
+        }
+      });
+
+      this.scene.add(wrapper);
+
+      // Linia trasy (identycznie jak sprite)
+      let routeLine = null;
+      if (vessel.mission) {
+        const m = vessel.mission;
+        const isReturn = m.phase === 'returning';
+        let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
+        let ty = isReturn ? (m.returnTargetY ?? m.liveOriginY ?? 0) : (m.liveTargetY ?? m.targetY ?? 0);
+        if (isNaN(tx)) tx = 0;
+        if (isNaN(ty)) ty = 0;
+        let vx = vessel.position.x, vy = vessel.position.y;
+        if (isNaN(vx)) vx = 0;
+        if (isNaN(vy)) vy = 0;
+        const points = [
+          new THREE.Vector3(S(vx), 0.3, S(vy)),  // start: statek (nad płaszczyzną)
+          new THREE.Vector3(S(tx), 0.0, S(ty)),   // cel: planeta (na równiku)
+        ];
+        const geo = new THREE.BufferGeometry().setFromPoints(points);
+        const lineMat = new THREE.LineDashedMaterial({
+          color, dashSize: 0.3, gapSize: 0.15,
+          transparent: true, opacity: 0.4,
+        });
+        routeLine = new THREE.Line(geo, lineMat);
+        routeLine.computeLineDistances();
+        this.scene.add(routeLine);
+      }
+
+      this._vessels.set(vessel.id, { sprite: wrapper, routeLine, color, isModel3D: true });
+    };
+
+    // Sprawdź czy model już załadowany (cache)
+    if (this._shipModelTemplates.has(modelPath)) {
+      placeModel(this._shipModelTemplates.get(modelPath));
+      return;
+    }
+
+    // Załaduj model asynchronicznie
+    this._gltfLoader.load(
+      modelPath,
+      (gltf) => {
+        this._shipModelTemplates.set(modelPath, gltf.scene);
+        placeModel(gltf.scene);
+      },
+      undefined,
+      (error) => {
+        console.warn(`[ThreeRenderer] Nie można załadować modelu ${modelPath}:`, error);
+        // Fallback na sprite
+        this._addVesselSpriteFallback(vessel);
+      }
+    );
+  }
+
+  /**
+   * Fallback: dodaj sprite statku na mapie 3D (Canvas 2D billboard).
+   */
+  _addVesselSpriteFallback(vessel) {
+    if (this._vessels.has(vessel.id)) return;
+
     // Kolor wg generacji statku (trail + sprite)
-    const GEN_COLORS = { 1: 0xffffff, 2: 0x4488ff, 3: 0xff44aa, 4: 0xffdd44, 5: 0x44ffdd };
     const typeColors = {
       science_vessel:  0x4488ff,
       cargo_ship:      0x44cc66,
@@ -2475,8 +2635,8 @@ export class ThreeRenderer {
       if (isNaN(vx)) vx = 0;
       if (isNaN(vy)) vy = 0;
       const points = [
-        new THREE.Vector3(S(vx), 0.1, S(vy)),
-        new THREE.Vector3(S(tx), 0.1, S(ty)),
+        new THREE.Vector3(S(vx), 0.3, S(vy)),  // start: statek (nad płaszczyzną)
+        new THREE.Vector3(S(tx), 0.0, S(ty)),   // cel: planeta (na równiku)
       ];
 
       const geo = new THREE.BufferGeometry().setFromPoints(points);
@@ -2500,8 +2660,20 @@ export class ThreeRenderer {
     if (!entry) return;
 
     this.scene.remove(entry.sprite);
-    entry.sprite.material.dispose();
-    if (entry.tex) entry.tex.dispose();
+
+    if (entry.isModel3D) {
+      // Model 3D — dispose geometrii klonów (materiały współdzielone z templatem)
+      entry.sprite.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry?.dispose();
+        }
+      });
+    } else {
+      // Sprite billboard — dispose materiału i tekstury
+      entry.sprite.material.dispose();
+      if (entry.tex) entry.tex.dispose();
+    }
+
     if (entry.routeLine) {
       this.scene.remove(entry.routeLine);
       entry.routeLine.geometry.dispose();
@@ -2533,9 +2705,8 @@ export class ThreeRenderer {
       // Guard NaN — pozycja statku
       const vx = isNaN(vessel.position.x) ? 0 : vessel.position.x;
       const vy = isNaN(vessel.position.y) ? 0 : vessel.position.y;
-      entry.sprite.position.set(S(vx), 0.3, S(vy));
 
-      // Aktualizuj linię trasy (2 punkty: statek → cel)
+      // Aktualizuj linię trasy (2 punkty: statek → cel na równiku planety)
       if (vessel.mission) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
@@ -2545,12 +2716,33 @@ export class ThreeRenderer {
         if (isNaN(tx)) tx = 0;
         if (isNaN(ty)) ty = 0;
 
+        // Oblicz wysokość Y — statek opada ku planecie w miarę zbliżania
+        // Daleko od celu → Y=0.3, przy celu → Y=0 (równik planety)
+        const dx = tx - vx;
+        const dy = ty - vy;
+        const distToTarget = Math.sqrt(dx * dx + dy * dy);
+        const ox = m.originX ?? m.liveOriginX ?? vx;
+        const oy = m.originY ?? m.liveOriginY ?? vy;
+        const totalDist = Math.sqrt((tx - ox) * (tx - ox) + (ty - oy) * (ty - oy));
+        // Proporcja: 1.0 = daleko od celu (start), 0.0 = przy celu
+        const ratio = totalDist > 0 ? Math.min(1, distToTarget / totalDist) : 0;
+        const shipY = 0.3 * ratio; // opada od 0.3 do 0.0
+
+        entry.sprite.position.set(S(vx), shipY, S(vy));
+
+        // Model 3D — obróć dziobem w kierunku celu
+        if (entry.isModel3D) {
+          if (dx !== 0 || dy !== 0) {
+            entry.sprite.rotation.y = Math.atan2(dx, dy) + Math.PI / 2;
+          }
+        }
+
         if (!entry.routeLine) {
           // Stwórz nową linię
           const savedColor = entry.color ?? 0xaaaaaa;
           const pts = [
-            new THREE.Vector3(S(vessel.position.x), 0.1, S(vessel.position.y)),
-            new THREE.Vector3(S(tx), 0.1, S(ty)),
+            new THREE.Vector3(S(vx), shipY, S(vy)),    // statek (dynamiczna wysokość)
+            new THREE.Vector3(S(tx), 0.0, S(ty)),       // cel (równik planety)
           ];
           const geo = new THREE.BufferGeometry().setFromPoints(pts);
           const lineMat = new THREE.LineDashedMaterial({
@@ -2561,19 +2753,23 @@ export class ThreeRenderer {
           entry.routeLine.computeLineDistances();
           this.scene.add(entry.routeLine);
         } else {
-          // Aktualizuj 2 punkty: statek → cel
+          // Aktualizuj 2 punkty: statek → cel (równik planety)
           const posArr = entry.routeLine.geometry.attributes.position.array;
-          posArr[0] = S(vessel.position.x); posArr[1] = 0.1; posArr[2] = S(vessel.position.y);
-          posArr[3] = S(tx);                posArr[4] = 0.1; posArr[5] = S(ty);
+          posArr[0] = S(vx); posArr[1] = shipY; posArr[2] = S(vy);
+          posArr[3] = S(tx); posArr[4] = 0.0;   posArr[5] = S(ty);
           entry.routeLine.geometry.attributes.position.needsUpdate = true;
           entry.routeLine.computeLineDistances();
         }
-      } else if (entry.routeLine) {
-        // Misja zakończona — usuń linię trasy
-        this.scene.remove(entry.routeLine);
-        entry.routeLine.geometry.dispose();
-        entry.routeLine.material.dispose();
-        entry.routeLine = null;
+      } else {
+        // Brak misji — statek na stałej wysokości
+        entry.sprite.position.set(S(vx), 0.3, S(vy));
+        if (entry.routeLine) {
+          // Usuń linię trasy
+          this.scene.remove(entry.routeLine);
+          entry.routeLine.geometry.dispose();
+          entry.routeLine.material.dispose();
+          entry.routeLine = null;
+        }
       }
     }
   }
