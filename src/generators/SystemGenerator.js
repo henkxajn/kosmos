@@ -680,12 +680,20 @@ export class SystemGenerator {
       bestPlanet.atmosphere = 'breathable';
       bestPlanet.breathableAtmosphere = true;
       const T_base_C = bestPlanet.temperatureK - 273.15 - oldGreenhouse;
-      bestPlanet.temperatureC = T_base_C + GREENHOUSE.breathable;
+      let finalC = T_base_C + GREENHOUSE.breathable;
+      // Clamp do zakresu Earth-like — planeta macierzysta musi byc hospitalna
+      if (finalC < 5)  finalC = 5 + Math.random() * 10;   // 5–15°C
+      if (finalC > 35) finalC = 20 + Math.random() * 10;  // 20–30°C
+      bestPlanet.temperatureC = Math.round(finalC);
       bestPlanet.temperatureK = bestPlanet.temperatureC + 273.15;
       bestPlanet.surface.temperature = bestPlanet.temperatureC;
     } else {
       bestPlanet.atmosphere = 'breathable';
       bestPlanet.breathableAtmosphere = true;
+      bestPlanet.temperatureC = 15;
+      bestPlanet.temperatureK = 288.15;
+      bestPlanet.surface = bestPlanet.surface || {};
+      bestPlanet.surface.temperature = 15;
     }
     // Gwarancja minimalnego Ti w composition — żeby gracz nie utknął bez tego surowca
     // Złoża generowane w generate() → trzeba regenerować po modyfikacji composition
@@ -758,12 +766,20 @@ export class SystemGenerator {
       bestPlanet.atmosphere = 'breathable';
       bestPlanet.breathableAtmosphere = true;
       const T_base_C = bestPlanet.temperatureK - 273.15 - oldGreenhouse;
-      bestPlanet.temperatureC = T_base_C + GREENHOUSE.breathable;
+      let finalC = T_base_C + GREENHOUSE.breathable;
+      // Clamp do zakresu Earth-like — planeta macierzysta musi byc hospitalna
+      if (finalC < 5)  finalC = 5 + Math.random() * 10;   // 5–15°C
+      if (finalC > 35) finalC = 20 + Math.random() * 10;  // 20–30°C
+      bestPlanet.temperatureC = Math.round(finalC);
       bestPlanet.temperatureK = bestPlanet.temperatureC + 273.15;
       bestPlanet.surface.temperature = bestPlanet.temperatureC;
     } else {
       bestPlanet.atmosphere = 'breathable';
       bestPlanet.breathableAtmosphere = true;
+      bestPlanet.temperatureC = 15;
+      bestPlanet.temperatureK = 288.15;
+      bestPlanet.surface = bestPlanet.surface || {};
+      bestPlanet.surface.temperature = 15;
     }
     if (!bestPlanet.surfaceRadius) {
       bestPlanet.surfaceRadius = this.calcSurfaceRadius(bestPlanet.physics.mass, bestPlanet.planetType);

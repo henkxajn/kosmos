@@ -12,6 +12,13 @@ import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/Buil
 import { TECHS }             from '../data/TechData.js';
 import { showRenameModal }   from '../ui/ModalInput.js';
 import { THEME, bgAlpha, GLASS_BORDER }   from '../config/ThemeConfig.js';
+import {
+  loadAllTerrainTextures,
+  getTerrainTexture,
+  getTransitionTexture,
+  texturesLoaded,
+} from '../renderer/TerrainTextures.js';
+import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 
 // ── Stałe layoutu ───────────────────────────────────────────
 // HEX_SIZE dynamiczny — obliczany per planeta/rozdzielczość w _calcOptimalHexSize()
@@ -93,6 +100,11 @@ export class PlanetScene {
     EventBus.emit('time:setMultiplier', { index: 1 });
     EventBus.emit('time:pause');
 
+    // Ładuj tekstury terenu (async, przerysuje mapę po załadowaniu)
+    loadAllTerrainTextures();
+    this._onTexturesLoaded = () => { if (this.grid) this._drawAllTiles(); };
+    EventBus.on('terrain:texturesLoaded', this._onTexturesLoaded);
+
     // Generuj siatkę
     this.grid = PlanetMapGenerator.generate(planet, true);
 
@@ -170,6 +182,10 @@ export class PlanetScene {
     if (layer) layer.style.zIndex = '3';
 
     // Usuń eventy
+    if (this._onTexturesLoaded) {
+      EventBus.off('terrain:texturesLoaded', this._onTexturesLoaded);
+      this._onTexturesLoaded = null;
+    }
     this._unregisterEvents(layer);
 
     // Zatrzymaj pętlę
@@ -415,9 +431,102 @@ export class PlanetScene {
     pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
     ctx.closePath();
 
-    // terrain.color to liczba hex (np. 0x7ab648) — konwersja na string CSS
-    ctx.fillStyle = '#' + (terrain.color || 0x334455).toString(16).padStart(6, '0');
-    ctx.fill();
+    // ── Wypełnienie: tekstura PNG lub fallback na kolor ────────────────────────
+    const _tileIndex = Math.abs(tile.q * 31 + tile.r * 17);
+    const _texImg = texturesLoaded()
+      ? getTerrainTexture(tile.type, this.planet, _tileIndex)
+      : null;
+
+    if (_texImg) {
+      ctx.save();
+      ctx.clip(); // przytnij do kształtu hexa (ścieżka już zdefiniowana wyżej)
+
+      // Bounding box hexa
+      const _xs = pts.map(p => p.x);
+      const _ys = pts.map(p => p.y);
+      const _tx = Math.min(..._xs);
+      const _ty = Math.min(..._ys);
+      const _tw = Math.max(..._xs) - _tx;
+      const _th = Math.max(..._ys) - _ty;
+
+      // Krater: wyśrodkuj i przeskaluj do rozmiaru hexa (nie kafelkuj)
+      if (tile.type === 'crater') {
+        const _size = Math.min(_tw, _th);
+        const _cx = _tx + (_tw - _size) / 2;
+        const _cy = _ty + (_th - _size) / 2;
+        ctx.drawImage(_texImg, _cx, _cy, _size, _size);
+      } else {
+        ctx.drawImage(_texImg, _tx, _ty, _tw, _th);
+      }
+
+      // Lekkie przyciemnienie — głębszy klimat sci-fi
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.20)';
+      ctx.fill();
+
+      ctx.restore();
+
+      // Odtwórz ścieżkę hexa (clip/restore ją usunął) — potrzebna do overlayów
+      ctx.beginPath();
+      pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.closePath();
+    } else {
+      // Fallback: płaski kolor z TERRAIN_TYPES
+      ctx.fillStyle = '#' + (terrain.color || 0x334455).toString(16).padStart(6, '0');
+      ctx.fill();
+    }
+
+    // ── Przejścia między biomami przy krawędziach ─────────────────────────
+    if (this.grid) {
+      const hs = this._hexSize - 1;
+      for (let ei = 0; ei < 6; ei++) {
+        const dir = HEX_DIRECTIONS[ei];
+        const nb = this.grid.get(tile.q + dir.q, tile.r + dir.r);
+        if (!nb || nb.type === tile.type) continue;
+
+        const pA = pts[ei], pB = pts[(ei + 1) % 6];
+        const emx = (pA.x + pB.x) / 2, emy = (pA.y + pB.y) / 2;
+
+        // PNG transition
+        if (texturesLoaded()) {
+          const edgeHash = Math.abs(tile.q * 7 + tile.r * 13 + ei * 31);
+          const trans = getTransitionTexture(tile.type, nb.type, edgeHash);
+          if (trans) {
+            const angle = Math.atan2(emy - pos.y, emx - pos.x);
+            ctx.save();
+            ctx.beginPath();
+            pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+            ctx.closePath();
+            ctx.clip();
+            ctx.translate(emx, emy);
+            ctx.rotate(angle);
+            if (trans.flip) ctx.scale(-1, 1);
+            const tw = hs * 0.6, th = hs * 0.8;
+            ctx.globalAlpha = 0.40;
+            ctx.drawImage(trans.img, -tw * 0.5, -th / 2, tw, th);
+            ctx.globalAlpha = 1;
+            ctx.restore();
+            continue;
+          }
+        }
+
+        // Fallback gradient dla par bez PNG
+        const nbTerrain = TERRAIN_TYPES[nb.type];
+        if (!nbTerrain) continue;
+        const nc = nbTerrain.color ?? 0x888888;
+        const nR = (nc >> 16) & 0xFF, nG = (nc >> 8) & 0xFF, nB = nc & 0xFF;
+        const endX = emx + (pos.x - emx) * 0.45;
+        const endY = emy + (pos.y - emy) * 0.45;
+        const grad = ctx.createLinearGradient(emx, emy, endX, endY);
+        grad.addColorStop(0, `rgba(${nR},${nG},${nB},0.3)`);
+        grad.addColorStop(1, `rgba(${nR},${nG},${nB},0)`);
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      ctx.closePath();
+    }
 
     // Overlay budynku
     if (tile.buildingId && BUILDINGS[tile.buildingId]) {

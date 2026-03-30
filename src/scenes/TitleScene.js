@@ -317,14 +317,19 @@ export class TitleScene {
       window.KOSMOS.scenario  = 'power_test';
     }
 
-    // Fade out
+    // Fade out → loading screen → start gry
     const el = this._container;
     el.style.transition = 'opacity 0.6s ease';
     el.style.opacity = '0';
 
     setTimeout(() => {
       this.destroy();
-      window._startMainGame();
+      // Pokaż loading screen i odrocz inicjalizację
+      window._showLoadingScreen?.();
+      // requestAnimationFrame pozwala przeglądarce wyrenderować loading screen
+      requestAnimationFrame(() => {
+        setTimeout(() => window._startMainGame(), 16);
+      });
     }, 600);
   }
 

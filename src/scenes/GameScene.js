@@ -73,6 +73,7 @@ export class GameScene {
     this.physicsSystem = new PhysicsSystem();
 
     // Generowanie / przywrócenie układu
+    window._updateLoading?.(10, 'Generowanie układu...');
     const savedData = window.KOSMOS?.savedData || null;
     const { star, planets, moons = [], planetesimals, asteroids = [], comets = [], planetoids = [] } =
       savedData
@@ -82,17 +83,20 @@ export class GameScene {
     this.star = star;
 
     // ── StarSystemManager — rejestr układów gwiezdnych ───────
+    window._updateLoading?.(25, 'Inicjalizacja systemów...');
     this.starSystemManager = new StarSystemManager();
     this.starSystemManager.registerHomeSystem(star, planets, moons, planetoids);
     window.KOSMOS.starSystemManager = this.starSystemManager;
     window.KOSMOS.activeSystemId    = 'sys_home';
 
     // ── Three.js renderer ──────────────────────────────────────
+    window._updateLoading?.(40, 'Renderer 3D...');
     this.threeRenderer = new ThreeRenderer(canvas3D);
 
     // Inicjalizuj pozycje planet zanim renderer wyrenderuje pierwszą klatkę
     this.physicsSystem.update(0.001);
 
+    window._updateLoading?.(55, 'Ładowanie tekstur...');
     this.threeRenderer.initSystem(star, planets, planetesimals, moons);
 
     // ── Kontroler kamery ───────────────────────────────────────

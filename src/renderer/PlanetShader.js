@@ -9,6 +9,7 @@
 
 import * as THREE from 'three';
 import { hashCode } from './PlanetTextureUtils.js';
+import { getBiomeColorsForPlanet } from './TerrainTextures.js';
 
 // ── Deterministyczny PRNG (mulberry32) ────────────────────────────────────────
 export function mulberry32(seed) {
@@ -106,21 +107,30 @@ uniform vec3 uColorTint;
 uniform float uNoiseFreqMult;
 uniform float uWarpStrength;
 uniform float uPolarCap;
+uniform vec3 uBiomeColors[10]; // kolory biomów próbkowane z tekstur terenu
 
 ${GLSL_NOISE_LIB}
 
-// ── Kolor bazowy biomu (if/else — WebGL 1 kompatybilne) ──────────────────────
+// ── Kolor bazowy biomu — dynamiczny z uBiomeColors[] ─────────────────────────
+// Bazowy kolor z uniform + wariacja height/humidity dla głębi wizualnej
 vec3 biomeColor(float bId, float height, float humidity) {
-  if (bId < 0.5) return mix(vec3(0.29, 0.48, 0.16), vec3(0.42, 0.60, 0.28), humidity); // plains (0)
-  if (bId < 1.5) return mix(vec3(0.42, 0.38, 0.33), vec3(0.67, 0.61, 0.55), height);   // mountains (1)
-  if (bId < 2.5) { float depth = 1.0 - height; return mix(vec3(0.16, 0.42, 0.72), vec3(0.04, 0.12, 0.45), depth * 0.8); } // ocean (2)
-  if (bId < 3.5) return mix(vec3(0.10, 0.35, 0.10), vec3(0.16, 0.48, 0.16), humidity); // forest (3)
-  if (bId < 4.5) return mix(vec3(0.68, 0.55, 0.22), vec3(0.91, 0.78, 0.42), height);   // desert (4)
-  if (bId < 5.5) return mix(vec3(0.48, 0.60, 0.67), vec3(0.60, 0.73, 0.80), humidity); // tundra (5)
-  if (bId < 6.5) return mix(vec3(0.67, 0.16, 0.00), vec3(0.80, 0.28, 0.13), height);   // volcano (6)
-  if (bId < 7.5) return mix(vec3(0.35, 0.31, 0.25), vec3(0.48, 0.44, 0.38), height);   // crater (7)
-  if (bId < 8.5) return mix(vec3(0.75, 0.85, 0.94), vec3(0.88, 0.94, 1.00), humidity); // ice_sheet (8)
-  return mix(vec3(0.42, 0.35, 0.29), vec3(0.55, 0.48, 0.42), height);                  // wasteland (9)
+  int idx = int(bId + 0.5);
+  vec3 base;
+  // WebGL 1: brak indeksowania dynamicznego → if/else
+  if (idx == 0)      base = uBiomeColors[0];
+  else if (idx == 1) base = uBiomeColors[1];
+  else if (idx == 2) base = uBiomeColors[2];
+  else if (idx == 3) base = uBiomeColors[3];
+  else if (idx == 4) base = uBiomeColors[4];
+  else if (idx == 5) base = uBiomeColors[5];
+  else if (idx == 6) base = uBiomeColors[6];
+  else if (idx == 7) base = uBiomeColors[7];
+  else if (idx == 8) base = uBiomeColors[8];
+  else               base = uBiomeColors[9];
+
+  // Wariacja jasności wg height/humidity — zachowuje naturalny wygląd
+  float variation = mix(height, humidity, 0.5);
+  return mix(base * 0.82, base * 1.18, variation);
 }
 
 // ── Helper: pełny odczyt BiomeMap + kolor biomu dla danego UV ─────────────────
@@ -448,9 +458,19 @@ function createUniforms(planet, biomeMapTexture, buildingMapTexture) {
   );
   if (!buildingMapTexture) emptyBuildingTex.needsUpdate = true;
 
+  // Kolory biomów próbkowane z tekstur terenu (per planeta)
+  const biomeColors = getBiomeColorsForPlanet(planet);
+  const biomeColorVecs = [];
+  for (let i = 0; i < 10; i++) {
+    biomeColorVecs.push(new THREE.Vector3(
+      biomeColors[i * 3], biomeColors[i * 3 + 1], biomeColors[i * 3 + 2]
+    ));
+  }
+
   return {
     uBiomeMap:        { value: biomeMapTexture },
     uBuildingMap:     { value: emptyBuildingTex },
+    uBiomeColors:     { value: biomeColorVecs },
     uRotationSpeed:   { value: 0.08 },
     uLightDir:        { value: new THREE.Vector3(3, 2, 4).normalize() },
     uTime:            { value: 0.0 },
@@ -469,8 +489,18 @@ function createBakeUniforms(planet, biomeMapTexture) {
   const { seed, colorTint, noiseFreqMult, warpStrength, polarCap } =
     _resolvePresetParams(planet);
 
+  // Kolory biomów próbkowane z tekstur terenu (per planeta)
+  const biomeColors = getBiomeColorsForPlanet(planet);
+  const biomeColorVecs = [];
+  for (let i = 0; i < 10; i++) {
+    biomeColorVecs.push(new THREE.Vector3(
+      biomeColors[i * 3], biomeColors[i * 3 + 1], biomeColors[i * 3 + 2]
+    ));
+  }
+
   return {
     uBiomeMap:      { value: biomeMapTexture },
+    uBiomeColors:   { value: biomeColorVecs },
     uSeed:          { value: seed },
     uColorTint:     { value: colorTint },
     uNoiseFreqMult: { value: noiseFreqMult },

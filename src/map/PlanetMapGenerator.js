@@ -313,14 +313,47 @@ export class PlanetMapGenerator {
     const temp = planet.surface?.temperature ?? 20;
     const type = planet.planetType           ?? 'rocky';
 
-    // Czapy lodowe: górny i dolny wiersz → ice_sheet jeśli zimno
-    if (temp < 5) {
-      const rows = [0, grid.height - 1];
-      grid.forEach((tile, col, row) => {
-        if (rows.includes(row) && type !== 'hot_rocky' && type !== 'gas') {
-          tile.type = 'ice_sheet';
-        }
-      });
+    // Czapy lodowe — gradientowe: im zimniej, tym więcej rzędów pokrywy
+    // hot_rocky i gas nie mają czap
+    if (type !== 'hot_rocky' && type !== 'gas') {
+      // Liczba rzędów czapy (per biegun): zależy od temperatury
+      //   temp < -50  → 4 rzędy (gruba czapa)
+      //   temp < -20  → 3 rzędy
+      //   temp < 5    → 2 rzędy
+      //   temp < 25   → 1 rząd  (cienka polarna)
+      //   temp >= 25  → 0 (brak czap — gorąca planeta)
+      let capRows;
+      if (temp < -50) capRows = 4;
+      else if (temp < -20) capRows = 3;
+      else if (temp < 5)   capRows = 2;
+      else if (temp < 25)  capRows = 1;
+      else                 capRows = 0;
+
+      // Ogranicz do max połowy siatki (nie pokrywaj równika)
+      const maxCap = Math.floor(grid.height / 2) - 1;
+      capRows = Math.min(capRows, maxCap);
+
+      if (capRows > 0) {
+        const H = grid.height;
+        grid.forEach((tile, col, row) => {
+          const distFromPole = Math.min(row, H - 1 - row); // 0 = biegun, rośnie ku równikowi
+          if (distFromPole < capRows) {
+            // Biegun (distFromPole=0): zawsze ice_sheet
+            // Dalsze rzędy: prawdopodobieństwo maleje — tundra zamiast ice_sheet
+            if (distFromPole === 0) {
+              tile.type = 'ice_sheet';
+            } else {
+              // Szansa na ice_sheet maleje z odległością od bieguna
+              const chance = 1.0 - (distFromPole / capRows) * 0.6;
+              if (rand() < chance) {
+                tile.type = 'ice_sheet';
+              } else if (tile.type !== 'ocean' && tile.type !== 'mountains') {
+                tile.type = 'tundra'; // przejściowa strefa
+              }
+            }
+          }
+        });
+      }
     }
 
     // Aktywność wulkaniczna: hot_rocky → gwarantuj przynajmniej 2 wulkany

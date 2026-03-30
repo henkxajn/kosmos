@@ -9,6 +9,8 @@
 
 import * as THREE from 'three';
 import { HexGrid } from '../map/HexGrid.js';
+import { getTerrainImageData, texturesLoaded } from './TerrainTextures.js';
+import { TERRAIN_TYPES } from '../map/HexTile.js';
 
 // Kodowanie biomów → kanały RGB
 const BIOME_DATA = {
@@ -118,7 +120,9 @@ export class BiomeMapGenerator {
     // Zbierz pozycje hexów i ich biomy + kopie przesunięte o ±gridPx.w (seamless wrapping)
     const baseHexes = [];
     grid.forEach(tile => {
-      const center = HexGrid.hexToPixel(tile.q, tile.r, hexSize);
+      const center = grid.tilePixelPos
+        ? grid.tilePixelPos(tile.q, tile.r, hexSize)
+        : HexGrid.hexToPixel(tile.q, tile.r, hexSize);
       baseHexes.push({
         cx: center.x,
         cy: center.y,
@@ -167,6 +171,160 @@ export class BiomeMapGenerator {
     }
 
     return BiomeMapGenerator._createTexture(data);
+  }
+
+  // ── Mapa kolorów z tekstur terenu → CanvasTexture (diffuse 3D) ────────────
+  // Dla każdego piksela equirectangular: znajdź hex → próbkuj teksturę PNG
+  // Wynik: 1:1 dopasowanie między mapą 2D a globusem 3D
+  // Optymalizacja: spatial grid (O(1) lookup) zamiast brute-force (O(N))
+  static generateColorMap(grid, planet) {
+    if (!grid || !texturesLoaded()) return null;
+    if (grid.width === undefined) return null;
+
+    const TEX_W = BUF_W, TEX_H = BUF_H;
+    const byW = TEX_W / (Math.sqrt(3) * (grid.width + 0.5));
+    const byH = TEX_H / (1.5 * grid.height + 0.5);
+    const hexSize = Math.floor(Math.min(byW, byH));
+    const gridPx = grid.gridPixelSize(hexSize);
+
+    // Zbierz hexy z ich ImageData tekstur (z tapered offset!)
+    const baseHexes = [];
+    grid.forEach(tile => {
+      const center = grid.tilePixelPos
+        ? grid.tilePixelPos(tile.q, tile.r, hexSize)
+        : HexGrid.hexToPixel(tile.q, tile.r, hexSize);
+      const tileIdx = Math.abs(tile.q * 31 + tile.r * 17);
+      const imgData = getTerrainImageData(tile.type, planet, tileIdx);
+      const terrain = TERRAIN_TYPES[tile.type];
+      const fc = terrain?.color ?? 0x888888;
+      baseHexes.push({
+        cx: center.x, cy: center.y, imgData,
+        fallbackR: (fc >> 16) & 0xFF,
+        fallbackG: (fc >> 8) & 0xFF,
+        fallbackB: fc & 0xFF,
+      });
+    });
+    if (baseHexes.length === 0) return null;
+
+    // Kopie wraparound (seamless w poziomie)
+    const hexes = [];
+    for (const h of baseHexes) {
+      hexes.push(h);
+      hexes.push({ ...h, cx: h.cx + gridPx.w });
+      hexes.push({ ...h, cx: h.cx - gridPx.w });
+    }
+
+    // ── Spatial grid: dziel przestrzeń na komórki rozmiaru cellSize ────────
+    // Każda komórka zawiera indeksy hexów których centrum jest blisko
+    const cellSize = hexSize * 1.8; // nieco większy niż hex → pokrycie sąsiadów
+    const gridCols = Math.ceil(gridPx.w / cellSize) + 2;
+    const gridRows = Math.ceil(gridPx.h / cellSize) + 2;
+    const spatialGrid = new Array(gridCols * gridRows);
+    for (let i = 0; i < spatialGrid.length; i++) spatialGrid[i] = [];
+
+    for (let i = 0; i < hexes.length; i++) {
+      const gc = Math.floor(hexes[i].cx / cellSize) + 1;
+      const gr = Math.floor(hexes[i].cy / cellSize) + 1;
+      // Wstaw do komórki i sąsiednich (3×3) — gwarancja znalezienia najbliższego
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const c = gc + dc, r = gr + dr;
+          if (c >= 0 && c < gridCols && r >= 0 && r < gridRows) {
+            spatialGrid[r * gridCols + c].push(i);
+          }
+        }
+      }
+    }
+
+    // Generuj piksele (polar cap nie jest tu potrzebny — hex grid ma ice_sheet na biegunach)
+    const canvas = document.createElement('canvas');
+    canvas.width = TEX_W;
+    canvas.height = TEX_H;
+    const ctx = canvas.getContext('2d');
+    const outData = ctx.createImageData(TEX_W, TEX_H);
+    const out = outData.data;
+
+    for (let py = 0; py < TEX_H; py++) {
+      const gy = (py / TEX_H) * gridPx.h;
+      const gr = Math.floor(gy / cellSize) + 1;
+
+      for (let px = 0; px < TEX_W; px++) {
+        const gx = (px / TEX_W) * gridPx.w;
+        const gc = Math.floor(gx / cellSize) + 1;
+
+        // Szukaj najbliższego hexa tylko w komórce spatial grid
+        const cellIdx = (gr >= 0 && gr < gridRows && gc >= 0 && gc < gridCols)
+          ? gr * gridCols + gc : -1;
+        const candidates = cellIdx >= 0 ? spatialGrid[cellIdx] : null;
+
+        let bestDist = Infinity, bestIdx = 0;
+        if (candidates && candidates.length > 0) {
+          for (let k = 0; k < candidates.length; k++) {
+            const i = candidates[k];
+            const dx = gx - hexes[i].cx, dy = gy - hexes[i].cy;
+            const dist = dx * dx + dy * dy;
+            if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+          }
+        } else {
+          // Fallback: brute-force (rzadki case — piksele na krawędzi)
+          for (let i = 0; i < hexes.length; i++) {
+            const dx = gx - hexes[i].cx, dy = gy - hexes[i].cy;
+            const dist = dx * dx + dy * dy;
+            if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+          }
+        }
+
+        const hex = hexes[bestIdx];
+        const oIdx = (py * TEX_W + px) * 4;
+
+        // Próbkuj kolor z tekstury lub fallback
+        function sampleHex(h, sx, sy) {
+          if (h.imgData) {
+            const tw = h.imgData.width, th = h.imgData.height;
+            const scale = tw / (hexSize * 2.5);
+            const stx = Math.floor((sx * scale) % tw + tw) % tw;
+            const sty = Math.floor((sy * scale) % th + th) % th;
+            const si = (sty * tw + stx) * 4;
+            return [h.imgData.data[si], h.imgData.data[si+1], h.imgData.data[si+2]];
+          }
+          return [h.fallbackR, h.fallbackG, h.fallbackB];
+        }
+
+        let [r, g, b] = sampleHex(hex, gx, gy);
+
+        // Biome blending: mieszaj kolory na granicy hexów (delikatne przejścia)
+        if (candidates && candidates.length > 1) {
+          let secondDist = Infinity, secondIdx = bestIdx;
+          for (let k = 0; k < candidates.length; k++) {
+            const ci = candidates[k];
+            if (ci === bestIdx) continue;
+            const dx2 = gx - hexes[ci].cx, dy2 = gy - hexes[ci].cy;
+            const d2 = dx2 * dx2 + dy2 * dy2;
+            if (d2 < secondDist) { secondDist = d2; secondIdx = ci; }
+          }
+          if (secondIdx !== bestIdx) {
+            const ratio = bestDist / (secondDist + 0.001);
+            if (ratio > 0.75) { // tylko bardzo blisko granicy
+              const blend = (ratio - 0.75) / 0.25; // 0 przy 0.75, 1 przy 1.0
+              const t = blend * 0.3; // max 30% drugiego koloru
+              const [r2, g2, b2] = sampleHex(hexes[secondIdx], gx, gy);
+              r = Math.round(r * (1 - t) + r2 * t);
+              g = Math.round(g * (1 - t) + g2 * t);
+              b = Math.round(b * (1 - t) + b2 * t);
+            }
+          }
+        }
+
+        out[oIdx] = r; out[oIdx + 1] = g; out[oIdx + 2] = b;
+        out[oIdx + 3] = 255;
+      }
+    }
+
+    ctx.putImageData(outData, 0, 0);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    return tex;
   }
 
   // ── Utwórz DataTexture z bufora ──────────────────────────────────────────

@@ -19,6 +19,8 @@ import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
+import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
+import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -532,6 +534,9 @@ export class ThreeRenderer {
 
   // ── Inicjalizacja układu ─────────────────────────────────────
   initSystem(star, planets, planetesimals, moons = []) {
+    // Ładuj tekstury terenu — po załadowaniu przebuduj diffuse planet
+    loadAllTerrainTextures().then(() => this._rebakePlanetTextures());
+
     this.renderStar(star);
     this._buildHabitableZone(star);
     planets.forEach(p => this.addPlanetMesh(p));
@@ -983,9 +988,25 @@ export class ThreeRenderer {
     group.add(ring);
   }
 
-  // ── RTT Bake — renderuj proceduralny diffuse z PlanetShader na teksturę ────
-  // Generuje equirectangular diffuse texture identyczną z globusem (bez oświetlenia)
+  // ── Bake diffuse texture planety ────────────────────────────────────────────
+  // Priorytet: tekstury terenu z mapy 2D → fallback na shader proceduralny
   _bakePlanetTexture(planet) {
+    // ── Tryb 1: mapa kolorów z tekstur terenu (1:1 z mapą 2D) ──────────────
+    if (texturesLoaded()) {
+      const isHome = planet.id === window.KOSMOS?.homePlanet?.id;
+      const grid = PlanetMapGenerator.generate(planet, isHome);
+      if (grid) {
+        const colorMap = BiomeMapGenerator.generateColorMap(grid, planet);
+        if (colorMap) return colorMap;
+      }
+    }
+
+    // ── Tryb 2: fallback — shader proceduralny (RegionSystem + GLSL) ────────
+    return this._bakeShaderTexture(planet);
+  }
+
+  // Stary shader bake — fallback gdy tekstury terenu niedostępne
+  _bakeShaderTexture(planet) {
     const BAKE_W = 1024, BAKE_H = 512;
 
     // 1. Generuj regiony (deterministyczne z planet.id)
@@ -1048,6 +1069,81 @@ export class ThreeRenderer {
     return tex;
   }
 
+  // ── Przebuduj diffuse tekstury planet po załadowaniu tekstur terenu ────────
+  // Async: jedna planeta na klatkę → bez zamrażania UI
+  async _rebakePlanetTextures() {
+    if (!texturesLoaded()) return;
+
+    const entries = [...this._planets.entries()]
+      .filter(([, e]) => e.planet && e.planet.planetType !== 'gas' && e.mesh?.material?.map);
+    const total = entries.length;
+    if (total === 0) { window._hideLoadingScreen?.(); return; }
+
+    window._updateLoading?.(60, 'Generowanie tekstur planet...');
+    let count = 0;
+
+    for (let i = 0; i < entries.length; i++) {
+      const [id, entry] = entries[i];
+      const progress = 60 + (i / total) * 35; // 60–95%
+      window._updateLoading?.(progress, `Tekstura planety ${i + 1}/${total}...`);
+
+      // Oddaj kontrolę przeglądarce — pozwól przerysować loading screen
+      await new Promise(r => setTimeout(r, 0));
+
+      let newTex = null;
+      try {
+        newTex = this._bakePlanetTexture(entry.planet);
+      } catch (err) {
+        console.warn('[ThreeRenderer] Rebake error:', entry.planet.id, err);
+      }
+      if (newTex) {
+        const oldTex = entry.mesh.material.map;
+        entry.mesh.material.map = newTex;
+        entry.mesh.material.needsUpdate = true;
+        if (oldTex) oldTex.dispose();
+        count++;
+      }
+    }
+
+    // Rebake księżyców
+    for (const [, entry] of this._moons) {
+      if (!entry.moon || !entry.mesh?.material?.map) continue;
+      await new Promise(r => setTimeout(r, 0));
+      try {
+        const tex = this._bakePlanetTexture(entry.moon);
+        if (tex) {
+          const old = entry.mesh.material.map;
+          entry.mesh.material.map = tex;
+          entry.mesh.material.needsUpdate = true;
+          if (old) old.dispose();
+          count++;
+        }
+      } catch (e) { /* cichy */ }
+    }
+
+    // Rebake planetoidów
+    for (const [, entry] of this._planetoids) {
+      if (!entry.planetoid || !entry.mesh?.material?.map) continue;
+      await new Promise(r => setTimeout(r, 0));
+      try {
+        const tex = this._bakePlanetTexture(entry.planetoid);
+        if (tex) {
+          const old = entry.mesh.material.map;
+          entry.mesh.material.map = tex;
+          entry.mesh.material.needsUpdate = true;
+          if (old) old.dispose();
+          count++;
+        }
+      } catch (e) { /* cichy */ }
+    }
+
+    window._updateLoading?.(100, 'Gotowe!');
+    await new Promise(r => setTimeout(r, 200));
+    window._hideLoadingScreen?.();
+
+    if (count) console.log(`[ThreeRenderer] Rebake: ${count} tekstur (planety+księżyce+planetoidy)`);
+  }
+
   // ── Planeta mesh ─────────────────────────────────────────────
   addPlanetMesh(planet) {
     if (this._planets.has(planet.id)) return;
@@ -1081,7 +1177,12 @@ export class ThreeRenderer {
       }
     } else {
       // RTT bake — proceduralny diffuse z BiomeMap + PlanetShader
-      const bakedDiffuse = this._bakePlanetTexture(planet);
+      let bakedDiffuse = null;
+      try {
+        bakedDiffuse = this._bakePlanetTexture(planet);
+      } catch (err) {
+        console.warn('[ThreeRenderer] _bakePlanetTexture error:', planet.id, err);
+      }
       if (bakedDiffuse) {
         // Zachowaj normal+roughness z PBR jeśli dostępne
         const texType = resolveTextureType(planet);
@@ -1128,7 +1229,8 @@ export class ThreeRenderer {
     group.add(mesh);
 
     // Warstwa chmur — tylko rocky z atmosferą (nie gas)
-    if (!isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak') {
+    const hasValidAtmo = !isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
+    if (hasValidAtmo) {
       const cloudMesh = this._createSystemCloudMesh(r);
       if (cloudMesh) {
         cloudMesh.userData.isCloud = true;
@@ -1140,7 +1242,7 @@ export class ThreeRenderer {
     const hasAtmo = !isGas && planet.atmosphere && planet.atmosphere !== 'none' && planet.atmosphere !== 'brak';
     if (hasAtmo) {
       const atmoColor    = new THREE.Color(planet.visual.glowColor ?? 0x4488ff);
-      const atmoScale    = 1.15;
+      const atmoScale    = 1.08;
       const atmoStrength = 0.55;
 
       const atmoMat = new THREE.ShaderMaterial({
@@ -1223,7 +1325,7 @@ export class ThreeRenderer {
 
     this._clickable.push(mesh);
     this._entityByUUID.set(mesh.uuid, planet);
-    this._planets.set(planet.id, { group, mesh });
+    this._planets.set(planet.id, { group, mesh, planet });
     this.scene.add(group);
   }
 
@@ -1399,20 +1501,27 @@ export class ThreeRenderer {
         return snoise(p.yz*s)*w.x+snoise(p.xz*s)*w.y+snoise(p.xy*s)*w.z;
       }
       void main(){
-        vec3 sp=vSpherePos+vec3(uTime*0.012,0.0,uTime*0.004);
-        float n=sphereNoise(sp,3.0)*0.500+sphereNoise(sp,6.2)*0.250
-               +sphereNoise(sp,12.5)*0.125+sphereNoise(sp,25.0)*0.063;
+        float t=uTime;
+        vec3 drift=vec3(t*0.06, t*0.015, t*0.025);
+        vec3 sp=vSpherePos+drift;
+        float n=sphereNoise(sp,3.0)*0.500
+              +sphereNoise(sp,6.2)*0.250
+              +sphereNoise(sp,12.5)*0.125
+              +sphereNoise(sp,25.0)*0.063;
         n=n*0.5+0.5;
-        float cloudMask=smoothstep(0.50,0.72,n);
+        float evolve=sphereNoise(vSpherePos+vec3(t*0.04,-t*0.03,t*0.02),2.0)*0.12;
+        n+=evolve;
+        float cloudMask=smoothstep(0.48,0.70,n);
+        if(cloudMask<0.01){discard;}
         vec3 toStar=normalize(uLightDir-vWorldPos);
         float rawDiff=dot(vWorldNormal,toStar);
         float diff=max(rawDiff,0.0);
-        float lit=0.4+0.6*diff;
+        float lit=0.30+0.70*diff;
         vec3 cloudColor=vec3(0.95,0.97,1.00)*lit;
-        float nightFade=smoothstep(-0.1,0.15,rawDiff);
+        float nightFade=smoothstep(-0.15,0.2,rawDiff);
         float fresnel=1.0-max(dot(vNormal,vViewDir),0.0);
-        float edgeFade=1.0-pow(fresnel,2.5)*0.6;
-        float alpha=cloudMask*0.82*edgeFade*(0.06+0.94*nightFade);
+        float edgeFade=1.0-pow(fresnel,2.5)*0.5;
+        float alpha=cloudMask*0.88*edgeFade*(0.05+0.95*nightFade);
         gl_FragColor=vec4(cloudColor,alpha);
       }
     `;
@@ -1422,9 +1531,9 @@ export class ThreeRenderer {
         uTime:     { value: 0.0 },
         uLightDir: { value: new THREE.Vector3(0, 0, 0) },
       },
-      transparent: true, depthWrite: false, side: THREE.FrontSide,
+      transparent: true, depthWrite: false, depthTest: false, side: THREE.FrontSide,
     });
-    return new THREE.Mesh(new THREE.SphereGeometry(planetRadius * 1.02, 32, 32), mat);
+    return new THREE.Mesh(new THREE.SphereGeometry(planetRadius * 1.025, 32, 32), mat);
   }
 
   _syncPlanetMeshes(planets, moons = []) {
@@ -1451,7 +1560,6 @@ export class ThreeRenderer {
         }
         if (child.userData.isCloud) {
           child.material.uniforms.uLightDir.value.copy(starWPos);
-          child.material.uniforms.uTime.value += 0.016; // ~60fps krok
         }
       }
 
@@ -1717,26 +1825,36 @@ export class ThreeRenderer {
     const r   = Math.max(0.015, Math.min(0.04, 0.015 + (moon.physics?.mass ?? 0.001) * 1.5));
     const geo = new THREE.SphereGeometry(r, 24, 16);
 
-    // PBR tekstury — re-use istniejących tekstur planet (rocky/ice/iron/volcanic)
-    if (!moon._cachedTexType) {
-      moon._cachedTexType = resolveTextureType(moon);
-      moon._cachedTexVariant = (hashCode(moon.id || 'moon') % TEXTURE_VARIANTS) + 1;
-    }
-    const texType = moon._cachedTexType;
+    // Tekstura: terrain-based diffuse (hex grid → generateColorMap) lub PBR fallback
     let mat;
-    if (texType) {
-      const seed    = hashCode(moon.id || 'moon');
-      const variant = moon._cachedTexVariant;
-      const maps    = loadPlanetTextures(texType, variant);
-      mat = new THREE.MeshStandardMaterial({
-        map:          maps.diffuse,
-        normalMap:    maps.normal,
-        roughnessMap: maps.roughness,
-        metalness:    0.02,
-      });
-    } else {
-      // fallback — stary kolor
-      mat = new THREE.MeshStandardMaterial({ color: moon.visual.color, roughness: 0.85, metalness: 0.02 });
+    try {
+      const bakedDiffuse = this._bakePlanetTexture(moon);
+      if (bakedDiffuse) {
+        const texType = resolveTextureType(moon);
+        const seed = hashCode(moon.id || 'moon');
+        let normalMap = null, roughnessMap = null;
+        if (texType) {
+          const variant = (seed % TEXTURE_VARIANTS) + 1;
+          const maps = loadPlanetTextures(texType, variant);
+          normalMap = maps.normal;
+          roughnessMap = maps.roughness;
+        }
+        mat = new THREE.MeshStandardMaterial({
+          map: bakedDiffuse, normalMap, roughnessMap, metalness: 0.02,
+        });
+      }
+    } catch (e) { /* cichy fallback */ }
+    if (!mat) {
+      const texType = resolveTextureType(moon);
+      if (texType) {
+        const seed = hashCode(moon.id || 'moon');
+        const maps = loadPlanetTextures(texType, (seed % TEXTURE_VARIANTS) + 1);
+        mat = new THREE.MeshStandardMaterial({
+          map: maps.diffuse, normalMap: maps.normal, roughnessMap: maps.roughness, metalness: 0.02,
+        });
+      } else {
+        mat = new THREE.MeshStandardMaterial({ color: moon.visual?.color ?? 0x888888, roughness: 0.85, metalness: 0.02 });
+      }
     }
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(S(moon.x), 0, S(moon.y));
@@ -1744,7 +1862,7 @@ export class ThreeRenderer {
 
     this._clickable.push(mesh);
     this._entityByUUID.set(mesh.uuid, moon);
-    this._moons.set(moon.id, { mesh, ring, parentEntry });
+    this._moons.set(moon.id, { mesh, ring, parentEntry, moon });
   }
 
   // Pokaż orbitę konkretnego księżyca
@@ -1972,27 +2090,40 @@ export class ThreeRenderer {
       const r = Math.max(0.08, Math.min(0.12, 0.06 + mass * 0.8));
       const geo = new THREE.SphereGeometry(r, 16, 12);
 
-      // PBR tekstura z pre-generowanych plików
-      const texType = resolveTextureType(p);
+      // Tekstura: terrain-based diffuse (hex grid) lub PBR fallback
+      const isMetallic = p.planetoidType === 'metallic';
       let mat;
-      if (texType) {
-        const seed    = hashCode(String(p.id));
-        const variant = (seed % TEXTURE_VARIANTS) + 1;
-        const maps    = loadPlanetTextures(texType, variant);
-        // Metallic planetoids: wyższy metalness (błyszczące)
-        const isMetallic = p.planetoidType === 'metallic';
-        mat = new THREE.MeshStandardMaterial({
-          map:          maps.diffuse,
-          normalMap:    maps.normal,
-          roughnessMap: maps.roughness,
-          metalness:    isMetallic ? 0.25 : 0.05,
-        });
-      } else {
-        // Fallback: solid color
-        mat = new THREE.MeshStandardMaterial({
-          color: p.visual?.color ?? 0x998877,
-          metalness: 0.05, roughness: 0.7,
-        });
+      try {
+        const bakedDiffuse = this._bakePlanetTexture(p);
+        if (bakedDiffuse) {
+          const texType = resolveTextureType(p);
+          let normalMap = null, roughnessMap = null;
+          if (texType) {
+            const seed = hashCode(String(p.id));
+            const maps = loadPlanetTextures(texType, (seed % TEXTURE_VARIANTS) + 1);
+            normalMap = maps.normal;
+            roughnessMap = maps.roughness;
+          }
+          mat = new THREE.MeshStandardMaterial({
+            map: bakedDiffuse, normalMap, roughnessMap,
+            metalness: isMetallic ? 0.25 : 0.05,
+          });
+        }
+      } catch (e) { /* cichy fallback */ }
+      if (!mat) {
+        const texType = resolveTextureType(p);
+        if (texType) {
+          const seed = hashCode(String(p.id));
+          const maps = loadPlanetTextures(texType, (seed % TEXTURE_VARIANTS) + 1);
+          mat = new THREE.MeshStandardMaterial({
+            map: maps.diffuse, normalMap: maps.normal, roughnessMap: maps.roughness,
+            metalness: isMetallic ? 0.25 : 0.05,
+          });
+        } else {
+          mat = new THREE.MeshStandardMaterial({
+            color: p.visual?.color ?? 0x998877, metalness: 0.05, roughness: 0.7,
+          });
+        }
       }
 
       const mesh = new THREE.Mesh(geo, mat);
@@ -2001,7 +2132,7 @@ export class ThreeRenderer {
 
       this._clickable.push(mesh);
       this._entityByUUID.set(mesh.uuid, p);
-      this._planetoids.set(p.id, { mesh });
+      this._planetoids.set(p.id, { mesh, planetoid: p });
 
       // Orbita (ukryta domyślnie)
       this._buildPlanetoidOrbit(p);
@@ -2426,12 +2557,26 @@ export class ThreeRenderer {
         const camDist = this._cameraController?._dist ?? 100;
         this._colonyMarkers.tick(0.016, camDist);
 
+        // Animacja chmur — niezaleznie od pauzy gry (real-time)
+        this._tickClouds();
+
         this.renderer.render(this.scene, this.camera);
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
       }
     };
     loop();
+  }
+
+  // Animacja chmur — co klatkę, niezaleznie od pauzy gry
+  _tickClouds() {
+    for (const [, entry] of this._planets) {
+      for (const child of entry.group.children) {
+        if (child.userData.isCloud && child.material?.uniforms?.uTime) {
+          child.material.uniforms.uTime.value += 0.016;
+        }
+      }
+    }
   }
 
   getCamera() { return this.camera; }

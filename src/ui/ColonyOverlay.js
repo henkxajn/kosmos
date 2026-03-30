@@ -14,6 +14,8 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { t }   from '../i18n/i18n.js';
+import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
+import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 
 const HDR_H = 32;
 const FLOAT_W = 200;  // szerokość floating panelu
@@ -320,7 +322,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (grid) {
       ctx.save();
       ctx.beginPath(); ctx.rect(ox, mapY, ow, mapH); ctx.clip();
-      this._drawMap(ctx, ox, mapY, ow, mapH, grid);
+      this._drawMap(ctx, ox, mapY, ow, mapH, grid, colony?.planet);
       ctx.restore();
     }
 
@@ -431,7 +433,7 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   // ── Mapa 2D ──────────────────────────────────────────────────────────────
-  _drawMap(ctx, ox, oy, ow, oh, grid) {
+  _drawMap(ctx, ox, oy, ow, oh, grid, planet) {
     const hs = this._hexSize;
     const cx = ox + ow / 2 - this._camX;
     const cy = oy + oh / 2 - this._camY;
@@ -445,11 +447,11 @@ export class ColonyOverlay extends BaseOverlay {
       const terrain = TERRAIN_TYPES[tile.type] ?? TERRAIN_TYPES.plains;
       const hov = this._hoveredHex?.q === tile.q && this._hoveredHex?.r === tile.r;
       const sel = this._selectedHex?.q === tile.q && this._selectedHex?.r === tile.r;
-      this._drawHex(ctx, sx, sy, hs, terrain, tile, hov, sel);
+      this._drawHex(ctx, sx, sy, hs, terrain, tile, hov, sel, planet, grid);
     });
   }
 
-  _drawHex(ctx, cx, cy, r, terrain, tile, isHov, isSel) {
+  _drawHex(ctx, cx, cy, r, terrain, tile, isHov, isSel, planet, grid) {
     const pts = [];
     for (let i = 0; i < 6; i++) {
       const a = (Math.PI / 180) * (60 * i - 30);
@@ -461,11 +463,94 @@ export class ColonyOverlay extends BaseOverlay {
     for (let i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.closePath();
 
-    // Kolor terenu z TERRAIN_TYPES
+    // ── Tekstura terenu lub fallback na kolor ────────────────────────────────
+    const _tileIdx = Math.abs(tile.q * 31 + tile.r * 17);
+    const _texImg = texturesLoaded()
+      ? getTerrainTexture(tile.type, planet, _tileIdx)
+      : null;
+
     const c = terrain.color ?? 0x888888;
     const cR = (c >> 16) & 0xFF, cG = (c >> 8) & 0xFF, cB = c & 0xFF;
-    ctx.fillStyle = `rgb(${cR},${cG},${cB})`;
-    ctx.fill();
+
+    if (_texImg) {
+      ctx.save();
+      ctx.clip();
+      const _xs = pts.map(p => p.x), _ys = pts.map(p => p.y);
+      const _tx = Math.min(..._xs), _ty = Math.min(..._ys);
+      const _tw = Math.max(..._xs) - _tx, _th = Math.max(..._ys) - _ty;
+      if (tile.type === 'crater') {
+        const _sz = Math.min(_tw, _th);
+        ctx.drawImage(_texImg, _tx + (_tw - _sz) / 2, _ty + (_th - _sz) / 2, _sz, _sz);
+      } else {
+        ctx.drawImage(_texImg, _tx, _ty, _tw, _th);
+      }
+      ctx.fillStyle = 'rgba(0,0,0,0.20)';
+      ctx.fill();
+      ctx.restore();
+
+      // Odtwórz ścieżkę hexa (clip ją usunął)
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath();
+    } else {
+      ctx.fillStyle = `rgb(${cR},${cG},${cB})`;
+      ctx.fill();
+    }
+
+    // ── Przejścia między biomami przy krawędziach ─────────────────────────
+    if (grid && r > 8) {
+      for (let ei = 0; ei < 6; ei++) {
+        const dir = HEX_DIRECTIONS[ei];
+        const nb = grid.get(tile.q + dir.q, tile.r + dir.r);
+        if (!nb || nb.type === tile.type) continue;
+
+        const pA = pts[ei], pB = pts[(ei + 1) % 6];
+        const emx = (pA.x + pB.x) / 2, emy = (pA.y + pB.y) / 2;
+
+        // PNG transition
+        if (texturesLoaded()) {
+          const edgeHash = Math.abs(tile.q * 7 + tile.r * 13 + ei * 31);
+          const trans = getTransitionTexture(tile.type, nb.type, edgeHash);
+          if (trans) {
+            const angle = Math.atan2(emy - cy, emx - cx);
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(pts[0].x, pts[0].y);
+            for (let j = 1; j < 6; j++) ctx.lineTo(pts[j].x, pts[j].y);
+            ctx.closePath();
+            ctx.clip();
+            ctx.translate(emx, emy);
+            ctx.rotate(angle);
+            if (trans.flip) ctx.scale(-1, 1);
+            const tw = r * 0.6, th = r * 0.8;
+            ctx.globalAlpha = 0.40;
+            ctx.drawImage(trans.img, -tw * 0.5, -th / 2, tw, th);
+            ctx.globalAlpha = 1;
+            ctx.restore();
+            continue;
+          }
+        }
+
+        // Fallback gradient dla par bez PNG
+        const nbTerrain = TERRAIN_TYPES[nb.type];
+        if (!nbTerrain) continue;
+        const nc = nbTerrain.color ?? 0x888888;
+        const nR = (nc >> 16) & 0xFF, nG = (nc >> 8) & 0xFF, nB = nc & 0xFF;
+        const endX = emx + (cx - emx) * 0.45;
+        const endY = emy + (cy - emy) * 0.45;
+        const grad = ctx.createLinearGradient(emx, emy, endX, endY);
+        grad.addColorStop(0, `rgba(${nR},${nG},${nB},0.3)`);
+        grad.addColorStop(1, `rgba(${nR},${nG},${nB},0)`);
+        ctx.fillStyle = grad;
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath();
+    }
 
     // Budynek
     if (tile.buildingId || tile.capitalBase) {
@@ -505,9 +590,9 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < 6; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.closePath();
-    if (isSel)      { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2.5; }
-    else if (isHov) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2; }
-    else { ctx.strokeStyle = `rgb(${Math.max(0,cR-30)},${Math.max(0,cG-30)},${Math.max(0,cB-30)})`; ctx.lineWidth = 1; }
+    if (isSel)      { ctx.strokeStyle = THEME.accent; ctx.lineWidth = 2.5; }
+    else if (isHov) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; }
+    else { ctx.strokeStyle = THEME.border; ctx.lineWidth = 1; }
     ctx.stroke();
   }
 
