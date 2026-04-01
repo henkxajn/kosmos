@@ -3117,9 +3117,9 @@ export class FleetManagerOverlay {
       cy += LH + 4;
 
       // Lista modułów — kompaktowa
-      const categories = ['propulsion', 'cargo', 'science', 'habitat', 'armor', 'fuel', 'special'];
+      const categories = ['propulsion', 'cargo', 'science', 'special', 'habitat', 'armor', 'fuel'];
       const catNames = { propulsion: '🔥 Napęd', cargo: '📦 Cargo', science: '🔬 Nauka',
-                         habitat: '🏠 Habitat', armor: '🛡 Pancerz', fuel: '⛽ Paliwo', special: '🤖 Specjalne' };
+                         special: '🤖 Specjalne', habitat: '🏠 Habitat', armor: '🛡 Pancerz', fuel: '⛽ Paliwo' };
 
       for (const cat of categories) {
         const mods = Object.values(SHIP_MODULES).filter(m => m.slotType === cat);
