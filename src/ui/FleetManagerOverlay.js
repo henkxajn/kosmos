@@ -410,10 +410,12 @@ export class FleetManagerOverlay {
     // Hover na statku w LEFT
     this._hoverVesselId = null;
     this._hoverShipId = null;
+    this._hoverPendingOrder = null;
     for (const z of this._hitZones) {
       if (mx < z.x || mx > z.x + z.w || my < z.y || my > z.y + z.h) continue;
       if (z.type === 'vessel') { this._hoverVesselId = z.data.vesselId; break; }
       if (z.type === 'build_ship') { this._hoverShipId = z.data.shipId; break; }
+      if (z.type === 'pending_ship_hover') { this._hoverPendingOrder = z.data.order; break; }
     }
     // Hover na ciele na mapie
     this._mapHoverBody = null;
@@ -3342,7 +3344,18 @@ export class FleetManagerOverlay {
       for (const order of pendingOrders) {
         if (cy > y + h - 30) break;
         const shipDef = SHIPS[order.shipId];
-        const rowH = 22;
+        const rowH = 34;
+
+        // Brakujące zasoby — lista z ikonami i ilościami
+        const missingItems = [];
+        for (const [k, need] of Object.entries(order.cost)) {
+          const have = inv[k] ?? 0;
+          if (have < need) {
+            const icon = RESOURCE_ICONS[k] ?? COMMODITIES[k]?.icon ?? '';
+            const shortName = COMMODITY_SHORT[k] ?? k;
+            missingItems.push({ icon, name: shortName, have: Math.floor(have), need });
+          }
+        }
 
         // Tło
         ctx.fillStyle = 'rgba(60,40,5,0.5)';
@@ -3354,20 +3367,14 @@ export class FleetManagerOverlay {
         // Nazwa statku
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.warning;
-        ctx.fillText(`${shipDef?.icon ?? '🚀'} ${shipDef ? getName(shipDef, 'ship') : order.shipId}`, x + PAD + 4, cy + 14);
+        ctx.fillText(`${shipDef?.icon ?? '🚀'} ${shipDef ? getName(shipDef, 'ship') : order.shipId}`, x + PAD + 4, cy + 12);
 
-        // Brakujące zasoby (krótka lista)
-        const missing = [];
-        for (const [k, need] of Object.entries(order.cost)) {
-          const have = inv[k] ?? 0;
-          if (have < need) missing.push(k);
-        }
-        if (missing.length > 0) {
+        // Brakujące zasoby — czytelna lista pod nazwą
+        if (missingItems.length > 0) {
           ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          const parts = missingItems.slice(0, 4).map(m => `${m.icon}${m.have}/${m.need}`);
           ctx.fillStyle = '#ff8844';
-          ctx.textAlign = 'right';
-          ctx.fillText(missing.slice(0, 3).join(', '), x + w - PAD - 30, cy + 14);
-          ctx.textAlign = 'left';
+          ctx.fillText(parts.join('  '), x + PAD + 4, cy + 26);
         }
 
         // Przycisk anulowania (×)
@@ -3378,6 +3385,12 @@ export class FleetManagerOverlay {
         this._hitZones.push({
           x: cancelX, y: cy, w: 22, h: rowH,
           type: 'cancel_pending_ship', data: { planetId: activePid, orderId: order.id },
+        });
+
+        // Hit zone dla tooltipu (cały wiersz)
+        this._hitZones.push({
+          x: x + PAD, y: cy, w: w - PAD * 2 - 24, h: rowH,
+          type: 'pending_ship_hover', data: { order },
         });
 
         cy += rowH + 2;
@@ -3398,6 +3411,11 @@ export class FleetManagerOverlay {
     // Tooltip kosztów budowy — rysowany NA KOŃCU (z-order najwyższy)
     if (this._hoverShipId) {
       this._drawShipCostTooltip(ctx, x, y, w, h, this._hoverShipId, inv, canBuildAny, activeCol);
+    }
+
+    // Tooltip pending order — pełna lista kosztów z brakami
+    if (this._hoverPendingOrder) {
+      this._drawPendingOrderTooltip(ctx, x, y, w, h, this._hoverPendingOrder, inv);
     }
   }
 
@@ -3478,6 +3496,63 @@ export class FleetManagerOverlay {
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     for (const line of lines) {
       ctx.fillStyle = line.dim ? THEME.textSecondary : (line.ok ? THEME.success : THEME.danger);
+      ctx.fillText(line.text, tipX + PAD, ty + 8);
+      ty += LH;
+    }
+  }
+
+  // ── Tooltip pending ship order — pełna lista kosztów ─────────────────────
+  _drawPendingOrderTooltip(ctx, panelX, panelY, panelW, panelH, order, inv) {
+    const ship = SHIPS[order.shipId];
+    if (!ship) return;
+
+    const PAD = 8;
+    const LH = 14;
+
+    // Zbierz linie kosztów
+    const lines = [];
+    for (const [k, need] of Object.entries(order.cost)) {
+      const have = Math.floor(inv[k] ?? 0);
+      const ok = have >= need;
+      const icon = RESOURCE_ICONS[k] ?? COMMODITIES[k]?.icon ?? '';
+      const name = COMMODITY_SHORT[k] ?? k;
+      lines.push({ text: `${icon} ${name}: ${have}/${need}`, ok });
+    }
+    if (order.crewCost > 0) {
+      const freePops = window.KOSMOS?.civSystem?.freePops ?? 0;
+      lines.push({ text: `👤 ${freePops.toFixed(1)}/${order.crewCost} POP`, ok: freePops >= order.crewCost });
+    }
+
+    // Wymiary
+    const tipW = 200;
+    const tipH = 22 + lines.length * LH + 8;
+
+    // Pozycja: po lewej od panelu
+    let tipX = panelX - tipW - 6;
+    if (tipX < 4) tipX = panelX + 4;
+    // Znajdź pozycję Y z hit zone
+    const zone = this._hitZones.find(z => z.type === 'pending_ship_hover' && z.data.order?.id === order.id);
+    let tipY = zone ? zone.y : panelY + 100;
+    if (tipY + tipH > panelY + panelH) tipY = panelY + panelH - tipH - 4;
+
+    // Tło
+    ctx.fillStyle = 'rgba(6,12,20,0.96)';
+    ctx.fillRect(tipX, tipY, tipW, tipH);
+    ctx.strokeStyle = THEME.warning;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tipX, tipY, tipW, tipH);
+
+    // Nagłówek
+    let ty = tipY + 6;
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.warning;
+    ctx.fillText(`⏳ ${ship.icon} ${getName(ship, 'ship')}`, tipX + PAD, ty + 10);
+    ty += 18;
+
+    // Linie kosztów
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    for (const line of lines) {
+      ctx.fillStyle = line.ok ? THEME.success : THEME.danger;
       ctx.fillText(line.text, tipX + PAD, ty + 8);
       ty += LH;
     }

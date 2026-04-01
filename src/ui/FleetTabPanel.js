@@ -5,6 +5,8 @@
 
 import { THEME } from '../config/ThemeConfig.js';
 import { SHIPS }           from '../data/ShipsData.js';
+import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
+import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleCapabilities } from '../data/ShipModulesData.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import EntityManager       from '../core/EntityManager.js';
@@ -1533,23 +1535,40 @@ export class FleetTabPanel {
       ctx.fillText(`⏳ ${t('fleet.pendingOrders')} (${pendingOrders.length})`, x + PAD, cy + 8);
       cy += LH;
 
+      const inv = activeCol?.resourceSystem?.inventorySnapshot() ?? {};
       for (const order of pendingOrders) {
         if (cy > y + h - 20) break;
         const shipDef = SHIPS[order.shipId];
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.warning;
         ctx.fillText(`${shipDef?.icon ?? '🚀'} ${shipDef ? getName(shipDef, 'ship') : order.shipId}`, x + PAD + 2, cy + 8);
+        cy += LH;
 
-        // x anuluj
+        // Brakujące zasoby — czytelna lista z ikonami
+        const missingParts = [];
+        for (const [k, need] of Object.entries(order.cost)) {
+          const have = inv[k] ?? 0;
+          if (have < need) {
+            const icon = RESOURCE_ICONS[k] ?? COMMODITIES[k]?.icon ?? '';
+            missingParts.push(`${icon}${Math.floor(have)}/${need}`);
+          }
+        }
+        if (missingParts.length > 0 && cy < y + h - 16) {
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = '#ff8844';
+          ctx.fillText(missingParts.slice(0, 4).join(' '), x + PAD + 4, cy + 7);
+          cy += LH - 2;
+        }
+
+        // x anuluj (na wierszu nazwy, po prawej)
         const cancelX = x + w - PAD - 16;
         ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = '#ff6666';
-        ctx.fillText('×', cancelX + 4, cy + 9);
+        ctx.fillText('×', cancelX + 4, cy - LH + 9);
         this._hitZones.push({
-          x: cancelX, y: cy, w: 16, h: LH,
+          x: cancelX, y: cy - LH * 2, w: 16, h: LH * 2,
           type: 'cancel_pending_ship', data: { planetId: activePid, orderId: order.id },
         });
-        cy += LH;
       }
     }
 
