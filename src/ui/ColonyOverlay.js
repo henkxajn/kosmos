@@ -916,7 +916,11 @@ export class ColonyOverlay extends BaseOverlay {
       const tileKey = `${tile.q},${tile.r}`;
       const aEntry = colony?.buildingSystem?._active?.get(tileKey);
       const rates = aEntry?.effectiveRates ?? aEntry?.baseRates ?? b.rates;
-      if (rates) h += 13 + Object.keys(rates).filter(k => rates[k] !== 0).length * 14;
+      const baseRates = b.rates ?? {};
+      // Liczbę widocznych linii: efektywne != 0 + bazowe > 0 które wypadły na 0
+      const shownCount = Object.keys(rates).filter(k => rates[k] !== 0).length;
+      const zeroedCount = Object.keys(baseRates).filter(k => baseRates[k] > 0 && !(rates[k] > 0 || rates[k] < 0)).length;
+      if (rates) h += 13 + (shownCount + zeroedCount) * 14;
       // Maintenance
       if (b.maintenance && Object.keys(b.maintenance).length > 0) h += 13 + Object.keys(b.maintenance).length * 14;
       if (b.energyCost) h += 14;
@@ -1035,11 +1039,33 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillStyle = THEME.textDim;
         ctx.fillText('Produkcja/rok:', x + 8, cy); cy += 13;
         ctx.font = `11px ${THEME.fontFamily}`;
+
+        // Pokaż bazowe stawki (z rates budynku) — aby widać co POWINNO być produkowane
+        const baseRates = b.rates ?? {};
+        const shownKeys = new Set();
         for (const [res, rate] of Object.entries(rates)) {
           if (rate === 0) continue;
+          shownKeys.add(res);
           ctx.fillStyle = rate > 0 ? '#88ff88' : '#ff8888';
           const sign = rate > 0 ? '+' : '';
           ctx.fillText(`${sign}${rate.toFixed?.(1) ?? rate} ${res}`, x + 12, cy); cy += 14;
+        }
+
+        // Pokaż zerowe stawki dla zasobów z definicji budynku (np. research = 0 z powodu braku naukowców)
+        for (const [res, baseVal] of Object.entries(baseRates)) {
+          if (baseVal <= 0 || shownKeys.has(res)) continue;
+          // Bazowa stawka > 0 ale efektywna = 0 → wyjaśnij powód
+          const empEff = activeEntry ? colony.buildingSystem?._getBuildingLaborEfficiency?.(b, tileKey) : 1.0;
+          ctx.fillStyle = '#ff6644';
+          if (empEff !== undefined && empEff <= 0) {
+            const popType = b.popType ?? 'laborer';
+            const label = popType === 'scientist' ? '(brak naukowców)'
+                        : popType === 'engineer'  ? '(brak inżynierów)'
+                        : `(brak ${popType})`;
+            ctx.fillText(`0 ${res} ${label}`, x + 12, cy); cy += 14;
+          } else {
+            ctx.fillText(`0 ${res}`, x + 12, cy); cy += 14;
+          }
         }
       }
 
