@@ -1303,9 +1303,8 @@ export class ColonyOverlay extends BaseOverlay {
             this._selectedHex = { q: tile.q, r: tile.r };
             return true;
           }
-          // Klik na pusty hex → rozkaz ruchu (nie otwieraj panelu budowy)
-          mgr?.moveUnit(this._selectedUnit.id, tile.q, tile.r);
-          return true;
+          // Lewy klik na pusty hex → odznacz jednostkę, otwórz panel budowy
+          this._selectedUnit = null;
         }
 
         // Brak zaznaczonej jednostki
