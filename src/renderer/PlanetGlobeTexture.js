@@ -222,11 +222,16 @@ export class PlanetGlobeTexture {
     const markerR = hexSize * 0.35;
     const drawSize = markerR * 2.4; // nieco większe aby glow był widoczny
 
-    // Kolory anomalii
+    // Kolory anomalii — stare kategorie + fallback dla nowych anomaly ID
     const ANOMALY_COLORS = {
       scientific: [100, 200, 255],
       resource:   [255, 200, 50],
       danger:     [255, 80, 50],
+      // Nowe kategorie (z AnomalyData)
+      geological: [255, 200, 50],
+      biological: [100, 220, 100],
+      alien:      [100, 200, 255],
+      cosmic:     [200, 150, 255],
     };
 
     grid.forEach(tile => {
@@ -363,7 +368,8 @@ export class PlanetGlobeTexture {
 
       // ─ Anomalia (romb) — bez zmian ─
       if (hasAnomaly) {
-        const aCol = ANOMALY_COLORS[tile.anomaly] ?? [200, 200, 200];
+        // Kolor anomalii: najpierw szukaj po kluczu (stary format), potem fallback żółty
+        const aCol = ANOMALY_COLORS[tile.anomaly] ?? [255, 200, 50];
         const offset = markerR * 0.9;
         const ax = hasBuilding || hasCapital ? texX + offset : texX;
         const ay = hasBuilding || hasCapital ? texY - offset : texY;

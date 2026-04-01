@@ -13,6 +13,7 @@ import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
+import { ANOMALIES }     from '../data/AnomalyData.js';
 import { t }   from '../i18n/i18n.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
@@ -50,6 +51,11 @@ export class ColonyOverlay extends BaseOverlay {
     this._camX = 0; this._camY = 0;
     this._hexSize = 32;
     this._minHexSize = 10; this._maxHexSize = 56;
+
+    // Jednostki naziemne
+    this._selectedUnit = null;
+    this._unitSprites = new Map();
+    this._loadUnitSprites();
 
     // Drag
     this._isDragging = false;
@@ -89,6 +95,25 @@ export class ColonyOverlay extends BaseOverlay {
     EventBus.on('planet:pendingCancelled', () => this._onBuildingChanged());
     EventBus.on('planet:constructionComplete', () => this._onBuildingChanged());
     EventBus.on('planet:constructionProgress', () => this._onBuildingChanged());
+
+    // Away Team — tryb wyboru hexa lądowania
+    this._landingMode = false;
+    this._landingVesselId = null;
+    EventBus.on('vessel:awayTeamLanding', ({ vesselId, targetId }) => {
+      // Otwórz overlay dla planety docelowej w trybie lądowania
+      const colMgr = window.KOSMOS?.colonyManager;
+      if (colMgr) {
+        // Upewnij się że kolonia jest aktywna
+        colMgr.switchActiveColony(targetId);
+        this._selectedColonyId = targetId;
+      }
+      this._landingMode = true;
+      this._landingVesselId = vesselId;
+      if (!this.visible) {
+        this.show({});
+      }
+      this._showFlash('🤖 Wybierz hex lądowania Away Team');
+    });
   }
 
   _createTooltipEl() {
@@ -127,11 +152,36 @@ export class ColonyOverlay extends BaseOverlay {
     if (grid) { this._fitMapToView(grid); this._centerOnCapital(grid); }
 
     if (opts.originX !== undefined) this._animateOpen(opts.originX, opts.originY);
+
+    // Auto-spawn rovera jeśli brak jednostek na planecie domowej (stare save'y / nowa gra)
+    this._autoSpawnRover(colony);
+  }
+
+  _autoSpawnRover(colony) {
+    if (!colony) return;
+    const mgr = window.KOSMOS?.groundUnitManager;
+    if (!mgr) return;
+    if (mgr.getUnitsOnPlanet(colony.planetId).length > 0) return;
+
+    // Znajdź hex stolicy
+    const bSys = colony.buildingSystem;
+    let startQ = 0, startR = 0;
+    if (bSys) {
+      for (const [key] of bSys._active) {
+        if (key.startsWith('capital_')) {
+          const coords = key.replace('capital_', '').split(',').map(Number);
+          startQ = coords[0]; startR = coords[1];
+          break;
+        }
+      }
+    }
+    mgr.createUnit('science_rover', colony.planetId, startQ, startR);
   }
 
   hide() {
     super.hide();
     this._selectedHex = null; this._hoveredHex = null;
+    this._selectedUnit = null;
     this._hideTooltip();
     document.getElementById('colony-open-backdrop')?.remove();
     // Wymuś reset active w OverlayManager (nie czekaj na draw)
@@ -326,8 +376,8 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.restore();
     }
 
-    // Floating panel obok zaznaczonego hexa
-    if (this._selectedHex && grid && colony) {
+    // Floating panel obok zaznaczonego hexa (nie pokazuj gdy jednostka zaznaczona)
+    if (this._selectedHex && !this._selectedUnit && grid && colony) {
       const tile = grid.get(this._selectedHex.q, this._selectedHex.r);
       if (tile) {
         const sp = this._tileScreenPos(tile, grid, ox, oy, ow, oh);
@@ -342,6 +392,23 @@ export class ColonyOverlay extends BaseOverlay {
         this._floatX = fx; this._floatY = fy;
         this._drawFloatingPanel(ctx, fx, fy, tile, colony, grid);
       }
+    }
+
+    // Panel jednostki naziemnej
+    if (this._selectedUnit && colony) {
+      this._drawUnitPanel(ctx, ox, oy, ow, oh);
+    }
+
+    // Landing mode indicator
+    if (this._landingMode) {
+      const t = Date.now() / 1000;
+      const pulse = (Math.sin(t * 3) + 1) / 2;
+      ctx.fillStyle = `rgba(0, 200, 160, ${0.08 + pulse * 0.06})`;
+      ctx.fillRect(ox, oy + HDR_H, ow, 22);
+      ctx.font = `bold 11px ${THEME.fontFamily}`;
+      ctx.fillStyle = `rgba(0, 255, 180, ${0.7 + pulse * 0.3})`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('🤖 WYBIERZ HEX LĄDOWANIA — kliknij na mapie', ox + ow / 2, oy + HDR_H + 11);
     }
 
     // Flash message
@@ -449,6 +516,196 @@ export class ColonyOverlay extends BaseOverlay {
       const sel = this._selectedHex?.q === tile.q && this._selectedHex?.r === tile.r;
       this._drawHex(ctx, sx, sy, hs, terrain, tile, hov, sel, planet, grid);
     });
+
+    // Jednostki naziemne (rysowane NAD hexami)
+    this._drawUnits(ctx, ox, oy, ow, oh, grid);
+  }
+
+  _drawUnitPanel(ctx, ox, oy, ow, oh) {
+    const unit = this._selectedUnit;
+    if (!unit) return;
+
+    // Sprawdź czy hex pod roverem ma anomalię do analizy
+    const colony = this._getColony();
+    const grid = colony ? this._getGrid(colony) : null;
+    const tile = grid?.get(unit.q, unit.r);
+    const canAnalyze = tile?.anomaly && tile.anomalyDetected && !tile.anomalyRevealed;
+
+    // Panel w prawym dolnym rogu overlay
+    const pw = 190, ph = canAnalyze ? 160 : 140;
+    const px = ox + ow - pw - 8;
+    const py = oy + oh - ph - 8;
+
+    // Tło
+    ctx.fillStyle = 'rgba(4, 8, 16, 0.92)';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.strokeStyle = '#00ffb4';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px, py, pw, ph);
+
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    let ly = py + 16;
+
+    // Typ jednostki
+    ctx.font = `bold 11px ${THEME.fontFamily}`;
+    ctx.fillStyle = '#00ffb4';
+    ctx.fillText('🔬 SCIENCE ROVER', px + 8, ly);
+    ly += 18;
+
+    // Status
+    ctx.font = `11px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    const missionType = unit.mission?.type;
+    const scanPct = Math.floor((unit.mission?.progress ?? 0) * 100);
+    const statusLabels = {
+      idle:     '⏸ Bezczynna',
+      moving:   '🚀 W ruchu',
+      scanning: missionType === 'survey'  ? `🔍 Skanowanie ${scanPct}%`
+              : missionType === 'analyze' ? `🔬 Analiza ${scanPct}%`
+              : `🔍 Skan ${scanPct}%`,
+      working:  '⚙ Pracuje',
+    };
+    ctx.fillText(statusLabels[unit.status] ?? unit.status, px + 8, ly);
+    ly += 16;
+
+    // Pozycja
+    ctx.fillText(`Hex: (${unit.q}, ${unit.r})`, px + 8, ly);
+    ly += 20;
+
+    // Przycisk 1: Skanuj obszar (survey) — gdy idle
+    if (unit.status === 'idle') {
+      const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 22;
+      ctx.fillStyle = THEME.accent;
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = '#000';
+      ctx.font = `bold 10px ${THEME.fontFamily}`;
+      ctx.fillText('🔍 Skanuj obszar', bx + 6, by + 12);
+      this._addHit(bx, by, bw, bh, 'unitSurvey');
+      ly += 26;
+    }
+
+    // Przycisk 2: Analizuj anomalię — gdy idle + hex z anomalyDetected
+    if (unit.status === 'idle' && canAnalyze) {
+      const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 22;
+      ctx.fillStyle = '#cc66ff';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = '#000';
+      ctx.font = `bold 10px ${THEME.fontFamily}`;
+      ctx.fillText('🔬 Analizuj anomalię', bx + 6, by + 12);
+      this._addHit(bx, by, bw, bh, 'unitAnalyze');
+      ly += 26;
+    }
+
+    // Przycisk: Odznacz
+    {
+      const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 20;
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = THEME.textDim;
+      ctx.font = `10px ${THEME.fontFamily}`;
+      ctx.fillText('✕ Odznacz', bx + 6, by + 11);
+      this._addHit(bx, by, bw, bh, 'unitDeselect');
+    }
+  }
+
+  _loadUnitSprites() {
+    const roverImg = new Image();
+    roverImg.src = 'assets/units/science_rover.png';
+    this._unitSprites.set('science_rover', roverImg);
+  }
+
+  _drawUnits(ctx, ox, oy, ow, oh, grid) {
+    const mgr = window.KOSMOS?.groundUnitManager;
+    const colony = this._getColony();
+    if (!mgr || !colony) return;
+
+    const units = mgr.getUnitsOnPlanet(colony.planetId);
+    const hs = this._hexSize;
+    const cx = ox + ow / 2 - this._camX;
+    const cy = oy + oh / 2 - this._camY;
+
+    for (const unit of units) {
+      const img = this._unitSprites.get(unit.type);
+
+      // Pozycja: interpolacja między hexami podczas ruchu
+      let sx, sy;
+      if (unit.status === 'moving' && unit._path?.length > 0) {
+        const fromPos = grid.tilePixelPos(unit.q, unit.r, hs);
+        const nextHex = unit._path[0];
+        const toPos   = grid.tilePixelPos(nextHex.q, nextHex.r, hs);
+        sx = cx + fromPos.x + (toPos.x - fromPos.x) * unit._animT;
+        sy = cy + fromPos.y + (toPos.y - fromPos.y) * unit._animT;
+      } else {
+        const pos = grid.tilePixelPos(unit.q, unit.r, hs);
+        sx = cx + pos.x;
+        sy = cy + pos.y;
+      }
+
+      const S = hs * 1.2;
+      const glowR = S * 0.55;
+      const t = Date.now() / 1000;  // sekundy (do animacji pulsu)
+
+      // ── Glow pod sprite'em (turkusowa "podstawka") ──
+      const glowGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
+      glowGrad.addColorStop(0, 'rgba(0, 200, 160, 0.35)');
+      glowGrad.addColorStop(0.6, 'rgba(0, 200, 160, 0.12)');
+      glowGrad.addColorStop(1, 'rgba(0, 200, 160, 0)');
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ── Pulsujący ring ──
+      const pulsePhase = (Math.sin(t * 2.5) + 1) / 2;  // 0→1→0, ~2.5 Hz
+      const ringR = glowR * (0.85 + pulsePhase * 0.25);
+      const ringAlpha = 0.2 + pulsePhase * 0.25;
+      ctx.strokeStyle = `rgba(0, 255, 180, ${ringAlpha})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // ── Sprite (flip poziomy gdy patrzy w lewo) ──
+      const flip = unit._facingLeft ? -1 : 1;
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.scale(flip, 1);
+        ctx.drawImage(img, -S / 2, -S / 2, S, S);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#00cc88';
+        ctx.beginPath();
+        ctx.moveTo(sx + S / 3, sy);
+        ctx.lineTo(sx, sy + S / 3);
+        ctx.lineTo(sx - S / 3, sy);
+        ctx.lineTo(sx, sy - S / 3);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // ── Ramka selekcji (jaśniejsza, grubsza gdy zaznaczona) ──
+      if (this._selectedUnit?.id === unit.id) {
+        ctx.strokeStyle = '#00ffb4';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sx, sy, S / 2 + 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Pasek postępu skanowania
+      if (unit.status === 'scanning' && unit.mission) {
+        const bw = hs * 1.4;
+        const bh = 3;
+        const bx = sx - bw / 2;
+        const by = sy + hs * 0.7;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = '#00ffb4';
+        ctx.fillRect(bx, by, bw * unit.mission.progress, bh);
+      }
+    }
   }
 
   _drawHex(ctx, cx, cy, r, terrain, tile, isHov, isSel, planet, grid) {
@@ -582,6 +839,28 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
 
+    // Anomalia — marker na hexie
+    if (tile.anomaly && tile.anomalyDetected && r > 10) {
+      if (tile.anomalyRevealed) {
+        // Ujawniona — pokaż ikonę anomalii
+        const aDef = ANOMALIES[tile.anomaly];
+        const aIcon = aDef?.icon ?? '⚠';
+        ctx.font = `${Math.max(8, Math.round(r * 0.5))}px serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffdd44';
+        const iconY = tile.buildingId ? cy + r * 0.35 : cy;
+        ctx.fillText(aIcon, cx, iconY);
+      } else {
+        // Wykryta ale nieujawniona — pulsujący ❓
+        const t = Date.now() / 1000;
+        const pulse = (Math.sin(t * 3) + 1) / 2;
+        ctx.font = `${Math.max(8, Math.round(r * 0.5))}px serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = `rgba(255, 220, 50, ${0.5 + pulse * 0.5})`;
+        ctx.fillText('❓', cx, cy);
+      }
+    }
+
     // Fog
     if (tile.explored === false) { ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fill(); }
 
@@ -606,6 +885,11 @@ export class ColonyOverlay extends BaseOverlay {
     h += 20; // teren header
     h += 16; // koordynaty + modifier
     if (terrain.yieldBonus) h += Object.keys(terrain.yieldBonus).length * 14 + 4;
+
+    // Anomalia (jeśli ujawniona)
+    const aDef = tile.anomaly && tile.anomalyRevealed ? ANOMALIES[tile.anomaly] : null;
+    if (aDef) h += 18 + 14 + 10; // ikona+nazwa, efekt, separator
+
     h += 10; // separator
 
     if (b) {
@@ -692,6 +976,18 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillStyle = color;
         ctx.fillText(`${label}: ×${mult}`, x + 8, cy); cy += 14;
       }
+    }
+
+    // ── Sekcja: Anomalia (jeśli ujawniona) ──
+    if (aDef) {
+      ctx.font = `bold 11px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#ffdd44';
+      ctx.fillText(`${aDef.icon ?? '❓'} ${aDef.namePL ?? aDef.id}`, x + 8, cy);
+      cy += 16;
+      ctx.font = `10px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#ccbb88';
+      ctx.fillText(aDef.effectDescPL ?? '', x + 8, cy);
+      cy += 14;
     }
 
     // Separator
@@ -950,14 +1246,68 @@ export class ColonyOverlay extends BaseOverlay {
       const colony = this._getColony();
       const grid = colony ? this._getGrid(colony) : null;
       const tile = this._screenToTile(x, y, grid);
+
+      // ── Tryb lądowania Away Team ──
+      if (this._landingMode && tile) {
+        const terrain = TERRAIN_TYPES[tile.type];
+        if (tile.type === 'ocean') {
+          this._showFlash('Nie można lądować na oceanie');
+        } else if (tile.buildingId) {
+          this._showFlash('Hex zajęty przez budynek');
+        } else {
+          // Deploy rovera
+          const vMgr = window.KOSMOS?.vesselManager;
+          if (vMgr && this._landingVesselId) {
+            vMgr.deployAwayTeam(this._landingVesselId, colony.planetId, tile.q, tile.r);
+            this._showFlash('🤖 Away Team wylądował');
+          }
+          this._landingMode = false;
+          this._landingVesselId = null;
+        }
+        return true;
+      }
+
       if (tile) {
+        const mgr = window.KOSMOS?.groundUnitManager;
+        const unitOnTile = mgr?.getUnitAt(colony?.planetId, tile.q, tile.r);
+
+        if (this._selectedUnit) {
+          // Tryb jednostki aktywny
+          if (unitOnTile && unitOnTile.id === this._selectedUnit.id) {
+            // Klik na tę samą jednostkę → odznacz
+            this._selectedUnit = null;
+            this._selectedHex = null;
+            return true;
+          }
+          if (unitOnTile) {
+            // Klik na inną jednostkę → przełącz
+            this._selectedUnit = unitOnTile;
+            this._selectedHex = { q: tile.q, r: tile.r };
+            return true;
+          }
+          // Klik na pusty hex → rozkaz ruchu (nie otwieraj panelu budowy)
+          mgr?.moveUnit(this._selectedUnit.id, tile.q, tile.r);
+          return true;
+        }
+
+        // Brak zaznaczonej jednostki
+        if (unitOnTile) {
+          // Klik na jednostkę → zaznacz ją (bez floating panelu)
+          this._selectedUnit = unitOnTile;
+          this._selectedHex = { q: tile.q, r: tile.r };
+          this._hoveredBuildId = null;
+          return true;
+        }
+
+        // Normalny klik na hex → floating panel budowy
         this._selectedHex = { q: tile.q, r: tile.r };
         this._hoveredBuildId = null;
         this._floatScroll = 0;
         return true;
       }
-      // Klik na overlay ale poza mapą — deselect hex, konsumuj klik
+      // Klik na overlay ale poza mapą — deselect wszystko
       this._selectedHex = null;
+      this._selectedUnit = null;
     }
     return true;
   }
@@ -998,6 +1348,19 @@ export class ColonyOverlay extends BaseOverlay {
             EventBus.emit('planet:pendingCancelled', { tileKey });
           }
         }
+        break;
+      case 'unitSurvey':
+        if (this._selectedUnit) {
+          window.KOSMOS?.groundUnitManager?.startSurvey(this._selectedUnit.id);
+        }
+        break;
+      case 'unitAnalyze':
+        if (this._selectedUnit) {
+          window.KOSMOS?.groundUnitManager?.startAnalysis(this._selectedUnit.id);
+        }
+        break;
+      case 'unitDeselect':
+        this._selectedUnit = null;
         break;
     }
   }
@@ -1082,6 +1445,18 @@ export class ColonyOverlay extends BaseOverlay {
           const b = BUILDINGS[tile.buildingId];
           html += `<br>${b?.icon ?? ''} ${(b?.namePL ?? b?.id)} Lv.${tile.buildingLevel ?? 1}`;
         }
+        // Anomalia na hexie
+        if (tile.anomaly && tile.anomalyDetected) {
+          if (tile.anomalyRevealed) {
+            const ad = ANOMALIES[tile.anomaly];
+            if (ad) {
+              html += `<br><span style="color:#ffdd44">${ad.icon ?? ''} ${ad.namePL ?? ad.id}</span>`;
+              html += `<br><span style="color:#ccbb88;font-size:10px">${ad.effectDescPL ?? ''}</span>`;
+            }
+          } else {
+            html += `<br><span style="color:#ffdd44">❓ Wykryto anomalię — wyślij rovera</span>`;
+          }
+        }
         this._showTooltip(html, x * _UI_SCALE, y * _UI_SCALE);
       } else {
         this._hoveredHex = null;
@@ -1140,6 +1515,7 @@ export class ColonyOverlay extends BaseOverlay {
   handleKeyDown(key) {
     if (!this.visible) return false;
     if (key === 'Escape') {
+      if (this._selectedUnit) { this._selectedUnit = null; this._selectedHex = null; return true; }
       if (this._selectedHex) { this._selectedHex = null; return true; }
       this.hide();
       if (window.KOSMOS?.overlayManager) window.KOSMOS.overlayManager.active = null;

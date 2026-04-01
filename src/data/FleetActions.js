@@ -13,6 +13,7 @@
 // }
 
 import { SHIPS } from './ShipsData.js';
+import { SHIP_MODULES } from './ShipModulesData.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
 
@@ -233,6 +234,9 @@ const ACTIONS = {
       // Dostępny gdy orbituje lub jest w locie
       if (vessel.position.state === 'docked') return { ok: false, reason: 'Statek w hangarze' };
 
+      // Blokada: away team na powierzchni
+      if (vessel.awayTeamUnitId) return { ok: false, reason: 'Zbierz Away Team przed odlotem' };
+
       // Statek już wraca (vessel-level) — nie potrzebuje rozkazu
       if (vessel.mission?.phase === 'returning') return { ok: false, reason: 'Już wraca' };
 
@@ -366,6 +370,73 @@ const ACTIONS = {
       }
     },
   },
+
+  // ── Akcje skanowania i Away Team (orbita) ─────────────────────────────
+
+  full_scan: {
+    id: 'full_scan',
+    label: 'Pełny Skan',
+    icon: '📡',
+    requiresTarget: false,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
+      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      // Wymaga modułu naukowego
+      const hasSciMod = (vessel.modules ?? []).some(
+        m => SHIP_MODULES[m]?.slotType === 'science'
+      );
+      if (!hasSciMod) return { ok: false, reason: 'Brak modułu naukowego' };
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      EventBus.emit('vessel:fullScan', {
+        vesselId: vessel.id,
+        targetId: vessel.position.dockedAt,
+      });
+    },
+  },
+
+  send_away_team: {
+    id: 'send_away_team',
+    label: 'Wyślij Away Team',
+    icon: '🤖',
+    requiresTarget: false,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
+      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      // Wymaga modułu away team
+      const hasAT = (vessel.modules ?? []).some(
+        m => SHIP_MODULES[m]?.stats?.enablesAwayTeam
+      );
+      if (!hasAT) return { ok: false, reason: 'Brak modułu Away Team' };
+      // Nie może mieć już aktywnego away team
+      if (vessel.awayTeamUnitId) return { ok: false, reason: 'Away Team już na powierzchni' };
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      EventBus.emit('vessel:sendAwayTeam', {
+        vesselId: vessel.id,
+        targetId: vessel.position.dockedAt,
+      });
+    },
+  },
+
+  collect_away_team: {
+    id: 'collect_away_team',
+    label: 'Zbierz Away Team',
+    icon: '⬆',
+    requiresTarget: false,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
+      if (!vessel.awayTeamUnitId) return { ok: false, reason: 'Brak Away Team na powierzchni' };
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      EventBus.emit('vessel:collectAwayTeam', {
+        vesselId: vessel.id,
+      });
+    },
+  },
 };
 
 // ── Helper: pobierz dostępne akcje dla statku ────────────────────────────────
@@ -401,7 +472,10 @@ export function getAvailableActions(vessel, state) {
       result.push(_check(ACTIONS.trade_route, vessel, state));
     }
   } else if (vessel.position.state === 'orbiting') {
-    // Na orbicie — powrót, redirect, transport
+    // Na orbicie — skan, away team, powrót, redirect, transport
+    result.push(_check(ACTIONS.full_scan, vessel, state));
+    result.push(_check(ACTIONS.send_away_team, vessel, state));
+    result.push(_check(ACTIONS.collect_away_team, vessel, state));
     result.push(_check(ACTIONS.return_home, vessel, state));
     result.push(_check(ACTIONS.redirect, vessel, state));
     result.push(_check(ACTIONS.transport, vessel, state));

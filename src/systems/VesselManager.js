@@ -85,6 +85,16 @@ export class VesselManager {
       this._startForeignColonize(vesselId, targetId));
     EventBus.on('expedition:foreignUnload', ({ vesselId, targetId }) =>
       this._startForeignUnload(vesselId, targetId));
+
+    // Full Scan z orbity
+    EventBus.on('vessel:fullScan', ({ vesselId, targetId }) =>
+      this._startFullScan(vesselId, targetId));
+
+    // Away Team
+    EventBus.on('vessel:sendAwayTeam', ({ vesselId, targetId }) =>
+      this._sendAwayTeam(vesselId, targetId));
+    EventBus.on('vessel:collectAwayTeam', ({ vesselId }) =>
+      this._collectAwayTeam(vesselId));
   }
 
   // ── API publiczne ─────────────────────────────────────────────────────────
@@ -597,6 +607,133 @@ export class VesselManager {
     }
   }
 
+  // ── Full Scan z orbity ─────────────────────────────────────────────────
+
+  _startFullScan(vesselId, targetId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel || vessel.position.state !== 'orbiting') return;
+    if (vessel.status !== 'idle') return;
+
+    vessel.status = 'on_mission';
+    vessel._fullScan = {
+      targetId,
+      progress: 0,
+      duration: 0.5, // 0.5 roku cywilizacyjnego
+    };
+  }
+
+  _tickFullScan(vessel, dt) {
+    if (!vessel._fullScan) return;
+    vessel._fullScan.progress += dt / vessel._fullScan.duration;
+
+    if (vessel._fullScan.progress >= 1) {
+      this._completeFullScan(vessel);
+    }
+  }
+
+  _completeFullScan(vessel) {
+    const targetId = vessel._fullScan.targetId;
+    vessel._fullScan = null;
+    vessel.status = 'idle';
+
+    // Określ tier skanera (najwyższy moduł naukowy)
+    let scanTier = 1;
+    for (const modId of (vessel.modules ?? [])) {
+      const mod = SHIP_MODULES[modId];
+      if (mod?.slotType === 'science' && (mod.tier ?? 1) > scanTier) {
+        scanTier = mod.tier;
+      }
+    }
+
+    // Pobierz grid planety
+    const colMgr = window.KOSMOS?.colonyManager;
+    let grid = colMgr?.getColony(targetId)?.grid;
+    if (!grid) {
+      // Ciało bez kolonii — pobierz lub wygeneruj tymczasowy grid
+      // (anomalie istnieją tylko na gridach w ColonyOverlay)
+      // Generuj grid dla niezkolonizowanego ciała
+      const entity = this._findEntity(targetId);
+      if (entity) {
+        // Ciało bez gridu — full scan nie może wykryć anomalii
+        // (anomalie generowane przy tworzeniu gridu w ColonyOverlay)
+        return;
+      }
+    }
+
+    if (!grid) return;
+
+    let detectedCount = 0;
+    grid.forEach(tile => {
+      if (!tile.anomaly) return;
+      if (!tile.anomalyDetected) {
+        tile.anomalyDetected = true;
+        detectedCount++;
+      }
+      // Tier 2+ ujawnia szczegóły
+      if (scanTier >= 2 && !tile.anomalyRevealed) {
+        tile.anomalyRevealed = true;
+      }
+    });
+
+    EventBus.emit('vessel:fullScanComplete', {
+      vesselId: vessel.id,
+      targetId,
+      detectedCount,
+      scanTier,
+    });
+  }
+
+  // ── Away Team ─────────────────────────────────────────────────────────
+
+  _sendAwayTeam(vesselId, targetId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel || vessel.position.state !== 'orbiting') return;
+    if (vessel.awayTeamUnitId) return; // już na powierzchni
+
+    // Emituj event → ColonyOverlay wejdzie w tryb wyboru hexa
+    EventBus.emit('vessel:awayTeamLanding', {
+      vesselId: vessel.id,
+      targetId,
+    });
+  }
+
+  // Wywoływane gdy gracz wybrał hex lądowania
+  deployAwayTeam(vesselId, planetId, q, r) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return;
+
+    const mgr = window.KOSMOS?.groundUnitManager;
+    if (!mgr) return;
+
+    const unit = mgr.createUnit('science_rover', planetId, q, r);
+    if (unit) {
+      vessel.awayTeamUnitId = unit.id;
+      EventBus.emit('vessel:awayTeamDeployed', {
+        vesselId: vessel.id,
+        unitId:   unit.id,
+        planetId, q, r,
+      });
+    }
+  }
+
+  _collectAwayTeam(vesselId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel || !vessel.awayTeamUnitId) return;
+
+    const mgr = window.KOSMOS?.groundUnitManager;
+    if (mgr) {
+      mgr.removeUnit(vessel.awayTeamUnitId);
+    }
+
+    const unitId = vessel.awayTeamUnitId;
+    vessel.awayTeamUnitId = null;
+
+    EventBus.emit('vessel:awayTeamCollected', {
+      vesselId: vessel.id,
+      unitId,
+    });
+  }
+
   // ── Serializacja ─────────────────────────────────────────────────────────
 
   serialize() {
@@ -632,6 +769,7 @@ export class VesselManager {
         fuelType:     v.fuelType ?? 'power_cells',
         damaged:      v.damaged ?? false,
         _repairProgress: v._repairProgress ?? 0,
+        awayTeamUnitId: v.awayTeamUnitId ?? null,
       });
     }
     return {
@@ -681,6 +819,7 @@ export class VesselManager {
         fuelType:     vd.fuelType ?? 'power_cells',
         damaged:      vd.damaged ?? false,
         _repairProgress: vd._repairProgress ?? 0,
+        awayTeamUnitId: vd.awayTeamUnitId ?? null,
       };
       // Oblicz colonistCapacity z modułów
       if (vessel.modules?.length) {
@@ -738,7 +877,16 @@ export class VesselManager {
   _tick(deltaYears) {
     this._tickRefueling(deltaYears);
     this._tickRepair(deltaYears);
+    this._tickFullScans(deltaYears);
     this._updatePositions(deltaYears);
+  }
+
+  _tickFullScans(deltaYears) {
+    for (const vessel of this._vessels.values()) {
+      if (vessel._fullScan) {
+        this._tickFullScan(vessel, deltaYears);
+      }
+    }
   }
 
   /**

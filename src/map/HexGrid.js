@@ -123,7 +123,22 @@ export class HexGrid {
   getNeighbors(q, r) {
     const result = [];
     for (const dir of HEX_DIRECTIONS) {
-      const neighbor = this.get(q + dir.q, r + dir.r);
+      let nq = q + dir.q, nr = r + dir.r;
+      let neighbor = this.get(nq, nr);
+
+      // Zawijanie poziome — planeta jest kulą
+      if (!neighbor && nr >= 0 && nr < this.height) {
+        const rowW = this.getRowWidth(nr);
+        if (rowW > 0) {
+          const { col } = HexGrid.cubeToOffset(nq, nr);
+          if (col < 0 || col >= rowW) {
+            const wrappedCol = ((col % rowW) + rowW) % rowW;
+            const wrapped = HexGrid.offsetToCube(wrappedCol, nr);
+            neighbor = this.get(wrapped.q, wrapped.r);
+          }
+        }
+      }
+
       if (neighbor) result.push(neighbor);
     }
     return result;

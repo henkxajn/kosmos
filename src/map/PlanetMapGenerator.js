@@ -18,6 +18,7 @@
 import { HexGrid }  from './HexGrid.js';
 import { HexTile }  from './HexTile.js';
 import { getEffectivePlanetType } from '../utils/EntityUtils.js';
+import { getEligibleAnomalies, ANOMALIES } from '../data/AnomalyData.js';
 
 // ── Rozmiary siatek per typ planety (legacy prostokątny) ─────────────────────
 const GRID_SIZES = {
@@ -125,7 +126,10 @@ export class PlanetMapGenerator {
 
     // 6. Zasoby strategiczne — usunięte (martwy feature, deposits w DepositSystem)
 
-    // 7. Fog of war (odkryte tylko na planecie domowej)
+    // 7. Anomalie — ukryte do odkrycia przez rovera
+    PlanetMapGenerator._placeAnomalies(grid, planet, rand);
+
+    // 8. Fog of war (odkryte tylko na planecie domowej)
     if (!homeWorld) {
       grid.forEach(tile => { tile.explored = false; });
     }
@@ -376,6 +380,42 @@ export class PlanetMapGenerator {
         .some(n => n.type === 'desert' || n.type === 'volcano');
       if (hasDesertNeighbor && rand() < 0.6) tile.type = 'plains';
     });
+  }
+
+  // ── Krok 7: Anomalie ─────────────────────────────────────────────────────────
+  // Ukryte na hexach — wykrywane przez survey rovera, ujawniane przez analyze
+
+  static _placeAnomalies(grid, planet, rand) {
+    const effectiveType = getEffectivePlanetType(planet);
+    const maxAnomalies = effectiveType === 'planetoid' ? 2
+                       : effectiveType === 'moon'      ? 3
+                       : 5;
+
+    // Kandydujące hexy (bez budynku, bez zasobu strategicznego, bez anomalii)
+    const allTiles = grid.toArray().filter(t =>
+      t.strategicResource === null && t.anomaly === null && !t.buildingId
+    );
+
+    const shuffled = shuffle(allTiles, rand);
+    let placed = 0;
+
+    for (const tile of shuffled) {
+      if (placed >= maxAnomalies) break;
+
+      const eligible = getEligibleAnomalies(tile.type, planet);
+      if (eligible.length === 0) continue;
+
+      // Rzut kością dla każdej pasującej anomalii
+      for (const anomalyId of eligible) {
+        const anomaly = ANOMALIES[anomalyId];
+        if (rand() < anomaly.rarity) {
+          tile.anomaly = anomalyId;
+          // detected/revealed = false (domyślne) — gracz musi użyć rovera
+          placed++;
+          break;  // max 1 anomalia per hex
+        }
+      }
+    }
   }
 
   // ── Krok 6: Zasoby strategiczne ────────────────────────────────────────────

@@ -34,6 +34,9 @@ import { DiscoverySystem }     from '../systems/DiscoverySystem.js';
 import { ObservatorySystem }  from '../systems/ObservatorySystem.js';
 import { CollisionForecast } from '../systems/CollisionForecast.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
+import { GroundUnitManager } from '../systems/GroundUnitManager.js';
+import { AnomalyEffectSystem } from '../systems/AnomalyEffectSystem.js';
+import { ANOMALIES } from '../data/AnomalyData.js';
 import { showEventNotification, showImpactNotification, showMovementModal } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
@@ -157,6 +160,8 @@ export class GameScene {
     this.discoverySystem   = new DiscoverySystem();
     this.observatorySystem = new ObservatorySystem();
     this.collisionForecast = new CollisionForecast();
+    this.groundUnitManager = new GroundUnitManager();
+    this.anomalyEffectSystem = new AnomalyEffectSystem();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -180,6 +185,8 @@ export class GameScene {
     window.KOSMOS.discoverySystem  = this.discoverySystem;
     window.KOSMOS.observatorySystem = this.observatorySystem;
     window.KOSMOS.collisionForecast = this.collisionForecast;
+    window.KOSMOS.groundUnitManager  = this.groundUnitManager;
+    window.KOSMOS.anomalyEffectSystem = this.anomalyEffectSystem;
     window.KOSMOS.threeRenderer    = this.threeRenderer;
 
     // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
@@ -259,6 +266,10 @@ export class GameScene {
       if (c4x.collisionForecast) {
         this.collisionForecast.restore(c4x.collisionForecast);
       }
+      // Przywróć GroundUnitManager
+      if (c4x.groundUnitManager) {
+        this.groundUnitManager.restore(c4x.groundUnitManager);
+      }
       // Walidacja misji — teraz VesselManager jest przywrócony, można sprawdzić statki
       this.expeditionSystem.validateMissions();
       // Przywróć TradeRouteManager
@@ -282,6 +293,9 @@ export class GameScene {
         this.starSystemManager.restore(c4x.starSystemManager);
       }
     }
+
+    // ── Spawn rovera po postawieniu stolicy (nowa gra) ─────────
+    this._initRoverSpawnListener();
 
     // ── PlanetScene (mapa hex) ─────────────────────────────────
     const planetCanvas = document.getElementById('planet-canvas');
@@ -385,6 +399,26 @@ export class GameScene {
           civ._milestoneState.justSurvivedDisaster = true;
         }
       }
+    });
+
+    // Popup: anomalia odkryta przez rovera
+    EventBus.on('anomaly:discovered', ({ anomalyDef }) => {
+      if (!anomalyDef) return;
+      const lang = window.KOSMOS?.lang ?? 'pl';
+      const name = lang === 'en' ? anomalyDef.nameEN : anomalyDef.namePL;
+      const effectDesc = lang === 'en' ? anomalyDef.effectDescEN : anomalyDef.effectDescPL;
+      queueMissionEvent({
+        severity: 'info',
+        barTitle: lang === 'en' ? 'ANOMALY DISCOVERED' : 'ANOMALIA ODKRYTA',
+        barRight: '',
+        svgKey:   'report',
+        svgLabel: `${anomalyDef.icon ?? '❓'}<br>${anomalyDef.category?.toUpperCase() ?? ''}`,
+        prompt:   '> ANALYZE_',
+        headline: name,
+        description: anomalyDef.description ?? '',
+        contentHTML: formatStatLine(lang === 'en' ? 'Effect' : 'Efekt', effectDesc ?? '—'),
+        buttons: [{ label: '[ENTER] OK', primary: true }],
+      });
     });
 
     // Popupy misji (pauza + powiadomienie)
@@ -657,6 +691,36 @@ export class GameScene {
     // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
     this.buildingSystem.setDeposits(planet.deposits ?? []);
     this.colonyManager.registerHomePlanet(planet, this.resourceSystem, this.civSystem, this.buildingSystem);
+
+    // Rover spawni się przy pierwszym buildResult colony_base (patrz _initRoverSpawnListener)
+  }
+
+  _initRoverSpawnListener() {
+    const onBuild = ({ success, buildingId }) => {
+      if (!success || buildingId !== 'colony_base') return;
+      const mgr = this.groundUnitManager;
+      const hp = window.KOSMOS?.homePlanet;
+      if (!mgr || !hp) return;
+      // Tylko jeśli nie ma jeszcze żadnej jednostki na planecie domowej
+      if (mgr.getUnitsOnPlanet(hp.id).length > 0) return;
+
+      // Znajdź hex stolicy
+      const bSys = window.KOSMOS?.buildingSystem;
+      let startQ = 0, startR = 0;
+      if (bSys) {
+        for (const [key] of bSys._active) {
+          if (key.startsWith('capital_')) {
+            const coords = key.replace('capital_', '').split(',').map(Number);
+            startQ = coords[0]; startR = coords[1];
+            break;
+          }
+        }
+      }
+      mgr.createUnit('science_rover', hp.id, startQ, startR);
+      // Jednorazowy listener
+      EventBus.off('planet:buildResult', onBuild);
+    };
+    EventBus.on('planet:buildResult', onBuild);
   }
 
   // ── Migracja starych save: fleet[] ze stringami → vessel instances ──
@@ -1274,6 +1338,24 @@ export class GameScene {
       // Najpierw UI, potem 3D
       if (!this.uiManager.handleClick(x, y)) {
         this.threeRenderer.handleClick(x, y);
+      }
+    });
+
+    // Prawy klik — rozkaz ruchu jednostki naziemnej (ColonyOverlay)
+    window.addEventListener('contextmenu', (e) => {
+      const overlay = this.uiManager?.overlayManager?.overlays?.colony;
+      if (!overlay?.visible || !overlay._selectedUnit) return;
+      e.preventDefault();
+      const colony = overlay._getColony();
+      const grid = colony ? overlay._getGrid(colony) : null;
+      if (!grid) return;
+      const uiScale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+      const sx = e.clientX / uiScale, sy = e.clientY / uiScale;
+      const tile = overlay._screenToTile(sx, sy, grid);
+      if (tile) {
+        window.KOSMOS?.groundUnitManager?.moveUnit(
+          overlay._selectedUnit.id, tile.q, tile.r
+        );
       }
     });
 

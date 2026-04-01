@@ -35,6 +35,7 @@ import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { RegionSystem } from '../map/RegionSystem.js';
+import { HexGrid }      from '../map/HexGrid.js';
 import { t } from '../i18n/i18n.js';
 
 // Rozmiary siatek hex per typ/masa ciała
@@ -1213,14 +1214,16 @@ export class ColonyManager {
       const prospSys = new ProsperitySystem(resSys, civSys, this.techSystem, entity);
       if (colData.prosperitySystem) prospSys.restore(colData.prosperitySystem);
 
-      // Przywróć grid regionów jeśli zapisany
+      // Przywróć grid jeśli zapisany (HexGrid lub RegionSystem)
       let savedGrid = null;
       if (colData.grid) {
         try {
           if (colData.grid.version === 2) {
             savedGrid = RegionSystem.restore(colData.grid);
+          } else if (colData.grid.tiles && colData.grid.width) {
+            // Format HexGrid (tapered lub prostokątny) — przywróć z anomaliami
+            savedGrid = HexGrid.restore(colData.grid);
           }
-          // Stary format HexGrid — ignoruj, regeneruj przy otwarciu
         } catch (e) {
           console.warn('[ColonyManager] Grid restore failed, will regenerate:', e);
         }

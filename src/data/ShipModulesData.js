@@ -162,6 +162,22 @@ export const SHIP_MODULES = {
     description: '+100% odkrycia. Umożliwia misje do gwiazd neutronowych.',
   },
 
+  // ── Moduły specjalne ──────────────────────────────────────────────────
+
+  science_away_team: {
+    id: 'science_away_team',
+    namePL: 'Zespół Badawczy',
+    nameEN: 'Science Away Team',
+    icon: '🤖',
+    slotType: 'special',
+    tier: 1,
+    cost: { Si: 15, Cu: 10 },
+    commodityCost: { electronic_systems: 2 },
+    stats: { enablesAwayTeam: true, awayTeamType: 'science_rover' },
+    requires: 'exploration',
+    description: 'Rover badawczy do eksploracji powierzchni. Wyślij z orbity na planetę.',
+  },
+
   // ── Moduły habitacyjne ─────────────────────────────────────────────────
 
   habitat_pod: {

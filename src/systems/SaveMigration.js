@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 37;
+export const CURRENT_VERSION     = 40;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -52,6 +52,9 @@ const MIGRATIONS = {
   34: _migrateV34toV35,
   35: _migrateV35toV36,
   36: _migrateV36toV37,
+  37: _migrateV37toV38,
+  38: _migrateV38toV39,
+  39: _migrateV39toV40,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1091,6 +1094,28 @@ function _migrateV36toV37(data) {
     if (col.grid && !col.grid.tapered) {
       col.grid = null;
     }
+  }
+  return data;
+}
+
+// ── v39 → v40: Away Team + Full Scan — awayTeamUnitId w vessels ─────────────
+function _migrateV39toV40(data) {
+  // Nowe pole awayTeamUnitId domyślnie null w VesselManager.restore()
+  // Nowy moduł science_away_team dodany do ShipModulesData — nie wymaga migracji
+  return data;
+}
+
+// ── v38 → v39: System anomalii — nowe pola anomalyDetected/anomalyRevealed ──
+function _migrateV38toV39(data) {
+  // Pola anomalyDetected/anomalyRevealed domyślnie false w HexTile.restore()
+  // Migracja nie musi nic robić — defensywne defaults wystarczą
+  return data;
+}
+
+// ── v37 → v38: System jednostek naziemnych (GroundUnitManager) ──────────────
+function _migrateV37toV38(data) {
+  if (data.civ4x) {
+    data.civ4x.groundUnitManager = data.civ4x.groundUnitManager ?? null;
   }
   return data;
 }

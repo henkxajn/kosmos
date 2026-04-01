@@ -45,7 +45,7 @@ export const SHIPS = {
     crewCost:          0.1,
     crewStrata:        'scientist',
     requires:          'exploration',
-    defaultModules:    ['engine_chemical', 'science_lab'],
+    defaultModules:    ['engine_chemical', 'science_lab', 'science_away_team'],
     capabilities:      ['recon', 'scientific', 'survey'],
     description:       'Lekki kadłub naukowy — 4 sloty modułowe. ' +
                        'Dobierz napęd i skaner stosownie do misji.',

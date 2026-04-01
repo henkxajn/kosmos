@@ -171,9 +171,11 @@ export class HexTile {
     // Stolica cywilizacji stoi na tym hexie (wirtualny budynek — nie blokuje budowy)
     this.capitalBase = false;
 
-    // Anomalia na hexie (null | 'scientific' | 'resource' | 'danger')
-    // Widoczna jako marker na globusie — gracz może zbadać
+    // Anomalia na hexie (null | anomalyId string, np. 'neutronium_vein')
+    // Dwuetapowe odkrywanie: survey wykrywa (detected), analyze ujawnia (revealed)
     this.anomaly = null;
+    this.anomalyDetected = false;  // survey wykrył obecność
+    this.anomalyRevealed = false;  // analyze ujawnił typ i efekty
 
     // Budowa w toku (null | { buildingId, progress, buildTime, isUpgrade? })
     this.underConstruction = null;
@@ -220,6 +222,8 @@ export class HexTile {
       damaged:           this.damaged,
       capitalBase:       this.capitalBase,
       anomaly:           this.anomaly,
+      anomalyDetected:   this.anomalyDetected,
+      anomalyRevealed:   this.anomalyRevealed,
       underConstruction: this.underConstruction,
       syntheticSlot:     this.syntheticSlot,
     };
@@ -234,6 +238,8 @@ export class HexTile {
     tile.damaged           = data.damaged           ?? false;
     tile.capitalBase       = data.capitalBase       ?? false;
     tile.anomaly           = data.anomaly           ?? null;
+    tile.anomalyDetected   = data.anomalyDetected   ?? false;
+    tile.anomalyRevealed   = data.anomalyRevealed   ?? false;
     tile.underConstruction = data.underConstruction ?? null;
     tile.syntheticSlot     = data.syntheticSlot     ?? null;
     return tile;

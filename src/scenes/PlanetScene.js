@@ -85,6 +85,17 @@ export class PlanetScene {
 
     // Pętla rysowania (requestAnimationFrame)
     this._animFrameId = null;
+
+    // Jednostki naziemne
+    this._selectedUnit = null;
+    this._unitSprites = new Map();
+    this._loadUnitSprites();
+  }
+
+  _loadUnitSprites() {
+    const roverImg = new Image();
+    roverImg.src = 'assets/units/science_rover.png';
+    this._unitSprites.set('science_rover', roverImg);
   }
 
   // Otwiera scenę dla podanej planety
@@ -95,6 +106,7 @@ export class PlanetScene {
     this._hoveredTile        = null;
     this._selectedTile       = null;
     this._buildPanelTile     = null;
+    this._selectedUnit       = null;
 
     // Zwolnij czas
     EventBus.emit('time:setMultiplier', { index: 1 });
@@ -176,6 +188,7 @@ export class PlanetScene {
   // Zamknij scenę
   _close() {
     this.isOpen = false;
+    this._selectedUnit = null;
     this.canvas.style.display = 'none';
 
     const layer = document.getElementById('event-layer');
@@ -228,14 +241,28 @@ export class PlanetScene {
       if (this._hitTestTimeBar(mx, my))    return;
       if (this._hitTestBuildPanel(mx, my)) return;
 
+      // Hit test panelu jednostki
+      if (this._selectedUnit && this._hitTestUnitPanel(mx, my)) return;
+
       // Klik na hex
       const tile = this._pixelToTile(mx, my);
       if (tile) {
+        // Sprawdź czy na hexie stoi jednostka
+        const mgr = window.KOSMOS?.groundUnitManager;
+        const unitOnTile = mgr?.getUnitAt(this.planet?.id, tile.q, tile.r);
+        if (unitOnTile) {
+          this._selectedUnit = unitOnTile;
+          this._selectedTile = tile;
+          this._buildPanelTile = null;  // ukryj panel budowy gdy zaznaczono jednostkę
+          return;
+        }
+        this._selectedUnit   = null;
         this._selectedTile   = tile;
         this._buildPanelTile = tile;
       } else {
         this._selectedTile   = null;
         this._buildPanelTile = null;
+        this._selectedUnit   = null;
       }
     };
 
@@ -310,9 +337,25 @@ export class PlanetScene {
       this._timeState.multiplierIndex = multiplierIndex;
     };
 
+    // Prawy klik — rozkaz ruchu jednostki
+    this._onContextMenu = (e) => {
+      e.preventDefault();
+      if (!this._selectedUnit) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const mx   = (e.clientX - rect.left) / PS_SCALE;
+      const my   = (e.clientY - rect.top)  / PS_SCALE;
+      const tile = this._pixelToTile(mx, my);
+      if (tile) {
+        window.KOSMOS?.groundUnitManager?.moveUnit(
+          this._selectedUnit.id, tile.q, tile.r
+        );
+      }
+    };
+
     if (layer) {
-      layer.addEventListener('mousemove', this._onMouseMove);
-      layer.addEventListener('click',     this._onClick);
+      layer.addEventListener('mousemove',  this._onMouseMove);
+      layer.addEventListener('click',      this._onClick);
+      layer.addEventListener('contextmenu', this._onContextMenu);
     }
     EventBus.on('planet:buildResult',   this._onBuildResult);
     EventBus.on('planet:demolishResult', this._onDemolishResult);
@@ -325,8 +368,9 @@ export class PlanetScene {
   _unregisterEvents(layer) {
     if (this._onKeyDown)  document.removeEventListener('keydown', this._onKeyDown);
     if (layer) {
-      if (this._onMouseMove) layer.removeEventListener('mousemove', this._onMouseMove);
-      if (this._onClick)     layer.removeEventListener('click',     this._onClick);
+      if (this._onMouseMove)   layer.removeEventListener('mousemove',  this._onMouseMove);
+      if (this._onClick)       layer.removeEventListener('click',      this._onClick);
+      if (this._onContextMenu) layer.removeEventListener('contextmenu', this._onContextMenu);
     }
     EventBus.off('planet:buildResult',   this._onBuildResult);
     EventBus.off('planet:demolishResult', this._onDemolishResult);
@@ -388,6 +432,7 @@ export class PlanetScene {
       );
 
       this._drawAllTiles();
+      this._drawUnits();
     }
 
     // Górny pasek
@@ -405,6 +450,11 @@ export class PlanetScene {
     // Panel budowania (prawy)
     if (this._buildPanelTile) {
       this._drawBuildPanel();
+    }
+
+    // Panel akcji jednostki
+    if (this._selectedUnit) {
+      this._drawUnitPanel();
     }
 
     ctx.restore();
@@ -652,6 +702,219 @@ export class PlanetScene {
     const localY = py - this._screenCY + this._gridCenter.y;
     const { q, r } = HexGrid.pixelToHex(localX, localY, this._hexSize);
     return this.grid.get(q, r) || null;
+  }
+
+  // ── Rysowanie jednostek naziemnych ──────────────────────────────
+  _drawUnits() {
+    const mgr = window.KOSMOS?.groundUnitManager;
+    if (!mgr || !this.planet) return;
+
+    const ctx = this.ctx;
+    const units = mgr.getUnitsOnPlanet(this.planet.id);
+
+    for (const unit of units) {
+      const img = this._unitSprites.get(unit.type);
+
+      // Pozycja: interpolacja między hexami podczas ruchu
+      let px, py;
+      if (unit.status === 'moving' && unit._fromPixel && unit._toPixel) {
+        // _fromPixel/_toPixel są znormalizowane (hexSize=1), przelicz na ekran
+        const fromScreen = this._tileScreenPos(unit.q, unit.r);
+        const nextHex = unit._path?.[0];
+        if (nextHex) {
+          const toScreen = this._tileScreenPos(nextHex.q, nextHex.r);
+          px = fromScreen.x + (toScreen.x - fromScreen.x) * unit._animT;
+          py = fromScreen.y + (toScreen.y - fromScreen.y) * unit._animT;
+        } else {
+          px = fromScreen.x;
+          py = fromScreen.y;
+        }
+      } else {
+        const pos = this._tileScreenPos(unit.q, unit.r);
+        px = pos.x;
+        py = pos.y;
+      }
+
+      const S = this._hexSize * 1.2;
+      const glowR = S * 0.55;
+      const t = Date.now() / 1000;
+
+      // ── Glow pod sprite'em ──
+      const glowGrad = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+      glowGrad.addColorStop(0, 'rgba(0, 200, 160, 0.35)');
+      glowGrad.addColorStop(0.6, 'rgba(0, 200, 160, 0.12)');
+      glowGrad.addColorStop(1, 'rgba(0, 200, 160, 0)');
+      ctx.fillStyle = glowGrad;
+      ctx.beginPath();
+      ctx.arc(px, py, glowR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ── Pulsujący ring ──
+      const pulsePhase = (Math.sin(t * 2.5) + 1) / 2;
+      const ringR = glowR * (0.85 + pulsePhase * 0.25);
+      const ringAlpha = 0.2 + pulsePhase * 0.25;
+      ctx.strokeStyle = `rgba(0, 255, 180, ${ringAlpha})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(px, py, ringR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // ── Sprite (flip poziomy) ──
+      const flip = unit._facingLeft ? -1 : 1;
+      if (img && img.complete && img.naturalWidth > 0) {
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.scale(flip, 1);
+        ctx.drawImage(img, -S / 2, -S / 2, S, S);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#00cc88';
+        ctx.beginPath();
+        ctx.moveTo(px + S / 3, py);
+        ctx.lineTo(px, py + S / 3);
+        ctx.lineTo(px - S / 3, py);
+        ctx.lineTo(px, py - S / 3);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // ── Ramka selekcji ──
+      if (this._selectedUnit && this._selectedUnit.id === unit.id) {
+        ctx.strokeStyle = '#00ffb4';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(px, py, S / 2 + 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Pasek postępu skanowania
+      if (unit.status === 'scanning' && unit.mission) {
+        const bw = this._hexSize * 1.4;
+        const bh = 4;
+        const bx = px - bw / 2;
+        const by = py + this._hexSize * 0.7;
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = '#00ffb4';
+        ctx.fillRect(bx, by, bw * unit.mission.progress, bh);
+      }
+    }
+  }
+
+  // ── Panel akcji jednostki (prawy dolny róg) ───────────────────
+  _drawUnitPanel() {
+    if (!this._selectedUnit) return;
+    const unit = this._selectedUnit;
+    const ctx = this.ctx;
+
+    const panelX = LW - RIGHT_W + 4;
+    const panelY = LH - 200;
+    const panelW = RIGHT_W - 8;
+    const panelH = 190;
+
+    // Tło panelu
+    ctx.fillStyle = bgAlpha(0.7);
+    ctx.fillRect(panelX, panelY, panelW, panelH);
+    ctx.strokeStyle = THEME.accent;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+    ctx.fillStyle = THEME.text;
+    ctx.font = '13px monospace';
+
+    let y = panelY + 20;
+    const x = panelX + 10;
+
+    // Typ i ID
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText('🔬 SCIENCE ROVER', x, y);
+    y += 18;
+
+    // Status
+    ctx.fillStyle = THEME.textDim;
+    const statusLabels = {
+      idle:     '⏸ Bezczynna',
+      moving:   '🚀 W ruchu',
+      scanning: `🔍 Skanuje ${Math.floor((unit.mission?.progress ?? 0) * 100)}%`,
+      working:  '⚙ Pracuje',
+    };
+    ctx.fillText(statusLabels[unit.status] ?? unit.status, x, y);
+    y += 18;
+
+    // Pozycja
+    ctx.fillText(`Hex: (${unit.q}, ${unit.r})`, x, y);
+    y += 24;
+
+    // Przycisk 1: Skanuj obszar (survey)
+    if (unit.status === 'idle') {
+      this._unitSurveyBtnRect = { x: x, y: y, w: panelW - 20, h: 26 };
+      ctx.fillStyle = THEME.accent;
+      ctx.fillRect(x, y, panelW - 20, 26);
+      ctx.fillStyle = '#000';
+      ctx.font = '12px monospace';
+      ctx.fillText('🔍 Skanuj obszar', x + 10, y + 17);
+      y += 30;
+    } else {
+      this._unitSurveyBtnRect = null;
+    }
+
+    // Przycisk 2: Analizuj anomalię
+    const grid = window.KOSMOS?.colonyManager?.getColony(this.planet?.id)?.grid
+              ?? this.grid;
+    const tile = grid?.get(unit.q, unit.r);
+    const canAnalyze = tile?.anomaly && tile.anomalyDetected && !tile.anomalyRevealed;
+    if (unit.status === 'idle' && canAnalyze) {
+      this._unitAnalyzeBtnRect = { x: x, y: y, w: panelW - 20, h: 26 };
+      ctx.fillStyle = '#cc66ff';
+      ctx.fillRect(x, y, panelW - 20, 26);
+      ctx.fillStyle = '#000';
+      ctx.font = '12px monospace';
+      ctx.fillText('🔬 Analizuj anomalię', x + 10, y + 17);
+      y += 30;
+    } else {
+      this._unitAnalyzeBtnRect = null;
+    }
+
+    // Przycisk: Deselect
+    this._unitDeselectBtnRect = { x: x, y: y, w: panelW - 20, h: 26 };
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x, y, panelW - 20, 26);
+    ctx.fillStyle = THEME.textDim;
+    ctx.font = '12px monospace';
+    ctx.fillText('✕ Odznacz', x + 10, y + 17);
+  }
+
+  _hitTestUnitPanel(mx, my) {
+    if (!this._selectedUnit) return false;
+
+    // Przycisk Survey
+    if (this._unitSurveyBtnRect) {
+      const b = this._unitSurveyBtnRect;
+      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+        window.KOSMOS?.groundUnitManager?.startSurvey(this._selectedUnit.id);
+        return true;
+      }
+    }
+
+    // Przycisk Analyze
+    if (this._unitAnalyzeBtnRect) {
+      const b = this._unitAnalyzeBtnRect;
+      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+        window.KOSMOS?.groundUnitManager?.startAnalysis(this._selectedUnit.id);
+        return true;
+      }
+    }
+
+    // Przycisk Deselect
+    if (this._unitDeselectBtnRect) {
+      const b = this._unitDeselectBtnRect;
+      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+        this._selectedUnit = null;
+        return true;
+      }
+    }
+
+    return false;
   }
 
   // ── Górny pasek ───────────────────────────────────────────────

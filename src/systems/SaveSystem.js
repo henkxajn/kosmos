@@ -132,6 +132,7 @@ export class SaveSystem {
       randomEventSystem: window.KOSMOS?.randomEventSystem?.serialize() ?? null,
       observatorySystem: window.KOSMOS?.observatorySystem?.serialize() ?? null,
       collisionForecast: window.KOSMOS?.collisionForecast?.serialize() ?? null,
+      groundUnitManager: window.KOSMOS?.groundUnitManager?.serialize() ?? null,
       exploredBodies,
       galaxyData: window.KOSMOS.galaxyData ?? null,
       activeSystemId: window.KOSMOS.activeSystemId ?? 'sys_home',
