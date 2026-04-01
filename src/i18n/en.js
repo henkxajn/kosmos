@@ -902,6 +902,7 @@ export default {
   'fleet.designCatHabitat': 'HABITAT',
   'fleet.designCatArmor': 'ARMOR',
   'fleet.designCatFuel': 'FUEL',
+  'fleet.designCatSpecial': 'SPECIAL',
   'fleet.backToShipyard': '← Shipyard',
   'fleet.renameShip': 'Rename ship',
   'fleet.labelStatus': 'STATUS',
@@ -1620,6 +1621,9 @@ export default {
   'outliner.orbiting': '⊙ orbit',
   'outliner.fleet': 'FLEET [{0}]',
   'outliner.noShips': 'No ships',
+  'outliner.groundUnits': 'GROUND UNITS [{0}]',
+  'outliner.noGroundUnits': 'No units',
+  'groundUnit.science_rover': 'Sci. Rover',
   'outliner.epoch': '⭐ Epoch: {0}',
   'outliner.popInfo': '👤 POP: {0}/{1}  Prosperity: {2}',
 

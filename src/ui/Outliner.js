@@ -51,15 +51,17 @@ export class Outliner {
   constructor() {
     // Sekcje zwijane/rozwijane
     this._sections = {
-      colonies:    true,  // domyślnie rozwinięta
-      expeditions: true,
-      fleet:       true,
+      colonies:     true,  // domyślnie rozwinięta
+      expeditions:  true,
+      fleet:        true,
+      groundUnits:  true,
     };
     // Hit-rects do kliknięć
     this._clickTargets = [];
     // Hover tooltip kolonii
     this._hoveredColonyId = null;
     this._hoveredVesselId = null;
+    this._hoveredGroundUnitId = null;
     this._colonyTooltip   = null;
     this._tooltipX        = 0;
     this._tooltipY        = 0;
@@ -278,6 +280,51 @@ export class Outliner {
 
       return Math.max(ITEM_H, dy);
     });
+
+    // ── JEDNOSTKI NAZIEMNE ─────────────────────────────────
+    const groundUnits = state.groundUnits ?? [];
+    cy = this._drawSection(ctx, x, cy, 'groundUnits', t('outliner.groundUnits', groundUnits.length), (startY) => {
+      if (groundUnits.length === 0) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.dim;
+        ctx.fillText(t('outliner.noGroundUnits'), x + PAD, startY + 14);
+        return ITEM_H;
+      }
+
+      let dy = 0;
+      for (const unit of groundUnits) {
+        const iy = startY + dy;
+        const icon = unit.type === 'science_rover' ? '🤖' : '🔧';
+        const statusIco = unit.status === 'moving' ? '→'
+                        : unit.status === 'scanning' ? '🔍'
+                        : unit.status === 'working' ? '⚙' : '';
+
+        // Hover highlight
+        const isHov = unit.id === this._hoveredGroundUnitId;
+        if (isHov) {
+          ctx.fillStyle = 'rgba(0,255,180,0.08)';
+          ctx.fillRect(x, iy, OUTLINER_W, ITEM_H);
+        }
+
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = isHov ? C.bright : C.text;
+        const label = _truncate(t(`groundUnit.${unit.type}`) ?? unit.type, 10);
+        ctx.fillText(`${icon} ${statusIco}${label}`, x + PAD, iy + 14);
+
+        // Nazwa planety po prawej
+        ctx.fillStyle = C.label;
+        ctx.textAlign = 'right';
+        ctx.fillText(_truncate(unit.planetName ?? '', 6), x + OUTLINER_W - PAD, iy + 14);
+        ctx.textAlign = 'left';
+
+        this._clickTargets.push({
+          type: 'groundUnit', unitId: unit.id, planetId: unit.planetId,
+          x, y: iy, w: OUTLINER_W, h: ITEM_H,
+        });
+        dy += ITEM_H;
+      }
+      return Math.max(ITEM_H, dy);
+    });
   }
 
   // Rysuj sekcję z nagłówkiem (zwijalna)
@@ -373,6 +420,16 @@ export class Outliner {
           }
           return true;
         }
+        if (t.type === 'groundUnit') {
+          // Przełącz na kolonię jednostki i otwórz ColonyOverlay z zaznaczeniem jednostki
+          const colMgr = window.KOSMOS?.colonyManager;
+          if (colMgr) colMgr.switchActiveColony(t.planetId);
+          const om = window.KOSMOS?.overlayManager;
+          if (om) om.openPanel('colony');
+          // Zaznacz jednostkę w ColonyOverlay
+          EventBus.emit('groundUnit:select', { unitId: t.unitId });
+          return true;
+        }
       }
     }
 
@@ -386,10 +443,12 @@ export class Outliner {
     const ox = W - OUTLINER_W;
     if (mx < ox || my < TOP_BAR_H || my > H - BOTTOM_BAR_H) {
       this._hoveredColonyId = null;
+      this._hoveredGroundUnitId = null;
       this._colonyTooltip = null;
       return;
     }
     let foundVessel = null;
+    let foundGroundUnit = null;
     for (const t of this._clickTargets) {
       if (mx >= t.x && mx <= t.x + t.w && my >= t.y && my <= t.y + t.h) {
         if (t.type === 'colony') {
@@ -398,14 +457,19 @@ export class Outliner {
             this._colonyTooltip = this._buildColonyTooltip(t.colony);
           }
           this._hoveredVesselId = null;
+          this._hoveredGroundUnitId = null;
           return;
         }
         if (t.type === 'vessel') {
           foundVessel = t.vesselId;
         }
+        if (t.type === 'groundUnit') {
+          foundGroundUnit = t.unitId;
+        }
       }
     }
     this._hoveredVesselId = foundVessel;
+    this._hoveredGroundUnitId = foundGroundUnit;
     this._hoveredColonyId = null;
     this._colonyTooltip = null;
   }

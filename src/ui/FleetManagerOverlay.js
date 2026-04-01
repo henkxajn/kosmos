@@ -3117,9 +3117,9 @@ export class FleetManagerOverlay {
       cy += LH + 4;
 
       // Lista modułów — kompaktowa
-      const categories = ['propulsion', 'cargo', 'science', 'habitat', 'armor', 'fuel'];
+      const categories = ['propulsion', 'cargo', 'science', 'habitat', 'armor', 'fuel', 'special'];
       const catNames = { propulsion: '🔥 Napęd', cargo: '📦 Cargo', science: '🔬 Nauka',
-                         habitat: '🏠 Habitat', armor: '🛡 Pancerz', fuel: '⛽ Paliwo' };
+                         habitat: '🏠 Habitat', armor: '🛡 Pancerz', fuel: '⛽ Paliwo', special: '🤖 Specjalne' };
 
       for (const cat of categories) {
         const mods = Object.values(SHIP_MODULES).filter(m => m.slotType === cat);
@@ -3282,8 +3282,8 @@ export class FleetManagerOverlay {
       const canQueue = hasCrew && !allAfford;
       const canClick = canBuildNow || canQueue;
 
+      const btnH = 28, bx = x + PAD, bw = w - PAD * 2;
       if (canClick) {
-        const btnH = 28, bx = x + PAD, bw = w - PAD * 2;
         const label = canBuildNow ? '🚀 BUDUJ' : '⏳ KOLEJKA';
         ctx.fillStyle = canBuildNow ? 'rgba(0,255,180,0.15)' : 'rgba(255,180,0,0.1)';
         ctx.fillRect(bx, cy, bw, btnH);
@@ -3297,13 +3297,20 @@ export class FleetManagerOverlay {
         this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH,
           type: 'design_build', data: { shipId: this._designHullId, modules: [...this._designModules] } });
         cy += btnH + 4;
-      }
-
-      if (!canBuildAny) {
+      } else {
+        // Przycisk wyłączony z powodem (brak slotów / brak załogi)
+        ctx.fillStyle = 'rgba(20,20,30,0.5)';
+        ctx.fillRect(bx, cy, bw, btnH);
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, cy, bw, btnH);
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.warning;
-        ctx.fillText('⚠ Brak wolnych slotów stoczni', x + PAD, cy + 8);
-        cy += LH;
+        ctx.fillStyle = THEME.textDim;
+        ctx.textAlign = 'center';
+        const reason = !canBuildAny ? t('fleet.noFreeSlots') : t('fleet.designNoCrew');
+        ctx.fillText(reason, bx + bw / 2, cy + 17);
+        ctx.textAlign = 'left';
+        cy += btnH + 4;
       }
     }
 

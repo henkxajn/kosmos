@@ -270,6 +270,10 @@ export class GameScene {
       if (c4x.groundUnitManager) {
         this.groundUnitManager.restore(c4x.groundUnitManager);
       }
+      // Przywróć AnomalyEffectSystem (planet modifiers)
+      if (c4x.anomalyEffectSystem) {
+        this.anomalyEffectSystem.restore(c4x.anomalyEffectSystem);
+      }
       // Walidacja misji — teraz VesselManager jest przywrócony, można sprawdzić statki
       this.expeditionSystem.validateMissions();
       // Przywróć TradeRouteManager
@@ -406,7 +410,16 @@ export class GameScene {
       if (!anomalyDef) return;
       const lang = window.KOSMOS?.lang ?? 'pl';
       const name = lang === 'en' ? anomalyDef.nameEN : anomalyDef.namePL;
-      const effectDesc = lang === 'en' ? anomalyDef.effectDescEN : anomalyDef.effectDescPL;
+      let effectDesc = lang === 'en' ? anomalyDef.effectDescEN : anomalyDef.effectDescPL;
+      // Dodaj info o wymaganiu budynku dla efektów tile-level
+      const eff = anomalyDef.effect;
+      const TILE_TYPES = ['tile_yield_bonus', 'building_multiplier', 'build_modifier', 'passive_resource'];
+      if (eff && TILE_TYPES.includes(eff.type)) {
+        const hint = lang === 'en'
+          ? ' (build on this hex to activate)'
+          : ' (postaw budynek na tym hexie aby aktywować)';
+        effectDesc += hint;
+      }
       queueMissionEvent({
         severity: 'info',
         barTitle: lang === 'en' ? 'ANOMALY DISCOVERED' : 'ANOMALIA ODKRYTA',

@@ -852,11 +852,23 @@ export class UIManager {
         const v = vMgrOut.getVessel(exp.vesselId);
         return v && v.colonyId === activePid;
       });
+      // Zbierz jednostki naziemne ze wszystkich kolonii
+      const guMgr = window.KOSMOS?.groundUnitManager;
+      const groundUnits = [];
+      if (guMgr) {
+        for (const col of (colMgr?.getAllColonies() ?? [])) {
+          const units = guMgr.getUnitsOnPlanet(col.planetId);
+          for (const u of units) {
+            groundUnits.push({ ...u, planetName: col.name });
+          }
+        }
+      }
       this._outliner.draw(ctx, W, H, {
         colonies: colMgr?.getAllColonies() ?? [],
         expeditions: outlinerExps,
         fleet: colMgr?.getFleet(activePid) ?? [],
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
+        groundUnits,
       });
     }
 

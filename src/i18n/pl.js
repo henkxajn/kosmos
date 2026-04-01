@@ -902,6 +902,7 @@ export default {
   'fleet.designCatHabitat': 'HABITATY',
   'fleet.designCatArmor': 'PANCERZ',
   'fleet.designCatFuel': 'PALIWO',
+  'fleet.designCatSpecial': 'SPECJALNE',
   'fleet.backToShipyard': '← Stocznia',
   'fleet.renameShip': 'Zmień nazwę statku',
   'fleet.labelStatus': 'STATUS',
@@ -1620,6 +1621,9 @@ export default {
   'outliner.orbiting': '⊙ orbita',
   'outliner.fleet': 'FLOTA [{0}]',
   'outliner.noShips': 'Brak statków',
+  'outliner.groundUnits': 'JEDN. NAZIEMNE [{0}]',
+  'outliner.noGroundUnits': 'Brak jednostek',
+  'groundUnit.science_rover': 'Sci. Rover',
   'outliner.epoch': '⭐ Epoka: {0}',
   'outliner.popInfo': '👤 POP: {0}/{1}  Prosperity: {2}',
 

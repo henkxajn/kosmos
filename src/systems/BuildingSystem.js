@@ -315,7 +315,9 @@ export class BuildingSystem {
 
     const level = 1;
     // Zbuduj minimalny tile-like obiekt do obliczenia stawek
-    const tileLike = { r: tileR, type: tileType, key: tileKey };
+    // Pobierz prawdziwy tile z gridu (dla anomalyEffect) lub fallback
+    const realTile = this._grid?.get(...tileKey.split(',').map(Number));
+    const tileLike = realTile ?? { r: tileR, type: tileType, key: tileKey, anomalyEffect: null };
 
     const baseRates      = this._calcBaseRates(building, tileLike, level);
     const activeKey  = isCapital ? `capital_${tileKey}` : tileKey;
@@ -512,10 +514,12 @@ export class BuildingSystem {
       this.resourceSystem.spend(actualCost);
     }
 
-    // Czas budowy (z mnożnikiem tech — AI Core itp.)
+    // Czas budowy (z mnożnikiem tech — AI Core itp. + anomalia build_modifier)
     const rawBuildTime = building.buildTime ?? 0;
     const btMult = this.techSystem?.getBuildTimeMultiplier() ?? 1.0;
-    const buildTime = rawBuildTime * btMult;
+    const anomalyBtMult = (tile.anomalyEffect?.type === 'build_modifier' && tile.anomalyEffect.buildTimeMult)
+      ? tile.anomalyEffect.buildTimeMult : 1.0;
+    const buildTime = rawBuildTime * btMult * anomalyBtMult;
 
     if (buildTime > 0 && !isCapital) {
       // Budowa z opóźnieniem — dodaj do kolejki
@@ -1277,8 +1281,12 @@ export class BuildingSystem {
     const hasEnergyCost = building.energyCost && building.energyCost > 0;
     const hasMaintenance = building.maintenance && hasKeys(building.maintenance);
 
-    // Jeśli brak rates I brak energyCost I brak maintenance → naprawdę puste
-    if (!hasRates && !hasEnergyCost && !hasMaintenance) return {};
+    // Anomalia na hexie — efekt tile-level (np. miningBonus, building_multiplier, passive_resource)
+    const anomalyEff = tile.anomalyEffect ?? null;
+
+    // Jeśli brak rates I brak energyCost I brak maintenance I brak anomaly passive → naprawdę puste
+    const hasAnomalyPassive = anomalyEff?.type === 'passive_resource' && anomalyEff.resource;
+    if (!hasRates && !hasEnergyCost && !hasMaintenance && !hasAnomalyPassive) return {};
 
     const terrain = TERRAIN_TYPES[tile.type];
     const bonuses = terrain?.yieldBonus ?? {};
@@ -1291,20 +1299,58 @@ export class BuildingSystem {
     // Mnożnik poziomu: liniowy — Lv2 = 2x, Lv3 = 3x produkcji
     const levelMult = level;
 
+    // ── Anomaly: mnożnik budynku na hexie (building_multiplier) ──
+    let anomalyBuildingMult = 1.0;
+    if (anomalyEff?.type === 'building_multiplier' && anomalyEff.buildingId === building.id) {
+      anomalyBuildingMult = anomalyEff.multiplier ?? 1.0;
+    }
+
+    // ── Anomaly: bonus wydobycia (tile_yield_bonus) — dotyczy budynków kategorii mining ──
+    let anomalyMiningMult = 1.0;
+    if (anomalyEff?.type === 'tile_yield_bonus' && anomalyEff.miningBonus && building.category === 'mining') {
+      anomalyMiningMult = 1.0 + anomalyEff.miningBonus;
+    }
+
+    // ── Anomaly: bonus planetarny (food bonus) ──
+    let anomalyFoodMult = 1.0;
+    const anomalySys = window.KOSMOS?.anomalyEffectSystem;
+    if (anomalySys && this._planetId) {
+      const foodBonus = anomalySys.getFoodBonus(this._planetId);
+      if (foodBonus > 0 && building.category === 'food') {
+        anomalyFoodMult = 1.0 + foodBonus;
+      }
+    }
+
+    const anomalyMult = anomalyBuildingMult * anomalyMiningMult * anomalyFoodMult;
+
     const base = {};
     if (hasRates) {
       const rates = building.rates;
       for (const key in rates) {
         const val = rates[key];
         if (key === 'research') {
-          base[key] = val * latMod.production * levelMult;
+          base[key] = val * latMod.production * levelMult * anomalyMult;
         } else if (val < 0) {
           // Konsumpcja rośnie liniowo z levelem: Lv2 = 2×, Lv3 = 3×
           base[key] = val * levelMult;
         } else {
-          base[key] = val * multiplier * latMod.production * levelMult;
+          base[key] = val * multiplier * latMod.production * levelMult * anomalyMult;
         }
       }
+    }
+
+    // ── Anomaly: pasywny zasób z hexa (passive_resource) — dodaj do produkcji budynku ──
+    if (hasAnomalyPassive) {
+      const res = anomalyEff.resource;
+      const amt = anomalyEff.amount ?? 0;
+      base[res] = (base[res] ?? 0) + amt;
+    }
+
+    // ── Anomaly: pasywny zasób z tile_yield_bonus (np. +0.5 Hv/rok) ──
+    if (anomalyEff?.type === 'tile_yield_bonus' && anomalyEff.passiveResource && anomalyEff.passiveAmount) {
+      const res = anomalyEff.passiveResource;
+      const amt = anomalyEff.passiveAmount;
+      base[res] = (base[res] ?? 0) + amt;
     }
 
     // Dodatkowa konsumpcja energii (energyCost z definicji budynku)
@@ -1430,7 +1476,8 @@ export class BuildingSystem {
         const eventMult = this._planetId
           ? (window.KOSMOS?.randomEventSystem?.getProductionMultiplierForColony(this._planetId, key) ?? 1.0)
           : 1.0;
-        effective[key] = val * techMult * eventMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency * outpostPenalty * loyaltyMult * penaltyMult;
+        const result = val * techMult * eventMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency * outpostPenalty * loyaltyMult * penaltyMult;
+        effective[key] = Number.isFinite(result) ? result : 0;
       } else if (val < 0) {
         const techMult = this.techSystem?.getConsumptionMultiplier(key) ?? 1.0;
         effective[key] = val * techMult;
@@ -1443,6 +1490,15 @@ export class BuildingSystem {
 
   _reapplyAllRates() {
     for (const [activeKey, entry] of this._active) {
+      // Przelicz baseRates z tile (uwzględnia anomalyEffect)
+      const tileKey = activeKey.startsWith('capital_') ? activeKey.replace('capital_', '') : activeKey;
+      const parts = tileKey.split(',');
+      const tile = this._grid?.get(parseInt(parts[0], 10), parseInt(parts[1], 10));
+      if (tile && entry.building) {
+        const level = entry.level ?? 1;
+        entry.baseRates = this._calcBaseRates(entry.building, tile, level);
+      }
+
       const newEffective = this._applyTechMultipliers(entry.baseRates, entry.building, activeKey);
       entry.effectiveRates = newEffective;
 

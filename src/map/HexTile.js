@@ -176,6 +176,9 @@ export class HexTile {
     this.anomaly = null;
     this.anomalyDetected = false;  // survey wykrył obecność
     this.anomalyRevealed = false;  // analyze ujawnił typ i efekty
+    // Efekt anomalii zapisany po analyze — stosowany przez BuildingSystem gdy budynek stanie na hexie
+    // null | { type, miningBonus?, buildingId?, multiplier?, buildTimeMult?, resource?, amount?, ... }
+    this.anomalyEffect = null;
 
     // Budowa w toku (null | { buildingId, progress, buildTime, isUpgrade? })
     this.underConstruction = null;
@@ -224,6 +227,7 @@ export class HexTile {
       anomaly:           this.anomaly,
       anomalyDetected:   this.anomalyDetected,
       anomalyRevealed:   this.anomalyRevealed,
+      anomalyEffect:     this.anomalyEffect,
       underConstruction: this.underConstruction,
       syntheticSlot:     this.syntheticSlot,
     };
@@ -240,6 +244,7 @@ export class HexTile {
     tile.anomaly           = data.anomaly           ?? null;
     tile.anomalyDetected   = data.anomalyDetected   ?? false;
     tile.anomalyRevealed   = data.anomalyRevealed   ?? false;
+    tile.anomalyEffect     = data.anomalyEffect     ?? null;
     tile.underConstruction = data.underConstruction ?? null;
     tile.syntheticSlot     = data.syntheticSlot     ?? null;
     return tile;

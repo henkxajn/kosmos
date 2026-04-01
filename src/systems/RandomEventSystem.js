@@ -67,10 +67,12 @@ export class RandomEventSystem {
   getProductionMultiplier(resource) {
     let mult = 1.0;
     for (const ae of this._activeEvents) {
+      if (!ae.event?.effects) continue;
       for (const fx of ae.event.effects) {
         if (fx.type === 'production') {
           if (fx.resource === resource || fx.resource === 'all') {
-            mult *= fx.multiplier;
+            const m = fx.multiplier ?? 1.0;
+            if (Number.isFinite(m)) mult *= m;
           }
         }
       }
@@ -83,10 +85,12 @@ export class RandomEventSystem {
     let mult = 1.0;
     for (const ae of this._activeEvents) {
       if (ae.planetId !== planetId) continue;
+      if (!ae.event?.effects) continue;
       for (const fx of ae.event.effects) {
         if (fx.type === 'production') {
           if (fx.resource === resource || fx.resource === 'all') {
-            mult *= fx.multiplier;
+            const m = fx.multiplier ?? 1.0;
+            if (Number.isFinite(m)) mult *= m;
           }
         }
       }
@@ -443,7 +447,11 @@ export class RandomEventSystem {
       if (level > 1) {
         // Downgrade o 1 level (bez zwrotu surowców — katastrofa)
         entry.level = level - 1;
-        entry.baseRates = bSys._calcBaseRates(entry.building, { r: 0, type: 'plains', key: activeKey }, entry.level);
+        // Pobierz prawdziwy tile z gridu (poprawne LatMod i anomalyEffect), fallback na neutralny
+        const parts = activeKey.split(',');
+        const realTile = colony.grid?.get(parseInt(parts[0], 10), parseInt(parts[1], 10));
+        const tileLike = realTile ?? { r: Math.floor((colony.grid?.height ?? 10) / 2), type: 'plains', key: activeKey, anomalyEffect: null };
+        entry.baseRates = bSys._calcBaseRates(entry.building, tileLike, entry.level);
         entry.effectiveRates = bSys._applyTechMultipliers(entry.baseRates, entry.building, activeKey);
         const pid = entry.producerId ?? `building_${activeKey}`;
         if (bSys.resourceSystem) {

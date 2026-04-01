@@ -114,6 +114,24 @@ export class ColonyOverlay extends BaseOverlay {
       }
       this._showFlash('🤖 Wybierz hex lądowania Away Team');
     });
+
+    // Zaznaczenie jednostki z Outlinera
+    EventBus.on('groundUnit:select', ({ unitId }) => {
+      const mgr = window.KOSMOS?.groundUnitManager;
+      const unit = mgr?.getUnit(unitId);
+      if (unit) {
+        this._selectedUnit = unit;
+        this._selectedHex = { q: unit.q, r: unit.r };
+        // Wycentruj kamerę na jednostce
+        const colony = this._getColony();
+        const grid = colony ? this._getGrid(colony) : null;
+        if (grid) {
+          const pos = grid.tilePixelPos(unit.q, unit.r, this._hexSize);
+          this._camX = pos.x;
+          this._camY = pos.y;
+        }
+      }
+    });
   }
 
   _createTooltipEl() {

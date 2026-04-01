@@ -72,6 +72,7 @@ const MODULE_CATEGORIES = [
   { id: 'habitat',    icon: '🏠', labelKey: 'fleet.designCatHabitat' },
   { id: 'armor',      icon: '🛡', labelKey: 'fleet.designCatArmor' },
   { id: 'fuel',       icon: '⛽', labelKey: 'fleet.designCatFuel' },
+  { id: 'special',    icon: '🤖', labelKey: 'fleet.designCatSpecial' },
 ];
 
 // Kolory alias — krótsze odwołania do THEME
