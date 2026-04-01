@@ -3121,10 +3121,14 @@ export class FleetManagerOverlay {
       const catNames = { propulsion: '🔥 Napęd', cargo: '📦 Cargo', science: '🔬 Nauka',
                          special: '🤖 Specjalne', habitat: '🏠 Habitat', armor: '🛡 Pancerz', fuel: '⛽ Paliwo' };
 
+      // Zarezerwuj miejsce na footer (statystyki + przycisk Dalej)
+      const reservedFooter = 24 + 20 + 8; // nextBtnH + stats + padding
+      const maxModuleY = y + h - reservedFooter;
+
       for (const cat of categories) {
         const mods = Object.values(SHIP_MODULES).filter(m => m.slotType === cat);
         if (mods.length === 0) continue;
-        if (cy > y + h - 50) break;
+        if (cy > maxModuleY - 30) break;
 
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
@@ -3132,7 +3136,7 @@ export class FleetManagerOverlay {
         cy += 12;
 
         for (const mod of mods) {
-          if (cy > y + h - 30) break;
+          if (cy > maxModuleY - 10) break;
           const isSelected = this._designModules.includes(mod.id);
           const techOk = !mod.requires || (tSys?.isResearched(mod.requires) ?? false);
           const slotsOk = isSelected || usedSlots < maxSlots;
@@ -3181,7 +3185,14 @@ export class FleetManagerOverlay {
       // Przycisk DALEJ / info o napędzie — zawsze na dole panelu (sticky)
       const nextBtnH = 24;
       const footerH = nextBtnH + 20; // przycisk + statystyki
-      const footerY = Math.max(cy + 4, y + h - footerH - 4);
+      const footerY = y + h - footerH - 4; // zawsze sticky na dole panelu
+
+      // Tło pod footerem (zakrywa ucięte moduły)
+      ctx.fillStyle = 'rgba(6,10,20,0.95)';
+      ctx.fillRect(x, footerY - 4, w, footerH + 12);
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + PAD, footerY - 2); ctx.lineTo(x + w - PAD, footerY - 2); ctx.stroke();
 
       // Statystyki (kompaktowe, nad przyciskiem)
       if (this._designModules.length > 0) {
