@@ -761,12 +761,21 @@ export class ColonyOverlay extends BaseOverlay {
       } else {
         ctx.drawImage(_texImg, _tx, _ty, _tw, _th);
       }
-      // Adaptacyjne przyciemnienie — ciemne planety (lód, księżyce) mniej, ciepłe więcej
+      // Adaptacyjne oświetlenie — zimne/ciemne ciała rozjaśnione, ciepłe lekko przyciemnione
       const _tempC = planet?.temperatureC ?? (planet?.temperatureK ? planet.temperatureK - 273 : 20);
       const _pType = planet?.planetType ?? planet?.type ?? 'rocky';
-      const _isDark = _pType === 'ice' || _pType === 'moon' || planet?.type === 'moon' || _tempC < -30;
-      ctx.fillStyle = _isDark ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.18)';
-      ctx.fill();
+      const _isDark = _pType === 'ice' || _pType === 'moon' || planet?.type === 'moon'
+        || planet?.type === 'planetoid' || _tempC < -30;
+      if (_isDark) {
+        // Rozjaśnij ciemne tekstury białą nakładką (screen-like)
+        ctx.globalCompositeOperation = 'screen';
+        ctx.fillStyle = 'rgba(140,160,180,0.35)';
+        ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+      } else {
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fill();
+      }
       ctx.restore();
 
       // Odtwórz ścieżkę hexa (clip ją usunął)
