@@ -532,6 +532,13 @@ export class UIManager {
     EventBus.on('expedition:launchFailed', ({ reason }) => {
       this._log(t('log.expeditionLaunchFailed', reason), 'expedition_fail');
     });
+    EventBus.on('outpost:orderQueued', ({ order }) => {
+      const bDef = BUILDINGS[order.buildingId];
+      const bName = bDef ? getName(bDef, 'building') : order.buildingId;
+      const targetName = order.targetName ?? order.targetId ?? '?';
+      this._log(t('log.outpostOrderQueued', bName, targetName), 'expedition_ok');
+      this._addNotification(`⏳ ${bName} → ${targetName}`);
+    });
     EventBus.on('colony:founded', ({ colony }) => {
       this._log(t('log.colonyFounded', colony.name), 'new_planet');
     });

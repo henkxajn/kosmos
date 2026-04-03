@@ -615,10 +615,13 @@ export class Outliner {
       if (pendingOutpostOrders) {
         for (const order of pendingOutpostOrders) {
           const target = EntityManager.getEntity(order.targetId);
+          const bDef = BUILDINGS[order.buildingId];
+          const bName = bDef ? getName(bDef, 'building') : order.buildingId;
+          const tName = order.targetName ?? target?.name ?? '?';
           items.push({
             queueType: 'outpost',
             icon: '🏕',
-            name: `→ ${target?.name ?? '?'}`,
+            name: `${bName} → ${tName}`,
             progress: null, total: null,
             blocked: true,
           });

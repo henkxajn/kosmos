@@ -718,6 +718,7 @@ export default {
   'log.expeditionDisaster': '💥 KATASTROFA! Ekspedycja do {0} — utrata załogi',
   'log.expeditionReturned': '↩ Ekspedycja powróciła z {0}',
   'log.expeditionLaunchFailed': '⚠ Start anulowany: {0}',
+  'log.outpostOrderQueued': '⏳ Placówka kolejkowana: {0} → {1} — oczekuje na surowce',
   'log.expeditionBonusFull': ' ★ bonus!',
   'log.expeditionBonusPartial': ' (częściowy)',
   // Obserwatorium

@@ -718,6 +718,7 @@ export default {
   'log.expeditionDisaster': '💥 DISASTER! Expedition to {0} — crew lost',
   'log.expeditionReturned': '↩ Expedition returned from {0}',
   'log.expeditionLaunchFailed': '⚠ Launch cancelled: {0}',
+  'log.outpostOrderQueued': '⏳ Outpost queued: {0} → {1} — awaiting resources',
   'log.expeditionBonusFull': ' ★ bonus!',
   'log.expeditionBonusPartial': ' (partial)',
   // Observatory

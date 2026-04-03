@@ -804,9 +804,11 @@ export class ColonyManager {
     if (!colony.pendingOutpostOrders) colony.pendingOutpostOrders = [];
 
     const orderId = `poo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const targetEntity = EntityManager.getEntity(targetId);
     const order = {
       id: orderId,
       targetId,
+      targetName: targetEntity?.name ?? targetId,
       buildingId,
       vesselId,
       cost: { ...cost },
