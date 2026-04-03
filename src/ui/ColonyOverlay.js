@@ -761,7 +761,11 @@ export class ColonyOverlay extends BaseOverlay {
       } else {
         ctx.drawImage(_texImg, _tx, _ty, _tw, _th);
       }
-      ctx.fillStyle = 'rgba(0,0,0,0.20)';
+      // Adaptacyjne przyciemnienie — ciemne planety (lód, księżyce) mniej, ciepłe więcej
+      const _tempC = planet?.temperatureC ?? (planet?.temperatureK ? planet.temperatureK - 273 : 20);
+      const _pType = planet?.planetType ?? planet?.type ?? 'rocky';
+      const _isDark = _pType === 'ice' || _pType === 'moon' || planet?.type === 'moon' || _tempC < -30;
+      ctx.fillStyle = _isDark ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.18)';
       ctx.fill();
       ctx.restore();
 
