@@ -23,6 +23,7 @@ import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
+import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { addMissionLog } from '../entities/Vessel.js';
 import { t }             from '../i18n/i18n.js';
 
@@ -1666,6 +1667,16 @@ export class MissionSystem {
         text: t('mission.targetHasColony'),
       });
       return;
+    }
+
+    // Wygeneruj siatkę hex dla outpostu (potrzebna do autoPlaceBuilding)
+    if (!outpost.grid && outpost.planet) {
+      const grid = PlanetMapGenerator.generate(outpost.planet, false);
+      outpost.grid = grid;
+      if (outpost.buildingSystem) {
+        outpost.buildingSystem._grid = grid;
+        outpost.buildingSystem._gridHeight = grid.height ?? 10;
+      }
     }
 
     // Auto-build budynku na outpoście

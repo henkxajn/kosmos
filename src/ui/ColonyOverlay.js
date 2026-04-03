@@ -177,6 +177,8 @@ export class ColonyOverlay extends BaseOverlay {
 
   _autoSpawnRover(colony) {
     if (!colony) return;
+    // Outposty nie mają załogi — nie spawnuj roverów
+    if (colony.isOutpost) return;
     const mgr = window.KOSMOS?.groundUnitManager;
     if (!mgr) return;
     if (mgr.getUnitsOnPlanet(colony.planetId).length > 0) return;
