@@ -834,11 +834,13 @@ export class FleetManagerOverlay {
       if (!result) return; // anulowano
 
       const { buildingId, pending } = result;
+      console.log('[FleetMgr] outpost picker result:', { buildingId, pending, targetId, vesselId: vessel.id });
 
       if (pending) {
         // Brak surowców — dodaj do pending outpost orders (fabryki wyprodukują)
         const bDef = window.KOSMOS?.buildingsData?.[buildingId]
                   ?? (await import('../data/BuildingsData.js')).BUILDINGS[buildingId];
+        console.log('[FleetMgr] bDef for', buildingId, ':', bDef?.id, 'cost:', bDef?.cost, 'commodityCost:', bDef?.commodityCost);
         const totalCost = {};
         for (const [resId, qty] of Object.entries(bDef?.cost ?? {})) {
           totalCost[resId] = (totalCost[resId] ?? 0) + qty;
@@ -846,24 +848,27 @@ export class FleetManagerOverlay {
         for (const [comId, qty] of Object.entries(bDef?.commodityCost ?? {})) {
           totalCost[comId] = (totalCost[comId] ?? 0) + qty;
         }
+        console.log('[FleetMgr] totalCost:', totalCost, 'colonyId:', vessel.colonyId);
 
         const colMgr = window.KOSMOS?.colonyManager;
-        colMgr?.addPendingOutpostOrder(vessel.colonyId, {
+        const orderId = colMgr?.addPendingOutpostOrder(vessel.colonyId, {
           targetId,
           buildingId,
           vesselId: vessel.id,
           cost: totalCost,
         });
+        console.log('[FleetMgr] pending outpost order added, orderId:', orderId);
       } else {
         // Ma surowce — od razu launch
+        console.log('[FleetMgr] launching outpost directly');
         EventBus.emit('expedition:foundOutpostRequest', {
           targetId,
           buildingId,
           vesselId: vessel.id,
         });
       }
-    } catch {
-      // anulowano
+    } catch (err) {
+      console.warn('[FleetMgr] outpost building picker error:', err);
     }
     this._missionConfig = null;
     this._targetScrollOffset = 0;
