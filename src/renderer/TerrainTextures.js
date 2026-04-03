@@ -159,6 +159,7 @@ export function getTerrainSubtype(terrainType, planet) {
       return 'grey';
 
     case 'ocean':
+      if (temp < -40 && life === 0)                      return '@ice_sheet'; // zamarznięty — przekierowanie na lód
       if (atmo === 'breathable' || life > 30)            return 'blue';
       if (temp < 0 && life === 0)                        return 'dark';
       if (pType === 'ocean' && life === 0)               return 'dark';
@@ -342,10 +343,17 @@ export function getTransitionTexture(typeA, typeB, edgeHash) {
 const TYPE_REDIRECT = { wasteland: 'desert' };
 
 export function getTerrainTexture(terrainType, planet, tileIndex) {
-  const fileType = TYPE_REDIRECT[terrainType] ?? terrainType;
-  const subtype = getTerrainSubtype(terrainType, planet);
-  const count   = VARIANTS[fileType]?.[subtype] ?? 1;
+  let fileType = TYPE_REDIRECT[terrainType] ?? terrainType;
+  let subtype = getTerrainSubtype(terrainType, planet);
 
+  // Przekierowanie '@typ' — podtyp wskazuje na inny typ tekstury
+  if (subtype.startsWith('@')) {
+    const redirectType = subtype.slice(1);
+    fileType = FILE_PREFIX[redirectType] ?? redirectType;
+    subtype = getTerrainSubtype(redirectType, planet);
+  }
+
+  const count = VARIANTS[fileType]?.[subtype] ?? 1;
   const n   = (Math.abs(tileIndex) % count) + 1;
   const key = `${fileType}_${subtype}_${n}`;
 
@@ -358,8 +366,13 @@ const _pixCanvas = document.createElement('canvas');
 const _pixCtx = _pixCanvas.getContext('2d', { willReadFrequently: true });
 
 export function getTerrainImageData(terrainType, planet, tileIndex) {
-  const fileType = TYPE_REDIRECT[terrainType] ?? terrainType;
-  const subtype = getTerrainSubtype(terrainType, planet);
+  let fileType = TYPE_REDIRECT[terrainType] ?? terrainType;
+  let subtype = getTerrainSubtype(terrainType, planet);
+  if (subtype.startsWith('@')) {
+    const redirectType = subtype.slice(1);
+    fileType = FILE_PREFIX[redirectType] ?? redirectType;
+    subtype = getTerrainSubtype(redirectType, planet);
+  }
   const count   = VARIANTS[fileType]?.[subtype] ?? 1;
   const n       = (Math.abs(tileIndex) % count) + 1;
   const key     = `${fileType}_${subtype}_${n}`;
