@@ -353,11 +353,20 @@ export class Outliner {
             });
           }
 
+          // Dodatkowy wiersz z brakującymi zasobami (outpost pending)
+          let extraH = 0;
+          if (item.missingTooltip) {
+            extraH = 12;
+            ctx.font = `${THEME.fontSizeSmall - 3}px ${THEME.fontFamily}`;
+            ctx.fillStyle = C.orange;
+            ctx.fillText(`  ${_truncate(item.missingTooltip, 28)}`, x + PAD, iy + ITEM_H + 2);
+          }
+
           this._clickTargets.push({
             type: 'queueItem', queueType: item.queueType,
-            x, y: iy, w: OUTLINER_W - (item.cancelData ? cancelBtnW : 0), h: ITEM_H,
+            x, y: iy, w: OUTLINER_W - (item.cancelData ? cancelBtnW : 0), h: ITEM_H + extraH,
           });
-          dy += ITEM_H;
+          dy += ITEM_H + extraH;
         }
         // Overflow
         if (queueItems.length > maxShow) {
@@ -684,19 +693,41 @@ export class Outliner {
         }
       }
 
-      // 4. Oczekujące outposty
+      // 4. Oczekujące outposty — z informacją o brakujących zasobach
       if (pendingOutpostOrders) {
         for (const order of pendingOutpostOrders) {
           const target = EntityManager.get(order.targetId);
           const bDef = BUILDINGS[order.buildingId];
           const bName = bDef ? getName(bDef, 'building') : order.buildingId;
           const tName = order.targetName ?? target?.name ?? '?';
+
+          // Oblicz procent gotowości (ile zasobów już mamy z potrzebnych)
+          let totalNeeded = 0, totalHave = 0;
+          const missing = [];
+          const inv = state.inventory ?? {};
+          if (order.cost) {
+            for (const [resId, need] of Object.entries(order.cost)) {
+              if (need <= 0) continue;
+              const have = inv[resId] ?? 0;
+              totalNeeded += need;
+              totalHave += Math.min(have, need);
+              if (have < need) {
+                const cDef = COMMODITIES[resId] ?? ALL_RESOURCES[resId];
+                const shortName = cDef ? (getName(cDef, 'commodity') ?? cDef.namePL ?? resId) : resId;
+                missing.push(`${shortName}: ${Math.floor(have)}/${need}`);
+              }
+            }
+          }
+          const pct = totalNeeded > 0 ? Math.floor((totalHave / totalNeeded) * 100) : 0;
+
           items.push({
             queueType: 'outpost',
             icon: '🏕',
-            name: `${bName} → ${tName}`,
-            progress: null, total: null,
+            name: bName,
+            subtitle: `→ ${tName}`,
+            progress: pct, total: 100,
             blocked: true,
+            missingTooltip: missing.length > 0 ? missing.join(', ') : null,
             cancelData: { type: 'pendingOutpost', orderId: order.id },
           });
         }

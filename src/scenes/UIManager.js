@@ -890,6 +890,7 @@ export class UIManager {
         groundUnits,
         constructionQueue, pendingBuilds, pendingShipOrders,
         pendingOutpostOrders, factoryQueue, factoryAllocations,
+        inventory: colMgr?.getColony(activePid)?.resourceSystem?.inventorySnapshot() ?? {},
       });
     }
 
