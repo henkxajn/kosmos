@@ -69,12 +69,12 @@ function _getModuleName(mod) {
 // Kategorie modułów do grupowania w designerze
 const MODULE_CATEGORIES = [
   { id: 'propulsion', icon: '🔥', labelKey: 'fleet.designCatPropulsion' },
+  { id: 'fuel',       icon: '⛽', labelKey: 'fleet.designCatFuel' },
   { id: 'cargo',      icon: '📦', labelKey: 'fleet.designCatCargo' },
   { id: 'science',    icon: '🔬', labelKey: 'fleet.designCatScience' },
   { id: 'special',    icon: '🤖', labelKey: 'fleet.designCatSpecial' },
   { id: 'habitat',    icon: '🏠', labelKey: 'fleet.designCatHabitat' },
   { id: 'armor',      icon: '🛡', labelKey: 'fleet.designCatArmor' },
-  { id: 'fuel',       icon: '⛽', labelKey: 'fleet.designCatFuel' },
 ];
 
 // Kolory alias — krótsze odwołania do THEME
@@ -316,6 +316,9 @@ export class FleetTabPanel {
     if (mx >= rightX) {
       if (this._missionConfig?.step === 'select') {
         this._targetScrollOffset = Math.max(0, this._targetScrollOffset + delta * 0.5);
+      } else if (this._designStep === 'modules') {
+        const maxS = this._designModuleMaxScroll ?? 0;
+        this._designModuleScroll = Math.max(0, Math.min(maxS, (this._designModuleScroll ?? 0) + delta * 0.5));
       } else {
         this._rightScrollY = Math.max(0, this._rightScrollY + delta * 0.5);
       }
@@ -1690,11 +1693,22 @@ export class FleetTabPanel {
     ctx.textAlign = 'left';
     cy += backBtnH + 6;
 
+    // Scroll offset dla listy modułów
+    const scrollOff = this._designModuleScroll ?? 0;
+    const listStartY = cy;
+
+    // Clipping — nie rysuj poza obszarem panelu
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, listStartY, w, maxY - listStartY - 30);
+    ctx.clip();
+
+    cy -= scrollOff;
+
     // Moduły pogrupowane po kategoriach
     for (const cat of MODULE_CATEGORIES) {
       const mods = Object.values(SHIP_MODULES).filter(m => m.slotType === cat.id);
       if (mods.length === 0) continue;
-      if (cy > maxY - 30) break;
 
       // Nagłówek kategorii
       ctx.font = `bold ${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
@@ -1703,7 +1717,6 @@ export class FleetTabPanel {
       cy += LH;
 
       for (const mod of mods) {
-        if (cy > maxY - 20) break;
         const hasTech = !mod.requires || (tSys?.isResearched(mod.requires) ?? false);
         const isSelected = this._designModules.includes(mod.id);
         const slotsLeft = maxSlots - usedSlots;
@@ -1752,6 +1765,16 @@ export class FleetTabPanel {
       }
       cy += 2;
     }
+
+    // Zapisz pełną wysokość listy (do ograniczenia scrollu)
+    const totalListH = (cy + scrollOff) - listStartY;
+    const visibleH = maxY - listStartY - 30;
+    this._designModuleMaxScroll = Math.max(0, totalListH - visibleH);
+
+    ctx.restore(); // koniec clippingu
+
+    // Przywróć cy do prawdziwej pozycji (po scroll offset)
+    cy = listStartY + Math.min(totalListH, visibleH);
 
     // Podgląd statystyk na żywo
     cy += 4;
