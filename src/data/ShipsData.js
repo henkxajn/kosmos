@@ -31,14 +31,14 @@ export const SHIPS = {
     baseMass:          30,    // tony — lekki kadłub
     baseModuleSlots:   4,
     baseFuelCapacity:  8,
-    baseSpeedAU:       1.2,
+    baseSpeedAU:       1.3,
     baseCargoCapacity: 0,
     baseFuelPerAU:     0.4,
     // Aliasy kompatybilności (stary kod czyta te pola z SHIPS[shipId])
     fuelCapacity:      8,
     fuelPerAU:         0.4,
     range:             20,
-    speedAU:           1.2,
+    speedAU:           1.3,
     cargoCapacity:     0,
     fuelType:          'power_cells',
     cost:              { Fe: 80, Ti: 15, Cu: 10 },
@@ -67,14 +67,14 @@ export const SHIPS = {
     baseMass:          60,    // tony — ciężki kadłub
     baseModuleSlots:   6,
     baseFuelCapacity:  10,
-    baseSpeedAU:       0.9,
+    baseSpeedAU:       1.0,
     baseCargoCapacity: 0,    // cargo wyłącznie z modułów
     baseFuelPerAU:     0.5,
     // Aliasy kompatybilności (stary kod czyta te pola z SHIPS[shipId])
     fuelCapacity:      10,
     fuelPerAU:         0.5,
     range:             20,
-    speedAU:           0.9,
+    speedAU:           1.0,
     cargoCapacity:     500,  // domyślne z defaultModules (2× cargo_small)
     fuelType:          'power_cells',
     cost:              { Fe: 120, Ti: 20, Cu: 10 },

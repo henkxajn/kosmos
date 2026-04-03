@@ -291,8 +291,8 @@ export const SHIP_MODULES = {
 // Masa wpływa na prędkość i zużycie paliwa:
 //   totalMass = hull.baseMass + Σ(module.mass)
 //   massRatio = totalMass / hull.baseMass
-//   speed     = baseSpeed × Π(speedMult) / √massRatio
-//   fuelPerAU = baseFuelPerAU × Π(fuelMult) × √massRatio
+//   speed     = baseSpeed × Π(speedMult) / ∛massRatio
+//   fuelPerAU = baseFuelPerAU × Π(fuelMult) × ∛massRatio
 //   range     = fuelCapacity / fuelPerAU
 //
 export function calcShipStats(hullDef, selectedModuleIds) {
@@ -326,10 +326,10 @@ export function calcShipStats(hullDef, selectedModuleIds) {
     if (m.warpSpeedLY)                   warpSpeedLY = m.warpSpeedLY;
   }
 
-  // Wpływ masy: √massRatio — łagodna krzywa (×2 masy = ~30% kary)
+  // Wpływ masy: ∛massRatio — łagodna krzywa (×2 masy = ~26% kary, ×3 = ~44%)
   const totalMass = baseMass + moduleMass;
   const massRatio = totalMass / baseMass;
-  const massFactor = Math.sqrt(massRatio); // >= 1.0
+  const massFactor = Math.cbrt(massRatio); // >= 1.0
 
   speed /= massFactor;
   fuelPerAU *= massFactor;
