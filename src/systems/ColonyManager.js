@@ -36,6 +36,7 @@ import { SHIPS } from '../data/ShipsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
+import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { t } from '../i18n/i18n.js';
 
 // Rozmiary siatek hex per typ/masa ciała
@@ -413,6 +414,11 @@ export class ColonyManager {
     bSys.setDeposits(entity.deposits ?? []);
     bSys.setPlanetId(planetId);
 
+    // Generuj HexGrid — potrzebny do autoPlaceBuilding
+    const grid = PlanetMapGenerator.generate(entity, false);
+    bSys._grid = grid;
+    bSys._gridHeight = grid.height ?? 10;
+
     // FactorySystem per-outpost
     const factSys = new FactorySystem(resSys);
     bSys.setFactorySystem(factSys);
@@ -438,7 +444,7 @@ export class ColonyManager {
       buildingSystem:  bSys,
       factorySystem:   factSys,
       prosperitySystem: prospSys,
-      grid:            null,
+      grid,
       allowImmigration: false,
       allowEmigration:  false,
       fleet:           [],
