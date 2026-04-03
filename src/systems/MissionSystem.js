@@ -21,6 +21,8 @@ import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
+import { BUILDINGS }     from '../data/BuildingsData.js';
+import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { addMissionLog } from '../entities/Vessel.js';
 import { t }             from '../i18n/i18n.js';
 
@@ -83,6 +85,9 @@ export class MissionSystem {
       this._orderRedirect(expeditionId, targetId));
     EventBus.on('mission:orderRedirect', ({ missionId, targetId }) =>
       this._orderRedirect(missionId, targetId));
+
+    EventBus.on('expedition:foundOutpostRequest', ({ targetId, buildingId, vesselId }) =>
+      this._launchFoundOutpost(targetId, buildingId, vesselId));
 
     EventBus.on('expedition:deliverCargo', ({ expeditionId }) =>
       this._deliverCargo(expeditionId));
@@ -162,6 +167,41 @@ export class MissionSystem {
     const activePid = colMgr?.activePlanetId;
     const vesselOk = colMgr?.hasShipWithCapability(activePid, 'recon') ?? false;
     return { ok: techOk && padOk && vesselOk, techOk, padOk, crewOk: true, vesselOk };
+  }
+
+  // Sprawdź czy gracz może założyć outpost (cargo ship + budynek)
+  canFoundOutpost(targetId, buildingId) {
+    const techOk   = window.KOSMOS?.techSystem?.isResearched('exploration') ?? false;
+    const colMgr   = window.KOSMOS?.colonyManager;
+    const activePid = colMgr?.activePlanetId;
+    const vMgr     = window.KOSMOS?.vesselManager;
+    const shipOk   = vMgr?.hasAvailableShipWithCapability(activePid, 'cargo') ?? false;
+    const target   = this._findTarget(targetId);
+    const exploredOk = target?.explored === true;
+    const typeOk   = target
+      ? (target.type === 'planetoid' || target.type === 'moon' ||
+         (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
+      : false;
+    const existingCol = colMgr?.getColony(targetId);
+    const notColonized = !existingCol;
+    const bDef = BUILDINGS[buildingId];
+    const buildingOk = !!bDef;
+    const resSys = this.resourceSystem;
+    let canAfford = true;
+    const totalCost = {};
+    if (bDef) {
+      for (const [resId, qty] of Object.entries(bDef.cost ?? {})) {
+        totalCost[resId] = (totalCost[resId] ?? 0) + qty;
+      }
+      for (const [comId, qty] of Object.entries(bDef.commodityCost ?? {})) {
+        totalCost[comId] = (totalCost[comId] ?? 0) + qty;
+      }
+      if (resSys) canAfford = resSys.canAfford(totalCost);
+    }
+    return {
+      ok: techOk && shipOk && exploredOk && typeOk && notColonized && buildingOk && canAfford,
+      techOk, shipOk, exploredOk, typeOk, notColonized, buildingOk, canAfford, totalCost,
+    };
   }
 
   // Liczba niezbadanych ciał wg typu
@@ -552,6 +592,105 @@ export class MissionSystem {
         fuelCost:    distance * (vMgr.getVessel(vesselId)?.fuel?.consumption ?? 0),
       });
     }
+
+    this._emit('mission:started', 'expedition:launched', { expedition: mission });
+  }
+
+  // ── Założenie outpostu (cargo ship + budynek) ─────────────────────────────
+  _launchFoundOutpost(targetId, buildingId, vesselId) {
+    const check = this.canFoundOutpost(targetId, buildingId);
+    if (!check.ok) {
+      const reason = !check.techOk ? t('mission.noTechColonization')
+        : !check.shipOk ? t('mission.noColonyShip')
+        : !check.exploredOk ? t('mission.targetNotExploredScience')
+        : !check.typeOk ? t('mission.targetNotSuitable')
+        : !check.notColonized ? t('mission.targetHasColony')
+        : !check.canAfford ? t('mission.noStartupResources')
+        : t('mission.targetNotSuitable');
+      this._emit('mission:failed', 'expedition:launchFailed', { reason });
+      return;
+    }
+
+    const target = this._findTarget(targetId);
+    const vMgr   = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const activePid = colMgr?.activePlanetId;
+
+    // Znajdź cargo ship
+    let vessel;
+    if (vesselId) {
+      vessel = vMgr?.getVessel(vesselId);
+    } else {
+      vessel = vMgr?.getFirstAvailableWithCapability(activePid, 'cargo');
+    }
+    if (!vessel || vessel.status !== 'idle') {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.shipUnavailable') });
+      return;
+    }
+
+    const distance = this._calcDistance(target);
+
+    // Sprawdź paliwo
+    const fuelNeeded = distance * vessel.fuel.consumption;
+    if (vessel.fuel.current < fuelNeeded) {
+      this._emit('mission:failed', 'expedition:launchFailed', {
+        reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
+      });
+      return;
+    }
+
+    // Pobierz surowce z kolonii i załaduj na statek
+    const bDef = BUILDINGS[buildingId];
+    const totalCost = check.totalCost;
+    if (this.resourceSystem) {
+      this.resourceSystem.spend(totalCost);
+    }
+    for (const [resId, qty] of Object.entries(totalCost)) {
+      if (qty > 0) {
+        vessel.cargo = vessel.cargo ?? {};
+        vessel.cargo[resId] = (vessel.cargo[resId] ?? 0) + qty;
+        const weight = COMMODITIES[resId]?.weight ?? 1;
+        vessel.cargoUsed = (vessel.cargoUsed ?? 0) + qty * weight;
+      }
+    }
+
+    // Czas podróży
+    const shipSpeed  = this._getShipSpeed(vesselId);
+    const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
+    const departYear = this._gameYear;
+
+    const mission = {
+      id:             `exp_${this._nextId++}`,
+      type:           'found_outpost',
+      targetId,
+      targetName:     target.name,
+      targetType:     target.type,
+      buildingId,
+      departYear,
+      arrivalYear:    departYear + travelTime,
+      returnYear:     null,
+      distance:       parseFloat(distance.toFixed(2)),
+      travelTime,
+      crewCost:       0,
+      status:         'en_route',
+      gained:         null,
+      eventRoll:      null,
+      vesselId:       vessel.id,
+      originColonyId: vessel.colonyId ?? activePid,
+    };
+
+    this._missions.push(mission);
+
+    // Wyślij statek
+    vMgr.dispatchOnMission(vessel.id, {
+      type:        'found_outpost',
+      targetId,
+      targetName:  target.name,
+      departYear,
+      arrivalYear: mission.arrivalYear,
+      returnYear:  null,
+      fuelCost:    fuelNeeded,
+    });
 
     this._emit('mission:started', 'expedition:launched', { expedition: mission });
   }
@@ -1151,9 +1290,10 @@ export class MissionSystem {
       }
     }
 
-    if (exp.type === 'colony')    { this._processColonyArrival(exp); return; }
-    if (exp.type === 'transport') { this._processTransportArrival(exp); return; }
-    if (exp.type === 'recon')     { this._processReconArrival(exp); return; }
+    if (exp.type === 'colony')        { this._processColonyArrival(exp); return; }
+    if (exp.type === 'transport')     { this._processTransportArrival(exp); return; }
+    if (exp.type === 'recon')         { this._processReconArrival(exp); return; }
+    if (exp.type === 'found_outpost') { this._processFoundOutpostArrival(exp); return; }
 
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
@@ -1496,6 +1636,77 @@ export class MissionSystem {
       expedition: exp,
       gained: exp.gained ?? exp.cargo,
       multiplier: 1.0,
+    });
+  }
+
+  // ── Found outpost arrival ─────────────────────────────────────────────────
+  _processFoundOutpostArrival(exp) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vMgr   = window.KOSMOS?.vesselManager;
+    const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+    const gameYear = Math.floor(this._gameYear);
+
+    // Utwórz outpost z cargo statku
+    const outpostResources = {};
+    if (vessel?.cargo) {
+      for (const [comId, qty] of Object.entries(vessel.cargo)) {
+        if (qty > 0) outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
+      }
+    }
+
+    const outpost = colMgr?.createOutpost(exp.targetId, outpostResources, gameYear);
+    if (!outpost) {
+      // Cel ma już kolonię — powrót statku
+      exp.status = 'completed';
+      if (vessel && vMgr) {
+        vMgr.dockAtColony(exp.vesselId, exp.originColonyId);
+      }
+      this._emit('mission:arrived', 'expedition:missionReport', {
+        expedition: exp, gained: {}, multiplier: 0,
+        text: t('mission.targetHasColony'),
+      });
+      return;
+    }
+
+    // Auto-build budynku na outpoście
+    const bDef = BUILDINGS[exp.buildingId];
+    let buildSuccess = false;
+    if (bDef && outpost.buildingSystem) {
+      buildSuccess = outpost.buildingSystem.autoPlaceBuilding(exp.buildingId);
+    }
+
+    // Wyczyść cargo statku
+    if (vessel) {
+      vessel.cargo = {};
+      vessel.cargoUsed = 0;
+    }
+
+    // Dok statek w outpoście + transfer floty
+    if (exp.vesselId && vMgr) {
+      const oldColonyId = vessel?.colonyId;
+      const oldCol = oldColonyId ? colMgr?.getColony(oldColonyId) : null;
+      if (oldCol) {
+        const idx = oldCol.fleet.indexOf(exp.vesselId);
+        if (idx !== -1) oldCol.fleet.splice(idx, 1);
+      }
+      vMgr.dockAtColony(exp.vesselId, exp.targetId);
+      if (!outpost.fleet.includes(exp.vesselId)) {
+        outpost.fleet.push(exp.vesselId);
+      }
+    }
+
+    exp.status  = 'completed';
+    exp.gained  = outpostResources;
+
+    // Raport misji
+    const bName = bDef ? (bDef.namePL ?? exp.buildingId) : exp.buildingId;
+    this._emit('mission:arrived', 'expedition:missionReport', {
+      expedition: exp,
+      gained: outpostResources,
+      multiplier: 1.0,
+      text: buildSuccess
+        ? t('expedition.foundOutpost', bName)
+        : t('expedition.foundOutpostFailed'),
     });
   }
 
