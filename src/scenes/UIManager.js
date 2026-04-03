@@ -864,21 +864,22 @@ export class UIManager {
         }
       }
       // Zbierz dane kolejek aktywnej kolonii
-      const activeCol = colMgr?.getColony(activePid);
-      const bSys = activeCol?.buildingSystem;
-      const fSys = activeCol?.factorySystem;
+      let constructionQueue = [], pendingBuilds = [], pendingShipOrders = [], pendingOutpostOrders = [], factoryQueue = [];
+      try {
+        const activeCol = colMgr?.getColony(activePid);
+        constructionQueue    = activeCol?.buildingSystem?.serializeQueue() ?? [];
+        pendingBuilds        = activeCol?.buildingSystem?.serializePendingQueue() ?? [];
+        pendingShipOrders    = colMgr?.getPendingShipOrders(activePid) ?? [];
+        pendingOutpostOrders = colMgr?.getPendingOutpostOrders(activePid) ?? [];
+        factoryQueue         = activeCol?.factorySystem?.getQueue() ?? [];
+      } catch (_) { /* defensywne — nie blokuj renderingu */ }
       this._outliner.draw(ctx, W, H, {
         colonies: colMgr?.getAllColonies() ?? [],
         expeditions: outlinerExps,
         fleet: colMgr?.getFleet(activePid) ?? [],
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
         groundUnits,
-        // Kolejki
-        constructionQueue:    bSys?.serializeQueue() ?? [],
-        pendingBuilds:        bSys?.serializePendingQueue() ?? [],
-        pendingShipOrders:    colMgr?.getPendingShipOrders(activePid) ?? [],
-        pendingOutpostOrders: colMgr?.getPendingOutpostOrders(activePid) ?? [],
-        factoryQueue:         fSys?.getQueue() ?? [],
+        constructionQueue, pendingBuilds, pendingShipOrders, pendingOutpostOrders, factoryQueue,
       });
     }
 

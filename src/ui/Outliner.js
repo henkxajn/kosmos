@@ -284,7 +284,7 @@ export class Outliner {
     });
 
     // ── KOLEJKA ─────────────────────────────────────────────
-    const queueItems = this._buildQueueItems(state);
+    const queueItems = this._buildQueueItems(state) ?? [];
     if (queueItems.length > 0) {
       cy = this._drawSection(ctx, x, cy, 'queue', t('outliner.queue', queueItems.length), (startY) => {
         let dy = 0;
@@ -561,85 +561,86 @@ export class Outliner {
   // Zbierz wszystkie elementy kolejki z aktywnej kolonii
   _buildQueueItems(state) {
     const items = [];
-    const { constructionQueue, pendingBuilds, pendingShipOrders, pendingOutpostOrders, factoryQueue } = state;
+    try {
+      const { constructionQueue, pendingBuilds, pendingShipOrders, pendingOutpostOrders, factoryQueue } = state;
 
-    // 1. Budowa budynków — aktywna (z paskiem progresu)
-    if (constructionQueue) {
-      for (const entry of constructionQueue) {
-        const bDef = BUILDINGS[entry.buildingId];
-        const name = entry.isUpgrade
-          ? `${getName(bDef, 'building')} →Lv${entry.targetLevel}`
-          : getName(bDef, 'building');
-        items.push({
-          queueType: 'building',
-          icon: bDef?.icon ?? '🏗',
-          name,
-          progress: entry.progress,
-          total: entry.buildTime,
-          blocked: false,
-        });
+      // 1. Budowa budynków — aktywna (z paskiem progresu)
+      if (constructionQueue) {
+        for (const entry of constructionQueue) {
+          const bDef = BUILDINGS[entry.buildingId];
+          const bName = bDef ? getName(bDef, 'building') : entry.buildingId;
+          const name = entry.isUpgrade ? `${bName} →Lv${entry.targetLevel}` : bName;
+          items.push({
+            queueType: 'building',
+            icon: bDef?.icon ?? '🏗',
+            name,
+            progress: entry.progress,
+            total: entry.buildTime,
+            blocked: false,
+          });
+        }
       }
-    }
 
-    // 2. Budynki oczekujące na zasoby
-    if (pendingBuilds) {
-      for (const order of pendingBuilds) {
-        const bDef = BUILDINGS[order.buildingId];
-        const name = order.isUpgrade
-          ? `${getName(bDef, 'building')} →Lv${order.targetLevel}`
-          : getName(bDef, 'building');
-        items.push({
-          queueType: 'building',
-          icon: bDef?.icon ?? '🏗',
-          name,
-          progress: null, total: null,
-          blocked: true,
-        });
+      // 2. Budynki oczekujące na zasoby
+      if (pendingBuilds) {
+        for (const order of pendingBuilds) {
+          const bDef = BUILDINGS[order.buildingId];
+          const bName = bDef ? getName(bDef, 'building') : order.buildingId;
+          const name = order.isUpgrade ? `${bName} →Lv${order.targetLevel}` : bName;
+          items.push({
+            queueType: 'building',
+            icon: bDef?.icon ?? '🏗',
+            name,
+            progress: null, total: null,
+            blocked: true,
+          });
+        }
       }
-    }
 
-    // 3. Budowa statków — oczekujące na zasoby
-    if (pendingShipOrders) {
-      for (const order of pendingShipOrders) {
-        const sDef = SHIPS[order.shipId];
-        items.push({
-          queueType: 'ship',
-          icon: sDef?.icon ?? '🚀',
-          name: getName(sDef, 'ship'),
-          progress: null, total: null,
-          blocked: true,
-        });
+      // 3. Budowa statków — oczekujące na zasoby
+      if (pendingShipOrders) {
+        for (const order of pendingShipOrders) {
+          const sDef = SHIPS[order.shipId];
+          items.push({
+            queueType: 'ship',
+            icon: sDef?.icon ?? '🚀',
+            name: sDef ? getName(sDef, 'ship') : order.shipId,
+            progress: null, total: null,
+            blocked: true,
+          });
+        }
       }
-    }
 
-    // 4. Oczekujące outposty
-    if (pendingOutpostOrders) {
-      for (const order of pendingOutpostOrders) {
-        const target = EntityManager.getEntity(order.targetId);
-        const tName = target?.name ?? '?';
-        items.push({
-          queueType: 'outpost',
-          icon: '🏕',
-          name: `→ ${tName}`,
-          progress: null, total: null,
-          blocked: true,
-        });
+      // 4. Oczekujące outposty
+      if (pendingOutpostOrders) {
+        for (const order of pendingOutpostOrders) {
+          const target = EntityManager.getEntity(order.targetId);
+          items.push({
+            queueType: 'outpost',
+            icon: '🏕',
+            name: `→ ${target?.name ?? '?'}`,
+            progress: null, total: null,
+            blocked: true,
+          });
+        }
       }
-    }
 
-    // 5. Kolejka fabryki
-    if (factoryQueue) {
-      for (const q of factoryQueue) {
-        const cDef = COMMODITIES[q.commodityId];
-        items.push({
-          queueType: 'factory',
-          icon: cDef?.icon ?? '🏭',
-          name: getName(cDef, 'commodity') ?? q.commodityId,
-          progress: null, total: null,
-          blocked: false,
-          qtyLabel: `×${q.qty}`,
-        });
+      // 5. Kolejka fabryki
+      if (factoryQueue) {
+        for (const q of factoryQueue) {
+          const cDef = COMMODITIES[q.commodityId];
+          items.push({
+            queueType: 'factory',
+            icon: cDef?.icon ?? '🏭',
+            name: cDef?.namePL ?? q.commodityId,
+            progress: null, total: null,
+            blocked: false,
+            qtyLabel: `×${q.qty}`,
+          });
+        }
       }
+    } catch (e) {
+      console.warn('[Outliner] _buildQueueItems error:', e);
     }
 
     return items;
