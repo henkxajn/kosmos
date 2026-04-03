@@ -693,7 +693,7 @@ export class GameScene {
     // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
     // Startowe zasoby (surowce + commodities T1/T2)
     this.resourceSystem.receive({
-      Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10, Hv: 4,
+      Fe: 200, C: 150, Si: 100, Cu: 50, Ti: 20, Li: 10, Hv: 4, Xe: 50,
       food: 100, water: 100, research: 100,
       structural_alloys: 15, polymer_composites: 10, conductor_bundles: 8,
       power_cells: 12, electronic_systems: 6, extraction_systems: 5,
@@ -701,6 +701,14 @@ export class GameScene {
       automation_droid: 0, semiconductor_arrays: 2, propulsion_systems: 0,
       plasma_cores: 0, metamaterials: 0, quantum_processors: 0, warp_cores: 0,
     });
+    // Gwarantuj małe złoże Xe na planecie domowej (paliwo jonowe)
+    if (!planet.deposits) planet.deposits = [];
+    const hasXe = planet.deposits.some(d => d.resourceId === 'Xe');
+    if (!hasXe) {
+      planet.deposits.push({
+        resourceId: 'Xe', richness: 0.1, totalAmount: 500, remaining: 500,
+      });
+    }
     // Zarejestruj jako pierwszą kolonię w ColonyManager (z per-kolonia BuildingSystem)
     this.buildingSystem.setDeposits(planet.deposits ?? []);
     this.colonyManager.registerHomePlanet(planet, this.resourceSystem, this.civSystem, this.buildingSystem);
