@@ -335,7 +335,7 @@ export const BUILDINGS = {
     isSpaceport:   true,
     isAutonomous:  true,
     cost:          { Fe: 1000, Ti: 500, Cu: 300, Si: 200 },
-    commodityCost: { structural_alloys: 130, android_worker: 60, reactive_armor: 60, electronic_systems: 50 },
+    commodityCost: { structural_alloys: 130, android_worker: 20, reactive_armor: 60, electronic_systems: 50 },
     energyCost:    8,
     buildTime:     2.0,      // lata gry
     rates:         {},
