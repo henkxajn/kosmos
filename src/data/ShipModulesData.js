@@ -270,6 +270,21 @@ export const SHIP_MODULES = {
     description: '+5 jednostek paliwa.',
   },
 
+  fuel_tank_medium: {
+    id: 'fuel_tank_medium',
+    namePL: 'Zbiornik Paliwa Średni',
+    nameEN: 'Medium Fuel Tank',
+    icon: '⛽',
+    slotType: 'fuel',
+    tier: 1,
+    mass: 16,  // tony
+    cost: { Fe: 35, Ti: 10 },
+    commodityCost: { structural_alloys: 6, reactive_armor: 1 },
+    stats: { fuelCapacityAdd: 10 },
+    requires: null,
+    description: '+10 jednostek paliwa.',
+  },
+
   fuel_tank_large: {
     id: 'fuel_tank_large',
     namePL: 'Zbiornik Paliwa Duży',
@@ -283,6 +298,21 @@ export const SHIP_MODULES = {
     stats: { fuelCapacityAdd: 15 },
     requires: null,
     description: '+15 jednostek paliwa.',
+  },
+
+  fuel_tank_cryo: {
+    id: 'fuel_tank_cryo',
+    namePL: 'Zbiornik Kriogeniczny',
+    nameEN: 'Cryo Fuel Tank',
+    icon: '🧊',
+    slotType: 'fuel',
+    tier: 2,
+    mass: 18,  // tony — lekki dzięki izolacji kriogenicznej
+    cost: { Ti: 20, Cu: 10 },
+    commodityCost: { pressure_modules: 4, structural_alloys: 6 },
+    stats: { fuelCapacityAdd: 25 },
+    requires: 'cryogenics',
+    description: '+25 jednostek paliwa. Kriogeniczna izolacja minimalizuje masę.',
   },
 };
 
