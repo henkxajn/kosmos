@@ -614,7 +614,7 @@ export class Outliner {
       // 4. Oczekujące outposty
       if (pendingOutpostOrders) {
         for (const order of pendingOutpostOrders) {
-          const target = EntityManager.getEntity(order.targetId);
+          const target = EntityManager.get(order.targetId);
           const bDef = BUILDINGS[order.buildingId];
           const bName = bDef ? getName(bDef, 'building') : order.buildingId;
           const tName = order.targetName ?? target?.name ?? '?';
