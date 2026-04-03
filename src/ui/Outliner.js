@@ -625,7 +625,28 @@ export class Outliner {
         }
       }
 
-      // 5. Kolejka fabryki
+      // 5. Aktywna produkcja fabryki (alokacje)
+      const factoryAllocations = state.factoryAllocations;
+      if (factoryAllocations) {
+        for (const a of factoryAllocations) {
+          const cDef = COMMODITIES[a.commodityId];
+          const pct = a.pctComplete != null ? Math.floor(a.pctComplete) : 0;
+          const produced = a.produced ?? 0;
+          const target = a.targetQty;
+          const label = target ? `${produced}/${target}` : `${produced}`;
+          items.push({
+            queueType: 'factory',
+            icon: cDef?.icon ?? '🏭',
+            name: cDef?.namePL ?? a.commodityId,
+            progress: a.pctComplete != null ? a.pctComplete : null,
+            total: 100,
+            blocked: a.paused ?? false,
+            qtyLabel: label,
+          });
+        }
+      }
+
+      // 6. Kolejka fabryki (oczekujące)
       if (factoryQueue) {
         for (const q of factoryQueue) {
           const cDef = COMMODITIES[q.commodityId];
@@ -635,7 +656,7 @@ export class Outliner {
             name: cDef?.namePL ?? q.commodityId,
             progress: null, total: null,
             blocked: false,
-            qtyLabel: `×${q.qty}`,
+            qtyLabel: `⏳×${q.qty}`,
           });
         }
       }

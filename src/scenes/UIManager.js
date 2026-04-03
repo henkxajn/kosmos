@@ -719,6 +719,9 @@ export class UIManager {
       }
     }
 
+    // CivPanel sidebar (zakładki po lewej) — przed overlayem, żeby zawsze działały
+    if (window.KOSMOS?.civMode && this._hitTestCivPanel(x, y)) return true;
+
     // Overlay pełnoekranowy (FleetManager itp.) — przed resztą UI
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleClick(x, y)) return true;
@@ -739,9 +742,6 @@ export class UIManager {
 
     // BottomContext (dolny panel kontekstowy)
     if (this._selectedEntity && this._bottomContext.hitTest(x, y, W, H, this._selectedEntity)) return true;
-
-    // CivPanel
-    if (window.KOSMOS?.civMode && this._hitTestCivPanel(x, y)) return true;
 
     // Akcje gracza
     if (this._hitTestActionPanel(x, y)) return true;
@@ -864,7 +864,8 @@ export class UIManager {
         }
       }
       // Zbierz dane kolejek aktywnej kolonii
-      let constructionQueue = [], pendingBuilds = [], pendingShipOrders = [], pendingOutpostOrders = [], factoryQueue = [];
+      let constructionQueue = [], pendingBuilds = [], pendingShipOrders = [];
+      let pendingOutpostOrders = [], factoryQueue = [], factoryAllocations = [];
       try {
         const activeCol = colMgr?.getColony(activePid);
         constructionQueue    = activeCol?.buildingSystem?.serializeQueue() ?? [];
@@ -872,6 +873,7 @@ export class UIManager {
         pendingShipOrders    = colMgr?.getPendingShipOrders(activePid) ?? [];
         pendingOutpostOrders = colMgr?.getPendingOutpostOrders(activePid) ?? [];
         factoryQueue         = activeCol?.factorySystem?.getQueue() ?? [];
+        factoryAllocations   = activeCol?.factorySystem?.getAllocations() ?? [];
       } catch (_) { /* defensywne — nie blokuj renderingu */ }
       this._outliner.draw(ctx, W, H, {
         colonies: colMgr?.getAllColonies() ?? [],
@@ -879,7 +881,8 @@ export class UIManager {
         fleet: colMgr?.getFleet(activePid) ?? [],
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
         groundUnits,
-        constructionQueue, pendingBuilds, pendingShipOrders, pendingOutpostOrders, factoryQueue,
+        constructionQueue, pendingBuilds, pendingShipOrders,
+        pendingOutpostOrders, factoryQueue, factoryAllocations,
       });
     }
 
