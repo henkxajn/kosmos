@@ -8,6 +8,7 @@
 // Status:  'idle' | 'on_mission' | 'refueling' | 'damaged'
 
 import { SHIPS } from '../data/ShipsData.js';
+import { calcShipStats } from '../data/ShipModulesData.js';
 import { getNextName } from '../data/VesselNames.js';
 import EntityManager from '../core/EntityManager.js';
 
@@ -31,9 +32,20 @@ export function createVessel(shipId, colonyId, opts = {}) {
   const x = opts.x ?? 0;
   const y = opts.y ?? 0;
 
+  // Oblicz statystyki z kadłuba + modułów (uwzględnia masę)
+  const modules = opts.modules || [];
+  const stats = modules.length > 0
+    ? calcShipStats(ship, modules)
+    : null;
+
   // Paliwo — pełny bak domyślnie
-  const fuelMax = ship.fuelCapacity ?? 8;
+  const fuelMax = opts.fuelMax ?? (stats?.fuelCapacity ?? ship.fuelCapacity ?? 8);
   const fuelCurrent = opts.fuel ?? fuelMax;
+  const fuelPerAU = opts.fuelPerAU ?? (stats?.fuelPerAU ?? ship.fuelPerAU ?? 0.5);
+  const fuelType = opts.fuelType ?? (stats?.fuelType ?? ship.fuelType ?? 'power_cells');
+  const speedAU = opts.speedAU ?? (stats?.speed ?? ship.speedAU ?? ship.baseSpeedAU ?? 1.0);
+  const cargoMax = opts.cargoMax ?? (stats?.cargo ?? ship.cargoCapacity ?? ship.baseCargoCapacity ?? 0);
+  const totalMass = stats?.totalMass ?? (ship.baseMass ?? 30);
 
   // Sprawdź systemId z encji kolonii lub z aktywnego układu
   const entity = EntityManager.get(colonyId);
@@ -56,25 +68,28 @@ export function createVessel(shipId, colonyId, opts = {}) {
     },
 
     // Moduły zainstalowane na statku (lista ID z ShipModulesData)
-    modules: opts.modules || [],
+    modules,
 
     // Generacja i typ paliwa (z modułów lub kadłuba)
     generation: ship.generation ?? 1,
-    fuelType: opts.fuelType ?? ship.fuelType ?? 'power_cells',
+    fuelType,
 
-    // Paliwo (stats mogą być nadpisane przez moduły)
+    // Masa statku (kadłub + moduły)
+    totalMass,
+
+    // Paliwo (obliczone z kadłuba + modułów + masa)
     fuel: {
-      current: opts.fuel ?? (opts.fuelMax ?? fuelMax),
-      max: opts.fuelMax ?? fuelMax,
-      consumption: opts.fuelPerAU ?? ship.fuelPerAU ?? 0.5,
-      fuelType: opts.fuelType ?? ship.fuelType ?? 'power_cells',
+      current: fuelCurrent,
+      max: fuelMax,
+      consumption: fuelPerAU,
+      fuelType,
     },
 
-    // Prędkość (AU/rok) — z modułów lub kadłuba
-    speedAU: opts.speedAU ?? ship.speedAU ?? ship.baseSpeedAU ?? 1.0,
+    // Prędkość (AU/rok) — z kadłuba + modułów + masa
+    speedAU,
 
-    // Ładowność (tony) — z modułów lub kadłuba
-    cargoMax: opts.cargoMax ?? ship.cargoCapacity ?? ship.baseCargoCapacity ?? 0,
+    // Ładowność (tony) — z modułów
+    cargoMax,
 
     // Misja (null gdy w hangarze)
     mission: null,
@@ -209,7 +224,8 @@ function _getAvailable(resSys, id) {
  */
 export function loadCargo(vessel, commodityId, qty, resSys) {
   const ship = SHIPS[vessel.shipId];
-  const capacity = ship?.cargoCapacity ?? 0;
+  // Użyj vessel.cargoMax (obliczone z modułów+masy) z fallbackiem na SHIPS
+  const capacity = vessel.cargoMax ?? ship?.cargoCapacity ?? 0;
   if (qty <= 0 || capacity <= 0) return 0;
 
   const weight = _getWeight(commodityId);

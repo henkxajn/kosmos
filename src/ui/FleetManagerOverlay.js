@@ -2280,7 +2280,7 @@ export class FleetManagerOverlay {
     const gridH = 30;
     const stats = [
       { label: t('fleet.labelStatus'), value: this._statusText(vessel), color: (STATUS_COLORS[vessel.position.state] ?? (() => THEME.textSecondary))() },
-      { label: t('fleet.labelSpeed'),  value: `${((ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1)).toFixed(1)} AU/r`, color: THEME.textPrimary },
+      { label: t('fleet.labelSpeed'),  value: `${((vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1)).toFixed(1)} AU/r`, color: THEME.textPrimary },
       { label: t('fleet.labelBase'),   value: this._baseText(vessel), color: THEME.textPrimary },
       { label: t('fleet.labelExperience'), value: this._xpStars(vessel), color: THEME.yellow },
     ];
@@ -2891,29 +2891,54 @@ export class FleetManagerOverlay {
     ctx.fillText(fuelName, valX, cy + 10);
     cy += lineH;
 
-    // Zasięg
-    const range = ship.range ?? (ship.fuelCapacity / (ship.fuelPerAU || 1));
+    // Prędkość (z vessel jeśli dostępna, fallback na ship)
+    const vesselSpeed = vessel?.speedAU ?? ship.speedAU ?? ship.baseSpeedAU ?? 1.0;
+    ctx.font = specFont;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('fleet.designSpeed'), labelX, cy + 10);
+    ctx.font = valFont;
+    ctx.fillStyle = THEME.textPrimary;
+    ctx.fillText(`${vesselSpeed.toFixed(1)} AU/y`, valX, cy + 10);
+    cy += lineH;
+
+    // Zasięg (z vessel jeśli dostępna)
+    const vesselFuelPerAU = vessel?.fuel?.consumption ?? ship.fuelPerAU ?? 0.5;
+    const vesselFuelCap = vessel?.fuel?.max ?? ship.fuelCapacity ?? 10;
+    const range = vesselFuelPerAU > 0 ? vesselFuelCap / vesselFuelPerAU : (ship.range ?? 20);
     ctx.font = specFont;
     ctx.fillStyle = THEME.textDim;
     ctx.fillText(t('fleet.shipRange'), labelX, cy + 10);
     ctx.font = valFont;
     ctx.fillStyle = THEME.textPrimary;
-    let rangeText = `${range} AU`;
+    let rangeText = `${range.toFixed(1)} AU`;
     if (ship.warpCapable && ship.fuelPerLY) {
-      const rangeLY = (ship.fuelCapacity / ship.fuelPerLY).toFixed(1);
+      const rangeLY = (vesselFuelCap / ship.fuelPerLY).toFixed(1);
       rangeText += ` / ${rangeLY} LY`;
     }
     ctx.fillText(rangeText, valX, cy + 10);
     cy += lineH;
 
+    // Masa
+    const totalMass = vessel?.totalMass ?? ship.baseMass ?? 0;
+    if (totalMass > 0) {
+      ctx.font = specFont;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.designMass'), labelX, cy + 10);
+      ctx.font = valFont;
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(`${totalMass} t`, valX, cy + 10);
+      cy += lineH;
+    }
+
     // Ładownia (jeśli > 0)
-    if (ship.cargoCapacity > 0) {
+    const cargoCapacity = vessel?.cargoMax ?? ship.cargoCapacity ?? 0;
+    if (cargoCapacity > 0) {
       ctx.font = specFont;
       ctx.fillStyle = THEME.textDim;
       ctx.fillText(t('fleet.shipCargo'), labelX, cy + 10);
       ctx.font = valFont;
       ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`${ship.cargoCapacity} t`, valX, cy + 10);
+      ctx.fillText(`${cargoCapacity} t`, valX, cy + 10);
       cy += lineH;
     }
 
@@ -3162,13 +3187,15 @@ export class FleetManagerOverlay {
           ctx.textAlign = 'right';
           ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.textDim;
+          const massTxt = mod.mass ? ` ${mod.mass}t` : '';
           let statTxt = '';
-          if (mod.stats.speedMult && mod.stats.speedMult !== 1) statTxt = `×${mod.stats.speedMult}⚡`;
-          else if (mod.stats.cargoAdd) statTxt = `+${mod.stats.cargoAdd}t`;
-          else if (mod.stats.discoveryBonus) statTxt = `+${Math.round(mod.stats.discoveryBonus * 100)}%🔬`;
-          else if (mod.stats.colonistCapacity) statTxt = `+${mod.stats.colonistCapacity}👤`;
-          else if (mod.stats.fuelCapacityAdd) statTxt = `+${mod.stats.fuelCapacityAdd}⛽`;
-          else if (mod.stats.survivalBonus) statTxt = `+${Math.round(mod.stats.survivalBonus * 100)}%🛡`;
+          if (mod.stats.speedMult && mod.stats.speedMult !== 1) statTxt = `×${mod.stats.speedMult}⚡${massTxt}`;
+          else if (mod.stats.cargoAdd) statTxt = `+${mod.stats.cargoAdd}t${massTxt}`;
+          else if (mod.stats.discoveryBonus) statTxt = `+${Math.round(mod.stats.discoveryBonus * 100)}%🔬${massTxt}`;
+          else if (mod.stats.colonistCapacity) statTxt = `+${mod.stats.colonistCapacity}👤${massTxt}`;
+          else if (mod.stats.fuelCapacityAdd) statTxt = `+${mod.stats.fuelCapacityAdd}⛽${massTxt}`;
+          else if (mod.stats.survivalBonus) statTxt = `+${Math.round(mod.stats.survivalBonus * 100)}%🛡${massTxt}`;
+          else statTxt = massTxt;
           ctx.fillText(statTxt, bx + bw - 4, cy + 14);
           ctx.textAlign = 'left';
 
@@ -3201,7 +3228,7 @@ export class FleetManagerOverlay {
         const stats = calcShipStats(hull, this._designModules);
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)}  📦${stats.cargo}t  🎯${Math.round(stats.range)} AU`, x + PAD, footerY + 8);
+        ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)}  📦${stats.cargo}t  🎯${Math.round(stats.range)} AU  ⚖${stats.totalMass}t`, x + PAD, footerY + 8);
       }
       const btnY = footerY + 14;
 
@@ -3259,7 +3286,7 @@ export class FleetManagerOverlay {
       cy += 4;
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)} (${stats.fuelType})`, x + PAD, cy + 8);
+      ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)} (${stats.fuelType})  ⚖${stats.totalMass}t`, x + PAD, cy + 8);
       cy += LH;
       ctx.fillText(`📦${stats.cargo}t  🎯${Math.round(stats.range)} AU  🛡+${Math.round(stats.survivalBonus * 100)}%`, x + PAD, cy + 8);
       cy += LH;
@@ -3879,7 +3906,7 @@ export class FleetManagerOverlay {
     // Tabela: odległość, czas lotu, paliwo
     const ship = SHIPS[vessel.shipId];
     const distAU = this._calcDistAU(vessel, target);
-    const effectiveSpeed = (ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+    const effectiveSpeed = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
     const travelYears = effectiveSpeed > 0 ? distAU / effectiveSpeed : Infinity;
     const fuelCost = distAU * (vessel.fuel.consumption ?? 0);
 

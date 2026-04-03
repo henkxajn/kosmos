@@ -19,6 +19,7 @@ export const SHIP_MODULES = {
     icon: '🔥',
     slotType: 'propulsion',
     tier: 1,
+    mass: 5,   // tony
     cost: { Fe: 20, Cu: 10 },
     commodityCost: { power_cells: 2 },
     stats: { speedMult: 1.0, fuelMult: 1.0, rangeMult: 1.0 },
@@ -34,6 +35,7 @@ export const SHIP_MODULES = {
     icon: '⚡',
     slotType: 'propulsion',
     tier: 2,
+    mass: 8,   // tony
     cost: { Ti: 15, Cu: 10 },
     commodityCost: { propulsion_systems: 2 },
     stats: { speedMult: 1.8, fuelMult: 0.6, rangeMult: 2.5 },
@@ -49,6 +51,7 @@ export const SHIP_MODULES = {
     icon: '🔆',
     slotType: 'propulsion',
     tier: 3,
+    mass: 15,  // tony
     cost: { Ti: 30, Hv: 10 },
     commodityCost: { plasma_cores: 3, propulsion_systems: 2 },
     stats: { speedMult: 3.0, fuelMult: 0.4, rangeMult: 4.0 },
@@ -64,6 +67,7 @@ export const SHIP_MODULES = {
     icon: '🌀',
     slotType: 'propulsion',
     tier: 4,
+    mass: 30,  // tony — ciężki
     cost: { Ti: 50, Hv: 20 },
     commodityCost: { warp_cores: 2, metamaterials: 4, quantum_processors: 2 },
     stats: { speedMult: 50.0, fuelMult: 1.0, rangeMult: 999 },
@@ -83,6 +87,7 @@ export const SHIP_MODULES = {
     icon: '📦',
     slotType: 'cargo',
     tier: 1,
+    mass: 15,  // tony — lekka konstrukcja
     cost: { Fe: 30 },
     commodityCost: { structural_alloys: 3 },
     stats: { cargoAdd: 200 },
@@ -97,6 +102,7 @@ export const SHIP_MODULES = {
     icon: '🚛',
     slotType: 'cargo',
     tier: 1,
+    mass: 50,  // tony — ciężka konstrukcja
     cost: { Fe: 80, Ti: 10 },
     commodityCost: { structural_alloys: 8, reactive_armor: 2 },
     stats: { cargoAdd: 1000 },
@@ -111,6 +117,7 @@ export const SHIP_MODULES = {
     icon: '🏭',
     slotType: 'cargo',
     tier: 2,
+    mass: 120, // tony — masywna
     cost: { Fe: 200, Ti: 30 },
     commodityCost: { structural_alloys: 20, reactive_armor: 8 },
     stats: { cargoAdd: 5000 },
@@ -127,6 +134,7 @@ export const SHIP_MODULES = {
     icon: '🔬',
     slotType: 'science',
     tier: 1,
+    mass: 8,   // tony
     cost: { Si: 20, Cu: 15 },
     commodityCost: { electronic_systems: 3, polymer_composites: 2 },
     stats: { discoveryBonus: 0.25, enablesMissions: ['scientific', 'survey'] },
@@ -141,6 +149,7 @@ export const SHIP_MODULES = {
     icon: '📡',
     slotType: 'science',
     tier: 2,
+    mass: 6,   // tony
     cost: { Si: 30, Cu: 20 },
     commodityCost: { semiconductor_arrays: 2, electronic_systems: 3 },
     stats: { discoveryBonus: 0.5, enablesMissions: ['deep_scan', 'anomaly_hunt'] },
@@ -155,6 +164,7 @@ export const SHIP_MODULES = {
     icon: '⚛',
     slotType: 'science',
     tier: 3,
+    mass: 15,  // tony
     cost: { Si: 50, Hv: 10 },
     commodityCost: { quantum_processors: 2, semiconductor_arrays: 4 },
     stats: { discoveryBonus: 1.0, enablesMissions: ['deep_scan', 'anomaly_hunt', 'neutron_star'] },
@@ -171,6 +181,7 @@ export const SHIP_MODULES = {
     icon: '🤖',
     slotType: 'special',
     tier: 1,
+    mass: 5,   // tony
     cost: { Si: 15, Cu: 10 },
     commodityCost: { electronic_systems: 2 },
     stats: { enablesAwayTeam: true, awayTeamType: 'science_rover' },
@@ -187,6 +198,7 @@ export const SHIP_MODULES = {
     icon: '🏠',
     slotType: 'habitat',
     tier: 1,
+    mass: 20,  // tony — life support
     cost: { Ti: 20, Fe: 30 },
     commodityCost: { pressure_modules: 4, compact_bioreactor: 2 },
     stats: { colonistCapacity: 1.0, enablesMissions: ['colony'] },
@@ -201,6 +213,7 @@ export const SHIP_MODULES = {
     icon: '❄',
     slotType: 'habitat',
     tier: 2,
+    mass: 25,  // tony
     cost: { Ti: 30, Fe: 40 },
     commodityCost: { pressure_modules: 6, electronic_systems: 3 },
     stats: { colonistCapacity: 3.0, enablesMissions: ['colony'] },
@@ -217,6 +230,7 @@ export const SHIP_MODULES = {
     icon: '🛡',
     slotType: 'armor',
     tier: 1,
+    mass: 15,  // tony
     cost: { Ti: 10, Fe: 15 },
     commodityCost: { reactive_armor: 4 },
     stats: { armorRating: 1, survivalBonus: 0.02 },
@@ -231,6 +245,7 @@ export const SHIP_MODULES = {
     icon: '⚔',
     slotType: 'armor',
     tier: 2,
+    mass: 35,  // tony — bardzo ciężki
     cost: { Ti: 25, Hv: 10 },
     commodityCost: { reactive_armor: 10, metamaterials: 2 },
     stats: { armorRating: 3, survivalBonus: 0.05, speedMult: 0.9 },
@@ -247,6 +262,7 @@ export const SHIP_MODULES = {
     icon: '⛽',
     slotType: 'fuel',
     tier: 1,
+    mass: 10,  // tony (pusty zbiornik)
     cost: { Fe: 20, Ti: 5 },
     commodityCost: { structural_alloys: 4 },
     stats: { fuelCapacityAdd: 5 },
@@ -261,6 +277,7 @@ export const SHIP_MODULES = {
     icon: '⛽',
     slotType: 'fuel',
     tier: 1,
+    mass: 25,  // tony
     cost: { Fe: 50, Ti: 15 },
     commodityCost: { structural_alloys: 10, reactive_armor: 2 },
     stats: { fuelCapacityAdd: 15 },
@@ -270,21 +287,32 @@ export const SHIP_MODULES = {
 };
 
 // ── Pomocnik: oblicz statystyki statku z kadłuba + modułów ────────────────
+//
+// Masa wpływa na prędkość i zużycie paliwa:
+//   totalMass = hull.baseMass + Σ(module.mass)
+//   massRatio = totalMass / hull.baseMass
+//   speed     = baseSpeed × Π(speedMult) / √massRatio
+//   fuelPerAU = baseFuelPerAU × Π(fuelMult) × √massRatio
+//   range     = fuelCapacity / fuelPerAU
+//
 export function calcShipStats(hullDef, selectedModuleIds) {
+  const baseMass = hullDef.baseMass ?? 30;
   let speed = hullDef.baseSpeedAU ?? 1.0;
   let fuelCapacity = hullDef.baseFuelCapacity ?? 10;
   let cargo = hullDef.baseCargoCapacity ?? 0;
-  let fuelPerAU = 0.5;  // bazowe
+  let fuelPerAU = hullDef.baseFuelPerAU ?? 0.5;
   let survivalBonus = 0;
   let discoveryBonus = 0;
   let colonistCapacity = 0;
   let fuelType = 'power_cells';
   let warpCapable = false;
   let warpSpeedLY = 0;
+  let moduleMass = 0;
 
   for (const modId of selectedModuleIds) {
     const m = SHIP_MODULES[modId];
     if (!m) continue;
+    moduleMass += (m.mass ?? 0);
     if (m.stats.speedMult != null)       speed *= m.stats.speedMult;
     if (m.stats.fuelMult != null)        fuelPerAU *= m.stats.fuelMult;
     if (m.stats.rangeMult != null)       fuelCapacity *= m.stats.rangeMult;
@@ -298,12 +326,21 @@ export function calcShipStats(hullDef, selectedModuleIds) {
     if (m.warpSpeedLY)                   warpSpeedLY = m.warpSpeedLY;
   }
 
+  // Wpływ masy: √massRatio — łagodna krzywa (×2 masy = ~30% kary)
+  const totalMass = baseMass + moduleMass;
+  const massRatio = totalMass / baseMass;
+  const massFactor = Math.sqrt(massRatio); // >= 1.0
+
+  speed /= massFactor;
+  fuelPerAU *= massFactor;
+
   const range = fuelPerAU > 0 ? fuelCapacity / fuelPerAU : 0;
 
   return {
     speed, fuelCapacity, cargo, fuelPerAU,
     survivalBonus, discoveryBonus, colonistCapacity,
     fuelType, warpCapable, warpSpeedLY, range,
+    totalMass, baseMass, massRatio,
   };
 }
 

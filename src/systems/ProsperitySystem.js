@@ -282,10 +282,26 @@ export class ProsperitySystem {
         continue;
       }
 
-      // Satisfaction = ciągła zdolność pokrycia popytu (produkcja vs demand)
-      // Stock NIE liczy się — jednorazowy zapas nie oznacza trwałej satysfakcji
       const production = this._consumerProduction[goodId] ?? 0;
-      const ratio = production / demand;
+      const stock = this.resourceSystem?.inventory?.get(goodId) ?? 0;
+
+      // Satisfaction oparta na produkcji, ale inventory chroni przed spadkiem.
+      // Jeśli produkcja nie pokrywa demand, ale jest zapas — satisfaction pełna
+      // dopóki inventory > 0. Spadek dopiero gdy inventory się wyczerpie.
+      let ratio;
+      if (production >= demand) {
+        // Produkcja pokrywa popyt — standardowe ratio
+        ratio = production / demand;
+      } else if (stock > 0) {
+        // Brak produkcji (lub niedobór), ale jest zapas — traktuj jak pokryty
+        // Im więcej zapasu (w latach demand), tym wyższy ratio
+        const yearsOfStock = stock / demand;
+        // >= 2 lata zapasu → pełna satysfakcja; < 2 lat → proporcjonalnie spada
+        ratio = Math.min(1.5, production / demand + yearsOfStock * 0.5);
+      } else {
+        // Brak produkcji I brak zapasu — pełny niedobór
+        ratio = production / demand;
+      }
 
       this._satisfaction[goodId] = this._ratioToSatisfaction(ratio);
     }

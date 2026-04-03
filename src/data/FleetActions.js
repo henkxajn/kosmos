@@ -314,7 +314,7 @@ const ACTIONS = {
           }
           const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
           const ship = SHIPS[vessel.shipId];
-          const speed = (ship?.speedAU ?? 0.3) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+          const speed = (vessel.speedAU ?? ship?.speedAU ?? 0.3) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
           const travelYears = distAU / speed;
           vessel.mission.returnYear = gameYear + travelYears;
           vMgr.startReturn(vessel.id);

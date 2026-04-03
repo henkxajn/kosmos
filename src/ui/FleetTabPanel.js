@@ -1765,7 +1765,7 @@ export class FleetTabPanel {
       ctx.fillStyle = C.text;
       ctx.fillText(`⚡ ${stats.speed.toFixed(1)} AU/y  ⛽ ${stats.fuelCapacity.toFixed(0)} (${stats.fuelType})`, x + PAD, cy + 8);
       cy += LH - 2;
-      ctx.fillText(`📏 ${stats.range.toFixed(1)} AU  📦 ${stats.cargo}t`, x + PAD, cy + 8);
+      ctx.fillText(`📏 ${stats.range.toFixed(1)} AU  📦 ${stats.cargo}t  ⚖ ${stats.totalMass}t`, x + PAD, cy + 8);
       if (stats.survivalBonus > 0 || stats.discoveryBonus > 0) {
         cy += LH - 2;
         const parts = [];
@@ -1854,6 +1854,7 @@ export class FleetTabPanel {
     ctx.fillText(`⚡ ${t('fleet.designSpeed')}: ${stats.speed.toFixed(1)} AU/y`, x + PAD, cy + 8); cy += LH - 2;
     ctx.fillText(`📏 ${t('fleet.designRange')}: ${stats.range.toFixed(1)} AU`, x + PAD, cy + 8); cy += LH - 2;
     ctx.fillText(`⛽ ${t('fleet.designFuel')}: ${stats.fuelCapacity.toFixed(0)} (${stats.fuelType})`, x + PAD, cy + 8); cy += LH - 2;
+    ctx.fillText(`⚖ ${t('fleet.designMass')}: ${stats.totalMass}t (×${stats.massRatio.toFixed(2)})`, x + PAD, cy + 8); cy += LH - 2;
     if (stats.cargo > 0) { ctx.fillText(`📦 ${t('fleet.designCargo')}: ${stats.cargo}t`, x + PAD, cy + 8); cy += LH - 2; }
     if (stats.survivalBonus > 0) { ctx.fillText(`🛡 ${t('fleet.designSurvival')}: +${(stats.survivalBonus * 100).toFixed(0)}%`, x + PAD, cy + 8); cy += LH - 2; }
     if (stats.discoveryBonus > 0) { ctx.fillText(`🔬 ${t('fleet.designDiscovery')}: +${(stats.discoveryBonus * 100).toFixed(0)}%`, x + PAD, cy + 8); cy += LH - 2; }
@@ -1971,13 +1972,14 @@ export class FleetTabPanel {
   // ── Pomocnik: kluczowa statystyka modułu (krótki string) ────────────────
   _getModuleStatStr(mod) {
     const s = mod.stats;
-    if (s.speedMult != null && mod.slotType === 'propulsion') return `×${s.speedMult} ⚡`;
-    if (s.cargoAdd != null && s.cargoAdd > 0) return `+${s.cargoAdd}t`;
-    if (s.discoveryBonus != null && s.discoveryBonus > 0) return `+${(s.discoveryBonus * 100).toFixed(0)}% 🔬`;
-    if (s.colonistCapacity != null && s.colonistCapacity > 0) return `${s.colonistCapacity} POP`;
-    if (s.survivalBonus != null && s.survivalBonus > 0) return `+${(s.survivalBonus * 100).toFixed(0)}% 🛡`;
-    if (s.fuelCapacityAdd != null && s.fuelCapacityAdd > 0) return `+${s.fuelCapacityAdd} ⛽`;
-    return '';
+    const mass = mod.mass ? ` ${mod.mass}t` : '';
+    if (s.speedMult != null && mod.slotType === 'propulsion') return `×${s.speedMult} ⚡${mass}`;
+    if (s.cargoAdd != null && s.cargoAdd > 0) return `+${s.cargoAdd}t${mass}`;
+    if (s.discoveryBonus != null && s.discoveryBonus > 0) return `+${(s.discoveryBonus * 100).toFixed(0)}%🔬${mass}`;
+    if (s.colonistCapacity != null && s.colonistCapacity > 0) return `${s.colonistCapacity}POP${mass}`;
+    if (s.survivalBonus != null && s.survivalBonus > 0) return `+${(s.survivalBonus * 100).toFixed(0)}%🛡${mass}`;
+    if (s.fuelCapacityAdd != null && s.fuelCapacityAdd > 0) return `+${s.fuelCapacityAdd}⛽${mass}`;
+    return mass;
   }
 
   // ── Szczegóły statku (tryb B) ──────────────────────────────────────────────

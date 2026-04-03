@@ -2039,7 +2039,7 @@ export class ExpeditionSystem {
         const shipDef = SHIPS[vessel.shipId];
         // Warp = natychmiastowy lot (bardzo duża prędkość → travelTime ≈ 0)
         if (shipDef?.warpCapable) return 99999;
-        base = shipDef?.speedAU ?? 1.0;
+        base = vessel.speedAU ?? shipDef?.speedAU ?? 1.0;
         // Uszkodzony statek — 50% prędkości
         if (vessel.damaged) base *= 0.5;
       }

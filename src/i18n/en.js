@@ -891,6 +891,7 @@ export default {
   'fleet.designSpeed': 'Speed',
   'fleet.designRange': 'Range',
   'fleet.designFuel': 'Fuel',
+  'fleet.designMass': 'Mass',
   'fleet.designCargo': 'Cargo',
   'fleet.designSurvival': 'Survival',
   'fleet.designDiscovery': 'Discovery',

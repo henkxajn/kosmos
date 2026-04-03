@@ -28,10 +28,12 @@ export const SHIPS = {
     icon:              '🛸',
     hullType:          'science',
     generation:        1,
+    baseMass:          30,    // tony — lekki kadłub
     baseModuleSlots:   4,
     baseFuelCapacity:  8,
     baseSpeedAU:       1.2,
     baseCargoCapacity: 0,
+    baseFuelPerAU:     0.4,
     // Aliasy kompatybilności (stary kod czyta te pola z SHIPS[shipId])
     fuelCapacity:      8,
     fuelPerAU:         0.4,
@@ -62,10 +64,12 @@ export const SHIPS = {
     icon:              '📦',
     hullType:          'transport',
     generation:        1,
+    baseMass:          60,    // tony — ciężki kadłub
     baseModuleSlots:   6,
     baseFuelCapacity:  10,
     baseSpeedAU:       0.9,
     baseCargoCapacity: 0,    // cargo wyłącznie z modułów
+    baseFuelPerAU:     0.5,
     // Aliasy kompatybilności (stary kod czyta te pola z SHIPS[shipId])
     fuelCapacity:      10,
     fuelPerAU:         0.5,
