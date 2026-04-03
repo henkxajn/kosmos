@@ -2006,6 +2006,7 @@ export default {
   'expedition.colonistsDelivered': '{0} kolonistów dostarczonych do kolonii',
   'expedition.noColonistsLoaded': 'Załaduj kolonistów na statek przed wysłaniem',
   'expedition.foundOutpost': 'Założono placówkę + zbudowano {0}',
+  'expedition.buildingDelivered': 'Dostarczono i zbudowano {0}',
   'expedition.foundOutpostFailed': 'Nie udało się zbudować — brak odpowiedniego terenu',
   'expedition.outpostBuildingMissing': 'Brak towarów na budowę {0}',
 

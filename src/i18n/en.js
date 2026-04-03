@@ -2006,6 +2006,7 @@ export default {
   'expedition.colonistsDelivered': '{0} colonists delivered to colony',
   'expedition.noColonistsLoaded': 'Load colonists onto ship before sending',
   'expedition.foundOutpost': 'Outpost founded + built {0}',
+  'expedition.buildingDelivered': 'Delivered and built {0}',
   'expedition.foundOutpostFailed': 'Build failed — no suitable terrain',
   'expedition.outpostBuildingMissing': 'Missing commodities for {0}',
 

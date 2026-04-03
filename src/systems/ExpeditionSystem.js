@@ -185,9 +185,9 @@ export class ExpeditionSystem {
       ? (target.type === 'planetoid' || target.type === 'moon' ||
          (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
       : false;
-    // Cel nie może mieć kolonii (outpost OK → upgrade)
+    // Sprawdź czy cel ma już kolonię/outpost → tryb dostawy budynku
     const existingCol = colMgr?.getColony(targetId);
-    const notColonized = !existingCol;
+    const isDelivery = !!existingCol; // dostawa budynku do istniejącej kolonii
     // Budynek musi istnieć
     const bDef = BUILDINGS[buildingId];
     const buildingOk = !!bDef;
@@ -206,8 +206,8 @@ export class ExpeditionSystem {
       if (resSys) canAfford = resSys.canAfford(totalCost);
     }
     return {
-      ok: techOk && shipOk && exploredOk && typeOk && notColonized && buildingOk && canAfford,
-      techOk, shipOk, exploredOk, typeOk, notColonized, buildingOk, canAfford, totalCost,
+      ok: techOk && shipOk && exploredOk && typeOk && buildingOk && canAfford,
+      techOk, shipOk, exploredOk, typeOk, buildingOk, canAfford, totalCost, isDelivery,
     };
   }
 
@@ -595,7 +595,6 @@ export class ExpeditionSystem {
         : !check.shipOk ? t('expedition.noColonyShip')
         : !check.exploredOk ? t('expedition.targetNotExploredColony')
         : !check.typeOk ? t('expedition.targetNotColonizable')
-        : !check.notColonized ? t('expedition.targetAlreadyColonized')
         : !check.canAfford ? t('expedition.outpostBuildingMissing', buildingId)
         : t('expedition.targetNotColonizable');
       EventBus.emit('expedition:launchFailed', { reason });
@@ -658,6 +657,7 @@ export class ExpeditionSystem {
       targetName:     target.name,
       targetType:     target.type,
       buildingId,     // budynek do postawienia
+      isDelivery:     check.isDelivery, // true = dostawa do istniejącej kolonii
       departYear,
       arrivalYear:    departYear + travelTime,
       returnYear:     null,
@@ -1555,14 +1555,14 @@ export class ExpeditionSystem {
     const buildingId = exp.buildingId;
     const bDef = BUILDINGS[buildingId];
 
-    // Utwórz outpost
-    const gameYear = Math.floor(this._gameYear);
-    const outpost = colMgr?.createOutpost(exp.targetId, {}, gameYear);
+    // Sprawdź czy to dostawa budynku do istniejącej kolonii
+    const existingCol = colMgr?.getColony(exp.targetId);
+    const colony = existingCol ?? colMgr?.createOutpost(exp.targetId, {}, Math.floor(this._gameYear));
 
-    if (outpost) {
-      // Rozładuj cargo z vessel do outpost inventory
+    if (colony) {
+      // Rozładuj cargo z vessel do colony inventory
       if (vessel) {
-        const resSys = outpost.resourceSystem;
+        const resSys = colony.resourceSystem;
         if (resSys) {
           for (const [resId, qty] of Object.entries(vessel.cargo ?? {})) {
             if (qty > 0) resSys.receive({ [resId]: qty });
@@ -1573,13 +1573,13 @@ export class ExpeditionSystem {
         vessel.cargoUsed = 0;
       }
 
-      // Auto-budowa budynku na outpoście
+      // Auto-budowa budynku na kolonii/outpoście
       let buildSuccess = false;
-      if (bDef && outpost.buildingSystem) {
-        buildSuccess = outpost.buildingSystem.autoPlaceBuilding(buildingId);
+      if (bDef && colony.buildingSystem) {
+        buildSuccess = colony.buildingSystem.autoPlaceBuilding(buildingId);
       }
 
-      // Statek dokuje na outpoście (przeżywa)
+      // Statek dokuje na kolonii
       if (vessel && vMgr) {
         vMgr.dockAtColony(vessel.id, exp.targetId);
       }
@@ -1593,14 +1593,18 @@ export class ExpeditionSystem {
         gained: {},
         multiplier: 1.0,
         text: buildSuccess
-          ? t('expedition.foundOutpost', bName)
+          ? (existingCol
+            ? t('expedition.buildingDelivered', bName)
+            : t('expedition.foundOutpost', bName))
           : t('expedition.foundOutpostFailed'),
       });
 
-      // Emituj zdarzenie nowego outpostu
-      EventBus.emit('outpost:founded', { colony: outpost });
+      // Emituj zdarzenie nowego outpostu (tylko jeśli nowy)
+      if (!existingCol) {
+        EventBus.emit('outpost:founded', { colony });
+      }
     } else {
-      // Outpost nie utworzony (cel już zajęty?) — statek wraca
+      // Outpost nie utworzony — statek wraca
       exp.status = 'completed';
       if (vessel && vMgr) {
         vMgr.dockAtColony(vessel.id, exp.originColonyId);
@@ -1609,7 +1613,7 @@ export class ExpeditionSystem {
         expedition: exp,
         gained: {},
         multiplier: 0,
-        text: t('expedition.targetAlreadyColonized'),
+        text: t('expedition.foundOutpostFailed'),
       });
     }
   }
