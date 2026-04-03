@@ -863,12 +863,22 @@ export class UIManager {
           }
         }
       }
+      // Zbierz dane kolejek aktywnej kolonii
+      const activeCol = colMgr?.getColony(activePid);
+      const bSys = activeCol?.buildingSystem;
+      const fSys = activeCol?.factorySystem;
       this._outliner.draw(ctx, W, H, {
         colonies: colMgr?.getAllColonies() ?? [],
         expeditions: outlinerExps,
         fleet: colMgr?.getFleet(activePid) ?? [],
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
         groundUnits,
+        // Kolejki
+        constructionQueue:    bSys?.serializeQueue() ?? [],
+        pendingBuilds:        bSys?.serializePendingQueue() ?? [],
+        pendingShipOrders:    colMgr?.getPendingShipOrders(activePid) ?? [],
+        pendingOutpostOrders: colMgr?.getPendingOutpostOrders(activePid) ?? [],
+        factoryQueue:         fSys?.getQueue() ?? [],
       });
     }
 

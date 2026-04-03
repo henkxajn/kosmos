@@ -1621,6 +1621,8 @@ export default {
   'outliner.orbiting': '⊙ orbit',
   'outliner.fleet': 'FLEET [{0}]',
   'outliner.noShips': 'No ships',
+  'outliner.queue': 'QUEUE [{0}]',
+  'outliner.queueMore': 'more',
   'outliner.groundUnits': 'GROUND UNITS [{0}]',
   'outliner.noGroundUnits': 'No units',
   'groundUnit.science_rover': 'Sci. Rover',

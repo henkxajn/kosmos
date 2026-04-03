@@ -7,6 +7,7 @@
 import { THEME, bgAlpha, drawGlassPanel } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { SHIPS }          from '../data/ShipsData.js';
+import { BUILDINGS }      from '../data/BuildingsData.js';
 import { ALL_RESOURCES }  from '../data/ResourcesData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
 import EventBus            from '../core/EventBus.js';
@@ -54,6 +55,7 @@ export class Outliner {
       colonies:     true,  // domyślnie rozwinięta
       expeditions:  true,
       fleet:        true,
+      queue:        true,
       groundUnits:  true,
     };
     // Hit-rects do kliknięć
@@ -281,6 +283,75 @@ export class Outliner {
       return Math.max(ITEM_H, dy);
     });
 
+    // ── KOLEJKA ─────────────────────────────────────────────
+    const queueItems = this._buildQueueItems(state);
+    if (queueItems.length > 0) {
+      cy = this._drawSection(ctx, x, cy, 'queue', t('outliner.queue', queueItems.length), (startY) => {
+        let dy = 0;
+        const maxShow = 8;
+        const shown = queueItems.slice(0, maxShow);
+        for (const item of shown) {
+          const iy = startY + dy;
+
+          // Ikona typu + nazwa
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = item.blocked ? C.orange : C.text;
+          ctx.fillText(`${item.icon} ${_truncate(item.name, 12)}`, x + PAD, iy + 12);
+
+          // Prawa strona: pasek progresu lub status oczekiwania
+          if (item.progress != null && item.total != null && item.total > 0) {
+            // Pasek progresu
+            const frac = Math.min(1, item.progress / item.total);
+            const barW = 40;
+            const barX = x + OUTLINER_W - PAD - barW;
+            const barY = iy + 3;
+            const barH = 4;
+            ctx.fillStyle = THEME.bgTertiary;
+            ctx.fillRect(barX, barY, barW, barH);
+            ctx.fillStyle = item.blocked ? C.orange : THEME.borderActive;
+            ctx.fillRect(barX, barY, Math.round(barW * frac), barH);
+            ctx.strokeStyle = THEME.border;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(barX, barY, barW, barH);
+            // Procent pod paskiem
+            ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+            ctx.fillStyle = C.dim;
+            ctx.textAlign = 'right';
+            ctx.fillText(`${Math.floor(frac * 100)}%`, x + OUTLINER_W - PAD, iy + 14);
+            ctx.textAlign = 'left';
+          } else if (item.qtyLabel) {
+            // Kolejka fabryki — ilość
+            ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+            ctx.fillStyle = C.dim;
+            ctx.textAlign = 'right';
+            ctx.fillText(item.qtyLabel, x + OUTLINER_W - PAD, iy + 12);
+            ctx.textAlign = 'left';
+          } else {
+            // Oczekuje na zasoby
+            ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+            ctx.fillStyle = C.orange;
+            ctx.textAlign = 'right';
+            ctx.fillText('⌛', x + OUTLINER_W - PAD, iy + 12);
+            ctx.textAlign = 'left';
+          }
+
+          this._clickTargets.push({
+            type: 'queueItem', queueType: item.queueType,
+            x, y: iy, w: OUTLINER_W, h: ITEM_H,
+          });
+          dy += ITEM_H;
+        }
+        // Overflow
+        if (queueItems.length > maxShow) {
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = C.dim;
+          ctx.fillText(`  (+${queueItems.length - maxShow} ${t('outliner.queueMore')})`, x + PAD, startY + dy + 12);
+          dy += 16;
+        }
+        return Math.max(ITEM_H, dy);
+      });
+    }
+
     // ── JEDNOSTKI NAZIEMNE ─────────────────────────────────
     const groundUnits = state.groundUnits ?? [];
     cy = this._drawSection(ctx, x, cy, 'groundUnits', t('outliner.groundUnits', groundUnits.length), (startY) => {
@@ -420,6 +491,19 @@ export class Outliner {
           }
           return true;
         }
+        if (t.type === 'queueItem') {
+          const om = window.KOSMOS?.overlayManager;
+          if (t.queueType === 'building') {
+            if (om) om.openPanel('colony');
+          } else if (t.queueType === 'ship') {
+            if (om) om.openPanel('fleet');
+          } else if (t.queueType === 'factory') {
+            if (om) om.openPanel('economy');
+          } else if (t.queueType === 'outpost') {
+            if (om) om.openPanel('fleet');
+          }
+          return true;
+        }
         if (t.type === 'groundUnit') {
           // Przełącz na kolonię jednostki i otwórz ColonyOverlay z zaznaczeniem jednostki
           const colMgr = window.KOSMOS?.colonyManager;
@@ -472,6 +556,93 @@ export class Outliner {
     this._hoveredGroundUnitId = foundGroundUnit;
     this._hoveredColonyId = null;
     this._colonyTooltip = null;
+  }
+
+  // Zbierz wszystkie elementy kolejki z aktywnej kolonii
+  _buildQueueItems(state) {
+    const items = [];
+    const { constructionQueue, pendingBuilds, pendingShipOrders, pendingOutpostOrders, factoryQueue } = state;
+
+    // 1. Budowa budynków — aktywna (z paskiem progresu)
+    if (constructionQueue) {
+      for (const entry of constructionQueue) {
+        const bDef = BUILDINGS[entry.buildingId];
+        const name = entry.isUpgrade
+          ? `${getName(bDef, 'building')} →Lv${entry.targetLevel}`
+          : getName(bDef, 'building');
+        items.push({
+          queueType: 'building',
+          icon: bDef?.icon ?? '🏗',
+          name,
+          progress: entry.progress,
+          total: entry.buildTime,
+          blocked: false,
+        });
+      }
+    }
+
+    // 2. Budynki oczekujące na zasoby
+    if (pendingBuilds) {
+      for (const order of pendingBuilds) {
+        const bDef = BUILDINGS[order.buildingId];
+        const name = order.isUpgrade
+          ? `${getName(bDef, 'building')} →Lv${order.targetLevel}`
+          : getName(bDef, 'building');
+        items.push({
+          queueType: 'building',
+          icon: bDef?.icon ?? '🏗',
+          name,
+          progress: null, total: null,
+          blocked: true,
+        });
+      }
+    }
+
+    // 3. Budowa statków — oczekujące na zasoby
+    if (pendingShipOrders) {
+      for (const order of pendingShipOrders) {
+        const sDef = SHIPS[order.shipId];
+        items.push({
+          queueType: 'ship',
+          icon: sDef?.icon ?? '🚀',
+          name: getName(sDef, 'ship'),
+          progress: null, total: null,
+          blocked: true,
+        });
+      }
+    }
+
+    // 4. Oczekujące outposty
+    if (pendingOutpostOrders) {
+      for (const order of pendingOutpostOrders) {
+        const target = EntityManager.getEntity(order.targetId);
+        const tName = target?.name ?? '?';
+        items.push({
+          queueType: 'outpost',
+          icon: '🏕',
+          name: `→ ${tName}`,
+          progress: null, total: null,
+          blocked: true,
+        });
+      }
+    }
+
+    // 5. Kolejka fabryki
+    if (factoryQueue) {
+      for (const q of factoryQueue) {
+        const cDef = COMMODITIES[q.commodityId];
+        items.push({
+          queueType: 'factory',
+          icon: cDef?.icon ?? '🏭',
+          name: getName(cDef, 'commodity') ?? q.commodityId,
+          progress: null, total: null,
+          blocked: false,
+          qtyLabel: `×${q.qty}`,
+        });
+      }
+    }
+
+    return items;
   }
 
   _buildColonyTooltip(colony) {
