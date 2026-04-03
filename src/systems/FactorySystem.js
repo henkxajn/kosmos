@@ -322,21 +322,19 @@ export class FactorySystem {
     if (points <= 0) {
       const had = this._allocations.has(commodityId);
       this._allocations.delete(commodityId);
-      if (had) this._promoteFromQueue();
+      if (had) {
+        this._promoteFromQueue(); // promoteFromQueue woła _autoConsolidate() na końcu
+      }
     } else {
       const existing = this._allocations.get(commodityId);
-      const maxAlloc = this.freePoints + (existing?.points ?? 0);
-      const actual = Math.min(points, maxAlloc);
-      if (actual <= 0) {
-        this._allocations.delete(commodityId);
-      } else {
-        this._allocations.set(commodityId, {
-          points: actual,
-          progress:  existing?.progress ?? 0,
-          targetQty: existing?.targetQty ?? null,
-          produced:  existing?.produced ?? 0,
-        });
-      }
+      // Dodaj z min 1 FP — konsolidacja rozdzieli punkty równomiernie
+      this._allocations.set(commodityId, {
+        points: Math.max(1, points),
+        progress:  existing?.progress ?? 0,
+        targetQty: existing?.targetQty ?? null,
+        produced:  existing?.produced ?? 0,
+      });
+      this._autoConsolidate();
     }
     this._emitStatus();
   }
@@ -345,9 +343,14 @@ export class FactorySystem {
     if (this._mode !== 'manual') return;
     const alloc = this._allocations.get(commodityId);
     if (!alloc) return;
+    const oldTarget = alloc.targetQty;
     alloc.targetQty = (qty != null && qty > 0) ? qty : null;
     if (alloc.targetQty !== null && alloc.produced >= alloc.targetQty) {
       alloc.produced = 0;
+    }
+    // Nowy lub zwiększony target → auto-kolejkuj brakujące składniki
+    if (alloc.targetQty !== null && (oldTarget === null || alloc.targetQty > oldTarget)) {
+      this._enqueuePrereqs(commodityId, alloc.targetQty - (alloc.produced ?? 0));
     }
     this._emitStatus();
   }
@@ -356,6 +359,8 @@ export class FactorySystem {
     if (this._mode !== 'manual') return;
     const def = COMMODITIES[commodityId];
     if (!def || !qty || qty <= 0) return;
+    // Auto-kolejkuj brakujące składniki (commodity) PRZED głównym produktem
+    this._enqueuePrereqs(commodityId, qty);
     this._queue.push({ commodityId, qty });
     this._emitStatus();
   }
@@ -482,6 +487,9 @@ export class FactorySystem {
         else if (this._mode === 'reactive') this._reactiveAllocate();
       }
     }
+
+    // Konsolidacja: 1 produkt → pełna moc
+    this._autoConsolidate();
 
     // Produkcja (wspólna dla wszystkich trybów)
     if (this._allocations.size === 0 && this._queue.length === 0) return;
@@ -999,7 +1007,8 @@ export class FactorySystem {
   }
 
   _promoteFromQueue() {
-    while (this._queue.length > 0 && this.freePoints > 0) {
+    // Promuj z kolejki — limit: łącznie alokacji nie więcej niż totalPoints
+    while (this._queue.length > 0 && this._allocations.size < this._totalPoints) {
       const next = this._queue.shift();
       const existing = this._allocations.get(next.commodityId);
       if (existing) {
@@ -1008,13 +1017,87 @@ export class FactorySystem {
         }
         continue;
       }
-      const pts = Math.min(1, this.freePoints);
       this._allocations.set(next.commodityId, {
-        points: pts,
+        points: 1,
         progress: 0,
         targetQty: next.qty,
         produced: 0,
       });
+    }
+    // Po promocji — rozdziel punkty równomiernie
+    this._autoConsolidate();
+  }
+
+  // Automatyczna konsolidacja: gdy zostaje 1 aktywna produkcja → daj jej max FP;
+  // gdy jest więcej — rozdziel równomiernie; zablokowane (brak surowców) oddają FP aktywnym
+  _autoConsolidate() {
+    if (this._mode !== 'manual') return;
+    if (this._allocations.size === 0) return;
+
+    // Sprawdź które alokacje mogą produkować (mają surowce + nie osiągnęły targetu)
+    const active = [];
+    const blocked = [];
+    for (const [id, alloc] of this._allocations) {
+      const def = COMMODITIES[id];
+      if (!def) { blocked.push(alloc); continue; }
+      const targetDone = alloc.targetQty !== null && alloc.produced >= alloc.targetQty;
+      const hasIng = this._hasIngredients(def.recipe, id);
+      if (!targetDone && hasIng) {
+        active.push(alloc);
+      } else {
+        blocked.push(alloc);
+      }
+    }
+
+    if (active.length === 0) {
+      // Wszystko zablokowane — po równo (żeby UI nie pokazywał 0)
+      const count = this._allocations.size;
+      const perAlloc = Math.max(1, Math.floor(this._totalPoints / count));
+      let remainder = this._totalPoints - perAlloc * count;
+      for (const [, alloc] of this._allocations) {
+        alloc.points = perAlloc + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) remainder--;
+      }
+      return;
+    }
+
+    // Zablokowane dostają 0 FP — aktywne dzielą całość
+    for (const alloc of blocked) alloc.points = 0;
+
+    if (active.length === 1) {
+      active[0].points = this._totalPoints;
+    } else {
+      const perAlloc = Math.max(1, Math.floor(this._totalPoints / active.length));
+      let remainder = this._totalPoints - perAlloc * active.length;
+      for (const alloc of active) {
+        alloc.points = perAlloc + (remainder > 0 ? 1 : 0);
+        if (remainder > 0) remainder--;
+      }
+    }
+  }
+
+  // Auto-kolejkowanie składników: gdy towar wymaga innych towarów, kolejkuj brakujące
+  _enqueuePrereqs(commodityId, qty) {
+    const def = COMMODITIES[commodityId];
+    if (!def) return;
+    for (const [ingId, ingQty] of Object.entries(def.recipe)) {
+      // Tylko commodity-składniki (nie surowce)
+      if (!COMMODITIES[ingId]) continue;
+      const stock = this._getStock(ingId);
+      const needed = ingQty * qty;
+      const deficit = needed - stock;
+      if (deficit <= 0) continue;
+      // Czy już jest w alokacjach lub kolejce?
+      const inAlloc = this._allocations.get(ingId);
+      const inQueue = this._queue.find(q => q.commodityId === ingId);
+      const alreadyPlanned = (inAlloc ? (inAlloc.targetQty ?? 0) - (inAlloc.produced ?? 0) : 0)
+                           + (inQueue ? inQueue.qty : 0);
+      const toEnqueue = Math.max(0, deficit - alreadyPlanned);
+      if (toEnqueue <= 0) continue;
+      // Rekurencja — składniki składników
+      this._enqueuePrereqs(ingId, toEnqueue);
+      // Dodaj na początek kolejki (przed głównym produktem)
+      this._queue.unshift({ commodityId: ingId, qty: toEnqueue });
     }
   }
 
