@@ -298,12 +298,18 @@ export class Outliner {
           ctx.fillStyle = item.blocked ? C.orange : C.text;
           ctx.fillText(`${item.icon} ${_truncate(item.name, 12)}`, x + PAD, iy + 12);
 
+          // Przycisk anulowania (✕) po prawej — tylko dla elementów z cancelData
+          const cancelBtnW = 14;
+          const cancelBtnX = x + OUTLINER_W - cancelBtnW;
+          // Prawa krawędź dla labelek/pasków (z miejscem na ✕ jeśli jest)
+          const rightEdge = item.cancelData ? (cancelBtnX - 2) : (x + OUTLINER_W - PAD);
+
           // Prawa strona: pasek progresu lub status oczekiwania
           if (item.progress != null && item.total != null && item.total > 0) {
             // Pasek progresu
             const frac = Math.min(1, item.progress / item.total);
-            const barW = 40;
-            const barX = x + OUTLINER_W - PAD - barW;
+            const barW = 36;
+            const barX = rightEdge - barW;
             const barY = iy + 3;
             const barH = 4;
             ctx.fillStyle = THEME.bgTertiary;
@@ -317,27 +323,39 @@ export class Outliner {
             ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
             ctx.fillStyle = C.dim;
             ctx.textAlign = 'right';
-            ctx.fillText(`${Math.floor(frac * 100)}%`, x + OUTLINER_W - PAD, iy + 14);
+            ctx.fillText(`${Math.floor(frac * 100)}%`, rightEdge, iy + 14);
             ctx.textAlign = 'left';
           } else if (item.qtyLabel) {
             // Kolejka fabryki — ilość
             ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
             ctx.fillStyle = C.dim;
             ctx.textAlign = 'right';
-            ctx.fillText(item.qtyLabel, x + OUTLINER_W - PAD, iy + 12);
+            ctx.fillText(item.qtyLabel, rightEdge, iy + 12);
             ctx.textAlign = 'left';
           } else {
             // Oczekuje na zasoby
             ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
             ctx.fillStyle = C.orange;
             ctx.textAlign = 'right';
-            ctx.fillText('⌛', x + OUTLINER_W - PAD, iy + 12);
+            ctx.fillText('⌛', rightEdge, iy + 12);
             ctx.textAlign = 'left';
+          }
+          if (item.cancelData) {
+            ctx.font = `bold ${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+            ctx.fillStyle = THEME.danger ?? '#ff3344';
+            ctx.textAlign = 'center';
+            ctx.fillText('✕', cancelBtnX + cancelBtnW / 2, iy + 13);
+            ctx.textAlign = 'left';
+            // Oddzielny click target dla ✕
+            this._clickTargets.push({
+              type: 'queueCancel', cancelData: item.cancelData,
+              x: cancelBtnX, y: iy, w: cancelBtnW, h: ITEM_H,
+            });
           }
 
           this._clickTargets.push({
             type: 'queueItem', queueType: item.queueType,
-            x, y: iy, w: OUTLINER_W, h: ITEM_H,
+            x, y: iy, w: OUTLINER_W - (item.cancelData ? cancelBtnW : 0), h: ITEM_H,
           });
           dy += ITEM_H;
         }
@@ -491,6 +509,10 @@ export class Outliner {
           }
           return true;
         }
+        if (t.type === 'queueCancel') {
+          this._cancelQueueItem(t.cancelData);
+          return true;
+        }
         if (t.type === 'queueItem') {
           const om = window.KOSMOS?.overlayManager;
           if (t.queueType === 'building') {
@@ -518,6 +540,54 @@ export class Outliner {
     }
 
     return true; // pochłoń klik w Outlinerze
+  }
+
+  // ── Anulowanie elementu kolejki ────────────────────────────
+  _cancelQueueItem(cancelData) {
+    try {
+      const colMgr = window.KOSMOS?.colonyManager;
+      const activePid = colMgr?.activePlanetId;
+      const activeCol = activePid ? colMgr.getColony(activePid) : null;
+
+      switch (cancelData.type) {
+        case 'construction': {
+          // Anulowanie aktywnej budowy via tileKey
+          const bSys = activeCol?.buildingSystem ?? window.KOSMOS?.buildingSystem;
+          if (bSys && cancelData.tileKey) {
+            bSys.cancelConstruction(cancelData.tileKey);
+          }
+          break;
+        }
+        case 'pendingBuild': {
+          const bSys = activeCol?.buildingSystem ?? window.KOSMOS?.buildingSystem;
+          if (bSys && cancelData.tileKey) {
+            bSys.cancelPending(cancelData.tileKey);
+          }
+          break;
+        }
+        case 'pendingShip': {
+          if (colMgr && activePid && cancelData.orderId) {
+            colMgr.cancelPendingShip(activePid, cancelData.orderId);
+          }
+          break;
+        }
+        case 'pendingOutpost': {
+          if (colMgr && activePid && cancelData.orderId) {
+            colMgr.cancelPendingOutpostOrder(activePid, cancelData.orderId);
+          }
+          break;
+        }
+        case 'factoryQueue': {
+          const fSys = activeCol?.factorySystem ?? window.KOSMOS?.factorySystem;
+          if (fSys && cancelData.index != null) {
+            fSys.dequeue(cancelData.index);
+          }
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn('[Outliner] cancel error:', e);
+    }
   }
 
   // ── Hover tooltip kolonii ──────────────────────────────────
@@ -577,6 +647,7 @@ export class Outliner {
             progress: entry.progress,
             total: entry.buildTime,
             blocked: false,
+            cancelData: { type: 'construction', tileKey: entry.tileKey },
           });
         }
       }
@@ -593,6 +664,7 @@ export class Outliner {
             name,
             progress: null, total: null,
             blocked: true,
+            cancelData: { type: 'pendingBuild', tileKey: order.tileKey },
           });
         }
       }
@@ -607,6 +679,7 @@ export class Outliner {
             name: sDef ? getName(sDef, 'ship') : order.shipId,
             progress: null, total: null,
             blocked: true,
+            cancelData: { type: 'pendingShip', orderId: order.id },
           });
         }
       }
@@ -624,6 +697,7 @@ export class Outliner {
             name: `${bName} → ${tName}`,
             progress: null, total: null,
             blocked: true,
+            cancelData: { type: 'pendingOutpost', orderId: order.id },
           });
         }
       }
@@ -651,7 +725,8 @@ export class Outliner {
 
       // 6. Kolejka fabryki (oczekujące)
       if (factoryQueue) {
-        for (const q of factoryQueue) {
+        for (let qi = 0; qi < factoryQueue.length; qi++) {
+          const q = factoryQueue[qi];
           const cDef = COMMODITIES[q.commodityId];
           items.push({
             queueType: 'factory',
@@ -660,6 +735,7 @@ export class Outliner {
             progress: null, total: null,
             blocked: false,
             qtyLabel: `⏳×${q.qty}`,
+            cancelData: { type: 'factoryQueue', index: qi },
           });
         }
       }

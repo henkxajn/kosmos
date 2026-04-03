@@ -1013,6 +1013,20 @@ export class BuildingSystem {
     }
   }
 
+  // ── Anuluj budowę w toku (z outliner / UI) ─────────────────────────────
+
+  cancelConstruction(tileKey) {
+    const entry = this._constructionQueue.get(tileKey);
+    if (!entry) return;
+    // Znajdź tile w gridzie
+    const [q, r] = tileKey.split(',').map(Number);
+    const tile = this._grid?.get(q, r);
+    if (tile) {
+      // Deleguj do _demolish — obsłuży zwrot kosztów i czyszczenie
+      this._demolish(tile);
+    }
+  }
+
   // ── Anuluj oczekujące zamówienie ────────────────────────────────────────
 
   cancelPending(tileKey) {
