@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 40;
+export const CURRENT_VERSION     = 41;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -55,6 +55,7 @@ const MIGRATIONS = {
   37: _migrateV37toV38,
   38: _migrateV38toV39,
   39: _migrateV39toV40,
+  40: _migrateV40toV41,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1102,6 +1103,27 @@ function _migrateV36toV37(data) {
 function _migrateV39toV40(data) {
   // Nowe pole awayTeamUnitId domyślnie null w VesselManager.restore()
   // Nowy moduł science_away_team dodany do ShipModulesData — nie wymaga migracji
+  return data;
+}
+
+// ── v40 → v41: Złoże Xe na planecie domowej ─────────────────────────────────
+function _migrateV40toV41(data) {
+  const homeId = data.civ4x?.homePlanetId;
+  if (!homeId) return data;
+
+  // Znajdź planetę domową w tablicy planet
+  const planets = data.planets ?? [];
+  const home = planets.find(p => p.id === homeId);
+  if (!home) return data;
+
+  // Dodaj złoże Xe jeśli brakuje
+  if (!home.deposits) home.deposits = [];
+  const hasXe = home.deposits.some(d => d.resourceId === 'Xe');
+  if (!hasXe) {
+    home.deposits.push({
+      resourceId: 'Xe', richness: 1.0, totalAmount: 50, remaining: 50,
+    });
+  }
   return data;
 }
 
