@@ -7,6 +7,7 @@
 import { THEME, bgAlpha, drawGlassPanel } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { SHIPS }          from '../data/ShipsData.js';
+import { HULLS }          from '../data/HullsData.js';
 import { BUILDINGS }      from '../data/BuildingsData.js';
 import { ALL_RESOURCES }  from '../data/ResourcesData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
@@ -232,7 +233,7 @@ export class Outliner {
           const vessel = vMgr?.getVessel(vid);
           if (!vessel) continue;
           const iy = startY + dy;
-          const ship = SHIPS[vessel.shipId];
+          const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
           const icon = ship?.icon ?? '🚀';
           const vName = _truncate(vessel.name ?? (ship ? getName(ship, 'ship') : vessel.shipId), 14);
           // Status — ikona stanu
@@ -258,7 +259,7 @@ export class Outliner {
       // Queues (budowa w toku — wiele slotów)
       for (const q of queues) {
         const iy = startY + dy;
-        const shipDef = SHIPS[q.shipId];
+        const shipDef = SHIPS[q.shipId] ?? HULLS[q.shipId];
         const frac = q.buildTime > 0 ? q.progress / q.buildTime : 0;
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textPrimary;
@@ -680,7 +681,7 @@ export class Outliner {
       // 3. Budowa statków — oczekujące na zasoby
       if (pendingShipOrders) {
         for (const order of pendingShipOrders) {
-          const sDef = SHIPS[order.shipId];
+          const sDef = SHIPS[order.shipId] ?? HULLS[order.shipId];
           items.push({
             queueType: 'ship',
             icon: sDef?.icon ?? '🚀',

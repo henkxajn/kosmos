@@ -17,6 +17,7 @@ import { QuickSuite } from './src/suites/QuickSuite.js';
 import { FullSuite } from './src/suites/FullSuite.js';
 import { StressSuite } from './src/suites/StressSuite.js';
 import { BoostedSuite } from './src/suites/BoostedSuite.js';
+import { Boosted40Suite } from './src/suites/Boosted40Suite.js';
 
 import { StatisticalAnalyzer } from './src/analysis/StatisticalAnalyzer.js';
 import { BottleneckDetector } from './src/analysis/BottleneckDetector.js';
@@ -109,6 +110,7 @@ const SUITES = {
   full: FullSuite,
   stress: StressSuite,
   boosted: BoostedSuite,
+  boosted40: Boosted40Suite,
 };
 
 // ── Main ──

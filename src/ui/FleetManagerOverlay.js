@@ -9,7 +9,8 @@ import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC }          from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W }  from './CivPanelDrawer.js';
 import { SHIPS }           from '../data/ShipsData.js';
-import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots } from '../data/ShipModulesData.js';
+import { HULLS }           from '../data/HullsData.js';
+import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleCapabilities } from '../data/ShipModulesData.js';
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { effectiveRange }  from '../entities/Vessel.js';
@@ -149,11 +150,6 @@ export class FleetManagerOverlay {
     this._hitZones = [];          // { x,y,w,h, type, data }
     this._bounds = null;          // { x,y,w,h } — cały overlay
 
-    // Designer modułowy statku
-    this._designStep = 'list';    // 'list' | 'modules' | 'summary'
-    this._designHullId = null;
-    this._designModules = [];
-    this._designModuleScroll = 0;
     this._cachedTargets = null;   // cache celów misji
     this._cachedTargetsKey = '';   // klucz walidacji cache
     this._pendingSendSystemId = null; // ID systemu do wysyłki — pokazuje ship picker w prawym panelu
@@ -440,49 +436,14 @@ export class FleetManagerOverlay {
         break;
       case 'build_ship':
         if (zone.data.enabled) {
-          const shipDef = SHIPS[zone.data.shipId];
+          const shipDef = SHIPS[zone.data.shipId] ?? HULLS[zone.data.shipId];
           const modules = zone.data.modules ?? shipDef?.defaultModules ?? [];
           EventBus.emit('fleet:buildRequest', { shipId: zone.data.shipId, modules });
         }
         break;
-      case 'design_hull':
+      case 'build_template':
         if (zone.data.enabled) {
-          this._designHullId = zone.data.shipId;
-          this._designModules = [...(SHIPS[zone.data.shipId]?.defaultModules ?? [])];
-          this._designStep = 'modules';
-        }
-        break;
-      case 'design_module': {
-        const modId = zone.data.moduleId;
-        const idx = this._designModules.indexOf(modId);
-        if (idx >= 0) {
-          this._designModules.splice(idx, 1);
-        } else {
-          const hull = SHIPS[this._designHullId];
-          if (this._designModules.length < (hull?.baseModuleSlots ?? 4)) {
-            this._designModules.push(modId);
-          }
-        }
-        break;
-      }
-      case 'design_back':
-        if (this._designStep === 'modules') {
-          this._designStep = 'list';
-          this._designHullId = null;
-          this._designModules = [];
-        } else if (this._designStep === 'summary') {
-          this._designStep = 'modules';
-        }
-        break;
-      case 'design_next':
-        this._designStep = 'summary';
-        break;
-      case 'design_build':
-        if (zone.data.shipId) {
-          EventBus.emit('fleet:buildRequest', { shipId: zone.data.shipId, modules: zone.data.modules });
-          this._designStep = 'list';
-          this._designHullId = null;
-          this._designModules = [];
+          EventBus.emit('fleet:buildRequest', { shipId: zone.data.hullId, modules: zone.data.modules });
         }
         break;
       case 'cancel_pending_ship': {
@@ -579,7 +540,7 @@ export class FleetManagerOverlay {
 
         if (this._selectedVesselId) {
           const selV = vMgr2.getVessel(this._selectedVesselId);
-          const selDef = selV ? SHIPS[selV.shipId] : null;
+          const selDef = selV ? (SHIPS[selV.shipId] ?? HULLS[selV.shipId]) : null;
           if (selV && selDef?.fuelPerLY > 0 &&
               selV.position.state === 'docked' &&
               (selV.status === 'idle' || selV.status === 'refueling')) {
@@ -1060,7 +1021,7 @@ export class FleetManagerOverlay {
           ctx.fillRect(x, ry, w, rH);
         }
 
-        const ship = SHIPS[vessel.shipId];
+        const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
         const icon = ship?.icon ?? '🚀';
 
         // ── Wiersz 1: ikona + nazwa + paliwo ──
@@ -2045,7 +2006,7 @@ export class FleetManagerOverlay {
       const canSend = vMgr && colMgr;
       const activePid = colMgr?.activePlanetId;
       const avail = activePid ? (vMgr?.getAvailable(activePid) ?? []) : [];
-      const hasWarpShip = avail.some(v => SHIPS[v.shipId]?.fuelPerLY > 0);
+      const hasWarpShip = avail.some(v => (SHIPS[v.shipId] ?? HULLS[v.shipId])?.fuelPerLY > 0);
 
       ctx.fillStyle = hasWarpShip ? 'rgba(0,255,180,0.08)' : 'rgba(60,60,60,0.3)';
       ctx.fillRect(px + PAD, iy, btnW, btnH);
@@ -2225,7 +2186,7 @@ export class FleetManagerOverlay {
       return;
     }
 
-    const ship = SHIPS[vessel.shipId];
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
     let cy = y + pad;
 
     // ── Przycisk powrotu do Stoczni ────────────────────────
@@ -2467,13 +2428,20 @@ export class FleetManagerOverlay {
       ctx.fillText(`🌍 ${t('fleet.orbitingBody', orbitName)}`, x + pad, cy + 10);
       cy += 18;
 
-      const ship = SHIPS[vessel.shipId];
-      const caps = ship?.capabilities ?? [];
+      const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+      // Zdolności z kadłuba + modułów
+      const hullCaps = ship?.capabilities ?? [];
+      const modCaps = vessel.modules?.length ? getModuleCapabilities(vessel.modules) : new Set();
+      // Każdy statek z napędem może recon
+      if (vessel.modules?.some(m => SHIP_MODULES[m]?.slotType === 'propulsion')) {
+        modCaps.add('recon'); modCaps.add('survey');
+      }
+      const caps = { has: c => hullCaps.includes(c) || modCaps.has(c) };
       const btnW = w - pad * 2;
       const btnH = 22;
 
       // ── Recon ciała (recon cap) ──
-      if (caps.includes('recon')) {
+      if (caps.has('recon')) {
         const isExplored = orbitBody?.explored ?? false;
         ctx.fillStyle = isExplored ? 'rgba(100,100,100,0.08)' : 'rgba(0,180,255,0.08)';
         ctx.fillRect(x + pad, cy, btnW, btnH);
@@ -2507,7 +2475,7 @@ export class FleetManagerOverlay {
       }
 
       // ── Kolonizacja (colony cap) ──
-      if (caps.includes('colony')) {
+      if (caps.has('colony')) {
         const colMgr4 = window.KOSMOS?.colonyManager;
         const isExploredCol = orbitBody?.explored ?? false;
         const isColonized = colMgr4?.getColony(isMission.targetId) != null;
@@ -2537,7 +2505,7 @@ export class FleetManagerOverlay {
       }
 
       // ── Rozładunek cargo ──
-      if (caps.includes('cargo') && (vessel.cargoUsed ?? 0) > 0) {
+      if (caps.has('cargo') && (vessel.cargoUsed ?? 0) > 0) {
         ctx.fillStyle = 'rgba(255,204,68,0.08)';
         ctx.fillRect(x + pad, cy, btnW, btnH);
         ctx.strokeStyle = THEME.warning;
@@ -2757,7 +2725,7 @@ export class FleetManagerOverlay {
     const warpShips = allVessels.filter(v => {
       if (v.position.state !== 'docked') return false;
       if (v.status !== 'idle' && v.status !== 'refueling') return false;
-      const def = SHIPS[v.shipId];
+      const def = SHIPS[v.shipId] ?? HULLS[v.shipId];
       return def?.fuelPerLY > 0;
     });
 
@@ -2773,7 +2741,7 @@ export class FleetManagerOverlay {
       for (const v of warpShips) {
         if (cy + btnH > y + h - 40) break;
 
-        const shipDef = SHIPS[v.shipId];
+        const shipDef = SHIPS[v.shipId] ?? HULLS[v.shipId];
         const rangeLY = shipDef?.fuelPerLY ? (v.fuel.current / shipDef.fuelPerLY).toFixed(1) : '?';
         const fuelPct = v.fuel.max > 0 ? v.fuel.current / v.fuel.max : 0;
 
@@ -3046,7 +3014,7 @@ export class FleetManagerOverlay {
     if (queues.length > 0) {
       for (const q of queues) {
         if (cy > y + h - 30) break;
-        const shipDef = SHIPS[q.shipId];
+        const shipDef = SHIPS[q.shipId] ?? HULLS[q.shipId];
         const frac = q.buildTime > 0 ? Math.min(1, q.progress / q.buildTime) : 0;
         const eta = q.buildTime > 0 ? ((q.buildTime - q.progress) / speedBonus).toFixed(1) : '?';
 
@@ -3087,266 +3055,74 @@ export class FleetManagerOverlay {
     const canBuildAny = queues.length < shipyardLevel;
     const inv = activeCol?.resourceSystem?.inventorySnapshot() ?? {};
 
-    // ── 3-krokowy designer statku ──────────────────────────────────────────
-    if (this._designStep === 'list') {
-      // KROK 1: Wybór kadłuba
+    // ── Lista szablonów z Unit Design ──────────────────────────────────────
+    const templates = window.KOSMOS?.unitDesigns ?? [];
+
+    if (templates.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('unitDesign.noDesigns'), x + PAD, cy + 8);
+      cy += LH + 8;
+    } else {
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textHeader;
-      ctx.fillText('PROJEKTUJ STATEK', x + PAD, cy + 8);
+      ctx.fillText(t('unitDesign.savedTemplates'), x + PAD, cy + 8);
       cy += LH + 4;
 
-      for (const ship of Object.values(SHIPS)) {
-        if (cy > y + h - 40) break;
-        const hasTech = !ship.requires || (tSys?.isResearched(ship.requires) ?? false);
+      for (const tpl of templates) {
+        if (cy > y + h - 80) break;
+        const hull = HULLS[tpl.hullId];
+        if (!hull) continue;
+
+        const hasTech = !hull.requires || (tSys?.isResearched(hull.requires) ?? false);
         if (!hasTech) continue;
 
-        const btnH = 34;
+        const mods = (tpl.modules ?? []).filter(Boolean);
+        const stats = calcShipStats(hull, mods);
+        const { cost: rawC, commodityCost: comC } = calcShipCost(hull, mods);
+        const allCosts = { ...rawC, ...comC };
+        const allAfford = Object.entries(allCosts).every(([k, need]) => (inv[k] ?? 0) >= need);
+        const crewCost = hull.crewCost ?? 0;
+        const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
+
+        const btnH = 42;
         const bx = x + PAD, bw = w - PAD * 2;
-        ctx.fillStyle = canBuildAny ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.5)';
+
+        // Tło
+        const canBuildNow = canBuildAny && allAfford && hasCrew;
+        const canQueue = hasCrew && !allAfford;
+        const canClick = canBuildNow || canQueue;
+        ctx.fillStyle = canClick ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.5)';
         ctx.fillRect(bx, cy, bw, btnH);
-        ctx.strokeStyle = canBuildAny ? THEME.borderActive : THEME.border;
+        ctx.strokeStyle = canBuildNow ? THEME.borderActive : canQueue ? THEME.warning : THEME.border;
         ctx.lineWidth = 1;
         ctx.strokeRect(bx, cy, bw, btnH);
 
+        // Ikona kadłuba + nazwa szablonu
         ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = canBuildAny ? THEME.accent : THEME.textDim;
-        ctx.fillText(`${ship.icon} ${getName(ship, 'ship')}`, bx + 6, cy + 14);
+        ctx.fillStyle = canClick ? THEME.accent : THEME.textDim;
+        ctx.fillText(`${hull.icon} ${tpl.name}`, bx + 6, cy + 14);
+
+        // Szybkie staty
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`${ship.baseModuleSlots} slotów  ⚡${ship.baseSpeedAU} AU/y  ⛽${ship.baseFuelCapacity}`, bx + 6, cy + 27);
+        ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  📦${stats.cargo}t  🎯${Math.round(stats.range)} AU  ⚖${stats.totalMass}t`, bx + 6, cy + 28);
 
-        this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH,
-          type: 'design_hull', data: { shipId: ship.id, enabled: canBuildAny } });
-        cy += btnH + 4;
-      }
+        // Przycisk BUDUJ / KOLEJKA
+        const buildLabel = canBuildNow ? '🚀' : canQueue ? '⏳' : '—';
+        const buildBtnW = 28;
+        const buildBtnX = bx + bw - buildBtnW - 4;
+        ctx.fillStyle = canBuildNow ? THEME.accent : canQueue ? THEME.warning : THEME.textDim;
+        ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.fillText(buildLabel, buildBtnX + buildBtnW / 2, cy + btnH / 2 + 5);
+        ctx.textAlign = 'left';
 
-    } else if (this._designStep === 'modules') {
-      // KROK 2: Wybór modułów
-      const hull = SHIPS[this._designHullId];
-      if (!hull) { this._designStep = 'list'; return; }
-      const maxSlots = hull.baseModuleSlots ?? 4;
-      const usedSlots = this._designModules.length;
-
-      // Przycisk powrotu
-      ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.warning;
-      ctx.fillText('← Kadłub', x + PAD, cy + 8);
-      this._hitZones.push({ x: x + PAD, y: cy - 4, w: 80, h: 18, type: 'design_back', data: {} });
-      cy += LH + 2;
-
-      // Nagłówek + sloty
-      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textHeader;
-      ctx.fillText(`${hull.icon} MODUŁY: ${usedSlots}/${maxSlots}`, x + PAD, cy + 8);
-      cy += LH + 4;
-
-      // Lista modułów — kompaktowa
-      const categories = ['propulsion', 'cargo', 'science', 'special', 'habitat', 'armor', 'fuel'];
-      const catNames = { propulsion: '🔥 Napęd', cargo: '📦 Cargo', science: '🔬 Nauka',
-                         special: '🤖 Specjalne', habitat: '🏠 Habitat', armor: '🛡 Pancerz', fuel: '⛽ Paliwo' };
-
-      // Zarezerwuj miejsce na footer (statystyki + przycisk Dalej)
-      const reservedFooter = 24 + 20 + 8; // nextBtnH + stats + padding
-      const maxModuleY = y + h - reservedFooter;
-
-      for (const cat of categories) {
-        const mods = Object.values(SHIP_MODULES).filter(m => m.slotType === cat);
-        if (mods.length === 0) continue;
-        if (cy > maxModuleY - 30) break;
-
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText(catNames[cat] ?? cat, x + PAD, cy + 8);
-        cy += 12;
-
-        for (const mod of mods) {
-          if (cy > maxModuleY - 10) break;
-          const isSelected = this._designModules.includes(mod.id);
-          const techOk = !mod.requires || (tSys?.isResearched(mod.requires) ?? false);
-          const slotsOk = isSelected || usedSlots < maxSlots;
-          const enabled = techOk && slotsOk;
-
-          const btnH = 22;
-          const bx = x + PAD, bw = w - PAD * 2;
-          ctx.fillStyle = isSelected ? 'rgba(0,255,180,0.12)' : enabled ? 'rgba(20,40,60,0.6)' : 'rgba(20,20,30,0.3)';
-          ctx.fillRect(bx, cy, bw, btnH);
-          ctx.strokeStyle = isSelected ? THEME.accent : enabled ? THEME.border : 'rgba(40,40,50,0.5)';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(bx, cy, bw, btnH);
-
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = isSelected ? THEME.accent : enabled ? THEME.textPrimary : THEME.textDim;
-          const check = isSelected ? '✓ ' : '';
-          const lock = !techOk ? '🔒 ' : '';
-          ctx.fillText(`${lock}${check}${mod.icon} ${mod.namePL}`, bx + 4, cy + 14);
-
-          // Krótka info o efekcie
-          ctx.textAlign = 'right';
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          ctx.fillStyle = THEME.textDim;
-          const massTxt = mod.mass ? ` ${mod.mass}t` : '';
-          let statTxt = '';
-          if (mod.stats.speedMult && mod.stats.speedMult !== 1) statTxt = `×${mod.stats.speedMult}⚡${massTxt}`;
-          else if (mod.stats.cargoAdd) statTxt = `+${mod.stats.cargoAdd}t${massTxt}`;
-          else if (mod.stats.discoveryBonus) statTxt = `+${Math.round(mod.stats.discoveryBonus * 100)}%🔬${massTxt}`;
-          else if (mod.stats.colonistCapacity) statTxt = `+${mod.stats.colonistCapacity}👤${massTxt}`;
-          else if (mod.stats.fuelCapacityAdd) statTxt = `+${mod.stats.fuelCapacityAdd}⛽${massTxt}`;
-          else if (mod.stats.survivalBonus) statTxt = `+${Math.round(mod.stats.survivalBonus * 100)}%🛡${massTxt}`;
-          else statTxt = massTxt;
-          ctx.fillText(statTxt, bx + bw - 4, cy + 14);
-          ctx.textAlign = 'left';
-
-          if (enabled) {
-            this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH,
-              type: 'design_module', data: { moduleId: mod.id } });
-          }
-          cy += btnH + 2;
+        if (canClick) {
+          this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH,
+            type: 'build_template', data: { templateId: tpl.id, hullId: tpl.hullId, modules: mods, enabled: true } });
         }
-        cy += 2;
-      }
 
-      // Sprawdź czy jest silnik
-      const hasEngine = this._designModules.some(id => SHIP_MODULES[id]?.slotType === 'propulsion');
-
-      // Przycisk DALEJ / info o napędzie — zawsze na dole panelu (sticky)
-      const nextBtnH = 24;
-      const footerH = nextBtnH + 20; // przycisk + statystyki
-      const footerY = y + h - footerH - 4; // zawsze sticky na dole panelu
-
-      // Tło pod footerem (zakrywa ucięte moduły)
-      ctx.fillStyle = 'rgba(6,10,20,0.95)';
-      ctx.fillRect(x, footerY - 4, w, footerH + 12);
-      ctx.strokeStyle = THEME.border;
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x + PAD, footerY - 2); ctx.lineTo(x + w - PAD, footerY - 2); ctx.stroke();
-
-      // Statystyki (kompaktowe, nad przyciskiem)
-      if (this._designModules.length > 0) {
-        const stats = calcShipStats(hull, this._designModules);
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)}  📦${stats.cargo}t  🎯${Math.round(stats.range)} AU  ⚖${stats.totalMass}t`, x + PAD, footerY + 8);
-      }
-      const btnY = footerY + 14;
-
-      // Przycisk DALEJ
-      if (hasEngine) {
-        const bx = x + PAD, bw = w - PAD * 2;
-        ctx.fillStyle = 'rgba(0,255,180,0.15)';
-        ctx.fillRect(bx, btnY, bw, nextBtnH);
-        ctx.strokeStyle = THEME.accent;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(bx, btnY, bw, nextBtnH);
-        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.accent;
-        ctx.textAlign = 'center';
-        ctx.fillText('Dalej →', bx + bw / 2, btnY + 16);
-        ctx.textAlign = 'left';
-        this._hitZones.push({ x: bx, y: btnY, w: bw, h: nextBtnH, type: 'design_next', data: {} });
-      } else {
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.warning;
-        ctx.fillText('⚠ Wybierz napęd!', x + PAD, btnY + 8);
-      }
-      cy = btnY + nextBtnH + 4;
-
-    } else if (this._designStep === 'summary') {
-      // KROK 3: Podsumowanie + budowa
-      const hull = SHIPS[this._designHullId];
-      if (!hull) { this._designStep = 'list'; return; }
-
-      // Przycisk powrotu
-      ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.warning;
-      ctx.fillText('← Moduły', x + PAD, cy + 8);
-      this._hitZones.push({ x: x + PAD, y: cy - 4, w: 80, h: 18, type: 'design_back', data: {} });
-      cy += LH + 2;
-
-      // Nazwa + moduły
-      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textHeader;
-      ctx.fillText(`${hull.icon} ${getName(hull, 'ship')}`, x + PAD, cy + 8);
-      cy += LH;
-
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textSecondary;
-      for (const modId of this._designModules) {
-        const mod = SHIP_MODULES[modId];
-        if (mod && cy < y + h - 80) {
-          ctx.fillText(`  ${mod.icon} ${mod.namePL}`, x + PAD, cy + 8);
-          cy += 12;
-        }
-      }
-
-      // Statystyki
-      const stats = calcShipStats(hull, this._designModules);
-      cy += 4;
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  ⛽${Math.round(stats.fuelCapacity)} (${stats.fuelType})  ⚖${stats.totalMass}t`, x + PAD, cy + 8);
-      cy += LH;
-      ctx.fillText(`📦${stats.cargo}t  🎯${Math.round(stats.range)} AU  🛡+${Math.round(stats.survivalBonus * 100)}%`, x + PAD, cy + 8);
-      cy += LH;
-
-      // Koszt
-      cy += 4;
-      ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
-      cy += 6;
-
-      const { cost: rawC, commodityCost: comC } = calcShipCost(hull, this._designModules);
-      const allCosts = { ...rawC, ...comC };
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      let allAfford = true;
-      for (const [k, need] of Object.entries(allCosts)) {
-        if (cy > y + h - 40) break;
-        const have = inv[k] ?? 0;
-        const ok = have >= need;
-        if (!ok) allAfford = false;
-        ctx.fillStyle = ok ? THEME.success : '#ff4444';
-        const label = COMMODITIES[k]?.namePL ?? COMMODITY_SHORT[k] ?? k;
-        ctx.fillText(`${label}: ${have}/${need}`, x + PAD, cy + 8);
-        cy += 11;
-      }
-
-      // Crew check
-      const crewCost = hull.crewCost ?? 0;
-      const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
-
-      // Przycisk BUDUJ
-      cy += 4;
-      const canBuildNow = canBuildAny && allAfford && hasCrew;
-      const canQueue = hasCrew && !allAfford;
-      const canClick = canBuildNow || canQueue;
-
-      const btnH = 28, bx = x + PAD, bw = w - PAD * 2;
-      if (canClick) {
-        const label = canBuildNow ? '🚀 BUDUJ' : '⏳ KOLEJKA';
-        ctx.fillStyle = canBuildNow ? 'rgba(0,255,180,0.15)' : 'rgba(255,180,0,0.1)';
-        ctx.fillRect(bx, cy, bw, btnH);
-        ctx.strokeStyle = canBuildNow ? THEME.accent : THEME.warning;
-        ctx.strokeRect(bx, cy, bw, btnH);
-        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = canBuildNow ? THEME.accent : THEME.warning;
-        ctx.textAlign = 'center';
-        ctx.fillText(label, bx + bw / 2, cy + 18);
-        ctx.textAlign = 'left';
-        this._hitZones.push({ x: bx, y: cy, w: bw, h: btnH,
-          type: 'design_build', data: { shipId: this._designHullId, modules: [...this._designModules] } });
-        cy += btnH + 4;
-      } else {
-        // Przycisk wyłączony z powodem (brak slotów / brak załogi)
-        ctx.fillStyle = 'rgba(20,20,30,0.5)';
-        ctx.fillRect(bx, cy, bw, btnH);
-        ctx.strokeStyle = THEME.border;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(bx, cy, bw, btnH);
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim;
-        ctx.textAlign = 'center';
-        const reason = !canBuildAny ? t('fleet.noFreeSlots') : t('fleet.designNoCrew');
-        ctx.fillText(reason, bx + bw / 2, cy + 17);
-        ctx.textAlign = 'left';
         cy += btnH + 4;
       }
     }
@@ -3367,7 +3143,7 @@ export class FleetManagerOverlay {
 
       for (const order of pendingOrders) {
         if (cy > y + h - 30) break;
-        const shipDef = SHIPS[order.shipId];
+        const shipDef = SHIPS[order.shipId] ?? HULLS[order.shipId];
         const rowH = 34;
 
         // Brakujące zasoby — lista z ikonami i ilościami
@@ -3446,7 +3222,7 @@ export class FleetManagerOverlay {
   // ── Tooltip kosztów budowy statku ───────────────────────────────────────────
 
   _drawShipCostTooltip(ctx, panelX, panelY, panelW, panelH, shipId, inv, slotsOk, activeCol) {
-    const ship = SHIPS[shipId];
+    const ship = SHIPS[shipId] ?? HULLS[shipId];
     if (!ship) return;
 
     // Znajdź pozycję hovered buttona
@@ -3527,7 +3303,7 @@ export class FleetManagerOverlay {
 
   // ── Tooltip pending ship order — pełna lista kosztów ─────────────────────
   _drawPendingOrderTooltip(ctx, panelX, panelY, panelW, panelH, order, inv) {
-    const ship = SHIPS[order.shipId];
+    const ship = SHIPS[order.shipId] ?? HULLS[order.shipId];
     if (!ship) return;
 
     const PAD = 8;
@@ -3901,7 +3677,7 @@ export class FleetManagerOverlay {
     cy += 24;
 
     // Tabela: odległość, czas lotu, paliwo
-    const ship = SHIPS[vessel.shipId];
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
     const distAU = this._calcDistAU(vessel, target);
     const effectiveSpeed = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
     const travelYears = effectiveSpeed > 0 ? distAU / effectiveSpeed : Infinity;

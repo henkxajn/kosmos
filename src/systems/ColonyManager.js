@@ -33,6 +33,7 @@ import { BuildingSystem } from './BuildingSystem.js';
 import { FactorySystem } from './FactorySystem.js';
 import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
+import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
@@ -610,7 +611,7 @@ export class ColonyManager {
       return { ok: false, reason: t('fleet.colonyNotFound') };
     }
 
-    const ship = SHIPS[shipId];
+    const ship = SHIPS[shipId] ?? HULLS[shipId];
     if (!ship) {
       EventBus.emit('fleet:buildFailed', { reason: t('fleet.unknownShip') });
       return { ok: false, reason: t('fleet.unknownShip') };
@@ -744,7 +745,7 @@ export class ColonyManager {
         if (colony.shipQueues.length >= shipyardLevel) break;
 
         // Sprawdź POPy (re-check — stan zmienia się po lockPops)
-        const orderStrata = SHIPS[order.shipId]?.crewStrata ?? null;
+        const orderStrata = (SHIPS[order.shipId] ?? HULLS[order.shipId])?.crewStrata ?? null;
         if (order.crewCost > 0) {
           const freePops = colony.civSystem?.freePops ?? 0;
           if (freePops < order.crewCost) continue;
@@ -764,7 +765,7 @@ export class ColonyManager {
           colony.civSystem.lockPops(order.crewCost, orderStrata);
         }
 
-        const ship = SHIPS[order.shipId];
+        const ship = SHIPS[order.shipId] ?? HULLS[order.shipId];
         colony.shipQueues.push({
           shipId:    order.shipId,
           progress:  0,

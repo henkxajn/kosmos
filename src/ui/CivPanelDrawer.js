@@ -22,6 +22,7 @@ export const CIV_TABS = [
   { id: 'trade',          icon: '🏪', labelKey: 'civPanel.trade',         key: 'H' },
   { id: 'civilization',  icon: '🏛', labelKey: 'civPanel.civilization', key: 'V' },
   { id: 'observatory',   icon: '🔭', labelKey: 'civPanel.observatory',  key: 'O' },
+  { id: 'unit_design',   icon: '🔧', labelKey: 'civPanel.unitDesign',   key: 'U' },
   { id: 'galaxy',        icon: '🌌', labelKey: 'civPanel.galaxy',       key: 'G' },
 ];
 

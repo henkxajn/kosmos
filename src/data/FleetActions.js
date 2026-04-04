@@ -13,9 +13,41 @@
 // }
 
 import { SHIPS } from './ShipsData.js';
-import { SHIP_MODULES } from './ShipModulesData.js';
+import { HULLS } from './HullsData.js';
+import { SHIP_MODULES, getModuleCapabilities } from './ShipModulesData.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
+
+// Helper: czy statek wymaga wyrzutni (spaceport)?
+// Małe kadłuby (size === 'small') nie wymagają — mogą startować/lądować wszędzie
+function _needsSpaceport(vessel) {
+  const hull = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+  if (hull?.size === 'small') return false;
+  return hull?.requiresSpaceport !== false; // domyślnie true
+}
+
+// Helper: sprawdź spaceport — pomija check dla małych statków
+function _checkPad(vessel, state) {
+  if (!_needsSpaceport(vessel)) return true;
+  const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
+  return vesselColony?.buildingSystem?.hasSpaceport() ?? false;
+}
+
+// Helper: pobierz zdolności statku (kadłub + moduły)
+function _getVesselCaps(vessel) {
+  const hull = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+  const hullCaps = hull?.capabilities ?? [];
+  const modCaps = vessel.modules?.length ? getModuleCapabilities(vessel.modules) : new Set();
+  // Każdy statek z napędem może robić recon (zwiad)
+  if (vessel.modules?.some(m => SHIP_MODULES[m]?.slotType === 'propulsion')) {
+    modCaps.add('recon');
+    modCaps.add('survey');
+  }
+  // Połącz kadłub + moduły
+  const all = new Set(hullCaps);
+  for (const c of modCaps) all.add(c);
+  return all;
+}
 
 // ── Definicje akcji ─────────────────────────────────────────────────────────
 
@@ -36,12 +68,9 @@ const ACTIONS = {
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
       const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
       if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      // Sprawdź spaceport w kolonii statku (nie aktywnej)
-      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
-      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
-      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
-      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
-      if (!caps.includes('survey')) {
+      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
+      const caps = _getVesselCaps(vessel);
+      if (!caps.has('survey')) {
         return { ok: false, reason: 'Statek nie ma zdolności zwiadowczych' };
       }
       return { ok: true };
@@ -64,12 +93,9 @@ const ACTIONS = {
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
       const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
       if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      // Sprawdź spaceport w kolonii statku (nie aktywnej)
-      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
-      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
-      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
-      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
-      if (!caps.includes('deep_scan')) {
+      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
+      const caps = _getVesselCaps(vessel);
+      if (!caps.has('deep_scan')) {
         return { ok: false, reason: 'Statek nie ma zdolności skanowania' };
       }
       const unexplored = ms.getUnexploredCount();
@@ -91,10 +117,7 @@ const ACTIONS = {
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
       const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
       if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      // Sprawdź spaceport w kolonii statku (nie aktywnej)
-      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
-      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
-      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
+      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -139,16 +162,13 @@ const ACTIONS = {
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
-      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
-      if (!caps.includes('colony')) return { ok: false, reason: 'Statek nie ma zdolności kolonizacyjnych' };
+      const caps = _getVesselCaps(vessel);
+      if (!caps.has('colony')) return { ok: false, reason: 'Statek nie ma zdolności kolonizacyjnych' };
       const ms = state.missionSystem;
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
       const techOk = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
       if (!techOk) return { ok: false, reason: 'Brak tech: Kolonizacja' };
-      // Sprawdź spaceport w kolonii statku (nie aktywnej)
-      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
-      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
-      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
+      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
       if (state.targetId) {
         const check = ms.canLaunchColony(state.targetId);
         if (!check.ok) {
@@ -175,14 +195,11 @@ const ACTIONS = {
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
-      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
-      if (!caps.includes('cargo')) return { ok: false, reason: 'Wymaga statku cargo' };
+      const caps = _getVesselCaps(vessel);
+      if (!caps.has('cargo')) return { ok: false, reason: 'Wymaga statku cargo' };
       const techOk = window.KOSMOS?.techSystem?.isResearched('exploration') ?? false;
       if (!techOk) return { ok: false, reason: 'Brak tech: Eksploracja' };
-      // Sprawdź spaceport w kolonii statku
-      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
-      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
-      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
+      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -283,7 +300,7 @@ const ACTIONS = {
             return;
           }
           const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-          const ship = SHIPS[vessel.shipId];
+          const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
           const speed = (vessel.speedAU ?? ship?.speedAU ?? 0.3) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
           const travelYears = distAU / speed;
           vessel.mission.returnYear = gameYear + travelYears;
@@ -301,8 +318,8 @@ const ACTIONS = {
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
-      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
-      if (!caps.includes('cargo')) {
+      const caps = _getVesselCaps(vessel);
+      if (!caps.has('cargo')) {
         return { ok: false, reason: 'Wymaga statku cargo' };
       }
       const techOk = window.KOSMOS?.techSystem?.isResearched('interplanetary_logistics') ?? false;
@@ -422,19 +439,19 @@ export function getAvailableActions(vessel, state) {
 
   // Akcje wg stanu statku
   if (vessel.position.state === 'docked') {
-    // W hangarze — akcje misji wg capabilities statku
-    const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
-    if (caps.includes('survey')) {
+    // W hangarze — akcje misji wg zdolności (kadłub + moduły)
+    const caps = _getVesselCaps(vessel);
+    if (caps.has('survey')) {
       result.push(_check(ACTIONS.survey, vessel, state));
     }
-    if (caps.includes('deep_scan')) {
+    if (caps.has('deep_scan')) {
       result.push(_check(ACTIONS.deep_scan, vessel, state));
     }
-    if (caps.includes('colony')) {
+    if (caps.has('colony')) {
       result.push(_check(ACTIONS.colonize, vessel, state));
     }
     result.push(_check(ACTIONS.transport, vessel, state));
-    if (caps.includes('cargo')) {
+    if (caps.has('cargo')) {
       result.push(_check(ACTIONS.found_outpost, vessel, state));
       result.push(_check(ACTIONS.trade_route, vessel, state));
     }

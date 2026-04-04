@@ -4,6 +4,7 @@
 // Styl: sci-fi ciemny panel, scrollbar w stylistyce gry, z-index 100.
 
 import { SHIPS } from '../data/ShipsData.js';
+import { HULLS } from '../data/HullsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { loadCargo, unloadCargo } from '../entities/Vessel.js';
@@ -64,8 +65,8 @@ export function showCargoLoadModal(vessel, colony) {
   return new Promise(resolve => {
     _injectScrollStyle();
 
-    const ship = SHIPS[vessel.shipId];
-    const cargoCapacity = ship?.cargoCapacity ?? 0;
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+    const cargoCapacity = vessel.cargoMax ?? ship?.cargoCapacity ?? 0;
     const resSys = colony.resourceSystem;
     const inventory = resSys?.inventory ?? new Map();
 

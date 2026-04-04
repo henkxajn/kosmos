@@ -49,13 +49,18 @@ export async function runSingle({ botName, seed, years, runId, verbose = false, 
   const bridge = new EventBusBridge(runtime.getEventBus(), collector);
   bridge.attach();
 
-  const TICK_YEARS = 1.0; // Bot podejmuje decyzję co 1 rok gry
+  const TICK_YEARS = 0.1; // Bot podejmuje decyzję co 0.1 roku gry (= 1.2 civYear)
   let year = 0;
 
   while (year < years && !runtime.isGameOver()) {
     // Bot podejmuje decyzję
     const state = runtime.getState();
     collector.updateState(state);
+
+    // Factory allocation AUTOMATYCZNA (nie blokuje decyzji bota)
+    if (state.factory.totalPoints > 0) {
+      bot._autoAllocateFactory(runtime, state);
+    }
 
     const decision = bot.decide(state);
     if (decision) {

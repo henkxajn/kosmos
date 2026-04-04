@@ -26,6 +26,10 @@ import EventBus       from '../core/EventBus.js';
 import EntityManager  from '../core/EntityManager.js';
 import { KeplerMath } from '../utils/KeplerMath.js';
 import { SHIPS }      from '../data/ShipsData.js';
+import { HULLS }      from '../data/HullsData.js';
+
+// Helper: pobierz definicję kadłuba (legacy SHIPS lub nowe HULLS)
+function _getHullDef(id) { return SHIPS[id] ?? HULLS[id]; }
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import {
   createVessel, effectiveRange, canReach, consumeFuel, refuel,
@@ -218,16 +222,27 @@ export class VesselManager {
     const docked = this.getVesselsAt(colonyId);
     for (const v of docked) {
       if (v.status !== 'idle') continue;
-      // Sprawdź capability z hull definition
-      const hullCaps = SHIPS[v.shipId]?.capabilities ?? [];
-      if (hullCaps.includes(capability)) return v;
-      // Sprawdź capability z modułów (habitat_pod → 'colony', cargo → 'cargo', etc.)
-      if (v.modules?.length) {
-        const moduleCaps = getModuleCapabilities(v.modules);
-        if (moduleCaps.has(capability)) return v;
-      }
+      if (this._vesselHasCapability(v, capability)) return v;
     }
     return null;
+  }
+
+  // Sprawdź czy statek ma daną zdolność (kadłub + moduły)
+  _vesselHasCapability(v, capability) {
+    // Sprawdź capability z hull definition
+    const hullCaps = _getHullDef(v.shipId)?.capabilities ?? [];
+    if (hullCaps.includes(capability)) return true;
+    // Sprawdź capability z modułów
+    if (v.modules?.length) {
+      const moduleCaps = getModuleCapabilities(v.modules);
+      if (moduleCaps.has(capability)) return true;
+      // Każdy statek z napędem może robić recon/survey
+      if ((capability === 'recon' || capability === 'survey') &&
+          v.modules.some(m => SHIP_MODULES[m]?.slotType === 'propulsion')) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -262,7 +277,7 @@ export class VesselManager {
 
     // Zastosuj fuel efficiency z tech (np. plasma_drives -30% zużycie)
     // Bazowe zużycie z modułów+masy (vessel.fuel.consumption ustawione przy tworzeniu)
-    const baseFuelPerAU = vessel._baseFuelPerAU ?? vessel.fuel.consumption ?? SHIPS[vessel.shipId]?.fuelPerAU ?? 0.5;
+    const baseFuelPerAU = vessel._baseFuelPerAU ?? vessel.fuel.consumption ?? _getHullDef(vessel.shipId)?.fuelPerAU ?? 0.5;
     const fuelEffMult = window.KOSMOS?.techSystem?.getFuelEfficiency() ?? 1.0;
     vessel.fuel.consumption = baseFuelPerAU * fuelEffMult;
 
@@ -452,7 +467,7 @@ export class VesselManager {
     if (vessel.status !== 'idle' && vessel.status !== 'refueling') return false;
     if (vessel.position.state !== 'docked') return false;
 
-    const shipDef = SHIPS[vessel.shipId];
+    const shipDef = _getHullDef(vessel.shipId);
     if (!shipDef?.warpCapable) return false;
 
     // Dane docelowej gwiazdy z galaxyData
@@ -826,10 +841,10 @@ export class VesselManager {
         stats:        vd.stats ? { ...vd.stats } : { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 },
         generation:   vd.generation ?? 1,
         fuelType:     vd.fuelType ?? 'power_cells',
-        speedAU:      vd.speedAU ?? SHIPS[vd.shipId]?.speedAU ?? 1.0,
-        cargoMax:     vd.cargoMax ?? SHIPS[vd.shipId]?.cargoCapacity ?? 0,
-        totalMass:    vd.totalMass ?? SHIPS[vd.shipId]?.baseMass ?? 30,
-        _baseFuelPerAU: vd._baseFuelPerAU ?? vd.fuel?.consumption ?? SHIPS[vd.shipId]?.fuelPerAU ?? 0.5,
+        speedAU:      vd.speedAU ?? _getHullDef(vd.shipId)?.speedAU ?? 1.0,
+        cargoMax:     vd.cargoMax ?? _getHullDef(vd.shipId)?.cargoCapacity ?? 0,
+        totalMass:    vd.totalMass ?? _getHullDef(vd.shipId)?.baseMass ?? 30,
+        _baseFuelPerAU: vd._baseFuelPerAU ?? vd.fuel?.consumption ?? _getHullDef(vd.shipId)?.fuelPerAU ?? 0.5,
         damaged:      vd.damaged ?? false,
         _repairProgress: vd._repairProgress ?? 0,
         awayTeamUnitId: vd.awayTeamUnitId ?? null,
@@ -846,7 +861,7 @@ export class VesselManager {
 
       // Migracja: stare save'y bez masy — przelicz statystyki z modułów
       if (!vd.totalMass && vessel.modules?.length) {
-        const hull = SHIPS[vessel.shipId];
+        const hull = _getHullDef(vessel.shipId);
         if (hull) {
           const stats = calcShipStats(hull, vessel.modules);
           vessel.speedAU = stats.speed;
@@ -871,7 +886,7 @@ export class VesselManager {
     if (!Array.isArray(fleet)) return [];
     const newIds = [];
     for (const item of fleet) {
-      if (typeof item === 'string' && SHIPS[item]) {
+      if (typeof item === 'string' && _getHullDef(item)) {
         // Stary format — string type
         const vessel = this.createAndRegister(item, colonyId);
         newIds.push(vessel.id);
@@ -1095,8 +1110,8 @@ export class VesselManager {
           vessel.stats.distanceTraveled += dPx / AU_TO_PX;
         }
 
-        // ── Detekcja przylotu dla exploration mission (obcy układ) ──
-        if (m.type === 'exploration' && !m.phase?.startsWith('return') && gameYear >= m.arrivalYear) {
+        // ── Detekcja przylotu — statek dotarł do celu ──
+        if (!m.phase?.startsWith('return') && gameYear >= m.arrivalYear) {
           const target = this._findEntity(m.targetId);
           vessel.position.state = 'orbiting';
           vessel.position.dockedAt = m.targetId;
@@ -1453,7 +1468,7 @@ export class VesselManager {
     if (!target) return;
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    const ship = SHIPS[vessel.shipId];
+    const ship = _getHullDef(vessel.shipId);
     const speedAU = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
 
     // Odległość od gwiazdy (pozycja statku) do planety (AU)
@@ -1561,7 +1576,7 @@ export class VesselManager {
 
       // Oblicz czas do pierwszego ciała
       const firstTarget = this._findEntity(targets[0]);
-      const ship = SHIPS[vessel.shipId];
+      const ship = _getHullDef(vessel.shipId);
       const speedAU = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
       const distAU = Math.hypot(
         (firstTarget.x - vessel.position.x) / AU_TO_PX,
@@ -1704,7 +1719,7 @@ export class VesselManager {
         // Leć do następnego ciała
         const nextId = m.targets[m.currentIdx];
         const nextBody = this._findEntity(nextId);
-        const ship = SHIPS[vessel.shipId];
+        const ship = _getHullDef(vessel.shipId);
         const speedAU = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
         const distAU = Math.hypot(
           ((nextBody?.x ?? 0) - vessel.position.x) / AU_TO_PX,
@@ -1776,7 +1791,7 @@ export class VesselManager {
     if (colMgr.getColony(targetId)) return;
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    const ship = SHIPS[vessel.shipId];
+    const ship = _getHullDef(vessel.shipId);
     const startPop = ship?.colonists ?? 2;
 
     // Zasoby startowe

@@ -193,6 +193,9 @@ export class GameScene {
     window.KOSMOS.galaxyData = savedData?.civ4x?.galaxyData
       ?? GalaxyGenerator.generate(star.id, star.name, star.spectralType);
 
+    // ── Szablony projektów statków (Unit Design) ─────────────────
+    window.KOSMOS.unitDesigns = savedData?.civ4x?.unitDesigns ?? [];
+
     // ── Przywrócenie stanu 4X ──────────────────────────────────
     const c4x = savedData?.civ4x;
     if (c4x?.civMode) {

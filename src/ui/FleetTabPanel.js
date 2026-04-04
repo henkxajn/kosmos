@@ -5,6 +5,7 @@
 
 import { THEME } from '../config/ThemeConfig.js';
 import { SHIPS }           from '../data/ShipsData.js';
+import { HULLS }           from '../data/HullsData.js';
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleCapabilities } from '../data/ShipModulesData.js';
@@ -482,7 +483,7 @@ export class FleetTabPanel {
         if (zone.data.enabled) {
           this._designHullId = zone.data.shipId;
           // Załaduj domyślne moduły kadłuba
-          const hullDef = SHIPS[zone.data.shipId];
+          const hullDef = SHIPS[zone.data.shipId] ?? HULLS[zone.data.shipId];
           this._designModules = hullDef?.defaultModules ? [...hullDef.defaultModules] : [];
           this._designStep = 'modules';
           this._designModuleScroll = 0;
@@ -497,7 +498,7 @@ export class FleetTabPanel {
           if (idx >= 0) this._designModules.splice(idx, 1);
         } else {
           // Dodaj moduł (jeśli są wolne sloty)
-          const hDef = SHIPS[this._designHullId];
+          const hDef = SHIPS[this._designHullId] ?? HULLS[this._designHullId];
           const maxS = hDef?.baseModuleSlots ?? 0;
           if (countModuleSlots(this._designModules) < maxS) {
             this._designModules.push(modId);
@@ -844,7 +845,7 @@ export class FleetTabPanel {
 
         const isSelected = this._selectedVesselId === vessel.id;
         const isHover = this._hoverVesselId === vessel.id;
-        const sd = SHIPS[vessel.shipId];
+        const sd = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
 
         // Tło wiersza
         if (isSelected) {
@@ -1348,7 +1349,7 @@ export class FleetTabPanel {
       if (sx < x - 6 || sx > x + w + 6 || sy < y - 6 || sy > y + h + 6) continue;
 
       const isSelected = v.id === this._selectedVesselId;
-      const sd = SHIPS[v.shipId];
+      const sd = SHIPS[v.shipId] ?? HULLS[v.shipId];
       const color = v.position.state === 'docked' ? THEME.success
         : v.position.state === 'orbiting' ? THEME.mint : THEME.warning;
 
@@ -1501,7 +1502,7 @@ export class FleetTabPanel {
 
     // Aktywne budowy
     for (const q of queues) {
-      const shipDef = SHIPS[q.shipId];
+      const shipDef = SHIPS[q.shipId] ?? HULLS[q.shipId];
       const frac = q.buildTime > 0 ? q.progress / q.buildTime : 0;
       ctx.fillStyle = C.text;
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -1539,7 +1540,7 @@ export class FleetTabPanel {
       const inv = activeCol?.resourceSystem?.inventorySnapshot() ?? {};
       for (const order of pendingOrders) {
         if (cy > y + h - 20) break;
-        const shipDef = SHIPS[order.shipId];
+        const shipDef = SHIPS[order.shipId] ?? HULLS[order.shipId];
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.warning;
         ctx.fillText(`${shipDef?.icon ?? '🚀'} ${shipDef ? getName(shipDef, 'ship') : order.shipId}`, x + PAD + 2, cy + 8);
@@ -1666,7 +1667,7 @@ export class FleetTabPanel {
   _drawDesignModules(ctx, x, cy, w, maxY, activeCol, tSys) {
     const PAD = 8;
     const LH = 14;
-    const hull = SHIPS[this._designHullId];
+    const hull = SHIPS[this._designHullId] ?? HULLS[this._designHullId];
     if (!hull) { this._designStep = 'hull'; return cy; }
 
     const maxSlots = hull.baseModuleSlots;
@@ -1827,7 +1828,7 @@ export class FleetTabPanel {
   _drawDesignSummary(ctx, x, cy, w, maxY, activeCol, tSys, queues, shipyardLevel) {
     const PAD = 8;
     const LH = 14;
-    const hull = SHIPS[this._designHullId];
+    const hull = SHIPS[this._designHullId] ?? HULLS[this._designHullId];
     if (!hull) { this._designStep = 'hull'; return cy; }
 
     // Przycisk Wstecz
@@ -2008,7 +2009,7 @@ export class FleetTabPanel {
     const PAD = 8;
     const LH = 16;
     let cy = y + 12;
-    const sd = SHIPS[vessel.shipId];
+    const sd = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
 
     // Nagłówek: ikona + nazwa
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
@@ -2315,7 +2316,7 @@ export class FleetTabPanel {
     if (vessel && target) {
       const dist = Math.max(0.001, DistanceUtils.euclideanAU(_findBody(vessel.colonyId) ?? window.KOSMOS?.homePlanet, target));
       const fuelCost = dist * vessel.fuel.consumption;
-      const sd = SHIPS[vessel.shipId];
+      const sd = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
       const eta = dist / ((sd?.speedAU ?? 1.0) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1));
 
       ctx.fillStyle = C.text;
@@ -2330,7 +2331,7 @@ export class FleetTabPanel {
     cy += 10;
 
     // Checkbox "Powtarzaj" — dla transportu ze statkami z ładownią
-    const shipDef = vessel ? SHIPS[vessel.shipId] : null;
+    const shipDef = vessel ? (SHIPS[vessel.shipId] ?? HULLS[vessel.shipId]) : null;
     if (cfg.actionId === 'transport' && vessel && (shipDef?.cargoCapacity ?? 0) > 0) {
       const cbSize = 14;
       const cbX = x + PAD;

@@ -51,6 +51,7 @@ import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
+import { HULLS }         from '../data/HullsData.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { GAME_CONFIG }   from '../config/GameConfig.js';
@@ -132,7 +133,10 @@ export class ExpeditionSystem {
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const vMgr     = window.KOSMOS?.vesselManager;
-    const shipOk   = vMgr?.hasAvailableShipWithCapability(activePid, 'colony') ?? false;
+    // Jeśli podano vesselId — statek już wybrany, pomiń sprawdzenie hangaru
+    const shipOk   = vesselId
+      ? !!(vMgr?.getVessel(vesselId))
+      : (vMgr?.hasAvailableShipWithCapability(activePid, 'colony') ?? false);
     // Koloniści załadowani na statek (min 1 POP)
     const vessel = vesselId ? vMgr?.getVessel(vesselId) : vMgr?.getFirstAvailableWithCapability(activePid, 'colony');
     const colonistOk = (vessel?.colonists ?? 0) >= 1;
@@ -167,12 +171,15 @@ export class ExpeditionSystem {
 
   // Sprawdź czy gracz może założyć outpost (cargo ship + budynek)
   // Nie wymaga spaceport — cargo ship leci bezpośrednio
-  canFoundOutpost(targetId, buildingId) {
+  canFoundOutpost(targetId, buildingId, vesselId = null) {
     const techOk   = window.KOSMOS?.techSystem?.isResearched('exploration') ?? false;
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const vMgr     = window.KOSMOS?.vesselManager;
-    const shipOk   = vMgr?.hasAvailableShipWithCapability(activePid, 'cargo') ?? false;
+    // Jeśli podano vesselId — statek już wybrany, pomiń sprawdzenie hangaru
+    const shipOk   = vesselId
+      ? !!(vMgr?.getVessel(vesselId))
+      : (vMgr?.hasAvailableShipWithCapability(activePid, 'cargo') ?? false);
     const target   = this._findTarget(targetId);
     const exploredOk = target?.explored === true;
     const typeOk   = target
@@ -331,7 +338,7 @@ export class ExpeditionSystem {
     const vMgr = window.KOSMOS?.vesselManager;
     const vessel = vMgr?.getVessel(vesselId);
     if (!vessel) return null;
-    return SHIPS[vessel.shipId]?.crewStrata ?? null;
+    return (SHIPS[vessel.shipId] ?? HULLS[vessel.shipId])?.crewStrata ?? null;
   }
 
   _hasSpaceport() {
@@ -500,7 +507,7 @@ export class ExpeditionSystem {
     }
 
     const assignedVessel = vesselId ? vMgr?.getVessel(vesselId) : null;
-    const vesselShipDef  = assignedVessel ? SHIPS[assignedVessel.shipId] : null;
+    const vesselShipDef  = assignedVessel ? (SHIPS[assignedVessel.shipId] ?? HULLS[assignedVessel.shipId]) : null;
     const colonists      = assignedVessel?.colonists ?? 1;
 
     // POPy już zablokowane przy loadColonists (w UI) — nie blokujemy ponownie
@@ -567,7 +574,7 @@ export class ExpeditionSystem {
   // ── Założenie outpostu (cargo ship + budynek) ─────────────────────────────
 
   _launchFoundOutpost(targetId, buildingId, vesselId) {
-    const check = this.canFoundOutpost(targetId, buildingId);
+    const check = this.canFoundOutpost(targetId, buildingId, vesselId);
     if (!check.ok) {
       const reason = !check.techOk ? t('expedition.noTechColonization')
         : !check.shipOk ? t('expedition.noColonyShip')
@@ -1991,7 +1998,7 @@ export class ExpeditionSystem {
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
       if (vessel) {
-        const shipDef = SHIPS[vessel.shipId];
+        const shipDef = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
         // Warp = natychmiastowy lot (bardzo duża prędkość → travelTime ≈ 0)
         if (shipDef?.warpCapable) return 99999;
         base = vessel.speedAU ?? shipDef?.speedAU ?? 1.0;
@@ -2032,7 +2039,7 @@ export class ExpeditionSystem {
 
   // Sprawdź czy cel jest w zasięgu statku (orbitalna, stabilna metryka)
   _isInRange(target, shipId) {
-    const ship = SHIPS[shipId];
+    const ship = SHIPS[shipId] ?? HULLS[shipId];
     if (!ship || !ship.range) return true; // brak limitu = brak blokady
     const dist = DistanceUtils.orbitalFromHomeAU(target);
     return dist <= ship.range;

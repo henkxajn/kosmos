@@ -1798,6 +1798,27 @@ export default {
   'civPanel.colonies': 'Colonies',
   'civPanel.observatory': 'Observatory',
   'civPanel.galaxy': 'Galaxy',
+  'civPanel.unitDesign': 'Designs',
+
+  // === UnitDesignOverlay ===
+  'unitDesign.shipDesign': 'SHIP DESIGN',
+  'unitDesign.groundUnits': 'GROUND UNITS',
+  'unitDesign.groundPlaceholder': 'Ground unit design coming in a future update.',
+  'unitDesign.selectHull': 'Select Hull',
+  'unitDesign.slots': 'Module Slots',
+  'unitDesign.emptySlot': '(empty)',
+  'unitDesign.propulsionSlot': 'Propulsion',
+  'unitDesign.utilitySlot': 'Utility',
+  'unitDesign.pickModule': 'pick module',
+  'unitDesign.saveTemplate': 'Save',
+  'unitDesign.clear': 'Clear',
+  'unitDesign.savedTemplates': 'Saved Designs',
+  'unitDesign.edit': 'Edit',
+  'unitDesign.delete': 'Delete',
+  'unitDesign.noTemplates': 'No designs yet. Create one above.',
+  'unitDesign.needEngine': 'At least one propulsion module required.',
+  'unitDesign.statsPreview': 'Stats Preview',
+  'unitDesign.noDesigns': 'No designs. Press U to open Unit Design.',
 
   // === ObservatoryOverlay ===
   'observatory.title': 'OBSERVATORY',

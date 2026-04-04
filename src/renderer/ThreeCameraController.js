@@ -69,6 +69,8 @@ export class ThreeCameraController {
     // max 450 = widoczność orbit do ~40 AU (dla układów 9-11 planet)
     window.addEventListener('wheel', (e) => {
       e.preventDefault();
+      // Blokuj zoom gdy overlay jest otwarty (scroll obsługuje UIManager)
+      if (window.KOSMOS?.overlayManager?.isAnyOpen()) return;
       // Blokuj zoom gdy kursor jest nad elementem UI
       if (this._isOverUI && this._isOverUI(e.clientX, e.clientY)) return;
       // Adaptacyjna czułość: wolniej przy bliskim zoomie → precyzja

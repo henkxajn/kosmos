@@ -1,17 +1,15 @@
-// BalancedBot — strategia wzorowana na doświadczonym graczu
-// Filozofia: POP rush → kopalnie na bonusach → upgrade → port kosmiczny → ekspansja
+// BalancedBot — odwzorowanie strategii agresywnego gracza
 //
-// === Scenariusz standardowy (civilization) ===
-// Faza 1 (0-10 lat): BOOTSTRAP — solar_farm → mine → factory → research_station
-// Faza 2 (10-40 lat): WZROST — farmy/studnie/housing → POP rush + upgrades
-// Faza 3 (40+ lat, bez portu): AKUMULACJA — kopalnie, zbieranie Fe na port
-// Faza 4 (po porcie): EKSPANSJA — flota, recon, kolonizacja
-//
-// === Scenariusz boosted (civilization_boosted) ===
-// Start: 4 POP, rocketry+exploration, launch_pad+shipyard, mining×5, factory×1.5
-// Faza B1 (0-15): BOOTSTRAP — mine + factory + ekonomia bazowa
-// Faza B2 (15-40): WZROST — POP rush + housing + upgrade + commodity production
-// Faza B3 (40+): EKSPANSJA — statki + recon + kolonie
+// BUILD ORDER (boosted):
+// 1. Mine → coal_plant → metallurgy → factory (steel budget: 13-3-3-5=2)
+// 2. Food/water jeśli trzeba, inaczej consumer_factory Lv1
+// 3. Kopalnia #2, upgrade factory→Lv2, research
+// 4. Water/food/energy jeśli trzeba, factory→Lv3, mine→Lv3
+// 5. Science vessel → recon full_system
+// 6. Consumer factory
+// 7. Produkuj 3× autonomous mine + solar prefab, czekaj na Fe
+// 8. Produkuj autonomous spaceport prefab (Fe:1000!)
+// 9. Cargo ship → załaduj prefaby → outpost na księżyc
 
 import { BotInterface } from './BotInterface.js';
 
@@ -24,141 +22,123 @@ export class BalancedBot extends BotInterface {
   evaluatePriorities(state) {
     const base = super.evaluatePriorities(state);
     const year = state.gameYear ?? 0;
-    const pop = state.colony.population;
-    const hasRocketry = state.tech.researched.includes('rocketry');
-    const hasExploration = state.tech.researched.includes('exploration');
-    const hasShipyard = state.buildings.active.some(b => b.buildingId === 'shipyard');
-    const hasLaunchPad = state.buildings.active.some(b =>
+    const s = state;
+    const hasShipyard = s.buildings.active.some(b => b.buildingId === 'shipyard');
+    const hasLaunchPad = s.buildings.active.some(b =>
       b.buildingId === 'launch_pad' || b.buildingId === 'autonomous_spaceport');
-    const mineCount = state.buildings.active.filter(b => b.buildingId === 'mine').length;
-    const factoryCount = state.buildings.active.filter(b => b.buildingId === 'factory').length;
-    const Fe = state.resources.inventory.Fe ?? 0;
-    const savingForPort = hasRocketry && !hasLaunchPad;
-
-    // Wykryj scenariusz boosted: ma launch_pad + shipyard od startu
-    const isBoosted = hasLaunchPad && hasShipyard && year < 5 && pop <= 5;
+    const factoryCount = s.buildings.active.filter(b => b.buildingId === 'factory').length;
+    const cfCount = s.buildings.active.filter(b => b.buildingId === 'consumer_factory').length;
+    const mineCount = s.buildings.active.filter(b => b.buildingId === 'mine').length;
+    const fleet = s.fleet.allVessels || [];
+    const sciVessels = fleet.filter(v => v.shipId === 'science_vessel').length;
+    const cargoShips = fleet.filter(v => v.shipId === 'cargo_ship').length;
+    const factoryLv = Math.max(...s.buildings.active
+      .filter(b => b.buildingId === 'factory').map(b => b.level ?? 1), 0);
+    const mineLv = Math.max(...s.buildings.active
+      .filter(b => b.buildingId === 'mine').map(b => b.level ?? 1), 0);
+    const prosperity = s.colony.prosperity ?? 50;
+    const outposts = (s.colonies ?? []).filter(c => c.isOutpost).length;
 
     for (const p of base) {
       // ═══════════════════════════════════════════════════════════════
-      // SCENARIUSZ BOOSTED: launch_pad + shipyard od startu
+      // SCENARIUSZ BOOSTED
       // ═══════════════════════════════════════════════════════════════
       if (hasLaunchPad && hasShipyard) {
 
+        // ── KROK 1: mine FIRST → coal → metallurgy → factory (yr 0-3) ──
+        if (factoryCount === 0) {
+          // Mine MUSI być pierwsza — Fe drains at 120/gameYear from maintenance!
+          if (p.name === 'build_mine') p.score += 50;
+          if (p.name === 'proactive_mine') p.score += 50;
+          if (p.name === 'proactive_energy') p.score += 35;  // coal_plant
+          if (p.name === 'research_tech') p.score += 25;     // metallurgy (po mine!)
+          if (p.name === 'build_factory') p.score += 20;     // factory po coal+metallurgy
+          // NIE hamuj food/water → zapobiega starvation
+          if (p.name === 'build_ship') p.score -= 30;
+          if (p.name === 'send_recon') p.score -= 30;
+          if (p.name === 'send_transport') p.score -= 30;
+          continue;
+        }
+
+        // ── KROK 2-4: food/water + mine#2 + factory→Lv2/3 + mine→Lv3 (yr 3-15) ──
         if (year < 15) {
-          // ── Faza B1: BOOTSTRAP — ekonomia bazowa ──
-          // Priorytet: mine + factory + food/water + energia
-          if (p.name === 'build_mine') p.score += 20;
-          if (p.name === 'proactive_mine') p.score += 18;
-          if (p.name === 'build_factory') p.score += 18;
-          if (p.name === 'allocate_factory') p.score += 15;
+          if (p.name === 'allocate_factory') p.score += 5;   // produkuj commodities!
+          if (p.name === 'upgrade_building') p.score += 22;   // factory/mine upgrade
+          if (p.name === 'proactive_food') p.score += 18;
+          if (p.name === 'proactive_water') p.score += 15;
+          if (p.name === 'proactive_energy') p.score += 12;
+          if (p.name === 'build_mine' && mineCount < 2) p.score += 20;
+          if (p.name === 'proactive_mine') p.score += 15;
+          if (p.name === 'build_consumer_factory' && cfCount === 0 && factoryLv >= 2) p.score += 18;
           if (p.name === 'research_tech') p.score += 15;
+          if (p.name === 'build_housing') p.score += 10;
+          // Statki: science_vessel po mine Lv3 + factory Lv2
+          if (p.name === 'build_ship' && mineLv >= 3 && factoryLv >= 2) p.score += 25;
+          if (p.name === 'send_recon' && sciVessels > 0) p.score += 30;
+
+        // ── KROK 5-6: science vessel + consumer factory (yr 15-25) ──
+        } else if (year < 25) {
+          if (p.name === 'build_ship') p.score += 30;
+          if (p.name === 'send_recon') p.score += 40;
+          if (p.name === 'allocate_factory') p.score += 5;
+          if (p.name === 'upgrade_building') p.score += 20;
+          if (p.name === 'build_consumer_factory' && cfCount < 1) p.score += 25;
+          if (p.name === 'research_tech') p.score += 18;
+          if (p.name === 'proactive_food') p.score += 12;
+          if (p.name === 'proactive_water') p.score += 10;
           if (p.name === 'proactive_energy') p.score += 10;
-          if (p.name === 'proactive_food') p.score += 5;
-          if (p.name === 'proactive_water') p.score += 5;
-          if (p.name === 'build_housing') p.score += 5;
-          // Hamuj ekspansję — za wcześnie
-          if (p.name === 'build_ship') p.score -= 20;
-          if (p.name === 'send_recon') p.score -= 20;
+          if (p.name === 'build_housing') p.score += 12;
+          if (p.name === 'build_mine') p.score += 8;
+          // Cargo ship po science vessel
+          if (p.name === 'send_transport') p.score += 35;
 
-        } else if (year < 40) {
-          // ── Faza B2: WZROST — POP rush + commodity production ──
-          if (p.name === 'proactive_food') p.score += 15;
-          if (p.name === 'proactive_water') p.score += 12;
-          if (p.name === 'build_housing') p.score += 15;
-          if (p.name === 'proactive_energy') p.score += 8;
-          if (p.name === 'allocate_factory') p.score += 18;
-          if (p.name === 'build_mine') p.score += 12;
-          if (p.name === 'proactive_mine') p.score += 10;
-          if (p.name === 'research_tech') p.score += 12;
-          if (p.name === 'build_factory' && factoryCount < 2) p.score += 15;
-          if (year > 20 && p.name === 'upgrade_building') p.score += 20;
-          // Statek: niższy priorytet, ale OK jeśli mamy surowce
-          if (p.name === 'build_ship') p.score += 10;
-          if (p.name === 'send_recon') p.score += 15;
-
+        // ── KROK 7-9: prefaby + cargo ship + outpost (yr 25+) ──
         } else {
-          // ── Faza B3: EKSPANSJA — statki + recon + kolonie ──
-          // build_ship MUSI wygrywać z allocate_factory (base ~68)
-          if (p.name === 'build_ship') p.score += 50;
-          if (p.name === 'send_recon') p.score += 55;
-          if (p.name === 'send_colony') p.score += 55;
-          if (p.name === 'upgrade_building') p.score += 18;
-          if (p.name === 'research_tech') p.score += 15;
-          if (p.name === 'allocate_factory') p.score += 12;
-          if (p.name === 'proactive_food') p.score += 8;
-          if (p.name === 'proactive_water') p.score += 8;
-          if (p.name === 'build_mine') p.score += 10;
-          if (p.name === 'build_housing') p.score += 8;
+          if (p.name === 'send_transport') p.score += 48;    // outpost!
+          if (p.name === 'upgrade_outpost') p.score += 50;
+          if (p.name === 'send_colony') p.score += 45;
+          if (p.name === 'send_recon') p.score += 42;
+          if (p.name === 'build_ship') p.score += 38;
+          if (p.name === 'allocate_factory') p.score += 5;
+          if (p.name === 'upgrade_building') p.score += 20;
+          if (p.name === 'research_tech') p.score += 18;
+          if (p.name === 'build_consumer_factory' && cfCount < 2 && prosperity < 30) p.score += 28;
+          if (p.name === 'proactive_food') p.score += 12;
+          if (p.name === 'proactive_water') p.score += 10;
+          if (p.name === 'proactive_energy') p.score += 10;
+          if (p.name === 'build_housing') p.score += 12;
         }
 
       // ═══════════════════════════════════════════════════════════════
-      // SCENARIUSZ STANDARDOWY: bez launch_pad od startu
+      // SCENARIUSZ STANDARDOWY
       // ═══════════════════════════════════════════════════════════════
-      } else if (year < 10) {
-        // ── Faza 1: BOOTSTRAP — infrastruktura before POP rush ──
-        if (p.name === 'research_tech') p.score += 15;
-        if (p.name === 'build_mine') p.score += 18;
-        if (p.name === 'proactive_mine') p.score += 18;
-        if (p.name === 'build_factory') p.score += 12;
-        if (p.name === 'allocate_factory') p.score += 8;
-        if (p.name === 'proactive_energy') p.score += 5;
-        if (p.name === 'build_research') p.score += 5;
-        if (p.name === 'proactive_food') p.score -= 10;
-        if (p.name === 'proactive_water') p.score -= 5;
-        if (p.name === 'build_housing') p.score -= 10;
-        if (p.name === 'build_shipyard') p.score -= 30;
-        if (p.name === 'build_launch_pad') p.score -= 30;
-        if (p.name === 'build_ship') p.score -= 30;
-
-      } else if (year < 40) {
-        // ── Faza 2: WZROST — POP rush + upgrades + 2. fabryka ──
-        if (p.name === 'proactive_food') p.score += 15;
-        if (p.name === 'proactive_water') p.score += 12;
-        if (p.name === 'build_housing') p.score += 15;
-        if (p.name === 'proactive_energy') p.score += 8;
-        if (p.name === 'research_tech') p.score += 12;
-        if (p.name === 'build_research') p.score += 10;
-        if (p.name === 'build_mine') p.score += 10;
-        if (p.name === 'proactive_mine') p.score += 8;
-        if (p.name === 'allocate_factory') p.score += 10;
-        // 2. fabryka: buduj w fazie 2 (podwaja prędkość produkcji!)
-        if (p.name === 'build_factory' && factoryCount < 2) p.score += 15;
-        if (year > 15 && p.name === 'upgrade_building') p.score += 20;
-        // Hamuj ekspansję
-        if (p.name === 'build_shipyard') p.score -= 20;
-        if (p.name === 'build_launch_pad') p.score -= 20;
-        if (p.name === 'build_ship') p.score -= 20;
-
-      } else if (savingForPort) {
-        // ── Faza 3: AKUMULACJA Fe NA PORT KOSMICZNY (od orbital_survey) ──
-        if (p.name === 'build_mine') p.score += 30;
-        if (p.name === 'proactive_mine') p.score += 28;
-        if (p.name === 'allocate_factory') p.score += 25;
-        if (p.name === 'build_factory' && factoryCount < 2) p.score += 20;
-        if (p.name === 'research_tech') p.score += 18;
-        if (p.name === 'proactive_food') p.score += 5;
-        if (p.name === 'proactive_water') p.score += 3;
-        if (!hasShipyard && p.name === 'build_shipyard') p.score += 20;
-        if (p.name === 'build_launch_pad') p.score += 35;
-        if (p.name === 'upgrade_building') p.score -= 20;
-        if (p.name === 'build_housing' && pop >= 10) p.score -= 15;
-        if (p.name === 'build_ship') p.score -= 30;
-
-      } else if (!hasLaunchPad && !savingForPort) {
-        // ── Pre-orbital_survey: rozwój przemysłowy ──
-        if (p.name === 'upgrade_building') p.score += 20;
-        if (p.name === 'research_tech') p.score += 22;
-        if (p.name === 'allocate_factory') p.score += 18;
+      } else if (year < 15) {
+        if (p.name === 'build_mine') p.score += 20;
+        if (p.name === 'proactive_mine') p.score += 20;
+        if (p.name === 'proactive_energy') p.score += 15;
         if (p.name === 'build_factory') p.score += 15;
-        if (p.name === 'build_mine') p.score += 15;
-        if (p.name === 'proactive_mine') p.score += 12;
-        if (p.name === 'build_research') p.score += 10;
-        if (p.name === 'proactive_food') p.score += 8;
-        if (p.name === 'proactive_water') p.score += 6;
-        if (p.name === 'build_housing') p.score += 8;
-        if (p.name === 'build_shipyard') p.score -= 20;
-        if (p.name === 'build_launch_pad') p.score -= 20;
-        if (p.name === 'build_ship') p.score -= 20;
+        if (p.name === 'research_tech') p.score += 15;
+        if (p.name === 'build_ship') p.score -= 30;
+      } else if (year < 40) {
+        if (p.name === 'upgrade_building') p.score += 22;
+        if (p.name === 'build_consumer_factory') p.score += 20;
+        if (p.name === 'proactive_food') p.score += 18;
+        if (p.name === 'proactive_water') p.score += 15;
+        if (p.name === 'build_housing') p.score += 18;
+        if (p.name === 'allocate_factory') p.score += 5;
+        if (p.name === 'research_tech') p.score += 15;
+        if (p.name === 'build_ship') p.score += 20;
+        if (p.name === 'send_recon') p.score += 25;
+      } else {
+        if (p.name === 'send_recon') p.score += 45;
+        if (p.name === 'send_transport') p.score += 42;
+        if (p.name === 'upgrade_outpost') p.score += 45;
+        if (p.name === 'build_ship') p.score += 35;
+        if (p.name === 'allocate_factory') p.score += 5;
+        if (p.name === 'upgrade_building') p.score += 20;
+        if (p.name === 'research_tech') p.score += 18;
+        if (p.name === 'proactive_food') p.score += 12;
+        if (p.name === 'proactive_energy') p.score += 10;
       }
     }
 

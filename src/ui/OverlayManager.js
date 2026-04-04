@@ -18,6 +18,7 @@ export class OverlayManager {
       'h': 'trade',
       'v': 'civilization',
       'g': 'galaxy',
+      'u': 'unit_design',
     };
   }
 

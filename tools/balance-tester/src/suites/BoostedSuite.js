@@ -1,13 +1,12 @@
 // BoostedSuite — test scenariusza "Nowa Gra 2" (civilization_boosted)
-// Start: 4 POP, rocketry+exploration, launch_pad+shipyard, mining×5, factory×1.5
-// 500 lat — pełna ścieżka: statki → recon → kolonie
+// 40 lat — matchuje czas gry gracza (2 outposty, kolonizacja, 50+ pop)
 
 export const BoostedSuite = {
   name: 'boosted',
-  description: 'Nowa Gra 2: 50 runów BalancedBot × 500 lat (boosted start)',
+  description: 'Nowa Gra 2: 50 runów BalancedBot × 40 lat (boosted start)',
   bots: [
     { botName: 'BalancedBot', runs: 50 },
   ],
-  years: 500,
+  years: 40,
   scenario: 'civilization_boosted',
 };

@@ -21,6 +21,7 @@ import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { SHIPS }         from '../data/ShipsData.js';
+import { HULLS }         from '../data/HullsData.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
@@ -129,19 +130,22 @@ export class MissionSystem {
   }
 
   // Sprawdź czy gracz może wysłać ekspedycję mining
-  canLaunch(type = 'mining') {
+  canLaunch(type = 'mining', vesselId = null) {
     const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-    const padOk  = this._hasSpaceport();
+    const padOk  = this._checkPadForVessel(vesselId);
     return { ok: techOk && padOk, techOk, padOk, crewOk: true, vesselOk: true };
   }
 
   // Sprawdź czy gracz może wysłać ekspedycję kolonizacyjną
-  canLaunchColony(targetId) {
+  canLaunchColony(targetId, vesselId = null) {
     const techOk   = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
-    const padOk    = this._hasSpaceport();
+    const padOk    = this._checkPadForVessel(vesselId);
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
-    const shipOk   = colMgr?.hasShipWithCapability(activePid, 'colony') ?? false;
+    const vMgr     = window.KOSMOS?.vesselManager;
+    const shipOk   = vesselId
+      ? !!(vMgr?.getVessel(vesselId))
+      : (colMgr?.hasShipWithCapability(activePid, 'colony') ?? false);
     const target   = this._findTarget(targetId);
     const exploredOk = target?.explored === true;
     const typeOk   = target
@@ -158,30 +162,33 @@ export class MissionSystem {
   }
 
   // Sprawdź czy gracz może wysłać misję rozpoznawczą (survey/deep_scan)
-  canLaunchRecon() {
+  canLaunchRecon(vesselId = null) {
     const techOk   = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-    const padOk    = this._hasSpaceport();
+    const padOk    = this._checkPadForVessel(vesselId);
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
-    const vesselOk = colMgr?.hasShipWithCapability(activePid, 'recon') ?? false;
+    const vMgr     = window.KOSMOS?.vesselManager;
+    const vesselOk = vesselId
+      ? !!(vMgr?.getVessel(vesselId))
+      : (colMgr?.hasShipWithCapability(activePid, 'recon') ?? false);
     return { ok: techOk && padOk && vesselOk, techOk, padOk, crewOk: true, vesselOk };
   }
 
   // Sprawdź czy gracz może założyć outpost (cargo ship + budynek)
-  canFoundOutpost(targetId, buildingId) {
+  canFoundOutpost(targetId, buildingId, vesselId = null) {
     const techOk   = window.KOSMOS?.techSystem?.isResearched('exploration') ?? false;
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const vMgr     = window.KOSMOS?.vesselManager;
-    const shipOk   = vMgr?.hasAvailableShipWithCapability(activePid, 'cargo') ?? false;
+    const shipOk   = vesselId
+      ? !!(vMgr?.getVessel(vesselId))
+      : (vMgr?.hasAvailableShipWithCapability(activePid, 'cargo') ?? false);
     const target   = this._findTarget(targetId);
     const exploredOk = target?.explored === true;
     const typeOk   = target
       ? (target.type === 'planetoid' || target.type === 'moon' ||
          (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
       : false;
-    const existingCol = colMgr?.getColony(targetId);
-    const notColonized = !existingCol;
     const bDef = BUILDINGS[buildingId];
     const buildingOk = !!bDef;
     const resSys = this.resourceSystem;
@@ -197,8 +204,8 @@ export class MissionSystem {
       if (resSys) canAfford = resSys.canAfford(totalCost);
     }
     return {
-      ok: techOk && shipOk && exploredOk && typeOk && notColonized && buildingOk && canAfford,
-      techOk, shipOk, exploredOk, typeOk, notColonized, buildingOk, canAfford, totalCost,
+      ok: techOk && shipOk && exploredOk && typeOk && buildingOk && canAfford,
+      techOk, shipOk, exploredOk, typeOk, notColonized: true, buildingOk, canAfford, totalCost,
     };
   }
 
@@ -383,6 +390,23 @@ export class MissionSystem {
     return bSys ? bSys.hasSpaceport() : false;
   }
 
+  // Czy statek wymaga wyrzutni? Małe kadłuby (size === 'small') nie wymagają.
+  _needsSpaceportForVessel(vesselId) {
+    if (!vesselId) return true;
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(vesselId);
+    if (!vessel) return true;
+    const hull = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+    if (hull?.size === 'small') return false;
+    return hull?.requiresSpaceport !== false; // domyślnie true
+  }
+
+  // Sprawdź spaceport — pomija check dla małych statków
+  _checkPadForVessel(vesselId) {
+    if (!this._needsSpaceportForVessel(vesselId)) return true;
+    return this._hasSpaceport();
+  }
+
   // ── Emituj event z aliasem (nowy + stary) ──────────────────────────────────
   _emit(newEvent, oldEvent, data) {
     EventBus.emit(newEvent, data);
@@ -403,7 +427,7 @@ export class MissionSystem {
     }
 
     // mining
-    const { ok, techOk, padOk } = this.canLaunch(type);
+    const { ok, techOk, padOk } = this.canLaunch(type, vesselId);
     if (!ok) {
       const reason = !techOk
         ? t('mission.noTechRocketry')
@@ -492,7 +516,7 @@ export class MissionSystem {
 
   // ── Ekspedycja kolonizacyjna ──────────────────────────────────────────────
   _launchColony(targetId, vesselId) {
-    const check = this.canLaunchColony(targetId);
+    const check = this.canLaunchColony(targetId, vesselId);
     if (!check.ok) {
       const reason = !check.techOk
         ? t('mission.noTechColonization')
@@ -587,7 +611,7 @@ export class MissionSystem {
 
   // ── Założenie outpostu (cargo ship + budynek) ─────────────────────────────
   _launchFoundOutpost(targetId, buildingId, vesselId) {
-    const check = this.canFoundOutpost(targetId, buildingId);
+    const check = this.canFoundOutpost(targetId, buildingId, vesselId);
     if (!check.ok) {
       const reason = !check.techOk ? t('mission.noTechColonization')
         : !check.shipOk ? t('mission.noColonyShip')
@@ -778,8 +802,8 @@ export class MissionSystem {
     const isRedispatch = isOrbiting || isRemoteDocked;
 
     if (!isRedispatch) {
-      // Standardowy launch z bazy — wymaga launch_pad
-      const padOk  = this._hasSpaceport();
+      // Standardowy launch z bazy — wymaga launch_pad (pomijane dla małych kadłubów)
+      const padOk  = this._checkPadForVessel(vesselId);
 
       if (!padOk) {
         this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noSpaceport') });
@@ -1002,7 +1026,7 @@ export class MissionSystem {
 
   // ── Recon (survey / deep_scan) ────────────────────────────────────────────
   _launchRecon(scope, vesselId) {
-    const { ok, techOk, padOk, vesselOk } = this.canLaunchRecon();
+    const { ok, techOk, padOk, vesselOk } = this.canLaunchRecon(vesselId);
     if (!ok) {
       const reason = !techOk
         ? t('mission.noTechRocketry')
@@ -1954,7 +1978,7 @@ export class MissionSystem {
     if (vMgr && vesselId) {
       const vessel = vMgr.getVessel(vesselId);
       if (vessel) {
-        const shipDef = SHIPS[vessel.shipId];
+        const shipDef = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
         // Warp = natychmiastowy lot (bardzo duża prędkość → travelTime ≈ 0)
         if (shipDef?.warpCapable) return 99999;
         base = vessel.speedAU ?? shipDef?.speedAU ?? 1.0;
@@ -1994,7 +2018,7 @@ export class MissionSystem {
   }
 
   _isInRange(target, shipId) {
-    const ship = SHIPS[shipId];
+    const ship = SHIPS[shipId] ?? HULLS[shipId];
     if (!ship || !ship.range) return true;
     const dist = DistanceUtils.orbitalFromHomeAU(target);
     return dist <= ship.range;

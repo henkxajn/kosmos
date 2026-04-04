@@ -6,6 +6,7 @@
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { SHIPS } from '../data/ShipsData.js';
+import { HULLS } from '../data/HullsData.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { t, getName } from '../i18n/i18n.js';
 
@@ -56,7 +57,7 @@ export function showTradeRouteModal(sourceColony, targetBodyId, targetName, vess
     panel.appendChild(info);
 
     // Info o ładowności statku
-    const shipDef = vessel ? SHIPS[vessel.shipId] : null;
+    const shipDef = vessel ? (SHIPS[vessel.shipId] ?? HULLS[vessel.shipId]) : null;
     const cargoCapacity = shipDef?.cargoCapacity ?? 0;
     let cargoInfo = null;
     if (vessel && cargoCapacity > 0) {

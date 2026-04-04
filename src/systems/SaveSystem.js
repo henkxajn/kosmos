@@ -135,6 +135,7 @@ export class SaveSystem {
       groundUnitManager: window.KOSMOS?.groundUnitManager?.serialize() ?? null,
       anomalyEffectSystem: window.KOSMOS?.anomalyEffectSystem?.serialize() ?? null,
       exploredBodies,
+      unitDesigns: window.KOSMOS?.unitDesigns ?? [],
       galaxyData: window.KOSMOS.galaxyData ?? null,
       activeSystemId: window.KOSMOS.activeSystemId ?? 'sys_home',
       starSystemManager: window.KOSMOS.starSystemManager?.serialize() ?? null,

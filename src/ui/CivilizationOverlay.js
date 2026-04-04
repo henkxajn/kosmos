@@ -8,6 +8,7 @@ import { BaseOverlay }   from './BaseOverlay.js';
 import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { SHIPS }         from '../data/ShipsData.js';
+import { HULLS }         from '../data/HullsData.js';
 import { t, getName }    from '../i18n/i18n.js';
 
 const LEFT_W = 340;
@@ -300,7 +301,7 @@ export class CivilizationOverlay extends BaseOverlay {
 
     // Breakdown per typ statku
     for (const [shipId, count] of Object.entries(data.fleetByType)) {
-      const shipDef = SHIPS[shipId];
+      const shipDef = SHIPS[shipId] ?? HULLS[shipId];
       const shipName = shipDef ? getName(shipDef, 'ship') : shipId;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;

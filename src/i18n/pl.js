@@ -1798,6 +1798,27 @@ export default {
   'civPanel.colonies': 'Kolonie',
   'civPanel.observatory': 'Obserwatorium',
   'civPanel.galaxy': 'Galaktyka',
+  'civPanel.unitDesign': 'Projekty',
+
+  // === UnitDesignOverlay ===
+  'unitDesign.shipDesign': 'PROJEKTOWANIE STATKÓW',
+  'unitDesign.groundUnits': 'JEDNOSTKI NAZIEMNE',
+  'unitDesign.groundPlaceholder': 'Projektowanie jednostek naziemnych dostępne w przyszłej aktualizacji.',
+  'unitDesign.selectHull': 'Wybierz kadłub',
+  'unitDesign.slots': 'Sloty modułowe',
+  'unitDesign.emptySlot': '(pusty)',
+  'unitDesign.propulsionSlot': 'Napęd',
+  'unitDesign.utilitySlot': 'Użytkowy',
+  'unitDesign.pickModule': 'wybierz moduł',
+  'unitDesign.saveTemplate': 'Zapisz',
+  'unitDesign.clear': 'Wyczyść',
+  'unitDesign.savedTemplates': 'Zapisane projekty',
+  'unitDesign.edit': 'Edytuj',
+  'unitDesign.delete': 'Usuń',
+  'unitDesign.noTemplates': 'Brak projektów. Stwórz pierwszy powyżej.',
+  'unitDesign.needEngine': 'Wymagany co najmniej jeden moduł napędowy.',
+  'unitDesign.statsPreview': 'Podgląd statystyk',
+  'unitDesign.noDesigns': 'Brak projektów. Naciśnij U aby otworzyć Projektowanie.',
 
   // === ObservatoryOverlay ===
   'observatory.title': 'OBSERWATORIUM',

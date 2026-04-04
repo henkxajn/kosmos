@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 41;
+export const CURRENT_VERSION     = 42;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -56,6 +56,7 @@ const MIGRATIONS = {
   38: _migrateV38toV39,
   39: _migrateV39toV40,
   40: _migrateV40toV41,
+  41: _migrateV41toV42,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1123,6 +1124,14 @@ function _migrateV40toV41(data) {
     home.deposits.push({
       resourceId: 'Xe', richness: 1.0, totalAmount: 50, remaining: 50,
     });
+  }
+  return data;
+}
+
+// ── v41 → v42: Unit Design — szablony projektów statków ─────────────────────
+function _migrateV41toV42(data) {
+  if (data.civ4x) {
+    data.civ4x.unitDesigns = data.civ4x.unitDesigns ?? [];
   }
   return data;
 }

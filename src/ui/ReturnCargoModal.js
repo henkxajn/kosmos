@@ -6,6 +6,7 @@
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { SHIPS } from '../data/ShipsData.js';
+import { HULLS } from '../data/HullsData.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { t, getName } from '../i18n/i18n.js';
 
@@ -47,7 +48,7 @@ export function showReturnCargoModal(targetColony, vessel) {
     panel.appendChild(title);
 
     // Info o ładowności
-    const shipDef = SHIPS[vessel?.shipId];
+    const shipDef = SHIPS[vessel?.shipId] ?? HULLS[vessel?.shipId];
     const cargoCapacity = shipDef?.cargoCapacity ?? 0;
     let cargoInfo = null;
     if (cargoCapacity > 0) {

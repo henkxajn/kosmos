@@ -15,10 +15,12 @@ let PhysicsSystem, TimeSystem, LifeSystem, DiskPhaseSystem;
 let ResourceSystem, CivilizationSystem, BuildingSystem, TechSystem;
 let FactorySystem, DepositSystem, ColonyManager, VesselManager;
 let MissionSystem, TradeRouteManager, ResearchSystem, RandomEventSystem;
+let CivilianTradeSystem, ObservatorySystem;
 let ImpactDamageSystem;
 let SystemGenerator;
 let PlanetMapGenerator;
 let BUILDINGS, TERRAIN_TYPES, TECHS;
+let VesselLoadCargo, VesselUnloadCargo;
 
 let _modulesLoaded = false;
 
@@ -44,10 +46,15 @@ async function loadGameModules() {
   ({ DepositSystem }     = await import(`${GAME_SRC}/systems/DepositSystem.js`));
   ({ ColonyManager }     = await import(`${GAME_SRC}/systems/ColonyManager.js`));
   ({ VesselManager }     = await import(`${GAME_SRC}/systems/VesselManager.js`));
+  const vesselMod = await import(`${GAME_SRC}/entities/Vessel.js`);
+  VesselLoadCargo = vesselMod.loadCargo;
+  VesselUnloadCargo = vesselMod.unloadCargo;
   ({ MissionSystem }     = await import(`${GAME_SRC}/systems/MissionSystem.js`));
   ({ TradeRouteManager } = await import(`${GAME_SRC}/systems/TradeRouteManager.js`));
   ({ ResearchSystem }    = await import(`${GAME_SRC}/systems/ResearchSystem.js`));
   ({ RandomEventSystem } = await import(`${GAME_SRC}/systems/RandomEventSystem.js`));
+  ({ CivilianTradeSystem } = await import(`${GAME_SRC}/systems/CivilianTradeSystem.js`));
+  ({ ObservatorySystem }   = await import(`${GAME_SRC}/systems/ObservatorySystem.js`));
   ({ ImpactDamageSystem } = await import(`${GAME_SRC}/systems/ImpactDamageSystem.js`));
   ({ SystemGenerator }   = await import(`${GAME_SRC}/generators/SystemGenerator.js`));
   ({ PlanetMapGenerator } = await import(`${GAME_SRC}/map/PlanetMapGenerator.js`));
@@ -82,6 +89,8 @@ export class HeadlessRuntime {
     this.tradeRouteManager = null;
     this.researchSystem = null;
     this.depositSystem = null;
+    this.civilianTradeSystem = null;
+    this.observatorySystem = null;
 
     this.star = null;
     this.planets = [];
@@ -117,7 +126,7 @@ export class HeadlessRuntime {
 
     // ── TimeSystem ──
     this.timeSystem = new TimeSystem();
-    this.timeSystem.multiplierIndex = 3; // 1r/s
+    this.timeSystem.multiplierIndex = 4; // 1r/s (index 4 w TIME_MULTIPLIERS)
     this.timeSystem.isPaused = false;
     // Wyłącz auto-slow (niepotrzebny w headless)
     this.timeSystem._autoSlowEnabled = false;
@@ -127,6 +136,7 @@ export class HeadlessRuntime {
 
     // ── Generuj układ planetarny ──
     window.KOSMOS.scenario = scenario;
+    window.KOSMOS.activeSystemId = 'sys_home';
     const generator = new SystemGenerator();
     const result = generator.generateCivScenario();
 
@@ -136,6 +146,11 @@ export class HeadlessRuntime {
     this.planets = result.planets || [];
     this.moons = result.moons || [];
     this.planetoids = result.planetoids || [];
+
+    // Ustaw systemId na wszystkich ciałach (wymagane przez MissionSystem)
+    for (const e of [...this.planets, ...this.moons, ...this.planetoids, this.star]) {
+      if (e) e.systemId = 'sys_home';
+    }
 
     // Inicjalizuj pozycje orbit
     this.physicsSystem.update(0.001);
@@ -163,6 +178,8 @@ export class HeadlessRuntime {
     // this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
     this.impactDamageSystem = null;
     this.researchSystem = new ResearchSystem(this.techSystem);
+    this.civilianTradeSystem = new CivilianTradeSystem(this.colonyManager);
+    this.observatorySystem = new ObservatorySystem();
 
     // ── window.KOSMOS service locator ──
     window.KOSMOS.civMode = false;
@@ -180,6 +197,8 @@ export class HeadlessRuntime {
     window.KOSMOS.timeSystem = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
     window.KOSMOS.researchSystem = this.researchSystem;
+    window.KOSMOS.civilianTradeSystem = this.civilianTradeSystem;
+    window.KOSMOS.observatorySystem = this.observatorySystem;
     // overlayManager nie istnieje w headless — stub
     window.KOSMOS.overlayManager = { openPanel: () => {}, closeActive: () => {}, isAnyOpen: () => false };
 
@@ -237,6 +256,12 @@ export class HeadlessRuntime {
         this._gameOver = true;
         this._gameOverReason = 'extinction';
       }
+    });
+
+    // ── Auto-rozwiązanie ruchów społecznych (headless: zawsze negotiate) ──
+    EventBus.on('civ:movementStarted', ({ movementId }) => {
+      // W headless bot nie może interagować z UI — auto-negotiate
+      EventBus.emit('civ:resolveMovement', { movementType: movementId, resolutionId: 'negotiate' });
     });
 
     // ── Fix: aktualizuj grid tile po zakończeniu budowy/upgrade ──
@@ -374,7 +399,7 @@ export class HeadlessRuntime {
 
   /** Zbadaj tech wymagane przez budynki boosted (replikuje GameScene._setupBoostedTechs) */
   _setupBoostedTechs() {
-    const techIds = ['orbital_survey', 'rocketry', 'exploration'];
+    const techIds = ['orbital_survey', 'rocketry', 'exploration', 'basic_computing', 'automation'];
     this.techSystem.restore({ researched: techIds });
   }
 
@@ -498,15 +523,21 @@ export class HeadlessRuntime {
       colony: {
         population: this.civSystem.population,
         housing: this.civSystem.housing,
-        morale: this.civSystem.morale,
-        moraleTarget: this.civSystem._moraleTarget ?? this.civSystem.morale,
+        // Morale zastąpione przez prosperity + loyalty
+        morale: this.civSystem.loyalty ?? 50, // backward compat — mapuj loyalty jako morale
+        moraleTarget: this.civSystem.loyalty ?? 50,
+        prosperity: colony?.prosperitySystem?.prosperity ?? 50,
+        targetProsperity: colony?.prosperitySystem?.targetProsperity ?? 50,
+        loyalty: this.civSystem.loyalty ?? 50,
+        epoch: colony?.prosperitySystem?.epoch ?? 'early',
         freePops: this.civSystem.freePops,
         employedPops: this.civSystem.employedPops ?? 0,
         lockedPops: this.civSystem.lockedPops ?? 0,
         isUnrest: this.civSystem.unrestActive ?? false,
         isFamine: this.civSystem._famine ?? false,
-        epoch: this.civSystem.epoch ?? 0,
         growthProgress: this.civSystem._growthProgress ?? 0,
+        activeMovements: this.civSystem.activeMovements?.filter(m => !m.resolved) ?? [],
+        strata: this._getStrataSnapshot(),
       },
 
       resources: {
@@ -567,6 +598,14 @@ export class HeadlessRuntime {
         remaining: d.remaining,
         totalAmount: d.totalAmount,
       })),
+
+      colonies: (this.colonyManager?.getColonies?.() ?? []).map(c => ({
+        planetId: c.planetId,
+        name: c.name,
+        isOutpost: c.isOutpost ?? false,
+        population: c.civSystem?.population ?? 0,
+        isHomePlanet: c.isHomePlanet ?? false,
+      })),
     };
   }
 
@@ -598,6 +637,20 @@ export class HeadlessRuntime {
       });
     }
     return result;
+  }
+
+  /** Snapshot strat populacyjnych */
+  _getStrataSnapshot() {
+    const strata = this.civSystem?.strata;
+    if (!strata) return {};
+    const snap = {};
+    for (const [type, data] of Object.entries(strata)) {
+      snap[type] = {
+        count: data.count ?? 0,
+        satisfaction: data.satisfaction ?? 50,
+      };
+    }
+    return snap;
   }
 
   /** Dostępne technologie do badania */
@@ -696,6 +749,44 @@ export class HeadlessRuntime {
   sendExpedition(type, targetId, vesselId) {
     EventBus.emit('expedition:sendRequest', { type, targetId, vesselId });
     return true;
+  }
+
+  /** Załaduj towar na statek z inventory kolonii */
+  loadCargo(vesselId, commodityId, qty) {
+    const vessel = this.vesselManager?.getVessel(vesselId);
+    if (!vessel) return 0;
+    return VesselLoadCargo(vessel, commodityId, qty, this.resourceSystem);
+  }
+
+  /** Rozładuj towar ze statku do inventory kolonii */
+  unloadCargo(vesselId, commodityId, qty) {
+    const vessel = this.vesselManager?.getVessel(vesselId);
+    if (!vessel) return 0;
+    return VesselUnloadCargo(vessel, commodityId, qty, this.resourceSystem);
+  }
+
+  /** Wyślij transport (cargo ship z ładunkiem na cel → outpost jeśli pusty) */
+  sendTransport(targetId, vesselId) {
+    const vessel = this.vesselManager?.getVessel(vesselId);
+    if (!vessel) return false;
+    EventBus.emit('expedition:transportRequest', {
+      targetId,
+      cargo: vessel.cargo ? { ...vessel.cargo } : {},
+      vesselId,
+      cargoPreloaded: true,
+    });
+    return true;
+  }
+
+  /** Wyślij colony ship na cel (kolonizacja lub upgrade outpostu) */
+  sendColonyShip(targetId, vesselId) {
+    EventBus.emit('expedition:sendRequest', { type: 'colony', targetId, vesselId });
+    return true;
+  }
+
+  /** Zwróć listę kolonii/outpostów */
+  getColonies() {
+    return this.colonyManager?.getColonies?.() ?? [];
   }
 
   /** Znajdź najlepszy tile na budynek danego typu */

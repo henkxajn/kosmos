@@ -10,6 +10,7 @@
 
 import { THEME }              from '../config/ThemeConfig.js';
 import { SHIPS }              from '../data/ShipsData.js';
+import { HULLS }              from '../data/HullsData.js';
 import { effectiveRange }     from '../entities/Vessel.js';
 import { getAvailableActions } from '../data/FleetActions.js';
 import EventBus               from '../core/EventBus.js';
@@ -150,7 +151,7 @@ export class FleetPanel {
 
   // ── Rysowanie wiersza statku ──────────────────────────────────────────────
   _drawVesselRow(ctx, x, y, w, vessel, ms, isSelected) {
-    const ship = SHIPS[vessel.shipId];
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
     const icon = ship?.icon ?? '🛸';
 
     // Tło (highlight dla wybranego)
@@ -220,7 +221,7 @@ export class FleetPanel {
   // ── Panel szczegółów ──────────────────────────────────────────────────────
   _drawDetail(ctx, x, y, w, maxH, vessel, state) {
     let cy = y;
-    const ship = SHIPS[vessel.shipId];
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
     const ms = state.missionSystem;
 
     // Nagłówek — nazwa + typ

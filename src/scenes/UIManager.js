@@ -25,6 +25,7 @@ import { ObservatoryOverlay }  from '../ui/ObservatoryOverlay.js';
 import { TradeOverlay }        from '../ui/TradeOverlay.js';
 import { CivilizationOverlay } from '../ui/CivilizationOverlay.js';
 import { GalaxyMapScene }      from './GalaxyMapScene.js';
+import { UnitDesignOverlay }   from '../ui/UnitDesignOverlay.js';
 import { t, getName }          from '../i18n/i18n.js';
 
 // Nowe komponenty UI
@@ -201,14 +202,19 @@ export class UIManager {
     this.overlayManager.register('observatory', new ObservatoryOverlay());
     this.overlayManager.register('trade', new TradeOverlay());
     this.overlayManager.register('civilization', new CivilizationOverlay());
+    this.overlayManager.register('unit_design', new UnitDesignOverlay());
     this.overlayManager.register('galaxy', new GalaxyMapScene());
 
     this._setupEvents();
     this._startDrawLoop();
 
-    // Scroll kółkiem myszy
+    // Scroll kółkiem myszy — normalizacja deltaY (różne przeglądarki/urządzenia)
     window.addEventListener('wheel', (e) => {
-      this.handleWheel(e.clientX, e.clientY, e.deltaY);
+      // deltaMode: 0=px, 1=lines, 2=pages — normalizuj do px-like
+      let dy = e.deltaY;
+      if (e.deltaMode === 1) dy *= 20;       // linie → px (typowy wiersz ~20px)
+      else if (e.deltaMode === 2) dy *= 400;  // strony → px
+      this.handleWheel(e.clientX, e.clientY, dy);
     }, { passive: true });
   }
 
@@ -756,17 +762,29 @@ export class UIManager {
     return false;
   }
 
+  // Pobierz WSZYSTKIE statki należące do kolonii (docked + in_transit + orbiting)
+  _getAllVesselsForColony(planetId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return [];
+    const ids = [];
+    for (const v of vMgr.getAllVessels()) {
+      if (v.colonyId === planetId) ids.push(v.id);
+    }
+    return ids;
+  }
+
   // Obsługa scrolla
   handleWheel(rawX, rawY, deltaY) {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
+    const delta = deltaY * 0.6; // globalna redukcja czułości scrolla o 40%
     // Overlay pełnoekranowy — scroll
     if (this.overlayManager.isAnyOpen()) {
-      if (this.overlayManager.handleScroll(deltaY, x, y)) return true;
+      if (this.overlayManager.handleScroll(delta, x, y)) return true;
     }
     // BottomContext scroll
     if (this._selectedEntity) {
-      if (this._bottomContext.handleWheel(x, y, deltaY, W, H, this._selectedEntity)) return true;
+      if (this._bottomContext.handleWheel(x, y, delta, W, H, this._selectedEntity)) return true;
     }
     return false;
   }
@@ -885,7 +903,7 @@ export class UIManager {
       this._outliner.draw(ctx, W, H, {
         colonies: colMgr?.getAllColonies() ?? [],
         expeditions: outlinerExps,
-        fleet: colMgr?.getFleet(activePid) ?? [],
+        fleet: this._getAllVesselsForColony(activePid) ?? [],
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
         groundUnits,
         constructionQueue, pendingBuilds, pendingShipOrders,

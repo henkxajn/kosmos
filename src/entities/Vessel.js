@@ -8,6 +8,7 @@
 // Status:  'idle' | 'on_mission' | 'refueling' | 'damaged'
 
 import { SHIPS } from '../data/ShipsData.js';
+import { HULLS } from '../data/HullsData.js';
 import { calcShipStats } from '../data/ShipModulesData.js';
 import { getNextName } from '../data/VesselNames.js';
 import EntityManager from '../core/EntityManager.js';
@@ -22,7 +23,7 @@ let _nextVesselId = 1;
  * @returns {object} VesselInstance
  */
 export function createVessel(shipId, colonyId, opts = {}) {
-  const ship = SHIPS[shipId];
+  const ship = SHIPS[shipId] ?? HULLS[shipId];
   if (!ship) throw new Error(`[Vessel] Nieznany typ statku: ${shipId}`);
 
   const id = `v_${_nextVesselId++}`;
@@ -176,7 +177,7 @@ export function needsRefuel(vessel) {
  * Pobierz definicję typu statku z ShipsData.
  */
 export function getShipDef(vessel) {
-  return SHIPS[vessel.shipId] ?? null;
+  return SHIPS[vessel.shipId] ?? HULLS[vessel.shipId] ?? null;
 }
 
 // ── Dziennik misji ───────────────────────────────────────────────────────────
@@ -223,8 +224,8 @@ function _getAvailable(resSys, id) {
  * @returns {number} faktycznie załadowana ilość
  */
 export function loadCargo(vessel, commodityId, qty, resSys) {
-  const ship = SHIPS[vessel.shipId];
-  // Użyj vessel.cargoMax (obliczone z modułów+masy) z fallbackiem na SHIPS
+  const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+  // Użyj vessel.cargoMax (obliczone z modułów+masy) z fallbackiem na SHIPS/HULLS
   const capacity = vessel.cargoMax ?? ship?.cargoCapacity ?? 0;
   if (qty <= 0 || capacity <= 0) return 0;
 

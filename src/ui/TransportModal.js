@@ -9,6 +9,7 @@ import EntityManager from '../core/EntityManager.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { SHIPS } from '../data/ShipsData.js';
+import { HULLS } from '../data/HullsData.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { t, getName } from '../i18n/i18n.js';
 
@@ -42,7 +43,7 @@ export function showTransportModal(sourceColony, targetColonies, fixedTargetId) 
     const fleet = sourceColony.fleet ?? [];
     let cargoCapacity = 0;
     for (const shipId of fleet) {
-      const ship = SHIPS[shipId];
+      const ship = SHIPS[shipId] ?? HULLS[shipId];
       if (ship?.cargoCapacity > cargoCapacity) cargoCapacity = ship.cargoCapacity;
     }
     if (cargoCapacity === 0) cargoCapacity = 200; // domyślna pojemność

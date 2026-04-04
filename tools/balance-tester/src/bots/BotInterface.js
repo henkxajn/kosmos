@@ -24,6 +24,9 @@ export class BotInterface {
    * @param {object} state — z runtime.getState()
    */
   decide(state) {
+    // AUTO: factory produkcja — co tick sprawdzaj inventory i produkuj
+    this._autoAllocateFactory(this.runtime, state);
+
     const priorities = this.evaluatePriorities(state);
 
     // Sortuj wg score malejąco
@@ -143,6 +146,13 @@ export class BotInterface {
         score: this._factoryAllocScore(s) + (mod.factoryAlloc ?? 0),
         action: () => this._allocateFactorySmart(r, s),
       },
+      // ── Consumer factory (prosperity → pop growth) ──
+      {
+        name: 'build_consumer_factory',
+        type: 'build',
+        score: this._consumerFactoryScore(s) + (mod.consumer_factory ?? 0),
+        action: () => this._buildByType(r, 'consumer_factory'),
+      },
       // ── Launch pad (port kosmiczny) ──
       {
         name: 'build_launch_pad',
@@ -185,6 +195,20 @@ export class BotInterface {
         score: this._proactiveEnergyScore(s) + (mod.proactive_energy ?? 0),
         action: () => this._buildEnergy(r, s),
       },
+      // ── Wyślij transport (cargo ship z prefabami → outpost) ──
+      {
+        name: 'send_transport',
+        type: 'expedition',
+        score: this._transportScore(s) + (mod.transport ?? 0),
+        action: () => this._sendTransportOutpost(r, s),
+      },
+      // ── Upgrade outpost do kolonii (colony ship) ──
+      {
+        name: 'upgrade_outpost',
+        type: 'expedition',
+        score: this._upgradeOutpostScore(s) + (mod.upgradeOutpost ?? 0),
+        action: () => this._sendColonyUpgrade(r, s),
+      },
     ];
   }
 
@@ -201,20 +225,20 @@ export class BotInterface {
   }
 
   // PROAKTYWNE FOOD: planuj farmę ZANIM populacja urośnie
-  // Przy szybkim wzroście POP (interval=10) farma MUSI wygrywać z energią/research
+  // Przy CIV_TIME_SCALE=12: pop rośnie szybko, farmy muszą wyprzedzać!
   _proactiveFoodScore(s) {
     const pop = s.colony.population;
     const foodPerYear = s.resources.perYear.food ?? 0;
-    const futureConsumption = (pop + 1) * 2.5;
+    const futureConsumption = (pop + 2) * 2.5;
     const currentConsumption = pop * 2.5;
-    // ZERO produkcji food → KRYTYCZNE, buduj farmę natychmiast!
+    // ZERO produkcji food → KRYTYCZNE
     if (foodPerYear <= 0) return 72;
-    // Nie wystarczy na pop+1 (z 20% marginesem) → NAJWYŻSZY proaktywny score
+    // Nie wystarczy na pop+2 (z 20% marginesem) → WYSOKI priorytet
     if (foodPerYear < futureConsumption * 1.2) return 68;
     // Ledwo wystarcza na obecnych (z 30% marginesem)
     if (foodPerYear < currentConsumption * 1.3) return 55;
-    // Przy wyższej populacji (5+): planuj na pop+2 — więcej marginesu
-    if (pop >= 5 && foodPerYear < (pop + 2) * 2.5 * 1.1) return 42;
+    // Przy wyższej populacji (8+): planuj na pop+3
+    if (pop >= 8 && foodPerYear < (pop + 3) * 2.5 * 1.1) return 42;
     return 0;
   }
 
@@ -255,19 +279,18 @@ export class BotInterface {
     return 0;
   }
 
-  // PROAKTYWNA ENERGIA: zapas na budynki z energyCost (research_station=6, factory=5 itp.)
+  // PROAKTYWNA ENERGIA: zapas na budynki + populację (energy: 1.0/POP/civYear)
   _proactiveEnergyScore(s) {
     const balance = s.resources.energyBalance ?? 0;
-    const solarCount = s.buildings.active.filter(b => b.buildingId === 'solar_farm').length;
-    const researchCount = s.buildings.active.filter(b => b.buildingId === 'research_station').length;
-    if (balance < 3) return 72; // krytycznie mało — prawie kryzys
-    // Po 2 solar_farmach (energy ~10-14): wystarczy na factory(5)+research(6)
-    // Nie buduj 3. solar_farm kosztem Si — pozwól mine/factory/research_station najpierw
-    if (solarCount >= 2 && balance >= 5) return 0;
-    // KLUCZOWE: energia na stację badawczą (energyCost=6 + margines 2)
-    if (researchCount === 0 && balance < 8) return 55;
-    if (balance < 5) return 45;
-    if (balance < 8) return 25;
+    const pop = s.colony.population;
+    // Krytycznie mało — prawie brownout
+    if (balance < 3) return 75;
+    // Planuj na przyszłość: pop rośnie → energy consumption rośnie
+    // Każdy POP + każdy nowy budynek zjada energy
+    const futureNeed = (pop + 3) * 1.0 + 10; // ~10 energy na przyszłe budynki
+    if (balance < futureNeed * 0.3) return 62;
+    if (balance < 8) return 45;
+    if (balance < 15) return 25;
     return 0;
   }
 
@@ -328,53 +351,47 @@ export class BotInterface {
     return 0;
   }
 
-  // UPGRADE: ulepszaj istniejące budynki — upgrade > nowy budynek (lepsza wartość)
-  // Sprawdza DOSTĘPNOŚĆ (surowce) żeby nie blokować decyzji innymi akcjami
+  // UPGRADE: ulepszaj istniejące budynki — priorytet: factory→Lv4, mine, farm, solar
   _upgradeScore(s) {
     const active = s.buildings.active;
     if (active.length === 0) return 0;
-
-    const hasResearchStation = active.some(b => b.buildingId === 'research_station');
-    if (!hasResearchStation) return 8;
-
     if (s.resources.energyBalance < 3) return 5;
 
-    // ── FE SAVING MODE: gdy zbieramy na port kosmiczny, WSTRZYMAJ upgrade'y ──
-    const hasRocketry = s.tech.researched.includes('rocketry');
-    const hasLaunchPad = active.some(b => b.buildingId === 'launch_pad' || b.buildingId === 'autonomous_spaceport');
-    if (hasRocketry && !hasLaunchPad) {
-      const Fe = s.resources.inventory.Fe ?? 0;
-      if (Fe < 1500) return 5;
-    }
-
     const inv = s.resources.inventory;
-    // ── MAX LEVEL CAP: ogranicz upgrade żeby oszczędzać Fe na port kosmiczny ──
-    // Kopalnie: BEZ LIMITU (produkują Fe, upgrade się zwraca)
-    // Inne budynki: max Lv2 przed portem (Lv3+ kosztuje setki Fe)
-    const maxLevelDefault = hasLaunchPad ? 5 : 2;
-
-    // Dynamiczny priorytet: habitat wyżej gdy housing gap mały
+    const hasLaunchPad = active.some(b => b.buildingId === 'launch_pad' || b.buildingId === 'autonomous_spaceport');
     const housingGap = s.colony.housing - s.colony.population;
-    const upgradePriority = housingGap <= 1
-      ? ['habitat', 'mine', 'farm', 'well', 'research_station', 'solar_farm', 'factory', 'shipyard']
-      : ['mine', 'farm', 'well', 'research_station', 'solar_farm', 'habitat', 'factory', 'shipyard'];
 
-    for (const bid of upgradePriority) {
-      // Kopalnie: bez limitu (produkują Fe), inne: maxLevelDefault
-      const maxLevel = (bid === 'mine') ? 5 : maxLevelDefault;
-      const building = active.find(b => b.buildingId === bid && (b.level ?? 1) < maxLevel);
-      if (!building) continue;
+    // Priorytet upgrade'ów: mine→Lv3 MINIMUM (więcej Ti/Fe/Cu!) → factory→Lv4 → reszta
+    // Mine Lv3 = 3× wydobycie → odblokuje Ti na hull_armor → cargo_ship → outposty
+    const upgradePriority = [
+      { bid: 'mine', targetLv: 3, priority: 70 },          // KRYTYCZNE: mine Lv3 minimum!
+      { bid: 'factory', targetLv: 4, priority: 65 },       // factory Lv4 = szybka produkcja
+      { bid: 'mine', targetLv: 5, priority: 55 },          // mine dalej do Lv5
+      { bid: 'solar_farm', targetLv: 3, priority: 52 },    // energy na budynki
+      { bid: 'farm', targetLv: 3, priority: 50 },          // food na POP
+      { bid: 'consumer_factory', targetLv: 3, priority: 48 },
+      { bid: 'well', targetLv: 3, priority: 45 },
+      { bid: 'habitat', targetLv: housingGap <= 1 ? 3 : 2, priority: 42 },
+      { bid: 'research_station', targetLv: 3, priority: 40 },
+      { bid: 'shipyard', targetLv: 2, priority: 35 },
+    ];
+
+    for (const { bid, targetLv, priority } of upgradePriority) {
+      // Znajdź NAJNIŻSZY level tego budynku (upgrade od najmniejszego)
+      const candidates = active.filter(b => b.buildingId === bid && (b.level ?? 1) < targetLv);
+      if (candidates.length === 0) continue;
+      const building = candidates.reduce((a, b) => (a.level ?? 1) < (b.level ?? 1) ? a : b);
 
       const level = building.level ?? 1;
       const nextLevel = level + 1;
-      // Wstępne sprawdzenie kosztów — nie blokuj decyzji gdy nie stać
       const bData = this.runtime.getBuildingsData()[bid];
+      // Sprawdź koszt surowców
       if (bData?.cost) {
         let canAfford = true;
         for (const [res, amount] of Object.entries(bData.cost)) {
           if ((inv[res] ?? 0) < Math.ceil(amount * nextLevel * 1.2)) { canAfford = false; break; }
         }
-        if (!canAfford) continue; // pomiń ten budynek, sprawdź następny
+        if (!canAfford) continue;
       }
       // Sprawdź commodities (Lv3+)
       if (nextLevel >= 3 && bData?.commodityCost) {
@@ -388,11 +405,9 @@ export class BotInterface {
       const popCost = bData?.popCost ?? 0.25;
       if (popCost > 0 && (this.runtime.civSystem?.freePops ?? 0) < popCost) continue;
 
-      const levelBonus = (5 - level) * 4;
-      const yieldMult = building.yieldBonus ?? 1.0;
-      return Math.round((45 + levelBonus) * yieldMult);
+      return priority;
     }
-    return 0; // nic do upgrade'u (nie stać lub max level)
+    return 0;
   }
 
   // MINE: buduj kopalnię jeśli są złoża I mamy wymagane commodities
@@ -493,12 +508,40 @@ export class BotInterface {
     return 28;
   }
 
+  // CONSUMER FACTORY: towary konsumpcyjne → prosperity → wzrost POP
+  // Gracz buduje consumer_factory zaraz po factory — to podstawa!
+  _consumerFactoryScore(s) {
+    const hasMetallurgy = s.tech.researched.includes('metallurgy');
+    if (!hasMetallurgy) return 0;
+    const cfCount = s.buildings.active.filter(b => b.buildingId === 'consumer_factory').length;
+    const factoryCount = s.buildings.active.filter(b => b.buildingId === 'factory').length;
+    const energyBalance = s.resources.energyBalance ?? 0;
+    if (energyBalance < 8) return 0; // consumer_factory: energyCost=8
+    const prosperity = s.colony.prosperity ?? 50;
+    const pop = s.colony.population;
+
+    // Pierwsza consumer_factory — buduj zaraz po factory!
+    if (cfCount === 0 && factoryCount >= 1) {
+      if (prosperity < 30) return 75; // kryzys prosperity
+      if (pop >= 6) return 68; // wystarczająco POPów → potrzebują consumer goods
+      return 55; // nawet wcześnie — warto mieć
+    }
+    // Druga consumer_factory — gdy prosperity spada poniżej progu
+    if (cfCount === 1) {
+      if (prosperity < 25) return 65; // silny brak coverage
+      if (prosperity < 40) return 45;
+      return 12;
+    }
+    if (cfCount >= 2) return 5;
+    return 0;
+  }
+
   // RESEARCH STATION: produkuje research points — KRYTYCZNA infrastruktura!
   _researchBuildScore(s) {
     const count = s.buildings.active.filter(b => b.buildingId === 'research_station').length;
     if (count >= 3) return 0;
-    // Sprawdź czy stać nas energetycznie (research_station energyCost=10)
-    const canAffordEnergy = s.resources.energyBalance >= 10;
+    // Sprawdź czy stać nas energetycznie (research_station energyCost=6)
+    const canAffordEnergy = s.resources.energyBalance >= 6;
     if (count === 0) {
       // Brak stacji = brak dochodu research → priorytet!
       if (!canAffordEnergy) return 5; // nie próbuj — niech proactive_energy zadziała
@@ -583,6 +626,9 @@ export class BotInterface {
       habitat_modules:    { Ti: 6, Fe: 5, Si: 4, Cu: 3 },
       water_recyclers:    { Cu: 6, Si: 4, Fe: 2 },
       hull_armor:         { Ti: 8, Fe: 6, W: 4 },
+      microcircuits:      { Si: 8, Cu: 4, C: 2 },
+      prefab_autonomous_mine:       { Fe: 35, Cu: 10, Ti: 10 },
+      prefab_autonomous_solar_farm: { Si: 22, Cu: 12, Ti: 6, Fe: 8 },
     };
     const recipe = COMMODITY_RECIPES[this._lastFactoryAlloc];
     if (!recipe) return false;
@@ -658,10 +704,10 @@ export class BotInterface {
       if ((inv[res] ?? 0) < amount) return 0; // nie stać
     }
 
-    // Priorytet: science_vessel → colony_ship → cargo_ship → kolejne
+    // Priorytet: science_vessel → cargo_ship → colony_ship → kolejne
     if (sciVessels === 0) return 45;
-    if (colonyShips === 0 && s.tech.researched.includes('colonization')) return 40;
-    if (cargoShips === 0 && s.tech.researched.includes('interplanetary_logistics')) return 35;
+    if (cargoShips === 0) return 40; // cargo ship ASAP po science vessel (outposty!)
+    if (colonyShips === 0 && s.tech.researched.includes('colonization')) return 38;
     if (sciVessels < 2) return 28;
     if (fleet.length < 5) return 22;
     return 5;
@@ -694,9 +740,9 @@ export class BotInterface {
       (v.position?.state === 'docked' || v.status === 'idle')
     );
     if (!colonyShip) return 0;
-    // Cooldown 50 lat między koloniami (nie wysyłaj dwóch naraz)
+    // Cooldown 10 lat między koloniami
     const yearsSinceLast = (s.gameYear ?? 0) - this._lastColonyYear;
-    if (yearsSinceLast < 50) return 0;
+    if (yearsSinceLast < 10) return 0;
     // Szukaj zbadanej planety do kolonizacji
     const em = this.runtime.getEntityManager();
     const exploredPlanets = em.getAll().filter(e =>
@@ -714,88 +760,87 @@ export class BotInterface {
     const needs = [];
     const pop = s.colony.population;
     const housingGap = s.colony.housing - pop;
-    const mineCount = s.buildings.active.filter(b => b.buildingId === 'mine').length;
-    const hasDeposits = s.deposits.some(d => d.remaining > 0);
-    const factoryCount = s.buildings.active.filter(b => b.buildingId === 'factory').length;
-
-    // Czy planujemy stocznię / statki?
-    const hasRocketry = s.tech.researched.includes('rocketry') || s.tech.researched.includes('exploration');
     const hasShipyard = s.buildings.active.some(b => b.buildingId === 'shipyard');
     const hasLaunchPad = s.buildings.active.some(b =>
       b.buildingId === 'launch_pad' || b.buildingId === 'autonomous_spaceport');
+    const hasRocketry = s.tech.researched.includes('rocketry') || s.tech.researched.includes('exploration');
+    const fleet = s.fleet.allVessels || [];
+    const sciVessels = fleet.filter(v => v.shipId === 'science_vessel').length;
+    const cargoShips = fleet.filter(v => v.shipId === 'cargo_ship').length;
+    const year = s.gameYear ?? 0;
 
-    // ── SPACE PHASE: port kosmiczny wymaga OGROMNYCH ilości surowców + commodities ──
-    // launch_pad BAZOWY koszt: Fe:1200, Ti:600, Cu:300
-    // launch_pad COMMODITIES: hull_armor:80, electronics:60, steel_plates:120, concrete_mix:40
-    // STRATEGIA: kopalnie produkują w tle. Commodities BEZ Fe/Ti produkuj od razu.
-    // Fe/Ti-consuming commodities: produkuj PO JEDNYM (nie jednocześnie!) z małym buforem.
+    // ── SPACE PHASE (standardowy): budowa launch_pad ──
     if (hasRocketry && !hasLaunchPad) {
       const Fe = inv.Fe ?? 0;
       const Ti = inv.Ti ?? 0;
-      const hullNeeded = hasShipyard ? 84 : 90;
-      const elecNeeded = hasShipyard ? 63 : 67;
-      const steelNeeded = hasShipyard ? 128 : 136;
-      const pcNeeded = hasShipyard ? 10 : 13;
-
-      // ZAWSZE: commodities BEZ Fe i Ti (electronics, power_cells, copper_wiring)
-      if ((inv.electronics ?? 0) < elecNeeded) needs.push('electronics');
-      if ((inv.power_cells ?? 0) < pcNeeded) needs.push('power_cells');
-      if ((inv.copper_wiring ?? 0) < (hasShipyard ? 2 : 4)) needs.push('copper_wiring');
-
-      // Fe-consuming commodities: produkuj gdy Fe > bazowy koszt (1200) + bufor na 1 batch
-      // Fabryka zjada Fe STOPNIOWO (batch po 4 szt), kopalnie uzupełniają w tle
-      // steel: Fe:8/szt × 4 = 32 Fe per batch → Fe > 1232
-      // concrete: Fe:6/szt × 4 = 24 Fe per batch → Fe > 1224
-      // hull_armor: Fe:6/szt × 4 = 24 Fe + Ti:8/szt × 4 = 32 Ti per batch
-      const steelDone = (inv.steel_plates ?? 0) >= steelNeeded;
-      const concreteDone = (inv.concrete_mix ?? 0) >= 40;
-      const hullDone = (inv.hull_armor ?? 0) >= hullNeeded;
-
-      // Sekwencyjna: steel → concrete → hull_armor (nie jednocześnie!)
-      if (!steelDone && Fe > 1240) needs.push('steel_plates');
-      else if (!concreteDone && Fe > 1230) needs.push('concrete_mix');
-      else if (!hullDone && Fe > 1230 && Ti > 650) needs.push('hull_armor');
-
+      if ((inv.electronics ?? 0) < 67) needs.push('electronics');
+      if ((inv.power_cells ?? 0) < 13) needs.push('power_cells');
+      if ((inv.copper_wiring ?? 0) < 4) needs.push('copper_wiring');
+      if ((inv.steel_plates ?? 0) < 136 && Fe > 1240) needs.push('steel_plates');
+      else if ((inv.concrete_mix ?? 0) < 40 && Fe > 1230) needs.push('concrete_mix');
+      else if ((inv.hull_armor ?? 0) < 90 && Fe > 1230 && Ti > 650) needs.push('hull_armor');
       return [...new Set(needs)];
     }
 
-    // ── POST-SPACEPORT: statki potrzebują hull_armor + electronics ──
-    if (hasRocketry && hasLaunchPad && hasShipyard) {
-      if ((inv.hull_armor ?? 0) < 12) needs.push('hull_armor');
-      if ((inv.electronics ?? 0) < 6) needs.push('electronics');
-      if ((inv.power_cells ?? 0) < 6) needs.push('power_cells');
-      if ((inv.steel_plates ?? 0) < 8) needs.push('steel_plates');
+    // ══════════════════════════════════════════════════════════════
+    // PRIORYTET 1: Commodities na STATKI (science_vessel → cargo_ship)
+    // ══════════════════════════════════════════════════════════════
+    if (hasLaunchPad && hasShipyard) {
+      // science_vessel: hull_armor:4, electronics:3, power_cells:2, copper_wiring:2
+      if (sciVessels === 0) {
+        if ((inv.hull_armor ?? 0) < 4) needs.push('hull_armor');
+        if ((inv.electronics ?? 0) < 3) needs.push('electronics');
+        if ((inv.power_cells ?? 0) < 2) needs.push('power_cells');
+        if ((inv.copper_wiring ?? 0) < 2) needs.push('copper_wiring');
+      }
+      // cargo_ship: hull_armor:7, electronics:2, power_cells:4, copper_wiring:1
+      if (sciVessels >= 1 && cargoShips === 0) {
+        if ((inv.hull_armor ?? 0) < 7) needs.push('hull_armor');
+        if ((inv.electronics ?? 0) < 2) needs.push('electronics');
+        if ((inv.power_cells ?? 0) < 4) needs.push('power_cells');
+        if ((inv.copper_wiring ?? 0) < 1) needs.push('copper_wiring');
+      }
     }
 
-    // ── Tier 1: ZAWSZE potrzebne (buduj rotacyjnie) ──
-    if ((inv.steel_plates ?? 0) < 6) needs.push('steel_plates');
-    if ((inv.copper_wiring ?? 0) < 3) needs.push('copper_wiring');
-    if ((inv.polymer_composites ?? 0) < 3) needs.push('polymer_composites');
-    if ((inv.concrete_mix ?? 0) < 3) needs.push('concrete_mix');
+    // ══════════════════════════════════════════════════════════════
+    // PRIORYTET 2: PREFABY na outposty (po cargo ship lub planowaniu)
+    // ══════════════════════════════════════════════════════════════
+    if (hasLaunchPad && (cargoShips > 0 || sciVessels >= 1)) {
+      // Autonomous mine + solar → basic outpost
+      if ((inv.prefab_autonomous_mine ?? 0) < 1) needs.push('prefab_autonomous_mine');
+      if ((inv.prefab_autonomous_solar_farm ?? 0) < 1) needs.push('prefab_autonomous_solar_farm');
+      // Microcircuits (potrzebne na prefaby T2) — produkuj jeśli brak
+      if ((inv.microcircuits ?? 0) < 4) needs.push('microcircuits');
+    }
 
-    // ── Tier 2: kontekstowe — produkuj to czego bot FAKTYCZNIE potrzebuje ──
+    // ══════════════════════════════════════════════════════════════
+    // PRIORYTET 3: Tier 1 basics (rotacyjnie)
+    // ══════════════════════════════════════════════════════════════
+    if ((inv.steel_plates ?? 0) < 8) needs.push('steel_plates');
+    if ((inv.copper_wiring ?? 0) < 4) needs.push('copper_wiring');
+    if ((inv.polymer_composites ?? 0) < 4) needs.push('polymer_composites');
+    if ((inv.concrete_mix ?? 0) < 4) needs.push('concrete_mix');
 
-    // Housing commodities — PRIORYTET gdy housing gap mały (proaktywnie!)
+    // ══════════════════════════════════════════════════════════════
+    // PRIORYTET 4: Housing + mining commodities
+    // ══════════════════════════════════════════════════════════════
     if (housingGap <= 2) {
       if ((inv.habitat_modules ?? 0) < 3) needs.push('habitat_modules');
       if ((inv.water_recyclers ?? 0) < 2) needs.push('water_recyclers');
     }
+    if ((inv.power_cells ?? 0) < 6) needs.push('power_cells');
+    if ((inv.electronics ?? 0) < 4) needs.push('electronics');
+    if ((inv.hull_armor ?? 0) < 4) needs.push('hull_armor');
 
-    // Mining drills — gdy mamy złoża i chcemy kopać
-    if (hasDeposits && mineCount < 3) {
-      if ((inv.mining_drills ?? 0) < 3) needs.push('mining_drills');
+    // ══════════════════════════════════════════════════════════════
+    // PRIORYTET 5: Zapas prefabów (po pierwszym outpoście)
+    // ══════════════════════════════════════════════════════════════
+    const outposts = (s.colonies ?? []).filter(c => c.isOutpost).length;
+    if (outposts > 0 && cargoShips > 0) {
+      if ((inv.prefab_autonomous_mine ?? 0) < 2) needs.push('prefab_autonomous_mine');
+      if ((inv.prefab_autonomous_solar_farm ?? 0) < 2) needs.push('prefab_autonomous_solar_farm');
     }
 
-    // Power cells — paliwo + budynki + statki
-    if ((inv.power_cells ?? 0) < 4) needs.push('power_cells');
-
-    // Electronics — stacje badawcze, fabryki
-    if ((inv.electronics ?? 0) < 3) needs.push('electronics');
-
-    // Hull armor — zapas na przyszłą stocznię
-    if ((inv.hull_armor ?? 0) < 2) needs.push('hull_armor');
-
-    // Deduplikacja (na wypadek podwójnego dodania)
     return [...new Set(needs)];
   }
 
@@ -826,35 +871,46 @@ export class BotInterface {
   }
 
   _buildEnergy(runtime, state) {
-    // Nuclear jeśli ma tech
+    // Nuclear jeśli ma tech (najlepsza energy)
     let result = this._buildByType(runtime, 'nuclear_plant');
+    if (result) return result;
+    // Coal plant PREFEROWANY — energy:18 (vs solar:10), tańszy na Si/Cu
+    result = this._buildByType(runtime, 'coal_plant');
     if (result) return result;
     // Geothermal na wulkanie
     result = this._buildByType(runtime, 'geothermal');
     if (result) return result;
-    // Solar farm (standard)
-    result = this._buildByType(runtime, 'solar_farm');
-    if (result) return result;
-    // Coal plant — fallback jeśli nie stać na solar (tańszy na Si/Cu)
-    return this._buildByType(runtime, 'coal_plant');
+    // Solar farm — fallback
+    return this._buildByType(runtime, 'solar_farm');
   }
 
   _researchBestTech(runtime, state) {
     if (state.tech.available.length === 0) return null;
-    // Priorytet tech (odzwierciedla strategię gracza)
+    // Priorytet tech: energy/food boosty → ekspansja → zaawansowane
+    // efficient_solar (+20% energy), hydroponics (+25% food), bio_recycling (-20% food consumption)
+    // nuclear_power (+40% energy), food_synthesis (+20% food) — mid-game boosty
     const priority = [
-      'metallurgy', 'hydroponics', 'efficient_solar',
-      'orbital_survey',                     // gateway do rocketry + +40% research
+      'metallurgy',                         // gateway do factory
+      'efficient_solar',                    // +20% energy — PRIORYTET!
+      'hydroponics',                        // +25% food — PRIORYTET!
+      'bio_recycling',                      // -20% food consumption
+      'orbital_survey',                     // gateway do rocketry
       'rocketry',                           // odblokuj launch_pad
       'exploration',                        // odblokuj shipyard + science_vessel
-      'advanced_mining', 'urban_planning',
-      'nuclear_power', 'deep_drilling',
+      'basic_computing',                    // gateway do automation
+      'automation',                         // autonomous buildings
+      'nuclear_power',                      // +40% energy — mid-game boost
       'colonization',                       // odblokuj colony_ship
-      'advanced_materials', 'genetic_engineering', 'arcology',
+      'advanced_mining', 'urban_planning',
+      'deep_drilling',
+      'food_synthesis',                     // +20% food (late)
+      'medicine',                           // prosperity bonus
+      'advanced_materials', 'genetic_engineering',
       'interplanetary_logistics',
       'advanced_navigation', 'space_mining',
+      'arcology',                           // -10% food consumption + housing 8
       'ion_drives', 'emergency_protocols',
-      'exotic_materials', 'food_synthesis', 'fusion_power',
+      'exotic_materials', 'fusion_power',
       'quantum_physics', 'fusion_drives', 'terraforming',
       'antimatter_propulsion',
     ];
@@ -876,14 +932,26 @@ export class BotInterface {
   }
 
   // UPGRADE: znajdź najlepszy budynek do ulepszenia
-  // Preferuj budynki na tile'ach z wyższym yieldBonus (mountains dla mine, plains dla farm)
+  // Mine→Lv3 minimum! Potem factory→Lv4. Reszta do Lv3.
   _upgradeBest(runtime, state) {
     const active = state.buildings.active;
-    // Priorytet upgrade: mine i farm pierwsze (fundament ekonomii)
-    const upgradePriority = ['mine', 'farm', 'well', 'research_station', 'solar_farm', 'factory', 'shipyard'];
+    const housingGap = state.colony.housing - state.colony.population;
+    // Priorytet zsynchronizowany z _upgradeScore
+    const upgradePriority = [
+      { bid: 'mine', targetLv: 3 },
+      { bid: 'factory', targetLv: 4 },
+      { bid: 'mine', targetLv: 5 },
+      { bid: 'solar_farm', targetLv: 3 },
+      { bid: 'farm', targetLv: 3 },
+      { bid: 'consumer_factory', targetLv: 3 },
+      { bid: 'well', targetLv: 3 },
+      { bid: 'habitat', targetLv: housingGap <= 1 ? 3 : 2 },
+      { bid: 'research_station', targetLv: 3 },
+      { bid: 'shipyard', targetLv: 2 },
+    ];
 
-    for (const bid of upgradePriority) {
-      const candidates = active.filter(b => b.buildingId === bid && (b.level ?? 1) < 5);
+    for (const { bid, targetLv } of upgradePriority) {
+      const candidates = active.filter(b => b.buildingId === bid && (b.level ?? 1) < targetLv);
       if (candidates.length === 0) continue;
 
       // Sortuj: najniższy level, a przy równym — wyższy yieldBonus tile'a
@@ -1007,95 +1075,227 @@ export class BotInterface {
     return { type: 'colonize', targetId: target.id, vesselId: colonyShip.id };
   }
 
-  // FACTORY ALLOC: inteligentna alokacja z rotacją
-  _allocateFactorySmart(runtime, state) {
-    const needs = this._getNeededCommodities(state);
-    if (needs.length === 0) {
-      // Nic pilnego — produkuj steel jako default (jeśli stać)
-      const fallback = this._canProduceCommodity('steel_plates', state) ? 'steel_plates' : 'copper_wiring';
-      runtime.allocateFactory(fallback, state.factory.totalPoints);
-      runtime.setFactoryTarget(fallback, 4);
-      this._lastFactoryAlloc = fallback;
-      this._factoryBatchCount = 0;
-      return { commodityId: fallback, qty: 4 };
-    }
+  // TRANSPORT: wyślij cargo ship z prefabami na zbadaną planetę → outpost
+  _transportScore(s) {
+    const fleet = s.fleet.allVessels || [];
+    // Potrzebujemy idle cargo shipa
+    const idleCargo = fleet.find(v =>
+      (v.shipId === 'cargo_ship' || v.shipId === 'heavy_freighter' || v.shipId === 'bulk_freighter') &&
+      (v.position?.state === 'docked' || v.status === 'idle')
+    );
+    if (!idleCargo) return 0;
+    // Potrzebujemy zbadanej planety/księżyca bez kolonii
+    const colonies = s.colonies ?? [];
+    const colonizedIds = new Set(colonies.map(c => c.planetId));
+    // Sprawdź explored bodies bez kolonii
+    const em = this.runtime.getEntityManager();
+    const targets = em.getAll().filter(e =>
+      e.explored && !colonizedIds.has(e.id) && e.id !== this.runtime.homePlanet?.id &&
+      (e.type === 'planet' || e.type === 'moon' || e.type === 'planetoid')
+    );
+    if (targets.length === 0) return 0;
+    // Potrzebujemy prefabów: minimum autonomous_mine + autonomous_solar_farm
+    const inv = s.resources.inventory;
+    const hasPrefabs = (inv.prefab_autonomous_mine ?? 0) >= 1 &&
+                       (inv.prefab_autonomous_solar_farm ?? 0) >= 1;
+    if (!hasPrefabs) return 0;
+    // Sprawdź paliwo
+    if ((idleCargo.fuel?.current ?? 0) < 2) return 0;
+    return 40;
+  }
 
-    // FILTRUJ: usuń commodities na które nie stać (brak surowców na recept)
-    const affordableNeeds = needs.filter(c => this._canProduceCommodity(c, state));
+  _sendTransportOutpost(runtime, state) {
+    const fleet = state.fleet.allVessels || [];
+    const idleCargo = fleet.find(v =>
+      (v.shipId === 'cargo_ship' || v.shipId === 'heavy_freighter' || v.shipId === 'bulk_freighter') &&
+      (v.position?.state === 'docked' || v.status === 'idle')
+    );
+    if (!idleCargo) return null;
 
-    if (affordableNeeds.length === 0) {
-      // Nie stać na żaden potrzebny commodity — produkuj najtańszy co możemy
-      const cheap = ['copper_wiring', 'polymer_composites', 'concrete_mix', 'steel_plates'];
-      const fallback = cheap.find(c => this._canProduceCommodity(c, state));
-      if (!fallback) return null; // kompletny brak surowców
-      runtime.allocateFactory(fallback, state.factory.totalPoints);
-      runtime.setFactoryTarget(fallback, 2);
-      this._lastFactoryAlloc = fallback;
-      return { commodityId: fallback, qty: 2 };
-    }
+    // Znajdź cel: preferuj księżyce macierzystej planety (szybki transport!)
+    // Zwłaszcza te z Pt (platyna — rzadka, wartościowa)
+    const colonies = state.colonies ?? [];
+    const colonizedIds = new Set(colonies.map(c => c.planetId));
+    const em = runtime.getEntityManager();
+    const homePlanet = runtime.homePlanet;
+    const homeId = homePlanet?.id;
+    const targets = em.getAll().filter(e =>
+      e.explored && !colonizedIds.has(e.id) && e.id !== homeId &&
+      (e.type === 'planet' || e.type === 'moon' || e.type === 'planetoid')
+    );
+    if (targets.length === 0) return null;
 
-    let target = affordableNeeds[0];
+    // Sortuj: księżyce home first, potem Pt, potem odległość
+    targets.sort((a, b) => {
+      // Księżyce macierzystej planety mają priorytet (bliski transport!)
+      const aMoon = (a.type === 'moon' && a.parentId === homeId) ? 1 : 0;
+      const bMoon = (b.type === 'moon' && b.parentId === homeId) ? 1 : 0;
+      if (aMoon !== bMoon) return bMoon - aMoon;
+      // Pt bonus (platyna — rzadka)
+      const aPt = (a.composition?.Pt > 0.01) ? 1 : 0;
+      const bPt = (b.composition?.Pt > 0.01) ? 1 : 0;
+      if (aPt !== bPt) return bPt - aPt;
+      // Potem odległość
+      const distA = Math.hypot((a.x ?? 0) - (homePlanet.x ?? 0), (a.y ?? 0) - (homePlanet.y ?? 0));
+      const distB = Math.hypot((b.x ?? 0) - (homePlanet.x ?? 0), (b.y ?? 0) - (homePlanet.y ?? 0));
+      return distA - distB;
+    });
+    const target = targets[0];
 
-    // ── SPACE PHASE: dedykowana produkcja bez rotacji ──
-    const hasRocketry = state.tech.researched.includes('rocketry');
-    const hasLaunchPad = state.buildings.active.some(b =>
-      b.buildingId === 'launch_pad' || b.buildingId === 'autonomous_spaceport');
+    // Załaduj prefaby na statek
     const inv = state.resources.inventory;
-
-    // ── HOUSING OVERRIDE: habitat_modules mają priorytet gdy housing gap <= 0 ──
-    const housingGap = state.colony.housing - state.colony.population;
-    if (housingGap <= 0 && affordableNeeds.includes('habitat_modules') &&
-        this._canProduceCommodity('habitat_modules', state)) {
-      const totalPoints = state.factory.totalPoints;
-      runtime.allocateFactory('habitat_modules', totalPoints);
-      runtime.setFactoryTarget('habitat_modules', 4);
-      this._lastFactoryAlloc = 'habitat_modules';
-      return { commodityId: 'habitat_modules', qty: 4 };
+    const prefabsToLoad = [
+      'prefab_autonomous_mine',
+      'prefab_autonomous_solar_farm',
+      'prefab_autonomous_spaceport',
+    ];
+    for (const pf of prefabsToLoad) {
+      const qty = inv[pf] ?? 0;
+      if (qty > 0) runtime.loadCargo(idleCargo.id, pf, Math.min(qty, 2));
     }
-    // Water recyclers: potrzebne razem z habitat_modules dla habitat
-    if (housingGap <= 1 && affordableNeeds.includes('water_recyclers') &&
-        (inv.water_recyclers ?? 0) < 2 && this._canProduceCommodity('water_recyclers', state)) {
-      const totalPoints = state.factory.totalPoints;
-      runtime.allocateFactory('water_recyclers', totalPoints);
-      runtime.setFactoryTarget('water_recyclers', 3);
-      this._lastFactoryAlloc = 'water_recyclers';
-      return { commodityId: 'water_recyclers', qty: 3 };
+    // Załaduj też trochę surowców startowych
+    for (const res of ['Fe', 'C', 'Si', 'Cu', 'food', 'water']) {
+      const have = inv[res] ?? 0;
+      const toLoad = Math.min(Math.floor(have * 0.1), 50); // max 10% lub 50
+      if (toLoad > 5) runtime.loadCargo(idleCargo.id, res, toLoad);
     }
 
-    if (hasRocketry && !hasLaunchPad) {
-      // Etapowa produkcja: _getNeededCommodities filtruje wg Fe/Ti progów
-      // Sekwencyjna — produkuj to co needs wskazuje (steel→concrete→hull po kolei)
-      const spaceTarget = affordableNeeds.find(c => this._canProduceCommodity(c, state));
-      if (spaceTarget) {
-        // MAŁE batche (4) żeby fabryka nie zjadła zbyt dużo Fe naraz
-        const batchSize = 4;
-        const totalPoints = state.factory.totalPoints;
-        runtime.allocateFactory(spaceTarget, totalPoints);
-        runtime.setFactoryTarget(spaceTarget, batchSize);
-        this._lastFactoryAlloc = spaceTarget;
-        return { commodityId: spaceTarget, qty: batchSize };
-      }
-    }
+    // Wyślij transport
+    runtime.sendTransport(target.id, idleCargo.id);
+    return { type: 'transport', targetId: target.id, vesselId: idleCargo.id };
+  }
 
-    // ── Normalna ROTACJA: po ukończeniu batcha tego samego commodity, przejdź do następnego ──
-    if (this._lastFactoryAlloc === target && affordableNeeds.length > 1) {
-      this._factoryBatchCount++;
-      if (this._factoryBatchCount >= 2) {
-        // Po 2 batchach tego samego → wymuś rotację
-        target = affordableNeeds[1];
-        this._factoryBatchCount = 0;
-      }
-    } else if (this._lastFactoryAlloc !== target) {
-      this._factoryBatchCount = 0;
-    }
+  // UPGRADE OUTPOST: wyślij colony ship na istniejący outpost
+  _upgradeOutpostScore(s) {
+    const fleet = s.fleet.allVessels || [];
+    const idleColonyShip = fleet.find(v =>
+      v.shipId === 'colony_ship' &&
+      (v.position?.state === 'docked' || v.status === 'idle')
+    );
+    if (!idleColonyShip) return 0;
+    // Potrzebujemy istniejącego outpostu
+    const outposts = (s.colonies ?? []).filter(c => c.isOutpost);
+    if (outposts.length === 0) return 0;
+    // Sprawdź paliwo
+    if ((idleColonyShip.fuel?.current ?? 0) < 2) return 0;
+    return 38;
+  }
 
-    // Mniejsze batche = szybsza rotacja
-    const batchSize = 4;
+  _sendColonyUpgrade(runtime, state) {
+    const fleet = state.fleet.allVessels || [];
+    const colonyShip = fleet.find(v =>
+      v.shipId === 'colony_ship' &&
+      (v.position?.state === 'docked' || v.status === 'idle')
+    );
+    if (!colonyShip) return null;
+    const outposts = (state.colonies ?? []).filter(c => c.isOutpost);
+    if (outposts.length === 0) return null;
+    // Wybierz outpost z najlepszym potencjałem (pierwszy dostępny)
+    const target = outposts[0];
+    runtime.sendColonyShip(target.planetId, colonyShip.id);
+    this._lastColonyYear = runtime.getGameYear();
+    return { type: 'colony_upgrade', targetId: target.planetId, vesselId: colonyShip.id };
+  }
+
+  // AUTO FACTORY: wywoływana automatycznie co tick (nie jako akcja bota)
+  // Sprawdza inventory i ustawia produkcję wg sekwencyjnej listy
+  _autoAllocateFactory(runtime, state) {
+    const inv = state.resources.inventory;
     const totalPoints = state.factory.totalPoints;
-    runtime.allocateFactory(target, totalPoints);
-    runtime.setFactoryTarget(target, batchSize);
-    this._lastFactoryAlloc = target;
-    return { commodityId: target, qty: batchSize };
+    if (totalPoints <= 0) return;
+
+    // Jeśli fabryka aktywnie produkuje → nie zmieniaj
+    const allocs = state.factory.allocations ?? [];
+    const active = allocs.find(a => a.points > 0 && a.targetQty > 0 && a.produced < a.targetQty);
+    if (active) return;
+
+    // Sekwencyjna lista: produkuj to czego brakuje
+    const plan = [
+      { id: 'steel_plates', target: 12 },
+      { id: 'power_cells', target: 6 },
+      { id: 'copper_wiring', target: 5 },
+      { id: 'mining_drills', target: 4 },
+      { id: 'electronics', target: 4 },
+      { id: 'concrete_mix', target: 4 },
+      { id: 'polymer_composites', target: 4 },
+      { id: 'hull_armor', target: 8 },
+      { id: 'habitat_modules', target: 4 },
+      { id: 'water_recyclers', target: 3 },
+      { id: 'microcircuits', target: 4 },
+      { id: 'prefab_autonomous_mine', target: 2 },
+      { id: 'prefab_autonomous_solar_farm', target: 2 },
+    ];
+
+    for (const { id, target } of plan) {
+      if ((inv[id] ?? 0) >= target) continue;
+      if (!this._canProduceCommodity(id, state)) continue;
+      const qty = target - (inv[id] ?? 0);
+      runtime.allocateFactory(id, totalPoints);
+      runtime.setFactoryTarget(id, qty);
+      return;
+    }
+    // Default: steel
+    if (this._canProduceCommodity('steel_plates', state)) {
+      runtime.allocateFactory('steel_plates', totalPoints);
+      runtime.setFactoryTarget('steel_plates', 10);
+    }
+  }
+
+  // FACTORY ALLOC: legacy action (niższy priorytet, factory auto robi swoje)
+  _allocateFactorySmart(runtime, state) {
+    const inv = state.resources.inventory;
+    const totalPoints = state.factory.totalPoints;
+    if (totalPoints <= 0) return null;
+
+    // Jeśli fabryka już coś produkuje i nie skończyła → nie zmieniaj
+    const allocs = state.factory.allocations ?? [];
+    const active = allocs.find(a => a.points > 0 && a.targetQty > 0 && a.produced < a.targetQty);
+    if (active) {
+      return { commodityId: active.commodityId, qty: active.targetQty - active.produced };
+    }
+
+    // Sekwencyjna lista produkcji: sprawdź inventory, produkuj to czego brakuje
+    const productionPlan = [
+      // KROK 1: basic commodities na upgrade mine/factory
+      { id: 'steel_plates', target: 10 },
+      { id: 'power_cells', target: 6 },
+      { id: 'copper_wiring', target: 4 },
+      { id: 'mining_drills', target: 4 },
+      { id: 'electronics', target: 4 },
+      // KROK 2: hull_armor na statki (science_vessel:4, cargo_ship:7)
+      { id: 'hull_armor', target: 8 },
+      // KROK 3: concrete + polymer na budynki
+      { id: 'concrete_mix', target: 4 },
+      { id: 'polymer_composites', target: 4 },
+      // KROK 4: housing commodities
+      { id: 'habitat_modules', target: 4 },
+      { id: 'water_recyclers', target: 3 },
+      // KROK 5: prefaby na outposty (microcircuits + prefab autonomous)
+      { id: 'microcircuits', target: 4 },
+      { id: 'prefab_autonomous_mine', target: 2 },
+      { id: 'prefab_autonomous_solar_farm', target: 2 },
+    ];
+
+    // Znajdź pierwszy commodity poniżej targetu
+    for (const { id, target } of productionPlan) {
+      const have = inv[id] ?? 0;
+      if (have >= target) continue;
+      if (!this._canProduceCommodity(id, state)) continue;
+      const qty = target - have;
+      runtime.allocateFactory(id, totalPoints);
+      runtime.setFactoryTarget(id, qty);
+      this._lastFactoryAlloc = id;
+      return { commodityId: id, qty };
+    }
+
+    // Wszystko na targecie → odśwież steel jako default
+    if (this._canProduceCommodity('steel_plates', state)) {
+      runtime.allocateFactory('steel_plates', totalPoints);
+      runtime.setFactoryTarget('steel_plates', 10);
+      this._lastFactoryAlloc = 'steel_plates';
+      return { commodityId: 'steel_plates', qty: 10 };
+    }
+    return null;
   }
 
   // Sprawdź czy stać nas na produkcję danego commodity (czy mamy surowce na receptę)
@@ -1111,6 +1311,9 @@ export class BotInterface {
       habitat_modules:    { Ti: 6, Fe: 5, Si: 4, Cu: 3 },
       water_recyclers:    { Cu: 6, Si: 4, Fe: 2 },
       hull_armor:         { Ti: 8, Fe: 6, W: 4 },
+      microcircuits:      { Si: 8, Cu: 4, C: 2 },
+      prefab_autonomous_mine:       { Fe: 35, Cu: 10, Ti: 10 },
+      prefab_autonomous_solar_farm: { Si: 22, Cu: 12, Ti: 6, Fe: 8 },
     };
     const recipe = COMMODITY_RECIPES[commodityId];
     if (!recipe) return true; // nieznany — spróbuj

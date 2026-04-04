@@ -314,7 +314,44 @@ export const SHIP_MODULES = {
     requires: 'cryogenics',
     description: '+25 jednostek paliwa. Kriogeniczna izolacja minimalizuje masę.',
   },
+
+  // ── Moduły uzbrojenia (placeholder — walka jeszcze nie zaimplementowana) ───
+
+  weapon_laser: {
+    id: 'weapon_laser',
+    namePL: 'Wieża Laserowa',
+    nameEN: 'Laser Turret',
+    icon: '🔫',
+    slotType: 'weapon',
+    tier: 1,
+    mass: 10,  // tony
+    cost: { Ti: 20, Cu: 15 },
+    commodityCost: { electronic_systems: 3 },
+    stats: { attackPower: 5, survivalBonus: 0.01 },
+    requires: 'point_defense',
+    description: 'Broń energetyczna bliskiego zasięgu. (Walka w przyszłej aktualizacji)',
+  },
+
+  weapon_missile: {
+    id: 'weapon_missile',
+    namePL: 'Wyrzutnia Rakiet',
+    nameEN: 'Missile Launcher',
+    icon: '🚀',
+    slotType: 'weapon',
+    tier: 2,
+    mass: 18,  // tony
+    cost: { Ti: 30, Fe: 20 },
+    commodityCost: { propulsion_systems: 2, reactive_armor: 3 },
+    stats: { attackPower: 12, survivalBonus: 0.02, speedMult: 0.95 },
+    requires: 'point_defense',
+    description: 'Rakiety dalekiego zasięgu. (Walka w przyszłej aktualizacji)',
+  },
 };
+
+// Typy modułów akceptowane w slotach utility (wszystko oprócz propulsion)
+export const UTILITY_SLOT_TYPES = new Set([
+  'cargo', 'science', 'special', 'habitat', 'armor', 'fuel', 'weapon',
+]);
 
 // ── Pomocnik: oblicz statystyki statku z kadłuba + modułów ────────────────
 //

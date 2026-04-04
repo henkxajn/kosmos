@@ -9,6 +9,7 @@ import { COSMIC }       from '../config/LayoutConfig.js';
 import { TECHS, TECH_BRANCHES } from '../data/TechData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { SHIPS }     from '../data/ShipsData.js';
+import { HULLS }     from '../data/HullsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { t, getName, getDesc } from '../i18n/i18n.js';
 import { CIV_SIDEBAR_W } from './CivPanelDrawer.js';
@@ -1237,7 +1238,7 @@ export class TechOverlay {
         return { text: `[${t('techPanel.fxUnlock')}] ${b ? getName(b, 'building') : fx.buildingId}`, color: THEME.accent };
       }
       case 'unlockShip': {
-        const s = SHIPS[fx.shipId];
+        const s = SHIPS[fx.shipId] ?? HULLS[fx.shipId];
         return { text: `[${t('techPanel.fxUnlockShip')}] ${s ? getName(s, 'ship') : fx.shipId}`, color: '#88ddff' };
       }
       case 'unlockCommodity': {
