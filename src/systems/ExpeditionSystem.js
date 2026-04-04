@@ -5,20 +5,18 @@
 // Typy ekspedycji:
 //   'recon'      — rozpoznanie układu (scope: 'nearest' | 'full_system')
 //   'mining'     — wydobycie surowców (cel: zbadana asteroida, planetoida, inna planeta)
-//   'scientific' — punkty nauki + odkrycie ciała (cel: zbadana kometa, asteroida, planeta, księżyc)
 //   'colony'     — kolonizacja zbadanego ciała (cel: explored rocky/moon/planetoid)
 //
 // Wymagania do wysłania:
-//   mining/scientific:
+//   mining:
 //     - technologia 'rocketry' zbadana
 //     - budynek 'launch_pad' aktywny na mapie planety
-//     - scientific: wymaga statku 'science_vessel' w hangarze floty
 //     - koszt startowy: { Fe: 50, C: 20 }
 //     - wolni POPowie: freePops >= 0.5
 //   colony:
 //     - technologia 'colonization' zbadana
 //     - budynek 'launch_pad' aktywny + statek z modułem kolonizacyjnym (habitat_pod/cryo_pod)
-//     - cel explored=true (wcześniejsza ekspedycja scientific)
+//     - cel explored=true (wcześniej zbadane przez recon)
 //     - cel: skaliste ciało (planet rocky/ice, moon, planetoid)
 //     - 2 wolne POPy (crewCost=2.0)
 //     - koszt: { Fe: 150, C: 50, Ti: 20, food: 100, water: 50 }
@@ -27,7 +25,7 @@
 // Czas podróży = odległość_AU × 2 lat (minimum 2 lata, colony: minimum 3)
 //
 // Zdarzenia losowe przy przybyciu do celu:
-//   mining/scientific:
+//   mining:
 //     5%  — katastrofa: brak zarobku
 //     10% — częściowy sukces: zarobek × 0.5
 //     75% — normalny sukces: zarobek × 1.0
@@ -61,13 +59,13 @@ import { loadCargo }     from '../entities/Vessel.js';
 
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE; // 12 — skala czasu cywilizacyjnego
 
-// Koszt ekspedycji mining/scientific (stały, niezależnie od celu)
+// Koszt ekspedycji mining (stały, niezależnie od celu)
 const LAUNCH_COST          = { Fe: 50, C: 20 };
 // Koszt misji rozpoznawczej (symboliczny)
 const RECON_COST           = { Fe: 10 };
 const MIN_TRAVEL_YEARS     = 0.008; // ~3 dni gry — absolutne minimum podróży
 const MIN_COLONY_TRAVEL    = 0.02;  // ~7 dni gry — minimum podróży kolonizacyjnej
-const EXPEDITION_CREW_COST = 0.5;   // POP zablokowany na czas misji (mining/scientific)
+const EXPEDITION_CREW_COST = 0.5;   // POP zablokowany na czas misji (mining)
 const BASE_DISASTER_CHANCE = 2.0;   // % — bazowe ryzyko katastrofy
 const MIN_DISASTER_CHANCE  = 0.1;   // % — minimum
 const XP_REDUCTION_PER     = 0.1;   // % redukcji na punkt doświadczenia statku
@@ -117,17 +115,13 @@ export class ExpeditionSystem {
 
   // ── API publiczne ──────────────────────────────────────────────────────────
 
-  // Sprawdź czy gracz może aktualnie wysłać ekspedycję mining/scientific
+  // Sprawdź czy gracz może aktualnie wysłać ekspedycję mining
   // Zwraca { ok, techOk, padOk, crewOk, vesselOk } — powody blokady jeśli !ok
   canLaunch(type = 'mining') {
     const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
     const padOk  = this._hasSpaceport();
     const crewOk = (window.KOSMOS?.civSystem?.freePops ?? 0) >= EXPEDITION_CREW_COST;
-    // Ekspedycje scientific wymagają statku z capability 'scientific'
-    const colMgr = window.KOSMOS?.colonyManager;
-    const activePid = colMgr?.activePlanetId;
-    const vesselOk = type !== 'scientific' || (colMgr?.hasShipWithCapability(activePid, 'scientific') ?? false);
-    return { ok: techOk && padOk && crewOk && vesselOk, techOk, padOk, crewOk, vesselOk };
+    return { ok: techOk && padOk && crewOk, techOk, padOk, crewOk, vesselOk: true };
   }
 
   // Sprawdź czy gracz może wysłać ekspedycję kolonizacyjną
@@ -360,16 +354,14 @@ export class ExpeditionSystem {
       return;
     }
 
-    // Sprawdź wymagania (mining/scientific)
-    const { ok, techOk, padOk, crewOk, vesselOk } = this.canLaunch(type);
+    // Sprawdź wymagania (mining)
+    const { ok, techOk, padOk, crewOk } = this.canLaunch(type);
     if (!ok) {
       const reason = !techOk
         ? t('expedition.noTechRocketry')
         : !padOk
           ? t('expedition.noSpaceport')
-          : !vesselOk
-            ? t('expedition.noScienceVessel')
-            : t('expedition.noFreePops', EXPEDITION_CREW_COST);
+          : t('expedition.noFreePops', EXPEDITION_CREW_COST);
       EventBus.emit('expedition:launchFailed', { reason });
       return;
     }
@@ -380,7 +372,7 @@ export class ExpeditionSystem {
       return;
     }
 
-    // Mining/scientific wymaga zbadanego celu
+    // Mining wymaga zbadanego celu
     if (!target.explored) {
       EventBus.emit('expedition:launchFailed', { reason: t('expedition.targetNotExplored') });
       return;
@@ -403,20 +395,6 @@ export class ExpeditionSystem {
       if (vessel.fuel.current < fuelNeeded) {
         EventBus.emit('expedition:launchFailed', {
           reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
-        });
-        return;
-      }
-    } else if (type === 'scientific') {
-      // Fallback range check: znajdź pierwszy dostępny statek z 'scientific'
-      const fallbackVessel = window.KOSMOS?.vesselManager?.getFirstAvailableWithCapability(
-        colMgr?.activePlanetId, 'scientific'
-      );
-      const fallbackShipId = fallbackVessel?.shipId ?? 'science_vessel';
-      if (!this._isInRange(target, fallbackShipId)) {
-        const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
-        const range = SHIPS[fallbackShipId]?.range ?? SHIPS.science_vessel?.range ?? 20;
-        EventBus.emit('expedition:launchFailed', {
-          reason: t('expedition.outOfRange', dist, range)
         });
         return;
       }
@@ -1350,12 +1328,6 @@ export class ExpeditionSystem {
       return;
     }
 
-    // Ekspedycja naukowa → oznacz cel jako zbadany
-    if (exp.type === 'scientific') {
-      const target = this._findTarget(exp.targetId);
-      if (target) target.explored = true;
-    }
-
     // Oblicz zarobek bazowy
     const target    = this._findTarget(exp.targetId);
     const baseGains = this._baseYield(exp.type, target);
@@ -1392,24 +1364,12 @@ export class ExpeditionSystem {
 
     // Raport z misji w EventLog
     const targetName = exp.targetName ?? '?';
-    const icon = exp.type === 'scientific' ? '🔬' : '⛏';
     const gainParts = Object.entries(gained).map(([k, v]) => `${k}:${v}`).join(', ');
     const multStr = multiplier !== 1.0 ? ` (×${multiplier.toFixed(1)})` : '';
     EventBus.emit('expedition:missionReport', {
       expedition: exp, gained, multiplier,
-      text: `${icon} ${targetName}: ${gainParts}${multStr}`,
+      text: `⛏ ${targetName}: ${gainParts}${multStr}`,
     });
-
-    // Odkrycie naukowe — losuj po misji scientific
-    if (exp.type === 'scientific' && target) {
-      const distAU = target.orbital?.a ?? 1.0;
-      EventBus.emit('discovery:roll', {
-        expedition: exp,
-        bodyId: exp.targetId,
-        bodyType: target.type,
-        distanceAU: distAU,
-      });
-    }
 
     EventBus.emit('expedition:arrived', { expedition: exp, gained, multiplier });
   }
@@ -1962,9 +1922,6 @@ export class ExpeditionSystem {
       gained.Fe = Math.max(10, Math.min(200, Math.floor((comp.Fe ?? 15) * 1.5)));
       if ((comp.Si ?? 0) > 5) gained.Si = Math.floor((comp.Si ?? 0) * 0.8);
       if ((comp.C  ?? 0) > 5) gained.C  = Math.floor((comp.C  ?? 0) * 0.8);
-      if (type === 'scientific') {
-        gained.research = 30;
-      }
 
     } else if (target.type === 'comet') {
       // Komety — bogate w lód wodny
@@ -1981,9 +1938,6 @@ export class ExpeditionSystem {
       if ((comp.H2O ?? 0) > 5)  gained.water = Math.floor((comp.H2O ?? 0) * massMult * 2);
       if ((comp.Cu  ?? 0) > 0.5) gained.Cu   = Math.floor((comp.Cu ?? 0) * massMult * 3);
       if ((comp.Ti  ?? 0) > 0.1) gained.Ti   = Math.floor((comp.Ti ?? 0) * massMult * 2);
-      if (type === 'scientific') {
-        gained.research = target.atmosphere !== 'none' ? 60 : 30;
-      }
 
     } else if (target.type === 'planet') {
       // Inna planeta — surowce wg składu chemicznego
@@ -1993,9 +1947,6 @@ export class ExpeditionSystem {
       gained.water = Math.max(10, Math.floor((comp.H2O ?? 5)  * 0.8));
       if (target.surface?.hasWater) {
         gained.food = 30;
-      }
-      if (type === 'scientific') {
-        gained.research = (target.lifeScore ?? 0) > 30 ? 80 : 30;
       }
 
     } else {

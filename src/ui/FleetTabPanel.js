@@ -98,7 +98,6 @@ const C = {
 function _missionIcon(type) {
   switch (type) {
     case 'recon': case 'survey': case 'deep_scan': return '🔭';
-    case 'scientific': return '🔬';
     case 'transport': return '📦';
     case 'colony': return '🏗';
     case 'mining': return '⛏';
@@ -113,7 +112,6 @@ function _missionLabel(type) {
     recon: 'fleet.missionTypeRecon',
     survey: 'fleet.missionTypeSurvey',
     deep_scan: 'fleet.missionTypeDeepScan',
-    scientific: 'fleet.missionTypeScientific',
     mining: 'fleet.missionTypeMining',
     colony: 'fleet.missionTypeColony',
     transport: 'fleet.missionTypeTransport',
@@ -2128,7 +2126,7 @@ export class FleetTabPanel {
   _drawActiveMission(ctx, x, y, w, exp, vessel) {
     const LH = 15;
     let cy = y;
-    const typeNames = { recon: t('fleet.missionTypeRecon'), mining: t('fleet.missionTypeMining'), scientific: t('fleet.missionTypeScientific'), transport: t('fleet.missionTypeTransport'), colony: t('fleet.missionTypeColony') };
+    const typeNames = { recon: t('fleet.missionTypeRecon'), mining: t('fleet.missionTypeMining'), transport: t('fleet.missionTypeTransport'), colony: t('fleet.missionTypeColony') };
     const typeName = typeNames[exp.type] ?? exp.type;
 
     ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
@@ -2445,7 +2443,7 @@ export class FleetTabPanel {
 
         if (actionId === 'survey' || actionId === 'deep_scan') {
           // dowolne
-        } else if (actionId === 'scientific' || actionId === 'mining') {
+        } else if (actionId === 'mining') {
           if (!body.explored) continue;
         } else if (actionId === 'colonize') {
           if (!body.explored) continue;

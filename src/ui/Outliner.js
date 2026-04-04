@@ -181,8 +181,7 @@ export class Outliner {
       let dy = 0;
       for (const exp of expeditions.slice(0, 6)) {
         const iy = startY + dy;
-        const icon = exp.type === 'scientific' ? '🔬'
-          : exp.type === 'colony' ? '🚢'
+        const icon = exp.type === 'colony' ? '🚢'
           : exp.type === 'transport' ? '📦'
           : exp.type === 'recon' ? '🔭'
           : '⛏';

@@ -318,7 +318,7 @@ export default {
 
   // === Ships ===
   'ship.science_vessel.name': 'Science Vessel',
-  'ship.science_vessel.desc': 'Orbital research vessel. Required for scientific expeditions.',
+  'ship.science_vessel.desc': 'Orbital research vessel. Survey bodies and scan entire systems.',
   'ship.cargo_ship.name': 'Cargo Ship',
   'ship.cargo_ship.desc': 'Large freighter for resource transfer between colonies.',
 

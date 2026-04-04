@@ -285,7 +285,7 @@ export class FleetPanel {
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       const typeLabels = {
         survey: '🔭 Rozpoznanie', deep_scan: '📡 Skan układu',
-        scientific: '🔬 Naukowa', mining: '⛏ Wydobycie',
+        mining: '⛏ Wydobycie',
         transport: '📦 Transport', colonize: '🏗 Kolonizacja',
       };
       ctx.fillText(typeLabels[mType] ?? mType, x + PADDING, cy + 10);

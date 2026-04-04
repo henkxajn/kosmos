@@ -51,7 +51,7 @@ function _typeIcon(body) {
 function _missionTypeLabel(type) {
   switch (type) {
     case 'mining':     return t('mission.mining');
-    case 'scientific': return t('mission.scientific');
+    // (scientific usunięty)
     case 'recon':      return t('mission.recon');
     case 'colony':     return t('mission.colonization');
     case 'transport':  return t('mission.transport');

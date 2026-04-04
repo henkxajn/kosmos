@@ -5,7 +5,7 @@
 // Tryb rozwinięty: lista misji + przycisk "Wyślij nową".
 //
 // Modal wysyłki (w layerze depth 40+):
-//   - Wybór typu misji (mining / scientific)
+//   - Wybór typu misji (mining)
 //   - Lista celów sortowana wg odległości
 //   - Szacowane zarobki i czas podróży
 //   - Potwierdzenie kosztów
@@ -164,7 +164,7 @@ export class ExpeditionPanel {
   _addExpRow(y, exp) {
     const color = STATUS_COLORS[exp.status] ?? '#6888aa';
     const arrow = exp.status === 'returning' ? '↩' : '→';
-    const icon  = exp.type === 'scientific'  ? '🔬' : '⛏';
+    const icon  = '⛏';
     const name  = exp.targetName.substring(0, 12);
     const yr    = exp.status === 'returning'
       ? `↩ ${this._fmtYear(exp.returnYear)}`
@@ -292,7 +292,7 @@ export class ExpeditionPanel {
     this._mAdd(y, 'Typ misji:', '#4a6a8a');
     y += 14;
 
-    for (const [key, label] of [['mining', '⛏  Wydobycie'], ['scientific', '🔬  Naukowa']]) {
+    for (const [key, label] of [['mining', '⛏  Wydobycie']]) {
       const active = this._selectedType === key;
       const btn = this.scene.add.text(MX + 12, y, `[ ${label} ]`, {
         fontSize: '10px', fontFamily: 'monospace',

@@ -137,7 +137,7 @@ export const SHIP_MODULES = {
     mass: 8,   // tony
     cost: { Si: 20, Cu: 15 },
     commodityCost: { electronic_systems: 3, polymer_composites: 2 },
-    stats: { discoveryBonus: 0.25, enablesMissions: ['scientific', 'survey'] },
+    stats: { discoveryBonus: 0.25, enablesMissions: ['survey', 'deep_scan'] },
     requires: null,
     description: '+25% szans odkrycia naukowego. Umożliwia misje naukowe.',
   },

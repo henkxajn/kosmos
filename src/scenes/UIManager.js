@@ -402,7 +402,7 @@ export class UIManager {
     EventBus.on('vessel:launched', ({ vessel, mission }) => {
       const sd = SHIPS[vessel.shipId];
       const icon = sd?.icon ?? '🚀';
-      const mIcon = mission?.type === 'scientific' ? '🔬' : mission?.type === 'colony' ? '🚢'
+      const mIcon = mission?.type === 'colony' ? '🚢'
         : mission?.type === 'transport' ? '📦' : mission?.type === 'recon' ? '🔭' : '⛏';
       this._addNotification(`${icon} ${vessel.name} → ${mission?.targetName ?? '?'} (${mIcon} ${mission?.type})`);
     });
@@ -523,7 +523,7 @@ export class UIManager {
       this._log(`${typeLabel}: ${expedition.targetName}${mult}`, 'expedition_ok');
     });
     EventBus.on('expedition:missionReport', ({ text }) => {
-      // Raport z misji mining/scientific — szczegółowe zasoby
+      // Raport z misji mining — szczegółowe zasoby
       this._log(text, 'expedition_ok');
     });
     EventBus.on('expedition:disaster', ({ expedition }) => {

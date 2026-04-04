@@ -81,36 +81,6 @@ const ACTIONS = {
     },
   },
 
-  scientific: {
-    id: 'scientific',
-    label: 'Misja naukowa',
-    icon: '🔬',
-    requiresTarget: true,
-    canExecute(vessel, state) {
-      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
-      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
-      const ms = state.missionSystem;
-      if (!ms) return { ok: false, reason: 'Brak systemu misji' };
-      const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      // Sprawdź spaceport w kolonii statku (nie aktywnej)
-      const vesselColony = state.colonyManager?.getColony(vessel.colonyId);
-      const padOk = vesselColony?.buildingSystem?.hasSpaceport() ?? false;
-      if (!padOk) return { ok: false, reason: 'Brak Wyrzutni' };
-      const caps = SHIPS[vessel.shipId]?.capabilities ?? [];
-      if (!caps.includes('scientific')) {
-        return { ok: false, reason: 'Statek nie ma zdolności naukowych' };
-      }
-      return { ok: true };
-    },
-    execute(vessel, state) {
-      if (!state.targetId) return;
-      EventBus.emit('expedition:sendRequest', {
-        type: 'scientific', targetId: state.targetId, vesselId: vessel.id,
-      });
-    },
-  },
-
   mining: {
     id: 'mining',
     label: 'Wydobycie',
@@ -459,9 +429,6 @@ export function getAvailableActions(vessel, state) {
     }
     if (caps.includes('deep_scan')) {
       result.push(_check(ACTIONS.deep_scan, vessel, state));
-    }
-    if (caps.includes('scientific')) {
-      result.push(_check(ACTIONS.scientific, vessel, state));
     }
     if (caps.includes('colony')) {
       result.push(_check(ACTIONS.colonize, vessel, state));

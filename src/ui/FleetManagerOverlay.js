@@ -91,7 +91,6 @@ function _fmtYear(y) {
 function _missionTypeIcon(type) {
   switch (type) {
     case 'recon': case 'survey': case 'deep_scan': return '🔭';
-    case 'scientific': return '🔬';
     case 'transport': return '📦';
     case 'colony': return '🏗';
     case 'mining': return '⛏';
@@ -104,7 +103,7 @@ function _missionTypeIcon(type) {
 function _missionTypeLabel(type) {
   const key = {
     recon: 'fleet.missionTypeRecon', survey: 'fleet.missionTypeSurvey',
-    deep_scan: 'fleet.missionTypeDeepScan', scientific: 'fleet.missionTypeScientific',
+    deep_scan: 'fleet.missionTypeDeepScan',
     mining: 'fleet.missionTypeMining', colony: 'fleet.missionTypeColony',
     transport: 'fleet.missionTypeTransport', trade_route: 'fleet.missionTypeTransport',
     interstellar_jump: 'fleet.missionTypeInterstellar',
@@ -1422,7 +1421,6 @@ export class FleetManagerOverlay {
           routeColor = 'rgba(0,204,255,0.5)';
         else if (m.type === 'colony') routeColor = 'rgba(170,136,255,0.5)';
         else if (m.type === 'transport') routeColor = 'rgba(255,204,68,0.5)';
-        else if (m.type === 'scientific') routeColor = 'rgba(0,238,136,0.5)';
         if (isSel) routeColor = THEME.accent;
 
         ctx.setLineDash([4, 4]);
@@ -1435,7 +1433,6 @@ export class FleetManagerOverlay {
         if (vessel.position.state === 'in_transit') {
           const midX = (vx + tpx) / 2, midY = (vy + tpy) / 2;
           const mIcon = m.type === 'recon' || m.type === 'survey' ? '🔭'
-            : m.type === 'scientific' ? '🔬'
             : m.type === 'colony' ? '🚢'
             : m.type === 'transport' ? '📦'
             : m.type === 'mining' ? '⛏' : '→';
@@ -2475,8 +2472,8 @@ export class FleetManagerOverlay {
       const btnW = w - pad * 2;
       const btnH = 22;
 
-      // ── Recon ciała (recon/scientific cap) ──
-      if (caps.includes('recon') || caps.includes('scientific')) {
+      // ── Recon ciała (recon cap) ──
+      if (caps.includes('recon')) {
         const isExplored = orbitBody?.explored ?? false;
         ctx.fillStyle = isExplored ? 'rgba(100,100,100,0.08)' : 'rgba(0,180,255,0.08)';
         ctx.fillRect(x + pad, cy, btnW, btnH);
@@ -2959,7 +2956,7 @@ export class FleetManagerOverlay {
       ctx.font = valFont;
       ctx.fillStyle = THEME.mint ?? THEME.accent;
       const capIcons = {
-        recon: '🔭', scientific: '🔬', survey: '📡', deep_scan: '🛰',
+        recon: '🔭', survey: '📡', deep_scan: '🛰',
         colony: '🏗', cargo: '📦',
       };
       const capText = ship.capabilities.map(c => capIcons[c] ?? c).join(' ');
@@ -3652,7 +3649,7 @@ export class FleetManagerOverlay {
   _missionTypeName(type) {
     const names = {
       recon: t('fleet.missionTypeRecon'), survey: t('fleet.missionTypeSurvey'), deep_scan: t('fleet.missionTypeDeepScan'),
-      scientific: t('fleet.missionTypeScientific'), mining: t('fleet.missionTypeMining'), colony: t('fleet.missionTypeColony'),
+      mining: t('fleet.missionTypeMining'), colony: t('fleet.missionTypeColony'),
       transport: t('fleet.missionTypeTransport'), transit: t('fleet.missionTypeTransit'),
       foreign_recon: t('fleet.missionTypeForeignRecon'),
       exploration: t('fleet.missionTypeExploration'),
@@ -4091,7 +4088,7 @@ export class FleetManagerOverlay {
         const okTypes = ['rocky', 'ice', 'iron', 'volcanic', 'moon', 'planetoid'];
         if (!okTypes.includes(pType) && body.type !== 'moon' && body.type !== 'planetoid') continue;
       }
-      // Survey/scientific — wszystkie ciała (zbadane i niezbadane)
+      // Survey/deep_scan — wszystkie ciała (zbadane i niezbadane)
       // Mining — tylko zbadane (ale pokazuj wszystkie, badge powie)
 
       const distAU = this._calcDistAU(vessel, body);

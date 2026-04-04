@@ -47,7 +47,7 @@ const COLONY_START_RESOURCES = { Fe: 200, C: 150, Si: 100, Cu: 50, food: 100, wa
 // recon(target/nearest) → survey
 // recon(full_system)    → deep_scan
 // colony               → colonize
-// mining/scientific/transport — bez zmian
+// mining/transport — bez zmian
 
 export class MissionSystem {
   constructor(resourceSystem = null) {
@@ -102,7 +102,7 @@ export class MissionSystem {
 
   /**
    * Stwórz i wyślij misję.
-   * @param {string} type — survey|deep_scan|transport|colonize|mining|scientific|transit
+   * @param {string} type — survey|deep_scan|transport|colonize|mining|transit
    * @param {string} vesselId — id statku
    * @param {object} params — { targetId, cargo, ... }
    */
@@ -128,14 +128,11 @@ export class MissionSystem {
     this._orderReturn(missionId);
   }
 
-  // Sprawdź czy gracz może wysłać ekspedycję mining/scientific
+  // Sprawdź czy gracz może wysłać ekspedycję mining
   canLaunch(type = 'mining') {
     const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
     const padOk  = this._hasSpaceport();
-    const colMgr = window.KOSMOS?.colonyManager;
-    const activePid = colMgr?.activePlanetId;
-    const vesselOk = type !== 'scientific' || (colMgr?.hasShipWithCapability(activePid, 'scientific') ?? false);
-    return { ok: techOk && padOk && vesselOk, techOk, padOk, crewOk: true, vesselOk };
+    return { ok: techOk && padOk, techOk, padOk, crewOk: true, vesselOk: true };
   }
 
   // Sprawdź czy gracz może wysłać ekspedycję kolonizacyjną
@@ -320,7 +317,7 @@ export class MissionSystem {
       return 'survey';
     }
     if (mission.type === 'colony') return 'colonize';
-    return mission.type; // mining, scientific, transport
+    return mission.type; // mining, transport
   }
 
   // Serializacja
@@ -394,7 +391,7 @@ export class MissionSystem {
     }
   }
 
-  // ── Launch główny (mining/scientific/recon/colony) ─────────────────────────
+  // ── Launch główny (mining/recon/colony) ─────────────────────────────────────
   _launch(type, targetId, cargo, vesselId) {
     if (type === 'colony') {
       this._launchColony(targetId, vesselId);
@@ -405,14 +402,12 @@ export class MissionSystem {
       return;
     }
 
-    // mining/scientific
-    const { ok, techOk, padOk, vesselOk } = this.canLaunch(type);
+    // mining
+    const { ok, techOk, padOk } = this.canLaunch(type);
     if (!ok) {
       const reason = !techOk
         ? t('mission.noTechRocketry')
-        : !padOk
-          ? t('mission.noSpaceport')
-          : t('mission.noScienceVessel');
+        : t('mission.noSpaceport');
       this._emit('mission:failed', 'expedition:launchFailed', { reason });
       return;
     }
@@ -445,13 +440,6 @@ export class MissionSystem {
         });
         return;
       }
-    } else if (type === 'scientific' && !this._isInRange(target, 'science_vessel')) {
-      const dist = DistanceUtils.orbitalFromHomeAU(target).toFixed(1);
-      const range = SHIPS.science_vessel.range;
-      this._emit('mission:failed', 'expedition:launchFailed', {
-        reason: t('mission.targetOutOfRange', dist, range)
-      });
-      return;
     }
 
     if (this.resourceSystem) {
@@ -1337,16 +1325,6 @@ export class MissionSystem {
       return;
     }
 
-    if (exp.type === 'scientific') {
-      const target = this._findTarget(exp.targetId);
-      if (target) target.explored = true;
-      // Stats: bodiesSurveyed
-      if (exp.vesselId && vMgr) {
-        const vessel = vMgr.getVessel(exp.vesselId);
-        if (vessel?.stats) vessel.stats.bodiesSurveyed += 1;
-      }
-    }
-
     const target    = this._findTarget(exp.targetId);
     const baseGains = this._baseYield(exp.type, target);
 
@@ -1383,24 +1361,12 @@ export class MissionSystem {
     }
 
     const targetName = exp.targetName ?? '?';
-    const icon = exp.type === 'scientific' ? '🔬' : '⛏';
     const gainParts = Object.entries(gained).map(([k, v]) => `${k}:${v}`).join(', ');
     const multStr = multiplier !== 1.0 ? ` (×${multiplier.toFixed(1)})` : '';
     this._emit('mission:report', 'expedition:missionReport', {
       expedition: exp, gained, multiplier,
-      text: `${icon} ${targetName}: ${gainParts}${multStr}`,
+      text: `⛏ ${targetName}: ${gainParts}${multStr}`,
     });
-
-    // Odkrycie naukowe — losuj po misji scientific
-    if (exp.type === 'scientific' && target) {
-      const distAU = target.orbital?.a ?? 1.0;
-      EventBus.emit('discovery:roll', {
-        expedition: exp,
-        bodyId: exp.targetId,
-        bodyType: target.type,
-        distanceAU: distAU,
-      });
-    }
 
     this._emit('mission:arrived', 'expedition:arrived', { expedition: exp, gained, multiplier });
   }
@@ -1950,7 +1916,6 @@ export class MissionSystem {
       gained.Fe = Math.max(10, Math.min(200, Math.floor((comp.Fe ?? 15) * 1.5)));
       if ((comp.Si ?? 0) > 5) gained.Si = Math.floor((comp.Si ?? 0) * 0.8);
       if ((comp.C  ?? 0) > 5) gained.C  = Math.floor((comp.C  ?? 0) * 0.8);
-      if (type === 'scientific') gained.research = 30;
     } else if (target.type === 'comet') {
       gained.water    = 200;
       gained.C        = 40;
@@ -1963,14 +1928,12 @@ export class MissionSystem {
       if ((comp.H2O ?? 0) > 5)  gained.water = Math.floor((comp.H2O ?? 0) * massMult * 2);
       if ((comp.Cu  ?? 0) > 0.5) gained.Cu   = Math.floor((comp.Cu ?? 0) * massMult * 3);
       if ((comp.Ti  ?? 0) > 0.1) gained.Ti   = Math.floor((comp.Ti ?? 0) * massMult * 2);
-      if (type === 'scientific') gained.research = target.atmosphere !== 'none' ? 60 : 30;
     } else if (target.type === 'planet') {
       const comp = target.composition ?? {};
       gained.Fe    = Math.max(20, Math.floor((comp.Fe  ?? 15) * 0.8));
       gained.Si    = Math.max(5,  Math.floor((comp.Si  ?? 10) * 0.5));
       gained.water = Math.max(10, Math.floor((comp.H2O ?? 5)  * 0.8));
       if (target.surface?.hasWater) gained.food = 30;
-      if (type === 'scientific') gained.research = (target.lifeScore ?? 0) > 30 ? 80 : 30;
     } else {
       gained.Fe = 30;
     }

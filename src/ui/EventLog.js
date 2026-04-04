@@ -148,12 +148,11 @@ export class EventLog {
 
     // ── Zdarzenia ekspedycji ──────────────────────────────────────
     EventBus.on('expedition:launched', ({ expedition }) => {
-      const icon = expedition.type === 'scientific' ? '🔬' : '⛏';
-      this._add(t('log.expeditionLaunch', icon, expedition.targetName, expedition.travelTime), 'expedition_ok');
+      this._add(t('log.expeditionLaunch', '⛏', expedition.targetName, expedition.travelTime), 'expedition_ok');
     });
 
     EventBus.on('expedition:arrived', ({ expedition, gained, multiplier }) => {
-      const icon     = expedition.type === 'scientific' ? '🔬' : '⛏';
+      const icon     = '⛏';
       const bonusStr = multiplier >= 1.5 ? t('log.expeditionBonusFull') : multiplier <= 0.5 ? t('log.expeditionBonusPartial') : '';
       const gainStr  = Object.entries(gained).filter(([,v]) => v > 0)
         .map(([k, v]) => `${v}${k === 'minerals' ? '⛏' : k === 'energy' ? '⚡' : k === 'organics' ? '🌿' : k === 'water' ? '💧' : k === 'research' ? '🔬' : k}`)
