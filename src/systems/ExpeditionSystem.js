@@ -176,9 +176,9 @@ export class ExpeditionSystem {
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const vMgr     = window.KOSMOS?.vesselManager;
-    // Jeśli podano vesselId — statek już wybrany, pomiń sprawdzenie hangaru
+    const vessel   = vesselId ? vMgr?.getVessel(vesselId) : null;
     const shipOk   = vesselId
-      ? !!(vMgr?.getVessel(vesselId))
+      ? !!vessel
       : (vMgr?.hasAvailableShipWithCapability(activePid, 'cargo') ?? false);
     const target   = this._findTarget(targetId);
     const exploredOk = target?.explored === true;
@@ -186,29 +186,31 @@ export class ExpeditionSystem {
       ? (target.type === 'planetoid' || target.type === 'moon' ||
          (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
       : false;
-    // Sprawdź czy cel ma już kolonię/outpost → tryb dostawy budynku
     const existingCol = colMgr?.getColony(targetId);
-    const isDelivery = !!existingCol; // dostawa budynku do istniejącej kolonii
-    // Budynek musi istnieć
+    const isDelivery = !!existingCol;
     const bDef = BUILDINGS[buildingId];
     const buildingOk = !!bDef;
-    // Sprawdź czy kolonia ma commodities na budynek
     const resSys = this.resourceSystem;
     let canAfford = true;
     const totalCost = {};
+    let cargoWeight = 0;
     if (bDef) {
-      // Koszt surowców + commodities
       for (const [resId, qty] of Object.entries(bDef.cost ?? {})) {
         totalCost[resId] = (totalCost[resId] ?? 0) + qty;
+        cargoWeight += qty; // surowce: 1t/szt
       }
       for (const [comId, qty] of Object.entries(bDef.commodityCost ?? {})) {
         totalCost[comId] = (totalCost[comId] ?? 0) + qty;
+        cargoWeight += qty * (COMMODITIES[comId]?.weight ?? 1);
       }
       if (resSys) canAfford = resSys.canAfford(totalCost);
     }
+    const cargoMax = vessel?.cargoMax ?? 0;
+    const cargoOk = !vessel || cargoWeight <= cargoMax;
     return {
-      ok: techOk && shipOk && exploredOk && typeOk && buildingOk && canAfford,
-      techOk, shipOk, exploredOk, typeOk, buildingOk, canAfford, totalCost, isDelivery,
+      ok: techOk && shipOk && exploredOk && typeOk && buildingOk && canAfford && cargoOk,
+      techOk, shipOk, exploredOk, typeOk, buildingOk, canAfford, cargoOk,
+      totalCost, cargoWeight, cargoMax, isDelivery,
     };
   }
 

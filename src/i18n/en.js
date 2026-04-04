@@ -1065,6 +1065,7 @@ export default {
   'mission.targetHasColony': 'Target already has a colony',
   'mission.shipUnavailable': 'Ship unavailable',
   'mission.noStartupResources': 'Insufficient startup resources',
+  'mission.cargoTooHeavy': 'Cargo too heavy ({0}t, capacity: {1}t)',
   'mission.noCargoToTransport': 'No cargo to transport',
   'mission.noResourcesToTransport': 'No resources to transport',
   'mission.noUnexploredBodies': 'No unexplored celestial bodies',

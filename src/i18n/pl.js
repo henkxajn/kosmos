@@ -1065,6 +1065,7 @@ export default {
   'mission.targetHasColony': 'Cel już posiada kolonię',
   'mission.shipUnavailable': 'Statek niedostępny',
   'mission.noStartupResources': 'Brak surowców startowych',
+  'mission.cargoTooHeavy': 'Ładunek za ciężki ({0}t, pojemność: {1}t)',
   'mission.noCargoToTransport': 'Brak ładunku do transportu',
   'mission.noResourcesToTransport': 'Brak surowców do transportu',
   'mission.noUnexploredBodies': 'Brak niezbadanych ciał niebieskich',

@@ -180,8 +180,9 @@ export class MissionSystem {
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const vMgr     = window.KOSMOS?.vesselManager;
+    const vessel   = vesselId ? vMgr?.getVessel(vesselId) : null;
     const shipOk   = vesselId
-      ? !!(vMgr?.getVessel(vesselId))
+      ? !!vessel
       : (vMgr?.hasAvailableShipWithCapability(activePid, 'cargo') ?? false);
     const target   = this._findTarget(targetId);
     const exploredOk = target?.explored === true;
@@ -194,18 +195,25 @@ export class MissionSystem {
     const resSys = this.resourceSystem;
     let canAfford = true;
     const totalCost = {};
+    let cargoWeight = 0;
     if (bDef) {
       for (const [resId, qty] of Object.entries(bDef.cost ?? {})) {
         totalCost[resId] = (totalCost[resId] ?? 0) + qty;
+        cargoWeight += qty; // surowce: 1t/szt
       }
       for (const [comId, qty] of Object.entries(bDef.commodityCost ?? {})) {
         totalCost[comId] = (totalCost[comId] ?? 0) + qty;
+        cargoWeight += qty * (COMMODITIES[comId]?.weight ?? 1);
       }
       if (resSys) canAfford = resSys.canAfford(totalCost);
     }
+    // Sprawdź pojemność cargo statku
+    const cargoMax = vessel?.cargoMax ?? 0;
+    const cargoOk = !vessel || cargoWeight <= cargoMax; // bez statku — pomiń check
     return {
-      ok: techOk && shipOk && exploredOk && typeOk && buildingOk && canAfford,
-      techOk, shipOk, exploredOk, typeOk, notColonized: true, buildingOk, canAfford, totalCost,
+      ok: techOk && shipOk && exploredOk && typeOk && buildingOk && canAfford && cargoOk,
+      techOk, shipOk, exploredOk, typeOk, notColonized: true, buildingOk, canAfford, cargoOk,
+      totalCost, cargoWeight, cargoMax,
     };
   }
 
@@ -617,8 +625,8 @@ export class MissionSystem {
         : !check.shipOk ? t('mission.noColonyShip')
         : !check.exploredOk ? t('mission.targetNotExploredScience')
         : !check.typeOk ? t('mission.targetNotSuitable')
-        : !check.notColonized ? t('mission.targetHasColony')
         : !check.canAfford ? t('mission.noStartupResources')
+        : !check.cargoOk ? t('mission.cargoTooHeavy', Math.round(check.cargoWeight), check.cargoMax)
         : t('mission.targetNotSuitable');
       this._emit('mission:failed', 'expedition:launchFailed', { reason });
       return;
