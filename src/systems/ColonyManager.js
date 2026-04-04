@@ -337,7 +337,6 @@ export class ColonyManager {
     // BuildingSystem per-kolonia — powiązany z własnymi ResourceSystem i CivilizationSystem
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
     civSys.buildingSystem = bSys;  // referencja do strata demand
-    bSys._requiresSpaceportFirst = true;  // nowa kolonia wymaga portu kosmicznego
     bSys.setDeposits(entity.deposits ?? []);
     bSys.setPlanetId(planetId);
 
@@ -411,7 +410,6 @@ export class ColonyManager {
     const bSys = new BuildingSystem(resSys, civSys, this.techSystem);
     civSys.buildingSystem = bSys;
     bSys._isOutpost = true;
-    bSys._requiresSpaceportFirst = true;  // nowa kolonia wymaga portu kosmicznego
     bSys.setDeposits(entity.deposits ?? []);
     bSys.setPlanetId(planetId);
 

@@ -398,14 +398,7 @@ export class BuildingSystem {
       }
     }
 
-    // Reguła "spaceport first" — nowe kolonie wymagają portu kosmicznego
-    if (this._requiresSpaceportFirst && !building.isSpaceport && !isCapital && !this.hasSpaceport()) {
-      EventBus.emit('planet:buildResult', {
-        success: false, tile,
-        reason: t('ui.buildSpaceportFirst'),
-      });
-      return;
-    }
+    // Reguła "spaceport first" usunięta — budowanie nie wymaga portu kosmicznego
 
     // Outpost: tylko budynki autonomiczne (popCost=0 lub isAutonomous)
     if (this._isOutpost && !isCapital && !building.isSpaceport) {
