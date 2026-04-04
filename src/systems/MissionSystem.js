@@ -652,19 +652,10 @@ export class MissionSystem {
       return;
     }
 
-    // Pobierz surowce z kolonii i załaduj na statek
-    const bDef = BUILDINGS[buildingId];
+    // Pobierz koszt budynku z kolonii macierzystej (budynek stawiany za darmo na outpoście)
     const totalCost = check.totalCost;
     if (this.resourceSystem) {
       this.resourceSystem.spend(totalCost);
-    }
-    for (const [resId, qty] of Object.entries(totalCost)) {
-      if (qty > 0) {
-        vessel.cargo = vessel.cargo ?? {};
-        vessel.cargo[resId] = (vessel.cargo[resId] ?? 0) + qty;
-        const weight = COMMODITIES[resId]?.weight ?? 1;
-        vessel.cargoUsed = (vessel.cargoUsed ?? 0) + qty * weight;
-      }
     }
 
     // Czas podróży
@@ -1637,15 +1628,9 @@ export class MissionSystem {
     const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
     const gameYear = Math.floor(this._gameYear);
 
-    // Utwórz outpost z cargo statku
-    const outpostResources = {};
-    if (vessel?.cargo) {
-      for (const [comId, qty] of Object.entries(vessel.cargo)) {
-        if (qty > 0) outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
-      }
-    }
-
-    const outpost = colMgr?.createOutpost(exp.targetId, outpostResources, gameYear);
+    // Utwórz outpost — koszt budynku już pobrany z macierzystej kolonii przy wysyłce,
+    // budynek stawiany za darmo przez autoPlaceBuilding, outpost startuje pusty
+    const outpost = colMgr?.createOutpost(exp.targetId, {}, gameYear);
     if (!outpost) {
       // Cel ma już kolonię — powrót statku
       exp.status = 'completed';

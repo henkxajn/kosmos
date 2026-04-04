@@ -1631,25 +1631,10 @@ export class ExpeditionSystem {
       // Cel BEZ kolonii — utwórz outpost
       const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
 
-      // Cargo statku → zasoby outpost
-      const outpostResources = {};
-
-      if (vessel?.cargo) {
-        for (const [comId, qty] of Object.entries(vessel.cargo)) {
-          if (qty <= 0) continue;
-          outpostResources[comId] = (outpostResources[comId] ?? 0) + qty;
-        }
-      }
-
-      // Dodaj cargo z ekspedycji (zasoby transportowe)
-      if (exp.cargo) {
-        for (const [key, val] of Object.entries(exp.cargo)) {
-          if (val > 0) outpostResources[key] = (outpostResources[key] ?? 0) + val;
-        }
-      }
-
+      // Outpost startuje pusty — koszt budynku pobrany z macierzystej kolonii przy wysyłce,
+      // budynek stawiany za darmo przez autoPlaceBuilding
       const gameYear = Math.floor(this._gameYear);
-      colMgr.createOutpost(exp.targetId, outpostResources, gameYear);
+      colMgr.createOutpost(exp.targetId, {}, gameYear);
 
       // Przenieś statek z floty macierzystej kolonii do outpost
       if (exp.vesselId && vMgr) {
