@@ -716,8 +716,9 @@ export class ColonyManager {
         queues[i].progress += deltaYears * speedBonus;
         if (queues[i].progress >= queues[i].buildTime) {
           const shipId = queues[i].shipId;
+          const modules = queues[i].modules || [];
           queues.splice(i, 1);
-          EventBus.emit('fleet:shipCompleted', { planetId: colony.planetId, shipId });
+          EventBus.emit('fleet:shipCompleted', { planetId: colony.planetId, shipId, modules });
         }
       }
     }
@@ -768,6 +769,7 @@ export class ColonyManager {
           shipId:    order.shipId,
           progress:  0,
           buildTime: ship?.buildTime ?? 5,
+          modules:   order.modules || [],
         });
 
         toRemove.push(i);

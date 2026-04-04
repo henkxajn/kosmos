@@ -60,8 +60,8 @@ export class VesselManager {
     this._vessels = new Map();
 
     // ── EventBus ──────────────────────────────────────────────────
-    EventBus.on('fleet:shipCompleted', ({ planetId, shipId }) =>
-      this._onShipCompleted(planetId, shipId));
+    EventBus.on('fleet:shipCompleted', ({ planetId, shipId, modules = [] }) =>
+      this._onShipCompleted(planetId, shipId, modules));
 
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — tankowanie i naprawa biegną szybciej
     EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) =>
@@ -888,8 +888,8 @@ export class VesselManager {
   /**
    * Statek ukończony w Stoczni — stwórz vessel instance.
    */
-  _onShipCompleted(planetId, shipId) {
-    const vessel = this.createAndRegister(shipId, planetId);
+  _onShipCompleted(planetId, shipId, modules = []) {
+    const vessel = this.createAndRegister(shipId, planetId, { modules });
     // Dodaj vessel ID do colony.fleet (przez ColonyManager)
     const colMgr = window.KOSMOS?.colonyManager;
     const colony = colMgr?.getColony(planetId);
