@@ -228,6 +228,8 @@ export class ColonyManager {
     if (colony.prosperitySystem)  window.KOSMOS.prosperitySystem  = colony.prosperitySystem;
     if (window.KOSMOS.expeditionSystem) window.KOSMOS.expeditionSystem.resourceSystem = colony.resourceSystem;
     if (window.KOSMOS.techSystem)       window.KOSMOS.techSystem.resourceSystem       = colony.resourceSystem;
+    // Wymuś odświeżenie UI zasobów nowej kolonii (usuwa stale dane z poprzedniej)
+    EventBus.emit('resource:requestSnapshot');
     return true;
   }
 
