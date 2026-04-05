@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KOSMOS — 3 wizje UI (pełne ekrany gry)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Rajdhani:wght@300;400;500;600;700&family=Bebas+Neue&family=Space+Mono:wght@400;700&family=Orbitron:wght@400;700;900&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:#000;color:#ccc;font-family:sans-serif;overflow:hidden;width:100%;height:100%}
+
+/* ═══ MASTER NAV ═══ */
+.master-nav{
+  position:fixed;top:0;left:0;right:0;z-index:9999;
+  display:flex;height:38px;background:rgba(0,0,0,0.97);border-bottom:1px solid #222;
+}
+.style-tabs{display:flex;flex:1}
+.style-tab{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+  cursor:pointer;border-bottom:2px solid transparent;transition:all 0.3s;
+  font-size:10px;letter-spacing:2px;
+}
+.style-tab:hover{background:rgba(255,255,255,0.02)}
+.style-tab.active{border-bottom-color:var(--c)}
+.style-tab .dot{width:8px;height:8px;border-radius:50%;background:var(--c)}
+
+.screen-tabs{
+  display:flex;gap:0;border-left:1px solid #333;
+}
+.screen-tab{
+  padding:0 14px;display:flex;align-items:center;
+  font-size:9px;letter-spacing:1px;color:#555;cursor:pointer;transition:all 0.3s;
+}
+.screen-tab:hover{color:#888}
+.screen-tab.active{color:#ddd;background:rgba(255,255,255,0.03)}
+
+/* ═══ VIEWPORT ═══ */
+.viewport{
+  position:fixed;top:38px;left:0;right:0;bottom:0;
+  overflow:hidden;
+}
+.scene{display:none;width:100%;height:100%;position:absolute;inset:0}
+.scene.active{display:block}
+
+/* ════════════════════════════════════════════
+   THEME VARS
+   ════════════════════════════════════════════ */
+
+/* NEON CYBER */
+.t-cyber{
+  --bg:#08020a;--bg2:#0c0414;--bg3:#10061a;--bg4:#140820;
+  --acc:#ff2288;--acc2:#ff44aa;--acc-dim:rgba(255,34,136,0.08);--acc-border:rgba(255,34,136,0.12);--acc-glow:rgba(255,34,136,0.25);
+  --acc-bar:linear-gradient(90deg,#ff2288,#aa00ff);
+  --sec:#cc88ff;--sec-dim:rgba(204,136,255,0.08);
+  --grn:#44ffaa;--red:#ff4466;--ylw:#ffaa44;--pur:#cc88ff;--blu:#44aaff;
+  --txt:#e0c8d8;--txt2:rgba(220,190,210,0.55);--txt3:rgba(200,170,190,0.3);--txt4:rgba(200,170,190,0.14);
+  --brd:rgba(255,34,136,0.06);--brd2:rgba(255,34,136,0.12);--brd3:rgba(255,34,136,0.25);
+  --f-display:'Audiowide',sans-serif;--f-body:'Rajdhani',sans-serif;--f-mono:'Rajdhani',sans-serif;
+  --f-logo-size:32px;--f-body-size:12px;--f-data-size:12px;--f-label-size:9px;--f-title-size:11px;
+  --f-body-weight:400;--f-data-weight:500;
+}
+/* FILM KOSMICZNY */
+.t-film{
+  --bg:#080604;--bg2:#0c0a06;--bg3:#100e08;--bg4:#14120c;
+  --acc:#e8a030;--acc2:#f0c060;--acc-dim:rgba(232,160,48,0.06);--acc-border:rgba(232,160,48,0.08);--acc-glow:rgba(232,160,48,0.2);
+  --acc-bar:#e8a030;
+  --sec:#c89860;--sec-dim:rgba(200,152,96,0.06);
+  --grn:#88aa44;--red:#cc6644;--ylw:#e8a030;--pur:#aa8866;--blu:#88aa88;
+  --txt:#c8b898;--txt2:rgba(200,180,150,0.5);--txt3:rgba(180,160,130,0.28);--txt4:rgba(180,160,130,0.12);
+  --brd:rgba(232,160,48,0.05);--brd2:rgba(232,160,48,0.1);--brd3:rgba(232,160,48,0.2);
+  --f-display:'Bebas Neue',sans-serif;--f-body:'Space Mono',monospace;--f-mono:'Space Mono',monospace;
+  --f-logo-size:42px;--f-body-size:10px;--f-data-size:10px;--f-label-size:8px;--f-title-size:12px;
+  --f-body-weight:400;--f-data-weight:400;
+}
+/* NEON VIOLET */
+.t-violet{
+  --bg:#06030c;--bg2:#0a0614;--bg3:#0e081a;--bg4:#120a20;
+  --acc:#aa66ff;--acc2:#c088ff;--acc-dim:rgba(170,102,255,0.06);--acc-border:rgba(170,102,255,0.1);--acc-glow:rgba(170,102,255,0.2);
+  --acc-bar:linear-gradient(90deg,#aa66ff,#4488ff);
+  --sec:#6688cc;--sec-dim:rgba(102,136,204,0.06);
+  --grn:#44ddaa;--red:#ff6688;--ylw:#ddaa44;--pur:#aa66ff;--blu:#4488ff;
+  --txt:#c0b8d8;--txt2:rgba(190,180,210,0.5);--txt3:rgba(170,160,190,0.28);--txt4:rgba(170,160,190,0.14);
+  --brd:rgba(170,102,255,0.05);--brd2:rgba(170,102,255,0.1);--brd3:rgba(170,102,255,0.2);
+  --f-display:'Audiowide',sans-serif;--f-body:'Rajdhani',sans-serif;--f-mono:'Rajdhani',sans-serif;
+  --f-logo-size:32px;--f-body-size:12px;--f-data-size:12px;--f-label-size:9px;--f-title-size:11px;
+  --f-body-weight:400;--f-data-weight:500;
+}
+
+/* ════════════════════════════════════════════
+   SHARED COMPONENTS
+   ════════════════════════════════════════════ */
+
+/* === TOP BAR === */
+.topbar{
+  position:absolute;top:0;left:0;right:0;height:46px;
+  background:linear-gradient(180deg,rgba(0,0,0,0.9) 0%,rgba(0,0,0,0.8) 100%);
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--brd2);
+  display:flex;align-items:center;padding:0 10px;z-index:20;
+  font-family:var(--f-body);
+}
+.tb-logo{font-family:var(--f-display);font-size:11px;color:var(--acc);opacity:0.6;letter-spacing:3px;margin-right:6px}
+.tb-4x{font-size:8px;color:var(--txt3);margin-right:14px;letter-spacing:1px}
+.tb-sep{width:1px;height:24px;background:var(--brd2);margin:0 8px}
+.tb-group{display:flex;gap:1px}
+.tb-group-label{font-size:6px;color:var(--txt4);letter-spacing:1.5px;text-transform:uppercase;padding:0 4px;align-self:flex-start;margin-top:2px}
+.tb-item{display:flex;flex-direction:column;align-items:center;padding:2px 5px;min-width:44px}
+.tb-item-icon{font-size:8px;opacity:0.4}
+.tb-item-sym{font-size:var(--f-label-size);color:var(--txt3);letter-spacing:1px}
+.tb-item-val{font-size:var(--f-data-size);color:var(--txt);font-weight:var(--f-data-weight);font-variant-numeric:tabular-nums}
+.tb-item-delta{font-size:8px;font-variant-numeric:tabular-nums}
+.tb-item-delta.pos{color:var(--grn)}.tb-item-delta.neg{color:var(--red)}.tb-item-delta.zero{color:var(--txt4)}
+
+.tb-time{margin-left:auto;display:flex;align-items:center;gap:4px}
+.tb-date{font-size:var(--f-data-size);color:var(--acc);font-variant-numeric:tabular-nums;font-weight:var(--f-data-weight)}
+.tb-speed{display:flex;gap:2px}
+.tb-speed-btn{
+  padding:2px 6px;font-family:var(--f-body);font-size:8px;
+  background:transparent;border:1px solid var(--brd);color:var(--txt3);
+  cursor:pointer;font-weight:var(--f-data-weight);
+}
+.tb-speed-btn.active{background:var(--acc-dim);border-color:var(--acc);color:var(--acc)}
+.tb-play{width:20px;height:18px;background:transparent;border:1px solid var(--brd2);color:var(--acc);font-size:9px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+/* === SIDEBAR === */
+.sidebar{
+  position:absolute;top:46px;left:0;bottom:26px;width:30px;
+  background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);
+  border-right:1px solid var(--brd);
+  display:flex;flex-direction:column;padding:4px 0;gap:1px;z-index:20;
+}
+.sb-btn{
+  width:30px;height:30px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  background:none;border:none;color:var(--txt3);cursor:pointer;
+  font-size:13px;position:relative;
+}
+.sb-btn .key{font-family:var(--f-body);font-size:7px;color:var(--txt4);margin-top:-1px}
+.sb-btn.active{color:var(--acc)}
+.sb-btn.active::before{content:'';position:absolute;left:0;top:4px;bottom:4px;width:2px;background:var(--acc);box-shadow:0 0 6px var(--acc-glow)}
+
+/* === CIV PANEL === */
+.civpanel{
+  position:absolute;top:46px;left:30px;bottom:26px;width:250px;
+  background:linear-gradient(180deg,rgba(0,0,0,0.88) 0%,rgba(0,0,0,0.85) 100%);
+  backdrop-filter:blur(10px);
+  border-right:1px solid var(--brd);
+  padding:10px;overflow-y:auto;z-index:19;
+  font-family:var(--f-body);
+}
+.cp-title{font-family:var(--f-display);font-size:var(--f-title-size);color:var(--acc);opacity:0.5;letter-spacing:3px;margin-bottom:12px}
+.cp-sec{font-size:var(--f-label-size);color:var(--txt4);letter-spacing:2px;text-transform:uppercase;margin:10px 0 4px;padding-bottom:3px;border-bottom:1px solid var(--brd)}
+.cp-row{display:flex;justify-content:space-between;padding:2px 0;font-size:var(--f-body-size);font-weight:var(--f-body-weight)}
+.cp-row .l{color:var(--txt3)}.cp-row .v{color:var(--txt);font-weight:var(--f-data-weight);font-variant-numeric:tabular-nums}
+.cp-bar{height:2px;background:var(--brd2);margin:2px 0 6px;border-radius:1px}
+.cp-bar-fill{height:100%;border-radius:1px}
+
+/* === OUTLINER === */
+.outliner{
+  position:absolute;top:46px;right:0;bottom:26px;width:170px;
+  background:rgba(0,0,0,0.82);backdrop-filter:blur(8px);
+  border-left:1px solid var(--brd);
+  padding:6px;overflow-y:auto;z-index:20;
+  font-family:var(--f-body);
+}
+.ol-item{padding:5px 6px;cursor:pointer;border-left:2px solid transparent;margin-bottom:1px;transition:all 0.2s}
+.ol-item:hover{background:var(--acc-dim);border-left-color:var(--brd2)}
+.ol-item.sel{border-left-color:var(--acc);background:var(--acc-dim)}
+.ol-name{font-size:var(--f-body-size);color:var(--txt);font-weight:var(--f-data-weight)}
+.ol-type{font-size:7px;color:var(--txt4);letter-spacing:1px;text-transform:uppercase}
+.ol-dot{display:inline-block;width:5px;height:5px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+/* === BOTTOM BAR === */
+.bottombar{
+  position:absolute;bottom:0;left:0;right:0;height:26px;
+  background:rgba(0,0,0,0.9);border-top:1px solid var(--brd);
+  display:flex;align-items:center;padding:0 8px;z-index:20;
+  font-family:var(--f-body);font-size:8px;color:var(--txt3);gap:10px;
+}
+.bb-stab{display:flex;align-items:center;gap:4px}
+.bb-stab-bar{width:40px;height:4px;background:var(--brd2);border-radius:2px;overflow:hidden}
+.bb-stab-fill{height:100%;border-radius:2px}
+.bb-log{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:8px}
+.bb-btns{display:flex;gap:3px;margin-left:auto}
+.bb-btn{padding:2px 6px;background:transparent;border:1px solid var(--brd);color:var(--txt3);font-family:var(--f-body);font-size:7px;cursor:pointer;letter-spacing:1px}
+.bb-btn:hover{border-color:var(--brd2);color:var(--txt2)}
+
+/* === EVENT LOG === */
+.eventlog{
+  position:absolute;bottom:30px;left:34px;width:320px;z-index:18;
+  font-family:var(--f-body);
+}
+.el-entry{font-size:9px;padding:2px 6px;border-left:2px solid transparent}
+.el-entry .time{color:var(--txt4);margin-right:6px;font-variant-numeric:tabular-nums}
+.el-entry.e-life{border-left-color:var(--grn);color:var(--grn)}
+.el-entry.e-warn{border-left-color:var(--ylw);color:var(--ylw)}
+.el-entry.e-danger{border-left-color:var(--red);color:var(--red)}
+.el-entry.e-info{border-left-color:var(--blu);color:var(--blu)}
+
+/* === VIEWPORT 3D PLACEHOLDER === */
+.space-viewport{
+  position:absolute;top:46px;left:280px;right:170px;bottom:26px;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.orbit{position:absolute;border:1px solid var(--brd);border-radius:50%}
+.sun{
+  width:30px;height:30px;border-radius:50%;
+  background:radial-gradient(circle,#fff8e0,#ffcc44 35%,rgba(255,180,40,0.2) 65%,transparent);
+  box-shadow:0 0 40px rgba(255,200,80,0.25),0 0 80px rgba(255,160,40,0.08);
+}
+.planet{position:absolute;border-radius:50%;animation:orb var(--p) linear infinite}
+@keyframes orb{from{transform:rotate(0deg) translateX(var(--r)) rotate(0deg)}to{transform:rotate(360deg) translateX(var(--r)) rotate(-360deg)}}
+
+/* ════════════════════════════════════════════
+   TITLE SCREEN
+   ════════════════════════════════════════════ */
+.title-scene{
+  width:100%;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;position:relative;
+}
+.ts-nebula{
+  position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 80% 60% at 30% 40%, var(--acc-dim) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 70% 60%, var(--sec-dim) 0%, transparent 60%),
+    var(--bg);
+}
+.ts-noise{
+  position:absolute;inset:0;opacity:0.025;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size:256px;mix-blend-mode:overlay;
+}
+.ts-stars{position:absolute;inset:0;pointer-events:none}
+.ts-star{position:absolute;border-radius:50%;background:#fff;animation:twk var(--d) ease-in-out infinite alternate}
+@keyframes twk{0%{opacity:var(--a)}100%{opacity:var(--b)}}
+
+.ts-center{position:relative;z-index:2;text-align:center}
+.ts-solar{position:relative;width:280px;height:280px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center}
+.ts-solar .orbit{border-style:dashed}
+.ts-solar .sun{width:28px;height:28px}
+.ts-solar .planet{box-shadow:0 0 6px var(--acc-glow)}
+
+.ts-logo{
+  font-family:var(--f-display);font-size:var(--f-logo-size);color:var(--txt);
+  letter-spacing:12px;
+  text-shadow:0 0 40px var(--acc-glow),0 0 80px rgba(0,0,0,0.5);
+  animation:breath 6s ease-in-out infinite;
+}
+@keyframes breath{0%,100%{text-shadow:0 0 30px var(--acc-glow)}50%{text-shadow:0 0 50px var(--acc-glow),0 0 100px var(--acc-dim)}}
+.ts-sub{
+  font-family:var(--f-body);font-size:9px;color:var(--txt3);
+  letter-spacing:4px;margin-top:4px;text-transform:uppercase;
+}
+.ts-line{width:160px;height:1px;background:var(--acc-bar);opacity:0.2;margin:24px auto}
+
+.ts-menu{display:flex;gap:6px;justify-content:center;margin-top:8px}
+.ts-btn{
+  font-family:var(--f-body);font-size:var(--f-body-size);font-weight:var(--f-data-weight);
+  color:var(--txt2);background:transparent;
+  border:1px solid var(--brd2);padding:10px 0;width:160px;
+  cursor:pointer;letter-spacing:3px;text-transform:uppercase;text-align:center;
+  transition:all 0.4s;position:relative;overflow:hidden;
+}
+.ts-btn::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:var(--acc);transform:scaleX(0);transition:transform 0.4s}
+.ts-btn:hover::before{transform:scaleX(1)}
+.ts-btn:hover{color:var(--acc);border-color:var(--brd3);background:var(--acc-dim)}
+.ts-btn.primary{border-color:var(--brd3);color:var(--txt)}
+
+.ts-top{position:absolute;top:12px;left:14px;right:14px;display:flex;justify-content:space-between;z-index:3;font-family:var(--f-body)}
+.ts-top-logo{font-family:var(--f-display);font-size:10px;color:var(--acc);opacity:0.4;letter-spacing:4px}
+.ts-top-build{font-size:8px;color:var(--txt4);letter-spacing:1px}
+.ts-dots{display:flex;gap:6px;align-items:center}
+.ts-dot{width:10px;height:10px;border-radius:50%;border:1px solid var(--brd2);cursor:pointer;transition:all 0.3s}
+.ts-dot:hover{border-color:var(--brd3)}
+.ts-dot.active{border-color:var(--acc);box-shadow:0 0 6px var(--acc-glow)}
+
+.ts-save-info{font-size:8px;color:var(--txt4);margin-top:2px}
+
+/* ════════════════════════════════════════════
+   PLANET VIEW
+   ════════════════════════════════════════════ */
+.pv-topbar{height:50px}
+.pv-back{font-family:var(--f-body);font-size:var(--f-body-size);color:var(--acc);opacity:0.6;margin-left:8px;cursor:pointer}
+.pv-planet-name{font-family:var(--f-body);font-size:var(--f-body-size);color:var(--txt);margin-left:8px;font-weight:var(--f-data-weight)}
+
+.pv-left{
+  position:absolute;top:50px;left:0;bottom:44px;width:240px;
+  background:rgba(0,0,0,0.88);backdrop-filter:blur(10px);
+  border-right:1px solid var(--brd);padding:8px;overflow-y:auto;z-index:10;
+  font-family:var(--f-body);
+}
+.pv-right{
+  position:absolute;top:50px;right:0;bottom:44px;width:220px;
+  background:rgba(0,0,0,0.88);backdrop-filter:blur(10px);
+  border-left:1px solid var(--brd);padding:10px;overflow-y:auto;z-index:10;
+  font-family:var(--f-body);
+}
+.pv-globe{
+  position:absolute;top:50px;left:240px;right:220px;bottom:44px;
+  display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.01) 0%,transparent 50%);
+}
+.pv-sphere{
+  width:min(40vh,300px);height:min(40vh,300px);border-radius:50%;position:relative;
+  background:conic-gradient(from 30deg,#1a2820,#243828,#1e3025,#162218,#1a2820);
+  box-shadow:inset -25px -15px 50px rgba(0,0,0,0.6),0 0 30px var(--acc-dim);
+}
+.pv-atmo{position:absolute;inset:-6px;border-radius:50%;background:radial-gradient(circle at 30% 30%,var(--acc-dim) 0%,transparent 55%)}
+
+.pv-bottom{
+  position:absolute;bottom:0;left:0;right:0;height:44px;
+  background:rgba(0,0,0,0.9);border-top:1px solid var(--brd);
+  display:flex;align-items:center;padding:0 12px;gap:10px;z-index:10;
+  font-family:var(--f-body);
+}
+.pv-tab{
+  font-family:var(--f-body);font-size:var(--f-label-size);
+  padding:5px 14px;background:transparent;border:1px solid var(--brd);
+  color:var(--txt3);cursor:pointer;letter-spacing:1px;
+}
+.pv-tab.active{color:var(--acc);border-color:var(--acc);background:var(--acc-dim)}
+.pv-terrain{margin-left:auto;font-size:9px;color:var(--txt3)}
+
+/* Building cards */
+.bld-card{
+  padding:6px 8px;margin-bottom:3px;
+  border:1px solid var(--brd);cursor:pointer;transition:all 0.2s;
+}
+.bld-card:hover{border-color:var(--brd2);background:var(--acc-dim)}
+.bld-card.sel{border-color:var(--acc);background:var(--acc-dim)}
+.bld-name{font-size:var(--f-body-size);color:var(--txt);font-weight:var(--f-data-weight)}
+.bld-cat{font-size:7px;letter-spacing:1px;text-transform:uppercase;padding:1px 4px;display:inline-block;border-radius:1px}
+.bld-cost{font-size:8px;color:var(--txt3);margin-top:2px}
+.cat-m{color:#cc9944;background:rgba(204,153,68,0.08)}
+.cat-e{color:#ddcc44;background:rgba(221,204,68,0.08)}
+.cat-f{color:#44cc66;background:rgba(68,204,102,0.08)}
+.cat-p{color:#4488ff;background:rgba(68,136,255,0.08)}
+.cat-r{color:#cc66ff;background:rgba(204,102,255,0.08)}
+.cat-s{color:#6688cc;background:rgba(102,136,204,0.08)}
+
+/* Info panel */
+.info-title{font-family:var(--f-display);font-size:var(--f-title-size);color:var(--acc);letter-spacing:2px;margin-bottom:4px}
+.info-row{display:flex;justify-content:space-between;padding:2px 0;font-size:var(--f-body-size)}
+.info-label{color:var(--txt3)}.info-val{color:var(--txt);font-weight:var(--f-data-weight);font-variant-numeric:tabular-nums}
+.info-btn{
+  width:100%;margin-top:6px;padding:7px;font-family:var(--f-body);font-size:var(--f-body-size);font-weight:var(--f-data-weight);
+  background:var(--acc-dim);border:1px solid var(--acc);color:var(--acc);
+  cursor:pointer;text-align:center;letter-spacing:1px;
+}
+.info-btn.warn{border-color:var(--ylw);color:var(--ylw);background:rgba(200,160,60,0.06)}
+
+/* ════════════════════════════════════════════
+   POPUP OVERLAY
+   ════════════════════════════════════════════ */
+.popup-overlay{
+  position:absolute;inset:0;
+  background:rgba(0,0,0,0.65);backdrop-filter:blur(3px);
+  display:flex;align-items:center;justify-content:center;z-index:50;
+}
+.popup{width:420px;background:var(--bg2);border:1px solid var(--brd3);font-family:var(--f-body)}
+.pop-bar{height:2px;background:var(--acc-bar);box-shadow:0 0 8px var(--acc-glow)}
+.pop-head{padding:14px 16px 8px;display:flex;align-items:center;gap:12px}
+.pop-icon{font-size:28px;opacity:0.5}
+.pop-title{font-family:var(--f-display);font-size:var(--f-title-size);color:var(--txt);letter-spacing:2px}
+.pop-sub{font-size:9px;color:var(--txt3);margin-top:1px}
+.pop-body{padding:0 16px 12px;font-size:var(--f-body-size);color:var(--txt2);line-height:1.6}
+.pop-hl{color:var(--acc)}.pop-warn{color:var(--ylw)}
+.pop-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:10px;padding:8px;background:rgba(0,0,0,0.3);border:1px solid var(--brd)}
+.pop-stat{display:flex;justify-content:space-between;font-size:var(--f-body-size)}
+.pop-foot{padding:10px 16px;border-top:1px solid var(--brd);display:flex;justify-content:flex-end;gap:6px}
+.pop-btn{
+  font-family:var(--f-body);font-size:var(--f-body-size);font-weight:var(--f-data-weight);
+  padding:7px 22px;background:var(--acc-dim);border:1px solid var(--acc);
+  color:var(--acc);cursor:pointer;letter-spacing:1px;
+}
+
+</style>
+</head>
+<body>
+
+<!-- ═══ NAV ═══ -->
+<div class="master-nav">
+  <div class="style-tabs">
+    <div class="style-tab active" onclick="setTheme('cyber')" style="--c:#ff2288">
+      <span class="dot"></span><span>NEON CYBER</span>
+    </div>
+    <div class="style-tab" onclick="setTheme('film')" style="--c:#e8a030">
+      <span class="dot"></span><span>FILM KOSMICZNY</span>
+    </div>
+    <div class="style-tab" onclick="setTheme('violet')" style="--c:#aa66ff">
+      <span class="dot"></span><span>NEON VIOLET</span>
+    </div>
+  </div>
+  <div class="screen-tabs">
+    <div class="screen-tab active" onclick="setScreen('title')">TITLE</div>
+    <div class="screen-tab" onclick="setScreen('galaxy')">GALAXY</div>
+    <div class="screen-tab" onclick="setScreen('planet')">PLANET</div>
+  </div>
+</div>
+
+<div class="viewport t-cyber" id="viewport">
+
+<!-- ═══════════════════════════════════════
+     SCREEN 1: TITLE
+     ═══════════════════════════════════════ -->
+<div class="scene active" id="sc-title">
+  <div class="title-scene">
+    <div class="ts-nebula"></div>
+    <div class="ts-noise"></div>
+    <div class="ts-stars" id="stars"></div>
+
+    <div class="ts-top">
+      <div class="ts-top-logo">KOSMOS</div>
+      <div class="ts-dots">
+        <div class="ts-dot active" style="background:var(--acc)"></div>
+        <div class="ts-dot" style="background:#4090c0"></div>
+        <div class="ts-dot" style="background:#a060c0"></div>
+        <div class="ts-dot" style="background:#50a060"></div>
+      </div>
+      <div class="ts-top-build">BUILD 2026.03 // 4X STRATEGY</div>
+    </div>
+
+    <div class="ts-center">
+      <div class="ts-solar">
+        <div class="orbit" style="width:60px;height:60px"></div>
+        <div class="orbit" style="width:120px;height:120px"></div>
+        <div class="orbit" style="width:190px;height:190px"></div>
+        <div class="orbit" style="width:260px;height:260px"></div>
+        <div class="sun"></div>
+        <div class="planet" style="width:5px;height:5px;background:#c07040;--r:30px;--p:6s"></div>
+        <div class="planet" style="width:7px;height:7px;background:#5888a8;--r:60px;--p:12s"></div>
+        <div class="planet" style="width:10px;height:10px;background:#44aa88;--r:95px;--p:20s"></div>
+        <div class="planet" style="width:14px;height:14px;background:#cc9955;--r:130px;--p:32s"></div>
+      </div>
+      <div class="ts-logo">KOSMOS</div>
+      <div class="ts-sub">beyond the celestial sphere</div>
+      <div class="ts-line"></div>
+      <div class="ts-menu">
+        <div>
+          <button class="ts-btn primary">01 KONTYNUUJ</button>
+          <div class="ts-save-info">Rok 4,217,892 · 8 POP · 2 kolonie</div>
+        </div>
+        <button class="ts-btn">02 NOWA GRA</button>
+        <button class="ts-btn">03 NOWA GRA +</button>
+        <button class="ts-btn">04 POWER TEST</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCREEN 2: GALAXY VIEW
+     ═══════════════════════════════════════ -->
+<div class="scene" id="sc-galaxy">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="tb-logo">KOSMOS</div>
+    <div class="tb-4x">4X</div>
+    <div class="tb-sep"></div>
+    <div class="tb-group-label">SUROWCE</div>
+    <div class="tb-group">
+      <div class="tb-item"><span class="tb-item-sym">Fe</span><span class="tb-item-val">1,247</span><span class="tb-item-delta pos">+42/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">C</span><span class="tb-item-val">834</span><span class="tb-item-delta pos">+18/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">Si</span><span class="tb-item-val">612</span><span class="tb-item-delta neg">-7/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">Cu</span><span class="tb-item-val">89</span><span class="tb-item-delta pos">+3/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">Ti</span><span class="tb-item-val">42</span><span class="tb-item-delta pos">+1/r</span></div>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-group-label">ZASOBY</div>
+    <div class="tb-group">
+      <div class="tb-item"><span class="tb-item-sym">🍖</span><span class="tb-item-val">2,100</span><span class="tb-item-delta pos">+124/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">💧</span><span class="tb-item-val">1,680</span><span class="tb-item-delta pos">+56/r</span></div>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-group-label">SYSTEMY</div>
+    <div class="tb-group">
+      <div class="tb-item"><span class="tb-item-sym">⚡</span><span class="tb-item-val">890</span><span class="tb-item-delta neg">-12/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">🔬</span><span class="tb-item-val">340</span><span class="tb-item-delta pos">+28/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">👤</span><span class="tb-item-val">8/12</span><span class="tb-item-delta zero">POP</span></div>
+    </div>
+    <div class="tb-time">
+      <div class="tb-date">Rok 4,217,892</div>
+      <button class="tb-play">⏸</button>
+      <div class="tb-speed">
+        <button class="tb-speed-btn">1d</button>
+        <button class="tb-speed-btn">1m</button>
+        <button class="tb-speed-btn active">1r</button>
+        <button class="tb-speed-btn">10r</button>
+        <button class="tb-speed-btn">10k</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <button class="sb-btn active">⚙<span class="key">E</span></button>
+    <button class="sb-btn">👤<span class="key">P</span></button>
+    <button class="sb-btn">🧬<span class="key">T</span></button>
+    <button class="sb-btn">🚀<span class="key">F</span></button>
+    <button class="sb-btn">🏠<span class="key">C</span></button>
+    <button class="sb-btn">🌌<span class="key">G</span></button>
+  </div>
+
+  <!-- CivPanel -->
+  <div class="civpanel">
+    <div class="cp-title">GOSPODARKA</div>
+    <div class="cp-sec">PRODUKCJA NETTO</div>
+    <div class="cp-row"><span class="l">🔩 Fe (żelazo)</span><span class="v" style="color:var(--grn)">+42.0/r</span></div>
+    <div class="cp-row"><span class="l">♦ C (węgiel)</span><span class="v" style="color:var(--grn)">+18.0/r</span></div>
+    <div class="cp-row"><span class="l">💎 Si (krzem)</span><span class="v" style="color:var(--red)">-7.0/r</span></div>
+    <div class="cp-row"><span class="l">🟤 Cu (miedź)</span><span class="v" style="color:var(--grn)">+3.0/r</span></div>
+    <div class="cp-row"><span class="l">⬜ Ti (tytan)</span><span class="v" style="color:var(--grn)">+1.0/r</span></div>
+
+    <div class="cp-sec">POPULACJA</div>
+    <div class="cp-row"><span class="l">POP (ludność)</span><span class="v" style="color:var(--acc)">8 / 12</span></div>
+    <div class="cp-bar"><div class="cp-bar-fill" style="width:67%;background:var(--acc)"></div></div>
+    <div class="cp-row"><span class="l">Morale</span><span class="v" style="color:var(--grn)">72%</span></div>
+    <div class="cp-bar"><div class="cp-bar-fill" style="width:72%;background:var(--ylw)"></div></div>
+    <div class="cp-row"><span class="l">Zatrudnienie</span><span class="v">6.5 / 8</span></div>
+    <div class="cp-row"><span class="l">Epoka</span><span class="v" style="color:var(--acc)">Industrialna</span></div>
+
+    <div class="cp-sec">TECHNOLOGIE</div>
+    <div class="cp-row"><span class="l">🔬 Fuzja jądrowa</span><span class="v" style="color:var(--pur)">45%</span></div>
+    <div class="cp-bar"><div class="cp-bar-fill" style="width:45%;background:var(--pur)"></div></div>
+    <div class="cp-row"><span class="l">🧬 Genetyka</span><span class="v" style="color:var(--txt3)">0%</span></div>
+    <div class="cp-bar"><div class="cp-bar-fill" style="width:0%"></div></div>
+
+    <div class="cp-sec">FLOTA</div>
+    <div class="cp-row"><span class="l">🚀 KS Odkrywca</span><span class="v" style="color:var(--grn)">orbiting</span></div>
+    <div class="cp-row"><span class="l">🚀 KS Pionier</span><span class="v" style="color:var(--ylw)">w locie</span></div>
+    <div class="cp-row"><span class="l">🚀 KS Wędrowiec</span><span class="v" style="color:var(--txt3)">hangar</span></div>
+
+    <div class="cp-sec">FABRYKA</div>
+    <div class="cp-row"><span class="l">🏭 PC (punkty)</span><span class="v">12 / 18</span></div>
+    <div class="cp-row"><span class="l">→ steel_plates</span><span class="v" style="color:var(--ylw)">7/10</span></div>
+    <div class="cp-row"><span class="l">→ power_cells</span><span class="v" style="color:var(--ylw)">3/∞</span></div>
+  </div>
+
+  <!-- 3D viewport -->
+  <div class="space-viewport">
+    <div class="orbit" style="width:60px;height:60px"></div>
+    <div class="orbit" style="width:130px;height:130px"></div>
+    <div class="orbit" style="width:220px;height:220px"></div>
+    <div class="orbit" style="width:340px;height:340px"></div>
+    <div class="orbit" style="width:480px;height:480px"></div>
+    <div class="orbit" style="width:620px;height:620px"></div>
+    <div class="sun"></div>
+    <div class="planet" style="width:5px;height:5px;background:#b07040;--r:30px;--p:7s"></div>
+    <div class="planet" style="width:7px;height:7px;background:#6090a8;--r:65px;--p:13s"></div>
+    <div class="planet" style="width:10px;height:10px;background:#44aa88;--r:110px;--p:22s;box-shadow:0 0 8px var(--acc-glow)"></div>
+    <div class="planet" style="width:6px;height:6px;background:#aa8866;--r:170px;--p:32s"></div>
+    <div class="planet" style="width:16px;height:16px;background:#cc9955;--r:240px;--p:45s"></div>
+    <div class="planet" style="width:8px;height:8px;background:#7788aa;--r:310px;--p:60s"></div>
+  </div>
+
+  <!-- Outliner -->
+  <div class="outliner">
+    <div class="cp-sec">CIAŁA NIEBIESKIE</div>
+    <div class="ol-item sel"><span class="ol-dot" style="background:#ffcc44"></span><span class="ol-name">Sol</span><div class="ol-type">Gwiazda G2V</div></div>
+    <div class="ol-item"><span class="ol-dot" style="background:#b07040"></span><span class="ol-name">Merkury</span><div class="ol-type">Rocky · 0.4 AU</div></div>
+    <div class="ol-item"><span class="ol-dot" style="background:#6090a8"></span><span class="ol-name">Wenus</span><div class="ol-type">Rocky · 0.7 AU</div></div>
+    <div class="ol-item"><span class="ol-dot" style="background:#44aa88"></span><span class="ol-name">Ziemia 🏠</span><div class="ol-type">Ocean · 1.0 AU · CIV</div></div>
+    <div class="ol-item"><span class="ol-dot" style="background:#aa8866"></span><span class="ol-name">Mars</span><div class="ol-type">Desert · 1.5 AU · Outpost</div></div>
+    <div class="ol-item"><span class="ol-dot" style="background:#cc9955"></span><span class="ol-name">Jowisz</span><div class="ol-type">Gas giant · 5.2 AU</div></div>
+    <div class="ol-item"><span class="ol-dot" style="background:#7788aa"></span><span class="ol-name">Neptun</span><div class="ol-type">Ice · 14.8 AU · ???</div></div>
+    <div class="cp-sec" style="margin-top:8px">PLANETOIDY</div>
+    <div class="ol-item"><span class="ol-dot" style="background:#888"></span><span class="ol-name">2024-X1</span><div class="ol-type">Metallic · 4.2 AU</div></div>
+    <div class="ol-item"><span class="ol-dot" style="background:#665544"></span><span class="ol-name">2024-X2</span><div class="ol-type">Carbonaceous · 5.8 AU</div></div>
+  </div>
+
+  <!-- Event Log -->
+  <div class="eventlog">
+    <div class="el-entry e-life"><span class="time">4,217,891</span>Populacja wzrosła do 8 POP</div>
+    <div class="el-entry e-info" style="opacity:0.7"><span class="time">4,217,889</span>KS Odkrywca dotarł na orbitę Jowisza</div>
+    <div class="el-entry e-warn" style="opacity:0.5"><span class="time">4,217,885</span>Niedobór krzemu (Si) — produkcja ujemna</div>
+    <div class="el-entry e-info" style="opacity:0.35"><span class="time">4,217,880</span>Badania: Fuzja jądrowa 45%</div>
+  </div>
+
+  <!-- Bottom Bar -->
+  <div class="bottombar">
+    <div class="bb-stab">STAB: 78▲ <div class="bb-stab-bar"><div class="bb-stab-fill" style="width:78%;background:var(--grn)"></div></div></div>
+    <div class="bb-log">4,217,891 Populacja wzrosła do 8 POP</div>
+    <div class="bb-btns">
+      <button class="bb-btn">AUT</button>
+      <button class="bb-btn">ZAP</button>
+      <button class="bb-btn">WCZ</button>
+      <button class="bb-btn">MUZ</button>
+      <button class="bb-btn">DZW</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCREEN 3: PLANET VIEW
+     ═══════════════════════════════════════ -->
+<div class="scene" id="sc-planet">
+  <div class="topbar pv-topbar">
+    <div class="tb-logo">KOSMOS</div>
+    <span class="pv-back">← Wróć</span>
+    <span class="pv-planet-name">🌍 Ziemia · Kolonia główna</span>
+    <div class="tb-sep" style="margin-left:12px"></div>
+    <div class="tb-group">
+      <div class="tb-item"><span class="tb-item-sym">Fe</span><span class="tb-item-val">1,247</span><span class="tb-item-delta pos">+42/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">🍖</span><span class="tb-item-val">2,100</span><span class="tb-item-delta pos">+124/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">💧</span><span class="tb-item-val">1,680</span><span class="tb-item-delta pos">+56/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">⚡</span><span class="tb-item-val" style="color:var(--ylw)">890</span><span class="tb-item-delta neg">-12/r</span></div>
+      <div class="tb-item"><span class="tb-item-sym">👤</span><span class="tb-item-val" style="color:var(--acc)">8/12</span><span class="tb-item-delta zero">POP</span></div>
+    </div>
+    <div class="tb-time">
+      <div class="tb-date">Rok 4,217,892</div>
+      <button class="tb-play">▶</button>
+      <div class="tb-speed">
+        <button class="tb-speed-btn active">1r</button>
+        <button class="tb-speed-btn">10r</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Left Panel -->
+  <div class="pv-left">
+    <div class="cp-title">BUDYNKI</div>
+    <div class="cp-sec">WYDOBYCIE</div>
+    <div class="bld-card"><div class="bld-name">⛏ Kopalnia</div><span class="bld-cat cat-m">MINING</span><div class="bld-cost">Fe:50 C:10 · 0.25 POP</div></div>
+    <div class="bld-card"><div class="bld-name">⛏ Kopalnia autonomiczna</div><span class="bld-cat cat-m">MINING</span><div class="bld-cost">Fe:120 Cu:20 steel:2 · 0 POP</div></div>
+    <div class="cp-sec">ENERGIA</div>
+    <div class="bld-card sel"><div class="bld-name">♨ Elektrownia geotermalna</div><span class="bld-cat cat-e">ENERGY</span><div class="bld-cost">Fe:30 Si:10 · 0.25 POP</div></div>
+    <div class="bld-card"><div class="bld-name">☀ Farma solarna</div><span class="bld-cat cat-e">ENERGY</span><div class="bld-cost">Si:40 · 0 POP</div></div>
+    <div class="bld-card" style="opacity:0.4"><div class="bld-name">⚛ Elektrownia jądrowa 🔒</div><span class="bld-cat cat-e">ENERGY</span><div class="bld-cost">Wymaga: Fuzja jądrowa</div></div>
+    <div class="cp-sec">ŻYWNOŚĆ</div>
+    <div class="bld-card"><div class="bld-name">🌾 Farma</div><span class="bld-cat cat-f">FOOD</span><div class="bld-cost">Fe:20 C:10 · 0.25 POP</div></div>
+    <div class="cp-sec">POPULACJA</div>
+    <div class="bld-card"><div class="bld-name">🏠 Habitat</div><span class="bld-cat cat-p">HOUSING</span><div class="bld-cost">Fe:60 Si:20 · 0 POP</div></div>
+    <div class="cp-sec">BADANIA</div>
+    <div class="bld-card"><div class="bld-name">🔬 Laboratorium</div><span class="bld-cat cat-r">RESEARCH</span><div class="bld-cost">Fe:80 Cu:15 · 0.5 POP</div></div>
+    <div class="cp-sec">PRZESTRZEŃ</div>
+    <div class="bld-card"><div class="bld-name">🚀 Stocznia</div><span class="bld-cat cat-s">SPACE</span><div class="bld-cost">Fe:200 Ti:30 steel:8 · 0.5 POP</div></div>
+  </div>
+
+  <!-- Globe -->
+  <div class="pv-globe">
+    <div class="pv-sphere"><div class="pv-atmo"></div></div>
+  </div>
+
+  <!-- Right Panel -->
+  <div class="pv-right">
+    <div class="info-title">♨ GEOTERMALNA</div>
+    <div class="cp-sec">POZIOM 2</div>
+    <div class="info-row"><span class="info-label">Produkcja</span><span class="info-val" style="color:var(--grn)">+8.0 energy/r</span></div>
+    <div class="info-row"><span class="info-label">Pracownicy</span><span class="info-val">0.25 POP</span></div>
+    <div class="info-row"><span class="info-label">Teren</span><span class="info-val">Góry</span></div>
+    <div class="info-row"><span class="info-label">Bonus terenu</span><span class="info-val" style="color:var(--acc)">+50%</span></div>
+    <div class="info-row"><span class="info-label">Efektywna prod.</span><span class="info-val" style="color:var(--grn)">+12.0/r</span></div>
+
+    <div class="cp-sec" style="margin-top:14px">ULEPSZENIE Lv.3</div>
+    <div class="info-row"><span class="info-label">Koszt Fe</span><span class="info-val">68</span></div>
+    <div class="info-row"><span class="info-label">Koszt Si</span><span class="info-val">23</span></div>
+    <div class="info-row"><span class="info-label">Czas budowy</span><span class="info-val">0.25 lat</span></div>
+    <button class="info-btn">ULEPSZ → Lv.3</button>
+    <button class="info-btn warn" style="margin-top:4px">OBNIŻ Lv.2 → Lv.1</button>
+
+    <div class="cp-sec" style="margin-top:14px">HEX INFO</div>
+    <div class="info-row"><span class="info-label">Pozycja</span><span class="info-val">(3, -1)</span></div>
+    <div class="info-row"><span class="info-label">Biom</span><span class="info-val" style="color:var(--grn)">Las</span></div>
+    <div class="info-row"><span class="info-label">Złoże</span><span class="info-val" style="color:var(--ylw)">Fe (bogate)</span></div>
+    <div class="info-row"><span class="info-label">Strefa</span><span class="info-val">Umiarkowana</span></div>
+  </div>
+
+  <!-- Bottom -->
+  <div class="pv-bottom">
+    <button class="pv-tab active">BUDUJ</button>
+    <button class="pv-tab">ZAINSTALUJ</button>
+    <button class="pv-tab">SIATKA</button>
+    <div class="pv-terrain">Hex: (3, -1) · Biom: <span style="color:var(--grn)">Las</span> · Złoże: <span style="color:var(--ylw)">Fe</span></div>
+  </div>
+</div>
+
+</div><!-- /viewport -->
+
+<script>
+// Stars
+const sf=document.getElementById('stars');
+for(let i=0;i<100;i++){
+  const s=document.createElement('div');s.className='ts-star';
+  const sz=Math.random()*1.2+0.3;
+  s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${3+Math.random()*5}s;--a:${0.08+Math.random()*0.15};--b:${0.4+Math.random()*0.5};animation-delay:${Math.random()*4}s`;
+  sf.appendChild(s);
+}
+
+function setTheme(t){
+  const vp=document.getElementById('viewport');
+  vp.className='viewport t-'+t;
+  document.querySelectorAll('.style-tab').forEach(tab=>tab.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+function setScreen(s){
+  document.querySelectorAll('.scene').forEach(sc=>sc.classList.remove('active'));
+  document.getElementById('sc-'+s).classList.add('active');
+  document.querySelectorAll('.screen-tab').forEach(tab=>tab.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+</script>
+
+</body>
+</html>

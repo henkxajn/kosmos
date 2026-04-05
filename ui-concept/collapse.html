@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>KOSMOS UI — Chowane Panele × 5 Kolorów</title>
+<style>
+:root {
+  --acc:   #ff2288;
+  --acc2:  #ff44aa;
+  --glow:  rgba(255,34,136,0.25);
+  --glow2: rgba(255,34,136,0.08);
+  --bdr:   rgba(255,34,136,0.25);
+  --bdr-h: rgba(255,34,136,0.55);
+  --bdr-a: rgba(255,34,136,0.80);
+  --bg0:   #030208;
+  --bg1:   #06030d;
+  --bg2:   #0a0515;
+  --bg3:   #0d0618;
+  --tx1:   #ffe8f8;
+  --tx2:   rgba(255,200,230,0.65);
+  --tx3:   rgba(255,160,210,0.40);
+  --pos:   #00ee88;
+  --neg:   #ff4444;
+  --warn:  #ffcc44;
+  --dur:   0.32s;
+  --ease:  cubic-bezier(.22,1,.36,1);
+}
+/* ── 5 TEMATÓW ── */
+[data-theme="cyan"] {
+  --acc:#00e5ff; --acc2:#44eeff; --glow:rgba(0,229,255,0.20); --glow2:rgba(0,229,255,0.06);
+  --bdr:rgba(0,229,255,0.22); --bdr-h:rgba(0,229,255,0.50); --bdr-a:rgba(0,229,255,0.80);
+  --bg0:#000810; --bg1:#00060e; --bg2:#000c18; --bg3:#001020;
+  --tx1:#e0f8ff; --tx2:rgba(160,230,255,0.65); --tx3:rgba(100,200,255,0.38);
+}
+[data-theme="amber"] {
+  --acc:#ffaa30; --acc2:#ffc060; --glow:rgba(255,170,48,0.22); --glow2:rgba(255,170,48,0.07);
+  --bdr:rgba(255,170,48,0.22); --bdr-h:rgba(255,170,48,0.50); --bdr-a:rgba(255,170,48,0.80);
+  --bg0:#080400; --bg1:#0c0600; --bg2:#120800; --bg3:#160a00;
+  --tx1:#fff3e0; --tx2:rgba(255,220,160,0.65); --tx3:rgba(255,180,80,0.38);
+}
+[data-theme="jade"] {
+  --acc:#00ee88; --acc2:#44ffaa; --glow:rgba(0,238,136,0.20); --glow2:rgba(0,238,136,0.06);
+  --bdr:rgba(0,238,136,0.20); --bdr-h:rgba(0,238,136,0.48); --bdr-a:rgba(0,238,136,0.78);
+  --bg0:#000a04; --bg1:#000c06; --bg2:#00100a; --bg3:#001410;
+  --tx1:#e0fff2; --tx2:rgba(160,255,200,0.65); --tx3:rgba(100,220,160,0.38);
+}
+[data-theme="violet"] {
+  --acc:#bb66ff; --acc2:#cc88ff; --glow:rgba(187,102,255,0.22); --glow2:rgba(187,102,255,0.07);
+  --bdr:rgba(187,102,255,0.22); --bdr-h:rgba(187,102,255,0.50); --bdr-a:rgba(187,102,255,0.80);
+  --bg0:#05000e; --bg1:#080012; --bg2:#0c0018; --bg3:#10001e;
+  --tx1:#f0e8ff; --tx2:rgba(220,180,255,0.65); --tx3:rgba(180,130,255,0.38);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg0); font-family:'Space Mono','Courier New',monospace; color:var(--tx2); overflow:hidden; width:100vw; height:100vh; }
+
+/* ══ NAV (theme switcher) ══ */
+.tnav {
+  position:fixed; top:0; left:0; right:0; z-index:9999;
+  background:rgba(0,0,0,0.97); border-bottom:1px solid rgba(255,255,255,0.1);
+  display:flex; align-items:center; gap:3px; padding:5px 10px;
+  font-size:8px;
+}
+.tnav-label { color:rgba(255,255,255,0.3); letter-spacing:2px; margin-right:8px; }
+.tnav-btn {
+  padding:4px 11px; border:1px solid rgba(255,255,255,0.12);
+  background:transparent; color:rgba(255,255,255,0.4);
+  cursor:pointer; font-family:inherit; font-size:8px;
+  transition:all 0.15s; letter-spacing:1px;
+}
+.tnav-btn:hover { border-color:rgba(255,255,255,0.3); color:#fff; }
+.tnav-btn.active { border-color:var(--acc); color:var(--acc); background:var(--glow2); box-shadow:0 0 8px var(--glow); }
+.tnav-hint { margin-left:auto; color:rgba(255,255,255,0.2); font-size:7px; letter-spacing:1px; }
+
+/* ══ APP SHELL ══ */
+#app {
+  position:fixed; inset:26px 0 0 0;
+  display:grid;
+  grid-template-rows:38px 1fr 1fr; /* topbar, main, bottom — bottom collapsible */
+  grid-template-columns:1fr;
+  transition:grid-template-rows var(--dur) var(--ease);
+}
+#app.bottom-hidden { grid-template-rows:38px 1fr 0px; }
+
+/* ══ TOPBAR ══ */
+#topbar {
+  grid-row:1; display:flex; align-items:center; gap:0;
+  background:var(--bg1); border-bottom:1px solid var(--bdr);
+  overflow:hidden; position:relative; z-index:100;
+}
+#topbar::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--acc),transparent);
+  opacity:0.5;
+}
+.tb-logo {
+  padding:0 10px; font-size:11px; letter-spacing:5px; color:var(--acc);
+  text-shadow:0 0 10px var(--glow); border-right:1px solid var(--bdr);
+  height:100%; display:flex; align-items:center; white-space:nowrap;
+  min-width:90px;
+}
+.tb-section {
+  display:flex; align-items:stretch; border-right:1px solid var(--bdr);
+  height:100%;
+}
+.tb-section-label {
+  writing-mode:horizontal-tb; font-size:6px; letter-spacing:2px; color:var(--tx3);
+  padding:0 5px; display:flex; align-items:center; border-right:1px solid var(--bdr);
+  text-transform:uppercase;
+}
+.tb-res {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  padding:0 5px; min-width:44px; border-right:1px solid rgba(255,255,255,0.04);
+  cursor:default; transition:background 0.15s;
+}
+.tb-res:hover { background:var(--glow2); }
+.tb-res .ico { font-size:7px; color:var(--tx3); margin-bottom:1px; }
+.tb-res .val { font-size:8px; color:var(--tx1); white-space:nowrap; }
+.tb-res .dlt { font-size:6px; color:var(--pos); }
+.tb-res .dlt.neg { color:var(--neg); }
+.tb-right {
+  margin-left:auto; display:flex; align-items:center; gap:0;
+  border-left:1px solid var(--bdr);
+}
+.tb-clock { padding:0 10px; font-size:10px; color:var(--tx1); letter-spacing:2px; border-right:1px solid var(--bdr); }
+.tb-time-btn {
+  padding:0 6px; height:100%; font-size:8px;
+  background:transparent; border:none; border-right:1px solid var(--bdr);
+  color:var(--tx3); cursor:pointer; font-family:inherit; transition:all 0.15s;
+}
+.tb-time-btn:hover { color:var(--acc); background:var(--glow2); }
+.tb-time-btn.active { color:var(--acc); background:var(--glow); }
+
+/* ══ MAIN ROW ══ */
+#main {
+  grid-row:2; display:flex; overflow:hidden; position:relative;
+}
+
+/* ══ LEFT ICON SIDEBAR (zawsze widoczny) ══ */
+#icon-bar {
+  width:28px; flex-shrink:0;
+  background:var(--bg2); border-right:1px solid var(--bdr);
+  display:flex; flex-direction:column; align-items:center;
+  padding:4px 0; gap:1px; z-index:20; position:relative;
+}
+.icon-btn {
+  width:24px; height:24px; border-radius:2px;
+  background:transparent; border:none; cursor:pointer;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:1px; transition:all 0.15s; position:relative;
+}
+.icon-btn:hover { background:var(--glow2); }
+.icon-btn.active {
+  background:var(--glow); border-left:2px solid var(--acc);
+  box-shadow:inset 2px 0 8px var(--glow);
+}
+.icon-btn .ico { font-size:11px; }
+.icon-btn .ltr { font-size:5px; color:var(--tx3); font-family:inherit; letter-spacing:1px; }
+.icon-btn.active .ltr { color:var(--acc); }
+
+/* ══ COLLAPSIBLE PANEL WRAPPER ══ */
+.cpanel {
+  position:relative; display:flex; flex-shrink:0;
+  transition:width var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  overflow:visible; /* tab sticks out */
+}
+.cpanel.collapsed { width:0 !important; }
+.cpanel.collapsed .panel-inner { opacity:0; pointer-events:none; }
+.cpanel.collapsed .panel-tab { opacity:1; pointer-events:all; }
+
+/* panel inner content */
+.panel-inner {
+  width:100%; height:100%; overflow:hidden;
+  transition:opacity var(--dur) var(--ease);
+  border-right:1px solid var(--bdr);
+  background:var(--bg1);
+  display:flex; flex-direction:column;
+}
+.panel-inner.right-border { border-right:none; border-left:1px solid var(--bdr); }
+
+/* ══ PANEL TAB (toggle handle, always visible on edge) ══ */
+.panel-tab {
+  position:absolute; top:50%; transform:translateY(-50%);
+  width:14px; height:52px;
+  background:var(--bg2); border:1px solid var(--bdr);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; z-index:30;
+  transition:background 0.15s, border-color 0.15s, box-shadow 0.15s, opacity var(--dur) var(--ease);
+  font-size:8px; color:var(--tx3);
+}
+.panel-tab:hover { background:var(--glow); border-color:var(--bdr-h); color:var(--acc); box-shadow:0 0 12px var(--glow); }
+
+/* LEFT panel tab: on RIGHT edge */
+.cpanel-left .panel-tab  { right:-14px; border-left:none; border-radius:0 3px 3px 0; }
+/* RIGHT panel tab: on LEFT edge */
+.cpanel-right .panel-tab { left:-14px; border-right:none; border-radius:3px 0 0 3px; }
+
+.cpanel.collapsed .panel-tab { opacity:1 !important; }
+
+/* Tab arrow symbol */
+.panel-tab .arr { font-size:9px; line-height:1; }
+
+/* ══ PANEL HEADER ══ */
+.ph {
+  padding:5px 10px 4px;
+  background:var(--bg3); border-bottom:1px solid var(--bdr);
+  font-size:7px; letter-spacing:3px; color:var(--acc);
+  text-transform:uppercase; display:flex; align-items:center; gap:6px;
+  flex-shrink:0;
+}
+.ph::before {
+  content:''; width:5px; height:5px; border-radius:50%;
+  background:var(--acc); box-shadow:0 0 5px var(--acc);
+  animation:dot-pulse 2.5s ease-in-out infinite;
+}
+@keyframes dot-pulse { 0%,100%{opacity:.5;} 50%{opacity:1;} }
+
+.ph-sub {
+  padding:3px 10px 3px; font-size:6px; letter-spacing:2px; color:var(--tx3);
+  text-transform:uppercase; border-bottom:1px solid rgba(255,255,255,0.04);
+  background:var(--bg3); flex-shrink:0;
+  display:flex; align-items:center; gap:5px;
+}
+
+/* ══ LEFT ECON PANEL ══ */
+#left-panel { width:260px; }
+.econ-scroll { overflow-y:auto; flex:1; }
+.econ-scroll::-webkit-scrollbar { width:3px; }
+.econ-scroll::-webkit-scrollbar-track { background:transparent; }
+.econ-scroll::-webkit-scrollbar-thumb { background:var(--bdr); border-radius:2px; }
+
+.res-row {
+  display:flex; align-items:center; padding:3px 10px;
+  border-bottom:1px solid rgba(255,255,255,0.03);
+  transition:background 0.12s;
+}
+.res-row:hover { background:var(--glow2); }
+.res-row .name { font-size:8px; color:var(--tx2); flex:1; display:flex; align-items:center; gap:5px; }
+.res-row .ico  { font-size:9px; width:14px; text-align:center; }
+.res-row .val  { font-size:8px; color:var(--tx1); min-width:38px; text-align:right; }
+.res-row .dlt  { font-size:7px; color:var(--pos); min-width:36px; text-align:right; }
+.res-row .dlt.neg { color:var(--neg); }
+.res-row .dlt.zero { color:var(--tx3); }
+
+.energy-footer {
+  padding:6px 10px; background:var(--bg3);
+  border-top:1px solid var(--bdr); flex-shrink:0;
+  font-size:8px; display:flex; align-items:center; justify-content:space-between;
+}
+.energy-footer .label { color:var(--tx3); font-size:7px; }
+.energy-footer .val { color:var(--pos); font-size:13px; letter-spacing:1px; }
+.energy-footer .tag { font-size:7px; color:var(--pos); }
+
+/* ══ CENTER PANEL ══ */
+#center-panel {
+  flex:1; min-width:0; background:var(--bg0);
+  display:flex; flex-direction:column; overflow:hidden;
+  position:relative;
+}
+/* Mock content - production/trade */
+.center-tabs {
+  display:flex; background:var(--bg3); border-bottom:1px solid var(--bdr);
+  flex-shrink:0;
+}
+.ctab {
+  padding:6px 14px; font-size:8px; letter-spacing:2px; cursor:pointer;
+  border-right:1px solid var(--bdr); color:var(--tx3); text-transform:uppercase;
+  transition:all 0.15s; position:relative;
+}
+.ctab:hover { color:var(--tx2); background:var(--glow2); }
+.ctab.active { color:var(--acc); background:var(--glow); }
+.ctab.active::after { content:''; position:absolute; bottom:0; left:0; right:0; height:2px; background:var(--acc); }
+
+.center-content {
+  flex:1; overflow:hidden; display:flex; gap:0;
+}
+.center-left {
+  width:320px; flex-shrink:0; border-right:1px solid var(--bdr);
+  padding:12px; display:flex; flex-direction:column; gap:10px; overflow-y:auto;
+}
+.center-right { flex:1; position:relative; overflow:hidden; }
+
+.section-block { display:flex; flex-direction:column; gap:5px; }
+.section-block .title { font-size:7px; letter-spacing:2px; color:var(--acc); text-transform:uppercase; border-bottom:1px solid var(--bdr); padding-bottom:4px; display:flex; align-items:center; gap:5px; }
+.data-kv { display:flex; justify-content:space-between; font-size:8px; padding:2px 0; }
+.data-kv .k { color:var(--tx3); }
+.data-kv .v { color:var(--tx1); }
+.data-kv .v.pos { color:var(--pos); }
+.data-kv .v.neg { color:var(--neg); }
+.data-kv .v.warn { color:var(--warn); }
+.badge { padding:1px 5px; font-size:7px; border:1px solid var(--bdr); color:var(--acc); }
+.connection { font-size:8px; color:var(--tx2); padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.04); display:flex; justify-content:space-between; }
+.price-good { font-size:8px; padding:2px 0; display:flex; gap:5px; }
+.price-good .mul { color:var(--warn); }
+.price-good.cheap .mul { color:var(--pos); }
+
+/* Trade chart mock */
+.trade-chart { height:80px; position:relative; margin-top:4px; }
+.chart-bar {
+  position:absolute; bottom:0;
+  background:linear-gradient(0deg, var(--glow), var(--acc));
+  opacity:0.7; border-top:1px solid var(--acc);
+  animation:bar-grow 1s var(--ease) both;
+}
+@keyframes bar-grow { from{height:0;} }
+.chart-label { position:absolute; top:0; font-size:6px; color:var(--tx3); letter-spacing:1px; }
+.chart-label.right { right:0; }
+.chart-axis { position:absolute; bottom:0; left:0; right:0; height:1px; background:var(--bdr); }
+
+/* Log */
+.log-entry { font-size:7px; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.04); color:var(--tx3); }
+.log-entry .rok { color:var(--acc); margin-right:6px; }
+.log-entry .evnt { color:var(--tx2); }
+
+/* Center planet view */
+.planet-view {
+  position:absolute; inset:0;
+  display:flex; align-items:center; justify-content:center;
+}
+.planet-sphere {
+  width:120px; height:120px; border-radius:50%;
+  background:radial-gradient(circle at 35% 35%, #c8a878, #8b5e2c 50%, #4a2800);
+  box-shadow: 0 0 40px rgba(200,140,80,0.3), inset -20px -10px 40px rgba(0,0,0,0.7);
+  position:relative;
+  animation:planet-rot 20s linear infinite;
+}
+@keyframes planet-rot { from{filter:hue-rotate(0deg);} to{filter:hue-rotate(5deg);} }
+.planet-orbit-line {
+  position:absolute; left:50%; top:50%;
+  width:2px; height:140px; transform-origin:0 0;
+  background:linear-gradient(180deg,transparent,var(--bdr));
+  animation:orbit-line 8s linear infinite;
+}
+@keyframes orbit-line { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+
+/* ══ RIGHT ENERGY PANEL ══ */
+#right-panel-energy { width:195px; }
+.energy-row {
+  display:flex; justify-content:space-between; padding:3px 10px;
+  font-size:8px; border-bottom:1px solid rgba(255,255,255,0.03);
+  transition:background 0.12s;
+}
+.energy-row:hover { background:var(--glow2); }
+.energy-row .name { color:var(--tx2); flex:1; }
+.energy-row .val.pos { color:var(--pos); }
+.energy-row .val.neg { color:var(--neg); }
+.energy-row .val.warn { color:var(--warn); }
+.bilans-total {
+  padding:5px 10px; background:var(--bg3); border-top:1px solid var(--bdr);
+  display:flex; justify-content:space-between; font-size:9px; flex-shrink:0;
+}
+.bilans-total .lbl { color:var(--tx3); }
+.bilans-total .val { color:var(--pos); }
+
+/* ══ RIGHT OUTLINER ══ */
+#right-outliner { width:180px; }
+.ol-section { flex-shrink:0; }
+.ol-item {
+  padding:5px 10px; font-size:8px; cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,0.03);
+  transition:background 0.12s;
+}
+.ol-item:hover { background:var(--glow2); }
+.ol-item.active { border-left:2px solid var(--acc); background:var(--glow); padding-left:8px; }
+.ol-item .name { color:var(--tx1); margin-bottom:2px; display:flex; align-items:center; gap:4px; }
+.ol-item .sub  { font-size:7px; color:var(--tx3); }
+.ol-item .sub .pop { color:var(--tx2); }
+.no-items { padding:5px 10px; font-size:7px; color:var(--tx3); }
+
+/* Fleet item */
+.fl-item {
+  padding:4px 10px; font-size:8px; cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,0.03); transition:background 0.12s;
+  display:flex; align-items:center; gap:5px;
+}
+.fl-item:hover { background:var(--glow2); }
+.fl-item .ico { font-size:11px; }
+.fl-item .info .name { color:var(--tx2); font-size:8px; }
+.fl-item .info .status { font-size:7px; color:var(--tx3); }
+.fl-item .info .status.going { color:var(--acc); }
+
+/* ══ BOTTOM PANEL (collapsible downward) ══ */
+#bottom-wrap {
+  grid-row:3; overflow:hidden; position:relative;
+  transition:all var(--dur) var(--ease);
+}
+#bottom-panel {
+  height:100%; display:flex; flex-direction:column;
+  background:var(--bg1); border-top:1px solid var(--bdr);
+  transition:transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+}
+#app.bottom-hidden #bottom-panel { transform:translateY(100%); opacity:0; }
+
+.bottom-tab {
+  position:absolute; top:-16px; left:50%; transform:translateX(-50%);
+  padding:2px 20px; background:var(--bg2); border:1px solid var(--bdr);
+  border-bottom:none; font-size:8px; color:var(--tx3); cursor:pointer;
+  z-index:50; display:flex; align-items:center; gap:6px;
+  transition:all 0.15s; letter-spacing:2px;
+  clip-path:polygon(8px 0,calc(100% - 8px) 0,100% 100%,0 100%);
+}
+.bottom-tab:hover { color:var(--acc); background:var(--glow); border-color:var(--bdr-h); box-shadow:0 -4px 12px var(--glow); }
+.bottom-tab .arr { font-size:10px; transition:transform 0.3s; }
+#app.bottom-hidden .bottom-tab .arr { transform:rotate(180deg); }
+
+.bottom-inner {
+  flex:1; display:flex; overflow:hidden;
+}
+.bottom-tabs-row {
+  display:flex; background:var(--bg3); border-bottom:1px solid var(--bdr); flex-shrink:0;
+}
+.btab {
+  padding:4px 12px; font-size:7px; letter-spacing:2px; color:var(--tx3);
+  border-right:1px solid var(--bdr); cursor:pointer; transition:all 0.15s;
+  text-transform:uppercase;
+}
+.btab:hover { color:var(--tx2); background:var(--glow2); }
+.btab.active { color:var(--acc); background:var(--glow); border-bottom:1px solid var(--acc); }
+
+.btab-content { flex:1; display:flex; overflow:hidden; }
+.bottom-stat-col { padding:8px 14px; border-right:1px solid var(--bdr); display:flex; flex-direction:column; gap:4px; }
+.bottom-stat-col .label { font-size:6px; letter-spacing:2px; color:var(--tx3); text-transform:uppercase; margin-bottom:2px; }
+.bottom-stat-col .big { font-size:12px; color:var(--tx1); letter-spacing:1px; }
+.bottom-stat-col .small { font-size:8px; color:var(--tx2); }
+.bottom-kv { display:flex; gap:12px; flex-wrap:wrap; padding:8px 14px; }
+.bottom-kv .item { display:flex; flex-direction:column; gap:1px; }
+.bottom-kv .item .k { font-size:6px; color:var(--tx3); letter-spacing:1px; text-transform:uppercase; }
+.bottom-kv .item .v { font-size:9px; color:var(--tx1); }
+
+/* ══ BOTTOM STATUS BAR (always visible, below bottom panel) ══ */
+#status-bar {
+  height:20px; background:var(--bg2); border-top:1px solid var(--bdr);
+  display:flex; align-items:center; padding:0 10px; gap:10px;
+  font-size:7px; color:var(--tx3); flex-shrink:0;
+  position:relative; z-index:101;
+}
+#status-bar::before {
+  content:''; position:absolute; top:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,var(--acc),transparent);
+  opacity:0.4;
+}
+.sb-item { display:flex; align-items:center; gap:4px; }
+.sb-item .ico { color:var(--acc); }
+.sb-item.pos { color:var(--pos); }
+.sb-item.warn { color:var(--warn); }
+.sb-sep { width:1px; height:12px; background:var(--bdr); }
+.sb-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
+.btn-menu {
+  padding:2px 10px; border:1px solid var(--bdr);
+  background:transparent; color:var(--tx3); cursor:pointer; font-family:inherit; font-size:7px;
+  transition:all 0.15s; letter-spacing:1px;
+}
+.btn-menu:hover { border-color:var(--bdr-h); color:var(--acc); background:var(--glow2); }
+
+/* ══ ANIMATIONS ON LOAD ══ */
+#topbar        { animation:from-top   .45s var(--ease) both; }
+#icon-bar      { animation:from-left  .45s var(--ease) .05s both; }
+#left-panel    { animation:from-left  .5s  var(--ease) .08s both; }
+#right-panel-energy { animation:from-right .5s var(--ease) .08s both; }
+#right-outliner{ animation:from-right .5s  var(--ease) .12s both; }
+#bottom-wrap   { animation:from-bot   .45s var(--ease) .15s both; }
+
+@keyframes from-top   { from{transform:translateY(-100%);opacity:0;} }
+@keyframes from-left  { from{transform:translateX(-30px);opacity:0;} }
+@keyframes from-right { from{transform:translateX(30px);opacity:0;} }
+@keyframes from-bot   { from{transform:translateY(30px);opacity:0;} }
+
+/* stagger list items */
+.res-row, .energy-row, .ol-item, .fl-item {
+  animation:row-in .3s var(--ease) both;
+}
+@keyframes row-in { from{opacity:0;transform:translateX(-4px);} }
+.res-row:nth-child(1){animation-delay:.15s;} .res-row:nth-child(2){animation-delay:.19s;}
+.res-row:nth-child(3){animation-delay:.23s;} .res-row:nth-child(4){animation-delay:.27s;}
+.res-row:nth-child(5){animation-delay:.31s;} .res-row:nth-child(6){animation-delay:.35s;}
+.res-row:nth-child(7){animation-delay:.39s;} .res-row:nth-child(8){animation-delay:.43s;}
+.res-row:nth-child(9){animation-delay:.47s;}
+.energy-row:nth-child(1){animation-delay:.18s;} .energy-row:nth-child(2){animation-delay:.22s;}
+.energy-row:nth-child(3){animation-delay:.26s;} .energy-row:nth-child(4){animation-delay:.30s;}
+.energy-row:nth-child(5){animation-delay:.34s;} .energy-row:nth-child(6){animation-delay:.38s;}
+.energy-row:nth-child(7){animation-delay:.42s;} .energy-row:nth-child(8){animation-delay:.46s;}
+.ol-item:nth-child(1){animation-delay:.20s;} .ol-item:nth-child(2){animation-delay:.25s;}
+.fl-item:nth-child(1){animation-delay:.22s;} .fl-item:nth-child(2){animation-delay:.27s;}
+
+/* hover shine on panel tabs */
+.panel-tab::after {
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(180deg,rgba(255,255,255,0.07),transparent);
+  pointer-events:none;
+}
+
+/* ══ SCAN LINE ══ */
+.scan-line {
+  position:absolute; left:0; right:0; height:1px; pointer-events:none; z-index:50;
+  background:linear-gradient(90deg,transparent,var(--acc),transparent);
+  opacity:0.25; animation:scan-sweep 6s linear infinite;
+}
+@keyframes scan-sweep { 0%{top:0;opacity:.3;} 90%{opacity:.1;} 100%{top:100%;opacity:0;} }
+</style>
+</head>
+<body>
+
+<!-- THEME NAV -->
+<div class="tnav">
+  <span class="tnav-label">KOLOR</span>
+  <button class="tnav-btn active" onclick="setTheme('',this)">❶ NEON PINK</button>
+  <button class="tnav-btn"       onclick="setTheme('cyan',this)">❷ CYAN HOLO</button>
+  <button class="tnav-btn"       onclick="setTheme('amber',this)">❸ AMBER</button>
+  <button class="tnav-btn"       onclick="setTheme('jade',this)">❹ JADE GREEN</button>
+  <button class="tnav-btn"       onclick="setTheme('violet',this)">❺ VIOLET</button>
+  <span class="tnav-hint">KLAWISZE 1–5 · PANELE: [ ◀ ] [ ▶ ] [ ▼ ]</span>
+</div>
+
+<!-- APP -->
+<div id="app">
+
+  <!-- ══ TOPBAR ══ -->
+  <div id="topbar">
+    <div class="tb-logo">KOSMOS</div>
+
+    <div class="tb-section">
+      <div class="tb-section-label">SUROWCE</div>
+      <div class="tb-res"><span class="ico">⬡ Fe</span><span class="val">1.4k</span><span class="dlt">+51.4</span></div>
+      <div class="tb-res"><span class="ico">◈ Si</span><span class="val">4.5k</span><span class="dlt">+72.9</span></div>
+      <div class="tb-res"><span class="ico">◈ Cu</span><span class="val">1.9k</span><span class="dlt">+37.7</span></div>
+      <div class="tb-res"><span class="ico">▲ Ti</span><span class="val">17.0</span><span class="dlt">+6.5</span></div>
+      <div class="tb-res"><span class="ico">◆ Li</span><span class="val">433</span><span class="dlt">+8.4</span></div>
+      <div class="tb-res"><span class="ico">● W</span><span class="val">500</span><span class="dlt">+9.5</span></div>
+      <div class="tb-res"><span class="ico">✦ Pt</span><span class="val">4</span><span class="dlt zero">0</span></div>
+    </div>
+    <div class="tb-section">
+      <div class="tb-section-label">ZASOBY</div>
+      <div class="tb-res"><span class="ico">🌿</span><span class="val">647</span><span class="dlt">+15.0</span></div>
+      <div class="tb-res"><span class="ico">💧</span><span class="val">359</span><span class="dlt">+2.2</span></div>
+    </div>
+    <div class="tb-section">
+      <div class="tb-section-label">SYSTEMY</div>
+      <div class="tb-res"><span class="ico">⚡</span><span class="val">36.2</span><span class="dlt">+110</span></div>
+      <div class="tb-res"><span class="ico">🏗</span><span class="val">145</span><span class="dlt">+22.4</span></div>
+      <div class="tb-res"><span class="ico">💻</span><span class="val">0/2</span><span class="dlt zero">PC</span></div>
+      <div class="tb-res"><span class="ico">👤</span><span class="val">0/8</span><span class="dlt zero">POP</span></div>
+      <div class="tb-res"><span class="ico">⭐</span><span class="val">92</span><span class="dlt zero">PRO</span></div>
+    </div>
+
+    <div class="tb-right">
+      <div class="tb-clock">05/12/0005</div>
+      <button class="tb-time-btn">⏸</button>
+      <button class="tb-time-btn active">1d/s</button>
+      <button class="tb-time-btn">1t/s</button>
+      <button class="tb-time-btn">1m/s</button>
+      <button class="tb-time-btn">1r/s</button>
+      <button class="tb-time-btn">10r/s</button>
+      <button class="tb-time-btn" style="letter-spacing:1px;color:var(--acc)">ALT</button>
+    </div>
+  </div>
+
+  <!-- ══ MAIN ROW ══ -->
+  <div id="main">
+
+    <!-- Icon sidebar -->
+    <div id="icon-bar">
+      <button class="icon-btn active" title="Ekonomia (E)"><span class="ico">⚙</span><span class="ltr">E</span></button>
+      <button class="icon-btn" title="Populacja (P)"><span class="ico">👤</span><span class="ltr">P</span></button>
+      <button class="icon-btn" title="Technologie (T)"><span class="ico">🧬</span><span class="ltr">T</span></button>
+      <button class="icon-btn" title="Flota (F)"><span class="ico">🚀</span><span class="ltr">F</span></button>
+      <button class="icon-btn" title="Kolonie (C)"><span class="ico">🏠</span><span class="ltr">C</span></button>
+      <button class="icon-btn" title="Obserwatorium (O)"><span class="ico">🔭</span><span class="ltr">O</span></button>
+      <button class="icon-btn" title="Galaktyka (G)"><span class="ico">🌌</span><span class="ltr">G</span></button>
+    </div>
+
+    <!-- LEFT PANEL (EKONOMIA) -->
+    <div class="cpanel cpanel-left" id="left-panel" style="width:260px">
+      <div class="panel-inner">
+        <div class="scan-line"></div>
+        <div class="ph">EKONOMIA — Tymek I</div>
+
+        <div class="econ-scroll">
+          <div class="ph-sub">⛏ WYDOBYWALNE</div>
+          <div class="res-row"><span class="ico name">🪨</span><span class="name">Węgiel</span><span class="val">3.1k</span><span class="dlt">+29.5</span></div>
+          <div class="res-row"><span class="ico name">⬡</span><span class="name">Żelazo</span><span class="val">1.4k</span><span class="dlt">+51.4</span></div>
+          <div class="res-row"><span class="ico name">◈</span><span class="name">Krzem</span><span class="val">4.5k</span><span class="dlt">+72.9</span></div>
+          <div class="res-row"><span class="ico name">◈</span><span class="name">Miedź</span><span class="val">1.9k</span><span class="dlt">+37.7</span></div>
+          <div class="res-row"><span class="ico name">▲</span><span class="name">Tytan</span><span class="val">17.0</span><span class="dlt">+6.5</span></div>
+          <div class="res-row"><span class="ico name">◆</span><span class="name">Lit</span><span class="val">433</span><span class="dlt">+8.4</span></div>
+          <div class="res-row"><span class="ico name">●</span><span class="name">Wolfram</span><span class="val">500</span><span class="dlt">+9.5</span></div>
+          <div class="res-row"><span class="ico name">✦</span><span class="name">Platyna</span><span class="val">4</span><span class="dlt zero">0</span></div>
+          <div class="res-row"><span class="ico name">○</span><span class="name">Ksenon</span><span class="val">0</span><span class="dlt zero">0</span></div>
+          <div class="res-row"><span class="ico name">⚛</span><span class="name">Neutronium</span><span class="val">0</span><span class="dlt zero">0</span></div>
+
+          <div class="ph-sub">🌿 ZBIERALNE</div>
+          <div class="res-row"><span class="ico name">🌿</span><span class="name">Żywność</span><span class="val">647</span><span class="dlt">+15.0</span></div>
+          <div class="res-row"><span class="ico name">💧</span><span class="name">Woda</span><span class="val">359</span><span class="dlt">+2.2</span></div>
+
+          <div class="ph-sub">📦 TOWARY</div>
+          <div class="res-row"><span class="ico name">🔩</span><span class="name">Płyty Stalowe</span><span class="val">15</span><span class="dlt zero">0</span></div>
+          <div class="res-row"><span class="ico name">🧪</span><span class="name">Polimery K</span><span class="val">7</span><span class="dlt zero">0</span></div>
+          <div class="res-row"><span class="ico name">⚗</span><span class="name">Mieszanka</span><span class="val">6</span><span class="dlt zero">0</span></div>
+          <div class="res-row"><span class="ico name">🔧</span><span class="name">Instalacje</span><span class="val">10</span><span class="dlt zero">0</span></div>
+          <div class="res-row"><span class="ico name">🔋</span><span class="name">Ogniwa Zas.</span><span class="val">20</span><span class="dlt zero">0</span></div>
+          <div class="res-row"><span class="ico name">💡</span><span class="name">Elektronik</span><span class="val">12</span><span class="dlt zero">0</span></div>
+          <div class="res-row"><span class="ico name">🔬</span><span class="name">Syntezator</span><span class="val">3</span><span class="dlt zero">0</span></div>
+        </div>
+
+        <div class="energy-footer">
+          <div><div class="label">ENERGIA (bilans)</div><div class="tag">NADWYŻKA</div></div>
+          <div class="val">+36.2</div>
+        </div>
+      </div>
+      <!-- TAB -->
+      <div class="panel-tab" id="left-tab" onclick="togglePanel('left')" title="Schowaj lewy panel">
+        <span class="arr" id="left-arr">◀</span>
+      </div>
+    </div>
+
+    <!-- CENTER PANEL -->
+    <div id="center-panel">
+      <div class="center-tabs">
+        <div class="ctab">FABRYKI</div>
+        <div class="ctab">PRZEPŁYWY</div>
+        <div class="ctab active">HANDEL</div>
+      </div>
+      <div class="center-content">
+        <div class="center-left">
+          <div class="section-block">
+            <div class="title">📊 HANDEL CYWILNY</div>
+            <div class="data-kv"><span class="k">Kredyty</span><span class="v">0 Kr</span></div>
+            <div class="data-kv"><span class="k">Flow/rok</span><span class="v pos">+0.0/rok</span></div>
+            <div class="data-kv"><span class="k">Trade Cap.</span><span class="v">1800 Kr/rok</span></div>
+          </div>
+          <div class="section-block">
+            <div class="title">🔗 POŁĄCZENIA</div>
+            <div class="connection"><span>⇄ MoonTym (0.0 AU)</span><span style="color:var(--tx3)">brak przepływu</span></div>
+          </div>
+          <div class="section-block">
+            <div class="title">💰 CENY LOKALNE</div>
+            <div class="price-good"><span class="mul">×5.0</span><span style="color:var(--tx2)">energy</span><span style="margin-left:auto;color:var(--neg)">DROGIE</span></div>
+            <div class="price-good cheap"><span class="mul">×0.2</span><span style="color:var(--tx2)">semiconductors</span></div>
+            <div class="price-good cheap"><span class="mul">×0.2</span><span style="color:var(--tx2)">gourmet_food</span></div>
+            <div class="price-good cheap"><span class="mul">×0.2</span><span style="color:var(--tx2)">personal_electronics</span></div>
+          </div>
+          <div class="section-block">
+            <div class="title" style="justify-content:space-between">
+              <span>↑ EKSPORT</span><span style="color:var(--neg);font-size:7px">↓ IMPORT</span>
+            </div>
+            <div class="trade-chart">
+              <div class="chart-axis"></div>
+              <div class="chart-label">6</div>
+              <div class="chart-label right">6</div>
+              <div class="chart-bar" style="left:5%;width:60%;height:65%;animation-delay:.4s"></div>
+            </div>
+          </div>
+          <div class="section-block">
+            <div class="title">📋 LOG TRANSAKCJI</div>
+            <div class="log-entry"><span class="rok">Rok 5.6</span><span class="evnt">Handlarz → MoonTym</span></div>
+            <div class="log-entry" style="color:var(--tx3);font-size:6px;padding-left:8px">Prefab Aut, Port Kosmiczny:1.0 Prefab...</div>
+          </div>
+        </div>
+        <div class="center-right">
+          <div class="planet-view">
+            <div class="planet-sphere">
+              <div class="planet-orbit-line"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT ENERGY PANEL -->
+    <div class="cpanel cpanel-right" id="right-panel-energy" style="width:195px">
+      <div class="panel-tab" id="right-e-tab" onclick="togglePanel('right-energy')" title="Schowaj panel energii">
+        <span class="arr" id="right-e-arr">▶</span>
+      </div>
+      <div class="panel-inner right-border">
+        <div class="scan-line" style="animation-delay:2s"></div>
+        <div class="ph">BILANS ENERGII</div>
+        <div style="flex:1;overflow-y:auto">
+          <div class="ph-sub" style="color:var(--acc)">ALERTY</div>
+          <div class="energy-row"><span class="name">Elektrownia Węglowa</span><span class="val pos">+60.5</span></div>
+          <div class="energy-row"><span class="name">Elektrownia Słon.</span><span class="val pos">+49.7</span></div>
+          <div class="energy-row"><span class="name">Stolica</span><span class="val neg">−2.0</span></div>
+          <div class="energy-row"><span class="name">Farma ×2</span><span class="val neg">−3.0</span></div>
+          <div class="energy-row"><span class="name">Studnia ×2</span><span class="val neg">−3.0</span></div>
+          <div class="energy-row"><span class="name">Habitat</span><span class="val neg">−3.0</span></div>
+          <div class="energy-row"><span class="name">Kopalnia</span><span class="val neg">−4.0</span></div>
+          <div class="energy-row"><span class="name">Obserwatorium</span><span class="val neg">−4.0</span></div>
+          <div class="energy-row"><span class="name">Stocznia</span><span class="val neg">−5.0</span></div>
+          <div class="energy-row"><span class="name">Stacja Badawcza</span><span class="val neg">−6.0</span></div>
+          <div class="energy-row"><span class="name">POPy (×8)</span><span class="val neg">−8.0</span></div>
+          <div class="energy-row"><span class="name">Port Kosmiczny</span><span class="val neg">−10.0</span></div>
+          <div class="energy-row"><span class="name">Fabryka</span><span class="val neg">−10.0</span></div>
+          <div class="energy-row"><span class="name">Fabryka Konsumpc.</span><span class="val neg">−16.0</span></div>
+          <div class="ph-sub" style="margin-top:4px">ALERTY PRODUKCJI</div>
+          <div style="padding:5px 10px;font-size:7px;color:var(--tx3)">Brak alertów</div>
+        </div>
+        <div class="bilans-total"><span class="lbl">BILANS</span><span class="val">+36.2</span></div>
+      </div>
+    </div>
+
+    <!-- RIGHT OUTLINER -->
+    <div class="cpanel cpanel-right" id="right-outliner" style="width:178px">
+      <div class="panel-tab" id="right-o-tab" onclick="togglePanel('right-outliner')" title="Schowaj outliner">
+        <span class="arr" id="right-o-arr">▶</span>
+      </div>
+      <div class="panel-inner right-border">
+        <div class="scan-line" style="animation-delay:3.5s"></div>
+        <div class="ph">KOLONIE (2)</div>
+        <div class="ol-section">
+          <div class="ol-item active">
+            <div class="name">⭐ <span style="color:var(--warn)">TOI-4029</span></div>
+            <div class="sub">Tymek I &nbsp; <span class="pop">8 POP</span> &nbsp; ⭐92</div>
+          </div>
+          <div class="ol-item">
+            <div class="name">🌙 MoonTym</div>
+            <div class="sub">0 POP &nbsp; ⭐0 &nbsp; Outpost</div>
+          </div>
+        </div>
+
+        <div class="ph" style="margin-top:2px">EKSPEDYCJE (0)</div>
+        <div class="no-items">Brak aktywnych</div>
+
+        <div class="ph" style="margin-top:2px">FLOTA (1)</div>
+        <div class="fl-item">
+          <span class="ico">🚀</span>
+          <div class="info">
+            <div class="name">→ Odkrywca</div>
+            <div class="status going">w locie</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+
+  <!-- ══ BOTTOM PANEL ══ -->
+  <div id="bottom-wrap">
+    <div id="bottom-panel">
+      <div class="bottom-tab" onclick="toggleBottom()" title="Schowaj dolny panel">
+        <span style="font-size:7px;letter-spacing:2px">TOI-4029 · ORBITA</span>
+        <span class="arr">▼</span>
+      </div>
+      <div class="bottom-tabs-row">
+        <div class="btab active">ORBITA</div>
+        <div class="btab">FIZYKA</div>
+        <div class="btab">SKŁAD</div>
+      </div>
+      <div class="btab-content">
+        <div class="bottom-stat-col">
+          <div class="label">PLANETA</div>
+          <div class="big">TOI-4029 I</div>
+          <div class="small" style="color:var(--tx3)">Rocky · Strefa HZ</div>
+        </div>
+        <div class="bottom-kv">
+          <div class="item"><span class="k">Orbita</span><span class="v">8.132 AU</span></div>
+          <div class="item"><span class="k">Mimośród</span><span class="v">0.038</span></div>
+          <div class="item"><span class="k">Okres</span><span class="v">24.11 lat</span></div>
+          <div class="item"><span class="k">Stabilność</span><span class="v" style="color:var(--pos)">100%</span></div>
+          <div class="item"><span class="k">Wiek</span><span class="v">0 lat</span></div>
+          <div class="item"><span class="k">Temperatura</span><span class="v">288 K</span></div>
+          <div class="item"><span class="k">Atm.</span><span class="v">N₂/O₂</span></div>
+          <div class="item"><span class="k">Życie</span><span class="v" style="color:var(--pos)">100</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div id="status-bar">
+    <div class="sb-item pos">⚡ Energia: bilans dodatni — brownout zakończony</div>
+    <div class="sb-sep"></div>
+    <div class="sb-item warn">⚠ BROWNOUT! Deficyt energii — produkcja wstrzymana</div>
+    <div class="sb-right">
+      <button class="btn-menu">MENU (ESC)</button>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<script>
+/* ── Theme switcher ── */
+function setTheme(t, btn) {
+  document.body.dataset.theme = t;
+  document.querySelectorAll('.tnav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Replay entry animations
+  replayAnims();
+}
+
+/* ── Panel toggle ── */
+const panelState = { left:true, 'right-energy':true, 'right-outliner':true };
+
+function togglePanel(which) {
+  panelState[which] = !panelState[which];
+  const open = panelState[which];
+
+  if (which === 'left') {
+    const el = document.getElementById('left-panel');
+    const arr = document.getElementById('left-arr');
+    el.classList.toggle('collapsed', !open);
+    arr.textContent = open ? '◀' : '▶';
+    // Animate tab glow
+    flashTab(document.getElementById('left-tab'));
+
+  } else if (which === 'right-energy') {
+    const el = document.getElementById('right-panel-energy');
+    const arr = document.getElementById('right-e-arr');
+    el.classList.toggle('collapsed', !open);
+    arr.textContent = open ? '▶' : '◀';
+    flashTab(document.getElementById('right-e-tab'));
+
+  } else if (which === 'right-outliner') {
+    const el = document.getElementById('right-outliner');
+    const arr = document.getElementById('right-o-arr');
+    el.classList.toggle('collapsed', !open);
+    arr.textContent = open ? '▶' : '◀';
+    flashTab(document.getElementById('right-o-tab'));
+  }
+}
+
+function flashTab(tab) {
+  tab.style.boxShadow = '0 0 20px var(--glow)';
+  tab.style.borderColor = 'var(--bdr-a)';
+  tab.style.color = 'var(--acc)';
+  setTimeout(() => {
+    tab.style.boxShadow = '';
+    tab.style.borderColor = '';
+    tab.style.color = '';
+  }, 400);
+}
+
+let bottomOpen = true;
+function toggleBottom() {
+  bottomOpen = !bottomOpen;
+  document.getElementById('app').classList.toggle('bottom-hidden', !bottomOpen);
+  document.getElementById('app').style.gridTemplateRows = bottomOpen
+    ? '38px 1fr 130px'
+    : '38px 1fr 0px';
+}
+
+/* ── Replay animations on theme change ── */
+function replayAnims() {
+  const els = document.querySelectorAll('#topbar,#icon-bar,#left-panel,#right-panel-energy,#right-outliner,#bottom-wrap');
+  els.forEach(el => {
+    const anim = el.style.animation || getComputedStyle(el).animation;
+    el.style.animation = 'none';
+    el.offsetHeight;
+    el.style.animation = '';
+  });
+}
+
+/* ── Keyboard shortcuts ── */
+document.addEventListener('keydown', e => {
+  const n = parseInt(e.key);
+  if (n >= 1 && n <= 5) {
+    const themes = ['','cyan','amber','jade','violet'];
+    const btns = document.querySelectorAll('.tnav-btn');
+    setTheme(themes[n-1], btns[n-1]);
+  }
+  if (e.key === 'q' || e.key === 'Q') togglePanel('left');
+  if (e.key === 'w' || e.key === 'W') togglePanel('right-energy');
+  if (e.key === 'e' || e.key === 'E') togglePanel('right-outliner');
+  if (e.key === 's' || e.key === 'S') toggleBottom();
+});
+
+/* Set initial grid row height for bottom */
+document.getElementById('app').style.gridTemplateRows = '38px 1fr 130px';
+</script>
+</body>
+</html>

@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KOSMOS — 5 wizji UI</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=Orbitron:wght@400;700;900&family=Bebas+Neue&family=Audiowide&family=Press+Start+2P&family=Space+Mono:wght@400;700&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&family=Silkscreen&family=Michroma&display=swap');
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { background:#000; color:#ccc; font-family:sans-serif; overflow-x:hidden; }
+
+/* ═══ TABS ═══ */
+.tabs {
+  position:sticky; top:0; z-index:100;
+  display:flex; justify-content:center; gap:0;
+  background:rgba(0,0,0,0.95); backdrop-filter:blur(12px);
+  border-bottom:1px solid #222;
+}
+.tab {
+  padding:12px 6px; cursor:pointer; transition:all 0.3s;
+  border-bottom:2px solid transparent; text-align:center;
+  flex:1; max-width:220px;
+}
+.tab:hover { background:rgba(255,255,255,0.03); }
+.tab.active { border-bottom-color:var(--tab-color,#fff); }
+.tab .tab-num { font-size:9px; letter-spacing:2px; opacity:0.4; }
+.tab .tab-name { font-size:11px; margin-top:2px; letter-spacing:1px; }
+
+/* ═══ SECTIONS ═══ */
+.variant { display:none; min-height:100vh; }
+.variant.active { display:block; }
+
+/* ═══ VARIANT HEADER ═══ */
+.v-header {
+  text-align:center; padding:40px 20px 30px;
+}
+.v-header h2 { font-size:28px; margin-bottom:6px; }
+.v-header .v-desc { font-size:12px; opacity:0.5; max-width:500px; margin:0 auto; line-height:1.6; }
+
+/* ═══ DEMO GRID ═══ */
+.demos {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:16px; padding:20px; max-width:1200px; margin:0 auto;
+}
+.demo-box {
+  border:1px solid rgba(255,255,255,0.08);
+  overflow:hidden; min-height:420px;
+}
+.demo-label {
+  padding:6px 12px; font-size:8px; letter-spacing:2px;
+  text-transform:uppercase; opacity:0.3; border-bottom:1px solid rgba(255,255,255,0.05);
+}
+
+/* ════════════════════════════════════════════════════
+   WARIANT 1: RETRO TERMINAL — VT323 + zielony fosfor
+   ════════════════════════════════════════════════════ */
+.v1 { background:#020a02; }
+.v1 .tab { --tab-color:#33ff66; }
+.v1 .v-header h2 { font-family:'VT323',monospace; color:#33ff66; font-size:36px; letter-spacing:4px; }
+.v1 .v-header .v-desc { font-family:'VT323',monospace; color:#33ff66; opacity:0.4; font-size:14px; }
+
+.v1 .demo-box { background:#030d03; border-color:rgba(51,255,102,0.1); }
+.v1 .demo-label { color:#33ff66; }
+
+/* Title */
+.v1 .d-title {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:400px; position:relative;
+  background: radial-gradient(circle at 50% 50%, rgba(51,255,102,0.03) 0%, transparent 60%);
+}
+.v1 .d-title .logo {
+  font-family:'VT323',monospace; font-size:64px; color:#33ff66;
+  text-shadow:0 0 20px rgba(51,255,102,0.5), 0 0 60px rgba(51,255,102,0.15);
+  letter-spacing:12px;
+}
+.v1 .d-title .sub {
+  font-family:'VT323',monospace; font-size:16px; color:#33ff66; opacity:0.35;
+  letter-spacing:3px; margin-top:4px;
+}
+.v1 .d-title .sep { width:120px; height:1px; background:#33ff66; opacity:0.2; margin:20px 0; }
+.v1 .d-title .btn {
+  font-family:'VT323',monospace; font-size:18px; color:#33ff66;
+  background:transparent; border:1px solid rgba(51,255,102,0.2);
+  padding:8px 40px; margin:3px 0; cursor:pointer; letter-spacing:2px;
+  width:220px; text-align:center;
+}
+.v1 .d-title .btn:hover { background:rgba(51,255,102,0.08); border-color:rgba(51,255,102,0.5); }
+.v1 .d-title .btn.primary { border-color:rgba(51,255,102,0.4); }
+.v1 .d-title .scanlines {
+  position:absolute; inset:0; pointer-events:none;
+  background:repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px);
+}
+.v1 .d-title .cursor-blink {
+  display:inline-block; width:12px; height:20px; background:#33ff66;
+  animation:blink 1s step-end infinite; vertical-align:middle; margin-left:4px;
+}
+@keyframes blink { 50% { opacity:0; } }
+
+/* Galaxy */
+.v1 .d-galaxy { font-family:'VT323',monospace; color:#33ff66; }
+.v1 .d-galaxy .topbar {
+  height:32px; border-bottom:1px solid rgba(51,255,102,0.15);
+  display:flex; align-items:center; padding:0 10px; font-size:16px; gap:16px;
+}
+.v1 .d-galaxy .topbar .lbl { opacity:0.3; font-size:13px; }
+.v1 .d-galaxy .topbar .val { }
+.v1 .d-galaxy .topbar .neg { color:#ff4444; }
+.v1 .d-galaxy .topbar .time { margin-left:auto; color:#aaff44; }
+.v1 .d-galaxy .panel {
+  padding:10px; border-right:1px solid rgba(51,255,102,0.08);
+  width:200px; float:left; min-height:370px;
+}
+.v1 .d-galaxy .sec { font-size:13px; opacity:0.3; margin:8px 0 4px; border-bottom:1px solid rgba(51,255,102,0.08); padding-bottom:2px; }
+.v1 .d-galaxy .row { display:flex; justify-content:space-between; font-size:15px; padding:1px 0; }
+.v1 .d-galaxy .grn { color:#33ff66; }
+.v1 .d-galaxy .red { color:#ff4444; }
+.v1 .d-galaxy .ylw { color:#aaff44; }
+.v1 .d-galaxy .bar { height:2px; background:rgba(51,255,102,0.15); margin:2px 0 6px; }
+.v1 .d-galaxy .bar-fill { height:100%; background:#33ff66; }
+
+/* Popup */
+.v1 .d-popup {
+  display:flex; align-items:center; justify-content:center; min-height:400px;
+  background:rgba(0,0,0,0.3);
+}
+.v1 .d-popup .modal {
+  width:320px; background:#030d03; border:1px solid rgba(51,255,102,0.3);
+  font-family:'VT323',monospace; color:#33ff66;
+}
+.v1 .d-popup .m-bar { height:2px; background:#33ff66; box-shadow:0 0 8px rgba(51,255,102,0.4); }
+.v1 .d-popup .m-head { padding:10px 12px; font-size:20px; letter-spacing:2px; border-bottom:1px solid rgba(51,255,102,0.1); }
+.v1 .d-popup .m-body { padding:10px 12px; font-size:15px; line-height:1.5; opacity:0.7; }
+.v1 .d-popup .m-stats {
+  margin:8px 0; padding:8px; background:rgba(0,0,0,0.4); border:1px solid rgba(51,255,102,0.1);
+  display:grid; grid-template-columns:1fr 1fr; gap:3px; font-size:14px;
+}
+.v1 .d-popup .m-foot { padding:8px 12px; text-align:right; border-top:1px solid rgba(51,255,102,0.1); }
+.v1 .d-popup .m-btn {
+  font-family:'VT323',monospace; font-size:16px; padding:6px 24px;
+  background:rgba(51,255,102,0.1); border:1px solid rgba(51,255,102,0.4);
+  color:#33ff66; cursor:pointer;
+}
+
+/* Resources */
+.v1 .d-res {
+  font-family:'VT323',monospace; color:#33ff66; padding:12px;
+  display:flex; flex-direction:column; justify-content:center; min-height:400px;
+}
+.v1 .d-res .res-row { display:flex; justify-content:space-between; font-size:16px; padding:4px 0; border-bottom:1px solid rgba(51,255,102,0.05); }
+.v1 .d-res .res-bar { height:6px; background:rgba(51,255,102,0.1); margin:2px 0 8px; }
+.v1 .d-res .res-bar-fill { height:100%; }
+
+/* ════════════════════════════════════════════════════
+   WARIANT 2: NEON CYBER — Audiowide + magenta/hot pink
+   ════════════════════════════════════════════════════ */
+.v2 { background:#08020a; }
+.v2 .tab { --tab-color:#ff2288; }
+.v2 .v-header h2 { font-family:'Audiowide',sans-serif; color:#ff2288; font-size:28px; letter-spacing:6px; }
+.v2 .v-header .v-desc { font-family:'Rajdhani',sans-serif; color:#ff88bb; opacity:0.4; font-size:13px; }
+
+.v2 .demo-box { background:#0a0410; border-color:rgba(255,34,136,0.1); }
+.v2 .demo-label { color:#ff2288; }
+
+.v2 .d-title {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:400px;
+  background:
+    radial-gradient(ellipse at 30% 60%, rgba(255,34,136,0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 40%, rgba(88,0,255,0.04) 0%, transparent 50%);
+}
+.v2 .d-title .logo {
+  font-family:'Audiowide',sans-serif; font-size:52px; color:#ff2288;
+  text-shadow:0 0 30px rgba(255,34,136,0.4), 0 0 80px rgba(255,34,136,0.1),
+              0 2px 0 rgba(88,0,255,0.3);
+  letter-spacing:16px;
+}
+.v2 .d-title .sub {
+  font-family:'Rajdhani',sans-serif; font-size:13px; color:#ff88bb; opacity:0.3;
+  letter-spacing:6px; margin-top:8px; font-weight:300; text-transform:uppercase;
+}
+.v2 .d-title .sep {
+  width:160px; height:2px; margin:24px 0;
+  background:linear-gradient(90deg, transparent, #ff2288, #5500ff, transparent);
+  opacity:0.4;
+}
+.v2 .d-title .btn {
+  font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:500; color:#ff88bb;
+  background:transparent; border:1px solid rgba(255,34,136,0.15);
+  padding:10px 0; margin:3px 0; cursor:pointer; letter-spacing:4px;
+  width:240px; text-align:center; text-transform:uppercase;
+}
+.v2 .d-title .btn:hover { background:rgba(255,34,136,0.08); border-color:rgba(255,34,136,0.5); color:#ff2288; }
+.v2 .d-title .btn.primary { border-color:rgba(255,34,136,0.3); color:#ff2288; }
+
+.v2 .d-galaxy { font-family:'Rajdhani',sans-serif; color:#e0c0d0; }
+.v2 .d-galaxy .topbar {
+  height:34px; border-bottom:1px solid rgba(255,34,136,0.12);
+  display:flex; align-items:center; padding:0 10px; font-size:13px; gap:14px; font-weight:500;
+}
+.v2 .d-galaxy .topbar .lbl { opacity:0.3; font-size:10px; font-weight:300; letter-spacing:1px; }
+.v2 .d-galaxy .topbar .neg { color:#ff4466; }
+.v2 .d-galaxy .topbar .time { margin-left:auto; color:#cc88ff; font-family:'Audiowide',sans-serif; font-size:10px; }
+.v2 .d-galaxy .panel { padding:10px; border-right:1px solid rgba(255,34,136,0.06); width:200px; float:left; min-height:370px; }
+.v2 .d-galaxy .sec { font-size:10px; opacity:0.3; margin:8px 0 4px; letter-spacing:2px; text-transform:uppercase; border-bottom:1px solid rgba(255,34,136,0.06); padding-bottom:2px; font-weight:300; }
+.v2 .d-galaxy .row { display:flex; justify-content:space-between; font-size:12px; padding:2px 0; font-weight:400; }
+.v2 .d-galaxy .grn { color:#44ffaa; }
+.v2 .d-galaxy .red { color:#ff4466; }
+.v2 .d-galaxy .ylw { color:#ffaa44; }
+.v2 .d-galaxy .acc { color:#ff2288; }
+.v2 .d-galaxy .pur { color:#cc88ff; }
+.v2 .d-galaxy .bar { height:2px; background:rgba(255,34,136,0.1); margin:2px 0 6px; border-radius:1px; }
+.v2 .d-galaxy .bar-fill { height:100%; border-radius:1px; }
+
+.v2 .d-popup { display:flex; align-items:center; justify-content:center; min-height:400px; }
+.v2 .d-popup .modal { width:320px; background:#0a0410; border:1px solid rgba(255,34,136,0.25); }
+.v2 .d-popup .m-bar { height:2px; background:linear-gradient(90deg,#ff2288,#5500ff); }
+.v2 .d-popup .m-head { padding:12px 14px; font-family:'Audiowide',sans-serif; font-size:13px; color:#ff2288; letter-spacing:2px; border-bottom:1px solid rgba(255,34,136,0.08); }
+.v2 .d-popup .m-body { padding:10px 14px; font-family:'Rajdhani',sans-serif; font-size:12px; color:#e0c0d0; opacity:0.7; line-height:1.6; }
+.v2 .d-popup .m-stats { margin:8px 0; padding:8px; background:rgba(0,0,0,0.3); border:1px solid rgba(255,34,136,0.08); display:grid; grid-template-columns:1fr 1fr; gap:3px; font-size:11px; font-family:'Rajdhani',sans-serif; }
+.v2 .d-popup .m-foot { padding:8px 14px; text-align:right; border-top:1px solid rgba(255,34,136,0.08); }
+.v2 .d-popup .m-btn { font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:600; padding:7px 24px; background:rgba(255,34,136,0.1); border:1px solid rgba(255,34,136,0.4); color:#ff2288; cursor:pointer; letter-spacing:2px; text-transform:uppercase; }
+
+.v2 .d-res { font-family:'Rajdhani',sans-serif; color:#e0c0d0; padding:12px; display:flex; flex-direction:column; justify-content:center; min-height:400px; }
+.v2 .d-res .res-row { display:flex; justify-content:space-between; font-size:13px; padding:4px 0; border-bottom:1px solid rgba(255,34,136,0.04); font-weight:400; }
+.v2 .d-res .res-bar { height:4px; background:rgba(255,34,136,0.08); margin:2px 0 8px; border-radius:2px; }
+.v2 .d-res .res-bar-fill { height:100%; border-radius:2px; }
+
+/* ════════════════════════════════════════════════════
+   WARIANT 3: FILM KOSMICZNY — Bebas Neue + ciepły amber
+   ════════════════════════════════════════════════════ */
+.v3 { background:#080604; }
+.v3 .tab { --tab-color:#e8a030; }
+.v3 .v-header h2 { font-family:'Bebas Neue',sans-serif; color:#e8a030; font-size:42px; letter-spacing:10px; }
+.v3 .v-header .v-desc { font-family:'Space Mono',monospace; color:#c89860; opacity:0.35; font-size:11px; }
+
+.v3 .demo-box { background:#0a0804; border-color:rgba(232,160,48,0.08); }
+.v3 .demo-label { color:#e8a030; }
+
+.v3 .d-title {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:400px;
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(232,160,48,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(160,80,20,0.03) 0%, transparent 40%);
+}
+.v3 .d-title .logo {
+  font-family:'Bebas Neue',sans-serif; font-size:80px; color:#f0c060;
+  text-shadow:0 0 40px rgba(232,160,48,0.2), 0 0 80px rgba(232,160,48,0.05);
+  letter-spacing:20px;
+}
+.v3 .d-title .sub {
+  font-family:'Space Mono',monospace; font-size:10px; color:#c89860; opacity:0.3;
+  letter-spacing:5px; margin-top:2px; text-transform:uppercase;
+}
+.v3 .d-title .sep { width:180px; height:1px; background:linear-gradient(90deg,transparent,#e8a030,transparent); opacity:0.2; margin:28px 0; }
+.v3 .d-title .btn {
+  font-family:'Bebas Neue',sans-serif; font-size:18px; color:#c89860;
+  background:transparent; border:1px solid rgba(232,160,48,0.1);
+  padding:8px 0; margin:2px 0; cursor:pointer; letter-spacing:6px;
+  width:240px; text-align:center;
+}
+.v3 .d-title .btn:hover { background:rgba(232,160,48,0.06); border-color:rgba(232,160,48,0.3); color:#e8a030; }
+.v3 .d-title .btn.primary { border-color:rgba(232,160,48,0.2); color:#f0c060; }
+
+.v3 .d-galaxy { font-family:'Space Mono',monospace; color:#c0a880; }
+.v3 .d-galaxy .topbar {
+  height:34px; border-bottom:1px solid rgba(232,160,48,0.08);
+  display:flex; align-items:center; padding:0 10px; font-size:11px; gap:14px;
+}
+.v3 .d-galaxy .topbar .lbl { opacity:0.25; font-size:8px; letter-spacing:1px; }
+.v3 .d-galaxy .topbar .neg { color:#cc6644; }
+.v3 .d-galaxy .topbar .time { margin-left:auto; color:#e8a030; }
+.v3 .d-galaxy .panel { padding:10px; border-right:1px solid rgba(232,160,48,0.05); width:200px; float:left; min-height:370px; }
+.v3 .d-galaxy .sec { font-family:'Bebas Neue',sans-serif; font-size:13px; opacity:0.3; margin:8px 0 4px; letter-spacing:3px; border-bottom:1px solid rgba(232,160,48,0.05); padding-bottom:2px; }
+.v3 .d-galaxy .row { display:flex; justify-content:space-between; font-size:10px; padding:2px 0; }
+.v3 .d-galaxy .grn { color:#88aa44; }
+.v3 .d-galaxy .red { color:#cc6644; }
+.v3 .d-galaxy .ylw { color:#e8a030; }
+.v3 .d-galaxy .pur { color:#aa8866; }
+.v3 .d-galaxy .bar { height:2px; background:rgba(232,160,48,0.08); margin:2px 0 6px; }
+.v3 .d-galaxy .bar-fill { height:100%; }
+
+.v3 .d-popup { display:flex; align-items:center; justify-content:center; min-height:400px; }
+.v3 .d-popup .modal { width:320px; background:#0a0804; border:1px solid rgba(232,160,48,0.15); }
+.v3 .d-popup .m-bar { height:2px; background:#e8a030; box-shadow:0 0 8px rgba(232,160,48,0.3); }
+.v3 .d-popup .m-head { padding:12px 14px; font-family:'Bebas Neue',sans-serif; font-size:22px; color:#f0c060; letter-spacing:3px; border-bottom:1px solid rgba(232,160,48,0.06); }
+.v3 .d-popup .m-body { padding:10px 14px; font-family:'Space Mono',monospace; font-size:10px; color:#c0a880; opacity:0.65; line-height:1.7; }
+.v3 .d-popup .m-stats { margin:8px 0; padding:8px; background:rgba(0,0,0,0.3); border:1px solid rgba(232,160,48,0.06); display:grid; grid-template-columns:1fr 1fr; gap:3px; font-size:10px; }
+.v3 .d-popup .m-foot { padding:8px 14px; text-align:right; border-top:1px solid rgba(232,160,48,0.06); }
+.v3 .d-popup .m-btn { font-family:'Bebas Neue',sans-serif; font-size:16px; padding:6px 28px; background:rgba(232,160,48,0.08); border:1px solid rgba(232,160,48,0.3); color:#e8a030; cursor:pointer; letter-spacing:3px; }
+
+.v3 .d-res { font-family:'Space Mono',monospace; color:#c0a880; padding:12px; display:flex; flex-direction:column; justify-content:center; min-height:400px; }
+.v3 .d-res .res-row { display:flex; justify-content:space-between; font-size:11px; padding:4px 0; border-bottom:1px solid rgba(232,160,48,0.03); }
+.v3 .d-res .res-bar { height:3px; background:rgba(232,160,48,0.06); margin:2px 0 8px; }
+.v3 .d-res .res-bar-fill { height:100%; }
+
+/* ════════════════════════════════════════════════════
+   WARIANT 4: PIXEL ARCADE — Press Start 2P + elektryczny niebieski
+   ════════════════════════════════════════════════════ */
+.v4 { background:#020210; }
+.v4 .tab { --tab-color:#44aaff; }
+.v4 .v-header h2 { font-family:'Press Start 2P',monospace; color:#44aaff; font-size:16px; letter-spacing:2px; }
+.v4 .v-header .v-desc { font-family:'Silkscreen',monospace; color:#4488cc; opacity:0.4; font-size:11px; }
+
+.v4 .demo-box { background:#040420; border-color:rgba(68,170,255,0.1); }
+.v4 .demo-label { color:#44aaff; font-family:'Press Start 2P',monospace; font-size:6px; }
+
+.v4 .d-title {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:400px;
+  background: radial-gradient(circle at 50% 50%, rgba(68,170,255,0.04) 0%, transparent 50%);
+  image-rendering:pixelated;
+}
+.v4 .d-title .logo {
+  font-family:'Press Start 2P',monospace; font-size:28px; color:#44aaff;
+  text-shadow:0 0 10px rgba(68,170,255,0.5), 3px 3px 0 rgba(20,40,80,0.8);
+  letter-spacing:6px;
+}
+.v4 .d-title .sub {
+  font-family:'Silkscreen',monospace; font-size:10px; color:#4488cc; opacity:0.35;
+  letter-spacing:2px; margin-top:8px;
+}
+.v4 .d-title .sep { width:100px; height:2px; background:#44aaff; opacity:0.15; margin:24px 0; image-rendering:pixelated; }
+.v4 .d-title .btn {
+  font-family:'Press Start 2P',monospace; font-size:8px; color:#4488cc;
+  background:transparent; border:2px solid rgba(68,170,255,0.15);
+  padding:10px 20px; margin:3px 0; cursor:pointer; letter-spacing:1px;
+  width:220px; text-align:center;
+}
+.v4 .d-title .btn:hover { background:rgba(68,170,255,0.08); border-color:rgba(68,170,255,0.5); color:#44aaff; }
+.v4 .d-title .btn.primary { border-color:rgba(68,170,255,0.3); color:#66ccff; }
+
+.v4 .d-galaxy { font-family:'Silkscreen',monospace; color:#88bbdd; }
+.v4 .d-galaxy .topbar {
+  height:32px; border-bottom:2px solid rgba(68,170,255,0.1);
+  display:flex; align-items:center; padding:0 8px; font-size:10px; gap:12px;
+}
+.v4 .d-galaxy .topbar .lbl { opacity:0.3; font-size:8px; font-family:'Press Start 2P',monospace; }
+.v4 .d-galaxy .topbar .neg { color:#ff6644; }
+.v4 .d-galaxy .topbar .time { margin-left:auto; color:#44aaff; font-family:'Press Start 2P',monospace; font-size:7px; }
+.v4 .d-galaxy .panel { padding:8px; border-right:2px solid rgba(68,170,255,0.06); width:200px; float:left; min-height:370px; }
+.v4 .d-galaxy .sec { font-family:'Press Start 2P',monospace; font-size:6px; opacity:0.3; margin:8px 0 4px; border-bottom:2px solid rgba(68,170,255,0.06); padding-bottom:3px; }
+.v4 .d-galaxy .row { display:flex; justify-content:space-between; font-size:9px; padding:3px 0; }
+.v4 .d-galaxy .grn { color:#44ff88; }
+.v4 .d-galaxy .red { color:#ff6644; }
+.v4 .d-galaxy .ylw { color:#ffcc44; }
+.v4 .d-galaxy .pur { color:#aa88ff; }
+.v4 .d-galaxy .bar { height:3px; background:rgba(68,170,255,0.1); margin:2px 0 6px; image-rendering:pixelated; }
+.v4 .d-galaxy .bar-fill { height:100%; }
+
+.v4 .d-popup { display:flex; align-items:center; justify-content:center; min-height:400px; }
+.v4 .d-popup .modal { width:320px; background:#040420; border:2px solid rgba(68,170,255,0.2); }
+.v4 .d-popup .m-bar { height:3px; background:#44aaff; }
+.v4 .d-popup .m-head { padding:10px 12px; font-family:'Press Start 2P',monospace; font-size:10px; color:#44aaff; letter-spacing:1px; border-bottom:2px solid rgba(68,170,255,0.08); }
+.v4 .d-popup .m-body { padding:8px 12px; font-family:'Silkscreen',monospace; font-size:9px; color:#88bbdd; opacity:0.7; line-height:1.7; }
+.v4 .d-popup .m-stats { margin:8px 0; padding:6px; background:rgba(0,0,0,0.4); border:2px solid rgba(68,170,255,0.08); display:grid; grid-template-columns:1fr 1fr; gap:3px; font-size:9px; }
+.v4 .d-popup .m-foot { padding:8px 12px; text-align:right; border-top:2px solid rgba(68,170,255,0.08); }
+.v4 .d-popup .m-btn { font-family:'Press Start 2P',monospace; font-size:8px; padding:8px 20px; background:rgba(68,170,255,0.08); border:2px solid rgba(68,170,255,0.3); color:#44aaff; cursor:pointer; }
+
+.v4 .d-res { font-family:'Silkscreen',monospace; color:#88bbdd; padding:12px; display:flex; flex-direction:column; justify-content:center; min-height:400px; }
+.v4 .d-res .res-row { display:flex; justify-content:space-between; font-size:10px; padding:4px 0; border-bottom:2px solid rgba(68,170,255,0.04); }
+.v4 .d-res .res-bar { height:4px; background:rgba(68,170,255,0.08); margin:2px 0 8px; image-rendering:pixelated; }
+.v4 .d-res .res-bar-fill { height:100%; }
+
+/* ════════════════════════════════════════════════════
+   WARIANT 5: GALAKTYCZNY FIOLET — Michroma + purpurowo-lodowy
+   ════════════════════════════════════════════════════ */
+.v5 { background:#06040c; }
+.v5 .tab { --tab-color:#aa66ff; }
+.v5 .v-header h2 { font-family:'Michroma',sans-serif; color:#aa66ff; font-size:22px; letter-spacing:8px; }
+.v5 .v-header .v-desc { font-family:'Share Tech Mono',monospace; color:#9988bb; opacity:0.4; font-size:11px; }
+
+.v5 .demo-box { background:#08060e; border-color:rgba(170,102,255,0.08); }
+.v5 .demo-label { color:#aa66ff; }
+
+.v5 .d-title {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:400px;
+  background:
+    radial-gradient(ellipse at 40% 50%, rgba(170,102,255,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 60%, rgba(40,120,255,0.02) 0%, transparent 40%);
+}
+.v5 .d-title .logo {
+  font-family:'Michroma',sans-serif; font-size:44px; color:#c088ff;
+  text-shadow:0 0 40px rgba(170,102,255,0.25), 0 0 100px rgba(170,102,255,0.08);
+  letter-spacing:14px;
+}
+.v5 .d-title .sub {
+  font-family:'Share Tech Mono',monospace; font-size:10px; color:#8866aa; opacity:0.35;
+  letter-spacing:4px; margin-top:6px; text-transform:uppercase;
+}
+.v5 .d-title .sep { width:160px; height:1px; background:linear-gradient(90deg,transparent,#aa66ff,#4488ff,transparent); opacity:0.25; margin:28px 0; }
+.v5 .d-title .btn {
+  font-family:'Michroma',sans-serif; font-size:9px; color:#9988bb;
+  background:transparent; border:1px solid rgba(170,102,255,0.1);
+  padding:11px 0; margin:2px 0; cursor:pointer; letter-spacing:4px;
+  width:240px; text-align:center;
+}
+.v5 .d-title .btn:hover { background:rgba(170,102,255,0.06); border-color:rgba(170,102,255,0.35); color:#c088ff; }
+.v5 .d-title .btn.primary { border-color:rgba(170,102,255,0.2); color:#c088ff; }
+
+.v5 .d-galaxy { font-family:'Share Tech Mono',monospace; color:#b0a0c8; }
+.v5 .d-galaxy .topbar {
+  height:34px; border-bottom:1px solid rgba(170,102,255,0.08);
+  display:flex; align-items:center; padding:0 10px; font-size:11px; gap:14px;
+}
+.v5 .d-galaxy .topbar .lbl { opacity:0.25; font-size:9px; letter-spacing:1px; }
+.v5 .d-galaxy .topbar .neg { color:#ff6688; }
+.v5 .d-galaxy .topbar .time { margin-left:auto; color:#aa66ff; font-family:'Michroma',sans-serif; font-size:9px; }
+.v5 .d-galaxy .panel { padding:10px; border-right:1px solid rgba(170,102,255,0.05); width:200px; float:left; min-height:370px; }
+.v5 .d-galaxy .sec { font-family:'Michroma',sans-serif; font-size:7px; opacity:0.3; margin:8px 0 4px; letter-spacing:2px; border-bottom:1px solid rgba(170,102,255,0.05); padding-bottom:3px; }
+.v5 .d-galaxy .row { display:flex; justify-content:space-between; font-size:11px; padding:2px 0; }
+.v5 .d-galaxy .grn { color:#44ddaa; }
+.v5 .d-galaxy .red { color:#ff6688; }
+.v5 .d-galaxy .ylw { color:#ddaa44; }
+.v5 .d-galaxy .pur { color:#aa66ff; }
+.v5 .d-galaxy .bar { height:2px; background:rgba(170,102,255,0.08); margin:2px 0 6px; }
+.v5 .d-galaxy .bar-fill { height:100%; }
+
+.v5 .d-popup { display:flex; align-items:center; justify-content:center; min-height:400px; }
+.v5 .d-popup .modal { width:320px; background:#08060e; border:1px solid rgba(170,102,255,0.2); }
+.v5 .d-popup .m-bar { height:2px; background:linear-gradient(90deg,#aa66ff,#4488ff); box-shadow:0 0 10px rgba(170,102,255,0.3); }
+.v5 .d-popup .m-head { padding:12px 14px; font-family:'Michroma',sans-serif; font-size:11px; color:#c088ff; letter-spacing:3px; border-bottom:1px solid rgba(170,102,255,0.06); }
+.v5 .d-popup .m-body { padding:10px 14px; font-family:'Share Tech Mono',monospace; font-size:11px; color:#b0a0c8; opacity:0.65; line-height:1.6; }
+.v5 .d-popup .m-stats { margin:8px 0; padding:8px; background:rgba(0,0,0,0.3); border:1px solid rgba(170,102,255,0.06); display:grid; grid-template-columns:1fr 1fr; gap:3px; font-size:10px; }
+.v5 .d-popup .m-foot { padding:8px 14px; text-align:right; border-top:1px solid rgba(170,102,255,0.06); }
+.v5 .d-popup .m-btn { font-family:'Michroma',sans-serif; font-size:9px; padding:8px 24px; background:rgba(170,102,255,0.08); border:1px solid rgba(170,102,255,0.3); color:#aa66ff; cursor:pointer; letter-spacing:2px; }
+
+.v5 .d-res { font-family:'Share Tech Mono',monospace; color:#b0a0c8; padding:12px; display:flex; flex-direction:column; justify-content:center; min-height:400px; }
+.v5 .d-res .res-row { display:flex; justify-content:space-between; font-size:11px; padding:4px 0; border-bottom:1px solid rgba(170,102,255,0.03); }
+.v5 .d-res .res-bar { height:3px; background:rgba(170,102,255,0.06); margin:2px 0 8px; }
+.v5 .d-res .res-bar-fill { height:100%; }
+
+</style>
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab active" onclick="show(0)" style="--tab-color:#33ff66">
+    <div class="tab-num">WARIANT 1</div>
+    <div class="tab-name" style="font-family:'VT323',monospace;color:#33ff66;font-size:14px">RETRO TERMINAL</div>
+  </div>
+  <div class="tab" onclick="show(1)" style="--tab-color:#ff2288">
+    <div class="tab-num">WARIANT 2</div>
+    <div class="tab-name" style="font-family:'Audiowide',sans-serif;color:#ff2288;font-size:10px">NEON CYBER</div>
+  </div>
+  <div class="tab" onclick="show(2)" style="--tab-color:#e8a030">
+    <div class="tab-num">WARIANT 3</div>
+    <div class="tab-name" style="font-family:'Bebas Neue',sans-serif;color:#e8a030;font-size:14px;letter-spacing:3px">FILM KOSMICZNY</div>
+  </div>
+  <div class="tab" onclick="show(3)" style="--tab-color:#44aaff">
+    <div class="tab-num">WARIANT 4</div>
+    <div class="tab-name" style="font-family:'Press Start 2P',monospace;color:#44aaff;font-size:7px">PIXEL ARCADE</div>
+  </div>
+  <div class="tab" onclick="show(4)" style="--tab-color:#aa66ff">
+    <div class="tab-num">WARIANT 5</div>
+    <div class="tab-name" style="font-family:'Michroma',sans-serif;color:#aa66ff;font-size:9px;letter-spacing:2px">GALAKTYCZNY FIOLET</div>
+  </div>
+</div>
+
+<script>
+// ═══ Template danych ═══
+function makeTitle(v) {
+  const extra = v === 0 ? '<div class="scanlines"></div>' : '';
+  const cursor = v === 0 ? '<span class="cursor-blink"></span>' : '';
+  return `
+    <div class="d-title">
+      ${extra}
+      <div class="logo">KOSMOS${cursor}</div>
+      <div class="sub">symulator układu słonecznego</div>
+      <div class="sep"></div>
+      <button class="btn primary">KONTYNUUJ</button>
+      <button class="btn">NOWA GRA</button>
+      <button class="btn">POWER TEST</button>
+    </div>`;
+}
+
+function makeGalaxy() {
+  return `
+    <div class="d-galaxy">
+      <div class="topbar">
+        <span class="lbl">Fe</span><span class="val">1,247</span>
+        <span class="lbl">H₂O</span><span class="val">1,680</span>
+        <span class="lbl">ENERGY</span><span class="val neg">890</span>
+        <span class="time">Rok 4,217,892</span>
+      </div>
+      <div class="gd-body" style="display:flex">
+        <div class="panel">
+          <div class="sec">PRODUKCJA</div>
+          <div class="row"><span>Fe (żelazo)</span><span class="grn">+42/r</span></div>
+          <div class="row"><span>Si (krzem)</span><span class="red">-7/r</span></div>
+          <div class="row"><span>Cu (miedź)</span><span class="grn">+3/r</span></div>
+          <div class="sec">POPULACJA</div>
+          <div class="row"><span>POP</span><span class="ylw">8 / 12</span></div>
+          <div class="bar"><div class="bar-fill" style="width:67%;background:currentColor"></div></div>
+          <div class="row"><span>Morale</span><span class="grn">72%</span></div>
+          <div class="bar"><div class="bar-fill" style="width:72%;background:currentColor"></div></div>
+          <div class="row"><span>Epoka</span><span class="ylw">Industrialna</span></div>
+          <div class="sec">TECHNOLOGIE</div>
+          <div class="row"><span>Fuzja</span><span class="pur">45%</span></div>
+          <div class="bar"><div class="bar-fill" style="width:45%;background:currentColor"></div></div>
+          <div class="sec">FLOTA</div>
+          <div class="row"><span>KS Odkrywca</span><span class="grn">orbiting</span></div>
+          <div class="row"><span>KS Pionier</span><span class="ylw">w locie</span></div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function makePopup() {
+  return `
+    <div class="d-popup">
+      <div class="modal">
+        <div class="m-bar"></div>
+        <div class="m-head">🔭 ODKRYCIE</div>
+        <div class="m-body">
+          Statek <b>KS Odkrywca</b> dotarł na orbitę Jowisza.
+          Odkryto bogate złoża <b>helu-3</b> w górnych warstwach atmosfery.
+          <div class="m-stats">
+            <div class="row"><span>Cel</span><span>Jowisz</span></div>
+            <div class="row"><span>Status</span><span class="grn">Na orbicie</span></div>
+            <div class="row"><span>Paliwo</span><span class="ylw">34%</span></div>
+            <div class="row"><span>Złoża He³</span><span class="ylw">Bogate</span></div>
+          </div>
+        </div>
+        <div class="m-foot"><button class="m-btn">OK</button></div>
+      </div>
+    </div>`;
+}
+
+function makeRes() {
+  return `
+    <div class="d-res">
+      <div class="res-row"><span>Fe (żelazo)</span><span class="grn" style="color:inherit">1,247 / 2,000</span></div>
+      <div class="res-bar"><div class="res-bar-fill" style="width:62%;background:currentColor"></div></div>
+      <div class="res-row"><span>Si (krzem)</span><span>612 / 1,500</span></div>
+      <div class="res-bar"><div class="res-bar-fill" style="width:41%;background:currentColor"></div></div>
+      <div class="res-row"><span>Cu (miedź)</span><span>89 / 500</span></div>
+      <div class="res-bar"><div class="res-bar-fill" style="width:18%;background:currentColor;opacity:0.6"></div></div>
+      <div class="res-row"><span>Food</span><span>2,100 / 3,000</span></div>
+      <div class="res-bar"><div class="res-bar-fill" style="width:70%;background:currentColor"></div></div>
+      <div class="res-row"><span>H₂O</span><span>1,680 / 2,000</span></div>
+      <div class="res-bar"><div class="res-bar-fill" style="width:84%;background:currentColor"></div></div>
+      <div class="res-row"><span>Energy</span><span style="opacity:0.6">890 / 1,200</span></div>
+      <div class="res-bar"><div class="res-bar-fill" style="width:74%;background:currentColor;opacity:0.5"></div></div>
+      <div class="res-row"><span>Research</span><span>340 / 500</span></div>
+      <div class="res-bar"><div class="res-bar-fill" style="width:68%;background:currentColor"></div></div>
+    </div>`;
+}
+
+// ═══ Build all variants ═══
+const names = ['v1','v2','v3','v4','v5'];
+const labels = [
+  ['RETRO TERMINAL','VT323 + Share Tech Mono','Zielony fosfor CRT. Klimat starych monitorów NASA, lat 70/80. Scanlines, migający kursor, pikselowy tekst.'],
+  ['NEON CYBER','Audiowide + Rajdhani','Gorąca magenta, cyberpunkowy neon. Szeroka czcionka display + elegancka Rajdhani na dane. Gradient magenta→fiolet.'],
+  ['FILM KOSMICZNY','Bebas Neue + Space Mono','Kinowy amber/złoto. Condensed display jak plakaty Interstellar. Ciepły, filmowy, nastrojowy.'],
+  ['PIXEL ARCADE','Press Start 2P + Silkscreen','8-bitowy retro gaming. Pikselowe czcionki, ostry niebieski, grube bordery. Nostalgiczny pixel-art.'],
+  ['GALAKTYCZNY FIOLET','Michroma + Share Tech Mono','Elegancki fiolet z lodowym niebieskim. Michroma — ultra-wide, kosmiczna. Subtelna, głęboka.']
+];
+
+for (let i = 0; i < 5; i++) {
+  const el = document.createElement('div');
+  el.className = `variant ${names[i]} ${i===0?'active':''}`;
+  el.id = 'var'+i;
+  el.innerHTML = `
+    <div class="v-header">
+      <h2>${labels[i][0]}</h2>
+      <div class="v-desc"><b>${labels[i][1]}</b><br>${labels[i][2]}</div>
+    </div>
+    <div class="demos">
+      <div class="demo-box"><div class="demo-label">Title Screen</div>${makeTitle(i)}</div>
+      <div class="demo-box"><div class="demo-label">Galaxy View — Panel</div>${makeGalaxy()}</div>
+      <div class="demo-box"><div class="demo-label">Popup / Modal</div>${makePopup()}</div>
+      <div class="demo-box"><div class="demo-label">Zasoby / Paski</div>${makeRes()}</div>
+    </div>
+  `;
+  document.body.appendChild(el);
+}
+
+function show(idx) {
+  document.querySelectorAll('.variant').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('var'+idx).classList.add('active');
+  document.querySelectorAll('.tab')[idx].classList.add('active');
+}
+</script>
+
+</body>
+</html>

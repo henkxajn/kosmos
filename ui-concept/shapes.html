@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>KOSMOS UI — Kształty Paneli</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#000;
+  font-family:'Space Mono','Courier New',monospace;
+  color:#aac8c0;
+  overflow:hidden;
+}
+
+/* ── NAV ── */
+.nav {
+  position:fixed; top:0; left:0; right:0; z-index:999;
+  background:rgba(0,0,0,0.96);
+  border-bottom:1px solid rgba(0,255,180,0.2);
+  display:flex; align-items:center; gap:4px; padding:7px 14px;
+}
+.nav-title { color:#00ffb4; font-size:10px; letter-spacing:3px; margin-right:18px; }
+.nav-btn {
+  padding:5px 13px; font-size:8px; letter-spacing:1px;
+  background:transparent; border:1px solid rgba(0,255,180,0.15);
+  color:rgba(160,200,190,0.5); cursor:pointer; font-family:inherit;
+  transition:all 0.2s; text-transform:uppercase;
+}
+.nav-btn:hover { border-color:rgba(0,255,180,0.4); color:#00ffb4; }
+.nav-btn.active { background:rgba(0,255,180,0.1); border-color:rgba(0,255,180,0.5); color:#00ffb4; }
+
+/* ── SCENES ── */
+.scene { display:none; position:fixed; inset:30px 0 0 0; overflow:hidden; }
+.scene.active { display:block; }
+canvas.bg { position:absolute; inset:0; width:100%; height:100%; }
+
+/* ══ SHARED KEYFRAMES ══ */
+@keyframes slide-left  { from { transform:translateX(-100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+@keyframes slide-right { from { transform:translateX(100%);  opacity:0; } to { transform:translateX(0); opacity:1; } }
+@keyframes slide-up    { from { transform:translateY(100%);  opacity:0; } to { transform:translateY(0); opacity:1; } }
+@keyframes slide-down  { from { transform:translateY(-40px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+@keyframes fade-in     { from { opacity:0; } to { opacity:1; } }
+@keyframes fade-in-up  { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+@keyframes float       { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-5px);} }
+@keyframes float-r     { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-7px);} }
+@keyframes border-glow { 0%,100%{box-shadow:0 0 0 rgba(0,255,180,0);} 50%{box-shadow:0 0 16px rgba(0,255,180,0.18);} }
+@keyframes scan-sweep  { 0%{top:0;opacity:0.7;} 80%{opacity:0.4;} 100%{top:100%;opacity:0;} }
+@keyframes dot-blink   { 0%,100%{opacity:0.4;} 50%{opacity:1;} }
+@keyframes pulse-ring  { 0%{box-shadow:0 0 4px rgba(0,255,180,.4);} 50%{box-shadow:0 0 14px rgba(0,255,180,.8);} 100%{box-shadow:0 0 4px rgba(0,255,180,.4);} }
+@keyframes corner-draw { from{stroke-dashoffset:200;} to{stroke-dashoffset:0;} }
+@keyframes trace-light { 0%{stroke-opacity:0;} 100%{stroke-opacity:1;} }
+@keyframes topbar-in   { from{transform:translateY(-100%);opacity:0;} to{transform:translateY(0);opacity:1;} }
+@keyframes mapmode-in  { from{transform:translateX(-50%) translateY(-20px);opacity:0;} to{transform:translateX(-50%) translateY(0);opacity:1;} }
+@keyframes item-in     { from{opacity:0;transform:translateX(-8px);} to{opacity:1;transform:translateX(0);} }
+@keyframes item-in-r   { from{opacity:0;transform:translateX(8px);}  to{opacity:1;transform:translateX(0);} }
+
+/* scan line overlay effect */
+.scan-line {
+  position:absolute; left:0; right:0; height:2px;
+  background:linear-gradient(90deg,transparent,rgba(0,255,180,0.15),transparent);
+  pointer-events:none; z-index:50;
+  animation:scan-sweep 5s linear infinite;
+}
+.scan-line-blue { background:linear-gradient(90deg,transparent,rgba(80,180,255,0.15),transparent); }
+.scan-line-green { background:linear-gradient(90deg,transparent,rgba(0,200,80,0.12),transparent); }
+
+/* ══ SHARED ELEMENTS ══ */
+.topbar-base {
+  position:absolute; top:0; left:0; right:0; height:44px;
+  display:flex; align-items:center; padding:0 14px; gap:10px;
+  z-index:10;
+  animation: topbar-in 0.5s cubic-bezier(.22,1,.36,1) both;
+}
+.logo { font-size:12px; letter-spacing:6px; }
+.res-pill {
+  padding:2px 7px; font-size:8px;
+  display:flex; flex-direction:column; align-items:center; min-width:46px;
+  transition: background 0.2s, border-color 0.2s;
+}
+.res-pill:hover { border-color:rgba(0,255,180,0.35) !important; background:rgba(0,255,180,0.08) !important; }
+.res-pill .lbl { font-size:6px; opacity:0.45; }
+.res-pill .val { font-size:8px; }
+.time-block { margin-left:auto; font-size:8px; letter-spacing:2px; }
+
+.mapmode {
+  position:absolute; top:50px; left:50%; transform:translateX(-50%);
+  display:flex; z-index:10;
+  animation: mapmode-in 0.6s cubic-bezier(.22,1,.36,1) 0.15s both;
+}
+.mm-btn {
+  padding:4px 14px; font-size:7px; letter-spacing:2px;
+  background:transparent; border:none; cursor:pointer;
+  font-family:inherit; text-transform:uppercase;
+  display:flex; flex-direction:column; align-items:center; gap:1px;
+  transition:all 0.25s;
+}
+.mm-icon { font-size:13px; line-height:1; transition: transform 0.3s; }
+.mm-lbl  { font-size:6px; }
+.mm-btn:hover .mm-icon { transform: scale(1.25); }
+
+.ph {
+  font-size:7px; letter-spacing:3px; text-transform:uppercase;
+  padding:7px 12px 5px;
+}
+.ci {
+  padding:6px 12px; font-size:8px; cursor:pointer;
+  transition: background 0.15s, padding-left 0.15s;
+}
+.ci:hover { background:rgba(0,255,180,0.05); padding-left:16px; }
+.ci .cn { margin-bottom:2px; }
+.ci .cs { font-size:7px; opacity:0.45; }
+.sep { height:1px; margin:4px 12px; }
+
+.variant-tag {
+  position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+  text-align:center; z-index:20; pointer-events:none;
+  animation: fade-in 1s 0.8s both;
+}
+.variant-tag h2 { font-size:10px; letter-spacing:4px; text-transform:uppercase; }
+.variant-tag p  { font-size:8px; letter-spacing:2px; margin-top:3px; opacity:0.45; }
+
+/* ══════════════════════════════════════════════════════
+   WARIANT A — SLASH PANELS
+══════════════════════════════════════════════════════ */
+#vA .topbar-base {
+  background:rgba(2,4,5,0.40);
+  border-bottom:1px solid rgba(0,255,180,0.30);
+  backdrop-filter:blur(6px);
+}
+#vA .topbar-base::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,255,180,0.7),transparent);
+  animation: scan-h 3s ease-in-out infinite;
+}
+@keyframes scan-h { 0%,100%{opacity:.4;} 50%{opacity:1;} }
+#vA .logo { color:#00ffb4; text-shadow:0 0 10px rgba(0,255,180,0.4); }
+#vA .res-pill { background:rgba(0,255,180,0.04); border:1px solid rgba(0,255,180,0.12); }
+#vA .res-pill .val { color:rgba(170,200,195,0.9); }
+#vA .time-block { color:rgba(0,255,180,0.5); }
+
+#vA .mapmode {
+  background:rgba(2,4,5,0.45); backdrop-filter:blur(8px);
+  border:1px solid rgba(0,255,180,0.25);
+  clip-path:polygon(8px 0%,calc(100% - 8px) 0%,100% 50%,calc(100% - 8px) 100%,8px 100%,0% 50%);
+  padding:2px 16px;
+}
+#vA .mm-btn { color:rgba(0,255,180,0.35); }
+#vA .mm-btn.on { color:#00ffb4; text-shadow:0 0 8px rgba(0,255,180,0.7); }
+
+#vA .left-panel {
+  position:absolute; left:0; top:44px; bottom:24px; width:210px;
+  background:rgba(2,4,5,0.38); backdrop-filter:blur(7px);
+  clip-path:polygon(0 0, calc(100% - 36px) 0, 100% 36px, 100% 100%, 0 100%);
+  z-index:5; overflow:hidden;
+  animation: slide-left 0.55s cubic-bezier(.22,1,.36,1) 0.1s both;
+}
+/* Scan line inside left panel */
+#vA .left-panel .scan-line { animation-duration:4s; animation-delay:1s; }
+
+#vA .right-panel {
+  position:absolute; right:0; top:44px; bottom:24px; width:175px;
+  background:rgba(2,4,5,0.38); backdrop-filter:blur(7px);
+  clip-path:polygon(36px 0, 100% 0, 100% 100%, 0 100%, 0 36px);
+  z-index:5;
+  animation: slide-right 0.55s cubic-bezier(.22,1,.36,1) 0.1s both;
+}
+#vA .right-panel .scan-line { animation-duration:4.5s; animation-delay:2s; }
+
+#vA .bottom-bar {
+  position:absolute; bottom:0; left:0; right:0; height:24px;
+  background:rgba(2,4,5,0.38); backdrop-filter:blur(5px);
+  border-top:1px solid rgba(0,255,180,0.28);
+  display:flex; align-items:center; padding:0 12px;
+  font-size:7px; color:rgba(0,255,180,0.4);
+  animation: slide-up 0.5s cubic-bezier(.22,1,.36,1) 0.25s both;
+}
+
+#vA .ph { color:rgba(0,255,180,0.55); border-bottom:1px solid rgba(0,255,180,0.1); }
+#vA .ci .cn { color:rgba(170,200,195,0.85); }
+#vA .ci.sel { border-left:2px solid rgba(0,255,180,0.7); padding-left:10px; background:rgba(0,255,180,0.05); }
+#vA .sep { background:rgba(0,255,180,0.08); }
+
+/* Staggered items */
+#vA .left-panel .ci:nth-child(1) { animation: item-in .4s .3s both; }
+#vA .left-panel .ci:nth-child(2) { animation: item-in .4s .38s both; }
+#vA .left-panel .ci:nth-child(3) { animation: item-in .4s .46s both; }
+#vA .left-panel .ci:nth-child(4) { animation: item-in .4s .54s both; }
+#vA .left-panel .ci:nth-child(5) { animation: item-in .4s .62s both; }
+#vA .right-panel .ci:nth-child(1) { animation: item-in-r .4s .3s both; }
+#vA .right-panel .ci:nth-child(2) { animation: item-in-r .4s .38s both; }
+#vA .right-panel .ci:nth-child(3) { animation: item-in-r .4s .46s both; }
+#vA .right-panel .ci:nth-child(4) { animation: item-in-r .4s .54s both; }
+
+/* Slash corner animated glow */
+#vA .slash-corner-glow {
+  position:absolute; z-index:11; pointer-events:none;
+  top:44px; right:0; width:40px; height:40px;
+  background:radial-gradient(circle at 0 0, rgba(0,255,180,0.25), transparent 70%);
+  animation: dot-blink 2.5s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════════
+   WARIANT B — FLOATING CHIPS
+══════════════════════════════════════════════════════ */
+#vB .topbar-base {
+  left:10px; right:10px; top:4px; height:38px;
+  background:rgba(2,4,5,0.42);
+  border:1px solid rgba(0,255,180,0.22); border-radius:3px;
+  backdrop-filter:blur(8px);
+  box-shadow:0 2px 20px rgba(0,0,0,0.5);
+  animation: slide-down 0.5s cubic-bezier(.22,1,.36,1) both;
+}
+#vB .topbar-base::before {
+  content:''; position:absolute; top:0; left:15%; right:15%; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,255,180,0.5),transparent);
+}
+#vB .logo { color:#00ffb4; }
+#vB .res-pill { border:1px solid rgba(0,255,180,0.1); background:rgba(0,255,180,0.03); border-radius:2px; }
+#vB .res-pill .val { color:rgba(170,210,200,0.9); }
+#vB .time-block { color:rgba(0,255,180,0.45); }
+
+#vB .mapmode {
+  top:52px;
+  background:rgba(2,4,5,0.45); border:1px solid rgba(0,255,180,0.22);
+  border-radius:24px; padding:3px 6px; backdrop-filter:blur(8px); gap:2px;
+}
+#vB .mm-btn { color:rgba(0,255,180,0.3); border-radius:20px; padding:4px 12px; }
+#vB .mm-btn.on { background:rgba(0,255,180,0.12); color:#00ffb4; box-shadow:0 0 8px rgba(0,255,180,0.2); }
+
+.chip {
+  position:absolute;
+  background:rgba(2,4,5,0.44);
+  border:1px solid rgba(0,255,180,0.20);
+  backdrop-filter:blur(8px); overflow:hidden;
+  box-shadow:0 4px 24px rgba(0,0,0,0.5);
+  transition: box-shadow 0.3s, border-color 0.3s, transform 0.3s;
+}
+.chip:hover {
+  border-color:rgba(0,255,180,0.45);
+  box-shadow:0 6px 30px rgba(0,0,0,0.6), 0 0 20px rgba(0,255,180,0.1);
+  transform: translateY(-3px) !important;
+  animation-play-state: paused !important;
+}
+.chip::before {
+  content:''; position:absolute; top:0; left:10%; right:10%; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,255,180,0.4),transparent);
+}
+.chip .scan-line { opacity:0.6; }
+.chip-title {
+  font-size:7px; letter-spacing:3px; text-transform:uppercase;
+  color:rgba(0,255,180,0.5); padding:6px 10px 4px;
+  border-bottom:1px solid rgba(0,255,180,0.08);
+  display:flex; align-items:center; gap:5px;
+}
+.chip-title::before {
+  content:''; width:5px; height:5px; background:rgba(0,255,180,0.5);
+  border-radius:50%; box-shadow:0 0 5px rgba(0,255,180,0.6);
+  display:inline-block; flex-shrink:0;
+  animation:dot-blink 2.5s ease-in-out infinite;
+}
+.chip .ci { padding:5px 10px; }
+.chip .ci .cn { color:rgba(170,200,195,0.85); }
+.chip .ci .cs { font-size:6px; color:rgba(0,200,160,0.35); }
+.chip .ci.sel { background:rgba(0,255,180,0.06); border-left:2px solid rgba(0,255,180,0.6); padding-left:8px; }
+.chip .ci:hover { padding-left:14px; }
+
+/* Floating + stagger animations per chip */
+#vB .chip-colonies {
+  left:12px; top:100px; width:200px; border-radius:4px;
+  animation: fade-in-up .5s .1s both, float 7s 1s ease-in-out infinite;
+}
+#vB .chip-fleet {
+  left:12px; bottom:34px; width:185px; border-radius:4px;
+  animation: fade-in-up .5s .25s both, float 8s 1.5s ease-in-out infinite;
+}
+#vB .chip-recon {
+  left:50%; transform:translateX(-50%); bottom:34px; width:220px; border-radius:4px;
+  animation: fade-in-up .5s .35s both, float-chip-center 9s 2s ease-in-out infinite;
+}
+#vB .chip-body {
+  right:12px; top:100px; width:175px; border-radius:4px;
+  animation: fade-in-up .5s .2s both, float-r 7.5s 1.2s ease-in-out infinite;
+}
+#vB .chip-status {
+  right:12px; bottom:34px; width:155px; border-radius:4px;
+  animation: fade-in-up .5s .3s both, float 6.5s 0.8s ease-in-out infinite;
+}
+@keyframes float-chip-center {
+  0%,100%{transform:translateX(-50%) translateY(0);}
+  50%{transform:translateX(-50%) translateY(-5px);}
+}
+
+#vB .bottom-bar {
+  position:absolute; bottom:4px; left:10px; right:10px; height:22px;
+  background:rgba(2,4,5,0.4); border:1px solid rgba(0,255,180,0.15);
+  border-radius:3px; backdrop-filter:blur(5px);
+  display:flex; align-items:center; padding:0 12px;
+  font-size:7px; color:rgba(0,255,180,0.35);
+  animation: slide-up .5s .4s both;
+}
+
+/* ══════════════════════════════════════════════════════
+   WARIANT C — ARC COCKPIT
+══════════════════════════════════════════════════════ */
+#vC .topbar-base {
+  background:rgba(2,4,5,0.42); backdrop-filter:blur(7px);
+  border-bottom:1px solid rgba(100,180,255,0.3);
+}
+#vC .topbar-base::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(100,200,255,0.7),transparent);
+  box-shadow:0 0 8px rgba(80,180,255,0.4);
+  animation: scan-h 4s ease-in-out infinite;
+}
+#vC .logo { color:rgba(120,200,255,0.9); text-shadow:0 0 10px rgba(80,180,255,0.5); }
+#vC .res-pill { background:rgba(0,15,40,0.5); border:1px solid rgba(80,160,220,0.2); border-top-color:rgba(100,200,255,0.4); }
+#vC .res-pill .val { color:rgba(140,210,255,0.9); }
+#vC .time-block { color:rgba(80,180,255,0.45); }
+#vC .res-pill:hover { border-color:rgba(100,200,255,0.5) !important; }
+
+#vC .mapmode {
+  top:52px; background:rgba(0,6,20,0.5); backdrop-filter:blur(8px);
+  border:1px solid rgba(80,160,240,0.3); gap:0;
+}
+#vC .mm-btn { color:rgba(80,170,255,0.35); border-right:1px solid rgba(80,160,240,0.15); }
+#vC .mm-btn:last-child { border-right:none; }
+#vC .mm-btn.on { background:rgba(40,100,200,0.25); color:rgba(120,210,255,0.95); }
+
+#vC .left-panel {
+  position:absolute; left:0; top:44px; bottom:24px; width:200px;
+  background:rgba(0,6,22,0.42); backdrop-filter:blur(8px);
+  clip-path:path('M0,0 L180,0 Q250,200 180,400 Q250,600 180,800 L0,800 Z');
+  z-index:5;
+  animation: slide-left 0.6s cubic-bezier(.22,1,.36,1) 0.1s both;
+}
+#vC .left-panel .scan-line { animation-duration:5s; animation-delay:0.5s; }
+
+#vC .right-panel {
+  position:absolute; right:0; top:44px; bottom:24px; width:175px;
+  background:rgba(0,6,22,0.42); backdrop-filter:blur(8px);
+  clip-path:path('M175,0 L0,0 Q-60,200 0,400 Q-60,600 0,800 L175,800 Z');
+  z-index:5;
+  animation: slide-right 0.6s cubic-bezier(.22,1,.36,1) 0.1s both;
+}
+#vC .right-panel .scan-line { animation-duration:5.5s; animation-delay:1.5s; }
+
+#vC .bottom-bar {
+  position:absolute; bottom:0; left:0; right:0; height:24px;
+  background:rgba(0,6,22,0.45); backdrop-filter:blur(5px);
+  border-top:1px solid rgba(80,160,255,0.3);
+  display:flex; align-items:center; padding:0 12px;
+  font-size:7px; color:rgba(80,170,255,0.4);
+  animation: slide-up .5s .25s both;
+}
+#vC .ph { color:rgba(80,190,255,0.6); border-bottom:1px solid rgba(80,160,255,0.1); }
+#vC .ci .cn { color:rgba(140,210,255,0.85); }
+#vC .ci:hover { background:rgba(40,100,200,0.1); }
+#vC .ci.sel { border-left:2px solid rgba(80,200,255,0.7); padding-left:10px; background:rgba(40,100,200,0.12); }
+
+#vC .left-panel .ci:nth-child(1) { animation: item-in .4s .3s both; }
+#vC .left-panel .ci:nth-child(2) { animation: item-in .4s .38s both; }
+#vC .left-panel .ci:nth-child(3) { animation: item-in .4s .46s both; }
+#vC .left-panel .ci:nth-child(4) { animation: item-in .4s .54s both; }
+#vC .right-panel .ci:nth-child(1) { animation: item-in-r .4s .3s both; }
+#vC .right-panel .ci:nth-child(2) { animation: item-in-r .4s .38s both; }
+#vC .right-panel .ci:nth-child(3) { animation: item-in-r .4s .46s both; }
+
+/* ══════════════════════════════════════════════════════
+   WARIANT D — L-CORNERS
+══════════════════════════════════════════════════════ */
+#vD .topbar-base { display:none; }
+#vD .mapmode {
+  top:10px; background:rgba(2,4,5,0.38); backdrop-filter:blur(7px);
+  border:1px solid rgba(0,255,180,0.22);
+  clip-path:polygon(10px 0,calc(100% - 10px) 0,100% 50%,calc(100% - 10px) 100%,10px 100%,0 50%);
+  padding:3px 18px;
+}
+#vD .mm-btn { color:rgba(0,255,180,0.3); }
+#vD .mm-btn.on { color:#00ffb4; text-shadow:0 0 8px rgba(0,255,180,0.7); }
+
+.l-panel {
+  position:absolute; z-index:5;
+  background:rgba(2,4,5,0.35); backdrop-filter:blur(7px);
+}
+
+/* TL slides from top-left */
+#vD .lp-tl {
+  top:30px; left:0; width:195px; height:180px;
+  clip-path:polygon(0 0,100% 0,100% 44px,44px 44px,44px 100%,0 100%);
+  animation: slide-left 0.55s cubic-bezier(.22,1,.36,1) 0.05s both;
+}
+#vD .lp-tr {
+  top:30px; right:0; width:185px; height:180px;
+  clip-path:polygon(0 0,100% 0,100% 100%,calc(100% - 44px) 100%,calc(100% - 44px) 44px,0 44px);
+  animation: slide-right 0.55s cubic-bezier(.22,1,.36,1) 0.05s both;
+}
+#vD .lp-bl {
+  bottom:0; left:0; width:195px; height:200px;
+  clip-path:polygon(0 0,44px 0,44px calc(100% - 44px),100% calc(100% - 44px),100% 100%,0 100%);
+  animation: slide-left 0.55s cubic-bezier(.22,1,.36,1) 0.15s both;
+}
+#vD .lp-br {
+  bottom:0; right:0; width:185px; height:200px;
+  clip-path:polygon(0 calc(100% - 44px),calc(100% - 44px) calc(100% - 44px),calc(100% - 44px) 0,100% 0,100% 100%,0 100%);
+  animation: slide-right 0.55s cubic-bezier(.22,1,.36,1) 0.15s both;
+}
+
+.l-svg { position:absolute; inset:0; width:100%; height:100%; overflow:visible; pointer-events:none; }
+/* SVG lines draw-in animation */
+.l-svg line, .l-svg polyline {
+  stroke-dasharray:400;
+  stroke-dashoffset:400;
+}
+.l-panel.ready .l-svg line,
+.l-panel.ready .l-svg polyline {
+  animation: corner-draw 0.8s cubic-bezier(.22,1,.36,1) forwards;
+}
+.l-panel.ready .l-svg line:nth-child(2) { animation-delay:0.05s; }
+.l-panel.ready .l-svg line:nth-child(3) { animation-delay:0.10s; }
+.l-panel.ready .l-svg line:nth-child(4) { animation-delay:0.15s; }
+.l-panel.ready .l-svg line:nth-child(5) { animation-delay:0.20s; }
+.l-panel.ready .l-svg rect { animation: fade-in .3s .4s both; }
+/* Corner hover pulse */
+.l-panel:hover { animation: border-glow 1.5s ease-in-out infinite; }
+
+#vD .l-panel .section-title {
+  font-size:7px; letter-spacing:3px; color:rgba(0,255,180,0.5);
+  text-transform:uppercase; padding:4px 10px 3px;
+}
+#vD .l-panel .row {
+  font-size:8px; padding:3px 10px;
+  display:flex; justify-content:space-between; gap:8px;
+}
+#vD .l-panel .row .k { color:rgba(0,200,150,0.4); font-size:7px; }
+#vD .l-panel .row .v { color:rgba(170,210,195,0.85); }
+#vD .lp-tl .res-row { display:flex; gap:4px; padding:6px 10px 4px; flex-wrap:wrap; }
+#vD .res-mini {
+  font-size:7px; display:flex; flex-direction:column; align-items:center;
+  background:rgba(0,255,180,0.04); border:1px solid rgba(0,255,180,0.1);
+  padding:2px 5px; min-width:36px;
+  transition:border-color .2s, background .2s;
+}
+#vD .res-mini:hover { border-color:rgba(0,255,180,0.35); background:rgba(0,255,180,0.08); }
+#vD .res-mini .lbl { font-size:5px; color:rgba(0,200,150,0.4); }
+#vD .res-mini .val { color:rgba(170,210,195,0.8); }
+
+/* ══════════════════════════════════════════════════════
+   WARIANT E — PCB CIRCUIT
+══════════════════════════════════════════════════════ */
+#vE .topbar-base {
+  background:rgba(3,6,3,0.45); backdrop-filter:blur(6px);
+  border-bottom:1px solid rgba(0,200,80,0.25);
+}
+#vE .topbar-base::after {
+  content:''; position:absolute; bottom:0; left:0; right:0; height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,220,80,0.5),transparent);
+  animation: scan-h 5s ease-in-out infinite;
+}
+#vE .logo { color:rgba(0,220,80,0.85); text-shadow:0 0 8px rgba(0,180,60,0.5); }
+#vE .res-pill { background:rgba(0,10,2,0.5); border:1px solid rgba(0,180,60,0.15); border-top-color:rgba(0,220,80,0.35); }
+#vE .res-pill .val { color:rgba(0,220,80,0.8); }
+#vE .time-block { color:rgba(0,180,60,0.5); }
+#vE .res-pill:hover { border-color:rgba(0,220,60,0.45) !important; }
+
+#vE .mapmode {
+  top:52px; background:rgba(3,6,3,0.5); backdrop-filter:blur(7px);
+  border:1px solid rgba(0,200,60,0.25); padding:2px 5px; border-radius:2px;
+}
+#vE .mm-btn { color:rgba(0,180,60,0.3); }
+#vE .mm-btn.on { background:rgba(0,80,20,0.4); color:rgba(0,220,80,0.9); border:1px solid rgba(0,200,60,0.4); }
+
+#vE .left-panel {
+  position:absolute; left:0; top:44px; bottom:24px; width:205px;
+  background:rgba(3,6,3,0.40); backdrop-filter:blur(7px);
+  border-right:1px solid rgba(0,180,60,0.2); z-index:5; overflow:hidden;
+  animation: slide-left 0.55s cubic-bezier(.22,1,.36,1) 0.1s both;
+}
+#vE .left-panel::after {
+  content:''; position:absolute; inset:0;
+  background-image:
+    linear-gradient(rgba(0,180,60,0.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,180,60,0.04) 1px,transparent 1px);
+  background-size:18px 18px; pointer-events:none;
+}
+#vE .left-panel .scan-line { animation-duration:4s; }
+
+#vE .right-panel {
+  position:absolute; right:0; top:44px; height:320px; width:165px;
+  background:rgba(3,6,3,0.40); backdrop-filter:blur(7px);
+  border-left:1px solid rgba(0,180,60,0.2);
+  border-bottom:1px solid rgba(0,180,60,0.2);
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 28px),calc(100% - 28px) 100%,0 100%);
+  z-index:5;
+  animation: slide-right 0.55s cubic-bezier(.22,1,.36,1) 0.2s both;
+}
+#vE .right-panel::after {
+  content:''; position:absolute; inset:0;
+  background-image:
+    linear-gradient(rgba(0,180,60,0.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,180,60,0.04) 1px,transparent 1px);
+  background-size:18px 18px; pointer-events:none;
+}
+#vE .right-panel .scan-line { animation-duration:5s; animation-delay:1.2s; }
+
+#vE .bottom-panel {
+  position:absolute; bottom:0; left:0; width:380px; height:60px;
+  background:rgba(3,6,3,0.42); backdrop-filter:blur(5px);
+  border-top:1px solid rgba(0,180,60,0.2); border-right:1px solid rgba(0,180,60,0.15);
+  clip-path:polygon(0 0,calc(100% - 20px) 0,100% 20px,100% 100%,0 100%);
+  z-index:5; display:flex; align-items:center; padding:0 12px;
+  font-size:7px; color:rgba(0,180,60,0.45);
+  animation: slide-up 0.5s cubic-bezier(.22,1,.36,1) 0.3s both;
+}
+
+#vE .ph { color:rgba(0,200,70,0.6); border-bottom:1px solid rgba(0,180,60,0.1); font-size:7px; letter-spacing:2px; }
+#vE .ci .cn { color:rgba(0,220,80,0.8); }
+#vE .ci .cs { color:rgba(0,150,50,0.45); }
+#vE .ci:hover { background:rgba(0,80,20,0.15); }
+#vE .ci.sel { border-left:2px solid rgba(0,210,70,0.7); padding-left:10px; background:rgba(0,80,20,0.2); }
+
+#vE .left-panel .ci:nth-child(1) { animation: item-in .4s .35s both; }
+#vE .left-panel .ci:nth-child(2) { animation: item-in .4s .43s both; }
+#vE .left-panel .ci:nth-child(3) { animation: item-in .4s .51s both; }
+#vE .left-panel .ci:nth-child(4) { animation: item-in .4s .59s both; }
+#vE .left-panel .ci:nth-child(5) { animation: item-in .4s .67s both; }
+#vE .right-panel .ci:nth-child(1) { animation: item-in-r .4s .35s both; }
+#vE .right-panel .ci:nth-child(2) { animation: item-in-r .4s .43s both; }
+#vE .right-panel .ci:nth-child(3) { animation: item-in-r .4s .51s both; }
+
+.pcb-canvas { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:6; }
+.solder { position:absolute; width:6px; height:6px; border-radius:50%; z-index:7; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title">KOSMOS — Kształty + Animacje</div>
+  <button class="nav-btn active" onclick="show('A',this)">A · Slash</button>
+  <button class="nav-btn"        onclick="show('B',this)">B · Floating Chips</button>
+  <button class="nav-btn"        onclick="show('C',this)">C · Arc Cockpit</button>
+  <button class="nav-btn"        onclick="show('D',this)">D · L-Corners</button>
+  <button class="nav-btn"        onclick="show('E',this)">E · PCB Circuit</button>
+</div>
+
+<!-- ══════ A — SLASH ══════ -->
+<div class="scene active" id="vA">
+  <canvas class="bg" id="bgA"></canvas>
+
+  <div class="topbar-base">
+    <span class="logo">K O S M O S</span>
+    <div style="display:flex;gap:2px">
+      <div class="res-pill"><span class="lbl">Fe</span><span class="val">1,240</span></div>
+      <div class="res-pill"><span class="lbl">Si</span><span class="val">880</span></div>
+      <div class="res-pill"><span class="lbl">C</span><span class="val">340</span></div>
+      <div class="res-pill"><span class="lbl">food</span><span class="val" style="color:#00ee88">+4.2</span></div>
+    </div>
+    <div class="time-block">⏸ &nbsp;<span style="color:#00ffb4">1d/s</span>&nbsp;<span style="opacity:.3">1m/s 1r/s</span></div>
+  </div>
+  <div class="mapmode">
+    <button class="mm-btn"><span class="mm-icon">✦</span><span class="mm-lbl">GALAXY</span></button>
+    <button class="mm-btn on"><span class="mm-icon">◎</span><span class="mm-lbl">SYSTEM</span></button>
+    <button class="mm-btn"><span class="mm-icon">⊙</span><span class="mm-lbl">BODY</span></button>
+  </div>
+
+  <div class="left-panel">
+    <div class="scan-line"></div>
+    <svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:10">
+      <line x1="173" y1="0" x2="210" y2="36" stroke="rgba(0,255,180,0.5)" stroke-width="1.5"/>
+      <line x1="210" y1="36" x2="210" y2="2000" stroke="rgba(0,255,180,0.28)" stroke-width="1"/>
+      <line x1="0" y1="0" x2="173" y2="0" stroke="rgba(0,255,180,0.28)" stroke-width="1"/>
+      <polygon points="173,0 210,0 210,36" fill="rgba(0,255,180,0.10)"/>
+      <!-- animated sweep dot on the slash line -->
+      <circle r="2.5" fill="#00ffb4" opacity="0.8">
+        <animateMotion dur="2.5s" repeatCount="indefinite" path="M173,0 L210,36"/>
+      </circle>
+    </svg>
+    <div class="ph" style="padding-top:12px">KOLONIE</div>
+    <div class="ci sel"><div class="cn">⬡ Kepler-IV</div><div class="cs">POP 4 · Rocky HZ · Pros. 72</div></div>
+    <div class="ci"><div class="cn">⬡ Minos-II</div><div class="cs">POP 2 · Outpost · Pros. 38</div></div>
+    <div class="ci"><div class="cn">⬡ Arkas-VII</div><div class="cs">POP 1 · Pros. 21</div></div>
+    <div class="sep" style="background:rgba(0,255,180,0.08)"></div>
+    <div class="ph">EKSPEDYCJE</div>
+    <div class="ci"><div class="cn" style="color:rgba(0,220,180,0.6)">◈ RECON → Ast-44</div><div class="cs">ETA 2.3 lat</div></div>
+    <div class="ci"><div class="cn" style="color:rgba(0,220,180,0.6)">◈ MINING → Belta-09</div><div class="cs">ETA 8.1 lat</div></div>
+  </div>
+
+  <div class="right-panel">
+    <div class="scan-line"></div>
+    <svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:10">
+      <line x1="36" y1="0" x2="0" y2="36" stroke="rgba(0,255,180,0.5)" stroke-width="1.5"/>
+      <line x1="0" y1="36" x2="0" y2="2000" stroke="rgba(0,255,180,0.28)" stroke-width="1"/>
+      <line x1="36" y1="0" x2="175" y2="0" stroke="rgba(0,255,180,0.28)" stroke-width="1"/>
+      <polygon points="0,0 36,0 0,36" fill="rgba(0,255,180,0.10)"/>
+      <circle r="2.5" fill="#00ffb4" opacity="0.8">
+        <animateMotion dur="2.5s" begin="1.2s" repeatCount="indefinite" path="M36,0 L0,36"/>
+      </circle>
+    </svg>
+    <div class="ph" style="padding-top:12px">FLOTA</div>
+    <div class="ci"><div class="cn">Nauka I</div><div class="cs" style="color:rgba(0,255,180,0.4)">orbituje</div></div>
+    <div class="ci"><div class="cn">Nauka II</div><div class="cs">w locie · ETA 6.1</div></div>
+    <div class="ci"><div class="cn">Kolonista I</div><div class="cs">hangar</div></div>
+    <div class="sep" style="background:rgba(0,255,180,0.08)"></div>
+    <div class="ph">SYSTEM</div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="color:rgba(0,200,150,.4);font-size:7px">rok</span><span style="color:rgba(170,200,190,.85)">2,847</span></div></div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="color:rgba(0,200,150,.4);font-size:7px">faza</span><span style="color:rgba(170,200,190,.85)">Dojrzały</span></div></div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="color:rgba(0,200,150,.4);font-size:7px">stab.</span><span style="color:#00ee88">84%</span></div></div>
+  </div>
+
+  <div class="bottom-bar">
+    STABILNOŚĆ 84% · ROK 2847 <span style="margin-left:auto;opacity:.4">↑ MINOS-II: kolonia założona</span>
+  </div>
+  <div class="variant-tag">
+    <h2 style="color:rgba(0,255,180,.8)">A — Slash Panels</h2>
+    <p>Ukośne cięcia · świecące trójkąty · dot animuje się po skosie</p>
+  </div>
+</div>
+
+<!-- ══════ B — FLOATING CHIPS ══════ -->
+<div class="scene" id="vB">
+  <canvas class="bg" id="bgB"></canvas>
+  <div class="topbar-base">
+    <span class="logo">K O S M O S</span>
+    <div style="display:flex;gap:2px">
+      <div class="res-pill"><span class="lbl">Fe</span><span class="val">1,240</span></div>
+      <div class="res-pill"><span class="lbl">Si</span><span class="val">880</span></div>
+      <div class="res-pill"><span class="lbl">food</span><span class="val" style="color:#00ee88">+4.2</span></div>
+    </div>
+    <div class="time-block">⏸ &nbsp;<span style="color:#00ffb4">1d/s</span></div>
+  </div>
+  <div class="mapmode">
+    <button class="mm-btn"><span class="mm-icon">✦</span><span class="mm-lbl">GALAXY</span></button>
+    <button class="mm-btn on"><span class="mm-icon">◎</span><span class="mm-lbl">SYSTEM</span></button>
+    <button class="mm-btn"><span class="mm-icon">⊙</span><span class="mm-lbl">BODY</span></button>
+  </div>
+
+  <div class="chip chip-colonies">
+    <div class="scan-line"></div>
+    <div class="chip-title">KOLONIE</div>
+    <div class="ci sel"><div class="cn">⬡ Kepler-IV</div><div class="cs">POP 4 · Rocky HZ · 72</div></div>
+    <div class="ci"><div class="cn">⬡ Minos-II</div><div class="cs">POP 2 · Outpost · 38</div></div>
+    <div class="ci"><div class="cn">⬡ Arkas-VII</div><div class="cs">POP 1 · 21</div></div>
+  </div>
+  <div class="chip chip-fleet">
+    <div class="scan-line" style="animation-delay:2s"></div>
+    <div class="chip-title">FLOTA</div>
+    <div class="ci"><div class="cn">Nauka I</div><div class="cs" style="color:rgba(0,255,180,.4)">orbituje</div></div>
+    <div class="ci"><div class="cn">Nauka II</div><div class="cs">w locie</div></div>
+    <div class="ci"><div class="cn">Kolonista I</div><div class="cs">hangar</div></div>
+  </div>
+  <div class="chip chip-recon">
+    <div class="scan-line" style="animation-delay:1s"></div>
+    <div class="chip-title">EKSPEDYCJE</div>
+    <div class="ci"><div class="cn" style="color:rgba(0,220,180,.65)">◈ RECON → Asteroid-44</div><div class="cs">ETA 2.3 lat · Nauka I</div></div>
+    <div class="ci"><div class="cn" style="color:rgba(0,220,180,.65)">◈ MINING → Belta-09</div><div class="cs">ETA 8.1 lat · Nauka II</div></div>
+  </div>
+  <div class="chip chip-body">
+    <div class="scan-line" style="animation-delay:1.5s"></div>
+    <div class="chip-title">KEPLER-IV</div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="font-size:7px;opacity:.5">populacja</span><span style="color:rgba(170,210,200,.85)">4 POP</span></div></div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="font-size:7px;opacity:.5">morale</span><span style="color:#ffcc44">58</span></div></div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="font-size:7px;opacity:.5">prosperity</span><span style="color:#00ee88">72</span></div></div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="font-size:7px;opacity:.5">epoka</span><span style="color:rgba(170,200,190,.8)">Przem.</span></div></div>
+  </div>
+  <div class="chip chip-status">
+    <div class="chip-title">SYSTEM</div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="font-size:7px;opacity:.5">rok</span><span style="color:rgba(170,200,190,.85)">2,847</span></div></div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="font-size:7px;opacity:.5">stab.</span><span style="color:#00ee88">84%</span></div></div>
+  </div>
+  <div class="bottom-bar">STABILNOŚĆ 84% · ROK 2847 <span style="margin-left:auto;opacity:.35">↑ MINOS-II: kolonia</span></div>
+  <div class="variant-tag">
+    <h2 style="color:rgba(0,255,180,.8)">B — Floating Chips</h2>
+    <p>Niezależne karty unoszą się · hover zatrzymuje · scan line wewnątrz</p>
+  </div>
+</div>
+
+<!-- ══════ C — ARC COCKPIT ══════ -->
+<div class="scene" id="vC">
+  <canvas class="bg" id="bgC"></canvas>
+  <div class="topbar-base">
+    <span class="logo">K O S M O S</span>
+    <div style="display:flex;gap:2px">
+      <div class="res-pill"><span class="lbl">Fe</span><span class="val">1,240</span></div>
+      <div class="res-pill"><span class="lbl">Si</span><span class="val">880</span></div>
+      <div class="res-pill"><span class="lbl">food</span><span class="val" style="color:#00ccff">+4.2</span></div>
+    </div>
+    <div class="time-block">⏸ &nbsp;<span style="color:rgba(100,210,255,.9)">1d/s</span></div>
+  </div>
+  <div class="mapmode">
+    <button class="mm-btn"><span class="mm-icon">✦</span><span class="mm-lbl">GALAXY</span></button>
+    <button class="mm-btn on"><span class="mm-icon">◎</span><span class="mm-lbl">SYSTEM</span></button>
+    <button class="mm-btn"><span class="mm-icon">⊙</span><span class="mm-lbl">BODY</span></button>
+  </div>
+
+  <div class="left-panel">
+    <div class="scan-line scan-line-blue"></div>
+    <svg id="arcL" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:10"></svg>
+    <div class="ph">KOLONIE</div>
+    <div class="ci sel"><div class="cn">⬡ Kepler-IV</div><div class="cs">POP 4 · Rocky HZ · 72</div></div>
+    <div class="ci"><div class="cn">⬡ Minos-II</div><div class="cs">POP 2 · 38</div></div>
+    <div class="ci"><div class="cn">⬡ Arkas-VII</div><div class="cs">POP 1 · 21</div></div>
+    <div class="sep" style="background:rgba(80,160,255,.1)"></div>
+    <div class="ph">EKSPEDYCJE</div>
+    <div class="ci"><div class="cn" style="color:rgba(100,200,255,.65)">◈ RECON → Ast-44</div><div class="cs">ETA 2.3 lat</div></div>
+  </div>
+  <div class="right-panel">
+    <div class="scan-line scan-line-blue" style="animation-delay:2s"></div>
+    <svg id="arcR" style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:10"></svg>
+    <div class="ph">FLOTA</div>
+    <div class="ci"><div class="cn">Nauka I</div><div class="cs" style="color:rgba(80,200,255,.5)">orbita</div></div>
+    <div class="ci"><div class="cn">Nauka II</div><div class="cs">w locie</div></div>
+    <div class="sep" style="background:rgba(80,160,255,.1)"></div>
+    <div class="ph">STATUS</div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="color:rgba(80,160,255,.4);font-size:7px">rok</span><span style="color:rgba(140,210,255,.85)">2,847</span></div></div>
+    <div class="ci"><div style="display:flex;justify-content:space-between"><span style="color:rgba(80,160,255,.4);font-size:7px">stab.</span><span style="color:rgba(100,220,100,.7)">84%</span></div></div>
+  </div>
+  <div class="bottom-bar">STAB 84% · ROK 2847<span style="margin-left:auto;opacity:.3">↑ MINOS-II kolonia</span></div>
+  <div class="variant-tag">
+    <h2 style="color:rgba(100,200,255,.8)">C — Arc Cockpit</h2>
+    <p>Łukowe SVG krawędzie · wsuwa się z boków · kropki na końcach łuków</p>
+  </div>
+</div>
+
+<!-- ══════ D — L-CORNERS ══════ -->
+<div class="scene" id="vD">
+  <canvas class="bg" id="bgD"></canvas>
+  <div style="position:absolute;top:34px;left:50%;transform:translateX(-50%);z-index:20;text-align:center;animation:fade-in .8s .3s both">
+    <div style="font-size:9px;letter-spacing:8px;color:rgba(0,255,180,.55)">K O S M O S</div>
+  </div>
+  <div class="mapmode" style="top:54px">
+    <button class="mm-btn"><span class="mm-icon">✦</span><span class="mm-lbl">GALAXY</span></button>
+    <button class="mm-btn on"><span class="mm-icon">◎</span><span class="mm-lbl">SYSTEM</span></button>
+    <button class="mm-btn"><span class="mm-icon">⊙</span><span class="mm-lbl">BODY</span></button>
+  </div>
+
+  <!-- TL -->
+  <div class="l-panel lp-tl" id="lp-tl">
+    <svg class="l-svg">
+      <line x1="0" y1="0" x2="195" y2="0" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="195" y1="0" x2="195" y2="44" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="195" y1="44" x2="44" y2="44" stroke="rgba(0,255,180,0.30)" stroke-width="1"/>
+      <line x1="44" y1="44" x2="44" y2="180" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="0" y1="0" x2="0" y2="180" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="0" y1="180" x2="44" y2="180" stroke="rgba(0,255,180,0.30)" stroke-width="1"/>
+      <rect x="190" y="39" width="10" height="10" fill="rgba(0,255,180,0.15)" stroke="rgba(0,255,180,0.5)" stroke-width="1"/>
+      <rect x="39" y="175" width="10" height="10" fill="rgba(0,255,180,0.10)" stroke="rgba(0,255,180,0.35)" stroke-width="1"/>
+    </svg>
+    <div class="res-row" style="display:flex;gap:4px;padding:6px 10px 4px;flex-wrap:wrap">
+      <div class="res-mini"><span class="lbl">Fe</span><span class="val">1,240</span></div>
+      <div class="res-mini"><span class="lbl">Si</span><span class="val">880</span></div>
+      <div class="res-mini"><span class="lbl">C</span><span class="val">340</span></div>
+    </div>
+    <div style="display:flex;gap:4px;padding:0 10px 4px">
+      <div class="res-mini"><span class="lbl">food</span><span class="val" style="color:#00ee88">+4.2</span></div>
+      <div class="res-mini"><span class="lbl">H₂O</span><span class="val">+1.8</span></div>
+    </div>
+  </div>
+
+  <!-- TR -->
+  <div class="l-panel lp-tr" id="lp-tr">
+    <svg class="l-svg">
+      <line x1="0" y1="0" x2="185" y2="0" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="185" y1="0" x2="185" y2="180" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="185" y1="180" x2="141" y2="180" stroke="rgba(0,255,180,0.30)" stroke-width="1"/>
+      <line x1="141" y1="180" x2="141" y2="44" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="141" y1="44" x2="0" y2="44" stroke="rgba(0,255,180,0.30)" stroke-width="1"/>
+      <line x1="0" y1="0" x2="0" y2="44" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <rect x="136" y="39" width="10" height="10" fill="rgba(0,255,180,0.15)" stroke="rgba(0,255,180,0.5)" stroke-width="1"/>
+      <rect x="136" y="175" width="10" height="10" fill="rgba(0,255,180,0.10)" stroke="rgba(0,255,180,0.35)" stroke-width="1"/>
+    </svg>
+    <div class="section-title" style="font-size:7px;letter-spacing:3px;color:rgba(0,255,180,.5);text-transform:uppercase;padding:6px 12px 3px;text-align:right">FLOTA</div>
+    <div style="font-size:8px;padding:3px 12px;display:flex;justify-content:space-between"><span style="color:rgba(0,200,150,.4);font-size:7px">Nauka I</span><span style="color:rgba(0,255,180,.6)">orbita</span></div>
+    <div style="font-size:8px;padding:3px 12px;display:flex;justify-content:space-between"><span style="color:rgba(0,200,150,.4);font-size:7px">Nauka II</span><span style="color:rgba(170,210,195,.85)">w locie</span></div>
+    <div style="font-size:8px;padding:3px 12px;display:flex;justify-content:space-between"><span style="color:rgba(0,200,150,.4);font-size:7px">Kolonista</span><span style="color:rgba(170,210,195,.5)">hangar</span></div>
+  </div>
+
+  <!-- BL -->
+  <div class="l-panel lp-bl" id="lp-bl">
+    <svg class="l-svg">
+      <line x1="0" y1="0" x2="44" y2="0" stroke="rgba(0,255,180,0.30)" stroke-width="1"/>
+      <line x1="44" y1="0" x2="44" y2="156" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="44" y1="156" x2="195" y2="156" stroke="rgba(0,255,180,0.30)" stroke-width="1"/>
+      <line x1="195" y1="156" x2="195" y2="200" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="0" y1="0" x2="0" y2="200" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="0" y1="200" x2="195" y2="200" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <rect x="39" y="151" width="10" height="10" fill="rgba(0,255,180,0.15)" stroke="rgba(0,255,180,0.5)" stroke-width="1"/>
+    </svg>
+    <div style="font-size:7px;letter-spacing:3px;color:rgba(0,255,180,.5);text-transform:uppercase;padding:10px 10px 3px;padding-left:50px">KOLONIE</div>
+    <div style="font-size:8px;padding:3px 10px 3px 50px;display:flex;justify-content:space-between;max-width:155px"><span style="color:rgba(0,200,150,.4);font-size:7px">Kepler-IV</span><span style="color:rgba(170,210,195,.85)">POP 4</span></div>
+    <div style="font-size:8px;padding:3px 10px 3px 50px;display:flex;justify-content:space-between;max-width:155px"><span style="color:rgba(0,200,150,.4);font-size:7px">Minos-II</span><span style="color:rgba(170,210,195,.85)">POP 2</span></div>
+    <div style="font-size:8px;padding:3px 10px 3px 50px;display:flex;justify-content:space-between;max-width:155px"><span style="color:rgba(0,200,150,.4);font-size:7px">Arkas-VII</span><span style="color:rgba(170,210,195,.85)">POP 1</span></div>
+  </div>
+
+  <!-- BR -->
+  <div class="l-panel lp-br" id="lp-br">
+    <svg class="l-svg">
+      <line x1="0" y1="156" x2="141" y2="156" stroke="rgba(0,255,180,0.30)" stroke-width="1"/>
+      <line x1="141" y1="156" x2="141" y2="0" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="141" y1="0" x2="185" y2="0" stroke="rgba(0,255,180,0.30)" stroke-width="1"/>
+      <line x1="185" y1="0" x2="185" y2="200" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="0" y1="156" x2="0" y2="200" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <line x1="0" y1="200" x2="185" y2="200" stroke="rgba(0,255,180,0.45)" stroke-width="1"/>
+      <rect x="136" y="151" width="10" height="10" fill="rgba(0,255,180,0.15)" stroke="rgba(0,255,180,0.5)" stroke-width="1"/>
+    </svg>
+    <div style="font-size:7px;letter-spacing:3px;color:rgba(0,255,180,.5);text-transform:uppercase;padding:6px 10px 3px">STATUS · ROK 2847</div>
+    <div style="font-size:8px;padding:3px 10px;display:flex;justify-content:space-between"><span style="color:rgba(0,200,150,.4);font-size:7px">stabilność</span><span style="color:#00ee88">84%</span></div>
+    <div style="font-size:8px;padding:3px 10px;display:flex;justify-content:space-between"><span style="color:rgba(0,200,150,.4);font-size:7px">epoka</span><span style="color:rgba(170,200,190,.8)">Przemysłowa</span></div>
+    <div style="font-size:8px;padding:3px 10px;display:flex;justify-content:space-between"><span style="color:rgba(0,200,150,.4);font-size:7px">prosperity</span><span style="color:rgba(170,200,190,.8)">72</span></div>
+  </div>
+
+  <div style="position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:10;font-size:8px;letter-spacing:2px;color:rgba(0,255,180,.35);animation:fade-in 1s .5s both">
+    ⏸ &nbsp;<span style="color:rgba(0,255,180,.7)">1d/s</span>&nbsp;<span style="opacity:.3">1t/s 1m/s 1r/s</span>
+  </div>
+  <div class="variant-tag" style="bottom:4px">
+    <h2 style="color:rgba(0,255,180,.7)">D — L-Corners</h2>
+    <p>Linie SVG rysują się po kolei · środek całkowicie otwarty</p>
+  </div>
+</div>
+
+<!-- ══════ E — PCB CIRCUIT ══════ -->
+<div class="scene" id="vE">
+  <canvas class="bg" id="bgE"></canvas>
+  <div class="topbar-base">
+    <span class="logo">K O S M O S</span>
+    <div style="display:flex;gap:2px">
+      <div class="res-pill"><span class="lbl">Fe</span><span class="val">1,240</span></div>
+      <div class="res-pill"><span class="lbl">Si</span><span class="val">880</span></div>
+      <div class="res-pill"><span class="lbl">food</span><span class="val" style="color:#88cc44">+4.2</span></div>
+    </div>
+    <div class="time-block">⏸ &nbsp;<span style="color:rgba(0,210,70,.9)">1d/s</span></div>
+  </div>
+  <div class="mapmode">
+    <button class="mm-btn"><span class="mm-icon">✦</span><span class="mm-lbl">GALAXY</span></button>
+    <button class="mm-btn on"><span class="mm-icon">◎</span><span class="mm-lbl">SYSTEM</span></button>
+    <button class="mm-btn"><span class="mm-icon">⊙</span><span class="mm-lbl">BODY</span></button>
+  </div>
+
+  <div class="left-panel">
+    <div class="scan-line scan-line-green"></div>
+    <canvas class="pcb-canvas" id="pcbL"></canvas>
+    <div class="ph">KOLONIE</div>
+    <div class="ci sel"><div class="cn">⬡ Kepler-IV</div><div class="cs">POP 4 · Rocky HZ · 72</div></div>
+    <div class="ci"><div class="cn">⬡ Minos-II</div><div class="cs">POP 2 · 38</div></div>
+    <div class="ci"><div class="cn">⬡ Arkas-VII</div><div class="cs">POP 1 · 21</div></div>
+    <div class="sep" style="background:rgba(0,180,60,.1)"></div>
+    <div class="ph">EKSPEDYCJE</div>
+    <div class="ci"><div class="cn" style="color:rgba(0,200,70,.7)">◈ RECON → Ast-44</div><div class="cs">ETA 2.3 lat</div></div>
+    <div class="ci"><div class="cn" style="color:rgba(0,200,70,.7)">◈ MINING → Belta-09</div><div class="cs">ETA 8.1 lat</div></div>
+    <div class="solder" style="top:4px;right:6px;background:rgba(0,200,60,.5);box-shadow:0 0 5px rgba(0,180,60,.7);animation:dot-blink 2s infinite"></div>
+    <div class="solder" style="bottom:8px;right:6px;background:rgba(0,200,60,.35)"></div>
+  </div>
+
+  <div class="right-panel">
+    <div class="scan-line scan-line-green" style="animation-delay:1.8s"></div>
+    <canvas class="pcb-canvas" id="pcbR"></canvas>
+    <svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:10">
+      <line x1="0" y1="292" x2="28" y2="320" stroke="rgba(0,200,60,0.45)" stroke-width="1"/>
+      <line x1="0" y1="0" x2="0" y2="292" stroke="rgba(0,200,60,0.28)" stroke-width="1"/>
+      <line x1="165" y1="0" x2="165" y2="320" stroke="rgba(0,200,60,0.28)" stroke-width="1"/>
+      <!-- moving dot along right edge -->
+      <circle r="2" fill="rgba(0,200,60,0.7)">
+        <animateMotion dur="3s" repeatCount="indefinite" path="M165,0 L165,320"/>
+      </circle>
+    </svg>
+    <div class="ph">FLOTA</div>
+    <div class="ci"><div class="cn">Nauka I</div><div class="cs" style="color:rgba(0,200,70,.5)">orbita</div></div>
+    <div class="ci"><div class="cn">Nauka II</div><div class="cs">w locie</div></div>
+    <div class="sep" style="background:rgba(0,180,60,.1)"></div>
+    <div class="ph">PRODUKCJA</div>
+    <div class="ci">
+      <div style="font-size:7px;color:rgba(0,180,60,.5);margin-bottom:3px">Kolejka:</div>
+      <div style="font-size:8px;color:rgba(0,220,70,.7)">prefab_mine ×2</div>
+      <div style="font-size:8px;color:rgba(0,200,60,.5)">power_cells ×10</div>
+    </div>
+    <div class="solder" style="top:4px;left:6px;background:rgba(0,200,60,.5);animation:dot-blink 2.5s .5s infinite"></div>
+    <div class="solder" style="top:4px;right:6px;background:rgba(0,200,60,.4)"></div>
+  </div>
+
+  <div class="bottom-panel">
+    <svg style="position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:10">
+      <line x1="360" y1="0" x2="380" y2="20" stroke="rgba(0,200,60,0.4)" stroke-width="1"/>
+      <line x1="0" y1="0" x2="360" y2="0" stroke="rgba(0,200,60,0.3)" stroke-width="1"/>
+      <!-- trace sweep -->
+      <circle r="2" fill="rgba(0,200,60,0.6)" opacity="0.7">
+        <animateMotion dur="4s" repeatCount="indefinite" path="M0,30 L360,30"/>
+      </circle>
+    </svg>
+    STAB 84% · ROK 2847 &nbsp;·&nbsp;
+    <span style="color:rgba(0,200,70,.55)">⏸ 1d/s</span>
+    <span style="margin-left:12px;opacity:.35">↑ MINOS-II kolonia</span>
+    <div class="solder" style="top:4px;left:4px;background:rgba(0,180,60,.5)"></div>
+  </div>
+
+  <div class="variant-tag" style="right:180px;bottom:70px;left:auto;transform:none;text-align:right">
+    <h2 style="color:rgba(0,200,60,.75)">E — PCB Circuit</h2>
+    <p>Ścieżki PCB · solder points · dot przesuwa się po krawędziach</p>
+  </div>
+</div>
+
+<script>
+/* ─── PRNG + Star Background ─── */
+function rng(seed){let s=seed;return()=>{s=(s*1664525+1013904223)&0xffffffff;return(s>>>0)/0xffffffff;}}
+
+function drawBg(id,starCol,nebulaHue,seed){
+  const c=document.getElementById(id); if(!c)return;
+  c.width=window.innerWidth; c.height=window.innerHeight;
+  const ctx=c.getContext('2d'),W=c.width,H=c.height,r=rng(seed);
+  ctx.fillStyle='#000204'; ctx.fillRect(0,0,W,H);
+  [[W*.55,H*.42,W*.38],[W*.3,H*.65,W*.28]].forEach(([x,y,rad])=>{
+    const g=ctx.createRadialGradient(x,y,0,x,y,rad);
+    g.addColorStop(0,`hsla(${nebulaHue},80%,30%,0.10)`);
+    g.addColorStop(.5,`hsla(${nebulaHue},70%,20%,0.05)`);
+    g.addColorStop(1,'transparent');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  });
+  for(let i=0;i<700;i++){
+    const x=r()*W,y=r()*H,rad=r()<.04?(r()*1.4+.6):(r()*.45+.15),a=r()*.55+.15;
+    ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.fillStyle=`rgba(${starCol},${a})`;ctx.fill();
+  }
+  const sx=W*.52,sy=H*.42;
+  const sg=ctx.createRadialGradient(sx,sy,0,sx,sy,100);
+  sg.addColorStop(0,'rgba(255,245,180,.95)');sg.addColorStop(.06,'rgba(255,210,100,.65)');
+  sg.addColorStop(.2,'rgba(255,160,50,.18)');sg.addColorStop(.5,'rgba(255,120,20,.06)');
+  sg.addColorStop(1,'transparent');ctx.fillStyle=sg;ctx.fillRect(sx-100,sy-100,200,200);
+  ctx.strokeStyle='rgba(180,220,200,.035)';ctx.lineWidth=1;
+  [88,155,230,315].forEach(rad=>{ctx.beginPath();ctx.arc(sx,sy,rad,0,Math.PI*2);ctx.stroke();});
+  [[88,.8,4,'rgba(200,120,60,.8)'],[155,2.1,6,'rgba(100,180,220,.85)'],[230,4.2,5,'rgba(80,160,100,.75)'],[315,1.5,9,'rgba(180,140,80,.7)']].forEach(([rad,a,size,col])=>{
+    const px=sx+Math.cos(a)*rad,py=sy+Math.sin(a)*rad;
+    const pg=ctx.createRadialGradient(px-size*.3,py-size*.3,0,px,py,size);
+    pg.addColorStop(0,'rgba(255,255,255,.35)');pg.addColorStop(.3,col);pg.addColorStop(1,col.replace(/[\d.]+\)$/,'0.2)'));
+    ctx.beginPath();ctx.arc(px,py,size,0,Math.PI*2);ctx.fillStyle=pg;ctx.fill();
+  });
+}
+drawBg('bgA','176,240,224',165,11);
+drawBg('bgB','176,240,224',165,42);
+drawBg('bgC','160,220,255',210,77);
+drawBg('bgD','176,240,224',165,99);
+drawBg('bgE','160,230,180',130,131);
+
+/* ─── Arc borders (C) ─── */
+function drawArcs(){
+  const lp=document.querySelector('#vC .left-panel');
+  const rp=document.querySelector('#vC .right-panel');
+  if(!lp||!rp)return;
+  const lH=lp.getBoundingClientRect().height;
+  const rH=rp.getBoundingClientRect().height;
+  const svgL=document.getElementById('arcL');
+  const svgR=document.getElementById('arcR');
+  const mid1=lH/2;
+  // Animated arc path using stroke-dashoffset
+  const arcLen=Math.round(lH*1.2);
+  svgL.innerHTML=`
+    <path d="M0,0 L200,0" stroke="rgba(80,160,255,0.35)" stroke-width="1" fill="none"
+      stroke-dasharray="200" stroke-dashoffset="200">
+      <animate attributeName="stroke-dashoffset" from="200" to="0" dur="0.7s" fill="freeze"/>
+    </path>
+    <path d="M200,0 Q270,${mid1} 200,${lH}" stroke="rgba(80,190,255,0.65)" stroke-width="1.5" fill="none"
+      stroke-dasharray="${arcLen}" stroke-dashoffset="${arcLen}">
+      <animate attributeName="stroke-dashoffset" from="${arcLen}" to="0" dur="0.8s" begin="0.2s" fill="freeze"/>
+    </path>
+    <path d="M200,${lH} L0,${lH}" stroke="rgba(80,160,255,0.25)" stroke-width="1" fill="none"
+      stroke-dasharray="200" stroke-dashoffset="200">
+      <animate attributeName="stroke-dashoffset" from="200" to="0" dur="0.5s" begin="0.6s" fill="freeze"/>
+    </path>
+    <path d="M0,0 L0,${lH}" stroke="rgba(80,160,255,0.35)" stroke-width="1" fill="none"/>
+    <circle cx="200" cy="0" r="3" fill="rgba(80,190,255,0.7)">
+      <animate attributeName="opacity" values="0;1" dur="0.3s" begin="0.1s" fill="freeze"/>
+      <animate attributeName="r" values="5;3" dur="0.4s" begin="0.1s" fill="freeze"/>
+    </circle>
+    <circle cx="200" cy="${lH}" r="3" fill="rgba(80,190,255,0.7)">
+      <animate attributeName="opacity" values="0;1" dur="0.3s" begin="0.7s" fill="freeze"/>
+    </circle>
+    <!-- Floating dot along the arc -->
+    <circle r="2.5" fill="rgba(100,210,255,0.8)">
+      <animateMotion dur="4s" repeatCount="indefinite" begin="1s">
+        <mpath href="#arcPathL"/>
+      </animateMotion>
+    </circle>
+    <path id="arcPathL" d="M200,0 Q270,${mid1} 200,${lH}" fill="none" stroke="none"/>
+  `;
+  const mid2=rH/2;
+  const arcLen2=Math.round(rH*1.2);
+  svgR.innerHTML=`
+    <path d="M0,0 L175,0" stroke="rgba(80,160,255,0.35)" stroke-width="1" fill="none"
+      stroke-dasharray="175" stroke-dashoffset="175">
+      <animate attributeName="stroke-dashoffset" from="175" to="0" dur="0.7s" fill="freeze"/>
+    </path>
+    <path d="M0,0 Q-70,${mid2} 0,${rH}" stroke="rgba(80,190,255,0.65)" stroke-width="1.5" fill="none"
+      stroke-dasharray="${arcLen2}" stroke-dashoffset="${arcLen2}">
+      <animate attributeName="stroke-dashoffset" from="${arcLen2}" to="0" dur="0.8s" begin="0.2s" fill="freeze"/>
+    </path>
+    <path d="M0,${rH} L175,${rH}" stroke="rgba(80,160,255,0.25)" stroke-width="1" fill="none"
+      stroke-dasharray="175" stroke-dashoffset="175">
+      <animate attributeName="stroke-dashoffset" from="175" to="0" dur="0.5s" begin="0.6s" fill="freeze"/>
+    </path>
+    <path d="M175,0 L175,${rH}" stroke="rgba(80,160,255,0.35)" stroke-width="1" fill="none"/>
+    <circle cx="0" cy="0" r="3" fill="rgba(80,190,255,0.7)">
+      <animate attributeName="opacity" values="0;1" dur="0.3s" begin="0.1s" fill="freeze"/>
+      <animate attributeName="r" values="5;3" dur="0.4s" begin="0.1s" fill="freeze"/>
+    </circle>
+    <circle cx="0" cy="${rH}" r="3" fill="rgba(80,190,255,0.7)">
+      <animate attributeName="opacity" values="0;1" dur="0.3s" begin="0.7s" fill="freeze"/>
+    </circle>
+    <circle r="2.5" fill="rgba(100,210,255,0.8)">
+      <animateMotion dur="4s" begin="2.5s" repeatCount="indefinite">
+        <mpath href="#arcPathR"/>
+      </animateMotion>
+    </circle>
+    <path id="arcPathR" d="M0,0 Q-70,${mid2} 0,${rH}" fill="none" stroke="none"/>
+  `;
+}
+setTimeout(drawArcs,50);
+
+/* ─── L-Corners draw-in (D) ─── */
+function initLCorners(){
+  setTimeout(()=>{
+    ['lp-tl','lp-tr','lp-bl','lp-br'].forEach((id,i)=>{
+      setTimeout(()=>{ document.getElementById(id)?.classList.add('ready'); }, i*80);
+    });
+  },100);
+}
+initLCorners();
+
+/* ─── PCB traces (E) ─── */
+function drawPCB(canvasId,w,h,col){
+  const c=document.getElementById(canvasId); if(!c)return;
+  c.width=w; c.height=h;
+  const ctx=c.getContext('2d');
+  ctx.clearRect(0,0,w,h);
+
+  const traces=[
+    [8,80,60,80],[8,80,8,120],[8,120,40,120],
+    [8,180,80,180],[80,180,80,210],[80,210,8,210],
+    [w-8,60,w-50,60],[w-50,60,w-50,90],[w-50,90,w-8,90],
+    [8,h-40,50,h-40],[50,h-40,50,h-20],[50,h-20,8,h-20],
+  ];
+
+  let delay=0;
+  traces.forEach(([x1,y1,x2,y2])=>{
+    setTimeout(()=>{
+      ctx.strokeStyle=col; ctx.lineWidth=1; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+      // Pad
+      [[x1,y1],[x2,y2]].forEach(([px,py])=>{
+        ctx.beginPath(); ctx.arc(px,py,3,0,Math.PI*2);
+        ctx.fillStyle=col.replace('0.18','0.5'); ctx.fill();
+        // glow flash
+        ctx.beginPath(); ctx.arc(px,py,5,0,Math.PI*2);
+        ctx.fillStyle=col.replace('0.18','0.15'); ctx.fill();
+      });
+    }, delay);
+    delay+=50;
+  });
+}
+setTimeout(()=>{
+  const lp=document.querySelector('#vE .left-panel');
+  const rp=document.querySelector('#vE .right-panel');
+  if(lp) drawPCB('pcbL',lp.clientWidth,lp.clientHeight,'rgba(0,200,60,0.18)');
+  if(rp) drawPCB('pcbR',rp.clientWidth,rp.clientHeight,'rgba(0,200,60,0.15)');
+},80);
+
+/* ─── Nav + re-trigger animations ─── */
+function show(id,btn){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  const scene=document.getElementById('v'+id);
+  scene.classList.add('active');
+  btn.classList.add('active');
+
+  // Re-trigger CSS animations by clone trick
+  scene.querySelectorAll('.topbar-base,.left-panel,.right-panel,.bottom-bar,.bottom-panel,.chip,.l-panel,.mapmode').forEach(el=>{
+    el.style.animation='none';
+    el.offsetHeight; // reflow
+    el.style.animation='';
+  });
+
+  if(id==='C') setTimeout(drawArcs,20);
+  if(id==='D'){
+    document.querySelectorAll('#vD .l-panel').forEach(p=>p.classList.remove('ready'));
+    setTimeout(()=>initLCorners(),50);
+  }
+  if(id==='E') setTimeout(()=>{
+    const lp=document.querySelector('#vE .left-panel');
+    const rp=document.querySelector('#vE .right-panel');
+    const pcbL=document.getElementById('pcbL');
+    const pcbR=document.getElementById('pcbR');
+    if(pcbL) pcbL.getContext('2d').clearRect(0,0,pcbL.width,pcbL.height);
+    if(pcbR) pcbR.getContext('2d').clearRect(0,0,pcbR.width,pcbR.height);
+    if(lp) drawPCB('pcbL',lp.clientWidth,lp.clientHeight,'rgba(0,200,60,0.18)');
+    if(rp) drawPCB('pcbR',rp.clientWidth,rp.clientHeight,'rgba(0,200,60,0.15)');
+  },20);
+}
+
+document.addEventListener('keydown',e=>{
+  const map={'a':0,'b':1,'c':2,'d':3,'e':4,'1':0,'2':1,'3':2,'4':3,'5':4};
+  const i=map[e.key.toLowerCase()];
+  if(i!==undefined) show(['A','B','C','D','E'][i],document.querySelectorAll('.nav-btn')[i]);
+});
+</script>
+</body>
+</html>

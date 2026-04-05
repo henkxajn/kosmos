@@ -134,6 +134,7 @@ export class SaveSystem {
       collisionForecast: window.KOSMOS?.collisionForecast?.serialize() ?? null,
       groundUnitManager: window.KOSMOS?.groundUnitManager?.serialize() ?? null,
       anomalyEffectSystem: window.KOSMOS?.anomalyEffectSystem?.serialize() ?? null,
+      leaderSystem: window.KOSMOS?.leaderSystem?.serialize() ?? null,
       exploredBodies,
       unitDesigns: window.KOSMOS?.unitDesigns ?? [],
       galaxyData: window.KOSMOS.galaxyData ?? null,

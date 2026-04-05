@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>KOSMOS — HUD Concept v2</title>
+<style>
+/* ── Reset + font ─────────────────────────────────────────── */
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  width:100vw; height:100vh; overflow:hidden;
+  background:#040608;
+  font-family:'Segoe UI', 'Consolas', monospace;
+  color:#8899aa;
+  user-select:none;
+  font-size:12px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   PALETA — zgodna z grą
+   --pink:    #ff44aa  (aktywne, selected)
+   --gold:    #e0c87a  (kolonie, gwiazdy)
+   --cyan:    #44ccdd  (statki, ekspedycje)
+   --green:   #44cc66  (pozytywny delta)
+   --red:     #cc3344  (alarm, negative)
+   --panel:   rgba(6,9,18, 0.94)
+   --border:  rgba(255,255,255,0.06)
+   --glow-p:  rgba(255,44,160,0.5)
+   --glow-c:  rgba(44,180,220,0.5)
+══════════════════════════════════════════════════════════ */
+
+/* ── TŁO — tactical map ───────────────────────────────────── */
+#space-bg {
+  position:absolute; inset:0;
+  background:radial-gradient(ellipse at 50% 50%, #0a0c14 0%, #040608 100%);
+}
+#star-canvas { position:absolute; inset:0; pointer-events:none; }
+
+/* Planety na tactical map */
+.tac-body {
+  position:absolute; border-radius:50%;
+  transform:translate(-50%,-50%);
+  cursor:pointer;
+}
+.tac-label {
+  position:absolute; font-size:9px; color:#334455;
+  white-space:nowrap; transform:translate(-50%, 10px);
+  letter-spacing:1px;
+}
+/* Linia trasy statku (SVG overlay) */
+#route-svg { position:absolute; inset:0; pointer-events:none; }
+
+/* Legenda */
+#tac-legend {
+  position:absolute; bottom:60px; right:16px;
+  font-size:9px; color:#334; line-height:1.9; letter-spacing:1px;
+  pointer-events:none;
+}
+.leg-row { display:flex; align-items:center; gap:6px; }
+.leg-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+
+/* ══════════════════════════════════════════════════════════
+   TOP BAR
+══════════════════════════════════════════════════════════ */
+#top-bar {
+  position:absolute; top:0; left:0; right:0; height:46px;
+  background:rgba(4,6,14,0.97);
+  border-bottom:1px solid rgba(255,255,255,0.05);
+  display:flex; align-items:center;
+  padding:0 10px; gap:0;
+  z-index:60;
+}
+.top-logo {
+  font-size:15px; font-weight:700; letter-spacing:4px;
+  color:#e0c87a; flex-shrink:0; padding-right:14px;
+  border-right:1px solid rgba(255,255,255,0.06);
+  margin-right:10px;
+}
+.top-section-label {
+  font-size:9px; letter-spacing:2px; color:#223;
+  margin-right:6px; flex-shrink:0;
+}
+.top-res-group { display:flex; gap:12px; padding:0 10px; border-right:1px solid rgba(255,255,255,0.04); }
+.top-res { display:flex; flex-direction:column; }
+.top-res .v { font-size:11px; color:#c8d0dc; line-height:1.2; }
+.top-res .d { font-size:9px; color:#44cc66; }
+.top-res .dl{ font-size:9px; color:#cc3344; }
+.top-res .n { font-size:9px; color:#334; }
+.top-date { margin-left:auto; font-size:11px; color:#334455; letter-spacing:1px; padding-left:12px; flex-shrink:0; }
+.top-date strong { color:#556677; display:block; font-size:12px; }
+
+/* Przyciski map tabs */
+.top-tabs { display:flex; gap:2px; margin-left:10px; }
+.top-tab {
+  padding:4px 12px; font-size:10px; letter-spacing:1px; color:#334;
+  background:transparent; border:1px solid transparent;
+  border-radius:3px; cursor:pointer; transition:all 0.15s;
+}
+.top-tab:hover { color:#556677; border-color:rgba(255,255,255,0.08); }
+.top-tab.active { color:#88aacc; border-color:rgba(40,80,160,0.4); background:rgba(20,40,100,0.3); }
+
+/* ══════════════════════════════════════════════════════════
+   LEWY SIDEBAR (ikony)
+══════════════════════════════════════════════════════════ */
+#left-sidebar {
+  position:absolute; top:46px; left:0; bottom:40px;
+  width:36px; z-index:50;
+  background:rgba(4,6,14,0.96);
+  /* Trapez: wąski u góry/dołu, szerszy w środku */
+  clip-path:polygon(0 0, 24px 0, 36px 6%, 36px 94%, 24px 100%, 0 100%);
+  display:flex; flex-direction:column; align-items:center;
+  padding:12px 0; gap:4px;
+}
+/* Świecąca krawędź */
+#left-sidebar::after {
+  content:''; position:absolute; top:6%; right:0; bottom:6%; width:1px;
+  background:linear-gradient(180deg,
+    transparent 0%, rgba(255,44,160,0.5) 20%,
+    rgba(255,80,180,0.8) 50%,
+    rgba(255,44,160,0.5) 80%, transparent 100%);
+  box-shadow:0 0 8px rgba(255,44,160,0.3);
+}
+
+.sb-icon {
+  width:28px; height:28px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:14px; opacity:0.28; cursor:pointer;
+  border-radius:3px; transition:all 0.15s;
+  position:relative;
+}
+.sb-icon:hover { opacity:0.75; background:rgba(255,44,160,0.1); }
+.sb-icon.active {
+  opacity:1;
+  background:rgba(255,44,160,0.15);
+  box-shadow:0 0 8px rgba(255,44,160,0.2);
+}
+.sb-icon.active::after {
+  content:''; position:absolute; right:0; top:50%; transform:translateY(-50%);
+  width:2px; height:14px; border-radius:1px 0 0 1px;
+  background:linear-gradient(180deg,#ff44aa,#ff88cc);
+  box-shadow:0 0 6px #ff44aa;
+}
+.sb-sep { width:18px; height:1px; background:rgba(255,255,255,0.04); margin:3px 0; flex-shrink:0; }
+
+/* ══════════════════════════════════════════════════════════
+   LEWY SLIDE PANEL (wysuwa się z sidelinera po kliknięciu)
+══════════════════════════════════════════════════════════ */
+#left-panel {
+  position:absolute; top:46px; left:36px; bottom:40px;
+  width:240px; z-index:49;
+  background:linear-gradient(90deg,
+    rgba(5,7,18,0.97) 0%,
+    rgba(6,9,20,0.94) 75%,
+    rgba(6,9,20,0.80) 100%);
+  backdrop-filter:blur(10px);
+  /* Trapez — prawa krawędź: wąska u góry/dołu */
+  clip-path:polygon(0% 0%, 82% 0%, 100% 7%, 100% 93%, 82% 100%, 0% 100%);
+  transform:translateX(-110%);
+  transition:transform 0.36s cubic-bezier(0.22,1,0.36,1);
+  overflow:hidden;
+  padding:14px 10px 14px 12px;
+}
+#left-panel.open { transform:translateX(0); }
+
+/* Świecąca prawa krawędź lewego panelu */
+#left-panel::after {
+  content:''; position:absolute; top:7%; right:0; bottom:7%; width:1px;
+  background:linear-gradient(180deg,
+    transparent 0%, rgba(255,44,160,0.6) 20%,
+    rgba(255,100,190,0.9) 50%,
+    rgba(255,44,160,0.6) 80%, transparent 100%);
+  box-shadow:0 0 8px rgba(255,44,160,0.3);
+  transform:skewY(-4deg); transform-origin:bottom;
+}
+/* Scanlines */
+#left-panel::before {
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:repeating-linear-gradient(180deg,
+    transparent 0px, transparent 3px,
+    rgba(255,44,160,0.018) 3px, rgba(255,44,160,0.018) 4px);
+}
+
+/* Nagłówek panelu */
+.lp-header {
+  display:flex; align-items:center; gap:8px;
+  margin-bottom:12px; padding-bottom:8px;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+  position:relative; z-index:2;
+}
+.lp-title { font-size:11px; letter-spacing:2px; color:#556677; font-weight:600; }
+.lp-count { font-size:10px; color:#ff44aa; margin-left:2px; }
+.lp-close { margin-left:auto; font-size:13px; color:#223; cursor:pointer; transition:color 0.15s; }
+.lp-close:hover { color:#ff44aa; }
+
+/* Tabs w panelu */
+.lp-tabs { display:flex; gap:3px; margin-bottom:10px; position:relative; z-index:2; }
+.lp-tab {
+  padding:3px 9px; font-size:9px; letter-spacing:1px;
+  background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06);
+  border-radius:2px; cursor:pointer; color:#334; transition:all 0.15s;
+}
+.lp-tab:hover { color:#88aacc; }
+.lp-tab.active { background:rgba(255,44,160,0.15); border-color:rgba(255,44,160,0.35); color:#ff88cc; }
+
+/* Sekcja w panelu */
+.lp-section { position:relative; z-index:2; margin-bottom:10px; }
+.lp-section-label {
+  font-size:9px; letter-spacing:2px; color:#223344;
+  margin-bottom:5px; padding-left:2px;
+  display:flex; align-items:center; gap:6px;
+}
+.lp-section-label::after { content:''; flex:1; height:1px; background:rgba(255,255,255,0.04); }
+.lp-section-count { color:#ff44aa; margin-left:2px; }
+
+/* Item w panelu */
+.lp-item {
+  display:flex; align-items:flex-start; gap:8px;
+  padding:6px 6px; border-radius:3px; cursor:pointer;
+  border:1px solid transparent;
+  transition:all 0.15s; margin-bottom:2px;
+}
+.lp-item:hover { background:rgba(255,44,160,0.07); border-color:rgba(255,44,160,0.15); }
+.lp-item.selected { background:rgba(255,44,160,0.12); border-color:rgba(255,44,160,0.3); }
+.lp-item-icon { font-size:14px; flex-shrink:0; margin-top:1px; }
+.lp-item-name { font-size:11px; color:#aabbcc; line-height:1.3; }
+.lp-item-sub { font-size:9px; color:#334455; display:block; margin-top:1px; }
+.lp-item-right { margin-left:auto; text-align:right; flex-shrink:0; }
+.lp-item-val { font-size:10px; color:#44cc66; display:block; }
+.lp-item-val.warn { color:#cc8833; }
+
+/* Progress bar */
+.lp-progress { height:2px; background:rgba(255,255,255,0.05); border-radius:1px; margin-top:4px; overflow:hidden; }
+.lp-progress-fill { height:100%; border-radius:1px; }
+
+/* Tag status */
+.lp-tag {
+  display:inline-block; font-size:8px; letter-spacing:1px;
+  padding:1px 5px; border-radius:2px;
+}
+.lp-tag.flight { color:#ffaa44; background:rgba(120,60,0,0.2); border:1px solid rgba(200,100,0,0.25); }
+.lp-tag.orbit  { color:#44ccdd; background:rgba(0,80,120,0.2); border:1px solid rgba(0,150,200,0.25); }
+.lp-tag.docked { color:#44cc66; background:rgba(0,60,30,0.2); border:1px solid rgba(0,150,80,0.25); }
+
+/* Akcja szybka */
+.lp-actions { display:flex; gap:5px; margin-top:4px; position:relative; z-index:2; }
+.lp-btn {
+  flex:1; padding:5px 6px; text-align:center;
+  background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08);
+  border-radius:3px; font-size:9px; color:#334455;
+  cursor:pointer; transition:all 0.15s; letter-spacing:1px;
+}
+.lp-btn:hover { background:rgba(255,44,160,0.1); border-color:rgba(255,44,160,0.3); color:#ff88cc; }
+.lp-btn.primary { border-color:rgba(255,180,0,0.3); color:#c8a030; background:rgba(100,60,0,0.15); }
+.lp-btn.primary:hover { background:rgba(180,100,0,0.2); border-color:rgba(255,200,0,0.4); color:#e0c87a; }
+
+.lp-div { height:1px; background:rgba(255,255,255,0.04); margin:8px 0; position:relative; z-index:2; }
+
+/* ══════════════════════════════════════════════════════════
+   PRAWY SIDEBAR TRIGGER (hover-strefa po prawej)
+══════════════════════════════════════════════════════════ */
+#right-trigger {
+  position:absolute; top:46px; right:0; bottom:40px;
+  width:8px; z-index:51; cursor:pointer;
+}
+/* Cienka świecąca kreska — sygnał że można rozwinąć */
+#right-trigger::before {
+  content:''; position:absolute; top:15%; right:0; bottom:15%; width:2px;
+  background:linear-gradient(180deg,
+    transparent 0%, rgba(255,44,160,0.4) 20%,
+    rgba(255,80,180,0.7) 50%,
+    rgba(255,44,160,0.4) 80%, transparent 100%);
+  box-shadow:0 0 6px rgba(255,44,160,0.25);
+  border-radius:1px;
+  transition:all 0.2s;
+}
+#right-trigger:hover::before,
+#right-trigger.hovered::before {
+  background:linear-gradient(180deg,
+    transparent 0%, rgba(255,44,160,0.8) 20%,
+    rgba(255,120,200,1.0) 50%,
+    rgba(255,44,160,0.8) 80%, transparent 100%);
+  box-shadow:0 0 12px rgba(255,44,160,0.5);
+  width:3px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   PRAWY PANEL (wysuwa się na hover z prawej)
+══════════════════════════════════════════════════════════ */
+#right-panel {
+  position:absolute; top:46px; right:8px; bottom:40px;
+  width:230px; z-index:50;
+  background:linear-gradient(270deg,
+    rgba(5,7,18,0.97) 0%,
+    rgba(6,9,20,0.94) 75%,
+    rgba(6,9,20,0.80) 100%);
+  backdrop-filter:blur(10px);
+  /* Trapez — lewa krawędź: wąska u góry/dołu */
+  clip-path:polygon(18% 0%, 100% 0%, 100% 100%, 18% 100%, 0% 93%, 0% 7%);
+  transform:translateX(calc(100% + 8px));
+  transition:transform 0.36s cubic-bezier(0.22,1,0.36,1);
+  overflow:hidden;
+  padding:14px 12px 14px 50px;
+}
+#right-panel.open { transform:translateX(0); }
+
+/* Świecąca lewa krawędź prawego panelu */
+#right-panel::before {
+  content:''; position:absolute; top:7%; left:0; bottom:7%; width:1px;
+  background:linear-gradient(180deg,
+    transparent 0%, rgba(255,44,160,0.6) 20%,
+    rgba(255,100,190,0.9) 50%,
+    rgba(255,44,160,0.6) 80%, transparent 100%);
+  box-shadow:0 0 8px rgba(255,44,160,0.3);
+  transform:skewY(4deg); transform-origin:top;
+}
+/* Scanlines */
+#right-panel::after {
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:repeating-linear-gradient(180deg,
+    transparent 0px, transparent 3px,
+    rgba(255,44,160,0.018) 3px, rgba(255,44,160,0.018) 4px);
+}
+
+/* Narożniki dekoracyjne */
+.rp-corner-tr { position:absolute; top:6px; right:8px; width:14px; height:14px;
+  border-top:1px solid rgba(255,44,160,0.35); border-right:1px solid rgba(255,44,160,0.35); }
+.rp-corner-br { position:absolute; bottom:6px; right:8px; width:14px; height:14px;
+  border-bottom:1px solid rgba(255,44,160,0.35); border-right:1px solid rgba(255,44,160,0.35); }
+
+/* Sekcja w prawym panelu */
+.rp-section { position:relative; z-index:2; margin-bottom:10px; }
+.rp-section-label {
+  font-size:9px; letter-spacing:2px; color:#223344;
+  margin-bottom:5px; display:flex; align-items:center; gap:5px;
+  border-bottom:1px solid rgba(255,255,255,0.04); padding-bottom:4px;
+}
+.rp-section-label .arr { font-size:7px; color:#ff44aa; }
+
+.rp-item {
+  padding:5px 4px; border-radius:3px; cursor:pointer;
+  display:flex; align-items:center; gap:7px; font-size:11px; color:#667788;
+  transition:all 0.15s; margin-bottom:2px;
+}
+.rp-item:hover { background:rgba(255,44,160,0.07); color:#aabbcc; }
+.rp-item.selected { color:#e0c87a; }
+.rp-item .dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+.rp-item .sub { font-size:9px; color:#223344; display:block; margin-top:1px; }
+.rp-item .badge { margin-left:auto; font-size:9px; color:#334; padding:1px 5px; background:rgba(255,255,255,0.04); border-radius:2px; }
+.rp-item .badge.warn { color:#cc8833; background:rgba(80,40,0,0.3); }
+.rp-item .badge.pink { color:#ff44aa; background:rgba(180,0,80,0.2); }
+
+/* Stocznia sekcja */
+.shipyard-title { font-size:11px; letter-spacing:2px; color:#44ccdd; display:flex; align-items:center; gap:6px; margin-bottom:4px; position:relative; z-index:2; }
+.shipyard-slots { font-size:10px; color:#334455; margin-bottom:10px; position:relative; z-index:2; }
+.ship-btn {
+  width:100%; padding:6px 10px; margin-bottom:5px;
+  background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.07);
+  border-radius:3px; cursor:pointer; transition:all 0.15s;
+  display:flex; align-items:center; gap:8px;
+  font-size:10px; color:#445566; position:relative; z-index:2;
+  text-align:left;
+}
+.ship-btn:hover { background:rgba(44,180,220,0.1); border-color:rgba(44,180,220,0.3); color:#88ccdd; }
+.ship-btn.available { border-color:rgba(220,160,0,0.4); color:#c8a030; background:rgba(80,50,0,0.2); }
+.ship-btn.available:hover { background:rgba(120,80,0,0.3); color:#e0c87a; }
+.ship-btn .cost { margin-left:auto; font-size:9px; color:#334; }
+.ship-btn.available .cost { color:#c8a030; }
+
+.rp-hint { font-size:9px; color:#1a2a3a; letter-spacing:1px; position:relative; z-index:2; margin-top:8px; font-style:italic; }
+
+/* ══════════════════════════════════════════════════════════
+   BOTTOM BAR
+══════════════════════════════════════════════════════════ */
+#bottom-bar {
+  position:absolute; bottom:0; left:0; right:0; height:40px;
+  background:rgba(4,6,14,0.97);
+  border-top:1px solid rgba(255,255,255,0.05);
+  display:flex; align-items:center; padding:0 10px; gap:20px;
+  z-index:60; font-size:10px;
+}
+.bev { display:flex; align-items:center; gap:6px; }
+.bev .dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+.bev .txt { color:#334455; }
+.bev .hi-r { color:#cc3344; font-weight:600; }
+.bev .hi-g { color:#44cc66; }
+.bev .hi-y { color:#e0c87a; }
+.bev .num { color:#ff44aa; font-weight:700; margin-right:3px; }
+
+/* ══════════════════════════════════════════════════════════
+   TOGGLE OLD / NEW
+══════════════════════════════════════════════════════════ */
+#toggle-bar {
+  position:absolute; top:54px; left:50%; transform:translateX(-50%);
+  z-index:200;
+  display:flex; background:rgba(4,6,14,0.95);
+  border:1px solid rgba(255,255,255,0.08); border-radius:6px; overflow:hidden;
+}
+.tbtn {
+  padding:7px 18px; font-size:10px; letter-spacing:1px;
+  cursor:pointer; border:none; background:transparent;
+  color:#334; transition:all 0.2s;
+}
+.tbtn.active { background:rgba(255,44,160,0.15); color:#ff88cc; }
+.tbtn:hover:not(.active) { color:#667788; }
+.tbtn-div { width:1px; background:rgba(255,255,255,0.06); }
+
+/* ══════════════════════════════════════════════════════════
+   HOVER LABEL (tooltip "najedź aby rozwinąć")
+══════════════════════════════════════════════════════════ */
+#right-hover-hint {
+  position:absolute; top:50%; right:16px;
+  transform:translateY(-50%);
+  z-index:52; pointer-events:none;
+  opacity:1; transition:opacity 0.4s;
+  writing-mode:vertical-rl;
+  font-size:9px; letter-spacing:2px; color:rgba(255,44,160,0.4);
+}
+#right-hover-hint.hidden { opacity:0; }
+</style>
+</head>
+<body>
+
+<!-- TŁO -->
+<div id="space-bg">
+  <canvas id="star-canvas"></canvas>
+
+  <!-- Tactical map bodies -->
+  <!-- Gwiazda centralna -->
+  <div class="tac-body" style="left:50%;top:50%;width:28px;height:28px;
+    background:radial-gradient(circle,#fff8d0,#ffcc44,#ff8800,transparent);
+    box-shadow:0 0 30px 10px #ff880044, 0 0 80px 30px #ff440011;">
+  </div>
+
+  <!-- Planety -->
+  <div class="tac-body" style="left:39%;top:43%;width:12px;height:12px;background:#cc3366;box-shadow:0 0 8px #cc336644;">
+    <div class="tac-label">GJ-9060 b</div></div>
+  <div class="tac-body" style="left:44%;top:35%;width:10px;height:10px;background:#8899aa;"><div class="tac-label">GJ-9060 c</div></div>
+  <div class="tac-body" style="left:48%;top:58%;width:11px;height:11px;background:#4466aa;box-shadow:0 0 6px #4466aa44;"><div class="tac-label">GJ-9060 d</div></div>
+  <!-- Home planet -->
+  <div class="tac-body" id="home-pl" style="left:46%;top:46%;width:14px;height:14px;
+    background:radial-gradient(circle at 35% 35%,#ff44aa,#cc1166,#440022);
+    box-shadow:0 0 10px 3px #ff44aa55;">
+    <div class="tac-label" style="color:#ff44aa88;">New Earth ●</div>
+  </div>
+  <div class="tac-body" style="left:57%;top:38%;width:9px;height:9px;background:#667755;"><div class="tac-label">GJ-9060 f</div></div>
+  <div class="tac-body" style="left:36%;top:62%;width:8px;height:8px;background:#556677;"><div class="tac-label">GJ-9060 g</div></div>
+  <div class="tac-body" style="left:63%;top:52%;width:20px;height:20px;
+    background:radial-gradient(circle,#aa8844,#664422);opacity:0.7;"><div class="tac-label">GJ-9060 (gas)</div></div>
+  <!-- Dalekie -->
+  <div class="tac-body" style="left:70%;top:28%;width:7px;height:7px;background:#446688;opacity:0.5;"><div class="tac-label" style="color:#223">GJ-9060 h</div></div>
+  <div class="tac-body" style="left:24%;top:32%;width:6px;height:6px;background:#445566;opacity:0.4;"></div>
+  <div class="tac-body" style="left:78%;top:65%;width:5px;height:5px;background:#445566;opacity:0.35;"></div>
+
+  <!-- Statek Explorer (w locie) -->
+  <div class="tac-body" id="ship-explorer" style="left:48.5%;top:53%;
+    width:7px;height:7px;background:#ffaa44;border-radius:2px;transform:translate(-50%,-50%) rotate(45deg);
+    box-shadow:0 0 6px #ffaa4488;">
+    <div class="tac-label" style="color:#ffaa44;transform:translate(-50%,10px);">Explorer</div>
+  </div>
+
+  <!-- SVG trasa statku -->
+  <svg id="route-svg" style="position:absolute;inset:0;width:100%;height:100%;">
+    <defs>
+      <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L6,3 z" fill="#ffaa4466"/>
+      </marker>
+    </defs>
+    <!-- linia przerywana: New Earth → GJ-9060 f -->
+    <line id="route-line"
+      x1="46%" y1="46%" x2="57%" y2="38%"
+      stroke="#ffaa44" stroke-width="1" stroke-opacity="0.4"
+      stroke-dasharray="5,4"
+      marker-end="url(#arrowhead)"/>
+  </svg>
+
+  <!-- Legenda -->
+  <div id="tac-legend">
+    <div class="leg-row"><div class="leg-dot" style="background:#ff44aa;"></div>Home planet</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#4466aa;"></div>Colony</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#8899aa;"></div>Planet</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#ffaa44;border-radius:2px;"></div>Ship (in flight)</div>
+    <div class="leg-row"><div class="leg-dot" style="background:#44ccdd;border-radius:2px;"></div>Ship (orbit)</div>
+  </div>
+
+  <!-- Tabs mapy (STAR ATLAS / STAR CLUSTER / ROUTES / RANGE) -->
+  <div style="position:absolute;top:54px;right:50%;transform:translateX(50%);
+    display:flex;gap:4px;z-index:10;pointer-events:none;">
+    <div class="top-tab" style="font-size:9px;color:#223;">STAR ATLAS</div>
+    <div class="top-tab" style="font-size:9px;color:#223;">STAR CLUSTER</div>
+    <div class="top-tab active" style="font-size:9px;">ROUTES</div>
+    <div class="top-tab" style="font-size:9px;color:#223;">RANGE</div>
+  </div>
+</div>
+
+<!-- TOP BAR -->
+<div id="top-bar">
+  <span class="top-logo">KOSMOS</span>
+  <span class="top-section-label">RESOURCES</span>
+  <div class="top-res-group">
+    <div class="top-res"><div class="v">⚙ 2.0k</div><div class="dl">-108</div></div>
+    <div class="top-res"><div class="v">Fe 812</div><div class="d">+184</div></div>
+    <div class="top-res"><div class="v">Si 2.9k</div><div class="d">+203</div></div>
+    <div class="top-res"><div class="v">Cu 1.2k</div><div class="d">+89</div></div>
+    <div class="top-res"><div class="v">Ti 9.1</div><div class="d">+3.2</div></div>
+    <div class="top-res"><div class="v">Li 367</div><div class="d">+6.7</div></div>
+    <div class="top-res"><div class="v">W 371</div><div class="d">+9.7</div></div>
+    <div class="top-res"><div class="v">✦ Pt 4</div><div class="n">—</div></div>
+  </div>
+  <span class="top-section-label" style="margin-left:8px;">STOCKS</span>
+  <div class="top-res-group">
+    <div class="top-res"><div class="v">🌾 454</div><div class="d">+14.5</div></div>
+    <div class="top-res"><div class="v">💧 269</div><div class="d">+0.4</div></div>
+  </div>
+  <span class="top-section-label" style="margin-left:8px;">SYSTEMS</span>
+  <div class="top-res-group" style="border-right:none;">
+    <div class="top-res"><div class="v">⚡ 5.6</div><div class="d">+30</div></div>
+    <div class="top-res"><div class="v">PC 2</div><div class="n">2/2</div></div>
+    <div class="top-res"><div class="v">POP 7</div><div class="n">0.25/7</div></div>
+    <div class="top-res"><div class="v">⭐ 88</div><div class="n">—</div></div>
+  </div>
+  <div class="top-date"><strong>22/09/0004</strong><span style="font-size:9px;color:#223;letter-spacing:2px;">ALT ▶▶</span></div>
+</div>
+
+<!-- TOGGLE -->
+<div id="toggle-bar">
+  <button class="tbtn active" id="btn-old" onclick="setMode('old')">◀ OBECNE UI</button>
+  <div class="tbtn-div"></div>
+  <button class="tbtn" id="btn-new" onclick="setMode('new')">NOWE HUD ▶</button>
+</div>
+
+<!-- ════════════════════════════════════════════
+     LEWY SIDEBAR + PANEL
+════════════════════════════════════════════ -->
+<div id="left-sidebar">
+  <div class="sb-icon" data-panel="fleet"       onclick="toggleLeft('fleet',this)"       title="Flota">🚢</div>
+  <div class="sb-icon" data-panel="expeditions" onclick="toggleLeft('expeditions',this)" title="Ekspedycje">🚀</div>
+  <div class="sb-icon" data-panel="colonies"    onclick="toggleLeft('colonies',this)"    title="Kolonie">🌐</div>
+  <div class="sb-sep"></div>
+  <div class="sb-icon" onclick="toggleLeft(null,this)" title="Cywilizacja">👤</div>
+  <div class="sb-icon" onclick="toggleLeft(null,this)" title="Technologie">🔬</div>
+  <div class="sb-icon" onclick="toggleLeft(null,this)" title="Budownictwo">🏗</div>
+  <div class="sb-sep"></div>
+  <div class="sb-icon" onclick="toggleLeft(null,this)" title="Ustawienia">⚙</div>
+</div>
+
+<div id="left-panel">
+
+  <!-- FLEET VIEW -->
+  <div class="lp-view" id="lv-fleet">
+    <div class="lp-header">
+      <span style="font-size:14px;">🚢</span>
+      <span class="lp-title">FLEET <span class="lp-count">[1]</span></span>
+      <span class="lp-close" onclick="closeLeft()">✕</span>
+    </div>
+    <div class="lp-tabs">
+      <div class="lp-tab active">ALL</div>
+      <div class="lp-tab">🚀</div>
+      <div class="lp-tab">🚢</div>
+      <div class="lp-tab">⚗</div>
+    </div>
+
+    <div class="lp-section">
+      <div class="lp-section-label">IN FLIGHT <span class="lp-section-count">1</span></div>
+      <div class="lp-item selected">
+        <div class="lp-item-icon">🚀</div>
+        <div>
+          <div class="lp-item-name">Explorer <span class="lp-tag flight">w locie</span></div>
+          <span class="lp-item-sub">→ GJ-9060 f · Transport</span>
+          <div class="lp-progress" style="margin-top:5px;width:140px;">
+            <div class="lp-progress-fill" style="width:70%;background:linear-gradient(90deg,#cc7700,#ffaa44);"></div>
+          </div>
+        </div>
+        <div class="lp-item-right">
+          <span class="lp-item-val" style="color:#ffaa44;">70%</span>
+          <span class="lp-item-sub">ETA: rok 7</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="lp-div"></div>
+
+    <div class="lp-section">
+      <div class="lp-section-label">NA ORBICIE <span class="lp-section-count">1</span></div>
+      <div class="lp-item">
+        <div class="lp-item-icon">🛸</div>
+        <div>
+          <div class="lp-item-name">Orzeł I <span class="lp-tag orbit">orbita</span></div>
+          <span class="lp-item-sub">GJ-9060 f · paliwo 84%</span>
+        </div>
+      </div>
+      <div class="lp-actions">
+        <div class="lp-btn">↩ Powrót</div>
+        <div class="lp-btn">→ Redirect</div>
+      </div>
+    </div>
+
+    <div class="lp-div"></div>
+
+    <div class="lp-section">
+      <div class="lp-section-label">W PORCIE <span class="lp-section-count">2</span></div>
+      <div class="lp-item">
+        <div class="lp-item-icon">🚢</div>
+        <div>
+          <div class="lp-item-name">Kondor II <span class="lp-tag docked">dokowany</span></div>
+          <span class="lp-item-sub">New Earth · cargo 0/40t</span>
+        </div>
+      </div>
+      <div class="lp-item">
+        <div class="lp-item-icon">🚢</div>
+        <div>
+          <div class="lp-item-name">Pelikan I <span class="lp-tag docked">dokowany</span></div>
+          <span class="lp-item-sub">GJ-9060 · paliwo 100%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPEDITIONS VIEW -->
+  <div class="lp-view" id="lv-expeditions" style="display:none;">
+    <div class="lp-header">
+      <span style="font-size:14px;">🚀</span>
+      <span class="lp-title">EKSPEDYCJE <span class="lp-count">[1]</span></span>
+      <span class="lp-close" onclick="closeLeft()">✕</span>
+    </div>
+    <div class="lp-section">
+      <div class="lp-section-label">W TOKU <span class="lp-section-count">1</span></div>
+      <div class="lp-item selected">
+        <div class="lp-item-icon">🔬</div>
+        <div>
+          <div class="lp-item-name">Explorer I <span class="lp-tag flight">transit</span></div>
+          <span class="lp-item-sub">→ GJ-9060 f · recon</span>
+          <div class="lp-progress" style="margin-top:5px;width:140px;">
+            <div class="lp-progress-fill" style="width:62%;background:linear-gradient(90deg,#1155aa,#4488ff);"></div>
+          </div>
+        </div>
+        <div class="lp-item-right">
+          <span class="lp-item-val" style="color:#4488ff;">62%</span>
+          <span class="lp-item-sub">~1.4 lat</span>
+        </div>
+      </div>
+    </div>
+    <div class="lp-div"></div>
+    <div class="lp-section">
+      <div class="lp-section-label">ODKRYCIA</div>
+      <div style="font-size:10px;color:#334455;line-height:2;padding:0 4px;">
+        <div>· GJ-9060 f — <span style="color:#8899aa;">rocky, zbadana</span></div>
+        <div>· GJ-9060 g — <span style="color:#334;">niezbadana</span></div>
+        <div>· Planetoida #12 — <span style="color:#8899aa;">metalic</span></div>
+      </div>
+    </div>
+    <div class="lp-div"></div>
+    <div class="lp-actions">
+      <div class="lp-btn">🔬 Naukowa</div>
+      <div class="lp-btn primary">🌍 Kolonia</div>
+    </div>
+  </div>
+
+  <!-- COLONIES VIEW -->
+  <div class="lp-view" id="lv-colonies" style="display:none;">
+    <div class="lp-header">
+      <span style="font-size:14px;">🌐</span>
+      <span class="lp-title">KOLONIE <span class="lp-count">[1]</span></span>
+      <span class="lp-close" onclick="closeLeft()">✕</span>
+    </div>
+    <div class="lp-section">
+      <div class="lp-item selected">
+        <div class="sp-dot" style="width:8px;height:8px;border-radius:50%;background:#e0c87a;box-shadow:0 0 4px #e0c87a66;flex-shrink:0;"></div>
+        <div>
+          <div class="lp-item-name">GJ-9060</div>
+          <span class="lp-item-sub">Stolica · 7 POPów</span>
+        </div>
+        <div class="lp-item-right"><span class="lp-item-val" style="color:#e0c87a;">⭐ 89</span></div>
+      </div>
+      <div class="lp-item">
+        <div class="sp-dot" style="width:8px;height:8px;border-radius:50%;background:#4488ff;flex-shrink:0;"></div>
+        <div>
+          <div class="lp-item-name">New Earth</div>
+          <span class="lp-item-sub">Kolonia · 5 POPów</span>
+        </div>
+        <div class="lp-item-right"><span class="lp-item-val warn">food ↓</span></div>
+      </div>
+    </div>
+    <div class="lp-div"></div>
+    <div class="lp-section">
+      <div class="lp-section-label">ZASOBY GLOBALNE</div>
+      <div style="font-size:10px;color:#334455;line-height:2;padding:0 4px;">
+        <div style="display:flex;justify-content:space-between;"><span>Kredyty</span><span style="color:#e0c87a;">Kr 340</span></div>
+        <div style="display:flex;justify-content:space-between;"><span>Trasy handlowe</span><span style="color:#44cc66;">2</span></div>
+        <div style="display:flex;justify-content:space-between;"><span>Prosperity avg</span><span style="color:#8899aa;">72</span></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #left-panel -->
+
+<!-- PRAWY TRIGGER (hover strefa) -->
+<div id="right-trigger"
+  onmouseenter="openRight()"
+  onmouseleave="scheduleCloseRight()">
+</div>
+
+<!-- ETYKIETA hover -->
+<div id="right-hover-hint">KOLONIE · FLOTA ›</div>
+
+<!-- PRAWY PANEL -->
+<div id="right-panel"
+  onmouseenter="cancelCloseRight()"
+  onmouseleave="scheduleCloseRight()">
+
+  <div class="rp-corner-tr"></div>
+  <div class="rp-corner-br"></div>
+
+  <!-- Stocznia (jak w screenshocie) -->
+  <div class="rp-section">
+    <div class="shipyard-title">⚓ SHIPYARD</div>
+    <div class="shipyard-slots">Slots: 0/1 (1)</div>
+    <div style="font-size:9px;letter-spacing:1px;color:#223344;margin-bottom:8px;position:relative;z-index:2;">BUILD SHIP</div>
+    <button class="ship-btn">
+      <span>🔬 Science Vessel</span>
+      <span class="cost">0.5 👤</span>
+    </button>
+    <button class="ship-btn">
+      <span>🌍 Colony Ship</span>
+      <span class="cost">2 👤</span>
+    </button>
+    <button class="ship-btn available">
+      <span>🚢 Cargo Ship</span>
+      <span class="cost">0.25 👤</span>
+    </button>
+    <div class="rp-hint">← Select a ship from the list</div>
+  </div>
+
+  <div style="height:1px;background:rgba(255,255,255,0.05);margin:10px 0;position:relative;z-index:2;"></div>
+
+  <!-- Kolonie -->
+  <div class="rp-section">
+    <div class="rp-section-label"><span class="arr">▼</span> COLONIES (1)</div>
+    <div class="rp-item selected">
+      <div class="dot" style="background:#e0c87a;box-shadow:0 0 4px #e0c87a55;"></div>
+      <div><div>GJ-9060</div><span class="sub">7 POPów</span></div>
+      <span class="badge pink">6 ⭐89</span>
+    </div>
+    <div class="rp-item" style="padding-left:18px;">
+      <div class="dot" style="background:#4488ff;"></div>
+      <div><div>New Ear...</div><span class="sub">5 POPów</span></div>
+      <span class="badge warn">⭐50</span>
+    </div>
+  </div>
+
+  <div class="rp-section">
+    <div class="rp-section-label"><span class="arr">▼</span> EXPEDITIONS (0)</div>
+    <div style="font-size:10px;color:#1a2a3a;padding:4px;position:relative;z-index:2;">No missions</div>
+  </div>
+
+  <div class="rp-section">
+    <div class="rp-section-label"><span class="arr">▼</span> FLEET (1)</div>
+    <div class="rp-item">
+      <span style="font-size:13px;">🚀</span>
+      <div><div>→Explorer</div><span class="sub">in flight</span></div>
+    </div>
+  </div>
+
+  <!-- Tech info -->
+  <div style="position:absolute;bottom:14px;right:10px;font-size:8px;color:#1a2a3a;letter-spacing:1px;z-index:2;text-align:right;">
+    SYS.OK<br>NET.02<br>V24
+  </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div id="bottom-bar">
+  <div class="bev">
+    <div class="dot" style="background:#cc3344;"></div>
+    <span class="num">4</span><span class="hi-r">Famine in colony!</span>
+  </div>
+  <div class="bev">
+    <div class="dot" style="background:#44cc66;"></div>
+    <span class="num">4</span><span class="hi-g">Energy: positive balance</span>
+    <span class="txt">— brownout ended</span>
+  </div>
+  <div style="margin-left:auto;font-size:10px;color:#223344;letter-spacing:2px;">≡ MENU</div>
+</div>
+
+<script>
+/* ── Gwiazdy ── */
+const sc = document.getElementById('star-canvas');
+const sx = sc.getContext('2d');
+function resizeStars(){sc.width=window.innerWidth;sc.height=window.innerHeight;drawStars();}
+window.addEventListener('resize',resizeStars);
+function drawStars(){
+  sx.clearRect(0,0,sc.width,sc.height);
+  const rng=s=>{let x=Math.sin(s)*43758.5453;return x-Math.floor(x);};
+  for(let i=0;i<280;i++){
+    const x=rng(i*7.1)*sc.width,y=rng(i*3.3)*sc.height,r=rng(i*5.7)*1.1,a=0.15+rng(i*2.9)*0.5;
+    sx.beginPath();sx.arc(x,y,r,0,Math.PI*2);
+    sx.fillStyle=`rgba(160,190,220,${a})`;sx.fill();
+  }
+}
+resizeStars();
+
+/* ── Tryby OLD / NEW ── */
+let mode = 'old';
+const leftSidebar = document.getElementById('left-sidebar');
+const leftPanel   = document.getElementById('left-panel');
+const rightTrigger= document.getElementById('right-trigger');
+const rightPanel  = document.getElementById('right-panel');
+const rightHint   = document.getElementById('right-hover-hint');
+const toggleBar   = document.getElementById('toggle-bar');
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-old').classList.toggle('active', m==='old');
+  document.getElementById('btn-new').classList.toggle('active', m==='new');
+
+  if(m==='old'){
+    leftSidebar.style.display  = 'none';
+    leftPanel.style.display    = 'none';
+    rightTrigger.style.display = 'none';
+    rightPanel.style.display   = 'none';
+    rightHint.style.display    = 'none';
+    // Pokaż stare (inline)
+    document.getElementById('old-left').style.display  = 'flex';
+    document.getElementById('old-right').style.display = 'block';
+  } else {
+    leftSidebar.style.display  = 'flex';
+    leftPanel.style.display    = 'block';
+    rightTrigger.style.display = 'block';
+    rightPanel.style.display   = 'block';
+    rightHint.style.display    = 'block';
+    document.getElementById('old-left').style.display  = 'none';
+    document.getElementById('old-right').style.display = 'none';
+    closeLeft();
+  }
+}
+window.setMode = setMode;
+
+/* ── Lewy panel ── */
+let currentLeft = null;
+function toggleLeft(panelId, iconEl){
+  if(mode!=='new') return;
+  if(currentLeft===panelId && panelId!==null){ closeLeft(); return; }
+  document.querySelectorAll('.sb-icon').forEach(i=>i.classList.remove('active'));
+  if(!panelId){ closeLeft(); return; }
+  iconEl.classList.add('active');
+  currentLeft = panelId;
+  document.querySelectorAll('.lp-view').forEach(v=>v.style.display='none');
+  const v = document.getElementById('lv-'+panelId);
+  if(v) v.style.display='block';
+  leftPanel.classList.add('open');
+}
+function closeLeft(){
+  leftPanel.classList.remove('open');
+  document.querySelectorAll('.sb-icon').forEach(i=>i.classList.remove('active'));
+  currentLeft = null;
+}
+window.toggleLeft = toggleLeft;
+window.closeLeft  = closeLeft;
+
+/* ── Prawy panel (hover) ── */
+let rightCloseTimer = null;
+function openRight(){
+  if(mode!=='new') return;
+  cancelCloseRight();
+  rightPanel.classList.add('open');
+  rightTrigger.classList.add('hovered');
+  rightHint.classList.add('hidden');
+}
+function scheduleCloseRight(){
+  rightCloseTimer = setTimeout(()=>{
+    rightPanel.classList.remove('open');
+    rightTrigger.classList.remove('hovered');
+    rightHint.classList.remove('hidden');
+  }, 300);
+}
+function cancelCloseRight(){
+  if(rightCloseTimer){ clearTimeout(rightCloseTimer); rightCloseTimer=null; }
+}
+window.openRight         = openRight;
+window.scheduleCloseRight= scheduleCloseRight;
+window.cancelCloseRight  = cancelCloseRight;
+
+/* ── Stare UI — elementy ── */
+// Wstrzyknij stare panele dynamicznie
+const oldLeft = document.createElement('div');
+oldLeft.id = 'old-left';
+oldLeft.style.cssText = `
+  position:absolute;top:46px;left:0;bottom:40px;width:32px;
+  background:rgba(4,6,14,0.97);border-right:1px solid rgba(255,255,255,0.05);
+  display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:8px;z-index:40;
+`;
+oldLeft.innerHTML = ['🚢','🚀','🌐','⚙','👤','🔬','🏗'].map(ic=>
+  `<span style="font-size:13px;opacity:0.35;cursor:pointer;">${ic}</span>`).join('');
+document.body.appendChild(oldLeft);
+
+const oldRight = document.createElement('div');
+oldRight.id = 'old-right';
+oldRight.style.cssText = `
+  position:absolute;top:46px;right:0;bottom:40px;width:220px;
+  background:rgba(4,6,14,0.97);border-left:1px solid rgba(255,255,255,0.05);
+  padding:8px;z-index:40;font-size:11px;color:#667788;
+`;
+oldRight.innerHTML = `
+  <div style="margin-bottom:8px;">
+    <div style="font-size:9px;letter-spacing:2px;color:#223;border-bottom:1px solid rgba(255,255,255,0.05);padding:3px 0;margin-bottom:4px;">▼ COLONIES (1)</div>
+    <div style="padding:4px 5px;display:flex;align-items:center;gap:6px;color:#e0c87a;cursor:pointer;">
+      <div style="width:7px;height:7px;border-radius:50%;background:#e0c87a;flex-shrink:0;"></div>GJ-9060
+      <span style="margin-left:auto;font-size:9px;color:#334;">6 ⭐89</span></div>
+    <div style="padding:4px 5px;padding-left:16px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <div style="width:6px;height:6px;border-radius:50%;background:#4488ff;flex-shrink:0;"></div>New Ear...
+      <span style="margin-left:auto;font-size:9px;color:#334;">⭐50</span></div>
+  </div>
+  <div style="margin-bottom:8px;">
+    <div style="font-size:9px;letter-spacing:2px;color:#223;border-bottom:1px solid rgba(255,255,255,0.05);padding:3px 0;margin-bottom:4px;">▼ EXPEDITIONS (0)</div>
+    <div style="font-size:10px;color:#1a2a3a;padding:4px;">No missions</div>
+  </div>
+  <div>
+    <div style="font-size:9px;letter-spacing:2px;color:#223;border-bottom:1px solid rgba(255,255,255,0.05);padding:3px 0;margin-bottom:4px;">▼ FLEET (1)</div>
+    <div style="padding:4px 5px;display:flex;align-items:center;gap:6px;cursor:pointer;">🚀 →Explorer</div>
+  </div>
+`;
+document.body.appendChild(oldRight);
+
+// Start w trybie OLD
+setMode('old');
+</script>
+</body>
+</html>

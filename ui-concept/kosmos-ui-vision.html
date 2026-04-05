@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KOSMOS — UI Vision: Signal in the Static</title>
+<style>
+/* ══════════════════════════════════════════════════════════════
+   KOSMOS UI VISION — "Signal in the Static" aesthetic
+   Post-rock meets deep space: haze, reverb, distortion layers
+   ══════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  /* ─── PALETA "SIGNAL IN THE STATIC" ─── */
+  /* Inspiracja: shoegaze haze + deep space + post-punk shadows */
+
+  --void:        #030508;       /* absolutna ciemność kosmosu */
+  --deep:        #060a10;       /* głębia paneli */
+  --surface:     #0a1018;       /* powierzchnia kart */
+  --elevated:    #0e1520;       /* podniesione elementy */
+
+  /* Akcent główny: mgławicowy cyan — "shimmering reverb" */
+  --accent:      #00c8a0;       /* stonowany cyan-zielony */
+  --accent-bright: #00ffcc;     /* jasny stan hover */
+  --accent-dim:  rgba(0,200,160,0.12);
+  --accent-glow: rgba(0,200,160,0.25);
+
+  /* Akcent wtórny: ciepły amber — "distant thunder" */
+  --warm:        #c49040;
+  --warm-dim:    rgba(196,144,64,0.15);
+  --warm-glow:   rgba(196,144,64,0.3);
+
+  /* Sygnałowe kolory — "noise bent into melody" */
+  --signal-blue:    #4488cc;    /* info, dane */
+  --signal-violet:  #8866cc;    /* tech, research */
+  --signal-rose:    #cc5566;    /* danger, alarmy */
+  --signal-green:   #44aa66;    /* success, życie */
+  --signal-gold:    #ccaa44;    /* warning, zasoby */
+
+  /* Tekst — hierarchia jak w shoegaze: jasne melodie nad mgłą */
+  --text-primary:   #c0d4cc;    /* czytelny, ale NIE biały */
+  --text-secondary: rgba(176,200,192,0.6);
+  --text-dim:       rgba(160,190,180,0.35);
+  --text-ghost:     rgba(160,190,180,0.18);
+
+  /* Bordery — "blurred distortion" */
+  --border:      rgba(0,200,160,0.06);
+  --border-soft: rgba(0,200,160,0.12);
+  --border-vis:  rgba(0,200,160,0.25);
+
+  /* Fonty */
+  --font-mono:   'Space Mono', monospace;
+  --font-display: 'Orbitron', sans-serif;
+  --font-ui:     'Inter', -apple-system, sans-serif;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--void);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+/* ══════════════════════════════════════
+   SEKCJA 0: NAWIGACJA MIĘDZY WIDOKAMI
+   ══════════════════════════════════════ */
+
+.view-nav {
+  position: fixed; top: 0; left: 0; right: 0;
+  z-index: 1000;
+  display: flex; justify-content: center; gap: 2px;
+  padding: 8px 20px;
+  background: linear-gradient(180deg, rgba(3,5,8,0.95) 0%, rgba(3,5,8,0.7) 100%);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-soft);
+}
+.view-nav button {
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 1px;
+  padding: 6px 18px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.4s ease;
+  text-transform: uppercase;
+}
+.view-nav button:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-soft);
+}
+.view-nav button.active {
+  color: var(--accent);
+  border-color: var(--border-vis);
+  background: var(--accent-dim);
+  text-shadow: 0 0 20px var(--accent-glow);
+}
+
+/* ══════════════════════════════════════
+   WIDOKI
+   ══════════════════════════════════════ */
+
+.view {
+  display: none;
+  width: 100%; height: 100%;
+  padding-top: 40px;
+}
+.view.active { display: block; }
+
+/* ══════════════════════════════════════
+   SEKCJA 1: TITLE SCREEN
+   ══════════════════════════════════════ */
+
+.title-screen {
+  position: relative;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  overflow: hidden;
+}
+
+/* Tło: mgławica — "sprawling atmospherics" */
+.nebula-bg {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 30% 40%, rgba(0,200,160,0.04) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 80% at 70% 60%, rgba(136,102,204,0.03) 0%, transparent 70%),
+    radial-gradient(ellipse 100% 100% at 50% 50%, rgba(196,144,64,0.02) 0%, transparent 60%),
+    var(--void);
+}
+
+/* Szum — "static" / grain filmowy */
+.noise-overlay {
+  position: absolute; inset: 0;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* Gwiazdy — subtelne, nie agresywne */
+.starfield {
+  position: absolute; inset: 0;
+  pointer-events: none;
+}
+.star {
+  position: absolute;
+  border-radius: 50%;
+  background: #fff;
+  animation: twinkle var(--dur) ease-in-out infinite alternate;
+}
+@keyframes twinkle {
+  0% { opacity: var(--min-o); }
+  100% { opacity: var(--max-o); }
+}
+
+/* Logo KOSMOS — "intimate and vast" */
+.logo-container {
+  position: relative; z-index: 2;
+  text-align: center;
+  margin-bottom: 60px;
+}
+.logo-main {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 72px;
+  letter-spacing: 24px;
+  color: var(--text-primary);
+  text-shadow:
+    0 0 60px rgba(0,200,160,0.15),
+    0 0 120px rgba(0,200,160,0.05);
+  animation: logoBreath 6s ease-in-out infinite;
+}
+@keyframes logoBreath {
+  0%, 100% { text-shadow: 0 0 60px rgba(0,200,160,0.12), 0 0 120px rgba(0,200,160,0.04); }
+  50% { text-shadow: 0 0 80px rgba(0,200,160,0.2), 0 0 160px rgba(0,200,160,0.08); }
+}
+.logo-sub {
+  font-family: var(--font-ui);
+  font-weight: 300;
+  font-size: 12px;
+  letter-spacing: 6px;
+  color: var(--text-dim);
+  margin-top: 12px;
+  text-transform: uppercase;
+}
+
+/* Linia separatora — sygnał w szumie */
+.signal-line {
+  width: 200px; height: 1px;
+  margin: 0 auto 50px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.3;
+  position: relative;
+}
+.signal-line::after {
+  content: '';
+  position: absolute;
+  width: 40px; height: 1px;
+  background: var(--accent-bright);
+  animation: signalPulse 4s ease-in-out infinite;
+  top: 0;
+}
+@keyframes signalPulse {
+  0%   { left: -40px; opacity: 0; }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { left: 200px; opacity: 0; }
+}
+
+/* Menu — minimalistyczne, oddychające */
+.menu-container {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column;
+  gap: 4px; align-items: center;
+}
+.menu-btn {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  padding: 14px 48px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.5s ease;
+  min-width: 280px;
+  position: relative;
+  overflow: hidden;
+}
+.menu-btn::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, var(--accent-dim), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
+.menu-btn:hover::before { transform: translateX(0); }
+.menu-btn:hover {
+  color: var(--accent);
+  border-color: var(--border-vis);
+  text-shadow: 0 0 20px var(--accent-glow);
+}
+.menu-btn.primary {
+  border-color: var(--border-soft);
+  color: var(--text-primary);
+}
+
+/* Wersja / build info */
+.build-info {
+  position: absolute; bottom: 20px; right: 24px;
+  font-size: 9px;
+  color: var(--text-ghost);
+  letter-spacing: 2px;
+}
+
+/* ══════════════════════════════════════
+   SEKCJA 2: GALAXY VIEW (widok kosmiczny)
+   ══════════════════════════════════════ */
+
+.galaxy-view {
+  position: relative;
+  width: 100%; height: 100%;
+  background: var(--void);
+}
+
+/* Top Bar — zasoby */
+.top-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 44px;
+  background: linear-gradient(180deg, rgba(6,10,16,0.92) 0%, rgba(6,10,16,0.85) 100%);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 16px;
+  z-index: 10;
+}
+.top-logo {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: var(--accent);
+  opacity: 0.7;
+  margin-right: 24px;
+}
+.resource-group {
+  display: flex; gap: 2px;
+  margin-right: 16px;
+  padding-right: 16px;
+  border-right: 1px solid var(--border);
+}
+.resource-group:last-of-type { border-right: none; }
+.resource-item {
+  display: flex; flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  padding: 2px 6px;
+}
+.res-icon { font-size: 12px; opacity: 0.5; }
+.res-value {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.res-delta {
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+.res-delta.positive { color: var(--signal-green); }
+.res-delta.negative { color: var(--signal-rose); }
+.res-delta.zero { color: var(--text-ghost); }
+
+.res-label {
+  font-size: 7px;
+  color: var(--text-ghost);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Time controls */
+.time-controls {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 8px;
+}
+.time-display {
+  font-size: 11px;
+  color: var(--warm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+.time-btn {
+  width: 24px; height: 24px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 10px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.3s;
+}
+.time-btn:hover {
+  border-color: var(--border-vis);
+  color: var(--accent);
+}
+.time-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Sidebar — CivPanel */
+.sidebar {
+  position: absolute;
+  top: 44px; left: 0; bottom: 0;
+  width: 36px;
+  background: rgba(6,10,16,0.88);
+  backdrop-filter: blur(8px);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 6px 0;
+  gap: 2px;
+  z-index: 10;
+}
+.sidebar-btn {
+  width: 36px; height: 36px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  position: relative;
+  transition: all 0.3s;
+}
+.sidebar-btn:hover { color: var(--text-secondary); }
+.sidebar-btn.active {
+  color: var(--accent);
+}
+.sidebar-btn.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 4px; bottom: 4px;
+  width: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.sidebar-btn .key {
+  position: absolute;
+  bottom: 2px; right: 3px;
+  font-size: 7px;
+  font-family: var(--font-mono);
+  color: var(--text-ghost);
+}
+
+/* Expanded panel */
+.civ-panel {
+  position: absolute;
+  top: 44px; left: 36px; bottom: 0;
+  width: 260px;
+  background: linear-gradient(180deg, rgba(6,10,16,0.92) 0%, rgba(6,10,16,0.88) 100%);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  z-index: 9;
+  padding: 12px;
+}
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: var(--accent);
+  opacity: 0.6;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+.panel-section {
+  margin-bottom: 16px;
+}
+.section-label {
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--text-ghost);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.stat-row {
+  display: flex; justify-content: space-between;
+  padding: 3px 0;
+  font-size: 11px;
+}
+.stat-label { color: var(--text-dim); }
+.stat-value { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.stat-value.accent { color: var(--accent); }
+.stat-value.warn { color: var(--signal-gold); }
+.stat-value.good { color: var(--signal-green); }
+
+/* Progress bars */
+.progress-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 1px;
+  margin: 4px 0;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.5s ease;
+}
+.progress-fill.accent { background: var(--accent); box-shadow: 0 0 6px var(--accent-glow); }
+.progress-fill.warm { background: var(--warm); box-shadow: 0 0 6px var(--warm-glow); }
+.progress-fill.violet { background: var(--signal-violet); }
+
+/* Right outliner */
+.outliner {
+  position: absolute;
+  top: 44px; right: 0; bottom: 0;
+  width: 180px;
+  background: rgba(6,10,16,0.85);
+  backdrop-filter: blur(8px);
+  border-left: 1px solid var(--border);
+  padding: 8px;
+  overflow-y: auto;
+  z-index: 10;
+}
+.outliner-item {
+  padding: 6px 8px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all 0.3s;
+  margin-bottom: 1px;
+}
+.outliner-item:hover {
+  background: var(--accent-dim);
+  border-left-color: var(--border-vis);
+}
+.outliner-item.selected {
+  border-left-color: var(--accent);
+  background: var(--accent-dim);
+}
+.outliner-name {
+  font-size: 11px;
+  color: var(--text-primary);
+}
+.outliner-type {
+  font-size: 8px;
+  color: var(--text-ghost);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.outliner-dot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+/* Event Log */
+.event-log {
+  position: absolute;
+  bottom: 8px; left: 44px;
+  width: 340px;
+  max-height: 160px;
+  overflow-y: auto;
+  z-index: 10;
+}
+.log-entry {
+  font-size: 10px;
+  padding: 2px 8px;
+  color: var(--text-dim);
+  border-left: 2px solid transparent;
+  transition: opacity 0.3s;
+}
+.log-entry:hover { opacity: 1 !important; }
+.log-entry.event-life { border-left-color: var(--signal-green); color: var(--signal-green); }
+.log-entry.event-warn { border-left-color: var(--signal-gold); color: var(--signal-gold); }
+.log-entry.event-danger { border-left-color: var(--signal-rose); color: var(--signal-rose); }
+.log-entry.event-info { border-left-color: var(--signal-blue); color: var(--signal-blue); }
+.log-entry .log-time {
+  color: var(--text-ghost);
+  margin-right: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Symulowany widok 3D — placeholder */
+.viewport-3d {
+  position: absolute;
+  top: 44px; left: 36px; right: 180px; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.orbit-ring {
+  position: absolute;
+  border: 1px solid rgba(0,200,160,0.06);
+  border-radius: 50%;
+}
+.sun-glow {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff8e0 0%, #ffcc44 30%, rgba(255,180,40,0.3) 60%, transparent 100%);
+  box-shadow: 0 0 60px rgba(255,200,80,0.3), 0 0 120px rgba(255,160,40,0.1);
+  animation: sunPulse 5s ease-in-out infinite;
+}
+@keyframes sunPulse {
+  0%, 100% { box-shadow: 0 0 60px rgba(255,200,80,0.25), 0 0 120px rgba(255,160,40,0.08); }
+  50% { box-shadow: 0 0 80px rgba(255,200,80,0.35), 0 0 140px rgba(255,160,40,0.12); }
+}
+
+/* Planet dots */
+.planet-dot {
+  position: absolute;
+  border-radius: 50%;
+  animation: orbit var(--period) linear infinite;
+}
+@keyframes orbit {
+  from { transform: rotate(0deg) translateX(var(--radius)) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(var(--radius)) rotate(-360deg); }
+}
+
+/* ══════════════════════════════════════
+   SEKCJA 3: PLANET VIEW (widok planety)
+   ══════════════════════════════════════ */
+
+.planet-view {
+  position: relative;
+  width: 100%; height: 100%;
+  background: var(--void);
+}
+
+/* Globe placeholder */
+.globe-container {
+  position: absolute;
+  top: 88px; bottom: 44px;
+  left: 250px; right: 230px;
+  display: flex; align-items: center; justify-content: center;
+}
+.globe-sphere {
+  width: 300px; height: 300px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(140,180,160,0.15) 0%, transparent 50%),
+    radial-gradient(circle at 65% 65%, rgba(60,80,70,0.1) 0%, transparent 40%),
+    conic-gradient(from 45deg, #1a2a20, #243828, #1e3025, #162218, #1a2a20);
+  box-shadow:
+    inset -30px -20px 60px rgba(0,0,0,0.6),
+    0 0 40px rgba(0,200,160,0.05),
+    0 0 80px rgba(0,200,160,0.02);
+  position: relative;
+}
+.globe-atmosphere {
+  position: absolute; inset: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(0,200,160,0.06) 0%, transparent 60%);
+}
+
+/* Left panel — budynki */
+.build-panel-left {
+  position: absolute;
+  top: 88px; left: 0; bottom: 44px;
+  width: 250px;
+  background: rgba(6,10,16,0.92);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid var(--border);
+  padding: 12px;
+  overflow-y: auto;
+}
+.building-card {
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+}
+.building-card:hover {
+  border-color: var(--border-soft);
+  background: var(--accent-dim);
+}
+.building-card.selected {
+  border-color: var(--accent);
+  background: rgba(0,200,160,0.06);
+}
+.building-name {
+  font-size: 11px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.building-cat {
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.cat-mining    { color: var(--signal-gold); background: rgba(204,170,68,0.1); }
+.cat-energy    { color: #eedd44; background: rgba(238,221,68,0.1); }
+.cat-food      { color: var(--signal-green); background: rgba(68,170,102,0.1); }
+.cat-pop       { color: var(--signal-blue); background: rgba(68,136,204,0.1); }
+.cat-research  { color: var(--signal-violet); background: rgba(136,102,204,0.1); }
+.cat-space     { color: #6688cc; background: rgba(102,136,204,0.1); }
+.building-cost {
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* Right panel — info budynku */
+.info-panel-right {
+  position: absolute;
+  top: 88px; right: 0; bottom: 44px;
+  width: 230px;
+  background: rgba(6,10,16,0.92);
+  backdrop-filter: blur(12px);
+  border-left: 1px solid var(--border);
+  padding: 12px;
+  overflow-y: auto;
+}
+
+/* Bottom bar */
+.bottom-bar {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 44px;
+  background: rgba(6,10,16,0.92);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  z-index: 10;
+}
+.bottom-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 5px 14px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.3s;
+  letter-spacing: 1px;
+}
+.bottom-btn:hover {
+  color: var(--accent);
+  border-color: var(--border-vis);
+}
+.bottom-btn.active {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+/* ══════════════════════════════════════
+   SEKCJA 4: POPUP / MODAL
+   ══════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.modal-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.modal-popup {
+  width: 460px;
+  background: var(--deep);
+  border: 1px solid var(--border-vis);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Górna linia akcentu — "signal" */
+.modal-accent-bar {
+  height: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow), 0 2px 20px var(--accent-glow);
+}
+.modal-accent-bar.danger {
+  background: var(--signal-rose);
+  box-shadow: 0 0 12px rgba(204,85,102,0.4);
+}
+.modal-accent-bar.discovery {
+  background: var(--signal-gold);
+  box-shadow: 0 0 12px rgba(204,170,68,0.4);
+  animation: shimmer 2s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+.modal-header {
+  padding: 16px 20px 12px;
+  display: flex; align-items: center; gap: 14px;
+}
+.modal-icon {
+  width: 48px; height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px;
+  opacity: 0.6;
+}
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: var(--text-primary);
+}
+.modal-subtitle {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.modal-body {
+  padding: 0 20px 16px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.modal-body .highlight {
+  color: var(--accent);
+}
+.modal-body .warn-text {
+  color: var(--signal-gold);
+}
+
+.modal-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+}
+.modal-stat-row {
+  display: flex; justify-content: space-between;
+  font-size: 10px;
+}
+
+.modal-footer {
+  padding: 12px 20px;
+  display: flex; justify-content: flex-end; gap: 8px;
+  border-top: 1px solid var(--border);
+}
+.modal-btn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 8px 24px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.3s;
+}
+.modal-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.modal-btn.primary {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+.modal-btn.primary:hover {
+  background: rgba(0,200,160,0.2);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+/* ══════════════════════════════════════
+   SEKCJA 5: TOOLTIP
+   ══════════════════════════════════════ */
+.tooltip-demo {
+  position: fixed;
+  width: 220px;
+  background: rgba(6,10,16,0.96);
+  border: 1px solid var(--border-vis);
+  padding: 10px 12px;
+  font-size: 10px;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.tooltip-title {
+  color: var(--accent);
+  font-size: 11px;
+  margin-bottom: 6px;
+  letter-spacing: 1px;
+}
+.tooltip-row {
+  display: flex; justify-content: space-between;
+  padding: 2px 0;
+  color: var(--text-secondary);
+}
+.tooltip-row .val { color: var(--text-primary); }
+
+/* ══════════════════════════════════════
+   SEKCJA 6: DESIGN PRINCIPLES (meta)
+   ══════════════════════════════════════ */
+
+.principles-view {
+  padding: 60px 80px;
+  max-width: 900px;
+  margin: 0 auto;
+  overflow-y: auto;
+  height: 100%;
+}
+.principle-block {
+  margin-bottom: 40px;
+}
+.principle-num {
+  font-family: var(--font-display);
+  font-size: 9px;
+  color: var(--accent);
+  opacity: 0.4;
+  letter-spacing: 3px;
+  margin-bottom: 6px;
+}
+.principle-title {
+  font-family: var(--font-ui);
+  font-size: 18px;
+  font-weight: 300;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+}
+.principle-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.8;
+  max-width: 600px;
+}
+.principle-desc em {
+  color: var(--accent);
+  font-style: normal;
+}
+
+/* Paleta kolorów demo */
+.color-palette {
+  display: flex; gap: 4px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+.color-swatch {
+  width: 40px; height: 40px;
+  border-radius: 2px;
+  position: relative;
+  cursor: pointer;
+}
+.color-swatch:hover::after {
+  content: attr(data-name);
+  position: absolute;
+  bottom: -18px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 8px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.color-swatch-big {
+  width: 60px; height: 60px;
+  border-radius: 2px;
+  display: flex; align-items: flex-end;
+  padding: 4px;
+  font-size: 8px;
+  color: rgba(255,255,255,0.5);
+}
+
+/* Scrollbar style */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-vis); }
+
+/* ══════════════════════════════════════
+   SEKCJA 7: TECH TREE PREVIEW
+   ══════════════════════════════════════ */
+.tech-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 12px;
+}
+.tech-card {
+  padding: 8px;
+  border: 1px solid var(--border);
+  transition: all 0.3s;
+  cursor: pointer;
+}
+.tech-card:hover {
+  border-color: var(--border-soft);
+  background: var(--accent-dim);
+}
+.tech-card.researched {
+  border-color: var(--signal-violet);
+  background: rgba(136,102,204,0.06);
+}
+.tech-card.available {
+  border-color: var(--border-soft);
+}
+.tech-card.locked {
+  opacity: 0.4;
+}
+.tech-name {
+  font-size: 10px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.tech-tier {
+  font-size: 7px;
+  color: var(--signal-violet);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.tech-progress {
+  margin-top: 4px;
+}
+
+</style>
+</head>
+<body>
+
+<!-- ═══════ NAWIGACJA ═══════ -->
+<nav class="view-nav">
+  <button class="active" onclick="showView('title')">TITLE</button>
+  <button onclick="showView('galaxy')">GALAXY</button>
+  <button onclick="showView('planet')">PLANET</button>
+  <button onclick="showView('popup')">POPUP</button>
+  <button onclick="showView('principles')">ZASADY</button>
+</nav>
+
+<!-- ═══════ WIDOK 1: TITLE SCREEN ═══════ -->
+<div id="view-title" class="view active">
+  <div class="title-screen">
+    <div class="nebula-bg"></div>
+    <div class="noise-overlay"></div>
+    <div class="starfield" id="starfield"></div>
+
+    <div class="logo-container">
+      <div class="logo-main">KOSMOS</div>
+      <div class="logo-sub">symulator uk&lstrok;adu s&lstrok;onecznego</div>
+    </div>
+
+    <div class="signal-line"></div>
+
+    <div class="menu-container">
+      <button class="menu-btn primary">KONTYNUUJ</button>
+      <button class="menu-btn">NOWA GRA</button>
+      <button class="menu-btn">NOWA GRA +</button>
+      <button class="menu-btn">POWER TEST</button>
+    </div>
+
+    <div class="build-info">BUILD 2026.03 &middot; SIGNAL IN THE STATIC</div>
+  </div>
+</div>
+
+<!-- ═══════ WIDOK 2: GALAXY VIEW ═══════ -->
+<div id="view-galaxy" class="view">
+  <div class="galaxy-view">
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <div class="top-logo">KOSMOS</div>
+      <div class="resource-group">
+        <div class="resource-item">
+          <span class="res-label">Fe</span>
+          <span class="res-value">1,247</span>
+          <span class="res-delta positive">+42/r</span>
+        </div>
+        <div class="resource-item">
+          <span class="res-label">C</span>
+          <span class="res-value">834</span>
+          <span class="res-delta positive">+18/r</span>
+        </div>
+        <div class="resource-item">
+          <span class="res-label">Si</span>
+          <span class="res-value">612</span>
+          <span class="res-delta negative">-7/r</span>
+        </div>
+        <div class="resource-item">
+          <span class="res-label">Cu</span>
+          <span class="res-value">89</span>
+          <span class="res-delta positive">+3/r</span>
+        </div>
+      </div>
+      <div class="resource-group">
+        <div class="resource-item">
+          <span class="res-label">FOOD</span>
+          <span class="res-value">2,100</span>
+          <span class="res-delta positive">+124/r</span>
+        </div>
+        <div class="resource-item">
+          <span class="res-label">H&#8322;O</span>
+          <span class="res-value">1,680</span>
+          <span class="res-delta positive">+56/r</span>
+        </div>
+        <div class="resource-item">
+          <span class="res-label">ENERGY</span>
+          <span class="res-value">890</span>
+          <span class="res-delta negative">-12/r</span>
+        </div>
+      </div>
+      <div class="resource-group">
+        <div class="resource-item">
+          <span class="res-label">RESEARCH</span>
+          <span class="res-value">340</span>
+          <span class="res-delta positive">+28/r</span>
+        </div>
+      </div>
+      <div class="time-controls">
+        <span class="time-display">Rok 4,217,892</span>
+        <button class="time-btn">&#10074;&#10074;</button>
+        <button class="time-btn">&#9654;</button>
+        <button class="time-btn active">&#9654;&#9654;</button>
+        <button class="time-btn">&#9654;&#9654;&#9654;</button>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <button class="sidebar-btn active" title="Gospodarka">
+        &#9881;<span class="key">E</span>
+      </button>
+      <button class="sidebar-btn" title="Populacja">
+        &#128100;<span class="key">P</span>
+      </button>
+      <button class="sidebar-btn" title="Technologie">
+        &#129516;<span class="key">T</span>
+      </button>
+      <button class="sidebar-btn" title="Flota">
+        &#128640;<span class="key">F</span>
+      </button>
+      <button class="sidebar-btn" title="Kolonie">
+        &#127968;<span class="key">C</span>
+      </button>
+      <button class="sidebar-btn" title="Galaktyka">
+        &#127756;<span class="key">G</span>
+      </button>
+    </div>
+
+    <!-- CivPanel -->
+    <div class="civ-panel">
+      <div class="panel-title">Gospodarka</div>
+
+      <div class="panel-section">
+        <div class="section-label">Produkcja</div>
+        <div class="stat-row">
+          <span class="stat-label">Fe (&#380;elazo)</span>
+          <span class="stat-value good">+42.0/r</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">C (w&#281;giel)</span>
+          <span class="stat-value good">+18.0/r</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Si (krzem)</span>
+          <span class="stat-value" style="color:var(--signal-rose)">-7.0/r</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Cu (mied&#378;)</span>
+          <span class="stat-value good">+3.0/r</span>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-label">Populacja</div>
+        <div class="stat-row">
+          <span class="stat-label">POP</span>
+          <span class="stat-value accent">8 / 12</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill accent" style="width: 67%"></div>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Morale</span>
+          <span class="stat-value good">72%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill warm" style="width: 72%"></div>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Zatrudnienie</span>
+          <span class="stat-value">6.5 / 8</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Epoka</span>
+          <span class="stat-value accent">Industrialna</span>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-label">Technologie</div>
+        <div class="tech-grid">
+          <div class="tech-card researched">
+            <div class="tech-name">Metalurgia</div>
+            <div class="tech-tier">TIER I</div>
+          </div>
+          <div class="tech-card researched">
+            <div class="tech-name">Rakietowe</div>
+            <div class="tech-tier">TIER I</div>
+          </div>
+          <div class="tech-card available">
+            <div class="tech-name">Fuzja</div>
+            <div class="tech-tier">TIER II</div>
+            <div class="tech-progress">
+              <div class="progress-bar">
+                <div class="progress-fill violet" style="width: 45%"></div>
+              </div>
+            </div>
+          </div>
+          <div class="tech-card available">
+            <div class="tech-name">Genetyka</div>
+            <div class="tech-tier">TIER II</div>
+            <div class="tech-progress">
+              <div class="progress-bar">
+                <div class="progress-fill violet" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+          <div class="tech-card locked">
+            <div class="tech-name">Warp</div>
+            <div class="tech-tier">TIER III</div>
+          </div>
+          <div class="tech-card locked">
+            <div class="tech-name">Terraformacja</div>
+            <div class="tech-tier">TIER III</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Viewport 3D (symulowany) -->
+    <div class="viewport-3d">
+      <div class="orbit-ring" style="width:80px;height:80px;"></div>
+      <div class="orbit-ring" style="width:160px;height:160px;"></div>
+      <div class="orbit-ring" style="width:280px;height:280px;"></div>
+      <div class="orbit-ring" style="width:420px;height:420px;"></div>
+      <div class="orbit-ring" style="width:580px;height:580px;"></div>
+      <div class="sun-glow"></div>
+      <div class="planet-dot" style="width:6px;height:6px;background:#c07040;--radius:40px;--period:8s;"></div>
+      <div class="planet-dot" style="width:8px;height:8px;background:#5888a8;--radius:80px;--period:14s;"></div>
+      <div class="planet-dot" style="width:12px;height:12px;background:#44aa88;--radius:140px;--period:22s;box-shadow:0 0 8px rgba(68,170,136,0.4);"></div>
+      <div class="planet-dot" style="width:18px;height:18px;background:#cc9955;--radius:210px;--period:35s;"></div>
+      <div class="planet-dot" style="width:10px;height:10px;background:#7788aa;--radius:290px;--period:48s;"></div>
+    </div>
+
+    <!-- Outliner -->
+    <div class="outliner">
+      <div class="section-label" style="padding:4px 8px">Cia&#322;a niebieskie</div>
+      <div class="outliner-item selected">
+        <span class="outliner-dot" style="background:#ffcc44"></span>
+        <span class="outliner-name">Sol</span>
+        <div class="outliner-type">Gwiazda G2V</div>
+      </div>
+      <div class="outliner-item">
+        <span class="outliner-dot" style="background:#c07040"></span>
+        <span class="outliner-name">Merkury</span>
+        <div class="outliner-type">Rocky &middot; 0.4 AU</div>
+      </div>
+      <div class="outliner-item">
+        <span class="outliner-dot" style="background:#5888a8"></span>
+        <span class="outliner-name">Wenus</span>
+        <div class="outliner-type">Rocky &middot; 0.7 AU</div>
+      </div>
+      <div class="outliner-item">
+        <span class="outliner-dot" style="background:#44aa88"></span>
+        <span class="outliner-name">Ziemia &#127757;</span>
+        <div class="outliner-type">Ocean &middot; 1.0 AU &middot; CIV</div>
+      </div>
+      <div class="outliner-item">
+        <span class="outliner-dot" style="background:#cc9955"></span>
+        <span class="outliner-name">Jowisz</span>
+        <div class="outliner-type">Gas giant &middot; 5.2 AU</div>
+      </div>
+      <div class="outliner-item">
+        <span class="outliner-dot" style="background:#7788aa"></span>
+        <span class="outliner-name">Neptun</span>
+        <div class="outliner-type">Ice &middot; 14.8 AU &middot; ???</div>
+      </div>
+    </div>
+
+    <!-- Event Log -->
+    <div class="event-log">
+      <div class="log-entry event-life">
+        <span class="log-time">4,217,891</span>Populacja wzros&lstrok;a do 8 POP
+      </div>
+      <div class="log-entry event-info">
+        <span class="log-time">4,217,889</span>Statek "Odkrywca" dotar&lstrok; do Jowisza
+      </div>
+      <div class="log-entry event-warn">
+        <span class="log-time">4,217,885</span>Niedobór krzemu (Si) — produkcja ujemna
+      </div>
+      <div class="log-entry event-info" style="opacity:0.5">
+        <span class="log-time">4,217,880</span>Badania: Fuzja j&#261;drowa 45%
+      </div>
+      <div class="log-entry event-danger" style="opacity:0.35">
+        <span class="log-time">4,217,872</span>Kolonia Mars: kryzys g&lstrok;odu
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ WIDOK 3: PLANET VIEW ═══════ -->
+<div id="view-planet" class="view">
+  <div class="planet-view">
+    <!-- Top bar (reuse) -->
+    <div class="top-bar">
+      <div class="top-logo">KOSMOS</div>
+      <div style="font-size:11px;color:var(--text-secondary);margin-left:12px;">
+        &#127757; Ziemia &middot; <span style="color:var(--accent)">Kolonia g&lstrok;ówna</span>
+      </div>
+      <div class="time-controls">
+        <span class="time-display">Rok 4,217,892</span>
+        <button class="time-btn">&#10074;&#10074;</button>
+        <button class="time-btn active">&#9654;</button>
+        <button class="time-btn">&#9654;&#9654;</button>
+      </div>
+    </div>
+
+    <!-- Resource bar below top -->
+    <div style="position:absolute;top:44px;left:0;right:0;height:44px;background:rgba(6,10,16,0.92);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:20px;z-index:10;">
+      <div class="resource-item">
+        <span class="res-label">Fe</span>
+        <span class="res-value">1,247</span>
+        <span class="res-delta positive">+42/r</span>
+      </div>
+      <div class="resource-item">
+        <span class="res-label">FOOD</span>
+        <span class="res-value">2,100</span>
+        <span class="res-delta positive">+124/r</span>
+      </div>
+      <div class="resource-item">
+        <span class="res-label">H&#8322;O</span>
+        <span class="res-value">1,680</span>
+        <span class="res-delta positive">+56/r</span>
+      </div>
+      <div class="resource-item">
+        <span class="res-label">ENERGY</span>
+        <span class="res-value" style="color:var(--signal-gold)">890</span>
+        <span class="res-delta negative">-12/r</span>
+      </div>
+      <div class="resource-item">
+        <span class="res-label">POP</span>
+        <span class="res-value accent">8/12</span>
+      </div>
+      <div class="resource-item">
+        <span class="res-label">MORALE</span>
+        <span class="res-value good">72%</span>
+      </div>
+    </div>
+
+    <!-- Left: Build panel -->
+    <div class="build-panel-left">
+      <div class="panel-title">Budynki</div>
+
+      <div class="section-label">Wydobycie</div>
+      <div class="building-card">
+        <div class="building-name">Kopalnia</div>
+        <span class="building-cat cat-mining">MINING</span>
+        <div class="building-cost">Fe: 50 &middot; 0.25 POP</div>
+      </div>
+      <div class="building-card">
+        <div class="building-name">Kopalnia zaawansowana</div>
+        <span class="building-cat cat-mining">MINING</span>
+        <div class="building-cost">Fe: 120 Cu: 20 &middot; 0 POP</div>
+      </div>
+
+      <div class="section-label" style="margin-top:12px">Energia</div>
+      <div class="building-card selected">
+        <div class="building-name">Studnia geotermalna</div>
+        <span class="building-cat cat-energy">ENERGY</span>
+        <div class="building-cost">Fe: 30 &middot; 0.25 POP</div>
+      </div>
+      <div class="building-card">
+        <div class="building-name">Farma solarna</div>
+        <span class="building-cat cat-energy">ENERGY</span>
+        <div class="building-cost">Si: 40 &middot; 0 POP</div>
+      </div>
+      <div class="building-card">
+        <div class="building-name">Elektrownia j&#261;drowa</div>
+        <span class="building-cat cat-energy">ENERGY &#128274;</span>
+        <div class="building-cost">Wymaga: Fuzja j&#261;drowa</div>
+      </div>
+
+      <div class="section-label" style="margin-top:12px">&#379;ywno&#347;&#263;</div>
+      <div class="building-card">
+        <div class="building-name">Farma</div>
+        <span class="building-cat cat-food">FOOD</span>
+        <div class="building-cost">Fe: 20 C: 10 &middot; 0.25 POP</div>
+      </div>
+
+      <div class="section-label" style="margin-top:12px">Populacja</div>
+      <div class="building-card">
+        <div class="building-name">Habitat</div>
+        <span class="building-cat cat-pop">HOUSING</span>
+        <div class="building-cost">Fe: 60 Si: 20 &middot; 0 POP</div>
+      </div>
+
+      <div class="section-label" style="margin-top:12px">Badania</div>
+      <div class="building-card">
+        <div class="building-name">Laboratorium</div>
+        <span class="building-cat cat-research">RESEARCH</span>
+        <div class="building-cost">Fe: 80 Cu: 15 &middot; 0.5 POP</div>
+      </div>
+
+      <div class="section-label" style="margin-top:12px">Przestrze&#324;</div>
+      <div class="building-card">
+        <div class="building-name">Stocznia</div>
+        <span class="building-cat cat-space">SPACE</span>
+        <div class="building-cost">Fe: 200 Ti: 30 &middot; 0.5 POP</div>
+      </div>
+    </div>
+
+    <!-- Globe -->
+    <div class="globe-container">
+      <div class="globe-sphere">
+        <div class="globe-atmosphere"></div>
+      </div>
+    </div>
+
+    <!-- Right: Info panel -->
+    <div class="info-panel-right">
+      <div class="panel-title">Studnia geotermalna</div>
+      <div class="section-label">Poziom 2</div>
+
+      <div class="stat-row">
+        <span class="stat-label">Produkcja</span>
+        <span class="stat-value good">+8.0 energy/r</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Pracownicy</span>
+        <span class="stat-value">0.25 POP</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Teren</span>
+        <span class="stat-value">G&#243;ry</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Bonus terenu</span>
+        <span class="stat-value accent">+50%</span>
+      </div>
+
+      <div class="section-label" style="margin-top:16px">Ulepszenie Lv.3</div>
+      <div class="stat-row">
+        <span class="stat-label">Koszt</span>
+        <span class="stat-value">Fe: 68 Si: 23</span>
+      </div>
+      <div style="margin-top:8px">
+        <button class="modal-btn primary" style="width:100%;text-align:center;font-size:10px;">
+          ULEPSZ &#8594; Lv.3
+        </button>
+      </div>
+      <div style="margin-top:6px">
+        <button class="modal-btn" style="width:100%;text-align:center;font-size:10px;color:var(--signal-gold);border-color:rgba(204,170,68,0.3);">
+          OBNI&#379; Lv.2 &#8594; Lv.1
+        </button>
+      </div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div class="bottom-bar">
+      <button class="bottom-btn active">BUDUJ</button>
+      <button class="bottom-btn">ZAINSTALUJ</button>
+      <button class="bottom-btn">SIATKA</button>
+      <div style="margin-left:auto; font-size:10px; color:var(--text-dim);">
+        Hex: (3, -1) &middot; Biom: <span style="color:var(--signal-green)">Las</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ WIDOK 4: POPUP DEMO ═══════ -->
+<div id="view-popup" class="view">
+  <div style="width:100%;height:100%;background:var(--void);position:relative;">
+    <!-- Tło: zrzut ekranu galaxy view (symulowany) -->
+    <div style="position:absolute;inset:0;opacity:0.3;filter:blur(2px);">
+      <div style="width:100%;height:100%;background:radial-gradient(circle at 50% 50%, rgba(255,200,80,0.05) 0%, transparent 30%), var(--void);"></div>
+    </div>
+
+    <!-- Modal overlay -->
+    <div class="modal-overlay visible">
+      <!-- Discovery popup -->
+      <div class="modal-popup" id="popup-discovery">
+        <div class="modal-accent-bar discovery"></div>
+        <div class="modal-header">
+          <div class="modal-icon">&#128301;</div>
+          <div>
+            <div class="modal-title">ODKRYCIE</div>
+            <div class="modal-subtitle">Misja rozpoznawcza &mdash; KS Odkrywca</div>
+          </div>
+        </div>
+        <div class="modal-body">
+          Statek <span class="highlight">KS Odkrywca</span> dotar&lstrok; na orbit&#281; Jowisza
+          i uko&#324;czy&lstrok; skanowanie. Odkryto bogate z&lstrok;o&#380;a <span class="warn-text">helu-3</span>
+          w górnych warstwach atmosfery.
+
+          <div class="modal-stats">
+            <div class="modal-stat-row">
+              <span class="stat-label">Cel</span>
+              <span class="stat-value">Jowisz (5.2 AU)</span>
+            </div>
+            <div class="modal-stat-row">
+              <span class="stat-label">Status</span>
+              <span class="stat-value accent">Na orbicie</span>
+            </div>
+            <div class="modal-stat-row">
+              <span class="stat-label">Paliwo</span>
+              <span class="stat-value warn">34%</span>
+            </div>
+            <div class="modal-stat-row">
+              <span class="stat-label">Z&lstrok;o&#380;a He&#179;</span>
+              <span class="stat-value" style="color:var(--signal-gold)">Bogate</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn" onclick="showPopup('danger')">DANGER DEMO</button>
+          <button class="modal-btn primary">OK</button>
+        </div>
+      </div>
+
+      <!-- Danger popup (hidden) -->
+      <div class="modal-popup" id="popup-danger" style="display:none;">
+        <div class="modal-accent-bar danger"></div>
+        <div class="modal-header">
+          <div class="modal-icon" style="color:var(--signal-rose);">&#9888;</div>
+          <div>
+            <div class="modal-title" style="color:var(--signal-rose);">KATASTROFA</div>
+            <div class="modal-subtitle">Misja rozpoznawcza &mdash; KS Pionier</div>
+          </div>
+        </div>
+        <div class="modal-body">
+          Statek <span style="color:var(--signal-rose)">KS Pionier</span> uleg&lstrok; awarii silnika
+          podczas manewru orbitalnego. Za&lstrok;oga podj&#281;&lstrok;a pr&oacute;b&#281; naprawy, ale statek
+          straci&lstrok; <span style="color:var(--signal-rose)">60% paliwa</span>.
+
+          <div class="modal-stats" style="border-color:rgba(204,85,102,0.2);">
+            <div class="modal-stat-row">
+              <span class="stat-label">Statek</span>
+              <span class="stat-value" style="color:var(--signal-rose)">KS Pionier</span>
+            </div>
+            <div class="modal-stat-row">
+              <span class="stat-label">Status</span>
+              <span class="stat-value" style="color:var(--signal-rose)">Uszkodzony</span>
+            </div>
+            <div class="modal-stat-row">
+              <span class="stat-label">Paliwo</span>
+              <span class="stat-value" style="color:var(--signal-rose)">12%</span>
+            </div>
+            <div class="modal-stat-row">
+              <span class="stat-label">Za&lstrok;oga</span>
+              <span class="stat-value good">0.5 POP (bezpieczna)</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="modal-btn" onclick="showPopup('discovery')">DISCOVERY DEMO</button>
+          <button class="modal-btn primary" style="border-color:var(--signal-rose);color:var(--signal-rose);background:rgba(204,85,102,0.08);">ZAMKNIJ</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ WIDOK 5: ZASADY DESIGNU ═══════ -->
+<div id="view-principles" class="view">
+  <div class="principles-view">
+
+    <div class="principle-block">
+      <div class="principle-num">FILOZOFIA</div>
+      <div class="principle-title">Signal in the Static</div>
+      <div class="principle-desc">
+        Muzyka "Signal in the Static" definiuje estetyk&#281; KOSMOS: <em>sygnał wyłaniający się z szumu</em>.
+        Interfejs jest jak ciemny kosmos — ogromna, cicha próżnia — z której wy&#322;aniaj&#261; si&#281;
+        subtelne, czytelne informacje. Jak w shoegaze: <em>warstwy mg&#322;y</em>, z których przebijaj&#261; si&#281;
+        <em>melodie danych</em>.
+      </div>
+    </div>
+
+    <div class="principle-block">
+      <div class="principle-num">01 — CIEMNO&#346;&#262;</div>
+      <div class="principle-title">Kosmos jest ciemny. UI te&#380;.</div>
+      <div class="principle-desc">
+        T&#322;o <em>#030508</em> — prawie absolutna czer&#324;. Panele to ledwie widoczne warstwy
+        (<em>#060a10</em>, <em>#0a1018</em>). Oko gracza naturalnie skupia si&#281; na jasnych
+        danych i akcentach. Brak bia&#322;ego tekstu — najja&#347;niejszy to <em>#c0d4cc</em> (ciep&#322;y
+        szaro-zielony).
+      </div>
+      <div class="color-palette">
+        <div class="color-swatch-big" style="background:#030508">#030508</div>
+        <div class="color-swatch-big" style="background:#060a10">#060a10</div>
+        <div class="color-swatch-big" style="background:#0a1018">#0a1018</div>
+        <div class="color-swatch-big" style="background:#0e1520">#0e1520</div>
+      </div>
+    </div>
+
+    <div class="principle-block">
+      <div class="principle-num">02 — SYGNA&#321;</div>
+      <div class="principle-title">Akcent to sygnał, nie krzyk</div>
+      <div class="principle-desc">
+        G&#322;ówny akcent <em>#00c8a0</em> (stonowany cyan) zamiast jaskrawego <em>#00ffb4</em>.
+        Ciep&#322;y amber <em>#c49040</em> jako drugi g&#322;os. Razem tworz&#261; harmoni&#281;
+        zimna/ciep&#322;a — jak post-rock: <em>reverb i distortion</em> wspó&#322;istniej&#261;.
+      </div>
+      <div class="color-palette">
+        <div class="color-swatch" style="background:#00c8a0" data-name="accent"></div>
+        <div class="color-swatch" style="background:#00ffcc" data-name="bright"></div>
+        <div class="color-swatch" style="background:#c49040" data-name="warm"></div>
+        <div class="color-swatch" style="background:#4488cc" data-name="info"></div>
+        <div class="color-swatch" style="background:#8866cc" data-name="tech"></div>
+        <div class="color-swatch" style="background:#cc5566" data-name="danger"></div>
+        <div class="color-swatch" style="background:#44aa66" data-name="success"></div>
+        <div class="color-swatch" style="background:#ccaa44" data-name="warning"></div>
+      </div>
+    </div>
+
+    <div class="principle-block">
+      <div class="principle-num">03 — MG&#321;A</div>
+      <div class="principle-title">Backdrop-filter + szum = g&#322;&#281;bia</div>
+      <div class="principle-desc">
+        Panele u&#380;ywaj&#261; <em>backdrop-filter: blur()</em> zamiast solidnych t&#322;e&#322; —
+        gwiazdy i orbity prze&#347;wituj&#261; przez UI. Warstwa szumu (SVG fractal noise, 3% opacity)
+        dodaje filmow&#261; ziarnisto&#347;&#263; — jak statyczny szum w nazwie muzyki.
+        Efekt: UI &#380;yje, oddycha, nie jest p&#322;askim HUD-em.
+      </div>
+    </div>
+
+    <div class="principle-block">
+      <div class="principle-num">04 — ODDECH</div>
+      <div class="principle-title">Animacje s&#261; powolne i subtelne</div>
+      <div class="principle-desc">
+        Logo oddycha (6s cykl). Linia sygnału pulsuje (4s). Hover trwa 0.4-0.6s.
+        &#379;adnych gwa&#322;townych migni&#281;&#263; — wszystko jak <em>fala dźwi&#281;kowa shoegaze</em>:
+        powolna, p&#322;ynna, hipnotyczna. CRT scanlines opcjonalne (nie domy&#347;lne).
+      </div>
+    </div>
+
+    <div class="principle-block">
+      <div class="principle-num">05 — HIERARCHIA</div>
+      <div class="principle-title">4 poziomy widoczno&#347;ci tekstu</div>
+      <div class="principle-desc">
+        <em>Primary</em> (#c0d4cc) — dane krytyczne: ilo&#347;ci, nazwy<br>
+        <em>Secondary</em> (60% opacity) — opisy, etykiety aktywne<br>
+        <em>Dim</em> (35% opacity) — etykiety, podpisy, skróty klawiszowe<br>
+        <em>Ghost</em> (18% opacity) — dekoracyjne, numery wersji, separatory
+      </div>
+      <div class="color-palette" style="margin-top:12px">
+        <div class="color-swatch-big" style="background:#c0d4cc;color:#030508">primary</div>
+        <div class="color-swatch-big" style="background:rgba(176,200,192,0.6);color:#030508">secondary</div>
+        <div class="color-swatch-big" style="background:rgba(160,190,180,0.35)">dim</div>
+        <div class="color-swatch-big" style="background:rgba(160,190,180,0.18)">ghost</div>
+      </div>
+    </div>
+
+    <div class="principle-block">
+      <div class="principle-num">06 — BORDERY</div>
+      <div class="principle-title">Linie jak echa w przestrzeni</div>
+      <div class="principle-desc">
+        Bordery to <em>ledwie widoczne linie</em> (6-12% opacity) — nie ramy, a <em>echa</em>.
+        Hover podnosi do 25%, selected do 40%. Aktywny element &#347;wieci subtelnym
+        <em>box-shadow glow</em> — jak daleka gwiazda na tle ciemno&#347;ci.
+      </div>
+    </div>
+
+    <div class="principle-block">
+      <div class="principle-num">07 — TYPOGRAFIA</div>
+      <div class="principle-title">Trzy g&#322;osy fontów</div>
+      <div class="principle-desc">
+        <em>Orbitron</em> — display (logo, tytu&#322;y sekcji) — kosmiczny, geometryczny<br>
+        <em>Space Mono</em> — dane (liczby, statusy, logi) — techniczny, czytelny<br>
+        <em>Inter Light</em> — opisy, tooltip body — humanistyczny, ciep&#322;y<br>
+        Rozmiary: 7-8px ghost → 10-11px dane → 13px header → 72px logo
+      </div>
+    </div>
+
+    <div class="principle-block">
+      <div class="principle-num">ZMIANA VS OBECNY STYL</div>
+      <div class="principle-title">Co si&#281; zmienia?</div>
+      <div class="principle-desc">
+        &#10004; Stonowanie akcentu: <em>#00ffb4 → #00c8a0</em> (mniej krzykliwy)<br>
+        &#10004; Dodanie ciep&#322;ego drugiego akcentu: <em>#c49040</em> (amber)<br>
+        &#10004; Backdrop-filter blur na panelach (prze&#347;wituj&#261;ce t&#322;o)<br>
+        &#10004; Szum filmowy (noise overlay) na tle<br>
+        &#10004; Wolniejsze, oddychaj&#261;ce animacje<br>
+        &#10004; Inter jako font opisowy (zamiast Space Mono wsz&#281;dzie)<br>
+        &#10004; Subtelniejsze bordery (6% zamiast 7%)<br>
+        &#10004; Brak CRT jako domy&#347;lne (toggle w opcjach)<br>
+        &#10004; Signal-line: pulsuj&#261;ca kreska pod logo<br>
+        &#9747; Zachowana paleta statusów (green/red/gold/violet/blue)<br>
+        &#9747; Zachowany layout (sidebar + top bar + outliner)<br>
+        &#9747; Zachowane fonty mono do danych liczbowych
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════ TOOLTIP DEMO (floating) ═══════ -->
+<div class="tooltip-demo" id="tooltip" style="display:none;">
+  <div class="tooltip-title">Studnia geotermalna Lv.2</div>
+  <div class="tooltip-row">
+    <span>Produkcja</span>
+    <span class="val" style="color:var(--signal-green)">+8.0 energy/r</span>
+  </div>
+  <div class="tooltip-row">
+    <span>Pracownicy</span>
+    <span class="val">0.25 POP</span>
+  </div>
+  <div class="tooltip-row">
+    <span>Bonus terenu</span>
+    <span class="val" style="color:var(--accent)">+50% (Góry)</span>
+  </div>
+  <div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:9px;color:var(--text-ghost);">
+    Kliknij aby wybudować na wybranym hexie
+  </div>
+</div>
+
+<script>
+// ═══ Starfield ═══
+const sf = document.getElementById('starfield');
+for (let i = 0; i < 120; i++) {
+  const s = document.createElement('div');
+  s.className = 'star';
+  const size = Math.random() * 1.5 + 0.3;
+  s.style.cssText = `
+    width: ${size}px; height: ${size}px;
+    left: ${Math.random() * 100}%; top: ${Math.random() * 100}%;
+    --dur: ${3 + Math.random() * 5}s;
+    --min-o: ${0.1 + Math.random() * 0.2};
+    --max-o: ${0.5 + Math.random() * 0.5};
+    animation-delay: ${Math.random() * 5}s;
+  `;
+  sf.appendChild(s);
+}
+
+// ═══ View switching ═══
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.view-nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ═══ Popup switching ═══
+function showPopup(type) {
+  document.getElementById('popup-discovery').style.display = type === 'discovery' ? 'block' : 'none';
+  document.getElementById('popup-danger').style.display = type === 'danger' ? 'block' : 'none';
+}
+
+// ═══ Tooltip on building hover ═══
+document.querySelectorAll('.building-card').forEach(card => {
+  card.addEventListener('mouseenter', (e) => {
+    const tip = document.getElementById('tooltip');
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 16) + 'px';
+    tip.style.top = (e.clientY - 10) + 'px';
+  });
+  card.addEventListener('mousemove', (e) => {
+    const tip = document.getElementById('tooltip');
+    tip.style.left = (e.clientX + 16) + 'px';
+    tip.style.top = (e.clientY - 10) + 'px';
+  });
+  card.addEventListener('mouseleave', () => {
+    document.getElementById('tooltip').style.display = 'none';
+  });
+});
+</script>
+
+</body>
+</html>

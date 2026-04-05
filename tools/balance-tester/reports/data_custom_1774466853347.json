@@ -1,0 +1,2249 @@
+{
+  "config": {
+    "suite": "custom",
+    "timestamp": "2026-03-25T19:27:33.347Z",
+    "simTimeSeconds": 0.2
+  },
+  "analysis": {
+    "BalancedBot": {
+      "runCount": 1,
+      "finalPopulation": {
+        "mean": 11,
+        "median": 11,
+        "stddev": 0,
+        "min": 11,
+        "max": 11,
+        "p10": 11,
+        "p25": 11,
+        "p75": 11,
+        "p90": 11
+      },
+      "finalMorale": {
+        "mean": 93.4,
+        "median": 93.4,
+        "stddev": 0,
+        "min": 93.38822775501748,
+        "max": 93.38822775501748,
+        "p10": 93.4,
+        "p25": 93.4,
+        "p75": 93.4,
+        "p90": 93.4
+      },
+      "finalTechs": {
+        "mean": 10,
+        "median": 10,
+        "stddev": 0,
+        "min": 10,
+        "max": 10,
+        "p10": 10,
+        "p25": 10,
+        "p75": 10,
+        "p90": 10
+      },
+      "finalBuildings": {
+        "mean": 17,
+        "median": 17,
+        "stddev": 0,
+        "min": 17,
+        "max": 17,
+        "p10": 17,
+        "p25": 17,
+        "p75": 17,
+        "p90": 17
+      },
+      "compositeScore": {
+        "mean": 453.4,
+        "median": 453.4,
+        "stddev": 0,
+        "min": 453.3882277550175,
+        "max": 453.3882277550175,
+        "p10": 453.4,
+        "p25": 453.4,
+        "p75": 453.4,
+        "p90": 453.4
+      },
+      "milestones": {
+        "firstFarm": {
+          "reachedPct": 100,
+          "mean": 2,
+          "median": 2,
+          "stddev": 0,
+          "min": 2,
+          "max": 2,
+          "p10": 2,
+          "p25": 2,
+          "p75": 2,
+          "p90": 2
+        },
+        "firstMine": {
+          "reachedPct": 100,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstFactory": {
+          "reachedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "firstResearchStation": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstHabitat": {
+          "reachedPct": 100,
+          "mean": 5,
+          "median": 5,
+          "stddev": 0,
+          "min": 5,
+          "max": 5,
+          "p10": 5,
+          "p25": 5,
+          "p75": 5,
+          "p90": 5
+        },
+        "firstShipyard": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstShip": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstRecon": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstColony": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "pop5": {
+          "reachedPct": 100,
+          "mean": 4,
+          "median": 4,
+          "stddev": 0,
+          "min": 4,
+          "max": 4,
+          "p10": 4,
+          "p25": 4,
+          "p75": 4,
+          "p90": 4
+        },
+        "pop10": {
+          "reachedPct": 100,
+          "mean": 8,
+          "median": 8,
+          "stddev": 0,
+          "min": 8,
+          "max": 8,
+          "p10": 8,
+          "p25": 8,
+          "p75": 8,
+          "p90": 8
+        },
+        "pop20": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "pop50": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "techMetallurgy": {
+          "reachedPct": 100,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "techRocketry": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "techExploration": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "techColonization": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "epochIndustrial": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "epochSpace": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "energyPositive": {
+          "reachedPct": 100,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "foodSelfSufficient": {
+          "reachedPct": 100,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstCrisis": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstFamine": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstPopDeath": {
+          "reachedPct": 100,
+          "mean": 5,
+          "median": 5,
+          "stddev": 0,
+          "min": 5,
+          "max": 5,
+          "p10": 5,
+          "p25": 5,
+          "p75": 5,
+          "p90": 5
+        }
+      },
+      "counters": {
+        "totalBuildings": {
+          "mean": 9,
+          "median": 9,
+          "stddev": 0,
+          "min": 9,
+          "max": 9,
+          "p10": 9,
+          "p25": 9,
+          "p75": 9,
+          "p90": 9
+        },
+        "totalDemolished": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "totalUpgrades": {
+          "mean": 3,
+          "median": 3,
+          "stddev": 0,
+          "min": 3,
+          "max": 3,
+          "p10": 3,
+          "p25": 3,
+          "p75": 3,
+          "p90": 3
+        },
+        "techsResearched": {
+          "mean": 5,
+          "median": 5,
+          "stddev": 0,
+          "min": 5,
+          "max": 5,
+          "p10": 5,
+          "p25": 5,
+          "p75": 5,
+          "p90": 5
+        },
+        "expeditionsSent": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "expeditionsDisaster": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "coloniesFounded": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "outpostsFounded": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "popBirths": {
+          "mean": 11,
+          "median": 11,
+          "stddev": 0,
+          "min": 11,
+          "max": 11,
+          "p10": 11,
+          "p25": 11,
+          "p75": 11,
+          "p90": 11
+        },
+        "popDeaths": {
+          "mean": 3,
+          "median": 3,
+          "stddev": 0,
+          "min": 3,
+          "max": 3,
+          "p10": 3,
+          "p25": 3,
+          "p75": 3,
+          "p90": 3
+        },
+        "crisisUnrest": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "crisisFamine": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "shipsBuilt": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "reconMissions": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        }
+      },
+      "shortages": {
+        "spare_parts": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "pharmaceuticals": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "life_support_filters": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "synthetics": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "personal_electronics": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "Fe": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 6,
+          "median": 6,
+          "stddev": 0,
+          "min": 6,
+          "max": 6,
+          "p10": 6,
+          "p25": 6,
+          "p75": 6,
+          "p90": 6
+        }
+      },
+      "timeSeriesAgg": {
+        "gameYear": [
+          0,
+          5,
+          10
+        ],
+        "population": {
+          "mean": [
+            4,
+            7,
+            12
+          ],
+          "p10": [
+            4,
+            7,
+            12
+          ],
+          "p90": [
+            4,
+            7,
+            12
+          ]
+        },
+        "morale": {
+          "mean": [
+            65,
+            95,
+            84
+          ],
+          "p10": [
+            65,
+            95,
+            84
+          ],
+          "p90": [
+            65,
+            95,
+            84
+          ]
+        },
+        "housing": {
+          "mean": [
+            7,
+            7,
+            10
+          ],
+          "p10": [
+            7,
+            7,
+            10
+          ],
+          "p90": [
+            7,
+            7,
+            10
+          ]
+        },
+        "Fe": {
+          "mean": [
+            200,
+            76,
+            3493
+          ],
+          "p10": [
+            200,
+            76,
+            3493
+          ],
+          "p90": [
+            200,
+            76,
+            3493
+          ]
+        },
+        "C": {
+          "mean": [
+            150,
+            1559,
+            7463
+          ],
+          "p10": [
+            150,
+            1559,
+            7463
+          ],
+          "p90": [
+            150,
+            1559,
+            7463
+          ]
+        },
+        "Si": {
+          "mean": [
+            100,
+            3336,
+            14104
+          ],
+          "p10": [
+            100,
+            3336,
+            14104
+          ],
+          "p90": [
+            100,
+            3336,
+            14104
+          ]
+        },
+        "Cu": {
+          "mean": [
+            50,
+            1725,
+            6891
+          ],
+          "p10": [
+            50,
+            1725,
+            6891
+          ],
+          "p90": [
+            50,
+            1725,
+            6891
+          ]
+        },
+        "Ti": {
+          "mean": [
+            20,
+            197,
+            1108
+          ],
+          "p10": [
+            20,
+            197,
+            1108
+          ],
+          "p90": [
+            20,
+            197,
+            1108
+          ]
+        },
+        "Li": {
+          "mean": [
+            10,
+            347,
+            1459
+          ],
+          "p10": [
+            10,
+            347,
+            1459
+          ],
+          "p90": [
+            10,
+            347,
+            1459
+          ]
+        },
+        "food": {
+          "mean": [
+            100,
+            1231,
+            3264
+          ],
+          "p10": [
+            100,
+            1231,
+            3264
+          ],
+          "p90": [
+            100,
+            1231,
+            3264
+          ]
+        },
+        "water": {
+          "mean": [
+            100,
+            325,
+            603
+          ],
+          "p10": [
+            100,
+            325,
+            603
+          ],
+          "p90": [
+            100,
+            325,
+            603
+          ]
+        },
+        "energyBalance": {
+          "mean": [
+            10,
+            7,
+            -0.4
+          ],
+          "p10": [
+            10,
+            7,
+            -0.4
+          ],
+          "p90": [
+            10,
+            7,
+            -0.4
+          ]
+        },
+        "researchPerYear": {
+          "mean": [
+            2,
+            2,
+            2
+          ],
+          "p10": [
+            2,
+            2,
+            2
+          ],
+          "p90": [
+            2,
+            2,
+            2
+          ]
+        },
+        "researchAmount": {
+          "mean": [
+            100,
+            50,
+            368
+          ],
+          "p10": [
+            100,
+            50,
+            368
+          ],
+          "p90": [
+            100,
+            50,
+            368
+          ]
+        },
+        "buildingCount": {
+          "mean": [
+            8,
+            15,
+            17
+          ],
+          "p10": [
+            8,
+            15,
+            17
+          ],
+          "p90": [
+            8,
+            15,
+            17
+          ]
+        },
+        "techCount": {
+          "mean": [
+            5,
+            10,
+            10
+          ],
+          "p10": [
+            5,
+            10,
+            10
+          ],
+          "p90": [
+            5,
+            10,
+            10
+          ]
+        },
+        "colonyCount": {
+          "mean": [
+            1,
+            1,
+            1
+          ],
+          "p10": [
+            1,
+            1,
+            1
+          ],
+          "p90": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "aliveRate": 100,
+      "stableRate": 100
+    },
+    "_overall": {
+      "runCount": 1,
+      "finalPopulation": {
+        "mean": 11,
+        "median": 11,
+        "stddev": 0,
+        "min": 11,
+        "max": 11,
+        "p10": 11,
+        "p25": 11,
+        "p75": 11,
+        "p90": 11
+      },
+      "finalMorale": {
+        "mean": 93.4,
+        "median": 93.4,
+        "stddev": 0,
+        "min": 93.38822775501748,
+        "max": 93.38822775501748,
+        "p10": 93.4,
+        "p25": 93.4,
+        "p75": 93.4,
+        "p90": 93.4
+      },
+      "finalTechs": {
+        "mean": 10,
+        "median": 10,
+        "stddev": 0,
+        "min": 10,
+        "max": 10,
+        "p10": 10,
+        "p25": 10,
+        "p75": 10,
+        "p90": 10
+      },
+      "finalBuildings": {
+        "mean": 17,
+        "median": 17,
+        "stddev": 0,
+        "min": 17,
+        "max": 17,
+        "p10": 17,
+        "p25": 17,
+        "p75": 17,
+        "p90": 17
+      },
+      "compositeScore": {
+        "mean": 453.4,
+        "median": 453.4,
+        "stddev": 0,
+        "min": 453.3882277550175,
+        "max": 453.3882277550175,
+        "p10": 453.4,
+        "p25": 453.4,
+        "p75": 453.4,
+        "p90": 453.4
+      },
+      "milestones": {
+        "firstFarm": {
+          "reachedPct": 100,
+          "mean": 2,
+          "median": 2,
+          "stddev": 0,
+          "min": 2,
+          "max": 2,
+          "p10": 2,
+          "p25": 2,
+          "p75": 2,
+          "p90": 2
+        },
+        "firstMine": {
+          "reachedPct": 100,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstFactory": {
+          "reachedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "firstResearchStation": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstHabitat": {
+          "reachedPct": 100,
+          "mean": 5,
+          "median": 5,
+          "stddev": 0,
+          "min": 5,
+          "max": 5,
+          "p10": 5,
+          "p25": 5,
+          "p75": 5,
+          "p90": 5
+        },
+        "firstShipyard": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstShip": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstRecon": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstColony": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "pop5": {
+          "reachedPct": 100,
+          "mean": 4,
+          "median": 4,
+          "stddev": 0,
+          "min": 4,
+          "max": 4,
+          "p10": 4,
+          "p25": 4,
+          "p75": 4,
+          "p90": 4
+        },
+        "pop10": {
+          "reachedPct": 100,
+          "mean": 8,
+          "median": 8,
+          "stddev": 0,
+          "min": 8,
+          "max": 8,
+          "p10": 8,
+          "p25": 8,
+          "p75": 8,
+          "p90": 8
+        },
+        "pop20": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "pop50": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "techMetallurgy": {
+          "reachedPct": 100,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "techRocketry": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "techExploration": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "techColonization": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "epochIndustrial": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "epochSpace": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "energyPositive": {
+          "reachedPct": 100,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "foodSelfSufficient": {
+          "reachedPct": 100,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstCrisis": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstFamine": {
+          "reachedPct": 0,
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "firstPopDeath": {
+          "reachedPct": 100,
+          "mean": 5,
+          "median": 5,
+          "stddev": 0,
+          "min": 5,
+          "max": 5,
+          "p10": 5,
+          "p25": 5,
+          "p75": 5,
+          "p90": 5
+        }
+      },
+      "counters": {
+        "totalBuildings": {
+          "mean": 9,
+          "median": 9,
+          "stddev": 0,
+          "min": 9,
+          "max": 9,
+          "p10": 9,
+          "p25": 9,
+          "p75": 9,
+          "p90": 9
+        },
+        "totalDemolished": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "totalUpgrades": {
+          "mean": 3,
+          "median": 3,
+          "stddev": 0,
+          "min": 3,
+          "max": 3,
+          "p10": 3,
+          "p25": 3,
+          "p75": 3,
+          "p90": 3
+        },
+        "techsResearched": {
+          "mean": 5,
+          "median": 5,
+          "stddev": 0,
+          "min": 5,
+          "max": 5,
+          "p10": 5,
+          "p25": 5,
+          "p75": 5,
+          "p90": 5
+        },
+        "expeditionsSent": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "expeditionsDisaster": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "coloniesFounded": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "outpostsFounded": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "popBirths": {
+          "mean": 11,
+          "median": 11,
+          "stddev": 0,
+          "min": 11,
+          "max": 11,
+          "p10": 11,
+          "p25": 11,
+          "p75": 11,
+          "p90": 11
+        },
+        "popDeaths": {
+          "mean": 3,
+          "median": 3,
+          "stddev": 0,
+          "min": 3,
+          "max": 3,
+          "p10": 3,
+          "p25": 3,
+          "p75": 3,
+          "p90": 3
+        },
+        "crisisUnrest": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "crisisFamine": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "shipsBuilt": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        },
+        "reconMissions": {
+          "mean": 0,
+          "median": 0,
+          "stddev": 0,
+          "min": 0,
+          "max": 0,
+          "p10": 0,
+          "p25": 0,
+          "p75": 0,
+          "p90": 0
+        }
+      },
+      "shortages": {
+        "spare_parts": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "pharmaceuticals": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "life_support_filters": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "synthetics": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "personal_electronics": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 1,
+          "median": 1,
+          "stddev": 0,
+          "min": 1,
+          "max": 1,
+          "p10": 1,
+          "p25": 1,
+          "p75": 1,
+          "p90": 1
+        },
+        "Fe": {
+          "runsAffected": 1,
+          "runsAffectedPct": 100,
+          "mean": 6,
+          "median": 6,
+          "stddev": 0,
+          "min": 6,
+          "max": 6,
+          "p10": 6,
+          "p25": 6,
+          "p75": 6,
+          "p90": 6
+        }
+      },
+      "timeSeriesAgg": {
+        "gameYear": [
+          0,
+          5,
+          10
+        ],
+        "population": {
+          "mean": [
+            4,
+            7,
+            12
+          ],
+          "p10": [
+            4,
+            7,
+            12
+          ],
+          "p90": [
+            4,
+            7,
+            12
+          ]
+        },
+        "morale": {
+          "mean": [
+            65,
+            95,
+            84
+          ],
+          "p10": [
+            65,
+            95,
+            84
+          ],
+          "p90": [
+            65,
+            95,
+            84
+          ]
+        },
+        "housing": {
+          "mean": [
+            7,
+            7,
+            10
+          ],
+          "p10": [
+            7,
+            7,
+            10
+          ],
+          "p90": [
+            7,
+            7,
+            10
+          ]
+        },
+        "Fe": {
+          "mean": [
+            200,
+            76,
+            3493
+          ],
+          "p10": [
+            200,
+            76,
+            3493
+          ],
+          "p90": [
+            200,
+            76,
+            3493
+          ]
+        },
+        "C": {
+          "mean": [
+            150,
+            1559,
+            7463
+          ],
+          "p10": [
+            150,
+            1559,
+            7463
+          ],
+          "p90": [
+            150,
+            1559,
+            7463
+          ]
+        },
+        "Si": {
+          "mean": [
+            100,
+            3336,
+            14104
+          ],
+          "p10": [
+            100,
+            3336,
+            14104
+          ],
+          "p90": [
+            100,
+            3336,
+            14104
+          ]
+        },
+        "Cu": {
+          "mean": [
+            50,
+            1725,
+            6891
+          ],
+          "p10": [
+            50,
+            1725,
+            6891
+          ],
+          "p90": [
+            50,
+            1725,
+            6891
+          ]
+        },
+        "Ti": {
+          "mean": [
+            20,
+            197,
+            1108
+          ],
+          "p10": [
+            20,
+            197,
+            1108
+          ],
+          "p90": [
+            20,
+            197,
+            1108
+          ]
+        },
+        "Li": {
+          "mean": [
+            10,
+            347,
+            1459
+          ],
+          "p10": [
+            10,
+            347,
+            1459
+          ],
+          "p90": [
+            10,
+            347,
+            1459
+          ]
+        },
+        "food": {
+          "mean": [
+            100,
+            1231,
+            3264
+          ],
+          "p10": [
+            100,
+            1231,
+            3264
+          ],
+          "p90": [
+            100,
+            1231,
+            3264
+          ]
+        },
+        "water": {
+          "mean": [
+            100,
+            325,
+            603
+          ],
+          "p10": [
+            100,
+            325,
+            603
+          ],
+          "p90": [
+            100,
+            325,
+            603
+          ]
+        },
+        "energyBalance": {
+          "mean": [
+            10,
+            7,
+            -0.4
+          ],
+          "p10": [
+            10,
+            7,
+            -0.4
+          ],
+          "p90": [
+            10,
+            7,
+            -0.4
+          ]
+        },
+        "researchPerYear": {
+          "mean": [
+            2,
+            2,
+            2
+          ],
+          "p10": [
+            2,
+            2,
+            2
+          ],
+          "p90": [
+            2,
+            2,
+            2
+          ]
+        },
+        "researchAmount": {
+          "mean": [
+            100,
+            50,
+            368
+          ],
+          "p10": [
+            100,
+            50,
+            368
+          ],
+          "p90": [
+            100,
+            50,
+            368
+          ]
+        },
+        "buildingCount": {
+          "mean": [
+            8,
+            15,
+            17
+          ],
+          "p10": [
+            8,
+            15,
+            17
+          ],
+          "p90": [
+            8,
+            15,
+            17
+          ]
+        },
+        "techCount": {
+          "mean": [
+            5,
+            10,
+            10
+          ],
+          "p10": [
+            5,
+            10,
+            10
+          ],
+          "p90": [
+            5,
+            10,
+            10
+          ]
+        },
+        "colonyCount": {
+          "mean": [
+            1,
+            1,
+            1
+          ],
+          "p10": [
+            1,
+            1,
+            1
+          ],
+          "p90": [
+            1,
+            1,
+            1
+          ]
+        }
+      },
+      "aliveRate": 100,
+      "stableRate": 100
+    },
+    "_comparison": [
+      {
+        "botName": "BalancedBot",
+        "runCount": 1,
+        "score": {
+          "mean": 453.4,
+          "median": 453.4,
+          "stddev": 0,
+          "min": 453.3882277550175,
+          "max": 453.3882277550175,
+          "p10": 453.4,
+          "p25": 453.4,
+          "p75": 453.4,
+          "p90": 453.4
+        },
+        "avgPop": 11,
+        "avgTechs": 10,
+        "avgMorale": 93.38822775501748,
+        "aliveRate": 100
+      }
+    ]
+  },
+  "bottlenecks": [
+    {
+      "resource": "Fe",
+      "totalEvents": 6,
+      "runsAffectedPct": 100,
+      "avgEventsPerRun": 6,
+      "severity": 600
+    },
+    {
+      "resource": "spare_parts",
+      "totalEvents": 1,
+      "runsAffectedPct": 100,
+      "avgEventsPerRun": 1,
+      "severity": 100
+    },
+    {
+      "resource": "pharmaceuticals",
+      "totalEvents": 1,
+      "runsAffectedPct": 100,
+      "avgEventsPerRun": 1,
+      "severity": 100
+    },
+    {
+      "resource": "life_support_filters",
+      "totalEvents": 1,
+      "runsAffectedPct": 100,
+      "avgEventsPerRun": 1,
+      "severity": 100
+    },
+    {
+      "resource": "synthetics",
+      "totalEvents": 1,
+      "runsAffectedPct": 100,
+      "avgEventsPerRun": 1,
+      "severity": 100
+    },
+    {
+      "resource": "personal_electronics",
+      "totalEvents": 1,
+      "runsAffectedPct": 100,
+      "avgEventsPerRun": 1,
+      "severity": 100
+    }
+  ],
+  "spirals": {
+    "spirals": [],
+    "overallRate": 0
+  },
+  "dominant": {
+    "findings": []
+  },
+  "pacing": {
+    "avgIdleYears": 0,
+    "idlePct": 0,
+    "pacingIssues": [
+      {
+        "milestone": "firstMine",
+        "label": "Pierwsza kopalnia",
+        "severity": "INFO",
+        "message": "Pierwsza kopalnia za wcześnie: mediana 0 lat (ideał: 2-20)"
+      },
+      {
+        "milestone": "firstFactory",
+        "label": "Pierwsza fabryka",
+        "severity": "INFO",
+        "message": "Pierwsza fabryka za wcześnie: mediana 1 lat (ideał: 15-60)"
+      },
+      {
+        "milestone": "techMetallurgy",
+        "label": "Metalurgia",
+        "severity": "INFO",
+        "message": "Metalurgia za wcześnie: mediana 0 lat (ideał: 8-40)"
+      },
+      {
+        "milestone": "techRocketry",
+        "label": "Rakietowość",
+        "severity": "WARNING",
+        "message": "Rakietowość nigdy nie osiągnięto w żadnym runie"
+      },
+      {
+        "milestone": "pop10",
+        "label": "10 POPów",
+        "severity": "INFO",
+        "message": "10 POPów za wcześnie: mediana 8 lat (ideał: 40-150)"
+      },
+      {
+        "milestone": "firstColony",
+        "label": "Pierwsza kolonia",
+        "severity": "WARNING",
+        "message": "Pierwsza kolonia nigdy nie osiągnięto w żadnym runie"
+      }
+    ],
+    "idealTimings": {
+      "firstFarm": {
+        "min": 0,
+        "max": 5,
+        "label": "Pierwsza farma"
+      },
+      "firstMine": {
+        "min": 2,
+        "max": 20,
+        "label": "Pierwsza kopalnia"
+      },
+      "firstFactory": {
+        "min": 15,
+        "max": 60,
+        "label": "Pierwsza fabryka"
+      },
+      "techMetallurgy": {
+        "min": 8,
+        "max": 40,
+        "label": "Metalurgia"
+      },
+      "techRocketry": {
+        "min": 50,
+        "max": 200,
+        "label": "Rakietowość"
+      },
+      "pop10": {
+        "min": 40,
+        "max": 150,
+        "label": "10 POPów"
+      },
+      "firstColony": {
+        "min": 150,
+        "max": 400,
+        "label": "Pierwsza kolonia"
+      }
+    }
+  },
+  "techUsage": {
+    "techs": [
+      {
+        "techId": "orbital_survey",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": null,
+        "isDead": false,
+        "isOP": false
+      },
+      {
+        "techId": "rocketry",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": null,
+        "isDead": false,
+        "isOP": false
+      },
+      {
+        "techId": "exploration",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": null,
+        "isDead": false,
+        "isOP": false
+      },
+      {
+        "techId": "basic_computing",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": null,
+        "isDead": false,
+        "isOP": false
+      },
+      {
+        "techId": "automation",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": null,
+        "isDead": false,
+        "isOP": false
+      },
+      {
+        "techId": "metallurgy",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": 0,
+        "isDead": false,
+        "isOP": false
+      },
+      {
+        "techId": "bio_recycling",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": null,
+        "isDead": false,
+        "isOP": false
+      },
+      {
+        "techId": "efficient_solar",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": null,
+        "isDead": false,
+        "isOP": false
+      },
+      {
+        "techId": "hydroponics",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": null,
+        "isDead": false,
+        "isOP": false
+      },
+      {
+        "techId": "basic_shielding",
+        "usagePct": 100,
+        "avgScore": 453,
+        "impactPct": 0,
+        "avgTiming": null,
+        "isDead": false,
+        "isOP": false
+      }
+    ],
+    "deadTechs": [],
+    "opTechs": []
+  },
+  "rawResults": [
+    {
+      "runId": "BalancedBot_001",
+      "seed": 1000,
+      "botName": "BalancedBot",
+      "timeSeries": {
+        "gameYear": [
+          0,
+          5,
+          10
+        ],
+        "population": [
+          4,
+          7,
+          12
+        ],
+        "morale": [
+          65,
+          95,
+          84
+        ],
+        "housing": [
+          7,
+          7,
+          10
+        ],
+        "Fe": [
+          200,
+          76,
+          3493
+        ],
+        "C": [
+          150,
+          1559,
+          7463
+        ],
+        "Si": [
+          100,
+          3336,
+          14104
+        ],
+        "Cu": [
+          50,
+          1725,
+          6891
+        ],
+        "Ti": [
+          20,
+          197,
+          1108
+        ],
+        "Li": [
+          10,
+          347,
+          1459
+        ],
+        "food": [
+          100,
+          1231,
+          3264
+        ],
+        "water": [
+          100,
+          325,
+          603
+        ],
+        "energyBalance": [
+          10,
+          7,
+          -0.4
+        ],
+        "researchPerYear": [
+          2,
+          2,
+          2
+        ],
+        "researchAmount": [
+          100,
+          50,
+          368
+        ],
+        "buildingCount": [
+          8,
+          15,
+          17
+        ],
+        "techCount": [
+          5,
+          10,
+          10
+        ],
+        "colonyCount": [
+          1,
+          1,
+          1
+        ]
+      },
+      "milestones": {
+        "firstFarm": 2,
+        "firstMine": 0,
+        "firstFactory": 1,
+        "firstResearchStation": null,
+        "firstHabitat": 5,
+        "firstShipyard": null,
+        "firstShip": null,
+        "firstRecon": null,
+        "firstColony": null,
+        "pop5": 4,
+        "pop10": 8,
+        "pop20": null,
+        "pop50": null,
+        "techMetallurgy": 0,
+        "techRocketry": null,
+        "techExploration": null,
+        "techColonization": null,
+        "epochIndustrial": null,
+        "epochSpace": null,
+        "energyPositive": 0,
+        "foodSelfSufficient": 0,
+        "firstCrisis": null,
+        "firstFamine": null,
+        "firstPopDeath": 5
+      },
+      "counters": {
+        "totalBuildings": 9,
+        "totalDemolished": 0,
+        "totalUpgrades": 3,
+        "techsResearched": 5,
+        "expeditionsSent": 0,
+        "expeditionsDisaster": 0,
+        "coloniesFounded": 0,
+        "outpostsFounded": 0,
+        "popBirths": 11,
+        "popDeaths": 3,
+        "crisisUnrest": 0,
+        "crisisFamine": 0,
+        "shipsBuilt": 0,
+        "reconMissions": 0,
+        "shortageEvents": {
+          "spare_parts": 1,
+          "pharmaceuticals": 1,
+          "life_support_filters": 1,
+          "synthetics": 1,
+          "personal_electronics": 1,
+          "Fe": 6
+        }
+      },
+      "decisionSummary": {
+        "totalDecisions": 151,
+        "buildDecisions": 16,
+        "techDecisions": 5,
+        "expeditionDecisions": 0,
+        "factoryDecisions": 130,
+        "idleYears": 0
+      },
+      "finalState": {
+        "gameYear": 15.099999999999962,
+        "population": 11,
+        "morale": 93.38822775501748,
+        "epoch": "developing",
+        "techsResearched": [
+          "orbital_survey",
+          "rocketry",
+          "exploration",
+          "basic_computing",
+          "automation",
+          "metallurgy",
+          "bio_recycling",
+          "efficient_solar",
+          "hydroponics",
+          "basic_shielding"
+        ],
+        "buildings": {
+          "colony_base": 1,
+          "farm": 3,
+          "well": 2,
+          "solar_farm": 4,
+          "habitat": 2,
+          "launch_pad": 1,
+          "shipyard": 1,
+          "mine": 2,
+          "factory": 1
+        },
+        "buildingLevels": {
+          "colony_base": [
+            1
+          ],
+          "farm": [
+            1,
+            1,
+            1
+          ],
+          "well": [
+            1,
+            1
+          ],
+          "solar_farm": [
+            1,
+            3,
+            1,
+            1
+          ],
+          "habitat": [
+            1,
+            1
+          ],
+          "launch_pad": [
+            1
+          ],
+          "shipyard": [
+            1
+          ],
+          "mine": [
+            2,
+            2
+          ],
+          "factory": [
+            2
+          ]
+        },
+        "colonyCount": 1,
+        "exploredBodies": 1,
+        "totalBodies": 61,
+        "isAlive": true,
+        "isStable": true,
+        "isGameOver": false
+      }
+    }
+  ]
+}

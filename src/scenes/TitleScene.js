@@ -7,6 +7,7 @@ import { migrate }    from '../systems/SaveMigration.js';
 import { PRESET_THEMES, applyPreset, saveTheme } from '../config/ThemeConfig.js';
 import { updateCrt } from '../ui/CrtOverlay.js';
 import { t, getLocale, setLocale } from '../i18n/i18n.js';
+import { FactionSelectScene } from './FactionSelectScene.js';
 
 // ── 4 warianty kolorystyczne ekranu startowego ────────────────
 const SS_THEMES = [
@@ -311,6 +312,23 @@ export class TitleScene {
       SaveSystem.clearSave();
       window.KOSMOS.savedData = null;
       window.KOSMOS.scenario  = 'civilization_boosted';
+
+      // Fade out TitleScene → pokaż ekran wyboru frakcji
+      const el2 = this._container;
+      el2.style.transition = 'opacity 0.6s ease';
+      el2.style.opacity = '0';
+      setTimeout(() => {
+        this.destroy();
+        const factionScene = new FactionSelectScene();
+        factionScene.show(() => {
+          window._showLoadingScreen?.();
+          requestAnimationFrame(() => {
+            setTimeout(() => window._startMainGame(), 16);
+          });
+        });
+      }, 600);
+      return;  // nie kontynuuj do wspólnego fade out poniżej
+
     } else if (action === 'power_test') {
       SaveSystem.clearSave();
       window.KOSMOS.savedData = null;

@@ -419,3 +419,47 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 | Trade network bonus do prosperity | +3 per połączenie (max +15), upkeep 2×distFactor per połączenie; dalekie kolonie mogą tracić prosperity |
 | Kategoria 'market' w HexTile | Budynki handlowe: trade_hub (TC+zasięg), free_market (efektywność), trade_beacon (×1.5 zasięg), commodity_nexus (unlimited) |
 | Obserwatorium jako "oczy cywilizacji" | Auto-scan ciał (0.5/lv civYears), −0.3%/lv katastrofa, +5%/lv yield, research 6 (nie 12 — główna rola to mechaniki, nie research) |
+
+---
+
+## Lore i kierunek narracyjny
+
+### Koncept "Zagubieni Kolonizatorzy"
+Rok 2051. Statek kolonizacyjny z 400 000 ochotnikami wpada w anomalię
+czasoprzestrzenną i wyładowuje 47 280 lat świetlnych od Ziemi.
+Koloniści zakładają kolonię w nowym układzie. Gra zaczyna się tu.
+
+**Cel endgame:** Sfera Dysona (20 segmentów, 4 fazy) daje energię
+Cywilizacji Typu II potrzebną do aktywacji Bramy Skoku.
+
+**Trzy zakończenia:** Powrót do Ziemi / Zostajemy (Projekt Labirynt) /
+Wysyłamy Wiadomość
+
+### Dwie frakcje (wewnętrzna presja, nie wybór gracza)
+Gracz zarządza całą cywilizacją. Frakcje to presja polityczna kształtowana
+przez decyzje gracza (suwak 0-100). Zakończenie wynika organicznie z historii.
+
+**Konfederaci Misji** — "Jesteśmy tu na zawsze. To jest nasz dom."
+- Kolor: #378ADD (niebieski)
+- Przywódca: Dożywotni Archont (wybierany przy starcie z 3 kandydatów)
+- Kandydaci: Dr. Yara Osei-Mensah, Komandor Aleksei Borodin-Vasek,
+  Mirela Santos-Ikeda
+
+**Poszukiwacze Drogi** — "Dom jest tam skąd przyszliśmy."
+- Kolor: #D85A30 (pomarańczowy)
+- Przywódca: Wybieralny Konsul co 15 lat (5 postaci rotujących)
+- Konsulowie: Fatima Al-Rashidi, Tomás Ferreira-Okonkwo,
+  Ingrid Solberg-Nakamura, Viktor Havel-Osei, Amara Diallo-Chen
+
+### Klimat
+Mroczny, hard sci-fi. The Expanse + Dark + Lem.
+Kosmos jest zimny i obojętny. Decyzje mają ludzką cenę.
+Zakończenia są niejednoznaczne — nie ma gwarantowanego happy endu.
+
+### Nowe systemy w trakcie implementacji (Faza B)
+
+- `src/data/LeaderData.js` — dane frakcji i przywódców
+- `src/systems/LeaderSystem.js` — bonusy przywódcy, kadencje Konsula
+- `src/systems/FactionSystem.js` — suwak frakcji, napięcie (planowane)
+- `src/scenes/FactionSelectScene.js` — ekran wyboru przy nowej grze
+- Sfera Dysona — 20 segmentów w 4 fazach (planowane w Fazie D)

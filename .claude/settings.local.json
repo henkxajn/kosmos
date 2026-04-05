@@ -71,7 +71,17 @@
       "WebFetch(domain:asignalinthestatic.com)",
       "Bash(sed:*)",
       "Bash(cp \"/c/Users/Komputer/Downloads/Signal in the Static Main Menu.mp3\" \"E:/programy/Claude_kody/kosmos/assets/sounds/signal_main_menu.mp3\")",
-      "Bash(cp \"/c/Users/Komputer/Downloads/Signal in the Static New Game.mp3\" \"E:/programy/Claude_kody/kosmos/assets/sounds/signal_new_game.mp3\")"
+      "Bash(cp \"/c/Users/Komputer/Downloads/Signal in the Static New Game.mp3\" \"E:/programy/Claude_kody/kosmos/assets/sounds/signal_new_game.mp3\")",
+      "Bash(findstr:*)",
+      "Bash(git diff:*)",
+      "Bash(for seed:*)",
+      "Bash(while read:*)",
+      "Bash(git show:*)",
+      "Bash(do node -e \":*)",
+      "Bash(for f:*)",
+      "Bash(git push:*)",
+      "Bash(for type:*)",
+      "Bash(sort -t: -k3 -rn)"
     ]
   }
 }

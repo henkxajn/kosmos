@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>KOSMOS UI — 5 Wariantów</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    font-family: 'Space Mono', 'Courier New', monospace;
+    color: #aac8c0;
+    overflow-x: hidden;
+  }
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: rgba(0,0,0,0.95);
+    border-bottom: 1px solid rgba(0,255,180,0.3);
+    display: flex; align-items: center; gap: 4px;
+    padding: 8px 16px;
+  }
+  .nav-title {
+    color: #00ffb4; font-size: 11px; letter-spacing: 3px;
+    margin-right: 20px; text-transform: uppercase;
+  }
+  .nav-btn {
+    padding: 5px 14px; font-size: 9px; letter-spacing: 1px;
+    background: transparent; border: 1px solid rgba(0,255,180,0.2);
+    color: rgba(160,200,190,0.6); cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase;
+    font-family: inherit;
+  }
+  .nav-btn:hover { border-color: rgba(0,255,180,0.5); color: #00ffb4; }
+  .nav-btn.active {
+    background: rgba(0,255,180,0.12);
+    border-color: rgba(0,255,180,0.6);
+    color: #00ffb4;
+  }
+  .variant-container {
+    display: none; position: relative;
+    width: 100vw; height: 100vh; overflow: hidden;
+  }
+  .variant-container.active { display: block; }
+  canvas.bg { position: absolute; inset: 0; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     WARIANT 1 — HOLOGRAM BLUE (Minority Report)
+  ═══════════════════════════════════════════════════════════════ */
+  .v1-topbar {
+    position: absolute; top: 30px; left: 0; right: 0; height: 46px;
+    background: rgba(0, 15, 40, 0.35);
+    border-bottom: 1px solid rgba(0, 180, 255, 0.6);
+    border-top: 1px solid rgba(0, 180, 255, 0.15);
+    display: flex; align-items: center; padding: 0 16px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 1px 20px rgba(0,180,255,0.15), inset 0 0 40px rgba(0,100,200,0.05);
+  }
+  .v1-topbar::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,220,255,0.8), rgba(100,220,255,1), rgba(0,220,255,0.8), transparent);
+    animation: scan-h 3s ease-in-out infinite;
+  }
+  @keyframes scan-h {
+    0%,100% { opacity: 0.4; } 50% { opacity: 1; }
+  }
+  .v1-logo {
+    font-size: 13px; letter-spacing: 6px; color: rgba(100,210,255,0.9);
+    text-shadow: 0 0 12px rgba(0,180,255,0.8), 0 0 24px rgba(0,120,255,0.4);
+    margin-right: 24px;
+  }
+  .v1-res-group {
+    display: flex; gap: 2px; margin-right: 8px;
+  }
+  .v1-res {
+    background: rgba(0,30,60,0.5);
+    border: 1px solid rgba(0,150,220,0.25);
+    border-top-color: rgba(0,200,255,0.4);
+    padding: 2px 8px; font-size: 8px;
+    color: rgba(140,210,255,0.8);
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 56px;
+    backdrop-filter: blur(4px);
+  }
+  .v1-res-label { color: rgba(0,180,255,0.5); font-size: 7px; }
+  .v1-res-val { color: rgba(100,220,255,0.9); }
+
+  .v1-left {
+    position: absolute; left: 0; top: 76px; bottom: 26px; width: 200px;
+    background: linear-gradient(90deg, rgba(0,10,30,0.55) 0%, rgba(0,15,45,0.30) 100%);
+    border-right: 1px solid rgba(0,180,255,0.4);
+    backdrop-filter: blur(8px);
+    box-shadow: 2px 0 30px rgba(0,100,200,0.12), inset -1px 0 0 rgba(0,200,255,0.05);
+    overflow: hidden;
+  }
+  .v1-left::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 100%;
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,180,255,0.015) 3px, rgba(0,180,255,0.015) 4px);
+    pointer-events: none;
+  }
+  .v1-panel-header {
+    padding: 8px 12px 6px;
+    border-bottom: 1px solid rgba(0,180,255,0.2);
+    background: rgba(0,40,80,0.3);
+    font-size: 8px; letter-spacing: 3px;
+    color: rgba(0,200,255,0.7);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .v1-panel-header::before {
+    content: ''; width: 6px; height: 6px;
+    background: rgba(0,200,255,0.6);
+    box-shadow: 0 0 6px rgba(0,200,255,0.8);
+    border-radius: 50%; display: inline-block;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:0.5;} 50%{opacity:1;} }
+
+  .v1-colony-item {
+    padding: 7px 12px; border-bottom: 1px solid rgba(0,150,220,0.1);
+    cursor: pointer; transition: all 0.2s;
+    font-size: 9px;
+  }
+  .v1-colony-item:hover {
+    background: rgba(0,100,200,0.2);
+    border-bottom-color: rgba(0,200,255,0.3);
+  }
+  .v1-colony-item.selected {
+    background: rgba(0,80,160,0.35);
+    border-left: 2px solid rgba(0,200,255,0.8);
+    box-shadow: inset 2px 0 12px rgba(0,180,255,0.15);
+  }
+  .v1-colony-name { color: rgba(100,210,255,0.9); margin-bottom: 2px; }
+  .v1-colony-stats { color: rgba(0,160,220,0.55); font-size: 7px; letter-spacing: 1px; }
+
+  .v1-right {
+    position: absolute; right: 0; top: 76px; bottom: 26px; width: 170px;
+    background: linear-gradient(270deg, rgba(0,10,30,0.55) 0%, rgba(0,15,45,0.30) 100%);
+    border-left: 1px solid rgba(0,180,255,0.4);
+    backdrop-filter: blur(8px);
+    box-shadow: -2px 0 30px rgba(0,100,200,0.12);
+    overflow: hidden;
+  }
+  .v1-right::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 100%;
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,180,255,0.015) 3px, rgba(0,180,255,0.015) 4px);
+    pointer-events: none;
+  }
+
+  .v1-bottom {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 26px;
+    background: rgba(0,10,30,0.45);
+    border-top: 1px solid rgba(0,180,255,0.5);
+    backdrop-filter: blur(6px);
+    box-shadow: 0 -1px 20px rgba(0,100,200,0.15);
+    display: flex; align-items: center; padding: 0 12px;
+    font-size: 8px; color: rgba(0,170,220,0.6);
+  }
+  .v1-bottom::before {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,200,255,0.6), transparent);
+  }
+
+  /* Mapmode bar v1 */
+  .v1-mapmode {
+    position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 2px;
+    background: rgba(0,15,40,0.6);
+    border: 1px solid rgba(0,180,255,0.4);
+    border-top-color: rgba(0,220,255,0.7);
+    padding: 3px 4px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 20px rgba(0,150,255,0.15), inset 0 1px 0 rgba(0,220,255,0.1);
+  }
+  .v1-mapmode::before {
+    content: ''; position: absolute; top: 0; left: 20%; right: 20%; height: 1px;
+    background: rgba(0,220,255,0.5);
+  }
+  .v1-mode-btn {
+    padding: 4px 14px; font-size: 8px; letter-spacing: 1px;
+    background: transparent; border: 1px solid transparent;
+    color: rgba(0,170,220,0.5); cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase;
+    font-family: inherit; display: flex; flex-direction: column;
+    align-items: center; gap: 1px;
+  }
+  .v1-mode-btn.active {
+    background: rgba(0,100,220,0.25);
+    border-color: rgba(0,200,255,0.5);
+    color: rgba(100,220,255,0.95);
+    box-shadow: 0 0 8px rgba(0,180,255,0.3), inset 0 0 8px rgba(0,100,200,0.15);
+    text-shadow: 0 0 8px rgba(0,200,255,0.8);
+  }
+  .v1-mode-icon { font-size: 14px; line-height: 1; }
+  .v1-mode-label { font-size: 6px; }
+
+  /* Hologram floating data */
+  .v1-holo-float {
+    position: absolute; padding: 8px 12px;
+    border: 1px solid rgba(0,180,255,0.3);
+    border-top-color: rgba(0,220,255,0.6);
+    background: rgba(0,15,40,0.4);
+    backdrop-filter: blur(6px);
+    font-size: 8px; color: rgba(100,200,255,0.7);
+    box-shadow: 0 0 20px rgba(0,120,220,0.1);
+  }
+  .v1-holo-float::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,220,255,0.5), transparent);
+  }
+  .v1-holo-title { color: rgba(0,200,255,0.9); font-size: 7px; letter-spacing: 2px; margin-bottom: 6px; }
+  .v1-data-row { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 3px; }
+  .v1-data-key { color: rgba(0,150,200,0.55); }
+  .v1-data-val { color: rgba(100,210,255,0.85); }
+
+  .v1-label {
+    position: absolute; bottom: 30px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px; letter-spacing: 2px;
+    color: rgba(0,180,255,0.4);
+    text-align: center;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     WARIANT 2 — TAKTYCZNY HUD (Mass Effect / Dead Space)
+  ═══════════════════════════════════════════════════════════════ */
+  .v2-topbar {
+    position: absolute; top: 30px; left: 0; right: 0; height: 46px;
+    background: rgba(4, 2, 1, 0.50);
+    display: flex; align-items: center; padding: 0 16px;
+    backdrop-filter: blur(4px);
+  }
+  .v2-topbar::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent 5%, #c87820 20%, #ffaa40 50%, #c87820 80%, transparent 95%);
+    box-shadow: 0 0 10px rgba(200,120,30,0.6);
+  }
+  /* Corner brackets */
+  .corner-tl, .corner-tr, .corner-bl, .corner-br {
+    position: absolute; width: 16px; height: 16px;
+    border-color: rgba(255,160,40,0.8); border-style: solid;
+  }
+  .corner-tl { top: 8px; left: 8px; border-width: 2px 0 0 2px; }
+  .corner-tr { top: 8px; right: 8px; border-width: 2px 2px 0 0; }
+  .corner-bl { bottom: 8px; left: 8px; border-width: 0 0 2px 2px; }
+  .corner-br { bottom: 8px; right: 8px; border-width: 0 2px 2px 0; }
+
+  .v2-logo {
+    font-size: 13px; letter-spacing: 6px; color: rgba(255,170,60,0.9);
+    text-shadow: 0 0 10px rgba(255,140,30,0.6);
+    margin-right: 24px;
+  }
+  .v2-res {
+    background: rgba(20,10,0,0.55);
+    border: 1px solid rgba(180,100,20,0.3);
+    border-top: 2px solid rgba(255,160,40,0.6);
+    padding: 2px 8px; font-size: 8px;
+    color: rgba(255,180,80,0.8);
+    min-width: 56px; text-align: center;
+    margin-right: 2px;
+  }
+  .v2-res-group { display: flex; gap: 2px; margin-right: 8px; }
+  .v2-res-label { color: rgba(180,100,20,0.6); font-size: 7px; }
+  .v2-res-val { color: rgba(255,190,80,0.9); }
+
+  .v2-left {
+    position: absolute; left: 0; top: 76px; bottom: 26px; width: 200px;
+    background: rgba(8,4,1,0.45);
+    border-right: 2px solid rgba(200,120,30,0.4);
+    backdrop-filter: blur(5px);
+    overflow: hidden;
+  }
+  /* Diagonal cut top-right */
+  .v2-left::after {
+    content: ''; position: absolute; top: 0; right: -1px; width: 0; height: 0;
+    border-style: solid;
+    border-width: 0 28px 28px 0;
+    border-color: transparent transparent transparent transparent;
+    border-right-color: transparent;
+  }
+  .v2-panel-header {
+    padding: 8px 12px 6px;
+    background: rgba(30,15,0,0.6);
+    border-bottom: 1px solid rgba(180,100,20,0.3);
+    border-left: 3px solid rgba(255,160,40,0.8);
+    font-size: 8px; letter-spacing: 3px;
+    color: rgba(255,170,60,0.8);
+  }
+  .v2-colony-item {
+    padding: 7px 12px 7px 15px;
+    border-bottom: 1px solid rgba(150,80,10,0.15);
+    font-size: 9px; cursor: pointer;
+  }
+  .v2-colony-item.selected {
+    background: rgba(40,20,0,0.5);
+    border-left: 3px solid rgba(255,160,40,0.8);
+  }
+  .v2-colony-name { color: rgba(255,190,100,0.9); margin-bottom: 2px; }
+  .v2-colony-stats { color: rgba(180,120,40,0.55); font-size: 7px; }
+
+  .v2-right {
+    position: absolute; right: 0; top: 76px; bottom: 26px; width: 170px;
+    background: rgba(8,4,1,0.45);
+    border-left: 2px solid rgba(200,120,30,0.4);
+    backdrop-filter: blur(5px);
+    overflow: hidden;
+  }
+  .v2-bottom {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 26px;
+    background: rgba(8,4,1,0.55);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; padding: 0 12px;
+    font-size: 8px; color: rgba(180,120,40,0.7);
+  }
+  .v2-bottom::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent 5%, #c87820 20%, #ffaa40 50%, #c87820 80%, transparent 95%);
+    box-shadow: 0 -3px 10px rgba(200,120,30,0.4);
+  }
+
+  .v2-mapmode {
+    position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 0;
+    border: 1px solid rgba(180,100,20,0.5);
+    background: rgba(8,4,1,0.6);
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+  }
+  .v2-mode-btn {
+    padding: 5px 16px; font-size: 8px; letter-spacing: 1px;
+    background: transparent; border: none;
+    border-right: 1px solid rgba(150,80,10,0.4);
+    color: rgba(180,120,40,0.6); cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase;
+    font-family: inherit; display: flex; flex-direction: column;
+    align-items: center; gap: 2px;
+  }
+  .v2-mode-btn:last-child { border-right: none; }
+  .v2-mode-btn.active {
+    background: rgba(60,30,0,0.6);
+    color: rgba(255,180,60,0.95);
+    border-top: 2px solid rgba(255,160,40,0.8);
+    box-shadow: inset 0 0 12px rgba(200,100,10,0.2);
+  }
+  .v2-mode-icon { font-size: 13px; }
+  .v2-mode-label { font-size: 6px; }
+
+  /* Warning bar taktyczny */
+  .v2-warning {
+    position: absolute; top: 120px; left: 50%; transform: translateX(-50%);
+    padding: 4px 20px; font-size: 8px; letter-spacing: 3px;
+    border: 1px solid rgba(255,100,30,0.6); border-top: 2px solid rgba(255,80,20,0.8);
+    background: rgba(30,5,0,0.6); color: rgba(255,120,40,0.9);
+    text-transform: uppercase;
+    backdrop-filter: blur(4px);
+    animation: warn-blink 1.5s step-end infinite;
+  }
+  @keyframes warn-blink { 0%,100%{opacity:1;} 50%{opacity:0.5;} }
+
+  /* ═══════════════════════════════════════════════════════════════
+     WARIANT 3 — NEURO GRID (Tron / Portal)
+  ═══════════════════════════════════════════════════════════════ */
+  .v3-topbar {
+    position: absolute; top: 30px; left: 0; right: 0; height: 46px;
+    background: rgba(0, 2, 8, 0.40);
+    border-bottom: 1px solid #00e5ff;
+    box-shadow: 0 2px 0 rgba(0,229,255,0.08), 0 4px 20px rgba(0,200,255,0.12);
+    display: flex; align-items: center; padding: 0 16px;
+    backdrop-filter: blur(6px);
+  }
+  .v3-topbar::before {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: #00e5ff;
+    box-shadow: 0 0 8px rgba(0,229,255,0.9), 0 0 20px rgba(0,180,255,0.4);
+  }
+  .v3-logo {
+    font-size: 13px; letter-spacing: 8px; color: #00e5ff;
+    text-shadow: 0 0 10px #00e5ff, 0 0 30px rgba(0,200,255,0.5);
+    margin-right: 24px;
+  }
+  .v3-res-group { display: flex; gap: 1px; margin-right: 8px; }
+  .v3-res {
+    padding: 2px 8px; font-size: 8px;
+    background: rgba(0,229,255,0.04);
+    border: 1px solid rgba(0,229,255,0.15);
+    color: rgba(0,200,255,0.7);
+    min-width: 52px; text-align: center;
+  }
+  .v3-res-label { color: rgba(0,180,255,0.4); font-size: 7px; }
+  .v3-res-val { color: rgba(0,229,255,0.85); }
+
+  /* Grid lines panelu */
+  .v3-left {
+    position: absolute; left: 0; top: 76px; bottom: 26px; width: 200px;
+    background: rgba(0,2,8,0.40);
+    border-right: 1px solid rgba(0,229,255,0.5);
+    box-shadow: 2px 0 15px rgba(0,200,255,0.08);
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+  }
+  .v3-grid-bg {
+    position: absolute; inset: 0; opacity: 0.12;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.5) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.5) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .v3-panel-header {
+    position: relative; z-index: 1;
+    padding: 8px 12px 6px;
+    background: rgba(0,30,50,0.4);
+    border-bottom: 1px solid rgba(0,200,255,0.2);
+    font-size: 8px; letter-spacing: 3px;
+    color: #00e5ff;
+    text-shadow: 0 0 8px rgba(0,229,255,0.6);
+  }
+  .v3-colony-item {
+    position: relative; z-index: 1;
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(0,200,255,0.08);
+    font-size: 9px; cursor: pointer;
+  }
+  .v3-colony-item.selected {
+    background: rgba(0,80,120,0.3);
+    border-left: 2px solid #00e5ff;
+    box-shadow: inset 0 0 20px rgba(0,200,255,0.08);
+  }
+  .v3-colony-name { color: rgba(0,229,255,0.9); margin-bottom: 2px; text-shadow: 0 0 6px rgba(0,229,255,0.4); }
+  .v3-colony-stats { color: rgba(0,180,255,0.45); font-size: 7px; }
+
+  .v3-right {
+    position: absolute; right: 0; top: 76px; bottom: 26px; width: 170px;
+    background: rgba(0,2,8,0.40);
+    border-left: 1px solid rgba(0,229,255,0.5);
+    box-shadow: -2px 0 15px rgba(0,200,255,0.08);
+    backdrop-filter: blur(6px);
+    overflow: hidden;
+  }
+  .v3-right .v3-grid-bg { opacity: 0.08; }
+
+  .v3-bottom {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 26px;
+    background: rgba(0,2,8,0.45);
+    border-top: 1px solid rgba(0,229,255,0.5);
+    box-shadow: 0 -3px 15px rgba(0,200,255,0.08);
+    backdrop-filter: blur(6px);
+    display: flex; align-items: center; padding: 0 12px;
+    font-size: 8px; color: rgba(0,180,255,0.5);
+  }
+  .v3-bottom::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: #00e5ff;
+    box-shadow: 0 0 8px rgba(0,229,255,0.7);
+  }
+  .v3-mapmode {
+    position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 1px;
+    background: rgba(0,2,8,0.55);
+    border: 1px solid rgba(0,229,255,0.5);
+    box-shadow: 0 0 15px rgba(0,180,255,0.15);
+    backdrop-filter: blur(8px);
+    padding: 2px;
+  }
+  .v3-mode-btn {
+    padding: 4px 14px; font-size: 8px; letter-spacing: 1px;
+    background: transparent; border: 1px solid transparent;
+    color: rgba(0,180,255,0.45); cursor: pointer;
+    transition: all 0.15s; text-transform: uppercase;
+    font-family: inherit; display: flex; flex-direction: column;
+    align-items: center; gap: 1px;
+  }
+  .v3-mode-btn.active {
+    background: rgba(0,100,160,0.3);
+    border-color: rgba(0,229,255,0.6);
+    color: #00e5ff;
+    box-shadow: 0 0 10px rgba(0,200,255,0.3);
+    text-shadow: 0 0 8px rgba(0,229,255,0.8);
+  }
+  .v3-mode-icon { font-size: 14px; }
+  .v3-mode-label { font-size: 6px; }
+
+  /* Data nodes */
+  .v3-node {
+    position: absolute; width: 8px; height: 8px;
+    background: #00e5ff; border-radius: 50%;
+    box-shadow: 0 0 8px #00e5ff, 0 0 20px rgba(0,200,255,0.4);
+    animation: node-pulse 2s ease-in-out infinite;
+  }
+  .v3-node-line {
+    position: absolute; height: 1px;
+    background: linear-gradient(90deg, rgba(0,229,255,0.6), rgba(0,229,255,0.1));
+    box-shadow: 0 0 3px rgba(0,200,255,0.4);
+  }
+  @keyframes node-pulse { 0%,100%{box-shadow:0 0 6px #00e5ff;} 50%{box-shadow:0 0 16px #00e5ff, 0 0 30px rgba(0,200,255,0.6);} }
+
+  /* ═══════════════════════════════════════════════════════════════
+     WARIANT 4 — QUANTUM MINIMAL (floating brackets)
+  ═══════════════════════════════════════════════════════════════ */
+  .v4-topbar {
+    position: absolute; top: 30px; left: 0; right: 0; height: 46px;
+    background: rgba(2,4,5,0.25);
+    backdrop-filter: blur(3px);
+    display: flex; align-items: center; padding: 0 16px;
+  }
+  /* Tylko dolna krawędź, subtelna */
+  .v4-topbar::after {
+    content: ''; position: absolute; bottom: 0; left: 60px; right: 60px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,255,180,0.5), transparent);
+  }
+  .v4-logo {
+    font-size: 11px; letter-spacing: 10px; color: rgba(0,255,180,0.7);
+    text-transform: uppercase;
+    margin-right: 24px;
+  }
+  .v4-res-group { display: flex; gap: 16px; margin-right: 8px; }
+  .v4-res { font-size: 8px; color: rgba(160,200,190,0.6); display: flex; gap: 4px; align-items: baseline; }
+  .v4-res-label { color: rgba(0,255,180,0.35); font-size: 7px; }
+  .v4-res-val { color: rgba(160,200,190,0.9); }
+
+  /* Bracket panels — tylko narożniki */
+  .bracket-panel {
+    position: absolute;
+  }
+  .bracket-panel::before, .bracket-panel::after,
+  .bracket-panel > .bp-inner::before, .bracket-panel > .bp-inner::after {
+    content: ''; position: absolute; width: 12px; height: 12px;
+    border-color: rgba(0,255,180,0.55); border-style: solid;
+  }
+  .bracket-panel::before { top: 0; left: 0; border-width: 1px 0 0 1px; }
+  .bracket-panel::after  { top: 0; right: 0; border-width: 1px 1px 0 0; }
+  .bracket-panel > .bp-inner::before { bottom: 0; left: 0; border-width: 0 0 1px 1px; }
+  .bracket-panel > .bp-inner::after  { bottom: 0; right: 0; border-width: 0 1px 1px 0; }
+
+  .v4-left {
+    left: 0; top: 76px; bottom: 26px; width: 200px;
+    background: rgba(2,4,5,0.22);
+    border-right: 1px solid rgba(0,255,180,0.08);
+    backdrop-filter: blur(4px);
+  }
+  .v4-right {
+    right: 0; top: 76px; bottom: 26px; width: 170px;
+    background: rgba(2,4,5,0.22);
+    border-left: 1px solid rgba(0,255,180,0.08);
+    backdrop-filter: blur(4px);
+  }
+  .v4-bottom {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 26px;
+    background: rgba(2,4,5,0.22);
+    backdrop-filter: blur(3px);
+    display: flex; align-items: center; padding: 0 16px;
+  }
+  .v4-bottom::before {
+    content: ''; position: absolute; top: 0; left: 60px; right: 60px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,255,180,0.4), transparent);
+  }
+
+  .v4-panel-header {
+    padding: 10px 14px 6px;
+    font-size: 7px; letter-spacing: 4px; text-transform: uppercase;
+    color: rgba(0,255,180,0.45);
+  }
+  .v4-colony-item {
+    padding: 6px 14px; font-size: 9px; cursor: pointer;
+    border-bottom: 1px solid rgba(0,255,180,0.04);
+  }
+  .v4-colony-item.selected { border-left: 1px solid rgba(0,255,180,0.5); padding-left: 13px; }
+  .v4-colony-name { color: rgba(170,200,195,0.85); margin-bottom: 2px; }
+  .v4-colony-stats { color: rgba(0,255,180,0.3); font-size: 7px; }
+
+  .v4-mapmode {
+    position: absolute; top: 82px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 20px;
+    background: transparent;
+  }
+  .v4-mode-btn {
+    padding: 3px 10px; font-size: 7px; letter-spacing: 2px;
+    background: transparent; border: none; border-bottom: 1px solid rgba(0,255,180,0.15);
+    color: rgba(0,255,180,0.3); cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase; font-family: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  .v4-mode-btn.active {
+    border-bottom-color: rgba(0,255,180,0.7);
+    color: rgba(0,255,180,0.9);
+  }
+  .v4-mode-icon { font-size: 16px; opacity: 0.7; }
+  .v4-mode-label { font-size: 6px; letter-spacing: 3px; }
+
+  /* floating data text */
+  .v4-float-data {
+    position: absolute;
+    font-size: 8px; color: rgba(160,200,190,0.45);
+    line-height: 1.6;
+    letter-spacing: 1px;
+  }
+  .v4-float-accent { color: rgba(0,255,180,0.55); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     WARIANT 5 — ALIEN BIOLUMINESCENT (Avatar / Prometheus)
+  ═══════════════════════════════════════════════════════════════ */
+  .v5-topbar {
+    position: absolute; top: 30px; left: 0; right: 0; height: 46px;
+    background: rgba(0, 8, 4, 0.40);
+    border-bottom: 1px solid rgba(0,230,120,0.4);
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; padding: 0 16px;
+  }
+  .v5-topbar::after {
+    content: ''; position: absolute; bottom: -3px; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, transparent, rgba(0,230,100,0.3), transparent);
+    filter: blur(2px);
+  }
+  .v5-logo {
+    font-size: 13px; letter-spacing: 6px; color: rgba(0,230,100,0.85);
+    text-shadow: 0 0 12px rgba(0,200,80,0.6), 0 0 30px rgba(0,150,60,0.3);
+    margin-right: 24px;
+  }
+  .v5-res-group { display: flex; gap: 2px; margin-right: 8px; }
+  .v5-res {
+    background: rgba(0,15,6,0.5);
+    border: 1px solid rgba(0,180,80,0.2);
+    border-top: 1px solid rgba(0,220,100,0.4);
+    padding: 2px 8px; font-size: 8px;
+    color: rgba(0,220,100,0.7);
+    min-width: 52px; text-align: center;
+  }
+  .v5-res-label { color: rgba(0,150,60,0.5); font-size: 7px; }
+  .v5-res-val { color: rgba(0,230,100,0.85); }
+
+  .v5-left {
+    position: absolute; left: 0; top: 76px; bottom: 26px; width: 200px;
+    background: linear-gradient(90deg, rgba(0,8,4,0.5) 0%, rgba(0,12,6,0.30) 100%);
+    border-right: 1px solid rgba(0,200,80,0.35);
+    box-shadow: 2px 0 20px rgba(0,150,60,0.1);
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+  }
+  /* Organiczne "żyłki" */
+  .v5-vein {
+    position: absolute; pointer-events: none;
+    background: rgba(0,200,80,0.08);
+    border-radius: 50%;
+    filter: blur(8px);
+    animation: vein-pulse 4s ease-in-out infinite;
+  }
+  @keyframes vein-pulse {
+    0%,100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.05); }
+  }
+  .v5-panel-header {
+    padding: 8px 12px 6px;
+    background: rgba(0,20,8,0.45);
+    border-bottom: 1px solid rgba(0,180,80,0.2);
+    font-size: 8px; letter-spacing: 3px;
+    color: rgba(0,220,100,0.7);
+    position: relative;
+  }
+  .v5-colony-item {
+    padding: 7px 12px; border-bottom: 1px solid rgba(0,150,60,0.1);
+    font-size: 9px; cursor: pointer; position: relative;
+  }
+  .v5-colony-item.selected {
+    background: rgba(0,40,16,0.4);
+    border-left: 2px solid rgba(0,220,100,0.6);
+    box-shadow: inset 0 0 15px rgba(0,180,60,0.1);
+  }
+  .v5-colony-name { color: rgba(0,230,100,0.85); margin-bottom: 2px; }
+  .v5-colony-stats { color: rgba(0,160,60,0.5); font-size: 7px; }
+
+  .v5-right {
+    position: absolute; right: 0; top: 76px; bottom: 26px; width: 170px;
+    background: linear-gradient(270deg, rgba(0,8,4,0.5) 0%, rgba(0,12,6,0.30) 100%);
+    border-left: 1px solid rgba(0,200,80,0.35);
+    box-shadow: -2px 0 20px rgba(0,150,60,0.1);
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+  }
+  .v5-bottom {
+    position: absolute; bottom: 0; left: 0; right: 0; height: 26px;
+    background: rgba(0,8,4,0.45);
+    border-top: 1px solid rgba(0,200,80,0.35);
+    backdrop-filter: blur(6px);
+    display: flex; align-items: center; padding: 0 12px;
+    font-size: 8px; color: rgba(0,180,60,0.55);
+  }
+  .v5-mapmode {
+    position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 2px;
+    background: rgba(0,8,4,0.55);
+    border: 1px solid rgba(0,180,80,0.35);
+    border-radius: 2px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 15px rgba(0,150,60,0.15);
+    padding: 2px;
+  }
+  .v5-mode-btn {
+    padding: 4px 14px; font-size: 8px; letter-spacing: 1px;
+    background: transparent; border: 1px solid transparent;
+    color: rgba(0,170,60,0.45); cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase; font-family: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    border-radius: 1px;
+  }
+  .v5-mode-btn.active {
+    background: rgba(0,60,24,0.4);
+    border-color: rgba(0,210,90,0.5);
+    color: rgba(0,230,100,0.9);
+    box-shadow: 0 0 10px rgba(0,180,70,0.2);
+    text-shadow: 0 0 8px rgba(0,220,80,0.6);
+  }
+  .v5-mode-icon { font-size: 14px; }
+  .v5-mode-label { font-size: 6px; }
+
+  /* ─────── variant label overlay ─────── */
+  .variant-label {
+    position: absolute; bottom: 35px; left: 50%; transform: translateX(-50%);
+    text-align: center; pointer-events: none;
+  }
+  .variant-label h2 {
+    font-size: 10px; letter-spacing: 4px; text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .variant-label p { font-size: 8px; letter-spacing: 2px; opacity: 0.5; }
+
+  /* common section content helpers */
+  .section-content { padding: 8px 12px; }
+  .data-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 8px; }
+  .data-key { opacity: 0.55; }
+  .data-sep { opacity: 0.3; }
+
+  /* mini bar */
+  .mini-bar-bg {
+    height: 3px; border-radius: 1px; margin: 2px 0 6px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  .mini-bar-fill { height: 100%; border-radius: 1px; }
+</style>
+</head>
+<body>
+
+<!-- NAVIGATION -->
+<div class="nav">
+  <div class="nav-title">KOSMOS — UI Koncepty</div>
+  <button class="nav-btn active" onclick="showVariant(1, this)">1 · Hologram</button>
+  <button class="nav-btn" onclick="showVariant(2, this)">2 · Taktyczny</button>
+  <button class="nav-btn" onclick="showVariant(3, this)">3 · Neuro Grid</button>
+  <button class="nav-btn" onclick="showVariant(4, this)">4 · Quantum</button>
+  <button class="nav-btn" onclick="showVariant(5, this)">5 · Biolum.</button>
+</div>
+
+<!-- ═══ VARIANT 1: HOLOGRAM BLUE ═══ -->
+<div class="variant-container active" id="v1">
+  <canvas class="bg" id="bg1"></canvas>
+
+  <!-- TopBar -->
+  <div class="v1-topbar">
+    <div class="v1-logo">K O S M O S</div>
+    <div class="v1-res-group">
+      <div class="v1-res"><div class="v1-res-label">Fe</div><div class="v1-res-val">1,240</div></div>
+      <div class="v1-res"><div class="v1-res-label">Si</div><div class="v1-res-val">880</div></div>
+      <div class="v1-res"><div class="v1-res-label">C</div><div class="v1-res-val">340</div></div>
+    </div>
+    <div class="v1-res-group">
+      <div class="v1-res"><div class="v1-res-label">food</div><div class="v1-res-val">+4.2</div></div>
+      <div class="v1-res"><div class="v1-res-label">H₂O</div><div class="v1-res-val">+2.1</div></div>
+    </div>
+    <div style="margin-left:auto; font-size:8px; color:rgba(0,200,255,0.5); letter-spacing:2px;">
+      ⏸&nbsp;&nbsp;1d/s&nbsp;&nbsp;<span style="color:rgba(0,200,255,0.3)">1t/s&nbsp;1m/s&nbsp;1r/s&nbsp;10r/s</span>
+    </div>
+  </div>
+
+  <!-- MapMode -->
+  <div class="v1-mapmode">
+    <button class="v1-mode-btn"><div class="v1-mode-icon">✦</div><div class="v1-mode-label">Galaxy</div></button>
+    <button class="v1-mode-btn active"><div class="v1-mode-icon">◎</div><div class="v1-mode-label">System</div></button>
+    <button class="v1-mode-btn"><div class="v1-mode-icon">⊙</div><div class="v1-mode-label">Body</div></button>
+  </div>
+
+  <!-- Left panel -->
+  <div class="v1-left">
+    <div class="v1-panel-header">KOLONIE</div>
+    <div class="v1-colony-item selected">
+      <div class="v1-colony-name">⬡ Kepler-IV</div>
+      <div class="v1-colony-stats">POP 4 · Rocky HZ · Prosperity 72</div>
+    </div>
+    <div class="v1-colony-item">
+      <div class="v1-colony-name">⬡ Minos-II</div>
+      <div class="v1-colony-stats">POP 2 · Outpost · Prosperity 38</div>
+    </div>
+    <div class="v1-colony-item">
+      <div class="v1-colony-name">⬡ Arkas-VII</div>
+      <div class="v1-colony-stats">POP 1 · Outpost · Prosperity 21</div>
+    </div>
+    <div class="v1-panel-header" style="margin-top:8px">EKSPEDYCJE</div>
+    <div class="v1-colony-item">
+      <div class="v1-colony-name" style="color:rgba(100,220,255,0.6)">◈ RECON → Asteroid-44</div>
+      <div class="v1-colony-stats">ETA: 2.3 lat · Nauka I</div>
+    </div>
+    <div class="v1-colony-item">
+      <div class="v1-colony-name" style="color:rgba(100,220,255,0.6)">◈ MINING → Belta-09</div>
+      <div class="v1-colony-stats">ETA: 8.1 lat · Nauka II</div>
+    </div>
+  </div>
+
+  <!-- Right panel -->
+  <div class="v1-right">
+    <div class="v1-panel-header">FLOTA</div>
+    <div class="section-content" style="position:relative;z-index:1">
+      <div class="data-row">
+        <span class="data-key" style="color:rgba(0,180,255,0.45)">Nauka I</span>
+        <span style="color:rgba(100,210,255,0.7)">orbituje</span>
+      </div>
+      <div class="data-row">
+        <span class="data-key" style="color:rgba(0,180,255,0.45)">Nauka II</span>
+        <span style="color:rgba(100,210,255,0.5)">w locie</span>
+      </div>
+      <div class="data-row">
+        <span class="data-key" style="color:rgba(0,180,255,0.45)">Kolonista I</span>
+        <span style="color:rgba(0,210,255,0.3)">hangar</span>
+      </div>
+    </div>
+    <div class="v1-panel-header" style="margin-top:4px">BUDOWA</div>
+    <div class="section-content" style="position:relative;z-index:1">
+      <div class="data-row">
+        <span style="color:rgba(100,200,255,0.65)">Cargo III</span>
+        <span style="color:rgba(0,180,255,0.4)">6.2 lat</span>
+      </div>
+      <div class="mini-bar-bg" style="background:rgba(0,200,255,0.1)">
+        <div class="mini-bar-fill" style="width:35%;background:rgba(0,200,255,0.5)"></div>
+      </div>
+    </div>
+    <div class="v1-panel-header" style="margin-top:4px">SYSTEM</div>
+    <div class="section-content" style="position:relative;z-index:1;font-size:8px">
+      <div class="data-row"><span class="data-key" style="color:rgba(0,160,220,0.45)">gwiazda</span><span style="color:rgba(100,200,255,0.6)">Sol-type G</span></div>
+      <div class="data-row"><span class="data-key" style="color:rgba(0,160,220,0.45)">planety</span><span style="color:rgba(100,200,255,0.6)">7</span></div>
+      <div class="data-row"><span class="data-key" style="color:rgba(0,160,220,0.45)">rok gry</span><span style="color:rgba(100,200,255,0.6)">2,847</span></div>
+    </div>
+  </div>
+
+  <!-- Floating data panel -->
+  <div class="v1-holo-float" style="left:220px; bottom:50px; width:180px">
+    <div class="v1-holo-title">KEPLER-IV · STATUS</div>
+    <div class="v1-data-row"><span class="v1-data-key">populacja</span><span class="v1-data-val">4 POP</span></div>
+    <div class="v1-data-row"><span class="v1-data-key">epocha</span><span class="v1-data-val">Przemysłowa</span></div>
+    <div class="v1-data-row"><span class="v1-data-key">prosperity</span><span class="v1-data-val" style="color:#00ee88">72</span></div>
+    <div class="v1-data-row"><span class="v1-data-key">morale</span><span class="v1-data-val" style="color:#ffcc44">58</span></div>
+  </div>
+
+  <!-- Bottom -->
+  <div class="v1-bottom">
+    <span>SYS STABILITY: 84% &nbsp;|&nbsp; ROK 2847 &nbsp;|&nbsp;</span>
+    <span style="margin-left:auto; color:rgba(0,180,255,0.35)">↑ Kolonia Minos-II założona · Kepler-IV: nowa epoka</span>
+  </div>
+
+  <div class="variant-label">
+    <h2 style="color:rgba(0,200,255,0.8)">Wariant 1 — Hologram Blue</h2>
+    <p style="color:rgba(0,180,255,0.5)">Minority Report · bardzo przezroczyste · niebieska projekcja</p>
+  </div>
+</div>
+
+<!-- ═══ VARIANT 2: TACTICAL HUD ═══ -->
+<div class="variant-container" id="v2">
+  <canvas class="bg" id="bg2"></canvas>
+
+  <div class="v2-topbar">
+    <div class="corner-tl"></div><div class="corner-tr"></div>
+    <div class="corner-bl"></div><div class="corner-br"></div>
+    <div class="v2-logo">K O S M O S</div>
+    <div class="v2-res-group">
+      <div class="v2-res"><div class="v2-res-label">Fe</div><div class="v2-res-val">1,240</div></div>
+      <div class="v2-res"><div class="v2-res-label">Si</div><div class="v2-res-val">880</div></div>
+      <div class="v2-res"><div class="v2-res-label">C</div><div class="v2-res-val">340</div></div>
+    </div>
+    <div class="v2-res-group">
+      <div class="v2-res"><div class="v2-res-label">food</div><div class="v2-res-val">+4.2</div></div>
+      <div class="v2-res"><div class="v2-res-label">H₂O</div><div class="v2-res-val">+2.1</div></div>
+    </div>
+    <div style="margin-left:auto; font-size:8px; color:rgba(180,120,40,0.6); letter-spacing:2px;">
+      ⏸&nbsp;&nbsp;<span style="color:rgba(255,160,40,0.8)">1d/s</span>&nbsp;&nbsp;<span style="opacity:0.4">1t/s&nbsp;1m/s&nbsp;1r/s&nbsp;10r/s</span>
+    </div>
+  </div>
+
+  <div class="v2-mapmode">
+    <button class="v2-mode-btn"><div class="v2-mode-icon">✦</div><div class="v2-mode-label">GALAXY</div></button>
+    <button class="v2-mode-btn active"><div class="v2-mode-icon">◎</div><div class="v2-mode-label">SYSTEM</div></button>
+    <button class="v2-mode-btn"><div class="v2-mode-icon">⊙</div><div class="v2-mode-label">BODY</div></button>
+  </div>
+
+  <div class="v2-left">
+    <div class="v2-panel-header">KOLONIE</div>
+    <div class="v2-colony-item selected">
+      <div class="v2-colony-name">◈ Kepler-IV</div>
+      <div class="v2-colony-stats">POP 4 · Rocky HZ · Prosperity 72</div>
+    </div>
+    <div class="v2-colony-item">
+      <div class="v2-colony-name">◈ Minos-II</div>
+      <div class="v2-colony-stats">POP 2 · Outpost · Prosperity 38</div>
+    </div>
+    <div class="v2-colony-item">
+      <div class="v2-colony-name">◈ Arkas-VII</div>
+      <div class="v2-colony-stats">POP 1 · Outpost · Prosperity 21</div>
+    </div>
+    <div class="v2-panel-header" style="margin-top:8px">EKSPEDYCJE</div>
+    <div class="v2-colony-item">
+      <div class="v2-colony-name" style="color:rgba(255,160,60,0.7)">▶ RECON · Asteroid-44</div>
+      <div class="v2-colony-stats">ETA: 2.3 lat · active</div>
+    </div>
+  </div>
+
+  <div class="v2-right">
+    <div class="v2-panel-header">FLOTA</div>
+    <div class="section-content">
+      <div class="data-row"><span class="data-key" style="color:rgba(160,100,30,0.55)">Nauka I</span><span style="color:rgba(255,180,60,0.7)">orbita</span></div>
+      <div class="data-row"><span class="data-key" style="color:rgba(160,100,30,0.55)">Nauka II</span><span style="color:rgba(200,150,50,0.55)">w locie</span></div>
+      <div class="data-row"><span class="data-key" style="color:rgba(160,100,30,0.55)">Kolonista I</span><span style="color:rgba(150,100,30,0.4)">hangar</span></div>
+    </div>
+    <div class="v2-panel-header" style="margin-top:4px">SYSTEM</div>
+    <div class="section-content" style="font-size:8px">
+      <div class="data-row"><span style="color:rgba(150,90,20,0.5)">rok gry</span><span style="color:rgba(255,180,60,0.65)">2,847</span></div>
+      <div class="data-row"><span style="color:rgba(150,90,20,0.5)">faza</span><span style="color:rgba(255,180,60,0.65)">Dojrzały</span></div>
+      <div class="data-row"><span style="color:rgba(150,90,20,0.5)">stabilność</span><span style="color:rgba(150,220,60,0.7)">84%</span></div>
+    </div>
+  </div>
+
+  <div class="v2-bottom">
+    <span>STABILNOŚĆ: 84% &nbsp;·&nbsp; ROK 2847</span>
+    <span style="margin-left:auto;opacity:0.4">MINOS-II: kolonia założona</span>
+  </div>
+
+  <div class="variant-label">
+    <h2 style="color:rgba(255,160,40,0.8)">Wariant 2 — Taktyczny HUD</h2>
+    <p style="color:rgba(180,120,30,0.5)">Mass Effect · narożniki · bursztynowy akcent</p>
+  </div>
+</div>
+
+<!-- ═══ VARIANT 3: NEURO GRID ═══ -->
+<div class="variant-container" id="v3">
+  <canvas class="bg" id="bg3"></canvas>
+
+  <div class="v3-topbar">
+    <div class="v3-logo">K O S M O S</div>
+    <div class="v3-res-group">
+      <div class="v3-res"><div class="v3-res-label">Fe</div><div class="v3-res-val">1,240</div></div>
+      <div class="v3-res"><div class="v3-res-label">Si</div><div class="v3-res-val">880</div></div>
+      <div class="v3-res"><div class="v3-res-label">C</div><div class="v3-res-val">340</div></div>
+    </div>
+    <div class="v3-res-group">
+      <div class="v3-res"><div class="v3-res-label">food</div><div class="v3-res-val">+4.2</div></div>
+      <div class="v3-res"><div class="v3-res-label">H₂O</div><div class="v3-res-val">+2.1</div></div>
+    </div>
+    <div style="margin-left:auto; font-size:8px; color:rgba(0,200,255,0.4); letter-spacing:2px;">
+      ⏸ &nbsp; <span style="color:#00e5ff">1d/s</span> &nbsp; <span style="opacity:0.35">1t/s 1m/s 1r/s</span>
+    </div>
+  </div>
+
+  <div class="v3-mapmode">
+    <button class="v3-mode-btn"><div class="v3-mode-icon">✦</div><div class="v3-mode-label">GALAXY</div></button>
+    <button class="v3-mode-btn active"><div class="v3-mode-icon">◎</div><div class="v3-mode-label">SYSTEM</div></button>
+    <button class="v3-mode-btn"><div class="v3-mode-icon">⊙</div><div class="v3-mode-label">BODY</div></button>
+  </div>
+
+  <!-- Data nodes floating -->
+  <div class="v3-node" style="left:230px;top:180px"></div>
+  <div class="v3-node-line" style="left:238px;top:183px;width:80px"></div>
+  <div class="v3-node" style="left:330px;top:260px"></div>
+  <div class="v3-node-line" style="left:338px;top:263px;width:60px"></div>
+
+  <div class="v3-left">
+    <div class="v3-grid-bg"></div>
+    <div class="v3-panel-header">KOLONIE</div>
+    <div class="v3-colony-item selected">
+      <div class="v3-colony-name">◉ Kepler-IV</div>
+      <div class="v3-colony-stats">POP 4 · Rocky HZ · Prosperity 72</div>
+    </div>
+    <div class="v3-colony-item">
+      <div class="v3-colony-name">◉ Minos-II</div>
+      <div class="v3-colony-stats">POP 2 · Outpost · Prosperity 38</div>
+    </div>
+    <div class="v3-colony-item">
+      <div class="v3-colony-name">◉ Arkas-VII</div>
+      <div class="v3-colony-stats">POP 1 · Outpost · 21</div>
+    </div>
+    <div class="v3-panel-header" style="margin-top:8px;position:relative;z-index:1">EKSPEDYCJE</div>
+    <div class="v3-colony-item">
+      <div class="v3-colony-name" style="color:rgba(0,210,255,0.6)">⊛ RECON → Asteroid-44</div>
+      <div class="v3-colony-stats">ETA 2.3y · active</div>
+    </div>
+  </div>
+
+  <div class="v3-right">
+    <div class="v3-grid-bg"></div>
+    <div class="v3-panel-header">FLOTA</div>
+    <div class="section-content" style="position:relative;z-index:1">
+      <div class="data-row"><span class="data-key" style="color:rgba(0,160,220,0.4)">Nauka I</span><span style="color:rgba(0,210,255,0.7)">orbita</span></div>
+      <div class="data-row"><span class="data-key" style="color:rgba(0,160,220,0.4)">Nauka II</span><span style="color:rgba(0,200,255,0.5)">w locie</span></div>
+    </div>
+    <div class="v3-panel-header" style="position:relative;z-index:1;margin-top:4px">SIEĆ DANYCH</div>
+    <div class="section-content" style="position:relative;z-index:1;font-size:8px">
+      <div class="data-row"><span style="color:rgba(0,160,220,0.4)">węzły</span><span style="color:rgba(0,210,255,0.6)">12 aktywne</span></div>
+      <div class="data-row"><span style="color:rgba(0,160,220,0.4)">transfer</span><span style="color:rgba(0,210,255,0.6)">4.2 Gbit/s</span></div>
+      <div class="data-row"><span style="color:rgba(0,160,220,0.4)">latencja</span><span style="color:rgba(150,220,60,0.6)">0.3ms</span></div>
+    </div>
+  </div>
+
+  <div class="v3-bottom">
+    <span>GRID: 84% &nbsp;·&nbsp;</span>
+    <span style="color:#00e5ff;text-shadow:0 0 6px #00e5ff">ROK 2847</span>
+    <span style="margin-left:auto;opacity:0.35">↑ NODE KEPLER-IV · SYNC 98%</span>
+  </div>
+
+  <div class="variant-label">
+    <h2 style="color:rgba(0,220,255,0.8)">Wariant 3 — Neuro Grid</h2>
+    <p style="color:rgba(0,180,255,0.4)">Tron · siatka danych · węzły połączeń</p>
+  </div>
+</div>
+
+<!-- ═══ VARIANT 4: QUANTUM MINIMAL ═══ -->
+<div class="variant-container" id="v4">
+  <canvas class="bg" id="bg4"></canvas>
+
+  <div class="v4-topbar">
+    <div class="v4-logo">K O S M O S</div>
+    <div class="v4-res-group">
+      <div class="v4-res"><span class="v4-res-label">Fe</span>&nbsp;<span class="v4-res-val">1,240</span></div>
+      <div class="v4-res"><span class="v4-res-label">Si</span>&nbsp;<span class="v4-res-val">880</span></div>
+      <div class="v4-res"><span class="v4-res-label">C</span>&nbsp;<span class="v4-res-val">340</span></div>
+      <div class="v4-res"><span class="v4-res-label">food</span>&nbsp;<span class="v4-res-val" style="color:rgba(0,230,100,0.6)">+4.2</span></div>
+    </div>
+    <div style="margin-left:auto;font-size:8px;color:rgba(0,255,180,0.3);letter-spacing:2px">
+      ⏸ &nbsp; <span style="color:rgba(0,255,180,0.7)">1d/s</span> &nbsp; <span style="opacity:0.3">1t/s 1m/s 1r/s</span>
+    </div>
+  </div>
+
+  <div class="v4-mapmode">
+    <button class="v4-mode-btn"><div class="v4-mode-icon">✦</div><div class="v4-mode-label">GALAXY</div></button>
+    <button class="v4-mode-btn active"><div class="v4-mode-icon">◎</div><div class="v4-mode-label">SYSTEM</div></button>
+    <button class="v4-mode-btn"><div class="v4-mode-icon">⊙</div><div class="v4-mode-label">BODY</div></button>
+  </div>
+
+  <!-- Floating minimal data -->
+  <div class="v4-float-data" style="left:220px; top:100px">
+    <div style="color:rgba(0,255,180,0.4);font-size:7px;letter-spacing:3px;margin-bottom:6px">KEPLER-IV</div>
+    <div>POP <span class="v4-float-accent">4</span> &nbsp; MORALE <span class="v4-float-accent">58</span></div>
+    <div>PROSPERITY <span class="v4-float-accent">72</span></div>
+    <div>EPOKA <span class="v4-float-accent">Przemysłowa</span></div>
+  </div>
+
+  <div class="v4-float-data" style="right:190px; top:140px; text-align:right">
+    <div style="color:rgba(0,255,180,0.4);font-size:7px;letter-spacing:3px;margin-bottom:6px">FLOTA</div>
+    <div>Nauka I &nbsp; <span class="v4-float-accent">orbita</span></div>
+    <div>Nauka II &nbsp; <span class="v4-float-accent">w locie</span></div>
+    <div style="margin-top:8px;color:rgba(0,255,180,0.25)">ROK <span style="color:rgba(0,255,180,0.5)">2847</span></div>
+  </div>
+
+  <div class="bracket-panel v4-left">
+    <div class="bp-inner">
+      <div class="v4-panel-header">KOLONIE</div>
+      <div class="v4-colony-item selected">
+        <div class="v4-colony-name">Kepler-IV</div>
+        <div class="v4-colony-stats">POP 4 · Prosperity 72</div>
+      </div>
+      <div class="v4-colony-item">
+        <div class="v4-colony-name">Minos-II</div>
+        <div class="v4-colony-stats">POP 2 · Prosperity 38</div>
+      </div>
+      <div class="v4-colony-item">
+        <div class="v4-colony-name">Arkas-VII</div>
+        <div class="v4-colony-stats">POP 1 · Prosperity 21</div>
+      </div>
+      <div class="v4-panel-header" style="margin-top:10px">EKSPEDYCJE</div>
+      <div class="v4-colony-item">
+        <div class="v4-colony-name" style="color:rgba(0,255,180,0.5)">RECON · Asteroid-44</div>
+        <div class="v4-colony-stats">ETA 2.3 lat</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bracket-panel v4-right">
+    <div class="bp-inner">
+      <div class="v4-panel-header">FLOTA</div>
+      <div class="v4-colony-item">
+        <div class="v4-colony-name">Nauka I</div>
+        <div class="v4-colony-stats" style="color:rgba(0,255,180,0.4)">orbituje</div>
+      </div>
+      <div class="v4-colony-item">
+        <div class="v4-colony-name">Nauka II</div>
+        <div class="v4-colony-stats">w locie</div>
+      </div>
+      <div class="v4-panel-header" style="margin-top:10px">OBSERWACJE</div>
+      <div class="v4-colony-item">
+        <div class="v4-colony-name" style="font-size:8px">Odkryto: Asteroid-44</div>
+        <div class="v4-colony-stats">metalic · Fe, Pt</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="v4-bottom">
+    <span style="color:rgba(0,255,180,0.3); letter-spacing:2px">STABILNOŚĆ 84% &nbsp;·&nbsp; ROK 2847</span>
+    <span style="margin-left:auto; color:rgba(0,255,180,0.2)">MINOS-II: kolonia założona</span>
+  </div>
+
+  <div class="variant-label">
+    <h2 style="color:rgba(0,255,180,0.7)">Wariant 4 — Quantum Minimal</h2>
+    <p style="color:rgba(0,255,180,0.3)">Prawie niewidzialny · narożniki · dane unoszą się w przestrzeni</p>
+  </div>
+</div>
+
+<!-- ═══ VARIANT 5: BIOLUMINESCENT ═══ -->
+<div class="variant-container" id="v5">
+  <canvas class="bg" id="bg5"></canvas>
+
+  <div class="v5-topbar">
+    <div class="v5-logo">K O S M O S</div>
+    <div class="v5-res-group">
+      <div class="v5-res"><div class="v5-res-label">Fe</div><div class="v5-res-val">1,240</div></div>
+      <div class="v5-res"><div class="v5-res-label">Si</div><div class="v5-res-val">880</div></div>
+      <div class="v5-res"><div class="v5-res-label">C</div><div class="v5-res-val">340</div></div>
+    </div>
+    <div class="v5-res-group">
+      <div class="v5-res"><div class="v5-res-label">food</div><div class="v5-res-val">+4.2</div></div>
+    </div>
+    <div style="margin-left:auto;font-size:8px;color:rgba(0,180,60,0.5);letter-spacing:2px">
+      ⏸ &nbsp; <span style="color:rgba(0,230,100,0.8)">1d/s</span> &nbsp; <span style="opacity:0.35">1t/s 1m/s</span>
+    </div>
+  </div>
+
+  <div class="v5-mapmode">
+    <button class="v5-mode-btn"><div class="v5-mode-icon">✦</div><div class="v5-mode-label">GALAXY</div></button>
+    <button class="v5-mode-btn active"><div class="v5-mode-icon">◎</div><div class="v5-mode-label">SYSTEM</div></button>
+    <button class="v5-mode-btn"><div class="v5-mode-icon">⊙</div><div class="v5-mode-label">BODY</div></button>
+  </div>
+
+  <div class="v5-left">
+    <div class="v5-vein" style="width:120px;height:80px;top:100px;left:-20px"></div>
+    <div class="v5-vein" style="width:80px;height:60px;top:250px;left:60px;animation-delay:2s"></div>
+    <div class="v5-panel-header">KOLONIE</div>
+    <div class="v5-colony-item selected">
+      <div class="v5-colony-name">⬡ Kepler-IV</div>
+      <div class="v5-colony-stats">POP 4 · Rocky HZ · Prosperity 72</div>
+    </div>
+    <div class="v5-colony-item">
+      <div class="v5-colony-name">⬡ Minos-II</div>
+      <div class="v5-colony-stats">POP 2 · Outpost · Prosperity 38</div>
+    </div>
+    <div class="v5-colony-item">
+      <div class="v5-colony-name">⬡ Arkas-VII</div>
+      <div class="v5-colony-stats">POP 1 · Outpost · 21</div>
+    </div>
+    <div class="v5-panel-header" style="margin-top:8px">EKSPEDYCJE</div>
+    <div class="v5-colony-item">
+      <div class="v5-colony-name" style="color:rgba(0,200,80,0.65)">◈ RECON · Asteroid-44</div>
+      <div class="v5-colony-stats">ETA 2.3 lat</div>
+    </div>
+  </div>
+
+  <div class="v5-right">
+    <div class="v5-vein" style="width:100px;height:70px;top:80px;right:-10px"></div>
+    <div class="v5-panel-header">FLOTA</div>
+    <div class="section-content">
+      <div class="data-row"><span class="data-key" style="color:rgba(0,150,50,0.5)">Nauka I</span><span style="color:rgba(0,220,90,0.7)">orbita</span></div>
+      <div class="data-row"><span class="data-key" style="color:rgba(0,150,50,0.5)">Nauka II</span><span style="color:rgba(0,200,80,0.55)">w locie</span></div>
+    </div>
+    <div class="v5-panel-header" style="margin-top:4px">STATUS</div>
+    <div class="section-content" style="font-size:8px">
+      <div class="data-row"><span style="color:rgba(0,150,50,0.45)">biosfera</span><span style="color:rgba(0,220,90,0.65)">aktywna</span></div>
+      <div class="data-row"><span style="color:rgba(0,150,50,0.45)">rok gry</span><span style="color:rgba(0,220,90,0.65)">2,847</span></div>
+      <div class="data-row"><span style="color:rgba(0,150,50,0.45)">stabilność</span><span style="color:rgba(150,230,60,0.65)">84%</span></div>
+    </div>
+  </div>
+
+  <div class="v5-bottom">
+    <span>BIOSYSTEM: 84% &nbsp;·&nbsp; ROK 2847</span>
+    <span style="margin-left:auto;opacity:0.35">↑ MINOS-II: życie wykryte</span>
+  </div>
+
+  <div class="variant-label">
+    <h2 style="color:rgba(0,210,90,0.8)">Wariant 5 — Bioluminescent</h2>
+    <p style="color:rgba(0,160,60,0.4)">Avatar · organiczny blask · żywe żyłki</p>
+  </div>
+</div>
+
+<script>
+// ─── Background star field ───────────────────────────────────────
+function drawStars(canvasId, accent, nebulaColor) {
+  const canvas = document.getElementById(canvasId);
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const ctx = canvas.getContext('2d');
+
+  // Deep space background
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Nebula
+  const grd = ctx.createRadialGradient(canvas.width*0.55, canvas.height*0.45, 0, canvas.width*0.55, canvas.height*0.45, canvas.width*0.42);
+  grd.addColorStop(0, nebulaColor.replace('X', '0.10'));
+  grd.addColorStop(0.4, nebulaColor.replace('X', '0.05'));
+  grd.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const grd2 = ctx.createRadialGradient(canvas.width*0.3, canvas.height*0.6, 0, canvas.width*0.3, canvas.height*0.6, canvas.width*0.3);
+  grd2.addColorStop(0, nebulaColor.replace('X', '0.06'));
+  grd2.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd2;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Stars
+  const rng = mulberry32(42);
+  for (let i = 0; i < 600; i++) {
+    const x = rng() * canvas.width;
+    const y = rng() * canvas.height;
+    const r = rng() < 0.05 ? (rng()*1.2+0.6) : (rng()*0.5+0.2);
+    const a = rng()*0.5+0.2;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(${accent},${a})`;
+    ctx.fill();
+  }
+
+  // Bright star cluster
+  for (let i = 0; i < 12; i++) {
+    const x = canvas.width*0.5 + (rng()-0.5)*canvas.width*0.4;
+    const y = canvas.height*0.5 + (rng()-0.5)*canvas.height*0.4;
+    ctx.beginPath();
+    ctx.arc(x, y, rng()*1.5+0.8, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(${accent},${rng()*0.6+0.4})`;
+    ctx.fill();
+  }
+
+  // Star (sun)
+  const sx = canvas.width * 0.52, sy = canvas.height * 0.42;
+  const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, 90);
+  sg.addColorStop(0, 'rgba(255,240,180,0.95)');
+  sg.addColorStop(0.06, 'rgba(255,210,100,0.7)');
+  sg.addColorStop(0.2, 'rgba(255,170,50,0.25)');
+  sg.addColorStop(0.5, 'rgba(255,140,20,0.08)');
+  sg.addColorStop(1, 'transparent');
+  ctx.fillStyle = sg;
+  ctx.fillRect(sx-90, sy-90, 180, 180);
+
+  // Orbits
+  ctx.strokeStyle = 'rgba(180,220,200,0.04)';
+  ctx.lineWidth = 1;
+  [90, 160, 240, 330].forEach(r => {
+    ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI*2); ctx.stroke();
+  });
+
+  // Planets
+  const planets = [
+    { r: 90, a: 0.8, size: 4, color: 'rgba(200,120,60,0.8)' },
+    { r: 160, a: 2.1, size: 6, color: 'rgba(100,180,220,0.85)' },
+    { r: 240, a: 4.2, size: 5, color: 'rgba(80,160,100,0.75)' },
+    { r: 330, a: 1.5, size: 9, color: 'rgba(180,140,80,0.7)' },
+  ];
+  planets.forEach(p => {
+    const px = sx + Math.cos(p.a) * p.r;
+    const py = sy + Math.sin(p.a) * p.r;
+    const pg = ctx.createRadialGradient(px-p.size*0.3, py-p.size*0.3, 0, px, py, p.size);
+    pg.addColorStop(0, 'rgba(255,255,255,0.4)');
+    pg.addColorStop(0.3, p.color);
+    pg.addColorStop(1, p.color.replace(/[\d.]+\)$/, '0.3)'));
+    ctx.beginPath(); ctx.arc(px, py, p.size, 0, Math.PI*2);
+    ctx.fillStyle = pg; ctx.fill();
+  });
+}
+
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
+// Draw backgrounds for all variants
+drawStars('bg1', '176,240,224', 'rgba(0,100,200,X)');
+drawStars('bg2', '255,220,180', 'rgba(180,80,10,X)');
+drawStars('bg3', '176,240,224', 'rgba(0,100,160,X)');
+drawStars('bg4', '176,240,224', 'rgba(0,80,120,X)');
+drawStars('bg5', '180,240,200', 'rgba(0,120,40,X)');
+
+// Nav switching
+function showVariant(n, btn) {
+  document.querySelectorAll('.variant-container').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('v' + n).classList.add('active');
+  btn.classList.add('active');
+}
+
+// Keyboard shortcuts 1-5
+document.addEventListener('keydown', e => {
+  const n = parseInt(e.key);
+  if (n >= 1 && n <= 5) {
+    showVariant(n, document.querySelectorAll('.nav-btn')[n-1]);
+  }
+});
+</script>
+</body>
+</html>

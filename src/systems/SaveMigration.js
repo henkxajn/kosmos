@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 42;
+export const CURRENT_VERSION     = 43;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -57,6 +57,7 @@ const MIGRATIONS = {
   39: _migrateV39toV40,
   40: _migrateV40toV41,
   41: _migrateV41toV42,
+  42: _migrateV42toV43,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1132,6 +1133,14 @@ function _migrateV40toV41(data) {
 function _migrateV41toV42(data) {
   if (data.civ4x) {
     data.civ4x.unitDesigns = data.civ4x.unitDesigns ?? [];
+  }
+  return data;
+}
+
+// ── v42 → v43: LeaderSystem — frakcja i przywódca ───────────────────────────
+function _migrateV42toV43(data) {
+  if (data.c4x) {
+    data.c4x.leaderSystem = data.c4x.leaderSystem ?? null;
   }
   return data;
 }

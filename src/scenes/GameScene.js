@@ -36,10 +36,12 @@ import { CollisionForecast } from '../systems/CollisionForecast.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { GroundUnitManager } from '../systems/GroundUnitManager.js';
 import { AnomalyEffectSystem } from '../systems/AnomalyEffectSystem.js';
+import { LeaderSystem }        from '../systems/LeaderSystem.js';
 import { ANOMALIES } from '../data/AnomalyData.js';
 import { showEventNotification, showImpactNotification, showMovementModal } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
+import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { formatStatLine, formatStatLineWithCursor } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
@@ -162,6 +164,7 @@ export class GameScene {
     this.collisionForecast = new CollisionForecast();
     this.groundUnitManager = new GroundUnitManager();
     this.anomalyEffectSystem = new AnomalyEffectSystem();
+    this.leaderSystem        = new LeaderSystem();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -187,6 +190,7 @@ export class GameScene {
     window.KOSMOS.collisionForecast = this.collisionForecast;
     window.KOSMOS.groundUnitManager  = this.groundUnitManager;
     window.KOSMOS.anomalyEffectSystem = this.anomalyEffectSystem;
+    window.KOSMOS.leaderSystem     = this.leaderSystem;
     window.KOSMOS.threeRenderer    = this.threeRenderer;
 
     // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
@@ -299,6 +303,19 @@ export class GameScene {
       if (c4x.starSystemManager) {
         this.starSystemManager.restore(c4x.starSystemManager);
       }
+      // Przywróć LeaderSystem
+      if (c4x.leaderSystem) {
+        this.leaderSystem.restore(c4x.leaderSystem);
+      }
+    }
+
+    // Nowa gra — ustaw przywódcę z ekranu wyboru frakcji
+    if (!savedData && window.KOSMOS.selectedFaction) {
+      this.leaderSystem.setLeader(
+        window.KOSMOS.selectedFaction,
+        window.KOSMOS.selectedLeader ?? 'yara_osei',
+        0
+      );
     }
 
     // ── Spawn rovera po postawieniu stolicy (nowa gra) ─────────
@@ -439,6 +456,8 @@ export class GameScene {
 
     // Popupy misji (pauza + powiadomienie)
     initMissionEvents();
+    // Modal wyborów konsularnych (Poszukiwacze co 15 lat)
+    initConsulElection();
 
     // Popup: kolonia/placówka utracona (zniszczenie ciała niebieskiego)
     EventBus.on('colony:destroyed', ({ planetId, colonyName, reason, isOutpost, population, destroyedVesselIds }) => {
