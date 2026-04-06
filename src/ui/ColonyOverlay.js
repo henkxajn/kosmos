@@ -1250,7 +1250,33 @@ export class ColonyOverlay extends BaseOverlay {
     for (const [key, amount] of Object.entries(building.cost ?? {})) {
       if ((res.getAmount?.(key) ?? res.inventory?.get(key) ?? 0) < amount) return false;
     }
+    for (const [key, amount] of Object.entries(building.commodityCost ?? {})) {
+      if ((res.inventory?.get(key) ?? 0) < amount) return false;
+    }
     return true;
+  }
+
+  // Zwraca listę brakujących zasobów/commodities do budowy
+  _getMissing(colony, building) {
+    const res = colony?.resourceSystem;
+    if (!res) return [];
+    const missing = [];
+    for (const [key, amount] of Object.entries(building.cost ?? {})) {
+      const have = res.getAmount?.(key) ?? res.inventory?.get(key) ?? 0;
+      if (have < amount) {
+        const icon = RESOURCE_ICONS[key] ?? '';
+        missing.push(`${amount - have}${icon}${key}`);
+      }
+    }
+    for (const [key, amount] of Object.entries(building.commodityCost ?? {})) {
+      const have = res.inventory?.get(key) ?? 0;
+      if (have < amount) {
+        const icon = COMMODITIES[key]?.icon ?? '📦';
+        const name = COMMODITIES[key]?.namePL ?? key;
+        missing.push(`${amount - have}×${icon}${name}`);
+      }
+    }
+    return missing;
   }
 
   // ── Pixel → Tile ─────────────────────────────────────────────────────────
@@ -1463,9 +1489,32 @@ export class ColonyOverlay extends BaseOverlay {
     if (this._hoveredBuildId && this._hoveredBuildId !== oldHov) {
       const bd = BUILDINGS[this._hoveredBuildId];
       if (bd) {
+        const colony = this._getColony();
+        const res = colony?.resourceSystem;
         let html = `<b>${bd.icon ?? ''} ${bd.namePL ?? bd.id}</b>`;
+        // Koszt surowców
         if (bd.cost) {
-          html += '<br>Koszt: ' + Object.entries(bd.cost).map(([k, v]) => `${k}:${v}`).join(' ');
+          html += '<br>Koszt: ' + Object.entries(bd.cost).map(([k, v]) => {
+            const have = res?.getAmount?.(k) ?? res?.inventory?.get(k) ?? 0;
+            const color = have >= v ? '#8f8' : '#f66';
+            return `<span style="color:${color}">${k}:${v}</span>`;
+          }).join(' ');
+        }
+        // Koszt commodities
+        if (bd.commodityCost && Object.keys(bd.commodityCost).length > 0) {
+          const parts = Object.entries(bd.commodityCost).map(([k, v]) => {
+            const have = res?.inventory?.get(k) ?? 0;
+            const color = have >= v ? '#8f8' : '#f66';
+            const icon = COMMODITIES[k]?.icon ?? '📦';
+            const name = COMMODITIES[k]?.namePL ?? k;
+            return `<span style="color:${color}">${v}×${icon}${name}</span>`;
+          });
+          html += '<br>' + parts.join(' ');
+        }
+        // Braki
+        const missing = this._getMissing(colony, bd);
+        if (missing.length > 0) {
+          html += `<br><span style="color:#f66">Brakuje: ${missing.join(', ')}</span>`;
         }
         if (bd.rates) {
           html += '<br>' + Object.entries(bd.rates).map(([k, v]) =>
