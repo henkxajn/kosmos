@@ -1636,9 +1636,21 @@ export class MissionSystem {
     const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
     const gameYear = Math.floor(this._gameYear);
 
-    // Utwórz outpost — koszt budynku już pobrany z macierzystej kolonii przy wysyłce,
-    // budynek stawiany za darmo przez autoPlaceBuilding, outpost startuje pusty
-    const outpost = colMgr?.createOutpost(exp.targetId, {}, gameYear);
+    // Zbierz zasoby z cargo statku + cargo misji → startowe zasoby outpostu
+    const outpostResources = {};
+    if (vessel?.cargo) {
+      for (const [id, qty] of Object.entries(vessel.cargo)) {
+        if (qty > 0) outpostResources[id] = (outpostResources[id] ?? 0) + qty;
+      }
+    }
+    if (exp.cargo) {
+      for (const [id, qty] of Object.entries(exp.cargo)) {
+        if (qty > 0) outpostResources[id] = (outpostResources[id] ?? 0) + qty;
+      }
+    }
+
+    // Utwórz outpost z zasobami z cargo
+    const outpost = colMgr?.createOutpost(exp.targetId, outpostResources, gameYear);
     if (!outpost) {
       // Cel ma już kolonię — powrót statku
       exp.status = 'completed';
@@ -1662,18 +1674,26 @@ export class MissionSystem {
       }
     }
 
-    // Auto-build budynku na outpoście
+    // Auto-build budynku na outpoście (bez kosztu — opłacony przy wysyłce)
     const bDef = BUILDINGS[exp.buildingId];
     let buildSuccess = false;
     if (bDef && outpost.buildingSystem) {
       buildSuccess = outpost.buildingSystem.autoPlaceBuilding(exp.buildingId);
     }
 
-    // Wyczyść cargo statku
+    // Stats: resourcesHauled
+    if (vessel?.stats) {
+      for (const v of Object.values(outpostResources)) {
+        vessel.stats.resourcesHauled += v;
+      }
+    }
+
+    // Wyczyść cargo statku (dostarczone do outpostu)
     if (vessel) {
       vessel.cargo = {};
       vessel.cargoUsed = 0;
     }
+    exp.cargo = null;
 
     // Dok statek w outpoście + transfer floty
     if (exp.vesselId && vMgr) {
