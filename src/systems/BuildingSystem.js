@@ -1055,23 +1055,30 @@ export class BuildingSystem {
       const allowed = building.allowedTerrain;
       if (allowed && !allowed.includes(tile.terrain)) continue;
 
-      // Postaw budynek natychmiast (bez kosztu, bez czasu budowy)
-      tile.buildingId = buildingId;
-      tile.buildingLevel = 1;
+      // Stolica: specjalna logika (virtualny budynek, capitalBase flag)
+      const isCapital = !!building.isCapital;
+      if (isCapital) {
+        tile.capitalBase = true;
+      } else {
+        tile.buildingId = buildingId;
+        tile.buildingLevel = 1;
+      }
 
       // Zarejestruj w _active
+      const activeKey  = isCapital ? `capital_${key}` : key;
+      const producerId = isCapital ? `capital_${key}` : key;
       const rates = this._calcBaseRates(building, tile, 1);
-      const effectiveRates = this._applyTechMultipliers(rates, building);
+      const effectiveRates = this._applyTechMultipliers(rates, building, activeKey);
       const entry = {
         building, def: building, level: 1, tile, tileKey: key,
         baseRates: { ...rates }, effectiveRates: { ...effectiveRates },
         popCost: building.popCost ?? 0,
       };
-      this._active.set(key, entry);
+      this._active.set(activeKey, entry);
 
       // Zarejestruj producenta
       if (this.resourceSystem) {
-        this.resourceSystem.registerProducer(key, rates);
+        this.resourceSystem.registerProducer(producerId, rates);
       }
 
       // Housing

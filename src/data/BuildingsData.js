@@ -308,7 +308,7 @@ export const BUILDINGS = {
     namePL:      'Port Kosmiczny',
     category:    'mining',
     icon:        '🚀',
-    description: 'Port kosmiczny — baza startowa ekspedycji i lotów międzyplanetarnych',
+    description: 'Port kosmiczny — baza startowa ekspedycji i lotów międzyplanetarnych. Zawiera moduł habitatu dla 1 POP.',
     isSpaceport: true,
     cost:        { Fe: 1200, Ti: 600, Cu: 300 },
     commodityCost: { structural_alloys: 120, reactive_armor: 80, electronic_systems: 60 },
@@ -316,7 +316,7 @@ export const BUILDINGS = {
     buildTime:   2.5,      // lata gry
     rates:       {},
     maintenance: { Fe: 4, Ti: 2 },  // rampy, sprzęt startowy
-    housing:     0,
+    housing:     1,        // moduł habitatu wbudowany w port
     popCost:     0.5,
     maxLevel:    5,
     capacityBonus: null,
