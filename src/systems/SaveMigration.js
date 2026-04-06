@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 43;
+export const CURRENT_VERSION     = 44;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -58,6 +58,7 @@ const MIGRATIONS = {
   40: _migrateV40toV41,
   41: _migrateV41toV42,
   42: _migrateV42toV43,
+  43: _migrateV43toV44,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1141,6 +1142,25 @@ function _migrateV41toV42(data) {
 function _migrateV42toV43(data) {
   if (data.c4x) {
     data.c4x.leaderSystem = data.c4x.leaderSystem ?? null;
+  }
+  return data;
+}
+
+// ── v43 → v44: Naprawa outpostów — pending builds z zerowym kosztem ──────────
+// Bug: found_outpost nie przenosił cargo do outpostu, budynki utknęły w pending
+// Fix: wyzeruj koszt pending buildów na outpostach — _tickPendingQueue zrealizuje je natychmiast
+function _migrateV43toV44(data) {
+  const colonies = data.civ4x?.colonies;
+  if (!colonies) return data;
+
+  for (const col of colonies) {
+    if (!col.isOutpost) continue;
+    if (!col.pendingQueue?.length) continue;
+
+    for (const pending of col.pendingQueue) {
+      pending.cost = {};     // koszt opłacony przy wysyłce — zeruj
+      pending.popCost = 0;   // outpost nie wymaga POPów
+    }
   }
   return data;
 }
