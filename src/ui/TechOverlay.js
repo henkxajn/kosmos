@@ -69,10 +69,20 @@ export class TechOverlay {
     this._syncStates();
   }
 
-  // Blokuj canvas clicks gdy overlay jest widoczny (ale przepuść sidebar)
-  handleClick(x)     { return this.visible && x >= CIV_SIDEBAR_W; }
+  // Blokuj canvas clicks gdy overlay jest widoczny (ale przepuść TopBar/BottomBar/sidebar)
+  handleClick(x, y)  { return this.visible && this._isInOverlayArea(x, y); }
   handleMouseMove() {}
-  handleScroll(delta, x) { return this.visible && x >= CIV_SIDEBAR_W; }
+  handleScroll(delta, x, y) { return this.visible && this._isInOverlayArea(x, y); }
+
+  _isInOverlayArea(x, y) {
+    const S = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const W = Math.round(window.innerWidth / S);
+    const H = Math.round(window.innerHeight / S);
+    return x >= CIV_SIDEBAR_W &&
+           x <= W - COSMIC.OUTLINER_W &&
+           y >= COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H &&
+           y <= H - COSMIC.BOTTOM_BAR_H;
+  }
 
   // ── Budowa DOM ──────────────────────────────────────────────────────────
 

@@ -327,7 +327,7 @@ export class FactorySystem {
       }
     } else {
       const existing = this._allocations.get(commodityId);
-      // Dodaj z min 1 FP — konsolidacja rozdzieli punkty równomiernie
+      // Dodaj z min 1 FP — konsolidacja skoryguje tylko jeśli suma > totalPoints
       this._allocations.set(commodityId, {
         points: Math.max(1, points),
         progress:  existing?.progress ?? 0,
@@ -362,6 +362,8 @@ export class FactorySystem {
     // Auto-kolejkuj brakujące składniki (commodity) PRZED głównym produktem
     this._enqueuePrereqs(commodityId, qty);
     this._queue.push({ commodityId, qty });
+    // Natychmiast promuj z kolejki jeśli są wolne sloty
+    this._promoteFromQueue();
     this._emitStatus();
   }
 
@@ -1028,8 +1030,8 @@ export class FactorySystem {
     this._autoConsolidate();
   }
 
-  // Automatyczna konsolidacja: gdy zostaje 1 aktywna produkcja → daj jej max FP;
-  // gdy jest więcej — rozdziel równomiernie; zablokowane (brak surowców) oddają FP aktywnym
+  // Konsolidacja: zablokowane oddają FP; ręczne ustawienia aktywnych zachowane;
+  // korekta tylko gdy suma przekracza totalPoints lub nowe pozycje nie mają FP
   _autoConsolidate() {
     if (this._mode !== 'manual') return;
     if (this._allocations.size === 0) return;
@@ -1049,29 +1051,31 @@ export class FactorySystem {
       }
     }
 
-    if (active.length === 0) {
-      // Wszystko zablokowane — po równo (żeby UI nie pokazywał 0)
-      const count = this._allocations.size;
-      const perAlloc = Math.max(1, Math.floor(this._totalPoints / count));
-      let remainder = this._totalPoints - perAlloc * count;
-      for (const [, alloc] of this._allocations) {
-        alloc.points = perAlloc + (remainder > 0 ? 1 : 0);
-        if (remainder > 0) remainder--;
-      }
-      return;
-    }
-
-    // Zablokowane dostają 0 FP — aktywne dzielą całość
+    // Zablokowane dostają 0 FP
     for (const alloc of blocked) alloc.points = 0;
 
-    if (active.length === 1) {
-      active[0].points = this._totalPoints;
-    } else {
-      const perAlloc = Math.max(1, Math.floor(this._totalPoints / active.length));
-      let remainder = this._totalPoints - perAlloc * active.length;
-      for (const alloc of active) {
-        alloc.points = perAlloc + (remainder > 0 ? 1 : 0);
-        if (remainder > 0) remainder--;
+    if (active.length === 0) return;
+
+    // Aktywne bez FP (nowo promowane z kolejki) — nadaj min 1
+    for (const alloc of active) {
+      if (alloc.points <= 0) alloc.points = 1;
+    }
+
+    // Jeśli suma aktywnych > totalPoints — skaluj proporcjonalnie w dół
+    let sum = 0;
+    for (const alloc of active) sum += alloc.points;
+
+    if (sum > this._totalPoints) {
+      const scale = this._totalPoints / sum;
+      let assigned = 0;
+      for (let i = 0; i < active.length; i++) {
+        if (i === active.length - 1) {
+          // Ostatni dostaje resztę
+          active[i].points = Math.max(1, this._totalPoints - assigned);
+        } else {
+          active[i].points = Math.max(1, Math.round(active[i].points * scale));
+          assigned += active[i].points;
+        }
       }
     }
   }
