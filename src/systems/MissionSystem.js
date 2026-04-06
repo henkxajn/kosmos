@@ -137,9 +137,11 @@ export class MissionSystem {
   }
 
   // Sprawdź czy gracz może wysłać ekspedycję kolonizacyjną
+  // Średnie i duże kadłuby nie wymagają spaceportu — statek sam staje się portem na miejscu
   canLaunchColony(targetId, vesselId = null) {
     const techOk   = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
-    const padOk    = this._checkPadForVessel(vesselId);
+    // Misja kolonizacyjna: średni/duży kadłub nie wymaga wyrzutni (statek → spaceport)
+    const padOk    = this._colonyShipBypassPad(vesselId) ? true : this._checkPadForVessel(vesselId);
     const colMgr   = window.KOSMOS?.colonyManager;
     const activePid = colMgr?.activePlanetId;
     const vMgr     = window.KOSMOS?.vesselManager;
@@ -413,6 +415,17 @@ export class MissionSystem {
   _checkPadForVessel(vesselId) {
     if (!this._needsSpaceportForVessel(vesselId)) return true;
     return this._hasSpaceport();
+  }
+
+  // Czy statek z średnim/dużym kadłubem może startować bez wyrzutni na misję kolonizacyjną?
+  // Średni i duży kadłub sam staje się spaceportem na miejscu docelowym.
+  _colonyShipBypassPad(vesselId) {
+    if (!vesselId) return false;
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(vesselId);
+    if (!vessel) return false;
+    const hull = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+    return hull?.size === 'medium' || hull?.size === 'large';
   }
 
   // ── Emituj event z aliasem (nowy + stary) ──────────────────────────────────
@@ -1415,6 +1428,14 @@ export class MissionSystem {
       existingCol.resourceSystem.receive(startResources);
       colMgr.upgradeOutpostToColony(exp.targetId, exp.crewCost);
 
+      // Auto-spaceport + elektrownia z materiałów statku (jeśli outpost nie ma)
+      if (existingCol.buildingSystem) {
+        if (!existingCol.buildingSystem.hasSpaceport()) {
+          existingCol.buildingSystem.autoPlaceBuilding?.('launch_pad');
+        }
+        existingCol.buildingSystem.autoPlaceBuilding?.('solar_farm');
+      }
+
       // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
       const originColUpgrade = colMgr?.getColony(exp.originColonyId);
       if (originColUpgrade) originColUpgrade.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
@@ -1479,6 +1500,7 @@ export class MissionSystem {
       startPop:       exp.crewCost,
       roll:           roll,
       resourceMult,
+      autoSpaceport:  true,  // statek staje się spaceportem + elektrownia solarna
     });
 
     this._emit('mission:arrived', 'expedition:arrived', {

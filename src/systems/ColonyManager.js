@@ -1293,9 +1293,10 @@ export class ColonyManager {
     const gameYear = Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0);
     const colony = this.createColony(planetId, startResources, startPop, gameYear);
 
-    // Auto-spaceport: statek kolonizacyjny staje się portem kosmicznym
+    // Auto-spaceport: statek kolonizacyjny staje się portem kosmicznym + elektrownia słoneczna
     if (autoSpaceport && colony?.buildingSystem) {
       colony.buildingSystem.autoPlaceBuilding?.('launch_pad');
+      colony.buildingSystem.autoPlaceBuilding?.('solar_farm');
     }
 
     // Automatycznie utwórz drogi handlowe z nową kolonią (jeśli tech jest zbadany)

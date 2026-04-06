@@ -168,7 +168,10 @@ const ACTIONS = {
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
       const techOk = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
       if (!techOk) return { ok: false, reason: 'Brak tech: Kolonizacja' };
-      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
+      // Misja kolonizacyjna: średni/duży kadłub nie wymaga wyrzutni (statek → spaceport na miejscu)
+      const hull = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+      const colonyBypassPad = hull?.size === 'medium' || hull?.size === 'large';
+      if (!colonyBypassPad && !_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
       if (state.targetId) {
         const check = ms.canLaunchColony(state.targetId);
         if (!check.ok) {
