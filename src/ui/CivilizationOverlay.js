@@ -9,7 +9,12 @@ import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { SHIPS }         from '../data/ShipsData.js';
 import { HULLS }         from '../data/HullsData.js';
-import { t, getName }    from '../i18n/i18n.js';
+import { LEADERS }       from '../data/LeaderData.js';
+import { t, getName, getLocale } from '../i18n/i18n.js';
+
+// Faza C5: kolory frakcji (wspólne z FactionSelectScene/branding)
+const COLOR_SEEKERS      = '#D85A30';
+const COLOR_CONFEDERATES = '#378ADD';
 
 const LEFT_W = 340;
 const TAB_H  = 32;
@@ -156,12 +161,31 @@ export class CivilizationOverlay extends BaseOverlay {
       else docked++;
     }
 
+    // ── Faza C5: snapshot lidera i frakcji (raz per frame) ─────────────────
+    const leaderSys = window.KOSMOS?.leaderSystem;
+    const facSys    = window.KOSMOS?.factionSystem;
+    const leaderId  = leaderSys?.activeLeader ?? null;
+    const leaderDef = leaderId ? LEADERS[leaderId] : null;
+    const leaderInfo = {
+      leaderId,
+      leaderDef,
+      activeFaction: leaderSys?.activeFaction ?? null,
+    };
+    const factionInfo = facSys ? {
+      ref:     facSys,
+      locked:  !!facSys.isLocked,
+      slider:  facSys.slider  ?? 50,
+      tension: facSys.tension ?? 0,
+      zone:    facSys.getCurrentZone?.() ?? 'balanced',
+    } : null;
+
     return {
       colonies, fullColonies, outposts, perColony,
       totalPop, totalMaxPop, avgProsperity,
       totalCredits, totalCreditsPerYear, totalResearch,
       globalResources,
       vessels, fleetByType, inFlight, orbiting, docked,
+      leaderInfo, factionInfo,
     };
   }
 
@@ -235,6 +259,9 @@ export class CivilizationOverlay extends BaseOverlay {
       }
     }
     ry += 4;
+
+    // ── Faza C5: LIDER + FRAKCJE ────────────────────────────────────────
+    ry = this._drawLeaderFactionBlock(ctx, x, ry, w, pad, data);
 
     // ── EKONOMIA ────────────────────────────────────────────────────────
     this._sectionHeader(ctx, x + pad, ry, t('civOverlay.economy'));
@@ -310,6 +337,189 @@ export class CivilizationOverlay extends BaseOverlay {
     }
 
     ctx.restore();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Faza C5: blok LIDER + FRAKCJE (lewa kolumna, między POPULACJA a EKONOMIA)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Zwraca nową wartość ry po narysowaniu sekcji.
+  _drawLeaderFactionBlock(ctx, x, ry, w, pad, data) {
+    const isPL = getLocale() !== 'en';
+    const leaderInfo  = data.leaderInfo;
+    const factionInfo = data.factionInfo;
+
+    // ── SEKCJA 1 — LIDER (zawsze widoczna w civMode) ─────────────────────
+    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.leader'));
+    ry += 18;
+
+    if (leaderInfo?.leaderDef) {
+      const leader = leaderInfo.leaderDef;
+      const name   = isPL ? leader.namePL : (leader.nameEN || leader.namePL);
+      const title  = isPL ? leader.titlePL : (leader.titleEN || leader.titlePL);
+      const arch   = isPL ? leader.archetype : (leader.archetypeEN || leader.archetype);
+
+      // Imię (główny tekst)
+      ctx.font = `bold ${THEME.fontSizeSmall + 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(name, x + pad, ry + 10);
+      ry += 14;
+
+      // Tytuł (mniejszy, faded)
+      if (title) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(title, x + pad, ry + 9);
+        ry += 12;
+      }
+
+      // Archetype (mniejszy, accent kolor)
+      if (arch) {
+        ctx.font = `italic ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.accent;
+        ctx.fillText(`◈ ${arch}`, x + pad, ry + 9);
+        ry += 12;
+      }
+
+      // Frakcja (znana lub nieznana)
+      const factionId = leaderInfo.activeFaction;
+      let factionLabel, factionColor;
+      if (factionId === 'confederates') {
+        factionLabel = isPL ? 'Konfederaci Misji' : 'Confederation of the Mission';
+        factionColor = COLOR_CONFEDERATES;
+      } else if (factionId === 'seekers') {
+        factionLabel = isPL ? 'Poszukiwacze Drogi' : 'Seekers of the Way';
+        factionColor = COLOR_SEEKERS;
+      } else {
+        factionLabel = t('civOverlay.factionUnknown');
+        factionColor = THEME.textDim;
+      }
+      this._statRow(ctx, x + pad, ry, w, t('civOverlay.faction'), factionLabel, factionColor);
+      ry += ROW_H;
+    } else {
+      // Brak lidera (nie powinno się zdarzyć w civMode, defensywnie)
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText('—', x + pad, ry + 10);
+      ry += ROW_H;
+    }
+    ry += 4;
+
+    // ── SEKCJA 2 — FRAKCJE (tylko gdy odblokowane) ──────────────────────
+    if (factionInfo && !factionInfo.locked) {
+      this._sectionHeader(ctx, x + pad, ry, t('civOverlay.factionsHeader'));
+      ry += 18;
+
+      const slider  = factionInfo.slider;
+      const tension = factionInfo.tension;
+      const zone    = factionInfo.zone;
+      const barW    = w - pad * 2;
+
+      // ── Pasek suwaka 0-100 z 3 strefami ──
+      const barX = x + pad;
+      const barY = ry;
+      const barH = 8;
+
+      // Tło paska podzielone na 3 strefy kolorystyczne
+      // Lewa 0-30 = Seekers (#D85A30), środek 31-69 = accent, prawa 70-100 = Confed (#378ADD)
+      const seg1W = Math.round(barW * 0.30);    // 0-30
+      const seg2W = Math.round(barW * 0.40);    // 30-70
+      const seg3W = barW - seg1W - seg2W;       // 70-100
+      ctx.fillStyle = COLOR_SEEKERS + '40';     // semi-transparent (40 = 25%)
+      ctx.fillRect(barX, barY, seg1W, barH);
+      ctx.fillStyle = THEME.accent + '30';
+      ctx.fillRect(barX + seg1W, barY, seg2W, barH);
+      ctx.fillStyle = COLOR_CONFEDERATES + '40';
+      ctx.fillRect(barX + seg1W + seg2W, barY, seg3W, barH);
+
+      // Granice stref (subtelne pionowe linie)
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(barX + seg1W, barY); ctx.lineTo(barX + seg1W, barY + barH);
+      ctx.moveTo(barX + seg1W + seg2W, barY); ctx.lineTo(barX + seg1W + seg2W, barY + barH);
+      ctx.stroke();
+
+      // Ramka paska
+      ctx.strokeStyle = THEME.border;
+      ctx.strokeRect(barX, barY, barW, barH);
+
+      // Znacznik aktualnej pozycji slidera (pionowa kreska + trójkąt nad)
+      let markerColor;
+      if (slider <= 30)      markerColor = COLOR_SEEKERS;
+      else if (slider >= 70) markerColor = COLOR_CONFEDERATES;
+      else                   markerColor = THEME.accent;
+      const markerX = barX + Math.round(barW * (slider / 100));
+      ctx.fillStyle = markerColor;
+      ctx.fillRect(markerX - 1, barY - 2, 3, barH + 4);
+
+      ry += barH + 6;
+
+      // Etykieta strefy (centered nad paskiem niższe?, na razie pod paskiem po lewej + wartość po prawej)
+      const zoneKey = `civOverlay.zone_${zone}`;
+      const zoneLabel = t(zoneKey);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = markerColor;
+      ctx.fillText(zoneLabel, x + pad, ry + 9);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(`${Math.round(slider)}/100`, x + pad + barW, ry + 9);
+      ctx.textAlign = 'left';
+      ry += 14;
+
+      // ── Sub-pasek napięcia ──
+      const tensionLabel = `${t('civOverlay.tension')}: ${Math.round(tension)}%`;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = tension > 50 ? THEME.danger : THEME.textSecondary;
+      ctx.fillText(tensionLabel, x + pad, ry + 9);
+      ry += 12;
+
+      const tensionColor = tension > 50 ? THEME.danger : THEME.warning;
+      this._drawBar(ctx, x + pad, ry, barW, 4, tension / 100, tensionColor, THEME.border);
+      ry += 8;
+
+      // ── Modyfikatory aktywnej strefy (top 2-3) ──
+      const facSys = factionInfo.ref;
+      if (facSys?.getModifier) {
+        const STATS = ['research', 'industryProduction', 'prosperity', 'popGrowth', 'explorationSpeed', 'anomalyChance'];
+        const modLabels = {
+          research:           t('civOverlay.modResearch'),
+          industryProduction: t('civOverlay.modIndustry'),
+          prosperity:         t('civOverlay.modProsperity'),
+          popGrowth:          t('civOverlay.modPopGrowth'),
+          explorationSpeed:   t('civOverlay.modExploration'),
+          anomalyChance:      t('civOverlay.modAnomaly'),
+        };
+        const activeMods = [];
+        for (const stat of STATS) {
+          const mult = facSys.getModifier(stat);
+          if (mult === 1.0) continue;
+          activeMods.push({ stat, mult });
+          if (activeMods.length >= 3) break;
+        }
+        if (activeMods.length > 0) {
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          for (const m of activeMods) {
+            const pct = Math.round((m.mult - 1.0) * 100);
+            const sign = pct > 0 ? '+' : '';
+            const color = m.mult < 1.0 ? THEME.danger : THEME.success;
+            ctx.fillStyle = color;
+            ctx.fillText(`  ${modLabels[m.stat]}: ${sign}${pct}%`, x + pad, ry + 9);
+            ry += 11;
+          }
+        }
+      }
+      ry += 4;
+    } else if (factionInfo && factionInfo.locked) {
+      // Frakcje jeszcze nie odblokowane — krótka notka zamiast sekcji
+      ctx.font = `italic ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('civOverlay.factionLocked'), x + pad, ry + 9);
+      ry += 14;
+      ry += 4;
+    }
+
+    return ry;
   }
 
   // ══════════════════════════════════════════════════════════════════════════

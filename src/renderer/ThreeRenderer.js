@@ -155,6 +155,13 @@ export class ThreeRenderer {
     this._starTwinkleUniform = null;  // referencja do uTime migotania gwiazd tła
     this._starPromCount      = 0;     // liczba protuberancji
 
+    // ── Faza D3: Sfera Dysona — wizualne pierścienie wokół gwiazdy ──
+    this._dysonStage      = 0;
+    this._dysonRingsGroup = null;
+    // Zachowane oryginalne wartości lighta — restore przy stage 0 (dla idempotencji)
+    this._starLightOrigColor     = 0xffeedd;
+    this._starLightOrigIntensity = 1.5;
+
     // ── Raycaster ─────────────────────────────────────────────
     this._ray   = new THREE.Raycaster();
     this._mouse = new THREE.Vector2();
@@ -649,6 +656,17 @@ export class ThreeRenderer {
       });
       this.scene.remove(this._starGroup);
       this._starGroup = null;
+    }
+
+    // Faza D3: dispose pierścieni Sfery Dysona razem z gwiazdą
+    if (this._dysonRingsGroup) {
+      this._dysonRingsGroup.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+      this.scene.remove(this._dysonRingsGroup);
+      this._dysonRingsGroup = null;
+      this._dysonStage = 0;
     }
 
     // HZ ring
@@ -2316,7 +2334,100 @@ export class ThreeRenderer {
     if (this._starGroup) {
       this._starGroup.position.set(S(star.x), 0, S(star.y));
       this._starLight.position.set(S(star.x), 0, S(star.y));
+      // Faza D3: synchronizuj też pierścienie Dysona z gwiazdą
+      if (this._dysonRingsGroup) {
+        this._dysonRingsGroup.position.set(S(star.x), 0, S(star.y));
+      }
     }
+  }
+
+  // ── Faza D3: Wizualna progresja gwiazdy z postępem Sfery Dysona ──
+  // stage: 0 = normalna gwiazda, 1-4 = etapy Sfery (1 segm/2 wyraźne/3 przyciemnione/4 fioletowe)
+  // Wywoływane z GameScene listener'a 'dyson:visualStageChanged'
+  updateStarForDyson(stage) {
+    if (stage === this._dysonStage) return;
+    this._dysonStage = stage;
+    if (!this._starGroup || !this._starLight) return;
+
+    // Reset światła do oryginału przy każdej zmianie (idempotencja)
+    this._starLight.color.setHex(this._starLightOrigColor);
+    this._starLight.intensity = this._starLightOrigIntensity;
+
+    switch (stage) {
+      case 0:
+        // Normalna gwiazda — usuń pierścienie jeśli były
+        this._addDysonRings(0);
+        break;
+      case 1:
+      case 2:
+        // Pierścienie ledwo widoczne / wyraźne — bez zmian światła
+        this._addDysonRings(stage);
+        break;
+      case 3:
+        // Gwiazda przysłonięta — zmniejsz jasność
+        this._starLight.intensity = 0.8;
+        this._addDysonRings(stage);
+        break;
+      case 4:
+        // Gwiazda prawie niewidoczna, fioletowe światło
+        this._starLight.intensity = 0.3;
+        this._starLight.color.setHex(0x9933cc);
+        this._addDysonRings(stage);
+        break;
+    }
+  }
+
+  _addDysonRings(stage) {
+    // Dispose poprzednich pierścieni
+    if (this._dysonRingsGroup) {
+      this.scene.remove(this._dysonRingsGroup);
+      this._dysonRingsGroup.traverse(obj => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+      this._dysonRingsGroup = null;
+    }
+
+    if (stage === 0) return;
+
+    this._dysonRingsGroup = new THREE.Group();
+
+    // Parametry per etap (rings = ile pierścieni, scale = mnożnik radius)
+    // Zmniejszone w D3-fix — wcześniejsze wartości zajmowały cały ekran.
+    const configs = {
+      1: { rings: 1, opacity: 0.08, color: 0x8888aa, scale: 1.5 },
+      2: { rings: 2, opacity: 0.12, color: 0x6699bb, scale: 1.8 },
+      3: { rings: 3, opacity: 0.15, color: 0x4488cc, scale: 2.2 },
+      4: { rings: 3, opacity: 0.20, color: 0x9933cc, scale: 2.5 },
+    };
+    const cfg = configs[stage];
+    if (!cfg) return;
+
+    // Bazowy promień gwiazdy: 1.6 (stała z _getEntityRadius dla 'star')
+    const starRadius = 1.6;
+
+    for (let i = 0; i < cfg.rings; i++) {
+      const radius = starRadius * cfg.scale * (1 + i * 0.3);
+      const geo    = new THREE.RingGeometry(radius * 0.97, radius, 64);
+      const mat    = new THREE.MeshBasicMaterial({
+        color:        cfg.color,
+        transparent:  true,
+        opacity:      cfg.opacity * (1 - i * 0.1),
+        side:         THREE.DoubleSide,
+        depthWrite:   false,
+      });
+      const ring = new THREE.Mesh(geo, mat);
+      // Płaszczyzna ekliptyki + lekkie nachylenia per pierścień
+      ring.rotation.x = Math.PI / 2 + (i * 0.05);
+      ring.rotation.z = i * 0.1;
+      this._dysonRingsGroup.add(ring);
+    }
+
+    // Pozycja zsynchronizowana z gwiazdą
+    if (this._starGroup) {
+      this._dysonRingsGroup.position.copy(this._starGroup.position);
+    }
+    this.scene.add(this._dysonRingsGroup);
   }
 
   // ── Kliknięcie (raycasting) ───────────────────────────────────

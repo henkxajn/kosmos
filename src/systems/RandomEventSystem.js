@@ -209,7 +209,12 @@ export class RandomEventSystem {
 
     // Redukcja szansy z obrony kolonii
     const defenseReduction = this._getColonyDefenseReduction(colony);
-    const adjustedChance = EVENT_CHANCE * (1 - defenseReduction);
+    let adjustedChance = EVENT_CHANCE * (1 - defenseReduction);
+
+    // Faza D2a hook: spacetime_cartography +50% szansa anomalii temporalnych
+    // (uproszczone: zwiększamy globalną szansę event'u zamiast filtrować po typie anomalii)
+    const hasSpacetimeCarto = window.KOSMOS?.techSystem?.isResearched?.('spacetime_cartography') ?? false;
+    if (hasSpacetimeCarto) adjustedChance *= 1.5;
 
     // Szansa na zdarzenie
     if (Math.random() > adjustedChance) return;

@@ -10,6 +10,18 @@ import { t, getLocale } from '../i18n/i18n.js';
 
 const PL = () => getLocale() === 'pl';
 
+// ── Faction shift per Konsul (Faza C2) ─────────────────────────────────────
+// Każdy Konsul to Poszukiwacz, ale z różną intensywnością programu.
+// Wszystkie wartości ujemne (suwak w stronę 0 = Poszukiwacze).
+// Dobierane wg "agresywności" programu wobec powrotu do Ziemi.
+const CONSUL_SLIDER_SHIFTS = {
+  fatima_alrashidi: -8,   // Projekt Genesis (FTL focus) — najbardziej zdeterminowana
+  tomas_ferreira:   -6,   // Wielka Ekspedycja — eksploracja, szukanie drogi
+  ingrid_solberg:   -2,   // Wielka Zgoda — łagodzi napięcia
+  viktor_havel:     -4,   // Projekt Kardaszow — energia → podróż
+  amara_diallo:     -3,   // Projekt Memoria — pamięć, kultura
+};
+
 let _active = null;
 let _savedTimeState = null;
 
@@ -80,7 +92,9 @@ function _showModal(candidates, year) {
         <p class="ce-title" style="color:${factionColor}aa">
           ${PL() ? leader.titlePL : (leader.titleEN || leader.titlePL)}
         </p>
-        <p class="ce-program">${PL() ? leader.programDescPL : (leader.programDescEN || leader.programDescPL)}</p>
+        <p class="ce-program">${PL()
+          ? (leader.programDescPL ?? leader.archetype ?? '')
+          : (leader.programDescEN ?? leader.archetypeEN ?? leader.programDescPL ?? leader.archetype ?? '')}</p>
         <div class="ce-stats">
           ${bonuses}
           ${maluses}
@@ -131,7 +145,17 @@ function _showModal(candidates, year) {
 function _selectConsul(leaderId, year) {
   const leaderSys = window.KOSMOS?.leaderSystem;
   if (leaderSys) {
+    // Zaktualizuje activeLeader, termStartYear, termYears + re-arm electionPending
     leaderSys.changeConsul(leaderId, year);
+  }
+
+  // Faction shift wg programu wybranego Konsula (Faza C2)
+  const sliderDelta = CONSUL_SLIDER_SHIFTS[leaderId];
+  if (sliderDelta) {
+    EventBus.emit('faction:sliderShift', {
+      delta:  sliderDelta,
+      reason: `consul_elected_${leaderId}`,
+    });
   }
 
   // Zamknij modal
@@ -144,9 +168,10 @@ function _selectConsul(leaderId, year) {
     }, 400);
   }
 
-  // Przywróć czas
+  // Przywróć czas (jeśli gracz nie był wcześniej spauzowany)
   if (_savedTimeState && !_savedTimeState.isPaused) {
-    EventBus.emit('time:resume');
+    EventBus.emit('time:setMultiplier', { index: _savedTimeState.multiplierIndex });
+    EventBus.emit('time:play');
   }
   _savedTimeState = null;
 }

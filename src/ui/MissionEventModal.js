@@ -193,10 +193,12 @@ function _showNext() {
     if (e.target === overlay) dismiss();
   });
 
-  // Keyboard
+  // Keyboard — UWAGA: stopPropagation TYLKO dla obsługiwanych klawiszy.
+  // Wcześniej wołany unconditional na linii 198 (capture phase) blokował WSZYSTKIE klawisze
+  // dla GameScene._setupKeyboard — gracz nie mógł używać F/P/E/T/D etc. gdy popup był aktywny.
   const onKey = (e) => {
-    e.stopPropagation();
     if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') {
+      e.stopPropagation();
       e.preventDefault();
       document.removeEventListener('keydown', onKey, true);
       dismiss();

@@ -17,6 +17,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { TECHS } from '../data/TechData.js';
+import { TECH_SLIDER_SHIFTS } from '../systems/FactionSystem.js';
 import { t, getName } from '../i18n/i18n.js';
 
 export class TechSystem {
@@ -417,5 +418,32 @@ export class TechSystem {
 
     this._researched.add(techId);
     EventBus.emit('tech:researched', { tech, restored: false });
+
+    // Faction shift — postęp w FTL = nadzieja na powrót → suwak w stronę Poszukiwaczy (Faza C1)
+    const factionDelta = TECH_SLIDER_SHIFTS[techId];
+    if (factionDelta) {
+      EventBus.emit('faction:sliderShift', {
+        delta:  factionDelta,
+        reason: `${techId}_researched`,
+      });
+    }
+
+    // Faza C5: kronika_lokalizacji to lore-tech który wyzwala narodziny frakcji
+    // (FactionSystem.unlock + łańcuch eventów narracyjnych w GameScene handler)
+    if (techId === 'kronika_lokalizacji') {
+      EventBus.emit('narrative:earthLocated');
+    }
+
+    // Faza D2a: hooki Sfery Dysona — będą skonsumowane przez DysonSystem w Fazie D3.
+    // Aktualnie emitowane do nikąd (no-op listenerów); brak crash.
+    if (techId === 'dyson_engineering') {
+      EventBus.emit('dyson:engineeringUnlocked');
+    } else if (techId === 'dyson_collector') {
+      EventBus.emit('dyson:collectorUnlocked');
+    } else if (techId === 'dyson_transmitter') {
+      EventBus.emit('dyson:transmitterUnlocked');
+    } else if (techId === 'jump_gate_construction') {
+      EventBus.emit('dyson:jumpGateUnlocked');
+    }
   }
 }

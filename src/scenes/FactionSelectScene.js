@@ -1,33 +1,28 @@
-// FactionSelectScene — ekran wyboru frakcji i przywódcy (Faza B)
+// FactionSelectScene — ekran wyboru lidera (Faza B → C4)
 //
-// Pojawia się po kliknięciu "NOWA GRA" w TitleScene, przed GameScene.
-// 3 kroki: (1) wybór frakcji, (2) wybór przywódcy, (3) potwierdzenie.
-// Klimat identyczny z TitleScene (gwiazdozbiór, CRT, ten sam font/kolory).
+// Po kliknięciu "NOWA GRA" w TitleScene, przed GameScene.
+// Faza C4: frakcje NIE istnieją na starcie — gracz wybiera tylko styl przywództwa.
+// 2 kroki: (1) wybór z 6 liderów, (2) potwierdzenie.
+// Klasa zachowuje starą nazwę FactionSelectScene dla zgodności z TitleScene importem.
 
-import { FACTIONS, LEADERS, CONFEDERATE_CANDIDATES, SEEKER_CONSULS } from '../data/LeaderData.js';
+import { LEADERS, STARTING_LEADERS } from '../data/LeaderData.js';
 import { THEME } from '../config/ThemeConfig.js';
-import { t, getLocale } from '../i18n/i18n.js';
+import { getLocale } from '../i18n/i18n.js';
 
 const PL = () => getLocale() === 'pl';
 
-// ── Ikony frakcji (PNG z przezroczystym tłem) ───────────────────────────
-const IMG_CONFEDERATES = `<img class="fs-faction-logo" src="assets/ui/faction_confederates.png" alt="Confederates">`;
-const IMG_SEEKERS      = `<img class="fs-faction-logo" src="assets/ui/faction_seekers.png" alt="Seekers">`;
-
 export class FactionSelectScene {
   constructor() {
-    this._container = null;
-    this._step = 1;
-    this._selectedFaction = null;
+    this._container       = null;
+    this._step            = 1;
     this._selectedLeader  = null;
-    this._onComplete = null;
+    this._onComplete      = null;
   }
 
   show(onComplete) {
     this._onComplete = onComplete;
     this._buildDOM();
     this._generateStars();
-    // Fade in
     requestAnimationFrame(() => {
       if (this._container) this._container.style.opacity = '1';
     });
@@ -53,7 +48,6 @@ export class FactionSelectScene {
     c.id = 'faction-select';
     c.style.opacity = '0';
 
-    // Stały szkielet: tło + header + środek (wymienny) + nav
     c.innerHTML = `
       <div class="fs-scanlines"></div>
       <div class="fs-vignette"></div>
@@ -77,7 +71,7 @@ export class FactionSelectScene {
     this._renderStep1();
   }
 
-  // ── Gwiazdy (jak TitleScene) ─────────────────────────────────────────
+  // ── Tło: gwiazdy (jak TitleScene) ────────────────────────────────────
 
   _generateStars() {
     const container = this._container.querySelector('.fs-stars');
@@ -100,170 +94,45 @@ export class FactionSelectScene {
     }
   }
 
-  // ── Krok 1: Wybór frakcji ────────────────────────────────────────────
+  // ── Krok 1: wybór lidera (siatka 6 kart, 3+3) ────────────────────────
 
   _renderStep1() {
-    const conf = FACTIONS.confederates;
-    const seek = FACTIONS.seekers;
-
-    // Header
     this._setHeader(
-      `${PL() ? 'KROK' : 'STEP'} 1/3`,
-      PL() ? 'WYBIERZ FRAKCJĘ' : 'CHOOSE YOUR FACTION',
-      PL() ? 'Twoja decyzja ukształtuje przyszłość kolonii' : 'Your decision will shape the future of the colony'
+      `${PL() ? 'KROK' : 'STEP'} 1/2`,
+      PL() ? 'WYBIERZ LIDERA' : 'CHOOSE YOUR LEADER',
+      PL()
+        ? 'Twój styl przywództwa ukształtuje przyszłość kolonii'
+        : 'Your leadership style will shape the colony\'s future'
     );
 
-    // Nav — brak (krok 1 nie ma przycisków)
     document.getElementById('fs-nav').innerHTML = '';
 
-    // Body — karty poziome
+    const candidates = STARTING_LEADERS.map(id => LEADERS[id]).filter(Boolean);
     const body = document.getElementById('fs-body');
     body.innerHTML = `
-      <div class="fs-split-container">
-        <div class="fs-split-half" data-faction="confederates" style="--fc:${conf.color}">
-          <img class="fs-watermark" src="assets/ui/faction_confederates.png" alt="">
-          <div class="fs-half-content">
-            <div class="fs-half-logo">
-              <img class="fs-faction-logo-small" src="assets/ui/faction_confederates.png" alt="">
-            </div>
-            <div class="fs-half-center">
-              <div class="fs-faction-tag">${PL() ? 'FRAKCJA I' : 'FACTION I'}</div>
-              <h2 class="fs-faction-name" style="color:${conf.color}">${PL() ? conf.namePL : conf.nameEN}</h2>
-              <p class="fs-faction-motto"><em>"${PL() ? conf.motto : conf.mottoEN}"</em></p>
-              <div class="fs-faction-system">${PL() ? 'SYSTEM: Dożywotni Archont' : 'SYSTEM: Lifetime Archon'}</div>
-            </div>
-            <div class="fs-half-stats">
-              <div class="fs-stat-header">${PL() ? 'BONUSY' : 'BONUSES'}</div>
-              <div class="fs-stat-bonus"><span class="sym">✦</span> ${PL() ? '+20% efektywność kolonizacji' : '+20% colonization efficiency'}</div>
-              <div class="fs-stat-bonus"><span class="sym">✦</span> ${PL() ? '-15% koszt budynków populacji' : '-15% population building cost'}</div>
-              <div class="fs-stat-header" style="margin-top:10px">${PL() ? 'KARY' : 'PENALTIES'}</div>
-              <div class="fs-stat-malus"><span class="sym">✗</span> ${PL() ? '-30% badania FTL' : '-30% FTL research'}</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="fs-split-or">${PL() ? 'LUB' : 'OR'}</div>
-
-        <div class="fs-split-half" data-faction="seekers" style="--fc:${seek.color}">
-          <img class="fs-watermark" src="assets/ui/faction_seekers.png" alt="">
-          <div class="fs-half-content">
-            <div class="fs-half-logo">
-              <img class="fs-faction-logo-small" src="assets/ui/faction_seekers.png" alt="">
-            </div>
-            <div class="fs-half-center">
-              <div class="fs-faction-tag">${PL() ? 'FRAKCJA II' : 'FACTION II'}</div>
-              <h2 class="fs-faction-name" style="color:${seek.color}">${PL() ? seek.namePL : seek.nameEN}</h2>
-              <p class="fs-faction-motto"><em>"${PL() ? seek.motto : seek.mottoEN}"</em></p>
-              <div class="fs-faction-system">${PL() ? 'SYSTEM: Konsul co 15 lat' : 'SYSTEM: Consul every 15 years'}</div>
-            </div>
-            <div class="fs-half-stats">
-              <div class="fs-stat-header">${PL() ? 'BONUSY' : 'BONUSES'}</div>
-              <div class="fs-stat-bonus"><span class="sym">✦</span> ${PL() ? '+40% badania FTL' : '+40% FTL research'}</div>
-              <div class="fs-stat-bonus"><span class="sym">✦</span> ${PL() ? '+40% badania energetyczne' : '+40% energy research'}</div>
-              <div class="fs-stat-header" style="margin-top:10px">${PL() ? 'KARY' : 'PENALTIES'}</div>
-              <div class="fs-stat-malus"><span class="sym">✗</span> ${PL() ? '-20% morale kolonii' : '-20% colony morale'}</div>
-            </div>
-          </div>
-        </div>
+      <div class="fs-content fs-leaders-grid">
+        ${candidates.map(leader => this._renderLeaderCard(leader)).join('')}
       </div>
     `;
 
-    this._bindFactionCards();
+    this._bindLeaderCards();
   }
 
-  _bindFactionCards() {
-    const halves = document.getElementById('fs-body').querySelectorAll('.fs-split-half');
-
-    halves.forEach(half => {
-      half.addEventListener('mouseenter', () => {
-        halves.forEach(h => {
-          if (h === half) {
-            h.classList.remove('fs-card-collapsed');
-            h.classList.add('fs-card-expanded');
-          } else {
-            h.classList.remove('fs-card-expanded');
-            h.classList.add('fs-card-collapsed');
-          }
-        });
-      });
-
-      half.addEventListener('click', () => {
-        const factionId = half.dataset.faction;
-        this._selectedFaction = factionId;
-
-        halves.forEach(h => h.classList.remove('selected'));
-        half.classList.add('selected');
-
-        setTimeout(() => {
-          this._fadeTransition(() => this._renderStep2());
-        }, 350);
-      });
-    });
-
-    // Powrót do domyślnego stanu po opuszczeniu kontenera
-    const container = document.getElementById('fs-body').querySelector('.fs-split-container');
-    container.addEventListener('mouseleave', () => {
-      halves.forEach(h => {
-        h.classList.remove('fs-card-collapsed', 'fs-card-expanded');
-      });
-    });
-  }
-
-  // ── Krok 2: Wybór przywódcy ──────────────────────────────────────────
-
-  _renderStep2() {
-    const faction = FACTIONS[this._selectedFaction];
-    const isSeekers = this._selectedFaction === 'seekers';
-
-    const candidateIds = isSeekers
-      ? [SEEKER_CONSULS[0]]
-      : CONFEDERATE_CANDIDATES;
-    const candidates = candidateIds.map(id => LEADERS[id]);
-
-    // Header
-    this._setHeader(
-      `${PL() ? 'KROK' : 'STEP'} 2/3`,
-      PL() ? 'WYBIERZ PRZYWÓDCĘ' : 'CHOOSE YOUR LEADER',
-      PL() ? faction.namePL : faction.nameEN
-    );
-
-    // Nav
-    document.getElementById('fs-nav').innerHTML = `
-      <button class="fs-btn fs-btn-back" id="fs-back">← ${PL() ? 'WSTECZ' : 'BACK'}</button>
-      <div></div>
-    `;
-
-    // Body
-    const body = document.getElementById('fs-body');
-    body.style.setProperty('--fc', faction.color);
-    body.innerHTML = `
-      <div class="fs-content fs-leaders-row ${isSeekers ? 'fs-single-leader' : ''}">
-        ${candidates.map(leader => this._renderLeaderCard(leader, faction.color)).join('')}
-      </div>
-      ${isSeekers ? `<p class="fs-consul-info">${PL()
-        ? '◈ Kolejni Konsulowie wyłaniani będą co 15 lat w wyborach'
-        : '◈ Subsequent Consuls will be elected every 15 years'}</p>` : ''}
-    `;
-
-    this._bindLeaderCards(faction.color);
-  }
-
-  _renderLeaderCard(leader, factionColor) {
+  _renderLeaderCard(leader) {
     const initials = leader.namePL.split(' ')
       .filter(w => w.length > 2 && w[0] === w[0].toUpperCase())
       .map(w => w[0]).join('').slice(0, 2);
 
+    // Tylko bonusy — bez maluses (frakcja nieznana, brak presji ideologicznej)
     const bonusesHtml = (leader.bonuses || []).map(b =>
-      `<div class="fs-leader-bonus">✦ ${PL() ? b.descPL : b.descEN}</div>`
+      `<div class="fs-leader-bonus">✦ ${PL() ? b.descPL : (b.descEN || b.descPL)}</div>`
     ).join('');
 
-    const malusesHtml = (leader.maluses || []).map(m =>
-      `<div class="fs-leader-malus">✗ ${PL() ? m.descPL : m.descEN}</div>`
-    ).join('');
+    const archetypeText = PL() ? leader.archetype : (leader.archetypeEN || leader.archetype);
 
     return `
-      <div class="fs-leader-card" data-leader="${leader.id}" style="--fc: ${factionColor}">
-        <div class="fs-portrait-wrap" style="--fc: ${factionColor}">
+      <div class="fs-leader-card" data-leader="${leader.id}">
+        <div class="fs-portrait-wrap">
           <img class="fs-portrait-img" src="${leader.portrait}"
                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                alt="${leader.namePL}">
@@ -271,81 +140,67 @@ export class FactionSelectScene {
             ${initials}
           </div>
         </div>
-        <h3 class="fs-leader-name">${PL() ? leader.namePL : leader.namePL}</h3>
+        <p class="fs-leader-archetype">${archetypeText ?? ''}</p>
+        <h3 class="fs-leader-name">${leader.namePL}</h3>
         <p class="fs-leader-title">
           ${PL() ? leader.titlePL : (leader.titleEN || leader.titlePL)}
         </p>
         <p class="fs-leader-age">${PL() ? 'Wiek' : 'Age'}: ${leader.age}</p>
-        <div class="fs-leader-stats">
-          ${bonusesHtml}
-          ${malusesHtml}
-        </div>
+        <div class="fs-leader-stats">${bonusesHtml}</div>
       </div>
     `;
   }
 
-  _bindLeaderCards(factionColor) {
+  _bindLeaderCards() {
     const cards = document.getElementById('fs-body').querySelectorAll('.fs-leader-card');
-    const backBtn = document.getElementById('fs-back');
 
     cards.forEach(card => {
       card.addEventListener('click', () => {
         this._selectedLeader = card.dataset.leader;
-
         cards.forEach(cc => cc.classList.remove('selected'));
         card.classList.add('selected');
-
-        // Natychmiastowe przejście do kroku 3
         setTimeout(() => {
-          this._fadeTransition(() => this._renderStep3());
+          this._fadeTransition(() => this._renderStep2());
         }, 350);
       });
     });
-
-    backBtn.addEventListener('click', () => {
-      this._selectedLeader = null;
-      this._fadeTransition(() => this._renderStep1());
-    });
   }
 
-  // ── Krok 3: Potwierdzenie ────────────────────────────────────────────
+  // ── Krok 2: potwierdzenie wyboru ─────────────────────────────────────
 
-  _renderStep3() {
-    const faction = FACTIONS[this._selectedFaction];
+  _renderStep2() {
     const leader = LEADERS[this._selectedLeader];
-    const factionColor = faction.color;
+    if (!leader) {
+      this._renderStep1();
+      return;
+    }
 
     const initials = leader.namePL.split(' ')
       .filter(w => w.length > 2 && w[0] === w[0].toUpperCase())
       .map(w => w[0]).join('').slice(0, 2);
 
     const bonusesHtml = (leader.bonuses || []).map(b =>
-      `<div class="fs-confirm-bonus">✦ ${PL() ? b.descPL : b.descEN}</div>`
+      `<div class="fs-confirm-bonus">✦ ${PL() ? b.descPL : (b.descEN || b.descPL)}</div>`
     ).join('');
 
-    const malusesHtml = (leader.maluses || []).map(m =>
-      `<div class="fs-confirm-malus">✗ ${PL() ? m.descPL : m.descEN}</div>`
-    ).join('');
+    const archetypeText = PL() ? leader.archetype : (leader.archetypeEN || leader.archetype);
 
-    // Header
     this._setHeader(
-      `${PL() ? 'KROK' : 'STEP'} 3/3`,
+      `${PL() ? 'KROK' : 'STEP'} 2/2`,
       PL() ? 'POTWIERDZENIE' : 'CONFIRMATION',
       ''
     );
 
-    // Nav
     const nav = document.getElementById('fs-nav');
     nav.innerHTML = `
       <button class="fs-btn fs-btn-back" id="fs-back">← ${PL() ? 'WSTECZ' : 'BACK'}</button>
       <button class="fs-btn fs-btn-start" id="fs-start">${PL() ? 'ROZPOCZNIJ GRĘ' : 'START GAME'} ►</button>
     `;
 
-    // Body
     const body = document.getElementById('fs-body');
     body.innerHTML = `
       <div class="fs-content fs-confirm-layout">
-        <div class="fs-confirm-portrait" style="--fc: ${factionColor}">
+        <div class="fs-confirm-portrait">
           <img class="fs-confirm-img" src="${leader.portrait}"
                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
                alt="${leader.namePL}">
@@ -355,6 +210,7 @@ export class FactionSelectScene {
         </div>
 
         <div class="fs-confirm-info">
+          <p class="fs-confirm-archetype">${archetypeText ?? ''}</p>
           <h2 class="fs-confirm-name">${leader.namePL}</h2>
           <p class="fs-confirm-title-text">
             ${PL() ? leader.titlePL : (leader.titleEN || leader.titlePL)}
@@ -363,25 +219,19 @@ export class FactionSelectScene {
             "${PL() ? leader.quote : (leader.quoteEN || leader.quote)}"
           </p>
           <div class="fs-confirm-sep"></div>
-          <div class="fs-confirm-stats">
-            ${bonusesHtml}
-            ${malusesHtml}
-          </div>
-          <div class="fs-confirm-sep"></div>
-          <p class="fs-confirm-faction">
-            ${PL() ? faction.namePL : faction.nameEN}
-          </p>
+          <div class="fs-confirm-stats">${bonusesHtml}</div>
         </div>
       </div>
     `;
 
     nav.querySelector('#fs-back').addEventListener('click', () => {
-      this._fadeTransition(() => this._renderStep2());
+      this._fadeTransition(() => this._renderStep1());
     });
 
     nav.querySelector('#fs-start').addEventListener('click', () => {
-      window.KOSMOS.selectedFaction = this._selectedFaction;
+      // Faza C4: frakcja nieznana — tylko leader id
       window.KOSMOS.selectedLeader  = this._selectedLeader;
+      window.KOSMOS.selectedFaction = null;
 
       this._container.style.transition = 'opacity 0.6s ease';
       this._container.style.opacity = '0';
@@ -406,10 +256,8 @@ export class FactionSelectScene {
   _fadeTransition(renderFn) {
     const body = document.getElementById('fs-body');
     if (!body) { renderFn(); return; }
-
     body.style.transition = 'opacity 0.3s ease';
     body.style.opacity = '0';
-
     setTimeout(() => {
       renderFn();
       body.style.opacity = '1';
@@ -419,7 +267,7 @@ export class FactionSelectScene {
   // ── CSS ──────────────────────────────────────────────────────────────
 
   _buildCSS() {
-    // Kolory z aktywnego theme
+    // Faza C4: jeden neutralny accent — bez kolorów frakcji
     const acc = THEME.accent || '#00ffb4';
     const bg  = '#060504';
 
@@ -448,8 +296,8 @@ export class FactionSelectScene {
       .fs-stars { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
       .fs-nebula {
         position: fixed; inset: 0; pointer-events: none; z-index: 2;
-        background: radial-gradient(ellipse at 30% 40%, rgba(55,138,221,0.06) 0%, transparent 50%),
-                    radial-gradient(ellipse at 70% 60%, rgba(216,90,48,0.06) 0%, transparent 50%);
+        background: radial-gradient(ellipse at 30% 40%, ${acc}10 0%, transparent 50%),
+                    radial-gradient(ellipse at 70% 60%, ${acc}08 0%, transparent 50%);
       }
       @keyframes fs-twinkle { from{opacity:0.05} to{opacity:0.5} }
 
@@ -475,14 +323,6 @@ export class FactionSelectScene {
         color: ${acc}88; margin: 0;
       }
 
-      /* ── Zawartość (kroki 2, 3) ── */
-      .fs-content {
-        position: relative; z-index: 10;
-        flex: 1; display: flex; align-items: center; justify-content: center;
-        padding: 20px 48px;
-        gap: 28px;
-      }
-
       /* ── Body (wymienna zawartość środkowa) ── */
       .fs-body {
         position: relative; z-index: 10;
@@ -490,256 +330,77 @@ export class FactionSelectScene {
         display: flex; flex-direction: column;
         transition: opacity 0.3s ease;
       }
-
-      /* ── Krok 1: karty poziome ── */
-      .fs-split-container {
-        z-index: 10;
-        display: flex; align-items: center; justify-content: center;
-        gap: 0;
-        max-width: 1100px;
-        width: 90%;
-        margin: auto;
-      }
-      .fs-split-half {
-        flex: 42;
-        height: 280px;
-        position: relative;
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer;
-        overflow: hidden;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        opacity: 0.8;
-        transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-        background: color-mix(in srgb, var(--fc) 4%, transparent);
-      }
-      /* Domyślnie: ukryj motto, stats, system, tag */
-      .fs-split-half .fs-faction-motto,
-      .fs-split-half .fs-half-stats,
-      .fs-split-half .fs-faction-system,
-      .fs-split-half .fs-faction-tag {
-        opacity: 0;
-        max-height: 0;
-        overflow: hidden;
-        margin: 0;
-        transition: opacity 0.4s ease, max-height 0.4s ease, margin 0.4s ease;
-      }
-      /* Expanded: pokaż wszystko */
-      .fs-split-half.fs-card-expanded {
-        flex: 52;
-        opacity: 1;
-        background: color-mix(in srgb, var(--fc) 9%, transparent);
-        border-color: ${acc}40;
-        box-shadow: inset 0 0 30px color-mix(in srgb, var(--fc) 8%, transparent),
-                    0 0 25px ${acc}15;
-      }
-      .fs-split-half.fs-card-expanded .fs-faction-motto {
-        opacity: 1; max-height: 60px; margin: 0 0 10px;
-      }
-      .fs-split-half.fs-card-expanded .fs-half-stats {
-        opacity: 1; max-height: 200px;
-      }
-      .fs-split-half.fs-card-expanded .fs-faction-system {
-        opacity: 1; max-height: 30px; margin-top: 10px;
-      }
-      .fs-split-half.fs-card-expanded .fs-faction-tag {
-        opacity: 0.4; max-height: 20px; margin-bottom: 8px;
-      }
-      /* Collapsed: dim */
-      .fs-split-half.fs-card-collapsed {
-        flex: 32;
-        opacity: 0.5;
-      }
-      /* Selected */
-      .fs-split-half.selected {
-        flex: 55;
-        opacity: 1;
-        background: color-mix(in srgb, var(--fc) 12%, transparent);
-        border-color: ${acc}60;
-        box-shadow: inset 0 0 40px color-mix(in srgb, var(--fc) 12%, transparent),
-                    0 0 35px ${acc}25;
-      }
-      /* Watermark logo w tle */
-      .fs-watermark {
-        position: absolute;
-        top: 50%; left: 50%;
-        transform: translate(-50%, -50%);
-        width: 220px; height: 220px;
-        object-fit: contain;
-        filter: brightness(0) invert(1);
-        opacity: 0.06;
-        pointer-events: none;
-        transition: opacity 0.4s ease;
-      }
-      .fs-split-half:hover .fs-watermark {
-        opacity: 0.12;
-      }
-      .fs-split-half.selected .fs-watermark {
-        opacity: 0.15;
-      }
-      /* Treść — row layout: logo | text | stats */
-      .fs-half-content {
-        position: relative; z-index: 2;
-        display: flex; align-items: center; gap: 24px;
-        padding: 28px 32px;
-        width: 100%; height: 100%;
-        box-sizing: border-box;
-      }
-      .fs-half-logo {
-        flex-shrink: 0;
-        display: flex; align-items: center; justify-content: center;
-      }
-      .fs-half-center {
-        flex: 1; min-width: 0;
-      }
-      .fs-half-stats {
-        flex-shrink: 0;
-        text-align: left;
-      }
-      /* Tag frakcji */
-      .fs-faction-tag {
-        font-size: 9px; letter-spacing: 3px;
-        text-transform: uppercase;
-        color: rgba(255,255,255,0.3);
-        margin-bottom: 8px;
-      }
-      /* Logo w karcie */
-      .fs-faction-logo-small {
-        width: 80px; height: 80px;
-        object-fit: contain;
-        filter: brightness(0) invert(1);
-        opacity: 0.85;
-      }
-      .fs-faction-name {
-        font-family: 'Space Mono', 'Orbitron', monospace;
-        font-size: 18px; font-weight: 700;
-        letter-spacing: 3px; margin: 0 0 8px;
-        text-transform: uppercase;
-        /* kolor ustawiany inline style="color:..." */
-      }
-      .fs-faction-motto {
-        font-size: 12px; color: rgba(255,255,255,0.4);
-        margin: 0 0 10px; line-height: 1.5;
-      }
-      .fs-faction-stats {
-        margin-bottom: 0;
-      }
-      .fs-stat-header {
-        font-size: 9px; letter-spacing: 3px; color: rgba(255,255,255,0.2);
-        margin-bottom: 4px; text-transform: uppercase;
-      }
-      .fs-stat-bonus, .fs-stat-malus {
-        font-size: 12px; color: rgba(255,255,255,0.65); margin: 3px 0;
-      }
-      .sym {
-        color: rgba(255,255,255,0.4);
-        margin-right: 2px;
-      }
-      .fs-faction-system {
-        font-size: 9px; letter-spacing: 2px;
-        color: rgba(255,255,255,0.3); margin-top: 10px;
-        text-transform: uppercase;
+      .fs-content {
+        position: relative; z-index: 10;
+        flex: 1; display: flex; align-items: center; justify-content: center;
+        padding: 20px 48px;
+        gap: 28px;
       }
 
-      /* ── Separator "OR" ── */
-      .fs-split-or {
-        flex-shrink: 0;
-        width: 48px;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 11px; letter-spacing: 4px;
-        color: ${acc}30;
-        z-index: 11;
+      /* ── Krok 1: siatka 6 kart liderów (3 kolumny × 2 rzędy) ── */
+      .fs-leaders-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(280px, 320px));
+        gap: 22px;
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 22px 0;
+        align-items: start;
+      }
+      @media (max-width: 1100px) {
+        .fs-leaders-grid { grid-template-columns: repeat(2, minmax(260px, 320px)); }
+      }
+      @media (max-width: 720px) {
+        .fs-leaders-grid { grid-template-columns: 1fr; }
       }
 
-      /* ── Karty przywódców (Krok 2) ── */
-      .fs-leaders-row {
-        gap: 28px; flex-wrap: wrap;
-        padding-top: 30px; /* miejsce na pop-out portretu */
-      }
-      .fs-leaders-row.fs-single-leader {
-        justify-content: center;
-      }
-      @keyframes fs-holo-shimmer {
-        0%   { transform: translateY(100%); }
-        100% { transform: translateY(-100%); }
-      }
       .fs-leader-card {
-        flex: 0 1 340px;
-        padding: 32px 28px;
-        border: 1px solid transparent;
+        padding: 22px 20px;
+        border: 1px solid ${acc}20;
         border-radius: 4px;
-        background: color-mix(in srgb, var(--fc) 4%, transparent);
+        background: ${acc}05;
         cursor: pointer;
-        transition: all 0.3s ease-out;
+        transition: all 0.25s ease-out;
         text-align: center;
+        position: relative;
         overflow: visible;
       }
       .fs-leader-card:hover {
-        background: color-mix(in srgb, var(--fc) 8%, transparent);
-        border-color: ${acc}40;
-        box-shadow: 0 0 25px ${acc}15, 0 0 50px ${acc}08;
+        background: ${acc}0c;
+        border-color: ${acc}55;
+        box-shadow: 0 0 22px ${acc}18, 0 0 44px ${acc}08;
+        transform: translateY(-2px);
       }
       .fs-leader-card.selected {
-        background: color-mix(in srgb, var(--fc) 10%, transparent);
-        border-color: ${acc}60;
-        box-shadow: 0 0 35px ${acc}25, 0 0 70px ${acc}10;
+        background: ${acc}12;
+        border-color: ${acc}80;
+        box-shadow: 0 0 30px ${acc}25, 0 0 60px ${acc}10;
       }
 
       /* ── Portret ── */
       .fs-portrait-wrap {
-        width: 220px; height: 275px;
-        margin: 0 auto 20px;
-        border: 1px solid transparent;
+        width: 160px; height: 200px;
+        margin: 0 auto 14px;
+        border: 1px solid ${acc}30;
         border-radius: 4px;
         overflow: hidden;
-        box-shadow: none;
         position: relative;
         transition: transform 0.3s ease-out, box-shadow 0.3s ease-out, border-color 0.3s ease-out;
       }
       .fs-leader-card:hover .fs-portrait-wrap {
-        border-color: ${acc}50;
+        border-color: ${acc}60;
+        transform: scale(1.04);
+        box-shadow: 0 6px 22px ${acc}20;
       }
       .fs-leader-card.selected .fs-portrait-wrap {
-        border-color: ${acc}70;
+        border-color: ${acc}80;
+        transform: scale(1.04);
+        box-shadow: 0 6px 28px ${acc}25;
       }
-      /* Inset shadow — przyciemnienie krawędzi */
       .fs-portrait-wrap::after {
         content: ''; position: absolute; inset: 0;
-        box-shadow: inset 0 0 40px rgba(0,0,0,0.8);
+        box-shadow: inset 0 0 30px rgba(0,0,0,0.75);
         pointer-events: none; z-index: 2;
-      }
-      /* Holograficzny shimmer */
-      .fs-portrait-wrap::before {
-        content: ''; position: absolute; inset: 0;
-        background: linear-gradient(
-          180deg,
-          transparent 0%,
-          ${acc}25 45%,
-          ${acc}25 55%,
-          transparent 100%
-        );
-        z-index: 3; pointer-events: none;
-        opacity: 0;
-        transform: translateY(100%);
-        transition: opacity 0.3s ease-out;
-      }
-      /* Hover: pop-out + shimmer aktywny */
-      .fs-leader-card:hover .fs-portrait-wrap {
-        transform: scale(1.12) translateY(-25px);
-        box-shadow: 0 8px 30px ${acc}20;
-      }
-      .fs-leader-card:hover .fs-portrait-wrap::before {
-        opacity: 1;
-        animation: fs-holo-shimmer 3s ease-in-out infinite;
-      }
-      /* Selected: permanentny pop-out + mocniejszy glow */
-      .fs-leader-card.selected .fs-portrait-wrap {
-        transform: scale(1.12) translateY(-25px);
-        box-shadow: 0 8px 40px ${acc}30, 0 0 60px ${acc}10;
-      }
-      .fs-leader-card.selected .fs-portrait-wrap::before {
-        opacity: 1;
-        animation: fs-holo-shimmer 3s ease-in-out infinite;
       }
       .fs-portrait-img {
         width: 100%; height: 100%; object-fit: cover;
@@ -748,50 +409,48 @@ export class FactionSelectScene {
         width: 100%; height: 100%;
         display: flex; align-items: center; justify-content: center;
         font-family: 'Orbitron', monospace;
-        font-size: 52px; font-weight: 700;
+        font-size: 42px; font-weight: 700;
         letter-spacing: 4px;
         background: ${acc}15;
         color: ${acc};
       }
 
+      .fs-leader-archetype {
+        font-family: 'Orbitron', monospace;
+        font-size: 10px; letter-spacing: 3px;
+        color: ${acc}99;
+        text-transform: uppercase;
+        margin: 0 0 6px;
+      }
       .fs-leader-name {
         font-family: 'Orbitron', monospace;
-        font-size: 15px; font-weight: 700;
-        letter-spacing: 2px; color: var(--fc);
-        margin: 0 0 6px; text-transform: uppercase;
+        font-size: 13px; font-weight: 700;
+        letter-spacing: 1.5px; color: ${acc};
+        margin: 0 0 4px; text-transform: uppercase;
       }
       .fs-leader-title {
-        font-size: 13px; margin: 0 0 6px;
-        font-style: italic; color: color-mix(in srgb, var(--fc) 60%, transparent);
+        font-size: 11px; margin: 0 0 4px;
+        font-style: italic; color: ${acc}88;
       }
       .fs-leader-age {
-        font-size: 12px; color: color-mix(in srgb, var(--fc) 40%, transparent);
-        margin: 0 0 16px;
+        font-size: 11px; color: ${acc}55;
+        margin: 0 0 12px;
       }
       .fs-leader-stats {
         text-align: left;
       }
       .fs-leader-bonus {
-        font-size: 12px; color: ${THEME.success || '#00ee88'}; margin: 4px 0;
-      }
-      .fs-leader-malus {
-        font-size: 12px; color: ${THEME.danger || '#ff3344'}; margin: 4px 0;
+        font-size: 11px; color: ${THEME.success || '#00ee88'}; margin: 3px 0;
       }
 
-      .fs-consul-info {
-        position: relative; z-index: 10;
-        text-align: center;
-        font-size: 13px; color: color-mix(in srgb, var(--fc, #D85A30) 50%, transparent);
-        letter-spacing: 1px; margin: 0; padding: 0 20px 10px;
-      }
-
-      /* ── Potwierdzenie (Krok 3) ── */
+      /* ── Potwierdzenie (Krok 2) ── */
       .fs-confirm-layout {
         gap: 56px; max-width: 960px; margin: 0 auto;
+        align-items: center;
       }
       .fs-confirm-portrait {
         width: 300px; height: 380px; flex-shrink: 0;
-        border: 1px solid transparent;
+        border: 1px solid ${acc}40;
         border-radius: 4px; overflow: hidden;
         box-shadow: 0 0 24px ${acc}18;
         position: relative;
@@ -810,9 +469,17 @@ export class FactionSelectScene {
         font-family: 'Orbitron', monospace;
         font-size: 64px; font-weight: 700;
         letter-spacing: 6px; color: ${acc};
+        background: ${acc}15;
       }
       .fs-confirm-info {
         flex: 1; text-align: left;
+      }
+      .fs-confirm-archetype {
+        font-family: 'Orbitron', monospace;
+        font-size: 12px; letter-spacing: 4px;
+        color: ${acc}aa;
+        text-transform: uppercase;
+        margin: 0 0 8px;
       }
       .fs-confirm-name {
         font-family: 'Orbitron', monospace;
@@ -841,15 +508,6 @@ export class FactionSelectScene {
       }
       .fs-confirm-bonus {
         font-size: 13px; color: ${THEME.success || '#00ee88'}; margin: 5px 0;
-      }
-      .fs-confirm-malus {
-        font-size: 13px; color: ${THEME.danger || '#ff3344'}; margin: 5px 0;
-      }
-      .fs-confirm-faction {
-        font-family: 'Orbitron', monospace;
-        font-size: 14px; font-weight: 700;
-        letter-spacing: 5px; margin: 0;
-        text-transform: uppercase;
       }
 
       /* ── Nawigacja ── */

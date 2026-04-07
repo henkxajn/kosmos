@@ -37,12 +37,19 @@ import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { GroundUnitManager } from '../systems/GroundUnitManager.js';
 import { AnomalyEffectSystem } from '../systems/AnomalyEffectSystem.js';
 import { LeaderSystem }        from '../systems/LeaderSystem.js';
+import { FactionSystem }       from '../systems/FactionSystem.js';
+import { DysonSystem }          from '../systems/DysonSystem.js';
+import { AutoPauseSystem }      from '../systems/AutoPauseSystem.js';
+import { LEADERS }              from '../data/LeaderData.js';
+import { NARRATIVE_EVENTS_BY_ID } from '../data/NarrativeEventsData.js';
+import { EndgameScene }         from './EndgameScene.js';
 import { ANOMALIES } from '../data/AnomalyData.js';
 import { showEventNotification, showImpactNotification, showMovementModal } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
-import { formatStatLine, formatStatLineWithCursor } from '../ui/TerminalPopupBase.js';
+import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
+import { formatStatLine, formatStatLineWithCursor, buildTerminalPopup } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
 import { StarSystemManager } from '../systems/StarSystemManager.js';
@@ -59,7 +66,7 @@ import { TECHS }             from '../data/TechData.js';          // POWER TEST
 import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
 import { TERRAIN_TYPES }     from '../map/HexTile.js';            // POWER TEST
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do auto-build
-import { t } from '../i18n/i18n.js';
+import { t, getLocale } from '../i18n/i18n.js';
 
 export class GameScene {
   // canvas3D — element #three-canvas
@@ -165,6 +172,9 @@ export class GameScene {
     this.groundUnitManager = new GroundUnitManager();
     this.anomalyEffectSystem = new AnomalyEffectSystem();
     this.leaderSystem        = new LeaderSystem();
+    this.factionSystem       = new FactionSystem();
+    this.dysonSystem         = new DysonSystem();
+    this.autoPauseSystem     = new AutoPauseSystem();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -191,6 +201,9 @@ export class GameScene {
     window.KOSMOS.groundUnitManager  = this.groundUnitManager;
     window.KOSMOS.anomalyEffectSystem = this.anomalyEffectSystem;
     window.KOSMOS.leaderSystem     = this.leaderSystem;
+    window.KOSMOS.factionSystem    = this.factionSystem;
+    window.KOSMOS.dysonSystem      = this.dysonSystem;
+    window.KOSMOS.autoPauseSystem  = this.autoPauseSystem;
     window.KOSMOS.threeRenderer    = this.threeRenderer;
 
     // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
@@ -307,15 +320,24 @@ export class GameScene {
       if (c4x.leaderSystem) {
         this.leaderSystem.restore(c4x.leaderSystem);
       }
+      // Przywróć FactionSystem
+      if (c4x.factionSystem) {
+        this.factionSystem.restore(c4x.factionSystem);
+      }
+      // Faza D3: Przywróć DysonSystem
+      if (c4x.dysonSystem) {
+        this.dysonSystem.restore(c4x.dysonSystem);
+      }
+      // Auto-pauza: przywróć ustawienia (master + per-kategoria)
+      if (c4x.autoPause) {
+        this.autoPauseSystem.restore(c4x.autoPause);
+      }
     }
 
-    // Nowa gra — ustaw przywódcę z ekranu wyboru frakcji
-    if (!savedData && window.KOSMOS.selectedFaction) {
-      this.leaderSystem.setLeader(
-        window.KOSMOS.selectedFaction,
-        window.KOSMOS.selectedLeader ?? 'yara_osei',
-        0
-      );
+    // Faza C4: nowa gra — ustaw lidera BEZ frakcji (frakcje odblokowują się
+    // dopiero gdy koloniści odkryją gdzie jest Ziemia, później w trakcie gry)
+    if (!savedData && window.KOSMOS.selectedLeader) {
+      this.leaderSystem.setLeaderNoFaction(window.KOSMOS.selectedLeader, 0);
     }
 
     // ── Spawn rovera po postawieniu stolicy (nowa gra) ─────────
@@ -458,6 +480,270 @@ export class GameScene {
     initMissionEvents();
     // Modal wyborów konsularnych (Poszukiwacze co 15 lat)
     initConsulElection();
+    // Toast auto-pauzy (krótki komunikat 3s przy auto-pauzie)
+    initAutoPauseToast();
+
+    // ── Faza C5: narodziny frakcji — handler kronika_lokalizacji ──────────
+    // TechSystem emituje narrative:earthLocated po zbadaniu kronika_lokalizacji.
+    // 1) odblokuj FactionSystem (pokaż HUD, rozpocznij tickowanie tension/narrative)
+    // 2) przypisz lidera do jego ukrytej frakcji
+    // 3) jeśli Seekers — zmień status na Konsula (kadencja 15 lat)
+    // 4) wyzwól pierwszy event narracyjny (earth_located → chain do first_voices_of_division)
+    EventBus.on('narrative:earthLocated', () => {
+      const facSys = window.KOSMOS?.factionSystem;
+      const leaderSys = window.KOSMOS?.leaderSystem;
+      if (!facSys || !leaderSys) return;
+
+      // Already triggered? (defensywa — zapobiega podwójnemu uruchomieniu)
+      if (!facSys.isLocked) return;
+
+      facSys.unlock();
+
+      const leaderId = leaderSys.activeLeader;
+      const leader = leaderId ? LEADERS[leaderId] : null;
+      const factionId = leader?.hidden_faction ?? 'confederates';
+      leaderSys.assignFaction(factionId);
+      if (factionId === 'seekers') {
+        leaderSys.convertToConsul();
+      }
+
+      // Wyzwól event narracyjny (chain w narrative:eventTriggered)
+      const event = NARRATIVE_EVENTS_BY_ID['earth_located'];
+      if (event) {
+        const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+        EventBus.emit('narrative:eventTriggered', { event, gameYear });
+      }
+    });
+
+    // ── Faza C3+C5: handler eventów narracyjnych frakcji ─────────────────
+    // FactionSystem (lub inne źródła) emitują narrative:eventTriggered.
+    // choice=false → queueMissionEvent (pauza + OK), shift suwaka natychmiast, opcjonalny onComplete chain
+    // choice=true  → buildTerminalPopup z 2-3 buttons (dynamicznie z optionA/B/C), efekty per event.id
+    EventBus.on('narrative:eventTriggered', ({ event, gameYear, sliderDirectionForMinority }) => {
+      const isPL = getLocale() !== 'en';
+      const facSys = window.KOSMOS?.factionSystem;
+      if (!facSys || !event) return;
+
+      if (event.choice) {
+        // ── Modal z wyborem (2-3 opcje) ──────────────────────────────────
+        EventBus.emit('time:pause');
+
+        // Dla faction_crisis_protest: kierunek shifta optionA zależy od dominującej frakcji
+        const isCrisis = event.id === 'faction_crisis_protest';
+        const optKeys = ['optionA', 'optionB', 'optionC'];
+        const optLetters = ['A', 'B', 'C'];
+
+        // Dynamicznie zbierz buttony z istniejących opcji
+        const buttons = [];
+        const presentOpts = [];
+        for (let i = 0; i < optKeys.length; i++) {
+          const opt = event[optKeys[i]];
+          if (!opt) continue;
+          buttons.push({
+            label:   isPL ? opt.labelPL : (opt.labelEN || opt.labelPL),
+            primary: i === 0,
+          });
+          presentOpts.push({ letter: optLetters[i], opt });
+        }
+
+        const { overlay, dismiss, btnElements } = buildTerminalPopup({
+          severity:    event.severity ?? 'warning',
+          barTitle:    isPL ? event.titlePL : event.titleEN,
+          svgKey:      event.svgKey ?? 'report',
+          svgLabel:    isPL ? 'DECYZJA' : 'DECISION',
+          prompt:      '> NARRATIVE.LOG_',
+          headline:    (isPL ? event.titlePL : event.titleEN).toUpperCase(),
+          description: isPL ? event.descPL : event.descEN,
+          buttons,
+          onDismiss: () => { EventBus.emit('time:resume'); },
+        });
+
+        // Bind każdego przycisku do odpowiadającej opcji
+        btnElements.forEach((btn, idx) => {
+          const { letter, opt } = presentOpts[idx];
+          btn.addEventListener('click', () => {
+            // 1. Domyślny shift suwaka z opcji
+            let baseDelta = opt.sliderDelta ?? 0;
+            if (isCrisis && letter === 'A') {
+              // Crisis protest optionA — kierunek zależy od dominującej frakcji
+              baseDelta = baseDelta * (sliderDirectionForMinority ?? -1);
+            }
+            if (baseDelta !== 0) {
+              facSys.shiftSlider(baseDelta, `${event.id}_choice${letter}`);
+            }
+
+            // 2. Per-event side effects
+            this._applyNarrativeChoiceEffect(event.id, letter, facSys);
+
+            dismiss();
+          });
+        });
+
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
+
+      } else {
+        // ── Event informacyjny (popup z OK) ───────────────────────────────
+        if (event.sliderDelta) {
+          facSys.shiftSlider(event.sliderDelta, event.id);
+        }
+        queueMissionEvent({
+          severity:    event.severity ?? 'info',
+          barTitle:    isPL ? event.titlePL : event.titleEN,
+          svgKey:      event.svgKey ?? 'report',
+          svgLabel:    isPL ? 'KRONIKA' : 'CHRONICLE',
+          prompt:      '> NARRATIVE.LOG_',
+          headline:    (isPL ? event.titlePL : event.titleEN).toUpperCase(),
+          description: isPL ? event.descPL : event.descEN,
+          buttons: [{ label: isPL ? '[ENTER] Rozumiem' : '[ENTER] Understood', primary: true }],
+        });
+
+        // Faza C5: chain handler dla onComplete (po dismiss popupu)
+        // Uwaga: queueMissionEvent NIE wspiera onComplete callbacku — emit chain natychmiast
+        // (popup info pojawia się w kolejce, chain leci równolegle, oba tickują przez kolejkę)
+        if (event.onComplete === 'faction_birth') {
+          const next = NARRATIVE_EVENTS_BY_ID['first_voices_of_division'];
+          if (next) {
+            EventBus.emit('narrative:eventTriggered', {
+              event:    next,
+              gameYear: window.KOSMOS?.timeSystem?.gameTime ?? 0,
+            });
+          }
+        } else if (event.onComplete === 'show_faction_assignment') {
+          const leaderSys = window.KOSMOS?.leaderSystem;
+          const lId = leaderSys?.activeLeader;
+          const lData = lId ? LEADERS[lId] : null;
+          const fId = leaderSys?.activeFaction;
+          const factionLabel = isPL
+            ? (fId === 'confederates' ? 'Konfederaci Misji' : (fId === 'seekers' ? 'Poszukiwacze Drogi' : '—'))
+            : (fId === 'confederates' ? 'Confederation of the Mission' : (fId === 'seekers' ? 'Seekers of the Way' : '—'));
+          queueMissionEvent({
+            severity:    'info',
+            barTitle:    isPL ? 'STANOWISKO LIDERA' : 'LEADER\'S POSITION',
+            svgKey:      'colony',
+            svgLabel:    isPL ? 'LIDER' : 'LEADER',
+            prompt:      '> LEADER_STANCE.LOG_',
+            headline:    `${(lData?.namePL ?? '?').toUpperCase()} — ${factionLabel.toUpperCase()}`,
+            description: isPL
+              ? 'Twój lider zajął wyraźne stanowisko. Kolonia to zauważyła.'
+              : 'Your leader has taken a clear position. The colony noticed.',
+            buttons: [{ label: isPL ? '[ENTER] Rozumiem' : '[ENTER] Understood', primary: true }],
+          });
+        }
+      }
+    });
+
+    // ── Faza D3: handlery DysonSystem ────────────────────────────────────
+    // Wizualna progresja gwiazdy w 3D — DysonSystem emituje przy każdym ukończonym segmencie
+    EventBus.on('dyson:visualStageChanged', ({ stage }) => {
+      window.KOSMOS?.threeRenderer?.updateStarForDyson?.(stage);
+    });
+
+    // Popup po ukończeniu segmentu Sfery + faction shift
+    EventBus.on('dyson:segmentCompleted', ({ segmentId, completedCount, segmentNamePL, segmentNameEN }) => {
+      const isPL = getLocale() !== 'en';
+      const name = isPL ? segmentNamePL : segmentNameEN;
+      const fSys = window.KOSMOS?.factionSystem;
+      const zone = fSys?.getCurrentZone?.() ?? 'balanced';
+      const isConfederate = zone.includes('confederates');
+      const factionReaction = isPL
+        ? (isConfederate
+            ? 'Zbudowaliśmy coś czego Ziemia nigdy nie widziała.'
+            : 'Kolejny segment gotowy. Brama jest bliżej.')
+        : (isConfederate
+            ? 'We built something Earth has never seen.'
+            : 'Another segment complete. The Gate is closer.');
+
+      queueMissionEvent({
+        severity:    'discovery',
+        barTitle:    isPL ? 'SEGMENT SFERY DYSONA' : 'DYSON SPHERE SEGMENT',
+        svgKey:      'discovery',
+        svgLabel:    `${completedCount}/20`,
+        prompt:      '> DYSON_SEGMENT.LOG_',
+        headline:    `${segmentId}. ${(name ?? '').toUpperCase()}`,
+        description: factionReaction,
+        buttons: [{ label: isPL ? '[ENTER] Rozumiem' : '[ENTER] Understood', primary: true }],
+      });
+
+      // Brama Skoku zbliża się — slider w stronę Poszukiwaczy (-5)
+      // (Konfederaci interpretują Sferę jako Type II prosperity, Seekers jako drogę powrotną)
+      fSys?.shiftSlider?.(-5, 'dyson_segment_completed');
+
+      // ── Faza D4: trigger endgame gdy segment 20 ukończony + tech zbadane ──
+      if (completedCount === 20) {
+        const hasJumpGate = window.KOSMOS?.techSystem?.isResearched?.('jump_gate_construction') ?? false;
+        if (hasJumpGate) this._triggerEndgame();
+      }
+    });
+
+    // ── Faza D4: druga ścieżka triggera — gdy tech zbadany PO ukończeniu seg 20
+    EventBus.on('dyson:jumpGateUnlocked', () => {
+      if (window.KOSMOS?.dysonSystem?.completedCount === 20) {
+        this._triggerEndgame();
+      }
+    });
+
+    // ── Faza D4: handlery sceny endgame ────────────────────────────────────
+    EventBus.on('endgame:triggered', (data) => {
+      const scene = new EndgameScene();
+      scene.show(data);
+    });
+
+    EventBus.on('endgame:chosen', ({ ending, gameYear }) => {
+      const isPL = getLocale() !== 'en';
+
+      // Narracja epilogu per wybór
+      const narratives = {
+        return: {
+          PL: `Po ${gameYear} latach, flota wraca. Brama Skoku otwiera się raz — i zamyka za ostatnim statkiem.\n\nCo zastają w Układzie Słonecznym? To zależy od tego jaką historię napisałeś przez te wszystkie lata.\n\nAle wrócili. Po 3000 latach i 400 pokoleniach — wrócili.`,
+          EN: `After ${gameYear} years, the fleet returns. The Jump Gate opens once — and closes behind the last ship.\n\nWhat do they find in the Solar System? That depends on the history you wrote across all those years.\n\nBut they returned. After 3,000 years and 400 generations — they returned.`,
+        },
+        stay: {
+          PL: `Energia Sfery zasila sieć bram przez cały układ. Każda kolonia oddalona o sekundy od każdej innej.\n\nNie wróciliście do Ziemi. Ale Układ stał się czymś czego Ziemia nigdy nie widziała.\n\nNie jesteście już zagubionymi kolonistami. Jesteście nową ludzkością.`,
+          EN: `The Sphere's energy powers a gate network across the entire system. Every colony seconds away from every other.\n\nYou did not return to Earth. But the System became something Earth had never seen.\n\nYou are no longer lost colonists. You are a new humanity.`,
+        },
+        message: {
+          PL: `Nadajnik galaktyczny aktywny. Sygnał niesie historię 400 000 kolonistów, ${gameYear} lat i jedną Sferę Dysona.\n\nOdpowiedź dotrze za 47 280 lat. Nikt z żyjących jej nie doczeka.\n\nMoże za 50 000 lat ktoś usłyszy. Może to wystarczy.`,
+          EN: `The galactic transmitter is active. The signal carries the history of 400,000 colonists, ${gameYear} years, and one Dyson Sphere.\n\nThe reply will arrive in 47,280 years. No one alive will see it.\n\nMaybe in 50,000 years someone will hear. Maybe that is enough.`,
+        },
+      };
+      const narrative = narratives[ending]?.[isPL ? 'PL' : 'EN']
+        ?? narratives.message[isPL ? 'PL' : 'EN'];
+
+      const headline = isPL
+        ? (ending === 'return' ? 'Powrót'
+         : ending === 'stay'   ? 'Nowa Ludzkość'
+         : 'Wiadomość w Butelce')
+        : (ending === 'return' ? 'Return'
+         : ending === 'stay'   ? 'New Humanity'
+         : 'Message in a Bottle');
+
+      queueMissionEvent({
+        severity:    'discovery',
+        barTitle:    isPL ? 'KONIEC HISTORII' : 'END OF HISTORY',
+        svgKey:      'discovery',
+        svgLabel:    isPL ? 'EPILOG' : 'EPILOGUE',
+        prompt:      '> END.LOG_',
+        headline,
+        description: narrative,
+        buttons: [{
+          label: isPL ? '[ENTER] Zakończ grę' : '[ENTER] End Game',
+          primary: true,
+          onClick: () => EventBus.emit('game:returnToTitle'),
+        }],
+      });
+
+      // Zapisz wybór endgame w polu instance (do save lub statystyk)
+      this._endgameChoice = ending;
+    });
+
+    // Powrót do TitleScene (najprostsze: reload strony)
+    EventBus.on('game:returnToTitle', () => {
+      EventBus.emit('time:pause');
+      // Czyścimy save zakończonej gry — gracz wraca do menu z czystą kartą
+      // (alternatywnie zostawić save jako "ukończona gra" — TODO Faza D5)
+      window.location.reload();
+    });
 
     // Popup: kolonia/placówka utracona (zniszczenie ciała niebieskiego)
     EventBus.on('colony:destroyed', ({ planetId, colonyName, reason, isOutpost, population, destroyedVesselIds }) => {
@@ -706,6 +992,108 @@ export class GameScene {
   }
 
   // ── Konfiguracja kolonii (wyciągnięte z planet:colonize) ───────
+  // ── Faza C3+C5: per-event side effects narracyjnych wyborów ──────────
+  // Wywoływane z handlera narrative:eventTriggered po kliknięciu buttona.
+  // letter ∈ {'A','B','C'} — która opcja została wybrana.
+  _applyNarrativeChoiceEffect(eventId, letter, facSys) {
+    const prosp = window.KOSMOS?.prosperitySystem;
+    const civ   = window.KOSMOS?.civSystem;
+
+    switch (eventId) {
+      // ── Faza C3 ─────────────────────────────────────────────────────
+      case 'generational_winter_1':
+        // Obie opcje: bonus morale 10 przez 5 lat
+        prosp?.addEventBonus?.(`narrative_${eventId}_${letter}`, 10, 5);
+        return;
+
+      case 'faction_crisis_protest':
+        if (letter === 'A') {
+          // Ustąp mniejszości — napięcie spada (concession kalmy)
+          facSys.tension = Math.max(0, facSys.tension - 30);
+          facSys._narrativeCrisisFired = false;
+        } else if (letter === 'B') {
+          // Stłum siłą — drastyczny spadek napięcia, ale prosperity -20 / 10 lat
+          facSys.tension = Math.max(0, facSys.tension - 50);
+          facSys._narrativeCrisisFired = false;
+          prosp?.addEventBonus?.(`narrative_${eventId}_suppress`, -20, 10);
+        }
+        return;
+
+      // ── Faza C5: pierwszy sabotaż ──────────────────────────────────
+      case 'first_sabotage':
+        if (letter === 'A') {
+          // Śledztwo — napięcie -15, prosperity -5 przez 5 lat
+          facSys.tension = Math.max(0, facSys.tension - 15);
+          prosp?.addEventBonus?.(`narrative_${eventId}_investigate`, -5, 5);
+        } else if (letter === 'B') {
+          // Amnestia — napięcie -25 ale morale -10 przez 5 lat (jako prosperity penalty)
+          facSys.tension = Math.max(0, facSys.tension - 25);
+          prosp?.addEventBonus?.(`narrative_${eventId}_amnesty`, -10, 5);
+        }
+        return;
+
+      // ── Faza C5: groźba separacji ──────────────────────────────────
+      case 'colony_separation_threat':
+        if (letter === 'A') {
+          // Pozwól odejść — tracisz 20% populacji, napięcie spada do 30
+          const pop = civ?.population ?? 0;
+          const toRemove = Math.floor(pop * 0.2);
+          for (let i = 0; i < toRemove && (civ?.population ?? 0) > 1; i++) {
+            civ?.removePop?.(null, 1);
+          }
+          if (toRemove > 0) {
+            EventBus.emit('civ:popDied', { cause: 'separation', population: civ?.population ?? 0 });
+          }
+          facSys.tension = 30;
+          facSys._crisisActive = false;
+        } else if (letter === 'B') {
+          // Negocjuj — napięcie -30, prosperity -10 / 10 lat
+          facSys.tension = Math.max(0, facSys.tension - 30);
+          facSys._crisisActive = false;
+          prosp?.addEventBonus?.(`narrative_${eventId}_negotiate`, -10, 10);
+        } else if (letter === 'C') {
+          // Odmów — napięcie +20, ryzyko sabotażu rośnie (reset _sabotageTriggered = sabotaż znów możliwy)
+          facSys.tension = Math.min(100, facSys.tension + 20);
+          facSys._crisisActive = false;
+          facSys._sabotageTriggered = false;
+        }
+        return;
+
+      default:
+        return;
+    }
+  }
+
+  // ── Faza D4: trigger sceny zakończenia ──────────────────────────────
+  // Wywoływane gdy ukończono segment 20 Sfery + zbadano jump_gate_construction.
+  // Guard `_endgameTriggered` zapobiega podwójnemu odpaleniu (oba paths: segCompleted + techUnlocked).
+  _triggerEndgame() {
+    if (this._endgameTriggered) return;
+    this._endgameTriggered = true;
+
+    EventBus.emit('time:pause');
+
+    // Krótkie opóźnienie dramatyczne (2s) — pozwala graczowi przeczytać popup segmentu 20
+    setTimeout(() => {
+      EventBus.emit('endgame:triggered', {
+        slider:        window.KOSMOS?.factionSystem?.slider ?? 50,
+        leaderName:    this._getLeaderName(),
+        gameYear:      Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0),
+        coloniesCount: window.KOSMOS?.colonyManager?.getAllColonies?.()?.length ?? 1,
+      });
+    }, 2000);
+  }
+
+  // Helper: nazwa aktywnego lidera (PL/EN per locale)
+  _getLeaderName() {
+    const leaderId = window.KOSMOS?.leaderSystem?.activeLeader;
+    if (!leaderId) return '?';
+    const leader = LEADERS[leaderId];
+    if (!leader) return leaderId;
+    const isPL = getLocale() !== 'en';
+    return isPL ? (leader.namePL ?? leader.id) : (leader.nameEN ?? leader.namePL ?? leader.id);
+  }
+
   _setupColony(planet) {
     window.KOSMOS.civMode    = true;
     window.KOSMOS.homePlanet = planet;

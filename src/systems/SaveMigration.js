@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 44;
+export const CURRENT_VERSION     = 49;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -59,6 +59,11 @@ const MIGRATIONS = {
   41: _migrateV41toV42,
   42: _migrateV42toV43,
   43: _migrateV43toV44,
+  44: _migrateV44toV45,
+  45: _migrateV45toV46,
+  46: _migrateV46toV47,
+  47: _migrateV47toV48,
+  48: _migrateV48toV49,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1142,6 +1147,87 @@ function _migrateV41toV42(data) {
 function _migrateV42toV43(data) {
   if (data.c4x) {
     data.c4x.leaderSystem = data.c4x.leaderSystem ?? null;
+  }
+  return data;
+}
+
+// ── v44 → v45: FactionSystem — suwak frakcji i napięcie ─────────────────────
+function _migrateV44toV45(data) {
+  if (data.civ4x) {
+    data.civ4x.factionSystem = data.civ4x.factionSystem ?? {
+      slider:         50,
+      tension:        0,
+      yearsInExtreme: 0,
+      crisisActive:   false,
+      accumYears:     0,
+    };
+  }
+  return data;
+}
+
+// ── v45 → v46: FactionSystem — eventy narracyjne (Faza C3) ──────────────────
+function _migrateV45toV46(data) {
+  if (data.civ4x?.factionSystem) {
+    data.civ4x.factionSystem.triggeredEvents      = data.civ4x.factionSystem.triggeredEvents      ?? [];
+    data.civ4x.factionSystem.narrativeCrisisFired = data.civ4x.factionSystem.narrativeCrisisFired ?? false;
+  }
+  return data;
+}
+
+// ── v47 → v48: DysonSystem (Faza D3) ───────────────────────────────────────
+// Megaprojekt Sfery Dysona — 20 segmentów w 4 fazach. Stan persistowany w c4x.dysonSystem.
+// Legacy save: zainicjalizuj pustą Sferą (active=false, brak segmentów ukończonych).
+function _migrateV47toV48(data) {
+  if (!data.civ4x) return data;
+  if (!data.civ4x.dysonSystem) {
+    const segments = {};
+    for (let i = 1; i <= 20; i++) {
+      segments[i] = { delivered: {}, completed: false };
+    }
+    data.civ4x.dysonSystem = {
+      segments,
+      unlockedPhases: [],
+      completedCount: 0,
+      researchBonus:  0,
+      active:         false,
+    };
+  }
+  return data;
+}
+
+// ── v48 → v49: AutoPauseSystem — domyślne ustawienia auto-pauzy ─────────────
+// Stare save'y nie miały AutoPauseSystem. Pole `autoPause` jest opcjonalne —
+// jeśli nie ma w save, AutoPauseSystem ładuje defaults z localStorage albo
+// hardkodowane DEFAULT_SETTINGS. Nic nie trzeba dopisywać do save.
+function _migrateV48toV49(data) {
+  if (data.civ4x) {
+    data.civ4x.autoPause = data.civ4x.autoPause ?? null;
+  }
+  return data;
+}
+
+// ── v46 → v47: FactionSystem narodziny frakcji (Faza C4 + C5) ──────────────
+// Faza C4: frakcje nie istnieją na starcie — odblokowują się po odkryciu Ziemi.
+//   • Wszystkie istniejące save są retroaktywnie zablokowane (locked=true)
+//   • Lider z legacy save traci frakcję (była ustawiana przez stary FactionSelectScene)
+// Faza C5: dodatkowe pola FactionSystem dla łańcucha narodzin frakcji.
+//   • _unlockedYear (rok unlock) — używane przez `two_sides_emerge` event
+//   • _sabotageTriggered — guard żeby first_sabotage nie powtarzał się
+function _migrateV46toV47(data) {
+  if (data.civ4x?.factionSystem) {
+    // Faza C4
+    data.civ4x.factionSystem.locked            = data.civ4x.factionSystem.locked            ?? true;
+    // Faza C5
+    data.civ4x.factionSystem.unlockedYear      = data.civ4x.factionSystem.unlockedYear      ?? null;
+    data.civ4x.factionSystem.sabotageTriggered = data.civ4x.factionSystem.sabotageTriggered ?? false;
+  }
+  if (data.civ4x?.leaderSystem) {
+    // Jeśli factionSystem jest locked → wyzeruj activeFaction lidera (frakcja "nieznana")
+    if (data.civ4x.factionSystem?.locked) {
+      data.civ4x.leaderSystem.activeFaction = null;
+      // termYears też wyzeruj — w trybie locked nie ma rotacji konsulów
+      data.civ4x.leaderSystem.termYears = null;
+    }
   }
   return data;
 }

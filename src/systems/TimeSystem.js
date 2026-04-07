@@ -27,6 +27,7 @@ export class TimeSystem {
 
     EventBus.on('time:pause',           ()          => this.pause());
     EventBus.on('time:play',            ()          => this.play());
+    EventBus.on('time:resume',          ()          => this.play());  // alias dla play (używany przez ConsulElectionModal, GameScene movements, GalaxyMapScene)
     EventBus.on('time:setMultiplier',   ({ index }) => this.setMultiplier(index));
     EventBus.on('time:faster',          ()          => this.faster());
     EventBus.on('time:slower',          ()          => this.slower());

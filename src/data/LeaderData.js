@@ -1,7 +1,16 @@
-// LeaderData — dane frakcji i przywódców (Faza B)
+// LeaderData — dane liderów (Faza B → C4)
 //
-// Dwie frakcje: Konfederaci Misji (dożywotni Archont) i Poszukiwacze Drogi (Konsul co 15 lat).
-// 8 postaci: 3 kandydatów Konfederatów + 5 Konsulów Poszukiwaczy.
+// Faza C4: na starcie gry frakcje NIE istnieją — gracz wybiera tylko styl
+// przywództwa (archetype). Pole `hidden_faction` jest niewidoczne w UI i
+// zostaje użyte przez FactionSystem dopiero gdy frakcje się odblokują
+// (po odkryciu Ziemi). Stare pole `faction` zachowane TYLKO dla Viktora
+// i Amary — to są pełnoprawni Konsulowie post-unlock.
+//
+// 8 postaci łącznie:
+//   STARTING_LEADERS (6) — wybierane na starcie gry, neutralne cytaty
+//     • yara_osei, aleksei_borodin, mirela_santos (hidden: confederates)
+//     • fatima_alrashidi, tomas_ferreira, ingrid_solberg (hidden: seekers)
+//   Konsulowie post-unlock (Viktor, Amara) — tylko w wyborach co 15 lat
 
 export const FACTIONS = {
   confederates: {
@@ -39,135 +48,128 @@ export const FACTIONS = {
 };
 
 export const LEADERS = {
-  // ── KONFEDERACI — 3 kandydatów do wyboru przy starcie ──────────────────
+  // ── STARTERY — 6 liderów do wyboru przy nowej grze ─────────────────────
+  // hidden_faction: niewidoczne w UI; FactionSystem użyje gdy frakcje się odblokują
   yara_osei: {
-    id:        'yara_osei',
-    faction:   'confederates',
-    namePL:    'Dr. Yara Osei-Mensah',
-    titlePL:   'Archont Nauki i Ekspansji',
-    titleEN:   'Archon of Science and Expansion',
-    age:       44,
-    quote:     'Ziemia wysłała nas żebyśmy przeżyli. Przeżyjmy — i zbudujmy coś godnego tego poświęcenia.',
-    quoteEN:   'Earth sent us to survive. Let us survive — and build something worthy of that sacrifice.',
-    portrait:  'assets/portraits/yara_osei.png',
+    id:             'yara_osei',
+    hidden_faction: 'confederates',
+    archetype:      'Wizjoner Nauki',
+    archetypeEN:    'Science Visionary',
+    namePL:         'Dr. Yara Osei-Mensah',
+    titlePL:        'Dyrektor Naukowy Misji',
+    titleEN:        'Mission Science Director',
+    age:            44,
+    quote:          'Jesteśmy pierwszymi ludźmi którzy widzą to niebo. Każde odkrycie które tu zrobimy — należy do całej ludzkości.',
+    quoteEN:        'We are the first humans to see this sky. Every discovery we make here belongs to all of humanity.',
+    portrait:       'assets/portraits/yara_osei.png',
     bonuses: [
-      { stat: 'research',        mult: 1.25, descPL: '+25% badania naukowe',           descEN: '+25% research output' },
-      { stat: 'colonyProsperity',mult: 1.15, descPL: '+15% prosperity nowych kolonii', descEN: '+15% new colony prosperity' },
-      { stat: 'anomalyResearch', mult: 2.0,  descPL: 'Anomalie naukowe ×2 research',   descEN: 'Science anomalies ×2 research' },
+      { stat: 'research',         mult: 1.25, descPL: '+25% badania naukowe',           descEN: '+25% research output' },
+      { stat: 'colonyProsperity', mult: 1.15, descPL: '+15% prosperity nowych kolonii', descEN: '+15% new colony prosperity' },
+      { stat: 'anomalyResearch',  mult: 2.0,  descPL: 'Anomalie ×2 research',           descEN: 'Anomalies ×2 research' },
     ],
-    maluses: [
-      { stat: 'seekersMorale', mult: 0.85, descPL: '-15% morale Poszukiwaczy', descEN: '-15% Seekers morale' },
-    ],
+    maluses: [],   // brak malusów na starcie — frakcja nieznana
   },
 
   aleksei_borodin: {
-    id:        'aleksei_borodin',
-    faction:   'confederates',
-    namePL:    'Komandor Aleksei Borodin-Vasek',
-    titlePL:   'Archont Stabilności i Porządku',
-    titleEN:   'Archon of Stability and Order',
-    age:       51,
-    quote:     'Mam 400 000 dusz pod opieką. Najpierw przeżyją. Potem będziemy filozofować.',
-    quoteEN:   'I have 400,000 souls in my care. First they survive. Then we philosophize.',
-    portrait:  'assets/portraits/aleksei_borodin.png',
+    id:             'aleksei_borodin',
+    hidden_faction: 'confederates',
+    archetype:      'Pragmatyk Stabilności',
+    archetypeEN:    'Stability Pragmatist',
+    namePL:         'Komandor Aleksei Borodin-Vasek',
+    titlePL:        'Komandor Bezpieczeństwa Misji',
+    titleEN:        'Mission Security Commander',
+    age:            51,
+    quote:          'Mam 400 000 dusz pod opieką. Dopóki żyją — mam czas na pytania. Najpierw przeżyją.',
+    quoteEN:        'I have 400,000 souls in my care. As long as they live — I have time for questions. Survival comes first.',
+    portrait:       'assets/portraits/aleksei_borodin.png',
     bonuses: [
-      { stat: 'stabilityFloor', value: 40,   descPL: 'Morale nie spada poniżej 40',    descEN: 'Morale cannot drop below 40' },
-      { stat: 'defenseCost',    mult: 0.75,  descPL: 'Budynki obronne -25% koszt',      descEN: 'Defense buildings -25% cost' },
-      { stat: 'crisisDuration', mult: 0.60,  descPL: 'Kryzysy trwają 40% krócej',       descEN: 'Crises last 40% shorter' },
+      { stat: 'stabilityFloor', value: 40,   descPL: 'Morale nie spada poniżej 40',  descEN: 'Morale cannot drop below 40' },
+      { stat: 'defenseCost',    mult: 0.75,  descPL: 'Budynki obronne -25% koszt',    descEN: 'Defense buildings -25% cost' },
+      { stat: 'crisisDuration', mult: 0.60,  descPL: 'Kryzysy trwają 40% krócej',     descEN: 'Crises last 40% shorter' },
     ],
-    maluses: [
-      { stat: 'research',        mult: 0.80, descPL: '-20% badania naukowe',       descEN: '-20% research output' },
-      { stat: 'seekersTension',  mult: 2.0,  descPL: 'Poszukiwacze ×2 napięcia',  descEN: 'Seekers ×2 tension' },
-    ],
+    maluses: [],
   },
 
   mirela_santos: {
-    id:        'mirela_santos',
-    faction:   'confederates',
-    namePL:    'Mirela Santos-Ikeda',
-    titlePL:   'Archont Wspólnoty i Dobrobytu',
-    titleEN:   'Archon of Community and Prosperity',
-    age:       38,
-    quote:     'Pytali mnie ile ludzi zmieści się na tym statku. Pytałam ich — ile społeczeństw? Jedno. Tylko jedno.',
-    quoteEN:   'They asked me how many people fit on this ship. I asked them — how many societies? One. Just one.',
-    portrait:  'assets/portraits/mirela_santos.png',
+    id:             'mirela_santos',
+    hidden_faction: 'confederates',
+    archetype:      'Humanista Wspólnoty',
+    archetypeEN:    'Community Humanist',
+    namePL:         'Mirela Santos-Ikeda',
+    titlePL:        'Dyrektor Systemów Społecznych',
+    titleEN:        'Social Systems Director',
+    age:            38,
+    quote:          'Zabraliśmy ze sobą wszystko co czyni nas ludźmi. Teraz musimy sprawdzić czy to wystarczy.',
+    quoteEN:        'We brought with us everything that makes us human. Now we must find out if that is enough.',
+    portrait:       'assets/portraits/mirela_santos.png',
     bonuses: [
-      { stat: 'popGrowth',       mult: 1.35, descPL: '+35% wzrost populacji',              descEN: '+35% population growth' },
-      { stat: 'consumerGoods',   mult: 1.40, descPL: 'Dobra konsumpcyjne +40% szybciej',   descEN: 'Consumer goods +40% faster' },
-      { stat: 'prosperity',      mult: 1.25, descPL: 'Prosperity rośnie +25% szybciej',    descEN: 'Prosperity grows +25% faster' },
+      { stat: 'popGrowth',     mult: 1.35, descPL: '+35% wzrost populacji',            descEN: '+35% population growth' },
+      { stat: 'consumerGoods', mult: 1.40, descPL: 'Dobra konsumpcyjne +40% szybciej', descEN: 'Consumer goods +40% faster' },
+      { stat: 'prosperity',    mult: 1.25, descPL: 'Prosperity rośnie +25% szybciej',  descEN: 'Prosperity grows +25% faster' },
     ],
-    maluses: [
-      { stat: 'miningEfficiency',mult: 0.90, descPL: '-10% wydajność wydobycia',   descEN: '-10% mining efficiency' },
-      { stat: 'megaprojectCost', mult: 1.20, descPL: 'Megaprojekty +20% droższe',  descEN: 'Megaprojects +20% more expensive' },
-    ],
+    maluses: [],
   },
 
-  // ── POSZUKIWACZE — 5 Konsulów rotujących co 15 lat ─────────────────────
+  // ── STARTERY (Seekers hidden) — także rotują jako Konsulowie post-unlock ──
   fatima_alrashidi: {
-    id:        'fatima_alrashidi',
-    faction:   'seekers',
-    namePL:    'Dr. Fatima Al-Rashidi',
-    titlePL:   'Konsul — Projekt Genesis',
-    titleEN:   'Consul — Project Genesis',
-    age:       47,
-    quote:     'Widziałam jak przestrzeń się złożyła. To nie był wypadek. To było zaproszenie.',
-    quoteEN:   'I saw space fold in on itself. It was not an accident. It was an invitation.',
-    portrait:  'assets/portraits/fatima_alrashidi.png',
-    termYears: 15,
-    program:   'project_genesis',
-    programDescPL: 'Projekt Genesis — rozumienie skoku',
-    programDescEN: 'Project Genesis — understanding the jump',
+    id:             'fatima_alrashidi',
+    hidden_faction: 'seekers',
+    archetype:      'Obsesyjny Odkrywca',
+    archetypeEN:    'Obsessive Explorer',
+    namePL:         'Dr. Fatima Al-Rashidi',
+    titlePL:        'Główny Fizyk Anomalii',
+    titleEN:        'Chief Anomaly Physicist',
+    age:            47,
+    quote:          'Anomalia skoku to nie wypadek. To równanie które czeka na rozwiązanie. Ja je rozwiążę.',
+    quoteEN:        'The jump anomaly is not an accident. It is an equation waiting to be solved. I will solve it.',
+    portrait:       'assets/portraits/fatima_alrashidi.png',
+    termYears:      15,    // post-unlock: rotacja Konsulów co 15 lat
     bonuses: [
-      { stat: 'ftlResearch',       mult: 3.0, descPL: '×3 badania FTL przez 15 lat',     descEN: '×3 FTL research for 15 years' },
-      { stat: 'temporalAnomalies', mult: 2.0, descPL: 'Anomalie temporalne ×2 częściej',  descEN: 'Temporal anomalies ×2 more frequent' },
+      { stat: 'ftlResearch',       mult: 2.0,  descPL: '×2 badania FTL',                   descEN: '×2 FTL research' },
+      { stat: 'temporalAnomalies', mult: 2.0,  descPL: 'Anomalie temporalne ×2 częściej',  descEN: 'Temporal anomalies ×2 more frequent' },
+      { stat: 'research',          mult: 1.15, descPL: '+15% badania ogólne',              descEN: '+15% general research' },
     ],
-    maluses: [
-      { stat: 'consumerGoods',      mult: 0.75, descPL: '-25% produkcja dóbr',          descEN: '-25% consumer goods production' },
-      { stat: 'confederateTension', value: 20,   descPL: '+20 napięcia Konfederatów',    descEN: '+20 Confederate tension' },
-    ],
+    maluses: [],
   },
 
   tomas_ferreira: {
-    id:        'tomas_ferreira',
-    faction:   'seekers',
-    namePL:    'Tomás Ferreira-Okonkwo',
-    titlePL:   'Konsul — Wielka Ekspedycja',
-    titleEN:   'Consul — The Great Expedition',
-    age:       55,
-    quote:     'Odpowiedź jest tam. Nie wiem gdzie dokładnie. Dlatego lecimy wszędzie.',
-    quoteEN:   'The answer is out there. I don\'t know exactly where. That\'s why we fly everywhere.',
-    portrait:  'assets/portraits/tomas_ferreira.png',
-    termYears: 15,
-    program:   'great_expedition',
-    programDescPL: 'Wielka Ekspedycja',
-    programDescEN: 'The Great Expedition',
+    id:             'tomas_ferreira',
+    hidden_faction: 'seekers',
+    archetype:      'Kapitan Eksploracji',
+    archetypeEN:    'Captain of Exploration',
+    namePL:         'Tomás Ferreira-Okonkwo',
+    titlePL:        'Admirał Floty Kolonizacyjnej',
+    titleEN:        'Admiral of Colonial Fleet',
+    age:            55,
+    quote:          'Nie wiemy gdzie jesteśmy. Ale wiem jak to sprawdzić. Lecimy.',
+    quoteEN:        'We do not know where we are. But I know how to find out. We fly.',
+    portrait:       'assets/portraits/tomas_ferreira.png',
+    termYears:      15,
     bonuses: [
-      { stat: 'shipRange',     mult: 1.50, descPL: 'Statki +50% zasięg',          descEN: 'Ships +50% range' },
-      { stat: 'shipSpeed',     mult: 1.40, descPL: 'Statki +40% szybkość',        descEN: 'Ships +40% speed' },
-      { stat: 'anomalyChance', mult: 3.0,  descPL: 'Anomalie temporalne ×3 szansa', descEN: 'Temporal anomalies ×3 chance' },
+      { stat: 'shipRange',     mult: 1.50, descPL: 'Statki +50% zasięg',         descEN: 'Ships +50% range' },
+      { stat: 'shipSpeed',     mult: 1.40, descPL: 'Statki +40% szybkość',       descEN: 'Ships +40% speed' },
+      { stat: 'anomalyChance', mult: 2.0,  descPL: 'Anomalie ×2 szansa odkrycia', descEN: 'Anomalies ×2 discovery chance' },
     ],
-    maluses: [
-      { stat: 'transportEfficiency', mult: 0.70, descPL: 'Transport -30% wydajność', descEN: 'Transport -30% efficiency' },
-    ],
+    maluses: [],
   },
 
   ingrid_solberg: {
-    id:        'ingrid_solberg',
-    faction:   'seekers',
-    namePL:    'Ingrid Solberg-Nakamura',
-    titlePL:   'Konsul — Wielka Zgoda',
-    titleEN:   'Consul — The Great Accord',
-    age:       41,
-    quote:     'Możemy się kłócić przez tysiąc lat. Albo możemy zbudować statek który nas tam zawiezie.',
-    quoteEN:   'We can argue for a thousand years. Or we can build a ship that will take us there.',
-    portrait:  'assets/portraits/ingrid_solberg.png',
-    termYears: 15,
-    program:   'great_accord',
-    programDescPL: 'Wielka Zgoda',
-    programDescEN: 'The Great Accord',
+    id:             'ingrid_solberg',
+    hidden_faction: 'seekers',
+    archetype:      'Dyplomata Jedności',
+    archetypeEN:    'Unity Diplomat',
+    namePL:         'Ingrid Solberg-Nakamura',
+    titlePL:        'Pełnomocnik ds. Spójności Społecznej',
+    titleEN:        'Commissioner for Social Cohesion',
+    age:            41,
+    quote:          'Czterysta tysięcy ludzi, jedno pytanie: co teraz? Moja odpowiedź: najpierw przestańcie się kłócić.',
+    quoteEN:        'Four hundred thousand people, one question: what now? My answer: first stop arguing.',
+    portrait:       'assets/portraits/ingrid_solberg.png',
+    termYears:      15,
     bonuses: [
       { stat: 'factionTension', mult: 0.5,  descPL: 'Napięcie frakcji -50%',  descEN: 'Faction tension -50%' },
       { stat: 'morale',         mult: 1.20, descPL: '+20% morale globalne',   descEN: '+20% global morale' },
+      { stat: 'crisisDuration', mult: 0.70, descPL: 'Kryzysy trwają 30% krócej', descEN: 'Crises last 30% shorter' },
     ],
     maluses: [],
   },
@@ -220,12 +222,20 @@ export const LEADERS = {
   },
 };
 
-// Pomocnicze: lista kandydatów Konfederatów
+// Faza C4: 6 starterów do wyboru przy nowej grze (LeaderSelectScene)
+// Kolejność: 3 ukryci Konfederaci, 3 ukryci Poszukiwacze (UI ich nie rozróżnia)
+export const STARTING_LEADERS = [
+  'yara_osei', 'aleksei_borodin', 'mirela_santos',
+  'fatima_alrashidi', 'tomas_ferreira', 'ingrid_solberg',
+];
+
+// Pomocnicze: lista kandydatów Konfederatów (zachowane dla legacy / przyszłej rotacji Archonta)
 export const CONFEDERATE_CANDIDATES = ['yara_osei', 'aleksei_borodin', 'mirela_santos'];
 
-// Pomocnicze: lista Konsulów Poszukiwaczy (rotacja)
+// Pomocnicze: lista Konsulów Poszukiwaczy (rotacja co 15 lat post-unlock)
+// Wszystkie 5 mogą zostać wylosowanych w wyborach po odblokowaniu frakcji.
 export const SEEKER_CONSULS = [
-  'fatima_alrashidi',  // zawsze pierwsza kadencja
+  'fatima_alrashidi',
   'tomas_ferreira',
   'ingrid_solberg',
   'viktor_havel',

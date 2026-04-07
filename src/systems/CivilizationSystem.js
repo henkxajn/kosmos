@@ -793,7 +793,9 @@ export class CivilizationSystem {
     const housingMod = this._housingGrowthModifier();
     if (housingMod <= 0) { this._lastGrowth = 0; return; }
 
-    const conditionMult = (window.KOSMOS?.prosperitySystem?.getGrowthMultiplier() ?? 1.0) * foodMod * housingMod;
+    // Faza C5: faction popGrowth modifier (kary -5% w zonach seekers/seekers_mild/seekers_max)
+    const factionPopMult = window.KOSMOS?.factionSystem?.getModifier?.('popGrowth') ?? 1.0;
+    const conditionMult = (window.KOSMOS?.prosperitySystem?.getGrowthMultiplier() ?? 1.0) * foodMod * housingMod * factionPopMult;
     const techMult      = this.techSystem?.getPopGrowthMultiplier() ?? 1.0;
 
     // Skalowanie logistyczne — im więcej POPów, tym wolniejszy wzrost

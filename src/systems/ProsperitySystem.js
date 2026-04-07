@@ -118,6 +118,13 @@ export class ProsperitySystem {
       this.targetProsperity = Math.min(100, this.targetProsperity + Math.max(-10, tradeNetBonus));
     }
 
+    // 4e. Faza C5: faction zone modifier — multiplikatywnie na target przed inercją
+    // (kary -10% w zonach seekers/seekers_max; getModifier zwraca 1.0 gdy locked lub balanced)
+    const factionProsMult = window.KOSMOS?.factionSystem?.getModifier?.('prosperity') ?? 1.0;
+    if (factionProsMult !== 1.0) {
+      this.targetProsperity = Math.max(0, Math.min(100, this.targetProsperity * factionProsMult));
+    }
+
     // 5. Zastosuj inercję: prosperity dąży do target
     const delta = (this.targetProsperity - this.prosperity) * 0.15;
     this.prosperity = Math.max(0, Math.min(100, this.prosperity + delta));
@@ -157,6 +164,15 @@ export class ProsperitySystem {
           const ratio = this._satisfaction[goodId];
           EventBus.emit('consumer:shortage', { goodId, ratio });
         }
+      }
+
+      // Faction shift — pasywny dryf suwaka frakcji wg prosperity (Faza C1)
+      // Gate `prosperitySystem === this` daje pojedynczą emisję raz/rok dla całej cywilizacji
+      // (nie mnoży się przez N kolonii — pierwsza aktywna decyduje za cały empire).
+      if (this.prosperity > 80) {
+        EventBus.emit('faction:sliderShift', { delta: +0.5, reason: 'high_prosperity' });
+      } else if (this.prosperity < 30) {
+        EventBus.emit('faction:sliderShift', { delta: -0.3, reason: 'low_prosperity' });
       }
     }
   }

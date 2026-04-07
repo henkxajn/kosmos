@@ -134,9 +134,11 @@ export class ColonyManager {
     });
 
     // Invaliduj cache shipyard level przy budowie/rozbiórce/upgrade stoczni
-    const invalidateShipyard = ({ buildingId, tile }) => {
+    // planetId z eventu (BuildingSystem._tickConstruction) — fallback _activePlanetId
+    // dla buildResult/demolishResult/upgradeResult (guarded — zawsze aktywna kolonia)
+    const invalidateShipyard = ({ buildingId, tile, planetId }) => {
       if (buildingId === 'shipyard' || tile?.buildingId === 'shipyard') {
-        const pid = this._activePlanetId;
+        const pid = planetId ?? this._activePlanetId;
         const colony = pid ? this._colonies.get(pid) : null;
         if (colony) colony._shipyardLevelDirty = true;
       }

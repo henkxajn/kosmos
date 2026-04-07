@@ -91,10 +91,10 @@ export class ColonyOverlay extends BaseOverlay {
       this._onBuildingChanged();
       if (!e.success && e.reason) this._showFlash(e.reason);
     });
-    EventBus.on('planet:pendingFulfilled', () => this._onBuildingChanged());
+    EventBus.on('planet:pendingFulfilled', (e) => this._onBuildingChanged(e?.planetId));
     EventBus.on('planet:pendingCancelled', () => this._onBuildingChanged());
-    EventBus.on('planet:constructionComplete', () => this._onBuildingChanged());
-    EventBus.on('planet:constructionProgress', () => this._onBuildingChanged());
+    EventBus.on('planet:constructionComplete', (e) => this._onBuildingChanged(e?.planetId));
+    EventBus.on('planet:constructionProgress', (e) => this._onBuildingChanged(e?.planetId));
 
     // Away Team — tryb wyboru hexa lądowania
     this._landingMode = false;
@@ -342,7 +342,20 @@ export class ColonyOverlay extends BaseOverlay {
     bSys._grid = grid;
   }
 
-  _onBuildingChanged() {
+  // planetId opcjonalny — gdy podany, syncuj grid TEJ kolonii (nawet jeśli nie wyświetlana).
+  // Konieczne dla constructionComplete/constructionProgress/pendingFulfilled, które ticki
+  // mogą emitować dla każdej kolonii niezależnie od aktualnie otwartej.
+  // Bez tego: gdy budowa kończy się na nieaktywnej kolonii, jej cached grid pozostaje
+  // ze stale referencją do skasowanego entry → pasek "100%" zamrożony po powrocie.
+  _onBuildingChanged(planetId = null) {
+    if (planetId) {
+      const grid = this._gridCache[planetId];
+      if (!grid) return;  // grid nie był jeszcze cache'owany — _getGrid zsynchronizuje przy otwarciu
+      const colony = window.KOSMOS?.colonyManager?.getColony(planetId);
+      if (colony?.buildingSystem) this._syncTileBuildings(grid, colony.buildingSystem);
+      return;
+    }
+    // Legacy: bez planetId — syncuj aktualnie wyświetlaną kolonię
     const colony = this._getColony();
     if (!colony) return;
     const grid = this._gridCache[colony.planetId];
@@ -1228,14 +1241,40 @@ export class ColonyOverlay extends BaseOverlay {
   _getAvailableBuildings(tile) {
     if (!tile) return [];
     const techSys = window.KOSMOS?.techSystem;
+    const facSys  = window.KOSMOS?.factionSystem;
+    const colMgr  = window.KOSMOS?.colonyManager;
     const terrain = TERRAIN_TYPES[tile.type];
     if (!terrain) { console.warn('[ColonyOverlay] Brak TERRAIN_TYPES dla:', tile.type); return []; }
     if (!terrain.buildable) return [];
+
+    // Faza D2b: aktywne budynki na bieżącej kolonii — do sprawdzenia requiresBuilding
+    const activeCol = colMgr?.getColony(colMgr?.activePlanetId);
+    const activeBuildingsMap = activeCol?.buildingSystem?._active;
 
     const result = Object.values(BUILDINGS)
       .filter(b => {
         if (!b.id || b.isCapital) return false;
         if (b.requires && techSys && !techSys.isResearched(b.requires)) return false;
+        // Faza D2b: budynek-prereq (np. heritage_dome wymaga mission_archive)
+        if (b.requiresBuilding && activeBuildingsMap) {
+          let found = false;
+          for (const entry of activeBuildingsMap.values()) {
+            if (entry.building?.id === b.requiresBuilding) { found = true; break; }
+          }
+          if (!found) return false;
+        }
+        // Faza C5: gating frakcyjny — ukryj budynki kulturowe gdy frakcje zablokowane
+        if (b.requiresFactionUnlocked || b.factionGating) {
+          if (!facSys || facSys.isLocked) return false;
+          if (b.factionGating) {
+            const slider = facSys.slider ?? 50;
+            const { slider: op, value } = b.factionGating;
+            if (op === '>'  && !(slider >  value)) return false;
+            if (op === '<'  && !(slider <  value)) return false;
+            if (op === '>=' && !(slider >= value)) return false;
+            if (op === '<=' && !(slider <= value)) return false;
+          }
+        }
         if (b.terrainAny) return true;
         if (b.terrainOnly) return b.terrainOnly.includes(tile.type);
         return terrain.allowedCategories?.includes(b.category) ?? false;

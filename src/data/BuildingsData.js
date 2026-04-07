@@ -1090,6 +1090,331 @@ export const BUILDINGS = {
     popType:       'scientist',
     isCultural:    true,
   },
+
+  // ── Faza C5: Budynki frakcyjne ─────────────────────────────────────────────
+  // Wszystkie 3 budynki dostępne tylko gdy FactionSystem.isLocked === false
+  // (po zbadaniu kronika_lokalizacji i odblokowaniu frakcji).
+  // Dodatkowo confederation_hall i seekers_institute mają warunek na sliderze.
+
+  confederation_hall: {
+    id:            'confederation_hall',
+    namePL:        'Hala Konfederatów',
+    nameEN:        'Confederation Hall',
+    category:      'governance',
+    icon:          '🏛',
+    description:   'Symbol trwałości. Tu zostajemy — to jest nasz dom.',
+    cost:          { Fe: 300, Si: 200 },
+    commodityCost: { structural_alloys: 8 },
+    energyCost:    3,
+    buildTime:     5.0,
+    rates:         { research: 6 },  // historycy/archiwiści dokumentujący kolonię
+    maintenance:   { Fe: 2 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      null,                              // brak gating tech
+    factionGating: { slider: '>', value: 60 },        // tylko gdy slider > 60
+    isUnique:      true,
+    popType:       'bureaucrat',
+    isCultural:    true,
+  },
+
+  seekers_institute: {
+    id:            'seekers_institute',
+    namePL:        'Instytut Poszukiwaczy',
+    nameEN:        'Seekers Institute',
+    category:      'research',
+    icon:          '🧭',
+    description:   'Centrum badań nad drogą powrotną do Ziemi.',
+    cost:          { Si: 300, Cu: 150, Ti: 50 },
+    commodityCost: { electronic_systems: 6, conductor_bundles: 4 },
+    energyCost:    4,
+    buildTime:     5.0,
+    rates:         { research: 12 },
+    maintenance:   { Si: 2 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      null,
+    factionGating: { slider: '<', value: 40 },        // tylko gdy slider < 40
+    isUnique:      true,
+    popType:       'scientist',
+    isCultural:    true,
+  },
+
+  mediation_center: {
+    id:            'mediation_center',
+    namePL:        'Centrum Mediacji',
+    nameEN:        'Mediation Center',
+    category:      'governance',
+    icon:          '⚖',
+    description:   'Obie strony muszą rozmawiać. Inaczej Sfera nigdy nie powstanie. Redukuje napięcie frakcji 3/rok.',
+    cost:          { Fe: 200, Si: 150 },
+    commodityCost: { structural_alloys: 5, electronic_systems: 3 },
+    energyCost:    2,
+    buildTime:     8.0,
+    rates:         {},                                // brak bezpośredniej produkcji
+    maintenance:   { Fe: 1 },
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      null,
+    factionGating: null,                              // brak warunku slider — dostępny zawsze gdy frakcje odblokowane
+    requiresFactionUnlocked: true,                    // ale wymaga odblokowanych frakcji
+    isUnique:      true,
+    popType:       'bureaucrat',
+    isCultural:    false,
+    specialEffect: 'faction_tension_reduction',
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Faza D2b: Pamięć i Tożsamość (civil) — narracyjne budynki cultural
+  // ══════════════════════════════════════════════════════════════════════════
+  // Aktywują eventy narracyjne o pamięci, tożsamości i pochodzeniu kolonii.
+  // Dostępne pre-unlock frakcji (sliderShift działa cicho dopóki frakcje locked).
+
+  memory_vault: {
+    id:            'memory_vault',
+    namePL:        'Skarbiec Pamięci',
+    nameEN:        'Memory Vault',
+    category:      'civil',
+    icon:          '🗄',
+    description:   'Przechowuje nagrania głosowe z Ziemi. Dzieci słuchają języków których nigdy nie usłyszą na żywo.',
+    cost:          { Fe: 200, Si: 100 },
+    commodityCost: { electronic_systems: 4, structural_alloys: 3 },
+    energyCost:    2,
+    buildTime:     3.0,
+    rates:         { research: 2 },   // archiwistyka, dokumentacja (morale efekt → narracyjny przez slider shift)
+    maintenance:   { Si: 1 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      3,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'colonial_governance',
+    popType:       'bureaucrat',
+    isCultural:    true,
+    // EventBus emit `narrative:memoryVaultBuilt` w BuildingSystem._activateBuilding (Faza D4 hook)
+  },
+
+  mission_archive: {
+    id:            'mission_archive',
+    namePL:        'Archiwum Misji',
+    nameEN:        'Mission Archive',
+    category:      'civil',
+    icon:          '📜',
+    description:   'Pełna dokumentacja misji kolonizacyjnej. Pierwotne rozkazy. Lista 400 000 nazwisk.',
+    cost:          { Fe: 300, Si: 200, Cu: 100 },
+    commodityCost: { electronic_systems: 6, structural_alloys: 4 },
+    energyCost:    3,
+    buildTime:     5.0,
+    rates:         { research: 5 },
+    maintenance:   { Si: 1 },
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'cultural_heritage',
+    isUnique:      true,
+    popType:       'scientist',
+    isCultural:    true,
+    // EventBus emit `ui:missionArchiveBuilt` w _activateBuilding — odblokuje "Kronikę Misji" (Faza D4)
+  },
+
+  heritage_dome: {
+    id:                'heritage_dome',
+    namePL:            'Kopuła Dziedzictwa',
+    nameEN:            'Heritage Dome',
+    category:          'civil',
+    icon:              '🌐',
+    description:       'Odtworzona przestrzeń ziemska pod kopułą. Trawa. Niebo. Deszcz. Dla tych którzy nigdy tego nie widzieli.',
+    cost:              { Fe: 500, Si: 400, Li: 50 },
+    commodityCost:     { structural_alloys: 12, polymer_composites: 8, compact_bioreactor: 2 },
+    energyCost:        4,
+    buildTime:         8.0,
+    rates:             { research: 3 },   // efekty kulturowe przez slider shift (+2 do Konfederatów)
+    maintenance:       { Fe: 2, water: 1 },
+    housing:           0,
+    popCost:           0.5,
+    maxLevel:          2,
+    capacityBonus:     null,
+    terrainOnly:       null,
+    terrainAny:        true,
+    requires:          null,                                // brak gating tech
+    requiresBuilding:  'mission_archive',                   // wymaga mission_archive na tej kolonii
+    factionGating:     { slider: '<', value: 60 },          // niedostępna gdy zbyt Konfederaccy
+    popType:           'bureaucrat',
+    isCultural:        true,
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Faza D2b: Nauka i Eksploracja (research) — odkrycia i anomalie
+  // ══════════════════════════════════════════════════════════════════════════
+
+  directional_observatory: {
+    id:            'directional_observatory',
+    namePL:        'Obserwatorium Kierunkowe',
+    nameEN:        'Directional Observatory',
+    category:      'research',
+    icon:          '🔭',
+    description:   'Skalibrowane na sektor Alfa Centauri. Wiemy gdzie szukać. Nie wiemy jak tam dotrzeć.',
+    cost:          { Fe: 400, Si: 300, Ti: 50 },
+    commodityCost: { electronic_systems: 8, conductor_bundles: 5 },
+    energyCost:    4,
+    buildTime:     5.0,
+    rates:         { research: 10 },
+    maintenance:   { Si: 1 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      3,
+    capacityBonus: null,
+    terrainOnly:   ['plains', 'tundra', 'crater'],   // wymaga otwartego horyzontu
+    terrainAny:    false,
+    requires:      'kronika_lokalizacji',             // tech z C5
+    popType:       'scientist',
+    // Placeholder hook: +50% szansa anomalii temporalnych T1-T2 (Faza D3 — RandomEventSystem)
+  },
+
+  anomaly_research_lab: {
+    id:            'anomaly_research_lab',
+    namePL:        'Laboratorium Anomalii',
+    nameEN:        'Anomaly Research Lab',
+    category:      'research',
+    icon:          '⚗',
+    description:   'Próbki z anomalii przechowywane w kontrolowanym środowisku. Coś w nich jest... znajome.',
+    cost:          { Si: 300, Cu: 200, Ti: 100 },
+    commodityCost: { electronic_systems: 6, polymer_composites: 4 },
+    energyCost:    3,
+    buildTime:     6.0,
+    rates:         { research: 8 },
+    maintenance:   { Si: 1 },
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      3,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'spacetime_cartography',           // tech z D2a
+    popType:       'scientist',
+    // Placeholder hook: każda odkryta anomalia daje ×2 research (Faza D3)
+  },
+
+  deep_space_array: {
+    id:            'deep_space_array',
+    namePL:        'Tablica Głębokiego Kosmosu',
+    nameEN:        'Deep Space Array',
+    category:      'research',
+    icon:          '📡',
+    description:   'Sieć sensorów rozciągnięta przez cały układ. Słuchamy przestrzeni.',
+    cost:          { Si: 600, Cu: 400, Xe: 20 },
+    commodityCost: { electronic_systems: 12, conductor_bundles: 8, semiconductor_arrays: 3 },
+    energyCost:    6,
+    buildTime:     10.0,
+    rates:         { research: 20 },
+    maintenance:   { Si: 2, energy: 1 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'quantum_fold_theory',             // tech z D2a
+    isUnique:      true,
+    popType:       'scientist',
+    // Placeholder hook: odblokowuje anomalie T3-T4, +100% zasięg science rovera (Faza D3)
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Faza D3: Budynki Sfery Dysona (stack)
+  // ══════════════════════════════════════════════════════════════════════════
+  // dyson_command — odblokowuje panel Sfery, centralizuje budowę
+  // orbital_fabricator — redukuje koszty segmentów (-10% per level, max -50%)
+  // stellar_collector_relay — naziemny relay od Sfery (+200 energy)
+
+  dyson_command: {
+    id:            'dyson_command',
+    namePL:        'Centrum Dowodzenia Sferą',
+    nameEN:        'Dyson Command Center',
+    category:      'space',                    // 'infrastructure' nie istnieje — używamy 'space'
+    icon:          '🛰',
+    description:   'Centrum dowodzenia projektem Sfery Dysona. Wszystkie dane budowy centralizowane tu. Każdy ukończony segment +5 research/rok.',
+    cost:          { Fe: 800, Si: 600, Cu: 300, Ti: 100 },
+    commodityCost: { electronic_systems: 15, structural_alloys: 10, quantum_processors: 2 },
+    energyCost:    8,
+    buildTime:     10.0,
+    rates:         { research: 15 },
+    maintenance:   { Fe: 3, Si: 2 },
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'dyson_engineering',
+    isUnique:      true,
+    popType:       'bureaucrat',
+    // DysonSystem konsumuje obecność tego budynku do działania panelu Sfery
+  },
+
+  orbital_fabricator: {
+    id:            'orbital_fabricator',
+    namePL:        'Fabryka Orbitalna',
+    nameEN:        'Orbital Fabricator',
+    category:      'mining',
+    icon:          '⚙',
+    description:   'Montaż komponentów Sfery w zerowej grawitacji. Każdy poziom -10% kosztu surowców segmentów Sfery (max -50% przy Lv5).',
+    cost:          { Fe: 600, Ti: 200, Hv: 30 },
+    commodityCost: { structural_alloys: 12, metamaterials: 4 },
+    energyCost:    5,
+    buildTime:     8.0,
+    rates:         { research: 3 },
+    maintenance:   { Fe: 2 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'dyson_engineering',
+    popType:       'engineer',
+    // DysonSystem.deliver() konsumuje _getBuildingLevel('orbital_fabricator') × 10% redukcji kosztów
+  },
+
+  stellar_collector_relay: {
+    id:            'stellar_collector_relay',
+    namePL:        'Przekaźnik Zbieracza',
+    nameEN:        'Stellar Collector Relay',
+    category:      'energy',
+    icon:          '🛸',
+    description:   'Wiązka ze Sfery kierowana na stację naziemną. Więcej energii niż kolonia zużywa.',
+    cost:          { Cu: 400, Si: 300 },
+    commodityCost: { conductor_bundles: 10, electronic_systems: 6 },
+    energyCost:    0,
+    buildTime:     12.0,
+    rates:         { energy: 200 },
+    maintenance:   { Cu: 1 },
+    housing:       0,
+    popCost:       0,
+    maxLevel:      3,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'dyson_collector',
+    isUnique:      true,
+    popType:       'engineer',
+  },
 };
 
 // ── Ikony zasobów — rozszerzony zestaw ──────────────────────────────────────

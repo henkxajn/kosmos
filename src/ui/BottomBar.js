@@ -7,7 +7,8 @@
 import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import EventBus            from '../core/EventBus.js';
-import { t }              from '../i18n/i18n.js';
+import { t, getLocale }   from '../i18n/i18n.js';
+import { showAutoPauseSettings } from './AutoPauseSettingsModal.js';
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline
@@ -17,7 +18,7 @@ const LOG_EXPANDED = 6; // ile wpisów po rozwinięciu
 const MENU_W = 220;
 const MENU_ROW_H = 28;
 const MENU_PAD = 8;
-const MENU_ROWS = 6; // Nowa gra, Zapisz, Autozapis, Orbity, Muzyka, Dźwięki
+const MENU_ROWS = 7; // Nowa gra, Zapisz, Autozapis, Auto-pauza, Orbity, Muzyka, Dźwięki
 const MENU_H = MENU_PAD * 2 + MENU_ROWS * MENU_ROW_H;
 
 // Opcje interwału autozapisu
@@ -291,6 +292,11 @@ export class BottomBar {
         this._cycleAutosave();
         this._updateDomMenu(); // odśwież wartość
         break;
+      case 'autopause':
+        showAutoPauseSettings();
+        this._menuOpen = false;
+        this._syncDomMenu();
+        break;
       case 'orbits':
         this._cycleOrbitMode();
         this._updateDomMenu();
@@ -337,10 +343,16 @@ export class BottomBar {
     const autosaveLabel = this._getAutosaveLabel();
     const autosaveOn = this._autosaveOption !== 'off';
     const orbitLabel = this._getOrbitLabel();
+    const pl = getLocale() === 'pl';
+    const apSys = window.KOSMOS?.autoPauseSystem;
+    const apEnabled = apSys ? apSys.isEnabled() : true;
+    const apLabel = pl ? 'Auto-pauza...' : 'Auto-pause...';
+    const apValue = apEnabled ? (pl ? 'WŁ' : 'ON') : (pl ? 'WYŁ' : 'OFF');
     return [
       { id: 'newGame', label: t('menu.newGame') },
       { id: 'save',    label: t('menu.save') },
       { id: 'autosave', label: t('menu.autosave'), value: autosaveLabel, valueOn: autosaveOn },
+      { id: 'autopause', label: apLabel, value: apValue, valueOn: apEnabled },
       { id: 'orbits',   label: t('menu.orbits'), value: orbitLabel, valueOn: true },
       { id: 'music',   label: t('menu.music'), value: musicEnabled ? t('menu.on') : t('menu.off'), valueOn: musicEnabled },
       { id: 'sfx',     label: t('menu.sfx'),   value: audioEnabled ? t('menu.on') : t('menu.off'), valueOn: audioEnabled },

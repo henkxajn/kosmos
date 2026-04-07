@@ -12,7 +12,7 @@ import { COSMIC }         from '../config/LayoutConfig.js';
 import { BUILDINGS }      from '../data/BuildingsData.js';
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
-import { t, getName }     from '../i18n/i18n.js';
+import { t, getName, getLocale } from '../i18n/i18n.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
@@ -47,6 +47,20 @@ function _fmtNum(n) {
   if (abs >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000)     return `${(n / 1_000).toFixed(1)}k`;
   return Number.isInteger(n) ? String(Math.round(n)) : n.toFixed(1);
+}
+
+/** Krótka etykieta strefy frakcji (PL/EN) — Faza C1 */
+function _zoneShortLabel(zone) {
+  const pl = getLocale() === 'pl';
+  switch (zone) {
+    case 'seekers_max':       return pl ? 'POSZ++' : 'SEEK++';
+    case 'seekers':           return pl ? 'POSZ'   : 'SEEK';
+    case 'seekers_mild':      return pl ? 'posz'   : 'seek';
+    case 'balanced':          return pl ? 'BAL'    : 'BAL';
+    case 'confederates_mild': return pl ? 'konf'   : 'conf';
+    case 'confederates':      return pl ? 'KONF++' : 'CONF++';
+    default: return '';
+  }
 }
 
 export class TopBar {
@@ -177,28 +191,33 @@ export class TopBar {
         // Zapamiętaj prostokąt do hover/tooltip
         this._itemRects.push({ x: ix, y: 0, w: iw, h: BAR_H, item });
 
-        // Rząd 1: ikona + symbol : wartość
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = item.color || C.text;
-        ctx.textAlign = 'left';
+        // Specjalne rendery (FactionSlider) — przejmują cały slot
+        if (item._factionSlider) {
+          this._drawFactionSlider(ctx, ix, iw, item._factionSlider);
+        } else {
+          // Rząd 1: ikona + symbol : wartość
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = item.color || C.text;
+          ctx.textAlign = 'left';
 
-        const valStr = item._rawValue ? String(item.value) : _fmtNum(item.value);
-        ctx.fillText(`${item.icon}${item.symbol}`, ix, row1Y);
+          const valStr = item._rawValue ? String(item.value) : _fmtNum(item.value);
+          ctx.fillText(`${item.icon}${item.symbol}`, ix, row1Y);
 
-        ctx.fillStyle = (item._rawValue ? false : item.value < 1) ? C.dim : C.bright;
-        const symW = ctx.measureText(`${item.icon}${item.symbol}`).width;
-        ctx.fillText(valStr, ix + symW + 2, row1Y);
+          ctx.fillStyle = (item._rawValue ? false : item.value < 1) ? C.dim : C.bright;
+          const symW = ctx.measureText(`${item.icon}${item.symbol}`).width;
+          ctx.fillText(valStr, ix + symW + 2, row1Y);
 
-        // Rząd 2: delta (jeśli jest)
-        if (item.delta !== undefined && Math.abs(item.delta) > 0.01) {
-          const sign = item.delta >= 0 ? '+' : '';
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = item.delta >= 0 ? THEME.successDim : THEME.dangerDim;
-          ctx.fillText(`${sign}${item.delta.toFixed(1)}`, ix, row2Y);
-        } else if (item.flowLabel) {
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = item.flowColor || C.dim;
-          ctx.fillText(item.flowLabel, ix, row2Y);
+          // Rząd 2: delta (jeśli jest)
+          if (item.delta !== undefined && Math.abs(item.delta) > 0.01) {
+            const sign = item.delta >= 0 ? '+' : '';
+            ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+            ctx.fillStyle = item.delta >= 0 ? THEME.successDim : THEME.dangerDim;
+            ctx.fillText(`${sign}${item.delta.toFixed(1)}`, ix, row2Y);
+          } else if (item.flowLabel) {
+            ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+            ctx.fillStyle = item.flowColor || C.dim;
+            ctx.fillText(item.flowLabel, ix, row2Y);
+          }
         }
 
         ix += iw;
@@ -286,8 +305,8 @@ export class TopBar {
     const name = item.tooltipName || `${item.icon} ${item.symbol || ''}`.trim();
     lines.push({ text: name, color: C.bright, bold: true });
 
-    // Ilość (pomijaj dla _rawValue — POP ma własne szczegóły)
-    if (!item._rawValue) {
+    // Ilość (pomijaj dla _rawValue — POP ma własne szczegóły; pomijaj dla faction slider)
+    if (!item._rawValue && !item._factionSlider) {
       lines.push({ text: t('ui.amount', _fmtNum(item.value)), color: C.text });
     }
 
@@ -352,6 +371,72 @@ export class TopBar {
       lines.push({ text: `${t('topBar.used')} ${pc.used}`, color: C.text });
       lines.push({ text: `${t('topBar.available')} ${pc.total}`, color: C.text });
       lines.push({ text: `${t('topBar.free')} ${pc.total - pc.used}`, color: pc.total - pc.used > 0 ? THEME.successDim : C.orange });
+    }
+
+    // Szczegóły frakcji (Faza C1) — pełne info o suwaku/napięciu/strefie
+    if (item._factionSlider) {
+      const fs = item._factionSlider;
+      const pl = getLocale() === 'pl';
+
+      // Strefa + dominująca frakcja
+      const zoneNames = {
+        seekers_max:       pl ? 'Pełni Poszukiwacze'    : 'Full Seekers',
+        seekers:           pl ? 'Poszukiwacze'           : 'Seekers',
+        seekers_mild:      pl ? 'Lekko Poszukiwacze'    : 'Mild Seekers',
+        balanced:          pl ? 'Równowaga'              : 'Balanced',
+        confederates_mild: pl ? 'Lekko Konfederaci'     : 'Mild Confederates',
+        confederates:      pl ? 'Pełni Konfederaci'    : 'Full Confederates',
+      };
+      lines.push({
+        text: pl ? `Strefa: ${zoneNames[fs.zone] ?? fs.zone}` : `Zone: ${zoneNames[fs.zone] ?? fs.zone}`,
+        color: C.text,
+      });
+      lines.push({
+        text: pl ? `Suwak: ${Math.round(fs.slider)} / 100` : `Slider: ${Math.round(fs.slider)} / 100`,
+        color: C.text,
+      });
+      lines.push({
+        text: pl ? `Napięcie: ${Math.round(fs.tension)} / 100` : `Tension: ${Math.round(fs.tension)} / 100`,
+        color: fs.tension >= 71 ? C.red : fs.tension >= 50 ? C.orange : C.text,
+      });
+
+      // Modyfikatory aktywnej strefy
+      const facSys = window.KOSMOS?.factionSystem;
+      const mods = facSys?._zoneModifiers ?? null;  // optional cache, jeśli kiedyś dodamy
+      // Bezpośrednio z tabeli przez getModifier (uproszczone — pokaż istotne staty)
+      if (facSys?.getModifier) {
+        const STATS = ['industryProduction', 'prosperity', 'popGrowth', 'research', 'explorationSpeed', 'anomalyChance'];
+        const labels = pl ? {
+          industryProduction: 'Produkcja',
+          prosperity:         'Prosperity',
+          popGrowth:          'Wzrost POP',
+          research:           'Badania',
+          explorationSpeed:   'Eksploracja',
+          anomalyChance:      'Szansa anomalii',
+        } : {
+          industryProduction: 'Industry',
+          prosperity:         'Prosperity',
+          popGrowth:          'Pop growth',
+          research:           'Research',
+          explorationSpeed:   'Exploration',
+          anomalyChance:      'Anomaly chance',
+        };
+        const modLines = [];
+        for (const stat of STATS) {
+          const m = facSys.getModifier(stat);
+          if (m === 1.0) continue;
+          const pct = Math.round((m - 1.0) * 100);
+          const sign = pct > 0 ? '+' : '';
+          modLines.push({
+            text: `  ${labels[stat]}: ${sign}${pct}%`,
+            color: m < 1.0 ? THEME.dangerDim : THEME.successDim,
+          });
+        }
+        if (modLines.length > 0) {
+          lines.push({ text: pl ? '─── Modyfikatory strefy ───' : '─── Zone modifiers ───', color: C.dim });
+          lines.push(...modLines);
+        }
+      }
     }
 
     // Szczegóły POP
@@ -437,6 +522,75 @@ export class TopBar {
       autoSlow ? THEME.successDim : null,
       THEME.fontSizeSmall - 2);
 
+    ctx.textAlign = 'left';
+  }
+
+  // ── Wskaźnik suwaka frakcji (Faza C1) ─────────────────────
+  // slider 0..100, kolor zależy od strefy:
+  //   0-30 = Poszukiwacze (#D85A30), 31-69 = neutralny, 70-100 = Konfederaci (#378ADD)
+  _drawFactionSlider(ctx, x, w, fs) {
+    const slider  = fs.slider;
+    const tension = fs.tension;
+    const zone    = fs.zone;
+
+    // Dobierz kolor strefy
+    let zoneColor;
+    if (slider <= 30)      zoneColor = '#D85A30';   // Poszukiwacze (pomarańczowy)
+    else if (slider >= 70) zoneColor = '#378ADD';   // Konfederaci (niebieski)
+    else                   zoneColor = 'rgba(255,255,255,0.4)';
+
+    // Etykieta nad paskiem (ikona ⚖)
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = C.bright;
+    ctx.textAlign = 'left';
+    ctx.fillText('⚖', x, 14);
+
+    // Kompaktowy odczyt wartości po prawej od ikony
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = zoneColor;
+    ctx.fillText(`${Math.round(slider)}`, x + 14, 14);
+
+    // Pasek 0-100 (rząd 2) — szerokość iw - 4
+    const barX = x + 2;
+    const barY = 22;
+    const barW = w - 6;
+    const barH = 6;
+
+    // Tło paska
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(barX, barY, barW, barH);
+
+    // Strefy (dwa subtelne markery 30 i 70 — granice neutralnej)
+    ctx.fillStyle = 'rgba(255,255,255,0.20)';
+    ctx.fillRect(barX + Math.round(barW * 0.30) - 1, barY, 1, barH);
+    ctx.fillRect(barX + Math.round(barW * 0.70) - 1, barY, 1, barH);
+
+    // Wypełnienie do pozycji slidera
+    const fillW = Math.max(0, Math.round(barW * (slider / 100)));
+    ctx.fillStyle = zoneColor;
+    ctx.fillRect(barX, barY, fillW, barH);
+
+    // Pionowy znacznik (tick) na pozycji slidera
+    const tickX = barX + Math.round(barW * (slider / 100));
+    ctx.fillStyle = C.bright;
+    ctx.fillRect(tickX - 1, barY - 1, 2, barH + 2);
+
+    // Tension (rząd 3) — mały pasek pod spodem (czerwony jeśli wysoki)
+    const tBarY = barY + barH + 2;
+    const tFill = Math.max(0, Math.round(barW * (tension / 100)));
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.fillRect(barX, tBarY, barW, 2);
+    if (tension > 0) {
+      ctx.fillStyle = tension >= 71 ? C.red : tension >= 50 ? C.orange : THEME.textDim;
+      ctx.fillRect(barX, tBarY, tFill, 2);
+    }
+
+    // Etykieta strefy mała (nad paskiem, po prawej)
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = C.dim;
+    ctx.textAlign = 'right';
+    const zoneLabel = _zoneShortLabel(zone);
+    if (zoneLabel) ctx.fillText(zoneLabel, x + w - 2, 14);
     ctx.textAlign = 'left';
   }
 
@@ -588,6 +742,22 @@ export class TopBar {
         value: pVal,
         color: pColor,
         tooltipName: '⭐ Prosperity',
+      });
+    }
+
+    // Faction slider (Faza C1) — pasek frakcji
+    // Faza C4: ukryj HUD gdy frakcje są zablokowane (przed odkryciem Ziemi)
+    const facSys = window.KOSMOS?.factionSystem;
+    if (window.KOSMOS?.civMode && facSys && !facSys.isLocked) {
+      items.push({
+        icon: '⚖', symbol: '',
+        value: Math.round(facSys.slider ?? 50),
+        tooltipName: getLocale() === 'pl' ? '⚖ Frakcja' : '⚖ Faction',
+        _factionSlider: {
+          slider:  facSys.slider  ?? 50,
+          tension: facSys.tension ?? 0,
+          zone:    facSys.getCurrentZone?.() ?? 'balanced',
+        },
       });
     }
 

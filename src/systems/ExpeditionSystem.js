@@ -1509,6 +1509,12 @@ export class ExpeditionSystem {
       autoSpaceport:  true,  // statek staje się spaceportem
     });
 
+    // Faction shift — nowa kolonia umacnia "tu zostajemy" (Konfederaci, Faza C1)
+    EventBus.emit('faction:sliderShift', {
+      delta:  +5,
+      reason: 'new_colony_founded',
+    });
+
     EventBus.emit('expedition:arrived', {
       expedition: exp,
       gained: startResources,

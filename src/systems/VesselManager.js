@@ -279,7 +279,9 @@ export class VesselManager {
     // Bazowe zużycie z modułów+masy (vessel.fuel.consumption ustawione przy tworzeniu)
     const baseFuelPerAU = vessel._baseFuelPerAU ?? vessel.fuel.consumption ?? _getHullDef(vessel.shipId)?.fuelPerAU ?? 0.5;
     const fuelEffMult = window.KOSMOS?.techSystem?.getFuelEfficiency() ?? 1.0;
-    vessel.fuel.consumption = baseFuelPerAU * fuelEffMult;
+    // Faza D2a hook: dyson_transmitter +100% zasięg (= fuelPerAU ×0.5)
+    const dysonRangeMult = (window.KOSMOS?.techSystem?.isResearched?.('dyson_transmitter') ?? false) ? 0.5 : 1.0;
+    vessel.fuel.consumption = baseFuelPerAU * fuelEffMult * dysonRangeMult;
 
     // Pozycja startu (bieżąca pozycja kolonii)
     const startEntity = this._findEntity(vessel.position.dockedAt);

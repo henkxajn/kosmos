@@ -643,6 +643,159 @@ export const TECHS = {
     description: 'Napęd antymaterii — ×2.0 prędkość (łącznie ×4.5)',
   },
 
+  // ── Kronika Lokalizacji — narracyjny gateway do narodzin frakcji (Faza C5) ──
+  // Bada gdzie w galaktyce znalazła się kolonia. Po zbadaniu: wyzwala łańcuch
+  // eventów narracyjnych (earth_located → first_voices_of_division → two_sides_emerge)
+  // i odblokowuje FactionSystem (frakcje przestają być ukryte).
+  kronika_lokalizacji: {
+    id:          'kronika_lokalizacji',
+    namePL:      'Kronika Lokalizacji',
+    nameEN:      'Localization Chronicle',
+    branch:      'space',
+    tier:        3,
+    cost:        { research: 500 },
+    requires:    ['advanced_navigation', 'orbital_survey'],
+    effects: [
+      { type: 'modifier', resource: 'research', multiplier: 1.10 },
+    ],
+    description: 'Triangulacja sygnatur kosmicznych — odkrycie położenia Ziemi w galaktyce. Otwiera narracyjny rozdział narodzin frakcji.',
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── Faza D2a: Ścieżka Kartograficzna (FTL) ───────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // kronika_lokalizacji → spacetime_cartography → quantum_fold_theory
+  //                                                      ↓
+  //                                              jump_gate_construction (capstone)
+
+  spacetime_cartography: {
+    id:          'spacetime_cartography',
+    namePL:      'Kartografia Czasoprzestrzenna',
+    nameEN:      'Spacetime Cartography',
+    branch:      'space',
+    tier:        4,
+    cost:        { research: 800 },
+    requires:    ['kronika_lokalizacji', 'quantum_physics'],
+    effects: [
+      { type: 'unlockBuilding',     buildingId: 'anomaly_research_lab' },
+      // Placeholder hook — będzie skonsumowany przez AnomalyEffectSystem (Faza D3)
+      { type: 'anomalyChanceBonus', value: 0.5 },
+    ],
+    description: 'Anomalia skoku nie była przypadkowa. Uczymy się czytać zakrzywienie przestrzeni — +50% szansa odkrycia anomalii temporalnych.',
+  },
+
+  quantum_fold_theory: {
+    id:          'quantum_fold_theory',
+    namePL:      'Teoria Składania Kwantowego',
+    nameEN:      'Quantum Fold Theory',
+    branch:      'space',
+    tier:        4,
+    cost:        { research: 1200 },
+    requires:    ['spacetime_cartography', 'antimatter_containment'],
+    effects: [
+      { type: 'unlockBuilding',       buildingId: 'deep_space_array' },
+      { type: 'shipSpeedMultiplier',  multiplier: 1.2 },
+    ],
+    description: 'Rozumiemy jak przestrzeń się złożyła. Teraz pytanie: czy możemy to powtórzyć? Statki +20% prędkość.',
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── Faza D2a: Ścieżka Sfery Dysona ────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // space_mining → asteroid_mining
+  //                       ↓
+  //         megastructures + asteroid_mining + fusion_power → dyson_engineering
+  //                                                                  ↓
+  //                                                          dyson_collector
+  //                                                                  ↓ ↓
+  //                                                  dyson_transmitter   (path ends)
+  //                                                  + jump_gate_construction (capstone z FTL)
+
+  asteroid_mining: {
+    id:          'asteroid_mining',
+    namePL:      'Górnictwo Asteroidalne',
+    nameEN:      'Asteroid Mining',
+    branch:      'mining',
+    tier:        3,
+    cost:        { research: 300 },
+    requires:    ['space_mining'],
+    effects: [
+      // Placeholder hook — będzie skonsumowany przez DepositSystem (Faza D3)
+      // Bonus ×2.0 do złóż asteroid/planetoid
+      { type: 'asteroidDepositMult', value: 2.0 },
+    ],
+    description: 'Pas asteroid to nieograniczone zasoby. Wystarczy po nie sięgnąć — ×2 wydobycie z planetoidów.',
+  },
+
+  dyson_engineering: {
+    id:          'dyson_engineering',
+    namePL:      'Inżynieria Sfery Dysona',
+    nameEN:      'Dyson Sphere Engineering',
+    branch:      'civil',
+    tier:        4,
+    cost:        { research: 800 },
+    requires:    ['megastructures', 'asteroid_mining', 'fusion_power'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'dyson_command' },
+      { type: 'unlockBuilding', buildingId: 'orbital_fabricator' },
+      // EventBus emit `dyson:engineeringUnlocked` w TechSystem (DysonSystem hook — Faza D3)
+    ],
+    description: 'Sfera Dysona to nie marzenie — to projekt inżynierski. Mamy plany. Odblokowuje panel Sfery Dysona.',
+  },
+
+  dyson_collector: {
+    id:          'dyson_collector',
+    namePL:      'Systemy Zbierające Dysona',
+    nameEN:      'Dyson Collection Systems',
+    branch:      'civil',
+    tier:        5,
+    cost:        { research: 1500 },
+    requires:    ['dyson_engineering', 'quantum_computing'],
+    effects: [
+      { type: 'unlockBuilding', buildingId: 'stellar_collector_relay' },
+      { type: 'modifier', resource: 'energy', multiplier: 3.0 },
+      // EventBus emit `dyson:collectorUnlocked` w TechSystem (Fazy II-III Sfery)
+    ],
+    description: 'Panele zbierają energię gwiazdy. Po raz pierwszy więcej energii niż potrzebujemy — ×3 produkcja energii.',
+  },
+
+  dyson_transmitter: {
+    id:          'dyson_transmitter',
+    namePL:      'Transmisja Mocy Dysona',
+    nameEN:      'Dyson Power Transmission',
+    branch:      'energy',
+    tier:        5,
+    cost:        { research: 1200 },
+    requires:    ['dyson_collector', 'zero_point_energy'],
+    effects: [
+      // Placeholder hook — będzie skonsumowany przez VesselManager (Faza D3)
+      { type: 'shipRangeMult', value: 2.0 },
+      // EventBus emit `dyson:transmitterUnlocked` w TechSystem (Faza IV Sfery)
+    ],
+    description: 'Energia Sfery zasila całą flotę. Typ I osiągnięty — statki +100% zasięg.',
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── Faza D2a: Brama Skoku (capstone) ──────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // Wymaga obu ścieżek (Dyson + FTL). Osobny tech od interstellar_colonization
+  // (które dalej istnieje jako "tania" droga do pojedynczego jump_gate buildingu).
+  jump_gate_construction: {
+    id:          'jump_gate_construction',
+    namePL:      'Budowa Bramy Skoku',
+    nameEN:      'Jump Gate Construction',
+    branch:      'space',
+    tier:        5,
+    cost:        { research: 2000 },
+    requires:    ['dyson_collector', 'quantum_fold_theory', 'warp_drive'],
+    effects: [
+      // Odblokowanie ekranu Decyzji Końcowej (Faza D4)
+      { type: 'unlockFeature', feature: 'endgame_decision' },
+      // EventBus emit `dyson:jumpGateUnlocked` w TechSystem (segment 20 Sfery)
+    ],
+    description: 'Mamy energię. Mamy teorię. Mamy materiały. Pytanie pozostaje — dokąd?',
+  },
+
   warp_theory: {
     id:          'warp_theory',
     namePL:      'Teoria Osnowy',

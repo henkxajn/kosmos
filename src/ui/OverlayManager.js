@@ -19,6 +19,7 @@ export class OverlayManager {
       'v': 'civilization',
       'g': 'galaxy',
       'u': 'unit_design',
+      'd': 'dyson',           // Faza D3 — Sfera Dysona
     };
   }
 

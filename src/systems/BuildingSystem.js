@@ -11,7 +11,9 @@
 //   Emituje:    'planet:buildResult'     { success, tile, buildingId, reason, underConstruction? }
 //               'planet:demolishResult'  { success, tile, reason, cancelled? }
 //               'planet:upgradeResult'   { success, tile, reason, underConstruction? }
-//               'planet:constructionComplete' { tileKey, buildingId }
+//               'planet:constructionComplete' { tileKey, buildingId, isUpgrade, planetId }
+//               'planet:constructionProgress' { planetId }
+//               'planet:pendingFulfilled'    { tileKey, buildingId, isUpgrade, planetId }
 //               'resource:registerProducer' → do ResourceSystem
 //               'resource:removeProducer'   → do ResourceSystem
 //               'civ:addHousing'            → do CivilizationSystem
@@ -25,6 +27,7 @@ import { TECHS }          from '../data/TechData.js';
 import { HexGrid }        from '../map/HexGrid.js';
 import { POP_PER_BUILDING } from '../systems/CivilizationSystem.js';
 import { DepositSystem }    from '../systems/DepositSystem.js';
+import { BUILDING_SLIDER_SHIFTS } from '../systems/FactionSystem.js';
 import { t, getName }      from '../i18n/i18n.js';
 
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
@@ -136,7 +139,48 @@ export class BuildingSystem {
       this._tickConstruction(deltaYears);
       this._tickMineExtraction(deltaYears);
       this._tickPendingQueue();
+      // Faza C5: mediation_center pasywnie redukuje napięcie frakcji
+      // (3/rok × civDeltaYears, tylko gdy mediation_center jest aktywne na kolonii)
+      this._tickMediation(deltaYears);
     });
+
+    // Faza C5: faction:sliderChanged → przelicz stawki (modifier zmienia się ze strefą)
+    // BEZ guardu `buildingSystem !== this` — slider jest globalny, wszystkie kolonie
+    // muszą przeliczyć (analogicznie do tech:researched).
+    EventBus.on('faction:sliderChanged', () => this._reapplyAllRates());
+    // Faza C5: faction:unlocked → przelicz stawki (locked → false zmienia getModifier)
+    EventBus.on('faction:unlocked', () => this._reapplyAllRates());
+  }
+
+  // Faza C5: czy na tej kolonii jest aktywne mediation_center
+  _isMediationActive() {
+    for (const entry of this._active.values()) {
+      if (entry.building?.id === 'mediation_center') return true;
+    }
+    return false;
+  }
+
+  // Faza D3: zwróć poziom najwyższego budynku o danym ID na tej kolonii (lub 0)
+  // Używane np. przez DysonSystem dla orbital_fabricator cost reduction.
+  _getBuildingLevel(buildingId) {
+    let maxLevel = 0;
+    for (const entry of this._active.values()) {
+      if (entry.building?.id === buildingId) {
+        const lv = entry.level ?? 1;
+        if (lv > maxLevel) maxLevel = lv;
+      }
+    }
+    return maxLevel;
+  }
+
+  // Faza C5: tick redukcji napięcia frakcji przez mediation_center
+  _tickMediation(deltaYears) {
+    if (deltaYears <= 0) return;
+    if (!this._isMediationActive()) return;
+    const fSys = window.KOSMOS?.factionSystem;
+    if (!fSys || fSys.isLocked) return;
+    // Active mediation: -3 napięcia × civDeltaYears
+    fSys.tension = Math.max(0, fSys.tension - (3 * deltaYears));
   }
 
   // ── Ustaw deposits i factorySystem ──────────────────────────────────────
@@ -364,6 +408,24 @@ export class BuildingSystem {
 
     // Przelicz stawki sąsiadów (adjacency bonus — Etap 38)
     this._reapplyNeighborRates(tileKey);
+
+    // Faction shift — budynki frakcyjne przesuwają suwak (Faza C1)
+    // Działa tylko gdy buildingId istnieje w BUILDING_SLIDER_SHIFTS
+    const factionDelta = BUILDING_SLIDER_SHIFTS[buildingId];
+    if (factionDelta && !isCapital) {
+      EventBus.emit('faction:sliderShift', {
+        delta:  factionDelta,
+        reason: `${buildingId}_built`,
+      });
+    }
+
+    // Faza D2b: hooki narracyjne dla cultural buildings — placeholders dla Faza D4
+    // (no-op listenerów; brak crash; konsumowane przez UI/narrative system w przyszłości)
+    if (buildingId === 'memory_vault') {
+      EventBus.emit('narrative:memoryVaultBuilt');
+    } else if (buildingId === 'mission_archive') {
+      EventBus.emit('ui:missionArchiveBuilt');
+    }
   }
 
   // ── Budowa ──────────────────────────────────────────────────────────────
@@ -395,6 +457,48 @@ export class BuildingSystem {
         const techName = tech ? getName(tech, 'tech') : building.requires;
         EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.requiresTech', techName) });
         return;
+      }
+    }
+
+    // Faza D2b: budynek-prereq — wymaga aktywnego budynku w TEJ samej kolonii
+    // (np. heritage_dome wymaga mission_archive). Sprawdza _active per-tej-kolonii BuildingSystem.
+    if (building.requiresBuilding) {
+      let hasPrereqBuilding = false;
+      for (const entry of this._active.values()) {
+        if (entry.building?.id === building.requiresBuilding) {
+          hasPrereqBuilding = true;
+          break;
+        }
+      }
+      if (!hasPrereqBuilding) {
+        const prereqDef = BUILDINGS[building.requiresBuilding];
+        const prereqName = prereqDef ? getName(prereqDef, 'building') : building.requiresBuilding;
+        EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.requiresBuilding', prereqName) });
+        return;
+      }
+    }
+
+    // Faza C5: gating frakcyjny — budynki frakcyjne wymagają odblokowanych frakcji,
+    // a niektóre dodatkowo określonej pozycji suwaka.
+    if (building.requiresFactionUnlocked || building.factionGating) {
+      const fSys = window.KOSMOS?.factionSystem;
+      if (!fSys || fSys.isLocked) {
+        EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.factionLocked') });
+        return;
+      }
+      if (building.factionGating) {
+        const slider = fSys.slider ?? 50;
+        const { slider: op, value } = building.factionGating;
+        let pass = false;
+        if (op === '>') pass = slider > value;
+        else if (op === '<') pass = slider < value;
+        else if (op === '>=') pass = slider >= value;
+        else if (op === '<=') pass = slider <= value;
+        else pass = true;
+        if (!pass) {
+          EventBus.emit('planet:buildResult', { success: false, tile, reason: t('ui.factionSliderRequired', `${op}${value}`) });
+          return;
+        }
       }
     }
 
@@ -903,8 +1007,9 @@ export class BuildingSystem {
     }
 
     // Powiadom UI o postępie budowy (pasek progresu)
+    // planetId — żeby ColonyOverlay zsynchronizował grid TEJ kolonii (nie tylko aktualnie wyświetlanej)
     if (completed.length < this._constructionQueue.size) {
-      EventBus.emit('planet:constructionProgress');
+      EventBus.emit('planet:constructionProgress', { planetId: this._planetId });
     }
 
     for (const tileKey of completed) {
@@ -928,7 +1033,12 @@ export class BuildingSystem {
         this._activateBuilding(tileKey, entry.buildingId, entry.tileR, entry.tileType, false);
       }
 
-      EventBus.emit('planet:constructionComplete', { tileKey, buildingId: entry.buildingId, isUpgrade: entry.isUpgrade });
+      EventBus.emit('planet:constructionComplete', {
+        tileKey,
+        buildingId: entry.buildingId,
+        isUpgrade: entry.isUpgrade,
+        planetId: this._planetId,
+      });
     }
   }
 
@@ -1002,6 +1112,7 @@ export class BuildingSystem {
         tileKey,
         buildingId: order.buildingId,
         isUpgrade: order.isUpgrade,
+        planetId: this._planetId,
       });
     }
   }
@@ -1481,6 +1592,14 @@ export class BuildingSystem {
     const loyaltyMult = this.civSystem?.getLoyaltyProductionMultiplier?.() ?? 1.0;
     const penaltyMult = this.civSystem?.getProductionPenaltyMultiplier?.() ?? 1.0;
 
+    // Faza C5: faction zone modifier — pobierany raz, używany per-key niżej
+    // (getModifier zwraca 1.0 gdy locked lub w strefie balanced)
+    const facSys = window.KOSMOS?.factionSystem;
+    const facResearchMult  = facSys?.getModifier?.('research')           ?? 1.0;
+    const facIndustryMult  = facSys?.getModifier?.('industryProduction') ?? 1.0;
+    // industryProduction stosujemy do "ciężkiego przemysłu": autonomous mining + factory category
+    const isHeavyIndustry  = isAutonomous && (building.category === 'mining' || building.category === 'synthetic' || building.id === 'factory');
+
     const effective = {};
     for (const key in baseRates) {
       const val = baseRates[key];
@@ -1490,7 +1609,11 @@ export class BuildingSystem {
         const eventMult = this._planetId
           ? (window.KOSMOS?.randomEventSystem?.getProductionMultiplierForColony(this._planetId, key) ?? 1.0)
           : 1.0;
-        const result = val * techMult * eventMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency * outpostPenalty * loyaltyMult * penaltyMult;
+        // Faza C5: faction modifier per-key
+        let factionMult = 1.0;
+        if (key === 'research')  factionMult = facResearchMult;
+        else if (isHeavyIndustry) factionMult = facIndustryMult;
+        const result = val * techMult * eventMult * this._civPenalty * empPenalty * adjBonus * autoEfficiency * outpostPenalty * loyaltyMult * penaltyMult * factionMult;
         effective[key] = Number.isFinite(result) ? result : 0;
       } else if (val < 0) {
         const techMult = this.techSystem?.getConsumptionMultiplier(key) ?? 1.0;
@@ -1555,6 +1678,18 @@ export class BuildingSystem {
 
     // Wydobądź surowce z deposits (zwraca plain object)
     const gains = DepositSystem.extractFromDeposits(this._deposits, this._cachedMineLevel, deltaYears);
+
+    // Faza D2a hook: asteroid_mining ×2 dla planetoid/asteroid
+    if (gains && hasKeys(gains)) {
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colony = this._planetId ? colMgr?.getColony(this._planetId) : null;
+      const bodyType = colony?.planet?.type;
+      const isAsteroidBody = bodyType === 'planetoid' || bodyType === 'asteroid';
+      const hasAsteroidMining = window.KOSMOS?.techSystem?.isResearched?.('asteroid_mining') ?? false;
+      if (isAsteroidBody && hasAsteroidMining) {
+        for (const k in gains) gains[k] *= 2.0;
+      }
+    }
 
     // Dodaj wydobyte surowce do inventory
     if (gains && hasKeys(gains)) {
