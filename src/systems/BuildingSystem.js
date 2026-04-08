@@ -1187,30 +1187,9 @@ export class BuildingSystem {
       tile.buildingLevel = 1;
     }
 
-    // Zarejestruj w _active
-    const activeKey  = isCapital ? `capital_${key}` : key;
-    const producerId = isCapital ? `capital_${key}` : key;
-    const rates = this._calcBaseRates(building, tile, 1);
-    const effectiveRates = this._applyTechMultipliers(rates, building, activeKey);
-    const entry = {
-      building, def: building, level: 1, tile, tileKey: key,
-      baseRates: { ...rates }, effectiveRates: { ...effectiveRates },
-      popCost: building.popCost ?? 0,
-    };
-    this._active.set(activeKey, entry);
-
-    // Zarejestruj producenta
-    if (this.resourceSystem) {
-      this.resourceSystem.registerProducer(producerId, rates);
-    }
-
-    // Housing
-    if (building.housing > 0) {
-      EventBus.emit('civ:addHousing', { amount: building.housing });
-    }
-
-    // Przelicz factory points jeśli to fabryka
-    if (building.id === 'factory') this._recalcFactoryPoints();
+    // Deleguj do wspólnej aktywacji — rejestracja produkcji, zatrudnienia, housing,
+    // konwersji strata, faction shift, factory points itd.
+    this._activateBuilding(key, buildingId, tile.r, tile.type, isCapital);
 
     return true;
   }
