@@ -13,13 +13,14 @@ import { HULLS }           from '../data/HullsData.js';
 import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleCapabilities } from '../data/ShipModulesData.js';
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
-import { effectiveRange }  from '../entities/Vessel.js';
+import { effectiveRange, loadColonists }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import EntityManager       from '../core/EntityManager.js';
 import EventBus            from '../core/EventBus.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
+import { ColonistLoadModal } from '../ui/ColonistLoadModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
 import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
@@ -735,6 +736,12 @@ export class FleetManagerOverlay {
       return;
     }
 
+    // Kolonizacja — otwórz ColonistLoadModal PRZED target pickerem
+    if (actionId === 'colonize' && (vessel.colonistCapacity ?? 0) > 0) {
+      this._openColonistThenTarget(vessel);
+      return;
+    }
+
     // Założenie placówki — teraz standardowy target picker (building picker po wyborze celu)
     // Flow obsługiwany w _executeMission()
 
@@ -769,6 +776,38 @@ export class FleetManagerOverlay {
       await showCargoLoadModal(vessel, colony);
       // Po zamknięciu modal — otwórz target picker
       this._missionConfig = { actionId: 'transport', targetId: null, step: 'select' };
+      this._targetScrollOffset = 0;
+      this._cachedTargets = null;
+    } catch {
+      // Anulowano — nic nie rób
+    }
+  }
+
+  /**
+   * Kolonizacja: otwórz modal kolonistów → po zamknięciu otwórz target picker.
+   * Faktyczne usunięcie POPów z kolonii źródłowej w _executeMission (atomowo
+   * z launchem). Anulowanie modalu przerywa setup misji.
+   */
+  async _openColonistThenTarget(vessel) {
+    try {
+      const colony = this._getVesselColony(vessel);
+      if (!colony) return;
+      const cap = vessel.colonistCapacity ?? 0;
+      const free = Math.floor(colony.civSystem?.freePops ?? 0);
+      const modal = ColonistLoadModal.getInstance();
+      const count = await modal.show(cap, free);
+      if (count <= 0) {
+        // Anulowano lub brak wolnych POPów — nie konfiguruj misji
+        this._missionConfig = null;
+        return;
+      }
+      // Zapisz intencję — fizyczne usunięcie POPów dopiero w _executeMission
+      this._missionConfig = {
+        actionId: 'colonize',
+        targetId: null,
+        step: 'select',
+        colonistCount: count,
+      };
       this._targetScrollOffset = 0;
       this._cachedTargets = null;
     } catch {
@@ -879,6 +918,21 @@ export class FleetManagerOverlay {
 
     const ms = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
     const colMgr = window.KOSMOS?.colonyManager;
+
+    // Misja kolonizacyjna — załaduj kolonistów (fizycznie usuń POPy z kolonii źródłowej)
+    if (actionId === 'colonize' && (this._missionConfig.colonistCount ?? 0) > 0) {
+      const sourceColony = this._getVesselColony(vessel);
+      if (sourceColony?.civSystem) {
+        const actuallyLoaded = loadColonists(vessel, this._missionConfig.colonistCount, sourceColony.civSystem);
+        if (actuallyLoaded <= 0) {
+          // Brak wolnych POPów (zniknęli między modalem a confirmem) — przerwij
+          this._missionConfig = null;
+          this._targetScrollOffset = 0;
+          return;
+        }
+      }
+    }
+
     const state = {
       missionSystem: ms,
       vesselManager: vMgr,
