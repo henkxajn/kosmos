@@ -1154,55 +1154,65 @@ export class BuildingSystem {
     if (!building) return false;
 
     const grid = this._grid;
-    if (!grid) return false;
+    if (!grid || typeof grid.forEach !== 'function') return false;
 
     // Znajdź pierwszy wolny hex pasujący do budynku
-    for (const [key, tile] of grid.tiles) {
-      if (tile.buildingId) continue;         // zajęty
-      if (tile.capitalBase) continue;        // stolica
-      if (tile.underConstruction) continue;  // w budowie
+    let placedKey = null;
+    let placedTile = null;
+    grid.forEach(tile => {
+      if (placedKey) return;                 // już znaleziono
+      if (tile.buildingId) return;           // zajęty
+      if (tile.capitalBase) return;          // stolica
+      if (tile.underConstruction) return;    // w budowie
 
       // Sprawdź czy teren pasuje
       const allowed = building.allowedTerrain;
-      if (allowed && !allowed.includes(tile.terrain)) continue;
+      if (allowed && !allowed.includes(tile.terrain)) return;
 
-      // Stolica: specjalna logika (virtualny budynek, capitalBase flag)
-      const isCapital = !!building.isCapital;
-      if (isCapital) {
-        tile.capitalBase = true;
-      } else {
-        tile.buildingId = buildingId;
-        tile.buildingLevel = 1;
-      }
+      placedKey = tile.key ?? `${tile.q},${tile.r}`;
+      placedTile = tile;
+    });
 
-      // Zarejestruj w _active
-      const activeKey  = isCapital ? `capital_${key}` : key;
-      const producerId = isCapital ? `capital_${key}` : key;
-      const rates = this._calcBaseRates(building, tile, 1);
-      const effectiveRates = this._applyTechMultipliers(rates, building, activeKey);
-      const entry = {
-        building, def: building, level: 1, tile, tileKey: key,
-        baseRates: { ...rates }, effectiveRates: { ...effectiveRates },
-        popCost: building.popCost ?? 0,
-      };
-      this._active.set(activeKey, entry);
+    if (!placedTile) return false;
 
-      // Zarejestruj producenta
-      if (this.resourceSystem) {
-        this.resourceSystem.registerProducer(producerId, rates);
-      }
+    const key = placedKey;
+    const tile = placedTile;
 
-      // Housing
-      if (building.housing > 0) {
-        EventBus.emit('civ:addHousing', { amount: building.housing });
-      }
-
-      // Przelicz factory points jeśli to fabryka
-      if (building.id === 'factory') this._recalcFactoryPoints();
-
-      return true;
+    // Stolica: specjalna logika (virtualny budynek, capitalBase flag)
+    const isCapital = !!building.isCapital;
+    if (isCapital) {
+      tile.capitalBase = true;
+    } else {
+      tile.buildingId = buildingId;
+      tile.buildingLevel = 1;
     }
-    return false;
+
+    // Zarejestruj w _active
+    const activeKey  = isCapital ? `capital_${key}` : key;
+    const producerId = isCapital ? `capital_${key}` : key;
+    const rates = this._calcBaseRates(building, tile, 1);
+    const effectiveRates = this._applyTechMultipliers(rates, building, activeKey);
+    const entry = {
+      building, def: building, level: 1, tile, tileKey: key,
+      baseRates: { ...rates }, effectiveRates: { ...effectiveRates },
+      popCost: building.popCost ?? 0,
+    };
+    this._active.set(activeKey, entry);
+
+    // Zarejestruj producenta
+    if (this.resourceSystem) {
+      this.resourceSystem.registerProducer(producerId, rates);
+    }
+
+    // Housing
+    if (building.housing > 0) {
+      EventBus.emit('civ:addHousing', { amount: building.housing });
+    }
+
+    // Przelicz factory points jeśli to fabryka
+    if (building.id === 'factory') this._recalcFactoryPoints();
+
+    return true;
   }
 
   getPendingDemand() {

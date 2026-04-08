@@ -1426,15 +1426,32 @@ export class MissionSystem {
         startResources[key] = Math.floor(val * resourceMult);
       }
       existingCol.resourceSystem.receive(startResources);
-      colMgr.upgradeOutpostToColony(exp.targetId, exp.crewCost);
 
-      // Auto-spaceport + elektrownia z materiałów statku (jeśli outpost nie ma)
+      // Załadowani koloniści ze statku (loadColonists w UI fizycznie usuwa POPy ze źródła).
+      // Tutaj startPop = ile faktycznie dotarło. Brak kolonistów (legacy save w locie):
+      // fallback do minimum 2 POP — out-of-thin-air, ale tylko dla starych misji.
+      const arrivingVessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+      const colonistsLoaded = arrivingVessel?.colonists ?? 0;
+      const startPop = colonistsLoaded > 0 ? colonistsLoaded : Math.max(2, exp.crewCost ?? 2);
+      colMgr.upgradeOutpostToColony(exp.targetId, startPop);
+
+      // Postaw stolicę (colony_base) — daje housing i status pełnej kolonii
+      // Spaceport + elektrownia z materiałów statku (jeśli outpost nie ma)
       if (existingCol.buildingSystem) {
+        existingCol.buildingSystem.autoPlaceBuilding?.('colony_base');
         if (!existingCol.buildingSystem.hasSpaceport()) {
           existingCol.buildingSystem.autoPlaceBuilding?.('launch_pad');
         }
         existingCol.buildingSystem.autoPlaceBuilding?.('solar_farm');
       }
+
+      // Powiadom UI że budynki się zmieniły — ColonyOverlay zsynchronizuje cache
+      // grid kolonii (jeśli była już otwarta jako outpost — capital_ pojawia się
+      // w _active dopiero teraz, kafelki musi zsynchronizować _syncTileBuildings)
+      EventBus.emit('planet:constructionComplete', { planetId: exp.targetId });
+
+      // Wyzeruj colonists na statku (rozładowani do kolonii)
+      if (arrivingVessel) arrivingVessel.colonists = 0;
 
       // Odblokuj POPy na kolonii źródłowej (bezpośrednio)
       const originColUpgrade = colMgr?.getColony(exp.originColonyId);
@@ -1456,6 +1473,10 @@ export class MissionSystem {
     const roll = Math.random() * 100;
     exp.eventRoll = roll;
     const disasterThreshold = this._getDisasterChance(exp.vesselId);
+
+    // Czytaj colonists ZANIM zniszczymy statek — startPop dla nowej kolonii
+    const colonyVessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+    const colonistsLoaded = colonyVessel?.colonists ?? 0;
 
     if (exp.vesselId && vMgr) {
       vMgr.destroyVessel(exp.vesselId);
@@ -1493,11 +1514,16 @@ export class MissionSystem {
     const originColFounded = colMgr?.getColony(exp.originColonyId);
     if (originColFounded) originColFounded.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
 
+    // Załadowani koloniści ze statku (loadColonists w UI fizycznie usuwa POPy ze źródła).
+    // Brak kolonistów (legacy save w locie): fallback do min 2 POP — out-of-thin-air,
+    // ale tylko dla starych misji.
+    const newColonyStartPop = colonistsLoaded > 0 ? colonistsLoaded : Math.max(2, exp.crewCost ?? 2);
+
     this._emit('expedition:colonyFounded', null, {
       expedition:     exp,
       planetId:       exp.targetId,
       startResources,
-      startPop:       exp.crewCost,
+      startPop:       newColonyStartPop,
       roll:           roll,
       resourceMult,
       autoSpaceport:  true,  // statek staje się spaceportem + elektrownia solarna

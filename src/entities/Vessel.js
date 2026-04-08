@@ -277,7 +277,8 @@ export function unloadCargo(vessel, commodityId, qty, resSys) {
 // ── Koloniści ─────────────────────────────────────────────────────────────────
 
 /**
- * Załaduj kolonistów na statek (zablokuj POPy w kolonii źródłowej).
+ * Załaduj kolonistów na statek (fizycznie usuń POPy z kolonii źródłowej).
+ * Koloniści lecą na nową planetę — nie wracają do puli wolnej przez "lock".
  * @param {object} vessel
  * @param {number} count — ile POPów załadować
  * @param {object} civSystem — CivilizationSystem kolonii źródłowej
@@ -286,16 +287,19 @@ export function unloadCargo(vessel, commodityId, qty, resSys) {
 export function loadColonists(vessel, count, civSystem) {
   if (count <= 0 || !civSystem) return 0;
   const cap = vessel.colonistCapacity ?? 0;
-  const actual = Math.min(count, cap - (vessel.colonists ?? 0));
+  const free = Math.floor(civSystem.freePops ?? 0);
+  // Limit: kapacitet statku, dostępna populacja, żądana liczba
+  const actual = Math.max(0, Math.min(count, cap - (vessel.colonists ?? 0), free));
   if (actual <= 0) return 0;
 
-  civSystem.lockPops?.(actual, 'colonist');
+  // Fizycznie usuń POPy ze źródła (najniższa satisfaction → najpierw)
+  civSystem.removePop?.(null, actual);
   vessel.colonists = (vessel.colonists ?? 0) + actual;
   return actual;
 }
 
 /**
- * Rozładuj kolonistów do kolonii docelowej.
+ * Rozładuj kolonistów do kolonii docelowej (dodaj jako 'laborer').
  * @param {object} vessel
  * @param {object} civSystem — CivilizationSystem kolonii docelowej (null = POPy tracone)
  * @returns {number} rozładowanych
@@ -304,11 +308,9 @@ export function unloadColonists(vessel, civSystem) {
   const count = vessel.colonists ?? 0;
   if (count <= 0) return 0;
 
-  if (civSystem?.immigrate) {
-    // Dodaj POPy do kolonii docelowej
-    civSystem.immigrate({ colonists: count });
-  } else if (civSystem?.unlockPops) {
-    civSystem.unlockPops(count, 'colonist');
+  // Dodaj POPy do kolonii docelowej jako 'laborer' (najniższa strata)
+  if (civSystem?.addPop) {
+    civSystem.addPop('laborer', count);
   }
   vessel.colonists = 0;
   return count;

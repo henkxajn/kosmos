@@ -14,6 +14,8 @@ import EntityManager       from '../core/EntityManager.js';
 import EventBus            from '../core/EventBus.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
+import { ColonistLoadModal }  from '../ui/ColonistLoadModal.js';
+import { loadColonists }      from '../entities/Vessel.js';
 import { showRenameModal }    from '../ui/ModalInput.js';
 import { showTradeRouteModal } from '../ui/TradeRouteModal.js';
 import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
@@ -584,6 +586,14 @@ export class FleetTabPanel {
       this._openCargoThenTarget(vessel);
       return;
     }
+    if (actionId === 'colonize') {
+      // Statek z modułem mieszkalnym → najpierw modal kolonistów, potem cel
+      if ((vessel.colonistCapacity ?? 0) > 0) {
+        this._openColonistThenTarget(vessel);
+        return;
+      }
+      // Statek bez modułu — nie powinno się zdarzyć (canExecute blokuje), ale fallback
+    }
     if (actionId === 'trade_route') {
       // Wybierz cel → potem TradeRouteModal (bez ładowania cargo wcześniej)
       this._missionConfig = { actionId: 'trade_route', vesselId: vessel.id, targetId: null, step: 'select' };
@@ -608,6 +618,31 @@ export class FleetTabPanel {
     if (!colony) return;
     await showCargoLoadModal(vessel, colony);
     this._missionConfig = { actionId: 'transport', vesselId: vessel.id, targetId: null, step: 'select' };
+    this._targetScrollOffset = 0;
+    this._cachedTargets = null;
+  }
+
+  async _openColonistThenTarget(vessel) {
+    const colony = this._getVesselColony(vessel);
+    if (!colony) return;
+    const cap = vessel.colonistCapacity ?? 0;
+    const free = Math.floor(colony.civSystem?.freePops ?? 0);
+    // Pokaż modal — gracz wybiera ile POPów chce wysłać (1 do min(cap, free))
+    const modal = ColonistLoadModal.getInstance();
+    const count = await modal.show(cap, free);
+    if (count <= 0) {
+      // Anulowano — nie konfiguruj misji
+      this._selectedVesselId = null;
+      return;
+    }
+    // Zapisz intencję — fizyczne usunięcie POPów dopiero w _executeMission (atomowo)
+    this._missionConfig = {
+      actionId: 'colonize',
+      vesselId: vessel.id,
+      targetId: null,
+      step: 'select',
+      colonistCount: count,
+    };
     this._targetScrollOffset = 0;
     this._cachedTargets = null;
   }
@@ -655,6 +690,21 @@ export class FleetTabPanel {
 
     const action = FLEET_ACTIONS[cfg.actionId];
     if (!action) return;
+
+    // Misja kolonizacyjna — załaduj kolonistów (fizycznie usuń POPy z kolonii źródłowej)
+    if (cfg.actionId === 'colonize' && (cfg.colonistCount ?? 0) > 0) {
+      const sourceColony = this._getVesselColony(vessel);
+      if (sourceColony?.civSystem) {
+        const actuallyLoaded = loadColonists(vessel, cfg.colonistCount, sourceColony.civSystem);
+        if (actuallyLoaded <= 0) {
+          // Brak wolnych POPów (mogły zniknąć między modalem a confirmem) — przerwij
+          this._selectedVesselId = null;
+          this._missionConfig = null;
+          return;
+        }
+      }
+    }
+
     const state = this._buildActionState(vessel);
     state.targetId = cfg.targetId;
     state.targetBody = _findBody(cfg.targetId);

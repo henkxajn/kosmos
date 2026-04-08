@@ -1276,6 +1276,27 @@ export class ColonyManager {
         window.KOSMOS.factorySystem = factSys;
         window.KOSMOS.prosperitySystem = prospSys;
       }
+
+      // Fix-up: kolonie po upgrade outpost → kolonia mogły zostać uszkodzone
+      // przez wcześniejszy bug (brak Stolicy + pop=0). Idempotentne — nic nie robi
+      // jeśli kolonia jest zdrowa.
+      if (!isOutpost && !colony.isHomePlanet) {
+        // Sprawdź czy stolica istnieje na siatce
+        let hasCapital = false;
+        if (savedGrid?.forEach) {
+          savedGrid.forEach(tile => { if (tile.capitalBase) hasCapital = true; });
+        }
+        // Brak stolicy → postaw (wymaga grid w buildingSystem)
+        if (!hasCapital && savedGrid) {
+          bSys._grid = savedGrid;
+          bSys._gridHeight = savedGrid.height ?? 10;
+          bSys.autoPlaceBuilding?.('colony_base');
+        }
+        // Pop = 0 na pełnej kolonii (nie outpost) → minimum 2 POP startowe
+        if (civSys.population <= 0) {
+          civSys.setPopulation(2);
+        }
+      }
     }
 
     if (data.activePlanetId && this._colonies.has(data.activePlanetId)) {
