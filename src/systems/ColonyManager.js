@@ -1279,22 +1279,39 @@ export class ColonyManager {
 
       // Fix-up: kolonie po upgrade outpost → kolonia mogły zostać uszkodzone
       // przez wcześniejszy bug (brak Stolicy + pop=0). Idempotentne — nic nie robi
-      // jeśli kolonia jest zdrowa.
-      if (!isOutpost && !colony.isHomePlanet) {
-        // Sprawdź czy stolica istnieje na siatce
-        let hasCapital = false;
+      // jeśli kolonia jest zdrowa. Skanuje wszystkie kolonie poza homem (outposty
+      // teoretycznie OK, ale jeśli są oznaczone "ulepszone" pomyłkowo — naprawimy).
+      if (!colony.isHomePlanet) {
+        // Sprawdź czy w _active jest klucz capital_ (powinien być po BuildingSystem.restoreFromSave)
+        let hasCapitalInActive = false;
+        for (const k of bSys._active.keys()) {
+          if (k.startsWith('capital_')) { hasCapitalInActive = true; break; }
+        }
+        // Sprawdź też w grid (na wypadek dziwnej desynchronizacji)
+        let hasCapitalInGrid = false;
         if (savedGrid?.forEach) {
-          savedGrid.forEach(tile => { if (tile.capitalBase) hasCapital = true; });
+          savedGrid.forEach(tile => { if (tile.capitalBase) hasCapitalInGrid = true; });
         }
-        // Brak stolicy → postaw (wymaga grid w buildingSystem)
-        if (!hasCapital && savedGrid) {
-          bSys._grid = savedGrid;
-          bSys._gridHeight = savedGrid.height ?? 10;
-          bSys.autoPlaceBuilding?.('colony_base');
+        const hasCapital = hasCapitalInActive || hasCapitalInGrid;
+
+        // Pełna kolonia bez stolicy → uszkodzona, napraw
+        if (!isOutpost && !hasCapital) {
+          console.warn(`[ColonyManager] Heal-up: kolonia ${colData.planetId} bez Stolicy — stawiam`);
+          if (savedGrid) {
+            bSys._grid = savedGrid;
+            bSys._gridHeight = savedGrid.height ?? 10;
+            const placed = bSys.autoPlaceBuilding?.('colony_base');
+            console.warn(`[ColonyManager] autoPlaceBuilding('colony_base') →`, placed);
+          } else {
+            console.warn(`[ColonyManager] Brak savedGrid — Stolica nie postawiona`);
+          }
         }
-        // Pop = 0 na pełnej kolonii (nie outpost) → minimum 2 POP startowe
-        if (civSys.population <= 0) {
+
+        // Pełna kolonia bez populacji → bug, daj minimum 2 POP
+        if (!isOutpost && civSys.population <= 0) {
+          console.warn(`[ColonyManager] Heal-up: kolonia ${colData.planetId} pop=${civSys.population} — ustawiam 2 POP`);
           civSys.setPopulation(2);
+          console.warn(`[ColonyManager] po setPopulation pop=${civSys.population}`);
         }
       }
     }
