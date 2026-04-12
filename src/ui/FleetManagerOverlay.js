@@ -452,6 +452,11 @@ export class FleetManagerOverlay {
         if (colMgr) colMgr.cancelPendingShip(zone.data.planetId, zone.data.orderId);
         break;
       }
+      case 'surge_ship': {
+        const colMgr = window.KOSMOS?.colonyManager;
+        if (colMgr) colMgr.surgeShipBuild(zone.data.planetId, zone.data.queueIndex);
+        break;
+      }
       case 'filter':
         this._filter = zone.data.filterId;
         this._scrollOffset = 0;
@@ -3064,9 +3069,10 @@ export class FleetManagerOverlay {
     ctx.fillText(t('fleet.shipyardSlotsShort', `${queues.length}/${shipyardLevel}`) + bonusStr, x + PAD, cy + 8);
     cy += LH;
 
-    // Aktywne budowy — paski progresu
+    // Aktywne budowy — paski progresu + Surge
     if (queues.length > 0) {
-      for (const q of queues) {
+      for (let qi = 0; qi < queues.length; qi++) {
+        const q = queues[qi];
         if (cy > y + h - 30) break;
         const shipDef = SHIPS[q.shipId] ?? HULLS[q.shipId];
         const frac = q.buildTime > 0 ? Math.min(1, q.progress / q.buildTime) : 0;
@@ -3096,6 +3102,44 @@ export class FleetManagerOverlay {
         ctx.textAlign = 'left';
 
         cy += LH + 8;
+
+        // ── Przycisk Surge ⚡ ──────────────────────────────────
+        const maxSurge = shipDef?.maxSurge ?? 1;
+        const surgeCount = q.surgeCount ?? 0;
+        const surgeMaxed = surgeCount >= maxSurge;
+
+        const freePop = activeCol?.civSystem?.freePops ?? 0;
+        const kr = activeCol?.credits ?? 0;
+        const canSurge = !surgeMaxed
+          && freePop >= 0.5
+          && kr >= 500;
+
+        const surgeLabel = surgeMaxed
+          ? t('fleet.surgeMax')
+          : `⚡ Surge [${surgeCount}/${maxSurge}] — 0.5 POP + 500 Kr`;
+        const surgeBtnW = w - PAD * 2;
+        const surgeBtnH = 18;
+
+        ctx.fillStyle = canSurge ? 'rgba(255,180,40,0.15)' : 'rgba(40,40,50,0.3)';
+        ctx.fillRect(x + PAD, cy, surgeBtnW, surgeBtnH);
+        ctx.strokeStyle = canSurge ? THEME.warning : THEME.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + PAD, cy, surgeBtnW, surgeBtnH);
+
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = canSurge ? THEME.warning : THEME.textDim;
+        ctx.textAlign = 'center';
+        ctx.fillText(surgeLabel, x + PAD + surgeBtnW / 2, cy + 13);
+        ctx.textAlign = 'left';
+
+        if (canSurge) {
+          this._hitZones.push({
+            x: x + PAD, y: cy, w: surgeBtnW, h: surgeBtnH,
+            type: 'surge_ship', data: { planetId: activePid, queueIndex: qi },
+          });
+        }
+
+        cy += surgeBtnH + 4;
       }
     }
 

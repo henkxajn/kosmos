@@ -136,6 +136,7 @@ export class UIManager {
       _recalcDimensions();
       this.canvas.width  = _PW;
       this.canvas.height = _PH;
+      this._dirty = true;
     });
 
     // ── Nowe komponenty UI ───────────────────────────────
@@ -193,6 +194,13 @@ export class UIManager {
     this._tooltipMouseX = 0;
     this._tooltipMouseY = 0;
 
+    // ── Dirty flag — optymalizacja renderingu ──────────────
+    this._dirty        = true;   // wymuszaj pierwszy frame
+    this._animating    = false;  // ciągły redraw dla animacji (notifications, gameOver)
+    this._lastDrawTime = 0;      // timestamp ostatniego renderowania (ms)
+    this._coloniesDirty  = true; // invalidacja cache getAllColonies()
+    this._cachedColonies = [];   // cache wyników getAllColonies()
+
     // ── OverlayManager (panele pełnoekranowe) ─────────────
     this.overlayManager = new OverlayManager();
     this.overlayManager.register('fleet', new FleetManagerOverlay());
@@ -226,6 +234,7 @@ export class UIManager {
     EventBus.on('time:stateChanged', ({ isPaused, multiplierIndex }) => {
       this._timeState.isPaused          = isPaused;
       this._timeState.multiplierIndex   = multiplierIndex;
+      this._dirty = true;
     });
     EventBus.on('time:display', ({ displayText, multiplierIndex, autoSlow }) => {
       this._timeState.displayText       = displayText;
@@ -236,12 +245,14 @@ export class UIManager {
     // Stabilność
     EventBus.on('system:stabilityChanged', ({ score, trend }) => {
       this._stability = { score, trend };
+      this._dirty = true;
     });
 
     // Faza dysku
     EventBus.on('disk:phaseChanged', ({ newPhase, newPhasePL }) => {
       this._diskPhase   = newPhase;
       this._diskPhasePL = newPhasePL;
+      this._dirty = true;
     });
 
     // Zaznaczenie
@@ -250,24 +261,26 @@ export class UIManager {
       if (this._infoPanelTab === 'composition' && !entity.composition) {
         this._infoPanelTab = 'orbit';
       }
+      this._dirty = true;
     });
-    EventBus.on('body:deselected', () => { this._selectedEntity = null; });
+    EventBus.on('body:deselected', () => { this._selectedEntity = null; this._dirty = true; });
     EventBus.on('player:planetUpdated', ({ planet }) => {
-      if (this._selectedEntity?.id === planet.id) this._selectedEntity = planet;
+      if (this._selectedEntity?.id === planet.id) { this._selectedEntity = planet; this._dirty = true; }
     });
     EventBus.on('planet:compositionChanged', ({ planet }) => {
-      if (this._selectedEntity?.id === planet.id) this._selectedEntity = planet;
+      if (this._selectedEntity?.id === planet.id) { this._selectedEntity = planet; this._dirty = true; }
     });
     EventBus.on('body:collision', () => {});
 
     // Synchronizacja stanu audio/muzyka z UI
-    EventBus.on('audio:toggle', () => { this._audioEnabled = !this._audioEnabled; });
-    EventBus.on('music:toggled', ({ enabled }) => { this._musicEnabled = enabled; });
+    EventBus.on('audio:toggle', () => { this._audioEnabled = !this._audioEnabled; this._dirty = true; });
+    EventBus.on('music:toggled', ({ enabled }) => { this._musicEnabled = enabled; this._dirty = true; });
 
     // Energia gracza
     EventBus.on('player:energyChanged', ({ energy, max }) => {
       this._energy    = energy;
       this._energyMax = max;
+      this._dirty = true;
     });
 
     // Zasoby 4X
@@ -322,19 +335,21 @@ export class UIManager {
           this._invPerYear = { ...inventory._perYear };
         }
       }
+      this._dirty = true;
     };
     EventBus.on('resource:changed',  _applyResources);
     EventBus.on('resource:snapshot', _applyResources);
     EventBus.on('resource:shortage', ({ resource }) => {
       this._flashResource(resource);
+      this._dirty = true;
     });
 
     // CivPanel
-    EventBus.on('civ:populationChanged', (data) => { this._civData = data; });
-    EventBus.on('prosperity:changed',    (data) => { this._prosperityData = data; });
+    EventBus.on('civ:populationChanged', (data) => { this._civData = data; this._dirty = true; });
+    EventBus.on('prosperity:changed',    (data) => { this._prosperityData = data; this._dirty = true; });
 
     // Fabryki
-    EventBus.on('factory:statusChanged', (data) => { this._factoryData = data; });
+    EventBus.on('factory:statusChanged', (data) => { this._factoryData = data; this._dirty = true; });
 
     // Tech
     EventBus.on('tech:researched', ({ tech, restored }) => {
@@ -347,6 +362,7 @@ export class UIManager {
     // Ekspedycje
     EventBus.on('expedition:launched', ({ expedition }) => {
       this._expeditions.push(expedition);
+      this._dirty = true;
     });
     EventBus.on('expedition:arrived',  ({ expedition }) => {
       // Aktualizuj stan — orbiting/returning, nie usuwaj od razu
@@ -358,12 +374,15 @@ export class UIManager {
           this._expeditions.splice(idx, 1);
         }
       }
+      this._dirty = true;
     });
     EventBus.on('expedition:disaster', ({ expedition }) => {
       this._expeditions = this._expeditions.filter(e => e.id !== expedition.id);
+      this._dirty = true;
     });
     EventBus.on('expedition:returned', ({ expedition }) => {
       this._expeditions = this._expeditions.filter(e => e.id !== expedition.id);
+      this._dirty = true;
     });
     EventBus.on('expedition:returnOrdered', ({ expedition }) => {
       // Aktualizuj status na returning
@@ -371,6 +390,7 @@ export class UIManager {
       if (idx !== -1) {
         this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
       }
+      this._dirty = true;
     });
     EventBus.on('expedition:reconProgress', ({ expedition }) => {
       // Sekwencyjny full_system recon — aktualizuj dane (nowy targetId, arrivalYear, bodiesDiscovered)
@@ -378,12 +398,14 @@ export class UIManager {
       if (idx !== -1) {
         this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
       }
+      this._dirty = true;
     });
     EventBus.on('expedition:redirected', ({ expedition }) => {
       const idx = this._expeditions.findIndex(e => e.id === expedition.id);
       if (idx !== -1) {
         this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
       }
+      this._dirty = true;
     });
     EventBus.on('expedition:redirectFailed', ({ reason }) => {
       this._addNotification(`⚠ Zmiana celu: ${reason}`);
@@ -427,11 +449,14 @@ export class UIManager {
     // Dialog Nowa Gra (emitowane z BottomBar)
     EventBus.on('ui:confirmNew', () => {
       this._confirmDialog = { visible: true };
+      this._dirty = true;
     });
 
     // Game Over — cywilizacja zniszczona
     EventBus.on('game:over', ({ reason, planetName }) => {
       this._gameOverData = { reason, planetName };
+      this._dirty = true;
+      this._animating = true;
     });
 
     // EventLog subskrypcje
@@ -549,9 +574,12 @@ export class UIManager {
     });
     EventBus.on('colony:founded', ({ colony }) => {
       this._log(t('log.colonyFounded', colony.name), 'new_planet');
+      this._coloniesDirty = true;
     });
     // Przełączenie aktywnej kolonii z Outliner → odśwież wszystkie dane UI
     EventBus.on('colony:switched', () => {
+      this._dirty = true;
+      this._coloniesDirty = true;
       EventBus.emit('resource:requestSnapshot');
       // Odśwież dane populacji z nowej kolonii
       const cSys = window.KOSMOS?.civSystem;
@@ -569,6 +597,10 @@ export class UIManager {
         };
       }
     });
+    // Invalidacja cache kolonii przy zmianie listy
+    EventBus.on('colony:destroyed', () => { this._coloniesDirty = true; this._dirty = true; });
+    EventBus.on('outpost:founded',  () => { this._coloniesDirty = true; this._dirty = true; });
+
     EventBus.on('colony:tradeExecuted', ({ route }) => {
       this._log(t('log.tradeExecuted'), 'info');
     });
@@ -632,6 +664,7 @@ export class UIManager {
   }
 
   _log(text, type = 'info') {
+    this._dirty = true;
     const MAX = 8;
     this._logEntries.unshift({ year: this._logYear, text, color: LOG_COLORS[type] || C.text });
     if (this._logEntries.length > MAX) this._logEntries.length = MAX;
@@ -639,7 +672,15 @@ export class UIManager {
 
   addInfo(text) { this._log(text, 'info'); }
 
+  /** Wymuszaj przerysowanie UI w następnej klatce */
+  markDirty() { this._dirty = true; }
+
+  /** Invaliduj cache kolonii + wymuszaj przerysowanie */
+  invalidateColonies() { this._coloniesDirty = true; this._dirty = true; }
+
   _addNotification(text) {
+    this._dirty = true;
+    this._animating = true;
     this._notifications.push({ text, alpha: 1.0, endTime: Date.now() + 2800 });
   }
 
@@ -698,6 +739,7 @@ export class UIManager {
   // handleClick
   // ══════════════════════════════════════════════════════════════
   handleClick(x, y) {
+    this._dirty = true;
     x /= UI_SCALE; y /= UI_SCALE;
 
     // Game Over — klik na przycisk "Nowa Gra"
@@ -777,6 +819,7 @@ export class UIManager {
 
   // Obsługa scrolla
   handleWheel(rawX, rawY, deltaY) {
+    this._dirty = true;
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     const delta = deltaY * 0.6; // globalna redukcja czułości scrolla o 40%
@@ -792,18 +835,21 @@ export class UIManager {
   }
 
   handleMouseDown(rawX, rawY) {
+    this._dirty = true;
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseDown(x, y); return; }
   }
 
   handleMouseUp(rawX, rawY) {
+    this._dirty = true;
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y); return; }
   }
 
   handleMouseMove(x, y) {
+    this._dirty = true;
     x /= UI_SCALE; y /= UI_SCALE;
     this._tooltipMouseX = x;
     this._tooltipMouseY = y;
@@ -835,7 +881,15 @@ export class UIManager {
   _startDrawLoop() {
     const draw = () => {
       requestAnimationFrame(draw);
-      this._draw();
+      const now = performance.now();
+      // Gdy gra biega (nie pauza) — min ~10fps dla odświeżenia zegara
+      const timeDirty = !this._timeState.isPaused
+        && (now - this._lastDrawTime > 100);
+      if (this._dirty || this._animating || timeDirty) {
+        this._dirty = false;
+        this._lastDrawTime = now;
+        this._draw();
+      }
     };
     draw();
   }
@@ -872,6 +926,12 @@ export class UIManager {
     if (civMode && !globeOpen) {
       const colMgr = window.KOSMOS?.colonyManager;
       const activePid = colMgr?.activePlanetId;
+      // Cache getAllColonies() — invalidowany przez eventy koloni
+      if (this._coloniesDirty) {
+        this._cachedColonies = colMgr?.getAllColonies() ?? [];
+        this._coloniesDirty = false;
+      }
+      const allColonies = this._cachedColonies;
       // Filtruj ekspedycje po aktywnej kolonii (spójność z AKTYWNE MISJE)
       const vMgrOut = window.KOSMOS?.vesselManager;
       const outlinerExps = this._expeditions.filter(exp => {
@@ -883,7 +943,7 @@ export class UIManager {
       const guMgr = window.KOSMOS?.groundUnitManager;
       const groundUnits = [];
       if (guMgr) {
-        for (const col of (colMgr?.getAllColonies() ?? [])) {
+        for (const col of allColonies) {
           const units = guMgr.getUnitsOnPlanet(col.planetId);
           for (const u of units) {
             groundUnits.push({ ...u, planetName: col.name });
@@ -903,7 +963,7 @@ export class UIManager {
         factoryAllocations   = activeCol?.factorySystem?.getAllocations() ?? [];
       } catch (_) { /* defensywne — nie blokuj renderingu */ }
       this._outliner.draw(ctx, W, H, {
-        colonies: colMgr?.getAllColonies() ?? [],
+        colonies: allColonies,
         expeditions: outlinerExps,
         fleet: this._getAllVesselsForColony(activePid) ?? [],
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
@@ -976,6 +1036,9 @@ export class UIManager {
 
     // ── Game Over ─────────────────────────────────────────────
     if (this._gameOverData) this._drawGameOver();
+
+    // ── Aktualizuj flagę animacji — kontynuuj redraw przy fade/pulse ──
+    this._animating = this._notifications.length > 0 || !!this._gameOverData;
 
     ctx.restore();
   }

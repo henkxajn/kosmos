@@ -745,6 +745,25 @@ export class TopBar {
       });
     }
 
+    // Kredyty (Kr) — suma ze wszystkich kolonii
+    if (window.KOSMOS?.civMode) {
+      const colMgr = window.KOSMOS?.colonyManager;
+      if (colMgr) {
+        let totalKr = 0;
+        for (const col of colMgr.getAllColonies()) {
+          totalKr += col.credits ?? 0;
+        }
+        const krStr = totalKr >= 1000 ? (totalKr / 1000).toFixed(1) + 'k' : String(totalKr);
+        items.push({
+          icon: '₡', symbol: '',
+          value: krStr,
+          color: THEME.warning,
+          tooltipName: '₡ ' + (getLocale() === 'pl' ? 'Kredyty' : 'Credits'),
+          _rawValue: true,
+        });
+      }
+    }
+
     // Faction slider (Faza C1) — pasek frakcji
     // Faza C4: ukryj HUD gdy frakcje są zablokowane (przed odkryciem Ziemi)
     const facSys = window.KOSMOS?.factionSystem;

@@ -86,6 +86,11 @@ export class ColonyManager {
     this._gameYear = 0;
     this._lastCheckedYear = 0;
 
+    // System podatkowy — globalny suwak (0–0.25)
+    this._taxRate = 0.08;          // 8% domyślnie (strefa neutralna)
+    this._taxAccum = 0;            // akumulator fizycznych lat do miesięcznego naliczania
+    this._taxProtestAccum = 0;     // licznik miesięcy ekstremalnego podatku → protest co rok
+
     // Nasłuch założenia kolonii z ekspedycji
     EventBus.on('expedition:colonyFounded', (data) => this._onColonyFounded(data));
 
@@ -126,11 +131,13 @@ export class ColonyManager {
       }
     });
 
-    // Tick budowy statków + pending ship/outpost orders — civDeltaYears = deltaYears × CIV_TIME_SCALE
-    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => {
-      this._tickShipBuilds(deltaYears);
+    // Tick budowy statków + pending ship/outpost orders + podatki
+    // civDeltaYears dla mechanik 4X (budowa, pending), deltaYears fizyczne dla podatków (raz/rok gry)
+    EventBus.on('time:tick', ({ deltaYears: physDt, civDeltaYears: civDt }) => {
+      this._tickShipBuilds(civDt);
       this._tickPendingShipOrders();
       this._tickPendingOutpostOrders();
+      this._tickTaxCollection(physDt);
     });
 
     // Invaliduj cache shipyard level przy budowie/rozbiórce/upgrade stoczni
@@ -302,7 +309,7 @@ export class ColonyManager {
       allowEmigration:  true,
       fleet:           [],    // statki w hangarze: ['science_vessel', ...]
       shipQueues:      [],    // sloty budowy: [{ shipId, progress, buildTime }, ...]
-      credits:         0,     // Kredyty (Kr) z handlu cywilnego
+      credits:         500,   // Kredyty startowe — budżet operacyjny misji kolonizacyjnej
       creditsPerYear:  0,
       tradeCapacity:   0,
       activeTradeConnections: [],
@@ -720,11 +727,133 @@ export class ColonyManager {
         if (queues[i].progress >= queues[i].buildTime) {
           const shipId = queues[i].shipId;
           const modules = queues[i].modules || [];
+          // Odblokuj POPy zablokowane przez Surge
+          if (queues[i].surgePopsLocked > 0 && colony.civSystem) {
+            colony.civSystem.unlockPops(queues[i].surgePopsLocked, 'mix');
+          }
           queues.splice(i, 1);
           EventBus.emit('fleet:shipCompleted', { planetId: colony.planetId, shipId, modules });
         }
       }
     }
+  }
+
+  // ── Surge — przyspieszenie budowy statku (POP + Kr) ─────────────────────
+  // Koszt: 0.5 POP (lock do zakończenia) + 500 Kr
+  // Efekt: −50% remaining time per surge
+  static SURGE_POP_COST = 0.5;
+  static SURGE_KR_COST  = 500;
+  static SURGE_TIME_REDUCTION = 0.5;
+
+  surgeShipBuild(planetId, queueIndex) {
+    const colony = this.getColony(planetId);
+    if (!colony) return { ok: false, reason: 'noColony' };
+
+    const queues = colony.shipQueues;
+    if (!queues?.[queueIndex]) return { ok: false, reason: 'noQueue' };
+    const queue = queues[queueIndex];
+
+    const shipDef = SHIPS[queue.shipId] ?? HULLS[queue.shipId];
+    const maxSurge = shipDef?.maxSurge ?? 1;
+    if ((queue.surgeCount ?? 0) >= maxSurge)
+      return { ok: false, reason: 'maxSurgeReached' };
+
+    // Sprawdź wolne POPy
+    const freePops = colony.civSystem?.freePops ?? 0;
+    if (freePops < ColonyManager.SURGE_POP_COST)
+      return { ok: false, reason: 'insufficientPop' };
+
+    // Sprawdź Kr
+    const kr = colony.credits ?? 0;
+    if (kr < ColonyManager.SURGE_KR_COST)
+      return { ok: false, reason: 'insufficientCredits' };
+
+    // Wydaj Kr przez CivilianTradeSystem
+    EventBus.emit('trade:spendCredits', {
+      colonyId: planetId,
+      amount:   ColonyManager.SURGE_KR_COST,
+      purpose:  'shipyard_surge',
+    });
+
+    // Zablokuj POPy
+    colony.civSystem.lockPops(ColonyManager.SURGE_POP_COST, 'mix');
+
+    // Przyspieszenie: −50% pozostałego czasu
+    const remaining = queue.buildTime - queue.progress;
+    queue.progress += remaining * ColonyManager.SURGE_TIME_REDUCTION;
+    queue.surgeCount = (queue.surgeCount ?? 0) + 1;
+    queue.surgePopsLocked = (queue.surgePopsLocked ?? 0) + ColonyManager.SURGE_POP_COST;
+
+    EventBus.emit('shipyard:surgeApplied', {
+      colonyId:   planetId,
+      queueIndex,
+      surgeCount: queue.surgeCount,
+      newProgress: queue.progress,
+    });
+
+    return { ok: true, surgeCount: queue.surgeCount };
+  }
+
+  // ── Podatki — globalny system podatkowy ──────────────────────────────────
+  // Każda kolonia odprowadza podatek co rok cywilizacyjny → Kr trafiają na konto
+  // Stawka 0–25%, efekty na prosperity i lojalność
+  // Formuła: Kr/rok = POP × 5 × prosperity × taxRate
+  //   ×5 = skala bazowa dochodu per POP (zbalansowane z kosztami: Surge=500 Kr)
+
+  get taxRate() { return this._taxRate; }
+  set taxRate(val) {
+    this._taxRate = Math.max(0, Math.min(0.25, val));
+    EventBus.emit('tax:rateChanged', { rate: this._taxRate });
+  }
+
+  calculateTaxIncome(colony) {
+    const pop = colony.civSystem?.population ?? 0;
+    const prosperity = colony.prosperitySystem?.prosperity ?? 50;
+    return Math.floor(pop * 5 * prosperity * this._taxRate);
+  }
+
+  _tickTaxCollection(deltaYears) {
+    if (!window.KOSMOS?.civMode) return;
+    // Akumuluj fizyczne lata — co miesiąc (1/12 roku) nalicz 1/12 rocznego przychodu
+    this._taxAccum += deltaYears;
+    const MONTH = 1 / 12;
+    if (this._taxAccum < MONTH) return;
+    this._taxAccum -= MONTH;
+    this._applyTaxes(MONTH);
+  }
+
+  _applyTaxes(fraction) {
+    const colonies = this.getAllColonies();
+    let totalIncome = 0;
+
+    for (const colony of colonies) {
+      if (colony.isOutpost) continue; // outposty nie płacą podatków
+      // Miesięczna rata = roczny przychód × fraction (1/12)
+      const annual = this.calculateTaxIncome(colony);
+      const income = Math.floor(annual * fraction);
+      colony.credits = (colony.credits ?? 0) + income;
+      totalIncome += income;
+    }
+
+    // Ryzyko protestu przy ekstremalnych podatkach (>20%) — co 12 miesięcy
+    if (this._taxRate > 0.20) {
+      this._taxProtestAccum++;
+      if (this._taxProtestAccum >= 12) {
+        this._taxProtestAccum = 0;
+        const targets = colonies.filter(c => !c.isOutpost);
+        if (targets.length > 0) {
+          const col = targets[Math.floor(Math.random() * targets.length)];
+          EventBus.emit('randomEvent:taxProtest', {
+            planetId: col.planetId,
+            colonyName: col.name,
+          });
+        }
+      }
+    } else {
+      this._taxProtestAccum = 0;
+    }
+
+    EventBus.emit('tax:collected', { totalIncome, taxRate: this._taxRate });
   }
 
   // Tick pending ship orders — sprawdź czy zamówienia mogą ruszyć
@@ -1174,6 +1303,9 @@ export class ColonyManager {
       tradeRoutes:      this._tradeRoutes.map(r => ({ ...r })),
       lastTradeYear:    this._lastTradeYear,
       lastMigrationYear: this._lastMigrationYear,
+      taxRate:          this._taxRate,
+      taxAccum:         this._taxAccum,
+      taxProtestAccum:  this._taxProtestAccum,
     };
   }
 
@@ -1309,6 +1441,11 @@ export class ColonyManager {
     this._tradeRoutes      = data.tradeRoutes ?? [];
     this._lastTradeYear    = data.lastTradeYear ?? 0;
     this._lastMigrationYear = data.lastMigrationYear ?? 0;
+
+    // Przywróć podatki
+    this._taxRate          = data.taxRate ?? 0.08;
+    this._taxAccum         = data.taxAccum ?? 0;
+    this._taxProtestAccum  = data.taxProtestAccum ?? 0;
   }
 
   // ── Prywatne ──────────────────────────────────────────────────────────

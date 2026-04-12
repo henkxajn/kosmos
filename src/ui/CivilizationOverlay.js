@@ -179,11 +179,21 @@ export class CivilizationOverlay extends BaseOverlay {
       zone:    facSys.getCurrentZone?.() ?? 'balanced',
     } : null;
 
+    // Podatki — suma przychodu i etykieta efektu
+    const colMgrRef = window.KOSMOS?.colonyManager;
+    let taxIncome = 0;
+    if (colMgrRef) {
+      for (const col of fullColonies) {
+        taxIncome += colMgrRef.calculateTaxIncome(col);
+      }
+    }
+    const taxEffect = this._getTaxEffectLabel(colMgrRef?.taxRate ?? 0.08);
+
     return {
       colonies, fullColonies, outposts, perColony,
       totalPop, totalMaxPop, avgProsperity,
       totalCredits, totalCreditsPerYear, totalResearch,
-      globalResources,
+      globalResources, taxIncome, taxEffect,
       vessels, fleetByType, inFlight, orbiting, docked,
       leaderInfo, factionInfo,
     };
@@ -278,6 +288,55 @@ export class CivilizationOverlay extends BaseOverlay {
     this._statRow(ctx, x + pad, ry, w, t('civOverlay.research'),
       `${data.totalResearch.toFixed(1)}/${t('tradePanel.perYear')}`, THEME.info);
     ry += ROW_H + 2;
+
+    // ── PODATKI ─────────────────────────────────────────────────────────
+    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.taxes'));
+    ry += 18;
+
+    // Suwak podatkowy (0–25%) z kolorowymi strefami
+    const colMgrTax = window.KOSMOS?.colonyManager;
+    const taxRate = colMgrTax?.taxRate ?? 0.08;
+    const taxPct = taxRate / 0.25; // 0–1
+    const BAR_W = w - pad * 2;
+    const taxBarY = ry;
+
+    // Tło paska
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(x + pad, ry, BAR_W, 8);
+
+    // Wypełnienie kolorowe wg strefy
+    const taxColor = taxRate <= 0.05 ? '#00ff88'
+      : taxRate <= 0.12 ? THEME.accent
+      : taxRate <= 0.20 ? '#ffaa00'
+      : '#ff4444';
+    ctx.fillStyle = taxColor;
+    ctx.fillRect(x + pad, ry, BAR_W * taxPct, 8);
+
+    // Znacznik pozycji
+    const markerX = x + pad + BAR_W * taxPct;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(markerX - 1, ry - 2, 2, 12);
+    ry += 16;
+
+    // Hit zone na pasku — klik zmienia stawkę
+    this._addHit(x + pad, taxBarY - 4, BAR_W, 16, 'tax_slider', { barX: x + pad, barW: BAR_W });
+
+    // Wartości
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.taxRate'),
+      `${Math.round(taxRate * 100)}%`, taxColor);
+    ry += ROW_H;
+
+    // Przychód z podatków (suma per-kolonia)
+    const taxIncome = data.taxIncome ?? 0;
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.taxIncome'),
+      `+${taxIncome} Kr/${t('tradePanel.perYear')}`, THEME.success);
+    ry += ROW_H;
+
+    // Efekt na społeczeństwo
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillText(data.taxEffect, x + pad, ry + 8);
+    ry += 16;
 
     // Top surowce (deficytowe i nadmiarowe)
     const sortedRes = Object.entries(data.globalResources)
@@ -702,6 +761,7 @@ export class CivilizationOverlay extends BaseOverlay {
     );
     if (x < ox || x > ox + ow || y < oy || y > oy + oh) return false;
 
+    this._lastClickX = x; // zapamiętaj pozycję X dla tax_slider
     const hit = this._hitTest(x, y);
     if (hit) {
       this._onHit(hit);
@@ -722,7 +782,41 @@ export class CivilizationOverlay extends BaseOverlay {
         }
         break;
       }
+      case 'tax_slider': {
+        // Klik na pasku → ustaw stawkę proporcjonalnie do pozycji X
+        const colMgr = window.KOSMOS?.colonyManager;
+        if (!colMgr) break;
+        // Pozycja kliknięcia w pikselach od lewej krawędzi paska
+        const hitX = this._lastClickX ?? 0;
+        const relX = Math.max(0, Math.min(zone.data.barW, hitX - zone.data.barX));
+        const newRate = (relX / zone.data.barW) * 0.25;
+        // Snap do 1% kroków
+        colMgr.taxRate = Math.round(newRate * 100) / 100;
+        break;
+      }
     }
+  }
+
+  _getTaxEffectLabel(rate) {
+    const isPL = getLocale() !== 'en';
+    // taxDrain: jak bardzo podatki obcinają konsumpcję
+    const drain = rate <= 0.05 ? -(0.05 - rate) * 200    // bonus 0→10%
+                : rate <= 0.12 ? 0
+                : (rate - 0.12) / 0.13 * 40;             // kara 0→40%
+    const drainPct = Math.round(drain);
+
+    if (drainPct < 0) return isPL
+      ? `✓ Dotacja konsumpcji +${-drainPct}%`
+      : `✓ Consumption subsidy +${-drainPct}%`;
+    if (drainPct === 0) return isPL
+      ? '● Neutralne'
+      : '● Neutral';
+    if (rate <= 0.20) return isPL
+      ? `⚠ Konsumpcja -${drainPct}%`
+      : `⚠ Consumption -${drainPct}%`;
+    return isPL
+      ? `✗ Konsumpcja -${drainPct}% — ryzyko protestu`
+      : `✗ Consumption -${drainPct}% — protest risk`;
   }
 
   handleScroll(delta, x, y) {

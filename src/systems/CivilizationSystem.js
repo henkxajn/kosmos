@@ -1101,7 +1101,13 @@ export class CivilizationSystem {
     // Autonomia: cap loyalty na 55
     const autonomyCap = this._autonomousState ? 55 : 100;
 
-    const target = Math.min(autonomyCap, baseLoyalty + historyOffset + amplifiedDelta + modSum + traitPenalty);
+    // Wpływ podatków na lojalność (odczyt globalnego taxRate, liniowa interpolacja)
+    const taxRate = window.KOSMOS?.colonyManager?.taxRate ?? 0.08;
+    const taxOffset = taxRate <= 0.05 ? 5
+                    : taxRate <= 0.12 ? 0
+                    : -(taxRate - 0.12) / 0.13 * 25;  // 0→-25 liniowo 12%→25%
+
+    const target = Math.min(autonomyCap, baseLoyalty + historyOffset + amplifiedDelta + modSum + traitPenalty + taxOffset);
 
     // Inercja — loyalty dąży do target (15% per rok)
     this._smoothedLoyalty += (target - this._smoothedLoyalty) * 0.15;

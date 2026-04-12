@@ -319,6 +319,13 @@ export class ProsperitySystem {
         ratio = production / demand;
       }
 
+      // Podatki obcinają efektywną konsumpcję — rząd zabiera część dóbr
+      const taxRate = window.KOSMOS?.colonyManager?.taxRate ?? 0.08;
+      const taxDrain = taxRate <= 0.05 ? -(0.05 - taxRate) * 2   // bonus 0→0.10
+                     : taxRate <= 0.12 ? 0                         // strefa neutralna
+                     : (taxRate - 0.12) / 0.13 * 0.40;            // kara 0→0.40
+      ratio *= (1 - taxDrain);
+
       this._satisfaction[goodId] = this._ratioToSatisfaction(ratio);
     }
   }

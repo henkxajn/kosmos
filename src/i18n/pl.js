@@ -844,6 +844,7 @@ export default {
   'fleet.pendingOrders': 'Oczekujące',
   'fleet.noCrewPops': 'Brak wolnych POPów (potrzeba {0})',
   'fleet.buildTime': '⏱ Budowa: {0} lat',
+  'fleet.surgeMax': '⚡ Max Surge osiągnięty',
   'fleet.crew': '👤 Załoga: {0}/{1}',
 
   // === Fleet UI (FleetManagerOverlay / FleetTabPanel) ===
@@ -1602,6 +1603,9 @@ export default {
   'civOverlay.credits': 'Kredyty',
   'civOverlay.creditsPerYear': 'Bilans Kr',
   'civOverlay.research': 'Badania',
+  'civOverlay.taxes': 'PODATKI',
+  'civOverlay.taxRate': 'Stawka podatkowa',
+  'civOverlay.taxIncome': 'Przychód z podatków',
   'civOverlay.deficits': 'Deficyty:',
   'civOverlay.surpluses': 'Nadwyzki:',
   'civOverlay.fleet': 'FLOTA',
