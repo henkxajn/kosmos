@@ -40,16 +40,17 @@ import { LeaderSystem }        from '../systems/LeaderSystem.js';
 import { FactionSystem }       from '../systems/FactionSystem.js';
 import { DysonSystem }          from '../systems/DysonSystem.js';
 import { AutoPauseSystem }      from '../systems/AutoPauseSystem.js';
+import { ScheduledEventSystem } from '../systems/ScheduledEventSystem.js';
+import { buildScheduledEventPopup } from '../ui/ScheduledEventPopup.js';
 import { LEADERS }              from '../data/LeaderData.js';
 import { NARRATIVE_EVENTS_BY_ID } from '../data/NarrativeEventsData.js';
 import { EndgameScene }         from './EndgameScene.js';
 import { ANOMALIES } from '../data/AnomalyData.js';
-import { showEventNotification, showImpactNotification, showMovementModal } from '../ui/EventChoiceModal.js';
 import { showIntroSequence }     from '../ui/IntroModal.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
-import { formatStatLine, formatStatLineWithCursor, buildTerminalPopup } from '../ui/TerminalPopupBase.js';
+import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
 import { StarSystemManager } from '../systems/StarSystemManager.js';
@@ -175,6 +176,7 @@ export class GameScene {
     this.factionSystem       = new FactionSystem();
     this.dysonSystem         = new DysonSystem();
     this.autoPauseSystem     = new AutoPauseSystem();
+    this.scheduledEventSystem = new ScheduledEventSystem();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -204,6 +206,7 @@ export class GameScene {
     window.KOSMOS.factionSystem    = this.factionSystem;
     window.KOSMOS.dysonSystem      = this.dysonSystem;
     window.KOSMOS.autoPauseSystem  = this.autoPauseSystem;
+    window.KOSMOS.scheduledEventSystem = this.scheduledEventSystem;
     window.KOSMOS.threeRenderer    = this.threeRenderer;
 
     // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
@@ -332,6 +335,10 @@ export class GameScene {
       if (c4x.autoPause) {
         this.autoPauseSystem.restore(c4x.autoPause);
       }
+      // Przywróć ScheduledEventSystem (zaplanowane zdarzenia)
+      if (c4x.scheduledEventSystem) {
+        this.scheduledEventSystem.restore(c4x.scheduledEventSystem);
+      }
     }
 
     // Faza C4: nowa gra — ustaw lidera BEZ frakcji (frakcje odblokowują się
@@ -375,14 +382,48 @@ export class GameScene {
       // ThreeRenderer subskrybuje 'accretion:newPlanet' samodzielnie
     });
 
-    // Powiadomienia o zdarzeniach losowych
+    // Powiadomienia o zdarzeniach losowych — popup DATASHEET
     EventBus.on('randomEvent:occurred', ({ event, colonyName }) => {
-      showEventNotification(event, colonyName);
+      const severity = event.severity === 'danger' ? 'danger' : 'info';
+      const eventName = t(`event.${event.id}.name`) !== `event.${event.id}.name`
+        ? t(`event.${event.id}.name`) : (event.namePL ?? event.id);
+      const eventDesc = t(`event.${event.id}.desc`) !== `event.${event.id}.desc`
+        ? t(`event.${event.id}.desc`) : (event.descriptionPL ?? event.description ?? '');
+      const isPL = getLocale() !== 'en';
+
+      let stats = '';
+      stats += formatStatLine(t('eventChoice.colony'), colonyName);
+      if (event.duration > 0) {
+        stats += formatStatLine(t('eventChoice.time'), t('eventChoice.duration', event.duration), 'at-stat-neu');
+      }
+      const prosperityFx = event.effects?.find(fx => fx.type === 'prosperity');
+      if (prosperityFx) {
+        const sign = prosperityFx.delta > 0 ? '+' : '';
+        const cls = prosperityFx.delta > 0 ? 'at-stat-pos' : 'at-stat-neg';
+        stats += formatStatLine(t('eventChoice.prosperity'), `${sign}${prosperityFx.delta}`, cls);
+      }
+      stats += formatStatLineWithCursor(t('eventChoice.statusLabel'), t('eventChoice.active'), 'at-stat-neu');
+
+      EventBus.emit('time:pause');
+      const svgKey = severity === 'danger' ? 'alert' : 'report';
+      const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
+        severity,
+        svgKey,
+        headline:    eventName.toUpperCase(),
+        description: eventDesc,
+        contentHTML: stats,
+        gameYear:    window.KOSMOS?.timeSystem?.gameTime ?? 0,
+        buttons: [{ label: isPL ? '[ENTER] Rozumiem' : '[ENTER] Understood', primary: true }],
+        onDismiss: () => EventBus.emit('time:resume'),
+      });
+      btnElements[0]?.addEventListener('click', () => dismiss());
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
     });
+
     // Prognoza kolizji — alert z obserwatorium (isHomePlanet = dowolna kolonia gracza)
     EventBus.on('observatory:collisionAlert', ({ bodyA, bodyB, yearsUntil, margin, isHomePlanet }) => {
       if (isHomePlanet) {
-        // Kolizja z planetą kolonii gracza — pauza + duży alert
         this.timeSystem?.pause();
         const nameA = bodyA.name ?? '?';
         const nameB = bodyB.name ?? '?';
@@ -403,20 +444,78 @@ export class GameScene {
       this.uiManager?.addInfo(`🛡 ${name} — ${t('eventChoice.blocked')} [${colonyName}]`);
     });
 
-    // Powiadomienia o uderzeniach kosmicznych (pauzuj grę przy poważnych)
+    // Powiadomienia o uderzeniach kosmicznych — popup DATASHEET
     EventBus.on('impact:colonyDamage', (data) => {
-      if (data.severity === 'heavy' || data.severity === 'extinction') {
-        EventBus.emit('time:pause');
-      }
-      showImpactNotification(data);
+      const { severity, planetName, popLost, buildingsDestroyed, resourceLossPercent, popRemaining } = data;
+      const isPL = getLocale() !== 'en';
+      const impactTitles = {
+        light:      isPL ? 'Lekki impakt'        : 'Minor impact',
+        moderate:   isPL ? 'Umiarkowany impakt'   : 'Moderate impact',
+        heavy:      isPL ? 'Poważny impakt'       : 'Major impact',
+        extinction: isPL ? 'Katastrofalny impakt' : 'Catastrophic impact',
+      };
+      const title = impactTitles[severity] ?? impactTitles.moderate;
+
+      let stats = '';
+      stats += formatStatLine(isPL ? 'Kolonia' : 'Colony', planetName ?? '?');
+      if (popLost > 0) stats += formatStatLine(isPL ? 'Populacja' : 'Population', `−${popLost} (${popRemaining ?? '?'})`, 'at-stat-neg');
+      if (buildingsDestroyed > 0) stats += formatStatLine(isPL ? 'Budynki' : 'Buildings', `−${buildingsDestroyed}`, 'at-stat-neg');
+      if (resourceLossPercent > 0) stats += formatStatLine(isPL ? 'Zasoby' : 'Resources', `−${resourceLossPercent}%`, 'at-stat-neg');
+      stats += formatStatLineWithCursor('STATUS', severity === 'extinction' ? 'EXTINCTION' : 'CRITICAL', 'at-stat-neg');
+
+      EventBus.emit('time:pause');
+      const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
+        severity:    'danger',
+        svgKey:      'impact',
+        headline:    title.toUpperCase(),
+        description: isPL ? 'Obiekt kosmiczny uderzył w planetę kolonii.' : 'A cosmic object struck the colony planet.',
+        contentHTML: stats,
+        gameYear:    window.KOSMOS?.timeSystem?.gameTime ?? 0,
+        buttons: [{ label: isPL ? '[ENTER] Przyjąłem' : '[ENTER] Acknowledged', primary: true }],
+        onDismiss: () => EventBus.emit('time:resume'),
+      });
+      btnElements[0]?.addEventListener('click', () => dismiss());
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
     });
 
-    // Ruchy spoleczne — modal z wyborem gracza
-    EventBus.on('civ:movementStarted', async (data) => {
+    // Ruchy spoleczne — popup DATASHEET z 3 opcjami
+    EventBus.on('civ:movementStarted', (data) => {
+      const { movementId, namePL, nameEN, demands, strength } = data;
+      const isPL = getLocale() !== 'en';
+      const title = isPL ? namePL : (nameEN ?? namePL);
+      const demandList = (demands ?? []).map(d => `• ${d}`).join('<br>');
+      let stats = '';
+      stats += formatStatLine(isPL ? 'Siła' : 'Strength', `${Math.round(strength * 100)}%`, 'at-stat-neg');
+      stats += formatSectionTitle(isPL ? 'ŻĄDANIA' : 'DEMANDS');
+      stats += `<div style="padding:4px 8px;font-size:12px;color:${THEME.textSecondary}">${demandList}</div>`;
+
       EventBus.emit('time:pause');
-      const resolutionId = await showMovementModal(data);
-      EventBus.emit('civ:resolveMovement', { movementType: data.movementId, resolutionId });
-      EventBus.emit('time:resume');
+      const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
+        severity:    'danger',
+        svgKey:      'alert',
+        headline:    title.toUpperCase(),
+        description: isPL
+          ? 'Robotnicy żądają zmian. Wybierz odpowiedź ostrożnie.'
+          : 'Workers are demanding change. Choose your response carefully.',
+        contentHTML: stats,
+        gameYear:    window.KOSMOS?.timeSystem?.gameTime ?? 0,
+        buttons: [
+          { label: isPL ? 'Negocjuj' : 'Negotiate', primary: true },
+          { label: isPL ? 'Stłum'    : 'Suppress' },
+          { label: isPL ? 'Ignoruj'  : 'Ignore' },
+        ],
+        onDismiss: () => EventBus.emit('time:resume'),
+      });
+      const resMap = ['negotiate', 'suppress', 'ignore'];
+      btnElements.forEach((btn, i) => {
+        btn.addEventListener('click', () => {
+          EventBus.emit('civ:resolveMovement', { movementType: movementId, resolutionId: resMap[i] });
+          dismiss();
+        });
+      });
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
     });
 
     // Milestones historii kolonii — log + opcjonalnie pauza
@@ -517,8 +616,8 @@ export class GameScene {
 
     // ── Faza C3+C5: handler eventów narracyjnych frakcji ─────────────────
     // FactionSystem (lub inne źródła) emitują narrative:eventTriggered.
-    // choice=false → queueMissionEvent (pauza + OK), shift suwaka natychmiast, opcjonalny onComplete chain
-    // choice=true  → buildTerminalPopup z 2-3 buttons (dynamicznie z optionA/B/C), efekty per event.id
+    // choice=true  → popup DATASHEET z 2-3 buttons, efekty per event.id
+    // choice=false → kolejkowany popup DATASHEET (info z OK), shift suwaka, onComplete chain
     EventBus.on('narrative:eventTriggered', ({ event, gameYear, sliderDirectionForMinority }) => {
       const isPL = getLocale() !== 'en';
       const facSys = window.KOSMOS?.factionSystem;
@@ -528,12 +627,10 @@ export class GameScene {
         // ── Modal z wyborem (2-3 opcje) ──────────────────────────────────
         EventBus.emit('time:pause');
 
-        // Dla faction_crisis_protest: kierunek shifta optionA zależy od dominującej frakcji
         const isCrisis = event.id === 'faction_crisis_protest';
         const optKeys = ['optionA', 'optionB', 'optionC'];
         const optLetters = ['A', 'B', 'C'];
 
-        // Dynamicznie zbierz buttony z istniejących opcji
         const buttons = [];
         const presentOpts = [];
         for (let i = 0; i < optKeys.length; i++) {
@@ -546,35 +643,27 @@ export class GameScene {
           presentOpts.push({ letter: optLetters[i], opt });
         }
 
-        const { overlay, dismiss, btnElements } = buildTerminalPopup({
+        const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
           severity:    event.severity ?? 'warning',
-          barTitle:    isPL ? event.titlePL : event.titleEN,
           svgKey:      event.svgKey ?? 'report',
-          svgLabel:    isPL ? 'DECYZJA' : 'DECISION',
-          prompt:      '> NARRATIVE.LOG_',
           headline:    (isPL ? event.titlePL : event.titleEN).toUpperCase(),
           description: isPL ? event.descPL : event.descEN,
+          gameYear:    window.KOSMOS?.timeSystem?.gameTime ?? 0,
           buttons,
           onDismiss: () => { EventBus.emit('time:resume'); },
         });
 
-        // Bind każdego przycisku do odpowiadającej opcji
         btnElements.forEach((btn, idx) => {
           const { letter, opt } = presentOpts[idx];
           btn.addEventListener('click', () => {
-            // 1. Domyślny shift suwaka z opcji
             let baseDelta = opt.sliderDelta ?? 0;
             if (isCrisis && letter === 'A') {
-              // Crisis protest optionA — kierunek zależy od dominującej frakcji
               baseDelta = baseDelta * (sliderDirectionForMinority ?? -1);
             }
             if (baseDelta !== 0) {
               facSys.shiftSlider(baseDelta, `${event.id}_choice${letter}`);
             }
-
-            // 2. Per-event side effects
             this._applyNarrativeChoiceEffect(event.id, letter, facSys);
-
             dismiss();
           });
         });
@@ -583,24 +672,19 @@ export class GameScene {
         requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
 
       } else {
-        // ── Event informacyjny (popup z OK) ───────────────────────────────
+        // ── Event informacyjny (kolejkowany popup z OK) ───────────────────
         if (event.sliderDelta) {
           facSys.shiftSlider(event.sliderDelta, event.id);
         }
         queueMissionEvent({
           severity:    event.severity ?? 'info',
-          barTitle:    isPL ? event.titlePL : event.titleEN,
           svgKey:      event.svgKey ?? 'report',
-          svgLabel:    isPL ? 'KRONIKA' : 'CHRONICLE',
-          prompt:      '> NARRATIVE.LOG_',
           headline:    (isPL ? event.titlePL : event.titleEN).toUpperCase(),
           description: isPL ? event.descPL : event.descEN,
           buttons: [{ label: isPL ? '[ENTER] Rozumiem' : '[ENTER] Understood', primary: true }],
         });
 
-        // Faza C5: chain handler dla onComplete (po dismiss popupu)
-        // Uwaga: queueMissionEvent NIE wspiera onComplete callbacku — emit chain natychmiast
-        // (popup info pojawia się w kolejce, chain leci równolegle, oba tickują przez kolejkę)
+        // Faza C5: chain handler dla onComplete
         if (event.onComplete === 'faction_birth') {
           const next = NARRATIVE_EVENTS_BY_ID['first_voices_of_division'];
           if (next) {
@@ -619,10 +703,7 @@ export class GameScene {
             : (fId === 'confederates' ? 'Confederation of the Mission' : (fId === 'seekers' ? 'Seekers of the Way' : '—'));
           queueMissionEvent({
             severity:    'info',
-            barTitle:    isPL ? 'STANOWISKO LIDERA' : 'LEADER\'S POSITION',
             svgKey:      'colony',
-            svgLabel:    isPL ? 'LIDER' : 'LEADER',
-            prompt:      '> LEADER_STANCE.LOG_',
             headline:    `${(lData?.namePL ?? '?').toUpperCase()} — ${factionLabel.toUpperCase()}`,
             description: isPL
               ? 'Twój lider zajął wyraźne stanowisko. Kolonia to zauważyła.'
@@ -631,6 +712,96 @@ export class GameScene {
           });
         }
       }
+    });
+
+    // ── Handler zaplanowanych zdarzeń (ScheduledEventSystem) ──────────────
+    // Gwarantowane zdarzenie co 3-5 civYears z opcjami decyzji A/B/C.
+    // WSZYSTKIE scheduled events uzywaja popupu DATASHEET (cyber-gazeta z video tlem).
+    EventBus.on('scheduledEvent:triggered', ({ event, planetId }) => {
+      const isPL   = getLocale() !== 'en';
+      const colony = window.KOSMOS?.colonyManager?.getColony?.(planetId)
+        ?? window.KOSMOS?.colonyManager?.getColony?.(window.KOSMOS?.homePlanet?.id);
+
+      // Zastosuj karę automatyczną
+      if (event.penalty) this._applyScheduledEffect(event.penalty, colony, planetId);
+
+      // Zastosuj nagrodę bazową
+      if (event.reward && Object.keys(event.reward).length > 0) {
+        this._applyScheduledReward(event.reward, colony);
+      }
+
+      // Autoeffect bez opcji
+      if (event.autoEffect && !event.options) {
+        const effects = Array.isArray(event.autoEffect) ? event.autoEffect : [event.autoEffect];
+        for (const eff of effects) {
+          this._applyScheduledEffect(eff, colony, planetId);
+        }
+      }
+
+      // Pauza — dla wszystkich scheduled events
+      EventBus.emit('time:pause');
+
+      // Video fallback chain: event-specific → category → default
+      const vBase = 'assets/event-videos/';
+      const videoSrc = [
+        `${vBase}${event.id}.mp4`,
+        `${vBase}${event.videoCategory ?? 'default'}.mp4`,
+        `${vBase}default.mp4`,
+      ];
+
+      // Zbuduj liste opcji do wyswietlenia (opis, koszt, efekt)
+      const popupOptions = event.options
+        ? event.options.map(opt => ({
+            label:      isPL ? opt.labelPL : opt.labelEN,
+            cost:       opt.costKr ?? 0,
+            effectDesc: isPL ? opt.effectPL : opt.effectEN,
+          }))
+        : null;
+
+      // Przyciski
+      const buttons = event.options
+        ? event.options.map((opt, i) => ({
+            label:   isPL ? opt.labelPL : opt.labelEN,
+            primary: i === 0,
+          }))
+        : [{ label: isPL ? '[ENTER] Rozumiem' : '[ENTER] Understood', primary: true }];
+
+      const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
+        severity:    event.severity ?? 'info',
+        headline:    (isPL ? event.titlePL : event.titleEN).toUpperCase(),
+        description: isPL ? event.descPL : event.descEN,
+        videoSrc,
+        gameYear:    window.KOSMOS?.timeSystem?.gameTime ?? 0,
+        options:     popupOptions,
+        buttons,
+        onDismiss:   () => EventBus.emit('time:resume'),
+      });
+
+      // Podlacz logike przyciskow
+      if (event.options) {
+        const self = this;
+        event.options.forEach((opt, i) => {
+          btnElements[i]?.addEventListener('click', () => {
+            if (opt.costKr > 0) {
+              if ((colony?.credits ?? 0) < opt.costKr) return;
+              colony.credits -= opt.costKr;
+            }
+            if (opt.effect) {
+              const effects = Array.isArray(opt.effect) ? opt.effect : [opt.effect];
+              for (const eff of effects) {
+                self._applyScheduledEffect(eff, colony, planetId);
+              }
+            }
+            dismiss();
+          });
+        });
+      } else {
+        // Brak opcji — pierwszy przycisk zamyka popup
+        btnElements[0]?.addEventListener('click', () => dismiss());
+      }
+
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
     });
 
     // ── Faza D3: handlery DysonSystem ────────────────────────────────────
@@ -1061,6 +1232,135 @@ export class GameScene {
 
       default:
         return;
+    }
+  }
+
+  // ── Scheduled Events: aplikowanie efektów ──────────────────────────
+  // Wywoływane z handlera scheduledEvent:triggered po wyborze opcji lub auto.
+
+  /** Zastosuj pojedynczy efekt zaplanowanego zdarzenia */
+  _applyScheduledEffect(effect, colony, planetId) {
+    if (!effect) return;
+    const facSys = window.KOSMOS?.factionSystem;
+    const resSys = colony?.resourceSystem;
+    const civSys = colony?.civSystem;
+    const prosp  = colony?.prosperitySystem;
+
+    switch (effect.type) {
+      case 'resources':
+        resSys?.receive?.(effect.gains);
+        break;
+
+      case 'temp_rate':
+        resSys?.registerProducer?.(effect.sourceId, effect.rates);
+        this.scheduledEventSystem?.registerTempEffect?.(
+          effect.sourceId,
+          planetId ?? colony?.planetId,
+          effect.duration
+        );
+        break;
+
+      case 'permanent_rate':
+        resSys?.registerProducer?.(effect.sourceId, effect.rates);
+        break;
+
+      case 'credits':
+        if (colony) colony.credits = (colony.credits ?? 0) + effect.amount;
+        break;
+
+      case 'prosperity_bonus':
+        prosp?.addEventBonus?.(effect.sourceId, effect.delta, effect.duration);
+        break;
+
+      case 'production_mult':
+        // Używa istniejącego mechanizmu _productionPenalties (addytywne, min 0.5)
+        civSys?._productionPenalties?.push?.({
+          mult: effect.mult,
+          remainingYears: effect.duration,
+        });
+        break;
+
+      case 'research_mult':
+        // Taki sam mechanizm jak production_mult — wpływa na BuildingSystem
+        civSys?._productionPenalties?.push?.({
+          mult: effect.mult,
+          remainingYears: effect.duration,
+        });
+        break;
+
+      case 'ship_cost_mult':
+        // Tymczasowy mnożnik kosztu statków — przez _productionPenalties jako fallback
+        civSys?._productionPenalties?.push?.({
+          mult: effect.mult - 1.0, // 0.8 → -0.2 (penalty format: addytywny do 1.0)
+          remainingYears: effect.duration,
+        });
+        EventBus.emit('shipyard:tempCostMult', { mult: effect.mult, duration: effect.duration });
+        break;
+
+      case 'permanent_mult':
+        // Stały mnożnik — emituj event (przyszła integracja z BuildingSystem/ColonyManager)
+        EventBus.emit('colony:permanentMult', { category: effect.category, mult: effect.mult });
+        console.log(`[ScheduledEvent] permanent_mult: ${effect.category} ×${effect.mult}`);
+        break;
+
+      case 'faction_slider':
+        facSys?.shiftSlider?.(effect.delta, 'scheduled_event');
+        break;
+
+      case 'faction_slider_toward_center': {
+        const current = facSys?.slider ?? 50;
+        const direction = current > 50 ? -1 : 1;
+        facSys?.shiftSlider?.(direction * effect.delta, 'political_resolution');
+        break;
+      }
+
+      case 'faction_tension':
+        if (facSys) facSys.tension = Math.max(0, (facSys.tension ?? 0) + effect.delta);
+        break;
+
+      case 'factory_product':
+        // Commodity trafia do inventory (ResourceSystem obsługuje commodities)
+        resSys?.receive?.({ [effect.product]: effect.count });
+        break;
+
+      case 'risky_mission':
+        // Bonus morale (prosperity) z ducha wolontariuszy
+        if (effect.morale) {
+          prosp?.addEventBonus?.('sched_risky_morale', effect.morale, 3);
+        }
+        // Szansa na sukces
+        if (effect.successChance > 0 && Math.random() < effect.successChance) {
+          this._applyScheduledEffect(effect.successEffect, colony, planetId);
+        }
+        // Szansa na straty
+        if (effect.casualtyChance > 0 && Math.random() < effect.casualtyChance) {
+          this._applyScheduledEffect(effect.casualtyEffect, colony, planetId);
+        }
+        break;
+
+      case 'pop_loss':
+        civSys?.removePop?.(null, effect.count ?? 1);
+        break;
+
+      default:
+        console.warn(`[ScheduledEvent] Nieznany typ efektu: ${effect.type}`);
+    }
+  }
+
+  /** Zastosuj nagrodę bazową zdarzenia */
+  _applyScheduledReward(reward, colony) {
+    if (!reward || !colony) return;
+    if (reward.credits) {
+      colony.credits = (colony.credits ?? 0) + reward.credits;
+    }
+    if (reward.resources) {
+      colony.resourceSystem?.receive?.(reward.resources);
+    }
+    if (reward.commodities) {
+      colony.resourceSystem?.receive?.(reward.commodities);
+    }
+    if (reward.factionSlider) {
+      window.KOSMOS?.factionSystem?.shiftSlider?.(reward.factionSlider, 'scheduled_reward');
     }
   }
 
@@ -1684,10 +1984,11 @@ export class GameScene {
       // Deleguj klawisze do aktywnego overlay (np. Escape w buildMode, strzałki)
       if (this.uiManager.overlayManager.isAnyOpen()) {
         const ov = this.uiManager.overlayManager.overlays[this.uiManager.overlayManager.active];
-        if (ov?.handleKeyDown && ov.handleKeyDown(e.key)) return;
+        if (ov?.handleKeyDown && ov.handleKeyDown(e.key)) { this.uiManager.markDirty(); return; }
         // Escape — zamknij aktywny overlay (jeśli overlay nie skonsumował)
         if (e.key === 'Escape') {
           this.uiManager.overlayManager.closeActive();
+          this.uiManager.markDirty();
           return;
         }
       }
@@ -1695,6 +1996,7 @@ export class GameScene {
       // Escape — zamknij dialog potwierdzenia (jeśli widoczny)
       if (e.key === 'Escape' && this.uiManager._confirmDialog?.visible) {
         this.uiManager._confirmDialog = { visible: false };
+        this.uiManager.markDirty();
         return;
       }
 
@@ -1702,13 +2004,14 @@ export class GameScene {
       if (e.key === 'Escape') {
         if (!this.planetScene?.isOpen) {
           this.uiManager._bottomBar.toggleMenu();
+          this.uiManager.markDirty();
         }
         return;
       }
 
       // Klawisze overlay (F/P/E/T) — civMode
       if (window.KOSMOS?.civMode) {
-        if (this.uiManager.overlayManager.handleKey(e.key)) return;
+        if (this.uiManager.overlayManager.handleKey(e.key)) { this.uiManager.markDirty(); return; }
       }
 
       const ts = this.timeSystem;

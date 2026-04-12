@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 49;
+export const CURRENT_VERSION     = 50;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -64,6 +64,7 @@ const MIGRATIONS = {
   46: _migrateV46toV47,
   47: _migrateV47toV48,
   48: _migrateV48toV49,
+  49: _migrateV49toV50,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1202,6 +1203,16 @@ function _migrateV47toV48(data) {
 function _migrateV48toV49(data) {
   if (data.civ4x) {
     data.civ4x.autoPause = data.civ4x.autoPause ?? null;
+  }
+  return data;
+}
+
+// ── v49 → v50: ScheduledEventSystem — zaplanowane zdarzenia co 3-5 civYears ──
+// Stare save'y nie miały ScheduledEventSystem. Pole opcjonalne —
+// jeśli null, system startuje ze świeżym akumulatorem i losowym interwałem.
+function _migrateV49toV50(data) {
+  if (data.civ4x) {
+    data.civ4x.scheduledEventSystem = data.civ4x.scheduledEventSystem ?? null;
   }
   return data;
 }

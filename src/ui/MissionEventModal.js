@@ -13,12 +13,12 @@ import { DepositSystem } from '../systems/DepositSystem.js';
 import { THEME }     from '../config/ThemeConfig.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
 import {
-  buildTerminalPopup,
   formatStatLine,
   formatStatLineWithCursor,
   formatSectionTitle,
   formatStatsGrid,
 } from './TerminalPopupBase.js';
+import { buildScheduledEventPopup } from './ScheduledEventPopup.js';
 
 // ── Stan wewnętrzny ──────────────────────────────────────────────────────
 let _queue = [];
@@ -171,17 +171,20 @@ function _showNext() {
     EventBus.emit('time:pause');
   }
 
-  // Buduj popup terminalowy
-  const { overlay, dismiss, btnElements } = buildTerminalPopup({
+  // Buduj popup DATASHEET (cyber-gazeta z video tlem)
+  const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
     ...config,
-    buttons: config.buttons ?? [{ label: '[ENTER] OK', primary: true }],
+    headline:  config.headline ?? config.barTitle ?? '',
+    svgKey:    config.svgKey ?? 'report',
+    gameYear:  window.KOSMOS?.timeSystem?.gameTime ?? 0,
+    buttons:   config.buttons ?? [{ label: '[ENTER] OK', primary: true }],
     onDismiss: () => {
       _active = null;
       _showNext();
     },
   });
 
-  // Podłącz domyślne zachowanie przycisków do dismiss
+  // Podlacz domyslne zachowanie przyciskow do dismiss
   for (const btn of btnElements) {
     if (!btn._hasCustomClick) {
       btn.addEventListener('click', () => dismiss());
@@ -193,18 +196,7 @@ function _showNext() {
     if (e.target === overlay) dismiss();
   });
 
-  // Keyboard — UWAGA: stopPropagation TYLKO dla obsługiwanych klawiszy.
-  // Wcześniej wołany unconditional na linii 198 (capture phase) blokował WSZYSTKIE klawisze
-  // dla GameScene._setupKeyboard — gracz nie mógł używać F/P/E/T/D etc. gdy popup był aktywny.
-  const onKey = (e) => {
-    if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') {
-      e.stopPropagation();
-      e.preventDefault();
-      document.removeEventListener('keydown', onKey, true);
-      dismiss();
-    }
-  };
-  document.addEventListener('keydown', onKey, true);
+  // Keyboard obslugiwany wewnatrz buildScheduledEventPopup
 
   document.body.appendChild(overlay);
   _active = overlay;

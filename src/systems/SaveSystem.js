@@ -138,6 +138,7 @@ export class SaveSystem {
       factionSystem: window.KOSMOS?.factionSystem?.serialize() ?? null,
       dysonSystem: window.KOSMOS?.dysonSystem?.serialize() ?? null,
       autoPause: window.KOSMOS?.autoPauseSystem?.serialize() ?? null,
+      scheduledEventSystem: window.KOSMOS?.scheduledEventSystem?.serialize() ?? null,
       exploredBodies,
       unitDesigns: window.KOSMOS?.unitDesigns ?? [],
       galaxyData: window.KOSMOS.galaxyData ?? null,
