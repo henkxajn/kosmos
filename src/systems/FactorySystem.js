@@ -114,6 +114,10 @@ export class FactorySystem {
     // Cache ostatniego skanu reaktywnego (do UI)
     this._reactiveDemand = [];
 
+    // Ręczny bonus zapasu per-towar: Map<commodityId, number>
+    // Dodawany do bazowego celu (safety stock tier default / consumption base)
+    this._demandBonus = new Map();
+
     // Interwał auto-alokacji (nie co tick — co ~0.1 roku civ)
     this._autoAllocTimer = 0;
     this._AUTO_ALLOC_INTERVAL = 0.1; // lata civ
@@ -293,6 +297,29 @@ export class FactorySystem {
   get reactiveDemand() { return [...this._reactiveDemand]; }
   get reactiveSourceOrder() { return [...this._reactiveSourceOrder]; }
 
+  /** Bonus zapasu gracza dla towaru (dodawany do bazowego celu) */
+  getDemandBonus(commodityId) {
+    return this._demandBonus.get(commodityId) ?? 0;
+  }
+
+  /** Zmień bonus zapasu (min 0) */
+  setDemandBonus(commodityId, value) {
+    const clamped = Math.max(0, Math.round(value));
+    if (clamped === 0) {
+      this._demandBonus.delete(commodityId);
+    } else {
+      this._demandBonus.set(commodityId, clamped);
+    }
+    this._emitStatus();
+  }
+
+  /** Cel zapasu bezpieczeństwa (domyślny wg tieru + bonus gracza) */
+  getSafetyStockTarget(commodityId) {
+    const def = COMMODITIES[commodityId];
+    const base = (def?.tier <= 2) ? 3 : 1;
+    return base + this.getDemandBonus(commodityId);
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // API publiczne — obecny system (manual)
   // ══════════════════════════════════════════════════════════════════════════
@@ -450,6 +477,7 @@ export class FactorySystem {
         items: t.items.map(i => ({ ...i })),
       })),
       reactiveSourceOrder:  [...this._reactiveSourceOrder],
+      demandBonus: Object.fromEntries(this._demandBonus),
     };
   }
 
@@ -471,6 +499,7 @@ export class FactorySystem {
     this._priorityList = data.priorityList ?? [];
     this._customTemplates = data.customTemplates ?? [];
     this._reactiveSourceOrder = data.reactiveSourceOrder ?? [...DEFAULT_REACTIVE_ORDER];
+    this._demandBonus = new Map(Object.entries(data.demandBonus ?? data.safetyStockOverrides ?? {}));
     this._autoChain = [];
     this._reactiveDemand = [];
   }
@@ -943,7 +972,7 @@ export class FactorySystem {
     for (const [goodId, rate] of Object.entries(BASE_DEMAND)) {
       if (!COMMODITIES[goodId]) continue;
       if (!this.isRecipeAvailable(goodId)) continue;
-      const needed = Math.ceil(pop * rate * yearsBuffer);
+      const needed = Math.ceil(pop * rate * yearsBuffer) + this.getDemandBonus(goodId);
       items.push({ commodityId: goodId, qty: needed });
     }
     return items;
@@ -971,13 +1000,13 @@ export class FactorySystem {
     return items;
   }
 
-  // Źródło 5: Zapas bezpieczeństwa — minimalne zapasy T1-T2
+  // Źródło 5: Zapas bezpieczeństwa — minimalne zapasy (domyślne wg tieru + ręczne nadpisania)
   // qty = docelowy minimalny zapas (deficyt liczy alokator)
   _scanSafetyStockDemand() {
     const items = [];
     for (const [id, def] of Object.entries(COMMODITIES)) {
       if (!this.isRecipeAvailable(id)) continue;
-      const minStock = (def.tier <= 2) ? 3 : 1;
+      const minStock = this.getSafetyStockTarget(id);
       items.push({ commodityId: id, qty: minStock });
     }
     return items;

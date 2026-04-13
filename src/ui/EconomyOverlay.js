@@ -1196,6 +1196,8 @@ export class EconomyOverlay extends BaseOverlay {
         safety: t('econPanel.reactiveSource.safety'),
       };
 
+      const colId = colony.planetId;
+
       for (const d of demand) {
         const def = COMMODITIES[d.commodityId];
         if (!def) continue;
@@ -1218,7 +1220,34 @@ export class EconomyOverlay extends BaseOverlay {
         const qtyR = Math.round(d.qty * 10) / 10;
         const color = stock >= d.qty ? THEME.success : (stock > 0 ? THEME.warning : THEME.danger);
         ctx.fillStyle = color;
-        ctx.fillText(`${stockR}/${qtyR}`, x + pad + colW - 80, ry + 10);
+
+        // Przyciski [−][+] dla safety stock i consumption — ręczna regulacja celu zapasu
+        if (d.source === 'safety' || d.source === 'consumption') {
+          const btnY = ry + 1;
+          const textX = x + pad + colW - 80;
+          ctx.fillText(`${stockR}/${qtyR}`, textX, ry + 10);
+
+          let bx = textX + 42;
+          // [−]
+          const bonus = fs.getDemandBonus?.(d.commodityId) ?? 0;
+          this._drawSmallBtn(ctx, bx, btnY, '−', bonus > 0 ? 'secondary' : 'disabled');
+          if (bonus > 0) {
+            this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
+              action: 'demand_minus', colonyId: colId, commodityId: d.commodityId,
+              label: '−', x: bx,
+            });
+          }
+          bx += BTN_S + 2;
+          // [+]
+          this._drawSmallBtn(ctx, bx, btnY, '+', 'primary');
+          this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
+            action: 'demand_plus', colonyId: colId, commodityId: d.commodityId,
+            label: '+', x: bx,
+          });
+        } else {
+          ctx.fillText(`${stockR}/${qtyR}`, x + pad + colW - 80, ry + 10);
+        }
+
         ry += 18;
       }
     }
@@ -1681,6 +1710,14 @@ export class EconomyOverlay extends BaseOverlay {
         break;
       case 'deleteCustomTemplate':
         fs.deleteCustomTemplate(data.index);
+        break;
+
+      // ── Tryb reaktywny — bonus zapasu ─────────────
+      case 'demand_plus':
+        fs.setDemandBonus(data.commodityId, fs.getDemandBonus(data.commodityId) + 1);
+        break;
+      case 'demand_minus':
+        fs.setDemandBonus(data.commodityId, fs.getDemandBonus(data.commodityId) - 1);
         break;
     }
   }
