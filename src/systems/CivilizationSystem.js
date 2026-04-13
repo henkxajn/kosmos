@@ -1172,7 +1172,7 @@ export class CivilizationSystem {
     const movement = {
       type:       movDef.id,
       strataType: movDef.strataType,
-      startYear:  window.KOSMOS?.game?.gameYear ?? 0,
+      startYear:  Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0),
       strength:   movDef.strength,
       resolved:   false,
     };
@@ -1229,7 +1229,7 @@ export class CivilizationSystem {
     } else if (resolutionId === 'suppress') {
       this.addMilestone('suppression');
       // Zapamiętaj suppress do eskalacji
-      const year = window.KOSMOS?.game?.gameYear ?? 0;
+      const year = Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0);
       this._suppressHistory.push({ year, movementType });
       // Eskalacja: 2× suppress w 30 lat → automatyczny separatyzm
       const recent = this._suppressHistory.filter(s => (year - s.year) < 30);
@@ -1266,7 +1266,7 @@ export class CivilizationSystem {
 
     this.identity.events.push({
       type: eventType,
-      year: window.KOSMOS?.game?.gameYear ?? 0,
+      year: Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0),
     });
 
     // Przelicz score
@@ -1284,7 +1284,7 @@ export class CivilizationSystem {
       EventBus.emit('civ:identityEvent', {
         colony:    this._colonyId,
         eventType,
-        year:      window.KOSMOS?.game?.gameYear ?? 0,
+        year:      Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0),
         score:     this.identity.score,
       });
     }
@@ -1438,7 +1438,7 @@ export class CivilizationSystem {
     const def = MILESTONE_BY_TYPE[type];
     if (!def) return;
 
-    const year = window.KOSMOS?.game?.gameYear ?? 0;
+    const year = Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0);
 
     // Sprawdź cooldown
     const lastYear = this._milestoneState.lastMilestoneYear[type] ?? -Infinity;
@@ -1556,7 +1556,7 @@ export class CivilizationSystem {
       if (def.unique && this.colonyHistory.some(h => h.type === def.type)) continue;
 
       // Cooldown check
-      const year = window.KOSMOS?.game?.gameYear ?? 0;
+      const year = Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0);
       const lastYear = st.lastMilestoneYear[def.type] ?? -Infinity;
       if (def.cooldown && (year - lastYear) < def.cooldown) continue;
 

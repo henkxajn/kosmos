@@ -615,7 +615,7 @@ export class PopulationOverlay extends BaseOverlay {
     const identityScore = civ.identity?.score ?? 0;
     const history = civ.colonyHistory ?? [];
     const traits = civ.identity?.traits ?? [];
-    const currentYear = Math.floor(window.KOSMOS?.game?.gameYear ?? 0);
+    const currentYear = Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0);
     const lang = window.KOSMOS?.lang ?? 'pl';
 
     // ── Pasek LOJALNOŚĆ ──────────────────────────────────
