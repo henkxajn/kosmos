@@ -275,54 +275,43 @@ export class CivilizationSystem {
    */
   convertToStrata(targetType, amount) {
     if (amount <= 0) return true;
-    // Jeśli cel ma wystarczająco wolnych — nie trzeba konwertować
+    const target = this.strata[targetType];
+    if (!target) return false;
+
+    // Szybka ścieżka: wolne POPy już pokrywają żądanie
     if (this.freeInStrata(targetType) >= amount) return true;
 
-    // Ile brakuje w docelowej strata
-    let deficit = amount - this.freeInStrata(targetType);
-    if (deficit <= 0) return true;
+    // Strata count są liczbami całkowitymi — przy fractional popCost (np. 0.5) i tak
+    // potrzeba jednego pełnego POPa, żeby obsadzić dowolny ułamek. Liczymy ile POPów
+    // w sumie potrzeba: demand z budynków (getSlotDemand) już zawiera nowo dodany budynek,
+    // a amount + locked pokrywa pending crew lock (convertToStrata wywołane przed lockPops).
+    const bSys = this.buildingSystem;
+    const totalDemand = bSys?.getSlotDemand?.(targetType) ?? 0;
+    const locked = this._lockedPerStrata[targetType] ?? 0;
+    const needed = Math.max(
+      Math.ceil(totalDemand + locked - 1e-6),
+      Math.ceil(amount      + locked - 1e-6),
+    );
+    let wholeDeficit = needed - target.count;
+    if (wholeDeficit <= 0) return true;
 
-    // Szukaj wolnych w innych stratach (priorytet: laborer, potem reszta)
+    // Szukaj wolnych POPów w innych stratach (priorytet: laborer)
     const donors = STRATA_TYPES.filter(t => t !== targetType);
-    // Laborer na początek (domyślna siła robocza)
     donors.sort((a, b) => (a === 'laborer' ? -1 : b === 'laborer' ? 1 : 0));
 
     for (const donorType of donors) {
-      if (deficit <= 0) break;
-      const free = this.freeInStrata(donorType);
-      if (free <= 0) continue;
-
-      const take = Math.min(deficit, free);
-      // Przenieś z donora do celu (growthProgress + count)
-      let toMove = take;
+      if (wholeDeficit <= 0) break;
       const donor = this.strata[donorType];
-      const target = this.strata[targetType];
+      const freeWhole = Math.floor(this.freeInStrata(donorType));
+      if (freeWhole <= 0) continue;
 
-      // Zabierz z growthProgress najpierw
-      const fromGP = Math.min(donor.growthProgress, toMove);
-      if (fromGP > 0) {
-        donor.growthProgress -= fromGP;
-        target.growthProgress += fromGP;
-        toMove -= fromGP;
-      }
-      // Reszta z count
-      if (toMove > 0) {
-        const fromCount = Math.min(donor.count, Math.ceil(toMove));
-        donor.count -= fromCount;
-        const overshoot = fromCount - toMove;
-        target.growthProgress += toMove;
-        if (overshoot > 0) donor.growthProgress += overshoot;
-      }
-      // Promuj growthProgress → count jeśli >= 1
-      while (target.growthProgress >= 1.0) {
-        target.growthProgress -= 1.0;
-        target.count += 1;
-      }
-
-      deficit -= take;
+      const take = Math.min(wholeDeficit, freeWhole);
+      donor.count -= take;
+      target.count += take;
+      wholeDeficit -= take;
     }
 
-    return deficit <= 0.001;
+    return wholeDeficit <= 0;
   }
 
   // ── Migracja cywilna (handel cywilny — CivilianTradeSystem) ─────────────
