@@ -126,7 +126,6 @@ export class SaveSystem {
       researchSystem: window.KOSMOS?.researchSystem?.serialize() ?? null,
       expeditions:    eSys?.serialize()    ?? null,
       vesselManager:  vMgr?.serialize()    ?? null,
-      tradeRouteManager: window.KOSMOS?.tradeRouteManager?.serialize() ?? null,
       tradeLog:       window.KOSMOS?.tradeLog?.serialize() ?? null,
       discoverySystem: window.KOSMOS?.discoverySystem?.serialize() ?? null,
       randomEventSystem: window.KOSMOS?.randomEventSystem?.serialize() ?? null,

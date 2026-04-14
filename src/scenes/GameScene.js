@@ -26,7 +26,6 @@ import { RandomEventSystem }  from '../systems/RandomEventSystem.js';
 import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }         from '../systems/DepositSystem.js';
 import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
-import { TradeRouteManager }    from '../systems/TradeRouteManager.js';
 import { CivilianTradeSystem }  from '../systems/CivilianTradeSystem.js';
 import TradeLog                 from '../systems/TradeLog.js';
 import { ResearchSystem }      from '../systems/ResearchSystem.js';
@@ -161,7 +160,6 @@ export class GameScene {
     this.missionSystem    = this.expeditionSystem; // alias — ten sam obiekt
     this.colonyManager   = new ColonyManager(this.techSystem);
     this.vesselManager   = new VesselManager();
-    this.tradeRouteManager = new TradeRouteManager();
     this.civilianTradeSystem = new CivilianTradeSystem(this.colonyManager);
     this.tradeLog          = new TradeLog();
     this.randomEventSystem = new RandomEventSystem();
@@ -191,7 +189,6 @@ export class GameScene {
     window.KOSMOS.colonyManager    = this.colonyManager;
     window.KOSMOS.vesselManager    = this.vesselManager;
     window.KOSMOS.overlayManager   = this.uiManager.overlayManager;
-    window.KOSMOS.tradeRouteManager = this.tradeRouteManager;
     window.KOSMOS.civilianTradeSystem = this.civilianTradeSystem;
     window.KOSMOS.tradeLog         = this.tradeLog;
     window.KOSMOS.timeSystem       = this.timeSystem;
@@ -299,18 +296,12 @@ export class GameScene {
       }
       // Walidacja misji — teraz VesselManager jest przywrócony, można sprawdzić statki
       this.expeditionSystem.validateMissions();
-      // Przywróć TradeRouteManager
-      if (c4x.tradeRouteManager) {
-        this.tradeRouteManager.restore(c4x.tradeRouteManager);
-      }
       // Przywróć TradeLog
       if (c4x.tradeLog) {
         this.tradeLog.restore(c4x.tradeLog);
       }
       // Migracja starych save: fleet[] ze stringami → vessel instances
       this._migrateStringFleets();
-      // Kick tras handlowych — po restore nie ma vessel:docked, trzeba ręcznie
-      this.tradeRouteManager.kickAfterRestore();
       if (c4x.civ?.unrestActive) {
         this.buildingSystem._civPenalty = 0.7;
         this.buildingSystem._reapplyAllRates();

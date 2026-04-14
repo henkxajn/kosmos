@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 50;
+export const CURRENT_VERSION     = 51;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -65,6 +65,7 @@ const MIGRATIONS = {
   47: _migrateV47toV48,
   48: _migrateV48toV49,
   49: _migrateV49toV50,
+  50: _migrateV50toV51,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1213,6 +1214,17 @@ function _migrateV48toV49(data) {
 function _migrateV49toV50(data) {
   if (data.civ4x) {
     data.civ4x.scheduledEventSystem = data.civ4x.scheduledEventSystem ?? null;
+  }
+  return data;
+}
+
+// ── v50 → v51: usunięcie TradeRouteManager, natywna pętla transportowa ──────
+// TradeRouteManager usunięty. Stare trasy są odrzucane — gracz stworzy pętle od nowa.
+// Pole `tradeRouteManager` w c4x ignorowane (może zostać, nie szkodzi).
+function _migrateV50toV51(data) {
+  if (data.civ4x) {
+    // Drop stare trasy handlowe (player-created) — TradeRouteManager nie istnieje
+    delete data.civ4x.tradeRouteManager;
   }
   return data;
 }

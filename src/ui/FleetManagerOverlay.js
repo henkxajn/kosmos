@@ -13,7 +13,7 @@ import { HULLS }           from '../data/HullsData.js';
 import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleCapabilities } from '../data/ShipModulesData.js';
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
-import { effectiveRange, loadColonists }  from '../entities/Vessel.js';
+import { effectiveRange, loadColonists, unloadColonists }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import EntityManager       from '../core/EntityManager.js';
 import EventBus            from '../core/EventBus.js';
@@ -696,6 +696,9 @@ export class FleetManagerOverlay {
       case 'cargo_load':
         this._openCargoLoader(zone.data.vesselId);
         break;
+      case 'unload_colonists':
+        this._unloadColonists(zone.data.vesselId);
+        break;
       case 'toggle_repeat':
         if (this._missionConfig) {
           this._missionConfig.repeat = !this._missionConfig.repeat;
@@ -704,8 +707,8 @@ export class FleetManagerOverlay {
       case 'set_return_cargo':
         this._openReturnCargoModal();
         break;
-      case 'delete_trade_route':
-        EventBus.emit('tradeRoute:delete', { routeId: zone.data.routeId });
+      case 'cancel_loop':
+        EventBus.emit('transport:cancelLoop', { vesselId: zone.data.vesselId });
         break;
       case 'disband':
         EventBus.emit('fleet:disbandRequest', { vesselId: zone.data.vesselId });
@@ -796,11 +799,43 @@ export class FleetManagerOverlay {
   async _openColonistThenTarget(vessel) {
     try {
       const colony = this._getVesselColony(vessel);
-      if (!colony) return;
-      const cap = vessel.colonistCapacity ?? 0;
+      if (!colony) {
+        EventBus.emit('expedition:launchFailed', { reason: t('expedition.sourceColonyMissing') });
+        return;
+      }
+      const capTotal = vessel.colonistCapacity ?? 0;
+      const alreadyOnBoard = vessel.colonists ?? 0;
+
+      // Statek już ma kolonistów na pokładzie (np. pozostałość po anulowanej misji) →
+      // pomiń modal, przejdź od razu do wyboru celu. Uwaga: colonistCount=0 sygnalizuje
+      // _executeMission żeby NIE wywoływać loadColonists — koloniści już na pokładzie.
+      if (alreadyOnBoard > 0) {
+        this._missionConfig = {
+          actionId: 'colonize',
+          targetId: null,
+          step: 'select',
+          colonistCount: 0, // 0 = nie ładuj więcej, lecimy z tym co jest
+          preloadedColonists: alreadyOnBoard,
+        };
+        this._targetScrollOffset = 0;
+        this._cachedTargets = null;
+        return;
+      }
+
+      const capRemaining = Math.max(0, capTotal - alreadyOnBoard);
+      if (capRemaining <= 0) {
+        EventBus.emit('expedition:launchFailed', {
+          reason: t('expedition.vesselFullOfColonists', capTotal)
+        });
+        return;
+      }
       const free = Math.floor(colony.civSystem?.freePops ?? 0);
+      if (free <= 0) {
+        EventBus.emit('expedition:launchFailed', { reason: t('expedition.colonistsUnavailable') });
+        return;
+      }
       const modal = ColonistLoadModal.getInstance();
-      const count = await modal.show(cap, free);
+      const count = await modal.show(capRemaining, free);
       if (count <= 0) {
         // Anulowano lub brak wolnych POPów — nie konfiguruj misji
         this._missionConfig = null;
@@ -886,6 +921,23 @@ export class FleetManagerOverlay {
   }
 
   /**
+   * Wyładuj kolonistów ze statku z powrotem do kolonii macierzystej.
+   * Chroni przed utknięciem w stanie „statek pełny kolonistów, nie mogę wystartować".
+   */
+  _unloadColonists(vesselId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(vesselId);
+    if (!vessel) return;
+    const colony = this._getVesselColony(vessel);
+    if (!colony?.civSystem) {
+      EventBus.emit('expedition:launchFailed', { reason: t('expedition.sourceColonyMissing') });
+      return;
+    }
+    unloadColonists(vessel, colony.civSystem);
+    // civ:popBorn emitowany przez civSystem.addPop — UIManager automatycznie zaloguje.
+  }
+
+  /**
    * Pobierz kolonię statku (do CargoLoadModal).
    */
   _getVesselColony(vessel) {
@@ -901,24 +953,26 @@ export class FleetManagerOverlay {
 
     const vMgr = window.KOSMOS?.vesselManager;
     const vessel = vMgr?.getVessel(this._selectedVesselId);
-    if (!vessel) return;
+    if (!vessel) {
+      EventBus.emit('expedition:launchFailed', { reason: t('expedition.vesselUnavailable') });
+      this._missionConfig = null;
+      this._targetScrollOffset = 0;
+      return;
+    }
+
+    // Kolonizacja bez załadowanych kolonistów — zgłoś błąd (wcześniej cicha porażka w _launchColony)
+    if (actionId === 'colonize' && (this._missionConfig.colonistCount ?? 0) <= 0
+        && (vessel.colonists ?? 0) <= 0) {
+      EventBus.emit('expedition:launchFailed', { reason: t('expedition.noColonistsLoaded') });
+      this._missionConfig = null;
+      this._targetScrollOffset = 0;
+      return;
+    }
 
     // Założenie placówki — po wyborze celu otwórz building picker (async)
     if (actionId === 'found_outpost') {
       this._openOutpostBuildingPicker(targetId, vessel);
       return;
-    }
-
-    // Transport z powtarzaniem → utwórz trasę handlową
-    if (actionId === 'transport' && this._missionConfig.repeat) {
-      EventBus.emit('tradeRoute:create', {
-        vesselId: vessel.id,
-        sourceColonyId: vessel.colonyId,
-        targetBodyId: targetId,
-        cargo: vessel.cargo ?? {},
-        returnCargo: this._missionConfig.returnCargo ?? {},
-        tripsTotal: null, // nieskończone
-      });
     }
 
     const ms = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
@@ -927,14 +981,20 @@ export class FleetManagerOverlay {
     // Misja kolonizacyjna — załaduj kolonistów (fizycznie usuń POPy z kolonii źródłowej)
     if (actionId === 'colonize' && (this._missionConfig.colonistCount ?? 0) > 0) {
       const sourceColony = this._getVesselColony(vessel);
-      if (sourceColony?.civSystem) {
-        const actuallyLoaded = loadColonists(vessel, this._missionConfig.colonistCount, sourceColony.civSystem);
-        if (actuallyLoaded <= 0) {
-          // Brak wolnych POPów (zniknęli między modalem a confirmem) — przerwij
-          this._missionConfig = null;
-          this._targetScrollOffset = 0;
-          return;
-        }
+      if (!sourceColony?.civSystem) {
+        // Brak kolonii źródłowej — przerwij z komunikatem
+        EventBus.emit('expedition:launchFailed', { reason: t('expedition.sourceColonyMissing') });
+        this._missionConfig = null;
+        this._targetScrollOffset = 0;
+        return;
+      }
+      const actuallyLoaded = loadColonists(vessel, this._missionConfig.colonistCount, sourceColony.civSystem);
+      if (actuallyLoaded <= 0) {
+        // POPy zniknęły między modalem a confirmem (migracja/zgon/blokada) — zgłoś błąd
+        EventBus.emit('expedition:launchFailed', { reason: t('expedition.colonistsUnavailable') });
+        this._missionConfig = null;
+        this._targetScrollOffset = 0;
+        return;
       }
     }
 
@@ -946,6 +1006,9 @@ export class FleetManagerOverlay {
       activePlanetId: colMgr?.activePlanetId,
       targetId,
       cargo: vessel.cargo ?? {},
+      // Pętla transportowa (cykliczny transport) — przekazywana do FleetActions.transport.execute
+      loop: !!this._missionConfig.repeat,
+      returnCargoSpec: this._missionConfig.returnCargo ?? null,
     };
     action.execute(vessel, state);
     this._missionConfig = null;
@@ -2344,7 +2407,9 @@ export class FleetManagerOverlay {
     cy += 32;
 
     // ── Przycisk Cargo (dla statków z ładownią) ──────────────
-    if (ship?.cargoCapacity > 0 && (vessel.position.state === 'docked' || vessel.position.state === 'orbiting')) {
+    // vessel.cargoMax (z modułów) lub ship.cargoCapacity (legacy SHIPS)
+    const cargoMaxDisplay = (vessel.cargoMax ?? 0) > 0 ? vessel.cargoMax : (ship?.cargoCapacity ?? 0);
+    if (cargoMaxDisplay > 0 && (vessel.position.state === 'docked' || vessel.position.state === 'orbiting')) {
       const cargoUsed = vessel.cargoUsed ?? 0;
       const cargoBtnW = w - pad * 2;
       const cargoBtnH = 24;
@@ -2355,12 +2420,34 @@ export class FleetManagerOverlay {
       ctx.strokeRect(x + pad, cy, cargoBtnW, cargoBtnH);
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.warning;
-      ctx.fillText(`📦 Cargo: ${Math.round(cargoUsed)} / ${ship.cargoCapacity} t`, x + pad + 8, cy + 16);
+      ctx.fillText(`📦 Cargo: ${Math.round(cargoUsed)} / ${cargoMaxDisplay} t`, x + pad + 8, cy + 16);
       this._hitZones.push({
         x: x + pad, y: cy, w: cargoBtnW, h: cargoBtnH,
         type: 'cargo_load', data: { vesselId: vessel.id },
       });
       cy += cargoBtnH + 6;
+    }
+
+    // ── Przycisk Wyładuj kolonistów (dla statków z kolonistami w hangarze) ──
+    // Zwraca POPy z powrotem do kolonii macierzystej. Chroni gracza przed
+    // utknięciem gdy statek ma stale colonists po anulowanej misji.
+    const onBoard = vessel.colonists ?? 0;
+    if (onBoard > 0 && vessel.position.state === 'docked') {
+      const unloadBtnW = w - pad * 2;
+      const unloadBtnH = 24;
+      ctx.fillStyle = 'rgba(120,80,200,0.10)';
+      ctx.fillRect(x + pad, cy, unloadBtnW, unloadBtnH);
+      ctx.strokeStyle = THEME.accent;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad, cy, unloadBtnW, unloadBtnH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      ctx.fillText(`🏠 ${t('fleet.unloadColonists', onBoard)}`, x + pad + 8, cy + 16);
+      this._hitZones.push({
+        x: x + pad, y: cy, w: unloadBtnW, h: unloadBtnH,
+        type: 'unload_colonists', data: { vesselId: vessel.id },
+      });
+      cy += unloadBtnH + 6;
     }
 
     // Separator
@@ -2695,31 +2782,49 @@ export class FleetManagerOverlay {
       }
     }
 
-    // ── Aktywna trasa handlowa ────────────────────────────────
-    const trMgr = window.KOSMOS?.tradeRouteManager;
-    const activeRoute = trMgr?.getRoutes()?.find(r => r.vesselId === vessel.id && (r.status === 'active' || r.status === 'paused'));
-    if (activeRoute) {
+    // ── Aktywna pętla transportowa ──────────────────────────
+    // Transport cykliczny: statek ma mission.loop === true (dowolny etap pętli).
+    const activeLoop = ms?.getActive?.()?.find(m =>
+      m.vesselId === vessel.id && m.loop && m.type === 'transport'
+    );
+    if (activeLoop) {
       cy += 4;
       ctx.strokeStyle = THEME.border;
       ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
       cy += 8;
 
-      // Nagłówek trasy
-      const routeIcon = activeRoute.status === 'paused' ? '⏸' : '🔄';
+      // Ikona wg etapu pętli
+      const legIcon = activeLoop.status === 'waiting_reload'       ? '⏳'
+                   : activeLoop.status === 'waiting_return_cargo' ? '⏳'
+                   : activeLoop.leg === 'return'                   ? '⬅'
+                   : '➡';
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.accent;
-      ctx.fillText(`${routeIcon} ${t('fleet.activeRouteLabel')}`, x + pad, cy + 10);
+      ctx.fillText(`${legIcon} ${t('fleet.activeLoopLabel')}`, x + pad, cy + 10);
       cy += 18;
 
-      // Cel trasy
-      const routeTarget = _findBody(activeRoute.targetBodyId);
-      const routeTargetName = routeTarget?.name ?? activeRoute.targetBodyId;
+      // Opis etapu
+      const srcName = colMgr?.getColony(activeLoop.loopSourceId)?.name ?? activeLoop.loopSourceId ?? '?';
+      const tgtBody = _findBody(activeLoop.loopTargetId);
+      const tgtName = tgtBody?.name ?? colMgr?.getColony(activeLoop.loopTargetId)?.name ?? activeLoop.loopTargetId ?? '?';
+      const routeStr = `${srcName} ⇄ ${tgtName}`;
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`→ ${routeTargetName}  (${t('fleet.tripsLabel', activeRoute.tripsCompleted)})`, x + pad, cy + 10);
-      cy += 16;
+      ctx.fillText(routeStr.slice(0, 36), x + pad, cy + 10);
+      cy += 14;
 
-      // Przycisk ZATRZYMAJ
+      // Status szczegółowy (czeka na ...)
+      if (activeLoop.status === 'waiting_reload') {
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText(t('fleet.loopWaitReload'), x + pad, cy + 10);
+        cy += 14;
+      } else if (activeLoop.status === 'waiting_return_cargo') {
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText(t('fleet.loopWaitReturnCargo'), x + pad, cy + 10);
+        cy += 14;
+      }
+
+      // Przycisk PRZERWIJ PĘTLĘ
       const stopW = w - pad * 2;
       const stopH = 22;
       ctx.fillStyle = 'rgba(80,20,20,0.5)';
@@ -2730,9 +2835,9 @@ export class FleetManagerOverlay {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
       ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.stopRoute'), x + w / 2, cy + 15);
+      ctx.fillText(t('fleet.stopLoop'), x + w / 2, cy + 15);
       ctx.textAlign = 'left';
-      this._hitZones.push({ x: x + pad, y: cy, w: stopW, h: stopH, type: 'delete_trade_route', data: { routeId: activeRoute.id } });
+      this._hitZones.push({ x: x + pad, y: cy, w: stopW, h: stopH, type: 'cancel_loop', data: { vesselId: vessel.id } });
       cy += stopH + 6;
     }
 
@@ -3808,9 +3913,12 @@ export class FleetManagerOverlay {
     ctx.textAlign = 'left';
     cy += 34;
 
-    // Checkbox "Powtarzaj" — dla transportu ze statkami z ładownią
+    // Checkbox "Powtarzaj" — dla transportu ze statkami z ładownią.
+    // vessel.cargoMax (z modułów) lub ship.cargoCapacity (legacy SHIPS) — nowoczesne
+    // statki projektowane z modułów mają pojemność tylko na vessel.cargoMax.
     const config = this._missionConfig;
-    if (config.actionId === 'transport' && vessel && (ship?.cargoCapacity ?? 0) > 0) {
+    const hasCargoCap = (vessel.cargoMax ?? 0) > 0 || (ship?.cargoCapacity ?? 0) > 0;
+    if (config.actionId === 'transport' && vessel && hasCargoCap) {
       const cbSize = 14;
       const cbX = x + pad;
       const cbY = cy;

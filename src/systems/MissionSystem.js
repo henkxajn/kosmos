@@ -75,8 +75,11 @@ export class MissionSystem {
     EventBus.on('expedition:sendRequest', ({ type, targetId, cargo, vesselId }) =>
       this._launch(type, targetId, cargo, vesselId));
 
-    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded, isTradeRoute, sourceColonyId }) =>
-      this._launchTransport(targetId, cargo, vesselId, cargoPreloaded, isTradeRoute, sourceColonyId));
+    EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded, sourceColonyId, loop, returnCargoSpec }) =>
+      this._launchTransport(targetId, cargo, vesselId, cargoPreloaded, sourceColonyId, loop, returnCargoSpec));
+
+    // Anuluj pętlę transportową — statek dokończy bieżący etap, potem zatrzymuje się
+    EventBus.on('transport:cancelLoop', ({ vesselId }) => this._cancelTransportLoop(vesselId));
 
     EventBus.on('expedition:orderReturn', ({ expeditionId }) =>
       this._orderReturn(expeditionId));
@@ -721,7 +724,7 @@ export class MissionSystem {
   }
 
   // ── Transport zasobów ──────────────────────────────────────────────────────
-  _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false, isTradeRoute = false, sourceColonyId = null) {
+  _launchTransport(targetId, cargo, vesselId, cargoPreloaded = false, sourceColonyId = null, loop = false, returnCargoSpec = null) {
     // Pusty cargo dozwolony — transport = też relokacja statku
     if (!cargo) cargo = {};
     const hasCargo = Object.keys(cargo).length > 0;
@@ -730,78 +733,14 @@ export class MissionSystem {
     const colMgr = window.KOSMOS?.colonyManager;
     const vessel = vesselId ? vMgr?.getVessel(vesselId) : null;
 
-    // ── Trasy handlowe — osobna ścieżka (bez POP, spaceport, active colony) ──
-    if (isTradeRoute) {
-      if (!vessel || vessel.position.state !== 'docked') return;
-
-      // Oblicz dystans od pozycji statku do celu
-      const target = this._findTarget(targetId);
-      const targetEntity = target || { x: 0, y: 0 };
-      const distance = Math.max(0.001, DistanceUtils.euclideanAU(
-        { x: vessel.position.x, y: vessel.position.y },
-        targetEntity
-      ));
-
-      // Sprawdź paliwo
-      const fuelNeeded = distance * (vessel.fuel?.consumption ?? 0);
-      if (vessel.fuel && vessel.fuel.current < fuelNeeded) return; // retry w TradeRouteManager
-
-      // Sprawdź i odejmij zasoby z kolonii, w której statek jest zadokowany
-      if (hasCargo) {
-        const dockedColony = sourceColonyId ? colMgr?.getColony(sourceColonyId) : null;
-        const resSys = dockedColony?.resourceSystem;
-        if (resSys) {
-          if (!resSys.canAfford(cargo)) return; // retry w TradeRouteManager
-          resSys.spend(cargo);
+    // Nowy transport dla statku nadpisuje wcześniejsze pętle — oznacz stare jako zakończone
+    if (vesselId) {
+      for (const m of this._missions) {
+        if (m.vesselId === vesselId && m.loop && m.status !== 'completed') {
+          m.status = 'completed';
+          m.loop   = false;
         }
       }
-
-      const shipSpeed  = this._getShipSpeed(vesselId);
-      const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
-      const departYear = this._gameYear;
-
-      const mission = {
-        id:          `exp_${this._nextId++}`,
-        type:        'transport',
-        targetId,
-        targetName:  target?.name ?? colMgr?.getColony(targetId)?.name ?? targetId,
-        targetType:  target?.type ?? 'colony',
-        departYear,
-        arrivalYear: departYear + travelTime,
-        returnYear:  null, // TradeRouteManager zarządza powrotami
-        distance:    parseFloat(distance.toFixed(2)),
-        travelTime,
-        crewCost:    0, // trasy handlowe nie blokują POPów
-        vesselId,
-        originColonyId: vessel.colonyId,
-        cargo:       { ...cargo },
-        status:      'en_route',
-        gained:      null,
-        eventRoll:   null,
-      };
-      this._missions.push(mission);
-
-      vMgr.dispatchOnMission(vesselId, {
-        type: 'transport', targetId,
-        targetName: mission.targetName,
-        departYear, arrivalYear: mission.arrivalYear, returnYear: null,
-        fuelCost: fuelNeeded,
-        cargo: { ...cargo },
-      });
-
-      this._emit('mission:started', 'expedition:launched', { expedition: mission });
-
-      // Loguj eksport (trasa handlowa)
-      if (hasCargo) {
-        EventBus.emit('trade:exported', {
-          colonyId: sourceColonyId ?? vessel.colonyId,
-          year: departYear,
-          items: { ...cargo },
-          vesselName: vessel?.name ?? vesselId,
-          targetName: mission.targetName,
-        });
-      }
-      return;
     }
 
     // ── Standardowy transport (nie trasa handlowa) ──────────────────
@@ -869,6 +808,7 @@ export class MissionSystem {
     const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
     const departYear = this._gameYear;
 
+    const loopSourceId = vessel?.colonyId ?? colMgr?.activePlanetId;
     const mission = {
       id:          `exp_${this._nextId++}`,
       type:        'transport',
@@ -882,11 +822,17 @@ export class MissionSystem {
       travelTime,
       crewCost:    EXPEDITION_CREW_COST,
       vesselId:    vesselId ?? null,
-      originColonyId: vessel?.colonyId ?? colMgr?.activePlanetId,
+      originColonyId: loopSourceId,
       cargo:       { ...cargo },
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
+      // ── Pętla (transport cykliczny, Faza A refaktora) ──
+      loop:           !!loop,
+      loopSourceId:   loop ? loopSourceId : null,    // kolonia źródłowa pętli (stały punkt)
+      loopTargetId:   loop ? targetId    : null,    // ciało docelowe pętli (stały punkt)
+      returnCargoSpec: loop ? { ...(returnCargoSpec ?? {}) } : null,
+      leg:            loop ? 'outbound' : null,     // 'outbound' | 'return' | 'waiting_reload' | 'waiting_return_cargo'
     };
 
     this._missions.push(mission);
@@ -1286,6 +1232,8 @@ export class MissionSystem {
         }
         this._emit('mission:complete', 'expedition:returned', { expedition: exp });
         changed = true;
+      } else if (exp.loop && (exp.status === 'waiting_return_cargo' || exp.status === 'waiting_reload')) {
+        if (this._tryResumeLoop(exp)) changed = true;
       }
     }
 
@@ -1536,6 +1484,168 @@ export class MissionSystem {
     });
   }
 
+  // ── Transport cykliczny (pętla) ───────────────────────────────────────────
+  //
+  // Stan pętli śledzi `exp.leg`:
+  //   'outbound'              → statek leci od źródła do celu
+  //   'return'                → statek leci z celu z powrotem do źródła
+  //   'waiting_return_cargo'  → statek zadokowany w celu, czeka aż kolonia zbierze returnCargoSpec
+  //   'waiting_reload'        → statek zadokowany w źródle, czeka aż gracz ręcznie doładuje cargo
+  //
+  // Zwraca `true` jeśli pętla kontynuuje (status/dispatch ustawione); `false` jeśli
+  // wywołujący powinien obsłużyć domyślne dokowanie (pętla zakończona/niemożliwa).
+  _continueTransportLoop(exp, vessel, deliveryCol) {
+    const vMgr   = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!vMgr || !vessel || !colMgr) return false;
+
+    const currentLoc = exp.targetId;
+    const isAtTarget = currentLoc === exp.loopTargetId;
+    const isAtSource = currentLoc === exp.loopSourceId;
+    if (!isAtTarget && !isAtSource) return false; // pętla zdezorientowana — anuluj
+
+    if (isAtTarget) {
+      // ── Przybyliśmy do celu → próbujemy pobrać returnCargo i lecieć z powrotem ──
+      const spec = exp.returnCargoSpec ?? {};
+      const specKeys = Object.keys(spec).filter(k => (spec[k] ?? 0) > 0);
+
+      // Zadokuj w celu (tymczasowo) — potrzebne do redispatch + doładowania cargo z kolonii
+      vMgr.dockAtColony(exp.vesselId, exp.targetId);
+
+      // Próbuj załadować returnCargoSpec z kolonii docelowej
+      if (specKeys.length > 0) {
+        const resSys = deliveryCol?.resourceSystem;
+        if (!resSys || !resSys.canAfford(spec)) {
+          // Brak towarów w kolonii docelowej — czekaj
+          exp.status = 'waiting_return_cargo';
+          exp.leg    = 'waiting_return_cargo';
+          return true;
+        }
+        resSys.spend(spec);
+        vessel.cargo = { ...spec };
+        vessel.cargoUsed = Object.values(spec).reduce((s, v) => s + v, 0);
+      } else {
+        // Brak returnCargo — leć pusty
+        vessel.cargo = {};
+        vessel.cargoUsed = 0;
+      }
+
+      // Dispatch return leg
+      return this._dispatchLoopLeg(exp, vessel, exp.loopSourceId, 'return');
+    }
+
+    // ── Przybyliśmy do źródła → czekaj na ręczne doładowanie cargo ──
+    vMgr.dockAtColony(exp.vesselId, exp.loopSourceId);
+    exp.status = 'waiting_reload';
+    exp.leg    = 'waiting_reload';
+    return true;
+  }
+
+  // Pomocnik: wyślij statek na kolejny odcinek pętli (outbound lub return).
+  // Oczekuje że vessel jest zadokowany i ma już cargo załadowane.
+  _dispatchLoopLeg(exp, vessel, nextTargetId, nextLeg) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return false;
+
+    const nextTarget = this._findTarget(nextTargetId) ?? window.KOSMOS?.colonyManager?.getColony(nextTargetId)?.planet ?? null;
+    if (!nextTarget) return false;
+
+    const distance = Math.max(0.001, DistanceUtils.euclideanAU(
+      { x: vessel.position.x, y: vessel.position.y },
+      nextTarget
+    ));
+    const fuelNeeded = distance * (vessel.fuel?.consumption ?? 0);
+    if (vessel.fuel && vessel.fuel.current < fuelNeeded) {
+      // Brak paliwa — czekaj na tankowanie
+      exp.status = nextLeg === 'return' ? 'waiting_return_cargo' : 'waiting_reload';
+      exp.leg    = exp.status;
+      return true;
+    }
+
+    const shipSpeed  = this._getShipSpeed(vessel.id);
+    const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
+    const departYear = this._gameYear;
+
+    exp.targetId     = nextTargetId;
+    exp.targetName   = nextTarget.name ?? window.KOSMOS?.colonyManager?.getColony(nextTargetId)?.name ?? nextTargetId;
+    exp.departYear   = departYear;
+    exp.arrivalYear  = departYear + travelTime;
+    exp.returnYear   = null;
+    exp.distance     = parseFloat(distance.toFixed(2));
+    exp.travelTime   = travelTime;
+    exp.cargo        = { ...(vessel.cargo ?? {}) };
+    exp.status       = 'en_route';
+    exp.leg          = nextLeg;
+
+    const dispatched = vMgr.dispatchOnMission(vessel.id, {
+      type: 'transport', targetId: nextTargetId,
+      targetName: exp.targetName,
+      departYear, arrivalYear: exp.arrivalYear, returnYear: null,
+      fuelCost: fuelNeeded,
+      cargo: { ...exp.cargo },
+    });
+    if (!dispatched) {
+      exp.status = nextLeg === 'return' ? 'waiting_return_cargo' : 'waiting_reload';
+      exp.leg    = exp.status;
+    }
+    return true;
+  }
+
+  // Ręczne anulowanie pętli transportowej (przycisk "Przerwij pętlę")
+  // Statek kończy bieżący odcinek normalnie (dostawa, dok w źródle/celu), ale
+  // system nie wysyła już kolejnego kursu.
+  _cancelTransportLoop(vesselId) {
+    const active = this._missions.filter(m =>
+      m.vesselId === vesselId && m.loop && m.type === 'transport'
+    );
+    for (const m of active) {
+      m.loop = false;
+      if (m.status === 'waiting_reload' || m.status === 'waiting_return_cargo') {
+        // Statek już zadokowany — kończymy od razu
+        m.status = 'completed';
+      }
+    }
+  }
+
+  // Wznowienie pętli przy każdym ticku — dla statków czekających zadokowanych:
+  //   'waiting_return_cargo' → próbuj pobrać returnCargo z kolonii docelowej
+  //   'waiting_reload'       → sprawdź czy gracz ręcznie doładował cargo; jeśli tak, wyślij outbound
+  // Zwraca true jeśli wznowiono (stan zmieniony), false jeśli nadal czekamy.
+  _tryResumeLoop(exp) {
+    const vMgr   = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!vMgr || !colMgr) return false;
+    const vessel = exp.vesselId ? vMgr.getVessel(exp.vesselId) : null;
+    if (!vessel || vessel.position.state !== 'docked') return false;
+
+    if (exp.status === 'waiting_return_cargo') {
+      const targetCol = colMgr.getColony(exp.loopTargetId);
+      const spec = exp.returnCargoSpec ?? {};
+      const specKeys = Object.keys(spec).filter(k => (spec[k] ?? 0) > 0);
+      if (specKeys.length === 0) {
+        // Spec pusty — leć pusty
+        vessel.cargo = {};
+        vessel.cargoUsed = 0;
+        return this._dispatchLoopLeg(exp, vessel, exp.loopSourceId, 'return');
+      }
+      const resSys = targetCol?.resourceSystem;
+      if (!resSys || !resSys.canAfford(spec)) return false;
+      resSys.spend(spec);
+      vessel.cargo = { ...spec };
+      vessel.cargoUsed = Object.values(spec).reduce((s, v) => s + v, 0);
+      return this._dispatchLoopLeg(exp, vessel, exp.loopSourceId, 'return');
+    }
+
+    if (exp.status === 'waiting_reload') {
+      // Gracz doładował cargo → wyślij outbound
+      const hasCargo = vessel.cargo && Object.values(vessel.cargo).some(v => v > 0);
+      if (!hasCargo) return false;
+      return this._dispatchLoopLeg(exp, vessel, exp.loopTargetId, 'outbound');
+    }
+
+    return false;
+  }
+
   // ── Transport arrival ─────────────────────────────────────────────────────
   _processTransportArrival(exp) {
     const colMgr = window.KOSMOS?.colonyManager;
@@ -1580,6 +1690,18 @@ export class MissionSystem {
         vessel.cargoUsed = 0;
       }
       exp.cargo = null;
+
+      // ── Transport cykliczny — obsługa pętli ─────────────────────────
+      // Pętla: po dostarczeniu ładunku wysyłamy statek na kolejny etap pętli
+      // (outbound → return → waiting_reload → outbound …). Brak zmiany własności floty.
+      if (exp.loop && this._continueTransportLoop(exp, vessel, targetCol)) {
+        this._emit('mission:arrived', 'expedition:arrived', {
+          expedition: exp,
+          gained: exp.gained,
+          multiplier: 1.0,
+        });
+        return;
+      }
 
       // Dock statek w kolonii docelowej + transfer floty
       exp.status = 'completed';

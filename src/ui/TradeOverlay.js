@@ -436,17 +436,15 @@ export class TradeOverlay extends BaseOverlay {
     const colMgr   = window.KOSMOS?.colonyManager;
     const vMgr     = window.KOSMOS?.vesselManager;
     const tradeLog = window.KOSMOS?.tradeLog;
-    const trm      = window.KOSMOS?.tradeRouteManager;
     const activeColId = colMgr?.activePlanetId;
 
-    const routes = trm?.getRoutes() ?? [];
     const log    = tradeLog?.getLog(activeColId, 30) ?? [];
     const yearly = tradeLog?.getYearlyAggregation(activeColId, 10) ?? [];
 
     const listY = y + TAB_H;
     const listH = h - TAB_H;
 
-    const hasData = log.length > 0 || routes.length > 0 || yearly.length > 0;
+    const hasData = log.length > 0 || yearly.length > 0;
     if (!hasData) {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
@@ -545,19 +543,6 @@ export class TradeOverlay extends BaseOverlay {
       ry += 8;
     }
 
-    // ═════════════════════════════════════════════════════════════════════
-    // C) TRASY HANDLOWE
-    // ═════════════════════════════════════════════════════════════════════
-
-    if (routes.length > 0) {
-      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textHeader;
-      ctx.fillText(t('tradePanel.routesHeader'), x + pad, ry + 11);
-      ry += 18;
-
-      ry = this._drawTradeRoutes(ctx, x, ry, w, routes, colMgr, vMgr);
-    }
-
     ctx.restore();
   }
 
@@ -610,99 +595,6 @@ export class TradeOverlay extends BaseOverlay {
     }
   }
 
-  // ── Trasy handlowe ──────────────────────────────────────────────────────
-
-  _drawTradeRoutes(ctx, x, ry, w, routes, colMgr, vMgr) {
-    const pad = 14;
-
-    for (const route of routes) {
-      const sourceCol = colMgr?.getColony(route.sourceColonyId);
-      const sourceName = sourceCol?.name ?? route.sourceColonyId;
-      const targetBody = this._findBody(route.targetBodyId);
-      const targetName = targetBody?.name ?? route.targetBodyId;
-
-      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`📦 ${sourceName}`, x + pad, ry + 12);
-      const hasReturn = route.returnCargo && Object.keys(route.returnCargo).length > 0;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(hasReturn ? '⇄' : '→', x + pad + 120, ry + 12);
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(targetName, x + pad + 135, ry + 12);
-
-      // Ładunek outbound
-      const cargoStr = Object.entries(route.cargo ?? {})
-        .map(([id, qty]) => `${qty}t ${id}`)
-        .join(', ') || '—';
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.warning;
-      ctx.fillText(`➡ ${cargoStr}`.slice(0, 40), x + pad + 10, ry + 26);
-
-      // Ładunek powrotny
-      if (hasReturn) {
-        const retStr = Object.entries(route.returnCargo)
-          .map(([id, qty]) => `${qty}t ${id}`)
-          .join(', ');
-        ctx.fillStyle = THEME.info ?? THEME.accent;
-        ctx.fillText(`⬅ ${retStr}`.slice(0, 40), x + pad + 10, ry + 38);
-      }
-
-      // Status
-      const status = route.status === 'active' ? t('tradePanel.routeActive')
-                   : route.status === 'paused' ? t('tradePanel.routePaused') : t('tradePanel.routeCompleted');
-      const statusColor = route.status === 'active' ? THEME.accent
-                        : route.status === 'paused' ? THEME.warning : THEME.textDim;
-
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = statusColor;
-      ctx.textAlign = 'right';
-      ctx.fillText(status, x + w - pad, ry + 12);
-
-      // Kursy
-      const trips = route.tripsTotal !== null
-        ? `${route.tripsCompleted}/${route.tripsTotal}`
-        : `${route.tripsCompleted}/∞`;
-      ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(trips, x + w - pad, ry + 26);
-      ctx.textAlign = 'left';
-
-      // Przyciski: ⏸/▶ + ✕
-      const btnW = 20; const btnH2 = 16;
-      const btnY = ry + (hasReturn ? 44 : 30);
-      const delX = x + w - pad - btnW;
-      const pauseX = delX - btnW - 4;
-
-      const isPaused = route.status === 'paused';
-      ctx.fillStyle = isPaused ? 'rgba(20,60,40,0.6)' : 'rgba(60,50,10,0.6)';
-      ctx.fillRect(pauseX, btnY, btnW, btnH2);
-      ctx.strokeStyle = isPaused ? THEME.success : THEME.warning;
-      ctx.strokeRect(pauseX, btnY, btnW, btnH2);
-      ctx.fillStyle = isPaused ? THEME.success : THEME.warning;
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.textAlign = 'center';
-      ctx.fillText(isPaused ? '▶' : '⏸', pauseX + btnW / 2, btnY + btnH2 - 3);
-      ctx.textAlign = 'left';
-      this._addHit(pauseX, btnY, btnW, btnH2, 'trade_toggle_pause', { routeId: route.id, paused: isPaused });
-
-      // ✕ (delete)
-      ctx.fillStyle = 'rgba(80,20,20,0.6)';
-      ctx.fillRect(delX, btnY, btnW, btnH2);
-      ctx.strokeStyle = THEME.danger;
-      ctx.strokeRect(delX, btnY, btnW, btnH2);
-      ctx.fillStyle = THEME.danger;
-      ctx.textAlign = 'center';
-      ctx.fillText('✕', delX + btnW / 2, btnY + btnH2 - 3);
-      ctx.textAlign = 'left';
-      this._addHit(delX, btnY, btnW, btnH2, 'trade_delete', { routeId: route.id });
-
-      ry = btnY + btnH2 + 8;
-      ctx.strokeStyle = THEME.border;
-      ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
-      ry += 6;
-    }
-
-    return ry;
-  }
 
   // ── Ceny lokalne ────────────────────────────────────────────────────────
 
@@ -778,17 +670,6 @@ export class TradeOverlay extends BaseOverlay {
         }
         break;
       }
-      case 'trade_toggle_pause':
-        if (zone.data.paused) {
-          EventBus.emit('tradeRoute:resume', { routeId: zone.data.routeId });
-        } else {
-          EventBus.emit('tradeRoute:pause', { routeId: zone.data.routeId });
-        }
-        break;
-      case 'trade_delete':
-        EventBus.emit('tradeRoute:delete', { routeId: zone.data.routeId });
-        break;
-
       // ── Wydawanie Kredytów ─────────────────────────────────────────────
       case 'spend_rush': {
         const { cost, colonyId } = zone.data;

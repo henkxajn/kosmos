@@ -150,6 +150,10 @@ const ACTIONS = {
         cargo: state.cargo ?? {},
         vesselId: vessel.id,
         cargoPreloaded: true,
+        // Transport cykliczny (pętla z powracającym ładunkiem) — kiedyś w TradeRouteManager,
+        // teraz natywnie w MissionSystem.
+        loop: !!state.loop,
+        returnCargoSpec: state.returnCargoSpec ?? null,
       });
     },
   },
@@ -313,27 +317,6 @@ const ACTIONS = {
     },
   },
 
-  trade_route: {
-    id: 'trade_route',
-    label: 'Trasa handlowa',
-    icon: '🔄',
-    requiresTarget: true,
-    canExecute(vessel, state) {
-      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
-      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
-      const caps = _getVesselCaps(vessel);
-      if (!caps.has('cargo')) {
-        return { ok: false, reason: 'Wymaga statku cargo' };
-      }
-      const techOk = window.KOSMOS?.techSystem?.isResearched('interplanetary_logistics') ?? false;
-      if (!techOk) return { ok: false, reason: 'Brak tech: Logistyka' };
-      return { ok: true };
-    },
-    execute(vessel, state) {
-      // Obsługa w FleetTabPanel — otwiera TradeRouteModal
-    },
-  },
-
   redirect: {
     id: 'redirect',
     label: 'Zmień cel',
@@ -456,7 +439,6 @@ export function getAvailableActions(vessel, state) {
     result.push(_check(ACTIONS.transport, vessel, state));
     if (caps.has('cargo')) {
       result.push(_check(ACTIONS.found_outpost, vessel, state));
-      result.push(_check(ACTIONS.trade_route, vessel, state));
     }
   } else if (vessel.position.state === 'orbiting') {
     // Na orbicie — skan, away team, powrót, redirect, transport

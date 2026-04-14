@@ -15,7 +15,6 @@ import EventBus            from '../core/EventBus.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showRenameModal }    from '../ui/ModalInput.js';
-import { showTradeRouteModal } from '../ui/TradeRouteModal.js';
 import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { drawMiniBar }     from '../ui/CivPanelDrawer.js';
@@ -538,8 +537,8 @@ export class FleetTabPanel {
         break;
       }
 
-      case 'delete_trade_route':
-        EventBus.emit('tradeRoute:delete', { routeId: zone.data.routeId });
+      case 'cancel_loop':
+        EventBus.emit('transport:cancelLoop', { vesselId: zone.data.vesselId });
         break;
 
       case 'toggle_repeat':
@@ -582,13 +581,6 @@ export class FleetTabPanel {
 
     if (actionId === 'transport') {
       this._openCargoThenTarget(vessel);
-      return;
-    }
-    if (actionId === 'trade_route') {
-      // Wybierz cel → potem TradeRouteModal (bez ładowania cargo wcześniej)
-      this._missionConfig = { actionId: 'trade_route', vesselId: vessel.id, targetId: null, step: 'select' };
-      this._targetScrollOffset = 0;
-      this._cachedTargets = null;
       return;
     }
     if (action.requiresTarget) {
@@ -634,54 +626,15 @@ export class FleetTabPanel {
     const vessel = vMgr?.getVessel(cfg.vesselId);
     if (!vessel) return;
 
-    // Trasa handlowa — otwórz TradeRouteModal
-    if (cfg.actionId === 'trade_route') {
-      this._openTradeRouteModal(vessel, cfg.targetId);
-      return;
-    }
-
-    // Transport z powtarzaniem → utwórz trasę handlową
-    if (cfg.actionId === 'transport' && cfg.repeat) {
-      const colony = this._getVesselColony(vessel);
-      EventBus.emit('tradeRoute:create', {
-        vesselId: vessel.id,
-        sourceColonyId: vessel.colonyId,
-        targetBodyId: cfg.targetId,
-        cargo: vessel.cargo ?? {},
-        returnCargo: cfg.returnCargo ?? {},
-        tripsTotal: null, // nieskończone
-      });
-    }
-
     const action = FLEET_ACTIONS[cfg.actionId];
     if (!action) return;
     const state = this._buildActionState(vessel);
     state.targetId = cfg.targetId;
     state.targetBody = _findBody(cfg.targetId);
+    // Pętla transportowa (transport + checkbox Powtarzaj)
+    state.loop = !!cfg.repeat;
+    state.returnCargoSpec = cfg.returnCargo ?? null;
     action.execute(vessel, state);
-    this._selectedVesselId = null;
-    this._missionConfig = null;
-  }
-
-  async _openTradeRouteModal(vessel, targetId) {
-    const colony = this._getVesselColony(vessel);
-    if (!colony) return;
-    const targetBody = _findBody(targetId);
-    const targetName = targetBody?.name ?? targetId;
-    // Pobierz kolonię docelową (jeśli istnieje) — do konfiguracji returnCargo
-    const colMgr = window.KOSMOS?.colonyManager;
-    const targetColony = colMgr?.getColony(targetId) ?? null;
-    const result = await showTradeRouteModal(colony, targetId, targetName, vessel, targetColony);
-    if (result) {
-      EventBus.emit('tradeRoute:create', {
-        vesselId: vessel.id,
-        sourceColonyId: vessel.colonyId,
-        targetBodyId: targetId,
-        cargo: result.cargo,
-        returnCargo: result.returnCargo ?? {},
-        tripsTotal: result.trips,
-      });
-    }
     this._selectedVesselId = null;
     this._missionConfig = null;
   }
@@ -1574,31 +1527,32 @@ export class FleetTabPanel {
       }
     }
 
-    // Trasy handlowe
-    const trMgr = window.KOSMOS?.tradeRouteManager;
+    // Aktywne pętle transportowe (transport + mission.loop)
+    const ms = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
     const vMgr = window.KOSMOS?.vesselManager;
-    const trRoutes = trMgr?.getRoutes()?.filter(r => r.status === 'active' || r.status === 'paused') ?? [];
-    if (trRoutes.length > 0 && cy < y + h - 20) {
+    const activeLoops = ms?.getActive?.()?.filter(m => m.type === 'transport' && m.loop) ?? [];
+    if (activeLoops.length > 0 && cy < y + h - 20) {
       cy += 6;
       ctx.strokeStyle = C.border; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
       cy += 8;
       ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = C.title;
-      ctx.fillText(t('fleet.tradeRoutesHeader', trRoutes.length), x + PAD, cy + 8);
+      ctx.fillText(t('fleet.tradeRoutesHeader', activeLoops.length), x + PAD, cy + 8);
       cy += LH;
-      for (const tr of trRoutes) {
+      for (const m of activeLoops) {
         if (cy > y + h - 16) break;
-        const vName = vMgr?.getVessel(tr.vesselId)?.name ?? '?';
-        const statusIcon = tr.status === 'paused' ? '⏸' : '▶';
+        const vName = vMgr?.getVessel(m.vesselId)?.name ?? '?';
+        const icon = m.status === 'waiting_reload' || m.status === 'waiting_return_cargo' ? '⏳'
+                   : m.leg === 'return' ? '⬅' : '➡';
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = tr.status === 'paused' ? C.dim : C.mint;
-        ctx.fillText(`${statusIcon} ${_truncate(vName, 8)} → ${_truncate(tr.targetBodyId, 8)}`, x + PAD, cy + 8);
+        ctx.fillStyle = icon === '⏳' ? C.dim : C.mint;
+        ctx.fillText(`${icon} ${_truncate(vName, 8)} ⇄ ${_truncate(m.loopTargetId, 8)}`, x + PAD, cy + 8);
         const delW = 14; const delX = x + w - PAD - delW;
         ctx.fillStyle = 'rgba(80,20,20,0.6)'; ctx.fillRect(delX, cy + 1, delW, 14);
         ctx.fillStyle = C.red; ctx.textAlign = 'center';
         ctx.fillText('✕', delX + delW / 2, cy + 11); ctx.textAlign = 'left';
-        this._hitZones.push({ x: delX, y: cy + 1, w: delW, h: 14, type: 'delete_trade_route', data: { routeId: tr.id } });
+        this._hitZones.push({ x: delX, y: cy + 1, w: delW, h: 14, type: 'cancel_loop', data: { vesselId: m.vesselId } });
         cy += LH;
       }
     }
@@ -2330,9 +2284,11 @@ export class FleetTabPanel {
 
     cy += 10;
 
-    // Checkbox "Powtarzaj" — dla transportu ze statkami z ładownią
+    // Checkbox "Powtarzaj" — dla transportu ze statkami z ładownią.
+    // vessel.cargoMax (z modułów) lub shipDef.cargoCapacity (legacy SHIPS).
     const shipDef = vessel ? (SHIPS[vessel.shipId] ?? HULLS[vessel.shipId]) : null;
-    if (cfg.actionId === 'transport' && vessel && (shipDef?.cargoCapacity ?? 0) > 0) {
+    const hasCargoCap = (vessel?.cargoMax ?? 0) > 0 || (shipDef?.cargoCapacity ?? 0) > 0;
+    if (cfg.actionId === 'transport' && vessel && hasCargoCap) {
       const cbSize = 14;
       const cbX = x + PAD;
       const cbY = cy;
