@@ -245,7 +245,7 @@ function _injectCSS() {
       font-family: 'Share Tech Mono', monospace;
       font-size: 13px;
       line-height: 1.6;
-      color: ${THEME.textSecondary};
+      color: ${THEME.textPrimary};
       margin-bottom: 12px;
     }
 

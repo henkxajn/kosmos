@@ -392,8 +392,8 @@ export function injectTerminalPopupCSS() {
       line-height: 1.5;
       display: flex; gap: 6px;
     }
-    .at-stat-prefix { opacity: 0.5; }
-    .at-stat-label  { opacity: 0.65; }
+    .at-stat-prefix { opacity: 0.75; }
+    .at-stat-label  { opacity: 0.9; }
     .at-stat-value  { margin-left: auto; }
     .at-stat-pos    { color: ${THEME.success}; }
     .at-stat-neg    { color: ${THEME.danger}; }

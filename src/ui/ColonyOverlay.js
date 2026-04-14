@@ -893,8 +893,8 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
 
-    // Fog
-    if (tile.explored === false) { ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fill(); }
+    // Fog — renderowanie wyłączone; dane `tile.explored` pozostają w gridzie do przyszłego wykorzystania
+    // if (tile.explored === false) { ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fill(); }
 
     // Obramowanie
     ctx.beginPath();

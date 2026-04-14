@@ -35,6 +35,9 @@ export class ColonistLoadModal {
     if (this._el) { this._el.remove(); this._el = null; }
 
     const overlay = document.createElement('div');
+    // Klasa wymagana przez guard w GameScene._setupMouseInput —
+    // bez niej klik na przycisku Potwierdź "przebija" na Star Atlas i wybiera zły cel.
+    overlay.className = 'kosmos-modal-overlay';
     overlay.style.cssText = `
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.7); z-index: 200; display: flex;
@@ -92,7 +95,9 @@ export class ColonistLoadModal {
       border: 1px solid ${THEME.accent}; color: ${THEME.accent};
       font-family: inherit; font-size: 12px; cursor: pointer; border-radius: 3px;
     `;
-    btnOk.onclick = () => { this._close(); this._resolve?.(value); };
+    // stopPropagation — w przeciwnym razie klik bąbelkuje do window listenera
+    // w GameScene._setupMouseInput i trafia w listę Star Atlas pod spodem.
+    btnOk.onclick = (e) => { e.stopPropagation(); this._close(); this._resolve?.(value); };
 
     const btnCancel = document.createElement('button');
     btnCancel.textContent = t('colonistModal.cancel');
@@ -101,7 +106,7 @@ export class ColonistLoadModal {
       border: 1px solid ${THEME.danger}; color: ${THEME.danger};
       font-family: inherit; font-size: 12px; cursor: pointer; border-radius: 3px;
     `;
-    btnCancel.onclick = () => { this._close(); this._resolve?.(0); };
+    btnCancel.onclick = (e) => { e.stopPropagation(); this._close(); this._resolve?.(0); };
 
     btnRow.appendChild(btnOk);
     btnRow.appendChild(btnCancel);
@@ -111,8 +116,10 @@ export class ColonistLoadModal {
     document.body.appendChild(overlay);
     this._el = overlay;
 
-    // Kliknięcie poza panel = anuluj
+    // Kliknięcie poza panel = anuluj. stopPropagation także dla kliknięć
+    // w samym panelu — żeby nic nie bąbelkowało do window listenera pod spodem.
     overlay.onclick = (e) => {
+      e.stopPropagation();
       if (e.target === overlay) { this._close(); this._resolve?.(0); }
     };
   }
