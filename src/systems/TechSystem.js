@@ -418,7 +418,13 @@ export class TechSystem {
 
     this._researched.add(techId);
     EventBus.emit('tech:researched', { tech, restored: false });
+    this.emitCompletionHooks(techId);
+  }
 
+  // Hooki odpalane po ukończeniu badania (faction slider, narrative, dyson).
+  // Publiczna — ResearchSystem wywołuje ją bezpośrednio, bo omija _research().
+  // Bez tego rozwidlenia hooki by się gubiły w głównym flow badań (multi-slot queue).
+  emitCompletionHooks(techId) {
     // Faction shift — postęp w FTL = nadzieja na powrót → suwak w stronę Poszukiwaczy (Faza C1)
     const factionDelta = TECH_SLIDER_SHIFTS[techId];
     if (factionDelta) {

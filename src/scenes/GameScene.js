@@ -62,9 +62,10 @@ import { ThreeCameraController } from '../renderer/ThreeCameraController.js';
 import { UIManager }         from './UIManager.js';
 import { PlanetScene }       from './PlanetScene.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
-import { TECHS }             from '../data/TechData.js';          // POWER TEST
 import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
 import { TERRAIN_TYPES }     from '../map/HexTile.js';            // POWER TEST
+import { ELEMENTS }          from '../data/ElementsData.js';      // POWER TEST
+import { COMMODITIES }       from '../data/CommoditiesData.js';   // POWER TEST
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js'; // grid do auto-build
 import { t, getLocale } from '../i18n/i18n.js';
 
@@ -318,6 +319,15 @@ export class GameScene {
       if (c4x.factionSystem) {
         this.factionSystem.restore(c4x.factionSystem);
       }
+      // Legacy heal: save'y sprzed fixu ResearchSystem emitCompletionHooks mogą mieć
+      // kronika_lokalizacji zbadane ale FactionSystem wciąż zablokowany — bo stary
+      // ResearchSystem pomijał hooki i narrative:earthLocated nigdy nie leciało.
+      // setTimeout(0) odkłada emit na po rejestracji handlera (linia ~582).
+      setTimeout(() => {
+        if (this.techSystem.isResearched('kronika_lokalizacji') && this.factionSystem.isLocked) {
+          EventBus.emit('narrative:earthLocated');
+        }
+      }, 0);
       // Faza D3: Przywróć DysonSystem
       if (c4x.dysonSystem) {
         this.dysonSystem.restore(c4x.dysonSystem);
@@ -1062,12 +1072,11 @@ export class GameScene {
         if (isPowerTest) {
           // Kolonizuj planetę
           this._setupColony(civPlanet);
-          // Ogromne zasoby startowe
+          // Minimalne zasoby startowe (po 100 każdego surowca + 2000 research)
           this._setupPowerTestResources();
-          // Zbadaj WSZYSTKIE technologie
-          this._setupPowerTestTechs();
-          // Populacja 100 POP (wystarczająca na wszystkie budynki)
-          this.civSystem.setPopulation(100);
+          // Tech pozostawione nieodkryte — gracz ma 2000 research na start drzewa
+          // Populacja 12 POP (suma popCost budynków Power Test ≈ 7.75, z marginesem)
+          this.civSystem.setPopulation(12);
           // Domyślne nazwy
           window.KOSMOS.civName = 'Test Empire';
           civPlanet.name = 'Test Capital';
@@ -1463,26 +1472,29 @@ export class GameScene {
 
   // ── POWER TEST — metody pomocnicze ─────────────────────────────
 
-  // POWER TEST — ogromne zasoby startowe
+  // POWER TEST — minimalne zasoby startowe (po 100 każdego surowca + 2000 research)
+  // _setupColony() dodał już startowe ilości — wyzeruj inventory i research.amount,
+  // potem ustaw po 100 dla każdego pierwiastka, food/water oraz commodities.
+  // Research wyjątkowo 2000 (budżet na wstępne tech).
   _setupPowerTestResources() {
-    this.resourceSystem.receive({
-      Fe: 99999, C: 99999, Si: 99999, Cu: 99999, Ti: 99999, Li: 99999,
-      Hv: 99999, Xe: 99999, Nt: 99999,
-      food: 99999, water: 99999, research: 10000,
-      structural_alloys: 9999, polymer_composites: 9999, conductor_bundles: 9999,
-      power_cells: 9999, electronic_systems: 9999, extraction_systems: 9999,
-      pressure_modules: 9999, reactive_armor: 9999, compact_bioreactor: 9999,
-      automation_droid: 9999, semiconductor_arrays: 9999, propulsion_systems: 9999,
-      plasma_cores: 9999, metamaterials: 9999,
-      android_worker: 9999, quantum_processors: 9999, warp_cores: 9999,
-      basic_supplies: 9999, civilian_goods: 9999, neurostimulants: 9999,
-    });
-  }
+    const rs = this.resourceSystem;
+    if (!rs) return;
 
-  // POWER TEST — zbadaj wszystkie technologie
-  _setupPowerTestTechs() {
-    const allTechIds = Object.keys(TECHS);
-    this.techSystem.restore({ researched: allTechIds });
+    // Wyzeruj wszystko co _setupColony zdążyło dodać
+    for (const id of rs.inventory.keys()) {
+      rs.inventory.set(id, 0);
+    }
+    rs.research.amount = 0;
+
+    // 100 każdego pierwiastka + food + water + wszystkich commodities
+    const gains = {};
+    for (const id of Object.keys(ELEMENTS))    gains[id] = 100;
+    for (const id of Object.keys(COMMODITIES)) gains[id] = 100;
+    gains.food     = 100;
+    gains.water    = 100;
+    gains.research = 2000;
+
+    rs.receive(gains);
   }
 
   // POWER TEST — flota startowa (1× science_vessel, 1× cargo_ship, 1× heavy_freighter)
@@ -1518,49 +1530,18 @@ export class GameScene {
       return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
     });
 
-    // Lista budynków do postawienia — WSZYSTKIE dostępne typy
+    // Lista budynków do postawienia — ręcznie wyselekcjonowane dla Power Test
+    // (budowane przez restoreFromSave — pomija sprawdzanie tech requirements)
     const buildPlan = [
-      // Podstawowe (wysoki poziom)
-      { id: 'habitat',               level: 10, count: 2 },
-      { id: 'solar_farm',            level: 10, count: 2 },
-      { id: 'mine',                  level: 10, count: 2 },
-      { id: 'farm',                  level: 10, count: 1 },
-      { id: 'well',                  level: 10, count: 1 },
-      { id: 'factory',               level: 10, count: 2 },
-      { id: 'research_station',      level: 10, count: 1 },
-      { id: 'launch_pad',            level: 3,  count: 1 },
-      { id: 'shipyard',              level: 3,  count: 2 },
-      // Energetyka
-      { id: 'coal_plant',            level: 3,  count: 1 },
-      { id: 'geothermal',            level: 3,  count: 1 },
-      { id: 'nuclear_plant',         level: 3,  count: 1 },
-      { id: 'fusion_reactor',        level: 3,  count: 1 },
-      // Przemysł
-      { id: 'smelter',               level: 3,  count: 1 },
-      { id: 'antimatter_factory',    level: 1,  count: 1 },
-      // Autonomiczne
-      { id: 'autonomous_mine',       level: 3,  count: 1 },
-      { id: 'autonomous_solar_farm', level: 3,  count: 1 },
-      { id: 'autonomous_spaceport',  level: 1,  count: 1 },
-      { id: 'synthesized_food_plant',level: 3,  count: 1 },
-      // Badawcze
-      { id: 'observatory',           level: 1,  count: 1 },
-      { id: 'data_center',           level: 1,  count: 1 },
-      { id: 'genetics_lab',          level: 1,  count: 1 },
-      { id: 'ai_core',               level: 1,  count: 1 },
-      // Populacja / mega
-      { id: 'arcology_building',     level: 1,  count: 1 },
-      { id: 'orbital_habitat',       level: 1,  count: 1 },
-      // Kosmiczne
-      { id: 'orbital_mine',          level: 1,  count: 1 },
-      { id: 'terraformer',           level: 1,  count: 1 },
-      { id: 'vacuum_generator',      level: 1,  count: 1 },
-      // Obrona
-      { id: 'defense_tower',         level: 3,  count: 1 },
-      { id: 'defense_grid',          level: 1,  count: 1 },
-      // Infrastruktura międzygwiezdna
-      { id: 'warp_beacon',           level: 1,  count: 1 },
-      { id: 'jump_gate',             level: 1,  count: 1 },
+      { id: 'mine',             level: 2, count: 2 },
+      { id: 'factory',          level: 2, count: 3 },
+      { id: 'solar_farm',       level: 2, count: 2 },
+      { id: 'coal_plant',       level: 2, count: 1 },
+      { id: 'farm',             level: 2, count: 1 },
+      { id: 'well',             level: 2, count: 1 },
+      { id: 'shipyard',         level: 1, count: 1 },
+      { id: 'launch_pad',       level: 1, count: 1 },  // Port Kosmiczny (spaceport)
+      { id: 'research_station', level: 1, count: 1 },
     ];
 
     const entries = [];  // dane do restoreFromSave

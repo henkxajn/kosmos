@@ -111,6 +111,10 @@ export class ResearchSystem {
       if (tech) {
         this.techSystem._researched.add(tech.id);
         EventBus.emit('tech:researched', { tech, restored: false });
+        // Omijamy TechSystem._research() (płacimy koszt tu, nie tam) — sami
+        // wywołujemy hooki narracyjne/frakcyjne/dyson (bez tego kronika_lokalizacji
+        // nie odblokowałaby FactionSystem i narracja by stanęła).
+        this.techSystem.emitCompletionHooks(tech.id);
       }
     }
 
@@ -180,6 +184,7 @@ export class ResearchSystem {
       if (tech) {
         this.techSystem._researched.add(tech.id);
         EventBus.emit('tech:researched', { tech, restored: false });
+        this.techSystem.emitCompletionHooks(tech.id);
       }
     }
   }
