@@ -322,10 +322,21 @@ export class GameScene {
       // Legacy heal: save'y sprzed fixu ResearchSystem emitCompletionHooks mogą mieć
       // kronika_lokalizacji zbadane ale FactionSystem wciąż zablokowany — bo stary
       // ResearchSystem pomijał hooki i narrative:earthLocated nigdy nie leciało.
-      // setTimeout(0) odkłada emit na po rejestracji handlera (linia ~582).
+      // Dodatkowo: Power Test save'y nie mają przypisanego lidera → pusta sekcja LIDER
+      // i błędny stan frakcji po unlocku. setTimeout(0) odkłada na po rejestracji handlerów.
       setTimeout(() => {
         if (this.techSystem.isResearched('kronika_lokalizacji') && this.factionSystem.isLocked) {
           EventBus.emit('narrative:earthLocated');
+        }
+        if (!this.leaderSystem.activeLeader) {
+          const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+          this.leaderSystem.setLeaderNoFaction('yara_osei', gameYear);
+          // Frakcje już odblokowane (np. bo wcześniej poleciał earth_located bez lidera)
+          // — przypisz frakcję nowego lidera, inaczej LeaderSystem.activeFaction zostanie null.
+          if (!this.factionSystem.isLocked) {
+            const leader = LEADERS['yara_osei'];
+            this.leaderSystem.assignFaction(leader?.hidden_faction ?? 'confederates');
+          }
         }
       }, 0);
       // Faza D3: Przywróć DysonSystem
@@ -598,6 +609,13 @@ export class GameScene {
       if (!facSys.isLocked) return;
 
       facSys.unlock();
+
+      // Defensywa: jeśli brak aktywnego lidera (Power Test bez FactionSelectScene,
+      // legacy save) — przypisz domyślnego Archonta żeby sekcja LIDER nie była pusta
+      // i leader.hidden_faction dało prawidłową frakcję.
+      if (!leaderSys.activeLeader) {
+        leaderSys.setLeaderNoFaction('yara_osei', window.KOSMOS?.timeSystem?.gameTime ?? 0);
+      }
 
       const leaderId = leaderSys.activeLeader;
       const leader = leaderId ? LEADERS[leaderId] : null;
@@ -1074,6 +1092,10 @@ export class GameScene {
           this._setupColony(civPlanet);
           // Minimalne zasoby startowe (po 100 każdego surowca + 2000 research)
           this._setupPowerTestResources();
+          // Domyślny lider — Power Test pomija FactionSelectScene, więc bez tego
+          // activeLeader byłby null i sekcja LIDER w UI świeciłaby pustką.
+          // Yara Osei — dożywotni Archont Konfederatów.
+          this.leaderSystem.setLeaderNoFaction('yara_osei', 0);
           // Tech pozostawione nieodkryte — gracz ma 2000 research na start drzewa
           // Populacja 12 POP (suma popCost budynków Power Test ≈ 7.75, z marginesem)
           this.civSystem.setPopulation(12);
