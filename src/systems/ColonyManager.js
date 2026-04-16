@@ -557,6 +557,88 @@ export class ColonyManager {
     EventBus.emit('colony:listChanged', {});
   }
 
+  // ── Faza 6: Przejęcie kolonii przez obce imperium ─────────────────
+  //
+  // Zwraca true jeśli transfer się udał. Obowiązujące reguły:
+  //   - Kolonia znika z listy gracza (_colonies.delete)
+  //   - Statki w hangarze zniszczone (analogicznie do removeColony)
+  //   - Empire dostaje nową kolonię w swoim .colonies[] (przez EmpireRegistry)
+  //   - Event colony:captured dla UI/narracji
+  //   - HomePlanet → game over jest obsługiwany w GameScene przez colony:captured
+
+  transferColony(planetId, newOwnerEmpireId, reason = 'invasion') {
+    const colony = this._colonies.get(planetId);
+    if (!colony) return false;
+
+    const vMgr = window.KOSMOS?.vesselManager;
+    const empireReg = window.KOSMOS?.empireRegistry;
+    const destroyedVesselIds = [];
+    // Zniszcz statki w hangarze przejętej kolonii
+    if (vMgr && colony.fleet?.length > 0) {
+      for (const vesselId of [...colony.fleet]) {
+        const vessel = vMgr.getVessel(vesselId);
+        if (vessel && vessel.position.state === 'docked') {
+          destroyedVesselIds.push(vesselId);
+          vMgr.destroyVessel(vesselId);
+        }
+      }
+    }
+
+    // Usuń drogi handlowe
+    this._tradeRoutes = this._tradeRoutes.filter(
+      r => r.colonyA !== planetId && r.colonyB !== planetId
+    );
+
+    // Jeśli to aktywna kolonia → przełącz na inną (priorytetowo homePlanet)
+    const wasActive = this._activePlanetId === planetId;
+    if (wasActive) {
+      const homePlanetId = window.KOSMOS?.homePlanet?.id;
+      if (homePlanetId && homePlanetId !== planetId && this._colonies.has(homePlanetId)) {
+        this.switchActiveColony(homePlanetId);
+      } else {
+        // Wybierz dowolną inną kolonię
+        const any = [...this._colonies.keys()].find(id => id !== planetId);
+        if (any) this.switchActiveColony(any);
+      }
+    }
+
+    const colonyName = colony.name ?? planetId;
+    const population = colony.civSystem?.population ?? 0;
+    const wasHomePlanet = !!colony.isHomePlanet;
+
+    // Usuń z gracza
+    this._colonies.delete(planetId);
+
+    // Rozpoznaj systemId planety (via EntityManager)
+    const planetEntity = EntityManager.get(planetId);
+    const systemId = planetEntity?.systemId ?? null;
+
+    // Dopisz do imperium — zaznacz w gameState
+    if (empireReg?.addColony) {
+      empireReg.addColony(newOwnerEmpireId, systemId, planetId);
+    }
+    // Oznacz system na galaxyData (dla rendering GalaxyMap)
+    const gd = window.KOSMOS?.galaxyData;
+    if (gd?.systems && systemId) {
+      const gs = gd.systems.find(s => s.id === systemId);
+      if (gs && !gs.empireId) gs.empireId = newOwnerEmpireId;
+    }
+
+    EventBus.emit('colony:captured', {
+      planetId,
+      colonyName,
+      newOwner: newOwnerEmpireId,
+      previousOwner: 'player',
+      reason,
+      population,
+      wasHomePlanet,
+      destroyedVesselIds,
+    });
+    EventBus.emit('colony:listChanged', {});
+
+    return true;
+  }
+
   // ── Drogi handlowe ────────────────────────────────────────────────
 
   // Pobierz listę dróg handlowych
@@ -1461,6 +1543,11 @@ export class ColonyManager {
       colony.buildingSystem._grid = grid;
       colony.buildingSystem._gridHeight = grid.height ?? 10;
       colony.grid = grid;
+
+      // Faza 6.5: inicjalizacja własności hexów na nowej kolonii
+      for (const tile of grid.toArray()) {
+        if (tile && tile.owner == null) tile.owner = 'player';
+      }
 
       // Postaw stolicę (colony_base) — daje housing
       colony.buildingSystem.autoPlaceBuilding?.('colony_base');

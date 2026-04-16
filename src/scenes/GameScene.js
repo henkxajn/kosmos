@@ -6,6 +6,8 @@
 
 import EventBus              from '../core/EventBus.js';
 import EntityManager         from '../core/EntityManager.js';
+import gameState             from '../core/GameState.js';
+import debugLog              from '../core/DebugLog.js';
 import { PhysicsSystem }     from '../systems/PhysicsSystem.js';
 import { TimeSystem }        from '../systems/TimeSystem.js';
 import { AccretionSystem }   from '../systems/AccretionSystem.js';
@@ -52,6 +54,18 @@ import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
+import { EmpireGenerator }   from '../generators/EmpireGenerator.js';
+import { EmpireRegistry }    from '../systems/EmpireRegistry.js';
+import { IntelSystem }       from '../systems/IntelSystem.js';
+import { DiplomacySystem }   from '../systems/DiplomacySystem.js';
+import { AlienCivSystem }    from '../systems/AlienCivSystem.js';
+import { WarSystem }         from '../systems/WarSystem.js';
+import { InvasionSystem }    from '../systems/InvasionSystem.js';
+import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
+import { EconAI }            from '../systems/ai/EconAI.js';
+import { THEME }             from '../config/ThemeConfig.js';
+import { BattleView3D }      from './BattleView3D.js';
+import { showBattleIntro, showBattleOutcome, getBattleViewPreference } from '../ui/BattleIntroModal.js';
 import { StarSystemManager } from '../systems/StarSystemManager.js';
 import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
@@ -176,6 +190,12 @@ export class GameScene {
     this.dysonSystem         = new DysonSystem();
     this.autoPauseSystem     = new AutoPauseSystem();
     this.scheduledEventSystem = new ScheduledEventSystem();
+    this.empireRegistry       = new EmpireRegistry();
+    this.intelSystem          = new IntelSystem();
+    this.diplomacySystem      = new DiplomacySystem();
+    this.alienCivSystem       = new AlienCivSystem();
+    this.warSystem            = new WarSystem();
+    this.invasionSystem       = new InvasionSystem();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -205,11 +225,43 @@ export class GameScene {
     window.KOSMOS.dysonSystem      = this.dysonSystem;
     window.KOSMOS.autoPauseSystem  = this.autoPauseSystem;
     window.KOSMOS.scheduledEventSystem = this.scheduledEventSystem;
+    window.KOSMOS.empireRegistry   = this.empireRegistry;
+    window.KOSMOS.intelSystem      = this.intelSystem;
+    window.KOSMOS.diplomacySystem  = this.diplomacySystem;
+    window.KOSMOS.alienCivSystem   = this.alienCivSystem;
+    window.KOSMOS.warSystem        = this.warSystem;
+    window.KOSMOS.invasionSystem   = this.invasionSystem;
+    // Faza 7: AI (statyczne klasy — ekspozycja dla debug z konsoli)
+    window.KOSMOS.militaryAI       = MilitaryAI;
+    window.KOSMOS.econAI           = EconAI;
     window.KOSMOS.threeRenderer    = this.threeRenderer;
 
+    // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
+    // Nowa gra → reset do domyślnego kształtu; restore z save'a niżej.
+    // DebugLog musi się doczepić do EventBusu PO EventBus.clear() na początku start(),
+    // w przeciwnym razie subskrypcje z module-load zostały wytarte.
+    gameState.reset();
+    debugLog.clear();
+    debugLog.attach();
+    window.KOSMOS.gameState  = gameState;
+    window.KOSMOS.debugLog   = debugLog;
+
     // ── Dane galaktyczne (okoliczne układy gwiezdne) ──────────
+    const isNewGame = !savedData?.civ4x?.galaxyData;
     window.KOSMOS.galaxyData = savedData?.civ4x?.galaxyData
       ?? GalaxyGenerator.generate(star.id, star.name, star.spectralType);
+
+    // ── Faza 1: spawn obcych imperiów (tylko nowa gra) ─────────
+    // Przy save — imperia w gameState.empires zostają przywrócone niżej,
+    // a syncToGalaxyData() odtworzy empireId na galaxyData.systems.
+    if (isNewGame) {
+      EmpireGenerator.generate(window.KOSMOS.galaxyData, this.empireRegistry);
+      // Dla każdego świeżo stworzonego imperium → zapewnij rekord intel=unknown
+      this.intelSystem.initForAllEmpires();
+      // Faza 3: diplomacy (peace, hostility=0) + FSM (IDLE/EXPANDING wg personality)
+      this.diplomacySystem.initForAllEmpires();
+      this.alienCivSystem.initForAllEmpires();
+    }
 
     // ── Szablony projektów statków (Unit Design) ─────────────────
     window.KOSMOS.unitDesigns = savedData?.civ4x?.unitDesigns ?? [];
@@ -218,6 +270,17 @@ export class GameScene {
     const c4x = savedData?.civ4x;
     if (c4x?.civMode) {
       window.KOSMOS.civMode = true;
+
+      // Faza 0: reactive store (empires/intel/diplomacy/wars/battles/invasions)
+      if (c4x.gameState) gameState.restore(c4x.gameState);
+      // Faza 1: po restore — odśwież empireId na galaxyData (na wypadek save
+      // sprzed Fazy 1 lub gdyby galaxyData była starsza od gameState.empires)
+      this.empireRegistry.syncToGalaxyData(window.KOSMOS.galaxyData);
+      // Faza 2: zapewnij rekord intel dla każdego imperium (save sprzed Fazy 2)
+      this.intelSystem.initForAllEmpires();
+      // Faza 3: zapewnij relacje diplomacy + FSM (save sprzed Fazy 3)
+      this.diplomacySystem.initForAllEmpires();
+      this.alienCivSystem.initForAllEmpires();
 
       // Po migracji SaveMigration: save zawsze ma colonies[] (v5+)
       // Przywróć tech (globalne)
@@ -392,6 +455,49 @@ export class GameScene {
     // Kolizja — akrecja nowej planety z ThreeRenderer (EventBus obsługuje wewnątrz)
     EventBus.on('accretion:newPlanet', (planet) => {
       // ThreeRenderer subskrybuje 'accretion:newPlanet' samodzielnie
+    });
+
+    // ── Faza 5: cinematic BattleView3D po rozstrzygnięciu bitwy ──
+    this._battleView3D = null;  // leniwa inicjalizacja
+    this._battleQueue = [];     // bitwy oczekujące w kolejce (żeby nie nakładały się)
+    this._battleShowing = false;
+
+    // Faza 6: powiadomienie o utracie kolonii (inwazja zakończona sukcesem obcego)
+    EventBus.on('colony:captured', ({ planetId, colonyName, newOwner, wasHomePlanet }) => {
+      if (!window.KOSMOS?.civMode) return;
+      const emp = window.KOSMOS?.empireRegistry?.get(newOwner);
+      const empName = emp?.name ?? newOwner;
+      const msg = wasHomePlanet
+        ? `⚠ STOLICA ZDOBYTA!\nPlaneta "${colonyName}" przeszła pod kontrolę imperium ${empName}.\n\nZnajdź jakąś drogę powrotu…`
+        : `⚠ Kolonia utracona!\nPlaneta "${colonyName}" zajęta przez ${empName}.`;
+      // Simple DOM alert przez MessageQueue później; na razie popup
+      setTimeout(() => {
+        try { alert(msg); } catch { /* ignore */ }
+      }, 100);
+    });
+
+    EventBus.on('battle:resolved', ({ warId, battleId, result }) => {
+      // Tylko gdy civMode aktywny i gracz bierze udział
+      if (!window.KOSMOS?.civMode) return;
+      const war = window.KOSMOS?.warSystem?.getWar(warId);
+      if (!war) return;
+      if (war.aggressor !== 'player' && war.defender !== 'player') return;
+
+      // Ustal stronę gracza (A/B) w payload BattleSystem
+      const playerSide = result?.participantB?.type === 'player' ? 'B' : 'A';
+      const empireId = war.aggressor === 'player' ? war.defender : war.aggressor;
+      const emp = window.KOSMOS?.empireRegistry?.get(empireId);
+
+      const battleData = {
+        warId, battleId, result,
+        aggressorName:     war.aggressor === 'player' ? 'Gracz' : (emp?.name ?? 'Obcy'),
+        defenderName:      war.defender  === 'player' ? 'Gracz' : (emp?.name ?? 'Obcy'),
+        aggressorArchetype: emp?.archetype,
+        playerSide,
+      };
+
+      this._battleQueue.push(battleData);
+      this._tryShowNextBattle();
     });
 
     // Powiadomienia o zdarzeniach losowych — popup DATASHEET
@@ -1448,6 +1554,53 @@ export class GameScene {
     // Rover spawni się przy pierwszym buildResult colony_base (patrz _initRoverSpawnListener)
   }
 
+  // ── Faza 5: pipeline BattleView3D ──────────────────────────
+  async _tryShowNextBattle() {
+    if (this._battleShowing) return;
+    if (this._battleQueue.length === 0) return;
+    this._battleShowing = true;
+
+    const battleData = this._battleQueue.shift();
+
+    // Preferencja gracza — 'ask' (domyślnie) lub 'skip' (Zawsze pomijaj)
+    const pref = getBattleViewPreference();
+    let choice = 'skip';
+    if (pref === 'ask') {
+      try {
+        choice = await showBattleIntro(battleData);
+      } catch (err) {
+        console.error('[BattleView] Intro error:', err);
+        choice = 'skip';
+      }
+    }
+
+    if (choice === 'watch') {
+      // Leniwa inicjalizacja BattleView3D z canvas
+      if (!this._battleView3D) {
+        const canvas = document.getElementById('three-canvas');
+        if (canvas) this._battleView3D = new BattleView3D(canvas);
+      }
+      if (this._battleView3D) {
+        try {
+          await this._battleView3D.start(battleData);
+        } catch (err) {
+          console.error('[BattleView3D] Error:', err);
+        }
+      }
+    } else {
+      // Skip / Zawsze pomijaj — tylko baner outcome, bez cinematic 3D
+      try {
+        await showBattleOutcome(battleData);
+      } catch (err) {
+        console.error('[BattleOutcome] Error:', err);
+      }
+    }
+
+    this._battleShowing = false;
+    // Kolejna w kolejce, jeśli jest
+    if (this._battleQueue.length > 0) this._tryShowNextBattle();
+  }
+
   _initRoverSpawnListener() {
     const onBuild = ({ success, buildingId }) => {
       if (!success || buildingId !== 'colony_base') return;
@@ -1470,6 +1623,26 @@ export class GameScene {
         }
       }
       mgr.createUnit('science_rover', hp.id, startQ, startR);
+
+      // Faza 6: auto-spawn pierwszej jednostki obrony — infantry na sąsiednim hexie
+      const grid = this.colonyManager?.getColony(hp.id)?.grid;
+      if (grid) {
+        // Sąsiad kapitoły — cube offsets {q,r}
+        const neighbors = [
+          { dq: +1, dr:  0 }, { dq: -1, dr:  0 },
+          { dq:  0, dr: +1 }, { dq:  0, dr: -1 },
+          { dq: +1, dr: -1 }, { dq: -1, dr: +1 },
+        ];
+        for (const n of neighbors) {
+          const nq = startQ + n.dq, nr = startR + n.dr;
+          const tile = grid.get(nq, nr);
+          if (!tile || tile.type === 'ocean') continue;
+          if (mgr.getUnitAt(hp.id, nq, nr)) continue;
+          mgr.createUnit('infantry', hp.id, nq, nr, { owner: 'player' });
+          break;
+        }
+      }
+
       // Jednorazowy listener
       EventBus.off('planet:buildResult', onBuild);
     };

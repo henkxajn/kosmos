@@ -2622,13 +2622,24 @@ export class ThreeRenderer {
     if (this._colonyTooltipEl) this._colonyTooltipEl.style.display = 'none';
   }
 
+  // ── Suspend/resume (Faza 5 — BattleView3D przejmuje canvas) ──
+  // Gdy _renderingEnabled=false, pętla żyje (odbiera eventy) ale nic nie rysuje
+  // na głównej scenie. BattleView3D używa tego samego canvas i renderera.
+  suspend() { this._renderingEnabled = false; }
+  resume()  { this._renderingEnabled = true;  }
+
   // ── Pętla renderowania ────────────────────────────────────────
   _startLoop() {
+    // Faza 5: bramka na rendering (BattleView3D zawiesza przy starciu)
+    if (this._renderingEnabled === undefined) this._renderingEnabled = true;
+
     const loop = () => {
       requestAnimationFrame(loop);
 
       // Pomiń rendering gdy kontekst WebGL utracony
       if (this._contextLost) return;
+      // Faza 5: BattleView3D przejął canvas — nie rysujemy głównej sceny
+      if (!this._renderingEnabled) return;
 
       try {
         const t = this._clock.getElapsedTime();

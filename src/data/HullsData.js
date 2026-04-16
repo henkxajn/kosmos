@@ -26,6 +26,9 @@ export const HULLS = {
     baseSpeedAU:       1.4,    // AU/rok — szybki
     baseCargoCapacity: 0,
     baseFuelPerAU:     0.35,
+    // Faza 4: combat — małe HP, wysokie evasion (mały i zwrotny)
+    baseHP:            30,
+    baseEvasion:       0.25,
     // Aliasy kompatybilności (stary kod czyta te pola)
     fuelCapacity:      8,
     fuelPerAU:         0.35,
@@ -64,6 +67,9 @@ export const HULLS = {
     baseSpeedAU:       1.0,    // AU/rok
     baseCargoCapacity: 0,
     baseFuelPerAU:     0.5,
+    // Faza 4: combat — zbalansowane HP i evasion
+    baseHP:            80,
+    baseEvasion:       0.15,
     fuelCapacity:      12,
     fuelPerAU:         0.5,
     range:             24,
@@ -104,6 +110,9 @@ export const HULLS = {
     baseSpeedAU:       0.7,    // AU/rok — wolny bez dobrych silników
     baseCargoCapacity: 0,
     baseFuelPerAU:     0.7,
+    // Faza 4: combat — duże HP, niskie evasion (niezdarny ale wytrzymały)
+    baseHP:            180,
+    baseEvasion:       0.05,
     fuelCapacity:      18,
     fuelPerAU:         0.7,
     range:             26,
@@ -129,6 +138,86 @@ export const HULLS = {
       { type: 'utility' },
     ],
     description:       'Duży kadłub — 9 slotów (3 napędy + 6 użytkowych). Ciężki i drogi. Wymaga wyrzutni.',
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Kadłuby bojowe (Faza 4) — zoptymalizowane pod combat
+  // ══════════════════════════════════════════════════════════════════════════
+
+  hull_frigate: {
+    id:                'hull_frigate',
+    namePL:            'Fregata',
+    nameEN:            'Frigate',
+    icon:              '⚔',
+    size:              'small',
+    baseMass:          40,     // tony
+    baseModuleSlots:   4,
+    baseFuelCapacity:  10,
+    baseSpeedAU:       1.2,
+    baseCargoCapacity: 0,
+    baseFuelPerAU:     0.4,
+    fuelCapacity:      10,
+    fuelPerAU:         0.4,
+    range:             25,
+    speedAU:           1.2,
+    cargoCapacity:     0,
+    fuelType:          'power_cells',
+    baseHP:            120,      // więcej HP niż zwiadowca
+    baseEvasion:       0.20,     // wciąż zwrotna
+    baseArmor:         2,        // wbudowany lekki pancerz
+    cost:              { Fe: 100, Ti: 20, Cu: 10 },
+    commodityCost:     { structural_alloys: 6, reactive_armor: 4, electronic_systems: 2 },
+    buildTime:         5.0,
+    maxSurge:          2,
+    crewCost:          0.1,
+    crewStrata:        'mix',
+    requires:          'point_defense',
+    slots: [
+      { type: 'propulsion' },
+      { type: 'utility' },
+      { type: 'utility' },
+      { type: 'utility' },
+    ],
+    description:       'Lekki okręt bojowy — 4 sloty (1 napęd + 3 użytkowe). Wbudowany pancerz lekki.',
+  },
+
+  hull_destroyer: {
+    id:                'hull_destroyer',
+    namePL:            'Niszczyciel',
+    nameEN:            'Destroyer',
+    icon:              '🛡',
+    size:              'medium',
+    baseMass:          80,     // tony
+    baseModuleSlots:   6,
+    baseFuelCapacity:  15,
+    baseSpeedAU:       0.9,
+    baseCargoCapacity: 0,
+    baseFuelPerAU:     0.55,
+    fuelCapacity:      15,
+    fuelPerAU:         0.55,
+    range:             27,
+    speedAU:           0.9,
+    cargoCapacity:     0,
+    fuelType:          'power_cells',
+    baseHP:            220,      // mocny kadłub
+    baseEvasion:       0.10,
+    baseArmor:         4,        // ciężki wbudowany pancerz
+    cost:              { Fe: 180, Ti: 40, Cu: 15, Hv: 5 },
+    commodityCost:     { structural_alloys: 12, reactive_armor: 8, electronic_systems: 4 },
+    buildTime:         9.0,
+    maxSurge:          3,
+    crewCost:          0.15,
+    crewStrata:        'mix',
+    requires:          'point_defense',
+    slots: [
+      { type: 'propulsion' },
+      { type: 'propulsion' },
+      { type: 'utility' },
+      { type: 'utility' },
+      { type: 'utility' },
+      { type: 'utility' },
+    ],
+    description:       'Średni okręt bojowy — 6 slotów (2 napędy + 4 użytkowe). Ciężki pancerz, duże HP.',
   },
 };
 

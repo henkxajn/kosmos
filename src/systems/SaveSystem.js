@@ -143,6 +143,8 @@ export class SaveSystem {
       galaxyData: window.KOSMOS.galaxyData ?? null,
       activeSystemId: window.KOSMOS.activeSystemId ?? 'sys_home',
       starSystemManager: window.KOSMOS.starSystemManager?.serialize() ?? null,
+      // Faza 0: reactive store dla NOWYCH domen (empires/intel/diplomacy/wars/battles/invasions)
+      gameState: window.KOSMOS.gameState?.serialize() ?? null,
     };
   }
 

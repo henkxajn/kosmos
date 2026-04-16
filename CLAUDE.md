@@ -14,18 +14,18 @@ Cel warstwy 4X (oryginalna wizja gracza):
 ## Technologia
 
 - **Three.js** (przez CDN, bez npm) — renderer 3D warstwy symulacyjnej (zastąpił Phaser 3)
-- **Canvas 2D** (natywny) — warstwa UI (UIManager) i mapa planety (PlanetScene)
+- **Canvas 2D** (natywny) — warstwa UI (UIManager) i mapa planety (ColonyOverlay; PlanetScene.js pozostał jako legacy — zero wywołań `.open/.show`)
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v25
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v51 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
 index.html
   #three-canvas   → ThreeRenderer (Three.js WebGL) — gwiazda, planety, księżyce, orbity
   #ui-canvas      → UIManager (Canvas 2D)           — panel info, paski czasu, EventLog
-  #planet-canvas  → PlanetScene (Canvas 2D)         — mapa hex planety (4X)
+  #planet-canvas  → (legacy PlanetScene — dead code; mapa planety renderowana przez ColonyOverlay na #ui-canvas)
   #event-layer    → przezroczysta warstwa zdarzeń myszy (z-index nad wszystkim)
 
 TitleScene (src/scenes/TitleScene.js):
@@ -90,11 +90,20 @@ window.KOSMOS = {
 
 ### Zasada komunikacji
 ```
-PlanetScene → EventBus.emit('planet:buildRequest') → BuildingSystem._build()
+ColonyOverlay → EventBus.emit('planet:buildRequest') → BuildingSystem._build()
 BuildingSystem → EventBus.emit('resource:registerProducer') → ResourceSystem
-BuildingSystem → EventBus.emit('planet:buildResult') → PlanetScene (UI update)
+BuildingSystem → EventBus.emit('planet:buildResult') → ColonyOverlay (UI update)
 ```
 NIE importuj systemów bezpośrednio między sobą.
+
+### GameState (nowe domeny — wojna/dyplomacja/AI obcych)
+Dla NOWYCH domen (empires, intel, diplomacy, wars, battles, invasions) używamy
+reactive store `src/core/GameState.js` jako jedynego źródła prawdy. Mutacje
+wyłącznie przez **intent methods** na systemach-właścicielach (nie raw `set()`
+z UI). Audit trail AI: `src/core/DebugLog.js` (ring buffer eventów). Istniejące
+systemy (ColonyManager, BuildingSystem, FactionSystem itd.) pozostają nietknięte
+i komunikują się jak dotąd (EventBus + `window.KOSMOS`). Szczegóły:
+`docs/plan-war-diplomacy-ai.md`.
 
 ---
 
@@ -163,10 +172,13 @@ GameScene.create()
   └─ BuildingSystem(resSys, civSys, techSys)  ← budowa (wymaga POP), demolish, rateReapply
   └─ CivilianTradeSystem(colMgr)  ← auto-routing towarów, Kredyty (Kr)
 
-PlanetScene
-  └─ importuje: HexGrid, PlanetMapGenerator, BUILDINGS, TECHS, ResourcePanel
-  └─ nasłuchuje: resource:changed, planet:buildResult, planet:demolishResult, tech:researched
+ColonyOverlay  (src/ui/ColonyOverlay.js — realna mapa planety 2D hex tapered)
+  └─ importuje: HexGrid, PlanetMapGenerator, BUILDINGS, TERRAIN_TYPES, TerrainTextures
+  └─ nasłuchuje: resource:changed, planet:buildResult, planet:demolishResult,
+                 planet:upgradeResult, planet:constructionProgress, tech:researched,
+                 vessel:awayTeamLanding, groundUnit:select
   └─ emituje:   planet:buildRequest, planet:demolishRequest, tech:researchRequest
+  └─ UWAGA: src/scenes/PlanetScene.js — legacy, zero wywołań .open/.show, nie używać
 
 DistanceUtils (src/utils/DistanceUtils.js)
   └─ euclideanAU(a, b)          ← dynamiczna odległość z physics.x/y → AU
@@ -187,14 +199,14 @@ SaveSystem._serializeCiv4x()
 |-----------|---------|----------|
 | `resource:registerProducer { id, rates }` | BuildingSystem, CivSystem | ResourceSystem |
 | `resource:removeProducer { id }` | BuildingSystem | ResourceSystem |
-| `resource:changed { resources }` | ResourceSystem | PlanetScene, ResourcePanel |
+| `resource:changed { resources }` | ResourceSystem | ColonyOverlay, ResourcePanel |
 | `resource:shortage { resource }` | ResourceSystem | CivilizationSystem |
-| `planet:buildRequest { tile, buildingId }` | PlanetScene | BuildingSystem |
-| `planet:buildResult { success, tile, reason }` | BuildingSystem | PlanetScene |
-| `planet:demolishRequest { tile }` | PlanetScene | BuildingSystem |
-| `planet:demolishResult { success, tile }` | BuildingSystem | PlanetScene |
-| `tech:researchRequest { techId }` | PlanetScene | TechSystem |
-| `tech:researched { tech, restored }` | TechSystem | BuildingSystem, PlanetScene |
+| `planet:buildRequest { tile, buildingId }` | ColonyOverlay | BuildingSystem |
+| `planet:buildResult { success, tile, reason }` | BuildingSystem | ColonyOverlay |
+| `planet:demolishRequest { tile }` | ColonyOverlay | BuildingSystem |
+| `planet:demolishResult { success, tile }` | BuildingSystem | ColonyOverlay |
+| `tech:researchRequest { techId }` | ColonyOverlay | TechSystem |
+| `tech:researched { tech, restored }` | TechSystem | BuildingSystem, ColonyOverlay |
 | `civ:addHousing / removeHousing` | BuildingSystem | CivilizationSystem |
 | `civ:popBorn { population }` | CivilizationSystem | UIManager, BuildingSystem |
 | `civ:popDied { cause, population }` | CivilizationSystem | UIManager, BuildingSystem |
@@ -222,8 +234,8 @@ SaveSystem._serializeCiv4x()
 | `expedition:orderRedirect { expeditionId, targetId }` | UIManager | ExpeditionSystem |
 | `expedition:redirected { expedition }` | ExpeditionSystem | UIManager |
 | `expedition:redirectFailed { reason }` | ExpeditionSystem | UIManager |
-| `planet:colonize { planet }` | UIScene | GameScene → PlanetScene |
-| `planet:openMap { planet }` | UIScene | GameScene → PlanetScene |
+| `planet:colonize { planet }` | UIScene | GameScene → ColonyOverlay |
+| `planet:openMap { planet }` | UIScene | GameScene → ColonyOverlay |
 | `factory:setTarget { commodityId, qty }` | CivPanelDrawer | FactorySystem |
 | `factory:enqueue { commodityId, qty }` | CivPanelDrawer | FactorySystem |
 | `factory:dequeue { index }` | CivPanelDrawer | FactorySystem |
@@ -233,10 +245,10 @@ SaveSystem._serializeCiv4x()
 | `colony:destroyed { planetId, colonyName, reason, isOutpost, population, destroyedVesselIds }` | ColonyManager | GameScene, VesselManager, MissionSystem, TradeRouteManager |
 | `planet:constructionProgress` | BuildingSystem | ColonyOverlay |
 | `planet:constructionComplete { tileKey, buildingId }` | BuildingSystem | ColonyOverlay |
-| `planet:buildQueued { tile, buildingId, cost }` | BuildingSystem | PlanetScene, EventLog |
-| `planet:upgradeQueued { tile, cost }` | BuildingSystem | PlanetScene, EventLog |
-| `planet:pendingFulfilled { tileKey, buildingId, isUpgrade }` | BuildingSystem | PlanetScene, EventLog |
-| `planet:pendingCancelled { tileKey }` | BuildingSystem | PlanetScene |
+| `planet:buildQueued { tile, buildingId, cost }` | BuildingSystem | ColonyOverlay, EventLog |
+| `planet:upgradeQueued { tile, cost }` | BuildingSystem | ColonyOverlay, EventLog |
+| `planet:pendingFulfilled { tileKey, buildingId, isUpgrade }` | BuildingSystem | ColonyOverlay, EventLog |
+| `planet:pendingCancelled { tileKey }` | BuildingSystem | ColonyOverlay |
 | `fleet:buildQueued { planetId, shipId, cost }` | ColonyManager | UIManager, EventLog |
 | `fleet:pendingCancelled { planetId, orderId }` | ColonyManager | UIManager |
 | `trade:connectionsUpdated { connections[] }` | CivilianTradeSystem | UIManager |

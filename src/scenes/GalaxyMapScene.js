@@ -13,6 +13,7 @@ import { SHIPS }               from '../data/ShipsData.js';
 import EventBus                from '../core/EventBus.js';
 import EntityManager           from '../core/EntityManager.js';
 import { t }                   from '../i18n/i18n.js';
+import { ARCHETYPES }          from '../data/EmpireData.js';
 
 export class GalaxyMapScene extends BaseOverlay {
   constructor() {
@@ -220,6 +221,43 @@ export class GalaxyMapScene extends BaseOverlay {
         ctx.fill();
       }
 
+      // Faza 2: marker obcego imperium gated przez intel.level
+      //   unknown  → bez pierścienia (gwiazda wygląda neutralnie)
+      //   rumor    → szary pierścień bez halo
+      //   contact+ → pierścień + halo w kolorze archetypu
+      const empireId = s.empireId;
+      const intelLevel = empireId
+        ? (window.KOSMOS?.intelSystem?.getLevel(empireId) ?? 'unknown')
+        : 'unknown';
+      if (empireId && intelLevel !== 'unknown') {
+        const empire = window.KOSMOS?.empireRegistry?.get(empireId);
+        const archColor = empire ? ARCHETYPES[empire.archetype]?.color : null;
+        const isContact = intelLevel === 'contact' || intelLevel === 'detailed';
+        const ringColor = isContact && archColor ? archColor : '#888';
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r + 4, 0, Math.PI * 2);
+        ctx.stroke();
+        if (isContact && archColor) {
+          const haloGrad = ctx.createRadialGradient(sx, sy, r + 2, sx, sy, r + 10);
+          haloGrad.addColorStop(0, archColor + '40');
+          haloGrad.addColorStop(1, 'transparent');
+          ctx.fillStyle = haloGrad;
+          ctx.beginPath();
+          ctx.arc(sx, sy, r + 10, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // Rumor — przerywana linia drugiego pierścienia (mgła)
+          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = 'rgba(140,140,140,0.6)';
+          ctx.beginPath();
+          ctx.arc(sx, sy, r + 7, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
       // Kolor gwiazdy
       ctx.fillStyle = s.colorHex ?? (isExplored ? THEME.accent : THEME.textDim);
       ctx.beginPath();
@@ -330,6 +368,7 @@ export class GalaxyMapScene extends BaseOverlay {
     if (hasCol) panelH += 16;
     if (ssMgr?.hasBeacon(sys.id)) panelH += 14;
     if (ssMgr?.hasJumpGate(sys.id)) panelH += 14;
+    if (sys.empireId && (window.KOSMOS?.intelSystem?.getLevel(sys.empireId) ?? 'unknown') !== 'unknown') panelH += 28;
 
     // Tło glass
     drawGlassPanel(ctx, px, py, panelW, panelH);
@@ -374,6 +413,34 @@ export class GalaxyMapScene extends BaseOverlay {
       ctx.fillText(t('galaxy.unexplored'), px + PAD, iy + 10);
     }
     iy += 18;
+
+    // Faza 2: właściciel systemu — gated przez intel.level
+    //   unknown → nic nie rysujemy
+    //   rumor   → "obca obecność" (szary) bez nazwy
+    //   contact+ → pełna nazwa + archetyp
+    const empId = sys.empireId;
+    const intelSys = window.KOSMOS?.intelSystem;
+    const intelLvl = empId ? (intelSys?.getLevel(empId) ?? 'unknown') : 'unknown';
+    const emp = empId ? window.KOSMOS?.empireRegistry?.get(empId) : null;
+    if (emp && intelLvl !== 'unknown') {
+      if (intelLvl === 'rumor') {
+        ctx.fillStyle = '#AA9050';
+        ctx.fillText('⚑ Obca obecność ???', px + PAD, iy + 10);
+        iy += 14;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText('  (wyślij statek)', px + PAD, iy + 10);
+        iy += 14;
+      } else {
+        const archColor = ARCHETYPES[emp.archetype]?.color ?? THEME.textPrimary;
+        ctx.fillStyle = archColor;
+        ctx.fillText(`⚑ ${emp.name}`, px + PAD, iy + 10);
+        iy += 14;
+        const archName = ARCHETYPES[emp.archetype]?.namePL ?? emp.archetype;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(`  ${archName}`, px + PAD, iy + 10);
+        iy += 14;
+      }
+    }
 
     // Infrastruktura
     if (hasCol) {

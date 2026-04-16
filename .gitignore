@@ -1,0 +1,25 @@
+# Node.js
+node_modules/
+package-lock.json.*
+
+# Archives
+*.zip
+
+# Claude Code local config (user-specific, not shared)
+.claude/settings.json
+.claude/settings.local.json
+
+# Root-level duplicate textures (prawdziwe są w assets/planet-textures/)
+/planet-textures/
+
+# Stray empty files
+/0
+
+# Audit reports (pre-existing, nie część źródeł)
+kod_audit_*.md
+
+# Generated test reports (boty zapisują wyniki runów)
+src/testing/reports/*.json
+src/testing/reports/*.md
+src/testing/reports/evo_weights.json
+!src/testing/reports/.gitkeep

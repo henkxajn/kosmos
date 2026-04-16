@@ -189,6 +189,14 @@ export class HexTile {
     // Syntetyczna jednostka zainstalowana w budynku (null | { commodityId, tier })
     // tier: 1=automation_droid (×1.4), 2=android_worker (×1.7), 3=ai_collective_node (×2.5)
     this.syntheticSlot = null;
+
+    // Faza 6.5: własność hexu
+    // null → neutralne (planety nieskolonizowane); 'player' → gracz; 'emp_XXX' → obcy
+    this.owner = null;
+    // Progres okupacji: jednostka innego ownera stoi na budynkowym hexie
+    // occupyEmpireId = kto przejmuje; occupyStart = civYear gdy zaczęło się liczyć
+    this.occupyEmpireId = null;
+    this.occupyStart = null;
   }
 
   // Skrótowy dostęp do definicji terenu
@@ -230,6 +238,10 @@ export class HexTile {
       anomalyEffect:     this.anomalyEffect,
       underConstruction: this.underConstruction,
       syntheticSlot:     this.syntheticSlot,
+      // Faza 6.5: własność
+      owner:             this.owner,
+      occupyEmpireId:    this.occupyEmpireId,
+      occupyStart:       this.occupyStart,
     };
   }
 
@@ -247,6 +259,10 @@ export class HexTile {
     tile.anomalyEffect     = data.anomalyEffect     ?? null;
     tile.underConstruction = data.underConstruction ?? null;
     tile.syntheticSlot     = data.syntheticSlot     ?? null;
+    // Faza 6.5: własność — legacy save brak pól, tile.owner null (inicjalizowany przez InvasionSystem)
+    tile.owner             = data.owner             ?? null;
+    tile.occupyEmpireId    = data.occupyEmpireId    ?? null;
+    tile.occupyStart       = data.occupyStart       ?? null;
     return tile;
   }
 }

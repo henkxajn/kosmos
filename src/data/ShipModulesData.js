@@ -315,7 +315,8 @@ export const SHIP_MODULES = {
     description: '+25 jednostek paliwa. Kriogeniczna izolacja minimalizuje masę.',
   },
 
-  // ── Moduły uzbrojenia (placeholder — walka jeszcze nie zaimplementowana) ───
+  // ── Moduły uzbrojenia (Faza 4: aktywne w BattleSystem) ────────────────────
+  // Pola bojowe: damage (na turę), range ('short'|'long'), tracking (trafność 0-1)
 
   weapon_laser: {
     id: 'weapon_laser',
@@ -327,9 +328,24 @@ export const SHIP_MODULES = {
     mass: 10,  // tony
     cost: { Ti: 20, Cu: 15 },
     commodityCost: { electronic_systems: 3 },
-    stats: { attackPower: 5, survivalBonus: 0.01 },
+    stats: { attackPower: 5, survivalBonus: 0.01, damage: 5, range: 'short', tracking: 0.8 },
     requires: 'point_defense',
-    description: 'Broń energetyczna bliskiego zasięgu. (Walka w przyszłej aktualizacji)',
+    description: 'Broń energetyczna bliskiego zasięgu. Wysokie tracking, niskie obrażenia.',
+  },
+
+  weapon_kinetic: {
+    id: 'weapon_kinetic',
+    namePL: 'Działo Kinetyczne',
+    nameEN: 'Kinetic Cannon',
+    icon: '💥',
+    slotType: 'weapon',
+    tier: 1,
+    mass: 14,  // tony
+    cost: { Fe: 35, Ti: 15 },
+    commodityCost: { reactive_armor: 2, electronic_systems: 2 },
+    stats: { attackPower: 8, survivalBonus: 0.01, damage: 8, range: 'medium', tracking: 0.6, armorPierce: 1 },
+    requires: 'point_defense',
+    description: 'Pociski kinetyczne średniego zasięgu. Przebijają lekki pancerz.',
   },
 
   weapon_missile: {
@@ -342,15 +358,47 @@ export const SHIP_MODULES = {
     mass: 18,  // tony
     cost: { Ti: 30, Fe: 20 },
     commodityCost: { propulsion_systems: 2, reactive_armor: 3 },
-    stats: { attackPower: 12, survivalBonus: 0.02, speedMult: 0.95 },
+    stats: { attackPower: 12, survivalBonus: 0.02, speedMult: 0.95, damage: 12, range: 'long', tracking: 0.5 },
     requires: 'point_defense',
-    description: 'Rakiety dalekiego zasięgu. (Walka w przyszłej aktualizacji)',
+    description: 'Rakiety dalekiego zasięgu. Wysokie obrażenia, słabsze trafianie.',
+  },
+
+  // ── Moduły tarcz (Faza 4: absorbują damage przed armor/hp) ────────────────
+
+  shield_basic: {
+    id: 'shield_basic',
+    namePL: 'Tarcza Energetyczna',
+    nameEN: 'Basic Shield',
+    icon: '🛡',
+    slotType: 'shield',
+    tier: 2,
+    mass: 12,  // tony
+    cost: { Cu: 20, Ti: 10 },
+    commodityCost: { electronic_systems: 4, polymer_composites: 2 },
+    stats: { shieldHP: 15, shieldRegen: 1 },
+    requires: 'point_defense',
+    description: 'Ładowane pole ochronne. +15 HP tarczy, +1/turę regeneracji.',
+  },
+
+  shield_phase: {
+    id: 'shield_phase',
+    namePL: 'Tarcza Fazowa',
+    nameEN: 'Phase Shield',
+    icon: '🔷',
+    slotType: 'shield',
+    tier: 3,
+    mass: 20,  // tony
+    cost: { Ti: 30, Hv: 8 },
+    commodityCost: { quantum_processors: 2, electronic_systems: 6 },
+    stats: { shieldHP: 35, shieldRegen: 3 },
+    requires: 'quantum_computing',
+    description: 'Zaawansowana tarcza fazowa. Dużo HP i szybka regeneracja.',
   },
 };
 
 // Typy modułów akceptowane w slotach utility (wszystko oprócz propulsion)
 export const UTILITY_SLOT_TYPES = new Set([
-  'cargo', 'science', 'special', 'habitat', 'armor', 'fuel', 'weapon',
+  'cargo', 'science', 'special', 'habitat', 'armor', 'fuel', 'weapon', 'shield',
 ]);
 
 // ── Pomocnik: oblicz statystyki statku z kadłuba + modułów ────────────────

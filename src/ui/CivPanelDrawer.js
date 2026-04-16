@@ -25,6 +25,9 @@ export const CIV_TABS = [
   { id: 'unit_design',   icon: '🔧', labelKey: 'civPanel.unitDesign',   key: 'U' },
   { id: 'dyson',         icon: '⭐', labelKey: 'civPanel.dyson',        key: 'D' },
   { id: 'galaxy',        icon: '🌌', labelKey: 'civPanel.galaxy',       key: 'G' },
+  { id: 'intel',         icon: '👁', labelKey: 'civPanel.intel',        key: 'I' },
+  { id: 'diplomacy',     icon: '🤝', labelKey: 'civPanel.diplomacy',    key: 'Y' },
+  { id: 'war',           icon: '⚔', labelKey: 'civPanel.war',          key: 'W' },
 ];
 
 // ── Sidebar ────────────────────────────────────────────────

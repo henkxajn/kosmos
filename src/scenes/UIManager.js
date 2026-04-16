@@ -27,6 +27,9 @@ import { CivilizationOverlay } from '../ui/CivilizationOverlay.js';
 import { DysonOverlay }        from '../ui/DysonOverlay.js';
 import { GalaxyMapScene }      from './GalaxyMapScene.js';
 import { UnitDesignOverlay }   from '../ui/UnitDesignOverlay.js';
+import { IntelOverlay }        from '../ui/IntelOverlay.js';
+import { DiplomacyOverlay }    from '../ui/DiplomacyOverlay.js';
+import { WarOverlay }          from '../ui/WarOverlay.js';
 import { t, getName }          from '../i18n/i18n.js';
 
 // Nowe komponenty UI
@@ -214,6 +217,9 @@ export class UIManager {
     this.overlayManager.register('unit_design', new UnitDesignOverlay());
     this.overlayManager.register('dyson', new DysonOverlay());
     this.overlayManager.register('galaxy', new GalaxyMapScene());
+    this.overlayManager.register('intel', new IntelOverlay());
+    this.overlayManager.register('diplomacy', new DiplomacyOverlay());
+    this.overlayManager.register('war', new WarOverlay());
 
     this._setupEvents();
     this._startDrawLoop();

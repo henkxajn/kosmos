@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 51;
+export const CURRENT_VERSION     = 52;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -66,6 +66,7 @@ const MIGRATIONS = {
   48: _migrateV48toV49,
   49: _migrateV49toV50,
   50: _migrateV50toV51,
+  51: _migrateV51toV52,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1225,6 +1226,25 @@ function _migrateV50toV51(data) {
   if (data.civ4x) {
     // Drop stare trasy handlowe (player-created) — TradeRouteManager nie istnieje
     delete data.civ4x.tradeRouteManager;
+  }
+  return data;
+}
+
+// ── v51 → v52: GameState reactive store (Faza 0 planu war/diplomacy/AI) ─────
+// Nowe domeny (empires, intel, diplomacy, wars, battles, invasions) trafiają do
+// window.KOSMOS.gameState — jedyne źródło prawdy dla NOWEGO kodu. Istniejące
+// systemy pozostają nietknięte. Stare save'y nie miały tego pola — dodajemy
+// pustą strukturę, GameState.restore() dopełni brakujące domeny defaultami.
+function _migrateV51toV52(data) {
+  if (data.civ4x) {
+    data.civ4x.gameState = data.civ4x.gameState ?? {
+      empires:   {},
+      intel:     {},
+      diplomacy: { relations: {} },
+      wars:      {},
+      battles:   {},
+      invasions: {},
+    };
   }
   return data;
 }

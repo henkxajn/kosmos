@@ -1878,6 +1878,9 @@ export default {
   'civPanel.galaxy': 'Galaktyka',
   'civPanel.unitDesign': 'Projekty',
   'civPanel.dyson': 'Sfera Dysona',
+  'civPanel.intel': 'Wywiad',
+  'civPanel.diplomacy': 'Dyplomacja',
+  'civPanel.war': 'Wojny',
 
   // === DysonOverlay (Faza D3) ===
   'dyson.header':              'SFERA DYSONA',

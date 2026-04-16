@@ -249,6 +249,12 @@ export class ColonyOverlay extends BaseOverlay {
     this._gridCache[pid] = grid;
     colony.grid = grid;
 
+    // Faza 6.5: inicjalizacja własności hexów (gracz posiada wszystkie hexy kolonii)
+    // Nie nadpisuje hexów które już mają ownera (np. po invasion)
+    for (const tile of grid.toArray()) {
+      if (tile && tile.owner == null) tile.owner = 'player';
+    }
+
     // Próbuj załadować biome map (1:1 z 3D teksturą) — fallback: PlanetMapGenerator biomy
     this._loadBiomeMap(colony.planet, grid, pid);
 
@@ -564,15 +570,32 @@ export class ColonyOverlay extends BaseOverlay {
     const tile = grid?.get(unit.q, unit.r);
     const canAnalyze = tile?.anomaly && tile.anomalyDetected && !tile.anomalyRevealed;
 
-    // Panel w prawym dolnym rogu overlay
-    const pw = 190, ph = canAnalyze ? 160 : 140;
+    // Faza 6: owner info i cele ataku
+    const isEnemy = unit.owner && unit.owner !== 'player';
+    const gum = window.KOSMOS?.groundUnitManager;
+    const adjacentEnemy = (!isEnemy && gum)
+      ? this._findAdjacentEnemyUnit(unit, gum)
+      : null;
+    const adjacentPlayer = (isEnemy && gum)
+      ? this._findAdjacentPlayerUnit(unit, gum)
+      : null;
+    const canAttack = !isEnemy && adjacentEnemy && unit._atkCooldown <= 0 && (unit.attack ?? 0) > 0;
+
+    // Panel w prawym dolnym rogu overlay — dynamiczna wysokość
+    const pw = 200;
+    let ph = 96;  // baza: nazwa + status + hex + HP
+    if (unit.attack != null) ph += 18;            // linia attack/defense
+    if (canAttack) ph += 26;                      // przycisk atak
+    if (!isEnemy && unit.status === 'idle') ph += 26; // survey
+    if (!isEnemy && unit.status === 'idle' && canAnalyze) ph += 26; // analyze
+    ph += 26;  // deselect
     const px = ox + ow - pw - 8;
     const py = oy + oh - ph - 8;
 
     // Tło
     ctx.fillStyle = 'rgba(4, 8, 16, 0.92)';
     ctx.fillRect(px, py, pw, ph);
-    ctx.strokeStyle = '#00ffb4';
+    ctx.strokeStyle = isEnemy ? '#D85A30' : '#00ffb4';
     ctx.lineWidth = 1;
     ctx.strokeRect(px, py, pw, ph);
 
@@ -580,11 +603,27 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.textAlign = 'left';
     let ly = py + 16;
 
-    // Typ jednostki
+    // Nagłówek — typ jednostki + owner
     ctx.font = `bold 11px ${THEME.fontFamily}`;
-    ctx.fillStyle = '#00ffb4';
-    ctx.fillText('🔬 SCIENCE ROVER', px + 8, ly);
+    ctx.fillStyle = isEnemy ? '#FF6040' : '#00ffb4';
+    const typeLabel = {
+      science_rover: '🔬 ŁAZIK',
+      infantry:      '🪖 PIECHOTA',
+      mech:          '🤖 MECH',
+      garrison:      '🛡 GARNIZON',
+    }[unit.type] ?? unit.type.toUpperCase();
+    const prefix = isEnemy ? '⚠ ' : '';
+    ctx.fillText(`${prefix}${typeLabel}`, px + 8, ly);
     ly += 18;
+
+    // Owner
+    if (isEnemy) {
+      const emp = window.KOSMOS?.empireRegistry?.get(unit.owner);
+      ctx.font = `10px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#FF9060';
+      ctx.fillText(emp?.name ?? unit.owner, px + 8, ly);
+      ly += 14;
+    }
 
     // Status
     ctx.font = `11px ${THEME.fontFamily}`;
@@ -600,14 +639,59 @@ export class ColonyOverlay extends BaseOverlay {
       working:  '⚙ Pracuje',
     };
     ctx.fillText(statusLabels[unit.status] ?? unit.status, px + 8, ly);
-    ly += 16;
+    ly += 14;
 
-    // Pozycja
+    // HP bar
+    if (unit.hpMax) {
+      const bw = pw - 16, bh = 6;
+      const bx = px + 8, by = ly;
+      ctx.fillStyle = 'rgba(60,60,60,0.5)';
+      ctx.fillRect(bx, by, bw, bh);
+      const hpPct = Math.max(0, Math.min(1, unit.hp / unit.hpMax));
+      ctx.fillStyle = hpPct > 0.5 ? '#60E0B0' : hpPct > 0.25 ? '#D8A030' : '#D85A30';
+      ctx.fillRect(bx, by, Math.round(bw * hpPct), bh);
+      ctx.fillStyle = THEME.textDim;
+      ctx.font = `9px ${THEME.fontFamily}`;
+      ctx.fillText(`HP ${unit.hp}/${unit.hpMax}`, bx, by + 13);
+      ly += 18;
+    }
+
+    // Attack/Defense
+    if (unit.attack != null) {
+      ctx.font = `10px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(`⚔ ${unit.attack}  🛡 ${unit.defense}  🎯 ${unit.range ?? 1}`, px + 8, ly);
+      ly += 16;
+    }
+
+    // Hex pos
+    ctx.font = `10px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
     ctx.fillText(`Hex: (${unit.q}, ${unit.r})`, px + 8, ly);
-    ly += 20;
+    ly += 18;
 
-    // Przycisk 1: Skanuj obszar (survey) — gdy idle
-    if (unit.status === 'idle') {
+    // Przycisk: ATAKUJ (gdy gracza i obok wróg)
+    if (canAttack) {
+      const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 22;
+      ctx.fillStyle = '#D85A30';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = '#FFF';
+      ctx.font = `bold 10px ${THEME.fontFamily}`;
+      ctx.fillText(`⚔ ATAKUJ (${adjacentEnemy.hp} HP)`, bx + 6, by + 12);
+      this._addHit(bx, by, bw, bh, 'unitAttack', { targetId: adjacentEnemy.id });
+      ly += 26;
+    }
+
+    // Enemy hint — brak akcji dla wrogiej jednostki
+    if (isEnemy && adjacentPlayer) {
+      ctx.font = `9px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#FF9060';
+      ctx.fillText(`⚠ Zagraża: hex (${adjacentPlayer.q}, ${adjacentPlayer.r})`, px + 8, ly);
+      ly += 14;
+    }
+
+    // Przyciski survey/analyze — tylko dla gracza, idle
+    if (!isEnemy && unit.status === 'idle') {
       const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 22;
       ctx.fillStyle = THEME.accent;
       ctx.fillRect(bx, by, bw, bh);
@@ -617,9 +701,7 @@ export class ColonyOverlay extends BaseOverlay {
       this._addHit(bx, by, bw, bh, 'unitSurvey');
       ly += 26;
     }
-
-    // Przycisk 2: Analizuj anomalię — gdy idle + hex z anomalyDetected
-    if (unit.status === 'idle' && canAnalyze) {
+    if (!isEnemy && unit.status === 'idle' && canAnalyze) {
       const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 22;
       ctx.fillStyle = '#cc66ff';
       ctx.fillRect(bx, by, bw, bh);
@@ -630,7 +712,7 @@ export class ColonyOverlay extends BaseOverlay {
       ly += 26;
     }
 
-    // Przycisk: Odznacz
+    // Odznacz
     {
       const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 20;
       ctx.fillStyle = 'rgba(255,255,255,0.12)';
@@ -640,6 +722,33 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillText('✕ Odznacz', bx + 6, by + 11);
       this._addHit(bx, by, bw, bh, 'unitDeselect');
     }
+  }
+
+  // Faza 6: znajdź wrogą jednostkę na sąsiadujących hexach
+  _findAdjacentEnemyUnit(unit, gum) {
+    const all = gum.getUnitsOnPlanet(unit.planetId);
+    const range = unit.range ?? 1;
+    for (const u of all) {
+      if (u.id === unit.id) continue;
+      if (u.owner === unit.owner || (!u.owner && !unit.owner)) continue;
+      const dist = this._hexDist(unit.q, unit.r, u.q, u.r);
+      if (dist <= range) return u;
+    }
+    return null;
+  }
+  _findAdjacentPlayerUnit(enemyUnit, gum) {
+    const all = gum.getUnitsOnPlanet(enemyUnit.planetId);
+    for (const u of all) {
+      if (u.owner && u.owner !== 'player') continue;
+      const dist = this._hexDist(enemyUnit.q, enemyUnit.r, u.q, u.r);
+      if (dist <= 1) return u;
+    }
+    return null;
+  }
+  _hexDist(q1, r1, q2, r2) {
+    const s1 = -q1 - r1;
+    const s2 = -q2 - r2;
+    return (Math.abs(q1 - q2) + Math.abs(r1 - r2) + Math.abs(s1 - s2)) / 2;
   }
 
   _loadUnitSprites() {
@@ -660,6 +769,8 @@ export class ColonyOverlay extends BaseOverlay {
 
     for (const unit of units) {
       const img = this._unitSprites.get(unit.type);
+      // Faza 6: wroga jednostka → czerwone kolory glow/ring/ramka
+      const isEnemy = unit.owner && unit.owner !== 'player';
 
       // Pozycja: interpolacja między hexami podczas ruchu
       let sx, sy;
@@ -679,21 +790,29 @@ export class ColonyOverlay extends BaseOverlay {
       const glowR = S * 0.55;
       const t = Date.now() / 1000;  // sekundy (do animacji pulsu)
 
-      // ── Glow pod sprite'em (turkusowa "podstawka") ──
+      // ── Glow pod sprite'em (kolor zależny od owner) ──
       const glowGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-      glowGrad.addColorStop(0, 'rgba(0, 200, 160, 0.35)');
-      glowGrad.addColorStop(0.6, 'rgba(0, 200, 160, 0.12)');
-      glowGrad.addColorStop(1, 'rgba(0, 200, 160, 0)');
+      if (isEnemy) {
+        glowGrad.addColorStop(0, 'rgba(216, 90, 48, 0.40)');
+        glowGrad.addColorStop(0.6, 'rgba(216, 90, 48, 0.15)');
+        glowGrad.addColorStop(1, 'rgba(216, 90, 48, 0)');
+      } else {
+        glowGrad.addColorStop(0, 'rgba(0, 200, 160, 0.35)');
+        glowGrad.addColorStop(0.6, 'rgba(0, 200, 160, 0.12)');
+        glowGrad.addColorStop(1, 'rgba(0, 200, 160, 0)');
+      }
       ctx.fillStyle = glowGrad;
       ctx.beginPath();
       ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
       ctx.fill();
 
       // ── Pulsujący ring ──
-      const pulsePhase = (Math.sin(t * 2.5) + 1) / 2;  // 0→1→0, ~2.5 Hz
+      const pulsePhase = (Math.sin(t * 2.5) + 1) / 2;
       const ringR = glowR * (0.85 + pulsePhase * 0.25);
       const ringAlpha = 0.2 + pulsePhase * 0.25;
-      ctx.strokeStyle = `rgba(0, 255, 180, ${ringAlpha})`;
+      ctx.strokeStyle = isEnemy
+        ? `rgba(255, 100, 60, ${ringAlpha})`
+        : `rgba(0, 255, 180, ${ringAlpha})`;
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.arc(sx, sy, ringR, 0, Math.PI * 2);
@@ -705,10 +824,15 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.save();
         ctx.translate(sx, sy);
         ctx.scale(flip, 1);
+        if (isEnemy) {
+          // Red tint dla wrogich jednostek
+          ctx.filter = 'hue-rotate(-180deg) saturate(2)';
+        }
         ctx.drawImage(img, -S / 2, -S / 2, S, S);
         ctx.restore();
       } else {
-        ctx.fillStyle = '#00cc88';
+        // Fallback: romb w kolorze zależnym od owner
+        ctx.fillStyle = isEnemy ? '#D85A30' : '#00cc88';
         ctx.beginPath();
         ctx.moveTo(sx + S / 3, sy);
         ctx.lineTo(sx, sy + S / 3);
@@ -718,9 +842,22 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fill();
       }
 
-      // ── Ramka selekcji (jaśniejsza, grubsza gdy zaznaczona) ──
+      // ── Pasek HP (jeśli hp < hpMax) ──
+      if (unit.hpMax && unit.hp < unit.hpMax) {
+        const bw = hs * 1.4;
+        const bh = 3;
+        const bx = sx - bw / 2;
+        const by = sy - hs * 0.9;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(bx, by, bw, bh);
+        const hpPct = Math.max(0, Math.min(1, unit.hp / unit.hpMax));
+        ctx.fillStyle = hpPct > 0.5 ? '#60E0B0' : hpPct > 0.25 ? '#D8A030' : '#D85A30';
+        ctx.fillRect(bx, by, Math.round(bw * hpPct), bh);
+      }
+
+      // ── Ramka selekcji ──
       if (this._selectedUnit?.id === unit.id) {
-        ctx.strokeStyle = '#00ffb4';
+        ctx.strokeStyle = isEnemy ? '#FF6040' : '#00ffb4';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(sx, sy, S / 2 + 3, 0, Math.PI * 2);
@@ -895,6 +1032,44 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Fog — renderowanie wyłączone; dane `tile.explored` pozostają w gridzie do przyszłego wykorzystania
     // if (tile.explored === false) { ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fill(); }
+
+    // Faza 6.5: granice terytoriów (gruba linia na krawędziach między różnymi ownerami)
+    if (grid && tile.owner) {
+      for (let ei = 0; ei < 6; ei++) {
+        const dir = HEX_DIRECTIONS[ei];
+        const nb = grid.get(tile.q + dir.q, tile.r + dir.r);
+        if (!nb) continue;
+        if (nb.owner === tile.owner) continue;  // sama frakcja — brak granicy
+
+        // Kolor wg ownera OBECNEGO hexa (rysujemy granicę od wewnątrz)
+        let borderColor = null;
+        if (tile.owner === 'player') borderColor = '#60E0B0';
+        else if (tile.owner && tile.owner !== 'player') borderColor = '#D85A30';
+        if (!borderColor) continue;
+
+        const pA = pts[ei], pB = pts[(ei + 1) % 6];
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(pA.x, pA.y);
+        ctx.lineTo(pB.x, pB.y);
+        ctx.stroke();
+      }
+    }
+
+    // Faza 6.5: pasek postępu okupacji (gdy trwa 2-miesięczne przejmowanie budynku)
+    if (tile.occupyEmpireId && tile.occupyStart != null) {
+      const elapsed = (window.KOSMOS?.timeSystem?.gameTime ?? 0) - tile.occupyStart;
+      const progress = Math.max(0, Math.min(1, elapsed / (6 / 12)));
+      if (progress > 0 && progress < 1) {
+        const bw = r * 1.2, bh = Math.max(2, r * 0.1);
+        const bx = cx - bw / 2, by = cy + r * 0.5;
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = '#D85A30';
+        ctx.fillRect(bx, by, bw * progress, bh);
+      }
+    }
 
     // Obramowanie
     ctx.beginPath();
@@ -1470,6 +1645,15 @@ export class ColonyOverlay extends BaseOverlay {
         break;
       case 'unitDeselect':
         this._selectedUnit = null;
+        break;
+      case 'unitAttack':
+        if (this._selectedUnit && zone.data?.targetId) {
+          const gum = window.KOSMOS?.groundUnitManager;
+          if (gum) {
+            const res = gum.attackUnit(this._selectedUnit.id, zone.data.targetId);
+            if (!res.hit) console.warn('[ColonyOverlay] Atak nieudany:', res.reason);
+          }
+        }
         break;
     }
   }
