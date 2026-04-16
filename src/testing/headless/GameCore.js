@@ -14,6 +14,8 @@
 
 import EventBus              from '../../core/EventBus.js';
 import EntityManager         from '../../core/EntityManager.js';
+// Używane do emitowania build events
+const _eventBus = EventBus;
 import gameState             from '../../core/GameState.js';
 import debugLog              from '../../core/DebugLog.js';
 
@@ -213,6 +215,12 @@ export class GameCore {
     const grid = PlanetMapGenerator.generate(civPlanet, true);
     this.buildingSystem._gridHeight = grid.height;
     colony.grid = grid;
+
+    // KRITICAL: auto-place capital (colony_base) — w normalnej grze robi to
+    // ColonyOverlay przy pierwszym otwarciu. W headless musimy to zrobić ręcznie,
+    // inaczej brak stolicy = brak housing +4, brak food+3/research+2 z capital.
+    this._placeCapital(grid);
+
     this._autoPlaceStarterBuildings(grid);
 
     // Aktywna kolonia = home planet
@@ -332,5 +340,22 @@ export class GameCore {
       }
     }
     return null;
+  }
+
+  // ── Auto-place capital (colony_base) — replika ColonyOverlay logic ──
+  _placeCapital(grid) {
+    if (!grid) return;
+    const tiles = grid.toArray();
+    // Preferuj plains (najwyższe food bonus), potem any buildable blisko środka
+    let best = tiles.find(t => t.type === 'plains' && !t.buildingId && !t.damaged);
+    if (!best) {
+      best = tiles.find(t => {
+        const terrain = TERRAIN_TYPES[t.type];
+        return terrain?.buildable && !t.buildingId && !t.damaged;
+      });
+    }
+    if (best) {
+      _eventBus.emit('planet:buildRequest', { tile: best, buildingId: 'colony_base' });
+    }
   }
 }

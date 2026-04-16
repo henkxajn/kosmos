@@ -1,29 +1,51 @@
 // ═══════════════════════════════════════════════════════════════
-// RuleBot v2 — predykcyjny bot z bogatym contextem
+// RuleBot v4 — rozegrany bot: kolonizacja, eksploracja, reactive factory
 // ─────────────────────────────────────────────────────────────
-// Zamiast reagować na stan aktualny, przewiduje potrzeby:
-//   - food/water rates per year (nie tylko bieżący amount)
-//   - housing vs pop growth trajectory
-//   - commodity shortages (żeby budować factory gdy brakuje inputów do budynków)
-// Priority-ordered rules: pierwsza która trafia → akcja.
+// Kluczowe ulepszenia vs v3:
+//   • Aggresywny tech rush po rocketry→exploration→colonization
+//   • Multiple factories (2 gdy pop≥6, 3 gdy pop≥10) + reactive mode
+//   • Build launch_pad, shipyard, observatory sekwencyjnie
+//   • Build science_vessel po shipyard, wysłanie recon na najbliższe niezbadane
+//   • Po colonization tech + cargo_ship → build habitat_pod module → colonize
+//   • Observatory wcześnie (auto-discovery ciał)
 // ═══════════════════════════════════════════════════════════════
 
+import EntityManager from '../../core/EntityManager.js';
 import { BaseBot } from './BaseBot.js';
 import { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { BUILDINGS } from '../../data/BuildingsData.js';
 import { TECHS } from '../../data/TechData.js';
 
 const DEFAULT_PERSONALITY = {
-  aggression: 0.5, expansion: 0.5, science: 0.5, trade: 0.5, defense: 0.5,
+  aggression: 0.5, expansion: 0.7, science: 0.6, trade: 0.5, defense: 0.5,
 };
 
-// Tech których warto szukać jako priority — odblokowują kluczowe budynki
+// Ścieżka tech dla ekspansji kosmicznej — w tej kolejności
+const SPACE_TECH_CHAIN = [
+  'orbital_survey',     // T1 — odblokowuje observatory, rocketry
+  'rocketry',           // T2 — odblokowuje launch_pad
+  'exploration',        // T2 — odblokowuje shipyard, science_vessel, cargo_ship
+  'colonization',       // T3 — odblokowuje habitat_pod module (dla colonize missions)
+];
+
+// Ogólny TECH_PRIORITY (space chain first, potem foundation)
 const TECH_PRIORITY = [
-  'metallurgy', 'basic_power', 'basic_chemistry', 'agriculture',  // T1 fundamenty
-  'rocketry',                                                      // odblokowuje ekspedycje
-  'industrial_revolution', 'advanced_chemistry',                   // commodities T2
-  'colonization',                                                  // kolonie
-  'orbital_infrastructure',                                        // shipyard level 2+
+  ...SPACE_TECH_CHAIN,
+  'metallurgy', 'basic_power', 'basic_chemistry', 'agriculture',
+  'industrial_revolution', 'advanced_chemistry',
+  'orbital_infrastructure', 'hydroponics', 'bio_recycling',
+];
+
+// Opening build order — starter daje 3 budynki (farm, well, solar_farm) + colony_base
+// Bot dodaje factory → habitat → mine → lab (potem po rocketry launch_pad, po exploration shipyard)
+const OPENING_ORDER = [
+  { id: 'farm',        target: 1 },
+  { id: 'well',        target: 1 },
+  { id: 'solar_farm',  target: 1 },
+  { id: 'factory',     target: 1 },
+  { id: 'habitat',     target: 1 },
+  { id: 'mine',        target: 1 },
+  { id: 'lab',         target: 1 },
 ];
 
 export class RuleBot extends BaseBot {
@@ -32,115 +54,117 @@ export class RuleBot extends BaseBot {
     this.personality = { ...DEFAULT_PERSONALITY, ...personality };
     this.weights = {
       food_min: 40, water_min: 40,
-      food_rate_warn: 0.5,      // foodRate < 0.5 per POP → warning
-      water_rate_warn: 0.3,
       energy_min: -1,
-      housing_anticipate: 1,    // buduj gdy pop > housing - 1
-      research_min_pop: 3,      // min pop żeby robić research
-      mine_min_pop: 3,
-      shipyard_min_pop: 6,
-      observatory_min_pop: 5,
-      ship_build_min_pop: 8,
+      housing_buffer: 1,
+      research_prob: 0.45,
+      expedition_prob: 0.5,
+      upgrade_prob: 0.2,
+      factory_prob: 0.15,
+      ship_prob: 0.35,
+      farm_per_pop: 1.0,
+      well_per_pop: 1.0,
+      solar_per_pop: 0.7,
+      factory_per_pop: { 6: 2, 10: 3, 15: 4 },  // docelowa liczba factory per POP threshold
       ...weights,
     };
+    this._recentEnqueues = new Map();
+    this._enqueueCooldown = 15;
+    this._factoryModeSetReactive = false;  // flag — raz ustawione
+    this._reconnedTargets = new Set();      // ciała na które wysłano recon
+    this._colonizedTargets = new Set();
   }
+
+  _ESSENTIAL_COMMODITIES = [
+    { id: 'pressure_modules',   target: 4, qty: 3 },
+    { id: 'structural_alloys',  target: 6, qty: 3 },
+    { id: 'electronic_systems', target: 4, qty: 2 },
+    { id: 'extraction_systems', target: 3, qty: 2 },
+    { id: 'power_cells',        target: 5, qty: 3 },
+    { id: 'conductor_bundles',  target: 4, qty: 2 },
+    { id: 'polymer_composites', target: 3, qty: 2 },
+    { id: 'reactive_armor',     target: 3, qty: 2 },
+  ];
 
   decideAction(obs, catalog) {
     const ctx = this._buildContext();
     if (!ctx) return { type: ACTION_TYPES.WAIT };
 
-    const tryResult = (action, tag) => {
-      if (!action) return null;
-      action._tag = tag;
-      return action;
-    };
+    const civYear = Math.floor((window.KOSMOS?.timeSystem?.gameTime ?? 0) * 12);
 
-    // ── R1 KRYTYCZNE: FOOD ──────────────────────────────────────────────
-    if (ctx.food < this.weights.food_min || ctx.foodRate < ctx.pop * this.weights.food_rate_warn) {
-      // Preferuj upgrade istniejącego farm zamiast budowy nowej (tańsze)
-      const upgrade = this._findUpgrade(ctx, catalog, 'farm');
-      if (upgrade) return tryResult(upgrade, 'food_upgrade');
-      const build = this._findBuild(catalog, 'farm');
-      if (build && ctx.canBuild('farm')) return tryResult(build, 'food_build');
+    // ── P-2: Factory reactive mode (raz, gdy mamy ≥2 factories) ──
+    if (!this._factoryModeSetReactive && ctx.countBuilding('factory') >= 2) {
+      this._factoryModeSetReactive = true;
+      return { type: ACTION_TYPES.FACTORY_SET_MODE, mode: 'reactive', _tag: 'factory_reactive' };
     }
 
-    // ── R2 KRYTYCZNE: WATER ─────────────────────────────────────────────
-    if (ctx.water < this.weights.water_min || ctx.waterRate < ctx.pop * this.weights.water_rate_warn) {
-      const upgrade = this._findUpgrade(ctx, catalog, 'well');
-      if (upgrade) return tryResult(upgrade, 'water_upgrade');
-      const build = this._findBuild(catalog, 'well');
-      if (build && ctx.canBuild('well')) return tryResult(build, 'water_build');
+    // ── P-1: Pre-enqueue essential commodities ──
+    if (ctx.countBuilding('factory') > 0) {
+      for (const ec of this._ESSENTIAL_COMMODITIES) {
+        const have = ctx.getAmount(ec.id);
+        if (have < ec.target && this._canEnqueue(ec.id, civYear)) {
+          this._recentEnqueues.set(ec.id, civYear);
+          return { type: ACTION_TYPES.FACTORY_ENQUEUE, commodityId: ec.id, qty: ec.qty, _tag: `preenqueue_${ec.id}` };
+        }
+      }
     }
 
-    // ── R3 KRYTYCZNE: ENERGY ────────────────────────────────────────────
+    // ── P0: Opening build order ──
+    for (const step of OPENING_ORDER) {
+      if (ctx.countBuilding(step.id) < step.target) {
+        if (ctx.canBuild(step.id)) {
+          const a = this._findBuild(catalog, step.id);
+          if (a) { a._tag = `opening_${step.id}`; return a; }
+        } else {
+          const needed = this._findMissingCommodity(ctx, step.id);
+          if (needed && this._canEnqueue(needed, civYear)) {
+            this._recentEnqueues.set(needed, civYear);
+            return { type: ACTION_TYPES.FACTORY_ENQUEUE, commodityId: needed, qty: 3, _tag: `opening_fact_${needed}` };
+          }
+          break;
+        }
+      }
+    }
+
+    // ── P1-P3: KRYTYCZNE food/water/energy ──
+    if (ctx.food < this.weights.food_min || ctx.foodRate < ctx.pop * 0.6) {
+      const up = this._findUpgrade(ctx, catalog, 'farm');
+      if (up) { up._tag = 'food_upgrade'; return up; }
+      if (ctx.canBuild('farm')) {
+        const a = this._findBuild(catalog, 'farm');
+        if (a) { a._tag = 'food_build'; return a; }
+      }
+    }
+    if (ctx.water < this.weights.water_min || ctx.waterRate < ctx.pop * 0.4) {
+      const up = this._findUpgrade(ctx, catalog, 'well');
+      if (up) { up._tag = 'water_upgrade'; return up; }
+      if (ctx.canBuild('well')) {
+        const a = this._findBuild(catalog, 'well');
+        if (a) { a._tag = 'water_build'; return a; }
+      }
+    }
     if (ctx.energyBalance < this.weights.energy_min) {
-      const upgrade = this._findUpgrade(ctx, catalog, 'solar_farm');
-      if (upgrade) return tryResult(upgrade, 'energy_upgrade');
-      const build = this._findBuild(catalog, 'solar_farm');
-      if (build && ctx.canBuild('solar_farm')) return tryResult(build, 'energy_build');
+      const up = this._findUpgrade(ctx, catalog, 'solar_farm');
+      if (up) { up._tag = 'energy_upgrade'; return up; }
+      if (ctx.canBuild('solar_farm')) {
+        const a = this._findBuild(catalog, 'solar_farm');
+        if (a) { a._tag = 'energy_build'; return a; }
+      }
     }
 
-    // ── R4 URGENT: HOUSING (anticipate growth) ──────────────────────────
-    if (ctx.pop > ctx.housing - this.weights.housing_anticipate) {
-      // habitat najpierw (główny housing building)
+    // ── P4: Housing (anticipate pop growth) ──
+    if (ctx.pop >= ctx.housing - this.weights.housing_buffer) {
       if (ctx.canBuild('habitat')) {
         const a = this._findBuild(catalog, 'habitat');
-        if (a) return tryResult(a, 'housing_habitat');
+        if (a) { a._tag = 'housing_habitat'; return a; }
       }
-      // residential_block jako fallback
-      if (ctx.canBuild('residential_block')) {
-        const a = this._findBuild(catalog, 'residential_block');
-        if (a) return tryResult(a, 'housing_residential');
-      }
-      // Upgrade istniejących habitatów
       const up = this._findUpgrade(ctx, catalog, 'habitat');
-      if (up) return tryResult(up, 'housing_upgrade');
+      if (up) { up._tag = 'housing_upgrade'; return up; }
     }
 
-    // ── R5 URGENT: brak mine, a mamy POP ──────────────────────────────
-    if (ctx.pop >= this.weights.mine_min_pop && ctx.countBuilding('mine') === 0 && ctx.canBuild('mine')) {
-      const a = this._findBuild(catalog, 'mine');
-      if (a) return tryResult(a, 'mine_first');
-    }
-
-    // ── R6 COMMODITIES: factory dla potrzebnych commodities ─────────────
-    // Jeśli zaraz nie zbudujemy habitat/mine bo brakuje commodities → enqueue
-    const neededCom = this._findNeededCommodity(ctx);
-    if (neededCom) {
-      return tryResult({ type: ACTION_TYPES.FACTORY_ENQUEUE, commodityId: neededCom, qty: 2 }, `factory_${neededCom}`);
-    }
-
-    // ── R7 EXPAND: predict food/water future needs ─────────────────────
-    if (ctx.foodRate < ctx.pop * 1.0 && ctx.canBuild('farm')) {
-      const build = this._findBuild(catalog, 'farm');
-      if (build) return tryResult(build, 'food_expand');
-    }
-    if (ctx.waterRate < ctx.pop * 0.8 && ctx.canBuild('well')) {
-      const build = this._findBuild(catalog, 'well');
-      if (build) return tryResult(build, 'water_expand');
-    }
-
-    // ── R8 LAB/RESEARCH STATION ─────────────────────────────────────────
-    if (ctx.pop >= this.weights.research_min_pop) {
-      const hasLab = ctx.countBuilding('lab') + ctx.countBuilding('research_station') > 0;
-      if (!hasLab) {
-        if (ctx.canBuild('research_station')) {
-          const a = this._findBuild(catalog, 'research_station');
-          if (a) return tryResult(a, 'research_lab');
-        }
-        if (ctx.canBuild('lab')) {
-          const a = this._findBuild(catalog, 'lab');
-          if (a) return tryResult(a, 'research_lab');
-        }
-      }
-    }
-
-    // ── R9 RESEARCH ─────────────────────────────────────────────────────
-    // Próbuj research często — TechSystem trzyma pending queue, auto-complete gdy stać
-    if (Math.random() < this.personality.science * 0.5) {
+    // ── P5: RESEARCH — priority na space chain ──
+    if (Math.random() < this.personality.science * this.weights.research_prob * 2) {
       const availableTechs = catalog.listResearchActions();
       if (availableTechs.length > 0) {
-        // Preferuj tech z TECH_PRIORITY listy, potem najtańsze
         let pick = null;
         for (const priority of TECH_PRIORITY) {
           const found = availableTechs.find(a => a.techId === priority);
@@ -152,88 +176,234 @@ export class RuleBot extends BaseBot {
             .sort((x, y) => x.cost - y.cost);
           pick = sorted[0].a;
         }
-        return tryResult(pick, 'research');
+        pick._tag = 'research';
+        return pick;
       }
     }
 
-    // ── R10 SPACE: launch_pad po rocketry ──────────────────────────────
-    if (ctx.hasTech('rocketry') && ctx.countBuilding('launch_pad') === 0 && ctx.canBuild('launch_pad')) {
-      const a = this._findBuild(catalog, 'launch_pad');
-      if (a) return tryResult(a, 'launch_pad');
+    // ── P6: Expand food/water/solar z populacją ──
+    const pop = Math.max(1, ctx.pop);
+    if (ctx.countBuilding('farm') < Math.ceil(pop * this.weights.farm_per_pop / 2) && ctx.canBuild('farm')) {
+      const a = this._findBuild(catalog, 'farm');
+      if (a) { a._tag = 'expand_farm'; return a; }
     }
-
-    // ── R11 SHIPYARD ────────────────────────────────────────────────────
-    if (ctx.hasTech('rocketry') && ctx.pop >= this.weights.shipyard_min_pop &&
-        ctx.countBuilding('shipyard') === 0 && ctx.canBuild('shipyard')) {
-      const a = this._findBuild(catalog, 'shipyard');
-      if (a) return tryResult(a, 'shipyard');
+    if (ctx.countBuilding('well') < Math.ceil(pop * this.weights.well_per_pop / 2) && ctx.canBuild('well')) {
+      const a = this._findBuild(catalog, 'well');
+      if (a) { a._tag = 'expand_well'; return a; }
     }
-
-    // ── R12 OBSERVATORY ────────────────────────────────────────────────
-    if (ctx.pop >= this.weights.observatory_min_pop &&
-        ctx.countBuilding('observatory') === 0 && ctx.canBuild('observatory')) {
-      const a = this._findBuild(catalog, 'observatory');
-      if (a) return tryResult(a, 'observatory');
-    }
-
-    // ── R13 BUILD SHIP (science_vessel dla recon) ─────────────────────
-    if (ctx.countBuilding('shipyard') > 0 && ctx.pop >= this.weights.ship_build_min_pop) {
-      const shipActions = catalog.listBuildShipActions();
-      const science = shipActions.find(a => a.shipId === 'science_vessel');
-      if (science) return tryResult(science, 'build_science_ship');
-      if (shipActions.length > 0 && Math.random() < this.personality.expansion * 0.4) {
-        return tryResult(shipActions[0], 'build_ship_any');
-      }
-    }
-
-    // ── R14 EXPEDITION: recon w pierwszej kolejności ──────────────────
-    const expActions = catalog.listExpeditionActions({ limit: 20 });
-    if (expActions.length > 0 && Math.random() < this.personality.expansion * 0.6) {
-      const recon = expActions.find(e => e.missionType === 'recon');
-      if (recon) return tryResult(recon, 'recon');
-      if (Math.random() < 0.3) return tryResult(expActions[0], 'expedition');
-    }
-
-    // ── R15 2ND MINE ───────────────────────────────────────────────────
-    if (ctx.countBuilding('mine') === 1 && ctx.pop >= 5 && ctx.canBuild('mine')) {
-      const a = this._findBuild(catalog, 'mine');
-      if (a) return tryResult(a, 'mine_second');
-    }
-
-    // ── R16 UPGRADE: nadwyżka resources → upgrade losowego ─────────────
-    if (Math.random() < 0.25) {
-      const upgrades = catalog.listUpgradeActions({ limit: 20 });
-      if (upgrades.length > 0) {
-        return tryResult(upgrades[Math.floor(Math.random() * upgrades.length)], 'upgrade_random');
-      }
-    }
-
-    // ── R17 FACTORY: general commodity production ──────────────────────
-    if (Math.random() < this.personality.trade * 0.25) {
-      const fact = catalog.listFactoryActions();
-      if (fact.length > 0) return tryResult(fact[0], 'factory_general');
-    }
-
-    // ── R18 FALLBACK build: solar_farm is cheap ─────────────────────────
-    if (ctx.canBuild('solar_farm')) {
+    if (ctx.countBuilding('solar_farm') < Math.ceil(pop * this.weights.solar_per_pop / 1.5) && ctx.canBuild('solar_farm')) {
       const a = this._findBuild(catalog, 'solar_farm');
-      if (a && Math.random() < 0.3) return tryResult(a, 'fallback_solar');
+      if (a) { a._tag = 'expand_solar'; return a; }
+    }
+
+    // ── P7: 2nd mine ──
+    if (ctx.countBuilding('mine') < 2 && ctx.pop >= 5 && ctx.canBuild('mine')) {
+      const a = this._findBuild(catalog, 'mine');
+      if (a) { a._tag = 'mine_second'; return a; }
+    }
+
+    // ── P8: Multiple factories (kluczowe dla expansion commodities) ──
+    const factoryCount = ctx.countBuilding('factory');
+    let factoryTarget = 1;
+    for (const [popThresh, target] of Object.entries(this.weights.factory_per_pop).sort((a,b) => +a[0] - +b[0])) {
+      if (ctx.pop >= +popThresh) factoryTarget = target;
+    }
+    if (factoryCount < factoryTarget && ctx.canBuild('factory')) {
+      const a = this._findBuild(catalog, 'factory');
+      if (a) { a._tag = `factory_${factoryCount+1}`; return a; }
+    }
+
+    // ── P9: Space buildings po odpowiednich techach ──
+    if (ctx.hasTech('rocketry')) {
+      if (ctx.countBuilding('launch_pad') === 0 && ctx.canBuild('launch_pad')) {
+        const a = this._findBuild(catalog, 'launch_pad');
+        if (a) { a._tag = 'launch_pad'; return a; }
+      }
+    }
+    if (ctx.hasTech('exploration')) {
+      if (ctx.countBuilding('shipyard') === 0 && ctx.pop >= 5 && ctx.canBuild('shipyard')) {
+        const a = this._findBuild(catalog, 'shipyard');
+        if (a) { a._tag = 'shipyard'; return a; }
+      }
+    }
+
+    // ── P10: Observatory — wcześnie dla auto-discovery ──
+    if (ctx.pop >= 4 && ctx.countBuilding('observatory') === 0 && ctx.canBuild('observatory')) {
+      const a = this._findBuild(catalog, 'observatory');
+      if (a) { a._tag = 'observatory'; return a; }
+    }
+
+    // ── P11: Research station — zaawansowany lab ──
+    if (ctx.pop >= 7 && ctx.countBuilding('research_station') === 0 && ctx.canBuild('research_station')) {
+      const a = this._findBuild(catalog, 'research_station');
+      if (a) { a._tag = 'research_station'; return a; }
+    }
+
+    // ── P12: Build ship (science_vessel najpierw, potem cargo_ship dla kolonizacji) ──
+    if (ctx.countBuilding('shipyard') > 0 && ctx.pop >= 4) {
+      const vm = window.KOSMOS?.vesselManager;
+      const allVessels = vm?.getAllVessels?.() ?? [];
+      const myVessels = allVessels.filter(v => v.colonyId === ctx.active.planetId);
+      const hasScience = myVessels.some(v => v.shipId === 'science_vessel');
+      const hasCargo   = myVessels.some(v => v.shipId === 'cargo_ship');
+
+      if (!hasScience) {
+        const ships = catalog.listBuildShipActions();
+        const science = ships.find(a => a.shipId === 'science_vessel');
+        if (science) { science._tag = 'ship_science'; return science; }
+      }
+      // Po science_vessel — cargo_ship (dla colonization gdy tech zbadane)
+      if (hasScience && !hasCargo && ctx.hasTech('colonization')) {
+        const ships = catalog.listBuildShipActions();
+        const cargo = ships.find(a => a.shipId === 'cargo_ship');
+        if (cargo) { cargo._tag = 'ship_cargo'; return cargo; }
+      }
+    }
+
+    // ── P13: RECON — eksploracja najbliższych niezbadanych ciał ──
+    const vm = window.KOSMOS?.vesselManager;
+    const allVessels = vm?.getAllVessels?.() ?? [];
+    const dockedScience = allVessels.find(v =>
+      v.colonyId === ctx.active.planetId &&
+      v.status === 'docked' &&
+      v.shipId === 'science_vessel'
+    );
+    if (dockedScience && ctx.countBuilding('launch_pad') > 0) {
+      const unexploredBody = this._findNearestUnexplored(ctx.active.planet);
+      if (unexploredBody && !this._reconnedTargets.has(unexploredBody.id)) {
+        this._reconnedTargets.add(unexploredBody.id);
+        return {
+          type: ACTION_TYPES.EXPEDITION,
+          missionType: 'recon',
+          targetId: unexploredBody.id,
+          vesselId: dockedScience.id,
+          _tag: `recon_${unexploredBody.id}`,
+        };
+      }
+    }
+
+    // ── P14: COLONIZE — po rekonesansie rocky planet, wysłanie colonize ──
+    if (ctx.hasTech('colonization') && allVessels.length > 0) {
+      const dockedCargo = allVessels.find(v =>
+        v.colonyId === ctx.active.planetId &&
+        v.status === 'docked' &&
+        v.shipId === 'cargo_ship'
+      );
+      if (dockedCargo) {
+        const rockyTarget = this._findExploredRockyForColony(ctx.active.planet);
+        if (rockyTarget && !this._colonizedTargets.has(rockyTarget.id)) {
+          this._colonizedTargets.add(rockyTarget.id);
+          return {
+            type: ACTION_TYPES.EXPEDITION,
+            missionType: 'colonize',
+            targetId: rockyTarget.id,
+            vesselId: dockedCargo.id,
+            _tag: `colonize_${rockyTarget.id}`,
+          };
+        }
+      }
+    }
+
+    // ── P15: MINING — jeśli mamy explored bodies z deposits ──
+    if (allVessels.length > 0 && Math.random() < 0.3) {
+      const exps = catalog.listExpeditionActions({ limit: 15 });
+      const mining = exps.find(e => e.missionType === 'mining');
+      if (mining) { mining._tag = 'mining'; return mining; }
+    }
+
+    // ── P16: Upgrade random (żeby poprawiać istniejące) ──
+    if (Math.random() < this.weights.upgrade_prob) {
+      const ups = catalog.listUpgradeActions({ limit: 20 });
+      if (ups.length > 0) {
+        const u = ups[Math.floor(Math.random() * ups.length)];
+        u._tag = 'upgrade_random';
+        return u;
+      }
+    }
+
+    // ── P17: Factory enqueue fallback ──
+    if (Math.random() < this.personality.trade * this.weights.factory_prob * 2) {
+      const neededCom = this._findMissingCommodity(ctx, null);
+      if (neededCom && this._canEnqueue(neededCom, civYear)) {
+        this._recentEnqueues.set(neededCom, civYear);
+        return { type: ACTION_TYPES.FACTORY_ENQUEUE, commodityId: neededCom, qty: 2, _tag: `factory_${neededCom}` };
+      }
     }
 
     return { type: ACTION_TYPES.WAIT };
   }
 
-  // ── Context builder — agreguje state ─────────────────────────────────
+  _canEnqueue(commodityId, civYear) {
+    const factSys = window.KOSMOS?.factorySystem;
+    const queue = factSys?._queue ?? [];
+    if (queue.some(q => q?.commodityId === commodityId)) return false;
+    // W trybie reactive factory sam produkuje — nie enqueue duplicate
+    if (factSys?._mode === 'reactive') return false;
+    const last = this._recentEnqueues.get(commodityId);
+    if (last == null) return true;
+    return (civYear - last) >= this._enqueueCooldown;
+  }
+
+  /** Znajdź najbliższe ciało którego nie rozpoznaliśmy (nie explored + nie planowane recon) */
+  _findNearestUnexplored(homePlanet) {
+    if (!homePlanet) return null;
+    const allEntities = EntityManager.getAll?.() ?? [];
+    const candidates = allEntities.filter(e => {
+      if (e.type === 'star') return false;
+      if (e.id === homePlanet.id) return false;
+      if (e.explored) return false;
+      if (this._reconnedTargets.has(e.id)) return false;
+      // Mamy pozycję
+      return e.physics?.x != null || e.orbital?.a != null;
+    });
+    // Najbliższe — Euclid po position
+    const hx = homePlanet.physics?.x ?? 0;
+    const hy = homePlanet.physics?.y ?? 0;
+    let best = null, bestDist = Infinity;
+    for (const e of candidates) {
+      const ex = e.physics?.x ?? 0;
+      const ey = e.physics?.y ?? 0;
+      const d = Math.hypot(ex - hx, ey - hy);
+      if (d < bestDist) { best = e; bestDist = d; }
+    }
+    return best;
+  }
+
+  /** Znajdź explored rocky planetę, która nie jest już zasiedlona */
+  _findExploredRockyForColony(homePlanet) {
+    if (!homePlanet) return null;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const existingColonies = new Set(colMgr?.getAllColonies?.()?.map(c => c.planetId) ?? []);
+    const allEntities = EntityManager.getAll?.() ?? [];
+    const rockies = allEntities.filter(e => {
+      if (e.type !== 'planet') return false;
+      if (!e.explored) return false;
+      if (existingColonies.has(e.id)) return false;
+      if (this._colonizedTargets.has(e.id)) return false;
+      if (e.planetType !== 'rocky') return false;
+      // Ma atmosferę która nie jest "none" (lub minimum breatheble/thin)
+      return e.atmosphere !== 'none';
+    });
+    const hx = homePlanet.physics?.x ?? 0;
+    const hy = homePlanet.physics?.y ?? 0;
+    let best = null, bestDist = Infinity;
+    for (const e of rockies) {
+      const ex = e.physics?.x ?? 0;
+      const ey = e.physics?.y ?? 0;
+      const d = Math.hypot(ex - hx, ey - hy);
+      if (d < bestDist) { best = e; bestDist = d; }
+    }
+    return best;
+  }
+
   _buildContext() {
     const K = window.KOSMOS;
     const active = K?.colonyManager?.getColony?.(K?.colonyManager?._activePlanetId ?? K?.homePlanet?.id);
     if (!active) return null;
     const resSys = active.resourceSystem;
     if (!resSys) return null;
-
     const inv = resSys.inventory ?? new Map();
     const rates = resSys._inventoryPerYear ?? new Map();
-
     const getAmount = (id) => inv.get(id) ?? 0;
     const getRate   = (id) => rates.get(id) ?? 0;
 
@@ -248,44 +418,21 @@ export class RuleBot extends BaseBot {
         buildingCounts.set(id, (buildingCounts.get(id) ?? 0) + 1);
       }
     }
-
     const techSys = K.techSystem;
 
     return {
       active, resSys, bSys, techSys,
       pop, housing,
-      food: getAmount('food'),
-      water: getAmount('water'),
-      research: getAmount('research'),
-      foodRate: getRate('food'),
-      waterRate: getRate('water'),
-      researchRate: getRate('research'),
+      food: getAmount('food'), water: getAmount('water'),
+      foodRate: getRate('food'), waterRate: getRate('water'),
       energyBalance: resSys.energy?.balance ?? 0,
-
-      // Main resources
-      fe: getAmount('Fe'),
-      si: getAmount('Si'),
-      cu: getAmount('Cu'),
-
-      // Commodities important for basic building
-      structAlloys: getAmount('structural_alloys'),
-      pressureMod:  getAmount('pressure_modules'),
-      electronicSys: getAmount('electronic_systems'),
-      polymerComp:  getAmount('polymer_composites'),
-      conductorBun: getAmount('conductor_bundles'),
-      powerCells:   getAmount('power_cells'),
-      extractionSys: getAmount('extraction_systems'),
-
-      // Helpers
+      getAmount, getRate,
       countBuilding: (id) => buildingCounts.get(id) ?? 0,
-      haveBuilding: (id) => (buildingCounts.get(id) ?? 0) > 0,
       hasTech: (id) => techSys?.isResearched?.(id) ?? false,
-
       canBuild(buildingId) {
         const def = BUILDINGS[buildingId];
         if (!def) return false;
         if (def.requires && !techSys?.isResearched?.(def.requires)) return false;
-        // Check resource costs
         for (const [k, v] of Object.entries(def.cost ?? {})) {
           if (getAmount(k) < v) return false;
         }
@@ -297,21 +444,14 @@ export class RuleBot extends BaseBot {
     };
   }
 
-  /** Znajdź najtańszy brakujący commodity w commodityCost kluczowych budynków */
-  _findNeededCommodity(ctx) {
-    // Sprawdź 3 kluczowe budynki: habitat, mine, lab
-    const keyBuildings = ['habitat', 'mine', 'research_station', 'lab'];
-    for (const id of keyBuildings) {
+  _findMissingCommodity(ctx, buildingId) {
+    const candidates = buildingId ? [buildingId] : ['habitat', 'mine', 'lab', 'research_station', 'shipyard', 'launch_pad'];
+    for (const id of candidates) {
       const def = BUILDINGS[id];
       if (!def) continue;
-      // Jeśli NIE mamy tego budynku i brakuje ~commodity ale resource'y OK
       if (def.requires && !ctx.hasTech(def.requires)) continue;
-      // Commodity shortage?
       for (const [k, v] of Object.entries(def.commodityCost ?? {})) {
-        const have = ctx.active.resourceSystem.getAmount?.(k) ?? 0;
-        if (have < v) {
-          return k;  // zwróć pierwszy brakujący
-        }
+        if (ctx.getAmount(k) < v) return k;
       }
     }
     return null;
@@ -324,9 +464,8 @@ export class RuleBot extends BaseBot {
 
   _findUpgrade(ctx, catalog, buildingIdFilter) {
     const upgrades = catalog.listUpgradeActions({ limit: 20 });
-    const active = ctx.active;
     return upgrades.find(u => {
-      const entry = active.buildingSystem?._active?.get(u.tile.key);
+      const entry = ctx.active.buildingSystem?._active?.get(u.tile.key);
       const id = entry?.building?.id ?? entry?.buildingId;
       return id === buildingIdFilter;
     }) ?? null;

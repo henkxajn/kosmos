@@ -6,6 +6,8 @@
 // Eksport: JSON + human-readable summary.
 // ═══════════════════════════════════════════════════════════════
 
+import { generateConclusions, summaryText } from './ConclusionsEngine.js';
+
 export class GameReport {
   constructor({ id, seed, bot, scenario }) {
     this.id = id;
@@ -138,7 +140,7 @@ export class Reporter {
 
     // ── Event summary aggregation ──
     const evAgg = {};
-    const shortageByRes = {};
+    const shortByRes = {};
     const techByBranch = {};
     const shipsByType = {};
     for (const g of this.games) {
@@ -146,7 +148,7 @@ export class Reporter {
       for (const [k, v] of Object.entries(es)) {
         if (typeof v === 'number') evAgg[k] = (evAgg[k] ?? 0) + v;
         else if (k === 'shortagesByResource' && v) {
-          for (const [r, c] of Object.entries(v)) shortageByRes[r] = (shortageByRes[r] ?? 0) + c;
+          for (const [r, c] of Object.entries(v)) shortByRes[r] = (shortByRes[r] ?? 0) + c;
         }
         else if (k === 'techsByBranch' && v) {
           for (const [b, c] of Object.entries(v)) techByBranch[b] = (techByBranch[b] ?? 0) + c;
@@ -168,6 +170,16 @@ export class Reporter {
     const vesselTotals = this.games.map(g => g.finalState?.vessels?.total ?? 0);
     if (vesselTotals.length > 0) finalStats.avg_vessels = Math.round(vesselTotals.reduce((s, v) => s + v, 0) / vesselTotals.length * 10) / 10;
 
+    // Budujemy baseAgg bez conclusions — by ConclusionsEngine mógł go sprawdzić
+    const baseAggNoConclusions = {
+      runName: this.runName, games: n, crashed, finished, gameOver,
+      crashRate: (crashed / n * 100).toFixed(1) + '%',
+      avgYears: Math.round(avgYears), avgMs: Math.round(avgMs),
+      eventTotals: evAgg, shortageByResource: shortByRes,
+      techsByBranch: techByBranch, shipsBuiltByType: shipsByType,
+      finalStats, flagHistogram: flagHist, actionTotals,
+    };
+
     return {
       runName: this.runName,
       games: n,
@@ -185,11 +197,21 @@ export class Reporter {
       elapsedMs: Date.now() - this.startedAt,
       // Nowe: agregacje z event summary + final stats
       eventTotals: evAgg,
-      shortageByResource: shortageByRes,
+      shortageByResource: shortByRes,
       techsByBranch: techByBranch,
       shipsBuiltByType: shipsByType,
       finalStats,
+      conclusions: this._generateConclusionsSafe(baseAggNoConclusions),
     };
+  }
+
+  _generateConclusionsSafe(baseAgg) {
+    try {
+      const gamesJson = this.games.map(g => typeof g.toJSON === 'function' ? g.toJSON() : g);
+      return generateConclusions(baseAgg, gamesJson);
+    } catch (err) {
+      return [{ severity: 'info', category: 'game', title: 'ConclusionsEngine error', evidence: err?.message ?? String(err), suggestion: 'Zgłoś buga' }];
+    }
   }
 
   toJSON() {
@@ -251,6 +273,11 @@ export class Reporter {
       lines.push('');
       lines.push('── Ships Built ──');
       for (const [s, c] of Object.entries(a.shipsBuiltByType)) lines.push(`  ${s.padEnd(22)} ${c}`);
+    }
+
+    if (a.conclusions && a.conclusions.length > 0) {
+      lines.push('');
+      lines.push(summaryText(a.conclusions));
     }
     if (a.uniqueCrashes.length > 0) {
       lines.push('');

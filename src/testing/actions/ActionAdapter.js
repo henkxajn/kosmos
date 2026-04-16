@@ -17,6 +17,7 @@ export const ACTION_TYPES = {
   BUILD_SHIP:    'buildShip',
   FACTORY_ENQUEUE: 'factoryEnqueue',
   FACTORY_DEQUEUE: 'factoryDequeue',
+  FACTORY_SET_MODE: 'factorySetMode',
   WAIT:          'wait',
 };
 
@@ -75,6 +76,11 @@ export function execute(action) {
     case ACTION_TYPES.FACTORY_DEQUEUE:
       EventBus.emit('factory:dequeue', { index: action.index ?? 0 });
       return { emitted: true, event: 'factory:dequeue' };
+
+    case ACTION_TYPES.FACTORY_SET_MODE:
+      if (!action.mode) return { emitted: false, reason: 'missing_mode' };
+      EventBus.emit('factory:setMode', { mode: action.mode });
+      return { emitted: true, event: 'factory:setMode' };
 
     case ACTION_TYPES.WAIT:
       return { emitted: true, event: null, noop: true };

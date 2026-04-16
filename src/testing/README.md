@@ -6,6 +6,23 @@ Narzędzie do testowania gry KOSMOS przez botów AI grających w trybie headless
 
 ---
 
+## 📊 Co widzisz w raporcie (po ulepszeniach v2)
+
+Każdy raport JSON zawiera teraz:
+- **aggregate.finalStats** — avg_pop, avg_housing, avg_prosperity, avg_morale, avg_colonies, avg_techs, avg_buildings, avg_vessels, avg_credits
+- **aggregate.eventTotals** — popBorn, popDied, techsResearched, vesselsCreated, coloniesFounded, observatoryDiscoveries, shortages, randomEvents itd.
+- **aggregate.shortageByResource** — ile razy brakowało food/water/pressure_modules itd.
+- **aggregate.techsByBranch** — ile tech zbadano w mining/biology/energy/space/synthetic itd.
+- **aggregate.shipsBuiltByType** — science_vessel ×N, colony_ship ×N
+- **per-gra metricsSnapshots** — co 50 civYears: pop, housing, prosperity, morale, buildings, colonies, vessels, techs, research+rate, credits, energyProduction/consumption/balance, observatoryDiscoveries, resFood/resWater/resFe + rateFood/rateWater/rateResearch
+- **per-gra events** — timeline 200 eventów: popBorn/popDied/techResearched/vesselCreated/colonyFounded/observatoryDiscovered/shortage/randomEvent/gameOver
+- **per-gra eventSummary** — zbiorcze liczniki
+- **finalState** — coloniesList[], empires[] (z FSM, tech, military, hostility), buildingsByCategory, inventory z rates per-year
+
+W UI widzisz to jako: stat boxes, bar charts, SVG line charts w czasie, event timeline, tabela kolonii, tabela obcych imperiów z ich stanem.
+
+---
+
 ## 🖥️ Wizualny interfejs (polecane!)
 
 Zamiast CLI — odpal HTML konsolę z myszką:

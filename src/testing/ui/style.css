@@ -466,3 +466,138 @@ h3.section-title {
 .text-warn { color: var(--warning); }
 .text-danger { color: var(--danger); }
 .text-dim { color: var(--text-dim); }
+
+/* ── Conclusions panel ────────────────────────────────────── */
+.conclusions-list {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-bottom: 20px;
+}
+.conclusion-card {
+  background: var(--bg-secondary);
+  border-left: 4px solid var(--border);
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+}
+.conclusion-card.sev-critical {
+  border-left-color: var(--danger);
+  background: linear-gradient(90deg, rgba(255,85,102,0.08), var(--bg-secondary));
+}
+.conclusion-card.sev-warning {
+  border-left-color: var(--warning);
+  background: linear-gradient(90deg, rgba(255,204,102,0.08), var(--bg-secondary));
+}
+.conclusion-card.sev-info {
+  border-left-color: var(--success);
+  background: linear-gradient(90deg, rgba(0,238,136,0.06), var(--bg-secondary));
+}
+.cc-header {
+  display: flex; gap: 10px; align-items: baseline;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.cc-sev {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-primary);
+}
+.conclusion-card.sev-critical .cc-sev { color: var(--danger); }
+.conclusion-card.sev-warning .cc-sev { color: var(--warning); }
+.conclusion-card.sev-info .cc-sev { color: var(--success); }
+.cc-cat {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.cc-title {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: normal;
+  flex: 1;
+}
+.cc-body {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cc-body strong {
+  color: var(--text-primary);
+  font-weight: normal;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+.cc-suggestion {
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+/* ── Chart grid / SVG line charts ─────────────────────────── */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.chart-box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 10px;
+}
+.chart-title {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--text-header);
+  margin-bottom: 6px;
+}
+.line-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.chart-legend {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.lg-item { display: inline-flex; align-items: center; gap: 4px; }
+.lg-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.lg-val { color: var(--text-primary); }
+
+/* ── Event timeline ───────────────────────────────────────── */
+.event-timeline {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  font-size: 11px;
+  max-height: 350px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+}
+.tl-row {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 12px;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+}
+.tl-year {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.tl-events { display: flex; flex-wrap: wrap; gap: 6px; }
+.tl-event {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  font-size: 11px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.tl-det { color: var(--text-dim); font-size: 9px; }
