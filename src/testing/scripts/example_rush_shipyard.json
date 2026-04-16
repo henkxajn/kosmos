@@ -1,0 +1,13 @@
+{
+  "name": "rush_shipyard",
+  "description": "Test sekwencji: research metallurgy → rocketry → build launch_pad → build shipyard → build ship",
+  "fallback": "rule",
+  "actions": [
+    { "atCivYear": 1,  "action": { "type": "research", "techId": "metallurgy" } },
+    { "atCivYear": 5,  "action": { "type": "research", "techId": "rocketry" } },
+    { "atCivYear": 10, "action": { "type": "build", "buildingId": "launch_pad" } },
+    { "atCivYear": 15, "action": { "type": "build", "buildingId": "shipyard" } },
+    { "atCivYear": 25, "action": { "type": "research", "techId": "colonization" } },
+    { "atCivYear": 40, "action": { "type": "buildShip", "shipId": "science_vessel" } }
+  ]
+}

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KOSMOS QA Console</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ── Nagłówek ────────────────────────────────────── -->
+    <header class="header">
+      <div class="logo">KOSMOS</div>
+      <div class="subtitle">QA TESTING CONSOLE</div>
+      <nav class="tabs">
+        <button class="tab active" data-tab="run">▸ URUCHOM TEST</button>
+        <button class="tab" data-tab="reports">▸ RAPORTY</button>
+        <button class="tab" data-tab="runs">▸ AKTYWNE RUNY</button>
+      </nav>
+    </header>
+
+    <!-- ── Tab: Run Tests ──────────────────────────────── -->
+    <section id="tab-run" class="tab-content active">
+      <div class="panel">
+        <div class="panel-header">KONFIGURACJA TESTU</div>
+        <div class="panel-body">
+          <div class="form-grid">
+            <!-- Bot type -->
+            <div class="form-row">
+              <label>Typ bota:</label>
+              <div class="radio-group" id="bot-group">
+                <label class="radio-card"><input type="radio" name="bot" value="random"><span class="r-title">RandomBot</span><span class="r-desc">Crash hunter, fuzz testing</span></label>
+                <label class="radio-card"><input type="radio" name="bot" value="rule" checked><span class="r-title">RuleBot</span><span class="r-desc">Priority rules, competent play</span></label>
+                <label class="radio-card"><input type="radio" name="bot" value="mcts"><span class="r-title">MCTSBot</span><span class="r-desc">Heuristic-weighted sampling</span></label>
+                <label class="radio-card"><input type="radio" name="bot" value="evo"><span class="r-title">EvoBot</span><span class="r-desc">Trenowany (wagi z JSON)</span></label>
+                <label class="radio-card"><input type="radio" name="bot" value="scripted"><span class="r-title">ScriptedBot</span><span class="r-desc">Odtwórz sekwencję akcji</span></label>
+              </div>
+            </div>
+
+            <!-- Mode preset -->
+            <div class="form-row">
+              <label>Preset:</label>
+              <div class="btn-group" id="mode-group">
+                <button class="btn-mode active" data-mode="quick">QUICK<small>100g × 300y ≈ 10s</small></button>
+                <button class="btn-mode" data-mode="normal">NORMAL<small>500g × 800y ≈ 2min</small></button>
+                <button class="btn-mode" data-mode="deep">DEEP<small>100g × 3000y ≈ 5min</small></button>
+                <button class="btn-mode" data-mode="custom">CUSTOM<small>własne wartości</small></button>
+              </div>
+            </div>
+
+            <!-- Custom values -->
+            <div class="form-row custom-row" id="custom-row" style="display:none;">
+              <label>Parametry własne:</label>
+              <div class="input-pair">
+                <div class="input-group"><span>Gry:</span><input type="number" id="games" value="100" min="1" max="10000"></div>
+                <div class="input-group"><span>civYears/gra:</span><input type="number" id="years" value="300" min="10" max="10000"></div>
+              </div>
+            </div>
+
+            <!-- Seed -->
+            <div class="form-row">
+              <label>Seed prefix:</label>
+              <input type="text" id="seed" value="" placeholder="auto (timestamp)" class="input-wide">
+            </div>
+
+            <!-- Isolated -->
+            <div class="form-row">
+              <label>Izolacja:</label>
+              <div class="checkbox-group">
+                <label class="cb-card"><input type="checkbox" id="isolated"><span>Fork per gra (wolniej, bezpieczniej)</span></label>
+                <div class="input-group" id="concurrency-row" style="display:none;"><span>Concurrency:</span><input type="number" id="concurrency" value="4" min="1" max="16"></div>
+              </div>
+            </div>
+
+            <!-- Script (tylko dla scripted) -->
+            <div class="form-row hidden-row" id="script-row">
+              <label>Skrypt:</label>
+              <select id="script-select" class="input-wide">
+                <option value="">— wybierz —</option>
+              </select>
+            </div>
+
+            <!-- EvoWeights (tylko dla evo) -->
+            <div class="form-row hidden-row" id="weights-row">
+              <label>Wagi EvoBot:</label>
+              <select id="weights-select" class="input-wide">
+                <option value="">domyślne</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Command preview -->
+          <div class="cmd-preview">
+            <span class="cmd-label">PODGLĄD KOMENDY:</span>
+            <code id="cmd-preview">node src/testing/runner/run.js --mode=quick --bot=rule</code>
+          </div>
+
+          <div class="form-actions">
+            <button id="btn-run" class="btn-primary">▶ URUCHOM TEST</button>
+            <button id="btn-cancel" class="btn-secondary" disabled>■ ANULUJ (nie zaimplementowane)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live output -->
+      <div class="panel" id="output-panel" style="display:none;">
+        <div class="panel-header">
+          <span>LIVE OUTPUT</span>
+          <span id="run-status" class="status-badge">running</span>
+        </div>
+        <div class="panel-body">
+          <pre id="output-log" class="log-box"></pre>
+          <div class="output-actions" id="output-actions" style="display:none;">
+            <button class="btn-primary" id="btn-view-report">📊 ZOBACZ RAPORT</button>
+            <button class="btn-secondary" id="btn-new-run">⟳ NOWY TEST</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Tab: Reports ────────────────────────────────── -->
+    <section id="tab-reports" class="tab-content">
+      <div class="reports-layout">
+        <aside class="reports-list panel">
+          <div class="panel-header">
+            <span>WSZYSTKIE RAPORTY</span>
+            <button id="btn-refresh-reports" class="btn-small">⟳</button>
+          </div>
+          <div class="panel-body" id="reports-list-body">
+            <div class="muted">Ładowanie...</div>
+          </div>
+        </aside>
+
+        <main class="report-detail panel" id="report-detail">
+          <div class="panel-header">SZCZEGÓŁY RAPORTU</div>
+          <div class="panel-body" id="report-detail-body">
+            <div class="muted placeholder">← Wybierz raport z listy po lewej</div>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <!-- ── Tab: Active Runs ─────────────────────────────── -->
+    <section id="tab-runs" class="tab-content">
+      <div class="panel">
+        <div class="panel-header">
+          <span>AKTYWNE / OSTATNIE RUNY</span>
+          <button id="btn-refresh-runs" class="btn-small">⟳</button>
+        </div>
+        <div class="panel-body" id="runs-list-body">
+          <div class="muted">Ładowanie...</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

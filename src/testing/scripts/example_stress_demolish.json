@@ -1,0 +1,17 @@
+{
+  "name": "stress_demolish_loop",
+  "description": "Build + demolish w pętli — szuka crashów w demolish logic",
+  "fallback": "random",
+  "actions": [
+    { "atCivYear": 5,  "action": { "type": "build", "buildingId": "mine" } },
+    { "atCivYear": 8,  "action": { "type": "demolish" } },
+    { "atCivYear": 10, "action": { "type": "build", "buildingId": "mine" } },
+    { "atCivYear": 12, "action": { "type": "demolish" } },
+    { "atCivYear": 14, "action": { "type": "build", "buildingId": "mine" } },
+    { "atCivYear": 16, "action": { "type": "demolish" } },
+    { "atCivYear": 20, "action": { "type": "build", "buildingId": "habitat" } },
+    { "atCivYear": 23, "action": { "type": "upgrade" } },
+    { "atCivYear": 26, "action": { "type": "upgrade" } },
+    { "atCivYear": 29, "action": { "type": "demolish" } }
+  ]
+}
