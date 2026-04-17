@@ -830,6 +830,7 @@ export default {
   'colony.shipsLost': '−{0} utraconych',
   'colony.irrecoverablyLost': 'BEZPOWROTNIE UTRACONA',
   'colony.outpostUpgraded': 'Placówka rozbudowana do pełnej kolonii!',
+  'colony.migrationDelivered': 'Migranci dostarczeni do kolonii: +{0} POP',
   'colony.status': 'Status',
 
   // === Budowa statków (ColonyManager) ===

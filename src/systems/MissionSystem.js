@@ -157,11 +157,14 @@ export class MissionSystem {
       ? (target.type === 'planetoid' || target.type === 'moon' ||
          (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
       : false;
-    // Outposty można upgrade'ować colony shipem — blokuj tylko pełne kolonie
+    // Colony ship trafia:
+    //   pusty cel       → nowa kolonia
+    //   outpost         → upgrade do pełnej kolonii
+    //   pełna kolonia   → dostawa migrantów (POPy + cargo)
     const existingCol = colMgr?.getColony(targetId);
     const notColonized = existingCol ? existingCol.isOutpost === true : true;
     return {
-      ok: techOk && padOk && shipOk && exploredOk && typeOk && notColonized,
+      ok: techOk && padOk && shipOk && exploredOk && typeOk,
       techOk, padOk, shipOk, crewOk: true, exploredOk, typeOk, notColonized
     };
   }
@@ -550,9 +553,7 @@ export class MissionSystem {
             ? t('mission.noColonyShip')
             : !check.exploredOk
               ? t('mission.targetNotExploredScience')
-              : !check.typeOk
-                ? t('mission.targetNotSuitable')
-                : t('mission.targetHasColony');
+              : t('mission.targetNotSuitable');
       this._emit('mission:failed', 'expedition:launchFailed', { reason });
       return;
     }
@@ -1360,8 +1361,64 @@ export class MissionSystem {
     const colMgr = window.KOSMOS?.colonyManager;
     const vMgr   = window.KOSMOS?.vesselManager;
 
-    // Upgrade outpost → pełna kolonia
+    // Migracja — cel jest już pełną kolonią: dostarczamy POPy + cargo, statek przeżywa
     const existingCol = colMgr?.getColony(exp.targetId);
+    if (existingCol && !existingCol.isOutpost) {
+      const arrivingVessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+      const colonistsLoaded = arrivingVessel?.colonists ?? 0;
+
+      // POPy → kolonia docelowa (jako laborer, jak unloadColonists)
+      if (colonistsLoaded > 0 && existingCol.civSystem?.addPop) {
+        existingCol.civSystem.addPop('laborer', colonistsLoaded);
+      }
+      if (arrivingVessel) arrivingVessel.colonists = 0;
+
+      // Cargo statku → zasoby kolonii
+      const delivered = {};
+      if (arrivingVessel?.cargo) {
+        for (const [id, qty] of Object.entries(arrivingVessel.cargo)) {
+          if (qty > 0) delivered[id] = qty;
+        }
+        if (Object.keys(delivered).length > 0 && existingCol.resourceSystem?.receive) {
+          existingCol.resourceSystem.receive(delivered);
+        }
+        arrivingVessel.cargo = {};
+        arrivingVessel.cargoUsed = 0;
+      }
+
+      // Statek przeżywa — przepnij z kolonii źródłowej do docelowej
+      if (exp.vesselId && vMgr) {
+        const oldColonyId = arrivingVessel?.colonyId;
+        const oldCol = oldColonyId ? colMgr?.getColony(oldColonyId) : null;
+        if (oldCol) {
+          const idx = oldCol.fleet.indexOf(exp.vesselId);
+          if (idx !== -1) oldCol.fleet.splice(idx, 1);
+        }
+        vMgr.dockAtColony(exp.vesselId, exp.targetId);
+        if (!existingCol.fleet.includes(exp.vesselId)) {
+          existingCol.fleet.push(exp.vesselId);
+        }
+      }
+
+      // Odblokuj zarezerwowane POPy na kolonii źródłowej (crewCost lock bufora)
+      const originColMig = colMgr?.getColony(exp.originColonyId);
+      if (originColMig?.civSystem?.unlockPops) {
+        originColMig.civSystem.unlockPops(exp.crewCost, exp.crewStrata);
+      }
+
+      exp.status = 'completed';
+      exp.gained = delivered;
+
+      this._emit('mission:report', 'expedition:missionReport', {
+        expedition: exp,
+        gained: delivered,
+        multiplier: 1.0,
+        text: t('colony.migrationDelivered', colonistsLoaded),
+      });
+      return;
+    }
+
+    // Upgrade outpost → pełna kolonia
     if (existingCol?.isOutpost) {
       const roll = Math.random() * 100;
       let resourceMult;

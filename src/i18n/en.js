@@ -830,6 +830,7 @@ export default {
   'colony.shipsLost': '−{0} lost',
   'colony.irrecoverablyLost': 'IRRECOVERABLY LOST',
   'colony.outpostUpgraded': 'Outpost upgraded to full colony!',
+  'colony.migrationDelivered': 'Migrants delivered to colony: +{0} POP',
   'colony.status': 'Status',
 
   // === Ship building (ColonyManager) ===

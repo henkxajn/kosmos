@@ -181,7 +181,6 @@ const ACTIONS = {
         if (!check.ok) {
           if (!check.exploredOk)  return { ok: false, reason: 'Cel niezbadany' };
           if (!check.typeOk)      return { ok: false, reason: 'Cel nie nadaje się' };
-          if (!check.notColonized) return { ok: false, reason: 'Cel ma kolonię' };
         }
       }
       return { ok: true };
