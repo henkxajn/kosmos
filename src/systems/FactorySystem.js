@@ -223,6 +223,10 @@ export class FactorySystem {
     // Wyczyść auto-łańcuch przy zmianie trybu
     this._autoChain = [];
 
+    // Po wejściu w tryb reaktywny od razu napełnij cache demand
+    // (bez tego UI czeka do 0.1 civYears na pierwszy _reactiveAllocate)
+    if (mode === 'reactive') this._reactiveAllocate();
+
     EventBus.emit('factory:modeChanged', { mode });
     this._emitStatus();
   }
@@ -732,11 +736,13 @@ export class FactorySystem {
   // ══════════════════════════════════════════════════════════════════════════
 
   _reactiveAllocate() {
-    if (this._totalPoints === 0) return;
-
-    // Skanuj zapotrzebowanie z 5 źródeł
+    // Skanuj zapotrzebowanie z 5 źródeł — zawsze, nawet przy 0 FP,
+    // żeby UI mogło pokazać katalog towarów i pozwolić graczowi
+    // ustawić min. zapas ZANIM wybuduje fabryki / odblokuje tech.
     const demandItems = this._scanDemand();
     this._reactiveDemand = demandItems; // cache do UI
+
+    if (this._totalPoints === 0) return;
 
     // Wyczyść obecne alokacje (zachowaj postęp)
     const oldProgress = new Map();
@@ -1000,14 +1006,21 @@ export class FactorySystem {
     return items;
   }
 
-  // Źródło 5: Zapas bezpieczeństwa — minimalne zapasy (domyślne wg tieru + ręczne nadpisania)
+  // Źródło 5: Zapas bezpieczeństwa — WSZYSTKIE towary (również tech-locked)
+  // Tech-locked dostają flagę `locked:true` i nie są alokowane (filter w _reactiveAllocate),
+  // ale pojawiają się w UI min. zapasów żeby gracz mógł pre-konfigurować próg.
   // qty = docelowy minimalny zapas (deficyt liczy alokator)
   _scanSafetyStockDemand() {
     const items = [];
     for (const [id, def] of Object.entries(COMMODITIES)) {
-      if (!this.isRecipeAvailable(id)) continue;
+      const locked = !this.isRecipeAvailable(id);
       const minStock = this.getSafetyStockTarget(id);
-      items.push({ commodityId: id, qty: minStock });
+      items.push({
+        commodityId:   id,
+        qty:           minStock,
+        locked,
+        requiresTech:  def.requiresTech ?? null,
+      });
     }
     return items;
   }

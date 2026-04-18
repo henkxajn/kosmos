@@ -1164,13 +1164,17 @@ export class EconomyOverlay extends BaseOverlay {
 
   _drawReactiveMode(ctx, x, ry, w, colony, fs) {
     const pad = 14;
+    const colId = colony.planetId;
+    const colW = w - pad * 2;
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
     ctx.fillText(t('econPanel.reactiveHeader'), x + pad, ry + 10);
     ry += 18;
 
-    const demand = fs.reactiveDemand;
+    // Safety source wyciągamy do dedykowanej sekcji "Minimalne zapasy" niżej,
+    // żeby edytor progu był zwarty i obejmował WSZYSTKIE towary (również tech-locked).
+    const demand = (fs.reactiveDemand ?? []).filter(d => d.source !== 'safety');
 
     if (demand.length === 0) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -1181,13 +1185,12 @@ export class EconomyOverlay extends BaseOverlay {
       // Nagłówki kolumn
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      const colW = w - pad * 2;
       ctx.fillText('Źródło', x + pad, ry + 10);
       ctx.fillText('Towar', x + pad + 100, ry + 10);
       ctx.fillText('Potrzeba', x + pad + colW - 80, ry + 10);
       ry += 14;
 
-      // Grupuj wg source
+      // Etykiety źródeł
       const sourceLabels = {
         build: t('econPanel.reactiveSource.build'),
         fuel: t('econPanel.reactiveSource.fuel'),
@@ -1195,8 +1198,6 @@ export class EconomyOverlay extends BaseOverlay {
         trade: t('econPanel.reactiveSource.trade'),
         safety: t('econPanel.reactiveSource.safety'),
       };
-
-      const colId = colony.planetId;
 
       for (const d of demand) {
         const def = COMMODITIES[d.commodityId];
@@ -1221,14 +1222,13 @@ export class EconomyOverlay extends BaseOverlay {
         const color = stock >= d.qty ? THEME.success : (stock > 0 ? THEME.warning : THEME.danger);
         ctx.fillStyle = color;
 
-        // Przyciski [−][+] dla safety stock i consumption — ręczna regulacja celu zapasu
-        if (d.source === 'safety' || d.source === 'consumption') {
+        // [−][+] tylko dla konsumpcji (safety przeniesione do sekcji niżej)
+        if (d.source === 'consumption') {
           const btnY = ry + 1;
           const textX = x + pad + colW - 80;
           ctx.fillText(`${stockR}/${qtyR}`, textX, ry + 10);
 
           let bx = textX + 42;
-          // [−]
           const bonus = fs.getDemandBonus?.(d.commodityId) ?? 0;
           this._drawSmallBtn(ctx, bx, btnY, '−', bonus > 0 ? 'secondary' : 'disabled');
           if (bonus > 0) {
@@ -1238,7 +1238,6 @@ export class EconomyOverlay extends BaseOverlay {
             });
           }
           bx += BTN_S + 2;
-          // [+]
           this._drawSmallBtn(ctx, bx, btnY, '+', 'primary');
           this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
             action: 'demand_plus', colonyId: colId, commodityId: d.commodityId,
@@ -1260,6 +1259,10 @@ export class EconomyOverlay extends BaseOverlay {
       ctx.fillText(t('econPanel.reactiveIdle', idle), x + pad, ry + 10);
       ry += 14;
     }
+
+    // ── Sekcja: MINIMALNE ZAPASY ───────────────────────────────────────────
+    // Edytor progu dla KAŻDEGO towaru (również tech-locked — można pre-konfigurować).
+    ry = this._drawMinStockEditor(ctx, x, ry + 4, w, fs, colId);
 
     // Aktywne alokacje (read-only)
     const allocs = fs.getAllocations();
@@ -1284,6 +1287,127 @@ export class EconomyOverlay extends BaseOverlay {
     }
 
     return ry;
+  }
+
+  // ── Sekcja: Minimalne zapasy (edytor progu dla wszystkich towarów) ─────────
+  // Lista grupowana po tierze; tech-locked wyświetlane z 🔒 i wymaganą nauką.
+  // [−][+] wołają setDemandBonus — działa też gdy tech jeszcze nieodblokowane
+  // (bonus przetrwa i zacznie działać po odkryciu).
+  _drawMinStockEditor(ctx, x, ry, w, fs, colId) {
+    const pad = 14;
+    const colW = w - pad * 2;
+
+    // Separator
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath();
+    ctx.moveTo(x + pad, ry);
+    ctx.lineTo(x + w - pad, ry);
+    ctx.stroke();
+    ry += 8;
+
+    // Nagłówek sekcji
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('econPanel.minStockHeader'), x + pad, ry + 10);
+    ry += 16;
+
+    // Podpis (opis funkcji)
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('econPanel.minStockHint'), x + pad, ry + 10);
+    ry += 14;
+
+    // Zbieramy towary pogrupowane — konsumpcyjne osobno, reszta wg tieru
+    const groups = [
+      { key: 'T1', label: t('econPanel.minStockTier', 1), tiers: [1], consumer: false },
+      { key: 'T2', label: t('econPanel.minStockTier', 2), tiers: [2], consumer: false },
+      { key: 'T3', label: t('econPanel.minStockTier', 3), tiers: [3], consumer: false },
+      { key: 'T4', label: t('econPanel.minStockTier', 4), tiers: [4], consumer: false },
+      { key: 'T5', label: t('econPanel.minStockTier', 5), tiers: [5], consumer: false },
+      { key: 'C',  label: t('econPanel.minStockConsumer'),  tiers: null, consumer: true  },
+    ];
+
+    for (const g of groups) {
+      const ids = Object.entries(COMMODITIES)
+        .filter(([, def]) => g.consumer
+          ? def.isConsumerGood === true
+          : (def.isConsumerGood !== true && g.tiers.includes(def.tier)))
+        .map(([id]) => id);
+      if (ids.length === 0) continue;
+
+      // Nagłówek grupy
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(g.label, x + pad, ry + 10);
+      ry += 14;
+
+      for (const id of ids) {
+        ry = this._drawMinStockRow(ctx, x + pad, ry, colW, id, fs, colId);
+      }
+      ry += 2;
+    }
+
+    return ry;
+  }
+
+  // Pojedynczy wiersz edytora min. zapasów
+  _drawMinStockRow(ctx, x, y, w, commodityId, fs, colId) {
+    const def = COMMODITIES[commodityId];
+    if (!def) return y;
+
+    const locked = !fs.isRecipeAvailable(commodityId);
+    const stock  = fs.getStock?.(commodityId) ?? 0;
+    const target = fs.getSafetyStockTarget(commodityId);
+    const bonus  = fs.getDemandBonus?.(commodityId) ?? 0;
+
+    // Kolor statusu
+    let textColor;
+    if (locked) textColor = THEME.textDim;
+    else if (stock >= target) textColor = THEME.success;
+    else if (stock > 0)       textColor = THEME.warning;
+    else                      textColor = THEME.danger;
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+
+    // Ikona + nazwa (+ 🔒 jeśli locked)
+    ctx.fillStyle = locked ? THEME.textDim : THEME.textSecondary;
+    const lockPrefix = locked ? '🔒 ' : '';
+    ctx.fillText(`${lockPrefix}${def.icon} ${getName(def, 'commodity')}`, x + 4, y + 10);
+
+    // Jeśli locked — pokaż wymaganą naukę (mniejszy font, dimmed, pod nazwą)
+    if (locked && def.requiresTech) {
+      const techName = t(`tech.${def.requiresTech}.name`) || def.requiresTech;
+      ctx.font = `${THEME.fontSizeSmall - 3}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.minStockRequires', techName), x + 20, y + 20);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    }
+
+    // Stock / target (prawa strona)
+    const stockR = Math.round(stock * 10) / 10;
+    const textX = x + w - 80;
+    ctx.fillStyle = textColor;
+    ctx.fillText(`${stockR}/${target}`, textX, y + 10);
+
+    // Przyciski [−][+]
+    const btnY = y + 1;
+    let bx = textX + 42;
+    this._drawSmallBtn(ctx, bx, btnY, '−', bonus > 0 ? 'secondary' : 'disabled');
+    if (bonus > 0) {
+      this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
+        action: 'demand_minus', colonyId: colId, commodityId,
+        label: '−', x: bx,
+      });
+    }
+    bx += BTN_S + 2;
+    this._drawSmallBtn(ctx, bx, btnY, '+', 'primary');
+    this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
+      action: 'demand_plus', colonyId: colId, commodityId,
+      label: '+', x: bx,
+    });
+
+    // Wyższy wiersz dla locked (żeby zmieścić nazwę techu)
+    return y + (locked && def.requiresTech ? 24 : 16);
   }
 
   // ── Przycisk szeroki (do szablonów/dodaj) ──────────────────────────────────
