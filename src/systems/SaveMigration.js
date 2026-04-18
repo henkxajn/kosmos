@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 52;
+export const CURRENT_VERSION     = 54;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -67,6 +67,8 @@ const MIGRATIONS = {
   49: _migrateV49toV50,
   50: _migrateV50toV51,
   51: _migrateV51toV52,
+  52: _migrateV52toV53,
+  53: _migrateV53toV54,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1226,6 +1228,40 @@ function _migrateV50toV51(data) {
   if (data.civ4x) {
     // Drop stare trasy handlowe (player-created) — TradeRouteManager nie istnieje
     delete data.civ4x.tradeRouteManager;
+  }
+  return data;
+}
+
+// ── v53 → v54: Ground Unit recruitment queue (Opcja B) ────────────────────
+// Dodaje colony.groundUnitQueues = [] dla każdej kolonii. ColonyManager używa
+// tej kolejki do tick'owania budowy archetypów (1.0 civYear per jednostka).
+function _migrateV53toV54(data) {
+  if (data.civ4x?.colonies) {
+    for (const col of data.civ4x.colonies) {
+      col.groundUnitQueues = col.groundUnitQueues ?? [];
+    }
+  }
+  return data;
+}
+
+// ── v52 → v53: Ground Unit System (archetypy + zdolności + miny + capture) ──
+// Dodaje:
+//   - gameState.minefields: {} (domena dla lay_minefield)
+//   - groundUnitManager.captureProgress: [] (capture_building ability)
+//   - groundUnitManager.passiveAccum: 0 (akumulator tick passive abilities)
+// Istniejące jednostki (infantry/mech/garrison/science_rover) pozostają bez zmian —
+// GroundUnitManager rozpoznaje legacy typy w restore() i nie dotyka ich kształtu.
+function _migrateV52toV53(data) {
+  if (data.civ4x) {
+    // Domena minefields w reactive store
+    if (data.civ4x.gameState) {
+      data.civ4x.gameState.minefields = data.civ4x.gameState.minefields ?? {};
+    }
+    // Nowe pola managera
+    if (data.civ4x.groundUnitManager) {
+      data.civ4x.groundUnitManager.captureProgress = data.civ4x.groundUnitManager.captureProgress ?? [];
+      data.civ4x.groundUnitManager.passiveAccum    = data.civ4x.groundUnitManager.passiveAccum ?? 0;
+    }
   }
   return data;
 }

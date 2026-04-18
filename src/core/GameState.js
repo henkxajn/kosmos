@@ -25,6 +25,7 @@ function createDefaultState() {
     wars:       {},  // warId → { participants, casusBelli, goals, fronts, exhaustion, startYear }
     battles:    {},  // battleId → { location, fleets, result, timeline }
     invasions:  {},  // invasionId → { planetId, aggressor, defender, landedTroops, battlesOnHex }
+    minefields: {},  // planetId → { `${q}_${r}` → { ownerId, damage, laidBy, q, r } } — Ground Unit System
   };
 }
 

@@ -752,9 +752,45 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   _loadUnitSprites() {
+    // ── Legacy jednostki (science_rover, infantry, mech, garrison) ──
     const roverImg = new Image();
     roverImg.src = 'assets/units/science_rover.png';
     this._unitSprites.set('science_rover', roverImg);
+
+    // ── Ground Unit System: sprity wszystkich archetypów × frakcji ──
+    // Klucz: `${factionId}:${archetypeId}` (np. 'humanity:shock_infantry').
+    // Brakujące PNG → GroundUnitFactory.loadUnitSprite() podstawia runtime placeholder.
+    Promise.all([
+      import('../systems/GroundUnitFactory.js'),
+      import('../data/factions/humanity.js'),
+      import('../data/factions/UNE.js'),
+      import('../data/factions/Syndykat.js'),
+    ]).then(([
+      { GroundUnitFactory },
+      { HUMANITY_UNITS },
+      { UNE_UNITS },
+      { SYNDYKAT_UNITS },
+    ]) => {
+      const factions = { humanity: HUMANITY_UNITS, UNE: UNE_UNITS, Syndykat: SYNDYKAT_UNITS };
+      for (const [factionId, units] of Object.entries(factions)) {
+        for (const [archetypeId, def] of Object.entries(units)) {
+          const key = `${factionId}:${archetypeId}`;
+          const img = GroundUnitFactory.loadUnitSprite(def.sprite);
+          this._unitSprites.set(key, img);
+        }
+      }
+    }).catch(err => console.warn('[ColonyOverlay] Nie udało się załadować sprite\'ów jednostek:', err));
+  }
+
+  /** Zwróć obraz sprite'a dla jednostki (Ground Unit System + legacy fallback). */
+  _getUnitSprite(unit) {
+    if (unit.factionId && unit.archetypeId) {
+      const key = `${unit.factionId}:${unit.archetypeId}`;
+      const img = this._unitSprites.get(key);
+      if (img) return img;
+    }
+    // Legacy fallback po `type`
+    return this._unitSprites.get(unit.type);
   }
 
   _drawUnits(ctx, ox, oy, ow, oh, grid) {
@@ -768,7 +804,10 @@ export class ColonyOverlay extends BaseOverlay {
     const cy = oy + oh / 2 - this._camY;
 
     for (const unit of units) {
-      const img = this._unitSprites.get(unit.type);
+      // Ground Unit System: ukryte jednostki (stealth) nie są rysowane dla wroga.
+      // Dla 'player' pokazujemy zawsze (gracz widzi swoje).
+      if (unit._stealthState === 'hidden' && unit.owner && unit.owner !== 'player') continue;
+      const img = this._getUnitSprite(unit);
       // Faza 6: wroga jednostka → czerwone kolory glow/ring/ramka
       const isEnemy = unit.owner && unit.owner !== 'player';
 

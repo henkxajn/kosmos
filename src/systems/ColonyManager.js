@@ -35,6 +35,7 @@ import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
+import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
@@ -135,6 +136,7 @@ export class ColonyManager {
     // civDeltaYears dla mechanik 4X (budowa, pending), deltaYears fizyczne dla podatków (raz/rok gry)
     EventBus.on('time:tick', ({ deltaYears: physDt, civDeltaYears: civDt }) => {
       this._tickShipBuilds(civDt);
+      this._tickGroundUnitBuilds(civDt);
       this._tickPendingShipOrders();
       this._tickPendingOutpostOrders();
       this._tickTaxCollection(physDt);
@@ -189,6 +191,12 @@ export class ColonyManager {
   // Pobierz stan kolonii
   getColony(planetId) {
     return this._colonies.get(planetId) ?? null;
+  }
+
+  // Pobierz aktualnie aktywną kolonię (używane przez UI takie jak GroundUnitPanel)
+  getActiveColony() {
+    if (!this._activePlanetId) return null;
+    return this._colonies.get(this._activePlanetId) ?? null;
   }
 
   // Pobierz ResourceSystem kolonii
@@ -309,6 +317,7 @@ export class ColonyManager {
       allowEmigration:  true,
       fleet:           [],    // statki w hangarze: ['science_vessel', ...]
       shipQueues:      [],    // sloty budowy: [{ shipId, progress, buildTime }, ...]
+      groundUnitQueues: [],   // Ground Unit System: kolejka rekrutacji [{ archetypeId, factionId, progress, buildTime }]
       credits:         500,   // Kredyty startowe — budżet operacyjny misji kolonizacyjnej
       creditsPerYear:  0,
       tradeCapacity:   0,
@@ -375,6 +384,7 @@ export class ColonyManager {
       allowEmigration:  true,
       fleet:           [],
       shipQueues:      [],
+      groundUnitQueues: [],
       credits:         0,
       creditsPerYear:  0,
       tradeCapacity:   0,
@@ -459,6 +469,7 @@ export class ColonyManager {
       allowEmigration:  false,
       fleet:           [],
       shipQueues:      [],
+      groundUnitQueues: [],
       credits:         0,
       creditsPerYear:  0,
       tradeCapacity:   0,
@@ -818,6 +829,151 @@ export class ColonyManager {
         }
       }
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Ground Unit System — rekrutacja jednostek naziemnych
+  // ══════════════════════════════════════════════════════════════════════
+  //
+  // MVP (Opcja B): wszystkie 6 archetypów dostępne z każdej kolonii.
+  // Flat cost: 50 minerals + 20 energy. Build time: 1.0 civYear.
+  // Opcja C (kolejny PR): barracks building + tech gating + skalowane koszty.
+
+  // Rare-materials placeholder koszt — wymaga Hv (metale ciężkie, z planetoid metallic).
+  // Energia WYŁĄCZONA z build cost (canAfford pomija energy — to flow, nie stockpile).
+  // Pełna tabela per archetyp w Opcji C (docs/plan-ground-unit-recruitment-option-c.md).
+  static GROUND_UNIT_COST      = { Ti: 5, Si: 3, Hv: 1 };
+  static GROUND_UNIT_BUILD_TIME = 1.0; // civYears
+
+  /**
+   * Uruchom rekrutację jednostki naziemnej w danej kolonii.
+   * @param {string} planetId
+   * @param {string} archetypeId — klucz z UNIT_ARCHETYPES
+   * @param {string} factionId   — 'humanity' | 'UNE' | 'Syndykat'
+   * @returns {{ok: boolean, reason?: string}}
+   */
+  startGroundUnitBuild(planetId, archetypeId, factionId = 'humanity') {
+    const colony = this.getColony(planetId);
+    if (!colony) {
+      return { ok: false, reason: 'colony_not_found' };
+    }
+    if (!UNIT_ARCHETYPES[archetypeId]) {
+      return { ok: false, reason: 'unknown_archetype' };
+    }
+
+    const cost = ColonyManager.GROUND_UNIT_COST;
+    if (!colony.resourceSystem?.canAfford?.(cost)) {
+      EventBus.emit('groundUnit:buildFailed', { planetId, archetypeId, reason: 'cannot_afford' });
+      return { ok: false, reason: 'cannot_afford' };
+    }
+
+    colony.resourceSystem.spend(cost);
+
+    if (!colony.groundUnitQueues) colony.groundUnitQueues = [];
+    colony.groundUnitQueues.push({
+      archetypeId,
+      factionId,
+      progress:  0,
+      buildTime: ColonyManager.GROUND_UNIT_BUILD_TIME,
+    });
+
+    EventBus.emit('groundUnit:buildStarted', { planetId, archetypeId, factionId });
+    return { ok: true };
+  }
+
+  /** Tick kolejki rekrutacji — wywoływany co civDeltaYears. */
+  _tickGroundUnitBuilds(civDeltaYears) {
+    if (!civDeltaYears || civDeltaYears <= 0) return;
+
+    for (const colony of this._colonies.values()) {
+      const queues = colony.groundUnitQueues;
+      if (!queues || queues.length === 0) continue;
+
+      // Iteracja od końca — splice nie zaburza indeksu
+      for (let i = queues.length - 1; i >= 0; i--) {
+        queues[i].progress += civDeltaYears;
+        if (queues[i].progress >= queues[i].buildTime) {
+          const { archetypeId, factionId } = queues[i];
+          queues.splice(i, 1);
+          this._spawnGroundUnit(colony, archetypeId, factionId);
+        }
+      }
+    }
+  }
+
+  /** Spawnuje jednostkę na hexie sąsiadującym z Capital. */
+  _spawnGroundUnit(colony, archetypeId, factionId) {
+    const mgr = window.KOSMOS?.groundUnitManager;
+    if (!mgr) {
+      EventBus.emit('groundUnit:buildFailed', {
+        planetId: colony.planetId, archetypeId, reason: 'no_manager',
+      });
+      return null;
+    }
+
+    const spawn = this._findGroundUnitSpawn(colony);
+    if (!spawn) {
+      EventBus.emit('groundUnit:buildFailed', {
+        planetId: colony.planetId, archetypeId, reason: 'no_spawn_hex',
+      });
+      return null;
+    }
+
+    // Factory-style: 5 pozycyjnych args (archetypeId, factionId, planetId, q, r)
+    const unit = mgr.createUnit(archetypeId, factionId, colony.planetId, spawn.q, spawn.r);
+    if (!unit) {
+      EventBus.emit('groundUnit:buildFailed', {
+        planetId: colony.planetId, archetypeId, reason: 'create_failed',
+      });
+      return null;
+    }
+
+    EventBus.emit('groundUnit:buildCompleted', {
+      unitId:      unit.id,
+      archetypeId,
+      factionId,
+      planetId:    colony.planetId,
+      q:           spawn.q,
+      r:           spawn.r,
+    });
+    return unit;
+  }
+
+  /** Znajdź wolny hex do spawnu jednostki (spiral od Capital). */
+  _findGroundUnitSpawn(colony) {
+    const grid = colony.grid;
+    if (!grid) return null;
+
+    // Znajdź Capital hex
+    let capQ = 0, capR = 0;
+    let found = false;
+    for (const tile of grid.toArray()) {
+      if (tile?.capitalBase) { capQ = tile.q; capR = tile.r; found = true; break; }
+    }
+    if (!found) {
+      // Fallback: pierwszy niepoza-oceanowy hex
+      for (const tile of grid.toArray()) {
+        if (tile && tile.type !== 'ocean') {
+          capQ = tile.q; capR = tile.r; found = true; break;
+        }
+      }
+    }
+    if (!found) return null;
+
+    const mgr = window.KOSMOS?.groundUnitManager;
+
+    // Spiral 0→5 — wolny hex bez jednostki + nie-ocean
+    for (let radius = 0; radius <= 5; radius++) {
+      const tiles = grid.spiral(capQ, capR, radius);
+      for (const tile of tiles) {
+        if (!tile || tile.type === 'ocean') continue;
+        if (mgr?.getUnitAt?.(colony.planetId, tile.q, tile.r)) continue;
+        return { q: tile.q, r: tile.r };
+      }
+    }
+
+    // Fallback: Capital hex (jednostka się tam pojawi nawet jeśli coś jest)
+    return { q: capQ, r: capR };
   }
 
   // ── Surge — przyspieszenie budowy statku (POP + Kr) ─────────────────────
@@ -1367,6 +1523,7 @@ export class ColonyManager {
         allowEmigration:  col.allowEmigration,
         fleet:            col.fleet ?? [],
         shipQueues:       col.shipQueues ?? [],
+        groundUnitQueues: col.groundUnitQueues ?? [],
         pendingShipOrders: col.pendingShipOrders ?? [],
         pendingOutpostOrders: col.pendingOutpostOrders ?? [],
         credits:          col.credits ?? 0,
@@ -1474,6 +1631,7 @@ export class ColonyManager {
         allowEmigration:  colData.allowEmigration  ?? true,
         fleet:            colData.fleet ?? [],
         shipQueues:       colData.shipQueues ?? [],
+        groundUnitQueues: colData.groundUnitQueues ?? [],
         pendingShipOrders: colData.pendingShipOrders ?? [],
         pendingOutpostOrders: colData.pendingOutpostOrders ?? [],
         credits:          colData.credits ?? 0,

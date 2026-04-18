@@ -13,6 +13,8 @@ import EventBus from '../core/EventBus.js';
 import { HexGrid } from '../map/HexGrid.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { getUnitStats } from '../data/GroundUnitData.js';
+import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
+import { GroundUnitFactory } from './GroundUnitFactory.js';
 
 // ── Koszty ruchu po terenie ──────────────────────────────────────────────────
 const MOVE_COST = {
@@ -36,6 +38,11 @@ export class GroundUnitManager {
     this._units = new Map();  // unitId → GroundUnit
     this._nextId = 1;
 
+    // Ground Unit System: progres zajmowania budynków { unitId → {planetId, q, r, progress, buildingId} }
+    this._captureProgress = new Map();
+    // Akumulator do tick passive abilities (co 1.0 civYear = jedna "tura")
+    this._passiveAccum = 0;
+
     // Subskrybuj tick czasu (civDeltaYears)
     this._onTick = ({ civDeltaYears: dt }) => this.tick(dt);
     EventBus.on('time:tick', this._onTick);
@@ -44,6 +51,44 @@ export class GroundUnitManager {
   // ── Tworzenie jednostki ──────────────────────────────────────────────────
 
   createUnit(type, planetId, q, r, opts = {}) {
+    // ── Overload detection (Ground Unit System) ──
+    // Factory-style call: createUnit(archetypeId, factionId, planetId, q, r)
+    //   — 5 args, 5-ty arg to number (hex r). Używane w testach + bezpośrednio z Factory.
+    // Legacy-style call: createUnit(type, planetId, q, r, opts?)
+    //   — 4 args lub 5 z 5-tym argiem jako obiektem. Używane przez GameScene, InvasionSystem.
+    if (UNIT_ARCHETYPES[type] && arguments.length === 5 && typeof arguments[4] === 'number') {
+      // Remapuj: planetId → factionId, q → planetId, r → q, opts(number) → r
+      const factionId = planetId;
+      planetId = q;
+      q = r;
+      r = opts;
+      opts = { factionId };
+    }
+
+    // ── Ground Unit System: dispatch archetyp vs legacy ──
+    // Jeśli `type` jest w UNIT_ARCHETYPES → użyj Factory (nowy kształt z baseStats/factionId).
+    // W przeciwnym razie (infantry/mech/garrison/science_rover) → legacy ścieżka.
+    if (UNIT_ARCHETYPES[type]) {
+      const factionId = opts.factionId ?? 'humanity';
+      const unit = GroundUnitFactory.create(type, factionId, planetId, q, r);
+      if (!unit) return null;
+      // Nadpisz ID wewnętrznym licznikiem (zgodnie z konwencją `gu_N`)
+      const id = `gu_${this._nextId++}`;
+      unit.id = id;
+      unit.owner = opts.owner ?? 'player';
+      if (opts.hp != null) {
+        unit.currentHP = opts.hp;
+        unit.hp        = opts.hp;
+      }
+      this._units.set(id, unit);
+      EventBus.emit('groundUnit:created', {
+        unitId: id, type, planetId, q, r, owner: unit.owner,
+        archetypeId: unit.archetypeId, factionId: unit.factionId,
+      });
+      return unit;
+    }
+
+    // ── Legacy ścieżka (science_rover/infantry/mech/garrison) — niezmieniona ──
     const id = `gu_${this._nextId++}`;
     const stats = getUnitStats(type);
     const unit = {
@@ -80,8 +125,33 @@ export class GroundUnitManager {
     const unit = this._units.get(unitId);
     if (!unit) return false;
     this._units.delete(unitId);
+    // Ground Unit System: cleanup capture progress
+    this._captureProgress.delete(unitId);
     EventBus.emit('groundUnit:removed', { unitId, planetId: unit.planetId });
     return true;
+  }
+
+  /** Zwróć wszystkie jednostki (płaska tablica). */
+  getAllUnits() {
+    return [...this._units.values()];
+  }
+
+  /**
+   * Zwróć jednostki w promieniu hex od (q,r) na danej planecie.
+   * @param {string} planetId
+   * @param {number} q
+   * @param {number} r
+   * @param {number} range — max hex distance
+   * @param {string|null} factionFilter — 'player' | empireId | null (brak filtra)
+   */
+  getUnitsInRange(planetId, q, r, range, factionFilter = null) {
+    const result = [];
+    for (const u of this._units.values()) {
+      if (u.planetId !== planetId) continue;
+      if (factionFilter && u.owner !== factionFilter) continue;
+      if (this._hexDistance(q, r, u.q, u.r) <= range) result.push(u);
+    }
+    return result;
   }
 
   // ── Zapytania ────────────────────────────────────────────────────────────
@@ -212,6 +282,17 @@ export class GroundUnitManager {
     }
     // Faza 6.5: tick okupacji (co klatka — 2-mo timer to dużo civYears)
     this._tickOccupation(civDeltaYears);
+
+    // ── Ground Unit System: passive abilities (co 1.0 civYear = jedna tura) ──
+    this._passiveAccum += civDeltaYears;
+    if (this._passiveAccum >= 1.0) {
+      const turns = Math.floor(this._passiveAccum);
+      this._passiveAccum -= turns;
+      for (let i = 0; i < turns; i++) this._tickPassiveAbilities();
+    }
+
+    // ── Ground Unit System: capture progress (ciągły) ──
+    this._tickCaptures(civDeltaYears);
   }
 
   // ── Faza 6.5: Okupacja hexów ───────────────────────────────────
@@ -315,6 +396,8 @@ export class GroundUnitManager {
 
   /**
    * Atak jednostki na inną jednostkę w zasięgu.
+   * Używa GroundUnitFactory.getEffectiveDmg() — legacy jednostki bez `counters`
+   * dostają surowy dmg (zero regresji).
    * Zwraca { hit: bool, damage, killed, attacker, defender }.
    */
   attackUnit(attackerId, targetId) {
@@ -328,13 +411,25 @@ export class GroundUnitManager {
     const dist = this._hexDistance(atk.q, atk.r, tgt.q, tgt.r);
     if (dist > (atk.range ?? 1)) return { hit: false, reason: 'out_of_range' };
 
-    // Damage: max(1, attack - defense) + random variance ±20%
-    const base = Math.max(1, (atk.attack ?? 5) - (tgt.defense ?? 0));
+    // Ground Unit System: counter bonus wlicza się do dmg PRZED odjęciem AC
+    const dmgAfterCounter = GroundUnitFactory.getEffectiveDmg(atk, tgt);
+    const base     = Math.max(1, dmgAfterCounter - (tgt.defense ?? 0));
     const variance = 0.8 + Math.random() * 0.4;
-    const damage = Math.max(1, Math.round(base * variance));
+    const damage   = Math.max(1, Math.round(base * variance));
 
     tgt.hp = Math.max(0, (tgt.hp ?? 0) - damage);
+    if (tgt.currentHP != null) tgt.currentHP = tgt.hp; // sync legacy mirror
     atk._atkCooldown = 1.0;  // 1 civYear cooldown
+
+    // Ground Unit System: reveal stealth attackera (re-hide timer reset)
+    if (atk.abilityId === 'stealth') {
+      const wasHidden = atk._stealthState === 'hidden';
+      atk._stealthState    = 'revealed';
+      atk._stealthCooldown = 2;
+      if (wasHidden) {
+        EventBus.emit('groundUnit:stealthRevealed', { unitId: atk.id });
+      }
+    }
 
     EventBus.emit('groundUnit:attacked', {
       attackerId, targetId, damage,
@@ -354,6 +449,190 @@ export class GroundUnitManager {
     return { hit: true, damage, killed };
   }
 
+  // ── Ground Unit System: zajęcie budynku (capture_building ability) ────
+
+  /**
+   * Rozpocznij zajmowanie budynku na hexie jednostki.
+   * Progres 2 civYears = 100%. Reset gdy jednostka opuści hex.
+   */
+  capture(unitId) {
+    const unit = this._units.get(unitId);
+    if (!unit) return { success: false, reason: 'no_unit' };
+    if (unit.status === 'moving') return { success: false, reason: 'moving' };
+
+    const grid = this._getGrid(unit.planetId);
+    if (!grid) return { success: false, reason: 'no_grid' };
+    const tile = grid.get(unit.q, unit.r);
+    if (!tile) return { success: false, reason: 'no_tile' };
+
+    const hasBuilding = tile.buildingId || tile.capitalBase;
+    if (!hasBuilding) return { success: false, reason: 'no_building' };
+    if (tile.owner === unit.owner) return { success: false, reason: 'already_owned' };
+
+    this._captureProgress.set(unitId, {
+      planetId:   unit.planetId,
+      q:          unit.q,
+      r:          unit.r,
+      buildingId: tile.buildingId ?? 'capital',
+      progress:   0,
+    });
+    EventBus.emit('groundUnit:capturingBuilding', {
+      unitId, planetId: unit.planetId, q: unit.q, r: unit.r, progress: 0,
+    });
+    return { success: true };
+  }
+
+  /** Tick progresu zajmowania (ciągły — gra pokazuje płynny pasek). */
+  _tickCaptures(civDeltaYears) {
+    if (this._captureProgress.size === 0) return;
+
+    for (const [unitId, cap] of [...this._captureProgress.entries()]) {
+      const unit = this._units.get(unitId);
+      // Jednostka zniknęła lub zginęła
+      if (!unit || (unit.hp ?? 0) <= 0) {
+        this._captureProgress.delete(unitId);
+        continue;
+      }
+      // Jednostka opuściła hex → reset
+      if (unit.q !== cap.q || unit.r !== cap.r) {
+        this._captureProgress.delete(unitId);
+        EventBus.emit('groundUnit:captureInterrupted', {
+          unitId, planetId: cap.planetId, q: cap.q, r: cap.r,
+        });
+        continue;
+      }
+
+      // 2 tury = 2 civYears
+      cap.progress += civDeltaYears / 2;
+
+      if (cap.progress >= 1) {
+        const grid = this._getGrid(cap.planetId);
+        const tile = grid?.get(cap.q, cap.r);
+        if (tile) this._changeTileOwner(tile, cap.planetId, unit.owner);
+        EventBus.emit('groundUnit:buildingCaptured', {
+          unitId, planetId: cap.planetId, q: cap.q, r: cap.r,
+          buildingId: cap.buildingId, newOwner: unit.owner,
+        });
+        this._captureProgress.delete(unitId);
+      } else {
+        EventBus.emit('groundUnit:capturingBuilding', {
+          unitId, planetId: cap.planetId, q: cap.q, r: cap.r,
+          progress: cap.progress,
+        });
+      }
+    }
+  }
+
+  // ── Ground Unit System: passive abilities tick (co 1.0 civYear) ────────
+
+  _tickPassiveAbilities() {
+    // 1. Cooldown zdolności
+    for (const u of this._units.values()) {
+      if (u.abilityCooldownRemaining > 0) {
+        u.abilityCooldownRemaining = Math.max(0, u.abilityCooldownRemaining - 1);
+      }
+    }
+
+    // 2. Drone lifespan — recon_drone expired po 5 turach
+    for (const u of [...this._units.values()]) {
+      if (u.archetypeId === 'recon_drone') {
+        u.turnsAlive = (u.turnsAlive ?? 0) + 1;
+        if (GroundUnitFactory.isExpired(u)) {
+          EventBus.emit('groundUnit:expired', {
+            unitId: u.id, planetId: u.planetId, reason: 'drone_battery',
+          });
+          this.removeUnit(u.id);
+        }
+      }
+    }
+
+    // 3. Heal nearby — medycy leczą przyjazne sąsiednie jednostki
+    for (const medic of this._units.values()) {
+      if (medic.abilityId !== 'heal_nearby') continue;
+      if ((medic.hp ?? 0) <= 0) continue;
+      const ability = GroundUnitFactory.getAbility(medic);
+      if (!ability) continue;
+      const heal = ability.healPerTurn ?? 3;
+      const rng  = ability.healRange   ?? 1;
+      const allies = this.getUnitsInRange(medic.planetId, medic.q, medic.r, rng, medic.owner);
+      for (const ally of allies) {
+        if (ally.id === medic.id) continue;
+        if ((ally.hp ?? 0) >= (ally.hpMax ?? 0)) continue;
+        const newHP = Math.min(ally.hpMax, (ally.hp ?? 0) + heal);
+        const delta = newHP - (ally.hp ?? 0);
+        ally.hp = newHP;
+        if (ally.currentHP != null) ally.currentHP = newHP;
+        if (delta > 0) {
+          EventBus.emit('groundUnit:healed', {
+            medicId: medic.id, targetId: ally.id, amount: delta,
+          });
+        }
+      }
+    }
+
+    // 4. Reveal fog — recon drones ujawniają hex'y w promieniu
+    for (const scout of this._units.values()) {
+      if (scout.abilityId !== 'reveal_fog') continue;
+      if ((scout.hp ?? 0) <= 0) continue;
+      const ability = GroundUnitFactory.getAbility(scout);
+      if (!ability) continue;
+      const rng = ability.revealRange ?? 3;
+      const hexes = [];
+      for (let dq = -rng; dq <= rng; dq++) {
+        for (let dr = Math.max(-rng, -dq - rng); dr <= Math.min(rng, -dq + rng); dr++) {
+          hexes.push({ q: scout.q + dq, r: scout.r + dr });
+        }
+      }
+      EventBus.emit('groundUnit:fogRevealed', {
+        unitId: scout.id, planetId: scout.planetId, hexes,
+      });
+    }
+
+    // 5. Stealth re-hide — po 2 turach od ujawnienia wraca do 'hidden'
+    for (const u of this._units.values()) {
+      if (u.abilityId !== 'stealth') continue;
+      if (u._stealthState !== 'revealed') continue;
+      u._stealthCooldown = Math.max(0, (u._stealthCooldown ?? 0) - 1);
+      if (u._stealthCooldown <= 0) {
+        u._stealthState = 'hidden';
+        EventBus.emit('groundUnit:stealthHidden', { unitId: u.id });
+      }
+    }
+  }
+
+  // ── Ground Unit System: sprawdź czy jednostka weszła na minę ──────────
+
+  _checkMineTrigger(unit) {
+    const gs = window.KOSMOS?.gameState;
+    if (!gs) return false;
+    const key  = `${unit.q}_${unit.r}`;
+    const path = `minefields.${unit.planetId}.${key}`;
+    const mine = gs.get(path);
+    if (!mine) return false;
+    if (mine.ownerId === unit.owner) return false; // swoja mina — ignoruj
+
+    const damage = mine.damage ?? 8;
+    unit.hp = Math.max(0, (unit.hp ?? 0) - damage);
+    if (unit.currentHP != null) unit.currentHP = unit.hp;
+
+    EventBus.emit('groundUnit:mineTrigger', {
+      planetId: unit.planetId, q: unit.q, r: unit.r,
+      unitId: unit.id, damage,
+    });
+
+    // Usuń zużytą minę
+    gs.set(path, null, 'mine_consumed');
+
+    if (unit.hp <= 0) {
+      EventBus.emit('groundUnit:destroyed', {
+        unitId: unit.id, planetId: unit.planetId, owner: unit.owner, killedBy: 'minefield',
+      });
+      this.removeUnit(unit.id);
+      return true; // unit died
+    }
+    return false;
+  }
+
   /** Aktualny rok gry. */
   _year() { return window.KOSMOS?.timeSystem?.gameTime ?? 0; }
 
@@ -368,7 +647,12 @@ export class GroundUnitManager {
   _tickCombatAI() {
     const enemies = [];
     for (const u of this._units.values()) {
-      if (u.owner && u.owner !== 'player' && u.role !== 'civilian') enemies.push(u);
+      if (u.owner && u.owner !== 'player' &&
+          u.role !== 'civilian' &&
+          u.role !== 'support' &&   // Ground Unit System: medyki nie atakują
+          u.role !== 'drone') {     // Ground Unit System: drony nie atakują
+        enemies.push(u);
+      }
     }
     if (enemies.length === 0) return;
 
@@ -381,6 +665,7 @@ export class GroundUnitManager {
         if (u.planetId !== atk.planetId) continue;
         if (u.owner !== 'player') continue;
         if (u.hp <= 0) continue;
+        if (u._stealthState === 'hidden') continue; // Ground Unit System: stealth
         targets.push(u);
       }
       if (targets.length === 0) continue;
@@ -414,6 +699,8 @@ export class GroundUnitManager {
       if (step) { unit.q = step.q; unit.r = step.r; }
       unit._wrapStep = false;
       unit._animT = 0;
+      // Ground Unit System: wejście na hex — sprawdź minę (może zabić jednostkę)
+      if (this._checkMineTrigger(unit)) return;
       if (unit._path.length === 0) {
         unit.status = 'idle';
         unit._fromPixel = null;
@@ -437,6 +724,8 @@ export class GroundUnitManager {
         unit.q = step.q;
         unit.r = step.r;
       }
+      // Ground Unit System: wejście na hex — sprawdź minę
+      if (this._checkMineTrigger(unit)) return;
 
       if (unit._path.length === 0) {
         // Koniec ścieżki
@@ -645,35 +934,92 @@ export class GroundUnitManager {
         owner:    u.owner ?? 'player',
         hp:       u.hp,
         hpMax:    u.hpMax,
+        // ── Ground Unit System (nowe pola — obecne tylko dla archetypowych jednostek) ──
+        archetypeId: u.archetypeId ?? null,
+        factionId:   u.factionId ?? null,
+        baseStats:   u.baseStats ?? null,
+        currentHP:   u.currentHP ?? u.hp,
+        experience:  u.experience ?? 0,
+        morale:      u.morale ?? 100,
+        turnsAlive:  u.turnsAlive ?? 0,
+        abilityId:   u.abilityId ?? null,
+        abilityCooldownRemaining: u.abilityCooldownRemaining ?? 0,
+        stealthState:    u._stealthState ?? null,
+        stealthCooldown: u._stealthCooldown ?? 0,
       })),
       nextId: this._nextId,
+      // Ground Unit System: progres zajmowania budynków
+      captureProgress: [...this._captureProgress.entries()].map(([unitId, cap]) => ({
+        unitId, ...cap,
+      })),
+      passiveAccum: this._passiveAccum ?? 0,
     };
   }
 
   restore(data) {
     if (!data) return;
     this._units.clear();
+    this._captureProgress.clear();
     this._nextId = data.nextId ?? 1;
+    this._passiveAccum = data.passiveAccum ?? 0;
+
     for (const u of (data.units ?? [])) {
-      const stats = getUnitStats(u.type);
-      this._units.set(u.id, {
-        ...u,
-        status:     u.status ?? 'idle',
-        mission:    u.mission ? { ...u.mission } : null,
-        // Faza 6: combat (defensive defaults for legacy saves)
-        owner:      u.owner ?? 'player',
-        hp:         u.hp ?? stats.hp,
-        hpMax:      u.hpMax ?? stats.hp,
-        attack:     stats.attack,
-        defense:    stats.defense,
-        range:      stats.range,
-        role:       stats.role,
-        _atkCooldown: 0,
-        _path:      [],
-        _animT:     0,
-        _fromPixel: null,
-        _toPixel:   null,
-        _facingLeft: u.facingLeft ?? false,
+      // Ground Unit System: rozpoznaj archetyp po obecności archetypeId lub zgodności type z UNIT_ARCHETYPES
+      const archId = u.archetypeId ?? (UNIT_ARCHETYPES[u.type] ? u.type : null);
+
+      if (archId && UNIT_ARCHETYPES[archId]) {
+        // Nowa jednostka archetypowa — odtwórz przez Factory + nadpisz zapisany runtime
+        const arch = UNIT_ARCHETYPES[archId];
+        const rebuilt = GroundUnitFactory.create(archId, u.factionId ?? 'humanity', u.planetId, u.q, u.r);
+        if (!rebuilt) continue;
+        rebuilt.id         = u.id;
+        rebuilt.owner      = u.owner ?? 'player';
+        rebuilt.hp         = u.hp ?? rebuilt.hp;
+        rebuilt.hpMax      = u.hpMax ?? rebuilt.hpMax;
+        rebuilt.currentHP  = u.currentHP ?? rebuilt.hp;
+        rebuilt.status     = u.status ?? 'idle';
+        rebuilt.mission    = u.mission ? { ...u.mission } : null;
+        rebuilt.experience = u.experience ?? 0;
+        rebuilt.morale     = u.morale ?? 100;
+        rebuilt.turnsAlive = u.turnsAlive ?? 0;
+        rebuilt.abilityCooldownRemaining = u.abilityCooldownRemaining ?? 0;
+        rebuilt._stealthState    = u.stealthState ?? (arch.ability === 'stealth' ? 'hidden' : null);
+        rebuilt._stealthCooldown = u.stealthCooldown ?? 0;
+        rebuilt._facingLeft      = u.facingLeft ?? false;
+        this._units.set(u.id, rebuilt);
+      } else {
+        // Legacy jednostka (infantry/mech/garrison/science_rover)
+        const stats = getUnitStats(u.type);
+        this._units.set(u.id, {
+          ...u,
+          status:     u.status ?? 'idle',
+          mission:    u.mission ? { ...u.mission } : null,
+          owner:      u.owner ?? 'player',
+          hp:         u.hp ?? stats.hp,
+          hpMax:      u.hpMax ?? stats.hp,
+          attack:     stats.attack,
+          defense:    stats.defense,
+          range:      stats.range,
+          role:       stats.role,
+          _atkCooldown: 0,
+          _path:      [],
+          _animT:     0,
+          _fromPixel: null,
+          _toPixel:   null,
+          _facingLeft: u.facingLeft ?? false,
+        });
+      }
+    }
+
+    // Ground Unit System: przywróć capture progress
+    for (const cap of (data.captureProgress ?? [])) {
+      if (!cap?.unitId) continue;
+      this._captureProgress.set(cap.unitId, {
+        planetId:   cap.planetId,
+        q:          cap.q,
+        r:          cap.r,
+        buildingId: cap.buildingId ?? 'capital',
+        progress:   cap.progress ?? 0,
       });
     }
   }

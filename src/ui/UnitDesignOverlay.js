@@ -13,6 +13,7 @@ import { RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { showRenameModal } from './ModalInput.js';
 import { t, getName }    from '../i18n/i18n.js';
+import { GroundUnitPanel } from './GroundUnitPanel.js';
 
 // ── Stałe layoutu ────────────────────────────────────────────────────────────
 const PAD       = 8;
@@ -78,6 +79,24 @@ export class UnitDesignOverlay extends BaseOverlay {
 
     // Scroll globalny
     this._scrollLeft = 0;
+
+    // ── Ground Unit Panel (prawa połowa) ──
+    // Dostaje callbacki do dodawania hit zones (prefix 'ground:') i czytania
+    // parent._hoverZone + pozycji kursora dla tooltipów.
+    this._mouseX = 0;
+    this._mouseY = 0;
+    this._groundPanel = new GroundUnitPanel({
+      addHit:       (x, y, w, h, type, data) => this._addHit(x, y, w, h, `ground:${type}`, data),
+      getHoverZone: () => this._hoverZone,
+      getMouse:     () => ({ x: this._mouseX, y: this._mouseY }),
+    });
+  }
+
+  // Override mouse move — zapamiętaj pozycję kursora dla tooltipów panelu
+  handleMouseMove(x, y) {
+    super.handleMouseMove(x, y);
+    this._mouseX = x;
+    this._mouseY = y;
   }
 
   // ── BaseOverlay API ───────────────────────────────────────────────────────
@@ -86,6 +105,7 @@ export class UnitDesignOverlay extends BaseOverlay {
     super.hide();
     this._activeSlotIndex = -1;
     this._scrollModules = 0;
+    this._groundPanel?.hide();
   }
 
   handleScroll(delta, mx, my) {
@@ -96,8 +116,11 @@ export class UnitDesignOverlay extends BaseOverlay {
 
     const halfW = b.ow / 2;
     if (mx < b.ox + halfW) {
-      // Lewa połowa — zawsze scrolluj cały panel
+      // Lewa połowa — scroll ship designer
       this._scrollLeft = Math.max(0, this._scrollLeft + delta * 3);
+    } else {
+      // Prawa połowa — scroll ground unit panel
+      this._groundPanel.handleScroll(delta, mx, my);
     }
     return true;
   }
@@ -137,8 +160,8 @@ export class UnitDesignOverlay extends BaseOverlay {
     ctx.lineTo(ox + halfW, oy + oh);
     ctx.stroke();
 
-    // ── Prawa połowa: JEDNOSTKI NAZIEMNE (placeholder) ─────────
-    this._drawGroundPlaceholder(ctx, ox + halfW, oy, ow - halfW, oh);
+    // ── Prawa połowa: JEDNOSTKI NAZIEMNE ─────────
+    this._groundPanel.draw(ctx, ox + halfW, oy, ow - halfW, oh);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -525,28 +548,16 @@ export class UnitDesignOverlay extends BaseOverlay {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // GROUND UNITS PLACEHOLDER (prawa połowa)
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  _drawGroundPlaceholder(ctx, x, y, w, h) {
-    // Nagłówek
-    ctx.fillStyle = THEME.textHeader;
-    ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(t('unitDesign.groundUnits'), x + w / 2, y + PAD + 14);
-
-    // Placeholder
-    ctx.fillStyle = THEME.textDim;
-    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillText(t('unitDesign.groundPlaceholder'), x + w / 2, y + h / 2);
-    ctx.textAlign = 'left';
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
   // HIT HANDLING
   // ═══════════════════════════════════════════════════════════════════════════
 
   _onHit(zone) {
+    // Ground Unit Panel dispatch — prefix 'ground:'
+    if (zone.type?.startsWith('ground:')) {
+      this._groundPanel.onHit(zone.type.slice(7), zone.data ?? {});
+      return;
+    }
+
     switch (zone.type) {
       case 'select_hull': {
         const hullId = zone.data.hullId;

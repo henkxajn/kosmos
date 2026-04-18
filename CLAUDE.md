@@ -260,6 +260,20 @@ SaveSystem._serializeCiv4x()
 | `randomEvent:warning { event, planetId, colonyName, yearsUntil }` | RandomEventSystem | EventLog, GameScene |
 | `observatory:collisionAlert { bodyA, bodyB, yearsUntil, margin }` | CollisionForecast | EventLog, GameScene |
 | `observatory:alertCleared { alertId }` | CollisionForecast | UIManager |
+| `groundUnit:capturingBuilding { unitId, planetId, q, r, progress }` | GroundUnitManager | ColonyOverlay |
+| `groundUnit:buildingCaptured { unitId, planetId, q, r, buildingId, newOwner }` | GroundUnitManager | ColonyOverlay, ColonyManager |
+| `groundUnit:captureInterrupted { unitId, planetId, q, r }` | GroundUnitManager | ColonyOverlay |
+| `groundUnit:orbitalStrike { unitId, planetId, q, r, hits, friendlyFireHits, placeholder }` | GroundAbilities (orbital_support) | BattleSystem (placeholder) |
+| `groundUnit:minefieldLaid { planetId, q, r, ownerId }` | GroundAbilities (lay_minefield) | ColonyOverlay, GameState |
+| `groundUnit:mineTrigger { planetId, q, r, unitId, damage }` | GroundUnitManager | ColonyOverlay, EventLog |
+| `groundUnit:fogRevealed { unitId, planetId, hexes[] }` | GroundUnitManager | FogSystem (TBD) |
+| `groundUnit:healed { medicId, targetId, amount }` | GroundUnitManager | ColonyOverlay |
+| `groundUnit:expired { unitId, planetId, reason }` | GroundUnitManager | ColonyOverlay |
+| `groundUnit:stealthRevealed { unitId }` | GroundUnitManager | ColonyOverlay |
+| `groundUnit:stealthHidden { unitId }` | GroundUnitManager | ColonyOverlay |
+| `groundUnit:buildStarted { planetId, archetypeId, factionId }` | ColonyManager | GroundUnitPanel, EventLog |
+| `groundUnit:buildCompleted { unitId, archetypeId, factionId, planetId, q, r }` | ColonyManager | GroundUnitPanel, ColonyOverlay |
+| `groundUnit:buildFailed { planetId, archetypeId, reason }` | ColonyManager | GroundUnitPanel |
 
 ---
 
@@ -275,6 +289,7 @@ SaveSystem._serializeCiv4x()
 8. Odległość między ciałami → `DistanceUtils` (`src/utils/DistanceUtils.js`): euclidean (dynamiczna) i orbital (stabilna)
 9. Nowy typ planety wizualnie → dodaj typ w `generate-planets.js` (PLANET_TYPES) + wygeneruj tekstury CLI → dodaj mapowanie w `resolveTextureType()` w ThreeRenderer
 10. Regeneracja tekstur: `node generate-planets.js --type <typ> --count 3 --resolution 1024 --quality high --output ./assets/planet-textures --name <typ>`
+11. Ground unit sprite 3D: wrzuć `<name>.glb` do `assets/units/ground/<faction>/` → `GlbSnapshotRenderer` zrobi PNG snapshot 128×128 przy pierwszym load'zie (cache per sesja); kolejność fallback: GLB → PNG → runtime placeholder
 
 ---
 
@@ -372,8 +387,22 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 - [x] **Etap 40D** — Prognoza kolizji: CollisionForecast, inkrementalna symulacja KeplerMath, auto-pauza
 - [x] **Etap 40E** — Zakładka Observatory UI: ObservatoryOverlay (SKAN/ORBITY/ZAGROŻENIA), klawisz O
 
-### Następne etapy (plan)
-- [ ] **Etap 17** — Cel gry: warunki zwycięstwa / milestones cywilizacyjne
+### Endgame (✅ ukończone)
+- [x] **Etap 17** — Cel gry: Sfera Dysona (20 segmentów, 4 fazy), techy `dyson_engineering/collector/transmitter` + `jump_gate_construction`, DysonSystem/DysonOverlay, 5 etapów wizualnych gwiazdy, EndgameScene z 3 zakończeniami (Powrót / Zostajemy / Wiadomość) — domyślne wg suwaka frakcji
+
+### Wojna, dyplomacja, AI obcych (✅ Fazy 0-7, plan: `docs/plan-war-diplomacy-ai.md`)
+- [x] **Faza 0** — GameState reactive store + DebugLog (ring buffer) + SaveMigration v51→v52
+- [x] **Faza 1** — EmpireRegistry + EmpireGenerator + 5 archetypów, 3-6 obcych imperiów na GalaxyMap
+- [x] **Faza 2** — IntelSystem (unknown→rumor→contact→detailed) + IntelOverlay (klawisz I)
+- [x] **Faza 3** — DiplomacySystem (hostility 0-100) + AlienCivSystem FSM + DiplomacyOverlay (klawisz Y)
+- [x] **Faza 4** — WarSystem + BattleSystem (deterministic seeded) + moduły bojowe + WarOverlay (klawisz W)
+- [x] **Faza 5** — BattleView3D cinematic (proceduralne statki, timeline, laser/flash) + BattleIntroModal
+- [x] **Faza 6** — InvasionSystem + ColonyOverlay combat (desant, HP bars, przycisk ⚔ ATAKUJ)
+- [~] **Faza 7** — MilitaryAI + EconAI (GOAP + Utility) — ongoing, równolegle do balansu
+
+### Testowanie AI (✅ ukończone)
+- [x] Headless bots + runner + UI + raporty (commit `f296032`)
+- [x] ConclusionsEngine (18 reguł wniosków) + rich metrics + RuleBot v4 priorytetyzujący łańcuch kosmiczny (commit `5d5ffed`)
 
 ---
 
