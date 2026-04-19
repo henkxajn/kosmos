@@ -315,6 +315,74 @@ export class TechSystem {
     return false;
   }
 
+  // ── Opcja C v3: Ground unit archetype unlocks + military stat bonuses ─────
+
+  /**
+   * Sprawdź czy archetyp jednostki naziemnej jest odblokowany przez zbadaną technologię.
+   * Archetypy bez żadnego `unlockArchetype` w TechData są uważane za bazowe
+   * (shock_infantry, garrison_unit) — zawsze odblokowane.
+   */
+  isArchetypeUnlocked(archetypeId) {
+    for (const techId of this._researched) {
+      const tech = TECHS[techId];
+      if (!tech?.effects) continue;
+      for (const eff of tech.effects) {
+        if (eff.type === 'unlockArchetype' && eff.archetypeId === archetypeId) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Sprawdź czy statek jest odblokowany przez zbadaną technologię.
+   * Statki bez `unlockShip` w TechData są bazowe (zawsze odblokowane).
+   */
+  isShipUnlocked(shipId) {
+    for (const techId of this._researched) {
+      const tech = TECHS[techId];
+      if (!tech?.effects) continue;
+      for (const eff of tech.effects) {
+        if (eff.type === 'unlockShip' && eff.shipId === shipId) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Sprawdź czy commodity jest odblokowany przez zbadaną technologię.
+   * Commodity bez `unlockCommodity` w TechData jest bazowy.
+   */
+  isCommodityUnlocked(commodityId) {
+    for (const techId of this._researched) {
+      const tech = TECHS[techId];
+      if (!tech?.effects) continue;
+      for (const eff of tech.effects) {
+        if (eff.type === 'unlockCommodity' && eff.commodityId === commodityId) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Zagregowane bonusy militarne z `statBonus` effects.
+   * @returns {{ org: number, morale: number, supplyCap: number }}
+   */
+  getTechStatBonuses() {
+    let org = 0, morale = 0, supplyCap = 0;
+    for (const techId of this._researched) {
+      const tech = TECHS[techId];
+      if (!tech?.effects) continue;
+      for (const eff of tech.effects) {
+        if (eff.type !== 'statBonus') continue;
+        const amount = eff.amount ?? 0;
+        if (eff.stat === 'militaryOrg')       org       += amount;
+        if (eff.stat === 'militaryMorale')    morale    += amount;
+        if (eff.stat === 'militarySupplyCap') supplyCap += amount;
+      }
+    }
+    return { org, morale, supplyCap };
+  }
+
   // ── Serializacja ──────────────────────────────────────────────────────────
 
   serialize() {

@@ -46,7 +46,10 @@ export class ActionCatalog {
   }
 
   // ── Kategoria: BUILD ──────────────────────────────────────────────────────
-  listBuildActions({ limit = 100 } = {}) {
+  // Opcja `buildingId` — zwróć tylko akcje dla konkretnego budynku (pomija limit z innych).
+  // Bez tego limit=80 mógł wyczerpać się na wcześniejszych budynkach z wielu tiles
+  // i factory (10 pozycja w BUILDINGS) nie mieściła się w wynikach.
+  listBuildActions({ limit = 100, buildingId = null, perBuilding = null } = {}) {
     const active = this._getActive();
     if (!active?.grid) return [];
     const bSys = active.buildingSystem;
@@ -66,15 +69,21 @@ export class ActionCatalog {
     for (const building of Object.values(BUILDINGS)) {
       // Stolica nie-buildable przez gracza (auto-placed)
       if (building.isCapital) continue;
+      // Filtr po konkretnym buildingId (gdy podany)
+      if (buildingId && building.id !== buildingId) continue;
       // Tech gate
       if (building.requires && !techSys.isResearched(building.requires)) continue;
       // Czy stać nas (surowce + commodities)?
       const cost = { ...(building.cost ?? {}), ...(building.commodityCost ?? {}) };
       if (Object.keys(cost).length > 0 && !resSys.canAfford(cost)) continue;
 
+      // Dla każdego budynku opcjonalnie limituj liczbę tiles (perBuilding) — równomierne pokrycie
+      let pushedThisBuilding = 0;
       for (const tile of freeTiles) {
         if (!bSys._canBuildOnTile(tile, building)) continue;
         actions.push({ type: ACTION_TYPES.BUILD, tile, buildingId: building.id });
+        pushedThisBuilding++;
+        if (perBuilding && pushedThisBuilding >= perBuilding) break;
         if (actions.length >= limit) return actions;
       }
     }

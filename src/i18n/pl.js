@@ -1943,6 +1943,8 @@ export default {
   'groundPanel.stat.dmg':          'DMG',
   'groundPanel.stat.rng':          'RNG',
   'groundPanel.stat.mov':          'MOV',
+  'groundPanel.stat.supply':       'SUPPLY',
+  'groundPanel.stat.supply.full':  'Pojemność magazynu supply + konsumpcja bazowa (supply/civYear)',
   'groundPanel.stat.hp.full':      'Zdrowie — punkty życia jednostki',
   'groundPanel.stat.ac.full':      'Pancerz — redukcja otrzymywanych obrażeń',
   'groundPanel.stat.dmg.full':     'Obrażenia — damage zadawany w 1 ataku',
@@ -1975,6 +1977,71 @@ export default {
   'groundPanel.role.support':      'Wsparcie',
   'groundPanel.role.scout':        'Zwiad',
   'groundPanel.role.drone':        'Dron',
+  'groundPanel.role.logistics':    'Logistyka',
+
+  // Opcja C v3 — panel rekrutacji (split BUDOWA / UTRZYMANIE / STATYSTYKI STARTOWE)
+  'groundPanel.buildCost':         'BUDOWA',
+  'groundPanel.upkeepCost':        'UTRZYMANIE',
+  'groundPanel.startStats':        'STATYSTYKI STARTOWE',
+  'groundPanel.locked':            '🔒 Zablokowane',
+  'groundPanel.lockedTech':        'Wymaga tech: {0}',
+  'groundPanel.lockedBarracks':    'Wymaga Koszar Lv{0}',
+  'groundPanel.barracksFull':      'Koszary pełne ({0}/{1})',
+  'groundPanel.capReached':        'Max jednostek ({0})',
+  'groundPanel.noFreePops':        'Brak wolnych POPów (wymagane {0})',
+  'groundPanel.noCredits':         'Brak kredytów (wymagane {0} Kr)',
+  'groundPanel.offlineUnit':       'Offline — brak utrzymania ({0}/5)',
+  'groundPanel.starving':          '🍖 Głód — brak supply',
+  'groundPanel.inCoverage':        '📦 W zasięgu supply ({0})',
+  'groundPanel.loaded':            '💤 W transporcie — supply zamrożone',
+
+  // Commodity
+  'commodity.military_supplies.name':  'Zaopatrzenie Wojskowe',
+  'commodity.military_supplies.desc':  'Amunicja, racje polowe, medykamenty i elektronika polowa. Bez supply jednostki wojskowe nie walczą.',
+  'commodity.military_supplies.short': 'Supply',
+
+  // Techs (Opcja C v3)
+  'tech.ground_warfare.name':       'Wojna Lądowa',
+  'tech.ground_warfare.desc':       'Doktryna walki pojazdów i wsparcia — Koszary Lv2 + artyleria, AA, medycy',
+  'tech.drone_warfare.name':        'Wojna Dronowa',
+  'tech.drone_warfare.desc':        'Zdalnie sterowane i autonomiczne systemy bojowe — Koszary Lv3 + drony zwiadowcze',
+  'tech.military_logistics.name':   'Logistyka Wojskowa',
+  'tech.military_logistics.desc':   'Zaopatrzenie Wojskowe (commodity) + Naziemna Jednostka Zaopatrzeniowa, +10 org/mor, +20 cap supply',
+  'tech.field_discipline.name':     'Dyscyplina Polowa',
+  'tech.field_discipline.desc':     'Regularne szkolenie i drill — +15 organizacja, +15 morale',
+  'tech.combat_doctrine.name':      'Doktryna Bojowa',
+  'tech.combat_doctrine.desc':      'Taktyka kombinowana — +15 organizacja, +10 morale',
+  'tech.elite_training.name':       'Elitarne Szkolenie',
+  'tech.elite_training.desc':       'Programy elitarnego treningu — +10 organizacja, +15 morale',
+  'tech.fleet_logistics.name':      'Logistyka Flotowa',
+  'tech.fleet_logistics.desc':      'Zaopatrzenie kosmiczne — Statek Zaopatrzeniowy (placeholder), +5/+5 org/mor, +20 cap supply',
+  'tech.strategic_doctrine.name':   'Doktryna Strategiczna',
+  'tech.strategic_doctrine.desc':   'Sztab generalny i wywiad — +20 organizacja, +15 morale',
+  'tech.veteran_corps.name':        'Korpus Weteranów',
+  'tech.veteran_corps.desc':        'Doświadczeni żołnierze — +15/+20 org/mor, +20 cap supply',
+
+  // Barracks buildings
+  'building.barracks_lv1.name': 'Koszary',
+  'building.barracks_lv1.desc': 'Centrum rekrutacji jednostek naziemnych (Lv1). 1 slot budowy. Capital/Barracks adjacency daje auto-supply.',
+  'building.barracks_lv2.name': 'Rozszerzone Koszary',
+  'building.barracks_lv2.desc': 'Koszary z poligonem (Lv2). 1 slot rekrutacji. Odblokowuje artylerię, AA, medyków.',
+  'building.barracks_lv3.name': 'Kompleks Szkoleniowy',
+  'building.barracks_lv3.desc': 'Koszary z hangarem dronów (Lv3). Odblokowuje drony zwiadowcze.',
+
+  // Nowe archetypy
+  'unit.ground_supply_unit.name': 'Jednostka Zaopatrzeniowa',
+  'unit.ground_supply_unit.desc': 'Mobilne zaopatrzenie. Tankuje w Capital/Koszarach, karmi sąsiadów w 1 hex.',
+  'unit.space_supply_ship.name':  'Statek Zaopatrzeniowy',
+  'unit.space_supply_ship.desc':  'Zaopatrzenie flotowe (placeholder — fleet-group w osobnym projekcie).',
+
+  // Vessel name pool
+  'vesselName.space_supply_ship': 'Kwatermistrz, Prowiant, Zaopatrzeniowiec, Arsenał, Intendent, Magazyn, Depot, Tabor, Furaż, Komisariat',
+
+  // Events
+  'event.groundUnit.starved':    'Jednostka {0} głoduje na {1}',
+  'event.groundUnit.disbanded':  'Jednostka {0} rozwiązana (brak utrzymania)',
+  'event.groundUnit.resumed':    'Jednostka {0} aktywna',
+  'event.colony.suppliesLow':    'Niski stan military_supplies w {0}',
 
   // === ObservatoryOverlay ===
   'observatory.title': 'OBSERWATORIUM',

@@ -69,15 +69,19 @@ export class GameCore {
    * Bootstrap game state headless. Używa scenariusza "civilization" (Nowa Gra).
    * Po boot() wszystkie systemy są w window.KOSMOS, kolonia założona, budynki startowe.
    */
-  boot({ civName = 'Test Empire', capitalName = 'Capital', quiet = true } = {}) {
+  boot({ civName = 'Test Empire', capitalName = 'Capital', quiet = true, scenario = 'civilization' } = {}) {
     this._quiet = quiet;
 
     // Czyść singletony
     EntityManager.clear();
     EventBus.clear();
 
-    // Scenariusz zawsze civilization w testach
-    window.KOSMOS.scenario = 'civilization';
+    // scenariusz: 'civilization' (standard Nowa Gra) lub 'civilization_boosted' (Nowa Gra 2).
+    // Boosted: dodatkowe budynki startowe (habitat, launch_pad, shipyard, solar Lv3),
+    // pre-researched techy (orbital_survey, rocketry, exploration, basic_computing, automation),
+    // populacja startowa 4 zamiast 2.
+    this._scenario = scenario;
+    window.KOSMOS.scenario = scenario;
     window.KOSMOS.civMode = false;
     window.KOSMOS.homePlanet = null;
     window.KOSMOS.savedData = null;
@@ -221,7 +225,14 @@ export class GameCore {
     // inaczej brak stolicy = brak housing +4, brak food+3/research+2 z capital.
     this._placeCapital(grid);
 
-    this._autoPlaceStarterBuildings(grid);
+    if (this._scenario === 'civilization_boosted') {
+      // Nowa Gra 2 — boosted start: odblokuj techy + postaw dodatkowe budynki
+      this._setupBoostedTechs();
+      this.civSystem.setPopulation(4);
+      this._autoPlaceBoostedBuildings(grid);
+    } else {
+      this._autoPlaceStarterBuildings(grid);
+    }
 
     // Aktywna kolonia = home planet
     this.colonyManager.switchActiveColony(civPlanet.id);
@@ -340,6 +351,81 @@ export class GameCore {
       }
     }
     return null;
+  }
+
+  // ── Boosted start (Nowa Gra 2) — port z GameScene._autoPlaceBoostedBuildings ──
+  _autoPlaceBoostedBuildings(grid) {
+    const bSys = window.KOSMOS?.buildingSystem;
+    if (!grid || !bSys) return;
+
+    const allTiles = grid.toArray();
+    const freeTiles = allTiles.filter(t => {
+      const terrain = TERRAIN_TYPES[t.type];
+      return terrain?.buildable && !t.isOccupied && !t.damaged;
+    });
+
+    const terrainPriority = ['plains', 'desert', 'ice_sheet', 'forest', 'mountains', 'tundra', 'crater', 'wasteland', 'volcano'];
+    freeTiles.sort((a, b) => {
+      const ai = terrainPriority.indexOf(a.type);
+      const bi = terrainPriority.indexOf(b.type);
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+    });
+
+    // Standard + dodatkowe budynki dla boosted (identyczna kolejność jak GameScene)
+    const buildPlan = [
+      { id: 'farm',       level: 1, count: 1 },
+      { id: 'well',       level: 1, count: 1 },
+      { id: 'solar_farm', level: 1, count: 1 },
+      { id: 'habitat',    level: 1, count: 1 },
+      { id: 'launch_pad', level: 1, count: 1 },
+      { id: 'shipyard',   level: 1, count: 1 },
+      { id: 'solar_farm', level: 3, count: 1 },
+    ];
+
+    const entries = [];
+    const usedTiles = new Set();
+    const capitalTile = allTiles.find(t => t.capitalBase === true);
+
+    for (const plan of buildPlan) {
+      // Kopia definicji bez `requires` — w boosted wszystkie budynki dostępne od startu
+      const building = { ...BUILDINGS[plan.id] };
+      if (!building.id) continue;
+      delete building.requires;
+
+      for (let n = 0; n < plan.count; n++) {
+        let tile;
+        if (plan.id === 'farm' && n === 0 && capitalTile && !usedTiles.has(capitalTile.key)) {
+          tile = capitalTile;
+        } else {
+          tile = this._findTileForBuilding(freeTiles, building, usedTiles);
+        }
+        if (!tile) continue;
+
+        usedTiles.add(tile.key);
+        tile.buildingId    = plan.id;
+        tile.buildingLevel = plan.level;
+
+        const baseRates = bSys._calcBaseRates(building, tile, plan.level);
+        const housing   = (building.housing || 0) * plan.level;
+
+        entries.push({
+          tileKey:    tile.key,
+          buildingId: plan.id,
+          baseRates,
+          housing,
+          popCost:    building.popCost ?? 0.25,
+          level:      plan.level,
+        });
+      }
+    }
+
+    if (entries.length > 0) bSys.restoreFromSave(entries);
+  }
+
+  _setupBoostedTechs() {
+    // Tech pre-researched w Nowej Grze 2: space chain + automation
+    const techIds = ['orbital_survey', 'rocketry', 'exploration', 'basic_computing', 'automation'];
+    this.techSystem.restore({ researched: techIds });
   }
 
   // ── Auto-place capital (colony_base) — replika ColonyOverlay logic ──

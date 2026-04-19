@@ -556,8 +556,54 @@ export class ColonyOverlay extends BaseOverlay {
       this._drawHex(ctx, sx, sy, hs, terrain, tile, hov, sel, planet, grid);
     });
 
+    // Opcja C v3: Supply Coverage overlay (toggle 'S')
+    if (this._showSupplyCoverage) {
+      this._drawSupplyCoverage(ctx, ox, oy, ow, oh, grid);
+    }
+
     // Jednostki naziemne (rysowane NAD hexami)
     this._drawUnits(ctx, ox, oy, ow, oh, grid);
+  }
+
+  /** Rysuje tint coverage (green=capital, blue=barracks, orange=supplier). */
+  _drawSupplyCoverage(ctx, ox, oy, ow, oh, grid) {
+    const colony = this._getColony();
+    const sys = window.KOSMOS?.supplyCoverageSystem;
+    if (!sys || !colony) return;
+    const coverage = sys.getCoverage(colony.planetId);
+    if (!coverage || coverage.size === 0) return;
+
+    const hs = this._hexSize;
+    const cx = ox + ow / 2 - this._camX;
+    const cy = oy + oh / 2 - this._camY;
+
+    ctx.save();
+    for (const [key, info] of coverage) {
+      const [qS, rS] = key.split(',');
+      const q = Number(qS), r = Number(rS);
+      const tile = grid?.get(q, r);
+      if (!tile) continue;
+      const pos = grid.tilePixelPos(q, r, hs);
+      const sx = cx + pos.x;
+      const sy = cy + pos.y;
+
+      let color;
+      if (info.type === 'capital')       color = 'rgba(50, 220, 100, 0.22)';
+      else if (info.type === 'barracks') color = 'rgba(60, 150, 230, 0.20)';
+      else                                color = 'rgba(230, 150, 50, 0.22)';
+
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 180) * (60 * i - 30);
+        const px = sx + hs * Math.cos(a);
+        const py = sy + hs * Math.sin(a);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   _drawUnitPanel(ctx, ox, oy, ow, oh) {
@@ -585,6 +631,9 @@ export class ColonyOverlay extends BaseOverlay {
     const pw = 200;
     let ph = 96;  // baza: nazwa + status + hex + HP
     if (unit.attack != null) ph += 18;            // linia attack/defense
+    // Opcja C v3: rezerwuj miejsce dla supply/org/morale + damageMult (tylko archetypowe jednostki)
+    const hasSupplyV3 = unit.supply != null && !isEnemy;
+    if (hasSupplyV3) ph += 52;                     // 3 linie stats + 1 linia damageMult
     if (canAttack) ph += 26;                      // przycisk atak
     if (!isEnemy && unit.status === 'idle') ph += 26; // survey
     if (!isEnemy && unit.status === 'idle' && canAnalyze) ph += 26; // analyze
@@ -661,6 +710,36 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.font = `10px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.fillText(`⚔ ${unit.attack}  🛡 ${unit.defense}  🎯 ${unit.range ?? 1}`, px + 8, ly);
+      ly += 16;
+    }
+
+    // Opcja C v3: Supply / Org / Morale + damageMult live
+    if (hasSupplyV3) {
+      ctx.font = `10px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      const supStr = `📦 ${Math.round(unit.supply)}/${unit.supplyCap}`;
+      const conStr = `−${unit.supplyConsumption ?? 2}/y`;
+      ctx.fillText(`${supStr}  ${conStr}`, px + 8, ly);
+      ly += 14;
+
+      const orgStr = `🎖 Org ${Math.round(unit.org)}/${unit.maxOrg}`;
+      const morStr = unit.noMorale
+        ? '🤖 N/A'
+        : `🔥 Mor ${Math.round(unit.morale)}/${unit.maxMorale}`;
+      ctx.fillText(`${orgStr}  ${morStr}`, px + 8, ly);
+      ly += 14;
+
+      // damageMult live (breakdown)
+      const supFac = (unit.supply ?? 0) <= 0 ? 0 : Math.min((unit.supply ?? 0) / 20, 1);
+      const noMor  = unit.noMorale === true;
+      const coreSum = (unit.org ?? 0) + (noMor ? 0 : (unit.morale ?? 0));
+      const coreDiv = noMor ? 100 : 200;
+      const coreBonus = coreSum / coreDiv;
+      const dmgMult = supFac * (1 + coreBonus);
+      const multColor = dmgMult >= 1.5 ? '#60E0B0' : dmgMult >= 1.0 ? '#E0C020' : dmgMult > 0 ? '#E08020' : '#D85A30';
+      ctx.fillStyle = multColor;
+      ctx.font = `bold 10px ${THEME.fontFamily}`;
+      ctx.fillText(`⚔ DMG ×${dmgMult.toFixed(2)}  (${supFac.toFixed(2)} × ${(1 + coreBonus).toFixed(2)})`, px + 8, ly);
       ly += 16;
     }
 
@@ -866,6 +945,12 @@ export class ColonyOverlay extends BaseOverlay {
         if (isEnemy) {
           // Red tint dla wrogich jednostek
           ctx.filter = 'hue-rotate(-180deg) saturate(2)';
+        } else if (unit.status === 'offline') {
+          // Opcja C v3: szary filter dla jednostek bez utrzymania
+          ctx.filter = 'grayscale(100%) brightness(0.55)';
+        } else if ((unit.supply ?? Infinity) <= 0) {
+          // Słaby szary tint gdy jednostka głoduje (supply=0 ale status jeszcze nie offline)
+          ctx.filter = 'grayscale(60%) brightness(0.75)';
         }
         ctx.drawImage(img, -S / 2, -S / 2, S, S);
         ctx.restore();
@@ -881,17 +966,71 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fill();
       }
 
-      // ── Pasek HP (jeśli hp < hpMax) ──
+      // ── Paski HP / Supply / Org / Morale (Opcja C v3) ──
+      // Rysujemy tylko dla jednostek archetypowych (mają pole supply)
+      const hasSupplySys = unit.supply != null && unit.supplyCap != null;
+      const bw = hs * 1.4;
+      const bh = 3;
+      const bx = sx - bw / 2;
+      let barY = sy - hs * 0.9;
+
+      // HP bar (zawsze gdy hp < hpMax)
       if (unit.hpMax && unit.hp < unit.hpMax) {
-        const bw = hs * 1.4;
-        const bh = 3;
-        const bx = sx - bw / 2;
-        const by = sy - hs * 0.9;
         ctx.fillStyle = 'rgba(0,0,0,0.6)';
-        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillRect(bx, barY, bw, bh);
         const hpPct = Math.max(0, Math.min(1, unit.hp / unit.hpMax));
         ctx.fillStyle = hpPct > 0.5 ? '#60E0B0' : hpPct > 0.25 ? '#D8A030' : '#D85A30';
-        ctx.fillRect(bx, by, Math.round(bw * hpPct), bh);
+        ctx.fillRect(bx, barY, Math.round(bw * hpPct), bh);
+        barY += bh + 1;
+      }
+
+      // Supply/Org/Morale — tylko dla unitów gracza + tylko gdy stan < pełny
+      if (hasSupplySys && !isEnemy) {
+        const supPct = unit.supplyCap > 0 ? Math.max(0, Math.min(1, unit.supply / unit.supplyCap)) : 0;
+        const orgPct = (unit.maxOrg ?? 0) > 0 ? Math.max(0, Math.min(1, unit.org / unit.maxOrg)) : 0;
+        const morPct = (unit.maxMorale ?? 0) > 0 ? Math.max(0, Math.min(1, unit.morale / unit.maxMorale)) : 0;
+
+        // Supply (żółty) — rysuj zawsze gdy supply < cap, albo gdy status attrition
+        if (supPct < 1.0 || unit.supply <= 0) {
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fillRect(bx, barY, bw, 2);
+          ctx.fillStyle = supPct > 0.5 ? '#E0C020' : supPct > 0 ? '#E08020' : '#D85A30';
+          ctx.fillRect(bx, barY, Math.round(bw * supPct), 2);
+          barY += 3;
+        }
+        // Org (niebieski) — gdy org < max
+        if (orgPct < 1.0) {
+          ctx.fillStyle = 'rgba(0,0,0,0.4)';
+          ctx.fillRect(bx, barY, bw, 2);
+          ctx.fillStyle = '#4090E8';
+          ctx.fillRect(bx, barY, Math.round(bw * orgPct), 2);
+          barY += 3;
+        }
+        // Morale (zielony) — gdy morale < max i nie noMorale
+        if (!unit.noMorale && morPct < 1.0) {
+          ctx.fillStyle = 'rgba(0,0,0,0.4)';
+          ctx.fillRect(bx, barY, bw, 2);
+          ctx.fillStyle = '#80D060';
+          ctx.fillRect(bx, barY, Math.round(bw * morPct), 2);
+          barY += 3;
+        }
+      }
+
+      // ── Ikony statusu (🔌 offline, 🍖 głód, 📦 w coverage, 💤 transport) ──
+      if (!isEnemy && hasSupplySys) {
+        const iconY = sy - hs * 1.2;
+        let iconX = sx - hs * 0.6;
+        ctx.font = `${Math.round(hs * 0.5)}px sans-serif`;
+        ctx.textAlign = 'left';
+        if (unit.status === 'offline')           { ctx.fillText('🔌', iconX, iconY); iconX += hs * 0.55; }
+        if ((unit.supply ?? 0) <= 0)             { ctx.fillText('🍖', iconX, iconY); iconX += hs * 0.55; }
+        if (unit.transportStatus === 'loaded')   { ctx.fillText('💤', iconX, iconY); iconX += hs * 0.55; }
+        // 📦 w coverage — sprawdź w cache supplyCoverageSystem
+        const coverage = window.KOSMOS?.supplyCoverageSystem?.getCoverage?.(unit.planetId);
+        const inCov = coverage?.get(`${unit.q},${unit.r}`);
+        if (inCov && (inCov.type === 'capital' || inCov.type === 'barracks' || inCov.type === 'supplier')) {
+          ctx.fillText('📦', iconX, iconY);
+        }
       }
 
       // ── Ramka selekcji ──
@@ -1881,6 +2020,11 @@ export class ColonyOverlay extends BaseOverlay {
       const grid = colony ? this._getGrid(colony) : null;
       const tile = grid?.get(this._selectedHex.q, this._selectedHex.r);
       if (tile?.buildingId) { EventBus.emit('planet:demolishRequest', { tile }); return true; }
+    }
+    // Opcja C v3: toggle Supply Coverage overlay (S)
+    if (key === 's' || key === 'S') {
+      this._showSupplyCoverage = !this._showSupplyCoverage;
+      return true;
     }
     return false;
   }

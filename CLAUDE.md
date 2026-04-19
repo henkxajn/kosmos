@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v51 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v55 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -274,6 +274,13 @@ SaveSystem._serializeCiv4x()
 | `groundUnit:buildStarted { planetId, archetypeId, factionId }` | ColonyManager | GroundUnitPanel, EventLog |
 | `groundUnit:buildCompleted { unitId, archetypeId, factionId, planetId, q, r }` | ColonyManager | GroundUnitPanel, ColonyOverlay |
 | `groundUnit:buildFailed { planetId, archetypeId, reason }` | ColonyManager | GroundUnitPanel |
+| `groundUnit:supplyChanged { unitId, supply, max }` | SupplyCoverageSystem | ColonyOverlay |
+| `groundUnit:orgChanged { unitId, org, max }` | GroundUnitManager, SupplyCoverageSystem | ColonyOverlay |
+| `groundUnit:moraleChanged { unitId, morale, max }` | GroundUnitManager, SupplyCoverageSystem | ColonyOverlay |
+| `groundUnit:starved { unitId, planetId }` | SupplyCoverageSystem | UIManager (EventLog) |
+| `groundUnit:disbanded { unitId, planetId, reason, archetypeId }` | ColonyManager (upkeep) | UIManager, EventLog |
+| `groundUnit:resumed { unitId, planetId }` | ColonyManager (upkeep) | ColonyOverlay |
+| `supply:coverageChanged {}` | SupplyCoverageSystem | ColonyOverlay |
 
 ---
 

@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 54;
+export const CURRENT_VERSION     = 55;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -69,6 +69,7 @@ const MIGRATIONS = {
   51: _migrateV51toV52,
   52: _migrateV52toV53,
   53: _migrateV53toV54,
+  54: _migrateV54toV55,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1241,6 +1242,44 @@ function _migrateV53toV54(data) {
       col.groundUnitQueues = col.groundUnitQueues ?? [];
     }
   }
+  return data;
+}
+
+// ── v54 → v55: Opcja C v3 — Supply/Org/Morale + Barracks + upkeep ─────────
+// Dodaje:
+//   - colony._pendingPopReturns = [] (kolejka reintegracji POPów po śmierci unitów)
+//   - colony.commodities.military_supplies = 0 (nowy commodity T2, produkowany w fabryce)
+//   - Stare unity bez supply → przyznaj full supply, org=baseOrg, morale=baseMorale
+//     żeby nie umarły natychmiast po loadzie (GroundUnitManager.restore też ma defaults,
+//     to fallback dla danych które nie przejdą przez restore).
+function _migrateV54toV55(data) {
+  if (data.civ4x?.colonies) {
+    for (const col of data.civ4x.colonies) {
+      col._pendingPopReturns = col._pendingPopReturns ?? [];
+      if (col.commodities && col.commodities.military_supplies == null) {
+        col.commodities.military_supplies = 0;
+      }
+    }
+  }
+
+  // Ground units — zainicjalizuj supply/org/morale dla starych save'ów.
+  // Defaulty: pełny supply (100), org=10, morale=10, bez transportStatus.
+  // Dokładne wartości per-archetype nadpisze GroundUnitManager.restore z arch.base*.
+  if (data.civ4x?.groundUnitManager?.units) {
+    for (const u of data.civ4x.groundUnitManager.units) {
+      u.supply            = u.supply            ?? null;   // null → restore wstawi domyślne
+      u.supplyCap         = u.supplyCap         ?? null;
+      u.org               = u.org               ?? null;
+      u.maxOrg            = u.maxOrg            ?? null;
+      u.maxMorale         = u.maxMorale         ?? null;
+      u.supplyConsumption = u.supplyConsumption ?? null;
+      u.transportStatus   = u.transportStatus   ?? null;
+      u.prevStatus        = u.prevStatus        ?? null;
+      u.unpaidYears       = u.unpaidYears       ?? 0;
+      u.popCost           = u.popCost           ?? 0;
+    }
+  }
+
   return data;
 }
 

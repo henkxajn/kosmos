@@ -96,7 +96,11 @@ function createLocalBot(spec) {
     case 'rule':   return new RuleBot(spec.opts ?? {});
     case 'mcts':   return new MCTSBot(spec.opts ?? {});
     case 'evo':    return new EvoBot(spec.opts ?? {});
-    case 'scripted': return new ScriptedBot({ script: spec.script ?? { actions: [] }, fallback: spec.fallback ?? 'idle' });
+    case 'scripted': return new ScriptedBot({
+      script: spec.script ?? { actions: [] },
+      // fallback z JSON skryptu (ActionRecorder zapisuje "rule") ma priorytet nad CLI default
+      fallback: spec.script?.fallback ?? spec.fallback ?? 'idle',
+    });
     default:       return new RandomBot();
   }
 }

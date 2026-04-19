@@ -35,7 +35,7 @@ import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
-import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, ARCHETYPE_REQUIREMENTS, GROUND_UNIT_CAP_EXEMPT, checkArchetypeUnlocked } from '../data/unitArchetypes.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
@@ -137,10 +137,15 @@ export class ColonyManager {
     EventBus.on('time:tick', ({ deltaYears: physDt, civDeltaYears: civDt }) => {
       this._tickShipBuilds(civDt);
       this._tickGroundUnitBuilds(civDt);
+      this._tickGroundUnitUpkeep(civDt);       // Opcja C v3
+      this._tickPendingPopReturns(civDt);      // Opcja C v3
       this._tickPendingShipOrders();
       this._tickPendingOutpostOrders();
       this._tickTaxCollection(physDt);
     });
+
+    // Opcja C v3: subscribe groundUnit:destroyed → kolejka reintegracji POPów
+    this._subscribeGroundUnitDestroyed();
 
     // Invaliduj cache shipyard level przy budowie/rozbiórce/upgrade stoczni
     // planetId z eventu (BuildingSystem._tickConstruction) — fallback _activePlanetId
@@ -832,52 +837,214 @@ export class ColonyManager {
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  // Ground Unit System — rekrutacja jednostek naziemnych
+  // Ground Unit System — rekrutacja jednostek naziemnych (Opcja C v3)
   // ══════════════════════════════════════════════════════════════════════
   //
-  // MVP (Opcja B): wszystkie 6 archetypów dostępne z każdej kolonii.
-  // Flat cost: 50 minerals + 20 energy. Build time: 1.0 civYear.
-  // Opcja C (kolejny PR): barracks building + tech gating + skalowane koszty.
+  // Gating: ARCHETYPE_REQUIREMENTS (barracks lv + tech) + pop cap + barracks slots.
+  // Koszty: rare materials + commodities + laborer POP (lock) + Credits.
+  // Utrzymanie: energy flow + Kr/y (upkeep tick co 1.0 civYear).
+  // Init: fresh unit spawn z maxOrg = baseOrg + techBonuses (cap 100), supply = cap.
+  // Szczegóły: docs/plan-ground-unit-recruitment-option-c-v3.md
 
-  // Rare-materials placeholder koszt — wymaga Hv (metale ciężkie, z planetoid metallic).
-  // Energia WYŁĄCZONA z build cost (canAfford pomija energy — to flow, nie stockpile).
-  // Pełna tabela per archetyp w Opcji C (docs/plan-ground-unit-recruitment-option-c.md).
-  static GROUND_UNIT_COST      = { Ti: 5, Si: 3, Hv: 1 };
-  static GROUND_UNIT_BUILD_TIME = 1.0; // civYears
+  // Rare materials + commodities per archetype (build cost, jednorazowy)
+  static GROUND_UNIT_BUILD_COSTS = {
+    shock_infantry:     { Ti: 8,  Si: 5,  Hv: 2  },
+    garrison_unit:      { Ti: 15, Si: 8,  Hv: 25 },
+    rocket_artillery:   { Ti: 20, Si: 12, Hv: 18, Xe: 1 },
+    aa_platform:        { Ti: 10, Si: 25, Hv: 8,  Xe: 2 },
+    medic_unit:         { Ti: 8,  Si: 10, Hv: 5  },
+    recon_drone:        { Ti: 5,  Si: 18,         Xe: 3 },
+    ground_supply_unit: { Ti: 12, Si: 15 },
+  };
+
+  static GROUND_UNIT_COMMODITY_COSTS = {
+    shock_infantry:     { structural_alloys: 2, reactive_armor: 1 },
+    garrison_unit:      { structural_alloys: 5, reactive_armor: 4 },
+    rocket_artillery:   { structural_alloys: 4, electronic_systems: 3, polymer_composites: 2 },
+    aa_platform:        { structural_alloys: 3, electronic_systems: 4, metamaterials: 1 },
+    medic_unit:         { polymer_composites: 3 },
+    recon_drone:        { electronic_systems: 3, polymer_composites: 2 },
+    ground_supply_unit: { structural_alloys: 5, electronic_systems: 3 },
+  };
+
+  // POP cost (zawsze 'laborer' — rekruci z wolnej populacji)
+  static GROUND_UNIT_POP_COSTS = {
+    shock_infantry: 0.15, garrison_unit: 0.30, rocket_artillery: 0.40,
+    aa_platform: 0.30, medic_unit: 0.25, recon_drone: 0.00,
+    ground_supply_unit: 0.30,
+  };
+
+  static GROUND_UNIT_CREDITS_BUILD = {
+    shock_infantry: 100, garrison_unit: 250, rocket_artillery: 500,
+    aa_platform: 400, medic_unit: 300, recon_drone: 400,
+    ground_supply_unit: 350,
+  };
+
+  // Utrzymanie co 1.0 civYear (energy = flow check; credits = pobranie)
+  static GROUND_UNIT_UPKEEP = {
+    shock_infantry:     { energy: 0, credits: 2  },
+    garrison_unit:      { energy: 4, credits: 5  },
+    rocket_artillery:   { energy: 2, credits: 10 },
+    aa_platform:        { energy: 3, credits: 8  },
+    medic_unit:         { energy: 0, credits: 6  },
+    recon_drone:        { energy: 1, credits: 8  },
+    ground_supply_unit: { energy: 2, credits: 5  },
+  };
+
+  static GROUND_UNIT_BUILD_TIMES = {
+    shock_infantry: 0.8, garrison_unit: 1.2, rocket_artillery: 1.4,
+    aa_platform: 1.1, medic_unit: 1.0, recon_drone: 0.8,
+    ground_supply_unit: 1.2,
+  };
+
+  // Reintegracja POPów po śmierci jednostki — { rate: 0..1, delay: civYears }
+  static GROUND_UNIT_POP_REINTEGRATION = {
+    shock_infantry:     { rate: 0.5,  delay: 2.0 },
+    garrison_unit:      { rate: 1.0,  delay: 1.0 },
+    rocket_artillery:   { rate: 0.5,  delay: 2.0 },
+    aa_platform:        { rate: 0.5,  delay: 2.0 },
+    medic_unit:         { rate: 0.75, delay: 1.0 },
+    recon_drone:        { rate: 0.0,  delay: 0.0 },
+    ground_supply_unit: { rate: 0.75, delay: 1.5 },
+  };
+
+  static UPKEEP_GRACE_CIVYEARS = 5;  // offline → disband po tylu civYears bez utrzymania
+
+  // ── Helpery Barracks ─────────────────────────────────────────────────────
+
+  /** Max poziom koszar w kolonii (0 gdy brak). */
+  _getBarracksLevel(colony) {
+    let max = 0;
+    if (this._hasBuilding(colony, 'barracks_lv1')) max = Math.max(max, 1);
+    if (this._hasBuilding(colony, 'barracks_lv2')) max = Math.max(max, 2);
+    if (this._hasBuilding(colony, 'barracks_lv3')) max = Math.max(max, 3);
+    return max;
+  }
+
+  /** Łączna liczba slotów rekrutacji (każdy barracks = 1 slot). */
+  _getBarracksSlots(colony) {
+    let slots = 0;
+    const bSys = colony?.buildingSystem;
+    if (!bSys) return 0;
+    for (const [, entry] of bSys._active) {
+      const id = entry.building.id;
+      if (id === 'barracks_lv1' || id === 'barracks_lv2' || id === 'barracks_lv3') slots += 1;
+    }
+    return slots;
+  }
+
+  /** Maks jednostek w kolonii (floor(pop/4), min 2). Drony i supply unit exempt. */
+  _getMaxGroundUnits(colony) {
+    const pop = Math.floor(colony.civSystem?.population ?? 0);
+    return Math.max(2, Math.floor(pop / 4));
+  }
+
+  /** Czy można zrekrutować kolejną jednostkę (pop cap)? */
+  _canRecruitMoreUnits(colony, archetypeId) {
+    if (GROUND_UNIT_CAP_EXEMPT.has(archetypeId)) return true;
+
+    const mgr = window.KOSMOS?.groundUnitManager;
+    if (!mgr) return true;
+
+    const units = mgr.getUnitsOnPlanet?.(colony.planetId) ?? [];
+    const counted = units.filter(u =>
+      (u.owner === 'player' || u.factionId === 'humanity') &&
+      !GROUND_UNIT_CAP_EXEMPT.has(u.archetypeId)
+    );
+    return counted.length < this._getMaxGroundUnits(colony);
+  }
 
   /**
-   * Uruchom rekrutację jednostki naziemnej w danej kolonii.
-   * @param {string} planetId
-   * @param {string} archetypeId — klucz z UNIT_ARCHETYPES
-   * @param {string} factionId   — 'humanity' | 'UNE' | 'Syndykat'
-   * @returns {{ok: boolean, reason?: string}}
+   * Uruchom rekrutację jednostki naziemnej w danej kolonii (Opcja C v3).
+   * 9-step check: colony → archetype → gating (barracks+tech) → cap → slot →
+   *               pop → credits → resources → (spend + queue with init stats).
+   * @returns {{ok: boolean, reason?: string, missing?: string, requiredLv?: number}}
    */
   startGroundUnitBuild(planetId, archetypeId, factionId = 'humanity') {
     const colony = this.getColony(planetId);
-    if (!colony) {
-      return { ok: false, reason: 'colony_not_found' };
-    }
-    if (!UNIT_ARCHETYPES[archetypeId]) {
-      return { ok: false, reason: 'unknown_archetype' };
-    }
+    if (!colony) return { ok: false, reason: 'colony_not_found' };
+    if (!UNIT_ARCHETYPES[archetypeId]) return { ok: false, reason: 'unknown_archetype' };
 
-    const cost = ColonyManager.GROUND_UNIT_COST;
-    if (!colony.resourceSystem?.canAfford?.(cost)) {
-      EventBus.emit('groundUnit:buildFailed', { planetId, archetypeId, reason: 'cannot_afford' });
-      return { ok: false, reason: 'cannot_afford' };
+    // 1. Gating: Barracks Lv + Tech
+    const barracksLv = this._getBarracksLevel(colony);
+    const unlock = checkArchetypeUnlocked(archetypeId, barracksLv, this.techSystem);
+    if (!unlock.unlocked) {
+      EventBus.emit('groundUnit:buildFailed', { planetId, archetypeId, ...unlock });
+      return { ok: false, ...unlock };
     }
 
-    colony.resourceSystem.spend(cost);
+    // 2. Pop cap (kolonia nie może mieć więcej niż floor(pop/4) jednostek bojowych)
+    if (!this._canRecruitMoreUnits(colony, archetypeId)) {
+      const max = this._getMaxGroundUnits(colony);
+      EventBus.emit('groundUnit:buildFailed', { planetId, archetypeId, reason: 'cap_reached', max });
+      return { ok: false, reason: 'cap_reached', max };
+    }
 
+    // 3. Barracks slot — każdy barracks = 1 slot budowy równoległej
     if (!colony.groundUnitQueues) colony.groundUnitQueues = [];
+    const maxSlots = this._getBarracksSlots(colony);
+    if (colony.groundUnitQueues.length >= maxSlots) {
+      EventBus.emit('groundUnit:buildFailed', { planetId, archetypeId, reason: 'barracks_full', current: colony.groundUnitQueues.length, max: maxSlots });
+      return { ok: false, reason: 'barracks_full', current: colony.groundUnitQueues.length, max: maxSlots };
+    }
+
+    // 4. Free POPs (laborer)
+    const popCost = ColonyManager.GROUND_UNIT_POP_COSTS[archetypeId] ?? 0;
+    if (popCost > 0) {
+      const freePops = colony.civSystem?.freePops ?? 0;
+      if (freePops < popCost) {
+        EventBus.emit('groundUnit:buildFailed', { planetId, archetypeId, reason: 'no_free_pops', required: popCost, available: freePops });
+        return { ok: false, reason: 'no_free_pops', required: popCost, available: freePops };
+      }
+    }
+
+    // 5. Credits
+    const krCost = ColonyManager.GROUND_UNIT_CREDITS_BUILD[archetypeId] ?? 0;
+    if ((colony.credits ?? 0) < krCost) {
+      EventBus.emit('groundUnit:buildFailed', { planetId, archetypeId, reason: 'no_credits', required: krCost, available: colony.credits ?? 0 });
+      return { ok: false, reason: 'no_credits', required: krCost, available: colony.credits ?? 0 };
+    }
+
+    // 6. Resources + Commodities (canAfford obsługuje oba razem)
+    const elementCost   = ColonyManager.GROUND_UNIT_BUILD_COSTS[archetypeId]     ?? {};
+    const commodityCost = ColonyManager.GROUND_UNIT_COMMODITY_COSTS[archetypeId] ?? {};
+    const allCost = { ...elementCost, ...commodityCost };
+    if (!colony.resourceSystem?.canAfford?.(allCost)) {
+      EventBus.emit('groundUnit:buildFailed', { planetId, archetypeId, reason: 'cannot_afford', cost: allCost });
+      return { ok: false, reason: 'cannot_afford', cost: allCost };
+    }
+
+    // 7. Wszystkie checki OK — pobierz
+    colony.resourceSystem.spend(allCost);
+    if (krCost > 0) {
+      colony.credits = Math.max(0, (colony.credits ?? 0) - krCost);
+      EventBus.emit('trade:spendCredits', { colonyId: planetId, amount: krCost, purpose: 'ground_unit_recruit' });
+    }
+    if (popCost > 0) colony.civSystem?.lockPops?.(popCost, 'laborer');
+
+    // 8. Init stats z techBonuses
+    const bonuses = this.techSystem?.getTechStatBonuses?.() ?? { org: 0, morale: 0, supplyCap: 0 };
+    const arch    = UNIT_ARCHETYPES[archetypeId];
+    const noMor   = arch.noMorale === true;
+    const initialOrg       = Math.min(100, (arch.baseOrg    ?? 10) + bonuses.org);
+    const initialMorale    = noMor ? 0 : Math.min(100, (arch.baseMorale ?? 10) + bonuses.morale);
+    const initialSupplyCap = Math.min(200, (arch.baseSupplyCap ?? 100) + bonuses.supplyCap);
+
     colony.groundUnitQueues.push({
       archetypeId,
       factionId,
       progress:  0,
-      buildTime: ColonyManager.GROUND_UNIT_BUILD_TIME,
+      buildTime: ColonyManager.GROUND_UNIT_BUILD_TIMES[archetypeId] ?? 1.0,
+      popCost,
+      krCost,
+      initialOrg,
+      initialMorale,
+      initialSupplyCap,
+      // Opcja C v3 + "macierz": kolonia która zrekrutowała jednostkę opłaca jej upkeep
+      homeColonyId: planetId,
     });
 
-    EventBus.emit('groundUnit:buildStarted', { planetId, archetypeId, factionId });
+    EventBus.emit('groundUnit:buildStarted', { planetId, archetypeId, factionId, krCost, popCost });
     return { ok: true };
   }
 
@@ -893,24 +1060,181 @@ export class ColonyManager {
       for (let i = queues.length - 1; i >= 0; i--) {
         queues[i].progress += civDeltaYears;
         if (queues[i].progress >= queues[i].buildTime) {
-          const { archetypeId, factionId } = queues[i];
+          const item = queues[i];
           queues.splice(i, 1);
-          this._spawnGroundUnit(colony, archetypeId, factionId);
+          this._spawnGroundUnit(colony, item);
         }
       }
     }
   }
 
-  /** Spawnuje jednostkę na hexie sąsiadującym z Capital. */
-  _spawnGroundUnit(colony, archetypeId, factionId) {
+  /**
+   * Tick utrzymania jednostek naziemnych (Opcja C v3 + "macierz").
+   * Co 1.0 civYear sprawdza:
+   *   - Kredyty (Kr) — pobrane z HOME colony (unit.homeColonyId, czyli kolonii która zrekrutowała)
+   *   - Energia (flow) — sprawdzana w DEPLOYED colony (gdzie unit aktualnie stacjonuje)
+   *
+   * Lore: HQ płaci żołd niezależnie od deployment (jak regularna armia).
+   *       Ale lokalna elektronika/radary ciągną prąd z lokalnej sieci.
+   *
+   * Brak któregoś → unit offline + unpaidYears++; 5 civYears → disband.
+   */
+  _tickGroundUnitUpkeep(civDeltaYears) {
+    if (!civDeltaYears || civDeltaYears <= 0) return;
+    this._upkeepAccum = (this._upkeepAccum ?? 0) + civDeltaYears;
+    if (this._upkeepAccum < 1.0) return;
+    this._upkeepAccum -= 1.0;
+
+    const mgr = window.KOSMOS?.groundUnitManager;
+    if (!mgr) return;
+
+    // Zbierz wszystkie unity gracza
+    const allUnits = [];
+    for (const u of mgr._units?.values?.() ?? []) {
+      if (u.owner === 'player' || u.factionId === 'humanity') allUnits.push(u);
+    }
+    if (allUnits.length === 0) return;
+
+    // ── Grupowanie: Kr per homeColonyId, Energy per deployedPlanetId ──
+    const krByHome      = new Map();  // homeId → { total, units[] }
+    const energyByDep   = new Map();  // planetId → total energy needed
+
+    for (const u of allUnits) {
+      const up = ColonyManager.GROUND_UNIT_UPKEEP[u.archetypeId];
+      if (!up) continue;
+
+      const homeId = u.homeColonyId ?? u.planetId;
+      const krBucket = krByHome.get(homeId) ?? { total: 0, units: [] };
+      krBucket.total += up.credits ?? 0;
+      krBucket.units.push(u);
+      krByHome.set(homeId, krBucket);
+
+      const eCur = energyByDep.get(u.planetId) ?? 0;
+      energyByDep.set(u.planetId, eCur + (up.energy ?? 0));
+    }
+
+    // ── Sprawdź energy per deployed colony (flow) ──
+    const energyOKPlanets = new Set();
+    for (const [pid, need] of energyByDep) {
+      const col = this.getColony(pid);
+      const flow = col?.resourceSystem?.energy?.perYear ?? 0;
+      if (flow >= need) energyOKPlanets.add(pid);
+    }
+
+    // ── Sprawdź credits per home colony → zapłać atomowo albo wszystkich z tego home
+    //    przenieś w offline ──
+    for (const [homeId, bucket] of krByHome) {
+      const home = this.getColony(homeId);
+      const hasCredits = home && (home.credits ?? 0) >= bucket.total;
+
+      if (hasCredits && bucket.total > 0) {
+        home.credits = Math.max(0, (home.credits ?? 0) - bucket.total);
+        EventBus.emit('trade:spendCredits', {
+          colonyId: homeId, amount: bucket.total, purpose: 'ground_unit_upkeep',
+        });
+      }
+
+      // Dla każdej jednostki z tego home — mixed check: Kr home + Energy deployed
+      for (const u of bucket.units) {
+        const energyOK  = energyOKPlanets.has(u.planetId);
+        const online    = hasCredits && energyOK;
+
+        if (online) {
+          const wasOffline = u.status === 'offline';
+          u.unpaidYears = 0;
+          if (wasOffline) {
+            u.status = 'idle';
+            EventBus.emit('groundUnit:resumed', { unitId: u.id, planetId: u.planetId });
+          }
+        } else {
+          u.status      = 'offline';
+          u.unpaidYears = (u.unpaidYears ?? 0) + 1;
+
+          if (u.unpaidYears >= ColonyManager.UPKEEP_GRACE_CIVYEARS) {
+            // Disband — pełen zwrot POPów do HOME colony (gdzie były zablokowane)
+            if ((u.popCost ?? 0) > 0) {
+              const homeForPop = home ?? this.getColony(u.planetId);
+              homeForPop?.civSystem?.unlockPops?.(u.popCost, 'laborer');
+            }
+            EventBus.emit('groundUnit:disbanded', {
+              unitId: u.id, planetId: u.planetId, homeColonyId: homeId,
+              reason: !hasCredits ? 'no_credits' : 'no_energy',
+              archetypeId: u.archetypeId ?? null,
+            });
+            mgr.removeUnit?.(u.id);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Tick opóźnionej reintegracji POPów po śmierci jednostek (Opcja C v3).
+   * colony._pendingPopReturns = [{ amount, strata, readyAt }] — akumulowane
+   * przez handler `groundUnit:destroyed` w _subscribeGroundUnitDestroyed().
+   */
+  _tickPendingPopReturns(civDeltaYears) {
+    if (!civDeltaYears || civDeltaYears <= 0) return;
+    this._pendingPopClock = (this._pendingPopClock ?? 0) + civDeltaYears;
+
+    for (const colony of this._colonies.values()) {
+      const list = colony._pendingPopReturns;
+      if (!list || list.length === 0) continue;
+
+      for (let i = list.length - 1; i >= 0; i--) {
+        const entry = list[i];
+        if (this._pendingPopClock >= entry.readyAt) {
+          colony.civSystem?.unlockPops?.(entry.amount, entry.strata ?? 'laborer');
+          list.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  /**
+   * Lazy subscribe do 'groundUnit:destroyed' — jednorazowo (z constructora).
+   * Kolejkuje reintegrację POPów wg tabeli GROUND_UNIT_POP_REINTEGRATION.
+   */
+  _subscribeGroundUnitDestroyed() {
+    if (this._groundUnitDestroyedSubscribed) return;
+    this._groundUnitDestroyedSubscribed = true;
+
+    EventBus.on('groundUnit:destroyed', ({ unitId, planetId, popCost, archetypeId, cause }) => {
+      if (!planetId || !(popCost > 0) || !archetypeId) return;
+      const colony = this.getColony(planetId);
+      if (!colony) return;
+
+      const ri = ColonyManager.GROUND_UNIT_POP_REINTEGRATION[archetypeId];
+      if (!ri || ri.rate <= 0) return;
+
+      const returnAmount = popCost * ri.rate;
+      const readyAt = (this._pendingPopClock ?? 0) + (ri.delay ?? 0);
+
+      if (!colony._pendingPopReturns) colony._pendingPopReturns = [];
+      colony._pendingPopReturns.push({
+        amount:  returnAmount,
+        strata:  'laborer',
+        readyAt,
+      });
+    });
+  }
+
+  /**
+   * Spawnuje jednostkę na hexie sąsiadującym z Capital.
+   * @param {object} colony
+   * @param {object} queueItem — { archetypeId, factionId, popCost, krCost,
+   *                                initialOrg, initialMorale, initialSupplyCap }
+   */
+  _spawnGroundUnit(colony, queueItem) {
     const mgr = window.KOSMOS?.groundUnitManager;
     if (!mgr) {
       EventBus.emit('groundUnit:buildFailed', {
-        planetId: colony.planetId, archetypeId, reason: 'no_manager',
+        planetId: colony.planetId, archetypeId: queueItem.archetypeId, reason: 'no_manager',
       });
       return null;
     }
 
+    const { archetypeId, factionId } = queueItem;
     const spawn = this._findGroundUnitSpawn(colony);
     if (!spawn) {
       EventBus.emit('groundUnit:buildFailed', {
@@ -927,6 +1251,27 @@ export class ColonyManager {
       });
       return null;
     }
+
+    // Opcja C v3: wstrzyknij init supply/org/morale z queueItem (uwzględnia techBonuses)
+    const arch = UNIT_ARCHETYPES[archetypeId];
+    const noMor = arch?.noMorale === true;
+    unit.maxOrg          = queueItem.initialOrg    ?? (arch?.baseOrg    ?? 10);
+    unit.maxMorale       = noMor ? 0 : (queueItem.initialMorale ?? (arch?.baseMorale ?? 10));
+    unit.org             = unit.maxOrg;
+    unit.morale          = unit.maxMorale;
+    unit.supplyCap       = queueItem.initialSupplyCap ?? (arch?.baseSupplyCap ?? 100);
+    unit.supply          = unit.supplyCap;                        // fresh = full
+    unit.supplyConsumption = arch?.supplyConsumption ?? 2;
+    unit.noMorale        = noMor;
+    unit.isSupplier      = arch?.isSupplier === true;
+    unit.supplyTransferRate = arch?.supplyTransferRate ?? 0;
+    unit.transportStatus = null;  // null | 'loaded' | 'in_transit'
+    unit.unpaidYears     = 0;
+    unit.status          = unit.status ?? 'idle';
+    // POP cost zapamiętany dla death reintegration + disband refund
+    unit.popCost         = queueItem.popCost ?? 0;
+    // Opcja C v3 "macierz": home colony opłaca Kr upkeep niezależnie od deployment
+    unit.homeColonyId    = queueItem.homeColonyId ?? colony.planetId;
 
     EventBus.emit('groundUnit:buildCompleted', {
       unitId:      unit.id,

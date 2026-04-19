@@ -62,6 +62,13 @@ export const GroundUnitFactory = {
     const id = `gu_${Date.now()}_${(++_idCounter).toString(36)}`;
     const legacyRole = mapRoleToLegacy(arch.role);
 
+    // ── Opcja C v3: Supply/Org/Morale — domyślne z archetypu ──
+    // ColonyManager._spawnGroundUnit może nadpisać tymi samymi polami z uwzględnieniem techBonuses.
+    const noMor = arch.noMorale === true;
+    const baseOrg       = arch.baseOrg       ?? 10;
+    const baseMorale    = noMor ? 0 : (arch.baseMorale ?? 10);
+    const baseSupplyCap = arch.baseSupplyCap ?? 100;
+
     return {
       // ── Identity ──
       id,
@@ -80,8 +87,23 @@ export const GroundUnitFactory = {
       currentHP:  baseStats.hp,
       status:     'idle',
       experience: 0,
-      morale:     100,
       turnsAlive: 0,
+
+      // ── Opcja C v3: Supply/Org/Morale ──
+      org:                baseOrg,
+      maxOrg:             baseOrg,
+      morale:             baseMorale,
+      maxMorale:          baseMorale,
+      supply:             baseSupplyCap,
+      supplyCap:          baseSupplyCap,
+      supplyConsumption:  arch.supplyConsumption ?? 2,
+      noMorale:           noMor,
+      isSupplier:         arch.isSupplier === true,
+      supplyTransferRate: arch.supplyTransferRate ?? 0,
+      transportStatus:    null,
+      prevStatus:         null,
+      unpaidYears:        0,
+      popCost:            0,  // nadpisywane przez ColonyManager._spawnGroundUnit
 
       // ── Position ──
       planetId,
@@ -151,21 +173,55 @@ export const GroundUnitFactory = {
   },
 
   /**
-   * Policz efektywny damage po counter system:
-   *   defender.archetypeId ∈ attacker.counters → +30% (×1.3)
-   *   w przeciwnym razie: surowe dmg bez zmian
+   * Policz efektywny damage po counter system + Opcja C v3 damageMult.
+   *   1. Bazowy dmg z archetype (lub legacy .attack)
+   *   2. Counter bonus: defender ∈ attacker.counters → ×1.3
+   *   3. Opcja C v3 damageMult:
+   *        supplyFactor = supply<=0 ? 0 : min(supply/20, 1)
+   *        coreBonus    = (org + morale) / 200     (drone: tylko org, dzielone przez 100)
+   *        multiplier   = supplyFactor × (1.0 + coreBonus)
+   *        → 0 supply = 0 dmg; 100/10/10 = 1.10×; 100/100/100 = 2.00×
    * Counter NIE odejmuje AC — to robi GroundUnitManager.attackUnit.
    * @param {Object} attacker
    * @param {Object} defender
-   * @returns {number} surowy dmg po mnożniku counter (przed odjęciem AC)
+   * @returns {number} surowy dmg po counter × supply/org/morale mult (przed odjęciem AC)
    */
   getEffectiveDmg(attacker, defender) {
     const baseDmg = attacker?.baseStats?.dmg ?? attacker?.attack ?? 0;
-    if (!attacker?.counters || !defender?.archetypeId) return baseDmg;
-    if (attacker.counters.includes(defender.archetypeId)) {
-      return Math.round(baseDmg * 1.3);
+
+    // Counter bonus (Ground Unit System)
+    let dmg = baseDmg;
+    if (attacker?.counters && defender?.archetypeId &&
+        attacker.counters.includes(defender.archetypeId)) {
+      dmg = Math.round(dmg * 1.3);
     }
-    return baseDmg;
+
+    // Opcja C v3: supply/org/morale multiplier
+    const mult = this.computeDamageMult(attacker);
+    return dmg * mult;
+  },
+
+  /**
+   * Opcja C v3: oblicz mnożnik dmg z supply/org/morale jednostki.
+   * Działa też dla legacy jednostek (brak pól → traktowane jako full supply, org=10, mor=10 → ×1.10).
+   * @param {Object} unit
+   * @returns {number} 0..2.0
+   */
+  computeDamageMult(unit) {
+    if (!unit) return 1.0;
+    // Legacy jednostki (bez pola `supply`) — zachowują pełny dmg dla kompatybilności z fazą 6.
+    if (unit.supply === undefined || unit.supply === null) return 1.0;
+
+    if ((unit.supply ?? 0) <= 0) return 0;
+    const supplyFactor = Math.min((unit.supply ?? 0) / 20, 1);
+
+    const noMor   = unit.noMorale === true;
+    const orgTerm = (unit.org ?? 0);
+    const morTerm = noMor ? 0 : (unit.morale ?? 0);
+    const coreDiv = noMor ? 100 : 200;  // drone — tylko org liczy się do bonusu
+    const coreBonus = (orgTerm + morTerm) / coreDiv;
+
+    return supplyFactor * (1.0 + coreBonus);
   },
 
   /**

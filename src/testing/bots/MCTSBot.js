@@ -55,9 +55,11 @@ export class MCTSBot extends BaseBot {
   _sampleCandidates(catalog, n) {
     const out = [];
     const seen = new Set();
-    // Deterministyczne dodanie po 1 z każdej kategorii (jeśli istnieje)
+    // perBuilding=2 — gwarantuje, że każdy buildingId ma ≥1-2 akcje w sample
+    // (inaczej factory/shipyard były wypychane przez mine/solar_farm w limicie).
+    // Dodaj build actions per-building żeby wszystkie typy miały szansę.
     const categoryLists = {
-      build: catalog.listBuildActions({ limit: 30 }),
+      build: catalog.listBuildActions({ limit: 60, perBuilding: 2 }),
       upgrade: catalog.listUpgradeActions({ limit: 20 }),
       research: catalog.listResearchActions(),
       expedition: catalog.listExpeditionActions({ limit: 15 }),
@@ -110,48 +112,61 @@ export class MCTSBot extends BaseBot {
       case ACTION_TYPES.DEMOLISH: return -5; // rzadko użyteczne
       case ACTION_TYPES.RESEARCH: return this._evaluateResearch(action, obs);
       case ACTION_TYPES.EXPEDITION: return this._evaluateExpedition(action, obs);
-      case ACTION_TYPES.BUILD_SHIP: return 8;
-      case ACTION_TYPES.FACTORY_ENQUEUE: return 2;
+      case ACTION_TYPES.BUILD_SHIP: return this._evaluateBuildShip(action, obs);
+      case ACTION_TYPES.FACTORY_ENQUEUE: return this._evaluateFactoryEnqueue(action, obs);
       case ACTION_TYPES.WAIT: return 0;
       default: return -1;
     }
+  }
+
+  /** Policz ile jest danego budynku w aktywnej kolonii */
+  _countBuilding(id) {
+    const K = window.KOSMOS;
+    const bSys = K?.colonyManager?.getColony?.(K?.homePlanet?.id)?.buildingSystem;
+    if (!bSys?._active) return 0;
+    let n = 0;
+    for (const [, entry] of bSys._active) {
+      if ((entry.building?.id ?? entry.buildingId) === id) n++;
+    }
+    return n;
   }
 
   _evaluateBuild(action, obs) {
     const id = action.buildingId;
     const b = BUILDINGS[id];
     if (!b) return 0;
-    let score = 5; // bazowa wartość budowy
+    let score = 15; // bazowa wartość budowy — PRIORYTETYZACJA nad research
 
     const food = obs.resources?.food ?? 0;
     const water = obs.resources?.water ?? 0;
+    const count = this._countBuilding(id);
 
-    // Farm/well gdy brakuje jedzenia/wody
-    if (id === 'farm' && food < 80)  score += 15;
-    if (id === 'well' && water < 80) score += 12;
-    // Solar_farm gdy brownout
-    if (id === 'solar_farm' && obs.energyBalance < 0) score += 14;
-    // Habitat gdy pop blisko housing cap
-    if ((id === 'habitat' || id === 'residential_block') && obs.pop >= 3) score += 10;
-    // Lab dla tempa research
-    if ((id === 'lab' || id === 'research_lab') && obs.researched.length > 3) score += 8;
-    // Mine gdy mamy pop, nie mamy mine
-    if (id === 'mine' && obs.pop >= 3) score += 6;
-    // Shipyard po rocketry
-    if (id === 'shipyard' && obs.researched.includes('rocketry')) score += 9;
-    // Launch_pad po rocketry
-    if (id === 'launch_pad' && obs.researched.includes('rocketry')) score += 10;
+    // Foundation: kluczowe budynki mają bardzo wysoki boost gdy brakuje
+    // (sekwencja solar→mine→factory zgodnie z user strategy)
+    if (id === 'solar_farm' && count === 0) score += 30;
+    if (id === 'mine' && count === 0)        score += 30;
+    if (id === 'factory' && count === 0 && obs.researched.includes('metallurgy')) score += 35;
+    if (id === 'farm' && count === 0)        score += 25;
+    if (id === 'well' && count === 0)        score += 25;
+
+    // Reaktywne: uzupełnianie gdy zasobów brak
+    if (id === 'farm' && food < 80)          score += 20;
+    if (id === 'well' && water < 80)         score += 18;
+    if (id === 'solar_farm' && obs.energyBalance < 0) score += 22;
+
+    // Housing gdy pop blisko cap
+    if ((id === 'habitat' || id === 'residential_block') && obs.pop >= 3) score += 12;
+    // Lab po fundamentach
+    if ((id === 'lab' || id === 'research_lab') && obs.researched.length > 3) score += 10;
+    // Dodatkowa fabryka gdy POP rośnie (dla prosperity przez commodities)
+    if (id === 'factory' && count >= 1 && count < 3 && obs.pop >= 6) score += 18;
+    // Space chain — po odpowiednich techach
+    if (id === 'launch_pad' && obs.researched.includes('rocketry') && count === 0)   score += 20;
+    if (id === 'shipyard'   && obs.researched.includes('exploration') && count === 0) score += 18;
+    if (id === 'observatory' && count === 0 && obs.pop >= 4) score += 12;
 
     // Penalty: jeśli mamy już kilka tego typu
-    const K = window.KOSMOS;
-    const bSys = K?.colonyManager?.getColony?.(K?.homePlanet?.id)?.buildingSystem;
-    if (bSys?._active) {
-      let sameCount = 0;
-      for (const [, entry] of bSys._active) {
-        if ((entry.building?.id ?? entry.buildingId) === id) sameCount++;
-      }
-      if (sameCount >= 3) score -= sameCount * 2; // malejące korzyści
-    }
+    if (count >= 3) score -= count * 4; // silniejsze malejące korzyści
 
     return score;
   }
@@ -165,12 +180,16 @@ export class MCTSBot extends BaseBot {
   _evaluateResearch(action, obs) {
     const tech = TECHS[action.techId];
     if (!tech) return 0;
-    let score = 8; // research jest generalnie wartościowy
+    let score = 5; // obniżone — build ma priorytet
     // Bonus za tech niskiego tier-u (tanie, odblokowują więcej)
-    if (tech.tier <= 2) score += 6;
-    // Bonus za rocketry (otwiera ekspedycje)
+    if (tech.tier === 1) score += 6;
+    if (tech.tier === 2) score += 3;
+    // TOP PRIORITY: metallurgy (odblokowuje factory) — jak RuleBot
+    if (action.techId === 'metallurgy' && !obs.researched.includes('metallurgy')) score += 25;
+    // Space chain — konieczne dla ekspansji
+    if (action.techId === 'orbital_survey' && !obs.researched.includes('orbital_survey')) score += 12;
     if (action.techId === 'rocketry' && !obs.researched.includes('rocketry')) score += 15;
-    // Bonus za colonization
+    if (action.techId === 'exploration' && !obs.researched.includes('exploration')) score += 14;
     if (action.techId === 'colonization' && !obs.researched.includes('colonization')) score += 10;
     return score;
   }
@@ -181,6 +200,27 @@ export class MCTSBot extends BaseBot {
     if (action.missionType === 'mining') score += 6;
     if (action.missionType === 'scientific') score += 7;
     if (action.missionType === 'colonize') score += 12; // droga ale potężna
+    return score;
+  }
+
+  _evaluateBuildShip(action, obs) {
+    // Statki dopiero po shipyard; priorytet science_vessel (recon)
+    const shipyardCount = this._countBuilding('shipyard');
+    if (shipyardCount === 0) return 0;
+    let score = 10;
+    if (action.shipId === 'science_vessel' && obs.vesselCount === 0) score += 15;
+    if (action.shipId === 'cargo_ship' && obs.researched.includes('colonization')) score += 12;
+    return score;
+  }
+
+  _evaluateFactoryEnqueue(action, obs) {
+    // Factory enqueue ma sens tylko gdy fabryka istnieje i coś brakuje.
+    const factoryCount = this._countBuilding('factory');
+    if (factoryCount === 0) return 0;
+    let score = 8; // podwyższone z 2
+    const have = obs.resources?.[action.commodityId] ?? 0;
+    if (have < 3) score += 10; // krytyczny brak
+    else if (have < 8) score += 5;
     return score;
   }
 }

@@ -28,24 +28,39 @@ const SPACE_TECH_CHAIN = [
   'colonization',       // T3 — odblokowuje habitat_pod module (dla colonize missions)
 ];
 
-// Ogólny TECH_PRIORITY (space chain first, potem foundation)
+// TECH_PRIORITY — hybrydowa kolejność:
+// metallurgy (TOP, tanie, factory) → space chain (żeby odblokować observatory/launch_pad/shipyard)
+// → tanie foundation. Bez tego space chain odpala po 200+ latach i commodities już są wyczerpane.
 const TECH_PRIORITY = [
-  ...SPACE_TECH_CHAIN,
-  'metallurgy', 'basic_power', 'basic_chemistry', 'agriculture',
-  'industrial_revolution', 'advanced_chemistry',
-  'orbital_infrastructure', 'hydroponics', 'bio_recycling',
+  'metallurgy',         // 50 — unlock factory (TOP priority)
+  'orbital_survey',     // 110 — unlock observatory + rocketry path
+  'bio_recycling',      // 50 — biology (food/water efficiency)
+  'hydroponics',        // 60 — food boost
+  'rocketry',           // T2 — unlock launch_pad
+  'exploration',        // T2 — unlock shipyard + science_vessel
+  'advanced_mining',    // 90 — +20% minerals + nowe tereny
+  'efficient_solar',    // energy
+  'battery_tech',       // energy storage
+  'urban_planning',     // housing
+  'automation',         // efficiency
+  'colonization',       // T3 — dla kolonizacji
 ];
 
 // Opening build order — starter daje 3 budynki (farm, well, solar_farm) + colony_base
-// Bot dodaje factory → habitat → mine → lab (potem po rocketry launch_pad, po exploration shipyard)
+// Strategia:
+//   mine (free tech) → factory (metallurgy) → observatory (orbital_survey) → lab → habitat
+// Observatory w opening bo: tanie (4 SA + 3 ES + 2 PC), +6 research/year przyspiesza space chain,
+// auto-discovery ciał. Gated przez orbital_survey tech — opening zapauzuje się tutaj
+// dopóki research nie skończy, potem odpala build.
 const OPENING_ORDER = [
   { id: 'farm',        target: 1 },
   { id: 'well',        target: 1 },
   { id: 'solar_farm',  target: 1 },
-  { id: 'factory',     target: 1 },
-  { id: 'habitat',     target: 1 },
   { id: 'mine',        target: 1 },
-  { id: 'lab',         target: 1 },
+  { id: 'factory',     target: 1 },
+  { id: 'habitat',     target: 1 },  // housing przed research — pop dorośnie
+  { id: 'observatory', target: 1 },
+  { id: 'research_station',         target: 1 },
 ];
 
 export class RuleBot extends BaseBot {
@@ -91,8 +106,13 @@ export class RuleBot extends BaseBot {
 
     const civYear = Math.floor((window.KOSMOS?.timeSystem?.gameTime ?? 0) * 12);
 
-    // ── P-2: Factory reactive mode (raz, gdy mamy ≥2 factories) ──
-    if (!this._factoryModeSetReactive && ctx.countBuilding('factory') >= 2) {
+    // ── P-2: Factory reactive mode — PO zbudowaniu observatory + shipyard + launch_pad.
+    // Reactive blokuje enqueue strategic commodities (electronic_systems, reactive_armor etc.)
+    // które są wymagane dla observatory/launch_pad. Przełączamy w reactive dopiero gdy
+    // kluczowe budynki kosmosowe stoją — wtedy factory może skupić się na POP prosperity.
+    const hasSpaceInfra = ctx.countBuilding('observatory') > 0 &&
+                          ctx.countBuilding('launch_pad') > 0;
+    if (!this._factoryModeSetReactive && hasSpaceInfra && ctx.countBuilding('factory') >= 1) {
       this._factoryModeSetReactive = true;
       return { type: ACTION_TYPES.FACTORY_SET_MODE, mode: 'reactive', _tag: 'factory_reactive' };
     }
@@ -109,11 +129,24 @@ export class RuleBot extends BaseBot {
     }
 
     // ── P0: Opening build order ──
+    // Jeśli step wymaga tech nie zbadanego, zamiast break — zainicjuj research tego tech.
+    // Jeśli canBuild fail przez commodity, enqueue commodity (gdy factory istnieje).
     for (const step of OPENING_ORDER) {
       if (ctx.countBuilding(step.id) < step.target) {
+        const def = BUILDINGS[step.id];
+        // Required tech nie zbadany → research tego tech
+        if (def?.requires && !ctx.hasTech(def.requires)) {
+          const techActions = catalog.listResearchActions();
+          const techAction = techActions.find(a => a.techId === def.requires);
+          if (techAction) { techAction._tag = `opening_tech_${def.requires}`; return techAction; }
+          // tech niedostępny (deeper requires nie spełnione) — przejdź do innych priorytetów
+          break;
+        }
         if (ctx.canBuild(step.id)) {
           const a = this._findBuild(catalog, step.id);
           if (a) { a._tag = `opening_${step.id}`; return a; }
+          // _findBuild zwróciło null (brak legalnego hexa) — pomiń ten krok
+          continue;
         } else {
           const needed = this._findMissingCommodity(ctx, step.id);
           if (needed && this._canEnqueue(needed, civYear)) {
@@ -181,7 +214,37 @@ export class RuleBot extends BaseBot {
       }
     }
 
-    // ── P6: Expand food/water/solar z populacją ──
+    // ── P6: Observatory — tanie, odblokowuje skanowanie. Wcześnie, PRZED expand. ──
+    // Obserwatorium kosztuje tylko Fe 25, Si 15, Cu 10 + 4 SA + 3 ES + 2 PC — łatwe do wybudowania.
+    if (ctx.pop >= 3 && ctx.countBuilding('observatory') === 0 && ctx.canBuild('observatory')) {
+      const a = this._findBuild(catalog, 'observatory');
+      if (a) { a._tag = 'observatory'; return a; }
+    }
+
+    // ── P7: Lab — wcześnie żeby przyspieszyć research (space chain wymaga techów) ──
+    if (ctx.pop >= 4 && ctx.countBuilding('research_station') === 0 && ctx.canBuild('research_station')) {
+      const a = this._findBuild(catalog, 'research_station');
+      if (a) { a._tag = 'research_station'; return a; }
+    }
+
+    // ── P8: Shipyard po exploration (lekki, Fe 80 Ti 30 — osiągalne z produkcji) ──
+    if (ctx.hasTech('exploration')) {
+      if (ctx.countBuilding('shipyard') === 0 && ctx.pop >= 4 && ctx.canBuild('shipyard')) {
+        const a = this._findBuild(catalog, 'shipyard');
+        if (a) { a._tag = 'shipyard'; return a; }
+      }
+    }
+
+    // ── P9: Launch_pad po rocketry (DROGI: Fe 1200, Ti 600, SA 120 — wymaga długiej produkcji) ──
+    if (ctx.hasTech('rocketry')) {
+      if (ctx.countBuilding('launch_pad') === 0 && ctx.canBuild('launch_pad')) {
+        const a = this._findBuild(catalog, 'launch_pad');
+        if (a) { a._tag = 'launch_pad'; return a; }
+      }
+    }
+
+    // ── P10: Expand food/water/solar z populacją (tylko jeśli jeszcze mało pop lub kryzys) ──
+    // Ograniczony expand — żeby nie marnować commodities na kolejne farmy gdy trzeba space chain.
     const pop = Math.max(1, ctx.pop);
     if (ctx.countBuilding('farm') < Math.ceil(pop * this.weights.farm_per_pop / 2) && ctx.canBuild('farm')) {
       const a = this._findBuild(catalog, 'farm');
@@ -196,13 +259,13 @@ export class RuleBot extends BaseBot {
       if (a) { a._tag = 'expand_solar'; return a; }
     }
 
-    // ── P7: 2nd mine ──
+    // ── P11: 2nd mine ──
     if (ctx.countBuilding('mine') < 2 && ctx.pop >= 5 && ctx.canBuild('mine')) {
       const a = this._findBuild(catalog, 'mine');
       if (a) { a._tag = 'mine_second'; return a; }
     }
 
-    // ── P8: Multiple factories (kluczowe dla expansion commodities) ──
+    // ── P12: Multiple factories (kluczowe dla expansion commodities) ──
     const factoryCount = ctx.countBuilding('factory');
     let factoryTarget = 1;
     for (const [popThresh, target] of Object.entries(this.weights.factory_per_pop).sort((a,b) => +a[0] - +b[0])) {
@@ -213,33 +276,7 @@ export class RuleBot extends BaseBot {
       if (a) { a._tag = `factory_${factoryCount+1}`; return a; }
     }
 
-    // ── P9: Space buildings po odpowiednich techach ──
-    if (ctx.hasTech('rocketry')) {
-      if (ctx.countBuilding('launch_pad') === 0 && ctx.canBuild('launch_pad')) {
-        const a = this._findBuild(catalog, 'launch_pad');
-        if (a) { a._tag = 'launch_pad'; return a; }
-      }
-    }
-    if (ctx.hasTech('exploration')) {
-      if (ctx.countBuilding('shipyard') === 0 && ctx.pop >= 5 && ctx.canBuild('shipyard')) {
-        const a = this._findBuild(catalog, 'shipyard');
-        if (a) { a._tag = 'shipyard'; return a; }
-      }
-    }
-
-    // ── P10: Observatory — wcześnie dla auto-discovery ──
-    if (ctx.pop >= 4 && ctx.countBuilding('observatory') === 0 && ctx.canBuild('observatory')) {
-      const a = this._findBuild(catalog, 'observatory');
-      if (a) { a._tag = 'observatory'; return a; }
-    }
-
-    // ── P11: Research station — zaawansowany lab ──
-    if (ctx.pop >= 7 && ctx.countBuilding('research_station') === 0 && ctx.canBuild('research_station')) {
-      const a = this._findBuild(catalog, 'research_station');
-      if (a) { a._tag = 'research_station'; return a; }
-    }
-
-    // ── P12: Build ship (science_vessel najpierw, potem cargo_ship dla kolonizacji) ──
+    // ── P13: Build ship (science_vessel najpierw, potem cargo_ship dla kolonizacji) ──
     if (ctx.countBuilding('shipyard') > 0 && ctx.pop >= 4) {
       const vm = window.KOSMOS?.vesselManager;
       const allVessels = vm?.getAllVessels?.() ?? [];
@@ -445,7 +482,7 @@ export class RuleBot extends BaseBot {
   }
 
   _findMissingCommodity(ctx, buildingId) {
-    const candidates = buildingId ? [buildingId] : ['habitat', 'mine', 'lab', 'research_station', 'shipyard', 'launch_pad'];
+    const candidates = buildingId ? [buildingId] : ['habitat', 'mine', 'research_station', 'research_station', 'shipyard', 'launch_pad'];
     for (const id of candidates) {
       const def = BUILDINGS[id];
       if (!def) continue;
@@ -458,8 +495,10 @@ export class RuleBot extends BaseBot {
   }
 
   _findBuild(catalog, buildingId) {
-    const actions = catalog.listBuildActions({ limit: 80 });
-    return actions.find(a => a.buildingId === buildingId) ?? null;
+    // Użyj filtra po buildingId — pomija wcześniejsze budynki w iteracji BUILDINGS,
+    // dzięki czemu zawsze znajdziemy factory/shipyard/itp. niezależnie od `limit`.
+    const actions = catalog.listBuildActions({ limit: 10, buildingId });
+    return actions[0] ?? null;
   }
 
   _findUpgrade(ctx, catalog, buildingIdFilter) {

@@ -19,6 +19,7 @@ import { BaseBot } from './BaseBot.js';
 import { ACTION_TYPES } from '../actions/ActionAdapter.js';
 import { RandomBot } from './RandomBot.js';
 import { RuleBot } from './RuleBot.js';
+import EntityManager from '../../core/EntityManager.js';
 
 export class ScriptedBot extends BaseBot {
   constructor({ script, fallback = 'idle' } = {}) {
@@ -51,7 +52,7 @@ export class ScriptedBot extends BaseBot {
     return { type: ACTION_TYPES.WAIT };
   }
 
-  /** Resolve: zamień koordy q/r na obiekt tile z aktywnego grida */
+  /** Resolve: zamień koordy q/r na obiekt tile z aktywnego grida + semantic targetId dla ekspedycji */
   _resolveAction(action, catalog) {
     if (!action || !action.type) return null;
     const out = { ...action };
@@ -77,7 +78,85 @@ export class ScriptedBot extends BaseBot {
       }
     }
 
+    // Ekspedycja: jeśli oryginalny targetId nie istnieje w bieżącym układzie,
+    // użyj _targetHint żeby znaleźć semantycznie odpowiednie ciało.
+    // Dla starych skryptów bez hintu — stosuj defaulty per missionType.
+    if (action.type === ACTION_TYPES.EXPEDITION) {
+      const origExists = action.targetId && EntityManager.get?.(action.targetId);
+      if (!origExists) {
+        const hint = action._targetHint || this._defaultHintFor(action.missionType);
+        const resolved = this._resolveSemanticTarget(hint, action.missionType, action.vesselId);
+        if (resolved) out.targetId = resolved;
+      }
+      // Vessel hint — oryginalny v_5 pewnie nie istnieje; użyj pierwszego dostępnego.
+      // Vessel.status = 'idle' po stworzeniu, 'on_mission' w trakcie misji.
+      if (out.vesselId && !this._vesselAvailable(out.vesselId)) {
+        const vm = window.KOSMOS?.vesselManager;
+        const homeId = window.KOSMOS?.homePlanet?.id;
+        const free = vm?.getAllVessels?.()?.find(v =>
+          v.status === 'idle' && v.colonyId === homeId
+        );
+        if (free) out.vesselId = free.id;
+      }
+    }
+
     return out;
+  }
+
+  /** Znajdź semantycznie pasujące ciało. hint: { kind, planetType, rank, requireUnexplored, requireNoColony } */
+  _resolveSemanticTarget(hint, missionType, vesselIdUnused) {
+    const homePlanet = window.KOSMOS?.homePlanet;
+    if (!homePlanet) return null;
+
+    const colMgr = window.KOSMOS?.colonyManager;
+    const existingColonyIds = new Set(colMgr?.getAllColonies?.()?.map(c => c.planetId) ?? []);
+
+    const all = EntityManager.getAll?.() ?? [];
+    const candidates = all.filter(e => {
+      if (e.type === 'star') return false;
+      if (e.id === homePlanet.id) return false;
+      if (hint.kind && e.type !== hint.kind) return false;
+      if (hint.planetType && e.planetType !== hint.planetType) return false;
+      if (hint.requireUnexplored && e.explored) return false;
+      if (hint.requireExplored && !e.explored) return false;
+      if (hint.requireNoColony && existingColonyIds.has(e.id)) return false;
+      return true;
+    });
+
+    if (candidates.length === 0) return null;
+
+    // Najbliższe do domowej planety (Euclid w physics coords)
+    const hx = homePlanet.physics?.x ?? 0;
+    const hy = homePlanet.physics?.y ?? 0;
+    let best = null, bestDist = Infinity;
+    for (const e of candidates) {
+      const ex = e.physics?.x ?? 0;
+      const ey = e.physics?.y ?? 0;
+      const d = Math.hypot(ex - hx, ey - hy);
+      if (d < bestDist) { best = e; bestDist = d; }
+    }
+    return best?.id ?? null;
+  }
+
+  /** Default hint gdy skrypt nie ma _targetHint (stare nagrania). */
+  _defaultHintFor(missionType) {
+    if (missionType === 'colony' || missionType === 'colonize') {
+      // Najpierw próbuj księżyc blisko (user w nagraniu kolonizował moon), potem rocky
+      return { kind: 'moon', requireNoColony: true, requireExplored: true };
+    }
+    if (missionType === 'recon') {
+      return { requireUnexplored: true };
+    }
+    if (missionType === 'mining' || missionType === 'scientific') {
+      return { requireExplored: true };
+    }
+    return {};
+  }
+
+  _vesselAvailable(vesselId) {
+    const vm = window.KOSMOS?.vesselManager;
+    const v = vm?.getVessel?.(vesselId);
+    return !!v && v.status === 'idle';
   }
 
   /** Reset executed flags (do ponownego uruchomienia skryptu) */

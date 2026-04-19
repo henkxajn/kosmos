@@ -1,0 +1,386 @@
+{
+  "name": "opening-2026-04-17T19-34-10",
+  "description": "Nagrane 42 akcji. Generated 2026-04-17T19:34:10.915Z",
+  "fallback": "rule",
+  "actions": [
+    {
+      "atCivYear": 0,
+      "action": {
+        "type": "build",
+        "buildingId": "colony_base",
+        "tileQ": 8,
+        "tileR": 7
+      }
+    },
+    {
+      "atCivYear": 0,
+      "action": {
+        "type": "build",
+        "buildingId": "solar_farm",
+        "tileQ": 10,
+        "tileR": 6
+      }
+    },
+    {
+      "atCivYear": 0,
+      "action": {
+        "type": "build",
+        "buildingId": "mine",
+        "tileQ": 4,
+        "tileR": 4
+      }
+    },
+    {
+      "atCivYear": 0,
+      "action": {
+        "type": "build",
+        "buildingId": "factory",
+        "tileQ": 7,
+        "tileR": 7
+      }
+    },
+    {
+      "atCivYear": 2,
+      "action": {
+        "type": "build",
+        "buildingId": "observatory",
+        "tileQ": 5,
+        "tileR": 6
+      }
+    },
+    {
+      "atCivYear": 16,
+      "action": {
+        "type": "buildShip",
+        "shipId": "hull_small",
+        "modules": [
+          "engine_chemical",
+          "science_lab"
+        ]
+      }
+    },
+    {
+      "atCivYear": 18,
+      "action": {
+        "type": "build",
+        "buildingId": "coal_plant",
+        "tileQ": 1,
+        "tileR": 4
+      }
+    },
+    {
+      "atCivYear": 20,
+      "action": {
+        "type": "build",
+        "buildingId": "well",
+        "tileQ": 8,
+        "tileR": 8
+      }
+    },
+    {
+      "atCivYear": 20,
+      "action": {
+        "type": "build",
+        "buildingId": "farm",
+        "tileQ": 9,
+        "tileR": 6
+      }
+    },
+    {
+      "atCivYear": 23,
+      "action": {
+        "type": "build",
+        "buildingId": "research_station",
+        "tileQ": 6,
+        "tileR": 7
+      }
+    },
+    {
+      "atCivYear": 25,
+      "action": {
+        "type": "build",
+        "buildingId": "solar_farm",
+        "tileQ": 5,
+        "tileR": 4
+      }
+    },
+    {
+      "atCivYear": 25,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 4,
+        "tileR": 4
+      }
+    },
+    {
+      "atCivYear": 31,
+      "action": {
+        "type": "buildShip",
+        "shipId": "hull_small",
+        "modules": [
+          "engine_chemical",
+          "cargo_small"
+        ]
+      }
+    },
+    {
+      "atCivYear": 31,
+      "action": {
+        "type": "buildShip",
+        "shipId": "hull_small",
+        "modules": [
+          "engine_chemical",
+          "cargo_small"
+        ]
+      }
+    },
+    {
+      "atCivYear": 31,
+      "action": {
+        "type": "buildShip",
+        "shipId": "hull_small",
+        "modules": [
+          "engine_chemical",
+          "cargo_small"
+        ]
+      }
+    },
+    {
+      "atCivYear": 31,
+      "action": {
+        "type": "build",
+        "buildingId": "mine",
+        "tileQ": 4,
+        "tileR": 3
+      }
+    },
+    {
+      "atCivYear": 42,
+      "action": {
+        "type": "build",
+        "buildingId": "factory",
+        "tileQ": 9,
+        "tileR": 8
+      }
+    },
+    {
+      "atCivYear": 42,
+      "action": {
+        "type": "build",
+        "buildingId": "factory",
+        "tileQ": 10,
+        "tileR": 8
+      }
+    },
+    {
+      "atCivYear": 42,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 7,
+        "tileR": 7
+      }
+    },
+    {
+      "atCivYear": 45,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 10,
+        "tileR": 6
+      }
+    },
+    {
+      "atCivYear": 45,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 5,
+        "tileR": 4
+      }
+    },
+    {
+      "atCivYear": 46,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 9,
+        "tileR": 8
+      }
+    },
+    {
+      "atCivYear": 47,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 10,
+        "tileR": 8
+      }
+    },
+    {
+      "atCivYear": 57,
+      "action": {
+        "type": "buildShip",
+        "shipId": "hull_small",
+        "modules": [
+          "engine_chemical",
+          "habitat_pod"
+        ]
+      }
+    },
+    {
+      "atCivYear": 58,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 4,
+        "tileR": 3
+      }
+    },
+    {
+      "atCivYear": 59,
+      "action": {
+        "type": "build",
+        "buildingId": "factory",
+        "tileQ": 7,
+        "tileR": 9
+      }
+    },
+    {
+      "atCivYear": 59,
+      "action": {
+        "type": "build",
+        "buildingId": "factory",
+        "tileQ": 8,
+        "tileR": 9
+      }
+    },
+    {
+      "atCivYear": 59,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 8,
+        "tileR": 8
+      }
+    },
+    {
+      "atCivYear": 59,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 9,
+        "tileR": 6
+      }
+    },
+    {
+      "atCivYear": 74,
+      "action": {
+        "type": "expedition",
+        "missionType": "colony",
+        "targetId": "entity_11",
+        "vesselId": "v_5"
+      }
+    },
+    {
+      "atCivYear": 76,
+      "action": {
+        "type": "build",
+        "buildingId": "solar_farm",
+        "tileQ": 6,
+        "tileR": 4
+      }
+    },
+    {
+      "atCivYear": 76,
+      "action": {
+        "type": "demolish",
+        "tileQ": 7,
+        "tileR": 7
+      }
+    },
+    {
+      "atCivYear": 76,
+      "action": {
+        "type": "upgrade",
+        "tileQ": 7,
+        "tileR": 7
+      }
+    },
+    {
+      "atCivYear": 76,
+      "action": {
+        "type": "demolish",
+        "tileQ": 1,
+        "tileR": 4
+      }
+    },
+    {
+      "atCivYear": 77,
+      "action": {
+        "type": "expedition",
+        "missionType": "colony",
+        "targetId": "entity_11",
+        "vesselId": "v_5"
+      }
+    },
+    {
+      "atCivYear": 80,
+      "action": {
+        "type": "expedition",
+        "missionType": "colony",
+        "targetId": "entity_11",
+        "vesselId": "v_5"
+      }
+    },
+    {
+      "atCivYear": 80,
+      "action": {
+        "type": "expedition",
+        "missionType": "colony",
+        "targetId": "entity_11",
+        "vesselId": "v_5"
+      }
+    },
+    {
+      "atCivYear": 83,
+      "action": {
+        "type": "build",
+        "buildingId": "mine",
+        "tileQ": 5,
+        "tileR": 3
+      }
+    },
+    {
+      "atCivYear": 90,
+      "action": {
+        "type": "expedition",
+        "missionType": "colony",
+        "targetId": "entity_11",
+        "vesselId": "v_5"
+      }
+    },
+    {
+      "atCivYear": 91,
+      "action": {
+        "type": "build",
+        "buildingId": "solar_farm",
+        "tileQ": 0,
+        "tileR": 2
+      }
+    },
+    {
+      "atCivYear": 91,
+      "action": {
+        "type": "buildShip",
+        "shipId": "hull_small",
+        "modules": [
+          "engine_chemical",
+          "habitat_pod",
+          "habitat_pod"
+        ]
+      }
+    },
+    {
+      "atCivYear": 94,
+      "action": {
+        "type": "expedition",
+        "missionType": "colony",
+        "targetId": "entity_11",
+        "vesselId": "v_6"
+      }
+    }
+  ]
+}

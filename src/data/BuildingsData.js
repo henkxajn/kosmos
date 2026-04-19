@@ -687,6 +687,83 @@ export const BUILDINGS = {
     popType:       'laborer',
   },
 
+  // ── Koszary (Opcja C v3) — rekrutacja jednostek naziemnych ────────────────
+  // Każdy poziom = 1 slot rekrutacji równoległej (ColonyManager._getBarracksSlots).
+  // Gating archetypów: Lv1 → shock/garrison; Lv2 (ground_warfare) → + artyleria/AA/medyk;
+  // Lv3 (drone_warfare) → + drony. Capital/Barracks adjacency → auto-supply z colony.commodities.military_supplies.
+
+  barracks_lv1: {
+    id:            'barracks_lv1',
+    namePL:        'Koszary',
+    nameEN:        'Barracks',
+    category:      'military',
+    icon:          '🪖',
+    description:   'Centrum rekrutacji jednostek naziemnych (Lv1). 1 slot budowy. ' +
+                   'Dostępne shock infantry + garrison unit. Capital/Barracks adjacency daje auto-supply.',
+    cost:          { Ti: 20, Si: 15, Cu: 10 },
+    commodityCost: { structural_alloys: 6, reactive_armor: 3 },
+    energyCost:    2,
+    buildTime:     1.5,
+    rates:         {},
+    maintenance:   { Ti: 0.5 },
+    housing:       0,
+    popCost:       0.25,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      null,  // bazowe koszary — bez tech
+    popType:       'laborer',
+  },
+
+  barracks_lv2: {
+    id:            'barracks_lv2',
+    namePL:        'Rozszerzone Koszary',
+    nameEN:        'Extended Barracks',
+    category:      'military',
+    icon:          '🪖',
+    description:   'Koszary z poligonem (Lv2). 1 slot rekrutacji. ' +
+                   'Wymaga Wojny Lądowej. Odblokowuje artylerię, AA, medyków.',
+    cost:          { Ti: 40, Si: 30, Cu: 20 },
+    commodityCost: { structural_alloys: 12, reactive_armor: 6 },
+    energyCost:    4,
+    buildTime:     2.5,
+    rates:         {},
+    maintenance:   { Ti: 1 },
+    housing:       0,
+    popCost:       0.5,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'ground_warfare',
+    popType:       'laborer',
+  },
+
+  barracks_lv3: {
+    id:            'barracks_lv3',
+    namePL:        'Kompleks Szkoleniowy',
+    nameEN:        'Training Complex',
+    category:      'military',
+    icon:          '🪖',
+    description:   'Koszary z hangarem dronów (Lv3). 1 slot rekrutacji. ' +
+                   'Wymaga Wojny Dronowej. Odblokowuje drony zwiadowcze.',
+    cost:          { Ti: 80, Si: 60, Cu: 40, Hv: 10 },
+    commodityCost: { structural_alloys: 20, reactive_armor: 10, electronic_systems: 8 },
+    energyCost:    7,
+    buildTime:     4.0,
+    rates:         {},
+    maintenance:   { Ti: 2, Si: 1 },
+    housing:       0,
+    popCost:       0.75,
+    maxLevel:      1,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,
+    requires:      'drone_warfare',
+    popType:       'laborer',
+  },
+
   antimatter_factory: {
     id:            'antimatter_factory',
     namePL:        'Fabryka Antymaterii',

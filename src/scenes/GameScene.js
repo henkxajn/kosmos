@@ -36,6 +36,7 @@ import { ObservatorySystem }  from '../systems/ObservatorySystem.js';
 import { CollisionForecast } from '../systems/CollisionForecast.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { GroundUnitManager } from '../systems/GroundUnitManager.js';
+import { SupplyCoverageSystem } from '../systems/SupplyCoverageSystem.js';
 import { AnomalyEffectSystem } from '../systems/AnomalyEffectSystem.js';
 import { LeaderSystem }        from '../systems/LeaderSystem.js';
 import { FactionSystem }       from '../systems/FactionSystem.js';
@@ -51,6 +52,7 @@ import { showIntroSequence }     from '../ui/IntroModal.js';
 import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js';
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
+import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
@@ -184,6 +186,7 @@ export class GameScene {
     this.observatorySystem = new ObservatorySystem();
     this.collisionForecast = new CollisionForecast();
     this.groundUnitManager = new GroundUnitManager();
+    this.supplyCoverageSystem = new SupplyCoverageSystem(this.colonyManager, this.groundUnitManager);
     this.anomalyEffectSystem = new AnomalyEffectSystem();
     this.leaderSystem        = new LeaderSystem();
     this.factionSystem       = new FactionSystem();
@@ -219,6 +222,7 @@ export class GameScene {
     window.KOSMOS.observatorySystem = this.observatorySystem;
     window.KOSMOS.collisionForecast = this.collisionForecast;
     window.KOSMOS.groundUnitManager  = this.groundUnitManager;
+    window.KOSMOS.supplyCoverageSystem = this.supplyCoverageSystem;
     window.KOSMOS.anomalyEffectSystem = this.anomalyEffectSystem;
     window.KOSMOS.leaderSystem     = this.leaderSystem;
     window.KOSMOS.factionSystem    = this.factionSystem;
@@ -235,6 +239,11 @@ export class GameScene {
     window.KOSMOS.militaryAI       = MilitaryAI;
     window.KOSMOS.econAI           = EconAI;
     window.KOSMOS.threeRenderer    = this.threeRenderer;
+
+    // ── ActionRecorder — nagrywa akcje gracza (Ctrl+Shift+R toggle) ──
+    // Pozwala zapisać otwarcie jako script dla ScriptedBot (teach the AI how to open).
+    this.actionRecorder = new ActionRecorder();
+    window.KOSMOS.recorder = this.actionRecorder;
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
     // Nowa gra → reset do domyślnego kształtu; restore z save'a niżej.
@@ -2206,8 +2215,61 @@ export class GameScene {
           e.preventDefault();
           this._toggleThemeOverlay();
           break;
+        case 'KeyR':
+          // Ctrl+Shift+R: toggle recorder (start/stop + auto-download przy stop)
+          if (e.ctrlKey && e.shiftKey) {
+            e.preventDefault();
+            this._toggleRecorder();
+          }
+          break;
       }
     });
+  }
+
+  // ── Recorder toggle (Ctrl+Shift+R) ───────────────────────────────
+  // Start: zaczyna nagrywać akcje EventBus. Stop: zatrzymuje + pobiera JSON.
+  _toggleRecorder() {
+    const rec = this.actionRecorder;
+    if (!rec) return;
+    if (!rec.isRecording()) {
+      rec.start();
+      this._showRecorderToast('● REC — nagrywanie akcji', '#e74c3c');
+    } else {
+      rec.stop();
+      const count = rec.getActions().length;
+      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      rec.download(`opening-${ts}.json`, { name: `opening-${ts}`, fallback: 'rule', relative: true });
+      rec.clear();
+      this._showRecorderToast(`■ Stop — zapisano ${count} akcji`, '#27ae60');
+    }
+  }
+
+  _showRecorderToast(msg, color = '#e74c3c') {
+    let toast = document.getElementById('kosmos-recorder-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'kosmos-recorder-toast';
+      Object.assign(toast.style, {
+        position:     'fixed',
+        top:          '16px',
+        right:        '16px',
+        padding:      '10px 16px',
+        background:   'rgba(12,8,4,0.92)',
+        border:       '1px solid #d4a574',
+        borderRadius: '4px',
+        color:        '#f4e8d4',
+        font:         '13px/1.4 "Courier New", monospace',
+        zIndex:       '9999',
+        pointerEvents: 'none',
+        transition:   'opacity 0.3s',
+      });
+      document.body.appendChild(toast);
+    }
+    toast.style.color = color;
+    toast.textContent = msg;
+    toast.style.opacity = '1';
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => { toast.style.opacity = '0'; }, 2500);
   }
 
   // ── Theme overlay (F7) ───────────────────────────────────────────

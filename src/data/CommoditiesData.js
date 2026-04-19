@@ -146,6 +146,23 @@ export const COMMODITIES = {
     isConsumerGood: false, consumptionLayer: null,
   },
 
+  military_supplies: {
+    id:          'military_supplies',
+    namePL:      'Zaopatrzenie Wojskowe',
+    nameEN:      'Military Supplies',
+    icon:        '📦',
+    tier:        2,
+    // Amunicja (Hv) + baterie/racjonalne (Li) + elektronika polowa (Si) + racje (food) + hydratacja (water)
+    // Brak Fe — świadomie, inne commodity wystarczająco obciążają żelazo
+    recipe:      { Hv: 1, Li: 1, Si: 1, food: 2, water: 1 },
+    baseTime:    0.2,
+    weight:      0.5,
+    requiresTech: 'military_logistics',
+    description: 'Amunicja, racje polowe, medykamenty i elektronika polowa. ' +
+                 'Bez supply jednostki wojskowe nie walczą — logistyka to tlen armii.',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
   // ══════════════════════════════════════════════════════════════════════════
   // TIER 3 — Technologia Zaawansowana
   // ══════════════════════════════════════════════════════════════════════════

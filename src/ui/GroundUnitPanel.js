@@ -12,10 +12,11 @@
 //   - EventBus: brak bezpośrednich emitów (manager emituje za nas)
 
 import { THEME }                    from '../config/ThemeConfig.js';
-import { UNIT_ARCHETYPES }          from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, checkArchetypeUnlocked, GROUND_UNIT_CAP_EXEMPT } from '../data/unitArchetypes.js';
 import { GROUND_ABILITIES }         from '../data/groundAbilities.js';
 import { HUMANITY_UNITS }           from '../data/factions/humanity.js';
 import { GroundUnitFactory }        from '../systems/GroundUnitFactory.js';
+import { ColonyManager }            from '../systems/ColonyManager.js';
 import { t, getLocale }             from '../i18n/i18n.js';
 
 // ── Layout constants ──────────────────────────────────────────
@@ -25,7 +26,9 @@ const COLONY_INFO_H  = 22;
 const TILES_ROW_H    = 68;
 const SPRITE_SIZE    = 92;
 const STATS_LINE_H   = 18;
-const COST_H         = 22;
+// COST_H — miejsce na split BUDOWA / UTRZYMANIE / STATYSTYKI + gating
+// (Opcja C v3 — było 22, musi pomieścić ~7 linii tekstu + opcjonalny lock)
+const COST_H         = 120;
 const ACTIONS_H      = 30;
 
 const DEFAULT_ARCHETYPE = 'shock_infantry';
@@ -41,7 +44,7 @@ const ARCHETYPE_ICONS = {
 };
 
 // Ikony statystyk
-const STAT_ICONS = { hp: '❤', ac: '🛡', dmg: '⚔', rng: '🎯', mov: '👣' };
+const STAT_ICONS = { hp: '❤', ac: '🛡', dmg: '⚔', rng: '🎯', mov: '👣', supply: '📦', org: '🎖', morale: '🔥' };
 
 // Krótkie nazwy dla badge'ów counter/tile
 const ARCHETYPE_SHORT = {
@@ -111,13 +114,39 @@ export class GroundUnitPanel {
     return window.KOSMOS?.colonyManager?.getActiveColony?.() ?? null;
   }
 
+  /** Zwraca pełny koszt rekrutacji dla selected archetype (Opcja C v3). */
   _getRecruitCost() {
-    return { minerals: 50, energy: 20 };
+    const archId = this._selectedArchetypeId;
+    if (!archId) return { resources: {}, commodities: {}, pop: 0, kr: 0, time: 1.0 };
+    return {
+      resources:   { ...(ColonyManager.GROUND_UNIT_BUILD_COSTS[archId]     ?? {}) },
+      commodities: { ...(ColonyManager.GROUND_UNIT_COMMODITY_COSTS[archId] ?? {}) },
+      pop:          ColonyManager.GROUND_UNIT_POP_COSTS[archId]            ?? 0,
+      kr:           ColonyManager.GROUND_UNIT_CREDITS_BUILD[archId]        ?? 0,
+      time:         ColonyManager.GROUND_UNIT_BUILD_TIMES[archId]          ?? 1.0,
+      upkeep:       ColonyManager.GROUND_UNIT_UPKEEP[archId]               ?? { energy: 0, credits: 0 },
+    };
   }
 
   _canAfford(colony) {
     if (!colony?.resourceSystem?.canAfford) return false;
-    return colony.resourceSystem.canAfford(this._getRecruitCost());
+    const c = this._getRecruitCost();
+    const all = { ...c.resources, ...c.commodities };
+    if (!colony.resourceSystem.canAfford(all)) return false;
+    if (c.pop > 0 && (colony.civSystem?.freePops ?? 0) < c.pop) return false;
+    if (c.kr > 0 && (colony.credits ?? 0) < c.kr) return false;
+    return true;
+  }
+
+  /** Sprawdź gating (barracks + tech) dla selected archetype. */
+  _getGatingStatus() {
+    const archId = this._selectedArchetypeId;
+    if (!archId) return { unlocked: false };
+    const colony = this._getActiveColony();
+    if (!colony) return { unlocked: false, reason: 'no_colony' };
+    const colonyMgr = window.KOSMOS?.colonyManager;
+    const barracksLv = colonyMgr?._getBarracksLevel?.(colony) ?? 0;
+    return checkArchetypeUnlocked(archId, barracksLv, window.KOSMOS?.techSystem);
   }
 
   _hoverTypeIs(normalizedType) {
@@ -313,12 +342,16 @@ export class GroundUnitPanel {
     // Stats grid (po prawej od sprite'a)
     const statsX = spriteX + SPRITE_SIZE + 14;
     let statY = spriteY;
+    // Opcja C v3: dołącz supply cap + konsumpcję (bez org/morale — pokazane w STATYSTYKI STARTOWE z techBonuses)
+    const supCap = arch.baseSupplyCap ?? 100;
+    const supCon = arch.supplyConsumption ?? 2;
     const stats = [
-      ['hp',  arch.baseStats.hp],
-      ['ac',  arch.baseStats.ac],
-      ['dmg', arch.baseStats.dmg],
-      ['rng', arch.baseStats.rng],
-      ['mov', arch.baseStats.mov],
+      ['hp',     arch.baseStats.hp],
+      ['ac',     arch.baseStats.ac],
+      ['dmg',    arch.baseStats.dmg],
+      ['rng',    arch.baseStats.rng],
+      ['mov',    arch.baseStats.mov],
+      ['supply', `${supCap} (−${supCon}/y)`],
     ];
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -453,45 +486,147 @@ export class GroundUnitPanel {
   }
 
   _drawCostRow(ctx, x, cy, w) {
-    const cost = this._getRecruitCost();
-    const colony = this._getActiveColony();
+    const archId = this._selectedArchetypeId;
+    const arch   = UNIT_ARCHETYPES[archId];
+    if (!arch) return;
+    const colony    = this._getActiveColony();
+    const cost      = this._getRecruitCost();
     const canAfford = this._canAfford(colony);
+
+    const okColor  = THEME.textPrimary;
+    const badColor = THEME.danger;
+    const priColor = canAfford || !colony ? okColor : badColor;
+
+    // ── Sekcja BUDOWA ──
+    ctx.fillStyle = THEME.textLabel;
+    ctx.font = `bold ${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+    ctx.fillText(t('groundPanel.buildCost'), x + PAD, cy + 10);
+    cy += 14;
+
+    // Rare materials row (Ti/Si/Hv/Xe)
+    const resParts = [];
+    for (const [k, v] of Object.entries(cost.resources)) resParts.push(`${k} ${v}`);
+    if (resParts.length > 0) {
+      ctx.fillStyle = priColor;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillText(resParts.join('  '), x + PAD + 4, cy + 12);
+      cy += 14;
+    }
+
+    // Commodities row
+    const commParts = [];
+    for (const [k, v] of Object.entries(cost.commodities)) commParts.push(`${k.replace(/_/g, ' ')} ${v}`);
+    if (commParts.length > 0) {
+      ctx.fillStyle = THEME.textDim;
+      ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+      ctx.fillText(commParts.join('  '), x + PAD + 4, cy + 10);
+      cy += 12;
+    }
+
+    // POP / Kr / time row
+    ctx.fillStyle = priColor;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const popStr  = cost.pop > 0 ? `👤 ${cost.pop.toFixed(2)} lab` : '';
+    const krStr   = cost.kr  > 0 ? `💰 ${cost.kr} Kr`              : '';
+    const timeStr = `⏱ ${cost.time.toFixed(1)}`;
+    ctx.fillText([popStr, krStr, timeStr].filter(Boolean).join('   '), x + PAD + 4, cy + 12);
+    cy += 16;
+
+    // ── Sekcja UTRZYMANIE ──
+    ctx.fillStyle = THEME.textLabel;
+    ctx.font = `bold ${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+    ctx.fillText(t('groundPanel.upkeepCost'), x + PAD, cy + 10);
+    cy += 14;
+
+    ctx.fillStyle = THEME.textDim;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillText(`⚡ ${cost.upkeep.energy}/y   💰 ${cost.upkeep.credits} Kr/y`, x + PAD + 4, cy + 12);
+    cy += 16;
+
+    // ── Sekcja STATYSTYKI STARTOWE (org/morale/supplyCap + consumption) ──
+    const bonuses = window.KOSMOS?.techSystem?.getTechStatBonuses?.() ?? { org: 0, morale: 0, supplyCap: 0 };
+    const noMor   = arch.noMorale === true;
+    const startOrg       = Math.min(100, (arch.baseOrg       ?? 10) + bonuses.org);
+    const startMorale    = noMor ? 0 : Math.min(100, (arch.baseMorale ?? 10) + bonuses.morale);
+    const startSupplyCap = Math.min(200, (arch.baseSupplyCap ?? 100) + bonuses.supplyCap);
 
     ctx.fillStyle = THEME.textLabel;
     ctx.font = `bold ${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
-    ctx.fillText(t('groundPanel.cost'), x + PAD, cy + 12);
+    ctx.fillText(t('groundPanel.startStats'), x + PAD, cy + 10);
+    cy += 14;
 
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = canAfford || !colony ? THEME.textPrimary : THEME.danger;
-    const costText = `⛏ ${cost.minerals}   ⚡ ${cost.energy}   ⏱ 1.0 ${t('groundPanel.year')}`;
-    ctx.textAlign = 'right';
-    ctx.fillText(costText, x + w - PAD, cy + 12);
-    ctx.textAlign = 'left';
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+    const morStr = noMor ? 'N/A' : `${startMorale}`;
+    ctx.fillText(
+      `Org ${startOrg}   Mor ${morStr}   📦 ${startSupplyCap}   −${arch.supplyConsumption ?? 2}/y`,
+      x + PAD + 4, cy + 10
+    );
+    cy += 14;
+
+    // ── Gating info (jeśli zablokowany) ──
+    const gate = this._getGatingStatus();
+    if (!gate.unlocked && gate.reason) {
+      ctx.fillStyle = THEME.danger;
+      ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+      let msg = '';
+      if (gate.reason === 'tech')     msg = t('groundPanel.lockedTech', gate.missing);
+      if (gate.reason === 'barracks') msg = t('groundPanel.lockedBarracks', gate.requiredLv);
+      ctx.fillText(`🔒 ${msg}`, x + PAD, cy + 10);
+    }
   }
 
   _drawActions(ctx, x, cy, w) {
-    const colony = this._getActiveColony();
+    const colony    = this._getActiveColony();
     const canAfford = this._canAfford(colony);
-    const canRecruit = !!colony && canAfford;
+    const gate      = this._getGatingStatus();
+    const colonyMgr = window.KOSMOS?.colonyManager;
+
+    // Opcja C v3: dodatkowe warunki rekrutacji (slot + cap + gating)
+    const archId     = this._selectedArchetypeId;
+    const barracksLv = colonyMgr?._getBarracksLevel?.(colony) ?? 0;
+    const barracksSlots = colonyMgr?._getBarracksSlots?.(colony) ?? 0;
+    const queueCount = colony?.groundUnitQueues?.length ?? 0;
+    const slotFree   = queueCount < barracksSlots;
+    const capOK      = colonyMgr?._canRecruitMoreUnits?.(colony, archId) ?? true;
+
+    const canRecruit = !!colony && canAfford && gate.unlocked && slotFree && capOK;
 
     const btnW = Math.floor((w - PAD * 3) * 0.66);
     const btnH = 24;
 
     const style = canRecruit ? 'primary' : 'disabled';
-    const label = !colony
-      ? t('groundPanel.recruitDisabled')
-      : (canAfford ? t('groundPanel.recruit') : t('groundPanel.cannotAfford'));
+    let label;
+    if (!colony)              label = t('groundPanel.recruitDisabled');
+    else if (!gate.unlocked)  label = t('groundPanel.locked');
+    else if (!slotFree)       label = t('groundPanel.barracksFull', queueCount, barracksSlots);
+    else if (!capOK)          label = t('groundPanel.capReached', colonyMgr?._getMaxGroundUnits?.(colony) ?? 0);
+    else if (!canAfford)      label = t('groundPanel.cannotAfford');
+    else                      label = t('groundPanel.recruit');
 
     this._drawButton(ctx, label, x + PAD, cy, btnW, btnH, style);
     if (canRecruit) {
-      this._addHit(x + PAD, cy, btnW, btnH, 'recruit', { archetypeId: this._selectedArchetypeId });
+      this._addHit(x + PAD, cy, btnW, btnH, 'recruit', { archetypeId: archId });
     }
 
-    // Queue badge (right)
+    // Queue + cap badge (right)
     const queueX = x + PAD * 2 + btnW;
     const queueW = w - PAD * 3 - btnW;
-    const queueCount = colony?.groundUnitQueues?.length ?? 0;
-    this._drawButton(ctx, `📋 ${t('groundPanel.queue')} ${queueCount}`, queueX, cy, queueW, btnH, 'secondary');
+    // Pokaż: Koszary Lv N | 📋 Q/slots | Jednostki C/M
+    const maxUnits = colonyMgr?._getMaxGroundUnits?.(colony) ?? 0;
+    const activeCount = (() => {
+      const mgr = window.KOSMOS?.groundUnitManager;
+      if (!mgr || !colony) return 0;
+      const units = mgr.getUnitsOnPlanet?.(colony.planetId) ?? [];
+      return units.filter(u =>
+        (u.owner === 'player' || u.factionId === 'humanity') &&
+        !GROUND_UNIT_CAP_EXEMPT.has(u.archetypeId)
+      ).length;
+    })();
+    const barracksLabel = barracksLv > 0 ? `🪖 Lv${barracksLv}` : '🪖 —';
+    const queueLabel    = `📋 ${queueCount}/${barracksSlots}`;
+    const capLabel      = `👥 ${activeCount}/${maxUnits}`;
+    this._drawButton(ctx, `${barracksLabel}  ${queueLabel}  ${capLabel}`, queueX, cy, queueW, btnH, 'secondary');
 
     // Toast (transient feedback nad przyciskami)
     this._drawToast(ctx, x, cy - 22, w);

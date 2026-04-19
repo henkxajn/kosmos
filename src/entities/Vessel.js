@@ -248,6 +248,61 @@ export function loadCargo(vessel, commodityId, qty, resSys) {
   return actual;
 }
 
+// ── Ground Units (Opcja C v3) — transport freeze supply ──────────────────────
+
+/**
+ * Załaduj jednostkę naziemną do ładowni statku.
+ * Ustawia `transportStatus='loaded'` — SupplyCoverageSystem pomija taką jednostkę,
+ * co oznacza ZERO konsumpcji supply podczas transportu (FROZEN/hibernacja).
+ * To jest obietnica gracz-friendly z planu v3: wysłanie unitów na misję
+ * do innej planety NIE zjada supply podczas lotu.
+ *
+ * @param {object} vessel — instancja statku
+ * @param {object} unit   — jednostka naziemna z GroundUnitManager
+ */
+export function loadGroundUnit(vessel, unit) {
+  if (!vessel || !unit) return false;
+  if (!vessel.groundUnits) vessel.groundUnits = [];  // list of unit.id
+
+  if (vessel.groundUnits.includes(unit.id)) return false;
+
+  // Zapamiętaj poprzedni status żeby przywrócić przy unload
+  unit.prevStatus      = unit.status ?? 'idle';
+  unit.status          = 'in_cargo';
+  unit.transportStatus = 'loaded';
+
+  vessel.groundUnits.push(unit.id);
+  return true;
+}
+
+/**
+ * Rozładuj jednostkę naziemną na docelowej planecie.
+ * Przywraca poprzedni status (idle/attacking/...) i czyści transportStatus.
+ * Supply jednostki NIE zmienia się przez czas transportu.
+ *
+ * @param {object} vessel — instancja statku
+ * @param {object} unit   — jednostka
+ * @param {string} planetId
+ * @param {number} q
+ * @param {number} r
+ */
+export function unloadGroundUnit(vessel, unit, planetId, q, r) {
+  if (!vessel || !unit) return false;
+
+  unit.planetId = planetId ?? unit.planetId;
+  if (q != null) unit.q = q;
+  if (r != null) unit.r = r;
+
+  unit.status          = unit.prevStatus ?? 'idle';
+  unit.prevStatus      = null;
+  unit.transportStatus = null;
+
+  if (vessel.groundUnits) {
+    vessel.groundUnits = vessel.groundUnits.filter(id => id !== unit.id);
+  }
+  return true;
+}
+
 /**
  * Rozładuj towar ze statku do inventory kolonii (ResourceSystem).
  * @returns {number} faktycznie rozładowana ilość

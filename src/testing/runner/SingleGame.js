@@ -67,7 +67,12 @@ export function runSingleGame({
 
   try {
     core = new GameCore();
-    core.boot({ quiet: true, ...bootOptions });
+    // Mapuj CLI scenario values na GameCore ('new-game'/'civilization' → standard,
+    // 'nowa-gra-2'/'civilization_boosted'/'boosted' → boosted start z shipyard+launch_pad).
+    const bootScenario = ['civilization_boosted', 'boosted', 'nowa-gra-2'].includes(scenario)
+      ? 'civilization_boosted'
+      : 'civilization';
+    core.boot({ quiet: true, scenario: bootScenario, ...bootOptions });
     ticker = new Ticker(core.timeSystem);
     catalog = new ActionCatalog({
       colonyManager: core.colonyManager,

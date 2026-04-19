@@ -42,6 +42,8 @@
 //   { type: 'unlockCommodity', commodityId }
 //   { type: 'researchCostMultiplier', multiplier }
 //   { type: 'allBuildingsAutonomous' }
+//   { type: 'unlockArchetype', archetypeId }                          — Opcja C v3: ground unit archetype
+//   { type: 'statBonus', stat: 'militaryOrg'|'militaryMorale'|'militarySupplyCap', amount } — Opcja C v3
 //
 // OR prerequisites:
 //   requires: ['rocketry', ['ion_drives','plasma_drives'], 'fusion_power']
@@ -1006,6 +1008,147 @@ export const TECHS = {
       { type: 'terrainUnlock', terrain: 'ocean', categories: ['mining', 'energy', 'food', 'population', 'research', 'space', 'military'] },
     ],
     description: 'Tarcze statków + budowa na oceanie (platformy siłowe)',
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── WOJNA LĄDOWA (defense) ⚔ — 9 tech (Opcja C v3) ──────────────────────
+  // Dodatkowe efekty używane przez GroundUnitSystem:
+  //   { type: 'unlockArchetype', archetypeId }   — odblokowanie archetypu jednostki
+  //   { type: 'statBonus', stat: 'militaryOrg'|'militaryMorale'|'militarySupplyCap', amount }
+  // ══════════════════════════════════════════════════════════════════════════
+
+  ground_warfare: {
+    id:          'ground_warfare',
+    namePL:      'Wojna Lądowa',
+    branch:      'defense',
+    tier:        2,
+    cost:        { research: 150 },
+    requires:    ['rocketry'],
+    effects: [
+      { type: 'unlockBuilding',   buildingId:  'barracks_lv2' },
+      { type: 'unlockArchetype',  archetypeId: 'rocket_artillery' },
+      { type: 'unlockArchetype',  archetypeId: 'aa_platform' },
+      { type: 'unlockArchetype',  archetypeId: 'medic_unit' },
+    ],
+    description: 'Doktryna walki pojazdów i wsparcia — Koszary Lv2 + artyleria, AA, medycy',
+  },
+
+  drone_warfare: {
+    id:          'drone_warfare',
+    namePL:      'Wojna Dronowa',
+    branch:      'defense',
+    tier:        3,
+    cost:        { research: 280 },
+    requires:    ['ground_warfare'],
+    effects: [
+      { type: 'unlockBuilding',   buildingId:  'barracks_lv3' },
+      { type: 'unlockArchetype',  archetypeId: 'recon_drone' },
+    ],
+    description: 'Zdalnie sterowane i autonomiczne systemy bojowe — Koszary Lv3 + drony',
+  },
+
+  military_logistics: {
+    id:          'military_logistics',
+    namePL:      'Logistyka Wojskowa',
+    branch:      'defense',
+    tier:        2,
+    cost:        { research: 150 },
+    requires:    ['ground_warfare'],
+    effects: [
+      { type: 'unlockCommodity',  commodityId: 'military_supplies' },
+      { type: 'unlockArchetype',  archetypeId: 'ground_supply_unit' },
+      { type: 'statBonus',        stat: 'militaryOrg',       amount: 10 },
+      { type: 'statBonus',        stat: 'militaryMorale',    amount: 10 },
+      { type: 'statBonus',        stat: 'militarySupplyCap', amount: 20 },
+    ],
+    description: 'Zaopatrzenie Wojskowe (commodity) + Jednostka Zaopatrzeniowa, +10 org, +10 mor, cap supply +20',
+  },
+
+  field_discipline: {
+    id:          'field_discipline',
+    namePL:      'Dyscyplina Polowa',
+    branch:      'defense',
+    tier:        2,
+    cost:        { research: 160 },
+    requires:    ['ground_warfare'],
+    effects: [
+      { type: 'statBonus', stat: 'militaryOrg',    amount: 15 },
+      { type: 'statBonus', stat: 'militaryMorale', amount: 15 },
+    ],
+    description: 'Regularne szkolenie i drill — +15 organizacja, +15 morale dla wszystkich jednostek',
+  },
+
+  combat_doctrine: {
+    id:          'combat_doctrine',
+    namePL:      'Doktryna Bojowa',
+    branch:      'defense',
+    tier:        3,
+    cost:        { research: 220 },
+    requires:    ['field_discipline'],
+    effects: [
+      { type: 'statBonus', stat: 'militaryOrg',    amount: 15 },
+      { type: 'statBonus', stat: 'militaryMorale', amount: 10 },
+    ],
+    description: 'Taktyka kombinowana — +15 organizacja, +10 morale',
+  },
+
+  elite_training: {
+    id:          'elite_training',
+    namePL:      'Elitarne Szkolenie',
+    branch:      'defense',
+    tier:        3,
+    cost:        { research: 220 },
+    requires:    ['field_discipline'],
+    effects: [
+      { type: 'statBonus', stat: 'militaryOrg',    amount: 10 },
+      { type: 'statBonus', stat: 'militaryMorale', amount: 15 },
+    ],
+    description: 'Programy elitarnego treningu — +10 organizacja, +15 morale',
+  },
+
+  fleet_logistics: {
+    id:          'fleet_logistics',
+    namePL:      'Logistyka Flotowa',
+    branch:      'defense',
+    tier:        3,
+    cost:        { research: 260 },
+    requires:    ['military_logistics', 'drone_warfare'],
+    effects: [
+      { type: 'unlockShip',       shipId: 'space_supply_ship' },
+      { type: 'statBonus',        stat: 'militaryOrg',       amount: 5 },
+      { type: 'statBonus',        stat: 'militaryMorale',    amount: 5 },
+      { type: 'statBonus',        stat: 'militarySupplyCap', amount: 20 },
+    ],
+    description: 'Zaopatrzenie kosmiczne — Statek Zaopatrzeniowy, +5/+5 org/mor, cap supply +20 (placeholder fleet-group)',
+  },
+
+  strategic_doctrine: {
+    id:          'strategic_doctrine',
+    namePL:      'Doktryna Strategiczna',
+    branch:      'defense',
+    tier:        4,
+    cost:        { research: 320 },
+    requires:    ['combat_doctrine'],
+    effects: [
+      { type: 'statBonus', stat: 'militaryOrg',    amount: 20 },
+      { type: 'statBonus', stat: 'militaryMorale', amount: 15 },
+    ],
+    description: 'Sztab generalny i wywiad — +20 organizacja, +15 morale',
+  },
+
+  veteran_corps: {
+    id:          'veteran_corps',
+    namePL:      'Korpus Weteranów',
+    branch:      'defense',
+    tier:        4,
+    cost:        { research: 320 },
+    requires:    ['elite_training'],
+    effects: [
+      { type: 'statBonus', stat: 'militaryOrg',       amount: 15 },
+      { type: 'statBonus', stat: 'militaryMorale',    amount: 20 },
+      { type: 'statBonus', stat: 'militarySupplyCap', amount: 20 },
+    ],
+    description: 'Doświadczeni żołnierze — +15/+20 org/mor, cap supply +20',
   },
 
   // ══════════════════════════════════════════════════════════════════════════

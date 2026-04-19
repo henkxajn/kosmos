@@ -407,19 +407,38 @@ export class GroundUnitManager {
     if (atk.planetId !== tgt.planetId) return { hit: false, reason: 'diff_planet' };
     if (atk.owner === tgt.owner) return { hit: false, reason: 'same_owner' };
     if (atk._atkCooldown > 0) return { hit: false, reason: 'cooldown' };
+    // Opcja C v3: offline jednostki nie atakują (brak utrzymania)
+    if (atk.status === 'offline') return { hit: false, reason: 'offline' };
 
     const dist = this._hexDistance(atk.q, atk.r, tgt.q, tgt.r);
     if (dist > (atk.range ?? 1)) return { hit: false, reason: 'out_of_range' };
 
-    // Ground Unit System: counter bonus wlicza się do dmg PRZED odjęciem AC
+    // Ground Unit System: counter bonus wlicza się do dmg PRZED odjęciem AC.
+    // Opcja C v3: getEffectiveDmg mnoży dodatkowo przez computeDamageMult(atk)
+    //             = supplyFactor × (1 + (org+morale)/200). Brak supply → dmg=0.
     const dmgAfterCounter = GroundUnitFactory.getEffectiveDmg(atk, tgt);
-    const base     = Math.max(1, dmgAfterCounter - (tgt.defense ?? 0));
+    const base     = Math.max(0, dmgAfterCounter - (tgt.defense ?? 0));
     const variance = 0.8 + Math.random() * 0.4;
-    const damage   = Math.max(1, Math.round(base * variance));
+    // Jeśli dmgAfterCounter===0 (brak supply), damage musi pozostać 0 — nie klampuj do >=1
+    const damage   = dmgAfterCounter > 0 ? Math.max(1, Math.round(base * variance)) : 0;
 
-    tgt.hp = Math.max(0, (tgt.hp ?? 0) - damage);
-    if (tgt.currentHP != null) tgt.currentHP = tgt.hp; // sync legacy mirror
+    if (damage > 0) {
+      tgt.hp = Math.max(0, (tgt.hp ?? 0) - damage);
+      if (tgt.currentHP != null) tgt.currentHP = tgt.hp; // sync legacy mirror
+    }
     atk._atkCooldown = 1.0;  // 1 civYear cooldown
+
+    // Opcja C v3: degradacja org/morale po walce
+    //   — atakujący traci -5 org (zmęczenie, zużycie amunicji)
+    //   — cel traci -5 org (dezorganizacja) i -3 morale jeśli nie noMorale
+    atk.org = Math.max(0, (atk.org ?? 0) - 5);
+    if (damage > 0) {
+      tgt.org = Math.max(0, (tgt.org ?? 0) - 5);
+      if (!tgt.noMorale) tgt.morale = Math.max(0, (tgt.morale ?? 0) - 3);
+      EventBus.emit('groundUnit:orgChanged',    { unitId: tgt.id, org: tgt.org, max: tgt.maxOrg ?? 100 });
+      if (!tgt.noMorale) EventBus.emit('groundUnit:moraleChanged', { unitId: tgt.id, morale: tgt.morale, max: tgt.maxMorale ?? 100 });
+    }
+    EventBus.emit('groundUnit:orgChanged', { unitId: atk.id, org: atk.org, max: atk.maxOrg ?? 100 });
 
     // Ground Unit System: reveal stealth attackera (re-hide timer reset)
     if (atk.abilityId === 'stealth') {
@@ -440,8 +459,12 @@ export class GroundUnitManager {
     let killed = false;
     if (tgt.hp <= 0) {
       killed = true;
+      // Opcja C v3: emit popCost dla reintegracji POPów w ColonyManager
       EventBus.emit('groundUnit:destroyed', {
         unitId: targetId, planetId: tgt.planetId, owner: tgt.owner, killedBy: attackerId,
+        archetypeId: tgt.archetypeId ?? null,
+        popCost:     tgt.popCost ?? 0,
+        cause:       'combat',
       });
       this.removeUnit(targetId);
     }
@@ -458,7 +481,8 @@ export class GroundUnitManager {
   capture(unitId) {
     const unit = this._units.get(unitId);
     if (!unit) return { success: false, reason: 'no_unit' };
-    if (unit.status === 'moving') return { success: false, reason: 'moving' };
+    if (unit.status === 'moving')  return { success: false, reason: 'moving' };
+    if (unit.status === 'offline') return { success: false, reason: 'offline' };  // Opcja C v3
 
     const grid = this._getGrid(unit.planetId);
     if (!grid) return { success: false, reason: 'no_grid' };
@@ -502,8 +526,10 @@ export class GroundUnitManager {
         continue;
       }
 
-      // 2 tury = 2 civYears
-      cap.progress += civDeltaYears / 2;
+      // 2 tury = 2 civYears, skalowane przez damageMult (Opcja C v3)
+      // — głodna / zdemoralizowana jednostka zajmuje budynek wolniej
+      const mult = GroundUnitFactory.computeDamageMult(unit);
+      cap.progress += (civDeltaYears / 2) * mult;
 
       if (cap.progress >= 1) {
         const grid = this._getGrid(cap.planetId);
@@ -550,6 +576,7 @@ export class GroundUnitManager {
     for (const medic of this._units.values()) {
       if (medic.abilityId !== 'heal_nearby') continue;
       if ((medic.hp ?? 0) <= 0) continue;
+      if (medic.status === 'offline') continue;  // Opcja C v3
       const ability = GroundUnitFactory.getAbility(medic);
       if (!ability) continue;
       const heal = ability.healPerTurn ?? 3;
@@ -658,6 +685,7 @@ export class GroundUnitManager {
 
     for (const atk of enemies) {
       if (atk.hp <= 0 || atk.status === 'moving') continue;
+      if (atk.status === 'offline') continue;  // Opcja C v3
 
       // Znajdź najbliższą jednostkę gracza na tej samej planecie
       const targets = [];
@@ -714,7 +742,9 @@ export class GroundUnitManager {
     }
 
     // Prędkość zależy od terenu: MOVE_SPEED / koszt_terenu
-    const terrainSpeed = MOVE_SPEED / (unit._stepCost || 1);
+    // Opcja C v3: supply<20 → ruch wolniejszy o 50% (zmęczenie, brak paliwa)
+    let terrainSpeed = MOVE_SPEED / (unit._stepCost || 1);
+    if (unit.supply != null && unit.supply < 20) terrainSpeed *= (1 / 1.5);  // +50% cost = 2/3 speed
     unit._animT += dt * terrainSpeed;
 
     if (unit._animT >= 1) {
@@ -946,6 +976,21 @@ export class GroundUnitManager {
         abilityCooldownRemaining: u.abilityCooldownRemaining ?? 0,
         stealthState:    u._stealthState ?? null,
         stealthCooldown: u._stealthCooldown ?? 0,
+        // ── Opcja C v3: Supply/Org/Morale ──
+        org:                 u.org               ?? null,
+        maxOrg:              u.maxOrg            ?? null,
+        maxMorale:           u.maxMorale         ?? null,
+        supply:              u.supply            ?? null,
+        supplyCap:           u.supplyCap         ?? null,
+        supplyConsumption:   u.supplyConsumption ?? null,
+        noMorale:            u.noMorale          ?? false,
+        isSupplier:          u.isSupplier        ?? false,
+        supplyTransferRate:  u.supplyTransferRate ?? 0,
+        transportStatus:     u.transportStatus   ?? null,
+        prevStatus:          u.prevStatus        ?? null,
+        unpaidYears:         u.unpaidYears       ?? 0,
+        popCost:             u.popCost           ?? 0,
+        homeColonyId:        u.homeColonyId      ?? u.planetId,
       })),
       nextId: this._nextId,
       // Ground Unit System: progres zajmowania budynków
@@ -986,6 +1031,24 @@ export class GroundUnitManager {
         rebuilt._stealthState    = u.stealthState ?? (arch.ability === 'stealth' ? 'hidden' : null);
         rebuilt._stealthCooldown = u.stealthCooldown ?? 0;
         rebuilt._facingLeft      = u.facingLeft ?? false;
+        // ── Opcja C v3: Supply/Org/Morale — defaulty dla starych save'ów ──
+        const noMor = arch.noMorale === true;
+        rebuilt.maxOrg            = u.maxOrg            ?? (arch.baseOrg       ?? 10);
+        rebuilt.maxMorale         = u.maxMorale         ?? (noMor ? 0 : (arch.baseMorale ?? 10));
+        rebuilt.org               = u.org               ?? rebuilt.maxOrg;
+        rebuilt.morale            = noMor ? 0 : (u.morale ?? rebuilt.maxMorale);
+        rebuilt.supplyCap         = u.supplyCap         ?? (arch.baseSupplyCap ?? 100);
+        rebuilt.supply            = u.supply            ?? rebuilt.supplyCap;
+        rebuilt.supplyConsumption = u.supplyConsumption ?? (arch.supplyConsumption ?? 2);
+        rebuilt.noMorale          = noMor;
+        rebuilt.isSupplier        = arch.isSupplier === true;
+        rebuilt.supplyTransferRate = arch.supplyTransferRate ?? 0;
+        rebuilt.transportStatus   = u.transportStatus   ?? null;
+        rebuilt.prevStatus        = u.prevStatus        ?? null;
+        rebuilt.unpaidYears       = u.unpaidYears       ?? 0;
+        rebuilt.popCost           = u.popCost           ?? 0;
+        // Opcja C v3 "macierz": fallback na planetId dla legacy save (v54 i starsze)
+        rebuilt.homeColonyId      = u.homeColonyId      ?? u.planetId;
         this._units.set(u.id, rebuilt);
       } else {
         // Legacy jednostka (infantry/mech/garrison/science_rover)

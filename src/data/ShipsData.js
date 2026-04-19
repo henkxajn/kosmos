@@ -91,4 +91,52 @@ export const SHIPS = {
                        'Ładowność zależy od modułów cargo.',
   },
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Statek Zaopatrzeniowy (Opcja C v3) — placeholder, fleet-group mechanika TBD
+  // Magazyn military_supplies, zaopatruje statki bojowe w tej samej grupie floty.
+  // W v3: budowalny po fleet_logistics, ale aktywna mechanika supply w kosmosie
+  // czeka na osobny projekt "Fleet Groups". Statek ma statystyki i ładowność,
+  // ale nie wpływa jeszcze na walkę w kosmosie.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  space_supply_ship: {
+    id:                'space_supply_ship',
+    namePL:            'Kadłub Zaopatrzeniowy',
+    nameEN:            'Supply Hull',
+    icon:              '🚚',
+    hullType:          'logistics',
+    generation:        1,
+    baseMass:          80,
+    baseModuleSlots:   5,
+    baseFuelCapacity:  12,
+    baseSpeedAU:       0.9,
+    baseCargoCapacity: 0,
+    baseFuelPerAU:     0.6,
+    // Aliasy kompatybilności
+    fuelCapacity:      12,
+    fuelPerAU:         0.6,
+    range:             20,
+    speedAU:           0.9,
+    cargoCapacity:     500,
+    fuelType:          'power_cells',
+    // Specyficzne dla supply ship
+    supplyMagazine:      500,  // pojemność magazynu military_supplies
+    supplyTransferRate:  20,   // supply/civY transferowane do sąsiednich statków fleet-group (placeholder)
+    cost:              { Ti: 40, Si: 30, Hv: 10, Xe: 2 },
+    commodityCost:     { structural_alloys: 15, electronic_systems: 8, power_cells: 5 },
+    buildTime:         4.0,
+    maxSurge:          1,
+    crewCost:          0.1,
+    crewStrata:        'worker',
+    requires:          'fleet_logistics',
+    defaultModules:    ['engine_chemical', 'cargo_small', 'cargo_small'],
+    capabilities:      ['cargo', 'fleet_supply'],
+    // Opcja C v3 — stat bonuses dla mechaniki org/morale
+    baseOrg:           20,
+    baseMorale:        20,
+    placeholder:       true,  // fleet-group supply broadcast w osobnym projekcie
+    description:       'Mobilne zaopatrzenie flotowe. Przewozi zaopatrzenie dla statków bojowych. ' +
+                       '[Placeholder: aktywna mechanika fleet-group w osobnym projekcie.]',
+  },
+
 };

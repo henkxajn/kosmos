@@ -16,6 +16,10 @@ const NAME_POOLS = {
     'Handlarz', 'Kurier', 'Fracht', 'Karawana', 'Merkury',
     'Konwój', 'Transporter', 'Dostawca', 'Opat', 'Smok',
   ],
+  space_supply_ship: [
+    'Kwatermistrz', 'Prowiant', 'Zaopatrzeniowiec', 'Arsenał', 'Intendent',
+    'Magazyn', 'Depot', 'Tabor', 'Furaż', 'Komisariat',
+  ],
 };
 
 // Licznik nazw per typ — inkrementowany przy każdej generacji

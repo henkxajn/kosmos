@@ -1943,6 +1943,8 @@ export default {
   'groundPanel.stat.dmg':          'DMG',
   'groundPanel.stat.rng':          'RNG',
   'groundPanel.stat.mov':          'MOV',
+  'groundPanel.stat.supply':       'SUPPLY',
+  'groundPanel.stat.supply.full':  'Supply magazine cap + base consumption (supply/civYear)',
   'groundPanel.stat.hp.full':      'Hit Points — unit health',
   'groundPanel.stat.ac.full':      'Armor Class — incoming damage reduction',
   'groundPanel.stat.dmg.full':     'Damage — attack damage per hit',
@@ -1975,6 +1977,71 @@ export default {
   'groundPanel.role.support':      'Support',
   'groundPanel.role.scout':        'Scout',
   'groundPanel.role.drone':        'Drone',
+  'groundPanel.role.logistics':    'Logistics',
+
+  // Opcja C v3 — recruit panel (split BUILD / UPKEEP / START STATS)
+  'groundPanel.buildCost':         'BUILD',
+  'groundPanel.upkeepCost':        'UPKEEP',
+  'groundPanel.startStats':        'START STATS',
+  'groundPanel.locked':            '🔒 Locked',
+  'groundPanel.lockedTech':        'Requires tech: {0}',
+  'groundPanel.lockedBarracks':    'Requires Barracks Lv{0}',
+  'groundPanel.barracksFull':      'Barracks full ({0}/{1})',
+  'groundPanel.capReached':        'Unit cap ({0})',
+  'groundPanel.noFreePops':        'No free POPs (need {0})',
+  'groundPanel.noCredits':         'No credits (need {0} Kr)',
+  'groundPanel.offlineUnit':       'Offline — no upkeep ({0}/5)',
+  'groundPanel.starving':          '🍖 Starving — no supply',
+  'groundPanel.inCoverage':        '📦 In supply coverage ({0})',
+  'groundPanel.loaded':            '💤 In transport — supply frozen',
+
+  // Commodity
+  'commodity.military_supplies.name':  'Military Supplies',
+  'commodity.military_supplies.desc':  'Ammunition, field rations, medical supplies and field electronics. No supply — no combat.',
+  'commodity.military_supplies.short': 'Supply',
+
+  // Techs (Opcja C v3)
+  'tech.ground_warfare.name':       'Ground Warfare',
+  'tech.ground_warfare.desc':       'Vehicle combat and support doctrine — Barracks Lv2 + artillery, AA, medics',
+  'tech.drone_warfare.name':        'Drone Warfare',
+  'tech.drone_warfare.desc':        'Remote-controlled and autonomous combat systems — Barracks Lv3 + recon drones',
+  'tech.military_logistics.name':   'Military Logistics',
+  'tech.military_logistics.desc':   'Military Supplies (commodity) + Ground Supply Unit, +10 org/mor, +20 supply cap',
+  'tech.field_discipline.name':     'Field Discipline',
+  'tech.field_discipline.desc':     'Regular training and drill — +15 organization, +15 morale',
+  'tech.combat_doctrine.name':      'Combat Doctrine',
+  'tech.combat_doctrine.desc':      'Combined arms tactics — +15 organization, +10 morale',
+  'tech.elite_training.name':       'Elite Training',
+  'tech.elite_training.desc':       'Elite training programs — +10 organization, +15 morale',
+  'tech.fleet_logistics.name':      'Fleet Logistics',
+  'tech.fleet_logistics.desc':      'Space supply — Supply Ship (placeholder), +5/+5 org/mor, +20 supply cap',
+  'tech.strategic_doctrine.name':   'Strategic Doctrine',
+  'tech.strategic_doctrine.desc':   'General staff and intelligence — +20 organization, +15 morale',
+  'tech.veteran_corps.name':        'Veteran Corps',
+  'tech.veteran_corps.desc':        'Seasoned soldiers — +15/+20 org/mor, +20 supply cap',
+
+  // Barracks buildings
+  'building.barracks_lv1.name': 'Barracks',
+  'building.barracks_lv1.desc': 'Ground unit recruitment (Lv1). 1 slot. Capital/Barracks adjacency grants auto-supply.',
+  'building.barracks_lv2.name': 'Extended Barracks',
+  'building.barracks_lv2.desc': 'Barracks with training ground (Lv2). Unlocks artillery, AA, medics.',
+  'building.barracks_lv3.name': 'Training Complex',
+  'building.barracks_lv3.desc': 'Barracks with drone hangar (Lv3). Unlocks recon drones.',
+
+  // New archetypes
+  'unit.ground_supply_unit.name': 'Supply Unit',
+  'unit.ground_supply_unit.desc': 'Mobile logistics. Refills at Capital/Barracks, feeds adjacent allies within 1 hex.',
+  'unit.space_supply_ship.name':  'Supply Ship',
+  'unit.space_supply_ship.desc':  'Fleet supply (placeholder — fleet-group mechanic in separate project).',
+
+  // Vessel name pool
+  'vesselName.space_supply_ship': 'Quartermaster, Commissary, Provisioner, Arsenal, Intendant, Warehouse, Depot, Train, Forage, Logistician',
+
+  // Events
+  'event.groundUnit.starved':    'Unit {0} is starving on {1}',
+  'event.groundUnit.disbanded':  'Unit {0} disbanded (no upkeep)',
+  'event.groundUnit.resumed':    'Unit {0} resumed',
+  'event.colony.suppliesLow':    'Military supplies low in {0}',
 
   // === ObservatoryOverlay ===
   'observatory.title': 'OBSERVATORY',

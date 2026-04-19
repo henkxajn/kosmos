@@ -27,7 +27,7 @@ function createBot(spec) {
     case 'evo':    return new EvoBot(spec.opts ?? {});
     case 'scripted': {
       const script = spec.script ?? (spec.scriptPath ? JSON.parse(readFileSync(spec.scriptPath, 'utf-8')) : { actions: [] });
-      return new ScriptedBot({ script, fallback: spec.fallback ?? 'idle' });
+      return new ScriptedBot({ script, fallback: script.fallback ?? spec.fallback ?? 'idle' });
     }
     default: return new RandomBot();
   }

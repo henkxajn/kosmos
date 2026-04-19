@@ -11,6 +11,15 @@
 //   terrainModifiers               — override kosztów terenu (Infinity = nieprzejezdne)
 //   tags                           — tagi do filtrowania/AI
 //   specialRules                   — opis reguł specjalnych (informacyjne dla UI)
+//
+// ── Opcja C v3: Supply/Org/Morale ────────────────────────────────────────────
+//   baseOrg            — startowa organizacja (0..100)
+//   baseMorale         — startowe morale (0..100) lub 0 dla dronów z noMorale
+//   baseSupplyCap      — pojemność magazynu supply jednostki
+//   supplyConsumption  — bazowa konsumpcja supply/civYear (mnożona przez matrycę §4 planu)
+//   noMorale           — flag dla dronów/maszyn (morale pomijane w formułach, dmg mult dzieli tylko przez org/100)
+//   isSupplier         — flag dla Supply Unit (SupplyCoverageSystem traktuje jako źródło supply)
+//   supplyTransferRate — tempo transferu supply do sąsiadów (tylko gdy isSupplier)
 
 export const UNIT_ARCHETYPES = {
   // ── Szturm: szybka piechota, zajmuje budynki, bonus w mieście ──
@@ -30,6 +39,11 @@ export const UNIT_ARCHETYPES = {
     ],
     descriptionPL: 'Lekka piechota szturmowa. Szybko zajmuje budynki, dobra w walce miejskiej.',
     descriptionEN: 'Light shock infantry. Quickly captures buildings, effective in urban combat.',
+    // Opcja C v3
+    baseOrg:           10,
+    baseMorale:        15,  // elita — wyższe morale startowe
+    baseSupplyCap:     100,
+    supplyConsumption: 3,
   },
 
   // ── Artyleria rakietowa: długi zasięg, mało HP, nie może strzelać w zwarciu ──
@@ -49,6 +63,11 @@ export const UNIT_ARCHETYPES = {
     ],
     descriptionPL: 'Artyleria rakietowa dalekiego zasięgu. Druzgocąca siła ognia, ale krucha w zwarciu.',
     descriptionEN: 'Long-range rocket artillery. Devastating firepower, fragile at close range.',
+    // Opcja C v3
+    baseOrg:           10,
+    baseMorale:        10,
+    baseSupplyCap:     100,
+    supplyConsumption: 5,  // ciężki sprzęt pali dużo
   },
 
   // ── Garnizon: stacjonarna obrona, aura AC dla sąsiadów ──
@@ -68,6 +87,11 @@ export const UNIT_ARCHETYPES = {
     ],
     descriptionPL: 'Stacjonarny garnizon. Wysokie HP i pancerz, wzmacnia sąsiadów aurą obronną.',
     descriptionEN: 'Fortified garrison. High HP and armor, buffs adjacent allies with defensive aura.',
+    // Opcja C v3
+    baseOrg:           15,  // okopany — lepsza organizacja
+    baseMorale:        10,
+    baseSupplyCap:     100,
+    supplyConsumption: 2,
   },
 
   // ── Obrona przeciw-drono-powietrzna: przechwytuje drony, słaba przeciw piechocie ──
@@ -88,6 +112,11 @@ export const UNIT_ARCHETYPES = {
     ],
     descriptionPL: 'Platforma przeciwlotnicza. Niszczy drony, słaba przeciw piechocie i pojazdom.',
     descriptionEN: 'Anti-air platform. Shreds drones, weak against infantry and vehicles.',
+    // Opcja C v3
+    baseOrg:           10,
+    baseMorale:        10,
+    baseSupplyCap:     100,
+    supplyConsumption: 3,
   },
 
   // ── Medyk: leczy sąsiadów, nie atakuje, priorytet celowania AI ──
@@ -107,6 +136,11 @@ export const UNIT_ARCHETYPES = {
     ],
     descriptionPL: 'Pojazd medyczny wsparcia. Leczy sąsiadów +3 HP/turę. Nie atakuje.',
     descriptionEN: 'Medical support crawler. Heals adjacent allies +3 HP/turn. Cannot attack.',
+    // Opcja C v3
+    baseOrg:           10,
+    baseMorale:        15,
+    baseSupplyCap:     100,
+    supplyConsumption: 2,
   },
 
   // ── Dron zwiadowczy: latający, niewidoczny, bateria na 5 tur ──
@@ -128,8 +162,80 @@ export const UNIT_ARCHETYPES = {
     ],
     descriptionPL: 'Latający dron zwiadowczy. Niewidoczny, ujawnia mgłę wojny. Bateria na 5 tur.',
     descriptionEN: 'Flying recon drone. Invisible, reveals fog of war. Battery lasts 5 turns.',
+    // Opcja C v3
+    baseOrg:           20,  // zautomatyzowany, wysoka org startowa
+    baseMorale:        0,
+    noMorale:          true, // pomija morale w formułach (dmg mult korzysta tylko z org)
+    baseSupplyCap:     50,
+    supplyConsumption: 2,
+  },
+
+  // ── Jednostka Zaopatrzeniowa (Opcja C v3): mobilny magazyn, karmi sąsiadów w 1 hex ──
+  ground_supply_unit: {
+    id:          'ground_supply_unit',
+    role:        'logistics',
+    category:    'support',
+    baseStats:   { hp: 40, ac: 3, dmg: 2, rng: 1, mov: 2 },
+    ability:     null,
+    counters:    [],
+    counteredBy: ['shock_infantry', 'rocket_artillery', 'recon_drone'],
+    terrainModifiers: {},
+    tags:        ['vehicle', 'logistics', 'supplier', 'high_priority_target'],
+    specialRules: [
+      'Tankuje automatycznie gdy adjacent do Capital/Barracks',
+      'Transferuje supply do sąsiadów (1 hex) po 10/civY każdemu',
+      'Nie wlicza się do cap populacji (GROUND_UNIT_CAP_EXEMPT)',
+    ],
+    descriptionPL: 'Mobilne zaopatrzenie. Tankuje w Capital/Koszarach, karmi sąsiednie jednostki w promieniu 1 hex.',
+    descriptionEN: 'Mobile supply. Refills at Capital/Barracks, feeds adjacent allies within 1 hex.',
+    // Opcja C v3
+    baseOrg:           20,
+    baseMorale:        20,
+    baseSupplyCap:     200,
+    supplyConsumption: 1,
+    isSupplier:        true,
+    supplyTransferRate: 10,
   },
 };
+
+// ── Wymagania gating (Opcja C v3) ────────────────────────────────────────────
+// Barracks Lv + tech required to BUILD each archetype.
+// Używane przez ColonyManager.startGroundUnitBuild() + GroundUnitPanel UI lock overlay.
+
+export const ARCHETYPE_REQUIREMENTS = {
+  shock_infantry:     { barracksLv: 1, tech: null },
+  garrison_unit:      { barracksLv: 1, tech: null },
+  rocket_artillery:   { barracksLv: 2, tech: 'ground_warfare' },
+  aa_platform:        { barracksLv: 2, tech: 'ground_warfare' },
+  medic_unit:         { barracksLv: 2, tech: 'ground_warfare' },
+  recon_drone:        { barracksLv: 3, tech: 'drone_warfare' },
+  ground_supply_unit: { barracksLv: 2, tech: 'military_logistics' },
+};
+
+// Archetypy które NIE liczą się do cap populacji (autonomiczne / logistyczne).
+export const GROUND_UNIT_CAP_EXEMPT = new Set(['recon_drone', 'ground_supply_unit']);
+
+export function getArchetypeRequirements(archetypeId) {
+  return ARCHETYPE_REQUIREMENTS[archetypeId] ?? { barracksLv: 1, tech: null };
+}
+
+/**
+ * Sprawdź czy archetyp jest odblokowany w danej kolonii (tech + barracks lv).
+ * @param {string} archetypeId
+ * @param {number} barracksLv — max poziom barracks w kolonii
+ * @param {object} techSystem — window.KOSMOS.techSystem (musi mieć isResearched)
+ * @returns {{ unlocked: boolean, reason?: 'tech'|'barracks', missing?: string, requiredLv?: number }}
+ */
+export function checkArchetypeUnlocked(archetypeId, barracksLv, techSystem) {
+  const req = getArchetypeRequirements(archetypeId);
+  if (req.tech && !techSystem?.isResearched?.(req.tech)) {
+    return { unlocked: false, reason: 'tech', missing: req.tech };
+  }
+  if (barracksLv < req.barracksLv) {
+    return { unlocked: false, reason: 'barracks', requiredLv: req.barracksLv, currentLv: barracksLv };
+  }
+  return { unlocked: true };
+}
 
 /**
  * Mapowanie role (assault/ranged/defense/support/scout) → legacy role (military/defensive/support/drone).
