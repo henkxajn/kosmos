@@ -350,6 +350,11 @@ export class FactorySystem {
     const def = COMMODITIES[commodityId];
     if (!def) return;
 
+    // Tech-gate: nie pozwól rozpocząć produkcji jeśli receptura jest zablokowana.
+    // points<=0 to rozbiórka — pozwalamy (ktoś mógł odblokować allocate przed
+    // utratą techu, teraz pozwól mu ją usunąć).
+    if (points > 0 && !this.isRecipeAvailable(commodityId)) return;
+
     if (points <= 0) {
       const had = this._allocations.has(commodityId);
       this._allocations.delete(commodityId);
@@ -390,6 +395,8 @@ export class FactorySystem {
     if (this._mode !== 'manual') return;
     const def = COMMODITIES[commodityId];
     if (!def || !qty || qty <= 0) return;
+    // Tech-gate: receptura musi być odblokowana
+    if (!this.isRecipeAvailable(commodityId)) return;
     // Auto-kolejkuj brakujące składniki (commodity) PRZED głównym produktem
     this._enqueuePrereqs(commodityId, qty);
     this._queue.push({ commodityId, qty });
@@ -428,6 +435,9 @@ export class FactorySystem {
       const techSpeedMult = window.KOSMOS?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
       const speedMult = scenarioMult * techSpeedMult;
       const timePerUnit = def.baseTime / (alloc.points * speedMult);
+      // Alokacja z 0 FP (zwykle zablokowana przez _autoConsolidate — brak
+      // składników lub cel osiągnięty) UI traktuje jako "stalled".
+      const isPaused = (alloc._paused ?? false) || (alloc.points <= 0);
       result.push({
         commodityId: id,
         namePL:      def.namePL,
@@ -436,10 +446,11 @@ export class FactorySystem {
         progress:    alloc.progress,
         timePerUnit,
         pctComplete: Math.min(100, (alloc.progress / timePerUnit) * 100),
-        paused:      alloc._paused ?? false,
+        paused:      isPaused,
         targetQty:   alloc.targetQty ?? null,
         produced:    alloc.produced ?? 0,
-        isChain:     alloc._isChain ?? false,  // flaga auto-łańcucha
+        isChain:     alloc._isChain ?? false,       // flaga auto-łańcucha
+        blockedByTech: alloc._blockedByTech ?? null, // [{ingredientId, requiresTech}]
       });
     }
     return result;
@@ -450,9 +461,33 @@ export class FactorySystem {
   isRecipeAvailable(commodityId) {
     const def = COMMODITIES[commodityId];
     if (!def) return false;
-    if (!def.requiresTech) return true;
     const techSys = window.KOSMOS?.techSystem;
+    // Priorytet: efekty `unlockCommodity` w drzewie tech (JEDNO źródło prawdy).
+    // Commodity może być odblokowane przez kilka tech'ów — isCommodityUnlocked
+    // zwraca true jeśli DOWOLNA zbadana tech ma unlockCommodity dla tego id.
+    if (techSys?.isCommodityUnlocked?.(commodityId)) return true;
+    // Fallback: pole requiresTech z CommoditiesData (dla towarów bez wpisu
+    // unlockCommodity w TechData, np. prefabrykaty, consumer goods).
+    if (!def.requiresTech) return true;
     return techSys?.isResearched(def.requiresTech) ?? false;
+  }
+
+  // Zwróć listę sub-składników (commodity) zablokowanych technologicznie.
+  // Używane do ostrzeżenia UI: "zablokowane przez tech X sub-składnika Y".
+  _getTechBlockedIngredients(commodityId) {
+    const def = COMMODITIES[commodityId];
+    if (!def?.recipe) return [];
+    const blocked = [];
+    for (const ingId of Object.keys(def.recipe)) {
+      const ingDef = COMMODITIES[ingId];
+      if (!ingDef) continue; // surowiec bazowy — nie ma tech-gate
+      if (this.isRecipeAvailable(ingId)) continue;
+      blocked.push({
+        ingredientId: ingId,
+        requiresTech:  ingDef.requiresTech ?? null,
+      });
+    }
+    return blocked;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -605,8 +640,8 @@ export class FactorySystem {
       needs.push({ commodityId: item.commodityId, deficit, stockTarget: item.stockTarget });
     }
 
-    // Zbierz potrzeby auto-łańcucha
-    const chainNeeds = this._resolveChainNeeds(needs);
+    // Zbierz potrzeby auto-łańcucha + tech-blockady
+    const { chain: chainNeeds, blocked: blockedByTechMap } = this._resolveChainNeeds(needs);
 
     // Wyczyść obecne alokacje (zachowaj postęp)
     const oldProgress = new Map();
@@ -615,18 +650,20 @@ export class FactorySystem {
     }
     this._allocations.clear();
 
-    // Najpierw przydziel łańcuch (max 50% FP)
-    const maxChainFP = Math.max(1, Math.floor(this._totalPoints * 0.5));
-    let chainFPUsed = 0;
+    // Pojedynczy budżet FP — chain i main konkurują o ten sam zasób.
+    // Faktyczny balans (kto dostaje ile) robi _autoConsolidate na podstawie
+    // tego KTO może produkować (aktywne vs zablokowane brakiem składnika).
+    let remainingFP = this._totalPoints;
     const newAutoChain = [];
 
+    // Alokuj najpierw łańcuch (niższy tier → musi powstać zanim powstanie parent)
     for (const ch of chainNeeds) {
-      if (chainFPUsed >= maxChainFP) break;
+      if (remainingFP <= 0) break;
       const stock = this._getStock(ch.commodityId);
       const stillNeeded = Math.max(0, ch.qty - stock);
       if (stillNeeded <= 0) continue;
 
-      const fp = Math.min(1, maxChainFP - chainFPUsed);
+      const fp = Math.min(1, remainingFP);
       const old = oldProgress.get(ch.commodityId);
       this._allocations.set(ch.commodityId, {
         points: fp,
@@ -635,27 +672,26 @@ export class FactorySystem {
         produced: old?.produced ?? 0,
         _isChain: true,
       });
-      chainFPUsed += fp;
+      remainingFP -= fp;
       newAutoChain.push({
         commodityId: ch.commodityId,
         qty: stillNeeded,
-        produced: this._getStock(ch.commodityId),
+        produced: stock,
         forCommodityId: ch.forCommodityId,
       });
     }
     this._autoChain = newAutoChain;
 
-    // Przydziel resztę FP do głównych priorytetów
-    let remainingFP = this._totalPoints - chainFPUsed;
-
+    // Przydziel resztę FP do głównych priorytetów.
+    // Gdy chain pochłonął cały budżet FP, rejestrujemy main z 0 FP —
+    // _autoConsolidate przekaże mu FP gdy chain skończy (Bug #4/5 fix).
     for (const need of needs) {
-      if (remainingFP <= 0) break;
       if (need.deficit <= 0) continue;
 
-      const fp = Math.min(1, remainingFP);
+      const blockedByTech = blockedByTechMap.get(need.commodityId) ?? null;
+      const fp = Math.min(1, Math.max(0, remainingFP));
       const existing = this._allocations.get(need.commodityId);
       if (existing) {
-        // Jeśli łańcuch już alokował — dodaj FP
         existing.points += fp;
       } else {
         const old = oldProgress.get(need.commodityId);
@@ -665,23 +701,25 @@ export class FactorySystem {
           targetQty: need.deficit,
           produced: old?.produced ?? 0,
           _isChain: false,
+          _blockedByTech: (blockedByTech && blockedByTech.length > 0) ? blockedByTech : null,
         });
       }
       remainingFP -= fp;
     }
 
-    // Jeśli zostały wolne FP, rozdaj dodatkowe punkty proporcjonalnie do deficytu
+    // Dodatkowe FP → _autoConsolidate rozdzieli po _hasIngredients (aktywne/zablokowane).
+    // Zostawiamy tu: jeśli wszyscy potrzebują i mają dostępne składniki,
+    // bonus pójdzie do items z największym deficytem.
     if (remainingFP > 0) {
       const activeNeeds = needs.filter(n => n.deficit > 0 && this._allocations.has(n.commodityId));
       while (remainingFP > 0 && activeNeeds.length > 0) {
-        // Daj dodatkowy FP temu z największym deficytem
         activeNeeds.sort((a, b) => b.deficit - a.deficit);
         const best = activeNeeds[0];
         const alloc = this._allocations.get(best.commodityId);
         if (alloc) {
           alloc.points += 1;
           remainingFP -= 1;
-          best.deficit -= 1; // Zmniejsz wirtualnie żeby rozłożyć FP
+          best.deficit -= 1;
           if (best.deficit <= 0) activeNeeds.shift();
         } else {
           break;
@@ -691,20 +729,24 @@ export class FactorySystem {
   }
 
   // Rozwiąż łańcuch składników — zwróć listę brakujących sub-commodities
+  // oraz mapę tech-zablokowanych sub-składników per główny towar.
+  // Zwraca: { chain: [...], blocked: Map<mainCommodityId, [{ingredientId, requiresTech}]> }
   _resolveChainNeeds(mainNeeds) {
     const chainMap = new Map(); // commodityId → { qty, forCommodityId }
+    const blockedMap = new Map(); // mainCommodityId → [{ ingredientId, requiresTech }]
 
     for (const need of mainNeeds) {
       if (need.deficit <= 0) continue;
-      this._addChainFor(need.commodityId, need.deficit, need.commodityId, chainMap, 0);
+      this._addChainFor(need.commodityId, need.deficit, need.commodityId, chainMap, 0, blockedMap);
     }
 
     // Zwróć jako tablicę posortowaną po tierze (niższy tier = produkuj pierwszy)
-    return [...chainMap.values()]
+    const chain = [...chainMap.values()]
       .sort((a, b) => (COMMODITIES[a.commodityId]?.tier ?? 0) - (COMMODITIES[b.commodityId]?.tier ?? 0));
+    return { chain, blocked: blockedMap };
   }
 
-  _addChainFor(commodityId, qty, forCommodityId, chainMap, depth) {
+  _addChainFor(commodityId, qty, forCommodityId, chainMap, depth, blockedMap) {
     if (depth > 3) return; // max 3 poziomy rekurencji
     const def = COMMODITIES[commodityId];
     if (!def) return;
@@ -712,7 +754,18 @@ export class FactorySystem {
     for (const [ingId, ingQty] of Object.entries(def.recipe)) {
       const ingDef = COMMODITIES[ingId];
       if (!ingDef) continue; // to surowiec, nie commodity — pomiń
-      if (!this.isRecipeAvailable(ingId)) continue;
+
+      if (!this.isRecipeAvailable(ingId)) {
+        // Zapisz blockage dla parent — UI pokaże "⚠ wymaga tech X"
+        if (blockedMap) {
+          const list = blockedMap.get(forCommodityId) ?? [];
+          if (!list.some(b => b.ingredientId === ingId)) {
+            list.push({ ingredientId: ingId, requiresTech: ingDef.requiresTech ?? null });
+          }
+          blockedMap.set(forCommodityId, list);
+        }
+        continue;
+      }
 
       const totalNeeded = qty * ingQty;
       const stock = this._getStock(ingId);
@@ -726,7 +779,7 @@ export class FactorySystem {
           chainMap.set(ingId, { commodityId: ingId, qty: deficit, forCommodityId });
         }
         // Rekurencja: ten składnik też może potrzebować składników
-        this._addChainFor(ingId, deficit, forCommodityId, chainMap, depth + 1);
+        this._addChainFor(ingId, deficit, forCommodityId, chainMap, depth + 1, blockedMap);
       }
     }
   }
@@ -783,52 +836,24 @@ export class FactorySystem {
     }).filter(a => a.deficit > 0 && this.isRecipeAvailable(a.commodityId))
       .sort((a, b) => a.priority !== b.priority ? a.priority - b.priority : b.deficit - a.deficit);
 
-    // Alokuj FP — każdy towar z deficytem dostaje min 1 FP
-    for (const agg of sorted) {
-      if (remainingFP <= 0) break;
-
-      const fp = Math.min(1, remainingFP);
-      const old = oldProgress.get(agg.commodityId);
-      this._allocations.set(agg.commodityId, {
-        points: fp,
-        progress: old?.progress ?? 0,
-        targetQty: agg.deficit,
-        produced: old?.produced ?? 0,
-        _isChain: false,
-      });
-      remainingFP -= fp;
-    }
-
-    // Rozdziel dodatkowe FP proporcjonalnie do deficytu
-    if (remainingFP > 0) {
-      const active = sorted.filter(a => this._allocations.has(a.commodityId));
-      for (const a of active) {
-        if (remainingFP <= 0) break;
-        const alloc = this._allocations.get(a.commodityId);
-        if (alloc) {
-          alloc.points += 1;
-          remainingFP -= 1;
-        }
-      }
-    }
-
-    // Rozwiąż auto-łańcuch dla reaktywnych celów
+    // Rozwiąż auto-łańcuch NAJPIERW (sub-składniki niższego tieru muszą powstać
+    // zanim parent zacznie produkcję). Chain i main konkurują o ten sam budżet FP;
+    // _autoConsolidate potem balansuje wg kto faktycznie może produkować.
     const needs = [...aggregated.values()].map(a => ({
       commodityId: a.commodityId,
       deficit: Math.max(0, a.qty - this._getStock(a.commodityId)),
       stockTarget: a.qty,
     }));
-    const chainNeeds = this._resolveChainNeeds(needs);
-    const maxChainFP = Math.max(1, Math.floor(this._totalPoints * 0.3));
-    let chainFPUsed = 0;
+    const { chain: chainNeeds, blocked: blockedByTechMap } = this._resolveChainNeeds(needs);
+    const newAutoChain = [];
 
     for (const ch of chainNeeds) {
-      if (chainFPUsed >= maxChainFP) break;
-      if (this._allocations.has(ch.commodityId)) continue; // już alokowany
+      if (remainingFP <= 0) break;
+      if (this._allocations.has(ch.commodityId)) continue; // już alokowany jako main
       const stock = this._getStock(ch.commodityId);
       if (stock >= ch.qty) continue;
 
-      const fp = Math.min(1, maxChainFP - chainFPUsed);
+      const fp = Math.min(1, remainingFP);
       const old = oldProgress.get(ch.commodityId);
       this._allocations.set(ch.commodityId, {
         points: fp,
@@ -837,7 +862,48 @@ export class FactorySystem {
         produced: 0,
         _isChain: true,
       });
-      chainFPUsed += fp;
+      remainingFP -= fp;
+      newAutoChain.push({
+        commodityId: ch.commodityId,
+        qty: ch.qty - stock,
+        produced: stock,
+        forCommodityId: ch.forCommodityId,
+      });
+    }
+    this._autoChain = newAutoChain;
+
+    // Alokuj FP — każdy główny towar z deficytem rejestruje alokację.
+    // Gdy chain pochłonął cały budżet FP, rejestrujemy main z 0 FP —
+    // _autoConsolidate przekaże mu FP gdy chain skończy (Bug #4/5 fix).
+    for (const agg of sorted) {
+      if (this._allocations.has(agg.commodityId)) continue; // już z chain
+
+      const blockedByTech = blockedByTechMap.get(agg.commodityId) ?? null;
+      const fp = Math.min(1, Math.max(0, remainingFP));
+      const old = oldProgress.get(agg.commodityId);
+      this._allocations.set(agg.commodityId, {
+        points: fp,
+        progress: old?.progress ?? 0,
+        targetQty: agg.deficit,
+        produced: old?.produced ?? 0,
+        _isChain: false,
+        _blockedByTech: (blockedByTech && blockedByTech.length > 0) ? blockedByTech : null,
+      });
+      remainingFP -= fp;
+    }
+
+    // Rozdziel dodatkowe FP pozostałe po chain+main na aktywne mainy z deficytem.
+    // _autoConsolidate dopieszczy balans per-tick (zablokowane → 0, wolne → aktywne).
+    if (remainingFP > 0) {
+      const active = sorted.filter(a => this._allocations.has(a.commodityId) && !this._allocations.get(a.commodityId)._isChain);
+      for (const a of active) {
+        if (remainingFP <= 0) break;
+        const alloc = this._allocations.get(a.commodityId);
+        if (alloc) {
+          alloc.points += 1;
+          remainingFP -= 1;
+        }
+      }
     }
   }
 
@@ -1072,10 +1138,10 @@ export class FactorySystem {
     this._autoConsolidate();
   }
 
-  // Konsolidacja: zablokowane oddają FP; ręczne ustawienia aktywnych zachowane;
-  // korekta tylko gdy suma przekracza totalPoints lub nowe pozycje nie mają FP
+  // Konsolidacja: zablokowane oddają FP aktywnym; ręczne ustawienia zachowane.
+  // Działa we WSZYSTKICH trybach — w reactive/priority chain dziedziczy FP
+  // z głównych towarów które czekają na sub-składnik (Bug #4 fix).
   _autoConsolidate() {
-    if (this._mode !== 'manual') return;
     if (this._allocations.size === 0) return;
 
     // Sprawdź które alokacje mogą produkować (mają surowce + nie osiągnęły targetu)
@@ -1093,31 +1159,46 @@ export class FactorySystem {
       }
     }
 
-    // Zablokowane dostają 0 FP
+    // Zablokowane dostają 0 FP (ale zachowują progress)
     for (const alloc of blocked) alloc.points = 0;
 
     if (active.length === 0) return;
 
-    // Aktywne bez FP (nowo promowane z kolejki) — nadaj min 1
+    // Aktywne bez FP (nowo promowane z kolejki lub zwolnione przez zablokowanego
+    // głównego) — nadaj min 1
     for (const alloc of active) {
       if (alloc.points <= 0) alloc.points = 1;
     }
 
-    // Jeśli suma aktywnych > totalPoints — skaluj proporcjonalnie w dół
     let sum = 0;
     for (const alloc of active) sum += alloc.points;
 
     if (sum > this._totalPoints) {
+      // Skaluj proporcjonalnie w dół
       const scale = this._totalPoints / sum;
       let assigned = 0;
       for (let i = 0; i < active.length; i++) {
         if (i === active.length - 1) {
-          // Ostatni dostaje resztę
           active[i].points = Math.max(1, this._totalPoints - assigned);
         } else {
           active[i].points = Math.max(1, Math.round(active[i].points * scale));
           assigned += active[i].points;
         }
+      }
+    } else if (sum < this._totalPoints) {
+      // Redystrybucja: wolne FP (uwolnione przez zablokowanych) idą do aktywnych.
+      // Priorytet: chain (sub-składniki) pierwsze — gdy się skończą, parent
+      // odzyska swoje FP. Potem items z najmniejszą liczbą FP (wyrównaj).
+      let extra = this._totalPoints - sum;
+      const sorted = [...active].sort((a, b) => {
+        if (!!a._isChain !== !!b._isChain) return a._isChain ? -1 : 1;
+        return a.points - b.points;
+      });
+      let i = 0;
+      while (extra > 0 && sorted.length > 0) {
+        sorted[i % sorted.length].points += 1;
+        extra -= 1;
+        i++;
       }
     }
   }
@@ -1129,6 +1210,8 @@ export class FactorySystem {
     for (const [ingId, ingQty] of Object.entries(def.recipe)) {
       // Tylko commodity-składniki (nie surowce)
       if (!COMMODITIES[ingId]) continue;
+      // Pomiń tech-zablokowane sub-składniki (nie da się ich wyprodukować)
+      if (!this.isRecipeAvailable(ingId)) continue;
       const stock = this._getStock(ingId);
       const needed = ingQty * qty;
       const deficit = needed - stock;

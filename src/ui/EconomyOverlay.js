@@ -693,7 +693,19 @@ export class EconomyOverlay extends BaseOverlay {
     if (isStall) {
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.danger;
-      ctx.fillText(t('econPanel.noResources'), barX, y + 24);
+      // Gdy produkcja stoi przez brak TECHNOLOGII sub-składnika — pokaż ostrzeżenie
+      // zamiast generic "brak surowców" (Bug #4 fix).
+      if (alloc.blockedByTech && alloc.blockedByTech.length > 0) {
+        const first = alloc.blockedByTech[0];
+        const ingDef = COMMODITIES[first.ingredientId];
+        const techName = first.requiresTech
+          ? (t(`tech.${first.requiresTech}.name`) || first.requiresTech)
+          : '?';
+        const ingName = ingDef ? getName(ingDef, 'commodity') : first.ingredientId;
+        ctx.fillText(`⚠ ${ingName}: ${t('ui.requiresTech', techName)}`, barX, y + 24);
+      } else {
+        ctx.fillText(t('econPanel.noResources'), barX, y + 24);
+      }
     }
 
     // Output / rok
@@ -1592,7 +1604,9 @@ export class EconomyOverlay extends BaseOverlay {
     const allocs = fs.getAllocations();
     let ry = y;
 
-    // Zbierz wszystkie dostępne towary i podziel na grupy
+    // Zbierz wszystkie dostępne towary i podziel na grupy.
+    // Tech-gate: pomijamy towary których receptura nie jest odblokowana —
+    // inaczej manual obchodziłby drzewo technologiczne (Bug #2).
     const allAvailable = [];
     for (const tier of [1, 2, 3, 4, 5]) {
       const ids = COMMODITY_BY_TIER[tier];
@@ -1601,6 +1615,7 @@ export class EconomyOverlay extends BaseOverlay {
         const def = COMMODITIES[cId];
         if (!def || !def.recipe) continue;
         if (allocs.some(a => a.commodityId === cId)) continue;
+        if (!fs.isRecipeAvailable(cId)) continue;
         allAvailable.push(cId);
       }
     }
