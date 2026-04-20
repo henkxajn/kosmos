@@ -2478,18 +2478,18 @@ export class ThreeRenderer {
     this._mouse.y = -(screenY / window.innerHeight) * 2 + 1;
     this._ray.setFromCamera(this._mouse, this.camera);
 
-    // Standard hover na ciała niebieskie (i statki)
+    // Standard hover na ciała niebieskie (raycast BEZ ingerencji w statki)
     const hits  = this._ray.intersectObjects(this._clickable);
-    const firstHit = hits.length > 0 ? hits[0].object : null;
-    const vesselHover = firstHit?.userData?.type === 'vessel' ? firstHit.userData.vesselId : null;
-    const planetEntity = firstHit && !vesselHover ? this._entityByUUID.get(firstHit.uuid) : null;
-    const newId = planetEntity?.id ?? null;
+    const newId = hits.length > 0
+      ? (this._entityByUUID.get(hits[0].object.uuid)?.id ?? null)
+      : null;
     if (newId !== this._hoverPlanetId) {
       this._hoverPlanetId = newId;
       EventBus.emit('planet:hover', { entityId: newId });
     }
 
-    // Hover nad statkiem ma priorytet — pokaż tooltip statku, pomiń reszt
+    // Hover statku — screen-space picking (bez modyfikacji sceny/hitboxów)
+    const vesselHover = this._getVesselAtScreen(screenX, screenY);
     if (vesselHover) {
       if (vesselHover !== this._hoverVesselId) {
         this._hoverVesselId = vesselHover;
@@ -2610,6 +2610,33 @@ export class ThreeRenderer {
     html += `<br><br><b>⚡ Energia:</b> <span style="color:${totalEnergy >= 0 ? '#88ff88' : '#ff8888'}">${totalEnergy >= 0 ? '+' : ''}${totalEnergy.toFixed(1)}/rok</span>`;
 
     this._showColonyTooltipEl(html, sx, sy);
+  }
+
+  // Screen-space picking statków: rzutuj pozycję wrapera/sprite na ekran
+  // i zwróć vesselId najbliższego w promieniu thresholdPx. Bez modyfikacji sceny.
+  _getVesselAtScreen(sx, sy, thresholdPx = 28) {
+    if (!this._vessels || this._vessels.size === 0) return null;
+    const canvas = this.renderer?.domElement;
+    const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    const cw = rect.width, ch = rect.height;
+    const tmp = this._tmpPickVec ?? (this._tmpPickVec = new THREE.Vector3());
+    let best = null;
+    let bestDist = thresholdPx * thresholdPx;
+    for (const [vid, entry] of this._vessels) {
+      const obj = entry?.sprite;
+      if (!obj) continue;
+      obj.getWorldPosition(tmp);
+      tmp.project(this.camera);
+      // Poza frustum (głównie: za kamerą) — pomiń
+      if (tmp.z < -1 || tmp.z > 1) continue;
+      const vx = (tmp.x * 0.5 + 0.5) * cw + rect.left;
+      const vy = (-tmp.y * 0.5 + 0.5) * ch + rect.top;
+      const dx = vx - sx;
+      const dy = vy - sy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < bestDist) { bestDist = d2; best = vid; }
+    }
+    return best;
   }
 
   // ── Tooltip statku (hover na vessel sprite/model) ─────────────────────
@@ -2846,15 +2873,6 @@ export class ThreeRenderer {
       // Pozycja — lekko nad płaszczyzną orbitalną
       wrapper.position.set(px, 0.3, pz);
 
-      // Niewidzialny hitbox dla raycast hover/click (model 3D jest zbyt mały i złożony)
-      const hitbox = new THREE.Mesh(
-        new THREE.SphereGeometry(0.6, 8, 6),
-        new THREE.MeshBasicMaterial({ visible: false, transparent: true, opacity: 0, depthWrite: false })
-      );
-      hitbox.userData = { type: 'vessel', vesselId: vessel.id };
-      wrapper.add(hitbox);
-      this._clickable.push(hitbox);
-
       // Obrót dziobem w kierunku celu
       if (vessel.mission) {
         const m = vessel.mission;
@@ -2905,7 +2923,7 @@ export class ThreeRenderer {
         this.scene.add(routeLine);
       }
 
-      this._vessels.set(vessel.id, { sprite: wrapper, routeLine, color, isModel3D: true, hitbox });
+      this._vessels.set(vessel.id, { sprite: wrapper, routeLine, color, isModel3D: true });
     };
 
     // Sprawdź czy model już załadowany (cache)
@@ -2983,7 +3001,6 @@ export class ThreeRenderer {
     sprite.userData = { type: 'vessel', vesselId: vessel.id };
 
     this.scene.add(sprite);
-    this._clickable.push(sprite);
 
     // Linia trasy (przerywana, 2 punkty: statek → cel)
     let routeLine = null;
@@ -3022,13 +3039,6 @@ export class ThreeRenderer {
     const entry = this._vessels.get(vesselId);
     if (!entry) return;
 
-    // Usuń z _clickable (hitbox dla 3D model lub sam sprite dla billboard)
-    const pickable = entry.hitbox ?? entry.sprite;
-    if (pickable) {
-      const idx = this._clickable.indexOf(pickable);
-      if (idx !== -1) this._clickable.splice(idx, 1);
-    }
-
     this.scene.remove(entry.sprite);
 
     if (entry.isModel3D) {
@@ -3038,16 +3048,14 @@ export class ThreeRenderer {
           child.geometry?.dispose();
         }
       });
-      // Dispose hitbox sphere
-      if (entry.hitbox) {
-        entry.hitbox.geometry?.dispose();
-        entry.hitbox.material?.dispose();
-      }
     } else {
       // Sprite billboard — dispose materiału i tekstury
       entry.sprite.material.dispose();
       if (entry.tex) entry.tex.dispose();
     }
+
+    // Jeśli skończony hover był na tym statku — wyczyść
+    if (this._hoverVesselId === vesselId) this._hoverVesselId = null;
 
     if (entry.routeLine) {
       this.scene.remove(entry.routeLine);
