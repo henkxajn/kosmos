@@ -220,7 +220,10 @@ export class SupplyCoverageSystem {
 
         const maxOrg = u.maxOrg ?? 100;
         if ((u.org ?? 0) < maxOrg) {
-          u.org = Math.min(maxOrg, (u.org ?? 0) + ORG_REGEN_RATE * civDeltaYears);
+          // Jednostka okopana (deployState='deployed') regeneruje +50% szybciej.
+          // Ciągłe jeżdżenie (mobile) i tranzyt (deploying/packing) — baza.
+          const deployMult = (u.deployState === 'deployed') ? 1.5 : 1.0;
+          u.org = Math.min(maxOrg, (u.org ?? 0) + ORG_REGEN_RATE * civDeltaYears * deployMult);
           EventBus.emit('groundUnit:orgChanged', { unitId: u.id, org: u.org, max: maxOrg });
         }
         if (!u.noMorale && (u.org ?? 0) > MORALE_REGEN_ORG_THRESHOLD) {

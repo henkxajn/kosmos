@@ -1273,6 +1273,13 @@ export class ColonyManager {
     // Opcja C v3 "macierz": home colony opłaca Kr upkeep niezależnie od deployment
     unit.homeColonyId    = queueItem.homeColonyId ?? colony.planetId;
 
+    // Deploy/Pack: powyższe init nadpisuje supplyConsumption bazą z archetypu;
+    // jednostki z supportsDeploy startują w Mobile, więc reapply żeby wziąć
+    // mobileSupplyConsumption + mobileStats (mov=2, dmg=0 zamiast deployed mov=0).
+    if (arch?.supportsDeploy) {
+      mgr._applyDeployStateStats(unit);
+    }
+
     EventBus.emit('groundUnit:buildCompleted', {
       unitId:      unit.id,
       archetypeId,

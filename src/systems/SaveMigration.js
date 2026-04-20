@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 57;
+export const CURRENT_VERSION     = 58;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -72,6 +72,7 @@ const MIGRATIONS = {
   54: _migrateV54toV55,
   55: _migrateV55toV56,
   56: _migrateV56toV57,
+  57: _migrateV57toV58,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1443,6 +1444,24 @@ function _migrateV56toV57(data) {
         }
         col.factorySystem.everProducedHere = [...seen];
       }
+    }
+  }
+  return data;
+}
+
+// ── v57 → v58: garrison_unit Deploy/Pack state machine ─────────────────────
+// Nowe pola per-jednostka: deployState ('mobile'|'deploying'|'deployed'|'packing'),
+// stateTimer (civYears pozostałe do zakończenia tranzytu, 0 gdy nie w tranzycie).
+// Legacy garrisony były stacjonarne (mov=0) → defaulujemy do 'deployed' żeby
+// nie zmieniać wartości bojowej istniejących save'ów. Nowe spawny z Koszar
+// (po tej wersji) startują w 'mobile' — ustawiane w GroundUnitManager.createUnit.
+function _migrateV57toV58(data) {
+  const units = data.civ4x?.groundUnitManager?.units;
+  if (!Array.isArray(units)) return data;
+  for (const u of units) {
+    if (u.archetypeId === 'garrison_unit' && u.deployState == null) {
+      u.deployState = 'deployed';
+      u.stateTimer  = 0;
     }
   }
   return data;

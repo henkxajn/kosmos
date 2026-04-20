@@ -70,28 +70,40 @@ export const UNIT_ARCHETYPES = {
     supplyConsumption: 5,  // ciężki sprzęt pali dużo
   },
 
-  // ── Garnizon: stacjonarna obrona, aura AC dla sąsiadów ──
+  // ── Garnizon: tryb Mobile (wóz kołowy) ↔ Deployed (okopany z aurą AC) ──
+  //   • baseStats = staty trybu deployed (czyt. przez GroundUnitFactory — domyślnie)
+  //   • mobileStats = staty trybu mobile (używane gdy deployState='mobile'|'deploying')
+  //   • deployTime/packTime w civYears; w trakcie przejścia jednostka jest podatna
+  //     (niski AC, zero dmg, zero mov — patrz _deployTransitStats w GroundUnitManager)
   garrison_unit: {
     id:          'garrison_unit',
     role:        'defense',
     category:    'defense',
-    baseStats:   { hp: 30, ac: 8, dmg: 5, rng: 2, mov: 0 },
+    baseStats:   { hp: 30, ac: 8, dmg: 5, rng: 2, mov: 0 },      // tryb DEPLOYED (pierwotne)
+    mobileStats: { hp: 30, ac: 3, dmg: 0, rng: 0, mov: 2 },      // tryb MOBILE (wóz kołowy)
+    supportsDeploy: true,
+    deployTime:  2.0,   // civYears rozłożenia (mobile → deployed)
+    packTime:    1.0,   // civYears zwijania (deployed → mobile)
+    packOrgCost: 15,    // minimalny org i koszt pack_up
     ability:     null,
     counters:    [],
     counteredBy: ['shock_infantry', 'rocket_artillery'],
     terrainModifiers: {},
-    tags:        ['fortification', 'immobile', 'aura'],
+    tags:        ['fortification', 'immobile', 'aura', 'deployable'],
     specialRules: [
-      'Cannot move after deployment',
-      'Grants +2 AC to adjacent friendly units',
+      'Deployed: immobile, +2 AC aura for adjacent allies',
+      'Mobile: wheeled transport, cannot attack, mov 2',
+      'Deploy: 2 civY (vulnerable in transit)',
+      'Pack up: 1 civY, costs 15 org',
     ],
-    descriptionPL: 'Stacjonarny garnizon. Wysokie HP i pancerz, wzmacnia sąsiadów aurą obronną.',
-    descriptionEN: 'Fortified garrison. High HP and armor, buffs adjacent allies with defensive aura.',
+    descriptionPL: 'Garnizon mobilny. Rozkłada się w stacjonarny okop (aura obronna) lub zwija w wóz kołowy do przejazdu.',
+    descriptionEN: 'Mobile garrison. Deploys as fortified emplacement (defensive aura) or packs into wheeled transport.',
     // Opcja C v3
     baseOrg:           15,  // okopany — lepsza organizacja
     baseMorale:        10,
     baseSupplyCap:     100,
-    supplyConsumption: 2,
+    supplyConsumption: 2,   // deployed; w mobile podwaja się do 4 (_applyDeployStateStats)
+    mobileSupplyConsumption: 4,
   },
 
   // ── Obrona przeciw-drono-powietrzna: przechwytuje drony, słaba przeciw piechocie ──

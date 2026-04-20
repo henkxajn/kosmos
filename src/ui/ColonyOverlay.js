@@ -627,6 +627,10 @@ export class ColonyOverlay extends BaseOverlay {
       : null;
     const canAttack = !isEnemy && adjacentEnemy && unit._atkCooldown <= 0 && (unit.attack ?? 0) > 0;
 
+    // Deploy/Pack (garrison_unit): rezerwuj linię stanu + przycisk/progress
+    const hasDeploy = !isEnemy && unit.deployState != null;
+    const inTransit = hasDeploy && (unit.deployState === 'deploying' || unit.deployState === 'packing');
+
     // Panel w prawym dolnym rogu overlay — dynamiczna wysokość
     const pw = 200;
     let ph = 96;  // baza: nazwa + status + hex + HP
@@ -634,6 +638,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Opcja C v3: rezerwuj miejsce dla supply/org/morale + damageMult (tylko archetypowe jednostki)
     const hasSupplyV3 = unit.supply != null && !isEnemy;
     if (hasSupplyV3) ph += 52;                     // 3 linie stats + 1 linia damageMult
+    if (hasDeploy) ph += inTransit ? 44 : 44;      // label stanu (14) + button/progress (26) + odstęp (4)
     if (canAttack) ph += 26;                      // przycisk atak
     if (!isEnemy && unit.status === 'idle') ph += 26; // survey
     if (!isEnemy && unit.status === 'idle' && canAnalyze) ph += 26; // analyze
@@ -749,6 +754,81 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.fillText(`Hex: (${unit.q}, ${unit.r})`, px + 8, ly);
     ly += 18;
 
+    // Deploy/Pack — label stanu + przycisk lub progress bar
+    if (hasDeploy) {
+      ctx.font = `bold 10px ${THEME.fontFamily}`;
+      const stateLabels = {
+        mobile:    '🚛 Tryb: Mobile (wóz kołowy)',
+        deploying: '⏳ Rozkładanie...',
+        deployed:  '🛡 Tryb: Deployed (okopany)',
+        packing:   '⏳ Zwijanie...',
+      };
+      const stateColors = {
+        mobile:    '#E0C020',
+        deploying: '#E08020',
+        deployed:  '#60E0B0',
+        packing:   '#E08020',
+      };
+      ctx.fillStyle = stateColors[unit.deployState] ?? THEME.textDim;
+      ctx.fillText(stateLabels[unit.deployState] ?? unit.deployState, px + 8, ly);
+      ly += 14;
+
+      // Progress bar w tranzycie; przyciski w stanach stabilnych
+      if (inTransit) {
+        // Pasek progresu (stateTimer liczy DO zera; pełny = 0, pusty = totalTime)
+        const arch = this._deployArchetypes?.[unit.archetypeId];
+        const total = unit.deployState === 'deploying'
+          ? (arch?.deployTime ?? 2.0)
+          : (arch?.packTime   ?? 1.0);
+        const remain = Math.max(0, unit.stateTimer ?? 0);
+        const pct = total > 0 ? (1 - remain / total) : 1;
+        const bw = pw - 16, bh = 10;
+        const bx = px + 8, by = ly;
+        ctx.fillStyle = 'rgba(60,60,60,0.5)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = '#E0C020';
+        ctx.fillRect(bx, by, Math.round(bw * pct), bh);
+        ctx.font = `9px ${THEME.fontFamily}`;
+        ctx.fillStyle = '#FFF';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${remain.toFixed(1)}y`, bx + bw / 2, by + 5);
+        ctx.textAlign = 'left';
+        // Przycisk anuluj (mały, pod paskiem)
+        const abx = px + 8, aby = ly + 12, abw = pw - 16, abh = 18;
+        ctx.fillStyle = 'rgba(216, 90, 48, 0.4)';
+        ctx.fillRect(abx, aby, abw, abh);
+        ctx.fillStyle = '#FFF';
+        ctx.font = `bold 9px ${THEME.fontFamily}`;
+        ctx.fillText('✕ Anuluj', abx + abw / 2 - 20, aby + 9);
+        this._addHit(abx, aby, abw, abh, 'unitCancelDeploy');
+        ly += 34;
+      } else if (unit.deployState === 'mobile') {
+        // Przycisk: Rozłóż
+        const canDeploy = unit.status !== 'moving';
+        const bx = px + 8, by = ly, bw = pw - 16, bh = 22;
+        ctx.fillStyle = canDeploy ? '#60E0B0' : 'rgba(96,96,96,0.5)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = '#000';
+        ctx.font = `bold 10px ${THEME.fontFamily}`;
+        ctx.fillText('🏴 Rozłóż (2.0y)', bx + 6, by + 12);
+        if (canDeploy) this._addHit(bx, by, bw, bh, 'unitDeploy');
+        ly += 26;
+      } else if (unit.deployState === 'deployed') {
+        // Przycisk: Zwiń (potrzebuje org >= 15)
+        const orgCost = 15;
+        const canPack = (unit.org ?? 0) >= orgCost;
+        const bx = px + 8, by = ly, bw = pw - 16, bh = 22;
+        ctx.fillStyle = canPack ? '#E0C020' : 'rgba(96,96,96,0.5)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = '#000';
+        ctx.font = `bold 10px ${THEME.fontFamily}`;
+        const label = canPack ? '🎒 Zwiń (1.0y, -15 org)' : `🎒 Zwiń (potrzeba ${orgCost} org)`;
+        ctx.fillText(label, bx + 6, by + 12);
+        if (canPack) this._addHit(bx, by, bw, bh, 'unitPackUp');
+        ly += 26;
+      }
+    }
+
     // Przycisk: ATAKUJ (gdy gracza i obok wróg)
     if (canAttack) {
       const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 22;
@@ -838,32 +918,60 @@ export class ColonyOverlay extends BaseOverlay {
 
     // ── Ground Unit System: sprity wszystkich archetypów × frakcji ──
     // Klucz: `${factionId}:${archetypeId}` (np. 'humanity:shock_infantry').
+    // Archetypy z supportsDeploy (garrison_unit) dodatkowo ładują dwa warianty
+    // z sufiksami `_mobile` / `_deployed` (klucz `...:mobile` / `...:deployed`).
     // Brakujące PNG → GroundUnitFactory.loadUnitSprite() podstawia runtime placeholder.
     Promise.all([
       import('../systems/GroundUnitFactory.js'),
       import('../data/factions/humanity.js'),
       import('../data/factions/UNE.js'),
       import('../data/factions/Syndykat.js'),
+      import('../data/unitArchetypes.js'),
     ]).then(([
       { GroundUnitFactory },
       { HUMANITY_UNITS },
       { UNE_UNITS },
       { SYNDYKAT_UNITS },
+      { UNIT_ARCHETYPES },
     ]) => {
       const factions = { humanity: HUMANITY_UNITS, UNE: UNE_UNITS, Syndykat: SYNDYKAT_UNITS };
       for (const [factionId, units] of Object.entries(factions)) {
         for (const [archetypeId, def] of Object.entries(units)) {
           const key = `${factionId}:${archetypeId}`;
-          const img = GroundUnitFactory.loadUnitSprite(def.sprite);
-          this._unitSprites.set(key, img);
+          this._unitSprites.set(key, GroundUnitFactory.loadUnitSprite(def.sprite));
+          // Warianty deploy mode (jeśli archetyp wspiera rozkładanie)
+          if (UNIT_ARCHETYPES[archetypeId]?.supportsDeploy) {
+            const mobilePath   = this._deriveVariantPath(def.sprite, 'mobile');
+            const deployedPath = this._deriveVariantPath(def.sprite, 'deployed');
+            this._unitSprites.set(`${key}:mobile`,   GroundUnitFactory.loadUnitSprite(mobilePath));
+            this._unitSprites.set(`${key}:deployed`, GroundUnitFactory.loadUnitSprite(deployedPath));
+          }
         }
       }
+      // Cache archetypów dla UI (progress bar czyta deployTime/packTime).
+      this._deployArchetypes = UNIT_ARCHETYPES;
     }).catch(err => console.warn('[ColonyOverlay] Nie udało się załadować sprite\'ów jednostek:', err));
+  }
+
+  /**
+   * Przekształć ścieżkę bazową w wariant deploy mode.
+   * `human_garrison.png` → `human_garrison_mobile.png` lub `..._deployed.png`.
+   */
+  _deriveVariantPath(basePath, variant) {
+    return basePath.replace(/(\.[a-z]+)$/i, `_${variant}$1`);
   }
 
   /** Zwróć obraz sprite'a dla jednostki (Ground Unit System + legacy fallback). */
   _getUnitSprite(unit) {
     if (unit.factionId && unit.archetypeId) {
+      // Deploy mode variant: mobile/deploying → _mobile; deployed/packing → _deployed.
+      if (unit.deployState) {
+        const variant = (unit.deployState === 'mobile' || unit.deployState === 'deploying')
+          ? 'mobile' : 'deployed';
+        const variantKey = `${unit.factionId}:${unit.archetypeId}:${variant}`;
+        const variantImg = this._unitSprites.get(variantKey);
+        if (variantImg) return variantImg;
+      }
       const key = `${unit.factionId}:${unit.archetypeId}`;
       const img = this._unitSprites.get(key);
       if (img) return img;
@@ -906,35 +1014,22 @@ export class ColonyOverlay extends BaseOverlay {
 
       const S = hs * 1.2;
       const glowR = S * 0.55;
-      const t = Date.now() / 1000;  // sekundy (do animacji pulsu)
 
-      // ── Glow pod sprite'em (kolor zależny od owner) ──
-      const glowGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, glowR);
-      if (isEnemy) {
-        glowGrad.addColorStop(0, 'rgba(216, 90, 48, 0.40)');
-        glowGrad.addColorStop(0.6, 'rgba(216, 90, 48, 0.15)');
-        glowGrad.addColorStop(1, 'rgba(216, 90, 48, 0)');
-      } else {
-        glowGrad.addColorStop(0, 'rgba(0, 200, 160, 0.35)');
-        glowGrad.addColorStop(0.6, 'rgba(0, 200, 160, 0.12)');
-        glowGrad.addColorStop(1, 'rgba(0, 200, 160, 0)');
-      }
-      ctx.fillStyle = glowGrad;
+      // ── Owalny "footprint" pod jednostką (statyczny, bez pulsu) ──
+      // Spłaszczona elipsa imituje światło/cień na podłożu, a nie pierścień na hexie.
+      const fc = isEnemy ? { r: 216, g: 90, b: 48 } : { r: 100, g: 160, b: 255 };
+      ctx.save();
+      ctx.translate(sx, sy + S * 0.28);
+      ctx.scale(1, 0.35);
+      const footGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, glowR);
+      footGrad.addColorStop(0,   `rgba(${fc.r},${fc.g},${fc.b},0.55)`);
+      footGrad.addColorStop(0.6, `rgba(${fc.r},${fc.g},${fc.b},0.20)`);
+      footGrad.addColorStop(1,   `rgba(${fc.r},${fc.g},${fc.b},0)`);
+      ctx.fillStyle = footGrad;
       ctx.beginPath();
-      ctx.arc(sx, sy, glowR, 0, Math.PI * 2);
+      ctx.arc(0, 0, glowR, 0, Math.PI * 2);
       ctx.fill();
-
-      // ── Pulsujący ring ──
-      const pulsePhase = (Math.sin(t * 2.5) + 1) / 2;
-      const ringR = glowR * (0.85 + pulsePhase * 0.25);
-      const ringAlpha = 0.2 + pulsePhase * 0.25;
-      ctx.strokeStyle = isEnemy
-        ? `rgba(255, 100, 60, ${ringAlpha})`
-        : `rgba(0, 255, 180, ${ringAlpha})`;
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.arc(sx, sy, ringR, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.restore();
 
       // ── Sprite (flip poziomy gdy patrzy w lewo) ──
       const flip = unit._facingLeft ? -1 : 1;
@@ -1033,9 +1128,36 @@ export class ColonyOverlay extends BaseOverlay {
         }
       }
 
+      // ── Trójkąt-znacznik nad jednostką (wierzchołkiem w dół) ──
+      // Umieszczony nad ikonami statusu, żeby był zawsze widoczny jako marker identyfikacyjny.
+      const triW = 10;
+      const triH = 10;
+      const triTopY = sy - hs * 1.5;
+      const triFill = isEnemy ? '#D85A30' : '#64A0FF';
+      const triStroke = isEnemy ? '#FFB098' : '#B0D0FF';
+      ctx.save();
+      ctx.shadowColor = `rgba(${fc.r},${fc.g},${fc.b},0.9)`;
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = triFill;
+      ctx.beginPath();
+      ctx.moveTo(sx - triW / 2, triTopY);
+      ctx.lineTo(sx + triW / 2, triTopY);
+      ctx.lineTo(sx, triTopY + triH);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = triStroke;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(sx - triW / 2, triTopY);
+      ctx.lineTo(sx + triW / 2, triTopY);
+      ctx.lineTo(sx, triTopY + triH);
+      ctx.closePath();
+      ctx.stroke();
+
       // ── Ramka selekcji ──
       if (this._selectedUnit?.id === unit.id) {
-        ctx.strokeStyle = isEnemy ? '#FF6040' : '#00ffb4';
+        ctx.strokeStyle = isEnemy ? '#FF6040' : '#64A0FF';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(sx, sy, S / 2 + 3, 0, Math.PI * 2);
@@ -1831,6 +1953,23 @@ export class ColonyOverlay extends BaseOverlay {
             const res = gum.attackUnit(this._selectedUnit.id, zone.data.targetId);
             if (!res.hit) console.warn('[ColonyOverlay] Atak nieudany:', res.reason);
           }
+        }
+        break;
+      case 'unitDeploy':
+        if (this._selectedUnit) {
+          const res = window.KOSMOS?.groundUnitManager?.deploy(this._selectedUnit.id);
+          if (!res?.success) console.warn('[ColonyOverlay] Rozłożenie nieudane:', res?.reason);
+        }
+        break;
+      case 'unitPackUp':
+        if (this._selectedUnit) {
+          const res = window.KOSMOS?.groundUnitManager?.packUp(this._selectedUnit.id);
+          if (!res?.success) console.warn('[ColonyOverlay] Zwijanie nieudane:', res?.reason);
+        }
+        break;
+      case 'unitCancelDeploy':
+        if (this._selectedUnit) {
+          window.KOSMOS?.groundUnitManager?.cancelDeployTransition(this._selectedUnit.id);
         }
         break;
     }

@@ -84,7 +84,18 @@
       "Bash(sort -t: -k3 -rn)",
       "Bash(git rev-list:*)",
       "Bash(sort -k2 -rn)",
-      "Bash(xargs -I {} bash -c \"echo -n '{}:'; find {} -maxdepth 1 -name '*.js' -type f | wc -l\")"
+      "Bash(xargs -I {} bash -c \"echo -n '{}:'; find {} -maxdepth 1 -name '*.js' -type f | wc -l\")",
+      "Bash(git:*)",
+      "Bash(timeout 8 npx serve -p 5050)",
+      "Bash(echo \"PID=$!\")",
+      "Bash(kill 733)",
+      "Bash(head -10 kod_audit_report.md)",
+      "Bash(head -5 kod_audit_summary.md)",
+      "Bash(ls -lh kosmos.zip)",
+      "Bash(du -sh src/testing/*)",
+      "Bash(pkill -f \"server.js\")",
+      "Bash(echo \"exit=$?\")",
+      "Bash(awk '/id:|duration:|type.*production|multiplier/ {print}' src/data/RandomEventsData.js)"
     ]
   }
 }

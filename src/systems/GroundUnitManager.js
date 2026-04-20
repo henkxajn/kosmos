@@ -80,6 +80,17 @@ export class GroundUnitManager {
         unit.currentHP = opts.hp;
         unit.hp        = opts.hp;
       }
+      // Jednostki z supportsDeploy (garrison_unit) startują w trybie Mobile —
+      // gracz dojeżdża wozem w docelowe miejsce i rozkłada przez `deploy()`.
+      const arch = UNIT_ARCHETYPES[type];
+      if (arch.supportsDeploy) {
+        unit.deployState = opts.deployState ?? 'mobile';
+        unit.stateTimer  = 0;
+        this._applyDeployStateStats(unit);
+      } else {
+        unit.deployState = null;
+        unit.stateTimer  = 0;
+      }
       this._units.set(id, unit);
       EventBus.emit('groundUnit:created', {
         unitId: id, type, planetId, q, r, owner: unit.owner,
@@ -182,6 +193,15 @@ export class GroundUnitManager {
   moveUnit(unitId, targetQ, targetR) {
     const unit = this._units.get(unitId);
     if (!unit) return false;
+
+    // Deployable unit w trybie deployed/deploying/packing nie może się ruszać —
+    // tylko Mobile. Dodatkowo speedHex=0 w tych stanach blokuje ruch w AI.
+    if (unit.deployState && unit.deployState !== 'mobile') {
+      EventBus.emit('groundUnit:pathBlocked', {
+        unitId, targetQ, targetR, reason: 'not_mobile',
+      });
+      return false;
+    }
 
     // Pobierz grid planety
     const grid = this._getGrid(unit.planetId);
@@ -293,6 +313,141 @@ export class GroundUnitManager {
 
     // ── Ground Unit System: capture progress (ciągły) ──
     this._tickCaptures(civDeltaYears);
+
+    // ── Deploy/Pack state machine (garrison_unit i inne supportsDeploy) ──
+    for (const unit of this._units.values()) {
+      if (unit.deployState === 'deploying' || unit.deployState === 'packing') {
+        this._tickDeployTransition(unit, civDeltaYears);
+      }
+    }
+  }
+
+  // ── Deploy/Pack state machine ──────────────────────────────────────────────
+  //
+  // Stany:
+  //   mobile    — wóz kołowy: mov=2, ac=3, dmg=0, zużywa 4 supply/civY, brak aury
+  //   deploying — rozkładanie (2 civY): ac=1, dmg=0, mov=0 — okno podatności
+  //   deployed  — okopany: bazowe staty (mov=0, ac=8, dmg=5, rng=2), aura +2 AC
+  //   packing   — zwijanie (1 civY, -15 org): ac=2, dmg=0, mov=0
+
+  /**
+   * Wymusza staty jednostki zgodne z jej bieżącym deployState.
+   * Wywoływane po każdym przejściu stanu. Modyfikuje flat fields
+   * (attack/defense/range/speedHex) + baseStats snapshot + supplyConsumption.
+   * HP/org/morale to stan jednostki (nie tryb) — NIE są resetowane.
+   */
+  _applyDeployStateStats(unit) {
+    const arch = UNIT_ARCHETYPES[unit.archetypeId];
+    if (!arch?.supportsDeploy) return;
+
+    let stats;
+    if (unit.deployState === 'mobile') {
+      stats = arch.mobileStats;
+      unit.supplyConsumption = arch.mobileSupplyConsumption ?? arch.supplyConsumption;
+    } else if (unit.deployState === 'deploying' || unit.deployState === 'packing') {
+      // tranzyt: bezbronny, nieruchomy; wyższy koszt supply bo silnik pracuje
+      const baseAc = unit.deployState === 'deploying' ? 1 : 2;
+      stats = { hp: arch.baseStats.hp, ac: baseAc, dmg: 0, rng: 0, mov: 0 };
+      unit.supplyConsumption = arch.mobileSupplyConsumption ?? arch.supplyConsumption;
+    } else {
+      // deployed — bazowe staty z archetypu
+      stats = arch.baseStats;
+      unit.supplyConsumption = arch.supplyConsumption;
+    }
+
+    unit.attack   = stats.dmg;
+    unit.defense  = stats.ac;
+    unit.range    = stats.rng;
+    unit.speedHex = stats.mov;
+    // Snapshot baseStats dla readers (GroundUnitFactory.getEffectiveDmg itp.)
+    unit.baseStats = { ...stats, hp: unit.hpMax ?? stats.hp };
+  }
+
+  /**
+   * Rozpocznij rozkładanie (mobile → deploying → deployed).
+   * @returns {{ success: boolean, reason?: string }}
+   */
+  deploy(unitId) {
+    const unit = this._units.get(unitId);
+    if (!unit) return { success: false, reason: 'no_unit' };
+    const arch = UNIT_ARCHETYPES[unit.archetypeId];
+    if (!arch?.supportsDeploy) return { success: false, reason: 'not_deployable' };
+    if (unit.deployState !== 'mobile') return { success: false, reason: 'not_mobile' };
+    if (unit.status === 'moving')      return { success: false, reason: 'moving' };
+
+    unit.deployState = 'deploying';
+    unit.stateTimer  = arch.deployTime ?? 2.0;
+    this._applyDeployStateStats(unit);
+    EventBus.emit('groundUnit:deployStateChanged', {
+      unitId, planetId: unit.planetId,
+      deployState: 'deploying', stateTimer: unit.stateTimer, totalTime: unit.stateTimer,
+    });
+    return { success: true };
+  }
+
+  /**
+   * Rozpocznij zwijanie (deployed → packing → mobile). Kosztuje min. 15 org.
+   * @returns {{ success: boolean, reason?: string, required?: number }}
+   */
+  packUp(unitId) {
+    const unit = this._units.get(unitId);
+    if (!unit) return { success: false, reason: 'no_unit' };
+    const arch = UNIT_ARCHETYPES[unit.archetypeId];
+    if (!arch?.supportsDeploy)           return { success: false, reason: 'not_deployable' };
+    if (unit.deployState !== 'deployed') return { success: false, reason: 'not_deployed' };
+    const orgCost = arch.packOrgCost ?? 15;
+    if ((unit.org ?? 0) < orgCost) {
+      return { success: false, reason: 'low_org', required: orgCost };
+    }
+
+    unit.org = Math.max(0, (unit.org ?? 0) - orgCost);
+    EventBus.emit('groundUnit:orgChanged', {
+      unitId, org: unit.org, max: unit.maxOrg ?? 100,
+    });
+
+    unit.deployState = 'packing';
+    unit.stateTimer  = arch.packTime ?? 1.0;
+    this._applyDeployStateStats(unit);
+    EventBus.emit('groundUnit:deployStateChanged', {
+      unitId, planetId: unit.planetId,
+      deployState: 'packing', stateTimer: unit.stateTimer, totalTime: unit.stateTimer,
+    });
+    return { success: true };
+  }
+
+  /**
+   * Anuluj trwające rozkładanie/zwijanie → powrót do stanu źródłowego.
+   * deploying → mobile; packing → deployed. Bez zwrotu org.
+   */
+  cancelDeployTransition(unitId) {
+    const unit = this._units.get(unitId);
+    if (!unit) return { success: false, reason: 'no_unit' };
+    if (unit.deployState !== 'deploying' && unit.deployState !== 'packing') {
+      return { success: false, reason: 'not_in_transit' };
+    }
+    const newState = unit.deployState === 'deploying' ? 'mobile' : 'deployed';
+    unit.deployState = newState;
+    unit.stateTimer  = 0;
+    this._applyDeployStateStats(unit);
+    EventBus.emit('groundUnit:deployStateChanged', {
+      unitId, planetId: unit.planetId,
+      deployState: newState, stateTimer: 0, totalTime: 0,
+    });
+    return { success: true };
+  }
+
+  _tickDeployTransition(unit, civDeltaYears) {
+    unit.stateTimer = Math.max(0, (unit.stateTimer ?? 0) - civDeltaYears);
+    if (unit.stateTimer > 0) return;
+
+    const oldState = unit.deployState;
+    const newState = oldState === 'deploying' ? 'deployed' : 'mobile';
+    unit.deployState = newState;
+    this._applyDeployStateStats(unit);
+    EventBus.emit('groundUnit:deployStateChanged', {
+      unitId: unit.id, planetId: unit.planetId,
+      deployState: newState, stateTimer: 0, totalTime: 0,
+    });
   }
 
   // ── Faza 6.5: Okupacja hexów ───────────────────────────────────
@@ -991,6 +1146,9 @@ export class GroundUnitManager {
         unpaidYears:         u.unpaidYears       ?? 0,
         popCost:             u.popCost           ?? 0,
         homeColonyId:        u.homeColonyId      ?? u.planetId,
+        // Deploy/Pack state machine (tylko dla supportsDeploy archetypes)
+        deployState:         u.deployState       ?? null,
+        stateTimer:          u.stateTimer        ?? 0,
       })),
       nextId: this._nextId,
       // Ground Unit System: progres zajmowania budynków
@@ -1049,6 +1207,16 @@ export class GroundUnitManager {
         rebuilt.popCost           = u.popCost           ?? 0;
         // Opcja C v3 "macierz": fallback na planetId dla legacy save (v54 i starsze)
         rebuilt.homeColonyId      = u.homeColonyId      ?? u.planetId;
+        // Deploy/Pack: legacy save bez deployState → załóż 'deployed' (jak dotychczas
+        // stacjonarne). Spawn świeżej jednostki ustawia 'mobile' w createUnit().
+        if (arch.supportsDeploy) {
+          rebuilt.deployState = u.deployState ?? 'deployed';
+          rebuilt.stateTimer  = u.stateTimer  ?? 0;
+          this._applyDeployStateStats(rebuilt);
+        } else {
+          rebuilt.deployState = null;
+          rebuilt.stateTimer  = 0;
+        }
         this._units.set(u.id, rebuilt);
       } else {
         // Legacy jednostka (infantry/mech/garrison/science_rover)
