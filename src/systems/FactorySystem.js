@@ -625,6 +625,26 @@ export class FactorySystem {
     }
     this._autoChain = [];
     this._reactiveDemand = [];
+
+    // Cleanup: usuń alokacje na commodities których ta kolonia nie może
+    // lokalnie wyprodukować (brak raw surowca bez producenta). Ratuje stare
+    // save'y, gdzie poprzedni bug _scanTradeDemand (iterował WSZYSTKIE
+    // connections) spowodował że kolonie bez Xe miały alokacje T3 na perma-STALL.
+    // Wywołanie LAZY — po pierwszym ticku, gdy resourceSystem ma przeliczone
+    // _inventoryPerYear. Flaga zapewnia jednorazowe odpalenie.
+    this._needsUnsustainablePrune = true;
+  }
+
+  _pruneUnsustainableAllocations() {
+    if (!this.resourceSystem) return;
+    const toRemove = [];
+    for (const id of this._allocations.keys()) {
+      if (!this._colonyCanSustainRecipe(id)) toRemove.push(id);
+    }
+    for (const id of toRemove) this._allocations.delete(id);
+    // Kolejkę też sprzątnij
+    this._queue = this._queue.filter(q => this._colonyCanSustainRecipe(q.commodityId));
+    if (toRemove.length > 0) this._emitStatus();
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -632,6 +652,13 @@ export class FactorySystem {
   // ══════════════════════════════════════════════════════════════════════════
 
   _update(deltaYears) {
+    // Jednorazowy cleanup po restore: usuń alokacje na commodities których
+    // kolonia nie ma jak lokalnie zrobić (stare save'y z buga sprzed v57).
+    if (this._needsUnsustainablePrune) {
+      this._needsUnsustainablePrune = false;
+      this._pruneUnsustainableAllocations();
+    }
+
     // Auto-alokacja (priorytetowy/reaktywny) co interwał
     if (this._mode !== 'manual') {
       this._autoAllocTimer += deltaYears;
@@ -919,11 +946,18 @@ export class FactorySystem {
       }
     }
 
-    // Sortuj wg priorytetu źródła (Build=0 pierwszy) potem wg deficytu malejąco
+    // Sortuj wg priorytetu źródła (Build=0 pierwszy) potem wg deficytu malejąco.
+    // Filtruj commodities, których ta kolonia nie potrafi lokalnie wyprodukować
+    // (brak raw surowca i brak producenta, który by go dostarczył) — takie
+    // zapotrzebowanie idzie wyłącznie przez ProductionRequestBoard (gdy w ogóle).
+    // Bez tego filtra kolonia bez Xe próbuje alokować FP na Układy Półprzewodnikowe
+    // → perma-stall "brak surowców".
     const sorted = [...aggregated.values()].map(agg => {
       const stock = this._getStock(agg.commodityId);
       return { ...agg, stock, deficit: Math.max(0, agg.qty - stock) };
-    }).filter(a => a.deficit > 0 && this.isRecipeAvailable(a.commodityId))
+    }).filter(a => a.deficit > 0
+                   && this.isRecipeAvailable(a.commodityId)
+                   && this._colonyCanSustainRecipe(a.commodityId))
       .sort((a, b) => a.priority !== b.priority ? a.priority - b.priority : b.deficit - a.deficit);
 
     // Rozwiąż auto-łańcuch NAJPIERW (sub-składniki niższego tieru muszą powstać
@@ -1021,21 +1055,26 @@ export class FactorySystem {
     return result;
   }
 
-  // Źródło 1: Budowa — commodities potrzebne do pending builds i statków
-  // WAŻNE: qty = CAŁKOWITA potrzeba (nie deficyt) — deficyt liczy alokator
+  // Źródło 1: Budowa — commodities potrzebne do pending builds i statków.
+  // Filtr: commodities bez lokalnego źródła raw surowca są pomijane — niech
+  // kolonia macierzysta zgłosi to przez ProductionRequestBoard (Plan B) zamiast
+  // dotykać tutaj FP i wpadać w perma-STALL. qty = CAŁKOWITA potrzeba.
   _scanBuildDemand() {
     const items = [];
     const colony = this._getOwnerColony();
+    const push = (resId, qty) => {
+      if (!COMMODITIES[resId]) return;
+      if (qty <= 0) return;
+      if (!this._colonyCanSustainRecipe(resId)) return;
+      items.push({ commodityId: resId, qty });
+    };
 
     // Pending buildings (budynki czekające na surowce/commodities)
     const bSys = colony?.buildingSystem ?? window.KOSMOS?.buildingSystem;
     if (bSys?.getPendingDemand) {
       const demand = bSys.getPendingDemand();
       for (const [resId, qty] of Object.entries(demand)) {
-        if (!COMMODITIES[resId]) continue; // tylko commodities
-        if (qty > 0) {
-          items.push({ commodityId: resId, qty });
-        }
+        push(resId, qty);
       }
     }
 
@@ -1049,10 +1088,7 @@ export class FactorySystem {
       const allPending = pending.length > 0 ? pending : directPending;
       for (const order of allPending) {
         for (const [resId, qty] of Object.entries(order.cost ?? {})) {
-          if (!COMMODITIES[resId]) continue;
-          if (qty > 0) {
-            items.push({ commodityId: resId, qty });
-          }
+          push(resId, qty);
         }
       }
     }
@@ -1063,10 +1099,7 @@ export class FactorySystem {
                           ?? colony?.pendingOutpostOrders ?? [];
       for (const order of outpostPending) {
         for (const [resId, qty] of Object.entries(order.cost ?? {})) {
-          if (!COMMODITIES[resId]) continue;
-          if (qty > 0) {
-            items.push({ commodityId: resId, qty });
-          }
+          push(resId, qty);
         }
       }
     }
@@ -1441,6 +1474,33 @@ export class FactorySystem {
     const actual = this._getScaledRecipe(recipe, commodityId);
     for (const resId in actual) {
       if ((this.resourceSystem.inventory.get(resId) ?? 0) < actual[resId]) return false;
+    }
+    return true;
+  }
+
+  // Czy ta kolonia może kiedykolwiek wyprodukować ten commodity lokalnie.
+  // Warunek: każdy raw surowiec w recepturze (również sub-commodities) jest albo
+  // w magazynie (>0) albo ma producenta generującego go per rok. Inaczej kolonia
+  // po prostu nie ma źródła — zapotrzebowanie pójdzie cross-colony przez board.
+  _colonyCanSustainRecipe(commodityId, visited = new Set()) {
+    if (visited.has(commodityId)) return true;
+    visited.add(commodityId);
+    const def = COMMODITIES[commodityId];
+    if (!def?.recipe) return true;
+    const inv = this.resourceSystem;
+    if (!inv) return false;
+
+    for (const resId of Object.keys(def.recipe)) {
+      if (COMMODITIES[resId]) {
+        // Sub-commodity — recepta musi być unlock + rekurencja w raw surowce
+        if (!this.isRecipeAvailable(resId)) return false;
+        if (!this._colonyCanSustainRecipe(resId, visited)) return false;
+      } else {
+        // Raw — mamy go w magazynie LUB mamy producenta który go wydobywa
+        const stock = inv.inventory?.get(resId) ?? 0;
+        const perYear = inv._inventoryPerYear?.get(resId) ?? 0;
+        if (stock <= 0 && perYear <= 0) return false;
+      }
     }
     return true;
   }
