@@ -55,6 +55,7 @@ import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
+import { spawnTestEnemy }     from '../debug/SpawnTestEnemy.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
@@ -250,6 +251,13 @@ export class GameScene {
     // Pozwala zapisać otwarcie jako script dla ScriptedBot (teach the AI how to open).
     this.actionRecorder = new ActionRecorder();
     window.KOSMOS.recorder = this.actionRecorder;
+
+    // ── Debug cheats (konsola) ────────────────────────────────────
+    // KOSMOS.debug.spawnTestEnemy() — tworzy wrogie imperium + kolonię
+    // na najbliższym niezamieszkałym ciele do testów desantu/walki.
+    window.KOSMOS.debug = {
+      spawnTestEnemy,
+    };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
     // Nowa gra → reset do domyślnego kształtu; restore z save'a niżej.
