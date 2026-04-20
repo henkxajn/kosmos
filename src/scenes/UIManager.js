@@ -34,7 +34,6 @@ import { WarOverlay }          from '../ui/WarOverlay.js';
 import { t, getName }          from '../i18n/i18n.js';
 
 // Nowe komponenty UI
-import { MapModeBar }    from '../ui/MapModeBar.js';
 import { TopBar }        from '../ui/TopBar.js';
 import { BottomBar }     from '../ui/BottomBar.js';
 import { BottomContext }  from '../ui/BottomContext.js';
@@ -148,7 +147,6 @@ export class UIManager {
     this._bottomBar    = new BottomBar();
     this._bottomContext = new BottomContext();
     this._outliner     = new Outliner();
-    this._mapModeBar   = new MapModeBar();
 
     // ── Stan UI ───────────────────────────────────────────────
     this._selectedEntity  = null;
@@ -746,9 +744,6 @@ export class UIManager {
     // TopBar (zawsze widoczny)
     if (this._topBar.isOver(x, y)) return true;
 
-    // MapModeBar (pływający przełącznik trybu)
-    if (window.KOSMOS?.civMode && this._mapModeBar.hitTest(x, y)) return true;
-
     // BottomBar (zawsze widoczny) + panel menu
     if (this._bottomBar.isOver(x, y, W, H)) return true;
 
@@ -807,15 +802,6 @@ export class UIManager {
       if (x >= btnX && x <= btnX + btnW) {
         this._bottomBar._menuOpen = !this._bottomBar._menuOpen;
         this._bottomBar._syncDomMenu();
-        return true;
-      }
-    }
-
-    // MapModeBar (przełącznik trybu mapy) — ZAWSZE na wierzchu, przed overlayami
-    if (window.KOSMOS?.civMode) {
-      const modeHit = this._mapModeBar.onClick(x, y);
-      if (modeHit) {
-        this._handleMapModeChange(modeHit);
         return true;
       }
     }
@@ -915,8 +901,6 @@ export class UIManager {
     this._topBar.updateHover(x, y);
     // Outliner hover (tooltip kolonii)
     if (this._outliner) this._outliner.updateHover(x, y, W, H);
-    // MapModeBar hover
-    this._mapModeBar.onMouseMove(x, y);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -1044,18 +1028,6 @@ export class UIManager {
     if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
     // ── Przerysuj sidebar nad overlayem (zawsze widoczny) ───
     if (civMode && !globeOpen && this.overlayManager.active) this._drawCivPanel();
-
-    // ── MapModeBar (NA WIERZCHU — po overlayach) ───────────
-    if (civMode && !globeOpen) {
-      if (this.overlayManager.active === 'galaxy') {
-        this._mapModeBar.mode = 'galaxy';
-      } else if (this.overlayManager.active === 'colony') {
-        this._mapModeBar.mode = 'body';
-      } else {
-        this._mapModeBar.mode = 'system';
-      }
-      this._mapModeBar.draw(ctx, W, H);
-    }
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──
     this._bottomBar.drawMenu(ctx, W, H, {
@@ -1666,22 +1638,6 @@ export class UIManager {
     return false;
   }
 
-
-  _handleMapModeChange(mode) {
-    switch (mode) {
-      case 'galaxy':
-        this.overlayManager.openPanel('galaxy');
-        break;
-      case 'system':
-        // Wróć do widoku systemu — zamknij overlaye
-        this.overlayManager.closeActive();
-        break;
-      case 'body':
-        // Otwórz overlay kolonii dla aktywnej kolonii
-        this.overlayManager.openPanel('colony');
-        break;
-    }
-  }
 
   _hitTestConfirm(x, y) {
     const DW = 300, DH = 90;
