@@ -115,6 +115,9 @@ export class ThreeRenderer {
     // ── Cache modeli 3D statków ─────────────────────────────────
     this._shipModelTemplates = new Map(); // modelPath → THREE.Group (oryginał)
     this._gltfLoader = new GLTFLoader();
+    // Preload — ładuj templaty GLB z wyprzedzeniem, żeby statki dostały model od razu
+    // (bez preloadu pierwszy statek czeka na async load, w międzyczasie render się odświeża)
+    this._preloadShipModels();
 
     // ── Cywilne świetliki handlowe ───────────────────────────
     this._tradeFireflies   = [];     // Array of { sprite, route, t, speed }
@@ -2932,20 +2935,48 @@ export class ThreeRenderer {
       return;
     }
 
-    // Załaduj model asynchronicznie
-    this._gltfLoader.load(
-      modelPath,
-      (gltf) => {
-        this._shipModelTemplates.set(modelPath, gltf.scene);
-        placeModel(gltf.scene);
-      },
-      undefined,
-      (error) => {
-        console.warn(`[ThreeRenderer] Nie można załadować modelu ${modelPath}:`, error);
-        // Fallback na sprite
-        this._addVesselSpriteFallback(vessel);
-      }
-    );
+    // Załaduj model asynchronicznie (z jednym retry — przeglądarka czasem gubi
+    // request przy parallel batch przy starcie)
+    const loadOnce = (isRetry = false) => {
+      this._gltfLoader.load(
+        modelPath,
+        (gltf) => {
+          this._shipModelTemplates.set(modelPath, gltf.scene);
+          placeModel(gltf.scene);
+        },
+        undefined,
+        (error) => {
+          if (!isRetry) {
+            console.warn(`[ThreeRenderer] GLB load failed (retry za 400ms): ${modelPath}`, error);
+            setTimeout(() => loadOnce(true), 400);
+          } else {
+            console.error(`[ThreeRenderer] GLB load failed finalnie: ${modelPath} — fallback sprite dla vessel`, vessel.name, error);
+            this._addVesselSpriteFallback(vessel);
+          }
+        }
+      );
+    };
+    loadOnce(false);
+  }
+
+  // Preload wszystkich unikalnych modeli GLB — uruchamiane raz w konstruktorze.
+  // Dzięki temu statki wczytywane z save mają gotowy template w cache (bez async race).
+  _preloadShipModels() {
+    const paths = new Set(Object.values(ThreeRenderer.VESSEL_MODEL_MAP));
+    paths.add(ThreeRenderer.VESSEL_MODEL_DEFAULT);
+    for (const p of paths) {
+      if (this._shipModelTemplates.has(p)) continue;
+      this._gltfLoader.load(
+        p,
+        (gltf) => {
+          this._shipModelTemplates.set(p, gltf.scene);
+        },
+        undefined,
+        (err) => {
+          console.warn(`[ThreeRenderer] Preload GLB failed: ${p}`, err);
+        }
+      );
+    }
   }
 
   /**

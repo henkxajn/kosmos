@@ -849,6 +849,13 @@ export class UIManager {
     return ids;
   }
 
+  // Wszystkie statki gracza — niezależne od aktywnej kolonii (do outlinera)
+  _getAllPlayerVessels() {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return [];
+    return vMgr.getAllVessels().map(v => v.id);
+  }
+
   // Obsługa scrolla
   handleWheel(rawX, rawY, deltaY) {
     this._dirty = true;
@@ -995,7 +1002,7 @@ export class UIManager {
       this._outliner.draw(ctx, W, H, {
         colonies: allColonies,
         expeditions: outlinerExps,
-        fleet: this._getAllVesselsForColony(activePid) ?? [],
+        fleet: this._getAllPlayerVessels(),
         shipQueues: colMgr?.getShipQueues(activePid) ?? [],
         groundUnits,
         constructionQueue, pendingBuilds, pendingShipOrders,
