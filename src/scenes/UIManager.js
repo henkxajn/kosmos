@@ -536,19 +536,31 @@ export class UIManager {
     EventBus.on('civ:epochChanged', ({ epoch, message }) => {
       this._log(message || t('log.epochChanged', epoch?.key ? t(epoch.key) : (epoch?.namePL ?? epoch)), 'civ_epoch');
     });
-    EventBus.on('civ:unrestStarted', () => {
-      this._log(t('log.socialUnrest'), 'civ_unrest');
+    EventBus.on('civ:unrest', ({ planetId, colonyName }) => {
+      const name = colonyName ?? t('log.colonyUnknown');
+      this._log(t('log.socialUnrest', name), 'civ_unrest', planetId);
     });
-    EventBus.on('civ:famine', () => {
-      this._log(t('log.colonyFamine'), 'civ_famine');
+    EventBus.on('civ:unrestLifted', ({ planetId, colonyName }) => {
+      if (!colonyName) return; // legacy event bez context — pomiń żeby nie spamować
+      this._log(t('log.colonyUnrestLifted', colonyName), 'expedition_ok', planetId);
+    });
+    EventBus.on('civ:famine', ({ planetId, colonyName }) => {
+      const name = colonyName ?? 'kolonia';
+      this._log(t('log.colonyFamine', name), 'civ_famine', planetId);
+    });
+    EventBus.on('civ:famineLifted', ({ planetId, colonyName }) => {
+      if (!colonyName) return;
+      this._log(t('log.colonyFamineLifted', colonyName), 'expedition_ok', planetId);
     });
 
-    EventBus.on('civ:popBorn', ({ population }) => {
-      this._log(t('log.popBorn', population), 'pop_born');
+    EventBus.on('civ:popBorn', ({ population, planetId, colonyName }) => {
+      const name = colonyName ?? '—';
+      this._log(t('log.popBorn', name, population), 'pop_born', planetId);
     });
-    EventBus.on('civ:popDied', ({ cause, population }) => {
+    EventBus.on('civ:popDied', ({ cause, population, planetId, colonyName }) => {
+      const name = colonyName ?? '—';
       const key = cause === 'starvation' ? 'log.popDiedStarvation' : 'log.popDied';
-      this._log(t(key, population), 'pop_died');
+      this._log(t(key, name, population), 'pop_died', planetId);
     });
 
     EventBus.on('expedition:reconProgress', ({ body, discovered }) => {
@@ -679,18 +691,20 @@ export class UIManager {
     });
   }
 
-  _log(text, type = 'info') {
+  _log(text, type = 'info', entityRef = null) {
     this._dirty = true;
     // Opcja B: jedyne źródło prawdy to EventLogSystem. Stare wywołania
     // z `type` (collision_absorb, civ_famine itd.) mapują się przez pushLegacy
     // na {channel, severity}. Kolor wpisu czytany jest w BottomBar z LOG_COLORS
     // — zachowane dla wizualnej ciągłości.
+    // v57: entityRef (np. planetId) pozwala overlay'owi zrobić klikalny wpis
+    // → fokus/otwarcie kolonii.
     const logSys = window.KOSMOS?.eventLogSystem;
     if (logSys) {
-      logSys.pushLegacy(text, type);
+      logSys.pushLegacy(text, type, entityRef);
     } else {
       // Fallback (pre-init): dawne _logEntries jako bufor przejściowy.
-      this._logEntries.unshift({ year: this._logYear, text, color: LOG_COLORS[type] || C.text, type });
+      this._logEntries.unshift({ year: this._logYear, text, color: LOG_COLORS[type] || C.text, type, entityRef });
       if (this._logEntries.length > 8) this._logEntries.length = 8;
     }
   }

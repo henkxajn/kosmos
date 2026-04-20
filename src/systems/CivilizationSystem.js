@@ -67,7 +67,7 @@ const STARVATION_YEARS = 5;  // lat głodu do straty POPa
 const UNREST_PROSPERITY_THRESHOLD = 15;  // prosperity poniżej = ryzyko niepokojów
 const UNREST_YEARS_NEEDED     = 5;
 const UNREST_DURATION         = 10;
-const FAMINE_YEARS_NEEDED     = 2;
+const FAMINE_YEARS_NEEDED     = 1;  // v57: nowe kryterium (yearsLeft<1 + flow<0) jest rygorystyczne, więc skracamy do 1 roku
 const UNREST_RECOVERY_PROSPERITY = 25;   // prosperity powyżej = koniec licznika
 
 // ── Domyślna struktura strat ──────────────────────────────────────────────
@@ -738,7 +738,7 @@ export class CivilizationSystem {
 
     // 3. Kryzysy (prosperity-based)
     this._updateUnrest();
-    this._updateFamine(foodRatio);
+    this._updateFamine();  // v57: czyta _resourceSnap wewnętrznie, bez parametru
 
     // 4. Ruchy spoleczne + loyalty
     this._updateMovementsAndLoyalty();
@@ -801,7 +801,12 @@ export class CivilizationSystem {
       this.addPop('laborer');  // tymczasowo laborer — Faza 5 doda demand-based growth
       this._lastGrowth = 1;
       if (window.KOSMOS?.civSystem === this) {
-        EventBus.emit('civ:popBorn', { population: this.population, strataType: 'laborer' });
+        EventBus.emit('civ:popBorn', {
+          population:  this.population,
+          strataType:  'laborer',
+          planetId:    this._colonyId,
+          colonyName:  this.planet?.name ?? 'kolonia',
+        });
       }
     } else {
       this._lastGrowth = 0;
@@ -821,7 +826,12 @@ export class CivilizationSystem {
     if (needsShelter && this.housing <= 0) {
       this.removePop();
       if (window.KOSMOS?.civSystem === this) {
-        EventBus.emit('civ:popDied', { cause: 'exposure', population: this.population });
+        EventBus.emit('civ:popDied', {
+          cause:      'exposure',
+          population: this.population,
+          planetId:   this._colonyId,
+          colonyName: this.planet?.name ?? 'kolonia',
+        });
       }
       return;
     }
@@ -837,7 +847,12 @@ export class CivilizationSystem {
         this.removePop();  // ginie najniższa satisfaction
         this._starvationYears = 0;
         if (window.KOSMOS?.civSystem === this) {
-          EventBus.emit('civ:popDied', { cause: 'starvation', population: this.population });
+          EventBus.emit('civ:popDied', {
+            cause:      'starvation',
+            population: this.population,
+            planetId:   this._colonyId,
+            colonyName: this.planet?.name ?? 'kolonia',
+          });
         }
       }
     } else {
@@ -855,7 +870,10 @@ export class CivilizationSystem {
       if (this._unrestRemainingYears <= 0) {
         this._unrestActive = false;
         this._lowProsperityYears = 0;
-        EventBus.emit('civ:unrestLifted', {});
+        EventBus.emit('civ:unrestLifted', {
+          planetId:   this._colonyId,
+          colonyName: this.planet?.name ?? 'kolonia',
+        });
       }
       return;
     }
@@ -867,8 +885,10 @@ export class CivilizationSystem {
         this._unrestRemainingYears = UNREST_DURATION;
         this._lowProsperityYears   = 0;
         EventBus.emit('civ:unrest', {
-          reason:       t('log.unrestReason', UNREST_YEARS_NEEDED),
+          reason:        t('log.unrestReason', UNREST_YEARS_NEEDED),
           yearsInCrisis: UNREST_YEARS_NEEDED,
+          planetId:      this._colonyId,
+          colonyName:    this.planet?.name ?? 'kolonia',
         });
       }
     } else if (prosperity >= UNREST_RECOVERY_PROSPERITY) {
@@ -876,17 +896,43 @@ export class CivilizationSystem {
     }
   }
 
-  _updateFamine(organicsRatio) {
-    const isStarving = organicsRatio < 0.02;
+  _updateFamine() {
+    // Nowe kryterium (v57): głód tylko gdy zapas < 1 rok konsumpcji I flow ujemny.
+    // Stare kryterium (ratio < 0.02 przez 2 lata) dawało fałszywe alerty gdy amount=0
+    // chwilowo lub gdy snapshot był niezsynchronizowany z faktycznym stanem.
+    const foodRes = this._resourceSnap.food ?? this._resourceSnap.organics;
+    if (!foodRes) {
+      if (this._famineActive) this._famineActive = false;
+      this._famineYears = 0;
+      return;
+    }
+
+    const consumption = this.population * POP_CONSUMPTION.food;
+    const yearsLeft = consumption > 0 ? (foodRes.amount ?? 0) / consumption : Infinity;
+    const netFlow   = foodRes.perYear ?? 0;
+
+    // Głód: mniej niż 1 rok zapasu AND produkcja < konsumpcji (netFlow < 0)
+    const isStarving = yearsLeft < 1.0 && netFlow < 0;
 
     if (isStarving) {
       this._famineYears++;
       if (this._famineYears >= FAMINE_YEARS_NEEDED && !this._famineActive) {
         this._famineActive = true;
-        EventBus.emit('civ:famine', { severity: 'severe' });
+        EventBus.emit('civ:famine', {
+          severity:   'severe',
+          planetId:   this._colonyId,
+          colonyName: this.planet?.name ?? 'kolonia',
+          yearsLeft:  yearsLeft,
+        });
       }
     } else {
-      if (this._famineActive) this._famineActive = false;
+      if (this._famineActive) {
+        this._famineActive = false;
+        EventBus.emit('civ:famineLifted', {
+          planetId:   this._colonyId,
+          colonyName: this.planet?.name ?? 'kolonia',
+        });
+      }
       this._famineYears = 0;
     }
   }

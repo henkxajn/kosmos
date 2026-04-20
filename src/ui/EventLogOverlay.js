@@ -10,6 +10,8 @@ import { BaseOverlay } from './BaseOverlay.js';
 import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { getLocale } from '../i18n/i18n.js';
 import { CHANNELS, CHANNEL_IDS } from '../systems/EventLogSystem.js';
+import EntityManager from '../core/EntityManager.js';
+import EventBus from '../core/EventBus.js';
 
 const LEFT_W       = 240;  // szerokość lewej kolumny filtrów
 const HEADER_H     = 44;   // wysokość nagłówka
@@ -227,9 +229,16 @@ export class EventLogOverlay extends BaseOverlay {
     for (let i = startIdx; i < endIdx; i++) {
       const entry = visible[i];
       const rowY = listY + (i - startIdx) * ROW_H;
+      const clickable = !!entry.entityRef;
+      const isHover = clickable
+        && this._hoverZone?.type === 'entry'
+        && this._hoverZone?.data?.entryId === entry.id;
 
-      // Zebra striping
-      if ((i - startIdx) % 2 === 0) {
+      // Zebra striping + hover highlight
+      if (isHover) {
+        ctx.fillStyle = 'rgba(0,255,180,0.08)';
+        ctx.fillRect(x + 1, rowY, w - 2, ROW_H);
+      } else if ((i - startIdx) % 2 === 0) {
         ctx.fillStyle = 'rgba(255,255,255,0.015)';
         ctx.fillRect(x + 1, rowY, w - 2, ROW_H);
       }
@@ -258,6 +267,19 @@ export class EventLogOverlay extends BaseOverlay {
       const textMaxW = w - pad * 2 - 82 - 14;  // -14 miejsca na scrollbar
       ctx.fillStyle = _entryColor(entry);
       ctx.fillText(_wrapText(ctx, entry.text, textMaxW), textX, rowY + 15);
+
+      // Ikona "klikalne" dla wpisów z entityRef (strzałka przejścia)
+      if (clickable) {
+        ctx.fillStyle = isHover ? THEME.accent : THEME.textDim;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillText('↗', x + w - 24, rowY + 15);
+        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        // Hit zone dla całego wiersza
+        this._addHit(x + 1, rowY, w - 2, ROW_H, 'entry', {
+          entryId:   entry.id,
+          entityRef: entry.entityRef,
+        });
+      }
     }
 
     ctx.restore();
@@ -316,5 +338,37 @@ export class EventLogOverlay extends BaseOverlay {
       this._scrollOffset = 0;
       return;
     }
+    if (zone.type === 'entry' && zone.data?.entityRef) {
+      this._navigateToEntity(zone.data.entityRef);
+      return;
+    }
+  }
+
+  /**
+   * Przejście z klikniętego wpisu do encji:
+   *  - jeśli encja jest kolonią → switchActiveColony + otwórz ColonyOverlay
+   *  - w innym wypadku → emituj body:selected (fokus kamery + BottomContext)
+   */
+  _navigateToEntity(entityRef) {
+    const entity = EntityManager.get(entityRef);
+    if (!entity) return;
+
+    const colMgr = window.KOSMOS?.colonyManager;
+    const ovMgr  = window.KOSMOS?.overlayManager;
+
+    // Zamknij dziennik
+    this.hide();
+    if (ovMgr && ovMgr.active === 'eventLog') ovMgr.active = null;
+
+    // Kolonia gracza → przełącz i otwórz Colony Overlay
+    if (colMgr?.getColony(entityRef)) {
+      colMgr.switchActiveColony(entityRef);
+      EventBus.emit('body:selected', { entity });
+      if (ovMgr) ovMgr.openPanel('colony');
+      return;
+    }
+
+    // Inne encje (planeta obca, ciało bez kolonii) → tylko fokus
+    EventBus.emit('body:selected', { entity });
   }
 }
