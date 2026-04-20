@@ -13,6 +13,7 @@ import { HULLS }           from '../data/HullsData.js';
 import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleCapabilities } from '../data/ShipModulesData.js';
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
+import { ALL_RESOURCES }   from '../data/ResourcesData.js';
 import { effectiveRange, loadColonists, unloadColonists }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import EntityManager       from '../core/EntityManager.js';
@@ -24,7 +25,7 @@ import { ColonistLoadModal } from '../ui/ColonistLoadModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
 import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
-import { t, getName } from '../i18n/i18n.js';
+import { t, getName, getLocale } from '../i18n/i18n.js';
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
 const _BODY_TYPES = ['star', 'planet', 'moon', 'asteroid', 'comet', 'planetoid'];
@@ -114,6 +115,23 @@ function _missionTypeLabel(type) {
 }
 
 // ── Styl akcji wg typu ──────────────────────────────────────────────────────
+// Ikona + nazwa towaru/surowca (dual-locale, fallback do id)
+function _cargoIcon(id) {
+  return RESOURCE_ICONS[id] ?? ALL_RESOURCES[id]?.icon ?? COMMODITIES[id]?.icon ?? '•';
+}
+function _cargoName(id) {
+  const en = getLocale() === 'en';
+  const res = ALL_RESOURCES[id];
+  if (res) return en ? (res.nameEN ?? res.namePL ?? id) : (res.namePL ?? id);
+  const c = COMMODITIES[id];
+  if (c) return en ? (c.nameEN ?? c.namePL ?? id) : (c.namePL ?? id);
+  return id;
+}
+function _truncateStr(s, max) {
+  if (!s) return '';
+  return s.length > max ? s.slice(0, max - 1) + '…' : s;
+}
+
 function _actionStyle(actionId, ok) {
   if (!ok) return { bg: THEME.bgTertiary, fg: THEME.textDim, border: THEME.border };
   if (actionId === 'return_home') return { bg: 'rgba(255,51,68,0.12)', fg: THEME.danger, border: THEME.dangerDim };
@@ -2460,6 +2478,13 @@ export class FleetManagerOverlay {
     const mission = activeMissions.find(m => m.vesselId === vessel.id);
     if (mission) {
       cy = this._drawActiveMission(ctx, x, cy, w, pad, mission, vessel);
+      // Manifest: plan wysyłki + stan + plan powrotny (dla misji transportowych / pętli)
+      const hasPlan = mission.cargo && Object.values(mission.cargo).some(q => q > 0);
+      const hasOnBoard = vessel.cargo && Object.values(vessel.cargo).some(q => q > 0);
+      const hasReturnSpec = mission.returnCargoSpec && Object.values(mission.returnCargoSpec).some(q => q > 0);
+      if (hasPlan || hasOnBoard || hasReturnSpec) {
+        cy = this._drawMissionManifest(ctx, x, cy, w, pad, mission, vessel);
+      }
     }
 
     // ── Panel po przylecie międzygwiezdnym ────────────────────
@@ -3618,6 +3643,108 @@ export class FleetManagerOverlay {
 
     // Separator
     cy += 62;
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+    cy += 8;
+
+    return cy;
+  }
+
+  // Manifest misji: plan wysyłki (mission.cargo), stan aktualny (vessel.cargo) i plan powrotny (returnCargoSpec)
+  _drawMissionManifest(ctx, x, cy, w, pad, mission, vessel) {
+    const LH = 14;
+    const plan = mission?.cargo ?? {};
+    const onBoard = vessel?.cargo ?? {};
+    const returnSpec = mission?.returnCargoSpec ?? null;
+
+    const planEntries = Object.entries(plan).filter(([, q]) => q > 0);
+    const boardEntries = Object.entries(onBoard).filter(([, q]) => q > 0);
+    const returnEntries = returnSpec ? Object.entries(returnSpec).filter(([, q]) => q > 0) : [];
+
+    // Nagłówek
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('fleet.manifestHeader'), x + pad, cy + 10);
+    cy += LH + 2;
+
+    // Dla pętli: etap cyklu
+    if (mission?.loop) {
+      const legColor = mission.leg === 'outbound' ? THEME.warning
+                     : mission.leg === 'return'   ? THEME.success
+                     : THEME.textDim;
+      const legLabel = mission.leg === 'outbound' ? t('fleet.legOutbound')
+                     : mission.leg === 'return'   ? t('fleet.legReturn')
+                     : mission.leg === 'waiting_reload' ? t('fleet.legWaitingReload')
+                     : mission.leg === 'waiting_return_cargo' ? t('fleet.legWaitingReturnCargo')
+                     : (mission.leg ?? '');
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(t('fleet.loopCycleLabel'), x + pad, cy + 9);
+      ctx.fillStyle = legColor;
+      ctx.fillText(legLabel, x + pad + 52, cy + 9);
+      cy += LH - 2;
+    }
+
+    // Pomocnik: rysuje kompaktową listę towarów
+    const drawItems = (entries, compareWith, maxRows) => {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      const shown = entries.slice(0, maxRows);
+      for (const [id, qty] of shown) {
+        const icon = _cargoIcon(id);
+        const name = _cargoName(id);
+        let color = THEME.textPrimary;
+        if (compareWith) {
+          const planQty = compareWith[id] ?? 0;
+          if (qty >= planQty && planQty > 0) color = THEME.success;
+          else if (qty > 0 && qty < planQty) color = THEME.warning;
+          else if (qty === 0) color = THEME.textDim;
+        }
+        ctx.fillStyle = color;
+        ctx.fillText(`${icon} ${_truncateStr(name, 14)}`, x + pad + 6, cy + 9);
+        ctx.textAlign = 'right';
+        ctx.fillText(`${Math.round(qty)}`, x + w - pad - 4, cy + 9);
+        ctx.textAlign = 'left';
+        cy += LH - 2;
+      }
+      if (entries.length > maxRows) {
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(t('fleet.manifestMore', entries.length - maxRows), x + pad + 6, cy + 9);
+        cy += LH - 2;
+      }
+    };
+
+    // Plan wysyłki (manifest outbound) — tylko dla en_route lub returning z wyraźnym planem
+    if (planEntries.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.manifestPlanned'), x + pad, cy + 9);
+      cy += LH - 2;
+      drawItems(planEntries, null, 4);
+      cy += 2;
+    }
+
+    // Na pokładzie (rzeczywisty stan)
+    if (boardEntries.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.manifestOnBoard'), x + pad, cy + 9);
+      cy += LH - 2;
+      const compare = planEntries.length > 0 ? plan : null;
+      drawItems(boardEntries, compare, 4);
+      cy += 2;
+    }
+
+    // Plan powrotny (tylko dla pętli)
+    if (returnEntries.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.manifestReturn'), x + pad, cy + 9);
+      cy += LH - 2;
+      drawItems(returnEntries, null, 4);
+      cy += 2;
+    }
+
+    // Separator
     ctx.strokeStyle = THEME.border;
     ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
     cy += 8;
