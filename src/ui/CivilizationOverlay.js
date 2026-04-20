@@ -189,11 +189,28 @@ export class CivilizationOverlay extends BaseOverlay {
     }
     const taxEffect = this._getTaxEffectLabel(colMgrRef?.taxRate ?? 0.08);
 
+    // Utrzymanie jednostek naziemnych — suma Kr/civYear dla wszystkich jednostek gracza.
+    // Źródło: tabela ColonyManager.GROUND_UNIT_UPKEEP (tick co 1.0 civYear w _tickGroundUnitUpkeep).
+    let totalUnitUpkeep = 0;
+    let unitUpkeepCount = 0;
+    const guMgr = window.KOSMOS?.groundUnitManager;
+    const upTable = colMgrRef?.constructor?.GROUND_UNIT_UPKEEP;
+    if (guMgr && upTable) {
+      for (const u of guMgr._units?.values?.() ?? []) {
+        if (u.owner !== 'player' && u.factionId !== 'humanity') continue;
+        const up = upTable[u.archetypeId];
+        if (!up) continue;
+        totalUnitUpkeep += up.credits ?? 0;
+        unitUpkeepCount++;
+      }
+    }
+
     return {
       colonies, fullColonies, outposts, perColony,
       totalPop, totalMaxPop, avgProsperity,
       totalCredits, totalCreditsPerYear, totalResearch,
       globalResources, taxIncome, taxEffect,
+      totalUnitUpkeep, unitUpkeepCount,
       vessels, fleetByType, inFlight, orbiting, docked,
       leaderInfo, factionInfo,
     };
@@ -285,6 +302,14 @@ export class CivilizationOverlay extends BaseOverlay {
       `${sign}${data.totalCreditsPerYear.toFixed(1)} Kr/${t('tradePanel.perYear')}`,
       data.totalCreditsPerYear >= 0 ? THEME.success : THEME.danger);
     ry += ROW_H;
+    // Utrzymanie jednostek naziemnych (płacone raz na civYear z kolonii macierzystej)
+    if (data.unitUpkeepCount > 0) {
+      this._statRow(ctx, x + pad, ry, w,
+        `Utrzymanie jednostek (${data.unitUpkeepCount})`,
+        `-${data.totalUnitUpkeep} Kr/${t('tradePanel.perYear')}`,
+        THEME.danger);
+      ry += ROW_H;
+    }
     this._statRow(ctx, x + pad, ry, w, t('civOverlay.research'),
       `${data.totalResearch.toFixed(1)}/${t('tradePanel.perYear')}`, THEME.info);
     ry += ROW_H + 2;
