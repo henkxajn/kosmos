@@ -1325,6 +1325,20 @@ export default {
   'tradeRoute.noTargetResources': 'Brak zasobów w kolonii docelowej',
   'tradeRoute.cancel': 'Anuluj',
 
+  // === Manifest misji + pętla transportowa ===
+  'fleet.manifestHeader':       '📦 MANIFEST',
+  'fleet.manifestPlanned':      'Plan wysyłki:',
+  'fleet.manifestOnBoard':      'Na pokładzie:',
+  'fleet.manifestReturn':       'Plan powrotu:',
+  'fleet.manifestMore':         '+{0} więcej',
+  'fleet.loopCycleLabel':       '🔁 Cykl:',
+  'fleet.legOutbound':          'W drodze tam',
+  'fleet.legReturn':            'Powrót',
+  'fleet.legWaitingReload':     'Czeka (doładunek)',
+  'fleet.legWaitingReturnCargo':'Czeka (ładunek B)',
+  'transport.loopCheckbox':     '🔁 Powtarzaj misję',
+  'transport.loopExplain':      'Statek będzie kursował cyklicznie między koloniami. Ładunek powrotny ustawisz w następnym kroku.',
+
   // === ReturnCargoModal ===
   'returnCargo.title': '⬅ ŁADUNEK POWROTNY',
   'returnCargo.capacity': 'Ładowność: {0} / {1} t',

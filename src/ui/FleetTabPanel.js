@@ -8,6 +8,7 @@ import { SHIPS }           from '../data/ShipsData.js';
 import { HULLS }           from '../data/HullsData.js';
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
+import { ALL_RESOURCES }   from '../data/ResourcesData.js';
 import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleCapabilities } from '../data/ShipModulesData.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import EntityManager       from '../core/EntityManager.js';
@@ -131,6 +132,31 @@ function _shortYear(y) {
   if (y >= 1e6) return (y / 1e6).toFixed(1) + 'M';
   if (y >= 1e4) return (y / 1e3).toFixed(0) + 'k';
   return String(Math.round(y));
+}
+
+// Ikona + nazwa towaru/surowca (dual-locale, fallback do id)
+function _cargoIcon(id) {
+  return RESOURCE_ICONS[id] ?? ALL_RESOURCES[id]?.icon ?? COMMODITIES[id]?.icon ?? '•';
+}
+
+function _cargoName(id) {
+  const en = getLocale() === 'en';
+  const res = ALL_RESOURCES[id];
+  if (res) return en ? (res.nameEN ?? res.namePL ?? id) : (res.namePL ?? id);
+  const c = COMMODITIES[id];
+  if (c) return en ? (c.nameEN ?? c.namePL ?? id) : (c.namePL ?? id);
+  return id;
+}
+
+// Etap pętli transportowej — etykieta i kolor
+function _legInfo(leg) {
+  switch (leg) {
+    case 'outbound':             return { label: t('fleet.legOutbound'),           color: THEME.warning };
+    case 'return':               return { label: t('fleet.legReturn'),             color: THEME.success };
+    case 'waiting_reload':       return { label: t('fleet.legWaitingReload'),      color: THEME.textDisabled };
+    case 'waiting_return_cargo': return { label: t('fleet.legWaitingReturnCargo'), color: THEME.textDisabled };
+    default:                     return { label: leg ?? '', color: THEME.textSecondary };
+  }
 }
 
 function _actionStyle(actionId, ok) {
@@ -598,8 +624,13 @@ export class FleetTabPanel {
   async _openCargoThenTarget(vessel) {
     const colony = this._getVesselColony(vessel);
     if (!colony) return;
-    await showCargoLoadModal(vessel, colony);
-    this._missionConfig = { actionId: 'transport', vesselId: vessel.id, targetId: null, step: 'select' };
+    const result = await showCargoLoadModal(vessel, colony, { showRepeatCheckbox: true });
+    const repeat = !!(result && result.repeat);
+    // Pętlę zapisujemy w missionConfig — po wyborze celu zapytamy jeszcze o plan powrotny
+    this._missionConfig = {
+      actionId: 'transport', vesselId: vessel.id, targetId: null, step: 'select',
+      repeat, returnCargo: null,
+    };
     this._targetScrollOffset = 0;
     this._cachedTargets = null;
   }
@@ -628,6 +659,17 @@ export class FleetTabPanel {
 
     const action = FLEET_ACTIONS[cfg.actionId];
     if (!action) return;
+
+    // Pętla transportowa: cel musi być kolonią (bo returnCargoSpec ładuje z kolonii B).
+    // Jeśli user zaznaczył „Powtarzaj" w CargoLoadModal ale wskazał nie-kolonię — odznaczamy.
+    if (cfg.actionId === 'transport' && cfg.repeat) {
+      const colMgr = window.KOSMOS?.colonyManager;
+      if (!colMgr?.getColony(cfg.targetId)) {
+        cfg.repeat = false;
+        cfg.returnCargo = null;
+      }
+    }
+
     const state = this._buildActionState(vessel);
     state.targetId = cfg.targetId;
     state.targetBody = _findBody(cfg.targetId);
@@ -2056,6 +2098,14 @@ export class FleetTabPanel {
     if (activeMission) {
       cy = this._drawActiveMission(ctx, x + PAD, cy, w - PAD * 2, activeMission, vessel);
       cy += 4;
+      // Manifest ładunku — tylko dla misji z cargo (transport) lub gdy statek coś wiezie
+      const hasManifestData = (activeMission.cargo && Object.keys(activeMission.cargo).length > 0)
+        || (vessel.cargo && Object.values(vessel.cargo).some(q => q > 0))
+        || (activeMission.returnCargoSpec && Object.keys(activeMission.returnCargoSpec).length > 0);
+      if (hasManifestData) {
+        const newCy = this._drawCargoBreakdown(ctx, x + PAD, cy, w - PAD * 2, vessel, activeMission);
+        if (newCy > cy) { cy = newCy + 4; }
+      }
       ctx.strokeStyle = C.border; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
       cy += 8;
@@ -2111,6 +2161,104 @@ export class FleetTabPanel {
       ctx.fillText(t('fleet.etaYearLabel', _shortYear(exp.arrivalYear ?? 0)), x + w, cy + 8);
       ctx.textAlign = 'left';
       cy += LH;
+    }
+
+    return cy;
+  }
+
+  // Manifest ładunku: Plan (exp.cargo), Na pokładzie (vessel.cargo), Plan powrotny (loop)
+  _drawCargoBreakdown(ctx, x, y, w, vessel, exp) {
+    const LH = 14;
+    let cy = y;
+
+    const plan = exp?.cargo ?? {};
+    const onBoard = vessel?.cargo ?? {};
+    const returnSpec = exp?.returnCargoSpec ?? null;
+
+    const planEntries = Object.entries(plan).filter(([, q]) => q > 0);
+    const boardEntries = Object.entries(onBoard).filter(([, q]) => q > 0);
+    const returnEntries = returnSpec ? Object.entries(returnSpec).filter(([, q]) => q > 0) : [];
+
+    // Jeśli nie ma żadnych danych — nie rysuj sekcji
+    if (planEntries.length === 0 && boardEntries.length === 0 && returnEntries.length === 0) {
+      return cy;
+    }
+
+    // Nagłówek
+    ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = C.label;
+    ctx.fillText(t('fleet.manifestHeader'), x, cy + 8);
+    cy += LH;
+
+    // Dla pętli: etap cyklu
+    if (exp?.loop) {
+      const leg = _legInfo(exp.leg);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.dim;
+      ctx.fillText(t('fleet.loopCycleLabel'), x, cy + 8);
+      ctx.fillStyle = leg.color;
+      ctx.fillText(leg.label, x + 48, cy + 8);
+      cy += LH;
+    }
+
+    // Helper: renderuj kompaktową listę towarów
+    const drawItems = (entries, compareWith = null, maxRows = 5) => {
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      const shown = entries.slice(0, maxRows);
+      for (const [id, qty] of shown) {
+        const icon = _cargoIcon(id);
+        const name = _cargoName(id);
+        // Kolor wg diff (tylko gdy mamy compareWith = plan i aktualny stan)
+        let color = C.bright;
+        if (compareWith) {
+          const planQty = compareWith[id] ?? 0;
+          if (qty >= planQty && planQty > 0) color = THEME.success;
+          else if (qty > 0 && qty < planQty) color = THEME.warning;
+          else if (qty === 0) color = C.dim;
+        }
+        ctx.fillStyle = color;
+        ctx.fillText(`${icon} ${_truncate(name, 12)}`, x + 6, cy + 7);
+        ctx.textAlign = 'right';
+        ctx.fillText(`${Math.round(qty)}`, x + w - 4, cy + 7);
+        ctx.textAlign = 'left';
+        cy += LH - 2;
+      }
+      if (entries.length > maxRows) {
+        ctx.fillStyle = C.dim;
+        ctx.fillText(t('fleet.manifestMore', entries.length - maxRows), x + 6, cy + 7);
+        cy += LH - 2;
+      }
+    };
+
+    // Plan wysyłki (manifest outbound)
+    if (planEntries.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.label;
+      ctx.fillText(t('fleet.manifestPlanned'), x, cy + 8);
+      cy += LH - 2;
+      drawItems(planEntries, null, 5);
+      cy += 2;
+    }
+
+    // Na pokładzie (rzeczywisty stan)
+    if (boardEntries.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.label;
+      ctx.fillText(t('fleet.manifestOnBoard'), x, cy + 8);
+      cy += LH - 2;
+      // Diff tylko gdy mamy plan outbound
+      const compare = planEntries.length > 0 ? plan : null;
+      drawItems(boardEntries, compare, 5);
+      cy += 2;
+    }
+
+    // Plan powrotny (tylko dla pętli)
+    if (returnEntries.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = C.label;
+      ctx.fillText(t('fleet.manifestReturn'), x, cy + 8);
+      cy += LH - 2;
+      drawItems(returnEntries, null, 5);
     }
 
     return cy;

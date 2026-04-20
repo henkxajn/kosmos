@@ -18,9 +18,11 @@ import { BiomeMapGenerator }  from './BiomeMapGenerator.js';
 import { PlanetShader }       from './PlanetShader.js';
 import { GasGiantShader }    from './GasGiantShader.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
-import { BUILDINGS } from '../data/BuildingsData.js';
+import { BUILDINGS, RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import { ALL_RESOURCES } from '../data/ResourcesData.js';
+import { COMMODITIES } from '../data/CommoditiesData.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -2476,14 +2478,27 @@ export class ThreeRenderer {
     this._mouse.y = -(screenY / window.innerHeight) * 2 + 1;
     this._ray.setFromCamera(this._mouse, this.camera);
 
-    // Standard hover na ciała niebieskie
+    // Standard hover na ciała niebieskie (i statki)
     const hits  = this._ray.intersectObjects(this._clickable);
-    const newId = hits.length > 0
-      ? (this._entityByUUID.get(hits[0].object.uuid)?.id ?? null)
-      : null;
+    const firstHit = hits.length > 0 ? hits[0].object : null;
+    const vesselHover = firstHit?.userData?.type === 'vessel' ? firstHit.userData.vesselId : null;
+    const planetEntity = firstHit && !vesselHover ? this._entityByUUID.get(firstHit.uuid) : null;
+    const newId = planetEntity?.id ?? null;
     if (newId !== this._hoverPlanetId) {
       this._hoverPlanetId = newId;
       EventBus.emit('planet:hover', { entityId: newId });
+    }
+
+    // Hover nad statkiem ma priorytet — pokaż tooltip statku, pomiń reszt
+    if (vesselHover) {
+      if (vesselHover !== this._hoverVesselId) {
+        this._hoverVesselId = vesselHover;
+      }
+      this._showVesselTooltip(vesselHover, screenX, screenY);
+      return;
+    }
+    if (this._hoverVesselId) {
+      this._hoverVesselId = null;
     }
 
     // Tooltip — aktywny tylko przy bliskim zoomie i gdy overlay NIE jest otwarty
@@ -2593,6 +2608,73 @@ export class ThreeRenderer {
 
     // Bilans energii
     html += `<br><br><b>⚡ Energia:</b> <span style="color:${totalEnergy >= 0 ? '#88ff88' : '#ff8888'}">${totalEnergy >= 0 ? '+' : ''}${totalEnergy.toFixed(1)}/rok</span>`;
+
+    this._showColonyTooltipEl(html, sx, sy);
+  }
+
+  // ── Tooltip statku (hover na vessel sprite/model) ─────────────────────
+  _showVesselTooltip(vesselId, sx, sy) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(vesselId);
+    if (!vessel) { this._hideColonyTooltip(); return; }
+
+    const mSys = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
+    const missions = mSys?._missions ?? mSys?._expeditions ?? [];
+    const mission = missions.find(m => m.vesselId === vesselId && m.status !== 'completed') ?? null;
+
+    // Kolor nagłówka = kolor cargo = zielony mint; inaczej biały
+    let html = `<b style="color:#88ff99">🚀 ${vessel.name}</b>`;
+
+    if (mission) {
+      const typeIcon = mission.type === 'transport' ? '📦'
+                     : mission.type === 'recon' || mission.type === 'survey' ? '🔭'
+                     : mission.type === 'colony' ? '🏗'
+                     : mission.type === 'mining' ? '⛏' : '🚀';
+      const legBadge = mission.loop ? ' 🔁' : '';
+      html += `<br><span style="opacity:0.85">${typeIcon} → ${mission.targetName ?? '?'}${legBadge}</span>`;
+      // ETA
+      const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      let eta = null;
+      if (mission.status === 'returning') eta = mission.returnYear;
+      else if (mission.status === 'en_route') eta = mission.arrivalYear;
+      if (eta != null && eta > now) {
+        const delta = eta - now;
+        html += `<br><span style="opacity:0.75">ETA ${delta.toFixed(1)} lat</span>`;
+      }
+      // Etap pętli
+      if (mission.loop && mission.leg) {
+        const legLabel = { outbound: 'W drodze tam', return: 'Powrót', waiting_reload: 'Czeka (ładunek)', waiting_return_cargo: 'Czeka (powrót)' }[mission.leg] ?? mission.leg;
+        html += `<br><span style="color:#b0c4b0">Etap: ${legLabel}</span>`;
+      }
+    } else {
+      const stateLabel = vessel.position?.state === 'docked' ? 'W hangarze'
+                       : vessel.position?.state === 'orbiting' ? 'Na orbicie' : 'Bezczynny';
+      html += `<br><span style="opacity:0.7">${stateLabel}</span>`;
+    }
+
+    // Cargo top-3
+    const cargoEntries = Object.entries(vessel.cargo ?? {}).filter(([, q]) => q > 0).sort((a, b) => b[1] - a[1]);
+    if (cargoEntries.length > 0) {
+      html += `<br><b style="color:#66aa88">📦 Cargo:</b>`;
+      const top = cargoEntries.slice(0, 3);
+      for (const [id, qty] of top) {
+        const icon = RESOURCE_ICONS[id] ?? ALL_RESOURCES[id]?.icon ?? COMMODITIES[id]?.icon ?? '•';
+        const name = ALL_RESOURCES[id]?.namePL ?? COMMODITIES[id]?.namePL ?? id;
+        html += `<br>${icon} ${name} ×${qty}`;
+      }
+      if (cargoEntries.length > 3) {
+        html += `<br><span style="opacity:0.7">+${cargoEntries.length - 3} więcej</span>`;
+      }
+    }
+
+    // Manifest planowany (plan misji) — gdy różny od aktualnego cargo
+    if (mission?.cargo) {
+      const planEntries = Object.entries(mission.cargo).filter(([, q]) => q > 0);
+      const diffFromBoard = planEntries.some(([id, q]) => (vessel.cargo?.[id] ?? 0) !== q);
+      if (planEntries.length > 0 && diffFromBoard) {
+        html += `<br><span style="opacity:0.65; color:#a0a0c0">Plan: ${planEntries.slice(0, 3).map(([id, q]) => (RESOURCE_ICONS[id] ?? ALL_RESOURCES[id]?.icon ?? COMMODITIES[id]?.icon ?? '•') + q).join(' ')}${planEntries.length > 3 ? ' +' + (planEntries.length - 3) : ''}</span>`;
+      }
+    }
 
     this._showColonyTooltipEl(html, sx, sy);
   }
@@ -2764,6 +2846,15 @@ export class ThreeRenderer {
       // Pozycja — lekko nad płaszczyzną orbitalną
       wrapper.position.set(px, 0.3, pz);
 
+      // Niewidzialny hitbox dla raycast hover/click (model 3D jest zbyt mały i złożony)
+      const hitbox = new THREE.Mesh(
+        new THREE.SphereGeometry(0.6, 8, 6),
+        new THREE.MeshBasicMaterial({ visible: false, transparent: true, opacity: 0, depthWrite: false })
+      );
+      hitbox.userData = { type: 'vessel', vesselId: vessel.id };
+      wrapper.add(hitbox);
+      this._clickable.push(hitbox);
+
       // Obrót dziobem w kierunku celu
       if (vessel.mission) {
         const m = vessel.mission;
@@ -2814,7 +2905,7 @@ export class ThreeRenderer {
         this.scene.add(routeLine);
       }
 
-      this._vessels.set(vessel.id, { sprite: wrapper, routeLine, color, isModel3D: true });
+      this._vessels.set(vessel.id, { sprite: wrapper, routeLine, color, isModel3D: true, hitbox });
     };
 
     // Sprawdź czy model już załadowany (cache)
@@ -2889,8 +2980,10 @@ export class ThreeRenderer {
     const px = S(vessel.position.x);
     const pz = S(vessel.position.y);
     sprite.position.set(px, 0.3, pz); // lekko nad płaszczyzną
+    sprite.userData = { type: 'vessel', vesselId: vessel.id };
 
     this.scene.add(sprite);
+    this._clickable.push(sprite);
 
     // Linia trasy (przerywana, 2 punkty: statek → cel)
     let routeLine = null;
@@ -2929,6 +3022,13 @@ export class ThreeRenderer {
     const entry = this._vessels.get(vesselId);
     if (!entry) return;
 
+    // Usuń z _clickable (hitbox dla 3D model lub sam sprite dla billboard)
+    const pickable = entry.hitbox ?? entry.sprite;
+    if (pickable) {
+      const idx = this._clickable.indexOf(pickable);
+      if (idx !== -1) this._clickable.splice(idx, 1);
+    }
+
     this.scene.remove(entry.sprite);
 
     if (entry.isModel3D) {
@@ -2938,6 +3038,11 @@ export class ThreeRenderer {
           child.geometry?.dispose();
         }
       });
+      // Dispose hitbox sphere
+      if (entry.hitbox) {
+        entry.hitbox.geometry?.dispose();
+        entry.hitbox.material?.dispose();
+      }
     } else {
       // Sprite billboard — dispose materiału i tekstury
       entry.sprite.material.dispose();

@@ -1325,6 +1325,20 @@ export default {
   'tradeRoute.noTargetResources': 'No resources in target colony',
   'tradeRoute.cancel': 'Cancel',
 
+  // === Mission manifest + transport loop ===
+  'fleet.manifestHeader':       '📦 MANIFEST',
+  'fleet.manifestPlanned':      'Planned cargo:',
+  'fleet.manifestOnBoard':      'On board:',
+  'fleet.manifestReturn':       'Return plan:',
+  'fleet.manifestMore':         '+{0} more',
+  'fleet.loopCycleLabel':       '🔁 Cycle:',
+  'fleet.legOutbound':          'Outbound',
+  'fleet.legReturn':            'Returning',
+  'fleet.legWaitingReload':     'Waiting (reload)',
+  'fleet.legWaitingReturnCargo':'Waiting (B cargo)',
+  'transport.loopCheckbox':     '🔁 Repeat mission',
+  'transport.loopExplain':      'The ship will cycle between colonies. You will set the return cargo in the next step.',
+
   // === ReturnCargoModal ===
   'returnCargo.title': '⬅ RETURN CARGO',
   'returnCargo.capacity': 'Capacity: {0} / {1} t',

@@ -59,16 +59,24 @@ function _injectScrollStyle() {
  * Pokaż modal załadunku cargo na statek.
  * @param {Object} vessel — instancja statku (z Vessel.js)
  * @param {Object} colony — kolonia (z ColonyManager)
- * @returns {Promise<boolean>} — true jeśli dokonano zmian
+ * @param {Object} [options]
+ * @param {boolean} [options.showRepeatCheckbox=false] — pokaż checkbox „Powtarzaj misję (pętla)"
+ * @param {boolean} [options.initialRepeat=false] — stan początkowy checkboxa
+ * @returns {Promise<{changed:boolean, repeat:boolean}>}
  */
-export function showCargoLoadModal(vessel, colony) {
+export function showCargoLoadModal(vessel, colony, options = {}) {
+  const showRepeatCheckbox = !!options.showRepeatCheckbox;
+
   return new Promise(resolve => {
     _injectScrollStyle();
 
     const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
     const cargoCapacity = vessel.cargoMax ?? ship?.cargoCapacity ?? 0;
-    const resSys = colony.resourceSystem;
+    const resSys = colony?.resourceSystem ?? null;
     const inventory = resSys?.inventory ?? new Map();
+
+    let repeatChecked = !!options.initialRepeat;
+    let changed = false;
 
     const _ac = hexToRgb(THEME.accent);
     const _bc = hexToRgb(THEME.border);
@@ -121,8 +129,6 @@ export function showCargoLoadModal(vessel, colony) {
     header.appendChild(barContainer);
 
     panel.appendChild(header);
-
-    let changed = false;
 
     function updateCargoBar() {
       const used = vessel.cargoUsed ?? 0;
@@ -247,7 +253,6 @@ export function showCargoLoadModal(vessel, colony) {
           availSpan.textContent = `${avail}× ${w}t`;
           row.appendChild(availSpan);
 
-          // Przyciski +1, +10, MAX
           const doLoad = (qty) => {
             const actual = loadCargo(vessel, id, qty, resSys);
             if (actual > 0) { changed = true; updateCargoBar(); refreshCargoList(); refreshLoadSection(); }
@@ -280,8 +285,27 @@ export function showCargoLoadModal(vessel, colony) {
     const footer = document.createElement('div');
     footer.style.cssText = `
       padding: 8px 16px; border-top: 1px solid ${THEME.border};
-      display: flex; justify-content: center; flex-shrink: 0;
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 12px;
     `;
+
+    // Opcjonalnie: checkbox „🔁 Powtarzaj misję (pętla)"
+    const loopWrap = document.createElement('label');
+    if (showRepeatCheckbox) {
+      loopWrap.style.cssText = `display: flex; align-items: center; gap: 6px; color: ${THEME.textSecondary}; font-size: 10px; cursor: pointer; user-select: none;`;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = repeatChecked;
+      cb.style.cssText = `accent-color: ${THEME.accent}; cursor: pointer;`;
+      cb.addEventListener('change', () => { repeatChecked = cb.checked; });
+      loopWrap.appendChild(cb);
+      const lbl = document.createElement('span');
+      lbl.textContent = t('transport.loopCheckbox');
+      lbl.title = t('transport.loopExplain');
+      loopWrap.appendChild(lbl);
+    } else {
+      loopWrap.style.cssText = 'flex: 0;';
+    }
+    footer.appendChild(loopWrap);
 
     const btnClose = _makeBtn(t('ui.close'), THEME.accent, () => close(), true);
     btnClose.style.cssText += `padding: 4px 28px; font-size: 11px; letter-spacing: 1px;`;
@@ -312,7 +336,7 @@ export function showCargoLoadModal(vessel, colony) {
     function close() {
       document.removeEventListener('keydown', onKey);
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      resolve(changed);
+      resolve({ changed, repeat: repeatChecked });
     }
   });
 }
