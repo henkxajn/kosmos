@@ -1371,15 +1371,29 @@ export class FactorySystem {
   _autoConsolidate() {
     if (this._allocations.size === 0) return;
 
-    // Sprawdź które alokacje mogą produkować (mają surowce + nie osiągnęły targetu)
+    // Najpierw: USUŃ alokacje z osiągniętym targetem. Inaczej zostają jako
+    // "blocked" z points=0 i UI mylnie pokazuje STALL "BRAK SUROWCÓW" zamiast
+    // "zakończone". Pętla produkcji w _update skipuje alokacje z points<=0
+    // zanim dojdzie do sprawdzenia targetu — tutaj jest jedyne miejsce, w
+    // którym możemy je niezawodnie sprzątnąć.
+    const targetDoneIds = [];
+    for (const [id, alloc] of this._allocations) {
+      if (alloc.targetQty !== null && (alloc.produced ?? 0) >= alloc.targetQty) {
+        targetDoneIds.push(id);
+      }
+    }
+    for (const id of targetDoneIds) this._allocations.delete(id);
+
+    if (this._allocations.size === 0) return;
+
+    // Sprawdź które alokacje mogą produkować (mają surowce)
     const active = [];
     const blocked = [];
     for (const [id, alloc] of this._allocations) {
       const def = COMMODITIES[id];
       if (!def) { blocked.push(alloc); continue; }
-      const targetDone = alloc.targetQty !== null && alloc.produced >= alloc.targetQty;
       const hasIng = this._hasIngredients(def.recipe, id);
-      if (!targetDone && hasIng) {
+      if (hasIng) {
         active.push(alloc);
       } else {
         blocked.push(alloc);
