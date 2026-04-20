@@ -114,9 +114,11 @@ export class ThreeRenderer {
 
     // ── Cache modeli 3D statków ─────────────────────────────────
     this._shipModelTemplates = new Map(); // modelPath → THREE.Group (oryginał)
+    this._shipModelPromises  = new Map(); // modelPath → Promise — deduplikacja równoległych load
     this._gltfLoader = new GLTFLoader();
-    // Preload — ładuj templaty GLB z wyprzedzeniem, żeby statki dostały model od razu
-    // (bez preloadu pierwszy statek czeka na async load, w międzyczasie render się odświeża)
+    // Preload — ładuj templaty GLB z wyprzedzeniem, żeby statki dostały model od razu.
+    // Deduplikacja przez promise cache: równoczesne wywołania dla tego samego pliku
+    // czekają na TEN SAM request (bez tego binary chunk GLB mógł się fragmentować).
     this._preloadShipModels();
 
     // ── Cywilne świetliki handlowe ───────────────────────────
@@ -2929,53 +2931,61 @@ export class ThreeRenderer {
       this._vessels.set(vessel.id, { sprite: wrapper, routeLine, color, isModel3D: true });
     };
 
-    // Sprawdź czy model już załadowany (cache)
-    if (this._shipModelTemplates.has(modelPath)) {
-      placeModel(this._shipModelTemplates.get(modelPath));
-      return;
-    }
+    // Użyj promise-based cache — gwarantuje że równoległe wywołania dla tego
+    // samego path dzielą JEDEN request (bez podwójnego pobierania 18 MB pliku)
+    this._loadShipModel(modelPath)
+      .then(template => placeModel(template))
+      .catch(err => {
+        console.warn(`[ThreeRenderer] GLB load failed (retry za 400ms): ${modelPath}`, err);
+        // Retry po delayu — przeglądarka mogła zwolnić zasoby
+        setTimeout(() => {
+          this._loadShipModel(modelPath)
+            .then(template => placeModel(template))
+            .catch(err2 => {
+              console.error(`[ThreeRenderer] GLB load failed finalnie: ${modelPath} — fallback sprite dla ${vessel.name}`, err2);
+              this._addVesselSpriteFallback(vessel);
+            });
+        }, 400);
+      });
+  }
 
-    // Załaduj model asynchronicznie (z jednym retry — przeglądarka czasem gubi
-    // request przy parallel batch przy starcie)
-    const loadOnce = (isRetry = false) => {
+  // Jeden load per modelPath (deduplikacja). Zwraca Promise<gltf.scene>.
+  // Template trafia też do _shipModelTemplates (synchroniczny cache check).
+  _loadShipModel(modelPath) {
+    if (this._shipModelTemplates.has(modelPath)) {
+      return Promise.resolve(this._shipModelTemplates.get(modelPath));
+    }
+    if (this._shipModelPromises.has(modelPath)) {
+      return this._shipModelPromises.get(modelPath);
+    }
+    const p = new Promise((resolve, reject) => {
       this._gltfLoader.load(
         modelPath,
         (gltf) => {
           this._shipModelTemplates.set(modelPath, gltf.scene);
-          placeModel(gltf.scene);
+          resolve(gltf.scene);
         },
         undefined,
-        (error) => {
-          if (!isRetry) {
-            console.warn(`[ThreeRenderer] GLB load failed (retry za 400ms): ${modelPath}`, error);
-            setTimeout(() => loadOnce(true), 400);
-          } else {
-            console.error(`[ThreeRenderer] GLB load failed finalnie: ${modelPath} — fallback sprite dla vessel`, vessel.name, error);
-            this._addVesselSpriteFallback(vessel);
-          }
+        (err) => {
+          // Usuń z promise cache żeby retry mógł stworzyć nową promesę
+          this._shipModelPromises.delete(modelPath);
+          reject(err);
         }
       );
-    };
-    loadOnce(false);
+    });
+    this._shipModelPromises.set(modelPath, p);
+    return p;
   }
 
   // Preload wszystkich unikalnych modeli GLB — uruchamiane raz w konstruktorze.
-  // Dzięki temu statki wczytywane z save mają gotowy template w cache (bez async race).
+  // Dzięki temu statki wczytywane z save mają gotowy template w cache.
   _preloadShipModels() {
     const paths = new Set(Object.values(ThreeRenderer.VESSEL_MODEL_MAP));
     paths.add(ThreeRenderer.VESSEL_MODEL_DEFAULT);
     for (const p of paths) {
-      if (this._shipModelTemplates.has(p)) continue;
-      this._gltfLoader.load(
-        p,
-        (gltf) => {
-          this._shipModelTemplates.set(p, gltf.scene);
-        },
-        undefined,
-        (err) => {
-          console.warn(`[ThreeRenderer] Preload GLB failed: ${p}`, err);
-        }
-      );
+      this._loadShipModel(p).catch(err => {
+        console.warn(`[ThreeRenderer] Preload GLB failed: ${p}`, err);
+      });
     }
   }
 
