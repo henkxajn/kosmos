@@ -15,6 +15,7 @@
 import EventBus from '../core/EventBus.js';
 import { BASE_PRICE, scarcityMultiplier, routingPriority, TRADEABLE_GOODS } from '../data/TradeValuesData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
+import { COMMODITIES } from '../data/CommoditiesData.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 
 export class CivilianTradeSystem {
@@ -105,6 +106,11 @@ export class CivilianTradeSystem {
 
     // 4. Aktualizuj dane handlowe na koloniach
     this._updateColonyData(tradingColonies);
+
+    // 4b. Publikuj/czyść zlecenia produkcyjne cross-colony (Plan B)
+    // Po routingu widzimy co naprawdę płynie — dopiero teraz wiemy czy trade
+    // naturalnie pokrył deficyt, czy kolonia zostaje z "unmet demand".
+    this._updateProductionRequests(tradingColonies);
 
     // 5. Emit
     EventBus.emit('trade:connectionsUpdated', {
@@ -540,6 +546,86 @@ export class CivilianTradeSystem {
       }
     }
     return consumption;
+  }
+
+  // ── Zlecenia produkcyjne cross-colony (Plan B) ──────────────────────────
+  // Dla każdej kolonii sprawdź towary, których NIE produkuje lokalnie a ma deficyt
+  // niedający się pokryć trade'em z istniejących nadwyżek. Zgłoś na board —
+  // FactorySystem z opt-in (acceptsExportOrders) może przyjąć zlecenie.
+  _updateProductionRequests(colonies) {
+    const board = window.KOSMOS?.productionRequestBoard;
+    if (!board) return;
+
+    for (const col of colonies) {
+      const factSys = col.factorySystem;
+      const everProduced = factSys?._everProducedHere ?? null;
+
+      for (const goodId of TRADEABLE_GOODS) {
+        // Tylko commodities (recepty) — surowców wydobywczych nie zlecamy
+        const def = COMMODITIES[goodId];
+        if (!def) continue;
+
+        // Recepta niedostępna globalnie — nikt tego nie wyprodukuje
+        if (!this._isRecipeGloballyAvailable(goodId)) {
+          this._cancelRequestIfExists(col, goodId, 'recipe_locked');
+          continue;
+        }
+
+        // Kolonia sama produkuje ten towar — to lokalny problem, nie globalny
+        if (everProduced && everProduced.has && everProduced.has(goodId)) {
+          this._cancelRequestIfExists(col, goodId, 'self_production');
+          continue;
+        }
+
+        // Oblicz deficyt — bufor 2-letni konsumpcji + pending builds/ships
+        const stock = this._getStock(goodId, col);
+        const consumption = this._getConsumption(goodId, col);
+        const pendingDemand = this._getPendingDemand(goodId, col);
+        const needed = consumption * 2 + pendingDemand;
+
+        if (needed <= 0) {
+          // Kolonia nic z tym nie robi — nie ma deficytu
+          this._cancelRequestIfExists(col, goodId, 'no_demand');
+          continue;
+        }
+
+        if (stock >= needed) {
+          this._cancelRequestIfExists(col, goodId, 'deficit_resolved');
+          continue;
+        }
+
+        // Jeśli inna kolonia ma wyraźną nadwyżkę, trade pokryje naturalnie
+        // w kolejnych tickach — nie publikuj jeszcze zlecenia (unikamy podwójnej
+        // pracy: producer lokalny z nadwyżką + producer na zlecenie).
+        const hasSurplusElsewhere = colonies.some(other => {
+          if (other === col) return false;
+          return this._surplusScore(goodId, other) > 1.5;
+        });
+        if (hasSurplusElsewhere) continue;
+
+        // Zostaje: publikuj lub aktualizuj zlecenie
+        const qty = Math.ceil(needed - stock);
+        const yearsBuffer = consumption > 0 ? stock / consumption : 99;
+        // Urgency: 0 gdy zapas > 2 lata, 1 gdy 0 lat
+        const urgency = Math.max(0, Math.min(1, 1 - yearsBuffer / 2));
+        board.createOrUpdate(col.planetId, goodId, qty, urgency);
+      }
+    }
+  }
+
+  _cancelRequestIfExists(colony, goodId, reason) {
+    const board = window.KOSMOS?.productionRequestBoard;
+    if (!board) return;
+    const existing = board.findOpenFor(colony.planetId, goodId);
+    if (existing) board.cancel(existing.id, reason);
+  }
+
+  _isRecipeGloballyAvailable(goodId) {
+    const techSys = window.KOSMOS?.techSystem;
+    if (techSys?.isCommodityUnlocked?.(goodId)) return true;
+    const def = COMMODITIES[goodId];
+    if (!def?.requiresTech) return true;
+    return techSys?.isResearched(def.requiresTech) ?? false;
   }
 
   // ── Budynki handlowe — bonusy ───────────────────────────────────────────

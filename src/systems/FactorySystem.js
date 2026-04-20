@@ -77,7 +77,15 @@ export const PRIORITY_TEMPLATES = {
 };
 
 // Kolejność źródeł zapotrzebowania (reaktywny)
-const DEFAULT_REACTIVE_ORDER = ['build', 'fuel', 'consumption', 'trade', 'safety'];
+// export_orders (zlecenia z innych kolonii) — najniższy priorytet, opt-in per kolonia.
+const DEFAULT_REACTIVE_ORDER = ['build', 'fuel', 'consumption', 'trade', 'safety', 'export_orders'];
+
+// Domyślne preferencje eksportu: Tier 1-2 automatycznie, Tier 3+ wymaga opt-in.
+// Gdy kolonia jest dedykowaną "fabryką półprzewodników", gracz włącza Tier 3/4 ręcznie.
+const DEFAULT_EXPORT_PREFS = {
+  enabled: true,
+  tiers: { 1: true, 2: true, 3: false, 4: false },
+};
 
 export class FactorySystem {
   constructor(resourceSystem) {
@@ -113,6 +121,22 @@ export class FactorySystem {
 
     // Cache ostatniego skanu reaktywnego (do UI)
     this._reactiveDemand = [];
+
+    // Set commodityId, które ta kolonia kiedykolwiek wyprodukowała — zawęża
+    // safety stock demand (nie szukamy zapasu bezp. dla rzeczy, które tu nigdy
+    // nie powstały). Kolonia "tankuje ten set przy każdej wyprodukowanej sztuce.
+    this._everProducedHere = new Set();
+
+    // Preferencje przyjmowania zleceń eksportowych (z ProductionRequestBoard)
+    // Klonujemy żeby modyfikacje UI nie wpływały na DEFAULT_EXPORT_PREFS
+    this._exportPrefs = {
+      enabled: DEFAULT_EXPORT_PREFS.enabled,
+      tiers:   { ...DEFAULT_EXPORT_PREFS.tiers },
+    };
+
+    // Zlecenia eksportowe, które ta kolonia obecnie realizuje.
+    // Map<commodityId, { requestId, requesterId, qtyTotal, produced }>
+    this._acceptedOrders = new Map();
 
     // Ręczny bonus zapasu per-towar: Map<commodityId, number>
     // Dodawany do bazowego celu (safety stock tier default / consumption base)
@@ -193,6 +217,30 @@ export class FactorySystem {
       if (window.KOSMOS?.factorySystem !== this) return;
       this._reactiveSourceOrder = order;
       this._emitStatus();
+    });
+
+    EventBus.on('factory:setExportEnabled', ({ enabled }) => {
+      if (window.KOSMOS?.factorySystem !== this) return;
+      this._exportPrefs.enabled = !!enabled;
+      this._emitStatus();
+    });
+
+    EventBus.on('factory:setExportTier', ({ tier, enabled }) => {
+      if (window.KOSMOS?.factorySystem !== this) return;
+      if (tier < 1 || tier > 4) return;
+      this._exportPrefs.tiers[tier] = !!enabled;
+      this._emitStatus();
+    });
+
+    // Reaguj na anulowanie/wygaśnięcie zlecenia — usuń z _acceptedOrders
+    EventBus.on('productionRequest:cancelled', ({ requestId }) => {
+      this._forgetAcceptedOrder(requestId);
+    });
+    EventBus.on('productionRequest:expired', ({ request }) => {
+      this._forgetAcceptedOrder(request?.id);
+    });
+    EventBus.on('productionRequest:fulfilled', ({ requestId }) => {
+      this._forgetAcceptedOrder(requestId);
     });
 
     // Tick produkcji (civDeltaYears)
@@ -300,6 +348,17 @@ export class FactorySystem {
   get autoChain() { return [...this._autoChain]; }
   get reactiveDemand() { return [...this._reactiveDemand]; }
   get reactiveSourceOrder() { return [...this._reactiveSourceOrder]; }
+  get exportPrefs() {
+    return { enabled: this._exportPrefs.enabled, tiers: { ...this._exportPrefs.tiers } };
+  }
+  get acceptedOrders() {
+    const out = [];
+    for (const [commodityId, o] of this._acceptedOrders) {
+      out.push({ commodityId, ...o });
+    }
+    return out;
+  }
+  get everProducedHere() { return new Set(this._everProducedHere); }
 
   /** Bonus zapasu gracza dla towaru (dodawany do bazowego celu) */
   getDemandBonus(commodityId) {
@@ -516,7 +575,15 @@ export class FactorySystem {
         items: t.items.map(i => ({ ...i })),
       })),
       reactiveSourceOrder:  [...this._reactiveSourceOrder],
-      demandBonus: Object.fromEntries(this._demandBonus),
+      demandBonus:          Object.fromEntries(this._demandBonus),
+      everProducedHere:     [...this._everProducedHere],
+      exportPrefs: {
+        enabled: this._exportPrefs.enabled,
+        tiers:   { ...this._exportPrefs.tiers },
+      },
+      acceptedOrders: [...this._acceptedOrders.entries()].map(([cid, o]) => ({
+        commodityId: cid, ...o,
+      })),
     };
   }
 
@@ -538,7 +605,24 @@ export class FactorySystem {
     this._priorityList = data.priorityList ?? [];
     this._customTemplates = data.customTemplates ?? [];
     this._reactiveSourceOrder = data.reactiveSourceOrder ?? [...DEFAULT_REACTIVE_ORDER];
+    // Stare save'y mogą nie mieć nowych źródeł — dopisz brakujące na końcu
+    for (const src of DEFAULT_REACTIVE_ORDER) {
+      if (!this._reactiveSourceOrder.includes(src)) this._reactiveSourceOrder.push(src);
+    }
     this._demandBonus = new Map(Object.entries(data.demandBonus ?? data.safetyStockOverrides ?? {}));
+    this._everProducedHere = new Set(data.everProducedHere ?? []);
+    this._exportPrefs = data.exportPrefs
+      ? { enabled: !!data.exportPrefs.enabled, tiers: { ...DEFAULT_EXPORT_PREFS.tiers, ...(data.exportPrefs.tiers ?? {}) } }
+      : { enabled: DEFAULT_EXPORT_PREFS.enabled, tiers: { ...DEFAULT_EXPORT_PREFS.tiers } };
+    this._acceptedOrders = new Map();
+    for (const o of (data.acceptedOrders ?? [])) {
+      this._acceptedOrders.set(o.commodityId, {
+        requestId:   o.requestId,
+        requesterId: o.requesterId,
+        qtyTotal:    o.qtyTotal,
+        produced:    o.produced ?? 0,
+      });
+    }
     this._autoChain = [];
     this._reactiveDemand = [];
   }
@@ -604,9 +688,15 @@ export class FactorySystem {
         alloc.progress -= timePerUnit;
         alloc.produced = (alloc.produced ?? 0) + 1;
 
+        // Ta kolonia właśnie wyprodukowała jednostkę — zapamiętaj do safety scan
+        this._everProducedHere.add(commodityId);
+
         if (this.resourceSystem) {
           this.resourceSystem.receive({ [commodityId]: 1 });
         }
+
+        // Jeśli ta produkcja wypełnia zlecenie eksportowe — aktualizuj board
+        this._onUnitProducedForExport(commodityId);
 
         EventBus.emit('factory:produced', { commodityId, amount: 1 });
       }
@@ -911,11 +1001,12 @@ export class FactorySystem {
   _scanDemand() {
     const result = [];
     const scanners = {
-      build:       () => this._scanBuildDemand(),
-      fuel:        () => this._scanFuelDemand(),
-      consumption: () => this._scanConsumptionDemand(),
-      trade:       () => this._scanTradeDemand(),
-      safety:      () => this._scanSafetyStockDemand(),
+      build:         () => this._scanBuildDemand(),
+      fuel:          () => this._scanFuelDemand(),
+      consumption:   () => this._scanConsumptionDemand(),
+      trade:         () => this._scanTradeDemand(),
+      safety:        () => this._scanSafetyStockDemand(),
+      export_orders: () => this._scanExportOrdersDemand(),
     };
 
     for (const source of this._reactiveSourceOrder) {
@@ -1050,16 +1141,24 @@ export class FactorySystem {
     return items;
   }
 
-  // Źródło 4: Handel — towary eksportowane generujące Kredyty
+  // Źródło 4: Handel — towary eksportowane PRZEZ TĘ KONKRETNĄ KOLONIĘ
+  // (naprawione: wcześniej iterowało ALL connections — każda kolonia chciała
+  // produkować wszystko co ktokolwiek eksportuje)
   // qty = bufor docelowy (deficyt liczy alokator)
   _scanTradeDemand() {
     const items = [];
     const tradeSys = window.KOSMOS?.civilianTradeSystem;
     if (!tradeSys) return items;
 
+    const colony = this._getOwnerColony();
+    const myPlanetId = colony?.planetId;
+    if (!myPlanetId) return items;
+
     const connections = tradeSys._connections ?? [];
     const exported = new Set();
     for (const conn of connections) {
+      // Tylko połączenia, w których TA kolonia jest eksporterem
+      if (conn.from?.planetId !== myPlanetId) continue;
       if (conn.goods) {
         for (const g of conn.goods) exported.add(g.goodId);
       }
@@ -1072,13 +1171,31 @@ export class FactorySystem {
     return items;
   }
 
-  // Źródło 5: Zapas bezpieczeństwa — WSZYSTKIE towary (również tech-locked)
-  // Tech-locked dostają flagę `locked:true` i nie są alokowane (filter w _reactiveAllocate),
-  // ale pojawiają się w UI min. zapasów żeby gracz mógł pre-konfigurować próg.
-  // qty = docelowy minimalny zapas (deficyt liczy alokator)
+  // Źródło 5: Zapas bezpieczeństwa — commodities, które ta kolonia faktycznie
+  // produkuje lokalnie (_everProducedHere) + te jawnie ustawione w priority
+  // list / queue / allocations / custom templates. To zapobiega sytuacji, w
+  // której każda kolonia próbuje utrzymywać zapas wszystkiego i konkuruje o
+  // rzadkie surowce (Xe, Hv, Nt). Zlecenia cross-colony idą przez export_orders.
+  // Uwaga: tech-locked commodities trafiają do items z flagą locked:true tylko
+  // jeśli gracz ustawił ręczny bonus (demandBonus) — wtedy UI je pokazuje.
   _scanSafetyStockDemand() {
     const items = [];
-    for (const [id, def] of Object.entries(COMMODITIES)) {
+
+    // Zbierz "lokalnie istotne" commodities
+    const localScope = new Set();
+    for (const id of this._everProducedHere) localScope.add(id);
+    for (const a of this._allocations.keys()) localScope.add(a);
+    for (const p of this._priorityList) localScope.add(p.commodityId);
+    for (const q of this._queue) localScope.add(q.commodityId);
+    for (const t of this._customTemplates) {
+      for (const it of (t.items ?? [])) localScope.add(it.commodityId);
+    }
+    // Ręczny bonus gracza też włącza commodity w safety scope (UI-facing)
+    for (const id of this._demandBonus.keys()) localScope.add(id);
+
+    for (const id of localScope) {
+      const def = COMMODITIES[id];
+      if (!def) continue;
       const locked = !this.isRecipeAvailable(id);
       const minStock = this.getSafetyStockTarget(id);
       items.push({
@@ -1089,6 +1206,83 @@ export class FactorySystem {
       });
     }
     return items;
+  }
+
+  // Źródło 6: Zlecenia eksportowe — inne kolonie proszą o towary, których same
+  // nie produkują. Najniższy priorytet — tylko gdy wolne FP po zaspokojeniu
+  // lokalnych potrzeb. Opt-in per-kolonia per-tier.
+  // qty = pełna ilość zlecona (alokator i _onUnitProducedForExport liczą postęp)
+  _scanExportOrdersDemand() {
+    const items = [];
+    if (!this._exportPrefs.enabled) return items;
+
+    const board = window.KOSMOS?.productionRequestBoard;
+    if (!board) return items;
+
+    const colony = this._getOwnerColony();
+    const myPlanetId = colony?.planetId;
+    if (!myPlanetId) return items;
+
+    const available = board.getAvailableFor(myPlanetId);
+    for (const req of available) {
+      const def = COMMODITIES[req.commodityId];
+      if (!def) continue;
+      if (!this.isRecipeAvailable(req.commodityId)) continue;
+
+      // Filtr per-tier — Tier 3+ wymaga opt-in od gracza
+      const tier = def.tier ?? 1;
+      if (this._exportPrefs.tiers[tier] !== true) continue;
+
+      items.push({ commodityId: req.commodityId, qty: req.qty, requestId: req.id });
+    }
+    return items;
+  }
+
+  // Wywoływane z _update po wyprodukowaniu 1 szt. Sprawdza czy kolonia ma
+  // aktywne zlecenie eksportowe na ten towar — i jeśli tak, inkrementuje
+  // licznik produced. Gdy produced >= qtyTotal, emituje fulfill na board.
+  _onUnitProducedForExport(commodityId) {
+    const order = this._acceptedOrders.get(commodityId);
+    if (!order) {
+      // Być może właśnie zaczęliśmy produkować na zlecenie — sprawdź board.
+      // Przypisz do siebie pierwszy pasujący otwarty request.
+      const board = window.KOSMOS?.productionRequestBoard;
+      const colony = this._getOwnerColony();
+      if (!board || !colony) return;
+      const available = board.getAvailableFor(colony.planetId)
+        .filter(r => r.commodityId === commodityId && r.assignedTo == null);
+      if (available.length === 0) return;
+
+      // Weź pierwszy (najnowszy — alternatywnie: najwyższa urgency)
+      const pick = available.sort((a, b) => b.urgency - a.urgency)[0];
+      if (!board.assign(pick.id, colony.planetId)) return;
+      this._acceptedOrders.set(commodityId, {
+        requestId:   pick.id,
+        requesterId: pick.requesterId,
+        qtyTotal:    pick.qty,
+        produced:    1,
+      });
+      if (1 >= pick.qty) board.fulfill(pick.id, colony.planetId);
+      return;
+    }
+
+    order.produced += 1;
+    if (order.produced >= order.qtyTotal) {
+      const board = window.KOSMOS?.productionRequestBoard;
+      const colony = this._getOwnerColony();
+      if (board && colony) board.fulfill(order.requestId, colony.planetId);
+      this._acceptedOrders.delete(commodityId);
+    }
+  }
+
+  _forgetAcceptedOrder(requestId) {
+    if (!requestId) return;
+    for (const [cid, order] of this._acceptedOrders) {
+      if (order.requestId === requestId) {
+        this._acceptedOrders.delete(cid);
+        return;
+      }
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════

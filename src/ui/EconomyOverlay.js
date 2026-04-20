@@ -1209,6 +1209,7 @@ export class EconomyOverlay extends BaseOverlay {
         consumption: t('econPanel.reactiveSource.consumption'),
         trade: t('econPanel.reactiveSource.trade'),
         safety: t('econPanel.reactiveSource.safety'),
+        export_orders: t('econPanel.reactiveSource.exportOrders'),
       };
 
       for (const d of demand) {
@@ -1272,6 +1273,9 @@ export class EconomyOverlay extends BaseOverlay {
       ry += 14;
     }
 
+    // ── Sekcja: ZLECENIA EKSPORTOWE ────────────────────────────────────────
+    ry = this._drawExportOrdersSection(ctx, x, ry + 4, w, fs, colId);
+
     // ── Sekcja: MINIMALNE ZAPASY ───────────────────────────────────────────
     // Edytor progu dla KAŻDEGO towaru (również tech-locked — można pre-konfigurować).
     ry = this._drawMinStockEditor(ctx, x, ry + 4, w, fs, colId);
@@ -1295,6 +1299,106 @@ export class EconomyOverlay extends BaseOverlay {
       for (const a of allocs) {
         this._drawAllocRow(ctx, x + pad, ry, w - pad * 2, a, colony);
         ry += 40;
+      }
+    }
+
+    return ry;
+  }
+
+  // ── Sekcja: Zlecenia eksportowe (Plan B — cross-colony production) ──────
+  // Toggle globalny + 4 toggle per tier + lista obecnie realizowanych zleceń.
+  // Domyślnie: T1+T2 przyjmowane (proste towary), T3+T4 wymagają opt-in.
+  _drawExportOrdersSection(ctx, x, ry, w, fs, colId) {
+    const pad = 14;
+    const prefs = fs.exportPrefs ?? { enabled: true, tiers: { 1: true, 2: true, 3: false, 4: false } };
+
+    // Separator
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath();
+    ctx.moveTo(x + pad, ry);
+    ctx.lineTo(x + w - pad, ry);
+    ctx.stroke();
+    ry += 8;
+
+    // Nagłówek
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('econPanel.exportOrdersHeader'), x + pad, ry + 10);
+    ry += 16;
+
+    // Podpis
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('econPanel.exportOrdersHint'), x + pad, ry + 10);
+    ry += 16;
+
+    // Wiersz 1: toggle Enabled [ON]/[OFF]
+    const toggleW = 90;
+    const toggleLabel = prefs.enabled ? t('econPanel.exportOn') : t('econPanel.exportOff');
+    this._drawSmallBtnWide(ctx, x + pad, ry, toggleW, toggleLabel, prefs.enabled ? 'primary' : 'secondary');
+    this._addHit(x + pad, ry, toggleW, BTN_S, 'factory_btn', {
+      action: 'export_toggle_enabled', colonyId: colId,
+      label: toggleLabel, x: x + pad,
+    });
+
+    // Obok — wiersz toggle per tier
+    let tx = x + pad + toggleW + 12;
+    const tierW = 54;
+    for (const tier of [1, 2, 3, 4]) {
+      const on = prefs.tiers[tier] === true;
+      const label = `T${tier} ${on ? '✓' : '✗'}`;
+      const style = !prefs.enabled ? 'disabled' : (on ? 'primary' : 'secondary');
+      this._drawSmallBtnWide(ctx, tx, ry, tierW, label, style);
+      if (prefs.enabled) {
+        this._addHit(tx, ry, tierW, BTN_S, 'factory_btn', {
+          action: 'export_toggle_tier', colonyId: colId, tier,
+          label, x: tx,
+        });
+      }
+      tx += tierW + 4;
+    }
+    ry += BTN_S + 6;
+
+    // Lista przyjętych zleceń
+    const accepted = fs.acceptedOrders ?? [];
+    const board = window.KOSMOS?.productionRequestBoard;
+    const openForMe = board ? board.getAvailableFor(colId) : [];
+
+    if (accepted.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.exportAcceptedLabel', accepted.length), x + pad, ry + 10);
+      ry += 14;
+
+      const colMgr = window.KOSMOS?.colonyManager;
+      for (const order of accepted) {
+        const def = COMMODITIES[order.commodityId];
+        if (!def) continue;
+        const requester = colMgr?.getColony?.(order.requesterId);
+        const requesterName = requester?.name ?? '?';
+        const remaining = Math.max(0, order.qtyTotal - (order.produced ?? 0));
+
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textSecondary;
+        const line = `→ ${def.icon} ${getName(def, 'commodity')} × ${remaining}/${order.qtyTotal} · ${requesterName}`;
+        ctx.fillText(line, x + pad + 8, ry + 10);
+        ry += 14;
+      }
+    }
+
+    // Informacja o dostępnych zleceniach (nie przyjętych)
+    if (prefs.enabled && openForMe.length > 0) {
+      const pickupable = openForMe.filter(r => {
+        const def = COMMODITIES[r.commodityId];
+        if (!def) return false;
+        const tier = def.tier ?? 1;
+        return prefs.tiers[tier] === true;
+      });
+      if (pickupable.length > 0) {
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(t('econPanel.exportAvailable', pickupable.length), x + pad, ry + 10);
+        ry += 14;
       }
     }
 
@@ -1857,6 +1961,17 @@ export class EconomyOverlay extends BaseOverlay {
         break;
       case 'demand_minus':
         fs.setDemandBonus(data.commodityId, fs.getDemandBonus(data.commodityId) - 1);
+        break;
+
+      // ── Tryb reaktywny — zlecenia eksportowe (Plan B) ─
+      case 'export_toggle_enabled':
+        EventBus.emit('factory:setExportEnabled', { enabled: !fs.exportPrefs.enabled });
+        break;
+      case 'export_toggle_tier':
+        EventBus.emit('factory:setExportTier', {
+          tier: data.tier,
+          enabled: !fs.exportPrefs.tiers[data.tier],
+        });
         break;
     }
   }

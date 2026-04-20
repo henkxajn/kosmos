@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 56;
+export const CURRENT_VERSION     = 57;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -71,6 +71,7 @@ const MIGRATIONS = {
   53: _migrateV53toV54,
   54: _migrateV54toV55,
   55: _migrateV55toV56,
+  56: _migrateV56toV57,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1401,6 +1402,48 @@ function _migrateV35toV36(data) {
 function _migrateV55toV56(data) {
   if (data.civ4x && data.civ4x.eventLog == null) {
     data.civ4x.eventLog = { entries: [], nextId: 1 };
+  }
+  return data;
+}
+
+// ── v56 → v57: ProductionRequestBoard + per-kolonia acceptsExportOrders ─────
+// Board zaczyna pusty. Każda kolonia dostaje domyślne preferencje eksportu:
+//   { enabled: true, tiers: { 1: true, 2: true, 3: false, 4: false } }
+// (Tier 1-2 przyjmowane automatycznie, Tier 3+ wymaga explicit opt-in).
+// FactorySystem per-kolonia dostaje pole _everProducedHere = [] (set commodityId
+// które kolonia kiedykolwiek wyprodukowała — zawęża safety stock demand).
+function _migrateV56toV57(data) {
+  if (!data.civ4x) return data;
+
+  if (data.civ4x.productionRequestBoard == null) {
+    data.civ4x.productionRequestBoard = {
+      openRequests:   [],
+      nextId:         1,
+      totalCreated:   0,
+      totalFulfilled: 0,
+      totalExpired:   0,
+    };
+  }
+
+  const colonies = data.civ4x.colonies;
+  if (Array.isArray(colonies)) {
+    for (const col of colonies) {
+      if (col.acceptsExportOrders == null) {
+        col.acceptsExportOrders = {
+          enabled: true,
+          tiers:   { 1: true, 2: true, 3: false, 4: false },
+        };
+      }
+      if (col.factorySystem && col.factorySystem.everProducedHere == null) {
+        // Import z istniejących alokacji — jeśli coś było alokowane/produkowane,
+        // zakładamy że ta kolonia produkuje to lokalnie.
+        const seen = new Set();
+        for (const a of (col.factorySystem.allocations ?? [])) {
+          if ((a.produced ?? 0) > 0) seen.add(a.commodityId);
+        }
+        col.factorySystem.everProducedHere = [...seen];
+      }
+    }
   }
   return data;
 }

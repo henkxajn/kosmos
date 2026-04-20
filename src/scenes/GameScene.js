@@ -29,6 +29,7 @@ import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }         from '../systems/DepositSystem.js';
 import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
 import { CivilianTradeSystem }  from '../systems/CivilianTradeSystem.js';
+import { ProductionRequestBoard } from '../systems/ProductionRequestBoard.js';
 import TradeLog                 from '../systems/TradeLog.js';
 import { ResearchSystem }      from '../systems/ResearchSystem.js';
 import { DiscoverySystem }     from '../systems/DiscoverySystem.js';
@@ -179,6 +180,7 @@ export class GameScene {
     this.colonyManager   = new ColonyManager(this.techSystem);
     this.vesselManager   = new VesselManager();
     this.civilianTradeSystem = new CivilianTradeSystem(this.colonyManager);
+    this.productionRequestBoard = new ProductionRequestBoard();
     this.tradeLog          = new TradeLog();
     this.randomEventSystem = new RandomEventSystem();
     this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
@@ -216,6 +218,7 @@ export class GameScene {
     window.KOSMOS.vesselManager    = this.vesselManager;
     window.KOSMOS.overlayManager   = this.uiManager.overlayManager;
     window.KOSMOS.civilianTradeSystem = this.civilianTradeSystem;
+    window.KOSMOS.productionRequestBoard = this.productionRequestBoard;
     window.KOSMOS.tradeLog         = this.tradeLog;
     window.KOSMOS.timeSystem       = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
@@ -361,6 +364,10 @@ export class GameScene {
       // Przywróć EventLogSystem (zunifikowany dziennik — Opcja B)
       if (c4x.eventLog) {
         this.eventLogSystem.restore(c4x.eventLog);
+      }
+      // Przywróć ProductionRequestBoard (zlecenia produkcyjne cross-colony)
+      if (c4x.productionRequestBoard) {
+        this.productionRequestBoard.restore(c4x.productionRequestBoard);
       }
       // Przywróć CollisionForecast
       if (c4x.collisionForecast) {
