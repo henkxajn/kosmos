@@ -1647,31 +1647,33 @@ export class ColonyManager {
 
   // Rozformuj statek — zwrot 75% surowców/commodities, odblokowanie POP
   _disbandVessel(vesselId) {
+    const fail = (reason, details) => {
+      console.warn('[disband] NIEPOWODZENIE:', reason, details ?? '');
+      EventBus.emit('fleet:disbandFailed', { vesselId, reason, details });
+    };
+
     const vMgr = window.KOSMOS?.vesselManager;
-    if (!vMgr) { console.warn('[disband] VesselManager niedostępny'); return; }
+    if (!vMgr) return fail('VesselManager niedostępny');
     const vessel = vMgr.getVessel(vesselId);
-    if (!vessel) { console.warn('[disband] Nie znaleziono statku', vesselId); return; }
+    if (!vessel) return fail('Nie znaleziono statku', vesselId);
 
     // Tylko zadokowane statki (idle/refueling)
     if (vessel.position.state !== 'docked') {
-      console.warn('[disband] Statek nie zadokowany', vessel.name, vessel.position.state);
-      return;
+      return fail(`Statek ${vessel.name} nie zadokowany`, vessel.position.state);
     }
 
     const colony = this.getColony(vessel.colonyId);
-    if (!colony) { console.warn('[disband] Kolonia nie istnieje', vessel.colonyId); return; }
+    if (!colony) return fail('Kolonia nie istnieje', vessel.colonyId);
 
     // Wymaga stoczni w kolonii
     if (this._getShipyardLevel(colony) === 0) {
-      console.warn('[disband] Brak stoczni w', colony.name);
-      return;
+      return fail(`Brak stoczni w ${colony.name}`);
     }
 
     // Kadłub z SHIPS lub HULLS (custom design) — ten sam lookup co createVessel
     const shipDef = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
     if (!shipDef) {
-      console.warn('[disband] Nieznany shipId', vessel.shipId);
-      return;
+      return fail('Nieznany typ kadłuba', vessel.shipId);
     }
 
     // Zwrot 75% surowców i commodities budowy (kadłub)

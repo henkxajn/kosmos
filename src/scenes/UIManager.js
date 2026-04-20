@@ -429,6 +429,14 @@ export class UIManager {
     EventBus.on('fleet:buildFailed', ({ reason }) => {
       this._addNotification(`⚠ Stocznia: ${reason}`);
     });
+    EventBus.on('fleet:disbandFailed', ({ reason, details }) => {
+      const suffix = details ? ` (${details})` : '';
+      this._addNotification(`⚠ Disband: ${reason}${suffix}`);
+    });
+    EventBus.on('fleet:disbanded', ({ shipId }) => {
+      const ship = SHIPS[shipId] ?? null;
+      this._addNotification(`🗑 Statek rozformowany: ${ship?.namePL ?? shipId}`);
+    });
     EventBus.on('fleet:buildQueued', ({ shipId }) => {
       const ship = SHIPS[shipId];
       this._addNotification(`⏳ Stocznia: ${ship?.namePL ?? shipId} — oczekuje na surowce`);
