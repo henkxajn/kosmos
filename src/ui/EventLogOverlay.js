@@ -351,24 +351,35 @@ export class EventLogOverlay extends BaseOverlay {
    */
   _navigateToEntity(entityRef) {
     const entity = EntityManager.get(entityRef);
-    if (!entity) return;
-
     const colMgr = window.KOSMOS?.colonyManager;
     const ovMgr  = window.KOSMOS?.overlayManager;
+    const colony = colMgr?.getColony(entityRef);
 
-    // Zamknij dziennik
+    console.log('[EventLog] klik wpisu →', entityRef, {
+      entityExists: !!entity,
+      colonyExists: !!colony,
+      entityName:   entity?.name,
+    });
+
+    if (!entity && !colony) {
+      console.warn('[EventLog] nie znaleziono encji/kolonii dla entityRef', entityRef);
+      return;
+    }
+
+    // Zamknij dziennik PRZED otwarciem Colony (OverlayManager.openPanel sam zamknie,
+    // ale robimy to ręcznie żeby state był czysty)
     this.hide();
     if (ovMgr && ovMgr.active === 'eventLog') ovMgr.active = null;
 
     // Kolonia gracza → przełącz i otwórz Colony Overlay
-    if (colMgr?.getColony(entityRef)) {
+    if (colony) {
       colMgr.switchActiveColony(entityRef);
-      EventBus.emit('body:selected', { entity });
+      if (entity) EventBus.emit('body:selected', { entity });
       if (ovMgr) ovMgr.openPanel('colony');
       return;
     }
 
     // Inne encje (planeta obca, ciało bez kolonii) → tylko fokus
-    EventBus.emit('body:selected', { entity });
+    if (entity) EventBus.emit('body:selected', { entity });
   }
 }
