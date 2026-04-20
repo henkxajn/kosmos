@@ -1645,32 +1645,55 @@ export class ColonyManager {
     return true;
   }
 
-  // Rozformuj statek — zwrot 100% surowców/commodities, odblokowanie POP
+  // Rozformuj statek — zwrot 75% surowców/commodities, odblokowanie POP
   _disbandVessel(vesselId) {
     const vMgr = window.KOSMOS?.vesselManager;
-    if (!vMgr) return;
+    if (!vMgr) { console.warn('[disband] VesselManager niedostępny'); return; }
     const vessel = vMgr.getVessel(vesselId);
-    if (!vessel) return;
+    if (!vessel) { console.warn('[disband] Nie znaleziono statku', vesselId); return; }
 
     // Tylko zadokowane statki (idle/refueling)
-    if (vessel.position.state !== 'docked') return;
+    if (vessel.position.state !== 'docked') {
+      console.warn('[disband] Statek nie zadokowany', vessel.name, vessel.position.state);
+      return;
+    }
 
     const colony = this.getColony(vessel.colonyId);
-    if (!colony) return;
+    if (!colony) { console.warn('[disband] Kolonia nie istnieje', vessel.colonyId); return; }
 
     // Wymaga stoczni w kolonii
-    if (this._getShipyardLevel(colony) === 0) return;
+    if (this._getShipyardLevel(colony) === 0) {
+      console.warn('[disband] Brak stoczni w', colony.name);
+      return;
+    }
 
-    const shipDef = SHIPS[vessel.shipId];
-    if (!shipDef) return;
+    // Kadłub z SHIPS lub HULLS (custom design) — ten sam lookup co createVessel
+    const shipDef = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+    if (!shipDef) {
+      console.warn('[disband] Nieznany shipId', vessel.shipId);
+      return;
+    }
 
-    // Zwrot 75% surowców i commodities budowy
+    // Zwrot 75% surowców i commodities budowy (kadłub)
     const refund = {};
     for (const [resId, qty] of Object.entries(shipDef.cost || {})) {
       refund[resId] = Math.floor(qty * 0.75);
     }
     for (const [comId, qty] of Object.entries(shipDef.commodityCost || {})) {
       refund[comId] = Math.floor(qty * 0.75);
+    }
+    // Moduły custom designu — zwrot 75% każdego zainstalowanego modułu
+    if (Array.isArray(vessel.modules)) {
+      for (const modId of vessel.modules) {
+        const mod = SHIP_MODULES?.[modId];
+        if (!mod) continue;
+        for (const [resId, qty] of Object.entries(mod.cost || {})) {
+          refund[resId] = (refund[resId] ?? 0) + Math.floor(qty * 0.75);
+        }
+        for (const [comId, qty] of Object.entries(mod.commodityCost || {})) {
+          refund[comId] = (refund[comId] ?? 0) + Math.floor(qty * 0.75);
+        }
+      }
     }
     // Cargo statku — zwrot 100%
     if (vessel.cargo) {
@@ -1681,8 +1704,8 @@ export class ColonyManager {
     colony.resourceSystem.receive(refund);
 
     // Odblokuj POPy (załoga wraca) — bezpośrednio na kolonii właściciela
-    const crewCost = SHIPS[vessel.shipId]?.crewCost ?? 0;
-    const crewStrata = SHIPS[vessel.shipId]?.crewStrata ?? null;
+    const crewCost = shipDef.crewCost ?? 0;
+    const crewStrata = shipDef.crewStrata ?? null;
     if (crewCost > 0 && colony.civSystem) {
       colony.civSystem.unlockPops(crewCost, crewStrata);
     }
