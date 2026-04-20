@@ -1111,7 +1111,7 @@ export class ColonyOverlay extends BaseOverlay {
         }
       }
 
-      // ── Ikony statusu (🔌 offline, 🍖 głód, 📦 w coverage, 💤 transport) ──
+      // ── Ikony statusu (🔌 offline, 🍖 głód, 💤 transport) ──
       if (!isEnemy && hasSupplySys) {
         const iconY = sy - hs * 1.2;
         let iconX = sx - hs * 0.6;
@@ -1120,12 +1120,6 @@ export class ColonyOverlay extends BaseOverlay {
         if (unit.status === 'offline')           { ctx.fillText('🔌', iconX, iconY); iconX += hs * 0.55; }
         if ((unit.supply ?? 0) <= 0)             { ctx.fillText('🍖', iconX, iconY); iconX += hs * 0.55; }
         if (unit.transportStatus === 'loaded')   { ctx.fillText('💤', iconX, iconY); iconX += hs * 0.55; }
-        // 📦 w coverage — sprawdź w cache supplyCoverageSystem
-        const coverage = window.KOSMOS?.supplyCoverageSystem?.getCoverage?.(unit.planetId);
-        const inCov = coverage?.get(`${unit.q},${unit.r}`);
-        if (inCov && (inCov.type === 'capital' || inCov.type === 'barracks' || inCov.type === 'supplier')) {
-          ctx.fillText('📦', iconX, iconY);
-        }
       }
 
       // ── Trójkąt-znacznik nad jednostką (wierzchołkiem w dół) ──
