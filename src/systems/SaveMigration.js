@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 55;
+export const CURRENT_VERSION     = 56;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -70,6 +70,7 @@ const MIGRATIONS = {
   52: _migrateV52toV53,
   53: _migrateV53toV54,
   54: _migrateV54toV55,
+  55: _migrateV55toV56,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1390,6 +1391,16 @@ function _migrateV35toV36(data) {
   if (!colonies) return data;
   for (const col of colonies) {
     if (!col.pendingOutpostOrders) col.pendingOutpostOrders = [];
+  }
+  return data;
+}
+
+// ── v55 → v56: EventLogSystem (zunifikowany dziennik zdarzeń) ───────────────
+// Nowe pole: data.civ4x.eventLog = { entries: [], nextId: 1 }.
+// Stare save'y nie mają dziennika — start z pustym.
+function _migrateV55toV56(data) {
+  if (data.civ4x && data.civ4x.eventLog == null) {
+    data.civ4x.eventLog = { entries: [], nextId: 1 };
   }
   return data;
 }

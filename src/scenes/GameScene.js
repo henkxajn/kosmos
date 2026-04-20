@@ -43,6 +43,7 @@ import { FactionSystem }       from '../systems/FactionSystem.js';
 import { DysonSystem }          from '../systems/DysonSystem.js';
 import { AutoPauseSystem }      from '../systems/AutoPauseSystem.js';
 import { ScheduledEventSystem } from '../systems/ScheduledEventSystem.js';
+import { EventLogSystem }       from '../systems/EventLogSystem.js';
 import { buildScheduledEventPopup } from '../ui/ScheduledEventPopup.js';
 import { LEADERS }              from '../data/LeaderData.js';
 import { NARRATIVE_EVENTS_BY_ID } from '../data/NarrativeEventsData.js';
@@ -193,6 +194,7 @@ export class GameScene {
     this.dysonSystem         = new DysonSystem();
     this.autoPauseSystem     = new AutoPauseSystem();
     this.scheduledEventSystem = new ScheduledEventSystem();
+    this.eventLogSystem       = new EventLogSystem();
     this.empireRegistry       = new EmpireRegistry();
     this.intelSystem          = new IntelSystem();
     this.diplomacySystem      = new DiplomacySystem();
@@ -229,6 +231,7 @@ export class GameScene {
     window.KOSMOS.dysonSystem      = this.dysonSystem;
     window.KOSMOS.autoPauseSystem  = this.autoPauseSystem;
     window.KOSMOS.scheduledEventSystem = this.scheduledEventSystem;
+    window.KOSMOS.eventLogSystem       = this.eventLogSystem;
     window.KOSMOS.empireRegistry   = this.empireRegistry;
     window.KOSMOS.intelSystem      = this.intelSystem;
     window.KOSMOS.diplomacySystem  = this.diplomacySystem;
@@ -354,6 +357,10 @@ export class GameScene {
       // Przywróć ObservatorySystem
       if (c4x.observatorySystem) {
         this.observatorySystem.restore(c4x.observatorySystem);
+      }
+      // Przywróć EventLogSystem (zunifikowany dziennik — Opcja B)
+      if (c4x.eventLog) {
+        this.eventLogSystem.restore(c4x.eventLog);
       }
       // Przywróć CollisionForecast
       if (c4x.collisionForecast) {

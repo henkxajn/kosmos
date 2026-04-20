@@ -23,6 +23,7 @@ export class OverlayManager {
       'i': 'intel',           // Faza 2 — Wywiad (obce imperia)
       'y': 'diplomacy',       // Faza 3 — Dyplomacja (relacje z obcymi)
       'w': 'war',             // Faza 4 — Panel wojny
+      'l': 'eventLog',        // Opcja B/3 — Dziennik zdarzeń
     };
   }
 

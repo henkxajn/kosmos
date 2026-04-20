@@ -11,8 +11,14 @@ import { t, getLocale }   from '../i18n/i18n.js';
 import { showAutoPauseSettings } from './AutoPauseSettingsModal.js';
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
-const LOG_INLINE = 2; // ile wpisów widocznych inline
-const LOG_EXPANDED = 6; // ile wpisów po rozwinięciu
+const LOG_INLINE = 2; // ile wpisów widocznych inline w zwiniętym pasku
+
+// Kolory per severity (info/warn/alert) — używane do wyróżnienia ważnych wpisów
+function _severityColor(sev) {
+  if (sev === 'alert') return THEME.danger;
+  if (sev === 'warn')  return THEME.warning;
+  return null; // info → kolor domyślny z THEME
+}
 
 // Wymiary panelu MENU
 const MENU_W = 220;
@@ -55,7 +61,9 @@ function _truncate(str, maxLen) {
 
 export class BottomBar {
   constructor() {
-    this._expanded = false; // rozwinięty EventLog
+    // Opcja B/3: rozwinięcie dziennika = osobny pełnoekranowy overlay (klawisz L).
+    // Przycisk ▲ deleguje otwarcie do OverlayManager — BottomBar nie rysuje już
+    // żadnego rozwiniętego panelu sam.
     this._menuOpen = false; // panel menu otwarty
     this._hoverRow = -1;    // podświetlony wiersz menu (-1 = żaden)
     this._domMenu = null;   // DOM element panelu menu (z-index nad wszystkimi canvasami)
@@ -95,33 +103,18 @@ export class BottomBar {
   // ── Rysowanie ───────────────────────────────────────────
   draw(ctx, W, H, state) {
     this._lastState = state; // zachowaj do DOM menu
-    const { stability, logEntries, audioEnabled, musicEnabled, autoSlow, civMode } = state;
+    const { stability, logSystem, logEntriesFallback, audioEnabled, musicEnabled, autoSlow, civMode } = state;
     const barY = H - BAR_H;
 
     // Czy tryb Generator (stabilność widoczna)
     const isGenerator = window.KOSMOS?.scenario === 'generator';
     const expandedLogX = isGenerator ? 160 : 10;
 
-    // Rozwinięty log — dodatkowe tło nad paskiem
-    const expandedH = this._expanded ? LOG_EXPANDED * 14 + 8 : 0;
-
-    if (this._expanded && expandedH > 0) {
-      const expY = barY - expandedH;
-      ctx.fillStyle = bgAlpha(0.42);
-      ctx.fillRect(0, expY, W, expandedH);
-      ctx.strokeStyle = GLASS_BORDER;
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(0, expY); ctx.lineTo(W, expY); ctx.stroke();
-
-      // Rozwinięte wpisy
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      const entries = (logEntries || []).slice(0, LOG_EXPANDED);
-      entries.forEach((entry, i) => {
-        ctx.fillStyle = entry.color || C.text;
-        const yr = entry.year > 0 ? `${_shortYear(entry.year)} ` : '';
-        ctx.fillText(yr + _truncate(entry.text, 60), expandedLogX, expY + 12 + i * 14);
-      });
-    }
+    // Opcja B/3: tylko inline 2 wpisy w cienkim pasku.
+    // Pełna historia + filtry → overlay 'eventLog' (klawisz L lub klik ▲).
+    const visibleEntries = logSystem
+      ? logSystem.getVisible()
+      : (logEntriesFallback || []);
 
     // Tło paska
     ctx.fillStyle = bgAlpha(0.40);
@@ -165,25 +158,43 @@ export class BottomBar {
       logX = 140;
     }
 
-    // ── Sekcja centralna: EventLog (inline) ──
-    const logW = W - logX - 100; // dynamicznie zależne od logX
-    const maxChars = Math.floor(logW / 6);
+    // ── Sekcja centralna: EventLog (inline, 2 wpisy, flash 3s, klikalna całość) ──
+    const menuBtnW = 64;
+    const menuBtnX = W - menuBtnW - 6;
+    const logAreaX = logX;
+    const logAreaW = (menuBtnX - 8) - logAreaX;
+    this._logClickBounds = { x: logAreaX, y: barY, w: logAreaW, h: BAR_H };
 
+    // Ikona „otwórz dziennik" (📜) + strzałka stanu — na początku sekcji logu
+    const activeOverlay = window.KOSMOS?.overlayManager?.active;
+    const overlayOpen = activeOverlay === 'eventLog';
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    const entries = (logEntries || []).slice(0, LOG_INLINE);
-    let lx = logX;
+    ctx.fillStyle = overlayOpen ? C.title : C.label;
+    ctx.fillText(overlayOpen ? '📜▼' : '📜▲', logAreaX, textY);
+    const entriesStartX = logAreaX + 28;
+
+    // Wpisy inline po ikonie
+    const entriesW = menuBtnX - entriesStartX - 8;
+    const maxChars = Math.max(10, Math.floor(entriesW / 6));
+
+    const entries = visibleEntries.slice(0, LOG_INLINE);
+    const now = Date.now();
+    let lx = entriesStartX;
     entries.forEach((entry, i) => {
-      ctx.fillStyle = entry.color || C.text;
+      const baseColor = _entryColor(entry);
+      const age = now - (entry.createdAt ?? 0);
+      const flashing = i === 0 && age < 3000 && age > 0;
+      if (flashing) {
+        const pulse = 0.5 + 0.5 * Math.cos(age * 0.008);
+        ctx.globalAlpha = 0.6 + 0.4 * pulse;
+      }
+      ctx.fillStyle = baseColor;
       const yr = entry.year > 0 ? `${_shortYear(entry.year)} ` : '';
       const txt = yr + _truncate(entry.text, Math.floor(maxChars / LOG_INLINE) - 2);
       ctx.fillText(txt, lx, textY);
+      ctx.globalAlpha = 1.0;
       lx += ctx.measureText(txt).width + 16;
     });
-
-    // Przycisk rozwinięcia [▲/▼]
-    const expandBtnX = logX - 14;
-    ctx.fillStyle = this._expanded ? C.title : C.label;
-    ctx.fillText(this._expanded ? '▼' : '▲', expandBtnX, textY);
 
     // ── Sekcja prawa: przycisk MENU ──
     this._drawMenuButton(ctx, W, H, textY);
@@ -407,12 +418,8 @@ export class BottomBar {
     }
 
     const barY = H - BAR_H;
+
     if (y < barY) {
-      // Rozwinięty EventLog
-      if (this._expanded) {
-        const expandedH = LOG_EXPANDED * 14 + 8;
-        if (y >= barY - expandedH) return true; // pochłoń klik w rozw. logu
-      }
       return false;
     }
 
@@ -426,11 +433,17 @@ export class BottomBar {
       return true;
     }
 
-    // Przycisk rozwinięcia EventLog
-    const logExpandX = 126;
-    if (x >= logExpandX - 8 && x <= logExpandX + 12) {
-      this._expanded = !this._expanded;
-      return true;
+    // Klik gdziekolwiek w sekcji logu (ikona 📜 lub inline wpisy) → toggle overlay 'eventLog'
+    if (this._logClickBounds) {
+      const b = this._logClickBounds;
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+        const ovMgr = window.KOSMOS?.overlayManager;
+        if (ovMgr) {
+          if (ovMgr.active === 'eventLog') ovMgr.closeActive();
+          else ovMgr.openPanel('eventLog');
+        }
+        return true;
+      }
     }
 
     return true; // pochłoń klik w pasku dolnym
@@ -491,11 +504,25 @@ export class BottomBar {
       const menuY = H - BAR_H - MENU_H - 4;
       if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) return true;
     }
-    // Rozwinięty EventLog
-    if (this._expanded) {
-      const expandedH = LOG_EXPANDED * 14 + 8;
-      if (y >= barY - expandedH) return true;
-    }
+    // (Opcja B/3: rozwinięty panel dziennika przeniesiony do overlay 'eventLog')
     return false;
   }
+}
+
+// ── Helper: kolor wpisu (severity > type > default) ───────────────────────────
+// Eksport lokalny dla BottomBar — używa THEME.
+function _entryColor(entry) {
+  const sevColor = _severityColor(entry.severity);
+  if (sevColor) return sevColor;
+  // Info → kolor wg kanału (fleet info niebieskawy, civ zielony itp.)
+  const chanColors = {
+    fleet:  THEME.info,
+    civ:    THEME.accent,
+    life:   THEME.success,
+    combat: THEME.danger,
+    trade:  THEME.mint,
+    intel:  THEME.purple ?? THEME.accent,
+    system: THEME.textSecondary,
+  };
+  return chanColors[entry.channel] ?? THEME.textSecondary;
 }

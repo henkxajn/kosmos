@@ -17,6 +17,7 @@ import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC }          from '../config/LayoutConfig.js';
 import { OverlayManager }  from '../ui/OverlayManager.js';
 import { FleetManagerOverlay } from '../ui/FleetManagerOverlay.js';
+import { EventLogOverlay }    from '../ui/EventLogOverlay.js';
 import { PopulationOverlay }   from '../ui/PopulationOverlay.js';
 import { EconomyOverlay }      from '../ui/EconomyOverlay.js';
 import { TechOverlay }         from '../ui/TechOverlay.js';
@@ -220,6 +221,7 @@ export class UIManager {
     this.overlayManager.register('intel', new IntelOverlay());
     this.overlayManager.register('diplomacy', new DiplomacyOverlay());
     this.overlayManager.register('war', new WarOverlay());
+    this.overlayManager.register('eventLog', new EventLogOverlay());
 
     this._setupEvents();
     this._startDrawLoop();
@@ -417,29 +419,29 @@ export class UIManager {
       this._addNotification(`⚠ Zmiana celu: ${reason}`);
     });
 
-    // Flota
+    // Flota — kanał 'fleet', severity info/warn zależnie od zdarzenia
     EventBus.on('fleet:buildStarted', ({ shipId }) => {
       const ship = SHIPS[shipId];
-      this._addNotification(`⚓ Stocznia: budowa ${ship?.namePL ?? shipId}`);
+      this._addNotification(`⚓ Stocznia: budowa ${ship?.namePL ?? shipId}`, 'fleet', 'info');
     });
     EventBus.on('fleet:shipCompleted', ({ shipId }) => {
       const ship = SHIPS[shipId];
-      this._addNotification(`✅ Statek gotowy: ${ship?.icon ?? '🚀'} ${ship?.namePL ?? shipId}`);
+      this._addNotification(`✅ Statek gotowy: ${ship?.icon ?? '🚀'} ${ship?.namePL ?? shipId}`, 'fleet', 'info');
     });
     EventBus.on('fleet:buildFailed', ({ reason }) => {
-      this._addNotification(`⚠ Stocznia: ${reason}`);
+      this._addNotification(`⚠ Stocznia: ${reason}`, 'fleet', 'warn');
     });
     EventBus.on('fleet:disbandFailed', ({ reason, details }) => {
       const suffix = details ? ` (${details})` : '';
-      this._addNotification(`⚠ Disband: ${reason}${suffix}`);
+      this._addNotification(`⚠ Disband: ${reason}${suffix}`, 'fleet', 'warn');
     });
     EventBus.on('fleet:disbanded', ({ shipId }) => {
       const ship = SHIPS[shipId] ?? null;
-      this._addNotification(`🗑 Statek rozformowany: ${ship?.namePL ?? shipId}`);
+      this._addNotification(`🗑 Statek rozformowany: ${ship?.namePL ?? shipId}`, 'fleet', 'info');
     });
     EventBus.on('fleet:buildQueued', ({ shipId }) => {
       const ship = SHIPS[shipId];
-      this._addNotification(`⏳ Stocznia: ${ship?.namePL ?? shipId} — oczekuje na surowce`);
+      this._addNotification(`⏳ Stocznia: ${ship?.namePL ?? shipId} — oczekuje na surowce`, 'fleet', 'info');
     });
 
     // Vessel events
@@ -448,16 +450,16 @@ export class UIManager {
       const icon = sd?.icon ?? '🚀';
       const mIcon = mission?.type === 'colony' ? '🚢'
         : mission?.type === 'transport' ? '📦' : mission?.type === 'recon' ? '🔭' : '⛏';
-      this._addNotification(`${icon} ${vessel.name} → ${mission?.targetName ?? '?'} (${mIcon} ${mission?.type})`);
+      this._addNotification(`${icon} ${vessel.name} → ${mission?.targetName ?? '?'} (${mIcon} ${mission?.type})`, 'fleet', 'info');
     });
     EventBus.on('vessel:docked', ({ vessel }) => {
-      this._addNotification(`↩ ${vessel.name} powrócił`);
+      this._addNotification(`↩ ${vessel.name} powrócił`, 'fleet', 'info');
     });
 
     // Autosave
     EventBus.on('game:saved', ({ gameTime }) => {
       const y = Math.round(gameTime).toLocaleString('pl-PL');
-      this._addNotification(`\u{1F4BE} Zapisano (${y} lat)`);
+      this._addNotification(`\u{1F4BE} Zapisano (${y} lat)`, 'system', 'info');
     });
 
     // Dialog Nowa Gra (emitowane z BottomBar)
@@ -584,7 +586,7 @@ export class UIManager {
       const bName = bDef ? getName(bDef, 'building') : order.buildingId;
       const targetName = order.targetName ?? order.targetId ?? '?';
       this._log(t('log.outpostOrderQueued', bName, targetName), 'expedition_ok');
-      this._addNotification(`⏳ ${bName} → ${targetName}`);
+      this._addNotification(`⏳ ${bName} → ${targetName}`, 'fleet', 'info');
     });
     EventBus.on('colony:founded', ({ colony }) => {
       this._log(t('log.colonyFounded', colony.name), 'new_planet');
@@ -679,9 +681,18 @@ export class UIManager {
 
   _log(text, type = 'info') {
     this._dirty = true;
-    const MAX = 8;
-    this._logEntries.unshift({ year: this._logYear, text, color: LOG_COLORS[type] || C.text });
-    if (this._logEntries.length > MAX) this._logEntries.length = MAX;
+    // Opcja B: jedyne źródło prawdy to EventLogSystem. Stare wywołania
+    // z `type` (collision_absorb, civ_famine itd.) mapują się przez pushLegacy
+    // na {channel, severity}. Kolor wpisu czytany jest w BottomBar z LOG_COLORS
+    // — zachowane dla wizualnej ciągłości.
+    const logSys = window.KOSMOS?.eventLogSystem;
+    if (logSys) {
+      logSys.pushLegacy(text, type);
+    } else {
+      // Fallback (pre-init): dawne _logEntries jako bufor przejściowy.
+      this._logEntries.unshift({ year: this._logYear, text, color: LOG_COLORS[type] || C.text, type });
+      if (this._logEntries.length > 8) this._logEntries.length = 8;
+    }
   }
 
   addInfo(text) { this._log(text, 'info'); }
@@ -692,10 +703,15 @@ export class UIManager {
   /** Invaliduj cache kolonii + wymuszaj przerysowanie */
   invalidateColonies() { this._coloniesDirty = true; this._dirty = true; }
 
-  _addNotification(text) {
+  /**
+   * Opcja B: powiadomienia idą do dziennika zamiast do toasta.
+   * Wszystkie historyczne wywołania zachowane — channel='system' to bezpieczny default.
+   * Nowe callsite'y powinny podać channel+severity (np. fleet/warn dla porażki budowy).
+   */
+  _addNotification(text, channel = 'system', severity = 'info') {
     this._dirty = true;
-    this._animating = true;
-    this._notifications.push({ text, alpha: 1.0, endTime: Date.now() + 2800 });
+    const logSys = window.KOSMOS?.eventLogSystem;
+    if (logSys) logSys.push({ text, channel, severity });
   }
 
   _flashResource(resource) {
@@ -1000,7 +1016,10 @@ export class UIManager {
     // ── BottomBar (stabilność + EventLog + przyciski) ────────
     this._bottomBar.draw(ctx, W, H, {
       stability: this._stability,
-      logEntries: this._logEntries,
+      // Opcja B: BottomBar sam czyta z EventLogSystem (filtry per-kanał)
+      logSystem: window.KOSMOS?.eventLogSystem ?? null,
+      // Fallback pre-init: stara tablica (wyłącznie zanim GameScene zainicjuje system)
+      logEntriesFallback: this._logEntries,
       audioEnabled: this._audioEnabled,
       musicEnabled: this._musicEnabled,
       autoSlow: this._timeState.autoSlow,
@@ -1033,8 +1052,7 @@ export class UIManager {
     // ── Panel akcji gracza (tylko tryb Generator) ────────────
     if (!civMode && window.KOSMOS?.scenario === 'generator') this._drawActionPanel();
 
-    // ── Powiadomienia (fade out) ─────────────────────────────
-    this._drawNotifications();
+    // ── Powiadomienia (Opcja B): toast usunięty, wszystko w BottomBar EventLog ─
 
     // ── Tooltip TopBar (na wierzchu) ─────────────────────────
     if (civMode) this._topBar.drawTooltip(ctx, W, UI_SCALE);
@@ -1051,8 +1069,11 @@ export class UIManager {
     // ── Game Over ─────────────────────────────────────────────
     if (this._gameOverData) this._drawGameOver();
 
-    // ── Aktualizuj flagę animacji — kontynuuj redraw przy fade/pulse ──
-    this._animating = this._notifications.length > 0 || !!this._gameOverData;
+    // ── Aktualizuj flagę animacji — kontynuuj redraw przy flash nowego wpisu/Game Over ──
+    const logSys = window.KOSMOS?.eventLogSystem;
+    const latest = logSys?.getLatest();
+    const flashActive = latest && (Date.now() - latest.createdAt) < 3000;
+    this._animating = flashActive || !!this._gameOverData;
 
     ctx.restore();
   }
