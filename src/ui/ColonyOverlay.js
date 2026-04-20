@@ -1343,7 +1343,7 @@ export class ColonyOverlay extends BaseOverlay {
 
         // Kolor wg ownera OBECNEGO hexa (rysujemy granicę od wewnątrz)
         let borderColor = null;
-        if (tile.owner === 'player') borderColor = '#60E0B0';
+        if (tile.owner === 'player') borderColor = '#64A0FF';
         else if (tile.owner && tile.owner !== 'player') borderColor = '#D85A30';
         if (!borderColor) continue;
 
