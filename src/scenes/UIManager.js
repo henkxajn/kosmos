@@ -307,10 +307,12 @@ export class UIManager {
           const wasBefore = this._wasBrownout;
           this._energyFlow = { ...inventory._energy };
           const isNow = !!this._energyFlow.brownout;
+          // Brownout dotyczy aktywnej kolonii (resource:changed emituje tylko aktywna).
+          const activeColonyId = window.KOSMOS?.colonyManager?.getActiveColony?.()?.planetId ?? null;
           if (isNow && !wasBefore) {
-            this._log(t('log.brownoutStart'), 'civ_unrest');
+            this._log(t('log.brownoutStart'), 'civ_unrest', activeColonyId);
           } else if (!isNow && wasBefore) {
-            this._log(t('log.brownoutEnd'), 'expedition_ok');
+            this._log(t('log.brownoutEnd'), 'expedition_ok', activeColonyId);
           }
           this._wasBrownout = isNow;
         }
@@ -633,8 +635,8 @@ export class UIManager {
     EventBus.on('colony:migration', ({ from, to, count }) => {
       this._log(t('log.migration', count, from, to), 'info');
     });
-    EventBus.on('trade:migrationExecuted', ({ fromName, toName, popQty, krCost }) => {
-      this._log(t('log.civMigration', popQty.toFixed(2), fromName, toName, krCost.toFixed(0)), 'info');
+    EventBus.on('trade:migrationExecuted', ({ fromName, toName, toId, popQty, krCost }) => {
+      this._log(t('log.civMigration', popQty.toFixed(2), fromName, toName, krCost.toFixed(0)), 'info', toId);
     });
 
     // Prosperity events
