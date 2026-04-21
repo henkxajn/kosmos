@@ -38,6 +38,7 @@ import { CollisionForecast } from '../systems/CollisionForecast.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { GroundUnitManager } from '../systems/GroundUnitManager.js';
 import { CombatSystem } from '../systems/CombatSystem.js';
+import { ArmySystem } from '../systems/ArmySystem.js';
 import { SupplyCoverageSystem } from '../systems/SupplyCoverageSystem.js';
 import { AnomalyEffectSystem } from '../systems/AnomalyEffectSystem.js';
 import { LeaderSystem }        from '../systems/LeaderSystem.js';
@@ -192,6 +193,7 @@ export class GameScene {
     this.collisionForecast = new CollisionForecast();
     this.groundUnitManager = new GroundUnitManager();
     this.combatSystem         = new CombatSystem();
+    this.armySystem           = new ArmySystem();
     this.supplyCoverageSystem = new SupplyCoverageSystem(this.colonyManager, this.groundUnitManager);
     this.anomalyEffectSystem = new AnomalyEffectSystem();
     this.leaderSystem        = new LeaderSystem();
@@ -231,6 +233,7 @@ export class GameScene {
     window.KOSMOS.collisionForecast = this.collisionForecast;
     window.KOSMOS.groundUnitManager  = this.groundUnitManager;
     window.KOSMOS.combatSystem       = this.combatSystem;
+    window.KOSMOS.armySystem         = this.armySystem;
     window.KOSMOS.supplyCoverageSystem = this.supplyCoverageSystem;
     window.KOSMOS.anomalyEffectSystem = this.anomalyEffectSystem;
     window.KOSMOS.leaderSystem     = this.leaderSystem;
@@ -465,6 +468,10 @@ export class GameScene {
       // Przywróć GroundUnitManager
       if (c4x.groundUnitManager) {
         this.groundUnitManager.restore(c4x.groundUnitManager);
+      }
+      // Przywróć ArmySystem (Paradox-style grupy)
+      if (c4x.armySystem) {
+        this.armySystem.restore(c4x.armySystem);
       }
       // Przywróć AnomalyEffectSystem (planet modifiers)
       if (c4x.anomalyEffectSystem) {

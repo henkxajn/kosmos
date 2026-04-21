@@ -5,7 +5,8 @@
 // Nagłówek: nazwa kolonii + POP + budynki.
 
 import { BaseOverlay }  from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER, hexToRgb } from '../config/ThemeConfig.js';
+import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
 import { BUILDINGS, RESOURCE_ICONS, formatCost } from '../data/BuildingsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
@@ -675,23 +676,43 @@ export class ColonyOverlay extends BaseOverlay {
     if (this._selectedHex && !this._selectedUnit && grid && colony) {
       const tile = grid.get(this._selectedHex.q, this._selectedHex.r);
       if (tile) {
-        const sp = this._tileScreenPos(tile, grid, ox, oy, ow, oh);
-        // Panel po prawej od hexa (lub lewej jeśli nie mieści się)
-        let fx = sp.x + this._hexSize + 8;
-        let fy = sp.y - 60;
-        if (fx + FLOAT_W > ox + ow - 10) fx = sp.x - FLOAT_W - this._hexSize - 8;
-        // Ogranicz pozycję — panel musi mieścić się w overlay
-        const panelH = this._floatH ?? 300;
-        fy = Math.max(mapY + 4, Math.min(oy + oh - panelH - 4, fy));
-        fx = Math.max(ox + 4, Math.min(ox + ow - FLOAT_W - 4, fx));
-        this._floatX = fx; this._floatY = fy;
-        this._drawFloatingPanel(ctx, fx, fy, tile, colony, grid);
+        // Jeśli na hexie jest stack (≥2 player units) → pokaż stack panel
+        const gum = window.KOSMOS?.groundUnitManager;
+        const playerStack = gum?.getUnitsAtHex?.(colony.planetId, tile.q, tile.r)
+          .filter(u => !u.owner || u.owner === 'player') ?? [];
+        if (playerStack.length >= 2) {
+          const sp = this._tileScreenPos(tile, grid, ox, oy, ow, oh);
+          let fx = sp.x + this._hexSize + 8;
+          let fy = sp.y - 60;
+          const STACK_W = 240;
+          if (fx + STACK_W > ox + ow - 10) fx = sp.x - STACK_W - this._hexSize - 8;
+          fx = Math.max(ox + 4, Math.min(ox + ow - STACK_W - 4, fx));
+          fy = Math.max(mapY + 4, fy);
+          this._floatX = fx; this._floatY = fy;
+          this._drawStackFloatingPanel(ctx, fx, fy, STACK_W, playerStack, tile);
+        } else {
+          // Zwykły panel budowy
+          const sp = this._tileScreenPos(tile, grid, ox, oy, ow, oh);
+          let fx = sp.x + this._hexSize + 8;
+          let fy = sp.y - 60;
+          if (fx + FLOAT_W > ox + ow - 10) fx = sp.x - FLOAT_W - this._hexSize - 8;
+          const panelH = this._floatH ?? 300;
+          fy = Math.max(mapY + 4, Math.min(oy + oh - panelH - 4, fy));
+          fx = Math.max(ox + 4, Math.min(ox + ow - FLOAT_W - 4, fx));
+          this._floatX = fx; this._floatY = fy;
+          this._drawFloatingPanel(ctx, fx, fy, tile, colony, grid);
+        }
       }
     }
 
     // Panel jednostki naziemnej
     if (this._selectedUnit && colony) {
       this._drawUnitPanel(ctx, ox, oy, ow, oh);
+    }
+
+    // Bottom Drawer (Paradox HoI4-style) — pas pod mapą gdy coś zaznaczone
+    if (this._selectedUnits.size > 0 && colony) {
+      this._drawBottomDrawer(ctx, ox, oy, ow, oh);
     }
 
     // Landing mode indicator
@@ -1555,6 +1576,32 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
 
+    // Army banner (Paradox-style flag nad hexem) — rysowany dla każdej armii
+    const armySys = window.KOSMOS?.armySystem;
+    if (armySys) {
+      const armies = armySys.getArmiesOnPlanet?.(colony.planetId) ?? [];
+      for (const army of armies) {
+        if (army.ownerId !== 'player') continue;
+        const pos = grid.tilePixelPos(army.q, army.r, hs);
+        const bx = cx + pos.x;
+        const by = cy + pos.y - hs * 0.85;
+        // Proporzec (flag) — mały prostokąt z napisem
+        ctx.save();
+        ctx.fillStyle = 'rgba(224, 192, 96, 0.92)';
+        ctx.fillRect(bx - 14, by - 9, 28, 14);
+        ctx.strokeStyle = '#8A6020';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx - 14, by - 9, 28, 14);
+        ctx.font = `bold 9px ${THEME.fontFamily}`;
+        ctx.fillStyle = '#2a1608';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🎖', bx, by - 2);
+        ctx.textBaseline = 'alphabetic';
+        ctx.restore();
+      }
+    }
+
     // Support target lines — cyan linia od supportera do wspieranego hexu
     for (const u of units) {
       if (!u.supportTarget) continue;
@@ -1571,6 +1618,248 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  // ── Floating Stack Panel (Paradox-style przy hexie ze stackiem ≥2) ──────
+  _drawStackFloatingPanel(ctx, x, y, w, units, tile) {
+    const ROW_H = 20;
+    const H_PAD = 8;
+    const armySys = window.KOSMOS?.armySystem;
+    const firstUnit = units[0];
+    const existingArmy = armySys?.getArmyOnHex?.(firstUnit.planetId, tile.q, tile.r);
+    const h = 40 + units.length * ROW_H + 80;  // header + rows + action buttons
+
+    // Tło
+    ctx.save();
+    ctx.fillStyle = 'rgba(6, 12, 22, 0.96)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = existingArmy ? '#E0C060' : '#64A0FF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+
+    // Header
+    ctx.fillStyle = existingArmy ? 'rgba(224, 192, 96, 0.18)' : 'rgba(100, 160, 255, 0.15)';
+    ctx.fillRect(x, y, w, 24);
+    ctx.font = `bold 11px ${THEME.fontFamily}`;
+    ctx.fillStyle = existingArmy ? '#E0C060' : '#80B8FF';
+    ctx.textAlign = 'left';
+    const header = existingArmy
+      ? `🎖 ${existingArmy.name} (${tile.q},${tile.r})`
+      : `👥 STACK (${tile.q},${tile.r}) — ${units.length} jedn.`;
+    ctx.fillText(header, x + H_PAD, y + 16);
+
+    // Lista jednostek
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    let ry = y + 32;
+    let sumDmg = 0, sumHp = 0, sumHpMax = 0;
+    for (const u of units) {
+      const arch = UNIT_ARCHETYPES[u.archetypeId];
+      const hp = Math.round(u.hp ?? 0);
+      const maxHp = arch?.baseStats?.hp ?? u.hpMax ?? hp;
+      sumDmg += arch?.baseStats?.dmg ?? u.attack ?? 0;
+      sumHp += hp;
+      sumHpMax += maxHp;
+      const inArmy = armySys?.getArmyForUnit?.(u.id);
+      const isSelected = this._selectedUnits.has(u.id);
+
+      // Tło wiersza
+      if (isSelected) {
+        ctx.fillStyle = 'rgba(100,160,255,0.12)';
+        ctx.fillRect(x + 2, ry - 4, w - 4, ROW_H - 2);
+      }
+
+      // Icon + name
+      ctx.textAlign = 'left';
+      ctx.fillStyle = THEME.textPrimary;
+      const icon = arch?.icon ?? '🪖';
+      const nm = arch?.descriptionPL?.split('.')[0] ?? u.archetypeId ?? u.type;
+      const label = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
+      ctx.fillText(`${icon} ${label}`, x + H_PAD, ry + 10);
+
+      // HP right-aligned
+      ctx.textAlign = 'right';
+      const hpFrac = maxHp > 0 ? hp / maxHp : 0;
+      ctx.fillStyle = hpFrac > 0.6 ? '#80D840' : hpFrac > 0.3 ? '#D88040' : '#D84040';
+      ctx.fillText(`${hp}/${maxHp}`, x + w - H_PAD, ry + 10);
+
+      // Hit zone per row (klik → toggle selection)
+      this._addHit(x, ry - 4, w, ROW_H - 2, 'stackRowClick', { unitId: u.id });
+
+      ry += ROW_H;
+    }
+
+    // Sum stats
+    const sumY = ry + 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(x + 2, sumY, w - 4, 18);
+    ctx.font = `10px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.textAlign = 'center';
+    ctx.fillText(`Σ DMG ${sumDmg} · HP ${sumHp}/${sumHpMax}`, x + w / 2, sumY + 12);
+
+    // Action buttons
+    const btnY = sumY + 22;
+    const btnH = 22;
+    const btns = [];
+    if (existingArmy) {
+      btns.push({ label: '➕ Podziel', color: '#80B8FF', type: 'armySplit', data: { armyId: existingArmy.id } });
+      btns.push({ label: '💔 Rozwiąż', color: '#D85A30', type: 'armyDisband', data: { armyId: existingArmy.id } });
+      btns.push({ label: '✏ Nazwa', color: '#80D840', type: 'armyRename', data: { armyId: existingArmy.id } });
+    } else {
+      btns.push({ label: '⚡ Zaznacz', color: '#80B8FF', type: 'stackSelectAll', data: { tileQ: tile.q, tileR: tile.r } });
+      btns.push({ label: '🎖 Połącz w armię', color: '#E0C060', type: 'armyCreate', data: { tileQ: tile.q, tileR: tile.r } });
+    }
+
+    const btnW = (w - H_PAD * (btns.length + 1)) / btns.length;
+    let bx = x + H_PAD;
+    for (const b of btns) {
+      const c = hexToRgb ? hexToRgb(b.color) : { r: 100, g: 160, b: 255 };
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.22)`;
+      ctx.fillRect(bx, btnY, btnW, btnH);
+      ctx.strokeStyle = b.color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(bx, btnY, btnW, btnH);
+      ctx.font = `bold 10px ${THEME.fontFamily}`;
+      ctx.fillStyle = b.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(b.label, bx + btnW / 2, btnY + 14);
+      this._addHit(bx, btnY, btnW, btnH, b.type, b.data);
+      bx += btnW + H_PAD;
+    }
+
+    ctx.restore();
+  }
+
+  // ── Bottom Drawer (Paradox HoI4-style pod mapą) ─────────────────────────
+  _drawBottomDrawer(ctx, ox, oy, ow, oh) {
+    const sel = this._getSelectedPlayerUnits();
+    if (sel.length === 0) return 0;  // Brak draw → 0 wysokości
+
+    const armySys = window.KOSMOS?.armySystem;
+    // Czy cały select to jedna armia?
+    const firstArmy = armySys?.getArmyForUnit?.(sel[0].id);
+    const allSameArmy = firstArmy && sel.every(u => armySys?.getArmyForUnit?.(u.id)?.id === firstArmy.id);
+
+    const H = 86;
+    const dx = ox + 4;
+    const dy = oy + oh - H - 4;
+    const dw = ow - 8;
+
+    ctx.save();
+    // Tło drawer
+    ctx.fillStyle = 'rgba(6, 12, 22, 0.94)';
+    ctx.fillRect(dx, dy, dw, H);
+    ctx.strokeStyle = allSameArmy ? '#E0C060' : '#64A0FF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(dx, dy, dw, H);
+
+    // Header
+    ctx.font = `bold 12px ${THEME.fontFamily}`;
+    ctx.fillStyle = allSameArmy ? '#E0C060' : '#80B8FF';
+    ctx.textAlign = 'left';
+    const headerText = allSameArmy
+      ? `🎖 ${firstArmy.name} · ${sel.length} jedn. · (${firstArmy.q},${firstArmy.r})`
+      : `👥 ZAZNACZONO ${sel.length} jednostek`;
+    ctx.fillText(headerText, dx + 10, dy + 18);
+
+    // Lista ikon jednostek (horizontalnie)
+    const iconSize = 40;
+    const iconY = dy + 26;
+    let ix = dx + 10;
+    const maxIcons = Math.floor((dw - 280) / (iconSize + 4));
+    const visibleUnits = sel.slice(0, maxIcons);
+
+    for (const u of visibleUnits) {
+      const arch = UNIT_ARCHETYPES[u.archetypeId];
+      const hp = u.hp ?? 0;
+      const maxHp = arch?.baseStats?.hp ?? u.hpMax ?? hp;
+      const hpFrac = maxHp > 0 ? hp / maxHp : 0;
+
+      // Tło ikony
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(ix, iconY, iconSize, iconSize);
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(ix, iconY, iconSize, iconSize);
+
+      // Emoji
+      ctx.font = '24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(arch?.icon ?? '🪖', ix + iconSize / 2, iconY + 26);
+
+      // HP bar
+      const barY = iconY + iconSize - 5;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(ix + 2, barY, iconSize - 4, 3);
+      ctx.fillStyle = hpFrac > 0.6 ? '#80D840' : hpFrac > 0.3 ? '#D88040' : '#D84040';
+      ctx.fillRect(ix + 2, barY, (iconSize - 4) * hpFrac, 3);
+
+      this._addHit(ix, iconY, iconSize, iconSize, 'drawerUnitClick', { unitId: u.id });
+      ix += iconSize + 4;
+    }
+
+    if (sel.length > maxIcons) {
+      ctx.font = `11px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'left';
+      ctx.fillText(`+${sel.length - maxIcons}`, ix + 4, iconY + 28);
+    }
+
+    // Action buttons po prawej
+    const btnBlockX = dx + dw - 260;
+    const btnBlockY = dy + 28;
+    const btnH = 22;
+    const btnW = 80;
+    const btns = [];
+    if (allSameArmy) {
+      btns.push({ label: '➕ Podziel', color: '#80B8FF', type: 'armySplitFromDrawer', data: { armyId: firstArmy.id } });
+      btns.push({ label: '✏ Nazwa', color: '#80D840', type: 'armyRename', data: { armyId: firstArmy.id } });
+      btns.push({ label: '💔 Rozwiąż', color: '#D85A30', type: 'armyDisband', data: { armyId: firstArmy.id } });
+    } else if (sel.length >= 2) {
+      // Wszystkie na tym samym hexie? (wymóg Połącz)
+      const sameHex = sel.every(u => u.q === sel[0].q && u.r === sel[0].r && u.planetId === sel[0].planetId);
+      if (sameHex) {
+        btns.push({ label: '🎖 Połącz', color: '#E0C060', type: 'armyCreateFromSelection', data: {} });
+      }
+      btns.push({ label: '📋 Szczegóły', color: '#80B8FF', type: 'drawerOpenGroup', data: {} });
+    } else {
+      btns.push({ label: '📋 Szczegóły', color: '#80B8FF', type: 'drawerOpenUnit', data: { unitId: sel[0].id } });
+    }
+
+    let bx = btnBlockX;
+    for (const b of btns) {
+      if (bx + btnW > dx + dw - 10) break;
+      const c = hexToRgb(b.color);
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.22)`;
+      ctx.fillRect(bx, btnBlockY, btnW, btnH);
+      ctx.strokeStyle = b.color;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(bx, btnBlockY, btnW, btnH);
+      ctx.font = `bold 10px ${THEME.fontFamily}`;
+      ctx.fillStyle = b.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(b.label, bx + btnW / 2, btnBlockY + 14);
+      this._addHit(bx, btnBlockY, btnW, btnH, b.type, b.data);
+      bx += btnW + 4;
+    }
+
+    // Sum stats pod przyciskami (dla armii)
+    if (allSameArmy) {
+      ctx.font = `9px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'right';
+      let sumDmg = 0, sumHp = 0, sumHpMax = 0;
+      for (const u of sel) {
+        const arch = UNIT_ARCHETYPES[u.archetypeId];
+        sumDmg += arch?.baseStats?.dmg ?? u.attack ?? 0;
+        sumHp += u.hp ?? 0;
+        sumHpMax += arch?.baseStats?.hp ?? u.hpMax ?? 0;
+      }
+      ctx.fillText(`Σ DMG ${sumDmg} · HP ${sumHp}/${sumHpMax} · Kills ${firstArmy.kills}`, dx + dw - 10, dy + H - 6);
+    }
+
+    ctx.restore();
+    return H;
   }
 
   _drawStackBadge(ctx, x, y, label, color) {
@@ -2508,6 +2797,114 @@ export class ColonyOverlay extends BaseOverlay {
           window.KOSMOS?.groundUnitManager?.cancelDeployTransition(this._selectedUnit.id);
         }
         break;
+
+      // ── Army actions (Paradox-style) ──
+      case 'stackRowClick': {
+        // Toggle jednostki w selektcie
+        const u = window.KOSMOS?.groundUnitManager?.getUnit?.(zone.data?.unitId);
+        if (u) this._toggleInSelection(u);
+        break;
+      }
+      case 'stackSelectAll': {
+        const mgr = window.KOSMOS?.groundUnitManager;
+        if (!mgr) break;
+        const pid = this._getColony()?.planetId;
+        const stack = mgr.getUnitsAtHex(pid, zone.data.tileQ, zone.data.tileR)
+          .filter(u => !u.owner || u.owner === 'player');
+        this._selectedUnits.clear();
+        for (const u of stack) this._selectedUnits.add(u.id);
+        if (stack.length > 0) this._selectedUnit = stack[0];
+        this._showFlash(`⚡ Zaznaczono ${stack.length}`);
+        break;
+      }
+      case 'armyCreate': {
+        const mgr = window.KOSMOS?.groundUnitManager;
+        const armySys = window.KOSMOS?.armySystem;
+        if (!mgr || !armySys) break;
+        const pid = this._getColony()?.planetId;
+        const stack = mgr.getUnitsAtHex(pid, zone.data.tileQ, zone.data.tileR)
+          .filter(u => !u.owner || u.owner === 'player');
+        if (stack.length < 2) { this._showFlash('Potrzeba ≥2 jednostek'); break; }
+        const res = armySys.createArmy(stack.map(u => u.id));
+        if (res.success) this._showFlash(`🎖 Utworzono ${res.army.name}`);
+        else this._showFlash(`Błąd: ${res.reason}`);
+        break;
+      }
+      case 'armyCreateFromSelection': {
+        const armySys = window.KOSMOS?.armySystem;
+        if (!armySys) break;
+        const ids = [...this._selectedUnits];
+        if (ids.length < 2) { this._showFlash('Potrzeba ≥2 jednostek'); break; }
+        const res = armySys.createArmy(ids);
+        if (res.success) this._showFlash(`🎖 Utworzono ${res.army.name}`);
+        else this._showFlash(`Błąd: ${res.reason}`);
+        break;
+      }
+      case 'armyDisband': {
+        const armySys = window.KOSMOS?.armySystem;
+        if (!armySys || !zone.data?.armyId) break;
+        const army = armySys.getArmy(zone.data.armyId);
+        if (!army) break;
+        if (!window.confirm(`Rozwiązać ${army.name}? Jednostki pozostaną.`)) break;
+        armySys.disbandArmy(zone.data.armyId);
+        this._showFlash('💔 Armia rozwiązana');
+        break;
+      }
+      case 'armyRename': {
+        const armySys = window.KOSMOS?.armySystem;
+        if (!armySys || !zone.data?.armyId) break;
+        const army = armySys.getArmy(zone.data.armyId);
+        if (!army) break;
+        const name = window.prompt('Nowa nazwa armii:', army.name);
+        if (name) armySys.renameArmy(zone.data.armyId, name);
+        break;
+      }
+      case 'armySplit':
+      case 'armySplitFromDrawer': {
+        const armySys = window.KOSMOS?.armySystem;
+        if (!armySys || !zone.data?.armyId) break;
+        const army = armySys.getArmy(zone.data.armyId);
+        if (!army) break;
+        // Wyodrębnij zaznaczone z selektu (jeśli to członkowie tej armii)
+        const split = [...this._selectedUnits].filter(id => army.members.has(id));
+        if (split.length === 0) {
+          this._showFlash('Zaznacz członków armii do wydzielenia');
+          break;
+        }
+        if (split.length >= army.members.size) {
+          this._showFlash('Nie można wydzielić całej armii');
+          break;
+        }
+        const res = armySys.splitArmy(zone.data.armyId, split);
+        if (res.success && res.newArmy) {
+          this._showFlash(`➕ Wydzielono ${res.newArmy.name}`);
+        } else if (res.success) {
+          this._showFlash('➕ Jednostki wydzielone (za mało na armię)');
+        } else {
+          this._showFlash(`Błąd: ${res.reason}`);
+        }
+        break;
+      }
+      case 'drawerUnitClick': {
+        const u = window.KOSMOS?.groundUnitManager?.getUnit?.(zone.data?.unitId);
+        if (u) {
+          // Klik na ikonę w drawerze → zaznacz pojedynczo
+          this._selectSingle(u);
+          this._selectedHex = { q: u.q, r: u.r };
+        }
+        break;
+      }
+      case 'drawerOpenUnit': {
+        const u = window.KOSMOS?.groundUnitManager?.getUnit?.(zone.data?.unitId);
+        if (u) {
+          try { showUnitCard(u); } catch { /* */ }
+        }
+        break;
+      }
+      case 'drawerOpenGroup': {
+        try { showBattleGroup(this._getSelectedUnits(), this._selectedUnits); } catch { /* */ }
+        break;
+      }
     }
   }
 

@@ -133,6 +133,7 @@ export class SaveSystem {
       eventLog:          window.KOSMOS?.eventLogSystem?.serialize() ?? null,
       collisionForecast: window.KOSMOS?.collisionForecast?.serialize() ?? null,
       groundUnitManager: window.KOSMOS?.groundUnitManager?.serialize() ?? null,
+      armySystem:        window.KOSMOS?.armySystem?.serialize() ?? null,
       anomalyEffectSystem: window.KOSMOS?.anomalyEffectSystem?.serialize() ?? null,
       leaderSystem: window.KOSMOS?.leaderSystem?.serialize() ?? null,
       factionSystem: window.KOSMOS?.factionSystem?.serialize() ?? null,

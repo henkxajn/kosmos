@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 62;
+export const CURRENT_VERSION     = 63;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -77,6 +77,7 @@ const MIGRATIONS = {
   59: _migrateV59toV60,
   60: _migrateV60toV61,
   61: _migrateV61toV62,
+  62: _migrateV62toV63,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1525,6 +1526,15 @@ function _migrateV61toV62(data) {
     data.civ4x.colonyOverlay = { controlGroups: {} };
   } else if (data.civ4x?.colonyOverlay && !data.civ4x.colonyOverlay.controlGroups) {
     data.civ4x.colonyOverlay.controlGroups = {};
+  }
+  return data;
+}
+
+// ── Migracja v62 → v63 ──────────────────────────────────────────────────────
+// ArmySystem: nowe pole data.civ4x.armySystem z pustą tablicą armii
+function _migrateV62toV63(data) {
+  if (data.civ4x && !data.civ4x.armySystem) {
+    data.civ4x.armySystem = { armies: [], nextId: 1 };
   }
   return data;
 }
