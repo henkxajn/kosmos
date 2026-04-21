@@ -265,6 +265,20 @@ export class GameScene {
         rs.receive({ research: amount });
         console.log(`[debug] +${amount} research → ${rs.research?.amount ?? '?'}`);
       },
+      // KOSMOS.debug.unlockTech('ground_warfare', 'point_defense', ...) — natychmiast bada.
+      // Bez argumentów: odblokowuje pakiet militarny (broń + desant + logistyka).
+      unlockTech: (...techIds) => {
+        const tSys = window.KOSMOS?.techSystem;
+        if (!tSys) { console.warn('[debug] Brak aktywnego TechSystem'); return; }
+        const list = techIds.length > 0
+          ? techIds
+          : ['point_defense', 'ground_warfare', 'military_logistics', 'drone_warfare', 'tech_munitions', 'fleet_logistics'];
+        for (const id of list) {
+          if (tSys.isResearched(id)) { console.log(`[debug] ${id} już zbadany`); continue; }
+          tSys.restore({ researched: [id] });  // restore DODAJE do Set + emituje tech:researched
+          console.log(`[debug] ✓ ${id}`);
+        }
+      },
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
@@ -1985,9 +1999,16 @@ export class GameScene {
   // ── Zbadaj technologie wymagane dla budynków boosted ──────────
   _setupBoostedTechs() {
     // Tech wymagane: orbital_survey → rocketry (launch_pad), exploration (shipyard)
-    // Odblokowane od startu — gracz nie musi ich badać
-    // Nuclear power NIE odblokowany — gracz musi sam zbadać
-    const techIds = ['orbital_survey', 'rocketry', 'exploration', 'basic_computing', 'automation'];
+    // Odblokowane od startu — gracz nie musi ich badać.
+    // Nuclear power NIE odblokowany — gracz musi sam zbadać.
+    // Militarne fundamenty (point_defense + ground_warfare + military_logistics) są
+    // odblokowane żeby gracz mógł od razu budować broń, troop_bay, drop_pods i koszary.
+    // Tech wyższego rzędu (tech_munitions T3, fleet_logistics T3, exotic_materials)
+    // gracz musi sam zbadać.
+    const techIds = [
+      'orbital_survey', 'rocketry', 'exploration', 'basic_computing', 'automation',
+      'point_defense', 'ground_warfare', 'military_logistics',
+    ];
     this.techSystem.restore({ researched: techIds });
   }
 
