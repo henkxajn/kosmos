@@ -471,11 +471,15 @@ const ACTIONS = {
       if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
       if (!vessel.canDropTroops) return { ok: false, reason: 'Brak Kapsuł Desantowych' };
       if ((vessel.groundUnits?.length ?? 0) === 0) return { ok: false, reason: 'Ładownia pusta' };
-      // Dominacja orbitalna wymagana dla wrogich ciał (własne kolonie OK bez bitwy)
+      // Dominacja orbitalna wymagana dla wrogich ciał (własne kolonie OK bez bitwy).
+      // Wrogie = kolonia z ownerEmpireId LUB isTestEnemy (debug spawn), lub brak kolonii w colMgr.
       const targetId = vessel.position.dockedAt;
       const colMgr = state.colonyManager;
       const warSys = window.KOSMOS?.warSystem;
-      const targetIsOwn = !!colMgr?.getColony?.(targetId);
+      const targetColony = colMgr?.getColony?.(targetId);
+      const targetIsOwn = !!targetColony
+        && !targetColony.ownerEmpireId
+        && !targetColony.isTestEnemy;
       if (!targetIsOwn && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
         return { ok: false, reason: 'Brak dominacji orbitalnej' };
       }
@@ -507,7 +511,10 @@ const ACTIONS = {
       const targetId = vessel.position.dockedAt;
       const colMgr = state.colonyManager;
       const warSys = window.KOSMOS?.warSystem;
-      const targetIsOwn = !!colMgr?.getColony?.(targetId);
+      const targetColony = colMgr?.getColony?.(targetId);
+      const targetIsOwn = !!targetColony
+        && !targetColony.ownerEmpireId
+        && !targetColony.isTestEnemy;
       if (!targetIsOwn && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
         return { ok: false, reason: 'Brak dominacji orbitalnej' };
       }

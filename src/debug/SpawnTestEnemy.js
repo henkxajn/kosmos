@@ -18,6 +18,7 @@ import EntityManager from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
+import gameState from '../core/GameState.js';
 
 const TEST_ENEMY_ID = 'emp_test_enemy';
 
@@ -151,6 +152,15 @@ export function spawnTestEnemy() {
 
   // 8. Oznacz ciało jako zbadane (żeby gracz mógł wysłać flotę)
   target.explored = true;
+
+  // 9. Ustaw dominację orbitalną na gracza — test enemy nie ma floty, więc nie ma walki.
+  // Bez tego drop troops byłby blokowany przez playerHasOrbitalDominance, który wymaga
+  // explicit controller lub brak wrogiej floty (obie spełnione, ale ustawiamy explicit
+  // dla wygody testowania i spójności debug flow).
+  gameState.set(`orbitalDominance.${systemId}`, {
+    controllerId: 'player',
+    year: gameYear,
+  }, 'spawn_test_enemy_dominance');
 
   const report = {
     success:    true,

@@ -390,15 +390,48 @@ export class WarSystem {
   }
 
   /**
+   * Czy w systemie jest aktywna flota wroga (strength > 0)?
+   * Używane do semantyki dominacji: pusta orbita = brak oporu = dominance domyślnie gracza.
+   * @param {string} systemId
+   * @returns {boolean}
+   */
+  _hasHostileFleetInSystem(systemId) {
+    if (!systemId) return false;
+    const reg = window.KOSMOS?.empireRegistry;
+    if (!reg) return false;
+    const empires = reg.listAll?.() ?? [];
+    for (const emp of empires) {
+      if (!emp?.fleets) continue;
+      for (const f of emp.fleets) {
+        if ((f.strength ?? 0) <= 0) continue;
+        if (f.systemId === systemId || f.destSystemId === systemId) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Czy gracz ma dominację orbitalną nad planetą?
    * Używane przez ColonyOverlay (drop mode, orbital strike UI) i dropTroop().
+   *
+   * Dominacja gracza obowiązuje gdy:
+   *  (a) explicit: controller == 'player' (po wygranej bitwie), LUB
+   *  (b) domyślnie: w systemie NIE MA wrogiej floty z strength > 0.
+   *
+   * Pusty system = brak oporu = orbita bezpieczna. Jeśli flota wroga przybędzie,
+   * dominacja znika automatycznie i gracz musi wygrać walkę, by znowu móc desantować.
+   *
    * @param {string} planetId
    * @returns {boolean}
    */
   playerHasOrbitalDominance(planetId) {
     const sysId = this._getBodySystemId(planetId);
     if (!sysId) return false;
-    return this.getOrbitalController(sysId) === 'player';
+    const ctrl = this.getOrbitalController(sysId);
+    if (ctrl === 'player') return true;
+    if (ctrl) return false; // kontroler to wrogie imperium → player nie ma
+    // Brak explicit controller — sprawdź czy w systemie jest wroga flota
+    return !this._hasHostileFleetInSystem(sysId);
   }
 
   /**

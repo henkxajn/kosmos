@@ -101,18 +101,9 @@ export class ColonyOverlay extends BaseOverlay {
     this._landingMode = false;
     this._landingVesselId = null;
     EventBus.on('vessel:awayTeamLanding', ({ vesselId, targetId }) => {
-      // Otwórz overlay dla planety docelowej w trybie lądowania
-      const colMgr = window.KOSMOS?.colonyManager;
-      if (colMgr) {
-        // Upewnij się że kolonia jest aktywna
-        colMgr.switchActiveColony(targetId);
-        this._selectedColonyId = targetId;
-      }
       this._landingMode = true;
       this._landingVesselId = vesselId;
-      if (!this.visible) {
-        this.show({});
-      }
+      this._openAsColonyPanel(targetId);
       this._showFlash('🤖 Wybierz hex lądowania Away Team');
     });
 
@@ -133,23 +124,19 @@ export class ColonyOverlay extends BaseOverlay {
       if (!vessel?.orbitalStrike) return;
       if ((vessel.orbitalStrike.ammoCurrent ?? 0) <= 0) { this._showFlash('Brak amunicji'); return; }
 
-      // Sprawdź dominację (jeśli obca kolonia)
+      // Sprawdź dominację (jeśli obca kolonia). Obca = brak w colMgr LUB ma ownerEmpireId/isTestEnemy.
       const colMgr = window.KOSMOS?.colonyManager;
       const targetColony = colMgr?.getColony?.(targetId);
-      const isPlayerColony = !!targetColony;
-      if (!isPlayerColony && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
+      const isHostile = !targetColony || !!targetColony.ownerEmpireId || !!targetColony.isTestEnemy;
+      if (isHostile && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
         this._showFlash('Brak dominacji orbitalnej');
         return;
       }
 
-      if (colMgr && isPlayerColony) {
-        colMgr.switchActiveColony(targetId);
-        this._selectedColonyId = targetId;
-      }
       this._strikeMode = true;
       this._strikeVesselId = vesselId;
       this._strikePlanetId = targetId;
-      if (!this.visible) this.show({});
+      this._openAsColonyPanel(targetId);
       this._showFlash(`💥 Wybierz hex ostrzału (${vessel.orbitalStrike.ammoCurrent} pocisków)`);
     });
 
@@ -178,14 +165,13 @@ export class ColonyOverlay extends BaseOverlay {
         ? unitIds.filter(id => vessel.groundUnits.includes(id))
         : [...vessel.groundUnits];
 
-      // Ustaw overlay na PLANETĘ DOCELOWĄ (nie zmieniamy activeColony gracza —
-      // overlay tymczasowo pokazuje obcą planetę). Po zakończeniu drop mode
-      // można nacisnąć Esc i wrócić do własnej kolonii przez inny flow.
+      // Zapamiętaj skąd wracać po zakończeniu desantu (zwykle 'fleet').
+      this._dropReturnOverlay = window.KOSMOS?.overlayManager?.active ?? 'fleet';
       this._dropMode = true;
       this._dropVesselId = vesselId;
       this._dropPlanetId = targetId;
       this._dropQueue = queueUnits;
-      this.show({ colonyId: targetId });
+      this._openAsColonyPanel(targetId);
       this._showDropPrompt();
     });
 
@@ -323,16 +309,26 @@ export class ColonyOverlay extends BaseOverlay {
     const pid = colony.planetId;
     if (this._gridCache[pid]) return this._gridCache[pid];
 
+    // Obca/test-enemy kolonia wygenerowana poza overlay (np. spawnTestEnemy już ustawił
+    // grid z tile.owner=empireId i zbudował capital). Uszanuj istniejący grid — nie regeneruj.
+    const isHostileColony = !!colony.ownerEmpireId || !!colony.isTestEnemy;
+    if (colony.grid && isHostileColony) {
+      this._gridCache[pid] = colony.grid;
+      return colony.grid;
+    }
+
     // Generuj grid z planety
     const isHome = (pid === window.KOSMOS?.homePlanet?.id);
     const grid = PlanetMapGenerator.generate(colony.planet, isHome);
     this._gridCache[pid] = grid;
     colony.grid = grid;
 
-    // Faza 6.5: inicjalizacja własności hexów (gracz posiada wszystkie hexy kolonii)
-    // Nie nadpisuje hexów które już mają ownera (np. po invasion)
+    // Domyślny owner: dla obcej kolonii → empireId/isTestEnemy, inaczej → 'player'.
+    // Nie nadpisuje hexów które już mają ownera (np. po invasion).
+    const defaultOwner = colony.ownerEmpireId
+      ?? (colony.isTestEnemy ? 'enemy' : 'player');
     for (const tile of grid.toArray()) {
-      if (tile && tile.owner == null) tile.owner = 'player';
+      if (tile && tile.owner == null) tile.owner = defaultOwner;
     }
 
     // Próbuj załadować biome map (1:1 z 3D teksturą) — fallback: PlanetMapGenerator biomy
@@ -351,9 +347,10 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
 
-    // Auto-place stolicy przy pierwszym otwarciu (jeśli brak)
+    // Auto-place stolicy przy pierwszym otwarciu (jeśli brak).
+    // Pomiń dla obcych/test-enemy kolonii — ich capital stawia spawnTestEnemy/EmpireGenerator.
     const isOutpost = colony.isOutpost ?? false;
-    if (bSys && window.KOSMOS?.civMode && !isOutpost) {
+    if (bSys && window.KOSMOS?.civMode && !isOutpost && !isHostileColony) {
       let hasCapital = false;
       for (const key of bSys._active.keys()) {
         if (key.startsWith('capital_')) { hasCapital = true; break; }
@@ -456,6 +453,43 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   _showFlash(msg) { this._flashMsg = msg; this._flashEnd = Date.now() + 2500; }
+
+  /**
+   * Otwórz ColonyOverlay dla konkretnej planety (własnej LUB obcej) przez OverlayManager.
+   * To kluczowe: sama `this.show()` ustawia lokalnie visible=true ale OverlayManager.active
+   * zostaje na poprzednim panelu (np. 'fleet') — w efekcie ColonyOverlay nie dostaje
+   * rysowania ani kliknięć. openPanel zamyka poprzedni panel i aktywuje 'colony'.
+   */
+  _openAsColonyPanel(planetId) {
+    const om = window.KOSMOS?.overlayManager;
+    if (om) {
+      om.openPanel('colony', { colonyId: planetId });
+    } else {
+      // Fallback dla środowisk bez OverlayManager (testy headless)
+      this.show({ colonyId: planetId });
+    }
+  }
+
+  /**
+   * Zakończ tryb desantu: wyczyść stan, flash + po 1.5s wróć do poprzedniego overlay'a
+   * (zwykle 'fleet'), żeby gracz mógł kontynuować zarządzanie flotą.
+   */
+  _finishDropMode(flashMsg = '⚔ Desant zakończony') {
+    this._dropMode = false;
+    this._dropVesselId = null;
+    this._dropPlanetId = null;
+    this._dropQueue = [];
+    this._showFlash(flashMsg);
+
+    const returnTo = this._dropReturnOverlay;
+    this._dropReturnOverlay = null;
+    if (returnTo && returnTo !== 'colony') {
+      setTimeout(() => {
+        const om = window.KOSMOS?.overlayManager;
+        if (om) om.openPanel(returnTo);
+      }, 1500);
+    }
+  }
 
   /**
    * Wyświetl prompt dla bieżącej jednostki w kolejce desantu.
@@ -2021,10 +2055,7 @@ export class ColonyOverlay extends BaseOverlay {
         if (this._dropQueue.length > 0) {
           this._showDropPrompt();
         } else {
-          this._dropMode = false;
-          this._dropVesselId = null;
-          this._dropPlanetId = null;
-          this._showFlash('⚔ Desant zakończony');
+          this._finishDropMode('⚔ Desant zakończony');
         }
         return true;
       }
@@ -2325,6 +2356,10 @@ export class ColonyOverlay extends BaseOverlay {
   handleKeyDown(key) {
     if (!this.visible) return false;
     if (key === 'Escape') {
+      // Priorytet: anuluj tryby specjalne zamiast zamykać overlay
+      if (this._dropMode)    { this._finishDropMode('⚔ Desant anulowany'); return true; }
+      if (this._strikeMode)  { this._strikeMode = false; this._strikeVesselId = null; this._strikePlanetId = null; this._showFlash('💥 Ostrzał anulowany'); return true; }
+      if (this._landingMode) { this._landingMode = false; this._landingVesselId = null; this._showFlash('🤖 Away Team anulowany'); return true; }
       if (this._selectedUnit) { this._selectedUnit = null; this._selectedHex = null; return true; }
       if (this._selectedHex) { this._selectedHex = null; return true; }
       this.hide();
