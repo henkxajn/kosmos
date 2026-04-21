@@ -153,6 +153,7 @@ export default {
   'techBranch.space': 'Space',
   'techBranch.computing': 'Computing',
   'techBranch.defense': 'Defense',
+  'techBranch.synthetic': 'Synthetics',
 
   // === Technologies ===
   'tech.metallurgy.name': 'Metallurgy',
@@ -1184,6 +1185,7 @@ export default {
   'techBranch.space': 'Space',
   'techBranch.computing': 'Computing',
   'techBranch.defense': 'Defense',
+  'techBranch.synthetic': 'Synthetics',
   'missionPopup.deposit': 'DEPOSIT',
   'missionPopup.planet': 'PLANET',
   'missionPopup.quality': 'QUALITY',
@@ -2042,6 +2044,18 @@ export default {
   'tech.strategic_doctrine.desc':   'General staff and intelligence — +20 organization, +15 morale',
   'tech.veteran_corps.name':        'Veteran Corps',
   'tech.veteran_corps.desc':        'Seasoned soldiers — +15/+20 org/mor, +20 supply cap',
+
+  // Missing translations (synthetic / civil / defense)
+  'tech.robotics.name':             'Robotics',
+  'tech.robotics.desc':             'Automation of industrial processes — worker androids',
+  'tech.android_engineering.name':  'Android Engineering',
+  'tech.android_engineering.desc':  'Design of humanoid worker androids',
+  'tech.colonial_governance.name':  'Colonial Governance',
+  'tech.colonial_governance.desc':  'Administrative structures — Cultural Center shapes colony identity',
+  'tech.cultural_heritage.name':    'Cultural Heritage',
+  'tech.cultural_heritage.desc':    'Historical Archive — faster milestone discovery, research bonus',
+  'tech.tech_munitions.name':       'Orbital Munitions',
+  'tech.tech_munitions.desc':       'Orbital Shells + Orbital Strike Battery — fire support from orbit for ground forces',
 
   // Barracks buildings
   'building.barracks_lv1.name': 'Barracks',

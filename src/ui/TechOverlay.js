@@ -14,7 +14,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { t, getName, getDesc } from '../i18n/i18n.js';
 import { CIV_SIDEBAR_W } from './CivPanelDrawer.js';
 
-const BRANCH_ORDER = ['mining', 'energy', 'biology', 'civil', 'space', 'computing', 'defense'];
+const BRANCH_ORDER = ['mining', 'energy', 'biology', 'civil', 'space', 'computing', 'defense', 'synthetic'];
 
 // Layout — rozmiary neuronów i odstępy
 const NODE_R = 26;          // promień koła neuronu

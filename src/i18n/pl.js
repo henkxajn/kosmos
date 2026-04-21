@@ -153,6 +153,7 @@ export default {
   'techBranch.space': 'Kosmos',
   'techBranch.computing': 'Informatyka',
   'techBranch.defense': 'Obronność',
+  'techBranch.synthetic': 'Synthetyka',
 
   // === Technologie ===
   'tech.metallurgy.name': 'Metalurgia',
@@ -1184,6 +1185,7 @@ export default {
   'techBranch.space': 'Kosmos',
   'techBranch.computing': 'Informatyka',
   'techBranch.defense': 'Obronność',
+  'techBranch.synthetic': 'Synthetyka',
   'missionPopup.deposit': 'ZŁOŻE',
   'missionPopup.planet': 'PLANETA',
   'missionPopup.quality': 'JAKOŚĆ',
@@ -2042,6 +2044,18 @@ export default {
   'tech.strategic_doctrine.desc':   'Sztab generalny i wywiad — +20 organizacja, +15 morale',
   'tech.veteran_corps.name':        'Korpus Weteranów',
   'tech.veteran_corps.desc':        'Doświadczeni żołnierze — +15/+20 org/mor, +20 cap supply',
+
+  // Brakujące tłumaczenia (synthetic / civil / defense)
+  'tech.robotics.name':             'Robotyka',
+  'tech.robotics.desc':             'Automatyzacja procesów przemysłowych — androidy robocze',
+  'tech.android_engineering.name':  'Inżynieria Androidów',
+  'tech.android_engineering.desc':  'Projektowanie humanoidalnych androidów roboczych',
+  'tech.colonial_governance.name':  'Administracja Kolonialna',
+  'tech.colonial_governance.desc':  'Struktury administracyjne — Centrum Kulturalne buduje tożsamość kolonii',
+  'tech.cultural_heritage.name':    'Dziedzictwo Kulturowe',
+  'tech.cultural_heritage.desc':    'Archiwum Historyczne — szybsze odkrywanie milestones, bonus badań',
+  'tech.tech_munitions.name':       'Amunicja Orbitalna',
+  'tech.tech_munitions.desc':       'Pociski Orbitalne + Bateria Ostrzału Orbitalnego — wsparcie ogniowe z orbity dla sił naziemnych',
 
   // Barracks buildings
   'building.barracks_lv1.name': 'Koszary',
