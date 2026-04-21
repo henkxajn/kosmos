@@ -768,10 +768,12 @@ export class FleetManagerOverlay {
       return;
     }
 
-    // Załadunek wojsk — otwórz CargoLoadModal (zakładka Wojsko pokaże garnizon).
-    // To samo wejście co przycisk Cargo, ale z poziomu dedykowanej akcji 🪖.
+    // Załadunek wojsk — CargoLoadModal w trybie troopsOnly (ukrywa cargo/surowce/orbital).
     if (actionId === 'load_troops') {
-      this._openCargoLoader(vessel.id);
+      const colony = this._getVesselColony?.(vessel) ?? window.KOSMOS?.colonyManager?.getColony(vessel.colonyId);
+      if (colony) {
+        try { showCargoLoadModal(vessel, colony, { troopsOnly: true }); } catch { /* anulowano */ }
+      }
       return;
     }
 

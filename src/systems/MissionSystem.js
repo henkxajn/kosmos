@@ -986,15 +986,14 @@ export class MissionSystem {
 
   // ── Recon (survey / deep_scan) ────────────────────────────────────────────
   _launchRecon(scope, vesselId, opts = {}) {
-    // orbitOnly (akcja "Leć i orbituj") — pomiń wymaganie science vessel,
-    // sprawdź tylko tech rakietnictwa i wyrzutnię. Statek bez modułu nauki
-    // też może orbitować cel (np. fregata desantowa bez laboratorium).
+    // orbitOnly (akcja "Leć i orbituj") — pomiń wymagania science vessel
+    // ORAZ spaceport (statek wychodzi z hangaru na orbitę, zrzuca przez drop pods
+    // bez lądowania). Wystarczy tech rakietnictwa.
     if (opts.orbitOnly) {
       const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-      const padOk  = this._checkPadForVessel(vesselId);
-      if (!techOk || !padOk) {
+      if (!techOk) {
         this._emit('mission:failed', 'expedition:launchFailed', {
-          reason: !techOk ? t('mission.noTechRocketry') : t('mission.noSpaceport')
+          reason: t('mission.noTechRocketry')
         });
         return;
       }

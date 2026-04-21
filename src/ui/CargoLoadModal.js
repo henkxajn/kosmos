@@ -63,10 +63,12 @@ function _injectScrollStyle() {
  * @param {Object} [options]
  * @param {boolean} [options.showRepeatCheckbox=false] — pokaż checkbox „Powtarzaj misję (pętla)"
  * @param {boolean} [options.initialRepeat=false] — stan początkowy checkboxa
+ * @param {boolean} [options.troopsOnly=false] — pokaż TYLKO sekcję Wojsko (ukryj cargo/surowce/orbital)
  * @returns {Promise<{changed:boolean, repeat:boolean}>}
  */
 export function showCargoLoadModal(vessel, colony, options = {}) {
   const showRepeatCheckbox = !!options.showRepeatCheckbox;
+  const troopsOnly = !!options.troopsOnly;
 
   return new Promise(resolve => {
     _injectScrollStyle();
@@ -110,28 +112,37 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
 
     const title = document.createElement('div');
     title.style.cssText = `font-size: 13px; font-weight: bold; text-align: center; color: ${THEME.accent}; letter-spacing: 1px;`;
-    title.textContent = t('cargo.title', vessel.name);
+    title.textContent = troopsOnly ? `⚔ ZAŁADUNEK WOJSK — ${vessel.name}` : t('cargo.title', vessel.name);
     header.appendChild(title);
 
     const info = document.createElement('div');
     info.style.cssText = `font-size: 10px; color: ${THEME.textSecondary}; margin-top: 4px; text-align: center;`;
-    info.textContent = t('cargo.shipInfo', getName({ id: vessel.shipId, namePL: ship?.namePL }, 'ship'), cargoCapacity);
+    if (troopsOnly) {
+      const cap = vessel.troopCapacity ?? 0;
+      const used = vessel.troopBayUsed ?? 0;
+      info.textContent = `Ładownia desantowa — ${used}/${cap} pkt`;
+    } else {
+      info.textContent = t('cargo.shipInfo', getName({ id: vessel.shipId, namePL: ship?.namePL }, 'ship'), cargoCapacity);
+    }
     header.appendChild(info);
 
-    // Pasek ładowności (wizualny)
+    // Pasek ładowności (wizualny) — tylko dla trybu cargo; w trybie troops pomiń
     const barContainer = document.createElement('div');
-    barContainer.style.cssText = `margin-top: 6px; height: 14px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.border}; border-radius: 2px; position: relative; overflow: hidden;`;
     const barFill = document.createElement('div');
-    barFill.style.cssText = `height: 100%; border-radius: 1px; transition: width 0.2s;`;
-    barContainer.appendChild(barFill);
     const barLabel = document.createElement('div');
-    barLabel.style.cssText = `position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ${THEME.textPrimary}; text-shadow: 0 0 3px #000;`;
-    barContainer.appendChild(barLabel);
-    header.appendChild(barContainer);
+    if (!troopsOnly) {
+      barContainer.style.cssText = `margin-top: 6px; height: 14px; background: ${THEME.bgTertiary}; border: 1px solid ${THEME.border}; border-radius: 2px; position: relative; overflow: hidden;`;
+      barFill.style.cssText = `height: 100%; border-radius: 1px; transition: width 0.2s;`;
+      barContainer.appendChild(barFill);
+      barLabel.style.cssText = `position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ${THEME.textPrimary}; text-shadow: 0 0 3px #000;`;
+      barContainer.appendChild(barLabel);
+      header.appendChild(barContainer);
+    }
 
     panel.appendChild(header);
 
     function updateCargoBar() {
+      if (troopsOnly) return;  // brak paska w trybie troops
       const used = vessel.cargoUsed ?? 0;
       const frac = cargoCapacity > 0 ? Math.min(1, used / cargoCapacity) : 0;
       barFill.style.width = `${(frac * 100).toFixed(1)}%`;
@@ -149,7 +160,7 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
       scrollbar-color: ${THEME.border} ${THEME.bgPrimary};
     `;
 
-    // ── Aktualne cargo statku ────────────────────────────────────────────────
+    // ── Aktualne cargo statku (ukryte w trybie troopsOnly) ──────────────────
     const cargoSection = document.createElement('div');
     cargoSection.style.cssText = 'margin-bottom: 8px;';
 
@@ -160,7 +171,7 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
 
     const cargoList = document.createElement('div');
     cargoSection.appendChild(cargoList);
-    content.appendChild(cargoSection);
+    if (!troopsOnly) content.appendChild(cargoSection);
 
     function refreshCargoList() {
       cargoList.innerHTML = '';
@@ -200,16 +211,16 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
     // Separator
     const sep = document.createElement('div');
     sep.style.cssText = `height: 1px; background: ${THEME.border}; margin: 6px 0;`;
-    content.appendChild(sep);
+    if (!troopsOnly) content.appendChild(sep);
 
     // ── Załaduj z inventory ───────────────────────────────────────────────────
     const loadHeader = document.createElement('div');
     loadHeader.style.cssText = `font-size: 10px; color: ${THEME.textDim}; margin-bottom: 4px; font-weight: bold; letter-spacing: 0.5px;`;
     loadHeader.textContent = t('cargo.loadFrom');
-    content.appendChild(loadHeader);
+    if (!troopsOnly) content.appendChild(loadHeader);
 
     const loadSection = document.createElement('div');
-    content.appendChild(loadSection);
+    if (!troopsOnly) content.appendChild(loadSection);
 
     function refreshLoadSection() {
       loadSection.innerHTML = '';
@@ -286,7 +297,8 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
     if ((vessel.troopCapacity ?? 0) > 0) {
       const troopSep = document.createElement('div');
       troopSep.style.cssText = `height: 1px; background: ${THEME.border}; margin: 6px 0;`;
-      content.appendChild(troopSep);
+      // W trybie troopsOnly separator nad sekcją Wojsko jest zbędny
+      if (!troopsOnly) content.appendChild(troopSep);
 
       const troopHeader = document.createElement('div');
       troopHeader.style.cssText = `font-size: 10px; color: ${THEME.accent}; margin-bottom: 4px; font-weight: bold; letter-spacing: 0.5px;`;
@@ -397,7 +409,8 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
     }
 
     // ── Sekcja Orbital Strike (tylko gdy statek ma baterię) ──────────────────
-    if (vessel.orbitalStrike) {
+    // W trybie troopsOnly ukrywamy — to osobna mechanika, nie "wojsko".
+    if (vessel.orbitalStrike && !troopsOnly) {
       const osSep = document.createElement('div');
       osSep.style.cssText = `height: 1px; background: ${THEME.border}; margin: 6px 0;`;
       content.appendChild(osSep);

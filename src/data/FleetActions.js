@@ -244,6 +244,8 @@ const ACTIONS = {
   // na kolejny rozkaz (drop troops, orbital strike, redirect, return).
   // Jeśli ciało docelowe należy do wroga, bitwa orbitalna zostanie wywołana
   // przez WarSystem._fleetArrived (mechanizm istniejący dla flot AI).
+  // UWAGA: nie wymaga spaceport (ani u źródła, ani u celu) — to manewr kosmiczny,
+  // statek wychodzi na orbitę z hangaru i zrzuca przez drop pods, bez lądowania.
   orbit: {
     id: 'orbit',
     label: 'Leć i orbituj',
@@ -254,7 +256,6 @@ const ACTIONS = {
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
       const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
       if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
       return { ok: true };
     },
     execute(vessel, state) {
