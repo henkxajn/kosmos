@@ -254,9 +254,17 @@ export class GameScene {
 
     // ── Debug cheats (konsola) ────────────────────────────────────
     // KOSMOS.debug.spawnTestEnemy() — tworzy wrogie imperium + kolonię
-    // na najbliższym niezamieszkałym ciele do testów desantu/walki.
+    //   na najbliższym niezamieszkałym ciele do testów desantu/walki.
+    // KOSMOS.debug.giveResearch(10000) — dodaje research do aktywnej kolonii
+    //   (przydatne na starym save bez konieczności rozpoczynania nowego Power Test).
     window.KOSMOS.debug = {
       spawnTestEnemy,
+      giveResearch: (amount = 10000) => {
+        const rs = window.KOSMOS?.resourceSystem;
+        if (!rs) { console.warn('[debug] Brak aktywnego ResourceSystem'); return; }
+        rs.receive({ research: amount });
+        console.log(`[debug] +${amount} research → ${rs.research?.amount ?? '?'}`);
+      },
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
