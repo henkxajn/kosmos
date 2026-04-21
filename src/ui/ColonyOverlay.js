@@ -156,6 +156,14 @@ export class ColonyOverlay extends BaseOverlay {
       this._showFlash(`💥 Wybierz hex ostrzału (${vessel.orbitalStrike.ammoCurrent} pocisków)`);
     });
 
+    // Intercept movement — unit wpadł w kontakt z wrogiem, ruch przerwany
+    EventBus.on('groundUnit:intercepted', ({ unitId, planetId, q, r }) => {
+      if (!this.visible) return;
+      const activePid = this._selectedColonyId ?? window.KOSMOS?.colonyManager?.activePlanetId;
+      if (planetId !== activePid) return;
+      this._showFlash(`⚠ Kontakt (${q},${r}) — ruch przerwany`);
+    });
+
     // Victoria 2 stack combat: widoczny raport z walki (flash + event log entry)
     EventBus.on('combat:hexResolved', ({ planetId, q, r, winnerId, playerKilled, enemyKilled }) => {
       if (!this.visible) return;

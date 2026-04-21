@@ -145,11 +145,14 @@ export class CombatSystem {
   }
 
   _findContestedHexes(gum) {
-    // Grupuj po (planetId, q, r) → Set<owner>; zwracaj te z >=2 owners
+    // Grupuj po (planetId, q, r) → Set<owner>; zwracaj te z >=2 owners.
+    // Moving units teraz TEŻ się liczą — ich pozycja logiczna to (q,r) = hex startu
+    // bieżącego kroku. Unit "mijający się" z wrogim na tym samym hexie walczy.
+    // Offline pomijamy (brak utrzymania → nie walczy).
     const groups = new Map();
     for (const u of gum._units.values()) {
       if (u.hp <= 0) continue;
-      if (u.status === 'moving') continue; // jednostka jeszcze nie dotarła
+      if (u.status === 'offline') continue;
       const key = `${u.planetId}|${u.q}|${u.r}`;
       if (!groups.has(key)) groups.set(key, new Set());
       groups.get(key).add(u.owner ?? 'player');
@@ -165,8 +168,9 @@ export class CombatSystem {
 
   _runBattleRound(planetId, q, r, key) {
     const gum = window.KOSMOS?.groundUnitManager;
+    // Moving unit też walczy (patrz _findContestedHexes). Offline pomijamy.
     const unitsAtHex = gum.getUnitsAtHex(planetId, q, r).filter(u =>
-      u.hp > 0 && u.status !== 'moving' && u.status !== 'offline'
+      u.hp > 0 && u.status !== 'offline'
     );
     const sides = this._groupByOwner(unitsAtHex);
     const owners = Object.keys(sides);

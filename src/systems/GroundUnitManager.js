@@ -228,12 +228,13 @@ export class GroundUnitManager {
 
   /**
    * Wszystkie jednostki na danym hexie (tablica — stack combat).
-   * Pomija jednostki w ruchu (status='moving') — jeszcze tam nie ma.
+   * Moving units TEŻ są uwzględniane — podczas kroku ich (q,r) wskazuje hex
+   * startowy (logiczna pozycja). Unit jest tam dopóki step się nie zakończy.
    */
   getUnitsAtHex(planetId, q, r) {
     const out = [];
     for (const u of this._units.values()) {
-      if (u.planetId === planetId && u.q === q && u.r === r && u.status !== 'moving') {
+      if (u.planetId === planetId && u.q === q && u.r === r) {
         out.push(u);
       }
     }
@@ -862,6 +863,37 @@ export class GroundUnitManager {
 
   // ── Ground Unit System: sprawdź czy jednostka weszła na minę ──────────
 
+  /**
+   * Victoria 2 stack combat: jeśli po step shift unit wszedł na hex z wrogiem,
+   * zatrzymaj ruch (porzuć resztę path, status=idle). CombatSystem odpali bitwę
+   * w najbliższym civYear ticku.
+   * @returns {boolean} true jeśli unit został przechwycony (caller nie kontynuuje)
+   */
+  _interceptOnContact(unit) {
+    if (!unit || unit.hp <= 0) return false;
+    const ownerId = unit.owner ?? 'player';
+    const occupants = this.getUnitsAtHex(unit.planetId, unit.q, unit.r);
+    const enemy = occupants.find(u => u.id !== unit.id
+      && u.hp > 0
+      && (u.owner ?? 'player') !== ownerId);
+    if (!enemy) return false;
+
+    // Porzuć pozostałą ścieżkę, zatrzymaj się
+    unit._path = [];
+    unit.status = 'idle';
+    unit._animT = 0;
+    unit._fromPixel = null;
+    unit._toPixel = null;
+    EventBus.emit('groundUnit:intercepted', {
+      unitId: unit.id,
+      planetId: unit.planetId,
+      q: unit.q, r: unit.r,
+      by: enemy.id,
+    });
+    EventBus.emit('groundUnit:moved', { unitId: unit.id, q: unit.q, r: unit.r });
+    return true;
+  }
+
   _checkMineTrigger(unit) {
     const gs = window.KOSMOS?.gameState;
     if (!gs) return false;
@@ -955,6 +987,8 @@ export class GroundUnitManager {
       unit._animT = 0;
       // Ground Unit System: wejście na hex — sprawdź minę (może zabić jednostkę)
       if (this._checkMineTrigger(unit)) return;
+      // Victoria 2 stack combat: contact intercept — jeśli na nowym hexie wróg, zatrzymaj
+      if (this._interceptOnContact(unit)) return;
       if (unit._path.length === 0) {
         unit.status = 'idle';
         unit._fromPixel = null;
@@ -982,6 +1016,8 @@ export class GroundUnitManager {
       }
       // Ground Unit System: wejście na hex — sprawdź minę
       if (this._checkMineTrigger(unit)) return;
+      // Victoria 2 stack combat: contact intercept — na hexie z wrogiem stop
+      if (this._interceptOnContact(unit)) return;
 
       if (unit._path.length === 0) {
         // Koniec ścieżki
