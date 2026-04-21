@@ -2263,7 +2263,7 @@ export class GameScene {
       // Deleguj klawisze do aktywnego overlay (np. Escape w buildMode, strzałki)
       if (this.uiManager.overlayManager.isAnyOpen()) {
         const ov = this.uiManager.overlayManager.overlays[this.uiManager.overlayManager.active];
-        if (ov?.handleKeyDown && ov.handleKeyDown(e.key)) { this.uiManager.markDirty(); return; }
+        if (ov?.handleKeyDown && ov.handleKeyDown(e.key, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey })) { this.uiManager.markDirty(); return; }
         // Escape — zamknij aktywny overlay (jeśli overlay nie skonsumował)
         if (e.key === 'Escape') {
           this.uiManager.overlayManager.closeActive();
@@ -2388,6 +2388,9 @@ export class GameScene {
   // Nasłuchuje na window (gwarantuje odbiór niezależnie od z-index warstw)
   _setupMouseInput(eventLayer) {
     window.addEventListener('click', (e) => {
+      // Propaguj modifiery kliku do ColonyOverlay (multi-select shift/ctrl)
+      const overlay = this.uiManager?.overlayManager?.overlays?.colony;
+      if (overlay) overlay._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
       if (this.planetScene?.isOpen) return;
       // Blokuj kliknięcia gdy DOM modal/menu jest na wierzchu
       if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;

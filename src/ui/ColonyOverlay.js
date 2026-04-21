@@ -55,9 +55,22 @@ export class ColonyOverlay extends BaseOverlay {
     this._minHexSize = 10; this._maxHexSize = 56;
 
     // Jednostki naziemne
-    this._selectedUnit = null;
+    this._selectedUnit = null;          // primary selection (last clicked) — compat
+    this._selectedUnits = new Set();    // wszystkie zaznaczone unit IDs (multi-select)
+    this._controlGroups = new Map();    // number → Set<unitId> (Ctrl+1..9 grupy bojowe)
     this._unitSprites = new Map();
     this._loadUnitSprites();
+
+    // Modifiery ostatniego kliknięcia — ustawiane przez window.mousedown listener w GameScene.
+    // Używane w handleClick do rozróżnienia single-select (bez modifierów) vs add-to-selection.
+    this._lastMouseMods = { shift: false, ctrl: false };
+
+    // Drag-select (prostokąt) — mousedown na pustym hexie + drag
+    this._dragSelectActive = false;
+    this._dragSelectStartX = 0;
+    this._dragSelectStartY = 0;
+    this._dragSelectCurX = 0;
+    this._dragSelectCurY = 0;
 
     // Drag
     this._isDragging = false;
@@ -481,6 +494,65 @@ export class ColonyOverlay extends BaseOverlay {
     return (Math.abs(q1 - q2) + Math.abs(r1 - r2) + Math.abs(s1 - s2)) / 2;
   }
 
+  // ── Multi-select helpers ──────────────────────────────────────────────
+  /**
+   * Zaznacz pojedynczą jednostkę (nadpisz cały select).
+   */
+  _selectSingle(unit) {
+    this._selectedUnits.clear();
+    if (unit) this._selectedUnits.add(unit.id);
+    this._selectedUnit = unit ?? null;
+  }
+
+  /**
+   * Toggle: jeśli jest w selectie usuń, inaczej dodaj (dla Shift/Ctrl click).
+   * Tylko player-owned (chroni przed sterowaniem wrogiem).
+   */
+  _toggleInSelection(unit) {
+    if (!unit) return;
+    if (unit.owner && unit.owner !== 'player') return;  // wrogi: pomiń
+    if (this._selectedUnits.has(unit.id)) {
+      this._selectedUnits.delete(unit.id);
+      if (this._selectedUnit?.id === unit.id) {
+        // Primary wskazuje na usuwaną → znajdź nową primary
+        const gum = window.KOSMOS?.groundUnitManager;
+        const firstId = [...this._selectedUnits][0];
+        this._selectedUnit = firstId ? (gum?.getUnit?.(firstId) ?? null) : null;
+      }
+    } else {
+      this._selectedUnits.add(unit.id);
+      this._selectedUnit = unit;
+    }
+  }
+
+  /**
+   * Wyczyść wszystkie zaznaczenia.
+   */
+  _clearSelection() {
+    this._selectedUnits.clear();
+    this._selectedUnit = null;
+  }
+
+  /**
+   * Zwróć tablicę zaznaczonych jednostek (żywych i nadal istniejących).
+   */
+  _getSelectedUnits() {
+    const gum = window.KOSMOS?.groundUnitManager;
+    const out = [];
+    for (const id of this._selectedUnits) {
+      const u = gum?.getUnit?.(id);
+      if (u) out.push(u);
+    }
+    return out;
+  }
+
+  /**
+   * Tylko player-owned z selectu (dla rozkazów).
+   */
+  _getSelectedPlayerUnits() {
+    return this._getSelectedUnits().filter(u => !u.owner || u.owner === 'player');
+  }
+
   /**
    * Otwórz ColonyOverlay dla konkretnej planety (własnej LUB obcej) przez OverlayManager.
    * To kluczowe: sama `this.show()` ustawia lokalnie visible=true ale OverlayManager.active
@@ -604,6 +676,22 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillStyle = `rgba(0, 255, 180, ${0.7 + pulse * 0.3})`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('🤖 WYBIERZ HEX LĄDOWANIA — kliknij na mapie', ox + ow / 2, oy + HDR_H + 11);
+    }
+
+    // Drag-select: prostokąt zaznaczenia (Shift+drag)
+    if (this._dragSelectActive) {
+      const sx = Math.min(this._dragSelectStartX, this._dragSelectCurX);
+      const sy = Math.min(this._dragSelectStartY, this._dragSelectCurY);
+      const ex = Math.max(this._dragSelectStartX, this._dragSelectCurX);
+      const ey = Math.max(this._dragSelectStartY, this._dragSelectCurY);
+      ctx.save();
+      ctx.fillStyle = 'rgba(100,160,255,0.12)';
+      ctx.fillRect(sx, sy, ex - sx, ey - sy);
+      ctx.strokeStyle = '#64A0FF';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(sx, sy, ex - sx, ey - sy);
+      ctx.restore();
     }
 
     // Flash message
@@ -791,6 +879,8 @@ export class ColonyOverlay extends BaseOverlay {
     const pw = 200;
     let ph = 96;  // baza: nazwa + status + hex + HP
     if (isEnemy) ph += 14;                         // banner "ROZPOZNANIE"
+    const multiSelect = this._selectedUnits.size > 1;
+    if (multiSelect) ph += 18;                    // banner "Zaznaczono N"
     if (unit.attack != null) ph += 18;            // linia attack/defense
     // Opcja C v3: rezerwuj miejsce dla supply/org/morale + damageMult (tylko archetypowe jednostki)
     const hasSupplyV3 = unit.supply != null && !isEnemy;
@@ -821,9 +911,23 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.textAlign = 'left';
     }
 
+    // Banner multi-select (nad normalnym content panelu)
+    let multiBannerOffset = 0;
+    if (multiSelect) {
+      const bY = py + (isEnemy ? 14 : 0);
+      ctx.fillStyle = 'rgba(100,160,255,0.22)';
+      ctx.fillRect(px, bY, pw, 18);
+      ctx.font = `bold 10px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#80B8FF';
+      ctx.textAlign = 'center';
+      ctx.fillText(`👥 Zaznaczono ${this._selectedUnits.size} jednostek`, px + pw / 2, bY + 9);
+      ctx.textAlign = 'left';
+      multiBannerOffset = 18;
+    }
+
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    let ly = py + (isEnemy ? 28 : 16);
+    let ly = py + (isEnemy ? 28 : 16) + multiBannerOffset;
 
     // Nagłówek — typ jednostki + owner
     ctx.font = `bold 11px ${THEME.fontFamily}`;
@@ -1344,9 +1448,12 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.stroke();
 
       // ── Ramka selekcji ──
-      if (this._selectedUnit?.id === unit.id) {
+      // Ring dla zaznaczonych: primary (grubszy) + pozostałe z multi-selectu (cieńszy)
+      const isPrimary = this._selectedUnit?.id === unit.id;
+      const isMultiSelected = this._selectedUnits.has(unit.id);
+      if (isPrimary || isMultiSelected) {
         ctx.strokeStyle = isEnemy ? '#FF6040' : '#64A0FF';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = isPrimary ? 2 : 1.5;
         ctx.beginPath();
         ctx.arc(sx, sy, S / 2 + 3, 0, Math.PI * 2);
         ctx.stroke();
@@ -2245,32 +2352,34 @@ export class ColonyOverlay extends BaseOverlay {
       if (tile) {
         const mgr = window.KOSMOS?.groundUnitManager;
         const unitOnTile = mgr?.getUnitAt(colony?.planetId, tile.q, tile.r);
+        const mods = this._lastMouseMods ?? { shift: false, ctrl: false };
+        const isMultiSelectMod = mods.shift || mods.ctrl;
 
-        if (this._selectedUnit) {
-          // Tryb jednostki aktywny
-          if (unitOnTile && unitOnTile.id === this._selectedUnit.id) {
-            // Klik na tę samą jednostkę → odznacz
-            this._selectedUnit = null;
-            this._selectedHex = null;
-            return true;
-          }
-          if (unitOnTile) {
-            // Klik na inną jednostkę → przełącz
-            this._selectedUnit = unitOnTile;
-            this._selectedHex = { q: tile.q, r: tile.r };
-            return true;
-          }
-          // Lewy klik na pusty hex → odznacz jednostkę, otwórz panel budowy
-          this._selectedUnit = null;
-        }
-
-        // Brak zaznaczonej jednostki
         if (unitOnTile) {
-          // Klik na jednostkę → zaznacz ją (bez floating panelu)
-          this._selectedUnit = unitOnTile;
-          this._selectedHex = { q: tile.q, r: tile.r };
+          // Klik na jednostkę
+          if (isMultiSelectMod) {
+            // Shift/Ctrl+click → toggle w _selectedUnits (tylko player-owned)
+            this._toggleInSelection(unitOnTile);
+            this._selectedHex = { q: tile.q, r: tile.r };
+          } else {
+            // Zwykły klik
+            if (this._selectedUnits.has(unitOnTile.id) && this._selectedUnits.size === 1) {
+              // Klik na jedynie zaznaczoną → odznacz
+              this._clearSelection();
+              this._selectedHex = null;
+            } else {
+              // Nadpisz select jedną jednostką
+              this._selectSingle(unitOnTile);
+              this._selectedHex = { q: tile.q, r: tile.r };
+            }
+          }
           this._hoveredBuildId = null;
           return true;
+        }
+
+        // Klik na pusty hex — jeśli miałeś selected unit, odznacz (bez shift/ctrl)
+        if (this._selectedUnits.size > 0 && !isMultiSelectMod) {
+          this._clearSelection();
         }
 
         // Normalny klik na hex → floating panel budowy
@@ -2281,7 +2390,7 @@ export class ColonyOverlay extends BaseOverlay {
       }
       // Klik na overlay ale poza mapą — deselect wszystko
       this._selectedHex = null;
-      this._selectedUnit = null;
+      this._clearSelection();
     }
     return true;
   }
@@ -2377,6 +2486,13 @@ export class ColonyOverlay extends BaseOverlay {
   handleMouseMove(x, y) {
     if (!this.visible) return;
     super.handleMouseMove(x, y);
+
+    // Drag-select (Shift+drag) — aktualizuj prostokąt
+    if (this._dragSelectActive) {
+      this._dragSelectCurX = x;
+      this._dragSelectCurY = y;
+      return;
+    }
 
     if (this._isDragging) {
       const dx = x - this._dragStartX, dy = y - this._dragStartY;
@@ -2506,12 +2622,74 @@ export class ColonyOverlay extends BaseOverlay {
     const bounds = this._getMapBounds();
     if (!bounds) return;
     if (x < bounds.ox || x > bounds.ox + bounds.ow || y < bounds.oy || y > bounds.oy + bounds.oh) return;
+
+    // Shift+drag = drag-select wojsk (multi-select prostokąt).
+    // Bez modifiera = drag kamery (istniejąca logika).
+    if (this._lastMouseMods?.shift) {
+      this._dragSelectActive = true;
+      this._dragSelectStartX = x;
+      this._dragSelectStartY = y;
+      this._dragSelectCurX = x;
+      this._dragSelectCurY = y;
+      return;
+    }
+
     this._isDragging = true; this._hasDragged = false;
     this._dragStartX = x; this._dragStartY = y;
     this._dragCamStartX = this._camX; this._dragCamStartY = this._camY;
   }
 
-  handleMouseUp() { if (this.visible) this._isDragging = false; }
+  handleMouseUp() {
+    if (!this.visible) return;
+    if (this._dragSelectActive) {
+      this._finishDragSelect();
+      this._dragSelectActive = false;
+      return;
+    }
+    this._isDragging = false;
+  }
+
+  /**
+   * Po drag-select: znajdź wszystkie player unit-y których sprite jest w prostokącie.
+   */
+  _finishDragSelect() {
+    const mgr = window.KOSMOS?.groundUnitManager;
+    const colony = this._getColony();
+    const grid = colony ? this._getGrid(colony) : null;
+    if (!mgr || !grid) return;
+
+    const minX = Math.min(this._dragSelectStartX, this._dragSelectCurX);
+    const maxX = Math.max(this._dragSelectStartX, this._dragSelectCurX);
+    const minY = Math.min(this._dragSelectStartY, this._dragSelectCurY);
+    const maxY = Math.max(this._dragSelectStartY, this._dragSelectCurY);
+
+    // Jeśli prostokąt za mały (przypadkowy klik), przerwij
+    if ((maxX - minX) < 8 && (maxY - minY) < 8) return;
+
+    const bounds = this._getMapBounds();
+    if (!bounds) return;
+    const cx = bounds.ox + bounds.ow / 2 - this._camX;
+    const cy = bounds.oy + bounds.oh / 2 - this._camY;
+
+    // Ctrl trzymane na release → dodaj do istniejącego selectu; bez Ctrl → nadpisz
+    const addMode = !!this._lastMouseMods?.ctrl;
+    if (!addMode) this._clearSelection();
+
+    const units = mgr.getUnitsOnPlanet?.(colony.planetId) ?? [];
+    let added = 0;
+    for (const u of units) {
+      if (u.owner && u.owner !== 'player') continue;  // tylko własne
+      const pos = grid.tilePixelPos(u.q, u.r, this._hexSize);
+      const sx = cx + pos.x;
+      const sy = cy + pos.y;
+      if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) {
+        this._selectedUnits.add(u.id);
+        this._selectedUnit = u; // primary = ostatnio dodany
+        added++;
+      }
+    }
+    if (added > 0) this._showFlash(`Zaznaczono ${this._selectedUnits.size} jednostek`);
+  }
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
@@ -2544,8 +2722,45 @@ export class ColonyOverlay extends BaseOverlay {
     return true;
   }
 
-  handleKeyDown(key) {
+  handleKeyDown(key, mods = {}) {
     if (!this.visible) return false;
+
+    // Grupy bojowe: 1..9 select / Ctrl+1..9 assign
+    if (/^[1-9]$/.test(key)) {
+      const n = Number(key);
+      if (mods.ctrl) {
+        // Ctrl+N: przypisz aktualny select → grupa N
+        if (this._selectedUnits.size === 0) {
+          this._showFlash(`Nic nie zaznaczono do grupy ${n}`);
+        } else {
+          this._controlGroups.set(n, new Set(this._selectedUnits));
+          this._showFlash(`✓ Grupa ${n} (${this._selectedUnits.size} jednostek)`);
+        }
+        return true;
+      }
+      // Sam N: select grupy N
+      const group = this._controlGroups.get(n);
+      if (!group || group.size === 0) {
+        this._showFlash(`Grupa ${n} jest pusta`);
+        return true;
+      }
+      const gum = window.KOSMOS?.groundUnitManager;
+      this._selectedUnits.clear();
+      let primary = null;
+      for (const id of group) {
+        const u = gum?.getUnit?.(id);
+        if (u) {
+          this._selectedUnits.add(id);
+          if (!primary) primary = u;
+        }
+      }
+      // Usuń martwe jednostki z grupy
+      for (const id of group) if (!gum?.getUnit?.(id)) group.delete(id);
+      this._selectedUnit = primary;
+      this._showFlash(`👥 Grupa ${n} (${this._selectedUnits.size} jednostek)`);
+      return true;
+    }
+
     if (key === 'Escape') {
       // Priorytet: anuluj tryby specjalne zamiast zamykać overlay
       if (this._dropMode)    { this._finishDropMode('⚔ Desant anulowany'); return true; }
