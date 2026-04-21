@@ -13,7 +13,7 @@ import EventBus from '../core/EventBus.js';
 import { HexGrid } from '../map/HexGrid.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { getUnitStats } from '../data/GroundUnitData.js';
-import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
+import { UNIT_ARCHETYPES, getTransportSize } from '../data/unitArchetypes.js';
 import { GroundUnitFactory } from './GroundUnitFactory.js';
 
 // ── Koszty ruchu po terenie ──────────────────────────────────────────────────
@@ -176,8 +176,29 @@ export class GroundUnitManager {
     this._units.delete(unitId);
     // Ground Unit System: cleanup capture progress
     this._captureProgress.delete(unitId);
+    // Wyczyść z ładowni statków (jeśli jednostka była in_cargo)
+    this._pruneFromVessels(unitId);
     EventBus.emit('groundUnit:removed', { unitId, planetId: unit.planetId });
     return true;
+  }
+
+  // Usuń ID jednostki z `vessel.groundUnits` wszystkich statków i przelicz troopBayUsed.
+  _pruneFromVessels(unitId) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr?.getAllVessels) return;
+    for (const v of vMgr.getAllVessels()) {
+      const list = v.groundUnits;
+      if (!Array.isArray(list) || !list.includes(unitId)) continue;
+      v.groundUnits = list.filter(id => id !== unitId);
+      // Przelicz troopBayUsed z pozostałych (źródło prawdy = żywe jednostki w ładowni)
+      let used = 0;
+      for (const id of v.groundUnits) {
+        const u = this._units.get(id);
+        if (!u) continue;
+        used += getTransportSize(u.archetypeId) ?? 0;
+      }
+      v.troopBayUsed = used;
+    }
   }
 
   /** Zwróć wszystkie jednostki (płaska tablica). */

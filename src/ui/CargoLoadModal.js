@@ -355,6 +355,21 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
         // Załadowane
         loadedList.innerHTML = '';
         const gum = window.KOSMOS?.groundUnitManager;
+        // Self-heal: prune stale IDs (jednostki usunięte z GroundUnitManager)
+        // oraz przelicz troopBayUsed aby zgadzał się z rzeczywistą zawartością ładowni.
+        if (Array.isArray(vessel.groundUnits) && gum) {
+          const alive = vessel.groundUnits.filter(id => gum.getUnit(id));
+          if (alive.length !== vessel.groundUnits.length) {
+            vessel.groundUnits = alive;
+            let usedRecalc = 0;
+            for (const id of alive) {
+              const u = gum.getUnit(id);
+              usedRecalc += getTransportSize(u?.archetypeId) ?? 0;
+            }
+            vessel.troopBayUsed = usedRecalc;
+            changed = true;
+          }
+        }
         if ((vessel.groundUnits ?? []).length === 0) {
           const empty = document.createElement('div');
           empty.style.cssText = `font-size: 10px; color: ${THEME.textDim}; padding: 2px 0; font-style: italic;`;
