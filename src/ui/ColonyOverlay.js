@@ -67,14 +67,10 @@ export class ColonyOverlay extends BaseOverlay {
     // Używane w handleClick do rozróżnienia single-select (bez modifierów) vs add-to-selection.
     this._lastMouseMods = { shift: false, ctrl: false };
 
-    // Drag-select (prostokąt) — mousedown na pustym hexie + drag
-    this._dragSelectActive = false;
-    this._dragSelectStartX = 0;
-    this._dragSelectStartY = 0;
-    this._dragSelectCurX = 0;
-    this._dragSelectCurY = 0;
+    // Drag-select (prostokąt) — współdzielone API w BaseOverlay (this._rectSelect).
+    // Opt-in przez _canStartRectSelect() poniżej.
 
-    // Drag
+    // Pan kamery (MMB drag lub klawiatura WASD/strzałki)
     this._isDragging = false;
     this._dragStartX = 0; this._dragStartY = 0;
     this._dragCamStartX = 0; this._dragCamStartY = 0;
@@ -727,20 +723,32 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillText('🤖 WYBIERZ HEX LĄDOWANIA — kliknij na mapie', ox + ow / 2, oy + HDR_H + 11);
     }
 
-    // Drag-select: prostokąt zaznaczenia (Shift+drag)
-    if (this._dragSelectActive) {
-      const sx = Math.min(this._dragSelectStartX, this._dragSelectCurX);
-      const sy = Math.min(this._dragSelectStartY, this._dragSelectCurY);
-      const ex = Math.max(this._dragSelectStartX, this._dragSelectCurX);
-      const ey = Math.max(this._dragSelectStartY, this._dragSelectCurY);
-      ctx.save();
-      ctx.fillStyle = 'rgba(100,160,255,0.12)';
-      ctx.fillRect(sx, sy, ex - sx, ey - sy);
-      ctx.strokeStyle = '#64A0FF';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(sx, sy, ex - sx, ey - sy);
-      ctx.restore();
+    // Rect-select (LMB drag) — live-preview obwódek jednostek wewnątrz prostokąta
+    if (this._rectSelect.active) {
+      const bounds = this._getRectSelectBounds();
+      if (bounds) {
+        const previewIds = this._onRectSelectPreview(bounds);
+        if (previewIds && previewIds.size > 0) {
+          const colony = this._getColony();
+          const grid = colony ? this._getGrid(colony) : null;
+          if (grid) {
+            const mapBounds = this._getMapBounds();
+            if (mapBounds) {
+              const cx = mapBounds.ox + mapBounds.ow / 2 - this._camX;
+              const cy = mapBounds.oy + mapBounds.oh / 2 - this._camY;
+              const gum = window.KOSMOS?.groundUnitManager;
+              for (const uid of previewIds) {
+                const u = gum?.getUnit?.(uid);
+                if (!u) continue;
+                const pos = grid.tilePixelPos(u.q, u.r, this._hexSize);
+                this._drawRectSelectPreviewOutline(ctx, cx + pos.x, cy + pos.y, 14);
+              }
+            }
+          }
+        }
+      }
+      // Właściwy prostokąt zaznaczenia (mint, spójny z resztą UI)
+      this._drawRectSelect(ctx);
     }
 
     // Flash message
@@ -2910,14 +2918,10 @@ export class ColonyOverlay extends BaseOverlay {
 
   handleMouseMove(x, y) {
     if (!this.visible) return;
-    super.handleMouseMove(x, y);
+    super.handleMouseMove(x, y);  // aktualizuje _hoverZone + _rectSelect.curX/Y
 
-    // Drag-select (Shift+drag) — aktualizuj prostokąt
-    if (this._dragSelectActive) {
-      this._dragSelectCurX = x;
-      this._dragSelectCurY = y;
-      return;
-    }
+    // Rect-select aktywne → nic więcej nie rób (pan i hover nie dotyczą drag-select)
+    if (this._rectSelect.active) return;
 
     if (this._isDragging) {
       const dx = x - this._dragStartX, dy = y - this._dragStartY;
@@ -3038,82 +3042,107 @@ export class ColonyOverlay extends BaseOverlay {
     }
   }
 
-  handleMouseDown(x, y) {
-    if (!this.visible) return;
-    // Nie draguj gdy klik jest w floating panel
+  // ── Rect-select (LMB drag) — opt-in dla BaseOverlay ────────────────────────
+  // Zwraca true gdy punkt (x,y) nadaje się na start prostokąta selekcji.
+  _canStartRectSelect(x, y) {
+    if (!this.visible) return false;
+    // Nie w floating panelu
     if (this._selectedHex && x >= this._floatX && x <= this._floatX + FLOAT_W &&
-        y >= this._floatY && y <= this._floatY + (this._floatH ?? 300)) return;
-    // Nie draguj gdy klik poza overlay bounds
+        y >= this._floatY && y <= this._floatY + (this._floatH ?? 300)) return false;
+    // W bounds mapy
     const bounds = this._getMapBounds();
-    if (!bounds) return;
-    if (x < bounds.ox || x > bounds.ox + bounds.ow || y < bounds.oy || y > bounds.oy + bounds.oh) return;
-
-    // Shift+drag = drag-select wojsk (multi-select prostokąt).
-    // Bez modifiera = drag kamery (istniejąca logika).
-    if (this._lastMouseMods?.shift) {
-      this._dragSelectActive = true;
-      this._dragSelectStartX = x;
-      this._dragSelectStartY = y;
-      this._dragSelectCurX = x;
-      this._dragSelectCurY = y;
-      return;
-    }
-
-    this._isDragging = true; this._hasDragged = false;
-    this._dragStartX = x; this._dragStartY = y;
-    this._dragCamStartX = this._camX; this._dragCamStartY = this._camY;
+    if (!bounds) return false;
+    if (x < bounds.ox || x > bounds.ox + bounds.ow || y < bounds.oy || y > bounds.oy + bounds.oh) return false;
+    // Nie w specjalnych trybach (tam LMB = wybór hexa)
+    if (this._landingMode || this._strikeMode || this._supportMode) return false;
+    // Nie nad hit-zone (np. przycisk)
+    if (this._hitTest(x, y)) return false;
+    return true;
   }
 
-  handleMouseUp() {
-    if (!this.visible) return;
-    if (this._dragSelectActive) {
-      this._finishDragSelect();
-      this._dragSelectActive = false;
-      return;
-    }
-    this._isDragging = false;
-  }
-
-  /**
-   * Po drag-select: znajdź wszystkie player unit-y których sprite jest w prostokącie.
-   */
-  _finishDragSelect() {
+  // Helper: pobierz jednostki-gracza których sprite leży w prostokącie screen-space.
+  _collectUnitsInRect(bounds) {
+    const out = new Set();
     const mgr = window.KOSMOS?.groundUnitManager;
     const colony = this._getColony();
     const grid = colony ? this._getGrid(colony) : null;
-    if (!mgr || !grid) return;
-
-    const minX = Math.min(this._dragSelectStartX, this._dragSelectCurX);
-    const maxX = Math.max(this._dragSelectStartX, this._dragSelectCurX);
-    const minY = Math.min(this._dragSelectStartY, this._dragSelectCurY);
-    const maxY = Math.max(this._dragSelectStartY, this._dragSelectCurY);
-
-    // Jeśli prostokąt za mały (przypadkowy klik), przerwij
-    if ((maxX - minX) < 8 && (maxY - minY) < 8) return;
-
-    const bounds = this._getMapBounds();
-    if (!bounds) return;
-    const cx = bounds.ox + bounds.ow / 2 - this._camX;
-    const cy = bounds.oy + bounds.oh / 2 - this._camY;
-
-    // Ctrl trzymane na release → dodaj do istniejącego selectu; bez Ctrl → nadpisz
-    const addMode = !!this._lastMouseMods?.ctrl;
-    if (!addMode) this._clearSelection();
-
+    if (!mgr || !grid) return out;
+    const mapBounds = this._getMapBounds();
+    if (!mapBounds) return out;
+    const cx = mapBounds.ox + mapBounds.ow / 2 - this._camX;
+    const cy = mapBounds.oy + mapBounds.oh / 2 - this._camY;
     const units = mgr.getUnitsOnPlanet?.(colony.planetId) ?? [];
-    let added = 0;
     for (const u of units) {
-      if (u.owner && u.owner !== 'player') continue;  // tylko własne
+      if (u.owner && u.owner !== 'player') continue;
       const pos = grid.tilePixelPos(u.q, u.r, this._hexSize);
-      const sx = cx + pos.x;
-      const sy = cy + pos.y;
-      if (sx >= minX && sx <= maxX && sy >= minY && sy <= maxY) {
-        this._selectedUnits.add(u.id);
-        this._selectedUnit = u; // primary = ostatnio dodany
-        added++;
+      const sx = cx + pos.x, sy = cy + pos.y;
+      if (sx >= bounds.minX && sx <= bounds.maxX && sy >= bounds.minY && sy <= bounds.maxY) {
+        out.add(u.id);
       }
     }
-    if (added > 0) this._showFlash(`Zaznaczono ${this._selectedUnits.size} jednostek`);
+    return out;
+  }
+
+  _onRectSelectPreview(bounds) {
+    return this._collectUnitsInRect(bounds);
+  }
+
+  _onRectSelectComplete(bounds, mods) {
+    // Gate supresji click'a który zaraz wystrzeli po mouseup
+    this._hasDragged = true;
+
+    const ids = this._collectUnitsInRect(bounds);
+    // Ctrl trzymane na release → dodaj do istniejącego selectu; bez Ctrl → nadpisz
+    if (!mods.ctrl) this._clearSelection();
+    const mgr = window.KOSMOS?.groundUnitManager;
+    for (const uid of ids) {
+      const u = mgr?.getUnit?.(uid);
+      if (!u) continue;
+      this._selectedUnits.add(uid);
+      this._selectedUnit = u;
+    }
+    if (ids.size > 0) {
+      this._showFlash(`Zaznaczono ${this._selectedUnits.size} jednostek`);
+    } else if (!mods.ctrl) {
+      // Pusty rect bez Ctrl = deselekcja (oczyść wybór)
+      this._showFlash('Wybór wyczyszczony');
+    }
+  }
+
+  handleMouseDown(x, y, button = 0) {
+    if (!this.visible) return;
+    // LMB → pozwól BaseOverlay uruchomić rect-select jeśli _canStartRectSelect()
+    if (button === 0) {
+      this._hasDragged = false;  // reset dla click-vs-drag w handleClick
+      super.handleMouseDown(x, y, button);
+      return; // brak pan-kamery pod LMB
+    }
+    // MMB → pan kamery
+    if (button === 1) {
+      // Nie pan gdy klik w floating panel
+      if (this._selectedHex && x >= this._floatX && x <= this._floatX + FLOAT_W &&
+          y >= this._floatY && y <= this._floatY + (this._floatH ?? 300)) return;
+      const bounds = this._getMapBounds();
+      if (!bounds) return;
+      if (x < bounds.ox || x > bounds.ox + bounds.ow || y < bounds.oy || y > bounds.oy + bounds.oh) return;
+      this._isDragging = true; this._hasDragged = false;
+      this._dragStartX = x; this._dragStartY = y;
+      this._dragCamStartX = this._camX; this._dragCamStartY = this._camY;
+    }
+    // RMB (button 2) → rozkaz ruchu obsługuje window.contextmenu w GameScene
+  }
+
+  handleMouseUp(x, y, button = 0) {
+    if (!this.visible) return;
+    // LMB → domknij rect-select (BaseOverlay wywoła _onRectSelectComplete)
+    if (button === 0) {
+      super.handleMouseUp(x, y, button);
+      return;
+    }
+    // MMB → zakończ pan
+    if (button === 1) {
+      this._isDragging = false;
+    }
   }
 
   handleScroll(delta, x, y) {
@@ -3216,10 +3245,20 @@ export class ColonyOverlay extends BaseOverlay {
       const tile = grid?.get(this._selectedHex.q, this._selectedHex.r);
       if (tile?.buildingId) { EventBus.emit('planet:demolishRequest', { tile }); return true; }
     }
-    // Opcja C v3: toggle Supply Coverage overlay (S)
-    if (key === 's' || key === 'S') {
+
+    // Opcja C v3: toggle Supply Coverage overlay — Shift+S (żeby samo 's' mogło być pan)
+    if (key === 'S' || (mods.shift && key === 's')) {
       this._showSupplyCoverage = !this._showSupplyCoverage;
       return true;
+    }
+
+    // Pan kamery klawiaturą: WASD / strzałki (gdy bez shift — Shift+S to supply)
+    if (!mods.shift) {
+      const PAN_STEP = 40;
+      if (key === 'ArrowLeft'  || key === 'a') { this._camX -= PAN_STEP; return true; }
+      if (key === 'ArrowRight' || key === 'd') { this._camX += PAN_STEP; return true; }
+      if (key === 'ArrowUp'    || key === 'w') { this._camY -= PAN_STEP; return true; }
+      if (key === 'ArrowDown'  || key === 's') { this._camY += PAN_STEP; return true; }
     }
     return false;
   }

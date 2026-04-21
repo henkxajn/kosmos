@@ -873,18 +873,18 @@ export class UIManager {
     return false;
   }
 
-  handleMouseDown(rawX, rawY) {
+  handleMouseDown(rawX, rawY, button = 0) {
     this._dirty = true;
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
-    if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseDown(x, y); return; }
+    if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseDown(x, y, button); return; }
   }
 
-  handleMouseUp(rawX, rawY) {
+  handleMouseUp(rawX, rawY, button = 0) {
     this._dirty = true;
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
-    if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y); return; }
+    if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y, button); return; }
   }
 
   handleMouseMove(x, y) {

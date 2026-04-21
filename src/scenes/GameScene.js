@@ -2417,11 +2417,16 @@ export class GameScene {
       }
     });
 
-    // Prawy klik — rozkaz ruchu jednostki naziemnej (ColonyOverlay)
+    // Prawy klik — blokuj natywne menu przeglądarki (wygląda jak HTML, nie jak gra).
+    // Wyjątek: inputy tekstowe (ModalInput, pola liczby) — tam menu native daje copy/paste.
+    // Następnie ewentualny rozkaz ruchu jednostki naziemnej (ColonyOverlay).
     window.addEventListener('contextmenu', (e) => {
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
+      e.preventDefault();
+
       const overlay = this.uiManager?.overlayManager?.overlays?.colony;
       if (!overlay?.visible || !overlay._selectedUnit) return;
-      e.preventDefault();
 
       // Guard: gracz nie może kierować wrogimi jednostkami (owner !== 'player')
       const selected = overlay._selectedUnit;
@@ -2530,13 +2535,16 @@ export class GameScene {
     window.addEventListener('mousedown', (e) => {
       if (this.planetScene?.isOpen) return;
       if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
-      this.uiManager.handleMouseDown(e.clientX, e.clientY);
+      // Propaguj modifier state do overlay'a (żeby rect-select z Ctrl/Shift działał od mousedown)
+      const overlay = this.uiManager?.overlayManager?.overlays?.colony;
+      if (overlay) overlay._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
+      this.uiManager.handleMouseDown(e.clientX, e.clientY, e.button);
     });
 
     window.addEventListener('mouseup', (e) => {
       if (this.planetScene?.isOpen) return;
       if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
-      this.uiManager.handleMouseUp(e.clientX, e.clientY);
+      this.uiManager.handleMouseUp(e.clientX, e.clientY, e.button);
     });
 
     window.addEventListener('mousemove', (e) => {

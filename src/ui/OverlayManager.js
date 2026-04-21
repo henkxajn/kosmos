@@ -103,15 +103,15 @@ export class OverlayManager {
     return false;
   }
 
-  handleMouseDown(x, y) {
+  handleMouseDown(x, y, button = 0) {
     if (!this.active) return;
     const ov = this.overlays[this.active];
-    if (ov.handleMouseDown) ov.handleMouseDown(x, y);
+    if (ov.handleMouseDown) ov.handleMouseDown(x, y, button);
   }
 
-  handleMouseUp(x, y) {
+  handleMouseUp(x, y, button = 0) {
     if (!this.active) return;
     const ov = this.overlays[this.active];
-    if (ov.handleMouseUp) ov.handleMouseUp(x, y);
+    if (ov.handleMouseUp) ov.handleMouseUp(x, y, button);
   }
 }
