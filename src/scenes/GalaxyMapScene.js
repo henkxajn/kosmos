@@ -10,6 +10,8 @@ import { COSMIC }              from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W }      from '../ui/CivPanelDrawer.js';
 import { STAR_TYPES }          from '../config/GameConfig.js';
 import { SHIPS }               from '../data/ShipsData.js';
+import { HULLS }               from '../data/HullsData.js';
+import { calcShipStats }       from '../data/ShipModulesData.js';
 import EventBus                from '../core/EventBus.js';
 import EntityManager           from '../core/EntityManager.js';
 import { t }                   from '../i18n/i18n.js';
@@ -588,8 +590,14 @@ export class GalaxyMapScene extends BaseOverlay {
     return vMgr.getAllVessels().filter(v => {
       if (v.position.state !== 'docked') return false;
       if (v.status !== 'idle' && v.status !== 'refueling') return false;
-      const def = SHIPS[v.shipId];
-      return def?.warpCapable === true;
+      // Warp capability pochodzi z modułów (engine_warp); legacy fallback na hull.
+      const hull = SHIPS[v.shipId] ?? HULLS[v.shipId];
+      if (!hull) return false;
+      if (Array.isArray(v.modules) && v.modules.length > 0) {
+        const stats = calcShipStats(hull, v.modules);
+        return stats?.warpCapable === true;
+      }
+      return hull.warpCapable === true;
     });
   }
 

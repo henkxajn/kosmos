@@ -470,7 +470,15 @@ export class VesselManager {
     if (vessel.position.state !== 'docked') return false;
 
     const shipDef = _getHullDef(vessel.shipId);
-    if (!shipDef?.warpCapable) return false;
+    if (!shipDef) return false;
+
+    // Warp capability pochodzi z modułów (engine_warp) — nie z kadłuba.
+    // Legacy fallback: flaga na hullDef (starsze save'y / jednostki debugowe).
+    const stats = Array.isArray(vessel.modules) && vessel.modules.length > 0
+      ? calcShipStats(shipDef, vessel.modules)
+      : null;
+    const isWarpCapable = stats?.warpCapable === true || shipDef.warpCapable === true;
+    if (!isWarpCapable) return false;
 
     // Dane docelowej gwiazdy z galaxyData
     const gd = window.KOSMOS?.galaxyData;
@@ -491,8 +499,8 @@ export class VesselManager {
     const fuelCost = distLY * fuelPerLY;
     if (vessel.fuel.current < fuelCost) return false;
 
-    // Prędkość warp (z bonusem beacon)
-    const baseSpeed = shipDef.warpSpeedLY ?? 2.5; // LY/rok
+    // Prędkość warp (z bonusem beacon) — z modułów jeśli dostępne
+    const baseSpeed = stats?.warpSpeedLY || shipDef.warpSpeedLY || 2.5; // LY/rok
     const ssMgr = window.KOSMOS?.starSystemManager;
     const beaconBonus = ssMgr?.hasBeacon(targetSystemId) ? 3.0 : 1.0;
     const warpSpeed = baseSpeed * beaconBonus;
