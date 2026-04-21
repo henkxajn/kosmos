@@ -1091,8 +1091,12 @@ export class GroundUnitManager {
 
       const neighbors = grid.getNeighbors(current.q, current.r);
       for (const neighbor of neighbors) {
-        const cost = MOVE_COST[neighbor.type] ?? 1;
-        if (cost === Infinity) continue;  // nieprzejezdny
+        // Pathfinding używa UNIFORM COST 1 — gracz chce najkrótszej ścieżki.
+        // Terrain cost wpływa na PRĘDKOŚĆ (spowolnienie w _tickMovement via unit._stepCost),
+        // NIE na wybór trasy. Tylko Infinity (ocean) blokuje przejście.
+        const terrainCost = MOVE_COST[neighbor.type] ?? 1;
+        if (terrainCost === Infinity) continue;  // nieprzejezdny
+        const cost = 1;
 
         const nKey = `${neighbor.q},${neighbor.r}`;
         const tentativeG = (gScore.get(curKey) ?? Infinity) + cost;

@@ -158,6 +158,33 @@ export class ColonyOverlay extends BaseOverlay {
       this._showFlash(`💥 Wybierz hex ostrzału (${vessel.orbitalStrike.ammoCurrent} pocisków)`);
     });
 
+    // Victoria 2 stack combat: widoczny raport z walki (flash + event log entry)
+    EventBus.on('combat:hexResolved', ({ planetId, q, r, winnerId, playerKilled, enemyKilled }) => {
+      if (!this.visible) return;
+      // Pokaż flash tylko gdy ta planeta jest otwarta
+      const activePid = this._selectedColonyId ?? window.KOSMOS?.colonyManager?.activePlanetId;
+      if (planetId !== activePid) return;
+      if (winnerId === 'player') {
+        this._showFlash(`⚔ Zwycięstwo (${q},${r}) — straty ${playerKilled} · wrogów ${enemyKilled}`);
+      } else if (winnerId && winnerId !== 'player') {
+        this._showFlash(`💀 Przegrana (${q},${r}) — straty ${playerKilled}`);
+      } else {
+        this._showFlash(`⚔ Bitwa (${q},${r}) zakończona`);
+      }
+    });
+
+    EventBus.on('combat:round', ({ planetId, q, r, round, playerLosses, enemyLosses }) => {
+      if (!this.visible) return;
+      const activePid = this._selectedColonyId ?? window.KOSMOS?.colonyManager?.activePlanetId;
+      if (planetId !== activePid) return;
+      const pk = playerLosses?.killed ?? 0;
+      const ek = enemyLosses?.killed ?? 0;
+      // Flash tylko gdy są ofiary (inaczej zasypaliby ekran)
+      if (pk > 0 || ek > 0) {
+        this._showFlash(`⚔ (${q},${r}) runda ${round}: −${pk} / −${ek}`);
+      }
+    });
+
     EventBus.on('vessel:dropTroopsRequest', ({ vesselId, targetId, unitIds }) => {
       const vMgr = window.KOSMOS?.vesselManager;
       const warSys = window.KOSMOS?.warSystem;

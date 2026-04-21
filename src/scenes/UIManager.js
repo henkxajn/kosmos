@@ -976,13 +976,17 @@ export class UIManager {
         const v = vMgrOut.getVessel(exp.vesselId);
         return v && v.colonyId === activePid;
       });
-      // Zbierz jednostki naziemne ze wszystkich kolonii
+      // Zbierz jednostki naziemne ze wszystkich kolonii.
+      // Outliner pokazuje tylko WŁASNE, ŻYWE jednostki — wrogów widać na mapie,
+      // ale nie chcemy ich na liście gracza (zabite pozostawałyby widoczne).
       const guMgr = window.KOSMOS?.groundUnitManager;
       const groundUnits = [];
       if (guMgr) {
         for (const col of allColonies) {
           const units = guMgr.getUnitsOnPlanet(col.planetId);
           for (const u of units) {
+            if (u.owner && u.owner !== 'player') continue;  // ukryj wrogów
+            if ((u.hp ?? 0) <= 0) continue;                 // ukryj martwych (defensywa)
             groundUnits.push({ ...u, planetName: col.name });
           }
         }
