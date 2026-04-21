@@ -75,6 +75,99 @@ export class EconomyOverlay extends BaseOverlay {
     super.hide();
     this._hoverResourceId = null;
     this._hideTooltip();
+    this._closeMinStockInput();
+  }
+
+  // ── Inline DOM input dla minimalnego zapasu ─────────────────────────────
+  // Tworzymy pływające pole nad canvas dokładnie w miejscu kliknięcia
+  // (kafelek między [−] a [+]). Wpisana wartość = docelowy bonus zapasu.
+  _openMinStockInput(colonyId, commodityId, canvasX, canvasY, boxW, boxH) {
+    this._closeMinStockInput();
+
+    const colMgr = window.KOSMOS?.colonyManager;
+    const col = colMgr?.getColony(colonyId);
+    const fs = col?.factorySystem;
+    if (!fs) return;
+
+    // Skala logiczne → fizyczne piksele (identyczna jak w UIManager)
+    const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const sx = canvasX * SCALE;
+    const sy = canvasY * SCALE;
+    const sw = boxW * SCALE;
+    const sh = boxH * SCALE;
+
+    const current = fs.getDemandBonus?.(commodityId) ?? 0;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.max = '999';
+    input.step = '1';
+    input.value = String(current);
+    Object.assign(input.style, {
+      position: 'fixed',
+      left: `${Math.round(sx)}px`,
+      top:  `${Math.round(sy)}px`,
+      width: `${Math.round(sw)}px`,
+      height: `${Math.round(sh)}px`,
+      boxSizing: 'border-box',
+      padding: '0 3px',
+      margin: '0',
+      background: THEME.bgPrimary,
+      border: `1px solid ${THEME.borderActive}`,
+      color: THEME.accent,
+      fontFamily: THEME.fontFamily,
+      fontSize: `${Math.max(10, Math.round(sh * 0.65))}px`,
+      textAlign: 'center',
+      outline: 'none',
+      zIndex: '300',
+      caretColor: THEME.accent,
+    });
+    // Ukryj strzałki number (spójność stylu)
+    input.style.appearance = 'textfield';
+
+    document.body.appendChild(input);
+    this._minStockInput = input;
+
+    let done = false;
+    const commit = () => {
+      if (done) return;
+      done = true;
+      const raw = parseInt(input.value, 10);
+      const val = Number.isFinite(raw) ? Math.max(0, Math.min(999, raw)) : 0;
+      fs.setDemandBonus(commodityId, val);
+      this._closeMinStockInput();
+    };
+    const cancel = () => {
+      if (done) return;
+      done = true;
+      this._closeMinStockInput();
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      e.stopPropagation();
+    });
+    input.addEventListener('blur', commit);
+    // Nie propaguj klików do canvas (nie zamknij overlay ani nie trigger hit zones)
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      input.addEventListener(evt, (e) => e.stopPropagation());
+    }
+
+    requestAnimationFrame(() => {
+      input.focus();
+      input.select();
+    });
+  }
+
+  _closeMinStockInput() {
+    const el = this._minStockInput;
+    if (!el) return;
+    this._minStockInput = null;
+    // Zdejmij listener blur żeby nie wywołał commit przy unmount
+    el.onblur = null;
+    if (el.parentNode) el.parentNode.removeChild(el);
   }
 
   _createTooltipEl() {
@@ -1235,10 +1328,11 @@ export class EconomyOverlay extends BaseOverlay {
         const color = stock >= d.qty ? THEME.success : (stock > 0 ? THEME.warning : THEME.danger);
         ctx.fillStyle = color;
 
-        // [−][+] tylko dla konsumpcji (safety przeniesione do sekcji niżej)
+        // [−][box][+] tylko dla konsumpcji (safety przeniesione do sekcji niżej)
         if (d.source === 'consumption') {
           const btnY = ry + 1;
-          const textX = x + pad + colW - 80;
+          const BOX_W = 34;
+          const textX = x + pad + colW - 80 - (BOX_W + 4);
           ctx.fillText(`${stockR}/${qtyR}`, textX, ry + 10);
 
           let bx = textX + 42;
@@ -1251,6 +1345,12 @@ export class EconomyOverlay extends BaseOverlay {
             });
           }
           bx += BTN_S + 2;
+          this._drawBonusBox(ctx, bx, btnY, BOX_W, BTN_S, bonus, false);
+          this._addHit(bx, btnY, BOX_W, BTN_S, 'factory_btn', {
+            action: 'demand_set_input', colonyId: colId, commodityId: d.commodityId,
+            label: 'box', x: bx, boxW: BOX_W, boxH: BTN_S, boxCanvasX: bx, boxCanvasY: btnY,
+          });
+          bx += BOX_W + 2;
           this._drawSmallBtn(ctx, bx, btnY, '+', 'primary');
           this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
             action: 'demand_plus', colonyId: colId, commodityId: d.commodityId,
@@ -1501,11 +1601,13 @@ export class EconomyOverlay extends BaseOverlay {
 
     // Stock / target (prawa strona)
     const stockR = Math.round(stock * 10) / 10;
-    const textX = x + w - 80;
+    const BOX_W = 34;
+    // Rezerwujemy miejsce: [−][BOX][+] = 16+2+34+2+16 = 70 px
+    const textX = x + w - 80 - (BOX_W + 4);
     ctx.fillStyle = textColor;
     ctx.fillText(`${stockR}/${target}`, textX, y + 10);
 
-    // Przyciski [−][+]
+    // Przyciski [−][BOX][+]
     const btnY = y + 1;
     let bx = textX + 42;
     this._drawSmallBtn(ctx, bx, btnY, '−', bonus > 0 ? 'secondary' : 'disabled');
@@ -1516,6 +1618,15 @@ export class EconomyOverlay extends BaseOverlay {
       });
     }
     bx += BTN_S + 2;
+    // Edytowalne pole z wartością bonusu
+    this._drawBonusBox(ctx, bx, btnY, BOX_W, BTN_S, bonus, locked);
+    if (!locked) {
+      this._addHit(bx, btnY, BOX_W, BTN_S, 'factory_btn', {
+        action: 'demand_set_input', colonyId: colId, commodityId,
+        label: 'box', x: bx, boxW: BOX_W, boxH: BTN_S, boxCanvasX: bx, boxCanvasY: btnY,
+      });
+    }
+    bx += BOX_W + 2;
     this._drawSmallBtn(ctx, bx, btnY, '+', 'primary');
     this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
       action: 'demand_plus', colonyId: colId, commodityId,
@@ -1853,6 +1964,36 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.textAlign = 'left';
   }
 
+  // ── Edytowalne pole (wartość bonusu min. zapasu) ──────────────────────────
+  // Wygląd jak terminal input: ciemne tło, cienkie obramowanie accent, liczba
+  // wycentrowana. Hover podświetla — sygnalizuje interakcję.
+  _drawBonusBox(ctx, bx, by, bw, bh, value, locked) {
+    const isHover = !locked && this._hoverZone?.data?.label === 'box' &&
+                    this._hoverZone?.data?.x === bx;
+
+    const bgColor = locked
+      ? 'rgba(0,0,0,0.2)'
+      : (isHover ? 'rgba(0,255,180,0.08)' : 'rgba(0,20,14,0.55)');
+    const borderColor = locked
+      ? 'rgba(0,255,180,0.07)'
+      : (isHover ? THEME.borderActive : 'rgba(0,255,180,0.3)');
+    const textColor = locked
+      ? 'rgba(160,200,190,0.25)'
+      : (value > 0 ? THEME.accent : THEME.textSecondary);
+
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+
+    ctx.font = `${bh - 5}px ${THEME.fontFamily}`;
+    ctx.fillStyle = textColor;
+    ctx.textAlign = 'center';
+    ctx.fillText(String(value), bx + bw / 2, by + bh - 4);
+    ctx.textAlign = 'left';
+  }
+
   // ── Router kliknięć fabryki ───────────────────────────────────────────────
 
   _handleFactoryBtn(data) {
@@ -1961,6 +2102,12 @@ export class EconomyOverlay extends BaseOverlay {
         break;
       case 'demand_minus':
         fs.setDemandBonus(data.commodityId, fs.getDemandBonus(data.commodityId) - 1);
+        break;
+      case 'demand_set_input':
+        this._openMinStockInput(
+          data.colonyId, data.commodityId,
+          data.boxCanvasX, data.boxCanvasY, data.boxW, data.boxH
+        );
         break;
 
       // ── Tryb reaktywny — zlecenia eksportowe (Plan B) ─
