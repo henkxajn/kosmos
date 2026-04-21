@@ -768,6 +768,13 @@ export class FleetManagerOverlay {
       return;
     }
 
+    // Załadunek wojsk — otwórz CargoLoadModal (zakładka Wojsko pokaże garnizon).
+    // To samo wejście co przycisk Cargo, ale z poziomu dedykowanej akcji 🪖.
+    if (actionId === 'load_troops') {
+      this._openCargoLoader(vessel.id);
+      return;
+    }
+
     // Założenie placówki — teraz standardowy target picker (building picker po wyborze celu)
     // Flow obsługiwany w _executeMission()
 
