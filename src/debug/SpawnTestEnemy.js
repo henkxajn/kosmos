@@ -465,11 +465,22 @@ export function spawnEnemyCiv(opts = {}) {
   EventBus.emit('vessel:created', { vessel });
   // vessel:launched → ThreeRenderer doda sprite na orbitę
   EventBus.emit('vessel:launched', { vessel });
+  // positionUpdate zmusi ThreeRenderer._syncVesselPositions do umieszczenia sprite'a
+  // na pozycji wrogiego ciała (bez tego sprite siedzi tam gdzie był przy spawn bo
+  // _updatePositions pomija orbitujące bez mission)
+  EventBus.emit('vessel:positionUpdate', { vessels: [vessel] });
+
+  // Focus kamery na statku (z opóźnieniem — GLB ładuje się async)
+  setTimeout(() => {
+    EventBus.emit('vessel:focus', { vesselId: vessel.id });
+  }, 900);
 
   const report = {
     success:     true,
     empireId:    TEST_ENEMY_ID,
     enemyColony: enemyColonyId,
+    position:    { x: vessel.position.x, y: vessel.position.y, systemId: vessel.systemId },
+    activeSys:   K.activeSystemId,
     vessel: {
       id: vessel.id,
       name: vessel.name,
@@ -477,6 +488,7 @@ export function spawnEnemyCiv(opts = {}) {
       modules,
       orbiting: enemyColonyId,
     },
+    hint: 'Kamera auto-focus za ~1s. Jeśli nie widać: sprawdź `KOSMOS.threeRenderer._vessels.has("' + vessel.id + '")`',
   };
   console.log('[spawnEnemyCiv] ✓ Cywilizacja + statek orbitalny:', report);
   return report;
