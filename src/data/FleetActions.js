@@ -218,6 +218,56 @@ const ACTIONS = {
     },
   },
 
+  // ── Załadunek wojsk na statek desantowy (docked) ──────────────────────
+  load_troops: {
+    id: 'load_troops',
+    label: 'Załaduj wojsko',
+    icon: '🪖',
+    requiresTarget: false,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'docked' && vessel.position.state !== 'orbiting') {
+        return { ok: false, reason: 'Statek w locie' };
+      }
+      if ((vessel.troopCapacity ?? 0) <= 0) return { ok: false, reason: 'Brak ładowni desantowej' };
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      // Otwórz CargoLoadModal — gracz wybiera jednostki garnizonu z kolonii
+      // i ładuje na statek. Walidacja pojemności (transportSize) w loadGroundUnit().
+      EventBus.emit('vessel:openCargoModal', { vesselId: vessel.id });
+    },
+  },
+
+  // ── Lot i orbita wokół dowolnego ciała (docked) ────────────────────────
+  // Uniwersalna akcja "leć i zatrzymaj się na orbicie". Bez science bonus,
+  // bez transport cargo — czysty lot. Po dotarciu statek orbituje czekając
+  // na kolejny rozkaz (drop troops, orbital strike, redirect, return).
+  // Jeśli ciało docelowe należy do wroga, bitwa orbitalna zostanie wywołana
+  // przez WarSystem._fleetArrived (mechanizm istniejący dla flot AI).
+  orbit: {
+    id: 'orbit',
+    label: 'Leć i orbituj',
+    icon: '⊙',
+    requiresTarget: true,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
+      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
+      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
+      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      if (!state.targetId) return;
+      // Misja typu `survey` z oznaczeniem `orbitOnly` — leci, orbituje, nie robi science.
+      // ExpeditionSystem/MissionSystem traktuje ją jak recon-target ale bez yield.
+      state.missionSystem?.createMission('survey', vessel.id, {
+        targetId: state.targetId,
+        orbitOnly: true,
+      });
+    },
+  },
+
   return_home: {
     id: 'return_home',
     label: 'Powrót',
@@ -426,6 +476,12 @@ export function getAvailableActions(vessel, state) {
   if (vessel.position.state === 'docked') {
     // W hangarze — akcje misji wg zdolności (kadłub + moduły)
     const caps = _getVesselCaps(vessel);
+    // Uniwersalna akcja lotu — każdy statek z silnikiem może lecieć i orbitować
+    result.push(_check(ACTIONS.orbit, vessel, state));
+    // Załadunek wojska — widoczne tylko dla statków z troop bay
+    if ((vessel.troopCapacity ?? 0) > 0) {
+      result.push(_check(ACTIONS.load_troops, vessel, state));
+    }
     if (caps.has('survey')) {
       result.push(_check(ACTIONS.survey, vessel, state));
     }
@@ -440,7 +496,10 @@ export function getAvailableActions(vessel, state) {
       result.push(_check(ACTIONS.found_outpost, vessel, state));
     }
   } else if (vessel.position.state === 'orbiting') {
-    // Na orbicie — skan, away team, powrót, redirect, transport
+    // Na orbicie — skan, away team, powrót, redirect, transport, załadunek (gdy przy własnej kolonii)
+    if ((vessel.troopCapacity ?? 0) > 0) {
+      result.push(_check(ACTIONS.load_troops, vessel, state));
+    }
     result.push(_check(ACTIONS.full_scan, vessel, state));
     result.push(_check(ACTIONS.send_away_team, vessel, state));
     result.push(_check(ACTIONS.collect_away_team, vessel, state));

@@ -113,7 +113,8 @@ export class MissionSystem {
   createMission(type, vesselId, params = {}) {
     // Mapuj nowe typy na stare metody
     if (type === 'survey') {
-      this._launch('recon', params.targetId ?? 'nearest', null, vesselId);
+      // orbitOnly → czysty lot bez science yield (akcja "Leć i orbituj")
+      this._launch('recon', params.targetId ?? 'nearest', null, vesselId, { orbitOnly: !!params.orbitOnly });
     } else if (type === 'deep_scan') {
       this._launch('recon', 'full_system', null, vesselId);
     } else if (type === 'colonize') {
@@ -443,13 +444,13 @@ export class MissionSystem {
   }
 
   // ── Launch główny (mining/recon/colony) ─────────────────────────────────────
-  _launch(type, targetId, cargo, vesselId) {
+  _launch(type, targetId, cargo, vesselId, opts = {}) {
     if (type === 'colony') {
       this._launchColony(targetId, vesselId);
       return;
     }
     if (type === 'recon') {
-      this._launchRecon(targetId, vesselId);
+      this._launchRecon(targetId, vesselId, opts);
       return;
     }
 
@@ -984,7 +985,23 @@ export class MissionSystem {
   }
 
   // ── Recon (survey / deep_scan) ────────────────────────────────────────────
-  _launchRecon(scope, vesselId) {
+  _launchRecon(scope, vesselId, opts = {}) {
+    // orbitOnly (akcja "Leć i orbituj") — pomiń wymaganie science vessel,
+    // sprawdź tylko tech rakietnictwa i wyrzutnię. Statek bez modułu nauki
+    // też może orbitować cel (np. fregata desantowa bez laboratorium).
+    if (opts.orbitOnly) {
+      const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
+      const padOk  = this._checkPadForVessel(vesselId);
+      if (!techOk || !padOk) {
+        this._emit('mission:failed', 'expedition:launchFailed', {
+          reason: !techOk ? t('mission.noTechRocketry') : t('mission.noSpaceport')
+        });
+        return;
+      }
+      this._launchReconTarget(scope, vesselId, { orbitOnly: true });
+      return;
+    }
+
     const { ok, techOk, padOk, vesselOk } = this.canLaunchRecon(vesselId);
     if (!ok) {
       const reason = !techOk
@@ -1117,13 +1134,14 @@ export class MissionSystem {
   }
 
   // ── Recon na konkretne ciało ──────────────────────────────────────────────
-  _launchReconTarget(targetId, vesselId) {
+  _launchReconTarget(targetId, vesselId, opts = {}) {
     const target = this._findTarget(targetId);
     if (!target) {
       this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.unknownTarget') });
       return;
     }
-    if (target.explored) {
+    // orbitOnly: statek może lecieć nawet na zbadane ciała (desant, orbital strike, recon return)
+    if (target.explored && !opts.orbitOnly) {
       this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.bodyAlreadyExplored') });
       return;
     }
@@ -1177,6 +1195,7 @@ export class MissionSystem {
       status:      'en_route',
       gained:      null,
       eventRoll:   null,
+      orbitOnly:   !!opts.orbitOnly,  // flag: pomija science yield i body discovery
     };
 
     this._missions.push(mission);

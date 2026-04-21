@@ -201,6 +201,9 @@ export class FleetTabPanel {
     this._mapDragStartY = 0;
     this._mapDragWasDrag = false;
 
+    // Akcja `load_troops` z FleetActions → otwiera CargoLoadModal
+    EventBus.on('vessel:openCargoModal', ({ vesselId }) => this._openCargoLoader(vesselId));
+
     // Cache katalogu
     this._catalogRowRects = [];
     this._catalogContentH = 0;
