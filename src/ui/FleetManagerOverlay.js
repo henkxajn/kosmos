@@ -21,6 +21,7 @@ import EventBus            from '../core/EventBus.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
+import { showDropTroopsModal } from '../ui/DropTroopsModal.js';
 import { ColonistLoadModal } from '../ui/ColonistLoadModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
@@ -777,6 +778,12 @@ export class FleetManagerOverlay {
       return;
     }
 
+    // Zrzut wojsk — najpierw modal wyboru jednostek, potem przekierowanie do ColonyOverlay
+    if (actionId === 'drop_troops') {
+      this._openDropTroopsFlow(vessel);
+      return;
+    }
+
     // Założenie placówki — teraz standardowy target picker (building picker po wyborze celu)
     // Flow obsługiwany w _executeMission()
 
@@ -815,6 +822,32 @@ export class FleetManagerOverlay {
       this._cachedTargets = null;
     } catch {
       // Anulowano — nic nie rób
+    }
+  }
+
+  /**
+   * Zrzut wojsk: modal wyboru jednostek → emit drop request z unitIds[].
+   * ColonyOverlay odbiera event, otwiera overlay docelowej planety
+   * (wroga lub własna) i przechodzi w drop mode dla wybranych jednostek.
+   */
+  async _openDropTroopsFlow(vessel) {
+    try {
+      const targetId = vessel.position?.dockedAt;
+      if (!targetId) return;
+      const colMgr = window.KOSMOS?.colonyManager;
+      const targetColony = colMgr?.getColony?.(targetId);
+      const targetName = targetColony?.name
+        ?? window.KOSMOS?.entityManager?.get?.(targetId)?.name
+        ?? targetId;
+      const unitIds = await showDropTroopsModal(vessel, targetName);
+      if (!unitIds || unitIds.length === 0) return;  // anulowano
+      EventBus.emit('vessel:dropTroopsRequest', {
+        vesselId: vessel.id,
+        targetId,
+        unitIds,
+      });
+    } catch (e) {
+      console.warn('[DropTroops] flow error', e);
     }
   }
 

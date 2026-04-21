@@ -153,7 +153,7 @@ export class ColonyOverlay extends BaseOverlay {
       this._showFlash(`💥 Wybierz hex ostrzału (${vessel.orbitalStrike.ammoCurrent} pocisków)`);
     });
 
-    EventBus.on('vessel:dropTroopsRequest', ({ vesselId, targetId }) => {
+    EventBus.on('vessel:dropTroopsRequest', ({ vesselId, targetId, unitIds }) => {
       const vMgr = window.KOSMOS?.vesselManager;
       const warSys = window.KOSMOS?.warSystem;
       const vessel = vMgr?.getVessel?.(vesselId);
@@ -161,24 +161,31 @@ export class ColonyOverlay extends BaseOverlay {
       if (!vessel.canDropTroops) { this._showFlash('Brak Kapsuł Desantowych'); return; }
       if ((vessel.groundUnits ?? []).length === 0) { this._showFlash('Ładownia pusta'); return; }
 
-      // Dominacja orbitalna: wymagana gdy desant na obcą kolonię
+      // Dominacja orbitalna: wymagana dla wrogich celów (własne kolonie OK).
+      // Wroga kolonia = ta która ma ownerEmpireId lub isTestEnemy (debug spawn).
       const colMgr = window.KOSMOS?.colonyManager;
       const targetColony = colMgr?.getColony?.(targetId);
-      const isPlayerColony = !!targetColony;
-      if (!isPlayerColony && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
+      const isHostileTarget = !targetColony
+        || !!targetColony.ownerEmpireId
+        || !!targetColony.isTestEnemy;
+      if (isHostileTarget && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
         this._showFlash('Brak dominacji orbitalnej — wygraj bitwę najpierw');
         return;
       }
 
-      if (colMgr && isPlayerColony) {
-        colMgr.switchActiveColony(targetId);
-        this._selectedColonyId = targetId;
-      }
+      // Wybrane jednostki (z modalu) lub fallback na wszystkie
+      const queueUnits = Array.isArray(unitIds) && unitIds.length > 0
+        ? unitIds.filter(id => vessel.groundUnits.includes(id))
+        : [...vessel.groundUnits];
+
+      // Ustaw overlay na PLANETĘ DOCELOWĄ (nie zmieniamy activeColony gracza —
+      // overlay tymczasowo pokazuje obcą planetę). Po zakończeniu drop mode
+      // można nacisnąć Esc i wrócić do własnej kolonii przez inny flow.
       this._dropMode = true;
       this._dropVesselId = vesselId;
       this._dropPlanetId = targetId;
-      this._dropQueue = [...vessel.groundUnits];
-      if (!this.visible) this.show({});
+      this._dropQueue = queueUnits;
+      this.show({ colonyId: targetId });
       this._showDropPrompt();
     });
 
@@ -228,7 +235,13 @@ export class ColonyOverlay extends BaseOverlay {
   show(opts = {}) {
     super.show();
     const colMgr = window.KOSMOS?.colonyManager;
-    if (colMgr) this._selectedColonyId = colMgr.activePlanetId;
+    // opts.colonyId ma priorytet (np. drop mode na obcej planecie).
+    // Inaczej: activePlanetId gracza.
+    if (opts.colonyId) {
+      this._selectedColonyId = opts.colonyId;
+    } else if (colMgr) {
+      this._selectedColonyId = colMgr.activePlanetId;
+    }
     this._selectedHex = null;
     this._hoveredBuildId = null;
 
@@ -238,8 +251,8 @@ export class ColonyOverlay extends BaseOverlay {
 
     if (opts.originX !== undefined) this._animateOpen(opts.originX, opts.originY);
 
-    // Auto-spawn rovera jeśli brak jednostek na planecie domowej (stare save'y / nowa gra)
-    this._autoSpawnRover(colony);
+    // Auto-spawn rovera tylko na własnej planecie macierzystej — nie na obcym celu desantu
+    if (!opts.colonyId) this._autoSpawnRover(colony);
   }
 
   _autoSpawnRover(colony) {
