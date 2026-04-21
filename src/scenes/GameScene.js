@@ -279,6 +279,45 @@ export class GameScene {
           console.log(`[debug] ✓ ${id}`);
         }
       },
+      // KOSMOS.debug.give({ Fe: 500, structural_alloys: 50 }) — uniwersalne dodawanie zasobów.
+      // Akceptuje surowce (Fe/C/Si/Cu/Ti/Li/Hv/Xe/Nt), utility (food/water/research)
+      // i commodities (structural_alloys, power_cells, ...).
+      give: (gains) => {
+        const rs = window.KOSMOS?.resourceSystem;
+        if (!rs) { console.warn('[debug] Brak aktywnego ResourceSystem'); return; }
+        if (!gains || typeof gains !== 'object') {
+          console.warn('[debug] Użycie: KOSMOS.debug.give({ Fe: 500, Ti: 100, structural_alloys: 20 })');
+          return;
+        }
+        rs.receive(gains);
+        console.log('[debug] Dodano:', gains);
+      },
+      // KOSMOS.debug.giveAll(1000) — sypie po `amount` KAŻDEGO surowca + commodity.
+      giveAll: (amount = 1000) => {
+        const rs = window.KOSMOS?.resourceSystem;
+        if (!rs) { console.warn('[debug] Brak aktywnego ResourceSystem'); return; }
+        const gains = {};
+        for (const id of rs.inventory.keys()) gains[id] = amount;
+        rs.receive(gains);
+        console.log(`[debug] +${amount} każdego (${Object.keys(gains).length} typów)`);
+      },
+      // KOSMOS.debug.giveCredits(10000) — dodaje Kredyty (Kr) do aktywnej kolonii
+      // (waluta handlowa z CivilianTradeSystem; wykorzystywana do rush build, zakupów awaryjnych).
+      giveCredits: (amount = 10000) => {
+        const colMgr = window.KOSMOS?.colonyManager;
+        const colony = colMgr?.getActiveColony?.() ?? colMgr?.getColony?.(colMgr?.activePlanetId);
+        if (!colony) { console.warn('[debug] Brak aktywnej kolonii'); return; }
+        colony.credits = (colony.credits ?? 0) + amount;
+        EventBus.emit('trade:creditsChanged', { colonyId: colony.planetId, credits: colony.credits, delta: amount });
+        console.log(`[debug] +${amount} Kr → ${colony.credits}`);
+      },
+      // KOSMOS.debug.givePop(5) — dodaje POPy do aktywnej kolonii (lub konkretnej warstwy).
+      givePop: (amount = 5, strata = 'laborer') => {
+        const civ = window.KOSMOS?.civSystem;
+        if (!civ) { console.warn('[debug] Brak aktywnego CivilizationSystem'); return; }
+        civ.addPop?.(strata, amount);
+        console.log(`[debug] +${amount} POP (${strata})`);
+      },
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
