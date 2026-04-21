@@ -57,7 +57,7 @@ import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
-import { spawnTestEnemy, spawnEnemyFleet } from '../debug/SpawnTestEnemy.js';
+import { spawnTestEnemy, spawnEnemyFleet, spawnEnemyCiv } from '../debug/SpawnTestEnemy.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
@@ -266,6 +266,7 @@ export class GameScene {
     window.KOSMOS.debug = {
       spawnTestEnemy,
       spawnEnemyFleet,
+      spawnEnemyCiv,
       giveResearch: (amount = 10000) => {
         const rs = window.KOSMOS?.resourceSystem;
         if (!rs) { console.warn('[debug] Brak aktywnego ResourceSystem'); return; }

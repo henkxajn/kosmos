@@ -19,6 +19,8 @@ import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import gameState from '../core/GameState.js';
+import EventBus from '../core/EventBus.js';
+import { createVessel } from '../entities/Vessel.js';
 
 export const TEST_ENEMY_ID = 'emp_test_enemy';
 
@@ -385,5 +387,97 @@ export function spawnEnemyFleet(opts = {}) {
     troops:     embarkedTroops?.length ?? 0,
   };
   console.log(`[spawnEnemyFleet] 🚀 Flota w drodze (ETA ${etaYears}y):`, report);
+  return report;
+}
+
+/**
+ * Combo cheat: spawnTestEnemy (cywilizacja wroga + 3 marines na mapie 2D)
+ * + wrogi statek na orbicie z konfigurowalnym kadłubem i modułami.
+ *
+ * Domyślny statek: Kadłub Średni + 2× silnik jonowy + 1× pancerz standardowy
+ * + 2× działo kinetyczne (5/6 slotów).
+ *
+ * @param {object} opts
+ * @param {string} [opts.hullId='hull_medium']
+ * @param {string[]} [opts.modules]            — lista ID modułów (override)
+ * @param {string} [opts.vesselName='Łowca Testowy']
+ */
+export function spawnEnemyCiv(opts = {}) {
+  const K = window.KOSMOS;
+  if (!K?.civMode) {
+    console.warn('[spawnEnemyCiv] Gracz jeszcze nie przejął cywilizacji');
+    return { success: false, reason: 'no_civ_mode' };
+  }
+
+  // 1. Cywilizacja wroga + kolonia + 3 marines (jeśli jeszcze nie ma)
+  let civReport;
+  if (!K.empireRegistry?.get(TEST_ENEMY_ID)) {
+    civReport = spawnTestEnemy();
+    if (!civReport?.success) return civReport;
+  } else {
+    console.log('[spawnEnemyCiv] Wróg już istnieje — pomijam spawnTestEnemy');
+    civReport = { targetId: K.empireRegistry.get(TEST_ENEMY_ID)?.colonies?.[0]?.planetId };
+  }
+
+  const enemyColonyId = civReport.targetId
+    ?? K.empireRegistry.get(TEST_ENEMY_ID)?.colonies?.[0]?.planetId;
+  if (!enemyColonyId) {
+    console.warn('[spawnEnemyCiv] Nie znaleziono planety kolonii wrogiej');
+    return { success: false, reason: 'no_enemy_colony' };
+  }
+
+  // 2. Spawnuj statek w orbicie wokół wrogiej kolonii
+  const vMgr = K.vesselManager;
+  if (!vMgr) {
+    console.warn('[spawnEnemyCiv] Brak VesselManager');
+    return { success: false, reason: 'no_vessel_manager' };
+  }
+
+  const hullId = opts.hullId ?? 'hull_medium';
+  const modules = opts.modules ?? [
+    'engine_ion', 'engine_ion',
+    'armor_standard',
+    'weapon_kinetic', 'weapon_kinetic',
+  ];
+
+  const enemyBody = EntityManager.get(enemyColonyId);
+  const x = enemyBody?.x ?? 0;
+  const y = enemyBody?.y ?? 0;
+
+  const vessel = createVessel(hullId, enemyColonyId, {
+    name:     opts.vesselName ?? 'Łowca Testowy',
+    modules,
+    x, y,
+    systemId: enemyBody?.systemId ?? K.activeSystemId ?? 'sys_home',
+  });
+
+  // Oznacz jako wrogi (pole non-standardowe — UI/combat może je odczytywać)
+  vessel.ownerEmpireId = TEST_ENEMY_ID;
+  vessel.owner = TEST_ENEMY_ID;
+  vessel.isEnemy = true;
+
+  // Orbita nad wrogą kolonią (state=orbiting, dokowanie w enemyColonyId)
+  vessel.position.state    = 'orbiting';
+  vessel.position.dockedAt = enemyColonyId;
+  vessel.status            = 'idle';
+
+  vMgr._vessels.set(vessel.id, vessel);
+  EventBus.emit('vessel:created', { vessel });
+  // vessel:launched → ThreeRenderer doda sprite na orbitę
+  EventBus.emit('vessel:launched', { vessel });
+
+  const report = {
+    success:     true,
+    empireId:    TEST_ENEMY_ID,
+    enemyColony: enemyColonyId,
+    vessel: {
+      id: vessel.id,
+      name: vessel.name,
+      hull: hullId,
+      modules,
+      orbiting: enemyColonyId,
+    },
+  };
+  console.log('[spawnEnemyCiv] ✓ Cywilizacja + statek orbitalny:', report);
   return report;
 }
