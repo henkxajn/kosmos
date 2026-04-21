@@ -2163,16 +2163,13 @@ export class ColonyOverlay extends BaseOverlay {
           this._dropQueue = [];
           return true;
         }
-        // Hex zajęty przez WŁASNĄ jednostkę → blokada (friendly stacking zbędnie komplikuje UI)
-        const existingUnit = gum?.getUnitAt?.(this._dropPlanetId, tile.q, tile.r);
-        const isFriendly = existingUnit && (existingUnit.owner == null || existingUnit.owner === 'player');
-        if (isFriendly) {
-          this._showFlash('Hex zajęty przez własną jednostkę — wybierz inny');
-          return true;
-        }
 
-        // Wrogi hex → kapsuła dociera ale desant ginie w lądowaniu pod ogniem
-        const isHostile = existingUnit && existingUnit.owner && existingUnit.owner !== 'player';
+        // Victoria 2 stack combat: wiele jednostek może stać na hexie.
+        // Ocean pozostaje zablokowany (już wcześniej). Wrogi hex → jednostka ląduje ale
+        // dostaje -25% HP penalty za "chaotyczne lądowanie pod ogniem" i od razu
+        // wchodzi w bitwę (CombatSystem zauważy następnym tickiem).
+        const occupants = gum?.getUnitsAtHex?.(this._dropPlanetId, tile.q, tile.r) ?? [];
+        const hasHostile = occupants.some(u => u.owner && u.owner !== 'player');
 
         const unitId = this._dropQueue.shift();
         const unit = gum?.getUnit?.(unitId);
@@ -2181,17 +2178,18 @@ export class ColonyOverlay extends BaseOverlay {
           if (!res?.ok) {
             this._showFlash(`Błąd zrzutu: ${res?.reason ?? 'unknown'}`);
             this._dropQueue = [];
-          } else if (isHostile) {
-            EventBus.emit('groundUnit:destroyed', {
-              unitId: unit.id,
-              planetId: this._dropPlanetId,
-              cause: 'landing_zone_hot',
-              archetypeId: unit.archetypeId,
-              popCost: unit.popCost ?? 0,
-              ownerId: unit.owner ?? 'player',
+          } else if (hasHostile) {
+            // Penalty HP za wrogi hex — jednostka wchodzi w bitwę osłabiona
+            const beforeHp = unit.hp ?? 0;
+            unit.hp = Math.max(1, Math.floor(beforeHp * 0.75));
+            if (unit.currentHP != null) unit.currentHP = unit.hp;
+            EventBus.emit('groundUnit:attacked', {
+              attackerId: null, targetId: unit.id,
+              damage: beforeHp - unit.hp,
+              targetHP: unit.hp, targetHPMax: unit.hpMax ?? unit.maxHp,
+              planetId: this._dropPlanetId, q: tile.q, r: tile.r,
             });
-            gum?.removeUnit?.(unit.id);
-            this._showFlash(`💀 Desant zestrzelony — wrogi ogień na (${tile.q},${tile.r})`);
+            this._showFlash(`🔥 Chaotyczne lądowanie (${tile.q},${tile.r}) — -25% HP`);
           } else {
             this._showFlash(`🪖 Zrzucono na (${tile.q},${tile.r})`);
           }
