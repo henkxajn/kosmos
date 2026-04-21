@@ -1114,10 +1114,27 @@ export class ColonyManager {
     }
 
     // ── Sprawdź energy per deployed colony (flow) ──
+    // Dla jednostek zdeployowanych na WROGIEJ planecie (ownerEmpireId/isTestEnemy)
+    // check idzie przez home colony — wrogi reaktor nie zasila gracza.
     const energyOKPlanets = new Set();
     for (const [pid, need] of energyByDep) {
-      const col = this.getColony(pid);
-      const flow = col?.resourceSystem?.energy?.perYear ?? 0;
+      const deployedCol = this.getColony(pid);
+      const isHostileColony = deployedCol && (deployedCol.ownerEmpireId || deployedCol.isTestEnemy);
+
+      let effectiveCol = deployedCol;
+      if (!deployedCol || isHostileColony) {
+        // Fallback: spróbuj home colony którejś jednostki z tej deployed planety
+        // (wszystkie w tej iteracji mają ten sam deployed, ale home może być różne)
+        let homeFlow = 0;
+        for (const u of allUnits) {
+          if (u.planetId !== pid) continue;
+          const homeCol = this.getColony(u.homeColonyId ?? pid);
+          const hFlow = homeCol?.resourceSystem?.energy?.perYear ?? 0;
+          if (hFlow > homeFlow) { homeFlow = hFlow; effectiveCol = homeCol; }
+        }
+      }
+
+      const flow = effectiveCol?.resourceSystem?.energy?.perYear ?? 0;
       if (flow >= need) energyOKPlanets.add(pid);
     }
 

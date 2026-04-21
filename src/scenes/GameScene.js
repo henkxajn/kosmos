@@ -2412,6 +2412,15 @@ export class GameScene {
       const overlay = this.uiManager?.overlayManager?.overlays?.colony;
       if (!overlay?.visible || !overlay._selectedUnit) return;
       e.preventDefault();
+
+      // Guard: gracz nie może kierować wrogimi jednostkami (owner !== 'player')
+      const selected = overlay._selectedUnit;
+      const isPlayerOwned = !selected.owner || selected.owner === 'player';
+      if (!isPlayerOwned) {
+        overlay._showFlash?.('Nie możesz kierować wrogą jednostką');
+        return;
+      }
+
       const colony = overlay._getColony();
       const grid = colony ? overlay._getGrid(colony) : null;
       if (!grid) return;
@@ -2419,10 +2428,53 @@ export class GameScene {
       const sx = e.clientX / uiScale, sy = e.clientY / uiScale;
       const tile = overlay._screenToTile(sx, sy, grid);
       if (tile) {
-        window.KOSMOS?.groundUnitManager?.moveUnit(
-          overlay._selectedUnit.id, tile.q, tile.r
-        );
+        // Sprint 3 placeholder: pętla po _selectedUnits gdy multi-select będzie gotowy.
+        // MVP: tylko zaznaczona jednostka (player-owned — zweryfikowane powyżej).
+        const gum = window.KOSMOS?.groundUnitManager;
+        const selectedIds = overlay._selectedUnits instanceof Set && overlay._selectedUnits.size > 0
+          ? [...overlay._selectedUnits]
+          : [selected.id];
+        for (const uid of selectedIds) {
+          const u = gum?.getUnit?.(uid);
+          if (u && (!u.owner || u.owner === 'player')) {
+            gum.moveUnit(uid, tile.q, tile.r);
+          }
+        }
       }
+    });
+
+    // Victoria 2 stack combat: log rund i raporty końcowe bitew
+    EventBus.on('combat:round', ({ planetId, q, r, round, playerLosses, enemyLosses }) => {
+      const log = this.eventLogSystem;
+      if (!log?.push) return;
+      const pl = playerLosses ?? {};
+      const en = enemyLosses ?? {};
+      const pKilled = pl.killed ?? 0, eKilled = en.killed ?? 0;
+      const pDmg = pl.dmgDealt ?? 0, eDmg = en.dmgDealt ?? 0;
+      // Wpis per runda — zwięzły format
+      let text = `⚔ Bitwa (${q},${r}) runda ${round}`;
+      if (pKilled > 0 || eKilled > 0) text += ` · straty: gracz −${pKilled}, wróg −${eKilled}`;
+      text += ` · dmg: gracz ${pDmg}→, wróg ${eDmg}→`;
+      const severity = pKilled > 0 ? 'alert' : (eKilled > 0 ? 'warn' : 'info');
+      log.push({ text, channel: 'combat', severity, entityRef: planetId });
+    });
+
+    EventBus.on('combat:hexResolved', ({ planetId, q, r, winnerId, playerKilled, enemyKilled, playerDmg, enemyDmg }) => {
+      const log = this.eventLogSystem;
+      if (!log?.push) return;
+      let text;
+      let severity;
+      if (winnerId === 'player') {
+        text = `⚔ Zwycięstwo (${q},${r}) — wróg zneutralizowany. Straty własne: ${playerKilled}, zadano ${playerDmg} dmg.`;
+        severity = 'info';
+      } else if (winnerId && winnerId !== 'player') {
+        text = `💀 Przegrana (${q},${r}) — własne wojsko wybite. Straty: ${playerKilled}, zadano wrogowi ${playerDmg} dmg.`;
+        severity = 'alert';
+      } else {
+        text = `⚔ Bitwa (${q},${r}) zakończona remisem. Straty: ${playerKilled} / ${enemyKilled}.`;
+        severity = 'warn';
+      }
+      log.push({ text, channel: 'combat', severity, entityRef: planetId });
     });
 
     // Dwuklik na planetę/księżyc → otwórz ColonyOverlay

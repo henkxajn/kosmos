@@ -45,6 +45,7 @@ export class CombatSystem {
   constructor() {
     this._accum = 0;  // civYears accumulator
     this._battleRounds = new Map(); // "planetId_q_r" → round count
+    this._battleTotals = new Map(); // "planetId_q_r" → { playerKilled, enemyKilled, playerDmg, enemyDmg, startYear }
   }
 
   // ── Public tick — wywoływany przez GroundUnitManager co civDeltaYears ────
@@ -105,9 +106,36 @@ export class CombatSystem {
       this._runBattleRound(planetId, q, r, key);
     }
 
-    // Wyczyść round counters dla bitew które się zakończyły
+    // Wyczyść round counters dla bitew które się zakończyły + emit hexResolved
     for (const key of this._battleRounds.keys()) {
-      if (!seenKeys.has(key)) this._battleRounds.delete(key);
+      if (!seenKeys.has(key)) {
+        const totals = this._battleTotals.get(key);
+        this._battleRounds.delete(key);
+        this._battleTotals.delete(key);
+        if (totals) {
+          // Ustal zwycięzcę: jeśli jakiś gracz/wróg zginął i teraz bitwa skończona → któraś strona wyczyściła hex
+          // winner = kto ma żywych na hexie (lub null jeśli obie wyczyściły się)
+          const [pid, qS, rS] = key.split('_');
+          const q = Number(qS), r = Number(rS);
+          const gum = window.KOSMOS?.groundUnitManager;
+          const occupants = gum?.getUnitsAtHex?.(pid, q, r) ?? [];
+          let winnerId = null;
+          if (occupants.length > 0) {
+            const alive = occupants.filter(u => u.hp > 0);
+            if (alive.length > 0) {
+              const owners = new Set(alive.map(u => u.owner ?? 'player'));
+              winnerId = owners.size === 1 ? [...owners][0] : null;
+            }
+          }
+          EventBus.emit('combat:hexResolved', {
+            planetId: pid, q, r, winnerId,
+            playerKilled: totals.playerKilled ?? 0,
+            enemyKilled:  totals.enemyKilled  ?? 0,
+            playerDmg:    totals.playerDmg    ?? 0,
+            enemyDmg:     totals.enemyDmg     ?? 0,
+          });
+        }
+      }
     }
 
     // Auto-clear supportTarget dla unitów których bitwa już nie istnieje / wyszła z range
@@ -209,6 +237,17 @@ export class CombatSystem {
         this._tryRetreat(gum, unit);
       }
     }
+
+    // Akumuluj totalsy bitwy do raportu końcowego
+    const totals = this._battleTotals.get(key) ?? {
+      playerKilled: 0, enemyKilled: 0, playerDmg: 0, enemyDmg: 0,
+      startYear: window.KOSMOS?.timeSystem?.gameTime ?? 0,
+    };
+    totals.enemyKilled += enemyLosses.summary.killed ?? 0;
+    totals.playerKilled += playerLosses.summary.killed ?? 0;
+    totals.enemyDmg += enemyLosses.summary.dmgDealt ?? 0;
+    totals.playerDmg += playerLosses.summary.dmgDealt ?? 0;
+    this._battleTotals.set(key, totals);
 
     EventBus.emit('combat:round', {
       planetId, q, r, round,

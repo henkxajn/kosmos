@@ -14,6 +14,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
+import { showUnitCard } from './UnitCardPanel.js';
 import { ANOMALIES }     from '../data/AnomalyData.js';
 import { t }   from '../i18n/i18n.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
@@ -789,6 +790,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Panel w prawym dolnym rogu overlay — dynamiczna wysokość
     const pw = 200;
     let ph = 96;  // baza: nazwa + status + hex + HP
+    if (isEnemy) ph += 14;                         // banner "ROZPOZNANIE"
     if (unit.attack != null) ph += 18;            // linia attack/defense
     // Opcja C v3: rezerwuj miejsce dla supply/org/morale + damageMult (tylko archetypowe jednostki)
     const hasSupplyV3 = unit.supply != null && !isEnemy;
@@ -801,16 +803,27 @@ export class ColonyOverlay extends BaseOverlay {
     const px = ox + ow - pw - 8;
     const py = oy + oh - ph - 8;
 
-    // Tło
-    ctx.fillStyle = 'rgba(4, 8, 16, 0.92)';
+    // Tło (wrogie jednostki wyraźnie czerwone — recon/info only)
+    ctx.fillStyle = isEnemy ? 'rgba(40, 8, 6, 0.94)' : 'rgba(4, 8, 16, 0.92)';
     ctx.fillRect(px, py, pw, ph);
     ctx.strokeStyle = isEnemy ? '#D85A30' : '#00ffb4';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = isEnemy ? 2 : 1;
     ctx.strokeRect(px, py, pw, ph);
+
+    // Banner "ROZPOZNANIE" dla wrogiej jednostki
+    if (isEnemy) {
+      ctx.fillStyle = 'rgba(216, 90, 48, 0.25)';
+      ctx.fillRect(px, py, pw, 14);
+      ctx.font = `bold 9px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#FF9060';
+      ctx.textAlign = 'center';
+      ctx.fillText('🔴 ROZPOZNANIE — brak kontroli', px + pw / 2, py + 7);
+      ctx.textAlign = 'left';
+    }
 
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    let ly = py + 16;
+    let ly = py + (isEnemy ? 28 : 16);
 
     // Nagłówek — typ jednostki + owner
     ctx.font = `bold 11px ${THEME.fontFamily}`;
@@ -2543,6 +2556,11 @@ export class ColonyOverlay extends BaseOverlay {
       if (this._selectedHex) { this._selectedHex = null; return true; }
       this.hide();
       if (window.KOSMOS?.overlayManager) window.KOSMOS.overlayManager.active = null;
+      return true;
+    }
+    // Karta jednostki (klawisz I)
+    if ((key === 'i' || key === 'I') && this._selectedUnit) {
+      try { showUnitCard(this._selectedUnit); } catch { /* */ }
       return true;
     }
     if (key === 'Delete' && this._selectedHex) {
