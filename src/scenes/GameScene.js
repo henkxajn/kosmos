@@ -321,6 +321,23 @@ export class GameScene {
         civ.addPop?.(strata, amount);
         console.log(`[debug] +${amount} POP (${strata})`);
       },
+      // KOSMOS.debug.spawnMyUnit('shock_infantry', q, r, planetId?) — natychmiastowy spawn
+      // własnej jednostki na hexie (dla testów walki). planetId domyślnie homePlanet.
+      spawnMyUnit: (archetypeId = 'shock_infantry', q = 0, r = 0, planetId = null) => {
+        const gum = window.KOSMOS?.groundUnitManager;
+        if (!gum) { console.warn('[debug] Brak GroundUnitManager'); return; }
+        const pid = planetId ?? window.KOSMOS?.homePlanet?.id;
+        if (!pid) { console.warn('[debug] Brak planetId — podaj explicit lub skolonizuj'); return; }
+        const unit = gum.createUnit(archetypeId, pid, q, r, {
+          factionId: 'humanity',
+          owner: 'player',
+        });
+        if (unit) {
+          console.log(`[debug] ✓ ${archetypeId} na (${q},${r}) planeta ${pid} — id=${unit.id}`);
+          return unit;
+        }
+        console.warn(`[debug] Spawn nieudany — sprawdź archetypeId (dostępne: shock_infantry, rocket_artillery, garrison_unit, aa_platform, medic_unit, recon_drone, ground_supply_unit)`);
+      },
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
