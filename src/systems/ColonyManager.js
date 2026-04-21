@@ -880,15 +880,16 @@ export class ColonyManager {
     ground_supply_unit: 350,
   };
 
-  // Utrzymanie co 1.0 civYear (energy = flow check; credits = pobranie)
+  // Utrzymanie co 1.0 civYear — tylko kredyty (energy wyłączone: komplikowało drop/invasion UX).
+  // Pola energy zachowane = 0 dla przyszłego re-enable; tick ignoruje je całkowicie.
   static GROUND_UNIT_UPKEEP = {
     shock_infantry:     { energy: 0, credits: 2  },
-    garrison_unit:      { energy: 4, credits: 5  },
-    rocket_artillery:   { energy: 2, credits: 10 },
-    aa_platform:        { energy: 3, credits: 8  },
+    garrison_unit:      { energy: 0, credits: 5  },
+    rocket_artillery:   { energy: 0, credits: 10 },
+    aa_platform:        { energy: 0, credits: 8  },
     medic_unit:         { energy: 0, credits: 6  },
-    recon_drone:        { energy: 1, credits: 8  },
-    ground_supply_unit: { energy: 2, credits: 5  },
+    recon_drone:        { energy: 0, credits: 8  },
+    ground_supply_unit: { energy: 0, credits: 5  },
   };
 
   static GROUND_UNIT_BUILD_TIMES = {
@@ -1095,9 +1096,11 @@ export class ColonyManager {
     }
     if (allUnits.length === 0) return;
 
-    // ── Grupowanie: Kr per homeColonyId, Energy per deployedPlanetId ──
-    const krByHome      = new Map();  // homeId → { total, units[] }
-    const energyByDep   = new Map();  // planetId → total energy needed
+    // ── Grupowanie: Kr per homeColonyId ──
+    // Energy upkeep wyłączony (commit: remove ground unit energy upkeep) —
+    // psuło drop/invasion UX (jednostki na wrogich planetach leciały w offline).
+    // Utrzymanie jest teraz tylko kredytowe, płacone z home colony.
+    const krByHome = new Map();  // homeId → { total, units[] }
 
     for (const u of allUnits) {
       const up = ColonyManager.GROUND_UNIT_UPKEEP[u.archetypeId];
@@ -1108,34 +1111,6 @@ export class ColonyManager {
       krBucket.total += up.credits ?? 0;
       krBucket.units.push(u);
       krByHome.set(homeId, krBucket);
-
-      const eCur = energyByDep.get(u.planetId) ?? 0;
-      energyByDep.set(u.planetId, eCur + (up.energy ?? 0));
-    }
-
-    // ── Sprawdź energy per deployed colony (flow) ──
-    // Dla jednostek zdeployowanych na WROGIEJ planecie (ownerEmpireId/isTestEnemy)
-    // check idzie przez home colony — wrogi reaktor nie zasila gracza.
-    const energyOKPlanets = new Set();
-    for (const [pid, need] of energyByDep) {
-      const deployedCol = this.getColony(pid);
-      const isHostileColony = deployedCol && (deployedCol.ownerEmpireId || deployedCol.isTestEnemy);
-
-      let effectiveCol = deployedCol;
-      if (!deployedCol || isHostileColony) {
-        // Fallback: spróbuj home colony którejś jednostki z tej deployed planety
-        // (wszystkie w tej iteracji mają ten sam deployed, ale home może być różne)
-        let homeFlow = 0;
-        for (const u of allUnits) {
-          if (u.planetId !== pid) continue;
-          const homeCol = this.getColony(u.homeColonyId ?? pid);
-          const hFlow = homeCol?.resourceSystem?.energy?.perYear ?? 0;
-          if (hFlow > homeFlow) { homeFlow = hFlow; effectiveCol = homeCol; }
-        }
-      }
-
-      const flow = effectiveCol?.resourceSystem?.energy?.perYear ?? 0;
-      if (flow >= need) energyOKPlanets.add(pid);
     }
 
     // ── Sprawdź credits per home colony → zapłać atomowo albo wszystkich z tego home
@@ -1151,10 +1126,9 @@ export class ColonyManager {
         });
       }
 
-      // Dla każdej jednostki z tego home — mixed check: Kr home + Energy deployed
+      // Tylko Kr decyduje: online jeśli home ma kredyty na cały bucket
       for (const u of bucket.units) {
-        const energyOK  = energyOKPlanets.has(u.planetId);
-        const online    = hasCredits && energyOK;
+        const online = hasCredits;
 
         if (online) {
           const wasOffline = u.status === 'offline';
@@ -1175,7 +1149,7 @@ export class ColonyManager {
             }
             EventBus.emit('groundUnit:disbanded', {
               unitId: u.id, planetId: u.planetId, homeColonyId: homeId,
-              reason: !hasCredits ? 'no_credits' : 'no_energy',
+              reason: 'no_credits',
               archetypeId: u.archetypeId ?? null,
             });
             mgr.removeUnit?.(u.id);

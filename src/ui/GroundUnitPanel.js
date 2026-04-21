@@ -540,7 +540,7 @@ export class GroundUnitPanel {
 
     ctx.fillStyle = THEME.textDim;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillText(`⚡ ${cost.upkeep.energy}/y   💰 ${cost.upkeep.credits} Kr/y`, x + PAD + 4, cy + 12);
+    ctx.fillText(`💰 ${cost.upkeep.credits} Kr/y`, x + PAD + 4, cy + 12);
     cy += 16;
 
     // ── Sekcja STATYSTYKI STARTOWE (org/morale/supplyCap + consumption) ──
