@@ -1698,10 +1698,10 @@ export class GameScene {
 
   // ── POWER TEST — metody pomocnicze ─────────────────────────────
 
-  // POWER TEST — minimalne zasoby startowe (po 100 każdego surowca + 2000 research)
+  // POWER TEST — minimalne zasoby startowe (po 100 każdego surowca + 10k research)
   // _setupColony() dodał już startowe ilości — wyzeruj inventory i research.amount,
   // potem ustaw po 100 dla każdego pierwiastka, food/water oraz commodities.
-  // Research wyjątkowo 2000 (budżet na wstępne tech).
+  // Research 10000 (budżet na szybkie odblokowanie drzewa tech w trybie testowym).
   _setupPowerTestResources() {
     const rs = this.resourceSystem;
     if (!rs) return;
@@ -1718,7 +1718,7 @@ export class GameScene {
     for (const id of Object.keys(COMMODITIES)) gains[id] = 100;
     gains.food     = 100;
     gains.water    = 100;
-    gains.research = 2000;
+    gains.research = 10000;
 
     rs.receive(gains);
   }

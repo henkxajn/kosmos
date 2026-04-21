@@ -500,6 +500,20 @@ export class FleetTabPanel {
         this._openCargoLoader(zone.data.vesselId);
         break;
 
+      case 'drop_troops':
+        EventBus.emit('vessel:dropTroopsRequest', {
+          vesselId: zone.data.vesselId,
+          targetId: zone.data.targetId,
+        });
+        break;
+
+      case 'orbital_strike':
+        EventBus.emit('vessel:orbitalStrikeRequest', {
+          vesselId: zone.data.vesselId,
+          targetId: zone.data.targetId,
+        });
+        break;
+
       case 'build_ship':
         if (zone.data.enabled) EventBus.emit('fleet:buildRequest', { shipId: zone.data.shipId, modules: zone.data.modules ?? [] });
         break;
@@ -1612,7 +1626,14 @@ export class FleetTabPanel {
 
     const canBuildAny = queues.length < shipyardLevel;
 
-    for (const ship of Object.values(SHIPS)) {
+    // Kapitalizacja capability-based: stocznia pokazuje TYLKO uniwersalne kadłuby (HULLS).
+    // Legacy statki z SHIPS (colony_ship/cargo_ship/science_vessel) są ukryte —
+    // gracz osiąga te role przez wybór modułów (habitat_pod → colony, cargo_bay → frachtowiec).
+    // Dodatkowo: kadłuby bojowe (hull_frigate/destroyer/cruiser) są ukryte — ich rola
+    // jest emergentna z modułów (pancerz + broń + troop_bay). Save loading legacy nadal działa.
+    const LEGACY_HIDDEN_HULLS = new Set(['hull_frigate', 'hull_destroyer', 'hull_cruiser']);
+    for (const ship of Object.values(HULLS)) {
+      if (LEGACY_HIDDEN_HULLS.has(ship.id)) continue;
       if (cy > maxY - 30) break;
       const hasTech = !ship.requires || (tSys?.isResearched(ship.requires) ?? false);
 
@@ -2073,8 +2094,9 @@ export class FleetTabPanel {
     cy += 14;
 
     // Przycisk Cargo
-    if (sd?.cargoCapacity > 0) {
+    if (sd?.cargoCapacity > 0 || (vessel.cargoMax ?? 0) > 0 || (vessel.troopCapacity ?? 0) > 0 || vessel.orbitalStrike) {
       const cargoUsed = vessel.cargoUsed ?? 0;
+      const cap = vessel.cargoMax ?? sd?.cargoCapacity ?? 0;
       const cbH = 18;
       ctx.fillStyle = 'rgba(30,60,40,0.6)';
       ctx.fillRect(x + PAD, cy, w - PAD * 2, cbH);
@@ -2082,10 +2104,71 @@ export class FleetTabPanel {
       ctx.strokeRect(x + PAD, cy, w - PAD * 2, cbH);
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.successDim; ctx.textAlign = 'center';
-      ctx.fillText(`📦 Cargo (${cargoUsed.toFixed(0)}/${sd.cargoCapacity}t)`, x + w / 2, cy + 12);
+      const labelParts = [];
+      if (cap > 0) labelParts.push(`📦 ${cargoUsed.toFixed(0)}/${cap}t`);
+      if ((vessel.troopCapacity ?? 0) > 0) labelParts.push(`🪖 ${vessel.troopBayUsed ?? 0}/${vessel.troopCapacity}`);
+      if (vessel.orbitalStrike) labelParts.push(`💥 ${vessel.orbitalStrike.ammoCurrent ?? 0}/${vessel.orbitalStrike.ammoCapacity ?? 10}`);
+      ctx.fillText(labelParts.join('  '), x + w / 2, cy + 12);
       ctx.textAlign = 'left';
       this._hitZones.push({ x: x + PAD, y: cy, w: w - PAD * 2, h: cbH, type: 'cargo_load', data: { vesselId: vessel.id } });
       cy += cbH + 4;
+    }
+
+    // Przyciski desantowe — wspólne wymaganie: statek orbituje + dominacja orbitalna
+    const isOrbiting = (vessel.position?.state === 'orbiting');
+    const dropTargetId = vessel.mission?.targetId ?? vessel.position?.dockedAt;
+    const warSys = window.KOSMOS?.warSystem;
+    const dropColMgr = window.KOSMOS?.colonyManager;
+    const targetIsOwn = !!dropColMgr?.getColony?.(dropTargetId);
+    const hasDominance = targetIsOwn || (warSys?.playerHasOrbitalDominance?.(dropTargetId) ?? false);
+
+    // ⚔ ZRZUĆ WOJSKA — drop_pods + troop bay z załadowanym wojskiem
+    if (isOrbiting && vessel.canDropTroops && (vessel.groundUnits?.length ?? 0) > 0) {
+      const enabled = hasDominance;
+      const dbH = 22;
+      ctx.fillStyle = enabled ? 'rgba(100,30,30,0.7)' : 'rgba(40,20,20,0.5)';
+      ctx.fillRect(x + PAD, cy, w - PAD * 2, dbH);
+      ctx.strokeStyle = enabled ? THEME.danger : THEME.border;
+      ctx.strokeRect(x + PAD, cy, w - PAD * 2, dbH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = enabled ? THEME.danger : THEME.textDim; ctx.textAlign = 'center';
+      ctx.fillText(enabled
+        ? `⚔ ZRZUĆ WOJSKA (${vessel.groundUnits.length})`
+        : `⚔ Brak dominacji orbitalnej`,
+        x + w / 2, cy + 15);
+      ctx.textAlign = 'left';
+      if (enabled) {
+        this._hitZones.push({ x: x + PAD, y: cy, w: w - PAD * 2, h: dbH, type: 'drop_troops', data: { vesselId: vessel.id, targetId: dropTargetId } });
+      }
+      cy += dbH + 4;
+    }
+
+    // 💥 OSTRZAŁ ORBITALNY — orbital_strike_battery + amunicja + cooldown
+    if (isOrbiting && vessel.orbitalStrike) {
+      const os = vessel.orbitalStrike;
+      const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const hasAmmo = (os.ammoCurrent ?? 0) > 0;
+      const ready = gameYear >= (os.cooldownUntilYear ?? 0);
+      const enabled = hasDominance && hasAmmo && ready;
+
+      const sbH = 22;
+      ctx.fillStyle = enabled ? 'rgba(120,60,20,0.7)' : 'rgba(40,30,20,0.5)';
+      ctx.fillRect(x + PAD, cy, w - PAD * 2, sbH);
+      ctx.strokeStyle = enabled ? THEME.yellow : THEME.border;
+      ctx.strokeRect(x + PAD, cy, w - PAD * 2, sbH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = enabled ? THEME.yellow : THEME.textDim; ctx.textAlign = 'center';
+      let label;
+      if (!hasDominance) label = '💥 Brak dominacji orbitalnej';
+      else if (!hasAmmo) label = '💥 Brak amunicji';
+      else if (!ready) label = `💥 Cooldown (${(os.cooldownUntilYear - gameYear).toFixed(2)}y)`;
+      else label = `💥 OSTRZAŁ ORBITALNY (${os.ammoCurrent})`;
+      ctx.fillText(label, x + w / 2, cy + 15);
+      ctx.textAlign = 'left';
+      if (enabled) {
+        this._hitZones.push({ x: x + PAD, y: cy, w: w - PAD * 2, h: sbH, type: 'orbital_strike', data: { vesselId: vessel.id, targetId: dropTargetId } });
+      }
+      cy += sbH + 4;
     }
 
     // Separator

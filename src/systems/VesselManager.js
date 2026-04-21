@@ -536,12 +536,34 @@ export class VesselManager {
   }
 
   /**
-   * Oznacz statek jako zużyty/zniszczony (colony_ship, katastrofa).
-   * Usuwa z rejestru + z colony.fleet.
+   * Oznacz statek jako zużyty/zniszczony (colony_ship, katastrofa, walka orbitalna).
+   * Usuwa z rejestru + z colony.fleet. Jednostki naziemne w troop bay GINĄ razem
+   * ze statkiem (emituje groundUnit:destroyed z cause='transport_lost').
    */
   destroyVessel(vesselId) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return;
+
+    // Jednostki naziemne w ładowni giną razem ze statkiem (dramaturgia desantu)
+    if (vessel.groundUnits?.length > 0) {
+      const gum = window.KOSMOS?.groundUnitManager;
+      for (const unitId of [...vessel.groundUnits]) {
+        const unit = gum?.getUnit?.(unitId);
+        if (unit) {
+          EventBus.emit('groundUnit:destroyed', {
+            unitId,
+            planetId: unit.planetId ?? vessel.colonyId,
+            cause: 'transport_lost',
+            archetypeId: unit.archetypeId,
+            popCost: unit.popCost ?? 0,
+            ownerId: unit.owner ?? null,
+          });
+          gum?.removeUnit?.(unitId);
+        }
+      }
+      vessel.groundUnits = [];
+      vessel.troopBayUsed = 0;
+    }
 
     // Usuń z colony.fleet
     const colMgr = window.KOSMOS?.colonyManager;

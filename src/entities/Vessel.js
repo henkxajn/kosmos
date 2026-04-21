@@ -9,11 +9,35 @@
 
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
-import { calcShipStats } from '../data/ShipModulesData.js';
+import { calcShipStats, getModuleCapabilities, SHIP_MODULES } from '../data/ShipModulesData.js';
 import { getNextName } from '../data/VesselNames.js';
+import { getTransportSize } from '../data/unitArchetypes.js';
 import EntityManager from '../core/EntityManager.js';
 
 let _nextVesselId = 1;
+
+// Primary role dla listy moduli — używane przy auto-naming (przed zbudowaniem vessel instance).
+function _primaryRoleForModules(moduleIds) {
+  let hasColony = false, hasTroop = false, hasDropPods = false;
+  let hasWeapon = false, hasScience = false, hasCargo = false;
+  for (const id of moduleIds) {
+    const m = SHIP_MODULES[id];
+    if (!m) continue;
+    if (id === 'habitat_pod' || id === 'cryo_pod') hasColony = true;
+    if (m.stats?.troopCapacity > 0) hasTroop = true;
+    if (m.stats?.enablesPlanetLanding) hasDropPods = true;
+    if (m.slotType === 'weapon') hasWeapon = true;
+    if (id === 'science_lab' || id === 'deep_scanner' || id === 'quantum_scanner') hasScience = true;
+    if (m.stats?.cargoAdd > 0) hasCargo = true;
+  }
+  if (hasColony) return 'colony';
+  if (hasTroop && hasWeapon) return 'assault';
+  if (hasTroop) return 'transport';
+  if (hasWeapon) return 'warship';
+  if (hasScience) return 'science';
+  if (hasCargo) return 'cargo';
+  return 'scout';
+}
 
 /**
  * Stwórz nową instancję statku.
@@ -27,7 +51,16 @@ export function createVessel(shipId, colonyId, opts = {}) {
   if (!ship) throw new Error(`[Vessel] Nieznany typ statku: ${shipId}`);
 
   const id = `v_${_nextVesselId++}`;
-  const name = opts.name || getNextName(shipId);
+
+  // Auto-nazwa: capability-based (rola z modułów) gdy modules podane, legacy pool dla starych typów
+  let name = opts.name;
+  if (!name) {
+    if (opts.modules?.length > 0 && HULLS[shipId]) {
+      name = getNextName(`role_${_primaryRoleForModules(opts.modules)}`);
+    } else {
+      name = getNextName(shipId);
+    }
+  }
 
   // Pozycja startowa = pozycja kolonii macierzystej
   const x = opts.x ?? 0;
@@ -47,6 +80,17 @@ export function createVessel(shipId, colonyId, opts = {}) {
   const speedAU = opts.speedAU ?? (stats?.speed ?? ship.speedAU ?? ship.baseSpeedAU ?? 1.0);
   const cargoMax = opts.cargoMax ?? (stats?.cargo ?? ship.cargoCapacity ?? ship.baseCargoCapacity ?? 0);
   const totalMass = stats?.totalMass ?? (ship.baseMass ?? 30);
+
+  // Troop transport + orbital strike (Faza desantu)
+  const troopCapacity = stats?.troopCapacity ?? 0;
+  const canDropTroops = !!stats?.canDropTroops;
+  const orbitalStrikeSpec = stats?.orbitalStrike ?? null;
+
+  // Pojemność kolonistów — z modułów (habitat_pod/cryo_pod) lub legacy z SHIPS
+  const colonistCapacity = opts.colonistCapacity
+    ?? stats?.colonistCapacity
+    ?? ship.colonistCapacity
+    ?? 0;
 
   // Sprawdź systemId z encji kolonii lub z aktywnego układu
   const entity = EntityManager.get(colonyId);
@@ -104,6 +148,21 @@ export function createVessel(shipId, colonyId, opts = {}) {
 
     // Koloniści na pokładzie (POPy, osobne od cargo)
     colonists: 0,
+    colonistCapacity,
+
+    // Troop transport (Faza desantu) — jednostki naziemne w ładowni
+    groundUnits: [],              // [unitId] — przechowywane w GroundUnitManager z transportStatus='loaded'
+    troopCapacity,                // pojemność z modułów (Σ troop_bay_*.troopCapacity)
+    troopBayUsed: 0,              // suma transportSize załadowanych jednostek
+    canDropTroops,                // flag z modułu drop_pods
+
+    // Orbital strike (Faza desantu) — bateria bombardowania orbitalnego
+    // null gdy brak modułu, inaczej { damage, cooldownYears, ammoCapacity, ammoType, ammoCurrent, cooldownUntilYear }
+    orbitalStrike: orbitalStrikeSpec ? {
+      ...orbitalStrikeSpec,
+      ammoCurrent: 0,
+      cooldownUntilYear: 0,
+    } : null,
 
     // Automatyzacja zachowań
     automation: {
@@ -180,6 +239,120 @@ export function getShipDef(vessel) {
   return SHIPS[vessel.shipId] ?? HULLS[vessel.shipId] ?? null;
 }
 
+// ── Capability helpers (capability-based role identity) ─────────────────────
+// Zastępują stare `shipId === 'colony_ship'` itd. — rola statku wynika z modułów.
+// `vessel.modules` = lista ID z ShipModulesData. Legacy ships bez modules →
+// fallback na flagi z SHIPS[shipId] (isColonizer, shipId === 'cargo_ship' itd.).
+
+/**
+ * Czy statek ma dany moduł (po ID)?
+ */
+export function hasModule(vessel, moduleId) {
+  return Array.isArray(vessel?.modules) && vessel.modules.includes(moduleId);
+}
+
+/**
+ * Set capabilities statku z modułów (reużywa helper z ShipModulesData).
+ * Zwraca Set<string>: 'colony', 'cargo', 'survey', 'deep_scan', 'anomaly_hunt',
+ * 'troop_transport', 'planet_landing', 'orbital_strike', 'warp'.
+ */
+export function getCapabilities(vessel) {
+  if (!vessel) return new Set();
+  return getModuleCapabilities(vessel.modules ?? []);
+}
+
+/**
+ * Statek potrafi kolonizować — ma moduł habitacyjny + pojemność na kolonistów.
+ * Legacy: SHIPS[shipId]?.isColonizer === true.
+ */
+export function canColonize(vessel) {
+  if (!vessel) return false;
+  if ((vessel.colonistCapacity ?? 0) > 0) return true;
+  if (hasModule(vessel, 'habitat_pod') || hasModule(vessel, 'cryo_pod')) return true;
+  // Legacy fallback
+  const def = getShipDef(vessel);
+  return !!def?.isColonizer;
+}
+
+/**
+ * Statek potrafi wozić ładunki (ma cargo bay).
+ */
+export function canHaulCargo(vessel) {
+  if (!vessel) return false;
+  return (vessel.cargoMax ?? 0) > 0;
+}
+
+/**
+ * Statek potrafi prowadzić badania (lab pokładowy / skaner).
+ */
+export function canDoScience(vessel) {
+  if (!vessel) return false;
+  if (hasModule(vessel, 'science_lab') || hasModule(vessel, 'deep_scanner') || hasModule(vessel, 'quantum_scanner')) return true;
+  return getCapabilities(vessel).has('survey');
+}
+
+/**
+ * Statek potrafi rozpoznanie (recon) — przynajmniej survey lub science.
+ */
+export function canDoRecon(vessel) {
+  if (!vessel) return false;
+  const caps = getCapabilities(vessel);
+  if (caps.has('survey') || caps.has('deep_scan')) return true;
+  return canDoScience(vessel);
+}
+
+/**
+ * Statek potrafi zejść Away Team na powierzchnię.
+ */
+export function canDeployAwayTeam(vessel) {
+  return hasModule(vessel, 'science_away_team');
+}
+
+/**
+ * Statek ma broń (dowolną wieżę/wyrzutnię).
+ */
+export function hasWeapons(vessel) {
+  if (!vessel?.modules) return false;
+  for (const modId of vessel.modules) {
+    const m = SHIP_MODULES[modId];
+    if (m?.slotType === 'weapon') return true;
+  }
+  return false;
+}
+
+/**
+ * Prymarna rola statku — używana do wyboru puli nazw i etykiety UI.
+ * Priorytet: colony > warship(z troop_bay) > transport > warship > science > cargo > scout.
+ */
+export function getPrimaryRole(vessel) {
+  if (!vessel) return 'scout';
+  if (canColonize(vessel))                        return 'colony';
+  if (vessel.canDropTroops || (vessel.troopCapacity ?? 0) > 0) {
+    return hasWeapons(vessel) ? 'assault' : 'transport';
+  }
+  if (hasWeapons(vessel))                         return 'warship';
+  if (canDoScience(vessel))                       return 'science';
+  if (canHaulCargo(vessel))                       return 'cargo';
+  return 'scout';
+}
+
+/**
+ * Etykieta roli PL (do UI — „Statek Badawczy", „Transporter Desantowy" itd.)
+ */
+export function getRoleLabelPL(vessel) {
+  const role = getPrimaryRole(vessel);
+  switch (role) {
+    case 'colony':    return 'Osadnik Kolonizacyjny';
+    case 'assault':   return 'Krążownik Desantowy';
+    case 'transport': return 'Transportowiec';
+    case 'warship':   return 'Okręt Bojowy';
+    case 'science':   return 'Statek Badawczy';
+    case 'cargo':     return 'Frachtowiec';
+    case 'scout':     return 'Zwiadowca';
+    default:          return 'Statek';
+  }
+}
+
 // ── Dziennik misji ───────────────────────────────────────────────────────────
 
 const MAX_LOG_ENTRIES = 20;
@@ -254,17 +427,35 @@ export function loadCargo(vessel, commodityId, qty, resSys) {
  * Załaduj jednostkę naziemną do ładowni statku.
  * Ustawia `transportStatus='loaded'` — SupplyCoverageSystem pomija taką jednostkę,
  * co oznacza ZERO konsumpcji supply podczas transportu (FROZEN/hibernacja).
- * To jest obietnica gracz-friendly z planu v3: wysłanie unitów na misję
- * do innej planety NIE zjada supply podczas lotu.
+ *
+ * Walidacja (Faza desantu):
+ *  - statek musi mieć troopCapacity > 0 (moduł troop_bay_*)
+ *  - transportSize jednostki + troopBayUsed ≤ troopCapacity
+ *  - garrison_unit w trybie 'deployed' jest automatycznie przełączany na 'mobile'
+ *    (transport wymaga trybu mobilnego — deploy następuje ręcznie po zrzucie)
  *
  * @param {object} vessel — instancja statku
  * @param {object} unit   — jednostka naziemna z GroundUnitManager
+ * @returns {{ok:boolean, reason?:string}}
  */
 export function loadGroundUnit(vessel, unit) {
-  if (!vessel || !unit) return false;
-  if (!vessel.groundUnits) vessel.groundUnits = [];  // list of unit.id
+  if (!vessel || !unit) return { ok: false, reason: 'invalid_args' };
+  if (!vessel.groundUnits) vessel.groundUnits = [];
 
-  if (vessel.groundUnits.includes(unit.id)) return false;
+  if (vessel.groundUnits.includes(unit.id)) return { ok: false, reason: 'already_loaded' };
+
+  const capacity = vessel.troopCapacity ?? 0;
+  if (capacity <= 0) return { ok: false, reason: 'no_troop_bay' };
+
+  const size = getTransportSize(unit.archetypeId);
+  const used = vessel.troopBayUsed ?? 0;
+  if (used + size > capacity) return { ok: false, reason: 'no_space' };
+
+  // Garrison w trybie deployed → przełącz na mobile (nie transportujemy bunkra)
+  if (unit.archetypeId === 'garrison_unit' && unit.deployState === 'deployed') {
+    unit.deployState = 'mobile';
+    unit.deployTimer = 0;
+  }
 
   // Zapamiętaj poprzedni status żeby przywrócić przy unload
   unit.prevStatus      = unit.status ?? 'idle';
@@ -272,7 +463,8 @@ export function loadGroundUnit(vessel, unit) {
   unit.transportStatus = 'loaded';
 
   vessel.groundUnits.push(unit.id);
-  return true;
+  vessel.troopBayUsed = used + size;
+  return { ok: true };
 }
 
 /**
@@ -300,7 +492,67 @@ export function unloadGroundUnit(vessel, unit, planetId, q, r) {
   if (vessel.groundUnits) {
     vessel.groundUnits = vessel.groundUnits.filter(id => id !== unit.id);
   }
+  const size = getTransportSize(unit.archetypeId);
+  vessel.troopBayUsed = Math.max(0, (vessel.troopBayUsed ?? 0) - size);
   return true;
+}
+
+/**
+ * Zrzut desantowy jednostki z ładowni na wrogą planetę.
+ * Wymaga: canDropTroops (moduł drop_pods) + dominacji orbitalnej (sprawdza caller).
+ * Garrison zostaje w trybie mobile — deploy ręczny po zrzucie (2 civY).
+ *
+ * @param {object} vessel
+ * @param {object} unit — jednostka z groundUnits
+ * @param {string} planetId — planeta docelowa
+ * @param {number} q
+ * @param {number} r
+ * @returns {{ok:boolean, reason?:string}}
+ */
+export function dropTroop(vessel, unit, planetId, q, r) {
+  if (!vessel || !unit) return { ok: false, reason: 'invalid_args' };
+  if (!vessel.canDropTroops) return { ok: false, reason: 'no_drop_pods' };
+  if (!vessel.groundUnits?.includes(unit.id)) return { ok: false, reason: 'not_loaded' };
+
+  unloadGroundUnit(vessel, unit, planetId, q, r);
+  return { ok: true };
+}
+
+/**
+ * Wystrzel ostrzał orbitalny na hex docelowy.
+ * Zużywa 1 orbital_shells, ustawia cooldown. Sprawdza: ammo > 0, cooldown OK.
+ * Caller musi sprawdzić dominację orbitalną przed wywołaniem.
+ *
+ * @param {object} vessel
+ * @param {number} currentYear — aktualny rok gry (do cooldownu)
+ * @returns {{ok:boolean, reason?:string, damage?:number}}
+ */
+export function fireOrbitalStrike(vessel, currentYear) {
+  const os = vessel.orbitalStrike;
+  if (!os) return { ok: false, reason: 'no_battery' };
+  if ((os.ammoCurrent ?? 0) <= 0) return { ok: false, reason: 'no_ammo' };
+  if (currentYear < (os.cooldownUntilYear ?? 0)) return { ok: false, reason: 'cooldown' };
+
+  os.ammoCurrent -= 1;
+  os.cooldownUntilYear = currentYear + (os.cooldownYears ?? 0.5);
+  return { ok: true, damage: os.damage ?? 20 };
+}
+
+/**
+ * Załaduj orbital_shells z cargo kolonii do baterii.
+ * @returns {number} faktycznie załadowane
+ */
+export function loadOrbitalShells(vessel, qty, resSys) {
+  if (!vessel.orbitalStrike) return 0;
+  const os = vessel.orbitalStrike;
+  const space = (os.ammoCapacity ?? 10) - (os.ammoCurrent ?? 0);
+  if (space <= 0 || qty <= 0) return 0;
+  const available = Math.floor(_getAvailable(resSys, 'orbital_shells'));
+  const actual = Math.min(qty, space, available);
+  if (actual <= 0) return 0;
+  if (resSys?.spend) resSys.spend({ orbital_shells: actual });
+  os.ammoCurrent = (os.ammoCurrent ?? 0) + actual;
+  return actual;
 }
 
 /**

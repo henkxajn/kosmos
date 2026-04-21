@@ -7,7 +7,8 @@ import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
-import { loadCargo, unloadCargo } from '../entities/Vessel.js';
+import { loadCargo, unloadCargo, loadGroundUnit, unloadGroundUnit, loadOrbitalShells } from '../entities/Vessel.js';
+import { UNIT_ARCHETYPES, getTransportSize } from '../data/unitArchetypes.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { t, getName } from '../i18n/i18n.js';
 
@@ -278,6 +279,173 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
       addGroup(t('cargo.harvested'), HARVESTED_RESOURCES);
     }
     refreshLoadSection();
+
+    // ── Sekcja Wojsko (tylko gdy statek ma troop_bay) ────────────────────────
+    const troopSection = document.createElement('div');
+    troopSection.style.cssText = 'margin-top: 10px;';
+    if ((vessel.troopCapacity ?? 0) > 0) {
+      const troopSep = document.createElement('div');
+      troopSep.style.cssText = `height: 1px; background: ${THEME.border}; margin: 6px 0;`;
+      content.appendChild(troopSep);
+
+      const troopHeader = document.createElement('div');
+      troopHeader.style.cssText = `font-size: 10px; color: ${THEME.accent}; margin-bottom: 4px; font-weight: bold; letter-spacing: 0.5px;`;
+      content.appendChild(troopHeader);
+
+      const loadedList = document.createElement('div');
+      loadedList.style.cssText = 'margin-bottom: 6px;';
+      content.appendChild(loadedList);
+
+      const garrisonHeader = document.createElement('div');
+      garrisonHeader.style.cssText = `font-size: 9px; color: ${THEME.textDim}; margin: 6px 0 2px; font-weight: bold; opacity: 0.7;`;
+      garrisonHeader.textContent = '🪖 Garnizon planety:';
+      content.appendChild(garrisonHeader);
+
+      const garrisonList = document.createElement('div');
+      content.appendChild(garrisonList);
+
+      function _unitRow(unit, action) {
+        const arc = UNIT_ARCHETYPES[unit.archetypeId];
+        const name = arc?.descriptionPL?.split('.')[0] ?? unit.archetypeId;
+        const size = getTransportSize(unit.archetypeId);
+        const hp = Math.round(unit.hp ?? 0);
+        const maxHp = arc?.baseStats?.hp ?? hp;
+
+        const row = document.createElement('div');
+        row.style.cssText = `display: flex; align-items: center; padding: 2px 4px; margin-bottom: 1px; background: rgba(${_bc.r},${_bc.g},${_bc.b},0.08); border-radius: 2px;`;
+
+        const icon = document.createElement('span');
+        icon.style.cssText = 'width: 18px; font-size: 10px; flex-shrink: 0;';
+        icon.textContent = '🪖';
+        row.appendChild(icon);
+
+        const nameEl = document.createElement('span');
+        nameEl.style.cssText = `flex: 1; font-size: 10px; color: ${THEME.textSecondary}; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;`;
+        nameEl.textContent = `${name} (${hp}/${maxHp} HP)`;
+        row.appendChild(nameEl);
+
+        const sizeSpan = document.createElement('span');
+        sizeSpan.style.cssText = `font-size: 9px; color: ${THEME.textDim}; margin: 0 4px; white-space: nowrap; flex-shrink: 0;`;
+        sizeSpan.textContent = `${size} pkt`;
+        row.appendChild(sizeSpan);
+
+        row.appendChild(action);
+        return row;
+      }
+
+      function refreshTroopSection() {
+        const cap = vessel.troopCapacity ?? 0;
+        const used = vessel.troopBayUsed ?? 0;
+        troopHeader.textContent = `⚔ TRANSPORT WOJSK — ${used}/${cap} pkt ${vessel.canDropTroops ? '🛩' : '(bez kapsuł desantowych)'}`;
+
+        // Załadowane
+        loadedList.innerHTML = '';
+        const gum = window.KOSMOS?.groundUnitManager;
+        if ((vessel.groundUnits ?? []).length === 0) {
+          const empty = document.createElement('div');
+          empty.style.cssText = `font-size: 10px; color: ${THEME.textDim}; padding: 2px 0; font-style: italic;`;
+          empty.textContent = '(ładownia pusta)';
+          loadedList.appendChild(empty);
+        } else {
+          for (const unitId of vessel.groundUnits) {
+            const unit = gum?.getUnit(unitId);
+            if (!unit) continue;
+            const btnUnload = _makeBtn('Wyładuj', THEME.yellow, () => {
+              const planetId = colony?.planetId ?? vessel.colonyId;
+              unloadGroundUnit(vessel, unit, planetId, unit.q ?? 0, unit.r ?? 0);
+              changed = true;
+              refreshTroopSection();
+            });
+            loadedList.appendChild(_unitRow(unit, btnUnload));
+          }
+        }
+
+        // Garnizon planety (tylko player units, nie in_cargo)
+        garrisonList.innerHTML = '';
+        const planetId = colony?.planetId ?? vessel.colonyId;
+        const garrisonUnits = gum?.getUnitsOnPlanet?.(planetId) ?? [];
+        const eligible = garrisonUnits.filter(u =>
+          (u.owner == null || u.owner === 'player') &&
+          u.status !== 'in_cargo' &&
+          !vessel.groundUnits?.includes(u.id)
+        );
+
+        if (eligible.length === 0) {
+          const empty = document.createElement('div');
+          empty.style.cssText = `font-size: 10px; color: ${THEME.textDim}; padding: 2px 0; font-style: italic;`;
+          empty.textContent = '(brak jednostek do załadowania)';
+          garrisonList.appendChild(empty);
+        } else {
+          for (const unit of eligible) {
+            const size = getTransportSize(unit.archetypeId);
+            const canFit = (used + size) <= cap;
+            const btnLoad = _makeBtn('Załaduj', canFit ? THEME.successDim : THEME.border, () => {
+              if (!canFit) return;
+              const res = loadGroundUnit(vessel, unit);
+              if (res?.ok) { changed = true; refreshTroopSection(); }
+            });
+            if (!canFit) {
+              btnLoad.disabled = true;
+              btnLoad.style.opacity = '0.3';
+              btnLoad.style.cursor = 'default';
+            }
+            garrisonList.appendChild(_unitRow(unit, btnLoad));
+          }
+        }
+      }
+      refreshTroopSection();
+    }
+
+    // ── Sekcja Orbital Strike (tylko gdy statek ma baterię) ──────────────────
+    if (vessel.orbitalStrike) {
+      const osSep = document.createElement('div');
+      osSep.style.cssText = `height: 1px; background: ${THEME.border}; margin: 6px 0;`;
+      content.appendChild(osSep);
+
+      const osHeader = document.createElement('div');
+      osHeader.style.cssText = `font-size: 10px; color: ${THEME.accent}; margin-bottom: 4px; font-weight: bold; letter-spacing: 0.5px;`;
+      content.appendChild(osHeader);
+
+      const osRow = document.createElement('div');
+      osRow.style.cssText = `display: flex; align-items: center; padding: 2px 4px; background: rgba(${_bc.r},${_bc.g},${_bc.b},0.08); border-radius: 2px;`;
+      content.appendChild(osRow);
+
+      const osIcon = document.createElement('span');
+      osIcon.style.cssText = 'width: 18px; font-size: 10px; flex-shrink: 0;';
+      osIcon.textContent = '💥';
+      osRow.appendChild(osIcon);
+
+      const osName = document.createElement('span');
+      osName.style.cssText = `flex: 1; font-size: 10px; color: ${THEME.textSecondary};`;
+      osName.textContent = 'Pociski Orbitalne';
+      osRow.appendChild(osName);
+
+      const doLoadShells = (qty) => {
+        const actual = loadOrbitalShells(vessel, qty, resSys);
+        if (actual > 0) { changed = true; refreshOrbitalStrike(); }
+      };
+      const osBtn1 = _makeBtn('+1', THEME.successDim, () => doLoadShells(1));
+      const osBtn5 = _makeBtn('+5', THEME.successDim, () => doLoadShells(5));
+      const osBtnMax = _makeBtn('MAX', THEME.accent, () => doLoadShells(vessel.orbitalStrike.ammoCapacity ?? 10));
+      osRow.appendChild(osBtn1);
+      osRow.appendChild(osBtn5);
+      osRow.appendChild(osBtnMax);
+
+      function refreshOrbitalStrike() {
+        const os = vessel.orbitalStrike;
+        osHeader.textContent = `💥 BATERIA ORBITALNA — ${os.ammoCurrent ?? 0}/${os.ammoCapacity ?? 10} pocisków (${os.damage ?? 20} dmg)`;
+        const avail = Math.floor(inventory.get('orbital_shells') ?? 0);
+        const space = (os.ammoCapacity ?? 10) - (os.ammoCurrent ?? 0);
+        const canLoad = Math.min(avail, space);
+        for (const b of [osBtn1, osBtn5, osBtnMax]) {
+          const disable = canLoad <= 0;
+          b.disabled = disable;
+          b.style.opacity = disable ? '0.3' : '1';
+          b.style.cursor = disable ? 'default' : 'pointer';
+        }
+      }
+      refreshOrbitalStrike();
+    }
 
     panel.appendChild(content);
 

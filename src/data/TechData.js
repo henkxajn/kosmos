@@ -1122,6 +1122,21 @@ export const TECHS = {
     description: 'Zaopatrzenie kosmiczne — Statek Zaopatrzeniowy, +5/+5 org/mor, cap supply +20 (placeholder fleet-group)',
   },
 
+  tech_munitions: {
+    id:          'tech_munitions',
+    namePL:      'Amunicja Orbitalna',
+    nameEN:      'Orbital Munitions',
+    branch:      'defense',
+    tier:        3,
+    cost:        { research: 240 },
+    requires:    ['ground_warfare'],
+    effects: [
+      { type: 'unlockCommodity',   commodityId: 'orbital_shells' },
+      { type: 'unlockShipModule',  moduleId:    'orbital_strike_battery' },
+    ],
+    description: 'Pociski Orbitalne (commodity) + Bateria Ostrzału Orbitalnego (moduł statku) — wsparcie ogniowe z orbity dla sił naziemnych',
+  },
+
   strategic_doctrine: {
     id:          'strategic_doctrine',
     namePL:      'Doktryna Strategiczna',

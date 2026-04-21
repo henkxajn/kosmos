@@ -20,6 +20,10 @@
 //   noMorale           — flag dla dronów/maszyn (morale pomijane w formułach, dmg mult dzieli tylko przez org/100)
 //   isSupplier         — flag dla Supply Unit (SupplyCoverageSystem traktuje jako źródło supply)
 //   supplyTransferRate — tempo transferu supply do sąsiadów (tylko gdy isSupplier)
+//
+// ── Troop Transport (Faza desantu) ───────────────────────────────────────────
+//   transportSize      — ładowność jednostki w troop_bay (1=piechota, 2=wóz, 3=ciężki sprzęt)
+//   Frakcje (humanity/UNE/Syndykat) NIE nadpisują tego pola — to cecha archetypu.
 
 export const UNIT_ARCHETYPES = {
   // ── Szturm: szybka piechota, zajmuje budynki, bonus w mieście ──
@@ -44,6 +48,8 @@ export const UNIT_ARCHETYPES = {
     baseMorale:        15,  // elita — wyższe morale startowe
     baseSupplyCap:     100,
     supplyConsumption: 3,
+    // Troop transport
+    transportSize:     1,   // piechota — bazowa jednostka ładowności
   },
 
   // ── Artyleria rakietowa: długi zasięg, mało HP, nie może strzelać w zwarciu ──
@@ -68,6 +74,8 @@ export const UNIT_ARCHETYPES = {
     baseMorale:        10,
     baseSupplyCap:     100,
     supplyConsumption: 5,  // ciężki sprzęt pali dużo
+    // Troop transport
+    transportSize:     3,  // ciężkie wyrzutnie + amunicja rakietowa
   },
 
   // ── Garnizon: tryb Mobile (wóz kołowy) ↔ Deployed (okopany z aurą AC) ──
@@ -104,6 +112,8 @@ export const UNIT_ARCHETYPES = {
     baseSupplyCap:     100,
     supplyConsumption: 2,   // deployed; w mobile podwaja się do 4 (_applyDeployStateStats)
     mobileSupplyConsumption: 4,
+    // Troop transport
+    transportSize:     3,   // transport w trybie mobile — ciężki wóz kołowy + sprzęt fortyfikacyjny
   },
 
   // ── Obrona przeciw-drono-powietrzna: przechwytuje drony, słaba przeciw piechocie ──
@@ -129,6 +139,8 @@ export const UNIT_ARCHETYPES = {
     baseMorale:        10,
     baseSupplyCap:     100,
     supplyConsumption: 3,
+    // Troop transport
+    transportSize:     2,  // platforma wozowa z wyrzutniami AA
   },
 
   // ── Medyk: leczy sąsiadów, nie atakuje, priorytet celowania AI ──
@@ -153,6 +165,8 @@ export const UNIT_ARCHETYPES = {
     baseMorale:        15,
     baseSupplyCap:     100,
     supplyConsumption: 2,
+    // Troop transport
+    transportSize:     2,  // pojazd crawler ze sprzętem medycznym
   },
 
   // ── Dron zwiadowczy: latający, niewidoczny, bateria na 5 tur ──
@@ -180,6 +194,8 @@ export const UNIT_ARCHETYPES = {
     noMorale:          true, // pomija morale w formułach (dmg mult korzysta tylko z org)
     baseSupplyCap:     50,
     supplyConsumption: 2,
+    // Troop transport
+    transportSize:     1,   // mały dron + stacja operatora + bateria
   },
 
   // ── Jednostka Zaopatrzeniowa (Opcja C v3): mobilny magazyn, karmi sąsiadów w 1 hex ──
@@ -207,6 +223,8 @@ export const UNIT_ARCHETYPES = {
     supplyConsumption: 1,
     isSupplier:        true,
     supplyTransferRate: 10,
+    // Troop transport
+    transportSize:     3,  // mobilny magazyn cap 200 — największy pojazd logistyczny
   },
 };
 
@@ -247,6 +265,16 @@ export function checkArchetypeUnlocked(archetypeId, barracksLv, techSystem) {
     return { unlocked: false, reason: 'barracks', requiredLv: req.barracksLv, currentLv: barracksLv };
   }
   return { unlocked: true };
+}
+
+/**
+ * Pobierz transportSize (ładowność w troop_bay) dla archetypu.
+ * Frakcje NIE nadpisują — to cecha archetypu. Fallback 1 dla nieznanych/legacy.
+ * @param {string} archetypeId
+ * @returns {number} 1-3 (lub 1 jako bezpieczny default)
+ */
+export function getTransportSize(archetypeId) {
+  return UNIT_ARCHETYPES[archetypeId]?.transportSize ?? 1;
 }
 
 /**

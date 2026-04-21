@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 58;
+export const CURRENT_VERSION     = 60;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -73,6 +73,8 @@ const MIGRATIONS = {
   55: _migrateV55toV56,
   56: _migrateV56toV57,
   57: _migrateV57toV58,
+  58: _migrateV58toV59,
+  59: _migrateV59toV60,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1464,5 +1466,70 @@ function _migrateV57toV58(data) {
       u.stateTimer  = 0;
     }
   }
+  return data;
+}
+
+// ── Migracja v58 → v59 ──────────────────────────────────────────────────────
+// Faza desantu: pola na vessel (troopBay/canDropTroops/orbitalStrike), fleet
+// (hasTroopTransport/troopCapacity), gameState.orbitalDominance.
+function _migrateV58toV59(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!Array.isArray(v.groundUnits)) v.groundUnits = [];
+      if (v.troopCapacity == null) v.troopCapacity = 0;
+      if (v.troopBayUsed == null) v.troopBayUsed = 0;
+      if (v.canDropTroops == null) v.canDropTroops = false;
+      if (v.orbitalStrike === undefined) v.orbitalStrike = null;
+    }
+  }
+
+  // Obce floty — hasTroopTransport (domyślnie false dla legacy save)
+  const empires = data.gameState?.empires ?? data.empires;
+  if (empires && typeof empires === 'object') {
+    for (const emp of Object.values(empires)) {
+      if (!emp?.fleets) continue;
+      for (const f of emp.fleets) {
+        if (f.hasTroopTransport == null) f.hasTroopTransport = false;
+        if (f.troopCapacity == null) f.troopCapacity = 0;
+      }
+    }
+  }
+
+  // orbitalDominance — pusty obiekt (stary save = brak historii bitew)
+  if (data.gameState && !data.gameState.orbitalDominance) {
+    data.gameState.orbitalDominance = {};
+  }
+
+  return data;
+}
+
+// ── Migracja v59 → v60 ──────────────────────────────────────────────────────
+// Capability refactor:
+//   - vessel.colonistCapacity (ustawiane z modułów habitat_pod/cryo_pod lub legacy ship)
+//   - fleet.embarkedTroops[] (konkretne archetypy załadowane na obcych flotach)
+function _migrateV59toV60(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (v.colonistCapacity == null) {
+        // Legacy: ustaw na podstawie starego shipId (bez modułów)
+        if (v.shipId === 'colony_ship') v.colonistCapacity = 3;
+        else v.colonistCapacity = 0;
+      }
+    }
+  }
+
+  // Obce floty — embarkedTroops (pusta lista dla legacy; nowe floty AI wypełniają w EmpireGenerator)
+  const empires = data.gameState?.empires ?? data.empires;
+  if (empires && typeof empires === 'object') {
+    for (const emp of Object.values(empires)) {
+      if (!emp?.fleets) continue;
+      for (const f of emp.fleets) {
+        if (!Array.isArray(f.embarkedTroops)) f.embarkedTroops = [];
+      }
+    }
+  }
+
   return data;
 }

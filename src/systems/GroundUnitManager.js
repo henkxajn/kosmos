@@ -46,6 +46,40 @@ export class GroundUnitManager {
     // Subskrybuj tick czasu (civDeltaYears)
     this._onTick = ({ civDeltaYears: dt }) => this.tick(dt);
     EventBus.on('time:tick', this._onTick);
+
+    // Ostrzał orbitalny — zadaje damage jednostkom na docelowym hexie (Faza desantu)
+    EventBus.on('groundUnit:orbitalStrike', (ev) => this._onOrbitalStrike(ev));
+  }
+
+  /**
+   * Odbiór ostrzału orbitalnego — damage dla WSZYSTKICH jednostek na hexie
+   * (nie filtrujemy po ownerze — kinetyczny pocisk nie widzi flagi).
+   * Friendly fire jest cenną decyzją taktyczną gracza.
+   */
+  _onOrbitalStrike({ planetId, q, r, damage }) {
+    if (!planetId || damage == null) return;
+    const dmg = Math.max(0, damage);
+    if (dmg === 0) return;
+    const toKill = [];
+    for (const u of this._units.values()) {
+      if (u.planetId !== planetId) continue;
+      if (u.q !== q || u.r !== r) continue;
+      const hp = (u.currentHP ?? u.hp ?? 0) - dmg;
+      u.currentHP = hp;
+      u.hp = hp;
+      if (hp <= 0) toKill.push(u);
+    }
+    for (const u of toKill) {
+      EventBus.emit('groundUnit:destroyed', {
+        unitId: u.id,
+        planetId: u.planetId,
+        cause: 'orbital_strike',
+        archetypeId: u.archetypeId,
+        popCost: u.popCost ?? 0,
+        ownerId: u.owner ?? null,
+      });
+      this.removeUnit(u.id);
+    }
   }
 
   // ── Tworzenie jednostki ──────────────────────────────────────────────────

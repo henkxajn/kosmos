@@ -60,9 +60,10 @@ export class InvasionSystem {
    * Ląduj wojska na planecie.
    * @param {string} empireId — agresor
    * @param {string} planetId — cel (planeta gracza)
-   * @param {number} troopCount — ile jednostek desantuje (domyślnie TROOPS_PER_LANDING)
+   * @param {number} troopCount — fallback ile jednostek gdy brak fleet.embarkedTroops
+   * @param {string[]} [embarkedTroops] — konkretne archetypy do desantu (parity z graczem)
    */
-  launchInvasion(empireId, planetId, troopCount = TROOPS_PER_LANDING) {
+  launchInvasion(empireId, planetId, troopCount = TROOPS_PER_LANDING, embarkedTroops = null) {
     const body = EntityManager.get(planetId);
     if (!body) return { success: false, reason: 'no_planet' };
 
@@ -79,8 +80,18 @@ export class InvasionSystem {
     const grid = colony?.grid;
     if (!grid) return { success: false, reason: 'no_grid' };
 
-    // Pool jednostek wg archetypu
-    const pool = INVASION_UNIT_POOLS[emp.archetype] ?? ['infantry', 'infantry'];
+    // Lista archetypów do desantu: preferuj konkretne embarkedTroops (parity z graczem),
+    // fallback na losowanie z puli archetypu imperium.
+    let troops;
+    if (Array.isArray(embarkedTroops) && embarkedTroops.length > 0) {
+      troops = embarkedTroops.slice(0, troopCount);
+    } else {
+      const pool = INVASION_UNIT_POOLS[emp.archetype] ?? ['infantry', 'infantry'];
+      troops = [];
+      for (let i = 0; i < troopCount; i++) {
+        troops.push(pool[Math.floor(Math.random() * pool.length)]);
+      }
+    }
 
     // Znajdź hexy landing: brzeg siatki, nie ocean, nie capital, nie pod wrogą jednostką
     const landingHexes = this._findLandingHexes(grid, colony);
@@ -90,9 +101,9 @@ export class InvasionSystem {
     }
 
     const landed = [];
-    for (let i = 0; i < troopCount; i++) {
+    for (let i = 0; i < troops.length; i++) {
       const hex = landingHexes[i % landingHexes.length];
-      const type = pool[Math.floor(Math.random() * pool.length)];
+      const type = troops[i];
       const unit = gum.createUnit(type, planetId, hex.q, hex.r, { owner: empireId });
       landed.push(unit.id);
     }
@@ -126,23 +137,30 @@ export class InvasionSystem {
 
   _onBattleResolved({ warId, battleId, result }) {
     if (!result) return;
-    // Desant tylko gdy:
-    //   - jest lokalizacja (systemId gracza)
-    //   - uczestnik B był graczem, uczestnik A to flota imperium
-    //   - zwycięstwo A lub draw z surviving strength
     const pA = result.participantA;
     const pB = result.participantB;
     if (pA?.type !== 'empire' || pB?.type !== 'player') return;
     const systemId = result.location;
     if (!systemId) return;
 
-    // Obcy musi mieć resztki siły — if destroyed, no landing.
-    // Nie wymagamy już winner=='A' — desant idzie też przy remisie i przegranej,
-    // o ile pozostaje wystarczająca siła floty ("przedarta blokada").
     const empireId = pA.empireId;
     const startStr = pA.strength ?? 0;
     const survived = startStr - (result.lossesA ?? 0);
     if (survived < MIN_SURVIVING_STRENGTH_TO_LAND) return;
+
+    // Faza desantu: sprawdź czy atakująca flota ma transport wojsk.
+    // Bez `hasTroopTransport` flota może wygrać bitwę orbitalną, ale NIE desantuje.
+    // To wymusza na AI dywersyfikację floty (walka vs transport) — analog gracza.
+    const fleetId = pA.fleetId;
+    const reg = window.KOSMOS?.empireRegistry;
+    const empire = reg?.get(empireId);
+    const fleet = empire?.fleets?.find(f => f.id === fleetId);
+    const hasTransport = !!fleet?.hasTroopTransport;
+    if (!hasTransport) {
+      // Blokada się przedarła, ale nie ma czym desantować — tylko orbita.
+      EventBus.emit('invasion:blocked', { empireId, systemId, reason: 'no_troop_transport' });
+      return;
+    }
 
     // Znajdź player colony w tym systemie — najlepsza (home jeśli możliwa)
     const colMgr = window.KOSMOS?.colonyManager;
@@ -155,7 +173,20 @@ export class InvasionSystem {
 
     // Prefer home, else first
     const target = targets.find(c => c.isHomePlanet) ?? targets[0];
-    this.launchInvasion(empireId, target.planetId, TROOPS_PER_LANDING);
+
+    // Pojemność desantu zależy od floty (troopCapacity) z fallbackiem na stałą
+    const troopCount = fleet.troopCapacity ?? TROOPS_PER_LANDING;
+    // Konkretne archetypy załadowane na flocie (parity z graczem): jeśli puste — losowanie z puli
+    const embarked = (fleet.embarkedTroops ?? []).slice();
+    const res = this.launchInvasion(empireId, target.planetId, troopCount, embarked);
+
+    // Po desancie: flota straciła ładunek — zeruj embarkedTroops (druga fala musi mieć nowe wojsko)
+    if (res?.success && empire) {
+      const nextFleets = (empire.fleets ?? []).map(f =>
+        f.id === fleetId ? { ...f, embarkedTroops: [] } : f
+      );
+      gameState.set(`empires.${empireId}.fleets`, nextFleets, 'troops_disembarked');
+    }
   }
 
   // ── Tick: capture checks ─────────────────────────────────────

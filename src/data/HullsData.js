@@ -219,6 +219,47 @@ export const HULLS = {
     ],
     description:       'Średni okręt bojowy — 6 slotów (2 napędy + 4 użytkowe). Ciężki pancerz, duże HP.',
   },
+
+  hull_cruiser: {
+    id:                'hull_cruiser',
+    namePL:            'Krążownik',
+    nameEN:            'Cruiser',
+    icon:              '🚀',
+    size:              'large',
+    baseMass:          140,    // tony — ciężki okręt
+    baseModuleSlots:   8,
+    baseFuelCapacity:  22,
+    baseSpeedAU:       0.7,    // AU/rok — powolny
+    baseCargoCapacity: 0,
+    baseFuelPerAU:     0.75,
+    fuelCapacity:      22,
+    fuelPerAU:         0.75,
+    range:             29,
+    speedAU:           0.7,
+    cargoCapacity:     0,
+    fuelType:          'power_cells',
+    baseHP:            350,      // capital-class HP
+    baseEvasion:       0.05,     // duży cel
+    baseArmor:         5,        // ciężki pancerz kompozytowy
+    cost:              { Fe: 280, Ti: 70, Cu: 25, Hv: 12 },
+    commodityCost:     { structural_alloys: 22, reactive_armor: 14, electronic_systems: 8, pressure_modules: 4 },
+    buildTime:         15.0,
+    maxSurge:          4,
+    crewCost:          0.25,
+    crewStrata:        'mix',
+    requires:          'point_defense',
+    slots: [
+      { type: 'propulsion' },
+      { type: 'propulsion' },
+      { type: 'propulsion' },
+      { type: 'utility' },
+      { type: 'utility' },
+      { type: 'utility' },
+      { type: 'utility' },
+      { type: 'utility' },
+    ],
+    description:       'Ciężki okręt desantowy — 8 slotów (3 napędy + 5 użytkowych). Mieści troop bay L lub 2× troop bay M. Podstawa pełnoskalowej inwazji.',
+  },
 };
 
 // ── Pomocnik: zlicz sloty wg typu ────────────────────────────────────────────

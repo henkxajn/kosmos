@@ -162,6 +162,14 @@ export class EmpireRegistry {
       etaYear:      null,
       morale:       params.morale ?? 1.0,
       createdYear:  window.KOSMOS?.timeSystem?.gameTime ?? 0,
+      // Faza desantu: transport wojsk (bez tego flota toczy tylko bitwy orbitalne)
+      hasTroopTransport: params.hasTroopTransport ?? false,
+      troopCapacity:     params.troopCapacity ?? 0,
+      // Faza desantu B: konkretne archetypy załadowane na statkach desantowych.
+      // Gracz robi to samo przez CargoLoadModal → loadGroundUnit. AI generuje
+      // listę w EmpireGenerator przy spawnu floty (wg archetypu).
+      // Format: ['shock_infantry', 'rocket_artillery', ...]
+      embarkedTroops:    params.embarkedTroops ?? [],
     };
     fleets.push(fleet);
     gameState.set(`empires.${empireId}.fleets`, fleets, 'fleet_spawned');

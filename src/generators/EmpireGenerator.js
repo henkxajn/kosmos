@@ -12,6 +12,7 @@
 // Każde imperium dostaje 1–3 kolonie (home + 0–2 outpostów) w pobliżu swego home.
 
 import { ARCHETYPES, ARCHETYPE_IDS, NAME_PREFIXES_PL, NAME_PREFIXES_EN } from '../data/EmpireData.js';
+import { INVASION_UNIT_POOLS } from '../data/GroundUnitData.js';
 
 // ── Stałe ─────────────────────────────────────────────────────────────────────
 const COUNT_MIN  = 3;     // minimalna liczba imperiów
@@ -165,9 +166,26 @@ export class EmpireGenerator {
       // Siła skalowana od personality.aggression + archetype
       const arch = ARCHETYPES[archetypeId];
       const aggroMult = 0.7 + (arch?.personality?.aggression ?? 0.5) * 0.6; // 0.7 - 1.3
+      // Faza desantu: flagi transport wojsk — prawdopodobieństwo per archetyp.
+      // xenophage/hegemon są agresywne → wysoka szansa; trader niska.
+      // Domyślnie 0.4 jeśli brak konfiguracji. Pojemność 3-8 jednostek.
+      const transportChance = arch?.personality?.landInvasion ?? (0.3 + (arch?.personality?.aggression ?? 0.5) * 0.4);
+      const hasTroopTransport = rng() < transportChance;
+      const troopCapacity = hasTroopTransport ? 3 + Math.floor(rng() * 6) : 0; // 3-8
+      // Załaduj konkretne archetypy z puli wg archetypu imperium (parity z graczem — realne unity, nie random spawn)
+      const embarkedTroops = [];
+      if (hasTroopTransport && troopCapacity > 0) {
+        const pool = INVASION_UNIT_POOLS[archetypeId] ?? ['infantry', 'infantry'];
+        for (let k = 0; k < troopCapacity; k++) {
+          embarkedTroops.push(pool[Math.floor(rng() * pool.length)]);
+        }
+      }
       empireRegistry.spawnFleet(empireId, {
         strength: Math.round((emp.military?.power ?? 100) * 0.5 * aggroMult),
         systemId: homeSys.id,
+        hasTroopTransport,
+        troopCapacity,
+        embarkedTroops,
       });
 
       // Dodatkowe kolonie (0-2) — z pobliskich systemów

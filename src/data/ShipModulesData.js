@@ -253,6 +253,38 @@ export const SHIP_MODULES = {
     description: '+5% przeżywalność, -10% prędkość.',
   },
 
+  // ── Wzmocnienie kadłuba — +HP (zastępuje wbudowany pancerz hull_frigate/destroyer/cruiser) ──
+
+  reinforced_hull: {
+    id: 'reinforced_hull',
+    namePL: 'Wzmocniony Kadłub',
+    nameEN: 'Reinforced Hull',
+    icon: '🛡',
+    slotType: 'armor',
+    tier: 2,
+    mass: 25,  // tony — wewnętrzne wzmocnienia
+    cost: { Fe: 60, Ti: 20, Hv: 5 },
+    commodityCost: { structural_alloys: 8, reactive_armor: 4 },
+    stats: { hpBonus: 60, armorRating: 1 },
+    requires: 'point_defense',
+    description: '+60 HP kadłuba, +1 armor. Wewnętrzne wzmocnienia konstrukcyjne.',
+  },
+
+  titanic_plating: {
+    id: 'titanic_plating',
+    namePL: 'Płyty Tytaniczne',
+    nameEN: 'Titanic Plating',
+    icon: '⚜',
+    slotType: 'armor',
+    tier: 3,
+    mass: 60,  // tony — masywna warstwa pancerza
+    cost: { Fe: 120, Ti: 60, Hv: 20 },
+    commodityCost: { structural_alloys: 16, reactive_armor: 10, metamaterials: 4 },
+    stats: { hpBonus: 180, armorRating: 4, speedMult: 0.92 },
+    requires: 'exotic_materials',
+    description: '+180 HP, +4 armor, -8% prędkość. Endgame — kapitalny okręt bojowy.',
+  },
+
   // ── Moduły paliwowe ────────────────────────────────────────────────────
 
   fuel_tank: {
@@ -394,11 +426,93 @@ export const SHIP_MODULES = {
     requires: 'quantum_computing',
     description: 'Zaawansowana tarcza fazowa. Dużo HP i szybka regeneracja.',
   },
+
+  // ── Moduły transportu wojsk (Faza desantu) ────────────────────────────────
+  // troopCapacity liczone w transportSize: 1=piechota, 2=wóz, 3=ciężki sprzęt.
+  // Wymaga drop_pods by móc desantować jednostki na wrogą planetę.
+
+  troop_bay_s: {
+    id: 'troop_bay_s',
+    namePL: 'Ładownia Desantowa Mała',
+    nameEN: 'Small Troop Bay',
+    icon: '🪖',
+    slotType: 'troop',
+    tier: 1,
+    mass: 25,  // tony — żywe jednostki + lekki life support
+    cost: { Fe: 30, Ti: 10 },
+    commodityCost: { structural_alloys: 4, pressure_modules: 1 },
+    stats: { troopCapacity: 3 },
+    requires: 'ground_warfare',
+    description: 'Mieści 3 pkt ładowności (3 piechoty / 1 ciężki sprzęt). Raid/commando.',
+  },
+
+  troop_bay_m: {
+    id: 'troop_bay_m',
+    namePL: 'Ładownia Desantowa Średnia',
+    nameEN: 'Medium Troop Bay',
+    icon: '🪖',
+    slotType: 'troop',
+    tier: 2,
+    mass: 55,  // tony
+    cost: { Fe: 70, Ti: 20 },
+    commodityCost: { structural_alloys: 10, pressure_modules: 3, reactive_armor: 2 },
+    stats: { troopCapacity: 8 },
+    requires: 'ground_warfare',
+    description: 'Mieści 8 pkt ładowności (batalion mieszany). Standard inwazyjny.',
+  },
+
+  troop_bay_l: {
+    id: 'troop_bay_l',
+    namePL: 'Ładownia Desantowa Duża',
+    nameEN: 'Large Troop Bay',
+    icon: '🪖',
+    slotType: 'troop',
+    tier: 3,
+    mass: 110, // tony
+    cost: { Fe: 140, Ti: 40, Cu: 15 },
+    commodityCost: { structural_alloys: 20, pressure_modules: 6, reactive_armor: 4 },
+    stats: { troopCapacity: 16 },
+    requires: 'fleet_logistics',
+    description: 'Mieści 16 pkt ładowności (pełna armia z logistyką). Kampania podbojowa.',
+  },
+
+  drop_pods: {
+    id: 'drop_pods',
+    namePL: 'Kapsuły Desantowe',
+    nameEN: 'Drop Pods',
+    icon: '🛩',
+    slotType: 'special',
+    tier: 2,
+    mass: 12,  // tony — pojedyncze kapsuły zrzutowe
+    cost: { Ti: 20, Fe: 25, Cu: 8 },
+    commodityCost: { structural_alloys: 4, reactive_armor: 2, electronic_systems: 2 },
+    stats: { enablesPlanetLanding: true },
+    requires: 'ground_warfare',
+    description: 'Umożliwia desant jednostek z troop bay na powierzchnię planety (wymaga dominacji orbitalnej). Bez tego jednostki są tylko transportowane — nie wysadzane na wrogi ląd.',
+  },
+
+  // ── Moduł wsparcia orbitalnego (Faza desantu) ─────────────────────────────
+
+  orbital_strike_battery: {
+    id: 'orbital_strike_battery',
+    namePL: 'Bateria Ostrzału Orbitalnego',
+    nameEN: 'Orbital Strike Battery',
+    icon: '💥',
+    slotType: 'weapon',
+    tier: 3,
+    mass: 30,  // tony
+    cost: { Ti: 40, Fe: 30, Hv: 15 },
+    commodityCost: { reactive_armor: 4, electronic_systems: 4, propulsion_systems: 2 },
+    // Ładuje orbital_shells jako amunicję; strike: 20 dmg na hex, cooldown 0.5 civY
+    stats: { orbitalStrike: { damage: 20, cooldownYears: 0.5, ammoCapacity: 10, ammoType: 'orbital_shells' } },
+    requires: 'tech_munitions',
+    description: 'Ciężka bateria kinetyczna do ostrzału powierzchni. Zużywa Pociski Orbitalne (max 10 na pokładzie). Wymaga dominacji orbitalnej.',
+  },
 };
 
 // Typy modułów akceptowane w slotach utility (wszystko oprócz propulsion)
 export const UTILITY_SLOT_TYPES = new Set([
-  'cargo', 'science', 'special', 'habitat', 'armor', 'fuel', 'weapon', 'shield',
+  'cargo', 'science', 'special', 'habitat', 'armor', 'fuel', 'weapon', 'shield', 'troop',
 ]);
 
 // ── Pomocnik: oblicz statystyki statku z kadłuba + modułów ────────────────
@@ -423,6 +537,23 @@ export function calcShipStats(hullDef, selectedModuleIds) {
   let warpCapable = false;
   let warpSpeedLY = 0;
   let moduleMass = 0;
+  // Troop transport + orbital strike (Faza desantu)
+  let troopCapacity = 0;
+  let canDropTroops = false;
+  let orbitalStrike = null;
+
+  // HP i armor (z bazy kadłuba + modułów reinforced_hull/titanic_plating)
+  let hp = hullDef.baseHP ?? 50;
+  let armor = hullDef.baseArmor ?? 0;
+
+  // Zlicz silniki — kolejne dają redundancy bonus (więcej silników = większa moc napędowa).
+  // Bez tego 2 silniki chemiczne (speedMult 1.0 × 1.0 = 1.0) dawały tylko więcej masy → absurd.
+  let engineCount = 0;
+  for (const modId of selectedModuleIds) {
+    if (SHIP_MODULES[modId]?.slotType === 'propulsion') engineCount++;
+  }
+  const ENGINE_REDUNDANCY_BONUS = 0.25; // +25% za każdy dodatkowy silnik ponad pierwszy
+  const engineRedundancyMult = 1 + Math.max(0, engineCount - 1) * ENGINE_REDUNDANCY_BONUS;
 
   for (const modId of selectedModuleIds) {
     const m = SHIP_MODULES[modId];
@@ -436,10 +567,18 @@ export function calcShipStats(hullDef, selectedModuleIds) {
     if (m.stats.survivalBonus != null)   survivalBonus += m.stats.survivalBonus;
     if (m.stats.discoveryBonus != null)  discoveryBonus += m.stats.discoveryBonus;
     if (m.stats.colonistCapacity != null) colonistCapacity += m.stats.colonistCapacity;
+    if (m.stats.troopCapacity != null)   troopCapacity += m.stats.troopCapacity;
+    if (m.stats.enablesPlanetLanding)    canDropTroops = true;
+    if (m.stats.orbitalStrike)           orbitalStrike = { ...m.stats.orbitalStrike };
+    if (m.stats.hpBonus != null)         hp += m.stats.hpBonus;
+    if (m.stats.armorRating != null)     armor += m.stats.armorRating;
     if (m.fuelType)                      fuelType = m.fuelType; // ostatni silnik wygrywa
     if (m.warpCapable)                   warpCapable = true;
     if (m.warpSpeedLY)                   warpSpeedLY = m.warpSpeedLY;
   }
+
+  // Redundancy silników (więcej silników = bonus do prędkości, kompensuje masę większych kadłubów)
+  speed *= engineRedundancyMult;
 
   // Wpływ masy: ∛massRatio — łagodna krzywa (×2 masy = ~26% kary, ×3 = ~44%)
   const totalMass = baseMass + moduleMass;
@@ -456,6 +595,8 @@ export function calcShipStats(hullDef, selectedModuleIds) {
     survivalBonus, discoveryBonus, colonistCapacity,
     fuelType, warpCapable, warpSpeedLY, range,
     totalMass, baseMass, massRatio,
+    troopCapacity, canDropTroops, orbitalStrike,
+    hp, armor, engineCount,
   };
 }
 
@@ -500,6 +641,9 @@ export function getModuleCapabilities(selectedModuleIds) {
     if (m.stats.cargoAdd > 0) caps.add('cargo');
     if (m.stats.colonistCapacity > 0) caps.add('colony');
     if (m.warpCapable) caps.add('warp');
+    if (m.stats.troopCapacity > 0) caps.add('troop_transport');
+    if (m.stats.enablesPlanetLanding) caps.add('planet_landing');
+    if (m.stats.orbitalStrike) caps.add('orbital_strike');
   }
   return caps;
 }

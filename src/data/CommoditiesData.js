@@ -163,6 +163,22 @@ export const COMMODITIES = {
     isConsumerGood: false, consumptionLayer: null,
   },
 
+  orbital_shells: {
+    id:          'orbital_shells',
+    namePL:      'Pociski Orbitalne',
+    nameEN:      'Orbital Shells',
+    icon:        '💥',
+    tier:        2,
+    // Ciężka amunicja kinetyczna do bombardowania — wolfram + napęd rakietowy + elektronika naprowadzania
+    recipe:      { Hv: 3, Ti: 2, Li: 1, electronic_systems: 1 },
+    baseTime:    0.4,
+    weight:      2.0,
+    requiresTech: 'tech_munitions',
+    description: 'Kinetyczne pociski orbitalne z wolframowym rdzeniem i napędem korekcyjnym. ' +
+                 'Ładowane do baterii ostrzału orbitalnego — jeden strzał wystarczy, by zrównać z ziemią bunkier.',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
   // ══════════════════════════════════════════════════════════════════════════
   // TIER 3 — Technologia Zaawansowana
   // ══════════════════════════════════════════════════════════════════════════

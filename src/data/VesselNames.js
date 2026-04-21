@@ -8,6 +8,7 @@
 import { t } from '../i18n/i18n.js';
 
 const NAME_POOLS = {
+  // Legacy (przed refactorem capability) — wciąż obsługiwane dla kompatybilności
   science_vessel: [
     'Odkrywca', 'Zwiadowca', 'Pionier', 'Horyzon', 'Voyager',
     'Poszukiwacz', 'Obserwator', 'Promień', 'Ikarus', 'Kopernik',
@@ -19,6 +20,36 @@ const NAME_POOLS = {
   space_supply_ship: [
     'Kwatermistrz', 'Prowiant', 'Zaopatrzeniowiec', 'Arsenał', 'Intendent',
     'Magazyn', 'Depot', 'Tabor', 'Furaż', 'Komisariat',
+  ],
+
+  // Capability-based (nowy system — nazwa po primary role)
+  role_scout: [
+    'Odkrywca', 'Zwiadowca', 'Pionier', 'Horyzon', 'Voyager',
+    'Poszukiwacz', 'Obserwator', 'Promień', 'Ikarus', 'Kopernik',
+  ],
+  role_science: [
+    'Hubble', 'Tycho', 'Galileo', 'Newton', 'Einstein',
+    'Curie', 'Sagan', 'Laboratoire', 'Prometeusz', 'Inkwizytor',
+  ],
+  role_cargo: [
+    'Handlarz', 'Kurier', 'Fracht', 'Karawana', 'Merkury',
+    'Konwój', 'Transporter', 'Dostawca', 'Opat', 'Smok',
+  ],
+  role_colony: [
+    'Arka', 'Osadnik', 'Kolonista', 'Założyciel', 'Exodus',
+    'Pokolenie', 'Pierwszy Krok', 'Nowy Świt', 'Sprague', 'Kepler',
+  ],
+  role_warship: [
+    'Bellator', 'Gladiator', 'Furia', 'Orzeł', 'Wilk',
+    'Żmija', 'Sztylet', 'Klinga', 'Burza', 'Huragan',
+  ],
+  role_transport: [
+    'Szerpa', 'Wierny', 'Karawan', 'Roztocz', 'Ibis',
+    'Kotwica', 'Przewoźnik', 'Brzytwa', 'Łopot', 'Dźwig',
+  ],
+  role_assault: [
+    'Najeźdźca', 'Tytan', 'Młot', 'Behemot', 'Spartanin',
+    'Legion', 'Conquistador', 'Kirys', 'Topornik', 'Trzon',
   ],
 };
 
@@ -41,17 +72,26 @@ function _getPool(shipId) {
 }
 
 /**
- * Pobierz kolejną auto-nazwę dla typu statku.
- * Nazwy krążą cyklicznie po puli; numer (I, II, ...) rośnie po wyczerpaniu puli.
- * Pula nazw pobierana z i18n (locale-aware) z fallbackiem na NAME_POOLS.
+ * Pobierz kolejną auto-nazwę.
+ * @param {string} shipIdOrRole — shipId (legacy) LUB `role_<primary>` (scout/science/cargo/colony/warship/transport/assault)
+ * @returns {string} nazwa z numerem rzymskim przy cyklu > 1
  */
-export function getNextName(shipId) {
-  if (!_counters[shipId]) _counters[shipId] = 0;
-  const pool = _getPool(shipId);
-  const idx = _counters[shipId]++;
+export function getNextName(shipIdOrRole) {
+  const key = shipIdOrRole;
+  if (!_counters[key]) _counters[key] = 0;
+  const pool = _getPool(key);
+  const idx = _counters[key]++;
   const name = pool[idx % pool.length];
   const cycle = Math.floor(idx / pool.length) + 1;
   return cycle === 1 ? name : `${name} ${_toRoman(cycle)}`;
+}
+
+/**
+ * Pobierz nazwę dla statku na podstawie jego primary role (capability-based).
+ * @param {string} role — 'scout'|'science'|'cargo'|'colony'|'warship'|'transport'|'assault'
+ */
+export function getNextNameByRole(role) {
+  return getNextName(`role_${role}`);
 }
 
 /**

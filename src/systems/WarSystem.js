@@ -152,7 +152,31 @@ export class WarSystem {
     this.changeExhaustion(warId, war.defender, EXHAUSTION_PER_BATTLE * rate, 'battle');
 
     EventBus.emit('battle:resolved', { warId, battleId, result: battleRec });
+
+    // Faza desantu: ustaw dominację orbitalną nad systemem bitwy
+    this._updateOrbitalDominance(battleRec);
+
     return battleRec;
+  }
+
+  /**
+   * Ustaw gameState.orbitalDominance[systemId] = { controllerId, year }
+   * po rozstrzygnięciu bitwy. Controller = empireId (A wygrał) lub 'player' (B wygrał).
+   * Draw → bez zmiany (poprzedni controller pozostaje).
+   * Emituje battle:orbitalDominance dla InvasionSystem i UI.
+   */
+  _updateOrbitalDominance(battleRec) {
+    const systemId = battleRec.location;
+    if (!systemId || !battleRec.winner || battleRec.winner === 'draw') return;
+
+    const winnerPart = battleRec.winner === 'A' ? battleRec.participantA : battleRec.participantB;
+    if (!winnerPart) return;
+    const controllerId = winnerPart.empireId ?? (winnerPart.type === 'player' ? 'player' : null);
+    if (!controllerId) return;
+
+    const year = this._year();
+    gameState.set(`orbitalDominance.${systemId}`, { controllerId, year }, 'battle_resolved');
+    EventBus.emit('battle:orbitalDominance', { systemId, controllerId, year });
   }
 
   /**
@@ -355,4 +379,36 @@ export class WarSystem {
   // ── Pomocnicze ───────────────────────────────────────────────
 
   _year() { return window.KOSMOS?.timeSystem?.gameTime ?? 0; }
+
+  /**
+   * Kto kontroluje orbitę systemu (po ostatniej bitwie)?
+   * @param {string} systemId
+   * @returns {string|null} 'player' | empireId | null (nigdy nie było bitwy)
+   */
+  getOrbitalController(systemId) {
+    return gameState.get(`orbitalDominance.${systemId}`)?.controllerId ?? null;
+  }
+
+  /**
+   * Czy gracz ma dominację orbitalną nad planetą?
+   * Używane przez ColonyOverlay (drop mode, orbital strike UI) i dropTroop().
+   * @param {string} planetId
+   * @returns {boolean}
+   */
+  playerHasOrbitalDominance(planetId) {
+    const sysId = this._getBodySystemId(planetId);
+    if (!sysId) return false;
+    return this.getOrbitalController(sysId) === 'player';
+  }
+
+  /**
+   * Kto kontroluje orbitę konkretnej planety (pochodna getOrbitalController).
+   * @param {string} planetId
+   * @returns {string|null}
+   */
+  getPlanetOrbitalController(planetId) {
+    const sysId = this._getBodySystemId(planetId);
+    if (!sysId) return null;
+    return this.getOrbitalController(sysId);
+  }
 }

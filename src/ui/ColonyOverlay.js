@@ -13,6 +13,7 @@ import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
+import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
 import { ANOMALIES }     from '../data/AnomalyData.js';
 import { t }   from '../i18n/i18n.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
@@ -113,6 +114,72 @@ export class ColonyOverlay extends BaseOverlay {
         this.show({});
       }
       this._showFlash('🤖 Wybierz hex lądowania Away Team');
+    });
+
+    // Desant — tryb wyboru hexów zrzutu jednostek z troop bay (Faza desantu)
+    // Iteracyjnie: dla każdej jednostki w bay gracz klika hex docelowy.
+    this._dropMode = false;
+    this._dropVesselId = null;
+    this._dropQueue = [];       // [unitId] — kolejka do zrzucenia
+    this._dropPlanetId = null;
+    // Ostrzał orbitalny — tryb wyboru hexa (Faza desantu)
+    this._strikeMode = false;
+    this._strikeVesselId = null;
+    this._strikePlanetId = null;
+    EventBus.on('vessel:orbitalStrikeRequest', ({ vesselId, targetId }) => {
+      const vMgr = window.KOSMOS?.vesselManager;
+      const warSys = window.KOSMOS?.warSystem;
+      const vessel = vMgr?.getVessel?.(vesselId);
+      if (!vessel?.orbitalStrike) return;
+      if ((vessel.orbitalStrike.ammoCurrent ?? 0) <= 0) { this._showFlash('Brak amunicji'); return; }
+
+      // Sprawdź dominację (jeśli obca kolonia)
+      const colMgr = window.KOSMOS?.colonyManager;
+      const targetColony = colMgr?.getColony?.(targetId);
+      const isPlayerColony = !!targetColony;
+      if (!isPlayerColony && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
+        this._showFlash('Brak dominacji orbitalnej');
+        return;
+      }
+
+      if (colMgr && isPlayerColony) {
+        colMgr.switchActiveColony(targetId);
+        this._selectedColonyId = targetId;
+      }
+      this._strikeMode = true;
+      this._strikeVesselId = vesselId;
+      this._strikePlanetId = targetId;
+      if (!this.visible) this.show({});
+      this._showFlash(`💥 Wybierz hex ostrzału (${vessel.orbitalStrike.ammoCurrent} pocisków)`);
+    });
+
+    EventBus.on('vessel:dropTroopsRequest', ({ vesselId, targetId }) => {
+      const vMgr = window.KOSMOS?.vesselManager;
+      const warSys = window.KOSMOS?.warSystem;
+      const vessel = vMgr?.getVessel?.(vesselId);
+      if (!vessel) return;
+      if (!vessel.canDropTroops) { this._showFlash('Brak Kapsuł Desantowych'); return; }
+      if ((vessel.groundUnits ?? []).length === 0) { this._showFlash('Ładownia pusta'); return; }
+
+      // Dominacja orbitalna: wymagana gdy desant na obcą kolonię
+      const colMgr = window.KOSMOS?.colonyManager;
+      const targetColony = colMgr?.getColony?.(targetId);
+      const isPlayerColony = !!targetColony;
+      if (!isPlayerColony && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
+        this._showFlash('Brak dominacji orbitalnej — wygraj bitwę najpierw');
+        return;
+      }
+
+      if (colMgr && isPlayerColony) {
+        colMgr.switchActiveColony(targetId);
+        this._selectedColonyId = targetId;
+      }
+      this._dropMode = true;
+      this._dropVesselId = vesselId;
+      this._dropPlanetId = targetId;
+      this._dropQueue = [...vessel.groundUnits];
+      if (!this.visible) this.show({});
+      this._showDropPrompt();
     });
 
     // Zaznaczenie jednostki z Outlinera
@@ -376,6 +443,21 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   _showFlash(msg) { this._flashMsg = msg; this._flashEnd = Date.now() + 2500; }
+
+  /**
+   * Wyświetl prompt dla bieżącej jednostki w kolejce desantu.
+   * Pokazuje nazwę archetypu + ile jeszcze zostało do zrzucenia.
+   */
+  _showDropPrompt() {
+    const gum = window.KOSMOS?.groundUnitManager;
+    const unitId = this._dropQueue[0];
+    const unit = gum?.getUnit?.(unitId);
+    if (!unit) return;
+    // Prosta nazwa po archetypie (unitArchetypes i18n w UI jest lżejsze)
+    const archId = unit.archetypeId ?? 'unit';
+    const remaining = this._dropQueue.length;
+    this._showFlash(`⚔ Zrzut ${archId} — wybierz hex (${remaining} ${remaining === 1 ? 'jednostka' : 'jednostek'})`);
+  }
 
   // ── Pozycja hexa na ekranie ──────────────────────────────────────────────
   _tileScreenPos(tile, grid, ox, oy, ow, oh) {
@@ -1842,6 +1924,94 @@ export class ColonyOverlay extends BaseOverlay {
           }
           this._landingMode = false;
           this._landingVesselId = null;
+        }
+        return true;
+      }
+
+      // ── Tryb ostrzału orbitalnego ──
+      if (this._strikeMode && tile) {
+        const vMgr = window.KOSMOS?.vesselManager;
+        const vessel = vMgr?.getVessel?.(this._strikeVesselId);
+        if (!vessel) {
+          this._strikeMode = false;
+          return true;
+        }
+        const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+        const res = fireOrbitalStrike(vessel, gameYear);
+        if (res?.ok) {
+          EventBus.emit('groundUnit:orbitalStrike', {
+            vesselId: vessel.id,
+            planetId: this._strikePlanetId,
+            q: tile.q, r: tile.r,
+            damage: res.damage,
+            ownerId: 'player',
+          });
+          this._showFlash(`💥 Ostrzał (${tile.q},${tile.r}) — ${res.damage} dmg`);
+        } else {
+          this._showFlash(`Błąd ostrzału: ${res?.reason ?? 'unknown'}`);
+        }
+        this._strikeMode = false;
+        this._strikeVesselId = null;
+        this._strikePlanetId = null;
+        return true;
+      }
+
+      // ── Tryb desantu (drop mode) ──
+      if (this._dropMode && tile) {
+        // Blokady (hard — gracz wybiera inny hex):
+        if (tile.type === 'ocean') {
+          this._showFlash('Nie można zrzucić wojsk na ocean');
+          return true;
+        }
+        const vMgr = window.KOSMOS?.vesselManager;
+        const gum = window.KOSMOS?.groundUnitManager;
+        const vessel = vMgr?.getVessel?.(this._dropVesselId);
+        if (!vessel || this._dropQueue.length === 0) {
+          this._dropMode = false;
+          this._dropVesselId = null;
+          this._dropQueue = [];
+          return true;
+        }
+        // Hex zajęty przez WŁASNĄ jednostkę → blokada (friendly stacking zbędnie komplikuje UI)
+        const existingUnit = gum?.getUnitAt?.(this._dropPlanetId, tile.q, tile.r);
+        const isFriendly = existingUnit && (existingUnit.owner == null || existingUnit.owner === 'player');
+        if (isFriendly) {
+          this._showFlash('Hex zajęty przez własną jednostkę — wybierz inny');
+          return true;
+        }
+
+        // Wrogi hex → kapsuła dociera ale desant ginie w lądowaniu pod ogniem
+        const isHostile = existingUnit && existingUnit.owner && existingUnit.owner !== 'player';
+
+        const unitId = this._dropQueue.shift();
+        const unit = gum?.getUnit?.(unitId);
+        if (unit) {
+          const res = dropTroop(vessel, unit, this._dropPlanetId, tile.q, tile.r);
+          if (!res?.ok) {
+            this._showFlash(`Błąd zrzutu: ${res?.reason ?? 'unknown'}`);
+            this._dropQueue = [];
+          } else if (isHostile) {
+            EventBus.emit('groundUnit:destroyed', {
+              unitId: unit.id,
+              planetId: this._dropPlanetId,
+              cause: 'landing_zone_hot',
+              archetypeId: unit.archetypeId,
+              popCost: unit.popCost ?? 0,
+              ownerId: unit.owner ?? 'player',
+            });
+            gum?.removeUnit?.(unit.id);
+            this._showFlash(`💀 Desant zestrzelony — wrogi ogień na (${tile.q},${tile.r})`);
+          } else {
+            this._showFlash(`🪖 Zrzucono na (${tile.q},${tile.r})`);
+          }
+        }
+        if (this._dropQueue.length > 0) {
+          this._showDropPrompt();
+        } else {
+          this._dropMode = false;
+          this._dropVesselId = null;
+          this._dropPlanetId = null;
+          this._showFlash('⚔ Desant zakończony');
         }
         return true;
       }
