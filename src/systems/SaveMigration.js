@@ -14,7 +14,7 @@
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 60;
+export const CURRENT_VERSION     = 61;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -75,6 +75,7 @@ const MIGRATIONS = {
   57: _migrateV57toV58,
   58: _migrateV58toV59,
   59: _migrateV59toV60,
+  60: _migrateV60toV61,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1501,6 +1502,18 @@ function _migrateV58toV59(data) {
     data.gameState.orbitalDominance = {};
   }
 
+  return data;
+}
+
+// ── Migracja v60 → v61 ──────────────────────────────────────────────────────
+// Victoria 2 stack combat: ranged units support target (null domyślnie)
+function _migrateV60toV61(data) {
+  const units = data.civ4x?.groundUnitManager?.units;
+  if (Array.isArray(units)) {
+    for (const u of units) {
+      if (u.supportTarget === undefined) u.supportTarget = null;
+    }
+  }
   return data;
 }
 

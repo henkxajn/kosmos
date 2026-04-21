@@ -125,6 +125,8 @@ export class GroundUnitManager {
         unit.deployState = null;
         unit.stateTimer  = 0;
       }
+      // Victoria 2 stack combat: ranged unit może wspierać bitwę na sąsiednim hexie
+      unit.supportTarget = null;
       this._units.set(id, unit);
       EventBus.emit('groundUnit:created', {
         unitId: id, type, planetId, q, r, owner: unit.owner,
@@ -153,6 +155,8 @@ export class GroundUnitManager {
       mission:  null,
       // Cooldown ataku (w civYears) — zapobiega spam atakom
       _atkCooldown: 0,
+      // Victoria 2 stack combat: ranged unit support target (null dla piechoty)
+      supportTarget: null,
       // Animacja ruchu (nie serializowane oprócz _heading)
       _path:      [],
       _animT:     0,
@@ -222,6 +226,30 @@ export class GroundUnitManager {
     return null;
   }
 
+  /**
+   * Wszystkie jednostki na danym hexie (tablica — stack combat).
+   * Pomija jednostki w ruchu (status='moving') — jeszcze tam nie ma.
+   */
+  getUnitsAtHex(planetId, q, r) {
+    const out = [];
+    for (const u of this._units.values()) {
+      if (u.planetId === planetId && u.q === q && u.r === r && u.status !== 'moving') {
+        out.push(u);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Czy jednostka jest w trakcie bitwy (na hexie z przeciwnikiem)?
+   */
+  isUnitInCombat(unit) {
+    if (!unit || unit.hp <= 0) return false;
+    const ownerId = unit.owner ?? 'player';
+    const occupants = this.getUnitsAtHex(unit.planetId, unit.q, unit.r);
+    return occupants.some(u => (u.owner ?? 'player') !== ownerId);
+  }
+
   // ── Rozkaz ruchu (A* pathfinding) ────────────────────────────────────────
 
   moveUnit(unitId, targetQ, targetR) {
@@ -261,6 +289,21 @@ export class GroundUnitManager {
     if (unit.status === 'scanning') {
       unit.mission = null;
     }
+
+    // Disengagement penalty: wyjście z hexu gdzie są wrogowie kosztuje -25% HP
+    if (this.isUnitInCombat(unit)) {
+      const beforeHp = unit.hp ?? 0;
+      unit.hp = Math.max(1, Math.floor(beforeHp * 0.75));
+      if (unit.currentHP != null) unit.currentHP = unit.hp;
+      const hpLost = beforeHp - unit.hp;
+      EventBus.emit('groundUnit:disengaged', {
+        unitId, planetId: unit.planetId,
+        fromQ: unit.q, fromR: unit.r, hpLost,
+      });
+    }
+
+    // Auto-clear supportTarget przy ruchu — ranged unit zaprzestaje wsparcia gdy się porusza
+    if (unit.supportTarget) unit.supportTarget = null;
 
     unit._path = path;
     unit._animT = 0;
@@ -327,12 +370,13 @@ export class GroundUnitManager {
         this._tickScan(unit, civDeltaYears);
       }
     }
-    // Combat tick — co civYear obce jednostki atakują/ruszają się
+    // Combat tick — Victoria 2 stack combat: CombatSystem resolve bitew na hexach,
+    // lokalny _tickCombatAI tylko porusza AI wrogów poza bitwą.
     this._combatAccum = (this._combatAccum ?? 0) + civDeltaYears;
     if (this._combatAccum >= 1.0) {
       const steps = Math.floor(this._combatAccum);
       this._combatAccum -= steps;
-      for (let i = 0; i < steps; i++) this._tickCombatAI();
+      for (let i = 0; i < steps; i++) this._tickCombatAI(1.0);
     }
     // Faza 6.5: tick okupacji (co klatka — 2-mo timer to dużo civYears)
     this._tickOccupation(civDeltaYears);
@@ -859,48 +903,41 @@ export class GroundUnitManager {
     return (Math.abs(q1 - q2) + Math.abs(r1 - r2) + Math.abs(s1 - s2)) / 2;
   }
 
-  /** Combat AI: obce jednostki same atakują/ruszają się. */
-  _tickCombatAI() {
-    const enemies = [];
-    for (const u of this._units.values()) {
-      if (u.owner && u.owner !== 'player' &&
-          u.role !== 'civilian' &&
-          u.role !== 'support' &&   // Ground Unit System: medyki nie atakują
-          u.role !== 'drone') {     // Ground Unit System: drony nie atakują
-        enemies.push(u);
-      }
-    }
-    if (enemies.length === 0) return;
+  /**
+   * Combat AI: stary per-unit click-target model ZASTĄPIONY przez stack-hex combat
+   * w CombatSystem (Victoria 2 style). Tutaj pozostaje tylko:
+   *  - delegacja do CombatSystem.tick() (resolve bitew na hexach)
+   *  - AI ruchu wrogów (podchodź do najbliższego gracza jeśli nie ma bitwy)
+   *
+   * @param {number} deltaYears civYears od ostatniego ticku
+   */
+  _tickCombatAI(deltaYears = 0) {
+    // 1. Stack combat tick — resolve bitwy na hexach (bez klikania, automatycznie)
+    const cs = window.KOSMOS?.combatSystem;
+    if (cs && deltaYears > 0) cs.tick(deltaYears);
 
-    for (const atk of enemies) {
-      if (atk.hp <= 0 || atk.status === 'moving') continue;
-      if (atk.status === 'offline') continue;  // Opcja C v3
+    // 2. AI ruchu: każdy wrogi military unit poza bitwą idzie w stronę najbliższego gracza
+    for (const atk of this._units.values()) {
+      if (!atk.owner || atk.owner === 'player') continue;
+      if (atk.role === 'civilian' || atk.role === 'support' || atk.role === 'drone') continue;
+      if (atk.hp <= 0 || atk.status === 'moving' || atk.status === 'offline') continue;
+      if (this.isUnitInCombat(atk)) continue; // jest w bitwie — zostaje i walczy
 
       // Znajdź najbliższą jednostkę gracza na tej samej planecie
-      const targets = [];
-      for (const u of this._units.values()) {
-        if (u.planetId !== atk.planetId) continue;
-        if (u.owner !== 'player') continue;
-        if (u.hp <= 0) continue;
-        if (u._stealthState === 'hidden') continue; // Ground Unit System: stealth
-        targets.push(u);
-      }
-      if (targets.length === 0) continue;
-
       let best = null;
       let bestDist = Infinity;
-      for (const t of targets) {
-        const d = this._hexDistance(atk.q, atk.r, t.q, t.r);
-        if (d < bestDist) { bestDist = d; best = t; }
+      for (const u of this._units.values()) {
+        if (u.planetId !== atk.planetId) continue;
+        if ((u.owner ?? 'player') === atk.owner) continue;
+        if (u.hp <= 0) continue;
+        if (u._stealthState === 'hidden') continue;
+        const d = this._hexDistance(atk.q, atk.r, u.q, u.r);
+        if (d < bestDist) { bestDist = d; best = u; }
       }
       if (!best) continue;
 
-      // W zasięgu → atakuj
-      if (bestDist <= (atk.range ?? 1)) {
-        this.attackUnit(atk.id, best.id);
-      } else if ((atk.role === 'military') && (atk.hp / atk.hpMax) > 0.3) {
-        // Poruszaj się w stronę celu (jeden krok) — tylko military z >30% HP
-        // Stacjonarne (speedHex=0) nie ruszają się
+      // Blisko wroga → wejdź na jego hex (rozpocznij bitwę). Daleko → krok w jego stronę.
+      if (bestDist > 0 && (atk.role === 'military') && (atk.hp / (atk.hpMax ?? atk.maxHp ?? 100)) > 0.3) {
         const stats = getUnitStats(atk.type);
         if ((stats.speedHex ?? 0) > 0) {
           this.moveUnit(atk.id, best.q, best.r);
@@ -1183,6 +1220,8 @@ export class GroundUnitManager {
         // Deploy/Pack state machine (tylko dla supportsDeploy archetypes)
         deployState:         u.deployState       ?? null,
         stateTimer:          u.stateTimer        ?? 0,
+        // Victoria 2 stack combat: support target dla ranged
+        supportTarget:       u.supportTarget     ?? null,
       })),
       nextId: this._nextId,
       // Ground Unit System: progres zajmowania budynków
@@ -1251,6 +1290,7 @@ export class GroundUnitManager {
           rebuilt.deployState = null;
           rebuilt.stateTimer  = 0;
         }
+        rebuilt.supportTarget = u.supportTarget ?? null;
         this._units.set(u.id, rebuilt);
       } else {
         // Legacy jednostka (infantry/mech/garrison/science_rover)
@@ -1267,6 +1307,7 @@ export class GroundUnitManager {
           range:      stats.range,
           role:       stats.role,
           _atkCooldown: 0,
+          supportTarget: u.supportTarget ?? null,
           _path:      [],
           _animT:     0,
           _fromPixel: null,

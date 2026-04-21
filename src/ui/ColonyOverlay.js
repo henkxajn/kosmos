@@ -117,6 +117,10 @@ export class ColonyOverlay extends BaseOverlay {
     this._strikeMode = false;
     this._strikeVesselId = null;
     this._strikePlanetId = null;
+
+    // Victoria 2 stack combat: tryb wyboru bitwy dla ranged support
+    this._supportMode = false;
+    this._supportSourceUnitId = null;
     EventBus.on('vessel:orbitalStrikeRequest', ({ vesselId, targetId }) => {
       const vMgr = window.KOSMOS?.vesselManager;
       const warSys = window.KOSMOS?.warSystem;
@@ -453,6 +457,28 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   _showFlash(msg) { this._flashMsg = msg; this._flashEnd = Date.now() + 2500; }
+
+  /**
+   * Czy jest contested hex w zasięgu jednostki ranged?
+   */
+  _hasSupportCandidates(unit, combatSystem) {
+    if (!combatSystem) return false;
+    const gum = window.KOSMOS?.groundUnitManager;
+    if (!gum) return false;
+    const range = unit.range ?? 1;
+    for (const u of gum._units.values()) {
+      if (u.planetId !== unit.planetId) continue;
+      const d = this._hexDist(unit.q, unit.r, u.q, u.r);
+      if (d === 0 || d > range) continue;
+      if (combatSystem.isHexContested(unit.planetId, u.q, u.r)) return true;
+    }
+    return false;
+  }
+
+  _hexDist(q1, r1, q2, r2) {
+    const s1 = -q1 - r1, s2 = -q2 - r2;
+    return (Math.abs(q1 - q2) + Math.abs(r1 - r2) + Math.abs(s1 - s2)) / 2;
+  }
 
   /**
    * Otwórz ColonyOverlay dla konkretnej planety (własnej LUB obcej) przez OverlayManager.
@@ -958,24 +984,50 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
 
-    // Przycisk: ATAKUJ (gdy gracza i obok wróg)
-    if (canAttack) {
-      const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 22;
-      ctx.fillStyle = '#D85A30';
-      ctx.fillRect(bx, by, bw, bh);
-      ctx.fillStyle = '#FFF';
+    // Victoria 2 stack combat: ATAKUJ USUNIĘTY — bitwy rozstrzygają się automatycznie
+    // gdy jednostki różnych właścicieli są na tym samym hexie. Zamiast kliknięcia,
+    // gracz pozycjonuje jednostki ruchem.
+
+    // Unit w bitwie — pokaż info
+    if (!isEnemy && gum.isUnitInCombat(unit)) {
       ctx.font = `bold 10px ${THEME.fontFamily}`;
-      ctx.fillText(`⚔ ATAKUJ (${adjacentEnemy.hp} HP)`, bx + 6, by + 12);
-      this._addHit(bx, by, bw, bh, 'unitAttack', { targetId: adjacentEnemy.id });
-      ly += 26;
+      ctx.fillStyle = '#FF6030';
+      ctx.fillText(`⚔ W BITWIE`, px + 8, ly + 8);
+      ly += 14;
+      ctx.font = `9px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#C4A060';
+      ctx.fillText(`Ruch = odwrót z −25% HP`, px + 8, ly + 6);
+      ly += 14;
     }
 
-    // Enemy hint — brak akcji dla wrogiej jednostki
-    if (isEnemy && adjacentPlayer) {
-      ctx.font = `9px ${THEME.fontFamily}`;
-      ctx.fillStyle = '#FF9060';
-      ctx.fillText(`⚠ Zagraża: hex (${adjacentPlayer.q}, ${adjacentPlayer.r})`, px + 8, ly);
-      ly += 14;
+    // Ranged support (artyleria, AA, deployed garrison) — przycisk "Wesprzyj bitwę"
+    const unitRange = unit.range ?? 1;
+    const isRangedCapable = !isEnemy && unitRange >= 2 && !gum.isUnitInCombat(unit);
+    if (isRangedCapable) {
+      const cs = window.KOSMOS?.combatSystem;
+      // Jeśli już wspiera → pokaż cofnij
+      if (unit.supportTarget) {
+        const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 22;
+        ctx.fillStyle = '#888844';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = '#FFF';
+        ctx.font = `bold 10px ${THEME.fontFamily}`;
+        ctx.fillText(`✕ Cofnij wsparcie (${unit.supportTarget.q},${unit.supportTarget.r})`, bx + 6, by + 12);
+        this._addHit(bx, by, bw, bh, 'unitClearSupport');
+        ly += 26;
+      } else if (cs) {
+        // Sprawdź czy w zasięgu są contested hexy
+        const hasCandidates = this._hasSupportCandidates(unit, cs);
+        const bx = px + 8, by = ly - 6, bw = pw - 16, bh = 22;
+        ctx.fillStyle = hasCandidates ? '#22AAFF' : 'rgba(60,80,100,0.5)';
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = hasCandidates ? '#FFF' : '#8899AA';
+        ctx.font = `bold 10px ${THEME.fontFamily}`;
+        const label = hasCandidates ? '🎯 Wesprzyj bitwę' : '🎯 Brak bitew w zasięgu';
+        ctx.fillText(label, bx + 6, by + 12);
+        if (hasCandidates) this._addHit(bx, by, bw, bh, 'unitSupportStart');
+        ly += 26;
+      }
     }
 
     // Przyciski survey/analyze — tylko dla gracza, idle
@@ -1299,6 +1351,98 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillRect(bx, by, bw * unit.mission.progress, bh);
       }
     }
+
+    // ── Victoria 2 stack combat: badges i battle markers ─────────────────────
+    // Grupuj po (q,r) i rysuj: licznik stacka + ⚔ gdy contested
+    const stacks = new Map();  // "q,r" → { player: [], enemy: [], tile }
+    for (const u of units) {
+      if (u.status === 'moving') continue;
+      if (u._stealthState === 'hidden' && u.owner && u.owner !== 'player') continue;
+      const key = `${u.q},${u.r}`;
+      if (!stacks.has(key)) {
+        stacks.set(key, { player: [], enemy: [], q: u.q, r: u.r });
+      }
+      const slot = stacks.get(key);
+      if (u.owner && u.owner !== 'player') slot.enemy.push(u);
+      else slot.player.push(u);
+    }
+
+    const cs = window.KOSMOS?.combatSystem;
+    const time = Date.now();
+
+    for (const [, slot] of stacks) {
+      const total = slot.player.length + slot.enemy.length;
+      if (total <= 1 && !(slot.player.length > 0 && slot.enemy.length > 0)) continue;
+      const pos = grid.tilePixelPos(slot.q, slot.r, hs);
+      const sx = cx + pos.x;
+      const sy = cy + pos.y;
+
+      const contested = slot.player.length > 0 && slot.enemy.length > 0;
+
+      // Battle marker ⚔ — pulsujący nad hexem
+      if (contested) {
+        const pulse = 0.5 + 0.5 * Math.sin(time / 300);
+        ctx.save();
+        ctx.globalAlpha = 0.6 + 0.3 * pulse;
+        ctx.font = `bold ${hs * 0.9}px ${THEME.fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#FF3030';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.strokeText('⚔', sx, sy - hs * 0.5);
+        ctx.fillText('⚔', sx, sy - hs * 0.5);
+        ctx.textAlign = 'left';
+        ctx.restore();
+      }
+
+      // Stack badges: "P×3" player / "E×2" enemy po bokach hexa
+      const badgeY = sy + hs * 0.55;
+      if (slot.player.length > 1 || contested) {
+        const label = `${slot.player.length}`;
+        this._drawStackBadge(ctx, sx - hs * 0.3, badgeY, label, '#64A0FF');
+      }
+      if (slot.enemy.length > 1 || contested) {
+        const label = `${slot.enemy.length}`;
+        this._drawStackBadge(ctx, sx + hs * 0.3, badgeY, label, '#FF6040');
+      }
+    }
+
+    // Support target lines — cyan linia od supportera do wspieranego hexu
+    for (const u of units) {
+      if (!u.supportTarget) continue;
+      if (u.owner && u.owner !== 'player') continue;  // tylko player widzi linie swoich
+      const from = grid.tilePixelPos(u.q, u.r, hs);
+      const to = grid.tilePixelPos(u.supportTarget.q, u.supportTarget.r, hs);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(100,220,255,0.7)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(cx + from.x, cy + from.y);
+      ctx.lineTo(cx + to.x, cy + to.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  _drawStackBadge(ctx, x, y, label, color) {
+    const r = 8;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x, y + 1);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
   }
 
   _drawHex(ctx, cx, cy, r, terrain, tile, isHov, isSel, planet, grid) {
@@ -2060,6 +2204,33 @@ export class ColonyOverlay extends BaseOverlay {
         return true;
       }
 
+      // ── Tryb wyboru bitwy do wsparcia (ranged support) ──
+      if (this._supportMode && tile) {
+        const gum = window.KOSMOS?.groundUnitManager;
+        const cs = window.KOSMOS?.combatSystem;
+        const unit = gum?.getUnit?.(this._supportSourceUnitId);
+        if (!unit || !cs) {
+          this._supportMode = false;
+          this._supportSourceUnitId = null;
+          return true;
+        }
+        const range = unit.range ?? 1;
+        const dist = this._hexDist(unit.q, unit.r, tile.q, tile.r);
+        if (dist === 0 || dist > range) {
+          this._showFlash(`Poza zasięgiem (${dist}/${range})`);
+          return true;
+        }
+        if (!cs.isHexContested(unit.planetId, tile.q, tile.r)) {
+          this._showFlash('Na tym hexie nie ma bitwy');
+          return true;
+        }
+        unit.supportTarget = { q: tile.q, r: tile.r };
+        this._showFlash(`🎯 Wsparcie bitwy (${tile.q},${tile.r})`);
+        this._supportMode = false;
+        this._supportSourceUnitId = null;
+        return true;
+      }
+
       if (tile) {
         const mgr = window.KOSMOS?.groundUnitManager;
         const unitOnTile = mgr?.getUnitAt(colony?.planetId, tile.q, tile.r);
@@ -2155,12 +2326,21 @@ export class ColonyOverlay extends BaseOverlay {
         this._selectedUnit = null;
         break;
       case 'unitAttack':
-        if (this._selectedUnit && zone.data?.targetId) {
-          const gum = window.KOSMOS?.groundUnitManager;
-          if (gum) {
-            const res = gum.attackUnit(this._selectedUnit.id, zone.data.targetId);
-            if (!res.hit) console.warn('[ColonyOverlay] Atak nieudany:', res.reason);
-          }
+        // Legacy — kliki ATAKUJ zastąpione przez Victoria 2 stack combat (automatyczne)
+        this._showFlash('Bitwa automatyczna — wejdź na hex wroga');
+        break;
+      case 'unitSupportStart':
+        // Tryb wyboru bitwy do wsparcia — klik w contested hex ustawi supportTarget
+        if (this._selectedUnit) {
+          this._supportMode = true;
+          this._supportSourceUnitId = this._selectedUnit.id;
+          this._showFlash('🎯 Wybierz contested hex w zasięgu');
+        }
+        break;
+      case 'unitClearSupport':
+        if (this._selectedUnit) {
+          this._selectedUnit.supportTarget = null;
+          this._showFlash('✕ Wsparcie anulowane');
         }
         break;
       case 'unitDeploy':
@@ -2359,6 +2539,7 @@ export class ColonyOverlay extends BaseOverlay {
       // Priorytet: anuluj tryby specjalne zamiast zamykać overlay
       if (this._dropMode)    { this._finishDropMode('⚔ Desant anulowany'); return true; }
       if (this._strikeMode)  { this._strikeMode = false; this._strikeVesselId = null; this._strikePlanetId = null; this._showFlash('💥 Ostrzał anulowany'); return true; }
+      if (this._supportMode) { this._supportMode = false; this._supportSourceUnitId = null; this._showFlash('🎯 Wybór wsparcia anulowany'); return true; }
       if (this._landingMode) { this._landingMode = false; this._landingVesselId = null; this._showFlash('🤖 Away Team anulowany'); return true; }
       if (this._selectedUnit) { this._selectedUnit = null; this._selectedHex = null; return true; }
       if (this._selectedHex) { this._selectedHex = null; return true; }

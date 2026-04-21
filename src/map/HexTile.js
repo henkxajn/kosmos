@@ -27,6 +27,7 @@ export const TERRAIN_TYPES = {
     allowedCategories: ['mining', 'energy', 'food', 'population', 'research', 'military', 'space', 'market', 'synthetic', 'governance'],
     yieldBonus:        { food: 1.4, default: 1.0 },  // bonus do żywności
     baseYield:         { organics: 0.5 },
+    defenseBonus:      1.0,           // walka: neutralny teren
     description:       'Płaski teren, idealny pod zabudowę i uprawy',
   },
 
@@ -39,6 +40,7 @@ export const TERRAIN_TYPES = {
     allowedCategories: ['mining', 'energy', 'military', 'synthetic', 'governance'],  // brak rolnictwa
     yieldBonus:        { mining: 1.6, default: 0.8 },     // trudniejsza budowa, ale więcej rud
     baseYield:         { minerals: 0.8 },
+    defenseBonus:      1.25,          // walka: +25% obrony — łatwo się okopać
     description:       'Bogate złoża minerałów, trudna budowa',
   },
 
@@ -64,6 +66,7 @@ export const TERRAIN_TYPES = {
     yieldBonus:        { food: 1.3, default: 0.9 },
     baseYield:         { organics: 1.2 },
     clearCost:         { minerals: 30 },   // koszt karczowania przed budową
+    defenseBonus:      1.15,          // walka: +15% obrony — osłona drzew
     description:       'Bogata organika, wymaga karczowania przed budową',
   },
 
@@ -76,6 +79,7 @@ export const TERRAIN_TYPES = {
     allowedCategories: ['mining', 'energy', 'military', 'space', 'market', 'synthetic'],
     yieldBonus:        { energy: 1.5, default: 0.9 },  // doskonałe słońce
     baseYield:         { minerals: 0.3 },
+    defenseBonus:      0.95,          // walka: -5% — otwarte pole, brak osłony
     description:       'Idealne nasłonecznienie, bonus dla elektrowni słonecznych',
   },
 
@@ -88,6 +92,7 @@ export const TERRAIN_TYPES = {
     allowedCategories: ['mining', 'energy', 'food', 'military', 'market', 'governance'],
     yieldBonus:        { mining: 1.2, default: 0.8 },
     baseYield:         { minerals: 0.4, water: 0.3 },
+    defenseBonus:      1.05,          // walka: +5% — trudny teren
     description:       'Zimny teren z płytkimi złożami i lodem',
   },
 
@@ -100,6 +105,7 @@ export const TERRAIN_TYPES = {
     allowedCategories: ['energy', 'mining', 'market'],
     yieldBonus:        { energy: 2.0, mining: 1.3, default: 0.7 },  // geotermia!
     baseYield:         { energy: 1.5, minerals: 0.5 },
+    defenseBonus:      1.1,           // walka: +10% — uformowany teren, skały
     description:       'Aktywność geotermiczna — ogromny bonus dla elektrowni',
   },
 
@@ -113,6 +119,7 @@ export const TERRAIN_TYPES = {
     yieldBonus:        { mining: 1.8, default: 0.9 },  // skondensowane pierwiastki z impaktu
     baseYield:         { minerals: 1.5 },
     strategic:         true,         // może zawierać unikalne pierwiastki (Au, Pt)
+    defenseBonus:      1.15,          // walka: +15% — krawędzie krateru jako osłona
     description:       'Ślad po impakcie — skoncentrowane rzadkie pierwiastki',
   },
 
@@ -125,6 +132,7 @@ export const TERRAIN_TYPES = {
     allowedCategories: ['mining', 'energy', 'food'],
     yieldBonus:        { default: 0.8 },
     baseYield:         { water: 2.5 },
+    defenseBonus:      0.9,           // walka: -10% — śliskie podłoże, ekspozycja
     description:       'Ogromne rezerwy lodu wodnego',
   },
 
@@ -137,6 +145,7 @@ export const TERRAIN_TYPES = {
     allowedCategories: ['mining', 'energy', 'military', 'synthetic'],
     yieldBonus:        { default: 0.7 },
     baseYield:         {},
+    defenseBonus:      1.0,           // walka: neutralnie
     description:       'Zdegradowany teren, niska wydajność',
   },
 };

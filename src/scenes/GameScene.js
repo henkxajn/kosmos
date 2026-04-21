@@ -37,6 +37,7 @@ import { ObservatorySystem }  from '../systems/ObservatorySystem.js';
 import { CollisionForecast } from '../systems/CollisionForecast.js';
 import { DiskPhaseSystem }   from '../systems/DiskPhaseSystem.js';
 import { GroundUnitManager } from '../systems/GroundUnitManager.js';
+import { CombatSystem } from '../systems/CombatSystem.js';
 import { SupplyCoverageSystem } from '../systems/SupplyCoverageSystem.js';
 import { AnomalyEffectSystem } from '../systems/AnomalyEffectSystem.js';
 import { LeaderSystem }        from '../systems/LeaderSystem.js';
@@ -190,6 +191,7 @@ export class GameScene {
     this.observatorySystem = new ObservatorySystem();
     this.collisionForecast = new CollisionForecast();
     this.groundUnitManager = new GroundUnitManager();
+    this.combatSystem         = new CombatSystem();
     this.supplyCoverageSystem = new SupplyCoverageSystem(this.colonyManager, this.groundUnitManager);
     this.anomalyEffectSystem = new AnomalyEffectSystem();
     this.leaderSystem        = new LeaderSystem();
@@ -228,6 +230,7 @@ export class GameScene {
     window.KOSMOS.observatorySystem = this.observatorySystem;
     window.KOSMOS.collisionForecast = this.collisionForecast;
     window.KOSMOS.groundUnitManager  = this.groundUnitManager;
+    window.KOSMOS.combatSystem       = this.combatSystem;
     window.KOSMOS.supplyCoverageSystem = this.supplyCoverageSystem;
     window.KOSMOS.anomalyEffectSystem = this.anomalyEffectSystem;
     window.KOSMOS.leaderSystem     = this.leaderSystem;
