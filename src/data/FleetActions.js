@@ -460,6 +460,66 @@ const ACTIONS = {
       });
     },
   },
+
+  // ── Zrzut desantu (orbita + drop_pods + załadowane wojsko) ─────────────
+  drop_troops: {
+    id: 'drop_troops',
+    label: 'Zrzuć wojska',
+    icon: '⚔',
+    requiresTarget: false,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
+      if (!vessel.canDropTroops) return { ok: false, reason: 'Brak Kapsuł Desantowych' };
+      if ((vessel.groundUnits?.length ?? 0) === 0) return { ok: false, reason: 'Ładownia pusta' };
+      // Dominacja orbitalna wymagana dla wrogich ciał (własne kolonie OK bez bitwy)
+      const targetId = vessel.position.dockedAt;
+      const colMgr = state.colonyManager;
+      const warSys = window.KOSMOS?.warSystem;
+      const targetIsOwn = !!colMgr?.getColony?.(targetId);
+      if (!targetIsOwn && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
+        return { ok: false, reason: 'Brak dominacji orbitalnej' };
+      }
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      EventBus.emit('vessel:dropTroopsRequest', {
+        vesselId: vessel.id,
+        targetId: vessel.position.dockedAt,
+      });
+    },
+  },
+
+  // ── Ostrzał orbitalny (orbita + orbital_strike_battery + amunicja + cooldown) ─
+  orbital_strike: {
+    id: 'orbital_strike',
+    label: 'Ostrzał orbitalny',
+    icon: '💥',
+    requiresTarget: false,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
+      if (!vessel.orbitalStrike) return { ok: false, reason: 'Brak baterii ostrzału' };
+      const os = vessel.orbitalStrike;
+      if ((os.ammoCurrent ?? 0) <= 0) return { ok: false, reason: 'Brak amunicji' };
+      const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      if (gameYear < (os.cooldownUntilYear ?? 0)) {
+        return { ok: false, reason: `Cooldown (${(os.cooldownUntilYear - gameYear).toFixed(1)}y)` };
+      }
+      const targetId = vessel.position.dockedAt;
+      const colMgr = state.colonyManager;
+      const warSys = window.KOSMOS?.warSystem;
+      const targetIsOwn = !!colMgr?.getColony?.(targetId);
+      if (!targetIsOwn && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
+        return { ok: false, reason: 'Brak dominacji orbitalnej' };
+      }
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      EventBus.emit('vessel:orbitalStrikeRequest', {
+        vesselId: vessel.id,
+        targetId: vessel.position.dockedAt,
+      });
+    },
+  },
 };
 
 // ── Helper: pobierz dostępne akcje dla statku ────────────────────────────────
@@ -483,10 +543,13 @@ export function getAvailableActions(vessel, state) {
     if ((vessel.troopCapacity ?? 0) > 0) {
       result.push(_check(ACTIONS.load_troops, vessel, state));
     }
-    if (caps.has('survey')) {
+    // Survey/deep_scan wymagają modułu naukowego (science_lab/deep_scanner/quantum_scanner),
+    // nie tylko posiadania silnika (caps.has('survey') jest przyznawane każdemu z engine).
+    const hasScience = (vessel.modules ?? []).some(m => SHIP_MODULES[m]?.slotType === 'science');
+    if (hasScience && caps.has('survey')) {
       result.push(_check(ACTIONS.survey, vessel, state));
     }
-    if (caps.has('deep_scan')) {
+    if (hasScience && caps.has('deep_scan')) {
       result.push(_check(ACTIONS.deep_scan, vessel, state));
     }
     if (caps.has('colony')) {
@@ -497,13 +560,32 @@ export function getAvailableActions(vessel, state) {
       result.push(_check(ACTIONS.found_outpost, vessel, state));
     }
   } else if (vessel.position.state === 'orbiting') {
-    // Na orbicie — skan, away team, powrót, redirect, transport, załadunek (gdy przy własnej kolonii)
+    // Załadunek (przy własnej kolonii — canExecute sprawdzi kontekst)
     if ((vessel.troopCapacity ?? 0) > 0) {
       result.push(_check(ACTIONS.load_troops, vessel, state));
     }
-    result.push(_check(ACTIONS.full_scan, vessel, state));
-    result.push(_check(ACTIONS.send_away_team, vessel, state));
-    result.push(_check(ACTIONS.collect_away_team, vessel, state));
+    // Desant (drop pods + załadowane wojsko + dominacja)
+    if (vessel.canDropTroops) {
+      result.push(_check(ACTIONS.drop_troops, vessel, state));
+    }
+    // Ostrzał orbitalny (bateria + amunicja + dominacja)
+    if (vessel.orbitalStrike) {
+      result.push(_check(ACTIONS.orbital_strike, vessel, state));
+    }
+    // Skaner pokładowy (tylko gdy jest moduł naukowy)
+    const hasScience = (vessel.modules ?? []).some(m => SHIP_MODULES[m]?.slotType === 'science');
+    if (hasScience) {
+      result.push(_check(ACTIONS.full_scan, vessel, state));
+    }
+    // Away Team (tylko gdy jest moduł science_away_team)
+    const hasAwayTeam = (vessel.modules ?? []).some(m => SHIP_MODULES[m]?.stats?.enablesAwayTeam);
+    if (hasAwayTeam) {
+      result.push(_check(ACTIONS.send_away_team, vessel, state));
+      // Zbierz pokazuje się tylko gdy team JEST na powierzchni (żeby nie zaśmiecać UI)
+      if (vessel.awayTeamUnitId) {
+        result.push(_check(ACTIONS.collect_away_team, vessel, state));
+      }
+    }
     result.push(_check(ACTIONS.return_home, vessel, state));
     result.push(_check(ACTIONS.redirect, vessel, state));
     result.push(_check(ACTIONS.transport, vessel, state));
