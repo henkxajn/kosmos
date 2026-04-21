@@ -152,7 +152,7 @@ export class CombatSystem {
     const groups = new Map();
     for (const u of gum._units.values()) {
       if (u.hp <= 0) continue;
-      if (u.status === 'offline') continue;
+      if (u.status === 'offline' || u.status === 'in_cargo') continue;
       const key = `${u.planetId}|${u.q}|${u.r}`;
       if (!groups.has(key)) groups.set(key, new Set());
       groups.get(key).add(u.owner ?? 'player');
@@ -364,7 +364,7 @@ export class CombatSystem {
       if ((u.owner ?? 'player') !== ownerId) continue;
       if (u.planetId !== planetId) continue;
       if (u.hp <= 0) continue;
-      if (u.status === 'offline' || u.status === 'moving') continue;
+      if (u.status === 'offline' || u.status === 'moving' || u.status === 'in_cargo') continue;
       if (!u.supportTarget) continue;
       if (u.supportTarget.q !== q || u.supportTarget.r !== r) continue;
       const dist = this._hexDist(u.q, u.r, q, r);

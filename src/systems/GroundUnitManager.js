@@ -212,14 +212,15 @@ export class GroundUnitManager {
   getUnitsOnPlanet(planetId) {
     const result = [];
     for (const u of this._units.values()) {
-      if (u.planetId === planetId) result.push(u);
+      if (u.planetId === planetId && u.status !== 'in_cargo') result.push(u);
     }
     return result;
   }
 
   getUnitAt(planetId, q, r) {
     for (const u of this._units.values()) {
-      if (u.planetId === planetId && u.q === q && u.r === r && u.status !== 'moving') {
+      if (u.planetId === planetId && u.q === q && u.r === r &&
+          u.status !== 'moving' && u.status !== 'in_cargo') {
         return u;
       }
     }
@@ -234,7 +235,8 @@ export class GroundUnitManager {
   getUnitsAtHex(planetId, q, r) {
     const out = [];
     for (const u of this._units.values()) {
-      if (u.planetId === planetId && u.q === q && u.r === r) {
+      if (u.planetId === planetId && u.q === q && u.r === r &&
+          u.status !== 'in_cargo') {
         out.push(u);
       }
     }
@@ -545,7 +547,7 @@ export class GroundUnitManager {
     const occupiedByForeigner = new Map();
 
     for (const unit of this._units.values()) {
-      if (unit.status === 'moving') continue; // w tranzycie nie okupuje
+      if (unit.status === 'moving' || unit.status === 'in_cargo') continue; // w tranzycie / w ładowni nie okupuje
       if ((unit.hp ?? 0) <= 0) continue;
       const owner = unit.owner ?? 'player';
       const grid = this._getGrid(unit.planetId);
@@ -967,14 +969,14 @@ export class GroundUnitManager {
     for (const atk of this._units.values()) {
       if (!atk.owner || atk.owner === 'player') continue;
       if (atk.role === 'civilian' || atk.role === 'support' || atk.role === 'drone') continue;
-      if (atk.hp <= 0 || atk.status === 'moving' || atk.status === 'offline') continue;
+      if (atk.hp <= 0 || atk.status === 'moving' || atk.status === 'offline' || atk.status === 'in_cargo') continue;
       if (this.isUnitInCombat(atk)) continue; // jest w bitwie — zostaje i walczy
 
       // Znajdź najbliższą jednostkę gracza na tej samej planecie
       let best = null;
       let bestDist = Infinity;
       for (const u of this._units.values()) {
-        if (u.planetId !== atk.planetId) continue;
+        if (u.planetId !== atk.planetId || u.status === 'in_cargo') continue;
         if ((u.owner ?? 'player') === atk.owner) continue;
         if (u.hp <= 0) continue;
         if (u._stealthState === 'hidden') continue;
