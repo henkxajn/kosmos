@@ -1999,16 +1999,9 @@ export class GameScene {
   // ── Zbadaj technologie wymagane dla budynków boosted ──────────
   _setupBoostedTechs() {
     // Tech wymagane: orbital_survey → rocketry (launch_pad), exploration (shipyard)
-    // Odblokowane od startu — gracz nie musi ich badać.
-    // Nuclear power NIE odblokowany — gracz musi sam zbadać.
-    // Militarne fundamenty (point_defense + ground_warfare + military_logistics) są
-    // odblokowane żeby gracz mógł od razu budować broń, troop_bay, drop_pods i koszary.
-    // Tech wyższego rzędu (tech_munitions T3, fleet_logistics T3, exotic_materials)
-    // gracz musi sam zbadać.
-    const techIds = [
-      'orbital_survey', 'rocketry', 'exploration', 'basic_computing', 'automation',
-      'point_defense', 'ground_warfare', 'military_logistics',
-    ];
+    // Odblokowane od startu — gracz nie musi ich badać
+    // Nuclear power NIE odblokowany — gracz musi sam zbadać
+    const techIds = ['orbital_survey', 'rocketry', 'exploration', 'basic_computing', 'automation'];
     this.techSystem.restore({ researched: techIds });
   }
 
