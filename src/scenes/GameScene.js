@@ -57,7 +57,7 @@ import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
-import { spawnTestEnemy }     from '../debug/SpawnTestEnemy.js';
+import { spawnTestEnemy, spawnEnemyFleet } from '../debug/SpawnTestEnemy.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
@@ -265,6 +265,7 @@ export class GameScene {
     //   (przydatne na starym save bez konieczności rozpoczynania nowego Power Test).
     window.KOSMOS.debug = {
       spawnTestEnemy,
+      spawnEnemyFleet,
       giveResearch: (amount = 10000) => {
         const rs = window.KOSMOS?.resourceSystem;
         if (!rs) { console.warn('[debug] Brak aktywnego ResourceSystem'); return; }

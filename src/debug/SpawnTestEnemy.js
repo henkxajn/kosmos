@@ -20,7 +20,7 @@ import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import gameState from '../core/GameState.js';
 
-const TEST_ENEMY_ID = 'emp_test_enemy';
+export const TEST_ENEMY_ID = 'emp_test_enemy';
 
 // Layout budynków do postawienia (buildingId, targetLevel)
 const BUILDING_LAYOUT = [
@@ -290,4 +290,100 @@ function _findAdjacentFreeHexes(grid, tile, n) {
     }
   }
   return out;
+}
+
+/**
+ * Spawnuje wrogą flotę (warship) która ZARAZ DOLECI do systemu gracza i
+ * odpali bitwę orbitalną. Zajmuje się wszystkim: sprawdza/tworzy imperium
+ * testowe, deklaruje wojnę jeśli brak, zeruje dominację orbitalną (ustawioną
+ * przez spawnTestEnemy), wysyła flotę z krótkim ETA.
+ *
+ * @param {object} opts
+ * @param {number} [opts.strength=500]
+ * @param {boolean} [opts.transport=false]      — dołóż troop bay
+ * @param {number} [opts.troopCapacity=5]
+ * @param {string[]} [opts.troops]              — archetypy desantu (auto-fill gdy brak)
+ * @param {number} [opts.etaYears=0.1]          — za ile lat przybędzie
+ */
+export function spawnEnemyFleet(opts = {}) {
+  const K = window.KOSMOS;
+  if (!K?.civMode) {
+    console.warn('[spawnEnemyFleet] Gracz jeszcze nie przejął cywilizacji');
+    return { success: false, reason: 'no_civ_mode' };
+  }
+
+  const reg = K.empireRegistry;
+  const warSys = K.warSystem;
+  const dipl = K.diplomacySystem;
+  if (!reg || !warSys) {
+    console.warn('[spawnEnemyFleet] Brak EmpireRegistry / WarSystem');
+    return { success: false, reason: 'no_systems' };
+  }
+
+  // 1. Upewnij się że wróg istnieje
+  if (!reg.get(TEST_ENEMY_ID)) {
+    console.log('[spawnEnemyFleet] Brak wroga — tworzę przez spawnTestEnemy()');
+    const res = spawnTestEnemy();
+    if (!res?.success) return res;
+  }
+
+  const homeSystemId = K.homePlanet?.systemId ?? K.activeSystemId ?? 'sys_home';
+
+  // 2. Wojna — jeśli brak aktywnej, zadeklaruj
+  const hasWar = warSys.getWarWith?.(TEST_ENEMY_ID)?.active;
+  if (!hasWar) {
+    if (dipl?.declareWar) {
+      dipl.declareWar(TEST_ENEMY_ID, 'debug_spawn_fleet');
+    } else {
+      warSys.createWar('player', TEST_ENEMY_ID, 'debug');
+    }
+    console.log(`[spawnEnemyFleet] ⚔ Wojna zadeklarowana z ${TEST_ENEMY_ID}`);
+  }
+
+  // 3. Zeruj dominację orbitalną (spawnTestEnemy ustawia ją na gracza)
+  const gameState = (window.KOSMOS?.gameState);
+  if (gameState?.set) {
+    gameState.set(`orbitalDominance.${homeSystemId}`, null, 'debug_clear_dominance');
+  }
+
+  // 4. Przygotuj desant
+  const transport = !!opts.transport;
+  const troopCapacity = transport ? (opts.troopCapacity ?? 5) : 0;
+  let embarkedTroops = opts.troops;
+  if (transport && !Array.isArray(embarkedTroops)) {
+    const pool = ['shock_infantry', 'shock_infantry', 'rocket_artillery', 'medic_unit'];
+    embarkedTroops = Array.from({ length: troopCapacity }, (_, i) => pool[i % pool.length]);
+  }
+
+  // 5. Spawnuj flotę w home-system wroga + ruch do gracza
+  const emp = reg.get(TEST_ENEMY_ID);
+  const sourceSystemId = emp?.homeSystemId ?? homeSystemId;
+  const fleet = reg.spawnFleet(TEST_ENEMY_ID, {
+    strength:          opts.strength ?? 500,
+    systemId:          sourceSystemId,
+    hasTroopTransport: transport,
+    troopCapacity,
+    embarkedTroops:    transport ? embarkedTroops : [],
+  });
+  if (!fleet) {
+    console.warn('[spawnEnemyFleet] spawnFleet zwrócił null');
+    return { success: false, reason: 'spawn_failed' };
+  }
+
+  // 6. Rozkaz ruchu do systemu gracza (z ETA żeby _fleetArrived odpalił bitwę)
+  const etaYears = opts.etaYears ?? 0.1;
+  reg.moveFleet(TEST_ENEMY_ID, fleet.id, homeSystemId, etaYears);
+
+  const report = {
+    success:    true,
+    fleetId:    fleet.id,
+    strength:   fleet.strength,
+    from:       sourceSystemId,
+    to:         homeSystemId,
+    etaYears,
+    transport,
+    troops:     embarkedTroops?.length ?? 0,
+  };
+  console.log(`[spawnEnemyFleet] 🚀 Flota w drodze (ETA ${etaYears}y):`, report);
+  return report;
 }
