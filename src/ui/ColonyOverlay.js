@@ -2776,17 +2776,36 @@ export class ColonyOverlay extends BaseOverlay {
         if (unitOnTile) {
           // Klik na jednostkę
           if (isMultiSelectMod) {
-            // Shift/Ctrl+click → toggle w _selectedUnits (tylko player-owned)
+            // Shift/Ctrl+click → toggle pojedynczej jednostki (bez army auto-select)
             this._toggleInSelection(unitOnTile);
             this._selectedHex = { q: tile.q, r: tile.r };
           } else {
-            // Zwykły klik
-            if (this._selectedUnits.has(unitOnTile.id) && this._selectedUnits.size === 1) {
-              // Klik na jedynie zaznaczoną → odznacz
+            // Zwykły klik — Paradox-style: jeśli unit w armii, zaznacz CAŁĄ armię
+            const armySys = window.KOSMOS?.armySystem;
+            const army = armySys?.getArmyForUnit?.(unitOnTile.id);
+            if (army && army.members.size > 1) {
+              // Toggle: drugi klik na jednostkę z już zaznaczonej armii → odznacz
+              const alreadyAllSelected = army.members.size === this._selectedUnits.size
+                && [...army.members].every(id => this._selectedUnits.has(id));
+              if (alreadyAllSelected) {
+                this._clearSelection();
+                this._selectedHex = null;
+              } else {
+                this._selectedUnits.clear();
+                const gum = window.KOSMOS?.groundUnitManager;
+                for (const uid of army.members) {
+                  const u = gum?.getUnit?.(uid);
+                  if (u) this._selectedUnits.add(uid);
+                }
+                this._selectedUnit = unitOnTile; // primary = clicked unit
+                this._selectedHex = { q: tile.q, r: tile.r };
+              }
+            } else if (this._selectedUnits.has(unitOnTile.id) && this._selectedUnits.size === 1) {
+              // Klik na jedynie zaznaczoną loose jednostkę → odznacz
               this._clearSelection();
               this._selectedHex = null;
             } else {
-              // Nadpisz select jedną jednostką
+              // Nadpisz select jedną loose jednostką
               this._selectSingle(unitOnTile);
               this._selectedHex = { q: tile.q, r: tile.r };
             }

@@ -120,7 +120,9 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
     if (troopsOnly) {
       const cap = vessel.troopCapacity ?? 0;
       const used = vessel.troopBayUsed ?? 0;
-      info.textContent = `Ładownia desantowa — ${used}/${cap} pkt`;
+      const planetName = colony?.name ?? '???';
+      info.innerHTML = `Ładownia desantowa — ${used}/${cap} pkt<br>` +
+        `<span style="color:${THEME.textDim}; font-size:9px">Jednostki z planety: <b>${planetName}</b></span>`;
     } else {
       info.textContent = t('cargo.shipInfo', getName({ id: vessel.shipId, namePL: ship?.namePL }, 'ship'), cargoCapacity);
     }
@@ -372,20 +374,24 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
           }
         }
 
-        // Garnizon planety (tylko player units, nie in_cargo)
+        // Garnizon planety (tylko player units, żywe, nie już w tym statku)
         garrisonList.innerHTML = '';
         const planetId = colony?.planetId ?? vessel.colonyId;
         const garrisonUnits = gum?.getUnitsOnPlanet?.(planetId) ?? [];
         const eligible = garrisonUnits.filter(u =>
           (u.owner == null || u.owner === 'player') &&
-          u.status !== 'in_cargo' &&
-          !vessel.groundUnits?.includes(u.id)
+          u.hp > 0 &&
+          u.status !== 'in_cargo' &&                                    // nie w innym statku
+          u.transportStatus !== 'loaded' &&                             // ani nie załadowana w innym
+          !vessel.groundUnits?.includes(u.id)                           // nie w tym statku
         );
 
         if (eligible.length === 0) {
           const empty = document.createElement('div');
-          empty.style.cssText = `font-size: 10px; color: ${THEME.textDim}; padding: 2px 0; font-style: italic;`;
-          empty.textContent = '(brak jednostek do załadowania)';
+          empty.style.cssText = `font-size: 10px; color: ${THEME.textDim}; padding: 4px 6px; font-style: italic; line-height: 1.5;`;
+          const planetName = colony?.name ?? '???';
+          empty.innerHTML = `Brak jednostek na <b>${planetName}</b>.<br>` +
+            `<span style="font-size:9px">Aby załadować z innej planety, przesuń tam statek (orbit lub hangar).</span>`;
           garrisonList.appendChild(empty);
         } else {
           for (const unit of eligible) {
