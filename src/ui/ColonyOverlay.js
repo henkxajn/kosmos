@@ -15,6 +15,7 @@ import { hashCode, TEXTURE_VARIANTS } from '../renderer/PlanetTextureUtils.js';
 import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
 import { showUnitCard } from './UnitCardPanel.js';
+import { showBattleGroup } from './BattleGroupPanel.js';
 import { ANOMALIES }     from '../data/AnomalyData.js';
 import { t }   from '../i18n/i18n.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
@@ -2800,10 +2801,17 @@ export class ColonyOverlay extends BaseOverlay {
       if (window.KOSMOS?.overlayManager) window.KOSMOS.overlayManager.active = null;
       return true;
     }
-    // Karta jednostki (klawisz I)
-    if ((key === 'i' || key === 'I') && this._selectedUnit) {
-      try { showUnitCard(this._selectedUnit); } catch { /* */ }
-      return true;
+    // Karta jednostki / grupy (klawisz I)
+    if (key === 'i' || key === 'I') {
+      if (this._selectedUnits.size > 1) {
+        // Multi-select → panel grupy
+        try { showBattleGroup(this._getSelectedUnits(), this._selectedUnits); } catch { /* */ }
+        return true;
+      }
+      if (this._selectedUnit) {
+        try { showUnitCard(this._selectedUnit); } catch { /* */ }
+        return true;
+      }
     }
     if (key === 'Delete' && this._selectedHex) {
       const colony = this._getColony();
