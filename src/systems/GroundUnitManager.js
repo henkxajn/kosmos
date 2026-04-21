@@ -596,6 +596,21 @@ export class GroundUnitManager {
     EventBus.emit('tile:ownerChanged', { planetId, q: tile.q, r: tile.r, oldOwner, newOwner });
   }
 
+  // Przejęcie terytorium podczas ruchu: jednostka przechodząca przez pusty
+  // obcy hex natychmiast go przejmuje. Hex z budynkiem wymaga zatrzymania
+  // (obsługuje _tickOccupation z timerem 0.5 civYear).
+  _captureHexOnEntry(unit) {
+    const owner = unit.owner ?? 'player';
+    const grid = this._getGrid(unit.planetId);
+    if (!grid) return;
+    const tile = grid.get(unit.q, unit.r);
+    if (!tile) return;
+    if (tile.owner === owner) return;
+    const hasBuilding = tile.buildingId !== null || tile.capitalBase === true;
+    if (hasBuilding) return; // wymaga stop + timer
+    this._changeTileOwner(tile, unit.planetId, owner);
+  }
+
   _cleanupStaleOccupations(occupiedByForeigner) {
     // Dla każdego grida — sprawdź hexy z occupyEmpireId które nie mają już okupanta
     for (const [planetId, tiles] of this._stalePlanetCache()) {
@@ -987,6 +1002,8 @@ export class GroundUnitManager {
       unit._animT = 0;
       // Ground Unit System: wejście na hex — sprawdź minę (może zabić jednostkę)
       if (this._checkMineTrigger(unit)) return;
+      // Przejęcie terytorium podczas ruchu (pusty obcy hex → instant)
+      this._captureHexOnEntry(unit);
       // Victoria 2 stack combat: contact intercept — jeśli na nowym hexie wróg, zatrzymaj
       if (this._interceptOnContact(unit)) return;
       if (unit._path.length === 0) {
@@ -1016,6 +1033,8 @@ export class GroundUnitManager {
       }
       // Ground Unit System: wejście na hex — sprawdź minę
       if (this._checkMineTrigger(unit)) return;
+      // Przejęcie terytorium podczas ruchu (pusty obcy hex → instant)
+      this._captureHexOnEntry(unit);
       // Victoria 2 stack combat: contact intercept — na hexie z wrogiem stop
       if (this._interceptOnContact(unit)) return;
 

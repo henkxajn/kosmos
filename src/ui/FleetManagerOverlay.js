@@ -998,10 +998,18 @@ export class FleetManagerOverlay {
   }
 
   /**
-   * Pobierz kolonię statku (do CargoLoadModal).
+   * Pobierz kolonię ZWIĄZANĄ ze statkiem — dla orbitujących to planeta docelowa
+   * (żeby load troops brał unity z planety której statek pilnuje), dla zadokowanych
+   * to kolonia macierzysta.
    */
   _getVesselColony(vessel) {
     const colMgr = window.KOSMOS?.colonyManager;
+    // Orbitujący: użyj planety nad którą orbituje (dockedAt)
+    if (vessel?.position?.state === 'orbiting' && vessel.position.dockedAt) {
+      const orbiting = colMgr?.getColony(vessel.position.dockedAt);
+      if (orbiting) return orbiting;
+    }
+    // Hangar / fallback: kolonia macierzysta
     return colMgr?.getColony(vessel.colonyId ?? vessel.homeColonyId) ?? null;
   }
 
