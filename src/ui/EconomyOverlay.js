@@ -81,7 +81,7 @@ export class EconomyOverlay extends BaseOverlay {
   // ── Inline DOM input dla minimalnego zapasu ─────────────────────────────
   // Tworzymy pływające pole nad canvas dokładnie w miejscu kliknięcia
   // (kafelek między [−] a [+]). Wpisana wartość = docelowy bonus zapasu.
-  _openMinStockInput(colonyId, commodityId, canvasX, canvasY, boxW, boxH) {
+  _openMinStockInput(colonyId, commodityId, canvasX, canvasY, boxW, boxH, baseTarget) {
     this._closeMinStockInput();
 
     const colMgr = window.KOSMOS?.colonyManager;
@@ -96,14 +96,20 @@ export class EconomyOverlay extends BaseOverlay {
     const sw = boxW * SCALE;
     const sh = boxH * SCALE;
 
-    const current = fs.getDemandBonus?.(commodityId) ?? 0;
+    // Wpisywana wartość = docelowy safety stock (nie bonus).
+    // Bonus = max(0, target - baseTarget), gdzie baseTarget to domyślny próg
+    // bez bonusu gracza (zależny od kontekstu: tier w sekcji min-zapasów,
+    // lub zużycie bieżącej konsumpcji).
+    const base = Math.max(0, baseTarget ?? 0);
+    const currentBonus = fs.getDemandBonus?.(commodityId) ?? 0;
+    const currentTarget = base + currentBonus;
 
     const input = document.createElement('input');
     input.type = 'number';
     input.min = '0';
     input.max = '999';
     input.step = '1';
-    input.value = String(current);
+    input.value = String(currentTarget);
     Object.assign(input.style, {
       position: 'fixed',
       left: `${Math.round(sx)}px`,
@@ -135,7 +141,9 @@ export class EconomyOverlay extends BaseOverlay {
       done = true;
       const raw = parseInt(input.value, 10);
       const val = Number.isFinite(raw) ? Math.max(0, Math.min(999, raw)) : 0;
-      fs.setDemandBonus(commodityId, val);
+      // val = docelowy safety stock → przelicz na bonus nad bazą
+      const newBonus = Math.max(0, val - base);
+      fs.setDemandBonus(commodityId, newBonus);
       this._closeMinStockInput();
     };
     const cancel = () => {
@@ -1337,6 +1345,8 @@ export class EconomyOverlay extends BaseOverlay {
 
           let bx = textX + 42;
           const bonus = fs.getDemandBonus?.(d.commodityId) ?? 0;
+          // Baza konsumpcji (bez bonusu) — potrzebna do przeliczenia target → bonus
+          const consBase = Math.max(0, Math.round(d.qty - bonus));
           this._drawSmallBtn(ctx, bx, btnY, '−', bonus > 0 ? 'secondary' : 'disabled');
           if (bonus > 0) {
             this._addHit(bx, btnY, BTN_S, BTN_S, 'factory_btn', {
@@ -1345,10 +1355,12 @@ export class EconomyOverlay extends BaseOverlay {
             });
           }
           bx += BTN_S + 2;
-          this._drawBonusBox(ctx, bx, btnY, BOX_W, BTN_S, bonus, false);
+          // Box pokazuje pełen docelowy zapas (baza + bonus), czyli d.qty
+          this._drawBonusBox(ctx, bx, btnY, BOX_W, BTN_S, Math.round(d.qty), false);
           this._addHit(bx, btnY, BOX_W, BTN_S, 'factory_btn', {
             action: 'demand_set_input', colonyId: colId, commodityId: d.commodityId,
             label: 'box', x: bx, boxW: BOX_W, boxH: BTN_S, boxCanvasX: bx, boxCanvasY: btnY,
+            baseTarget: consBase,
           });
           bx += BOX_W + 2;
           this._drawSmallBtn(ctx, bx, btnY, '+', 'primary');
@@ -1618,12 +1630,14 @@ export class EconomyOverlay extends BaseOverlay {
       });
     }
     bx += BTN_S + 2;
-    // Edytowalne pole z wartością bonusu
-    this._drawBonusBox(ctx, bx, btnY, BOX_W, BTN_S, bonus, locked);
+    // Edytowalne pole z docelowym safety stockiem (baza zależna od tieru + bonus)
+    const safetyBase = Math.max(0, target - bonus);
+    this._drawBonusBox(ctx, bx, btnY, BOX_W, BTN_S, target, locked);
     if (!locked) {
       this._addHit(bx, btnY, BOX_W, BTN_S, 'factory_btn', {
         action: 'demand_set_input', colonyId: colId, commodityId,
         label: 'box', x: bx, boxW: BOX_W, boxH: BTN_S, boxCanvasX: bx, boxCanvasY: btnY,
+        baseTarget: safetyBase,
       });
     }
     bx += BOX_W + 2;
@@ -2106,7 +2120,8 @@ export class EconomyOverlay extends BaseOverlay {
       case 'demand_set_input':
         this._openMinStockInput(
           data.colonyId, data.commodityId,
-          data.boxCanvasX, data.boxCanvasY, data.boxW, data.boxH
+          data.boxCanvasX, data.boxCanvasY, data.boxW, data.boxH,
+          data.baseTarget ?? 0
         );
         break;
 
