@@ -101,7 +101,8 @@ export class CombatSystem {
     const seenKeys = new Set();
 
     for (const { planetId, q, r } of contested) {
-      const key = `${planetId}_${q}_${r}`;
+      // Separator `|` (nie `_`) — planetId może zawierać `_` (np. "p_3"), co psuło split
+      const key = `${planetId}|${q}|${r}`;
       seenKeys.add(key);
       this._runBattleRound(planetId, q, r, key);
     }
@@ -115,7 +116,8 @@ export class CombatSystem {
         if (totals) {
           // Ustal zwycięzcę: jeśli jakiś gracz/wróg zginął i teraz bitwa skończona → któraś strona wyczyściła hex
           // winner = kto ma żywych na hexie (lub null jeśli obie wyczyściły się)
-          const [pid, qS, rS] = key.split('_');
+          // Separator `|` — planetId może zawierać `_` (np. "p_3")
+          const [pid, qS, rS] = key.split('|');
           const q = Number(qS), r = Number(rS);
           const gum = window.KOSMOS?.groundUnitManager;
           const occupants = gum?.getUnitsAtHex?.(pid, q, r) ?? [];

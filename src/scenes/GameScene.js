@@ -2464,20 +2464,31 @@ export class GameScene {
 
     EventBus.on('combat:hexResolved', ({ planetId, q, r, winnerId, playerKilled, enemyKilled, playerDmg, enemyDmg }) => {
       const log = this.eventLogSystem;
-      if (!log?.push) return;
-      let text;
-      let severity;
-      if (winnerId === 'player') {
-        text = `⚔ Zwycięstwo (${q},${r}) — wróg zneutralizowany. Straty własne: ${playerKilled}, zadano ${playerDmg} dmg.`;
-        severity = 'info';
-      } else if (winnerId && winnerId !== 'player') {
-        text = `💀 Przegrana (${q},${r}) — własne wojsko wybite. Straty: ${playerKilled}, zadano wrogowi ${playerDmg} dmg.`;
-        severity = 'alert';
-      } else {
-        text = `⚔ Bitwa (${q},${r}) zakończona remisem. Straty: ${playerKilled} / ${enemyKilled}.`;
-        severity = 'warn';
+      if (log?.push) {
+        let text;
+        let severity;
+        if (winnerId === 'player') {
+          text = `⚔ Zwycięstwo (${q},${r}) — wróg zneutralizowany. Straty własne: ${playerKilled}, zadano ${playerDmg} dmg.`;
+          severity = 'info';
+        } else if (winnerId && winnerId !== 'player') {
+          text = `💀 Przegrana (${q},${r}) — własne wojsko wybite. Straty: ${playerKilled}, zadano wrogowi ${playerDmg} dmg.`;
+          severity = 'alert';
+        } else {
+          text = `⚔ Bitwa (${q},${r}) zakończona remisem. Straty: ${playerKilled} / ${enemyKilled}.`;
+          severity = 'warn';
+        }
+        log.push({ text, channel: 'combat', severity, entityRef: planetId });
       }
-      log.push({ text, channel: 'combat', severity, entityRef: planetId });
+
+      // Globalny modal — zawsze widoczny, niezależnie od otwartego overlay
+      import('../ui/BattleReportModal.js').then(({ showBattleReport }) => {
+        const entity = EntityManager.get(planetId);
+        showBattleReport({
+          winnerId, q, r,
+          planetName: entity?.name ?? planetId,
+          playerKilled, enemyKilled, playerDmg, enemyDmg,
+        });
+      }).catch(() => { /* ignore */ });
     });
 
     // Dwuklik na planetę/księżyc → otwórz ColonyOverlay
