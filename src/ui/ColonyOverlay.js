@@ -932,12 +932,22 @@ export class ColonyOverlay extends BaseOverlay {
     const hasDeploy = !isEnemy && unit.deployState != null;
     const inTransit = hasDeploy && (unit.deployState === 'deploying' || unit.deployState === 'packing');
 
+    // Stack navigator: jeśli na hexie jest >1 jednostek tej samej strony,
+    // pokaż pasek cyklowania ◄ current/total ► (mały przycisk nawigacji)
+    const hexSiblings = gum?.getUnitsAtHex?.(unit.planetId, unit.q, unit.r) ?? [];
+    const ownerFilter = isEnemy
+      ? (u => u.owner && u.owner !== 'player')
+      : (u => !u.owner || u.owner === 'player');
+    const siblings = hexSiblings.filter(ownerFilter);
+    const hasSiblings = siblings.length > 1;
+
     // Panel w prawym dolnym rogu overlay — dynamiczna wysokość
     const pw = 200;
     let ph = 96;  // baza: nazwa + status + hex + HP
     if (isEnemy) ph += 14;                         // banner "ROZPOZNANIE"
     const multiSelect = this._selectedUnits.size > 1;
     if (multiSelect) ph += 18;                    // banner "Zaznaczono N"
+    if (hasSiblings) ph += 22;                    // stack navigator
     if (unit.attack != null) ph += 18;            // linia attack/defense
     // Opcja C v3: rezerwuj miejsce dla supply/org/morale + damageMult (tylko archetypowe jednostki)
     const hasSupplyV3 = unit.supply != null && !isEnemy;
@@ -950,12 +960,22 @@ export class ColonyOverlay extends BaseOverlay {
     const px = ox + ow - pw - 8;
     const py = oy + oh - ph - 8;
 
-    // Tło (wrogie jednostki wyraźnie czerwone — recon/info only)
-    ctx.fillStyle = isEnemy ? 'rgba(40, 8, 6, 0.94)' : 'rgba(4, 8, 16, 0.92)';
+    // Tło — neon accent (choose-your-leader style)
+    const ACC = isEnemy ? '#FF4060' : '#00ffb4';
+    const ACC_RGB = isEnemy ? 'rgba(255,64,96' : 'rgba(0,255,180';
+    ctx.save();
+    ctx.shadowColor = `${ACC_RGB},0.30)`;
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = isEnemy ? 'rgba(16, 4, 4, 0.96)' : 'rgba(6, 5, 4, 0.96)';
     ctx.fillRect(px, py, pw, ph);
-    ctx.strokeStyle = isEnemy ? '#D85A30' : '#00ffb4';
-    ctx.lineWidth = isEnemy ? 2 : 1;
-    ctx.strokeRect(px, py, pw, ph);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = ACC;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+    // Inner accent line
+    ctx.strokeStyle = `${ACC_RGB},0.15)`;
+    ctx.strokeRect(px + 3.5, py + 3.5, pw - 7, ph - 7);
+    ctx.restore();
 
     // Banner "ROZPOZNANIE" dla wrogiej jednostki
     if (isEnemy) {
@@ -972,19 +992,65 @@ export class ColonyOverlay extends BaseOverlay {
     let multiBannerOffset = 0;
     if (multiSelect) {
       const bY = py + (isEnemy ? 14 : 0);
-      ctx.fillStyle = 'rgba(100,160,255,0.22)';
+      ctx.fillStyle = 'rgba(0,255,180,0.14)';
       ctx.fillRect(px, bY, pw, 18);
       ctx.font = `bold 10px ${THEME.fontFamily}`;
-      ctx.fillStyle = '#80B8FF';
+      ctx.fillStyle = '#00ffb4';
       ctx.textAlign = 'center';
-      ctx.fillText(`👥 Zaznaczono ${this._selectedUnits.size} jednostek`, px + pw / 2, bY + 9);
+      ctx.fillText(`👥 ZAZNACZONO ${this._selectedUnits.size}`, px + pw / 2, bY + 9);
       ctx.textAlign = 'left';
       multiBannerOffset = 18;
     }
 
+    // Stack navigator: ◄ current/total ► gdy na hexie jest >1 jednostek tego samego typu
+    let navOffset = 0;
+    if (hasSiblings) {
+      const navY = py + (isEnemy ? 14 : 0) + multiBannerOffset;
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(px, navY, pw, 22);
+      ctx.strokeStyle = 'rgba(0,255,180,0.25)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(px, navY + 22);
+      ctx.lineTo(px + pw, navY + 22);
+      ctx.stroke();
+
+      const curIdx = siblings.findIndex(u => u.id === unit.id);
+      const prevIdx = (curIdx - 1 + siblings.length) % siblings.length;
+      const nextIdx = (curIdx + 1) % siblings.length;
+
+      // ◄ przycisk
+      ctx.fillStyle = 'rgba(0,255,180,0.12)';
+      ctx.fillRect(px + 4, navY + 3, 28, 16);
+      ctx.strokeStyle = '#00ffb4';
+      ctx.strokeRect(px + 4.5, navY + 3.5, 27, 15);
+      ctx.fillStyle = '#00ffb4';
+      ctx.font = `bold 12px ${THEME.fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.fillText('◄', px + 18, navY + 15);
+      this._addHit(px + 4, navY + 3, 28, 16, 'cycleHexUnit', { unitId: siblings[prevIdx].id });
+
+      // Current counter
+      ctx.font = `10px ${THEME.fontFamily}`;
+      ctx.fillStyle = '#00ffb4';
+      ctx.fillText(`${curIdx + 1} / ${siblings.length} NA HEX`, px + pw / 2, navY + 15);
+
+      // ► przycisk
+      ctx.fillStyle = 'rgba(0,255,180,0.12)';
+      ctx.fillRect(px + pw - 32, navY + 3, 28, 16);
+      ctx.strokeStyle = '#00ffb4';
+      ctx.strokeRect(px + pw - 31.5, navY + 3.5, 27, 15);
+      ctx.fillStyle = '#00ffb4';
+      ctx.font = `bold 12px ${THEME.fontFamily}`;
+      ctx.fillText('►', px + pw - 18, navY + 15);
+      this._addHit(px + pw - 32, navY + 3, 28, 16, 'cycleHexUnit', { unitId: siblings[nextIdx].id });
+
+      navOffset = 22;
+    }
+
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    let ly = py + (isEnemy ? 28 : 16) + multiBannerOffset;
+    let ly = py + (isEnemy ? 28 : 16) + multiBannerOffset + navOffset;
 
     // Nagłówek — typ jednostki + owner
     ctx.font = `bold 11px ${THEME.fontFamily}`;
@@ -1751,24 +1817,37 @@ export class ColonyOverlay extends BaseOverlay {
     const H = 86;
     const dx = ox + 4;
     const dy = oy + oh - H - 4;
-    const dw = ow - 8;
+    // Zostaw miejsce (212px) na prawy panel jednostki żeby nie nakładały się
+    const hasUnitPanel = !!this._selectedUnit;
+    const dw = ow - 8 - (hasUnitPanel ? 212 : 0);
+
+    // Neon accent (Choose-your-leader style) — cyan/neon green
+    const ACCENT = allSameArmy ? '#E0C060' : '#00ffb4';
+    const ACCENT_DIM = allSameArmy ? 'rgba(224,192,96,0.12)' : 'rgba(0,255,180,0.08)';
+    const ACCENT_GLOW = allSameArmy ? 'rgba(224,192,96,0.30)' : 'rgba(0,255,180,0.22)';
 
     ctx.save();
-    // Tło drawer
-    ctx.fillStyle = 'rgba(6, 12, 22, 0.94)';
+    // Tło + glow
+    ctx.shadowColor = ACCENT_GLOW;
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = 'rgba(6, 5, 4, 0.96)';
     ctx.fillRect(dx, dy, dw, H);
-    ctx.strokeStyle = allSameArmy ? '#E0C060' : '#64A0FF';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(dx, dy, dw, H);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(dx + 0.5, dy + 0.5, dw - 1, H - 1);
+    // Inner accent line (cienka)
+    ctx.strokeStyle = ACCENT_DIM;
+    ctx.strokeRect(dx + 3.5, dy + 3.5, dw - 7, H - 7);
 
-    // Header
-    ctx.font = `bold 12px ${THEME.fontFamily}`;
-    ctx.fillStyle = allSameArmy ? '#E0C060' : '#80B8FF';
+    // Header — letter-spacing + orbitron-like
+    ctx.font = `bold 11px ${THEME.fontFamily}`;
+    ctx.fillStyle = ACCENT;
     ctx.textAlign = 'left';
     const headerText = allSameArmy
-      ? `🎖 ${firstArmy.name} · ${sel.length} jedn. · (${firstArmy.q},${firstArmy.r})`
-      : `👥 ZAZNACZONO ${sel.length} jednostek`;
-    ctx.fillText(headerText, dx + 10, dy + 18);
+      ? `🎖 ${firstArmy.name.toUpperCase()}  ·  ${sel.length} JEDN.  ·  (${firstArmy.q},${firstArmy.r})`
+      : `👥 ZAZNACZONO ${sel.length} JEDNOSTEK`;
+    ctx.fillText(headerText, dx + 12, dy + 18);
 
     // Lista ikon jednostek (horizontalnie)
     const iconSize = 40;
@@ -1783,23 +1862,24 @@ export class ColonyOverlay extends BaseOverlay {
       const maxHp = arch?.baseStats?.hp ?? u.hpMax ?? hp;
       const hpFrac = maxHp > 0 ? hp / maxHp : 0;
 
-      // Tło ikony
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      // Tło ikony — neon style
+      const isSel = (this._selectedUnit?.id === u.id);
+      ctx.fillStyle = isSel ? ACCENT_DIM : 'rgba(255,255,255,0.04)';
       ctx.fillRect(ix, iconY, iconSize, iconSize);
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(ix, iconY, iconSize, iconSize);
+      ctx.strokeStyle = isSel ? ACCENT : 'rgba(255,255,255,0.20)';
+      ctx.lineWidth = isSel ? 1.5 : 1;
+      ctx.strokeRect(ix + 0.5, iconY + 0.5, iconSize - 1, iconSize - 1);
 
       // Emoji
-      ctx.font = '24px sans-serif';
+      ctx.font = '22px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(arch?.icon ?? '🪖', ix + iconSize / 2, iconY + 26);
+      ctx.fillText(arch?.icon ?? '🪖', ix + iconSize / 2, iconY + 25);
 
-      // HP bar
+      // HP bar (neon)
       const barY = iconY + iconSize - 5;
-      ctx.fillStyle = '#000';
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(ix + 2, barY, iconSize - 4, 3);
-      ctx.fillStyle = hpFrac > 0.6 ? '#80D840' : hpFrac > 0.3 ? '#D88040' : '#D84040';
+      ctx.fillStyle = hpFrac > 0.6 ? '#00ffb4' : hpFrac > 0.3 ? '#D8A040' : '#FF4060';
       ctx.fillRect(ix + 2, barY, (iconSize - 4) * hpFrac, 3);
 
       this._addHit(ix, iconY, iconSize, iconSize, 'drawerUnitClick', { unitId: u.id });
@@ -1813,40 +1893,45 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillText(`+${sel.length - maxIcons}`, ix + 4, iconY + 28);
     }
 
-    // Action buttons po prawej
-    const btnBlockX = dx + dw - 260;
-    const btnBlockY = dy + 28;
-    const btnH = 22;
-    const btnW = 80;
+    // Action buttons po prawej — neon style
+    const btnH = 24;
+    const btnW = 82;
     const btns = [];
     if (allSameArmy) {
-      btns.push({ label: '➕ Podziel', color: '#80B8FF', type: 'armySplitFromDrawer', data: { armyId: firstArmy.id } });
-      btns.push({ label: '✏ Nazwa', color: '#80D840', type: 'armyRename', data: { armyId: firstArmy.id } });
-      btns.push({ label: '💔 Rozwiąż', color: '#D85A30', type: 'armyDisband', data: { armyId: firstArmy.id } });
+      btns.push({ label: '➕ PODZIEL', type: 'armySplitFromDrawer', data: { armyId: firstArmy.id } });
+      btns.push({ label: '✏ NAZWA',    type: 'armyRename',          data: { armyId: firstArmy.id } });
+      btns.push({ label: '💔 ROZWIĄŻ', type: 'armyDisband',         data: { armyId: firstArmy.id }, danger: true });
     } else if (sel.length >= 2) {
-      // Wszystkie na tym samym hexie? (wymóg Połącz)
       const sameHex = sel.every(u => u.q === sel[0].q && u.r === sel[0].r && u.planetId === sel[0].planetId);
       if (sameHex) {
-        btns.push({ label: '🎖 Połącz', color: '#E0C060', type: 'armyCreateFromSelection', data: {} });
+        btns.push({ label: '🎖 POŁĄCZ', type: 'armyCreateFromSelection', data: {} });
       }
-      btns.push({ label: '📋 Szczegóły', color: '#80B8FF', type: 'drawerOpenGroup', data: {} });
+      btns.push({ label: '📋 SZCZEGÓŁY', type: 'drawerOpenGroup', data: {} });
     } else {
-      btns.push({ label: '📋 Szczegóły', color: '#80B8FF', type: 'drawerOpenUnit', data: { unitId: sel[0].id } });
+      btns.push({ label: '📋 SZCZEGÓŁY', type: 'drawerOpenUnit', data: { unitId: sel[0].id } });
     }
 
+    const btnBlockX = dx + dw - (btns.length * (btnW + 4) + 4);
+    const btnBlockY = dy + 28;
     let bx = btnBlockX;
     for (const b of btns) {
-      if (bx + btnW > dx + dw - 10) break;
-      const c = hexToRgb(b.color);
-      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.22)`;
+      if (bx + btnW > dx + dw - 6) break;
+      const btnColor = b.danger ? '#FF4060' : ACCENT;
+      const c = hexToRgb(btnColor);
+      // Tło przycisku (subtle fill)
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.08)`;
       ctx.fillRect(bx, btnBlockY, btnW, btnH);
-      ctx.strokeStyle = b.color;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(bx, btnBlockY, btnW, btnH);
+      // Border 1px — neon
+      ctx.strokeStyle = btnColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx + 0.5, btnBlockY + 0.5, btnW - 1, btnH - 1);
+      // Label
       ctx.font = `bold 10px ${THEME.fontFamily}`;
-      ctx.fillStyle = b.color;
+      ctx.fillStyle = btnColor;
       ctx.textAlign = 'center';
-      ctx.fillText(b.label, bx + btnW / 2, btnBlockY + 14);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(b.label, bx + btnW / 2, btnBlockY + btnH / 2);
+      ctx.textBaseline = 'alphabetic';
       this._addHit(bx, btnBlockY, btnW, btnH, b.type, b.data);
       bx += btnW + 4;
     }
@@ -2911,6 +2996,11 @@ export class ColonyOverlay extends BaseOverlay {
       }
       case 'drawerOpenGroup': {
         try { showBattleGroup(this._getSelectedUnits(), this._selectedUnits); } catch { /* */ }
+        break;
+      }
+      case 'cycleHexUnit': {
+        const u = window.KOSMOS?.groundUnitManager?.getUnit?.(zone.data?.unitId);
+        if (u) this._selectSingle(u);
         break;
       }
     }
