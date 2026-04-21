@@ -818,6 +818,15 @@ export class VesselManager {
         damaged:      v.damaged ?? false,
         _repairProgress: v._repairProgress ?? 0,
         awayTeamUnitId: v.awayTeamUnitId ?? null,
+        // Faza desantu: groundUnits (załadowane jednostki), troopBayUsed (runtime used),
+        // orbitalStrike (ammoCurrent + cooldown). troopCapacity/canDropTroops są
+        // odtwarzane z modułów przy restore — nie trzeba ich zapisywać.
+        groundUnits:  Array.isArray(v.groundUnits) ? [...v.groundUnits] : [],
+        troopBayUsed: v.troopBayUsed ?? 0,
+        orbitalStrike: v.orbitalStrike ? {
+          ammoCurrent: v.orbitalStrike.ammoCurrent ?? 0,
+          cooldownUntilYear: v.orbitalStrike.cooldownUntilYear ?? 0,
+        } : null,
       });
     }
     return {
@@ -872,15 +881,34 @@ export class VesselManager {
         damaged:      vd.damaged ?? false,
         _repairProgress: vd._repairProgress ?? 0,
         awayTeamUnitId: vd.awayTeamUnitId ?? null,
+        // Faza desantu: pola z modułów (troop_bay_*/drop_pods/orbital_strike_battery)
+        groundUnits:    Array.isArray(vd.groundUnits) ? [...vd.groundUnits] : [],
+        troopCapacity:  0,       // obliczane poniżej z modułów
+        troopBayUsed:   vd.troopBayUsed ?? 0,
+        canDropTroops:  false,   // obliczane poniżej
+        orbitalStrike:  vd.orbitalStrike ? { ...vd.orbitalStrike } : null,
       };
-      // Oblicz colonistCapacity z modułów
+      // Przelicz z modułów: colonistCapacity + troop_bay/drop_pods/orbital_strike.
+      // Konieczne bo save przechowuje moduły (vessel.modules) ale pola pochodne
+      // mogą być stare (pre-Faza desantu) lub niezsynchronizowane.
       if (vessel.modules?.length) {
-        let cap = 0;
-        for (const modId of vessel.modules) {
-          const mod = SHIP_MODULES[modId];
-          if (mod?.stats?.colonistCapacity) cap += mod.stats.colonistCapacity;
+        const hull = _getHullDef(vessel.shipId);
+        const stats = hull ? calcShipStats(hull, vessel.modules) : null;
+        if (stats) {
+          vessel.colonistCapacity = stats.colonistCapacity ?? 0;
+          vessel.troopCapacity    = stats.troopCapacity ?? 0;
+          vessel.canDropTroops    = !!stats.canDropTroops;
+          // orbitalStrike: zachowaj ammoCurrent/cooldownUntilYear z save, ale weź spec z modułów
+          if (stats.orbitalStrike) {
+            vessel.orbitalStrike = {
+              ...stats.orbitalStrike,
+              ammoCurrent:     vd.orbitalStrike?.ammoCurrent ?? 0,
+              cooldownUntilYear: vd.orbitalStrike?.cooldownUntilYear ?? 0,
+            };
+          } else {
+            vessel.orbitalStrike = null;
+          }
         }
-        vessel.colonistCapacity = cap;
       }
 
       // Migracja: stare save'y bez masy — przelicz statystyki z modułów
