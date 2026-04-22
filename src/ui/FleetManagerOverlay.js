@@ -194,9 +194,26 @@ export class FleetManagerOverlay {
 
   // ── API publiczne ──────────────────────────────────────────────────────────
 
-  toggle() { this._visible = !this._visible; if (!this._visible) this._close(); }
-  open()   { this._visible = true; }
+  toggle() {
+    this._visible = !this._visible;
+    if (this._visible) this._focusOnHomeAtStart();
+    else this._close();
+  }
+  open()   { this._visible = true; this._focusOnHomeAtStart(); }
   close()  { this._visible = false; this._close(); }
+
+  // Przy otwarciu overlay'a — jeśli mapa w stanie domyślnym (pan=0, zoom=1),
+  // automatycznie zcentruj na homePlanet i ustaw sensowny zoom widzący planetę
+  // z księżycami. Bez tego user przy zoom=300 nadal widzi gwiazdę w centrum,
+  // bo focus nie jest ustawiony.
+  _focusOnHomeAtStart() {
+    if (this._mapPanX !== 0 || this._mapPanY !== 0 || this._mapZoom !== 1.0) return;
+    const home = window.KOSMOS?.homePlanet;
+    if (!home) return;
+    this._mapFocusBodyId = home.id;
+    this._mapZoom = 40;  // widok planeta + księżyce
+    this._centerMapOnBody(home);
+  }
   get isVisible() { return this._visible; }
 
   _close() {
@@ -373,7 +390,10 @@ export class FleetManagerOverlay {
         // Zoom mapy — utrzymaj focus na wybranym ciele (domyślnie gwiazda)
         const zoomFactor = delta > 0 ? 0.85 : 1.18;
         const oldZoom = this._mapZoom;
-        this._mapZoom = Math.max(0.3, Math.min(80, this._mapZoom * zoomFactor));
+        // Max zwiększony z 80 na 300 — pozwala widzieć planetę + księżyce + orbity
+        // księżyców w pełni ekranu. Focus-body trzeba wcześniej ustawić klikiem na
+        // ciało w mapie (wtedy zoom krąży wokół niego).
+        this._mapZoom = Math.max(0.3, Math.min(300, this._mapZoom * zoomFactor));
         const focusBody = this._mapFocusBodyId ? _findBody(this._mapFocusBodyId) : null;
         const { x: fAUx, y: fAUy } = this._bodyAU(focusBody);
         const maxAU = this._getMaxOrbitAU();
@@ -519,6 +539,14 @@ export class FleetManagerOverlay {
         if (bodyEntity) {
           EventBus.emit('body:selected', { entity: bodyEntity });
           this._centerMapOnBody(bodyEntity);
+          // Auto-zoom — planeta/księżyc klik → wskocz do zoomu który pokazuje
+          // ciało + jego księżyce/satelity. Dla planety ~zoom 40 (widok ~2 AU).
+          // Dla księżyca/planetoida ~zoom 120 (widok ~0.2 AU).
+          if (bodyEntity.type === 'planet') {
+            this._mapZoom = Math.max(this._mapZoom, 40);
+          } else if (bodyEntity.type === 'moon' || bodyEntity.type === 'planetoid') {
+            this._mapZoom = Math.max(this._mapZoom, 120);
+          }
         }
         break;
       }
@@ -534,6 +562,18 @@ export class FleetManagerOverlay {
         this._selectedVesselId = zone.data.vesselId;
         this._missionConfig = null;
         break;
+      case 'home_focus': {
+        // Powrót do widoku "nasza planeta + księżyce" — reset pan + zoom 40 + center
+        const home = window.KOSMOS?.homePlanet;
+        if (home) {
+          this._mapFocusBodyId = home.id;
+          this._mapPanX = 0;
+          this._mapPanY = 0;
+          this._mapZoom = 40;
+          this._centerMapOnBody(home);
+        }
+        break;
+      }
       case 'map_toggle':
         this._mapToggles[zone.data.key] = !this._mapToggles[zone.data.key];
         break;
@@ -1421,6 +1461,23 @@ export class FleetManagerOverlay {
     const toggleY = y + 6;
     let tbx = x + w - pad;
 
+    // 🏠 HOME — szybki powrót na planetę gracza (tylko w tactical map)
+    if (!this._showAtlas && !this._showCluster) {
+      const homeTw = 60;
+      tbx -= homeTw + 4;
+      ctx.fillStyle = 'transparent';
+      ctx.fillRect(tbx, toggleY, homeTw, 18);
+      ctx.strokeStyle = THEME.accent;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tbx, toggleY, homeTw, 18);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      ctx.textAlign = 'center';
+      ctx.fillText('🏠 HOME', tbx + homeTw / 2, toggleY + 13);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: tbx, y: toggleY, w: homeTw, h: 18, type: 'home_focus', data: {} });
+    }
+
     // TRASY / ZASIĘG — widoczne tylko w trybie tactical map
     if (!this._showAtlas && !this._showCluster) {
       for (const key of ['range', 'routes']) {
@@ -1540,17 +1597,20 @@ export class FleetManagerOverlay {
     const colMgr  = window.KOSMOS?.colonyManager;
 
     // ── Gwiazda ─────────────────────────────────────────────
-    const starR = Math.max(3, 5 * this._mapZoom);
+    // Rozmiar clamped — wcześniej `5 * _mapZoom` przy wysokim zoomie robiło
+    // gwiazdę większą od orbit wewnętrznych planet, chowając je pod spodem.
+    // Nowy wzór: logarytmiczny wzrost z zoom, cap 10 px, glow 2× zamiast 3×.
+    const starR = Math.max(3, Math.min(10, 3 + 2 * Math.log2(Math.max(1, this._mapZoom))));
     ctx.beginPath();
     ctx.arc(mapCx, mapCy, starR, 0, Math.PI * 2);
     ctx.fillStyle = THEME.yellow;
     ctx.fill();
-    // Glow
-    const grad = ctx.createRadialGradient(mapCx, mapCy, starR, mapCx, mapCy, starR * 3);
-    grad.addColorStop(0, 'rgba(255,200,60,0.25)');
+    // Glow — 2× zamiast 3×, mniejsza alpha żeby nie zasłaniać bliskich orbit
+    const grad = ctx.createRadialGradient(mapCx, mapCy, starR, mapCx, mapCy, starR * 2);
+    grad.addColorStop(0, 'rgba(255,200,60,0.15)');
     grad.addColorStop(1, 'rgba(255,200,60,0)');
     ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(mapCx, mapCy, starR * 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(mapCx, mapCy, starR * 2, 0, Math.PI * 2); ctx.fill();
 
     if (stars[0]) {
       this._hitZones.push({
@@ -1573,10 +1633,16 @@ export class FleetManagerOverlay {
 
     // ── Wszystkie ciała — rysuj i rejestruj hit zones ───────
 
+    // Helper — skala rozmiaru ciał z zoom. `base` = baseline przy zoom=1.
+    // `absMaxPx` = bezwzględny pułap w pixelach (zapobiega kolosom na wysokim zoom).
+    const bodyScale = (base, absMaxPx) => {
+      return Math.min(absMaxPx, Math.max(base, base * Math.sqrt(this._mapZoom)));
+    };
+
     // Planetoidy
     for (const pd of planetoids) {
       const px = toSx(pd.x), py = toSy(pd.y);
-      const r = Math.max(2, 2.5 * Math.min(this._mapZoom, 2));
+      const r = bodyScale(2.5, 12);
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fillStyle = pd.explored ? 'rgba(255,230,100,0.8)' : 'rgba(100,136,170,0.3)';
       ctx.fill();
@@ -1586,7 +1652,8 @@ export class FleetManagerOverlay {
     // Asteroidy
     for (const a of asteroids) {
       const px = toSx(a.x), py = toSy(a.y);
-      ctx.beginPath(); ctx.arc(px, py, 1.5, 0, Math.PI * 2);
+      const r = bodyScale(1.5, 6);
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(140,120,100,0.4)';
       ctx.fill();
       this._hitZones.push({ x: px - 6, y: py - 6, w: 12, h: 12, type: 'map_body', data: { bodyId: a.id } });
@@ -1595,7 +1662,8 @@ export class FleetManagerOverlay {
     // Komety
     for (const c of comets) {
       const px = toSx(c.x), py = toSy(c.y);
-      ctx.beginPath(); ctx.arc(px, py, 2, 0, Math.PI * 2);
+      const r = bodyScale(2, 8);
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(120,200,255,0.5)';
       ctx.fill();
       this._hitZones.push({ x: px - 6, y: py - 6, w: 12, h: 12, type: 'map_body', data: { bodyId: c.id } });
@@ -1604,7 +1672,7 @@ export class FleetManagerOverlay {
     // Księżyce
     for (const m of moons) {
       const px = toSx(m.x), py = toSy(m.y);
-      const r = Math.max(2, 2.5 * Math.min(this._mapZoom, 2));
+      const r = bodyScale(2.5, 15);
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fillStyle = m.explored ? 'rgba(255,230,100,0.8)' : 'rgba(120,150,180,0.4)';
       ctx.fill();
@@ -1616,12 +1684,13 @@ export class FleetManagerOverlay {
       this._hitZones.push({ x: px - 8, y: py - 8, w: 16, h: 16, type: 'map_body', data: { bodyId: m.id } });
     }
 
-    // Planety (na wierzchu)
+    // Planety (na wierzchu) — cap 25px absolute żeby nie zalewały mapy
     for (const p of planets) {
       const px = toSx(p.x), py = toSy(p.y);
       const isHome = p.id === homePid;
       const hasColony = colMgr?.hasColony(p.id);
-      const r = Math.max(3, (isHome ? 5 : hasColony ? 4 : 3) * Math.min(this._mapZoom, 2.5));
+      const base = isHome ? 5 : hasColony ? 4 : 3;
+      const r = bodyScale(base, 25);
 
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
       ctx.fillStyle = isHome ? THEME.accent : hasColony ? THEME.mint : p.explored ? 'rgba(255,230,100,0.8)' : THEME.textSecondary;
@@ -1719,7 +1788,9 @@ export class FleetManagerOverlay {
       if (isEnemy && !isWreck && !(obs?.isVesselDetected?.(v.id) ?? false)) continue;
       const vx = toSx(v.position.x), vy = toSy(v.position.y);
       const isSel = v.id === this._selectedVesselId;
-      const r = isSel ? 4 : 3;
+      // Statki skalują się z zoom; absolutny cap 10px żeby nie konkurowały z planetami
+      const baseR = isSel ? 4 : 3;
+      const r = bodyScale(baseR, 10);
       const color = isSel ? THEME.accent
         : isWreck ? '#808080'
         : isEnemy ? '#ff4466'

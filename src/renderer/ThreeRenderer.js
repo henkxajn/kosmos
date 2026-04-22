@@ -2567,6 +2567,79 @@ export class ThreeRenderer {
     };
   }
 
+  // Flag: pokaż labele wszystkich widocznych obiektów (toggle CTRL).
+  // UIManager w draw() czyta ten flag przez getAllVisibleLabels() i rysuje.
+  setShowAllLabels(on) { this._showAllLabels = !!on; }
+
+  // Zbierz pozycje screen-space dla wszystkich ciał i statków.
+  // Wołane przez UIManager gdy _showAllLabels === true.
+  // Zwraca: [{ id, name, x, y, kind, color }]. Kind: planet|moon|planetoid|star|vessel|wreck|enemy
+  getAllVisibleLabels() {
+    if (!this._showAllLabels) return [];
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    const tmp = this._tmpLabelVec ?? (this._tmpLabelVec = new THREE.Vector3());
+    const out = [];
+
+    const project = (mesh) => {
+      if (!mesh) return null;
+      mesh.getWorldPosition(tmp);
+      tmp.project(this.camera);
+      if (tmp.z < -1 || tmp.z > 1) return null;  // poza frustum
+      return { x: (tmp.x * 0.5 + 0.5) * W, y: (-tmp.y * 0.5 + 0.5) * H };
+    };
+
+    // Gwiazda
+    if (this._starGroup) {
+      const s = project(this._starGroup);
+      if (s) {
+        const star = EntityManager.getByType('star')?.[0];
+        out.push({ id: star?.id ?? 'star', name: star?.name ?? 'Gwiazda', x: s.x, y: s.y, kind: 'star', color: '#ffd866' });
+      }
+    }
+    // Planety
+    for (const [id, entry] of this._planets) {
+      const p = project(entry.group);
+      if (!p) continue;
+      const ent = this._entityByUUID.get(entry.mesh.uuid);
+      out.push({ id, name: ent?.name ?? id, x: p.x, y: p.y, kind: 'planet', color: '#9effc4' });
+    }
+    // Księżyce
+    for (const [id, entry] of this._moons) {
+      const p = project(entry.mesh);
+      if (!p) continue;
+      const ent = this._entityByUUID.get(entry.mesh.uuid);
+      out.push({ id, name: ent?.name ?? id, x: p.x, y: p.y, kind: 'moon', color: '#b0b0c0' });
+    }
+    // Planetoidy
+    for (const [id, entry] of this._planetoids) {
+      const p = project(entry.mesh);
+      if (!p) continue;
+      const ent = this._entityByUUID.get(entry.mesh.uuid);
+      out.push({ id, name: ent?.name ?? id, x: p.x, y: p.y, kind: 'planetoid', color: '#a08060' });
+    }
+    // Statki (żywe + wraki, różne kolory)
+    const vMgr = window.KOSMOS?.vesselManager;
+    for (const [id, entry] of this._vessels) {
+      const p = project(entry.sprite);
+      if (!p || !entry.sprite.visible) continue;
+      const vessel = vMgr?.getVessel(id);
+      const isEnemy = !!entry.enemyTint || !!vessel?.isEnemy;
+      const isWreck = !!entry.isWreck;
+      const color = isWreck ? '#888'
+                  : isEnemy ? '#ff4466'
+                  :           '#44cc66';
+      out.push({
+        id,
+        name: vessel?.name ?? id,
+        x: p.x, y: p.y,
+        kind: isWreck ? 'wreck' : (isEnemy ? 'enemy' : 'vessel'),
+        color,
+      });
+    }
+    return out;
+  }
+
   getEntityAtScreen(screenX, screenY) {
     this._mouse.x =  (screenX / window.innerWidth)  * 2 - 1;
     this._mouse.y = -(screenY / window.innerHeight) * 2 + 1;

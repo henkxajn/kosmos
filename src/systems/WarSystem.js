@@ -358,28 +358,81 @@ export class WarSystem {
     const vMgr = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
     // Bierz TYLKO statki gracza w tym systemie — wrogie vessele nie mogą wzmacniać
-    // obrony gracza. Bez filtra wrogi statek "walczył sam ze sobą".
+    // obrony gracza. Wraki też wykluczone (nie walczą — są zniszczone).
     const vessels = vMgr?._vessels
       ? Array.from(vMgr._vessels.values()).filter(v =>
-          v.systemId === systemId && !isEnemyVessel(v)
+          v.systemId === systemId && !isEnemyVessel(v) && !v.isWreck
         )
       : [];
 
-    // Zbierz statki + dodaj obronę z kolonii (fleet bazowy per kolonia)
+    // Zbierz statki gracza — baza jednostki bitwy
     let unit = playerVesselsToBattleUnit(vessels, HULLS, SHIP_MODULES, 'Gracz');
 
-    // Jeśli brak statków — obrona minimalna z kolonii (100 HP)
-    if (!vessels.length) {
-      const hasColony = colMgr?.getAllColonies().some(c => this._getBodySystemId(c.planetId) === systemId);
+    // Dodaj obronę z budynków defensywnych w koloniach gracza w tym systemie.
+    // defense_tower (level): +40 HP, +5 dmg, +1 armor per level.
+    // defense_grid (level):  +100 HP, +10 dmg, +2 armor per level.
+    // Bez żadnego z tych budynków gracz polega tylko na flocie; brak floty +
+    // brak obrony → symboliczna obrona pasywna planety (30 HP / 2 dmg).
+    const colonies = (colMgr?.getAllColonies() ?? []).filter(c =>
+      this._getBodySystemId(c.planetId) === systemId &&
+      (!c.ownerEmpireId || c.ownerEmpireId === 'player')
+    );
+
+    let defHP = 0, defDmg = 0, defArmor = 0;
+    for (const col of colonies) {
+      const actives = col.buildingSystem?._active;
+      if (!actives) continue;
+      actives.forEach(entry => {
+        const id = entry.building?.id;
+        const lv = entry.level ?? 1;
+        if (id === 'defense_tower') {
+          defHP    += 40 * lv;
+          defDmg   += 5  * lv;
+          defArmor += 1  * lv;
+        } else if (id === 'defense_grid') {
+          defHP    += 100 * lv;
+          defDmg   += 10  * lv;
+          defArmor += 2   * lv;
+        }
+      });
+    }
+
+    const hasDefense = defHP > 0;
+    const hasFleet   = vessels.length > 0;
+
+    if (hasFleet && hasDefense) {
+      // Flota + obrona — zsumuj stats
+      unit = {
+        ...unit,
+        label: 'Flota + Obrona orbitalna',
+        hp:    (unit.hp ?? 0) + defHP,
+        armor: (unit.armor ?? 0) + defArmor,
+        weapons: [...(unit.weapons ?? []), { damage: defDmg, tracking: 0.6 }],
+      };
+    } else if (!hasFleet && hasDefense) {
+      // Tylko obrona orbitalna z budynków
+      unit = {
+        label: 'Obrona orbitalna',
+        hp: defHP, shieldHP: 0, armor: defArmor, evasion: 0.05,
+        techMult: 1.0, morale: 1.0,
+        weapons: [{ damage: defDmg, tracking: 0.6 }],
+      };
+    } else if (!hasFleet && !hasDefense) {
+      // Brak floty + brak obrony — symboliczna obrona pasywna (planeta nie jest
+      // bezbronna: punkty obserwacyjne, improwizowane działka, ale bardzo słaba).
+      // Każdy wrogi hull_small+ powinien wygrać.
+      const hasColony = colonies.length > 0;
       if (hasColony) {
         unit = {
-          label: 'Obrona kolonii',
-          hp: 150, shieldHP: 0, armor: 2, evasion: 0.05,
-          techMult: 1.0, morale: 1.0,
-          weapons: [{ damage: 8, tracking: 0.6 }],
+          label: 'Symboliczna obrona',
+          hp: 30, shieldHP: 0, armor: 0, evasion: 0.02,
+          techMult: 1.0, morale: 0.8,
+          weapons: [{ damage: 2, tracking: 0.5 }],
         };
       }
     }
+    // hasFleet && !hasDefense → unit = flota gracza (bez zmian)
+
     return unit;
   }
 

@@ -1074,6 +1074,10 @@ export class UIManager {
     // ── Tooltip CivPanel ─────────────────────────────────────
     if (this._tooltip) this._drawTooltip();
 
+    // ── CTRL-hold: labele wszystkich obiektów w scenie 3D ──
+    const tr = window.KOSMOS?.threeRenderer;
+    if (tr?._showAllLabels) this._drawAllLabels(ctx, tr);
+
     // ── Dialog potwierdzenia ─────────────────────────────────
     if (this._confirmDialog?.visible) this._drawConfirmDialog();
 
@@ -1221,6 +1225,48 @@ export class UIManager {
   // ══════════════════════════════════════════════════════════════
   // Dialog potwierdzenia
   // ══════════════════════════════════════════════════════════════
+  // CTRL-hold: subtelne etykiety obok każdego obiektu w scenie 3D.
+  // Minimalistyczne — delikatny tekst bez ramek, lekka poświata zamiast stroke,
+  // rozjaśnia tylko gdy user trzyma CTRL (nie zakłóca normalnego widoku).
+  _drawAllLabels(ctx, tr) {
+    const labels = tr.getAllVisibleLabels?.();
+    if (!labels?.length) return;
+    ctx.save();
+    ctx.font = `10px ${THEME.fontFamily}`;
+    ctx.textBaseline = 'middle';
+    for (const lbl of labels) {
+      const name = lbl.name ?? '?';
+      const sx = lbl.x / UI_SCALE;
+      const sy = lbl.y / UI_SCALE;
+      if (sx < 0 || sx > W || sy < 0 || sy > H) continue;
+
+      // Subtelny shadow — poprawia czytelność bez ciężkich ramek
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillText(name, sx + 9, sy + 1);
+      // Główny text — pastel (rozjaśniony) żeby nie krzyczał
+      ctx.fillStyle = lbl.color ? this._softenColor(lbl.color) : 'rgba(160,220,200,0.85)';
+      ctx.fillText(name, sx + 8, sy);
+      // Bardzo mała kropka (jedynie lokalizator)
+      ctx.beginPath();
+      ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = lbl.color ? this._softenColor(lbl.color, 0.7) : 'rgba(160,220,200,0.7)';
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Zmiękcz kolor dla delikatnego tekstu — alpha 0.85 + lekko rozjaśniony.
+  _softenColor(hex, alpha = 0.85) {
+    if (!hex || hex[0] !== '#') return `rgba(180,220,200,${alpha})`;
+    const h = hex.slice(1);
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    // Wyblakły: miks z 180,180,180 w stosunku 60/40 — zachowuje ton ale ciszej
+    const mix = (c) => Math.round(c * 0.6 + 180 * 0.4);
+    return `rgba(${mix(r)},${mix(g)},${mix(b)},${alpha})`;
+  }
+
   _drawConfirmDialog() {
     const ctx = this.ctx;
     const DW  = 300, DH  = 90;

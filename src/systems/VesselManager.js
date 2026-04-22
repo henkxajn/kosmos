@@ -826,6 +826,14 @@ export class VesselManager {
         damaged:      v.damaged ?? false,
         _repairProgress: v._repairProgress ?? 0,
         awayTeamUnitId: v.awayTeamUnitId ?? null,
+        // Ownership & wreck flags — kluczowe dla filtrów UI (isEnemyVessel)
+        // i logiki bitwy. Bez persystowania wrogi statek po load staje się
+        // "statkiem gracza" w Outlinerze/Fleet/WarSystem.
+        isEnemy:       v.isEnemy ?? false,
+        owner:         v.owner ?? null,
+        ownerEmpireId: v.ownerEmpireId ?? null,
+        isWreck:       v.isWreck ?? false,
+        wreckedAt:     v.wreckedAt ?? null,
         // Faza desantu: groundUnits (załadowane jednostki), troopBayUsed (runtime used),
         // orbitalStrike (ammoCurrent + cooldown). troopCapacity/canDropTroops są
         // odtwarzane z modułów przy restore — nie trzeba ich zapisywać.
@@ -895,6 +903,12 @@ export class VesselManager {
         troopBayUsed:   vd.troopBayUsed ?? 0,
         canDropTroops:  false,   // obliczane poniżej
         orbitalStrike:  vd.orbitalStrike ? { ...vd.orbitalStrike } : null,
+        // Ownership & wreck flags — muszą przeżyć save/load (patrz serialize)
+        isEnemy:        vd.isEnemy ?? false,
+        owner:          vd.owner ?? null,
+        ownerEmpireId:  vd.ownerEmpireId ?? null,
+        isWreck:        vd.isWreck ?? false,
+        wreckedAt:      vd.wreckedAt ?? null,
       };
       // Przelicz z modułów: colonistCapacity + troop_bay/drop_pods/orbital_strike.
       // Konieczne bo save przechowuje moduły (vessel.modules) ale pola pochodne

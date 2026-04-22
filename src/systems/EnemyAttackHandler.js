@@ -14,13 +14,22 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
-import { resolveBattle, vesselToBattleUnit } from './BattleSystem.js';
+import { resolveBattle, playerVesselsToBattleUnit } from './BattleSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 
+// Okno czasu (ms realnych) na dołączenie kolejnych wrogów do tej samej bitwy.
+// Jeśli wrogi vessel #A przyleci, a w ciągu BATTLE_BATCH_WINDOW_MS dotrze #B
+// do tej samej planety, walczą razem (zagregowani). Bez tego każdy vessel
+// odpalał osobną sekwencyjną bitwę.
+const BATTLE_BATCH_WINDOW_MS = 500;
+
 export class EnemyAttackHandler {
   constructor() {
+    // Map<planetId, { arrivedVesselIds: Set, timerId, firstVesselYear }>
+    this._pendingBattles = new Map();
+
     EventBus.on('vessel:arrived', ({ vessel, mission }) => {
       this._onVesselArrived(vessel, mission);
     });
@@ -34,18 +43,70 @@ export class EnemyAttackHandler {
     const K = window.KOSMOS;
     if (!K?.civMode) return;
 
+    const targetPlanetId = mission.targetId;
+    if (!targetPlanetId) return;
+
+    // Zaplanuj zbiorową bitwę na tej planecie. Kolejni wrogowie dołączają
+    // do tej samej, bez resetowania timer'a.
+    const pending = this._pendingBattles.get(targetPlanetId);
+    if (pending) {
+      pending.arrivedVesselIds.add(vessel.id);
+      return;
+    }
+
+    const firstYear = K.timeSystem?.gameTime ?? 0;
+    const rec = {
+      arrivedVesselIds: new Set([vessel.id]),
+      firstVesselYear:  firstYear,
+      timerId: null,
+    };
+    this._pendingBattles.set(targetPlanetId, rec);
+
+    rec.timerId = setTimeout(() => {
+      this._resolveBatchedBattle(targetPlanetId);
+    }, BATTLE_BATCH_WINDOW_MS);
+  }
+
+  // Zbiera wszystkich wrogów orbitujących daną planetę (nowo-przybyłych +
+  // zwycięzców poprzednich bitew, którzy tam stoją), agreguje ich stats
+  // przez playerVesselsToBattleUnit (helper do sumowania vesseli wielu).
+  // Jedna bitwa, wspólny wynik dla wszystkich.
+  _resolveBatchedBattle(planetId) {
+    const K = window.KOSMOS;
+    const pending = this._pendingBattles.get(planetId);
+    this._pendingBattles.delete(planetId);
+    if (!K?.civMode || !pending) return;
+
     const warSys = K.warSystem;
     const evtLog = K.eventLogSystem;
     const vMgr   = K.vesselManager;
     const reg    = K.empireRegistry;
     const dipl   = K.diplomacySystem;
 
-    const empireId  = vessel.ownerEmpireId ?? vessel.owner;
-    const empire    = empireId ? reg?.get?.(empireId) : null;
-    const systemId  = vessel.systemId ?? K.activeSystemId ?? 'sys_home';
-    const year      = K.timeSystem?.gameTime ?? 0;
+    if (!vMgr?._vessels) return;
 
-    // 1) Upewnij się że jest wojna — debug spawn może nie przechodzić przez declareWar
+    // Zbierz obecnych wrogów orbitujących tę planetę (w tym nowo-przybyłych
+    // których VesselManager już zrobił state='orbiting'). Nie tylko arrivedVesselIds —
+    // również wcześniejsi zwycięzcy którzy już stoją na orbicie.
+    const allEnemies = [];
+    for (const v of vMgr._vessels.values()) {
+      if (!isEnemyVessel(v) || v.isWreck) continue;
+      if (v.position?.state !== 'orbiting') continue;
+      if (v.position.dockedAt !== planetId) continue;
+      allEnemies.push(v);
+    }
+
+    if (allEnemies.length === 0) return;
+
+    // Podstawowe dane — imperium pierwszego wroga (z arrivedVesselIds).
+    const firstArrivedId = Array.from(pending.arrivedVesselIds)[0];
+    const firstVessel    = vMgr.getVessel(firstArrivedId) ?? allEnemies[0];
+    const empireId       = firstVessel.ownerEmpireId ?? firstVessel.owner;
+    const empire         = empireId ? reg?.get?.(empireId) : null;
+    const systemId       = firstVessel.systemId ?? K.activeSystemId ?? 'sys_home';
+    const year           = K.timeSystem?.gameTime ?? pending.firstVesselYear;
+
+    // Wojna — zadeklaruj jeśli brak
     let war = warSys?.getWarWith?.(empireId);
     if (!war?.active) {
       if (dipl?.declareWar) {
@@ -57,36 +118,42 @@ export class EnemyAttackHandler {
       }
     }
 
-    // 2) Zbuduj jednostki bitwy
-    const enemyUnit = vesselToBattleUnit(
-      vessel, HULLS, SHIP_MODULES,
-      `${empire?.name ?? 'Wróg'} — ${vessel.name ?? vessel.shipId}`
+    // Zagreguj stats wrogów — tę funkcję reużywamy (nazwa zawodząca, ale
+    // faktycznie agreguje DOWOLNE vessele z modułami; oryginalnie player).
+    const enemyUnit = playerVesselsToBattleUnit(
+      allEnemies, HULLS, SHIP_MODULES,
+      allEnemies.length > 1
+        ? `${empire?.name ?? 'Flota wroga'} (${allEnemies.length} statków)`
+        : `${empire?.name ?? 'Wróg'} — ${firstVessel.name ?? firstVessel.shipId}`
     );
+
     const playerUnit = warSys?._buildPlayerBattleUnit?.(systemId) ?? {
       label: 'Gracz',
-      hp: 150, shieldHP: 0, armor: 2, evasion: 0.05,
+      hp: 30, shieldHP: 0, armor: 0, evasion: 0.02,
       techMult: 1.0, morale: 1.0,
-      weapons: [{ damage: 8, tracking: 0.6 }],
+      weapons: [{ damage: 2, tracking: 0.5 }],
     };
 
-    // 3) Deterministyczny seed — vessel id + rok
-    const seed = (year * 7919 + this._hashStr(vessel.id)) & 0x7FFFFFFF;
+    // Seed deterministyczny — rok + suma hash wrogów
+    let seedSum = 0;
+    for (const v of allEnemies) seedSum += this._hashStr(v.id);
+    const seed = (year * 7919 + seedSum) & 0x7FFFFFFF;
     const result = resolveBattle(enemyUnit, playerUnit, {
       casusBelli: war?.casusBelli ?? 'border_incident',
       location:   systemId,
       seed,
     });
 
-    // 4) Przepisz wynik zgodnie z formatem BattleSystem (A=atakujący, B=obrońca)
     const battleRec = {
       ...result,
       location: systemId,
       participantA: {
-        type: 'vessel',
+        type: 'vessel_group',
         empireId,
-        vesselId: vessel.id,
-        hp:       enemyUnit.hp,
-        label:    enemyUnit.label,
+        vesselIds: allEnemies.map(v => v.id),
+        count:     allEnemies.length,
+        hp:        enemyUnit.hp,
+        label:     enemyUnit.label,
       },
       participantB: {
         type: 'player',
@@ -94,26 +161,20 @@ export class EnemyAttackHandler {
       },
     };
 
-    // 5) Zapisz w gameState.battles (bez przejścia przez WarSystem.recordBattle —
-    // tamten ma swoje exhaustion/updateOrbitalDominance, które robimy ręcznie)
     if (war) {
-      const battleId = `battle_${year.toFixed(2)}_${empireId}_attack_${vessel.id}`.replace(/\./g, '_');
+      const battleId = `battle_${year.toFixed(2)}_${empireId}_batch_${firstArrivedId}`.replace(/\./g, '_');
       battleRec.id = battleId;
       battleRec.warId = war.id;
       battleRec.year = year;
       gameState.set(`battles.${battleId}`, battleRec, 'enemy_attack_arrived');
 
-      // Orbital dominance — zwycięzca przejmuje orbitę
       if (result.winner === 'A') {
         gameState.set(`orbitalDominance.${systemId}`, { controllerId: empireId, year }, 'enemy_attack_win');
       } else if (result.winner === 'B') {
         gameState.set(`orbitalDominance.${systemId}`, { controllerId: 'player', year }, 'enemy_attack_loss');
       }
-
       EventBus.emit('battle:resolved', { warId: war.id, battleId, result: battleRec });
     } else {
-      // Bez wojny (cheat bez declareWar) — i tak emit, EventLog handler w GameScene
-      // wymaga war ale robi guard; fallback to własny log
       evtLog?.push({
         text: `⚔ Bitwa w ${systemId}: ${enemyUnit.label} vs Gracz. Zwycięzca: ${result.winner === 'A' ? 'wróg' : result.winner === 'B' ? 'gracz' : 'remis'}.`,
         channel: 'combat',
@@ -122,31 +183,36 @@ export class EnemyAttackHandler {
       });
     }
 
-    // 6) Skutki dla vessela — wygrana = orbituje, przegrana = WRAK (nie dispose)
+    // Skutki — dotyczą wszystkich wrogów biorących udział
     if (result.winner === 'A') {
-      // Wygrał wróg — zostaje na orbicie planety docelowej, misja się kończy.
-      // Wrogie vessele gracza w systemie stają się wrakami (flota rozgromiona).
-      vessel.position.state = 'orbiting';
-      vessel.position.dockedAt = mission.targetId;
-      vessel.status = 'idle';
-      vessel.mission = null;
-
+      // Wrogowie wygrali — zostają na orbicie, flota gracza w systemie → wraki
+      for (const v of allEnemies) {
+        v.position.state = 'orbiting';
+        v.position.dockedAt = planetId;
+        v.status = 'idle';
+        v.mission = null;
+      }
       this._wreckPlayerVesselsInSystem(systemId, year);
     } else if (result.winner === 'B') {
-      // Przegrał wróg — jego statek staje się wrakiem dryfującym nad planetą.
-      this._turnIntoWreck(vessel, mission?.targetId ?? null, year);
+      // Gracz wygrał — wszyscy wrogowie stają się wrakami
+      for (const v of allEnemies) {
+        this._turnIntoWreck(v, planetId, year);
+      }
+      const count = allEnemies.length;
       evtLog?.push({
-        text: `💥 Wrogi statek "${vessel.name ?? '?'}" zestrzelony nad ${systemId}.`,
+        text: count > 1
+          ? `💥 ${count} wrogich statków zestrzelonych nad ${systemId}.`
+          : `💥 Wrogi statek "${firstVessel.name ?? '?'}" zestrzelony nad ${systemId}.`,
         channel: 'combat',
         severity: 'info',
         entityRef: systemId,
       });
     } else {
-      // Draw — wrakowanie obu stron (jeśli są vessele gracza w systemie)
-      this._turnIntoWreck(vessel, mission?.targetId ?? null, year);
+      // Draw — oboje tracą
+      for (const v of allEnemies) this._turnIntoWreck(v, planetId, year);
       this._wreckPlayerVesselsInSystem(systemId, year);
       evtLog?.push({
-        text: `💥 Bitwa zakończona remisem nad ${systemId} — obie floty zniszczone.`,
+        text: `💥 Bitwa nad ${systemId} — remis. Obie floty zniszczone (${allEnemies.length} wroga).`,
         channel: 'combat',
         severity: 'warn',
         entityRef: systemId,

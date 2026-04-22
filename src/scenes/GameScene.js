@@ -2398,6 +2398,15 @@ export class GameScene {
     document.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
+      // CTRL-hold → pokaż labele wszystkich obiektów 3D (planety, statki, wraki).
+      // Znika po puszczeniu (keyup).
+      if ((e.key === 'Control' || e.ctrlKey) && this.threeRenderer?.setShowAllLabels) {
+        if (!this.threeRenderer._showAllLabels) {
+          this.threeRenderer.setShowAllLabels(true);
+          this.uiManager?.markDirty?.();
+        }
+      }
+
       // Deleguj klawisze do aktywnego overlay (np. Escape w buildMode, strzałki)
       if (this.uiManager.overlayManager.isAnyOpen()) {
         const ov = this.uiManager.overlayManager.overlays[this.uiManager.overlayManager.active];
@@ -2463,6 +2472,23 @@ export class GameScene {
             this._toggleRecorder();
           }
           break;
+      }
+    });
+
+    // CTRL released → wyłącz labele wszystkich obiektów
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'Control' || !e.ctrlKey) {
+        if (this.threeRenderer?._showAllLabels) {
+          this.threeRenderer.setShowAllLabels(false);
+          this.uiManager?.markDirty?.();
+        }
+      }
+    });
+    // Edge case: utrata focusu okna podczas trzymania CTRL
+    window.addEventListener('blur', () => {
+      if (this.threeRenderer?._showAllLabels) {
+        this.threeRenderer.setShowAllLabels(false);
+        this.uiManager?.markDirty?.();
       }
     });
   }
