@@ -57,7 +57,7 @@ import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
-import { spawnTestEnemy, spawnEnemyFleet, spawnEnemyCiv } from '../debug/SpawnTestEnemy.js';
+import { spawnTestEnemy, spawnEnemyFleet, spawnEnemyCiv, spawnEnemyAttack } from '../debug/SpawnTestEnemy.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
@@ -68,6 +68,9 @@ import { DiplomacySystem }   from '../systems/DiplomacySystem.js';
 import { AlienCivSystem }    from '../systems/AlienCivSystem.js';
 import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
+import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
+import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
+import { HULLS } from '../data/HullsData.js';
 import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
 import { EconAI }            from '../systems/ai/EconAI.js';
 import { THEME }             from '../config/ThemeConfig.js';
@@ -208,6 +211,8 @@ export class GameScene {
     this.alienCivSystem       = new AlienCivSystem();
     this.warSystem            = new WarSystem();
     this.invasionSystem       = new InvasionSystem();
+    this.orbitalSpaceSystem   = new OrbitalSpaceSystem();
+    this.enemyAttackHandler   = new EnemyAttackHandler();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -248,6 +253,7 @@ export class GameScene {
     window.KOSMOS.alienCivSystem   = this.alienCivSystem;
     window.KOSMOS.warSystem        = this.warSystem;
     window.KOSMOS.invasionSystem   = this.invasionSystem;
+    window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
     // Faza 7: AI (statyczne klasy — ekspozycja dla debug z konsoli)
     window.KOSMOS.militaryAI       = MilitaryAI;
     window.KOSMOS.econAI           = EconAI;
@@ -267,6 +273,7 @@ export class GameScene {
       spawnTestEnemy,
       spawnEnemyFleet,
       spawnEnemyCiv,
+      spawnEnemyAttack,
       giveResearch: (amount = 10000) => {
         const rs = window.KOSMOS?.resourceSystem;
         if (!rs) { console.warn('[debug] Brak aktywnego ResourceSystem'); return; }
@@ -455,6 +462,10 @@ export class GameScene {
       if (c4x.observatorySystem) {
         this.observatorySystem.restore(c4x.observatorySystem);
       }
+      // Przywróć OrbitalSpaceSystem (sferyczne orbity wszystkich obiektów)
+      if (c4x.orbitalSpace) {
+        this.orbitalSpaceSystem.restore(c4x.orbitalSpace);
+      }
       // Przywróć EventLogSystem (zunifikowany dziennik — Opcja B)
       if (c4x.eventLog) {
         this.eventLogSystem.restore(c4x.eventLog);
@@ -621,6 +632,43 @@ export class GameScene {
       this._tryShowNextBattle();
     });
 
+    // Wpis do EventLoga dla KAŻDEJ bitwy (także obcy-vs-obcy w przyszłości).
+    // Niezależny od cinematic/queue powyżej — trwały ślad dla gracza.
+    EventBus.on('battle:resolved', ({ warId, result }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog || !result) return;
+      const war = window.KOSMOS?.warSystem?.getWar(warId);
+      if (!war) return;
+
+      const reg = window.KOSMOS?.empireRegistry;
+      const sysId = result.location;
+      const homeSys = window.KOSMOS?.homePlanet?.systemId ?? 'sys_home';
+      const sysName = sysId === homeSys
+        ? (window.KOSMOS?.homePlanet?.name ?? 'dom')
+        : (sysId ?? '?');
+      const aName = war.aggressor === 'player' ? 'Gracz' : (reg?.get(war.aggressor)?.name ?? war.aggressor);
+      const dName = war.defender  === 'player' ? 'Gracz' : (reg?.get(war.defender)?.name  ?? war.defender);
+
+      const winnerLabel = result.winner === 'A' ? aName
+        : result.winner === 'B' ? dName
+        : '—';
+
+      const playerInvolved = (war.aggressor === 'player' || war.defender === 'player');
+      const playerSide = result.participantB?.type === 'player' ? 'B' : 'A';
+      const playerWon = playerInvolved && (result.winner === playerSide);
+      const severity = !playerInvolved ? 'info'
+        : result.winner === 'draw' ? 'warn'
+        : playerWon ? 'info'
+        : 'alert';
+
+      evtLog.push({
+        text:      `⚔ Bitwa w ${sysName}: ${aName} vs ${dName}. Zwycięzca: ${winnerLabel}. Straty: ${Math.round(result.lossesA ?? 0)}/${Math.round(result.lossesB ?? 0)}, ${result.turns ?? 0} tur.`,
+        channel:   'combat',
+        severity,
+        entityRef: sysId ?? null,
+      });
+    });
+
     // Powiadomienia o zdarzeniach losowych — popup DATASHEET
     EventBus.on('randomEvent:occurred', ({ event, colonyName }) => {
       const severity = event.severity === 'danger' ? 'danger' : 'info';
@@ -681,6 +729,87 @@ export class GameScene {
       const name = t(`event.${event.id}.name`) !== `event.${event.id}.name`
         ? t(`event.${event.id}.name`) : (event.namePL ?? event.id);
       this.uiManager?.addInfo(`🛡 ${name} — ${t('eventChoice.blocked')} [${colonyName}]`);
+    });
+
+    // Pierwsze wykrycie wrogiej jednostki — popup DATASHEET z pauzą
+    EventBus.on('vessel:firstSighting', ({ vessel, empireId, empireName }) => {
+      if (!vessel) return;
+      const isPL = getLocale() !== 'en';
+      const mission = vessel.mission;
+      const currentYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const home = window.KOSMOS?.homePlanet;
+
+      // Typ kadłuba czytelnie (namePL/nameEN z HullsData, fallback shipId)
+      const hullId = vessel.shipId ?? vessel.hullId ?? '?';
+      const hullDef = HULLS[hullId] ?? null;
+      const hullName = hullDef?.namePL ?? hullDef?.nameEN ?? hullId;
+
+      // Dystans od homePlanet
+      let distAU = null;
+      if (home) {
+        const dx = (home.x ?? 0) - (vessel.position?.x ?? 0);
+        const dy = (home.y ?? 0) - (vessel.position?.y ?? 0);
+        distAU = Math.sqrt(dx * dx + dy * dy) / GAME_CONFIG.AU_TO_PX;
+      }
+
+      // ETA — jeśli statek ma misję attack, wylicz lata do arrivalYear
+      const etaYears = (mission?.arrivalYear != null)
+        ? Math.max(0, mission.arrivalYear - currentYear)
+        : null;
+
+      // Cel misji — nazwa planety docelowej
+      let targetName = null;
+      if (mission?.targetId) {
+        const target = EntityManager.get(mission.targetId);
+        targetName = target?.name ?? mission.targetName ?? mission.targetId;
+      }
+
+      let stats = '';
+      stats += formatStatLine(isPL ? 'Jednostka'  : 'Unit',     vessel.name ?? '?');
+      stats += formatStatLine(isPL ? 'Imperium'   : 'Empire',   empireName ?? '?');
+      stats += formatStatLine(isPL ? 'Kadłub'     : 'Hull',     hullName);
+      if (distAU != null) {
+        stats += formatStatLine(isPL ? 'Odległość' : 'Distance', `${distAU.toFixed(2)} AU`);
+      }
+      if (mission?.type === 'attack') {
+        stats += formatStatLine(isPL ? 'Misja' : 'Mission', isPL ? 'ATAK' : 'ATTACK', 'at-stat-neg');
+        if (targetName) {
+          stats += formatStatLine(isPL ? 'Cel'   : 'Target', targetName);
+        }
+        if (etaYears != null) {
+          stats += formatStatLine(
+            isPL ? 'ETA' : 'ETA',
+            `${etaYears.toFixed(2)} ${isPL ? 'lat' : 'yr'}`,
+            'at-stat-neg'
+          );
+        }
+      } else {
+        stats += formatStatLine(isPL ? 'Stan' : 'State', vessel.position?.state ?? '?');
+      }
+      stats += formatStatLineWithCursor(
+        isPL ? 'ZAGROŻENIE' : 'THREAT',
+        isPL ? 'AKTYWNE'    : 'ACTIVE',
+        'at-stat-neg'
+      );
+
+      EventBus.emit('time:pause');
+      const headline = isPL ? '⚔ WYKRYTO WROGĄ JEDNOSTKĘ' : '⚔ ENEMY UNIT DETECTED';
+      const desc = isPL
+        ? `Systemy obserwatorium wykryły obcy statek w naszym układzie. Analizuj dane, rozważ odpowiedź.`
+        : `Observatory detected an alien vessel in our system. Analyze intel, consider response.`;
+      const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
+        severity:    'danger',
+        svgKey:      'alert',
+        headline,
+        description: desc,
+        contentHTML: stats,
+        gameYear:    currentYear,
+        buttons: [{ label: isPL ? '[ENTER] Rozumiem' : '[ENTER] Understood', primary: true }],
+        onDismiss: () => EventBus.emit('time:resume'),
+      });
+      btnElements[0]?.addEventListener('click', () => dismiss());
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => { if (btnElements[0]) btnElements[0].focus(); });
     });
 
     // Powiadomienia o uderzeniach kosmicznych — popup DATASHEET
@@ -2506,9 +2635,19 @@ export class GameScene {
     });
 
     // Dwuklik na planetę/księżyc → otwórz ColonyOverlay
+    // Dwuklik na vessel/wrak → fokus kamery (bliski zoom, śledzenie)
     window.addEventListener('dblclick', (e) => {
       if (this.planetScene?.isOpen) return;
       if (this.uiManager?.overlayManager?.isAnyOpen()) return;
+
+      // Najpierw vessel — hover state łapie go niezależnie od rozmiaru sprite.
+      // Screen-space picking zwiększamy do 50px (sprite ma często <5px na ekranie).
+      const vesselId = this.threeRenderer._hoverVesselId
+                    ?? this.threeRenderer._getVesselAtScreen?.(e.clientX, e.clientY, 50);
+      if (vesselId) {
+        EventBus.emit('vessel:focus', { vesselId });
+        return;
+      }
 
       let entity = this.threeRenderer.getEntityAtScreen(e.clientX, e.clientY);
       if (!entity || (entity.type !== 'planet' && entity.type !== 'moon')) {

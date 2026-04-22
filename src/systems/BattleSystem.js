@@ -226,7 +226,9 @@ export function playerVesselsToBattleUnit(vessels, hullsData, modulesData, label
   let evasionSum = 0, count = 0;
 
   for (const v of vessels) {
-    const hull = hullsData?.[v.hullId];
+    // Fallback hullId ?? shipId — nowe vessele mają `shipId`, legacy mają `hullId`.
+    // Wrogie vessele z createVessel używają shipId='hull_medium' itd.
+    const hull = hullsData?.[v.hullId] ?? hullsData?.[v.shipId];
     if (!hull) continue;
     hp += hull.baseHP ?? 50;
     armor += hull.baseArmor ?? 0;
@@ -259,4 +261,17 @@ export function playerVesselsToBattleUnit(vessels, hullsData, modulesData, label
     morale:   1.0,
     weapons: weapons.length > 0 ? weapons : [{ damage: 2, tracking: 0.7 }],
   };
+}
+
+/**
+ * Convenience wrapper — pojedynczy vessel → BattleUnit.
+ * Reużywa pełnej logiki `playerVesselsToBattleUnit` dla tablicy o 1 elemencie.
+ */
+export function vesselToBattleUnit(vessel, hullsData, modulesData, label = null) {
+  return playerVesselsToBattleUnit(
+    vessel ? [vessel] : [],
+    hullsData,
+    modulesData,
+    label ?? vessel?.name ?? 'Vessel'
+  );
 }

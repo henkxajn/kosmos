@@ -23,6 +23,7 @@ import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
+import { isEnemyVessel } from '../entities/Vessel.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -397,6 +398,97 @@ export class ThreeRenderer {
     }));
     EventBus.on('vessel:positionUpdate', safe(({ vessels }) => {
       this._syncVesselPositions(vessels);
+    }));
+    // Fog-of-war — ObservatorySystem zmienia widoczność wrogiego statku
+    EventBus.on('vessel:detectionChanged', safe(({ vesselId, detected }) => {
+      const entry = this._vessels.get(vesselId);
+      if (!entry) return;
+      // Wraki są widoczne ZAWSZE (zniszczony statek nie ma mgły wojny)
+      if (entry.isWreck) { entry.sprite.visible = true; return; }
+      entry.sprite.visible = !!detected;
+      if (entry.routeLine) entry.routeLine.visible = !!detected;
+    }));
+    // Wrak — zmiana wizualna (szary, bez linii trasy, orbituje statycznie wokół
+    // planety. Wcześniej było "dryfuj statycznie" ale wrak lądował w środku mesh'a
+    // planety (y=0.02 < promień planety) i znikał wizualnie).
+    EventBus.on('vessel:wrecked', safe(({ vesselId, vessel }) => {
+      const entry = this._vessels.get(vesselId);
+      if (!entry) return;
+      entry.isWreck = true;
+      entry.sprite.visible = true;
+      // Usuń linię trasy — wrak nie leci nigdzie
+      if (entry.routeLine) {
+        this.scene.remove(entry.routeLine);
+        entry.routeLine.geometry?.dispose();
+        entry.routeLine.material?.dispose();
+        entry.routeLine = null;
+      }
+      // Orbit cache dla wraka — wyższa warstwa Y + wolna orbita + losowa faza.
+      // To tworzy "cmentarzysko orbitalne" oddzielone wizualnie od żywych statków
+      // gracza, które krążą na niskiej orbicie z typową prędkością.
+      const dockedAt = vessel?.position?.dockedAt;
+      if (dockedAt) {
+        let bodyR = 0.06;
+        const pEntry = this._planets.get(dockedAt);
+        if (pEntry) {
+          const ent = this._entityByUUID.get(pEntry.mesh.uuid);
+          bodyR = ent ? this._getEntityRadius(ent) : 0.1;
+        } else if (this._moons.has(dockedAt)) {
+          bodyR = 0.03;
+        } else if (this._planetoids.has(dockedAt)) {
+          bodyR = 0.02;
+        }
+        entry._orbiting = {
+          bodyId: dockedAt,
+          orbitR: Math.max(0.5, bodyR * 6.0),
+          isWreck: true,
+          initAngle: Math.random() * Math.PI * 2,
+        };
+      } else {
+        entry._orbiting = null;
+      }
+      // Wizualne — wypalony czarny z ledwo czerwoną poświatą. Wypiera rdzawy
+      // odcień który za bardzo upodabniał wrak do naturalnego koloru cargo3d.glb.
+      const wreckCol = new THREE.Color(0x1a1a1a);
+      if (entry.isModel3D) {
+        entry.sprite.traverse(child => {
+          if (!child.isMesh || !child.material) return;
+          const mat = child.material.clone();
+          if (mat.color)    mat.color.copy(wreckCol);
+          if (mat.emissive) mat.emissive.setHex(0x110000);
+          if (mat.metalness != null) mat.metalness = 0.3;
+          if (mat.roughness != null) mat.roughness = 1.0;
+          if (mat.opacity != null)   mat.opacity   = 1.0;
+          mat.transparent = false;
+          child.material = mat;
+        });
+        // Losowy tilt — wrak przechylony, sygnalizuje uszkodzony kadłub
+        entry.sprite.rotation.z = (Math.random() - 0.5) * 0.6;
+        entry.sprite.rotation.x = (Math.random() - 0.5) * 0.4;
+        entry.enemyTint = true;  // dispose cloned materials on remove
+      } else if (entry.sprite.material) {
+        // Sprite billboard — podmień teksturę na ikonę wraku (ciemnoszara + rdza)
+        const canvas = document.createElement('canvas');
+        canvas.width = 32; canvas.height = 32;
+        const c = canvas.getContext('2d');
+        c.fillStyle = '#554438'; c.strokeStyle = '#221100'; c.lineWidth = 2;
+        // Rysuj szczątki — złamany kadłub, odłamki
+        c.fillRect(6, 14, 20, 5);
+        c.fillRect(12, 6, 5, 20);
+        c.strokeRect(6, 14, 20, 5);
+        c.strokeRect(12, 6, 5, 20);
+        c.fillStyle = '#663322';
+        c.fillRect(4, 4, 3, 3);   // odłamek lewy góra
+        c.fillRect(26, 26, 3, 3); // odłamek prawy dół
+        const tex = new THREE.CanvasTexture(canvas);
+        entry.sprite.material.map?.dispose?.();
+        entry.sprite.material.map = tex;
+        entry.sprite.material.opacity = 1.0;
+        entry.sprite.material.transparent = true;  // sprite musi mieć transparent dla alfy PNG
+        entry.sprite.material.needsUpdate = true;
+        if (entry.tex) entry.tex.dispose();
+        entry.tex = tex;
+      }
     }));
 
     // ── Handel cywilny: linie + świetliki ───────────────────
@@ -2440,6 +2532,15 @@ export class ThreeRenderer {
   // ── Kliknięcie (raycasting) ───────────────────────────────────
   // screenX/Y w CSS-pikselach (e.clientX) — normalizujemy przez window.innerWidth/H
   handleClick(screenX, screenY) {
+    // Najpierw vessel/wrak — jeśli hover ma ustawiony, klik jest zamiarowy.
+    // Bez tego klik w pobliżu statku (ale obok mesh'a planet) trafiałby do
+    // `body:deselected` → kamera lata na gwiazdę.
+    const vid = this._hoverVesselId ?? this._getVesselAtScreen?.(screenX, screenY, 40);
+    if (vid) {
+      EventBus.emit('vessel:focus', { vesselId: vid });
+      return true;
+    }
+
     this._mouse.x =  (screenX / window.innerWidth)  * 2 - 1;
     this._mouse.y = -(screenY / window.innerHeight) * 2 + 1;
     this._ray.setFromCamera(this._mouse, this.camera);
@@ -2849,7 +2950,8 @@ export class ThreeRenderer {
    * Dodaj model 3D statku (GLB) na mapie.
    */
   _addVesselModel3D(vessel, modelPath) {
-    const color = 0x44cc66;  // kolor linii trasy — cargo green
+    const isEnemy = isEnemyVessel(vessel);
+    const color = isEnemy ? 0xff4466 : 0x44cc66;  // crimson dla wroga, cargo-green dla gracza
 
     // Pozycja startowa
     const px = S(vessel.position?.x ?? 0);
@@ -2892,19 +2994,50 @@ export class ThreeRenderer {
         }
       }
 
-      // Materiały: zachowaj oryginalne z GLB
+      // Materiały: zachowaj oryginalne z GLB (gracz) / crimson (wróg) / szary (wrak).
+      // Klonujemy, bo materiały GLB są współdzielone z template cache — bez klonu tint
+      // rozlałby się na wszystkie statki tego samego modelu (także gracza).
+      const isWreck = !!vessel.isWreck;
+      const redTint  = new THREE.Color(0xff4466);
+      // Wrak — wypalony czarny (kontrast z naturalnym pomarańczowym cargo3d.glb).
+      // Wcześniejszy rdzawy #554438 był zbyt podobny do żywych statków.
+      // Emissive ciemnoczerwony (0x110000) — ledwo widoczna poświata dogorywających
+      // reaktorów, nie ognista aura.
+      const wreckColor = new THREE.Color(0x1a1a1a);
       model.traverse((child) => {
-        if (child.isMesh) {
-          child.castShadow = false;
-          child.receiveShadow = false;
+        if (!child.isMesh) return;
+        child.castShadow = false;
+        child.receiveShadow = false;
+        if (!child.material) return;
+        if (isWreck) {
+          const mat = child.material.clone();
+          if (mat.color)    mat.color.copy(wreckColor);
+          if (mat.emissive) mat.emissive.setHex(0x110000);  // ledwo widoczna czerwień
+          if (mat.metalness != null)  mat.metalness  = 0.3;
+          if (mat.roughness != null)  mat.roughness  = 1.0;  // zupełnie matowy (spalony)
+          if (mat.opacity != null)    mat.opacity    = 1.0;
+          mat.transparent = false;
+          child.material = mat;
+        } else if (isEnemy) {
+          const mat = child.material.clone();
+          if (mat.color)    mat.color.lerp(redTint, 0.55);
+          if (mat.emissive) mat.emissive.setHex(0x880022);
+          child.material = mat;
         }
       });
 
+      // Wrak — lekki tilt (przechylony kadłub — sygnalizuje uszkodzenie).
+      // Bez scale-up — rdzawy kolor wystarczy żeby odróżnić od żywego statku.
+      if (isWreck) {
+        wrapper.rotation.z = (Math.random() - 0.5) * 0.6;  // ±0.3 rad ≈ ±17°
+        wrapper.rotation.x = (Math.random() - 0.5) * 0.4;
+      }
+
       this.scene.add(wrapper);
 
-      // Linia trasy (identycznie jak sprite)
+      // Linia trasy — wraki NIE mają trasy (nic nie lecą)
       let routeLine = null;
-      if (vessel.mission) {
+      if (vessel.mission && !isWreck) {
         const m = vessel.mission;
         const isReturn = m.phase === 'returning';
         let tx = isReturn ? (m.returnTargetX ?? m.liveOriginX ?? 0) : (m.liveTargetX ?? m.targetX ?? 0);
@@ -2928,7 +3061,46 @@ export class ThreeRenderer {
         this.scene.add(routeLine);
       }
 
-      this._vessels.set(vessel.id, { sprite: wrapper, routeLine, color, isModel3D: true });
+      // Wrogi statek: początkowa widoczność z ObservatorySystem (race guard).
+      // Wrak jest widoczny ZAWSZE (brak fog-of-war dla zniszczonych statków).
+      if (isWreck) {
+        wrapper.visible = true;
+      } else if (isEnemy) {
+        const obs = window.KOSMOS?.observatorySystem;
+        const detected = obs?.isVesselDetected?.(vessel.id) ?? false;
+        wrapper.visible = detected;
+        if (routeLine) routeLine.visible = detected;
+      }
+
+      this._vessels.set(vessel.id, {
+        sprite: wrapper, routeLine, color, isModel3D: true,
+        enemyTint: isEnemy || isWreck,  // wszystkie sklonowane materiały do dispose
+        isWreck,
+      });
+
+      // Wrak — ustaw orbit cache natychmiast, na wyższej warstwie Y niż żywe statki.
+      // Flag `isWreck` + `initAngle` pozwalają _calcVisualOrbitFromCache użyć
+      // wolnej orbity i wysokiej warstwy cmentarzyska.
+      if (isWreck && vessel.position?.dockedAt) {
+        entry.isWreck = true;
+        const bodyId = vessel.position.dockedAt;
+        let bodyR = 0.06;
+        const pE = this._planets.get(bodyId);
+        if (pE) {
+          const ent = this._entityByUUID.get(pE.mesh.uuid);
+          bodyR = ent ? this._getEntityRadius(ent) : 0.1;
+        } else if (this._moons.has(bodyId)) {
+          bodyR = 0.03;
+        } else if (this._planetoids.has(bodyId)) {
+          bodyR = 0.02;
+        }
+        entry._orbiting = {
+          bodyId,
+          orbitR: Math.max(0.5, bodyR * 6.0),
+          isWreck: true,
+          initAngle: Math.random() * Math.PI * 2,  // losowa faza startowa
+        };
+      }
     };
 
     // Użyj promise-based cache — gwarantuje że równoległe wywołania dla tego
@@ -2995,13 +3167,17 @@ export class ThreeRenderer {
   _addVesselSpriteFallback(vessel) {
     if (this._vessels.has(vessel.id)) return;
 
+    const isEnemy = isEnemyVessel(vessel);
+
     // Kolor wg generacji statku (trail + sprite)
     const typeColors = {
       science_vessel:  0x4488ff,
       cargo_ship:      0x44cc66,
     };
     const gen = vessel.generation ?? 1;
-    const color = typeColors[vessel.shipId] ?? 0x44cc66;  // fallback = cargo_ship
+    const color = isEnemy
+      ? 0xff4466
+      : (typeColors[vessel.shipId] ?? 0x44cc66);  // fallback = cargo_ship
 
     // Stwórz sprite (billboard) — kształt per typ statku
     const canvas = document.createElement('canvas');
@@ -3070,7 +3246,15 @@ export class ThreeRenderer {
       this.scene.add(routeLine);
     }
 
-    this._vessels.set(vessel.id, { sprite, routeLine, tex, color });
+    // Wrogi fallback sprite — widoczność initial wg ObservatorySystem
+    if (isEnemy) {
+      const obs = window.KOSMOS?.observatorySystem;
+      const detected = obs?.isVesselDetected?.(vessel.id) ?? false;
+      sprite.visible = detected;
+      if (routeLine) routeLine.visible = detected;
+    }
+
+    this._vessels.set(vessel.id, { sprite, routeLine, tex, color, enemyTint: isEnemy });
   }
 
   /**
@@ -3083,11 +3267,13 @@ export class ThreeRenderer {
     this.scene.remove(entry.sprite);
 
     if (entry.isModel3D) {
-      // Model 3D — dispose geometrii klonów (materiały współdzielone z templatem)
+      // Model 3D — dispose geometrii klonów (materiały współdzielone z templatem,
+      // chyba że to wrogi statek, gdzie każdy mesh dostał sklonowany materiał z tintem).
+      const disposeMats = !!entry.enemyTint;
       entry.sprite.traverse((child) => {
-        if (child.isMesh) {
-          child.geometry?.dispose();
-        }
+        if (!child.isMesh) return;
+        child.geometry?.dispose();
+        if (disposeMats && child.material) child.material.dispose();
       });
     } else {
       // Sprite billboard — dispose materiału i tekstury
@@ -3107,26 +3293,46 @@ export class ThreeRenderer {
   }
 
   /**
-   * Co-klatkowa animacja orbitujących statków (lekka — tylko pozycja+obrót).
+   * Co-klatkowa animacja orbitujących obiektów (statków, wraków, stacji, satelit).
+   * Pozycja pobierana z OrbitalSpaceSystem — centralny rejestr sferycznych
+   * koordynatów (r, θ, φ) z gwarantowanym min-angular-spacing między obiektami.
+   * Żywe statki rotują się w kierunku ruchu orbitalnego; wraki zachowują statyczny
+   * tilt z chwili zniszczenia (nadany w vessel:wrecked handler).
    */
   _tickOrbitingVessels() {
+    const orbital = window.KOSMOS?.orbitalSpaceSystem;
+    if (!orbital) return;
+    const tSec = performance.now() * 0.001;
     for (const [id, entry] of this._vessels) {
-      if (!entry._orbiting) continue;
-      const orb = this._calcVisualOrbitFromCache(entry._orbiting, id);
-      if (orb) {
-        entry.sprite.position.set(orb.ox, orb.oy, orb.oz);
-        if (entry.isModel3D) {
-          entry.sprite.rotation.y = orb.angle + Math.PI;
-        }
+      const orb = orbital.getOrbit(id);
+      if (!orb) continue;
+      // Pozycja planety w world-space
+      const pEntry = this._planets.get(orb.planetId);
+      const planetPos = pEntry
+        ? { x: pEntry.group.position.x, z: pEntry.group.position.z }
+        : this._moons.get(orb.planetId)
+          ? { x: this._moons.get(orb.planetId).mesh.position.x, z: this._moons.get(orb.planetId).mesh.position.z }
+          : this._planetoids.get(orb.planetId)
+            ? { x: this._planetoids.get(orb.planetId).mesh.position.x, z: this._planetoids.get(orb.planetId).mesh.position.z }
+            : null;
+      if (!planetPos) continue;
+      const pos = orbital.getPosition(id, planetPos, tSec);
+      if (!pos) continue;
+      entry.sprite.position.set(pos.x, pos.y, pos.z);
+      // Żywe statki: obrót w kierunku ruchu orbity. Wraki/stacje: bez rotacji.
+      if (entry.isModel3D && !entry.isWreck && !orb.anchored) {
+        entry.sprite.rotation.y = pos.theta + Math.PI;
       }
     }
   }
 
   /**
    * Szybka wersja obliczenia orbity (z cache'owanych danych ciała, bez lookup entity).
+   * Dla wraków używa innej warstwy Y i wolniejszej prędkości — cmentarzysko
+   * orbitalne leży "ponad" płaszczyzną żywych statków, żeby nie kolidować wizualnie.
    */
   _calcVisualOrbitFromCache(cache, vesselId) {
-    const { bodyId, orbitR } = cache;
+    const { bodyId, orbitR, isWreck, initAngle } = cache;
     // Zaktualizuj pozycję ciała (może się poruszać)
     let bodyX, bodyZ;
     const pEntry = this._planets.get(bodyId);
@@ -3141,15 +3347,25 @@ export class ThreeRenderer {
     }
     if (bodyX == null) return null;
 
-    const idHash = hashCode(vesselId);
-    const phaseOffset = (idHash % 1000) / 1000 * Math.PI * 2;
-    const orbitSpeed = 0.4;
-    const angle = (performance.now() * 0.001) * orbitSpeed + phaseOffset;
+    let angle;
+    let oy;
+    if (isWreck) {
+      // Wrak: losowa stała faza + wolna orbita + wysoka warstwa Y (cmentarzysko)
+      const orbitSpeed = 0.05;  // 8× wolniej niż żywe statki
+      angle = (initAngle ?? 0) + (performance.now() * 0.001) * orbitSpeed;
+      oy = 0.45;  // znacznie wyżej niż 0.02 żywych — wizualnie osobna warstwa
+    } else {
+      const idHash = hashCode(vesselId);
+      const phaseOffset = (idHash % 1000) / 1000 * Math.PI * 2;
+      const orbitSpeed = 0.4;
+      angle = (performance.now() * 0.001) * orbitSpeed + phaseOffset;
+      oy = 0.02;
+    }
 
     return {
       ox: bodyX + orbitR * Math.cos(angle),
       oz: bodyZ + orbitR * Math.sin(angle),
-      oy: 0.02,
+      oy,
       angle,
     };
   }
@@ -3231,31 +3447,18 @@ export class ThreeRenderer {
       const vx = isNaN(vessel.position.x) ? 0 : vessel.position.x;
       const vy = isNaN(vessel.position.y) ? 0 : vessel.position.y;
 
-      // ── Statek orbituje ciało — wizualna orbita ──────────────────
+      // ── Statek orbituje ciało — pozycja zarządzana przez OrbitalSpaceSystem ──
+      // `_tickOrbitingVessels()` co klatkę pobiera pozycję z centralnego rejestru
+      // i ustawia sprite. Tu tylko usuwamy routeLine (nie lecimy nigdzie).
       if (vessel.position?.state === 'orbiting') {
-        const orb = this._calcVisualOrbit(vessel, entry);
-        if (orb) {
-          entry.sprite.position.set(orb.ox, orb.oy, orb.oz);
-          if (entry.isModel3D) {
-            entry.sprite.rotation.y = orb.angle + Math.PI;
-          }
-          // Zapisz dane orbity do cache — animacja co klatkę w _tickOrbitingVessels
-          entry._orbiting = {
-            bodyId: vessel.position?.dockedAt ?? vessel.mission?.targetId,
-            orbitR: orb.orbitR,
-          };
-          // Usuń linię trasy przy orbitowaniu
-          if (entry.routeLine) {
-            this.scene.remove(entry.routeLine);
-            entry.routeLine.geometry.dispose();
-            entry.routeLine.material.dispose();
-            entry.routeLine = null;
-          }
-          continue;
+        if (entry.routeLine) {
+          this.scene.remove(entry.routeLine);
+          entry.routeLine.geometry.dispose();
+          entry.routeLine.material.dispose();
+          entry.routeLine = null;
         }
+        continue;
       }
-      // Statek nie orbituje — wyczyść cache orbity
-      entry._orbiting = null;
 
       // ── Statek w locie — linia trasy + opadanie ku celowi ────────
       if (vessel.mission) {

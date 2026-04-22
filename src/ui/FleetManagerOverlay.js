@@ -14,7 +14,7 @@ import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleC
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES }   from '../data/ResourcesData.js';
-import { effectiveRange, loadColonists, unloadColonists }  from '../entities/Vessel.js';
+import { effectiveRange, loadColonists, unloadColonists, isEnemyVessel }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import EntityManager       from '../core/EntityManager.js';
 import EventBus            from '../core/EventBus.js';
@@ -294,14 +294,22 @@ export class FleetManagerOverlay {
     const vMgr = window.KOSMOS?.vesselManager;
     const ms   = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
     const colMgr = window.KOSMOS?.colonyManager;
+    const obs    = window.KOSMOS?.observatorySystem;
     const allVessels = vMgr?.getAllVessels() ?? [];
     const activePid = colMgr?.activePlanetId;
 
-    // Filtruj statki
-    const vessels = this._filterVessels(allVessels, activePid);
+    // Podział: statki gracza żywe + wrogie widoczne + wraki (osobna sekcja).
+    // Wraki gracza wypadają z sekcji "flota gracza" i lądują w sekcji WRAKI.
+    const isLiving = (v) => !v.isWreck;
+    const playerAll  = allVessels.filter(v => !isEnemyVessel(v) && isLiving(v));
+    const playerList = this._filterVessels(playerAll, activePid);
+    const enemyVisible = allVessels.filter(v =>
+      isEnemyVessel(v) && isLiving(v) && (obs?.isVesselDetected?.(v.id) ?? false)
+    );
+    const wrecks = allVessels.filter(v => v.isWreck);
 
     // ── Trzy kolumny ────────────────────────────────────────
-    this._drawLeft(ctx, ox, oy, LEFT_W, oh, vessels, ms);
+    this._drawLeft(ctx, ox, oy, LEFT_W, oh, playerList, ms, enemyVisible, wrecks);
     this._drawCenter(ctx, ox + LEFT_W, oy, centerW, oh, allVessels, ms);
     this._drawRight(ctx, ox + ow - RIGHT_W, oy, RIGHT_W, oh, vMgr, ms, colMgr, activePid);
   }
@@ -1107,12 +1115,16 @@ export class FleetManagerOverlay {
   // LEFT — lista statków
   // ══════════════════════════════════════════════════════════════════════════
 
-  _drawLeft(ctx, x, y, w, h, vessels, ms) {
+  _drawLeft(ctx, x, y, w, h, vessels, ms, enemyVessels = [], wrecks = []) {
     const pad = 8;
     const ROW_HANGAR = 34;  // kompaktowy wiersz: nazwa + paliwo + lokalizacja
     const ROW_ORBIT  = 34;
     const ROW_FLIGHT = 52;  // wyższy: nazwa + paliwo + cel + typ misji + ETA
+    const ROW_ENEMY  = 34;  // nazwa + typ + odległość — bez paliwa/ETA (nie znamy)
+    const ROW_WRECK  = 30;  // nazwa + "wrak" + rok zniszczenia
     const SECTION_H  = 20;
+    const ENEMY_COLOR = '#ff4466';
+    const WRECK_COLOR = '#808080';
 
     // ── Nagłówek (h=36) ──────────────────────────────────────
     ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
@@ -1151,6 +1163,8 @@ export class FleetManagerOverlay {
       { key: 'hangar', label: t('fleet.sectionHangar'), color: THEME.success,  vessels: hangar,   rowH: ROW_HANGAR },
       { key: 'orbit',  label: t('fleet.sectionOrbit'),  color: THEME.mint,     vessels: orbiting, rowH: ROW_ORBIT },
       { key: 'flight', label: t('fleet.sectionFlight'), color: THEME.warning,  vessels: inFlight, rowH: ROW_FLIGHT },
+      { key: 'enemy',  label: 'WROGIE JEDNOSTKI',        color: ENEMY_COLOR,    vessels: enemyVessels, rowH: ROW_ENEMY },
+      { key: 'wreck',  label: 'WRAKI',                   color: WRECK_COLOR,    vessels: wrecks,   rowH: ROW_WRECK },
     ];
 
     // Oblicz łączną wysokość contentu
@@ -1202,13 +1216,87 @@ export class FleetManagerOverlay {
         const hovered  = vessel.id === this._hoverVesselId;
 
         if (selected) {
-          ctx.fillStyle = 'rgba(0,255,180,0.06)';
+          ctx.fillStyle = sec.key === 'enemy' ? 'rgba(255,68,102,0.12)' : 'rgba(0,255,180,0.06)';
           ctx.fillRect(x, ry, w, rH);
-          ctx.fillStyle = THEME.accent;
+          ctx.fillStyle = sec.key === 'enemy' ? ENEMY_COLOR : THEME.accent;
           ctx.fillRect(x, ry, 2, rH);
         } else if (hovered) {
-          ctx.fillStyle = 'rgba(0,255,180,0.03)';
+          ctx.fillStyle = sec.key === 'enemy' ? 'rgba(255,68,102,0.06)' : 'rgba(0,255,180,0.03)';
           ctx.fillRect(x, ry, w, rH);
+        }
+
+        // ── Wrak: minimalny wiersz (ikona + nazwa + rok zniszczenia) ──
+        if (sec.key === 'wreck') {
+          const shipW = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+          const iconW = '💀';
+          ctx.font = `13px ${THEME.fontFamily}`;
+          ctx.fillStyle = selected ? '#c8c8c8' : WRECK_COLOR;
+          const vNameW = (vessel.name ?? '?').length > 12 ? vessel.name.slice(0, 11) + '…' : vessel.name;
+          ctx.fillText(`${iconW} ${vNameW}`, x + pad, ry + 14);
+
+          const ownerIsEnemy = isEnemyVessel(vessel);
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          ctx.textAlign = 'right';
+          ctx.fillText(ownerIsEnemy ? 'wrogi' : 'nasz', x + w - pad, ry + 13);
+          ctx.textAlign = 'left';
+
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          const wyear = vessel.wreckedAt != null ? `rok ${Math.floor(vessel.wreckedAt)}` : '?';
+          ctx.fillText(`zniszczony: ${wyear}`, x + pad + 2, ry + 26);
+
+          ctx.strokeStyle = 'rgba(128,128,128,0.18)';
+          ctx.beginPath(); ctx.moveTo(x + pad, ry + rH - 1); ctx.lineTo(x + w - pad, ry + rH - 1); ctx.stroke();
+          this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rH, type: 'vessel', data: { vesselId: vessel.id } });
+          ry += rH;
+          continue;
+        }
+
+        // ── Wrogi statek: uproszczony wiersz (nazwa + typ + odległość) ──
+        if (sec.key === 'enemy') {
+          const ship2 = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+          const icon2 = ship2?.icon ?? '⚔';
+          ctx.font = `13px ${THEME.fontFamily}`;
+          ctx.fillStyle = selected ? '#ffd0d8' : ENEMY_COLOR;
+          const vName2 = vessel.name.length > 11 ? vessel.name.slice(0, 10) + '…' : vessel.name;
+          ctx.fillText(`${icon2} ${vName2}`, x + pad, ry + 14);
+
+          // Dystans do najbliższej planety gracza (euclidean AU)
+          const home = window.KOSMOS?.homePlanet;
+          let distLabel = '—';
+          if (home) {
+            const d = DistanceUtils.euclideanAU(
+              { x: home.x ?? 0, y: home.y ?? 0 },
+              { x: vessel.position?.x ?? 0, y: vessel.position?.y ?? 0 }
+            );
+            distLabel = `${d.toFixed(1)} AU`;
+          }
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          ctx.textAlign = 'right';
+          ctx.fillText(distLabel, x + w - pad, ry + 13);
+          ctx.textAlign = 'left';
+
+          // Wiersz 2: stan (orbituje / w locie / cumuje) + typ kadłuba
+          const stateLabel = vessel.position?.state === 'docked'   ? '◈ w hangarze'
+                           : vessel.position?.state === 'orbiting' ? '⊙ na orbicie'
+                           : '→ w locie';
+          const roleLabel = ship2?.namePL ?? ship2?.nameEN ?? ship2?.name ?? vessel.shipId ?? '?';
+          ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = ENEMY_COLOR;
+          ctx.fillText(`${stateLabel}`, x + pad + 2, ry + 28);
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          const roleTrim = roleLabel.length > 16 ? roleLabel.slice(0, 15) + '…' : roleLabel;
+          ctx.fillText(roleTrim, x + pad + 95, ry + 28);
+
+          // Separator + hitzone
+          ctx.strokeStyle = 'rgba(255,68,102,0.12)';
+          ctx.beginPath(); ctx.moveTo(x + pad, ry + rH - 1); ctx.lineTo(x + w - pad, ry + rH - 1); ctx.stroke();
+          this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rH, type: 'vessel', data: { vesselId: vessel.id } });
+          ry += rH;
+          continue;  // pomiń wspólny pipeline (paliwo/misja — brak sensu dla wroga)
         }
 
         const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
@@ -1621,12 +1709,20 @@ export class FleetManagerOverlay {
     }
 
     // ── Statki (kropki — na wierzchu) — tylko z aktywnego układu ──
+    const obs = window.KOSMOS?.observatorySystem;
     for (const v of allVessels) {
       if ((v.systemId ?? 'sys_home') !== sysId) continue;
+      const isEnemy = isEnemyVessel(v);
+      const isWreck = !!v.isWreck;
+      // Fog-of-war: wrogi statek ukryty dopóki go nie wykryjemy.
+      // Wraki są widoczne zawsze — zniszczony statek nie ma mgły.
+      if (isEnemy && !isWreck && !(obs?.isVesselDetected?.(v.id) ?? false)) continue;
       const vx = toSx(v.position.x), vy = toSy(v.position.y);
       const isSel = v.id === this._selectedVesselId;
       const r = isSel ? 4 : 3;
       const color = isSel ? THEME.accent
+        : isWreck ? '#808080'
+        : isEnemy ? '#ff4466'
         : v.position.state === 'docked' ? THEME.success
         : v.position.state === 'orbiting' ? THEME.mint
         : THEME.warning;
@@ -1660,10 +1756,10 @@ export class FleetManagerOverlay {
     const legX = x + w - 140;
     const legY2 = mapY + 8;
     ctx.fillStyle = bgAlpha(0.65);
-    ctx.fillRect(legX, legY2, 132, 90);
+    ctx.fillRect(legX, legY2, 132, 116);
     ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
-    ctx.strokeRect(legX, legY2, 132, 90);
+    ctx.strokeRect(legX, legY2, 132, 116);
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     const legendItems = [
@@ -1673,6 +1769,8 @@ export class FleetManagerOverlay {
       { color: THEME.success,       label: t('fleet.legendShipHangar') },
       { color: THEME.warning,       label: t('fleet.legendShipFlight') },
       { color: THEME.mint,          label: t('fleet.legendShipOrbit') },
+      { color: '#ff4466',           label: '⚔ Wróg (wykryty)' },
+      { color: '#808080',           label: '💀 Wrak' },
     ];
     let ly = legY2 + 12;
     for (const item of legendItems) {
@@ -2356,6 +2454,95 @@ export class FleetManagerOverlay {
   // RIGHT — szczegóły statku + akcje + konfigurator
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Panel wrogiego statku — brak akcji, ograniczone info
+  // (imperium name, typ kadłuba, pozycja / odległość, stan). Intel poza zakresem MVP.
+  _drawEnemyDetails(ctx, x, y, w, h, vessel) {
+    const pad = 8;
+    const ENEMY_COLOR = '#ff4466';
+    const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+
+    let cy = y + pad;
+
+    // Przycisk powrotu do Stoczni (zachowujemy dla symetrii — kliknięcie czyści selekcję)
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    const backLabel = t('fleet.backToShipyard');
+    ctx.fillText(backLabel, x + pad, cy + 10);
+    const backW = ctx.measureText(backLabel).width + 4;
+    this._hitZones.push({ x: x + pad - 2, y: cy, w: backW, h: 16, type: 'back_to_shipyard', data: {} });
+    cy += 22;
+
+    // Nagłówek — ⚔ WROGA JEDNOSTKA
+    ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
+    ctx.fillStyle = ENEMY_COLOR;
+    ctx.fillText('⚔ WROGA JEDNOSTKA', x + pad, cy + 16);
+    cy += 24;
+
+    // Nazwa statku
+    ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary;
+    const nm = vessel.name ?? '?';
+    const nmTrim = nm.length > 20 ? nm.slice(0, 19) + '…' : nm;
+    ctx.fillText(`${ship?.icon ?? '⚔'} ${nmTrim}`, x + pad, cy + 16);
+    cy += 22;
+
+    // Imperium (z EmpireRegistry) + Intel level
+    const empId = vessel.ownerEmpireId ?? vessel.owner;
+    const emp   = empId && window.KOSMOS?.empireRegistry?.get?.(empId);
+    const empName = emp?.name ?? 'Nieznane imperium';
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(`Imperium: ${empName}`, x + pad, cy + 14);
+    cy += 18;
+
+    const intel = window.KOSMOS?.intelSystem?.getLevel?.(empId);
+    if (intel) {
+      const intelLabels = { unknown: 'niepoznane', rumor: 'plotka', contact: 'kontakt', detailed: 'szczegółowe' };
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(`Wywiad: ${intelLabels[intel] ?? intel}`, x + pad, cy + 14);
+      cy += 18;
+    }
+
+    // Typ kadłuba
+    const typeName = ship?.namePL ?? ship?.nameEN ?? ship?.name ?? vessel.shipId ?? '?';
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(`Typ: ${typeName}`, x + pad, cy + 14);
+    cy += 22;
+
+    // Separator
+    ctx.strokeStyle = 'rgba(255,68,102,0.3)';
+    ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+    cy += 10;
+
+    // Stan + pozycja + dystans od Home
+    const stateTxt = vessel.position?.state === 'docked'   ? 'W hangarze'
+                   : vessel.position?.state === 'orbiting' ? 'Na orbicie'
+                   : 'W locie';
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(`Stan: ${stateTxt}`, x + pad, cy + 14); cy += 18;
+
+    const posX = (vessel.position?.x ?? 0) / GAME_CONFIG.AU_TO_PX;
+    const posY = (vessel.position?.y ?? 0) / GAME_CONFIG.AU_TO_PX;
+    ctx.fillText(`Pozycja: ${posX.toFixed(2)}, ${posY.toFixed(2)} AU`, x + pad, cy + 14); cy += 18;
+
+    const home = window.KOSMOS?.homePlanet;
+    if (home) {
+      const d = DistanceUtils.euclideanAU(
+        { x: home.x ?? 0, y: home.y ?? 0 },
+        { x: vessel.position?.x ?? 0, y: vessel.position?.y ?? 0 }
+      );
+      ctx.fillText(`Od domu: ${d.toFixed(2)} AU`, x + pad, cy + 14); cy += 18;
+    }
+
+    cy += 8;
+
+    // Komunikat: brak akcji
+    ctx.font = `italic ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText('— brak dostępnych akcji —', x + pad, cy + 14);
+  }
+
   _drawRight(ctx, x, y, w, h, vMgr, ms, colMgr, activePid) {
     const pad = 8;
 
@@ -2373,6 +2560,12 @@ export class FleetManagerOverlay {
     const vessel = vMgr?.getVessel(this._selectedVesselId);
     if (!vessel) {
       this._selectedVesselId = null;
+      return;
+    }
+
+    // ── Wrogi statek — uproszczony panel, brak akcji ──────────────
+    if (isEnemyVessel(vessel)) {
+      this._drawEnemyDetails(ctx, x, y, w, h, vessel);
       return;
     }
 

@@ -12,9 +12,12 @@
 //   - Save z przyszłości (version > CURRENT) → { error: 'future_version' }
 //   - Save zbyt stary (version < MIN_SUPPORTED) → { error: 'too_old' }
 
+import { ORBITAL_ROLES, getOrbitRange, computeBodyRadius } from '../data/OrbitalRolesData.js';
+import EntityManager from '../core/EntityManager.js';
+
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 63;
+export const CURRENT_VERSION     = 64;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -78,6 +81,7 @@ const MIGRATIONS = {
   60: _migrateV60toV61,
   61: _migrateV61toV62,
   62: _migrateV62toV63,
+  63: _migrateV63toV64,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1536,6 +1540,85 @@ function _migrateV62toV63(data) {
   if (data.civ4x && !data.civ4x.armySystem) {
     data.civ4x.armySystem = { armies: [], nextId: 1 };
   }
+  return data;
+}
+
+// ── Migracja v63 → v64 ──────────────────────────────────────────────────────
+// OrbitalSpaceSystem — sferyczne przestrzenie orbitalne wokół planet.
+// Dla każdego vessela z stanem 'orbiting' generujemy deterministyczną orbitę
+// (r, θ, φ) z hasha vesselId, w preferowanym zakresie radialnym wg roli.
+// Wraki trafiają do graveyard range (1.2–1.5); żywe statki do LEO/MEO.
+function _migrateV63toV64(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (!c4x) return data;
+
+  // Jeśli orbitalSpace już istnieje (nowa gra rozpoczęta w v64+) — pomiń
+  if (c4x.orbitalSpace) return data;
+
+  const spheres = {};
+  const vessels = c4x.vesselManager?.vessels ?? [];
+
+  // Prosty FNV-1a hash (powiela logikę w OrbitalSpaceSystem dla determinizmu)
+  const hashStr = (s) => {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < (s?.length ?? 0); i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h;
+  };
+
+  // Rezolucja roli z migracji — prosty heurystyczny wariant (bez modułów API)
+  const resolveRoleFromSave = (v) => {
+    if (v.isWreck) return 'wreck';
+    const modules = v.modules ?? [];
+    const hasWeapon = modules.some(m => typeof m === 'string' && m.startsWith('weapon_'));
+    const hasScience = modules.some(m => {
+      const id = typeof m === 'string' ? m : m?.id;
+      return id === 'science_lab' || id === 'deep_scanner' || id === 'quantum_scanner';
+    });
+    if (hasScience) return 'science';
+    if (hasWeapon)  return 'warship';
+    if ((v.cargoMax ?? 0) > 0) return 'cargo';
+    return 'default';
+  };
+
+  // Index planet/moon z save dla szybkiego lookup body radius
+  const bodiesById = new Map();
+  for (const p of (data.planets ?? [])) bodiesById.set(p.id, p);
+  for (const m of (data.moons ?? [])) bodiesById.set(m.id, m);
+  for (const pd of (data.planetoids ?? [])) bodiesById.set(pd.id, pd);
+
+  for (const v of vessels) {
+    if (v.position?.state !== 'orbiting' || !v.position.dockedAt) continue;
+    const planetId = v.position.dockedAt;
+    const role = resolveRoleFromSave(v);
+    const roleDef = ORBITAL_ROLES[role] ?? ORBITAL_ROLES.default;
+
+    // Znajdź body w save i policz bodyRadius (skala adekwatna do planety)
+    const body = bodiesById.get(planetId) ?? null;
+    const bodyRadius = computeBodyRadius(body);
+    const range = getOrbitRange(role, bodyRadius);
+
+    const h = hashStr(v.id ?? String(Math.random()));
+    const r   = range.rMin + ((h & 0xFF) / 255) * (range.rMax - range.rMin);
+    const θ   = ((h >>> 8) & 0xFFFF) / 0xFFFF * 2 * Math.PI;
+    const φ   = roleDef.phiCenter + (((h >>> 24) & 0xFF) / 255 - 0.5) * 2 * roleDef.phiDelta;
+
+    if (!spheres[planetId]) spheres[planetId] = [];
+    spheres[planetId].push({
+      objectId: v.id,
+      role,
+      r,
+      theta0: θ,
+      phi:    φ,
+      omega:  role === 'station' ? 0 : roleDef.omegaBase,
+      anchored: role === 'station',
+      spawnYear: v.wreckedAt ?? 0,
+    });
+  }
+
+  c4x.orbitalSpace = { spheres };
   return data;
 }
 

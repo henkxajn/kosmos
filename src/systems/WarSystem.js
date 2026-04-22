@@ -29,6 +29,7 @@ import { resolveBattle, empireFleetToBattleUnit, playerVesselsToBattleUnit } fro
 import { CASUS_BELLI, inferCasusBelli } from '../data/CasusBelliData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
+import { isEnemyVessel } from '../entities/Vessel.js';
 
 const EXHAUSTION_PER_BATTLE = 15;   // ile exhaustion rośnie za pojedynczą bitwę
 const AUTO_PEACE_EXHAUSTION = 100;  // próg auto-peace
@@ -356,7 +357,13 @@ export class WarSystem {
   _buildPlayerBattleUnit(systemId) {
     const vMgr = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
-    const vessels = vMgr?._vessels ? Array.from(vMgr._vessels.values()).filter(v => v.systemId === systemId) : [];
+    // Bierz TYLKO statki gracza w tym systemie — wrogie vessele nie mogą wzmacniać
+    // obrony gracza. Bez filtra wrogi statek "walczył sam ze sobą".
+    const vessels = vMgr?._vessels
+      ? Array.from(vMgr._vessels.values()).filter(v =>
+          v.systemId === systemId && !isEnemyVessel(v)
+        )
+      : [];
 
     // Zbierz statki + dodaj obronę z kolonii (fleet bazowy per kolonia)
     let unit = playerVesselsToBattleUnit(vessels, HULLS, SHIP_MODULES, 'Gracz');

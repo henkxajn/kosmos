@@ -239,6 +239,20 @@ export function getShipDef(vessel) {
   return SHIPS[vessel.shipId] ?? HULLS[vessel.shipId] ?? null;
 }
 
+// ── Ownership / wrogość ─────────────────────────────────────────────────────
+// Jedno źródło prawdy: kto nie jest graczem, jest wrogi (w MVP brak frakcji neutralnych
+// z własnymi statkami). Helper tolerancyjny — honoruje trzy pola ustawiane historycznie
+// przez kod spawningu (SpawnTestEnemy.js ustawia wszystkie trzy): `isEnemy`, `owner`,
+// `ownerEmpireId`. Statki gracza nie mają żadnego z tych pól → false.
+
+export function isEnemyVessel(vessel) {
+  if (!vessel) return false;
+  if (vessel.isEnemy === true) return true;
+  if (vessel.owner && vessel.owner !== 'player') return true;
+  if (vessel.ownerEmpireId && vessel.ownerEmpireId !== 'player') return true;
+  return false;
+}
+
 // ── Capability helpers (capability-based role identity) ─────────────────────
 // Zastępują stare `shipId === 'colony_ship'` itd. — rola statku wynika z modułów.
 // `vessel.modules` = lista ID z ShipModulesData. Legacy ships bez modules →

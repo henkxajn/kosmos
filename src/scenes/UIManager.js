@@ -10,6 +10,7 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import { TECHS } from '../data/TechData.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { SHIPS } from '../data/ShipsData.js';
+import { isEnemyVessel } from '../entities/Vessel.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
@@ -402,6 +403,8 @@ export class UIManager {
     });
     EventBus.on('expedition:reconProgress', ({ expedition }) => {
       // Sekwencyjny full_system recon — aktualizuj dane (nowy targetId, arrivalYear, bodiesDiscovered)
+      // ObservatorySystem emituje ten sam event dla discovery ciał — bez expedition.
+      if (!expedition) return;
       const idx = this._expeditions.findIndex(e => e.id === expedition.id);
       if (idx !== -1) {
         this._expeditions[idx] = { ...this._expeditions[idx], ...expedition };
@@ -853,7 +856,11 @@ export class UIManager {
   _getAllPlayerVessels() {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return [];
-    return vMgr.getAllVessels().map(v => v.id);
+    // Outliner pokazuje tylko statki gracza — wrogi vessel dostaje się do
+    // FleetManagerOverlay (sekcja WROGIE JEDNOSTKI), nie tutaj.
+    return vMgr.getAllVessels()
+      .filter(v => !isEnemyVessel(v))
+      .map(v => v.id);
   }
 
   // Obsługa scrolla
@@ -968,7 +975,12 @@ export class UIManager {
         this._cachedColonies = colMgr?.getAllColonies() ?? [];
         this._coloniesDirty = false;
       }
-      const allColonies = this._cachedColonies;
+      // Outliner pokazuje tylko kolonie gracza. Wrogie kolonie (ownerEmpireId
+       // !== 'player') są widoczne na mapie przez detekcję statków / Intel,
+       // nie w liście Kolonie.
+      const allColonies = this._cachedColonies.filter(c =>
+        !c?.ownerEmpireId || c.ownerEmpireId === 'player'
+      );
       // Filtruj ekspedycje po aktywnej kolonii (spójność z AKTYWNE MISJE)
       const vMgrOut = window.KOSMOS?.vesselManager;
       const outlinerExps = this._expeditions.filter(exp => {

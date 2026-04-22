@@ -21,6 +21,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import gameState from '../core/GameState.js';
 import EventBus from '../core/EventBus.js';
 import { createVessel } from '../entities/Vessel.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 
 export const TEST_ENEMY_ID = 'emp_test_enemy';
 
@@ -491,5 +492,151 @@ export function spawnEnemyCiv(opts = {}) {
     hint: 'Kamera auto-focus za ~1s. Jeśli nie widać: sprawdź `KOSMOS.threeRenderer._vessels.has("' + vessel.id + '")`',
   };
   console.log('[spawnEnemyCiv] ✓ Cywilizacja + statek orbitalny:', report);
+  return report;
+}
+
+/**
+ * Spawn realnego wrogiego statku z misją ATAKU na planetę gracza.
+ *
+ * Tworzy vessel (kadłub + moduły skalowane wg strength), umieszcza go daleko
+ * (domyślnie 15 AU od gwiazdy) po LOSOWEJ stronie orbity, ustawia misję typu
+ * 'attack' z celem = planeta domowa gracza, i emituje `vessel:launched`.
+ *
+ * Od tego momentu vessel leci standardową ścieżką VesselManager (in_transit),
+ * obserwatorium gracza go wykrywa gdy wejdzie w zasięg, a `EnemyAttackHandler`
+ * odpala bitwę po `vessel:arrived`.
+ *
+ * To jest docelowa ścieżka także dla AI — gdy obca cywilizacja zbuduje statek
+ * w swojej stoczni, użyje dokładnie tego samego flow.
+ *
+ * @param {object} opts
+ * @param {number} [opts.strength=500]       — siła (→ wybór kadłuba i modułów)
+ * @param {number} [opts.etaYears=0.5]       — za ile lat dotrze do gracza
+ * @param {number} [opts.spawnDistanceAU=15] — odległość od gwiazdy przy spawn
+ * @param {string} [opts.vesselName]         — override nazwy
+ */
+export function spawnEnemyAttack(opts = {}) {
+  const K = window.KOSMOS;
+  if (!K?.civMode) {
+    console.warn('[spawnEnemyAttack] Gracz jeszcze nie przejął cywilizacji');
+    return { success: false, reason: 'no_civ_mode' };
+  }
+  const vMgr = K.vesselManager;
+  const home = K.homePlanet;
+  if (!vMgr || !home) {
+    console.warn('[spawnEnemyAttack] Brak VesselManager lub homePlanet');
+    return { success: false, reason: 'no_deps' };
+  }
+
+  // 1) Upewnij się że wróg istnieje
+  if (!K.empireRegistry?.get(TEST_ENEMY_ID)) {
+    const res = spawnTestEnemy();
+    if (!res?.success) {
+      console.warn('[spawnEnemyAttack] spawnTestEnemy zawiódł', res);
+      return res;
+    }
+  }
+
+  const strength = opts.strength ?? 500;
+  const etaYears = opts.etaYears ?? 0.5;
+  const spawnDistAU = opts.spawnDistanceAU ?? 15;
+
+  // 2) Dobór kadłuba + modułów wg strength
+  //    <200 = lekki skirmisher, 200-800 = cruiser, >800 = battleship
+  let hullId, modules;
+  if (strength < 200) {
+    hullId = 'hull_small';
+    modules = ['engine_ion', 'armor_standard', 'weapon_kinetic'];
+  } else if (strength < 800) {
+    hullId = 'hull_medium';
+    modules = ['engine_ion', 'engine_ion', 'armor_standard', 'weapon_kinetic', 'weapon_kinetic'];
+  } else {
+    hullId = 'hull_large';
+    modules = ['engine_ion', 'engine_ion', 'engine_ion', 'armor_standard', 'armor_standard',
+               'weapon_kinetic', 'weapon_kinetic', 'weapon_kinetic', 'weapon_kinetic'];
+  }
+
+  // 3) Pozycja startowa — losowy kąt, dystans spawnDistAU od gwiazdy (0,0)
+  //    Wolimy kierunek z dala od gracza żeby droga była ciekawa
+  const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
+  const angle = Math.random() * Math.PI * 2;
+  const startX = Math.cos(angle) * spawnDistAU * AU_TO_PX;
+  const startY = Math.sin(angle) * spawnDistAU * AU_TO_PX;
+
+  // 4) Cel — PRZEWIDYWANA pozycja planety W MOMENCIE PRZYBYCIA (Kepler).
+  //    Bez predykcji planeta orbituje wokół gwiazdy i w etaYears jest gdzie indziej,
+  //    statek leci do pustego punktu. `_predictPosition` robi to samo co dla misji gracza.
+  const systemId = home.systemId ?? K.activeSystemId ?? 'sys_home';
+  const gameYear = K.timeSystem?.gameTime ?? 0;
+  const arrivalYear = gameYear + etaYears;
+  let tx, ty;
+  try {
+    const predicted = vMgr._predictPosition(home.id, arrivalYear);
+    tx = predicted?.x ?? home.x ?? 0;
+    ty = predicted?.y ?? home.y ?? 0;
+  } catch (_) {
+    tx = home.x ?? 0;
+    ty = home.y ?? 0;
+  }
+
+  // 5) Stwórz vessel
+  const vessel = createVessel(hullId, home.id, {
+    name:    opts.vesselName ?? `Najeźdźca ${hullId.replace('hull_', '').toUpperCase()}`,
+    modules,
+    x: startX, y: startY,
+    systemId,
+  });
+
+  // Oznacz jako wrogi — ObservatorySystem / FleetOverlay / ThreeRenderer to honorują
+  vessel.ownerEmpireId = TEST_ENEMY_ID;
+  vessel.owner         = TEST_ENEMY_ID;
+  vessel.isEnemy       = true;
+
+  // 6) Waypoints przez `_calcRoute` — unika Słońca
+  let waypoints = [];
+  try {
+    const route = vMgr._calcRoute(startX, startY, tx, ty, systemId);
+    waypoints = route?.waypoints ?? [];
+  } catch (_) { /* fallback: prosta trasa */ }
+
+  // 7) Konstrukcja misji (gameYear/arrivalYear już zdefiniowane wyżej)
+  vessel.mission = {
+    type:        'attack',
+    targetId:    home.id,
+    targetName:  home.name ?? 'Planeta gracza',
+    startX, startY,
+    targetX: tx, targetY: ty,
+    liveTargetX: tx, liveTargetY: ty,
+    liveOriginX: startX, liveOriginY: startY,
+    departYear:  gameYear,
+    arrivalYear,
+    waypoints,
+    phase:       'outbound',
+    originId:    null,
+  };
+  vessel.position.state    = 'in_transit';
+  vessel.position.dockedAt = null;
+  vessel.status            = 'on_mission';
+
+  // 8) Rejestracja + eventy (standardowa ścieżka jak w launchMission)
+  vMgr._vessels.set(vessel.id, vessel);
+  EventBus.emit('vessel:created',  { vessel });
+  EventBus.emit('vessel:launched', { vessel, mission: vessel.mission });
+  EventBus.emit('vessel:positionUpdate', { vessels: [vessel] });
+
+  const report = {
+    success:  true,
+    vesselId: vessel.id,
+    name:     vessel.name,
+    hullId,
+    modules,
+    strength,
+    spawn:    { x: startX, y: startY, distAU: spawnDistAU },
+    target:   { id: home.id, name: home.name, x: tx, y: ty },
+    etaYears,
+    arrivalYear: vessel.mission.arrivalYear,
+    hint: `Statek leci z ${spawnDistAU} AU. Zbuduj/ulepsz obserwatorium by wykryć wcześniej. Bitwa odpali się po dotarciu.`,
+  };
+  console.log('[spawnEnemyAttack] 🚀 Wrogi atak w drodze:', report);
   return report;
 }

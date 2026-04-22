@@ -981,6 +981,26 @@ export class VesselManager {
     this._tickRepair(deltaYears);
     this._tickFullScans(deltaYears);
     this._updatePositions(deltaYears);
+    this._tickWreckCleanup();
+  }
+
+  // Wraki (status='destroyed', isWreck=true) dryfują przez WRECK_LIFETIME_YEARS,
+  // potem są sprzątane. To daje graczowi czas zobaczyć że ktoś wygrał bitwę.
+  _tickWreckCleanup() {
+    const currentYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const LIFETIME = 30; // civYears
+    const tr = window.KOSMOS?.threeRenderer;
+    const toRemove = [];
+    for (const vessel of this._vessels.values()) {
+      if (!vessel.isWreck) continue;
+      const wreckedAt = vessel.wreckedAt ?? currentYear;
+      if (currentYear - wreckedAt >= LIFETIME) toRemove.push(vessel.id);
+    }
+    for (const id of toRemove) {
+      this._vessels.delete(id);
+      if (tr?._removeVesselSprite) tr._removeVesselSprite(id);
+      EventBus.emit('vessel:destroyed', { vesselId: id });
+    }
   }
 
   _tickFullScans(deltaYears) {
@@ -1076,6 +1096,30 @@ export class VesselManager {
     for (const vessel of this._vessels.values()) {
       const m = vessel.mission;
 
+      // Wraki — aktualizuj pozycję z OrbitalSpaceSystem żeby podążały za planetą
+      // (planeta krąży wokół gwiazdy, więc wrak bez tego zostawałby w starej pozycji).
+      if (vessel.isWreck && vessel.position?.dockedAt) {
+        const body = this._findEntity(vessel.position.dockedAt);
+        if (body) {
+          const orbital = window.KOSMOS?.orbitalSpaceSystem;
+          const orbit = orbital?.getOrbit?.(vessel.id);
+          if (orbit) {
+            const tSec = performance.now() * 0.001;
+            const pos = orbital.getPosition(
+              vessel.id,
+              { x: body.x / 10, z: body.y / 10 },
+              tSec
+            );
+            if (pos) {
+              vessel.position.x = pos.x * 10;
+              vessel.position.y = pos.z * 10;
+              moving.push(vessel);
+            }
+          }
+        }
+        continue;
+      }
+
       // Docked statki — synchronizuj pozycję z planetą macierzystą
       if (vessel.position.state === 'docked' && vessel.position.dockedAt) {
         const entity = this._findEntity(vessel.position.dockedAt);
@@ -1086,12 +1130,31 @@ export class VesselManager {
         continue;
       }
 
-      // Orbitujące statki — podążają za ciałem, wokół którego krążą
+      // Orbitujące statki z misją — pozycja z OrbitalSpaceSystem (jeśli jest
+       // zarejestrowany), inaczej fallback na pozycję ciała macierzystego.
       if (vessel.position.state === 'orbiting' && m) {
         const body = this._findEntity(m.targetId);
         if (body) {
-          vessel.position.x = body.x;
-          vessel.position.y = body.y;
+          const orbital = window.KOSMOS?.orbitalSpaceSystem;
+          const orbit = orbital?.getOrbit?.(vessel.id);
+          if (orbit) {
+            const tSec = performance.now() * 0.001;
+            const pos = orbital.getPosition(
+              vessel.id,
+              { x: body.x / 10, z: body.y / 10 },
+              tSec
+            );
+            if (pos) {
+              vessel.position.x = pos.x * 10;
+              vessel.position.y = pos.z * 10;
+            } else {
+              vessel.position.x = body.x;
+              vessel.position.y = body.y;
+            }
+          } else {
+            vessel.position.x = body.x;
+            vessel.position.y = body.y;
+          }
         }
         // Tick foreign_recon (scope='target') — skanowanie na orbicie
         if (m.type === 'foreign_recon' && m.scope === 'target') {
@@ -1099,6 +1162,41 @@ export class VesselManager {
         }
         // Aktualizuj linie trasy dla orbitujących
         this._updateRouteLine(vessel, m);
+        moving.push(vessel);
+        continue;
+      }
+
+      // Orbitujące BEZ misji — pozycja z OrbitalSpaceSystem (sferyczne koordynaty).
+      // Stary kod ustawiał (x, y) = pozycja planety → wszystkie orbitujące statki
+      // siedziały w jednym miejscu w tactical map. Teraz czerpiemy projekcję 2D
+      // (x, z) z world-space pozycji zwracanej przez OrbitalSpaceSystem.
+      if (vessel.position.state === 'orbiting' && !m && vessel.position.dockedAt) {
+        const body = this._findEntity(vessel.position.dockedAt);
+        if (!body) { continue; }
+
+        const orbital = window.KOSMOS?.orbitalSpaceSystem;
+        const tSec = performance.now() * 0.001;
+        const orbit = orbital?.getOrbit?.(vessel.id);
+        if (orbit) {
+          // World-space Three.js — mnożymy przez WORLD_SCALE żeby dostać jednostki fizyki (px)
+          // WORLD_SCALE=10 (patrz ThreeRenderer); pozycja body w px jest bezpośrednio.
+          const pos = orbital.getPosition(
+            vessel.id,
+            { x: (body.x ?? 0) / 10, z: (body.y ?? 0) / 10 },
+            tSec
+          );
+          if (pos) {
+            vessel.position.x = pos.x * 10;  // przelicz z Three-unit na px
+            vessel.position.y = pos.z * 10;
+          } else {
+            vessel.position.x = body.x;
+            vessel.position.y = body.y;
+          }
+        } else {
+          // Brak orbity w rejestrze — fallback: przy planecie
+          vessel.position.x = body.x;
+          vessel.position.y = body.y;
+        }
         moving.push(vessel);
         continue;
       }

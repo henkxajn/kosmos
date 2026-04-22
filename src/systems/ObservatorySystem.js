@@ -18,9 +18,16 @@ import EventBus      from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { t }         from '../i18n/i18n.js';
+import { DistanceUtils } from '../utils/DistanceUtils.js';
+import { isEnemyVessel } from '../entities/Vessel.js';
 
 // Typy ciał podlegające skanowaniu
 const SCANNABLE_TYPES = ['planet', 'moon', 'planetoid', 'asteroid', 'comet'];
+
+// Zasięg detekcji wrogich statków per poziom obserwatorium (AU).
+// Index 0 = brak obserwatorium — każda kolonia dostaje 1 AU pasywnego wzroku
+// (planeta widzi własną orbitę). Ostatni slot Lv5+ = ∞ (cały układ).
+const VESSEL_DETECTION_RANGE = [1, 3, 6, 10, 15, Infinity];
 
 export class ObservatorySystem {
   constructor() {
@@ -29,6 +36,14 @@ export class ObservatorySystem {
 
     // Historia odkryć obserwatorium: [{ bodyId, bodyName, year, colonyName }]
     this._discoveries = [];
+
+    // Detekcja wrogich statków — Set<vesselId> aktualnie widocznych przez jakąkolwiek
+    // kolonię gracza. Rebuilt co tick, NIE persystuje w save (self-healing po load).
+    this._detectedVesselIds = new Set();
+
+    // Set ID statków dla których wyemitowano już komunikat "Wykryto wrogą jednostkę"
+    // — unika spamu EventLoga gdy statek wchodzi/wychodzi z zasięgu kilka razy.
+    this._reportedVesselSightings = new Set();
 
     // Rok gry
     this._gameYear = 0;
@@ -107,9 +122,39 @@ export class ObservatorySystem {
     return [...this._discoveries];
   }
 
+  // ── Detekcja wrogich statków (fog-of-war) ──────────────────────────────
+
+  // Zasięg detekcji statków dla konkretnej kolonii (AU).
+  // Bazowo 1 AU dla dowolnej żywej kolonii; obserwatorium rozszerza wg VESSEL_DETECTION_RANGE.
+  getVesselDetectionRangeAU(colony) {
+    if (!colony?.buildingSystem) return 0;
+    let lvl = 0;
+    colony.buildingSystem._active.forEach(entry => {
+      if (entry.building.id === 'observatory') {
+        lvl = Math.max(lvl, entry.level);
+      }
+    });
+    const idx = Math.min(lvl, VESSEL_DETECTION_RANGE.length - 1);
+    return VESSEL_DETECTION_RANGE[idx];
+  }
+
+  // Czy konkretny statek jest aktualnie wykryty?
+  isVesselDetected(vesselId) {
+    return this._detectedVesselIds.has(vesselId);
+  }
+
+  // Snapshot wszystkich wykrytych statków (defensywna kopia).
+  getDetectedVesselIds() {
+    return new Set(this._detectedVesselIds);
+  }
+
   // ── Tick skanowania ───────────────────────────────────────────────────
 
   _tickScan(civDeltaYears) {
+    // Detekcja statków działa continuous — wykrycie wroga nie może czekać 6 lat jak
+    // pierwsze odkrycie ciała niebieskiego. Każdy tick rebuildsowi Set i emituje diff.
+    this._tickVesselDetection();
+
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return;
 
@@ -195,6 +240,97 @@ export class ObservatorySystem {
       body: target.body,
       discovered,
     });
+  }
+
+  // Rebuild zbioru wykrytych wrogich statków na podstawie zasięgów wszystkich kolonii gracza.
+  // Statek jest "detected" gdy leży w zasięgu JAKIEJKOLWIEK kolonii (OR nie SUM).
+  // Zasięg per kolonia = max z VESSEL_DETECTION_RANGE dla jej obserwatorium.
+  _tickVesselDetection() {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vMgr   = window.KOSMOS?.vesselManager;
+    if (!colMgr || !vMgr) return;
+
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    const colonies = colMgr.getAllColonies().filter(c => {
+      const cs = c.planet?.systemId ?? c.systemId ?? sysId;
+      return cs === sysId;
+    });
+
+    const currentlyDetected = new Set();
+
+    // Wczesne wyjście gdy brak kolonii w aktywnym systemie — nic nie widzimy
+    if (colonies.length > 0) {
+      const allVessels = vMgr.getAllVessels?.() ?? [];
+      for (const v of allVessels) {
+        if (!isEnemyVessel(v)) continue;
+        if ((v.systemId ?? sysId) !== sysId) continue;
+
+        for (const col of colonies) {
+          const range = this.getVesselDetectionRangeAU(col);
+          if (range <= 0) continue;
+          const colPos = col.planet ?? EntityManager.get(col.planetId);
+          if (!colPos) continue;
+          const dist = DistanceUtils.euclideanAU(
+            { x: colPos.x ?? 0, y: colPos.y ?? 0 },
+            { x: v.position?.x ?? 0, y: v.position?.y ?? 0 }
+          );
+          if (dist <= range) {
+            currentlyDetected.add(v.id);
+            break;  // wystarczy jedna kolonia
+          }
+        }
+      }
+    }
+
+    // Diff z poprzednim stanem — emituj zmiany visibility
+    const added = [];
+    const removed = [];
+    currentlyDetected.forEach(id => { if (!this._detectedVesselIds.has(id)) added.push(id); });
+    this._detectedVesselIds.forEach(id => { if (!currentlyDetected.has(id)) removed.push(id); });
+
+    if (added.length === 0 && removed.length === 0) return;
+
+    this._detectedVesselIds = currentlyDetected;
+
+    const evtLog   = window.KOSMOS?.eventLogSystem;
+    const intelSys = window.KOSMOS?.intelSystem;
+    const reg      = window.KOSMOS?.empireRegistry;
+
+    for (const id of added) {
+      const v = vMgr.getVessel?.(id) ?? null;
+      EventBus.emit('vessel:detectionChanged', { vesselId: id, detected: true, vessel: v });
+
+      if (!v) continue;
+
+      // IntelSystem — wykrycie wzrokowe to 'rumor' (nie spotkanie bezpośrednie).
+      // Faktyczny 'contact' przychodzi przez vessel:arrived / battle:resolved.
+      const empId = v.ownerEmpireId ?? v.owner;
+      if (empId && empId !== 'player') {
+        intelSys?.advanceIntel?.(empId, 'rumor', 'vessel_sighted');
+      }
+
+      // EventLog + popup alert — tylko PIERWSZE wykrycie w sesji.
+      if (!this._reportedVesselSightings.has(id)) {
+        this._reportedVesselSightings.add(id);
+        const empName = (empId && reg?.get?.(empId)?.name) ? reg.get(empId).name : 'nieznane imperium';
+        evtLog?.push({
+          text:      `🔭 Wykryto wrogą jednostkę: ${v.name ?? '?'} (${empName}).`,
+          channel:   'intel',
+          severity:  'warn',
+          entityRef: id,
+        });
+        // Dedykowany event dla GameScene — popup z pauzą gry
+        EventBus.emit('vessel:firstSighting', {
+          vessel: v,
+          empireId: empId,
+          empireName: empName,
+        });
+      }
+    }
+
+    for (const id of removed) {
+      EventBus.emit('vessel:detectionChanged', { vesselId: id, detected: false });
+    }
   }
 
   // Zbierz niezbadane ciała w zasięgu, posortowane wg odległości orbitalnej
