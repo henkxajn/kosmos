@@ -26,11 +26,22 @@ const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
 const SUN_EXCLUSION_PX = 0.3 * AU_TO_PX;
 
 // Próg zakończenia pursue/intercept — dystans "dotarcia" do celu (§5.2).
-const THREAT_RADIUS_AU = 0.05;
+// BUG#1 z playtestu: 0.05 AU (5.5 px) było zbyt permisywne — dwa vessele orbitujące
+// bliskie ciała miały często <5.5 px initial distance → insta-complete w pierwszym ticku.
+// Nowa wartość: 0.15 AU (16.5 px) ≈ 2× szerokość sprite vessela na mapie — sensowny
+// próg "dotarcia" i zostawia miejsce na widoczny ruch przy krótkich pursuach.
+const THREAT_RADIUS_AU = 0.15;
 const THREAT_RADIUS_PX = THREAT_RADIUS_AU * AU_TO_PX;
 
 // Epsilon dla intercept math — detekcja degenerate cases.
 const INTERCEPT_EPS = 1e-6;
+
+// Dev trace helper — gated przez window.KOSMOS.debug.enableTargetingTrace.
+// Design doc §11.3 obiecał tę flagę; BUG#3 z playtestu — nie była zaimplementowana.
+// Log format: '[MOS] ...' dla łatwego grepu w konsoli.
+function _trace(...args) {
+  if (window.KOSMOS?.debug?.enableTargetingTrace) console.log('[MOS]', ...args);
+}
 
 let _nextOrderId = 1;
 
@@ -232,6 +243,7 @@ export class MovementOrderSystem {
       `MoveTo (${tx.toFixed(0)}, ${ty.toFixed(0)}) — ${totalDistAU.toFixed(2)} AU`,
       'info');
 
+    _trace(`issue moveToPoint ${orderId} vessel=${vessel.id} → (${tx.toFixed(1)},${ty.toFixed(1)}) dist=${totalDistAU.toFixed(2)}AU fuel=${fuelNeeded.toFixed(2)} arrivalYear=${mission.arrivalYear.toFixed(3)}`);
     EventBus.emit('vessel:launched',    { vessel, mission });
     EventBus.emit('vessel:orderIssued', { vesselId: vessel.id, order });
 
@@ -255,6 +267,20 @@ export class MovementOrderSystem {
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const orderId = `mo_${_nextOrderId++}`;
+    // BUG#2 fix: vessel targets nie mają .x/.y na rootu (tylko .position.x/.y).
+    // Fallback pattern spójny z _tickPursueOrder — inaczej init daje {undefined, undefined}
+    // aż do pierwszego ticka (widoczne przy inspection gry w pauzie).
+    const initTx = target.x ?? target.position?.x ?? 0;
+    const initTy = target.y ?? target.position?.y ?? 0;
+
+    // BUG#1 fix: issue-time reject gdy target już w zasięgu zakończenia.
+    //   Bez tego vessel insta-complete'uje pursue w pierwszym ticku gdy initial
+    //   distance < THREAT_RADIUS_PX (wykryte w playtescie z 2 vesselami orbitującymi
+    //   bliskie ciała). Semantyczny komunikat dla UX: "target już w zasięgu".
+    const initDist = Math.hypot(initTx - vessel.position.x, initTy - vessel.position.y);
+    if (initDist < THREAT_RADIUS_PX) {
+      return { ok: false, reason: 'target_already_in_range' };
+    }
     const order = {
       id:             orderId,
       type:           spec.type,
@@ -263,7 +289,7 @@ export class MovementOrderSystem {
       targetEntityId: spec.targetEntityId,
       targetPoint:    null,
       patrolRoute:    null,
-      lastTargetPos:  { x: target.x, y: target.y },
+      lastTargetPos:  { x: initTx, y: initTy },
       interceptPoint: null,
       status:         'active',
       completedYear:  null,
@@ -290,6 +316,7 @@ export class MovementOrderSystem {
       `${spec.type === 'intercept' ? 'Intercept' : 'Pursue'}: ${target.name ?? target.id ?? '???'}`,
       'info');
 
+    _trace(`issue ${spec.type} ${orderId} vessel=${vessel.id} → target=${spec.targetEntityId} pos=(${initTx.toFixed(1)},${initTy.toFixed(1)})`);
     EventBus.emit('vessel:orderIssued', { vesselId: vessel.id, order });
     return { ok: true, orderId };
   }
@@ -376,6 +403,7 @@ export class MovementOrderSystem {
     const ty = target.y ?? target.position?.y ?? 0;
     order.lastTargetPos = { x: tx, y: ty };
 
+    _trace(`tick pursue ${order.id} vessel=${vessel.id}@(${vessel.position.x.toFixed(1)},${vessel.position.y.toFixed(1)}) target=${order.targetEntityId}@(${tx.toFixed(1)},${ty.toFixed(1)}) dPhys=${dPhysicsYear.toFixed(4)}`);
     this._moveTowardsAndMaybeComplete(vessel, order, tx, ty, dPhysicsYear, gameYear, target);
   }
 
@@ -392,8 +420,11 @@ export class MovementOrderSystem {
 
     const ip = this._computeInterceptPoint(vessel, target);
     order.interceptPoint = ip;
-    order.lastTargetPos  = { x: target.x ?? 0, y: target.y ?? 0 };
+    const ltx = target.x ?? target.position?.x ?? 0;
+    const lty = target.y ?? target.position?.y ?? 0;
+    order.lastTargetPos = { x: ltx, y: lty };
 
+    _trace(`tick intercept ${order.id} vessel=${vessel.id}@(${vessel.position.x.toFixed(1)},${vessel.position.y.toFixed(1)}) target@(${ltx.toFixed(1)},${lty.toFixed(1)}) IP=(${ip.x.toFixed(1)},${ip.y.toFixed(1)}) dPhys=${dPhysicsYear.toFixed(4)}`);
     this._moveTowardsAndMaybeComplete(vessel, order, ip.x, ip.y, dPhysicsYear, gameYear, target);
   }
 
@@ -459,8 +490,15 @@ export class MovementOrderSystem {
       vessel.position.x        = target.x ?? vessel.position.x;
       vessel.position.y        = target.y ?? vessel.position.y;
     } else {
+      // Świadomy M1 "deep-space drift" state (BUG#4 z playtestu udokumentowane,
+      // nie naprawiane — zob. Appendix C design doca). Vessel kończy pursue/intercept
+      // na vessel target gdzieś w otwartej przestrzeni; nie ma naturalnego "docking"
+      // punktu. Pozostaje state='orbiting' + dockedAt=null — _updatePositions nie
+      // updatuje pozycji (żaden branch nie matchuje), sprite Three.js zostaje na
+      // ostatniej pozycji. Gracz musi wydać kolejny order (moveToPoint do kolonii
+      // albo pursue nowego celu). M2: auto-return / drift physics / nowy state='idle'.
       vessel.position.state    = 'orbiting';
-      vessel.position.dockedAt = null;  // stand-by w przestrzeni
+      vessel.position.dockedAt = null;
     }
     vessel.status = 'idle';
     // Zeruj velocity po arrivalu (stoi przy targecie).
@@ -470,6 +508,7 @@ export class MovementOrderSystem {
       vessel.velocity.updatedYear = gameYear;
     }
 
+    _trace(`complete ${order.id} ${order.type} vessel=${vessel.id} pos=(${vessel.position.x.toFixed(1)},${vessel.position.y.toFixed(1)}) dockedAt=${vessel.position.dockedAt ?? 'null'} year=${gameYear.toFixed(3)}`);
     EventBus.emit('vessel:orderCompleted', {
       vesselId: vessel.id, orderId: order.id, type: order.type, completedYear: gameYear,
     });
@@ -482,6 +521,7 @@ export class MovementOrderSystem {
     order.status = 'blocked';
     order.blockReason = reason;
     this._byVessel.delete(vessel.id);
+    _trace(`blocked ${order.id} ${order.type} vessel=${vessel.id} reason=${reason}`);
     EventBus.emit('vessel:orderBlocked', {
       vesselId: vessel.id, orderId: order.id, reason,
     });

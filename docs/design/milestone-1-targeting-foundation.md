@@ -948,3 +948,57 @@ Debug commands: `enableFleetMaterialization`, `disableFleetMaterialization`,
 
 CLAUDE.md rozszerzony o 9 nowych eventów M1. Ten appendix + memory update.
 
+### Post-implementation playtest (2026-04-23) — 4 bugi znalezione i naprawione
+
+End-to-end playtest w prawdziwej grze (nie tylko smoke testach) ujawnił 4 bugi
+nieuchwycone w izolowanych testach M1. Wszystkie naprawione w pojedynczej sesji
+po finalizacji Milestone 1.
+
+**BUG#1 — pursue instant-completes (critical)**:
+- Root cause: `THREAT_RADIUS_AU = 0.05` → 5.5 px. W realistycznym game layout dwa
+  vessele orbitujące bliskie ciała niebieskie często mają initial distance < 5.5 px.
+  Pierwszy tick `distBefore ≤ THREAT_RADIUS_PX` → `_completeOrder` bez ruchu.
+- Fix (dwuczęściowy):
+  - `THREAT_RADIUS_AU: 0.05 → 0.15` (16.5 px ≈ 2× sprite vessela)
+  - Issue-time reject w `_issuePursueOrIntercept` gdy `initDist < THREAT_RADIUS_PX`
+    (`reason: 'target_already_in_range'`) — UX komunikat dla gracza.
+
+**BUG#2 — lastTargetPos {undefined, undefined} po issue pursue/intercept**:
+- Root cause: `_issuePursueOrIntercept` inicjalizował `lastTargetPos: {x: target.x,
+  y: target.y}`. Dla vessel targets `target.x/y` są `undefined` (tylko
+  `target.position.x/y`). Init dawał `{undefined, undefined}` — widoczne w gry
+  na pauzie przed pierwszym tickiem.
+- Fix: fallback pattern `target.x ?? target.position?.x ?? 0` (taki sam jak w
+  `_tickPursueOrder`). Ten sam bug drugorzędnie w `_tickInterceptOrder` (linia 395
+  pre-fix: `{target.x ?? 0, target.y ?? 0}` — brak fallback do `.position`) — dla
+  intercept vessel-target dawało `lastTargetPos = {0, 0}` co psuło UI. Naprawione
+  przy okazji.
+
+**BUG#3 — enableTargetingTrace flag niezaimplementowana**:
+- Root cause: design doc §11.3 deklarował flagę, ale nikt nie napisał kodu.
+  `grep enableTargetingTrace` → 0 plików.
+- Fix: dodany `_trace(...args)` helper + 6 call points (issue moveToPoint,
+  issue pursue/intercept, tick pursue, tick intercept, complete, blockAndCancel).
+  Gated przez `window.KOSMOS?.debug?.enableTargetingTrace`. Brak output gdy flaga off.
+
+**BUG#4 — vessel w state='orbiting' + dockedAt=null po completed (minor, udokumentowane)**:
+- Stan po `_completeOrder` dla vessel target (nie celestial): `state='orbiting'`,
+  `dockedAt=null`. Żaden branch w `_updatePositions` nie matchuje → vessel zostaje
+  nieruchomy (sprite pozostaje na last rendered position z Three.js cache).
+- Żaden system (OrbitalSpaceSystem, save/restore, EnemyAttackHandler) nie crashuje
+  na tym combo — tylko semantycznie dziwne.
+- **Decyzja**: udokumentowane jako świadomy "deep-space drift" state M1. Gracz
+  musi wydać kolejny order (moveToPoint do kolonii / pursue nowego celu).
+- **M2 TODO**: auto-return home / drift physics / dedykowany state='idle' lub
+  'standby'. Dodany komentarz w `_completeOrder` wskazujący tę sekcję.
+
+**Odchylenie od doca §5.2** (udokumentowane): design doc pisał "próg np. 0.05 AU".
+Podczas playtestu okazało się że to zbyt permisywne — nowa wartość 0.15 AU jest
+tuning-decision płynąca z realnego testu, nie sprzeczność z designem (bo §5.2
+używało "np." dla tuning value).
+
+**Uaktualnione smoke testy**: T7 z Commit 5 (proximity threshold, `vessel=(0,0)
+target=(4,0)` → oczekiwał immediate-complete) po fixie BUG#1 zwraca `ok: false,
+reason: 'target_already_in_range'` przy issue. Semantycznie poprawne — vessel
+już był w range, nie ma czego ścigać.
+
