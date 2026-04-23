@@ -2738,6 +2738,31 @@ export class FleetManagerOverlay {
 
     cy += 32;
 
+    // ── Pasek endurance (Milestone 1 — stamina operacyjna) ────
+    if (vessel.endurance && vessel.endurance.max > 0) {
+      const endPct = vessel.endurance.current / vessel.endurance.max;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.labelEndurance'), x + pad, cy + 10);
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.round(vessel.endurance.current)} / ${Math.round(vessel.endurance.max)}`, x + w - pad, cy + 10);
+      ctx.textAlign = 'left';
+      const eBarX = x + pad;
+      const eBarY = cy + 16;
+      const eBarW = w - pad * 2;
+      const eBarH = 8;
+      ctx.fillStyle = THEME.bgTertiary;
+      ctx.fillRect(eBarX, eBarY, eBarW, eBarH);
+      const eColor = endPct > 0.4 ? THEME.success : endPct > 0.2 ? THEME.warning : THEME.danger;
+      ctx.fillStyle = eColor;
+      ctx.fillRect(eBarX, eBarY, Math.round(eBarW * endPct), eBarH);
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(eBarX, eBarY, eBarW, eBarH);
+      cy += 32;
+    }
+
     // ── Przycisk Cargo (dla statków z ładownią) ──────────────
     // vessel.cargoMax (z modułów) lub ship.cargoCapacity (legacy SHIPS)
     const cargoMaxDisplay = (vessel.cargoMax ?? 0) > 0 ? vessel.cargoMax : (ship?.cargoCapacity ?? 0);
@@ -2786,6 +2811,9 @@ export class FleetManagerOverlay {
     ctx.strokeStyle = THEME.border;
     ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
     cy += 8;
+
+    // ── M1 Targeting — read-only label movementOrder (§8.4) ────
+    cy = this._drawMovementOrderLabel(ctx, x, cy, w, pad, vessel);
 
     // ── Aktywna misja (h=~80) ────────────────────────────────
     const activeMissions = ms?.getActive?.() ?? [];
@@ -3914,6 +3942,55 @@ export class FleetManagerOverlay {
     const xp = vessel.experience ?? 0;
     const level = Math.min(5, Math.floor(xp / 3));
     return '★'.repeat(level) + '☆'.repeat(5 - level);
+  }
+
+  // ── M1 Targeting — read-only label movementOrder (§8.4) ───────────────
+  //
+  // Format: ikona + label. Brak orderu → zwraca cy bez zmian (nic nie rysuje).
+  //   moveToPoint: → MoveTo: (x,y)
+  //   pursue:      ⚔ Pursue: <target name>
+  //   intercept:   ⊕ Intercept: <target name>
+  //   patrol:      ↻ Patrol
+  //   escort:      🛡 Escort: <target name>
+  //   status blocked: ⚠ Order blocked: <reason>
+  _drawMovementOrderLabel(ctx, x, cy, w, pad, vessel) {
+    const order = vessel?.movementOrder;
+    if (!order || order.status === 'cancelled' || order.status === 'completed') return cy;
+
+    // Resolve target name
+    let targetName = '-';
+    if (order.targetEntityId) {
+      const tv = window.KOSMOS?.vesselManager?.getVessel?.(order.targetEntityId);
+      targetName = tv?.name ?? _resolveName(order.targetEntityId);
+    } else if (order.targetPoint) {
+      targetName = `(${order.targetPoint.x.toFixed(0)},${order.targetPoint.y.toFixed(0)})`;
+    }
+
+    let label = '';
+    let color = THEME.textPrimary;
+    if (order.status === 'blocked') {
+      label = `⚠ Order blocked: ${order.blockReason ?? '?'}`;
+      color = THEME.warning;
+    } else {
+      switch (order.type) {
+        case 'moveToPoint': label = `→ MoveTo: ${targetName}`;        color = THEME.accent; break;
+        case 'pursue':      label = `⚔ Pursue: ${targetName}`;        color = THEME.danger; break;
+        case 'intercept':   label = `⊕ Intercept: ${targetName}`;     color = THEME.warning; break;
+        case 'patrol':      label = `↻ Patrol`;                        color = THEME.textSecondary; break;
+        case 'escort':      label = `🛡 Escort: ${targetName}`;       color = THEME.accent; break;
+        default:            label = `? ${order.type}: ${targetName}`;  color = THEME.textDim;
+      }
+    }
+
+    // Suspended oryginalna mission (§8.3) — marker istnieje na vessel._suspendedMission.
+    if (vessel._suspendedMission) {
+      label += ' (mission paused)';
+    }
+
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = color;
+    ctx.fillText(label, x + pad, cy + 10);
+    return cy + 18;
   }
 
   // ── Aktywna misja ─────────────────────────────────────────────────────────

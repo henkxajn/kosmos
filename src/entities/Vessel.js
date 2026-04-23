@@ -16,6 +16,48 @@ import EntityManager from '../core/EntityManager.js';
 
 let _nextVesselId = 1;
 
+// Endurance baseline per rola (Milestone 1 — stub).
+// Uwaga: cyfry są placeholderami; prawdziwy balans + pursuit multiplier w M2.
+//   drain: ubytek endurance per civYear (jednostki CIV_TIME_SCALE).
+//   regen: odzysk per civYear gdy docked.
+const _ENDURANCE_DEFAULTS = {
+  warship:   { drain: 2, regen: 20 },
+  assault:   { drain: 2, regen: 20 },
+  transport: { drain: 2, regen: 20 },
+  cargo:     { drain: 2, regen: 20 },
+  colony:    { drain: 2, regen: 20 },
+  science:   { drain: 1, regen: 20 },
+  scout:     { drain: 1, regen: 20 },
+  default:   { drain: 2, regen: 20 },
+};
+
+// Legacy shipId → rola (dla starych statków bez modułów).
+const _LEGACY_SHIP_ROLE = {
+  science_vessel: 'science',
+  cargo_ship:     'cargo',
+  colony_ship:    'colony',
+};
+
+/**
+ * Zwraca baseline endurance drain/regen (AU/civYear) dla vessela.
+ * Używane w createVessel() oraz w VesselManager.restore() — drain/regen
+ * nie są serializowane, tylko odtwarzane z modułów/kadłuba.
+ *
+ * TODO M2: getEnduranceDefaults(vessel) → odczyt z hull.enduranceSpec + modułów
+ *   (reactor_core, life_support, etc.). Pursuit multiplier także w M2.
+ * @param {object} vessel — instancja lub obiekt z polami modules/shipId
+ * @returns {{ drain: number, regen: number }}
+ */
+export function getEnduranceDefaults(vessel) {
+  let role;
+  if (Array.isArray(vessel?.modules) && vessel.modules.length > 0) {
+    role = _primaryRoleForModules(vessel.modules);
+  } else {
+    role = _LEGACY_SHIP_ROLE[vessel?.shipId] ?? 'default';
+  }
+  return _ENDURANCE_DEFAULTS[role] ?? _ENDURANCE_DEFAULTS.default;
+}
+
 // Primary role dla listy moduli — używane przy auto-naming (przed zbudowaniem vessel instance).
 function _primaryRoleForModules(moduleIds) {
   let hasColony = false, hasTroop = false, hasDropPods = false;
@@ -183,6 +225,34 @@ export function createVessel(shipId, colonyId, opts = {}) {
 
     // Doświadczenie (przyszłość — weteran = bonus)
     experience: 0,
+
+    // ── Milestone 1 — Targeting Foundation ────────────────────────────────
+    // Velocity: efektywna prędkość w AU/rok (z delty pozycji per tick).
+    //   - derived state, NIE serializowane (resync przy pierwszym _updatePositions po load).
+    //   - updatedYear: gameYear ostatniej aktualizacji.
+    velocity: {
+      vx:          0,
+      vy:          0,
+      updatedYear: 0,
+    },
+
+    // Endurance: stamina operacyjna (0..100%).
+    //   drainPerYear/regenPerYear pochodne z roli/modułów (helper getEnduranceDefaults).
+    //   current/max/lastDepleted serializowane; drain/regen odtwarzane przy restore.
+    endurance: (() => {
+      const d = getEnduranceDefaults({ shipId, modules });
+      return {
+        current:       100,
+        max:           100,
+        drainPerYear:  d.drain,
+        regenPerYear:  d.regen,
+        lastDepleted:  null,
+      };
+    })(),
+
+    // MovementOrder: rozkaz ruchu militarnego (moveToPoint/pursue/intercept/patrol/escort).
+    //   null = brak orderu, ruch sterowany wyłącznie przez mission (legacy path).
+    movementOrder: null,
   };
 }
 

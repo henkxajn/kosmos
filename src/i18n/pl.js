@@ -963,6 +963,7 @@ export default {
   'fleet.labelExperience': 'DOŚWIADCZENIE',
   'fleet.labelFuel': 'PALIWO',
   'fleet.labelFuelCells': 'PALIWO (OGNIWA ZASILAJĄCE)',
+  'fleet.labelEndurance': 'WYTRZYMAŁOŚĆ',
   'fleet.activeMission': 'AKTYWNA MISJA',
   'fleet.actionsHeader': 'AKCJE',
   'fleet.availableActions': 'DOSTĘPNE AKCJE',

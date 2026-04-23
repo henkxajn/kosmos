@@ -34,7 +34,7 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import {
   createVessel, effectiveRange, canReach, consumeFuel, refuel,
   needsRefuel, getShipDef, setNextVesselId, getNextVesselId,
-  addMissionLog,
+  addMissionLog, getEnduranceDefaults,
 } from '../entities/Vessel.js';
 import { getModuleCapabilities, calcShipStats, SHIP_MODULES } from '../data/ShipModulesData.js';
 import {
@@ -81,6 +81,14 @@ export class VesselManager {
     // Redirect statku po przylecie międzygwiezdnym (do planety w nowym układzie)
     EventBus.on('vessel:interstellarRedirect', ({ vesselId, targetId }) =>
       this._redirectInterstellarVessel(vesselId, targetId));
+
+    // M1 Targeting — resume oryginalnej mission po zakończeniu/anulowaniu orderu.
+    //   Mission została suspended przez MOS._suspendMissionIfAny przy issue;
+    //   tu rebuildujemy route od aktualnej pozycji do docelowego targetu.
+    EventBus.on('vessel:orderCompleted', ({ vesselId }) =>
+      this._resumeMissionAfterOrder(vesselId));
+    EventBus.on('vessel:orderCancelled', ({ vesselId }) =>
+      this._resumeMissionAfterOrder(vesselId));
 
     // Rozkazy w obcym układzie
     EventBus.on('expedition:foreignRecon', ({ vesselId, targetId, scope }) =>
@@ -798,6 +806,36 @@ export class VesselManager {
         if (missionData.waypoints) missionData.waypoints = missionData.waypoints.map(w => ({ ...w }));
         if (missionData.returnWaypoints) missionData.returnWaypoints = missionData.returnWaypoints.map(w => ({ ...w }));
       }
+      // MovementOrder — deep-copy (jak mission). null gdy brak rozkazu.
+      let movementOrderData = null;
+      if (v.movementOrder) {
+        movementOrderData = { ...v.movementOrder };
+        if (movementOrderData.targetPoint)    movementOrderData.targetPoint    = { ...movementOrderData.targetPoint };
+        if (movementOrderData.lastTargetPos)  movementOrderData.lastTargetPos  = { ...movementOrderData.lastTargetPos };
+        if (movementOrderData.interceptPoint) movementOrderData.interceptPoint = { ...movementOrderData.interceptPoint };
+        if (Array.isArray(movementOrderData.patrolRoute)) {
+          movementOrderData.patrolRoute = movementOrderData.patrolRoute.map(p => ({ ...p }));
+        }
+      }
+      // Endurance — serializujemy current/max/lastDepleted. drainPerYear/regenPerYear
+      // są pochodne z roli/modułów (getEnduranceDefaults) i odtwarzane przy restore.
+      const enduranceData = v.endurance ? {
+        current:      v.endurance.current,
+        max:          v.endurance.max,
+        lastDepleted: v.endurance.lastDepleted ?? null,
+      } : null;
+      // _suspendedMission — oryginalna mission gdy vessel wykonuje movementOrder (§8.3).
+      // Bez tego save/load podczas aktywnego orderu gubiłby kontekst resume.
+      let suspendedMissionData = null;
+      if (v._suspendedMission) {
+        suspendedMissionData = { ...v._suspendedMission };
+        if (suspendedMissionData.waypoints) {
+          suspendedMissionData.waypoints = suspendedMissionData.waypoints.map(w => ({ ...w }));
+        }
+        if (suspendedMissionData.returnWaypoints) {
+          suspendedMissionData.returnWaypoints = suspendedMissionData.returnWaypoints.map(w => ({ ...w }));
+        }
+      }
       vessels.push({
         id:           v.id,
         shipId:       v.shipId,
@@ -843,6 +881,11 @@ export class VesselManager {
           ammoCurrent: v.orbitalStrike.ammoCurrent ?? 0,
           cooldownUntilYear: v.orbitalStrike.cooldownUntilYear ?? 0,
         } : null,
+        // ── Milestone 1 — Targeting Foundation ────────────────────────────
+        endurance:         enduranceData,
+        movementOrder:     movementOrderData,
+        suspendedMission:  suspendedMissionData,
+        // velocity — celowo pominięte (derived; resync w pierwszym _updatePositions po load)
       });
     }
     return {
@@ -909,7 +952,45 @@ export class VesselManager {
         ownerEmpireId:  vd.ownerEmpireId ?? null,
         isWreck:        vd.isWreck ?? false,
         wreckedAt:      vd.wreckedAt ?? null,
+        // ── Milestone 1 — Targeting Foundation ──────────────────────────────
+        // Velocity: derived state, zeruje się przy load; pierwszy tick _updatePositions
+        //   ustawi prawidłową wartość z delty pozycji.
+        velocity: {
+          vx:          0,
+          vy:          0,
+          updatedYear: 0,
+        },
+        // Endurance: current/max/lastDepleted z save; drain/regen pochodne z roli.
+        endurance: {
+          current:       vd.endurance?.current ?? 100,
+          max:           vd.endurance?.max     ?? 100,
+          drainPerYear:  0,  // wyliczane niżej po odtworzeniu modułów
+          regenPerYear:  0,
+          lastDepleted:  vd.endurance?.lastDepleted ?? null,
+        },
+        // MovementOrder: deep-copy po deserializacji z save.
+        movementOrder: (() => {
+          if (!vd.movementOrder) return null;
+          const mo = { ...vd.movementOrder };
+          if (mo.targetPoint)    mo.targetPoint    = { ...mo.targetPoint };
+          if (mo.lastTargetPos)  mo.lastTargetPos  = { ...mo.lastTargetPos };
+          if (mo.interceptPoint) mo.interceptPoint = { ...mo.interceptPoint };
+          if (Array.isArray(mo.patrolRoute)) mo.patrolRoute = mo.patrolRoute.map(p => ({ ...p }));
+          return mo;
+        })(),
       };
+      // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
+      if (vd.suspendedMission) {
+        const sm = { ...vd.suspendedMission };
+        if (sm.waypoints)       sm.waypoints       = sm.waypoints.map(w => ({ ...w }));
+        if (sm.returnWaypoints) sm.returnWaypoints = sm.returnWaypoints.map(w => ({ ...w }));
+        vessel._suspendedMission = sm;
+      }
+      // Endurance drain/regen (M1) — pochodne z roli/modułów; odtwarzane po restore.
+      const endDef = getEnduranceDefaults(vessel);
+      vessel.endurance.drainPerYear = endDef.drain;
+      vessel.endurance.regenPerYear = endDef.regen;
+
       // Przelicz z modułów: colonistCapacity + troop_bay/drop_pods/orbital_strike.
       // Konieczne bo save przechowuje moduły (vessel.modules) ale pola pochodne
       // mogą być stare (pre-Faza desantu) lub niezsynchronizowane.
@@ -994,8 +1075,66 @@ export class VesselManager {
     this._tickRefueling(deltaYears);
     this._tickRepair(deltaYears);
     this._tickFullScans(deltaYears);
+    this._tickEndurance(deltaYears);
+    // M1 Targeting — MovementOrderSystem resolve PRZED _updatePositions
+    //   (order może nadpisać mission.targetX/Y; pozycja liczona z mission).
+    //   Sync call (nie własny time:tick listener) gwarantuje kolejność.
+    window.KOSMOS?.movementOrderSystem?._tick?.(deltaYears);
     this._updatePositions(deltaYears);
     this._tickWreckCleanup();
+  }
+
+  /**
+   * M1 Targeting — tick endurance (stamina operacyjna).
+   *
+   * Drain gdy state='in_transit' (pursuit multiplier w M2).
+   * Regen gdy state='docked'. Orbiting = neutralny (no drain/regen).
+   * Hysteresis dla eventów:
+   *   - vessel:enduranceLow     — gdy current ≤ 20% i flag nie podniesiona
+   *   - reset flag gdy current ≥ 40%
+   *   - vessel:enduranceDepleted — gdy current = 0 i lastDepleted = null
+   *   - lastDepleted zeruje się gdy current > 0 (ready na kolejny cykl)
+   *
+   * @param {number} civDy — civDeltaYears
+   */
+  _tickEndurance(civDy) {
+    if (civDy <= 0) return;
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const LOW_THRESHOLD   = 0.20;  // 20%
+    const RESET_THRESHOLD = 0.40;  // 40% hysteresis
+
+    for (const vessel of this._vessels.values()) {
+      if (vessel.isWreck) continue;
+      const end = vessel.endurance;
+      if (!end) continue;
+
+      const state = vessel.position?.state;
+      if (state === 'in_transit') {
+        // TODO M2: drainMultiplier gdy movementOrder.type ∈ ('pursue','intercept') — ~×3-4
+        end.current = Math.max(0, end.current - (end.drainPerYear ?? 0) * civDy);
+      } else if (state === 'docked') {
+        end.current = Math.min(end.max, end.current + (end.regenPerYear ?? 0) * civDy);
+      }
+      // orbiting / inne — no-op w M1
+
+      const pct = end.max > 0 ? (end.current / end.max) : 0;
+
+      // Hysteresis low/reset
+      if (pct <= LOW_THRESHOLD && !vessel._enduranceLowFired) {
+        vessel._enduranceLowFired = true;
+        EventBus.emit('vessel:enduranceLow', { vesselId: vessel.id, endurance: { ...end } });
+      } else if (pct >= RESET_THRESHOLD && vessel._enduranceLowFired) {
+        vessel._enduranceLowFired = false;
+      }
+
+      // Depleted — raz przy przejściu do zera
+      if (end.current <= 0 && end.lastDepleted == null) {
+        end.lastDepleted = gameYear;
+        EventBus.emit('vessel:enduranceDepleted', { vesselId: vessel.id });
+      } else if (end.current > 0 && end.lastDepleted != null) {
+        end.lastDepleted = null;
+      }
+    }
   }
 
   // Wraki (status='destroyed', isWreck=true) dryfują przez WRECK_LIFETIME_YEARS,
@@ -1108,6 +1247,27 @@ export class VesselManager {
     const moving = []; // statki w ruchu (do vessel:positionUpdate)
 
     for (const vessel of this._vessels.values()) {
+      // M1 Targeting — pursue/intercept są zarządzane przez MovementOrderSystem.
+      //   MOS ustawia vessel.position i vessel.velocity bezpośrednio przed tym call'em;
+      //   tu pomijamy całą logikę interpolacji, tylko push do moving (sprite update).
+      const mo = vessel.movementOrder;
+      const isOrderControlled = mo?.status === 'active' &&
+        (mo.type === 'pursue' || mo.type === 'intercept');
+
+      if (isOrderControlled) {
+        // Velocity już ustawione przez MOS. Nie zerujemy.
+        moving.push(vessel);
+        continue;
+      }
+
+      // M1 Targeting — velocity default zero (docked/orbiting/wreck = zero wg §2.1).
+      // Branches in_transit nadpisują przez _updateVelocityFromDelta po ruchu.
+      if (vessel.velocity) {
+        vessel.velocity.vx = 0;
+        vessel.velocity.vy = 0;
+        vessel.velocity.updatedYear = gameYear;
+      }
+
       const m = vessel.mission;
 
       // Wraki — aktualizuj pozycję z OrbitalSpaceSystem żeby podążały za planetą
@@ -1218,7 +1378,9 @@ export class VesselManager {
       if (vessel.position.state === 'in_transit' && m) {
         // ── Misja międzygwiezdna (warp transit) ──
         if (m.type === 'interstellar_jump' && m.phase === 'warp_transit') {
+          const _preX = vessel.position.x, _preY = vessel.position.y;
           this._tickInterstellar(vessel, m, gameYear);
+          this._updateVelocityFromDelta(vessel, _preX, _preY, deltaYears, gameYear);
           moving.push(vessel);
           continue;
         }
@@ -1226,7 +1388,9 @@ export class VesselManager {
         // ── Foreign recon (full_system) — własna logika interpolacji i skanowania ──
         // Uwaga: returning phase przechodzi dalej do standardowej interpolacji powrotu
         if (m.type === 'foreign_recon' && m.scope === 'full_system' && m.phase !== 'returning') {
+          const _preX = vessel.position.x, _preY = vessel.position.y;
           this._tickForeignRecon(vessel, m, gameYear);
+          this._updateVelocityFromDelta(vessel, _preX, _preY, deltaYears, gameYear);
           this._updateRouteLine(vessel, m);
           moving.push(vessel);
           continue;
@@ -1282,6 +1446,10 @@ export class VesselManager {
           vessel.stats.distanceTraveled += dPx / AU_TO_PX;
         }
 
+        // M1: velocity z delty pozycji (AU/civYear) — przed ewentualnym snap'em
+        // do targetu przy arrival (który teleportuje pozycję i dałby NaN-wa prędkość).
+        this._updateVelocityFromDelta(vessel, prevX, prevY, deltaYears, gameYear);
+
         // ── Detekcja przylotu — statek dotarł do celu ──
         if (!m.phase?.startsWith('return') && gameYear >= m.arrivalYear) {
           const target = this._findEntity(m.targetId);
@@ -1316,6 +1484,116 @@ export class VesselManager {
     if (moving.length > 0) {
       EventBus.emit('vessel:positionUpdate', { vessels: moving });
     }
+  }
+
+  /**
+   * M1 Targeting — resume oryginalnej mission po zakończeniu/anulowaniu orderu (§8.3).
+   *
+   * vessel._suspendedMission to deep-copy oryginalnej mission (z flagą
+   * suspendedDuringReturn). Rebuildujemy route od aktualnej pozycji do docelowego
+   * targetu (dla returning → originId, dla outgoing → targetId).
+   *
+   * @param {string} vesselId
+   */
+  _resumeMissionAfterOrder(vesselId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return;
+    const snapshot = vessel._suspendedMission;
+    if (!snapshot) return;  // brak zawieszonej mission — nic do resume
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+
+    const isReturning = !!snapshot.suspendedDuringReturn;
+    const destId = isReturning
+      ? (snapshot.originId ?? vessel.colonyId)
+      : snapshot.targetId;
+    const destEntity = this._findEntity(destId);
+
+    if (!destEntity) {
+      // Target lost (planeta zniszczona / outpost usunięty itp.) — anuluj mission.
+      console.warn(`[VesselManager] _resumeMissionAfterOrder: destEntity ${destId} nie istnieje — drop mission`);
+      delete vessel._suspendedMission;
+      vessel.mission = null;
+      vessel.status = 'idle';
+      return;
+    }
+
+    const sx = vessel.position.x;
+    const sy = vessel.position.y;
+    const speedAU = vessel.speedAU ?? 1.0;
+
+    // Szybki estimate czasu podróży (distance z aktualnej pos do bieżącej pos celu).
+    // Dla ruchomych planet kepler'owskich ten estimate jest przybliżeniem — używamy
+    // go jako arrivalYear, potem predict ciała na ten arrivalYear dla targetX/Y/waypoints.
+    const dxEst = (destEntity.x ?? sx) - sx;
+    const dyEst = (destEntity.y ?? sy) - sy;
+    const distAUEst = Math.hypot(dxEst, dyEst) / AU_TO_PX;
+    const travelYears = distAUEst / Math.max(0.01, speedAU);
+    const arrivalYear = gameYear + travelYears;
+
+    // Predict pozycji celu na moment arrival (kepler) — jak w dispatchOnMission.
+    const predicted = this._predictPosition(destId, arrivalYear);
+    const tx = predicted?.x ?? destEntity.x ?? sx;
+    const ty = predicted?.y ?? destEntity.y ?? sy;
+
+    const sysId = vessel.systemId ?? destEntity.systemId ?? 'sys_home';
+    const route = this._calcRoute(sx, sy, tx, ty, sysId);
+
+    // Zaadaptuj snapshot do resume (outgoing vs returning).
+    const m = { ...snapshot };
+    delete m.suspendedDuringReturn;
+    if (isReturning) {
+      m.phase           = 'returning';
+      m.returnStartX    = sx;
+      m.returnStartY    = sy;
+      m.returnTargetX   = tx;
+      m.returnTargetY   = ty;
+      m.returnWaypoints = route.waypoints;
+      m.returnDepartYear = gameYear;
+      m.returnYear      = arrivalYear;
+    } else {
+      m.phase       = m.phase ?? 'outgoing';
+      m.startX      = sx;
+      m.startY      = sy;
+      m.targetX     = tx;
+      m.targetY     = ty;
+      m.waypoints   = route.waypoints;
+      m.departYear  = gameYear;
+      m.arrivalYear = arrivalYear;
+    }
+
+    vessel.mission           = m;
+    vessel.status            = 'on_mission';
+    vessel.position.state    = 'in_transit';
+    vessel.position.dockedAt = null;
+    delete vessel._suspendedMission;
+
+    addMissionLog(vessel, gameYear,
+      `Resume mission → ${destEntity.name ?? destId}`,
+      'info');
+
+    EventBus.emit('vessel:launched', { vessel, mission: m });
+  }
+
+  /**
+   * M1 Targeting — wylicz velocity (AU/civYear) z delty pozycji.
+   *
+   * Jednostka: AU/civYear. VesselManager._tick dostaje civDeltaYears z TimeSystem
+   * (linia 71-72), więc delta AU / deltaYears to naturalna civ-scale velocity.
+   * Intercept math (M1/M2) porównuje z vessel.speedAU bez konwersji (zob. §6.2
+   * docs/design/milestone-1-targeting-foundation.md).
+   *
+   * @param {object} vessel
+   * @param {number} prevX — pozycja px przed update
+   * @param {number} prevY
+   * @param {number} civDy — civDeltaYears tego ticku
+   * @param {number} gameYear — aktualny czas gry (do updatedYear)
+   */
+  _updateVelocityFromDelta(vessel, prevX, prevY, civDy, gameYear) {
+    if (!vessel.velocity || civDy <= 1e-9) return;
+    vessel.velocity.vx = (vessel.position.x - prevX) / AU_TO_PX / civDy;
+    vessel.velocity.vy = (vessel.position.y - prevY) / AU_TO_PX / civDy;
+    vessel.velocity.updatedYear = gameYear;
   }
 
   /**

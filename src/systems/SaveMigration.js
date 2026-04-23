@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 64;
+export const CURRENT_VERSION     = 65;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -82,6 +82,7 @@ const MIGRATIONS = {
   61: _migrateV61toV62,
   62: _migrateV62toV63,
   63: _migrateV63toV64,
+  64: _migrateV64toV65,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1619,6 +1620,47 @@ function _migrateV63toV64(data) {
   }
 
   c4x.orbitalSpace = { spheres };
+  return data;
+}
+
+// ── Migracja v64 → v65 ──────────────────────────────────────────────────────
+// Milestone 1 (Targeting Foundation) — schema defaults:
+//   (a) vessel.endurance (stub, baseline drain/regen odtwarzane przy restore z modułów)
+//   (b) vessel.movementOrder (null — brak aktywnego rozkazu)
+//   (c) empire.fleets[].materializedVesselIds / materializationState / lastMaterializedAt
+// Uwaga: vessel.velocity celowo NIE jest migrowane — pole derived, liczone z delty pozycji
+//        per tick (patrz docs/design/milestone-1-targeting-foundation.md §2.1).
+function _migrateV64toV65(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (!c4x) return data;
+
+  // (a) + (b) — vessels
+  const vessels = c4x.vesselManager?.vessels ?? [];
+  for (const v of vessels) {
+    if (!v.endurance) {
+      v.endurance = {
+        current:      100,
+        max:          100,
+        lastDepleted: null,
+        // drainPerYear/regenPerYear — NIE serializujemy; restore pobiera z hull/modułów
+      };
+    }
+    if (v.movementOrder === undefined) v.movementOrder = null;
+  }
+
+  // (c) — empire fleets shadow materialization slots
+  const empires = data.gameState?.empires ?? data.empires;
+  if (empires && typeof empires === 'object') {
+    for (const emp of Object.values(empires)) {
+      if (!emp?.fleets) continue;
+      for (const f of emp.fleets) {
+        if (!Array.isArray(f.materializedVesselIds)) f.materializedVesselIds = [];
+        if (!f.materializationState) f.materializationState = 'abstract';
+        if (f.lastMaterializedAt === undefined) f.lastMaterializedAt = null;
+      }
+    }
+  }
+
   return data;
 }
 

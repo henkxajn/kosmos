@@ -281,6 +281,15 @@ SaveSystem._serializeCiv4x()
 | `groundUnit:disbanded { unitId, planetId, reason, archetypeId }` | ColonyManager (upkeep) | UIManager, EventLog |
 | `groundUnit:resumed { unitId, planetId }` | ColonyManager (upkeep) | ColonyOverlay |
 | `supply:coverageChanged {}` | SupplyCoverageSystem | ColonyOverlay |
+| `vessel:orderIssued { vesselId, order }` | MovementOrderSystem | UIManager (FleetManagerOverlay), VesselManager (suspend mission) |
+| `vessel:orderCompleted { vesselId, orderId, type, completedYear }` | MovementOrderSystem | UIManager, VesselManager (resume mission), EventLog |
+| `vessel:orderCancelled { vesselId, orderId, reason }` | MovementOrderSystem | UIManager, VesselManager (resume mission) |
+| `vessel:orderBlocked { vesselId, orderId, reason }` (`target_lost`/`out_of_range`/`endurance_zero`) | MovementOrderSystem | UIManager (alert), EventLog |
+| `vessel:enduranceLow { vesselId, endurance }` (≤20% z hysteresis reset @40%) | VesselManager (_tickEndurance) | UIManager, EventLog |
+| `vessel:enduranceDepleted { vesselId }` (current=0) | VesselManager (_tickEndurance) | UIManager, EventLog |
+| `empire:fleetMaterialized { empireId, fleetId, vesselIds[], strengthConsumed }` | EmpireFleetMaterializer | UIManager, IntelSystem |
+| `empire:fleetDematerialized { empireId, fleetId, reason }` (`all_vessels_lost`/`returned_home`/`fleet_disbanded`) | EmpireFleetMaterializer | UIManager |
+| `empire:fleetMaterializedVesselLost { empireId, fleetId, vesselId, remainingStrength }` | EmpireFleetMaterializer (on vessel:wrecked) | WarSystem, IntelSystem |
 
 ---
 

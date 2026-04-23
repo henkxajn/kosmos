@@ -101,7 +101,13 @@ const ACTIONS = [
     execute(ctx) {
       const { empire, empireReg } = ctx;
       const home = empire.homeSystemId;
-      const awayFleets = (empire.fleets ?? []).filter(f => f.systemId !== home);
+      // M1 Targeting — zmaterializowane floty NIE mogą wykonać abstract retreat
+      // (są konkretnymi vesselami na mapie; przeniesienie przez moveFleet
+      // duplikowałoby siłę). TODO M2: bidirectional reconciliation — retreat
+      // zmaterializowanej floty dematerializuje ją i odtwarza abstract strength.
+      const awayFleets = (empire.fleets ?? []).filter(
+        f => f.systemId !== home && f.materializationState !== 'full'
+      );
       if (awayFleets.length === 0) return;
 
       // Zawróć pierwszą idle lub nawet w tranzycie (abstract — zmiana destSystemId)

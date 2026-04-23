@@ -33,6 +33,15 @@ export const GAME_CONFIG = {
   // Tło
   BACKGROUND_COLOR: 0x0a0a1a,
   STAR_COUNT_BACKGROUND: 250,
+
+  // ── Feature flagi (Milestone 1 — Targeting Foundation) ───────────────────
+  // Kill-switch dla nowych systemów. OFF-by-default — instancjonowane lazily
+  // gdy flag=true (zob. GameScene._ensureMovementOrderSystem / ...Materializer).
+  // Toggle z devtools: KOSMOS.debug.enableMovementOrders() / disable...().
+  FEATURES: {
+    movementOrders:       false,  // MovementOrderSystem (M1 Commit 4-6)
+    fleetMaterialization: false,  // EmpireFleetMaterializer (M1 Commit 7)
+  },
 };
 
 // Typy gwiazd z parametrami fizycznymi

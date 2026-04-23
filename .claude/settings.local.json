@@ -95,7 +95,11 @@
       "Bash(du -sh src/testing/*)",
       "Bash(pkill -f \"server.js\")",
       "Bash(echo \"exit=$?\")",
-      "Bash(awk '/id:|duration:|type.*production|multiplier/ {print}' src/data/RandomEventsData.js)"
+      "Bash(awk '/id:|duration:|type.*production|multiplier/ {print}' src/data/RandomEventsData.js)",
+      "Bash(powershell -Command \"Get-Command msedge -ErrorAction SilentlyContinue | Select-Object Source\")",
+      "Read(//c/Program Files \\(x86\\)/Microsoft/Edge/Application/**)",
+      "Bash(\"/c/Program Files \\(x86\\)/Microsoft/Edge/Application/msedge.exe\" --headless --disable-gpu --no-pdf-header-footer --print-to-pdf=E:/programy/claude_kody/kosmos/docs/cheats.pdf \"file:///E:/programy/claude_kody/kosmos/docs/cheats.html\")",
+      "Bash(sort -u grep -oE \"^ [a-z_]+: \\\\\\\\{\" src/data/TechData.js)"
     ]
   }
 }

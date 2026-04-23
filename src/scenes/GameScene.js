@@ -70,6 +70,8 @@ import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
+import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
+import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
 import { HULLS } from '../data/HullsData.js';
 import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
 import { EconAI }            from '../systems/ai/EconAI.js';
@@ -254,6 +256,15 @@ export class GameScene {
     window.KOSMOS.warSystem        = this.warSystem;
     window.KOSMOS.invasionSystem   = this.invasionSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
+    // M1 Targeting — lazy init, feature flag. Tworzone gdy
+    //   GAME_CONFIG.FEATURES.movementOrders=true lub via debug.enableMovementOrders().
+    this.movementOrderSystem      = null;
+    window.KOSMOS.movementOrderSystem = null;
+    if (GAME_CONFIG.FEATURES?.movementOrders) this._ensureMovementOrderSystem();
+    // M1 Fleet Materialization — lazy init, feature flag.
+    this.empireFleetMaterializer = null;
+    window.KOSMOS.empireFleetMaterializer = null;
+    if (GAME_CONFIG.FEATURES?.fleetMaterialization) this._ensureEmpireFleetMaterializer();
     // Faza 7: AI (statyczne klasy — ekspozycja dla debug z konsoli)
     window.KOSMOS.militaryAI       = MilitaryAI;
     window.KOSMOS.econAI           = EconAI;
@@ -349,6 +360,68 @@ export class GameScene {
           return unit;
         }
         console.warn(`[debug] Spawn nieudany — sprawdź archetypeId (dostępne: shock_infantry, rocket_artillery, garrison_unit, aa_platform, medic_unit, recon_drone, ground_supply_unit)`);
+      },
+      // ── M1 Targeting (Commit 4) ──────────────────────────────────────
+      // KOSMOS.debug.enableMovementOrders() — włącz feature flag + instancjonuj system.
+      enableMovementOrders: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.movementOrders = true;
+        this._ensureMovementOrderSystem();
+      },
+      // KOSMOS.debug.disableMovementOrders() — wyłącz + anuluj aktywne ordery.
+      disableMovementOrders: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.movementOrders = false;
+        this._disableMovementOrderSystem();
+      },
+      // KOSMOS.debug.issueOrder(vesselId, spec) — wydaj rozkaz.
+      //   spec: { type: 'moveToPoint', targetPoint: { x, y } }
+      //         { type: 'pursue' | 'intercept', targetEntityId: string }
+      //   Feature flag musi być ON (enableMovementOrders() pierwsze).
+      issueOrder: (vesselId, spec) => {
+        const mos = window.KOSMOS?.movementOrderSystem;
+        if (!mos) { console.warn('[debug] MovementOrderSystem wyłączony — użyj enableMovementOrders()'); return { ok: false, reason: 'feature_disabled' }; }
+        const result = mos.issueOrder(vesselId, spec);
+        console.log(`[debug] issueOrder(${vesselId}, ${spec?.type}):`, result);
+        return result;
+      },
+      // KOSMOS.debug.cancelOrder(vesselId) — anuluj aktywny rozkaz.
+      cancelOrder: (vesselId) => {
+        const mos = window.KOSMOS?.movementOrderSystem;
+        if (!mos) { console.warn('[debug] MovementOrderSystem wyłączony'); return false; }
+        const ok = mos.cancelOrder(vesselId, 'debug');
+        console.log(`[debug] cancelOrder(${vesselId}):`, ok);
+        return ok;
+      },
+      // KOSMOS.debug.listOrders() — lista aktywnych orderów.
+      listOrders: () => {
+        const mos = window.KOSMOS?.movementOrderSystem;
+        if (!mos) { console.warn('[debug] MovementOrderSystem wyłączony'); return []; }
+        const orders = mos.listActive();
+        console.table(orders.map(o => ({
+          id: o.id, type: o.type, status: o.status,
+          target: o.targetEntityId ?? (o.targetPoint ? `(${o.targetPoint.x.toFixed(0)},${o.targetPoint.y.toFixed(0)})` : '-'),
+        })));
+        return orders;
+      },
+      // ── M1 Targeting (Commit 7) — EmpireFleetMaterializer ─────────────
+      enableFleetMaterialization: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.fleetMaterialization = true;
+        this._ensureEmpireFleetMaterializer();
+      },
+      disableFleetMaterialization: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.fleetMaterialization = false;
+        this._disableEmpireFleetMaterializer();
+      },
+      // KOSMOS.debug.materializeFleet(empireId, fleetId) — force materializacja (bypass ETA/trigger).
+      materializeFleet: (empireId, fleetId) => {
+        const efm = window.KOSMOS?.empireFleetMaterializer;
+        if (!efm) { console.warn('[debug] EmpireFleetMaterializer wyłączony — użyj enableFleetMaterialization()'); return null; }
+        const result = efm.materializeFleet(empireId, fleetId);
+        console.log(`[debug] materializeFleet(${empireId},${fleetId}):`, result);
+        return result;
       },
     };
 
@@ -2220,6 +2293,54 @@ export class GameScene {
     result.star.x = 0;
     result.star.y = 0;
     return result;
+  }
+
+  /**
+   * M1 Targeting — idempotentne init MovementOrderSystem.
+   * Lazy: tworzymy instancję przy pierwszej potrzebie. Wywoływane z debug toggle
+   * (KOSMOS.debug.enableMovementOrders) lub przy starcie gdy FEATURES.movementOrders=true.
+   */
+  _ensureMovementOrderSystem() {
+    if (this.movementOrderSystem) return this.movementOrderSystem;
+    if (!this.vesselManager) {
+      console.warn('[GameScene] vesselManager jeszcze nieinicjalizowany — odrocz enable');
+      return null;
+    }
+    this.movementOrderSystem = new MovementOrderSystem(this.vesselManager);
+    window.KOSMOS.movementOrderSystem = this.movementOrderSystem;
+    console.log('[GameScene] MovementOrderSystem aktywowany');
+    return this.movementOrderSystem;
+  }
+
+  _disableMovementOrderSystem() {
+    if (!this.movementOrderSystem) return;
+    this.movementOrderSystem.destroy();
+    this.movementOrderSystem = null;
+    window.KOSMOS.movementOrderSystem = null;
+    console.log('[GameScene] MovementOrderSystem deaktywowany');
+  }
+
+  /**
+   * M1 Fleet Materialization — idempotentne init.
+   */
+  _ensureEmpireFleetMaterializer() {
+    if (this.empireFleetMaterializer) return this.empireFleetMaterializer;
+    if (!this.vesselManager) {
+      console.warn('[GameScene] vesselManager jeszcze nieinicjalizowany — odrocz enable');
+      return null;
+    }
+    this.empireFleetMaterializer = new EmpireFleetMaterializer(this.vesselManager, this.empireRegistry);
+    window.KOSMOS.empireFleetMaterializer = this.empireFleetMaterializer;
+    console.log('[GameScene] EmpireFleetMaterializer aktywowany');
+    return this.empireFleetMaterializer;
+  }
+
+  _disableEmpireFleetMaterializer() {
+    if (!this.empireFleetMaterializer) return;
+    this.empireFleetMaterializer.destroy();
+    this.empireFleetMaterializer = null;
+    window.KOSMOS.empireFleetMaterializer = null;
+    console.log('[GameScene] EmpireFleetMaterializer deaktywowany (istniejące mater. floty pozostają)');
   }
 
   _restoreSystem(data, cx, cy) {

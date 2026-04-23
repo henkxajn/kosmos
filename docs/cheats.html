@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>KOSMOS — Cheaty konsoli</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.45;
+    font-size: 10.5pt;
+    margin: 0;
+  }
+  h1 {
+    font-size: 20pt;
+    color: #c38b3a;
+    border-bottom: 2px solid #c38b3a;
+    padding-bottom: 6px;
+    margin: 0 0 6px;
+  }
+  .subtitle {
+    color: #666;
+    font-size: 9.5pt;
+    margin-bottom: 18px;
+  }
+  h2 {
+    font-size: 12pt;
+    color: #1a4a6e;
+    border-left: 3px solid #1a4a6e;
+    padding-left: 8px;
+    margin: 18px 0 8px;
+  }
+  h3 {
+    font-size: 10.5pt;
+    color: #333;
+    margin: 10px 0 4px;
+  }
+  code, pre {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 10pt;
+  }
+  code {
+    background: #f0f0ee;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #8b3a1a;
+  }
+  pre {
+    background: #1a1a1a;
+    color: #e0d8b0;
+    padding: 10px 14px;
+    border-radius: 4px;
+    border-left: 3px solid #c38b3a;
+    overflow-x: auto;
+    margin: 6px 0 10px;
+    page-break-inside: avoid;
+  }
+  pre .comment { color: #7a8a6b; font-style: italic; }
+  pre .fn { color: #8bb6d6; }
+  pre .str { color: #d6b668; }
+  pre .num { color: #d68b68; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 6px 0 10px;
+    font-size: 9.5pt;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    padding: 4px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #f0f0ee; font-weight: 600; }
+  td code { background: #fafaf8; }
+  .note {
+    background: #fff7e0;
+    border-left: 3px solid #c38b3a;
+    padding: 8px 12px;
+    margin: 8px 0 12px;
+    font-size: 9.5pt;
+  }
+  .warn {
+    background: #fde8e0;
+    border-left: 3px solid #c85e28;
+    padding: 8px 12px;
+    margin: 8px 0 12px;
+    font-size: 9.5pt;
+  }
+  .footer {
+    margin-top: 28px;
+    padding-top: 8px;
+    border-top: 1px solid #ddd;
+    font-size: 8.5pt;
+    color: #888;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>KOSMOS — Cheaty konsoli</h1>
+<div class="subtitle">Komendy dostępne w konsoli przeglądarki (F12 → Console). Wszystkie pod <code>window.KOSMOS.debug</code>.</div>
+
+<div class="note">
+  <strong>Jak użyć:</strong> otwórz grę w przeglądarce, naciśnij <code>F12</code>, przejdź do zakładki <code>Console</code>,
+  wklej dowolną z komend poniżej i naciśnij Enter. Zmiany działają natychmiast, nie wymagają reloadu.
+  Wszystko idzie przez normalne API gry (ResourceSystem, CivSystem), więc eventy i UI aktualizują się jak przy normalnej rozgrywce.
+</div>
+
+<h2>Zasoby i waluta</h2>
+
+<h3>give(gains) — dowolne zasoby i commodities</h3>
+<pre><span class="comment">// Dodaj konkretne ilości surowców lub towarów do aktywnej kolonii.</span>
+<span class="comment">// Akceptuje surowce (Fe, C, Si, Cu, Ti, Li, Hv, Xe, Nt),</span>
+<span class="comment">// utility (food, water, research) i commodities (structural_alloys, power_cells, ...).</span>
+
+KOSMOS.debug.<span class="fn">give</span>({ Fe: <span class="num">1000</span>, Ti: <span class="num">500</span>, Hv: <span class="num">200</span> });
+
+KOSMOS.debug.<span class="fn">give</span>({
+  structural_alloys: <span class="num">50</span>,
+  power_cells: <span class="num">30</span>,
+  reactive_armor: <span class="num">20</span>,
+  orbital_shells: <span class="num">10</span>
+});</pre>
+
+<h3>giveAll(amount) — wszystkiego po równo</h3>
+<pre><span class="comment">// Dodaje `amount` KAŻDEGO surowca i commodity w inwentarzu (domyślnie 1000).</span>
+KOSMOS.debug.<span class="fn">giveAll</span>();          <span class="comment">// po 1000 wszystkiego</span>
+KOSMOS.debug.<span class="fn">giveAll</span>(<span class="num">5000</span>);      <span class="comment">// po 5000 wszystkiego</span></pre>
+
+<h3>giveResearch(amount) — punkty badawcze</h3>
+<pre>KOSMOS.debug.<span class="fn">giveResearch</span>();       <span class="comment">// +10 000 research (domyślnie)</span>
+KOSMOS.debug.<span class="fn">giveResearch</span>(<span class="num">50000</span>);   <span class="comment">// +50 000</span></pre>
+
+<h3>giveCredits(amount) — Kredyty handlowe (Kr)</h3>
+<pre><span class="comment">// Waluta handlu cywilnego. Używana do rush build i zakupów awaryjnych.</span>
+KOSMOS.debug.<span class="fn">giveCredits</span>();        <span class="comment">// +10 000 Kr (domyślnie)</span>
+KOSMOS.debug.<span class="fn">giveCredits</span>(<span class="num">50000</span>);    <span class="comment">// +50 000 Kr</span></pre>
+
+<h2>Populacja</h2>
+
+<h3>givePop(amount, strata) — dodaj POPy do aktywnej kolonii</h3>
+<pre><span class="comment">// Strata: laborer (domyślnie), scientist, bureaucrat, specialist</span>
+KOSMOS.debug.<span class="fn">givePop</span>(<span class="num">5</span>);                   <span class="comment">// +5 laborer</span>
+KOSMOS.debug.<span class="fn">givePop</span>(<span class="num">3</span>, <span class="str">'scientist'</span>);       <span class="comment">// +3 naukowców</span>
+KOSMOS.debug.<span class="fn">givePop</span>(<span class="num">2</span>, <span class="str">'bureaucrat'</span>);      <span class="comment">// +2 urzędników</span></pre>
+
+<h2>Technologie</h2>
+
+<h3>unlockTech(...techIds) — natychmiastowe odblokowanie</h3>
+<pre><span class="comment">// Bez argumentów: pakiet militarny (broń, desant, koszary, drony, amunicja orbitalna, logistyka flotowa).</span>
+KOSMOS.debug.<span class="fn">unlockTech</span>();
+
+<span class="comment">// Konkretne techy (dowolna ilość argumentów):</span>
+KOSMOS.debug.<span class="fn">unlockTech</span>(<span class="str">'nuclear_power'</span>);
+KOSMOS.debug.<span class="fn">unlockTech</span>(<span class="str">'ion_drives'</span>, <span class="str">'fusion_drives'</span>);
+KOSMOS.debug.<span class="fn">unlockTech</span>(<span class="str">'exotic_materials'</span>, <span class="str">'warp_drive'</span>, <span class="str">'quantum_computing'</span>);</pre>
+
+<div class="note">
+  <strong>Przydatne ID technologii:</strong>
+  <table>
+    <tr><th>Gałąź</th><th>Podstawowe</th><th>Zaawansowane</th><th>Endgame</th></tr>
+    <tr>
+      <td>Obrona</td>
+      <td><code>point_defense</code>, <code>ground_warfare</code></td>
+      <td><code>drone_warfare</code>, <code>military_logistics</code>, <code>tech_munitions</code>, <code>fleet_logistics</code></td>
+      <td><code>strategic_doctrine</code>, <code>veteran_corps</code></td>
+    </tr>
+    <tr>
+      <td>Energia</td>
+      <td><code>basic_computing</code>, <code>automation</code></td>
+      <td><code>nuclear_power</code>, <code>quantum_computing</code></td>
+      <td><code>antimatter_containment</code></td>
+    </tr>
+    <tr>
+      <td>Napęd</td>
+      <td><code>exploration</code>, <code>rocketry</code></td>
+      <td><code>ion_drives</code>, <code>fusion_drives</code>, <code>cryogenics</code></td>
+      <td><code>warp_drive</code>, <code>exotic_materials</code></td>
+    </tr>
+    <tr>
+      <td>Kolonizacja</td>
+      <td><code>orbital_survey</code>, <code>colonization</code></td>
+      <td><code>interplanetary_logistics</code>, <code>advanced_trade</code></td>
+      <td><code>jump_gate_construction</code></td>
+    </tr>
+  </table>
+</div>
+
+<h2>Wrogowie i walka</h2>
+
+<h3>spawnTestEnemy() — wroga kolonia do testów desantu</h3>
+<pre><span class="comment">// Tworzy wrogie imperium + kolonię na najbliższym niezamieszkałym ciele.</span>
+<span class="comment">// Przydatne do testów bitwy orbitalnej, dominacji orbitalnej, desantu i ostrzału.</span>
+KOSMOS.debug.<span class="fn">spawnTestEnemy</span>();</pre>
+
+<h2>Przykładowe scenariusze</h2>
+
+<h3>Szybki start: pełne wyposażenie do testu desantu</h3>
+<pre><span class="comment">// 1. Odblokuj militarne techy</span>
+KOSMOS.debug.<span class="fn">unlockTech</span>();
+
+<span class="comment">// 2. Daj surowce i commodities na budowę statku</span>
+KOSMOS.debug.<span class="fn">giveAll</span>(<span class="num">2000</span>);
+
+<span class="comment">// 3. Daj research do dalszych technologii</span>
+KOSMOS.debug.<span class="fn">giveResearch</span>(<span class="num">50000</span>);
+
+<span class="comment">// 4. Daj POPy do obsługi nowych budynków</span>
+KOSMOS.debug.<span class="fn">givePop</span>(<span class="num">10</span>);
+
+<span class="comment">// 5. Spawn wrogiej kolonii</span>
+KOSMOS.debug.<span class="fn">spawnTestEnemy</span>();</pre>
+
+<h3>Tryb "sandbox" — wszystko bez limitów</h3>
+<pre>KOSMOS.debug.<span class="fn">unlockTech</span>(
+  <span class="str">'point_defense'</span>, <span class="str">'ground_warfare'</span>, <span class="str">'military_logistics'</span>,
+  <span class="str">'drone_warfare'</span>, <span class="str">'tech_munitions'</span>, <span class="str">'fleet_logistics'</span>,
+  <span class="str">'nuclear_power'</span>, <span class="str">'ion_drives'</span>, <span class="str">'fusion_drives'</span>,
+  <span class="str">'quantum_computing'</span>, <span class="str">'exotic_materials'</span>
+);
+KOSMOS.debug.<span class="fn">giveAll</span>(<span class="num">100000</span>);
+KOSMOS.debug.<span class="fn">giveResearch</span>(<span class="num">1000000</span>);
+KOSMOS.debug.<span class="fn">giveCredits</span>(<span class="num">1000000</span>);
+KOSMOS.debug.<span class="fn">givePop</span>(<span class="num">50</span>);</pre>
+
+<div class="warn">
+  <strong>Uwaga:</strong> cheaty nadpisują stan zapisu. Po ich użyciu save będzie zawierał dodane zasoby.
+  Nie cofają się automatycznie. Jeśli chcesz wrócić do czystego stanu — załaduj save z przed użycia cheatu
+  lub zacznij nową grę.
+</div>
+
+<div class="footer">
+  KOSMOS — Symulator Układu Słonecznego + 4X · Wygenerowano z source na podstawie <code>src/scenes/GameScene.js</code>
+</div>
+
+</body>
+</html>

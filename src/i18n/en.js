@@ -963,6 +963,7 @@ export default {
   'fleet.labelExperience': 'EXPERIENCE',
   'fleet.labelFuel': 'FUEL',
   'fleet.labelFuelCells': 'FUEL (POWER CELLS)',
+  'fleet.labelEndurance': 'ENDURANCE',
   'fleet.activeMission': 'ACTIVE MISSION',
   'fleet.actionsHeader': 'ACTIONS',
   'fleet.availableActions': 'AVAILABLE ACTIONS',
