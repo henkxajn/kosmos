@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v55 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v65 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -154,7 +154,7 @@ Projekt realizuje podejście **MDA (Mechanics → Dynamics → Aesthetics)**:
 | `src/core/EventBus.js` | Serce komunikacji — błąd tu psuje wszystko |
 | `src/core/EntityManager.js` | Rejestr encji — modyfikacja rozbija save/restore |
 | `src/systems/PhysicsSystem.js` | Prawa Keplera + kolizje — fizyka orbitalna |
-| `src/config/GameConfig.js` | Globalne stałe gry |
+| `src/config/GameConfig.js` | Globalne stałe gry + `FEATURES` flagi (M1: movementOrders, fleetMaterialization) |
 | `src/map/HexGrid.js` | Matematyka hex cube coordinates |
 | `src/systems/SaveMigration.js` | Łańcuch migracji save'ów — centralny punkt, nie rozpraszaj |
 | `generate-planets.js` + `lib/` | Generator tekstur planet — 9 modułów, pipeline heightmap→color→PBR |
@@ -189,6 +189,21 @@ DistanceUtils (src/utils/DistanceUtils.js)
 SaveSystem._serializeCiv4x()
   └─ czyta: window.KOSMOS.{resourceSystem, civSystem, buildingSystem, techSystem, expeditionSystem, vesselManager}
   └─ zapisuje: resources, civ, buildings (z baseRates + popCost!), techs, expeditions, vesselManager
+
+MovementOrderSystem (src/systems/MovementOrderSystem.js) — M1, feature flag OFF
+  └─ issueOrder(vesselId, spec) → { ok, reason?, orderId? }
+  └─ cancelOrder(vesselId, reason) → bool
+  └─ getOrder(vesselId), listActive()
+  └─ _tick(civDy) — pursue/intercept zarządzają pozycją bezpośrednio; moveToPoint przez mission.
+  └─ Typy: moveToPoint, pursue, intercept (pełne) + patrol, escort (stub M2).
+  └─ Devtools: KOSMOS.debug.{enableMovementOrders, issueOrder, cancelOrder, listOrders, enableTargetingTrace}.
+
+EmpireFleetMaterializer (src/systems/EmpireFleetMaterializer.js) — M1, feature flag OFF
+  └─ materializeFleet(empireId, fleetId) — strength → vessels (via FleetCompositionPolicy)
+  └─ dematerializeFleet(...) — cleanup przy full loss
+  └─ Trigger: empire:fleetMoved gdy destSystemId='sys_home' + ETA ≤ 2 civYears
+  └─ Budżety: MAX_MATERIALIZE_PER_TICK=2, MAX_TOTAL_MATERIALIZED_VESSELS=40
+  └─ Devtools: KOSMOS.debug.{enableFleetMaterialization, materializeFleet}.
 ```
 
 ---
@@ -419,6 +434,16 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 ### Testowanie AI (✅ ukończone)
 - [x] Headless bots + runner + UI + raporty (commit `f296032`)
 - [x] ConclusionsEngine (18 reguł wniosków) + rich metrics + RuleBot v4 priorytetyzujący łańcuch kosmiczny (commit `5d5ffed`)
+
+### Milestone 1 — Targeting Foundation (✅ ukończony, save v65, tag `m1-complete`)
+Design: `docs/design/milestone-1-targeting-foundation.md` + Appendix C (implementation notes + playtest bugfixes). Podsumowanie: `docs/design/milestone-1-summary.md`.
+- [x] **MovementOrder** (`src/systems/MovementOrderSystem.js`) — moveToPoint (mission-based), pursue/intercept (MOS-controlled, linear intercept math), patrol/escort stub. Feature flag OFF-by-default.
+- [x] **Shadow fleet materialization** (`src/systems/EmpireFleetMaterializer.js` + `src/data/FleetCompositionPolicy.js`) — wrogie floty strength→vessels gdy leci na sys_home; full consumption; retreat blocked dla materialized. Feature flag OFF-by-default.
+- [x] **Endurance** — stamina operacyjna (drain/regen per civYear), hysteresis events, stub pod reformę fuel w M2.
+- [x] **Velocity tracking** — per-tick velocity w AU/civYear (derived, nie serializowane).
+- [x] **mission.suspended** — MOS suspenduje oryginalną mission przez `vessel._suspendedMission` snapshot, resume po orderCompleted/Cancelled.
+- [x] **Save v64→v65** — centralna migracja w SaveMigration, wszystkie nowe pola z sensownymi defaults.
+- [x] **Playtest bugfixes** (tag `m1-complete`): THREAT_RADIUS 0.05→0.15 AU + issue-time reject `target_already_in_range`; init `lastTargetPos` fallback pattern; `enableTargetingTrace` flag + 6 call points; deep-space drift state udokumentowany.
 
 ---
 
