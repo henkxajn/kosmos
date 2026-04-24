@@ -218,6 +218,16 @@ export class VesselCombatSystem {
     };
     gameState.set(`battles.${battleId}`, battleRec, 'deep_space_combat');
     EventBus.emit('battle:resolved', { warId: null, battleId, result: battleRec });
+
+    // Fill cooldown dla wszystkich par z bitwy (nie tylko triggering pair).
+    // Zapobiega re-engagement gdy ProximitySystem emituje wiele combatRangeEnter
+    // w tym samym ticku dla multi-vessel team-up (np. pursue 1 wroga w ciasnej
+    // grupie 3 wrogich vesseli → 3 eventy → bez tego pętla robiłaby 3 bitwy).
+    for (const a of sideA) {
+      for (const b of sideB) {
+        this._recentlyEngaged.set(pairKey(a.id, b.id), year);
+      }
+    }
   }
 
   // ── Wreck placement — delegacja do EnemyAttackHandler._turnIntoWreck ──
@@ -276,6 +286,11 @@ export class VesselCombatSystem {
     return window.KOSMOS?.timeSystem?.gameTime ?? 0;
   }
 
+  // TODO M3: battleId collision w tym samym ticku między tymi samymi stronami.
+  // Currently mitigated by team-up cooldown (wszystkie pary w engagement →
+  // cooldown po _applyOutcome, więc kolejny combatRangeEnter w tym ticku jest
+  // odrzucany przez _handleCombatRangeEnter). Prawdziwy fix: counter/sequence
+  // w _makeBattleId.
   _makeBattleId(year, ownerA, ownerB) {
     const yr = Number(year).toFixed(2).replace(/\./g, '_');
     return `battle_ds_${yr}_${ownerA}_${ownerB}`;
