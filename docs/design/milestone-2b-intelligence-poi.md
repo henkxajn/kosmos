@@ -25,6 +25,106 @@ M2b zakłada M2a działa w trybie produkcyjnym — VesselCombatSystem emituje
 
 ---
 
+## §0.5. Lessons from M2a playtest
+
+M2a miał 8 commitów implementacji + 5 post-playtest fixes. Offline smoke tests
+169/169 PASS nie wystarczyły — real-flow playtest ujawnił 5 bugów 
+integracyjnych. Te lessons kształtują M2b approach.
+
+### L1. Offline smoke ≠ real-flow integration
+
+Wszystkie 8 M2a commitów miały green smoke offline. Real-flow playtest w 
+Combat Sandbox ujawnił 5 bugów:
+
+- **Pursue release-from-orbit asymetryczny** do moveToPoint (commit d7b27e2)
+- **Location schema string→object niespójny** w 3 miejscach: EAH 
+  `_resolveBatchedBattle`, WarSystem `forceBattle`, WarSystem `_fleetArrived` 
+  (commit bc1e268)
+- **VCS engagement nigdy nie odpalał** — design flaw ProximitySystem: 
+  pojedynczy próg detection 0.5 AU vs VCS wymóg 0.15 AU, hysteresis band 
+  0.15-0.5 AU to no-op, drugiego eventu przy <0.15 AU nie ma (commit 23270dd 
+  — Opcja Z tymczasowa via orderCompleted hook)
+- **Endurance drain velocity degradation** przy 0 — undefined behavior poza 
+  scope M2a (commit 4109a59 — flaga `enduranceDrainActive=false`)
+- **VCS battles UI silent skip** — `if (!war) return` gate w GameScene 
+  handlerach, VCS emituje `warId=null` → gracz nie widział bitew mimo 
+  poprawnie działającego core loop (commit 67834d1 + ff0732e)
+
+**M2b implication:** każdy commit MUSI mieć offline smoke AND zidentyfikowany 
+real-flow scenariusz playtestowy. §11 commits plan rozszerzyć mentalnie o 
+"manual integration test" per commit (nie formalizować w tabeli — to workflow 
+guidance, nie deliverable).
+
+### L2. ProximitySystem dwuprogowy jest wymagany, nie opcjonalny
+
+M2a VCS używa tymczasowego `vessel:orderCompleted` hook (Opcja Z decision w 
+commit 23270dd). Hook działa TYLKO dla pursue/intercept, bo patrol/escort w 
+M2b nie emitują orderCompleted podczas regularnego ruchu — patrol chodzi w 
+pętli, escort trzyma się blisko, oba bez "completion" w M1 sense.
+
+**M2b implication:** §11.5 ProximitySystem refactor jako Commit 0 (pre-flight) 
+jest BLOCKER, nie optional. Bez niego patrol/escort auto-engage nie zadziała. 
+Już udokumentowane w §11.5 i §12 R10 (HIGH severity).
+
+### L3. UI handlers dla nowych formatów — upfront, nie post-hoc
+
+M2a VCS battles miały nowy format: prefix `battle_ds_`, `participantA.type: 
+'vessel_group'`, `warId: null`, `location.point: {x,y}`. Stare handlery 
+(GameScene modal queue + EventLog push) zakładały WarSystem-only format z 
+`warId≠null` i `participantA.type: 'empire'`. Silent skip — bitwy się 
+odbywały, gracz nic nie widział. Fix #5 dopiero to wyłapał.
+
+**M2b implication:** dla KAŻDEGO nowego eventu w M2b (§3 EventBus contract) 
+MUSI być zaplanowana UI reaction w tym samym commicie co system emitujący. 
+Minimum: EventLog entries + FleetOverlay updates. Pełny right-click menu dla 
+POI → M3 (zgodnie z §9.3 i §13).
+
+Lista M2b events wymagających UI deliverables — patrz **§6.5 UI deliverables 
+M2b (minimum viable)**.
+
+### L4. AutoRetreat UX — BUG#4 drift state re-evaluated
+
+AutoRetreatSystem wydaje moveToPoint do koordynatów kolonii. MOS kompletuje 
+order gdy vessel osiąga punkt (THREAT_RADIUS_AU), ale NIE dokuje — vessel 
+zostaje w `state='orbiting'`, `dockedAt=null`. Gracz musi ręcznie wydać 
+kolejny order żeby zadokować.
+
+**M2b re-assessment:** patrol/escort w M2b używają `WAYPOINT_REACHED_PX` bez 
+completion (§10.2, §10.3) — inna semantyka niż moveToPoint + completion, 
+drift state się NIE zreprodukuje w M2b patrol/escort normal flow. Dotyczy 
+TYLKO AutoRetreat path (M2a deliverable). §11.6 O2 updated accordingly — 
+deferred do M3 razem z UI reform (manual re-dock control).
+
+### L5. Combat Sandbox jako pierwsza linia obrony
+
+Combat Sandbox dla M2a zaoszczędził ~30-60 min per playtest iteration 
+(zamiast setup manualny przez nową grę → spawn wrogów → wypasienie → wojna). 
+5 post-playtest fixów × ~4 iteracje testowych = sandbox zwrócił się wielokrotnie.
+
+**M2b implication:** rozważyć **rozszerzenie Combat Sandbox** albo **nowy 
+sandbox scenariusz** dla M2b testów. Minimum testowe scenariusze:
+
+- POI setup test (stworzenie waypoint + patrol route + picket stub — 
+  walidacja schema + lifecycle)
+- Intel contact propagation (gracz vessel widzi wroga z różnych dystansów — 
+  rumor vs contact transitions + timeout degradation)
+- Patrol route cycle (vessel z patrol order chodzi w pętli 3+ waypoints, 
+  loop i ping_pong)
+- Escort integrity (escortee dostaje autoRetreat → escort cancel z 
+  `reason='escortee_lost'`)
+- Intercept z prediction cone widoczny visual-wise
+
+Nowe `KOSMOS.debug.createPOI/listPOIs/issueGoToPOI/issuePatrol/issueEscort` 
+wrappers (§9.3) to minimum. Sandbox scenariusz jako osobny commit 
+pre-implementation — rozważyć przed Commit 2 IntelSystem albo odłożyć do 
+pre-playtest session (analogicznie do M2a gdzie sandbox był zrobiony przed 
+Commit 1).
+
+**Decyzja o sandbox do podjęcia przy zatwierdzaniu planu commitów** — nie 
+blokuje design doc update.
+
+---
+
 ## §1. Weryfikacja kontekstu
 
 M2a merged do main, save v66, feature flagi M2a przetestowane. Brak odchyleń od
@@ -321,6 +421,76 @@ time:tick (1 civYear accumulator)
 - O(1) per vessel z active patrol. Przy max 50 aktywnych patroli: 50 µs.
 
 **Suma M2b per tick**: ~1-2 ms (prediction cone dominuje).
+
+---
+
+## §6.5. UI deliverables M2b (minimum viable)
+
+M2b jest "quality of life" feature — full UI (right-click menu, panel list, 
+overlay mode toggles) jest świadomie odłożony do M3 (§13). ALE: każdy event 
+emitowany przez M2b systemy MUSI mieć minimum UI reaction, inaczej gracz 
+nie widzi co się dzieje (lekcja L3 z §0.5).
+
+Poniższa tabela listuje UI deliverables wymagane w M2b, zmapowane na 
+commity z §11. Każdy UI element jest częścią commitu systemu który emituje 
+event — nie osobny commit.
+
+### EventLog entries (za każdy emitowany event M2b)
+
+| Event | Emitowany w | EventLog text (PL) | Severity |
+|---|---|---|---|
+| `intel:vesselContactChanged` | Commit 2 | `"Wykryto obcy statek [quality]: [vessel name lub ID]"` | info |
+| `intel:vesselContactLost` | Commit 2 | `"Utracono kontakt z [vessel name]: ostatnia pozycja [x,y]"` | warn |
+| `poi:created` | Commit 5 | `"Utworzono POI [type] '[name]'"` | info |
+| `poi:deleted` | Commit 5 | `"Usunięto POI '[name]'"` | info |
+| `vessel:goToPOIIssued` | Commit 6 | `"[vessel name] → POI '[poi name]'"` | info |
+| `vessel:patrolStarted` | Commit 6 | `"[vessel name] rozpoczyna patrol '[poi name]' ([N] waypoints)"` | info |
+| `vessel:patrolWaypointReached` | Commit 6 | `"[vessel name] osiągnął waypoint [index+1]/[total]"` | info (low priority, rozważyć throttling) |
+| `vessel:escortStarted` | Commit 7 | `"[vessel name] eskortuje [escortee name]"` | info |
+| `vessel:escortLost` | Commit 7 | `"[vessel name] stracił eskortowanego: [reason]"` (reason translate: 'escortee_lost' → 'zniszczony', 'escortee_out_of_range' → 'poza zasięgiem') | warn |
+
+**Implementacja:** reuse istniejący EventLog handler pattern z M2a 
+(GameScene battle:resolved handler, §11.4 M2a report). Każdy commit dodaje 
+własny EventBus.on → push do EventLog queue. Żadnego nowego UI kodu.
+
+### FleetOverlay updates (panel flot lewy)
+
+| Vessel order state | Label (PL) | Commit |
+|---|---|---|
+| `type='goToPOI'` | `"→ POI [name]"` | Commit 6 |
+| `type='patrol'` + index known | `"Patrol [name] ([idx+1]/[N])"` | Commit 6 |
+| `type='escort'` | `"Escort: [escortee name]"` | Commit 7 |
+
+Istniejący FleetOverlay pattern z M1 (moveToPoint, pursue, intercept labels) 
+— analogiczna rozbudowa switch statement w render. Fallback na istniejący 
+"w locie" dla nieznanych type.
+
+### ThreeRenderer additions
+
+| Element | Commit | Już zaplanowane |
+|---|---|---|
+| Prediction cone mesh | Commit 4 | ✅ §8.3 |
+| POI sprites per-type | Commit 7 | ✅ §9.3 (blue waypoint, green patrol, red picket, yellow rally, purple ambush) |
+
+### Deferred do M3 (świadomie, zgodnie z §13)
+
+- Right-click menu "Create POI / Issue order"
+- POI list panel z edit modal
+- Intel overlay (colored fleet state indicators — czerwone/żółte/szare ring 
+  dookoła enemy vessel sprite zależnie od quality)
+- Prediction cone hover mode (tylko na hover targetu, reszta hidden)
+- Escort visual line (linia od escort do escortee)
+
+### Rationale
+
+M2b minimum viable UI pokrywa "gracz wie co się dzieje w grze" bez full 
+right-click UX. Analogicznie do M2a gdzie po fix #5 mieliśmy PORAŻKA modal 
++ EventLog entry dla VCS battles, ale jeszcze nie manual retreat control 
+(to M3 scope).
+
+**Effort oszacowanie:** ~20-30% każdego commit'u M2b idzie na UI deliverable 
+tego commitu (EventLog + FleetOverlay label jeśli dotyczy). Nie osobne 
+commity, nie osobna sesja.
 
 ---
 
@@ -631,6 +801,17 @@ Rendering POI na mapie 3D: sprite per-type (blue waypoint, green patrol, red
 picket, yellow rally, purple ambush) + tooltip na hover. Minimalny UI.
 
 Pełny right-click menu + panel listy → M3.
+
+### 9.3.1. Cross-reference do §6.5 UI deliverables
+
+Poza devtools + POI sprites, M2b dostarcza **minimum viable UI reactions** 
+dla wszystkich nowych EventBus events — patrz §6.5 pełna lista. Dotyczy to 
+IntelSystem events (Commit 2), POI CRUD events (Commit 5), i nowych MOS 
+order events (Commits 6-7). Każdy commit dostarcza własnego EventLog 
+handlera + FleetOverlay label update jeśli dotyczy typu ordera.
+
+Pełny right-click menu POI, panel listy POI, edit modal, intel overlay 
+colored indicators, prediction cone hover mode — deferred do M3 (§13).
 
 ---
 
@@ -946,7 +1127,7 @@ przy planowaniu harmonogramu. Szczegóły: `milestone-2a-implementation-report.m
 | # | Issue | Severity | Kiedy warto zrobić |
 |---|---|---|---|
 | O1 | Endurance drain frozen (§12.1) | LOW | **Zostaw zamrożone** — unfreeze docelowy w M3 po pełnej reformie fuel/power cells. W M2b flaga `enduranceDrainActive` pozostaje OFF. |
-| O2 | BUG#4 drift state po auto-retreat (§12.2) | MEDIUM | Warto naprawić **przed patrol/escort** (§10.2/§10.3), bo te ordery też używają `moveToPoint` internalnie — ten sam drift state zagrozi UX. Można zrobić razem z §11.5 refactor lub osobnym commitem pre-M2b. Estimated: 0.5-1d. |
+| O2 | BUG#4 drift state po auto-retreat (§12.2) | MEDIUM | **REVISED ASSESSMENT (post-design review):** patrol/escort runtime (§10.2/§10.3) używają `WAYPOINT_REACHED_PX` bez completion — inna semantyka niż `moveToPoint`+completion, drift state się NIE zreprodukuje w M2b patrol/escort normal flow. Drift dotyczy tylko AutoRetreat path (M2a deliverable). **Deferred do M3** razem z UI reform (right-click "Re-dock to colony" manual control). Nie blokuje M2b. |
 | O3 | Deep-space wrak real-flow weryfikacja (§12.3) | LOW | Zrobić w ramach M2b playtestu — scenariusz z `resolveDeepSpaceBattle(vessel, weak_target)` + force-kill. Offline 25/25 PASS już istnieje, to defense-in-depth. |
 
 **Kontrast z §11.5 (BLOCKER):** ProximitySystem refactor MUSI iść przed
