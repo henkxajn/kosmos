@@ -204,6 +204,49 @@ EmpireFleetMaterializer (src/systems/EmpireFleetMaterializer.js) — M1, feature
   └─ Trigger: empire:fleetMoved gdy destSystemId='sys_home' + ETA ≤ 2 civYears
   └─ Budżety: MAX_MATERIALIZE_PER_TICK=2, MAX_TOTAL_MATERIALIZED_VESSELS=40
   └─ Devtools: KOSMOS.debug.{enableFleetMaterialization, materializeFleet}.
+
+ProximitySystem (src/systems/ProximitySystem.js) — M2a, feature flag OFF
+  └─ _tick(civDy) — per-tick detection par vessel↔vessel (O(n²/2) z rotującym offsetem)
+  └─ Hysteresis: enter <0.5 AU, exit ≥0.6 AU (nie miga na granicy)
+  └─ Budget MAX_PAIRS_PER_TICK=500 — pełny skan 100 vesseli w ~10 ticków
+  └─ Emituje: vessel:proximityEnter {vesselAId, vesselBId, distanceAU, sameFaction}, vessel:proximityExit
+  └─ Cleanup aktywnych par na vessel:wrecked (zapobiega false-positive reuse ID)
+  └─ Devtools: KOSMOS.debug.{enableProximity, disableProximity}
+
+VesselCombatSystem (src/systems/VesselCombatSystem.js) — M2a, feature flag OFF
+  └─ Event-driven na vessel:proximityEnter (dist ≤ 0.15 AU, !sameFaction)
+  └─ Team-up by ownerEmpireId — M2a tylko player ↔ highest-hostility empire
+  └─ BattleSystem.resolveBattle z location={systemId, planetId:null, point:{x,y}}
+  └─ Wreck placement przez EnemyAttackHandler._turnIntoWreck(v, midpoint, year)
+  └─ Cooldown ENGAGEMENT_COOLDOWN_YEARS=2 na parę (zapobiega spam przy draw/retreat)
+  └─ Devtools: KOSMOS.debug.{enableVesselCombat, disableVesselCombat, resolveDeepSpaceBattle}
+
+AutoRetreatSystem (src/systems/AutoRetreatSystem.js) — M2a, aktywny z vesselCombat
+  └─ Event-driven na battle:resolved (retreated='A'|'B')
+  └─ _findNearestFriendlyPlanet: preferencja full colonies > outposts > wrak
+  └─ issueOrder(moveToPoint, targetPoint=planet) przez MovementOrderSystem
+  └─ Marker vessel.movementOrder.retreatFromBattleId = battleId
+  └─ Fallback: brak friendly planet → delegacja do EAH._turnIntoWreck z wreckLocation=current pos
+  └─ Emituje: vessel:autoRetreatIssued, vessel:autoRetreatFailed
+
+Unified aggregator (WarSystem._fleetArrived) — M2a, feature flag unifiedAggregator OFF
+  └─ Gdy FEATURES.unifiedAggregator=true I fleet.materializationState='full' I materializedVesselIds[]:
+      - SKIP abstract battle (strength=0 byłoby duplikacją)
+      - destSystemId/etaYear=null (flota zaparkowana jako materialized)
+      - konkretne vessele walczą przez EnemyAttackHandler lub VesselCombatSystem
+  └─ Rozwiązuje §P2/P3 z m2-reconnaissance.md (double-hit materialized fleet)
+
+EnemyAttackHandler._turnIntoWreck — M2a rozszerzony kontrakt (commit 5)
+  └─ arg2 dockedAtOrPoint:
+      string → planetId (M1 legacy orbital graveyard path)
+      {x, y} → deep-space point (wrak zamrożony, wreckLocation serializowane)
+      null   → smart fallback: dockedAt istnieje→orbital, inaczej freeze w pozycji
+  └─ Expose przez window.KOSMOS.enemyAttackHandler (commit 5 dodał)
+
+Endurance drain multiplier (VesselManager._tickEndurance) — M2a commit 8
+  └─ PURSUE_DRAIN_MULT=3.0 gdy movementOrder.type ∈ ('pursue','intercept')
+  └─ Wywoływany dla state='in_transit' LUB isPursuing (pursue orbiting też drainuje)
+  └─ Presja zasobowa — hard-stop na endurance=0 → M3
 ```
 
 ---
@@ -305,6 +348,12 @@ EmpireFleetMaterializer (src/systems/EmpireFleetMaterializer.js) — M1, feature
 | `empire:fleetMaterialized { empireId, fleetId, vesselIds[], strengthConsumed }` | EmpireFleetMaterializer | UIManager, IntelSystem |
 | `empire:fleetDematerialized { empireId, fleetId, reason }` (`all_vessels_lost`/`returned_home`/`fleet_disbanded`) | EmpireFleetMaterializer | UIManager |
 | `empire:fleetMaterializedVesselLost { empireId, fleetId, vesselId, remainingStrength }` | EmpireFleetMaterializer (on vessel:wrecked) | WarSystem, IntelSystem |
+| `vessel:proximityEnter { vesselAId, vesselBId, distanceAU, sameFaction }` | ProximitySystem (M2a) | VesselCombatSystem; (M2b: IntelSystem) |
+| `vessel:proximityExit { vesselAId, vesselBId }` | ProximitySystem (M2a) | (M2b: IntelSystem) |
+| `vessel:engaged { sideA: vesselIds[], sideB: vesselIds[], location }` | VesselCombatSystem (M2a; opt) | UIManager (EventLog) |
+| `vessel:autoRetreatIssued { vesselId, battleId, destinationPlanetId, orderId }` | AutoRetreatSystem (M2a) | UIManager (EventLog) |
+| `vessel:autoRetreatFailed { vesselId, battleId, reason }` (`no_friendly_planet` / order_rejected) | AutoRetreatSystem (M2a) | UIManager (EventLog) |
+| `battle:resolved { warId, battleId, result }` z `result.location: {systemId, planetId, point}` (v66) | VesselCombatSystem (deep-space), EnemyAttackHandler, WarSystem | GameScene, AutoRetreatSystem, InvasionSystem |
 
 ---
 
@@ -434,6 +483,42 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 ### Testowanie AI (✅ ukończone)
 - [x] Headless bots + runner + UI + raporty (commit `f296032`)
 - [x] ConclusionsEngine (18 reguł wniosków) + rich metrics + RuleBot v4 priorytetyzujący łańcuch kosmiczny (commit `5d5ffed`)
+
+### Milestone 2a — Combat Core (✅ ukończony, save v66, implementacja 2026-04-24)
+Design: `docs/design/milestone-2a-combat-core.md` + Appendix A (post-implementation).
+Raport: `docs/design/milestone-2a-implementation-report.md`. 8 atomowych commitów,
+169 asercji offline PASS.
+
+- [x] **ProximitySystem** (`src/systems/ProximitySystem.js`) — per-tick detection
+      O(n²/2) z rotującym offset + hysteresis 0.5/0.6 AU + budget 500 pairs/tick.
+      Emituje `vessel:proximityEnter/Exit`. Feature flag OFF-by-default.
+- [x] **VesselCombatSystem** (`src/systems/VesselCombatSystem.js`) — event-driven
+      na `vessel:proximityEnter` (dist ≤ 0.15 AU), team-up by ownerEmpireId
+      (M2a: player↔empire), deep-space battle przez BattleSystem.resolveBattle,
+      cooldown 2 civYears. Feature flag OFF.
+- [x] **AutoRetreatSystem** (`src/systems/AutoRetreatSystem.js`) — event-driven
+      na `battle:resolved` z `retreated`. Wydaje `moveToPoint` do najbliższej
+      friendly planety (preferencja full colonies > outposts > wrak). Aktywny
+      z vesselCombat (bez osobnej flagi).
+- [x] **Unified aggregator** — `WarSystem._fleetArrived` skip gdy
+      `materializationState='full' && materializedVesselIds[]`. Eliminuje
+      double-hit dla materialized fleet. Feature flag OFF.
+- [x] **Deep-space wrak handling** — `EnemyAttackHandler._turnIntoWreck`
+      rozszerzony kontrakt (string | {x,y} | null). `vessel.wreckLocation` (v66
+      serialized). ThreeRenderer._syncVesselPositions + _addVesselSprite
+      fallback na wreckLocation dla sprite.
+- [x] **Endurance drain multiplier** — PURSUE_DRAIN_MULT=3.0 dla
+      `movementOrder.type ∈ ('pursue','intercept')` w `VesselManager._tickEndurance`.
+- [x] **Devtools** — `KOSMOS.debug.{enableProximity, enableVesselCombat,
+      enableUnifiedAggregator}` + disable wariants. Combat Sandbox aktywuje
+      flagi automatycznie.
+
+Save v65 → v66 migracja (centralna `_migrateV65toV66`): wreckLocation=null,
+movementOrder.retreatFromBattleId=null, battleRec.location: string → object.
+
+Ryzyka z design doca §10 zaadresowane: R1 budget, R2 cooldown, R3 wreckLocation
+serialize, R4 MilitaryAI idle-materialized, R5 ×3 (nie ×4), R6 hysteresis,
+R8 sync events order. R7 out-of-scope (empire↔empire → M3).
 
 ### Milestone 1 — Targeting Foundation (✅ ukończony, save v65, tag `m1-complete`)
 Design: `docs/design/milestone-1-targeting-foundation.md` + Appendix C (implementation notes + playtest bugfixes). Podsumowanie: `docs/design/milestone-1-summary.md`.

@@ -710,3 +710,95 @@ _tickEndurance(civDy) {
 
 **Koniec M2a design doc.**
 Save target: v66. Estimated effort: 5-7 dni Claude Code + 1-2 dni playtest.
+
+---
+
+## Appendix A — Post-implementation notes (2026-04-24)
+
+Rzeczywiste wartości i edge-case'y które wyszły podczas implementacji.
+Pełny raport: [`milestone-2a-implementation-report.md`](./milestone-2a-implementation-report.md).
+
+### A.1. Finalne stałe (bez zmian vs design doc)
+
+| Stała | Wartość | Gdzie | Uwagi |
+|---|---|---|---|
+| PROXIMITY_DETECTION_AU | 0.5 | ProximitySystem.js | Enter threshold |
+| PROXIMITY_EXIT_AU | 0.6 | ProximitySystem.js | Hysteresis +20% |
+| COMBAT_ENGAGEMENT_AU | 0.15 | ProximitySystem.js | Deep-space combat trigger |
+| MAX_PAIRS_PER_TICK | 500 | ProximitySystem.js | Budget rotation |
+| ENGAGEMENT_COOLDOWN_YEARS | 2 | VesselCombatSystem.js | Blokada re-engagement tej pary |
+| PURSUE_DRAIN_MULT | 3.0 | VesselManager.js | Endurance drain dla pursue/intercept |
+
+**Wszystkie wartości zgodne z design doca.** Żadna nie zmieniona w trakcie implementacji.
+
+### A.2. Edge case'y które wyszły w trakcie
+
+1. **`battleRec.location === null` fresh state (commit 1)** — migracja dodaje
+   fallback `{ systemId: 'sys_home', planetId: null, point: null }` gdy
+   `location` jest null (nie tylko string). Design doc §2.5 zakładał string→object;
+   null to runtime-possible edge-case.
+
+2. **`_turnIntoWreck` z null + brak dockedAt (commit 5)** — rozszerzony kontrakt
+   zamraża pozycję w `wreckLocation = current position.x/y`. Rozwiązuje BUG#P8
+   z m2-reconnaissance.md (vessel w tranzycie wreckowany przez
+   `_wreckPlayerVesselsInSystem` nie teleportuje do planety).
+
+3. **AutoRetreat: player ma TYLKO outposty (commit 7)** — graceful fallback
+   na outposty zamiast hard-filter + wrak. Rationale: wrak w early-game gdy
+   gracz ma tylko outposty byłby zbyt surowy. Odchylenie od design doca §8.5.
+
+4. **BattleSystem `winner='B', retreated='A'`** — gdy sideA spadnie poniżej
+   20% HP, winner='B' + retreated='A'. W tym przypadku NIKT nie jest wrecked
+   (retreat path). Test T1 w commit 4 wymagał poprawki — assercje rozdzielić
+   na: retreat (0 wrecks), draw (2 wrecks), decisive (1 wreck).
+
+5. **VesselCombatSystem `_inCombatState`** — explicit helper dodany (design doc
+   §8.2 miał tylko inline filter). Definicja: `state='in_transit'` lub
+   (`state='orbiting' && dockedAt==null`). Dokowane vessele w porcie NIE wchodzą
+   do deep-space combat.
+
+### A.3. Nowa metoda API która wyszła w trakcie
+
+**`EnemyAttackHandler._turnIntoWreck` — rozszerzony kontrakt v66:**
+```
+_turnIntoWreck(vessel, dockedAtOrPoint, year)
+  dockedAtOrPoint:
+    string   → planetId (M1 legacy orbital graveyard)
+    {x, y}   → deep-space point (NEW v66)
+    null     → smart fallback:
+                 jeśli vessel.position.dockedAt → orbital path
+                 inaczej → freeze position w wreckLocation
+```
+
+### A.4. Pomijalne w M2a (przeniesione jako TODO)
+
+- Hard-stop pursue przy endurance=0 (tylko drain 3× w M2a)
+- Empire↔empire deep-space combat (tylko player↔empire w M2a)
+- Abstract fleet retreat (AutoRetreatSystem filtruje `participantA.type !== 'vessel_group'`)
+- Bidirectional materialize/dematerialize reconciliation (unified aggregator
+  tylko w jedną stronę — skip abstract battle gdy materialized)
+- UI polish dla deep-space battle cinematic (reuse generic; M2b)
+- Prediction cone rendering (M2b)
+
+### A.5. Known pre-existing issue ujawniony przez M2a
+
+**`GameScene.js:726` EventLog handler `battle:resolved`** — czyta
+`result.location` jako string. Gdy VesselCombatSystem emituje obiekt
+`{systemId, planetId, point}`, handler zapisuje go do `sysName` zmiennej i
+formatuje w tekst. Wynik: `[object Object]` w EventLog przy deep-space battles.
+
+**Mitygacja:** użyć `BattleLocation.normalize(result.location).systemId` —
+**odroczone jako post-playtest fix** (nie blokuje M2a, dotyka tylko tekstu UI).
+
+### A.6. Performance note
+
+Smoke sprawdził scale 35 vesseli (595 par). Design target 100 vesseli (4950 par,
+pełny skan w ~10 ticków przy budżecie 500/tick). Żaden test nie ujawnił
+degradacji performance; live test z 100+ vesseli wymaga manual benchmarka.
+
+### A.7. Testy offline pokrycie
+
+169 asercji PASS przez 8 smokeów offline. Każdy commit ma osobny test file
+(tmp_*.mjs usuwany po commicie, nie w repo). Weryfikacja struktury kodu przez
+`node --check` na wszystkich dotkniętych plikach produkcyjnych.
+
