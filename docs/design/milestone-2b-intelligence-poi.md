@@ -871,6 +871,71 @@ Stubs (runtime → M3): picket, rally, ambush behavior. Schema w #5.
 
 ---
 
+## §11.5. Pre-M2b refactor requirements (dług techniczny z M2a)
+
+### ProximitySystem dwuprogowy + combatRangeEnter event
+
+**Dług z M2a post-playtest fix #2b (2026-04-24, commit `23270dd`):**
+
+M2a implementacja ProximitySystem ma pojedynczy próg `PROXIMITY_DETECTION_AU
+= 0.5 AU` i emituje jeden event `vessel:proximityEnter`. VCS filtruje
+`distanceAU > COMBAT_ENGAGEMENT_AU (0.15)` — bail przy świeżo wykrytej parze,
+a drugiego eventu przy <0.15 AU nie ma (hysteresis band 0.15–0.6 AU to no-op).
+Efekt: VCS nigdy nie engaguje przez proximity gdy pursuer dochodzi z daleka.
+
+**Tymczasowe rozwiązanie w M2a:** VCS nasłuchuje `vessel:orderCompleted`
+(MOS emit przy THREAT_RADIUS_AU 0.15). Działa tylko dla pursue/intercept —
+patrol/escort nie emitują orderCompleted gdy vessel leci, więc current hook
+ich NIE pokrywa.
+
+**Wymagany refactor PRZED M2b patrol/escort auto-engage:**
+
+1. **ProximitySystem** (`src/systems/ProximitySystem.js`):
+   - Drugi próg: `export const COMBAT_ENGAGEMENT_AU = 0.15` (już jest
+     exportowany; użyć jako enter threshold dla combat event)
+   - Druga hysteresis: `COMBAT_EXIT_AU = 0.20` (20% margin, analogicznie
+     do 0.5/0.6 dla detection)
+   - Drugi stan aktywnej pary: `this._activeCombatPairs = new Set()` obok
+     `this._activePairs`
+   - Drugi event: `vessel:combatRangeEnter { vesselAId, vesselBId,
+     distanceAU, sameFaction }` + `vessel:combatRangeExit`
+   - `_checkPair`: po istniejących enter/exit dla detection, dodatkowy
+     check na combat pair z COMBAT_ENGAGEMENT_AU/COMBAT_EXIT_AU
+
+2. **VesselCombatSystem** (`src/systems/VesselCombatSystem.js`):
+   - Subscribe na `vessel:combatRangeEnter` zamiast filtrować po distanceAU
+     w proximityEnter handler (można usunąć `distanceAU > COMBAT_ENGAGEMENT_AU`
+     bramkę — event już gwarantuje że jest w zasięgu)
+   - **Usunięcie** listener'a `vessel:orderCompleted` + metody
+     `_handleOrderCompleted` (tymczasowe rozwiązanie M2a post-playtest #2b)
+   - **Usunięcie** `targetEntityId` z MOS `vessel:orderCompleted` payload
+     (odwrócenie commit `23270dd`) — opcjonalne, można zostawić dla
+     innych przyszłych konsumentów
+
+3. **MovementOrderSystem**: zostaw payload rozszerzenie `targetEntityId`
+   jeśli bywa używany gdzie indziej; jeśli nie — cleanup razem z VCS
+   handler removal.
+
+**Kolejność:** ten refactor MUSI iść przed commitem implementującym
+`_issuePatrol`/`_issueEscort` runtime (§10.2/§10.3), bo patrol/escort
+które mają auto-engage logic (gdy wrogi vessel wejdzie w combat range)
+wymagają `combatRangeEnter` event żeby działały bez zależności od
+orderCompleted (którego nie emitują dla patrol/escort — te ordery nie
+kompletują w sensie M1).
+
+**Estimated effort:** 0.5 dnia (mały scope, zmiany w 2 plikach + tests).
+Dodane do M2b plan commitów jako Commit 0 (pre-flight refactor przed
+głównymi commitami IntelSystem/POI).
+
+**Walidacja po refactor:**
+- Regresja M2a: VCS engagement przez pursue nadal działa (teraz przez
+  combatRangeEnter, nie orderCompleted)
+- Nowa funkcjonalność: patrol z wrogim vessel w combat range → VCS
+  engaguje (dla tego samego scenariusza, gdzie M2a nie działał bez
+  ręcznego pursue)
+
+---
+
 ## §12. Ryzyka
 
 | # | Ryzyko | Severity | Mitigation |
@@ -884,6 +949,7 @@ Stubs (runtime → M3): picket, rally, ambush behavior. Schema w #5.
 | R7 | `stale predictionCone` po cancel orderu (mesh pozostaje) | LOW | `_syncPredictionCones` sprawdza `status==='active' && type==='intercept'` |
 | R8 | POI sprite w ThreeRenderer przesłania inne UI | LOW | Małe sprites (16px), transparent background |
 | R9 | IntelSystem `_observeVessel` missed edge case (target vessel == player vessel) | LOW | `sameFaction` check w event payload — nie wywołujemy `_observeVessel` |
+| R10 | ProximitySystem refactor (§11.5) pomijany w rushu — patrol/escort auto-engage nie działa jak M2b design spec | **HIGH** | **BLOCKER:** refactor §11.5 musi iść przed §10.2/§10.3 commits |
 
 ---
 

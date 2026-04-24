@@ -314,3 +314,125 @@ zaimplementowane.
 
 **Ryzyko regresji M1 'docked' path:** zero — branch nadal trafia z identyczną
 logiką (smoke 2 weryfikuje).
+
+---
+
+### 11.2. Location schema + VCS engagement (2026-04-24, Opcja Z hybryda)
+
+Po pierwszym fix'ie ujawnił się szerszy problem. Gracz wykonał diagnostykę
+w konsoli i podał:
+
+1. `battleRec.location === "sys_home"` (string) zamiast object
+2. `vessel.wreckLocation === null` + `position.dockedAt === "entity_10"` dla
+   deep-space-wyglądającego wraka
+3. VCS cooldown map PUSTY po bitwie — VCS **nigdy nie engagował** mimo że
+   vessel:proximityEnter był emitowany (distanceAU 0.4997)
+4. Ostateczna bitwa odpalona przez `battle_` prefix (WarSystem/EAH path),
+   NIE `battle_ds_` (VCS)
+
+**Dwa niezależne bugi** — rozwiązane w dwóch atomic commitach.
+
+#### 11.2a. Location schema unification (commit `bc1e268`)
+
+**Root cause:** commit 1 M2a wprowadził obiektowy schemat
+`{ systemId, planetId, point }` dla `battleRec.location`, SaveMigration v65→v66
+migruje legacy save'y, VCS (commit 4) od początku używa object. Ale EAH i
+WarSystem — starsze systemy — zapisywały `location` jako string w runtime.
+Mixed schema w gameState → UI czytające `.location` zakłada string → sysName
+= "Bitwa w sys_home" lub dziwne fallbacki.
+
+**Call-sites zapisujące (string → object):**
+- `EnemyAttackHandler.js:143-149` (_resolveBatchedBattle): nowe
+  `const location = { systemId, planetId, point: null }` + usunięcie
+  explicit `location: systemId` override w battleRec
+- `WarSystem.js:215` (forceBattle): obiekt z `{ systemId: playerSystemId,
+  planetId: null, point: null }`
+- `WarSystem.js:351` (_fleetArrived): obiekt z `{ systemId: destSystemId,
+  planetId: null, point: null }`
+- `WarSystem.js:229, 367` (recordedResult): usunięcie explicit overrides —
+  spread `...result` przekazuje object z resolveBattle context
+
+**Call-sites czytające (string assumption → normalize helper):**
+- `GameScene.js:786` (battle:resolved EventLog)
+- `WarSystem.js:171` (_updateOrbitalDominance)
+- `InvasionSystem.js:143` (_onBattleResolved)
+
+Wszystkie używają `normalize()` z `src/utils/BattleLocation.js` — istnieje
+od commit 1 M2a, akceptuje string/object/null, backward-compat dla save'ów
+pre-migracji.
+
+**Smoke offline** `tmp_location_schema_test.mjs` — 23/23 PASS:
+- normalize backward-compat (5 wariantów input)
+- isDeepSpace (3)
+- static inspekcja 4 plików (12)
+- regresja VCS nietknięty (1)
+
+#### 11.2b. VCS engagement via vessel:orderCompleted (commit `23270dd`)
+
+**Root cause — DESIGN FLAW w M2a architekturze:**
+- ProximitySystem emituje `vessel:proximityEnter` TYLKO przy pierwszym wejściu
+  w `PROXIMITY_DETECTION_AU = 0.5 AU`
+- VCS filtruje `distanceAU > COMBAT_ENGAGEMENT_AU (0.15)` → bail dla pierwszego
+  eventu (0.4997 > 0.15)
+- W paśmie hysteresis 0.15–0.6 AU nie ma drugiego eventu (no-op w
+  ProximitySystem linia 149)
+- MOS kompletuje pursue przy 0.15 AU → `_completeOrder` → pursuer się
+  zatrzymuje, VCS nigdy nie dostaje sygnału przy combat range
+- Stary MOS placeholder: `// TODO M2: vessel-vs-vessel combat trigger — emit
+  vessel:engageRequested gdy target to wrogi vessel` (linia 521-522)
+
+**Fix (tymczasowy, Opcja Z):** VCS dodaje drugi listener na
+`vessel:orderCompleted`. MOS rozszerzony o `targetEntityId` w payload (bez
+tego VCS musiałby czytać `vessel.movementOrder.targetEntityId` — ale order
+jest usuwany przez `_byVessel.delete` przed emit'em, więc kruche).
+
+Filter chain `_handleOrderCompleted` (**decyzja B** — luźniejsza niż
+proximity path):
+```
+1. !FEATURES.vesselCombat                 → return
+2. type ∉ {pursue, intercept}             → return
+3. !targetEntityId                        → return
+4. vessel/target exists i !isWreck        → return
+5. same faction (ownerV === ownerT)       → return
+6. cooldown (ENGAGEMENT_COOLDOWN_YEARS=2) → return
+7. delegacja: _battle([v], [t], mid, …)   (bez _inCombatState guard)
+```
+
+**Decyzja B uzasadnienie:** proximity path to pasywna detekcja — bezpiecznie
+filtruje na dockedAt (nie atakujemy statków stojących w hangarze). Order
+completion to jawna player-issued akcja — gdy gracz pursueje wrogi vessel
+parkujący na neutralnej planecie, VCS powinien walczyć. Dwie ścieżki z różną
+semantyką = zamierzona asymetria.
+
+**TODO M2b** (inline w kodzie VCS + komentarz konstruktora + ten dokument):
+docelowy fix architektoniczny to ProximitySystem z dwoma progami (detection
+0.5 AU + combat 0.15 AU) + dwoma eventami (proximityEnter + combatRangeEnter)
++ dwuwarstwową hysteresis. Wtedy:
+- VCS słucha `combatRangeEnter` zamiast `orderCompleted`
+- patrol/escort/picket auto-engage działają naturalnie (nie mają
+  orderCompleted, dlatego obecny hook ich nie pokrywa)
+- Usunięcie listener'a na `vessel:orderCompleted` jako cleanup
+
+**Smoke offline** `tmp_vcs_engagement_test.mjs` — 27/27 PASS:
+- MOS payload (targetEntityId w 2 emit-points, stary TODO usunięty)
+- VCS subscribe/unsubscribe/method existence
+- Filter chain: 9 asercji pokrywających wszystkie bramki
+- Regresja: proximity path (_handleProximityEnter + _resolveEngagement)
+  nietknięty
+- Symulacja 9 scenariuszy: pursue+hostile, same-faction, wreck, cooldown,
+  moveToPoint, decyzja B (docked target), intercept, no-target,
+  empire↔empire defer
+
+**Scope NIEobjęty (świadome przesunięcie do M2b):**
+- ProximitySystem dwuprogowy
+- patrol/escort auto-engage
+- empire↔empire combat
+
+**Ryzyko regresji:**
+- Proximity path identyczny jak przed — zero zmian w `_handleProximityEnter`
+  ani `_resolveEngagement`. Regression tests w M2a (169 asercji) nadal PASS.
+- Gracz który używał pursue do "taśmowania" wrogich statków (wizualne
+  śledzenie bez bitwy) teraz dostanie bitwę. **To jest zamierzone** — to
+  był pierwotny cel `pursue` od commit 5 M2a.
+- Order completion emit nie jest new — istniał od M1. Dodany tylko
+  `targetEntityId` field.

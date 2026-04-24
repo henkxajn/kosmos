@@ -520,6 +520,20 @@ Ryzyka z design doca §10 zaadresowane: R1 budget, R2 cooldown, R3 wreckLocation
 serialize, R4 MilitaryAI idle-materialized, R5 ×3 (nie ×4), R6 hysteresis,
 R8 sync events order. R7 out-of-scope (empire↔empire → M3).
 
+**Post-playtest fixes (§11 raportu):**
+- `d7b27e2` — pursue/intercept release-from-orbit (§11.1, MOS jedna linia)
+- `bc1e268` — Location schema unification (§11.2a, EAH + WarSystem × 4
+  call-sites zapisujących → object; GameScene/WarSystem/InvasionSystem ×
+  3 call-sites czytających → `BattleLocation.normalize()`)
+- `23270dd` — VCS engagement via `vessel:orderCompleted` (§11.2b, dług
+  techniczny). **Tymczasowy hook** — ProximitySystem emituje tylko przy
+  0.5 AU (detection), VCS wymaga ≤ 0.15 AU (combat) → event nie dociera.
+  MOS rozszerzony o `targetEntityId` w payload orderCompleted. VCS
+  nasłuchuje z luźniejszym filter chain (decyzja B: pomija `_inCombatState`
+  — jawna player-issued akcja). **Docelowy fix w M2b §11.5**:
+  ProximitySystem dwuprogowy (detection + combat) + combatRangeEnter
+  event — BLOCKER przed M2b patrol/escort auto-engage (R10).
+
 ### Milestone 1 — Targeting Foundation (✅ ukończony, save v65, tag `m1-complete`)
 Design: `docs/design/milestone-1-targeting-foundation.md` + Appendix C (implementation notes + playtest bugfixes). Podsumowanie: `docs/design/milestone-1-summary.md`.
 - [x] **MovementOrder** (`src/systems/MovementOrderSystem.js`) — moveToPoint (mission-based), pursue/intercept (MOS-controlled, linear intercept math), patrol/escort stub. Feature flag OFF-by-default.
