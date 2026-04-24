@@ -73,6 +73,7 @@ import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
+import { ProximitySystem } from '../systems/ProximitySystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
 import { EconAI }            from '../systems/ai/EconAI.js';
@@ -266,6 +267,11 @@ export class GameScene {
     this.empireFleetMaterializer = null;
     window.KOSMOS.empireFleetMaterializer = null;
     if (GAME_CONFIG.FEATURES?.fleetMaterialization) this._ensureEmpireFleetMaterializer();
+    // M2a ProximitySystem — lazy init, feature flag. Per-tick detection zbliżeń
+    //   vessel↔vessel. Hook w VesselManager._tick (PRZED MOS). Commit 2 — scaffold.
+    this.proximitySystem          = null;
+    window.KOSMOS.proximitySystem = null;
+    if (GAME_CONFIG.FEATURES?.proximitySystem) this._ensureProximitySystem();
     // Faza 7: AI (statyczne klasy — ekspozycja dla debug z konsoli)
     window.KOSMOS.militaryAI       = MilitaryAI;
     window.KOSMOS.econAI           = EconAI;
@@ -2363,6 +2369,31 @@ export class GameScene {
     this.empireFleetMaterializer = null;
     window.KOSMOS.empireFleetMaterializer = null;
     console.log('[GameScene] EmpireFleetMaterializer deaktywowany (istniejące mater. floty pozostają)');
+  }
+
+  /**
+   * M2a ProximitySystem — idempotentne init.
+   * Lazy: tworzymy instancję przy pierwszej potrzebie. Wywoływane z debug toggle
+   * (KOSMOS.debug.enableProximity — commit 8) lub przy starcie gdy FEATURES.proximitySystem=true.
+   */
+  _ensureProximitySystem() {
+    if (this.proximitySystem) return this.proximitySystem;
+    if (!this.vesselManager) {
+      console.warn('[GameScene] vesselManager jeszcze nieinicjalizowany — odrocz enable proximity');
+      return null;
+    }
+    this.proximitySystem = new ProximitySystem(this.vesselManager);
+    window.KOSMOS.proximitySystem = this.proximitySystem;
+    console.log('[GameScene] ProximitySystem aktywowany');
+    return this.proximitySystem;
+  }
+
+  _disableProximitySystem() {
+    if (!this.proximitySystem) return;
+    this.proximitySystem.destroy();
+    this.proximitySystem = null;
+    window.KOSMOS.proximitySystem = null;
+    console.log('[GameScene] ProximitySystem deaktywowany');
   }
 
   _restoreSystem(data, cx, cy) {

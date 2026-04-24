@@ -1080,6 +1080,11 @@ export class VesselManager {
     this._tickRepair(deltaYears);
     this._tickFullScans(deltaYears);
     this._tickEndurance(deltaYears);
+    // M2a ProximitySystem PRZED MOS — combat (event-driven po proximityEnter)
+    //   może wreckować target w tym ticku; vessel:wrecked → MOS._onVesselWrecked
+    //   ustawia blockReason='target_lost' ZANIM MOS._tick iteruje. Master doc §5.
+    //   Hook no-op gdy flag OFF lub system nieinstancjonowany.
+    window.KOSMOS?.proximitySystem?._tick?.(deltaYears);
     // M1 Targeting — MovementOrderSystem resolve PRZED _updatePositions
     //   (order może nadpisać mission.targetX/Y; pozycja liczona z mission).
     //   Sync call (nie własny time:tick listener) gwarantuje kolejność.
