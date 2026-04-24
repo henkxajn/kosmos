@@ -74,6 +74,7 @@ import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
 import { ProximitySystem } from '../systems/ProximitySystem.js';
+import { VesselCombatSystem } from '../systems/VesselCombatSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
 import { EconAI }            from '../systems/ai/EconAI.js';
@@ -272,6 +273,12 @@ export class GameScene {
     this.proximitySystem          = null;
     window.KOSMOS.proximitySystem = null;
     if (GAME_CONFIG.FEATURES?.proximitySystem) this._ensureProximitySystem();
+    // M2a VesselCombatSystem — event-driven combat na vessel:proximityEnter.
+    //   Wymaga proximitySystem (implicit dependency — flag vesselCombat sam
+    //   nie gwarantuje detection; sandbox włącza oba). Commit 4.
+    this.vesselCombatSystem          = null;
+    window.KOSMOS.vesselCombatSystem = null;
+    if (GAME_CONFIG.FEATURES?.vesselCombat) this._ensureVesselCombatSystem();
     // Faza 7: AI (statyczne klasy — ekspozycja dla debug z konsoli)
     window.KOSMOS.militaryAI       = MilitaryAI;
     window.KOSMOS.econAI           = EconAI;
@@ -2394,6 +2401,31 @@ export class GameScene {
     this.proximitySystem = null;
     window.KOSMOS.proximitySystem = null;
     console.log('[GameScene] ProximitySystem deaktywowany');
+  }
+
+  /**
+   * M2a VesselCombatSystem — idempotentne init.
+   * Event-driven: konsumuje vessel:proximityEnter. Wymaga FEATURES.proximitySystem
+   * aby faktycznie cokolwiek słyszał (sandbox włącza oba razem).
+   */
+  _ensureVesselCombatSystem() {
+    if (this.vesselCombatSystem) return this.vesselCombatSystem;
+    if (!this.vesselManager) {
+      console.warn('[GameScene] vesselManager jeszcze nieinicjalizowany — odrocz enable vesselCombat');
+      return null;
+    }
+    this.vesselCombatSystem = new VesselCombatSystem(this.vesselManager);
+    window.KOSMOS.vesselCombatSystem = this.vesselCombatSystem;
+    console.log('[GameScene] VesselCombatSystem aktywowany');
+    return this.vesselCombatSystem;
+  }
+
+  _disableVesselCombatSystem() {
+    if (!this.vesselCombatSystem) return;
+    this.vesselCombatSystem.destroy();
+    this.vesselCombatSystem = null;
+    window.KOSMOS.vesselCombatSystem = null;
+    console.log('[GameScene] VesselCombatSystem deaktywowany');
   }
 
   _restoreSystem(data, cx, cy) {

@@ -1,0 +1,285 @@
+// VesselCombatSystem — deep-space combat vessel↔vessel (M2a).
+//
+// Event-driven (bez własnego _tick). Nasłuchuje vessel:proximityEnter
+// z ProximitySystem. Gdy dystans ≤ COMBAT_ENGAGEMENT_AU (0.15) oraz
+// sameFaction === false — triggeruje bitwę.
+//
+// Flow:
+//   proximityEnter
+//     → cooldown check (ENGAGEMENT_COOLDOWN_YEARS=2)
+//     → team-up by ownerEmpireId (w M2a: tylko player ↔ empire)
+//     → BattleSystem.resolveBattle(sideA, sideB, {location: {systemId, planetId: null, point: mid}})
+//     → _applyOutcome:
+//         winner=A, !retreated → wreck sideB
+//         winner=B, !retreated → wreck sideA
+//         draw                 → wreck oba
+//         retreated=X          → X żyje; AutoRetreatSystem (commit 7) wyda moveToPoint order
+//     → gameState.set('battles.<id>', battleRec)
+//     → emit 'battle:resolved' { warId: null, battleId, result }
+//
+// M2a NIE obejmuje: empire↔empire combat (wymaga hostility matrix między
+// obcymi imperiami, M3); full cinematic BattleView3D dla deep-space (reuse
+// generic); bidirectional materialize/dematerialize reconciliation.
+//
+// Wreck placement w deep-space (commit 4 minimal): VesselCombatSystem
+// ręcznie ustawia flagi wraku + wreckLocation + emit vessel:wrecked.
+// Commit 5 zgeneralizuje _turnIntoWreck w EnemyAttackHandler by obsługiwało
+// zarówno planetId jak i {x,y} — wtedy ta metoda zostanie zredukowana do
+// delegacji.
+
+import EventBus from '../core/EventBus.js';
+import gameState from '../core/GameState.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { resolveBattle, playerVesselsToBattleUnit } from './BattleSystem.js';
+import { HULLS } from '../data/HullsData.js';
+import { SHIP_MODULES } from '../data/ShipModulesData.js';
+import { COMBAT_ENGAGEMENT_AU, pairKey } from './ProximitySystem.js';
+
+const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
+
+// Cooldown — para po starciu (draw/retreat) nie triggeruje combat przez 2 civYears.
+// Zapobiega spam'owi gdy proximity pozostaje po niekonkluzywnej bitwie.
+export const ENGAGEMENT_COOLDOWN_YEARS = 2;
+
+export class VesselCombatSystem {
+  /**
+   * @param {import('./VesselManager.js').VesselManager} vesselManager
+   */
+  constructor(vesselManager) {
+    this._vm = vesselManager;
+    /** @type {Map<string, number>} pairKey → lastEngagedYear */
+    this._recentlyEngaged = new Map();
+
+    this._onProximityEnter = (e) => this._handleProximityEnter(e);
+    EventBus.on('vessel:proximityEnter', this._onProximityEnter);
+  }
+
+  destroy() {
+    EventBus.off('vessel:proximityEnter', this._onProximityEnter);
+    this._recentlyEngaged.clear();
+  }
+
+  // ── Event handling ────────────────────────────────────────────────────
+
+  _handleProximityEnter({ vesselAId, vesselBId, distanceAU, sameFaction }) {
+    if (!GAME_CONFIG.FEATURES?.vesselCombat) return;
+    if (sameFaction) return;
+    if (distanceAU > COMBAT_ENGAGEMENT_AU) return;
+
+    const now = this._year();
+    const key = pairKey(vesselAId, vesselBId);
+    const last = this._recentlyEngaged.get(key);
+    if (last != null && (now - last) < ENGAGEMENT_COOLDOWN_YEARS) return;
+
+    this._recentlyEngaged.set(key, now);
+    this._resolveEngagement(vesselAId, vesselBId);
+  }
+
+  // ── Team-up + battle resolve ─────────────────────────────────────────
+
+  /**
+   * Zbierz vessele wokół punktu spotkania, pogrupuj wg ownerEmpireId.
+   * W M2a wybiera tylko pary player↔empire o najwyższej hostility.
+   */
+  _resolveEngagement(v1Id, v2Id) {
+    const vm = this._vm;
+    if (!vm) return;
+    const v1 = vm._vessels?.get(v1Id);
+    const v2 = vm._vessels?.get(v2Id);
+    if (!v1 || !v2 || v1.isWreck || v2.isWreck) return;
+    if (!_inCombatState(v1) || !_inCombatState(v2)) return;
+
+    // Midpoint spotkania — używany do wreck placement + cinematic location.
+    const mid = {
+      x: (v1.position.x + v2.position.x) / 2,
+      y: (v1.position.y + v2.position.y) / 2,
+    };
+
+    // Zbierz vessele w buforze COMBAT_ENGAGEMENT_AU * 1.5 od mid — team-up logic.
+    const nearby = [];
+    const bufferPx = COMBAT_ENGAGEMENT_AU * 1.5 * AU_TO_PX;
+    for (const v of vm._vessels.values()) {
+      if (v.isWreck) continue;
+      if (!_inCombatState(v)) continue;
+      const dx = v.position.x - mid.x;
+      const dy = v.position.y - mid.y;
+      if (Math.hypot(dx, dy) <= bufferPx) nearby.push(v);
+    }
+    if (nearby.length < 2) return;
+
+    // Grupuj wg ownerEmpireId (null/undefined → 'player').
+    const groups = new Map();
+    for (const v of nearby) {
+      const owner = _resolveOwner(v);
+      if (!groups.has(owner)) groups.set(owner, []);
+      groups.get(owner).push(v);
+    }
+    if (groups.size < 2) return;
+
+    // M2a: tylko player ↔ empire. Empire↔empire → M3.
+    const playerGroup = groups.get('player');
+    if (!playerGroup || playerGroup.length === 0) return;
+
+    let bestEmpireId = null;
+    let bestHostility = -1;
+    let bestGroup = null;
+    const dipl = window.KOSMOS?.diplomacySystem;
+    for (const [ownerId, group] of groups) {
+      if (ownerId === 'player') continue;
+      if (!group || group.length === 0) continue;
+      const hostility = dipl?.getHostility?.(ownerId) ?? 50;
+      if (hostility > bestHostility) {
+        bestHostility = hostility;
+        bestEmpireId = ownerId;
+        bestGroup = group;
+      }
+    }
+    if (!bestEmpireId || !bestGroup) return;
+
+    this._battle(playerGroup, bestGroup, mid, 'player', bestEmpireId);
+  }
+
+  _battle(sideA, sideB, mid, ownerA, ownerB) {
+    const empireB = window.KOSMOS?.empireRegistry?.get?.(ownerB);
+    const systemId = sideA[0]?.systemId ?? sideB[0]?.systemId ?? 'sys_home';
+    const location = { systemId, planetId: null, point: { x: mid.x, y: mid.y } };
+
+    const labelA = sideA.length > 1 ? `Gracz (${sideA.length})` : `Gracz — ${sideA[0].name ?? sideA[0].shipId}`;
+    const labelB = sideB.length > 1
+      ? `${empireB?.name ?? 'Wróg'} (${sideB.length})`
+      : `${empireB?.name ?? 'Wróg'} — ${sideB[0].name ?? sideB[0].shipId}`;
+
+    const unitA = playerVesselsToBattleUnit(sideA, HULLS, SHIP_MODULES, labelA);
+    const unitB = playerVesselsToBattleUnit(sideB, HULLS, SHIP_MODULES, labelB);
+
+    // Seed deterministyczny — year × prime + hash uczestników.
+    const year = this._year();
+    const seedBase = (Math.floor(year * 10000) * 7919) & 0x7FFFFFFF;
+    const seed = (seedBase + sideA.length * 113 + sideB.length * 127) & 0x7FFFFFFF;
+
+    const result = resolveBattle(unitA, unitB, {
+      casusBelli: 'border_incident',
+      location,
+      seed,
+    });
+
+    this._applyOutcome(sideA, sideB, result, location, ownerA, ownerB, year);
+  }
+
+  _applyOutcome(sideA, sideB, result, location, ownerA, ownerB, year) {
+    const mid = location.point;
+    const { winner, retreated } = result;
+
+    // Wreck strony przegrywającej (nie-retreated).
+    if (!retreated) {
+      if (winner === 'A')       this._wreckGroup(sideB, mid, year);
+      else if (winner === 'B')  this._wreckGroup(sideA, mid, year);
+      else                       { this._wreckGroup(sideA, mid, year); this._wreckGroup(sideB, mid, year); }
+    }
+    // retreated: side X żyje. AutoRetreatSystem (commit 7) nasłuchuje battle:resolved.
+
+    const battleId = this._makeBattleId(year, ownerA, ownerB);
+    const battleRec = {
+      ...result,
+      id:    battleId,
+      warId: null,
+      year,
+      location,
+      participantA: {
+        type:      'vessel_group',
+        empireId:  ownerA,
+        vesselIds: sideA.map(v => v.id),
+        count:     sideA.length,
+        label:     `Gracz (${sideA.length})`,
+      },
+      participantB: {
+        type:      'vessel_group',
+        empireId:  ownerB,
+        vesselIds: sideB.map(v => v.id),
+        count:     sideB.length,
+        label:     window.KOSMOS?.empireRegistry?.get?.(ownerB)?.name ?? ownerB,
+      },
+    };
+    gameState.set(`battles.${battleId}`, battleRec, 'deep_space_combat');
+    EventBus.emit('battle:resolved', { warId: null, battleId, result: battleRec });
+  }
+
+  // ── Wreck placement (commit 4 minimal; commit 5 ujednolici z EnemyAttackHandler) ──
+
+  _wreckGroup(group, mid, year) {
+    for (const v of group) this._wreckOne(v, mid, year);
+  }
+
+  _wreckOne(vessel, mid, year) {
+    if (!vessel || vessel.isWreck) return;
+    vessel.isWreck  = true;
+    vessel.status   = 'destroyed';
+    vessel.mission  = null;
+    vessel.wreckedAt = year;
+    // Deep-space wrak: dockedAt=null, position = mid, wreckLocation = mid.
+    vessel.position.state    = 'orbiting';
+    vessel.position.dockedAt = null;
+    vessel.position.x = mid.x;
+    vessel.position.y = mid.y;
+    vessel.wreckLocation = { x: mid.x, y: mid.y };
+    if (vessel.fuel) vessel.fuel.current = 0;
+    // NIE wywołujemy orbitalSpaceSystem.transitionToWreck — to ma flow dla
+    // wraków orbitujących ciała. Deep-space wrak jest statyczny (commit 5
+    // dopracuje rendering przez ThreeRenderer).
+    EventBus.emit('vessel:wrecked', { vesselId: vessel.id, vessel });
+  }
+
+  // ── Public debug API ──────────────────────────────────────────────────
+
+  /**
+   * Force-resolve bitwę dwóch grup vesseli w punkcie location.point.
+   * Używane przez KOSMOS.debug (commit 8) + test.
+   */
+  resolveDeepSpaceBattle(sideA, sideB, location) {
+    if (!Array.isArray(sideA) || !Array.isArray(sideB)) return null;
+    if (sideA.length === 0 || sideB.length === 0) return null;
+    const mid = location?.point ?? {
+      x: (sideA[0].position.x + sideB[0].position.x) / 2,
+      y: (sideA[0].position.y + sideB[0].position.y) / 2,
+    };
+    const ownerA = _resolveOwner(sideA[0]);
+    const ownerB = _resolveOwner(sideB[0]);
+    this._battle(sideA, sideB, mid, ownerA, ownerB);
+    return gameState.get(`battles.${this._makeBattleId(this._year(), ownerA, ownerB)}`) ?? null;
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────
+
+  _year() {
+    return window.KOSMOS?.timeSystem?.gameTime ?? 0;
+  }
+
+  _makeBattleId(year, ownerA, ownerB) {
+    const yr = Number(year).toFixed(2).replace(/\./g, '_');
+    return `battle_ds_${yr}_${ownerA}_${ownerB}`;
+  }
+}
+
+// ── Module helpers ─────────────────────────────────────────────────────
+
+/**
+ * Vessel w stanie który pozwala na deep-space combat.
+ * Dokowany vessel w porcie nie walczy; in_transit lub orbiting bez dockedAt = OK.
+ */
+function _inCombatState(v) {
+  const st = v.position?.state;
+  if (st === 'in_transit') return true;
+  if (st === 'orbiting' && (v.position?.dockedAt == null)) return true;
+  return false;
+}
+
+/**
+ * Owner ID vessela — 'player' dla własnych, empireId dla obcych.
+ * Fallback na polach historycznych (isEnemy, owner).
+ */
+function _resolveOwner(v) {
+  if (v.ownerEmpireId && v.ownerEmpireId !== 'player') return v.ownerEmpireId;
+  if (v.owner && v.owner !== 'player') return v.owner;
+  if (v.isEnemy) return v.ownerEmpireId ?? v.owner ?? 'unknown_empire';
+  return 'player';
+}
