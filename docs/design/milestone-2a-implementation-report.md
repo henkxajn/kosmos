@@ -439,6 +439,87 @@ docelowy fix architektoniczny to ProximitySystem z dwoma progami (detection
 
 ---
 
+### 11.3. UI handler compatibility dla VCS battles (2026-04-24, commit `67834d1`)
+
+Po naprawie §11.2 gracz może faktycznie odpalić deep-space bitwę przez
+pursue. BattleSystem liczy wynik poprawnie, wreck idzie w dobre miejsce,
+AutoRetreat wydaje moveToPoint do Bastionu. **Ale UI milczy**: żadnego
+modalu, żadnego wpisu w EventLog. Gracz widzi tylko, że jego statek zmienia
+kurs — nie wie, że przegrał bitwę.
+
+Ryzyko zidentyfikowane w §9.4 pierwszej wersji raportu (GameScene.js:726,
+stary numer). Fix dopina ostatni pre-release item M2a.
+
+**Root cause:** oba UI handlery `battle:resolved` w `GameScene.js` miały
+jako pierwszy gate:
+
+```js
+const war = window.KOSMOS?.warSystem?.getWar(warId);
+if (!war) return;
+```
+
+VCS emituje `warId: null` → `getWar(null)` = undefined → silent skip.
+Reszta pipeline (names, playerSide, severity) zakładała strukturę
+`war.aggressor/defender`.
+
+**Kontrakty payload (porównanie):**
+
+| Pole | WarSystem/EAH | VesselCombatSystem |
+|---|---|---|
+| `warId` | `war.id` (string) | **`null`** |
+| `battleId` prefix | `battle_` | `battle_ds_` |
+| `participantA.type` | `'empire'` | `'vessel_group'` |
+| `participantB.type` | `'player'` | `'vessel_group'` |
+| `location.point` | `null` | `{x, y}` (deep-space) |
+
+**Inventory pozostałych handlerów (nie wymagały zmian):**
+
+| Handler | VCS compat | Rationale |
+|---|---|---|
+| `AutoRetreatSystem` | ✅ | Filtruje na `result.retreated`, nie zakłada struktury war. |
+| `InvasionSystem` | ✅ (zamierzony skip) | Filter `pA.type='empire' && pB.type='player'` → VCS vessel_group pomijany. Deep-space = bez planety = bez inwazji. |
+| `DebugLog` | ✅ | Brak filtra, loguje wszystko. |
+| `WarOverlay.force_battle` | ✅ | `console.log` only, NIE subscribe `battle:resolved`. |
+| `BattleIntroModal` / `BattleView3D` | ✅ (pośrednio) | Invokowane z GameScene queue, czytają `battleData.aggressorName/defenderName/playerSide` — po fixie obie ścieżki budują identyczną strukturę. |
+
+**Fix (dwupasmowe handlery):**
+
+- `GameScene.js:754-776` (modal queue):
+  - `if (warId)` → legacy path (bez zmian behawioralnych)
+  - `else` → VCS path: `playerSide` z `pA.empireId === 'player'`,
+    `aggressorName/defenderName` z `participantA/B` + `empireRegistry`,
+    `aggressorArchetype` z non-player empire. Filter przyszłościowy:
+    bez udziału gracza (empire↔empire) → skip (M3).
+- `GameScene.js:780-815` (EventLog push):
+  - Ta sama dwupasmowa struktura.
+  - Dla VCS: `sysLabel` = `"głębokim kosmosie (${sysName})"` przez
+    `isDeepSpace(location)` helper z `BattleLocation.js`.
+  - **Retreat note** doklejany do textu EventLog — minimum UX:
+    `result.retreated === playerSide` → `" Gracz wycofał się."`;
+    `retreated && ≠ playerSide` → `" Wróg wycofał się."`.
+    Banner `showBattleOutcome` bez zmian (standardowe labeling
+    ZWYCIĘSTWO/PORAŻKA/REMIS z `result.winner`/`playerSide` działa bez modyfikacji).
+
+**Smoke offline** `tmp_vcs_ui_compat_test.mjs` — 8/8 scenariuszy PASS:
+- T1: VCS player loss (severity=alert, sysLabel=deep-space)
+- T2: VCS retreat player (retreat note "Gracz wycofał się")
+- T3: VCS retreat enemy (retreat note "Wróg wycofał się")
+- T4: Legacy WarSystem path (regresja, bez zmian w textcie)
+- T5: Legacy unknown warId → skip (nie rzuca)
+- T6: VCS empire↔empire → skip (M3 deferred)
+- T7: VCS player win → severity=info, winnerLabel="Gracz"
+- T8: VCS draw → severity=warn, winnerLabel="—"
+
+**Non-goals (świadome):**
+- NIE modyfikujemy `showBattleOutcome` banner (retreat info tylko w textcie EventLog)
+- NIE dodajemy osobnego modalu dla deep-space (reuse istniejącego pipeline)
+- NIE bump save version (tylko UI changes)
+
+**Ryzyko regresji:** zero — legacy path zachowany co do linii, VCS path
+to nowa gałąź `else`. T4/T5 (legacy) nadal PASS.
+
+---
+
 ## 12. Post-playtest known issues deferred to future milestones
 
 Trzy znane problemy które M2a ostatecznie NIE adresuje — celowo odłożone
