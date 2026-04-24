@@ -1111,6 +1111,10 @@ export class VesselManager {
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const LOW_THRESHOLD   = 0.20;  // 20%
     const RESET_THRESHOLD = 0.40;  // 40% hysteresis
+    // M2a Commit 8: pursue/intercept → drain ×3 (presja zasobowa, nie hard-stop).
+    // Hard-stop pursue przy endurance=0 → M3. Wartość ×3 zgodna z design doc
+    // §8.7 (domyślna; ×4 odrzucone przez R5 frustracja gracza).
+    const PURSUE_DRAIN_MULT = 3.0;
 
     for (const vessel of this._vessels.values()) {
       if (vessel.isWreck) continue;
@@ -1118,13 +1122,16 @@ export class VesselManager {
       if (!end) continue;
 
       const state = vessel.position?.state;
-      if (state === 'in_transit') {
-        // TODO M2: drainMultiplier gdy movementOrder.type ∈ ('pursue','intercept') — ~×3-4
-        end.current = Math.max(0, end.current - (end.drainPerYear ?? 0) * civDy);
+      const orderType = vessel.movementOrder?.type;
+      const isPursuing = orderType === 'pursue' || orderType === 'intercept';
+
+      if (state === 'in_transit' || isPursuing) {
+        const mult = isPursuing ? PURSUE_DRAIN_MULT : 1.0;
+        end.current = Math.max(0, end.current - (end.drainPerYear ?? 0) * mult * civDy);
       } else if (state === 'docked') {
         end.current = Math.min(end.max, end.current + (end.regenPerYear ?? 0) * civDy);
       }
-      // orbiting / inne — no-op w M1
+      // orbiting + !pursuing = neutral (bez drain, bez regen)
 
       const pct = end.max > 0 ? (end.current / end.max) : 0;
 

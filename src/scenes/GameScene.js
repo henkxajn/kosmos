@@ -445,6 +445,45 @@ export class GameScene {
         console.log(`[debug] materializeFleet(${empireId},${fleetId}):`, result);
         return result;
       },
+      // ── M2a Combat Core (Commit 8) ────────────────────────────────────
+      // KOSMOS.debug.enableProximity() — ProximitySystem on + instance.
+      enableProximity: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.proximitySystem = true;
+        this._ensureProximitySystem();
+      },
+      disableProximity: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.proximitySystem = false;
+        this._disableProximitySystem();
+      },
+      // KOSMOS.debug.enableVesselCombat() — VesselCombatSystem + AutoRetreat on.
+      // Niezależne od proximitySystem (flag), ale BEZ proximityEnter eventów
+      // VCS nie ma żeby czego nasłuchiwać — włącz oba razem.
+      enableVesselCombat: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.vesselCombat = true;
+        this._ensureVesselCombatSystem();
+        this._ensureAutoRetreatSystem();
+      },
+      disableVesselCombat: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.vesselCombat = false;
+        this._disableVesselCombatSystem();
+        this._disableAutoRetreatSystem();
+      },
+      // KOSMOS.debug.enableUnifiedAggregator() — WarSystem._fleetArrived skip
+      // dla materialized. Pomiędzy abstract fleet battle a vessel-level combat.
+      enableUnifiedAggregator: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.unifiedAggregator = true;
+        console.log('[debug] unifiedAggregator = true (WarSystem._fleetArrived skip dla materialized)');
+      },
+      disableUnifiedAggregator: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.unifiedAggregator = false;
+        console.log('[debug] unifiedAggregator = false');
+      },
       // ── Combat Sandbox (scenarioMode === 'combat_sandbox') ────────────
       // KOSMOS.debug.sandboxInfo() — dump stanu: empires + vessele + aktywne flagi.
       sandboxInfo,
