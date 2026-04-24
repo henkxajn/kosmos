@@ -5,7 +5,7 @@
 // Komunikacja wyłącznie przez EventBus.
 
 import EventBus              from '../core/EventBus.js';
-import { normalize as normalizeBattleLocation } from '../utils/BattleLocation.js';
+import { normalize as normalizeBattleLocation, isDeepSpace as isDeepSpaceBattle } from '../utils/BattleLocation.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
 import debugLog              from '../core/DebugLog.js';
@@ -754,22 +754,50 @@ export class GameScene {
     EventBus.on('battle:resolved', ({ warId, battleId, result }) => {
       // Tylko gdy civMode aktywny i gracz bierze udział
       if (!window.KOSMOS?.civMode) return;
-      const war = window.KOSMOS?.warSystem?.getWar(warId);
-      if (!war) return;
-      if (war.aggressor !== 'player' && war.defender !== 'player') return;
+      if (!result) return;
 
-      // Ustal stronę gracza (A/B) w payload BattleSystem
-      const playerSide = result?.participantB?.type === 'player' ? 'B' : 'A';
-      const empireId = war.aggressor === 'player' ? war.defender : war.aggressor;
-      const emp = window.KOSMOS?.empireRegistry?.get(empireId);
+      let battleData = null;
 
-      const battleData = {
-        warId, battleId, result,
-        aggressorName:     war.aggressor === 'player' ? 'Gracz' : (emp?.name ?? 'Obcy'),
-        defenderName:      war.defender  === 'player' ? 'Gracz' : (emp?.name ?? 'Obcy'),
-        aggressorArchetype: emp?.archetype,
-        playerSide,
-      };
+      if (warId) {
+        // ── Path A: legacy war-driven battle ───────────────────────────────
+        const war = window.KOSMOS?.warSystem?.getWar(warId);
+        if (!war) return;
+        if (war.aggressor !== 'player' && war.defender !== 'player') return;
+
+        const playerSide = result?.participantB?.type === 'player' ? 'B' : 'A';
+        const empireId = war.aggressor === 'player' ? war.defender : war.aggressor;
+        const emp = window.KOSMOS?.empireRegistry?.get(empireId);
+
+        battleData = {
+          warId, battleId, result,
+          aggressorName:     war.aggressor === 'player' ? 'Gracz' : (emp?.name ?? 'Obcy'),
+          defenderName:      war.defender  === 'player' ? 'Gracz' : (emp?.name ?? 'Obcy'),
+          aggressorArchetype: emp?.archetype,
+          playerSide,
+        };
+      } else {
+        // ── Path B: VCS deep-space battle ──────────────────────────────────
+        // participant.type='vessel_group', empireId na obu stronach.
+        const pA = result.participantA;
+        const pB = result.participantB;
+        if (!pA || !pB) return;
+        const aIsPlayer = pA.empireId === 'player';
+        const bIsPlayer = pB.empireId === 'player';
+        if (!aIsPlayer && !bIsPlayer) return; // M2a: empire↔empire deferred do M3
+
+        const playerSide = aIsPlayer ? 'A' : 'B';
+        const foeEmpireId = aIsPlayer ? pB.empireId : pA.empireId;
+        const emp = window.KOSMOS?.empireRegistry?.get(foeEmpireId);
+        const reg = window.KOSMOS?.empireRegistry;
+
+        battleData = {
+          warId: null, battleId, result,
+          aggressorName:      aIsPlayer ? 'Gracz' : (reg?.get(pA.empireId)?.name ?? pA.label ?? 'Obcy'),
+          defenderName:       bIsPlayer ? 'Gracz' : (reg?.get(pB.empireId)?.name ?? pB.label ?? 'Obcy'),
+          aggressorArchetype: emp?.archetype,
+          playerSide,
+        };
+      }
 
       this._battleQueue.push(battleData);
       this._tryShowNextBattle();
@@ -777,37 +805,67 @@ export class GameScene {
 
     // Wpis do EventLoga dla KAŻDEJ bitwy (także obcy-vs-obcy w przyszłości).
     // Niezależny od cinematic/queue powyżej — trwały ślad dla gracza.
+    //
+    // Dwupasmowy: legacy war-path (WarSystem/EAH) vs VCS deep-space
+    // (warId=null, participantX.type='vessel_group'). Obie ścieżki dają wpis
+    // o tym samym schemacie — gracz ma trwały ślad nawet bez wojny formalnej.
     EventBus.on('battle:resolved', ({ warId, result }) => {
       const evtLog = window.KOSMOS?.eventLogSystem;
       if (!evtLog || !result) return;
-      const war = window.KOSMOS?.warSystem?.getWar(warId);
-      if (!war) return;
 
       const reg = window.KOSMOS?.empireRegistry;
-      // v66: location jest objectem {systemId, planetId, point}; normalize pokrywa
-      // też legacy string.
-      const sysId = normalizeBattleLocation(result.location).systemId;
+      const loc = normalizeBattleLocation(result.location);
+      const sysId = loc.systemId;
       const homeSys = window.KOSMOS?.homePlanet?.systemId ?? 'sys_home';
-      const sysName = sysId === homeSys
-        ? (window.KOSMOS?.homePlanet?.name ?? 'dom')
-        : (sysId ?? '?');
-      const aName = war.aggressor === 'player' ? 'Gracz' : (reg?.get(war.aggressor)?.name ?? war.aggressor);
-      const dName = war.defender  === 'player' ? 'Gracz' : (reg?.get(war.defender)?.name  ?? war.defender);
+
+      let aName, dName, playerInvolved, playerSide, sysLabel;
+
+      if (warId) {
+        // ── Path A: legacy war-driven battle ───────────────────────────────
+        const war = window.KOSMOS?.warSystem?.getWar(warId);
+        if (!war) return;
+        aName = war.aggressor === 'player' ? 'Gracz' : (reg?.get(war.aggressor)?.name ?? war.aggressor);
+        dName = war.defender  === 'player' ? 'Gracz' : (reg?.get(war.defender)?.name  ?? war.defender);
+        playerInvolved = (war.aggressor === 'player' || war.defender === 'player');
+        playerSide = result.participantB?.type === 'player' ? 'B' : 'A';
+        sysLabel = sysId === homeSys
+          ? (window.KOSMOS?.homePlanet?.name ?? 'dom')
+          : (sysId ?? '?');
+      } else {
+        // ── Path B: VCS deep-space battle ──────────────────────────────────
+        const pA = result.participantA;
+        const pB = result.participantB;
+        if (!pA || !pB) return;
+        const aIsPlayer = pA.empireId === 'player';
+        const bIsPlayer = pB.empireId === 'player';
+        playerInvolved = aIsPlayer || bIsPlayer;
+        if (!playerInvolved) return; // M2a: VCS zawsze ma gracza; filtr przyszłościowy
+        playerSide = aIsPlayer ? 'A' : 'B';
+        aName = aIsPlayer ? 'Gracz' : (reg?.get(pA.empireId)?.name ?? pA.label ?? pA.empireId);
+        dName = bIsPlayer ? 'Gracz' : (reg?.get(pB.empireId)?.name ?? pB.label ?? pB.empireId);
+        // Deep-space zawsze ma point → "w głębokim kosmosie (system)"
+        sysLabel = isDeepSpaceBattle(loc)
+          ? `głębokim kosmosie (${sysId === homeSys ? (window.KOSMOS?.homePlanet?.name ?? 'dom') : sysId})`
+          : (sysId === homeSys ? (window.KOSMOS?.homePlanet?.name ?? 'dom') : (sysId ?? '?'));
+      }
 
       const winnerLabel = result.winner === 'A' ? aName
         : result.winner === 'B' ? dName
         : '—';
 
-      const playerInvolved = (war.aggressor === 'player' || war.defender === 'player');
-      const playerSide = result.participantB?.type === 'player' ? 'B' : 'A';
       const playerWon = playerInvolved && (result.winner === playerSide);
       const severity = !playerInvolved ? 'info'
         : result.winner === 'draw' ? 'warn'
         : playerWon ? 'info'
         : 'alert';
 
+      // Adnotacja retreat — minimum UX dla VCS (gracz musi wiedzieć że statek wycofał się z bitwy)
+      let retreatNote = '';
+      if (result.retreated === playerSide) retreatNote = ' Gracz wycofał się.';
+      else if (result.retreated && result.retreated !== playerSide) retreatNote = ' Wróg wycofał się.';
+
       evtLog.push({
-        text:      `⚔ Bitwa w ${sysName}: ${aName} vs ${dName}. Zwycięzca: ${winnerLabel}. Straty: ${Math.round(result.lossesA ?? 0)}/${Math.round(result.lossesB ?? 0)}, ${result.turns ?? 0} tur.`,
+        text:      `⚔ Bitwa w ${sysLabel}: ${aName} vs ${dName}. Zwycięzca: ${winnerLabel}. Straty: ${Math.round(result.lossesA ?? 0)}/${Math.round(result.lossesB ?? 0)}, ${result.turns ?? 0} tur.${retreatNote}`,
         channel:   'combat',
         severity,
         entityRef: sysId ?? null,
