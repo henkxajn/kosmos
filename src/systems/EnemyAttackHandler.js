@@ -221,23 +221,61 @@ export class EnemyAttackHandler {
   }
 
   // Konwertuje vessel na wrak — zachowuje go w VesselManager z nowym stanem.
-  // Pozycja (r, θ, φ) jest zarządzana przez OrbitalSpaceSystem.transitionToWreck
-  // — wrak trafia do graveyard range (r 1.2–1.5) z gwarantowaną separacją od
-  // żywych statków dzięki min-angular-spacing.
-  _turnIntoWreck(vessel, dockedAt, year) {
+  //
+  // `dockedAtOrPoint` (v66, M2a):
+  //   string   → planetId; vessel trafia do orbital graveyard (stary path M1)
+  //   {x, y}   → deep-space point; wrak zamrożony w tej pozycji, wreckLocation
+  //              serializowane, renderowane statycznie przez ThreeRenderer
+  //   null     → fallback: gdy vessel.position.dockedAt istnieje → orbital path;
+  //              inaczej zamrażamy pozycję w miejscu (wreckLocation = position.x/y).
+  //              To rozwiązuje BUG#P8 z m2-reconnaissance.md — vessel w tranzycie
+  //              wreckowany przez _wreckPlayerVesselsInSystem pozostaje
+  //              widoczny w miejscu zniszczenia (nie teleportuje do planety).
+  _turnIntoWreck(vessel, dockedAtOrPoint, year) {
     if (!vessel || vessel.isWreck) return;
-    vessel.isWreck           = true;
+
+    const isDeepSpace = (
+      dockedAtOrPoint && typeof dockedAtOrPoint === 'object' &&
+      typeof dockedAtOrPoint.x === 'number' && typeof dockedAtOrPoint.y === 'number'
+    );
+
+    vessel.isWreck          = true;
     vessel.status           = 'destroyed';
     vessel.mission          = null;
     vessel.wreckedAt        = year;
     vessel.position.state   = 'orbiting';
-    vessel.position.dockedAt = dockedAt ?? vessel.position.dockedAt ?? null;
     vessel.fuel && (vessel.fuel.current = 0);
 
-    // Przenieś do warstwy graveyard w OrbitalSpaceSystem. Ten system emituje
-    // 'orbit:assigned' którego słucha ThreeRenderer i aktualizuje wizualnie.
+    if (isDeepSpace) {
+      // Deep-space wrak: zamrażamy pozycję + zapisujemy do wreckLocation.
+      // NIE wywołujemy orbitalSpaceSystem — wrak nie orbituje ciała.
+      vessel.position.dockedAt = null;
+      vessel.position.x        = dockedAtOrPoint.x;
+      vessel.position.y        = dockedAtOrPoint.y;
+      vessel.wreckLocation     = { x: dockedAtOrPoint.x, y: dockedAtOrPoint.y };
+      EventBus.emit('vessel:wrecked', { vesselId: vessel.id, vessel });
+      return;
+    }
+
+    // Planet-based path (M1 legacy) — dockedAtOrPoint to string (planetId) albo null.
+    vessel.position.dockedAt = (typeof dockedAtOrPoint === 'string')
+      ? dockedAtOrPoint
+      : (vessel.position.dockedAt ?? null);
+
+    // Brak dockedAt (null z null-fallback i brak istniejącej orbit) — zamrażamy
+    // vessel w miejscu zniszczenia (deep-space wrak bez explicit midpointu).
+    if (!vessel.position.dockedAt) {
+      const px = vessel.position.x ?? 0;
+      const py = vessel.position.y ?? 0;
+      vessel.wreckLocation = { x: px, y: py };
+      EventBus.emit('vessel:wrecked', { vesselId: vessel.id, vessel });
+      return;
+    }
+
+    // Orbital graveyard path — OrbitalSpaceSystem emituje 'orbit:assigned' które
+    // słucha ThreeRenderer i aktualizuje wizualnie.
     const orbital = window.KOSMOS?.orbitalSpaceSystem;
-    if (orbital && vessel.position.dockedAt) {
+    if (orbital) {
       if (orbital.hasOrbit(vessel.id)) {
         orbital.transitionToWreck(vessel.id, year);
       } else {

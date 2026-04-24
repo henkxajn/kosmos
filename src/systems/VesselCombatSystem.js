@@ -204,7 +204,10 @@ export class VesselCombatSystem {
     EventBus.emit('battle:resolved', { warId: null, battleId, result: battleRec });
   }
 
-  // ── Wreck placement (commit 4 minimal; commit 5 ujednolici z EnemyAttackHandler) ──
+  // ── Wreck placement — delegacja do EnemyAttackHandler._turnIntoWreck ──
+  // Commit 5: _turnIntoWreck rozszerzony o deep-space {x,y} point path.
+  // Fallback inline wreck (gdy handler nieosiągalny) gwarantuje stabilność
+  // w testach headless.
 
   _wreckGroup(group, mid, year) {
     for (const v of group) this._wreckOne(v, mid, year);
@@ -212,20 +215,23 @@ export class VesselCombatSystem {
 
   _wreckOne(vessel, mid, year) {
     if (!vessel || vessel.isWreck) return;
+    const handler = window.KOSMOS?.enemyAttackHandler;
+    if (handler?._turnIntoWreck) {
+      handler._turnIntoWreck(vessel, mid, year);
+      return;
+    }
+    // Fallback (np. headless test bez pełnego GameScene). Zamraża pozycję
+    // w punkcie zderzenia — identyczna semantyka jak deep-space path w EAH.
     vessel.isWreck  = true;
     vessel.status   = 'destroyed';
     vessel.mission  = null;
     vessel.wreckedAt = year;
-    // Deep-space wrak: dockedAt=null, position = mid, wreckLocation = mid.
     vessel.position.state    = 'orbiting';
     vessel.position.dockedAt = null;
     vessel.position.x = mid.x;
     vessel.position.y = mid.y;
     vessel.wreckLocation = { x: mid.x, y: mid.y };
     if (vessel.fuel) vessel.fuel.current = 0;
-    // NIE wywołujemy orbitalSpaceSystem.transitionToWreck — to ma flow dla
-    // wraków orbitujących ciała. Deep-space wrak jest statyczny (commit 5
-    // dopracuje rendering przez ThreeRenderer).
     EventBus.emit('vessel:wrecked', { vesselId: vessel.id, vessel });
   }
 

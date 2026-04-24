@@ -3173,6 +3173,12 @@ export class ThreeRenderer {
           isWreck: true,
           initAngle: Math.random() * Math.PI * 2,  // losowa faza startowa
         };
+      } else if (isWreck && vessel.wreckLocation && vessel.position.dockedAt == null) {
+        // M2a deep-space wrak — brak orbity, sprite zamrożony w wreckLocation.
+        // Ustawiamy pozycję natychmiast (save/load — sprite inaczej ląduje w (0,0,0)).
+        const wx = isNaN(vessel.wreckLocation.x) ? 0 : vessel.wreckLocation.x;
+        const wy = isNaN(vessel.wreckLocation.y) ? 0 : vessel.wreckLocation.y;
+        wrapper.position.set(S(wx), 0.45, S(wy));
       }
     };
 
@@ -3529,6 +3535,15 @@ export class ThreeRenderer {
           entry.routeLine.geometry.dispose();
           entry.routeLine.material.dispose();
           entry.routeLine = null;
+        }
+        // M2a: deep-space wrak (isWreck + wreckLocation + brak dockedAt) — wrak
+        // nie ma orbity w OrbitalSpaceSystem, więc _tickOrbitingVessels go nie
+        // poruszy. Sprite pozostawiłby ostatnią pozycję (lub (0,0,0) po load).
+        // Ustawiamy pozycję z wreckLocation (wyższa warstwa Y — cmentarzysko).
+        if (vessel.isWreck && vessel.wreckLocation && vessel.position.dockedAt == null) {
+          const wx = isNaN(vessel.wreckLocation.x) ? 0 : vessel.wreckLocation.x;
+          const wy = isNaN(vessel.wreckLocation.y) ? 0 : vessel.wreckLocation.y;
+          entry.sprite.position.set(S(wx), 0.45, S(wy));
         }
         continue;
       }

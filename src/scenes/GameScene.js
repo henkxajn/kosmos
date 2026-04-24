@@ -259,6 +259,7 @@ export class GameScene {
     window.KOSMOS.warSystem        = this.warSystem;
     window.KOSMOS.invasionSystem   = this.invasionSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
+    window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
     // M1 Targeting — lazy init, feature flag. Tworzone gdy
     //   GAME_CONFIG.FEATURES.movementOrders=true lub via debug.enableMovementOrders().
     this.movementOrderSystem      = null;
