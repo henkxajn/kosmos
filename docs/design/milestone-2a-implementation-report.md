@@ -272,3 +272,45 @@ Wszystkie commity na `main` branch, ready do push.
 
 **Autor:** Claude Opus 4.7 (1M context)
 **Sesja:** 2026-04-24
+
+---
+
+## 11. Post-playtest fixes
+
+### 11.1. Pursue/intercept release-from-orbit (2026-04-24)
+
+**Bug ujawniony w playtest Combat Sandbox:**
+- Repro: `KOSMOS.debug.issueOrder('v_1', { type:'pursue', targetEntityId:'v_5' })`
+  gdy v_1 ma `position.state='orbiting'` + `dockedAt='entity_2'` (Bastion).
+- Obserwowane: order zaakceptowany, MOS pisze `position.x/y` per-tick (trace
+  pokazuje ruch w danych), ale ThreeRenderer nadal renderuje vessel wokół
+  Bastionu. Wizualnie statek stoi. UI floty: "na orbicie Bastion" zamiast "w locie".
+- Control: ten sam vessel, `moveToPoint` zamiast pursue → działa poprawnie.
+
+**Root cause:** `_issuePursueOrIntercept` w MovementOrderSystem (linia 305 pre-fix)
+zwalniał vessel tylko z `state === 'docked'`. `_issueMoveToPoint` (linie 236-238)
+robi to bezwarunkowo, stąd asymetria. Vessel orbiting z dockedAt pozostawał z
+nienaruszonym state — `ThreeRenderer._syncVesselPositions` (`:3532`) traktuje
+ten kombo jako "renderuj orbital wokół dockedAt" i nadpisuje pozycje pisane
+przez MOS.
+
+**Fix:** rozszerzenie warunku do `state === 'docked' || state === 'orbiting'`
+(jedna linia, brak helpera — wzorzec występuje 1× na ścieżce pursue/intercept,
+moveToPoint pozostaje przy unconditional set).
+
+**Weryfikacja:** smoke test offline `tmp_pursue_release_test.mjs` (24 asercji,
+PASS), 5 scenariuszy:
+1. pursue z orbiting+dockedAt (bug case) → release ✓
+2. pursue z docked (M1 regression) → release ✓
+3. pursue z in_transit (no-op) → branch pomijany, brak duplikatu vessel:launched ✓
+4. intercept z orbiting (symetria) → release ✓
+5. pursue z orbiting+dockedAt=null (deep-space drift z M1 §4.3) → release ✓
+
+**Bez:** bumpu save'a (zero schema change), bez modyfikacji invariantów §2/§4
+design doca M2a (kontrakt §8.2 nadal zachowany). Stub patrol/escort
+(`_issueStubOrder`) nie był touch'owany — stuby nie ruszają vessela, więc nie
+buguja per se; rozważenie release w stubach → M2b gdy patrol/escort zostaną
+zaimplementowane.
+
+**Ryzyko regresji M1 'docked' path:** zero — branch nadal trafia z identyczną
+logiką (smoke 2 weryfikuje).

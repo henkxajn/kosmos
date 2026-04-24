@@ -301,8 +301,13 @@ export class MovementOrderSystem {
     // po orderCompleted przywróci ją (może z recompute route od aktualnej pozycji).
     this._suspendMissionIfAny(vessel);
 
-    // Jeśli vessel docked — implicit launch. Stanowa zmiana position.state.
-    if (vessel.position.state === 'docked') {
+    // Jeśli vessel docked LUB orbiting (z lub bez dockedAt) — implicit launch.
+    // Post-playtest M2a fix: poprzednio guard tylko na 'docked' powodował, że pursue
+    // wydany vesselowi w 'orbiting' (zwykły post-mission state) nie zwalniał go z
+    // ciała macierzystego — MOS pisał position.x/y, ale ThreeRenderer renderował go
+    // wokół dockedAt (orbital interpolation). Spójne z _issueMoveToPoint, które
+    // robi to bezwarunkowo (linie 236-238).
+    if (vessel.position.state === 'docked' || vessel.position.state === 'orbiting') {
       vessel.position.state = 'in_transit';
       vessel.position.dockedAt = null;
       vessel.status = 'on_mission';
