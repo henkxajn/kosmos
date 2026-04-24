@@ -30,6 +30,7 @@ import { CASUS_BELLI, inferCasusBelli } from '../data/CasusBelliData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 
 const EXHAUSTION_PER_BATTLE = 15;   // ile exhaustion rośnie za pojedynczą bitwę
 const AUTO_PEACE_EXHAUSTION = 100;  // próg auto-peace
@@ -302,6 +303,32 @@ export class WarSystem {
     const reg = window.KOSMOS?.empireRegistry;
     // Flota doleciała do destSystemId — czy jest tam gracz?
     const destSystemId = fleet.destSystemId;
+
+    // M2a Unified Aggregator — flagi FEATURES.unifiedAggregator.
+    // Gdy fleet.materializationState === 'full' i są materializedVesselIds[],
+    // konkretne vessele walczą swoją ścieżką (EnemyAttackHandler przy arrival
+    // nad planetą lub VesselCombatSystem w deep-space). Abstract battle tu
+    // zduplikowałoby combat — strength=0 → bezsensowna minibitwa (§P2/P3
+    // m2-reconnaissance.md).
+    //
+    // Akcja: zeruj destSystemId/etaYear (flota "zaparkowana" w systemie jako
+    // materialized), skip abstract battle. MilitaryAI znajdzie flotę z
+    // destSystemId=null jako "idle" — pozwoli na nowe action, ale materialized
+    // strength=0 → score=0 → AI nie wyśle tej floty (R4).
+    if (GAME_CONFIG.FEATURES?.unifiedAggregator) {
+      if (fleet.materializationState === 'full' &&
+          Array.isArray(fleet.materializedVesselIds) &&
+          fleet.materializedVesselIds.length > 0) {
+        const fleets = [...(empire.fleets ?? [])];
+        const idx = fleets.findIndex(f => f.id === fleet.id);
+        if (idx >= 0) {
+          fleets[idx] = { ...fleets[idx], systemId: destSystemId, destSystemId: null, etaYear: null };
+          gameState.set(`empires.${empire.id}.fleets`, fleets, 'fleet_arrived_skipped_materialized');
+        }
+        return;
+      }
+    }
+
     const playerPresent = this._isPlayerInSystem(destSystemId);
 
     // Zawsze: flota teraz "mieszka" w destSystemId
