@@ -286,12 +286,16 @@ export class VesselCombatSystem {
 
 /**
  * Vessel w stanie który pozwala na deep-space combat.
- * Dokowany vessel w porcie nie walczy; in_transit lub orbiting bez dockedAt = OK.
+ * Fizycznie zadokowany (state='docked') nie walczy; in_transit lub orbiting = OK
+ * niezależnie od dockedAt. M2b Commit 0 off-design z M2a §8.2: patrol/escort/
+ * picket (§9.1) oraz Combat Sandbox spawnują wrogie vessele jako orbiting
+ * z dockedAt='entity_X' (orbita ciała niebieskiego, nie hangar). M2a wymagał
+ * dockedAt==null — blokowało auto-engage dla całego M2b scope.
  */
 function _inCombatState(v) {
   const st = v.position?.state;
   if (st === 'in_transit') return true;
-  if (st === 'orbiting' && (v.position?.dockedAt == null)) return true;
+  if (st === 'orbiting') return true;
   return false;
 }
 
