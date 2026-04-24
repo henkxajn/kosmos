@@ -58,6 +58,7 @@ import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
 import { spawnTestEnemy, spawnEnemyFleet, spawnEnemyCiv, spawnEnemyAttack } from '../debug/SpawnTestEnemy.js';
+import { loadCombatSandbox, sandboxInfo, sandboxResetPositions, sandboxSpawnMoreEnemies } from '../scenarios/CombatSandbox.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
@@ -423,6 +424,14 @@ export class GameScene {
         console.log(`[debug] materializeFleet(${empireId},${fleetId}):`, result);
         return result;
       },
+      // ── Combat Sandbox (scenarioMode === 'combat_sandbox') ────────────
+      // KOSMOS.debug.sandboxInfo() — dump stanu: empires + vessele + aktywne flagi.
+      sandboxInfo,
+      // KOSMOS.debug.sandboxResetPositions() — vessele wracają do pozycji startowych,
+      // anuluje aktywne movement ordery.
+      sandboxResetPositions,
+      // KOSMOS.debug.sandboxSpawnMoreEnemies(count=1) — N dodatkowych wrogich hull_small.
+      sandboxSpawnMoreEnemies,
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
@@ -1501,8 +1510,9 @@ export class GameScene {
     // ── Auto-kolonizacja w scenariuszu Cywilizacja / Power Test ───────────
     // Nowa gra: intro (transmisja rządowa → nazwy) → kolonizacja → globus
     if (!savedData && this._civPlanetId) {
-      const isPowerTest = window.KOSMOS?.scenario === 'power_test';
-      const isBoosted   = window.KOSMOS?.scenario === 'civilization_boosted';
+      const isPowerTest      = window.KOSMOS?.scenario === 'power_test';
+      const isBoosted        = window.KOSMOS?.scenario === 'civilization_boosted';
+      const isCombatSandbox  = window.KOSMOS?.scenario === 'combat_sandbox';
 
       setTimeout(async () => {
         const civPlanet = EntityManager.get(this._civPlanetId);
@@ -1514,6 +1524,18 @@ export class GameScene {
         // Focus kamery na planecie macierzystej + bliski zoom
         EventBus.emit('body:selected', { entity: civPlanet });
         this.cameraController._targetDist = 8;
+
+        // COMBAT SANDBOX — testowy scenariusz M2 (player vs enemy w jednym układzie)
+        if (isCombatSandbox) {
+          // Domyślny lider (jak POWER TEST — bez FactionSelectScene)
+          this.leaderSystem.setLeaderNoFaction('yara_osei', 0);
+          try {
+            loadCombatSandbox(this, civPlanet);
+          } catch (err) {
+            console.error('[CombatSandbox] LOAD FAILED:', err);
+          }
+          return;
+        }
 
         // POWER TEST — pomijamy intro, domyślne nazwy
         if (isPowerTest) {

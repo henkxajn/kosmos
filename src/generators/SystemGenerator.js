@@ -714,8 +714,9 @@ export class SystemGenerator {
       bestPlanet.surfaceGravity = this.calcSurfaceGravity(bestPlanet.physics.mass, bestPlanet.surfaceRadius);
     }
 
-    // Ustaw flagę globalną scenariusza (zachowaj civilization_boosted jeśli ustawiony)
-    if (window.KOSMOS.scenario !== 'civilization_boosted') {
+    // Ustaw flagę globalną scenariusza (zachowaj civilization_boosted / combat_sandbox)
+    if (window.KOSMOS.scenario !== 'civilization_boosted' &&
+        window.KOSMOS.scenario !== 'combat_sandbox') {
       window.KOSMOS.scenario = 'civilization';
     }
 

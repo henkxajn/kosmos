@@ -233,6 +233,10 @@ export class TitleScene {
           <span class="ss-item-num">${hasSave !== null ? '03' : '02'}</span>
           <span class="ss-item-label">POWER TEST</span>
         </button>
+        <button class="ss-menu-item" data-action="combat_sandbox">
+          <span class="ss-item-num">${hasSave !== null ? '04' : '03'}</span>
+          <span class="ss-item-label">COMBAT SANDBOX</span>
+        </button>
       </div>
     `;
 
@@ -333,6 +337,10 @@ export class TitleScene {
       SaveSystem.clearSave();
       window.KOSMOS.savedData = null;
       window.KOSMOS.scenario  = 'power_test';
+    } else if (action === 'combat_sandbox') {
+      SaveSystem.clearSave();
+      window.KOSMOS.savedData = null;
+      window.KOSMOS.scenario  = 'combat_sandbox';
     }
 
     // Fade out → loading screen → start gry
