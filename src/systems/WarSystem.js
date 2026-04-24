@@ -26,6 +26,7 @@ import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { resolveBattle, empireFleetToBattleUnit, playerVesselsToBattleUnit } from './BattleSystem.js';
+import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 import { CASUS_BELLI, inferCasusBelli } from '../data/CasusBelliData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
@@ -168,7 +169,9 @@ export class WarSystem {
    * Emituje battle:orbitalDominance dla InvasionSystem i UI.
    */
   _updateOrbitalDominance(battleRec) {
-    const systemId = battleRec.location;
+    // v66: location jest objectem {systemId, planetId, point}; helper obsługuje
+    // też legacy string (pre-v66 save'y które nie przeszły migracji w runtime).
+    const systemId = normalizeLocation(battleRec.location).systemId;
     if (!systemId || !battleRec.winner || battleRec.winner === 'draw') return;
 
     const winnerPart = battleRec.winner === 'A' ? battleRec.participantA : battleRec.participantB;
@@ -210,9 +213,11 @@ export class WarSystem {
     // Rozstrzygnij bitwę i zapisz wynik
     const fleetUnit = empireFleetToBattleUnit(fleet, emp, fleet.id);
     const playerUnit = this._buildPlayerBattleUnit(playerSystemId);
+    // M2a schema: location jako object (nie string). Abstract fleet battle nad
+    // systemem gracza — planetId/point=null (brak konkretnej planety/punktu).
     const result = resolveBattle(fleetUnit, playerUnit, {
       casusBelli: war.casusBelli,
-      location:   playerSystemId,
+      location:   { systemId: playerSystemId, planetId: null, point: null },
       seed:       Math.floor(this._year() * 7919 + fleet.strength) & 0x7FFFFFFF,
     });
 
@@ -220,10 +225,9 @@ export class WarSystem {
     const newStrength = Math.max(0, fleet.strength - result.lossesA);
     reg.updateFleetStrength(empireId, fleet.id, newStrength, 'force_battle_damage');
 
-    // Zapisz bitwę
+    // Zapisz bitwę — location przechodzi przez spread z result (już object po v66).
     const recordedResult = {
       ...result,
-      location: playerSystemId,
       participantA: { type: 'empire', empireId, fleetId: fleet.id, strength: fleet.strength },
       participantB: { type: 'player', systemId: playerSystemId },
     };
@@ -346,9 +350,11 @@ export class WarSystem {
     // BITWA
     const fleetUnit = empireFleetToBattleUnit(fleet, empire, fleet.id);
     const playerUnit = this._buildPlayerBattleUnit(destSystemId);
+    // M2a schema: location jako object (nie string). Abstract fleet arrived —
+    // planetId/point=null (bitwa odbywa się „nad systemem", brak konkretu).
     const result = resolveBattle(fleetUnit, playerUnit, {
       casusBelli: war.casusBelli,
-      location:   destSystemId,
+      location:   { systemId: destSystemId, planetId: null, point: null },
       seed:       Math.floor(this._year() * 7919 + fleet.strength) & 0x7FFFFFFF,
     });
 
@@ -356,10 +362,9 @@ export class WarSystem {
     const newStrength = fleet.strength - result.lossesA;
     reg.updateFleetStrength(empire.id, fleet.id, newStrength, 'battle_damage');
 
-    // Zapisz bitwę
+    // Zapisz bitwę — location przechodzi przez spread z result (już object po v66).
     const recordedResult = {
       ...result,
-      location: destSystemId,
       participantA: { type: 'empire', empireId: empire.id, fleetId: fleet.id, strength: fleet.strength },
       participantB: { type: 'player', systemId: destSystemId },
     };

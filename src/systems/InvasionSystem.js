@@ -21,6 +21,7 @@ import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { INVASION_UNIT_POOLS } from '../data/GroundUnitData.js';
+import { normalize as normalizeLocation } from '../utils/BattleLocation.js';
 
 const CAPTURE_GRACE_YEARS = 3.0;
 const MIN_SURVIVING_STRENGTH_TO_LAND = 30; // flota musi mieć min. siły
@@ -140,7 +141,9 @@ export class InvasionSystem {
     const pA = result.participantA;
     const pB = result.participantB;
     if (pA?.type !== 'empire' || pB?.type !== 'player') return;
-    const systemId = result.location;
+    // v66: location jest objectem {systemId, planetId, point}; normalize pokrywa
+    // też legacy string.
+    const systemId = normalizeLocation(result.location).systemId;
     if (!systemId) return;
 
     const empireId = pA.empireId;

@@ -5,6 +5,7 @@
 // Komunikacja wyłącznie przez EventBus.
 
 import EventBus              from '../core/EventBus.js';
+import { normalize as normalizeBattleLocation } from '../utils/BattleLocation.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
 import debugLog              from '../core/DebugLog.js';
@@ -783,7 +784,9 @@ export class GameScene {
       if (!war) return;
 
       const reg = window.KOSMOS?.empireRegistry;
-      const sysId = result.location;
+      // v66: location jest objectem {systemId, planetId, point}; normalize pokrywa
+      // też legacy string.
+      const sysId = normalizeBattleLocation(result.location).systemId;
       const homeSys = window.KOSMOS?.homePlanet?.systemId ?? 'sys_home';
       const sysName = sysId === homeSys
         ? (window.KOSMOS?.homePlanet?.name ?? 'dom')

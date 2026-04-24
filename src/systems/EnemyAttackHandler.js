@@ -138,15 +138,17 @@ export class EnemyAttackHandler {
     let seedSum = 0;
     for (const v of allEnemies) seedSum += this._hashStr(v.id);
     const seed = (year * 7919 + seedSum) & 0x7FFFFFFF;
+    // M2a schema: location jako object (nie string). planetId ustawione — bitwa
+    // orbitalna nad atakowaną planetą; point=null (nie deep-space).
+    const location = { systemId, planetId, point: null };
     const result = resolveBattle(enemyUnit, playerUnit, {
       casusBelli: war?.casusBelli ?? 'border_incident',
-      location:   systemId,
+      location,
       seed,
     });
 
     const battleRec = {
       ...result,
-      location: systemId,
       participantA: {
         type: 'vessel_group',
         empireId,
