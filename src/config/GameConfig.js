@@ -46,6 +46,10 @@ export const GAME_CONFIG = {
     proximitySystem:      false,  // ProximitySystem — per-tick detection + events
     vesselCombat:         false,  // VesselCombatSystem — deep-space battles (wymaga proximitySystem)
     unifiedAggregator:    false,  // WarSystem._fleetArrived skip gdy materializationState='full'
+    // M2a post-playtest freeze: drain zamrożony do M3 reformy fuel/power cells.
+    // Kod drain + PURSUE_DRAIN_MULT zostaje w VesselManager._tickEndurance — unfreeze
+    // przez flip flagi gdy M3 wprowadzi pełny model fuel/endurance z hard-stop semantyką.
+    enduranceDrainActive: false,  // _tickEndurance early return gdy off (brak drain/regen/events)
   },
 };
 

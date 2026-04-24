@@ -1108,6 +1108,13 @@ export class VesselManager {
    */
   _tickEndurance(civDy) {
     if (civDy <= 0) return;
+    // M2a post-playtest freeze: endurance drain zamrożony do M3.
+    // Wartość `enduranceDrainActive=false` (GameConfig.FEATURES) wyłącza CAŁY
+    // tick — nie tylko drain, ale też regen i hysteresis events enduranceLow/
+    // enduranceDepleted. Semantyka „zamrożone": istniejące wartości endurance
+    // nie zmieniają się. Flip flagi w dev/test (KOSMOS.debug) przywraca M2a
+    // Commit 8 behavior dla regresji. Unfreeze w M3 po pełnej reformie fuel.
+    if (!GAME_CONFIG.FEATURES?.enduranceDrainActive) return;
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const LOW_THRESHOLD   = 0.20;  // 20%
     const RESET_THRESHOLD = 0.40;  // 40% hysteresis
