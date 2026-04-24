@@ -154,6 +154,11 @@ export function createVessel(shipId, colonyId, opts = {}) {
       dockedAt: colonyId,  // id ciała gdy docked/orbiting
     },
 
+    // Deep-space wrak — zamrożona pozycja (x,y) gdy vessel został zniszczony
+    // poza orbitą ciała (dockedAt === null). Dla żywych vesseli i wraków
+    // orbitujących ciała — null. Ustawiane przez _turnIntoWreck w M2a Commit 5.
+    wreckLocation: null,
+
     // Moduły zainstalowane na statku (lista ID z ShipModulesData)
     modules,
 

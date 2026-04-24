@@ -872,6 +872,8 @@ export class VesselManager {
         ownerEmpireId: v.ownerEmpireId ?? null,
         isWreck:       v.isWreck ?? false,
         wreckedAt:     v.wreckedAt ?? null,
+        // M2a: pozycja wraku w deep-space (gdy dockedAt===null). null dla wraków orbitujących ciała.
+        wreckLocation: v.wreckLocation ?? null,
         // Faza desantu: groundUnits (załadowane jednostki), troopBayUsed (runtime used),
         // orbitalStrike (ammoCurrent + cooldown). troopCapacity/canDropTroops są
         // odtwarzane z modułów przy restore — nie trzeba ich zapisywać.
@@ -952,6 +954,8 @@ export class VesselManager {
         ownerEmpireId:  vd.ownerEmpireId ?? null,
         isWreck:        vd.isWreck ?? false,
         wreckedAt:      vd.wreckedAt ?? null,
+        // M2a: deep-space wrak pozycja (null dla żywych i wraków orbitujących ciała)
+        wreckLocation:  vd.wreckLocation ?? null,
         // ── Milestone 1 — Targeting Foundation ──────────────────────────────
         // Velocity: derived state, zeruje się przy load; pierwszy tick _updatePositions
         //   ustawi prawidłową wartość z delty pozycji.

@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 65;
+export const CURRENT_VERSION     = 66;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -83,6 +83,7 @@ const MIGRATIONS = {
   62: _migrateV62toV63,
   63: _migrateV63toV64,
   64: _migrateV64toV65,
+  65: _migrateV65toV66,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1657,6 +1658,42 @@ function _migrateV64toV65(data) {
         if (!Array.isArray(f.materializedVesselIds)) f.materializedVesselIds = [];
         if (!f.materializationState) f.materializationState = 'abstract';
         if (f.lastMaterializedAt === undefined) f.lastMaterializedAt = null;
+      }
+    }
+  }
+
+  return data;
+}
+
+// ── Migracja v65 → v66 ──────────────────────────────────────────────────────
+// Milestone 2a (Combat Core) — schema defaults:
+//   (a) vessel.wreckLocation (null — set przy deep-space wreck, commit 5)
+//   (b) vessel.movementOrder.retreatFromBattleId (null — marker dla auto-retreat orderów)
+//   (c) battleRec.location: string → { systemId, planetId: null, point: null }
+// Feature flagi proximitySystem/vesselCombat/unifiedAggregator czyta się
+// z GAME_CONFIG.FEATURES — save ich nie trzyma.
+function _migrateV65toV66(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x) {
+    // (a) + (b) — vessels
+    const vessels = c4x.vesselManager?.vessels ?? [];
+    for (const v of vessels) {
+      if (v.wreckLocation === undefined) v.wreckLocation = null;
+      if (v.movementOrder && v.movementOrder.retreatFromBattleId === undefined) {
+        v.movementOrder.retreatFromBattleId = null;
+      }
+    }
+  }
+
+  // (c) — battleRec.location legacy string → object
+  const gs = data.gameState;
+  if (gs?.battles && typeof gs.battles === 'object') {
+    for (const br of Object.values(gs.battles)) {
+      if (!br || typeof br !== 'object') continue;
+      if (typeof br.location === 'string') {
+        br.location = { systemId: br.location, planetId: null, point: null };
+      } else if (!br.location) {
+        br.location = { systemId: 'sys_home', planetId: null, point: null };
       }
     }
   }

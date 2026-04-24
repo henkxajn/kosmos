@@ -34,13 +34,18 @@ export const GAME_CONFIG = {
   BACKGROUND_COLOR: 0x0a0a1a,
   STAR_COUNT_BACKGROUND: 250,
 
-  // ── Feature flagi (Milestone 1 — Targeting Foundation) ───────────────────
+  // ── Feature flagi (Milestone 1/2 — Combat Foundation) ────────────────────
   // Kill-switch dla nowych systemów. OFF-by-default — instancjonowane lazily
   // gdy flag=true (zob. GameScene._ensureMovementOrderSystem / ...Materializer).
   // Toggle z devtools: KOSMOS.debug.enableMovementOrders() / disable...().
   FEATURES: {
+    // M1 — Targeting Foundation (save v65)
     movementOrders:       false,  // MovementOrderSystem (M1 Commit 4-6)
     fleetMaterialization: false,  // EmpireFleetMaterializer (M1 Commit 7)
+    // M2a — Combat Core (save v66)
+    proximitySystem:      false,  // ProximitySystem — per-tick detection + events
+    vesselCombat:         false,  // VesselCombatSystem — deep-space battles (wymaga proximitySystem)
+    unifiedAggregator:    false,  // WarSystem._fleetArrived skip gdy materializationState='full'
   },
 };
 
