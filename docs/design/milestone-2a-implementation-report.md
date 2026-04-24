@@ -436,3 +436,104 @@ docelowy fix architektoniczny to ProximitySystem z dwoma progami (detection
   był pierwotny cel `pursue` od commit 5 M2a.
 - Order completion emit nie jest new — istniał od M1. Dodany tylko
   `targetEntityId` field.
+
+---
+
+## 12. Post-playtest known issues deferred to future milestones
+
+Trzy znane problemy które M2a ostatecznie NIE adresuje — celowo odłożone
+do przyszłych milestone'ów. Każdy ma root cause, status weryfikacji,
+i plan unfreeze/naprawy.
+
+### 12.1. Endurance drain frozen (2026-04-24, commit `4109a59`)
+
+**Status:** ZAMROŻONE, `FEATURES.enduranceDrainActive=false` default.
+
+**Root cause:** M2a Commit 8 dodał `PURSUE_DRAIN_MULT=3.0` jako presję
+zasobową, ale playtest ujawnił efekt uboczny — gdy `endurance.current=0`,
+vessel doznaje velocity degradation (~0.1 AU/rok zamiast speedAU 1.3).
+Semantyka "co się dzieje przy 0" była udokumentowana w design doc §5.4
+jako hard-stop do M3, ale degradation logic w _updatePositions lub
+mission handler nie była przeznaczona do tego — nowy bug poza scope M2a.
+
+**Decyzja:** Opcja B — zamrozić CAŁY tick endurance (drain + regen +
+hysteresis events enduranceLow/enduranceDepleted) do M3. Early return
+w `VesselManager._tickEndurance` gdy `FEATURES.enduranceDrainActive=false`.
+Kod drain + multiplier + branches zostają (regresja regression-ready).
+Istniejące save'y z `endurance.current<100` zostają jak są — gracz
+startuje fresh playtest z current=max (nowe vessele spawn z max).
+
+**Deferred to:** M3 po pełnej reformie fuel/power cells. Unfreeze plan:
+- M3 design doc definiuje hard-stop semantykę (velocity = 0 vs ×0.3 mult
+  vs natychmiastowe drift)
+- Flip `enduranceDrainActive=true` default
+- Regresja test PURSUE_DRAIN_MULT logic (9 asercji `tmp_endurance_freeze_test`
+  weryfikowało kod nadal obecny po freeze)
+
+**Weryfikacja real-flow:** 20/20 smoke asercji offline. Manual retest
+gracza w Combat Sandbox: long pursue (v_4 → v_6 przez ~5 AU) kończy się
+bitwą w rozsądnym czasie bez endurance interferencji. Jeśli PASS → tag
+`m2a-complete`.
+
+---
+
+### 12.2. BUG#4 drift state po auto-retreat
+
+**Status:** UJAWNIONY w playteście M2a, NIE naprawiany.
+
+**Root cause:** `AutoRetreatSystem._issueRetreatOrder` (M2a commit 7) wydaje
+`moveToPoint` z `targetPoint = { x: dest.planet.x, y: dest.planet.y }` —
+koordynaty kolonii. MOS kompletuje order gdy vessel osiąga punkt
+(THREAT_RADIUS_AU=0.15 AU), ale **NIE** dokuje — vessel zostaje w
+`position.state='orbiting'` + `dockedAt=null`. To identyczna semantyka jak
+M1 "deep-space drift state" (Appendix C design doca M1 §4.3) — pursue/intercept
+w deep-space nie ma "naturalnego docking target". W tym przypadku mamy
+target (planetę), ale `moveToPoint` to nie `orbital-approach` — nie ma
+logiki docking.
+
+**Skutek dla gracza:** po auto-retreat vessel zatrzymuje się **blisko**
+kolonii ale nie wchodzi do hangaru. Gracz musi ręcznie wydać kolejny order
+żeby zadokować. Frustrujące UX ale nie wrak.
+
+**Deferred to:** M2b (razem z ProximitySystem refactor §11.5) ALBO
+osobna fix session. Kierunek naprawy:
+- Nowy `OrderType.orbitalApproach` w MovementOrderSystem — cel = planeta
+  (entity), completion = dockedAt=planet.id
+- LUB `AutoRetreatSystem._issueRetreatOrder` wydaje mission-based `move`
+  zamiast MOS `moveToPoint` (mission system ma docking logic)
+- LUB rozszerzyć `moveToPoint` completion o auto-dock gdy targetPoint jest
+  w pobliżu planety (ale to mixing semantyki)
+
+Estimated effort: 0.5-1d. Nie BLOCKER dla M2b (gracz kontynuuje po manual order).
+
+---
+
+### 12.3. Deep-space wrak niezweryfikowany w real flow
+
+**Status:** OFFLINE weryfikacja PASS (25 asercji `tmp_wreck_test.mjs`),
+REAL-FLOW weryfikacja BRAK.
+
+**Root cause:** Wszystkie bitwy w M2a playtest kończyły się `retreat='A'|'B'`
+(BattleSystem retreat przy HP ≤ 20% — design decyzja commit 2 M2a). Żaden
+vessel nie zginął z `hp=0` w deep-space → ścieżka `_turnIntoWreck` z
+`wreckLocation={x,y}` (commit 5 M2a) nie była triggerowana w real flow.
+
+**Co MA weryfikację offline:**
+- `tmp_wreck_test.mjs` (25 asercji): 3-ścieżkowy kontrakt `_turnIntoWreck`
+  (string planetId / {x,y} deep-space / null fallback)
+- ThreeRenderer sprite positioning z `wreckLocation` (manual code review)
+- SaveMigration v65→v66 (`wreckLocation=null` default)
+
+**Co NIE MA weryfikacji real-flow:**
+- Vessel ginący w deep-space (hp=0 + NIE retreat) → wreck w midpoint bitwy
+- Po save/load deep-space wrak zostaje w `wreckLocation` (nie teleportuje
+  do planety)
+- ThreeRenderer renderuje wrak sprite w wreckLocation bez OrbitalSpaceSystem
+
+**Deferred to:** M2b playtest kiedy asymetryczne scenariusze dostępne
+(devtools `KOSMOS.debug.resolveDeepSpaceBattle(vessel, weak_target)` +
+force-kill helper). Gracz uruchomi scenariusz przez np. sandbox który
+ustawia `hp=1` na enemy vessel → bitwa zabija bez retreat'u.
+
+Nie BLOCKER — offline weryfikacja pokrywa code paths, real-flow to
+defense-in-depth.

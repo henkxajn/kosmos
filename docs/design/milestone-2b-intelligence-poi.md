@@ -936,6 +936,24 @@ głównymi commitami IntelSystem/POI).
 
 ---
 
+## §11.6. Optional pre-M2b fixes (non-blockers)
+
+Trzy known issues z M2a playtestu — **opcjonalne** fixe przed rozpoczęciem
+M2b IntelSystem/POI. Nie blokują głównego scope, ale warto rozważyć
+przy planowaniu harmonogramu. Szczegóły: `milestone-2a-implementation-report.md`
+§12.
+
+| # | Issue | Severity | Kiedy warto zrobić |
+|---|---|---|---|
+| O1 | Endurance drain frozen (§12.1) | LOW | **Zostaw zamrożone** — unfreeze docelowy w M3 po pełnej reformie fuel/power cells. W M2b flaga `enduranceDrainActive` pozostaje OFF. |
+| O2 | BUG#4 drift state po auto-retreat (§12.2) | MEDIUM | Warto naprawić **przed patrol/escort** (§10.2/§10.3), bo te ordery też używają `moveToPoint` internalnie — ten sam drift state zagrozi UX. Można zrobić razem z §11.5 refactor lub osobnym commitem pre-M2b. Estimated: 0.5-1d. |
+| O3 | Deep-space wrak real-flow weryfikacja (§12.3) | LOW | Zrobić w ramach M2b playtestu — scenariusz z `resolveDeepSpaceBattle(vessel, weak_target)` + force-kill. Offline 25/25 PASS już istnieje, to defense-in-depth. |
+
+**Kontrast z §11.5 (BLOCKER):** ProximitySystem refactor MUSI iść przed
+patrol/escort auto-engage; §11.6 items to poprawki jakościowe.
+
+---
+
 ## §12. Ryzyka
 
 | # | Ryzyko | Severity | Mitigation |

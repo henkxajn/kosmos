@@ -533,6 +533,19 @@ R8 sync events order. R7 out-of-scope (empire↔empire → M3).
   — jawna player-issued akcja). **Docelowy fix w M2b §11.5**:
   ProximitySystem dwuprogowy (detection + combat) + combatRangeEnter
   event — BLOCKER przed M2b patrol/escort auto-engage (R10).
+- `4109a59` — Endurance drain freeze (§12.1, `FEATURES.enduranceDrainActive=false`).
+  Kod drain + `PURSUE_DRAIN_MULT=3.0` + hysteresis events zostają w
+  `_tickEndurance` — early return gdy flaga off. Unfreeze w M3 po pełnej
+  reformie fuel/power cells. Velocity degradation przy endurance=0 (nowy
+  bug z playtestu) **nie badany** — zamrożenie obchodzi problem dla
+  nowych sesji.
+
+**Known issues deferred do M2b/M3 (§12 raportu):**
+- §12.1 Endurance drain frozen (M3 reforma fuel)
+- §12.2 BUG#4 drift state po auto-retreat — `moveToPoint` nie dokuje do
+  planety docelowej (M2b §11.6 O2, warto przed patrol/escort)
+- §12.3 Deep-space wrak real-flow weryfikacja — offline 25/25 PASS, ale
+  wszystkie bitwy M2a kończyły się retreat (M2b playtest)
 
 ### Milestone 1 — Targeting Foundation (✅ ukończony, save v65, tag `m1-complete`)
 Design: `docs/design/milestone-1-targeting-foundation.md` + Appendix C (implementation notes + playtest bugfixes). Podsumowanie: `docs/design/milestone-1-summary.md`.
