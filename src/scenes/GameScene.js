@@ -75,6 +75,7 @@ import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
 import { ProximitySystem } from '../systems/ProximitySystem.js';
 import { VesselCombatSystem } from '../systems/VesselCombatSystem.js';
+import { AutoRetreatSystem } from '../systems/AutoRetreatSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
 import { EconAI }            from '../systems/ai/EconAI.js';
@@ -280,6 +281,12 @@ export class GameScene {
     this.vesselCombatSystem          = null;
     window.KOSMOS.vesselCombatSystem = null;
     if (GAME_CONFIG.FEATURES?.vesselCombat) this._ensureVesselCombatSystem();
+    // M2a AutoRetreatSystem — event-driven retreat na battle:resolved. Nie ma
+    //   osobnej flagi — pokryty przez vesselCombat (bez combat nie ma retreat).
+    //   Commit 7.
+    this.autoRetreatSystem          = null;
+    window.KOSMOS.autoRetreatSystem = null;
+    if (GAME_CONFIG.FEATURES?.vesselCombat) this._ensureAutoRetreatSystem();
     // Faza 7: AI (statyczne klasy — ekspozycja dla debug z konsoli)
     window.KOSMOS.militaryAI       = MilitaryAI;
     window.KOSMOS.econAI           = EconAI;
@@ -2427,6 +2434,37 @@ export class GameScene {
     this.vesselCombatSystem = null;
     window.KOSMOS.vesselCombatSystem = null;
     console.log('[GameScene] VesselCombatSystem deaktywowany');
+  }
+
+  /**
+   * M2a AutoRetreatSystem — idempotentne init.
+   * Event-driven na battle:resolved (retreated='A'|'B'). Delegacja moveToPoint
+   * order do najbliższej friendly planety przez MovementOrderSystem.
+   */
+  _ensureAutoRetreatSystem() {
+    if (this.autoRetreatSystem) return this.autoRetreatSystem;
+    if (!this.vesselManager || !this.colonyManager) {
+      console.warn('[GameScene] vessel/colonyManager jeszcze nieinicjalizowany — odrocz enable autoRetreat');
+      return null;
+    }
+    // MOS wymagane — jeśli flag movementOrders off, autoRetreat nie może wydawać orderów.
+    const mos = this._ensureMovementOrderSystem();
+    if (!mos) {
+      console.warn('[GameScene] MovementOrderSystem niedostępny — AutoRetreatSystem nie może działać');
+      return null;
+    }
+    this.autoRetreatSystem = new AutoRetreatSystem(this.vesselManager, this.colonyManager, mos);
+    window.KOSMOS.autoRetreatSystem = this.autoRetreatSystem;
+    console.log('[GameScene] AutoRetreatSystem aktywowany');
+    return this.autoRetreatSystem;
+  }
+
+  _disableAutoRetreatSystem() {
+    if (!this.autoRetreatSystem) return;
+    this.autoRetreatSystem.destroy();
+    this.autoRetreatSystem = null;
+    window.KOSMOS.autoRetreatSystem = null;
+    console.log('[GameScene] AutoRetreatSystem deaktywowany');
   }
 
   _restoreSystem(data, cx, cy) {
