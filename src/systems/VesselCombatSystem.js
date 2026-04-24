@@ -1,13 +1,19 @@
-// VesselCombatSystem — deep-space combat vessel↔vessel (M2a).
+// VesselCombatSystem — deep-space combat vessel↔vessel (M2a + M2b Commit 0).
 //
-// Event-driven (bez własnego _tick). Nasłuchuje vessel:proximityEnter
-// z ProximitySystem. Gdy dystans ≤ COMBAT_ENGAGEMENT_AU (0.15) oraz
-// sameFaction === false — triggeruje bitwę.
+// Event-driven (bez własnego _tick). Nasłuchuje vessel:combatRangeEnter
+// z ProximitySystem (próg <0.15 AU, hysteresis 0.20). Gdy sameFaction === false
+// i cooldown minął — triggeruje bitwę.
+//
+// M2b Commit 0 (§11.5): zastąpienie M2a hookov'ow na vessel:proximityEnter
+// i vessel:orderCompleted (tymczasowe rozwiązanie z commit 23270dd). Dzięki
+// dedykowanemu eventowi combatRangeEnter VCS działa jednolicie dla wszystkich
+// scenariuszy ruchu (pursue, intercept, patrol, escort, drift in-transit).
 //
 // Flow:
-//   proximityEnter
+//   combatRangeEnter
+//     → sameFaction bail
 //     → cooldown check (ENGAGEMENT_COOLDOWN_YEARS=2)
-//     → team-up by ownerEmpireId (w M2a: tylko player ↔ empire)
+//     → _resolveEngagement (team-up by ownerEmpireId, w M2a: tylko player ↔ empire)
 //     → BattleSystem.resolveBattle(sideA, sideB, {location: {systemId, planetId: null, point: mid}})
 //     → _applyOutcome:
 //         winner=A, !retreated → wreck sideB
@@ -21,11 +27,9 @@
 // obcymi imperiami, M3); full cinematic BattleView3D dla deep-space (reuse
 // generic); bidirectional materialize/dematerialize reconciliation.
 //
-// Wreck placement w deep-space (commit 4 minimal): VesselCombatSystem
-// ręcznie ustawia flagi wraku + wreckLocation + emit vessel:wrecked.
-// Commit 5 zgeneralizuje _turnIntoWreck w EnemyAttackHandler by obsługiwało
-// zarówno planetId jak i {x,y} — wtedy ta metoda zostanie zredukowana do
-// delegacji.
+// Wreck placement w deep-space: delegacja do EnemyAttackHandler._turnIntoWreck
+// (commit 5 rozszerzył kontrakt o {x,y} deep-space path). Fallback inline
+// gwarantuje stabilność w testach headless.
 
 import EventBus from '../core/EventBus.js';
 import gameState from '../core/GameState.js';
@@ -50,42 +54,33 @@ export class VesselCombatSystem {
     /** @type {Map<string, number>} pairKey → lastEngagedYear */
     this._recentlyEngaged = new Map();
 
-    this._onProximityEnter = (e) => this._handleProximityEnter(e);
-    EventBus.on('vessel:proximityEnter', this._onProximityEnter);
-
-    // M2a post-playtest fix #2b (2026-04-24): drugi listener.
-    //
-    // ProximitySystem emituje proximityEnter TYLKO raz — przy pierwszym wejściu
-    // w PROXIMITY_DETECTION_AU (0.5 AU). VCS filtruje `distanceAU > 0.15` →
-    // bail dla świeżo zbliżonej pary, a drugiego eventu przy <0.15 nie ma
-    // (hysteresis band 0.15–0.6 AU to no-op). Skutek: VCS nigdy nie engaguje
-    // przez proximityEnter gdy pursuer dochodzi z daleka.
-    //
-    // Tymczasowe rozwiązanie: słuchanie vessel:orderCompleted dla
-    // pursue/intercept. Gdy MOS kompletuje order (distance ≤ THREAT_RADIUS_AU
-    // 0.15), VCS buduje parę (vessel, target) i odpala _resolveEngagement.
-    //
-    // TODO M2b: docelowy fix to ProximitySystem z dwoma progami (detection
-    // 0.5 AU + combat 0.15 AU) i dwoma eventami (proximityEnter +
-    // combatRangeEnter). Wtedy VCS słucha combatRangeEnter zamiast polegać
-    // na orderCompleted. Aktualny hook działa tylko dla pursue/intercept —
-    // patrol/escort auto-engage w M2b wymagają refactoru.
-    this._onOrderCompleted = (e) => this._handleOrderCompleted(e);
-    EventBus.on('vessel:orderCompleted', this._onOrderCompleted);
+    this._onCombatRangeEnter = (e) => this._handleCombatRangeEnter(e);
+    EventBus.on('vessel:combatRangeEnter', this._onCombatRangeEnter);
   }
 
   destroy() {
-    EventBus.off('vessel:proximityEnter', this._onProximityEnter);
-    EventBus.off('vessel:orderCompleted', this._onOrderCompleted);
+    EventBus.off('vessel:combatRangeEnter', this._onCombatRangeEnter);
     this._recentlyEngaged.clear();
   }
 
   // ── Event handling ────────────────────────────────────────────────────
 
-  _handleProximityEnter({ vesselAId, vesselBId, distanceAU, sameFaction }) {
+  /**
+   * M2b Commit 0: combatRangeEnter → deep-space engage.
+   *
+   * Event gwarantuje że dystans <COMBAT_ENGAGEMENT_AU (0.15) w momencie
+   * emit. Nie filtrujemy po distanceAU; event przychodzi raz per pair
+   * (hysteresis 0.15/0.20 w ProximitySystem).
+   *
+   * Filter chain:
+   *   1. !FEATURES.vesselCombat         → return
+   *   2. sameFaction                    → return
+   *   3. cooldown (ENGAGEMENT_COOLDOWN_YEARS=2) → return
+   *   4. engage (reuse _resolveEngagement)
+   */
+  _handleCombatRangeEnter({ vesselAId, vesselBId, sameFaction }) {
     if (!GAME_CONFIG.FEATURES?.vesselCombat) return;
     if (sameFaction) return;
-    if (distanceAU > COMBAT_ENGAGEMENT_AU) return;
 
     const now = this._year();
     const key = pairKey(vesselAId, vesselBId);
@@ -94,75 +89,6 @@ export class VesselCombatSystem {
 
     this._recentlyEngaged.set(key, now);
     this._resolveEngagement(vesselAId, vesselBId);
-  }
-
-  /**
-   * M2a post-playtest fix #2b: orderCompleted → deep-space engage.
-   *
-   * Filter chain (decyzja projektowa B — luźniejsza niż proximity path):
-   *   1. !FEATURES.vesselCombat         → return
-   *   2. type ∉ {pursue, intercept}     → return
-   *   3. !targetEntityId                → return
-   *   4. vessel/target must exist i !isWreck
-   *   5. sameFaction                    → return
-   *   6. cooldown (ENGAGEMENT_COOLDOWN_YEARS=2) → return
-   *   7. engage (reuse _resolveEngagement)
-   *
-   * UWAGA decyzja B: pomijamy `_inCombatState` filter (który VCS via proximity
-   * używa w _resolveEngagement:90). Intencja — gdy player pursueje wrogi
-   * vessel stojący nawet w dockedAt!=null (np. parking na neutralnej planecie),
-   * VCS powinien walczyć. Proximity path zachowuje stary filter (to jest
-   * pasywna detekcja i nie gwarantuje intencji playera); orderCompleted
-   * oznacza jawną, player-issued akcję → luźniejsze reguły.
-   *
-   * Odnotowanie: _resolveEngagement nadal ma _inCombatState gate. Sekcja
-   * decyzji B wymaga jednak żeby VCS eng. Dlatego omijamy _resolveEngagement
-   * i wchodzimy bezpośrednio w `_battle(…)` gdy filter chain przeszedł,
-   * używając `vessel` i `target` jako minimalnych grup.
-   */
-  _handleOrderCompleted({ vesselId, type, targetEntityId }) {
-    if (!GAME_CONFIG.FEATURES?.vesselCombat) return;
-    if (type !== 'pursue' && type !== 'intercept') return;
-    if (!targetEntityId) return;
-
-    const vm = this._vm;
-    if (!vm) return;
-    const vessel = vm._vessels?.get(vesselId);
-    if (!vessel || vessel.isWreck) return;
-    const target = vm._vessels?.get(targetEntityId);
-    if (!target || target.isWreck) return;
-
-    const ownerV = _resolveOwner(vessel);
-    const ownerT = _resolveOwner(target);
-    if (ownerV === ownerT) return;
-
-    const now = this._year();
-    const key = pairKey(vesselId, targetEntityId);
-    const last = this._recentlyEngaged.get(key);
-    if (last != null && (now - last) < ENGAGEMENT_COOLDOWN_YEARS) return;
-
-    this._recentlyEngaged.set(key, now);
-
-    // Bezpośrednie engagement bez `_resolveEngagement` team-up logic —
-    // dla orderCompleted para jest już deterministyczna (pursuer+target).
-    // Midpoint = aktualna średnia pozycji (nawet gdy target dockedAt!=null,
-    // używamy position.x/y — OrbitalSpaceSystem aktualizuje ją na bieżąco).
-    const mid = {
-      x: (vessel.position.x + target.position.x) / 2,
-      y: (vessel.position.y + target.position.y) / 2,
-    };
-    // Grupowanie player↔target: jeśli pursuer jest graczem (ownerV==='player'),
-    // sideA=player; inaczej pursuer jest imperium → ownerT może być 'player'.
-    // M2a: obsługujemy tylko pary z graczem po jednej stronie (empire↔empire
-    // deferred do M3).
-    if (ownerV === 'player') {
-      this._battle([vessel], [target], mid, 'player', ownerT);
-    } else if (ownerT === 'player') {
-      this._battle([target], [vessel], mid, 'player', ownerV);
-    } else {
-      // Empire↔empire pursue — out of M2a scope. Odkładamy cooldown.
-      this._recentlyEngaged.delete(key);
-    }
   }
 
   // ── Team-up + battle resolve ─────────────────────────────────────────

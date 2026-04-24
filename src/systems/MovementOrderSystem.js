@@ -514,17 +514,11 @@ export class MovementOrderSystem {
     }
 
     _trace(`complete ${order.id} ${order.type} vessel=${vessel.id} pos=(${vessel.position.x.toFixed(1)},${vessel.position.y.toFixed(1)}) dockedAt=${vessel.position.dockedAt ?? 'null'} year=${gameYear.toFixed(3)}`);
-    // Payload zawiera targetEntityId — VCS (M2a post-playtest fix #2b) słucha
-    // orderCompleted dla pursue/intercept i triggeruje deep-space combat. Bez
-    // targetEntityId VCS nie wiedziałby przeciwko komu engage'ować, a czytanie
-    // vessel.movementOrder.targetEntityId byłoby kruche (MOS czyści order po
-    // emit'cie — _byVessel.delete na linii 511).
     EventBus.emit('vessel:orderCompleted', {
-      vesselId:       vessel.id,
-      orderId:        order.id,
-      type:           order.type,
-      targetEntityId: order.targetEntityId ?? null,
-      completedYear:  gameYear,
+      vesselId:      vessel.id,
+      orderId:       order.id,
+      type:          order.type,
+      completedYear: gameYear,
     });
   }
 
@@ -666,11 +660,10 @@ export class MovementOrderSystem {
       vessel.status  = 'idle';
 
       EventBus.emit('vessel:orderCompleted', {
-        vesselId:       vessel.id,
-        orderId:        order.id,
-        type:           order.type,
-        targetEntityId: order.targetEntityId ?? null,
-        completedYear:  gameYear,
+        vesselId:      vessel.id,
+        orderId:       order.id,
+        type:          order.type,
+        completedYear: gameYear,
       });
     }
   }

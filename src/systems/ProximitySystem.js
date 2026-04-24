@@ -1,10 +1,13 @@
-// ProximitySystem — per-tick detection zbliżeń vessel↔vessel (M2a).
+// ProximitySystem — per-tick detection zbliżeń vessel↔vessel (M2a + M2b).
 //
 // Algorytm: O(n²/2) par z rotującym offsetem + budżet MAX_PAIRS_PER_TICK.
 // Przy 100 vesseli pełne skanowanie zajmuje ~ceil(4950/500)=10 ticków.
-// Hysteresis: enter przy distAU < PROXIMITY_DETECTION_AU (0.5),
-// exit przy distAU ≥ PROXIMITY_EXIT_AU (0.6) — zapobiega migotaniu
-// eventów gdy dystans oscyluje wokół progu.
+//
+// Dwa progi (M2b Commit 0, §11.5 dług z M2a):
+//   Detection: enter <0.5 AU, exit ≥0.6 AU (hysteresis) — event proximityEnter/Exit.
+//   Combat:    enter <0.15 AU, exit ≥0.20 AU (hysteresis) — event combatRangeEnter/Exit.
+// VesselCombatSystem subskrybuje combatRangeEnter (nie filtruje po distanceAU).
+// IntelSystem (M2b) subskrybuje proximityEnter dla observed contact upgrade.
 //
 // Feature flag: GAME_CONFIG.FEATURES.proximitySystem — lazy init w GameScene.
 //
@@ -13,24 +16,28 @@
 // vessel:wrecked → MOS._onVesselWrecked → MOS._tick. Zob. master doc §5.
 //
 // Eventy:
-//   vessel:proximityEnter { vesselAId, vesselBId, distanceAU, sameFaction }
-//   vessel:proximityExit  { vesselAId, vesselBId }
+//   vessel:proximityEnter    { vesselAId, vesselBId, distanceAU, sameFaction }
+//   vessel:proximityExit     { vesselAId, vesselBId }
+//   vessel:combatRangeEnter  { vesselAId, vesselBId, distanceAU, sameFaction }
+//   vessel:combatRangeExit   { vesselAId, vesselBId }
 //
 // Flag sameFaction: true gdy ownerEmpireId obu pasuje. ProximitySystem NIE
-// filtruje same-faction — emituje zawsze. Subscriber (VesselCombatSystem)
-// sam decyduje co z tym zrobić. Rozdzielenie odpowiedzialności ułatwia
-// przyszłe use-cases (rally accumulation, escort hand-off).
+// filtruje same-faction — emituje zawsze. Subscriber (VesselCombatSystem,
+// IntelSystem) sam decyduje co z tym zrobić. Rozdzielenie odpowiedzialności
+// ułatwia przyszłe use-cases (rally accumulation, escort hand-off).
 
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
-// Stałe — użyte w detection logic.
+// Stałe — użyte w detection + combat logic.
 //   PROXIMITY_DETECTION_AU (enter), PROXIMITY_EXIT_AU (exit, hysteresis +20%),
-//   COMBAT_ENGAGEMENT_AU (próg dla VesselCombatSystem, commit 4),
-//   MAX_PAIRS_PER_TICK (budget — pełne skanowanie w ~ceil(n²/2 / budget) ticków).
+//   COMBAT_ENGAGEMENT_AU  (enter combat, dla VesselCombatSystem),
+//   COMBAT_EXIT_AU        (exit combat, hysteresis +33% vs engagement),
+//   MAX_PAIRS_PER_TICK    (budget — pełne skanowanie w ~ceil(n²/2 / budget) ticków).
 export const PROXIMITY_DETECTION_AU = 0.5;
 export const PROXIMITY_EXIT_AU      = 0.6;
 export const COMBAT_ENGAGEMENT_AU   = 0.15;
+export const COMBAT_EXIT_AU         = 0.20;
 export const MAX_PAIRS_PER_TICK     = 500;
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
@@ -65,8 +72,10 @@ export class ProximitySystem {
    */
   constructor(vesselManager) {
     this._vm = vesselManager;
-    /** @type {Set<string>} aktywne pary (obecnie w zasięgu proximity) */
+    /** @type {Set<string>} aktywne pary (obecnie w zasięgu proximity detection <0.5 AU) */
     this._activePairs = new Set();
+    /** @type {Set<string>} aktywne pary w combat range (<0.15 AU) */
+    this._activeCombatPairs = new Set();
     /** @type {number} offset do rotacji iteracji w _tick (budget handling) */
     this._iterationOffset = 0;
 
@@ -147,17 +156,37 @@ export class ProximitySystem {
       });
     }
     // W pasie hysteresis (DETECTION_AU .. EXIT_AU) — no-op dla spójności.
+
+    // Drugi próg: combat range (hysteresis 0.15 / 0.20 AU).
+    const isCombat = this._activeCombatPairs.has(key);
+    if (!isCombat && distAU < COMBAT_ENGAGEMENT_AU) {
+      this._activeCombatPairs.add(key);
+      const sameFaction = (v1.ownerEmpireId ?? null) === (v2.ownerEmpireId ?? null);
+      EventBus.emit('vessel:combatRangeEnter', {
+        vesselAId:  v1.id,
+        vesselBId:  v2.id,
+        distanceAU: distAU,
+        sameFaction,
+      });
+    } else if (isCombat && distAU >= COMBAT_EXIT_AU) {
+      this._activeCombatPairs.delete(key);
+      EventBus.emit('vessel:combatRangeExit', {
+        vesselAId: v1.id,
+        vesselBId: v2.id,
+      });
+    }
   }
 
   /**
-   * Cleanup aktywnych par po wreckowaniu vessela.
+   * Cleanup aktywnych par (detection + combat) po wreckowaniu vessela.
    * Zapobiega false-positive gdy ID zostaje reużyte (teoretyczne future-proof).
-   * NIE emitujemy proximityExit — wreck to terminal state; konsumenci
-   * (VesselCombatSystem, IntelSystem M2b) słuchają vessel:wrecked osobno.
+   * NIE emitujemy proximityExit/combatRangeExit — wreck to terminal state;
+   * konsumenci (VesselCombatSystem, IntelSystem M2b) słuchają vessel:wrecked osobno.
    * @param {{vesselId: string}} e
    */
   _handleVesselWrecked({ vesselId }) {
-    if (!vesselId || this._activePairs.size === 0) return;
+    if (!vesselId) return;
+    if (this._activePairs.size === 0 && this._activeCombatPairs.size === 0) return;
     const prefix1 = `${vesselId}|`;
     const suffix1 = `|${vesselId}`;
     for (const key of [...this._activePairs]) {
@@ -165,19 +194,33 @@ export class ProximitySystem {
         this._activePairs.delete(key);
       }
     }
+    for (const key of [...this._activeCombatPairs]) {
+      if (key.startsWith(prefix1) || key.endsWith(suffix1)) {
+        this._activeCombatPairs.delete(key);
+      }
+    }
   }
 
   destroy() {
     EventBus.off('vessel:wrecked', this._onVesselWrecked);
     this._activePairs.clear();
+    this._activeCombatPairs.clear();
     this._iterationOffset = 0;
   }
 
   /**
-   * Debug: lista aktywnych par proximity.
+   * Debug: lista aktywnych par proximity (detection <0.5 AU).
    * @returns {string[][]}
    */
   getProximityPairs() {
     return [...this._activePairs].map(k => k.split('|'));
+  }
+
+  /**
+   * Debug: lista aktywnych par w combat range (<0.15 AU).
+   * @returns {string[][]}
+   */
+  getCombatPairs() {
+    return [...this._activeCombatPairs].map(k => k.split('|'));
   }
 }
