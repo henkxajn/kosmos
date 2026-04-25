@@ -198,6 +198,7 @@ export class GameCore {
     K.unitDesigns = [];
     EmpireGenerator.generate(K.galaxyData, this.empireRegistry);
     this.intelSystem.initForAllEmpires();
+    this.intelSystem.initVesselSubdomain();
     this.diplomacySystem.initForAllEmpires();
     this.alienCivSystem.initForAllEmpires();
 

@@ -502,9 +502,11 @@ test('T7.1 IntelSystem używa imported GAME_CONFIG (window.GAME_CONFIG=undefined
   assertEq(rec.quality, 'rumor', 'quality');
 });
 
-test('T7.2 fresh-game init: intel.vessels istnieje po new IntelSystem() (bez load save)', () => {
+test('T7.2 initVesselSubdomain() inicjalizuje intel.vessels = {} dla świeżej gry', () => {
   // Świeża gra symulacja: gameState.reset() zostawia intel jako {} (z createDefaultState),
-  // bez sub-key 'vessels'. Konstruktor IntelSystem powinien dorzucić puste {}.
+  // bez sub-key 'vessels'. GameScene wywołuje initVesselSubdomain() po reset/restore.
+  // (Constructor IntelSystem byłby bezskuteczny — GameScene resetuje state po
+  // instancjacji systemu.)
   EventBus.clear();
   gameState.reset();
   GAME_CONFIG.FEATURES.intelContactState = true;
@@ -513,16 +515,19 @@ test('T7.2 fresh-game init: intel.vessels istnieje po new IntelSystem() (bez loa
     empireRegistry: { get: () => null, listAll: () => [] },
     homePlanet: null, galaxyData: null,
   };
-  // Pre-state: intel.vessels NIE istnieje
-  const before = gameState.get('intel.vessels');
-  if (before !== undefined) throw new Error(`pre-state expected undefined intel.vessels, got ${JSON.stringify(before)}`);
-
-  const _sys = new IntelSystem();
-  // Post-state: intel.vessels === {} (init w constructor)
+  const sys = new IntelSystem();
+  // Pre-init (po samym new IntelSystem) — intel.vessels NIE istnieje (constructor
+  // nie inicjalizuje, to jest właśnie pointa)
+  const beforeInit = gameState.get('intel.vessels');
+  if (beforeInit !== undefined) {
+    throw new Error(`oczekiwano undefined intel.vessels po samym new IntelSystem (constructor nie powinien init'ować — robi to GameScene), got ${JSON.stringify(beforeInit)}`);
+  }
+  // Symulacja wywołania z GameScene
+  sys.initVesselSubdomain();
   assertEq(gameState.get('intel.vessels'), {}, 'intel.vessels initialized to empty object');
 });
 
-test('T7.3 fresh-game init NIE nadpisuje istniejącego intel.vessels (idempotent)', () => {
+test('T7.3 initVesselSubdomain() NIE nadpisuje istniejącego intel.vessels (idempotent)', () => {
   EventBus.clear();
   gameState.reset();
   // Pre-state: intel.vessels już istnieje (np. z migracji v66→v67 + load)
@@ -533,7 +538,8 @@ test('T7.3 fresh-game init NIE nadpisuje istniejącego intel.vessels (idempotent
     empireRegistry: { get: () => null, listAll: () => [] },
     homePlanet: null, galaxyData: null,
   };
-  const _sys = new IntelSystem();
+  const sys = new IntelSystem();
+  sys.initVesselSubdomain();  // powinno zachować v_legacy
   const rec = gameState.get('intel.vessels.v_legacy');
   assertEq(rec?.quality, 'detailed', 'pre-existing v_legacy preserved');
 });

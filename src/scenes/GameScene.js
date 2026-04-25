@@ -517,6 +517,9 @@ export class GameScene {
       EmpireGenerator.generate(window.KOSMOS.galaxyData, this.empireRegistry);
       // Dla każdego świeżo stworzonego imperium → zapewnij rekord intel=unknown
       this.intelSystem.initForAllEmpires();
+      // M2b Commit 2: zapewnij intel.vessels = {} (constructor IntelSystem
+      // jest bezskuteczny — gameState.reset() powyżej wymiata jego init)
+      this.intelSystem.initVesselSubdomain();
       // Faza 3: diplomacy (peace, hostility=0) + FSM (IDLE/EXPANDING wg personality)
       this.diplomacySystem.initForAllEmpires();
       this.alienCivSystem.initForAllEmpires();
@@ -537,6 +540,9 @@ export class GameScene {
       this.empireRegistry.syncToGalaxyData(window.KOSMOS.galaxyData);
       // Faza 2: zapewnij rekord intel dla każdego imperium (save sprzed Fazy 2)
       this.intelSystem.initForAllEmpires();
+      // M2b Commit 2: zapewnij intel.vessels (fallback dla save sprzed migracji v66→v67
+      // i defense-in-depth dla świeżych save'ów)
+      this.intelSystem.initVesselSubdomain();
       // Faza 3: zapewnij relacje diplomacy + FSM (save sprzed Fazy 3)
       this.diplomacySystem.initForAllEmpires();
       this.alienCivSystem.initForAllEmpires();

@@ -79,17 +79,6 @@ export class IntelSystem {
       // Zachowujemy zapis intel (historia) — tylko stop-aktualizujemy
       delete this._rumorAccum[empireId];
     });
-
-    // M2b Commit 2 — fresh-game init dla intel.vessels.
-    // SaveMigration v66→v67 ustawia to tylko przy load v66 save. New Game v67
-    // wystartuje z gameState._state.intel = {} (per-empire M1 records) bez
-    // sub-key 'vessels' — handlery padają na .quality undefined gdy brak fallback.
-    // Uwaga: pois init odłożony do Commit 5 (POIRegistry constructor) — system-
-    // właściciel inicjalizuje swój sub-domain (symetria z intel.vessels).
-    const intel = gameState.get('intel') ?? {};
-    if (!intel.vessels) {
-      gameState.set('intel.vessels', {}, 'm2b_init');
-    }
   }
 
   // ── Read-only ────────────────────────────────────────────────
@@ -514,6 +503,21 @@ export class IntelSystem {
     if (!reg) return;
     for (const emp of reg.listAll()) {
       if (!this.get(emp.id)) this._initIntelRecord(emp.id);
+    }
+  }
+
+  // M2b Commit 2 — inicjalizacja vessel sub-domain.
+  // Wywoływane przez GameScene PO gameState.reset() / restore() (constructor
+  // init byłby bezskuteczny, bo GameScene resetuje state po instancjacji).
+  // SaveMigration v66→v67 dodaje intel.vessels przy load starszego save'a;
+  // tu jest fallback dla New Game v67 i save'ów które przeszły migrację bez
+  // tego pola (defense-in-depth). Idempotentne — nie nadpisuje istniejącego.
+  // Uwaga: pois init odłożony do Commit 5 (POIRegistry — system-właściciel
+  // inicjalizuje swój sub-domain, symetria z intel.vessels).
+  initVesselSubdomain() {
+    const intel = gameState.get('intel') ?? {};
+    if (!intel.vessels) {
+      gameState.set('intel.vessels', {}, 'm2b_init');
     }
   }
 }
