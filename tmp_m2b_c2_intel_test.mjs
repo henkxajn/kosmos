@@ -194,6 +194,28 @@ test('T1.4 sameFaction skip — record nie utworzony, brak emit', () => {
   assertEq(emitsOf('intel:vesselContactChanged').length, 0, 'no emit');
 });
 
+test('T1.5b vessel:combatRangeEnter przy distanceAU=0.1 → rumor → contact (post-fix #3)', () => {
+  // ProximitySystem emituje DWA eventy: proximityEnter (<0.5 AU detection)
+  // i combatRangeEnter (<0.15 AU combat). Bez subskrypcji na combatRangeEnter
+  // quality utknęłaby na 'rumor' gdy player pursue dochodzi do THREAT_RADIUS 0.15.
+  setup({
+    vessels: {
+      v_p: { ownerEmpireId: 'player', position: { x: 0, y: 0 } },
+      v_e: { ownerEmpireId: 'enemy_1', position: { x: 1, y: 1 }, combatStrength: 50 },
+    },
+  });
+  // Pre: rumor przy 0.4 (proximityEnter)
+  EventBus.emit('vessel:proximityEnter', { vesselAId: 'v_p', vesselBId: 'v_e', distanceAU: 0.4, sameFaction: false });
+  assertEq(gameState.get('intel.vessels.v_e').quality, 'rumor', 'pre-state rumor');
+  emittedEvents = [];
+  // v_1 dochodzi do <0.15 AU — combat range event leci, BEZ ponownego proximityEnter
+  EventBus.emit('vessel:combatRangeEnter', { vesselAId: 'v_p', vesselBId: 'v_e', distanceAU: 0.1, sameFaction: false });
+  assertEq(gameState.get('intel.vessels.v_e').quality, 'contact', 'upgraded to contact');
+  const emits = emitsOf('intel:vesselContactChanged');
+  assertEq(emits.length, 1, 'emit count');
+  assertEq(emits[0].newQuality, 'contact', 'emit newQuality');
+});
+
 test('T1.5 player observuje enemy, niezależnie od kolejności A/B', () => {
   setup({
     vessels: {

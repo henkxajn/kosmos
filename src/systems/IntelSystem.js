@@ -57,9 +57,15 @@ export class IntelSystem {
     EventBus.on('groundUnit:anomalyFound', (ev) => this._onGroundSurvey(ev));
 
     // M2b Commit 2 — vessel observations + degradation (gated przez FEATURES.intelContactState)
-    EventBus.on('vessel:proximityEnter', (e) => this._onVesselProximityEnter(e));
-    EventBus.on('vessel:proximityExit',  (e) => this._onVesselProximityExit(e));
-    EventBus.on('vessel:wrecked',        (e) => this._onVesselWrecked(e));
+    // ProximitySystem emituje DWA eventy dla dwóch threshold'ów:
+    //   proximityEnter    przy <0.5 AU (detection)  → distanceAU>=0.3 zwykle → 'rumor'
+    //   combatRangeEnter  przy <0.15 AU (combat)   → distanceAU<0.3       → 'contact'
+    // Bez subskrypcji combatRangeEnter quality utykałaby na 'rumor' gdy player
+    // pursue dochodzi do THREAT_RADIUS 0.15 AU bez ponownego proximityEnter.
+    EventBus.on('vessel:proximityEnter',    (e) => this._onVesselProximityEnter(e));
+    EventBus.on('vessel:combatRangeEnter',  (e) => this._onVesselProximityEnter(e));
+    EventBus.on('vessel:proximityExit',     (e) => this._onVesselProximityExit(e));
+    EventBus.on('vessel:wrecked',           (e) => this._onVesselWrecked(e));
 
     // Pasywny ticker (civDeltaYears — mechanika 4X)
     EventBus.on('time:tick', ({ civDeltaYears }) => {
