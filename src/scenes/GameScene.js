@@ -872,6 +872,37 @@ export class GameScene {
       });
     });
 
+    // M2b Commit 2 — IntelSystem vessel contact EventLog (lekcja L3 z M2a:
+    // UI w tym samym commicie co system emitujący — zapobiega silent skip)
+    EventBus.on('intel:vesselContactChanged', ({ vesselId, oldQuality, newQuality, reason }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog) return;
+      const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
+      const label = vessel?.name ?? vesselId;
+      evtLog.push({
+        text:      `Wykryto obcy statek (${newQuality}): ${label}`,
+        channel:   'intel',
+        severity:  'info',
+        entityRef: vesselId,
+      });
+    });
+
+    EventBus.on('intel:vesselContactLost', ({ vesselId, lastKnownPosition, reason }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog) return;
+      const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
+      const label = vessel?.name ?? vesselId;
+      const pos = lastKnownPosition
+        ? `[${Math.round(lastKnownPosition.x)},${Math.round(lastKnownPosition.y)}]`
+        : '[unknown]';
+      evtLog.push({
+        text:      `Utracono kontakt z ${label}: ostatnia pozycja ${pos}`,
+        channel:   'intel',
+        severity:  'warn',
+        entityRef: vesselId,
+      });
+    });
+
     // Powiadomienia o zdarzeniach losowych — popup DATASHEET
     EventBus.on('randomEvent:occurred', ({ event, colonyName }) => {
       const severity = event.severity === 'danger' ? 'danger' : 'info';

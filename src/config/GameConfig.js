@@ -51,7 +51,7 @@ export const GAME_CONFIG = {
     // przez flip flagi gdy M3 wprowadzi pełny model fuel/endurance z hard-stop semantyką.
     enduranceDrainActive: false,  // _tickEndurance early return gdy off (brak drain/regen/events)
     // M2b — Intelligence + POI (save v67) — Commit 1 fundament; flippujemy w Commits 2-7
-    intelContactState:    false,  // IntelSystem.vessels sub-domain + degradation (Commit 2)
+    intelContactState:    true,   // IntelSystem.vessels sub-domain + degradation (Commit 2 flipped)
     predictionCone:       false,  // prediction cone math + rendering (Commits 3-4)
     poiSystem:            false,  // POIRegistry + goToPOI/patrol/escort runtime (Commits 5-7)
   },

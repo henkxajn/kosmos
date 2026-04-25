@@ -223,4 +223,22 @@ export class ProximitySystem {
   getCombatPairs() {
     return [...this._activeCombatPairs].map(k => k.split('|'));
   }
+
+  /**
+   * Lista other-vessel IDs które mają aktywną parę proximity (detection <0.5 AU)
+   * z podanym vesselem. Używane przez IntelSystem (M2b) do multi-observer check
+   * w _onVesselProximityExit — jeśli inny player vessel nadal obserwuje cel,
+   * positionKnown nie jest resetowane.
+   * @param {string} vesselId
+   * @returns {string[]}
+   */
+  getActivePairsFor(vesselId) {
+    const out = [];
+    for (const key of this._activePairs) {
+      const [a, b] = key.split('|');
+      if (a === vesselId) out.push(b);
+      else if (b === vesselId) out.push(a);
+    }
+    return out;
+  }
 }

@@ -208,8 +208,10 @@ test('T1.9 round-trip idempotency v67 (already-migrated input not re-mutated)', 
 
 console.log('\n=== T3: GAME_CONFIG.FEATURES M2b flags ===');
 
-test('T3.1 intelContactState defaults to false', () => {
-  assertEq(GAME_CONFIG.FEATURES.intelContactState, false, 'intelContactState');
+test('T3.1 intelContactState === true (M2b Commit 2 flipped)', () => {
+  // Po M2b Commit 2 flaga flippnęła z false → true. C2 dostarcza realną logikę
+  // za nią (IntelSystem.vessels), więc default true jest oczekiwany.
+  assertEq(GAME_CONFIG.FEATURES.intelContactState, true, 'intelContactState');
 });
 test('T3.2 predictionCone defaults to false', () => {
   assertEq(GAME_CONFIG.FEATURES.predictionCone, false, 'predictionCone');
