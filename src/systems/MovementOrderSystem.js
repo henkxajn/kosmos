@@ -12,11 +12,12 @@
 //
 // M1 Commit 4 — scaffold + moveToPoint. Commit 5 dopisuje pursue/intercept.
 
-import EventBus            from '../core/EventBus.js';
-import EntityManager       from '../core/EntityManager.js';
+import EventBus              from '../core/EventBus.js';
+import EntityManager         from '../core/EntityManager.js';
 import { ORDER_TYPES, validateOrder } from '../data/MovementOrderTypes.js';
-import { GAME_CONFIG }     from '../config/GameConfig.js';
-import { addMissionLog }   from '../entities/Vessel.js';
+import { GAME_CONFIG }       from '../config/GameConfig.js';
+import { addMissionLog }     from '../entities/Vessel.js';
+import { PredictionConeMath } from '../utils/PredictionConeMath.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
@@ -440,6 +441,27 @@ export class MovementOrderSystem {
     const ltx = target.x ?? target.position?.x ?? 0;
     const lty = target.y ?? target.position?.y ?? 0;
     order.lastTargetPos = { x: ltx, y: lty };
+
+    // M2b Commit 3 — prediction cone update (per-tick refresh).
+    // targetPos = ip (intercept point), NIE lastTargetPos. Cone reprezentuje
+    // niepewność punktu spotkania — vessel leci DO ip, więc oś stożka musi
+    // iść wzdłuż trajektorii vessel.position → ip. Użycie lastTargetPos
+    // dawałoby stożek odchylony od trajektorii (zwłaszcza dla szybkich
+    // ruchomych targetów gdy ip ≠ obecna pozycja). Spec §8.2 design bug.
+    // Cleanup niepotrzebny — renderer (Commit 4) filtruje po status==='active'.
+    if (GAME_CONFIG.FEATURES.predictionCone) {
+      const contact    = window.KOSMOS?.intelSystem?.getVesselContact?.(target.id);
+      const obsQuality = contact?.quality
+        ?? (target.ownerEmpireId ? 'rumor' : 'detailed');
+      order.predictionCone = PredictionConeMath.computeCone(
+        vessel.position,
+        ip,
+        target.velocity,
+        vessel.speedAU ?? 1.0,
+        obsQuality,
+        gameYear,
+      );
+    }
 
     _trace(`tick intercept ${order.id} vessel=${vessel.id}@(${vessel.position.x.toFixed(1)},${vessel.position.y.toFixed(1)}) target@(${ltx.toFixed(1)},${lty.toFixed(1)}) IP=(${ip.x.toFixed(1)},${ip.y.toFixed(1)}) dPhys=${dPhysicsYear.toFixed(4)}`);
     this._moveTowardsAndMaybeComplete(vessel, order, ip.x, ip.y, dPhysicsYear, gameYear, target);

@@ -213,8 +213,10 @@ test('T3.1 intelContactState === true (M2b Commit 2 flipped)', () => {
   // za nią (IntelSystem.vessels), więc default true jest oczekiwany.
   assertEq(GAME_CONFIG.FEATURES.intelContactState, true, 'intelContactState');
 });
-test('T3.2 predictionCone defaults to false', () => {
-  assertEq(GAME_CONFIG.FEATURES.predictionCone, false, 'predictionCone');
+test('T3.2 predictionCone === true (M2b Commit 3 flipped)', () => {
+  // Po M2b Commit 3 flaga flippnęła z false → true. C3 dostarcza realną logikę
+  // (PredictionConeMath + MOS._tickInterceptOrder integration).
+  assertEq(GAME_CONFIG.FEATURES.predictionCone, true, 'predictionCone');
 });
 test('T3.3 poiSystem defaults to false', () => {
   assertEq(GAME_CONFIG.FEATURES.poiSystem, false, 'poiSystem');
