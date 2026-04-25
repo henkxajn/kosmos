@@ -19,9 +19,9 @@ globalThis.localStorage = {
   clear:      () => _lsStore.clear(),
 };
 globalThis.window = globalThis.window ?? globalThis;
-// FEATURES — przewidujemy że gra zaimportuje GAME_CONFIG, ale dla testu IntelSystem
-// czyta `window.GAME_CONFIG.FEATURES.intelContactState` więc musimy to ustawić jawnie.
-globalThis.window.GAME_CONFIG = { FEATURES: { intelContactState: true } };
+// IntelSystem (post-fix) używa `import { GAME_CONFIG }` — mutujemy imported
+// singleton w setup(). window.GAME_CONFIG zostawiamy undefined żeby T7.1
+// mogło asercjonować że pre-fix pattern (window-based) NIE jest używany.
 globalThis.window.KOSMOS = {
   timeSystem: { gameTime: 0 },
   vesselManager: null,    // zostanie ustawiony per test
@@ -38,6 +38,7 @@ Math.random = () => 0.5;
 // ── Imports (real singletons) ──────────────────────────────────────────────
 const EventBus  = (await import('./src/core/EventBus.js')).default;
 const gameState = (await import('./src/core/GameState.js')).default;
+const { GAME_CONFIG } = await import('./src/config/GameConfig.js');
 const { IntelSystem } = await import('./src/systems/IntelSystem.js');
 
 // ── Test harness ───────────────────────────────────────────────────────────
@@ -87,8 +88,10 @@ function setup({ vessels = {}, pairs = {}, gameYear = 0, flag = true } = {}) {
   EventBus.clear();
   gameState.reset();
 
+  // Mutuj imported GAME_CONFIG singleton (live reference — IntelSystem czyta z importu)
+  GAME_CONFIG.FEATURES.intelContactState = flag;
+
   // Mock KOSMOS
-  globalThis.window.GAME_CONFIG.FEATURES.intelContactState = flag;
   globalThis.window.KOSMOS.timeSystem.gameTime = gameYear;
   globalThis.window.KOSMOS.vesselManager = {
     getVessel: (id) => vessels[id] ?? null,
@@ -468,9 +471,79 @@ test('T6.2 wrecked bez record → no-op, no crash, no emit', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
+// T7 — Post-playtest fix: imported GAME_CONFIG (regression proof) + fresh-game init
+// ──────────────────────────────────────────────────────────────────────────
+
+console.log('\n=== T7: imported GAME_CONFIG + fresh-game init ===');
+
+test('T7.1 IntelSystem używa imported GAME_CONFIG (window.GAME_CONFIG=undefined → handler nadal działa)', () => {
+  setup({
+    vessels: {
+      v_p: { ownerEmpireId: 'player', position: { x: 0, y: 0 } },
+      v_e: { ownerEmpireId: 'enemy_1', position: { x: 1, y: 1 }, combatStrength: 50 },
+    },
+  });
+  // Symulacja braku window.GAME_CONFIG (jak w real-flow świeżej gry).
+  // GAME_CONFIG.FEATURES.intelContactState pozostaje true (imported singleton, set w setup()).
+  delete globalThis.window.GAME_CONFIG;
+
+  EventBus.emit('vessel:proximityEnter', {
+    vesselAId: 'v_p', vesselBId: 'v_e', distanceAU: 0.4, sameFaction: false,
+  });
+
+  // PRE-FIX BEHAVIOR: handler patrzy `!window.GAME_CONFIG?.FEATURES?.intelContactState`
+  //   → window.GAME_CONFIG=undefined → !undefined → true → return → NO-OP → record null
+  // POST-FIX BEHAVIOR: handler patrzy `!GAME_CONFIG.FEATURES.intelContactState`
+  //   → false (bo true) → no early return → record utworzony
+  const rec = gameState.get('intel.vessels.v_e');
+  if (!rec) {
+    throw new Error('record nie utworzony — handler najpewniej używa window.GAME_CONFIG zamiast importu');
+  }
+  assertEq(rec.quality, 'rumor', 'quality');
+});
+
+test('T7.2 fresh-game init: intel.vessels istnieje po new IntelSystem() (bez load save)', () => {
+  // Świeża gra symulacja: gameState.reset() zostawia intel jako {} (z createDefaultState),
+  // bez sub-key 'vessels'. Konstruktor IntelSystem powinien dorzucić puste {}.
+  EventBus.clear();
+  gameState.reset();
+  GAME_CONFIG.FEATURES.intelContactState = true;
+  globalThis.window.KOSMOS = {
+    timeSystem: { gameTime: 0 }, vesselManager: null, proximitySystem: null,
+    empireRegistry: { get: () => null, listAll: () => [] },
+    homePlanet: null, galaxyData: null,
+  };
+  // Pre-state: intel.vessels NIE istnieje
+  const before = gameState.get('intel.vessels');
+  if (before !== undefined) throw new Error(`pre-state expected undefined intel.vessels, got ${JSON.stringify(before)}`);
+
+  const _sys = new IntelSystem();
+  // Post-state: intel.vessels === {} (init w constructor)
+  assertEq(gameState.get('intel.vessels'), {}, 'intel.vessels initialized to empty object');
+});
+
+test('T7.3 fresh-game init NIE nadpisuje istniejącego intel.vessels (idempotent)', () => {
+  EventBus.clear();
+  gameState.reset();
+  // Pre-state: intel.vessels już istnieje (np. z migracji v66→v67 + load)
+  gameState.set('intel.vessels.v_legacy', { quality: 'detailed' }, 'pre_existing');
+  GAME_CONFIG.FEATURES.intelContactState = true;
+  globalThis.window.KOSMOS = {
+    timeSystem: { gameTime: 0 }, vesselManager: null, proximitySystem: null,
+    empireRegistry: { get: () => null, listAll: () => [] },
+    homePlanet: null, galaxyData: null,
+  };
+  const _sys = new IntelSystem();
+  const rec = gameState.get('intel.vessels.v_legacy');
+  assertEq(rec?.quality, 'detailed', 'pre-existing v_legacy preserved');
+});
+
+// ──────────────────────────────────────────────────────────────────────────
 // Wynik
 // ──────────────────────────────────────────────────────────────────────────
 
+// Cleanup — przywróć default (test T4 mutował przez setup())
+GAME_CONFIG.FEATURES.intelContactState = true;
 Math.random = _origRandom; // restore
 
 console.log(`\n======================================`);

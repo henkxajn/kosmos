@@ -24,6 +24,7 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 
 const LEVELS = ['unknown', 'rumor', 'contact', 'detailed'];
 const LEVEL_RANK = { unknown: 0, rumor: 1, contact: 2, detailed: 3 };
@@ -78,6 +79,17 @@ export class IntelSystem {
       // Zachowujemy zapis intel (historia) — tylko stop-aktualizujemy
       delete this._rumorAccum[empireId];
     });
+
+    // M2b Commit 2 — fresh-game init dla intel.vessels.
+    // SaveMigration v66→v67 ustawia to tylko przy load v66 save. New Game v67
+    // wystartuje z gameState._state.intel = {} (per-empire M1 records) bez
+    // sub-key 'vessels' — handlery padają na .quality undefined gdy brak fallback.
+    // Uwaga: pois init odłożony do Commit 5 (POIRegistry constructor) — system-
+    // właściciel inicjalizuje swój sub-domain (symetria z intel.vessels).
+    const intel = gameState.get('intel') ?? {};
+    if (!intel.vessels) {
+      gameState.set('intel.vessels', {}, 'm2b_init');
+    }
   }
 
   // ── Read-only ────────────────────────────────────────────────
@@ -227,7 +239,7 @@ export class IntelSystem {
     }
 
     // M2b Commit 2 — vessel contact degradation (gated)
-    if (window.GAME_CONFIG?.FEATURES?.intelContactState) {
+    if (GAME_CONFIG.FEATURES.intelContactState) {
       this._tickVesselDegradation(yearsPassed);
     }
   }
@@ -283,7 +295,7 @@ export class IntelSystem {
   }
 
   _onVesselProximityEnter({ vesselAId, vesselBId, distanceAU, sameFaction } = {}) {
-    if (!window.GAME_CONFIG?.FEATURES?.intelContactState) return;
+    if (!GAME_CONFIG.FEATURES.intelContactState) return;
     if (sameFaction) return;
     const r = this._resolveObservedFromPair(vesselAId, vesselBId);
     if (!r) return;
@@ -324,7 +336,7 @@ export class IntelSystem {
   }
 
   _onVesselProximityExit({ vesselAId, vesselBId, sameFaction } = {}) {
-    if (!window.GAME_CONFIG?.FEATURES?.intelContactState) return;
+    if (!GAME_CONFIG.FEATURES.intelContactState) return;
     if (sameFaction) return;
     const r = this._resolveObservedFromPair(vesselAId, vesselBId);
     if (!r) return;
@@ -351,7 +363,7 @@ export class IntelSystem {
   }
 
   _onVesselWrecked({ vesselId } = {}) {
-    if (!window.GAME_CONFIG?.FEATURES?.intelContactState) return;
+    if (!GAME_CONFIG.FEATURES.intelContactState) return;
     if (!vesselId) return;
     const vessels = gameState.get('intel.vessels') ?? {};
     if (!vessels[vesselId]) return;  // nie obserwowaliśmy — nic do zrobienia
@@ -367,6 +379,7 @@ export class IntelSystem {
   }
 
   _tickVesselDegradation(yearsPassed) {
+    if (!GAME_CONFIG.FEATURES.intelContactState) return; // defense-in-depth (devtools direct call)
     if (!yearsPassed) return;
     const vessels = gameState.get('intel.vessels') ?? {};
     const ids = Object.keys(vessels);
