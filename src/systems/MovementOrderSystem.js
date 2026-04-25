@@ -205,6 +205,12 @@ export class MovementOrderSystem {
       status:         'active',
       completedYear:  null,
       blockReason:    null,
+      // M2b Commit 1 — defaults spójne z _migrateV66toV67 (Commits 3/6/7 użyją)
+      poiId:               null,
+      predictionCone:      null,
+      patrolWaypointIndex: 0,
+      patrolDirection:     1,
+      escorteeId:          null,
     };
 
     // Konstrukcja mission — specjalny typ 'move_to_point', bez targetId.
@@ -294,6 +300,12 @@ export class MovementOrderSystem {
       status:         'active',
       completedYear:  null,
       blockReason:    null,
+      // M2b Commit 1 — defaults spójne z _migrateV66toV67 (Commits 3/6/7 użyją)
+      poiId:               null,
+      predictionCone:      null,
+      patrolWaypointIndex: 0,
+      patrolDirection:     1,
+      escorteeId:          null,
     };
 
     // Suspend oryginalnej mission (jeśli aktywna). MOS rządzi pozycją bezpośrednio
@@ -552,6 +564,12 @@ export class MovementOrderSystem {
       status:         'active',
       completedYear:  null,
       blockReason:    null,
+      // M2b Commit 1 — defaults spójne z _migrateV66toV67 (Commits 3/6/7 użyją)
+      poiId:               null,
+      predictionCone:      null,
+      patrolWaypointIndex: 0,
+      patrolDirection:     1,
+      escorteeId:          null,
     };
     vessel.movementOrder = order;
     this._byVessel.set(vessel.id, order);

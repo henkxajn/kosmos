@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 66;
+export const CURRENT_VERSION     = 67;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -84,6 +84,7 @@ const MIGRATIONS = {
   63: _migrateV63toV64,
   64: _migrateV64toV65,
   65: _migrateV65toV66,
+  66: _migrateV66toV67,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1696,6 +1697,43 @@ function _migrateV65toV66(data) {
         br.location = { systemId: 'sys_home', planetId: null, point: null };
       }
     }
+  }
+
+  return data;
+}
+
+// ── Migracja v66 → v67 ──────────────────────────────────────────────────────
+// Milestone 2b (Intelligence + POI) — schema defaults:
+//   (a) gameState.pois = {} (POIRegistry; Commit 5 zacznie używać)
+//   (b) gameState.intel.vessels = {} (IntelSystem.vessels sub-domain; Commit 2)
+//   (c) vessel.movementOrder pola: poiId/predictionCone/patrolWaypointIndex/
+//       patrolDirection/escorteeId — wymagane przez Commits 3/6/7.
+// Feature flagi intelContactState/predictionCone/poiSystem czyta się z
+// GAME_CONFIG.FEATURES — save ich nie trzyma. Defaults runtime w MOS
+// (3 issue methods) — patrz Commit 1 raport.
+function _migrateV66toV67(data) {
+  const gs = data.gameState ?? {};
+
+  // (a) POI registry init (Commit 5 utworzy POIRegistry i będzie wpisywał poi_*)
+  if (!gs.pois) gs.pois = {};
+
+  // (b) IntelSystem.vessels sub-domain (Commit 2 wypełni przy obserwacjach)
+  if (!gs.intel) gs.intel = {};
+  if (!gs.intel.vessels) gs.intel.vessels = {};
+
+  // Re-attach gameState gdy data.gameState było undefined (legacy edge case).
+  if (!data.gameState) data.gameState = gs;
+
+  // (c) vessel.movementOrder pola — defaults dla aktywnych orderów
+  const c4x = data.civ4x ?? data.c4x;
+  const vessels = c4x?.vesselManager?.vessels ?? [];
+  for (const v of vessels) {
+    if (!v.movementOrder) continue;
+    if (v.movementOrder.poiId === undefined)               v.movementOrder.poiId = null;
+    if (v.movementOrder.predictionCone === undefined)      v.movementOrder.predictionCone = null;
+    if (v.movementOrder.patrolWaypointIndex === undefined) v.movementOrder.patrolWaypointIndex = 0;
+    if (v.movementOrder.patrolDirection === undefined)     v.movementOrder.patrolDirection = 1;
+    if (v.movementOrder.escorteeId === undefined)          v.movementOrder.escorteeId = null;
   }
 
   return data;
