@@ -50,6 +50,7 @@ import { AutoPauseSystem }   from '../../systems/AutoPauseSystem.js';
 import { ScheduledEventSystem } from '../../systems/ScheduledEventSystem.js';
 import { EmpireRegistry }    from '../../systems/EmpireRegistry.js';
 import { IntelSystem }       from '../../systems/IntelSystem.js';
+import { POIRegistry }       from '../../systems/POIRegistry.js';
 import { DiplomacySystem }   from '../../systems/DiplomacySystem.js';
 import { AlienCivSystem }    from '../../systems/AlienCivSystem.js';
 import { WarSystem }         from '../../systems/WarSystem.js';
@@ -145,6 +146,7 @@ export class GameCore {
     this.scheduledEventSystem = new ScheduledEventSystem();
     this.empireRegistry = new EmpireRegistry();
     this.intelSystem = new IntelSystem();
+    this.poiRegistry = new POIRegistry();
     this.diplomacySystem = new DiplomacySystem();
     this.alienCivSystem = new AlienCivSystem();
     this.warSystem = new WarSystem();
@@ -179,6 +181,7 @@ export class GameCore {
     K.scheduledEventSystem = this.scheduledEventSystem;
     K.empireRegistry = this.empireRegistry;
     K.intelSystem = this.intelSystem;
+    K.poiRegistry = this.poiRegistry;
     K.diplomacySystem = this.diplomacySystem;
     K.alienCivSystem = this.alienCivSystem;
     K.warSystem = this.warSystem;
@@ -199,6 +202,7 @@ export class GameCore {
     EmpireGenerator.generate(K.galaxyData, this.empireRegistry);
     this.intelSystem.initForAllEmpires();
     this.intelSystem.initVesselSubdomain();
+    this.poiRegistry.initPOISubdomain();
     this.diplomacySystem.initForAllEmpires();
     this.alienCivSystem.initForAllEmpires();
 

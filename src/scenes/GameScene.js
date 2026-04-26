@@ -66,6 +66,7 @@ import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
 import { EmpireGenerator }   from '../generators/EmpireGenerator.js';
 import { EmpireRegistry }    from '../systems/EmpireRegistry.js';
 import { IntelSystem }       from '../systems/IntelSystem.js';
+import { POIRegistry }       from '../systems/POIRegistry.js';
 import { DiplomacySystem }   from '../systems/DiplomacySystem.js';
 import { AlienCivSystem }    from '../systems/AlienCivSystem.js';
 import { WarSystem }         from '../systems/WarSystem.js';
@@ -214,6 +215,7 @@ export class GameScene {
     this.eventLogSystem       = new EventLogSystem();
     this.empireRegistry       = new EmpireRegistry();
     this.intelSystem          = new IntelSystem();
+    this.poiRegistry          = new POIRegistry();
     this.diplomacySystem      = new DiplomacySystem();
     this.alienCivSystem       = new AlienCivSystem();
     this.warSystem            = new WarSystem();
@@ -256,6 +258,7 @@ export class GameScene {
     window.KOSMOS.eventLogSystem       = this.eventLogSystem;
     window.KOSMOS.empireRegistry   = this.empireRegistry;
     window.KOSMOS.intelSystem      = this.intelSystem;
+    window.KOSMOS.poiRegistry      = this.poiRegistry;
     window.KOSMOS.diplomacySystem  = this.diplomacySystem;
     window.KOSMOS.alienCivSystem   = this.alienCivSystem;
     window.KOSMOS.warSystem        = this.warSystem;
@@ -493,6 +496,15 @@ export class GameScene {
       sandboxResetPositions,
       // KOSMOS.debug.sandboxSpawnMoreEnemies(count=1) — N dodatkowych wrogich hull_small.
       sandboxSpawnMoreEnemies,
+      // ── M2b Commit 5 — POIRegistry CRUD ───────────────────────────────
+      // KOSMOS.debug.createPOI(spec) — utwórz POI. Spec patrz POITypes.validatePOISpec.
+      createPOI: (spec) => window.KOSMOS?.poiRegistry?.createPOI(spec),
+      // KOSMOS.debug.listPOIs(filter?) — lista wszystkich lub filter={type}/{ownerEmpireId}.
+      listPOIs:  (filter) => window.KOSMOS?.poiRegistry?.listPOIs(filter),
+      // KOSMOS.debug.deletePOI(poiId) — usuń POI. MOS auto-cancel orderów referencjujących.
+      deletePOI: (poiId) => window.KOSMOS?.poiRegistry?.deletePOI(poiId),
+      // KOSMOS.debug.getPOI(poiId) — pełny obiekt POI lub null.
+      getPOI:    (poiId) => window.KOSMOS?.poiRegistry?.getPOI(poiId),
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
@@ -520,6 +532,8 @@ export class GameScene {
       // M2b Commit 2: zapewnij intel.vessels = {} (constructor IntelSystem
       // jest bezskuteczny — gameState.reset() powyżej wymiata jego init)
       this.intelSystem.initVesselSubdomain();
+      // M2b Commit 5: zapewnij gameState.pois = {} (analogicznie L2 z C2 fix #2)
+      this.poiRegistry.initPOISubdomain();
       // Faza 3: diplomacy (peace, hostility=0) + FSM (IDLE/EXPANDING wg personality)
       this.diplomacySystem.initForAllEmpires();
       this.alienCivSystem.initForAllEmpires();
@@ -543,6 +557,8 @@ export class GameScene {
       // M2b Commit 2: zapewnij intel.vessels (fallback dla save sprzed migracji v66→v67
       // i defense-in-depth dla świeżych save'ów)
       this.intelSystem.initVesselSubdomain();
+      // M2b Commit 5: zapewnij gameState.pois + reconstruct _nextId po load
+      this.poiRegistry.initPOISubdomain();
       // Faza 3: zapewnij relacje diplomacy + FSM (save sprzed Fazy 3)
       this.diplomacySystem.initForAllEmpires();
       this.alienCivSystem.initForAllEmpires();
@@ -906,6 +922,29 @@ export class GameScene {
         channel:   'intel',
         severity:  'warn',
         entityRef: vesselId,
+      });
+    });
+
+    // M2b Commit 5 — POI lifecycle EventLog (channel 'intel' — POI to lokacje strategiczne).
+    // poi:deleted payload zawiera `name` (D1: capture w POIRegistry.deletePOI PRZED mutation
+    // — subscriber EventLog nie może odczytać name post-fact bo POI już zniknął z gameState).
+    EventBus.on('poi:created', ({ poi }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog) return;
+      evtLog.push({
+        text:      `Utworzono POI ${poi.type} '${poi.name}'`,
+        channel:   'intel',
+        severity:  'info',
+      });
+    });
+
+    EventBus.on('poi:deleted', ({ poiId, name }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog) return;
+      evtLog.push({
+        text:      `Usunięto POI '${name ?? poiId}'`,
+        channel:   'intel',
+        severity:  'info',
       });
     });
 

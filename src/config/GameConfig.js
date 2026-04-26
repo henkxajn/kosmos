@@ -53,7 +53,7 @@ export const GAME_CONFIG = {
     // M2b — Intelligence + POI (save v67) — Commit 1 fundament; flippujemy w Commits 2-7
     intelContactState:    true,   // IntelSystem.vessels sub-domain + degradation (Commit 2 flipped)
     predictionCone:       true,   // prediction cone math (Commit 3); rendering w Commit 4
-    poiSystem:            false,  // POIRegistry + goToPOI/patrol/escort runtime (Commits 5-7)
+    poiSystem:            true,   // POIRegistry CRUD + handler poi:deleted (Commit 5 flipped); goToPOI/patrol runtime w C6
   },
 };
 

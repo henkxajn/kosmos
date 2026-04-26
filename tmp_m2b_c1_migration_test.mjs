@@ -218,8 +218,8 @@ test('T3.2 predictionCone === true (M2b Commit 3 flipped)', () => {
   // (PredictionConeMath + MOS._tickInterceptOrder integration).
   assertEq(GAME_CONFIG.FEATURES.predictionCone, true, 'predictionCone');
 });
-test('T3.3 poiSystem defaults to false', () => {
-  assertEq(GAME_CONFIG.FEATURES.poiSystem, false, 'poiSystem');
+test('T3.3 poiSystem defaults to true (Commit 5 flipped)', () => {
+  assertEq(GAME_CONFIG.FEATURES.poiSystem, true, 'poiSystem');
 });
 
 // ──────────────────────────────────────────────────────────────────────────

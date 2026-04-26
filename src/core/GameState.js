@@ -26,6 +26,7 @@ function createDefaultState() {
     battles:    {},  // battleId → { location, fleets, result, timeline }
     invasions:  {},  // invasionId → { planetId, aggressor, defender, landedTroops, battlesOnHex }
     minefields: {},  // planetId → { `${q}_${r}` → { ownerId, damage, laidBy, q, r } } — Ground Unit System
+    pois:       {},  // M2b — POIRegistry (poiId → poi object); init w createDefaultState żeby restore() nie pomijał klucza
   };
 }
 

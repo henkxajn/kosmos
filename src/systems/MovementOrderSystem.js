@@ -70,6 +70,12 @@ export class MovementOrderSystem {
     EventBus.on('vessel:arrived',  this._onArrived);
     EventBus.on('vessel:wrecked',  this._onWrecked);
 
+    // M2b C5 — cancel-dangling-orders gdy POI usunięty (proactive defensive,
+    // §9.2). W M1/M2a wszystkie ordery mają poiId=null → handler iteruje pustą listę.
+    // C6 (goToPOI/patrol) zacznie ustawiać order.poiId — handler już gotowy.
+    this._onPOIDeleted  = ({ poiId }) => this._onPOIDeletedHandler(poiId);
+    EventBus.on('poi:deleted', this._onPOIDeleted);
+
     // Rebuild index po restore savu — vessels w VesselManager mogą mieć movementOrder
     // zserializowany, ale my nie wiemy o nich dopóki nie zostaną zarejestrowane w _byVessel.
     // GameScene.onLoadComplete() lub konstruktor ładują istniejące order z vesseli.
@@ -564,6 +570,20 @@ export class MovementOrderSystem {
     EventBus.emit('vessel:orderBlocked', {
       vesselId: vessel.id, orderId: order.id, reason,
     });
+  }
+
+  // M2b C5 — cancel orderów referencjujących usunięty POI (§9.2 design doc).
+  // Filtruje po order.poiId (pole istnieje od C1, default null). Dla M1/M2a/M2b-C5
+  // wszystkie ordery mają poiId=null → pętla nigdy nie matchuje. C6 doda goToPOI
+  // który ustawi order.poiId — handler od razu zacznie chronić przed dangling refs.
+  _onPOIDeletedHandler(poiId) {
+    if (!GAME_CONFIG.FEATURES.poiSystem) return;
+    for (const [vId, order] of [...this._byVessel.entries()]) {
+      if (order.poiId === poiId && order.status === 'active') {
+        const vessel = this._vm.getVessel?.(vId);
+        if (vessel) this._blockAndCancel(vessel, order, 'poi_deleted');
+      }
+    }
   }
 
   /**
