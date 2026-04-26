@@ -32,6 +32,17 @@ const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 
 const LIFE_GLOW_COL = 0x44ff88;
 
+// ── Prediction cone (M2b C4) ────────────────────────────────────────────
+// Wizualizacja niepewności intercept point: cyan trójkąt (fill + outline)
+// per-vessel. Geom/mat tworzone raz, runtime tylko transform (scale.x =
+// szerokość kąta, scale.z = długość zasięgu w world units).
+const PREDICTION_CONE_FILL_COLOR  = 0x00ffff;
+const PREDICTION_CONE_FILL_ALPHA  = 0.15;
+const PREDICTION_CONE_LINE_COLOR  = 0x00ffff;
+const PREDICTION_CONE_LINE_ALPHA  = 0.6;
+const PREDICTION_CONE_BASE_ANGLE  = 0.5;   // rad — unit szerokości; runtime scale.x = angleWidth/baseAngle
+const PREDICTION_CONE_Y           = 0.05;  // wysokość nad orbitami (Y=0), pod statkami (Y≥0.3)
+
 // ── Tekstury planet: resolveTextureType, loadPlanetTextures, hashCode,
 //    TEXTURE_VARIANTS — importowane z PlanetTextureUtils.js ──
 
@@ -111,6 +122,7 @@ export class ThreeRenderer {
     this._entityByUUID = new Map();   // mesh.uuid → entity
     this._clickable    = [];
     this._vessels      = new Map();   // vesselId → { sprite, routeLine }
+    this._predictionConeMeshes = new Map();  // vesselId → { fillMesh, lineMesh, group } (M2b C4)
     this._tradeLines   = [];          // THREE.Line[] — linie handlu cywilnego
 
     // ── Cache modeli 3D statków ─────────────────────────────────
@@ -398,6 +410,7 @@ export class ThreeRenderer {
     }));
     EventBus.on('vessel:positionUpdate', safe(({ vessels }) => {
       this._syncVesselPositions(vessels);
+      this._syncPredictionCones();   // M2b C4 — origin/dir/scale per active intercept
     }));
     // Fog-of-war — ObservatorySystem zmienia widoczność wrogiego statku
     EventBus.on('vessel:detectionChanged', safe(({ vesselId, detected }) => {
@@ -791,6 +804,9 @@ export class ThreeRenderer {
       this.scene.remove(this._smallBodyPoints);
       this._smallBodyPoints = null;
     }
+
+    // Prediction cones (M2b C4) — switchSystem nie zostawia ghost mesh
+    this._disposeAllPredictionCones();
 
     // Reset
     this._entityByUUID.clear();
@@ -4156,5 +4172,111 @@ export class ThreeRenderer {
   /** Wyczyść cache thumbnailów (np. przy zmianie sceny) */
   clearThumbnailCache() {
     this._thumbCache.clear();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Prediction cones (M2b C4) — wizualizacja niepewności intercept
+  // ─────────────────────────────────────────────────────────────
+  // Per-vessel cyan trójkąt rośnie/kurczy się/obraca w real-time wzdłuż
+  // trajektorii vessel→IP. Origin = vessel.position (px), dir = unit vector
+  // do IP, angleWidth = niepewność per intel quality + target velocity,
+  // rangeAU = dystans do IP. Math: PredictionConeMath (C3). Hook:
+  // vessel:positionUpdate (po _syncVesselPositions). Cleanup: _disposeAllMeshes.
+
+  _syncPredictionCones() {
+    if (!GAME_CONFIG.FEATURES.predictionCone) {
+      if (this._predictionConeMeshes.size > 0) this._disposeAllPredictionCones();
+      return;
+    }
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return;
+
+    const activeIds = new Set();
+    for (const v of vMgr._vessels.values()) {
+      const order = v.movementOrder;
+      if (!order) continue;
+      if (order.type !== 'intercept') continue;
+      if (order.status !== 'active') continue;
+      if (!order.predictionCone) continue;
+      if (v.isWreck) continue;
+      activeIds.add(v.id);
+      this._upsertPredictionCone(v.id, order.predictionCone);
+    }
+    for (const id of [...this._predictionConeMeshes.keys()]) {
+      if (!activeIds.has(id)) this._disposePredictionCone(id);
+    }
+  }
+
+  _upsertPredictionCone(vesselId, cone) {
+    let entry = this._predictionConeMeshes.get(vesselId);
+    if (!entry) {
+      entry = this._createPredictionConeMesh();
+      this.scene.add(entry.group);
+      this._predictionConeMeshes.set(vesselId, entry);
+    }
+    this._updatePredictionConeTransform(entry, cone);
+  }
+
+  _createPredictionConeMesh() {
+    const tan = Math.tan(PREDICTION_CONE_BASE_ANGLE);
+    const v0 = new THREE.Vector3(0, 0, 0);
+    const v1 = new THREE.Vector3( tan, 0, 1);
+    const v2 = new THREE.Vector3(-tan, 0, 1);
+
+    const fillGeom = new THREE.BufferGeometry().setFromPoints([v0, v1, v2]);
+    fillGeom.setIndex([0, 1, 2]);
+    const fillMat = new THREE.MeshBasicMaterial({
+      color: PREDICTION_CONE_FILL_COLOR,
+      transparent: true,
+      opacity: PREDICTION_CONE_FILL_ALPHA,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const fillMesh = new THREE.Mesh(fillGeom, fillMat);
+
+    // Outline: 0 → right → left → 0 (zamknięty trójkąt)
+    const lineGeom = new THREE.BufferGeometry().setFromPoints([v0, v1, v2, v0]);
+    const lineMat = new THREE.LineBasicMaterial({
+      color: PREDICTION_CONE_LINE_COLOR,
+      transparent: true,
+      opacity: PREDICTION_CONE_LINE_ALPHA,
+    });
+    const lineMesh = new THREE.Line(lineGeom, lineMat);
+
+    const group = new THREE.Group();
+    group.add(fillMesh);
+    group.add(lineMesh);
+    return { fillMesh, lineMesh, group };
+  }
+
+  _updatePredictionConeTransform(entry, cone) {
+    const { group } = entry;
+    // Origin: vessel position (px) → world units
+    group.position.set(S(cone.originX), PREDICTION_CONE_Y, S(cone.originY));
+    group.rotation.y = Math.atan2(cone.dirX, cone.dirY);
+    // ↑ Argumenty odwrócone vs standardowe atan2(y,x). Powód: cone forward = +Z
+    //   (lokalne), rotation.y mierzona od +X axis CCW. Dla world dir
+    //   (X=dirX, Z=dirY), żeby +Z lokalne wskazywało na ten kierunek,
+    //   rotation = atan2(dirX, dirY). Match z vessel sprite convention atan2(dx, dy).
+    const angleScale  = cone.angleWidth / PREDICTION_CONE_BASE_ANGLE;
+    const lengthWorld = S(cone.rangeAU * AU);
+    group.scale.set(angleScale, 1, lengthWorld);
+  }
+
+  _disposePredictionCone(vesselId) {
+    const entry = this._predictionConeMeshes.get(vesselId);
+    if (!entry) return;
+    this.scene.remove(entry.group);
+    entry.fillMesh.geometry.dispose();
+    entry.fillMesh.material.dispose();
+    entry.lineMesh.geometry.dispose();
+    entry.lineMesh.material.dispose();
+    this._predictionConeMeshes.delete(vesselId);
+  }
+
+  _disposeAllPredictionCones() {
+    for (const id of [...this._predictionConeMeshes.keys()]) {
+      this._disposePredictionCone(id);
+    }
   }
 }
