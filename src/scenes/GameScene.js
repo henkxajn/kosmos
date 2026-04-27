@@ -6,6 +6,7 @@
 
 import EventBus              from '../core/EventBus.js';
 import { normalize as normalizeBattleLocation, isDeepSpace as isDeepSpaceBattle } from '../utils/BattleLocation.js';
+import { mouseToNDC, castRay, resolveTargetFromHits } from '../utils/RaycasterHelper.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
 import debugLog              from '../core/DebugLog.js';
@@ -559,6 +560,19 @@ export class GameScene {
           target: { type: targetType, ...extra },
           screenPoint,
         });
+      },
+
+      // ── M3 P1.2 — raycaster + simulated right click ────────────────────
+      // KOSMOS.debug.raycastAt(clientX, clientY) — sanity check raycaster
+      //   z konkretnych koordynat (zwraca {type, entityId?, ..., worldPoint}).
+      // KOSMOS.debug.simulateRightClick(clientX, clientY) — dispatch
+      //   contextmenu MouseEvent (testy bez prawdziwej myszki).
+      raycastAt: (clientX, clientY) => this._resolveClickTarget(clientX, clientY),
+      simulateRightClick: (clientX, clientY) => {
+        const evt = new MouseEvent('contextmenu', {
+          clientX, clientY, button: 2, bubbles: true, cancelable: true,
+        });
+        window.dispatchEvent(evt);
       },
     };
 
@@ -3129,6 +3143,10 @@ export class GameScene {
       // Najpierw UI, potem 3D
       if (!this.uiManager.handleClick(x, y)) {
         this.threeRenderer.handleClick(x, y);
+        // M3 P1.2: tactical map left click → selection / deselect via raycaster.
+        // Wykonywane PO threeRenderer.handleClick (dblclick focus dalej działa).
+        // wasDrag już sprawdzone wyżej (ignored gdy camera drag) — tutaj dodatkowych guardów nie ma.
+        this._handleTacticalLeftClick(e);
       }
     });
 
@@ -3141,7 +3159,12 @@ export class GameScene {
       e.preventDefault();
 
       const overlay = this.uiManager?.overlayManager?.overlays?.colony;
-      if (!overlay?.visible || !overlay._selectedUnit) return;
+      if (!overlay?.visible || !overlay._selectedUnit) {
+        // M3 P1.2: tactical map right click → context menu via raycaster.
+        // ELSE branch — ColonyOverlay ground unit flow zachowany (early-return).
+        this._handleTacticalRightClick(e);
+        return;
+      }
 
       // Guard: gracz nie może kierować wrogimi jednostkami (owner !== 'player')
       const selected = overlay._selectedUnit;
@@ -3281,5 +3304,60 @@ export class GameScene {
       this.uiManager.handleMouseMove(x, y);
       this.threeRenderer.handleMouseMove(x, y);
     });
+  }
+
+  // ── M3 P1.2 — Tactical map mouse interactions (raycaster) ─────────────
+  // Lewy klik (z istniejącego window 'click' handler — wasDrag już sprawdzony):
+  //   ownVessel sprite → setSelectedVesselId (secondary flow §5.1)
+  //   empty → clearSelection (Q6)
+  //   POI/planet/enemyVessel → no-op (P1.5 doda tooltip)
+  // Prawy klik (z istniejącego 'contextmenu' handler — ELSE branch po
+  // ColonyOverlay early-return):
+  //   emit ui:rightClickMenuOpened z target shape z resolveTargetFromHits.
+  _handleTacticalLeftClick(e) {
+    if (this.planetScene?.isOpen) return;
+    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
+    if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
+    if (this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
+
+    const target = this._resolveClickTarget(e.clientX, e.clientY);
+    if (!target) return;
+
+    if (target.type === 'ownVessel') {
+      this.uiManager.setSelectedVesselId(target.entityId);
+    } else if (target.type === 'empty') {
+      this.uiManager.clearSelection();
+    }
+    // POI/planet/enemyVessel — left-click no-op w P1.2 (tooltip w P1.5).
+  }
+
+  _handleTacticalRightClick(e) {
+    if (this.planetScene?.isOpen) return;
+    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
+    if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
+    if (this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
+
+    const target = this._resolveClickTarget(e.clientX, e.clientY);
+    if (!target) return;
+
+    EventBus.emit('ui:rightClickMenuOpened', {
+      target,
+      screenPoint: { x: e.clientX, y: e.clientY },
+    });
+  }
+
+  _resolveClickTarget(clientX, clientY) {
+    const tr = this.threeRenderer;
+    if (!tr) return null;
+    const canvas = tr.getCanvas?.();
+    const camera = tr.getCamera?.();
+    const scene = tr.getScene?.();
+    const raycaster = tr.getRaycaster?.();
+    if (!canvas || !camera || !scene || !raycaster) return null;
+
+    const ndc = mouseToNDC(clientX, clientY, canvas);
+    const { hits, worldPoint } = castRay(ndc, camera, scene, raycaster);
+    const myEmpireId = window.KOSMOS?.gameState?.get?.('player.empireId') ?? 'player';
+    return resolveTargetFromHits(hits, worldPoint, myEmpireId);
   }
 }

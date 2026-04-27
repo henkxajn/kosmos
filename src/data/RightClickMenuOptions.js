@@ -3,6 +3,12 @@
 // Pure data + jeden helper (buildMenuOptions). Brak logiki wykonującej
 // order — kliknięcie loguje placeholder, real wiring w P1.3.
 //
+// Target shape (dostarczany przez P1.2 raycaster — RaycasterHelper.resolveTargetFromHits):
+//   { type, entityId?, vessel?, poi?, planet?, worldPoint }
+//   type ∈ 'empty' | 'enemyVessel' | 'ownVessel' | 'poi' | 'planet'
+//   worldPoint: {x, y:0, z} — Y=0 plane intersect (zawsze obecny, dla moveToPoint w P1.3)
+//   vessel/poi/planet — pełna referencja do encji (z VesselManager/POIRegistry/EntityManager)
+//
 // Każda opcja:
 //   id                — unikalny identyfikator (string)
 //   labelPL/labelEN   — tekst wyświetlany (PL aktywny w P1.1)

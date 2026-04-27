@@ -1402,6 +1402,9 @@ export class ThreeRenderer {
       material
     );
     mesh.rotation.z = 0.1 + (seed % 10) * 0.04;
+    // M3 P1.2 — userData dla raycaster (atmoMesh/cloudMesh mają inne userData
+    // bez kosmosType, więc filter automatycznie odfiltruje tylko core mesh).
+    mesh.userData = { kosmosType: 'planet', planetId: planet.id };
     group.add(mesh);
 
     // Warstwa chmur — tylko rocky z atmosferą (nie gas)
@@ -3050,6 +3053,13 @@ export class ThreeRenderer {
 
   getCamera() { return this.camera; }
 
+  // ── M3 P1.2 — public accessors dla raycaster (GameScene._resolveClickTarget) ─
+  // getScene/getCanvas — Three.js scene + WebGL canvas dla mouseToNDC.
+  // getRaycaster — reuse istniejącej instancji this._ray (nie twórz nowej per klik).
+  getScene() { return this.scene; }
+  getCanvas() { return this.renderer?.domElement ?? this.canvas; }
+  getRaycaster() { return this._ray; }
+
   // Rejestracja kontrolera kamery (ustawiany przez GameScene)
   setCameraController(ctrl) { this._cameraController = ctrl; }
 
@@ -3096,6 +3106,8 @@ export class ThreeRenderer {
       // Wrapper Group — pozycja i obrót aplikowane na wrapperze,
       // model wewnątrz wycentrowany przez offset
       const wrapper = new THREE.Group();
+      // M3 P1.2 — userData dla raycaster (walk-up parent z child mesh GLB).
+      wrapper.userData = { kosmosType: 'vessel', vesselId: vessel.id };
 
       const model = template.clone();
 
@@ -3353,7 +3365,8 @@ export class ThreeRenderer {
     const px = S(vessel.position.x);
     const pz = S(vessel.position.y);
     sprite.position.set(px, 0.3, pz); // lekko nad płaszczyzną
-    sprite.userData = { type: 'vessel', vesselId: vessel.id };
+    // M3 P1.2 — kosmosType dla raycaster filter (zachowano legacy 'type' dla wstecznej kompat).
+    sprite.userData = { kosmosType: 'vessel', type: 'vessel', vesselId: vessel.id };
 
     this.scene.add(sprite);
 
@@ -4412,8 +4425,8 @@ export class ThreeRenderer {
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(POI_SPRITE_SIZE, POI_SPRITE_SIZE, 1);
     sprite.position.set(S(point.x), POI_SPRITE_Y, S(point.y));
-    // userData ready dla M3 tooltip raycastera (D4 deferral)
-    sprite.userData = { poiId: poi.id, poiName: poi.name, poiType: poi.type };
+    // M3 P1.2 — kosmosType dla raycaster (P1.5 tooltip reuse'uje ten sam userData).
+    sprite.userData = { kosmosType: 'poi', poiId: poi.id, poiName: poi.name, poiType: poi.type };
 
     this.scene.add(sprite);
     this._poiSprites.set(poi.id, { sprite, type: poi.type });
