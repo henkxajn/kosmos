@@ -49,7 +49,11 @@ const PREDICTION_CONE_Y           = 0.05;  // wysokość nad orbitami (Y=0), pod
 // Texture cache per typ (5 textur total, reuse'owane przez wszystkie POI
 // danego typu). Lifecycle event-driven (poi:created/deleted/updated) — bez
 // per-frame sync (POI to obiekty static).
-const POI_SPRITE_SIZE = 0.6;  // world units (precedens vessel sprite scale 0.5-1.0)
+const POI_SPRITE_SIZE = 8;    // world units — POI na world-coord pozycjach (np. ~150 wu),
+                              // kamera typowo 150+ wu od sprite'a; scale 0.6 dawał subpixel.
+                              // Filip's visual review (post-C7): wartość 8 to balans widoczność
+                              // vs nie-zaśmiecanie mapy. Vessele mają mniejszą scale (0.5-1.0)
+                              // bo są blisko kamery (focus mode dist 0.5-3 wu).
 const POI_SPRITE_Y    = 0.02; // tuż nad orbitami (Y=0), poniżej cone (Y=0.05) i vesseli (Y≥0.3)
 
 const POI_TYPE_COLORS = Object.freeze({

@@ -1219,8 +1219,12 @@ się od specyfikacji. Każde odstępstwo z uzasadnieniem — referencja dla M3+.
 - **`POI_SPRITE_Y = 0.02`** (D2): subtelny offset między orbitami (Y=0) a
   prediction cone (Y=0.05) i vesselami (Y≥0.3). Sprite zawsze widoczny od góry,
   nie zasłania innych warstw.
-- **`POI_SPRITE_SIZE = 0.6`** (off-spec): prompt sugerował 16 (world units),
-  co byłoby 16× rozmiar gwiazdy. Precedent vessel sprite scale 0.5–1.0.
+- **`POI_SPRITE_SIZE = 8`** (post-playtest tuning): prompt sugerował 16,
+  pierwszy commit ustawił 0.6 (precedens vessel scale 0.5–1.0). Visual review
+  ujawnił że sprite'y są niewidoczne — POI są na world-coord pozycjach (np.
+  ~150 wu), kamera typowo 150+ wu od sprite'a, więc scale 0.6 daje subpixel.
+  Vessele renderują się czytelnie z scale 0.5-1.0 bo są w focus mode 0.5-3 wu
+  od kamery. Filip wybrał wartość 8 jako balans widoczności vs nie-zaśmiecania.
 - **Cyan-shifted paleta** (Filip's decision): waypoint=cyan-blue, patrol=green,
   picket=red, rally=amber, ambush=violet. Symbole Unicode ⌖↻⛨⊕⊗ w canvas
   texture (32px bold sans-serif, optical centering y=34).
