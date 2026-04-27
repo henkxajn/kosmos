@@ -13,11 +13,15 @@
 // ── Stub browser globals (PRZED importami) ─────────────────────────────────
 globalThis.window = globalThis.window ?? globalThis;
 
-// Mock vesselManager — getVessel('v_own') ownVessel, 'v_enemy' enemyVessel,
-// 'v_stale' nieistniejący (stale userData fallback test).
+// Mock vesselManager — odzwierciedla REAL vessel shape (Vessel.js:isEnemyVessel
+// honoruje 3 pola: isEnemy / owner / ownerEmpireId).
+// Player vessele typowo NIE mają żadnego z tych pól (default = own).
+// Enemy vessele mają owner !== 'player' (typowo string z prefiksem 'emp_').
 const _vessels = new Map([
-  ['v_own',   { id: 'v_own',   name: 'Alfa', ownerEmpireId: 'player' }],
-  ['v_enemy', { id: 'v_enemy', name: 'Wróg', ownerEmpireId: 'rojowi' }],
+  ['v_own',         { id: 'v_own',     name: 'Alfa' }],                        // player default (no owner field)
+  ['v_own_explicit',{ id: 'v_own_explicit', name: 'Beta', owner: 'player' }],  // player explicit
+  ['v_enemy',       { id: 'v_enemy',   name: 'Wróg',  owner: 'emp_sandbox' }], // enemy via owner
+  ['v_enemy_legacy',{ id: 'v_enemy_legacy', name: 'Łowca', isEnemy: true }],   // enemy via legacy isEnemy flag
 ]);
 const _pois = new Map([
   ['poi_p', { id: 'poi_p', name: 'Patrol Test', type: 'patrol' }],
@@ -112,7 +116,7 @@ test('T2.1 hits=[] → {type:empty, worldPoint}', () => {
   assertEq(t, { type: 'empty', worldPoint: wp }, 'target');
 });
 
-test('T2.2 vessel z ownerEmpireId=player → ownVessel', () => {
+test('T2.2 vessel bez owner field (player default) → ownVessel', () => {
   const hit = { object: { userData: { kosmosType: 'vessel', vesselId: 'v_own' } }, kosmosNode: { userData: { kosmosType: 'vessel', vesselId: 'v_own' } } };
   const t = resolveTargetFromHits([hit], wp, 'player');
   assertEq(t.type, 'ownVessel', 'type');
@@ -121,12 +125,26 @@ test('T2.2 vessel z ownerEmpireId=player → ownVessel', () => {
   assertEq(t.worldPoint, wp, 'worldPoint');
 });
 
-test('T2.3 vessel z innym ownerEmpireId → enemyVessel', () => {
+test('T2.2b vessel z owner=player (explicit) → ownVessel', () => {
+  const hit = { object: {}, kosmosNode: { userData: { kosmosType: 'vessel', vesselId: 'v_own_explicit' } } };
+  const t = resolveTargetFromHits([hit], wp, 'player');
+  assertEq(t.type, 'ownVessel', 'type');
+  assertEq(t.vessel.owner, 'player', 'vessel.owner');
+});
+
+test('T2.3 vessel z owner=emp_sandbox → enemyVessel', () => {
   const hit = { object: {}, kosmosNode: { userData: { kosmosType: 'vessel', vesselId: 'v_enemy' } } };
   const t = resolveTargetFromHits([hit], wp, 'player');
   assertEq(t.type, 'enemyVessel', 'type');
   assertEq(t.entityId, 'v_enemy', 'entityId');
-  assertEq(t.vessel.ownerEmpireId, 'rojowi', 'vessel.ownerEmpireId');
+  assertEq(t.vessel.owner, 'emp_sandbox', 'vessel.owner');
+});
+
+test('T2.3b vessel z legacy isEnemy=true (bez owner field) → enemyVessel', () => {
+  const hit = { object: {}, kosmosNode: { userData: { kosmosType: 'vessel', vesselId: 'v_enemy_legacy' } } };
+  const t = resolveTargetFromHits([hit], wp, 'player');
+  assertEq(t.type, 'enemyVessel', 'type');
+  assertEq(t.vessel.isEnemy, true, 'vessel.isEnemy');
 });
 
 test('T2.4 POI patrol → {type:poi, poi.type:patrol}', () => {

@@ -569,10 +569,15 @@ export class GameScene {
       //   contextmenu MouseEvent (testy bez prawdziwej myszki).
       raycastAt: (clientX, clientY) => this._resolveClickTarget(clientX, clientY),
       simulateRightClick: (clientX, clientY) => {
-        const evt = new MouseEvent('contextmenu', {
-          clientX, clientY, button: 2, bubbles: true, cancelable: true,
+        // Direct emit — omija UI guards z _handleTacticalRightClick (modal
+        // detection, isOverUI). Reprodukuje produkcyjny path POST raycaster
+        // resolve. Pełen event-flow testowanie → real myszka w real-flow.
+        const target = this._resolveClickTarget(clientX, clientY);
+        if (!target) { console.warn('[simulateRightClick] resolver returned null'); return; }
+        EventBus.emit('ui:rightClickMenuOpened', {
+          target,
+          screenPoint: { x: clientX, y: clientY },
         });
-        window.dispatchEvent(evt);
       },
     };
 
@@ -3357,7 +3362,9 @@ export class GameScene {
 
     const ndc = mouseToNDC(clientX, clientY, canvas);
     const { hits, worldPoint } = castRay(ndc, camera, scene, raycaster);
-    const myEmpireId = window.KOSMOS?.gameState?.get?.('player.empireId') ?? 'player';
-    return resolveTargetFromHits(hits, worldPoint, myEmpireId);
+    // currentEmpireId vestigial w resolveTargetFromHits — own/enemy detection
+    // przez tolerancyjny 3-field check (vessel.isEnemy/owner/ownerEmpireId).
+    // TODO M4: jeśli multi-player → zastąp helperem getPlayerOwnerId().
+    return resolveTargetFromHits(hits, worldPoint, 'player');
   }
 }

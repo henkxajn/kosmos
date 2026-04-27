@@ -31,6 +31,19 @@ export function findKosmosNode(obj) {
   return null;
 }
 
+// Mirror isEnemyVessel z src/entities/Vessel.js:323 — tolerancyjny 3-field check.
+// Player vessele typowo NIE mają żadnego z tych pól ustawionego (default = own).
+// Inlinowane, żeby RaycasterPure pozostał lekki dla offline testów (Vessel.js
+// ciągnie kaskadę EntityManager/ShipsData/etc. — niepotrzebne tutaj).
+// KEEP IN SYNC z Vessel.js:isEnemyVessel.
+function _isVesselEnemy(vessel) {
+  if (!vessel) return false;
+  if (vessel.isEnemy === true) return true;
+  if (vessel.owner && vessel.owner !== 'player') return true;
+  if (vessel.ownerEmpireId && vessel.ownerEmpireId !== 'player') return true;
+  return false;
+}
+
 /**
  * Resolve target shape z hits (już posortowane od najbliższego) + worldPoint.
  * Hit shape: { object, kosmosNode? } — kosmosNode opcjonalne (gdy castRay
@@ -39,10 +52,11 @@ export function findKosmosNode(obj) {
  *
  * @param {Array} hits
  * @param {{x,y,z}} worldPoint
- * @param {string} currentEmpireId — empire ID gracza ('player' default)
+ * @param {string} _currentEmpireId — vestigial (kept dla wstecznej kompat).
+ *   M4 multi-player: zastąp _isVesselEnemy logic empire-aware lookup'em.
  * @returns {{type, entityId?, vessel?, poi?, planet?, worldPoint}}
  */
-export function resolveTargetFromHits(hits, worldPoint, currentEmpireId) {
+export function resolveTargetFromHits(hits, worldPoint, _currentEmpireId) {
   if (!hits || hits.length === 0) {
     return { type: 'empty', worldPoint };
   }
@@ -55,7 +69,7 @@ export function resolveTargetFromHits(hits, worldPoint, currentEmpireId) {
   if (ud.kosmosType === 'vessel') {
     const vessel = window.KOSMOS?.vesselManager?.getVessel?.(ud.vesselId);
     if (!vessel) return { type: 'empty', worldPoint };  // stale userData
-    const isOwn = (vessel.ownerEmpireId ?? 'player') === currentEmpireId;
+    const isOwn = !_isVesselEnemy(vessel);
     return {
       type: isOwn ? 'ownVessel' : 'enemyVessel',
       entityId: ud.vesselId,
