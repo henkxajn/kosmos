@@ -152,15 +152,22 @@ export class MovementOrderSystem {
     const val = validateOrder(spec);
     if (!val.valid) return { ok: false, reason: val.reason };
 
-    // W M1 pełna implementacja tylko dla moveToPoint. pursue/intercept — Commit 5.
-    // patrol/escort — no-op stub (akceptowany ale nic nie robi).
+    // M1: pełna implementacja moveToPoint, pursue/intercept (Commit 5).
+    // M2b C6: goToPOI (delegat do moveToPoint) + patrol (runtime).
+    // M2b C7: escort runtime — zostaje stub w C6.
     if (spec.type === ORDER_TYPES.moveToPoint) {
       return this._issueMoveToPoint(vessel, spec);
     }
     if (spec.type === ORDER_TYPES.pursue || spec.type === ORDER_TYPES.intercept) {
       return this._issuePursueOrIntercept(vessel, spec);
     }
-    if (spec.type === ORDER_TYPES.patrol || spec.type === ORDER_TYPES.escort) {
+    if (spec.type === ORDER_TYPES.goToPOI) {
+      return this._issueGoToPOI(vessel, spec);
+    }
+    if (spec.type === ORDER_TYPES.patrol) {
+      return this._issuePatrol(vessel, spec);
+    }
+    if (spec.type === ORDER_TYPES.escort) {
       return this._issueStubOrder(vessel, spec);
     }
 
@@ -587,6 +594,210 @@ export class MovementOrderSystem {
   }
 
   /**
+   * M2b C6 — `goToPOI`: nawigacja do POI. Delegat do `_issueMoveToPoint` z punktem
+   * rozwiązanym per typ POI (waypoint→point, patrol→waypoints[0], rally/picket/
+   * ambush→center). Po success nadpisuje `order.type='goToPOI'` + `order.poiId` —
+   * VesselArrived wykryje to i wyemituje `vesselReachedPOI` po dotarciu.
+   */
+  _issueGoToPOI(vessel, spec) {
+    if (!GAME_CONFIG.FEATURES?.poiSystem) {
+      return { ok: false, reason: 'feature_disabled' };
+    }
+    const registry = window.KOSMOS?.poiRegistry;
+    const poi = registry?.getPOI?.(spec.poiId);
+    if (!poi) return { ok: false, reason: 'poi_not_found' };
+
+    // Resolve target point per POI type
+    let targetPoint = null;
+    if (poi.type === 'waypoint')      targetPoint = poi.point;
+    else if (poi.type === 'patrol')   targetPoint = poi.waypoints?.[0];
+    else                              targetPoint = poi.center;  // rally/picket/ambush
+    if (!targetPoint || typeof targetPoint.x !== 'number' || typeof targetPoint.y !== 'number') {
+      return { ok: false, reason: 'poi_no_target_point' };
+    }
+
+    // Delegate do moveToPoint (build mission, suspend, route avoidance Słońca, fuel).
+    const result = this._issueMoveToPoint(vessel, {
+      type:        ORDER_TYPES.moveToPoint,
+      targetPoint: { x: targetPoint.x, y: targetPoint.y },
+      issuedBy:    spec.issuedBy ?? 'player',
+    });
+    if (!result.ok) return result;
+
+    // Override order — leci jako goToPOI, _onVesselArrived rozpozna i emit vesselReached.
+    const order = vessel.movementOrder;
+    order.type  = ORDER_TYPES.goToPOI;
+    order.poiId = spec.poiId;
+
+    EventBus.emit('vessel:goToPOIIssued', {
+      vesselId: vessel.id,
+      orderId:  order.id,
+      poiId:    spec.poiId,
+    });
+    return result;
+  }
+
+  /**
+   * M2b C6 — `patrol`: cykliczne chodzenie po waypoints. Akceptuje:
+   *   - `spec.poiId` → resolve `waypoints` z POI typu 'patrol'
+   *   - `spec.patrolRoute` → manualna route (devtools, brak POI)
+   *
+   * Patrol NIE buduje mission (chodzenie nie ma destination). Sterowanie pozycją
+   * przez `_tickPatrolOrder` w głównej pętli `_tick`.
+   */
+  _issuePatrol(vessel, spec) {
+    if (!GAME_CONFIG.FEATURES?.poiSystem) {
+      return { ok: false, reason: 'feature_disabled' };
+    }
+
+    let waypoints = null;
+    let poiId = null;
+    if (spec.poiId) {
+      const registry = window.KOSMOS?.poiRegistry;
+      const poi = registry?.getPOI?.(spec.poiId);
+      if (!poi) return { ok: false, reason: 'poi_not_found' };
+      if (poi.type !== 'patrol') return { ok: false, reason: 'poi_not_patrol_type' };
+      waypoints = poi.waypoints;
+      poiId = spec.poiId;
+    } else if (Array.isArray(spec.patrolRoute)) {
+      waypoints = spec.patrolRoute;
+    }
+
+    if (!Array.isArray(waypoints) || waypoints.length < 2) {
+      return { ok: false, reason: 'patrol_needs_2_points' };
+    }
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const orderId = `mo_${_nextOrderId++}`;
+    const order = {
+      id:             orderId,
+      type:           ORDER_TYPES.patrol,
+      issuedYear:     gameYear,
+      issuedBy:       spec.issuedBy ?? 'player',
+      targetEntityId: null,
+      targetPoint:    null,
+      patrolRoute:    waypoints.map(w => ({ x: w.x, y: w.y })),
+      lastTargetPos:  null,
+      interceptPoint: null,
+      status:         'active',
+      completedYear:  null,
+      blockReason:    null,
+      poiId:               poiId,
+      predictionCone:      null,
+      patrolWaypointIndex: 0,
+      patrolDirection:     1,
+      escorteeId:          null,
+    };
+
+    // Suspend oryginalnej mission (jeśli aktywna). Patrol nie ma własnej mission.
+    this._suspendMissionIfAny(vessel);
+
+    // Implicit launch z dock/orbit (analogicznie do pursue/intercept).
+    if (vessel.position.state === 'docked' || vessel.position.state === 'orbiting') {
+      vessel.position.state    = 'in_transit';
+      vessel.position.dockedAt = null;
+      vessel.status            = 'on_mission';
+      EventBus.emit('vessel:launched', { vessel, mission: vessel.mission ?? null });
+    }
+
+    vessel.movementOrder = order;
+    this._byVessel.set(vessel.id, order);
+
+    addMissionLog(vessel, gameYear,
+      poiId ? `Patrol POI ${poiId} (${waypoints.length} wp)` : `Patrol manual (${waypoints.length} wp)`,
+      'info');
+
+    _trace(`issue patrol ${orderId} vessel=${vessel.id} poiId=${poiId ?? 'null'} wp=${waypoints.length}`);
+    EventBus.emit('vessel:orderIssued',   { vesselId: vessel.id, order });
+    EventBus.emit('vessel:patrolStarted', {
+      vesselId:      vessel.id,
+      orderId,
+      poiId,
+      waypointIndex: 0,
+    });
+
+    return { ok: true, orderId };
+  }
+
+  /**
+   * Per-tick patrol: rusz w kierunku aktualnego waypointa, gdy dotrze (≤ THREAT_RADIUS_PX)
+   * emit `vessel:patrolWaypointReached` PRZED `_advancePatrolIndex` (handler chce
+   * "który właśnie został osiągnięty", nie "który następny"). Skorumpowany
+   * `patrolRoute` (null/[]/idx out-of-range w runtime overwrite) → `_blockAndCancel`.
+   */
+  _tickPatrolOrder(vessel, order, dPhysicsYear, gameYear) {
+    const wp = order.patrolRoute?.[order.patrolWaypointIndex];
+    if (!wp) {
+      this._blockAndCancel(vessel, order, 'patrol_invalid_waypoint');
+      return;
+    }
+
+    const dx = wp.x - vessel.position.x;
+    const dy = wp.y - vessel.position.y;
+    const distPx = Math.hypot(dx, dy);
+
+    if (distPx <= THREAT_RADIUS_PX) {
+      // KOLEJNOŚĆ: emit PRZED advance — handler dostaje index "właśnie osiągnięty".
+      EventBus.emit('vessel:patrolWaypointReached', {
+        vesselId:      vessel.id,
+        orderId:       order.id,
+        waypointIndex: order.patrolWaypointIndex,
+      });
+      this._advancePatrolIndex(order);
+      return;
+    }
+
+    // Movement physics — kopia z _moveTowardsAndMaybeComplete bez completion check.
+    const speedPxPerYear = (vessel.speedAU ?? 1.0) * AU_TO_PX;
+    const stepPx = Math.min(distPx, speedPxPerYear * Math.max(0, dPhysicsYear));
+    const ux = dx / distPx;
+    const uy = dy / distPx;
+    vessel.position.x += ux * stepPx;
+    vessel.position.y += uy * stepPx;
+
+    if (vessel.velocity) {
+      const speedCiv = (vessel.speedAU ?? 1.0) / CIV_TIME_SCALE;
+      vessel.velocity.vx = ux * speedCiv;
+      vessel.velocity.vy = uy * speedCiv;
+      vessel.velocity.updatedYear = gameYear;
+    }
+  }
+
+  /**
+   * Advance patrol waypoint index. loopMode rozwiązuje POI lookup z fallback do
+   * 'ping_pong' (Filip's decision: gdy patrol order bez poiId LUB POI usunięty).
+   *
+   * - 'loop':     index = (index + 1) % n
+   * - 'ping_pong': bounce — przy hit end (next>=n): next=n-2, dir=-1;
+   *                          przy hit start (next<0): next=1, dir=1
+   *
+   * Edge case n=2: ping_pong zachowuje się identycznie jak loop (A→B→A→B…).
+   */
+  _advancePatrolIndex(order) {
+    const n = order.patrolRoute?.length ?? 0;
+    if (n < 2) return;
+
+    const poi = order.poiId ? window.KOSMOS?.poiRegistry?.getPOI?.(order.poiId) : null;
+    const loopMode = poi?.loopMode ?? 'ping_pong';  // Filip's default
+
+    if (loopMode === 'loop') {
+      order.patrolWaypointIndex = (order.patrolWaypointIndex + 1) % n;
+      return;
+    }
+
+    // ping_pong (default)
+    let next = order.patrolWaypointIndex + order.patrolDirection;
+    if (next >= n) {
+      next = n - 2;
+      order.patrolDirection = -1;
+    } else if (next < 0) {
+      next = 1;
+      order.patrolDirection = 1;
+    }
+    order.patrolWaypointIndex = next;
+  }
+
+  /**
    * Stub dla patrol/escort — akceptuje order, ale runtime nie robi nic.
    * Placeholder pod M2 implementację.
    */
@@ -685,9 +896,13 @@ export class MovementOrderSystem {
         this._tickPursueOrder(vessel, order, dPhysicsYear, gameYear);
       } else if (order.type === ORDER_TYPES.intercept) {
         this._tickInterceptOrder(vessel, order, dPhysicsYear, gameYear);
+      } else if (order.type === ORDER_TYPES.patrol) {
+        this._tickPatrolOrder(vessel, order, dPhysicsYear, gameYear);
       }
-      // moveToPoint — ruch zarządzany przez _updatePositions (mission interpolation); tick no-op.
-      // patrol/escort — no-op stub.
+      // moveToPoint, goToPOI — ruch zarządzany przez _updatePositions
+      //   (mission interpolation, mission.type='move_to_point'); completion przez
+      //   _onVesselArrived (rozszerzone o goToPOI → emit vesselReachedPOI).
+      // escort — no-op stub (M2b C7).
     }
   }
 
@@ -708,7 +923,10 @@ export class MovementOrderSystem {
     const order = vessel.movementOrder;
     if (!order || order.status !== 'active') return;
 
-    if (order.type === ORDER_TYPES.moveToPoint && mission.type === 'move_to_point') {
+    // M2b C6: goToPOI delegate'uje do moveToPoint mission, więc completion path jest
+    //   identyczny — różnica to dodatkowy emit `poi:vesselReached` (przez registry).
+    const isMoveLike = (order.type === ORDER_TYPES.moveToPoint || order.type === ORDER_TYPES.goToPOI);
+    if (isMoveLike && mission.type === 'move_to_point') {
       const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
       order.status        = 'completed';
       order.completedYear = gameYear;
@@ -718,6 +936,11 @@ export class MovementOrderSystem {
       // TODO M2: auto-return / stand-by mode. W M1 gracz musi wydać kolejny order.
       vessel.mission = null;
       vessel.status  = 'idle';
+
+      // M2b C6: emit vesselReachedPOI gdy goToPOI dotarł.
+      if (order.type === ORDER_TYPES.goToPOI && order.poiId) {
+        window.KOSMOS?.poiRegistry?.vesselReachedPOI?.(vessel.id, order.poiId);
+      }
 
       EventBus.emit('vessel:orderCompleted', {
         vesselId:      vessel.id,

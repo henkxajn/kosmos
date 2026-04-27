@@ -505,6 +505,28 @@ export class GameScene {
       deletePOI: (poiId) => window.KOSMOS?.poiRegistry?.deletePOI(poiId),
       // KOSMOS.debug.getPOI(poiId) — pełny obiekt POI lub null.
       getPOI:    (poiId) => window.KOSMOS?.poiRegistry?.getPOI(poiId),
+      // ── M2b Commit 6 — POI navigation devtools ─────────────────────────
+      // KOSMOS.debug.issueGoToPOI(vesselId, poiId) — vessel leci do POI.
+      issueGoToPOI: (vId, poiId) => {
+        const mos = window.KOSMOS?.movementOrderSystem;
+        if (!mos) { console.warn('[debug] MovementOrderSystem wyłączony — użyj enableMovementOrders()'); return { ok: false, reason: 'mos_disabled' }; }
+        const result = mos.issueOrder(vId, { type: 'goToPOI', poiId });
+        console.log(`[debug] issueGoToPOI(${vId}, ${poiId}):`, result);
+        return result;
+      },
+      // KOSMOS.debug.issuePatrol(vesselId, poiIdOrSpec) — patrol z POI lub manualny.
+      //   issuePatrol('v_1', 'poi_2') — POI patrol
+      //   issuePatrol('v_1', { patrolRoute: [{x:0,y:0},{x:100,y:0}] }) — manualny
+      issuePatrol: (vId, poiIdOrSpec) => {
+        const mos = window.KOSMOS?.movementOrderSystem;
+        if (!mos) { console.warn('[debug] MovementOrderSystem wyłączony — użyj enableMovementOrders()'); return { ok: false, reason: 'mos_disabled' }; }
+        const spec = (typeof poiIdOrSpec === 'string')
+          ? { type: 'patrol', poiId: poiIdOrSpec }
+          : { type: 'patrol', ...poiIdOrSpec };
+        const result = mos.issueOrder(vId, spec);
+        console.log(`[debug] issuePatrol(${vId}):`, result);
+        return result;
+      },
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
@@ -945,6 +967,53 @@ export class GameScene {
         text:      `Usunięto POI '${name ?? poiId}'`,
         channel:   'intel',
         severity:  'info',
+      });
+    });
+
+    // M2b C6 — vessel POI navigation events (channel 'fleet' — akcje statku).
+    EventBus.on('vessel:goToPOIIssued', ({ vesselId, poiId }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog) return;
+      const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      const poi = window.KOSMOS?.poiRegistry?.getPOI?.(poiId);
+      const vLabel = vessel?.name ?? vesselId;
+      const pLabel = poi?.name ?? poiId;
+      evtLog.push({
+        text:      `${vLabel} → POI '${pLabel}'`,
+        channel:   'fleet',
+        severity:  'info',
+        entityRef: vesselId,
+      });
+    });
+
+    EventBus.on('vessel:patrolStarted', ({ vesselId, poiId }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog) return;
+      const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      const vLabel = vessel?.name ?? vesselId;
+      let text;
+      if (poiId) {
+        const poi = window.KOSMOS?.poiRegistry?.getPOI?.(poiId);
+        const pLabel = poi?.name ?? poiId;
+        const wpCount = poi?.waypoints?.length ?? '?';
+        text = `${vLabel} rozpoczyna patrol '${pLabel}' (${wpCount} waypoints)`;
+      } else {
+        text = `${vLabel} rozpoczyna patrol manualny`;
+      }
+      evtLog.push({ text, channel: 'fleet', severity: 'info', entityRef: vesselId });
+    });
+
+    EventBus.on('vessel:patrolWaypointReached', ({ vesselId, waypointIndex }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog) return;
+      const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      const total = vessel?.movementOrder?.patrolRoute?.length ?? '?';
+      const vLabel = vessel?.name ?? vesselId;
+      evtLog.push({
+        text:      `${vLabel} osiągnął waypoint ${waypointIndex + 1}/${total}`,
+        channel:   'fleet',
+        severity:  'info',
+        entityRef: vesselId,
       });
     });
 

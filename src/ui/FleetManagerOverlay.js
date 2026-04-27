@@ -3976,7 +3976,26 @@ export class FleetManagerOverlay {
         case 'moveToPoint': label = `→ MoveTo: ${targetName}`;        color = THEME.accent; break;
         case 'pursue':      label = `⚔ Pursue: ${targetName}`;        color = THEME.danger; break;
         case 'intercept':   label = `⊕ Intercept: ${targetName}`;     color = THEME.warning; break;
-        case 'patrol':      label = `↻ Patrol`;                        color = THEME.textSecondary; break;
+        case 'goToPOI': {
+          // M2b C6 — nazwa POI z registry, fallback do poiId.
+          const poi = window.KOSMOS?.poiRegistry?.getPOI?.(order.poiId);
+          label = `→ POI ${poi?.name ?? order.poiId ?? '?'}`;
+          color = THEME.accent;
+          break;
+        }
+        case 'patrol': {
+          // M2b C6 — licznik (idx+1)/N + nazwa POI lub "manualny".
+          const idx = order.patrolWaypointIndex ?? 0;
+          const total = order.patrolRoute?.length ?? 0;
+          if (order.poiId) {
+            const poi = window.KOSMOS?.poiRegistry?.getPOI?.(order.poiId);
+            label = `↻ Patrol ${poi?.name ?? order.poiId} (${idx+1}/${total})`;
+          } else {
+            label = `↻ Patrol manualny (${idx+1}/${total})`;
+          }
+          color = THEME.textSecondary;
+          break;
+        }
         case 'escort':      label = `🛡 Escort: ${targetName}`;       color = THEME.accent; break;
         default:            label = `? ${order.type}: ${targetName}`;  color = THEME.textDim;
       }
