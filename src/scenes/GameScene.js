@@ -3323,7 +3323,13 @@ export class GameScene {
     if (this.planetScene?.isOpen) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
-    if (this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
+    // isOverUI zwraca true dla CAŁEGO viewportu gdy overlayManager.isAnyOpen() (UIManager.js:794)
+    // — FleetOverlay/IntelOverlay/etc. otwarte blokowałyby wszystkie tactical clicks.
+    // Bypass gdy target to CANVAS (game viewport): planet-canvas z=4 persistent
+    // overlay przejmuje eventy z mapy galaktycznej; three-canvas z=1 dla typowego flow.
+    // DOM panele/modale mają target.tagName !== 'CANVAS' → isOverUI dalej blokuje je.
+    const isGameCanvas = e.target?.tagName === 'CANVAS';
+    if (!isGameCanvas && this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
 
     const target = this._resolveClickTarget(e.clientX, e.clientY);
     if (!target) return;
@@ -3340,7 +3346,10 @@ export class GameScene {
     if (this.planetScene?.isOpen) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
-    if (this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
+    // Patrz _handleTacticalLeftClick — bypass isOverUI dla CANVAS targetów
+    // (game viewport), DOM panele dalej blokowane.
+    const isGameCanvas = e.target?.tagName === 'CANVAS';
+    if (!isGameCanvas && this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
 
     const target = this._resolveClickTarget(e.clientX, e.clientY);
     if (!target) return;
