@@ -92,6 +92,7 @@ import { Planetoid }         from '../entities/Planetoid.js';
 import { ThreeRenderer }     from '../renderer/ThreeRenderer.js';
 import { ThreeCameraController } from '../renderer/ThreeCameraController.js';
 import { UIManager }         from './UIManager.js';
+import { RightClickMenu }    from '../ui/RightClickMenu.js';
 import { PlanetScene }       from './PlanetScene.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
 import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
@@ -155,6 +156,12 @@ export class GameScene {
     // ── UI ─────────────────────────────────────────────────────
     this.uiManager = new UIManager(uiCanvas);
     this.uiManager.addInfo(t('dialog.systemFormed'));
+
+    // M3 P1.1: RightClickMenu — DOM popup, self-managed (nie OverlayManager).
+    // window.KOSMOS exposure dla devtools + przyszłych P1.x integration.
+    this.rightClickMenu = new RightClickMenu();
+    window.KOSMOS.uiManager      = this.uiManager;
+    window.KOSMOS.rightClickMenu = this.rightClickMenu;
 
     // Blokada kamery gdy kursor nad elementem UI
     this.cameraController._isOverUI = (x, y) => this.uiManager.isOverUI(x, y);
@@ -535,6 +542,23 @@ export class GameScene {
         const result = mos.issueOrder(vId, { type: 'escort', targetEntityId: escorteeId });
         console.log(`[debug] issueEscort(${vId}, ${escorteeId}):`, result);
         return result;
+      },
+
+      // ── M3 P1.1 — UI selection + context menu devtools ─────────────────
+      // KOSMOS.debug.selectVessel(vId)        — ustaw zaznaczenie z konsoli.
+      // KOSMOS.debug.clearSelection()         — wyczyść zaznaczenie.
+      // KOSMOS.debug.getSelectedVesselId()    — odczyt aktualnego stanu.
+      // KOSMOS.debug.openRightClickMenu(type, point, extra) — emituj otwarcie
+      //   menu kontekstowego (testowanie bez raycaster — to dodajemy w P1.2).
+      //   Przykład: openRightClickMenu('enemyVessel', {x:400,y:300}, {entityId:'v_2'})
+      selectVessel: (vId) => window.KOSMOS?.uiManager?.setSelectedVesselId(vId),
+      clearSelection: () => window.KOSMOS?.uiManager?.clearSelection(),
+      getSelectedVesselId: () => window.KOSMOS?.uiManager?.getSelectedVesselId() ?? null,
+      openRightClickMenu: (targetType = 'empty', screenPoint = { x: 100, y: 100 }, extra = {}) => {
+        EventBus.emit('ui:rightClickMenuOpened', {
+          target: { type: targetType, ...extra },
+          screenPoint,
+        });
       },
     };
 

@@ -331,6 +331,16 @@ export class FleetManagerOverlay {
     this._drawRight(ctx, ox + ow - RIGHT_W, oy, RIGHT_W, oh, vMgr, ms, colMgr, activePid);
   }
 
+  // ── M3 P1.1: setter selekcji przez UIManager ────────────────────────────
+  // Single source of truth = UIManager._selectedVesselId. UIManager pisze
+  // też w nasz cache `this._selectedVesselId` (sync), więc render canvas działa
+  // bez zmian. Fallback (init order edge case) — zapis lokalny.
+  _setSelectedVesselViaUI(vesselId) {
+    const um = window.KOSMOS?.uiManager;
+    if (um) um.setSelectedVesselId(vesselId);
+    else this._selectedVesselId = vesselId;
+  }
+
   // ── Obsługa kliknięć ──────────────────────────────────────────────────────
 
   handleClick(mx, my) {
@@ -509,18 +519,19 @@ export class FleetManagerOverlay {
         this._scrollOffset = 0;
         break;
       case 'vessel':
-        // Toggle — kliknięcie tego samego statku odznacza go
+        // Toggle — kliknięcie tego samego statku odznacza go.
+        // M3 P1.1: write idzie przez UIManager (single source of truth).
         if (this._selectedVesselId === zone.data.vesselId) {
-          this._selectedVesselId = null;
+          this._setSelectedVesselViaUI(null);
         } else {
-          this._selectedVesselId = zone.data.vesselId;
+          this._setSelectedVesselViaUI(zone.data.vesselId);
         }
         this._missionConfig = null;
         this._targetScrollOffset = 0;
         this._cachedTargets = null;
         break;
       case 'back_to_shipyard':
-        this._selectedVesselId = null;
+        this._setSelectedVesselViaUI(null);
         this._missionConfig = null;
         this._targetScrollOffset = 0;
         this._cachedTargets = null;
@@ -559,7 +570,7 @@ export class FleetManagerOverlay {
         break;
       }
       case 'map_vessel':
-        this._selectedVesselId = zone.data.vesselId;
+        this._setSelectedVesselViaUI(zone.data.vesselId);
         this._missionConfig = null;
         break;
       case 'home_focus': {
@@ -687,7 +698,7 @@ export class FleetManagerOverlay {
           vesselId: zone.data.vesselId,
           targetId: zone.data.targetId,
         });
-        this._selectedVesselId = null;
+        this._setSelectedVesselViaUI(null);
         break;
       }
       case 'foreign_unload': {
@@ -779,7 +790,7 @@ export class FleetManagerOverlay {
         break;
       case 'disband':
         EventBus.emit('fleet:disbandRequest', { vesselId: zone.data.vesselId });
-        this._selectedVesselId = null;
+        this._setSelectedVesselViaUI(null);
         this._missionConfig = null;
         break;
     }
@@ -2630,7 +2641,8 @@ export class FleetManagerOverlay {
 
     const vessel = vMgr?.getVessel(this._selectedVesselId);
     if (!vessel) {
-      this._selectedVesselId = null;
+      // Auto-clear: vessel zniknął (wreck/disband/cleanup) — przekieruj przez UIManager.
+      this._setSelectedVesselViaUI(null);
       return;
     }
 

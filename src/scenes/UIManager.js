@@ -152,6 +152,9 @@ export class UIManager {
     // ── Stan UI ───────────────────────────────────────────────
     this._selectedEntity  = null;
     this._infoPanelTab    = 'orbit';
+    // M3 P1.1 — selection model dla orderów (single source of truth).
+    // FleetManagerOverlay._selectedVesselId pełni rolę cache rendering.
+    this._selectedVesselId = null;
     this._stability       = { score: 50, trend: 'stable' };
     this._timeState       = { isPaused: false, multiplierIndex: 1, displayText: '', autoSlow: true };
     this._diskPhase       = 'DISK';
@@ -233,6 +236,35 @@ export class UIManager {
       else if (e.deltaMode === 2) dy *= 400;  // strony → px
       this.handleWheel(e.clientX, e.clientY, dy);
     }, { passive: true });
+  }
+
+  // ── M3 P1.1: selection state API ──────────────────────────────
+  // Single source of truth dla aktualnie zaznaczonego vessela.
+  // FleetManagerOverlay._selectedVesselId synchronizowane jako cache
+  // (jednokierunkowy data flow — UIManager pisze, FleetOverlay tylko czyta).
+  getSelectedVesselId() {
+    return this._selectedVesselId;
+  }
+
+  setSelectedVesselId(vesselId) {
+    if (this._selectedVesselId === vesselId) return;  // dedupe
+    if (vesselId !== null) {
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      if (!v) {
+        console.warn(`[UIManager] setSelectedVesselId: vessel ${vesselId} nie istnieje`);
+        return;
+      }
+    }
+    const prev = this._selectedVesselId;
+    this._selectedVesselId = vesselId;
+    // Sync cache w FleetOverlay (D1: jednokierunkowy data flow)
+    const fleetOv = this.overlayManager?.overlays?.fleet;
+    if (fleetOv) fleetOv._selectedVesselId = vesselId;
+    EventBus.emit('ui:selectionChanged', { vesselId, prevVesselId: prev });
+  }
+
+  clearSelection() {
+    this.setSelectedVesselId(null);
   }
 
   // ── EventBus ──────────────────────────────────────────────────
