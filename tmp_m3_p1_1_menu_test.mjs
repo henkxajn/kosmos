@@ -66,13 +66,17 @@ function assertFalse(cond, label) {
 // ──────────────────────────────────────────────────────────────────────────
 console.log('\nT1 — buildMenuOptions filtering:');
 
-test('T1.1 empty target, no selection → moveToPoint disabled, createPOI enabled', () => {
+test('T1.1 empty target, no selection → moveToPoint+patrolManual disabled, createPOI enabled', () => {
+  // M3 P1.3: empty menu rozszerzone o `patrolManual` (picker mode trigger).
   const opts = buildMenuOptions({ type: 'empty' }, null);
-  assertEq(opts.length, 2, 'liczba opcji');
-  const move = opts.find(o => o.id === 'moveToPoint');
-  const poi  = opts.find(o => o.id === 'createPOI');
+  assertEq(opts.length, 3, 'liczba opcji');
+  const move    = opts.find(o => o.id === 'moveToPoint');
+  const patrolM = opts.find(o => o.id === 'patrolManual');
+  const poi     = opts.find(o => o.id === 'createPOI');
   assertEq(move.enabled, false, 'moveToPoint.enabled');
   assertEq(move.disabledReason, 'Najpierw wybierz statek', 'moveToPoint.disabledReason');
+  assertEq(patrolM.enabled, false, 'patrolManual.enabled (requiresSelection)');
+  assertEq(patrolM.disabledReason, 'Najpierw wybierz statek', 'patrolManual.disabledReason');
   assertEq(poi.enabled, true, 'createPOI.enabled');
   assertEq(poi.disabledReason, null, 'createPOI.disabledReason');
 });

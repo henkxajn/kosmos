@@ -7,6 +7,13 @@
 
 import EventBus    from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import {
+  createPickerState as _createPickerState,
+  startPicker as _startPicker,
+  addWaypoint as _addPickerWaypoint,
+  finalizePicker as _finalizePicker,
+  cancelPicker as _cancelPicker,
+} from '../utils/PickerStateMachine.js';
 import { TECHS } from '../data/TechData.js';
 import { BUILDINGS, RESOURCE_ICONS, formatRates, formatCost } from '../data/BuildingsData.js';
 import { SHIPS } from '../data/ShipsData.js';
@@ -155,6 +162,9 @@ export class UIManager {
     // M3 P1.1 — selection model dla orderów (single source of truth).
     // FleetManagerOverlay._selectedVesselId pełni rolę cache rendering.
     this._selectedVesselId = null;
+    // M3 P1.3 — picker mode state (np. patrol waypoints; future: targetEntity / targetPoint).
+    // null gdy idle; { mode, callback, waypoints, metadata } gdy active.
+    this._pickerState = null;
     this._stability       = { score: 50, trend: 'stable' };
     this._timeState       = { isPaused: false, multiplierIndex: 1, displayText: '', autoSlow: true };
     this._diskPhase       = 'DISK';
@@ -265,6 +275,72 @@ export class UIManager {
 
   clearSelection() {
     this.setSelectedVesselId(null);
+  }
+
+  // ── M3 P1.3: picker mode API ──────────────────────────────────
+  // Picker = "klikaj N punktów na mapie" tryb (np. patrol waypoints).
+  // Logika delegowana do PickerStateMachine (pure helper); UIManager dodaje
+  // EventBus emity (HUD banner i cursor reagują w GameScene._createPickerHUD).
+  getPickerState() {
+    return this._pickerState;
+  }
+
+  isPickerActive() {
+    return this._pickerState !== null;
+  }
+
+  setPickerMode(mode, callback, metadata = {}) {
+    const result = _startPicker(this._pickerState, mode, callback, metadata);
+    if (!result.ok) {
+      console.warn(`[UIManager] setPickerMode rejected: ${result.reason}`);
+      return false;
+    }
+    this._pickerState = result.newState;
+    EventBus.emit('ui:pickerModeStarted', { mode, metadata: result.newState.metadata });
+    return true;
+  }
+
+  addPickerWaypoint(point) {
+    if (!this._pickerState) return false;
+    const result = _addPickerWaypoint(this._pickerState, point);
+    if (!result.ok) {
+      console.warn(`[UIManager] addPickerWaypoint rejected: ${result.reason}`);
+      return false;
+    }
+    this._pickerState = result.newState;
+    EventBus.emit('ui:pickerWaypointAdded', {
+      point: { x: point.x, y: point.y },
+      total: result.newState.waypoints.length,
+    });
+    return true;
+  }
+
+  finalizePickerMode() {
+    if (!this._pickerState) return false;
+    const result = _finalizePicker(this._pickerState);
+    if (!result.ok) {
+      console.warn(`[UIManager] finalizePickerMode rejected: ${result.reason}`);
+      return false;
+    }
+    const { callback, metadata, result: pickerResult, mode } = result;
+    this._pickerState = null;
+    EventBus.emit('ui:pickerModeEnded', { result: pickerResult, metadata, mode, cancelled: false });
+    if (typeof callback === 'function') {
+      try {
+        callback(pickerResult, metadata);
+      } catch (err) {
+        console.warn('[UIManager] picker callback threw:', err);
+      }
+    }
+    return true;
+  }
+
+  cancelPickerMode() {
+    if (!this._pickerState) return false;
+    const prevMode = this._pickerState.mode;
+    this._pickerState = null;
+    EventBus.emit('ui:pickerModeEnded', { result: null, mode: prevMode, cancelled: true });
+    return true;
   }
 
   // ── EventBus ──────────────────────────────────────────────────

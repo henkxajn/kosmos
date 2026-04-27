@@ -579,6 +579,25 @@ export class GameScene {
           screenPoint: { x: clientX, y: clientY },
         });
       },
+
+      // ── M3 P1.3 — picker mode + ESC keyboard devtools ──────────────────
+      // KOSMOS.debug.startPicker(mode, callback?)  — np. ('patrolWaypoints', cb)
+      // KOSMOS.debug.cancelPicker()                — anuluj aktywny picker
+      // KOSMOS.debug.finalizePicker()              — zakończ (jeśli min reqs spełnione)
+      // KOSMOS.debug.getPickerState()              — odczyt stanu (debug)
+      // KOSMOS.debug.simulateKeydown(key)          — np. 'Escape' / 'Enter' (test path)
+      startPicker: (mode = 'patrolWaypoints', callback) => {
+        const cb = typeof callback === 'function'
+          ? callback
+          : (r) => console.log('[debug picker result]', r);
+        return window.KOSMOS?.uiManager?.setPickerMode(mode, cb, { source: 'debug' });
+      },
+      cancelPicker: () => window.KOSMOS?.uiManager?.cancelPickerMode?.() ?? false,
+      finalizePicker: () => window.KOSMOS?.uiManager?.finalizePickerMode?.() ?? false,
+      getPickerState: () => window.KOSMOS?.uiManager?.getPickerState?.() ?? null,
+      simulateKeydown: (key) => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      },
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
@@ -1765,6 +1784,9 @@ export class GameScene {
 
     // Keyboard input (DOM)
     this._setupKeyboard();
+
+    // M3 P1.3 — picker mode HUD banner (DOM div + cursor change subskrypcje)
+    this._createPickerHUD();
 
     // Obsługa input z event layer
     this._setupMouseInput(eventLayer);
@@ -2973,7 +2995,7 @@ export class GameScene {
   // ── Klawiatura ─────────────────────────────────────────────────
   _setupKeyboard() {
     document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target?.isContentEditable) return;
 
       // CTRL-hold → pokaż labele wszystkich obiektów 3D (planety, statki, wraki).
       // Znika po puszczeniu (keyup).
@@ -2982,6 +3004,35 @@ export class GameScene {
           this.threeRenderer.setShowAllLabels(true);
           this.uiManager?.markDirty?.();
         }
+      }
+
+      // ── M3 P1.3 — picker / menu / selection keyboard (priorytet PRZED overlay/menu/Space) ──
+      // ESC priority: picker → rightClickMenu → selectedVesselId → existing handlers.
+      // ENTER: tylko gdy picker aktywny (finalize).
+      const um = this.uiManager;
+      if (e.key === 'Escape') {
+        if (um?.isPickerActive?.()) {
+          e.preventDefault();
+          um.cancelPickerMode();
+          return;
+        }
+        const rcm = window.KOSMOS?.rightClickMenu;
+        if (rcm?.isOpen?.()) {
+          e.preventDefault();
+          rcm.hide();
+          return;
+        }
+        if (um?.getSelectedVesselId?.()) {
+          e.preventDefault();
+          um.clearSelection();
+          return;
+        }
+        // Brak picker/menu/selection → spada do istniejącego handling (overlay close, bottom menu)
+      }
+      if (e.key === 'Enter' && um?.isPickerActive?.()) {
+        e.preventDefault();
+        um.finalizePickerMode();
+        return;
       }
 
       // Deleguj klawisze do aktywnego overlay (np. Escape w buildMode, strzałki)
@@ -3067,6 +3118,46 @@ export class GameScene {
         this.threeRenderer.setShowAllLabels(false);
         this.uiManager?.markDirty?.();
       }
+    });
+  }
+
+  // ── M3 P1.3 — Picker mode HUD banner ─────────────────────────────
+  // DOM div w document.body (poza game-container; index.html nie ma HUD layer'a).
+  // EventBus.on('ui:pickerModeStarted/WaypointAdded/Ended') — pokaż/aktualizuj/ukryj.
+  // Cursor crosshair przez document.body.style.cursor — restore na end.
+  _createPickerHUD() {
+    if (this._pickerBanner) return;  // idempotent
+    const banner = document.createElement('div');
+    banner.id = 'kosmos-picker-banner';
+    banner.style.cssText = `
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      background: ${THEME.bgPrimary ?? '#1a1410'};
+      border: 1px solid ${THEME.accent ?? '#d8a050'};
+      color: ${THEME.textPrimary ?? '#f0e0c0'};
+      padding: 8px 16px; border-radius: 4px;
+      font-family: ${THEME.fontFamily ?? 'monospace'};
+      font-size: ${THEME.fontSizeNormal ?? 14}px;
+      z-index: 9998; display: none; pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+      letter-spacing: 0.3px;
+    `;
+    document.body.appendChild(banner);
+    this._pickerBanner = banner;
+
+    EventBus.on('ui:pickerModeStarted', ({ mode }) => {
+      if (mode === 'patrolWaypoints') {
+        banner.textContent = 'Klikaj waypointy patrolu (min 2). ESC anuluj, ENTER zakończ.';
+        banner.style.display = 'block';
+        document.body.style.cursor = 'crosshair';
+      }
+    });
+    EventBus.on('ui:pickerWaypointAdded', ({ total }) => {
+      const remainder = total < 2 ? ` (min ${2 - total} więcej)` : ' — ENTER zakończ lub klikaj dalej.';
+      banner.textContent = `Waypoint ${total} dodany${remainder}`;
+    });
+    EventBus.on('ui:pickerModeEnded', () => {
+      banner.style.display = 'none';
+      document.body.style.cursor = '';
     });
   }
 
@@ -3333,6 +3424,17 @@ export class GameScene {
 
     const target = this._resolveClickTarget(e.clientX, e.clientY);
     if (!target) return;
+
+    // M3 P1.3 — picker mode left-click ZAWSZE wygrywa nad normalnym selection flow.
+    // patrolWaypoints: każdy klik dodaje waypoint (worldPoint XZ → XY w UIManager.addPickerWaypoint).
+    const um = this.uiManager;
+    if (um?.isPickerActive?.()) {
+      const ps = um.getPickerState();
+      if (ps?.mode === 'patrolWaypoints' && target.worldPoint) {
+        um.addPickerWaypoint({ x: target.worldPoint.x, y: target.worldPoint.z });
+      }
+      return;  // NIE robić selection/deselect w picker mode
+    }
 
     if (target.type === 'ownVessel') {
       this.uiManager.setSelectedVesselId(target.entityId);

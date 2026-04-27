@@ -25,6 +25,11 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
   empty: [
     { id: 'moveToPoint', labelPL: 'Lecisz tutaj', labelEN: 'Move here', icon: '→',
       action: 'issueOrder', orderType: 'moveToPoint', requiresSelection: true },
+    // M3 P1.3 — patrol z manualnymi waypointami (picker mode). RightClickMenu
+    // rozpoznaje target.type !== 'poi' + orderType='patrol' jako sygnał picker'a.
+    // POI patrol (klasyczny) zostaje w MENU_OPTIONS_BY_TARGET.poi (używa POI.waypoints).
+    { id: 'patrolManual', labelPL: 'Patroluj manualnie', labelEN: 'Manual patrol', icon: '↻',
+      action: 'issueOrder', orderType: 'patrol', requiresSelection: true },
     { id: 'createPOI', labelPL: 'Utwórz POI...', labelEN: 'Create POI...', icon: '⌖',
       action: 'openCreatePOIModal', requiresSelection: false },
   ],

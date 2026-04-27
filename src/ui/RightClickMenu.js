@@ -14,6 +14,8 @@
 import EventBus from '../core/EventBus.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { buildMenuOptions } from '../data/RightClickMenuOptions.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { buildOrderSpec, buildPatrolFromWaypoints } from '../utils/OrderDispatcher.js';
 
 export class RightClickMenu {
   constructor() {
@@ -129,8 +131,78 @@ export class RightClickMenu {
 
   _handleOptionClick(option, target) {
     this.hide();
-    // P1.1 placeholder — logiczna routing do MOS.issueOrder w P1.3.
-    console.log('[RightClickMenu] Option clicked:', option.id, 'target:', target);
-    console.warn('[RightClickMenu] Order action TODO P1.3 — wiring to MOS.issueOrder');
+
+    // FEATURES gate (D1) — rollback safety. Filip toggle false → placeholder
+    // behavior (P1.1/P1.2 console.log) bez restartu sesji.
+    if (!GAME_CONFIG.FEATURES?.m3OrdersInteractive) {
+      console.log('[RightClickMenu] Option (placeholder, FEATURES off):', option.id, 'target:', target);
+      return;
+    }
+
+    // POI actions — placeholder do P2.2 modal'i. Emit eventów daje overlayowi
+    // szansę odpowiedzieć (na razie nikt nie nasłuchuje → no-op).
+    if (option.action === 'openCreatePOIModal') {
+      EventBus.emit('ui:openPOIModal', { mode: 'create', target });
+      return;
+    }
+    if (option.action === 'openEditPOIModal') {
+      EventBus.emit('ui:openPOIModal', { mode: 'edit', poiId: target.entityId });
+      return;
+    }
+    if (option.action === 'deletePOI') {
+      const poiId = target.entityId;
+      const reg = window.KOSMOS?.poiRegistry;
+      if (poiId && reg?.deletePOI) reg.deletePOI(poiId);
+      else console.warn('[RightClickMenu] deletePOI: brak poiRegistry lub poiId');
+      return;
+    }
+
+    // Order actions — wymagają orderType.
+    if (option.action !== 'issueOrder' || !option.orderType) {
+      console.warn('[RightClickMenu] Unknown action:', option.action);
+      return;
+    }
+
+    const um = window.KOSMOS?.uiManager;
+    const vesselId = um?.getSelectedVesselId?.() ?? null;
+    const mos = window.KOSMOS?.movementOrderSystem;
+
+    // Specjalna ścieżka: patrol z empty target (option.id='patrolManual') →
+    //   uruchom picker mode dla waypointów. POI patrol (target.type==='poi')
+    //   leci klasycznie przez buildOrderSpec → MOS używa POI.waypoints.
+    if (option.orderType === 'patrol' && target.type !== 'poi') {
+      if (!um || !vesselId) {
+        console.warn('[RightClickMenu] patrol picker: brak uiManager lub selectedVesselId');
+        return;
+      }
+      um.setPickerMode('patrolWaypoints', (waypoints) => {
+        if (!waypoints) return;  // cancelled
+        const built = buildPatrolFromWaypoints(waypoints);
+        if (!built.ok) {
+          console.warn(`[RightClickMenu] buildPatrolFromWaypoints: ${built.reason}`);
+          return;
+        }
+        const r = window.KOSMOS?.movementOrderSystem?.issueOrder?.(vesselId, built.spec);
+        if (!r || r.ok === false) {
+          console.warn(`[RightClickMenu] patrol issueOrder failed:`, r);
+        }
+      }, { vesselId, source: 'rightClickMenu_patrolManual' });
+      return;
+    }
+
+    // Standard issue: build spec → MOS.issueOrder(vesselId, spec).
+    const built = buildOrderSpec(option, target, vesselId);
+    if (!built.ok) {
+      console.warn(`[RightClickMenu] buildOrderSpec rejected: ${built.reason}`);
+      return;
+    }
+    if (!mos?.issueOrder) {
+      console.warn('[RightClickMenu] MovementOrderSystem niedostępny — użyj enableMovementOrders()');
+      return;
+    }
+    const result = mos.issueOrder(vesselId, built.spec);
+    if (!result?.ok) {
+      console.warn(`[RightClickMenu] MOS.issueOrder failed (${option.orderType}):`, result?.reason);
+    }
   }
 }

@@ -54,6 +54,8 @@ export const GAME_CONFIG = {
     intelContactState:    true,   // IntelSystem.vessels sub-domain + degradation (Commit 2 flipped)
     predictionCone:       true,   // prediction cone math (Commit 3); rendering w Commit 4
     poiSystem:            true,   // POIRegistry CRUD + handler poi:deleted (Commit 5 flipped); goToPOI/patrol runtime w C6
+    // M3 P1.3 — UI orders interactive (rollback toggle: false → placeholder behavior z P1.1/P1.2)
+    m3OrdersInteractive:  true,
   },
 };
 
