@@ -43,6 +43,31 @@ const PREDICTION_CONE_LINE_ALPHA  = 0.6;
 const PREDICTION_CONE_BASE_ANGLE  = 0.5;   // rad — unit szerokości; runtime scale.x = angleWidth/baseAngle
 const PREDICTION_CONE_Y           = 0.05;  // wysokość nad orbitami (Y=0), pod statkami (Y≥0.3)
 
+// ── POI sprites (M2b C7) ────────────────────────────────────────────────
+// Wizualne markery 5 typów POI na mapie 3D: per-typ paleta cyan-shifted
+// + symbol Unicode (Canvas → CanvasTexture → SpriteMaterial → THREE.Sprite).
+// Texture cache per typ (5 textur total, reuse'owane przez wszystkie POI
+// danego typu). Lifecycle event-driven (poi:created/deleted/updated) — bez
+// per-frame sync (POI to obiekty static).
+const POI_SPRITE_SIZE = 0.6;  // world units (precedens vessel sprite scale 0.5-1.0)
+const POI_SPRITE_Y    = 0.02; // tuż nad orbitami (Y=0), poniżej cone (Y=0.05) i vesseli (Y≥0.3)
+
+const POI_TYPE_COLORS = Object.freeze({
+  waypoint: 0x5588ff,  // cyan-blue (różny od cone cyan 0x00ffff)
+  patrol:   0x33ff66,  // green
+  picket:   0xff3333,  // red
+  rally:    0xffaa22,  // amber
+  ambush:   0xaa44ff,  // violet
+});
+
+const POI_TYPE_SYMBOLS = Object.freeze({
+  waypoint: '⌖',
+  patrol:   '↻',
+  picket:   '⛨',
+  rally:    '⊕',
+  ambush:   '⊗',
+});
+
 // ── Tekstury planet: resolveTextureType, loadPlanetTextures, hashCode,
 //    TEXTURE_VARIANTS — importowane z PlanetTextureUtils.js ──
 
@@ -123,6 +148,8 @@ export class ThreeRenderer {
     this._clickable    = [];
     this._vessels      = new Map();   // vesselId → { sprite, routeLine }
     this._predictionConeMeshes = new Map();  // vesselId → { fillMesh, lineMesh, group } (M2b C4)
+    this._poiSprites           = new Map();  // poiId → { sprite, type } (M2b C7)
+    this._poiTextureCache      = new Map();  // type → CanvasTexture (5 entries, M2b C7)
     this._tradeLines   = [];          // THREE.Line[] — linie handlu cywilnego
 
     // ── Cache modeli 3D statków ─────────────────────────────────
@@ -504,6 +531,15 @@ export class ThreeRenderer {
       }
     }));
 
+    // ── M2b C7: POI sprites lifecycle (event-driven, brak per-frame sync) ──
+    // Subskrypcje aktywne od konstruktora; CRUD POI po starcie auto-rejestruje
+    // sprites. Restore z save'a — GameScene woła `initPOISpritesFromState()`
+    // po `poiRegistry.initPOISubdomain()` (gameState.restore nie emituje
+    // poi:created dla zsynchronizowanych POI).
+    EventBus.on('poi:created', safe(({ poi }) => this._addPOISprite(poi)));
+    EventBus.on('poi:deleted', safe(({ poiId }) => this._removePOISprite(poiId)));
+    EventBus.on('poi:updated', safe(({ poiId, poi }) => this._updatePOISprite(poiId, poi)));
+
     // ── Handel cywilny: linie + świetliki ───────────────────
     EventBus.on('trade:connectionsUpdated', safe(({ connections }) => {
       this._updateTradeLines(connections);
@@ -807,6 +843,9 @@ export class ThreeRenderer {
 
     // Prediction cones (M2b C4) — switchSystem nie zostawia ghost mesh
     this._disposeAllPredictionCones();
+
+    // POI sprites (M2b C7) — switchSystem nie zostawia ghost markerów
+    this._disposeAllPOISprites();
 
     // Reset
     this._entityByUUID.clear();
@@ -4277,6 +4316,151 @@ export class ThreeRenderer {
   _disposeAllPredictionCones() {
     for (const id of [...this._predictionConeMeshes.keys()]) {
       this._disposePredictionCone(id);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // POI sprites (M2b C7) — wizualne markery POI na mapie 3D
+  // ─────────────────────────────────────────────────────────────
+  // 5 typów × cyan-shifted paleta + symbol Unicode (Canvas → CanvasTexture →
+  // SpriteMaterial → THREE.Sprite). Texture cache per typ — reuse'owane przez
+  // wszystkie POI tego typu (np. 100 patrol POI = 1 texture). Lifecycle
+  // event-driven na poi:created/deleted/updated. Init z gameState po load
+  // przez `initPOISpritesFromState()` (woła GameScene).
+  //
+  // userData na sprite: { poiId, poiName, poiType } — gotowe pod tooltip
+  // raycaster w M3 (D4 deferral z C7 plan mode).
+
+  /**
+   * Tworzy CanvasTexture z symbolem Unicode + ringu w kolorze typu. Cache per typ —
+   * pierwsza POI danego typu tworzy texture, kolejne reuse'ują.
+   */
+  _getOrCreatePOITexture(type) {
+    if (this._poiTextureCache.has(type)) return this._poiTextureCache.get(type);
+
+    const symbol = POI_TYPE_SYMBOLS[type] ?? '?';
+    const color  = POI_TYPE_COLORS[type] ?? 0xffffff;
+    const r = (color >> 16) & 0xff;
+    const g = (color >> 8) & 0xff;
+    const b = color & 0xff;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+
+    // Tło: subtelne wypełnienie circle (alpha 0.3)
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.3)`;
+    ctx.beginPath();
+    ctx.arc(32, 32, 28, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Outline ring (alpha 0.9)
+    ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, 0.9)`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Symbol w centrum (alpha 1.0). y=34 zamiast 32 dla optycznej centracji
+    // glyphów (większość symboli ma baseline poniżej geometric center).
+    ctx.fillStyle = `rgba(${r}, ${g}, ${b}, 1.0)`;
+    ctx.font = 'bold 32px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(symbol, 32, 34);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    this._poiTextureCache.set(type, texture);
+    return texture;
+  }
+
+  /**
+   * Center point per typ POI:
+   *   waypoint → poi.point
+   *   patrol   → poi.waypoints[0] (pierwszy waypoint jako "kotwica")
+   *   rally/picket/ambush → poi.center
+   */
+  _resolvePOICenter(poi) {
+    if (poi.type === 'waypoint') return poi.point;
+    if (poi.type === 'patrol')   return poi.waypoints?.[0] ?? null;
+    if (poi.type === 'rally' || poi.type === 'picket' || poi.type === 'ambush') {
+      return poi.center;
+    }
+    return null;
+  }
+
+  _addPOISprite(poi) {
+    if (!GAME_CONFIG.FEATURES.poiSystem) return;
+    if (!poi || !poi.id) return;
+    if (this._poiSprites.has(poi.id)) return;  // already exists
+
+    const point = this._resolvePOICenter(poi);
+    if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') return;
+
+    const texture = this._getOrCreatePOITexture(poi.type);
+    const material = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      depthTest: false,
+    });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(POI_SPRITE_SIZE, POI_SPRITE_SIZE, 1);
+    sprite.position.set(S(point.x), POI_SPRITE_Y, S(point.y));
+    // userData ready dla M3 tooltip raycastera (D4 deferral)
+    sprite.userData = { poiId: poi.id, poiName: poi.name, poiType: poi.type };
+
+    this.scene.add(sprite);
+    this._poiSprites.set(poi.id, { sprite, type: poi.type });
+  }
+
+  _removePOISprite(poiId) {
+    const entry = this._poiSprites.get(poiId);
+    if (!entry) return;
+    this.scene.remove(entry.sprite);
+    entry.sprite.material.dispose();
+    // Texture zostaje w cache — reuse'owana przez inne POI tego typu.
+    // Pełen dispose textur w `_disposeAllPOISprites` (switchSystem reset).
+    this._poiSprites.delete(poiId);
+  }
+
+  _updatePOISprite(poiId, poi) {
+    const entry = this._poiSprites.get(poiId);
+    if (!entry) {
+      // Sprite nie istniał (np. po load, lub flag flip mid-game). Utwórz.
+      this._addPOISprite(poi);
+      return;
+    }
+    const point = this._resolvePOICenter(poi);
+    if (point && typeof point.x === 'number' && typeof point.y === 'number') {
+      entry.sprite.position.set(S(point.x), POI_SPRITE_Y, S(point.y));
+    }
+    if (entry.sprite.userData) entry.sprite.userData.poiName = poi.name;
+  }
+
+  _disposeAllPOISprites() {
+    for (const id of [...this._poiSprites.keys()]) {
+      this._removePOISprite(id);
+    }
+    // Pełen cleanup texturek — switchSystem zaczyna od czystej karty.
+    for (const tex of this._poiTextureCache.values()) {
+      tex.dispose();
+    }
+    this._poiTextureCache.clear();
+  }
+
+  /**
+   * Public API — GameScene woła po `poiRegistry.initPOISubdomain()`
+   * (zarówno przy nowej grze jak i po `gameState.restore()`). Skanuje
+   * istniejące POI w gameState i tworzy sprites. Idempotent — duplicate
+   * call nie tworzy ghost sprites (`_addPOISprite` filtruje istniejące).
+   */
+  initPOISpritesFromState() {
+    if (!GAME_CONFIG.FEATURES.poiSystem) return;
+    const pois = window.KOSMOS?.gameState?.get?.('pois') ?? {};
+    for (const poi of Object.values(pois)) {
+      this._addPOISprite(poi);
     }
   }
 }

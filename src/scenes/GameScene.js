@@ -527,6 +527,15 @@ export class GameScene {
         console.log(`[debug] issuePatrol(${vId}):`, result);
         return result;
       },
+      // ── M2b Commit 7 — escort runtime devtools ─────────────────────────
+      // KOSMOS.debug.issueEscort(vesselId, escorteeId) — vessel eskortuje innego.
+      issueEscort: (vId, escorteeId) => {
+        const mos = window.KOSMOS?.movementOrderSystem;
+        if (!mos) { console.warn('[debug] MovementOrderSystem wyłączony — użyj enableMovementOrders()'); return { ok: false, reason: 'mos_disabled' }; }
+        const result = mos.issueOrder(vId, { type: 'escort', targetEntityId: escorteeId });
+        console.log(`[debug] issueEscort(${vId}, ${escorteeId}):`, result);
+        return result;
+      },
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
@@ -581,6 +590,10 @@ export class GameScene {
       this.intelSystem.initVesselSubdomain();
       // M2b Commit 5: zapewnij gameState.pois + reconstruct _nextId po load
       this.poiRegistry.initPOISubdomain();
+      // M2b Commit 7: po restore POI sprites — gameState.restore nie emituje
+      // poi:created dla zsynchronizowanych POI, więc ThreeRenderer trzeba
+      // zsiać explicit. Idempotent: skanuje gameState.pois i tworzy sprites.
+      this.threeRenderer?.initPOISpritesFromState?.();
       // Faza 3: zapewnij relacje diplomacy + FSM (save sprzed Fazy 3)
       this.diplomacySystem.initForAllEmpires();
       this.alienCivSystem.initForAllEmpires();
@@ -1013,6 +1026,37 @@ export class GameScene {
         text:      `${vLabel} osiągnął waypoint ${waypointIndex + 1}/${total}`,
         channel:   'fleet',
         severity:  'info',
+        entityRef: vesselId,
+      });
+    });
+
+    // M2b C7 — escort lifecycle EventLog (channel 'fleet').
+    EventBus.on('vessel:escortStarted', ({ vesselId, escorteeId }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog) return;
+      const vMgr = window.KOSMOS?.vesselManager;
+      const v = vMgr?.getVessel?.(vesselId);
+      const e = vMgr?.getVessel?.(escorteeId);
+      const vLabel = v?.name ?? vesselId;
+      const eLabel = e?.name ?? escorteeId;
+      evtLog.push({
+        text:      `${vLabel} eskortuje ${eLabel}`,
+        channel:   'fleet',
+        severity:  'info',
+        entityRef: vesselId,
+      });
+    });
+
+    EventBus.on('vessel:escortLost', ({ vesselId, reason }) => {
+      const evtLog = window.KOSMOS?.eventLogSystem;
+      if (!evtLog) return;
+      const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      const vLabel = vessel?.name ?? vesselId;
+      const reasonText = reason === 'escortee_lost' ? 'cel utracony' : reason;
+      evtLog.push({
+        text:      `${vLabel} przerwał eskortę: ${reasonText}`,
+        channel:   'fleet',
+        severity:  'warn',
         entityRef: vesselId,
       });
     });

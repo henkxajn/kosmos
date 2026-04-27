@@ -1167,6 +1167,82 @@ patrol/escort auto-engage; §11.6 items to poprawki jakościowe.
 
 ---
 
+## Implementation Notes (post-commit, odstępstwa od spec'a)
+
+Lista decyzji projektowych podjętych podczas implementacji M2b, które różnią
+się od specyfikacji. Każde odstępstwo z uzasadnieniem — referencja dla M3+.
+
+### C3 — Prediction cone math
+
+- **velocityFactor formula**: spec mówił "1 + |v_target|×k", implementacja używa
+  `1 + min(|v_target| / pursuerSpeed, 2.0) × 0.6`. Zmiana: cap na 2.0× pursuer
+  speed + waga 0.6 zamiast surowego mnożnika. Powód: wczesny playtest pokazał
+  że szybkie targety (np. enemy fleet po przybyciu) generowały kąt > π, co
+  rozwalało geometrię stożka. Cap stabilizuje formułę.
+- **targetPos = ip (intercept point)**, nie `lastTargetPos`. Spec §8.2 design bug
+  — stożek odchylony od trajektorii vessel→ip dla szybkich ruchomych targetów.
+  Cone reprezentuje niepewność punktu spotkania, więc oś musi iść do ip.
+
+### C5 — POI registry
+
+- **D3 GameState defaults**: spec sugerował lazy `gameState.pois` init przy
+  pierwszym `createPOI`. Implementacja: explicit `initPOISubdomain()` jako część
+  bootstrap chain (analogicznie do `intelSystem.initVesselSubdomain()`). Powód:
+  L11 z C2 — nowa domena gameState wymaga TRZECH bootstrap points (constructor,
+  reset, restore). Lazy init łamał invariants gdy save'y sprzed C5 ładowały się
+  bez `pois` field.
+- **`poi:deleted` payload zawiera `name`**: capture w `POIRegistry.deletePOI`
+  PRZED mutation gameState. Subscriber EventLog nie może odczytać name post-fact
+  (POI zniknął z gameState). D1 z C5 prompt review.
+
+### C6 — Patrol runtime
+
+- **`ping_pong` jako default `loopMode`** (Filip's decision). Spec sugerował
+  `loop`. Powód: `ping_pong` jest bardziej naturalny dla patrolu wojskowego
+  (touch-and-return) — wraca do bazy zamiast pętli przez wszystkie waypointy.
+  Fallback `ping_pong` wywoływany gdy: brak `poiId` na orderze (manual patrol)
+  LUB POI usunięty po start patrolu.
+- **Edge case n=2**: ping_pong i loop zachowują się identycznie (A→B→A→B…).
+  Test pokrywa explicitly.
+
+### C7 — Escort runtime + POI sprites (FINAL)
+
+- **`ESCORT_DISTANCE_PX = 0.1 AU`** (Filip's decision). Spec §10.3 sugerował
+  `THREAT_RADIUS_PX = 0.15 AU`. Powód: wizualna formacja — przy 0.15 AU dwa
+  vessele wyglądają jak osobne, niezwiązane. 0.1 AU daje czytelną formację
+  "lecą razem" bez "siedzenia na targecie". Fine-tunable w M3.
+- **`stepPx = Math.max(0, ...)` guard**: spec formula `Math.min(distPx − halfDist, speed*dt)`
+  mogła dawać ujemny stepPx gdy `distPx < halfDist` (escortee przesunął się bliżej
+  w międzyczasie). Bez guard'a vessel cofałby się. Plan-mode V2.
+- **POI sprites: THREE.Sprite zamiast Mesh** (D1). Camera-facing billboard,
+  ustalony precedent w repo. Lighter geometry niż Mesh+PlaneGeometry+lookAt.
+- **`POI_SPRITE_Y = 0.02`** (D2): subtelny offset między orbitami (Y=0) a
+  prediction cone (Y=0.05) i vesselami (Y≥0.3). Sprite zawsze widoczny od góry,
+  nie zasłania innych warstw.
+- **`POI_SPRITE_SIZE = 0.6`** (off-spec): prompt sugerował 16 (world units),
+  co byłoby 16× rozmiar gwiazdy. Precedent vessel sprite scale 0.5–1.0.
+- **Cyan-shifted paleta** (Filip's decision): waypoint=cyan-blue, patrol=green,
+  picket=red, rally=amber, ambush=violet. Symbole Unicode ⌖↻⛨⊕⊗ w canvas
+  texture (32px bold sans-serif, optical centering y=34).
+- **Texture cache per typ** (5 textury total): 100 POI tego samego typu
+  reuse'ują 1 teksturę. Pełen dispose tylko w `_disposeAllPOISprites`
+  (switchSystem reset), nie per-POI delete.
+- **`initPOISpritesFromState()` explicit z GameScene** (D3): spójność z istniejącym
+  bootstrap pattern (intelSystem/poiRegistry initX z GameScene). Self-call w
+  ThreeRenderer'a constructor byłby fragile — gameState może nie być załadowany.
+- **D4 tooltip on hover deferred do M3**: spec §9.3 mówił in-scope, ale
+  raycaster + mouse event handler + UI overlay dodaje ~80 LoC + ryzyko
+  regression na hover'ie planet/vesseli. Sprite ma `userData.poiId/poiName/poiType`
+  ready dla M3 tooltip bez zmian w sprite layer. M3 doda tooltip + right-click
+  menu razem (naturalne grupowanie POI interakcji).
+- **MovementOrderTypes.js bez zmian**: `escort` już w `TYPES_WITH_ENTITY_TARGET`
+  od M1 stub. Validator wymaga `targetEntityId` przed runtime w MOS.
+- **FleetManagerOverlay.js bez zmian**: case 'escort' → `🛡 Escort: ${targetName}`
+  działa via `order.targetEntityId` (alias dla `escorteeId`). Vessel name
+  resolved z VesselManager.
+
+---
+
 **Koniec M2b design doc.**
 Save target: v67. Estimated effort: 5-7 dni Claude Code + 1-2 dni playtest.
 Depends on M2a production-ready.

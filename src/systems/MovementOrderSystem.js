@@ -168,10 +168,155 @@ export class MovementOrderSystem {
       return this._issuePatrol(vessel, spec);
     }
     if (spec.type === ORDER_TYPES.escort) {
-      return this._issueStubOrder(vessel, spec);
+      return this._issueEscort(vessel, spec);
     }
 
     return { ok: false, reason: 'unhandled_type' };
+  }
+
+  /**
+   * M2b C7 — `escort`: vessel trzyma się obok escortee (innego vessela), chase'ując
+   * go gdy distance > ESCORT_DISTANCE_PX. Escortee wreck/missing → `vessel:escortLost`
+   * + block.
+   *
+   * Filip's decision: ESCORT_DISTANCE_PX = 0.1 AU (~11 px) — wizualna formacja
+   * "dwa vessele lecące razem" bez "siedzenia na targecie". Spec §10.3 sugerował
+   * 0.15 AU (= THREAT_RADIUS_PX), ale 0.1 AU daje czytelniejszą formację.
+   *
+   * Walidacje:
+   *   - feature_disabled (poiSystem flag OFF — M2b gate dla nowych orderów)
+   *   - escortee_not_found (resolveTarget zwrócił null)
+   *   - escortee_is_wreck (escortee.isWreck=true)
+   *   - escortee_self (escortee === vessel)
+   *   - escortee_not_vessel (escortee jest planetą/moonem, nie vesselem)
+   */
+  _issueEscort(vessel, spec) {
+    if (!GAME_CONFIG.FEATURES?.poiSystem) {
+      return { ok: false, reason: 'feature_disabled' };
+    }
+
+    const escortee = this._resolveTarget(spec.targetEntityId);
+    if (!escortee)            return { ok: false, reason: 'escortee_not_found' };
+    if (escortee.isWreck)     return { ok: false, reason: 'escortee_is_wreck' };
+    if (escortee === vessel)  return { ok: false, reason: 'escortee_self' };
+
+    // Tylko vessele jako escortees — planety/moons mają stałe orbity, escort
+    // dla planety byłby identyczny z `goToPOI(rally|center)` lub `moveToPoint`.
+    const isVessel = !!this._vm.getVessel?.(spec.targetEntityId);
+    if (!isVessel) return { ok: false, reason: 'escortee_not_vessel' };
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const orderId = `mo_${_nextOrderId++}`;
+    const order = {
+      id:             orderId,
+      type:           ORDER_TYPES.escort,
+      issuedYear:     gameYear,
+      issuedBy:       spec.issuedBy ?? 'player',
+      targetEntityId: spec.targetEntityId,
+      targetPoint:    null,
+      patrolRoute:    null,
+      lastTargetPos:  null,
+      interceptPoint: null,
+      status:         'active',
+      completedYear:  null,
+      blockReason:    null,
+      poiId:               null,
+      predictionCone:      null,
+      patrolWaypointIndex: 0,
+      patrolDirection:     1,
+      escorteeId:          spec.targetEntityId,
+      retreatFromBattleId: null,
+    };
+
+    // Suspend oryginalnej mission (jeśli aktywna). Escort sterowany pozycyjnie
+    // przez _tickEscortOrder — stara mission nie ma wpływu na ruch, ale resume
+    // po orderCompleted/Cancelled przywróci ją.
+    this._suspendMissionIfAny(vessel);
+
+    // Implicit launch z dock/orbit (analogicznie do pursue/intercept/patrol).
+    if (vessel.position.state === 'docked' || vessel.position.state === 'orbiting') {
+      vessel.position.state    = 'in_transit';
+      vessel.position.dockedAt = null;
+      vessel.status            = 'on_mission';
+      EventBus.emit('vessel:launched', { vessel, mission: vessel.mission ?? null });
+    }
+
+    vessel.movementOrder = order;
+    this._byVessel.set(vessel.id, order);
+
+    addMissionLog(vessel, gameYear,
+      `Escort: ${escortee.name ?? escortee.id ?? '???'}`,
+      'info');
+
+    _trace(`issue escort ${orderId} vessel=${vessel.id} → escortee=${spec.targetEntityId}`);
+    EventBus.emit('vessel:orderIssued',    { vesselId: vessel.id, order });
+    EventBus.emit('vessel:escortStarted', {
+      vesselId:   vessel.id,
+      orderId,
+      escorteeId: spec.targetEntityId,
+    });
+    return { ok: true, orderId };
+  }
+
+  /**
+   * Per-tick escort: chase escortee gdy distance > ESCORT_DISTANCE_PX. Cel ruchu
+   * = half-distance (escortee position − halfDist w kierunku do vessela), żeby
+   * nie oscylować na granicy threshold'a. Escortee.isWreck/missing → emit
+   * `vessel:escortLost` + `_blockAndCancel('escortee_lost')`.
+   *
+   * Movement physics analogiczna do `_tickPatrolOrder` — ten sam template
+   * speedPxPerYear × dPhysicsYear, velocity update w skali civYear.
+   */
+  _tickEscortOrder(vessel, order, dPhysicsYear, gameYear) {
+    const escortee = this._resolveTarget(order.escorteeId);
+    if (!escortee || escortee.isWreck) {
+      EventBus.emit('vessel:escortLost', {
+        vesselId: vessel.id,
+        orderId:  order.id,
+        reason:   'escortee_lost',
+      });
+      this._blockAndCancel(vessel, order, 'escortee_lost');
+      return;
+    }
+
+    const tx = escortee.x ?? escortee.position?.x ?? 0;
+    const ty = escortee.y ?? escortee.position?.y ?? 0;
+
+    // Filip's decision: 0.1 AU (~11 px) — czytelna formacja bez "siedzenia
+    // na targecie". Spec §10.3 sugerował 0.15 AU (THREAT_RADIUS_PX), ale playtest
+    // M3 może fine-tune'ować jeśli pojawi się feedback "za blisko/daleko".
+    const ESCORT_DISTANCE_PX = 0.1 * AU_TO_PX;
+
+    const dx = tx - vessel.position.x;
+    const dy = ty - vessel.position.y;
+    const distPx = Math.hypot(dx, dy);
+
+    if (distPx <= ESCORT_DISTANCE_PX) return;  // wystarczająco blisko, stój
+
+    // Cel ruchu: half-distance (zostań w okolicy ESCORT_DISTANCE_PX*0.5 od escortee).
+    // Math.max(0, ...) guard — chroni przed ujemnym stepPx gdy distPx < halfDist
+    // (np. escortee się szybko zbliżył w międzyczasie). Bez tego vessel cofałby się.
+    const halfDist = ESCORT_DISTANCE_PX * 0.5;
+    const speedPxPerYear = (vessel.speedAU ?? 1.0) * AU_TO_PX;
+    const stepPx = Math.max(0, Math.min(
+      distPx - halfDist,
+      speedPxPerYear * Math.max(0, dPhysicsYear),
+    ));
+
+    if (stepPx > 0 && distPx > 0) {
+      const ux = dx / distPx;
+      const uy = dy / distPx;
+      vessel.position.x += ux * stepPx;
+      vessel.position.y += uy * stepPx;
+
+      // Velocity update — analogicznie do patrol/pursue.
+      if (vessel.velocity) {
+        const speedCiv = (vessel.speedAU ?? 1.0) / CIV_TIME_SCALE;
+        vessel.velocity.vx = ux * speedCiv;
+        vessel.velocity.vy = uy * speedCiv;
+        vessel.velocity.updatedYear = gameYear;
+      }
+    }
   }
 
   /**
@@ -898,11 +1043,12 @@ export class MovementOrderSystem {
         this._tickInterceptOrder(vessel, order, dPhysicsYear, gameYear);
       } else if (order.type === ORDER_TYPES.patrol) {
         this._tickPatrolOrder(vessel, order, dPhysicsYear, gameYear);
+      } else if (order.type === ORDER_TYPES.escort) {
+        this._tickEscortOrder(vessel, order, dPhysicsYear, gameYear);
       }
       // moveToPoint, goToPOI — ruch zarządzany przez _updatePositions
       //   (mission interpolation, mission.type='move_to_point'); completion przez
       //   _onVesselArrived (rozszerzone o goToPOI → emit vesselReachedPOI).
-      // escort — no-op stub (M2b C7).
     }
   }
 
