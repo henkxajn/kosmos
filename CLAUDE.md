@@ -14,18 +14,18 @@ Cel warstwy 4X (oryginalna wizja gracza):
 ## Technologia
 
 - **Three.js** (przez CDN, bez npm) — renderer 3D warstwy symulacyjnej (zastąpił Phaser 3)
-- **Canvas 2D** (natywny) — warstwa UI (UIManager) i mapa planety (ColonyOverlay; PlanetScene.js pozostał jako legacy — zero wywołań `.open/.show`)
+- **Canvas 2D** (natywny) — warstwa UI (UIManager) i mapa planety (ColonyOverlay; PlanetScene.js wciąż instancjonowany w `GameScene` ale nigdy nie otwierany — kandydat do usunięcia)
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v65 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v66 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
 index.html
   #three-canvas   → ThreeRenderer (Three.js WebGL) — gwiazda, planety, księżyce, orbity
   #ui-canvas      → UIManager (Canvas 2D)           — panel info, paski czasu, EventLog
-  #planet-canvas  → (legacy PlanetScene — dead code; mapa planety renderowana przez ColonyOverlay na #ui-canvas)
+  #planet-canvas  → (legacy PlanetScene — instancjonowany w GameScene ale .open/.show nigdy nie wołane; mapa planety idzie przez ColonyOverlay na #ui-canvas)
   #event-layer    → przezroczysta warstwa zdarzeń myszy (z-index nad wszystkim)
 
 TitleScene (src/scenes/TitleScene.js):
@@ -154,7 +154,7 @@ Projekt realizuje podejście **MDA (Mechanics → Dynamics → Aesthetics)**:
 | `src/core/EventBus.js` | Serce komunikacji — błąd tu psuje wszystko |
 | `src/core/EntityManager.js` | Rejestr encji — modyfikacja rozbija save/restore |
 | `src/systems/PhysicsSystem.js` | Prawa Keplera + kolizje — fizyka orbitalna |
-| `src/config/GameConfig.js` | Globalne stałe gry + `FEATURES` flagi (M1: movementOrders, fleetMaterialization) |
+| `src/config/GameConfig.js` | Globalne stałe gry + `FEATURES` flagi (M1: movementOrders, fleetMaterialization; M2a: proximitySystem, vesselCombat, unifiedAggregator, enduranceDrainActive — wszystkie OFF) |
 | `src/map/HexGrid.js` | Matematyka hex cube coordinates |
 | `src/systems/SaveMigration.js` | Łańcuch migracji save'ów — centralny punkt, nie rozpraszaj |
 | `generate-planets.js` + `lib/` | Generator tekstur planet — 9 modułów, pipeline heightmap→color→PBR |
@@ -178,7 +178,7 @@ ColonyOverlay  (src/ui/ColonyOverlay.js — realna mapa planety 2D hex tapered)
                  planet:upgradeResult, planet:constructionProgress, tech:researched,
                  vessel:awayTeamLanding, groundUnit:select
   └─ emituje:   planet:buildRequest, planet:demolishRequest, tech:researchRequest
-  └─ UWAGA: src/scenes/PlanetScene.js — legacy, zero wywołań .open/.show, nie używać
+  └─ UWAGA: src/scenes/PlanetScene.js — legacy, instancjonowany w GameScene ale .open/.show nigdy nie wołane, nie używać
 
 DistanceUtils (src/utils/DistanceUtils.js)
   └─ euclideanAU(a, b)          ← dynamiczna odległość z physics.x/y → AU
@@ -431,7 +431,7 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 - [x] **Etap 19** — CivPanel UI: 3 zakładki (Gospodarka/Technologie/Budowle) w UIManager z widoku kosmicznego, floating tooltips hover na budynkach i technologiach, EventLog przeniesiony na dół-lewo
 
 - [x] **Etap 14** — Kolonizacja: colony_ship, scientific expedition, ColonyManager, multi-kolonia
-- [x] **Etap 15** — Zdarzenia losowe: RandomEventSystem (tymczasowo wstrzymany, flaga disabled=true)
+- [x] **Etap 15** — Zdarzenia losowe: RandomEventSystem (aktywny — eventy co 8-25 lat, obrona, blokady, prosperity bonusy)
 - [x] **Etap 16** — Ekspansja między planetami: handel, migracja, zarządzanie imperium
 - [x] **Etap 23** — Stocznia + Flota: statki jako jednostki, shipyard, hangar per-kolonia
 - [x] **Etap 24** — Misje rozpoznawcze: recon w ExpeditionSystem, explored gating
@@ -578,7 +578,7 @@ Design: `docs/design/milestone-1-targeting-foundation.md` + Appendix C (implemen
 | employmentPenalty w BuildingSystem | Gdy POPy giną a budynki stoją → produkcja spada proporcjonalnie; gracz musi rozebrać nadmiar |
 | Konsumpcja per POP (4 surowce) | organics: 3.0, water: 1.5, energy: 1.0, minerals: 0.5 per POP/rok — emergentne napięcie zasobowe |
 | Statki jako jednostki floty (nie budynki) | Stocznia buduje statki → trafiają do hangaru kolonii; intuicyjniejsze niż budynki na hexach |
-| RandomEventSystem disabled | System wstrzymany (flaga disabled=true) do czasu dopracowania logiki zdarzeń |
+| RandomEventSystem aktywny | Eventy co 8-25 lat napędzają presję na obronę (defense_tower/grid) i tworzą okazje (prosperity bonusy) |
 | Dwie metryki odległości (euclidean/orbital) | Euclidean = dynamiczna (UI, travel time), orbital = stabilna (gating zasięgu statków) |
 | Paliwo fuel-based (fuelCapacity/fuelPerAU) | Zastąpił statyczne `range` — emergentny zasięg z paliwa; power_cells jako Tier 1 |
 | Vessel instances (nie stringi w fleet) | Indywidualne statki z ID/nazwą/pozycją/paliwem → przyszłe interakcje w kosmosie (walki, spotkania) |
@@ -650,10 +650,10 @@ Mroczny, hard sci-fi. The Expanse + Dark + Lem.
 Kosmos jest zimny i obojętny. Decyzje mają ludzką cenę.
 Zakończenia są niejednoznaczne — nie ma gwarantowanego happy endu.
 
-### Nowe systemy w trakcie implementacji (Faza B)
+### Systemy frakcji i lore (zaimplementowane)
 
 - `src/data/LeaderData.js` — dane frakcji i przywódców
 - `src/systems/LeaderSystem.js` — bonusy przywódcy, kadencje Konsula
-- `src/systems/FactionSystem.js` — suwak frakcji, napięcie (planowane)
+- `src/systems/FactionSystem.js` — suwak frakcji, napięcie polityczne
 - `src/scenes/FactionSelectScene.js` — ekran wyboru przy nowej grze
-- Sfera Dysona — 20 segmentów w 4 fazach (planowane w Fazie D)
+- Sfera Dysona — 20 segmentów w 4 fazach (Etap 17, ukończone)

@@ -1,0 +1,140 @@
+# M2b Commit 6 — COMPLETE (2026-04-26)
+
+## Status
+Tag: m2b-commit-6-complete
+Save version: v67 (bez zmian, C6 to runtime extension)
+Playtest Combat Sandbox: PASS (4/5 scenariuszy explicit + 1 indirect)
+
+## Zmiany
+- `src/data/MovementOrderTypes.js` (+25 LoC):
+  - `goToPOI` w enum
+  - `TYPES_WITH_POI_TARGET = new Set([goToPOI])` exported
+  - `validateOrder` extension: `missing_poi_id` reason + patrol akceptuje `poiId` lub `patrolRoute` (`patrol_needs_poi_or_route`)
+- `src/systems/MovementOrderSystem.js` (+200 LoC):
+  - `_issueGoToPOI(vessel, spec)` — flag gate, POI lookup, target point per type, delegate do `_issueMoveToPoint`, override `order.type='goToPOI'` + `poiId`, emit `vessel:goToPOIIssued`
+  - `_issuePatrol(vessel, spec)` — M1 stub → runtime, accepts poiId or patrolRoute, build order bez mission (decyzja architekturalna §2c — patrol nie ma destination), emit `vessel:patrolStarted`
+  - `_tickPatrolOrder(vessel, order, dPhysicsYear, gameYear)` — movement physics + waypoint reach detection (`THREAT_RADIUS_PX=16.5`), emit `vessel:patrolWaypointReached` PRZED `_advancePatrolIndex`
+  - `_advancePatrolIndex(order)` — kluczowa logika z **Filip's decision**: `loopMode = poi?.loopMode ?? 'ping_pong'` (fallback ping_pong dla manual patrol bez POI). Loop: `idx = (idx+1) % n`. Ping_pong: bounce przy hit end (`next = n-2, dir = -1`) i hit start (`next = 1, dir = 1`).
+  - Dispatcher w `_tick`: case dla `'patrol'` → `_tickPatrolOrder`. goToPOI mission-driven (no-op w `_tick`), completion przez rozszerzony `_onVesselArrived` z extra `poiRegistry.vesselReachedPOI` emit gdy `order.poiId` set.
+- `src/scenes/GameScene.js` (+60 LoC):
+  - 3 EventLog handlers (channel `'fleet'`):
+    - `vessel:goToPOIIssued` → `[v] → POI '[name]'`
+    - `vessel:patrolStarted` → `[v] rozpoczyna patrol '[name]' ([N] waypoints)` lub `... patrol manualny`
+    - `vessel:patrolWaypointReached` → `[v] osiągnął waypoint [idx+1]/[total]` (BRAK throttle — M3 doda UI filter)
+  - 2 devtools: `KOSMOS.debug.issueGoToPOI(vId, poiId)`, `KOSMOS.debug.issuePatrol(vId, poiIdOrSpec)`
+- `src/ui/FleetManagerOverlay.js` (+20 LoC):
+  - case `'goToPOI'`: `→ POI [name]` (THEME.accent)
+  - case `'patrol'` rozszerzony: `↻ Patrol [name] ([idx+1]/[N])` lub `↻ Patrol manualny ([idx+1]/[N])` (THEME.textSecondary)
+- `tmp_m2b_c6_patrol_test.mjs` (NEW, ~442 LoC, 30 cases):
+  - T1.1-T1.6 ping_pong index advance + full cycle
+  - T2.1-T2.3 loop index advance + full cycle
+  - T3.1-T3.3 loopMode resolution (no poiId/POI loop/POI deleted fallback)
+  - T4.1-T4.5 `_issueGoToPOI` per POI type + flag gate
+  - T5.1-T5.6 `_issuePatrol` POI/manual/validation/flag gate
+  - T6.1-T6.4 `_tickPatrolOrder` movement + waypoint reach + corruption case
+  - T7.1-T7.3 events payload
+
+## Decyzje projektowe
+- **D1: central `validateOrder` extension** w `MovementOrderTypes.js` + inline runtime POI-existence check w `_issueX`. Schema validation oddzielona od runtime checks (POI registry).
+- **D2: goToPOI = full reuse `_issueMoveToPoint`** mission-based path. Brak osobnego ticker. Completion przez rozszerzony `_onVesselArrived` z extra `vesselReachedPOI` emit gdy `poiId` set. DRY + reuse `_calcRoute` (route avoidance Słońca).
+- **D3: EventLog channel `'fleet'`** dla 3 nowych events. Spójny mental model gracza — fleet actions vs intel/POI lifecycle (C5 channel 'intel').
+- **`ping_pong` jako default fallback** (Filip's decision) — `_advancePatrolIndex` używa `poi?.loopMode ?? 'ping_pong'`. Praktyczne tylko dla manual patrol bez POI (POI deleted mid-patrol jest przejmowane przez C5 `_onPOIDeletedHandler` przez `_blockAndCancel`).
+- **Patrol bez mission** (decyzja architekturalna) — patrol nie ma destination, więc nie ma sensu mission. AutoRetreatSystem (V7 verification) jest safe — jedyny trigger to `battle:resolved`, brak idle-checks.
+- **BRAK throttle** dla `vessel:patrolWaypointReached` — accept flood w M2b, M3 doda UI filter.
+
+## Smoke tests
+```
+tmp_m2b_c6_patrol_test.mjs         30/30 PASS  (T1-T7)
+tmp_m2b_c5_poi_test.mjs            31/31 PASS  (regression C5)
+tmp_m2b_c4_renderer_test.mjs        9/9  PASS  (regression C4)
+tmp_m2b_c3_predictioncone_test.mjs 21/21 PASS  (regression C3)
+tmp_m2b_c2_intel_test.mjs          26/26 PASS  (regression C2)
+tmp_m2b_c1_migration_test.mjs      13/13 PASS  (regression C1)
+tmp_m2b_c0_fix_test.mjs             7/7  PASS  (regression C0)
+tmp_vcs_teamup_cooldown_test.mjs   11/11 PASS  (regression M2a)
+                                  ─────────
+                                  148/148 PASS
+```
+
+## Real-flow playtest verification (Combat Sandbox)
+
+5 scenariuszy A-E:
+
+- **Scenario A — goToPOI single waypoint** ✓ PASS
+  - Vessel v_1 z (56, -76) doleciał DOKŁADNIE do (1500, 1500) — match POI point
+  - `movementOrder.type === 'goToPOI'`, `poiId === 'poi_1'`, `status === 'completed'`
+  - FleetOverlay `→ POI Cel Alfa` widoczne
+  - EventLog wpis `→ POI 'Cel Alfa'` (channel fleet)
+  - Battle resolution + ScheduledEvent popup w międzyczasie nie zakłóciło logic (side note: ScheduledEvent ma broken media files `volunteer_expedition.mp4`, `archival_data_recovered.mp4`, `new_alloy_discovered.mp4` — 404, niezwiązane z C6)
+
+- **Scenario B — patrol POI loop** ✓ PASS
+  - POI `Obwód Wschód` z `loopMode: 'loop'` (4 waypoints prostokąt)
+  - Sequence widoczne: `1/4 → 2/4 → 3/4 → 4/4 → 1/4` (modulo wrap)
+  - FleetOverlay `↻ Patrol Obwód Wschód (idx/4)` updates
+  - Vessel chodzi w prostokątnym obwodzie
+
+- **Scenario C — patrol POI ping_pong** ⚠ niewykonany w runtime
+  - Komendy nie wykonane (możliwy clipboard/paste issue)
+  - Smoke T1.6 (full ping_pong cycle 8 advance steps z assertion sequence `[1,2,3,2,1,0,1,2]`) potwierdza math offline
+  - Indirect proof przez Scenario D (ping_pong fallback wizualnie)
+
+- **Scenario D — manual patrolRoute (ping_pong fallback)** ✓ PASS — **KRYTYCZNY**
+  - Issue patrol bez POI z 3-punktową route
+  - **Sequence widoczne: `1/3 → 2/3 → 3/3 → 2/3 → 1/3`** = wahadło ✓
+  - **To bezpośredni proof Filip's decision** — fallback `'ping_pong'` zaimplementowany correctly
+  - FleetOverlay `↻ Patrol manualny (idx/3)` ✓
+  - EventLog wpis `[v] rozpoczyna patrol manualny` ✓
+
+- **Scenario E — POI deleted mid-patrol** ✓ PASS (logic) / ⚠ state check niewykonany
+  - `createPOI` → `poi_3` (Tymczasowy)
+  - `issuePatrol('v_5', 'poi_3')` → ok
+  - `deletePOI('poi_3')` → `{ ok: true }`
+  - C5 `_onPOIDeletedHandler` powinien był zadziałać (smoke C5 T5 + poprzedni real-flow C5 to potwierdziły)
+  - Runtime state check (`v5.movementOrder.status === 'blocked'`) niewykonany bo `v5` not defined w konsoli (no const declaration)
+
+## Off-spec / known gaps
+
+### `poi:vesselReached` brak EventLog handler
+Decyzja design: emit-only dla M3 rally tracker. W goToPOI completion gracz nie zobaczy explicit "statek dotarł do POI" wpisu w EventLog. Twoja obserwacja *"możliwe że gra posiada innych wyskakujących eventów i wyskoczył ten jedyny zamiast 'statek doleciał do POI'"* — dokładnie. Battle/ScheduledEvent popup'y mogą zakłócić attention, ale ten event jest celowo cichy.
+
+**Future M3:** dodać EventLog handler `poi:vesselReached` → `[v] dotarł do POI '[name]'` (info).
+
+### ScheduledEventPopup broken media files
+Console error 404 dla `volunteer_expedition.mp4`, `archival_data_recovered.mp4`, `new_alloy_discovered.mp4`. Niezwiązane z C6 — ScheduledEventSystem ma fallback chain (tryNext), gameplay nie pęka. Side issue, do M3.
+
+### Runtime state checks w Scenarios C/D/E niewykonane
+Konsola scoping issue — Filip nie zadeklarował `const v3/v4/v5 = KOSMOS.vesselManager.getVessel('v_X')` przed query. Smoke offline pokrył wszystkie state assertions programowo (T4-T7), więc runtime gap nie jest blocker.
+
+### `vessel:orderBlocked` brak EventLog handler
+M1 emit, ale brak handler M1/M2b → gracz nie zobaczy explicit "Order zablokowany" wpisu po POI deletion. C5 EventLog wpis `Usunięto POI '[name]'` to częściowo kompensuje, ale nie wskazuje że dotyczy konkretnego ordera. **Future M3:** consider handler.
+
+## Lessons learned (do dopisania)
+
+### L13. Console scoping w real-flow — wymagaj explicit declarations
+Filip's konsola ma quirk: `const v1 = KOSMOS.vesselManager.getVessel('v_1')` musi być wpisane explicit dla każdego vessela którego state chcesz sprawdzić. Brak tego = `ReferenceError: vN is not defined` w follow-up queries.
+
+**Implication dla future real-flow checklist:** w pierwszym kroku scenariusza dodać explicit `const vX = KOSMOS.vesselManager.getVessel('v_X')` PRZED sprawdzaniem state. Lub używać inline `KOSMOS.vesselManager.getVessel('v_X').movementOrder...` (no caching).
+
+### L14. POI ID enumeracja zakłada zerowy initial state
+Smoke testy + real-flow checklist zakładają że POI tworzą się od `poi_1`. Jeśli sesja Filipa miała wcześniejsze POI (z C5 testów), `_nextId` jest wyższy i kolejne `createPOI` dają `poi_2/3/4...` zamiast `poi_1/2/3`.
+
+**Filip handled it correctly** — manualnie podstawił rzeczywiste IDs zamiast spec'owych. Future checklist: pierwszym krokiem zawsze `KOSMOS.gameState.get('pois')` żeby zobaczyć current state, potem dynamic ID resolution.
+
+## Ready for M2b Commit 7 — FINAL
+Commit 7 spec: `milestone-2b-intelligence-poi.md` §11 row #7 — **escort runtime + POI sprites + final cleanup → tag `m2b-complete`:**
+
+- `MOS._issueEscort` + `_tickEscortOrder` (vessel trzyma się obok escortee w odległości ~0.05 AU, follow movement)
+- `vessel:escortStarted` + `vessel:escortLost` events + EventLog handlers
+- FleetOverlay label `🛡 Escort: [name]`
+- `KOSMOS.debug.issueEscort(vId, escorteeId)` devtools
+- **POI sprites w ThreeRenderer** per-type kolor:
+  - waypoint: blue
+  - patrol: green
+  - picket: red
+  - rally: yellow
+  - ambush: purple
+  - Tooltip on hover (POI name + type)
+  - Sync z POIRegistry events (`poi:created/deleted/updated`)
+- Final cleanup: documentation pass, retrospective playtest end-to-end M2b z prawdziwym narrative scenariuszem
+
+C7 jest medium-heavy (rendering + escort tracking, ale mniej skomplikowane niż C6 patrol math). Po C7 → tag `m2b-complete` + retrospective.

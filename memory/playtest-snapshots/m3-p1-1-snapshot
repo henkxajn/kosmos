@@ -1,0 +1,123 @@
+# M3 P1.1 — COMPLETE (snapshot)
+
+**Tag:** `m3-commit-p1-1-complete`
+**Predecessor:** `m2b-complete`
+**Commit:** `2efc23e`
+**Save version:** v67 (bez zmian — selection efemerycznie)
+
+## Status
+
+P1.1 deliverables w pełni działają:
+- UIManager owns `_selectedVesselId` (single source of truth)
+- RightClickMenu component (DOM popup, boundary flip, click outside close)
+- MENU_OPTIONS_BY_TARGET schema (5 target types, declarative)
+- FleetManagerOverlay click handler → setSelectedVesselId via UIManager
+- 3 nowe events: `ui:selectionChanged`, `ui:rightClickMenuOpened`, `ui:rightClickMenuClosed`
+- 4 devtools: selectVessel, clearSelection, getSelectedVesselId, openRightClickMenu
+
+## Files (592 insertions / 8 deletions)
+
+```
+src/data/RightClickMenuOptions.js     71 LoC  NEW
+src/ui/RightClickMenu.js             132 LoC  NEW
+src/scenes/UIManager.js              +30 LoC  EXTEND
+src/scenes/GameScene.js              +24 LoC  EXTEND
+src/ui/FleetManagerOverlay.js        +14 LoC  EXTEND (8 write sites rewrite)
+tmp_m3_p1_1_menu_test.mjs            232 LoC  NEW (test)
+```
+
+## Verifications V1-V7 (wszystkie zrealizowane)
+
+| V | Wynik |
+|---|-------|
+| V1 | UIManager — klasa, GameScene:156, brak `_selectedVesselId` (FleetOverlay miał) |
+| V2 | OverlayManager — canvas-based, RightClickMenu self-managed (jak ModalInput) |
+| V3 | FleetOverlay rows — canvas + hit zones, NIE DOM addEventListener |
+| V4 | contextmenu — istnieje w GameScene:3114 (P1.1 NIE modyfikuje, devtools-only) |
+| V5 | THEME — bgPrimary/textPrimary/textDim/accent/danger ✓; bgHover→accentDim, borderPrimary→border, fontMono→fontFamily |
+| V6 | EventBus — singleton, on/off/emit/once/clear, manual cleanup |
+| V7 | Planet.canDock — nie istnieje → dock USUNIĘTA z planet menu (P1.3 dorobi) |
+
+## Decyzje rozstrzygnięte
+
+- **D1: UIManager owns selection, FleetOverlay cache'uje** (jednokierunkowy data flow). 8 write sites w FleetOverlay przekierowane przez nowy helper `_setSelectedVesselViaUI`. Cache update synchroniczny w setterze (bez subskrypcji `ui:selectionChanged` w FleetOverlay).
+- **D2: bez FEATURES gate.** P1.1 to placeholder console.log → brak destruktywnego ryzyka. Flag rozważymy w P1.3 gdy dojdzie real wiring do MOS.
+
+## Off-spec / odkrycia (5)
+
+1. `contextmenu` listener już w GameScene:3114 (ColonyOverlay ground units, robi `e.preventDefault()`) → P1.1 zostawia bez zmian, P1.2 doda raycaster path
+2. FleetOverlay jest canvas, nie DOM → click wiring przez `handleClick(x,y)` zamiast `addEventListener('click', row)`
+3. THEME tokeny mapowane: bgHover→accentDim, borderPrimary→border, fontMono→fontFamily
+4. Planet.canDock brak → dock usunięte z `MENU_OPTIONS_BY_TARGET.planet` w P1.1
+5. `_selectedVesselId` już w FleetOverlay (8 write sites) → minimal refactor pod single source of truth (D1)
+
+## Test results
+
+```
+tmp_m3_p1_1_menu_test.mjs    17/17 PASS  (T1×6, T2×6, T3×3, T4×2)
+
+M2b regression cumulative:
+tmp_m2b_c0_fix_test.mjs       7/7  PASS
+tmp_m2b_c1_migration_test.mjs  13/13 PASS
+tmp_m2b_c2_intel_test.mjs    26/26 PASS
+tmp_m2b_c3_predictioncone_test.mjs 21/21 PASS
+tmp_m2b_c4_renderer_test.mjs  9/9  PASS
+tmp_m2b_c5_poi_test.mjs      31/31 PASS
+tmp_m2b_c6_patrol_test.mjs   30/30 PASS
+tmp_m2b_c7_escort_test.mjs   20/20 PASS
+tmp_vcs_teamup_cooldown_test.mjs   11/11 PASS
+                          ─────────
+                          185/185 PASS  (cumulative + P1.1)
+```
+
+Zero regression w stack'u.
+
+## Real-flow scenariusze A-F (Filip, ~15 min)
+
+| Scen | Wynik | Notatki |
+|------|-------|---------|
+| A | PASS | Selection przez click w FleetOverlay row, cache sync OK (UIManager + FleetOverlay._selectedVesselId zgodne) |
+| B | PASS | Disabled state widoczny (opacity 50%, cursor not-allowed); enabled createPOI klikalna; devtools-only path działa |
+| C | PASS | Po selekcji obie opcje enabled, click loguje placeholder TODO P1.3 |
+| D | PASS | 4 target types (enemyVessel/ownVessel/poi/planet) renderują różne option lists; D3-bonus (extra param `{poi: {type: 'patrol'}}`) — patrol option enabled |
+| E | PASS | Boundary flip w prawym dolnym rogu — menu pokazuje się na lewo i w górę od kursora (screenshot załączony) |
+| F | PASS | Click outside zamyka menu, `isOpen() === false` po kliknięciu |
+
+## Lekcje z P1.1 (kandydaci do M3 lessons learned, ostateczna lista po m3-complete)
+
+### L15 — Pre-existing state w refactorach
+
+Plan zakładał +10 LoC w FleetOverlay (jeden site). Verification V3 odkrył **8 write sites** dla `_selectedVesselId`. Decyzja: helper `_setSelectedVesselViaUI` (DRY), wszystkie sites przekierowane przez ten helper. Bez tego — częściowy refactor (selection przez click działa, ale filter/scroll/auto-deselect by się rozjechały z UIManager).
+
+**Implication dla M3:** w plan mode szukać **wszystkich miejsc gdzie state jest mutowany**, nie tylko głównych entry points. `grep -n` na nazwę pola.
+
+### L16 — Devtools-only path jako legitimate test pattern
+
+P1.1 nie ma real mouse events — to świadoma decyzja (raycaster w P1.2 to dedykowany scope). Real-flow testuje przez `KOSMOS.debug.openRightClickMenu(targetType, screenPoint, extra)`. Filip's confusion w testach ("menu nie otwiera się myszką") pokazała że **prompt musi explicit oznaczać devtools-only** — ja zaadresowałem w wyjaśnieniu, ale prompt mógłby to mieć w TL;DR czytelniej.
+
+**Implication dla M3 P1.2+:** prompt explicit "real mouse events działają DOPIERO od tego commita".
+
+### L17 — Off-spec odkrycia są sygnałem że spec design doc dojrzewa
+
+5 odkryć w P1.1 → wszystkie mogłyby być w spec doc gdyby był pisany "z kodu", a nie ahead-of-implementation. To **oczekiwane** — spec to draft, plan mode to konfrontacja drafta z rzeczywistością. M3 spec § otrzyma update po m3-complete (jak M2b otrzymał Implementation Notes w C7).
+
+## Pre-existing issues (nie dotyczą P1.1, do M3 known issues list)
+
+- **`(⚓ undefined)` w EventLog** dla dock orders — Łowca Alfa/Beta/Gamma w intel z dock targetem `undefined`. Pre-existing bug z M1/M2a. Naprawimy w P4 (polish phase) lub jako post-M3 fix.
+- **Click w vessel na mapie 3D nie selekcjonuje** — to jest dokładnie scope P1.2 (raycaster + sprite hit detection).
+- **`KOSMOS.gameScene` undefined** — scene nie exposed przez `window.KOSMOS.gameScene`. UIManager exposed przez `window.KOSMOS.uiManager`. To jest **świadoma konwencja** (uiManager to public API, gameScene to internal). Nie blocker, do udokumentowania.
+
+## Next: P1.2
+
+**Tactical map mouse interactions** — raycaster + sprite click detection + target type resolution.
+
+Najtrudniejszy commit P1. Krytyczne lekcje z M2b:
+- **L8** — KOSMOS jest 3D scene XZ plane (Y=altitude). Y coords stack: 0=orbity/planety, 0.02=POI sprites, 0.05=prediction cone, 0.3=vessele.
+- **L1** — real-flow ≠ smoke. Mouse events nie testowalne offline (Three.js raycaster, pointer events). Visual review krytyczny.
+- **L10** — test convention dla rendering. Pure logic (target type resolution) → smoke. Hit detection → visual.
+
+Wpięcie do contextmenu handler GameScene:3114 — extension istniejącego flow (V4 z P1.1).
+
+---
+
+**P1.1 CLOSED.** 185/185 smoke PASS, 6/6 real-flow PASS, 5 off-spec odkryć udokumentowanych, zero post-fix.

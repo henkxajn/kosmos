@@ -1,0 +1,101 @@
+# M2b Commit 4 — COMPLETE (2026-04-26)
+
+## Status
+Tag: m2b-commit-4-complete
+Save version: v67 (bez zmian, C4 to rendering only)
+Playtest Combat Sandbox: PASS (visual review 7-step + 6 screenshotów)
+
+## Zmiany
+- `src/renderer/ThreeRenderer.js` (+122 LoC):
+  - 6 stałych top-of-file (`PREDICTION_CONE_FILL_COLOR=0x00ffff`, alpha 0.15/0.6, baseAngle=0.5, Y=0.05)
+  - `this._predictionConeMeshes = new Map()` field (vesselId → {fillMesh, lineMesh, group})
+  - Hook w istniejącym `vessel:positionUpdate` handler — dorzucone `this._syncPredictionCones()`
+  - 6 nowych metod: `_syncPredictionCones`, `_upsertPredictionCone`, `_createPredictionConeMesh`, `_updatePredictionConeTransform`, `_disposePredictionCone`, `_disposeAllPredictionCones`
+  - Cleanup w `_disposeAllMeshes()` przed reset block (chroni przed ghost meshami przy `switchSystem()`)
+  - **BufferGeometry XZ plane** (forward=+Z), `rotation.y = atan2(dirX, dirY)` — match vessel sprite convention
+  - **Mesh reuse strict**: geometry/material tworzone raz per vessel, runtime tylko transform (position/rotation/scale)
+- `tmp_m2b_c4_renderer_test.mjs` (NEW, ~352 LoC, 9 cases):
+  - T1.1-T1.7 lifecycle filtering (active intercept, brak ordera, pursue type, cancelled status, isWreck, multi-run dispose)
+  - T3.1-T3.2 flag gate (anti-pattern proof, imported singleton)
+  - T2 (transform math) świadomie pominięty — visual review pokrywa
+
+## Decyzje projektowe
+- **Hook w `vessel:positionUpdate` zamiast nowego subscribera** — czystsza kolejność (vessels first, cones second), zero nowych subskrypcji EventBus.
+- **BufferGeometry zamiast ShapeGeometry** — KOSMOS jest XZ plane (Y=altitude), BufferGeometry tworzy geometrię natywnie w XZ bez konieczności `mesh.rotation.x = -π/2`. Spójne z orbit lines, vessel routes.
+- **Y=0.05 dla cone height** — tuż nad orbitami (Y=0), poniżej vesseli w locie (Y=0.3). Wizualnie dobrze (potwierdzone screenshotami SS1/SS2).
+- **Cyan stały (`0x00ffff`)** — quality cue idzie przez `angleWidth` (rumor szerszy, contact węższy), nie kolor. Quality color jako progressive enhancement do M3.
+- **Group(fill + line) zamiast pojedynczego Mesh z material array** — czystszy lifecycle (jeden parent do scene.add/remove), łatwiejszy dispose.
+
+## Smoke tests
+```
+tmp_m2b_c4_renderer_test.mjs    9/9 PASS  (T1.1-T1.7, T3.1-T3.2)
+tmp_m2b_c3_predictioncone_test.mjs  21/21 PASS  (regression C3)
+tmp_m2b_c2_intel_test.mjs       26/26 PASS  (regression C2)
+tmp_m2b_c1_migration_test.mjs   13/13 PASS  (regression C1)
+tmp_m2b_c0_fix_test.mjs          7/7  PASS  (regression C0)
+tmp_vcs_teamup_cooldown_test.mjs 11/11 PASS  (regression M2a)
+                                ─────────
+                                87/87 PASS
+```
+
+## Real-flow visual review verification (Combat Sandbox)
+
+7-step checklist + 6 screenshotów:
+
+- **SS1** ✓ Single intercept v_1→v_5: cyan cone widoczny, wzdłuż trajektorii vessel→IP, rumor wide (`angleWidth=0.15` rad ≈ 8.6°). Console: `_predictionConeMeshes.size === 1`.
+- **SS2** ⚠ Quality upgrade nie wykonany — w tej sesji combat sandbox setup vessele były ~7 AU od siebie, nigdy nie dochodzili <0.3 AU. Ratio formula pokryta offline T3.3.
+- **SS3** ✓ Multi: 3 cones (v_1/v_5, v_2/v_6, v_3/v_7) widoczne razem, brak FPS drop, brak transparency artefaktów.
+- **SS4** ✓ Disappearance po cancel (force `moveToPoint` na v_1): `size: 3 → 2`. `scene.children.length=118` stable przed/po cancel/issue cycle (proof mesh reuse + cleanup).
+- **SS5** ✓ Flag OFF: `size: 2 → 0`, dispose all cones.
+- **SS6** ✓ Flag ON: `size: 0 → 2`, recreation w następnym sync.
+- Console final: `_predictionConeMeshes.keys() → MapIterator('v_2', 'v_3')` matches scene state.
+
+## Off-spec / known gaps
+
+### Origin offset wszystkich linii (orbit/route/cone) względem sprite vessela — DEFER do M3
+Konwencja KOSMOS: linie/trajektorie nie wychodzą ze środka sprite'a vessela, tylko z `vessel.position` która jest "logiczną" pozycją (środek geometryczny). Sprite jest renderowany z lekkim offsetem (3D orientation z Y=0.3). Wizualnie wygląda jakby "cone wychodzi obok statku, nie z dziobu" — ale to dotyczy wszystkich linii w grze (vessel route lines też tak działają), nie tylko cone'a.
+
+**Decyzja:** globalna naprawa offset linii (cone, route, orbit relative do sprite) → **M3 visual pass**. Nie blocker M2b. Zachowuje spójność z istniejącą konwencją.
+
+### SS2 (quality upgrade) nie wykonany w tej sesji
+Combat Sandbox setup w tej sesji miał vessele ~7 AU od siebie + battle odbyła się w systemie macierzystym (Bastion) gdzie player nie miał vesseli pursuiting. Quality upgrade math pokryty smoke T3.3 (contact quality → mult=0.6 verified). Real-flow weryfikacja możliwa w przyszłości przy innym setup'cie.
+
+### T2 (transform math) smoke pominięty
+Świadoma decyzja: 3-liniowe formuły (`group.position.set`, `rotation.y`, `scale.set`) testowanie offline wymagałoby refaktoru `_updatePredictionConeTransform` na pure helper lub heavy mock Three.js. Visual review (SS1: cone wzdłuż trajektorii, SS3: poprawny scale dla 3 cones) pokrywa wzrokowo.
+
+### Test file używa repliki logiki, nie real ThreeRenderer
+THREE.js loader nieosiągalny w Node ESM standalone. Test pisze pure helper functions z mock vMgr + mock scene capture. Trade-off lekcji L1 — jeśli kiedyś `_syncPredictionCones` divergeuje między test repliką a produkcją, asercje pójdą obok.
+
+## Lessons learned (do dopisania w M2b notes)
+
+### L8. KOSMOS jest 3D scene z XZ plane (Y=altitude)
+Mimo że gameplay top-down 2D, scene jest pełne 3D Three.js: planety/vessele żyją w XZ plane, Y to wysokość. Konwencje:
+- Y=0: orbity, planety, gwiazdy (równik sceny)
+- Y=0.05: prediction cone (M2b C4 — tuż nad orbitami)
+- Y=0.3: vessele w locie
+- Y=0.45: wraki cmentarz
+
+**Implication:** każdy commit M2b/M3+ który dodaje 3D mesh musi zacząć od decyzji o Y-coordinate (gdzie w stosie), forward axis (+Z dla spójności z vessel sprite), i rotation axis (Y dla obrotów w XZ plane).
+
+### L9. Hook do istniejącego event handlera vs nowy subscriber
+Gdy wiele systemów potrzebuje sync'u przy tym samym evencie (`vessel:positionUpdate` w C4 — vessels first, cones second), preferuj **dorzucenie do istniejącego safe handler'a** zamiast nowego `EventBus.on(...)`. Zalety: deterministyczna kolejność (cones widzą najświeższe pozycje vesseli), jeden subscriber lifecycle, mniejszy footprint EventBus state.
+
+### L10. Test convention dla rendering — replika logiki + visual review
+Three.js w Node ESM jest niepraktyczny do mockowania (loader, GL context). Strategy dla rendering commitów:
+- Pure logic (filtering, lifecycle, flag gate) → standalone test z mock scene/vessel/manager
+- Math (transform formulas) → albo pure helper extracted z `_update*Transform`, albo polegaj na visual review
+- Visual quality (kolor, pozycja, FPS) → screenshot review przez Filipa, nie testowalne offline
+
+C4 wybrał: T1 (filtering) + T3 (flag gate) offline, T2 (math) odpuszczone na rzecz visual.
+
+## Ready for M2b Commit 5
+Commit 5 spec: `milestone-2b-intelligence-poi.md` §9 (POIRegistry):
+- `src/systems/POIRegistry.js` (NEW) — CRUD: `createPOI`, `getPOI`, `removePOI`, `listPOIs`, `listPOIsByType`
+- `src/config/POITypes.js` (NEW) — schema: waypoint/patrol/picket/rally/ambush
+- `gameState.pois` init w POIRegistry constructor (analogicznie do `intel.vessels` w C2)
+- Validators per-type (np. `patrol` musi mieć ≥2 waypoint'y, `escort` musi referować vesselId)
+- Cancel-dangling-orders: gdy POI usunięte, vesseli z order'em `goToPOI/patrol/escort` referującym to POI dostają cancel
+- Public API + flag flip `poiSystem: false → true`
+- Smoke testy: CRUD + per-type validation + cancel-dangling
+
+C5 nie ma UI (sprites POI idą do C7), nie ma EventLog handlerów (POI events to debug only). Czysta data layer + logic, podobnie do C2 size.

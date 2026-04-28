@@ -3414,9 +3414,13 @@ export class GameScene {
     if (this.planetScene?.isOpen) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
+    // Fullscreen overlay (FleetOverlay/IntelOverlay/...) zakrywa 3D mapę układu
+    // — lewy klik NIE może raycast'ować przez niego do 3D sceny.
+    // (W normalnym flow uiManager.handleClick i tak by to wcześniej pochłonął;
+    //  ten guard jest defensywny dla edge-case'ów out-of-bounds w overlayu.)
+    if (this.uiManager?.overlayManager?.isAnyOpen?.()) return;
     // isOverUI zwraca true dla CAŁEGO viewportu gdy overlayManager.isAnyOpen() (UIManager.js:794)
-    // — FleetOverlay/IntelOverlay/etc. otwarte blokowałyby wszystkie tactical clicks.
-    // Bypass gdy target to CANVAS (game viewport): planet-canvas z=4 persistent
+    // — bypass gdy target to CANVAS (game viewport): planet-canvas z=4 persistent
     // overlay przejmuje eventy z mapy galaktycznej; three-canvas z=1 dla typowego flow.
     // DOM panele/modale mają target.tagName !== 'CANVAS' → isOverUI dalej blokuje je.
     const isGameCanvas = e.target?.tagName === 'CANVAS';
@@ -3448,6 +3452,9 @@ export class GameScene {
     if (this.planetScene?.isOpen) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
+    // Fullscreen overlay (FleetOverlay/IntelOverlay/...) zakrywa 3D mapę układu
+    // — prawy klik NIE może raycast'ować przez niego do 3D sceny.
+    if (this.uiManager?.overlayManager?.isAnyOpen?.()) return;
     // Patrz _handleTacticalLeftClick — bypass isOverUI dla CANVAS targetów
     // (game viewport), DOM panele dalej blokowane.
     const isGameCanvas = e.target?.tagName === 'CANVAS';

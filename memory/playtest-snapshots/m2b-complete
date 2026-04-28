@@ -1,0 +1,261 @@
+# M2b — COMPLETE (2026-04-26)
+
+## Status finalny
+**Tag: `m2b-complete`** (overall milestone)
+Plus per-commit tags: `m2b-commit-0-complete` ... `m2b-commit-7-complete`
+Save version: v67
+
+**M2b deliverables w pełni działają:**
+- IntelSystem.vessels — kontakty enemy vessels z degradation timer
+- PredictionCone — math + visual rendering dla intercept
+- POIRegistry — 5 typów POI (waypoint/patrol/picket/rally/ambush) z CRUD
+- 3 nowe order types runtime: goToPOI, patrol (loop/ping_pong), escort
+- Visual POI sprites na mapie 3D z symbolami per typ
+
+## 7 commitów — przegląd
+
+| # | Commit | Tag | Smoke (cumulative) | Real-flow | Post-fix |
+|---|--------|-----|--------|-----------|----------|
+| C0 | ProximitySystem dual-threshold + combatRangeEnter | `m2b-commit-0-complete` | 7 | PASS | 2 (in-process) |
+| C1 | Schema v66→v67 + 3 FEATURES flags + Vessel.movementOrder defaults | `m2b-commit-1-complete` | 20 | PASS | 0 |
+| C2 | IntelSystem.vessels sub-domain + degradation ticker | `m2b-commit-2-complete` | 46 | PASS | 3 |
+| C3 | PredictionConeMath + MOS integration | `m2b-commit-3-complete` | 67 | PASS | 0 |
+| C4 | ThreeRenderer prediction cone rendering | `m2b-commit-4-complete` | 87 | PASS | 0 |
+| C5 | POIRegistry core + flag flip poiSystem=true | `m2b-commit-5-complete` | 118 | PASS | 0 |
+| C6 | MOS goToPOI + patrol runtime (ping_pong default) | `m2b-commit-6-complete` | 148 | PASS | 0 |
+| C7 | Escort runtime + POI sprites + cleanup | `m2b-commit-7-complete` | 168 | PASS | 1 (POI_SPRITE_SIZE) |
+
+**Łącznie:** 168 smoke testów PASS cumulative, 1 post-fix w finalnym commicie (sprite scale tuning), zero regression w stack'u.
+
+## Trend jakości
+
+- **C0-C2:** 5 post-fix łącznie — wczesne lekcje L1-L4 (real-flow ≠ smoke, init timing, ProximitySystem dual-threshold, imported singleton)
+- **C3-C6:** 4 commity z rzędu **zero post-fix** — plan mode rygor + verifications dojrzewały
+- **C7:** 1 post-fix (visual scale, niewykrywalny offline bo Three.js loader nie testowalny w Node ESM)
+
+Wzorzec: rygor w plan mode → verifications z konkretnymi cytatami → atomic commit z natywną walidacją → real-flow potwierdza. Workflow działa.
+
+## 14 lekcji learned (M2b)
+
+### L1 — Real-flow ≠ smoke
+Smoke 22/22 PASS w C2 było false positive bo testy mockowały zły pattern (window.GAME_CONFIG zamiast imported singleton). Real-flow odsłaniał problem dopiero po runtime issue w Combat Sandbox.
+**Implication:** smoke setup mutuje **imported live singletony**, nie własne window-stuby.
+
+### L2 — Constructor init w GameScene-managed systemach
+`gameState.reset()` wymiata stan wstawiony w konstruktorze. Każdy nowy system z `gameState.X` musi mieć **`initSubdomain()` method** wywoływaną z GameScene/GameCore PO `gameState.reset()/restore()`, nie w constructor.
+**Stosowane:** IntelSystem (C2 fix #2), POIRegistry (C5).
+
+### L3 — ProximitySystem dual-threshold
+ProximitySystem emituje **DWA events** (`proximityEnter` + `combatRangeEnter` z C0). Subscriber który chce wiedzieć "blisko vs combat-close" musi subskrybować oba.
+**Stosowane:** IntelSystem.vessels (C2 fix #3).
+
+### L4 — Imported `GAME_CONFIG`, nie window
+Flag gates używają `import('./src/config/GameConfig.js')` singletona. `window.GAME_CONFIG` jest **undefined w runtime** mimo że można czasem znaleźć w testach.
+**Stosowane:** wszystkie commity od C2.
+
+### L5 — Time units (gameYear vs civYear, CIV_TIME_SCALE=12)
+KOSMOS ma dwa tier'y czasu:
+- **Physics tier:** `vessel.speedAU = AU/gameYear`, `dPhysicsYear` w `_tick`
+- **Civilization tier:** `vessel.velocity.vx/vy = AU/civYear`, `civDeltaYears` w PassiveTick
+- **Conversion:** `civYear = gameYear / CIV_TIME_SCALE` (CIV_TIME_SCALE=12)
+
+Mieszanie tier'ów daje wyniki ×12 lub /12 — krytyczne dla `PredictionConeMath` (C3 fix dla velocityFactor).
+
+### L6 — Spec design docs mogą mieć bugi
+§8.1 velocityFactor formula explodował z CIV_TIME_SCALE=12 amplification. §8.2 `targetPos = lastTargetPos` był "design bug" — cone musiał się aliniować z trajectory vessel→ip, nie vessel→target.
+**Implication:** verifications PRZED kodem mają wykrywać niespójności spec'a, nie tylko parować requirements z istniejącym kodem.
+
+### L7 — Singleton mutable w testach
+Setup helper testów mutuje **imported `GAME_CONFIG.FEATURES.X` bezpośrednio** przed każdą grupą test cases. Anti-pattern: shadow copy.
+
+### L8 — KOSMOS jest 3D scene z XZ plane (Y=altitude)
+Mimo że gameplay top-down 2D, scene jest pełne 3D Three.js: planety/vessele żyją w XZ plane, Y to wysokość. Konwencje:
+- Y=0: orbity, planety, gwiazdy
+- Y=0.02: POI sprites (C7)
+- Y=0.05: prediction cone (C4)
+- Y=0.3: vessele w locie
+- Y=0.45: wraki cmentarz
+
+**Implication:** każdy nowy mesh wymaga decyzji o Y-coordinate (gdzie w stosie), forward axis (+Z), rotation axis (Y).
+
+### L9 — Hook do istniejącego event handler vs nowy subscriber
+Gdy wiele systemów potrzebuje sync'u przy tym samym evencie (`vessel:positionUpdate` w C4), preferuj **dorzucenie do istniejącego handler'a** zamiast nowego `EventBus.on(...)`. Zalety: deterministyczna kolejność, mniejszy footprint.
+
+### L10 — Test convention dla rendering
+Three.js w Node ESM jest niepraktyczny do mockowania (loader, GL context). Strategy:
+- Pure logic (filtering, lifecycle, flag gate) → standalone test z mock scene
+- Math (transform formulas) → pure helper extracted lub polegaj na visual review
+- Visual quality (kolor, pozycja, FPS, **scale**) → screenshot review przez gracza
+
+C7 post-fix `POI_SPRITE_SIZE` to klasyczny przypadek L10 — niewykrywalne offline.
+
+### L11 — Nowa domena gameState wymaga TRZECH bootstrap points
+- **(a)** `createDefaultState` defaults — ważne dla `restore()` (iteruje po Object.keys(default))
+- **(b)** Migration v→v+1 — dla istniejących save'ów
+- **(c)** `initSubdomain()` w GameScene/GameCore po reset/restore — dla świeżej gry/load idempotency
+
+C5 D3 wykrył że pominięcie (a) sprawia że `restore()` silently skip'ował klucz `pois` mimo poprawnej migration v66→v67.
+
+### L12 — Proactive defensive handler (cross-commit pre-wiring)
+Handler `_onPOIDeletedHandler` w MOS wprowadzony w C5 mimo że runtime trigger (orders z `poiId`) idzie w C6. Zero-risk (iteruje pustą listę w C5), single touch w MOS zamiast 2 commitów z rzędu.
+
+### L13 — Console scoping w real-flow
+Filip's konsola wymaga explicit `const vX = KOSMOS.vesselManager.getVessel('v_X')` PRZED follow-up queries. Bez tego — `ReferenceError`.
+**Implication:** real-flow checklist w pierwszym kroku scenariusza musi mieć explicit declarations.
+
+### L14 — POI ID enumeracja zakłada zerowy initial state
+Smoke + real-flow zakładały że POI tworzą się od `poi_1`. Sesja z wcześniejszymi POI ma `_nextId` wyższy — kolejne creates dają `poi_2/3/4` zamiast `poi_1/2/3`.
+**Implication:** real-flow zaczyna od `KOSMOS.gameState.get('pois')` żeby zobaczyć current state, dynamic ID resolution (Filip użył tego correctly w C6 + C7).
+
+## Kluczowe decyzje projektowe (Filip's overrides spec'a)
+
+1. **C3 velocityFactor formula** — dimensionless `1 + min(targetDriftAU/distAU, 5)` z cap=5 zamiast spec dimension-dependent (CIV_TIME_SCALE=12 amplification eksplodowała)
+2. **C3 targetPos = ip (interceptPoint)** — nie `lastTargetPos` jak w spec'ie. Cone aligned z trajectory vessel→ip
+3. **C5 D1 `poi:deleted` payload** — `{poiId, name}` zamiast spec'owego `{poiId}` (EventLog handler potrzebuje name)
+4. **C5 D3 `pois: {}` w `createDefaultState`** — niezapisane w spec'ie, ale wymagane (lekcja L11)
+5. **C6 ping_pong default loopMode** w fallback (manual patrolRoute bez POI). Spec sugerowała loop, Filip wybrał ping_pong jako bardziej naturalny dla otwartych tras
+6. **C7 ESCORT_DISTANCE_PX = 0.1 AU** — override spec'owego 0.15 AU (THREAT_RADIUS_PX). Czytelniejsza formacja
+7. **C7 D4 tooltip = DEFER do M3** — spec mówi "in-scope" ale +80-100 LoC dodatkowej infrastruktury + ryzyko regression vs +30 LoC zakładane. M3 dostarczy tooltip + right-click menu razem
+8. **C7 paleta cyan-shifted** zamiast spec'owej (waypoint blue → cyan-blue żeby nie konkurować z cyan cone)
+9. **C7 POI_SPRITE_SIZE=8** (post-fix) — Claude Code wybrał 0.6 wg precedensu sprite scale, ale POI sprites są na world-coord positions (kamera ~150 world units), wymagały scale proportional do odległości
+
+## Cumulative smoke tests
+```
+tmp_m2b_c7_escort_test.mjs         20/20 PASS  (T1-T5)
+tmp_m2b_c6_patrol_test.mjs         30/30 PASS  (T1-T7)
+tmp_m2b_c5_poi_test.mjs            31/31 PASS  (T1-T7)
+tmp_m2b_c4_renderer_test.mjs        9/9  PASS  (T1, T3)
+tmp_m2b_c3_predictioncone_test.mjs 21/21 PASS  (T1-T4)
+tmp_m2b_c2_intel_test.mjs          26/26 PASS  (T1-T8)
+tmp_m2b_c1_migration_test.mjs      13/13 PASS  (T1-T3)
+tmp_m2b_c0_fix_test.mjs             7/7  PASS
+tmp_vcs_teamup_cooldown_test.mjs   11/11 PASS  (regression M2a)
+                                  ─────────
+                                  168/168 PASS
+```
+
+## Visual deliverables M2b (real-flow weryfikacje)
+
+- **C4 SS1-SS6:** prediction cone widoczny, scaling z obs quality, dispose przy cancel/flag toggle
+- **C5 EventLog UI:** wpisy POI lifecycle (created/deleted) widoczne w Historia Zdarzeń
+- **C6 Scenario B+D:** patrol vessel chodzi w prostokątnym obwodzie (loop) i wahadle (ping_pong), FleetOverlay updates `(idx/N)` widoczne
+- **C7 SS1-SS4:** 5 POI sprites na mapie 3D, paleta cyan-shifted (cyan-blue/green/red/amber/violet), symbole ⌖↻⛨⊕⊗, escort formacja widoczna, save+reload zachowuje sprites
+
+## Off-spec / known gaps (deferred do M3)
+
+- **POI tooltip on hover** — sprite ma `userData` ready, M3 doda raycaster + UI overlay
+- **POI right-click menu** — naturalne grupowanie z tooltip
+- **Picket/rally/ambush runtime** — schema only w M2b, M3 doda behavior (alert range, member tracking, trigger detection)
+- **`vessel:patrolWaypointReached` flood w EventLog** — accept w M2b, M3 doda UI filter "Pokaż tylko critical events"
+- **`vessel:orderBlocked` brak EventLog handler** — M3 może dodać explicit "Order zablokowany" wpis
+- **`poi:vesselReached` brak EventLog handler** — emit-only dla future M3 rally tracker
+- **Origin offset wszystkich linii** (orbit/route/cone/escort tether) względem sprite vessela — M3 visual polish pass
+- **EventLog channel `'poi'`** — M2b reuse'uje `'intel'` żeby uniknąć modyfikacji `EventLogSystem.CHANNELS`. M3 może dodać dedicated channel + UI filter
+
+## Architectural patterns ustalone w M2b
+
+1. **`initSubdomain()` pattern** dla każdego nowego `gameState.X` (lekcja L2 + L11)
+2. **`window.KOSMOS?.X` lookup w konstruktorze** dla DI (IntelSystem, POIRegistry — match istniejącego stylu repo)
+3. **`gameState.set(path, value, action)`** z action label dla audit trail
+4. **Event-driven mesh lifecycle** dla rendering (subskrybuj CRUD events, sync dynamic w handler) — wzorzec C4 cone + C7 sprites
+5. **Texture cache per typ** dla repeated sprites (C7 — 5 textur reused across N POI tego typu)
+6. **`_blockAndCancel(vessel, order, reason)`** dla M1+ cancel flow — `status='blocked'`, `blockReason` set, vessel kontynuuje fizyczny ruch (inertia), AutoRetreatSystem może przejąć
+7. **Defensive `safe(handler)` wrapper** dla event subscriptions w ThreeRenderer
+8. **Filter `_byVessel` po `status==='active'`** w MOS dispatcher — `blocked` orders są no-op (nie usuwane od razu, audit trail)
+
+## Files touched cumulative
+
+```
+src/config/GameConfig.js                  (C1, C2, C3, C5)
+src/core/SaveMigration.js                 (C1)
+src/core/GameState.js                     (C5 D3)
+src/data/MovementOrderTypes.js            (C1, C6)
+src/data/POITypes.js                      (NEW C5)
+src/systems/ProximitySystem.js            (C0)
+src/systems/MovementOrderSystem.js        (C0, C3, C5, C6, C7) — najbardziej rozbudowany
+src/systems/IntelSystem.js                (NEW C2)
+src/systems/POIRegistry.js                (NEW C5)
+src/utils/PredictionConeMath.js           (NEW C3)
+src/renderer/ThreeRenderer.js             (C4, C7) — POI sprites + prediction cone
+src/scenes/GameScene.js                   (C2, C5, C6, C7) — EventLog handlers + devtools
+src/testing/headless/GameCore.js          (C2, C5)
+src/ui/FleetManagerOverlay.js             (C6 — patrol/goToPOI labels)
+docs/design/milestone-2b-intelligence-poi.md  (C7 Implementation Notes)
+tmp_m2b_c0..c7_*.mjs                      (8 standalone smoke tests w roocie)
+```
+
+## Devtools API (cumulative)
+
+```js
+// POI lifecycle (C5):
+KOSMOS.debug.createPOI(spec) → { ok, poiId }
+KOSMOS.debug.listPOIs(filter?) → poi[]
+KOSMOS.debug.getPOI(poiId) → poi | null
+KOSMOS.debug.deletePOI(poiId) → { ok }
+
+// Movement orders (C6 + C7):
+KOSMOS.debug.enableMovementOrders()
+KOSMOS.debug.issueOrder(vesselId, spec) → { ok, orderId }
+KOSMOS.debug.issueGoToPOI(vesselId, poiId) → { ok, orderId }
+KOSMOS.debug.issuePatrol(vesselId, poiIdOrSpec) → { ok, orderId }
+KOSMOS.debug.issueEscort(vesselId, escorteeId) → { ok, orderId }
+
+// Intel queries (C2):
+KOSMOS.intelSystem.getVesselContact(vesselId) → contact | null
+KOSMOS.intelSystem.advanceVesselContact(vesselId)
+KOSMOS.intelSystem.degradeVesselContact(vesselId)
+
+// State inspection:
+KOSMOS.gameState.get('pois') → hash
+KOSMOS.gameState.get('intel.vessels') → hash
+KOSMOS.gameState.version → 67
+KOSMOS.threeRenderer._poiSprites → Map (debug)
+KOSMOS.threeRenderer._predictionConeMeshes → Map (debug)
+
+// Flag toggle (runtime):
+import('./src/config/GameConfig.js').then(m => {
+  m.GAME_CONFIG.FEATURES.poiSystem = true/false;
+  m.GAME_CONFIG.FEATURES.predictionCone = true/false;
+  m.GAME_CONFIG.FEATURES.intelContactState = true/false;
+});
+```
+
+## M3 planning hints (post-M2b)
+
+Naturalny scope M3:
+
+1. **POI interaction UI** — tooltip on hover + right-click menu (grupowane razem zgodnie z §13 R8)
+2. **POI panel listy** — sortowalna lista wszystkich POI w sidebar, z filter per typ + ownerEmpireId
+3. **POI edit modal** — UI do modyfikacji waypoints/loopMode/range bez devtools
+4. **Picket runtime** — alert gdy enemy w `rangePxLocal`, automatic intel rumor upgrade dla pickets
+5. **Rally runtime** — tracker `memberVesselIds` add po `vesselReachedPOI`, condition resolver gdy `length >= waitForCount`
+6. **Ambush runtime** — hidden POI ujawniany dopiero gdy enemy enters trigger range; passive intel
+7. **EventLog channels filter UI** — toggle 'fleet'/'intel'/'combat' channels
+8. **Visual polish pass:**
+   - Origin offset wszystkich linii względem sprite vessela
+   - Channel `'poi'` dedicated (z istniejącego `'intel'`)
+   - Tooltip dla prediction cone (hover na cone → szczegóły obs quality)
+   - Subtelny ping animation dla nowo utworzonych POI
+
+## Optional retrospective playtest (zalecane przed M3)
+
+End-to-end narrative scenariusz testujący wszystkie systemy razem:
+
+1. Świeża gra w Combat Sandbox
+2. Utwórz patrol POI 'Granica Wschód' (4 waypoints prostokąt wokół kolonii) z loopMode='loop'
+3. Wydaj 2 vessele patrol (np. Obrońca Alfa + Obrońca Beta) na ten POI — obserwuj sequence updates
+4. Utwórz waypoint POI 'Cel Zwiad' w odległym sektorze (1500, 1500)
+5. Wydaj 3-ci vessel (Obrońca Gamma) goToPOI → vessel leci, completes
+6. Spawn enemy fleet (CombatSandbox tools) → IntelSystem rumor → contact transition (sprawdź `getVesselContact`)
+7. Wydaj 4-ty vessel (Badacz Sigma) intercept enemy → cone widoczny, scaling z obs quality
+8. Wydaj 5-ty vessel escort 4-ego (ochrona pursuit'a) — sprawdź formację
+9. Battle resolution → AutoRetreat M2a przejmuje patrol/escort orders gdy battle loss
+10. Cleanup: deletePOI 'Granica Wschód' mid-cycle → patrol orders blocked + EventLog wpisy
+11. Save → reload → sprawdź że POI sprites recreated, intel state zachowany
+12. End-to-end weryfikacja że wszystkie systemy współpracują
+
+Dokumentacja: `memory/playtest-snapshots/m2b-retrospective-[date].md` jeśli zrobiony.
+
+---
+
+**M2b CLOSED. Solid milestone — 7 commits, 168 smoke PASS, 14 lekcji, 9 Filip's decisions overrides spec'a, 1 post-fix w 7 commitach.**

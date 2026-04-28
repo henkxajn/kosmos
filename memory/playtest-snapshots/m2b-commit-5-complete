@@ -1,0 +1,134 @@
+# M2b Commit 5 — COMPLETE (2026-04-26)
+
+## Status
+Tag: m2b-commit-5-complete
+Save version: v67 (bez zmian, C5 to data layer + flag flip; pois domain już w v67 z C1 migration)
+Playtest Combat Sandbox: PASS (5/5 scenariuszy A-E)
+
+## Zmiany
+- `src/data/POITypes.js` (NEW, ~96 LoC):
+  - `POI_TYPES` enum (waypoint/patrol/picket/rally/ambush)
+  - `validatePOISpec(spec) → {ok, reason?}` per-type discriminated union validation
+  - `_isPoint(p)` helper
+  - `POI_SOFT_CAP = 100` constant (warning, no hard limit)
+- `src/systems/POIRegistry.js` (NEW, ~175 LoC):
+  - Zero-arg constructor, `window.KOSMOS?.X` lookup pattern (match IntelSystem from C2)
+  - `initPOISubdomain()` — wywoływane z GameScene/GameCore PO `gameState.reset()/restore()` (lekcja L2 z C2 fix #2)
+  - CRUD: `createPOI`, `updatePOI`, `deletePOI`, `getPOI`, `listPOIs`, `listByType`
+  - `vesselReachedPOI(vesselId, poiId)` — emit-only placeholder dla C6/M3
+  - `_extractTypeFields(spec)` — switch per-type tylko relevantne pola
+  - `_nextId` reconstruction po load (regex `/^poi_(\d+)$/` → max+1)
+- `src/scenes/GameScene.js` (+39 LoC):
+  - Import POIRegistry, instantiation, expose na `window.KOSMOS.poiRegistry`
+  - `initPOISubdomain()` w obu paths (NEW GAME po EmpireGenerator, LOAD po gameState.restore)
+  - 2 EventLog handlers: `poi:created` (info, channel intel), `poi:deleted` (info, używa `name` z payload)
+  - 4 devtools: `KOSMOS.debug.createPOI/listPOIs/deletePOI/getPOI`
+- `src/testing/headless/GameCore.js` (+4 LoC):
+  - Import + instantiation + expose + init (analogicznie do C2 fix #2 dla IntelSystem)
+- `src/systems/MovementOrderSystem.js` (+20 LoC):
+  - Subscribe `poi:deleted` w konstruktorze (alias `_onPOIDeleted` + `EventBus.on`)
+  - `_onPOIDeletedHandler(poiId)` — iteruje `_byVessel`, filter po `order.poiId === poiId && status==='active'`, wywołuje `_blockAndCancel(vessel, order, 'poi_deleted')`
+  - **Proactive defensive code** — w C5 wszystkie ordery mają `poiId=null`, handler iteruje pustą listę, ale gotowy na C6 gdy `_issueGoToPOI` natywnie setuje `poiId`
+- `src/core/GameState.js` (+1 LoC, **D3 fix**):
+  - Dodane `pois: {}` do `createDefaultState()` — bez tego `restore()` silently skipował klucz `pois` (iteruje tylko po `Object.keys(default)`)
+  - Złapane podczas implementation phase, nie w real-flow
+- `src/config/GameConfig.js` (1 line): flip `poiSystem: false → true`
+- `tmp_m2b_c5_poi_test.mjs` (NEW, ~363 LoC, 31 cases): T1-T7 (validation, CRUD, flag gate, init lifecycle, MOS handler, soft cap, events payload)
+- `tmp_m2b_c1_migration_test.mjs` (2 lines, T3.3 update post-flag-flip)
+
+## Decyzje projektowe
+- **D1: `poi:deleted` payload extended `{poiId, name}`** zamiast spec'owego `{poiId}`. Powód: EventLog handler musi pokazać "Usunięto POI '[name]'" per §6.5, ale w momencie emit POI już zniknął z `gameState.pois`. Capture name PRZED mutation w `deletePOI`. Subscriber który nie potrzebuje name może go ignorować — nie breaking change.
+- **D2: `goToPOI` enum extension idzie w C6**, nie C5. Spójność: enum + runtime razem. Confirmed przez V6 — handler `_onPOIDeletedHandler` filtruje po `order.poiId` (od C1), bez deps na `ORDER_TYPES.goToPOI`. C5 self-contained.
+- **D3: `pois: {}` w `createDefaultState`** (NEW domain init w GameState defaults). Wykryte podczas implementation — bez tego `restore()` po load pomijałby klucz pois. **Lekcja L11**: każda nowa domena gameState wymaga TRZECH miejsc init: (a) `createDefaultState` defaults, (b) migration v→v+1, (c) `initSubdomain()` w GameScene/GameCore.
+- **Channel `'intel'`** dla EventLog wpisów POI (V4) — semantycznie bliskie (POI to lokacje strategiczne). Nowy channel `'poi'` byłby out-of-scope (modyfikacja CHANNELS const w EventLogSystem).
+- **Whole-hash `gameState.set('pois', updated, ...)` zamiast per-POI dotted path** (V8) — bo `gameState.delete(path)` API nie istnieje. Dla CRUD spójności wszystkie operacje używają whole-hash. Akceptowalne dla soft cap 100 POI.
+
+## Smoke tests
+```
+tmp_m2b_c5_poi_test.mjs            31/31 PASS  (T1-T7)
+  T1.1-T1.10  validatePOISpec per type
+  T2.1-T2.8   POIRegistry CRUD
+  T3.1-T3.3   feature flag gate (anti-pattern proof)
+  T4.1-T4.3   initPOISubdomain lifecycle
+  T5.1-T5.3   MOS _onPOIDeletedHandler
+  T6.1        soft cap warning
+  T7.1-T7.3   events payload (D1 verification)
+
+tmp_m2b_c4_renderer_test.mjs        9/9  PASS  (regression C4)
+tmp_m2b_c3_predictioncone_test.mjs 21/21 PASS  (regression C3)
+tmp_m2b_c2_intel_test.mjs          26/26 PASS  (regression C2)
+tmp_m2b_c1_migration_test.mjs      13/13 PASS  (regression C1, T3.3 update)
+tmp_m2b_c0_fix_test.mjs             7/7  PASS  (regression C0)
+tmp_vcs_teamup_cooldown_test.mjs   11/11 PASS  (regression M2a)
+                                  ─────────
+                                  118/118 PASS
+```
+
+## Real-flow playtest verification (Combat Sandbox)
+
+5 scenariuszy A-E PASS:
+
+- **A: CRUD flow** ✓
+  - 3× `createPOI` (waypoint Outpost Alfa, patrol Granica E, picket Strażnik Wschód) → `poi_1/2/3`
+  - `listPOIs()` → 3 POI z prawidłowymi shape'ami
+  - `listPOIs({type:'waypoint'})` → 1 POI (filter działa)
+  - `getPOI('poi_2')` → patrol object z 3 waypoints
+  - `deletePOI('poi_3')` → ok, gameState `pois` ma 2 entries
+  - **EventLog UI:** wszystkie 4 wpisy widoczne (3× created + 1× deleted)
+- **B: validation rejections** ✓ — 4 reason codes (`waypoints_min_2`, `invalid_type`, `name_required`, `rangePxLocal_invalid`), zero side effects
+- **C: flag toggle** ✓ — OFF blocks CRUD (preserve state), ON recovers (`poi_4` continues `_nextId`)
+- **D: save + reload** ✓ KRYTYCZNE — proof D3 fix:
+  - Pre-save: `_nextId=5`, POI = [poi_1, poi_2, poi_4]
+  - Post-reload: `gameState.get('pois')` ma 3 POI (D3 restore zachowuje), `_nextId=5` reconstruct, `createPOI` continues z `poi_5`
+- **E: dangling order cancel** ✓ — proof handler dla C6:
+  - Manualnie wstrzyknięty `v.movementOrder.poiId='poi_5'`
+  - `deletePOI('poi_5')` → `v.movementOrder.status='blocked'`, `blockReason='poi_deleted'`
+  - Handler znalazł order w `_byVessel`, wywołał `_blockAndCancel`
+
+## Off-spec / known gaps
+
+### M1 `_blockAndCancel` ustawia `status='blocked'`, nie `'cancelled'`
+Drobna konwencja M1 — order zostaje w `_byVessel` z `status='blocked'` + `blockReason`, nie jest usuwany. Handler `_onPOIDeletedHandler` filtruje po `status==='active'`, więc raz `blocked`, drugi cancel/delete go nie wywoła ponownie. OK semantycznie.
+blocked order semantyka: vessel z status='blocked' kontynuuje fizyczny ruch (inertia), nie jest dead-stuck. AutoRetreatSystem (M2a) lub manualny order gracza przejmie kontrolę. Verified w real-flow Scenario E.
+
+### Whole-hash `gameState.set('pois', ...)` zamiast per-POI dotted
+V3/V8 decision. Spójność CRUD vs IntelSystem (per-vessel dotted) — różne convention dla różnych domen. POI soft cap 100 sprawia że perf nie jest issue. Future M3+ może zoptymalizować jeśli zajdzie potrzeba.
+
+### `vesselReachedPOI` to emit-only placeholder
+Public method w POIRegistry istnieje (zwraca emit-only), ale wywoływany dopiero przez C6 `_tickGoToPOI` przy reach. Rally tracker (memberVesselIds add) to M3.
+
+### EventLog channel `'intel'` reused
+Brak dedykowanego channel `'poi'` żeby uniknąć modyfikacji `EventLogSystem.CHANNELS`. Jeśli M3 doda channel filtering UI, można promote do osobnego.
+
+## Lessons learned (do dopisania)
+
+### L11. Nowa domena gameState wymaga TRZECH bootstrap points
+- **(a)** `createDefaultState` defaults — ważne dla `restore()` (iteruje po Object.keys(default))
+- **(b)** Migration v→v+1 — dla istniejących save'ów
+- **(c)** `initSubdomain()` w GameScene/GameCore po reset/restore — dla świeżej gry/load idempotency
+
+C5 D3 wykrył że pominięcie (a) sprawia że `restore()` silently skip'ował klucz `pois` mimo poprawnej migration v66→v67. Implementation phase złapała problem przed real-flow.
+
+**Implication dla M3+:** każdy nowy `gameState.X` wymaga wszystkich trzech. Pre-flight checklist: szukaj wszystkich miejsc gdzie poprzednia domena (np. `intel` z M1) jest inicjalizowana.
+
+### L12. Proactive defensive handler (cross-commit pre-wiring)
+Handler `_onPOIDeletedHandler` w MOS wprowadzony w C5 mimo że runtime trigger (orders z `poiId`) idzie w C6. Powód: zero-risk (iteruje pustą listę w C5), single touch w MOS zamiast 2 commitów z rzędu.
+
+Pattern dla cross-commit dependencies: jeśli system A emituje event który system B będzie używać natywnie dopiero w next commit, dodaj handler w obecnym commicie (defensive). Cost: ~15 LoC + tests. Benefit: czystszy commit history, zero risk integration.
+
+## Ready for M2b Commit 6
+Commit 6 spec: `milestone-2b-intelligence-poi.md` §11 row #6 — **MOS goToPOI + patrol runtime, najwiekszy commit M2b pozostały:**
+- `MovementOrderTypes.js`: dodanie `goToPOI` do enum + `TYPES_WITH_POI_TARGET` Set + validator
+- `MovementOrderSystem`:
+  - `_issueGoToPOI(vesselId, poiId)` — resolve POI point → delegate do `_issueMoveToPoint`-like
+  - `_issuePatrol(vesselId, poiId)` — M1 stub → runtime, setuje `patrolWaypointIndex/Direction`
+  - `_tickPatrolOrder(vessel, order, ...)` — gdy vessel <0.15 AU od current waypoint, advance index (loop/ping_pong)
+- 3 events: `vessel:goToPOIIssued`, `vessel:patrolStarted`, `vessel:patrolWaypointReached`
+- EventLog handlers (§6.5) — 3 PL strings
+- FleetOverlay labels: `→ POI [name]`, `Patrol [name] ([idx+1]/[N])`
+- Devtools: `KOSMOS.debug.issueGoToPOI/issuePatrol`
+- Flag flip: brak — `poiSystem` już true z C5
+
+C6 dotyka 5+ plików (MOS dominant, MovementOrderTypes, GameScene EventLog, FleetOverlay, devtools). Heavy scaffold prompt. Estymacja: 1-2 sesje.
+
+Po C6 zostaje tylko **C7** (escort runtime + devtools + POI sprites w ThreeRenderer + final cleanup) → `m2b-complete`.

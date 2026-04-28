@@ -1,0 +1,77 @@
+# M2b Commit 1 — COMPLETE (2026-04-25)
+
+## Status
+Tag: m2b-commit-1-complete
+Save version: v67 (bump z v66; migracja `_migrateV66toV67`)
+Playtest Combat Sandbox: PASS (natywny v67 save, świeża gra)
+
+## Zmiany
+- `src/config/GameConfig.js`: +3 FEATURES flagi (default OFF):
+  - `intelContactState` (Commit 2: IntelSystem.vessels sub-domain)
+  - `predictionCone` (Commits 3-4: math + rendering)
+  - `poiSystem` (Commits 5-7: POIRegistry + goToPOI/patrol/escort runtime)
+- `src/systems/SaveMigration.js`: bump `CURRENT_VERSION=67`, `MIGRATIONS[66]=_migrateV66toV67`
+  - `gameState.pois = {}` init
+  - `gameState.intel.vessels = {}` init (zachowuje istniejące `intel.*` pola)
+  - vessel.movementOrder defaults dla istniejących orderów: `poiId/predictionCone/patrolWaypointIndex/patrolDirection/escorteeId`
+- `src/systems/MovementOrderSystem.js`: +5 pól M2b w 3 order literalach
+  (`_issueMoveToPoint` ~195, `_issuePursueOrIntercept` ~297, `_issueStubOrder` ~553)
+  — spójność migracja↔runtime: nowy order w v67 ma identyczny shape co migrowany z v66.
+
+## Decyzje projektowe
+- **MOS opcja 1 (defaults w 3 issue methods) wybrana** zamiast lazy-fill w Commits 2-7.
+  Powód: spójność shape ordera between migrated/freshly-issued zapobiega rozjazdowi
+  w Commits 6/7 czytających `order.patrolWaypointIndex` etc. (uniknięcie `?? default`
+  zaśmiecanego po kodzie).
+- **Vessel.js bez zmian.** `vessel.movementOrder` jest `null` inicjalnie (Vessel.js:260),
+  order obiekt powstaje on-demand w MOS. Defaults należą do issue methods.
+- **`data.version = 67;` pominięte w body migracji.** Pętla `SaveMigration` ustawia
+  `migrated.version = v + 1` automatycznie (linia 147) — spójne z konwencją v59-v66.
+
+## Smoke tests
+```
+tmp_m2b_c1_migration_test.mjs    13/13 PASS
+  T1.1-T1.9 migracja (w tym round-trip idempotency v67)
+  T3.1-T3.3 FEATURES default OFF
+  + 1 sanity case
+tmp_m2b_c0_fix_test.mjs           7/7 PASS  (regression — M2b C0)
+tmp_vcs_teamup_cooldown_test.mjs 11/11 PASS  (regression — M2a)
+                                 ─────────
+                                 31/31 PASS
+```
+
+## Real-flow playtest verification (Combat Sandbox, natywny v67)
+
+Wykonany na świeżej grze (Combat Sandbox), nie na migrowanym save'ie v66 — żaden v66 save nie istniał na dysku. Migracja v66→v67 zweryfikowana wyłącznie offline (smoke T1.1-T1.9, w tym round-trip idempotency). Pierwsza realna migracja na save'ie z gry odbędzie się przy load istniejącego v66 save'a w przyszłości.
+
+Verification steps PASS:
+- `KOSMOS.gameState.version === 67` ✓
+- `KOSMOS.gameState.gameState.pois === {}` ✓
+- `KOSMOS.gameState.gameState.intel.vessels === {}` ✓
+- `window.GAME_CONFIG.FEATURES.{intelContactState, predictionCone, poiSystem}` wszystkie `false` ✓
+- Świeży `moveToPoint` order (mo_1, v_1, target=(100,100)): wszystkie 5 pól M2b z poprawnymi defaults
+  (poiId/predictionCone/escorteeId=null, patrolWaypointIndex=0, patrolDirection=1) ✓
+- Istniejące pola M1+M2a (`type, status, targetPoint, fuel, arrivalYear`) nietknięte ✓
+- Zero NPE / warningów w konsoli przy issue ✓
+
+Pominięte (akceptowalna redundancja vs offline smoke 31/31):
+- 30s gameplay loop bez NPE (gameplay loop nie zmieniony przez Commit 1)
+- Save → reload cycle z assertem version=67 (round-trip idempotency pokryta przez T1.9)
+
+## Off-spec / known gaps
+- `KOSMOS.gameConfig` undefined w runtime — config żyje jako `window.GAME_CONFIG`,
+  nie expose'owany na `KOSMOS`. Notatka do przyszłych playtest checklist:
+  używać `window.GAME_CONFIG.FEATURES.X` zamiast `KOSMOS.gameConfig.FEATURES.X`.
+- LoC delta ~241 (vs deklarowane ~150 z prompta): overhead na standalone test stub
+  (localStorage/window mock + assert harness). Akceptowalne.
+
+## Ready for M2b Commit 2
+Commit 2 spec: `milestone-2b-intelligence-poi.md` §7 (IntelSystem.vessels sub-domain):
+- `gameState.intel.vessels` runtime init (constructor fallback dla świeżych gier)
+- Subskrypcje: `vessel:proximityEnter/Exit/wrecked`
+- `_observeVessel(enemyVessel, distanceAU)` — rumor/contact transitions
+- `_tickVesselDegradation(yearsPassed)` w `_passiveTick` (TIMEOUT_YEARS_FIRST/SECOND/THIRD = 5/10/20)
+- Public API: `getVesselContact`, `advanceVesselContact`, `degradeVesselContact`
+- Events: `intel:vesselContactChanged`, `intel:vesselContactLost`
+- UI deliverables (§6.5): EventLog handlery dla obu eventów
+- Feature flag flip: `intelContactState=true` w tym samym commicie

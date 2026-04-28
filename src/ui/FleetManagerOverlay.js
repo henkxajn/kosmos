@@ -285,7 +285,9 @@ export class FleetManagerOverlay {
     const centerW = ow - LEFT_W - RIGHT_W;
 
     // ── Tło ──────────────────────────────────────────────────
-    ctx.fillStyle = bgAlpha(0.38);
+    // Pełna nieprzezroczystość — overlay zakrywa 3D mapę układu, żeby ruchome
+    // ciała pod spodem nie rozpraszały i prawy klik nie raycast'ował przez niego.
+    ctx.fillStyle = '#000';
     ctx.fillRect(ox, oy, ow, oh);
 
     // Obramowanie glass
@@ -1568,8 +1570,8 @@ export class FleetManagerOverlay {
     const baseRadius = Math.min(w / 2, mapH / 2) - 20;
     const mapRadius = baseRadius * this._mapZoom;
 
-    // Tło mapy — nieprzezroczyste
-    ctx.fillStyle = bgAlpha(0.38);
+    // Tło mapy — solidne czarne, żeby 3D mapa układu pod spodem nie prześwitywała.
+    ctx.fillStyle = '#000';
     ctx.fillRect(x + 1, mapY, w - 2, mapH - 1);
 
     // Clip do obszaru mapy
@@ -1876,8 +1878,8 @@ export class FleetManagerOverlay {
     const ROW_H = 38;
     let cy = y + 6;
 
-    // Tło
-    ctx.fillStyle = bgAlpha(0.38);
+    // Tło — solidne czarne (overlay zakrywa 3D mapę układu)
+    ctx.fillStyle = '#000';
     ctx.fillRect(x + 1, y, w - 2, h - 1);
 
     // Nagłówek
@@ -2117,8 +2119,8 @@ export class FleetManagerOverlay {
   _drawStarCluster(ctx, x, y, w, h) {
     const PAD = 10;
 
-    // Tło
-    ctx.fillStyle = bgAlpha(0.38);
+    // Tło — solidne czarne (overlay zakrywa 3D mapę układu)
+    ctx.fillStyle = '#000';
     ctx.fillRect(x + 1, y, w - 2, h - 1);
 
     const gd = window.KOSMOS?.galaxyData;
