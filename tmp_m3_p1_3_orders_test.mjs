@@ -142,6 +142,42 @@ const fOption = (orderType, action = 'issueOrder') => ({ id: orderType, orderTyp
   ok(r.ok === false && r.reason === 'no_target_point', 'T2.3 no target → no_target_point');
 }
 
+// P1.3.5 post-fix #1 — POINT_FROM_WORLD obsługuje 2D + 3D worldPoint.
+// T2.3a moveToPoint z 2D worldPoint {x, y} (tactical map FleetOverlay)
+{
+  const r = buildOrderSpec(
+    fOption('moveToPoint'),
+    { type: 'empty', worldPoint: { x: 100, y: -50 } },
+    'v_1',
+  );
+  ok(r.ok === true, 'T2.3a moveToPoint 2D worldPoint ok');
+  ok(r.spec?.targetPoint?.x === 100 && r.spec?.targetPoint?.y === -50,
+     'T2.3a 2D {x,y} → targetPoint {x: wp.x, y: wp.y}');
+}
+
+// T2.3b moveToPoint z 3D worldPoint {x, y, z} — wp.z dominuje (XZ plane Y=0 z mapy 3D)
+{
+  const r = buildOrderSpec(
+    fOption('moveToPoint'),
+    { type: 'empty', worldPoint: { x: 100, y: 999, z: -50 } },  // y=999 ignorowane
+    'v_1',
+  );
+  ok(r.ok === true, 'T2.3b moveToPoint 3D worldPoint ok');
+  ok(r.spec?.targetPoint?.x === 100 && r.spec?.targetPoint?.y === -50,
+     'T2.3b 3D {x,y,z} → targetPoint {x: wp.x, y: wp.z} (XZ→XY)');
+}
+
+// T2.3c moveToPoint z worldPoint bez x/y/z → fail (defensywny null guard)
+{
+  const r = buildOrderSpec(
+    fOption('moveToPoint'),
+    { type: 'empty', worldPoint: { x: 100 } },  // brak y i z
+    'v_1',
+  );
+  ok(r.ok === false && r.reason === 'no_target_point',
+     'T2.3c worldPoint bez y/z → no_target_point');
+}
+
 // T2.4 pursue z entityId
 {
   const r = buildOrderSpec(

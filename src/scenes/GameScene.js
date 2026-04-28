@@ -3430,6 +3430,13 @@ export class GameScene {
     if (this.planetScene?.isOpen) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
+    // P1.3.5 post-fix #1 (D2 reinforcement) — Strategy A pełna:
+    // mapa 3D = read-only "telewizor". Orders dispatchowane wyłącznie
+    // przez tactical map w FleetOverlay. Mapa 3D LMB no-op niezależnie
+    // od overlay state (poprzedni isAnyOpen() guard działał tylko gdy
+    // overlay otwarty — z FleetOverlay zamkniętym furtka była otwarta).
+    const targetId = e.target?.id;
+    if (targetId === 'three-canvas' || targetId === 'planet-canvas') return;
     // Fullscreen overlay (FleetOverlay/IntelOverlay/...) zakrywa 3D mapę układu
     // — lewy klik NIE może raycast'ować przez niego do 3D sceny.
     // (W normalnym flow uiManager.handleClick i tak by to wcześniej pochłonął;
@@ -3468,6 +3475,13 @@ export class GameScene {
     if (this.planetScene?.isOpen) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
     if (e.target?.closest && e.target.closest('.kosmos-menu-panel')) return;
+    // P1.3.5 post-fix #1 (D2 reinforcement) — Strategy A pełna:
+    // mapa 3D = read-only "telewizor". PPM zawsze ignored, niezależnie od
+    // overlay state. Orders dispatch wyłącznie przez tactical map w
+    // FleetOverlay (FleetManagerOverlay.handleRightClick z GameScene
+    // contextmenu route, P1.3.5 commit 0c720d9).
+    const targetId = e.target?.id;
+    if (targetId === 'three-canvas' || targetId === 'planet-canvas') return;
     // Fullscreen overlay (FleetOverlay/IntelOverlay/...) zakrywa 3D mapę układu
     // — prawy klik NIE może raycast'ować przez niego do 3D sceny.
     if (this.uiManager?.overlayManager?.isAnyOpen?.()) return;

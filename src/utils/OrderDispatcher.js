@@ -18,7 +18,16 @@
 //     entityId?, vessel?, poi?, planet?,
 //     worldPoint: { x, y:0, z } }
 
-const POINT_FROM_WORLD = (wp) => ({ x: wp.x, y: wp.z });  // XZ → XY (L8)
+// P1.3.5 post-fix: obsługa OBU konwencji worldPoint:
+//   3D (mapa 3D legacy, XZ plane Y=0): { x, y, z } → używamy wp.z jako y (L8)
+//   2D (tactical map, FleetOverlay):    { x, y }    → używamy wp.y bezpośrednio
+// Null guard: invalid wp / brakujące pola → null → caller raportuje no_target_point.
+const POINT_FROM_WORLD = (wp) => {
+  if (!wp || typeof wp.x !== 'number' || !Number.isFinite(wp.x)) return null;
+  const y = typeof wp.z === 'number' ? wp.z : wp.y;
+  if (typeof y !== 'number' || !Number.isFinite(y)) return null;
+  return { x: wp.x, y };
+};
 
 /**
  * Buduje spec dla MOS.issueOrder z opcji menu + raycaster target.
@@ -45,13 +54,13 @@ export function buildOrderSpec(option, target, vesselId) {
           spec: { type: 'moveToPoint', targetPoint: { x: target.planet.x, y: target.planet.y } },
         };
       }
-      // Empty target — worldPoint z raycaster (XZ → XY)
-      if (target.worldPoint
-          && typeof target.worldPoint.x === 'number'
-          && typeof target.worldPoint.z === 'number') {
+      // Empty target — worldPoint może być 3D (mapa 3D, XZ plane) lub
+      // 2D (tactical FleetOverlay, P1.3.5). POINT_FROM_WORLD obsługuje OBA.
+      const point = POINT_FROM_WORLD(target.worldPoint);
+      if (point) {
         return {
           ok: true,
-          spec: { type: 'moveToPoint', targetPoint: POINT_FROM_WORLD(target.worldPoint) },
+          spec: { type: 'moveToPoint', targetPoint: point },
         };
       }
       return { ok: false, reason: 'no_target_point' };
