@@ -3254,10 +3254,26 @@ export class GameScene {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target?.isContentEditable) return;
       e.preventDefault();
 
+      // M3 P1.3.5 — FleetOverlay tactical map = primary command surface.
+      // PPM w obszarze tactical mapy → emit ui:rightClickMenuOpened przez
+      // FleetOverlay.handleRightClick (nie raycaster 3D). Wcześniej w prompcie
+      // P1.2/P1.3 tactical handlers targetowały mapę 3D układu — Filip's reframe
+      // zmienia: mapa 3D = read-only "telewizor", orders przez tactical 2D.
+      const fleetOv = this.uiManager?.overlayManager?.overlays?.fleet;
+      if (fleetOv?.isVisible && fleetOv.handleRightClick) {
+        // KEEP IN SYNC z UI_SCALE pattern w UIManager (rawX / UI_SCALE).
+        const uiScaleFleet = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+        if (fleetOv.handleRightClick(e.clientX / uiScaleFleet, e.clientY / uiScaleFleet)) {
+          return;
+        }
+      }
+
       const overlay = this.uiManager?.overlayManager?.overlays?.colony;
       if (!overlay?.visible || !overlay._selectedUnit) {
         // M3 P1.2: tactical map right click → context menu via raycaster.
         // ELSE branch — ColonyOverlay ground unit flow zachowany (early-return).
+        // Note: gdy FleetOverlay otwarty, _handleTacticalRightClick early-returns
+        // przez overlayManager.isAnyOpen() guard (commit f2b7e75).
         this._handleTacticalRightClick(e);
         return;
       }

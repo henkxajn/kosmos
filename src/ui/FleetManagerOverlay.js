@@ -20,6 +20,7 @@ import EntityManager       from '../core/EntityManager.js';
 import EventBus            from '../core/EventBus.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
+import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showDropTroopsModal } from '../ui/DropTroopsModal.js';
 import { ColonistLoadModal } from '../ui/ColonistLoadModal.js';
@@ -190,6 +191,13 @@ export class FleetManagerOverlay {
     this._mapDragStartY = 0;
     this._mapDragWasDrag = false; // odróżnienie klik od drag
     this._clusterDrag = false;   // czy drag dotyczy cluster (nie tactical map)
+
+    // M3 P1.3.5 — view state cached przy każdym render tactical map.
+    // { mapCx, mapCy, auToPx, AU_TO_PX } — używane przez tacticalToWorld
+    // (inverse coord transform dla orderów wydawanych z tactical map).
+    // null gdy tactical map jeszcze nie renderowana (defensywny guard
+    // w handleRightClick przed first draw).
+    this._mapViewState = null;
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────
@@ -359,17 +367,70 @@ export class FleetManagerOverlay {
       return true;
     }
 
-    // Szukaj hit zone (reverse — top-most first)
+    // Szukaj hit zone (reverse — top-most first).
+    // M3 P1.3.5: map_vessel obsługiwane (selection z tactical mapy);
+    // wcześniej skipped — wybór tylko z listy po lewej.
     for (let i = this._hitZones.length - 1; i >= 0; i--) {
       const z = this._hitZones[i];
-      // Pomiń map_vessel — wybór statku tylko z listy po lewej
-      if (z.type === 'map_vessel') continue;
       if (mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
         this._handleHit(z);
         return true;
       }
     }
+
+    // M3 P1.3.5 — pusty obszar tactical map (nie atlas/cluster):
+    //   picker mode patrolWaypoints → addPickerWaypoint w world coords
+    //   inaczej → clearSelection (deselect)
+    if (!this._showAtlas && !this._showCluster && this._mapBounds) {
+      const mb = this._mapBounds;
+      if (mx >= mb.x && mx <= mb.x + mb.w && my >= mb.y && my <= mb.y + mb.h) {
+        const um = window.KOSMOS?.uiManager;
+        if (um?.isPickerActive?.()) {
+          const ps = um.getPickerState?.();
+          if (ps?.mode === 'patrolWaypoints') {
+            const wp = tacticalToWorld(mx, my, this._mapViewState);
+            if (wp) um.addPickerWaypoint?.({ x: wp.x, y: wp.y });
+          }
+        } else {
+          um?.clearSelection?.();
+        }
+        return true;
+      }
+    }
     return true; // pochłoń klik w overlayu
+  }
+
+  // M3 P1.3.5 — handleRightClick (PPM) — emit ui:rightClickMenuOpened
+  // z target shape kompatybilnym z RightClickMenu (P1.1).
+  // Tylko w trybie tactical map (nie atlas/cluster) i tylko w `_mapBounds`.
+  // Mapa 3D układu PPM jest zablokowana przez overlayManager.isAnyOpen()
+  // w GameScene._handleTacticalRightClick (commit f2b7e75) — ten path
+  // przejmuje PPM gdy FleetOverlay otwarty.
+  handleRightClick(mx, my) {
+    if (!this._visible) return false;
+    if (!this._mapBounds) return false;
+    if (this._showAtlas || this._showCluster) return false;
+    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return false;
+    const mb = this._mapBounds;
+    if (mx < mb.x || mx > mb.x + mb.w || my < mb.y || my > mb.y + mb.h) return false;
+    // Defensywnie: handleRightClick przed first render → _mapViewState=null
+    // → tacticalToWorld zwróci null → resolveTacticalTarget z worldPoint=null
+    // (target type 'empty' bez wp). Lepiej bail niż emit zły event.
+    if (!this._mapViewState) return false;
+
+    const hit = findHitZone(mx, my, this._hitZones);
+    const worldPoint = tacticalToWorld(mx, my, this._mapViewState);
+    const lookups = {
+      getVessel: (id) => window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null,
+      getEntity: (id) => EntityManager.get(id),
+    };
+    const target = resolveTacticalTarget(hit, worldPoint, lookups);
+
+    EventBus.emit('ui:rightClickMenuOpened', {
+      target,
+      screenPoint: { x: mx, y: my },
+    });
+    return true;
   }
 
   handleScroll(delta, mx, my) {
@@ -1601,6 +1662,10 @@ export class FleetManagerOverlay {
     }
     maxOrbitAU *= 1.15;
     const auToPx = mapRadius / maxOrbitAU;
+
+    // M3 P1.3.5 — cache view state dla inverse transform (handleRightClick).
+    // KEEP IN SYNC z toSx/toSy poniżej.
+    this._mapViewState = { mapCx, mapCy, auToPx, AU_TO_PX: GAME_CONFIG.AU_TO_PX };
 
     // Helper: AU coords → screen px
     const toSx = (bodyX) => (bodyX ?? 0) / GAME_CONFIG.AU_TO_PX * auToPx + mapCx;
