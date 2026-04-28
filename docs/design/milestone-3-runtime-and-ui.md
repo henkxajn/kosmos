@@ -584,6 +584,8 @@ EventLog wpis: `Ambush '[poi name]' aktywowany! Cel: [enemy name]` (severity war
 
 ## §11. EventLog channel filter (P4)
 
+**Access pattern:** EventLog żyje w `window.KOSMOS.eventLogSystem` (osobny system z M2b), NIE w `gameState`. Public API: `eventLogSystem.push({text, channel, severity, entityRef})`, `getEntries({channels, limit})`, `getVisible(limit)`, `getLatest()`, `toggleChannel(channelId)`. Producenci (M2b+M3): combat handlers, POI registry, MOS, picket/rally/ambush systems. Konsumenci: EventLogOverlay, BottomBar.
+
 ### 11.1. Filter component
 
 ```js
