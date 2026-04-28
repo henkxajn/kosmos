@@ -21,6 +21,7 @@ import EventBus            from '../core/EventBus.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
+import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showDropTroopsModal } from '../ui/DropTroopsModal.js';
 import { ColonistLoadModal } from '../ui/ColonistLoadModal.js';
@@ -851,6 +852,20 @@ export class FleetManagerOverlay {
       case 'cancel_loop':
         EventBus.emit('transport:cancelLoop', { vesselId: zone.data.vesselId });
         break;
+      case 'cancel_movement_order': {
+        // M3 P1.4 — anulowanie aktywnego rozkazu MovementOrderSystem.
+        // Selection unchanged (D5 iii — label auto-hides bo cancelled status
+        // ma early-return w _drawMovementOrderLabel:4037).
+        // Logika dispatchu w pure helperze MovementOrderCancellation.js
+        // (smoke testy headless bez canvas/THREE).
+        tryCancelVesselOrder({
+          mos:            window.KOSMOS?.movementOrderSystem,
+          vesselManager:  window.KOSMOS?.vesselManager,
+          eventLogSystem: window.KOSMOS?.eventLogSystem,
+          t,
+        }, zone.data.vesselId);
+        break;
+      }
       case 'disband':
         EventBus.emit('fleet:disbandRequest', { vesselId: zone.data.vesselId });
         this._setSelectedVesselViaUI(null);
@@ -2893,6 +2908,8 @@ export class FleetManagerOverlay {
 
     // ── M1 Targeting — read-only label movementOrder (§8.4) ────
     cy = this._drawMovementOrderLabel(ctx, x, cy, w, pad, vessel);
+    // M3 P1.4 — przycisk anulowania orderu (tylko gdy status='active')
+    cy = this._drawCancelOrderButton(ctx, x, cy, w, pad, vessel);
 
     // ── Aktywna misja (h=~80) ────────────────────────────────
     const activeMissions = ms?.getActive?.() ?? [];
@@ -4089,6 +4106,35 @@ export class FleetManagerOverlay {
     ctx.fillStyle = color;
     ctx.fillText(label, x + pad, cy + 10);
     return cy + 18;
+  }
+
+  // ── M3 P1.4 — przycisk anulowania orderu ──────────────────────────────────
+  //
+  // Rysowany tuż pod _drawMovementOrderLabel. Widoczny TYLKO gdy
+  // vessel.movementOrder.status === 'active' — MOS.cancelOrder odrzuca
+  // blocked/completed (V1, MovementOrderSystem.js:989). Klik dispatchuje
+  // zone 'cancel_movement_order' obsługiwany w _handleHit.
+  _drawCancelOrderButton(ctx, x, cy, w, pad, vessel) {
+    const order = vessel?.movementOrder;
+    if (!order || order.status !== 'active') return cy;
+
+    const btnW = w - pad * 2;
+    const btnH = 20;
+    ctx.fillStyle = 'rgba(255,80,80,0.10)';
+    ctx.fillRect(x + pad, cy, btnW, btnH);
+    ctx.strokeStyle = THEME.danger;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + pad, cy, btnW, btnH);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.danger;
+    ctx.textAlign = 'center';
+    ctx.fillText(`✕ ${t('fleet.cancelOrder')}`, x + w / 2, cy + 14);
+    ctx.textAlign = 'left';
+    this._hitZones.push({
+      x: x + pad, y: cy, w: btnW, h: btnH,
+      type: 'cancel_movement_order', data: { vesselId: vessel.id },
+    });
+    return cy + btnH + 6;
   }
 
   // ── Aktywna misja ─────────────────────────────────────────────────────────
