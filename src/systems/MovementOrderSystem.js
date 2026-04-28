@@ -992,10 +992,41 @@ export class MovementOrderSystem {
     order.blockReason = reason;
     this._byVessel.delete(vesselId);
 
+    // M3 P1.4.5 — physics-level cleanup symetryczny z _onVesselArrived.
+    // Bez tego vessel pozostawał state='in_transit' z synth move_to_point mission
+    // (lub stale velocity dla pursue/intercept) → _updatePositions kontynuował ruch.
+    // UWAGA ordering: emit('vessel:orderCancelled') jest synchronous → subscriber
+    // _resumeMissionAfterOrder w VesselManager nadpisze nasz cleanup gdy snapshot
+    // istnieje (resume oryginalnej mission). Test #2 weryfikuje resume path.
+    this._stopVesselMotion(vessel);
+
     EventBus.emit('vessel:orderCancelled', {
       vesselId, orderId: order.id, reason,
     });
     return true;
+  }
+
+  /**
+   * Cleanup pozycji/velocity/mission po cancel orderu.
+   * Konwencja vessel.position.state ∈ {docked, orbiting, in_transit}; brak 'idle' —
+   * "drift in space" reprezentujemy przez state='orbiting' + dockedAt=null
+   * (spójne z _onVesselArrived dla moveToPoint, gdzie m.targetId=null).
+   * Dla pursue/intercept oryginalna mission może być żywa (nie synth) — nie ruszamy
+   * jej; jeśli był suspended snapshot, _resumeMissionAfterOrder podniesie state z
+   * powrotem do 'in_transit' po naszym cleanup.
+   */
+  _stopVesselMotion(vessel) {
+    // Synth move_to_point mission — wywal całkowicie (zgodnie z _onVesselArrived).
+    if (vessel.mission?.type === 'move_to_point') {
+      vessel.mission = null;
+    }
+    vessel.position.state    = 'orbiting';
+    vessel.position.dockedAt = null;
+    vessel.status            = 'idle';
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    vessel.velocity.vx = 0;
+    vessel.velocity.vy = 0;
+    vessel.velocity.updatedYear = gameYear;
   }
 
   getOrder(vesselId) {
