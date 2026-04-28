@@ -401,6 +401,38 @@ export class FleetManagerOverlay {
     return true; // pochłoń klik w overlayu
   }
 
+  // M3 P1.5 — hover info dla universal Tooltip system. Read-only sibling
+  // do handleRightClick (NIE emituje eventu). Zwraca:
+  //   { kind: 'entity', target } — dla vessel/planet/poi sprite na tactical
+  //   { kind: 'uiHint', textKey } — dla hit zone z UI hint (np. cancel button)
+  //   null                          — empty / poza overlayem / przed renderem
+  resolveHoverInfo(mx, my) {
+    if (!this._visible) return null;
+    if (this._showAtlas || this._showCluster) return null;
+    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return null;
+
+    // Najpierw sprawdź hit zone — UI hints (cancel button) wygrywają nad mapą
+    const hit = findHitZone(mx, my, this._hitZones);
+    if (hit && hit.type === 'cancel_movement_order') {
+      return { kind: 'uiHint', textKey: 'tooltip.fleet.cancelOrderHint' };
+    }
+
+    // Tactical map entity hover — w obrębie _mapBounds
+    if (!this._mapBounds) return null;
+    const mb = this._mapBounds;
+    if (mx < mb.x || mx > mb.x + mb.w || my < mb.y || my > mb.y + mb.h) return null;
+    if (!this._mapViewState) return null;
+
+    const worldPoint = tacticalToWorld(mx, my, this._mapViewState);
+    const lookups = {
+      getVessel: (id) => window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null,
+      getEntity: (id) => EntityManager.get(id),
+    };
+    const target = resolveTacticalTarget(hit, worldPoint, lookups);
+    if (!target || target.type === 'empty') return null;
+    return { kind: 'entity', target };
+  }
+
   // M3 P1.3.5 — handleRightClick (PPM) — emit ui:rightClickMenuOpened
   // z target shape kompatybilnym z RightClickMenu (P1.1).
   // Tylko w trybie tactical map (nie atlas/cluster) i tylko w `_mapBounds`.

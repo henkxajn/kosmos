@@ -94,6 +94,8 @@ import { ThreeRenderer }     from '../renderer/ThreeRenderer.js';
 import { ThreeCameraController } from '../renderer/ThreeCameraController.js';
 import { UIManager }         from './UIManager.js';
 import { RightClickMenu }    from '../ui/RightClickMenu.js';
+import { Tooltip }           from '../ui/Tooltip.js';
+import { getTooltipContent } from '../utils/TooltipContent.js';
 import { PlanetScene }       from './PlanetScene.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
 import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
@@ -163,6 +165,13 @@ export class GameScene {
     this.rightClickMenu = new RightClickMenu();
     window.KOSMOS.uiManager      = this.uiManager;
     window.KOSMOS.rightClickMenu = this.rightClickMenu;
+
+    // M3 P1.5: Universal Tooltip — single global instance, dual sources
+    // (canvas hover via mousemove handler + DOM hover via data-tooltip listener).
+    // Hover state shared (flag #4 — last hover wins, no double tooltip).
+    this.tooltip = new Tooltip();
+    this._tooltipHoverState = { key: null };  // last canvas hover discriminator
+    window.KOSMOS.tooltip = this.tooltip;
 
     // Blokada kamery gdy kursor nad elementem UI
     this.cameraController._isOverUI = (x, y) => this.uiManager.isOverUI(x, y);
@@ -568,6 +577,21 @@ export class GameScene {
       // KOSMOS.debug.simulateRightClick(clientX, clientY) — dispatch
       //   contextmenu MouseEvent (testy bez prawdziwej myszki).
       raycastAt: (clientX, clientY) => this._resolveClickTarget(clientX, clientY),
+      // ── M3 P1.5 — tooltip devtools ─────────────────────────────────────
+      // KOSMOS.debug.showTooltip(type, id, x?, y?)  — bypass hover detection,
+      //   pokaż tooltip natychmiast (omija 500ms delay). Walidacja przez
+      //   getTooltipContent (zwraca null gdy entity null/unknown).
+      // KOSMOS.debug.hideTooltip()                  — schowaj.
+      showTooltip: (entityType, entityId, x = 200, y = 200) => {
+        const entity = this._lookupTooltipEntity(entityType, entityId);
+        const content = getTooltipContent(entityType, entity, this._tooltipDeps());
+        if (!content) {
+          console.warn(`[debug.showTooltip] brak content dla ${entityType}:${entityId}`);
+          return;
+        }
+        this.tooltip?.show(content, { x, y });
+      },
+      hideTooltip: () => this.tooltip?.hide(),
       simulateRightClick: (clientX, clientY) => {
         // Direct emit — omija UI guards z _handleTacticalRightClick (modal
         // detection, isOverUI). Reprodukuje produkcyjny path POST raycaster
@@ -3415,7 +3439,147 @@ export class GameScene {
 
       this.uiManager.handleMouseMove(x, y);
       this.threeRenderer.handleMouseMove(x, y);
+
+      // M3 P1.5 — universal tooltip canvas hover dispatch.
+      // Skipujemy gdy modal otwarty (modal eats focus) lub gdy DOM tooltip
+      // już aktywny (data-tooltip path obsługiwany przez Tooltip.js listenery).
+      this._dispatchTooltipHover(e.target?.id, x, y);
     });
+  }
+
+  // ── M3 P1.5 — tooltip hover dispatch ─────────────────────────────────────
+  // Dual-canvas: #three-canvas (mapa 3D) → RaycasterPure (P1.2),
+  //              #ui-canvas    (tactical, FleetOverlay) → FleetOverlay.resolveHoverInfo
+  //              + cancel button hint via hit zone 'cancel_movement_order'.
+  // Single tooltip instance w `this.tooltip`. Schedule używa key (entityId lub
+  // ui-hint id) żeby NIE flickerować przy mousemove w obrębie tego samego targetu.
+  _dispatchTooltipHover(targetId, clientX, clientY) {
+    const tooltip = this.tooltip;
+    if (!tooltip) return;
+    if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) {
+      tooltip.cancelSchedule(); tooltip.hide();
+      return;
+    }
+    // DOM elements z data-tooltip — sam Tooltip.js obsługuje przez global mouseover/mouseout,
+    // tu tylko canvas paths.
+    if (targetId === 'three-canvas' || targetId === 'planet-canvas') {
+      this._tooltipHoverFromMain3D(clientX, clientY);
+      return;
+    }
+    if (targetId === 'ui-canvas') {
+      this._tooltipHoverFromTactical(clientX, clientY);
+      return;
+    }
+    // Inny element (np. DOM panel) — anuluj canvas hover (DOM data-tooltip
+    // handler robi własną pracę).
+    if (this._tooltipHoverState.key !== null) {
+      this._tooltipHoverState.key = null;
+      tooltip.cancelSchedule();
+      tooltip.hide();
+    }
+  }
+
+  _tooltipHoverFromMain3D(clientX, clientY) {
+    // Fullscreen overlay zakrywa mapę 3D — żaden hover nie trafia
+    if (this.uiManager?.overlayManager?.isAnyOpen?.()) {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
+    const target = this._resolveClickTarget(clientX, clientY);
+    if (!target || target.type === 'empty') {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
+    this._scheduleEntityTooltip(target, clientX, clientY);
+  }
+
+  _tooltipHoverFromTactical(clientX, clientY) {
+    const fleet = this.uiManager?.overlayManager?.overlays?.fleet;
+    if (!fleet?.resolveHoverInfo) {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
+    // Convert clientX/Y → ui-canvas local px (UI_SCALE applied — same jak handleRightClick path)
+    const local = this.uiManager?.toLocalUI?.(clientX, clientY);
+    if (!local) {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
+    const info = fleet.resolveHoverInfo(local.x, local.y);
+    if (!info) {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
+    if (info.kind === 'entity') {
+      this._scheduleEntityTooltip(info.target, clientX, clientY);
+      return;
+    }
+    if (info.kind === 'uiHint') {
+      const textKey = info.textKey;
+      const text = t(textKey);
+      const key = `uiHint:${textKey}`;
+      if (this._tooltipHoverState.key !== key) {
+        this._tooltipHoverState.key = key;
+        this.tooltip.schedule(text, { x: clientX, y: clientY }, key);
+      }
+      return;
+    }
+    this._scheduleEntityTooltip(null, clientX, clientY);
+  }
+
+  _scheduleEntityTooltip(target, clientX, clientY) {
+    const tooltip = this.tooltip;
+    if (!target) {
+      if (this._tooltipHoverState.key !== null) {
+        this._tooltipHoverState.key = null;
+        tooltip.cancelSchedule(); tooltip.hide();
+      }
+      return;
+    }
+    // Skip empty/unsupported types (D2: A — empty no tooltip)
+    const supportedTypes = ['ownVessel', 'enemyVessel', 'vessel', 'planet', 'poi'];
+    if (!supportedTypes.includes(target.type)) {
+      if (this._tooltipHoverState.key !== null) {
+        this._tooltipHoverState.key = null;
+        tooltip.cancelSchedule(); tooltip.hide();
+      }
+      return;
+    }
+    const entityId = target.entityId ?? target.vessel?.id ?? target.planet?.id ?? target.poi?.id ?? null;
+    if (!entityId) return;
+    const key = `entity:${target.type}:${entityId}`;
+    if (this._tooltipHoverState.key === key) return;  // same target — no flicker
+    this._tooltipHoverState.key = key;
+
+    const entity = target.vessel ?? target.planet ?? target.poi
+      ?? this._lookupTooltipEntity(target.type, entityId);
+    const content = getTooltipContent(target.type, entity, this._tooltipDeps());
+    if (!content) {
+      tooltip.cancelSchedule(); tooltip.hide();
+      return;
+    }
+    tooltip.schedule(content, { x: clientX, y: clientY }, key);
+  }
+
+  _lookupTooltipEntity(type, entityId) {
+    if (type === 'ownVessel' || type === 'enemyVessel' || type === 'vessel') {
+      return window.KOSMOS?.vesselManager?.getVessel?.(entityId) ?? null;
+    }
+    if (type === 'poi') {
+      return window.KOSMOS?.poiRegistry?.getPOI?.(entityId) ?? null;
+    }
+    if (type === 'planet') {
+      return EntityManager.get(entityId) ?? null;
+    }
+    return null;
+  }
+
+  _tooltipDeps() {
+    return {
+      t,
+      colonyManager:   window.KOSMOS?.colonyManager ?? null,
+      empireRegistry:  window.KOSMOS?.empireRegistry ?? null,
+    };
   }
 
   // ── M3 P1.2 — Tactical map mouse interactions (raycaster) ─────────────

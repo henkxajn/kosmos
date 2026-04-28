@@ -2315,4 +2315,38 @@ export default {
   'outpostPicker.noAtmosphere': 'Brak atmosfery',
   'outpostPicker.queuePending': 'Kolejkuj — brakujące zasoby będą produkowane',
   'expedition.outpostQueued': 'Zamówienie placówki w kolejce — brakujące zasoby będą produkowane',
+
+  // === M3 P1.5 — Universal Tooltip ===
+  // Vessel
+  'tooltip.vessel.empire':    'Imperium',
+  'tooltip.vessel.fuel':      'Paliwo',
+  'tooltip.vessel.endurance': 'Wytrzymałość',
+  'tooltip.vessel.order':     'Rozkaz',
+  'tooltip.vessel.mission':   'Misja',
+  'tooltip.vessel.position':  'Pozycja',
+  // Planet
+  'tooltip.planet.type':        'Typ',
+  'tooltip.planet.owner':       'Właściciel',
+  'tooltip.planet.population':  'Populacja',
+  'tooltip.planet.resources':   'Zasoby',
+  'tooltip.planet.temperature': 'Temperatura',
+  // POI
+  'tooltip.poi.type':       'Typ',
+  'tooltip.poi.owner':      'Właściciel',
+  'tooltip.poi.created':    'Utworzono (rok)',
+  'tooltip.poi.position':   'Pozycja',
+  'tooltip.poi.waypoints':  'Punkty trasy',
+  'tooltip.poi.loopMode':   'Tryb pętli',
+  'tooltip.poi.range':      'Zasięg',
+  'tooltip.poi.members':    'Członkowie',
+  'tooltip.poi.state':      'Stan',
+  // Empire / ownership labels
+  'tooltip.empire.player':   'Imperium gracza',
+  'tooltip.empire.hostile':  'Wrogie imperium',
+  'tooltip.empire.neutral':  'Neutralne',
+  'tooltip.empire.unknown':  'Nieznane',
+  // UI element hints (data-tooltip pattern, Filip D6=α)
+  'tooltip.menu.requiresSelection': 'Najpierw wybierz statek',
+  'tooltip.menu.outOfRange':        'Cel poza zasięgiem',
+  'tooltip.fleet.cancelOrderHint':  'Anuluj rozkaz statku',
 };

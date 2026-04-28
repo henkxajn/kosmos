@@ -57,6 +57,13 @@ export const GAME_CONFIG = {
     // M3 P1.3 — UI orders interactive (rollback toggle: false → placeholder behavior z P1.1/P1.2)
     m3OrdersInteractive:  true,
   },
+
+  // ── UI tuning (M3 P1.5+) ────────────────────────────────────────────────
+  // Universal tooltip system (Tooltip.js + TooltipContent.js).
+  // tooltipDelayMs: delay przed show po hover. Filip D5=B (configurable).
+  UI: {
+    tooltipDelayMs: 500,
+  },
 };
 
 // Typy gwiazd z parametrami fizycznymi

@@ -2315,4 +2315,38 @@ export default {
   'outpostPicker.noAtmosphere': 'No atmosphere',
   'outpostPicker.queuePending': 'Queue — missing resources will be produced',
   'expedition.outpostQueued': 'Outpost order queued — missing resources will be produced',
+
+  // === M3 P1.5 — Universal Tooltip ===
+  // Vessel
+  'tooltip.vessel.empire':    'Empire',
+  'tooltip.vessel.fuel':      'Fuel',
+  'tooltip.vessel.endurance': 'Endurance',
+  'tooltip.vessel.order':     'Order',
+  'tooltip.vessel.mission':   'Mission',
+  'tooltip.vessel.position':  'Position',
+  // Planet
+  'tooltip.planet.type':        'Type',
+  'tooltip.planet.owner':       'Owner',
+  'tooltip.planet.population':  'Population',
+  'tooltip.planet.resources':   'Resources',
+  'tooltip.planet.temperature': 'Temperature',
+  // POI
+  'tooltip.poi.type':       'Type',
+  'tooltip.poi.owner':      'Owner',
+  'tooltip.poi.created':    'Created (year)',
+  'tooltip.poi.position':   'Position',
+  'tooltip.poi.waypoints':  'Waypoints',
+  'tooltip.poi.loopMode':   'Loop Mode',
+  'tooltip.poi.range':      'Range',
+  'tooltip.poi.members':    'Members',
+  'tooltip.poi.state':      'State',
+  // Empire / ownership labels
+  'tooltip.empire.player':   'Player Empire',
+  'tooltip.empire.hostile':  'Hostile Empire',
+  'tooltip.empire.neutral':  'Neutral',
+  'tooltip.empire.unknown':  'Unknown',
+  // UI element hints (data-tooltip pattern)
+  'tooltip.menu.requiresSelection': 'Select a vessel first',
+  'tooltip.menu.outOfRange':        'Target out of range',
+  'tooltip.fleet.cancelOrderHint':  'Cancel vessel order',
 };

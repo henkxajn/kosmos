@@ -1002,6 +1002,13 @@ export class UIManager {
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y, button); return; }
   }
 
+  // M3 P1.5 — wystawiamy konwersję clientX/Y → ui-canvas local px (post-UI_SCALE)
+  // żeby GameScene.tooltip hover dispatch mógł wywołać FleetOverlay.resolveHoverInfo
+  // bez duplikowania UI_SCALE math.
+  toLocalUI(rawX, rawY) {
+    return { x: rawX / UI_SCALE, y: rawY / UI_SCALE };
+  }
+
   handleMouseMove(x, y) {
     this._dirty = true;
     x /= UI_SCALE; y /= UI_SCALE;

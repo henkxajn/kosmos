@@ -16,6 +16,7 @@ import { THEME } from '../config/ThemeConfig.js';
 import { buildMenuOptions } from '../data/RightClickMenuOptions.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { buildOrderSpec, buildPatrolFromWaypoints } from '../utils/OrderDispatcher.js';
+import { t } from '../i18n/i18n.js';
 
 export class RightClickMenu {
   constructor() {
@@ -73,6 +74,24 @@ export class RightClickMenu {
       `;
       item.textContent = `${opt.icon}  ${opt.labelPL}`;
       if (opt.disabledReason) item.title = opt.disabledReason;
+
+      // M3 P1.5 — universal tooltip dla disabled options. data-tooltip
+      // pattern (Filip D6=α) — Tooltip.js global mouseover/mouseout listener
+      // pickup'uje atrybut. Pre-existing P1.3 known issue "out of range" UI feedback.
+      if (!opt.enabled) {
+        const reason = opt.disabledReason ?? 'requires_selection';
+        // Mapuj kody na klucze tłumaczeń; fallback na surowy reason
+        let tipKey;
+        if (reason === 'requires_selection' || /selection|wybierz/i.test(reason)) {
+          tipKey = 'tooltip.menu.requiresSelection';
+        } else if (/range|zasięg/i.test(reason)) {
+          tipKey = 'tooltip.menu.outOfRange';
+        } else {
+          tipKey = null;
+        }
+        const tipText = tipKey ? t(tipKey) : reason;
+        item.setAttribute('data-tooltip', tipText);
+      }
 
       if (opt.enabled) {
         item.addEventListener('mouseenter', () => {
