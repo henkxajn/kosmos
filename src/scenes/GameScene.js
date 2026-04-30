@@ -3462,11 +3462,30 @@ export class GameScene {
     }
     // DOM elements z data-tooltip — sam Tooltip.js obsługuje przez global mouseover/mouseout,
     // tu tylko canvas paths.
-    if (targetId === 'three-canvas' || targetId === 'planet-canvas') {
+    // M3 P1.5 post-fix #1: planet-canvas (z=4) capture'uje WSZYSTKIE mouse
+    // events nad mapą — events nigdy nie docierają do ui-canvas mimo że
+    // tactical map jest tam renderowana. Bound check (fleetOv._mapBounds w
+    // przestrzeni ui-canvas-local) rozróżnia tactical region od mapy 3D.
+    // Pattern z P1.2 post-fix #2 (CANVAS bypass dla isOverUI), tutaj dla mousemove.
+    const isMainCanvas = (targetId === 'three-canvas' || targetId === 'planet-canvas');
+    if (isMainCanvas) {
+      const fleetOv = this.uiManager?.overlayManager?.overlays?.fleet;
+      const b = fleetOv?._visible ? fleetOv._mapBounds : null;
+      if (b) {
+        // _mapBounds żyje w ui-canvas-local (po UI_SCALE) — konwertujemy clientX/Y
+        const local = this.uiManager?.toLocalUI?.(clientX, clientY);
+        if (local
+          && local.x >= b.x && local.x <= b.x + b.w
+          && local.y >= b.y && local.y <= b.y + b.h) {
+          this._tooltipHoverFromTactical(clientX, clientY);
+          return;
+        }
+      }
       this._tooltipHoverFromMain3D(clientX, clientY);
       return;
     }
     if (targetId === 'ui-canvas') {
+      // Fallback — gdyby planet-canvas miał display:none / pointer-events:none.
       this._tooltipHoverFromTactical(clientX, clientY);
       return;
     }
