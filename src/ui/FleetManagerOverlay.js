@@ -2528,7 +2528,7 @@ export class FleetManagerOverlay {
   _drawBodyTooltip(ctx, areaX, areaY, areaW, areaH) {
     const { bodyId, screenX, screenY } = this._mapHoverBody;
     const body = _findBody(bodyId);
-    // Gwiazda
+    // Gwiazda — zachowana w canvas (NEW Universal Tooltip nie obsługuje 'star' type, M4 cleanup).
     if (!body) {
       const stars = EntityManager.getByType('star') ?? [];
       const star = stars.find(s => s.id === bodyId);
@@ -2541,63 +2541,12 @@ export class FleetManagerOverlay {
       ]);
     }
 
-    const explored = body.explored ?? false;
-    const colMgr = window.KOSMOS?.colonyManager;
-    const hasColony = colMgr?.hasColony(body.id);
-    const distAU = this._bodyDistFromStar(body);
-
-    // Ikona wg typu
-    const icons = { planet: '🌍', moon: '🌙', planetoid: '🪨', asteroid: '☄', comet: '💫' };
-    const icon = icons[body.type] ?? '?';
-
-    const lines = [];
-    lines.push({ text: `${icon} ${body.name ?? body.id}`, color: THEME.textPrimary, bold: true });
-    lines.push({ text: t('fleet.tooltipType', body.planetType ?? body.subType ?? body.type), color: THEME.textSecondary });
-    lines.push({ text: t('fleet.tooltipDistance', distAU.toFixed(2)), color: THEME.textSecondary });
-
-    if (explored) {
-      lines.push({ text: t('fleet.tooltipStatusExplored'), color: THEME.success });
-      if (body.temperatureC != null || body.temperatureK) {
-        const tempC = Math.round(body.temperatureC ?? (body.temperatureK - 273));
-        lines.push({ text: t("fleet.tooltipTemp", `${tempC > 0 ? "+" : ""}${tempC}`), color: THEME.textSecondary });
-      }
-      if (body.orbital?.a) {
-        lines.push({ text: t('fleet.tooltipOrbit', body.orbital.a.toFixed(2)), color: THEME.textSecondary });
-      }
-      // Atmosfera
-      const atm = body.atmosphere || 'none';
-      const atmLabels = { dense: t('fleet.atmDense'), thick: t('fleet.atmDense'), thin: t('fleet.atmThin'), breathable: t('fleet.atmBreathable'), none: t('fleet.atmNone') };
-      let atmText = atmLabels[atm] || atm;
-      if (atm === 'breathable' || body.breathableAtmosphere) atmText += ' ✅';
-      const atmIcon = atm === 'none' ? '' : '☁ ';
-      const atmColor = atm === 'none' ? THEME.textDim : (atm === 'breathable' || body.breathableAtmosphere) ? THEME.success : THEME.textSecondary;
-      lines.push({ text: `${atmIcon}${t('fleet.tooltipAtmosphere', atmText)}`, color: atmColor });
-      if (hasColony) {
-        const col = colMgr.getColony(body.id);
-        const pop = col?.civSystem?.population ?? 0;
-        lines.push({ text: t('fleet.tooltipColony', pop), color: THEME.mint });
-      }
-      // Pełna lista złóż
-      const deps = body.deposits ?? [];
-      const activeDeps = deps.filter(d => d.remaining > 0).sort((a, b) => b.richness - a.richness);
-      if (activeDeps.length > 0) {
-        lines.push({ text: t('fleet.tooltipDepositsHeader'), color: THEME.textDim });
-        for (const d of activeDeps) {
-          const stars = d.richness >= 0.7 ? '★★★' : d.richness >= 0.4 ? '★★' : '★';
-          const pct = Math.round((d.remaining / d.totalAmount) * 100);
-          lines.push({ text: `  ${d.resourceId} ${stars}  ${pct}% (${d.remaining}/${d.totalAmount})`, color: THEME.yellow });
-        }
-      } else if (deps.length > 0) {
-        lines.push({ text: t('fleet.tooltipDepositsExhausted'), color: THEME.textDim });
-      } else {
-        lines.push({ text: t('fleet.tooltipDepositsNone'), color: THEME.textDim });
-      }
-    } else {
-      lines.push({ text: t('fleet.tooltipStatusUnexplored'), color: THEME.warning });
-      lines.push({ text: t('fleet.tooltipData'), color: THEME.textDim });
-    }
-
-    this._drawTooltipBox(ctx, screenX, screenY, areaX, areaY, areaW, areaH, lines);
+    // M3 migration: body tooltip (planet/moon/planetoid/asteroid/comet) zmigrowany
+    // do NEW Universal Tooltip przez TooltipContent._planetContent. NEW pokazuje
+    // superset (Status, Distance, Atmosphere, Resources, Owner, Population). Disable
+    // canvas draw — _mapHoverBody tracking zachowany dla sprite highlight (L2052).
+    // OLD body code w git history (commit pre-migracja).
+    return;
   }
 
   _drawTooltipBox(ctx, sx, sy, areaX, areaY, areaW, areaH, lines) {

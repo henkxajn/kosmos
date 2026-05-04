@@ -123,6 +123,22 @@ function _planetContent(planet, t, deps) {
   const ptype = planet.planetType ?? planet.type;
   if (ptype) lines.push(`${t('tooltip.planet.type')}: ${ptype}`);
 
+  // M3 migration: status (explored/unexplored). Linia widoczna zawsze — gracz
+  // od razu widzi czy ma dane o ciele.
+  const explored = planet.explored ?? false;
+  lines.push(t(explored ? 'fleet.tooltipStatusExplored' : 'fleet.tooltipStatusUnexplored'));
+
+  // M3 migration: dystans od gwiazdy (origin 0,0). Identical formula z
+  // FleetManagerOverlay._bodyDistFromStar. Wymaga deps.auToPx (GAME_CONFIG.AU_TO_PX).
+  if (typeof planet.x === 'number' && typeof planet.y === 'number' && deps.auToPx) {
+    const distAU = Math.hypot(planet.x, planet.y) / deps.auToPx;
+    lines.push(t('fleet.tooltipDistance', distAU.toFixed(2)));
+  }
+
+  // M3 migration: atmosfera (z mapowaniem labels + breathable bonus ✅).
+  const atmText = _resolvePlanetAtmosphere(planet, t);
+  if (atmText) lines.push(t('fleet.tooltipAtmosphere', atmText));
+
   // System: SKIP linia — planet.systemName brak (off-spec #4, single-system MVP).
 
   // Owner / population — przez colonyManager.getColony lookup
@@ -140,10 +156,13 @@ function _planetContent(planet, t, deps) {
     lines.push(`${t('tooltip.planet.owner')}: ${t('tooltip.empire.neutral')}`);
   }
 
-  // Resources — pokazujemy listę złóż gdy planet.explored
-  if (planet.explored && Array.isArray(planet.deposits) && planet.deposits.length > 0) {
+  // Resources — pokazujemy listę złóż gdy planet.explored. M3: dla unexplored
+  // pokazujemy "Dane: ???" (przeniesione z OLD _drawBodyTooltip body branch).
+  if (explored && Array.isArray(planet.deposits) && planet.deposits.length > 0) {
     const ids = planet.deposits.map(d => d.resourceId).filter(Boolean).slice(0, 5).join(', ');
     if (ids) lines.push(`${t('tooltip.planet.resources')}: ${ids}`);
+  } else if (!explored) {
+    lines.push(t('fleet.tooltipData'));
   }
 
   // Temperatura — uzupełnia obraz dla unscanned (zawsze widoczna z generatora)
@@ -155,6 +174,25 @@ function _planetContent(planet, t, deps) {
   }
 
   return { title: planet.name ?? `planet_${planet.id ?? '?'}`, lines };
+}
+
+// Pure helper: mapuje planet.atmosphere na user-facing label, lub null gdy
+// brak/'none' (then atmosphere line skipped). Zachowuje OLD _drawBodyTooltip
+// semantykę: dense/thick → atmDense, thin → atmThin, breathable → atmBreathable
+// + ✅, plus fallback flag breathableAtmosphere.
+export function _resolvePlanetAtmosphere(planet, t) {
+  if (!planet) return null;
+  const atm = planet.atmosphere;
+  if (!atm || atm === 'none') return null;
+  const labels = {
+    dense:      'fleet.atmDense',
+    thick:      'fleet.atmDense',
+    thin:       'fleet.atmThin',
+    breathable: 'fleet.atmBreathable',
+  };
+  let label = labels[atm] ? t(labels[atm]) : atm;
+  if (atm === 'breathable' || planet.breathableAtmosphere) label += ' ✅';
+  return label;
 }
 
 // ── POI ────────────────────────────────────────────────────────────────────

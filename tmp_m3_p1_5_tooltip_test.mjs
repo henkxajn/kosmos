@@ -16,7 +16,7 @@ globalThis.window = globalThis.window ?? globalThis;
 globalThis.window.KOSMOS = {};
 
 // ── Imports ────────────────────────────────────────────────────────────
-const { getTooltipContent, _resolveVesselEmpireName } = await import('./src/utils/TooltipContent.js');
+const { getTooltipContent, _resolveVesselEmpireName, _resolvePlanetAtmosphere } = await import('./src/utils/TooltipContent.js');
 
 // ── Test harness ───────────────────────────────────────────────────────
 let passed = 0;
@@ -272,6 +272,69 @@ test('T4.1 vessel → planet → poi switch — content distinct + non-null', ()
   assertTrue(c2.title === 'Bastion', 'c2 planet title');
   assertTrue(c3.title === 'Alpha', 'c3 poi title');
   assertTrue(c1.title !== c2.title && c2.title !== c3.title, 'distinct titles');
+});
+
+// ── T5 — FleetOverlay body tooltip migration (M3 mini-feature) ────────
+// Migracja content z _drawBodyTooltip (canvas) → NEW _planetContent.
+// Nowe pola: status, distance (od gwiazdy), atmosphere, "Dane ???" dla unexplored.
+// Reuse i18n keys fleet.tooltip* (z parametrami {0}). Local tParam honoruje args.
+
+console.log('\n=== T5 — FleetOverlay body tooltip migration (M3) ===\n');
+
+// t fn który formatuje parametryzowane klucze: 'key' lub 'key|arg1,arg2'
+const tParam = (key, ...args) => args.length ? `${key}|${args.join(',')}` : key;
+
+test('T5.1 explored planet z deposits + atmosphere thick + x/y + auToPx → Status/Distance/Atmosphere/Resources', () => {
+  const p = makePlanet({ x: 30, y: 40, atmosphere: 'thick' });  // dist = 50/auToPx
+  const out = getTooltipContent('planet', p, { t: tParam, auToPx: 10 });
+  assertContains(out.lines, l => l === 'fleet.tooltipStatusExplored', 'status explored');
+  assertContains(out.lines, l => l.startsWith('fleet.tooltipDistance|') && l.includes('5.00'), 'distance 5.00 AU');
+  assertContains(out.lines, l => l.startsWith('fleet.tooltipAtmosphere|') && l.includes('fleet.atmDense'), 'atmosphere=thick → atmDense label');
+  assertContains(out.lines, l => l.startsWith('tooltip.planet.resources:') && l.includes('iron'), 'resources line');
+});
+
+test('T5.2 unexplored planet → Status unexplored + Dane ??? + brak resources', () => {
+  const p = makePlanet({ explored: false, x: 10, y: 0 });
+  const out = getTooltipContent('planet', p, { t: tParam, auToPx: 10 });
+  assertContains(out.lines, l => l === 'fleet.tooltipStatusUnexplored', 'status unexplored');
+  assertContains(out.lines, l => l === 'fleet.tooltipData', 'Dane ??? line');
+  assertNoElement(out.lines, l => l.startsWith('tooltip.planet.resources:'), 'no resources unexplored');
+});
+
+test('T5.3 planet z atmosphere=none → SKIP linia atmosphere', () => {
+  const p = makePlanet({ atmosphere: 'none' });
+  const out = getTooltipContent('planet', p, { t: tParam, auToPx: 10 });
+  assertNoElement(out.lines, l => l.startsWith('fleet.tooltipAtmosphere'), 'no atmosphere line for none');
+});
+
+test('T5.4 planet bez x/y lub deps.auToPx → SKIP linia distance', () => {
+  const p1 = makePlanet({ x: 30, y: 40 });  // ma x/y ale brak auToPx
+  const out1 = getTooltipContent('planet', p1, { t: tParam });
+  assertNoElement(out1.lines, l => l.startsWith('fleet.tooltipDistance'), 'no distance bez auToPx');
+
+  const p2 = makePlanet();  // brak x/y
+  const out2 = getTooltipContent('planet', p2, { t: tParam, auToPx: 10 });
+  assertNoElement(out2.lines, l => l.startsWith('fleet.tooltipDistance'), 'no distance bez x/y');
+});
+
+test('T5.5 atmosphere=breathable → linia z ✅', () => {
+  const p = makePlanet({ atmosphere: 'breathable' });
+  const out = getTooltipContent('planet', p, { t: tParam });
+  assertContains(out.lines, l => l.startsWith('fleet.tooltipAtmosphere|') && l.includes('✅'), 'breathable z ✅');
+});
+
+test('T5.6 _resolvePlanetAtmosphere — multi-shape (string/none/breathableFlag/null)', () => {
+  // string thin → atmThin
+  assertEq(_resolvePlanetAtmosphere({ atmosphere: 'thin' }, tParam), 'fleet.atmThin', 'thin → atmThin');
+  // none → null (skip)
+  assertEq(_resolvePlanetAtmosphere({ atmosphere: 'none' }, tParam), null, 'none → null');
+  // missing → null
+  assertEq(_resolvePlanetAtmosphere({}, tParam), null, 'missing atm → null');
+  // breathableAtmosphere flag fallback (atmosphere=thick + flag → ✅)
+  const lbl = _resolvePlanetAtmosphere({ atmosphere: 'thick', breathableAtmosphere: true }, tParam);
+  assertTrue(lbl.includes('✅'), 'breathableAtmosphere flag → ✅');
+  // null planet → null (graceful)
+  assertEq(_resolvePlanetAtmosphere(null, tParam), null, 'null planet → null');
 });
 
 // ── Summary ────────────────────────────────────────────────────────────

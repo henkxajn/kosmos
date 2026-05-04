@@ -3598,6 +3598,7 @@ export class GameScene {
       t,
       colonyManager:   window.KOSMOS?.colonyManager ?? null,
       empireRegistry:  window.KOSMOS?.empireRegistry ?? null,
+      auToPx:          GAME_CONFIG.AU_TO_PX,  // M3: distance computation w _planetContent
     };
   }
 
