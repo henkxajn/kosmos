@@ -522,6 +522,16 @@ export class GameScene {
       deletePOI: (poiId) => window.KOSMOS?.poiRegistry?.deletePOI(poiId),
       // KOSMOS.debug.getPOI(poiId) — pełny obiekt POI lub null.
       getPOI:    (poiId) => window.KOSMOS?.poiRegistry?.getPOI(poiId),
+      // ── M3 P2.1 — POI Panel ──────────────────────────────────────────────
+      // KOSMOS.debug.openPOIPanel() — otwórz panel POI (klawisz N).
+      openPOIPanel: () => window.KOSMOS?.uiManager?.overlayManager?.openPanel?.('poi'),
+      // KOSMOS.debug.closePOIPanel() — zamknij panel POI (jeśli aktywny).
+      closePOIPanel: () => {
+        const om = window.KOSMOS?.uiManager?.overlayManager;
+        if (om?.active === 'poi') om.closeActive();
+      },
+      // KOSMOS.debug.getPOIPanelState() — { visible, sortBy, sortDir, filterType, filterOwner, scrollY, poiCount }.
+      getPOIPanelState: () => window.KOSMOS?.uiManager?.overlayManager?.overlays?.poi?.getState?.(),
       // ── M2b Commit 6 — POI navigation devtools ─────────────────────────
       // KOSMOS.debug.issueGoToPOI(vesselId, poiId) — vessel leci do POI.
       issueGoToPOI: (vId, poiId) => {

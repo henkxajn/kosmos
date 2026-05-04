@@ -24,6 +24,7 @@ export class OverlayManager {
       'y': 'diplomacy',       // Faza 3 — Dyplomacja (relacje z obcymi)
       'w': 'war',             // Faza 4 — Panel wojny
       'l': 'eventLog',        // Opcja B/3 — Dziennik zdarzeń
+      'n': 'poi',             // M3 P2.1 — POI Panel (sidebar list)
     };
   }
 
