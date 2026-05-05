@@ -2392,6 +2392,13 @@ export default {
   'poi.modal.error.too_many_points':  'Too many waypoints',
   'poi.modal.error.registry_failed':  'Save failed: ',
   'poi.confirm.delete':           'Delete this POI:',
+  // Generic confirm modal — chore: custom confirm modal (issue #7)
+  'confirm.yes':                  'Yes',
+  'confirm.no':                   'No',
+  'confirm.cancel':               'Cancel',
+  'poi.confirm.delete.title':     'Delete POI',
+  'poi.confirm.delete.message':   'Are you sure you want to delete POI:',
+  'poi.confirm.delete.confirmBtn':'Delete',
   // Empire / ownership labels
   'tooltip.empire.player':   'Player Empire',
   'tooltip.empire.hostile':  'Hostile Empire',

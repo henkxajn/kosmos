@@ -2392,6 +2392,13 @@ export default {
   'poi.modal.error.too_many_points':  'Za dużo punktów',
   'poi.modal.error.registry_failed':  'Zapis nieudany: ',
   'poi.confirm.delete':           'Czy na pewno usunąć POI:',
+  // Generic confirm modal — chore: custom confirm modal (issue #7)
+  'confirm.yes':                  'Tak',
+  'confirm.no':                   'Nie',
+  'confirm.cancel':               'Anuluj',
+  'poi.confirm.delete.title':     'Usuń POI',
+  'poi.confirm.delete.message':   'Czy na pewno usunąć POI:',
+  'poi.confirm.delete.confirmBtn':'Usuń',
   // Empire / ownership labels
   'tooltip.empire.player':   'Imperium gracza',
   'tooltip.empire.hostile':  'Wrogie imperium',

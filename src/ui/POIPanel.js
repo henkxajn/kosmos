@@ -17,6 +17,7 @@ import {
   collectOwners, POI_TYPE_ORDER, TYPE_ICONS,
 } from '../utils/POIPanelLogic.js';
 import { showPOIModalCreate, showPOIModalEdit } from './POIModal.js';
+import { showConfirmModal }                     from './ConfirmModal.js';
 
 const HEADER_H = 36;
 const FILTER_H = 32;
@@ -367,10 +368,14 @@ export class POIPanel extends BaseOverlay {
       case 'delete_poi': {
         const poi = window.KOSMOS?.poiRegistry?.getPOI?.(zone.data.poiId);
         if (!poi) break;
-        const msg = `${t('poi.confirm.delete')} "${poi.name}"?`;
-        if (window.confirm(msg)) {
-          window.KOSMOS?.poiRegistry?.deletePOI?.(poi.id);
-        }
+        showConfirmModal({
+          title:        t('poi.confirm.delete.title'),
+          message:      `${t('poi.confirm.delete.message')} "${poi.name}"?`,
+          confirmLabel: t('poi.confirm.delete.confirmBtn'),
+          danger:       true,
+        }).then((ok) => {
+          if (ok) window.KOSMOS?.poiRegistry?.deletePOI?.(poi.id);
+        });
         break;
       }
     }

@@ -17,6 +17,7 @@ import {
   getPOIFormSchema, validatePOIForm, formToPOIParams,
   poiToFormData, makeDefaultFormData,
 }                                                           from '../utils/POIFormLogic.js';
+import { showConfirmModal }                                 from './ConfirmModal.js';
 
 const POI_TYPES_LIST = ['waypoint', 'patrol', 'picket', 'rally', 'ambush'];
 const Z_INDEX = 1000;
@@ -212,10 +213,15 @@ function _showModal(mode, initialData) {
     }
 
     // ── Delete handler ────────────────────────────────────────
-    function attemptDelete() {
+    async function attemptDelete() {
       if (!isEdit) return;
-      const confirmMsg = `${t('poi.confirm.delete')} "${initialData.name}"?`;
-      if (!window.confirm(confirmMsg)) return;
+      const ok = await showConfirmModal({
+        title:        t('poi.confirm.delete.title'),
+        message:      `${t('poi.confirm.delete.message')} "${initialData.name}"?`,
+        confirmLabel: t('poi.confirm.delete.confirmBtn'),
+        danger:       true,
+      });
+      if (!ok) return;
       const reg = window.KOSMOS?.poiRegistry;
       if (!reg) { finishWith(null); return; }
       const result = reg.deletePOI(initialData.id);
