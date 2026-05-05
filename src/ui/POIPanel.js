@@ -231,6 +231,15 @@ export class POIPanel extends BaseOverlay {
     ctx.clip();
 
     const list = this._getFilteredSorted();
+
+    // Clamp scrollY do [0, maxScroll] — fix dla pre-existing P2.1 bug:
+    // gdy lista shrinks (delete/filter/sort), stary scrollY persystuje
+    // → POI rendered poza viewport. Single source of truth w render.
+    const totalRowsHeight = list.length * ROW_H + 6;  // +6 = top padding
+    const maxScroll = Math.max(0, totalRowsHeight - h);
+    this._maxScroll = maxScroll;  // cache dla handleScroll upper-bound clamp
+    this._scrollY = Math.max(0, Math.min(this._scrollY, maxScroll));
+
     if (list.length === 0) {
       ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
@@ -383,7 +392,10 @@ export class POIPanel extends BaseOverlay {
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
-    this._scrollY = Math.max(0, this._scrollY + delta * 0.6);
+    // Upper-bound clamp używa _maxScroll cached w poprzednim _drawList.
+    // Fallback Infinity przy pierwszym scroll przed render — render i tak clampuje.
+    const max = this._maxScroll ?? Infinity;
+    this._scrollY = Math.max(0, Math.min(this._scrollY + delta * 0.6, max));
     return true;
   }
 }
