@@ -532,6 +532,19 @@ export class GameScene {
       },
       // KOSMOS.debug.getPOIPanelState() — { visible, sortBy, sortDir, filterType, filterOwner, scrollY, poiCount }.
       getPOIPanelState: () => window.KOSMOS?.uiManager?.overlayManager?.overlays?.poi?.getState?.(),
+      // ── M3 P2.2 — POI Modal (create + edit) ─────────────────────────────
+      // KOSMOS.debug.openPOIModalCreate('waypoint'|'patrol'|'picket'|'rally'|'ambush')
+      openPOIModalCreate: async (initialType = 'waypoint') => {
+        const m = await import('../ui/POIModal.js');
+        return m.showPOIModalCreate(initialType);
+      },
+      // KOSMOS.debug.openPOIModalEdit(poiId) — otwiera Edit modal dla istniejącego POI.
+      openPOIModalEdit: async (poiId) => {
+        const poi = window.KOSMOS?.poiRegistry?.getPOI?.(poiId);
+        if (!poi) { console.warn(`[debug] POI nie znaleziony: ${poiId}`); return null; }
+        const m = await import('../ui/POIModal.js');
+        return m.showPOIModalEdit(poi);
+      },
       // ── M2b Commit 6 — POI navigation devtools ─────────────────────────
       // KOSMOS.debug.issueGoToPOI(vesselId, poiId) — vessel leci do POI.
       issueGoToPOI: (vId, poiId) => {

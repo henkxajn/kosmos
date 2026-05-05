@@ -16,6 +16,7 @@ import {
   sortPOIs, filterPOIs, formatPOIRow, getPOILocation,
   collectOwners, POI_TYPE_ORDER, TYPE_ICONS,
 } from '../utils/POIPanelLogic.js';
+import { showPOIModalCreate, showPOIModalEdit } from './POIModal.js';
 
 const HEADER_H = 36;
 const FILTER_H = 32;
@@ -111,6 +112,22 @@ export class POIPanel extends BaseOverlay {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
     ctx.fillText(`${filtered}/${total}`, x + w - 80, y + 24);
+
+    // [+ Dodaj POI] button (M3 P2.2 D3=a)
+    const addBtnW = 110, addBtnH = 22;
+    const addBtnX = x + w - 200, addBtnY = y + 7;
+    const addHover = this._hoverZone?.type === 'add_poi';
+    ctx.fillStyle = addHover ? 'rgba(0,255,180,0.12)' : 'rgba(0,255,180,0.05)';
+    ctx.fillRect(addBtnX, addBtnY, addBtnW, addBtnH);
+    ctx.strokeStyle = addHover ? THEME.accent : THEME.borderLight;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(addBtnX + 0.5, addBtnY + 0.5, addBtnW - 1, addBtnH - 1);
+    ctx.font = `${THEME.fontSizeSmall + 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = addHover ? THEME.accent : THEME.success;
+    ctx.textAlign = 'center';
+    ctx.fillText(t('poi.modal.btn.add'), addBtnX + addBtnW / 2, addBtnY + addBtnH / 2 + 4);
+    ctx.textAlign = 'left';
+    this._addHit(addBtnX, addBtnY, addBtnW, addBtnH, 'add_poi');
 
     // Close X
     const closeX = x + w - 24;
@@ -277,6 +294,22 @@ export class POIPanel extends BaseOverlay {
     ctx.textAlign = 'right';
     ctx.fillText(row.meta, x + w - 14, y + 18);
     ctx.textAlign = 'left';
+
+    // Pencil + trash icons (M3 P2.2 D4=a, D5=b dual)
+    // Hit zones pushed PRZED focus_poi (które dodajemy w _drawList po _drawRow)
+    // → _hitTest find() znajdzie ikony pierwsze.
+    const editX  = x + w - 56;
+    const trashX = x + w - 28;
+    const iconY  = y + 28;
+    const editHover  = this._hoverZone?.type === 'edit_poi'   && this._hoverZone?.data?.poiId === poi.id;
+    const trashHover = this._hoverZone?.type === 'delete_poi' && this._hoverZone?.data?.poiId === poi.id;
+    ctx.font = `14px ${THEME.fontFamily}`;
+    ctx.fillStyle = editHover ? THEME.accent : THEME.textSecondary;
+    ctx.fillText('✏', editX, iconY);
+    ctx.fillStyle = trashHover ? THEME.danger : THEME.textSecondary;
+    ctx.fillText('🗑', trashX, iconY);
+    this._addHit(editX  - 4, y + 14, 20, 22, 'edit_poi',   { poiId: poi.id });
+    this._addHit(trashX - 4, y + 14, 20, 22, 'delete_poi', { poiId: poi.id });
   }
 
   _getFilteredSorted() {
@@ -318,6 +351,25 @@ export class POIPanel extends BaseOverlay {
           // ThreeCameraController.focusOn(worldX, worldZ) — game 2D (x,y) → 3D (x,z)
           const cc = window.KOSMOS?.threeRenderer?._cameraController;
           if (cc?.focusOn) cc.focusOn(loc.x, loc.y);
+        }
+        break;
+      }
+      // M3 P2.2 — modal CRUD routing
+      case 'add_poi': {
+        showPOIModalCreate('waypoint');  // EventBus poi:created → _onPoiChanged refresh
+        break;
+      }
+      case 'edit_poi': {
+        const poi = window.KOSMOS?.poiRegistry?.getPOI?.(zone.data.poiId);
+        if (poi) showPOIModalEdit(poi);
+        break;
+      }
+      case 'delete_poi': {
+        const poi = window.KOSMOS?.poiRegistry?.getPOI?.(zone.data.poiId);
+        if (!poi) break;
+        const msg = `${t('poi.confirm.delete')} "${poi.name}"?`;
+        if (window.confirm(msg)) {
+          window.KOSMOS?.poiRegistry?.deletePOI?.(poi.id);
         }
         break;
       }
