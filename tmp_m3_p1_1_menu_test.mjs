@@ -66,19 +66,22 @@ function assertFalse(cond, label) {
 // ──────────────────────────────────────────────────────────────────────────
 console.log('\nT1 — buildMenuOptions filtering:');
 
-test('T1.1 empty target, no selection → moveToPoint+patrolManual disabled, createPOI enabled', () => {
+test('T1.1 empty target, no selection → move/patrolManual disabled, 5 createPOI.* enabled', () => {
   // M3 P1.3: empty menu rozszerzone o `patrolManual` (picker mode trigger).
+  // M3 P2.3: createPOI rozbity na 5 type-specific entries (createPOI.waypoint/patrol/picket/rally/ambush).
   const opts = buildMenuOptions({ type: 'empty' }, null);
-  assertEq(opts.length, 3, 'liczba opcji');
+  assertEq(opts.length, 7, 'liczba opcji (move + patrolManual + 5 createPOI types)');
   const move    = opts.find(o => o.id === 'moveToPoint');
   const patrolM = opts.find(o => o.id === 'patrolManual');
-  const poi     = opts.find(o => o.id === 'createPOI');
+  const createTypes = opts.filter(o => o.action === 'openCreatePOIPicker');
   assertEq(move.enabled, false, 'moveToPoint.enabled');
   assertEq(move.disabledReason, 'Najpierw wybierz statek', 'moveToPoint.disabledReason');
   assertEq(patrolM.enabled, false, 'patrolManual.enabled (requiresSelection)');
   assertEq(patrolM.disabledReason, 'Najpierw wybierz statek', 'patrolManual.disabledReason');
-  assertEq(poi.enabled, true, 'createPOI.enabled');
-  assertEq(poi.disabledReason, null, 'createPOI.disabledReason');
+  assertEq(createTypes.length, 5, '5 type-specific createPOI entries');
+  assertEq(createTypes.every(o => o.enabled === true), true, 'wszystkie createPOI enabled (no selection req)');
+  assertEq(createTypes.map(o => o.poiType).sort(),
+    ['ambush', 'patrol', 'picket', 'rally', 'waypoint'], 'poiType per entry');
 });
 
 test('T1.2 empty target, selection=v_1 → oba enabled', () => {

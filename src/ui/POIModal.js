@@ -42,6 +42,19 @@ export function showPOIModalEdit(poi) {
   return _showModal('edit', poi);
 }
 
+/**
+ * M3 P2.3 — Otwórz modal w trybie Create z pre-fill z picker mode.
+ * Per type:
+ *   waypoint        → initialFormData.point = point
+ *   picket/rally/ambush → initialFormData.center = point (+ defaults)
+ *   patrol          → initialFormData.waypoints = waypoints (+ loopMode default)
+ * @param {string} type — POI type
+ * @param {object} prefillFormData — partial formData per type (z pickerResultToPOISpec)
+ */
+export function showPOIModalCreateFromPicker(type, prefillFormData) {
+  return _showModal('create', { type, _prefill: prefillFormData });
+}
+
 // ── Internal ──────────────────────────────────────────────────────────
 
 function _showModal(mode, initialData) {
@@ -50,6 +63,10 @@ function _showModal(mode, initialData) {
     const isEdit = mode === 'edit';
     let currentType = isEdit ? initialData.type : (initialData.type || 'waypoint');
     let formData = isEdit ? poiToFormData(initialData) : makeDefaultFormData(currentType);
+    // M3 P2.3 — pre-fill z picker mode (point/center/waypoints + defaults z PICKER_DEFAULTS)
+    if (!isEdit && initialData && initialData._prefill && typeof initialData._prefill === 'object') {
+      formData = { ...formData, ...initialData._prefill };
+    }
     let errors = {};
 
     // ── DOM build ─────────────────────────────────────────────

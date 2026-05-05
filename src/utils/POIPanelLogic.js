@@ -173,3 +173,74 @@ export function collectOwners(pois) {
 
 export const POI_TYPE_ORDER = ['waypoint', 'patrol', 'picket', 'rally', 'ambush'];
 export { TYPE_ICONS };
+
+// ── M3 P2.3 — pickerResultToPOISpec ──────────────────────────────────────
+// Schema-aware extract picker result → POI form pre-fill data.
+// Per type:
+//   waypoint        → { point: {x,y} }
+//   picket          → { center: {x,y}, rangePxLocal: 50 (default) }
+//   rally           → { center: {x,y}, waitForCount: 1 (default) }
+//   ambush          → { center: {x,y}, rangePxLocal: 50, hidden: true }
+//   patrol          → { waypoints: [{x,y},...], loopMode: 'loop' (default) }
+//
+// Defaulty zgodne z POIFormLogic.makeDefaultFormData (validation min/max
+// rangePxLocal=1..1000, waitForCount=1..50). 50 i 1 to bezpieczne wartości
+// startowe — gracz może edytować w modal'u przed Save.
+
+const PICKER_DEFAULTS = Object.freeze({
+  rangePxLocal: 50,
+  waitForCount: 1,
+  loopMode:     'loop',
+  hidden:       true,
+});
+
+/**
+ * Buduje partial formData per type z picker result (single point lub waypoints[]).
+ *
+ * @param {string} type — 'waypoint' | 'patrol' | 'picket' | 'rally' | 'ambush'
+ * @param {object} pickerResult — { point: {x,y} } LUB { waypoints: [...] }
+ * @returns {object|null} partial formData — null gdy invalid input
+ */
+export function pickerResultToPOISpec(type, pickerResult) {
+  if (!pickerResult || typeof pickerResult !== 'object') return null;
+  const point = pickerResult.point;
+  const waypoints = pickerResult.waypoints;
+
+  switch (type) {
+    case 'waypoint':
+      if (!_isPoint(point)) return null;
+      return { point: { x: point.x, y: point.y } };
+    case 'picket':
+      if (!_isPoint(point)) return null;
+      return {
+        center: { x: point.x, y: point.y },
+        rangePxLocal: PICKER_DEFAULTS.rangePxLocal,
+      };
+    case 'rally':
+      if (!_isPoint(point)) return null;
+      return {
+        center: { x: point.x, y: point.y },
+        waitForCount: PICKER_DEFAULTS.waitForCount,
+      };
+    case 'ambush':
+      if (!_isPoint(point)) return null;
+      return {
+        center: { x: point.x, y: point.y },
+        rangePxLocal: PICKER_DEFAULTS.rangePxLocal,
+        hidden: PICKER_DEFAULTS.hidden,
+      };
+    case 'patrol': {
+      if (!Array.isArray(waypoints) || waypoints.length < 2) return null;
+      const wps = waypoints.filter(_isPoint).map(w => ({ x: w.x, y: w.y }));
+      if (wps.length < 2) return null;
+      return {
+        waypoints: wps,
+        loopMode: PICKER_DEFAULTS.loopMode,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+export { PICKER_DEFAULTS };

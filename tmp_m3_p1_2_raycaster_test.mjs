@@ -238,13 +238,14 @@ test('T5.2 ownVessel target === selected → escort filtrowany (condition)', () 
   assertEq(escort, undefined, 'escort odfiltrowany');
 });
 
-test('T5.3 empty target z selectedVessel → moveToPoint+createPOI enabled', () => {
+test('T5.3 empty target z selectedVessel → moveToPoint+createPOI.* enabled', () => {
+  // M3 P2.3: createPOI single entry → 5 type-specific entries (createPOI.waypoint/patrol/...).
   const target = { type: 'empty', worldPoint: wp };
   const opts = buildMenuOptions(target, 'v_own');
   const move = opts.find(o => o.id === 'moveToPoint');
-  const poi  = opts.find(o => o.id === 'createPOI');
+  const createWaypoint = opts.find(o => o.id === 'createPOI.waypoint');
   assertEq(move.enabled, true, 'moveToPoint.enabled');
-  assertEq(poi.enabled, true, 'createPOI.enabled');
+  assertEq(createWaypoint?.enabled, true, 'createPOI.waypoint.enabled');
 });
 
 // ──────────────────────────────────────────────────────────────────────────

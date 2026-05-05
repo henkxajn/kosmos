@@ -3,6 +3,7 @@
 // LPM drag = obrót | scroll = zoom | H = reset
 
 import * as THREE from 'three';
+import { gameplayToWorld } from '../utils/CoordTransform.js';
 
 const DRAG_THRESHOLD = 5;  // px — poniżej = kliknięcie, powyżej = orbit
 
@@ -132,6 +133,15 @@ export class ThreeCameraController {
     this._goalTarget.set(worldX, worldY, worldZ);
     // Szybki lerp — nadąża za ruchem ale wygładza mikro-drgania GPU
     this._target.lerp(this._goalTarget, 0.4);
+  }
+
+  // M3 P2.3 — focus na punkt w gameplay coords (px from origin).
+  // Konwertuje przez CoordTransform → focusOn (Three.js world coords).
+  // Single source of truth dla coord conversion (resolves issue #5).
+  focusOnGameplayCoord(gameplayPoint) {
+    const world = gameplayToWorld(gameplayPoint);
+    if (!world) return;
+    this.focusOn(world.worldX, world.worldZ);
   }
 
   // Ustaw minimalny dystans kamery (np. 0.5 dla księżyców, 3 domyślnie)

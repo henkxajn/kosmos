@@ -71,7 +71,8 @@ export function findHitZone(localX, localY, hitZones) {
   for (let i = hitZones.length - 1; i >= 0; i--) {
     const z = hitZones[i];
     if (!z) continue;
-    if (z.type !== 'map_body' && z.type !== 'map_vessel') continue;
+    // M3 P2.3 — dodano 'map_poi' (POI sprites w tactical map)
+    if (z.type !== 'map_body' && z.type !== 'map_vessel' && z.type !== 'map_poi') continue;
     if (localX >= z.x && localX <= z.x + z.w
         && localY >= z.y && localY <= z.y + z.h) {
       return z;
@@ -128,6 +129,22 @@ export function resolveTacticalTarget(hit, worldPoint, lookups = {}) {
       type: 'planet',
       entityId: bodyId,
       planet,
+      worldPoint: worldPoint ?? null,
+    };
+  }
+
+  // M3 P2.3 — POI sprites w tactical map. Resolves issue #6.
+  // POI hover w tactical → NEW Tooltip (P1.5 _poiContent reuse).
+  // PPM na POI → MENU_OPTIONS_BY_TARGET.poi (goToPOI/patrol/edit/delete).
+  if (hit.type === 'map_poi') {
+    const poiId = hit.data?.poiId;
+    if (!poiId) return { type: 'empty', worldPoint: worldPoint ?? null };
+    const poi = lookups.getPOI?.(poiId) ?? null;
+    if (!poi) return { type: 'empty', worldPoint: worldPoint ?? null };
+    return {
+      type: 'poi',
+      entityId: poiId,
+      poi,
       worldPoint: worldPoint ?? null,
     };
   }

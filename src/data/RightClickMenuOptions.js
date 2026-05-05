@@ -30,8 +30,20 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
     // POI patrol (klasyczny) zostaje w MENU_OPTIONS_BY_TARGET.poi (używa POI.waypoints).
     { id: 'patrolManual', labelPL: 'Patroluj manualnie', labelEN: 'Manual patrol', icon: '↻',
       action: 'issueOrder', orderType: 'patrol', requiresSelection: true },
-    { id: 'createPOI', labelPL: 'Utwórz POI...', labelEN: 'Create POI...', icon: '⌖',
-      action: 'openCreatePOIModal', requiresSelection: false },
+    // M3 P2.3 — Create POI mode (5 type-specific entries). Single-click types
+    // (waypoint/picket/rally/ambush) używają target.worldPoint jako 1st click —
+    // modal otwiera się natychmiast pre-filled (fast path). Patrol startuje
+    // picker mode (multi-click ≥2 + ENTER).
+    { id: 'createPOI.waypoint', labelPL: 'Utwórz Waypoint tutaj', labelEN: 'Create Waypoint here', icon: '📍',
+      action: 'openCreatePOIPicker', poiType: 'waypoint', requiresSelection: false },
+    { id: 'createPOI.patrol', labelPL: 'Utwórz Patrol tutaj', labelEN: 'Create Patrol here', icon: '↻',
+      action: 'openCreatePOIPicker', poiType: 'patrol', requiresSelection: false },
+    { id: 'createPOI.picket', labelPL: 'Utwórz Pikietę tutaj', labelEN: 'Create Picket here', icon: '⚠',
+      action: 'openCreatePOIPicker', poiType: 'picket', requiresSelection: false },
+    { id: 'createPOI.rally', labelPL: 'Utwórz Punkt Zborny tutaj', labelEN: 'Create Rally here', icon: '🎯',
+      action: 'openCreatePOIPicker', poiType: 'rally', requiresSelection: false },
+    { id: 'createPOI.ambush', labelPL: 'Utwórz Zasadzkę tutaj', labelEN: 'Create Ambush here', icon: '👁',
+      action: 'openCreatePOIPicker', poiType: 'ambush', requiresSelection: false },
   ],
   enemyVessel: [
     { id: 'pursue', labelPL: 'Ścigaj', labelEN: 'Pursue', icon: '⚔',

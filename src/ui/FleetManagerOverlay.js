@@ -21,6 +21,7 @@ import EventBus            from '../core/EventBus.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
+import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showDropTroopsModal } from '../ui/DropTroopsModal.js';
@@ -381,6 +382,7 @@ export class FleetManagerOverlay {
 
     // M3 P1.3.5 — pusty obszar tactical map (nie atlas/cluster):
     //   picker mode patrolWaypoints → addPickerWaypoint w world coords
+    //   M3 P2.3 — picker mode targetPoint → finalize via GameScene helper
     //   inaczej → clearSelection (deselect)
     if (!this._showAtlas && !this._showCluster && this._mapBounds) {
       const mb = this._mapBounds;
@@ -388,9 +390,14 @@ export class FleetManagerOverlay {
         const um = window.KOSMOS?.uiManager;
         if (um?.isPickerActive?.()) {
           const ps = um.getPickerState?.();
-          if (ps?.mode === 'patrolWaypoints') {
-            const wp = tacticalToWorld(mx, my, this._mapViewState);
-            if (wp) um.addPickerWaypoint?.({ x: wp.x, y: wp.y });
+          const wp = tacticalToWorld(mx, my, this._mapViewState);
+          if (wp) {
+            if (ps?.mode === 'patrolWaypoints') {
+              um.addPickerWaypoint?.({ x: wp.x, y: wp.y });
+            } else if (ps?.mode === 'targetPoint') {
+              // M3 P2.3 — single-click finalize. tactical wp już w gameplay px.
+              EventBus.emit('ui:targetPointPickerFinalize', { point: { x: wp.x, y: wp.y } });
+            }
           }
         } else {
           um?.clearSelection?.();
@@ -427,6 +434,7 @@ export class FleetManagerOverlay {
     const lookups = {
       getVessel: (id) => window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null,
       getEntity: (id) => EntityManager.get(id),
+      getPOI:    (id) => window.KOSMOS?.poiRegistry?.getPOI?.(id) ?? null,
     };
     const target = resolveTacticalTarget(hit, worldPoint, lookups);
     if (!target || target.type === 'empty') return null;
@@ -456,6 +464,7 @@ export class FleetManagerOverlay {
     const lookups = {
       getVessel: (id) => window.KOSMOS?.vesselManager?.getVessel?.(id) ?? null,
       getEntity: (id) => EntityManager.get(id),
+      getPOI:    (id) => window.KOSMOS?.poiRegistry?.getPOI?.(id) ?? null,
     };
     const target = resolveTacticalTarget(hit, worldPoint, lookups);
 
@@ -1946,6 +1955,9 @@ export class FleetManagerOverlay {
       });
     }
 
+    // ── M3 P2.3 — POI sprites (resolves issue #6) ─────────────
+    this._drawPOISprites(ctx, toSx, toSy, bodyScale, auToPx);
+
     ctx.restore(); // koniec clip
 
     // ── Legenda (poza clip) ─────────────────────────────────
@@ -1979,6 +1991,121 @@ export class FleetManagerOverlay {
     if (this._mapHoverBody) {
       this._drawBodyTooltip(ctx, x, mapY, w, mapH);
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // M3 P2.3 — POI sprites w tactical map (resolves issue #6)
+  // ══════════════════════════════════════════════════════════════════════════
+  // Per-type geometric shapes (D-tactical-poi-display = β):
+  //   waypoint  → outlined circle
+  //   patrol    → triangle z linami do waypointów (route visualization)
+  //   picket    → filled circle + range circle (semi-transparent fill)
+  //   rally     → diamond (rotated square)
+  //   ambush    → dashed circle (dimmed alpha gdy hidden=true)
+  //
+  // POI_TYPE_COLORS hex (z ThreeRenderer M2b POI sprites) → CSS rgba.
+  _drawPOISprites(ctx, toSx, toSy, bodyScale, auToPx) {
+    const reg = window.KOSMOS?.poiRegistry;
+    if (!reg?.listPOIs) return;
+    const pois = reg.listPOIs() ?? [];
+    if (pois.length === 0) return;
+
+    const POI_COLOR_CSS = {
+      waypoint: '#5588ff',
+      patrol:   '#33ff66',
+      picket:   '#ff3333',
+      rally:    '#ffaa22',
+      ambush:   '#aa44ff',
+    };
+    const r = bodyScale(3, 8);
+
+    ctx.save();
+    for (const poi of pois) {
+      const loc = getPOILocation(poi);
+      if (!loc) continue;
+      const px = toSx(loc.x), py = toSy(loc.y);
+      const color = POI_COLOR_CSS[poi.type] ?? '#888';
+
+      ctx.globalAlpha = (poi.type === 'ambush' && poi.hidden) ? 0.4 : 0.9;
+
+      if (poi.type === 'waypoint') {
+        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2);
+        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+      } else if (poi.type === 'patrol') {
+        // Triangle marker + lines do waypoints[1..n] (loop closure: ostatni → pierwszy)
+        const wps = Array.isArray(poi.waypoints) ? poi.waypoints : [];
+        if (wps.length >= 2) {
+          ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          for (let i = 0; i < wps.length; i++) {
+            const wx = toSx(wps[i].x), wy = toSy(wps[i].y);
+            if (i === 0) ctx.moveTo(wx, wy);
+            else         ctx.lineTo(wx, wy);
+          }
+          if (poi.loopMode === 'loop') {
+            const w0x = toSx(wps[0].x), w0y = toSy(wps[0].y);
+            ctx.lineTo(w0x, w0y);
+          }
+          ctx.stroke(); ctx.setLineDash([]);
+
+          // Małe kropki na każdym waypoincie
+          ctx.fillStyle = color;
+          for (const wp of wps) {
+            ctx.beginPath();
+            ctx.arc(toSx(wp.x), toSy(wp.y), Math.max(2, r - 1), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        // Triangle marker w pierwszym waypoincie
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(px, py - r);
+        ctx.lineTo(px + r, py + r * 0.7);
+        ctx.lineTo(px - r, py + r * 0.7);
+        ctx.closePath();
+        ctx.fill();
+      } else if (poi.type === 'picket') {
+        // Range circle (semi-transparent fill) + filled center
+        const rangeR = (poi.rangePxLocal ?? 0) / GAME_CONFIG.AU_TO_PX * (auToPx ?? 1);
+        if (rangeR > 1) {
+          ctx.fillStyle = color + '22';  // alpha ~0x22 = 13%
+          ctx.beginPath(); ctx.arc(px, py, rangeR, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = color + '55'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.arc(px, py, rangeR, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+      } else if (poi.type === 'rally') {
+        // Diamond (rotated square)
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(px, py - r);
+        ctx.lineTo(px + r, py);
+        ctx.lineTo(px, py + r);
+        ctx.lineTo(px - r, py);
+        ctx.closePath(); ctx.fill();
+      } else if (poi.type === 'ambush') {
+        // Dashed circle (zawsze dashed; alpha 0.4 gdy hidden=true ustawiona wyżej)
+        const rangeR = (poi.rangePxLocal ?? 0) / GAME_CONFIG.AU_TO_PX * (auToPx ?? 1);
+        if (rangeR > 1) {
+          ctx.strokeStyle = color + '44'; ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.beginPath(); ctx.arc(px, py, rangeR, 0, Math.PI * 2); ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.strokeStyle = color; ctx.lineWidth = 1;
+        ctx.setLineDash([3, 2]);
+        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Hitzone — większy niż sprite dla łatwiejszego hover/PPM
+      this._hitZones.push({
+        x: px - 10, y: py - 10, w: 20, h: 20,
+        type: 'map_poi', data: { poiId: poi.id },
+      });
+    }
+    ctx.restore();
   }
 
   // ══════════════════════════════════════════════════════════════════════════

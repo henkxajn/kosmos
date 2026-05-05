@@ -2359,6 +2359,17 @@ export default {
   'poi.type.label.picket':        'Picket',
   'poi.type.label.rally':         'Rally',
   'poi.type.label.ambush':        'Ambush',
+  // POI Create — M3 P2.3 (RightClickMenu type-specific entries)
+  'poi.create.waypoint':          'Create Waypoint here',
+  'poi.create.patrol':            'Create Patrol here',
+  'poi.create.picket':            'Create Picket here',
+  'poi.create.rally':             'Create Rally here',
+  'poi.create.ambush':            'Create Ambush here',
+  // Picker mode HUD banner — M3 P2.3
+  'picker.create.point.instructions':  'Click to set {0} position. ESC to cancel.',
+  'picker.create.patrol.instructions': 'Click patrol waypoints (min 2). ESC to cancel, ENTER to finalize.',
+  // Coord tooltip (empty hover, 3D map + tactical) — M3 P2.3
+  'coord.tooltip.label':          'Position: ({0}, {1})',
   // POI Modal — M3 P2.2 (create + edit)
   'poi.modal.create':             'Create POI',
   'poi.modal.edit':               'Edit POI',

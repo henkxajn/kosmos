@@ -358,9 +358,12 @@ export class POIPanel extends BaseOverlay {
         const poi = window.KOSMOS?.poiRegistry?.getPOI?.(zone.data.poiId);
         const loc = getPOILocation(poi);
         if (loc) {
-          // ThreeCameraController.focusOn(worldX, worldZ) — game 2D (x,y) → 3D (x,z)
+          // M3 P2.3 — issue #5 fix: focusOnGameplayCoord konwertuje px → world.
+          // Wcześniej focusOn(loc.x, loc.y) traktował px jako Three.js world coords
+          // (mismatch — 1 AU = 110 px gameplay = 11 jednostek world; brak / WORLD_SCALE).
           const cc = window.KOSMOS?.threeRenderer?._cameraController;
-          if (cc?.focusOn) cc.focusOn(loc.x, loc.y);
+          if (cc?.focusOnGameplayCoord) cc.focusOnGameplayCoord(loc);
+          else if (cc?.focusOn) cc.focusOn(loc.x, loc.y);  // fallback (shouldn't trigger)
         }
         break;
       }

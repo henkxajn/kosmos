@@ -7,6 +7,10 @@
 import EventBus              from '../core/EventBus.js';
 import { normalize as normalizeBattleLocation, isDeepSpace as isDeepSpaceBattle } from '../utils/BattleLocation.js';
 import { mouseToNDC, castRay, resolveTargetFromHits } from '../utils/RaycasterHelper.js';
+import { worldToGameplay } from '../utils/CoordTransform.js';
+import { tacticalToWorld } from '../utils/TacticalRaycaster.js';
+import { showPOIModalCreate, showPOIModalEdit, showPOIModalCreateFromPicker } from '../ui/POIModal.js';
+import { pickerResultToPOISpec } from '../utils/POIPanelLogic.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
 import debugLog              from '../core/DebugLog.js';
@@ -532,6 +536,13 @@ export class GameScene {
       },
       // KOSMOS.debug.getPOIPanelState() — { visible, sortBy, sortDir, filterType, filterOwner, scrollY, poiCount }.
       getPOIPanelState: () => window.KOSMOS?.uiManager?.overlayManager?.overlays?.poi?.getState?.(),
+      // ── M3 P2.3 — Create POI picker mode ─────────────────────────────────
+      // KOSMOS.debug.openCreatePOIPickerMode('waypoint'|'patrol'|'picket'|'rally'|'ambush', { initialPoint? })
+      // Bez initialPoint → enter targetPoint/patrolWaypoints picker, gracz klika.
+      // Z initialPoint (gameplay px {x,y}) → fast path do modal'u (single-click types).
+      openCreatePOIPickerMode: (poiType, options) => this._openCreatePOIPickerMode(poiType, options),
+      // KOSMOS.debug.exitPickerMode() — anuluj aktywny picker (alias dla cancelPickerMode).
+      exitPickerMode: () => this.uiManager?.cancelPickerMode?.(),
       // ── M3 P2.2 — POI Modal (create + edit) ─────────────────────────────
       // KOSMOS.debug.openPOIModalCreate('waypoint'|'patrol'|'picket'|'rally'|'ambush')
       openPOIModalCreate: async (initialType = 'waypoint') => {
@@ -1834,6 +1845,9 @@ export class GameScene {
 
     // M3 P1.3 — picker mode HUD banner (DOM div + cursor change subskrypcje)
     this._createPickerHUD();
+
+    // M3 P2.3 — Create POI flow (PPM RightClickMenu → picker mode → modal pre-fill)
+    this._setupPOICreateFlow();
 
     // Obsługa input z event layer
     this._setupMouseInput(eventLayer);
@@ -3191,12 +3205,22 @@ export class GameScene {
     document.body.appendChild(banner);
     this._pickerBanner = banner;
 
-    EventBus.on('ui:pickerModeStarted', ({ mode }) => {
-      if (mode === 'patrolWaypoints') {
+    EventBus.on('ui:pickerModeStarted', ({ mode, metadata }) => {
+      const intent = metadata?.intent;
+      if (mode === 'patrolWaypoints' && intent === 'create_poi') {
+        banner.textContent = t('picker.create.patrol.instructions');
+      } else if (mode === 'targetPoint' && intent === 'create_poi') {
+        const typeLabel = t(`poi.type.label.${metadata?.poiType ?? 'waypoint'}`);
+        banner.textContent = t('picker.create.point.instructions', typeLabel);
+      } else if (mode === 'patrolWaypoints') {
         banner.textContent = 'Klikaj waypointy patrolu (min 2). ESC anuluj, ENTER zakończ.';
-        banner.style.display = 'block';
-        document.body.style.cursor = 'crosshair';
+      } else if (mode === 'targetPoint') {
+        banner.textContent = 'Klik aby ustawić punkt. ESC anuluj.';
+      } else {
+        return;  // unknown mode — don't show banner
       }
+      banner.style.display = 'block';
+      document.body.style.cursor = 'crosshair';
     });
     EventBus.on('ui:pickerWaypointAdded', ({ total }) => {
       const remainder = total < 2 ? ` (min ${2 - total} więcej)` : ' — ENTER zakończ lub klikaj dalej.';
@@ -3206,6 +3230,121 @@ export class GameScene {
       banner.style.display = 'none';
       document.body.style.cursor = '';
     });
+  }
+
+  // ── M3 P2.3 — Create POI flow ───────────────────────────────────────
+  // Wiązanie:
+  //   ui:openPOIModal → showPOIModalCreate / showPOIModalEdit (placeholder
+  //     z RightClickMenu createPOI legacy entry)
+  //   ui:openCreatePOIPicker → _openCreatePOIPickerMode (5 type-specific
+  //     entries z RightClickMenu)
+  //
+  // Flow:
+  //   single-click types (waypoint/picket/rally/ambush) z PPM worldPoint
+  //     → fast path: skip picker, modal otwiera się natychmiast pre-filled
+  //   single-click types bez worldPoint (devtools openCreatePOIPickerMode)
+  //     → enter targetPoint picker, gracz klika
+  //   patrol → enter patrolWaypoints picker (min 2 + ENTER)
+  _setupPOICreateFlow() {
+    EventBus.on('ui:openPOIModal', ({ mode, target, poiId }) => {
+      if (mode === 'create') {
+        showPOIModalCreate('waypoint');
+      } else if (mode === 'edit' && poiId) {
+        const poi = window.KOSMOS?.poiRegistry?.getPOI?.(poiId);
+        if (poi) showPOIModalEdit(poi);
+      }
+    });
+
+    EventBus.on('ui:openCreatePOIPicker', ({ poiType, worldPoint }) => {
+      // worldPoint z RightClickMenu PPM tactical = tactical worldPoint w gameplay px
+      // (TacticalRaycaster.tacticalToWorld zwraca px). Mapa 3D PPM nie istnieje,
+      // ale defensywnie obsługujemy worldPoint.z (3D format) jako fallback.
+      const initialPoint = this._normalizeWorldPointToGameplay(worldPoint);
+      this._openCreatePOIPickerMode(poiType, { initialPoint });
+    });
+
+    // M3 P2.3 — TARGET_POINT picker finalize z tactical map (FleetOverlay).
+    EventBus.on('ui:targetPointPickerFinalize', ({ point }) => {
+      this._finalizeTargetPointPicker(point);
+    });
+  }
+
+  // Konwertuj worldPoint (różne formaty) → gameplay px {x,y}.
+  //   tactical (P1.3.5): {x, y} już w gameplay px → return as-is.
+  //   3D raycaster (P1.2): {x, y:0, z} w Three.js world coords → / WORLD_SCALE.
+  _normalizeWorldPointToGameplay(wp) {
+    if (!wp) return null;
+    if (typeof wp.z === 'number') {
+      // 3D format → gameplay
+      return worldToGameplay(wp.x, wp.z);
+    }
+    if (typeof wp.x === 'number' && typeof wp.y === 'number') {
+      return { x: wp.x, y: wp.y };
+    }
+    return null;
+  }
+
+  // ── M3 P2.3 — Główny entry create POI picker mode ──────────────────
+  // Strategy:
+  //   single-click types z initialPoint → bypass picker, modal direct
+  //   single-click types bez initialPoint → enter targetPoint picker
+  //   patrol → enter patrolWaypoints picker
+  // PickerStateMachine 'TARGET_POINT' mode obecny ale unused — reuse'ujemy.
+  _openCreatePOIPickerMode(poiType, options = {}) {
+    const um = this.uiManager;
+    if (!um) return;
+    if (!['waypoint', 'patrol', 'picket', 'rally', 'ambush'].includes(poiType)) {
+      console.warn('[GameScene] _openCreatePOIPickerMode: invalid poiType', poiType);
+      return;
+    }
+    const initialPoint = options.initialPoint;
+
+    if (poiType === 'patrol') {
+      // Multi-click ≥2 + ENTER → modal pre-filled z waypoints
+      const ok = um.setPickerMode('patrolWaypoints', (waypoints) => {
+        if (!Array.isArray(waypoints) || waypoints.length < 2) return;  // cancelled
+        const prefill = pickerResultToPOISpec('patrol', { waypoints });
+        if (!prefill) return;
+        showPOIModalCreateFromPicker('patrol', prefill);
+      }, { intent: 'create_poi', poiType: 'patrol' });
+      if (!ok) console.warn('[GameScene] picker mode rejected (patrol create)');
+      return;
+    }
+
+    // Single-click types (waypoint/picket/rally/ambush)
+    if (initialPoint) {
+      // Fast path — PPM worldPoint = 1st click. Modal otwiera się natychmiast.
+      const prefill = pickerResultToPOISpec(poiType, { point: initialPoint });
+      if (!prefill) {
+        console.warn('[GameScene] pickerResultToPOISpec failed for', poiType);
+        return;
+      }
+      showPOIModalCreateFromPicker(poiType, prefill);
+      return;
+    }
+
+    // Bez initialPoint (np. devtools) → enter targetPoint picker, gracz kliknie
+    const ok = um.setPickerMode('targetPoint', (point) => {
+      if (!point) return;
+      const prefill = pickerResultToPOISpec(poiType, { point });
+      if (!prefill) return;
+      showPOIModalCreateFromPicker(poiType, prefill);
+    }, { intent: 'create_poi', poiType });
+    if (!ok) console.warn(`[GameScene] picker mode rejected (${poiType} create)`);
+  }
+
+  // M3 P2.3 — Finalize TARGET_POINT picker (single-click finalize).
+  // PickerStateMachine.finalizePicker dla TARGET_POINT zwraca result=null —
+  // inline finalize: czytaj callback, cancel state, wywołaj callback z punktem.
+  _finalizeTargetPointPicker(point) {
+    const um = this.uiManager;
+    const ps = um?.getPickerState?.();
+    if (!ps || ps.mode !== 'targetPoint') return;
+    const cb = ps.callback;
+    um.cancelPickerMode();  // reset state + emit ui:pickerModeEnded (banner hide)
+    if (typeof cb === 'function') {
+      try { cb(point); } catch (err) { console.warn('[GameScene] targetPoint cb threw:', err); }
+    }
   }
 
   // ── Recorder toggle (Ctrl+Shift+R) ───────────────────────────────
@@ -3529,6 +3668,16 @@ export class GameScene {
     }
     const target = this._resolveClickTarget(clientX, clientY);
     if (!target || target.type === 'empty') {
+      // M3 P2.3 — coord tooltip dla empty space (override P1.5 D2 = no tooltip)
+      // 3D worldPoint to Three.js coords (XZ plane Y=0). Konwersja → gameplay px.
+      const wp = target?.worldPoint;
+      if (wp && typeof wp.x === 'number' && typeof wp.z === 'number') {
+        const gp = worldToGameplay(wp.x, wp.z);
+        if (gp) {
+          this._scheduleCoordTooltip(gp, clientX, clientY);
+          return;
+        }
+      }
       this._scheduleEntityTooltip(null, clientX, clientY);
       return;
     }
@@ -3549,6 +3698,18 @@ export class GameScene {
     }
     const info = fleet.resolveHoverInfo(local.x, local.y);
     if (!info) {
+      // M3 P2.3 — coord tooltip dla empty space w obrębie tactical map bounds.
+      // resolveHoverInfo zwraca null gdy outside mapBounds LUB empty hit.
+      // Re-check bounds: jeśli inside → coord tooltip, inaczej cancel.
+      const mb = fleet._mapBounds;
+      if (mb && local.x >= mb.x && local.x <= mb.x + mb.w
+          && local.y >= mb.y && local.y <= mb.y + mb.h) {
+        const wp = tacticalToWorld(local.x, local.y, fleet._mapViewState);
+        if (wp) {
+          this._scheduleCoordTooltip(wp, clientX, clientY);
+          return;
+        }
+      }
       this._scheduleEntityTooltip(null, clientX, clientY);
       return;
     }
@@ -3625,6 +3786,26 @@ export class GameScene {
     };
   }
 
+  // M3 P2.3 — coord tooltip dla empty space hover (mapa 3D + tactical).
+  // Override P1.5 D2 (no tooltip on empty) — Filip's feature request.
+  // gameplayPoint w gameplay px ({x, y}). Format: "Pozycja: (123.4, -67.8)".
+  _scheduleCoordTooltip(gameplayPoint, clientX, clientY) {
+    const tooltip = this.tooltip;
+    if (!tooltip || !gameplayPoint) return;
+    const x = Math.round(gameplayPoint.x * 10) / 10;
+    const y = Math.round(gameplayPoint.y * 10) / 10;
+    const text = t('coord.tooltip.label', x.toFixed(1), y.toFixed(1));
+    const key = 'coord:tooltip';  // single key — re-use existing schedule, no flicker
+    if (this._tooltipHoverState.key === key) {
+      // Same key — update content w-place gdyby dropił hide. Tooltip.schedule
+      // z tym samym key pozostawia timer aktywnym (mousemove no-flicker).
+      tooltip.schedule({ lines: [text] }, { x: clientX, y: clientY }, key);
+      return;
+    }
+    this._tooltipHoverState.key = key;
+    tooltip.schedule({ lines: [text] }, { x: clientX, y: clientY }, key);
+  }
+
   // ── M3 P1.2 — Tactical map mouse interactions (raycaster) ─────────────
   // Lewy klik (z istniejącego window 'click' handler — wasDrag już sprawdzony):
   //   ownVessel sprite → setSelectedVesselId (secondary flow §5.1)
@@ -3661,11 +3842,21 @@ export class GameScene {
 
     // M3 P1.3 — picker mode left-click ZAWSZE wygrywa nad normalnym selection flow.
     // patrolWaypoints: każdy klik dodaje waypoint (worldPoint XZ → XY w UIManager.addPickerWaypoint).
+    // M3 P2.3: targetPoint (create POI single-click) — finalize z gameplay px point.
     const um = this.uiManager;
     if (um?.isPickerActive?.()) {
       const ps = um.getPickerState();
-      if (ps?.mode === 'patrolWaypoints' && target.worldPoint) {
-        um.addPickerWaypoint({ x: target.worldPoint.x, y: target.worldPoint.z });
+      if (target.worldPoint) {
+        // 3D worldPoint w Three.js coords (XZ plane Y=0). Konwersja → gameplay px.
+        const gp = worldToGameplay(target.worldPoint.x, target.worldPoint.z);
+        if (gp) {
+          if (ps?.mode === 'patrolWaypoints') {
+            um.addPickerWaypoint(gp);
+          } else if (ps?.mode === 'targetPoint') {
+            // Inline finalize: zapisz point w metadata, wywołaj callback bezpośrednio.
+            this._finalizeTargetPointPicker(gp);
+          }
+        }
       }
       return;  // NIE robić selection/deselect w picker mode
     }

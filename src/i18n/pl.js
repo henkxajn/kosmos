@@ -2359,6 +2359,17 @@ export default {
   'poi.type.label.picket':        'Pikieta',
   'poi.type.label.rally':         'Punkt zborny',
   'poi.type.label.ambush':        'Zasadzka',
+  // POI Create — M3 P2.3 (RightClickMenu type-specific entries)
+  'poi.create.waypoint':          'Utwórz Waypoint tutaj',
+  'poi.create.patrol':            'Utwórz Patrol tutaj',
+  'poi.create.picket':            'Utwórz Pikietę tutaj',
+  'poi.create.rally':             'Utwórz Punkt Zborny tutaj',
+  'poi.create.ambush':            'Utwórz Zasadzkę tutaj',
+  // Picker mode HUD banner — M3 P2.3
+  'picker.create.point.instructions':  'Klik aby ustawić pozycję {0}. ESC anuluj.',
+  'picker.create.patrol.instructions': 'Klikaj waypointy patrolu (min 2). ESC anuluj, ENTER zakończ.',
+  // Coord tooltip (empty hover, mapa 3D + tactical) — M3 P2.3
+  'coord.tooltip.label':          'Pozycja: ({0}, {1})',
   // POI Modal — M3 P2.2 (create + edit)
   'poi.modal.create':             'Nowy POI',
   'poi.modal.edit':               'Edytuj POI',

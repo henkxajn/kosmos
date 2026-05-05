@@ -158,9 +158,11 @@ export class RightClickMenu {
       return;
     }
 
-    // POI actions — placeholder do P2.2 modal'i. Emit eventów daje overlayowi
-    // szansę odpowiedzieć (na razie nikt nie nasłuchuje → no-op).
+    // POI actions — listener w GameScene._setupPOICreateFlow (M3 P2.3).
     if (option.action === 'openCreatePOIModal') {
+      // Legacy entry — pozostawiony dla future compat. P2.3 default flow
+      // używa openCreatePOIPicker (per-type), ale ui:openPOIModal listener
+      // honoruje też mode='create' bez poiType (waypoint default).
       EventBus.emit('ui:openPOIModal', { mode: 'create', target });
       return;
     }
@@ -173,6 +175,15 @@ export class RightClickMenu {
       const reg = window.KOSMOS?.poiRegistry;
       if (poiId && reg?.deletePOI) reg.deletePOI(poiId);
       else console.warn('[RightClickMenu] deletePOI: brak poiRegistry lub poiId');
+      return;
+    }
+    // M3 P2.3 — Create POI picker mode. PPM worldPoint jest 1st click dla
+    // single-click types (waypoint/picket/rally/ambush) → fast path do modal'u.
+    // Patrol type startuje picker (multi-click ≥2 + ENTER).
+    if (option.action === 'openCreatePOIPicker') {
+      const poiType = option.poiType ?? 'waypoint';
+      const worldPoint = target?.worldPoint ?? null;
+      EventBus.emit('ui:openCreatePOIPicker', { poiType, worldPoint });
       return;
     }
 
