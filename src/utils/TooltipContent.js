@@ -232,12 +232,21 @@ function _poiContent(poi, t, deps) {
       if (typeof poi.rangePxLocal === 'number') {
         lines.push(`${t('tooltip.poi.range')}: ${poi.rangePxLocal.toFixed(1)}`);
       }
+      // M3 P3.1 post-fix #1 — runtime state: triggered (POIRuntimeSystem
+      // detection ujawnia obecność wrogiego vessel w zasięgu).
+      if (poi.triggered === true) {
+        lines.push(t('tooltip.poi.triggered'));
+      }
       break;
     case 'rally':
-      if (Array.isArray(poi.memberVesselIds)) {
-        const cur = poi.memberVesselIds.length;
-        const tgt = poi.waitForCount ?? '?';
-        lines.push(`${t('tooltip.poi.members')}: ${cur}/${tgt}`);
+      // M3 P3.1 post-fix #1 — runtime state: complete vs progress. Plain
+      // "members: cur/tgt" zastąpione bogatszą informacją per stan.
+      if (poi.complete === true) {
+        lines.push(t('tooltip.poi.rally.complete'));
+      } else if (Array.isArray(poi.memberVesselIds) || typeof poi.currentMembers === 'number') {
+        const cur = poi.currentMembers ?? poi.memberVesselIds?.length ?? 0;
+        const tgt = poi.waitForCount ?? 0;
+        lines.push(t('tooltip.poi.rally.progress', cur, tgt));
       }
       break;
     case 'ambush':

@@ -72,6 +72,7 @@ import { EmpireGenerator }   from '../generators/EmpireGenerator.js';
 import { EmpireRegistry }    from '../systems/EmpireRegistry.js';
 import { IntelSystem }       from '../systems/IntelSystem.js';
 import { POIRegistry }       from '../systems/POIRegistry.js';
+import { POIRuntimeSystem }  from '../systems/POIRuntimeSystem.js';
 import { DiplomacySystem }   from '../systems/DiplomacySystem.js';
 import { AlienCivSystem }    from '../systems/AlienCivSystem.js';
 import { WarSystem }         from '../systems/WarSystem.js';
@@ -237,6 +238,11 @@ export class GameScene {
     this.empireRegistry       = new EmpireRegistry();
     this.intelSystem          = new IntelSystem();
     this.poiRegistry          = new POIRegistry();
+    // M3 P3.1 — POI Runtime System (picket detection + rally member assembly)
+    this.poiRuntimeSystem     = new POIRuntimeSystem({
+      poiRegistry:   this.poiRegistry,
+      vesselManager: this.vesselManager,
+    });
     this.diplomacySystem      = new DiplomacySystem();
     this.alienCivSystem       = new AlienCivSystem();
     this.warSystem            = new WarSystem();
@@ -280,6 +286,7 @@ export class GameScene {
     window.KOSMOS.empireRegistry   = this.empireRegistry;
     window.KOSMOS.intelSystem      = this.intelSystem;
     window.KOSMOS.poiRegistry      = this.poiRegistry;
+    window.KOSMOS.poiRuntimeSystem = this.poiRuntimeSystem;
     window.KOSMOS.diplomacySystem  = this.diplomacySystem;
     window.KOSMOS.alienCivSystem   = this.alienCivSystem;
     window.KOSMOS.warSystem        = this.warSystem;
@@ -555,6 +562,22 @@ export class GameScene {
         if (!poi) { console.warn(`[debug] POI nie znaleziony: ${poiId}`); return null; }
         const m = await import('../ui/POIModal.js');
         return m.showPOIModalEdit(poi);
+      },
+      // ── M3 P3.1 — POI Runtime System ─────────────────────────────────────
+      // KOSMOS.debug.poiRuntime — pełny obiekt POIRuntimeSystem.
+      get poiRuntime() { return window.KOSMOS?.poiRuntimeSystem; },
+      // KOSMOS.debug.simulatePicketAlert(poiId, vesselId) — force trigger picket alert (testing).
+      simulatePicketAlert: (poiId, vId) => {
+        const sys = window.KOSMOS?.poiRuntimeSystem;
+        if (!sys?.simulatePicketAlert) return { ok: false, reason: 'system_unavailable' };
+        const result = sys.simulatePicketAlert(poiId, vId);
+        console.log(`[debug] simulatePicketAlert(${poiId}, ${vId}):`, result);
+        return result;
+      },
+      // KOSMOS.debug.getPOIRuntimeState(poiId) — { type, triggered, cooldownEndsAt, complete, currentMembers, completedYear }.
+      getPOIRuntimeState: (poiId) => {
+        const sys = window.KOSMOS?.poiRuntimeSystem;
+        return sys?.getPOIRuntimeState?.(poiId) ?? null;
       },
       // ── M2b Commit 6 — POI navigation devtools ─────────────────────────
       // KOSMOS.debug.issueGoToPOI(vesselId, poiId) — vessel leci do POI.

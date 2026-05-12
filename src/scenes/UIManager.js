@@ -118,6 +118,9 @@ const LOG_COLORS = {
   get pop_born()           { return THEME.success; },
   get pop_died()           { return THEME.danger; },
   get fleet()              { return THEME.info; },
+  // M3 P3.1 post-fix #1 — POI runtime events
+  get poi_alert()          { return THEME.danger; },
+  get poi_rally()          { return THEME.mint; },
 };
 
 // Koszty akcji gracza (zsynchronizowane z PlayerActionSystem)
@@ -801,6 +804,17 @@ export class UIManager {
           this._log(t('log.prosperityMilestone', colonyName, m), 'civ_epoch');
         }
       }
+    });
+
+    // M3 P3.1 post-fix #1 — POI runtime events. Handlery zarejestrowane
+    // tu (NIE w src/ui/EventLog.js, który jest dead-file w runtime).
+    EventBus.on('poi:alertTriggered', ({ poiName, vesselName, empireId }) => {
+      this._log(t('eventLog.poi.picketAlert',
+        poiName ?? '?', vesselName ?? '?', empireId ?? '?'), 'poi_alert');
+    });
+    EventBus.on('poi:rallyComplete', ({ poiName, memberCount }) => {
+      this._log(t('eventLog.poi.rallyComplete',
+        poiName ?? '?', memberCount ?? 0), 'poi_rally');
     });
   }
 

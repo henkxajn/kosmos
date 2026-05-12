@@ -29,6 +29,7 @@ import { ColonistLoadModal } from '../ui/ColonistLoadModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
 import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
+import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
@@ -141,6 +142,24 @@ function _actionStyle(actionId, ok) {
   if (actionId === 'return_home') return { bg: 'rgba(255,51,68,0.12)', fg: THEME.danger, border: THEME.dangerDim };
   if (actionId === 'colonize')    return { bg: 'rgba(170,136,255,0.12)', fg: THEME.purple, border: THEME.purple };
   return { bg: 'rgba(0,255,180,0.06)', fg: THEME.accent, border: THEME.borderActive };
+}
+
+// M3 P3.1 — generic section button (rally assignment + future use)
+function _drawSectionButton(ctx, x, y, w, h, label, fgColor, borderColor) {
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = borderColor ?? THEME.border;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+  ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+  ctx.fillStyle = fgColor ?? THEME.textPrimary;
+  // Truncate label do szerokości buttona
+  let txt = label ?? '';
+  const maxW = w - 12;
+  while (txt.length > 4 && ctx.measureText(txt).width > maxW) {
+    txt = txt.slice(0, -2) + '…';
+  }
+  ctx.fillText(txt, x + 6, y + h * 0.5 + 4);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -868,6 +887,15 @@ export class FleetManagerOverlay {
       case 'rename':
         this._renameVessel(zone.data.vesselId);
         break;
+      // M3 P3.1 — rally assignment
+      case 'rally_assign_open': {
+        this._openRallyAssignModal(zone.data.vesselId, zone.data.currentRallyId);
+        break;
+      }
+      case 'rally_assign_remove': {
+        this._removeFromRally(zone.data.vesselId, zone.data.rallyId);
+        break;
+      }
       // (duplikat map_body usunięty — obsługa w pierwszym case powyżej)
       case 'map_planet': {
         this._mapFocusBodyId = zone.data.planetId;
@@ -1271,6 +1299,47 @@ export class FleetManagerOverlay {
     } catch { /* anulowano */ }
   }
 
+  // ── M3 P3.1 — rally assignment handlers ───────────────────────────────────
+  // Single-rally rule: vessel może być w max 1 rally na raz. Re-assign =
+  // remove z poprzedniego + add do nowego.
+  async _openRallyAssignModal(vesselId, currentRallyId) {
+    try {
+      const result = await showRallyAssignModal({ currentVesselId: vesselId, currentRallyId });
+      if (!result || result.action === 'cancel') return;
+
+      const reg = window.KOSMOS?.poiRegistry;
+      if (!reg) return;
+
+      if (result.action === 'remove' && currentRallyId) {
+        this._removeFromRally(vesselId, currentRallyId);
+        return;
+      }
+
+      if (result.action === 'assign' && result.rallyId) {
+        // Remove z istniejącego rally (jeśli był) + add do nowego
+        if (currentRallyId && currentRallyId !== result.rallyId) {
+          this._removeFromRally(vesselId, currentRallyId, true /* skipUiRefresh */);
+        }
+        const target = reg.getPOI(result.rallyId);
+        if (!target || target.type !== 'rally') return;
+        const existing = target.memberVesselIds ?? [];
+        if (existing.includes(vesselId)) return;  // de-dupe
+        reg.updatePOI(result.rallyId, { memberVesselIds: [...existing, vesselId] });
+      }
+    } catch { /* modal cancel — noop */ }
+  }
+
+  _removeFromRally(vesselId, rallyId /* , _skipUiRefresh */) {
+    const reg = window.KOSMOS?.poiRegistry;
+    if (!reg) return;
+    const rally = reg.getPOI(rallyId);
+    if (!rally || rally.type !== 'rally') return;
+    const existing = rally.memberVesselIds ?? [];
+    const next = existing.filter(id => id !== vesselId);
+    if (next.length === existing.length) return;  // nie był w tym rally
+    reg.updatePOI(rallyId, { memberVesselIds: next });
+  }
+
   // ── Filtrowanie statków ───────────────────────────────────────────────────
 
   _filterVessels(allVessels, activePid) {
@@ -1295,6 +1364,18 @@ export class FleetManagerOverlay {
     const SECTION_H  = 20;
     const ENEMY_COLOR = '#ff4466';
     const WRECK_COLOR = '#808080';
+
+    // M3 P3.1 — cache vesselId→rallyName mapping (per draw) dla LEFT panel indicator.
+    // Avoid N×M lookup w pętli wierszy (jeden skan rally POI raz, lookup O(1)).
+    const _rallyByVesselId = new Map();
+    const _reg = window.KOSMOS?.poiRegistry;
+    if (_reg?.listPOIs) {
+      for (const r of _reg.listPOIs({ type: 'rally' }) ?? []) {
+        for (const vid of (r.memberVesselIds ?? [])) {
+          _rallyByVesselId.set(vid, r.name ?? '?');
+        }
+      }
+    }
 
     // ── Nagłówek (h=36) ──────────────────────────────────────
     ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
@@ -1477,6 +1558,15 @@ export class FleetManagerOverlay {
         ctx.fillStyle = selected ? THEME.textPrimary : THEME.textSecondary;
         const vName = vessel.name.length > 11 ? vessel.name.slice(0, 10) + '…' : vessel.name;
         ctx.fillText(`${icon} ${vName}`, x + pad, ry + 14);
+
+        // M3 P3.1 — rally indicator (🎯) gdy vessel assigned do rally
+        const _rallyName = _rallyByVesselId.get(vessel.id);
+        if (_rallyName) {
+          const _nameW = ctx.measureText(`${icon} ${vName}`).width;
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = '#ffaa22';  // rally color
+          ctx.fillText('🎯', x + pad + _nameW + 4, ry + 14);
+        }
 
         // Pasek paliwa
         const fuelPct = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
@@ -2017,6 +2107,9 @@ export class FleetManagerOverlay {
       rally:    '#ffaa22',
       ambush:   '#aa44ff',
     };
+    // M3 P3.1 — runtime state colors (simple color change, no animation per Filip flag #2)
+    const POI_TRIGGERED_COLOR = '#ff8800';  // picket triggered (orange)
+    const POI_COMPLETE_COLOR  = '#44ff88';  // rally complete (green)
     const r = bodyScale(3, 8);
 
     ctx.save();
@@ -2024,7 +2117,12 @@ export class FleetManagerOverlay {
       const loc = getPOILocation(poi);
       if (!loc) continue;
       const px = toSx(loc.x), py = toSy(loc.y);
-      const color = POI_COLOR_CSS[poi.type] ?? '#888';
+      // Runtime state override koloru (P3.1):
+      //   picket triggered (orange) — persistent przez cooldown 30 dni gry
+      //   rally complete (green) — persistent po complete=true
+      let color = POI_COLOR_CSS[poi.type] ?? '#888';
+      if (poi.type === 'picket' && poi.triggered) color = POI_TRIGGERED_COLOR;
+      else if (poi.type === 'rally' && poi.complete) color = POI_COMPLETE_COLOR;
 
       ctx.globalAlpha = (poi.type === 'ambush' && poi.hidden) ? 0.4 : 0.9;
 
@@ -3421,11 +3519,75 @@ export class FleetManagerOverlay {
     // ── Akcje ────────────────────────────────────────────────
     cy = this._drawActions(ctx, x, cy, w, pad, vessel, ms, colMgr, activePid);
 
+    // ── M3 P3.1 — Rally assignment section ───────────────────
+    cy = this._drawRallyAssignSection(ctx, x, cy, w, pad, vessel);
+
     // ── Log misji ────────────────────────────────────────────
     const logSpace = h - (cy - y);
     if (logSpace > 30 && vessel.missionLog.length > 0) {
       this._drawMissionLog(ctx, x, cy, w, logSpace, pad, vessel);
     }
+  }
+
+  // M3 P3.1 — sekcja rally assignment (RIGHT detail panel).
+  // Stan A (vessel NIE w żadnym rally): button "Przypisz do Rally..."
+  // Stan B (vessel w rally): "Przypisany do: 'X'" + button "Zmień rally..." +
+  //                          osobny button "Usuń" (bez modala — direct remove)
+  _drawRallyAssignSection(ctx, x, cy, w, pad, vessel) {
+    const reg = window.KOSMOS?.poiRegistry;
+    if (!reg?.listPOIs) return cy;
+
+    const rallies = reg.listPOIs({ type: 'rally' }) ?? [];
+    // Hide section gdy zero rally POI istnieje (avoid clutter)
+    if (rallies.length === 0) return cy;
+
+    // Lookup current rally assignment
+    let currentRally = null;
+    for (const r of rallies) {
+      if ((r.memberVesselIds ?? []).includes(vessel.id)) { currentRally = r; break; }
+    }
+
+    cy += 4;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('fleet.rally.sectionHeader'), x + pad, cy + 10);
+    cy += 18;
+
+    const btnH = 24;
+    const fullBtnW = w - pad * 2;
+
+    if (!currentRally) {
+      // Stan A — assign button (full-width)
+      _drawSectionButton(ctx, x + pad, cy, fullBtnW, btnH, t('fleet.rally.notAssigned'), THEME.accent, THEME.successDim);
+      this._hitZones.push({
+        x: x + pad, y: cy, w: fullBtnW, h: btnH,
+        type: 'rally_assign_open', data: { vesselId: vessel.id, currentRallyId: null },
+      });
+      cy += btnH + 6;
+    } else {
+      // Stan B — label + "change" + "remove" buttons
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary;
+      const nameTrim = (currentRally.name ?? '?').length > 18
+        ? currentRally.name.slice(0, 17) + '…' : currentRally.name;
+      ctx.fillText(t('fleet.rally.assigned', nameTrim), x + pad, cy + 11);
+      cy += 18;
+
+      const halfBtnW = (fullBtnW - 6) / 2;
+      _drawSectionButton(ctx, x + pad, cy, halfBtnW, btnH, t('fleet.rally.change'), THEME.textSecondary, THEME.border);
+      this._hitZones.push({
+        x: x + pad, y: cy, w: halfBtnW, h: btnH,
+        type: 'rally_assign_open', data: { vesselId: vessel.id, currentRallyId: currentRally.id },
+      });
+      _drawSectionButton(ctx, x + pad + halfBtnW + 6, cy, halfBtnW, btnH, t('fleet.rally.remove'), THEME.danger ?? '#ff4444', 'rgba(255,51,68,0.5)');
+      this._hitZones.push({
+        x: x + pad + halfBtnW + 6, y: cy, w: halfBtnW, h: btnH,
+        type: 'rally_assign_remove', data: { vesselId: vessel.id, rallyId: currentRally.id },
+      });
+      cy += btnH + 6;
+    }
+
+    return cy;
   }
 
   // ── Ship picker (prawy panel — wybór statku do wysyłki warp) ───────────────

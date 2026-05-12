@@ -60,10 +60,12 @@ function assertThrowsNot(fn, label) {
 
 console.log('\n=== T1: SaveMigration v66 → v67 ===');
 
-test('T1.1 bumps version to 67', () => {
+test('T1.1 bumps version to 68', () => {
+  // M3 P3.1 — CURRENT_VERSION 67 → 68. Migracja wykonuje pełen łańcuch
+  // v66 → v67 → v68, więc terminal version musi być === CURRENT_VERSION.
   const v66 = { version: 66, gameState: {} };
   const result = migrate(v66);
-  assertEq(result.version, 67, 'version');
+  assertEq(result.version, 68, 'version');
 });
 
 test('T1.2 initializes empty pois domain', () => {
@@ -168,14 +170,22 @@ test('T1.8 does NOT override existing M2b movementOrder fields (idempotent on da
   assertEq(v1.movementOrder.escorteeId,     null, 'escorteeId default');
 });
 
-test('T1.9 round-trip idempotency v67 (already-migrated input not re-mutated)', () => {
-  // Input: save z version=67, M2b polami już set.
-  // migrate() powinno zauważyć fromVersion === CURRENT_VERSION i zwrócić as-is.
-  // Pętla `for (let v=67; v<67; ...)` nie startuje — _migrateV66toV67 nie wywołuje się.
-  const v67 = {
-    version: 67,
+test('T1.9 round-trip idempotency v68 (already-migrated input not re-mutated)', () => {
+  // M3 P3.1 — CURRENT_VERSION → 68. Idempotency assertion teraz dla v68
+  // (already-migrated). Pełne POI runtime fields obecne, vessel.movementOrder
+  // M2b polami set. migrate() z fromVersion === CURRENT_VERSION skipuje pętlę
+  // → output identyczny z inputem.
+  const v68 = {
+    version: 68,
     gameState: {
-      pois: { poi_a: { id: 'poi_a', kind: 'wreck', x: 10, y: 20 } },
+      pois: {
+        poi_a: {
+          id: 'poi_a', kind: 'wreck', x: 10, y: 20,
+          // M3 P3.1 runtime fields — present (already migrated)
+          triggered: false, cooldownEndsAt: null,
+          complete: false, currentMembers: 0, completedYear: null,
+        },
+      },
       intel: { vessels: { v_1: { quality: 'detailed', lastSeenYear: 100 } } },
     },
     civ4x: {
@@ -194,11 +204,11 @@ test('T1.9 round-trip idempotency v67 (already-migrated input not re-mutated)', 
       },
     },
   };
-  const before = JSON.stringify(v67);
-  const result = migrate(v67);
+  const before = JSON.stringify(v68);
+  const result = migrate(v68);
   const after = JSON.stringify(result);
-  assertEq(after, before, 'v67 round-trip nietknięty');
-  assertEq(result.version, 67, 'version stays 67');
+  assertEq(after, before, 'v68 round-trip nietknięty');
+  assertEq(result.version, 68, 'version stays 68');
   assertEq(result.civ4x.vesselManager.vessels[0].movementOrder.patrolWaypointIndex, 5, 'patrolWaypointIndex pozostaje 5');
 });
 
@@ -223,11 +233,11 @@ test('T3.3 poiSystem defaults to true (Commit 5 flipped)', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Sanity bonus: CURRENT_VERSION exported = 67
+// Sanity bonus: CURRENT_VERSION exported = 68 (M3 P3.1 bumped from 67)
 // ──────────────────────────────────────────────────────────────────────────
 console.log('\n=== sanity ===');
-test('CURRENT_VERSION === 67', () => {
-  assertEq(CURRENT_VERSION, 67, 'CURRENT_VERSION');
+test('CURRENT_VERSION === 68', () => {
+  assertEq(CURRENT_VERSION, 68, 'CURRENT_VERSION');
 });
 
 // ──────────────────────────────────────────────────────────────────────────

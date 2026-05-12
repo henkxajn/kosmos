@@ -36,4 +36,22 @@ export function worldToGameplay(worldX, worldZ) {
   return { x: worldX * WORLD_SCALE, y: worldZ * WORLD_SCALE };
 }
 
+// ── M3 P3.1 — Euclidean distance helper (gameplay px) ────────────────
+// Używane przez POIRuntimeSystem dla picket detection oraz rally member
+// assembly. Vessel.position.x/y i POI.center.x/y są w tym samym coord
+// space (gameplay px), więc proste pitagoras wystarcza.
+/**
+ * @param {{x:number, y:number}|null} p1
+ * @param {{x:number, y:number}|null} p2
+ * @returns {number} — odległość w gameplay px, Infinity gdy invalid
+ */
+export function gameplayDistance(p1, p2) {
+  if (!p1 || !p2) return Infinity;
+  const x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y;
+  if (!Number.isFinite(x1) || !Number.isFinite(y1) ||
+      !Number.isFinite(x2) || !Number.isFinite(y2)) return Infinity;
+  const dx = x1 - x2, dy = y1 - y2;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 export const _internals = { WORLD_SCALE };

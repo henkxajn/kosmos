@@ -4423,7 +4423,13 @@ export class ThreeRenderer {
       depthTest: false,
     });
     const sprite = new THREE.Sprite(material);
-    sprite.scale.set(POI_SPRITE_SIZE, POI_SPRITE_SIZE, 1);
+    // M3 P3.1 — runtime state visual: triggered picket / complete rally → ×1.3 scale
+    // (texture jest cache'owana per type, więc kolor nie zmienia się; scale to
+    // simple, low-risk indicator).
+    const scaleMul = (poi.type === 'picket' && poi.triggered) ? 1.3
+                  : (poi.type === 'rally'  && poi.complete)  ? 1.2
+                  : 1.0;
+    sprite.scale.set(POI_SPRITE_SIZE * scaleMul, POI_SPRITE_SIZE * scaleMul, 1);
     sprite.position.set(S(point.x), POI_SPRITE_Y, S(point.y));
     // M3 P1.2 — kosmosType dla raycaster (P1.5 tooltip reuse'uje ten sam userData).
     sprite.userData = { kosmosType: 'poi', poiId: poi.id, poiName: poi.name, poiType: poi.type };
@@ -4454,6 +4460,11 @@ export class ThreeRenderer {
       entry.sprite.position.set(S(point.x), POI_SPRITE_Y, S(point.y));
     }
     if (entry.sprite.userData) entry.sprite.userData.poiName = poi.name;
+    // M3 P3.1 — runtime state: scale change zwracający informację o triggered/complete
+    const scaleMul = (poi.type === 'picket' && poi.triggered) ? 1.3
+                  : (poi.type === 'rally'  && poi.complete)  ? 1.2
+                  : 1.0;
+    entry.sprite.scale.set(POI_SPRITE_SIZE * scaleMul, POI_SPRITE_SIZE * scaleMul, 1);
   }
 
   _disposeAllPOISprites() {

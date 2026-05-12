@@ -64,6 +64,17 @@ export const GAME_CONFIG = {
   UI: {
     tooltipDelayMs: 500,
   },
+
+  // ── M3 P3.1 — POI runtime tunables ───────────────────────────────────────
+  // POIRuntimeSystem detection throttling i parametry per-type.
+  // Detection runs co N time:tick events (~16ms each) — co 10 = ~167ms delay.
+  poiDetectionTickInterval: 10,
+  // Picket cooldown po triggered → game-days (rename z picketCooldownSeconds
+  // dla semantic clarity — gameTime jest w latach, więc 30 dni = 30/365.25 lat).
+  picketCooldownGameDays: 30,
+  // Rally member gather range (gameplay px). Hardcoded MVP, per-rally konfig
+  // w future. Vessel w tym promieniu od poi.center liczony jako "zebrany".
+  rallyGatherRangePx: 50,
 };
 
 // Typy gwiazd z parametrami fizycznymi

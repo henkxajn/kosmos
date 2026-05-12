@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 67;
+export const CURRENT_VERSION     = 68;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -85,6 +85,7 @@ const MIGRATIONS = {
   64: _migrateV64toV65,
   65: _migrateV65toV66,
   66: _migrateV66toV67,
+  67: _migrateV67toV68,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1736,6 +1737,31 @@ function _migrateV66toV67(data) {
     if (v.movementOrder.escorteeId === undefined)          v.movementOrder.escorteeId = null;
   }
 
+  return data;
+}
+
+// ── Migracja v67 → v68 ──────────────────────────────────────────────────────
+// M3 P3.1 (Picket + Rally runtime systems) — runtime fields dla POI:
+//   - triggered: false           — picket alarm fired (cooldown active)
+//   - cooldownEndsAt: null       — gameTime po którym picket może znów triggerować
+//   - complete: false            — rally zebrany (one-time event)
+//   - currentMembers: 0          — liczba vessels w zasięgu rally (UI display)
+//   - completedYear: null        — gameTime gdy rally zebrany
+// Backward compatible — old saves load OK z lazy default pattern, ale tutaj
+// nadajemy explicit defaults dla deterministic state.
+function _migrateV67toV68(data) {
+  const gs = data.gameState ?? {};
+  const pois = gs.pois ?? {};
+  for (const poiId in pois) {
+    const poi = pois[poiId];
+    if (!poi || typeof poi !== 'object') continue;
+    if (poi.triggered === undefined)      poi.triggered = false;
+    if (poi.cooldownEndsAt === undefined) poi.cooldownEndsAt = null;
+    if (poi.complete === undefined)       poi.complete = false;
+    if (poi.currentMembers === undefined) poi.currentMembers = 0;
+    if (poi.completedYear === undefined)  poi.completedYear = null;
+  }
+  if (!data.gameState) data.gameState = gs;
   return data;
 }
 
