@@ -85,7 +85,11 @@ export function resolveTargetFromHits(hits, worldPoint, _currentEmpireId) {
   }
 
   if (ud.kosmosType === 'planet') {
-    const planet = window.KOSMOS?.entityManager?.getEntity?.(ud.planetId);
+    // EntityManager (singleton) has .get(id) — not .getEntity(). Two prior
+    // gaps fixed in P4: missing window.KOSMOS.entityManager exposure +
+    // method-name mismatch made planet hover return type:'empty'.
+    const em = window.KOSMOS?.entityManager;
+    const planet = em?.get?.(ud.planetId);
     if (!planet) return { type: 'empty', worldPoint };
     return { type: 'planet', entityId: ud.planetId, planet, worldPoint };
   }

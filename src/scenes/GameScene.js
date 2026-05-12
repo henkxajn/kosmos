@@ -23,6 +23,7 @@ import { LifeSystem }        from '../systems/LifeSystem.js';
 import { GravitySystem }     from '../systems/GravitySystem.js';
 import { AudioSystem }       from '../systems/AudioSystem.js';
 import { SaveSystem }        from '../systems/SaveSystem.js';
+import { CURRENT_VERSION }   from '../systems/SaveMigration.js';
 import { ResourceSystem }    from '../systems/ResourceSystem.js';
 import { CivilizationSystem } from '../systems/CivilizationSystem.js';
 import { BuildingSystem }    from '../systems/BuildingSystem.js';
@@ -252,6 +253,12 @@ export class GameScene {
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
+    // M3 P4 — devtools/runtime exposures (resolves long-standing deferred chore
+    // from P1.3.5 known-issues + RaycasterPure planet lookup needing entityManager).
+    window.KOSMOS.gameScene        = this;
+    window.KOSMOS.gameConfig       = GAME_CONFIG;
+    window.KOSMOS.entityManager    = EntityManager;
+    window.KOSMOS.saveCurrentVersion = CURRENT_VERSION;
     window.KOSMOS.buildingSystem   = this.buildingSystem;
     window.KOSMOS.resourceSystem   = this.resourceSystem;
     window.KOSMOS.civSystem        = this.civSystem;

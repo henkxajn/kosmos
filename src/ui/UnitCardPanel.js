@@ -9,6 +9,8 @@ import { GROUND_ABILITIES } from '../data/groundAbilities.js';
 import { GroundUnitFactory } from '../systems/GroundUnitFactory.js';
 import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import EventBus from '../core/EventBus.js';
+import { showConfirmModal } from './ConfirmModal.js';
+import { t } from '../i18n/i18n.js';
 
 const FACTION_COLORS = {
   humanity: '#94A3B8',
@@ -199,18 +201,26 @@ export function showUnitCard(unit) {
       footer.appendChild(renameBtn);
 
       const disbandBtn = _btn('💔 Rozwiąż', THEME.danger, () => {
-        if (!window.confirm('Rozwiązać jednostkę? Ta akcja jest nieodwracalna.')) return;
-        const gum = window.KOSMOS?.groundUnitManager;
-        if (gum?.removeUnit) {
-          EventBus.emit('groundUnit:destroyed', {
-            unitId: unit.id, planetId: unit.planetId, owner: unit.owner,
-            archetypeId: unit.archetypeId ?? null,
-            popCost: unit.popCost ?? 0,
-            cause: 'disband_manual',
-          });
-          gum.removeUnit(unit.id);
-        }
-        close();
+        showConfirmModal({
+          title:        t('unit.disband.title'),
+          message:      t('unit.disband.message'),
+          confirmLabel: t('common.disband'),
+          cancelLabel:  t('confirm.cancel'),
+          danger:       true,
+        }).then((confirmed) => {
+          if (!confirmed) return;
+          const gum = window.KOSMOS?.groundUnitManager;
+          if (gum?.removeUnit) {
+            EventBus.emit('groundUnit:destroyed', {
+              unitId: unit.id, planetId: unit.planetId, owner: unit.owner,
+              archetypeId: unit.archetypeId ?? null,
+              popCost: unit.popCost ?? 0,
+              cause: 'disband_manual',
+            });
+            gum.removeUnit(unit.id);
+          }
+          close();
+        });
       });
       footer.appendChild(disbandBtn);
     }

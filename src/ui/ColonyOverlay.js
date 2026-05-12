@@ -17,6 +17,7 @@ import EventBus          from '../core/EventBus.js';
 import { dropTroop, fireOrbitalStrike } from '../entities/Vessel.js';
 import { showUnitCard } from './UnitCardPanel.js';
 import { showBattleGroup } from './BattleGroupPanel.js';
+import { showConfirmModal } from './ConfirmModal.js';
 import { ANOMALIES }     from '../data/AnomalyData.js';
 import { t }   from '../i18n/i18n.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
@@ -2965,9 +2966,18 @@ export class ColonyOverlay extends BaseOverlay {
         if (!armySys || !zone.data?.armyId) break;
         const army = armySys.getArmy(zone.data.armyId);
         if (!army) break;
-        if (!window.confirm(`Rozwiązać ${army.name}? Jednostki pozostaną.`)) break;
-        armySys.disbandArmy(zone.data.armyId);
-        this._showFlash('💔 Armia rozwiązana');
+        const armyId = zone.data.armyId;
+        showConfirmModal({
+          title:        t('army.disband.title'),
+          message:      t('army.disband.message', army.name),
+          confirmLabel: t('common.disband'),
+          cancelLabel:  t('confirm.cancel'),
+          danger:       true,
+        }).then((confirmed) => {
+          if (!confirmed) return;
+          armySys.disbandArmy(armyId);
+          this._showFlash('💔 Armia rozwiązana');
+        });
         break;
       }
       case 'armyRename': {

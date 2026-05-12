@@ -2407,6 +2407,12 @@ export default {
   'confirm.yes':                  'Tak',
   'confirm.no':                   'Nie',
   'confirm.cancel':               'Anuluj',
+  // M3 P4 — disband confirms (replaced legacy window.confirm)
+  'common.disband':               'Rozwiąż',
+  'army.disband.title':           'Rozwiąż armię',
+  'army.disband.message':         'Rozwiązać {0}? Jednostki pozostaną.',
+  'unit.disband.title':           'Rozwiąż jednostkę',
+  'unit.disband.message':         'Rozwiązać jednostkę? Ta akcja jest nieodwracalna.',
   'poi.confirm.delete.title':     'Usuń POI',
   'poi.confirm.delete.message':   'Czy na pewno usunąć POI:',
   'poi.confirm.delete.confirmBtn':'Usuń',
