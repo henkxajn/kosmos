@@ -330,6 +330,8 @@ export class GameScene {
     window.KOSMOS.militaryAI       = MilitaryAI;
     window.KOSMOS.econAI           = EconAI;
     window.KOSMOS.threeRenderer    = this.threeRenderer;
+    // M4 P1 post-playtest — EventBus exposed dla debug konsoli (off-spec M3 #9).
+    window.KOSMOS.eventBus         = EventBus;
 
     // ── ActionRecorder — nagrywa akcje gracza (Ctrl+Shift+R toggle) ──
     // Pozwala zapisać otwarcie jako script dla ScriptedBot (teach the AI how to open).
@@ -421,6 +423,108 @@ export class GameScene {
           return unit;
         }
         console.warn(`[debug] Spawn nieudany — sprawdź archetypeId (dostępne: shock_infantry, rocket_artillery, garrison_unit, aa_platform, medic_unit, recon_drone, ground_supply_unit)`);
+      },
+      // KOSMOS.debug.spawnMyVessel('hull_frigate', { modules: [...] }) — instant spawn
+      // własnego militarnego statku w hangarze homePlanet. Auto-unlock point_defense.
+      // M4 P1.5 — żeby testowanie pursue/engage nie wymagało godzinnego ramp-up
+      // (build shipyard → research tech → produce vessel).
+      // Default: hull_frigate z weapon_kinetic + shield + armor (combat-ready loadout).
+      spawnMyVessel: (hullId = 'hull_frigate', opts = {}) => {
+        const vMgr = window.KOSMOS?.vesselManager;
+        const colMgr = window.KOSMOS?.colonyManager;
+        const home = window.KOSMOS?.homePlanet;
+        if (!vMgr || !colMgr || !home) {
+          console.warn('[debug] Brak VesselManager/ColonyManager/homePlanet');
+          return null;
+        }
+        const colony = colMgr.getColony(home.id);
+        if (!colony) { console.warn('[debug] Brak kolonii na homePlanet'); return null; }
+        // Auto-unlock point_defense (dla każdego militarnego hulla — wymaganie z HullsData)
+        if (this.techSystem && !this.techSystem.isResearched?.('point_defense')) {
+          this.techSystem.restore?.({ researched: ['point_defense'] });
+          console.log(`[debug] ✓ tech point_defense auto-unlocked`);
+        }
+        // Sensowne default modules per hull-class — combat-ready
+        const defaultModules = {
+          hull_frigate:   ['engine_chemical', 'weapon_kinetic', 'shield_basic', 'reinforced_hull'],
+          hull_destroyer: ['engine_chemical', 'engine_chemical', 'weapon_kinetic', 'weapon_kinetic',
+                           'shield_basic', 'reinforced_hull'],
+          hull_cruiser:   ['engine_chemical', 'engine_chemical', 'engine_chemical',
+                           'weapon_missile', 'weapon_kinetic', 'weapon_kinetic',
+                           'shield_basic', 'reinforced_hull'],
+          hull_small:     ['engine_chemical', 'weapon_laser'],
+          hull_medium:    ['engine_chemical', 'engine_chemical', 'cargo_hold'],
+          hull_large:     ['engine_chemical', 'engine_chemical', 'cargo_hold', 'cargo_hold', 'cargo_hold'],
+        };
+        const modules = opts.modules ?? defaultModules[hullId] ?? [];
+        let vessel;
+        try {
+          vessel = vMgr.createAndRegister(hullId, home.id, { modules, ...opts });
+        } catch (e) {
+          console.warn(`[debug] createAndRegister fail dla ${hullId}:`, e.message);
+          return null;
+        }
+        if (!vessel) { console.warn(`[debug] Spawn ${hullId} zwrócił null`); return null; }
+        if (!colony.fleet.includes(vessel.id)) colony.fleet.push(vessel.id);
+        console.log(`[debug] ✓ ${hullId} (${vessel.name}) spawned — id=${vessel.id}, modules=${modules.join(',')}`);
+        return vessel;
+      },
+      // KOSMOS.debug.simulateBattleRetreat({ vesselId?, lowFuel?, deepSpace? })
+      // Symuluje retreat po bitwie (TEST 5.1/5.2). Przesuwa vessel do deep-space,
+      // opcjonalnie ustawia fuel low, emituje battle:resolved retreat='A'.
+      //   vesselId — opcjonalny; brak → pierwszy żywy player vessel
+      //   lowFuel  — default true (fuel=0.05 → wymusza lowFuelDrift path)
+      //   deepSpace — default true (przesuwa vessel 5 AU od homePlanet)
+      // Zwraca { vessel, prevState, prevFuel, deepSpacePos } dla rollback.
+      simulateBattleRetreat: (opts = {}) => {
+        const vMgr = window.KOSMOS?.vesselManager;
+        const eventBus = window.KOSMOS?.eventBus;
+        const home = window.KOSMOS?.homePlanet;
+        if (!vMgr || !eventBus || !home) {
+          console.warn('[debug] Brak VesselManager/eventBus/homePlanet');
+          return null;
+        }
+        const lowFuel = opts.lowFuel ?? true;
+        const deepSpace = opts.deepSpace ?? true;
+        const all = vMgr.getAllVessels().filter(v => !v.ownerEmpireId && !v.isWreck);
+        const vessel = opts.vesselId
+          ? vMgr.getVessel(opts.vesselId)
+          : all[0];
+        if (!vessel) { console.warn('[debug] Brak żywego player vessela'); return null; }
+
+        const prevState = { ...vessel.position };
+        const prevFuel = vessel.fuel?.current ?? null;
+
+        if (deepSpace) {
+          // Przesuń vessel 5 AU od home planet (~550 px) — daleko od kolonii,
+          // żeby fuelNeeded dla retreat moveToPoint przekraczał fuel.current.
+          const AU = 110;  // GAME_CONFIG.AU_TO_PX
+          const angle = Math.random() * Math.PI * 2;
+          vessel.position.x = (home.x ?? 0) + Math.cos(angle) * 5 * AU;
+          vessel.position.y = (home.y ?? 0) + Math.sin(angle) * 5 * AU;
+          vessel.position.state    = 'in_transit';
+          vessel.position.dockedAt = null;
+        }
+
+        if (lowFuel && vessel.fuel) {
+          vessel.fuel.current = 0.05;
+        }
+
+        const battleId = `manual_test_retreat_${Date.now()}`;
+        eventBus.emit('battle:resolved', {
+          battleId,
+          result: {
+            retreated: 'A',
+            participantA: {
+              type: 'vessel_group',
+              empireId: 'player',
+              vesselIds: [vessel.id],
+            },
+          },
+        });
+        console.log(`[debug] ✓ simulateBattleRetreat: vessel=${vessel.id} (${vessel.name}), battleId=${battleId}, deepSpace=${deepSpace}, lowFuel=${lowFuel}`);
+        console.log(`[debug] Sprawdź: KOSMOS.vesselManager.getVessel('${vessel.id}').lowFuelDrift`);
+        return { vessel, prevState, prevFuel, deepSpacePos: { x: vessel.position.x, y: vessel.position.y } };
       },
       // ── M1 Targeting (Commit 4) ──────────────────────────────────────
       // KOSMOS.debug.enableMovementOrders() — włącz feature flag + instancjonuj system.
@@ -2503,16 +2607,27 @@ export class GameScene {
     rs.receive(gains);
   }
 
-  // POWER TEST — flota startowa (1× science_vessel, 1× cargo_ship, 1× heavy_freighter)
+  // POWER TEST — flota startowa (1× science_vessel, 1× cargo_ship, 1× hull_frigate)
+  // M4 P1.5 — dodany hull_frigate jako startowy militarny vessel + auto-unlock
+  // tech `point_defense` żeby gracz mógł budować kolejne. Lore: "koloniści mieli
+  // sprzęt na obronę przed nieznanym". Tylko Power Test — Civilization purystyczny.
   _spawnPowerTestFleet(planetId) {
     const vMgr = window.KOSMOS?.vesselManager;
     const colony = this.colonyManager.getColony(planetId);
     if (!vMgr || !colony) return;
-    for (const shipId of [
-      'science_vessel', 'cargo_ship',
-    ]) {
+    // Legacy ship types (SHIPS data)
+    for (const shipId of ['science_vessel', 'cargo_ship']) {
       const vessel = vMgr.createAndRegister(shipId, planetId);
       colony.fleet.push(vessel.id);
+    }
+    // M4 P1.5 — hull_frigate z sensownymi defaultami militarnymi
+    const frigate = vMgr.createAndRegister('hull_frigate', planetId, {
+      modules: ['engine_chemical', 'weapon_kinetic', 'shield_basic', 'reinforced_hull'],
+    });
+    if (frigate) colony.fleet.push(frigate.id);
+    // Auto-unlock point_defense — pozwala graczowi budować kolejne militarne hulle.
+    if (this.techSystem && !this.techSystem.isResearched?.('point_defense')) {
+      this.techSystem.restore?.({ researched: ['point_defense'] });
     }
   }
 

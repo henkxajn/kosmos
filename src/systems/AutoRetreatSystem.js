@@ -19,6 +19,7 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 
 export class AutoRetreatSystem {
   /**
@@ -94,8 +95,40 @@ export class AutoRetreatSystem {
       issuedBy:    'auto_retreat',
     });
     if (!res?.ok) {
-      // Order rejected (np. insufficient_fuel). NIE wrecking — gracz może
-      // zatankować i ręcznie wydać order. Emit failed z powodem z MOS.
+      // M4 P1 — gdy insufficient_fuel i flag m4FuelAwareRetreat ON, retry z bypass.
+      // Vessel doleci do friendly planety mimo niedoboru (P4 reforma fuel doda real
+      // consequences typu velocity degradation). Bez fallbacku gracz tracił statek
+      // — silent fail w deep-space. Marker lowFuelDrift dla UI.
+      if (res?.reason === 'insufficient_fuel'
+          && GAME_CONFIG.FEATURES?.m4FuelAwareRetreat) {
+        const retry = this._mos.issueOrder(vessel.id, {
+          type:            'moveToPoint',
+          targetPoint:     { x: dest.planet.x, y: dest.planet.y },
+          issuedBy:        'auto_retreat_low_fuel',
+          bypassFuelCheck: true,
+        });
+        if (retry?.ok) {
+          vessel.lowFuelDrift = {
+            sinceYear:     this._year(),
+            destPlanetId:  dest.planet.id,
+            originBattleId: battleId,
+          };
+          if (vessel.movementOrder) {
+            vessel.movementOrder.retreatFromBattleId = battleId;
+            vessel.movementOrder.lowFuelDrift        = true;
+          }
+          EventBus.emit('vessel:autoRetreatLowFuel', {
+            vesselId:            vessel.id,
+            battleId,
+            destinationPlanetId: dest.planet.id,
+            orderId:             retry.orderId,
+          });
+          return retry.orderId;
+        }
+        // Retry też failed — fallthrough do standard fail.
+      }
+      // Order rejected (inny powód niż fuel, lub retry też się nie udał).
+      // NIE wrecking — gracz może zatankować i ręcznie wydać order.
       EventBus.emit('vessel:autoRetreatFailed', {
         vesselId: vessel.id, battleId, reason: res?.reason ?? 'order_rejected',
       });

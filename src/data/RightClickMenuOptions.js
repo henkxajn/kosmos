@@ -3,6 +3,12 @@
 // Pure data + jeden helper (buildMenuOptions). Brak logiki wykonującej
 // order — kliknięcie loguje placeholder, real wiring w P1.3.
 //
+// M4 P1.5 — dodano `warning` field dla opcji enabled ale z ostrzeżeniem
+// (np. pursue na enemy z bezbronnym vesselem). RightClickMenu honoruje warning
+// jako tooltip (data-tooltip) bez disabling samej opcji.
+
+import { SHIP_MODULES } from './ShipModulesData.js';
+//
 // Target shape (dostarczany przez P1.2 raycaster — RaycasterHelper.resolveTargetFromHits):
 //   { type, entityId?, vessel?, poi?, planet?, worldPoint }
 //   type ∈ 'empty' | 'enemyVessel' | 'ownVessel' | 'poi' | 'planet'
@@ -78,18 +84,60 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
   ],
 });
 
+/**
+ * M4 P1.5 — sprawdź czy selected vessel ma jakikolwiek moduł broni.
+ * Vessel bez weapon module wchodząc w combat dostaje BattleSystem fallback damage=2,
+ * co nie przebija pancerza wrogich frigate (armor=2), więc przegrywa i retreatuje.
+ * Funkcja zwraca true gdy vessel NIE ma weapons — UI pokaże warning na pursue/intercept.
+ *
+ * Pure-ish: wykonuje window.KOSMOS lookup, ale to acceptable dla UI helper.
+ * @param {string} vesselId
+ * @returns {boolean} true gdy vessel istnieje i NIE ma weapon module
+ */
+function _vesselHasNoWeapons(vesselId) {
+  if (!vesselId) return false;
+  const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+  if (!vessel) return false;
+  const modules = vessel.modules ?? [];
+  if (modules.length === 0) {
+    // Legacy ship (SHIPS data) bez modules — fallback po shipId.
+    // science_vessel / cargo_ship / colony_ship / heavy_freighter — cywilne.
+    const civIds = new Set(['science_vessel', 'cargo_ship', 'colony_ship', 'heavy_freighter']);
+    return civIds.has(vessel.shipId);
+  }
+  // Modular hull (HULLS data) — sprawdź czy którykolwiek moduł ma stats.damage.
+  for (const modId of modules) {
+    const mod = SHIP_MODULES[modId];
+    if (mod?.stats?.damage != null) return false;  // ma broń → nie warning
+  }
+  return true;  // wszystkie modules sprawdzone, brak weapons → warning
+}
+
 // Buduje finalną listę opcji dla danego targetu + stanu selekcji.
-// Zwraca opcje z dodanymi flagami enabled + disabledReason (do UI).
+// Zwraca opcje z dodanymi flagami enabled + disabledReason + warning (do UI).
 // Pure function — testowalna w izolacji.
 export function buildMenuOptions(target, selectedVesselId) {
   const baseOptions = MENU_OPTIONS_BY_TARGET[target?.type] ?? [];
   return baseOptions
     .filter(opt => !opt.condition || opt.condition(target, selectedVesselId))
-    .map(opt => ({
-      ...opt,
-      enabled: !opt.requiresSelection || selectedVesselId !== null,
-      disabledReason: opt.requiresSelection && !selectedVesselId
-        ? 'Najpierw wybierz statek'
-        : null,
-    }));
+    .map(opt => {
+      const base = {
+        ...opt,
+        enabled: !opt.requiresSelection || selectedVesselId !== null,
+        disabledReason: opt.requiresSelection && !selectedVesselId
+          ? 'Najpierw wybierz statek'
+          : null,
+        warning: null,
+      };
+      // M4 P1.5 — warning gdy pursue/intercept na enemy a selected vessel bez broni.
+      // Opcja zostaje enabled (player może świadomie wysłać "kamikaze recon"),
+      // ale tooltip ostrzega o konsekwencjach.
+      if (base.enabled
+          && (opt.orderType === 'pursue' || opt.orderType === 'intercept')
+          && target?.type === 'enemyVessel'
+          && _vesselHasNoWeapons(selectedVesselId)) {
+        base.warning = 'no_weapons';
+      }
+      return base;
+    });
 }

@@ -41,9 +41,11 @@ import { COMBAT_ENGAGEMENT_AU, pairKey } from './ProximitySystem.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 
-// Cooldown — para po starciu (draw/retreat) nie triggeruje combat przez 2 civYears.
-// Zapobiega spam'owi gdy proximity pozostaje po niekonkluzywnej bitwie.
-export const ENGAGEMENT_COOLDOWN_YEARS = 2;
+// Cooldown — para po starciu nie triggeruje combat przez N civYears.
+// M4 P1 post-playtest #2 (C): skrócone z 2 → 1 civYear. Cooldown działa teraz
+// głównie jako anti-flicker last-resort dla par stale stłoczonych — fresh
+// engagement po prawdziwym disengage uzyskany przez reset na combatRangeExit (B).
+export const ENGAGEMENT_COOLDOWN_YEARS = 1;
 
 export class VesselCombatSystem {
   /**
@@ -56,10 +58,18 @@ export class VesselCombatSystem {
 
     this._onCombatRangeEnter = (e) => this._handleCombatRangeEnter(e);
     EventBus.on('vessel:combatRangeEnter', this._onCombatRangeEnter);
+
+    // M4 P1 post-playtest #2 (B) — reset cooldown gdy vessele rozłączają się
+    // po combat (dist ≥ 0.20 AU exit threshold). Cooldown działa teraz głównie
+    // jako anti-flicker dla par stale stłoczonych; po prawdziwym disengage
+    // (retreat lub manewr) fresh engagement możliwy bez czekania.
+    this._onCombatRangeExit = (e) => this._handleCombatRangeExit(e);
+    EventBus.on('vessel:combatRangeExit', this._onCombatRangeExit);
   }
 
   destroy() {
     EventBus.off('vessel:combatRangeEnter', this._onCombatRangeEnter);
+    EventBus.off('vessel:combatRangeExit', this._onCombatRangeExit);
     this._recentlyEngaged.clear();
   }
 
@@ -89,6 +99,19 @@ export class VesselCombatSystem {
 
     this._recentlyEngaged.set(key, now);
     this._resolveEngagement(vesselAId, vesselBId);
+  }
+
+  /**
+   * M4 P1 post-playtest #2 (B) — reset cooldown gdy para vesseli rozłącza się
+   * (dist ≥ COMBAT_EXIT_AU = 0.20 AU). Po prawdziwym disengage gracz może
+   * ponownie atakować ten sam target bez czekania na ENGAGEMENT_COOLDOWN_YEARS.
+   * Cooldown chroni tylko przed flicker'em gdy vessele zostają stale w combat
+   * range po niekonkluzywnej bitwie.
+   */
+  _handleCombatRangeExit({ vesselAId, vesselBId }) {
+    if (!GAME_CONFIG.FEATURES?.vesselCombat) return;
+    const key = pairKey(vesselAId, vesselBId);
+    this._recentlyEngaged.delete(key);
   }
 
   // ── Team-up + battle resolve ─────────────────────────────────────────
@@ -219,15 +242,13 @@ export class VesselCombatSystem {
     gameState.set(`battles.${battleId}`, battleRec, 'deep_space_combat');
     EventBus.emit('battle:resolved', { warId: null, battleId, result: battleRec });
 
-    // Fill cooldown dla wszystkich par z bitwy (nie tylko triggering pair).
-    // Zapobiega re-engagement gdy ProximitySystem emituje wiele combatRangeEnter
-    // w tym samym ticku dla multi-vessel team-up (np. pursue 1 wroga w ciasnej
-    // grupie 3 wrogich vesseli → 3 eventy → bez tego pętla robiłaby 3 bitwy).
-    for (const a of sideA) {
-      for (const b of sideB) {
-        this._recentlyEngaged.set(pairKey(a.id, b.id), year);
-      }
-    }
+    // M4 P1 post-playtest #2 (A) — DROP team-up smearing. Cooldown ustawiamy
+    // tylko dla triggering pair (już zrobione w _handleCombatRangeEnter).
+    // Poprzednio: po team-up bitwie cooldown smarowany na wszystkie pary
+    // sideA × sideB — vessele które nie strzelały też dostawały cooldown,
+    // przez co pursue na innego wroga z grupy nie wywoływał combat. Anti-spam
+    // w tym samym ticku obsługuje teraz B (reset on exit) + zwykły cooldown
+    // (1 civYear) tylko dla triggering pair.
   }
 
   // ── Wreck placement — delegacja do EnemyAttackHandler._turnIntoWreck ──

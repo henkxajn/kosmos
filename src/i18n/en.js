@@ -2443,4 +2443,25 @@ export default {
   'rallyModal.empty':             'No rally POIs. Create rally via tactical right-click → "Create Rally Point here".',
   'rallyModal.removeAssignment':  'Remove assignment',
   'rallyModal.assignedLabel':     'assigned',
+
+  // ── M4 P1 — Notifications + drift + retreat ─────────────────────────
+  'log.m4.enemyFleetMoving':       'Alien fleet movement detected (Empire {0}, ETA {1} yrs)',
+  'log.m4.enemyFleetArrival':      'ALIEN FLEET materializing at home! Empire {0}, {1} vessels',
+  'log.m4.proximityContact':       'Sensor contact: hostile vessel "{0}" ({1} AU)',
+  'log.m4.battleResolvedVictory':  'Victory in battle {0} — enemy defeated',
+  'log.m4.battleResolvedDefeat':   'Defeat in battle {0} — our forces destroyed',
+  'log.m4.battleResolvedDraw':     'Battle {0} ended in draw',
+  'log.m4.battleResolvedRetreat':  'Battle {0} — side "{1}" retreated',
+  'log.m4.autoRetreatFailed':      'Vessel "{0}" cannot retreat: {1}',
+  'log.m4.autoRetreatLowFuel':     'Vessel "{0}" drifting on fumes toward "{1}"',
+  'log.m4.driftIdle':              'Vessel "{0}" completed pursuit — auto-return in 5 yrs or issue new order',
+  'log.m4.driftAutoReturn':        'Vessel "{0}" drifted too long — auto-return to "{1}"',
+  'log.m4.warDeclared':            'WAR: Empire {0} declared war',
+  'log.autoSlowEnemyFleet':        'enemy fleet approaching',
+  'log.autoSlowBattle':            'battle concluded',
+  'log.autoSlowWar':               'war declaration',
+  'log.autoSlowEnemyMaterialize':  'alien fleet materializing',
+  // M4 P1.5 — first sighting + weapons warning
+  'log.m4.firstSighting':          'First sighting of alien vessel: "{0}" (Empire {1})',
+  'tooltip.menu.noWeapons':        'No weapons — vessel will be destroyed',
 };

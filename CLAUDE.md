@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v68 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v69 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -154,7 +154,7 @@ Projekt realizuje podejście **MDA (Mechanics → Dynamics → Aesthetics)**:
 | `src/core/EventBus.js` | Serce komunikacji — błąd tu psuje wszystko |
 | `src/core/EntityManager.js` | Rejestr encji — modyfikacja rozbija save/restore |
 | `src/systems/PhysicsSystem.js` | Prawa Keplera + kolizje — fizyka orbitalna |
-| `src/config/GameConfig.js` | Globalne stałe gry + `FEATURES` flagi (M1: movementOrders, fleetMaterialization; M2a: proximitySystem, vesselCombat, unifiedAggregator, enduranceDrainActive — wszystkie OFF) |
+| `src/config/GameConfig.js` | Globalne stałe gry + `FEATURES` flagi (M4 P1: M1+M2a flagi flip ON — movementOrders, fleetMaterialization, proximitySystem, vesselCombat, unifiedAggregator; enduranceDrainActive zostaje OFF do M4 P4; +m4DriftFix/m4Notifications/m4FuelAwareRetreat ON) |
 | `src/map/HexGrid.js` | Matematyka hex cube coordinates |
 | `src/systems/SaveMigration.js` | Łańcuch migracji save'ów — centralny punkt, nie rozpraszaj |
 | `generate-planets.js` + `lib/` | Generator tekstur planet — 9 modułów, pipeline heightmap→color→PBR |

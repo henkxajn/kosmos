@@ -121,6 +121,10 @@ const LOG_COLORS = {
   // M3 P3.1 post-fix #1 — POI runtime events
   get poi_alert()          { return THEME.danger; },
   get poi_rally()          { return THEME.mint; },
+  // M4 P1 — channele dla nowych notyfikacji
+  get intel()              { return THEME.info; },       // wykrycia, kontakty, predykcje
+  get combat()             { return THEME.danger; },     // bitwy, retreaty, wraki
+  get diplomacy()          { return THEME.warning; },    // wojny, ultimatums, hostility
 };
 
 // Koszty akcji gracza (zsynchronizowane z PlayerActionSystem)
@@ -816,6 +820,149 @@ export class UIManager {
       this._log(t('eventLog.poi.rallyComplete',
         poiName ?? '?', memberCount ?? 0), 'poi_rally');
     });
+
+    // ── M4 P1 — UI notifications dla M1/M2a eventów ──────────────────────
+    this._subscribeM4Notifications();
+  }
+
+  /**
+   * M4 P1 — subskrypcje UI dla eventów combat/fleet/diplomacy/drift.
+   * Gated przez FEATURES.m4Notifications (rollback toggle).
+   * Anti-spam: proximityEnter używa _lastProximityLog Map z 10-year cooldown per parę.
+   */
+  _subscribeM4Notifications() {
+    if (!GAME_CONFIG?.FEATURES?.m4Notifications) return;
+
+    this._lastProximityLog = new Map();   // pairKey → gameYear
+    this._PROXIMITY_LOG_COOLDOWN_YEARS = 10;
+
+    // Ruch wrogiej floty (intel-gated — pełen szczegół tylko gdy contact level).
+    // Bez gated info wciąż logujemy ogólny komunikat — bo gracz powinien wiedzieć.
+    EventBus.on('empire:fleetMoved', ({ empireId, destSystemId, etaYear }) => {
+      if (!empireId) return;
+      const empire = window.KOSMOS?.empireRegistry?.get?.(empireId);
+      const empName = empire?.namePL ?? empire?.name ?? empireId;
+      const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const eta = (typeof etaYear === 'number')
+        ? Math.max(0, etaYear - gameYear).toFixed(1)
+        : '?';
+      // Auto-slow tylko gdy flota leci na home (kluczowa informacja dla gracza).
+      if (destSystemId === 'sys_home') {
+        this._triggerAutoSlowIfTime(t('log.autoSlowEnemyFleet'));
+      }
+      this._log(t('log.m4.enemyFleetMoving', empName, eta), 'intel');
+    });
+
+    // Materializacja wrogiej floty przy home — krytyczne, auto-slow + log.
+    EventBus.on('empire:fleetMaterialized', ({ empireId, vesselIds }) => {
+      const empire = window.KOSMOS?.empireRegistry?.get?.(empireId);
+      const empName = empire?.namePL ?? empire?.name ?? empireId ?? '?';
+      const count = Array.isArray(vesselIds) ? vesselIds.length : 0;
+      this._triggerAutoSlowIfTime(t('log.autoSlowEnemyMaterialize'));
+      this._log(t('log.m4.enemyFleetArrival', empName, count), 'combat');
+    });
+
+    // Sensor proximity contact (wróg <0.5 AU od naszego statku).
+    // Anti-spam: cooldown per para 10 game-years.
+    EventBus.on('vessel:proximityEnter', ({ vesselAId, vesselBId, distanceAU, sameFaction }) => {
+      if (sameFaction) return;
+      const vm = window.KOSMOS?.vesselManager;
+      if (!vm) return;
+      const vA = vm.getVessel?.(vesselAId);
+      const vB = vm.getVessel?.(vesselBId);
+      if (!vA || !vB) return;
+      // Tylko gdy jedna ze stron to player vessel (nie loguj kontaktów empire↔empire).
+      const isPlayerA = !vA.ownerEmpireId || vA.ownerEmpireId === 'player';
+      const isPlayerB = !vB.ownerEmpireId || vB.ownerEmpireId === 'player';
+      if (!isPlayerA && !isPlayerB) return;
+      const enemy = isPlayerA ? vB : vA;
+      const pairKey = vesselAId < vesselBId ? `${vesselAId}|${vesselBId}` : `${vesselBId}|${vesselAId}`;
+      const now = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const last = this._lastProximityLog.get(pairKey);
+      if (last != null && (now - last) < this._PROXIMITY_LOG_COOLDOWN_YEARS) return;
+      this._lastProximityLog.set(pairKey, now);
+      this._log(t('log.m4.proximityContact',
+        enemy.name ?? enemy.id ?? '?',
+        (distanceAU ?? 0).toFixed(2)), 'intel');
+    });
+
+    // Bitwa zakończona — popup-like log, klasyfikuj wynik.
+    EventBus.on('battle:resolved', ({ battleId, result }) => {
+      if (!result) return;
+      // Filtruj: tylko gdy player jest stroną.
+      const isPlayerSide = (p) => p?.type === 'vessel_group' && p?.empireId === 'player';
+      const playerA = isPlayerSide(result.participantA);
+      const playerB = isPlayerSide(result.participantB);
+      if (!playerA && !playerB) return;
+      const playerSide = playerA ? 'A' : 'B';
+      this._triggerAutoSlowIfTime(t('log.autoSlowBattle'));
+      if (result.retreated) {
+        const retreatedSide = result.retreated === playerSide ? 'gracz' : 'wróg';
+        this._log(t('log.m4.battleResolvedRetreat', battleId ?? '?', retreatedSide), 'combat');
+      } else if (result.winner === 'draw') {
+        this._log(t('log.m4.battleResolvedDraw', battleId ?? '?'), 'combat');
+      } else if (result.winner === playerSide) {
+        this._log(t('log.m4.battleResolvedVictory', battleId ?? '?'), 'combat');
+      } else {
+        this._log(t('log.m4.battleResolvedDefeat', battleId ?? '?'), 'combat');
+      }
+    });
+
+    // Wycofanie nieudane (brak friendly planety + retry też failed).
+    EventBus.on('vessel:autoRetreatFailed', ({ vesselId, reason }) => {
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      this._log(t('log.m4.autoRetreatFailed',
+        v?.name ?? vesselId ?? '?', reason ?? 'unknown'), 'combat');
+    });
+
+    // Wycofanie awaryjne na resztkach paliwa (low_fuel_drift).
+    EventBus.on('vessel:autoRetreatLowFuel', ({ vesselId, destinationPlanetId }) => {
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      const planet = window.KOSMOS?.entityManager?.get?.(destinationPlanetId);
+      this._log(t('log.m4.autoRetreatLowFuel',
+        v?.name ?? vesselId ?? '?',
+        planet?.name ?? destinationPlanetId ?? '?'), 'combat');
+    });
+
+    // Drift idle po pursue/intercept na vessel target.
+    EventBus.on('vessel:driftIdle', ({ vesselId }) => {
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      this._log(t('log.m4.driftIdle', v?.name ?? vesselId ?? '?'), 'fleet');
+    });
+
+    // Auto-return po driftcie (5y timer expired).
+    EventBus.on('vessel:driftAutoReturn', ({ vesselId, destinationPlanetId }) => {
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      const planet = window.KOSMOS?.entityManager?.get?.(destinationPlanetId);
+      this._log(t('log.m4.driftAutoReturn',
+        v?.name ?? vesselId ?? '?',
+        planet?.name ?? destinationPlanetId ?? '?'), 'fleet');
+    });
+
+    // Deklaracja wojny (gracz vs obcy).
+    EventBus.on('diplomacy:warDeclared', ({ empireId, declaredBy }) => {
+      const empire = window.KOSMOS?.empireRegistry?.get?.(empireId ?? declaredBy);
+      const empName = empire?.namePL ?? empire?.name ?? empireId ?? declaredBy ?? '?';
+      this._triggerAutoSlowIfTime(t('log.autoSlowWar'));
+      this._log(t('log.m4.warDeclared', empName), 'diplomacy');
+    });
+
+    // M4 P1.5 — vessel:firstSighting subskrypcja USUNIĘTA po playtest #4.
+    // ObservatorySystem._tickVesselDetection już samodzielnie pushuje "🔭 Wykryto
+    // wrogą jednostkę" do EventLogSystem (linie 313-321) + emit firstSighting
+    // dla popup w GameScene:1324. Dodawanie kolejnego log entry = duplikat.
+    // i18n key log.m4.firstSighting zachowany — może być reużyty w przyszłym
+    // milestone jeśli Observatory zmieni format.
+  }
+
+  /**
+   * M4 P1 — bezpieczne wywołanie TimeSystem._triggerAutoSlow z reason.
+   */
+  _triggerAutoSlowIfTime(reason) {
+    const ts = window.KOSMOS?.timeSystem;
+    if (ts?._triggerAutoSlow) {
+      try { ts._triggerAutoSlow(reason); } catch (e) { /* defensive */ }
+    }
   }
 
   _log(text, type = 'info', entityRef = null) {

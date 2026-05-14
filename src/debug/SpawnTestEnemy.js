@@ -511,9 +511,12 @@ export function spawnEnemyCiv(opts = {}) {
  *
  * @param {object} opts
  * @param {number} [opts.strength=500]       — siła (→ wybór kadłuba i modułów)
- * @param {number} [opts.etaYears=0.5]       — za ile lat dotrze do gracza
- * @param {number} [opts.spawnDistanceAU=15] — odległość od gwiazdy przy spawn
+ * @param {number} [opts.etaYears=2.0]       — za ile lat dotrze do gracza (M4 P1.5: friendly default)
+ * @param {number} [opts.spawnDistanceAU=30] — odległość od gwiazdy przy spawn (M4 P1.5: friendly default)
  * @param {string} [opts.vesselName]         — override nazwy
+ *
+ * M4 P1.5 — friendly defaults dla testów (poprzednio etaYears=0.5, spawnDistanceAU=15).
+ * Agresywne wartości via opts: spawnEnemyAttack({ etaYears: 0.3, spawnDistanceAU: 10 })
  */
 export function spawnEnemyAttack(opts = {}) {
   const K = window.KOSMOS;
@@ -538,8 +541,10 @@ export function spawnEnemyAttack(opts = {}) {
   }
 
   const strength = opts.strength ?? 500;
-  const etaYears = opts.etaYears ?? 0.5;
-  const spawnDistAU = opts.spawnDistanceAU ?? 15;
+  // M4 P1.5 — friendly defaults: poprzednio 0.5 i 15. Player ma więcej czasu na
+  // zareagowanie i widzi wroga lecącego z większego dystansu.
+  const etaYears = opts.etaYears ?? 2.0;
+  const spawnDistAU = opts.spawnDistanceAU ?? 30;
 
   // 2) Dobór kadłuba + modułów wg strength
   //    <200 = lekki skirmisher, 200-800 = cruiser, >800 = battleship

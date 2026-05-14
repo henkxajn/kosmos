@@ -39,23 +39,27 @@ export const GAME_CONFIG = {
   // gdy flag=true (zob. GameScene._ensureMovementOrderSystem / ...Materializer).
   // Toggle z devtools: KOSMOS.debug.enableMovementOrders() / disable...().
   FEATURES: {
-    // M1 — Targeting Foundation (save v65)
-    movementOrders:       false,  // MovementOrderSystem (M1 Commit 4-6)
-    fleetMaterialization: false,  // EmpireFleetMaterializer (M1 Commit 7)
-    // M2a — Combat Core (save v66)
-    proximitySystem:      false,  // ProximitySystem — per-tick detection + events
-    vesselCombat:         false,  // VesselCombatSystem — deep-space battles (wymaga proximitySystem)
-    unifiedAggregator:    false,  // WarSystem._fleetArrived skip gdy materializationState='full'
-    // M2a post-playtest freeze: drain zamrożony do M3 reformy fuel/power cells.
+    // M1 — Targeting Foundation (save v65) — M4 P1: flip ON jako default (gracz nie potrzebuje devtools)
+    movementOrders:       true,   // MovementOrderSystem (M1 Commit 4-6)
+    fleetMaterialization: true,   // EmpireFleetMaterializer (M1 Commit 7)
+    // M2a — Combat Core (save v66) — M4 P1: flip ON
+    proximitySystem:      true,   // ProximitySystem — per-tick detection + events
+    vesselCombat:         true,   // VesselCombatSystem — deep-space battles (wymaga proximitySystem)
+    unifiedAggregator:    true,   // WarSystem._fleetArrived skip gdy materializationState='full'
+    // M2a post-playtest freeze: drain zamrożony do M4 P4 reformy fuel/power cells.
     // Kod drain + PURSUE_DRAIN_MULT zostaje w VesselManager._tickEndurance — unfreeze
-    // przez flip flagi gdy M3 wprowadzi pełny model fuel/endurance z hard-stop semantyką.
+    // przez flip flagi w P4 gdy M4 wprowadzi pełny model fuel/endurance z hard-stop semantyką.
     enduranceDrainActive: false,  // _tickEndurance early return gdy off (brak drain/regen/events)
-    // M2b — Intelligence + POI (save v67) — Commit 1 fundament; flippujemy w Commits 2-7
+    // M2b — Intelligence + POI (save v67)
     intelContactState:    true,   // IntelSystem.vessels sub-domain + degradation (Commit 2 flipped)
     predictionCone:       true,   // prediction cone math (Commit 3); rendering w Commit 4
     poiSystem:            true,   // POIRegistry CRUD + handler poi:deleted (Commit 5 flipped); goToPOI/patrol runtime w C6
     // M3 P1.3 — UI orders interactive (rollback toggle: false → placeholder behavior z P1.1/P1.2)
     m3OrdersInteractive:  true,
+    // ── M4 P1 — Activation + Notifications + Drift fix (save v69) ─────────
+    m4DriftFix:           true,   // MovementOrderSystem._completeOrder vessel target → driftIdle + 5y auto-return
+    m4Notifications:      true,   // UIManager subskrybuje empire:fleet*/battle:resolved/vessel:proximityEnter
+    m4FuelAwareRetreat:   true,   // AutoRetreatSystem fallback low_fuel_drift zamiast hard fail
   },
 
   // ── UI tuning (M3 P1.5+) ────────────────────────────────────────────────

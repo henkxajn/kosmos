@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 68;
+export const CURRENT_VERSION     = 69;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -86,6 +86,7 @@ const MIGRATIONS = {
   65: _migrateV65toV66,
   66: _migrateV66toV67,
   67: _migrateV67toV68,
+  68: _migrateV68toV69,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1762,6 +1763,29 @@ function _migrateV67toV68(data) {
     if (poi.completedYear === undefined)  poi.completedYear = null;
   }
   if (!data.gameState) data.gameState = gs;
+  return data;
+}
+
+// ── Migracja v68 → v69 ──────────────────────────────────────────────────────
+// M4 P1 — Activation + Notifications + Drift fix.
+// Nowe pola per-vessel (oba lazy-defaultowane w MOS i AutoRetreatSystem, ale
+// nadajemy explicit defaults dla deterministic state przy restore):
+//   - vessel.driftIdle: null          — drift state po pursue/intercept na vessel target
+//     ({ sinceYear, autoReturnYear } gdy aktywny; null gdy nie ma)
+//   - vessel.lowFuelDrift: null       — marker auto-retreat low fuel fallback
+//     ({ sinceYear, destPlanetId, originBattleId })
+//
+// Vessels are stored under c4x.vesselManager.vessels — spójnie z poprzednimi
+// migracjami (V59toV60 itp.).
+function _migrateV68toV69(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v || typeof v !== 'object') continue;
+      if (v.driftIdle === undefined)     v.driftIdle = null;
+      if (v.lowFuelDrift === undefined)  v.lowFuelDrift = null;
+    }
+  }
   return data;
 }
 

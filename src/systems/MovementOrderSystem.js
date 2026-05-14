@@ -18,6 +18,7 @@ import { ORDER_TYPES, validateOrder } from '../data/MovementOrderTypes.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
 import { addMissionLog }     from '../entities/Vessel.js';
 import { PredictionConeMath } from '../utils/PredictionConeMath.js';
+import { DistanceUtils }     from '../utils/DistanceUtils.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
@@ -25,6 +26,12 @@ const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
 // Strefa wykluczenia wokół Słońca (punkty wewnątrz = unreachable).
 // Spójne z VesselManager._calcRoute — zob. §8.5.
 const SUN_EXCLUSION_PX = 0.3 * AU_TO_PX;
+
+// M4 P1 — drift auto-return timer. Po complete pursue/intercept na vessel target
+// (deep-space drift state, M1 BUG#4), vessel czeka N game-years na nowy rozkaz
+// gracza, potem sam wraca do najbliższej friendly planety. Wartość w PHYSICS YEARS
+// (gameYear units), nie civYears.
+const DRIFT_AUTO_RETURN_GAME_YEARS = 5;
 
 // Próg zakończenia pursue/intercept — dystans "dotarcia" do celu (§5.2).
 // BUG#1 z playtestu: 0.05 AU (5.5 px) było zbyt permisywne — dwa vessele orbitujące
@@ -58,6 +65,13 @@ export class MovementOrderSystem {
     /** @type {Map<string, object>} */
     this._byVessel = new Map();
 
+    // M4 P1 — drift vessele które ukończyły pursue/intercept na vessel target i
+    // czekają DRIFT_AUTO_RETURN_GAME_YEARS na nowy order. Po timeout: auto-issue
+    // moveToPoint do nearest friendly planet. Set vesselId — sprawdzanie istnienia
+    // markera w _tick + cleanup w issueOrder/onWrecked.
+    /** @type {Set<string>} */
+    this._driftingVessels = new Set();
+
     // Cache gameYear poprzedniego ticku — do obliczania dPhysicsYear.
     // VesselManager._tick dostaje civDeltaYears, ale ruch pursue/intercept operuje
     // w skali physics (spójnie z vessel.speedAU = AU/gameYear). Diff gameYear
@@ -89,6 +103,11 @@ export class MovementOrderSystem {
   _indexExistingOrders() {
     const vessels = this._vm.getAllVessels?.() ?? [];
     for (const v of vessels) {
+      // M4 P1 — restore drift state (vessel.driftIdle serialized w save).
+      if (v.driftIdle && !v.isWreck && GAME_CONFIG.FEATURES?.m4DriftFix) {
+        this._driftingVessels.add(v.id);
+      }
+
       const mo = v.movementOrder;
       if (!mo || mo.status !== 'active') continue;
       if (this._isTargetMissing(mo)) {
@@ -151,6 +170,9 @@ export class MovementOrderSystem {
 
     const val = validateOrder(spec);
     if (!val.valid) return { ok: false, reason: val.reason };
+
+    // M4 P1 — gracz wydaje nowy order → vessel wychodzi z drift state, marker usuwany.
+    this._clearDriftMarker(vessel);
 
     // M1: pełna implementacja moveToPoint, pursue/intercept (Commit 5).
     // M2b C6: goToPOI (delegat do moveToPoint) + patrol (runtime).
@@ -340,9 +362,12 @@ export class MovementOrderSystem {
     const totalDistPx = route.totalDist;
     const totalDistAU = totalDistPx / AU_TO_PX;
 
-    // Paliwo — prosta gatekeeping. Reforma fuel/endurance w M2.
+    // Paliwo — prosta gatekeeping. Reforma fuel/endurance w M4 P4.
+    // M4 P1: spec.bypassFuelCheck=true → wydaj order mimo niedoboru (AutoRetreat
+    // low_fuel_drift fallback). Vessel doleci na cel — fuel.current zostaje co jest
+    // (clamped do 0), reforma w P4 nada temu real consequences (degradacja velocity).
     const fuelNeeded = totalDistAU * (vessel.fuel?.consumption ?? 0);
-    if (vessel.fuel && vessel.fuel.current < fuelNeeded) {
+    if (vessel.fuel && vessel.fuel.current < fuelNeeded && !spec.bypassFuelCheck) {
       return { ok: false, reason: 'insufficient_fuel' };
     }
 
@@ -687,15 +712,27 @@ export class MovementOrderSystem {
       vessel.position.x        = target.x ?? vessel.position.x;
       vessel.position.y        = target.y ?? vessel.position.y;
     } else {
-      // Świadomy M1 "deep-space drift" state (BUG#4 z playtestu udokumentowane,
-      // nie naprawiane — zob. Appendix C design doca). Vessel kończy pursue/intercept
-      // na vessel target gdzieś w otwartej przestrzeni; nie ma naturalnego "docking"
-      // punktu. Pozostaje state='orbiting' + dockedAt=null — _updatePositions nie
-      // updatuje pozycji (żaden branch nie matchuje), sprite Three.js zostaje na
-      // ostatniej pozycji. Gracz musi wydać kolejny order (moveToPoint do kolonii
-      // albo pursue nowego celu). M2: auto-return / drift physics / nowy state='idle'.
+      // M4 P1 — drift idle state z soft timer auto-return. Vessel kończy pursue/intercept
+      // na vessel target gdzieś w otwartej przestrzeni; pozostaje state='orbiting' +
+      // dockedAt=null (zachowane dla _updatePositions które nie ruszy pozycji bez
+      // valid dockedAt). Marker driftIdle + _driftingVessels Set powoduje że _tick
+      // monitoruje vessel i po DRIFT_AUTO_RETURN_GAME_YEARS auto-wydaje moveToPoint do
+      // najbliższej friendly planety. Player override: wydaj nowy order → marker
+      // jest czyszczony w issueOrder przez _clearDriftMarker.
       vessel.position.state    = 'orbiting';
       vessel.position.dockedAt = null;
+      if (GAME_CONFIG.FEATURES?.m4DriftFix) {
+        vessel.driftIdle = {
+          sinceYear:      gameYear,
+          autoReturnYear: gameYear + DRIFT_AUTO_RETURN_GAME_YEARS,
+        };
+        this._driftingVessels.add(vessel.id);
+        EventBus.emit('vessel:driftIdle', {
+          vesselId:       vessel.id,
+          sinceYear:      gameYear,
+          autoReturnYear: vessel.driftIdle.autoReturnYear,
+        });
+      }
     }
     vessel.status = 'idle';
     // Zeruj velocity po arrivalu (stoi przy targecie).
@@ -1053,34 +1090,168 @@ export class MovementOrderSystem {
       : 0;
     this._lastTickYear = gameYear;
 
-    if (this._byVessel.size === 0) return;
+    // Iteruj aktywne ordery (po kopii — _byVessel może być zmutowane przez _completeOrder wewnątrz).
+    if (this._byVessel.size > 0) {
+      for (const [vesselId, order] of [...this._byVessel.entries()]) {
+        const vessel = this._vm.getVessel?.(vesselId);
+        if (!vessel) {
+          // vessel znikł (cleaned wreck) — usuń order z indeksu
+          this._byVessel.delete(vesselId);
+          continue;
+        }
+        if (order.status !== 'active') {
+          this._byVessel.delete(vesselId);
+          continue;
+        }
 
-    // Iteruj po kopii (_byVessel może być zmutowane przez _completeOrder wewnątrz).
-    for (const [vesselId, order] of [...this._byVessel.entries()]) {
-      const vessel = this._vm.getVessel?.(vesselId);
-      if (!vessel) {
-        // vessel znikł (cleaned wreck) — usuń order z indeksu
-        this._byVessel.delete(vesselId);
-        continue;
+        if (order.type === ORDER_TYPES.pursue) {
+          this._tickPursueOrder(vessel, order, dPhysicsYear, gameYear);
+        } else if (order.type === ORDER_TYPES.intercept) {
+          this._tickInterceptOrder(vessel, order, dPhysicsYear, gameYear);
+        } else if (order.type === ORDER_TYPES.patrol) {
+          this._tickPatrolOrder(vessel, order, dPhysicsYear, gameYear);
+        } else if (order.type === ORDER_TYPES.escort) {
+          this._tickEscortOrder(vessel, order, dPhysicsYear, gameYear);
+        }
+        // moveToPoint, goToPOI — ruch zarządzany przez _updatePositions
+        //   (mission interpolation, mission.type='move_to_point'); completion przez
+        //   _onVesselArrived (rozszerzone o goToPOI → emit vesselReachedPOI).
       }
-      if (order.status !== 'active') {
-        this._byVessel.delete(vesselId);
-        continue;
-      }
-
-      if (order.type === ORDER_TYPES.pursue) {
-        this._tickPursueOrder(vessel, order, dPhysicsYear, gameYear);
-      } else if (order.type === ORDER_TYPES.intercept) {
-        this._tickInterceptOrder(vessel, order, dPhysicsYear, gameYear);
-      } else if (order.type === ORDER_TYPES.patrol) {
-        this._tickPatrolOrder(vessel, order, dPhysicsYear, gameYear);
-      } else if (order.type === ORDER_TYPES.escort) {
-        this._tickEscortOrder(vessel, order, dPhysicsYear, gameYear);
-      }
-      // moveToPoint, goToPOI — ruch zarządzany przez _updatePositions
-      //   (mission interpolation, mission.type='move_to_point'); completion przez
-      //   _onVesselArrived (rozszerzone o goToPOI → emit vesselReachedPOI).
     }
+
+    // M4 P1 — drift recovery loop. Vessele po pursue/intercept na vessel target
+    // które przekroczyły autoReturnYear → auto-issue moveToPoint do nearest friendly.
+    if (GAME_CONFIG.FEATURES?.m4DriftFix && this._driftingVessels.size > 0) {
+      for (const vId of [...this._driftingVessels]) {
+        const v = this._vm.getVessel?.(vId);
+        if (!v || v.isWreck || !v.driftIdle) {
+          this._driftingVessels.delete(vId);
+          if (v) v.driftIdle = null;
+          continue;
+        }
+        // Gracz wydał nowy order w międzyczasie? _clearDriftMarker już posprzątało.
+        if (v.movementOrder?.status === 'active') {
+          this._driftingVessels.delete(vId);
+          v.driftIdle = null;
+          continue;
+        }
+        if (gameYear >= v.driftIdle.autoReturnYear) {
+          this._tryAutoReturnDrift(v, gameYear);
+        }
+      }
+    }
+  }
+
+  /**
+   * M4 P1 — wyczyść drift marker (player wydał nowy order LUB vessel wrecked).
+   */
+  _clearDriftMarker(vessel) {
+    if (!vessel) return;
+    if (vessel.driftIdle) vessel.driftIdle = null;
+    if (this._driftingVessels.has(vessel.id)) this._driftingVessels.delete(vessel.id);
+  }
+
+  /**
+   * M4 P1 — auto-return drift vessela do najbliższej friendly planety.
+   *
+   * P1 post-playtest #1 fix: pursue planety nie działa, bo orbital speed
+   *   planety (bliska orbita: ~5-9 AU/civYear) > typowy vessel.speedAU (1.5-2.0).
+   *   Vessel ściga ale dystans pozostaje stały lub rośnie — pursue nigdy nie
+   *   wywołuje _completeOrder (THREAT_RADIUS_PX=0.15 AU).
+   *
+   * P1 post-playtest #2 fix (TEST 3.4): zamiast pursue, **inline rescue dock**.
+   *   Vessel zużywa paliwo proporcjonalnie do dystansu i teleportuje się na
+   *   orbitę planety (state=orbiting, dockedAt=planet.id, pozycja snapowana).
+   *   Lore: automated emergency docking sequence — koloniści wysyłają beacon
+   *   i tug-vessel. NIE jest fizycznie realistyczne, ale rozwiązuje drift trap
+   *   gdy vessel nie może dogonić własnej kolonii. Pełna fizyka travel —
+   *   backlog M5 (wymagałoby intercept math na planet orbital prediction).
+   */
+  _tryAutoReturnDrift(vessel, gameYear) {
+    const dest = this._findNearestFriendlyPlanetForDrift(vessel);
+    if (!dest) {
+      // Brak friendly planety — extend timer o kolejne 5 game-years (lazy retry),
+      // gracz zauważy w UI i ręcznie wyda order. NIE wreckujemy — drift jest miękki.
+      vessel.driftIdle.autoReturnYear = gameYear + DRIFT_AUTO_RETURN_GAME_YEARS;
+      return;
+    }
+
+    // Fuel cost — proporcjonalny do dystansu (symuluje że vessel rzeczywiście
+    // leciał, mimo że robimy teleport). Clamp do current fuel (rescue dock
+    // zawsze się udaje, nawet z fuel=0 — vessel dryfuje na bezwładności).
+    const distAU = dest.distanceAU;
+    const consumption = vessel.fuel?.consumption ?? 0;
+    const fuelCost = Math.min(
+      vessel.fuel?.current ?? 0,
+      distAU * consumption,
+    );
+    if (vessel.fuel) {
+      vessel.fuel.current = Math.max(0, (vessel.fuel.current ?? 0) - fuelCost);
+    }
+
+    // Inline rescue dock — snap do planety + dockedAt + orbiting state.
+    vessel.position.state    = 'orbiting';
+    vessel.position.dockedAt = dest.planet.id;
+    vessel.position.x        = dest.planet.x ?? vessel.position.x;
+    vessel.position.y        = dest.planet.y ?? vessel.position.y;
+    vessel.status            = 'idle';
+    if (vessel.velocity) {
+      vessel.velocity.vx = 0;
+      vessel.velocity.vy = 0;
+      vessel.velocity.updatedYear = gameYear;
+    }
+    // Synth move_to_point mission cleanup (jeśli była aktywna z poprzednich orderów).
+    if (vessel.mission?.type === 'move_to_point') vessel.mission = null;
+
+    this._clearDriftMarker(vessel);
+
+    addMissionLog(vessel, gameYear,
+      `Auto-rescue dock → ${dest.planet.name ?? dest.planet.id} (${distAU.toFixed(2)} AU, fuel −${fuelCost.toFixed(2)})`,
+      'info');
+
+    EventBus.emit('vessel:driftAutoReturn', {
+      vesselId:            vessel.id,
+      destinationPlanetId: dest.planet.id,
+      orderId:             null,  // inline rescue, brak orderu
+      fuelConsumed:        fuelCost,
+      distanceAU:          distAU,
+    });
+    EventBus.emit('vessel:docked', { vessel });
+  }
+
+  /**
+   * M4 P1 — clone AutoRetreatSystem._findNearestFriendlyPlanet. ColonyManager
+   * pobierany przez window.KOSMOS (spójnie z reszta MOS — _vm jest jedyny
+   * konstruktor-injected). Preferencja: full colonies > outposts.
+   */
+  _findNearestFriendlyPlanetForDrift(vessel) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr?.getAllColonies) return null;
+    const ownerId = vessel.ownerEmpireId ?? vessel.owner ?? 'player';
+
+    const all = colMgr.getAllColonies().filter(c => {
+      const cOwner = c.ownerEmpireId ?? 'player';
+      if (cOwner !== ownerId) return false;
+      return !!EntityManager.get(c.planetId);
+    });
+    if (all.length === 0) return null;
+
+    const fullColonies = all.filter(c => !c.isOutpost);
+    const candidates = fullColonies.length > 0 ? fullColonies : all;
+
+    const vwrap = { x: vessel.position.x, y: vessel.position.y };
+    let best = null;
+    let bestDist = Infinity;
+    for (const c of candidates) {
+      const planet = EntityManager.get(c.planetId);
+      if (!planet) continue;
+      const d = DistanceUtils.euclideanAU(vwrap, planet);
+      if (d < bestDist) {
+        bestDist = d;
+        best = { colony: c, planet, distanceAU: d };
+      }
+    }
+    return best;
   }
 
   _findVesselIdFor(order) {
@@ -1134,6 +1305,9 @@ export class MovementOrderSystem {
    */
   _onVesselWrecked(vessel) {
     if (!vessel) return;
+
+    // M4 P1 — drift cleanup gdy wrecked.
+    this._clearDriftMarker(vessel);
 
     // Pursuer wrecked → anuluj jego order.
     const order = vessel.movementOrder;

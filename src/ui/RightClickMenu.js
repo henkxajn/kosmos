@@ -72,7 +72,9 @@ export class RightClickMenu {
         align-items: center;
         white-space: nowrap;
       `;
-      item.textContent = `${opt.icon}  ${opt.labelPL}`;
+      // M4 P1.5 — warning suffix (np. ⚠) dla enabled options z warning code.
+      const warningPrefix = opt.warning ? '⚠ ' : '';
+      item.textContent = `${warningPrefix}${opt.icon}  ${opt.labelPL}`;
       if (opt.disabledReason) item.title = opt.disabledReason;
 
       // M3 P1.5 — universal tooltip dla disabled options. data-tooltip
@@ -91,6 +93,15 @@ export class RightClickMenu {
         }
         const tipText = tipKey ? t(tipKey) : reason;
         item.setAttribute('data-tooltip', tipText);
+      } else if (opt.warning) {
+        // M4 P1.5 — enabled option z warning. Tooltip pokazuje powód ostrzeżenia,
+        // ale opcja jest klikalna (player może świadomie wykonać akcję).
+        let tipKey = null;
+        if (opt.warning === 'no_weapons') tipKey = 'tooltip.menu.noWeapons';
+        const tipText = tipKey ? t(tipKey) : opt.warning;
+        item.setAttribute('data-tooltip', tipText);
+        // Dyskretna wizualna sygnalizacja warning — żółtawy tinit textu.
+        item.style.color = THEME.warning ?? THEME.textPrimary;
       }
 
       if (opt.enabled) {

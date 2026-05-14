@@ -2443,4 +2443,25 @@ export default {
   'rallyModal.empty':             'Brak rally POI. Utwórz rally przez PPM tactical → "Utwórz Punkt Zborny tutaj".',
   'rallyModal.removeAssignment':  'Usuń przypisanie',
   'rallyModal.assignedLabel':     'przypisanych',
+
+  // ── M4 P1 — Notifications + drift + retreat ─────────────────────────
+  'log.m4.enemyFleetMoving':       'Wykryto ruch obcej floty (Imperium {0}, ETA {1} lat)',
+  'log.m4.enemyFleetArrival':      'OBCA FLOTA materializuje się przy domu! Imperium {0}, {1} statków',
+  'log.m4.proximityContact':       'Kontakt sensoryczny: wrogi statek "{0}" ({1} AU)',
+  'log.m4.battleResolvedVictory':  'Zwycięstwo w bitwie {0} — strona przeciwna pokonana',
+  'log.m4.battleResolvedDefeat':   'Porażka w bitwie {0} — nasze siły rozbite',
+  'log.m4.battleResolvedDraw':     'Bitwa {0} zakończona remisem',
+  'log.m4.battleResolvedRetreat':  'Bitwa {0} — strona "{1}" wycofała się',
+  'log.m4.autoRetreatFailed':      'Statek "{0}" nie może się wycofać: {1}',
+  'log.m4.autoRetreatLowFuel':     'Statek "{0}" dryfuje na resztkach paliwa do "{1}"',
+  'log.m4.driftIdle':              'Statek "{0}" ukończył pościg — auto-powrót za 5 lat lub wydaj nowy rozkaz',
+  'log.m4.driftAutoReturn':        'Statek "{0}" dryfował zbyt długo — auto-powrót do "{1}"',
+  'log.m4.warDeclared':            'WOJNA: Imperium {0} wypowiedziało wojnę',
+  'log.autoSlowEnemyFleet':        'wroga flota nadciąga',
+  'log.autoSlowBattle':            'bitwa zakończona',
+  'log.autoSlowWar':               'deklaracja wojny',
+  'log.autoSlowEnemyMaterialize':  'wroga flota materializuje się',
+  // M4 P1.5 — first sighting + weapons warning
+  'log.m4.firstSighting':          'Pierwsze wykrycie statku obcego: "{0}" (Imperium {1})',
+  'tooltip.menu.noWeapons':        'Brak broni — statek zostanie zniszczony',
 };
