@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 69;
+export const CURRENT_VERSION     = 70;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -87,6 +87,7 @@ const MIGRATIONS = {
   66: _migrateV66toV67,
   67: _migrateV67toV68,
   68: _migrateV68toV69,
+  69: _migrateV69toV70,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1784,6 +1785,36 @@ function _migrateV68toV69(data) {
       if (!v || typeof v !== 'object') continue;
       if (v.driftIdle === undefined)     v.driftIdle = null;
       if (v.lowFuelDrift === undefined)  v.lowFuelDrift = null;
+    }
+  }
+  return data;
+}
+
+// ── Migracja v69 → v70 ──────────────────────────────────────────────────────
+// M4 P2 — Sensor overlay + Enemy ghosts + MiniMap + Wraki battle history.
+//   - uiPrefs.sensorOverlayVisible (BottomBar Radar toggle) — default false
+//   - uiPrefs.miniMapVisible (klawisz M) — default false
+//   - vessel.lastBattleId / lastBattleYear (Battle history per vessel) —
+//     stampowane przez VesselManager battle:resolved listener. Stare save
+//     przed P2 nie mają tej info — null jako sensowny default
+//     (FleetManagerOverlay renderuje "Brak rekordu bitwy").
+function _migrateV69toV70(data) {
+  // uiPrefs (per-save preferences UI)
+  data.uiPrefs ??= {};
+  if (data.uiPrefs.sensorOverlayVisible === undefined) {
+    data.uiPrefs.sensorOverlayVisible = false;
+  }
+  if (data.uiPrefs.miniMapVisible === undefined) {
+    data.uiPrefs.miniMapVisible = false;
+  }
+
+  // Vessels — battle history pola
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v || typeof v !== 'object') continue;
+      if (v.lastBattleId === undefined)   v.lastBattleId   = null;
+      if (v.lastBattleYear === undefined) v.lastBattleYear = null;
     }
   }
   return data;

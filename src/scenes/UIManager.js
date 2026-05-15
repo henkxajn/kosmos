@@ -284,6 +284,30 @@ export class UIManager {
     EventBus.emit('ui:selectionChanged', { vesselId, prevVesselId: prev });
   }
 
+  // M4 P2 — Tab / Shift+Tab cycling przez własne nie-wrak vessele.
+  // Sortuje po id (deterministyczne), wraparound. Aktualizuje selection +
+  // emituje vessel:focus żeby kamera 3D poleciała do wybranego statku.
+  cycleSelectedVessel(direction = 1) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr) return;
+    const list = [...vMgr._vessels.values()]
+      .filter(v => !v.isWreck && !isEnemyVessel(v))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    if (list.length === 0) return;
+    const curId = this._selectedVesselId;
+    const curIdx = curId ? list.findIndex(v => v.id === curId) : -1;
+    let nextIdx;
+    if (curIdx === -1) {
+      nextIdx = direction === -1 ? list.length - 1 : 0;
+    } else {
+      const n = list.length;
+      nextIdx = ((curIdx + direction) % n + n) % n;
+    }
+    const next = list[nextIdx];
+    this.setSelectedVesselId(next.id);
+    EventBus.emit('vessel:focus', { vesselId: next.id });
+  }
+
   clearSelection() {
     this.setSelectedVesselId(null);
   }

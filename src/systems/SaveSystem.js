@@ -78,6 +78,8 @@ export class SaveSystem {
       moons:      moons.map(m => this._serializeMoon(m)),
       planetoids: planetoids.map(p => this._serializePlanetoid(p)),
       civ4x:      this._serializeCiv4x(),
+      // M4 P2 — uiPrefs persistowane w save (np. radar overlay, minimap)
+      uiPrefs:    window.KOSMOS?.uiPrefs ? { ...window.KOSMOS.uiPrefs } : {},
     };
 
     try {

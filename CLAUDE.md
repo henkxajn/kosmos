@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v69 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v70 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -154,7 +154,7 @@ Projekt realizuje podejście **MDA (Mechanics → Dynamics → Aesthetics)**:
 | `src/core/EventBus.js` | Serce komunikacji — błąd tu psuje wszystko |
 | `src/core/EntityManager.js` | Rejestr encji — modyfikacja rozbija save/restore |
 | `src/systems/PhysicsSystem.js` | Prawa Keplera + kolizje — fizyka orbitalna |
-| `src/config/GameConfig.js` | Globalne stałe gry + `FEATURES` flagi (M4 P1: M1+M2a flagi flip ON — movementOrders, fleetMaterialization, proximitySystem, vesselCombat, unifiedAggregator; enduranceDrainActive zostaje OFF do M4 P4; +m4DriftFix/m4Notifications/m4FuelAwareRetreat ON) |
+| `src/config/GameConfig.js` | Globalne stałe gry + `FEATURES` flagi (M4 P1: M1+M2a flagi flip ON — movementOrders, fleetMaterialization, proximitySystem, vesselCombat, unifiedAggregator; enduranceDrainActive zostaje OFF do M4 P4; +m4DriftFix/m4Notifications/m4FuelAwareRetreat ON; M4 P2: +m4SensorOverlay/m4EnemyGhosts/m4MiniMap ON + SENSOR_LOCK_AU=0.3 + RUMOR_FADE_YEARS=10) |
 | `src/map/HexGrid.js` | Matematyka hex cube coordinates |
 | `src/systems/SaveMigration.js` | Łańcuch migracji save'ów — centralny punkt, nie rozpraszaj |
 | `generate-planets.js` + `lib/` | Generator tekstur planet — 9 modułów, pipeline heightmap→color→PBR |
@@ -563,6 +563,21 @@ Plan: `C:\Users\Komputer\.claude\plans\clever-forging-ember.md` §P1+P1.5. Test 
 - War declared powinno być popup modal nie log entry — defer P5.
 - Pełna fizyka travel dla auto-return (zamiast inline teleport) — M5 backlog.
 - Endurance unfreeze + presja fuel reform — P4.
+
+### Milestone 4 P2 — Sensor + Ghosts + MiniMap + Wraki polish + Tab (✅ ukończony, save v70, tag `m4-p2-complete`)
+Plan: `C:\Users\Komputer\.claude\plans\ok-zacznij-plan-p2-precious-turtle.md`.
+Smoke tests: `tmp_m4_p2_smoke.mjs` (30/30 PASS) + `tmp_m4_p1_smoke.mjs` regression (33/33 PASS).
+- [x] **P2-1 Sensor overlay** (commit `082b1cd`) — `ThreeRenderer._syncSensorOverlay`: cyan ring (`SENSOR_LOCK_AU=0.3`) wokół własnych vesseli + yellow ring (`ObservatorySystem.getVesselDetectionRangeAU`, clamp 35 AU dla Lv5∞) wokół kolonii. Mark&sweep + dispose 1:1 z `_syncPredictionCones`. Hooki: `physics:updated` + `vessel:positionUpdate` + `ui:sensorOverlayToggle`. BottomBar menu row "Radar" flipuje `uiPrefs.sensorOverlayVisible`.
+- [x] **P2-2 Enemy ghosts** (commit `4c28815`) — `_applyVesselIntelVisibility` w ThreeRenderer: quality z `IntelSystem.getVesselContact` → rumor (positionLastKnown, opacity 0.3 × fade(yearsAgo/`RUMOR_FADE_YEARS=10`)) / contact (0.5) / detailed (1.0). Detection override: w radarze obserwatorium → bump z unknown/rumor do contact. `_applyVesselOpacity` cachuje `_origOpacity` per mat (Sprite + GLB). Hook: `intel:vesselContactChanged` + `vessel:detectionChanged` deleguje do helpera.
+- [x] **P2-3 Galactic mini-map** (commit `d51184c`) — `src/ui/GalacticMiniMap.js` (Canvas overlay top-right za Outlinerem, ~260×280 px, klawisz `M`). Per-frame re-read galaxyData/EmpireRegistry/Diplomacy/Intel (bez cache, ETA live). Imperia filter `IntelSystem.isAtLeast(empireId, 'rumor')`. Hostility kolor: zielony 0-30 / żółty 31-70 / czerwony 71-100. Strzałki flot `empire.fleets[].destSystemId` z ETA label. Klik systemu → `minimap:systemClicked` (M5 hook).
+- [x] **P2-4 Wraki polish** (commit `07b2c3d`) — OverlayManager keymap obsługuje `{id, opts}`. Klawisz `K` → fleet z `focusSection='wreck'` (drugie wciśnięcie re-applikuje focus, nie zamyka). FleetManagerOverlay.open(opts) → `_pendingFocusSection`, pierwszy draw oblicza scroll + auto-select pierwszy wrak + emit `vessel:focus` (kamera 3D fly-to deep-space wraki przez sprite.position w wreckLocation). Klik vessel → emit `vessel:focus`. Selected wrak row expand o 36px z battle report (`WarSystem.getBattleRecord(lastBattleId)`). `vessel.lastBattleId/lastBattleYear` stampowane przez VesselManager `battle:resolved` listener.
+- [x] **P2-5 Tab cycling** (commit z P2-6) — `UIManager.cycleSelectedVessel(direction)`: filter `!isWreck && !isEnemyVessel`, sort `String(id).localeCompare`, wraparound + null-start (forward=first, backward=last). GameScene keydown: Tab/Shift+Tab z `preventDefault`, skip gdy input/textarea/contentEditable active.
+- [x] **Save v69→v70** — `_migrateV69toV70` w `SaveMigration.js`: `uiPrefs.sensorOverlayVisible/miniMapVisible` defaults + per vessel `lastBattleId/lastBattleYear` null. SaveSystem serializuje `window.KOSMOS.uiPrefs`, GameScene restoruje po loadData. VesselManager serialize/restore round-trip lastBattleId/Year.
+
+**Known issues deferred do M4 P3:**
+- MiniMap UX (tooltipy hover na empire/strzałki, label nazwy systemu) — backlog.
+- MiniMap pokazuje tylko inter-system fleet movement (galaktyka), nie lokalne vessele w sys_home (główna mapa 3D pełni tę rolę).
+- 3D map LPM nadal nie wybiera vessela (Tab cycling jako alternatywa).
 
 ### Milestone 1 — Targeting Foundation (✅ ukończony, save v65, tag `m1-complete`)
 Design: `docs/design/milestone-1-targeting-foundation.md` + Appendix C (implementation notes + playtest bugfixes). Podsumowanie: `docs/design/milestone-1-summary.md`.

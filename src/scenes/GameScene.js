@@ -202,6 +202,10 @@ export class GameScene {
     if (savedData?.gameTime) {
       this.timeSystem.gameTime = savedData.gameTime;
     }
+    // M4 P2 — przywróć uiPrefs (sensor overlay, minimap)
+    if (savedData?.uiPrefs && window.KOSMOS) {
+      window.KOSMOS.uiPrefs = { ...(window.KOSMOS.uiPrefs ?? {}), ...savedData.uiPrefs };
+    }
 
     // ── Systemy 4X ─────────────────────────────────────────────
     this.resourceSystem  = new ResourceSystem();
@@ -3280,6 +3284,18 @@ export class GameScene {
           this.uiManager.markDirty();
         }
         return;
+      }
+
+      // M4 P2 — Tab / Shift+Tab: cyklowanie własnymi vesselami
+      if (e.key === 'Tab' && window.KOSMOS?.civMode) {
+        const tag = (e.target?.tagName || '').toLowerCase();
+        const editable = tag === 'input' || tag === 'textarea' || e.target?.isContentEditable;
+        if (!editable) {
+          e.preventDefault();
+          this.uiManager.cycleSelectedVessel(e.shiftKey ? -1 : 1);
+          this.uiManager.markDirty();
+          return;
+        }
       }
 
       // Klawisze overlay (F/P/E/T) — civMode
