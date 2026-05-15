@@ -472,14 +472,29 @@ export class ThreeRenderer {
         this._syncSensorOverlay();
       }
     }));
-    // Fog-of-war — ObservatorySystem zmienia widoczność wrogiego statku
+    // Fog-of-war — ObservatorySystem zmienia widoczność wrogiego statku.
+    // M4 P2: deleguje do _applyVesselIntelVisibility — uwzględnia rumor ghost
+    // (sprite może pozostać widoczny w positionLastKnown nawet gdy detected=false).
     EventBus.on('vessel:detectionChanged', safe(({ vesselId, detected }) => {
       const entry = this._vessels.get(vesselId);
       if (!entry) return;
       // Wraki są widoczne ZAWSZE (zniszczony statek nie ma mgły wojny)
       if (entry.isWreck) { entry.sprite.visible = true; return; }
-      entry.sprite.visible = !!detected;
-      if (entry.routeLine) entry.routeLine.visible = !!detected;
+      if (GAME_CONFIG.FEATURES.m4EnemyGhosts) {
+        const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+        if (vessel) this._applyVesselIntelVisibility(vessel, entry);
+      } else {
+        entry.sprite.visible = !!detected;
+        if (entry.routeLine) entry.routeLine.visible = !!detected;
+      }
+    }));
+    // M4 P2 — intel quality zmienia się (proximity_observation / aged_out / manual).
+    // Re-apply rendering pojedynczego vessela bez czekania na vessel:positionUpdate.
+    EventBus.on('intel:vesselContactChanged', safe(({ vesselId }) => {
+      const entry = this._vessels.get(vesselId);
+      if (!entry) return;
+      const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      if (vessel) this._applyVesselIntelVisibility(vessel, entry);
     }));
     // Wrak — zmiana wizualna (szary, bez linii trasy, orbituje statycznie wokół
     // planety. Wcześniej było "dryfuj statycznie" ale wrak lądował w środku mesh'a
@@ -3237,11 +3252,13 @@ export class ThreeRenderer {
         this.scene.add(routeLine);
       }
 
-      // Wrogi statek: początkowa widoczność z ObservatorySystem (race guard).
-      // Wrak jest widoczny ZAWSZE (brak fog-of-war dla zniszczonych statków).
+      // Wrogi statek: początkowa widoczność. Wrak jest widoczny ZAWSZE.
+      // M4 P2: jeśli m4EnemyGhosts ON, wywołamy _applyVesselIntelVisibility po
+      // _vessels.set — uwzględnia intel quality (rumor/contact/detailed).
+      // W przeciwnym wypadku legacy fog-of-war z ObservatorySystem (binarne).
       if (isWreck) {
         wrapper.visible = true;
-      } else if (isEnemy) {
+      } else if (isEnemy && !GAME_CONFIG.FEATURES.m4EnemyGhosts) {
         const obs = window.KOSMOS?.observatorySystem;
         const detected = obs?.isVesselDetected?.(vessel.id) ?? false;
         wrapper.visible = detected;
@@ -3253,6 +3270,12 @@ export class ThreeRenderer {
         enemyTint: isEnemy || isWreck,  // wszystkie sklonowane materiały do dispose
         isWreck,
       });
+
+      // M4 P2 — po set: apply intel visibility (rumor ghost / contact dim / detailed)
+      if (isEnemy && !isWreck && GAME_CONFIG.FEATURES.m4EnemyGhosts) {
+        const entry = this._vessels.get(vessel.id);
+        this._applyVesselIntelVisibility(vessel, entry);
+      }
 
       // Wrak — ustaw orbit cache natychmiast, na wyższej warstwie Y niż żywe statki.
       // Flag `isWreck` + `initAngle` pozwalają _calcVisualOrbitFromCache użyć
@@ -3429,8 +3452,9 @@ export class ThreeRenderer {
       this.scene.add(routeLine);
     }
 
-    // Wrogi fallback sprite — widoczność initial wg ObservatorySystem
-    if (isEnemy) {
+    // Wrogi fallback sprite — widoczność initial. M4 P2 intel-aware ścieżka
+    // po _vessels.set (wymaga entry); fallback legacy gdy flag off.
+    if (isEnemy && !GAME_CONFIG.FEATURES.m4EnemyGhosts) {
       const obs = window.KOSMOS?.observatorySystem;
       const detected = obs?.isVesselDetected?.(vessel.id) ?? false;
       sprite.visible = detected;
@@ -3438,6 +3462,11 @@ export class ThreeRenderer {
     }
 
     this._vessels.set(vessel.id, { sprite, routeLine, tex, color, enemyTint: isEnemy });
+
+    // M4 P2 — apply intel ghosts dla fallback sprite (po set, helper iteruje sprite materials)
+    if (isEnemy && GAME_CONFIG.FEATURES.m4EnemyGhosts) {
+      this._applyVesselIntelVisibility(vessel, this._vessels.get(vessel.id));
+    }
   }
 
   /**
@@ -3712,6 +3741,112 @@ export class ThreeRenderer {
           entry.routeLine = null;
         }
       }
+
+      // M4 P2 — enemy intel-gated rendering (rumor ghost / contact dim / detailed full)
+      this._applyVesselIntelVisibility(vessel, entry);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // M4 P2 — Enemy ghosts (intel-gated rendering)
+  // ─────────────────────────────────────────────────────────────
+  // Per wrogi vessel: quality z IntelSystem.getVesselContact → rendering:
+  //   unknown  → sprite.visible=false (fog of war)
+  //   rumor    → ghost w positionLastKnown, opacity 0.3 × fade(yearsAgo/RUMOR_FADE_YEARS)
+  //   contact  → sprite w aktualnej pozycji, opacity 0.5
+  //   detailed → pełny sprite (opacity 1.0)
+  // Fallback gdy FEATURES.m4EnemyGhosts=false: legacy fog-of-war via
+  // ObservatorySystem.isVesselDetected (binary visible).
+
+  _applyVesselIntelVisibility(vessel, entry) {
+    if (!entry || entry.isWreck) return;
+    if (!isEnemyVessel(vessel)) return;
+
+    // Legacy ścieżka — binarna widoczność z ObservatorySystem
+    if (!GAME_CONFIG.FEATURES.m4EnemyGhosts) {
+      const detected = window.KOSMOS?.observatorySystem?.isVesselDetected?.(vessel.id) ?? false;
+      entry.sprite.visible = detected;
+      if (entry.routeLine) entry.routeLine.visible = detected;
+      return;
+    }
+
+    const intelSys = window.KOSMOS?.intelSystem;
+    const rec = intelSys?.getVesselContact?.(vessel.id) ?? null;
+    const obsSys = window.KOSMOS?.observatorySystem;
+    const detected = obsSys?.isVesselDetected?.(vessel.id) ?? false;
+
+    // Quality z intel + override przez aktualną detekcję — jeśli wróg jest TERAZ
+    // w radarze (proximity), pokaż go co najmniej jako 'contact' nawet gdy intel
+    // jeszcze nie zdążył podnieść quality (kolejność eventów per tick).
+    let quality = rec?.quality ?? 'unknown';
+    if (detected && (quality === 'unknown' || quality === 'rumor')) quality = 'contact';
+
+    if (quality === 'unknown') {
+      entry.sprite.visible = false;
+      if (entry.routeLine) entry.routeLine.visible = false;
+      entry.intelQuality = 'unknown';
+      return;
+    }
+
+    let opacity = 1.0;
+    let posOverride = null;
+    if (quality === 'rumor') {
+      const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const lastSeen = rec?.lastSeenYear ?? gameYear;
+      const yearsAgo = Math.max(0, gameYear - lastSeen);
+      const fade = Math.max(0, 1 - yearsAgo / GAME_CONFIG.RUMOR_FADE_YEARS);
+      opacity = 0.3 * fade;
+      if (opacity <= 0.05) {
+        entry.sprite.visible = false;
+        if (entry.routeLine) entry.routeLine.visible = false;
+        entry.intelQuality = 'rumor';
+        entry.intelOpacity = 0;
+        return;
+      }
+      // Zamroź sprite w ostatnio znanej pozycji (nie aktualnej)
+      posOverride = rec?.positionLastKnown ?? null;
+    } else if (quality === 'contact') {
+      opacity = 0.5;
+    } else {
+      opacity = 1.0;
+    }
+
+    entry.sprite.visible = true;
+    // routeLine widoczna tylko dla 'detailed' — niższe quality nie ujawniają trasy
+    if (entry.routeLine) entry.routeLine.visible = (quality === 'detailed');
+
+    this._applyVesselOpacity(entry, opacity);
+
+    if (posOverride && Number.isFinite(posOverride.x) && Number.isFinite(posOverride.y)) {
+      entry.sprite.position.set(S(posOverride.x), 0.3, S(posOverride.y));
+    }
+
+    entry.intelQuality = quality;
+    entry.intelOpacity = opacity;
+  }
+
+  _applyVesselOpacity(entry, opacity) {
+    if (entry.intelOpacity === opacity) return;
+    // Sprite billboard (fallback path) — bezpośrednio .material; nie wchodzi
+    // do traverse jako Mesh. Modele GLB — Group z dziećmi Mesh.
+    const applyToMat = (mat) => {
+      if (!mat) return;
+      if (mat.userData._origOpacity === undefined) {
+        mat.userData._origOpacity = mat.opacity ?? 1.0;
+        mat.userData._origTransparent = mat.transparent ?? false;
+      }
+      const base = mat.userData._origOpacity ?? 1.0;
+      mat.opacity = opacity * base;
+      mat.transparent = opacity < 1.0 || mat.userData._origTransparent;
+      mat.needsUpdate = true;
+    };
+    if (entry.sprite?.isSprite) {
+      applyToMat(entry.sprite.material);
+    } else {
+      entry.sprite?.traverse?.(child => {
+        if (child.isMesh && child.material) applyToMat(child.material);
+        else if (child.isSprite && child.material) applyToMat(child.material);
+      });
     }
   }
 
