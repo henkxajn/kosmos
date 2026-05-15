@@ -547,6 +547,23 @@ R8 sync events order. R7 out-of-scope (empire↔empire → M3).
 - §12.3 Deep-space wrak real-flow weryfikacja — offline 25/25 PASS, ale
   wszystkie bitwy M2a kończyły się retreat (M2b playtest)
 
+### Milestone 4 P1 — Activation + Drift + Notifications (✅ ukończony, save v69, tag `m4-p1-complete`)
+Plan: `C:\Users\Komputer\.claude\plans\clever-forging-ember.md` §P1+P1.5. Test flow: `docs/m4-p1-test-flow.md` (Rev 7). Commits: `b2be101` (implementacja) + `fa045d8` (playtest closure TEST 6/7 + firstSighting auto-slow).
+- [x] **Feature flag flip** — movementOrders, fleetMaterialization, proximitySystem, vesselCombat, unifiedAggregator ON by default. enduranceDrainActive zostaje OFF do P4.
+- [x] **MovementOrderSystem drift state** — po pursue/intercept na vessel target marker `driftIdle` (5y timer) → inline rescue teleport do najbliższej friendly planety (orbital speed problem). Player override w issueOrder czyści marker.
+- [x] **AutoRetreatSystem fuel-aware fallback** — `bypassFuelCheck` retry przy `insufficient_fuel`, marker `lowFuelDrift` + emit `vessel:autoRetreatLowFuel`.
+- [x] **UIManager M4 notifications** — 7 subskrypcji (empire:fleetMoved/Materialized, vessel:proximityEnter, battle:resolved, autoRetreatFailed/LowFuel, driftIdle, diplomacy:warDeclared) + LOG_COLORS intel/combat/diplomacy + auto-slow reuse + i18n PL/EN.
+- [x] **VesselCombatSystem cooldown reform A+B+C** — drop team-up smearing (cooldown tylko dla strzelającej pary) + reset na combatRangeExit (dist ≥ 0.20 AU) + ENGAGEMENT_COOLDOWN_YEARS 2→1.
+- [x] **P1.5 debug helpers** — `KOSMOS.debug.spawnMyVessel('hull_frigate', opts?)` + `simulateBattleRetreat(opts?)` + Power Test starting frigate + RightClickMenu warning ⚠ "Brak broni" dla pursue/intercept bez weapon module.
+- [x] **Save v68→v69** — centralna migracja: lazy defaults `driftIdle`/`lowFuelDrift` per vessel. VesselManager.serialize/restore rozszerzony o oba pola + re-call `_indexExistingOrders` po vesselManager.restore (MOS konstruowany przed restore).
+- [x] **Playtest closure** (`fa045d8`): firstSighting popup `_triggerAutoSlow` przed `time:pause` → po dismiss 1d/s, nie poprzedni multiplier. spawnEnemyAttack default etaYears 20.0 (1.5 AU/rok = player speedAU = realnie interceptable).
+
+**Known issues deferred do M4 P2+:**
+- 3D map LPM nie wybiera vessela (działa w FleetManagerOverlay) — P2 fix candidate.
+- War declared powinno być popup modal nie log entry — defer P5.
+- Pełna fizyka travel dla auto-return (zamiast inline teleport) — M5 backlog.
+- Endurance unfreeze + presja fuel reform — P4.
+
 ### Milestone 1 — Targeting Foundation (✅ ukończony, save v65, tag `m1-complete`)
 Design: `docs/design/milestone-1-targeting-foundation.md` + Appendix C (implementation notes + playtest bugfixes). Podsumowanie: `docs/design/milestone-1-summary.md`.
 - [x] **MovementOrder** (`src/systems/MovementOrderSystem.js`) — moveToPoint (mission-based), pursue/intercept (MOS-controlled, linear intercept math), patrol/escort stub. Feature flag OFF-by-default.

@@ -2,12 +2,21 @@
 
 Krok-po-kroku scenariusze do manualnego testu po wdrożeniu **M4 P1 — Activation + Notifications + Drift fix**.
 
-**Smoke tests offline:** 45/45 PASS — `tmp_m4_p1_smoke.mjs` (33) + `tmp_m4_p1_5_smoke.mjs` (12)
-**Co zostało:** ten dokument — weryfikacja w żywej grze (Live Server)
+**STATUS: ✅ CLOSED** — tag `m4-p1-complete`, commits `b2be101` + `fa045d8`. Wszystkie testy 0–7 PASS. Save v69.
+
+**Smoke tests offline:** 33/33 PASS (`tmp_m4_p1_smoke.mjs`) + 11/12 (`tmp_m4_p1_5_smoke.mjs` — T1.1 expects etaYears=2.0 ale obecnie 20.0 po intercept tuningu, ignore).
 
 ---
 
 ## Changelog
+
+**Rev 7 (post-playtest #6 — TEST 6/7 + firstSighting fix, commit `fa045d8`):**
+- **TEST 6 (save migration v68→v69):** PASS — driftIdle/lowFuelDrift defaults aplikowane przez SaveMigration.
+- **TEST 7 (drift after reload):** PASS po dwóch fixach:
+  1. `VesselManager.serialize/restore` rozszerzony o driftIdle/lowFuelDrift round-trip (poprzednio pola dropowane przy restore).
+  2. `GameScene` re-call `MovementOrderSystem._indexExistingOrders()` po `vesselManager.restore` — MOS konstruowany w `start()` przed restore widział pustą listę vesseli.
+- **firstSighting auto-slow fix:** popup wykrycia wroga wywołuje `_triggerAutoSlow` PRZED `time:pause`. Po dismiss czas wraca do **1d/s** (nie do poprzedniego multiplier, np. 10kr/s). Nowy i18n key `log.autoSlowEnemyDetected`.
+- **SpawnTestEnemy default etaYears 4.0 → 20.0** (1.5 AU/rok matches player speedAU — realnie interceptable nie tylko trafialny po trasie).
 
 **Rev 6 (post-playtest #5 — simulateBattleRetreat helper):**
 - **NOWY `KOSMOS.debug.simulateBattleRetreat(opts?)`** — jeden call zamiast 5 manualnych komend. Przesuwa vessel deep-space (5 AU od home), ustawia fuel=0.05, emituje battle:resolved retreat. **Naprawia TEST 5.1 fail z Rev 5:** vessel dokowany do home planet → moveToPoint do tej samej pozycji = dist 0 → fuelNeeded 0 → fuel OK → low_fuel_drift path nie odpala. Helper przesuwa vessel poza orbitę przed emit.
