@@ -60,7 +60,22 @@ export const GAME_CONFIG = {
     m4DriftFix:           true,   // MovementOrderSystem._completeOrder vessel target → driftIdle + 5y auto-return
     m4Notifications:      true,   // UIManager subskrybuje empire:fleet*/battle:resolved/vessel:proximityEnter
     m4FuelAwareRetreat:   true,   // AutoRetreatSystem fallback low_fuel_drift zamiast hard fail
+    // ── M4 P2 — Sensor overlay + Enemy ghosts + Minimap (save v70) ────────
+    m4SensorOverlay:      true,   // ThreeRenderer._syncSensorOverlay (cyan/yellow rings) — rollback OFF dla regresji
+    m4EnemyGhosts:        true,   // _syncVesselPositions intel-gated rendering (rumor/contact/detailed)
+    m4MiniMap:            true,   // GalacticMiniMap overlay (klawisz M)
   },
+
+  // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
+  // Promień radarowy własnego vessela (AU). Cyan ring wokół każdego own
+  // vessela; wzorowane na sensor lock range z M2a (proximity detection
+  // pre-fight, 0.5 AU enter / 0.6 AU exit) ale wizualnie pokazujemy węższe
+  // 0.3 AU jako "operacyjny zasięg sensora" (czytelność, nie zaśmiecanie mapy).
+  SENSOR_LOCK_AU: 0.3,
+  // Czas zaniku ghost rumor (gameYears). Po RUMOR_FADE_YEARS od ostatniego
+  // obserwacji intel quality='rumor' opacity → 0 i ghost nie jest renderowany
+  // (opacity ≤ 0.05 = skip). Pattern z plan §P2 R4.
+  RUMOR_FADE_YEARS: 10,
 
   // ── UI tuning (M3 P1.5+) ────────────────────────────────────────────────
   // Universal tooltip system (Tooltip.js + TooltipContent.js).

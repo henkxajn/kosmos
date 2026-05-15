@@ -43,6 +43,20 @@ const PREDICTION_CONE_LINE_ALPHA  = 0.6;
 const PREDICTION_CONE_BASE_ANGLE  = 0.5;   // rad — unit szerokości; runtime scale.x = angleWidth/baseAngle
 const PREDICTION_CONE_Y           = 0.05;  // wysokość nad orbitami (Y=0), pod statkami (Y≥0.3)
 
+// ── Sensor overlay (M4 P2) ──────────────────────────────────────────────
+// Wzorzec 1:1 z prediction cones: per-vessel/per-colony Map cache, RingGeometry
+// thin annulus (inner/outer w world units), MeshBasicMaterial transparent.
+// Hook: vessel:positionUpdate (kolonie też re-syncowane — orbitują).
+// Toggle: ui:sensorOverlayToggle event z BottomBar menu (radar row).
+const SENSOR_RING_VESSEL_COLOR = 0x44ccff;  // cyan
+const SENSOR_RING_COLONY_COLOR = 0xffcc44;  // amber/yellow
+const SENSOR_RING_OPACITY      = 0.15;
+const SENSOR_RING_SEGMENTS     = 96;        // gładkość okręgu
+const SENSOR_RING_Y            = 0.04;      // tuż pod prediction cone (0.05), nad orbitami (0)
+// Lv5 obserwatorium daje Infinity dla detection range — clamp do tej wartości
+// żeby uniknąć NaN/over-the-horizon ring covering całej sceny.
+const SENSOR_RING_MAX_COLONY_AU = 35.0;     // ≈ MAX_ORBIT_AU — cały układ widoczny
+
 // ── POI sprites (M2b C7) ────────────────────────────────────────────────
 // Wizualne markery 5 typów POI na mapie 3D: per-typ paleta cyan-shifted
 // + symbol Unicode (Canvas → CanvasTexture → SpriteMaterial → THREE.Sprite).
@@ -152,6 +166,7 @@ export class ThreeRenderer {
     this._clickable    = [];
     this._vessels      = new Map();   // vesselId → { sprite, routeLine }
     this._predictionConeMeshes = new Map();  // vesselId → { fillMesh, lineMesh, group } (M2b C4)
+    this._sensorRingMeshes     = new Map();  // key (`v_xxx` | `col_xxx`) → { mesh, type, radiusAU } (M4 P2)
     this._poiSprites           = new Map();  // poiId → { sprite, type } (M2b C7)
     this._poiTextureCache      = new Map();  // type → CanvasTexture (5 entries, M2b C7)
     this._tradeLines   = [];          // THREE.Line[] — linie handlu cywilnego
@@ -367,6 +382,11 @@ export class ThreeRenderer {
     EventBus.on('physics:updated', safe(({ planets, star, moons = [] }) => {
       this._syncPlanetMeshes(planets, moons);
       if (star) this._syncStarPosition(star);
+      // M4 P2 — radar rings: colonies orbit z planetami, więc re-sync co physics tick
+      // (vessel:positionUpdate nie odpala się gdy brak vesseli w ruchu).
+      if (this._sensorRingMeshes.size > 0 || window.KOSMOS?.uiPrefs?.sensorOverlayVisible) {
+        this._syncSensorOverlay();
+      }
     }));
 
     EventBus.on('body:collision', safe(({ winner, loser, type }) => {
@@ -442,6 +462,15 @@ export class ThreeRenderer {
     EventBus.on('vessel:positionUpdate', safe(({ vessels }) => {
       this._syncVesselPositions(vessels);
       this._syncPredictionCones();   // M2b C4 — origin/dir/scale per active intercept
+      this._syncSensorOverlay();     // M4 P2 — radar rings (vessels + colonies)
+    }));
+    // M4 P2 — toggle radar z BottomBar; pełny re-sync (lub teardown gdy off)
+    EventBus.on('ui:sensorOverlayToggle', safe(({ visible }) => {
+      if (!visible) {
+        this._disposeAllSensorRings();
+      } else {
+        this._syncSensorOverlay();
+      }
     }));
     // Fog-of-war — ObservatorySystem zmienia widoczność wrogiego statku
     EventBus.on('vessel:detectionChanged', safe(({ vesselId, detected }) => {
@@ -847,6 +876,9 @@ export class ThreeRenderer {
 
     // Prediction cones (M2b C4) — switchSystem nie zostawia ghost mesh
     this._disposeAllPredictionCones();
+
+    // Sensor rings (M4 P2) — switchSystem nie zostawia ghost ringów
+    this._disposeAllSensorRings();
 
     // POI sprites (M2b C7) — switchSystem nie zostawia ghost markerów
     this._disposeAllPOISprites();
@@ -4333,6 +4365,123 @@ export class ThreeRenderer {
   _disposeAllPredictionCones() {
     for (const id of [...this._predictionConeMeshes.keys()]) {
       this._disposePredictionCone(id);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Sensor overlay (M4 P2) — cyan ring wokół własnych vesseli +
+  // yellow ring wokół własnych kolonii (obserwatorium detection).
+  // ─────────────────────────────────────────────────────────────
+  // Wzorzec 1:1 z _syncPredictionCones: Map cache, mark&sweep każdego
+  // syncu (activeKeys), dispose dla nieaktywnych. Lifecycle:
+  // - vessel:positionUpdate → re-sync wszystkich (pozycje vesseli + kolonii
+  //   się zmieniają — planety orbitują).
+  // - ui:sensorOverlayToggle (off) → _disposeAllSensorRings.
+  // Reaguje na FEATURES.m4SensorOverlay (rollback flag) oraz na
+  // window.KOSMOS.uiPrefs.sensorOverlayVisible (player toggle).
+
+  _syncSensorOverlay() {
+    if (!GAME_CONFIG.FEATURES.m4SensorOverlay) {
+      if (this._sensorRingMeshes.size > 0) this._disposeAllSensorRings();
+      return;
+    }
+    const visible = window.KOSMOS?.uiPrefs?.sensorOverlayVisible === true;
+    if (!visible) {
+      if (this._sensorRingMeshes.size > 0) this._disposeAllSensorRings();
+      return;
+    }
+
+    const activeKeys = new Set();
+    const activeSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
+
+    // 1) Własne vessele — cyan ring SENSOR_LOCK_AU
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (vMgr) {
+      for (const v of vMgr._vessels.values()) {
+        if (v.isWreck) continue;
+        if (isEnemyVessel(v)) continue;
+        if (v.systemId && v.systemId !== activeSys) continue;
+        if (!v.position || isNaN(v.position.x) || isNaN(v.position.y)) continue;
+        const key = `v_${v.id}`;
+        activeKeys.add(key);
+        this._upsertSensorRing(
+          key, v.position.x, v.position.y,
+          GAME_CONFIG.SENSOR_LOCK_AU,
+          SENSOR_RING_VESSEL_COLOR,
+        );
+      }
+    }
+
+    // 2) Własne kolonie — yellow ring (obserwatorium detection range)
+    const colMgr = window.KOSMOS?.colonyManager;
+    const obsSys = window.KOSMOS?.observatorySystem;
+    if (colMgr) {
+      for (const col of colMgr.getAllColonies()) {
+        if ((col.systemId ?? 'sys_home') !== activeSys) continue;
+        const planet = col.planet ?? EntityManager.get(col.planetId);
+        if (!planet || isNaN(planet.x) || isNaN(planet.y)) continue;
+        // Bazowo 1 AU; obserwatorium rozszerza. obsSys może nie istnieć w sandboxie.
+        let rangeAU = 1.0;
+        if (obsSys?.getVesselDetectionRangeAU) {
+          rangeAU = obsSys.getVesselDetectionRangeAU(col) ?? 1.0;
+        }
+        if (!Number.isFinite(rangeAU)) rangeAU = SENSOR_RING_MAX_COLONY_AU;
+        rangeAU = Math.min(rangeAU, SENSOR_RING_MAX_COLONY_AU);
+        if (rangeAU <= 0) continue;
+        const key = `col_${col.planetId}`;
+        activeKeys.add(key);
+        this._upsertSensorRing(
+          key, planet.x, planet.y, rangeAU,
+          SENSOR_RING_COLONY_COLOR,
+        );
+      }
+    }
+
+    // 3) Mark & sweep — usuń ringi dla zniknięcych encji
+    for (const k of [...this._sensorRingMeshes.keys()]) {
+      if (!activeKeys.has(k)) this._disposeSensorRing(k);
+    }
+  }
+
+  _upsertSensorRing(key, worldX, worldY, radiusAU, color) {
+    const radiusWU = S(radiusAU * AU);
+    let entry = this._sensorRingMeshes.get(key);
+    if (!entry || entry.radiusAU !== radiusAU || entry.color !== color) {
+      if (entry) this._disposeSensorRing(key);
+      // Cienki annulus: inner 99% × outer (1px-ish w world units zależnie od zoom,
+      // ale Three.js RingGeometry wymaga konkretnych liczb). Stała szerokość
+      // = ~3% promienia daje widoczny ring od 0.1 AU do 35 AU.
+      const inner = radiusWU * 0.985;
+      const outer = radiusWU;
+      const geom = new THREE.RingGeometry(inner, outer, SENSOR_RING_SEGMENTS);
+      const mat  = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: SENSOR_RING_OPACITY,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.rotation.x = -Math.PI / 2;  // płaszczyzna XZ (ekliptyka)
+      this.scene.add(mesh);
+      entry = { mesh, geom, mat, radiusAU, color };
+      this._sensorRingMeshes.set(key, entry);
+    }
+    entry.mesh.position.set(S(worldX), SENSOR_RING_Y, S(worldY));
+  }
+
+  _disposeSensorRing(key) {
+    const entry = this._sensorRingMeshes.get(key);
+    if (!entry) return;
+    this.scene.remove(entry.mesh);
+    entry.geom.dispose();
+    entry.mat.dispose();
+    this._sensorRingMeshes.delete(key);
+  }
+
+  _disposeAllSensorRings() {
+    for (const k of [...this._sensorRingMeshes.keys()]) {
+      this._disposeSensorRing(k);
     }
   }
 

@@ -601,6 +601,7 @@ export default {
   'menu.orbitsPlanets': 'Planets+M',
   'menu.orbitsPlanetoids': 'Planetoids',
   'menu.orbitsNone': 'None',
+  'menu.radar': 'Radar',
   'ui.cancelBuild': '[ Cancel Build ]',
   'ui.downgrade': '[ Downgrade Lv {0} → {1} ]',
   'ui.demolishBtn': '[ Demolish ]',

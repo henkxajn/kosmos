@@ -601,6 +601,7 @@ export default {
   'menu.orbitsPlanets': 'Planety+K',
   'menu.orbitsPlanetoids': 'Planetoidy',
   'menu.orbitsNone': 'Żadne',
+  'menu.radar': 'Radar',
   'ui.cancelBuild': '[ Anuluj budowę ]',
   'ui.downgrade': '[ Obniż Lv {0} → {1} ]',
   'ui.demolishBtn': '[ Rozbiórka ]',

@@ -24,7 +24,7 @@ function _severityColor(sev) {
 const MENU_W = 220;
 const MENU_ROW_H = 28;
 const MENU_PAD = 8;
-const MENU_ROWS = 7; // Nowa gra, Zapisz, Autozapis, Auto-pauza, Orbity, Muzyka, Dźwięki
+const MENU_ROWS = 8; // Nowa gra, Zapisz, Autozapis, Auto-pauza, Orbity, Radar, Muzyka, Dźwięki
 const MENU_H = MENU_PAD * 2 + MENU_ROWS * MENU_ROW_H;
 
 // Opcje interwału autozapisu
@@ -312,6 +312,10 @@ export class BottomBar {
         this._cycleOrbitMode();
         this._updateDomMenu();
         break;
+      case 'radar':
+        this._toggleSensorOverlay();
+        this._updateDomMenu();
+        break;
       case 'music':
         EventBus.emit('music:toggle');
         // Wartości odświeżą się przy następnym otwarciu
@@ -359,12 +363,15 @@ export class BottomBar {
     const apEnabled = apSys ? apSys.isEnabled() : true;
     const apLabel = pl ? 'Auto-pauza...' : 'Auto-pause...';
     const apValue = apEnabled ? (pl ? 'WŁ' : 'ON') : (pl ? 'WYŁ' : 'OFF');
+    // M4 P2 — radar toggle (window.KOSMOS.uiPrefs.sensorOverlayVisible)
+    const radarOn = window.KOSMOS?.uiPrefs?.sensorOverlayVisible === true;
     return [
       { id: 'newGame', label: t('menu.newGame') },
       { id: 'save',    label: t('menu.save') },
       { id: 'autosave', label: t('menu.autosave'), value: autosaveLabel, valueOn: autosaveOn },
       { id: 'autopause', label: apLabel, value: apValue, valueOn: apEnabled },
       { id: 'orbits',   label: t('menu.orbits'), value: orbitLabel, valueOn: true },
+      { id: 'radar',   label: t('menu.radar'),  value: radarOn ? t('menu.on') : t('menu.off'), valueOn: radarOn },
       { id: 'music',   label: t('menu.music'), value: musicEnabled ? t('menu.on') : t('menu.off'), valueOn: musicEnabled },
       { id: 'sfx',     label: t('menu.sfx'),   value: audioEnabled ? t('menu.on') : t('menu.off'), valueOn: audioEnabled },
     ];
@@ -476,6 +483,17 @@ export class BottomBar {
 
   _emitOrbitFilter() {
     EventBus.emit('orbits:filterChanged', { mode: this._orbitMode });
+  }
+
+  // ── Toggle radar (M4 P2) ──────────────────────────────────────────────
+  // Stan żyje w window.KOSMOS.uiPrefs.sensorOverlayVisible (persistowane w save
+  // v70+). BottomBar tylko flipuje i emituje. ThreeRenderer reaguje na event.
+  _toggleSensorOverlay() {
+    if (!window.KOSMOS) return;
+    window.KOSMOS.uiPrefs = window.KOSMOS.uiPrefs ?? {};
+    const next = !window.KOSMOS.uiPrefs.sensorOverlayVisible;
+    window.KOSMOS.uiPrefs.sensorOverlayVisible = next;
+    EventBus.emit('ui:sensorOverlayToggle', { visible: next });
   }
 
   _getOrbitLabel() {

@@ -16,6 +16,11 @@ window.KOSMOS = {
   civMode:      false,
   homePlanet:   null,
   savedData:    null,
+  // Preferencje UI (persistowane w save v70+, hydratowane przy load przez SaveMigration)
+  uiPrefs:      {
+    sensorOverlayVisible: false,   // M4 P2 — radar (cyan vessel rings + yellow colony rings)
+    miniMapVisible:       false,   // M4 P2 — galactic minimap (klawisz M)
+  },
 };
 
 // Uruchom ekran tytułowy
