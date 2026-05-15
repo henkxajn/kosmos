@@ -2461,6 +2461,7 @@ export default {
   'log.autoSlowBattle':            'bitwa zakończona',
   'log.autoSlowWar':               'deklaracja wojny',
   'log.autoSlowEnemyMaterialize':  'wroga flota materializuje się',
+  'log.autoSlowEnemyDetected':     'wykryto wrogą jednostkę',
   // M4 P1.5 — first sighting + weapons warning
   'log.m4.firstSighting':          'Pierwsze wykrycie statku obcego: "{0}" (Imperium {1})',
   'tooltip.menu.noWeapons':        'Brak broni — statek zostanie zniszczony',

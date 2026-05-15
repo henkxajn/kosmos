@@ -2461,6 +2461,7 @@ export default {
   'log.autoSlowBattle':            'battle concluded',
   'log.autoSlowWar':               'war declaration',
   'log.autoSlowEnemyMaterialize':  'alien fleet materializing',
+  'log.autoSlowEnemyDetected':     'enemy vessel detected',
   // M4 P1.5 — first sighting + weapons warning
   'log.m4.firstSighting':          'First sighting of alien vessel: "{0}" (Empire {1})',
   'tooltip.menu.noWeapons':        'No weapons — vessel will be destroyed',

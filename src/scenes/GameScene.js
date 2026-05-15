@@ -903,6 +903,12 @@ export class GameScene {
       // Przywróć VesselManager
       if (c4x.vesselManager) {
         this.vesselManager.restore(c4x.vesselManager);
+        // M4 P1 fix — MOS skonstruowany w start() przed restore'em vesseli, więc
+        // _indexExistingOrders zobaczył pustą listę. Re-index po restore zbuduje
+        // _driftingVessels + _byVessel z aktualnego stanu vesseli (driftIdle, movementOrder).
+        if (this.movementOrderSystem?._indexExistingOrders) {
+          this.movementOrderSystem._indexExistingOrders();
+        }
       }
       // Przywróć DiscoverySystem
       if (c4x.discoverySystem) {
@@ -1438,6 +1444,13 @@ export class GameScene {
         'at-stat-neg'
       );
 
+      // M4 P1 fix — najpierw auto-slow do 1d/s, potem pauza. Po dismiss czas wraca
+      // na 1d/s (nie na poprzedni multiplier, np. 10kr/s). _triggerAutoSlow zapamiętuje
+      // multiplier=1 zanim pause go zamrozi → resume kontynuuje na slow.
+      const ts = window.KOSMOS?.timeSystem;
+      if (ts?._triggerAutoSlow) {
+        try { ts._triggerAutoSlow(t('log.autoSlowEnemyDetected')); } catch (e) { /* defensive */ }
+      }
       EventBus.emit('time:pause');
       const headline = isPL ? '⚔ WYKRYTO WROGĄ JEDNOSTKĘ' : '⚔ ENEMY UNIT DETECTED';
       const desc = isPL

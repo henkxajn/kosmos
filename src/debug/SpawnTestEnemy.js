@@ -511,12 +511,12 @@ export function spawnEnemyCiv(opts = {}) {
  *
  * @param {object} opts
  * @param {number} [opts.strength=500]       — siła (→ wybór kadłuba i modułów)
- * @param {number} [opts.etaYears=4.0]       — za ile lat dotrze do gracza (−50% speed vs M4 P1.5)
+ * @param {number} [opts.etaYears=20.0]      — za ile lat dotrze do gracza (interceptable speed)
  * @param {number} [opts.spawnDistanceAU=30] — odległość od gwiazdy przy spawn (M4 P1.5: friendly default)
  * @param {string} [opts.vesselName]         — override nazwy
  *
- * Prędkość statku = spawnDistanceAU / etaYears (default 30/4 = 7.5 AU/rok).
- * Historia defaultów: M4 P1 etaYears=0.5 → P1.5 friendly 2.0 → obecnie 4.0 (−50% by łatwiej przechwycić).
+ * Prędkość statku = spawnDistanceAU / etaYears (default 30/20 = 1.5 AU/rok, matches player speedAU).
+ * Historia defaultów: M4 P1 etaYears=0.5 → P1.5 friendly 2.0 → 4.0 (−50%) → 20.0 (interceptable).
  * Agresywne wartości via opts: spawnEnemyAttack({ etaYears: 0.3, spawnDistanceAU: 10 })
  */
 export function spawnEnemyAttack(opts = {}) {
@@ -544,8 +544,9 @@ export function spawnEnemyAttack(opts = {}) {
   const strength = opts.strength ?? 500;
   // M4 P1.5 — friendly defaults: poprzednio 0.5 i 15. Player ma więcej czasu na
   // zareagowanie i widzi wroga lecącego z większego dystansu.
-  // 2026-05-15: etaYears 2.0 → 4.0 (−50% prędkości — łatwiejszy intercept).
-  const etaYears = opts.etaYears ?? 4.0;
+  // 2026-05-15: etaYears 2.0 → 4.0 → 20.0 — 1.5 AU/rok dopasowane do player speedAU (~1.0–1.4),
+  // statek jest realnie przechwytywalny przez statki gracza, nie tylko trafialny po trasie.
+  const etaYears = opts.etaYears ?? 20.0;
   const spawnDistAU = opts.spawnDistanceAU ?? 30;
 
   // 2) Dobór kadłuba + modułów wg strength

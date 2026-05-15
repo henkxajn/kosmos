@@ -888,6 +888,11 @@ export class VesselManager {
         movementOrder:     movementOrderData,
         suspendedMission:  suspendedMissionData,
         // velocity — celowo pominięte (derived; resync w pierwszym _updatePositions po load)
+        // ── M4 P1 — drift state ───────────────────────────────────────────
+        // driftIdle/lowFuelDrift muszą przeżyć save/load: MovementOrderSystem
+        // odbudowuje _driftingVessels Set z vessel.driftIdle w _indexExistingOrders.
+        driftIdle:     v.driftIdle ? { ...v.driftIdle } : null,
+        lowFuelDrift:  v.lowFuelDrift ? { ...v.lowFuelDrift } : null,
       });
     }
     return {
@@ -982,6 +987,10 @@ export class VesselManager {
           if (Array.isArray(mo.patrolRoute)) mo.patrolRoute = mo.patrolRoute.map(p => ({ ...p }));
           return mo;
         })(),
+        // M4 P1 — drift state restore. MovementOrderSystem._indexExistingOrders
+        // odbuduje _driftingVessels Set na podstawie tego pola.
+        driftIdle:    vd.driftIdle    ? { ...vd.driftIdle }    : null,
+        lowFuelDrift: vd.lowFuelDrift ? { ...vd.lowFuelDrift } : null,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {
