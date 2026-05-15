@@ -26,6 +26,7 @@ export class OverlayManager {
       'l': 'eventLog',        // Opcja B/3 — Dziennik zdarzeń
       'n': 'poi',             // M3 P2.1 — POI Panel (sidebar list)
       'm': 'minimap',         // M4 P2 — Galactic mini-map (top-right corner)
+      'k': { id: 'fleet', opts: { focusSection: 'wreck' } }, // M4 P2 — Fleet → sekcja Wraki
     };
   }
 
@@ -46,18 +47,28 @@ export class OverlayManager {
 
   // Zwraca true jeśli klawisz obsłużony
   handleKey(key) {
-    const id = this._keyMap[key.toLowerCase()];
-    if (!id) return false;
+    const entry = this._keyMap[key.toLowerCase()];
+    if (!entry) return false;
+    // Wpis: string (legacy) lub { id, opts } (M4 P2 — klawisz K → fleet z focusSection)
+    const isObj = typeof entry !== 'string';
+    const id    = isObj ? entry.id        : entry;
+    const opts  = isObj ? (entry.opts ?? {}) : {};
     if (!this.overlays[id]) {
       console.log(`Panel ${id}: not yet registered`);
       return false;
     }
     if (this.active === id) {
+      // M4 P2: gdy klawisz ma opts (np. 'k' → fleet+focusSection), drugie wciśnięcie
+      // ponownie ustawia focus zamiast zamykać overlay (intuitive UX dla scroll).
+      if (isObj && Object.keys(opts).length > 0) {
+        this._showOverlay(this.overlays[id], opts);
+        return true;
+      }
       this._hideOverlay(this.overlays[id]);
       this.active = null;
     } else {
       if (this.active) this._hideOverlay(this.overlays[this.active]);
-      this._showOverlay(this.overlays[id]);
+      this._showOverlay(this.overlays[id], opts);
       this.active = id;
     }
     return true;

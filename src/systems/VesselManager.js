@@ -90,6 +90,27 @@ export class VesselManager {
     EventBus.on('vessel:orderCancelled', ({ vesselId }) =>
       this._resumeMissionAfterOrder(vesselId));
 
+    // M4 P2 — Battle history stamp. battle:resolved emit przez
+    // WarSystem.recordBattle ORAZ VesselCombatSystem._applyOutcome. Stamp obie
+    // strony — vessele które wygrały też mogą zostać wrakami w future battles,
+    // ale field zawsze pokazuje OSTATNIĄ bitwę. FleetManagerOverlay wrak row
+    // używa lastBattleId tylko gdy vessel.isWreck.
+    EventBus.on('battle:resolved', ({ battleId, result }) => {
+      if (!battleId || !result) return;
+      const year = result.year ?? (window.KOSMOS?.timeSystem?.gameTime ?? 0);
+      const stamp = (ids) => {
+        if (!Array.isArray(ids)) return;
+        for (const id of ids) {
+          const v = this._vessels.get(id);
+          if (!v) continue;
+          v.lastBattleId   = battleId;
+          v.lastBattleYear = year;
+        }
+      };
+      stamp(result.participantA?.vesselIds);
+      stamp(result.participantB?.vesselIds);
+    });
+
     // Rozkazy w obcym układzie
     EventBus.on('expedition:foreignRecon', ({ vesselId, targetId, scope }) =>
       this._startForeignRecon(vesselId, targetId, scope));
@@ -893,6 +914,11 @@ export class VesselManager {
         // odbudowuje _driftingVessels Set z vessel.driftIdle w _indexExistingOrders.
         driftIdle:     v.driftIdle ? { ...v.driftIdle } : null,
         lowFuelDrift:  v.lowFuelDrift ? { ...v.lowFuelDrift } : null,
+        // ── M4 P2 — battle history (wraki: ostatnia bitwa) ───────────────
+        // Stamp z battle:resolved listener. UI: FleetManagerOverlay
+        // expanded wrak row → WarSystem.getBattleRecord(lastBattleId).
+        lastBattleId:   v.lastBattleId   ?? null,
+        lastBattleYear: v.lastBattleYear ?? null,
       });
     }
     return {
@@ -991,6 +1017,9 @@ export class VesselManager {
         // odbuduje _driftingVessels Set na podstawie tego pola.
         driftIdle:    vd.driftIdle    ? { ...vd.driftIdle }    : null,
         lowFuelDrift: vd.lowFuelDrift ? { ...vd.lowFuelDrift } : null,
+        // M4 P2 — battle history
+        lastBattleId:   vd.lastBattleId   ?? null,
+        lastBattleYear: vd.lastBattleYear ?? null,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {

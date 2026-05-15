@@ -66,6 +66,11 @@ export class WarSystem {
   }
   getWar(warId) { return gameState.get(`wars.${warId}`) ?? null; }
 
+  /** Zwraca rekord bitwy z gameState.battles (read-only). Używane przez
+   *  FleetManagerOverlay (battle report w expanded wrak row). Może zwrócić
+   *  battleId z deep-space combat (VesselCombatSystem) gdzie warId=null. */
+  getBattleRecord(battleId) { return gameState.get(`battles.${battleId}`) ?? null; }
+
   /** Zwraca aktywną wojnę z danym imperium (gracz jako agresor lub obrońca) */
   getWarWith(empireId) {
     return this.listActive().find(w =>

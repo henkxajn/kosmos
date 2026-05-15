@@ -228,7 +228,13 @@ export class FleetManagerOverlay {
     if (this._visible) this._focusOnHomeAtStart();
     else this._close();
   }
-  open()   { this._visible = true; this._focusOnHomeAtStart(); }
+  open(opts = {}) {
+    this._visible = true;
+    this._focusOnHomeAtStart();
+    // M4 P2 — klawisz K otwiera fleet z focusSection: 'wreck'. Przy najbliższym
+    // draw wymuszamy scroll listy do tej sekcji + auto-select pierwszy wrak.
+    this._pendingFocusSection = opts.focusSection ?? null;
+  }
   close()  { this._visible = false; this._close(); }
 
   // Przy otwarciu overlay'a — jeśli mapa w stanie domyślnym (pan=0, zoom=1),
@@ -649,6 +655,10 @@ export class FleetManagerOverlay {
           this._setSelectedVesselViaUI(null);
         } else {
           this._setSelectedVesselViaUI(zone.data.vesselId);
+          // M4 P2 — fly camera 3D do vessela. Dla wraków (deep-space lub orbital
+          // graveyard) sprite.position jest już ustawione poprawnie, więc handler
+          // vessel:focus w ThreeRenderer zrobi focusOnInstant prawidłowo.
+          EventBus.emit('vessel:focus', { vesselId: zone.data.vesselId });
         }
         this._missionConfig = null;
         this._targetScrollOffset = 0;
@@ -1429,6 +1439,27 @@ export class FleetManagerOverlay {
     const listY = filterY + 28;
     const listH = h - (listY - y);
 
+    // M4 P2 — focusSection: scroll do sekcji + auto-select pierwszy element.
+    // open({ focusSection: 'wreck' }) ustawia _pendingFocusSection; tu w pierwszym
+    // draw obliczamy offset (suma poprzednich sekcji) i wybieramy pierwszy wrak.
+    if (this._pendingFocusSection) {
+      const target = this._pendingFocusSection;
+      let offset = 0;
+      let foundSec = null;
+      for (const sec of sections) {
+        if (sec.key === target) { foundSec = sec; break; }
+        if (sec.vessels.length === 0) continue;
+        offset += SECTION_H + sec.vessels.length * sec.rowH;
+      }
+      if (foundSec && foundSec.vessels.length > 0) {
+        this._scrollOffset = Math.min(offset, Math.max(0, totalContentH - listH));
+        const first = foundSec.vessels[0];
+        this._setSelectedVesselViaUI(first.id);
+        EventBus.emit('vessel:focus', { vesselId: first.id });
+      }
+      this._pendingFocusSection = null;
+    }
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, listY, w, listH);
@@ -1501,6 +1532,34 @@ export class FleetManagerOverlay {
           ctx.beginPath(); ctx.moveTo(x + pad, ry + rH - 1); ctx.lineTo(x + w - pad, ry + rH - 1); ctx.stroke();
           this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rH, type: 'vessel', data: { vesselId: vessel.id } });
           ry += rH;
+          // ── M4 P2 — Battle report w expanded selected wrak row ──
+          // Zniszczony w bitwie b_XX (rok YYYY) • strona A:N vs B:N
+          if (selected && vessel.lastBattleId) {
+            const expandH = 36;
+            ctx.fillStyle = 'rgba(0,0,0,0.30)';
+            ctx.fillRect(x + pad, ry, w - 2 * pad, expandH);
+            ctx.strokeStyle = 'rgba(128,128,128,0.14)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + pad + 0.5, ry + 0.5, w - 2 * pad - 1, expandH - 1);
+            const ws  = window.KOSMOS?.warSystem;
+            const rec = ws?.getBattleRecord?.(vessel.lastBattleId);
+            ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+            if (rec) {
+              const aCount = rec.participantA?.count ?? rec.participantA?.vesselIds?.length ?? '?';
+              const bCount = rec.participantB?.count ?? rec.participantB?.vesselIds?.length ?? '?';
+              const yrLabel = rec.year != null ? Math.floor(rec.year) : '?';
+              ctx.fillStyle = THEME.textSecondary;
+              ctx.fillText(`⚔ ${t('fleet.battleHeader', yrLabel)}`, x + pad + 6, ry + 13);
+              ctx.fillStyle = THEME.textDim;
+              ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+              ctx.fillText(`A:${aCount} vs B:${bCount} • ${t('fleet.battleResult')}: ${rec.winner ?? '?'}`,
+                           x + pad + 6, ry + 27);
+            } else {
+              ctx.fillStyle = THEME.textDim;
+              ctx.fillText(t('fleet.battleNoRecord'), x + pad + 6, ry + 18);
+            }
+            ry += expandH;
+          }
           continue;
         }
 
