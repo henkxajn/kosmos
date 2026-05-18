@@ -19,12 +19,22 @@ import * as THREE from 'three';
 import EventBus from '../core/EventBus.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { THEME } from '../config/ThemeConfig.js';
+import { SHIP_MODULES } from '../data/ShipModulesData.js';
 
-const TURN_DURATION_MS = 800;    // 0.8s per turn
+const TURN_DURATION_MS = 800;    // 0.8s per turn (legacy BattleSystem)
 const POST_BATTLE_PAUSE_MS = 1500; // pauza przed przyciskiem OK
 const SHIPS_PER_SIDE = 4;
 
 const PLAYER_COLOR = '#60E0B0';
+
+// M4 P3 — kolor lasera/missile per kategoria broni (DSCS tick-based timeline).
+// short = cyan (laser), medium = yellow-orange (kinetic), long = red (missile).
+const WEAPON_COLOR_BY_CATEGORY = {
+  short:  0x60E0FF,  // cyan
+  medium: 0xFFD060,  // amber
+  long:   0xFF6060,  // red
+};
+const DEFAULT_WEAPON_COLOR = 0xFFFFFF;
 
 export class BattleView3D {
   constructor(canvas) {
@@ -150,6 +160,11 @@ export class BattleView3D {
     this._timeline = data.result?.timeline ?? [];
     this._turnsTotal = this._timeline.length;
     this._ended = false;
+    // M4 P3 — format detection. DSCS timeline entries mają {round, events[]};
+    // legacy BattleSystem ma {turn, dmgA, dmgB, aHP, bHP}. Format wpływa na
+    // _playTurn dispatch (per-weapon events vs aggregate damage).
+    this._timelineFormat = (this._timeline.length > 0 && Array.isArray(this._timeline[0]?.events))
+      ? 'dscs' : 'legacy';
   }
 
   _resolveSideMeta(data, side) {
@@ -403,9 +418,116 @@ export class BattleView3D {
   _playTurn(turn) {
     if (!turn) return;
 
-    // Strzały A → B i B → A
+    // M4 P3 — DSCS tick-based format: turn.events[] = per-weapon shots.
+    // Format detection w start() ustawia _timelineFormat = 'dscs' | 'legacy'.
+    if (this._timelineFormat === 'dscs') {
+      this._playTurnDSCS(turn);
+      return;
+    }
+
+    // Legacy BattleSystem: aggregate damage A↔B per turn.
     if (turn.dmgB > 0) this._spawnVolley('A', 'B', turn.dmgB);
     if (turn.dmgA > 0) this._spawnVolley('B', 'A', turn.dmgA);
+  }
+
+  /**
+   * M4 P3 — DSCS tick-based round playback. Per-weapon event spawn z color
+   * wg category (short/medium/long). Hit/miss zaznaczane (miss bez flash).
+   *
+   * Round struct: { round, year, distanceAU, events: [{attacker, target,
+   *   weapon, hit, damage, blockedByShield, distanceAU}], joinEvents }
+   *
+   * @private
+   */
+  _playTurnDSCS(round) {
+    const events = round.events ?? [];
+    for (const ev of events) {
+      // Heuristic: 'attacker' vesselId zaczyna się od 'p' = player (sideA), 'e' = empire (sideB).
+      // To uproszczenie — w realnym save vesselId może być dowolny ('v_001', 'enemy_xxx').
+      // Lepsza heuristyka: sprawdź czy vesselId istnieje w window.KOSMOS.vesselManager
+      // i odczytaj ownerEmpireId; ale w cinematic kontekście (battle już zakończona,
+      // vessele wrack/retreat) lookup może być zawodny. Wybieramy random shooter z
+      // grupy attackera dla wizualnej spójności.
+      const fromSide = this._guessSideFromVesselId(ev.attacker);
+      const toSide   = fromSide === 'A' ? 'B' : 'A';
+      const color    = this._resolveWeaponColor(ev.weapon);
+      this._spawnEventVolley(fromSide, toSide, color, ev.hit, ev.damage);
+    }
+  }
+
+  /**
+   * Heurystyka strony — checkuje czy vesselId należy do uczestnikow z metadanych.
+   * Fallback: 'A' (player). W DSCS BattleRecord (P3-4) participantA/B mają
+   * vesselIds — ale ten payload nie jest podany do _playTurnDSCS, więc używamy
+   * meta z battleData.attackerEmpireId / defender.
+   *
+   * @private
+   */
+  _guessSideFromVesselId(vesselId) {
+    // Lookup w participantA/B z battleData (data.result.participantA.vesselIds).
+    const participantA = this._battleData?.result?.participantA;
+    const participantB = this._battleData?.result?.participantB;
+    if (participantA?.vesselIds?.includes(vesselId)) return 'A';
+    if (participantB?.vesselIds?.includes(vesselId)) return 'B';
+    // Fallback — string prefix heuristic (test/playtest only).
+    if (typeof vesselId === 'string' && vesselId.startsWith('e')) return 'B';
+    return 'A';
+  }
+
+  /**
+   * Resolve hex color dla weapon module (per kategoria).
+   * @private
+   */
+  _resolveWeaponColor(moduleId) {
+    const mod = SHIP_MODULES?.[moduleId];
+    const category = mod?.stats?.category ?? mod?.stats?.range;
+    return WEAPON_COLOR_BY_CATEGORY[category] ?? DEFAULT_WEAPON_COLOR;
+  }
+
+  /**
+   * Spawn per-event volley z explicit color + hit/miss feedback.
+   * @private
+   */
+  _spawnEventVolley(fromSide, toSide, colorHex, hit, _damage) {
+    const from = fromSide === 'A' ? this._groupA : this._groupB;
+    const to   = toSide   === 'A' ? this._groupA : this._groupB;
+    if (!from?.children?.length || !to?.children?.length) return;
+
+    const color = new THREE.Color(colorHex);
+    const shooter = from.children[Math.floor(Math.random() * from.children.length)];
+    const target  = to.children[Math.floor(Math.random() * to.children.length)];
+    const startP = new THREE.Vector3();
+    const endP = new THREE.Vector3();
+    shooter.getWorldPosition(startP);
+    target.getWorldPosition(endP);
+
+    const geom = new THREE.BufferGeometry().setFromPoints([startP, endP]);
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true,
+      opacity: hit ? 0.9 : 0.4 });  // miss = przygaszona linia
+    const line = new THREE.Line(geom, mat);
+    this._effectsGroup.add(line);
+    this._activeEffects.push({
+      mesh: line, startTime: performance.now(),
+      lifetime: 220, kind: 'laser',
+    });
+
+    // Flash tylko przy hit.
+    if (hit) {
+      setTimeout(() => {
+        if (!this.active) return;
+        const flashGeom = new THREE.SphereGeometry(0.8, 8, 8);
+        const flashMat = new THREE.MeshBasicMaterial({
+          color, transparent: true, opacity: 0.9,
+        });
+        const flash = new THREE.Mesh(flashGeom, flashMat);
+        flash.position.copy(endP);
+        this._effectsGroup.add(flash);
+        this._activeEffects.push({
+          mesh: flash, startTime: performance.now(),
+          lifetime: 400, kind: 'flash',
+        });
+      }, 150);
+    }
   }
 
   _spawnVolley(fromSide, toSide, damage) {
