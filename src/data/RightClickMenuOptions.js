@@ -56,6 +56,10 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
       action: 'issueOrder', orderType: 'pursue', requiresSelection: true },
     { id: 'intercept', labelPL: 'Przechwyć', labelEN: 'Intercept', icon: '⊕',
       action: 'issueOrder', orderType: 'intercept', requiresSelection: true },
+    // M4 P3 — tactical kiting: vessel utrzymuje optimal weapon range vs target.
+    // Warning gdy brak broni (analogicznie do pursue/intercept).
+    { id: 'engage', labelPL: 'Zaangażuj', labelEN: 'Engage', icon: '⊗',
+      action: 'issueOrder', orderType: 'engage', requiresSelection: true },
   ],
   ownVessel: [
     { id: 'escort', labelPL: 'Eskortuj', labelEN: 'Escort', icon: '🛡',
@@ -133,7 +137,7 @@ export function buildMenuOptions(target, selectedVesselId) {
       // Opcja zostaje enabled (player może świadomie wysłać "kamikaze recon"),
       // ale tooltip ostrzega o konsekwencjach.
       if (base.enabled
-          && (opt.orderType === 'pursue' || opt.orderType === 'intercept')
+          && (opt.orderType === 'pursue' || opt.orderType === 'intercept' || opt.orderType === 'engage')
           && target?.type === 'enemyVessel'
           && _vesselHasNoWeapons(selectedVesselId)) {
         base.warning = 'no_weapons';

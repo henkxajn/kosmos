@@ -19,6 +19,7 @@ import { GAME_CONFIG }       from '../config/GameConfig.js';
 import { addMissionLog }     from '../entities/Vessel.js';
 import { PredictionConeMath } from '../utils/PredictionConeMath.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
+import { SHIP_MODULES }      from '../data/ShipModulesData.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
@@ -191,6 +192,9 @@ export class MovementOrderSystem {
     }
     if (spec.type === ORDER_TYPES.escort) {
       return this._issueEscort(vessel, spec);
+    }
+    if (spec.type === ORDER_TYPES.engage) {
+      return this._issueEngage(vessel, spec);
     }
 
     return { ok: false, reason: 'unhandled_type' };
@@ -531,6 +535,168 @@ export class MovementOrderSystem {
     const v = this._vm.getVessel?.(entityId);
     if (v) return v;
     return EntityManager.get(entityId) ?? null;
+  }
+
+  // ── M4 P3 C5 — Engage order (tactical kiting) ─────────────────────────
+
+  /**
+   * Engage — player tactical kiting na enemy vessel.
+   *
+   * Vessel utrzymuje optimal distance = maxWeaponRangeAU × 0.95:
+   *   - dist > optimal × 1.05 → move toward target (zbliż się)
+   *   - dist < optimal × 0.95 → move away from target (cofnij)
+   *   - else hold (sweet spot — strzelaj)
+   *
+   * Cancel auto:
+   *   - target wreck → 'target_lost'
+   *   - currentDist > 2 × maxWeaponRangeAU → 'target_out_of_range'
+   *
+   * Vessel jest stationary z punktu widzenia mission interpolation
+   * (state='orbiting', dockedAt=null). MOS bezpośrednio mutuje vessel.position
+   * (jak pursue/intercept).
+   *
+   * @private
+   */
+  _issueEngage(vessel, spec) {
+    const target = this._resolveTarget(spec.targetEntityId);
+    if (!target) return { ok: false, reason: 'target_not_found' };
+    if (target.isWreck) return { ok: false, reason: 'target_is_wreck' };
+    if (target === vessel) return { ok: false, reason: 'target_self' };
+    // Target musi być vesselem (engage nie ma sensu na planecie/moonie).
+    if (!this._vm.getVessel?.(spec.targetEntityId)) {
+      return { ok: false, reason: 'target_not_vessel' };
+    }
+
+    // Sprawdź czy vessel ma broń — bez broni engage nie ma sensu.
+    const maxRangeAU = _computeMaxWeaponRangeAU(vessel);
+    if (maxRangeAU <= 0) return { ok: false, reason: 'no_weapons' };
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const orderId = `mo_${_nextOrderId++}`;
+    const tx = target.position?.x ?? 0;
+    const ty = target.position?.y ?? 0;
+
+    const order = {
+      id:             orderId,
+      type:           ORDER_TYPES.engage,
+      issuedYear:     gameYear,
+      issuedBy:       spec.issuedBy ?? 'player',
+      targetEntityId: spec.targetEntityId,
+      targetPoint:    null,
+      patrolRoute:    null,
+      lastTargetPos:  { x: tx, y: ty },
+      interceptPoint: null,
+      status:         'active',
+      completedYear:  null,
+      blockReason:    null,
+      poiId:               null,
+      predictionCone:      null,
+      patrolWaypointIndex: 0,
+      patrolDirection:     1,
+      escorteeId:          null,
+      // M4 P3 — engage cache (rebuilt per-tick z aktualnych modules + tech).
+      engageMaxRangeAU:    maxRangeAU,
+      engageTargetId:      spec.targetEntityId,  // shorthand dla DSCS._pickTarget
+    };
+
+    // Suspend obecnej mission (resume po orderCompleted/cancelled).
+    this._suspendMissionIfAny(vessel);
+
+    // Engage = stationary kiting. State='orbiting' (no waypoint trajectory).
+    vessel.mission = null;
+    vessel.movementOrder = order;
+    vessel.status = 'on_mission';
+    vessel.position.state = 'orbiting';
+    vessel.position.dockedAt = null;
+
+    this._byVessel.set(vessel.id, order);
+
+    addMissionLog(vessel, gameYear,
+      `Engage ${target.name ?? target.id} (optimal ${(maxRangeAU * 0.95).toFixed(3)} AU)`,
+      'info');
+
+    _trace(`issue engage ${orderId} vessel=${vessel.id} → ${spec.targetEntityId} maxRange=${maxRangeAU.toFixed(3)}AU`);
+    EventBus.emit('vessel:orderIssued', { vesselId: vessel.id, order });
+
+    return { ok: true, orderId };
+  }
+
+  /**
+   * Per-tick engage — kiting toward/away from target.
+   *
+   * @private
+   */
+  _tickEngageOrder(vessel, order, dPhysicsYear, civDy, gameYear) {
+    const target = this._resolveTarget(order.targetEntityId);
+    if (!target || target.isWreck) {
+      this._blockAndCancel(vessel, order, 'target_lost');
+      return;
+    }
+
+    // Refresh max range (tech mogło zmienić się od issueOrder).
+    const maxRangeAU = _computeMaxWeaponRangeAU(vessel);
+    if (maxRangeAU <= 0) {
+      this._blockAndCancel(vessel, order, 'no_weapons');
+      return;
+    }
+    order.engageMaxRangeAU = maxRangeAU;
+
+    const tx = target.position?.x ?? 0;
+    const ty = target.position?.y ?? 0;
+    order.lastTargetPos = { x: tx, y: ty };
+
+    const dxPx = tx - vessel.position.x;
+    const dyPx = ty - vessel.position.y;
+    const distPx = Math.hypot(dxPx, dyPx);
+    const distAU = distPx / AU_TO_PX;
+
+    // Cancel auto — target uciekł poza efektywny zasięg ataku.
+    const cancelDistAU = 2.0 * maxRangeAU;
+    if (distAU > cancelDistAU) {
+      this._blockAndCancel(vessel, order, 'target_out_of_range');
+      return;
+    }
+
+    const optimalDistAU = maxRangeAU * 0.95;
+    const upperBandAU   = optimalDistAU * 1.05;
+    const lowerBandAU   = optimalDistAU * 0.95;
+
+    let direction = 0;  // -1 = away, 0 = hold, +1 = toward
+    if (distAU > upperBandAU) direction = +1;
+    else if (distAU < lowerBandAU) direction = -1;
+
+    if (direction === 0 || distPx < INTERCEPT_EPS) {
+      // Hold sweet spot — zero velocity update, brak ruchu.
+      if (vessel.velocity) {
+        vessel.velocity.vx = 0;
+        vessel.velocity.vy = 0;
+        vessel.velocity.updatedYear = gameYear;
+      }
+      return;
+    }
+
+    // Krok px = speedAU × dPhysicsYear × AU_TO_PX. Dla engage cap kroku do
+    // odległości od optimal — vessel nie powinien overshoot bandu w jednym ticku.
+    const speedPxPerYear = (vessel.speedAU ?? 1.0) * AU_TO_PX;
+    const optimalPx = optimalDistAU * AU_TO_PX;
+    const distanceToOptimalPx = Math.abs(distPx - optimalPx);
+    const rawStepPx = speedPxPerYear * Math.max(0, dPhysicsYear);
+    const stepPx = Math.min(rawStepPx, distanceToOptimalPx);
+
+    // Unit vector toward target (positive — toward; we flip dla away).
+    const ux = dxPx / distPx;
+    const uy = dyPx / distPx;
+    vessel.position.x += direction * ux * stepPx;
+    vessel.position.y += direction * uy * stepPx;
+
+    if (vessel.velocity) {
+      const speedCiv = (vessel.speedAU ?? 1.0) / CIV_TIME_SCALE;
+      vessel.velocity.vx = direction * ux * speedCiv;
+      vessel.velocity.vy = direction * uy * speedCiv;
+      vessel.velocity.updatedYear = gameYear;
+    }
+
+    _trace(`tick engage ${order.id} vessel=${vessel.id} dist=${distAU.toFixed(3)}AU optimal=${optimalDistAU.toFixed(3)} dir=${direction === 1 ? 'toward' : direction === -1 ? 'away' : 'hold'} step=${stepPx.toFixed(2)}`);
   }
 
   /**
@@ -1112,6 +1278,8 @@ export class MovementOrderSystem {
           this._tickPatrolOrder(vessel, order, dPhysicsYear, gameYear);
         } else if (order.type === ORDER_TYPES.escort) {
           this._tickEscortOrder(vessel, order, dPhysicsYear, gameYear);
+        } else if (order.type === ORDER_TYPES.engage) {
+          this._tickEngageOrder(vessel, order, dPhysicsYear, civDy, gameYear);
         }
         // moveToPoint, goToPOI — ruch zarządzany przez _updatePositions
         //   (mission interpolation, mission.type='move_to_point'); completion przez
@@ -1341,4 +1509,36 @@ export class MovementOrderSystem {
     EventBus.off('vessel:arrived', this._onArrived);
     EventBus.off('vessel:wrecked', this._onWrecked);
   }
+}
+
+// ── Module helpers ─────────────────────────────────────────────────────
+
+/**
+ * Max effective weapon range vessela (AU). Uwzględnia tech multipliers
+ * (weapon_range_<category> × weapon_range_all) dla player vessela.
+ * Wzorowane na DSCS._resolveWeaponRange (zduplikowane, nie importujemy DSCS).
+ *
+ * Używane przez _issueEngage (gate "no_weapons") i _tickEngageOrder
+ * (kiting optimal range).
+ *
+ * @param {object} vessel
+ * @returns {number} max effective range w AU; 0 gdy vessel bez broni.
+ */
+function _computeMaxWeaponRangeAU(vessel) {
+  let maxAU = 0;
+  const isPlayer = (vessel.ownerEmpireId == null || vessel.ownerEmpireId === 'player');
+  const techSys = window.KOSMOS?.techSystem;
+  for (const modId of vessel.modules ?? []) {
+    const mod = SHIP_MODULES?.[modId];
+    if (!mod?.stats?.rangeAU) continue;
+    const category = mod.stats.category ?? mod.stats.range ?? 'medium';
+    let mult = 1.0;
+    if (isPlayer && techSys?.getMultiplier) {
+      mult *= techSys.getMultiplier(`weapon_range_${category}`);
+      mult *= techSys.getMultiplier('weapon_range_all');
+    }
+    const effective = mod.stats.rangeAU * mult;
+    if (effective > maxAU) maxAU = effective;
+  }
+  return maxAU;
 }

@@ -19,9 +19,10 @@ export const ORDER_TYPES = Object.freeze({
   patrol:      'patrol',     // M2b C6: pełny runtime
   escort:      'escort',     // M2b C7 stub (runtime w C7)
   goToPOI:     'goToPOI',    // M2b C6: POI nawigacja (delegacja do moveToPoint)
+  engage:      'engage',     // M4 P3 C5: tactical kiting na enemy vessel (utrzymuje optimal range)
 });
 
-const TYPES_WITH_ENTITY_TARGET = new Set([ORDER_TYPES.pursue, ORDER_TYPES.intercept, ORDER_TYPES.escort]);
+const TYPES_WITH_ENTITY_TARGET = new Set([ORDER_TYPES.pursue, ORDER_TYPES.intercept, ORDER_TYPES.escort, ORDER_TYPES.engage]);
 const TYPES_WITH_POINT_TARGET  = new Set([ORDER_TYPES.moveToPoint]);
 export const TYPES_WITH_POI_TARGET = new Set([ORDER_TYPES.goToPOI]);
 

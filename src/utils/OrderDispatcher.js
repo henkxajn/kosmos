@@ -68,7 +68,8 @@ export function buildOrderSpec(option, target, vesselId) {
 
     case 'pursue':
     case 'intercept':
-    case 'escort': {
+    case 'escort':
+    case 'engage': {
       if (!target.entityId || typeof target.entityId !== 'string') {
         return { ok: false, reason: 'no_target_entity' };
       }
