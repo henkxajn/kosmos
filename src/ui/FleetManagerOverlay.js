@@ -4422,6 +4422,7 @@ export class FleetManagerOverlay {
           break;
         }
         case 'escort':      label = `🛡 Escort: ${targetName}`;       color = THEME.accent; break;
+        case 'engage':      label = `⊗ Engage: ${targetName}`;        color = THEME.danger; break;
         default:            label = `? ${order.type}: ${targetName}`;  color = THEME.textDim;
       }
     }

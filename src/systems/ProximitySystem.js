@@ -28,6 +28,7 @@
 
 import EventBus from '../core/EventBus.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { SHIP_MODULES } from '../data/ShipModulesData.js';
 
 // Stałe — użyte w detection + combat logic.
 //   PROXIMITY_DETECTION_AU (enter), PROXIMITY_EXIT_AU (exit, hysteresis +20%),
@@ -171,9 +172,22 @@ export class ProximitySystem {
     }
     // W pasie hysteresis (enterAU .. exitAU) — no-op dla spójności.
 
-    // Drugi próg: combat range (hysteresis 0.15 / 0.20 AU).
+    // Drugi próg: combat range. M4 P3 hotfix3 — DYNAMIC per pair:
+    // combat enter = max(BASE 0.15, weapon range obu vesseli × 1.05).
+    // Vessel z missile (0.30 AU) inicjuje combat z 0.30 AU; frigate z kinetic
+    // (0.15) z 0.15. Pair = max obu — DSCS startEngagement gdy któryś jest w
+    // stanie strzelać. Zatrzymuje enemy via _freezeAsStationary zanim minie
+    // player vessel; player kontynuuje zbliżanie do swojej weapon range.
+    // Hysteresis: exit = enter × 1.33 (zachowane ratio z hardcoded 0.15/0.20).
     const isCombat = this._activeCombatPairs.has(key);
-    if (!isCombat && distAU < COMBAT_ENGAGEMENT_AU) {
+    const combatEnterAU = Math.max(
+      COMBAT_ENGAGEMENT_AU,
+      _maxWeaponRangeAU(v1) * 1.05,
+      _maxWeaponRangeAU(v2) * 1.05,
+    );
+    const combatExitAU = combatEnterAU * (COMBAT_EXIT_AU / COMBAT_ENGAGEMENT_AU);  // ratio 1.333
+
+    if (!isCombat && distAU < combatEnterAU) {
       this._activeCombatPairs.add(key);
       const sameFaction = (v1.ownerEmpireId ?? null) === (v2.ownerEmpireId ?? null);
       EventBus.emit('vessel:combatRangeEnter', {
@@ -182,7 +196,7 @@ export class ProximitySystem {
         distanceAU: distAU,
         sameFaction,
       });
-    } else if (isCombat && distAU >= COMBAT_EXIT_AU) {
+    } else if (isCombat && distAU >= combatExitAU) {
       this._activeCombatPairs.delete(key);
       EventBus.emit('vessel:combatRangeExit', {
         vesselAId: v1.id,
@@ -276,4 +290,26 @@ export class ProximitySystem {
     }
     return out;
   }
+}
+
+// ── Module helpers ────────────────────────────────────────────────────
+
+/**
+ * Max weapon range AU vessela — z modules.stats.rangeAU.
+ * Używane przez _checkPair do dynamic combat range. Vessel bez broni → 0.
+ * NIE uwzględnia tech multipliers (combat range = fizyczny zasięg modułu;
+ * tech extension to bonus dla _resolveWeaponRange w DSCS, ale combat range
+ * activation powinien być prosty/deterministyczny).
+ *
+ * @param {object} vessel
+ * @returns {number}
+ */
+function _maxWeaponRangeAU(vessel) {
+  let maxAU = 0;
+  for (const modId of vessel.modules ?? []) {
+    const mod = SHIP_MODULES?.[modId];
+    if (!mod?.stats?.rangeAU) continue;
+    if (mod.stats.rangeAU > maxAU) maxAU = mod.stats.rangeAU;
+  }
+  return maxAU;
 }
