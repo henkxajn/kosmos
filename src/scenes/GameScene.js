@@ -84,6 +84,7 @@ import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
 import { ProximitySystem } from '../systems/ProximitySystem.js';
 import { VesselCombatSystem } from '../systems/VesselCombatSystem.js';
+import { DeepSpaceCombatSystem } from '../systems/DeepSpaceCombatSystem.js';
 import { AutoRetreatSystem } from '../systems/AutoRetreatSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
@@ -324,6 +325,13 @@ export class GameScene {
     this.vesselCombatSystem          = null;
     window.KOSMOS.vesselCombatSystem = null;
     if (GAME_CONFIG.FEATURES?.vesselCombat) this._ensureVesselCombatSystem();
+    // M4 P3 DeepSpaceCombatSystem — per-tick deep-space combat (zastępuje
+    //   instant resolve VCS gdy FEATURES.m4DeepSpaceCombat ON). VCS deleguje
+    //   vessel:combatRangeEnter do DSCS przez flag. Domyślnie OFF do P3-3 close
+    //   (skeleton bez fire exchange — flag flip dopiero gdy combat działa).
+    this.deepSpaceCombatSystem          = null;
+    window.KOSMOS.deepSpaceCombatSystem = null;
+    if (GAME_CONFIG.FEATURES?.m4DeepSpaceCombat) this._ensureDeepSpaceCombatSystem();
     // M2a AutoRetreatSystem — event-driven retreat na battle:resolved. Nie ma
     //   osobnej flagi — pokryty przez vesselCombat (bez combat nie ma retreat).
     //   Commit 7.
@@ -618,6 +626,20 @@ export class GameScene {
         GAME_CONFIG.FEATURES.vesselCombat = false;
         this._disableVesselCombatSystem();
         this._disableAutoRetreatSystem();
+      },
+      // M4 P3 — DeepSpaceCombatSystem ON (per-tick combat zamiast instant VCS).
+      // Wymaga vesselCombat ON (DSCS delegowany z VCS._handleCombatRangeEnter).
+      enableDeepSpaceCombat: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.m4DeepSpaceCombat = true;
+        this._ensureDeepSpaceCombatSystem();
+        console.log('[debug] m4DeepSpaceCombat = true (VCS deleguje do DSCS)');
+      },
+      disableDeepSpaceCombat: () => {
+        GAME_CONFIG.FEATURES = GAME_CONFIG.FEATURES ?? {};
+        GAME_CONFIG.FEATURES.m4DeepSpaceCombat = false;
+        this._disableDeepSpaceCombatSystem();
+        console.log('[debug] m4DeepSpaceCombat = false (VCS instant resolve)');
       },
       // KOSMOS.debug.enableUnifiedAggregator() — WarSystem._fleetArrived skip
       // dla materialized. Pomiędzy abstract fleet battle a vessel-level combat.
@@ -3011,6 +3033,31 @@ export class GameScene {
     this.vesselCombatSystem = null;
     window.KOSMOS.vesselCombatSystem = null;
     console.log('[GameScene] VesselCombatSystem deaktywowany');
+  }
+
+  /**
+   * M4 P3 DeepSpaceCombatSystem — idempotentne init. Subscriber:
+   * vessel:combatRangeEnter (delegacja z VCS przez FEATURES.m4DeepSpaceCombat).
+   * Bez VesselCombatSystem nie ma kto deleguje — sandbox włącza oba razem.
+   */
+  _ensureDeepSpaceCombatSystem() {
+    if (this.deepSpaceCombatSystem) return this.deepSpaceCombatSystem;
+    if (!this.vesselManager) {
+      console.warn('[GameScene] vesselManager jeszcze nieinicjalizowany — odrocz enable deepSpaceCombat');
+      return null;
+    }
+    this.deepSpaceCombatSystem = new DeepSpaceCombatSystem(this.vesselManager);
+    window.KOSMOS.deepSpaceCombatSystem = this.deepSpaceCombatSystem;
+    console.log('[GameScene] DeepSpaceCombatSystem aktywowany');
+    return this.deepSpaceCombatSystem;
+  }
+
+  _disableDeepSpaceCombatSystem() {
+    if (!this.deepSpaceCombatSystem) return;
+    this.deepSpaceCombatSystem.destroy();
+    this.deepSpaceCombatSystem = null;
+    window.KOSMOS.deepSpaceCombatSystem = null;
+    console.log('[GameScene] DeepSpaceCombatSystem deaktywowany');
   }
 
   /**

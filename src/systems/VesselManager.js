@@ -1123,6 +1123,12 @@ export class VesselManager {
     //   ustawia blockReason='target_lost' ZANIM MOS._tick iteruje. Master doc §5.
     //   Hook no-op gdy flag OFF lub system nieinstancjonowany.
     window.KOSMOS?.proximitySystem?._tick?.(deltaYears);
+    // M4 P3 DeepSpaceCombatSystem — per-tick fire exchange w active encounters.
+    //   Po ProximitySystem (combatRangeEnter event przyjdzie najpierw, encounter
+    //   utworzony przed pierwszym tickiem fire), przed MOS (engage order może
+    //   zmienić pozycję player vessela w tym samym ticku po fire). Hook no-op
+    //   gdy FEATURES.m4DeepSpaceCombat OFF lub system nieinstancjonowany.
+    window.KOSMOS?.deepSpaceCombatSystem?._tick?.(deltaYears);
     // M1 Targeting — MovementOrderSystem resolve PRZED _updatePositions
     //   (order może nadpisać mission.targetX/Y; pozycja liczona z mission).
     //   Sync call (nie własny time:tick listener) gwarantuje kolejność.

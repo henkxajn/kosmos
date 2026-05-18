@@ -98,6 +98,22 @@ export class VesselCombatSystem {
     if (last != null && (now - last) < ENGAGEMENT_COOLDOWN_YEARS) return;
 
     this._recentlyEngaged.set(key, now);
+
+    // M4 P3: gdy FEATURES.m4DeepSpaceCombat ON → deleguj do DeepSpaceCombatSystem
+    // (per-tick simulation zamiast instant resolve). Flag OFF = M2a/M4 P2 behavior
+    // (instant BattleSystem.resolveBattle). Bezpieczny rollback dla regresji.
+    if (GAME_CONFIG.FEATURES?.m4DeepSpaceCombat) {
+      const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+      if (dscs?.handleCombatRangeEnter) {
+        dscs.handleCombatRangeEnter(vesselAId, vesselBId, sameFaction);
+        return;
+      }
+      // Flag ON ale system nieinstancjonowany — log + fallback do instant path.
+      // (Defensywne; production path: GameScene._ensureDeepSpaceCombatSystem
+      // jest wołany przy starcie sceny gdy flag ON.)
+      console.warn('[VCS] m4DeepSpaceCombat=true ale brak deepSpaceCombatSystem — fallback do instant resolve');
+    }
+
     this._resolveEngagement(vesselAId, vesselBId);
   }
 
