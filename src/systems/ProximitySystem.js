@@ -34,11 +34,19 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 //   COMBAT_ENGAGEMENT_AU  (enter combat, dla VesselCombatSystem),
 //   COMBAT_EXIT_AU        (exit combat, hysteresis +33% vs engagement),
 //   MAX_PAIRS_PER_TICK    (budget — pełne skanowanie w ~ceil(n²/2 / budget) ticków).
+//
+// M4 P3-7: PROXIMITY_DETECTION_AU staje się base value. Per-vessel próg
+// dynamic via _getDetectionRangeAU (player z TechSystem.getMultiplier('sensor_range');
+// empire bez tech → base). Hysteresis ratio (×1.2) zachowany. Combat range
+// pozostaje hardcoded — to fizyczne ograniczenie engagement, nie sensora.
 export const PROXIMITY_DETECTION_AU = 0.5;
 export const PROXIMITY_EXIT_AU      = 0.6;
 export const COMBAT_ENGAGEMENT_AU   = 0.15;
 export const COMBAT_EXIT_AU         = 0.20;
 export const MAX_PAIRS_PER_TICK     = 500;
+
+// M4 P3-7: hysteresis ratio enter→exit dla dynamic detection.
+const DETECTION_HYSTERESIS = 1.2;
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 
@@ -139,7 +147,13 @@ export class ProximitySystem {
     const distAU = distPx / AU_TO_PX;
     const isPaired = this._activePairs.has(key);
 
-    if (!isPaired && distAU < PROXIMITY_DETECTION_AU) {
+    // M4 P3-7 — dynamic detection threshold per vessel pair. Wygrywa większy
+    // sensor (np. player ze zbadanym advanced_sensors_2 wykrywa z 0.75 AU;
+    // empire bez tech sees go z 0.5 AU; pair entry threshold = 0.75 AU).
+    const enterAU = Math.max(this._getDetectionRangeAU(v1), this._getDetectionRangeAU(v2));
+    const exitAU  = enterAU * DETECTION_HYSTERESIS;
+
+    if (!isPaired && distAU < enterAU) {
       this._activePairs.add(key);
       const sameFaction = (v1.ownerEmpireId ?? null) === (v2.ownerEmpireId ?? null);
       EventBus.emit('vessel:proximityEnter', {
@@ -148,14 +162,14 @@ export class ProximitySystem {
         distanceAU: distAU,
         sameFaction,
       });
-    } else if (isPaired && distAU >= PROXIMITY_EXIT_AU) {
+    } else if (isPaired && distAU >= exitAU) {
       this._activePairs.delete(key);
       EventBus.emit('vessel:proximityExit', {
         vesselAId: v1.id,
         vesselBId: v2.id,
       });
     }
-    // W pasie hysteresis (DETECTION_AU .. EXIT_AU) — no-op dla spójności.
+    // W pasie hysteresis (enterAU .. exitAU) — no-op dla spójności.
 
     // Drugi próg: combat range (hysteresis 0.15 / 0.20 AU).
     const isCombat = this._activeCombatPairs.has(key);
@@ -175,6 +189,27 @@ export class ProximitySystem {
         vesselBId: v2.id,
       });
     }
+  }
+
+  /**
+   * M4 P3-7 — dynamic detection range per vessel.
+   *
+   * Player vessel: BASE × TechSystem.getMultiplier('sensor_range'). Empire
+   * vessel: BASE × 1.0 (empire tech state nie jest yet trackowany w grze;
+   * P5 doda EmpireTechState i empire-specific multipliers).
+   *
+   * Fallback gdy techSystem niedostępny → BASE (sensowny default).
+   *
+   * @private
+   * @param {object} vessel
+   * @returns {number} detection range w AU
+   */
+  _getDetectionRangeAU(vessel) {
+    const isPlayer = (vessel.ownerEmpireId == null || vessel.ownerEmpireId === 'player');
+    if (!isPlayer) return PROXIMITY_DETECTION_AU;
+    const techSys = window.KOSMOS?.techSystem;
+    if (!techSys?.getMultiplier) return PROXIMITY_DETECTION_AU;
+    return PROXIMITY_DETECTION_AU * techSys.getMultiplier('sensor_range');
   }
 
   /**
