@@ -108,8 +108,9 @@ if (typeof globalThis.localStorage === 'undefined') {
   globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 }
 const { GAME_CONFIG } = await import('./src/config/GameConfig.js');
-eq('FEATURES.m4DeepSpaceCombat = false (P3-1, włączane w P3-2)',
-   GAME_CONFIG.FEATURES.m4DeepSpaceCombat, false);
+// Flag existuje (od P3-1; flipnięte na true w P3-3 gdy fire działa).
+ok('FEATURES.m4DeepSpaceCombat defined (bool)',
+   typeof GAME_CONFIG.FEATURES.m4DeepSpaceCombat === 'boolean');
 eq('WEAPON_SHORT_AU',     GAME_CONFIG.WEAPON_SHORT_AU, 0.05);
 eq('WEAPON_MED_AU',       GAME_CONFIG.WEAPON_MED_AU, 0.15);
 eq('WEAPON_LONG_AU',      GAME_CONFIG.WEAPON_LONG_AU, 0.30);

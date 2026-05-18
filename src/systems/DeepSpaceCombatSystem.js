@@ -458,23 +458,74 @@ export class DeepSpaceCombatSystem {
       round.distanceAU = distSamples.reduce((s, d) => s + d, 0) / distSamples.length;
     }
 
-    // P3-4 doda pełne _checkEndConditions (retreat threshold dynamic).
-    // P3-3: tylko hard-end gdy strona wybita do zera (kill condition) lub MAX_ROUNDS.
+    const endResult = this._checkEndConditions(encounter);
+    if (endResult) this._finalizeBattle(encounter, endResult.winner, endResult.retreated);
+  }
+
+  /**
+   * Sprawdź czy encounter się kończy.
+   *   - sideA all hp ≤ 0 → winner='B', retreated=null (kill)
+   *   - sideB all hp ≤ 0 → winner='A', retreated=null (kill)
+   *   - sideA aggregate hp ≤ RETREAT_THRESHOLD × sideAggregateHpStart AND
+   *     niższe % niż sideB → retreat='A', winner='B'
+   *   - sideB analogicznie → retreat='B', winner='A'
+   *   - currentRound ≥ MAX_ROUNDS → time-out, highest aggregate HP wins
+   *
+   * Aggregate hpStart liczone dynamicznie (zawiera reinforcement joinedVesselIds)
+   * — większa strona z reinforcement ma więcej buffera przed retreat (gameplay
+   * positive: gracz chce żeby reinforcement pomagał).
+   *
+   * @private
+   * @returns {{winner: 'A'|'B'|null, retreated: 'A'|'B'|null}|null}
+   */
+  _checkEndConditions(encounter) {
+    const sideAVids = [...encounter.sideA.vesselIds, ...encounter.sideA.joinedVesselIds];
+    const sideBVids = [...encounter.sideB.vesselIds, ...encounter.sideB.joinedVesselIds];
+
     const aliveA = sideAVids.filter(vid => (encounter.vesselStates.get(vid)?.hp ?? 0) > 0).length;
     const aliveB = sideBVids.filter(vid => (encounter.vesselStates.get(vid)?.hp ?? 0) > 0).length;
-    if (aliveA === 0 && aliveB === 0) {
-      this._finalizeBattle(encounter, null, null);
-    } else if (aliveA === 0) {
-      this._finalizeBattle(encounter, 'B', null);
-    } else if (aliveB === 0) {
-      this._finalizeBattle(encounter, 'A', null);
-    } else if (encounter.currentRound >= MAX_ROUNDS) {
-      // P3-4 doda highest aggregate HP wins; P3-3 STUB: draw close.
-      const hpA = this._sumHP(encounter, 'A');
-      const hpB = this._sumHP(encounter, 'B');
+
+    // Hard kill conditions (priorytet — bez retreat option).
+    if (aliveA === 0 && aliveB === 0) return { winner: null, retreated: null };
+    if (aliveA === 0)                  return { winner: 'B',  retreated: null };
+    if (aliveB === 0)                  return { winner: 'A',  retreated: null };
+
+    // Retreat threshold dynamic (Opcja B — z reinforcement).
+    const hpStartA = this._sideAggregateHpStart(encounter, 'A');
+    const hpStartB = this._sideAggregateHpStart(encounter, 'B');
+    const hpA = this._sumHP(encounter, 'A');
+    const hpB = this._sumHP(encounter, 'B');
+    const pctA = hpStartA > 0 ? hpA / hpStartA : 1.0;
+    const pctB = hpStartB > 0 ? hpB / hpStartB : 1.0;
+
+    // Strona poniżej progu I niżej procentowo niż przeciwnik → retreat.
+    // Brak retreat gdy obie strony równo pod progiem (kontynuują walkę aż jedna padnie).
+    if (pctA <= RETREAT_THRESHOLD && pctA < pctB) return { winner: 'B', retreated: 'A' };
+    if (pctB <= RETREAT_THRESHOLD && pctB < pctA) return { winner: 'A', retreated: 'B' };
+
+    // Time-out.
+    if (encounter.currentRound >= MAX_ROUNDS) {
       const winner = hpA > hpB ? 'A' : hpB > hpA ? 'B' : null;
-      this._finalizeBattle(encounter, winner, null);
+      return { winner, retreated: null };
     }
+
+    return null;
+  }
+
+  /**
+   * Suma hpStart vesseli strony (initial + joined reinforcement).
+   * Używane do dynamicznego retreat threshold (Opcja B).
+   *
+   * @private
+   */
+  _sideAggregateHpStart(encounter, sideKey) {
+    const side = sideKey === 'A' ? encounter.sideA : encounter.sideB;
+    let sum = 0;
+    for (const vid of [...side.vesselIds, ...side.joinedVesselIds]) {
+      const state = encounter.vesselStates.get(vid);
+      if (state) sum += state.hpStart;
+    }
+    return sum;
   }
 
   /**
@@ -528,13 +579,54 @@ export class DeepSpaceCombatSystem {
   }
 
   /**
-   * P3-4 implementuje pełną semantykę. P3-2 STUB — tylko bezpieczne odznaczenie
-   * encounter gdy wszystkie vessele jednej strony oddaliły się > COMBAT_DISENGAGE_AU.
+   * Combat range exit handler (P3-4).
+   *
+   * Gdy para vesseli rozłączyła się (dist ≥ COMBAT_EXIT_AU=0.20, hysteresis
+   * proximity), sprawdź czy któryś z nich jest w aktywnym encounter. Jeśli tak:
+   *   - Oblicz min/max dystans midpoint → vessele każdej strony (alive only)
+   *   - Jeśli wszyscy żywi vessele jednej strony oddalili się > COMBAT_DISENGAGE_AU
+   *     (0.50) od midpoint → finalize as draw (no wreck żywych)
+   *   - Edge case: tylko niektóre vessele rozeszły się → kontynuuj z resztą
    *
    * @private
    */
-  _handleCombatRangeExit(_event) {
-    // STUB — P3-4 zaimplementuje detection rozejścia + draw finalize.
+  _handleCombatRangeExit({ vesselAId, vesselBId }) {
+    if (!vesselAId || !vesselBId) return;
+    const encA = this._findActiveEncounterContaining(vesselAId);
+    const encB = this._findActiveEncounterContaining(vesselBId);
+    const enc = encA ?? encB;
+    if (!enc || !enc.isActive) return;
+    // Para musi być w tym samym encounter (event dotyczy ich wspólnej combat sytuacji).
+    if (encA && encB && encA !== encB) return;
+
+    const mid = enc.location.point;
+    const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX;
+
+    const sideAVids = [...enc.sideA.vesselIds, ...enc.sideA.joinedVesselIds];
+    const sideBVids = [...enc.sideB.vesselIds, ...enc.sideB.joinedVesselIds];
+
+    const allOutsideOf = (vids) => {
+      let aliveCount = 0;
+      let outsideCount = 0;
+      for (const vid of vids) {
+        const state = enc.vesselStates.get(vid);
+        if (!state || state.hp <= 0) continue;
+        const v = this._vm?._vessels?.get(vid);
+        if (!v) continue;
+        aliveCount++;
+        const dx = v.position.x - mid.x;
+        const dy = v.position.y - mid.y;
+        if (Math.hypot(dx, dy) > disengagePx) outsideCount++;
+      }
+      // Wszyscy żywi rozeszli się (i co najmniej jeden żywy istnieje).
+      return aliveCount > 0 && aliveCount === outsideCount;
+    };
+
+    if (allOutsideOf(sideAVids) || allOutsideOf(sideBVids)) {
+      // Draw — żywi vessele pozostają (no wreck side-level). Dead per-vessel
+      // wreck już zaaplikowane w _finalizeBattle.
+      this._finalizeBattle(enc, null, null);
+    }
   }
 
   // ── Finalize battle ──────────────────────────────────────────────────
