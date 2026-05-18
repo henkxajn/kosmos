@@ -347,8 +347,9 @@ export const SHIP_MODULES = {
     description: '+25 jednostek paliwa. Kriogeniczna izolacja minimalizuje masę.',
   },
 
-  // ── Moduły uzbrojenia (Faza 4: aktywne w BattleSystem) ────────────────────
-  // Pola bojowe: damage (na turę), range ('short'|'long'), tracking (trafność 0-1)
+  // ── Moduły uzbrojenia (Faza 4: aktywne w BattleSystem; M4 P3: rangeAU + fireCooldownYears + category dla DeepSpaceCombatSystem) ────────────────────
+  // Pola bojowe legacy (BattleSystem orbital): damage (na turę), range ('short'|'medium'|'long'), tracking (0-1)
+  // M4 P3 deep-space (DSCS): rangeAU — fizyczny zasięg w AU; fireCooldownYears — cadence; category — alias range dla tech-mult lookup
 
   weapon_laser: {
     id: 'weapon_laser',
@@ -360,7 +361,7 @@ export const SHIP_MODULES = {
     mass: 10,  // tony
     cost: { Ti: 20, Cu: 15 },
     commodityCost: { electronic_systems: 3 },
-    stats: { attackPower: 5, survivalBonus: 0.01, damage: 5, range: 'short', tracking: 0.8 },
+    stats: { attackPower: 5, survivalBonus: 0.01, damage: 5, range: 'short', tracking: 0.8, rangeAU: 0.05, fireCooldownYears: 0.3, category: 'short' },
     requires: 'point_defense',
     description: 'Broń energetyczna bliskiego zasięgu. Wysokie tracking, niskie obrażenia.',
   },
@@ -375,7 +376,7 @@ export const SHIP_MODULES = {
     mass: 14,  // tony
     cost: { Fe: 35, Ti: 15 },
     commodityCost: { reactive_armor: 2, electronic_systems: 2 },
-    stats: { attackPower: 8, survivalBonus: 0.01, damage: 8, range: 'medium', tracking: 0.6, armorPierce: 1 },
+    stats: { attackPower: 8, survivalBonus: 0.01, damage: 8, range: 'medium', tracking: 0.6, armorPierce: 1, rangeAU: 0.15, fireCooldownYears: 0.5, category: 'medium' },
     requires: 'point_defense',
     description: 'Pociski kinetyczne średniego zasięgu. Przebijają lekki pancerz.',
   },
@@ -390,7 +391,7 @@ export const SHIP_MODULES = {
     mass: 18,  // tony
     cost: { Ti: 30, Fe: 20 },
     commodityCost: { propulsion_systems: 2, reactive_armor: 3 },
-    stats: { attackPower: 12, survivalBonus: 0.02, speedMult: 0.95, damage: 12, range: 'long', tracking: 0.5 },
+    stats: { attackPower: 12, survivalBonus: 0.02, speedMult: 0.95, damage: 12, range: 'long', tracking: 0.5, rangeAU: 0.30, fireCooldownYears: 1.0, category: 'long' },
     requires: 'point_defense',
     description: 'Rakiety dalekiego zasięgu. Wysokie obrażenia, słabsze trafianie.',
   },

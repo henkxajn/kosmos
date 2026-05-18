@@ -286,6 +286,22 @@ export default {
   'tech.force_fields.name': 'Pola Siłowe',
   'tech.force_fields.desc': 'Zaawansowane pola siłowe \u2014 budowa na oceanach, pełna ochrona',
 
+  // M4 P3 — Sensor + Weapon Range Tech (defense)
+  'tech.advanced_sensors_1.name':  'Zaawansowane Sensory I',
+  'tech.advanced_sensors_1.desc':  'Lepsze anteny radarowe \u2014 +25% zasięg sensorów statków (0.5 \u2192 0.625 AU).',
+  'tech.advanced_sensors_2.name':  'Zaawansowane Sensory II',
+  'tech.advanced_sensors_2.desc':  'Macierze fazowane \u2014 łącznie \u00d71.5 zasięg sensorów (0.75 AU).',
+  'tech.advanced_sensors_3.name':  'Zaawansowane Sensory III',
+  'tech.advanced_sensors_3.desc':  'Sieci sensoryczne kwantowe \u2014 łącznie \u00d72.0 zasięg sensorów (1.0 AU).',
+  'tech.weapon_optics.name':       'Optyka Bojowa',
+  'tech.weapon_optics.desc':       'Celowniki laserowe i światłowodowe \u2014 +25% zasięg broni krótkiego zasięgu.',
+  'tech.kinetic_targeting.name':   'Naprowadzanie Kinetyczne',
+  'tech.kinetic_targeting.desc':   'Komputery balistyczne \u2014 +30% zasięg + 10% tracking broni średniego zasięgu.',
+  'tech.missile_guidance_ai.name': 'AI Naprowadzania Rakiet',
+  'tech.missile_guidance_ai.desc': 'Algorytmy ścieżek dynamicznych \u2014 +50% zasięg + 10% tracking rakiet.',
+  'tech.range_finder_array.name':  'Macierz Dalmierzy',
+  'tech.range_finder_array.desc':  'Macierz LIDAR sprzężona z bronią \u2014 +15% zasięg wszystkich rodzajów broni.',
+
   'tech.requiresInventory': 'Wymaga w magazynie',
 
   // Tier nazwy

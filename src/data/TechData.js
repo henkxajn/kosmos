@@ -1167,6 +1167,115 @@ export const TECHS = {
   },
 
   // ══════════════════════════════════════════════════════════════════════════
+  // ── M4 P3: Deep-Space Combat — Sensor + Weapon Range Tech (defense) ──────
+  // ══════════════════════════════════════════════════════════════════════════
+  // Pasywne mnożniki kategorii konsumowane przez TechSystem.getMultiplier(category):
+  //   sensor_range, weapon_range_short, weapon_range_medium, weapon_range_long,
+  //   weapon_range_all, weapon_tracking_medium, weapon_tracking_long
+  // Effect schema: { type: 'multiplier', category: '<key>', value: <num> }
+  // (Różne od 'modifier' używanego przez ResourceSystem dla yield producentów.)
+
+  advanced_sensors_1: {
+    id:          'advanced_sensors_1',
+    namePL:      'Zaawansowane Sensory I',
+    nameEN:      'Advanced Sensors I',
+    branch:      'defense',
+    tier:        1,
+    cost:        { research: 80 },
+    requires:    [],
+    effects: [
+      { type: 'multiplier', category: 'sensor_range', value: 1.25 },
+    ],
+    description: 'Lepsze anteny radarowe — +25% zasięg sensorów statków (0.5 → 0.625 AU).',
+  },
+
+  advanced_sensors_2: {
+    id:          'advanced_sensors_2',
+    namePL:      'Zaawansowane Sensory II',
+    nameEN:      'Advanced Sensors II',
+    branch:      'defense',
+    tier:        2,
+    cost:        { research: 180 },
+    requires:    ['advanced_sensors_1'],
+    effects: [
+      { type: 'multiplier', category: 'sensor_range', value: 1.20 },  // łącznie ×1.5 z poprzednim
+    ],
+    description: 'Macierze fazowane — łącznie ×1.5 zasięg sensorów (0.75 AU).',
+  },
+
+  advanced_sensors_3: {
+    id:          'advanced_sensors_3',
+    namePL:      'Zaawansowane Sensory III',
+    nameEN:      'Advanced Sensors III',
+    branch:      'defense',
+    tier:        3,
+    cost:        { research: 320 },
+    requires:    ['advanced_sensors_2', 'quantum_computing'],
+    effects: [
+      { type: 'multiplier', category: 'sensor_range', value: 1.333 },  // łącznie ×2.0 (1.25 × 1.20 × 1.333)
+    ],
+    description: 'Sieci sensoryczne kwantowe — łącznie ×2.0 zasięg sensorów (1.0 AU).',
+  },
+
+  weapon_optics: {
+    id:          'weapon_optics',
+    namePL:      'Optyka Bojowa',
+    nameEN:      'Combat Optics',
+    branch:      'defense',
+    tier:        2,
+    cost:        { research: 160 },
+    requires:    ['point_defense'],
+    effects: [
+      { type: 'multiplier', category: 'weapon_range_short', value: 1.25 },
+    ],
+    description: 'Celowniki laserowe i światłowodowe — +25% zasięg broni krótkiego zasięgu (lasery).',
+  },
+
+  kinetic_targeting: {
+    id:          'kinetic_targeting',
+    namePL:      'Naprowadzanie Kinetyczne',
+    nameEN:      'Kinetic Targeting',
+    branch:      'defense',
+    tier:        2,
+    cost:        { research: 180 },
+    requires:    ['point_defense'],
+    effects: [
+      { type: 'multiplier', category: 'weapon_range_medium',    value: 1.30 },
+      { type: 'multiplier', category: 'weapon_tracking_medium', value: 1.10 },
+    ],
+    description: 'Komputery balistyczne — +30% zasięg + 10% tracking broni średniego zasięgu (działa kinetyczne).',
+  },
+
+  missile_guidance_ai: {
+    id:          'missile_guidance_ai',
+    namePL:      'AI Naprowadzania Rakiet',
+    nameEN:      'Missile Guidance AI',
+    branch:      'defense',
+    tier:        3,
+    cost:        { research: 320 },
+    requires:    ['point_defense', 'quantum_computing'],
+    effects: [
+      { type: 'multiplier', category: 'weapon_range_long',    value: 1.50 },
+      { type: 'multiplier', category: 'weapon_tracking_long', value: 1.10 },
+    ],
+    description: 'Algorytmy ścieżek dynamicznych — +50% zasięg + 10% tracking rakiet.',
+  },
+
+  range_finder_array: {
+    id:          'range_finder_array',
+    namePL:      'Macierz Dalmierzy',
+    nameEN:      'Range Finder Array',
+    branch:      'defense',
+    tier:        3,
+    cost:        { research: 280 },
+    requires:    ['advanced_sensors_2'],
+    effects: [
+      { type: 'multiplier', category: 'weapon_range_all', value: 1.15 },
+    ],
+    description: 'Macierz LIDAR sprzężona z bronią — +15% zasięg wszystkich rodzajów broni.',
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
   // ── CROSS-BRANCH: Fizyka Kwantowa ───────────────────────────────────────
   // ══════════════════════════════════════════════════════════════════════════
 

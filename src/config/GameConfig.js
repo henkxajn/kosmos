@@ -64,6 +64,12 @@ export const GAME_CONFIG = {
     m4SensorOverlay:      true,   // ThreeRenderer._syncSensorOverlay (cyan/yellow rings) — rollback OFF dla regresji
     m4EnemyGhosts:        true,   // _syncVesselPositions intel-gated rendering (rumor/contact/detailed)
     m4MiniMap:            true,   // GalacticMiniMap overlay (klawisz M)
+    // ── M4 P3 — Tick-based Deep-Space Combat (save v71) ───────────────────
+    // OFF w P3-1 (data only). Flip ON w P3-2 po wpięciu DeepSpaceCombatSystem.
+    // Gdy true: VesselCombatSystem deleguje vessel:combatRangeEnter do DSCS
+    // (per-tick fire exchange zamiast instant BattleSystem.resolveBattle).
+    // Gdy false: instant path z M4 P2 (rollback safety).
+    m4DeepSpaceCombat:    false,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
@@ -83,6 +89,17 @@ export const GAME_CONFIG = {
   UI: {
     tooltipDelayMs: 500,
   },
+
+  // ── M4 P3 — Weapon ranges + Combat disengage (AU) ────────────────────────
+  // Bazowe zasięgi broni w AU (przed mnożnikami tech-mult). Konsumowane przez
+  // DeepSpaceCombatSystem._resolveWeaponRange z fallback gdy module.rangeAU brak.
+  // weapon_laser=0.05, weapon_kinetic=0.15, weapon_missile=0.30 (ShipModulesData).
+  WEAPON_SHORT_AU:  0.05,
+  WEAPON_MED_AU:    0.15,
+  WEAPON_LONG_AU:   0.30,
+  // Próg rozejścia żywych vesseli z combat — gdy wszystkie po jednej stronie
+  // oddalą się > tej wartości od midpoint → encounter kończony jako draw.
+  COMBAT_DISENGAGE_AU: 0.50,
 
   // ── M3 P3.1 — POI runtime tunables ───────────────────────────────────────
   // POIRuntimeSystem detection throttling i parametry per-type.

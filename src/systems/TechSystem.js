@@ -173,6 +173,28 @@ export class TechSystem {
     return m;
   }
 
+  /**
+   * Generyczny mnożnik dla dowolnej kategorii (M4 P3+).
+   * Czyta effects typu `{ type: 'multiplier', category, value }`.
+   * Używane przez DeepSpaceCombatSystem (weapon_range_short/medium/long/all,
+   * weapon_tracking_medium/long) i ProximitySystem (sensor_range).
+   * @param {string} category
+   * @returns {number} łączny mnożnik (1.0 gdy żaden tech nie pasuje)
+   */
+  getMultiplier(category) {
+    let m = 1.0;
+    for (const id of this._researched) {
+      const tech = TECHS[id];
+      if (!tech?.effects) continue;
+      for (const fx of tech.effects) {
+        if (fx.type === 'multiplier' && fx.category === category) {
+          m *= fx.value;
+        }
+      }
+    }
+    return m;
+  }
+
   // ── Nowe query methods (Etap 38) ──────────────────────────────────────────
 
   /**
