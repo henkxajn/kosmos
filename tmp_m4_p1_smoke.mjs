@@ -129,10 +129,10 @@ test('T1.6 M3 flags pozostają (regression check)', () => {
 // T2 — SaveMigration v68→v69
 // ============================================================================
 
-// NOTE: CURRENT_VERSION bumpiony do 70 w M4 P2 (P2-6) — testy asercji
-// dostosowane. Migracje v66→v69 nadal działają (łańcuch dochodzi do v70).
-test('T2.1 CURRENT_VERSION === 70 (M4 P2 bump)', () => {
-  assertEq(CURRENT_VERSION, 70, 'CURRENT_VERSION');
+// NOTE: CURRENT_VERSION ewoluuje per faza. T2.1 sprawdza tylko że jest >= 70
+// (M4 P2 minimum), żeby tested nie wymagał update'u przy każdym kolejnym bumpie.
+test('T2.1 CURRENT_VERSION >= 70 (M4 P2 minimum)', () => {
+  if (CURRENT_VERSION < 70) throw new Error(`CURRENT_VERSION ${CURRENT_VERSION} < 70`);
 });
 test('T2.2 migrate v68 save → v70 + driftIdle/lowFuelDrift null defaults', () => {
   const data = {
@@ -147,7 +147,7 @@ test('T2.2 migrate v68 save → v70 + driftIdle/lowFuelDrift null defaults', () 
     },
   };
   const result = migrate(data);
-  assertEq(result.version, 70, 'version bumped');
+  assertEq(result.version, CURRENT_VERSION, 'version bumped');
   assertEq(result.civ4x.vesselManager.vessels[0].driftIdle, null, 'v_001 driftIdle null');
   assertEq(result.civ4x.vesselManager.vessels[0].lowFuelDrift, null, 'v_001 lowFuelDrift null');
   assertEq(result.civ4x.vesselManager.vessels[1].driftIdle.autoReturnYear, 10, 'v_002 driftIdle preserved');
@@ -156,7 +156,7 @@ test('T2.2 migrate v68 save → v70 + driftIdle/lowFuelDrift null defaults', () 
 test('T2.3 migrate save bez vesselManager (early game) → bez błędu', () => {
   const data = { version: 68, civ4x: {} };
   const result = migrate(data);
-  assertEq(result.version, 70, 'version bumped');
+  assertEq(result.version, CURRENT_VERSION, 'version bumped');
 });
 test('T2.4 migrate save z legacy c4x.vesselManager (alias) → handled', () => {
   const data = {
@@ -164,16 +164,16 @@ test('T2.4 migrate save z legacy c4x.vesselManager (alias) → handled', () => {
     c4x: { vesselManager: { vessels: [{ id: 'legacy' }] } },
   };
   const result = migrate(data);
-  assertEq(result.version, 70, 'version bumped');
+  assertEq(result.version, CURRENT_VERSION, 'version bumped');
   assertEq(result.c4x.vesselManager.vessels[0].driftIdle, null, 'legacy alias handled');
 });
-test('T2.5 migrate v66 save → łańcuch v66→v67→v68→v69→v70', () => {
+test('T2.5 migrate v66 save → łańcuch dochodzi do CURRENT_VERSION', () => {
   const data = { version: 66, civ4x: {} };
   const result = migrate(data);
-  assertEq(result.version, 70, 'chained migration');
+  assertEq(result.version, CURRENT_VERSION, 'chained migration');
 });
-test('T2.6 migrate save z przyszłości (v71) → error', () => {
-  const data = { version: 71 };
+test('T2.6 migrate save z przyszłości (CURRENT+1) → error', () => {
+  const data = { version: CURRENT_VERSION + 1 };
   const result = migrate(data);
   assertEq(result.error, 'future_version', 'future_version error');
 });

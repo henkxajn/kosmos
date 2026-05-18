@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 70;
+export const CURRENT_VERSION     = 71;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -88,6 +88,7 @@ const MIGRATIONS = {
   67: _migrateV67toV68,
   68: _migrateV68toV69,
   69: _migrateV69toV70,
+  70: _migrateV70toV71,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1798,6 +1799,33 @@ function _migrateV68toV69(data) {
 //     stampowane przez VesselManager battle:resolved listener. Stare save
 //     przed P2 nie mają tej info — null jako sensowny default
 //     (FleetManagerOverlay renderuje "Brak rekordu bitwy").
+// ── Migracja v70 → v71 (M4 P3 — Tick-based Deep-Space Combat) ──────────────
+// - deepSpaceEngagements: persist encounter state (Map<id, encounter>) między
+//   sesjami. Save mid-combat → restore tworzy DSCS._activeEncounters z tymi
+//   danymi. Encounter zawiera vesselStates Map (serializowany jako object).
+//   Default {} — istniejące save (v70) nie mają combat w toku.
+// - vessel.movementOrder.engageTargetId: shorthand dla DSCS._pickTarget
+//   (engage priority). Lazy default null — wszystkie istniejące orders
+//   (moveToPoint/pursue/intercept/escort) nie mają engageTargetId.
+function _migrateV70toV71(data) {
+  // Encounter records (DSCS state — persist between sessions)
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x) {
+    if (c4x.deepSpaceEngagements === undefined) c4x.deepSpaceEngagements = {};
+  }
+
+  // Vessel engage order target (lazy default null)
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v || typeof v !== 'object') continue;
+      if (v.movementOrder && v.movementOrder.engageTargetId === undefined) {
+        v.movementOrder.engageTargetId = null;
+      }
+    }
+  }
+  return data;
+}
+
 function _migrateV69toV70(data) {
   // uiPrefs (per-save preferences UI)
   data.uiPrefs ??= {};

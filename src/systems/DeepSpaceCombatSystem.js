@@ -915,6 +915,78 @@ export class DeepSpaceCombatSystem {
   listActive() {
     return [...this._activeEncounters.values()].filter(e => e.isActive);
   }
+
+  // ── Serialization (P3-8 — save v71) ─────────────────────────────────
+
+  /**
+   * Round-trip _activeEncounters do obiektu JSON-serializable.
+   * vesselStates Map → object (klucze=vesselId, wartości=state).
+   * Tylko isActive=true (zakończone encounters cleanup'owane w _tick).
+   *
+   * @returns {object} keyed by encounterId
+   */
+  serialize() {
+    const out = {};
+    for (const [id, enc] of this._activeEncounters) {
+      if (!enc.isActive) continue;
+      const vesselStatesObj = {};
+      for (const [vid, state] of enc.vesselStates) {
+        vesselStatesObj[vid] = { ...state, weapons: state.weapons.map(w => ({ ...w })) };
+      }
+      out[id] = {
+        id:              enc.id,
+        sideA:           { ...enc.sideA, vesselIds: [...enc.sideA.vesselIds], joinedVesselIds: [...enc.sideA.joinedVesselIds] },
+        sideB:           { ...enc.sideB, vesselIds: [...enc.sideB.vesselIds], joinedVesselIds: [...enc.sideB.joinedVesselIds] },
+        vesselStates:    vesselStatesObj,
+        location:        { ...enc.location, point: { ...enc.location.point } },
+        startYear:       enc.startYear,
+        currentRound:    enc.currentRound,
+        currentYear:     enc.currentYear,
+        timeline:        enc.timeline.map(t => ({
+          ...t,
+          events:     [...(t.events ?? [])],
+          joinEvents: [...(t.joinEvents ?? [])],
+        })),
+        isActive:        enc.isActive,
+        seedBase:        enc.seedBase,
+      };
+    }
+    return out;
+  }
+
+  /**
+   * Restore _activeEncounters z save. Pomija encounter'y bez participantów
+   * (np. wszystkie vessele wreck przy save — defensive).
+   *
+   * @param {object} data — keyed by encounterId
+   */
+  restore(data) {
+    if (!data || typeof data !== 'object') return;
+    for (const [id, enc] of Object.entries(data)) {
+      if (!enc || !enc.isActive) continue;
+      const vesselStates = new Map();
+      for (const [vid, state] of Object.entries(enc.vesselStates ?? {})) {
+        // Filter — vessel musi istnieć w vesselManager (wreck w międzyczasie
+        // wycięty z save). Skip jeśli brak.
+        if (!this._vm?._vessels?.has?.(vid)) continue;
+        vesselStates.set(vid, { ...state, weapons: (state.weapons ?? []).map(w => ({ ...w })) });
+      }
+      if (vesselStates.size < 2) continue;  // brak walczących stron
+      this._activeEncounters.set(id, {
+        id:              enc.id ?? id,
+        sideA:           enc.sideA ?? { vesselIds: [], joinedVesselIds: [], ownerEmpireId: 'player', label: 'Gracz' },
+        sideB:           enc.sideB ?? { vesselIds: [], joinedVesselIds: [], ownerEmpireId: 'empire_unknown', label: 'Wróg' },
+        vesselStates,
+        location:        enc.location ?? { systemId: 'sys_home', planetId: null, point: { x: 0, y: 0 } },
+        startYear:       enc.startYear ?? 0,
+        currentRound:    enc.currentRound ?? 0,
+        currentYear:     enc.currentYear ?? enc.startYear ?? 0,
+        timeline:        Array.isArray(enc.timeline) ? enc.timeline : [],
+        isActive:        true,
+        seedBase:        enc.seedBase ?? 0,
+      });
+    }
+  }
 }
 
 // ── Module helpers (kopia z VesselCombatSystem dla symetrii) ───────────

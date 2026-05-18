@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v70 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v71 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -154,7 +154,7 @@ Projekt realizuje podejście **MDA (Mechanics → Dynamics → Aesthetics)**:
 | `src/core/EventBus.js` | Serce komunikacji — błąd tu psuje wszystko |
 | `src/core/EntityManager.js` | Rejestr encji — modyfikacja rozbija save/restore |
 | `src/systems/PhysicsSystem.js` | Prawa Keplera + kolizje — fizyka orbitalna |
-| `src/config/GameConfig.js` | Globalne stałe gry + `FEATURES` flagi (M4 P1: M1+M2a flagi flip ON — movementOrders, fleetMaterialization, proximitySystem, vesselCombat, unifiedAggregator; enduranceDrainActive zostaje OFF do M4 P4; +m4DriftFix/m4Notifications/m4FuelAwareRetreat ON; M4 P2: +m4SensorOverlay/m4EnemyGhosts/m4MiniMap ON + SENSOR_LOCK_AU=0.3 + RUMOR_FADE_YEARS=10) |
+| `src/config/GameConfig.js` | Globalne stałe gry + `FEATURES` flagi (M4 P1: M1+M2a flagi flip ON — movementOrders, fleetMaterialization, proximitySystem, vesselCombat, unifiedAggregator; enduranceDrainActive zostaje OFF do M4 P4; +m4DriftFix/m4Notifications/m4FuelAwareRetreat ON; M4 P2: +m4SensorOverlay/m4EnemyGhosts/m4MiniMap ON + SENSOR_LOCK_AU=0.3 + RUMOR_FADE_YEARS=10; M4 P3: +m4DeepSpaceCombat ON + WEAPON_SHORT_AU=0.05/WEAPON_MED_AU=0.15/WEAPON_LONG_AU=0.30 + COMBAT_DISENGAGE_AU=0.50) |
 | `src/map/HexGrid.js` | Matematyka hex cube coordinates |
 | `src/systems/SaveMigration.js` | Łańcuch migracji save'ów — centralny punkt, nie rozpraszaj |
 | `generate-planets.js` + `lib/` | Generator tekstur planet — 9 modułów, pipeline heightmap→color→PBR |
@@ -578,6 +578,25 @@ Smoke tests: `tmp_m4_p2_smoke.mjs` (30/30 PASS) + `tmp_m4_p1_smoke.mjs` regressi
 - MiniMap UX (tooltipy hover na empire/strzałki, label nazwy systemu) — backlog.
 - MiniMap pokazuje tylko inter-system fleet movement (galaktyka), nie lokalne vessele w sys_home (główna mapa 3D pełni tę rolę).
 - 3D map LPM nadal nie wybiera vessela (Tab cycling jako alternatywa).
+
+### Milestone 4 P3 — Tick-based Deep-Space Combat (✅ ukończony, save v71, tag `m4-p3-complete`)
+Plan: `C:\Users\Komputer\.claude\plans\ok-stworz-plan-p3-agile-haven.md` + staging file `C:\Users\Komputer\.claude\plans\rozpoczynamy-implementacje-plan-pod-silly-gem.md`. 8 atomic commitów pogrupowanych w 4 etapy (tagi pośrednie: `m4-p3a-foundation`, `m4-p3b-combat`, `m4-p3c-ux`, finalny `m4-p3-complete`).
+Smoke tests: `tmp_m4_p3_smoke.mjs` (51/51 PASS consolidated) + per-commit `tmp_m4_p3_{1..7}_smoke.mjs` + regression `tmp_m4_p1` 33/33, `tmp_m4_p2` 30/30.
+- [x] **P3-1 weapon rangeAU + tech multipliers** (commit `06e803d`) — ShipModulesData: weapon_laser/kinetic/missile dostają `rangeAU` (0.05/0.15/0.30) + `fireCooldownYears` (0.3/0.5/1.0) + `category`. Legacy `range` zachowane (BattleSystem orbital). TechData: 7 nowych techów (defense): weapon_optics/kinetic_targeting/missile_guidance_ai/range_finder_array + advanced_sensors_1/2/3 z effect schema `{type:'multiplier', category, value}`. TechSystem.getMultiplier(category): generyczny iterator. GameConfig: WEAPON_*_AU + COMBAT_DISENGAGE_AU stałe. i18n PL+EN 14 nowych wpisów.
+- [x] **P3-2 DSCS skeleton + VCS delegation** (commit `59701be`) — NEW `src/systems/DeepSpaceCombatSystem.js` (~550 LoC): handleCombatRangeEnter dispatch (startEngagement | _joinEncounter), startEngagement (team-up gather kopia z VCS, build EncounterState z per-vessel vesselStates, stationary AI: enemy.mission=null), _joinEncounter (Opcja B reinforcement z joinedAtRound), _tickEncounter STUB (P3-3 dopisuje), _finalizeBattle pełna semantyka (per-vessel wreck always + side-level wreck żywych przegranych + emit battle:resolved). VCS delegacja w `_handleCombatRangeEnter` przez `FEATURES.m4DeepSpaceCombat`. VesselManager._tick wpięcie DSCS._tick (po proximity, przed MOS). GameScene `_ensureDeepSpaceCombatSystem` + devtools `KOSMOS.debug.enableDeepSpaceCombat`.
+- [x] **P3-3 per-tick fire exchange + engage target priority** (commit `1d06141`) — _tickEncounter pełna logika: cooldown decrement, range gating, target picking (Opcja D engage priority + closest fallback), roll hit (tracking × (1-evasion)), damage cascade (shield → armor → hp), shield regen, timeline events. mulberry32 seed=seedBase+currentRound (deterministyczne). Tech mult per category + all. FEATURES.m4DeepSpaceCombat flip false → true (combat działa end-to-end).
+- [x] **P3-4 battle conclude** (commit `1898aae`) — _checkEndConditions: kill (sideX hp=0 → winner=Y), retreat threshold dynamic (`pctX ≤ RETREAT_THRESHOLD=0.2 × sideAggregateHpStart AND pctX < pctY`), time-out MAX_ROUNDS=30 (highest HP wins). _sideAggregateHpStart liczone z reinforcement (Opcja B — większa siła = więcej buffera). _handleCombatRangeExit: gdy wszyscy żywi jednej strony > COMBAT_DISENGAGE_AU od midpoint → draw, no wreck żywych.
+- [x] **P3-5 engage order + PPM** (commit `1bf95c2`) — ORDER_TYPES.engage + validateOrder (wymaga targetEntityId). MovementOrderSystem `_issueEngage` (reject: no_target/self/wreck/not_vessel/no_weapons) + `_tickEngageOrder` (kiting: dist > optimal × 1.05 → toward, < × 0.95 → away, hold; cancel target_lost/target_out_of_range). `_computeMaxWeaponRangeAU` helper z tech mult. RightClickMenuOptions.enemyVessel: nowa opcja `{id:'engage', icon:'⊗', labelPL:'Zaangażuj'}` + warning no_weapons. OrderDispatcher.buildOrderSpec: case 'engage'.
+- [x] **P3-6 BattleView3D adapter** (commit `906e451`) — `_playTurn` z format detection (`turn.events` array → 'dscs', inaczej 'legacy'). `_playTurnDSCS` iteruje events, per event `_spawnEventVolley` z color wg category (short=cyan/medium=amber/long=red), opacity 0.9 hit vs 0.4 miss, flash sphere tylko przy hit. `_guessSideFromVesselId` via battleData.result.participantA/B.vesselIds lookup.
+- [x] **P3-7 ProximitySystem dynamic detection** (commit `9d627bd`) — `_checkPair` używa per-pair threshold `enterAU = max(_getDetectionRangeAU(v1), _getDetectionRangeAU(v2))`, `exitAU = enterAU × DETECTION_HYSTERESIS=1.2`. `_getDetectionRangeAU` per vessel: player z `TechSystem.getMultiplier('sensor_range')`, empire bez tech → BASE 0.5 (P5 doda empire tech state). COMBAT_ENGAGEMENT_AU/EXIT_AU pozostają hardcoded (fizyczne ograniczenie engagement, nie sensor).
+- [x] **P3-8 migration v70→v71 + consolidated smoke + docs** (this commit) — SaveMigration `_migrateV70toV71`: deepSpaceEngagements default `{}` + vessel.movementOrder.engageTargetId lazy null. SaveSystem._serializeCiv4x dodaje `deepSpaceEngagements: dscs.serialize()`. DSCS.serialize/restore (vesselStates Map ↔ object, encounter `isActive=true` only). GameScene restore po VesselManager. `tmp_m4_p3_smoke.mjs` 51/51 PASS (T1-T11). CLAUDE.md + MEMORY.md + `memory/m4-p3-complete.md` update.
+
+**Known issues deferred do M4 P4:**
+- Range bands cyan ring wokół player vessel w BattleView3D cinematic (range gating feedback) — backlog P6.
+- Distance label HUD per round w cinematic — backlog P6.
+- Empire tech state (per-empire sensor + weapon mult) — P5 wymóg dla AI kiting doctrine + obcy sensor scale.
+- Multi-engage same target offset radial (0/120/240°) — opcjonalny polish (R10 z planu).
+- Skip cinematic checkbox z localStorage persist — opcjonalne (skip per-bitwę wystarcza).
 
 ### Milestone 1 — Targeting Foundation (✅ ukończony, save v65, tag `m1-complete`)
 Design: `docs/design/milestone-1-targeting-foundation.md` + Appendix C (implementation notes + playtest bugfixes). Podsumowanie: `docs/design/milestone-1-summary.md`.

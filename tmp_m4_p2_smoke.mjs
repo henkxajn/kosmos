@@ -53,8 +53,8 @@ function assertFalse(actual, msg) {
 // T1 — SaveMigration v69→v70 (~5)
 // ──────────────────────────────────────────────────────────────────────
 
-test('T1.1 CURRENT_VERSION = 70', () => {
-  assertEq(CURRENT_VERSION, 70, 'CURRENT_VERSION');
+test('T1.1 CURRENT_VERSION >= 70 (M4 P2 minimum)', () => {
+  if (CURRENT_VERSION < 70) throw new Error(`CURRENT_VERSION ${CURRENT_VERSION} < 70`);
 });
 
 test('T1.2 v69→v70 adds uiPrefs defaults', () => {

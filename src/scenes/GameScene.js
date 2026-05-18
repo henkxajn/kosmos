@@ -936,6 +936,11 @@ export class GameScene {
           this.movementOrderSystem._indexExistingOrders();
         }
       }
+      // M4 P3 — Przywróć DeepSpaceCombatSystem encounter state (po VesselManager,
+      // bo restore filtruje encountery których vessele nie istnieją w VM).
+      if (c4x.deepSpaceEngagements && this.deepSpaceCombatSystem?.restore) {
+        this.deepSpaceCombatSystem.restore(c4x.deepSpaceEngagements);
+      }
       // Przywróć DiscoverySystem
       if (c4x.discoverySystem) {
         this.discoverySystem.restore(c4x.discoverySystem);
