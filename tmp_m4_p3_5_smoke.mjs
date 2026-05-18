@@ -89,7 +89,10 @@ console.log('\n--- T2: issueOrder engage success ---');
   ok('p1.movementOrder.engageMaxRangeAU > 0', p1.movementOrder?.engageMaxRangeAU > 0);
   eq('p1.position.state = orbiting', p1.position.state, 'orbiting');
   eq('p1.position.dockedAt = null', p1.position.dockedAt, null);
-  ok('p1.mission = null (stationary kiting)', p1.mission === null);
+  // M4 P3 hotfix #2: synthetic mission dla UI ("Engage: targetName")
+  ok('p1.mission ma type=engage', p1.mission?.type === 'engage');
+  ok('p1.mission.targetId = e1', p1.mission?.targetId === 'e1');
+  ok('p1.mission.managedByOrder = true', p1.mission?.managedByOrder === true);
   mos.destroy();
 }
 

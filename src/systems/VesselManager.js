@@ -1319,7 +1319,7 @@ export class VesselManager {
       //   tu pomijamy całą logikę interpolacji, tylko push do moving (sprite update).
       const mo = vessel.movementOrder;
       const isOrderControlled = mo?.status === 'active' &&
-        (mo.type === 'pursue' || mo.type === 'intercept');
+        (mo.type === 'pursue' || mo.type === 'intercept' || mo.type === 'engage');
 
       if (isOrderControlled) {
         // Velocity już ustawione przez MOS. Nie zerujemy.

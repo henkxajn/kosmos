@@ -602,8 +602,18 @@ export class MovementOrderSystem {
     // Suspend obecnej mission (resume po orderCompleted/cancelled).
     this._suspendMissionIfAny(vessel);
 
-    // Engage = stationary kiting. State='orbiting' (no waypoint trajectory).
-    vessel.mission = null;
+    // M4 P3 hotfix #2: synthetic mission dla UI panelu ("Engage: targetName"
+    // zamiast "brak aktywnej misji"). _updatePositions skip'uje engage przez
+    // isOrderControlled check — synthetic mission NIE wpływa na pozycję.
+    vessel.mission = {
+      type:       'engage',
+      targetId:   target.id,
+      targetName: target.name ?? target.shipId ?? target.id,
+      // Engage trwa dopóki target żyje — brak arrivalYear (UI panel nie pokazuje ETA).
+      departYear: gameYear,
+      arrivalYear: null,
+      managedByOrder: true,  // marker dla _updatePositions/UI że to nie waypoint mission
+    };
     vessel.movementOrder = order;
     vessel.status = 'on_mission';
     vessel.position.state = 'orbiting';
@@ -643,6 +653,7 @@ export class MovementOrderSystem {
     }
     order.engageMaxRangeAU = maxRangeAU;
 
+    // Target current position dla dist check.
     const tx = target.position?.x ?? 0;
     const ty = target.position?.y ?? 0;
     order.lastTargetPos = { x: tx, y: ty };
@@ -652,24 +663,19 @@ export class MovementOrderSystem {
     const distPx = Math.hypot(dxPx, dyPx);
     const distAU = distPx / AU_TO_PX;
 
-    // M4 P3 hotfix — engage = "chase + kite", nie "kite only".
-    // Poprzednio cancel target_out_of_range odpalał gdy dist > 2 × maxRange
-    // (laser=0.10 AU, kinetic=0.30 AU, missile=0.60 AU). W realistycznym
-    // scenariuszu enemy nadlatuje z >>0.5 AU → engage cancelled immediately
-    // → vessel stoi przy planecie → planet defense walczy zamiast vessela.
-    // Fix: chase'uj target dopóki nie dotrzesz do bandu (toward), wtedy
-    // kituj (hold/away). Cancel TYLKO target wreck (above).
+    // Engage = "chase + kite" — chase'uj target dopóki nie wpadniesz w optimal
+    // band, wtedy kituj (hold/away). Cancel TYLKO target wreck.
 
     const optimalDistAU = maxRangeAU * 0.95;
     const upperBandAU   = optimalDistAU * 1.05;
     const lowerBandAU   = optimalDistAU * 0.95;
 
-    let direction = 0;  // -1 = away, 0 = hold, +1 = toward (chase OR kite-toward)
+    let direction = 0;  // -1 = away, 0 = hold, +1 = toward
     if (distAU > upperBandAU) direction = +1;
     else if (distAU < lowerBandAU) direction = -1;
 
     if (direction === 0 || distPx < INTERCEPT_EPS) {
-      // Hold sweet spot — zero velocity update, brak ruchu.
+      // Hold sweet spot.
       if (vessel.velocity) {
         vessel.velocity.vx = 0;
         vessel.velocity.vy = 0;
@@ -678,21 +684,47 @@ export class MovementOrderSystem {
       return;
     }
 
-    // Krok px = speedAU × dPhysicsYear × AU_TO_PX.
-    // - Toward chase (distAU >> optimal): pełen krok (cap do dist - optimal,
-    //   żeby finalnie wpaść w band, nie pod lowerBand)
-    // - Away kite (distAU < lowerBand): cap do optimal - dist (no overshoot)
+    // M4 P3 hotfix #1: chase phase używa INTERCEPT MATH (target.velocity).
+    // Naive toward(current_pos) zawodzi gdy enemy faster niż frigate — pursuer
+    // gonił "ogon" enemy bez nigdy go dogonić. Intercept oblicza punkt spotkania
+    // (rozwiązuje kwadratowe |target.pos + target.vel × τ − pursuer.pos| = pursuer.speed × τ).
+    //   - Chase (direction=+1, dist > upperBand): waypoint = intercept point
+    //   - Kite (direction=-1, dist < lowerBand): naive away from current pos
+    //     (enemy w combat już stationary w DSCS, intercept zbędny)
+    let wpX, wpY;
+    if (direction === +1) {
+      const ip = this._computeInterceptPoint(vessel, target);
+      wpX = ip.x; wpY = ip.y;
+    } else {
+      wpX = tx; wpY = ty;
+    }
+
+    const dwx = wpX - vessel.position.x;
+    const dwy = wpY - vessel.position.y;
+    const distWpPx = Math.hypot(dwx, dwy);
+    if (distWpPx < INTERCEPT_EPS) return;
+
+    // Krok px. Cap do |dist - optimal| żeby nie overshoot w jednym ticku.
     const speedPxPerYear = (vessel.speedAU ?? 1.0) * AU_TO_PX;
     const optimalPx = optimalDistAU * AU_TO_PX;
     const distanceToOptimalPx = Math.abs(distPx - optimalPx);
     const rawStepPx = speedPxPerYear * Math.max(0, dPhysicsYear);
     const stepPx = Math.min(rawStepPx, distanceToOptimalPx);
 
-    // Unit vector toward target (positive — toward; we flip dla away).
-    const ux = dxPx / distPx;
-    const uy = dyPx / distPx;
-    vessel.position.x += direction * ux * stepPx;
-    vessel.position.y += direction * uy * stepPx;
+    // Unit vector w kierunku waypoint (intercept point albo current target).
+    const ux = dwx / distWpPx;
+    const uy = dwy / distWpPx;
+
+    // direction +1 → toward waypoint; direction -1 → away from current target pos.
+    // Dla away używamy unit vector od target (nie od waypoint).
+    if (direction === +1) {
+      vessel.position.x += ux * stepPx;
+      vessel.position.y += uy * stepPx;
+    } else {
+      // away from current target — flip ux,uy bo waypoint == target dla kite
+      vessel.position.x -= ux * stepPx;
+      vessel.position.y -= uy * stepPx;
+    }
 
     if (vessel.velocity) {
       const speedCiv = (vessel.speedAU ?? 1.0) / CIV_TIME_SCALE;
@@ -701,7 +733,7 @@ export class MovementOrderSystem {
       vessel.velocity.updatedYear = gameYear;
     }
 
-    _trace(`tick engage ${order.id} vessel=${vessel.id} dist=${distAU.toFixed(3)}AU optimal=${optimalDistAU.toFixed(3)} dir=${direction === 1 ? 'chase/toward' : direction === -1 ? 'away/kite' : 'hold'} step=${stepPx.toFixed(2)}`);
+    _trace(`tick engage ${order.id} vessel=${vessel.id} dist=${distAU.toFixed(3)}AU optimal=${optimalDistAU.toFixed(3)} dir=${direction === 1 ? `intercept→(${wpX.toFixed(1)},${wpY.toFixed(1)})` : 'kite-away'} step=${stepPx.toFixed(2)}`);
   }
 
   /**
