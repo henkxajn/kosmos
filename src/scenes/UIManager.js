@@ -41,6 +41,7 @@ import { DiplomacyOverlay }    from '../ui/DiplomacyOverlay.js';
 import { WarOverlay }          from '../ui/WarOverlay.js';
 import { POIPanel }            from '../ui/POIPanel.js';
 import { GalacticMiniMap }     from '../ui/GalacticMiniMap.js';
+import { CombatHUD }           from '../ui/CombatHUD.js';
 import { t, getName }          from '../i18n/i18n.js';
 
 // Nowe komponenty UI
@@ -245,6 +246,11 @@ export class UIManager {
     this.overlayManager.register('eventLog', new EventLogOverlay());
     this.overlayManager.register('poi', new POIPanel());
     this.overlayManager.register('minimap', new GalacticMiniMap());
+    // M4 P3 polish — live combat HP HUD. Always-on (auto-show gdy DSCS ma active
+    // encounters). Renderowany BEZPOŚREDNIO z _draw() (po overlayManager) bo
+    // OverlayManager rysuje tylko jeden active overlay — CombatHUD musi być
+    // widoczny niezależnie od tego co player ma otwarte.
+    this.combatHud = new CombatHUD();
 
     this._setupEvents();
     this._startDrawLoop();
@@ -1357,6 +1363,9 @@ export class UIManager {
     if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
     // ── Przerysuj sidebar nad overlayem (zawsze widoczny) ───
     if (civMode && !globeOpen && this.overlayManager.active) this._drawCivPanel();
+    // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
+    //    samo-filtrujący by active encounters). Tylko w civMode.
+    if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──
     this._bottomBar.drawMenu(ctx, W, H, {
