@@ -1,34 +1,34 @@
 // CombatHUD — live progress active deep-space encounter (M4 P3 polish).
 //
 // Auto-show gdy DSCS._activeEncounters.size > 0 → renderuje compact panel
-// per encounter: sideA HP bar, sideB HP bar, round X / MAX, dystans.
-// Auto-hide gdy brak active encounters.
+// per encounter: sideA HP bar, sideB HP bar, round X / MAX, dystans, log walki,
+// vessel details (hull + bronie). Auto-hide gdy brak active encounters.
 //
-// Pozycja: top-center (pod TopBar). Czytelny w czasie chase + combat.
-// Per-encounter wiersz: ~64 px, max 3 encountery jednoczesnie (kolejne ucinane).
+// Pozycja: top-center (pod TopBar + bufor na pasek zasobów). Per-encounter:
+// ~140 px (z log + vessels), max 2 encountery jednoczesnie (kolejne ucinane).
 //
 // Read-only — patrzy na window.KOSMOS.deepSpaceCombatSystem.listActive().
 
 import { BaseOverlay }    from './BaseOverlay.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
+import { HULLS }          from '../data/HullsData.js';
+import { SHIP_MODULES }   from '../data/ShipModulesData.js';
 
-const PANEL_W       = 380;
-const ROW_H         = 64;
+const PANEL_W       = 560;
 const HEADER_H      = 24;
 const PADDING       = 8;
 const HP_BAR_H      = 8;
-const HP_BAR_GAP    = 4;
-const MAX_VISIBLE_ENCOUNTERS = 3;
+const LOG_LINES_MAX = 6;
+const LOG_LINE_H    = 12;
+const MAX_VISIBLE_ENCOUNTERS = 2;
 
 export class CombatHUD extends BaseOverlay {
   constructor() {
     super(null);
-    // Zawsze "visible" w sensie BaseOverlay — draw() filtruje by active encounters.
     this.visible = true;
   }
 
-  // Override — overlay zawsze ON, nie potrzeba toggle/show/hide.
   toggle() { /* no-op */ }
   show()   { /* no-op */ }
   hide()   { /* no-op */ }
@@ -41,16 +41,27 @@ export class CombatHUD extends BaseOverlay {
 
     this._hitZones = [];
 
-    // Limit do MAX_VISIBLE_ENCOUNTERS — kolejne skondensowane do label "+N more".
     const visible = encounters.slice(0, MAX_VISIBLE_ENCOUNTERS);
     const overflow = encounters.length - visible.length;
 
-    const totalH = HEADER_H + visible.length * ROW_H + (overflow > 0 ? 18 : 0) + PADDING;
+    // Wysokość per encounter dynamicznie (label + HP + alive + vessels list + log).
+    const rowH = (enc) => {
+      const vesselsA = this._countVessels(enc, 'A');
+      const vesselsB = this._countVessels(enc, 'B');
+      const vesselsRows = Math.max(vesselsA, vesselsB, 1);
+      // label(14) + bars(12) + barLabels(12) + alive(14) + vessels(vesselsRows*12) + log header(14) + log lines + padding
+      return 14 + 14 + 14 + 14 + vesselsRows * 12 + 14 + LOG_LINES_MAX * LOG_LINE_H + 8;
+    };
+
+    let totalH = HEADER_H + PADDING;
+    for (const enc of visible) totalH += rowH(enc);
+    if (overflow > 0) totalH += 18;
+
     const px = Math.floor(W / 2 - PANEL_W / 2);
-    const py = (COSMIC.TOP_BAR_H ?? 32) + 18;
+    const py = (COSMIC.TOP_BAR_H ?? 32) + 80;
 
     // Tło + ramka
-    ctx.fillStyle = bgAlpha(0.65);
+    ctx.fillStyle = bgAlpha(0.78);
     ctx.fillRect(px, py, PANEL_W, totalH);
     ctx.strokeStyle = THEME.danger ?? '#ff4466';
     ctx.lineWidth = 1;
@@ -66,7 +77,6 @@ export class CombatHUD extends BaseOverlay {
     ctx.fillText(headerLabel, px + PANEL_W / 2, py + 16);
     ctx.textAlign = 'left';
 
-    // Header separator
     ctx.strokeStyle = THEME.border ?? '#444';
     ctx.beginPath();
     ctx.moveTo(px, py + HEADER_H);
@@ -75,20 +85,21 @@ export class CombatHUD extends BaseOverlay {
 
     let cy = py + HEADER_H;
     for (const enc of visible) {
-      this._drawEncounterRow(ctx, enc, px, cy);
-      cy += ROW_H;
+      const h = rowH(enc);
+      this._drawEncounterRow(ctx, enc, px, cy, h);
+      cy += h;
     }
 
     if (overflow > 0) {
       ctx.fillStyle = THEME.textDim ?? '#888';
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.textAlign = 'center';
-      ctx.fillText(`+ ${overflow} kolejnych...`, px + PANEL_W / 2, cy + 12);
+      ctx.fillText(`+ ${overflow} kolejnych…`, px + PANEL_W / 2, cy + 12);
       ctx.textAlign = 'left';
     }
   }
 
-  _drawEncounterRow(ctx, enc, px, py) {
+  _drawEncounterRow(ctx, enc, px, py, totalRowH) {
     const hpA      = this._sumHP(enc, 'A');
     const hpStartA = this._sumHpStart(enc, 'A');
     const hpB      = this._sumHP(enc, 'B');
@@ -99,8 +110,8 @@ export class CombatHUD extends BaseOverlay {
     const distAU = this._lastDistanceAU(enc);
     const aliveA = this._countAlive(enc, 'A');
     const aliveB = this._countAlive(enc, 'B');
-    const totalA = enc.sideA.vesselIds.length + enc.sideA.joinedVesselIds.length;
-    const totalB = enc.sideB.vesselIds.length + enc.sideB.joinedVesselIds.length;
+    const totalA = this._countVessels(enc, 'A');
+    const totalB = this._countVessels(enc, 'B');
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.textAlign = 'left';
@@ -110,7 +121,7 @@ export class CombatHUD extends BaseOverlay {
     const distStr = distAU > 0 ? `${distAU.toFixed(3)} AU` : '—';
 
     ctx.fillStyle = THEME.success ?? '#44cc66';
-    ctx.fillText(this._truncate(enc.sideA.label, 16), px + PADDING, py + 14);
+    ctx.fillText(this._truncate(enc.sideA.label, 20), px + PADDING, py + 14);
 
     ctx.fillStyle = THEME.textDim ?? '#888';
     ctx.textAlign = 'center';
@@ -118,7 +129,7 @@ export class CombatHUD extends BaseOverlay {
 
     ctx.fillStyle = THEME.danger ?? '#ff4466';
     ctx.textAlign = 'right';
-    ctx.fillText(this._truncate(enc.sideB.label, 16), px + PANEL_W - PADDING, py + 14);
+    ctx.fillText(this._truncate(enc.sideB.label, 20), px + PANEL_W - PADDING, py + 14);
 
     ctx.textAlign = 'left';
 
@@ -132,34 +143,74 @@ export class CombatHUD extends BaseOverlay {
                     `${hpB.toFixed(0)} / ${hpStartB.toFixed(0)} HP`,
                     THEME.danger ?? '#ff4466');
 
-    // Linia 3: alive counters (~vessel slots)
+    // Linia 3: alive counters
     ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary ?? '#bbb';
-    ctx.fillText(`żywych: ${aliveA}/${totalA}`, px + PADDING, py + 50);
+    ctx.fillText(`zywych: ${aliveA}/${totalA}`, px + PADDING, py + 50);
     ctx.textAlign = 'right';
-    ctx.fillText(`żywych: ${aliveB}/${totalB}`, px + PANEL_W - PADDING, py + 50);
+    ctx.fillText(`zywych: ${aliveB}/${totalB}`, px + PANEL_W - PADDING, py + 50);
     ctx.textAlign = 'left';
+
+    // Linia 4+: vessel details per side (hull + bronie)
+    const vesselsY = py + 64;
+    const vesselsA = this._getVesselDetails(enc, 'A');
+    const vesselsB = this._getVesselDetails(enc, 'B');
+    const halfW = (PANEL_W - PADDING * 3) / 2;
+
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    for (let i = 0; i < vesselsA.length; i++) {
+      ctx.fillStyle = vesselsA[i].alive ? (THEME.success ?? '#44cc66') : (THEME.textDim ?? '#666');
+      ctx.fillText(this._truncate(vesselsA[i].text, 44), px + PADDING, vesselsY + i * 12);
+    }
+    for (let i = 0; i < vesselsB.length; i++) {
+      ctx.fillStyle = vesselsB[i].alive ? (THEME.danger ?? '#ff4466') : (THEME.textDim ?? '#666');
+      ctx.textAlign = 'right';
+      ctx.fillText(this._truncate(vesselsB[i].text, 44), px + PANEL_W - PADDING, vesselsY + i * 12);
+    }
+    ctx.textAlign = 'left';
+
+    // Linia log: header + ostatnie LOG_LINES_MAX zdarzeń
+    const vesselsRows = Math.max(vesselsA.length, vesselsB.length, 1);
+    const logY = vesselsY + vesselsRows * 12 + 4;
+
+    ctx.strokeStyle = THEME.border ?? '#333';
+    ctx.beginPath();
+    ctx.moveTo(px + PADDING, logY);
+    ctx.lineTo(px + PANEL_W - PADDING, logY);
+    ctx.stroke();
+
+    ctx.fillStyle = THEME.textDim ?? '#888';
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillText('-- log walki --', px + PADDING, logY + 10);
+
+    // Zbierz ostatnie LOG_LINES_MAX events z timeline (newest first).
+    const recentEvents = this._collectRecentEvents(enc, LOG_LINES_MAX);
+    for (let i = 0; i < recentEvents.length; i++) {
+      const ev = recentEvents[i];
+      const color = ev.fromSide === 'A'
+        ? (THEME.success ?? '#44cc66')
+        : (THEME.danger ?? '#ff4466');
+      ctx.fillStyle = color;
+      const ly = logY + 22 + i * LOG_LINE_H;
+      ctx.fillText(this._truncate(ev.text, 88), px + PADDING, ly);
+    }
   }
 
   _drawHpBar(ctx, x, y, w, pct, label, fgColor) {
-    // Tło
     ctx.fillStyle = 'rgba(40, 40, 40, 0.6)';
     ctx.fillRect(x, y, w, HP_BAR_H);
-    // Wypełnienie
     const fillW = Math.max(0, Math.min(w, w * pct));
     ctx.fillStyle = fgColor;
     ctx.fillRect(x, y, fillW, HP_BAR_H);
-    // Ramka
     ctx.strokeStyle = THEME.border ?? '#444';
     ctx.lineWidth = 1;
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, HP_BAR_H - 1);
-    // Label pod barą
     ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim ?? '#888';
     ctx.fillText(label, x, y + HP_BAR_H + 10);
   }
 
-  // ── Helpers ───────────────────────────────────────────────────
+  // -- Helpers ----------------------------------------------------------
 
   _sumHP(enc, sideKey) {
     const side = sideKey === 'A' ? enc.sideA : enc.sideB;
@@ -191,9 +242,70 @@ export class CombatHUD extends BaseOverlay {
     return n;
   }
 
+  _countVessels(enc, sideKey) {
+    const side = sideKey === 'A' ? enc.sideA : enc.sideB;
+    return side.vesselIds.length + side.joinedVesselIds.length;
+  }
+
+  /** Lista wierszy "Nazwa · hull · weapony" per vessel. */
+  _getVesselDetails(enc, sideKey) {
+    const side = sideKey === 'A' ? enc.sideA : enc.sideB;
+    const vm = window.KOSMOS?.vesselManager;
+    const out = [];
+    for (const vid of [...side.vesselIds, ...side.joinedVesselIds]) {
+      const state = enc.vesselStates.get(vid);
+      const vessel = vm?._vessels?.get?.(vid);
+      const name = vessel?.name ?? vessel?.shipId ?? vid;
+      const hullId = vessel?.hullId ?? vessel?.shipId ?? '';
+      const hullName = (HULLS?.[hullId]?.namePL ?? hullId.replace(/^hull_/, ''));
+      const weapons = (state?.weapons ?? []).map(w => {
+        const mod = SHIP_MODULES?.[w.moduleId];
+        const wn = (mod?.namePL ?? w.moduleId.replace(/^weapon_/, ''));
+        return wn;
+      });
+      const wstr = weapons.length > 0 ? weapons.join(', ') : 'bez broni';
+      out.push({
+        text: `${name} · ${hullName} · ${wstr}`,
+        alive: (state?.hp ?? 0) > 0,
+      });
+    }
+    return out;
+  }
+
+  /** Ostatnie N events z timeline (newest first, sformatowane do tekstu). */
+  _collectRecentEvents(enc, n) {
+    const vm = window.KOSMOS?.vesselManager;
+    const sideAIds = new Set([...enc.sideA.vesselIds, ...enc.sideA.joinedVesselIds]);
+    const events = [];
+    // Iteruj timeline w odwrotnej kolejności
+    for (let i = enc.timeline.length - 1; i >= 0 && events.length < n; i--) {
+      const round = enc.timeline[i];
+      if (!round?.events) continue;
+      for (let j = round.events.length - 1; j >= 0 && events.length < n; j--) {
+        const ev = round.events[j];
+        const fromSide = sideAIds.has(ev.attacker) ? 'A' : 'B';
+        const att = vm?._vessels?.get?.(ev.attacker);
+        const tgt = vm?._vessels?.get?.(ev.target);
+        const attName = att?.name ?? ev.attacker;
+        const tgtName = tgt?.name ?? ev.target;
+        const mod = SHIP_MODULES?.[ev.weapon];
+        const wn = (mod?.namePL ?? ev.weapon.replace(/^weapon_/, ''));
+        let dmgInfo;
+        if (!ev.hit) dmgInfo = 'pudlo';
+        else if ((ev.blockedByShield ?? 0) > 0 && (ev.damage ?? 0) === 0) dmgInfo = `tarcza ${ev.blockedByShield.toFixed(0)}`;
+        else if ((ev.blockedByShield ?? 0) > 0) dmgInfo = `${ev.damage.toFixed(0)} dmg (+${ev.blockedByShield.toFixed(0)} tarcza)`;
+        else dmgInfo = `${(ev.damage ?? 0).toFixed(0)} dmg`;
+        events.push({
+          text: `R${round.round}: ${this._truncate(attName, 12)} → ${wn} → ${this._truncate(tgtName, 12)} (${dmgInfo})`,
+          fromSide,
+        });
+      }
+    }
+    return events;
+  }
+
   _lastDistanceAU(enc) {
     if (!enc.timeline?.length) return 0;
-    // Ostatni round entry z non-zero distanceAU
     for (let i = enc.timeline.length - 1; i >= 0; i--) {
       const d = enc.timeline[i]?.distanceAU;
       if (d && d > 0) return d;

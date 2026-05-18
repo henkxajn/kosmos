@@ -196,8 +196,56 @@ export class MovementOrderSystem {
     if (spec.type === ORDER_TYPES.engage) {
       return this._issueEngage(vessel, spec);
     }
+    if (spec.type === ORDER_TYPES.retreat) {
+      return this._issueRetreat(vessel, spec);
+    }
 
     return { ok: false, reason: 'unhandled_type' };
+  }
+
+  /**
+   * M4 P3 polish — manualne wycofanie z bitwy. Auto-wybór najbliższej friendly
+   * planety przez reuse AutoRetreatSystem._findNearestFriendlyPlanet. Wydaje
+   * moveToPoint z markerem `_retreatFromCombat=true` żeby UI mogło rozróżnić
+   * retreat od zwykłego ruchu.
+   *
+   * Reject:
+   *   - not_in_combat (vessel nie jest w aktywnym DSCS encounter)
+   *   - no_friendly_planet (brak kolonii/outpostu w zasięgu)
+   *
+   * Po wydaniu rozkazu vessel kieruje się do friendly planety; gdy wyjdzie
+   * z combat range (>0.50 AU od midpoint), DSCS._handleCombatRangeExit
+   * zidentyfikuje sideA jako uciekającego → finalize retreated='A', winner='B'
+   * (LOSS dla gracza).
+   *
+   * @private
+   */
+  _issueRetreat(vessel, _spec) {
+    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+    const inCombat = dscs?._findActiveEncounterContaining?.(vessel.id);
+    if (!inCombat) return { ok: false, reason: 'not_in_combat' };
+
+    const target = window.KOSMOS?.autoRetreatSystem?._findNearestFriendlyPlanet?.(vessel);
+    if (!target) return { ok: false, reason: 'no_friendly_planet' };
+
+    const targetX = target.x ?? target.position?.x ?? 0;
+    const targetY = target.y ?? target.position?.y ?? 0;
+    const targetName = target.name ?? '?';
+
+    const result = this._issueMoveToPoint(vessel, {
+      type: 'moveToPoint',
+      targetPoint: { x: targetX, y: targetY },
+      issuedBy: 'manual_retreat',
+    });
+    if (result.ok && vessel.movementOrder) {
+      vessel.movementOrder._retreatFromCombat = true;
+      EventBus.emit('vessel:retreatIssued', {
+        vesselId:   vessel.id,
+        targetPoint: { x: targetX, y: targetY },
+        targetName,
+      });
+    }
+    return result;
   }
 
   /**

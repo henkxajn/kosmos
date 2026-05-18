@@ -79,6 +79,11 @@ export function buildOrderSpec(option, target, vesselId) {
       };
     }
 
+    case 'retreat': {
+      // M4 P3 polish — retreat bez target (system sam pickuje friendly planet).
+      return { ok: true, spec: { type: 'retreat' } };
+    }
+
     case 'goToPOI': {
       if (target.type !== 'poi' || !target.entityId) {
         return { ok: false, reason: 'no_poi_target' };

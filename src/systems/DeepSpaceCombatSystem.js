@@ -55,6 +55,14 @@ export const MAX_ROUNDS = 30;
 // (z reinforcement) → strona retreat. P3-4 logika.
 export const RETREAT_THRESHOLD = 0.2;
 
+// Throttling tempa rund (hotfix po playtest M4 P3):
+// Bez throttle przy wysokich civDy (10r/s → civDy ~2/frame) wszystkie weapon
+// cooldowny resetowały się w 1 frame → 30 rund w 0.5s real time. Z accumulatorem:
+// jeden "round" potrzebuje CIV_PER_ROUND civYears nagromadzonej civDy. Max
+// MAX_ROUNDS_PER_TICK rund per _tick call (zapobiega batching).
+export const CIV_PER_ROUND = 0.3;
+export const MAX_ROUNDS_PER_TICK = 1;
+
 // Deterministyczny PRNG (kopia z BattleSystem — nie eksportowane).
 function mulberry32(seed) {
   let s = seed | 0;
@@ -236,6 +244,10 @@ export class DeepSpaceCombatSystem {
       timeline:           [],
       isActive:           true,
       seedBase:           (Math.floor(year * 10000) * 7919) & 0x7FFFFFFF,
+      // Accumulator throttle — init przy CIV_PER_ROUND aby pierwszy _tick zawsze
+      // odpalił przynajmniej jedną rundę (smoke test compat + UX: combat startuje
+      // od razu po pierwszym frame).
+      _civAcc:            CIV_PER_ROUND,
     };
 
     this._activeEncounters.set(id, encounter);
@@ -314,7 +326,21 @@ export class DeepSpaceCombatSystem {
     if (civDy <= 0) return;
     for (const encounter of this._activeEncounters.values()) {
       if (!encounter.isActive) continue;
-      this._tickEncounter(encounter, civDy);
+      // Accumulator throttling — zapobiega instant resolve przy wysokim civDy
+      // (10r/s → civDy ~2/frame). Round fires gdy _civAcc >= CIV_PER_ROUND.
+      // MAX_ROUNDS_PER_TICK ogranicza batching (max 1 round/frame przez default).
+      if (encounter._civAcc == null) encounter._civAcc = CIV_PER_ROUND;
+      encounter._civAcc += civDy;
+      let roundsThisTick = 0;
+      while (
+        encounter.isActive &&
+        encounter._civAcc >= CIV_PER_ROUND &&
+        roundsThisTick < MAX_ROUNDS_PER_TICK
+      ) {
+        encounter._civAcc -= CIV_PER_ROUND;
+        this._tickEncounter(encounter, CIV_PER_ROUND);
+        roundsThisTick++;
+      }
     }
     // Cleanup zakończonych encounter'ów po zakończeniu pętli.
     for (const [id, enc] of this._activeEncounters) {
@@ -458,6 +484,26 @@ export class DeepSpaceCombatSystem {
       round.distanceAU = distSamples.reduce((s, d) => s + d, 0) / distSamples.length;
     }
 
+    // M4 P3 polish 2026-05-18 (drugi playtest) — periodic disengage check.
+    // combatRangeExit event fires TYLKO raz przy przekroczeniu 0.20 AU. Player
+    // dalej oddalający się do 0.8 AU nie dostaje kolejnego eventu, więc retreat
+    // bazujący wyłącznie na evencie nie działa. Per-tick check w _tickEncounter
+    // gwarantuje że gdy strona faktycznie wyjdzie poza COMBAT_DISENGAGE_AU,
+    // encounter natychmiast się kończy z odpowiednim retreated/winner.
+    const mid = encounter.location.point;
+    const aOut = this._allOutsideOf(encounter, sideAVids, mid);
+    const bOut = this._allOutsideOf(encounter, sideBVids, mid);
+    if (aOut && bOut) {
+      this._finalizeBattle(encounter, null, null);
+      return;
+    } else if (aOut) {
+      this._finalizeBattle(encounter, 'B', 'A');
+      return;
+    } else if (bOut) {
+      this._finalizeBattle(encounter, 'A', 'B');
+      return;
+    }
+
     const endResult = this._checkEndConditions(encounter);
     if (endResult) this._finalizeBattle(encounter, endResult.winner, endResult.retreated);
   }
@@ -490,7 +536,12 @@ export class DeepSpaceCombatSystem {
     if (aliveA === 0)                  return { winner: 'B',  retreated: null };
     if (aliveB === 0)                  return { winner: 'A',  retreated: null };
 
-    // Retreat threshold dynamic (Opcja B — z reinforcement).
+    // Retreat threshold — M4 P3 polish 2026-05-18 (drugi playtest):
+    // ENEMY AI auto-retreat: `pctEnemy ≤ 0.2 AND pctEnemy < pctPlayer × 0.5`
+    //   (low HP + clearly losing the damage exchange).
+    // PLAYER: NIE ma auto-retreat. Gracz wydaje rozkaz manualnie (retreat order)
+    //   lub implicitly przez moveToPoint poza combat range (obsługiwane w
+    //   _handleCombatRangeExit). To gracz decyduje czy uciekać.
     const hpStartA = this._sideAggregateHpStart(encounter, 'A');
     const hpStartB = this._sideAggregateHpStart(encounter, 'B');
     const hpA = this._sumHP(encounter, 'A');
@@ -498,10 +549,15 @@ export class DeepSpaceCombatSystem {
     const pctA = hpStartA > 0 ? hpA / hpStartA : 1.0;
     const pctB = hpStartB > 0 ? hpB / hpStartB : 1.0;
 
-    // Strona poniżej progu I niżej procentowo niż przeciwnik → retreat.
-    // Brak retreat gdy obie strony równo pod progiem (kontynuują walkę aż jedna padnie).
-    if (pctA <= RETREAT_THRESHOLD && pctA < pctB) return { winner: 'B', retreated: 'A' };
-    if (pctB <= RETREAT_THRESHOLD && pctB < pctA) return { winner: 'A', retreated: 'B' };
+    const sideAIsPlayer = encounter.sideA.ownerEmpireId === 'player';
+    const sideBIsPlayer = encounter.sideB.ownerEmpireId === 'player';
+
+    if (!sideAIsPlayer && pctA <= RETREAT_THRESHOLD && pctA < pctB * 0.5) {
+      return { winner: 'B', retreated: 'A' };
+    }
+    if (!sideBIsPlayer && pctB <= RETREAT_THRESHOLD && pctB < pctA * 0.5) {
+      return { winner: 'A', retreated: 'B' };
+    }
 
     // Time-out.
     if (encounter.currentRound >= MAX_ROUNDS) {
@@ -581,12 +637,18 @@ export class DeepSpaceCombatSystem {
   /**
    * Combat range exit handler (P3-4).
    *
-   * Gdy para vesseli rozłączyła się (dist ≥ COMBAT_EXIT_AU=0.20, hysteresis
-   * proximity), sprawdź czy któryś z nich jest w aktywnym encounter. Jeśli tak:
-   *   - Oblicz min/max dystans midpoint → vessele każdej strony (alive only)
-   *   - Jeśli wszyscy żywi vessele jednej strony oddalili się > COMBAT_DISENGAGE_AU
-   *     (0.50) od midpoint → finalize as draw (no wreck żywych)
-   *   - Edge case: tylko niektóre vessele rozeszły się → kontynuuj z resztą
+   * M4 P3 polish 2026-05-18 (drugi playtest) — identyfikacja retreating side:
+   *   - Jeśli WSZYSCY żywi vessele strony są poza COMBAT_DISENGAGE_AU od midpoint
+   *     → strona "uciekła" → retreated dla tej strony (LOSS).
+   *   - Jeśli OBA sides poza disengage → mutual disengagement → draw.
+   *   - Jeśli tylko jedna strona poza → retreated=tamta_strona, winner=druga.
+   *   - Else: encounter trwa (jakieś vessele dalej w combat range).
+   *
+   * Player implicit retreat: po cancel engage + moveToPoint poza COMBAT_DISENGAGE_AU
+   *   → trafia w gałąź "tylko sideA poza" → retreated='A' (player loss).
+   * Enemy stationary AI nigdy nie wychodzi z midpoint (mission=null), więc enemy
+   *   retreat możliwy tylko przez auto-retreat w _checkEndConditions (HP comparison)
+   *   albo gdy AI dostanie order do ucieczki (M5+).
    *
    * @private
    */
@@ -596,37 +658,49 @@ export class DeepSpaceCombatSystem {
     const encB = this._findActiveEncounterContaining(vesselBId);
     const enc = encA ?? encB;
     if (!enc || !enc.isActive) return;
-    // Para musi być w tym samym encounter (event dotyczy ich wspólnej combat sytuacji).
     if (encA && encB && encA !== encB) return;
 
     const mid = enc.location.point;
-    const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX;
 
     const sideAVids = [...enc.sideA.vesselIds, ...enc.sideA.joinedVesselIds];
     const sideBVids = [...enc.sideB.vesselIds, ...enc.sideB.joinedVesselIds];
 
-    const allOutsideOf = (vids) => {
-      let aliveCount = 0;
-      let outsideCount = 0;
-      for (const vid of vids) {
-        const state = enc.vesselStates.get(vid);
-        if (!state || state.hp <= 0) continue;
-        const v = this._vm?._vessels?.get(vid);
-        if (!v) continue;
-        aliveCount++;
-        const dx = v.position.x - mid.x;
-        const dy = v.position.y - mid.y;
-        if (Math.hypot(dx, dy) > disengagePx) outsideCount++;
-      }
-      // Wszyscy żywi rozeszli się (i co najmniej jeden żywy istnieje).
-      return aliveCount > 0 && aliveCount === outsideCount;
-    };
+    const aOut = this._allOutsideOf(enc, sideAVids, mid);
+    const bOut = this._allOutsideOf(enc, sideBVids, mid);
 
-    if (allOutsideOf(sideAVids) || allOutsideOf(sideBVids)) {
-      // Draw — żywi vessele pozostają (no wreck side-level). Dead per-vessel
-      // wreck już zaaplikowane w _finalizeBattle.
+    if (aOut && bOut) {
+      // Mutual disengagement → draw
       this._finalizeBattle(enc, null, null);
+    } else if (aOut) {
+      // sideA uciekło → retreated='A', winner='B'
+      this._finalizeBattle(enc, 'B', 'A');
+    } else if (bOut) {
+      // sideB uciekło → retreated='B', winner='A'
+      this._finalizeBattle(enc, 'A', 'B');
     }
+    // Else: jakieś vessele dalej w combat range → encounter trwa
+  }
+
+  /**
+   * Czy wszyscy żywi vessele strony są poza COMBAT_DISENGAGE_AU od midpoint.
+   * Używane przez _handleCombatRangeExit do identyfikacji retreating side.
+   * @private
+   */
+  _allOutsideOf(encounter, vids, mid) {
+    const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX;
+    let aliveCount = 0;
+    let outsideCount = 0;
+    for (const vid of vids) {
+      const state = encounter.vesselStates.get(vid);
+      if (!state || state.hp <= 0) continue;
+      const v = this._vm?._vessels?.get(vid);
+      if (!v) continue;
+      aliveCount++;
+      const dx = v.position.x - mid.x;
+      const dy = v.position.y - mid.y;
+      if (Math.hypot(dx, dy) > disengagePx) outsideCount++;
+    }
+    return aliveCount > 0 && aliveCount === outsideCount;
   }
 
   // ── Finalize battle ──────────────────────────────────────────────────

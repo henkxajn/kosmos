@@ -20,6 +20,7 @@ export const ORDER_TYPES = Object.freeze({
   escort:      'escort',     // M2b C7 stub (runtime w C7)
   goToPOI:     'goToPOI',    // M2b C6: POI nawigacja (delegacja do moveToPoint)
   engage:      'engage',     // M4 P3 C5: tactical kiting na enemy vessel (utrzymuje optimal range)
+  retreat:     'retreat',    // M4 P3 polish: manualne wycofanie z bitwy (auto-pick friendly planet)
 });
 
 const TYPES_WITH_ENTITY_TARGET = new Set([ORDER_TYPES.pursue, ORDER_TYPES.intercept, ORDER_TYPES.escort, ORDER_TYPES.engage]);

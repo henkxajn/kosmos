@@ -32,6 +32,19 @@ import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
 
+// ── Helper M4 P3: czy vessel bierze udział w aktywnym deep-space encounter ──
+// Sprawdza DSCS._activeEncounters → vesselStates ma vessel.id. Read-only — wołane
+// per-frame z render loop, więc tania lookup (Map.has).
+function _isVesselInCombat(vesselId) {
+  const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+  if (!dscs?._activeEncounters) return false;
+  for (const enc of dscs._activeEncounters.values()) {
+    if (!enc?.isActive) continue;
+    if (enc.vesselStates?.has?.(vesselId)) return true;
+  }
+  return false;
+}
+
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
 const _BODY_TYPES = ['star', 'planet', 'moon', 'asteroid', 'comet', 'planetoid'];
 function _findBody(id) {
@@ -1570,7 +1583,9 @@ export class FleetManagerOverlay {
           ctx.font = `13px ${THEME.fontFamily}`;
           ctx.fillStyle = selected ? '#ffd0d8' : ENEMY_COLOR;
           const vName2 = vessel.name.length > 11 ? vessel.name.slice(0, 10) + '…' : vessel.name;
-          ctx.fillText(`${icon2} ${vName2}`, x + pad, ry + 14);
+          const inCombatE = _isVesselInCombat(vessel.id);
+          const combatBadgeE = inCombatE ? ' ⚔' : '';
+          ctx.fillText(`${icon2} ${vName2}${combatBadgeE}`, x + pad, ry + 14);
 
           // Dystans do najbliższej planety gracza (euclidean AU)
           const home = window.KOSMOS?.homePlanet;
@@ -1616,7 +1631,9 @@ export class FleetManagerOverlay {
         ctx.font = `13px ${THEME.fontFamily}`;
         ctx.fillStyle = selected ? THEME.textPrimary : THEME.textSecondary;
         const vName = vessel.name.length > 11 ? vessel.name.slice(0, 10) + '…' : vessel.name;
-        ctx.fillText(`${icon} ${vName}`, x + pad, ry + 14);
+        const inCombat = _isVesselInCombat(vessel.id);
+        const combatBadge = inCombat ? ' ⚔' : '';
+        ctx.fillText(`${icon} ${vName}${combatBadge}`, x + pad, ry + 14);
 
         // M3 P3.1 — rally indicator (🎯) gdy vessel assigned do rally
         const _rallyName = _rallyByVesselId.get(vessel.id);

@@ -591,6 +591,14 @@ Smoke tests: `tmp_m4_p3_smoke.mjs` (51/51 PASS consolidated) + per-commit `tmp_m
 - [x] **P3-7 ProximitySystem dynamic detection** (commit `9d627bd`) — `_checkPair` używa per-pair threshold `enterAU = max(_getDetectionRangeAU(v1), _getDetectionRangeAU(v2))`, `exitAU = enterAU × DETECTION_HYSTERESIS=1.2`. `_getDetectionRangeAU` per vessel: player z `TechSystem.getMultiplier('sensor_range')`, empire bez tech → BASE 0.5 (P5 doda empire tech state). COMBAT_ENGAGEMENT_AU/EXIT_AU pozostają hardcoded (fizyczne ograniczenie engagement, nie sensor).
 - [x] **P3-8 migration v70→v71 + consolidated smoke + docs** (this commit) — SaveMigration `_migrateV70toV71`: deepSpaceEngagements default `{}` + vessel.movementOrder.engageTargetId lazy null. SaveSystem._serializeCiv4x dodaje `deepSpaceEngagements: dscs.serialize()`. DSCS.serialize/restore (vesselStates Map ↔ object, encounter `isActive=true` only). GameScene restore po VesselManager. `tmp_m4_p3_smoke.mjs` 51/51 PASS (T1-T11). CLAUDE.md + MEMORY.md + `memory/m4-p3-complete.md` update.
 
+**M4 P3 polish 2026-05-18 — retreat semantics redesign:**
+- **Enemy AI auto-retreat:** HP comparison `pctEnemy ≤ 0.2 AND pctEnemy < pctPlayer × 0.5` (krytycznie nisko HP I clearly losing damage exchange). Bez tego warunku enemy wycofywał się przy 19% HP nawet wygrywając.
+- **Player NIE ma auto-retreat** — manual only. Dwie ścieżki: (a) nowy `ORDER_TYPES.retreat` (PPM "Wycofaj się z bitwy" na własny vessel w combat → auto-pick najbliższej friendly planet via `AutoRetreatSystem._findNearestFriendlyPlanet` + moveToPoint + `_retreatFromCombat=true` marker + emit `vessel:retreatIssued`); (b) implicit fallback: cancel engage + moveToPoint poza COMBAT_DISENGAGE_AU (0.50 AU).
+- **`_handleCombatRangeExit` identyfikuje retreating side** — strona z WSZYSTKIMI alive members poza disengage radius = uciekająca (LOSS, retreated='A'|'B'). Oba sides poza = mutual disengagement (draw, retreated=null).
+- **AutoRetreatSystem skip player side** — gdy `result.participantX.empireId === 'player'`, system returns bez akcji (gracz sam zarządza moveToPoint po retreat). Enemy AI dalej dostaje auto moveToPoint do friendly territory.
+- Pliki: `DeepSpaceCombatSystem.js`, `AutoRetreatSystem.js`, `MovementOrderSystem.js`, `MovementOrderTypes.js`, `OrderDispatcher.js`, `RightClickMenuOptions.js`, `UIManager.js`, `pl/en.js`. Bez save migration.
+- Smoke: `tmp_m4_p3_smoke.mjs` 61/61 PASS (rewrite T6 enemy retreat + 4 nowe case'y w T6 + 2 manual retreat test cases w T7).
+
 **Known issues deferred do M4 P4:**
 - Range bands cyan ring wokół player vessel w BattleView3D cinematic (range gating feedback) — backlog P6.
 - Distance label HUD per round w cinematic — backlog P6.

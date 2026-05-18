@@ -2475,6 +2475,7 @@ export default {
   'log.m4.battleResolvedDefeat':   'Defeat in battle {0} — our forces destroyed',
   'log.m4.battleResolvedDraw':     'Battle {0} ended in draw',
   'log.m4.battleResolvedRetreat':  'Battle {0} — side "{1}" retreated',
+  'log.m4.retreatIssued':          'Vessel "{0}" retreating from combat toward "{1}"',
   'log.m4.autoRetreatFailed':      'Vessel "{0}" cannot retreat: {1}',
   'log.m4.autoRetreatLowFuel':     'Vessel "{0}" drifting on fumes toward "{1}"',
   'log.m4.driftIdle':              'Vessel "{0}" completed pursuit — auto-return in 5 yrs or issue new order',

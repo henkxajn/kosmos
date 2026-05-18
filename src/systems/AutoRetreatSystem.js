@@ -49,6 +49,11 @@ export class AutoRetreatSystem {
                : null;
     if (!side) return;
     if (side.type !== 'vessel_group') return;  // abstract fleet retreat → M3
+    // M4 P3 polish 2026-05-18: player retreat jest manualny — gracz albo wydał
+    // explicit retreat order (już dostał moveToPoint), albo poszedł moveToPoint
+    // sam. Nie nadpisujemy jego decyzji. AutoRetreatSystem zachowany TYLKO
+    // dla enemy AI (która sama nie potrafi wybrać friendly planety).
+    if (side.empireId === 'player') return;
     const vesselIds = Array.isArray(side.vesselIds) ? side.vesselIds : [];
     if (vesselIds.length === 0) return;
 

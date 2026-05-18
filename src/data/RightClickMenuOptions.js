@@ -66,6 +66,13 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
       action: 'issueOrder', orderType: 'escort', requiresSelection: true,
       // Filtr: nie pokazuj escort'a jeśli celem jest sam selected vessel
       condition: (target, selectedId) => target.entityId !== selectedId },
+    // M4 P3 polish — "Wycofaj się" gdy PPM na własny vessel który jest w aktywnym
+    // DSCS encounter. Auto-pick najbliższej friendly planety + moveToPoint.
+    // Bitwa kończy się porażką gdy vessel wyjdzie z combat range.
+    { id: 'retreat', labelPL: 'Wycofaj się z bitwy', labelEN: 'Retreat from combat', icon: '↩',
+      action: 'issueOrder', orderType: 'retreat', requiresSelection: true,
+      // Pokazuj tylko gdy targetowany vessel jest w aktywnym combat.
+      condition: (target) => _vesselInCombat(target.entityId) },
   ],
   poi: [
     { id: 'goToPOI', labelPL: 'Lecisz do POI', labelEN: 'Go to POI', icon: '→',
@@ -98,6 +105,23 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
  * @param {string} vesselId
  * @returns {boolean} true gdy vessel istnieje i NIE ma weapon module
  */
+/**
+ * M4 P3 polish — czy vessel jest w aktywnym deep-space encounter.
+ * Read-only z DSCS._activeEncounters. Wołane z buildMenuOptions condition.
+ * @param {string} vesselId
+ * @returns {boolean}
+ */
+function _vesselInCombat(vesselId) {
+  if (!vesselId) return false;
+  const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+  if (!dscs?._activeEncounters) return false;
+  for (const enc of dscs._activeEncounters.values()) {
+    if (!enc?.isActive) continue;
+    if (enc.vesselStates?.has?.(vesselId)) return true;
+  }
+  return false;
+}
+
 function _vesselHasNoWeapons(vesselId) {
   if (!vesselId) return false;
   const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);

@@ -918,6 +918,20 @@ export class UIManager {
         (distanceAU ?? 0).toFixed(2)), 'intel');
     });
 
+    // Bitwa rozpoczęta (DSCS) — auto-slow + log. Daje graczowi czas zobaczyć
+    // CombatHUD i HP bary (hotfix M4 P3: combat per-tick lecial za szybko).
+    EventBus.on('vessel:engaged', ({ sideA, sideB }) => {
+      const playerInvolved = (sideA && sideA.length > 0) || (sideB && sideB.length > 0);
+      if (!playerInvolved) return;
+      this._triggerAutoSlowIfTime(t('log.autoSlowBattle'));
+    });
+
+    // M4 P3 polish — manualne wycofanie gracza z bitwy → log.
+    EventBus.on('vessel:retreatIssued', ({ vesselId, targetName }) => {
+      const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      this._log(t('log.m4.retreatIssued', vessel?.name ?? '?', targetName ?? '?'), 'combat');
+    });
+
     // Bitwa zakończona — popup-like log, klasyfikuj wynik.
     EventBus.on('battle:resolved', ({ battleId, result }) => {
       if (!result) return;

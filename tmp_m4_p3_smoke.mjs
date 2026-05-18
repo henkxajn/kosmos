@@ -288,7 +288,29 @@ console.log('\n--- T6: Battle conclude ---');
   dscs.destroy();
 }
 {
-  // Retreat threshold dynamic
+  // M4 P3 polish: Enemy auto-retreat via HP comparison (pctEnemy<=0.2 AND pctEnemy<pctPlayer*0.5)
+  const dist = 0.04 * AU_TO_PX;
+  const p1 = makeVessel('p1', 0, 0, { modules: ['weapon_laser'] });
+  const e1 = makeVessel('e1', dist, 0, { ownerEmpireId: 'empire_alpha', isEnemy: true });
+  const vm = makeMockVM([p1, e1]);
+  globalThis.window.KOSMOS.vesselManager = vm;
+  const dscs = new DeepSpaceCombatSystem(vm);
+  const enc = dscs.startEngagement('p1', 'e1');
+  // enemy 15% HP, player 80% HP → enemy retreat (pctB=0.15 ≤ 0.2 AND 0.15 < 0.40)
+  enc.vesselStates.get('e1').hp = enc.vesselStates.get('e1').hpStart * 0.15;
+  enc.vesselStates.get('p1').hp = enc.vesselStates.get('p1').hpStart * 0.80;
+  const battles = [];
+  const sub = (ev) => battles.push(ev);
+  EventBus.on('battle:resolved', sub);
+  dscs._tick(0.1);
+  eq('retreated = B (enemy HP comparison)', battles[0]?.result?.retreated, 'B');
+  eq('winner = A (gracz wygrał)', battles[0]?.result?.winner, 'A');
+  ok('e1 NIE wreck (retreat)', e1.isWreck !== true);
+  EventBus.off('battle:resolved', sub);
+  dscs.destroy();
+}
+{
+  // M4 P3 polish: Enemy NIE retreat gdy obie strony nisko (pctB NIE < pctA*0.5)
   const dist = 0.04 * AU_TO_PX;
   const p1 = makeVessel('p1', 0, 0, { modules: ['weapon_laser'] });
   const e1 = makeVessel('e1', dist, 0, { ownerEmpireId: 'empire_alpha', isEnemy: true });
@@ -297,18 +319,18 @@ console.log('\n--- T6: Battle conclude ---');
   const dscs = new DeepSpaceCombatSystem(vm);
   const enc = dscs.startEngagement('p1', 'e1');
   enc.vesselStates.get('p1').hp = enc.vesselStates.get('p1').hpStart * 0.15;
-  enc.vesselStates.get('e1').hp = enc.vesselStates.get('e1').hpStart * 0.80;
+  enc.vesselStates.get('e1').hp = enc.vesselStates.get('e1').hpStart * 0.15;
   const battles = [];
   const sub = (ev) => battles.push(ev);
   EventBus.on('battle:resolved', sub);
   dscs._tick(0.1);
-  eq('retreated = A', battles[0]?.result?.retreated, 'A');
-  ok('p1 NIE wreck (retreat)', p1.isWreck !== true);
+  // pctA=0.15, pctB=0.15. 0.15 < 0.075 → false. No retreat (continues or kill).
+  ok('No auto-retreat gdy obie strony równo', !battles[0] || battles[0]?.result?.retreated == null);
   EventBus.off('battle:resolved', sub);
   dscs.destroy();
 }
 {
-  // combatRangeExit draw
+  // M4 P3 polish: Player NIE auto-retreat (manual only)
   const dist = 0.04 * AU_TO_PX;
   const p1 = makeVessel('p1', 0, 0, { modules: ['weapon_laser'] });
   const e1 = makeVessel('e1', dist, 0, { ownerEmpireId: 'empire_alpha', isEnemy: true });
@@ -316,13 +338,56 @@ console.log('\n--- T6: Battle conclude ---');
   globalThis.window.KOSMOS.vesselManager = vm;
   const dscs = new DeepSpaceCombatSystem(vm);
   const enc = dscs.startEngagement('p1', 'e1');
+  // player 10%, enemy 90% — stara logika by zrobiła retreat='A'. Nowa: nie (player manual only)
+  enc.vesselStates.get('p1').hp = enc.vesselStates.get('p1').hpStart * 0.10;
+  enc.vesselStates.get('e1').hp = enc.vesselStates.get('e1').hpStart * 0.90;
+  const battles = [];
+  const sub = (ev) => battles.push(ev);
+  EventBus.on('battle:resolved', sub);
+  dscs._tick(0.1);
+  ok('Player NIE auto-retreat (manual only)', !battles[0] || battles[0]?.result?.retreated !== 'A');
+  EventBus.off('battle:resolved', sub);
+  dscs.destroy();
+}
+{
+  // M4 P3 polish: combatRangeExit — player ucieka → retreated='A' (loss)
+  const dist = 0.04 * AU_TO_PX;
+  const p1 = makeVessel('p1', 0, 0, { modules: ['weapon_laser'] });
+  const e1 = makeVessel('e1', dist, 0, { ownerEmpireId: 'empire_alpha', isEnemy: true });
+  const vm = makeMockVM([p1, e1]);
+  globalThis.window.KOSMOS.vesselManager = vm;
+  const dscs = new DeepSpaceCombatSystem(vm);
+  const enc = dscs.startEngagement('p1', 'e1');
+  // Teleport p1 (sideA = player) daleko od midpoint
   p1.position.x = enc.location.point.x + 1.0 * AU_TO_PX;
+  // e1 (sideB = enemy) zostaje w pobliżu midpoint
   const battles = [];
   const sub = (ev) => battles.push(ev);
   EventBus.on('battle:resolved', sub);
   EventBus.emit('vessel:combatRangeExit', { vesselAId: 'p1', vesselBId: 'e1' });
-  eq('draw winner = null', battles[0]?.result?.winner, null);
-  eq('draw retreated = null', battles[0]?.result?.retreated, null);
+  eq('player exit → retreated = A', battles[0]?.result?.retreated, 'A');
+  eq('player exit → winner = B', battles[0]?.result?.winner, 'B');
+  EventBus.off('battle:resolved', sub);
+  dscs.destroy();
+}
+{
+  // M4 P3 polish: mutual disengagement → draw (oba daleko od midpoint)
+  const dist = 0.04 * AU_TO_PX;
+  const p1 = makeVessel('p1', 0, 0, { modules: ['weapon_laser'] });
+  const e1 = makeVessel('e1', dist, 0, { ownerEmpireId: 'empire_alpha', isEnemy: true });
+  const vm = makeMockVM([p1, e1]);
+  globalThis.window.KOSMOS.vesselManager = vm;
+  const dscs = new DeepSpaceCombatSystem(vm);
+  const enc = dscs.startEngagement('p1', 'e1');
+  // OBA daleko od midpoint
+  p1.position.x = enc.location.point.x + 1.0 * AU_TO_PX;
+  e1.position.x = enc.location.point.x - 1.0 * AU_TO_PX;
+  const battles = [];
+  const sub = (ev) => battles.push(ev);
+  EventBus.on('battle:resolved', sub);
+  EventBus.emit('vessel:combatRangeExit', { vesselAId: 'p1', vesselBId: 'e1' });
+  eq('mutual exit → winner = null', battles[0]?.result?.winner, null);
+  eq('mutual exit → retreated = null', battles[0]?.result?.retreated, null);
   EventBus.off('battle:resolved', sub);
   dscs.destroy();
 }
@@ -389,6 +454,45 @@ console.log('\n--- T7: Engage order kiting ---');
   const mos = new MovementOrderSystem(vm);
   const r = mos.issueOrder('p1', { type: 'engage', targetEntityId: 'e1' });
   eq('reject no_weapons', r.reason, 'no_weapons');
+  mos.destroy();
+}
+{
+  // M4 P3 polish — manual retreat order (issueOrder type:'retreat')
+  const p1 = makeVessel('p1', 0, 0, { modules: ['weapon_laser'] });
+  const e1 = makeVessel('e1', 0.04 * AU_TO_PX, 0, { ownerEmpireId: 'empire_alpha', isEnemy: true });
+  const vm = makeMockVM([p1, e1]);
+  globalThis.window.KOSMOS.vesselManager = vm;
+  const dscs = new DeepSpaceCombatSystem(vm);
+  dscs.startEngagement('p1', 'e1');
+  globalThis.window.KOSMOS.deepSpaceCombatSystem = dscs;
+  // Stub AutoRetreatSystem dla _findNearestFriendlyPlanet lookup
+  globalThis.window.KOSMOS.autoRetreatSystem = {
+    _findNearestFriendlyPlanet: () => ({ x: 100 * AU_TO_PX, y: 0, name: 'TestPlanet' }),
+  };
+  const mos = new MovementOrderSystem(vm);
+  const retreatEvents = [];
+  EventBus.on('vessel:retreatIssued', e => retreatEvents.push(e));
+  const r = mos.issueOrder('p1', { type: 'retreat' });
+  ok('issueOrder retreat ok', r.ok === true);
+  eq('p1.movementOrder.type = moveToPoint', p1.movementOrder?.type, 'moveToPoint');
+  ok('_retreatFromCombat marker = true', p1.movementOrder?._retreatFromCombat === true);
+  eq('retreatIssued event emit', retreatEvents.length, 1);
+  EventBus.off('vessel:retreatIssued');
+  delete globalThis.window.KOSMOS.deepSpaceCombatSystem;
+  delete globalThis.window.KOSMOS.autoRetreatSystem;
+  mos.destroy();
+  dscs.destroy();
+}
+{
+  // M4 P3 polish — retreat reject gdy vessel NIE w combat
+  const p1 = makeVessel('p1', 0, 0, { modules: ['weapon_laser'] });
+  const vm = makeMockVM([p1]);
+  globalThis.window.KOSMOS.vesselManager = vm;
+  // brak DSCS → not_in_combat
+  delete globalThis.window.KOSMOS.deepSpaceCombatSystem;
+  const mos = new MovementOrderSystem(vm);
+  const r = mos.issueOrder('p1', { type: 'retreat' });
+  eq('reject not_in_combat', r.reason, 'not_in_combat');
   mos.destroy();
 }
 

@@ -472,6 +472,11 @@ export class ThreeRenderer {
         this._syncSensorOverlay();
       }
     }));
+    // M4 P3 hotfix — sensor range zmienia się gdy obserwatorium budowane/zburzone.
+    // Bez tego sensor ring zostawał z poprzednim radiusem (stale visual).
+    EventBus.on('planet:buildResult',     safe(() => this._syncSensorOverlay()));
+    EventBus.on('planet:demolishResult',  safe(() => this._syncSensorOverlay()));
+    EventBus.on('planet:upgradeResult',   safe(() => this._syncSensorOverlay()));
     // Fog-of-war — ObservatorySystem zmienia widoczność wrogiego statku.
     // M4 P2: deleguje do _applyVesselIntelVisibility — uwzględnia rumor ghost
     // (sprite może pozostać widoczny w positionLastKnown nawet gdy detected=false).

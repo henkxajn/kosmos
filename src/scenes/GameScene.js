@@ -360,6 +360,59 @@ export class GameScene {
       spawnEnemyFleet,
       spawnEnemyCiv,
       spawnEnemyAttack,
+      // KOSMOS.debug.dumpIntel() — wypisz intel quality dla każdego enemy
+      // vessela i imperium. Sprawdza czy IntelSystem (M4 P2) dziala.
+      dumpIntel: () => {
+        const intel = window.KOSMOS?.intelSystem;
+        const vm = window.KOSMOS?.vesselManager;
+        const reg = window.KOSMOS?.empireRegistry;
+        if (!intel) { console.warn('[debug] Brak IntelSystem'); return; }
+
+        console.log('=== INTEL EMPIRE CONTACTS ===');
+        if (reg) {
+          for (const empire of reg.getAll?.() ?? []) {
+            if (empire.id === 'player') continue;
+            const quality = intel.getEmpireContact?.(empire.id) ?? '?';
+            console.log(`  ${empire.id} (${empire.namePL ?? empire.name}): ${quality}`);
+          }
+        }
+
+        console.log('=== INTEL VESSEL CONTACTS ===');
+        if (vm) {
+          for (const v of vm.getAllVessels()) {
+            const isEnemy = v.ownerEmpireId && v.ownerEmpireId !== 'player';
+            if (!isEnemy) continue;
+            const contact = intel.getVesselContact?.(v.id);
+            const quality = contact?.quality ?? 'unknown';
+            const yearsAgo = contact?.lastSeenYear != null
+              ? (window.KOSMOS.timeSystem.gameTime - contact.lastSeenYear).toFixed(1)
+              : '?';
+            console.log(`  ${v.id} (${v.name}): quality=${quality}, lastSeen=${yearsAgo}y ago, owner=${v.ownerEmpireId}`);
+          }
+        }
+      },
+      // KOSMOS.debug.dumpCombat() — wypisz active encounters + per-vessel HP.
+      dumpCombat: () => {
+        const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+        if (!dscs) { console.warn('[debug] Brak DeepSpaceCombatSystem'); return; }
+        const list = dscs.listActive();
+        if (list.length === 0) { console.log('[debug] Brak aktywnych encounters'); return; }
+        for (const enc of list) {
+          console.log(`=== ${enc.id} (round ${enc.currentRound}) ===`);
+          console.log(`  sideA (${enc.sideA.label}): ${[...enc.sideA.vesselIds, ...enc.sideA.joinedVesselIds].join(', ')}`);
+          console.log(`  sideB (${enc.sideB.label}): ${[...enc.sideB.vesselIds, ...enc.sideB.joinedVesselIds].join(', ')}`);
+          console.log(`  Per-vessel HP:`);
+          for (const [vid, state] of enc.vesselStates) {
+            const weapons = state.weapons.map(w => `${w.moduleId}(cd${w.cooldownYearsRemaining.toFixed(2)})`).join(', ');
+            console.log(`    ${vid}: hp=${state.hp.toFixed(0)}/${state.hpStart}, shield=${state.shieldHP.toFixed(0)}, armor=${state.armor}, weapons=[${weapons}]`);
+          }
+          console.log(`  Last 5 events:`);
+          const allEvents = enc.timeline.flatMap(r => (r.events ?? []).map(ev => ({ round: r.round, ...ev })));
+          for (const ev of allEvents.slice(-5)) {
+            console.log(`    R${ev.round}: ${ev.attacker} → ${ev.weapon} → ${ev.target}: ${ev.hit ? `${ev.damage} dmg` : 'MISS'} (dist ${ev.distanceAU?.toFixed(3)} AU)`);
+          }
+        }
+      },
       giveResearch: (amount = 10000) => {
         const rs = window.KOSMOS?.resourceSystem;
         if (!rs) { console.warn('[debug] Brak aktywnego ResourceSystem'); return; }

@@ -2476,6 +2476,7 @@ export default {
   'log.m4.battleResolvedDefeat':   'Porażka w bitwie {0} — nasze siły rozbite',
   'log.m4.battleResolvedDraw':     'Bitwa {0} zakończona remisem',
   'log.m4.battleResolvedRetreat':  'Bitwa {0} — strona "{1}" wycofała się',
+  'log.m4.retreatIssued':          'Statek "{0}" wycofuje się z bitwy w kierunku "{1}"',
   'log.m4.autoRetreatFailed':      'Statek "{0}" nie może się wycofać: {1}',
   'log.m4.autoRetreatLowFuel':     'Statek "{0}" dryfuje na resztkach paliwa do "{1}"',
   'log.m4.driftIdle':              'Statek "{0}" ukończył pościg — auto-powrót za 5 lat lub wydaj nowy rozkaz',
