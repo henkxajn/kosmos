@@ -215,25 +215,32 @@ console.log('\n--- T7: cancel target_lost (target wreck) ---');
   mos.destroy();
 }
 
-// ── T8: _tickEngageOrder — cancel target_out_of_range ─────────────────
-console.log('\n--- T8: cancel target_out_of_range (dist > 2 × maxRange) ---');
+// ── T8: hotfix — engage chase (target daleko NIE cancel, vessel ścigá) ─
+console.log('\n--- T8: hotfix chase + kite (daleki target → vessel ścigá) ---');
 {
-  const p1 = makeVessel('p1', 0, 0, { modules: ['weapon_laser'] });  // maxRange 0.05 AU
-  // Start: enemy w zasięgu, potem move daleko
-  const e1 = makeVessel('e1', 0.04 * AU_TO_PX, 0, { ownerEmpireId: 'empire_alpha', isEnemy: true, modules: ['weapon_laser'] });
+  // M4 P3 hotfix: poprzednio engage cancel target_out_of_range gdy dist > 2 × maxRange.
+  // Realny scenariusz: enemy nadlatuje z 1 AU → laser maxRange 0.05 AU → 2×0.05=0.10
+  // → cancel immediate → vessel stoi przy planecie → planet defense walczy.
+  // Fix: engage chase'uje target dopóki nie wpadnie w band; cancel TYLKO target wreck.
+  const p1 = makeVessel('p1', 0, 0, { modules: ['weapon_laser'], speedAU: 1.0 });  // maxRange 0.05 AU
+  // Enemy DALEKO — 1 AU od player vessela
+  const e1 = makeVessel('e1', 1.0 * AU_TO_PX, 0, { ownerEmpireId: 'empire_alpha', isEnemy: true, modules: ['weapon_laser'] });
   const vm = makeMockVM([p1, e1]);
   globalThis.window.KOSMOS.vesselManager = vm;
+  globalThis.window.KOSMOS.timeSystem.gameTime = 100.0;
   const mos = new MovementOrderSystem(vm);
   mos.issueOrder('p1', { type: 'engage', targetEntityId: 'e1' });
 
-  // Enemy "ucieka" > 2 × 0.05 = 0.10 AU
-  e1.position.x = 0.20 * AU_TO_PX;
   const blockEvents = [];
   const sub = (e) => blockEvents.push(e);
   EventBus.on('vessel:orderBlocked', sub);
+  mos._tick(0.1);  // init _lastTickYear
+  globalThis.window.KOSMOS.timeSystem.gameTime = 101.0;
+  const xBefore = p1.position.x;
   mos._tick(0.1);
-  ok('vessel:orderBlocked emitted', blockEvents.length === 1);
-  eq('reason = target_out_of_range', blockEvents[0].reason, 'target_out_of_range');
+  ok('NO cancel mimo dist >> maxRange (chase mode)', blockEvents.length === 0,
+     `blocks: ${blockEvents.map(e => e.reason).join(',')}`);
+  ok('vessel ścigá target (x rośnie toward 1 AU)', p1.position.x > xBefore);
   EventBus.off('vessel:orderBlocked', sub);
   mos.destroy();
 }

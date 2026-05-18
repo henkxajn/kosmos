@@ -630,6 +630,7 @@ export class MovementOrderSystem {
     const target = this._resolveTarget(order.targetEntityId);
     if (!target || target.isWreck) {
       this._blockAndCancel(vessel, order, 'target_lost');
+      addMissionLog(vessel, gameYear, 'Engage zakończone — cel zniszczony.', 'info');
       return;
     }
 
@@ -637,6 +638,7 @@ export class MovementOrderSystem {
     const maxRangeAU = _computeMaxWeaponRangeAU(vessel);
     if (maxRangeAU <= 0) {
       this._blockAndCancel(vessel, order, 'no_weapons');
+      addMissionLog(vessel, gameYear, 'Engage anulowane — brak broni.', 'warn');
       return;
     }
     order.engageMaxRangeAU = maxRangeAU;
@@ -650,18 +652,19 @@ export class MovementOrderSystem {
     const distPx = Math.hypot(dxPx, dyPx);
     const distAU = distPx / AU_TO_PX;
 
-    // Cancel auto — target uciekł poza efektywny zasięg ataku.
-    const cancelDistAU = 2.0 * maxRangeAU;
-    if (distAU > cancelDistAU) {
-      this._blockAndCancel(vessel, order, 'target_out_of_range');
-      return;
-    }
+    // M4 P3 hotfix — engage = "chase + kite", nie "kite only".
+    // Poprzednio cancel target_out_of_range odpalał gdy dist > 2 × maxRange
+    // (laser=0.10 AU, kinetic=0.30 AU, missile=0.60 AU). W realistycznym
+    // scenariuszu enemy nadlatuje z >>0.5 AU → engage cancelled immediately
+    // → vessel stoi przy planecie → planet defense walczy zamiast vessela.
+    // Fix: chase'uj target dopóki nie dotrzesz do bandu (toward), wtedy
+    // kituj (hold/away). Cancel TYLKO target wreck (above).
 
     const optimalDistAU = maxRangeAU * 0.95;
     const upperBandAU   = optimalDistAU * 1.05;
     const lowerBandAU   = optimalDistAU * 0.95;
 
-    let direction = 0;  // -1 = away, 0 = hold, +1 = toward
+    let direction = 0;  // -1 = away, 0 = hold, +1 = toward (chase OR kite-toward)
     if (distAU > upperBandAU) direction = +1;
     else if (distAU < lowerBandAU) direction = -1;
 
@@ -675,8 +678,10 @@ export class MovementOrderSystem {
       return;
     }
 
-    // Krok px = speedAU × dPhysicsYear × AU_TO_PX. Dla engage cap kroku do
-    // odległości od optimal — vessel nie powinien overshoot bandu w jednym ticku.
+    // Krok px = speedAU × dPhysicsYear × AU_TO_PX.
+    // - Toward chase (distAU >> optimal): pełen krok (cap do dist - optimal,
+    //   żeby finalnie wpaść w band, nie pod lowerBand)
+    // - Away kite (distAU < lowerBand): cap do optimal - dist (no overshoot)
     const speedPxPerYear = (vessel.speedAU ?? 1.0) * AU_TO_PX;
     const optimalPx = optimalDistAU * AU_TO_PX;
     const distanceToOptimalPx = Math.abs(distPx - optimalPx);
@@ -696,7 +701,7 @@ export class MovementOrderSystem {
       vessel.velocity.updatedYear = gameYear;
     }
 
-    _trace(`tick engage ${order.id} vessel=${vessel.id} dist=${distAU.toFixed(3)}AU optimal=${optimalDistAU.toFixed(3)} dir=${direction === 1 ? 'toward' : direction === -1 ? 'away' : 'hold'} step=${stepPx.toFixed(2)}`);
+    _trace(`tick engage ${order.id} vessel=${vessel.id} dist=${distAU.toFixed(3)}AU optimal=${optimalDistAU.toFixed(3)} dir=${direction === 1 ? 'chase/toward' : direction === -1 ? 'away/kite' : 'hold'} step=${stepPx.toFixed(2)}`);
   }
 
   /**
