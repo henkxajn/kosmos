@@ -323,10 +323,26 @@ export class DeepSpaceCombatSystem {
   }
 
   /**
-   * Tick pojedynczego encounter. P3-2 STUB — tylko zaawansowanie rundy.
-   * P3-3 doda: distance matrix per pair, weapon cooldown decrement, range gating,
-   * fire roll (tracking × evasion), damage application (shield → armor → hp),
-   * shield regen, _checkEndConditions → _finalizeBattle.
+   * Tick pojedynczego encounter (P3-3 pełna logika).
+   *
+   * Sekwencja:
+   *   1. currentRound++, currentYear += civDy
+   *   2. Per side, per vessel (alive only), per weapon:
+   *      a. Decrement weapon.cooldownYearsRemaining (skip fire jeśli > 0)
+   *      b. Resolve effectiveRangeAU (rangeAU × tech mult)
+   *      c. Find target — Opcja D engage priority:
+   *         - Player z movementOrder.type='engage' i engageTargetId żywy,
+   *           w przeciwnej stronie, w zasięgu → target = engageTarget
+   *         - Else: closest live enemy
+   *      d. Skip jeśli dist > effectiveRangeAU
+   *      e. Roll hit (tracking × (1 - evasion)) — rng < hitChance
+   *      f. Apply damage (shield absorb → armor reduce → hp)
+   *      g. Reset weapon cooldown
+   *      h. Append timeline event
+   *   3. Shield regen per alive vessel (shieldRegen × civDy)
+   *   4. _checkEndConditions → _finalizeBattle (P3-4 doda retreat threshold)
+   *
+   * Damage roll PRNG seed: encounter.seedBase + currentRound (deterministyczne).
    *
    * @private
    */
@@ -334,14 +350,181 @@ export class DeepSpaceCombatSystem {
     encounter.currentRound++;
     encounter.currentYear = encounter.startYear + encounter.currentRound * civDy;
 
-    // STUB — bez fire exchange w P3-2. Encounter pozostaje active until
-    // ręczne wywołanie _finalizeBattle (test/devtools) lub combatRangeExit
-    // (P3-4) lub MAX_ROUNDS safety cap (P3-4 doda time-out).
-    if (encounter.currentRound >= MAX_ROUNDS) {
-      // P3-4 zaimplementuje time-out z "highest aggregate HP wins".
-      // P3-2: bezpieczny stub — draw bez wreck (tylko zamknięcie).
-      this._finalizeBattle(encounter, /*winner*/ null, /*retreated*/ null);
+    const round = this._ensureTimelineRound(encounter);
+    const rng = mulberry32(encounter.seedBase + encounter.currentRound);
+
+    // Średnia odległość między stronami (dla timeline distanceAU).
+    const distSamples = [];
+
+    // Strony i ich ownerEmpireId — używane do tech-mult lookup i target picking.
+    const sideAVids = [...encounter.sideA.vesselIds, ...encounter.sideA.joinedVesselIds];
+    const sideBVids = [...encounter.sideB.vesselIds, ...encounter.sideB.joinedVesselIds];
+
+    const fireFromSide = (attackerVids, defenderVids, attackerOwner) => {
+      for (const aid of attackerVids) {
+        const aState = encounter.vesselStates.get(aid);
+        if (!aState || aState.hp <= 0) continue;
+        const aVessel = this._vm?._vessels?.get(aid);
+        if (!aVessel) continue;
+
+        for (const weapon of aState.weapons) {
+          // Cooldown decrement (per-tick — civDy * 1 = jeden "tick year unit").
+          if (weapon.cooldownYearsRemaining > 0) {
+            weapon.cooldownYearsRemaining = Math.max(0, weapon.cooldownYearsRemaining - civDy);
+            continue;
+          }
+
+          const effectiveRangeAU = this._resolveWeaponRange(weapon, attackerOwner);
+
+          // Find target — Opcja D engage priority dla player, closest fallback.
+          const target = this._pickTarget(aVessel, aState, defenderVids, encounter, effectiveRangeAU);
+          if (!target) continue;
+          const { vesselId: tid, distanceAU } = target;
+          const tState = encounter.vesselStates.get(tid);
+          if (!tState) continue;
+
+          distSamples.push(distanceAU);
+
+          // Range gating.
+          if (distanceAU > effectiveRangeAU) continue;
+
+          // Roll hit.
+          // tracking mult (kategoria) tylko dla player; empire bez tech P3.
+          let effectiveTracking = weapon.tracking;
+          if (attackerOwner === 'player') {
+            const techSys = window.KOSMOS?.techSystem;
+            if (techSys?.getMultiplier) {
+              effectiveTracking *= techSys.getMultiplier(`weapon_tracking_${weapon.category}`);
+            }
+          }
+          const hitChance = Math.max(0.05, Math.min(0.95, effectiveTracking * (1 - tState.evasion)));
+          const hit = rng() < hitChance;
+
+          if (!hit) {
+            round.events.push({
+              attacker: aid, target: tid, weapon: weapon.moduleId,
+              hit: false, damage: 0, blockedByShield: 0,
+              distanceAU,
+            });
+            // Cooldown reset też przy miss — broń strzeliła, czas naładowania reszta.
+            weapon.cooldownYearsRemaining = weapon.fireCooldownYears;
+            continue;
+          }
+
+          // Apply damage: shield absorb → armor reduce → hp.
+          let damage = weapon.damage;
+          let blockedByShield = 0;
+          if (tState.shieldHP > 0) {
+            blockedByShield = Math.min(tState.shieldHP, damage);
+            tState.shieldHP -= blockedByShield;
+            damage -= blockedByShield;
+          }
+          if (damage > 0) {
+            // Armor reduction (− armor × 0.4 z minimum 1 — BattleSystem-like).
+            // armorPierce redukuje effective armor.
+            const effectiveArmor = Math.max(0, tState.armor - (weapon.armorPierce ?? 0));
+            const armorReduction = effectiveArmor * 0.4;
+            const netDamage = Math.max(1, damage - armorReduction);
+            tState.hp -= netDamage;
+            damage = netDamage;
+          } else {
+            damage = 0;
+          }
+
+          round.events.push({
+            attacker: aid, target: tid, weapon: weapon.moduleId,
+            hit: true, damage, blockedByShield, distanceAU,
+          });
+
+          weapon.cooldownYearsRemaining = weapon.fireCooldownYears;
+        }
+      }
+    };
+
+    // Fire from sideA → sideB i odwrotnie.
+    fireFromSide(sideAVids, sideBVids, encounter.sideA.ownerEmpireId);
+    fireFromSide(sideBVids, sideAVids, encounter.sideB.ownerEmpireId);
+
+    // Shield regen (alive vessels).
+    for (const state of encounter.vesselStates.values()) {
+      if (state.hp <= 0) continue;
+      if (state.shieldRegen > 0 && state.shieldHP < state.shieldHPStart) {
+        state.shieldHP = Math.min(state.shieldHPStart, state.shieldHP + state.shieldRegen * civDy);
+      }
     }
+
+    // Średnia distance dla timeline.
+    if (distSamples.length > 0) {
+      round.distanceAU = distSamples.reduce((s, d) => s + d, 0) / distSamples.length;
+    }
+
+    // P3-4 doda pełne _checkEndConditions (retreat threshold dynamic).
+    // P3-3: tylko hard-end gdy strona wybita do zera (kill condition) lub MAX_ROUNDS.
+    const aliveA = sideAVids.filter(vid => (encounter.vesselStates.get(vid)?.hp ?? 0) > 0).length;
+    const aliveB = sideBVids.filter(vid => (encounter.vesselStates.get(vid)?.hp ?? 0) > 0).length;
+    if (aliveA === 0 && aliveB === 0) {
+      this._finalizeBattle(encounter, null, null);
+    } else if (aliveA === 0) {
+      this._finalizeBattle(encounter, 'B', null);
+    } else if (aliveB === 0) {
+      this._finalizeBattle(encounter, 'A', null);
+    } else if (encounter.currentRound >= MAX_ROUNDS) {
+      // P3-4 doda highest aggregate HP wins; P3-3 STUB: draw close.
+      const hpA = this._sumHP(encounter, 'A');
+      const hpB = this._sumHP(encounter, 'B');
+      const winner = hpA > hpB ? 'A' : hpB > hpA ? 'B' : null;
+      this._finalizeBattle(encounter, winner, null);
+    }
+  }
+
+  /**
+   * Target selection — Opcja D engage priority dla player + closest fallback.
+   *
+   * @private
+   * @returns {{vesselId: string, distanceAU: number}|null}
+   */
+  _pickTarget(attackerVessel, attackerState, defenderVids, encounter, effectiveRangeAU) {
+    const ax = attackerVessel.position.x;
+    const ay = attackerVessel.position.y;
+
+    // Player engage priority — jeśli vessel ma movementOrder.type='engage'
+    // z engageTargetId, target jest w przeciwnej stronie i w zasięgu, prioritize.
+    const order = attackerVessel.movementOrder;
+    if (order?.type === 'engage' && order.targetEntityId) {
+      const eid = order.targetEntityId;
+      if (defenderVids.includes(eid)) {
+        const tState = encounter.vesselStates.get(eid);
+        const tVessel = this._vm?._vessels?.get(eid);
+        if (tState && tState.hp > 0 && tVessel) {
+          const dx = (tVessel.position.x - ax) / AU_TO_PX;
+          const dy = (tVessel.position.y - ay) / AU_TO_PX;
+          const distAU = Math.hypot(dx, dy);
+          if (distAU <= effectiveRangeAU) {
+            return { vesselId: eid, distanceAU: distAU };
+          }
+          // engage target poza zasięgiem — fallback closest.
+        }
+      }
+    }
+
+    // Closest live enemy fallback.
+    let bestId = null;
+    let bestDistAU = Infinity;
+    for (const did of defenderVids) {
+      const dState = encounter.vesselStates.get(did);
+      if (!dState || dState.hp <= 0) continue;
+      const dVessel = this._vm?._vessels?.get(did);
+      if (!dVessel) continue;
+      const dx = (dVessel.position.x - ax) / AU_TO_PX;
+      const dy = (dVessel.position.y - ay) / AU_TO_PX;
+      const distAU = Math.hypot(dx, dy);
+      if (distAU < bestDistAU) {
+        bestDistAU = distAU;
+        bestId = did;
+      }
+    }
+    if (bestId == null) return null;
+    return { vesselId: bestId, distanceAU: bestDistAU };
   }
 
   /**

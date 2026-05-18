@@ -65,11 +65,10 @@ export const GAME_CONFIG = {
     m4EnemyGhosts:        true,   // _syncVesselPositions intel-gated rendering (rumor/contact/detailed)
     m4MiniMap:            true,   // GalacticMiniMap overlay (klawisz M)
     // ── M4 P3 — Tick-based Deep-Space Combat (save v71) ───────────────────
-    // OFF w P3-1 (data only). Flip ON w P3-2 po wpięciu DeepSpaceCombatSystem.
-    // Gdy true: VesselCombatSystem deleguje vessel:combatRangeEnter do DSCS
-    // (per-tick fire exchange zamiast instant BattleSystem.resolveBattle).
-    // Gdy false: instant path z M4 P2 (rollback safety).
-    m4DeepSpaceCombat:    false,
+    // Flip ON w P3-3 (fire exchange działa end-to-end). Gdy true: VCS deleguje
+    // vessel:combatRangeEnter do DSCS (per-tick fire exchange zamiast instant
+    // BattleSystem.resolveBattle). Gdy false: instant path z M4 P2 (rollback).
+    m4DeepSpaceCombat:    true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
