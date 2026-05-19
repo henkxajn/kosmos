@@ -567,9 +567,13 @@ export function buildScheduledEventPopup(config) {
   }
 
   // Dodatkowy HTML (stat lines, zasoby, zloza — z formatStatLine etc.)
+  // Color na kontenerze: klasy .at-stat-prefix/.at-stat-label uzywaja opacity
+  // bez wlasnego koloru — bez tego dziedzicza czarny i znikaja na ciemnym tle.
   if (config.contentHTML) {
     const extra = document.createElement('div');
     extra.style.marginTop = '6px';
+    extra.style.color = THEME.textPrimary;
+    extra.style.fontFamily = "'Share Tech Mono', monospace";
     extra.innerHTML = config.contentHTML;
     body2.appendChild(extra);
   }
