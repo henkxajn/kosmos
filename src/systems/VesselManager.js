@@ -41,6 +41,7 @@ import {
   serializeNameCounters, restoreNameCounters,
 } from '../data/VesselNames.js';
 import { t } from '../i18n/i18n.js';
+import { needsSpaceportForVessel, hasSpaceportAt } from '../utils/SpaceportCheck.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
@@ -466,6 +467,30 @@ export class VesselManager {
 
     const targetId = colonyId ?? vessel.colonyId;
     const entity = this._findEntity(targetId);
+
+    // Spaceport gate przy lądowaniu — medium/large hull bez portu pozostaje
+    // w orbicie zamiast dokować. Może deployować prefab z cargo / transfer
+    // zasobów (orbital ops). Mały hull (small) ląduje normalnie.
+    const portCheck = needsSpaceportForVessel(vessel);
+    const hasPort = hasSpaceportAt(targetId);
+    if (portCheck && !hasPort) {
+      vessel.colonyId = targetId;
+      vessel.position.state = 'orbiting';
+      vessel.position.dockedAt = null;
+      vessel.position.x = entity?.x ?? 0;
+      vessel.position.y = entity?.y ?? 0;
+      vessel.status = 'idle';
+      vessel.mission = null;
+      vessel.experience += 1;
+      if (vessel.stats) vessel.stats.missionsComplete += 1;
+
+      const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const targetName = this._resolveEntityName(targetId);
+      addMissionLog(vessel, gameYear, t('vessel.orbitingNoPort', targetName), 'warning');
+      EventBus.emit('vessel:orbiting', { vessel, reason: 'no_spaceport' });
+      return;
+    }
+
     vessel.colonyId = targetId;
     vessel.position.state = 'docked';
     vessel.position.dockedAt = targetId;

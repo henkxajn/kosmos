@@ -1,0 +1,59 @@
+// SpaceportCheck — utility do walidacji portów kosmicznych
+//
+// Reguły:
+//   - Małe statki (hull.size === 'small') NIE wymagają portu — startują/lądują wszędzie
+//   - Średnie/duże (medium/large) wymagają portu na ciele dock/launch (chyba że hull.requiresSpaceport === false)
+//   - Outposty bez portu blokują medium/large dla operacji dock/launch — pozostają na orbicie
+//
+// Wzór: deploy prefab z orbity OK (drop pods), ale fizyczny LAUNCH (dock → in_transit)
+// i LANDING (in_transit → docked) wymagają portu dla medium/large.
+
+import { SHIPS } from '../data/ShipsData.js';
+import { HULLS } from '../data/HullsData.js';
+
+/**
+ * Czy ten statek wymaga portu kosmicznego do dock/launch.
+ * @param {object} vessel — VesselInstance
+ * @returns {boolean}
+ */
+export function needsSpaceportForVessel(vessel) {
+  if (!vessel) return true;
+  const hull = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+  if (!hull) return true;
+  if (hull.size === 'small') return false;
+  return hull.requiresSpaceport !== false; // domyślnie true
+}
+
+/**
+ * Czy dane ciało (planet/moon/planetoid) ma port kosmiczny w aktywnych budynkach.
+ * Sprawdza poprzez ColonyManager → BuildingSystem aktywnej kolonii na tym ciele.
+ *
+ * @param {string} bodyId
+ * @returns {boolean}
+ */
+export function hasSpaceportAt(bodyId) {
+  if (!bodyId) return false;
+  const colMgr = window.KOSMOS?.colonyManager;
+  if (!colMgr) return false;
+  const colony = colMgr.getColony?.(bodyId);
+  if (!colony) return false; // brak kolonii → brak portu
+  return colony.buildingSystem?.hasSpaceport?.() ?? false;
+}
+
+/**
+ * Czy statek może wystartować z aktualnego miejsca dokowania.
+ * Sprawdza: jeśli vessel jest 'docked', body musi mieć port (dla medium/large).
+ * Vessel w 'orbiting' lub 'in_transit' NIE wymaga sprawdzenia (już jest w przestrzeni).
+ *
+ * @param {object} vessel
+ * @returns {{ok:boolean, reason?:string}} — ok:true gdy port OK lub nie wymagany
+ */
+export function canLaunchFromCurrent(vessel) {
+  if (!vessel) return { ok: false, reason: 'no_vessel' };
+  if (vessel.position?.state !== 'docked') return { ok: true }; // już w przestrzeni
+  if (!needsSpaceportForVessel(vessel)) return { ok: true };
+  const dockedAt = vessel.position.dockedAt;
+  if (!dockedAt) return { ok: true }; // dock state bez ref — defensywnie zezwól
+  if (hasSpaceportAt(dockedAt)) return { ok: true };
+  return { ok: false, reason: 'no_spaceport_at_origin' };
+}

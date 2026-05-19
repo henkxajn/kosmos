@@ -244,6 +244,20 @@ export class RightClickMenu {
     const result = mos.issueOrder(vesselId, built.spec);
     if (!result?.ok) {
       console.warn(`[RightClickMenu] MOS.issueOrder failed (${option.orderType}):`, result?.reason);
+      // Bug 2 — visible feedback w EventLog dla typowych powodów odrzucenia
+      const reasonKey = `vessel.reason${_pascalCase(result?.reason ?? 'unknown')}`;
+      const reasonText = t(reasonKey);
+      window.KOSMOS?.eventLogSystem?.push({
+        text: reasonText !== reasonKey ? reasonText : `Order rejected: ${result?.reason ?? 'unknown'}`,
+        channel: 'fleet',
+        severity: 'warn',
+        entityRef: vesselId,
+      });
     }
   }
+}
+
+function _pascalCase(s) {
+  if (!s) return '';
+  return s.split('_').map(w => w[0]?.toUpperCase() + w.slice(1)).join('');
 }

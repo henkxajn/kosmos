@@ -418,10 +418,22 @@ export class MissionSystem {
     return hull?.requiresSpaceport !== false; // domyślnie true
   }
 
-  // Sprawdź spaceport — pomija check dla małych statków
+  // Sprawdź spaceport — gate dla LAUNCH (z dock → in_transit). Bug 2C:
+  // wcześniej używał _hasSpaceport() które patrzy na ACTIVE colony — fałszywy
+  // negatyw gdy player switchnął na outpost bez portu, ale vessel jest gdzie indziej.
+  // Teraz: vessel w 'orbiting' lub 'in_transit' (nie docked) → check pass (już w przestrzeni).
+  // Vessel docked → sprawdź port NA CIELE DOCK (nie active colony).
   _checkPadForVessel(vesselId) {
     if (!this._needsSpaceportForVessel(vesselId)) return true;
-    return this._hasSpaceport();
+    const vMgr = window.KOSMOS?.vesselManager;
+    const vessel = vMgr?.getVessel(vesselId);
+    if (!vessel) return false;
+    if (vessel.position?.state !== 'docked') return true; // już w przestrzeni
+    const dockedAt = vessel.position.dockedAt;
+    if (!dockedAt) return true; // dock state bez ref — defensywnie zezwól
+    const colMgr = window.KOSMOS?.colonyManager;
+    const colony = colMgr?.getColony?.(dockedAt);
+    return colony?.buildingSystem?.hasSpaceport?.() ?? false;
   }
 
   // Czy statek z średnim/dużym kadłubem może startować bez wyrzutni na misję kolonizacyjną?

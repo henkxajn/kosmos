@@ -20,6 +20,7 @@ import { addMissionLog }     from '../entities/Vessel.js';
 import { PredictionConeMath } from '../utils/PredictionConeMath.js';
 import { DistanceUtils }     from '../utils/DistanceUtils.js';
 import { SHIP_MODULES }      from '../data/ShipModulesData.js';
+import { canLaunchFromCurrent } from '../utils/SpaceportCheck.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 const CIV_TIME_SCALE = GAME_CONFIG.CIV_TIME_SCALE ?? 12;
@@ -402,6 +403,17 @@ export class MovementOrderSystem {
     // §8.5 — reject gdy punkt wewnątrz strefy wykluczenia Słońca (nie do obejścia).
     if (Math.hypot(p.x, p.y) < SUN_EXCLUSION_PX) {
       return { ok: false, reason: 'unreachable_target' };
+    }
+
+    // Spaceport gate — medium/large hull NIE może startować z ciała bez portu.
+    // Mały hull (small) startuje z każdego ciała. Vessel w in_transit/orbiting
+    // pomija check (już w przestrzeni). Bypass: spec.bypassSpaceportCheck=true
+    // (rezerwa dla emergency retreat / auto-rescue).
+    if (!spec.bypassSpaceportCheck) {
+      const portCheck = canLaunchFromCurrent(vessel);
+      if (!portCheck.ok) {
+        return { ok: false, reason: portCheck.reason ?? 'no_spaceport_at_origin' };
+      }
     }
 
     const sx = vessel.position.x;

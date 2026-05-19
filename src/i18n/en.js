@@ -617,6 +617,9 @@ export default {
   'menu.orbitsPlanetoids': 'Planetoids',
   'menu.orbitsNone': 'None',
   'menu.radar': 'Radar',
+  // Vessel — spaceport validation messages (Bug 2)
+  'vessel.orbitingNoPort': 'No spaceport at {0} — vessel stays in orbit',
+  'vessel.reasonNoSpaceport': 'No spaceport at vessel\'s docking body',
   // Notification Center (silent alerts — bell 🔔 in BottomBar)
   'notif.title': 'Notifications',
   'notif.empty': 'No new notifications',

@@ -618,6 +618,9 @@ export default {
   'menu.orbitsPlanetoids': 'Planetoidy',
   'menu.orbitsNone': 'Żadne',
   'menu.radar': 'Radar',
+  // Vessel — komunikaty walidacji portu kosmicznego (Bug 2)
+  'vessel.orbitingNoPort': 'Brak portu na {0} — statek pozostaje na orbicie',
+  'vessel.reasonNoSpaceport': 'Brak portu kosmicznego na ciele dokowania',
   // Notification Center (silent alerts — dzwonek 🔔 w BottomBar)
   'notif.title': 'Powiadomienia',
   'notif.empty': 'Brak nowych powiadomień',
