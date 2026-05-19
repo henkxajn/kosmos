@@ -106,6 +106,7 @@ import { getTooltipContent } from '../utils/TooltipContent.js';
 import { PlanetScene }       from './PlanetScene.js';
 import { GAME_CONFIG }       from '../config/GameConfig.js';
 import { BUILDINGS }         from '../data/BuildingsData.js';     // POWER TEST
+import { TECHS }             from '../data/TechData.js';          // POWER TEST
 import { TERRAIN_TYPES }     from '../map/HexTile.js';            // POWER TEST
 import { ELEMENTS }          from '../data/ElementsData.js';      // POWER TEST
 import { COMMODITIES }       from '../data/CommoditiesData.js';   // POWER TEST
@@ -2214,7 +2215,8 @@ export class GameScene {
           // activeLeader byłby null i sekcja LIDER w UI świeciłaby pustką.
           // Yara Osei — dożywotni Archont Konfederatów.
           this.leaderSystem.setLeaderNoFaction('yara_osei', 0);
-          // Tech pozostawione nieodkryte — gracz ma 2000 research na start drzewa
+          // Power Test: wszystkie technologie odkryte od startu (ułatwia testy combat/floty)
+          this.techSystem.restore({ researched: Object.keys(TECHS) });
           // Populacja 12 POP (suma popCost budynków Power Test ≈ 7.75, z marginesem)
           this.civSystem.setPopulation(12);
           // Domyślne nazwy

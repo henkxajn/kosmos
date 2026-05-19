@@ -46,8 +46,9 @@ export class CombatHUD extends BaseOverlay {
 
     // Wysokość per encounter dynamicznie (label + HP + alive + vessels list + log).
     const rowH = (enc) => {
-      const vesselsA = this._countVessels(enc, 'A');
-      const vesselsB = this._countVessels(enc, 'B');
+      // Multi-line per vessel: 2 wiersze (name+hull, weapons indent).
+      const vesselsA = this._countVessels(enc, 'A') * 2;
+      const vesselsB = this._countVessels(enc, 'B') * 2;
       const vesselsRows = Math.max(vesselsA, vesselsB, 1);
       // label(14) + bars(12) + barLabels(12) + alive(14) + vessels(vesselsRows*12) + log header(14) + log lines + padding
       return 14 + 14 + 14 + 14 + vesselsRows * 12 + 14 + LOG_LINES_MAX * LOG_LINE_H + 8;
@@ -247,7 +248,10 @@ export class CombatHUD extends BaseOverlay {
     return side.vesselIds.length + side.joinedVesselIds.length;
   }
 
-  /** Lista wierszy "Nazwa · hull · weapony" per vessel. */
+  /**
+   * Lista wierszy per vessel — dwie linie: (1) "Nazwa · hull", (2) "  bronie".
+   * Druga linia wcięta dla czytelności. Każdy vessel → 2 wpisy w wyjściu.
+   */
   _getVesselDetails(enc, sideKey) {
     const side = sideKey === 'A' ? enc.sideA : enc.sideB;
     const vm = window.KOSMOS?.vesselManager;
@@ -264,10 +268,9 @@ export class CombatHUD extends BaseOverlay {
         return wn;
       });
       const wstr = weapons.length > 0 ? weapons.join(', ') : 'bez broni';
-      out.push({
-        text: `${name} · ${hullName} · ${wstr}`,
-        alive: (state?.hp ?? 0) > 0,
-      });
+      const alive = (state?.hp ?? 0) > 0;
+      out.push({ text: `${name} · ${hullName}`, alive, indent: false });
+      out.push({ text: `  ${wstr}`,              alive, indent: true  });
     }
     return out;
   }

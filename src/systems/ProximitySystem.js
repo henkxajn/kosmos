@@ -295,21 +295,35 @@ export class ProximitySystem {
 // ── Module helpers ────────────────────────────────────────────────────
 
 /**
- * Max weapon range AU vessela — z modules.stats.rangeAU.
- * Używane przez _checkPair do dynamic combat range. Vessel bez broni → 0.
- * NIE uwzględnia tech multipliers (combat range = fizyczny zasięg modułu;
- * tech extension to bonus dla _resolveWeaponRange w DSCS, ale combat range
- * activation powinien być prosty/deterministyczny).
+ * Max effective weapon range AU vessela — z modules.stats.rangeAU,
+ * z uwzględnieniem tech multipliers (weapon_range_<category> × weapon_range_all).
+ *
+ * Why: MovementOrderSystem._tickEngageOrder utrzymuje optimal range = tech-adjusted
+ * maxRangeAU × 0.95. Jeśli ProximitySystem._checkPair używa raw range, optimal
+ * (np. kinetic 0.224 AU z techami) leży POZA combat threshold (raw 0.1575 AU)
+ * → engage hoveruje bez wpadania w combat. Symetria z _computeMaxWeaponRangeAU
+ * w MOS rozwiązuje ten rozjazd.
+ *
+ * Tech mults tylko dla player vessela (empire bez tech state — P5).
  *
  * @param {object} vessel
  * @returns {number}
  */
 function _maxWeaponRangeAU(vessel) {
   let maxAU = 0;
+  const isPlayer = (vessel.ownerEmpireId == null || vessel.ownerEmpireId === 'player');
+  const techSys = window.KOSMOS?.techSystem;
   for (const modId of vessel.modules ?? []) {
     const mod = SHIP_MODULES?.[modId];
     if (!mod?.stats?.rangeAU) continue;
-    if (mod.stats.rangeAU > maxAU) maxAU = mod.stats.rangeAU;
+    const category = mod.stats.category ?? mod.stats.range ?? 'medium';
+    let mult = 1.0;
+    if (isPlayer && techSys?.getMultiplier) {
+      mult *= techSys.getMultiplier(`weapon_range_${category}`);
+      mult *= techSys.getMultiplier('weapon_range_all');
+    }
+    const effective = mod.stats.rangeAU * mult;
+    if (effective > maxAU) maxAU = effective;
   }
   return maxAU;
 }
