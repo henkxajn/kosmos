@@ -4869,6 +4869,12 @@ export class FleetManagerOverlay {
       let badge = '', badgeColor = THEME.textDim;
       if (!tgt.reachable) { badge = t('fleet.badgeTooFar'); badgeColor = THEME.danger; }
       else if (!tgt.explored) { badge = t('fleet.badgeUnexplored'); badgeColor = THEME.accent; }
+      else if (this._missionConfig?.actionId === 'found_outpost' && tgt.colonyStatus === 'colony') {
+        badge = t('fleet.target.existingColony'); badgeColor = THEME.warning;
+      }
+      else if (this._missionConfig?.actionId === 'found_outpost' && tgt.colonyStatus === 'outpost') {
+        badge = t('fleet.target.existingOutpost'); badgeColor = THEME.warning;
+      }
       else { badge = t('fleet.badgeExplored'); badgeColor = THEME.textDim; }
 
       ctx.fillStyle = badgeColor;
@@ -5120,10 +5126,10 @@ export class FleetManagerOverlay {
         const col = colMgr?.getColony(body.id);
         if (col && !col.isOutpost) continue;
       }
-      // Założenie placówki — tylko zbadane ciała bez kolonii/outpostu
+      // Założenie placówki — zbadane ciała; istniejące kolonie/outposty dozwolone
+      // (misja działa jako dowóz budynku do istniejącej kolonii)
       if (actionId === 'found_outpost') {
         if (!body.explored) continue;
-        if (colMgr?.hasColony(body.id)) continue;
         // Tylko odpowiednie typy (rocky, ice, moon, planetoid)
         const pType = body.planetType ?? body.type;
         const okTypes = ['rocky', 'ice', 'iron', 'volcanic', 'moon', 'planetoid'];
@@ -5136,6 +5142,11 @@ export class FleetManagerOverlay {
       const range = effectiveRange(vessel);
       const reachable = distAU <= range;
 
+      // Status kolonii — używany do badge'a "(kolonia)/(placówka)" w found_outpost
+      const existingCol = colMgr?.getColony(body.id);
+      let colonyStatus = 'none';
+      if (existingCol) colonyStatus = existingCol.isOutpost ? 'outpost' : 'colony';
+
       targets.push({
         id: body.id,
         name: body.name ?? body.id,
@@ -5143,6 +5154,7 @@ export class FleetManagerOverlay {
         distAU,
         explored: body.explored ?? false,
         reachable,
+        colonyStatus,
       });
     }
 

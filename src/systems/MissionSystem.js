@@ -1881,6 +1881,10 @@ export class MissionSystem {
     const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
     const gameYear = Math.floor(this._gameYear);
 
+    // Czy cel już miał kolonię (decyduje o tekście raportu — placówka vs dostawa)
+    const preexistingColony = colMgr?.getColony(exp.targetId) ?? null;
+    const wasExisting = !!preexistingColony;
+
     // Zbierz zasoby z cargo statku + cargo misji → startowe zasoby outpostu
     const outpostResources = {};
     if (vessel?.cargo) {
@@ -1959,13 +1963,22 @@ export class MissionSystem {
 
     // Raport misji
     const bName = bDef ? (bDef.namePL ?? exp.buildingId) : exp.buildingId;
+    const targetName = outpost.name ?? exp.targetName ?? '?';
+    let reportText;
+    if (wasExisting) {
+      reportText = buildSuccess
+        ? t('expedition.deliveredToColony', bName, targetName)
+        : t('expedition.deliveredCargoOnly', targetName, bName);
+    } else {
+      reportText = buildSuccess
+        ? t('expedition.foundOutpost', bName)
+        : t('expedition.foundOutpostFailed');
+    }
     this._emit('mission:arrived', 'expedition:missionReport', {
       expedition: exp,
       gained: outpostResources,
       multiplier: 1.0,
-      text: buildSuccess
-        ? t('expedition.foundOutpost', bName)
-        : t('expedition.foundOutpostFailed'),
+      text: reportText,
     });
   }
 

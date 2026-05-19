@@ -1027,6 +1027,8 @@ export default {
   'fleet.badgeTooFar': 'too far',
   'fleet.badgeUnexplored': 'unexplored',
   'fleet.badgeExplored': 'explored',
+  'fleet.target.existingColony': '(existing colony)',
+  'fleet.target.existingOutpost': '(outpost)',
   'fleet.fuelInsufficient': '⛽ insufficient fuel',
   'fleet.missionTypeRecon': 'Recon',
   'fleet.missionTypeSurvey': 'Recon',
@@ -2328,6 +2330,8 @@ export default {
   'expedition.buildingDelivered': 'Delivered and built {0}',
   'expedition.foundOutpostFailed': 'Build failed — no suitable terrain',
   'expedition.outpostBuildingMissing': 'Missing commodities for {0}',
+  'expedition.deliveredToColony': 'Delivered {0} to {1}',
+  'expedition.deliveredCargoOnly': 'Delivered resources to {0} — no room for {1}',
 
   // Colonist Load Modal
   'colonistModal.title': '🏠 LOAD COLONISTS',

@@ -1028,6 +1028,8 @@ export default {
   'fleet.badgeTooFar': 'za daleko',
   'fleet.badgeUnexplored': 'niezbadane',
   'fleet.badgeExplored': 'zbadane',
+  'fleet.target.existingColony': '(istniejąca kolonia)',
+  'fleet.target.existingOutpost': '(placówka)',
   'fleet.fuelInsufficient': '⛽ brak paliwa',
   'fleet.missionTypeRecon': 'Rozpoznanie',
   'fleet.missionTypeSurvey': 'Rozpoznanie',
@@ -2329,6 +2331,8 @@ export default {
   'expedition.buildingDelivered': 'Dostarczono i zbudowano {0}',
   'expedition.foundOutpostFailed': 'Nie udało się zbudować — brak odpowiedniego terenu',
   'expedition.outpostBuildingMissing': 'Brak towarów na budowę {0}',
+  'expedition.deliveredToColony': 'Dostarczono {0} do {1}',
+  'expedition.deliveredCargoOnly': 'Dostarczono zasoby do {0} — brak miejsca na {1}',
 
   // Colonist Load Modal
   'colonistModal.title': '🏠 ZAŁADUJ KOLONISTÓW',
