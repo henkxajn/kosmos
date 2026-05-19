@@ -380,16 +380,26 @@ export class GameScene {
 
         console.log('=== INTEL VESSEL CONTACTS ===');
         if (vm) {
+          let live = 0, wrecks = 0, noContact = 0;
           for (const v of vm.getAllVessels()) {
             const isEnemy = v.ownerEmpireId && v.ownerEmpireId !== 'player';
             if (!isEnemy) continue;
             const contact = intel.getVesselContact?.(v.id);
-            const quality = contact?.quality ?? 'unknown';
-            const yearsAgo = contact?.lastSeenYear != null
+            const wreckTag = v.isWreck ? ' [WRAK]' : '';
+            if (v.isWreck) wrecks++;
+            else if (!contact) noContact++;
+            else live++;
+            if (!contact) {
+              const reason = v.isWreck ? 'intel cleared on wreck' : 'never observed';
+              console.log(`  ${v.id} (${v.name})${wreckTag}: NO CONTACT (${reason}), owner=${v.ownerEmpireId}`);
+              continue;
+            }
+            const yearsAgo = contact.lastSeenYear != null
               ? (window.KOSMOS.timeSystem.gameTime - contact.lastSeenYear).toFixed(1)
               : '?';
-            console.log(`  ${v.id} (${v.name}): quality=${quality}, lastSeen=${yearsAgo}y ago, owner=${v.ownerEmpireId}`);
+            console.log(`  ${v.id} (${v.name})${wreckTag}: quality=${contact.quality}, lastSeen=${yearsAgo}y ago, posKnown=${contact.positionKnown}, owner=${v.ownerEmpireId}`);
           }
+          console.log(`--- summary: ${live} live with contact, ${noContact} live no-contact, ${wrecks} wrecks (intel cleared) ---`);
         }
       },
       // KOSMOS.debug.dumpCombat() — wypisz active encounters + per-vessel HP.
