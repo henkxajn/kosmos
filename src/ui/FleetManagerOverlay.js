@@ -215,6 +215,10 @@ export class FleetManagerOverlay {
     this._mapPanY = 0;
     this._mapBounds = null;       // { x,y,w,h } — bounds obszaru mapy (do scroll detect)
     this._mapFocusBodyId = null;  // null = gwiazda, inaczej body.id — zoom utrzymuje focus
+    // Race fix: _focusOnHomeAtStart() wymaga _mapBounds, które dostępne dopiero
+    // w _drawCenterMap. Flaga deferuje init focusu do pierwszego draw'a po
+    // otwarciu overlay'a.
+    this._pendingFocusInit = false;
 
     // Tooltip ciała na mapie
     this._mapHoverBody = null;    // { body, screenX, screenY } — hover info
@@ -232,18 +236,31 @@ export class FleetManagerOverlay {
     // null gdy tactical map jeszcze nie renderowana (defensywny guard
     // w handleRightClick przed first draw).
     this._mapViewState = null;
+
+    // Reset stanu mapy przy interstellar jump — pan/zoom/focus z poprzedniego
+    // systemu nie ma sensu w nowym (inne maxOrbitAU, inne ciała).
+    EventBus.on('system:switched', () => {
+      this._mapZoom = 1.0;
+      this._mapPanX = 0;
+      this._mapPanY = 0;
+      this._mapFocusBodyId = null;
+      this._mapHoverBody = null;
+      this._pendingFocusInit = true;
+    });
   }
 
   // ── API publiczne ──────────────────────────────────────────────────────────
 
   toggle() {
     this._visible = !this._visible;
-    if (this._visible) this._focusOnHomeAtStart();
+    // Defer focus init do pierwszego draw'a — _focusOnHomeAtStart wymaga
+    // _mapBounds, które dostępne dopiero w _drawCenterMap.
+    if (this._visible) this._pendingFocusInit = true;
     else this._close();
   }
   open(opts = {}) {
     this._visible = true;
-    this._focusOnHomeAtStart();
+    this._pendingFocusInit = true;
     // M4 P2 — klawisz K otwiera fleet z focusSection: 'wreck'. Przy najbliższym
     // draw wymuszamy scroll listy do tej sekcji + auto-select pierwszy wrak.
     this._pendingFocusSection = opts.focusSection ?? null;
@@ -268,11 +285,9 @@ export class FleetManagerOverlay {
     this._missionConfig = null;
     this._targetScrollOffset = 0;
     this._cachedTargets = null;
-    this._mapZoom = 1.0;
-    this._mapPanX = 0;
-    this._mapPanY = 0;
-    this._mapFocusBodyId = null;
-    this._mapHoverBody = null;
+    // Stan mapy taktycznej (_mapZoom/Pan/FocusBodyId) NIE jest resetowany —
+    // gracz oczekuje że ujęcie zachowa się między otwarciami. Reset wymuszany
+    // tylko przy `system:switched` (interstellar jump) — patrz konstruktor.
     this._mapDragging = false;
     this._mapDragWasDrag = false;
     this._showCluster = false;
@@ -540,20 +555,27 @@ export class FleetManagerOverlay {
         const maxScroll = Math.max(0, this._atlasContentH - this._atlasVisibleH);
         this._atlasScrollY = Math.max(0, Math.min(maxScroll, this._atlasScrollY + delta * 0.5));
       } else {
-        // Zoom mapy — utrzymaj focus na wybranym ciele (domyślnie gwiazda)
-        const zoomFactor = delta > 0 ? 0.85 : 1.18;
+        // Zoom-at-cursor: world point pod kursorem (mx, my) ma pozostać pod
+        // kursorem po zmianie zoomu. Math zsynchronizowana z _drawCenterMap:
+        //   mapCx = mb.x + mb.w/2 + panX  (analogicznie mapCy)
+        //   bodyScreen = bodyAU * auToPx + mapCx
         const oldZoom = this._mapZoom;
-        // Max zwiększony z 80 na 300 — pozwala widzieć planetę + księżyce + orbity
-        // księżyców w pełni ekranu. Focus-body trzeba wcześniej ustawić klikiem na
-        // ciało w mapie (wtedy zoom krąży wokół niego).
-        this._mapZoom = Math.max(0.3, Math.min(300, this._mapZoom * zoomFactor));
-        const focusBody = this._mapFocusBodyId ? _findBody(this._mapFocusBodyId) : null;
-        const { x: fAUx, y: fAUy } = this._bodyAU(focusBody);
-        const maxAU = this._getMaxOrbitAU();
+        const newZoom = Math.max(0.3, Math.min(300, oldZoom * (delta > 0 ? 0.85 : 1.18)));
+        if (newZoom === oldZoom) return true;  // clamp hit — pan bez zmian
+
         const baseR = Math.min(mb.w / 2, mb.h / 2) - 20;
-        const dZoom = oldZoom - this._mapZoom;
-        this._mapPanX += fAUx * baseR * dZoom / maxAU;
-        this._mapPanY += fAUy * baseR * dZoom / maxAU;
+        const maxAU = this._getMaxOrbitAU();
+        const oldAuToPx = baseR * oldZoom / maxAU;
+        const newAuToPx = baseR * newZoom / maxAU;
+
+        const oldMapCx = mb.x + mb.w / 2 + this._mapPanX;
+        const oldMapCy = mb.y + mb.h / 2 + this._mapPanY;
+        const worldAU_x = (mx - oldMapCx) / oldAuToPx;
+        const worldAU_y = (my - oldMapCy) / oldAuToPx;
+
+        this._mapZoom = newZoom;
+        this._mapPanX = mx - (mb.x + mb.w / 2) - worldAU_x * newAuToPx;
+        this._mapPanY = my - (mb.y + mb.h / 2) - worldAU_y * newAuToPx;
       }
       return true;
     }
@@ -1835,6 +1857,20 @@ export class FleetManagerOverlay {
     const mapY = y + 32;
     const mapH = h - 32;
     this._mapBounds = { x, y: mapY, w, h: mapH };
+
+    // Deferred focus init — _focusOnHomeAtStart wymaga _mapBounds, którego
+    // nie ma na momencie wywołania open()/toggle(). Pierwszy draw po otwarciu
+    // teraz centruje home planet poprawnie.
+    if (this._pendingFocusInit) {
+      this._pendingFocusInit = false;
+      this._focusOnHomeAtStart();
+    }
+
+    // Orphan focus guard — body mogło zostać usunięte (wreck collected,
+    // asteroid impact) w długiej sesji z persist state.
+    if (this._mapFocusBodyId && !_findBody(this._mapFocusBodyId)) {
+      this._mapFocusBodyId = null;
+    }
 
     // Tryb STAR ATLAS — katalog ciał zamiast mapy
     if (this._showAtlas) {
