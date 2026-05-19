@@ -588,8 +588,15 @@ export class GalaxyMapScene extends BaseOverlay {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return [];
     return vMgr.getAllVessels().filter(v => {
-      if (v.position.state !== 'docked') return false;
-      if (v.status !== 'idle' && v.status !== 'refueling') return false;
+      if (v.isWreck) return false;
+      // Akceptujemy docked (hangar) ORAZ orbiting (statek na orbicie w obcym
+      // systemie bez friendly kolonii do dokowania — bez tego gracz nie może
+      // warpować dalej z odkrytego układu).
+      const state = v.position?.state;
+      if (state !== 'docked' && state !== 'orbiting') return false;
+      // Orbiting wymaga 'on_mission' lub 'idle'; docked wymaga idle/refueling.
+      if (state === 'docked' && v.status !== 'idle' && v.status !== 'refueling') return false;
+      if (state === 'orbiting' && v.status !== 'idle' && v.status !== 'on_mission') return false;
       // Warp capability pochodzi z modułów (engine_warp); legacy fallback na hull.
       const hull = SHIPS[v.shipId] ?? HULLS[v.shipId];
       if (!hull) return false;

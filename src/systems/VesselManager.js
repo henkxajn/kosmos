@@ -520,8 +520,13 @@ export class VesselManager {
   dispatchInterstellar(vesselId, targetSystemId) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return false;
-    if (vessel.status !== 'idle' && vessel.status !== 'refueling') return false;
-    if (vessel.position.state !== 'docked') return false;
+    // Akceptuj docked (idle/refueling) ORAZ orbiting (idle/on_mission po recon).
+    // Bez tego statek odkrywający obcy układ nie może warpować dalej bez
+    // wracania do home (gdy nie ma friendly kolonii w obcym systemie do dokowania).
+    const state = vessel.position?.state;
+    const isDocked = state === 'docked' && (vessel.status === 'idle' || vessel.status === 'refueling');
+    const isOrbiting = state === 'orbiting' && (vessel.status === 'idle' || vessel.status === 'on_mission');
+    if (!isDocked && !isOrbiting) return false;
 
     const shipDef = _getHullDef(vessel.shipId);
     if (!shipDef) return false;
@@ -2180,6 +2185,9 @@ export class VesselManager {
         vessel.position.dockedAt = m.targetId;
         m.phase = 'orbiting_body';
         m.type = 'exploration'; // przywróć typ aby UI pokazywał panel orbiting_body
+        // Powiadom OrbitalSpaceSystem — zarejestruje orbitę dla sprite'a w 3D map
+        // (bez tego _tickOrbitingVessels pomija statek i sprite zostaje w miejscu).
+        EventBus.emit('vessel:arrived', { vessel, mission: m });
       }
       return;
     }
@@ -2255,6 +2263,8 @@ export class VesselManager {
           vessel.position.dockedAt = bodyId;
           m.phase = 'orbiting_body';
           m.type = 'exploration'; // przywróć typ
+          // Powiadom OrbitalSpaceSystem — zarejestruje orbitę dla sprite'a w 3D map.
+          EventBus.emit('vessel:arrived', { vessel, mission: m });
           return;
         }
 
@@ -2310,6 +2320,8 @@ export class VesselManager {
 
     addMissionLog(vessel, gameYear, t('vessel.reconAborted'), 'warning');
 
+    // Powiadom OrbitalSpaceSystem — zarejestruje orbitę (sprite w 3D będzie żyć).
+    EventBus.emit('vessel:arrived', { vessel, mission: m });
     EventBus.emit('vessel:positionUpdate', { vessels: [vessel] });
     return true;
   }
