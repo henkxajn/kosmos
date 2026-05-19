@@ -3919,6 +3919,19 @@ export class GameScene {
       tooltip.cancelSchedule(); tooltip.hide();
       return;
     }
+
+    // Fleet Atlas/Cluster — dedicated path, bypass całego routingu canvas.
+    // Powód: poprzedni fix (resolveHoverInfo + tactical fallback) nie działał
+    // w praktyce — najprawdopodobniej e.target.id nie matchował 'three-canvas'
+    // ani 'ui-canvas' (event-layer capture'uje), więc cały tooltip path był
+    // skip'owany. Tu wprost sprawdzamy stan fleet i robimy atlas hit-test
+    // niezależnie od targetId.
+    const fleetForAtlas = this.uiManager?.overlayManager?.overlays?.fleet;
+    if (fleetForAtlas?._visible && (fleetForAtlas._showAtlas || fleetForAtlas._showCluster)) {
+      this._tooltipHoverFromFleetAtlas(clientX, clientY, fleetForAtlas);
+      return;
+    }
+
     // DOM elements z data-tooltip — sam Tooltip.js obsługuje przez global mouseover/mouseout,
     // tu tylko canvas paths.
     // M3 P1.5 post-fix #1: planet-canvas (z=4) capture'uje WSZYSTKIE mouse
@@ -3955,6 +3968,37 @@ export class GameScene {
       tooltip.cancelSchedule();
       tooltip.hide();
     }
+  }
+
+  // Dedicated path dla Fleet Atlas/Cluster — niezależny od e.target.id routingu.
+  // Iteruje fleet._hitZones bezpośrednio (nie przez findHitZone, który filtruje
+  // tylko tactical types). Hit na 'map_body' → entity tooltip; brak hit → cancel.
+  // NIGDY nie wpada w coord tooltip — atlas nie jest mapą świata.
+  _tooltipHoverFromFleetAtlas(clientX, clientY, fleet) {
+    const local = this.uiManager?.toLocalUI?.(clientX, clientY);
+    if (!local) {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
+    const mx = local.x, my = local.y;
+    const zones = fleet._hitZones ?? [];
+    // Reverse iter — atlas rows pushed in order, last visible wygrywa przy overlap
+    for (let i = zones.length - 1; i >= 0; i--) {
+      const z = zones[i];
+      if (!z || z.type !== 'map_body') continue;
+      if (mx < z.x || mx > z.x + z.w || my < z.y || my > z.y + z.h) continue;
+      const bodyId = z.data?.bodyId;
+      if (!bodyId) break;
+      const body = EntityManager.get(bodyId);
+      if (!body) break;
+      this._scheduleEntityTooltip(
+        { type: 'planet', entityId: bodyId, planet: body, worldPoint: null },
+        clientX, clientY,
+      );
+      return;
+    }
+    // Brak hit — cancel tooltip (NIE coord tooltip)
+    this._scheduleEntityTooltip(null, clientX, clientY);
   }
 
   _tooltipHoverFromMain3D(clientX, clientY) {
@@ -3997,6 +4041,13 @@ export class GameScene {
     // Atlas/Cluster — żaden tooltip (kind:'none' różni się od null żeby
     // NIE wpadać w coord-tooltip fallback, bo _mapBounds pokrywa region Atlas).
     if (info?.kind === 'none') {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
+    // Defensive guard — gdyby _dispatchTooltipHover nie złapał atlas/cluster
+    // (np. ścieżka via 'ui-canvas' targetId), nigdy nie pokazuj coord tooltipa
+    // nad atlasem/clusterem. Atlas != mapa świata.
+    if (fleet._showAtlas || fleet._showCluster) {
       this._scheduleEntityTooltip(null, clientX, clientY);
       return;
     }
