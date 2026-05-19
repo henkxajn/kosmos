@@ -3994,6 +3994,12 @@ export class GameScene {
       return;
     }
     const info = fleet.resolveHoverInfo(local.x, local.y);
+    // Atlas/Cluster — żaden tooltip (kind:'none' różni się od null żeby
+    // NIE wpadać w coord-tooltip fallback, bo _mapBounds pokrywa region Atlas).
+    if (info?.kind === 'none') {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
     if (!info) {
       // M3 P2.3 — coord tooltip dla empty space w obrębie tactical map bounds.
       // resolveHoverInfo zwraca null gdy outside mapBounds LUB empty hit.

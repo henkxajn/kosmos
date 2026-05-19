@@ -468,13 +468,27 @@ export class FleetManagerOverlay {
   //   null                          — empty / poza overlayem / przed renderem
   resolveHoverInfo(mx, my) {
     if (!this._visible) return null;
-    if (this._showAtlas || this._showCluster) return null;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return null;
 
     // Najpierw sprawdź hit zone — UI hints (cancel button) wygrywają nad mapą
     const hit = findHitZone(mx, my, this._hitZones);
     if (hit && hit.type === 'cancel_movement_order') {
       return { kind: 'uiHint', textKey: 'tooltip.fleet.cancelOrderHint' };
+    }
+
+    // Atlas / Cluster — własny hit-test (bez tactical worldPoint).
+    // Wiersze ciał w katalogu mają hit-zony 'map_body' (L2484-2487). Dla
+    // hovera nad wierszem zwracamy entity → GameScene pokaże Universal
+    // Tooltip z TooltipContent._planetContent. Pusty hit zwraca 'none'
+    // (NIE null) żeby GameScene NIE wpadł w coord-tooltip fallback —
+    // _mapBounds w tle pokrywa region Atlas, ale Atlas to nie mapa świata.
+    if (this._showAtlas || this._showCluster) {
+      if (hit?.type === 'map_body') {
+        const lookups = { getEntity: (id) => EntityManager.get(id) };
+        const target = resolveTacticalTarget(hit, null, lookups);
+        if (target && target.type !== 'empty') return { kind: 'entity', target };
+      }
+      return { kind: 'none' };
     }
 
     // Tactical map entity hover — w obrębie _mapBounds
