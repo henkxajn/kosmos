@@ -2630,7 +2630,10 @@ export class FleetTabPanel {
 
     for (const btype of _BODY_TYPES) {
       for (const body of EntityManager.getByType(btype)) {
-        if (body.id === activePid) continue;
+        // Wyklucz macierzystą planetę dla większości akcji (nie wysyłaj
+        // transport/colonize/recon na samego siebie). Dla `orbit` dopuść —
+        // statek z hangaru wylatuje na orbitę własnej planety.
+        if (body.id === activePid && actionId !== 'orbit') continue;
 
         if (actionId === 'survey' || actionId === 'deep_scan') {
           // dowolne
