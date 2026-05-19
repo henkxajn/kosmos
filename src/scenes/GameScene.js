@@ -54,6 +54,7 @@ import { DysonSystem }          from '../systems/DysonSystem.js';
 import { AutoPauseSystem }      from '../systems/AutoPauseSystem.js';
 import { ScheduledEventSystem } from '../systems/ScheduledEventSystem.js';
 import { EventLogSystem }       from '../systems/EventLogSystem.js';
+import { NotificationCenter }   from '../systems/NotificationCenter.js';
 import { buildScheduledEventPopup } from '../ui/ScheduledEventPopup.js';
 import { LEADERS }              from '../data/LeaderData.js';
 import { NARRATIVE_EVENTS_BY_ID } from '../data/NarrativeEventsData.js';
@@ -242,6 +243,7 @@ export class GameScene {
     this.autoPauseSystem     = new AutoPauseSystem();
     this.scheduledEventSystem = new ScheduledEventSystem();
     this.eventLogSystem       = new EventLogSystem();
+    this.notificationCenter   = new NotificationCenter();
     this.empireRegistry       = new EmpireRegistry();
     this.intelSystem          = new IntelSystem();
     this.poiRegistry          = new POIRegistry();
@@ -296,6 +298,7 @@ export class GameScene {
     window.KOSMOS.autoPauseSystem  = this.autoPauseSystem;
     window.KOSMOS.scheduledEventSystem = this.scheduledEventSystem;
     window.KOSMOS.eventLogSystem       = this.eventLogSystem;
+    window.KOSMOS.notificationCenter   = this.notificationCenter;
     window.KOSMOS.empireRegistry   = this.empireRegistry;
     window.KOSMOS.intelSystem      = this.intelSystem;
     window.KOSMOS.poiRegistry      = this.poiRegistry;
@@ -1024,6 +1027,9 @@ export class GameScene {
       // Przywróć EventLogSystem (zunifikowany dziennik — Opcja B)
       if (c4x.eventLog) {
         this.eventLogSystem.restore(c4x.eventLog);
+      }
+      if (c4x.notificationCenter) {
+        this.notificationCenter.restore(c4x.notificationCenter);
       }
       // Przywróć ProductionRequestBoard (zlecenia produkcyjne cross-colony)
       if (c4x.productionRequestBoard) {

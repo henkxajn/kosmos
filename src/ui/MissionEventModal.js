@@ -21,10 +21,14 @@ import {
 import { buildScheduledEventPopup } from './ScheduledEventPopup.js';
 
 // ── Stan wewnętrzny ──────────────────────────────────────────────────────
+// _queue: każdy element = { config, noPause }. Zwykłe popupy pauzują grę
+// (zachowanie pierwotne); silent notifications otwierane przez user-klik w
+// NotificationDropdown przekazują noPause=true → grę nie pauzujemy.
 let _queue = [];
 let _active = null;           // aktualny overlay DOM
-let _savedTimeState = null;   // { multiplierIndex, isPaused } sprzed 1. popupu
+let _savedTimeState = null;   // { multiplierIndex, isPaused } sprzed 1. popupu pauzującego
 let _currentTimeState = { multiplierIndex: 1, isPaused: false };
+let _pauseDepth = 0;          // licznik popupów pauzujących w kolejce — czas resetuje się dopiero przy 0
 
 // ── Helpery ──────────────────────────────────────────────────────────────
 
@@ -163,12 +167,15 @@ function _showNext() {
     return;
   }
 
-  const config = _queue.shift();
+  const { config, noPause } = _queue.shift();
 
-  // Przy pierwszym popupie — zapisz stan czasu i pauzuj
-  if (_savedTimeState === null) {
-    _savedTimeState = { ..._currentTimeState };
-    EventBus.emit('time:pause');
+  // Pauzujący popup (nieoznaczony noPause): zapisz stan czasu i pauzuj (tylko przy 1.)
+  if (!noPause) {
+    if (_savedTimeState === null) {
+      _savedTimeState = { ..._currentTimeState };
+      EventBus.emit('time:pause');
+    }
+    _pauseDepth++;
   }
 
   // Buduj popup DATASHEET (cyber-gazeta z video tlem)
@@ -180,6 +187,7 @@ function _showNext() {
     buttons:   config.buttons ?? [{ label: '[ENTER] OK', primary: true }],
     onDismiss: () => {
       _active = null;
+      if (!noPause) _pauseDepth = Math.max(0, _pauseDepth - 1);
       _showNext();
     },
   });
@@ -206,7 +214,9 @@ function _showNext() {
 }
 
 function _restoreTime() {
+  // Czas wraca tylko gdy wyczerpała się kolejka popupów pauzujących.
   if (_savedTimeState === null) return;
+  if (_pauseDepth > 0) return;
   const saved = _savedTimeState;
   _savedTimeState = null;
 
@@ -217,8 +227,14 @@ function _restoreTime() {
 
 // ── Publiczne API ───────────────────────────────────────────────────────
 
-export function queueMissionEvent(config) {
-  _queue.push(config);
+/**
+ * Dodaj popup do kolejki.
+ * @param {Object} config       — konfiguracja popupu (severity, headline, contentHTML, ...)
+ * @param {Object} [opts]
+ * @param {boolean} [opts.noPause] — true → popup NIE pauzuje gry (silent notifications)
+ */
+export function queueMissionEvent(config, opts = {}) {
+  _queue.push({ config, noPause: opts.noPause === true });
   if (!_active) _showNext();
 }
 
@@ -362,79 +378,82 @@ function _onMissionReport({ expedition: exp, gained, multiplier }) {
   });
 }
 
-function _onReconProgress({ expedition: exp, body, discovered }) {
-  const bodyName = body?.name ?? '?';
+// (Funkcje _onReconProgress / _onReconComplete usunięte — discovery body events
+// idą teraz przez NotificationCenter jako silent notifications. Detale otwierane
+// przez 'notify:openDetail' → _openNotificationDetail z noPause:true.)
 
+// ── Notification detail (silent — bez pauzy gry) ─────────────────────────
+// Klik wiersza w NotificationDropdown emituje 'notify:openDetail' z notifką.
+// Rebuilduje config jak dla popup recon, ale otwiera z noPause=true.
+
+function _openNotificationDetail({ notif }) {
+  if (!notif) return;
+  let config = null;
+  switch (notif.source) {
+    case 'reconProgress':
+    case 'observatoryDiscovered':
+      config = _buildBodyDiscoveryConfig(notif);
+      break;
+    case 'reconCompleteTarget':
+      config = _buildBodyDiscoveryConfig(notif);
+      break;
+    case 'reconComplete':
+      config = _buildReconCompleteSummaryConfig(notif);
+      break;
+    default:
+      return;
+  }
+  if (config) queueMissionEvent(config, { noPause: true });
+}
+
+function _buildBodyDiscoveryConfig(notif) {
+  const body = _findBody(notif.payload?.bodyId);
+  const bodyName = body?.name ?? notif.payload?.bodyName ?? '?';
   let stats = _buildBodyStats(body);
-  stats += formatStatLineWithCursor(t('missionPopup.discovered'), `${discovered?.length ?? 0} ${t('missionPopup.bodies')}`, 'at-stat-gld');
-
-  queueMissionEvent({
+  stats += formatStatLineWithCursor(t('missionPopup.orbit'), t('missionPopup.awaitingOrders'), 'at-stat-dim');
+  return {
     severity: 'discovery',
     barTitle: t('missionPopup.discoveryBar'),
     barRight: _gameYear(),
     svgKey: 'recon',
     svgLabel: t('missionPopup.bodyDetected').replace(/\n/g, '<br>'),
-    fanfareText: t('missionPopup.discoveryFanfare', bodyName.toUpperCase(), bodyName.toUpperCase()),
+    fanfareText: t('missionPopup.discoveryFanfareShort', bodyName.toUpperCase()),
     prompt: '> SCAN_COMPLETE.LOG_',
     headline: `${_typeIcon(body)} ${bodyName.toUpperCase()}`,
     contentHTML: stats,
-  });
+  };
 }
 
-function _onReconComplete({ expedition: exp, scope, discovered }) {
-  // full_system — podsumowanie
-  if (scope === 'full_system') {
-    const vesselName = exp.vesselId ? _getVesselName(exp.vesselId) : null;
-    let stats = '';
-    if (vesselName) stats += formatStatLine(t('missionPopup.vessel'), vesselName);
-    stats += formatStatLine(t('missionPopup.discovered'), `${discovered?.length ?? 0} ${t('missionPopup.bodies')}`, 'at-stat-pos');
+function _buildReconCompleteSummaryConfig(notif) {
+  const discoveredIds = notif.payload?.discoveredIds ?? [];
+  const vesselId = notif.payload?.vesselId;
+  const vesselName = vesselId ? _getVesselName(vesselId) : null;
 
-    if (discovered && discovered.length > 0) {
-      stats += formatSectionTitle(t('missionPopup.exploredBodies'));
-      for (const id of discovered) {
-        const b = _findBody(id);
-        if (b) {
-          stats += formatStatLine(`${_typeIcon(b)} ${b.name}`, b.planetType ?? b.type ?? '', 'at-stat-dim');
-        }
+  let stats = '';
+  if (vesselName) stats += formatStatLine(t('missionPopup.vessel'), vesselName);
+  stats += formatStatLine(t('missionPopup.discovered'), `${discoveredIds.length} ${t('missionPopup.bodies')}`, 'at-stat-pos');
+
+  if (discoveredIds.length > 0) {
+    stats += formatSectionTitle(t('missionPopup.exploredBodies'));
+    for (const id of discoveredIds) {
+      const b = _findBody(id);
+      if (b) {
+        stats += formatStatLine(`${_typeIcon(b)} ${b.name}`, b.planetType ?? b.type ?? '', 'at-stat-dim');
       }
     }
-
-    stats += formatStatLineWithCursor(t('missionPopup.orbit'), t('missionPopup.awaitingOrders'), 'at-stat-dim');
-
-    queueMissionEvent({
-      severity: 'info',
-      barTitle: t('missionPopup.reconBar'),
-      barRight: _gameYear(),
-      svgKey: 'recon',
-      svgLabel: t('missionPopup.scanComplete').replace(/\n/g, '<br>'),
-      prompt: '> RECON_DONE.EXE_',
-      headline: t('missionPopup.reconComplete').replace(/\n/g, '<br>'),
-      contentHTML: stats,
-    });
-    return;
   }
+  stats += formatStatLineWithCursor(t('missionPopup.orbit'), t('missionPopup.awaitingOrders'), 'at-stat-dim');
 
-  // target / nearest — pojedyncze ciało
-  if (discovered && discovered.length > 0) {
-    const bodyId = discovered[0];
-    const body = _findBody(bodyId);
-    const bodyName = body?.name ?? bodyId;
-
-    let stats = _buildBodyStats(body);
-    stats += formatStatLineWithCursor(t('missionPopup.orbit'), t('missionPopup.awaitingOrders'), 'at-stat-dim');
-
-    queueMissionEvent({
-      severity: 'discovery',
-      barTitle: t('missionPopup.discoveryBar'),
-      barRight: _gameYear(),
-      svgKey: 'recon',
-      svgLabel: t('missionPopup.bodyDetected').replace(/\n/g, '<br>'),
-      fanfareText: t('missionPopup.discoveryFanfareShort', bodyName.toUpperCase()),
-      prompt: '> SCAN_COMPLETE.LOG_',
-      headline: `${_typeIcon(body)} ${bodyName.toUpperCase()}`,
-      contentHTML: stats,
-    });
-  }
+  return {
+    severity: 'info',
+    barTitle: t('missionPopup.reconBar'),
+    barRight: _gameYear(),
+    svgKey: 'recon',
+    svgLabel: t('missionPopup.scanComplete').replace(/\n/g, '<br>'),
+    prompt: '> RECON_DONE.EXE_',
+    headline: t('missionPopup.reconComplete').replace(/\n/g, '<br>'),
+    contentHTML: stats,
+  };
 }
 
 // ── Śledzenie stanu czasu ───────────────────────────────────────────────
@@ -621,8 +640,9 @@ export function initMissionEvents() {
   EventBus.on('expedition:disaster',      _onDisaster);
   EventBus.on('expedition:colonyFounded',  _onColonyFounded);
   EventBus.on('expedition:missionReport',  _onMissionReport);
-  EventBus.on('expedition:reconProgress',  _onReconProgress);
-  EventBus.on('expedition:reconComplete',  _onReconComplete);
+  // expedition:reconProgress + reconComplete TERAZ idą przez NotificationCenter
+  // (silent notifications, BEZ pauzy gry). Detale otwierane przez 'notify:openDetail'.
+  EventBus.on('notify:openDetail',         _openNotificationDetail);
   EventBus.on('discovery:found',           _onDiscoveryFound);
   EventBus.on('tech:researched',           _onTechResearched);
   EventBus.on('interstellar:arrived',      _onInterstellarArrived);

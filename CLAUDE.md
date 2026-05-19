@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v71 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v72 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -95,6 +95,18 @@ BuildingSystem → EventBus.emit('resource:registerProducer') → ResourceSystem
 BuildingSystem → EventBus.emit('planet:buildResult') → ColonyOverlay (UI update)
 ```
 NIE importuj systemów bezpośrednio między sobą.
+
+### Silent notifications (bez pauzy gry)
+`NotificationCenter` (`src/systems/NotificationCenter.js`) — router dla eventów
+które NIE powinny pauzować gry ani pokazywać auto-popup. Subskrybuje silent
+events (`expedition:reconProgress`, `expedition:reconComplete`,
+`observatory:discovered`), przechowuje w `_items[]`, emituje `notify:listChanged`.
+BottomBar pokazuje ikonę 🔔 z badge count, klik → `NotificationDropdown` (DOM
+overlay) z auto-grupowaniem po typie. Klik wiersza → `notify:openDetail` →
+`MissionEventModal.queueMissionEvent(cfg, {noPause:true})` (detail bez pauzy).
+Equivalentny EventLog entry idzie przez `eventLogSystem.push()` (historia).
+Nowe kategorie (intel rumor, dyplomacja) — dodać `_handleX` w NotificationCenter
++ ikonę grupy w `NotificationDropdown.GROUP_ICONS`.
 
 ### GameState (nowe domeny — wojna/dyplomacja/AI obcych)
 Dla NOWYCH domen (empires, intel, diplomacy, wars, battles, invasions) używamy
@@ -354,6 +366,10 @@ Endurance drain multiplier (VesselManager._tickEndurance) — M2a commit 8
 | `vessel:autoRetreatIssued { vesselId, battleId, destinationPlanetId, orderId }` | AutoRetreatSystem (M2a) | UIManager (EventLog) |
 | `vessel:autoRetreatFailed { vesselId, battleId, reason }` (`no_friendly_planet` / order_rejected) | AutoRetreatSystem (M2a) | UIManager (EventLog) |
 | `battle:resolved { warId, battleId, result }` z `result.location: {systemId, planetId, point}` (v66) | VesselCombatSystem (deep-space), EnemyAttackHandler, WarSystem | GameScene, AutoRetreatSystem, InvasionSystem |
+| `notify:added { notif }` (silent notification) | NotificationCenter | — |
+| `notify:listChanged { count }` (active count change) | NotificationCenter | BottomBar (bell badge), NotificationDropdown |
+| `notify:dismissed { id }` | NotificationCenter | NotificationDropdown |
+| `notify:openDetail { notif }` (klik wiersza w dropdown) | NotificationDropdown | MissionEventModal (`noPause:true`) |
 
 ---
 

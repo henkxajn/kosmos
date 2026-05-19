@@ -9,6 +9,7 @@ import { COSMIC }         from '../config/LayoutConfig.js';
 import EventBus            from '../core/EventBus.js';
 import { t, getLocale }   from '../i18n/i18n.js';
 import { showAutoPauseSettings } from './AutoPauseSettingsModal.js';
+import { toggleNotificationDropdown, isNotificationDropdownOpen } from './NotificationDropdown.js';
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline w zwiniętym pasku
@@ -158,11 +159,16 @@ export class BottomBar {
       logX = 140;
     }
 
-    // ── Sekcja centralna: EventLog (inline, 2 wpisy, flash 3s, klikalna całość) ──
+    // ── Sekcja prawa: bell 🔔 (NotificationCenter) + MENU ──
     const menuBtnW = 64;
     const menuBtnX = W - menuBtnW - 6;
+    const bellBtnW = 38;
+    const bellBtnX = menuBtnX - bellBtnW - 4;
+    this._bellClickBounds = { x: bellBtnX, y: barY, w: bellBtnW, h: BAR_H };
+
+    // ── Sekcja centralna: EventLog (inline, 2 wpisy, flash 3s, klikalna całość) ──
     const logAreaX = logX;
-    const logAreaW = (menuBtnX - 8) - logAreaX;
+    const logAreaW = (bellBtnX - 8) - logAreaX;
     this._logClickBounds = { x: logAreaX, y: barY, w: logAreaW, h: BAR_H };
 
     // Ikona „otwórz dziennik" (📜) + strzałka stanu — na początku sekcji logu
@@ -173,8 +179,8 @@ export class BottomBar {
     ctx.fillText(overlayOpen ? '📜▼' : '📜▲', logAreaX, textY);
     const entriesStartX = logAreaX + 28;
 
-    // Wpisy inline po ikonie
-    const entriesW = menuBtnX - entriesStartX - 8;
+    // Wpisy inline po ikonie (zaweż żeby nie wchodziły na bell + MENU)
+    const entriesW = bellBtnX - entriesStartX - 8;
     const maxChars = Math.max(10, Math.floor(entriesW / 6));
 
     const entries = visibleEntries.slice(0, LOG_INLINE);
@@ -196,7 +202,8 @@ export class BottomBar {
       lx += ctx.measureText(txt).width + 16;
     });
 
-    // ── Sekcja prawa: przycisk MENU ──
+    // ── Sekcja prawa: bell 🔔 + przycisk MENU ──
+    this._drawBellButton(ctx, bellBtnX, barY + 3, bellBtnW, 20, textY);
     this._drawMenuButton(ctx, W, H, textY);
 
     // Hint (jeśli nie civMode)
@@ -331,6 +338,51 @@ export class BottomBar {
   // Rysuj panel MENU — stub (menu jest teraz DOM, nie canvas)
   drawMenu() { /* noop — DOM menu zarządzane przez _syncDomMenu() */ }
 
+  // ── Przycisk bell (🔔 + badge count) — silent notifications ──
+  // Stan żyje w window.KOSMOS.notificationCenter. Klik toggle DOM dropdown.
+  _drawBellButton(ctx, x, y, w, h, textY) {
+    const nc = window.KOSMOS?.notificationCenter;
+    const count = nc?.getActiveCount?.() ?? 0;
+    const open = isNotificationDropdownOpen();
+
+    // Tło przycisku (subtelne — dzwonek ma być akcentem ikony, nie ramki)
+    if (open) {
+      ctx.fillStyle = THEME.accentMed;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = THEME.borderActive;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
+    }
+
+    // Ikona dzwonka — emoji
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = count > 0 ? THEME.accent : THEME.textSecondary;
+    ctx.textAlign = 'center';
+    ctx.fillText('🔔', x + w / 2, textY);
+    ctx.textAlign = 'left';
+
+    // Badge z licznikiem (top-right na ikonie)
+    if (count > 0) {
+      const cx = x + w - 8;
+      const cy = y + 4;
+      const r = 7;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = THEME.danger;
+      ctx.fill();
+      ctx.strokeStyle = THEME.bgPrimary;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(count > 99 ? '99+' : String(count), cx, cy + 0.5);
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'left';
+    }
+  }
+
   // ── Przycisk MENU w prawym rogu paska ──
   _drawMenuButton(ctx, W, H, textY) {
     const btnW = 64;
@@ -438,6 +490,22 @@ export class BottomBar {
       this._syncDomMenu();
       this._hoverRow = -1;
       return true;
+    }
+
+    // Przycisk bell (🔔) — toggle NotificationDropdown
+    if (this._bellClickBounds) {
+      const b = this._bellClickBounds;
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+        // Anchor zawiera bbox bella żeby NotificationDropdown._onOutsideMouseDown
+        // mogło rozpoznać klik w bell i pominąć close (uniknij close+reopen pętli).
+        toggleNotificationDropdown({
+          anchorX: b.x + b.w / 2,
+          anchorY: b.y,
+          barH: BAR_H,
+          bellRect: { x: b.x, y: b.y, w: b.w, h: b.h },
+        });
+        return true;
+      }
     }
 
     // Klik gdziekolwiek w sekcji logu (ikona 📜 lub inline wpisy) → toggle overlay 'eventLog'

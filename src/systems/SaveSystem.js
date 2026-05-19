@@ -152,6 +152,7 @@ export class SaveSystem {
       // Faza 0: reactive store dla NOWYCH domen (empires/intel/diplomacy/wars/battles/invasions)
       gameState: window.KOSMOS.gameState?.serialize() ?? null,
       productionRequestBoard: window.KOSMOS.productionRequestBoard?.serialize() ?? null,
+      notificationCenter: window.KOSMOS.notificationCenter?.serialize() ?? null,
     };
   }
 

@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 71;
+export const CURRENT_VERSION     = 72;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -89,6 +89,7 @@ const MIGRATIONS = {
   68: _migrateV68toV69,
   69: _migrateV69toV70,
   70: _migrateV70toV71,
+  71: _migrateV71toV72,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1821,6 +1822,20 @@ function _migrateV70toV71(data) {
       if (v.movementOrder && v.movementOrder.engageTargetId === undefined) {
         v.movementOrder.engageTargetId = null;
       }
+    }
+  }
+  return data;
+}
+
+// ── Migracja v71 → v72 ──────────────────────────────────────────────────────
+// NotificationCenter — silent notifications (odkrycia ciał bez pauzy gry).
+//   - c4x.notificationCenter: { items[], nextId } — default puste.
+// Stare save (v71) nie miały żadnych notyfikacji, więc puste są właściwym defaultem.
+function _migrateV71toV72(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x) {
+    if (c4x.notificationCenter === undefined) {
+      c4x.notificationCenter = { items: [], nextId: 1 };
     }
   }
   return data;
