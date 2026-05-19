@@ -561,14 +561,18 @@ export class GalaxyMapScene extends BaseOverlay {
     const targetStar = gd?.systems?.find(s => s.id === targetSystemId);
     if (!targetStar) return;
 
-    for (const v of ships) {
+    // Prefer statki z najwięcej paliwa — większa szansa że którys osiągnie cel.
+    const sorted = [...ships].sort((a, b) => (b.fuel?.current ?? 0) - (a.fuel?.current ?? 0));
+
+    let lowestShortfall = Infinity;
+    for (const v of sorted) {
       const fromStar = gd.systems.find(s => s.id === (v.systemId ?? 'sys_home'));
       if (!fromStar) continue;
       const dx = targetStar.x - fromStar.x;
       const dy = targetStar.y - fromStar.y;
       const dz = (targetStar.z ?? 0) - (fromStar.z ?? 0);
       const distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const shipDef = SHIPS[v.shipId];
+      const shipDef = SHIPS[v.shipId] ?? HULLS[v.shipId];
       const fuelCost = distLY * (shipDef?.fuelPerLY ?? 0.5);
 
       if (v.fuel.current >= fuelCost) {
@@ -580,8 +584,17 @@ export class GalaxyMapScene extends BaseOverlay {
           }
           return;
         }
+      } else {
+        const shortfall = fuelCost - v.fuel.current;
+        if (shortfall < lowestShortfall) lowestShortfall = shortfall;
       }
     }
+    // Żaden statek nie dał rady — feedback dla gracza (toast z EventLogSystem).
+    EventBus.emit('expedition:launchFailed', {
+      reason: lowestShortfall === Infinity
+        ? 'Brak dostępnego statku warp'
+        : `Za mało paliwa warp (brakuje ~${lowestShortfall.toFixed(1)} jednostek)`,
+    });
   }
 
   _getAvailableWarpShips() {
@@ -591,12 +604,13 @@ export class GalaxyMapScene extends BaseOverlay {
       if (v.isWreck) return false;
       // Akceptujemy docked (hangar) ORAZ orbiting (statek na orbicie w obcym
       // systemie bez friendly kolonii do dokowania — bez tego gracz nie może
-      // warpować dalej z odkrytego układu).
+      // warpować dalej z odkrytego układu). Status nie filtruje — jeżeli statek
+      // jest "na misji" (np. interstellar_jump phase=in_system po dotarciu)
+      // gracz może chcieć go natychmiast warpować dalej. Hard-block tylko
+      // 'in_transit' (statek w trakcie skoku).
       const state = v.position?.state;
+      if (state === 'in_transit') return false;
       if (state !== 'docked' && state !== 'orbiting') return false;
-      // Orbiting wymaga 'on_mission' lub 'idle'; docked wymaga idle/refueling.
-      if (state === 'docked' && v.status !== 'idle' && v.status !== 'refueling') return false;
-      if (state === 'orbiting' && v.status !== 'idle' && v.status !== 'on_mission') return false;
       // Warp capability pochodzi z modułów (engine_warp); legacy fallback na hull.
       const hull = SHIPS[v.shipId] ?? HULLS[v.shipId];
       if (!hull) return false;

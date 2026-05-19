@@ -520,13 +520,14 @@ export class VesselManager {
   dispatchInterstellar(vesselId, targetSystemId) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return false;
-    // Akceptuj docked (idle/refueling) ORAZ orbiting (idle/on_mission po recon).
-    // Bez tego statek odkrywający obcy układ nie może warpować dalej bez
-    // wracania do home (gdy nie ma friendly kolonii w obcym systemie do dokowania).
+    if (vessel.isWreck) return false;
+    // Akceptuj docked (hangar) ORAZ orbiting (orbita ciała lub deep-space po
+    // arrival z innego skoku). Status nie blokuje — jeżeli statek ma stary
+    // interstellar_jump mission z phase='in_system', overwrite zadziała.
+    // Hard-block tylko 'in_transit' (już leci).
     const state = vessel.position?.state;
-    const isDocked = state === 'docked' && (vessel.status === 'idle' || vessel.status === 'refueling');
-    const isOrbiting = state === 'orbiting' && (vessel.status === 'idle' || vessel.status === 'on_mission');
-    if (!isDocked && !isOrbiting) return false;
+    if (state === 'in_transit') return false;
+    if (state !== 'docked' && state !== 'orbiting') return false;
 
     const shipDef = _getHullDef(vessel.shipId);
     if (!shipDef) return false;
