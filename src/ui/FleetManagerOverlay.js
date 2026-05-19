@@ -5114,8 +5114,16 @@ export class FleetManagerOverlay {
     ];
 
     for (const body of bodies) {
-      // Nie pokazuj ciała, na którym statek aktualnie stoi (docked)
-      if (body.id === vessel.position.dockedAt && vessel.position.state === 'docked') continue;
+      // Bug 3 fix — filter "docked here" relaxed dla found_outpost/transport:
+      // gracz może chcieć dostarczyć kolejny budynek do tego samego outpostu
+      // (lub dosypać zasobów), nie musi się przepinać do innego statku.
+      const dockedHere = body.id === vessel.position.dockedAt && vessel.position.state === 'docked';
+      if (dockedHere && actionId !== 'found_outpost' && actionId !== 'transport') {
+        if (window.KOSMOS?.debug?.verboseTargets) {
+          console.log('[target_filter] skip dockedHere', body.id, body.name);
+        }
+        continue;
+      }
 
       // Transport — tylko ciała z kolonią/outpostem
       if (actionId === 'transport') {
@@ -5146,6 +5154,15 @@ export class FleetManagerOverlay {
       const existingCol = colMgr?.getColony(body.id);
       let colonyStatus = 'none';
       if (existingCol) colonyStatus = existingCol.isOutpost ? 'outpost' : 'colony';
+
+      // Bug 3 — debug log (włącz przez `KOSMOS.debug.verboseTargets = true` w konsoli)
+      if (window.KOSMOS?.debug?.verboseTargets) {
+        console.log('[target_filter]', body.id, body.name, {
+          explored: body.explored, type: body.type, planetType: body.planetType,
+          systemId: body.systemId, colonyStatus, distAU: distAU.toFixed(2),
+          reachable, range: range.toFixed(2),
+        });
+      }
 
       targets.push({
         id: body.id,
