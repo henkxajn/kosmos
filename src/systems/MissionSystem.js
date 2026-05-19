@@ -348,9 +348,14 @@ export class MissionSystem {
   serialize() {
     const visitObj = {};
     for (const [k, v] of this._visitCounts) visitObj[k] = v;
+    // Przycinaj historie: zachowaj aktywne + ostatnie 30 zakonczonych
+    // (save quota: kazda misja ~0.5-1 KB, po dlugiej sesji urastalo do MB).
+    const active = this._missions.filter(m => m.status !== 'completed');
+    const completed = this._missions.filter(m => m.status === 'completed').slice(-30);
+    const serialized = [...active, ...completed].map(e => ({ ...e }));
     return {
-      expeditions: this._missions.map(e => ({ ...e })),  // backward compat key name
-      missions:    this._missions.map(e => ({ ...e })),
+      expeditions: serialized,  // backward compat key name
+      missions:    serialized,
       nextId:      this._nextId,
       visitCounts: visitObj,
     };

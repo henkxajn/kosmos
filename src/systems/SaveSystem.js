@@ -83,11 +83,18 @@ export class SaveSystem {
     };
 
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-      EventBus.emit('game:saved', { gameTime: data.gameTime });
+      const json = JSON.stringify(data);
+      localStorage.setItem(SAVE_KEY, json);
+      EventBus.emit('game:saved', { gameTime: data.gameTime, sizeBytes: json.length });
     } catch (e) {
-      // localStorage pełny lub niedostępny — ignoruj cicho
-      console.warn('[SaveSystem] Nie można zapisać:', e.message);
+      // localStorage pełny lub niedostępny — emit event żeby UI mogło pokazać toast.
+      // Gracz wcześniej widział tylko "wszystko działa" mimo że save od dawna padał.
+      const isQuota = e?.name === 'QuotaExceededError' || /quota|storage/i.test(e?.message ?? '');
+      console.warn('[SaveSystem] Nie można zapisać:', e?.message ?? e);
+      EventBus.emit('game:saveFailed', {
+        reason: isQuota ? 'quota' : 'unknown',
+        message: e?.message ?? 'Nieznany błąd zapisu',
+      });
     }
   }
 

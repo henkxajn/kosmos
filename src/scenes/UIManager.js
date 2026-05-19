@@ -609,9 +609,18 @@ export class UIManager {
     });
 
     // Autosave
-    EventBus.on('game:saved', ({ gameTime }) => {
+    EventBus.on('game:saved', ({ gameTime, sizeBytes }) => {
       const y = Math.round(gameTime).toLocaleString('pl-PL');
-      this._addNotification(`\u{1F4BE} Zapisano (${y} lat)`, 'system', 'info');
+      const mb = sizeBytes ? ` ${(sizeBytes / 1024 / 1024).toFixed(2)} MB` : '';
+      this._addNotification(`\u{1F4BE} Zapisano (${y} lat${mb})`, 'system', 'info');
+    });
+
+    // Save failure (np. localStorage quota — bez tego user nie wie ze save padl)
+    EventBus.on('game:saveFailed', ({ reason, message }) => {
+      const msg = reason === 'quota'
+        ? '\u{26A0} Save NIE zapisany — localStorage pelny. Usun stare save lub eksportuj.'
+        : `\u{26A0} Save padl: ${message}`;
+      this._addNotification(msg, 'system', 'warning');
     });
 
     // Dialog Nowa Gra (emitowane z BottomBar)
