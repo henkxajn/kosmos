@@ -498,10 +498,27 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   _centerOnCapital(grid) {
-    let cap = null;
-    grid.forEach(tile => { if (tile.capitalBase) cap = tile; });
-    const target = cap ? grid.tilePixelPos(cap.q, cap.r, this._hexSize) : grid.gridCenter(this._hexSize);
-    this._camX = target.x; this._camY = target.y;
+    // Centrujemy na bounding boxie wszystkich hexów. Wcześniej kamera celowała
+    // w capital, ale gdy stolica wylądowała daleko od środka siatki (ocean/lód
+    // w centrum + fallback na obrzeża), cała mapa była przesunięta. Bbox center
+    // gwarantuje że widoczna jest pełna planeta przy otwarciu, niezależnie od
+    // miejsca capital.
+    const hs = this._hexSize;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    grid.forEach(tile => {
+      const pos = grid.tilePixelPos(tile.q, tile.r, hs);
+      if (pos.x < minX) minX = pos.x;
+      if (pos.x > maxX) maxX = pos.x;
+      if (pos.y < minY) minY = pos.y;
+      if (pos.y > maxY) maxY = pos.y;
+    });
+    if (minX === Infinity) {
+      const c = grid.gridCenter(hs);
+      this._camX = c.x; this._camY = c.y;
+      return;
+    }
+    this._camX = (minX + maxX) / 2;
+    this._camY = (minY + maxY) / 2;
   }
 
   _showFlash(msg) { this._flashMsg = msg; this._flashEnd = Date.now() + 2500; }
