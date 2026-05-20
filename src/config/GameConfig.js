@@ -69,6 +69,12 @@ export const GAME_CONFIG = {
     // vessel:combatRangeEnter do DSCS (per-tick fire exchange zamiast instant
     // BattleSystem.resolveBattle). Gdy false: instant path z M4 P2 (rollback).
     m4DeepSpaceCombat:    true,
+    // ── Player Fleet Groups (save v73) ────────────────────────────────────
+    // Gracz tworzy nazwane floty z statków własnych. P1: CRUD + UI. P2: fleet
+    // orders (sync ETA + speed cap). P3: doktryna (kite/hold/retreat_at_50).
+    // Flip ON na końcu P1 c5 (po smoke teście). System sam zawsze instancjowany
+    // gdy civMode — flaga gates UI exposure + addMember acceptance.
+    playerFleets:         false,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

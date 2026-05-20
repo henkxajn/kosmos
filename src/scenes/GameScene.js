@@ -87,6 +87,7 @@ import { ProximitySystem } from '../systems/ProximitySystem.js';
 import { VesselCombatSystem } from '../systems/VesselCombatSystem.js';
 import { DeepSpaceCombatSystem } from '../systems/DeepSpaceCombatSystem.js';
 import { AutoRetreatSystem } from '../systems/AutoRetreatSystem.js';
+import { FleetSystem }         from '../systems/FleetSystem.js';
 import { HULLS } from '../data/HullsData.js';
 import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
 import { EconAI }            from '../systems/ai/EconAI.js';
@@ -223,6 +224,9 @@ export class GameScene {
     this.missionSystem    = this.expeditionSystem; // alias — ten sam obiekt
     this.colonyManager   = new ColonyManager(this.techSystem);
     this.vesselManager   = new VesselManager();
+    // Player Fleet Groups (save v73) — zawsze instancjowany dla save consistency;
+    // FEATURES.playerFleets gates UI ekspozycję, nie istnienie obiektu.
+    this.fleetSystem     = new FleetSystem(this.vesselManager);
     this.civilianTradeSystem = new CivilianTradeSystem(this.colonyManager);
     this.productionRequestBoard = new ProductionRequestBoard();
     this.tradeLog          = new TradeLog();
@@ -277,6 +281,7 @@ export class GameScene {
     window.KOSMOS.missionSystem    = this.missionSystem;
     window.KOSMOS.colonyManager    = this.colonyManager;
     window.KOSMOS.vesselManager    = this.vesselManager;
+    window.KOSMOS.fleetSystem      = this.fleetSystem;
     window.KOSMOS.overlayManager   = this.uiManager.overlayManager;
     window.KOSMOS.civilianTradeSystem = this.civilianTradeSystem;
     window.KOSMOS.productionRequestBoard = this.productionRequestBoard;

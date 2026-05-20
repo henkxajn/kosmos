@@ -258,6 +258,12 @@ export function createVessel(shipId, colonyId, opts = {}) {
     // MovementOrder: rozkaz ruchu militarnego (moveToPoint/pursue/intercept/patrol/escort).
     //   null = brak orderu, ruch sterowany wyłącznie przez mission (legacy path).
     movementOrder: null,
+
+    // ── Player Fleet Groups (P1) ──────────────────────────────────────────
+    // ID floty (Fleet.id) do której należy statek; null = nie zgrupowany.
+    // Reactive mirror — authoritative: Fleet.memberIds[]. Ustawiane wyłącznie
+    // przez FleetSystem.addMember/removeMember; ZAKAZ ręcznej mutacji.
+    fleetId: null,
   };
 }
 
