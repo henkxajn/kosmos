@@ -758,6 +758,55 @@ export class MovementOrderSystem {
     const distPx = Math.hypot(dxPx, dyPx);
     const distAU = distPx / AU_TO_PX;
 
+    // P3 polish #3 (2026-05-20): force-engagement fallback. ProximitySystem
+    // jest discrete sampler — przy fast time / fast closing pair może minąć
+    // combat range zone mid-tick (player+enemy obaj się ruszają w tej samej
+    // pętli). proximityEnter NIGDY nie wystrzeli → encounter nie utworzony →
+    // player kite hover bez walki.
+    //
+    // Threshold = maxRange × 1.2 (20% generous margin nad weapon range). Catch:
+    //   1. Intra-tick crossing przez combat range zone (player chase + enemy
+    //      przegonienie się w jednym ticku).
+    //   2. Pair drift TUŻ poza combat enter ale w zasięgu broni (enemy ucieka,
+    //      player nie nadąża, encounter już zakończony retreat).
+    // Player intent (engage order) GWARANTUJE że chce walczyć — z punktu widzenia
+    // mechaniki, gdy cel jest "w pobliżu" i nie ma encountera, ZAWSZE wymuszamy.
+    if (GAME_CONFIG.FEATURES?.m4DeepSpaceCombat && !target.isWreck) {
+      const forceThresholdAU = maxRangeAU * 1.2;
+      if (distAU < forceThresholdAU) {
+        const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+        if (dscs) {
+          const enc1 = dscs._findActiveEncounterContaining?.(vessel.id);
+          const enc2 = dscs._findActiveEncounterContaining?.(target.id);
+          if (!enc1 && !enc2) {
+            const sameFaction = (vessel.ownerEmpireId ?? null) === (target.ownerEmpireId ?? null);
+            if (!sameFaction) {
+              // Wyczyść _activeCombatPairs (jeśli zaschła z poprzedniego failed
+              // attempt) i emit świeży combatRangeEnter. VCS player-intent
+              // bypass pomija cooldown, DSCS.startEngagement tworzy encounter.
+              const ps = window.KOSMOS?.proximitySystem;
+              const k = vessel.id < target.id
+                ? `${vessel.id}|${target.id}`
+                : `${target.id}|${vessel.id}`;
+              if (ps?._activeCombatPairs) {
+                ps._activeCombatPairs.delete(k);
+              }
+              EventBus.emit('vessel:combatRangeEnter', {
+                vesselAId:  vessel.id,
+                vesselBId:  target.id,
+                distanceAU: distAU,
+                sameFaction: false,
+              });
+              if (ps?._activeCombatPairs) {
+                ps._activeCombatPairs.add(k);
+              }
+              _trace(`force-engage ${order.id} vessel=${vessel.id} target=${target.id} dist=${distAU.toFixed(3)}AU < ${forceThresholdAU.toFixed(3)}AU (proximity sampling missed)`);
+            }
+          }
+        }
+      }
+    }
+
     // Engage = "chase + kite" — chase'uj target dopóki nie wpadniesz w optimal
     // band, wtedy kituj (hold/away). Cancel TYLKO target wreck.
     //

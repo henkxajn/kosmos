@@ -1180,6 +1180,16 @@ export class VesselManager {
     //   Sync call (nie własny time:tick listener) gwarantuje kolejność.
     window.KOSMOS?.movementOrderSystem?._tick?.(deltaYears);
     this._updatePositions(deltaYears);
+
+    // P3 polish #3 (2026-05-20): SECOND ProximitySystem pass po ruchu.
+    // Race condition fix — player chase + enemy mission interp mogą wzajemnie
+    // wyminąć się W TYM SAMYM TICKU. Step 1 prox.tick widział dist 1.2 AU →
+    // brak emit; po MOS+positions dist może być 0.3 AU (intra-tick crossing
+    // przez combat range), ale prox nie biegnie ponownie → combatRangeEnter
+    // PRZEGAPIONE. Player kite settle na "powietrzu" bez encountera.
+    // Drugi pass z świeżymi pozycjami łapie te crossings. Koszt: O(n²/2)
+    // dla ~10 vesseli = ~45 par. Tani.
+    window.KOSMOS?.proximitySystem?._tick?.(deltaYears);
     this._tickWreckCleanup();
   }
 
