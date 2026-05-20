@@ -18,6 +18,16 @@ import {
   getNextFleetId, setNextFleetId,
 } from '../entities/Fleet.js';
 import { FLEET_DOCTRINES, DEFAULT_DOCTRINE, isValidDoctrine } from '../data/FleetDoctrines.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { DistanceUtils } from '../utils/DistanceUtils.js';
+
+const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
+// Sanity bound dla fleet_eta — jeśli flota startuje rozproszona (członek 100 AU
+// od target) i większość blisko, fleet_eta byłoby dominowane przez outlier.
+// Sanity: cap fleet_eta na MAX_SYNC_BOOST_FACTOR × min(native_eta). Empirycznie
+// 10× wystarcza — outlier dalej trzyma sync, ale nie zmusza całej floty do
+// "stania w miejscu" gdy 1 statek ma absurdalny dystans.
+const MAX_SYNC_BOOST_FACTOR = 10;
 
 export class FleetSystem {
   /**
@@ -40,6 +50,200 @@ export class FleetSystem {
       if (!vesselId) return;
       this.removeMember(vesselId, 'wrecked');
     });
+
+    // P2 — vessel.movementOrder zakończony/anulowany/zablokowany → usuń entry
+    // z fleet.activeOrder.memberOrderIds. Gdy memberOrderIds pusty → emit
+    // fleet:orderCompleted, clear activeOrder. Per-vessel orderCancelled
+    // może oznaczać player override (issueOrder per-vessel poza flotą) lub
+    // failure (target_lost, out_of_range itp.) — w obu przypadkach order
+    // floty traci tego członka.
+    EventBus.on('vessel:orderCompleted', ({ vesselId, orderId }) => {
+      this._onMemberOrderEnded(vesselId, orderId, 'completed');
+    });
+    EventBus.on('vessel:orderCancelled', ({ vesselId, orderId }) => {
+      this._onMemberOrderEnded(vesselId, orderId, 'cancelled');
+    });
+    EventBus.on('vessel:orderBlocked', ({ vesselId, orderId }) => {
+      this._onMemberOrderEnded(vesselId, orderId, 'blocked');
+    });
+  }
+
+  // ── P2 — Fleet order dispatch ──────────────────────────────────────────
+
+  /**
+   * Wydaj rozkaz całej flocie. Fan-out do MovementOrderSystem per member z:
+   *  - Sync ETA dla moveToPoint (wszyscy lądują w tej samej chwili)
+   *  - Speed cap dla pursue/intercept/engage (szybsi nie wyprzedzają wolnych)
+   *  - applyDoctrine (P3) — w P2 pass-through
+   *
+   * @param {string} fleetId
+   * @param {object} spec — { type, targetEntityId?, targetPoint?, ... } jak MOS
+   * @returns {{ ok, accepted: vesselId[], rejected: [{vesselId, reason}], orderType, fleetEta?, speedCap? }}
+   */
+  issueFleetOrder(fleetId, spec) {
+    const fleet = this._fleets.get(fleetId);
+    if (!fleet) return { ok: false, reason: 'fleet_not_found', accepted: [], rejected: [] };
+    if (!spec || typeof spec.type !== 'string') {
+      return { ok: false, reason: 'invalid_spec', accepted: [], rejected: [] };
+    }
+    if (fleet.memberIds.length === 0) {
+      return { ok: false, reason: 'fleet_empty', accepted: [], rejected: [] };
+    }
+    const mos = window.KOSMOS?.movementOrderSystem;
+    if (!mos) return { ok: false, reason: 'mos_not_ready', accepted: [], rejected: [] };
+
+    // Anuluj poprzedni active order floty (jeśli był) — fleet ma tylko 1 active order.
+    if (fleet.activeOrder) this.cancelFleetOrder(fleetId, 'replaced');
+
+    // Filtruj eligible members: żywi + nie wraki + istniejący w VM.
+    const eligible = [];
+    const rejected = [];
+    for (const vid of fleet.memberIds) {
+      const v = this._vm._vessels?.get?.(vid);
+      if (!v) { rejected.push({ vesselId: vid, reason: 'vessel_not_found' }); continue; }
+      if (v.isWreck) { rejected.push({ vesselId: vid, reason: 'wrecked' }); continue; }
+      eligible.push(v);
+    }
+    if (eligible.length === 0) {
+      return { ok: false, reason: 'no_eligible_members', accepted: [], rejected };
+    }
+
+    // applyDoctrine — P2 stub (pass-through); P3 wypełnia.
+    const doctrineMod = this.applyDoctrine(fleet, spec);
+    // doctrineMod może zwrócić { rejected: true, reason } dla wszystkich (np. hold_position
+    // blokuje pursue) — w P2 doctrineMod === spec (pass-through), więc skip tego case'u.
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const specBase = { ...doctrineMod, _fromFleet: fleet.id };
+
+    // Liczenie sync / cap zależnie od typu rozkazu.
+    let fleetEta = null;
+    let speedCap = null;
+    let perMemberSpec = null;
+
+    if (spec.type === 'moveToPoint') {
+      // Sync ETA — wszyscy lądują w tej samej chwili.
+      const target = spec.targetPoint;
+      if (!target) return { ok: false, reason: 'no_target_point', accepted: [], rejected };
+      let maxEta = 0;
+      let minEta = Infinity;
+      for (const v of eligible) {
+        const dPx = Math.hypot(target.x - v.position.x, target.y - v.position.y);
+        const dAU = dPx / AU_TO_PX;
+        const speedAU = Math.max(0.01, v.speedAU ?? 1.0);
+        const eta = dAU / speedAU;
+        if (eta > maxEta) maxEta = eta;
+        if (eta < minEta) minEta = eta;
+      }
+      // Sanity bound — outlier 10× najszybszy nie wpływa absurdalnie.
+      const cappedEta = Math.min(maxEta, Math.max(0.001, minEta) * MAX_SYNC_BOOST_FACTOR);
+      fleetEta = cappedEta;
+      // _arrivalSyncYear jest jeden dla wszystkich → MOS._issueMoveToPoint klampuje
+      // self per vessel (max(syncYear, naturalArrival)). Outlier vessel poleci na max
+      // speed, reszta dostosuje się przez interpolacje liniowa start→target.
+      perMemberSpec = { ...specBase, _arrivalSyncYear: gameYear + fleetEta };
+    } else if (spec.type === 'pursue' || spec.type === 'intercept' || spec.type === 'engage') {
+      // Speed cap — szybsi nie wyprzedzają najwolniejszego.
+      let minSpeed = Infinity;
+      for (const v of eligible) {
+        const s = v.speedAU ?? 1.0;
+        if (s < minSpeed) minSpeed = s;
+      }
+      if (minSpeed === Infinity) minSpeed = 1.0;
+      speedCap = minSpeed;
+      perMemberSpec = { ...specBase, _speedCapAU: speedCap };
+    } else {
+      // Inne typy (patrol/escort/goToPOI/retreat) — bez sync mechaniki, plain fan-out.
+      perMemberSpec = { ...specBase };
+    }
+
+    // Fan-out per member.
+    const accepted = [];
+    const memberOrderIds = {};
+    for (const v of eligible) {
+      const res = mos.issueOrder(v.id, { ...perMemberSpec }, { fromFleet: fleet.id });
+      if (res?.ok && res.orderId) {
+        accepted.push(v.id);
+        memberOrderIds[v.id] = res.orderId;
+      } else {
+        rejected.push({ vesselId: v.id, reason: res?.reason ?? 'unknown' });
+      }
+    }
+
+    // Active order floty — tracking całości; zerujemy gdy wszyscy ended.
+    if (accepted.length > 0) {
+      fleet.activeOrder = {
+        type:           spec.type,
+        targetEntityId: spec.targetEntityId ?? null,
+        targetPoint:    spec.targetPoint ?? null,
+        issuedYear:     gameYear,
+        arrivalSyncYear: (typeof fleetEta === 'number') ? (gameYear + fleetEta) : null,
+        speedCapAU:     speedCap,
+        memberOrderIds,
+        _retreatTriggered: false,
+        _inCombat:         false,
+      };
+      EventBus.emit('fleet:orderIssued', {
+        fleetId, type: spec.type, accepted: [...accepted], rejected: [...rejected],
+        fleetEta, speedCap,
+      });
+    }
+
+    return { ok: accepted.length > 0, accepted, rejected, orderType: spec.type, fleetEta, speedCap };
+  }
+
+  /**
+   * Anuluj aktywny order floty. Wywołuje MOS.cancelOrder per member; clear activeOrder.
+   */
+  cancelFleetOrder(fleetId, reason = 'manual') {
+    const fleet = this._fleets.get(fleetId);
+    if (!fleet || !fleet.activeOrder) return false;
+    const mos = window.KOSMOS?.movementOrderSystem;
+    for (const [vesselId] of Object.entries(fleet.activeOrder.memberOrderIds ?? {})) {
+      mos?.cancelOrder?.(vesselId, reason);
+    }
+    fleet.activeOrder = null;
+    EventBus.emit('fleet:orderCancelled', { fleetId, reason });
+    return true;
+  }
+
+  /**
+   * Doktryna — P2 pass-through. P3 wypełnia:
+   *  - engage_in_range: pass
+   *  - kite: dla 'engage' set preferMaxRange=true
+   *  - hold_position: dla 'pursue/intercept/engage' → reject (P3 zwraca {rejected:true})
+   *  - retreat_at_50: flag only (tick agreguje HP osobno)
+   */
+  applyDoctrine(_fleet, spec) {
+    return spec;
+  }
+
+  /**
+   * Hook na vessel:orderCompleted/Cancelled/Blocked — usuwa entry z fleet.activeOrder.
+   * Gdy memberOrderIds pusty → fleet:orderCompleted + clear activeOrder.
+   * @private
+   */
+  _onMemberOrderEnded(vesselId, orderId, mode) {
+    for (const fleet of this._fleets.values()) {
+      const ao = fleet.activeOrder;
+      if (!ao?.memberOrderIds) continue;
+      const tracked = ao.memberOrderIds[vesselId];
+      if (!tracked) continue;
+      // Mismatch orderId → vessel dostał nowy order między (player override) →
+      // usuwamy go z tracking ale nie kończymy aktywnego orderu floty.
+      if (tracked !== orderId) {
+        delete ao.memberOrderIds[vesselId];
+        continue;
+      }
+      delete ao.memberOrderIds[vesselId];
+      if (Object.keys(ao.memberOrderIds).length === 0) {
+        // Wszyscy members done — finalize order floty.
+        const completedType = ao.type;
+        fleet.activeOrder = null;
+        EventBus.emit('fleet:orderCompleted', { fleetId: fleet.id, type: completedType, mode });
+      }
+      return; // vessel jest w max 1 flocie → przerwij po pierwszej match
+    }
   }
 
   // ── CRUD ───────────────────────────────────────────────────────────────
