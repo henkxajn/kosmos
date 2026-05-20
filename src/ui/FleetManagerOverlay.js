@@ -733,6 +733,19 @@ export class FleetManagerOverlay {
       case 'fleetClearMultiSelect':
         this._multiSelectedIds.clear();
         break;
+      // P2 — fleet order buttons
+      case 'fleetMoveToPoint':
+        this._handleFleetMoveToPoint(zone.data.fleetId);
+        break;
+      case 'fleetEngage':
+        this._handleFleetEngage(zone.data.fleetId);
+        break;
+      case 'fleetReturnBase':
+        this._handleFleetReturnBase(zone.data.fleetId);
+        break;
+      case 'fleetCancelOrder':
+        this._handleFleetCancelOrder(zone.data.fleetId);
+        break;
       case 'build_ship':
         if (zone.data.enabled) {
           const shipDef = SHIPS[zone.data.shipId] ?? HULLS[zone.data.shipId];
@@ -2045,6 +2058,48 @@ export class FleetManagerOverlay {
     this._hitZones.push({ x: renX - 2, y: cy + 2, w: 14, h: 16, type: 'fleetRename', data: { fleetId: fleet.id } });
     cy += 24;
 
+    // ── P2 — Status floty + przyciski rozkazów ──────────────────────────
+    const fleetStatus = this._computeFleetStatus(fleet);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(t('fleet.statusLabel') + ': ', x + pad, cy + 10);
+    const labelW = ctx.measureText(t('fleet.statusLabel') + ': ').width;
+    ctx.fillStyle = fleetStatus.color;
+    ctx.fillText(fleetStatus.label, x + pad + labelW, cy + 10);
+    cy += 16;
+
+    // Order buttons (2×2 grid) — Move/Engage/Return/Cancel
+    const oBtnW = (w - pad * 3) / 2;
+    const oBtnH = 22;
+    const hasOrder = !!fleet.activeOrder;
+    const orderButtons = [
+      { id: 'fleetMoveToPoint', label: '🎯 ' + t('fleet.orderMove'),   enabled: true,     bg: 'rgba(255,170,30,0.12)', fg: THEME.warning },
+      { id: 'fleetEngage',      label: '⚔ ' + t('fleet.orderEngage'), enabled: true,     bg: 'rgba(255,68,102,0.10)', fg: THEME.danger },
+      { id: 'fleetReturnBase',  label: '⏎ ' + t('fleet.orderReturn'), enabled: true,     bg: 'rgba(0,255,180,0.10)',  fg: THEME.accent },
+      { id: 'fleetCancelOrder', label: '✕ ' + t('fleet.orderCancel'), enabled: hasOrder, bg: 'rgba(128,128,128,0.10)', fg: THEME.textDim },
+    ];
+    for (let i = 0; i < orderButtons.length; i++) {
+      const btn = orderButtons[i];
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const bx = x + pad + col * (oBtnW + pad);
+      const by = cy + row * (oBtnH + 4);
+      ctx.fillStyle = btn.enabled ? btn.bg : 'rgba(20,30,45,0.4)';
+      ctx.fillRect(bx, by, oBtnW, oBtnH);
+      ctx.strokeStyle = btn.enabled ? btn.fg : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, oBtnW, oBtnH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = btn.enabled ? btn.fg : THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(btn.label, bx + oBtnW / 2, by + 15);
+      ctx.textAlign = 'left';
+      if (btn.enabled) {
+        this._hitZones.push({ x: bx, y: by, w: oBtnW, h: oBtnH, type: btn.id, data: { fleetId: fleet.id } });
+      }
+    }
+    cy += oBtnH * 2 + 8;
+
     // Doctrine — 4 mini-buttony stacked
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
@@ -2084,6 +2139,7 @@ export class FleetManagerOverlay {
     }
     const ROW = 18;
     const listMaxY = y + h - pad;
+    const ao = fleet.activeOrder;
     for (const vid of fleet.memberIds) {
       if (cy + ROW > listMaxY) break;
       const v = vMgr?.getVessel?.(vid);
@@ -2091,10 +2147,48 @@ export class FleetManagerOverlay {
       const statusCol = v ? (STATUS_COLORS[v.position?.state]?.() ?? THEME.textSecondary) : THEME.textDim;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = statusCol;
-      ctx.fillText('• ' + (vName.length > 18 ? vName.slice(0, 17) + '…' : vName), x + pad, cy + 12);
+      const dispName = vName.length > 14 ? vName.slice(0, 13) + '…' : vName;
+      ctx.fillText('• ' + dispName, x + pad, cy + 12);
+      // Badge: [fleet] gdy member ma orderId odpowiadający fleet.activeOrder; [own]
+      // gdy ma własny order (diverged — player override); [—] gdy idle.
+      let badge = null; let badgeCol = THEME.textDim;
+      if (v?.movementOrder) {
+        const trackedOrderId = ao?.memberOrderIds?.[vid];
+        if (trackedOrderId && v.movementOrder.id === trackedOrderId) {
+          badge = '[fleet]'; badgeCol = THEME.accent;
+        } else {
+          badge = '[own]'; badgeCol = THEME.warning;
+        }
+      }
+      if (badge) {
+        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = badgeCol;
+        ctx.textAlign = 'right';
+        ctx.fillText(badge, x + w - pad, cy + 12);
+        ctx.textAlign = 'left';
+      }
       // Klik wiersza → select vessel (przełącza na vessels tab i pokazuje vessel detail)
       this._hitZones.push({ x: x + pad, y: cy, w: w - pad * 2, h: ROW, type: 'fleetMemberSelect', data: { vesselId: vid } });
       cy += ROW;
+    }
+  }
+
+  // ── P2 — Helper: derived fleet status (idle/moving/engaging/mixed) ──────
+  _computeFleetStatus(fleet) {
+    const ao = fleet.activeOrder;
+    if (!ao) return { label: t('fleet.statusIdle2'), color: THEME.textDim };
+    const tracked = Object.keys(ao.memberOrderIds ?? {}).length;
+    if (tracked === 0) return { label: t('fleet.statusIdle2'), color: THEME.textDim };
+    switch (ao.type) {
+      case 'moveToPoint':
+        return { label: `🎯 ${t('fleet.statusMoving')}`, color: THEME.warning };
+      case 'pursue':
+      case 'intercept':
+        return { label: `→ ${t('fleet.statusPursuing')}`, color: THEME.warning };
+      case 'engage':
+        return { label: `⚔ ${t('fleet.statusEngaging')}`, color: THEME.danger };
+      default:
+        return { label: ao.type, color: THEME.textSecondary };
     }
   }
 
@@ -2153,6 +2247,82 @@ export class FleetManagerOverlay {
       this._multiSelectedIds.clear();
       this._selectedFleetId = targetFleetId;
     } catch { /* anulowano */ }
+  }
+
+  // ── P2 — Handlery rozkazów flotowych ────────────────────────────────────
+
+  // Move: picker mode targetPoint na tactical map; po wybraniu punktu fire
+  // FleetSystem.issueFleetOrder('moveToPoint'). Klick na pustym miejscu mapy
+  // (FleetManagerOverlay tactical map) → GameScene._finalizeTargetPointPicker
+  // dispatchuje do naszego callbacku.
+  _handleFleetMoveToPoint(fleetId) {
+    const um = window.KOSMOS?.uiManager;
+    if (!um) return;
+    if (um.isPickerActive?.()) um.cancelPickerMode?.();
+    um.setPickerMode?.('targetPoint', (point) => {
+      if (!point) return;
+      const fs = window.KOSMOS?.fleetSystem;
+      const res = fs?.issueFleetOrder?.(fleetId, {
+        type: 'moveToPoint',
+        targetPoint: { x: point.x, y: point.y },
+      });
+      this._announceFleetOrderResult(res, fleetId, 'moveToPoint');
+    }, { intent: 'fleet_move', fleetId });
+  }
+
+  // Engage: w P2 hint o PPM (RightClickMenu fleet-context w c4). W tej wersji
+  // przycisk pokazuje toast "PPM na wrogim statku".
+  _handleFleetEngage(_fleetId) {
+    EventBus.emit('ui:toast', { text: t('fleet.engageHint'), color: '#ffaa22', durationMs: 3000 });
+  }
+
+  // Return to base: auto-target nearest friendly planet, fire moveToPoint.
+  // Centroid floty (najbliższa kolonia od centroidu, NIE od per-vessel).
+  _handleFleetReturnBase(fleetId) {
+    const fs = window.KOSMOS?.fleetSystem;
+    const fleet = fs?.getFleet?.(fleetId);
+    if (!fleet || fleet.memberIds.length === 0) return;
+    const ar = window.KOSMOS?.autoRetreatSystem;
+    if (!ar?._findNearestFriendlyPlanet) {
+      EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
+      return;
+    }
+    const vm = window.KOSMOS?.vesselManager;
+    const firstMember = fleet.memberIds
+      .map(vid => vm?.getVessel?.(vid))
+      .find(v => v && !v.isWreck);
+    if (!firstMember) return;
+    const target = ar._findNearestFriendlyPlanet(firstMember);
+    if (!target) {
+      EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
+      return;
+    }
+    const tx = target.x ?? target.position?.x ?? 0;
+    const ty = target.y ?? target.position?.y ?? 0;
+    const res = fs.issueFleetOrder(fleetId, {
+      type: 'moveToPoint',
+      targetPoint: { x: tx, y: ty },
+    });
+    this._announceFleetOrderResult(res, fleetId, 'returnBase');
+  }
+
+  // Cancel order — anuluj aktywny order floty.
+  _handleFleetCancelOrder(fleetId) {
+    const fs = window.KOSMOS?.fleetSystem;
+    fs?.cancelFleetOrder?.(fleetId, 'manual');
+  }
+
+  // Helper: pokaż toast z agregowanym wynikiem (accepted/rejected) issueFleetOrder.
+  _announceFleetOrderResult(res, _fleetId, _label) {
+    if (!res) return;
+    const acceptedN = res.accepted?.length ?? 0;
+    const rejectedN = res.rejected?.length ?? 0;
+    const totalN = acceptedN + rejectedN;
+    const color = res.ok ? '#00ffb4' : '#ff4466';
+    const msg = res.ok
+      ? t('fleet.orderResult', acceptedN, totalN)
+      : t('fleet.orderResultFailed', acceptedN, totalN);
+    EventBus.emit('ui:toast', { text: msg, color, durationMs: 2500 });
   }
 
   async _handleDisbandFleet(fleetId) {
