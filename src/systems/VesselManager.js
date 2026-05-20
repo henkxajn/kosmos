@@ -950,6 +950,12 @@ export class VesselManager {
         // expanded wrak row → WarSystem.getBattleRecord(lastBattleId).
         lastBattleId:   v.lastBattleId   ?? null,
         lastBattleYear: v.lastBattleYear ?? null,
+        // Player Fleet Groups (v73) — ID floty (Fleet.id) lub null. Reactive
+        // mirror — FleetSystem.restore nadpisuje to pole na podstawie
+        // authoritative memberIds. Tu zapisujemy żeby zachować consistency
+        // out-of-the-box (FleetSystem.restore wymaga vesselManager już load'ed,
+        // więc na moment serializacji pole jest aktualne).
+        fleetId:        v.fleetId        ?? null,
       });
     }
     return {
@@ -1051,6 +1057,9 @@ export class VesselManager {
         // M4 P2 — battle history
         lastBattleId:   vd.lastBattleId   ?? null,
         lastBattleYear: vd.lastBattleYear ?? null,
+        // Player Fleet Groups (v73) — reactive mirror; FleetSystem.restore
+        // nadpisze na podstawie authoritative memberIds.
+        fleetId:        vd.fleetId        ?? null,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {

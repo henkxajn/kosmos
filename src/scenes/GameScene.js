@@ -1013,6 +1013,13 @@ export class GameScene {
       if (c4x.deepSpaceEngagements && this.deepSpaceCombatSystem?.restore) {
         this.deepSpaceCombatSystem.restore(c4x.deepSpaceEngagements);
       }
+      // Player Fleet Groups (v73) — Przywróć FleetSystem po VesselManager.
+      // FleetSystem.restore waliduje memberIds (drop orphans gdy vessel nie istnieje)
+      // i re-ustawia vessel.fleetId reactive mirror z authoritative memberIds.
+      // Stare save (v72→v73 zmigrowane) mają playerFleets={fleets:[],nextId:1}.
+      if (c4x.playerFleets && this.fleetSystem?.restore) {
+        this.fleetSystem.restore(c4x.playerFleets);
+      }
       // Przywróć DiscoverySystem
       if (c4x.discoverySystem) {
         this.discoverySystem.restore(c4x.discoverySystem);

@@ -172,6 +172,9 @@ export class SaveSystem {
       gameState: window.KOSMOS.gameState?.serialize() ?? null,
       productionRequestBoard: window.KOSMOS.productionRequestBoard?.serialize() ?? null,
       notificationCenter: window.KOSMOS.notificationCenter?.serialize() ?? null,
+      // Player Fleet Groups (save v73) — { fleets[], nextId }. FleetSystem
+      // zawsze instancjowany, więc serialize() bezwarunkowo.
+      playerFleets: window.KOSMOS.fleetSystem?.serialize() ?? null,
     };
   }
 

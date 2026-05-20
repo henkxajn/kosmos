@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 72;
+export const CURRENT_VERSION     = 73;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -90,6 +90,7 @@ const MIGRATIONS = {
   69: _migrateV69toV70,
   70: _migrateV70toV71,
   71: _migrateV71toV72,
+  72: _migrateV72toV73,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1837,6 +1838,34 @@ function _migrateV71toV72(data) {
     if (c4x.notificationCenter === undefined) {
       c4x.notificationCenter = { items: [], nextId: 1 };
     }
+  }
+  return data;
+}
+
+// ── Migracja v72 → v73 (Player Fleet Groups, P1) ────────────────────────────
+// - c4x.playerFleets: { fleets: [], nextId: 1 } — rejestr logicznych grup statków.
+//   Default puste — stare save (v72) nie znały koncepcji floty.
+// - per vessel: v.fleetId ??= null. Reactive mirror członkostwa; authoritative
+//   to playerFleets.fleets[].memberIds. Po restore FleetSystem re-ustawi pole
+//   na podstawie memberIds (na razie wszystkie null).
+// - data.uiPrefs.selectedFleetId: null — UI overlay state (P2 wykorzystuje
+//   przy fleet-context selekcji; w P1 zarezerwowane).
+function _migrateV72toV73(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x) {
+    if (c4x.playerFleets === undefined) {
+      c4x.playerFleets = { fleets: [], nextId: 1 };
+    }
+    if (c4x.vesselManager?.vessels) {
+      for (const v of c4x.vesselManager.vessels) {
+        if (!v || typeof v !== 'object') continue;
+        if (v.fleetId === undefined) v.fleetId = null;
+      }
+    }
+  }
+  data.uiPrefs ??= {};
+  if (data.uiPrefs.selectedFleetId === undefined) {
+    data.uiPrefs.selectedFleetId = null;
   }
   return data;
 }
