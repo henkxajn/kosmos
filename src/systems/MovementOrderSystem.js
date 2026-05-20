@@ -767,7 +767,11 @@ export class MovementOrderSystem {
     // gdy enemy się odsuwa).
     const optimalFactor = order.preferMaxRange ? 0.98 : 0.95;
     const optimalDistAU = maxRangeAU * optimalFactor;
-    const upperBandAU   = optimalDistAU * 1.05;
+    // P3 polish #2 (2026-05-20): clamp upperBand do maxRangeAU × 0.98 — gwarancja
+    // że vessel NIGDY nie hover'uje poza zasięgiem broni. Bez tego dla kite (0.98)
+    // upperBand = 0.98 × 1.05 = 1.029 → vessel mógł być 2.9% poza max range i nie
+    // strzelać. Cap = 0.98 → 2% bezpieczny margines wewnątrz zasięgu.
+    const upperBandAU   = Math.min(optimalDistAU * 1.05, maxRangeAU * 0.98);
     const lowerBandAU   = optimalDistAU * 0.95;
 
     let direction = 0;  // -1 = away, 0 = hold, +1 = toward

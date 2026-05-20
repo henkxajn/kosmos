@@ -212,7 +212,27 @@ export class ProximitySystem {
     );
     const combatExitAU = combatEnterAU * (COMBAT_EXIT_AU / COMBAT_ENGAGEMENT_AU);  // ratio 1.333
 
-    if (!isCombat && distAU < combatEnterAU) {
+    // P3 polish #2 (2026-05-20) — defensywne re-emit gdy pair "zaschła" w
+    // _activeCombatPairs bez aktywnego encountera (np. startEngagement
+    // failed by team-up gather lub _inCombatState rejected jednego z vesseli).
+    // Bez tego: pair zostaje stale 'true', combat NIE wystartuje a player kite
+    // hover'uje bez walki. Self-heal: gdy isCombat=true, dist<combatEnter, ale
+    // DSCS nie ma żadnego encountera dla tych ID → wyczyść flag, niech następna
+    // iteracja emit'uje świeży combatRangeEnter.
+    if (isCombat && distAU < combatEnterAU) {
+      const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+      if (dscs?._findActiveEncounterContaining) {
+        const enc1 = dscs._findActiveEncounterContaining(v1.id);
+        const enc2 = dscs._findActiveEncounterContaining(v2.id);
+        if (!enc1 && !enc2) {
+          this._activeCombatPairs.delete(key);
+          // Fall-through — re-emit za chwilę przez `!isCombat` branch poniżej.
+        }
+      }
+    }
+    const isCombatRefreshed = this._activeCombatPairs.has(key);
+
+    if (!isCombatRefreshed && distAU < combatEnterAU) {
       this._activeCombatPairs.add(key);
       const sameFaction = (v1.ownerEmpireId ?? null) === (v2.ownerEmpireId ?? null);
       EventBus.emit('vessel:combatRangeEnter', {
@@ -221,7 +241,7 @@ export class ProximitySystem {
         distanceAU: distAU,
         sameFaction,
       });
-    } else if (isCombat && distAU >= combatExitAU) {
+    } else if (isCombatRefreshed && distAU >= combatExitAU) {
       this._activeCombatPairs.delete(key);
       EventBus.emit('vessel:combatRangeExit', {
         vesselAId: v1.id,
