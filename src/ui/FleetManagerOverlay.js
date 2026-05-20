@@ -2018,12 +2018,16 @@ export class FleetManagerOverlay {
         ctx.textAlign = 'left';
 
         // ── Wiersz 2: lokalizacja / cel ──
+        // P2.5 outliner fix: branch po STANIE statku (nie po sec.key — w drzewie
+        // sec.key='ungrouped' lub 'fleet_<id>', nie 'hangar/orbit/flight'). Bez tego
+        // docked vessel w sekcji floty/ungrouped wpadał w fallback "W locie → ???".
         ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        if (sec.key === 'hangar') {
+        const vState = vessel.position?.state;
+        if (vState === 'docked') {
           ctx.fillStyle = THEME.success;
           const locName = _resolveName(vessel.position.dockedAt);
           ctx.fillText(`◈ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2 + fleetGutter, ry + 28);
-        } else if (sec.key === 'orbit') {
+        } else if (vState === 'orbiting') {
           ctx.fillStyle = THEME.mint;
           const locName = _resolveName(vessel.position.dockedAt);
           ctx.fillText(`⊙ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2 + fleetGutter, ry + 28);
