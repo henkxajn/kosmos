@@ -300,7 +300,12 @@ export class UIManager {
   }
 
   setSelectedFleetId(fleetId) {
-    if (this._selectedFleetId === fleetId) return;
+    // Sync cache fleetOv zawsze (defensywnie), nawet gdy UIManager._selectedFleetId
+    // === fleetId (dedupe). Bez tego direct-mutate w FleetManagerOverlay (które było
+    // bugiem w _handleCreateFleet) powoduje permanentny desync — UIManager null,
+    // fleetOv ma fleet.id. setSelectedFleetId(null) wtedy DEDUPE'uje i nie czyści
+    // fleetOv → mutex nie działa.
+    const fleetOv = this.overlayManager?.overlays?.fleet;
     if (fleetId !== null) {
       const f = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId);
       if (!f) {
@@ -308,11 +313,10 @@ export class UIManager {
         return;
       }
     }
+    if (fleetOv) fleetOv._selectedFleetId = fleetId;
+    if (this._selectedFleetId === fleetId) return;  // dedupe event emit
     const prev = this._selectedFleetId;
     this._selectedFleetId = fleetId;
-    // Sync cache w FleetOverlay (single source of truth)
-    const fleetOv = this.overlayManager?.overlays?.fleet;
-    if (fleetOv) fleetOv._selectedFleetId = fleetId;
     EventBus.emit('ui:fleetSelectionChanged', { fleetId, prevFleetId: prev });
   }
 

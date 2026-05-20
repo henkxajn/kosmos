@@ -796,6 +796,9 @@ export class FleetManagerOverlay {
       case 'vessel': {
         // P2 polish — Fleet Engage pick mode: jeśli aktywny i klik na enemy
         // vessel → fire fleet engage order, exit pick mode.
+        // Bug fix: klik na własny vessel WYŁĄCZA pick mode + kontynuuje normalne
+        // selection. Wcześniejszy `break` lockował UI gdy gracz nieświadomie
+        // aktywował pick mode (fallback z _handleFleetEngage gdy enemies=0).
         if (this._fleetEngagePickMode?.fleetId) {
           const v = window.KOSMOS?.vesselManager?.getVessel?.(zone.data.vesselId);
           if (v && isEnemyVessel(v)) {
@@ -809,9 +812,10 @@ export class FleetManagerOverlay {
             this._announceFleetOrderResult(res, fleetId, 'engage');
             break;
           }
-          // Klik nie-enemy → nie wychodź z pick mode, pokazuj hint
-          EventBus.emit('ui:toast', { text: t('fleet.engageNeedEnemy'), color: '#ff4466', durationMs: 2500 });
-          break;
+          // Klik na własny → cancel pick mode + fall-through do normal selection.
+          this._fleetEngagePickMode = null;
+          EventBus.emit('ui:toast', { text: t('fleet.engageCancelled'), color: '#808080', durationMs: 1500 });
+          // fall-through (NO break) — wybór vessela dalej w dół.
         }
         // Toggle — kliknięcie tego samego statku odznacza go.
         // M3 P1.1: write idzie przez UIManager (single source of truth).
@@ -873,6 +877,7 @@ export class FleetManagerOverlay {
       }
       case 'map_vessel': {
         // P2 polish — Fleet Engage pick mode (tactical map LPM na enemy).
+        // Bug fix (jak case 'vessel'): klik na własny → cancel pick mode + select.
         if (this._fleetEngagePickMode?.fleetId) {
           const v = window.KOSMOS?.vesselManager?.getVessel?.(zone.data.vesselId);
           if (v && isEnemyVessel(v)) {
@@ -886,10 +891,14 @@ export class FleetManagerOverlay {
             this._announceFleetOrderResult(res, fleetId, 'engage');
             break;
           }
-          EventBus.emit('ui:toast', { text: t('fleet.engageNeedEnemy'), color: '#ff4466', durationMs: 2500 });
-          break;
+          // Klik na własny → cancel pick mode, fall-through do select.
+          this._fleetEngagePickMode = null;
+          EventBus.emit('ui:toast', { text: t('fleet.engageCancelled'), color: '#808080', durationMs: 1500 });
         }
         this._setSelectedVesselViaUI(zone.data.vesselId);
+        // P2.5 mutex — klik vessela na tactical map też czyści fleet selection.
+        const umMV = window.KOSMOS?.uiManager;
+        if (umMV?.setSelectedFleetId) umMV.setSelectedFleetId(null);
         this._missionConfig = null;
         break;
       }
@@ -2435,7 +2444,16 @@ export class FleetManagerOverlay {
       if (!name) return;
       const fSys = window.KOSMOS?.fleetSystem;
       const fleet = fSys?.createFleet?.(name);
-      if (fleet) this._selectedFleetId = fleet.id;
+      // Bug fix: setuj selekcję przez UIManager (single source of truth) zamiast
+      // direct mutate this._selectedFleetId. Bez tego UIManager._selectedFleetId
+      // pozostaje null, mutex w 'vessel' case (setSelectedFleetId(null)) dedupe'uje
+      // (już null) → fleetOv cache NIE synchronizowany → fleet detail "klei się"
+      // i klik vessela nie pokazuje detail.
+      if (fleet) {
+        const um = window.KOSMOS?.uiManager;
+        if (um?.setSelectedFleetId) um.setSelectedFleetId(fleet.id);
+        else this._selectedFleetId = fleet.id;
+      }
     } catch { /* anulowano */ }
   }
 
@@ -2479,7 +2497,11 @@ export class FleetManagerOverlay {
         else rejected.push({ vid, reason: res?.reason });
       }
       this._multiSelectedIds.clear();
-      this._selectedFleetId = targetFleetId;
+      // Bug fix: selekcja przez UIManager (sync cache). Direct set powodował
+      // desynchronizację (vide _handleCreateFleet).
+      const um = window.KOSMOS?.uiManager;
+      if (um?.setSelectedFleetId) um.setSelectedFleetId(targetFleetId);
+      else this._selectedFleetId = targetFleetId;
     } catch { /* anulowano */ }
   }
 
