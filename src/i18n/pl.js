@@ -888,6 +888,25 @@ export default {
   'fleet.crew': '👤 Załoga: {0}/{1}',
 
   // === Fleet UI (FleetManagerOverlay / FleetTabPanel) ===
+  // ── Player Fleet Groups (P1) — tabs + zakładka Floty + CRUD ──
+  'fleet.tabVessels':              'Statki',
+  'fleet.tabFleets':                'Floty',
+  'fleet.fleetsHeader':             'FLOTY',
+  'fleet.newFleet':                 'Nowa flota',
+  'fleet.newFleetDefaultName':      'Nowa flota',
+  'fleet.fleetsEmpty':              'Brak flot. Utwórz pierwszą, aby grupować statki.',
+  'fleet.disbandConfirmTitle':      'Rozwiąż flotę',
+  'fleet.disbandConfirmMessage':    'Czy na pewno rozwiązać flotę „{0}"? Statki zostaną odłączone.',
+  'fleet.backToFleetList':          'Lista flot',
+  'fleet.doctrineLabel':            'Doktryna',
+  'fleet.fleetMembers':             'Statki w flocie',
+  'fleet.fleetMembersEmpty':        'Brak statków. Przypisz z zakładki Statki.',
+  'fleet.fleetSelectHint':          'Wybierz flotę z listy po lewej.',
+  // Doktryny — nazwy (P3 doda opisy)
+  'fleet.doctrine.engage_in_range.name': 'Walka w zasięgu',
+  'fleet.doctrine.kite.name':            'Kiting',
+  'fleet.doctrine.hold_position.name':   'Trzymaj pozycję',
+  'fleet.doctrine.retreat_at_50.name':   'Wycof. przy 50% HP',
   'fleet.filterAll': 'WSZYSTKIE',
   'fleet.filterHere': '◈ TU',
   'fleet.filterHereAlt': '• TU',

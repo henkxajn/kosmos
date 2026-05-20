@@ -887,6 +887,25 @@ export default {
   'fleet.crew': '👤 Crew: {0}/{1}',
 
   // === Fleet UI (FleetManagerOverlay / FleetTabPanel) ===
+  // ── Player Fleet Groups (P1) — tabs + Fleets tab + CRUD ──
+  'fleet.tabVessels':              'Vessels',
+  'fleet.tabFleets':                'Fleets',
+  'fleet.fleetsHeader':             'FLEETS',
+  'fleet.newFleet':                 'New fleet',
+  'fleet.newFleetDefaultName':      'New Fleet',
+  'fleet.fleetsEmpty':              'No fleets yet. Create one to group your vessels.',
+  'fleet.disbandConfirmTitle':      'Disband fleet',
+  'fleet.disbandConfirmMessage':    'Disband fleet "{0}"? Vessels will be detached.',
+  'fleet.backToFleetList':          'Fleet list',
+  'fleet.doctrineLabel':            'Doctrine',
+  'fleet.fleetMembers':             'Fleet members',
+  'fleet.fleetMembersEmpty':        'No vessels. Assign from the Vessels tab.',
+  'fleet.fleetSelectHint':          'Select a fleet from the list on the left.',
+  // Doctrines — names (descriptions added in P3)
+  'fleet.doctrine.engage_in_range.name': 'Engage in range',
+  'fleet.doctrine.kite.name':            'Kite',
+  'fleet.doctrine.hold_position.name':   'Hold position',
+  'fleet.doctrine.retreat_at_50.name':   'Retreat at 50% HP',
   'fleet.filterAll': 'ALL',
   'fleet.filterHere': '◈ HERE',
   'fleet.filterHereAlt': '• HERE',

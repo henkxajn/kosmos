@@ -16,6 +16,7 @@ import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES }   from '../data/ResourcesData.js';
 import { effectiveRange, loadColonists, unloadColonists, isEnemyVessel }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
+import { ALL_DOCTRINES, doctrineNameKey } from '../data/FleetDoctrines.js';
 import EntityManager       from '../core/EntityManager.js';
 import EventBus            from '../core/EventBus.js';
 import { GAME_CONFIG }     from '../config/GameConfig.js';
@@ -186,6 +187,11 @@ export class FleetManagerOverlay {
     this._scrollOffset = 0;       // scroll listy statków (LEFT)
     this._selectedVesselId = null;
     this._hoverVesselId = null;
+    // Player Fleet Groups (P1) — tab switching i selekcja floty
+    this._activeTab     = 'vessels';   // 'vessels' | 'fleets'
+    this._selectedFleetId = null;
+    this._hoverFleetId  = null;
+    this._fleetScrollOffset = 0;       // scroll listy flot (gdy activeTab='fleets')
     this._hoverShipId = null;       // hover na przycisku budowy statku → tooltip kosztów
     this._missionConfig = null;   // null | { actionId, targetId, step:'select'|'confirm' }
     this._targetScrollOffset = 0; // scroll listy celów
@@ -547,9 +553,13 @@ export class FleetManagerOverlay {
     const b = this._bounds;
     if (mx < b.x || mx > b.x + b.w || my < b.y || my > b.y + b.h) return false;
 
-    // Scroll w LEFT (lista statków)
+    // Scroll w LEFT (lista statków / lista flot zależnie od aktywnej zakładki)
     if (mx < b.x + LEFT_W) {
-      this._scrollOffset = Math.max(0, this._scrollOffset + delta * 0.5);
+      if (this._activeTab === 'fleets') {
+        this._fleetScrollOffset = Math.max(0, this._fleetScrollOffset + delta * 0.5);
+      } else {
+        this._scrollOffset = Math.max(0, this._scrollOffset + delta * 0.5);
+      }
       return true;
     }
     // Scroll w RIGHT (konfigurator celów)
@@ -670,6 +680,44 @@ export class FleetManagerOverlay {
     switch (zone.type) {
       case 'close':
         this.close();
+        break;
+      // ── Player Fleet Groups (P1) ────────────────────────────────────────
+      case 'fleetTab':
+        if (this._activeTab !== zone.data.tab) {
+          this._activeTab = zone.data.tab;
+          // Reset scroll i hover gdy zmiana zakładki
+          this._scrollOffset = 0;
+          this._fleetScrollOffset = 0;
+          this._hoverVesselId = null;
+          this._hoverFleetId  = null;
+        }
+        break;
+      case 'fleetRow':
+        this._selectedFleetId =
+          (this._selectedFleetId === zone.data.fleetId) ? null : zone.data.fleetId;
+        break;
+      case 'fleetCreate':
+        this._handleCreateFleet();
+        break;
+      case 'fleetRename':
+        this._handleRenameFleet(zone.data.fleetId);
+        break;
+      case 'fleetDisband':
+        this._handleDisbandFleet(zone.data.fleetId);
+        break;
+      case 'fleetSetDoctrine': {
+        const fSys = window.KOSMOS?.fleetSystem;
+        fSys?.setDoctrine?.(zone.data.fleetId, zone.data.doctrine);
+        break;
+      }
+      case 'fleetBackToList':
+        this._selectedFleetId = null;
+        break;
+      case 'fleetMemberSelect':
+        // Przeskocz na vessels tab i otwórz detail vessela
+        this._activeTab = 'vessels';
+        this._setSelectedVesselViaUI(zone.data.vesselId);
+        EventBus.emit('vessel:focus', { vesselId: zone.data.vesselId });
         break;
       case 'build_ship':
         if (zone.data.enabled) {
@@ -1415,6 +1463,14 @@ export class FleetManagerOverlay {
 
   _drawLeft(ctx, x, y, w, h, vessels, ms, enemyVessels = [], wrecks = []) {
     const pad = 8;
+    // Player Fleet Groups (P1) — tab bar gdy FEATURES.playerFleets ON.
+    // Tabs zajmują pierwsze tabH=24 px LEFT panelu; reszta przesunięta.
+    const flagOn = !!GAME_CONFIG.FEATURES?.playerFleets;
+    const tabH = flagOn ? 24 : 0;
+    if (flagOn) this._drawLeftTabs(ctx, x, y, w, tabH);
+    if (flagOn && this._activeTab === 'fleets') {
+      return this._drawLeftFleets(ctx, x, y + tabH, w, h - tabH);
+    }
     const ROW_HANGAR = 34;  // kompaktowy wiersz: nazwa + paliwo + lokalizacja
     const ROW_ORBIT  = 34;
     const ROW_FLIGHT = 52;  // wyższy: nazwa + paliwo + cel + typ misji + ETA
@@ -1439,10 +1495,10 @@ export class FleetManagerOverlay {
     // ── Nagłówek (h=36) ──────────────────────────────────────
     ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
-    ctx.fillText(t('fleet.header') + ` [${vessels.length}]`, x + pad, y + 22);
+    ctx.fillText(t('fleet.header') + ` [${vessels.length}]`, x + pad, y + tabH + 22);
 
     // ── Filtry (h=28) ────────────────────────────────────────
-    const filterY = y + 36;
+    const filterY = y + tabH + 36;
     let fx = x + pad;
     for (const btn of _getFilterBtns()) {
       const active = this._filter === btn.id;
@@ -1766,6 +1822,263 @@ export class FleetManagerOverlay {
       return `→ ${vessel.mission.targetName ?? _resolveName(vessel.mission.targetId)}`;
     }
     return t('fleet.locationInFlight');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Player Fleet Groups (P1) — Tab bar + Fleets tab UI
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Mały tab bar: [Statki | Floty] na górze LEFT panelu.
+  _drawLeftTabs(ctx, x, y, w, tabH) {
+    const pad = 4;
+    const btnH = tabH - 4;
+    const btnW = (w - pad * 3) / 2;
+    const btns = [
+      { id: 'vessels', label: t('fleet.tabVessels') },
+      { id: 'fleets',  label: t('fleet.tabFleets') },
+    ];
+    let bx = x + pad;
+    for (const btn of btns) {
+      const active = this._activeTab === btn.id;
+      ctx.fillStyle = active ? 'rgba(0,255,180,0.18)' : 'rgba(20,30,45,0.6)';
+      ctx.fillRect(bx, y + 2, btnW, btnH);
+      ctx.strokeStyle = active ? THEME.accent : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, y + 2, btnW, btnH);
+      ctx.font = `${active ? 'bold ' : ''}${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
+      ctx.textAlign = 'center';
+      ctx.fillText(btn.label, bx + btnW / 2, y + 2 + btnH * 0.5 + 4);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: bx, y: y + 2, w: btnW, h: btnH, type: 'fleetTab', data: { tab: btn.id } });
+      bx += btnW + pad;
+    }
+  }
+
+  // LEFT panel — zakładka Floty: header + przycisk Nowa Flota + lista flot.
+  _drawLeftFleets(ctx, x, y, w, h) {
+    const pad = 8;
+    const fSys = window.KOSMOS?.fleetSystem;
+    const fleets = fSys?.listFleets?.() ?? [];
+
+    // Nagłówek
+    ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('fleet.fleetsHeader') + ` [${fleets.length}]`, x + pad, y + 22);
+
+    // Przycisk: Nowa flota (h=22)
+    const newBtnY = y + 36;
+    const newBtnH = 22;
+    ctx.fillStyle = 'rgba(0,255,180,0.10)';
+    ctx.fillRect(x + pad, newBtnY, w - pad * 2, newBtnH);
+    ctx.strokeStyle = THEME.borderActive;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + pad, newBtnY, w - pad * 2, newBtnH);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.textAlign = 'center';
+    ctx.fillText('＋ ' + t('fleet.newFleet'), x + w / 2, newBtnY + 15);
+    ctx.textAlign = 'left';
+    this._hitZones.push({ x: x + pad, y: newBtnY, w: w - pad * 2, h: newBtnH, type: 'fleetCreate', data: {} });
+
+    // Lista flot — scrollowalna
+    const listY = newBtnY + newBtnH + 8;
+    const listH = y + h - listY - 2;
+    const ROW_H = 36;
+    const totalH = fleets.length * ROW_H;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, listY, w, listH);
+    ctx.clip();
+
+    let ry = listY - this._fleetScrollOffset;
+    for (const fleet of fleets) {
+      if (ry + ROW_H < listY || ry > listY + listH) { ry += ROW_H; continue; }
+      this._drawFleetRow(ctx, x, ry, w, ROW_H, fleet);
+      ry += ROW_H;
+    }
+    ctx.restore();
+
+    // Pusty stan — komunikat
+    if (fleets.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.fleetsEmpty'), x + w / 2, listY + 30);
+      ctx.textAlign = 'left';
+    }
+    // Clamp scroll offset
+    const maxScroll = Math.max(0, totalH - listH);
+    if (this._fleetScrollOffset > maxScroll) this._fleetScrollOffset = maxScroll;
+  }
+
+  _drawFleetRow(ctx, x, y, w, h, fleet) {
+    const pad = 8;
+    const selected = this._selectedFleetId === fleet.id;
+    const hovered  = this._hoverFleetId === fleet.id;
+    // Tło
+    if (selected) {
+      ctx.fillStyle = 'rgba(0,255,180,0.10)';
+      ctx.fillRect(x, y, w, h);
+    } else if (hovered) {
+      ctx.fillStyle = 'rgba(255,255,255,0.02)';
+      ctx.fillRect(x, y, w, h);
+    }
+    // Lewa krawędź — accent strip dla selected
+    if (selected) {
+      ctx.fillStyle = THEME.accent;
+      ctx.fillRect(x, y, 2, h);
+    }
+    // Nazwa
+    ctx.font = `${selected ? 'bold ' : ''}${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = selected ? THEME.accent : THEME.textPrimary;
+    const nameTxt = fleet.name.length > 16 ? fleet.name.slice(0, 15) + '…' : fleet.name;
+    ctx.fillText(nameTxt, x + pad, y + 14);
+    // Pod-linia: doctrine + member count
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    const doctrineLabel = t(doctrineNameKey(fleet.doctrine));
+    const memberCnt = fleet.memberIds.length;
+    ctx.fillText(`${doctrineLabel} · ${memberCnt}`, x + pad, y + 28);
+    // ✕ disband button na prawym górnym rogu
+    const xBtnX = x + w - 18;
+    const xBtnY = y + 4;
+    ctx.font = `${THEME.fontSizeSmall + 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.danger;
+    ctx.fillText('✕', xBtnX, xBtnY + 12);
+    this._hitZones.push({ x: xBtnX - 4, y: xBtnY, w: 18, h: 18, type: 'fleetDisband', data: { fleetId: fleet.id } });
+    // Reszta wiersza — hit zone select
+    this._hitZones.push({ x, y, w: w - 22, h, type: 'fleetRow', data: { fleetId: fleet.id } });
+    // Dolna linia separator
+    ctx.strokeStyle = THEME.border;
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(x + pad, y + h - 1);
+    ctx.lineTo(x + w - pad, y + h - 1);
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
+  }
+
+  // RIGHT panel — szczegóły wybranej floty (gdy activeTab='fleets' i fleet selected).
+  _drawRightFleet(ctx, x, y, w, h, fleet) {
+    const pad = 8;
+    let cy = y + pad;
+
+    // Powrót do listy
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    const backLabel = '← ' + t('fleet.backToFleetList');
+    ctx.fillText(backLabel, x + pad, cy + 10);
+    const backW = ctx.measureText(backLabel).width + 4;
+    this._hitZones.push({ x: x + pad - 2, y: cy, w: backW, h: 16, type: 'fleetBackToList', data: {} });
+    cy += 22;
+
+    // Nazwa + ✎ rename
+    ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    const nameTxt = fleet.name.length > 14 ? fleet.name.slice(0, 13) + '…' : fleet.name;
+    ctx.fillText(nameTxt, x + pad, cy + 14);
+    const renX = x + pad + ctx.measureText(nameTxt).width + 8;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText('✎', renX, cy + 14);
+    this._hitZones.push({ x: renX - 2, y: cy + 2, w: 14, h: 16, type: 'fleetRename', data: { fleetId: fleet.id } });
+    cy += 24;
+
+    // Doctrine — 4 mini-buttony stacked
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(t('fleet.doctrineLabel'), x + pad, cy + 10);
+    cy += 16;
+    const dBtnH = 20;
+    for (const doctrine of ALL_DOCTRINES) {
+      const active = fleet.doctrine === doctrine;
+      ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : 'rgba(20,30,45,0.6)';
+      ctx.fillRect(x + pad, cy, w - pad * 2, dBtnH);
+      ctx.strokeStyle = active ? THEME.accent : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad, cy, w - pad * 2, dBtnH);
+      ctx.font = `${active ? 'bold ' : ''}${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
+      ctx.fillText(t(doctrineNameKey(doctrine)), x + pad + 6, cy + 14);
+      this._hitZones.push({ x: x + pad, y: cy, w: w - pad * 2, h: dBtnH, type: 'fleetSetDoctrine', data: { fleetId: fleet.id, doctrine } });
+      cy += dBtnH + 2;
+    }
+    cy += 6;
+
+    // Separator
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+    cy += 8;
+
+    // Members
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(t('fleet.fleetMembers') + ` [${fleet.memberIds.length}]`, x + pad, cy + 10);
+    cy += 18;
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (fleet.memberIds.length === 0) {
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.fleetMembersEmpty'), x + pad, cy + 10);
+      return;
+    }
+    const ROW = 18;
+    const listMaxY = y + h - pad;
+    for (const vid of fleet.memberIds) {
+      if (cy + ROW > listMaxY) break;
+      const v = vMgr?.getVessel?.(vid);
+      const vName = v?.name ?? vid;
+      const statusCol = v ? (STATUS_COLORS[v.position?.state]?.() ?? THEME.textSecondary) : THEME.textDim;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = statusCol;
+      ctx.fillText('• ' + (vName.length > 18 ? vName.slice(0, 17) + '…' : vName), x + pad, cy + 12);
+      // Klik wiersza → select vessel (przełącza na vessels tab i pokazuje vessel detail)
+      this._hitZones.push({ x: x + pad, y: cy, w: w - pad * 2, h: ROW, type: 'fleetMemberSelect', data: { vesselId: vid } });
+      cy += ROW;
+    }
+  }
+
+  // ── Handlery CRUD (DOM modals) ──────────────────────────────────────────
+
+  async _handleCreateFleet() {
+    try {
+      const { showRenameModal } = await import('../ui/ModalInput.js');
+      const name = await showRenameModal(t('fleet.newFleetDefaultName'));
+      if (!name) return;
+      const fSys = window.KOSMOS?.fleetSystem;
+      const fleet = fSys?.createFleet?.(name);
+      if (fleet) this._selectedFleetId = fleet.id;
+    } catch { /* anulowano */ }
+  }
+
+  async _handleRenameFleet(fleetId) {
+    try {
+      const fSys = window.KOSMOS?.fleetSystem;
+      const fleet = fSys?.getFleet?.(fleetId);
+      if (!fleet) return;
+      const { showRenameModal } = await import('../ui/ModalInput.js');
+      const newName = await showRenameModal(fleet.name);
+      if (newName) fSys.setName(fleetId, newName);
+    } catch { /* anulowano */ }
+  }
+
+  async _handleDisbandFleet(fleetId) {
+    try {
+      const fSys = window.KOSMOS?.fleetSystem;
+      const fleet = fSys?.getFleet?.(fleetId);
+      if (!fleet) return;
+      const { showConfirmModal } = await import('../ui/ConfirmModal.js');
+      const ok = await showConfirmModal({
+        title:   t('fleet.disbandConfirmTitle'),
+        message: t('fleet.disbandConfirmMessage', fleet.name),
+        danger:  true,
+      });
+      if (ok) {
+        fSys.disbandFleet(fleetId, 'manual');
+        if (this._selectedFleetId === fleetId) this._selectedFleetId = null;
+      }
+    } catch { /* anulowano */ }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -3041,6 +3354,24 @@ export class FleetManagerOverlay {
 
   _drawRight(ctx, x, y, w, h, vMgr, ms, colMgr, activePid) {
     const pad = 8;
+
+    // Player Fleet Groups (P1) — gdy activeTab='fleets' RIGHT panel pokazuje
+    // detail floty (gdy fleet selected) albo komunikat „Wybierz flotę z listy".
+    if (this._activeTab === 'fleets') {
+      const fSys = window.KOSMOS?.fleetSystem;
+      const fleet = this._selectedFleetId ? fSys?.getFleet?.(this._selectedFleetId) : null;
+      if (fleet) {
+        this._drawRightFleet(ctx, x, y, w, h, fleet);
+        return;
+      }
+      // Brak selekcji — placeholder
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.fleetSelectHint'), x + w / 2, y + h / 2);
+      ctx.textAlign = 'left';
+      return;
+    }
 
     // Tryb ship picker — wybór statku do wysyłki międzygwiezdnej
     if (this._pendingSendSystemId) {
