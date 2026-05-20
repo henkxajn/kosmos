@@ -2552,10 +2552,10 @@ export default {
   // P3 — fleet retreat + doctrine descriptions
   'log.fleetRetreatTriggered':     '⚑ {0}: AUTO-RETREAT ({1}% HP, {2} ships)',
   'log.fleetRetreatNoTarget':      '⚠ {0}: retreat blocked — no friendly planet',
-  'fleet.doctrine.engageInRange.desc': 'Vessels engage enemy within weapon range (default behavior).',
-  'fleet.doctrine.kite.desc':       'Engage holds maximum range (0.98× instead of 0.95×) — safer, but risk of losing contact.',
-  'fleet.doctrine.holdPosition.desc': 'Blocks pursue/intercept/engage. Fleet still defends reactively when enemy closes.',
-  'fleet.doctrine.retreatAt50.desc': 'Auto-retreat to nearest colony when fleet HP drops below threshold (slider).',
+  'fleet.doctrine.engage_in_range.desc': 'Vessels engage enemy within weapon range (default behavior).',
+  'fleet.doctrine.kite.desc':            'Engage holds maximum range (0.98× instead of 0.95×) — safer, but risk of losing contact.',
+  'fleet.doctrine.hold_position.desc':   'Blocks pursue/intercept/engage. Fleet still defends reactively when enemy closes.',
+  'fleet.doctrine.retreat_at_50.desc':   'Auto-retreat to nearest colony when fleet HP drops below threshold (slider).',
   'fleet.retreatThreshold.label':    'Retreat threshold',
   'fleet.retreatThreshold.tooltip':  'Percentage of aggregate fleet HP below which all alive members move to nearest friendly planet. Active only when doctrine = retreat_at_50.',
 };

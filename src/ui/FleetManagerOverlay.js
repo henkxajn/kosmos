@@ -490,6 +490,14 @@ export class FleetManagerOverlay {
     if (hit && hit.type === 'cancel_movement_order') {
       return { kind: 'uiHint', textKey: 'tooltip.fleet.cancelOrderHint' };
     }
+    // P3 — doctrine button tooltip (opis efektu doktryny).
+    if (hit?.type === 'fleetSetDoctrine' && hit.data?.doctrine) {
+      return { kind: 'uiHint', textKey: `fleet.doctrine.${hit.data.doctrine}.desc` };
+    }
+    // P3 — retreat threshold slider tooltip.
+    if (hit?.type === 'fleetRetreatThreshold') {
+      return { kind: 'uiHint', textKey: 'fleet.retreatThreshold.tooltip' };
+    }
 
     // Atlas / Cluster — własny hit-test (bez tactical worldPoint).
     // Wiersze ciał w katalogu mają hit-zony 'map_body' (L2484-2487). Dla

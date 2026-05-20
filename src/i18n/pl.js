@@ -2553,10 +2553,10 @@ export default {
   // P3 — fleet retreat + doctrine descriptions
   'log.fleetRetreatTriggered':     '⚑ {0}: AUTO-WYCOFANIE ({1}% HP, {2} statków)',
   'log.fleetRetreatNoTarget':      '⚠ {0}: retreat zablokowany — brak friendly planety',
-  'fleet.doctrine.engageInRange.desc': 'Statki angażują wroga w zasięgu broni (domyślne zachowanie).',
-  'fleet.doctrine.kite.desc':       'Engage utrzymuje maksymalny zasięg (0.98× zamiast 0.95×) — bezpieczniej, ale ryzyko utraty kontaktu.',
-  'fleet.doctrine.holdPosition.desc': 'Blokuje pursue/intercept/engage. Flota dalej broni się reaktywnie gdy wróg podejdzie.',
-  'fleet.doctrine.retreatAt50.desc': 'Auto-wycofanie do najbliższej kolonii gdy HP floty spadnie poniżej progu (suwak).',
+  'fleet.doctrine.engage_in_range.desc': 'Statki angażują wroga w zasięgu broni (domyślne zachowanie).',
+  'fleet.doctrine.kite.desc':            'Engage utrzymuje maksymalny zasięg (0.98× zamiast 0.95×) — bezpieczniej, ale ryzyko utraty kontaktu.',
+  'fleet.doctrine.hold_position.desc':   'Blokuje pursue/intercept/engage. Flota dalej broni się reaktywnie gdy wróg podejdzie.',
+  'fleet.doctrine.retreat_at_50.desc':   'Auto-wycofanie do najbliższej kolonii gdy HP floty spadnie poniżej progu (suwak).',
   'fleet.retreatThreshold.label':    'Próg auto-wycofania',
   'fleet.retreatThreshold.tooltip':  'Procent łącznego HP floty, poniżej którego wszyscy żywi członkowie ruszają do najbliższej friendly planety. Aktywne tylko gdy doktryna = retreat_at_50.',
 };
