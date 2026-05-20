@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 73;
+export const CURRENT_VERSION     = 74;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -91,6 +91,7 @@ const MIGRATIONS = {
   70: _migrateV70toV71,
   71: _migrateV71toV72,
   72: _migrateV72toV73,
+  73: _migrateV73toV74,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1850,6 +1851,23 @@ function _migrateV71toV72(data) {
 //   na podstawie memberIds (na razie wszystkie null).
 // - data.uiPrefs.selectedFleetId: null — UI overlay state (P2 wykorzystuje
 //   przy fleet-context selekcji; w P1 zarezerwowane).
+// v73 → v74: Player Fleet Groups P3 (Doctrine effects).
+// Każda flota dostaje retreatThreshold (default 0.5) — konfigurowalny próg
+// auto-wycofania dla doctrine='retreat_at_50' (FleetSystem._tickCivYears).
+// Lazy default — restoreFleet i tak robi clamp + fallback, ale stamp tutaj
+// dla explicitness w serialized data.
+function _migrateV73toV74(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  const pf  = c4x?.playerFleets;
+  if (pf?.fleets && Array.isArray(pf.fleets)) {
+    for (const f of pf.fleets) {
+      if (!f || typeof f !== 'object') continue;
+      if (f.retreatThreshold === undefined) f.retreatThreshold = 0.5;
+    }
+  }
+  return data;
+}
+
 function _migrateV72toV73(data) {
   const c4x = data.civ4x ?? data.c4x;
   if (c4x) {

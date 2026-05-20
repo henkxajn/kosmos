@@ -661,6 +661,14 @@ export class UIManager {
       const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
       this._addNotification(`⚑ ${fname}: rozkaz anulowany (${reason})`, 'fleet', 'info');
     });
+    // P3 — retreat_at_50 doctrine triggered auto-retreat.
+    EventBus.on('fleet:retreatTriggered', ({ fleetId, aggregateHpPct, memberCount, retreatedIds }) => {
+      const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
+      const pctText = Math.round((aggregateHpPct ?? 0) * 100);
+      const issued = Array.isArray(retreatedIds) ? retreatedIds.length : (memberCount ?? 0);
+      this._addNotification(t('log.fleetRetreatTriggered', fname, pctText, issued), 'fleet', 'warn');
+      this._triggerAutoSlowIfTime(t('log.autoSlowFleetRetreat'));
+    });
 
     // Vessel events
     EventBus.on('vessel:launched', ({ vessel, mission }) => {

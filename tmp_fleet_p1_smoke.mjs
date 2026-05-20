@@ -173,7 +173,7 @@ header('T5: vessel:wrecked → auto-remove + autoDisband empty');
 // ── T6 — SaveMigration v72→v73 ──────────────────────────────────────────────
 header('T6: SaveMigration v72→v73');
 {
-  assert(CURRENT_VERSION === 73, 'CURRENT_VERSION = 73');
+  assert(CURRENT_VERSION === 74, 'CURRENT_VERSION = 74');
 
   // Symuluj minimalny save w v72 z 1 vesselem
   const oldSave = {
@@ -184,7 +184,7 @@ header('T6: SaveMigration v72→v73');
     },
   };
   const migrated = migrate(oldSave);
-  assert(migrated.version === 73 && migrated.civ4x.playerFleets, 'migracja dodaje playerFleets default');
+  assert(migrated.version === CURRENT_VERSION && migrated.civ4x.playerFleets, 'migracja dodaje playerFleets default');
   assert(migrated.civ4x.vesselManager.vessels[0].fleetId === null,
          'migracja dodaje vessel.fleetId default null');
 }

@@ -38,8 +38,19 @@ export function createFleet(opts) {
     // Trzymane w polu (nie hardcoded w FleetSystem) by ewentualnie zwolnić tę
     // gwarancję per-fleet w przyszłości bez migracji.
     autoDisbandWhenEmpty: true,
+    // P3 — próg auto-wycofania dla doctrine='retreat_at_50' (0.05–0.95).
+    // Default 0.5 = 50% aggregate HP.
+    retreatThreshold: _clampThreshold(opts.retreatThreshold ?? 0.5),
   };
 }
+
+function _clampThreshold(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 0.5;
+  return Math.max(0.05, Math.min(0.95, n));
+}
+
+export { _clampThreshold as clampRetreatThreshold };
 
 /**
  * Serializuj flotę do JSON-safe obiektu.
@@ -54,6 +65,7 @@ export function serializeFleet(fleet) {
     activeOrder:          fleet.activeOrder ? { ..._cloneActiveOrder(fleet.activeOrder) } : null,
     createdYear:          fleet.createdYear ?? 0,
     autoDisbandWhenEmpty: fleet.autoDisbandWhenEmpty !== false,
+    retreatThreshold:     _clampThreshold(fleet.retreatThreshold ?? 0.5),
   };
 }
 
@@ -70,6 +82,7 @@ export function restoreFleet(data) {
     activeOrder:          data.activeOrder ? _cloneActiveOrder(data.activeOrder) : null,
     createdYear:          data.createdYear ?? 0,
     autoDisbandWhenEmpty: data.autoDisbandWhenEmpty !== false,
+    retreatThreshold:     _clampThreshold(data.retreatThreshold ?? 0.5),
   };
 }
 

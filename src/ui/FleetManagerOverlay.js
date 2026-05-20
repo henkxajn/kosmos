@@ -443,7 +443,7 @@ export class FleetManagerOverlay {
     for (let i = this._hitZones.length - 1; i >= 0; i--) {
       const z = this._hitZones[i];
       if (mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h) {
-        this._handleHit(z);
+        this._handleHit(z, mx, my);
         return true;
       }
     }
@@ -681,7 +681,7 @@ export class FleetManagerOverlay {
 
   // ── Hit dispatch ──────────────────────────────────────────────────────────
 
-  _handleHit(zone) {
+  _handleHit(zone, mx = null, my = null) {
     switch (zone.type) {
       case 'close':
         this.close();
@@ -723,6 +723,16 @@ export class FleetManagerOverlay {
       case 'fleetSetDoctrine': {
         const fSys = window.KOSMOS?.fleetSystem;
         fSys?.setDoctrine?.(zone.data.fleetId, zone.data.doctrine);
+        break;
+      }
+      case 'fleetRetreatThreshold': {
+        // Slider — mapuj mx na threshold 0.05–0.95.
+        const fSys = window.KOSMOS?.fleetSystem;
+        if (mx == null || !zone.data) break;
+        const { fleetId, sliderX, sliderW } = zone.data;
+        const norm = Math.max(0, Math.min(1, (mx - sliderX) / Math.max(1, sliderW)));
+        const threshold = 0.05 + norm * 0.9;  // 0.05–0.95 (clamp w FleetSystem)
+        fSys?.setRetreatThreshold?.(fleetId, threshold);
         break;
       }
       case 'fleetBackToList': {
@@ -2382,6 +2392,47 @@ export class FleetManagerOverlay {
       cy += dBtnH + 2;
     }
     cy += 6;
+
+    // P3 — retreat threshold slider (tylko gdy doctrine === 'retreat_at_50').
+    if (fleet.doctrine === 'retreat_at_50') {
+      const thr = (typeof fleet.retreatThreshold === 'number')
+        ? fleet.retreatThreshold : 0.5;
+      const pct = Math.round(thr * 100);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(t('fleet.retreatThreshold.label') + ':', x + pad, cy + 10);
+      ctx.fillStyle = THEME.accent;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${pct}%`, x + w - pad, cy + 10);
+      ctx.textAlign = 'left';
+      cy += 14;
+
+      // Slider track
+      const sliderX = x + pad;
+      const sliderY = cy + 4;
+      const sliderW = w - pad * 2;
+      const sliderH = 10;
+      ctx.fillStyle = 'rgba(20,30,45,0.8)';
+      ctx.fillRect(sliderX, sliderY, sliderW, sliderH);
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(sliderX, sliderY, sliderW, sliderH);
+      // Fill (0.05 → 0.95 range)
+      const normFrac = Math.max(0, Math.min(1, (thr - 0.05) / 0.9));
+      ctx.fillStyle = 'rgba(0,255,180,0.40)';
+      ctx.fillRect(sliderX + 1, sliderY + 1, (sliderW - 2) * normFrac, sliderH - 2);
+      // Handle
+      const handleX = sliderX + (sliderW - 2) * normFrac;
+      ctx.fillStyle = THEME.accent;
+      ctx.fillRect(handleX - 2, sliderY - 2, 4, sliderH + 4);
+      // Hit zone (cały slider — klik mapuje x na threshold)
+      this._hitZones.push({
+        x: sliderX, y: sliderY - 4, w: sliderW, h: sliderH + 8,
+        type: 'fleetRetreatThreshold',
+        data: { fleetId: fleet.id, sliderX, sliderW },
+      });
+      cy += sliderH + 8;
+    }
 
     // Separator
     ctx.strokeStyle = THEME.border;

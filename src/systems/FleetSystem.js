@@ -16,7 +16,7 @@ import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import {
   createFleet, serializeFleet, restoreFleet,
-  getNextFleetId, setNextFleetId,
+  getNextFleetId, setNextFleetId, clampRetreatThreshold,
 } from '../entities/Fleet.js';
 import { FLEET_DOCTRINES, DEFAULT_DOCTRINE, isValidDoctrine } from '../data/FleetDoctrines.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
@@ -372,6 +372,23 @@ export class FleetSystem {
     if (oldDoctrine === doctrine) return true;
     fleet.doctrine = doctrine;
     EventBus.emit('fleet:doctrineChanged', { fleetId, oldDoctrine, newDoctrine: doctrine });
+    return true;
+  }
+
+  /**
+   * Ustaw próg auto-wycofania (0.05–0.95) — używany przez doctrine='retreat_at_50'.
+   * Clamp do zakresu. Brak efektu jeśli wartość niezmieniona.
+   */
+  setRetreatThreshold(fleetId, threshold) {
+    const fleet = this._fleets.get(fleetId);
+    if (!fleet) return false;
+    const clamped = clampRetreatThreshold(threshold);
+    const oldThr = fleet.retreatThreshold ?? 0.5;
+    if (Math.abs(clamped - oldThr) < 0.001) return true;
+    fleet.retreatThreshold = clamped;
+    EventBus.emit('fleet:retreatThresholdChanged', {
+      fleetId, oldThreshold: oldThr, newThreshold: clamped,
+    });
     return true;
   }
 
