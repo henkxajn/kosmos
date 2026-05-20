@@ -116,10 +116,15 @@ export class FleetSystem {
       return { ok: false, reason: 'no_eligible_members', accepted: [], rejected };
     }
 
-    // applyDoctrine — P2 stub (pass-through); P3 wypełnia.
+    // applyDoctrine — P3 wypełnia (kite + hold_position).
     const doctrineMod = this.applyDoctrine(fleet, spec);
-    // doctrineMod może zwrócić { rejected: true, reason } dla wszystkich (np. hold_position
-    // blokuje pursue) — w P2 doctrineMod === spec (pass-through), więc skip tego case'u.
+    // P3 hold_position: doctrineMod może zwrócić { _rejected: true, _reason }.
+    // Cały fleet order odrzucony — wszyscy eligible members rejected.
+    if (doctrineMod && doctrineMod._rejected) {
+      const reason = doctrineMod._reason ?? 'doctrine_rejected';
+      for (const v of eligible) rejected.push({ vesselId: v.id, reason });
+      return { ok: false, reason, accepted: [], rejected };
+    }
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const specBase = { ...doctrineMod, _fromFleet: fleet.id };
@@ -241,13 +246,33 @@ export class FleetSystem {
   }
 
   /**
-   * Doktryna — P2 pass-through. P3 wypełnia:
-   *  - engage_in_range: pass
-   *  - kite: dla 'engage' set preferMaxRange=true
-   *  - hold_position: dla 'pursue/intercept/engage' → reject (P3 zwraca {rejected:true})
-   *  - retreat_at_50: flag only (tick agreguje HP osobno)
+   * Doktryna — modyfikuje fleet order spec wg fleet.doctrine.
+   *  - engage_in_range: pass-through (default)
+   *  - kite: dla 'engage' set preferMaxRange=true (MOS _tickEngageOrder
+   *    używa optimalFactor 0.98 zamiast 0.95 — vessel trzyma się bliżej max range)
+   *  - hold_position: dla 'pursue/intercept/engage' → zwraca {_rejected:true, _reason}
+   *    (vessel nadal broni się reaktywnie przez DSCS na proximityEnter — to JEST
+   *    "trzymaj pozycję", nie "nie strzelaj")
+   *  - retreat_at_50: flag-only (tick agreguje HP osobno w _tickCivYears)
+   *
+   * NIE waliduje typu — invalid doctrine fallback to engage_in_range (pass).
    */
-  applyDoctrine(_fleet, spec) {
+  applyDoctrine(fleet, spec) {
+    const doctrine = fleet?.doctrine ?? 'engage_in_range';
+    if (doctrine === 'engage_in_range') return spec;
+    if (doctrine === 'kite') {
+      if (spec.type === 'engage') {
+        return { ...spec, preferMaxRange: true };
+      }
+      return spec;
+    }
+    if (doctrine === 'hold_position') {
+      if (spec.type === 'pursue' || spec.type === 'intercept' || spec.type === 'engage') {
+        return { _rejected: true, _reason: 'doctrine_hold_position' };
+      }
+      return spec;
+    }
+    // retreat_at_50 — bez modyfikacji spec; tick handluje
     return spec;
   }
 

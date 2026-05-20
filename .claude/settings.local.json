@@ -107,7 +107,12 @@
       "Bash(Get-ChildItem -Path \"E:\\\\programy\\\\claude_kody\\\\kosmos\\\\src\" -Recurse -Name)",
       "Bash(Select-String -Pattern \"^ui|^renderer|^manager\")",
       "Bash(Sort-Object)",
-      "Bash(Get-Unique)"
+      "Bash(Get-Unique)",
+      "Bash(Get-ChildItem -Path \"E:\\\\programy\\\\claude_kody\\\\kosmos\\\\src\" -Recurse -Filter \"*.js\")",
+      "Bash(Select-Object -First 30 FullName)",
+      "Bash(Get-ChildItem -Path \"E:\\\\programy\\\\claude_kody\\\\kosmos\" -Name)",
+      "Bash(awk '/### Milestone 4 P3/,/### Milestone|^---/ {print NR\": \"$0}' CLAUDE.md)",
+      "Bash(dir *)"
     ]
   }
 }
