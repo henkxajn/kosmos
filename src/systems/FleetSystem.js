@@ -46,6 +46,9 @@ export class FleetSystem {
     /** @type {Map<string, object>} fleetId → FleetInstance */
     this._fleets = new Map();
 
+    // P3 retreat_at_50 — akumulator civYears (tick co 0.5 civYear).
+    this._civYearAccumulator = 0;
+
     // ── EventBus ──────────────────────────────────────────────────────────
     // Vessel wrecked → auto-remove z floty. Hook na BattleSystem/EAH/AutoRetreat
     // emitters via VesselManager pattern; signal: vessel.isWreck=true.
@@ -74,6 +77,9 @@ export class FleetSystem {
     EventBus.on('vessel:orderBlocked', ({ vesselId, orderId }) => {
       this._onMemberOrderEnded(vesselId, orderId, 'blocked');
     });
+
+    // P3 — retreat_at_50 tick (0.5 civYear accumulator).
+    EventBus.on('time:tick', ({ civDeltaYears }) => this._tickCivYears(civDeltaYears));
   }
 
   // ── P2 — Fleet order dispatch ──────────────────────────────────────────
@@ -496,6 +502,95 @@ export class FleetSystem {
       }
       this._fleets.set(f.id, f);
     }
+  }
+
+  // ── P3 retreat_at_50 tick ──────────────────────────────────────────────
+
+  /**
+   * Tick co 0.5 civYear: iteruj floty z doctrine='retreat_at_50', sprawdź
+   * czy którykolwiek member jest w DSCS encounter (derived _inCombat —
+   * nie subscribe noise), agreguj HP, gdy <threshold → trigger retreat.
+   *
+   * Retreat: każdy żywy member dostaje moveToPoint do nearest friendly
+   * planet via AutoRetreatSystem._findNearestFriendlyPlanet + bypass fuel
+   * check + _pendingReturnDock marker (auto-dock przy dotarciu).
+   *
+   * Idempotent przez fleet.activeOrder._retreatTriggered flag.
+   *
+   * @private
+   */
+  _tickCivYears(civDy) {
+    this._civYearAccumulator += civDy ?? 0;
+    if (this._civYearAccumulator < 0.5) return;
+    this._civYearAccumulator = 0;
+
+    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+    if (!dscs?._activeEncounters) return;
+
+    for (const fleet of this._fleets.values()) {
+      if (fleet.doctrine !== 'retreat_at_50') continue;
+      const ao = fleet.activeOrder;
+      if (!ao || ao._retreatTriggered) continue;
+
+      // Derived _inCombat — szukamy encountera zawierającego dowolnego membera.
+      // Zachowujemy też flag w activeOrder dla debug/diagnostyki.
+      let hpSum = 0, hpStartSum = 0, anyInCombat = false;
+      for (const vid of fleet.memberIds) {
+        const enc = this._findEncounterFor(vid, dscs);
+        if (!enc) continue;
+        const state = enc.vesselStates?.get?.(vid);
+        if (!state) continue;
+        anyInCombat = true;
+        hpSum      += state.hp      ?? 0;
+        hpStartSum += state.hpStart ?? state.hp ?? 0;
+      }
+      ao._inCombat = anyInCombat;
+      if (!anyInCombat || hpStartSum === 0) continue;
+
+      const pct = hpSum / hpStartSum;
+      const threshold = (typeof fleet.retreatThreshold === 'number')
+        ? fleet.retreatThreshold : 0.5;
+      if (pct >= threshold) continue;
+
+      // Trigger retreat — moveToPoint do nearest friendly per member.
+      ao._retreatTriggered = true;
+      const ar  = window.KOSMOS?.autoRetreatSystem;
+      const mos = window.KOSMOS?.movementOrderSystem;
+      const issuedIds = [];
+      for (const vid of fleet.memberIds) {
+        const v = this._vm._vessels?.get?.(vid);
+        if (!v || v.isWreck) continue;
+        const nearest = ar?._findNearestFriendlyPlanet?.(v);
+        if (!nearest?.planet) continue;
+        v._pendingReturnDock = nearest.planet.id;
+        const res = mos?.issueOrder?.(vid, {
+          type: 'moveToPoint',
+          targetPoint: { x: nearest.planet.x, y: nearest.planet.y },
+          bypassFuelCheck: true,
+          bypassSpaceportCheck: true,
+        }, { fromFleet: fleet.id });
+        if (res?.ok) issuedIds.push(vid);
+      }
+      EventBus.emit('fleet:retreatTriggered', {
+        fleetId:        fleet.id,
+        aggregateHpPct: pct,
+        threshold,
+        memberCount:    fleet.memberIds.length,
+        retreatedIds:   issuedIds,
+      });
+    }
+  }
+
+  /**
+   * Znajdź encounter zawierający dany vessel.
+   * @private
+   */
+  _findEncounterFor(vesselId, dscs) {
+    if (!dscs?._activeEncounters) return null;
+    for (const enc of dscs._activeEncounters.values()) {
+      if (enc?.isActive && enc.vesselStates?.has?.(vesselId)) return enc;
+    }
+    return null;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
