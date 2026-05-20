@@ -127,8 +127,24 @@ export class FleetSystem {
       if (!target) return { ok: false, reason: 'no_target_point', accepted: [], rejected };
       let maxEta = 0;
       let minEta = Infinity;
+      // Bug P2 fix #1: użyj _calcRoute() dla accurate distance per member
+      // (route może mieć waypointy omijania Słońca → totalDist > euclidean).
+      // Bez tego fleet_eta z euclidean << naturalArrival per slow vessel,
+      // klampowanie nie podciąga sync_year i statki dolatują osobno.
+      const useRoute = typeof this._vm?._calcRoute === 'function';
       for (const v of eligible) {
-        const dPx = Math.hypot(target.x - v.position.x, target.y - v.position.y);
+        let dPx;
+        if (useRoute) {
+          const sysId = v.systemId ?? 'sys_home';
+          try {
+            const route = this._vm._calcRoute(v.position.x, v.position.y, target.x, target.y, sysId);
+            dPx = route?.totalDist ?? Math.hypot(target.x - v.position.x, target.y - v.position.y);
+          } catch {
+            dPx = Math.hypot(target.x - v.position.x, target.y - v.position.y);
+          }
+        } else {
+          dPx = Math.hypot(target.x - v.position.x, target.y - v.position.y);
+        }
         const dAU = dPx / AU_TO_PX;
         const speedAU = Math.max(0.01, v.speedAU ?? 1.0);
         const eta = dAU / speedAU;
@@ -167,6 +183,15 @@ export class FleetSystem {
         memberOrderIds[v.id] = res.orderId;
       } else {
         rejected.push({ vesselId: v.id, reason: res?.reason ?? 'unknown' });
+      }
+    }
+
+    // Debug trace — gated przez KOSMOS.debug.enableTargetingTrace flag (P2 polish).
+    // Pomaga diagnozować sync ETA / speed cap problemy w grze.
+    if (window.KOSMOS?.debug?.enableTargetingTrace) {
+      console.log(`[FleetSystem] issueFleetOrder ${fleet.id} type=${spec.type} acc=${accepted.length} rej=${rejected.length} fleetEta=${fleetEta?.toFixed(2)} speedCap=${speedCap?.toFixed(2)}`);
+      if (rejected.length > 0) {
+        for (const r of rejected) console.log(`  rejected ${r.vesselId}: ${r.reason}`);
       }
     }
 

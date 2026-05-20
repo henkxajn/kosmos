@@ -1778,13 +1778,17 @@ export class FleetManagerOverlay {
         const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
         const icon = ship?.icon ?? '🚀';
 
+        // Player Fleet Groups (P1 polish): gdy flagOn i sekcja = własne statki,
+        // checkbox zajmuje 14px gutter po lewej — przesuwamy nazwę+ikonę o ten offset.
+        const fleetGutter = (flagOn && sec.key !== 'enemy' && sec.key !== 'wreck') ? 14 : 0;
+
         // ── Wiersz 1: ikona + nazwa + paliwo ──
         ctx.font = `13px ${THEME.fontFamily}`;
         ctx.fillStyle = selected ? THEME.textPrimary : THEME.textSecondary;
         const vName = vessel.name.length > 11 ? vessel.name.slice(0, 10) + '…' : vessel.name;
         const inCombat = _isVesselInCombat(vessel.id);
         const combatBadge = inCombat ? ' ⚔' : '';
-        ctx.fillText(`${icon} ${vName}${combatBadge}`, x + pad, ry + 14);
+        ctx.fillText(`${icon} ${vName}${combatBadge}`, x + pad + fleetGutter, ry + 14);
 
         // M3 P3.1 — rally indicator (🎯) gdy vessel assigned do rally
         const _rallyName = _rallyByVesselId.get(vessel.id);
@@ -1792,7 +1796,7 @@ export class FleetManagerOverlay {
           const _nameW = ctx.measureText(`${icon} ${vName}`).width;
           ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = '#ffaa22';  // rally color
-          ctx.fillText('🎯', x + pad + _nameW + 4, ry + 14);
+          ctx.fillText('🎯', x + pad + fleetGutter + _nameW + 4, ry + 14);
         }
 
         // Pasek paliwa
@@ -1813,11 +1817,11 @@ export class FleetManagerOverlay {
         if (sec.key === 'hangar') {
           ctx.fillStyle = THEME.success;
           const locName = _resolveName(vessel.position.dockedAt);
-          ctx.fillText(`◈ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2, ry + 28);
+          ctx.fillText(`◈ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2 + fleetGutter, ry + 28);
         } else if (sec.key === 'orbit') {
           ctx.fillStyle = THEME.mint;
           const locName = _resolveName(vessel.position.dockedAt);
-          ctx.fillText(`⊙ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2, ry + 28);
+          ctx.fillText(`⊙ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2 + fleetGutter, ry + 28);
         } else {
           // W locie: → cel + typ misji
           const targetName = vessel.mission?.targetName ?? _resolveName(vessel.mission?.targetId);
@@ -1825,9 +1829,9 @@ export class FleetManagerOverlay {
           const mIcon = _missionTypeIcon(mType);
           const mLabel = _missionTypeLabel(mType);
           ctx.fillStyle = THEME.warning;
-          ctx.fillText(`→ ${(targetName ?? '?').slice(0, 12)}`, x + pad + 2, ry + 28);
+          ctx.fillText(`→ ${(targetName ?? '?').slice(0, 12)}`, x + pad + 2 + fleetGutter, ry + 28);
           ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`${mIcon} ${mLabel}`, x + pad + 95, ry + 28);
+          ctx.fillText(`${mIcon} ${mLabel}`, x + pad + 95 + fleetGutter, ry + 28);
 
           // ── Wiersz 3 (tylko flight): ETA ──
           const m = vessel.mission;
@@ -1839,10 +1843,10 @@ export class FleetManagerOverlay {
           const etaLabel = isReturning ? '↩ ETA' : '⏱ ETA';
           if (etaYear != null && etaYear > 0) {
             ctx.fillStyle = THEME.warning;
-            ctx.fillText(`${etaLabel}: rok ${_fmtYear(etaYear)}`, x + pad + 2, ry + 43);
+            ctx.fillText(`${etaLabel}: rok ${_fmtYear(etaYear)}`, x + pad + 2 + fleetGutter, ry + 43);
           } else {
             ctx.fillStyle = THEME.textSecondary;
-            ctx.fillText(`${etaLabel}: —`, x + pad + 2, ry + 43);
+            ctx.fillText(`${etaLabel}: —`, x + pad + 2 + fleetGutter, ry + 43);
           }
         }
 
@@ -1853,22 +1857,32 @@ export class FleetManagerOverlay {
         this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rH, type: 'vessel', data: { vesselId: vessel.id } });
 
         // Player Fleet Groups (P1) — multi-select checkbox dla statków gracza.
-        // Renderowany w lewej części wiersza (gutter). Hit zone push PO 'vessel'
-        // — _handleClick iteruje w reverse, więc checkbox ma priorytet w swoim obszarze.
+        // Bug P2 polish #3: checkbox + badge mieszczą się w 14px gutter po lewej
+        // (icon+name shifted o fleetGutter). Checkbox na środku wiersza, badge
+        // FLOTY pokazujemy jako mały trójkątny indicator obok checkboxa (czytelnie
+        // bez nakładki na ikonę statku).
         if (flagOn && sec.key !== 'enemy' && sec.key !== 'wreck') {
           const isMulti = this._multiSelectedIds.has(vessel.id);
           const fleet = vessel.fleetId ? window.KOSMOS?.fleetSystem?.getFleet?.(vessel.fleetId) : null;
-          const cbx = x + 1, cby = Math.max(ry + 9, listY);
+          const cbx = x + 1;
+          const cby = Math.max(ry + (rH / 2) - 7, listY);  // pionowo wycentrowane
+          // Checkbox (12×12 char)
           ctx.font = `12px ${THEME.fontFamily}`;
           ctx.fillStyle = isMulti ? THEME.accent : THEME.textDim;
           ctx.fillText(isMulti ? '☑' : '☐', cbx, cby + 10);
           this._hitZones.push({ x: cbx, y: cby, w: 14, h: 14, type: 'vesselMultiToggle', data: { vesselId: vessel.id } });
-          // Badge floty (gdy przypisany) — mała kropka u dołu obok checkbox'a
+          // Badge floty — wąski kolorowy pasek (3px szerokości) lewa krawędź wiersza,
+          // mints gdy w jakiejś flocie. Brak tekstu = brak nakładki na ikonę.
           if (fleet) {
+            ctx.fillStyle = THEME.mint;
+            ctx.fillRect(x, ry + 2, 3, rH - 4);
+            // Tooltip-like nazwa floty w skrajnie prawym dolnym rogu wiersza (małym fontem)
             ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
             ctx.fillStyle = THEME.mint;
-            const fName = fleet.name.length > 5 ? fleet.name.slice(0, 4) + '…' : fleet.name;
-            ctx.fillText('⚑' + fName, cbx, cby + 22);
+            const fName = fleet.name.length > 8 ? fleet.name.slice(0, 7) + '…' : fleet.name;
+            ctx.textAlign = 'right';
+            ctx.fillText('⚑' + fName, x + w - pad, ry + rH - 4);
+            ctx.textAlign = 'left';
           }
         }
         ry += rH;
@@ -2299,13 +2313,20 @@ export class FleetManagerOverlay {
       .map(vid => vm?.getVessel?.(vid))
       .find(v => v && !v.isWreck);
     if (!firstMember) return;
-    const target = ar._findNearestFriendlyPlanet(firstMember);
-    if (!target) {
+    const nearest = ar._findNearestFriendlyPlanet(firstMember);
+    if (!nearest) {
       EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
       return;
     }
-    const tx = target.x ?? target.position?.x ?? 0;
-    const ty = target.y ?? target.position?.y ?? 0;
+    // Bug P2 fix #2: _findNearestFriendlyPlanet zwraca { colony, planet, distanceAU }
+    // — unwrap przez nearest.planet (nie nearest.x).
+    const planet = nearest.planet;
+    const tx = planet?.x ?? planet?.position?.x ?? 0;
+    const ty = planet?.y ?? planet?.position?.y ?? 0;
+    if (!tx && !ty) {
+      EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
+      return;
+    }
     const res = fs.issueFleetOrder(fleetId, {
       type: 'moveToPoint',
       targetPoint: { x: tx, y: ty },
