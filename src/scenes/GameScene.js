@@ -103,6 +103,7 @@ import { ThreeRenderer }     from '../renderer/ThreeRenderer.js';
 import { ThreeCameraController } from '../renderer/ThreeCameraController.js';
 import { UIManager }         from './UIManager.js';
 import { RightClickMenu }    from '../ui/RightClickMenu.js';
+import { ToastSystem }       from '../ui/ToastSystem.js';
 import { Tooltip }           from '../ui/Tooltip.js';
 import { getTooltipContent } from '../utils/TooltipContent.js';
 import { PlanetScene }       from './PlanetScene.js';
@@ -173,8 +174,12 @@ export class GameScene {
     // M3 P1.1: RightClickMenu — DOM popup, self-managed (nie OverlayManager).
     // window.KOSMOS exposure dla devtools + przyszłych P1.x integration.
     this.rightClickMenu = new RightClickMenu();
+    // P2.5 polish — toast system konsumuje EventBus 'ui:toast'. Niezbędne dla
+    // feedback'u Fleet Engage pick mode i ogólnych powiadomień UX.
+    this.toastSystem    = new ToastSystem();
     window.KOSMOS.uiManager      = this.uiManager;
     window.KOSMOS.rightClickMenu = this.rightClickMenu;
+    window.KOSMOS.toastSystem    = this.toastSystem;
 
     // M3 P1.5: Universal Tooltip — single global instance, dual sources
     // (canvas hover via mousemove handler + DOM hover via data-tooltip listener).

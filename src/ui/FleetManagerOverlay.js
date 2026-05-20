@@ -2343,6 +2343,25 @@ export class FleetManagerOverlay {
     }
     cy += oBtnH * 2 + 8;
 
+    // P2.5 polish — Pick mode hint (stały, w panelu, gdy aktywny).
+    // Toast jest transient (znika), gracz potrzebuje też trwałego wskazania
+    // żeby pamiętać że pick mode wciąż aktywny i jak go anulować.
+    if (engagePickActive) {
+      const hintH = 36;
+      ctx.fillStyle = 'rgba(255,68,102,0.10)';
+      ctx.fillRect(x + pad, cy, w - pad * 2, hintH);
+      ctx.strokeStyle = THEME.danger;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad, cy, w - pad * 2, hintH);
+      ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger;
+      ctx.fillText('⏳ ' + t('fleet.pickModeActive'), x + pad + 6, cy + 13);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(t('fleet.pickModeHint'), x + pad + 6, cy + 28);
+      cy += hintH + 6;
+    }
+
     // Doctrine — 4 mini-buttony stacked
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;

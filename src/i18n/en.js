@@ -920,6 +920,8 @@ export default {
   'fleet.engageNeedEnemy':          'Click an enemy vessel, not own',
   'fleet.engagePickTitle':          'Choose attack target',
   'fleet.noDetectedEnemies':        'No detected enemies. Click an enemy on tactical map if one appears.',
+  'fleet.pickModeActive':           'PICK ATTACK TARGET',
+  'fleet.pickModeHint':             'Click an enemy on tactical map OR Engage to cancel',
   'fleet.noFriendlyPlanet':         'No friendly planet in range',
   'fleet.orderResult':              'Fleet: {0}/{1} vessels executing',
   'fleet.orderResultFailed':        'Fleet: {0}/{1} executing (some rejected)',
