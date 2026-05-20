@@ -902,6 +902,8 @@ export default {
   'fleet.fleetMembers':             'Statki w flocie',
   'fleet.fleetMembersEmpty':        'Brak statków. Przypisz z zakładki Statki.',
   'fleet.fleetSelectHint':          'Wybierz flotę z listy po lewej.',
+  'fleet.assignSelectedTo':         'Przypisz',
+  'fleet.assignToFleetTitle':       'Przypisz statki do floty',
   // Doktryny — nazwy (P3 doda opisy)
   'fleet.doctrine.engage_in_range.name': 'Walka w zasięgu',
   'fleet.doctrine.kite.name':            'Kiting',

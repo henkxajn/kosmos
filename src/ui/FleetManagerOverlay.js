@@ -192,6 +192,8 @@ export class FleetManagerOverlay {
     this._selectedFleetId = null;
     this._hoverFleetId  = null;
     this._fleetScrollOffset = 0;       // scroll listy flot (gdy activeTab='fleets')
+    // Multi-select w zakładce Vessels — Set<vesselId>; przypisywanie do floty.
+    this._multiSelectedIds = new Set();
     this._hoverShipId = null;       // hover na przycisku budowy statku → tooltip kosztów
     this._missionConfig = null;   // null | { actionId, targetId, step:'select'|'confirm' }
     this._targetScrollOffset = 0; // scroll listy celów
@@ -718,6 +720,18 @@ export class FleetManagerOverlay {
         this._activeTab = 'vessels';
         this._setSelectedVesselViaUI(zone.data.vesselId);
         EventBus.emit('vessel:focus', { vesselId: zone.data.vesselId });
+        break;
+      case 'vesselMultiToggle': {
+        const vid = zone.data.vesselId;
+        if (this._multiSelectedIds.has(vid)) this._multiSelectedIds.delete(vid);
+        else this._multiSelectedIds.add(vid);
+        break;
+      }
+      case 'fleetAssignMenuOpen':
+        this._handleAssignMultiToFleet();
+        break;
+      case 'fleetClearMultiSelect':
+        this._multiSelectedIds.clear();
         break;
       case 'build_ship':
         if (zone.data.enabled) {
@@ -1541,7 +1555,32 @@ export class FleetManagerOverlay {
     }
 
     // ── Lista scrollowalna ───────────────────────────────────
-    const listY = filterY + 28;
+    // Player Fleet Groups (P1) — pasek multi-select gdy są zaznaczone vessele.
+    const multiCount = this._multiSelectedIds.size;
+    const showAssignBar = flagOn && multiCount > 0;
+    const assignBarH = showAssignBar ? 24 : 0;
+    if (showAssignBar) {
+      const barY = filterY + 22;
+      ctx.fillStyle = 'rgba(0,255,180,0.10)';
+      ctx.fillRect(x + pad, barY, w - pad * 2, 22);
+      ctx.strokeStyle = THEME.borderActive;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad, barY, w - pad * 2, 22);
+      // "Przypisz (N) ▼" — lewa część (klik otwiera DOM popup)
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      const assignLabel = t('fleet.assignSelectedTo') + ` (${multiCount}) ▼`;
+      ctx.fillText(assignLabel, x + pad + 6, barY + 15);
+      const labelW = ctx.measureText(assignLabel).width + 8;
+      this._hitZones.push({ x: x + pad, y: barY, w: labelW, h: 22, type: 'fleetAssignMenuOpen', data: {} });
+      // ✕ Wyczyść — prawy róg
+      ctx.fillStyle = THEME.danger;
+      ctx.textAlign = 'right';
+      ctx.fillText('✕', x + w - pad - 6, barY + 15);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: x + w - pad - 18, y: barY, w: 14, h: 22, type: 'fleetClearMultiSelect', data: {} });
+    }
+    const listY = filterY + 28 + assignBarH;
     const listH = h - (listY - y);
 
     // M4 P2 — focusSection: scroll do sekcji + auto-select pierwszy element.
@@ -1792,6 +1831,26 @@ export class FleetManagerOverlay {
         ctx.beginPath(); ctx.moveTo(x + pad, ry + rH - 1); ctx.lineTo(x + w - pad, ry + rH - 1); ctx.stroke();
 
         this._hitZones.push({ x, y: Math.max(ry, listY), w, h: rH, type: 'vessel', data: { vesselId: vessel.id } });
+
+        // Player Fleet Groups (P1) — multi-select checkbox dla statków gracza.
+        // Renderowany w lewej części wiersza (gutter). Hit zone push PO 'vessel'
+        // — _handleClick iteruje w reverse, więc checkbox ma priorytet w swoim obszarze.
+        if (flagOn && sec.key !== 'enemy' && sec.key !== 'wreck') {
+          const isMulti = this._multiSelectedIds.has(vessel.id);
+          const fleet = vessel.fleetId ? window.KOSMOS?.fleetSystem?.getFleet?.(vessel.fleetId) : null;
+          const cbx = x + 1, cby = Math.max(ry + 9, listY);
+          ctx.font = `12px ${THEME.fontFamily}`;
+          ctx.fillStyle = isMulti ? THEME.accent : THEME.textDim;
+          ctx.fillText(isMulti ? '☑' : '☐', cbx, cby + 10);
+          this._hitZones.push({ x: cbx, y: cby, w: 14, h: 14, type: 'vesselMultiToggle', data: { vesselId: vessel.id } });
+          // Badge floty (gdy przypisany) — mała kropka u dołu obok checkbox'a
+          if (fleet) {
+            ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+            ctx.fillStyle = THEME.mint;
+            const fName = fleet.name.length > 5 ? fleet.name.slice(0, 4) + '…' : fleet.name;
+            ctx.fillText('⚑' + fName, cbx, cby + 22);
+          }
+        }
         ry += rH;
       }
     }
@@ -2060,6 +2119,39 @@ export class FleetManagerOverlay {
       const { showRenameModal } = await import('../ui/ModalInput.js');
       const newName = await showRenameModal(fleet.name);
       if (newName) fSys.setName(fleetId, newName);
+    } catch { /* anulowano */ }
+  }
+
+  // Multi-select assign: DOM popup z listą flot + "Nowa flota".
+  // Po wyborze przypisuje wszystkie _multiSelectedIds przez addMember.
+  async _handleAssignMultiToFleet() {
+    const fSys = window.KOSMOS?.fleetSystem;
+    if (!fSys || this._multiSelectedIds.size === 0) return;
+    const fleets = fSys.listFleets();
+    try {
+      const choice = await _showAssignToFleetPopup(fleets);
+      if (!choice) return;
+      let targetFleetId = choice.fleetId;
+      if (choice.action === 'new') {
+        const { showRenameModal } = await import('../ui/ModalInput.js');
+        const name = await showRenameModal(t('fleet.newFleetDefaultName'));
+        if (!name) return;
+        const created = fSys.createFleet(name);
+        targetFleetId = created.id;
+      }
+      if (!targetFleetId) return;
+      // Bulk add — zbierz vid'y do array (Set zmienia się gdy addMember
+      // transferuje z innej floty → fleetId pole vessel update'uje się synchronicznie).
+      const ids = [...this._multiSelectedIds];
+      const accepted = [];
+      const rejected = [];
+      for (const vid of ids) {
+        const res = fSys.addMember(targetFleetId, vid);
+        if (res?.ok) accepted.push(vid);
+        else rejected.push({ vid, reason: res?.reason });
+      }
+      this._multiSelectedIds.clear();
+      this._selectedFleetId = targetFleetId;
     } catch { /* anulowano */ }
   }
 
@@ -5524,4 +5616,114 @@ export class FleetManagerOverlay {
     const ty = (target.y ?? 0) / GAME_CONFIG.AU_TO_PX;
     return Math.sqrt((vx - tx) ** 2 + (vy - ty) ** 2);
   }
+}
+
+// ── DOM popup: wybór floty do przypisania multi-selected vesseli ────────────
+// Promise<{action:'existing', fleetId} | {action:'new'} | null> — null = cancel.
+function _showAssignToFleetPopup(fleets) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'kosmos-modal-overlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0',
+      background: 'rgba(2,4,5,0.75)',
+      zIndex: '1001',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    });
+
+    const panel = document.createElement('div');
+    Object.assign(panel.style, {
+      background: THEME.bgSecondary,
+      border: `1px solid ${THEME.border}`,
+      borderRadius: '6px',
+      padding: '16px 20px',
+      width: '340px',
+      maxHeight: '70vh',
+      overflowY: 'auto',
+      fontFamily: THEME.fontFamily,
+      color: THEME.textPrimary,
+    });
+
+    const title = document.createElement('div');
+    title.textContent = t('fleet.assignToFleetTitle');
+    Object.assign(title.style, {
+      color: THEME.accent,
+      fontSize: `${THEME.fontSizeLarge}px`,
+      marginBottom: '10px',
+      letterSpacing: '1px',
+    });
+    panel.appendChild(title);
+
+    const list = document.createElement('div');
+    Object.assign(list.style, { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px' });
+
+    const cleanup = () => { if (overlay.parentNode) document.body.removeChild(overlay); };
+    const resolveAndClose = (val) => { cleanup(); resolve(val); };
+
+    const makeRow = (label, onClick, isAction = false) => {
+      const row = document.createElement('button');
+      row.textContent = label;
+      Object.assign(row.style, {
+        background: 'transparent',
+        border: `1px solid ${isAction ? THEME.borderActive : THEME.border}`,
+        borderRadius: '3px',
+        color: isAction ? THEME.accent : THEME.textPrimary,
+        fontFamily: THEME.fontFamily,
+        fontSize: `${THEME.fontSizeNormal}px`,
+        padding: '8px 12px',
+        cursor: 'pointer',
+        textAlign: 'left',
+      });
+      row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,255,255,0.04)'; });
+      row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
+      row.addEventListener('click', onClick);
+      list.appendChild(row);
+      return row;
+    };
+
+    // Istniejące floty
+    for (const f of fleets) {
+      const memberInfo = ` (${f.memberIds.length})`;
+      makeRow(f.name + memberInfo, () => resolveAndClose({ action: 'existing', fleetId: f.id }));
+    }
+    if (fleets.length === 0) {
+      const empty = document.createElement('div');
+      empty.textContent = t('fleet.fleetsEmpty');
+      Object.assign(empty.style, { color: THEME.textDim, fontSize: `${THEME.fontSizeSmall}px`, padding: '8px 0' });
+      list.appendChild(empty);
+    }
+    // Akcja: Nowa flota
+    makeRow('＋ ' + t('fleet.newFleet'), () => resolveAndClose({ action: 'new' }), true);
+
+    panel.appendChild(list);
+
+    // Cancel
+    const cancelRow = document.createElement('div');
+    Object.assign(cancelRow.style, { display: 'flex', justifyContent: 'flex-end' });
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = t('ui.cancel');
+    Object.assign(cancelBtn.style, {
+      background: 'transparent',
+      border: `1px solid ${THEME.textDim}`,
+      borderRadius: '3px',
+      color: THEME.textSecondary,
+      fontFamily: THEME.fontFamily,
+      fontSize: `${THEME.fontSizeNormal}px`,
+      padding: '6px 14px',
+      cursor: 'pointer',
+    });
+    cancelBtn.addEventListener('click', () => resolveAndClose(null));
+    cancelRow.appendChild(cancelBtn);
+    panel.appendChild(cancelRow);
+
+    overlay.appendChild(panel);
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      panel.addEventListener(evt, (e) => e.stopPropagation());
+    }
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) resolveAndClose(null); });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); resolveAndClose(null); }
+    });
+    document.body.appendChild(overlay);
+  });
 }

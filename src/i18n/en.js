@@ -901,6 +901,8 @@ export default {
   'fleet.fleetMembers':             'Fleet members',
   'fleet.fleetMembersEmpty':        'No vessels. Assign from the Vessels tab.',
   'fleet.fleetSelectHint':          'Select a fleet from the list on the left.',
+  'fleet.assignSelectedTo':         'Assign',
+  'fleet.assignToFleetTitle':       'Assign vessels to fleet',
   // Doctrines — names (descriptions added in P3)
   'fleet.doctrine.engage_in_range.name': 'Engage in range',
   'fleet.doctrine.kite.name':            'Kite',
