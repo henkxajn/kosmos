@@ -194,6 +194,9 @@ export class FleetManagerOverlay {
     this._fleetScrollOffset = 0;       // scroll listy flot (gdy activeTab='fleets')
     // Multi-select w zakładce Vessels — Set<vesselId>; przypisywanie do floty.
     this._multiSelectedIds = new Set();
+    // P2 polish — Fleet Engage pick mode: po kliku „Atak" w panelu floty,
+    // gracz wybiera enemy klikem LPM w tactical map.
+    this._fleetEngagePickMode = null;  // null | { fleetId }
     this._hoverShipId = null;       // hover na przycisku budowy statku → tooltip kosztów
     this._missionConfig = null;   // null | { actionId, targetId, step:'select'|'confirm' }
     this._targetScrollOffset = 0; // scroll listy celów
@@ -779,7 +782,26 @@ export class FleetManagerOverlay {
         this._filter = zone.data.filterId;
         this._scrollOffset = 0;
         break;
-      case 'vessel':
+      case 'vessel': {
+        // P2 polish — Fleet Engage pick mode: jeśli aktywny i klik na enemy
+        // vessel → fire fleet engage order, exit pick mode.
+        if (this._fleetEngagePickMode?.fleetId) {
+          const v = window.KOSMOS?.vesselManager?.getVessel?.(zone.data.vesselId);
+          if (v && isEnemyVessel(v)) {
+            const fleetId = this._fleetEngagePickMode.fleetId;
+            this._fleetEngagePickMode = null;
+            const fs = window.KOSMOS?.fleetSystem;
+            const res = fs?.issueFleetOrder?.(fleetId, {
+              type: 'engage',
+              targetEntityId: zone.data.vesselId,
+            });
+            this._announceFleetOrderResult(res, fleetId, 'engage');
+            break;
+          }
+          // Klik nie-enemy → nie wychodź z pick mode, pokazuj hint
+          EventBus.emit('ui:toast', { text: t('fleet.engageNeedEnemy'), color: '#ff4466', durationMs: 2500 });
+          break;
+        }
         // Toggle — kliknięcie tego samego statku odznacza go.
         // M3 P1.1: write idzie przez UIManager (single source of truth).
         if (this._selectedVesselId === zone.data.vesselId) {
@@ -795,6 +817,7 @@ export class FleetManagerOverlay {
         this._targetScrollOffset = 0;
         this._cachedTargets = null;
         break;
+      }
       case 'back_to_shipyard':
         this._setSelectedVesselViaUI(null);
         this._missionConfig = null;
@@ -834,10 +857,28 @@ export class FleetManagerOverlay {
         }
         break;
       }
-      case 'map_vessel':
+      case 'map_vessel': {
+        // P2 polish — Fleet Engage pick mode (tactical map LPM na enemy).
+        if (this._fleetEngagePickMode?.fleetId) {
+          const v = window.KOSMOS?.vesselManager?.getVessel?.(zone.data.vesselId);
+          if (v && isEnemyVessel(v)) {
+            const fleetId = this._fleetEngagePickMode.fleetId;
+            this._fleetEngagePickMode = null;
+            const fs = window.KOSMOS?.fleetSystem;
+            const res = fs?.issueFleetOrder?.(fleetId, {
+              type: 'engage',
+              targetEntityId: zone.data.vesselId,
+            });
+            this._announceFleetOrderResult(res, fleetId, 'engage');
+            break;
+          }
+          EventBus.emit('ui:toast', { text: t('fleet.engageNeedEnemy'), color: '#ff4466', durationMs: 2500 });
+          break;
+        }
         this._setSelectedVesselViaUI(zone.data.vesselId);
         this._missionConfig = null;
         break;
+      }
       case 'home_focus': {
         // Powrót do widoku "nasza planeta + księżyce" — reset pan + zoom 40 + center
         const home = window.KOSMOS?.homePlanet;
@@ -2093,9 +2134,13 @@ export class FleetManagerOverlay {
     const oBtnW = (w - pad * 3) / 2;
     const oBtnH = 22;
     const hasOrder = !!fleet.activeOrder;
+    const engagePickActive = this._fleetEngagePickMode?.fleetId === fleet.id;
     const orderButtons = [
       { id: 'fleetMoveToPoint', label: '🎯 ' + t('fleet.orderMove'),   enabled: true,     bg: 'rgba(255,170,30,0.12)', fg: THEME.warning },
-      { id: 'fleetEngage',      label: '⚔ ' + t('fleet.orderEngage'), enabled: true,     bg: 'rgba(255,68,102,0.10)', fg: THEME.danger },
+      { id: 'fleetEngage',      label: (engagePickActive ? '⏳ ' : '⚔ ') + t('fleet.orderEngage'),
+                                  enabled: true,
+                                  bg: engagePickActive ? 'rgba(255,68,102,0.30)' : 'rgba(255,68,102,0.10)',
+                                  fg: THEME.danger },
       { id: 'fleetReturnBase',  label: '⏎ ' + t('fleet.orderReturn'), enabled: true,     bg: 'rgba(0,255,180,0.10)',  fg: THEME.accent },
       { id: 'fleetCancelOrder', label: '✕ ' + t('fleet.orderCancel'), enabled: hasOrder, bg: 'rgba(128,128,128,0.10)', fg: THEME.textDim },
     ];
@@ -2291,10 +2336,18 @@ export class FleetManagerOverlay {
     }, { intent: 'fleet_move', fleetId });
   }
 
-  // Engage: w P2 hint o PPM (RightClickMenu fleet-context w c4). W tej wersji
-  // przycisk pokazuje toast "PPM na wrogim statku".
-  _handleFleetEngage(_fleetId) {
-    EventBus.emit('ui:toast', { text: t('fleet.engageHint'), color: '#ffaa22', durationMs: 3000 });
+  // Engage: P2 polish — klik aktywuje pick mode, gracz wybiera enemy klikem
+  // LPM w tactical map (CENTER overlay). Po wybraniu fire fleet engage order.
+  // Re-klik „Atak" przy aktywnym pick mode → cancel.
+  _handleFleetEngage(fleetId) {
+    if (this._fleetEngagePickMode?.fleetId === fleetId) {
+      // Toggle off
+      this._fleetEngagePickMode = null;
+      EventBus.emit('ui:toast', { text: t('fleet.engageCancelled'), color: '#808080', durationMs: 1500 });
+      return;
+    }
+    this._fleetEngagePickMode = { fleetId };
+    EventBus.emit('ui:toast', { text: t('fleet.engagePickHint'), color: '#ffaa22', durationMs: 4000 });
   }
 
   // Return to base: auto-target nearest friendly planet, fire moveToPoint.
@@ -2326,6 +2379,14 @@ export class FleetManagerOverlay {
     if (!tx && !ty) {
       EventBus.emit('ui:toast', { text: t('fleet.noFriendlyPlanet'), color: '#ff4466', durationMs: 3000 });
       return;
+    }
+    // Bug F (polish): auto-dock flag na każdym memberze. FleetSystem listener na
+    // vessel:orderCompleted snap'uje pozycję + dock'uje gdy vessel dotrze w dystansie
+    // RETURN_DOCK_THRESHOLD_AU od planety. Bez tego vessel stoi w statycznym punkcie
+    // gdzie planeta BYŁA w momencie issue (planeta tymczasem orbituje dalej).
+    for (const memberId of fleet.memberIds) {
+      const member = vm.getVessel(memberId);
+      if (member) member._pendingReturnDock = planet.id;
     }
     const res = fs.issueFleetOrder(fleetId, {
       type: 'moveToPoint',

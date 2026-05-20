@@ -13,6 +13,7 @@
 // vessel.fleetId — reactive mirror, ustawiany TYLKO przez add/removeMember.
 
 import EventBus from '../core/EventBus.js';
+import EntityManager from '../core/EntityManager.js';
 import {
   createFleet, serializeFleet, restoreFleet,
   getNextFleetId, setNextFleetId,
@@ -22,6 +23,10 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
+// Próg auto-dock przy Return to base — gdy vessel dotrze w tej odległości od
+// planety docelowej, FleetSystem snap'uje pozycję + ustawia dockedAt. Bez tego
+// `moveToPoint` zostawia statek statycznie w punkcie (planeta odlatuje po orbicie).
+const RETURN_DOCK_THRESHOLD_AU = 0.5;
 // Sanity bound dla fleet_eta — jeśli flota startuje rozproszona (członek 100 AU
 // od target) i większość blisko, fleet_eta byłoby dominowane przez outlier.
 // Sanity: cap fleet_eta na MAX_SYNC_BOOST_FACTOR × min(native_eta). Empirycznie
@@ -58,6 +63,9 @@ export class FleetSystem {
     // failure (target_lost, out_of_range itp.) — w obu przypadkach order
     // floty traci tego członka.
     EventBus.on('vessel:orderCompleted', ({ vesselId, orderId }) => {
+      // P2 polish — auto-dock po Return to base. Sprawdź vessel._pendingReturnDock
+      // PRZED _onMemberOrderEnded (które może czyścić activeOrder).
+      this._maybeAutoDockOnReturn(vesselId);
       this._onMemberOrderEnded(vesselId, orderId, 'completed');
     });
     EventBus.on('vessel:orderCancelled', ({ vesselId, orderId }) => {
@@ -478,5 +486,33 @@ export class FleetSystem {
   /** Aktualny gameYear dla createdYear stamping. */
   _currentYear() {
     return window.KOSMOS?.timeSystem?.currentYear ?? 0;
+  }
+
+  // ── P2 polish — auto-dock przy Return to base ──────────────────────────
+  // _handleFleetReturnBase w FleetManagerOverlay ustawia vessel._pendingReturnDock
+  // = planetId PRZED issueFleetOrder. Po vessel:orderCompleted snap pozycji do
+  // planety + dock gdy w dystansie RETURN_DOCK_THRESHOLD_AU. Bez tego moveToPoint
+  // zostawia statek w statycznym punkcie (planeta odlatuje po orbicie).
+  _maybeAutoDockOnReturn(vesselId) {
+    const v = this._vm._vessels?.get?.(vesselId);
+    if (!v || !v._pendingReturnDock) return;
+    const planetId = v._pendingReturnDock;
+    delete v._pendingReturnDock;  // jednorazowy flag
+    const planet = EntityManager.get(planetId);
+    if (!planet) return;
+    const dPx = Math.hypot(v.position.x - planet.x, v.position.y - planet.y);
+    const dAU = dPx / AU_TO_PX;
+    if (dAU > RETURN_DOCK_THRESHOLD_AU) {
+      // Za daleko — nie auto-dock (vessel parkujący się w open space)
+      return;
+    }
+    // Snap + dock: vessel orbituje planetę, dockedAt = planetId.
+    v.position.x = planet.x;
+    v.position.y = planet.y;
+    v.position.state = 'orbiting';
+    v.position.dockedAt = planetId;
+    v.mission = null;
+    v.status = 'idle';
+    EventBus.emit('vessel:docked', { vessel: v });
   }
 }
