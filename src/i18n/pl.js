@@ -895,6 +895,7 @@ export default {
   'fleet.newFleet':                 'Nowa flota',
   'fleet.newFleetDefaultName':      'Nowa flota',
   'fleet.fleetsEmpty':              'Brak flot. Utwórz pierwszą, aby grupować statki.',
+  'fleet.sectionUngrouped':         'BEZ FLOTY',
   'fleet.disbandConfirmTitle':      'Rozwiąż flotę',
   'fleet.disbandConfirmMessage':    'Czy na pewno rozwiązać flotę „{0}"? Statki zostaną odłączone.',
   'fleet.backToFleetList':          'Lista flot',

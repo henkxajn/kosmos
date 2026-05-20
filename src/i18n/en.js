@@ -894,6 +894,7 @@ export default {
   'fleet.newFleet':                 'New fleet',
   'fleet.newFleetDefaultName':      'New Fleet',
   'fleet.fleetsEmpty':              'No fleets yet. Create one to group your vessels.',
+  'fleet.sectionUngrouped':         'UNASSIGNED',
   'fleet.disbandConfirmTitle':      'Disband fleet',
   'fleet.disbandConfirmMessage':    'Disband fleet "{0}"? Vessels will be detached.',
   'fleet.backToFleetList':          'Fleet list',

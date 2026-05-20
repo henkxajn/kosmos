@@ -187,12 +187,16 @@ export class FleetManagerOverlay {
     this._scrollOffset = 0;       // scroll listy statków (LEFT)
     this._selectedVesselId = null;
     this._hoverVesselId = null;
-    // Player Fleet Groups (P1) — tab switching i selekcja floty
-    this._activeTab     = 'vessels';   // 'vessels' | 'fleets'
+    // Player Fleet Groups (P2.5 outliner) — jedna lista z drzewem.
+    //   _activeTab i _fleetScrollOffset usunięte (jeden widok, jeden scroll).
+    //   _collapsedFleets — Set<fleetId> dla collapse state per fleet. Lokalne,
+    //   nie persist między sesjami (decyzja gracza — startuj zawsze rozwinięte).
+    //   _collapsedSections — Set<'ungrouped'|'enemy'|'wreck'> dla non-fleet sekcji.
     this._selectedFleetId = null;
     this._hoverFleetId  = null;
-    this._fleetScrollOffset = 0;       // scroll listy flot (gdy activeTab='fleets')
-    // Multi-select w zakładce Vessels — Set<vesselId>; przypisywanie do floty.
+    this._collapsedFleets = new Set();
+    this._collapsedSections = new Set();
+    // Multi-select w drzewie — Set<vesselId>; przypisywanie do floty.
     this._multiSelectedIds = new Set();
     // P2 polish — Fleet Engage pick mode: po kliku „Atak" w panelu floty,
     // gracz wybiera enemy klikem LPM w tactical map.
@@ -558,13 +562,9 @@ export class FleetManagerOverlay {
     const b = this._bounds;
     if (mx < b.x || mx > b.x + b.w || my < b.y || my > b.y + b.h) return false;
 
-    // Scroll w LEFT (lista statków / lista flot zależnie od aktywnej zakładki)
+    // Scroll w LEFT (jedna lista drzewa — outliner P2.5).
     if (mx < b.x + LEFT_W) {
-      if (this._activeTab === 'fleets') {
-        this._fleetScrollOffset = Math.max(0, this._fleetScrollOffset + delta * 0.5);
-      } else {
-        this._scrollOffset = Math.max(0, this._scrollOffset + delta * 0.5);
-      }
+      this._scrollOffset = Math.max(0, this._scrollOffset + delta * 0.5);
       return true;
     }
     // Scroll w RIGHT (konfigurator celów)
@@ -686,23 +686,29 @@ export class FleetManagerOverlay {
       case 'close':
         this.close();
         break;
-      // ── Player Fleet Groups (P1) ────────────────────────────────────────
-      case 'fleetTab':
-        if (this._activeTab !== zone.data.tab) {
-          this._activeTab = zone.data.tab;
-          // Reset scroll i hover gdy zmiana zakładki
-          this._scrollOffset = 0;
-          this._fleetScrollOffset = 0;
-          this._hoverVesselId = null;
-          this._hoverFleetId  = null;
-        }
+      // ── Player Fleet Groups (P2.5 outliner) ────────────────────────────
+      case 'fleetSectionToggle': {
+        // Toggle collapse fleet section
+        const fid = zone.data.fleetId;
+        if (this._collapsedFleets.has(fid)) this._collapsedFleets.delete(fid);
+        else this._collapsedFleets.add(fid);
         break;
-      case 'fleetRow': {
-        // P2 — single source of truth = UIManager._selectedFleetId. Toggle.
+      }
+      case 'sectionToggle': {
+        // Toggle collapse non-fleet section (ungrouped/enemy/wreck)
+        const key = zone.data.sectionKey;
+        if (this._collapsedSections.has(key)) this._collapsedSections.delete(key);
+        else this._collapsedSections.add(key);
+        break;
+      }
+      case 'fleetSectionSelect': {
+        // Klik wiersza floty → select fleet (mutex: clear vessel selection).
         const um = window.KOSMOS?.uiManager;
         const next = (this._selectedFleetId === zone.data.fleetId) ? null : zone.data.fleetId;
         if (um?.setSelectedFleetId) um.setSelectedFleetId(next);
-        else this._selectedFleetId = next;  // fallback gdy UIManager niedostępny
+        else this._selectedFleetId = next;
+        // Mutex — clear vessel selection (fleet wygrywa context).
+        if (next && um?.setSelectedVesselId) um.setSelectedVesselId(null);
         break;
       }
       case 'fleetCreate':
@@ -726,9 +732,14 @@ export class FleetManagerOverlay {
         break;
       }
       case 'fleetMemberSelect':
-        // Przeskocz na vessels tab i otwórz detail vessela
-        this._activeTab = 'vessels';
+        // P2.5 — vessele są teraz w głównej liście outlinera pod nagłówkiem floty,
+        // więc fleet detail panel NIE ma już listy członków klikalnych. Zachowany
+        // case dla legacy compat (np. RightClickMenu jeszcze emit'uje).
         this._setSelectedVesselViaUI(zone.data.vesselId);
+        // Mutex: klik member → clear fleet selection (vessel wygrywa).
+        if (window.KOSMOS?.uiManager?.setSelectedFleetId) {
+          window.KOSMOS.uiManager.setSelectedFleetId(null);
+        }
         EventBus.emit('vessel:focus', { vesselId: zone.data.vesselId });
         break;
       case 'vesselMultiToggle': {
@@ -808,6 +819,9 @@ export class FleetManagerOverlay {
           this._setSelectedVesselViaUI(null);
         } else {
           this._setSelectedVesselViaUI(zone.data.vesselId);
+          // P2.5 mutex: klik vessela czyści fleet selection (vessel wygrywa context).
+          const um2 = window.KOSMOS?.uiManager;
+          if (um2?.setSelectedFleetId) um2.setSelectedFleetId(null);
           // M4 P2 — fly camera 3D do vessela. Dla wraków (deep-space lub orbital
           // graveyard) sprite.position jest już ustawione poprawnie, więc handler
           // vessel:focus w ThreeRenderer zrobi focusOnInstant prawidłowo.
@@ -1538,22 +1552,27 @@ export class FleetManagerOverlay {
 
   _drawLeft(ctx, x, y, w, h, vessels, ms, enemyVessels = [], wrecks = []) {
     const pad = 8;
-    // Player Fleet Groups (P1) — tab bar gdy FEATURES.playerFleets ON.
-    // Tabs zajmują pierwsze tabH=24 px LEFT panelu; reszta przesunięta.
+    // P2.5 outliner — jedna lista, sekcje per flota + Bez floty + Wrogie + Wraki.
+    // tabH usunięty (brak zakładek). _activeTab obsolete.
     const flagOn = !!GAME_CONFIG.FEATURES?.playerFleets;
-    const tabH = flagOn ? 24 : 0;
-    if (flagOn) this._drawLeftTabs(ctx, x, y, w, tabH);
-    if (flagOn && this._activeTab === 'fleets') {
-      return this._drawLeftFleets(ctx, x, y + tabH, w, h - tabH);
-    }
+    const tabH = 0;
     const ROW_HANGAR = 34;  // kompaktowy wiersz: nazwa + paliwo + lokalizacja
     const ROW_ORBIT  = 34;
     const ROW_FLIGHT = 52;  // wyższy: nazwa + paliwo + cel + typ misji + ETA
     const ROW_ENEMY  = 34;  // nazwa + typ + odległość — bez paliwa/ETA (nie znamy)
     const ROW_WRECK  = 30;  // nazwa + "wrak" + rok zniszczenia
-    const SECTION_H  = 20;
+    const SECTION_H  = 22;  // header sekcji (lekko większy dla buttonów floty)
     const ENEMY_COLOR = '#ff4466';
     const WRECK_COLOR = '#808080';
+
+    // Helper: dobierz wysokość wiersza per vessel state (per-vessel zamiast per-section
+    // — w sekcji floty mogą być statki w różnych stanach).
+    const _rowHForVessel = (v) => {
+      if (v.isWreck) return ROW_WRECK;
+      if (isEnemyVessel(v)) return ROW_ENEMY;
+      if (v.position?.state === 'in_transit') return ROW_FLIGHT;
+      return ROW_HANGAR;
+    };
 
     // M3 P3.1 — cache vesselId→rallyName mapping (per draw) dla LEFT panel indicator.
     // Avoid N×M lookup w pętli wierszy (jeden skan rally POI raz, lookup O(1)).
@@ -1570,10 +1589,28 @@ export class FleetManagerOverlay {
     // ── Nagłówek (h=36) ──────────────────────────────────────
     ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
-    ctx.fillText(t('fleet.header') + ` [${vessels.length}]`, x + pad, y + tabH + 22);
+    ctx.fillText(t('fleet.header') + ` [${vessels.length}]`, x + pad, y + 22);
+
+    // ── ＋ Nowa flota button (P2.5 — zawsze widoczny gdy flagOn) ──────────
+    let preListY = y + 36;
+    if (flagOn) {
+      const newBtnH = 20;
+      ctx.fillStyle = 'rgba(0,255,180,0.10)';
+      ctx.fillRect(x + pad, preListY, w - pad * 2, newBtnH);
+      ctx.strokeStyle = THEME.borderActive;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad, preListY, w - pad * 2, newBtnH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      ctx.textAlign = 'center';
+      ctx.fillText('＋ ' + t('fleet.newFleet'), x + w / 2, preListY + 14);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: x + pad, y: preListY, w: w - pad * 2, h: newBtnH, type: 'fleetCreate', data: {} });
+      preListY += newBtnH + 4;
+    }
 
     // ── Filtry (h=28) ────────────────────────────────────────
-    const filterY = y + tabH + 36;
+    const filterY = preListY;
     let fx = x + pad;
     for (const btn of _getFilterBtns()) {
       const active = this._filter === btn.id;
@@ -1595,24 +1632,80 @@ export class FleetManagerOverlay {
       fx += bw + 2;
     }
 
-    // ── Grupowanie statków wg stanu ──────────────────────────
-    const hangar  = vessels.filter(v => v.position.state === 'docked');
-    const orbiting = vessels.filter(v => v.position.state === 'orbiting');
-    const inFlight = vessels.filter(v => v.position.state === 'in_transit');
+    // ── P2.5 outliner — grupowanie player vessels po fleetId ─────────────
+    const fSys = window.KOSMOS?.fleetSystem;
+    const fleets = (flagOn && fSys?.listFleets) ? fSys.listFleets() : [];
+    const byFleet = new Map();         // fleetId → vessel[]
+    const ungrouped = [];
+    for (const v of vessels) {
+      if (flagOn && v.fleetId && fSys?.getFleet?.(v.fleetId)) {
+        if (!byFleet.has(v.fleetId)) byFleet.set(v.fleetId, []);
+        byFleet.get(v.fleetId).push(v);
+      } else {
+        ungrouped.push(v);
+      }
+    }
 
-    const sections = [
-      { key: 'hangar', label: t('fleet.sectionHangar'), color: THEME.success,  vessels: hangar,   rowH: ROW_HANGAR },
-      { key: 'orbit',  label: t('fleet.sectionOrbit'),  color: THEME.mint,     vessels: orbiting, rowH: ROW_ORBIT },
-      { key: 'flight', label: t('fleet.sectionFlight'), color: THEME.warning,  vessels: inFlight, rowH: ROW_FLIGHT },
-      { key: 'enemy',  label: 'WROGIE JEDNOSTKI',        color: ENEMY_COLOR,    vessels: enemyVessels, rowH: ROW_ENEMY },
-      { key: 'wreck',  label: 'WRAKI',                   color: WRECK_COLOR,    vessels: wrecks,   rowH: ROW_WRECK },
-    ];
+    // Sekcje — kolejność: per fleet (createdYear asc) → Bez floty → Wrogie → Wraki.
+    const sections = [];
+    for (const fleet of fleets) {
+      sections.push({
+        key:         `fleet_${fleet.id}`,
+        sectionType: 'fleet',
+        fleet,
+        label:       fleet.name,
+        color:       THEME.accent,
+        vessels:     byFleet.get(fleet.id) ?? [],
+      });
+    }
+    if (flagOn) {
+      // Bez floty zawsze widoczna gdy flagOn (nawet pusta — info dla gracza)
+      sections.push({
+        key:         'ungrouped',
+        sectionType: 'special',
+        label:       t('fleet.sectionUngrouped'),
+        color:       THEME.textSecondary,
+        vessels:     ungrouped,
+      });
+    } else {
+      // Legacy fallback bez flagi — wszystkie player vessels jako "Bez floty"
+      if (ungrouped.length > 0) {
+        sections.push({
+          key: 'ungrouped', sectionType: 'special',
+          label: t('fleet.sectionUngrouped'),
+          color: THEME.textSecondary,
+          vessels: ungrouped,
+        });
+      }
+    }
+    sections.push({
+      key: 'enemy', sectionType: 'special',
+      label: 'WROGIE JEDNOSTKI', color: ENEMY_COLOR, vessels: enemyVessels,
+    });
+    sections.push({
+      key: 'wreck', sectionType: 'special',
+      label: 'WRAKI', color: WRECK_COLOR, vessels: wrecks,
+    });
 
-    // Oblicz łączną wysokość contentu
+    // Helper: czy sekcja zwinięta
+    const _isCollapsed = (sec) => {
+      if (sec.sectionType === 'fleet') return this._collapsedFleets.has(sec.fleet.id);
+      return this._collapsedSections.has(sec.key);
+    };
+
+    // Oblicz łączną wysokość contentu (uwzględnia collapse)
     let totalContentH = 0;
     for (const sec of sections) {
-      if (sec.vessels.length === 0) continue;
-      totalContentH += SECTION_H + sec.vessels.length * sec.rowH;
+      if (sec.vessels.length === 0 && sec.sectionType !== 'fleet') continue;
+      // Fleet sections renderują się nawet puste (gracz musi widzieć flotę bez statków)
+      if (sec.sectionType === 'fleet' && sec.vessels.length === 0 && !_isCollapsed(sec)) {
+        totalContentH += SECTION_H + 18;  // header + "brak statków" hint row
+        continue;
+      }
+      totalContentH += SECTION_H;
+      if (!_isCollapsed(sec)) {
+        for (const v of sec.vessels) totalContentH += _rowHForVessel(v);
+      }
     }
 
     // ── Lista scrollowalna ───────────────────────────────────
@@ -1620,8 +1713,9 @@ export class FleetManagerOverlay {
     const multiCount = this._multiSelectedIds.size;
     const showAssignBar = flagOn && multiCount > 0;
     const assignBarH = showAssignBar ? 24 : 0;
+    const multiBarY = filterY + 22;
     if (showAssignBar) {
-      const barY = filterY + 22;
+      const barY = multiBarY;
       ctx.fillStyle = 'rgba(0,255,180,0.10)';
       ctx.fillRect(x + pad, barY, w - pad * 2, 22);
       ctx.strokeStyle = THEME.borderActive;
@@ -1641,7 +1735,7 @@ export class FleetManagerOverlay {
       ctx.textAlign = 'left';
       this._hitZones.push({ x: x + w - pad - 18, y: barY, w: 14, h: 22, type: 'fleetClearMultiSelect', data: {} });
     }
-    const listY = filterY + 28 + assignBarH;
+    const listY = filterY + 22 + assignBarH + 4;
     const listH = h - (listY - y);
 
     // M4 P2 — focusSection: scroll do sekcji + auto-select pierwszy element.
@@ -1653,8 +1747,11 @@ export class FleetManagerOverlay {
       let foundSec = null;
       for (const sec of sections) {
         if (sec.key === target) { foundSec = sec; break; }
-        if (sec.vessels.length === 0) continue;
-        offset += SECTION_H + sec.vessels.length * sec.rowH;
+        if (sec.vessels.length === 0 && sec.sectionType !== 'fleet') continue;
+        offset += SECTION_H;
+        if (!_isCollapsed(sec)) {
+          for (const v of sec.vessels) offset += _rowHForVessel(v);
+        }
       }
       if (foundSec && foundSec.vessels.length > 0) {
         this._scrollOffset = Math.min(offset, Math.max(0, totalContentH - listH));
@@ -1673,29 +1770,96 @@ export class FleetManagerOverlay {
     let ry = listY - this._scrollOffset;
 
     for (const sec of sections) {
-      if (sec.vessels.length === 0) continue;
-      const rH = sec.rowH;
+      const isCollapsed = _isCollapsed(sec);
+      // Pomiń puste special sections (enemy/wreck/ungrouped legacy bez flagOn).
+      // Fleet sections renderują się nawet puste — gracz widzi że ma flotę bez statków.
+      if (sec.vessels.length === 0 && sec.sectionType !== 'fleet') continue;
+      if (sec.sectionType === 'fleet' && sec.vessels.length === 0
+          && !flagOn) continue;  // legacy safety
 
-      // ── Nagłówek sekcji ──
+      // ── Nagłówek sekcji (z toggle + actions per typ) ──
       if (ry + SECTION_H > listY - 2 && ry < listY + listH + 2) {
-        ctx.fillStyle = 'rgba(20,30,45,0.8)';
+        const isSelFleet = sec.sectionType === 'fleet'
+          && this._selectedFleetId === sec.fleet.id;
+        ctx.fillStyle = isSelFleet ? 'rgba(0,255,180,0.10)' : 'rgba(20,30,45,0.8)';
         ctx.fillRect(x, ry, w, SECTION_H);
+        if (isSelFleet) {
+          ctx.fillStyle = THEME.accent;
+          ctx.fillRect(x, ry, 2, SECTION_H);
+        }
         ctx.strokeStyle = sec.color; ctx.lineWidth = 1; ctx.globalAlpha = 0.35;
         ctx.beginPath(); ctx.moveTo(x + pad, ry + SECTION_H - 1); ctx.lineTo(x + w - pad, ry + SECTION_H - 1); ctx.stroke();
         ctx.globalAlpha = 1.0;
+        // Toggle arrow ▾/▸
+        const arrow = isCollapsed ? '▸' : '▾';
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = sec.color;
+        ctx.fillText(arrow, x + pad, ry + 15);
+        this._hitZones.push({
+          x: x + pad - 2, y: ry, w: 14, h: SECTION_H,
+          type: sec.sectionType === 'fleet' ? 'fleetSectionToggle' : 'sectionToggle',
+          data: sec.sectionType === 'fleet' ? { fleetId: sec.fleet.id } : { sectionKey: sec.key },
+        });
+        // Label (truncated do dostępnej szerokości)
         ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = sec.color;
-        ctx.fillText(`▸ ${sec.label}`, x + pad, ry + 14);
+        const rightBtnW = sec.sectionType === 'fleet' ? 22 : 0;  // miejsce na ✕
+        const labelMaxW = w - pad * 2 - 14 - 28 - rightBtnW;
+        let label = sec.label;
+        while (label.length > 4 && ctx.measureText(label).width > labelMaxW) {
+          label = label.slice(0, -2) + '…';
+        }
+        ctx.fillText(label, x + pad + 14, ry + 14);
+        // [count] po prawej + (dla floty) doktryna + ✕
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim;
-        ctx.textAlign = 'right';
-        ctx.fillText(`${sec.vessels.length}`, x + w - pad, ry + 14);
-        ctx.textAlign = 'left';
+        if (sec.sectionType === 'fleet') {
+          // ✕ disband
+          ctx.fillStyle = THEME.danger;
+          const xBtnX = x + w - pad - 8;
+          ctx.fillText('✕', xBtnX, ry + 14);
+          this._hitZones.push({
+            x: xBtnX - 4, y: ry, w: 16, h: SECTION_H,
+            type: 'fleetDisband', data: { fleetId: sec.fleet.id },
+          });
+          // [count] przed ✕
+          ctx.fillStyle = THEME.textDim;
+          ctx.textAlign = 'right';
+          ctx.fillText(`[${sec.vessels.length}]`, xBtnX - 14, ry + 14);
+          ctx.textAlign = 'left';
+        } else {
+          ctx.fillStyle = THEME.textDim;
+          ctx.textAlign = 'right';
+          ctx.fillText(`${sec.vessels.length}`, x + w - pad, ry + 14);
+          ctx.textAlign = 'left';
+        }
+        // Klik wiersza floty (poza toggle/disband) → select fleet
+        if (sec.sectionType === 'fleet') {
+          this._hitZones.push({
+            x: x + pad + 14, y: ry, w: w - pad * 2 - 14 - 22, h: SECTION_H,
+            type: 'fleetSectionSelect', data: { fleetId: sec.fleet.id },
+          });
+        }
       }
       ry += SECTION_H;
 
+      // Fleet bez statków + nie zwinięta → hint row
+      if (sec.sectionType === 'fleet' && sec.vessels.length === 0 && !isCollapsed) {
+        if (ry + 18 > listY && ry < listY + listH) {
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          ctx.textAlign = 'center';
+          ctx.fillText(t('fleet.fleetMembersEmpty'), x + w / 2, ry + 13);
+          ctx.textAlign = 'left';
+        }
+        ry += 18;
+        continue;
+      }
+      // Sekcja zwinięta → pomiń wiersze (header był renderowany wyżej).
+      if (isCollapsed) continue;
+
       // ── Wiersze statków ──
       for (const vessel of sec.vessels) {
+        const rH = _rowHForVessel(vessel);
         if (ry + rH < listY) { ry += rH; continue; }
         if (ry > listY + listH) { ry += rH; continue; }
 
@@ -3733,22 +3897,18 @@ export class FleetManagerOverlay {
   _drawRight(ctx, x, y, w, h, vMgr, ms, colMgr, activePid) {
     const pad = 8;
 
-    // Player Fleet Groups (P1) — gdy activeTab='fleets' RIGHT panel pokazuje
-    // detail floty (gdy fleet selected) albo komunikat „Wybierz flotę z listy".
-    if (this._activeTab === 'fleets') {
+    // Player Fleet Groups (P2.5 outliner) — mutex: gdy selectedFleetId set,
+    // pokazuj fleet detail. Inaczej spadamy do dotychczasowej logiki vessel detail
+    // / shipyard. UI gwarantuje że tylko jedna selekcja na raz (mutex w handlerach).
+    const fleetSel = this._selectedFleetId;
+    if (fleetSel) {
       const fSys = window.KOSMOS?.fleetSystem;
-      const fleet = this._selectedFleetId ? fSys?.getFleet?.(this._selectedFleetId) : null;
+      const fleet = fSys?.getFleet?.(fleetSel);
       if (fleet) {
         this._drawRightFleet(ctx, x, y, w, h, fleet);
         return;
       }
-      // Brak selekcji — placeholder
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.fleetSelectHint'), x + w / 2, y + h / 2);
-      ctx.textAlign = 'left';
-      return;
+      // Fleet zniknął (disband/save corruption) — fallback do dotychczasowego flow.
     }
 
     // Tryb ship picker — wybór statku do wysyłki międzygwiezdnej
