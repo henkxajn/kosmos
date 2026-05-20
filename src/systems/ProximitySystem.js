@@ -92,6 +92,31 @@ export class ProximitySystem {
     // false-positive przy reuse vessel ID w przyszłości.
     this._onVesselWrecked = (e) => this._handleVesselWrecked(e);
     EventBus.on('vessel:wrecked', this._onVesselWrecked);
+
+    // P3 polish (2026-05-20) — battle finalize → wyczyść _activeCombatPairs dla
+    // par participantA × participantB. Bez tego po retreat enemy, gdy dist
+    // pomiędzy player a uciekającym enemy < combatExitAU, _activeCombatPairs
+    // nie jest czyszczone i `!isCombat` filter w _checkPair NIE emit'uje
+    // nowego combatRangeEnter → player kite hover bez walki.
+    this._onBattleResolved = (e) => this._handleBattleResolved(e);
+    EventBus.on('battle:resolved', this._onBattleResolved);
+  }
+
+  /**
+   * P3 polish — battle finalize cleanup. Po zakończonej walce wyczyść
+   * _activeCombatPairs dla par participantA × participantB, żeby następny
+   * _checkPair mógł re-emit combatRangeEnter (gdy dist nadal < combatEnter).
+   * @private
+   */
+  _handleBattleResolved({ result }) {
+    if (!result?.participantA?.vesselIds || !result?.participantB?.vesselIds) return;
+    const aIds = result.participantA.vesselIds;
+    const bIds = result.participantB.vesselIds;
+    for (const a of aIds) {
+      for (const b of bIds) {
+        this._activeCombatPairs.delete(pairKey(a, b));
+      }
+    }
   }
 
   /**

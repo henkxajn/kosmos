@@ -65,12 +65,37 @@ export class VesselCombatSystem {
     // (retreat lub manewr) fresh engagement możliwy bez czekania.
     this._onCombatRangeExit = (e) => this._handleCombatRangeExit(e);
     EventBus.on('vessel:combatRangeExit', this._onCombatRangeExit);
+
+    // P3 polish (2026-05-20) — reset cooldown po finalize encountera. Bez tego
+    // przy retreat enemy, gdy player engage order CONTINUES i dist nigdy nie
+    // przekroczy combatExitAU, combatRangeExit się nie emit'uje → cooldown
+    // blokuje restart → player kite hover bez walki przez 1 civYear.
+    this._onBattleResolved = (e) => this._handleBattleResolved(e);
+    EventBus.on('battle:resolved', this._onBattleResolved);
   }
 
   destroy() {
     EventBus.off('vessel:combatRangeEnter', this._onCombatRangeEnter);
     EventBus.off('vessel:combatRangeExit', this._onCombatRangeExit);
+    EventBus.off('battle:resolved', this._onBattleResolved);
     this._recentlyEngaged.clear();
+  }
+
+  /**
+   * P3 polish — battle finalize → wyczyść cooldown dla par participantA × participantB.
+   * Po legitimate end-of-combat gracz/AI może natychmiast podjąć nową walkę
+   * (np. enemy retreat → player engage order chase'uje → restart combat).
+   * @private
+   */
+  _handleBattleResolved({ result }) {
+    if (!result?.participantA?.vesselIds || !result?.participantB?.vesselIds) return;
+    const aIds = result.participantA.vesselIds;
+    const bIds = result.participantB.vesselIds;
+    for (const a of aIds) {
+      for (const b of bIds) {
+        this._recentlyEngaged.delete(pairKey(a, b));
+      }
+    }
   }
 
   // ── Event handling ────────────────────────────────────────────────────
@@ -95,7 +120,14 @@ export class VesselCombatSystem {
     const now = this._year();
     const key = pairKey(vesselAId, vesselBId);
     const last = this._recentlyEngaged.get(key);
-    if (last != null && (now - last) < ENGAGEMENT_COOLDOWN_YEARS) return;
+
+    // P3 polish — bypass cooldown gdy któryś vessel ma aktywny engage order
+    // targetujący drugiego (player intent). Cooldown istnieje żeby chronić
+    // przed flicker'em dla par "przypadkowo" stale w combat range; gdy gracz
+    // explicit'ie ŚCIGA cel rozkazem engage, restart combat musi być natychmiastowy.
+    const playerIntentOverride = this._hasEngageIntentBetween(vesselAId, vesselBId);
+
+    if (!playerIntentOverride && last != null && (now - last) < ENGAGEMENT_COOLDOWN_YEARS) return;
 
     this._recentlyEngaged.set(key, now);
 
@@ -124,6 +156,21 @@ export class VesselCombatSystem {
    * Cooldown chroni tylko przed flicker'em gdy vessele zostają stale w combat
    * range po niekonkluzywnej bitwie.
    */
+  /**
+   * Czy któryś z dwóch vesseli ma aktywny engage order targetujący drugiego.
+   * @private
+   */
+  _hasEngageIntentBetween(idA, idB) {
+    const vm = this._vm;
+    const vA = vm?._vessels?.get?.(idA);
+    const vB = vm?._vessels?.get?.(idB);
+    const oA = vA?.movementOrder;
+    const oB = vB?.movementOrder;
+    if (oA?.type === 'engage' && oA.targetEntityId === idB) return true;
+    if (oB?.type === 'engage' && oB.targetEntityId === idA) return true;
+    return false;
+  }
+
   _handleCombatRangeExit({ vesselAId, vesselBId }) {
     if (!GAME_CONFIG.FEATURES?.vesselCombat) return;
     const key = pairKey(vesselAId, vesselBId);
