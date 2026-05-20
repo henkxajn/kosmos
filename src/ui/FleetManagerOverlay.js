@@ -694,10 +694,14 @@ export class FleetManagerOverlay {
           this._hoverFleetId  = null;
         }
         break;
-      case 'fleetRow':
-        this._selectedFleetId =
-          (this._selectedFleetId === zone.data.fleetId) ? null : zone.data.fleetId;
+      case 'fleetRow': {
+        // P2 — single source of truth = UIManager._selectedFleetId. Toggle.
+        const um = window.KOSMOS?.uiManager;
+        const next = (this._selectedFleetId === zone.data.fleetId) ? null : zone.data.fleetId;
+        if (um?.setSelectedFleetId) um.setSelectedFleetId(next);
+        else this._selectedFleetId = next;  // fallback gdy UIManager niedostępny
         break;
+      }
       case 'fleetCreate':
         this._handleCreateFleet();
         break;
@@ -712,9 +716,12 @@ export class FleetManagerOverlay {
         fSys?.setDoctrine?.(zone.data.fleetId, zone.data.doctrine);
         break;
       }
-      case 'fleetBackToList':
-        this._selectedFleetId = null;
+      case 'fleetBackToList': {
+        const um = window.KOSMOS?.uiManager;
+        if (um?.setSelectedFleetId) um.setSelectedFleetId(null);
+        else this._selectedFleetId = null;
         break;
+      }
       case 'fleetMemberSelect':
         // Przeskocz na vessels tab i otwórz detail vessela
         this._activeTab = 'vessels';

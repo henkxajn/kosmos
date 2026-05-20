@@ -172,6 +172,10 @@ export class UIManager {
     // M3 P1.1 — selection model dla orderów (single source of truth).
     // FleetManagerOverlay._selectedVesselId pełni rolę cache rendering.
     this._selectedVesselId = null;
+    // Player Fleet Groups (P2) — analogiczne selektor floty (single source of truth).
+    // RightClickMenu czyta przez getSelectedFleetId() żeby pokazywać fleet-context
+    // entries. FleetManagerOverlay._selectedFleetId pełni rolę cache rendering.
+    this._selectedFleetId = null;
     // M3 P1.3 — picker mode state (np. patrol waypoints; future: targetEntity / targetPoint).
     // null gdy idle; { mode, callback, waypoints, metadata } gdy active.
     this._pickerState = null;
@@ -288,6 +292,28 @@ export class UIManager {
     const fleetOv = this.overlayManager?.overlays?.fleet;
     if (fleetOv) fleetOv._selectedVesselId = vesselId;
     EventBus.emit('ui:selectionChanged', { vesselId, prevVesselId: prev });
+  }
+
+  // ── P2: Selected fleet (analog vessel) ────────────────────────
+  getSelectedFleetId() {
+    return this._selectedFleetId;
+  }
+
+  setSelectedFleetId(fleetId) {
+    if (this._selectedFleetId === fleetId) return;
+    if (fleetId !== null) {
+      const f = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId);
+      if (!f) {
+        console.warn(`[UIManager] setSelectedFleetId: fleet ${fleetId} nie istnieje`);
+        return;
+      }
+    }
+    const prev = this._selectedFleetId;
+    this._selectedFleetId = fleetId;
+    // Sync cache w FleetOverlay (single source of truth)
+    const fleetOv = this.overlayManager?.overlays?.fleet;
+    if (fleetOv) fleetOv._selectedFleetId = fleetId;
+    EventBus.emit('ui:fleetSelectionChanged', { fleetId, prevFleetId: prev });
   }
 
   // M4 P2 — Tab / Shift+Tab cycling przez własne nie-wrak vessele.

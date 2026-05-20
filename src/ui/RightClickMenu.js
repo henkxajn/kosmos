@@ -37,8 +37,10 @@ export class RightClickMenu {
     this.hide();  // wyczyść poprzednie menu (re-open)
     this._target = target;
 
-    const selectedVesselId = window.KOSMOS?.uiManager?.getSelectedVesselId() ?? null;
-    const options = buildMenuOptions(target, selectedVesselId);
+    const um = window.KOSMOS?.uiManager;
+    const selectedVesselId = um?.getSelectedVesselId?.() ?? null;
+    const selectedFleetId = um?.getSelectedFleetId?.() ?? null;
+    const options = buildMenuOptions(target, { vesselId: selectedVesselId, fleetId: selectedFleetId });
     if (options.length === 0) return;  // brak opcji → nie pokazuj
 
     const menu = document.createElement('div');
@@ -159,6 +161,36 @@ export class RightClickMenu {
     return this._isOpen;
   }
 
+  // P2 — Build fleet spec z opcji menu + targetu. Analog buildOrderSpec
+  // ale bez vessel ID (fleet jest kolektywnym issuerem). targetEntityId
+  // pochodzi z target.entityId; targetPoint z target.planet.x/y lub worldPoint.
+  _buildFleetSpec(option, target) {
+    if (!option?.orderType || !target?.type) return null;
+    const orderType = option.orderType;
+    if (orderType === 'moveToPoint') {
+      // Planet target — body.x/body.y
+      if (target.type === 'planet' && target.planet
+          && typeof target.planet.x === 'number'
+          && typeof target.planet.y === 'number') {
+        return { type: 'moveToPoint', targetPoint: { x: target.planet.x, y: target.planet.y } };
+      }
+      // Empty target — worldPoint może być 3D ({x,y,z}, XZ plane) lub 2D ({x,y}).
+      const wp = target.worldPoint;
+      if (wp && typeof wp.x === 'number' && Number.isFinite(wp.x)) {
+        const yVal = typeof wp.z === 'number' ? wp.z : wp.y;
+        if (typeof yVal === 'number' && Number.isFinite(yVal)) {
+          return { type: 'moveToPoint', targetPoint: { x: wp.x, y: yVal } };
+        }
+      }
+      return null;
+    }
+    if (orderType === 'pursue' || orderType === 'intercept' || orderType === 'engage') {
+      if (!target.entityId) return null;
+      return { type: orderType, targetEntityId: target.entityId };
+    }
+    return null;
+  }
+
   _handleOptionClick(option, target) {
     this.hide();
 
@@ -195,6 +227,31 @@ export class RightClickMenu {
       const poiType = option.poiType ?? 'waypoint';
       const worldPoint = target?.worldPoint ?? null;
       EventBus.emit('ui:openCreatePOIPicker', { poiType, worldPoint });
+      return;
+    }
+
+    // P2 — Fleet order dispatch (action === 'issueFleetOrder').
+    if (option.action === 'issueFleetOrder' && option.orderType) {
+      const fsUm = window.KOSMOS?.uiManager;
+      const fleetId = fsUm?.getSelectedFleetId?.() ?? null;
+      const fSys = window.KOSMOS?.fleetSystem;
+      if (!fleetId || !fSys?.issueFleetOrder) {
+        console.warn('[RightClickMenu] fleet order: brak selectedFleetId lub FleetSystem');
+        return;
+      }
+      const spec = this._buildFleetSpec(option, target);
+      if (!spec) {
+        console.warn('[RightClickMenu] buildFleetSpec returned null');
+        return;
+      }
+      const res = fSys.issueFleetOrder(fleetId, spec);
+      if (!res?.ok) {
+        const reason = res?.rejected?.[0]?.reason ?? res?.reason ?? 'unknown';
+        window.KOSMOS?.eventLogSystem?.push?.({
+          text: `Fleet order rejected: ${reason}`,
+          channel: 'fleet', severity: 'warn',
+        });
+      }
       return;
     }
 

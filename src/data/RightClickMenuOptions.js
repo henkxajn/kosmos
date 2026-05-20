@@ -27,10 +27,20 @@ import { SHIP_MODULES } from './ShipModulesData.js';
 //                       (filter dynamiczny; pominięty → zawsze widoczne)
 //   requiresSelection — czy wymaga aktywnego selectedVesselId
 
+// ── P2 — Fleet-context entries (forFleet:true) ──────────────────────────
+// Pojawiają się gdy gracz ma wybraną flotę (selectedFleetId) — równolegle
+// do standardowych vessel-context. Wzajemnie wykluczające: gdy fleet jest
+// zaznaczony, fleet entries SHOW + vessel entries HIDE (gracz może mieć tylko
+// jedna ścieżkę selekcji on aktiwnie).
+// Etykieta zawiera placeholder {fleet} wstawiany przez buildMenuOptions z fleet.name.
+
 export const MENU_OPTIONS_BY_TARGET = Object.freeze({
   empty: [
     { id: 'moveToPoint', labelPL: 'Lecisz tutaj', labelEN: 'Move here', icon: '→',
       action: 'issueOrder', orderType: 'moveToPoint', requiresSelection: true },
+    // P2 — fleet move
+    { id: 'fleet.moveToPoint', labelPL: 'Flota: lecisz tutaj', labelEN: 'Fleet: move here', icon: '🎯',
+      action: 'issueFleetOrder', orderType: 'moveToPoint', forFleet: true },
     // M3 P1.3 — patrol z manualnymi waypointami (picker mode). RightClickMenu
     // rozpoznaje target.type !== 'poi' + orderType='patrol' jako sygnał picker'a.
     // POI patrol (klasyczny) zostaje w MENU_OPTIONS_BY_TARGET.poi (używa POI.waypoints).
@@ -60,6 +70,11 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
     // Warning gdy brak broni (analogicznie do pursue/intercept).
     { id: 'engage', labelPL: 'Zaangażuj', labelEN: 'Engage', icon: '⊗',
       action: 'issueOrder', orderType: 'engage', requiresSelection: true },
+    // P2 — fleet engage / pursue
+    { id: 'fleet.engage', labelPL: 'Flota: zaangażuj', labelEN: 'Fleet: engage', icon: '⊗',
+      action: 'issueFleetOrder', orderType: 'engage', forFleet: true },
+    { id: 'fleet.pursue', labelPL: 'Flota: ścigaj', labelEN: 'Fleet: pursue', icon: '⚔',
+      action: 'issueFleetOrder', orderType: 'pursue', forFleet: true },
   ],
   ownVessel: [
     { id: 'escort', labelPL: 'Eskortuj', labelEN: 'Escort', icon: '🛡',
@@ -92,6 +107,9 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
     // dock — pominięte w P1.1: Planet entity nie ma flagi canDock; decyzja
     // dokowania to runtime (ColonyManager.colonies + OrbitalSpaceSystem).
     // P1.3 doda gdy będzie miał resolveTarget logic.
+    // P2 — fleet move to planet (sync ETA)
+    { id: 'fleet.moveToPlanet', labelPL: 'Flota: lecisz do planety', labelEN: 'Fleet: move to planet', icon: '🎯',
+      action: 'issueFleetOrder', orderType: 'moveToPoint', forFleet: true },
   ],
 });
 
@@ -144,23 +162,54 @@ function _vesselHasNoWeapons(vesselId) {
 // Buduje finalną listę opcji dla danego targetu + stanu selekcji.
 // Zwraca opcje z dodanymi flagami enabled + disabledReason + warning (do UI).
 // Pure function — testowalna w izolacji.
-export function buildMenuOptions(target, selectedVesselId) {
+//
+// P2: signature backwards-compatible — drugi arg może być stringiem (legacy
+// vesselId) ALBO obiektem { vesselId?, fleetId? } (nowy fleet-aware path).
+//   - forFleet:true entries pojawiają się tylko gdy fleetId jest set
+//   - vessel-context (requiresSelection) entries pojawiają się tylko gdy
+//     vesselId set ORAZ fleetId NIE set (fleet selection wyklucza vessel)
+export function buildMenuOptions(target, selection) {
+  // Backwards-compat: gdy selection to string (legacy), traktuj jako vesselId.
+  const selectedVesselId = (typeof selection === 'string') ? selection
+    : (selection?.vesselId ?? null);
+  const selectedFleetId = (typeof selection === 'object' && selection !== null)
+    ? (selection.fleetId ?? null) : null;
+  const fleetActive = selectedFleetId !== null;
+  const fleetName = fleetActive
+    ? (window.KOSMOS?.fleetSystem?.getFleet?.(selectedFleetId)?.name ?? '?')
+    : null;
+
   const baseOptions = MENU_OPTIONS_BY_TARGET[target?.type] ?? [];
   return baseOptions
+    .filter(opt => {
+      // forFleet entries: pokazuj WYŁĄCZNIE gdy fleet selected.
+      if (opt.forFleet) return fleetActive;
+      // Vessel-context entries (requiresSelection): pokazuj gdy vessel selected
+      // I fleet NIE selected (fleet ma priorytet — wyklucza vessel).
+      if (opt.requiresSelection) return !fleetActive && selectedVesselId !== null;
+      // Inne (np. createPOI) — bez filtra selekcji.
+      return true;
+    })
     .filter(opt => !opt.condition || opt.condition(target, selectedVesselId))
     .map(opt => {
+      // Etykieta z nazwą floty dla fleet entries (placeholder {fleet} usuwany — wstawiamy
+      // bezpośrednio do labelu jako suffix dla czytelności).
+      const labelPL = opt.forFleet && fleetName
+        ? `${opt.labelPL} (${fleetName})` : opt.labelPL;
+      const labelEN = opt.forFleet && fleetName
+        ? `${opt.labelEN} (${fleetName})` : opt.labelEN;
       const base = {
         ...opt,
-        enabled: !opt.requiresSelection || selectedVesselId !== null,
-        disabledReason: opt.requiresSelection && !selectedVesselId
-          ? 'Najpierw wybierz statek'
-          : null,
+        labelPL, labelEN,
+        // forFleet zawsze enabled gdy zaakceptowany przez filter (fleetActive=true).
+        enabled: opt.forFleet ? true
+          : (!opt.requiresSelection || selectedVesselId !== null),
+        disabledReason: (!opt.forFleet && opt.requiresSelection && !selectedVesselId)
+          ? 'Najpierw wybierz statek' : null,
         warning: null,
       };
       // M4 P1.5 — warning gdy pursue/intercept na enemy a selected vessel bez broni.
-      // Opcja zostaje enabled (player może świadomie wysłać "kamikaze recon"),
-      // ale tooltip ostrzega o konsekwencjach.
-      if (base.enabled
+      if (base.enabled && !opt.forFleet
           && (opt.orderType === 'pursue' || opt.orderType === 'intercept' || opt.orderType === 'engage')
           && target?.type === 'enemyVessel'
           && _vesselHasNoWeapons(selectedVesselId)) {
