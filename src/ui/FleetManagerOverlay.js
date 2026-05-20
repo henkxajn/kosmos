@@ -2336,18 +2336,45 @@ export class FleetManagerOverlay {
     }, { intent: 'fleet_move', fleetId });
   }
 
-  // Engage: P2 polish — klik aktywuje pick mode, gracz wybiera enemy klikem
-  // LPM w tactical map (CENTER overlay). Po wybraniu fire fleet engage order.
-  // Re-klik „Atak" przy aktywnym pick mode → cancel.
-  _handleFleetEngage(fleetId) {
+  // Engage: P2 polish 3 — DOM modal z listą wykrytych enemy vesseli. Klik wiersza
+  // → fire fleet engage. Plus zachowany pick mode tactical map (drugi klik
+  // "Atak" przy aktywnym pickMode → cancel).
+  async _handleFleetEngage(fleetId) {
     if (this._fleetEngagePickMode?.fleetId === fleetId) {
-      // Toggle off
       this._fleetEngagePickMode = null;
       EventBus.emit('ui:toast', { text: t('fleet.engageCancelled'), color: '#808080', durationMs: 1500 });
       return;
     }
-    this._fleetEngagePickMode = { fleetId };
-    EventBus.emit('ui:toast', { text: t('fleet.engagePickHint'), color: '#ffaa22', durationMs: 4000 });
+    const vm = window.KOSMOS?.vesselManager;
+    const obs = window.KOSMOS?.observatorySystem;
+    if (!vm) return;
+    // Lista wykrytych enemy vesseli (active, nie wraki, detected przez obserwatorium)
+    const enemies = vm.getAllVessels().filter(v =>
+      isEnemyVessel(v) && !v.isWreck && (obs?.isVesselDetected?.(v.id) ?? false)
+    );
+    // Sortuj po dystansie od pierwszego membera floty
+    const fs = window.KOSMOS?.fleetSystem;
+    const fleet = fs?.getFleet?.(fleetId);
+    const firstMember = fleet?.memberIds?.map(vid => vm.getVessel(vid)).find(v => v && !v.isWreck);
+    if (firstMember) {
+      enemies.sort((a, b) => {
+        const dA = Math.hypot(a.position.x - firstMember.position.x, a.position.y - firstMember.position.y);
+        const dB = Math.hypot(b.position.x - firstMember.position.x, b.position.y - firstMember.position.y);
+        return dA - dB;
+      });
+    }
+    if (enemies.length === 0) {
+      // Brak detected — fallback do pick mode (gracz może klika na tactical map gdy spawn'uje enemy).
+      this._fleetEngagePickMode = { fleetId };
+      EventBus.emit('ui:toast', { text: t('fleet.noDetectedEnemies'), color: '#ffaa22', durationMs: 3500 });
+      return;
+    }
+    try {
+      const choice = await _showEnemyPickPopup(enemies, firstMember);
+      if (!choice?.vesselId) return;
+      const res = fs.issueFleetOrder(fleetId, { type: 'engage', targetEntityId: choice.vesselId });
+      this._announceFleetOrderResult(res, fleetId, 'engage');
+    } catch { /* cancel */ }
   }
 
   // Return to base: auto-target nearest friendly planet, fire moveToPoint.
@@ -5875,6 +5902,96 @@ export class FleetManagerOverlay {
     const ty = (target.y ?? 0) / GAME_CONFIG.AU_TO_PX;
     return Math.sqrt((vx - tx) ** 2 + (vy - ty) ** 2);
   }
+}
+
+// ── DOM popup: wybór wroga z listy (Fleet Engage P2 polish 3) ───────────────
+// Promise<{vesselId} | null> — null = cancel.
+function _showEnemyPickPopup(enemies, fromVessel) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'kosmos-modal-overlay';
+    Object.assign(overlay.style, {
+      position: 'fixed', inset: '0',
+      background: 'rgba(2,4,5,0.75)',
+      zIndex: '1001',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    });
+    const panel = document.createElement('div');
+    Object.assign(panel.style, {
+      background: THEME.bgSecondary,
+      border: `1px solid ${THEME.danger}`,
+      borderRadius: '6px',
+      padding: '16px 20px',
+      width: '380px',
+      maxHeight: '70vh',
+      overflowY: 'auto',
+      fontFamily: THEME.fontFamily,
+      color: THEME.textPrimary,
+    });
+    const title = document.createElement('div');
+    title.textContent = t('fleet.engagePickTitle');
+    Object.assign(title.style, {
+      color: THEME.danger,
+      fontSize: `${THEME.fontSizeLarge}px`,
+      marginBottom: '10px',
+      letterSpacing: '1px',
+    });
+    panel.appendChild(title);
+    const cleanup = () => { if (overlay.parentNode) document.body.removeChild(overlay); };
+    const resolveAndClose = (v) => { cleanup(); resolve(v); };
+    const list = document.createElement('div');
+    Object.assign(list.style, { display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' });
+    for (const enemy of enemies) {
+      const row = document.createElement('button');
+      const dPx = fromVessel
+        ? Math.hypot(enemy.position.x - fromVessel.position.x, enemy.position.y - fromVessel.position.y)
+        : 0;
+      const dAU = dPx / GAME_CONFIG.AU_TO_PX;
+      row.textContent = `⊗ ${enemy.name ?? enemy.id}  —  ${dAU.toFixed(2)} AU`;
+      Object.assign(row.style, {
+        background: 'transparent',
+        border: `1px solid ${THEME.dangerDim ?? THEME.border}`,
+        borderRadius: '3px',
+        color: THEME.textPrimary,
+        fontFamily: THEME.fontFamily,
+        fontSize: `${THEME.fontSizeNormal}px`,
+        padding: '8px 12px',
+        cursor: 'pointer',
+        textAlign: 'left',
+      });
+      row.addEventListener('mouseenter', () => { row.style.background = 'rgba(255,68,102,0.10)'; });
+      row.addEventListener('mouseleave', () => { row.style.background = 'transparent'; });
+      row.addEventListener('click', () => resolveAndClose({ vesselId: enemy.id }));
+      list.appendChild(row);
+    }
+    panel.appendChild(list);
+    const cancelRow = document.createElement('div');
+    Object.assign(cancelRow.style, { display: 'flex', justifyContent: 'flex-end' });
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = t('ui.cancel');
+    Object.assign(cancelBtn.style, {
+      background: 'transparent',
+      border: `1px solid ${THEME.textDim}`,
+      borderRadius: '3px',
+      color: THEME.textSecondary,
+      fontFamily: THEME.fontFamily,
+      fontSize: `${THEME.fontSizeNormal}px`,
+      padding: '6px 14px',
+      cursor: 'pointer',
+    });
+    cancelBtn.addEventListener('click', () => resolveAndClose(null));
+    cancelRow.appendChild(cancelBtn);
+    panel.appendChild(cancelRow);
+    overlay.appendChild(panel);
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      panel.addEventListener(evt, (e) => e.stopPropagation());
+    }
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) resolveAndClose(null); });
+    document.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Escape') { document.removeEventListener('keydown', onKey); resolveAndClose(null); }
+    });
+    document.body.appendChild(overlay);
+  });
 }
 
 // ── DOM popup: wybór floty do przypisania multi-selected vesseli ────────────

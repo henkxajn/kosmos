@@ -490,9 +490,13 @@ export class FleetSystem {
 
   // ── P2 polish — auto-dock przy Return to base ──────────────────────────
   // _handleFleetReturnBase w FleetManagerOverlay ustawia vessel._pendingReturnDock
-  // = planetId PRZED issueFleetOrder. Po vessel:orderCompleted snap pozycji do
-  // planety + dock gdy w dystansie RETURN_DOCK_THRESHOLD_AU. Bez tego moveToPoint
-  // zostawia statek w statycznym punkcie (planeta odlatuje po orbicie).
+  // = planetId PRZED issueFleetOrder. Po vessel:orderCompleted bezwarunkowo
+  // snapuje pozycję do AKTUALNEJ pozycji planety + dockedAt=planetId.
+  //
+  // Polish 2 (2026-05-20): usunięty threshold check. Planeta porusza się na orbicie,
+  // więc w momencie arrival vessel zwykle JEST daleko od pozycji planety (statyczny
+  // targetPoint z momentu issue). UX: gracz oczekuje że "Powrót do bazy" zawsze
+  // dock'uje. Snap to teleport, akceptowalny convenience w 4X grze.
   _maybeAutoDockOnReturn(vesselId) {
     const v = this._vm._vessels?.get?.(vesselId);
     if (!v || !v._pendingReturnDock) return;
@@ -500,17 +504,12 @@ export class FleetSystem {
     delete v._pendingReturnDock;  // jednorazowy flag
     const planet = EntityManager.get(planetId);
     if (!planet) return;
-    const dPx = Math.hypot(v.position.x - planet.x, v.position.y - planet.y);
-    const dAU = dPx / AU_TO_PX;
-    if (dAU > RETURN_DOCK_THRESHOLD_AU) {
-      // Za daleko — nie auto-dock (vessel parkujący się w open space)
-      return;
-    }
-    // Snap + dock: vessel orbituje planetę, dockedAt = planetId.
+    // Snap do AKTUALNEJ pozycji planety (uwzględnia orbit movement during travel).
     v.position.x = planet.x;
     v.position.y = planet.y;
     v.position.state = 'orbiting';
     v.position.dockedAt = planetId;
+    v.colonyId = planetId;
     v.mission = null;
     v.status = 'idle';
     EventBus.emit('vessel:docked', { vessel: v });

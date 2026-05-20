@@ -918,6 +918,8 @@ export default {
   'fleet.engagePickHint':           'Kliknij wrogi statek na mapie taktycznej, aby zaatakować',
   'fleet.engageCancelled':          'Anulowano wybór celu',
   'fleet.engageNeedEnemy':          'Kliknij wrogi statek, nie własny',
+  'fleet.engagePickTitle':          'Wybierz cel ataku',
+  'fleet.noDetectedEnemies':        'Brak wykrytych wrogów. Kliknij wroga na taktycznej mapie jeśli się pojawi.',
   'fleet.noFriendlyPlanet':         'Brak przyjaznej planety w zasięgu',
   'fleet.orderResult':              'Flota: {0}/{1} statków wykonuje rozkaz',
   'fleet.orderResultFailed':        'Flota: {0}/{1} wykonuje (część odrzucona)',
