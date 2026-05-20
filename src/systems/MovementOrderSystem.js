@@ -162,16 +162,23 @@ export class MovementOrderSystem {
   /**
    * Główne API: wydaj rozkaz statkowi.
    * @param {string} vesselId
-   * @param {object} spec — { type, targetEntityId?, targetPoint?, patrolRoute?, issuedBy? }
+   * @param {object} spec — { type, targetEntityId?, targetPoint?, patrolRoute?, issuedBy?,
+   *                          // Player Fleet Groups (P2):
+   *                          _arrivalSyncYear?, _speedCapAU?, preferMaxRange? }
+   * @param {object} [opts] — { fromFleet?: string } — informacyjny tag floty
+   *   (propagowany do order._fromFleet + vessel:orderIssued event payload).
    * @returns {{ ok: boolean, reason?: string, orderId?: string }}
    */
-  issueOrder(vesselId, spec) {
+  issueOrder(vesselId, spec, opts = {}) {
     const vessel = this._vm.getVessel?.(vesselId);
     if (!vessel) return { ok: false, reason: 'vessel_not_found' };
     if (vessel.isWreck) return { ok: false, reason: 'vessel_is_wreck' };
 
     const val = validateOrder(spec);
     if (!val.valid) return { ok: false, reason: val.reason };
+
+    // Propaguj opts.fromFleet do spec (forwarded do order factory).
+    if (opts.fromFleet) spec._fromFleet = opts.fromFleet;
 
     // M4 P1 — gracz wydaje nowy order → vessel wychodzi z drift state, marker usuwany.
     this._clearDriftMarker(vessel);
@@ -439,6 +446,18 @@ export class MovementOrderSystem {
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const travelYears = totalDistAU / Math.max(0.01, speedAU);
 
+    // Player Fleet Groups (P2): Sync ETA dla moveToPoint.
+    //   Jeśli spec._arrivalSyncYear ustawione (przez FleetSystem.issueFleetOrder
+    //   z fleet_eta = max(native_eta_i)), override naturalnego arrivalYear, by
+    //   wszyscy członkowie floty dolecieli w tej samej chwili. Sanity: nie pozwól
+    //   na arrivalYear EARLIER niż natural (max() — vessel nie może lecieć szybciej
+    //   niż swoja v_max). Jeśli sync_year < natural → użyj natural (vessel jest
+    //   tym najwolniejszym, nie ma czego dopasować).
+    const naturalArrival = gameYear + travelYears;
+    const arrivalYear = (typeof spec._arrivalSyncYear === 'number')
+      ? Math.max(spec._arrivalSyncYear, naturalArrival)
+      : naturalArrival;
+
     const orderId = `mo_${_nextOrderId++}`;
     const order = {
       id:             orderId,
@@ -459,6 +478,11 @@ export class MovementOrderSystem {
       patrolWaypointIndex: 0,
       patrolDirection:     1,
       escorteeId:          null,
+      // Player Fleet Groups (P2) — propaguj z spec do order (do tick + UI).
+      _fromFleet:          spec._fromFleet ?? null,
+      _arrivalSyncYear:    (typeof spec._arrivalSyncYear === 'number') ? spec._arrivalSyncYear : null,
+      _speedCapAU:         (typeof spec._speedCapAU === 'number') ? spec._speedCapAU : null,
+      preferMaxRange:      !!spec.preferMaxRange,
     };
 
     // Konstrukcja mission — specjalny typ 'move_to_point', bez targetId.
@@ -472,7 +496,7 @@ export class MovementOrderSystem {
       targetX: tx, targetY: ty,
       waypoints:  route.waypoints,
       departYear: gameYear,
-      arrivalYear: gameYear + travelYears,
+      arrivalYear,                            // override przez _arrivalSyncYear (P2)
       originId:   vessel.position.dockedAt ?? vessel.colonyId,
       fuelCost:   fuelNeeded,
     };
@@ -554,6 +578,12 @@ export class MovementOrderSystem {
       patrolWaypointIndex: 0,
       patrolDirection:     1,
       escorteeId:          null,
+      // Player Fleet Groups (P2) — speed cap dla synchronizacji z najwolniejszym
+      // członkiem floty (target się rusza → arrival-time sync zawodzi, używamy
+      // stałego clampu). preferMaxRange dla doktryny kite (P3).
+      _fromFleet:      spec._fromFleet ?? null,
+      _speedCapAU:     (typeof spec._speedCapAU === 'number') ? spec._speedCapAU : null,
+      preferMaxRange:  !!spec.preferMaxRange,
     };
 
     // Suspend oryginalnej mission (jeśli aktywna). MOS rządzi pozycją bezpośrednio
@@ -657,6 +687,11 @@ export class MovementOrderSystem {
       // M4 P3 — engage cache (rebuilt per-tick z aktualnych modules + tech).
       engageMaxRangeAU:    maxRangeAU,
       engageTargetId:      spec.targetEntityId,  // shorthand dla DSCS._pickTarget
+      // Player Fleet Groups (P2) — speed cap dla synchronizacji + preferMaxRange
+      // (kite doktryna, P3) zwiększa optimal threshold z 0.95 do 0.98 max range.
+      _fromFleet:      spec._fromFleet ?? null,
+      _speedCapAU:     (typeof spec._speedCapAU === 'number') ? spec._speedCapAU : null,
+      preferMaxRange:  !!spec.preferMaxRange,
     };
 
     // Suspend obecnej mission (resume po orderCompleted/cancelled).
@@ -725,8 +760,13 @@ export class MovementOrderSystem {
 
     // Engage = "chase + kite" — chase'uj target dopóki nie wpadniesz w optimal
     // band, wtedy kituj (hold/away). Cancel TYLKO target wreck.
-
-    const optimalDistAU = maxRangeAU * 0.95;
+    //
+    // Player Fleet Groups (P2): order.preferMaxRange (doktryna kite z P3) zwiększa
+    // optimalDistAU 0.95 → 0.98 → vessel trzyma się bliżej max range zamiast
+    // klasycznego 95% (więcej dystansu = bezpieczniej, ale ryzyko wyjścia z zasięgu
+    // gdy enemy się odsuwa).
+    const optimalFactor = order.preferMaxRange ? 0.98 : 0.95;
+    const optimalDistAU = maxRangeAU * optimalFactor;
     const upperBandAU   = optimalDistAU * 1.05;
     const lowerBandAU   = optimalDistAU * 0.95;
 
@@ -765,7 +805,11 @@ export class MovementOrderSystem {
     if (distWpPx < INTERCEPT_EPS) return;
 
     // Krok px. Cap do |dist - optimal| żeby nie overshoot w jednym ticku.
-    const speedPxPerYear = (vessel.speedAU ?? 1.0) * AU_TO_PX;
+    // P2: _speedCapAU clamp (member floty leci nie szybciej niż najwolniejszy).
+    const effectiveSpeedAU = (typeof order._speedCapAU === 'number')
+      ? Math.min(vessel.speedAU ?? 1.0, order._speedCapAU)
+      : (vessel.speedAU ?? 1.0);
+    const speedPxPerYear = effectiveSpeedAU * AU_TO_PX;
     const optimalPx = optimalDistAU * AU_TO_PX;
     const distanceToOptimalPx = Math.abs(distPx - optimalPx);
     const rawStepPx = speedPxPerYear * Math.max(0, dPhysicsYear);
@@ -935,7 +979,12 @@ export class MovementOrderSystem {
     if (distWpPx < INTERCEPT_EPS) return;  // już w punkcie
 
     // Krok w jednostkach px. speedAU (AU/gameYear) × AU_TO_PX = px/gameYear.
-    const speedPxPerYear = (vessel.speedAU ?? 1.0) * AU_TO_PX;
+    // Player Fleet Groups (P2): _speedCapAU clamp dla pursue/intercept gdy member floty.
+    // FleetSystem.issueFleetOrder ustawia spec._speedCapAU = min(memberSpeeds).
+    const effectiveSpeedAU = (typeof order._speedCapAU === 'number')
+      ? Math.min(vessel.speedAU ?? 1.0, order._speedCapAU)
+      : (vessel.speedAU ?? 1.0);
+    const speedPxPerYear = effectiveSpeedAU * AU_TO_PX;
     const stepPx = Math.min(distWpPx, speedPxPerYear * Math.max(0, dPhysicsYear));
 
     const ux = dx / distWpPx;
