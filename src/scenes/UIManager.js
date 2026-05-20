@@ -617,10 +617,25 @@ export class UIManager {
 
     // Save failure (np. localStorage quota — bez tego user nie wie ze save padl)
     EventBus.on('game:saveFailed', ({ reason, message }) => {
-      const msg = reason === 'quota'
-        ? '\u{26A0} Save NIE zapisany — localStorage pelny. Usun stare save lub eksportuj.'
-        : `\u{26A0} Save padl: ${message}`;
+      let msg;
+      if (reason === 'quota') {
+        msg = '\u{26A0} Save NIE zapisany — localStorage pelny. Usun stare save lub eksportuj.';
+      } else if (reason === 'serialization') {
+        msg = `\u{26A0} Save padl (blad serializacji): ${message}. Zobacz konsole F12.`;
+      } else {
+        msg = `\u{26A0} Save padl: ${message}`;
+      }
       this._addNotification(msg, 'system', 'warning');
+    });
+
+    // Proaktywne ostrzezenie gdy save zbliza sie do quota (~5 MB Chrome)
+    EventBus.on('game:saveLargeWarning', ({ sizeMB }) => {
+      const mb = sizeMB.toFixed(2);
+      this._addNotification(
+        `\u{26A0} Save duzy (${mb} MB / ~5 MB limit). Rozwaz eksport.`,
+        'system',
+        'warning',
+      );
     });
 
     // Dialog Nowa Gra (emitowane z BottomBar)

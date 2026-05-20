@@ -88,9 +88,23 @@ class GameState {
     return structuredClone(this._state);
   }
 
-  // Serializacja do save'a — zwraca surowe referencje (JSON.stringify w SaveSystem je klonuje)
+  // Serializacja do save'a — zwraca surowe referencje (JSON.stringify w SaveSystem je klonuje).
+  // Battles: prune do ostatnich MAX_BATTLES po year. Stare referencje (vessel.lastBattleId)
+  // grace fail przez getBattleRecord → null (FleetManagerOverlay i WarOverlay obsluguja brak).
+  // Bez prune battles rosly bez konca (timeline per round) → save quota crash po wielu wojnach.
   serialize() {
-    return this._state;
+    const MAX_BATTLES = 50;
+    const battles = this._state.battles ?? {};
+    const ids = Object.keys(battles);
+    if (ids.length <= MAX_BATTLES) return this._state;
+
+    const sorted = ids
+      .map(id => ({ id, year: battles[id]?.year ?? 0 }))
+      .sort((a, b) => b.year - a.year)
+      .slice(0, MAX_BATTLES);
+    const kept = {};
+    for (const { id } of sorted) kept[id] = battles[id];
+    return { ...this._state, battles: kept };
   }
 
   // Przywrócenie z save'a — merge z domyślnym kształtem, żeby brakujące domeny miały defaults

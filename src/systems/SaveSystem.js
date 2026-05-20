@@ -60,40 +60,52 @@ export class SaveSystem {
 
   // ── Zapis ────────────────────────────────────────────────────
   save() {
-    const allStars   = EntityManager.getByType('star');
-    const planets    = EntityManager.getByType('planet');
-    const moons      = EntityManager.getByType('moon');
-    const planetoids = EntityManager.getByType('planetoid');
-    const data = {
-      version:    CURRENT_VERSION,
-      savedAt:    Date.now(),
-      gameTime:   this.timeSystem.gameTime,
-      scenario:   window.KOSMOS?.scenario ?? 'civilization',
-      star:       this._serializeStar(this.star),
-      // Dodatkowe gwiazdy (inne układy) — serializowane osobno
-      stars:      allStars.length > 1
-        ? allStars.filter(s => s.id !== this.star.id).map(s => this._serializeStar(s))
-        : [],
-      planets:    planets.map(p => this._serializePlanet(p)),
-      moons:      moons.map(m => this._serializeMoon(m)),
-      planetoids: planetoids.map(p => this._serializePlanetoid(p)),
-      civ4x:      this._serializeCiv4x(),
-      // M4 P2 — uiPrefs persistowane w save (np. radar overlay, minimap)
-      uiPrefs:    window.KOSMOS?.uiPrefs ? { ...window.KOSMOS.uiPrefs } : {},
-    };
-
+    // Cały blok w try/catch — wczesniej tylko stringify+setItem byly chronione,
+    // wiec jakikolwiek wyjatek w serializatorze (null deref, nowe pole bez ?.)
+    // zabijal save() po cichu bez toastu. Teraz kazdy blad konczy sie eventem.
     try {
+      const allStars   = EntityManager.getByType('star');
+      const planets    = EntityManager.getByType('planet');
+      const moons      = EntityManager.getByType('moon');
+      const planetoids = EntityManager.getByType('planetoid');
+      const data = {
+        version:    CURRENT_VERSION,
+        savedAt:    Date.now(),
+        gameTime:   this.timeSystem.gameTime,
+        scenario:   window.KOSMOS?.scenario ?? 'civilization',
+        star:       this._serializeStar(this.star),
+        // Dodatkowe gwiazdy (inne układy) — serializowane osobno
+        stars:      allStars.length > 1
+          ? allStars.filter(s => s.id !== this.star.id).map(s => this._serializeStar(s))
+          : [],
+        planets:    planets.map(p => this._serializePlanet(p)),
+        moons:      moons.map(m => this._serializeMoon(m)),
+        planetoids: planetoids.map(p => this._serializePlanetoid(p)),
+        civ4x:      this._serializeCiv4x(),
+        // M4 P2 — uiPrefs persistowane w save (np. radar overlay, minimap)
+        uiPrefs:    window.KOSMOS?.uiPrefs ? { ...window.KOSMOS.uiPrefs } : {},
+      };
+
       const json = JSON.stringify(data);
       localStorage.setItem(SAVE_KEY, json);
+
+      // Proaktywne ostrzezenie gdy rozmiar zbliza sie do quota (~5 MB Chrome).
+      // 3.5 MB = ~70% — czas pomyslec o eksporcie/cleanupie zanim padnie naprawde.
+      const sizeMB = json.length / 1024 / 1024;
+      if (sizeMB > 3.5) {
+        EventBus.emit('game:saveLargeWarning', { sizeMB });
+      }
       EventBus.emit('game:saved', { gameTime: data.gameTime, sizeBytes: json.length });
     } catch (e) {
-      // localStorage pełny lub niedostępny — emit event żeby UI mogło pokazać toast.
-      // Gracz wcześniej widział tylko "wszystko działa" mimo że save od dawna padał.
+      // QuotaExceededError albo blad serializacji (null deref, circular ref, etc).
       const isQuota = e?.name === 'QuotaExceededError' || /quota|storage/i.test(e?.message ?? '');
-      console.warn('[SaveSystem] Nie można zapisać:', e?.message ?? e);
+      const isSerialization = !isQuota; // wszystko inne to wewnetrzny blad serializatora
+      console.error('[SaveSystem] Save padl:', e);
+      if (e?.stack) console.error(e.stack);
       EventBus.emit('game:saveFailed', {
-        reason: isQuota ? 'quota' : 'unknown',
-        message: e?.message ?? 'Nieznany błąd zapisu',
+        reason: isQuota ? 'quota' : (isSerialization ? 'serialization' : 'unknown'),
+        message: e?.message ?? 'Nieznany blad zapisu',
+        stack: e?.stack ?? null,
       });
     }
   }
