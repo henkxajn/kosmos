@@ -166,9 +166,28 @@ export class BottomBar {
     const bellBtnX = menuBtnX - bellBtnW - 4;
     this._bellClickBounds = { x: bellBtnX, y: barY, w: bellBtnW, h: BAR_H };
 
+    // Chip „⚔ Walki [N]" — pokazany TYLKO gdy CombatHUD jest zminimalizowany
+    // i DSCS ma active encounters. Klik → restore HUD (toggleMinimize).
+    const combatHud = window.KOSMOS?.combatHud;
+    let combatChipX = null, combatChipW = 0;
+    if (combatHud?.isMinimized?.() && combatHud?.hasActiveEncounters?.()) {
+      const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+      const n = dscs?.listActive?.()?.length ?? 0;
+      const chipLabel = n > 1 ? `⚔ Walki [${n}]` : '⚔ Walki';
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      combatChipW = Math.ceil(ctx.measureText(chipLabel).width) + 14;
+      combatChipX = bellBtnX - combatChipW - 6;
+      this._combatChipClickBounds = {
+        x: combatChipX, y: barY + 3, w: combatChipW, h: 20, label: chipLabel,
+      };
+    } else {
+      this._combatChipClickBounds = null;
+    }
+
     // ── Sekcja centralna: EventLog (inline, 2 wpisy, flash 3s, klikalna całość) ──
     const logAreaX = logX;
-    const logAreaW = (bellBtnX - 8) - logAreaX;
+    const rightSectionStart = combatChipX != null ? combatChipX : bellBtnX;
+    const logAreaW = (rightSectionStart - 8) - logAreaX;
     this._logClickBounds = { x: logAreaX, y: barY, w: logAreaW, h: BAR_H };
 
     // Ikona „otwórz dziennik" (📜) + strzałka stanu — na początku sekcji logu
@@ -179,8 +198,8 @@ export class BottomBar {
     ctx.fillText(overlayOpen ? '📜▼' : '📜▲', logAreaX, textY);
     const entriesStartX = logAreaX + 28;
 
-    // Wpisy inline po ikonie (zaweż żeby nie wchodziły na bell + MENU)
-    const entriesW = bellBtnX - entriesStartX - 8;
+    // Wpisy inline po ikonie (zaweż żeby nie wchodziły na bell/chip + MENU)
+    const entriesW = rightSectionStart - entriesStartX - 8;
     const maxChars = Math.max(10, Math.floor(entriesW / 6));
 
     const entries = visibleEntries.slice(0, LOG_INLINE);
@@ -202,7 +221,10 @@ export class BottomBar {
       lx += ctx.measureText(txt).width + 16;
     });
 
-    // ── Sekcja prawa: bell 🔔 + przycisk MENU ──
+    // ── Sekcja prawa: chip „⚔ Walki" (opcjonalnie) + bell 🔔 + MENU ──
+    if (this._combatChipClickBounds) {
+      this._drawCombatChip(ctx, this._combatChipClickBounds, textY);
+    }
     this._drawBellButton(ctx, bellBtnX, barY + 3, bellBtnW, 20, textY);
     this._drawMenuButton(ctx, W, H, textY);
 
@@ -337,6 +359,20 @@ export class BottomBar {
 
   // Rysuj panel MENU — stub (menu jest teraz DOM, nie canvas)
   drawMenu() { /* noop — DOM menu zarządzane przez _syncDomMenu() */ }
+
+  // ── Chip „⚔ Walki [N]" — restoreuje zminimalizowany CombatHUD ──
+  _drawCombatChip(ctx, b, textY) {
+    ctx.fillStyle = THEME.accentMed ?? 'rgba(60, 60, 60, 0.6)';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = THEME.danger ?? '#ff4466';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.danger ?? '#ff4466';
+    ctx.textAlign = 'center';
+    ctx.fillText(b.label, b.x + b.w / 2, textY);
+    ctx.textAlign = 'left';
+  }
 
   // ── Przycisk bell (🔔 + badge count) — silent notifications ──
   // Stan żyje w window.KOSMOS.notificationCenter. Klik toggle DOM dropdown.
@@ -490,6 +526,15 @@ export class BottomBar {
       this._syncDomMenu();
       this._hoverRow = -1;
       return true;
+    }
+
+    // Chip „⚔ Walki" — restoreuje zminimalizowany CombatHUD
+    if (this._combatChipClickBounds) {
+      const b = this._combatChipClickBounds;
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+        window.KOSMOS?.combatHud?.toggleMinimize?.();
+        return true;
+      }
     }
 
     // Przycisk bell (🔔) — toggle NotificationDropdown

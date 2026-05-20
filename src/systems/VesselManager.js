@@ -956,6 +956,10 @@ export class VesselManager {
         // out-of-the-box (FleetSystem.restore wymaga vesselManager już load'ed,
         // więc na moment serializacji pole jest aktualne).
         fleetId:        v.fleetId        ?? null,
+        // P3 polish (v75) — combatDamage: HP/shield missing po ostatniej bitwie.
+        // DSCS._buildVesselState czyta to przy starcie kolejnej bitwy — statki
+        // NIE regenerują się automatycznie (decyzja gracza 2026-05-20).
+        combatDamage:   v.combatDamage   ? { ...v.combatDamage } : null,
       });
     }
     return {
@@ -1060,6 +1064,8 @@ export class VesselManager {
         // Player Fleet Groups (v73) — reactive mirror; FleetSystem.restore
         // nadpisze na podstawie authoritative memberIds.
         fleetId:        vd.fleetId        ?? null,
+        // P3 polish (v75) — combatDamage persisted z poprzedniej bitwy.
+        combatDamage:   vd.combatDamage   ? { ...vd.combatDamage } : null,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {

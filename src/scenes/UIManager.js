@@ -255,6 +255,8 @@ export class UIManager {
     // OverlayManager rysuje tylko jeden active overlay — CombatHUD musi być
     // widoczny niezależnie od tego co player ma otwarte.
     this.combatHud = new CombatHUD();
+    // Expose dla BottomBar (chip „⚔ Walki") + click handler.
+    window.KOSMOS.combatHud = this.combatHud;
 
     this._setupEvents();
     this._startDrawLoop();
@@ -1210,6 +1212,10 @@ export class UIManager {
     if (this._confirmDialog?.visible) {
       return this._hitTestConfirm(x, y);
     }
+
+    // CombatHUD minimize button — rysowany na wierzchu overlay'ów, więc klik
+    // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
+    if (this.combatHud?.handleClick?.(x, y)) return true;
 
     // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
     if (this._bottomBar.menuOpen && this._bottomBar.hitTestMenu(x, y, W, H)) {

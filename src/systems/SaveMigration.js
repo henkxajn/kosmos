@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 74;
+export const CURRENT_VERSION     = 75;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -92,6 +92,7 @@ const MIGRATIONS = {
   71: _migrateV71toV72,
   72: _migrateV72toV73,
   73: _migrateV73toV74,
+  74: _migrateV74toV75,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1851,6 +1852,21 @@ function _migrateV71toV72(data) {
 //   na podstawie memberIds (na razie wszystkie null).
 // - data.uiPrefs.selectedFleetId: null — UI overlay state (P2 wykorzystuje
 //   przy fleet-context selekcji; w P1 zarezerwowane).
+// v74 → v75: HP persistence (P3 polish). Vessels NIE regenerują się
+// automatycznie po bitwie — combatDamage stampowany w DSCS._finalizeBattle
+// dla żywych ocalałych. _buildVesselState czyta przy następnej bitwie.
+// Lazy default null (vessel bez bitwy = pełne HP).
+function _migrateV74toV75(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v || typeof v !== 'object') continue;
+      if (v.combatDamage === undefined) v.combatDamage = null;
+    }
+  }
+  return data;
+}
+
 // v73 → v74: Player Fleet Groups P3 (Doctrine effects).
 // Każda flota dostaje retreatThreshold (default 0.5) — konfigurowalny próg
 // auto-wycofania dla doctrine='retreat_at_50' (FleetSystem._tickCivYears).

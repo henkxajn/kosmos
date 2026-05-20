@@ -785,6 +785,27 @@ export class DeepSpaceCombatSystem {
     // Retreat: żywi vessele retreatującej strony pozostają — AutoRetreatSystem
     // nasłuchuje battle:resolved i wydaje moveToPoint do najbliższej friendly planety.
 
+    // Persist combat damage na żywych ocalałych (NIE wrakach).
+    // Skanujemy WSZYSTKIE strony — retreat zachowuje swoich żywych, no-retreat
+    // wins side wcześniej oznaczył przegranych jako wraków.
+    for (const [vid, state] of encounter.vesselStates) {
+      if (state.hp <= 0) continue;  // wrak — combatDamage irrelevant
+      const vessel = this._vm?._vessels?.get(vid);
+      if (!vessel || vessel.isWreck) continue;
+      const hpMissing     = Math.max(0, (state.hpStart       ?? state.hp) - state.hp);
+      const shieldMissing = Math.max(0, (state.shieldHPStart ?? 0)         - (state.shieldHP ?? 0));
+      if (hpMissing === 0 && shieldMissing === 0) {
+        // Bezstratny — wyczyść poprzedni damage (rare: tylko jeśli był).
+        if (vessel.combatDamage) vessel.combatDamage = null;
+        continue;
+      }
+      vessel.combatDamage = {
+        hpMissing,
+        shieldMissing,
+        lastBattleYear: year,
+      };
+    }
+
     gameState.set?.(`battles.${battleId}`, battleRec, 'deep_space_combat');
     EventBus.emit('battle:resolved', { warId: null, battleId, result: battleRec });
 
@@ -831,11 +852,28 @@ export class DeepSpaceCombatSystem {
       }
     }
 
+    // Hull baseline (pełne HP/shield z modułów).
+    const hpStartFull     = Math.max(1, hp);
+    const shieldStartFull = shieldHP;
+
+    // Persisted combat damage (wcześniejsze bitwy) — vessel.combatDamage stampowany
+    // w _finalizeBattle dla żywych ocalałych. Statki NIE regenerują HP automatycznie
+    // między bitwami (decyzja gracza 2026-05-20). Naprawa = osobna mechanika (stocznia, TODO).
+    const dmg = v.combatDamage;
+    let hpCurrent     = hpStartFull;
+    let shieldCurrent = shieldStartFull;
+    if (dmg) {
+      const hpMissing     = Math.max(0, dmg.hpMissing     ?? 0);
+      const shieldMissing = Math.max(0, dmg.shieldMissing ?? 0);
+      hpCurrent     = Math.max(1, hpStartFull     - hpMissing);
+      shieldCurrent = Math.max(0, shieldStartFull - shieldMissing);
+    }
+
     return {
-      hp:            Math.max(1, hp),
-      hpStart:       Math.max(1, hp),
-      shieldHP,
-      shieldHPStart: shieldHP,
+      hp:            hpCurrent,
+      hpStart:       hpStartFull,
+      shieldHP:      shieldCurrent,
+      shieldHPStart: shieldStartFull,
       shieldRegen,
       armor,
       evasion,

@@ -340,12 +340,12 @@ header('T10: retreat NIE triggeruje gdy doctrine != retreat_at_50');
 // ── T11 — SaveMigration v73→v74 + CURRENT_VERSION=74 ─────────────────────
 header('T11: SaveMigration v73→v74 + CURRENT_VERSION=74');
 {
-  assert(CURRENT_VERSION === 74, `CURRENT_VERSION = 74 (got ${CURRENT_VERSION})`);
+  assert(CURRENT_VERSION === 75, `CURRENT_VERSION = 75 (got ${CURRENT_VERSION})`);
 
   const oldSave = {
     version: 73,
     civ4x: {
-      vesselManager: { vessels: [] },
+      vesselManager: { vessels: [{ id: 'v1' }] },
       notificationCenter: { items: [], nextId: 1 },
       playerFleets: {
         fleets: [
@@ -356,10 +356,12 @@ header('T11: SaveMigration v73→v74 + CURRENT_VERSION=74');
     },
   };
   const migrated = migrate(oldSave);
-  assert(migrated.version === 74, `migrated.version === 74 (got ${migrated.version})`);
+  assert(migrated.version === 75, `migrated.version === 75 (got ${migrated.version})`);
   const f0 = migrated.civ4x.playerFleets.fleets[0];
   assert(f0.retreatThreshold === 0.5,
          `migracja dodaje retreatThreshold=0.5 (got ${f0.retreatThreshold})`);
+  assert(migrated.civ4x.vesselManager.vessels[0].combatDamage === null,
+         'migracja v74→v75 dodaje combatDamage=null per vessel');
 }
 
 // ── T12 — Fleet serialize/restore round-trip retreatThreshold ─────────────
@@ -384,6 +386,35 @@ header('T12: Fleet serialize/restore round-trip retreatThreshold');
   assert(restored !== null, 'restored fleet exists');
   assert(restored?.retreatThreshold === 0.3,
          `restored retreatThreshold=0.3 (got ${restored?.retreatThreshold})`);
+}
+
+// ── T13 — HP persist między bitwami (DSCS combatDamage) ──────────────────
+header('T13: combatDamage persists HP across battles');
+{
+  const { DeepSpaceCombatSystem } = await import('./src/systems/DeepSpaceCombatSystem.js');
+  // _buildVesselState czytamy z prototype — minimalna instancja bez tickow.
+  const dscs = Object.create(DeepSpaceCombatSystem.prototype);
+  dscs._vm = makeVM();
+  dscs._fallbackRangeAU = () => 0.15;
+
+  // Vessel bez damage — pełne HP (hull_frigate baseHP=120)
+  const v1 = makeVessel('v_p1', { shipId: 'hull_frigate', modules: [] });
+  const s1 = dscs._buildVesselState(v1);
+  assert(s1.hp === 120 && s1.hpStart === 120,
+         `bez damage: hp=hpStart=120 (got hp=${s1.hp}, hpStart=${s1.hpStart})`);
+
+  // Vessel z damage hpMissing=80 → hp=40, hpStart=120 (start nadal full)
+  const v2 = makeVessel('v_p2', { shipId: 'hull_frigate', modules: [] });
+  v2.combatDamage = { hpMissing: 80, shieldMissing: 0, lastBattleYear: 100 };
+  const s2 = dscs._buildVesselState(v2);
+  assert(s2.hpStart === 120, `hpStart=120 niezmieniony (got ${s2.hpStart})`);
+  assert(s2.hp === 40, `hp=40 (120-80, got ${s2.hp})`);
+
+  // Vessel z damage > baseHP → clamp do 1 (vessel nadal walczy o życie)
+  const v3 = makeVessel('v_p3', { shipId: 'hull_frigate', modules: [] });
+  v3.combatDamage = { hpMissing: 999, shieldMissing: 0, lastBattleYear: 100 };
+  const s3 = dscs._buildVesselState(v3);
+  assert(s3.hp === 1, `hp clamped to 1 (got ${s3.hp})`);
 }
 
 // ── Summary ────────────────────────────────────────────────────────────────

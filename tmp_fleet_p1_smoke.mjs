@@ -173,7 +173,7 @@ header('T5: vessel:wrecked → auto-remove + autoDisband empty');
 // ── T6 — SaveMigration v72→v73 ──────────────────────────────────────────────
 header('T6: SaveMigration v72→v73');
 {
-  assert(CURRENT_VERSION === 74, 'CURRENT_VERSION = 74');
+  assert(CURRENT_VERSION === 75, 'CURRENT_VERSION = 75');
 
   // Symuluj minimalny save w v72 z 1 vesselem
   const oldSave = {

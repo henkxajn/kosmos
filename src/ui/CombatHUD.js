@@ -27,17 +27,48 @@ export class CombatHUD extends BaseOverlay {
   constructor() {
     super(null);
     this.visible = true;
+    // P3 polish — minimize. Gdy true, główny panel jest schowany; BottomBar
+    // pokazuje chip "⚔ Walki [N]" (klik chipa → toggleMinimize). Stan
+    // ephemeral (per-sesja), bez save persist — combat zwykle krótki.
+    this._minimized = false;
+    /** @type {{x:number,y:number,w:number,h:number}|null} */
+    this._minimizeBtnBounds = null;
   }
 
   toggle() { /* no-op */ }
   show()   { /* no-op */ }
   hide()   { /* no-op */ }
 
-  draw(ctx, W, _H) {
+  toggleMinimize() {
+    this._minimized = !this._minimized;
+  }
+
+  isMinimized() {
+    return this._minimized;
+  }
+
+  /** Czy HUD ma cokolwiek do pokazania (DSCS ma active encounters). */
+  hasActiveEncounters() {
+    const dscs = window.KOSMOS?.deepSpaceCombatSystem;
+    return !!(dscs?.listActive?.()?.length);
+  }
+
+  draw(ctx, W, H) {
     const dscs = window.KOSMOS?.deepSpaceCombatSystem;
     if (!dscs?.listActive) return;
     const encounters = dscs.listActive();
-    if (encounters.length === 0) return;
+    if (encounters.length === 0) {
+      this._minimizeBtnBounds = null;
+      // Auto-reset minimize gdy nie ma już active encounters (następna bitwa
+      // startuje w expanded mode — bez tego user widziałby chip dla nic).
+      if (this._minimized) this._minimized = false;
+      return;
+    }
+    if (this._minimized) {
+      // Chip rysuje BottomBar; tu nic.
+      this._minimizeBtnBounds = null;
+      return;
+    }
 
     this._hitZones = [];
 
@@ -58,8 +89,12 @@ export class CombatHUD extends BaseOverlay {
     for (const enc of visible) totalH += rowH(enc);
     if (overflow > 0) totalH += 18;
 
+    // Bottom-center: nad BottomBar (-8 padding). User feedback 2026-05-20 —
+    // top-center zachodziło z FleetManagerOverlay prawy panel. Bottom-center
+    // zostawia tactical map area czytelną.
+    const bottomBarH = COSMIC.BOTTOM_BAR_H ?? 32;
     const px = Math.floor(W / 2 - PANEL_W / 2);
-    const py = (COSMIC.TOP_BAR_H ?? 32) + 80;
+    const py = Math.max((COSMIC.TOP_BAR_H ?? 32) + 8, H - bottomBarH - totalH - 8);
 
     // Tło + ramka
     ctx.fillStyle = bgAlpha(0.78);
@@ -77,6 +112,26 @@ export class CombatHUD extends BaseOverlay {
       : `⚔ BITWY W DEEP-SPACE (${encounters.length})`;
     ctx.fillText(headerLabel, px + PANEL_W / 2, py + 16);
     ctx.textAlign = 'left';
+
+    // Minimize button (—) — top-right header. Klik → toggleMinimize → BottomBar
+    // pokazuje chip restoreujący panel.
+    const minBtnW = 22;
+    const minBtnH = HEADER_H - 4;
+    const minBtnX = px + PANEL_W - minBtnW - 4;
+    const minBtnY = py + 2;
+    ctx.fillStyle = bgAlpha(0.4);
+    ctx.fillRect(minBtnX, minBtnY, minBtnW, minBtnH);
+    ctx.strokeStyle = THEME.border ?? '#444';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(minBtnX + 0.5, minBtnY + 0.5, minBtnW - 1, minBtnH - 1);
+    ctx.fillStyle = THEME.textSecondary ?? '#bbb';
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('—', minBtnX + minBtnW / 2, minBtnY + minBtnH / 2 + 1);
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    this._minimizeBtnBounds = { x: minBtnX, y: minBtnY, w: minBtnW, h: minBtnH };
 
     ctx.strokeStyle = THEME.border ?? '#444';
     ctx.beginPath();
@@ -320,5 +375,19 @@ export class CombatHUD extends BaseOverlay {
     if (typeof s !== 'string') return '?';
     if (s.length <= max) return s;
     return s.slice(0, max - 1) + '…';
+  }
+
+  /**
+   * Click router — wywoływany przez UIManager.handleClick PRZED inną UI (HUD
+   * rysowany na wierzchu overlay'ów). Zwraca true gdy klik został zjedzony.
+   */
+  handleClick(mx, my) {
+    if (!this._minimizeBtnBounds || this._minimized) return false;
+    const b = this._minimizeBtnBounds;
+    if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+      this.toggleMinimize();
+      return true;
+    }
+    return false;
   }
 }
