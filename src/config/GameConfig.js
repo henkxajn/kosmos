@@ -72,9 +72,9 @@ export const GAME_CONFIG = {
     // ── Player Fleet Groups (save v73) ────────────────────────────────────
     // Gracz tworzy nazwane floty z statków własnych. P1: CRUD + UI. P2: fleet
     // orders (sync ETA + speed cap). P3: doktryna (kite/hold/retreat_at_50).
-    // Flip ON na końcu P1 c5 (po smoke teście). System sam zawsze instancjowany
-    // gdy civMode — flaga gates UI exposure + addMember acceptance.
-    playerFleets:         false,
+    // Flip ON po P1 c5 (CRUD + UI gotowe, P2/P3 nie potrzebują flag-flip —
+    // dodają semantykę nad bazą). System sam zawsze instancjowany gdy civMode.
+    playerFleets:         true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

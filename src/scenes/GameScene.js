@@ -888,6 +888,58 @@ export class GameScene {
       simulateKeydown: (key) => {
         document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
       },
+      // ── Player Fleet Groups (P1) — devtools ─────────────────────────────
+      // KOSMOS.debug.createFleet('Strike Alpha') → fleet
+      createFleet: (name = 'Test Fleet') => {
+        const fs = window.KOSMOS?.fleetSystem;
+        if (!fs) { console.warn('[debug] Brak FleetSystem'); return null; }
+        const f = fs.createFleet(name);
+        console.log('[debug] Created fleet:', f.id, f.name);
+        return f;
+      },
+      // KOSMOS.debug.disbandFleet(fleetId) → bool
+      disbandFleet: (fleetId) => {
+        const fs = window.KOSMOS?.fleetSystem;
+        if (!fs) { console.warn('[debug] Brak FleetSystem'); return false; }
+        return fs.disbandFleet(fleetId, 'manual');
+      },
+      // KOSMOS.debug.addToFleet(fleetId, vesselId) → { ok, reason? }
+      addToFleet: (fleetId, vesselId) => {
+        const fs = window.KOSMOS?.fleetSystem;
+        if (!fs) { console.warn('[debug] Brak FleetSystem'); return { ok: false, reason: 'no_system' }; }
+        const res = fs.addMember(fleetId, vesselId);
+        console.log('[debug] addMember:', res);
+        return res;
+      },
+      // KOSMOS.debug.listFleets() — wypisz tabela flot + members + doktryna
+      listFleets: () => {
+        const fs = window.KOSMOS?.fleetSystem;
+        if (!fs) { console.warn('[debug] Brak FleetSystem'); return; }
+        const fleets = fs.listFleets();
+        if (fleets.length === 0) { console.log('[debug] Brak flot'); return; }
+        console.log(`=== PLAYER FLEETS (${fleets.length}) ===`);
+        for (const f of fleets) {
+          console.log(`  ${f.id} "${f.name}" doctrine=${f.doctrine} members=[${f.memberIds.join(', ')}]`);
+        }
+      },
+      // KOSMOS.debug.dumpFleet(fleetId) — szczegóły jednej floty
+      dumpFleet: (fleetId) => {
+        const fs = window.KOSMOS?.fleetSystem;
+        const f = fs?.getFleet?.(fleetId);
+        if (!f) { console.warn('[debug] Fleet not found:', fleetId); return null; }
+        console.log(`=== ${f.id} "${f.name}" ===`);
+        console.log(`  doctrine: ${f.doctrine}`);
+        console.log(`  createdYear: ${f.createdYear}`);
+        console.log(`  autoDisbandWhenEmpty: ${f.autoDisbandWhenEmpty}`);
+        console.log(`  activeOrder: ${f.activeOrder ? JSON.stringify(f.activeOrder) : 'null'}`);
+        const vm = window.KOSMOS?.vesselManager;
+        console.log(`  members (${f.memberIds.length}):`);
+        for (const vid of f.memberIds) {
+          const v = vm?.getVessel?.(vid);
+          console.log(`    ${vid} "${v?.name ?? '?'}" state=${v?.position?.state ?? '?'} fleetId=${v?.fleetId ?? '?'}`);
+        }
+        return f;
+      },
     };
 
     // ── Reactive store + audit log (Faza 0: fundament dla wojny/dyplomacji/AI obcych) ──
