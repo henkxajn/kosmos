@@ -613,13 +613,49 @@ export class UIManager {
       const suffix = details ? ` (${details})` : '';
       this._addNotification(`⚠ Disband: ${reason}${suffix}`, 'fleet', 'warn');
     });
-    EventBus.on('fleet:disbanded', ({ shipId }) => {
+    EventBus.on('fleet:disbanded', (payload) => {
+      // Legacy (ColonyManager) emit {vesselId, shipId, planetId} dla decommissioned statku.
+      // P2 FleetSystem emit {fleetId, reason} dla rozwiązania floty — pomijamy tu
+      // (osobny handler poniżej dla fleet-context payloadu).
+      if (payload?.fleetId) return;
+      const { shipId } = payload ?? {};
       const ship = SHIPS[shipId] ?? null;
       this._addNotification(`🗑 Statek rozformowany: ${ship?.namePL ?? shipId}`, 'fleet', 'info');
     });
     EventBus.on('fleet:buildQueued', ({ shipId }) => {
       const ship = SHIPS[shipId];
       this._addNotification(`⏳ Stocznia: ${ship?.namePL ?? shipId} — oczekuje na surowce`, 'fleet', 'info');
+    });
+
+    // ── Player Fleet Groups (P2) — fleet lifecycle + orders ──
+    EventBus.on('fleet:created', ({ fleet }) => {
+      this._addNotification(`⚑ Utworzono flotę „${fleet?.name ?? '?'}"`, 'fleet', 'info');
+    });
+    EventBus.on('fleet:disbanded', ({ fleetId, reason }) => {
+      // 'shipId' fleet:disbanded ma starszy semantykę (vessel decommission) i
+      // dostarczana wyzej. Tu kontrastujemy po payloadzie: fleetId field.
+      if (fleetId) {
+        this._addNotification(`⚑ Rozwiązano flotę (${reason === 'empty' ? 'pusta' : reason ?? 'manual'})`, 'fleet', 'info');
+      }
+    });
+    EventBus.on('fleet:orderIssued', ({ fleetId, type, accepted, rejected, fleetEta, speedCap }) => {
+      const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
+      const aN = accepted?.length ?? 0;
+      const rN = rejected?.length ?? 0;
+      const total = aN + rN;
+      let extra = '';
+      if (typeof fleetEta === 'number') extra = ` (ETA ~${fleetEta.toFixed(1)} roku)`;
+      else if (typeof speedCap === 'number') extra = ` (cap ${speedCap.toFixed(1)} AU/r)`;
+      const sev = rN > 0 ? 'warn' : 'info';
+      this._addNotification(`⚑ ${fname} → ${type}: ${aN}/${total}${extra}`, 'fleet', sev);
+    });
+    EventBus.on('fleet:orderCompleted', ({ fleetId, type }) => {
+      const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
+      this._addNotification(`⚑ ${fname}: ${type} zakończone`, 'fleet', 'info');
+    });
+    EventBus.on('fleet:orderCancelled', ({ fleetId, reason }) => {
+      const fname = window.KOSMOS?.fleetSystem?.getFleet?.(fleetId)?.name ?? fleetId;
+      this._addNotification(`⚑ ${fname}: rozkaz anulowany (${reason})`, 'fleet', 'info');
     });
 
     // Vessel events

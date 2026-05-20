@@ -922,6 +922,14 @@ export class GameScene {
           console.log(`  ${f.id} "${f.name}" doctrine=${f.doctrine} members=[${f.memberIds.join(', ')}]`);
         }
       },
+      // KOSMOS.debug.issueFleetOrder(fleetId, spec) — manual fleet order
+      issueFleetOrder: (fleetId, spec) => {
+        const fs = window.KOSMOS?.fleetSystem;
+        if (!fs?.issueFleetOrder) { console.warn('[debug] Brak FleetSystem.issueFleetOrder'); return null; }
+        const res = fs.issueFleetOrder(fleetId, spec);
+        console.log('[debug] issueFleetOrder:', res);
+        return res;
+      },
       // KOSMOS.debug.dumpFleet(fleetId) — szczegóły jednej floty
       dumpFleet: (fleetId) => {
         const fs = window.KOSMOS?.fleetSystem;
