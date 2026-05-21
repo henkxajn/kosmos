@@ -305,7 +305,12 @@ export class DeepSpaceCombatSystem {
 
     // Stationary AI: enemy vessele zatrzymane na pozycji wejścia w combat.
     // Player vessele zachowują obecne movement orders (engage/pursue itp.).
-    for (const v of sideBVessels) this._freezeAsStationary(v);
+    // Combat slow fix 2026-05-21: jeśli sideA ma dominującą `dockedAt`
+    // (orbita planety), pin enemy do tej samej planety. Inaczej enemy stoi
+    // w absolute space, planeta z player vesselami orbituje słońce, dystans
+    // rośnie poza weapon range, walka cienie się.
+    const dominantDocked = this._findDominantDockedAt(sideAVessels);
+    for (const v of sideBVessels) this._freezeAsStationary(v, dominantDocked);
 
     EventBus.emit('vessel:engaged', {
       encounterId:   id,
@@ -1029,10 +1034,41 @@ export class DeepSpaceCombatSystem {
    *
    * @private
    */
-  _freezeAsStationary(vessel) {
+  /**
+   * Znajdź dockedAt który ma większość vesseli z listy. Używane do pin'owania
+   * enemy do tej samej planety co player defenders (combat slow fix).
+   * @private
+   */
+  _findDominantDockedAt(vessels) {
+    if (!Array.isArray(vessels) || vessels.length === 0) return null;
+    const counts = new Map();
+    for (const v of vessels) {
+      const d = v.position?.dockedAt;
+      if (!d) continue;
+      counts.set(d, (counts.get(d) ?? 0) + 1);
+    }
+    if (counts.size === 0) return null;
+    let bestId = null;
+    let bestCount = 0;
+    for (const [id, count] of counts) {
+      if (count > bestCount) { bestCount = count; bestId = id; }
+    }
+    // Wymóg: większość player vesseli musi być na tej samej orbicie.
+    return bestCount * 2 > vessels.length ? bestId : null;
+  }
+
+  _freezeAsStationary(vessel, pinDockedAt = null) {
     if (!vessel) return;
     vessel.mission = null;
-    if (vessel.position) vessel.position.state = 'orbiting';
+    if (vessel.position) {
+      vessel.position.state = 'orbiting';
+      // Combat slow fix 2026-05-21 — gdy player side orbituje planetę,
+      // pin enemy do tej samej planety. Wymusza enemy orbiting (przez
+      // _updatePositions z dockedAt) → enemy porusza się z planetą i
+      // sideA, dystans pozostaje stały, walka konkluduje w normalnym
+      // czasie zamiast trwać przez całą orbitę planety wokół słońca.
+      if (pinDockedAt) vessel.position.dockedAt = pinDockedAt;
+    }
   }
 
   /**
