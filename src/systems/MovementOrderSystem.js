@@ -236,9 +236,12 @@ export class MovementOrderSystem {
     const target = window.KOSMOS?.autoRetreatSystem?._findNearestFriendlyPlanet?.(vessel);
     if (!target) return { ok: false, reason: 'no_friendly_planet' };
 
-    const targetX = target.x ?? target.position?.x ?? 0;
-    const targetY = target.y ?? target.position?.y ?? 0;
-    const targetName = target.name ?? '?';
+    // _findNearestFriendlyPlanet zwraca { colony, planet, distanceAU } — czytamy z .planet
+    // (AutoRetreatSystem._issueRetreatOrder line 99 robi to samo: dest.planet.x/y).
+    const planet = target.planet ?? target;
+    const targetX = planet.x ?? planet.position?.x ?? 0;
+    const targetY = planet.y ?? planet.position?.y ?? 0;
+    const targetName = planet.name ?? target.colony?.name ?? '?';
 
     const result = this._issueMoveToPoint(vessel, {
       type: 'moveToPoint',

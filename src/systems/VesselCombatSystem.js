@@ -114,8 +114,12 @@ export class VesselCombatSystem {
    *   4. engage (reuse _resolveEngagement)
    */
   _handleCombatRangeEnter({ vesselAId, vesselBId, sameFaction }) {
-    if (!GAME_CONFIG.FEATURES?.vesselCombat) return;
-    if (sameFaction) return;
+    const trace = window.KOSMOS?.debug?.combatTrace;
+    if (!GAME_CONFIG.FEATURES?.vesselCombat) {
+      if (trace) console.log('[VCS] reject CRE: FEATURES.vesselCombat=false');
+      return;
+    }
+    if (sameFaction) { if (trace) console.log('[VCS] reject CRE: sameFaction'); return; }
 
     const now = this._year();
     const key = pairKey(vesselAId, vesselBId);
@@ -127,7 +131,11 @@ export class VesselCombatSystem {
     // explicit'ie ŚCIGA cel rozkazem engage, restart combat musi być natychmiastowy.
     const playerIntentOverride = this._hasEngageIntentBetween(vesselAId, vesselBId);
 
-    if (!playerIntentOverride && last != null && (now - last) < ENGAGEMENT_COOLDOWN_YEARS) return;
+    if (!playerIntentOverride && last != null && (now - last) < ENGAGEMENT_COOLDOWN_YEARS) {
+      if (trace) console.log('[VCS] reject CRE: cooldown', { key, since: now - last, cooldown: ENGAGEMENT_COOLDOWN_YEARS });
+      return;
+    }
+    if (trace) console.log('[VCS] CRE OK — delegating', { vesselAId, vesselBId, m4DSCS: !!GAME_CONFIG.FEATURES?.m4DeepSpaceCombat, hasDSCS: !!window.KOSMOS?.deepSpaceCombatSystem, playerIntentOverride });
 
     this._recentlyEngaged.set(key, now);
 

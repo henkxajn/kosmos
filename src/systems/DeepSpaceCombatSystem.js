@@ -105,12 +105,17 @@ export class DeepSpaceCombatSystem {
    * @param {boolean} sameFaction — gdy true, ignorujemy (M2a semantics)
    */
   handleCombatRangeEnter(v1Id, v2Id, sameFaction) {
-    if (sameFaction) return;
+    const trace = window.KOSMOS?.debug?.combatTrace;
+    if (sameFaction) { if (trace) console.log('[DSCS] reject handleCRE: sameFaction', { v1Id, v2Id }); return; }
     const vm = this._vm;
-    if (!vm) return;
+    if (!vm) { if (trace) console.log('[DSCS] reject handleCRE: no vesselManager'); return; }
     const v1 = vm._vessels?.get(v1Id);
     const v2 = vm._vessels?.get(v2Id);
-    if (!v1 || !v2 || v1.isWreck || v2.isWreck) return;
+    if (!v1 || !v2 || v1.isWreck || v2.isWreck) {
+      if (trace) console.log('[DSCS] reject handleCRE: vessel missing/wreck', { v1: !!v1, v2: !!v2, w1: v1?.isWreck, w2: v2?.isWreck });
+      return;
+    }
+    if (trace) console.log('[DSCS] handleCRE OK — dispatching', { v1Id, v2Id, v1State: v1.position?.state, v2State: v2.position?.state });
 
     const existing1 = this._findActiveEncounterContaining(v1Id);
     const existing2 = this._findActiveEncounterContaining(v2Id);
@@ -139,12 +144,19 @@ export class DeepSpaceCombatSystem {
    * @returns {EncounterState|null}
    */
   startEngagement(v1Id, v2Id) {
+    const trace = window.KOSMOS?.debug?.combatTrace;
     const vm = this._vm;
-    if (!vm) return null;
+    if (!vm) { if (trace) console.log('[DSCS] reject startEng: no vesselManager'); return null; }
     const v1 = vm._vessels?.get(v1Id);
     const v2 = vm._vessels?.get(v2Id);
-    if (!v1 || !v2 || v1.isWreck || v2.isWreck) return null;
-    if (!_inCombatState(v1) || !_inCombatState(v2)) return null;
+    if (!v1 || !v2 || v1.isWreck || v2.isWreck) {
+      if (trace) console.log('[DSCS] reject startEng: vessel missing/wreck', { v1Id, v2Id, v1: !!v1, v2: !!v2 });
+      return null;
+    }
+    if (!_inCombatState(v1) || !_inCombatState(v2)) {
+      if (trace) console.log('[DSCS] reject startEng: NOT in combat state', { v1State: v1.position?.state, v2State: v2.position?.state });
+      return null;
+    }
 
     // Midpoint spotkania — używany do wreck placement + cinematic location.
     const mid = {
@@ -152,18 +164,40 @@ export class DeepSpaceCombatSystem {
       y: (v1.position.y + v2.position.y) / 2,
     };
 
-    // Team-up gather: vessele w buforze COMBAT_ENGAGEMENT_AU × 1.5 od mid.
-    // Identyczna logika jak VCS._resolveEngagement (kopia 1:1, P3 §Architecture).
-    const nearby = [];
-    const bufferPx = COMBAT_ENGAGEMENT_AU * TEAMUP_BUFFER_FACTOR * AU_TO_PX;
-    for (const v of vm._vessels.values()) {
-      if (v.isWreck) continue;
-      if (!_inCombatState(v)) continue;
-      const dx = v.position.x - mid.x;
-      const dy = v.position.y - mid.y;
-      if (Math.hypot(dx, dy) <= bufferPx) nearby.push(v);
+    // Player intent bypass — gdy któryś z pair ma engage order targetujący drugiego,
+    // pomiń team-up gather (ten ma buffer 0.225 AU, za mały dla kite weapons z
+    // rangeAU > 0.15). Player explicit'ie chce walki tej pary — startuj nią
+    // bezpośrednio, team-up zostanie dolaczane przez _joinEncounter gdy inne
+    // vessele wejdą w combat range.
+    const isPlayerIntent = (
+      (v1.movementOrder?.type === 'engage' && v1.movementOrder.targetEntityId === v2Id) ||
+      (v2.movementOrder?.type === 'engage' && v2.movementOrder.targetEntityId === v1Id)
+    );
+
+    let nearby;
+    if (isPlayerIntent) {
+      nearby = [v1, v2];
+      if (trace) console.log('[DSCS] startEng: player intent bypass team-up gather', { v1Id, v2Id });
+    } else {
+      // Team-up gather: vessele w buforze COMBAT_ENGAGEMENT_AU × 1.5 od mid.
+      nearby = [];
+      const bufferPx = COMBAT_ENGAGEMENT_AU * TEAMUP_BUFFER_FACTOR * AU_TO_PX;
+      for (const v of vm._vessels.values()) {
+        if (v.isWreck) continue;
+        if (!_inCombatState(v)) continue;
+        const dx = v.position.x - mid.x;
+        const dy = v.position.y - mid.y;
+        if (Math.hypot(dx, dy) <= bufferPx) nearby.push(v);
+      }
+      if (nearby.length < 2) {
+        if (trace) console.log('[DSCS] reject startEng: nearby.length < 2', {
+          nearbyCount: nearby.length,
+          bufferAU: COMBAT_ENGAGEMENT_AU * TEAMUP_BUFFER_FACTOR,
+          distV1V2AU: Math.hypot(v1.position.x - v2.position.x, v1.position.y - v2.position.y) / AU_TO_PX,
+        });
+        return null;
+      }
     }
-    if (nearby.length < 2) return null;
 
     // Grupuj wg ownerEmpireId.
     const groups = new Map();
@@ -172,11 +206,20 @@ export class DeepSpaceCombatSystem {
       if (!groups.has(owner)) groups.set(owner, []);
       groups.get(owner).push(v);
     }
-    if (groups.size < 2) return null;
+    if (groups.size < 2) {
+      if (trace) console.log('[DSCS] reject startEng: groups.size < 2', {
+        groupOwners: [...groups.keys()],
+        nearby: nearby.map(v => ({ id: v.id, owner: _resolveOwner(v), isEnemy: v.isEnemy, ownerEmpireId: v.ownerEmpireId })),
+      });
+      return null;
+    }
 
     // M2a/P3: tylko player ↔ empire. Empire↔empire = M5.
     const playerGroup = groups.get('player');
-    if (!playerGroup || playerGroup.length === 0) return null;
+    if (!playerGroup || playerGroup.length === 0) {
+      if (trace) console.log('[DSCS] reject startEng: no playerGroup', { groupOwners: [...groups.keys()] });
+      return null;
+    }
 
     let bestEmpireId = null;
     let bestHostility = -1;
@@ -192,8 +235,16 @@ export class DeepSpaceCombatSystem {
         bestGroup = group;
       }
     }
-    if (!bestEmpireId || !bestGroup) return null;
+    if (!bestEmpireId || !bestGroup) {
+      if (trace) console.log('[DSCS] reject startEng: no bestEmpire', { groupOwners: [...groups.keys()] });
+      return null;
+    }
 
+    if (trace) console.log('[DSCS] startEng OK — creating encounter', {
+      playerGroup: playerGroup.map(v => v.id),
+      bestGroup: bestGroup.map(v => v.id),
+      bestEmpireId, bestHostility,
+    });
     return this._createEncounter(playerGroup, bestGroup, mid, 'player', bestEmpireId);
   }
 
