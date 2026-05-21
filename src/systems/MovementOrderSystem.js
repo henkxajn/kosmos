@@ -1117,6 +1117,36 @@ export class MovementOrderSystem {
       type:          order.type,
       completedYear: gameYear,
     });
+
+    // Bugfix 2026-05-21 — pursue/intercept completion na enemy vessel: force-emit
+    // combatRangeEnter. THREAT_RADIUS_AU (0.15) == COMBAT_ENGAGEMENT_AU (0.15) +
+    // ProximitySystem używa strict `<` dla combat enter → przy dokładnym landingu
+    // na 0.15 AU proximity nie emituje, DSCS nie startuje, vessel siedzi obok
+    // wroga bez walki. Force-emit gdy target jest enemy vesselem i kontrastuje
+    // faction. Czyścimy zarówno `_activeCombatPairs` jak i `_recentlyEngaged`
+    // (cooldown) — pursue mógł wcześniej wygenerować failed CRE i zostawić stale
+    // cooldown, który zablokuje nowy emit.
+    if (target && (order.type === ORDER_TYPES.pursue || order.type === ORDER_TYPES.intercept)) {
+      const isVessel = !!this._vm?.getVessel?.(target.id);
+      if (isVessel && !target.isWreck) {
+        const sameFaction = (vessel.ownerEmpireId ?? null) === (target.ownerEmpireId ?? null);
+        if (!sameFaction) {
+          const ps = window.KOSMOS?.proximitySystem;
+          const vcs = window.KOSMOS?.vesselCombatSystem;
+          const k = vessel.id < target.id ? `${vessel.id}|${target.id}` : `${target.id}|${vessel.id}`;
+          if (ps?._activeCombatPairs) ps._activeCombatPairs.delete(k);
+          if (vcs?._recentlyEngaged) vcs._recentlyEngaged.delete(k);
+          EventBus.emit('vessel:combatRangeEnter', {
+            vesselAId:  vessel.id,
+            vesselBId:  target.id,
+            distanceAU: THREAT_RADIUS_AU,
+            sameFaction: false,
+          });
+          if (ps?._activeCombatPairs) ps._activeCombatPairs.add(k);
+          _trace(`force-engage on complete: ${order.type} vessel=${vessel.id} target=${target.id}`);
+        }
+      }
+    }
   }
 
   _blockAndCancel(vessel, order, reason) {
