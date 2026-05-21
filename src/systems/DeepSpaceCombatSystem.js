@@ -329,6 +329,18 @@ export class DeepSpaceCombatSystem {
     const v = vm?._vessels?.get(newVesselId);
     if (!v || v.isWreck) return;
 
+    // Bugfix 2026-05-21 — _joinEncounter filtruje stan jak startEngagement.
+    // Bez tego dokowane vessele dołączały do encountera (handleCRE dispatch
+    // do _joinEncounter pomijał _inCombatState check obecny w startEngagement),
+    // a potem _allOutsideOf liczył docked vessels jako "out of combat range"
+    // → fałszywy retreated=A.
+    if (!_inCombatState(v)) {
+      if (window.KOSMOS?.debug?.combatTrace) {
+        console.log('[DSCS] _joinEncounter reject: NOT in combat state', { vesselId: newVesselId, state: v.position?.state });
+      }
+      return;
+    }
+
     // Skip jeśli już w encounter.
     if (encounter.vesselStates.has(newVesselId)) return;
 
@@ -544,6 +556,23 @@ export class DeepSpaceCombatSystem {
     const mid = encounter.location.point;
     const aOut = this._allOutsideOf(encounter, sideAVids, mid);
     const bOut = this._allOutsideOf(encounter, sideBVids, mid);
+    if (aOut || bOut) {
+      if (window.KOSMOS?.debug?.combatTrace) {
+        const disengageAU = GAME_CONFIG.COMBAT_DISENGAGE_AU;
+        console.log(`[DSCS] disengage check fail — aOut=${aOut} bOut=${bOut} disengage_thresh=${disengageAU}AU mid=(${mid.x.toFixed(1)},${mid.y.toFixed(1)}) round=${encounter.currentRound}`);
+        const dumpSide = (label, vids) => {
+          for (const vid of vids) {
+            const state = encounter.vesselStates.get(vid);
+            const v = this._vm?._vessels?.get(vid);
+            if (!state || !v) continue;
+            const dAU = Math.hypot(v.position.x - mid.x, v.position.y - mid.y) / AU_TO_PX;
+            console.log(`  ${label} ${vid}: state=${v.position?.state} hp=${state.hp.toFixed(0)} pos=(${v.position.x.toFixed(1)},${v.position.y.toFixed(1)}) distFromMid=${dAU.toFixed(3)}AU ${dAU > disengageAU ? 'OUT' : 'IN'}`);
+          }
+        };
+        dumpSide('A', sideAVids);
+        dumpSide('B', sideBVids);
+      }
+    }
     if (aOut && bOut) {
       this._finalizeBattle(encounter, null, null);
       return;
@@ -733,11 +762,36 @@ export class DeepSpaceCombatSystem {
   }
 
   /**
+   * Debug helper: lista żywych vesseli z ich pozycjami i dystansami od mid.
+   * @private
+   */
+  _aliveVids(encounter, vids) {
+    const mid = encounter.location.point;
+    const out = [];
+    for (const vid of vids) {
+      const state = encounter.vesselStates.get(vid);
+      if (!state || state.hp <= 0) continue;
+      const v = this._vm?._vessels?.get(vid);
+      if (!v) continue;
+      const dAU = Math.hypot(v.position.x - mid.x, v.position.y - mid.y) / AU_TO_PX;
+      out.push({ id: vid, hp: state.hp, distAU: +dAU.toFixed(3), state: v.position?.state });
+    }
+    return out;
+  }
+
+  /**
    * Czy wszyscy żywi vessele strony są poza COMBAT_DISENGAGE_AU od midpoint.
    * Używane przez _handleCombatRangeExit do identyfikacji retreating side.
    * @private
    */
   _allOutsideOf(encounter, vids, mid) {
+    // Bugfix 2026-05-21 — vessele z dockedAt != null (zaorbiowane na
+    // planecie/księżycu) NIE klasyfikujemy jako retreated. Są w bazie,
+    // nie uciekają. Orbita ciała niebieskiego wokół słońca może je oddalić
+    // od statycznego midpointu / frozen enemy, ale to mechanika orbitalna,
+    // nie ruch wycofania. Walka kończy się normalnie przez kill (HP=0) lub
+    // time-out (MAX_ROUNDS). Symetrycznie wykluczamy state='docked' (vessel
+    // siedzi w hangarze).
     const disengagePx = GAME_CONFIG.COMBAT_DISENGAGE_AU * AU_TO_PX;
     let aliveCount = 0;
     let outsideCount = 0;
@@ -746,6 +800,8 @@ export class DeepSpaceCombatSystem {
       if (!state || state.hp <= 0) continue;
       const v = this._vm?._vessels?.get(vid);
       if (!v) continue;
+      if (v.position?.state === 'docked') continue;
+      if (v.position?.dockedAt != null) continue;  // orbituje ciało niebieskie → nie ucieka
       aliveCount++;
       const dx = v.position.x - mid.x;
       const dy = v.position.y - mid.y;
