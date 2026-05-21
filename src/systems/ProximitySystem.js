@@ -233,6 +233,13 @@ export class ProximitySystem {
     const isCombatRefreshed = this._activeCombatPairs.has(key);
 
     if (!isCombatRefreshed && distAU < combatEnterAU) {
+      // Bugfix 2026-05-21 (task #13): nie emituj combatRangeEnter gdy
+      // któryś vessel jest docked. DSCS i tak zrejekutje (NOT in combat
+      // state) → bez tej skrótki ProximitySystem emituje co tick, VCS
+      // deleguje, DSCS odrzuca → log spam. Docked w hangarze nie walczą.
+      if (v1.position?.state === 'docked' || v2.position?.state === 'docked') {
+        return;
+      }
       this._activeCombatPairs.add(key);
       const sameFaction = (v1.ownerEmpireId ?? null) === (v2.ownerEmpireId ?? null);
       EventBus.emit('vessel:combatRangeEnter', {

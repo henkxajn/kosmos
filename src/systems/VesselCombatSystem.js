@@ -137,15 +137,20 @@ export class VesselCombatSystem {
     }
     if (trace) console.log('[VCS] CRE OK — delegating', { vesselAId, vesselBId, m4DSCS: !!GAME_CONFIG.FEATURES?.m4DeepSpaceCombat, hasDSCS: !!window.KOSMOS?.deepSpaceCombatSystem, playerIntentOverride });
 
-    this._recentlyEngaged.set(key, now);
-
     // M4 P3: gdy FEATURES.m4DeepSpaceCombat ON → deleguj do DeepSpaceCombatSystem
     // (per-tick simulation zamiast instant resolve). Flag OFF = M2a/M4 P2 behavior
     // (instant BattleSystem.resolveBattle). Bezpieczny rollback dla regresji.
+    //
+    // Bugfix 2026-05-21 (task #13): cooldown set warunkowo, tylko gdy DSCS
+    // faktycznie utworzył encounter lub dołączył vessel. Bez tego DSCS reject
+    // (np. docked vessel post-retreat) zostawiał stale cooldown blokujący
+    // re-engage przez 1 civYear → spam konsoli przy każdym ProximitySystem
+    // tick'u (vessele wciąż w combat range).
     if (GAME_CONFIG.FEATURES?.m4DeepSpaceCombat) {
       const dscs = window.KOSMOS?.deepSpaceCombatSystem;
       if (dscs?.handleCombatRangeEnter) {
-        dscs.handleCombatRangeEnter(vesselAId, vesselBId, sameFaction);
+        const engaged = dscs.handleCombatRangeEnter(vesselAId, vesselBId, sameFaction);
+        if (engaged) this._recentlyEngaged.set(key, now);
         return;
       }
       // Flag ON ale system nieinstancjonowany — log + fallback do instant path.
@@ -154,6 +159,9 @@ export class VesselCombatSystem {
       console.warn('[VCS] m4DeepSpaceCombat=true ale brak deepSpaceCombatSystem — fallback do instant resolve');
     }
 
+    // Instant path (m4DSCS=false): _resolveEngagement zawsze wykonuje pełną
+    // bitwę, więc cooldown ma sens unconditional.
+    this._recentlyEngaged.set(key, now);
     this._resolveEngagement(vesselAId, vesselBId);
   }
 

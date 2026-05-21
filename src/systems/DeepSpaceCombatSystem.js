@@ -106,33 +106,41 @@ export class DeepSpaceCombatSystem {
    */
   handleCombatRangeEnter(v1Id, v2Id, sameFaction) {
     const trace = window.KOSMOS?.debug?.combatTrace;
-    if (sameFaction) { if (trace) console.log('[DSCS] reject handleCRE: sameFaction', { v1Id, v2Id }); return; }
+    if (sameFaction) { if (trace) console.log('[DSCS] reject handleCRE: sameFaction', { v1Id, v2Id }); return false; }
     const vm = this._vm;
-    if (!vm) { if (trace) console.log('[DSCS] reject handleCRE: no vesselManager'); return; }
+    if (!vm) { if (trace) console.log('[DSCS] reject handleCRE: no vesselManager'); return false; }
     const v1 = vm._vessels?.get(v1Id);
     const v2 = vm._vessels?.get(v2Id);
     if (!v1 || !v2 || v1.isWreck || v2.isWreck) {
       if (trace) console.log('[DSCS] reject handleCRE: vessel missing/wreck', { v1: !!v1, v2: !!v2, w1: v1?.isWreck, w2: v2?.isWreck });
-      return;
+      return false;
     }
     if (trace) console.log('[DSCS] handleCRE OK — dispatching', { v1Id, v2Id, v1State: v1.position?.state, v2State: v2.position?.state });
 
     const existing1 = this._findActiveEncounterContaining(v1Id);
     const existing2 = this._findActiveEncounterContaining(v2Id);
 
-    // Oba w tym samym encounter — nic do roboty (już walczą).
-    if (existing1 && existing1 === existing2) return;
+    // Oba w tym samym encounter — nic do roboty (już walczą). Engagement aktywny.
+    if (existing1 && existing1 === existing2) return true;
 
     // Jeden w encounter, drugi nie — drugi dołącza jako reinforcement.
-    if (existing1 && !existing2) { this._joinEncounter(existing1, v2Id); return; }
-    if (existing2 && !existing1) { this._joinEncounter(existing2, v1Id); return; }
+    if (existing1 && !existing2) {
+      this._joinEncounter(existing1, v2Id);
+      // _joinEncounter może odrzucić (docked/etc) — sprawdź czy v2 faktycznie dołączył.
+      return existing1.vesselStates.has(v2Id);
+    }
+    if (existing2 && !existing1) {
+      this._joinEncounter(existing2, v1Id);
+      return existing2.vesselStates.has(v1Id);
+    }
 
     // Oba w różnych encounterach — w P3 nie łączymy encounter'ów (edge case).
     // Pierwszy wygrywa: drugi vessel nie dołącza. P5 może to rozwiązać.
-    if (existing1 && existing2) return;
+    if (existing1 && existing2) return false;
 
     // Żaden w combat — startuj nowy encounter.
-    this.startEngagement(v1Id, v2Id);
+    const enc = this.startEngagement(v1Id, v2Id);
+    return enc !== null;
   }
 
   // ── Encounter lifecycle ──────────────────────────────────────────────
