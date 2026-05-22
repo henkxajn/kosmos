@@ -16,6 +16,7 @@ import EventBus                from '../core/EventBus.js';
 import EntityManager           from '../core/EntityManager.js';
 import { t }                   from '../i18n/i18n.js';
 import { ARCHETYPES }          from '../data/EmpireData.js';
+import { showShipPickerModal } from '../ui/ShipPickerModal.js';
 
 export class GalaxyMapScene extends BaseOverlay {
   constructor() {
@@ -536,9 +537,9 @@ export class GalaxyMapScene extends BaseOverlay {
       }
 
       case 'sendShipPanel': {
-        // Wyślij pierwszy statek warpowy
+        // Otwórz modal wyboru statku
         const ships = this._getAvailableWarpShips();
-        this._handleSendShip(zone.data.systemId, ships);
+        this._openShipPicker(zone.data.systemId, ships);
         break;
       }
 
@@ -552,8 +553,7 @@ export class GalaxyMapScene extends BaseOverlay {
     }
   }
 
-  _handleSendShip(targetSystemId, ships) {
-    if (!ships || ships.length === 0) return;
+  _openShipPicker(targetSystemId, ships) {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr) return;
 
@@ -561,39 +561,22 @@ export class GalaxyMapScene extends BaseOverlay {
     const targetStar = gd?.systems?.find(s => s.id === targetSystemId);
     if (!targetStar) return;
 
-    // Prefer statki z najwięcej paliwa — większa szansa że którys osiągnie cel.
-    const sorted = [...ships].sort((a, b) => (b.fuel?.current ?? 0) - (a.fuel?.current ?? 0));
+    if (!ships || ships.length === 0) {
+      EventBus.emit('expedition:launchFailed', { reason: t('galaxy.noWarpShips') });
+      return;
+    }
 
-    let lowestShortfall = Infinity;
-    for (const v of sorted) {
-      const fromStar = gd.systems.find(s => s.id === (v.systemId ?? 'sys_home'));
-      if (!fromStar) continue;
-      const dx = targetStar.x - fromStar.x;
-      const dy = targetStar.y - fromStar.y;
-      const dz = (targetStar.z ?? 0) - (fromStar.z ?? 0);
-      const distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const shipDef = SHIPS[v.shipId] ?? HULLS[v.shipId];
-      const fuelCost = distLY * (shipDef?.fuelPerLY ?? 0.5);
-
-      if (v.fuel.current >= fuelCost) {
-        const ok = vMgr.dispatchInterstellar(v.id, targetSystemId);
-        if (ok) {
-          this.hide();
-          if (window.KOSMOS?.overlayManager) {
-            window.KOSMOS.overlayManager.active = null;
-          }
-          return;
+    showShipPickerModal(ships, targetStar).then(vesselId => {
+      if (!vesselId) return; // anulowano
+      const ok = vMgr.dispatchInterstellar(vesselId, targetSystemId);
+      if (ok) {
+        this.hide();
+        if (window.KOSMOS?.overlayManager) {
+          window.KOSMOS.overlayManager.active = null;
         }
       } else {
-        const shortfall = fuelCost - v.fuel.current;
-        if (shortfall < lowestShortfall) lowestShortfall = shortfall;
+        EventBus.emit('expedition:launchFailed', { reason: t('shipPicker.dispatchFailed') });
       }
-    }
-    // Żaden statek nie dał rady — feedback dla gracza (toast z EventLogSystem).
-    EventBus.emit('expedition:launchFailed', {
-      reason: lowestShortfall === Infinity
-        ? 'Brak dostępnego statku warp'
-        : `Za mało paliwa warp (brakuje ~${lowestShortfall.toFixed(1)} jednostek)`,
     });
   }
 

@@ -2238,6 +2238,16 @@ export default {
   'galaxy.buildBeacon': 'Build Beacon',
   'galaxy.buildGate': 'Build Jump Gate',
 
+  // === ShipPickerModal (warp jump ship selection) ===
+  'shipPicker.title': '🚀 Select ship for jump',
+  'shipPicker.dispatch': 'Dispatch',
+  'shipPicker.dispatchFailed': 'Failed to dispatch ship',
+  'shipPicker.fuel': 'Fuel',
+  'shipPicker.dist': 'Dist',
+  'shipPicker.cost': 'Cost',
+  'shipPicker.from': 'From',
+  'shipPicker.shortFuel': 'Missing ~{0} warp fuel units',
+
   // === ActionPanel (generator, not active) ===
   'action.header': 'PLAYER ACTIONS',
   'action.stabilize': 'STABILIZE',

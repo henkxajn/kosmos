@@ -2239,6 +2239,16 @@ export default {
   'galaxy.buildBeacon': 'Buduj Beacon',
   'galaxy.buildGate': 'Buduj Jump Gate',
 
+  // === ShipPickerModal (wybór statku do skoku) ===
+  'shipPicker.title': '🚀 Wybierz statek do skoku',
+  'shipPicker.dispatch': 'Wyślij',
+  'shipPicker.dispatchFailed': 'Wysłanie statku nie powiodło się',
+  'shipPicker.fuel': 'Paliwo',
+  'shipPicker.dist': 'Dystans',
+  'shipPicker.cost': 'Koszt',
+  'shipPicker.from': 'Z',
+  'shipPicker.shortFuel': 'Brakuje ~{0} jednostek paliwa warp',
+
   // === ActionPanel (generator, nie aktywne) ===
   'action.header': 'AKCJE GRACZA',
   'action.stabilize': 'STABILIZUJ',
