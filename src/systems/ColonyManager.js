@@ -309,6 +309,7 @@ export class ColonyManager {
       planetId:        planet.id,
       planet:          planet,
       isHomePlanet:    true,
+      ownerEmpireId:   null,  // Slice 1: null = gracz, empire_xxx = imperium AI
       name:            planet.name,
       systemId:        planet.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home',
       founded:         Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0),
@@ -376,6 +377,7 @@ export class ColonyManager {
       planetId,
       planet:          entity,
       isHomePlanet:    false,
+      ownerEmpireId:   null,  // Slice 1: null = gracz; bootstrap AI nadpisze
       name:            entity.name,
       systemId:        entity.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home',
       founded:         gameYear,
@@ -461,6 +463,7 @@ export class ColonyManager {
       planet:          entity,
       isHomePlanet:    false,
       isOutpost:       true,
+      ownerEmpireId:   null,  // Slice 1: null = gracz
       name:            entity.name,
       systemId:        entity.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home',
       founded:         gameYear,
@@ -629,9 +632,9 @@ export class ColonyManager {
     const planetEntity = EntityManager.get(planetId);
     const systemId = planetEntity?.systemId ?? null;
 
-    // Dopisz do imperium — zaznacz w gameState
+    // Dopisz do imperium — zaznacz w gameState (Slice 1: addColony(empireId, colonyId))
     if (empireReg?.addColony) {
-      empireReg.addColony(newOwnerEmpireId, systemId, planetId);
+      empireReg.addColony(newOwnerEmpireId, planetId);
     }
     // Oznacz system na galaxyData (dla rendering GalaxyMap)
     const gd = window.KOSMOS?.galaxyData;
@@ -1404,7 +1407,8 @@ export class ColonyManager {
   }
 
   _applyTaxes(fraction) {
-    const colonies = this.getAllColonies();
+    // Slice 1: pomiń kolonie imperium AI (ownerEmpireId !== null)
+    const colonies = this.getAllColonies().filter(c => !c.ownerEmpireId);
     let totalIncome = 0;
 
     for (const colony of colonies) {
@@ -1838,7 +1842,8 @@ export class ColonyManager {
 
   // Sprawdź migrację POP między koloniami
   _checkMigration() {
-    const colonies = this.getAllColonies();
+    // Slice 1: migracja działa tylko między koloniami gracza (pomiń ownerEmpireId !== null)
+    const colonies = this.getAllColonies().filter(c => !c.ownerEmpireId);
     if (colonies.length < 2) return;
 
     // Znajdź kolonie z wysokim i niskim prosperity
@@ -2097,7 +2102,8 @@ export class ColonyManager {
 
   // Auto-tworzenie dróg handlowych między istniejącymi koloniami
   _autoCreateTradeRoutes() {
-    const colonies = this.getAllColonies();
+    // Slice 1: drogi handlowe tylko między koloniami gracza (pomiń AI)
+    const colonies = this.getAllColonies().filter(c => !c.ownerEmpireId);
     for (let i = 0; i < colonies.length; i++) {
       for (let j = i + 1; j < colonies.length; j++) {
         this.addTradeRoute(colonies[i].planetId, colonies[j].planetId);

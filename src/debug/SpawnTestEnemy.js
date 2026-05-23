@@ -96,7 +96,7 @@ export function spawnTestEnemy() {
     tech:         { level: 2, focus: 'military' },
     military:     { power: 200 },
   });
-  reg.addColony(TEST_ENEMY_ID, systemId, target.id);
+  reg.addColony(TEST_ENEMY_ID, target.id);
 
   // 3. Utwórz kolonię w ColonyManager — oznacz jako testową wrogą
   const gameYear = Math.floor(K.timeSystem?.gameTime ?? 0);

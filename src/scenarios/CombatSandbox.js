@@ -382,7 +382,7 @@ function _setupEnemyCivilization(scene, enemyPlanet) {
     tech:         { level: 2, focus: 'military' },
     military:     { power: 200 },
   });
-  reg.addColony(SANDBOX_ENEMY_ID, systemId, enemyPlanet.id);
+  reg.addColony(SANDBOX_ENEMY_ID, enemyPlanet.id);
 
   const colony = colMgr.createColony(enemyPlanet.id, { ...ENEMY_START_RESOURCES },
                                      ENEMY_POPULATION, START_YEAR);

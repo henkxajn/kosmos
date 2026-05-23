@@ -1,42 +1,32 @@
 // EmpireRegistry — system-właściciel domeny gameState.empires
 //
-// Zgodnie z planem (docs/plan-war-diplomacy-ai.md): mutacje TYLKO przez intent methods.
-// NIE wywołuj gameState.set('empires.*') spoza tej klasy. UI i inne systemy mają używać:
-//   empireRegistry.createEmpire({...})
-//   empireRegistry.addColony(empireId, systemId, planetId)
-//   empireRegistry.changeTechLevel(empireId, +1, 'research_breakthrough')
+// Slice 1 refactor: usunięte abstrakcyjne scalary (military.power, tech.level,
+// resources.production, _growAll). Imperium ma realne kolonie typu Colony
+// w ColonyManager, które żyją ekonomicznie samoczynnie. EmpireRegistry trzyma
+// tylko metadane (id, name, archetype, personality, colonies, fleets).
+//
+// Mutacje TYLKO przez intent methods (nie gameState.set spoza tej klasy).
 //
 // Stan (per imperium) w gameState.empires[empireId]:
-//   { id, name, archetype, personality, homeSystemId, colonies[], tech{}, military{}, resources{}, createdYear }
+//   {
+//     id, name, namePL, nameEN,
+//     archetype, personality,
+//     homeSystemId,
+//     colonies: [colonyId, ...],       // string array — planetId z ColonyManager
+//     currentStrategy: { focus, startedYear },  // Faza 2: EmpireStrategicAI
+//     fleets: [...],
+//     createdYear
+//   }
 //
-// Tick: subskrybuje time:tick i co 1 civYear dokonuje abstract growth — skala
-// zależy od personality.expansion / science. Nie modeluje to szczegółowej gospodarki,
-// tylko "imperium żyje" (bez tickowania wszystko byłoby statyczne do pierwszej
-// interakcji gracza).
+// Faza 1: brak time:tick subscription — kolonie tickują przez własne systemy.
 
 import EventBus from '../core/EventBus.js';
 import gameState from '../core/GameState.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 
-// Stała tempo wzrostu (abstrakt — balansować później)
-const MILITARY_PER_YEAR_BASE = 3.0;   // baza dodawania do military.power
-const TECH_PER_YEAR_BASE     = 0.05;  // baza akumulatora → 1 poziom co ~20 lat
-
 export class EmpireRegistry {
   constructor() {
-    this._tickAccum = 0;
-    this._techAccum = {};   // empireId → float (akumulator do techLevel)
-
-    // Growth tick przez civDeltaYears (mechanika 4X, nie fizyka)
-    EventBus.on('time:tick', ({ civDeltaYears }) => {
-      if (!civDeltaYears) return;
-      this._tickAccum += civDeltaYears;
-      // Krok co 1 civYear, żeby nie miotać eventami przy każdym sub-tickowaniu
-      if (this._tickAccum < 1.0) return;
-      const steps = Math.floor(this._tickAccum);
-      this._tickAccum -= steps;
-      this._growAll(steps);
-    });
+    // Slice 1: brak abstract growth — kolonie żyją same.
   }
 
   // ── Czytanki (read-only) ─────────────────────────────────────
@@ -50,8 +40,8 @@ export class EmpireRegistry {
 
   /**
    * Rejestruje nowe imperium w gameState.
-   * @param {Object} p — { id, name, archetype, homeSystemId, colonies?, tech?, military?, resources? }
-   *                     personality zostaje skopiowana z archetypu.
+   * @param {Object} p — { id, name?, archetype, homeSystemId?, colonies?, currentStrategy?, fleets? }
+   *                     personality kopiowana z archetypu.
    * @returns {Object} zapisane imperium
    */
   createEmpire(p) {
@@ -72,10 +62,11 @@ export class EmpireRegistry {
       archetype:    p.archetype,
       personality:  { ...arch.personality },
       homeSystemId: p.homeSystemId ?? null,
+      // Slice 1: colonies to array colonyId stringów (planetId z ColonyManager).
       colonies:     Array.isArray(p.colonies) ? [...p.colonies] : [],
-      tech:         p.tech      ?? { level: 1, focus: this._defaultTechFocus(p.archetype) },
-      military:     p.military  ?? { power: 100 },
-      resources:    p.resources ?? { production: 50 },
+      // Faza 2: EmpireStrategicAI co 8 civYears mutuje currentStrategy.
+      currentStrategy: p.currentStrategy ?? { focus: null, startedYear: year },
+      fleets:       Array.isArray(p.fleets) ? [...p.fleets] : [],
       createdYear:  p.createdYear ?? year,
     };
     gameState.set(`empires.${p.id}`, emp, 'empire_created');
@@ -83,64 +74,80 @@ export class EmpireRegistry {
     return emp;
   }
 
-  /** Dodaje kolonię (rejestrację, że imperium zajmuje system/planetę) */
-  addColony(empireId, systemId, planetId = null) {
+  /**
+   * Rejestruje kolonię (colonyId) jako należącą do imperium.
+   * Jednocześnie ustawia colony.ownerEmpireId = empireId na obiekcie kolonii
+   * (jeśli ColonyManager już ma tę kolonię).
+   *
+   * Slice 1 nowy signature: addColony(empireId, colonyId).
+   *
+   * @param {string} empireId
+   * @param {string} colonyId — planetId z ColonyManager (kolonie są indexed po planetId)
+   * @returns {boolean} true jeśli dodano, false jeśli duplikat lub błąd
+   */
+  addColony(empireId, colonyId) {
     const emp = this.get(empireId);
-    if (!emp) return false;
-    // Duplikaty: ten sam system+planetId → noop
-    if (emp.colonies.some(c => c.systemId === systemId && c.planetId === planetId)) return false;
-    const next = [...emp.colonies, { systemId, planetId }];
+    if (!emp || !colonyId) return false;
+    if (emp.colonies.includes(colonyId)) return false;
+
+    const next = [...emp.colonies, colonyId];
     gameState.set(`empires.${empireId}.colonies`, next, 'empire_colony_added');
-    EventBus.emit('empire:colonyAdded', { empireId, systemId, planetId });
+
+    // Slice 1 hook: ownerEmpireId na obiekcie kolonii (jeśli już istnieje)
+    const colony = window.KOSMOS?.colonyManager?.getColony(colonyId);
+    if (colony) colony.ownerEmpireId = empireId;
+
+    EventBus.emit('empire:colonyAdded', { empireId, colonyId });
     return true;
   }
 
-  /** Usuwa kolonię. Jeśli to była ostatnia → empire:destroyed. */
-  removeColony(empireId, systemId, planetId = null) {
+  /**
+   * Wycofuje kolonię z imperium. Jeśli była ostatnia → empire:destroyed.
+   *
+   * @param {string} empireId
+   * @param {string} colonyId
+   */
+  removeColony(empireId, colonyId) {
     const emp = this.get(empireId);
-    if (!emp) return false;
-    const next = emp.colonies.filter(c =>
-      !(c.systemId === systemId && (planetId == null || c.planetId === planetId))
-    );
+    if (!emp || !colonyId) return false;
+    const next = emp.colonies.filter(id => id !== colonyId);
     if (next.length === emp.colonies.length) return false;
+
     gameState.set(`empires.${empireId}.colonies`, next, 'empire_colony_removed');
-    EventBus.emit('empire:colonyRemoved', { empireId, systemId, planetId });
+    EventBus.emit('empire:colonyRemoved', { empireId, colonyId });
+
     if (next.length === 0) this.destroyEmpire(empireId, 'no_colonies_left');
     return true;
   }
 
-  /** Zmiana abstract military.power (dodatnia/ujemna). */
-  updateMilitaryPower(empireId, delta, reason = '') {
-    const emp = this.get(empireId);
-    if (!emp) return;
-    const oldVal = emp.military?.power ?? 0;
-    const newVal = Math.max(0, oldVal + delta);
-    gameState.set(`empires.${empireId}.military.power`, newVal, reason);
-  }
+  // ── Backward compat stubs (Slice 1) ─────────────────────────
+  // Stary EconAI/MilitaryAI nadal wywołują te metody przez AlienCivSystem._tickAll.
+  // Faza 2 usunie stare AI — wtedy te stuby pójdą razem z nimi.
+  // No-op żeby nie crashować — abstrakcyjne scalary military.power/resources.production
+  // już nie istnieją w gameState.empires (Slice 1 refactor).
+  updateMilitaryPower(_empireId, _delta, _reason = '') { /* no-op */ }
+  updateResource(_empireId, _key, _delta, _reason = '') { /* no-op */ }
+  changeTechLevel(_empireId, _delta, _reason = '')      { /* no-op */ }
 
-  /** Zmiana wartości w empire.resources (np. production). */
-  updateResource(empireId, key, delta, reason = '') {
+  /**
+   * Ustawia strategic focus imperium (Faza 2: EmpireStrategicAI).
+   */
+  setStrategicFocus(empireId, focus, reason = '') {
     const emp = this.get(empireId);
     if (!emp) return;
-    const resources = { ...(emp.resources ?? {}) };
-    const oldVal = resources[key] ?? 0;
-    resources[key] = Math.max(0, oldVal + delta);
-    gameState.set(`empires.${empireId}.resources`, resources, reason);
-  }
-
-  /** Zmiana techLevel (int). Emituje empire:techAdvanced na wzrost. */
-  changeTechLevel(empireId, delta, reason = '') {
-    const emp = this.get(empireId);
-    if (!emp) return;
-    const oldLv = emp.tech?.level ?? 1;
-    const newLv = Math.max(1, oldLv + delta);
-    gameState.set(`empires.${empireId}.tech.level`, newLv, reason);
-    if (newLv > oldLv) EventBus.emit('empire:techAdvanced', { empireId, from: oldLv, to: newLv, reason });
+    const year = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const oldFocus = emp.currentStrategy?.focus ?? null;
+    gameState.set(
+      `empires.${empireId}.currentStrategy`,
+      { focus, startedYear: year },
+      reason || 'strategy_changed'
+    );
+    EventBus.emit('ai:strategicShift', { empireId, oldFocus, newFocus: focus, reason });
   }
 
   // ── Floty obcych imperiów (Faza 4) ──────────────────────────
   // Abstrakcyjna flota: { id, strength, systemId, destSystemId?, etaYear?, morale? }
-  // Przemieszczanie + walka obsługiwane przez WarSystem.
+  // W Slice 1 imperium AI nie ma startowych flot (nie produkuje statków).
 
   listFleets(empireId) {
     const emp = this.get(empireId);
@@ -162,13 +169,8 @@ export class EmpireRegistry {
       etaYear:      null,
       morale:       params.morale ?? 1.0,
       createdYear:  window.KOSMOS?.timeSystem?.gameTime ?? 0,
-      // Faza desantu: transport wojsk (bez tego flota toczy tylko bitwy orbitalne)
       hasTroopTransport: params.hasTroopTransport ?? false,
       troopCapacity:     params.troopCapacity ?? 0,
-      // Faza desantu B: konkretne archetypy załadowane na statkach desantowych.
-      // Gracz robi to samo przez CargoLoadModal → loadGroundUnit. AI generuje
-      // listę w EmpireGenerator przy spawnu floty (wg archetypu).
-      // Format: ['shock_infantry', 'rocket_artillery', ...]
       embarkedTroops:    params.embarkedTroops ?? [],
     };
     fleets.push(fleet);
@@ -227,64 +229,35 @@ export class EmpireRegistry {
     delete empires[empireId];
     gameState.set('empires', empires, 'empire_destroyed');
     EventBus.emit('empire:destroyed', { empireId, reason });
-    delete this._techAccum[empireId];
     return true;
-  }
-
-  // ── Wewnętrzne ───────────────────────────────────────────────
-
-  _growAll(yearsPassed) {
-    // Kopia, bo destroyEmpire może zmienić strukturę
-    const emps = this.listAll().slice();
-    for (const emp of emps) {
-      const p = emp.personality || {};
-      // Military power: proporcjonalne do liczby kolonii × personality.expansion
-      const colMult = Math.max(1, emp.colonies?.length ?? 1);
-      const milDelta = MILITARY_PER_YEAR_BASE * colMult * (0.4 + 0.6 * (p.expansion ?? 0.5)) * yearsPassed;
-      if (milDelta > 0) this.updateMilitaryPower(emp.id, milDelta, 'tick_growth');
-
-      // Tech: akumulator, co ciułanie 1.0 → level +1
-      const techDelta = TECH_PER_YEAR_BASE * (0.3 + 0.7 * (p.science ?? 0.5)) * yearsPassed;
-      this._techAccum[emp.id] = (this._techAccum[emp.id] || 0) + techDelta;
-      if (this._techAccum[emp.id] >= 1.0) {
-        const steps = Math.floor(this._techAccum[emp.id]);
-        this._techAccum[emp.id] -= steps;
-        this.changeTechLevel(emp.id, steps, 'tick_research');
-      }
-    }
-  }
-
-  _defaultTechFocus(archetype) {
-    switch (archetype) {
-      case 'xenophage':    return 'military';
-      case 'isolationist': return 'defense';
-      case 'trader':       return 'economy';
-      case 'hegemon':      return 'military';
-      case 'swarm':        return 'biology';
-      default:             return 'general';
-    }
   }
 
   /**
    * Po restore (gameState załadowany z save) — zsynchronizuj empireId na galaxyData.
    * Wywoływane z GameScene po GalaxyGenerator.generate / po gameState.restore.
+   *
+   * Slice 1: colonies to string array, więc systemId odczytujemy z ColonyManager.
    */
   syncToGalaxyData(galaxyData) {
     if (!galaxyData?.systems) return;
-    // Najpierw wyczyść — na wypadek gdyby imperium zniknęło
+    // Wyczyść stare empireId
     for (const sys of galaxyData.systems) {
       if (sys.empireId) sys.empireId = null;
     }
-    // Rozpisz: home + colonies na galaxyData
+    const colMgr = window.KOSMOS?.colonyManager;
     for (const emp of this.listAll()) {
-      for (const col of emp.colonies ?? []) {
-        const gs = galaxyData.systems.find(s => s.id === col.systemId);
-        if (gs) gs.empireId = emp.id;
-      }
-      // Home też na wszelki wypadek (gdyby nie było w colonies)
+      // Home system zaznaczamy na wszelki wypadek
       if (emp.homeSystemId) {
         const gs = galaxyData.systems.find(s => s.id === emp.homeSystemId);
         if (gs && !gs.empireId) gs.empireId = emp.id;
+      }
+      // Każda kolonia (po colonyId → systemId)
+      for (const colonyId of emp.colonies ?? []) {
+        const colony = colMgr?.getColony(colonyId);
+        const sysId  = colony?.systemId ?? null;
+        if (!sysId) continue;
+        const gs = galaxyData.systems.find(s => s.id === sysId);
+        if (gs) gs.empireId = emp.id;
       }
     }
   }

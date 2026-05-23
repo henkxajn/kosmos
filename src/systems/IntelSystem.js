@@ -121,10 +121,16 @@ export class IntelSystem {
     const updated = { ...rec, level: toLevel };
 
     // Przy contact: od razu ujawnij 1 znany fakt (archetyp + liczba kolonii)
+    // Slice 1: emp.colonies to [colonyId, ...] — systemId odczytujemy z ColonyManager.
     if (newRank >= LEVEL_RANK.contact) {
       updated.knownColonies = [...(updated.knownColonies ?? [])];
-      for (const c of emp.colonies ?? []) {
-        if (!updated.knownColonies.includes(c.systemId)) updated.knownColonies.push(c.systemId);
+      const colMgr = window.KOSMOS?.colonyManager;
+      for (const colonyId of emp.colonies ?? []) {
+        const col = colMgr?.getColony(colonyId);
+        const sysId = col?.systemId ?? null;
+        if (sysId && !updated.knownColonies.includes(sysId)) {
+          updated.knownColonies.push(sysId);
+        }
       }
     }
     // Przy detailed: ujawnij przybliżoną siłę wojskową
