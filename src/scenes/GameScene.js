@@ -77,6 +77,7 @@ import { POIRegistry }       from '../systems/POIRegistry.js';
 import { POIRuntimeSystem }  from '../systems/POIRuntimeSystem.js';
 import { DiplomacySystem }   from '../systems/DiplomacySystem.js';
 import { AlienCivSystem }    from '../systems/AlienCivSystem.js';
+import { EmpireColonyMaintenance } from '../systems/EmpireColonyMaintenance.js';  // TODO Faza 2: usuń razem z ColonyAutoPlanner
 import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
@@ -263,6 +264,8 @@ export class GameScene {
     });
     this.diplomacySystem      = new DiplomacySystem();
     this.alienCivSystem       = new AlienCivSystem();
+    // TODO Faza 2: usuń razem z ColonyAutoPlanner (przejmie _reapplyAllRates co tactical tick)
+    this.empireColonyMaintenance = new EmpireColonyMaintenance();
     this.warSystem            = new WarSystem();
     this.invasionSystem       = new InvasionSystem();
     this.orbitalSpaceSystem   = new OrbitalSpaceSystem();
@@ -975,6 +978,19 @@ export class GameScene {
     // a syncToGalaxyData() odtworzy empireId na galaxyData.systems.
     if (isNewGame) {
       EmpireGenerator.generate(window.KOSMOS.galaxyData, this.empireRegistry);
+      // Slice 1 log — pierwsze imperium AI z realną kolonią
+      const _firstEmp = this.empireRegistry.listAll()[0];
+      if (_firstEmp) {
+        const _firstColonyId = _firstEmp.colonies?.[0];
+        const _firstColony   = _firstColonyId
+          ? this.colonyManager?.getColony(_firstColonyId)
+          : null;
+        const _buildingCount = _firstColony?.buildingSystem?._active?.size ?? 0;
+        console.log(
+          `Empire AI created: ${_firstEmp.name} on ${_firstEmp.homeSystemId}, ` +
+          `colony ${_firstColony?.name ?? '?'} with ${_buildingCount} buildings`
+        );
+      }
       // Dla każdego świeżo stworzonego imperium → zapewnij rekord intel=unknown
       this.intelSystem.initForAllEmpires();
       // M2b Commit 2: zapewnij intel.vessels = {} (constructor IntelSystem
@@ -1023,6 +1039,11 @@ export class GameScene {
       if (c4x.colonies?.length > 0) {
         this.colonyManager.restore(c4x, this.buildingSystem);
       }
+      // Slice 1: drugi sync — po restore kolonii. EmpireRegistry.syncToGalaxyData
+      // czyta colony.systemId z ColonyManager (nowa struktura: emp.colonies = [colonyId, ...]).
+      // Pierwsze wywołanie (linia 1015, przed restore) działa tylko dla home systemu
+      // emp.homeSystemId — nowy sync dopisuje pozostałe kolonie.
+      this.empireRegistry.syncToGalaxyData(window.KOSMOS.galaxyData);
       // Ustaw homePlanet i aktywne systemy
       const homePlanetId = c4x.homePlanetId ?? c4x.colonies?.find(c => c.isHomePlanet)?.planetId;
       if (homePlanetId) {
