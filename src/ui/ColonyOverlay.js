@@ -411,9 +411,21 @@ export class ColonyOverlay extends BaseOverlay {
         const baseTile = this._findBestTileForCapital(grid);
         if (baseTile) {
           EventBus.emit('planet:buildRequest', { tile: baseTile, buildingId: 'colony_base' });
-          // Re-sync po postawieniu stolicy
+          // Invaliduj cache ZAWSZE — kolejne _getGrid zsynchronizuje stolicę
+          // (postawioną tu od razu, albo przez autoPlaceBuilding w
+          // ColonyManager._onColonyFounded gdy kolonia jeszcze nie ma surowców).
           delete this._gridCache[pid];
-          return this._getGrid(colony);
+          // Re-sync (rekurencja) TYLKO gdy stolica faktycznie trafiła do _active.
+          // Gdy kolonia nie stać na colony_base, _build wrzuca ją do kolejki
+          // pending → stolica NIE jest w _active. Bez tego warunku _getGrid
+          // rekurowałby w nieskończoność (stack overflow łapany po cichu przez
+          // try/catch EventBus). Fall-through zwraca bieżący grid; cache jest
+          // skasowany, więc po autoPlaceBuilding następne wejście pokaże stolicę.
+          let placed = false;
+          for (const key of bSys._active.keys()) {
+            if (key.startsWith('capital_')) { placed = true; break; }
+          }
+          if (placed) return this._getGrid(colony);
         }
       }
     }

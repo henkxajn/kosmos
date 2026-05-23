@@ -2389,24 +2389,30 @@ export class VesselManager {
       vessel.cargoUsed = 0;
     }
 
-    // Utwórz outpost lub pełną kolonię
-    if (startPop >= 2) {
-      // Colony ship — pełna kolonia
-      colMgr.createOutpost(targetId, startResources, gameYear);
-      colMgr.upgradeOutpostToColony(targetId, startPop);
-    } else {
-      // Mały statek — outpost
-      colMgr.createOutpost(targetId, startResources, gameYear);
-    }
-
     addMissionLog(vessel, gameYear,
       t('vessel.foreignColonized', target.name ?? targetId), 'success');
 
-    EventBus.emit('expedition:colonyFounded', {
-      planetId: targetId,
-      startResources,
-      startPop,
-    });
+    // Utwórz outpost lub pełną kolonię.
+    // WAŻNE: pełna kolonia idzie DOKŁADNIE tą samą ścieżką co kolonizacja w
+    // układzie macierzystym (pojedynczy emit 'expedition:colonyFounded' →
+    // ColonyManager._onColonyFounded tworzy kolonię, generuje grid, stawia
+    // stolicę + spaceport). Wcześniejszy wariant (createOutpost → upgrade →
+    // emit) cache'ował grid ColonyOverlay jeszcze jako outpost (bez stolicy),
+    // a późniejsze autoPlaceBuilding nie invalidowało cache → kolonia w innym
+    // układzie nie pokazywała stolicy ani żadnego budynku.
+    if (startPop >= 2) {
+      // Colony ship — pełna kolonia (autoSpaceport: statek staje się
+      // wyrzutnią + elektrownią solarną, jak w _processColonyArrival).
+      EventBus.emit('expedition:colonyFounded', {
+        planetId:      targetId,
+        startResources,
+        startPop,
+        autoSpaceport: true,
+      });
+    } else {
+      // Mały statek — outpost (placówki celowo nie mają stolicy/POPów).
+      colMgr.createOutpost(targetId, startResources, gameYear);
+    }
 
     // Zniszcz statek (colony ship jest jednorazowy)
     const colonyId = vessel.colonyId;
