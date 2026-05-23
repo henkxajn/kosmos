@@ -112,7 +112,12 @@
       "Bash(Select-Object -First 30 FullName)",
       "Bash(Get-ChildItem -Path \"E:\\\\programy\\\\claude_kody\\\\kosmos\" -Name)",
       "Bash(awk '/### Milestone 4 P3/,/### Milestone|^---/ {print NR\": \"$0}' CLAUDE.md)",
-      "Bash(dir *)"
+      "Bash(dir *)",
+      "Bash(del *)",
+      "Bash(Get-ChildItem -Recurse -Path \"E:\\\\programy\\\\claude_kody\\\\kosmos\\\\src\" -Name -Include \"*.js\")",
+      "Bash(Select-String -Pattern \"\\(hex|Hex|grid|Grid|map|Map|terrain|Terrain\\)\")",
+      "Bash(Get-ChildItem -Path \"E:\\\\programy\\\\claude_kody\\\\kosmos\" -Recurse -Directory -ErrorAction SilentlyContinue)",
+      "Bash(Get-ChildItem *)"
     ]
   }
 }
