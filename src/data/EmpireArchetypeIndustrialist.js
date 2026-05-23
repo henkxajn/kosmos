@@ -1,0 +1,117 @@
+// EmpireArchetypeIndustrialist — archetyp imperium AI typu "Industrialista"
+//
+// Slice 1: jedyny archetyp obcych imperiów. Cywilizacja oparta na produkcji
+// i handlu — buduje fabryki, gromadzi towary, rozwija się stabilnie. Wektor
+// osobowości skłania się ku trade/expansion, niski aggression.
+//
+// Rich data (poza personality): handicap startowy (budynki, POPy, surowce)
+// oraz wagi strategicPriorities dla EmpireStrategicAI (Faza 2).
+//
+// Plik powiązany: src/data/EmpireData.js eksportuje INDUSTRIALIST w ARCHETYPES
+// pod kluczem 'industrialist' (cienki re-export — żeby EmpireRegistry.createEmpire
+// znalazł arch.personality / arch.namePL po stringu archetype id).
+
+export const INDUSTRIALIST = {
+  id:     'industrialist',
+  namePL: 'Industrialista',
+  nameEN: 'Industrialist',
+  descPL: 'Cywilizacja oparta na produkcji i handlu. Buduje fabryki, ' +
+          'gromadzi towary, rozwija się stabilnie.',
+  descEN: 'Production and trade focused civilization. Builds factories, ' +
+          'stockpiles commodities, grows steadily.',
+  color:  '#B07020',  // ciepły amber/copper
+
+  // Wektor osobowości (0-1) — używany przez AI scoring + diplomacy hostility
+  personality: {
+    aggression: 0.3,
+    expansion:  0.7,
+    secrecy:    0.2,
+    trade:      0.9,
+    science:    0.6,
+  },
+
+  // Wagi priorytetów strategicznych dla EmpireStrategicAI (Faza 2)
+  strategicPriorities: {
+    raw_extraction:       1.0,
+    commodity_production: 0.9,
+    self_sufficiency:     0.8,
+    civilian_logistics:   0.7,
+    defense:              0.3,
+    science:              0.5,
+    military_buildup:     0.1,
+  },
+
+  // Handicap startowy — budynki stawiane instant (bez kosztu surowców i tech)
+  // przez EmpireColonyBootstrap via BuildingSystem.autoPlaceBuilding.
+  // preferredTerrain to scoring hint dla autoPlaceBuilding (Faza 0 Issue #1).
+  //
+  // Skala dopasowana do startowej populacji gracza (~4 POP). Lekki handicap
+  // AI = 6 POP + 16 budynków startowych (+50% POP vs gracz, zgodnie z planem Slice 1).
+  //
+  // Bilans dla 6 POP (consumption per POP/year: food 3.0, water 1.5, energy 1.0):
+  //   food   need 18/y → 2 farm × 10 × ~1.2 yieldBonus = ~24/y  → buffer +6
+  //   water  need  9/y → 2 well × 6                = 12/y       → buffer +3
+  //   energy need  6/y POP + ~10/y budynki ≈ 16/y → 6 solar × 8 = 48/y → buffer +32
+  //   Fe     wydobycie z REALNYCH deposits (SystemGenerator zapewnia Fe~125k)
+  //   housing colony_base(4) + habitat(3) = 7 → POP 6 mieści się z buforem na wzrost
+  //
+  // Solar count zwiększony z 2 → 6 (patch v3 Fix 1 opcja c): zamiast upgrade'ować
+  // 2 solar do lvl 3, używamy 6 solar lvl 1 (taka sama suma produkcji, prostsze API,
+  // unika fake-upgrade bug i kompleksowości BuildingSystem._applyUpgrade).
+  //
+  // Uwagi:
+  //   - latitude variance (biegunowe hexy ×0.5) NIE wymaga buforu — smart placer
+  //     w EmpireColonyBootstrap stawia poza biegunami (patch v3 Fix 3)
+  startingBuildings: [
+    { buildingId: 'colony_base', count: 1 },
+    { buildingId: 'habitat',     count: 1 },
+    { buildingId: 'launch_pad',  count: 1 },
+    { buildingId: 'shipyard',    count: 1 },                                            // istnieje, ale w Slice 1 nie produkuje
+    { buildingId: 'factory',     count: 1 },                                            // reaktywna, działa via safety stock
+    { buildingId: 'mine',        count: 1, preferredTerrain: ['mountains', 'crater'] },
+    { buildingId: 'farm',        count: 2, preferredTerrain: ['plains', 'forest'] },
+    { buildingId: 'well',        count: 2, preferredTerrain: ['water', 'ice'] },
+    { buildingId: 'solar_farm',  count: 6, preferredTerrain: ['desert', 'plains'] },
+  ],
+
+  // Startowa populacja — rozkład per strata (suma 6 POP — lekki handicap vs gracz ~4)
+  startingPops: {
+    laborer:    3,
+    worker:     1,
+    scientist:  1,
+    merchant:   1,
+  },
+
+  // Startowe surowce — deponowane do colony.resourceSystem.inventory.
+  // Bufor food/water powiększony do 250 — daje ~8 civYears zapasu na 6 POP
+  // (przed pierwszą produkcją + buffer na latitude variance budynków).
+  startingResources: {
+    C:       200,
+    Fe:      200,
+    Si:      100,
+    Cu:      80,
+    food:    250,
+    water:   250,
+    credits: 1000,  // uwaga: credits to NIE resource — bootstrap przeniesie do colony.credits
+  },
+
+  // Startowe safety stock targety (efektywny target = bonus + base wg tieru)
+  // FactorySystem.getSafetyStockTarget: tier 1-2 → base 3, tier 3-5 → base 1.
+  // Wszystkie commodities poniżej to tier 1 (CommoditiesData), więc:
+  //   target X → bonus = X - 3 (bonus aplikowany przez fs.setDemandBonus)
+  //
+  // Patch v3 Fix 4: dodane consumer goods (basic_supplies, civilian_goods).
+  // Bez nich factory reactive nie produkuje gdy POP demand rośnie — observed
+  // deficyt 3.1/1 w panelu factory dla Thuban b.
+  startingSafetyStocks: {
+    // Komponenty produkcyjne (na potrzeby budownictwa / upgrade'ów)
+    structural_alloys:  30,
+    polymer_composites: 20,
+    conductor_bundles:  20,
+    extraction_systems: 15,
+
+    // Consumer goods — POP demand. Target 10 = ~2 lata bufora przy 6 POP × ~0.5/y demand
+    basic_supplies:     10,   // Zaopatrzenie Bytowe (consumptionLayer: functioning)
+    civilian_goods:     10,   // Dobra Cywilizacyjne (consumptionLayer: comfort)
+  },
+};

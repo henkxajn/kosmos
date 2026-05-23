@@ -16,7 +16,10 @@
 //   trade      — otwartość na umowy handlowe i sojusze
 //   science    — priorytet badań, tempo wzrostu techLevel
 
+import { INDUSTRIALIST } from './EmpireArchetypeIndustrialist.js';
+
 export const ARCHETYPES = {
+  industrialist: INDUSTRIALIST,
   xenophage: {
     id: 'xenophage',
     namePL: 'Xenofag',
@@ -76,17 +79,19 @@ export function pickArchetype(rng = Math.random) {
 
 // Bazowa nazwa cywilizacji — prefiks wg archetypu (finalną nazwę składa EmpireGenerator)
 export const NAME_PREFIXES_PL = {
-  xenophage:    ['Rój',     'Horda',     'Pożeracze',   'Krew',       'Głód'],
-  isolationist: ['Strażnicy','Ukryci',   'Milczący',    'Zakon',      'Pustelnicy'],
-  trader:       ['Konsorcjum','Liga',    'Szlak',       'Karawana',   'Kompania'],
-  hegemon:      ['Imperium', 'Dominium', 'Suwerenat',   'Korona',     'Tron'],
-  swarm:        ['Rój',      'Kolektyw', 'Ul',          'Potomstwo',  'Tkanka'],
+  xenophage:     ['Rój',     'Horda',     'Pożeracze',   'Krew',       'Głód'],
+  isolationist:  ['Strażnicy','Ukryci',   'Milczący',    'Zakon',      'Pustelnicy'],
+  trader:        ['Konsorcjum','Liga',    'Szlak',       'Karawana',   'Kompania'],
+  hegemon:       ['Imperium', 'Dominium', 'Suwerenat',   'Korona',     'Tron'],
+  swarm:         ['Rój',      'Kolektyw', 'Ul',          'Potomstwo',  'Tkanka'],
+  industrialist: ['Manufaktura','Konsorcjum','Fundacja',  'Liga',       'Korporacja'],
 };
 
 export const NAME_PREFIXES_EN = {
-  xenophage:    ['Swarm',        'Horde',       'Devourers',  'Blood',     'Hunger'],
-  isolationist: ['Wardens',      'Hidden',      'Silent',     'Order',     'Hermits'],
-  trader:       ['Consortium',   'League',      'Route',      'Caravan',   'Company'],
-  hegemon:      ['Empire',       'Dominion',    'Sovereignty','Crown',     'Throne'],
-  swarm:        ['Swarm',        'Collective',  'Hive',       'Brood',     'Tissue'],
+  xenophage:     ['Swarm',        'Horde',       'Devourers',  'Blood',     'Hunger'],
+  isolationist:  ['Wardens',      'Hidden',      'Silent',     'Order',     'Hermits'],
+  trader:        ['Consortium',   'League',      'Route',      'Caravan',   'Company'],
+  hegemon:       ['Empire',       'Dominion',    'Sovereignty','Crown',     'Throne'],
+  swarm:         ['Swarm',        'Collective',  'Hive',       'Brood',     'Tissue'],
+  industrialist: ['Manufactory',  'Consortium',  'Foundation', 'League',    'Corporation'],
 };

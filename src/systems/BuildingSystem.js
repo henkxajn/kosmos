@@ -1145,33 +1145,58 @@ export class BuildingSystem {
 
   /**
    * Auto-umieść budynek na pierwszym pasującym hexie (bez kosztu surowców).
-   * Używane przy: auto-spaceport z colony ship, outpost + budynek z cargo.
+   * Używane przy: auto-spaceport z colony ship, outpost + budynek z cargo,
+   * bootstrap kolonii imperium AI (EmpireColonyBootstrap, Slice 1).
    * @param {string} buildingId
+   * @param {Object} [opts] — opcje placementu
+   * @param {string[]} [opts.preferredTerrain] — priorytet terenu; jeśli istnieje
+   *        pasujący wolny hex z tej listy, wybiera go. Fallback do allowedTerrain.
    * @returns {boolean} true jeśli udało się postawić
    */
-  autoPlaceBuilding(buildingId) {
+  autoPlaceBuilding(buildingId, opts = {}) {
     const building = BUILDINGS[buildingId];
     if (!building) return false;
 
     const grid = this._grid;
     if (!grid || typeof grid.forEach !== 'function') return false;
 
-    // Znajdź pierwszy wolny hex pasujący do budynku
+    const preferred = Array.isArray(opts.preferredTerrain) && opts.preferredTerrain.length > 0
+      ? opts.preferredTerrain
+      : null;
+    const allowed = building.allowedTerrain;
+
+    // Wspólny predykat "wolny hex" — bez sprawdzania terenu
+    const isFreeHex = (tile) => {
+      if (tile.buildingId) return false;
+      if (tile.capitalBase) return false;
+      if (tile.underConstruction) return false;
+      return true;
+    };
+
+    // Faza 1 — szukaj hexa z preferredTerrain (jeśli podane)
     let placedKey = null;
     let placedTile = null;
-    grid.forEach(tile => {
-      if (placedKey) return;                 // już znaleziono
-      if (tile.buildingId) return;           // zajęty
-      if (tile.capitalBase) return;          // stolica
-      if (tile.underConstruction) return;    // w budowie
+    if (preferred) {
+      grid.forEach(tile => {
+        if (placedKey) return;
+        if (!isFreeHex(tile)) return;
+        if (allowed && !allowed.includes(tile.terrain)) return;
+        if (!preferred.includes(tile.terrain)) return;
+        placedKey  = tile.key ?? `${tile.q},${tile.r}`;
+        placedTile = tile;
+      });
+    }
 
-      // Sprawdź czy teren pasuje
-      const allowed = building.allowedTerrain;
-      if (allowed && !allowed.includes(tile.terrain)) return;
-
-      placedKey = tile.key ?? `${tile.q},${tile.r}`;
-      placedTile = tile;
-    });
+    // Faza 2 — fallback: pierwszy wolny hex z allowedTerrain (zachowanie pre-Slice 1)
+    if (!placedTile) {
+      grid.forEach(tile => {
+        if (placedKey) return;
+        if (!isFreeHex(tile)) return;
+        if (allowed && !allowed.includes(tile.terrain)) return;
+        placedKey  = tile.key ?? `${tile.q},${tile.r}`;
+        placedTile = tile;
+      });
+    }
 
     if (!placedTile) return false;
 

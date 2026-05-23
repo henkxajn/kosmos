@@ -76,9 +76,20 @@ export class CivilianTradeSystem {
     if (!colonies || colonies.length < 2) return;
 
     // Filtruj kolonie zdolne do handlu (nie izolowane, mają port kosmiczny)
+    // Slice 1 patch v3 Fix 2: kolonie obcych imperiów (ownerEmpireId !== null)
+    // pomijamy dopóki ich system nie został zwiedzony przez gracza. To otwiera
+    // mechanizm "Slice 3 handlu z AI" — wystarczy że recon ustawi explored=true.
+    const galaxySystems = window.KOSMOS?.galaxyData?.systems;
     const tradingColonies = colonies.filter(c => {
       if (c.tradeOverrides?.isolation) return false;
-      return this._hasSpaceport(c);
+      if (!this._hasSpaceport(c)) return false;
+
+      // Kolonia obcego imperium — wymaga odkrytego systemu (fog of war)
+      if (c.ownerEmpireId && galaxySystems) {
+        const system = galaxySystems.find(s => s.id === c.systemId);
+        if (!system?.explored) return false;
+      }
+      return true;
     });
     if (tradingColonies.length < 2) return;
 

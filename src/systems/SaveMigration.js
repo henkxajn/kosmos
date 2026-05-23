@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 75;
+export const CURRENT_VERSION     = 76;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -93,6 +93,7 @@ const MIGRATIONS = {
   72: _migrateV72toV73,
   73: _migrateV73toV74,
   74: _migrateV74toV75,
+  75: _migrateV75toV76,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -152,7 +153,17 @@ export function migrate(data) {
       };
     }
     console.log(`[SaveMigration] Migracja v${v} → v${v + 1}...`);
-    migrated = fn(migrated);
+    // Slice 1: _migrateV75toV76 throw'uje clean break (incompatible save).
+    // Owijamy try/catch żeby przekuć throw → error object kompatybilny z TitleScene/BootScene.
+    try {
+      migrated = fn(migrated);
+    } catch (err) {
+      console.error(`[SaveMigration] Migracja v${v}→v${v + 1} rzuciła błąd:`, err);
+      return {
+        error:   'incompatible_save',
+        message: err?.message ?? `Migracja v${v}→v${v + 1} nie powiodła się.`,
+      };
+    }
     migrated.version = v + 1;
   }
 
@@ -1865,6 +1876,21 @@ function _migrateV74toV75(data) {
     }
   }
   return data;
+}
+
+// v75 → v76: Slice 1 — Empire AI ECS Economy. CLEAN BREAK.
+// Refaktor EmpireRegistry usunął scalary military.power/resources.production/tech.level,
+// zmienił colonies na [colonyId, ...] (string array), dodał currentStrategy,
+// kolonie dostały pole ownerEmpireId. Imperium AI startuje z REALNĄ kolonią
+// typu Colony (EmpireColonyBootstrap) zamiast abstrakcyjnych scalarów.
+//
+// Stary save v75 jest niekompatybilny ze nową strukturą empire/colony — nie
+// migrujemy, tylko sygnalizujemy gracza żeby zaczął nową grę.
+function _migrateV75toV76(_data) {
+  throw new Error(
+    'Save v75 niekompatybilny ze Slice 1. Imperium AI zostało przepisane. ' +
+    'Rozpocznij nową grę. (Save v75 incompatible with Slice 1. Empire AI rewritten. Please start new game.)'
+  );
 }
 
 // v73 → v74: Player Fleet Groups P3 (Doctrine effects).

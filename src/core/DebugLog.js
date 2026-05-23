@@ -18,6 +18,7 @@ const TRACKED_EVENTS = [
   'empire:colonyAdded',
   'empire:hostilityChanged',
   'empire:techAdvanced',
+  'ai:empireBootstrap',
   'intel:levelChanged',
   'intel:contactEstablished',
   'intel:reportGenerated',
