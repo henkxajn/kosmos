@@ -114,8 +114,12 @@ export class CivilizationSystem {
     // Epoka (indeks do CIV_EPOCHS)
     this.epochIndex = 0;
 
-    // Snapshot surowców (z resource:changed)
-    this._resourceSnap = {};
+    // Snapshot surowców — lazy cache (Patch v5 Slice 1).
+    // Wcześniej pole bezpośrednio aktualizowane przez handler `resource:changed`,
+    // ale guard `isActive` na emit w ResourceSystem blokował event dla kolonii AI →
+    // _resourceSnap = {} → _resourceRatio('food')=0 → spirala śmierci AI.
+    // Teraz getter `_resourceSnap` odczytuje on-demand z this.resourceSystem.snapshot().
+    this._snapCache = null;
 
     // ── System POP ──────────────────────────────────────────────────────
     this._growthProgress  = 0;     // akumulator wzrostu 0.0–1.0
@@ -144,10 +148,14 @@ export class CivilizationSystem {
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — wzrost POP, kryzysy biegną szybciej
     EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
 
-    // Zasoby — tylko aktywna kolonia nasłuchuje
-    EventBus.on('resource:changed', ({ resources }) => {
+    // Zasoby — invalidacja lazy cache (Patch v5). Handler odpalany tylko dla
+    // aktywnej kolonii gracza (emit `resource:changed` guarded w ResourceSystem),
+    // ale to wystarcza — getter i tak będzie czytał świeży snapshot przy najbliższym
+    // dostępie. AI kolonie nie odbierają eventu, lecz `_snapCache=null` przed każdym
+    // yearly iteration w `_update` zapewnia świeżość po stronie AI.
+    EventBus.on('resource:changed', () => {
       if (window.KOSMOS?.civSystem !== this) return;
-      this._resourceSnap = resources;
+      this._snapCache = null;
     });
 
     // Startowa konsumpcja w ResourceSystem
@@ -189,6 +197,23 @@ export class CivilizationSystem {
       if (window.KOSMOS?.civSystem !== this) return;
       this.resolveMovement(movementType, resolutionId);
     });
+  }
+
+  // Lazy snapshot surowców (Patch v5 Slice 1). Cache invalidowany w `_update`
+  // przed każdą yearly iteracją + przez handler `resource:changed` dla aktywnej
+  // kolonii gracza. Alias `food = organics`: ResourceSystem.snapshot() zawsze
+  // zwraca `organics` (legacy proxy z _syncLegacyProxy), nie `food`. Kod używa
+  // fallback `_resourceRatio('food') || _resourceRatio('organics')`, więc
+  // dorzucamy `food` żeby `_resourceSnap.food !== undefined` (wymóg testu).
+  get _resourceSnap() {
+    if (!this._snapCache) {
+      const snap = this.resourceSystem?.snapshot?.() ?? {};
+      if (snap.organics && !snap.food) {
+        snap.food = snap.organics;
+      }
+      this._snapCache = snap;
+    }
+    return this._snapCache;
   }
 
   // ── Publiczne metody modyfikacji stanu (bezpośrednie wywołania, bez EventBus) ──
@@ -716,7 +741,10 @@ export class CivilizationSystem {
     if (this._accumYears < 1) return;
     const years = Math.floor(this._accumYears);
     this._accumYears -= years;
-    for (let y = 0; y < years; y++) this._yearlyUpdate();
+    for (let y = 0; y < years; y++) {
+      this._snapCache = null;  // Patch v5: świeży snapshot per yearly iteration
+      this._yearlyUpdate();
+    }
     this._syncConsumption();
   }
 
