@@ -1157,6 +1157,15 @@ export class BuildingSystem {
     const building = BUILDINGS[buildingId];
     if (!building) return false;
 
+    // Idempotencja stolicy: nie stawiaj drugiej, jeśli już istnieje. Stolica może
+    // być postawiona dwiema ścieżkami (autoPlaceBuilding w _onColonyFounded ORAZ
+    // fallback w ColonyOverlay._getGrid) — bez tego guardu powstałyby dwie.
+    if (building.isCapital) {
+      for (const key of this._active.keys()) {
+        if (key.startsWith('capital_')) return false;
+      }
+    }
+
     const grid = this._grid;
     if (!grid || typeof grid.forEach !== 'function') return false;
 

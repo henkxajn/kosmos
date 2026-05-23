@@ -28,7 +28,11 @@ export const BUILDINGS = {
     description: 'Stolica cywilizacji — nie blokuje budowy na hexie',
     isCapital:   true,
     cost:        {},
-    commodityCost: { structural_alloys: 2, electronic_systems: 1 },
+    // Stolica jest stawiana automatycznie (autoPlaceBuilding / fallback w
+    // ColonyOverlay), nigdy ręcznie przez gracza. Koszt commodity blokował to
+    // dla nowych kolonii (brak structural_alloys/electronic_systems → _build
+    // wrzucał ją do kolejki pending i nigdy nie powstawała). Stolica = bezkosztowa.
+    commodityCost: {},
     energyCost:  2,
     buildTime:   0,           // natychmiastowa
     rates:       { food: 3, research: 2 },  // bazowa produkcja: 1 POP wyżywiony + powolne badania
