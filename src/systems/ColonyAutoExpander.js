@@ -57,6 +57,15 @@ const TERRAIN_RULE = {
   well: 'plains',
 };
 
+// Miękka preferencja terenu dla AI (nie twardy wymóg — fallback na dowolny wolny
+// buildowalny hex jeśli żaden preferowany nie jest wolny). Cel: fabryki/huty AI
+// Industrialist nie lądują na wasteland (kosmetyka — w logach raziło
+// "factory @ wasteland"). Lista = wszystkie sensowne tereny POZA wasteland.
+const AI_TERRAIN_PREFERENCE = {
+  factory: ['plains', 'tundra', 'desert', 'crater', 'forest'],
+  smelter: ['plains', 'tundra', 'desert', 'crater', 'forest'],
+};
+
 // Unreachable targets — gdy _build/_upgrade silent-failuje (np. brak technologii),
 // nie próbuj tego budynku w kółko. Po REGISTER czekaj RETRY civYears i spróbuj raz
 // (a nuż techy się odkryły); znów fail → ponowny backoff.
@@ -360,10 +369,13 @@ export class ColonyAutoExpander {
   }
 
   // Znajdź wolny, budowalny hex respektujący twardą regułę terenu; unikaj biegunów.
+  // Miękka preferencja (AI_TERRAIN_PREFERENCE) podbija scoring, ale NIE wyklucza —
+  // gdy żaden preferowany hex nie jest wolny, fallback na dowolny budowalny.
   _findFreeTile(colony, buildingId) {
     const grid = colony.buildingSystem?._grid;
     if (!grid || typeof grid.forEach !== 'function') return null;
     const requiredTerrain = TERRAIN_RULE[buildingId] ?? null;
+    const preferred = AI_TERRAIN_PREFERENCE[buildingId] ?? null;
     const rows = grid.height ?? 10;
 
     let best = null, bestScore = -Infinity;
@@ -373,8 +385,9 @@ export class ColonyAutoExpander {
       if (!terrain?.buildable) return;
       if (requiredTerrain && tile.type !== requiredTerrain) return; // twarda reguła AI
 
-      // Lekki scoring: unikaj biegunów (kara latitude), preferuj środek mapy.
+      // Lekki scoring: preferowany teren (soft) > unikanie biegunów.
       let score = 0;
+      if (preferred && preferred.includes(tile.type)) score += 10; // miękka preferencja
       if (tile.r === 0 || tile.r === rows - 1) score -= 5;
       else if (tile.r === 1 || tile.r === rows - 2) score -= 2;
       if (score > bestScore) { bestScore = score; best = tile; }
