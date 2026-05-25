@@ -83,12 +83,24 @@ export class ColonyAutoExpander {
     this._survivalAcc = 0;
     this._targetAcc   = 0;
 
+    // Devtool: logi akcji w konsoli. Włącz: KOSMOS.colonyAutoExpander._verbose = true.
+    this._verbose = false;
+
     this._onTick = ({ civDeltaYears }) => this._tick(civDeltaYears ?? 0);
     EventBus.on('time:tick', this._onTick);
   }
 
   stop() {
     EventBus.off('time:tick', this._onTick);
+  }
+
+  // Log akcji (gated _verbose):
+  //   [ColonyAutoExpander] [<colonyName>] <module>: <akcja> (cy=<civYear>) — <kontekst>
+  _log(colony, module, action, context, civYear) {
+    if (!this._verbose) return;
+    const name = colony?.name ?? colony?.planetId ?? '?';
+    const ctx  = context ? ` — ${context}` : '';
+    console.log(`[ColonyAutoExpander] [${name}] ${module}: ${action} (cy=${civYear})${ctx}`);
   }
 
   // ── Pętla czasu ─────────────────────────────────────────────────────────
@@ -147,9 +159,10 @@ export class ColonyAutoExpander {
       const pop = civ.population ?? 0;
 
       // 1) Energia — bilans poniżej progu → solar_farm (najwyższy priorytet, brownout psuje wszystko)
-      if ((res.energy?.balance ?? 0) < (TH.energy_balance_min ?? 0)) {
+      const bal = res.energy?.balance ?? 0;
+      if (bal < (TH.energy_balance_min ?? 0)) {
         if (this._doSurvival(colony, 'energy', civYear)) {
-          this._tryBuild(colony, 'solar_farm');
+          this._tryBuild(colony, 'solar_farm', { module: 'survival', civYear, why: `energy balance ${bal.toFixed(1)}` });
           continue;
         }
       }
@@ -157,9 +170,10 @@ export class ColonyAutoExpander {
       // 2) Żywność — ujemny bilans organics (deficyt) → farm na równinie.
       //    food_min_per_pop jest już wliczone w net rate (produkcja − konsumpcja),
       //    więc sygnałem survival jest net < 0 (kolonia traci żywność).
-      if ((res.getPerYear?.('organics') ?? 0) < 0) {
+      const orgRate = res.getPerYear?.('organics') ?? 0;
+      if (orgRate < 0) {
         if (this._doSurvival(colony, 'food', civYear)) {
-          this._tryBuild(colony, 'farm');
+          this._tryBuild(colony, 'farm', { module: 'survival', civYear, why: `organics rate ${orgRate.toFixed(1)}` });
           continue;
         }
       }
@@ -170,7 +184,7 @@ export class ColonyAutoExpander {
         const ratio = TH.housing_min_ratio_no_atmosphere ?? 0.5;
         if ((civ.housing ?? 0) < pop * ratio) {
           if (this._doSurvival(colony, 'housing', civYear)) {
-            this._tryBuild(colony, 'habitat');
+            this._tryBuild(colony, 'habitat', { module: 'survival', civYear, why: `housing ${civ.housing ?? 0}/${(pop * ratio).toFixed(1)} (atmo=${atmo})` });
             continue;
           }
         }
@@ -178,12 +192,14 @@ export class ColonyAutoExpander {
 
       // 4) Prosperity — poniżej alarmu → zwiększ pokrycie consumer goods:
       //    upewnij się że jest fabryka w trybie reactive (produkuje dobra on-demand).
-      if ((colony.prosperitySystem?.prosperity ?? 100) < (TH.prosperity_alarm ?? 0)) {
+      const prosp = colony.prosperitySystem?.prosperity ?? 100;
+      if (prosp < (TH.prosperity_alarm ?? 0)) {
         if (this._doSurvival(colony, 'consumer_goods', civYear)) {
           if (this._countBuilding(colony, 'factory') === 0) {
-            this._tryBuild(colony, 'factory');
+            this._tryBuild(colony, 'factory', { module: 'survival', civYear, why: `prosperity ${Math.round(prosp)} (brak fabryki)` });
           } else if (colony.factorySystem && colony.factorySystem.mode !== 'reactive') {
             colony.factorySystem.setMode('reactive');
+            this._log(colony, 'survival', 'setMode reactive', `prosperity ${Math.round(prosp)}`, civYear);
           }
           continue;
         }
@@ -220,7 +236,7 @@ export class ColonyAutoExpander {
 
       // safetyStocks — interpolacja liniowa, aplikowana jako demandBonus (tani setting,
       //   nie liczone jako "action" z cooldownem).
-      this._applySafetyStocks(colony, data.targets, gy);
+      this._applySafetyStocks(colony, data.targets, gy, civYear);
 
       // colonies_count — IGNOROWANE. To domena EconAI / Warstwy C (kolonizacja
       //   abstrakcyjna na poziomie galaktyki), nie auto-rozbudowy pojedynczej kolonii.
@@ -229,10 +245,14 @@ export class ColonyAutoExpander {
       for (const buildingId of BUILD_PRIORITY) {
         const want = cp.buildings[buildingId]?.count ?? 0;
         if (want <= 0) continue;
-        if (this._countBuilding(colony, buildingId) < want) {
-          if (this._tryBuild(colony, buildingId)) {
+        const cur = this._countBuilding(colony, buildingId);
+        if (cur < want) {
+          if (this._tryBuild(colony, buildingId, { module: 'target', civYear, why: `count ${cur}/${want} @gy${gy}` })) {
             // Nowa fabryka → tryb reactive (conduct: nowe fabryki reactive).
-            if (buildingId === 'factory') colony.factorySystem?.setMode('reactive');
+            if (buildingId === 'factory') {
+              colony.factorySystem?.setMode('reactive');
+              this._log(colony, 'target', 'setMode reactive', 'nowa fabryka', civYear);
+            }
             colony._caeLastTargetAction = { type: `build:${buildingId}`, civYear };
           }
           break; // jedna akcja na tick
@@ -244,7 +264,7 @@ export class ColonyAutoExpander {
       for (const buildingId of BUILD_PRIORITY) {
         const targetLevel = this._interpLevel(data.targets, buildingId, gy);
         if (targetLevel == null) continue;
-        if (this._tryUpgrade(colony, buildingId, targetLevel)) {
+        if (this._tryUpgrade(colony, buildingId, targetLevel, { module: 'target', civYear, why: `lerp →L${targetLevel} @gy${gy}` })) {
           colony._caeLastTargetAction = { type: `upgrade:${buildingId}`, civYear };
           break; // jedna akcja na tick
         }
@@ -278,7 +298,7 @@ export class ColonyAutoExpander {
   }
 
   // safetyStocks — interpolacja liniowa per commodity, aplikacja przez setDemandBonus.
-  _applySafetyStocks(colony, targets, gy) {
+  _applySafetyStocks(colony, targets, gy, civYear) {
     if (!colony.factorySystem?.setDemandBonus) return;
     let low = CHECKPOINTS[0], high = CHECKPOINTS[CHECKPOINTS.length - 1];
     for (let i = 0; i < CHECKPOINTS.length; i++) {
@@ -287,11 +307,16 @@ export class ColonyAutoExpander {
     const loStocks = targets[low.key]?.safetyStocks ?? {};
     const hiStocks = targets[high.key]?.safetyStocks ?? {};
     const frac = (low.key === high.key) ? 0 : Math.max(0, Math.min(1, (gy - low.gy) / (high.gy - low.gy)));
+    const cache = colony._caeStockCache ?? (colony._caeStockCache = {});
     const commodities = new Set([...Object.keys(loStocks), ...Object.keys(hiStocks)]);
     for (const c of commodities) {
-      const lo = loStocks[c] ?? 0;
-      const hi = hiStocks[c] ?? lo;
-      colony.factorySystem.setDemandBonus(c, Math.round(lo + (hi - lo) * frac));
+      const lo  = loStocks[c] ?? 0;
+      const hi  = hiStocks[c] ?? lo;
+      const val = Math.round(lo + (hi - lo) * frac);
+      if (cache[c] === val) continue;            // loguj tylko zmiany (mniej szumu)
+      colony.factorySystem.setDemandBonus(c, val);
+      this._log(colony, 'target', `setDemandBonus ${c}=${val}`, `${low.key}→${high.key} t=${frac.toFixed(2)}`, civYear);
+      cache[c] = val;
     }
   }
 
@@ -332,18 +357,25 @@ export class ColonyAutoExpander {
 
   // Próba budowy: znajdź hex, wywołaj kosztowy _build (sam sprawdzi surowce/tech/POP;
   // gdy brak — _build queue'uje, co też jest „akcją"). Zwraca true gdy podjęto próbę.
-  _tryBuild(colony, buildingId) {
+  _tryBuild(colony, buildingId, meta = {}) {
     if (!BUILDINGS[buildingId]) return false;
     const bSys = colony.buildingSystem;
     if (typeof bSys?._build !== 'function') return false;
     const tile = this._findFreeTile(colony, buildingId);
     if (!tile) return false;
     bSys._build(tile, buildingId);
+    // Wynik z flag tile (instant / w budowie / w kolejce na surowce-POP).
+    const outcome = tile.buildingId === buildingId ? 'built'
+                  : tile.underConstruction          ? 'construction'
+                  : tile.pendingBuild               ? 'queued' : '?';
+    this._log(colony, meta.module ?? 'target',
+      `build ${buildingId} @ ${tile.type} tile (${tile.q},${tile.r}) [${outcome}]`,
+      meta.why, meta.civYear);
     return true;
   }
 
   // Próba upgrade: znajdź budynek tego typu poniżej docelowego poziomu i ulepsz.
-  _tryUpgrade(colony, buildingId, targetLevel) {
+  _tryUpgrade(colony, buildingId, targetLevel, meta = {}) {
     const bSys = colony.buildingSystem;
     if (typeof bSys?._upgrade !== 'function') return false;
     const grid = bSys._grid;
@@ -358,7 +390,10 @@ export class ColonyAutoExpander {
       if (lvl < targetLevel) candidate = tile;
     });
     if (!candidate) return false;
+    const lvl = candidate.buildingLevel ?? 1;
     bSys._upgrade(candidate);
+    this._log(colony, meta.module ?? 'target',
+      `upgrade ${buildingId} L${lvl}→L${lvl + 1}`, meta.why, meta.civYear);
     return true;
   }
 }
