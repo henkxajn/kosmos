@@ -21,6 +21,7 @@ import EntityManager from '../core/EntityManager.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
+import { TechSystem } from './TechSystem.js';
 
 // Bazowy próg safety stock per tier (musi pasować do FactorySystem.getSafetyStockTarget).
 // Bonus = target - base, aplikowany przez setDemandBonus.
@@ -116,6 +117,21 @@ export class EmpireColonyBootstrap {
     // 6. Re-sync deposits (już ustawione w createColony, ale defensywne — homePlanet
     //    ma realne deposits z SystemGenerator._generateDepositsForAll).
     colony.buildingSystem.setDeposits(homePlanet.deposits ?? []);
+
+    // 6b. Osobny per-imperium TechSystem seedowany z archetype.startingTechs.
+    //     ColonyManager.createColony wpina GLOBALNY techSystem gracza (współdzielony),
+    //     przez co kosztowe buildy AutoExpandera sprawdzały drzewo tech GRACZA — AI
+    //     bez Metalurgii pętlił się na "build factory" (silent fail). Własny TechSystem
+    //     izoluje techy AI od gracza: AI ma swoje startowe techy, gracz swoje.
+    //     MUSI być PRZED stawianiem budynków (krok 7) — _activateBuilding liczy rates
+    //     z techSystem w tym momencie. Reassign tylko buildingSystem (rates/terrain/
+    //     production gating); civSystem/prosperitySystem zostają na globalnym (Slice 1).
+    if (Array.isArray(archetype.startingTechs) && archetype.startingTechs.length > 0) {
+      const aiTech = new TechSystem(colony.resourceSystem);
+      aiTech.grantTechs(archetype.startingTechs);
+      colony.techSystem            = aiTech;          // referencja (AutoExpander/debug)
+      colony.buildingSystem.techSystem = aiTech;
+    }
 
     // 7. Postaw startingBuildings (instant, free, no-tech).
     //    autoPlaceBuilding ignoruje cost / tech / POPy — to bootstrap path.

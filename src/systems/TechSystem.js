@@ -38,6 +38,21 @@ export class TechSystem {
   }
 
   /**
+   * Przyznaje techy bez kosztu, bez sprawdzania prerequisitów i bez globalnych
+   * eventów. Używane przez bootstrap imperium AI (osobny per-imperium TechSystem
+   * seedowany z archetype.startingTechs). NIE emituje 'tech:researched' — to
+   * świeża instancja bez producentów, a reapply rates liczy się przy stawianiu
+   * budynków przez bootstrap. Ignoruje nieznane id (defensywnie).
+   * @param {string[]} ids — lista id technologii z TechData
+   */
+  grantTechs(ids) {
+    if (!Array.isArray(ids)) return;
+    for (const id of ids) {
+      if (TECHS[id]) this._researched.add(id);
+    }
+  }
+
+  /**
    * Sprawdź prerequisites technologii z obsługą OR.
    * requires: ['A', ['B','C'], 'D'] → A AND (B OR C) AND D
    * @returns {boolean}

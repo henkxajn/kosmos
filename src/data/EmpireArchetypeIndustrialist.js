@@ -82,14 +82,39 @@ export const INDUSTRIALIST = {
     merchant:   1,
   },
 
+  // Startowe technologie — odblokowane "od razu", jakby imperium je już zbadało.
+  // Parytet z conductem gracza (reguła #8 scenariusza nagrań): gracz startuje z
+  //   Automatyzacją, Kartografią Orbitalną, Rakietnictwem, Eksploracją i
+  //   Obliczeniami Cyfrowymi, a pierwszą akcją (przed startem czasu) odkrywa
+  //   Metalurgię. AI nie może "kliknąć przed startem", więc bootstrap daje mu te
+  //   same techy + Metalurgię od razu.
+  // Identyfikatory z TechData.js (klucze EN), NIE namePL.
+  // Metalurgia odblokowuje fabryki (factory.requires === 'metallurgy') — bez niej
+  //   AutoExpander pętlił się w nieskończoność na "build factory" (silent fail).
+  // Bootstrap czyta to pole i seeduje osobny per-imperium TechSystem (izolacja od
+  //   drzewa tech gracza). Inne archetypy: dopisać własną listę.
+  startingTechs: [
+    'automation',        // Automatyzacja
+    'orbital_survey',    // Kartografia Orbitalna
+    'rocketry',          // Rakietnictwo
+    'exploration',       // Eksploracja
+    'basic_computing',   // Obliczenia Cyfrowe
+    'metallurgy',        // Metalurgia — odblokowuje fabryki
+  ],
+
   // Startowe surowce — deponowane do colony.resourceSystem.inventory.
   // Bufor food/water powiększony do 250 — daje ~8 civYears zapasu na 6 POP
   // (przed pierwszą produkcją + buffer na latitude variance budynków).
+  // Xe (Ksenon) 1000 — surowiec wejściowy dla układów półprzewodnikowych
+  //   (semiconductor_arrays, target od gameYear_20). Bez Xe na starcie AI siedzi
+  //   z pełnym inwentarzem (Fe/Si/Cu) i nie produkuje dóbr T2 — brak go w realnych
+  //   deposits planety home. Wartość heurystyczna (test); skala vs startowe Fe=200.
   startingResources: {
     C:       200,
     Fe:      200,
     Si:      100,
     Cu:      80,
+    Xe:      1000,
     food:    250,
     water:   250,
     credits: 1000,  // uwaga: credits to NIE resource — bootstrap przeniesie do colony.credits
