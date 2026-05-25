@@ -19,6 +19,7 @@
 import EventBus from '../core/EventBus.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
+import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
 import {
   INDUSTRIALIST_TARGETS,
   INDUSTRIALIST_SURVIVAL_THRESHOLDS,
@@ -48,23 +49,9 @@ const ARCHETYPE_DATA = {
   },
 };
 
-// Twarda reguła terenu dla AI Industrialist (ostrzejsza niż gra — gra dopuszcza
-// mine także na plains przez allowedCategories). Conduct gracza z nagrań:
-//   kopalnie tylko w górach, farmy/studnie tylko na równinach.
-const TERRAIN_RULE = {
-  mine: 'mountains',
-  farm: 'plains',
-  well: 'plains',
-};
-
-// Miękka preferencja terenu dla AI (nie twardy wymóg — fallback na dowolny wolny
-// buildowalny hex jeśli żaden preferowany nie jest wolny). Cel: fabryki/huty AI
-// Industrialist nie lądują na wasteland (kosmetyka — w logach raziło
-// "factory @ wasteland"). Lista = wszystkie sensowne tereny POZA wasteland.
-const AI_TERRAIN_PREFERENCE = {
-  factory: ['plains', 'tundra', 'desert', 'crater', 'forest'],
-  smelter: ['plains', 'tundra', 'desert', 'crater', 'forest'],
-};
+// Reguły terenu AI (hard/soft) — współdzielone z EmpireColonyBootstrap przez
+// src/data/ai/AiTerrainRules.js (mine/farm/well hard → odpowiednio mountains/
+// plains; factory/smelter/habitat soft). Patrz getTerrainRule().
 
 // Unreachable targets — gdy _build/_upgrade silent-failuje (np. brak technologii),
 // nie próbuj tego budynku w kółko. Po REGISTER czekaj RETRY civYears i spróbuj raz
@@ -369,31 +356,47 @@ export class ColonyAutoExpander {
     return n;
   }
 
-  // Znajdź wolny, budowalny hex respektujący twardą regułę terenu; unikaj biegunów.
-  // Miękka preferencja (AI_TERRAIN_PREFERENCE) podbija scoring, ale NIE wyklucza —
-  // gdy żaden preferowany hex nie jest wolny, fallback na dowolny budowalny.
+  // Znajdź wolny, budowalny hex respektujący regułę terenu AI; unikaj biegunów.
+  //   hard (mine/farm/well) → tylko terrains[]; fallback na dowolny buildowalny
+  //     DOPIERO gdy żaden hex z listy nie jest wolny (loguj warning).
+  //   soft (factory/smelter/habitat) → +score dla terrains[], inne akceptowalne.
   _findFreeTile(colony, buildingId) {
     const grid = colony.buildingSystem?._grid;
     if (!grid || typeof grid.forEach !== 'function') return null;
-    const requiredTerrain = TERRAIN_RULE[buildingId] ?? null;
-    const preferred = AI_TERRAIN_PREFERENCE[buildingId] ?? null;
+    const rule = getTerrainRule(buildingId);
+    const hardTerrains = rule?.mode === 'hard' ? rule.terrains : null;
+    const softTerrains = rule?.mode === 'soft' ? rule.terrains : null;
     const rows = grid.height ?? 10;
 
-    let best = null, bestScore = -Infinity;
-    grid.forEach(tile => {
-      if (tile.buildingId || tile.capitalBase || tile.underConstruction || tile.pendingBuild) return;
-      const terrain = TERRAIN_TYPES[tile.type];
-      if (!terrain?.buildable) return;
-      if (requiredTerrain && tile.type !== requiredTerrain) return; // twarda reguła AI
+    // enforceHard=true → filtruj do hardTerrains; false → bez filtra (fallback).
+    const pick = (enforceHard) => {
+      let best = null, bestScore = -Infinity;
+      grid.forEach(tile => {
+        if (tile.buildingId || tile.capitalBase || tile.underConstruction || tile.pendingBuild) return;
+        const terrain = TERRAIN_TYPES[tile.type];
+        if (!terrain?.buildable) return;
+        if (enforceHard && hardTerrains && !hardTerrains.includes(tile.type)) return;
 
-      // Lekki scoring: preferowany teren (soft) > unikanie biegunów.
-      let score = 0;
-      if (preferred && preferred.includes(tile.type)) score += 10; // miękka preferencja
-      if (tile.r === 0 || tile.r === rows - 1) score -= 5;
-      else if (tile.r === 1 || tile.r === rows - 2) score -= 2;
-      if (score > bestScore) { bestScore = score; best = tile; }
-    });
-    return best;
+        // Lekki scoring: preferowany teren (soft) > unikanie biegunów.
+        let score = 0;
+        if (softTerrains && softTerrains.includes(tile.type)) score += 10;
+        if (tile.r === 0 || tile.r === rows - 1) score -= 5;
+        else if (tile.r === 1 || tile.r === rows - 2) score -= 2;
+        if (score > bestScore) { bestScore = score; best = tile; }
+      });
+      return best;
+    };
+
+    if (hardTerrains) {
+      const strict = pick(true);
+      if (strict) return strict;
+      // Brak wolnego hexa z hard-listy → fallback na dowolny (nie blokuj rozbudowy).
+      const fb = pick(false);
+      if (fb) this._log(colony, 'terrain',
+        `${buildingId} fallback poza ${hardTerrains.join('/')}`, `→ ${fb.type} (${fb.q},${fb.r})`, this._civYear());
+      return fb;
+    }
+    return pick(false);
   }
 
   // Próba budowy: znajdź hex, wywołaj kosztowy _build (sam sprawdzi surowce/tech/POP;

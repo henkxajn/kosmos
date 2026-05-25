@@ -22,6 +22,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { TechSystem } from './TechSystem.js';
+import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
 
 // Bazowy próg safety stock per tier (musi pasować do FactorySystem.getSafetyStockTarget).
 // Bonus = target - base, aplikowany przez setDemandBonus.
@@ -317,52 +318,72 @@ export class EmpireColonyBootstrap {
     const totalRows = grid.height ?? this._inferRows(grid);
     const category = building.category;
 
-    // Scoring każdego dostępnego hexa
-    let bestTile = null;
-    let bestKey  = null;
-    let bestScore = -Infinity;
+    // Reguła terenu AI (współdzielona z AutoExpander). HARD (mine/farm/well) =
+    //   twardy filtr; bez niego well/farm lądowały na mountains przez scoring
+    //   (bug X2 — well @ mountains → deficyt wody). SOFT = bonus +score.
+    const aiRule = getTerrainRule(buildingId);
+    const aiHard = aiRule?.mode === 'hard' ? aiRule.terrains : null;
+    const aiSoft = aiRule?.mode === 'soft' ? aiRule.terrains : null;
 
-    grid.forEach(tile => {
-      // Hard constraints — skip niedostępne / niezgodne
-      if (tile.buildingId) return;
-      if (tile.capitalBase) return;
-      if (tile.underConstruction) return;
-      if (tile.pendingBuild) return;
-      if (allowed && !allowed.includes(tile.type)) return;
-      if (tile.buildable === false) return;
+    // Scan hexów; enforceAiHard=true → wymuś aiHard; false → fallback (bez filtra).
+    const scan = (enforceAiHard) => {
+      let best = null, bestK = null, bestS = -Infinity;
+      grid.forEach(tile => {
+        // Hard constraints — skip niedostępne / niezgodne
+        if (tile.buildingId) return;
+        if (tile.capitalBase) return;
+        if (tile.underConstruction) return;
+        if (tile.pendingBuild) return;
+        if (allowed && !allowed.includes(tile.type)) return;
+        if (tile.buildable === false) return;
+        if (enforceAiHard && aiHard && !aiHard.includes(tile.type)) return; // twarda reguła AI
 
-      let score = 0;
+        let score = 0;
 
-      // preferredTerrain bonus (soft)
-      if (preferred.length > 0 && preferred.includes(tile.type)) {
-        score += 10;
+        // preferredTerrain bonus (soft) + soft-rule AI bonus
+        if (preferred.length > 0 && preferred.includes(tile.type)) score += 10;
+        if (aiSoft && aiSoft.includes(tile.type)) score += 10;
+
+        // Polar penalty (latMod ×0.5 dla rzędu 0/last, ×0.7 dla 1/last-1)
+        if (tile.r === 0 || tile.r === totalRows - 1) score -= 5;
+        else if (tile.r === 1 || tile.r === totalRows - 2) score -= 2;
+
+        // Adjacency bonus z budynkami tej samej kategorii (HexGrid.getNeighbors(q, r))
+        if (category && typeof grid.getNeighbors === 'function') {
+          const neighbors = grid.getNeighbors(tile.q, tile.r);
+          const sameCount = neighbors.reduce((acc, n) => {
+            if (!n?.buildingId) return acc;
+            const nBuilding = BUILDINGS[n.buildingId];
+            return nBuilding?.category === category ? acc + 1 : acc;
+          }, 0);
+          score += sameCount * 2;
+        }
+
+        // Negatywna anomalia (yieldMult < 1.0)
+        const yieldMult = tile.anomalyEffect?.yieldMult;
+        if (yieldMult != null && yieldMult < 1.0) score -= 3;
+
+        if (score > bestS) {
+          bestS = score;
+          best  = tile;
+          bestK = tile.key ?? `${tile.q},${tile.r}`;
+        }
+      });
+      return { best, bestK };
+    };
+
+    // HARD: najpierw wymuś teren; fallback na dowolny DOPIERO gdy żaden hex z
+    //   listy nie jest wolny (nie blokuj bootstrapu — loguj warning).
+    let { best: bestTile, bestK: bestKey } = scan(!!aiHard);
+    if (!bestTile && aiHard) {
+      ({ best: bestTile, bestK: bestKey } = scan(false));
+      if (bestTile) {
+        console.warn(
+          `[EmpireColonyBootstrap] ${buildingId}: brak wolnego hexa ${aiHard.join('/')} ` +
+          `→ fallback na ${bestTile.type} (${bestTile.q},${bestTile.r})`
+        );
       }
-
-      // Polar penalty (latMod ×0.5 dla rzędu 0/last, ×0.7 dla 1/last-1)
-      if (tile.r === 0 || tile.r === totalRows - 1) score -= 5;
-      else if (tile.r === 1 || tile.r === totalRows - 2) score -= 2;
-
-      // Adjacency bonus z budynkami tej samej kategorii (HexGrid.getNeighbors(q, r))
-      if (category && typeof grid.getNeighbors === 'function') {
-        const neighbors = grid.getNeighbors(tile.q, tile.r);
-        const sameCount = neighbors.reduce((acc, n) => {
-          if (!n?.buildingId) return acc;
-          const nBuilding = BUILDINGS[n.buildingId];
-          return nBuilding?.category === category ? acc + 1 : acc;
-        }, 0);
-        score += sameCount * 2;
-      }
-
-      // Negatywna anomalia (yieldMult < 1.0)
-      const yieldMult = tile.anomalyEffect?.yieldMult;
-      if (yieldMult != null && yieldMult < 1.0) score -= 3;
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestTile  = tile;
-        bestKey   = tile.key ?? `${tile.q},${tile.r}`;
-      }
-    });
+    }
 
     if (!bestTile) return false;
 

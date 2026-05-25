@@ -25,6 +25,7 @@ import { FactorySystem }      from '../../systems/FactorySystem.js';
 import { TechSystem }         from '../../systems/TechSystem.js';
 import { HexGrid }            from '../../map/HexGrid.js';
 import { ColonyAutoExpander } from '../../systems/ColonyAutoExpander.js';
+import { EmpireColonyBootstrap } from '../../systems/EmpireColonyBootstrap.js';
 import { INDUSTRIALIST_TARGETS } from '../../data/targets/industrialist.js';
 import { INDUSTRIALIST }      from '../../data/EmpireArchetypeIndustrialist.js';
 
@@ -321,6 +322,50 @@ console.log(`    gy=${Math.floor(gt7)}, budynki=${totalBuildings(colony7)} (pró
 ok('budynki rosną monotonicznie', grewMonotonic && totalBuildings(colony7) > 6);
 ok('≥1 budynek osiągnął _active level ≥ 2 (upgrade zadziałał)', maxActiveLvl >= 2);
 ok('brak fałszywych unreachable (farm/solar_farm/mine/well)', falseUnreach.length === 0);
+
+// ── T9: bootstrap twarda reguła terenu (bug X2) ─────────────────
+// EmpireColonyBootstrap._placeBuildingSmart MUSI stawiać well/farm na plains i
+// mine na mountains nawet gdy inne tereny mają lepszy scoring (bug X2: well @
+// mountains → deficyt wody). Plains+mountains dostępne → twarda reguła wygrywa.
+console.log('--- T9: Bootstrap hard terrain (well/farm→plains, mine→mountains) ---');
+const grid9 = new HexGrid(8, 10);
+// Mieszanka: większość plains, pas mountains w środku (rząd 5), trochę desert.
+let mm = 0;
+grid9.forEach(t => {
+  if (t.r === 5) { t.type = 'mountains'; mm++; }
+  else if (t.r === 4) t.type = 'desert';
+  else t.type = 'plains';
+});
+const techReal9 = new TechSystem(); techReal9.grantTechs(INDUSTRIALIST.startingTechs);
+const res9 = new ResourceSystem(startResources);
+const civ9 = new CivilizationSystem({}, techReal9, planet); civ9.resourceSystem = res9;
+const bSys9 = new BuildingSystem(res9, civ9, techReal9); civ9.buildingSystem = bSys9;
+bSys9._grid = grid9; bSys9._gridHeight = grid9.height; bSys9.setDeposits?.([]);
+const fact9 = new FactorySystem(res9); bSys9.setFactorySystem(fact9);
+civ9.population = 20;
+const colony9 = { planetId:'p9', ownerEmpireId:'e9', isOutpost:false, planet,
+  resourceSystem:res9, civSystem:civ9, buildingSystem:bSys9, factorySystem:fact9 };
+
+// Stawiamy jak bootstrap: well×2 (archetypowy preferredTerrain water/ice — celowo
+// "zły", twarda reguła AI ma go pokonać), farm×2, mine×1.
+EmpireColonyBootstrap._placeBuildingSmart(colony9, 'well', { preferredTerrain: ['water', 'ice'] });
+EmpireColonyBootstrap._placeBuildingSmart(colony9, 'well', { preferredTerrain: ['water', 'ice'] });
+EmpireColonyBootstrap._placeBuildingSmart(colony9, 'farm', { preferredTerrain: ['plains', 'forest'] });
+EmpireColonyBootstrap._placeBuildingSmart(colony9, 'farm', { preferredTerrain: ['plains', 'forest'] });
+EmpireColonyBootstrap._placeBuildingSmart(colony9, 'mine', { preferredTerrain: ['mountains', 'crater'] });
+
+const terrainOf = (bid) => {
+  const types = [];
+  grid9.forEach(t => { if (t.buildingId === bid) types.push(t.type); });
+  return types;
+};
+const wellTypes = terrainOf('well');
+const farmTypes = terrainOf('farm');
+const mineTypes = terrainOf('mine');
+console.log(`    well @ [${wellTypes.join(',')}], farm @ [${farmTypes.join(',')}], mine @ [${mineTypes.join(',')}]`);
+ok('wszystkie well na plains (NIE mountains)', wellTypes.length === 2 && wellTypes.every(t => t === 'plains'));
+ok('wszystkie farm na plains', farmTypes.length === 2 && farmTypes.every(t => t === 'plains'));
+ok('wszystkie mine na mountains', mineTypes.length === 1 && mineTypes.every(t => t === 'mountains'));
 
 console.log(`\n=== ${pass} PASS, ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);
