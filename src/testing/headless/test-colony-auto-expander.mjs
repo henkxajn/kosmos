@@ -28,6 +28,7 @@ import { ColonyAutoExpander, MAX_PENDING_BUILDS_PER_COLONY } from '../../systems
 import { EmpireColonyBootstrap } from '../../systems/EmpireColonyBootstrap.js';
 import { INDUSTRIALIST_TARGETS } from '../../data/targets/industrialist.js';
 import { INDUSTRIALIST }      from '../../data/EmpireArchetypeIndustrialist.js';
+import { BUILDINGS }          from '../../data/BuildingsData.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond) => {
@@ -482,6 +483,70 @@ ok('_findFreeTile pomija blacklisted tile (≠ poprzedni)', tileDuring != null &
 window.KOSMOS.timeSystem.gameTime = 5;                // civYear 60 (>= retryAt 60)
 const tileAfter = expander._findFreeTile(colony12, 'factory');
 ok('po 60 cy blacklist wygasa — tile znów dostępny', tileAfter != null && tileAfter.key === tileBefore.key);
+
+// ── T13: deadlock POP w housing cap — habitat.popCost=0 rozbija pętlę ────────
+// Bug (investigation 2026-05-25): kolonia w housing cap (pop===housing) z
+// freePops=0 (wszystkie POP zatrudnione) nie mogła zbudować habitatu, bo
+// _tickPendingQueue gate'uje fulfillment na freePops >= popCost. Habitat
+// popCost=0.25 → nigdy nie fulfilled → housing nie rośnie → pop nie rośnie →
+// freePops zostaje 0. Fix: habitat.popCost 0.25 → 0 (mieszkanie nie zatrudnia).
+// Planeta NIE-oddychalna (atmo='thin') → housing realnie gate'uje wzrost
+// (na 'breathable' wzrost nie jest housing-gated, _updateStrataGrowth linia ~1069).
+console.log('--- T13: Deadlock POP housing cap (habitat.popCost=0) ---');
+const planetThin = { id: 'p13', name: 'Thuban b', atmosphere: 'thin' };
+const techReal13 = new TechSystem(); techReal13.grantTechs(INDUSTRIALIST.startingTechs);
+const grid13 = new HexGrid(8, 10); grid13.forEach(t => { t.type = 'plains'; });
+const res13 = new ResourceSystem(startResources);
+const civ13 = new CivilizationSystem({}, techReal13, planetThin); civ13.resourceSystem = res13;
+const bSys13 = new BuildingSystem(res13, civ13, techReal13); civ13.buildingSystem = bSys13;
+bSys13._grid = grid13; bSys13._gridHeight = grid13.height; bSys13.setDeposits?.([]);
+const fact13 = new FactorySystem(res13); bSys13.setFactorySystem(fact13);
+civ13.population    = 8;
+civ13.housing       = 8;   // cap: pop === housing
+civ13._employedPops = 8;   // wszystkie POP zatrudnione → freePops = 0 (deadlock przed fixem)
+const colony13 = { planetId:'p13', ownerEmpireId:'e13', isOutpost:false, planet:planetThin,
+  resourceSystem:res13, civSystem:civ13, buildingSystem:bSys13, factorySystem:fact13 };
+colonyRef.c = colony13;   // expander zarządza tą kolonią
+window.KOSMOS.civMode = true;  // CivilizationSystem._update early-returnuje gdy !civMode (linia ~739)
+
+ok('warunek startowy: freePops === 0', civ13.freePops === 0);
+ok('warunek startowy: effectiveHousing === 8', civ13.effectiveHousing === 8);
+
+// Spójność rebalansu: wszystkie czyste budynki mieszkalne (kategoria 'population')
+// mają popCost=0 — nie zatrudniają POP, więc nie blokują się w housing cap.
+ok('habitat.popCost === 0', BUILDINGS.habitat.popCost === 0);
+ok('arcology_building.popCost === 0', BUILDINGS.arcology_building.popCost === 0);
+ok('orbital_habitat.popCost === 0', BUILDINGS.orbital_habitat.popCost === 0);
+
+// Tikuj ~15 civYears (5 iteracji × civDeltaYears=3): survival queue'uje habitat,
+// _tickConstruction (popCost=0 → idzie do construction, NIE pending) dokańcza go.
+let gt13 = 0;
+for (let i = 0; i < 5; i++) {
+  gt13 += 0.25;
+  window.KOSMOS.timeSystem.gameTime = gt13;
+  EventBus.emit('time:tick', { deltaYears: 0.25, civDeltaYears: 3, gameTime: gt13, multiplier: 3 });
+  res13.receive(startResources);  // utrzymuj zapas (izolacja od konsumpcji)
+}
+
+const habitat13 = expander._countBuilding(colony13, 'habitat');
+console.log(`    habitat _active=${habitat13}, effectiveHousing=${civ13.effectiveHousing}, freePops=${civ13.freePops}`);
+ok('habitat wszedł do _active (deadlock rozbity)', habitat13 > 0);
+ok('housing wzrosło > 8 (habitat dodał miejsca)', civ13.effectiveHousing > 8);
+ok('freePops nadal === 0 (habitat NIE zatrudnia — popCost 0)', civ13.freePops === 0);
+
+// Po odblokowaniu housing wzrost populacji może ruszyć: tikuj dalej i sprawdź,
+// że strata growthProgress > 0 (housing > pop → _updateStrataGrowth nie early-returnuje).
+// UWAGA: globalny _growthProgress to legacy (path _updatePopGrowth nieaktywny);
+// realny wzrost akumuluje się per-strata (strata[type].growthProgress).
+for (let i = 0; i < 5; i++) {
+  gt13 += 0.25;
+  window.KOSMOS.timeSystem.gameTime = gt13;
+  EventBus.emit('time:tick', { deltaYears: 0.25, civDeltaYears: 3, gameTime: gt13, multiplier: 3 });
+  res13.receive(startResources);
+}
+const totalGrowthProgress = Object.values(civ13.strata).reduce((s, st) => s + (st.growthProgress ?? 0), 0);
+console.log(`    Σ strata growthProgress=${totalGrowthProgress.toFixed(3)} (housing ${civ13.effectiveHousing} > pop ${civ13.population})`);
+ok('wzrost populacji odblokowany (Σ strata growthProgress > 0)', totalGrowthProgress > 0);
 
 console.log(`\n=== ${pass} PASS, ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);

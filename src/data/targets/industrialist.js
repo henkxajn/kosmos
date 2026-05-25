@@ -39,8 +39,10 @@
 //   — tylko totalLevels per-kategoria. factory avgLevel poniżej = Z RELACJI GRACZA
 //   (4×L5=20 pkt produkcji), nie z nagrania. Po hotfixie wyciągniemy realny per-id.
 //
-// Housing na macierzystej NIE jest rozwijany ŚWIADOMIE (atmosfera oddychalna →
-//   housing zbędny). To nie anomalia. Stąd housing=8 stałe mimo pop→62.
+// Housing: wartości poniżej to bootstrap baseline (housing=8). AutoExpander
+//   dynamicznie dobudowuje habitat przez survival rule (housing_cap, próg
+//   housing < pop × 1.1), bo pop >= housing zatrzymuje wzrost na KAŻDEJ planecie
+//   (też oddychalnej). Realne housing rośnie z popem — nie traktuj 8 jako docelowe.
 // ═══════════════════════════════════════════════════════════════
 
 export const INDUSTRIALIST_TARGETS = {
@@ -50,7 +52,7 @@ export const INDUSTRIALIST_TARGETS = {
 
     pop: 21,
     prosperity: 91,
-    housing: 8,                 // świadomie stałe całą grę (atmosfera oddychalna → housing zbędny)
+    housing: 8,                 // bootstrap baseline — survival rule dobudowuje habitat z popem
     buildings: {
       farm:             { count: 2, avgLevel: 2.5 /* blend food */ },
       well:             { count: 2, avgLevel: 2.5 /* blend food */ },
@@ -80,7 +82,7 @@ export const INDUSTRIALIST_TARGETS = {
 
     pop: 36,
     prosperity: 90,
-    housing: 8,                 // świadomie stałe (atmosfera oddychalna)
+    housing: 8,                 // bootstrap baseline — survival rule dobudowuje habitat z popem
     buildings: {
       farm:        { count: 2, avgLevel: 3.0 /* blend food */ },
       well:        { count: 2, avgLevel: 3.0 /* blend food */ },
@@ -113,7 +115,7 @@ export const INDUSTRIALIST_TARGETS = {
 
     pop: 47,
     prosperity: 84,             // z nagrania (orientacja, nie cel — patrz FILOZOFIA)
-    housing: 8,                 // świadomie stałe (atmosfera oddychalna)
+    housing: 8,                 // bootstrap baseline — survival rule dobudowuje habitat z popem
     buildings: {
       // identyczna struktura jak gy40 — rozbudowa domu zatrzymała się ~gy20
       farm:        { count: 2, avgLevel: 2.6 /* blend food */ },
@@ -145,7 +147,7 @@ export const INDUSTRIALIST_TARGETS = {
     //   Pole orientacyjne; AutoExpander to ignoruje, kolonizacja należy do EconAI/Warstwy C
     pop: 62,
     prosperity: 68,             // z nagrania (orientacja, nie cel — patrz FILOZOFIA)
-    housing: 8,                 // świadomie stałe (atmosfera oddychalna)
+    housing: 8,                 // bootstrap baseline — survival rule dobudowuje habitat z popem
     buildings: {
       farm:        { count: 2, avgLevel: 2.6 /* blend food */ },
       well:        { count: 3, avgLevel: 2.6 /* blend food */ },

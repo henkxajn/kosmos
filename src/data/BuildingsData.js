@@ -202,7 +202,7 @@ export const BUILDINGS = {
     rates:       {},
     maintenance: { Fe: 1 },  // naprawy habitat
     housing:     3,
-    popCost:     0.25,
+    popCost:     0,          // mieszkanie nie zatrudnia POP — popCost>0 powodował deadlock w housing cap (freePops=0 → habitat nie fulfilluje → housing nie rośnie)
     maxLevel:    10,
     capacityBonus: null,
     terrainOnly: null,
@@ -590,7 +590,7 @@ export const BUILDINGS = {
     rates:         { food: 5 },
     maintenance:   { Fe: 2, Cu: 1 },
     housing:       8,
-    popCost:       0.5,
+    popCost:       0,          // mieszkanie nie zatrudnia POP (spójnie z habitat — anti-deadlock housing cap)
     maxLevel:      5,
     capacityBonus: null,
     terrainOnly:   null,
@@ -825,7 +825,7 @@ export const BUILDINGS = {
     rates:         {},
     maintenance:   { Ti: 3, Fe: 2 },
     housing:       20,
-    popCost:       0.5,
+    popCost:       0,          // mieszkanie nie zatrudnia POP (spójnie z habitat — anti-deadlock housing cap)
     maxLevel:      1,
     capacityBonus: null,
     terrainOnly:   null,
