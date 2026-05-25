@@ -141,5 +141,54 @@ let mineOk = true;
 grid.forEach(t => { if (t.buildingId === 'mine' && t.type !== 'mountains') mineOk = false; });
 ok('wszystkie mine na mountains', mineOk);
 
+// ── T5: silent-fail handling (bug #2) ───────────────────────────
+// Osobna mini-kolonia z techStub blokującym factory (isResearched('metallurgy')
+// === false). AutoExpander powinien: (a) NIE pętlić się — _tryBuild zwraca 'fail',
+// (b) zarejestrować unreachable w _caeUnreachableTargets, (c) pominąć w backoffie.
+console.log('--- T5: Silent fail factory (brak metallurgy) ---');
+
+// techStub#2: wszystko researched OPRÓCZ metallurgy → factory.requires zablokowany.
+const techStubNoMetal = new Proxy({}, {
+  get: (_t, prop) => {
+    if (prop === 'getTerrainUnlocks') return () => [];
+    if (prop === 'isResearched')      return (id) => id !== 'metallurgy';
+    return () => 1;
+  },
+});
+
+const grid2 = new HexGrid(8, 10);
+grid2.forEach(tile => { tile.type = 'plains'; }); // brak mountains → mine też 'no_tile' (ignorowane)
+const resSys2 = new ResourceSystem(startResources);
+const civSys2 = new CivilizationSystem({}, techStubNoMetal, planet);
+civSys2.resourceSystem = resSys2;
+const bSys2 = new BuildingSystem(resSys2, civSys2, techStubNoMetal);
+civSys2.buildingSystem = bSys2;
+bSys2._grid = grid2;
+bSys2._gridHeight = grid2.height;
+bSys2.setDeposits?.([]);
+const factSys2 = new FactorySystem(resSys2);
+bSys2.setFactorySystem(factSys2);
+civSys2.population = 30;
+
+const colony2 = {
+  planetId: 'p_test2', ownerEmpireId: 'emp_smoke2', isOutpost: false,
+  planet, resourceSystem: resSys2, civSystem: civSys2,
+  buildingSystem: bSys2, factorySystem: factSys2,
+};
+
+// Bezpośrednia próba budowy factory → 'fail' (brak metallurgy, tile niezmieniony).
+const outcomeFail = expander._tryBuild(colony2, 'factory', { module: 'target', civYear: 100, why: 'T5' });
+ok("_tryBuild('factory') === 'fail' bez metallurgy", outcomeFail === 'fail');
+
+// Symuluj rejestrację unreachable jak w _runTargets.
+expander._markUnreachable(colony2, 'build:factory', 100, { module: 'target' });
+ok('_caeUnreachableTargets ma wpis build:factory', colony2._caeUnreachableTargets?.has('build:factory'));
+ok('build:factory w backoffie @cy=110 (retry=130)', expander._isUnreachable(colony2, 'build:factory', 110) === true);
+ok('build:factory NIE w backoffie po retryAtCivYear (cy=130)', expander._isUnreachable(colony2, 'build:factory', 130) === false);
+
+// Clear → wpis znika (sukces po odkryciu techu).
+expander._clearUnreachable(colony2, 'build:factory');
+ok('_clearUnreachable usuwa wpis', !colony2._caeUnreachableTargets?.has('build:factory'));
+
 console.log(`\n=== ${pass} PASS, ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);

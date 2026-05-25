@@ -57,6 +57,11 @@ const TERRAIN_RULE = {
   well: 'plains',
 };
 
+// Unreachable targets — gdy _build/_upgrade silent-failuje (np. brak technologii),
+// nie próbuj tego budynku w kółko. Po REGISTER czekaj RETRY civYears i spróbuj raz
+// (a nuż techy się odkryły); znów fail → ponowny backoff.
+const UNREACHABLE_RETRY_CIVYEARS = 30;
+
 // Kolejność priorytetu budowy w module TARGET (esencja → produkcja → reszta).
 const BUILD_PRIORITY = [
   'farm', 'well', 'solar_farm', 'mine', 'factory', 'smelter',
@@ -242,21 +247,33 @@ export class ColonyAutoExpander {
       //   abstrakcyjna na poziomie galaktyki), nie auto-rozbudowy pojedynczej kolonii.
 
       // a) COUNTS (step function) — zbuduj pierwszy brakujący budynek wg priorytetu.
+      //    Silent fail (np. brak techu) → zarejestruj unreachable i przejdź do
+      //    następnego budynku z priorytetu (zamiast pętlić się w nieskończoność).
       for (const buildingId of BUILD_PRIORITY) {
         const want = cp.buildings[buildingId]?.count ?? 0;
         if (want <= 0) continue;
         const cur = this._countBuilding(colony, buildingId);
-        if (cur < want) {
-          if (this._tryBuild(colony, buildingId, { module: 'target', civYear, why: `count ${cur}/${want} @gy${gy}` })) {
-            // Nowa fabryka → tryb reactive (conduct: nowe fabryki reactive).
-            if (buildingId === 'factory') {
-              colony.factorySystem?.setMode('reactive');
-              this._log(colony, 'target', 'setMode reactive', 'nowa fabryka', civYear);
-            }
-            colony._caeLastTargetAction = { type: `build:${buildingId}`, civYear };
+        if (cur >= want) continue;
+
+        const key = `build:${buildingId}`;
+        if (this._isUnreachable(colony, key, civYear)) continue;  // w backoffie — pomiń
+
+        const outcome = this._tryBuild(colony, buildingId, { module: 'target', civYear, why: `count ${cur}/${want} @gy${gy}` });
+        if (this._isBuildSuccess(outcome)) {
+          this._clearUnreachable(colony, key);
+          // Nowa fabryka → tryb reactive (conduct: nowe fabryki reactive).
+          if (buildingId === 'factory') {
+            colony.factorySystem?.setMode('reactive');
+            this._log(colony, 'target', 'setMode reactive', 'nowa fabryka', civYear);
           }
+          colony._caeLastTargetAction = { type: key, civYear };
           break; // jedna akcja na tick
         }
+        if (outcome === 'fail') {
+          // silent fail — _build nie zwrócił built/construction/queued (brak techu itd.)
+          this._markUnreachable(colony, key, civYear, { module: 'target' });
+        }
+        // outcome 'no_tile'/'invalid' → po prostu spróbuj następny budynek (bez backoffu)
       }
       if (colony._caeLastTargetAction?.civYear === civYear) continue;
 
@@ -264,10 +281,20 @@ export class ColonyAutoExpander {
       for (const buildingId of BUILD_PRIORITY) {
         const targetLevel = this._interpLevel(data.targets, buildingId, gy);
         if (targetLevel == null) continue;
-        if (this._tryUpgrade(colony, buildingId, targetLevel, { module: 'target', civYear, why: `lerp →L${targetLevel} @gy${gy}` })) {
-          colony._caeLastTargetAction = { type: `upgrade:${buildingId}`, civYear };
+
+        const key = `upgrade:${buildingId}`;
+        if (this._isUnreachable(colony, key, civYear)) continue;
+
+        const outcome = this._tryUpgrade(colony, buildingId, targetLevel, { module: 'target', civYear, why: `lerp →L${targetLevel} @gy${gy}` });
+        if (outcome === 'upgraded') {
+          this._clearUnreachable(colony, key);
+          colony._caeLastTargetAction = { type: key, civYear };
           break; // jedna akcja na tick
         }
+        if (outcome === 'fail') {
+          this._markUnreachable(colony, key, civYear, { module: 'target' });
+        }
+        // outcome 'no_candidate' → brak budynku do ulepszenia, spróbuj następny
       }
     }
   }
@@ -356,30 +383,39 @@ export class ColonyAutoExpander {
   }
 
   // Próba budowy: znajdź hex, wywołaj kosztowy _build (sam sprawdzi surowce/tech/POP;
-  // gdy brak — _build queue'uje, co też jest „akcją"). Zwraca true gdy podjęto próbę.
+  // gdy brak surowców/POP — _build queue'uje). Zwraca outcome string:
+  //   'built'/'construction'/'queued' — sukces (akcja podjęta)
+  //   'fail'    — _build silent-failował (brak techu/walidacji — nie zmienił tile)
+  //   'no_tile' — brak wolnego hexa pasującego regule terenu
+  //   'invalid' — nieznany building lub brak _build
   _tryBuild(colony, buildingId, meta = {}) {
-    if (!BUILDINGS[buildingId]) return false;
+    if (!BUILDINGS[buildingId]) return 'invalid';
     const bSys = colony.buildingSystem;
-    if (typeof bSys?._build !== 'function') return false;
+    if (typeof bSys?._build !== 'function') return 'invalid';
     const tile = this._findFreeTile(colony, buildingId);
-    if (!tile) return false;
+    if (!tile) return 'no_tile';
     bSys._build(tile, buildingId);
     // Wynik z flag tile (instant / w budowie / w kolejce na surowce-POP).
+    // Brak którejkolwiek flagi = silent fail (np. brak technologii) → 'fail'.
     const outcome = tile.buildingId === buildingId ? 'built'
                   : tile.underConstruction          ? 'construction'
-                  : tile.pendingBuild               ? 'queued' : '?';
+                  : tile.pendingBuild               ? 'queued' : 'fail';
     this._log(colony, meta.module ?? 'target',
       `build ${buildingId} @ ${tile.type} tile (${tile.q},${tile.r}) [${outcome}]`,
       meta.why, meta.civYear);
-    return true;
+    return outcome;
   }
 
   // Próba upgrade: znajdź budynek tego typu poniżej docelowego poziomu i ulepsz.
+  // Zwraca outcome string:
+  //   'upgraded'     — sukces (poziom wzrósł lub start budowy ulepszenia)
+  //   'fail'         — _upgrade silent-failował (brak techu/surowców — bez zmiany)
+  //   'no_candidate' — brak budynku tego typu poniżej docelowego poziomu
   _tryUpgrade(colony, buildingId, targetLevel, meta = {}) {
     const bSys = colony.buildingSystem;
-    if (typeof bSys?._upgrade !== 'function') return false;
+    if (typeof bSys?._upgrade !== 'function') return 'no_candidate';
     const grid = bSys._grid;
-    if (!grid || typeof grid.forEach !== 'function') return false;
+    if (!grid || typeof grid.forEach !== 'function') return 'no_candidate';
 
     let candidate = null;
     grid.forEach(tile => {
@@ -389,12 +425,52 @@ export class ColonyAutoExpander {
       const lvl = tile.buildingLevel ?? 1;
       if (lvl < targetLevel) candidate = tile;
     });
-    if (!candidate) return false;
-    const lvl = candidate.buildingLevel ?? 1;
+    if (!candidate) return 'no_candidate';
+
+    const lvlBefore = candidate.buildingLevel ?? 1;
     bSys._upgrade(candidate);
+    // Sukces = poziom wzrósł (instant) LUB ruszyła budowa ulepszenia (buildTime>0).
+    const lvlAfter = candidate.buildingLevel ?? 1;
+    const success  = lvlAfter > lvlBefore || !!candidate.underConstruction;
+    if (!success) return 'fail';   // silent fail (brak techu/surowców)
+
     this._log(colony, meta.module ?? 'target',
-      `upgrade ${buildingId} L${lvl}→L${lvl + 1}`, meta.why, meta.civYear);
+      `upgrade ${buildingId} L${lvlBefore}→L${lvlBefore + 1}`, meta.why, meta.civYear);
+    return 'upgraded';
+  }
+
+  _isBuildSuccess(outcome) {
+    return outcome === 'built' || outcome === 'construction' || outcome === 'queued';
+  }
+
+  // ── Unreachable targets (anti-loop na silent fail) ──────────────────────────
+
+  // True gdy budynek jest w okresie backoffu (silent-failował, czekamy na retry).
+  // Gdy minął retryAtCivYear → false (czas spróbować ponownie) + log próby retry.
+  _isUnreachable(colony, key, civYear) {
+    const m = colony._caeUnreachableTargets;
+    const rec = m?.get(key);
+    if (!rec) return false;
+    if (civYear >= rec.retryAtCivYear) {
+      this._log(colony, 'target', `${key} retry attempt`, `unreachable since cy=${rec.sinceCivYear}`, civYear);
+      return false; // wypuść próbę — jeśli znów fail, _markUnreachable ustawi nowy backoff
+    }
     return true;
+  }
+
+  // Zarejestruj/odśwież backoff dla silent-failującego budynku.
+  _markUnreachable(colony, key, civYear, meta = {}) {
+    const m = colony._caeUnreachableTargets || (colony._caeUnreachableTargets = new Map());
+    const existing = m.get(key);
+    const sinceCivYear = existing?.sinceCivYear ?? civYear;
+    const retryAtCivYear = civYear + UNREACHABLE_RETRY_CIVYEARS;
+    m.set(key, { sinceCivYear, retryAtCivYear });
+    this._log(colony, meta.module ?? 'target',
+      `${key} unreachable (silent fail)`, `retry @cy=${retryAtCivYear}`, civYear);
+  }
+
+  _clearUnreachable(colony, key) {
+    colony._caeUnreachableTargets?.delete(key);
   }
 }
 
