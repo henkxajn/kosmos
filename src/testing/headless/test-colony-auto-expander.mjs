@@ -246,10 +246,17 @@ const upgOutB = expander._tryUpgrade(colony6b, 'farm', 2, { module:'target', civ
 ok("_tryUpgrade('farm',2) === 'queued' (brak surowców)", upgOutB === 'queued');
 ok('queued upgrade NIE jest oznaczony unreachable', !colony6b._caeUnreachableTargets?.has('upgrade:farm'));
 
-// Backoff: mark @cy=24 → retryAt=54 (stały interwał 30).
+// Backoff stały 30 (bug B): retryAt = since + 30, since kotwiczy się na TERAZ.
+// mark @cy=24 → since=24, retry=54. re-mark @cy=54 → since=54 (NIE 24!), retry=84.
+// Stary kod zostawiał since=24 → (retry-since) rosło (54→60→…), wyglądało jak exp.
 expander._markUnreachable(colony6, 'upgrade:smelter', 24, { module:'target' });
 const rec1 = colony6._caeUnreachableTargets.get('upgrade:smelter');
 ok('backoff mark@24: since=24, retryAt=54', rec1.sinceCivYear === 24 && rec1.retryAtCivYear === 54);
+expander._markUnreachable(colony6, 'upgrade:smelter', 54, { module:'target' });
+const rec2 = colony6._caeUnreachableTargets.get('upgrade:smelter');
+ok('re-mark@54: since=54 (kotwica TERAZ), retryAt=84 — stałe 30, NIE exp',
+   rec2.sinceCivYear === 54 && rec2.retryAtCivYear === 84);
+ok('odstęp retry zawsze 30 (retryAt - since)', rec2.retryAtCivYear - rec2.sinceCivYear === 30);
 
 // ── T7: integracja — kolonia jak po bootstrapie, tick ~100 civYears ──
 // Po obu fixach: buildings rosną monotonicznie, ≥1 budynek osiąga level≥2

@@ -502,11 +502,13 @@ export class ColonyAutoExpander {
   }
 
   // Zarejestruj/odśwież backoff dla silent-failującego budynku.
+  // STAŁY interwał: retryAtCivYear = sinceCivYear + 30 (bez exp backoffu). Każda
+  // nieudana próba (pierwsza i każda kolejna po retry) kotwiczy okno od TERAZ —
+  // sinceCivYear = civYear bieżącej porażki → przewidywalne, równe 30-cy odstępy.
   _markUnreachable(colony, key, civYear, meta = {}) {
     const m = colony._caeUnreachableTargets || (colony._caeUnreachableTargets = new Map());
-    const existing = m.get(key);
-    const sinceCivYear = existing?.sinceCivYear ?? civYear;
-    const retryAtCivYear = civYear + UNREACHABLE_RETRY_CIVYEARS;
+    const sinceCivYear   = civYear;
+    const retryAtCivYear = sinceCivYear + UNREACHABLE_RETRY_CIVYEARS;
     m.set(key, { sinceCivYear, retryAtCivYear });
     this._log(colony, meta.module ?? 'target',
       `${key} unreachable (silent fail)`, `retry @cy=${retryAtCivYear}`, civYear);
