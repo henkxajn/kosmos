@@ -161,7 +161,7 @@ export class Reporter {
 
     // Średnie key metrics z finalState
     const finalStats = {};
-    const statKeys = ['pop', 'housing', 'prosperity', 'morale', 'colonies', 'techs', 'credits', 'buildings'];
+    const statKeys = ['pop', 'housing', 'prosperity', 'colonies', 'techs', 'credits', 'buildings'];
     for (const key of statKeys) {
       const vals = this.games.map(g => g.finalState?.[key] ?? 0).filter(v => typeof v === 'number');
       if (vals.length > 0) finalStats[`avg_${key}`] = Math.round(vals.reduce((s, v) => s + v, 0) / vals.length * 10) / 10;

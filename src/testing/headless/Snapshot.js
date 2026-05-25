@@ -7,6 +7,31 @@
 //   buildings by category, vessels by status, colonies, empires, observatory.
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * Agreguj budynki kolonii po kategorii (B.2 — wsparcie per-kolonia).
+ * Zwraca { buildingCount, buildingsByCategory } w tym samym kształcie co
+ * top-level buildingsByCategory w capture(). Helper additive — istniejący
+ * top-level blok pozostaje nietknięty.
+ */
+function _aggregateColonyBuildings(buildingSystem) {
+  const byCat = {};
+  let count = 0;
+  const active = buildingSystem?._active;
+  if (active) {
+    for (const [, entry] of active) {
+      const id  = entry.building?.id ?? entry.buildingId;
+      const lvl = entry.level ?? 1;
+      count++;
+      const cat = entry.building?.category ?? 'other';
+      if (!byCat[cat]) byCat[cat] = { count: 0, totalLevels: 0, byId: {} };
+      byCat[cat].count++;
+      byCat[cat].totalLevels += lvl;
+      byCat[cat].byId[id] = (byCat[cat].byId[id] ?? 0) + 1;
+    }
+  }
+  return { buildingCount: count, buildingsByCategory: byCat };
+}
+
 /** Zrób bogatą migawkę z aktywnego state */
 export function capture(core) {
   const K = window.KOSMOS;
@@ -50,6 +75,13 @@ export function capture(core) {
     }
   }
 
+  // ── Safety stocks (demandBonus) + tryb fabryki aktywnej kolonii (B.2) ──
+  // demandBonus: Map<commodityId, number> → object. Target zapasu = base + bonus.
+  const demandBonus = active?.factorySystem?._demandBonus
+    ? Object.fromEntries(active.factorySystem._demandBonus)
+    : {};
+  const factoryMode = active?.factorySystem?._mode ?? null;
+
   // ── Vessels by status ──
   const vesselsByStatus = { docked: 0, in_transit: 0, orbiting: 0, away_team: 0, total: 0 };
   if (core.vesselManager?.getAllVessels) {
@@ -80,6 +112,8 @@ export function capture(core) {
   const coloniesList = [];
   if (core.colonyManager?.getAllColonies) {
     for (const col of core.colonyManager.getAllColonies()) {
+      const colBuildAgg = _aggregateColonyBuildings(col.buildingSystem);
+      const colFactory  = col.factorySystem;
       coloniesList.push({
         id: col.planetId,
         name: col.name ?? '?',
@@ -90,6 +124,17 @@ export function capture(core) {
         prosperity: Math.round(col.prosperitySystem?.prosperity ?? 0),
         buildings: col.buildingSystem?._active?.size ?? 0,
         credits: Math.round(col.credits ?? 0),
+        // ── Decyzje gracza per-kolonia ──
+        // B.2: safety stocks (demandBonus) + tryb fabryki
+        factorySystem: {
+          demandBonus: colFactory?._demandBonus ? Object.fromEntries(colFactory._demandBonus) : {},
+          mode:        colFactory?._mode ?? null,
+        },
+        // B.2: rozkład budynków per kategoria (count/totalLevels/byId)
+        buildingsByCategory: colBuildAgg.buildingsByCategory,
+        // B.3/B.4: stan decyzji handlowo-migracyjnych (rezultat trade:setOverride + polityka migracji)
+        allowImmigration: col.allowImmigration ?? null,
+        tradeOverrides:   col.tradeOverrides ? { ...col.tradeOverrides } : {},
       });
     }
   }
@@ -125,7 +170,6 @@ export function capture(core) {
 
   // ── Active colony details ──
   const activeProsperity = active?.prosperitySystem?.prosperity ?? 0;
-  const activeMorale = active?.civSystem?.morale ?? 0;
 
   return {
     civYear: Math.floor((core.timeSystem?.gameTime ?? 0) * 12),
@@ -134,7 +178,6 @@ export function capture(core) {
     // POP & housing
     pop: active?.civSystem?.population ?? 0,
     housing: active?.civSystem?.housing ?? 0,
-    morale: Math.round(activeMorale),
     prosperity: Math.round(activeProsperity),
 
     // Resources
@@ -146,6 +189,10 @@ export function capture(core) {
     buildingCount,
     buildings,
     buildingsByCategory,
+
+    // Safety stocks + tryb fabryki (aktywna kolonia) — B.2
+    demandBonus,
+    factoryMode,
 
     // Research
     researched,

@@ -40,7 +40,7 @@ console.log(JSON.stringify(d, null, 2));
 
 // Pokaż przykładowe pola z bogatego snapshot
 console.log(`\nRozszerzone pola snapshot:`);
-console.log(`  prosperity: ${snap50.prosperity}  morale: ${snap50.morale}`);
+console.log(`  prosperity: ${snap50.prosperity}`);
 console.log(`  buildingsByCategory keys: ${Object.keys(snap50.buildingsByCategory).join(', ')}`);
 console.log(`  rates: ${JSON.stringify(snap50.rates)}`);
 console.log(`  empires: ${snap50.empires.length}  vessels: ${snap50.vessels.total}`);
