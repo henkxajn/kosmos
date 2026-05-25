@@ -294,7 +294,10 @@ export class EmpireColonyBootstrap {
     const grid = bSys?._grid;
     if (!grid || typeof grid.forEach !== 'function') return false;
 
-    const allowed = building.allowedTerrain;
+    // Fix: pole w BuildingsData nazywa się `terrainOnly` (nie `allowedTerrain`),
+    //   a hex trzyma typ w `tile.type` (nie `tile.terrain`) — wcześniej ten twardy
+    //   filtr i miękki preferredTerrain były martwe (zawsze undefined/undefined).
+    const allowed = building.terrainOnly;
     const totalRows = grid.height ?? this._inferRows(grid);
     const category = building.category;
 
@@ -309,13 +312,13 @@ export class EmpireColonyBootstrap {
       if (tile.capitalBase) return;
       if (tile.underConstruction) return;
       if (tile.pendingBuild) return;
-      if (allowed && !allowed.includes(tile.terrain)) return;
+      if (allowed && !allowed.includes(tile.type)) return;
       if (tile.buildable === false) return;
 
       let score = 0;
 
       // preferredTerrain bonus (soft)
-      if (preferred.length > 0 && preferred.includes(tile.terrain)) {
+      if (preferred.length > 0 && preferred.includes(tile.type)) {
         score += 10;
       }
 

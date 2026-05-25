@@ -46,7 +46,8 @@
 export const INDUSTRIALIST_TARGETS = {
   // ── gameYear 10 (civYear 120) ──────────────────────────────────
   gameYear_10: {
-    colonies_count: 1,
+    colonies_count: 1,  // Pole orientacyjne; AutoExpander to ignoruje, kolonizacja należy do EconAI/Warstwy C
+
     pop: 21,
     prosperity: 91,
     housing: 8,                 // świadomie stałe całą grę (atmosfera oddychalna → housing zbędny)
@@ -75,7 +76,8 @@ export const INDUSTRIALIST_TARGETS = {
   gameYear_20: {
     // KOREKTA #1: 1 zamiast obserwowanych 2 — Industrialist konsoliduje home do gy20
     //   (gracz w nagraniu kolonizował przedwcześnie w gy12.6, target tego nie odtwarza).
-    colonies_count: 1,
+    colonies_count: 1,  // Pole orientacyjne; AutoExpander to ignoruje, kolonizacja należy do EconAI/Warstwy C
+
     pop: 36,
     prosperity: 90,
     housing: 8,                 // świadomie stałe (atmosfera oddychalna)
@@ -107,7 +109,8 @@ export const INDUSTRIALIST_TARGETS = {
 
   // ── gameYear 30 (civYear 360) ──────────────────────────────────
   gameYear_30: {
-    colonies_count: 2,
+    colonies_count: 2,  // Pole orientacyjne; AutoExpander to ignoruje, kolonizacja należy do EconAI/Warstwy C
+
     pop: 47,
     prosperity: 84,             // z nagrania (orientacja, nie cel — patrz FILOZOFIA)
     housing: 8,                 // świadomie stałe (atmosfera oddychalna)
@@ -139,6 +142,7 @@ export const INDUSTRIALIST_TARGETS = {
   // ── gameYear 40 (civYear 480) ──────────────────────────────────
   gameYear_40: {
     colonies_count: 2,          // 2–3 (w nagraniu 2: Nowa Ziemia + Xe; „new moon" to outpost pop=0)
+    //   Pole orientacyjne; AutoExpander to ignoruje, kolonizacja należy do EconAI/Warstwy C
     pop: 62,
     prosperity: 68,             // z nagrania (orientacja, nie cel — patrz FILOZOFIA)
     housing: 8,                 // świadomie stałe (atmosfera oddychalna)
