@@ -24,7 +24,7 @@ import { BuildingSystem }     from '../../systems/BuildingSystem.js';
 import { FactorySystem }      from '../../systems/FactorySystem.js';
 import { TechSystem }         from '../../systems/TechSystem.js';
 import { HexGrid }            from '../../map/HexGrid.js';
-import { ColonyAutoExpander } from '../../systems/ColonyAutoExpander.js';
+import { ColonyAutoExpander, MAX_PENDING_BUILDS_PER_COLONY } from '../../systems/ColonyAutoExpander.js';
 import { EmpireColonyBootstrap } from '../../systems/EmpireColonyBootstrap.js';
 import { INDUSTRIALIST_TARGETS } from '../../data/targets/industrialist.js';
 import { INDUSTRIALIST }      from '../../data/EmpireArchetypeIndustrialist.js';
@@ -396,6 +396,92 @@ console.log(`    well @ [${wellTypes.join(',')}], farm @ [${farmTypes.join(',')}
 ok('wszystkie well na plains (NIE mountains)', wellTypes.length === 2 && wellTypes.every(t => t === 'plains'));
 ok('wszystkie farm na plains', farmTypes.length === 2 && farmTypes.every(t => t === 'plains'));
 ok('wszystkie mine na mountains', mineTypes.length === 1 && mineTypes.every(t => t === 'mountains'));
+
+// ── T10: Y1 — stuck pending queue → abandon + unreachable ────────
+// Kolonia bez surowców i POP: każdy _build → queued (pendingBuild, czeka w
+// nieskończoność). _reconcilePending musi: trzymać świeży wpis, a po
+// PENDING_STUCK_CIVYEARS (30) anulować zamówienie i oznaczyć unreachable.
+console.log('--- T10: Y1 stuck queue (queued bez końca → abandon) ---');
+const techReal10 = new TechSystem(); techReal10.grantTechs(INDUSTRIALIST.startingTechs);
+const grid10 = new HexGrid(8, 10); grid10.forEach(t => { t.type = 'plains'; });
+const res10 = new ResourceSystem({});                 // brak surowców → queue
+const civ10 = new CivilizationSystem({}, techReal10, planet); civ10.resourceSystem = res10;
+const bSys10 = new BuildingSystem(res10, civ10, techReal10); civ10.buildingSystem = bSys10;
+bSys10._grid = grid10; bSys10._gridHeight = grid10.height; bSys10.setDeposits?.([]);
+const fact10 = new FactorySystem(res10); bSys10.setFactorySystem(fact10);
+civ10.population = 0;                                  // brak freePops → queue
+const colony10 = { planetId:'p10', ownerEmpireId:'e10', isOutpost:false, planet,
+  resourceSystem:res10, civSystem:civ10, buildingSystem:bSys10, factorySystem:fact10 };
+
+const out10 = expander._tryBuild(colony10, 'farm', { module:'target', civYear:0, why:'T10' });
+ok("_tryBuild('farm') === 'queued' (brak surowców+POP)", out10 === 'queued');
+ok('_caePendingBuilds śledzi 1 zamówienie', colony10._caePendingBuilds?.size === 1);
+expander._reconcilePending(colony10, 5);              // age 5 < 30 → trzymaj
+ok('reconcile@cy=5: wpis nadal śledzony (age<30)', colony10._caePendingBuilds?.size === 1);
+ok('build:farm jeszcze NIE unreachable @cy=5', !colony10._caeUnreachableTargets?.has('build:farm'));
+expander._reconcilePending(colony10, 40);             // age 40 > 30 → porzuć
+ok('reconcile@cy=40: wpis porzucony (stuck > 30 cy)', (colony10._caePendingBuilds?.size ?? 0) === 0);
+ok('build:farm oznaczony unreachable po abandon', colony10._caeUnreachableTargets?.has('build:farm'));
+ok('cancelPending wyczyścił _pendingQueue', bSys10._pendingQueue.size === 0);
+
+// ── T11: Y2 — rate limit MAX_PENDING_BUILDS_PER_COLONY ──────────
+// freePops>0 ale brak surowców → builds queue'ują (resource-bound). Limit musi
+// utrzymać _caePendingBuilds.builds ≤ MAX przez 100 civYears; logi "queue full"
+// throttlowane (≤ 5 przez throttle 30 cy).
+console.log('--- T11: Y2 rate limit (queue ≤ MAX przez 100 cy) ---');
+const techReal11 = new TechSystem(); techReal11.grantTechs(INDUSTRIALIST.startingTechs);
+const grid11 = new HexGrid(8, 10);
+let mm11 = 0; grid11.forEach(t => { if (t.r === 5 && mm11 < 4) { t.type = 'mountains'; mm11++; } else t.type = 'plains'; });
+const res11 = new ResourceSystem({});                 // brak surowców → resource-bound queue
+const civ11 = new CivilizationSystem({}, techReal11, planet); civ11.resourceSystem = res11;
+const bSys11 = new BuildingSystem(res11, civ11, techReal11); civ11.buildingSystem = bSys11;
+bSys11._grid = grid11; bSys11._gridHeight = grid11.height; bSys11.setDeposits?.([]);
+const fact11 = new FactorySystem(res11); bSys11.setFactorySystem(fact11);
+civ11.population = 30;                                 // freePops>0 → MAX jest aktywnym ogranicznikiem
+// energy balance ujemny → survival solar_farm; brak organics → farm itd.
+const colony11 = { planetId:'p11', ownerEmpireId:'e11', isOutpost:false, planet,
+  resourceSystem:res11, civSystem:civ11, buildingSystem:bSys11, factorySystem:fact11 };
+colonyRef.c = colony11;
+expander._verbose = true;
+let queueFullLogs = 0;
+const origLog = console.log;
+console.log = (...args) => { if (String(args[0]).includes('queue full')) queueFullLogs++; origLog(...args); };
+let invariantHeld = true;
+for (let cy = 1; cy <= 100; cy++) {
+  window.KOSMOS.timeSystem.gameTime = cy / 12;        // civYear = cy
+  expander._runSurvival(cy);
+  if (expander._pendingCounts(colony11).builds > MAX_PENDING_BUILDS_PER_COLONY) invariantHeld = false;
+}
+console.log = origLog;
+expander._verbose = false;
+console.log(`    builds=${expander._pendingCounts(colony11).builds}, queueFullLogs=${queueFullLogs}`);
+ok(`builds ≤ MAX (${MAX_PENDING_BUILDS_PER_COLONY}) przez całe 100 cy`, invariantHeld);
+ok('logi "queue full" throttlowane (≤ 5)', queueFullLogs <= 5);
+
+// ── T12: Y3 — tile blacklist po [fail] ──────────────────────────
+// _tryBuild zwraca [fail] (factory bez metallurgy) → tile na blacklist 60 cy.
+// _findFreeTile pomija go w oknie backoffu, znów dostępny po 60 cy.
+console.log('--- T12: Y3 tile blacklist (fail → skip 60 cy) ---');
+const grid12 = new HexGrid(8, 10); grid12.forEach(t => { t.type = 'plains'; });
+const res12 = new ResourceSystem(startResources);
+const civ12 = new CivilizationSystem({}, techStubNoMetal, planet); civ12.resourceSystem = res12;
+const bSys12 = new BuildingSystem(res12, civ12, techStubNoMetal); civ12.buildingSystem = bSys12;
+bSys12._grid = grid12; bSys12._gridHeight = grid12.height; bSys12.setDeposits?.([]);
+const fact12 = new FactorySystem(res12); bSys12.setFactorySystem(fact12);
+civ12.population = 30;
+const colony12 = { planetId:'p12', ownerEmpireId:'e12', isOutpost:false, planet,
+  resourceSystem:res12, civSystem:civ12, buildingSystem:bSys12, factorySystem:fact12 };
+
+window.KOSMOS.timeSystem.gameTime = 0;                // civYear 0
+const tileBefore = expander._findFreeTile(colony12, 'factory');
+const out12 = expander._tryBuild(colony12, 'factory', { module:'survival', why:'T12' }); // brak civYear → _civYear()=0
+ok("_tryBuild('factory') === 'fail' (brak metallurgy)", out12 === 'fail');
+ok('tile dodany do _caeBlacklistedTiles', colony12._caeBlacklistedTiles?.has(tileBefore.key));
+const tileDuring = expander._findFreeTile(colony12, 'factory');
+ok('_findFreeTile pomija blacklisted tile (≠ poprzedni)', tileDuring != null && tileDuring.key !== tileBefore.key);
+window.KOSMOS.timeSystem.gameTime = 5;                // civYear 60 (>= retryAt 60)
+const tileAfter = expander._findFreeTile(colony12, 'factory');
+ok('po 60 cy blacklist wygasa — tile znów dostępny', tileAfter != null && tileAfter.key === tileBefore.key);
 
 console.log(`\n=== ${pass} PASS, ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);

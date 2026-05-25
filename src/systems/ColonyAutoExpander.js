@@ -58,6 +58,30 @@ const ARCHETYPE_DATA = {
 // (a nuż techy się odkryły); znów fail → ponowny backoff.
 const UNREACHABLE_RETRY_CIVYEARS = 30;
 
+// ── Anti-deadlock (Y1/Y2/Y3) ───────────────────────────────────────────────
+// Rate limit kolejki rozbudowy per kolonia. Bez tego AutoExpander traktował każde
+// 'queued' jako sukces i dosypywał w nieskończoność (death spiral: 88 budynków,
+// nic nie produkuje). Limity sprzęgają AI z REALNĄ przepustowością kolonii.
+//   - Build i upgrade to OSOBNE pule (różne limity), ale śledzone w JEDNEJ mapie
+//     colony._caePendingBuilds (klucz = tileKey, unikalny — tile nie jest naraz
+//     budowany i upgradeowany). Rozdział przez flagę rec.isUpgrade.
+//   - Wartość 3 (build) wynika z obserwacji: gracz w nagraniu referencyjnym miał
+//     typowo 1–2 budynki w budowie naraz; 3 to bezpieczny bufor. BuildingSystem
+//     nie ma twardego maxConcurrentBuilds, więc limit egzekwuje AutoExpander.
+export const MAX_PENDING_BUILDS_PER_COLONY   = 3;
+export const MAX_PENDING_UPGRADES_PER_COLONY = 2;
+
+// Pending build bez postępu dłużej niż to → uznaj za prawdziwy fail (POP nigdy nie
+// dojdą), anuluj zamówienie i oznacz buildingId jako unreachable.
+const PENDING_STUCK_CIVYEARS = 30;
+
+// Tile który zwrócił [fail] z _tryBuild → backoff dłuższy niż buildingId (teren się
+// nie zmienia). Wykluczany w _findFreeTile do retryAtCivYear.
+const TILE_BLACKLIST_CIVYEARS = 60;
+
+// Throttle logów "queue full" / "rest" — nie spamuj co 1 civYear.
+const QUEUE_LOG_INTERVAL_CIVYEARS = 30;
+
 // Kolejność priorytetu budowy w module TARGET (esencja → produkcja → reszta).
 const BUILD_PRIORITY = [
   'farm', 'well', 'solar_farm', 'mine', 'factory', 'smelter',
@@ -159,13 +183,24 @@ export class ColonyAutoExpander {
 
       const pop = civ.population ?? 0;
 
+      // Y1/Y2: pogodź kolejkę z realnym stanem (usuń ukończone, porzuć stuck) i
+      //   ustal czy wolno jeszcze coś budować. restFromBuilds = kolejka pełna LUB
+      //   nie ma kto budować (freePops=0) a coś już wisi → odpoczynek po brownout.
+      this._reconcilePending(colony, civYear);
+      const pendingBuilds = this._pendingCounts(colony).builds;
+      const freePops      = civ.freePops ?? 0;
+      const restFromBuilds =
+        pendingBuilds >= MAX_PENDING_BUILDS_PER_COLONY ||
+        (freePops <= 0 && pendingBuilds >= 1);
+      if (restFromBuilds) this._logQueueThrottled(colony, civYear, pendingBuilds);
+
       // 0) Housing cap — pop osiągnął housing → wzrost STOI. Najwyższy priorytet:
       //    bez wolnych POP żadna inna akcja (build/upgrade kosztujący POP) się nie
       //    wykona. Działa na KAŻDEJ planecie (oddychalna atmosfera chroni przed karą
       //    brak-housing, ale nie odblokowuje wzrostu). Bufor 10% (housing_buffer_ratio).
       const housing      = civ.housing ?? 0;
       const bufferRatio  = TH.housing_buffer_ratio ?? 1.1;
-      if (pop > 0 && housing < pop * bufferRatio) {
+      if (!restFromBuilds && pop > 0 && housing < pop * bufferRatio) {
         if (this._doSurvival(colony, 'housing_cap', civYear)) {
           this._tryBuild(colony, 'habitat', { module: 'survival', civYear, why: `pop ${pop}/${housing} housing cap (target ${(pop * bufferRatio).toFixed(1)})` });
           continue;
@@ -174,7 +209,7 @@ export class ColonyAutoExpander {
 
       // 1) Energia — bilans poniżej progu → solar_farm (najwyższy priorytet, brownout psuje wszystko)
       const bal = res.energy?.balance ?? 0;
-      if (bal < (TH.energy_balance_min ?? 0)) {
+      if (!restFromBuilds && bal < (TH.energy_balance_min ?? 0)) {
         if (this._doSurvival(colony, 'energy', civYear)) {
           this._tryBuild(colony, 'solar_farm', { module: 'survival', civYear, why: `energy balance ${bal.toFixed(1)}` });
           continue;
@@ -185,7 +220,7 @@ export class ColonyAutoExpander {
       //    food_min_per_pop jest już wliczone w net rate (produkcja − konsumpcja),
       //    więc sygnałem survival jest net < 0 (kolonia traci żywność).
       const orgRate = res.getPerYear?.('organics') ?? 0;
-      if (orgRate < 0) {
+      if (!restFromBuilds && orgRate < 0) {
         if (this._doSurvival(colony, 'food', civYear)) {
           this._tryBuild(colony, 'farm', { module: 'survival', civYear, why: `organics rate ${orgRate.toFixed(1)}` });
           continue;
@@ -194,7 +229,7 @@ export class ColonyAutoExpander {
 
       // 3) Housing — TYLKO na planecie bez oddychalnej atmosfery.
       const atmo = civ.planet?.atmosphere ?? colony.planet?.atmosphere ?? 'breathable';
-      if (atmo !== 'breathable') {
+      if (!restFromBuilds && atmo !== 'breathable') {
         const ratio = TH.housing_min_ratio_no_atmosphere ?? 0.5;
         if ((civ.housing ?? 0) < pop * ratio) {
           if (this._doSurvival(colony, 'housing', civYear)) {
@@ -209,7 +244,7 @@ export class ColonyAutoExpander {
       const prosp = colony.prosperitySystem?.prosperity ?? 100;
       if (prosp < (TH.prosperity_alarm ?? 0)) {
         if (this._doSurvival(colony, 'consumer_goods', civYear)) {
-          if (this._countBuilding(colony, 'factory') === 0) {
+          if (!restFromBuilds && this._countBuilding(colony, 'factory') === 0) {
             this._tryBuild(colony, 'factory', { module: 'survival', civYear, why: `prosperity ${Math.round(prosp)} (brak fabryki)` });
           } else if (colony.factorySystem && colony.factorySystem.mode !== 'reactive') {
             colony.factorySystem.setMode('reactive');
@@ -255,10 +290,20 @@ export class ColonyAutoExpander {
       // colonies_count — IGNOROWANE. To domena EconAI / Warstwy C (kolonizacja
       //   abstrakcyjna na poziomie galaktyki), nie auto-rozbudowy pojedynczej kolonii.
 
+      // Y1/Y2: pogodź kolejkę i sprawdź limity zanim dosypiemy nowe targety.
+      this._reconcilePending(colony, civYear);
+      const counts = this._pendingCounts(colony);
+      const buildQueueFull   = counts.builds   >= MAX_PENDING_BUILDS_PER_COLONY;
+      const upgradeQueueFull = counts.upgrades >= MAX_PENDING_UPGRADES_PER_COLONY;
+      if (buildQueueFull && upgradeQueueFull) {
+        this._logQueueThrottled(colony, civYear, counts.builds);
+        continue;
+      }
+
       // a) COUNTS (step function) — zbuduj pierwszy brakujący budynek wg priorytetu.
       //    Silent fail (np. brak techu) → zarejestruj unreachable i przejdź do
       //    następnego budynku z priorytetu (zamiast pętlić się w nieskończoność).
-      for (const buildingId of BUILD_PRIORITY) {
+      if (!buildQueueFull) for (const buildingId of BUILD_PRIORITY) {
         const want = cp.buildings[buildingId]?.count ?? 0;
         if (want <= 0) continue;
         const cur = this._countBuilding(colony, buildingId);
@@ -287,7 +332,7 @@ export class ColonyAutoExpander {
       if (colony._caeLastTargetAction?.civYear === civYear) continue;
 
       // b) AVGLEVELS (interpolacja) — gdy counts spełnione, podnoś poziomy stopniowo.
-      for (const buildingId of BUILD_PRIORITY) {
+      if (!upgradeQueueFull) for (const buildingId of BUILD_PRIORITY) {
         const targetLevel = this._interpLevel(data.targets, buildingId, gy);
         if (targetLevel == null) continue;
 
@@ -380,12 +425,14 @@ export class ColonyAutoExpander {
     const hardTerrains = rule?.mode === 'hard' ? rule.terrains : null;
     const softTerrains = rule?.mode === 'soft' ? rule.terrains : null;
     const rows = grid.height ?? 10;
+    const civYear = this._civYear();
 
     // enforceHard=true → filtruj do hardTerrains; false → bez filtra (fallback).
     const pick = (enforceHard) => {
       let best = null, bestScore = -Infinity;
       grid.forEach(tile => {
         if (tile.buildingId || tile.capitalBase || tile.underConstruction || tile.pendingBuild) return;
+        if (this._isTileBlacklisted(colony, tile.key, civYear)) return;  // Y3: tile [fail]
         const terrain = TERRAIN_TYPES[tile.type];
         if (!terrain?.buildable) return;
         if (enforceHard && hardTerrains && !hardTerrains.includes(tile.type)) return;
@@ -433,6 +480,14 @@ export class ColonyAutoExpander {
     this._log(colony, meta.module ?? 'target',
       `build ${buildingId} @ ${tile.type} tile (${tile.q},${tile.r}) [${outcome}]`,
       meta.why, meta.civYear);
+    const civYear = meta.civYear ?? this._civYear();
+    // Y1: śledź zamówienia odroczone (construction/queued) by ograniczyć kolejkę.
+    if (outcome === 'construction' || outcome === 'queued') {
+      this._trackPending(colony, tile.key, buildingId, false, civYear);
+    }
+    // Y3: tile zwrócił [fail] (np. poza zasięgiem, niezdatny) → blacklist na backoff,
+    //   żeby nie spamować tej samej lokacji co civYear.
+    if (outcome === 'fail') this._blacklistTile(colony, tile, civYear);
     return outcome;
   }
 
@@ -485,14 +540,18 @@ export class ColonyAutoExpander {
     //   pendingBuild                      → 'queued'   (przyjęte, czeka na surowce/POP)
     //   nic z powyższych                  → 'fail'     (silent fail: brak techu/maxLevel)
     const lvlAfter = candidate.buildingLevel ?? 1;
+    const civYear  = meta.civYear ?? this._civYear();
     if (lvlAfter > lvlBefore || candidate.underConstruction) {
       this._log(colony, meta.module ?? 'target',
         `upgrade ${buildingId} L${lvlBefore}→L${lvlBefore + 1}`, meta.why, meta.civYear);
+      // Y1: instant level-up nie obciąża kolejki; tylko trwająca budowa upgrade'u.
+      if (candidate.underConstruction) this._trackPending(colony, candidate.key, buildingId, true, civYear);
       return 'upgraded';
     }
     if (candidate.pendingBuild) {
       this._log(colony, meta.module ?? 'target',
         `upgrade ${buildingId} L${lvlBefore}→L${lvlBefore + 1} [queued]`, meta.why, meta.civYear);
+      this._trackPending(colony, candidate.key, buildingId, true, civYear);  // Y1
       return 'queued';
     }
     return 'fail';   // silent fail (brak techu / maxLevel)
@@ -500,6 +559,94 @@ export class ColonyAutoExpander {
 
   _isBuildSuccess(outcome) {
     return outcome === 'built' || outcome === 'construction' || outcome === 'queued';
+  }
+
+  // ── Y1/Y2: monitor kolejki pendingBuilds (anti-deadlock) ────────────────────
+
+  // Zapisz odroczone zamówienie (construction/queued) postawione przez AI.
+  // Klucz = tileKey (unikalny). isUpgrade rozdziela pulę build vs upgrade.
+  _trackPending(colony, tileKey, buildingId, isUpgrade, civYear) {
+    const m = colony._caePendingBuilds || (colony._caePendingBuilds = new Map());
+    if (!m.has(tileKey)) m.set(tileKey, { buildingId, isUpgrade, queuedAtCivYear: civYear });
+  }
+
+  // Liczba aktywnych zamówień w obu pulach (po rozdzieleniu build/upgrade).
+  _pendingCounts(colony) {
+    let builds = 0, upgrades = 0;
+    const m = colony._caePendingBuilds;
+    if (m) for (const rec of m.values()) { if (rec.isUpgrade) upgrades++; else builds++; }
+    return { builds, upgrades };
+  }
+
+  // Pogódź mapę z realnym stanem BuildingSystem:
+  //   - wpis którego NIE ma już w _pendingQueue ani _constructionQueue → ukończony,
+  //     usuń ze śledzenia (zwolnij slot kolejki).
+  //   - wpis w _pendingQueue dłużej niż PENDING_STUCK_CIVYEARS → prawdziwy fail
+  //     (POP/surowce nigdy nie dojdą): anuluj zamówienie, wyczyść tile, oznacz
+  //     buildingId jako unreachable, usuń ze śledzenia.
+  _reconcilePending(colony, civYear) {
+    const m = colony._caePendingBuilds;
+    if (!m || m.size === 0) return;
+    const bSys = colony.buildingSystem;
+    const pendQ = bSys?._pendingQueue;
+    const consQ = bSys?._constructionQueue;
+    for (const [tileKey, rec] of [...m]) {
+      const inPending = pendQ?.has(tileKey);
+      const inConstr  = consQ?.has(tileKey);
+      if (!inPending && !inConstr) { m.delete(tileKey); continue; }  // ukończone/zniknęło
+      if (inPending && (civYear - rec.queuedAtCivYear) > PENDING_STUCK_CIVYEARS) {
+        const key = `${rec.isUpgrade ? 'upgrade' : 'build'}:${rec.buildingId}`;
+        bSys.cancelPending?.(tileKey);
+        const tile = this._tileByKey(colony, tileKey);
+        if (tile) tile.pendingBuild = null;   // AI colony: _syncBuildingIds nie poleci
+        this._markUnreachable(colony, key, civYear, { module: 'queue' });
+        this._log(colony, 'queue',
+          `queue stuck: ${rec.buildingId} @ ${tileKey} pending since cy=${rec.queuedAtCivYear}, no progress — abandoning`,
+          null, civYear);
+        m.delete(tileKey);
+      }
+    }
+  }
+
+  _tileByKey(colony, tileKey) {
+    const grid = colony.buildingSystem?._grid;
+    if (!grid || typeof grid.forEach !== 'function') return null;
+    let found = null;
+    grid.forEach(t => { if (!found && t.key === tileKey) found = t; });
+    return found;
+  }
+
+  // Throttled log "queue full / rest" (raz na QUEUE_LOG_INTERVAL_CIVYEARS).
+  _logQueueThrottled(colony, civYear, pendingBuilds) {
+    if (!this._verbose) return;
+    const last = colony._caeQueueLogCivYear ?? -Infinity;
+    if (civYear - last < QUEUE_LOG_INTERVAL_CIVYEARS) return;
+    colony._caeQueueLogCivYear = civYear;
+    const pending = [...(colony._caePendingBuilds?.values() ?? [])]
+      .map(r => `${r.buildingId}${r.isUpgrade ? '(up)' : ''}`).join(', ');
+    this._log(colony, 'queue',
+      `queue full (${pendingBuilds}/${MAX_PENDING_BUILDS_PER_COLONY}), skipping new builds`,
+      `pending: ${pending}`, civYear);
+  }
+
+  // ── Y3: tile blacklist (anti-loop na [fail] tej samej lokacji) ──────────────
+
+  _isTileBlacklisted(colony, tileKey, civYear) {
+    const rec = colony._caeBlacklistedTiles?.get(tileKey);
+    if (!rec) return false;
+    if (civYear >= rec.retryAtCivYear) {
+      colony._caeBlacklistedTiles.delete(tileKey);  // backoff minął — odblokuj
+      return false;
+    }
+    return true;
+  }
+
+  _blacklistTile(colony, tile, civYear) {
+    const m = colony._caeBlacklistedTiles || (colony._caeBlacklistedTiles = new Map());
+    const retryAtCivYear = civYear + TILE_BLACKLIST_CIVYEARS;
+    m.set(tile.key, { sinceCivYear: civYear, retryAtCivYear });
+    this._log(colony, 'terrain',
+      `tile (${tile.q},${tile.r}) blacklisted (fail)`, `retry @cy=${retryAtCivYear}`, civYear);
   }
 
   // ── Unreachable targets (anti-loop na silent fail) ──────────────────────────
