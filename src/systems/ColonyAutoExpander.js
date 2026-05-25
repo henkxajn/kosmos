@@ -159,6 +159,19 @@ export class ColonyAutoExpander {
 
       const pop = civ.population ?? 0;
 
+      // 0) Housing cap — pop osiągnął housing → wzrost STOI. Najwyższy priorytet:
+      //    bez wolnych POP żadna inna akcja (build/upgrade kosztujący POP) się nie
+      //    wykona. Działa na KAŻDEJ planecie (oddychalna atmosfera chroni przed karą
+      //    brak-housing, ale nie odblokowuje wzrostu). Bufor 10% (housing_buffer_ratio).
+      const housing      = civ.housing ?? 0;
+      const bufferRatio  = TH.housing_buffer_ratio ?? 1.1;
+      if (pop > 0 && housing < pop * bufferRatio) {
+        if (this._doSurvival(colony, 'housing_cap', civYear)) {
+          this._tryBuild(colony, 'habitat', { module: 'survival', civYear, why: `pop ${pop}/${housing} housing cap (target ${(pop * bufferRatio).toFixed(1)})` });
+          continue;
+        }
+      }
+
       // 1) Energia — bilans poniżej progu → solar_farm (najwyższy priorytet, brownout psuje wszystko)
       const bal = res.energy?.balance ?? 0;
       if (bal < (TH.energy_balance_min ?? 0)) {

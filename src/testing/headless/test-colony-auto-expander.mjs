@@ -323,6 +323,36 @@ ok('budynki rosną monotonicznie', grewMonotonic && totalBuildings(colony7) > 6)
 ok('≥1 budynek osiągnął _active level ≥ 2 (upgrade zadziałał)', maxActiveLvl >= 2);
 ok('brak fałszywych unreachable (farm/solar_farm/mine/well)', falseUnreach.length === 0);
 
+// ── T8: survival rule — pop >= housing → buduj habitat (bug X1) ──
+// Thuban b: pop utknął na 8 (= housing 8). Survival rule (najwyższy priorytet)
+// musi dobudować habitat gdy housing < pop * 1.1.
+console.log('--- T8: Survival habitat (pop 8 / housing 8 cap) ---');
+const grid8 = new HexGrid(8, 10); grid8.forEach(t => { t.type = 'plains'; });
+const techReal8 = new TechSystem(); techReal8.grantTechs(INDUSTRIALIST.startingTechs);
+const res8 = new ResourceSystem(startResources);
+const civ8 = new CivilizationSystem({}, techReal8, planet); civ8.resourceSystem = res8;
+const bSys8 = new BuildingSystem(res8, civ8, techReal8); civ8.buildingSystem = bSys8;
+bSys8._grid = grid8; bSys8._gridHeight = grid8.height; bSys8.setDeposits?.([]);
+const fact8 = new FactorySystem(res8); bSys8.setFactorySystem(fact8);
+civ8.population = 8;
+civ8.housing = 8;   // cap osiągnięty: pop === housing → wzrost stoi
+const colony8 = { planetId:'p8', ownerEmpireId:'e8', isOutpost:false, planet,
+  resourceSystem:res8, civSystem:civ8, buildingSystem:bSys8, factorySystem:fact8 };
+colonyRef.c = colony8;   // expander zarządza tą kolonią
+
+expander._runSurvival(200);   // jeden przebieg survival @cy=200
+
+let habitatQueued = false;
+for (const [, c] of bSys8._constructionQueue) if (c.buildingId === 'habitat') habitatQueued = true;
+const habitatActive = expander._countBuilding(colony8, 'habitat') > 0;
+let habitatOnGrid = false;
+grid8.forEach(t => { if (t.underConstruction?.buildingId === 'habitat' || t.buildingId === 'habitat') habitatOnGrid = true; });
+console.log(`    habitatQueued=${habitatQueued}, habitatActive=${habitatActive}, habitatOnGrid=${habitatOnGrid}, lastSurvival=${colony8._caeLastSurvivalAction?.type}`);
+ok('survival zbudował habitat (queue lub active)', habitatQueued || habitatActive);
+ok('nowa habitat na gridzie (underConstruction lub buildingId)', habitatOnGrid);
+ok('survival action = housing_cap (najwyższy priorytet)', colony8._caeLastSurvivalAction?.type === 'housing_cap');
+ok('build:habitat NIE oznaczony unreachable', !colony8._caeUnreachableTargets?.has('build:habitat'));
+
 // ── T9: bootstrap twarda reguła terenu (bug X2) ─────────────────
 // EmpireColonyBootstrap._placeBuildingSmart MUSI stawiać well/farm na plains i
 // mine na mountains nawet gdy inne tereny mają lepszy scoring (bug X2: well @

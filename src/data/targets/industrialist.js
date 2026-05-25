@@ -188,9 +188,15 @@ export const INDUSTRIALIST_SURVIVAL_THRESHOLDS = {
   food_min_per_pop: 3.0,
 
   // ⚠ housing ZALEŻY OD ATMOSFERY: na planecie z oddychalną atmosferą housing
-  //   jest zbędny (Nowa Ziemia: pop 62 @ housing 8, świadomie). Próg poniżej
-  //   stosować TYLKO dla kolonii bez oddychalnej atmosfery. do potwierdzenia.
+  //   jest zbędny do PRZEŻYCIA (brak kary), ale pop >= housing i tak ZATRZYMUJE
+  //   wzrost (Thuban b: pop utknął na 8 = housing 8). Próg poniżej (0.5) stosować
+  //   tylko jako minimum przeżycia bez atmosfery. do potwierdzenia.
   housing_min_ratio_no_atmosphere: 0.5,
+
+  // Pop >= housing zatrzymuje wzrost na KAŻDEJ planecie. AI utrzymuje 10% bufor:
+  //   housing target = pop × 1.1 → kolonia z 20 POP chce ≥22 housing (headroom na
+  //   wzrost). Survival rule (najwyższy priorytet) buduje habitat gdy housing < target.
+  housing_buffer_ratio: 1.1,
 
   // Energia: w partii 1 bilans był zawsze dodatni (brownout=false). Próg = nie
   //   schodzić poniżej 0 bilansu. do potwierdzenia.
