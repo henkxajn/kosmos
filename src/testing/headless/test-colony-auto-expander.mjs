@@ -22,9 +22,11 @@ import { ResourceSystem }     from '../../systems/ResourceSystem.js';
 import { CivilizationSystem } from '../../systems/CivilizationSystem.js';
 import { BuildingSystem }     from '../../systems/BuildingSystem.js';
 import { FactorySystem }      from '../../systems/FactorySystem.js';
+import { TechSystem }         from '../../systems/TechSystem.js';
 import { HexGrid }            from '../../map/HexGrid.js';
 import { ColonyAutoExpander } from '../../systems/ColonyAutoExpander.js';
 import { INDUSTRIALIST_TARGETS } from '../../data/targets/industrialist.js';
+import { INDUSTRIALIST }      from '../../data/EmpireArchetypeIndustrialist.js';
 
 let pass = 0, fail = 0;
 const ok = (name, cond) => {
@@ -189,6 +191,129 @@ ok('build:factory NIE w backoffie po retryAtCivYear (cy=130)', expander._isUnrea
 // Clear → wpis znika (sukces po odkryciu techu).
 expander._clearUnreachable(colony2, 'build:factory');
 ok('_clearUnreachable usuwa wpis', !colony2._caeUnreachableTargets?.has('build:factory'));
+
+// ── T6: _upgrade dla AI — success/queued ≠ unreachable (bug A) ───
+// Regresja: queued upgrade (pendingBuild, gdy brak surowców/POP) był błędnie
+// czytany jako 'fail' → AI rejestrował wszystkie upgrade:* jako unreachable.
+console.log('--- T6: Upgrade AI (success + queued ≠ unreachable) ---');
+
+const techRealT6 = new TechSystem();
+techRealT6.grantTechs(INDUSTRIALIST.startingTechs);  // metallurgy + automation itd.
+
+const grid6 = new HexGrid(8, 10);
+grid6.forEach(t => { t.type = 'plains'; });
+// 6a — pełne surowce + POP → upgrade rusza (underConstruction lub instant)
+const res6 = new ResourceSystem(startResources);
+const civ6 = new CivilizationSystem({}, techRealT6, planet); civ6.resourceSystem = res6;
+const bSys6 = new BuildingSystem(res6, civ6, techRealT6); civ6.buildingSystem = bSys6;
+bSys6._grid = grid6; bSys6._gridHeight = grid6.height; bSys6.setDeposits?.([]);
+const fact6 = new FactorySystem(res6); bSys6.setFactorySystem(fact6);
+civ6.population = 30;
+let farm6 = null;
+grid6.forEach(t => { if (!farm6 && t.r > 2 && t.r < 7) farm6 = t; });
+bSys6._activateBuilding(farm6.key, 'farm', farm6.r, farm6.type, false);
+farm6.buildingId = 'farm'; farm6.buildingLevel = 1;
+
+const colony6 = { planetId:'p6', ownerEmpireId:'e6', isOutpost:false, planet,
+  resourceSystem:res6, civSystem:civ6, buildingSystem:bSys6, factorySystem:fact6 };
+const upgOut = expander._tryUpgrade(colony6, 'farm', 2, { module:'target', civYear:24 });
+ok("_tryUpgrade('farm',2) === 'upgraded' (pełne surowce)", upgOut === 'upgraded');
+ok('upgrade ruszył (underConstruction)', !!farm6.underConstruction);
+// Dokończ budowę upgrade'u (driver: time:tick civDeltaYears). UWAGA: źródłem prawdy
+// dla poziomu jest _active[tileKey].level (grid tile.buildingLevel to mirror UI,
+// synchronizowany przez ColonyOverlay — w headless nie istnieje).
+for (let i = 0; i < 10 && (bSys6._active.get(farm6.key)?.level ?? 1) < 2; i++) {
+  EventBus.emit('time:tick', { deltaYears: 0.1, civDeltaYears: 2, gameTime: 30 + i, multiplier: 2 });
+}
+ok('po dokończeniu budowy _active[farm].level === 2', bSys6._active.get(farm6.key)?.level === 2);
+
+// 6b — pusty inwentarz → upgrade queue (pendingBuild) → 'queued', NIE 'fail'
+const grid6b = new HexGrid(8, 10); grid6b.forEach(t => { t.type = 'plains'; });
+const res6b = new ResourceSystem({});  // brak surowców → queue
+const civ6b = new CivilizationSystem({}, techRealT6, planet); civ6b.resourceSystem = res6b;
+const bSys6b = new BuildingSystem(res6b, civ6b, techRealT6); civ6b.buildingSystem = bSys6b;
+bSys6b._grid = grid6b; bSys6b._gridHeight = grid6b.height; bSys6b.setDeposits?.([]);
+const fact6b = new FactorySystem(res6b); bSys6b.setFactorySystem(fact6b);
+civ6b.population = 30;
+let farm6b = null;
+grid6b.forEach(t => { if (!farm6b && t.r > 2 && t.r < 7) farm6b = t; });
+bSys6b._activateBuilding(farm6b.key, 'farm', farm6b.r, farm6b.type, false);
+farm6b.buildingId = 'farm'; farm6b.buildingLevel = 1;
+const colony6b = { planetId:'p6b', ownerEmpireId:'e6b', isOutpost:false, planet,
+  resourceSystem:res6b, civSystem:civ6b, buildingSystem:bSys6b, factorySystem:fact6b };
+// pełna ścieżka jak _runTargets: outcome → clear/mark
+const upgOutB = expander._tryUpgrade(colony6b, 'farm', 2, { module:'target', civYear:24 });
+ok("_tryUpgrade('farm',2) === 'queued' (brak surowców)", upgOutB === 'queued');
+ok('queued upgrade NIE jest oznaczony unreachable', !colony6b._caeUnreachableTargets?.has('upgrade:farm'));
+
+// Backoff: mark @cy=24 → retryAt=54 (stały interwał 30).
+expander._markUnreachable(colony6, 'upgrade:smelter', 24, { module:'target' });
+const rec1 = colony6._caeUnreachableTargets.get('upgrade:smelter');
+ok('backoff mark@24: since=24, retryAt=54', rec1.sinceCivYear === 24 && rec1.retryAtCivYear === 54);
+
+// ── T7: integracja — kolonia jak po bootstrapie, tick ~100 civYears ──
+// Po obu fixach: buildings rosną monotonicznie, ≥1 budynek osiąga level≥2
+// (źródło prawdy: _active[].level), a mapa unreachable NIE zawiera fałszywych
+// upgrade:*/build:* dla budynków buildowalnych (farm/solar_farm/mine/well).
+// Pre-stawiamy startingBuildings jak EmpireColonyBootstrap (_activateBuilding +
+// stamp grid tile.buildingId) — to budynki które AutoExpander może upgrade'ować.
+console.log('--- T7: Integracja — tick ~100 civYears (upgrade flow) ---');
+const techRealT7 = new TechSystem();
+techRealT7.grantTechs(INDUSTRIALIST.startingTechs);
+const grid7 = new HexGrid(8, 10);
+let mset = 0; grid7.forEach(t => { if (t.r === 5 && mset < 5) { t.type = 'mountains'; mset++; } });
+const res7 = new ResourceSystem(startResources);
+const civ7 = new CivilizationSystem({}, techRealT7, planet); civ7.resourceSystem = res7;
+const bSys7 = new BuildingSystem(res7, civ7, techRealT7); civ7.buildingSystem = bSys7;
+bSys7._grid = grid7; bSys7._gridHeight = grid7.height; bSys7.setDeposits?.([]);
+const fact7 = new FactorySystem(res7); bSys7.setFactorySystem(fact7);
+civ7.population = 40;  // dużo POP → upgrade rusza (underConstruction)
+
+// Pre-stawienie startingBuildings (jak bootstrap: instant, stamp grid tile).
+const placeBootstrap = (bid, count, terrains) => {
+  let done = 0;
+  grid7.forEach(t => {
+    if (done >= count) return;
+    if (t.buildingId || t.capitalBase) return;
+    if (terrains && !terrains.includes(t.type)) return;
+    bSys7._activateBuilding(t.key, bid, t.r, t.type, BUILDINGS_IS_CAPITAL(bid));
+    if (BUILDINGS_IS_CAPITAL(bid)) t.capitalBase = true;
+    else { t.buildingId = bid; t.buildingLevel = 1; }
+    done++;
+  });
+};
+function BUILDINGS_IS_CAPITAL(bid) { return bid === 'colony_base'; }
+placeBootstrap('colony_base', 1, null);
+placeBootstrap('farm', 2, ['plains']);
+placeBootstrap('well', 2, ['plains']);
+placeBootstrap('solar_farm', 5, ['plains']);
+placeBootstrap('mine', 1, ['mountains']);
+placeBootstrap('factory', 1, ['plains']);
+
+const colony7 = { planetId:'p7', ownerEmpireId:'e7', isOutpost:false, planet,
+  resourceSystem:res7, civSystem:civ7, buildingSystem:bSys7, factorySystem:fact7 };
+colonyRef.c = colony7;   // przekieruj expander na kolonię T7
+fact7.setMode('reactive');
+
+const activeLevels = () => { let mx = 1; for (const e of bSys7._active.values()) if ((e.level ?? 1) > mx) mx = e.level; return mx; };
+let gt7 = 0;
+const buildSamples = [];
+for (let i = 0; i < 130; i++) {     // ~390 civYears (0.25 gy = 3 civYears/iter) — z zapasem
+  gt7 += 0.25;
+  window.KOSMOS.timeSystem.gameTime = gt7;
+  EventBus.emit('time:tick', { deltaYears: 0.25, civDeltaYears: 3, gameTime: gt7, multiplier: 3 });
+  res7.receive(startResources);     // utrzymuj zapas (izolacja od konsumpcji)
+  if (i % 20 === 0) buildSamples.push(totalBuildings(colony7));
+}
+buildSamples.push(totalBuildings(colony7));
+const grewMonotonic = buildSamples.every((v, i) => i === 0 || v >= buildSamples[i - 1]);
+const maxActiveLvl = activeLevels();  // źródło prawdy (nie grid mirror)
+const unreachKeys = [...(colony7._caeUnreachableTargets?.keys() ?? [])];
+const falseUnreach = unreachKeys.filter(k => /(farm|solar_farm|mine|well)$/.test(k));
+console.log(`    gy=${Math.floor(gt7)}, budynki=${totalBuildings(colony7)} (próbki ${buildSamples.join('→')}), maxActiveLevel=${maxActiveLvl}, unreachable=[${unreachKeys.join(', ')}]`);
+ok('budynki rosną monotonicznie', grewMonotonic && totalBuildings(colony7) > 6);
+ok('≥1 budynek osiągnął _active level ≥ 2 (upgrade zadziałał)', maxActiveLvl >= 2);
+ok('brak fałszywych unreachable (farm/solar_farm/mine/well)', falseUnreach.length === 0);
 
 console.log(`\n=== ${pass} PASS, ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);

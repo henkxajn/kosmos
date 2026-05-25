@@ -295,7 +295,8 @@ export class ColonyAutoExpander {
         if (this._isUnreachable(colony, key, civYear)) continue;
 
         const outcome = this._tryUpgrade(colony, buildingId, targetLevel, { module: 'target', civYear, why: `lerp →L${targetLevel} @gy${gy}` });
-        if (outcome === 'upgraded') {
+        if (outcome === 'upgraded' || outcome === 'queued') {
+          // 'queued' = upgrade przyjęty, czeka na surowce/POP — to NIE silent fail.
           this._clearUnreachable(colony, key);
           colony._caeLastTargetAction = { type: key, civYear };
           break; // jedna akcja na tick
@@ -419,10 +420,30 @@ export class ColonyAutoExpander {
     return outcome;
   }
 
+  // TECH DEBT (odkryte przy bug A, 2026-05-25): kandydaci do upgrade są szukani po
+  //   grid tile.buildingId, ale grid to MIRROR UI przebudowywany przez
+  //   ColonyOverlay._syncTileBuildings — synchronizowany TYLKO dla kolonii z
+  //   _gridCache[planetId] (czyli kiedykolwiek otwartych przez gracza). Źródłem
+  //   prawdy jest bSys._active (entry.level). Konsekwencje dla kolonii AI (nigdy
+  //   nie otwieranych w ColonyOverlay):
+  //     - budynki bootstrapowe (grid.buildingId ustawiony przez
+  //       EmpireColonyBootstrap._placeBuildingSmart) SĄ upgrade'owalne;
+  //     - budynki postawione przez sam AutoExpander przez _build (buildTime>0 →
+  //       construction queue → _activateBuilding ustawia tylko _active, NIE grid)
+  //       NIE dostają grid.buildingId → nie są kandydatami do upgrade;
+  //     - po starcie upgrade'u grid.underConstruction na nie-synchronizowanej koloni
+  //       nie jest czyszczony → ponowny upgrade tego hexa bywa blokowany.
+  //   Docelowy fix (poza scope bugfixów A/B): czytać kandydatów z bSys._active
+  //   (źródło prawdy) + sprawdzać busy-state przez _constructionQueue/_pendingQueue
+  //   zamiast flag grid tile. Wymaga ostrożności (BuildingSystem._upgrade też czyta
+  //   stale tile.underConstruction/pendingBuild i może odrzucić).
+  //
   // Próba upgrade: znajdź budynek tego typu poniżej docelowego poziomu i ulepsz.
   // Zwraca outcome string:
-  //   'upgraded'     — sukces (poziom wzrósł lub start budowy ulepszenia)
-  //   'fail'         — _upgrade silent-failował (brak techu/surowców — bez zmiany)
+  //   'upgraded'     — sukces natychmiastowy (poziom wzrósł) lub start budowy upgrade'u
+  //   'queued'       — sukces odroczony: _upgrade przyjął, czeka na surowce/POP
+  //                    (tile.pendingBuild) — to NIE silent fail (mirror _build 'queued')
+  //   'fail'         — _upgrade silent-failował (brak techu/maxLevel — bez zmiany tile)
   //   'no_candidate' — brak budynku tego typu poniżej docelowego poziomu
   _tryUpgrade(colony, buildingId, targetLevel, meta = {}) {
     const bSys = colony.buildingSystem;
@@ -442,14 +463,23 @@ export class ColonyAutoExpander {
 
     const lvlBefore = candidate.buildingLevel ?? 1;
     bSys._upgrade(candidate);
-    // Sukces = poziom wzrósł (instant) LUB ruszyła budowa ulepszenia (buildTime>0).
-    const lvlAfter = candidate.buildingLevel ?? 1;
-    const success  = lvlAfter > lvlBefore || !!candidate.underConstruction;
-    if (!success) return 'fail';   // silent fail (brak techu/surowców)
 
-    this._log(colony, meta.module ?? 'target',
-      `upgrade ${buildingId} L${lvlBefore}→L${lvlBefore + 1}`, meta.why, meta.civYear);
-    return 'upgraded';
+    // Rozróżnij wynik z flag tile (analogicznie do _tryBuild):
+    //   poziom wzrósł / underConstruction → 'upgraded' (akcja podjęta)
+    //   pendingBuild                      → 'queued'   (przyjęte, czeka na surowce/POP)
+    //   nic z powyższych                  → 'fail'     (silent fail: brak techu/maxLevel)
+    const lvlAfter = candidate.buildingLevel ?? 1;
+    if (lvlAfter > lvlBefore || candidate.underConstruction) {
+      this._log(colony, meta.module ?? 'target',
+        `upgrade ${buildingId} L${lvlBefore}→L${lvlBefore + 1}`, meta.why, meta.civYear);
+      return 'upgraded';
+    }
+    if (candidate.pendingBuild) {
+      this._log(colony, meta.module ?? 'target',
+        `upgrade ${buildingId} L${lvlBefore}→L${lvlBefore + 1} [queued]`, meta.why, meta.civYear);
+      return 'queued';
+    }
+    return 'fail';   // silent fail (brak techu / maxLevel)
   }
 
   _isBuildSuccess(outcome) {
