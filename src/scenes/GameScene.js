@@ -72,6 +72,7 @@ import { SystemGenerator }   from '../generators/SystemGenerator.js';
 import { GalaxyGenerator }   from '../generators/GalaxyGenerator.js';
 import { EmpireGenerator }   from '../generators/EmpireGenerator.js';
 import { EmpireRegistry }    from '../systems/EmpireRegistry.js';
+import { EmpireColonyBootstrap } from '../systems/EmpireColonyBootstrap.js';
 import { IntelSystem }       from '../systems/IntelSystem.js';
 import { POIRegistry }       from '../systems/POIRegistry.js';
 import { POIRuntimeSystem }  from '../systems/POIRuntimeSystem.js';
@@ -316,6 +317,7 @@ export class GameScene {
     window.KOSMOS.eventLogSystem       = this.eventLogSystem;
     window.KOSMOS.notificationCenter   = this.notificationCenter;
     window.KOSMOS.empireRegistry   = this.empireRegistry;
+    window.KOSMOS.empireColonyBootstrap = EmpireColonyBootstrap;  // klasa statyczna (Slice 2 devtools)
     window.KOSMOS.intelSystem      = this.intelSystem;
     window.KOSMOS.poiRegistry      = this.poiRegistry;
     window.KOSMOS.poiRuntimeSystem = this.poiRuntimeSystem;

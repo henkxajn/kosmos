@@ -36,6 +36,23 @@ export class EmpireRegistry {
   listIds()        { return Object.keys(gameState.get('empires') ?? {}); }
   count()          { return this.listIds().length; }
 
+  /**
+   * Zwraca żywe obiekty kolonii imperium (z ColonyManager), nie same id.
+   * Slice 2: używane przez EmpireColonyBootstrap.bootstrapColony (reuse TechSystem)
+   * oraz Warstwę C (decyzje strategiczne per kolonia).
+   * @param {string} empireId
+   * @returns {Object[]} tablica colony state (puste gdy brak imperium/ColonyManager)
+   */
+  getColoniesByEmpire(empireId) {
+    const emp = this.get(empireId);
+    if (!emp) return [];
+    const cm = window.KOSMOS?.colonyManager;
+    if (!cm) return [];
+    return emp.colonies
+      .map(planetId => cm.getColony(planetId))
+      .filter(Boolean);
+  }
+
   // ── Intent methods (mutacje) ─────────────────────────────────
 
   /**
