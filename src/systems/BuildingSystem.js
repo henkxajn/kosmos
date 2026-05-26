@@ -28,6 +28,7 @@ import { HexGrid }        from '../map/HexGrid.js';
 import { POP_PER_BUILDING } from '../systems/CivilizationSystem.js';
 import { DepositSystem }    from '../systems/DepositSystem.js';
 import { BUILDING_SLIDER_SHIFTS } from '../systems/FactionSystem.js';
+import { getTerrainRule }  from '../data/ai/AiTerrainRules.js';
 import { t, getName }      from '../i18n/i18n.js';
 
 // Maksymalny poziom budynku — base 10, tech nie potrzebny
@@ -1149,8 +1150,9 @@ export class BuildingSystem {
    * bootstrap kolonii imperium AI (EmpireColonyBootstrap, Slice 1).
    * @param {string} buildingId
    * @param {Object} [opts] — opcje placementu
-   * @param {string[]} [opts.preferredTerrain] — priorytet terenu; jeśli istnieje
-   *        pasujący wolny hex z tej listy, wybiera go. Fallback do allowedTerrain.
+   * @param {string[]} [opts.preferredTerrain] — priorytet terenu (Faza 1, hard hint);
+   *        jeśli istnieje wolny hex z tej listy, wybiera najmniej polarny.
+   *        Bez preferredTerrain → Faza 2: scoring wg AiTerrainRules + polar penalty.
    * @returns {boolean} true jeśli udało się postawić
    */
   autoPlaceBuilding(buildingId, opts = {}) {
@@ -1169,42 +1171,79 @@ export class BuildingSystem {
     const grid = this._grid;
     if (!grid || typeof grid.forEach !== 'function') return false;
 
+    const rows = grid.height ?? 10;
     const preferred = Array.isArray(opts.preferredTerrain) && opts.preferredTerrain.length > 0
       ? opts.preferredTerrain
       : null;
-    const allowed = building.allowedTerrain;
 
-    // Wspólny predykat "wolny hex" — bez sprawdzania terenu
+    // Reguła terenu AI — JEDNO źródło prawdy współdzielone z ColonyAutoExpander.
+    //   _findFreeTile i EmpireColonyBootstrap._placeBuildingSmart (AiTerrainRules.js).
+    const rule = getTerrainRule(buildingId);
+    const hardTerrains = rule?.mode === 'hard' ? rule.terrains : null;
+    const softTerrains = rule?.mode === 'soft' ? rule.terrains : null;
+
+    // Wspólny predykat "wolny + buildowalny hex".
     const isFreeHex = (tile) => {
       if (tile.buildingId) return false;
       if (tile.capitalBase) return false;
       if (tile.underConstruction) return false;
-      return true;
+      if (tile.pendingBuild) return false;
+      return TERRAIN_TYPES[tile.type]?.buildable === true;
     };
 
-    // Faza 1 — szukaj hexa z preferredTerrain (jeśli podane)
+    // POLAR_PENALTY: zsynchronizowane z ColonyAutoExpander._findFreeTile (-5/-2).
+    //   Jeśli zmieniasz tu wartości, zmień też tam i w
+    //   EmpireColonyBootstrap._placeBuildingSmart — trzy kopie tej samej skali.
+    const polarPenalty = (r) => {
+      if (r === 0 || r === rows - 1) return -5;
+      if (r === 1 || r === rows - 2) return -2;
+      return 0;
+    };
+
+    // Faza 1 — jawny preferredTerrain od callera (hard hint). Fix: czytamy
+    //   tile.type, nie nieistniejące tile.terrain (przez co Faza 1 była martwa).
+    //   Wśród pasujących preferowanych wybieramy najmniej polarny.
     let placedKey = null;
     let placedTile = null;
     if (preferred) {
+      let bestScore = -Infinity;
       grid.forEach(tile => {
-        if (placedKey) return;
         if (!isFreeHex(tile)) return;
-        if (allowed && !allowed.includes(tile.terrain)) return;
-        if (!preferred.includes(tile.terrain)) return;
-        placedKey  = tile.key ?? `${tile.q},${tile.r}`;
-        placedTile = tile;
+        if (!preferred.includes(tile.type)) return;
+        const score = polarPenalty(tile.r);
+        if (score > bestScore) {
+          bestScore  = score;
+          placedKey  = tile.key ?? `${tile.q},${tile.r}`;
+          placedTile = tile;
+        }
       });
     }
 
-    // Faza 2 — fallback: pierwszy wolny hex z allowedTerrain (zachowanie pre-Slice 1)
+    // Faza 2 — scoring-based selection (wzór _findFreeTile): soft-bonus za teren
+    //   z reguły AI + polar penalty. enforceHard=true → wymuś hardTerrains,
+    //   fallback na dowolny buildowalny DOPIERO gdy żaden hex z listy nie wolny
+    //   (nie blokuj dropu — nigdy nie wymuszaj bieguna jeśli jest cokolwiek innego).
     if (!placedTile) {
-      grid.forEach(tile => {
-        if (placedKey) return;
-        if (!isFreeHex(tile)) return;
-        if (allowed && !allowed.includes(tile.terrain)) return;
-        placedKey  = tile.key ?? `${tile.q},${tile.r}`;
-        placedTile = tile;
-      });
+      const pick = (enforceHard) => {
+        let best = null, bestKey = null, bestScore = -Infinity;
+        grid.forEach(tile => {
+          if (!isFreeHex(tile)) return;
+          if (enforceHard && hardTerrains && !hardTerrains.includes(tile.type)) return;
+          let score = 0;
+          if (softTerrains && softTerrains.includes(tile.type)) score += 10;
+          score += polarPenalty(tile.r);
+          if (score > bestScore) {
+            bestScore = score;
+            best      = tile;
+            bestKey   = tile.key ?? `${tile.q},${tile.r}`;
+          }
+        });
+        return { best, bestKey };
+      };
+      let res = pick(!!hardTerrains);
+      if (!res.best && hardTerrains) res = pick(false);  // fallback poza hard-listę
+      placedTile = res.best;
+      placedKey  = res.bestKey;
     }
 
     if (!placedTile) return false;

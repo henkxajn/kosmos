@@ -25,7 +25,21 @@ export const AI_TERRAIN_RULES = {
   factory: { mode: 'soft', terrains: ['plains', 'industrial_zones', 'tundra', 'desert', 'crater', 'forest'] },
   smelter: { mode: 'soft', terrains: ['plains', 'industrial_zones', 'tundra', 'desert', 'crater', 'forest'] },
   habitat: { mode: 'soft', terrains: ['plains', 'tundra', 'desert', 'crater', 'forest'] },
-  // pozostałe budynki: brak reguły → dowolny buildowalny teren OK
+
+  // ── Budynki autonomiczne (drop z cargo / found_outpost / bootstrap) ─────────
+  // Bez reguły lądowały na pierwszym wolnym hexie = biegun (penalty prod ×0.5).
+  // Solarne preferują nasłonecznione tereny (desert/plains); polar penalty w
+  //   scoringu (autoPlaceBuilding / _findFreeTile) sam dociąga je ku równikowi.
+  autonomous_solar_farm: { mode: 'soft', terrains: ['desert', 'plains'] },
+  // Kopalnie (orbitalna też) — twardo góry/krater, jak naziemny `mine`.
+  autonomous_mine:       { mode: 'hard', terrains: ['mountains', 'crater'] },
+  orbital_mine:          { mode: 'hard', terrains: ['mountains', 'crater'] },
+  // Spaceport — jakikolwiek sensowny teren, byle nie biegun (polar penalty).
+  autonomous_spaceport:  { mode: 'soft', terrains: ['plains', 'desert', 'tundra', 'crater', 'forest'] },
+
+  // ai_nexus / warp_beacon / jump_gate — sensowny default = brak reguły:
+  //   dowolny buildowalny hex, a polar penalty w scoringu i tak unika biegunów.
+  //   (Nie blokujemy ich twardym terenem — to budynki strategiczne late-game.)
 };
 
 /** Zwraca regułę terenu dla budynku ({ mode, terrains }) lub null. */
