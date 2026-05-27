@@ -80,6 +80,7 @@ import { DiplomacySystem }   from '../systems/DiplomacySystem.js';
 import { AlienCivSystem }    from '../systems/AlienCivSystem.js';
 import { EmpireColonyMaintenance } from '../systems/EmpireColonyMaintenance.js';  // TODO Faza 2: usuń razem z ColonyAutoPlanner
 import { ColonyAutoExpander } from '../systems/ColonyAutoExpander.js';
+import { EmpireStrategySystem } from '../systems/EmpireStrategySystem.js';
 import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
@@ -270,6 +271,8 @@ export class GameScene {
     this.empireColonyMaintenance = new EmpireColonyMaintenance();
     // Warstwa B AI — auto-rozbudowa kolonii AI (współistnieje z Maintenance, patrz konstruktor)
     this.colonyAutoExpander   = new ColonyAutoExpander();
+    // Warstwa C AI — strategiczne decyzje kolonizacji (outpost Xe / pełna kolonia)
+    this.empireStrategySystem = new EmpireStrategySystem();
     this.warSystem            = new WarSystem();
     this.invasionSystem       = new InvasionSystem();
     this.orbitalSpaceSystem   = new OrbitalSpaceSystem();
@@ -324,6 +327,7 @@ export class GameScene {
     window.KOSMOS.diplomacySystem  = this.diplomacySystem;
     window.KOSMOS.alienCivSystem   = this.alienCivSystem;
     window.KOSMOS.colonyAutoExpander = this.colonyAutoExpander;
+    window.KOSMOS.empireStrategySystem = this.empireStrategySystem;
     window.KOSMOS.warSystem        = this.warSystem;
     window.KOSMOS.invasionSystem   = this.invasionSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;

@@ -41,6 +41,22 @@ export const INDUSTRIALIST = {
     military_buildup:     0.1,
   },
 
+  // Warstwa C (EmpireStrategySystem) — tunable doktryny kolonizacji AI.
+  // Opcjonalny blok: system ma własne DEFAULTS jako fallback per-klucz, więc
+  // działa też dla archetypów bez tego pola. Decyzja "minimum wg promptu":
+  //   minFoodTransfer/minWaterTransfer pełnią podwójną rolę — próg dostępności
+  //   macierzystej ORAZ ilość wysyłana na nową kolonię (bez bufora; macierzysta
+  //   może chwilowo spaść ~do zera, odbuduje przed kolejną kolonią).
+  strategicColonization: {
+    targetXeOutposts:       2,    // ile outpostów Xe zabezpieczyć (P1 + P2)
+    popTransferSize:        2,    // ile POP wysłać na pełną kolonię (suma ≥ 2)
+    minFreePops:            8,    // min freePops macierzystej by uruchomić full-colony path
+    minFoodTransfer:        200,  // próg = transfer food (bootstrap wymaga ≥ 200)
+    minWaterTransfer:       200,  // próg = transfer water
+    blacklistDurationCy:    30,   // jak długo ciało-cel na blackliście po failure
+    requireBreathableForP3: true, // P3 wymaga atmosfery oddychalnej (fallback nie)
+  },
+
   // Handicap startowy — budynki stawiane instant (bez kosztu surowców i tech)
   // przez EmpireColonyBootstrap via BuildingSystem.autoPlaceBuilding.
   // preferredTerrain to scoring hint dla autoPlaceBuilding (Faza 0 Issue #1).
@@ -100,6 +116,9 @@ export const INDUSTRIALIST = {
     'exploration',       // Eksploracja
     'basic_computing',   // Obliczenia Cyfrowe
     'metallurgy',        // Metalurgia — odblokowuje fabryki
+    'robotics',          // Robotyka — odblokowuje recepturę android_worker (wymaga metallurgy).
+                         //   Bez tego AI nigdy nie produkuje androidów → P1/P2 (outposty Xe)
+                         //   martwe (autonomous_solar/mine wymagają android_worker). Slice 2 S2 fix.
   ],
 
   // Startowe surowce — deponowane do colony.resourceSystem.inventory.

@@ -520,15 +520,28 @@ export class FactorySystem {
   isRecipeAvailable(commodityId) {
     const def = COMMODITIES[commodityId];
     if (!def) return false;
-    const techSys = window.KOSMOS?.techSystem;
-    // Priorytet: efekty `unlockCommodity` w drzewie tech (JEDNO źródło prawdy).
-    // Commodity może być odblokowane przez kilka tech'ów — isCommodityUnlocked
-    // zwraca true jeśli DOWOLNA zbadana tech ma unlockCommodity dla tego id.
-    if (techSys?.isCommodityUnlocked?.(commodityId)) return true;
-    // Fallback: pole requiresTech z CommoditiesData (dla towarów bez wpisu
-    // unlockCommodity w TechData, np. prefabrykaty, consumer goods).
+    // PER-EMPIRE TECH ISOLATION (Slice 2 S2 fix): źródło tech = buildingSystem.techSystem
+    // kolonii-właściciela (anchor Slice 1: gracz === window.KOSMOS.techSystem,
+    // AI === per-empire aiTech). Wcześniej czytano window.KOSMOS.techSystem (GLOBALNY tech
+    // gracza) → AI nie mogło odblokować recept (np. android_worker bez robotics gracza),
+    // przez co outposty Xe AI (P1/P2) były martwe.
+    // FAIL-CLOSED — brak owner colony / techSystem → recepta niedostępna (zapobiega
+    // cichemu mostowi tech gracza↔AI). colony.techSystem NIE jest ustawione dla gracza,
+    // więc anchorujemy na buildingSystem.techSystem (ustawione dla każdej kolonii).
+    // TECH DEBT #15: pozostałe systemy nadal na globalnym window.KOSMOS.techSystem
+    // (factory speed mult :494/:698, BuildingSystem asteroid gate, ProsperitySystem, combat).
+    const techSys = this._getOwnerColony()?.buildingSystem?.techSystem;
+    if (!techSys) {
+      console.warn(`[FactorySystem] isRecipeAvailable(${commodityId}): brak owner colony lub buildingSystem.techSystem — fail-closed`);
+      return false;
+    }
+    // Zachowana 3-częściowa semantyka:
+    //   1) efekt unlockCommodity w zbadanej tech (JEDNO źródło prawdy)
+    if (techSys.isCommodityUnlocked?.(commodityId)) return true;
+    //   2) brak wymogu tech (prefabrykaty, consumer goods bazowe)
     if (!def.requiresTech) return true;
-    return techSys?.isResearched(def.requiresTech) ?? false;
+    //   3) fallback requiresTech z CommoditiesData
+    return techSys.isResearched?.(def.requiresTech) ?? false;
   }
 
   // Zwróć listę sub-składników (commodity) zablokowanych technologicznie.
