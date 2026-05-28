@@ -548,5 +548,164 @@ const totalGrowthProgress = Object.values(civ13.strata).reduce((s, st) => s + (s
 console.log(`    Σ strata growthProgress=${totalGrowthProgress.toFixed(3)} (housing ${civ13.effectiveHousing} > pop ${civ13.population})`);
 ok('wzrost populacji odblokowany (Σ strata growthProgress > 0)', totalGrowthProgress > 0);
 
+// ── T14: _syncGridFromActive — stempluje buildingId/level z _active (#3) ──────
+// Budynek aktywowany BEZ stempla grid (ścieżka AutoExpandera: _build buildTime>0 →
+// construction queue → _activateBuilding ustawia tylko _active). Sync re-derive grid.
+console.log('--- T14: _syncGridFromActive stempluje z _active ---');
+const techReal14 = new TechSystem(); techReal14.grantTechs(INDUSTRIALIST.startingTechs);
+const grid14 = new HexGrid(8, 10); grid14.forEach(t => { t.type = 'plains'; });
+const res14 = new ResourceSystem(startResources);
+const civ14 = new CivilizationSystem({}, techReal14, planet); civ14.resourceSystem = res14;
+const bSys14 = new BuildingSystem(res14, civ14, techReal14); civ14.buildingSystem = bSys14;
+bSys14._grid = grid14; bSys14._gridHeight = grid14.height; bSys14.setDeposits?.([]);
+const fact14 = new FactorySystem(res14); bSys14.setFactorySystem(fact14);
+civ14.population = 30;
+const colony14 = { planetId:'p14', ownerEmpireId:'e14', isOutpost:false, planet,
+  resourceSystem:res14, civSystem:civ14, buildingSystem:bSys14, factorySystem:fact14 };
+
+// Aktywuj farm BEZ stempla grid (symuluj ukończenie construction-queue na koloni AI).
+let t14 = null; grid14.forEach(t => { if (!t14 && t.r > 2 && t.r < 7) t14 = t; });
+bSys14._activateBuilding(t14.key, 'farm', t14.r, t14.type, false);
+ok('przed sync: grid tile NIE ma buildingId (bug AI)', !t14.buildingId);
+// Symuluj wcześniejszy upgrade w _active (level 3) — grid mirror tego nie wie.
+bSys14._active.get(t14.key).level = 3;
+expander._syncGridFromActive(colony14);
+ok('po sync: tile.buildingId === farm', t14.buildingId === 'farm');
+ok('po sync: tile.buildingLevel === 3 (z _active.level)', t14.buildingLevel === 3);
+
+// ── T15: sync czyści stale underConstruction po ukończeniu (rdzeń #3) ─────────
+console.log('--- T15: sync czyści stale underConstruction ---');
+const grid15 = new HexGrid(8, 10); grid15.forEach(t => { t.type = 'plains'; });
+const res15 = new ResourceSystem(startResources);
+const civ15 = new CivilizationSystem({}, techReal14, planet); civ15.resourceSystem = res15;
+const bSys15 = new BuildingSystem(res15, civ15, techReal14); civ15.buildingSystem = bSys15;
+bSys15._grid = grid15; bSys15._gridHeight = grid15.height; bSys15.setDeposits?.([]);
+const fact15 = new FactorySystem(res15); bSys15.setFactorySystem(fact15);
+civ15.population = 30;
+const colony15 = { planetId:'p15', ownerEmpireId:'e15', isOutpost:false, planet,
+  resourceSystem:res15, civSystem:civ15, buildingSystem:bSys15, factorySystem:fact15 };
+
+// (a) ukończony budynek z OSIEROCONYM underConstruction (nie ma go w construction queue).
+let t15done = null; grid15.forEach(t => { if (!t15done && t.r === 3) t15done = t; });
+bSys15._activateBuilding(t15done.key, 'solar_farm', t15done.r, t15done.type, false);
+t15done.underConstruction = { buildingId:'solar_farm', progress:1.5, buildTime:1.5 }; // stale
+ok('przed sync: stale underConstruction ustawione', !!t15done.underConstruction);
+// (b) tile REALNIE w budowie (jest w construction queue, NIE w _active).
+let t15constr = null; grid15.forEach(t => { if (!t15constr && t.r === 5) t15constr = t; });
+bSys15._constructionQueue.set(t15constr.key, { buildingId:'mine', progress:0.5, buildTime:1, tileR:t15constr.r, tileType:t15constr.type });
+
+expander._syncGridFromActive(colony15);
+ok('po sync: ukończony tile underConstruction === null (wyczyszczone)', t15done.underConstruction === null);
+ok('po sync: ukończony tile buildingId === solar_farm', t15done.buildingId === 'solar_farm');
+ok('po sync: tile realnie w budowie ZACHOWUJE underConstruction', !!t15constr.underConstruction && t15constr.underConstruction.buildingId === 'mine');
+ok('po sync: tile w budowie NIE ma jeszcze buildingId', !t15constr.buildingId);
+
+// ── T16: AutoExpander-built (NIE bootstrap) osiąga level ≥ 2 (regresja #3) ────
+// KLUCZOWY test fixu: kolonia BEZ pre-stawionych budynków. AutoExpander buduje
+// wszystko sam (_build buildTime>0 → construction → _activateBuilding, BEZ stempla
+// grid). Bez _syncGridFromActive grid tile nie dostaje buildingId → _tryUpgrade
+// nie znajduje kandydatów → maxActiveLevel utyka na 1. Z fixem: sync → upgrade działa.
+console.log('--- T16: AutoExpander-built osiąga level ≥ 2 (od zera, bez bootstrap) ---');
+const techReal16 = new TechSystem(); techReal16.grantTechs(INDUSTRIALIST.startingTechs);
+const grid16 = new HexGrid(8, 10);
+let m16 = 0; grid16.forEach(t => { if (t.r === 5 && m16 < 5) { t.type = 'mountains'; m16++; } else t.type = 'plains'; });
+const res16 = new ResourceSystem(startResources);
+const civ16 = new CivilizationSystem({}, techReal16, planet); civ16.resourceSystem = res16;
+const bSys16 = new BuildingSystem(res16, civ16, techReal16); civ16.buildingSystem = bSys16;
+bSys16._grid = grid16; bSys16._gridHeight = grid16.height; bSys16.setDeposits?.([]);
+const fact16 = new FactorySystem(res16); bSys16.setFactorySystem(fact16);
+civ16.population = 40;
+const colony16 = { planetId:'p16', ownerEmpireId:'e16', isOutpost:false, planet,
+  resourceSystem:res16, civSystem:civ16, buildingSystem:bSys16, factorySystem:fact16 };
+colonyRef.c = colony16;   // expander singleton zarządza tą kolonią przez time:tick
+fact16.setMode('reactive');
+
+let gt16 = 0;
+for (let i = 0; i < 200; i++) {   // ~gy50 — z zapasem ponad checkpoint gameYear_40
+  gt16 += 0.25;
+  window.KOSMOS.timeSystem.gameTime = gt16;
+  EventBus.emit('time:tick', { deltaYears: 0.25, civDeltaYears: 3, gameTime: gt16, multiplier: 3 });
+  res16.receive(startResources);
+}
+const maxLvl16 = (() => { let mx = 1; for (const e of bSys16._active.values()) if ((e.level ?? 1) > mx) mx = e.level; return mx; })();
+let stamped16 = 0; grid16.forEach(t => { if (t.buildingId) stamped16++; });
+console.log(`    gy=${Math.floor(gt16)}, budynki=${totalBuildings(colony16)}, maxActiveLevel=${maxLvl16}, grid stamped=${stamped16}`);
+ok('AutoExpander zbudował budynki (od zera)', totalBuildings(colony16) > 4);
+ok('grid ma buildingId zsynchronizowane przez _syncGridFromActive', stamped16 > 0);
+ok('≥1 AutoExpander-built budynek osiągnął level ≥ 2 (fix #3)', maxLvl16 >= 2);
+
+// ── T17: kolonia GRACZA (ownerEmpireId=null) NIE jest dotykana przez sync ─────
+// _syncGridFromActive wołane tylko w pętli _managedColonies() (filtr ownerEmpireId
+// != null). Kolonia gracza musi pozostać nietknięta — zero ryzyka regresji.
+console.log('--- T17: izolacja kolonii gracza (sync AI-only) ---');
+const grid17ai = new HexGrid(8, 10); grid17ai.forEach(t => { t.type = 'plains'; });
+const res17ai = new ResourceSystem(startResources);
+const civ17ai = new CivilizationSystem({}, techReal14, planet); civ17ai.resourceSystem = res17ai;
+const bSys17ai = new BuildingSystem(res17ai, civ17ai, techReal14); civ17ai.buildingSystem = bSys17ai;
+bSys17ai._grid = grid17ai; bSys17ai._gridHeight = grid17ai.height; bSys17ai.setDeposits?.([]);
+const fact17ai = new FactorySystem(res17ai); bSys17ai.setFactorySystem(fact17ai);
+civ17ai.population = 30;
+const colony17ai = { planetId:'p17ai', ownerEmpireId:'e17', isOutpost:false, planet,
+  resourceSystem:res17ai, civSystem:civ17ai, buildingSystem:bSys17ai, factorySystem:fact17ai };
+
+// Kolonia gracza — minimalny stub, ownerEmpireId=null. Grid z MARKEREM bez wpisu w
+// _active → gdyby sync pobiegł, full-reset skasowałby buildingId do null.
+const grid17pl = new HexGrid(8, 10); grid17pl.forEach(t => { t.type = 'plains'; });
+let t17marker = null; grid17pl.forEach(t => { if (!t17marker && t.r === 4) t17marker = t; });
+t17marker.buildingId = 'MARKER_PLAYER';
+t17marker.underConstruction = { buildingId:'MARKER', progress:1, buildTime:1 };
+const colony17pl = { planetId:'p17pl', ownerEmpireId:null, isOutpost:false, planet,
+  buildingSystem: { _grid: grid17pl } };
+
+// _managedColonies czyta getAllColonies — zwróć obie kolonie.
+const prevGetAll = window.KOSMOS.colonyManager.getAllColonies;
+window.KOSMOS.colonyManager.getAllColonies = () => [colony17ai, colony17pl];
+
+ok('_managedColonies wyklucza kolonię gracza (ownerEmpireId=null)',
+   !expander._managedColonies().some(c => c.planetId === 'p17pl'));
+ok('_managedColonies zawiera kolonię AI', expander._managedColonies().some(c => c.planetId === 'p17ai'));
+
+// Uruchom oba moduły (iterują _managedColonies → sync TYLKO na AI).
+expander._runSurvival(300);
+expander._runTargets(300);
+
+ok('kolonia gracza: marker buildingId NIETKNIĘTY (sync nie pobiegł)', t17marker.buildingId === 'MARKER_PLAYER');
+ok('kolonia gracza: stale underConstruction NIETKNIĘTY', !!t17marker.underConstruction);
+
+window.KOSMOS.colonyManager.getAllColonies = prevGetAll;   // przywróć stub
+
+// ── T18: R1 capital guard — capitalBase zachowane, stolica nie zabudowana ─────
+// KRYTYCZNE (uwaga Filipa): krok 2 sync MUSI mieć gałąź capital_ → ustaw capitalBase
+// i continue (NIE stempluj buildingId). Bez tego full-reset kasuje capitalBase →
+// _findFreeTile zabudowałby stolicę.
+console.log('--- T18: R1 capital guard (capitalBase zachowane) ---');
+const grid18 = new HexGrid(8, 10); grid18.forEach(t => { t.type = 'plains'; });
+const res18 = new ResourceSystem(startResources);
+const civ18 = new CivilizationSystem({}, techReal14, planet); civ18.resourceSystem = res18;
+const bSys18 = new BuildingSystem(res18, civ18, techReal14); civ18.buildingSystem = bSys18;
+bSys18._grid = grid18; bSys18._gridHeight = grid18.height; bSys18.setDeposits?.([]);
+const fact18 = new FactorySystem(res18); bSys18.setFactorySystem(fact18);
+civ18.population = 30;
+const colony18 = { planetId:'p18', ownerEmpireId:'e18', isOutpost:false, planet,
+  resourceSystem:res18, civSystem:civ18, buildingSystem:bSys18, factorySystem:fact18 };
+
+// Stolica (isCapital → _active key 'capital_q,r') + flaga grid jak po bootstrapie.
+let capTile = null; grid18.forEach(t => { if (!capTile && t.r === 4) capTile = t; });
+bSys18._activateBuilding(capTile.key, 'colony_base', capTile.r, capTile.type, true);
+capTile.capitalBase = true;
+// Zwykły budynek aktywowany BEZ stempla grid (sprawdzimy że sync go ostempluje obok stolicy).
+let normTile = null; grid18.forEach(t => { if (!normTile && t.r === 2) normTile = t; });
+bSys18._activateBuilding(normTile.key, 'farm', normTile.r, normTile.type, false);
+
+ok('_active ma klucz capital_ (stolica)', [...bSys18._active.keys()].some(k => k.startsWith('capital_')));
+expander._syncGridFromActive(colony18);
+ok('R1: capitalBase ZACHOWANE po sync', capTile.capitalBase === true);
+ok('R1: stolica NIE ostemplowana buildingId', !capTile.buildingId);
+ok('zwykły budynek ostemplowany (farm) obok stolicy', normTile.buildingId === 'farm');
+// _findFreeTile NIGDY nie zwraca tile stolicy (capitalBase chroni — efekt R1).
+let pickedCapital = false;
+for (let i = 0; i < 20; i++) { const ft = expander._findFreeTile(colony18, 'farm'); if (ft && ft.key === capTile.key) pickedCapital = true; }
+ok('_findFreeTile NIE wybiera tile stolicy', !pickedCapital);
+
 console.log(`\n=== ${pass} PASS, ${fail} FAIL ===`);
 process.exit(fail === 0 ? 0 : 1);

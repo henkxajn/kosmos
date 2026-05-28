@@ -187,6 +187,7 @@ export class ColonyAutoExpander {
       //   ustal czy wolno jeszcze coś budować. restFromBuilds = kolejka pełna LUB
       //   nie ma kto budować (freePops=0) a coś już wisi → odpoczynek po brownout.
       this._reconcilePending(colony, civYear);
+      this._syncGridFromActive(colony);   // #3: grid AI niesynchronizowany przez UI — re-derive z _active przed _findFreeTile
       const pendingBuilds = this._pendingCounts(colony).builds;
       const freePops      = civ.freePops ?? 0;
       const restFromBuilds =
@@ -292,6 +293,7 @@ export class ColonyAutoExpander {
 
       // Y1/Y2: pogodź kolejkę i sprawdź limity zanim dosypiemy nowe targety.
       this._reconcilePending(colony, civYear);
+      this._syncGridFromActive(colony);   // #3: jw. — przed _tryUpgrade/_findFreeTile
       const counts = this._pendingCounts(colony);
       const buildQueueFull   = counts.builds   >= MAX_PENDING_BUILDS_PER_COLONY;
       const upgradeQueueFull = counts.upgrades >= MAX_PENDING_UPGRADES_PER_COLONY;
@@ -491,25 +493,13 @@ export class ColonyAutoExpander {
     return outcome;
   }
 
-  // TECH DEBT (odkryte przy bug A, 2026-05-25): kandydaci do upgrade są szukani po
-  //   grid tile.buildingId, ale grid to MIRROR UI przebudowywany przez
-  //   ColonyOverlay._syncTileBuildings — synchronizowany TYLKO dla kolonii z
-  //   _gridCache[planetId] (czyli kiedykolwiek otwartych przez gracza). Źródłem
-  //   prawdy jest bSys._active (entry.level). Konsekwencje dla kolonii AI (nigdy
-  //   nie otwieranych w ColonyOverlay):
-  //     - budynki bootstrapowe (grid.buildingId ustawiony przez
-  //       EmpireColonyBootstrap._placeBuildingSmart) SĄ upgrade'owalne;
-  //     - budynki postawione przez sam AutoExpander przez _build (buildTime>0 →
-  //       construction queue → _activateBuilding ustawia tylko _active, NIE grid)
-  //       NIE dostają grid.buildingId → nie są kandydatami do upgrade;
-  //     - po starcie upgrade'u grid.underConstruction na nie-synchronizowanej koloni
-  //       nie jest czyszczony → ponowny upgrade tego hexa bywa blokowany.
-  //   Docelowy fix (poza scope bugfixów A/B): czytać kandydatów z bSys._active
-  //   (źródło prawdy) + sprawdzać busy-state przez _constructionQueue/_pendingQueue
-  //   zamiast flag grid tile. Wymaga ostrożności (BuildingSystem._upgrade też czyta
-  //   stale tile.underConstruction/pendingBuild i może odrzucić).
-  //
   // Próba upgrade: znajdź budynek tego typu poniżej docelowego poziomu i ulepsz.
+  // Skanuje grid (tile.buildingId/buildingLevel). Dla kolonii AI grid NIE jest
+  // synchronizowany przez ColonyOverlay._syncTileBuildings (UI — tylko kolonie
+  // otwarte przez gracza), więc spójność zapewnia _syncGridFromActive() wołane
+  // przed tym skanem w _runSurvival/_runTargets (re-derive z bSys._active — źródła
+  // prawdy — + queue). Naprawia #3: budynki AutoExpandera (buildTime>0 → tylko
+  // _active) stają się kandydatami do upgrade, a stale underConstruction czyszczone.
   // Zwraca outcome string:
   //   'upgraded'     — sukces natychmiastowy (poziom wzrósł) lub start budowy upgrade'u
   //   'queued'       — sukces odroczony: _upgrade przyjął, czeka na surowce/POP
@@ -614,6 +604,67 @@ export class ColonyAutoExpander {
     let found = null;
     grid.forEach(t => { if (!found && t.key === tileKey) found = t; });
     return found;
+  }
+
+  // ── #3: Sync grid z _active (AI-only reconcile) ─────────────────────────────
+  // Kolonie AI nie są synchronizowane przez ColonyOverlay._syncTileBuildings (UI —
+  // tylko kolonie otwarte przez gracza w _gridCache[planetId]). Bez tego budynki
+  // postawione przez _build (buildTime>0 → construction queue → _activateBuilding
+  // ustawia tylko _active, NIE grid) nie dostają tile.buildingId/buildingLevel,
+  // a underConstruction po ukończeniu nigdy nie jest czyszczone → _tryUpgrade/
+  // _findFreeTile widzą stale grid (AI realizuje count, nie avgLevel — utyka na Lv1).
+  //
+  // Pełna przebudowa grid IN-PLACE z 3 źródeł prawdy (dokładny mirror
+  // ColonyOverlay._syncTileBuildings:453-490). Wołane PRZED build/upgrade w obu
+  // modułach. Pełny reset czyści osierocone underConstruction po ukończeniu (krok 1
+  // zeruje, krok 3 re-set tylko żywe wpisy queue) — to jest rdzeń fixu #3.
+  _syncGridFromActive(colony) {
+    const bSys = colony.buildingSystem;
+    const grid = bSys?._grid;
+    if (!grid || typeof grid.forEach !== 'function') return;
+
+    // 1) Reset stanu budynków. NIE ruszamy tile.type/anomalyEffect (generacja mapy).
+    grid.forEach(tile => {
+      tile.buildingId = null; tile.buildingLevel = 1;
+      tile.capitalBase = false; tile.underConstruction = null; tile.pendingBuild = null;
+    });
+
+    // 2) Aktywne budynki (źródło prawdy: entry.building.id + entry.level).
+    //    R1 (KRYTYCZNE): stolica to wirtualny budynek pod kluczem 'capital_q,r' —
+    //    ustaw TYLKO capitalBase i continue (NIE stempluj buildingId), inaczej po
+    //    resecie _findFreeTile zabudowałby hex stolicy. Wzorzec: _syncTileBuildings:462-466.
+    for (const [key, entry] of bSys._active) {
+      if (key.startsWith('capital_')) {
+        const [cq, cr] = key.slice(8).split(',').map(Number);
+        const ct = grid.get(cq, cr);
+        if (ct) ct.capitalBase = true;
+        continue;
+      }
+      const [q, r] = key.split(',').map(Number);
+      const t = grid.get(q, r);
+      if (t) {
+        t.buildingId    = entry.building?.id ?? entry.buildingId;
+        t.buildingLevel = entry.level ?? 1;
+      }
+    }
+
+    // 3) Budowa w toku → underConstruction (tylko żywe wpisy construction queue).
+    if (bSys._constructionQueue) {
+      for (const [key, constr] of bSys._constructionQueue) {
+        const [q, r] = key.split(',').map(Number);
+        const t = grid.get(q, r);
+        if (t) t.underConstruction = constr;
+      }
+    }
+
+    // 4) Oczekujące (brak surowców/POP) → pendingBuild.
+    if (bSys._pendingQueue) {
+      for (const [key, order] of bSys._pendingQueue) {
+        const [q, r] = key.split(',').map(Number);
+        const t = grid.get(q, r);
+        if (t) t.pendingBuild = order.buildingId ?? order.building?.id;
+      }
+    }
   }
 
   // Throttled log "queue full / rest" (raz na QUEUE_LOG_INTERVAL_CIVYEARS).
