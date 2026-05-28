@@ -727,8 +727,12 @@ export class ColonyManager {
       return { ok: false, reason: t('fleet.unknownShip') };
     }
 
-    // Sprawdź tech
-    if (ship.requires && !this.techSystem?.isResearched(ship.requires)) {
+    // Sprawdź tech — AI używa per-empire techSystem kolonii (Slice 2 S3), gracz
+    // fallback na globalny window.KOSMOS.techSystem (gracz nie ma colony.techSystem).
+    // Bez tego AI nigdy nie zbudowałoby hull_small (requires 'exploration'), bo
+    // this.techSystem to drzewo gracza, nie imperium.
+    const buildTech = colony.techSystem ?? this.techSystem;
+    if (ship.requires && !buildTech?.isResearched(ship.requires)) {
       const reason = t('fleet.requiresTech', ship.requires);
       EventBus.emit('fleet:buildFailed', { reason });
       return { ok: false, reason };

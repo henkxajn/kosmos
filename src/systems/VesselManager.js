@@ -960,6 +960,11 @@ export class VesselManager {
         // DSCS._buildVesselState czyta to przy starcie kolejnej bitwy — statki
         // NIE regenerują się automatycznie (decyzja gracza 2026-05-20).
         combatDamage:   v.combatDamage   ? { ...v.combatDamage } : null,
+        // Slice 2 S3 (v77) — assignedRouteId: ID trasy logistycznej (logi_<empire>_<outpost>)
+        // gdy vessel jest kurierem EmpireLogisticsSystem; null dla wszystkich innych.
+        // EmpireLogisticsSystem odbudowuje route.courierIds z empire.logistics (gameState),
+        // ale persyst pola pomaga debugowi i spójności filtrów.
+        assignedRouteId: v.assignedRouteId ?? null,
       });
     }
     return {
@@ -1066,6 +1071,8 @@ export class VesselManager {
         fleetId:        vd.fleetId        ?? null,
         // P3 polish (v75) — combatDamage persisted z poprzedniej bitwy.
         combatDamage:   vd.combatDamage   ? { ...vd.combatDamage } : null,
+        // Slice 2 S3 (v77) — assignedRouteId kuriera logistycznego (null dla reszty).
+        assignedRouteId: vd.assignedRouteId ?? null,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {

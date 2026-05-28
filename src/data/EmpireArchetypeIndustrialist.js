@@ -49,12 +49,27 @@ export const INDUSTRIALIST = {
   //   może chwilowo spaść ~do zera, odbuduje przed kolejną kolonią).
   strategicColonization: {
     targetXeOutposts:       2,    // ile outpostów Xe zabezpieczyć (P1 + P2)
+    targetNtOutposts:       1,    // ile outpostów Nt (Neutronium) — Slice 2 S3, P5
     popTransferSize:        2,    // ile POP wysłać na pełną kolonię (suma ≥ 2)
     minFreePops:            8,    // min freePops macierzystej by uruchomić full-colony path
     minFoodTransfer:        200,  // próg = transfer food (bootstrap wymaga ≥ 200)
     minWaterTransfer:       200,  // próg = transfer water
     blacklistDurationCy:    30,   // jak długo ciało-cel na blackliście po failure
     requireBreathableForP3: true, // P3 wymaga atmosfery oddychalnej (fallback nie)
+  },
+
+  // Warstwa 2 transportu (EmpireLogisticsSystem) — Slice 2 S3. Kurierzy krążą
+  // outpost↔stolica wożąc surowce strategiczne (Xe/Nt). ROUTE-BASED: każdy outpost
+  // dostaje dedykowanych kurierów (couriersPerRoute), krążących póki route żyje.
+  //   couriersPerRoute     — ile statków na trasę (2 dywersyfikuje load + redundancja)
+  //   cargoModule          — moduł ładowni (cargo_small = +200t, bez tech-gate)
+  //   minFreePopsForCourier— min wolnych POP stolicy by zbudować kuriera (hull_small crewCost 0.05)
+  //   strategicDeposits    — które surowce traktujemy jako "strategiczne" (trasa dla outpostu z tym złożem)
+  logisticsConfig: {
+    couriersPerRoute:      2,
+    cargoModule:           'cargo_small',
+    minFreePopsForCourier: 0.05,
+    strategicDeposits:     ['Xe', 'Nt'],
   },
 
   // Handicap startowy — budynki stawiane instant (bez kosztu surowców i tech)

@@ -45,6 +45,7 @@ const OUTPOST_BUILDINGS = ['autonomous_solar_farm', 'autonomous_mine'];
 // je w EmpireArchetypeIndustrialist.js (te same wartości — decyzja Filipa).
 const DEFAULTS = {
   targetXeOutposts:       2,    // ile outpostów Xe zabezpieczyć (P1 + P2)
+  targetNtOutposts:       1,    // ile outpostów Nt (Neutronium) zabezpieczyć (P5) — Slice 2 S3
   popTransferSize:        2,    // ile POP wysłać na pełną kolonię (suma ≥ 2)
   minFreePops:            8,    // min freePops macierzystej by uruchomić full-colony
   minFoodTransfer:        200,  // próg = transfer (minimum wg promptu, bez bufora)
@@ -135,36 +136,61 @@ export class EmpireStrategySystem {
       return c && c.ownerEmpireId === empire.id && c.isOutpost && this._hasDeposit(EntityManager.get(id), 'Xe');
     }).length;
 
+    // Nt (Neutronium) outposty — liczone analogicznie (Slice 2 S3). Ciało Xe+Nt
+    // liczy się do OBU złóż → P5 nie buduje dubla na ciele które już ma outpost.
+    const ntOutposts = bodyIds.filter(id => {
+      const c = cm.getColony(id);
+      return c && c.ownerEmpireId === empire.id && c.isOutpost && this._hasDeposit(EntityManager.get(id), 'Nt');
+    }).length;
+
+    const targetXe = cfg.targetXeOutposts ?? DEFAULTS.targetXeOutposts;
+    const targetNt = cfg.targetNtOutposts ?? DEFAULTS.targetNtOutposts;
+
     const canOutpost = this._canAffordOutpost(mother);
     const canFull    = this._canAffordFullColony(mother, cfg);
 
+    // Najlepsze ciało Nt (null gdy brak zdobywalnego) — liczone RAZ, używane przez
+    // P5 (build) ORAZ P3 (waiver: gdy brak ciała Nt P3 nie czeka na nieosiągalny Nt).
+    const ntBody = this._pickNtBody(empire, bodyIds, civYear);
+
     // P1: pierwszy outpost Xe (brak żadnego). Gdy stać na outpost ale brak ciała Xe
-    //     → FALL THROUGH (nie no-op) do P3/fallback.
+    //     → FALL THROUGH (nie no-op) do dalszych priorytetów.
     if (xeOutposts === 0 && canOutpost) {
       const target = this._pickXeBody(empire, bodyIds, civYear);
       if (target) return void this._executeAutonomousOutpost(empire, mother, systemId, target, civYear, cfg);
     }
 
     // P2: kolejny outpost Xe (do targetXeOutposts).
-    if (xeOutposts >= 1 && xeOutposts < cfg.targetXeOutposts && canOutpost) {
+    if (xeOutposts >= 1 && xeOutposts < targetXe && canOutpost) {
       const target = this._pickXeBody(empire, bodyIds, civYear);
       if (target) return void this._executeAutonomousOutpost(empire, mother, systemId, target, civYear, cfg);
     }
 
-    // P3: pełna kolonia na rocky z atmosferą oddychalną (po ≥1 outpoście Xe).
-    if (xeOutposts >= 1 && canFull) {
+    // P5: outpost Nt (po zabezpieczeniu wszystkich Xe). Bramka WARUNKOWA — fall-through
+    //     gdy ntBody===null (brak zdobywalnego ciała Nt) → brak deadlocku (waiver Filipa).
+    if (xeOutposts >= targetXe && ntOutposts < targetNt && canOutpost && ntBody) {
+      return void this._executeAutonomousOutpost(empire, mother, systemId, ntBody, civYear, cfg);
+    }
+
+    // P3: pełna kolonia na rocky z atmosferą oddychalną — DOPIERO po zabezpieczeniu
+    //     Xe (targetXe) ORAZ Nt (targetNt LUB brak zdobywalnego ciała Nt → waiver).
+    const ntSatisfied = ntOutposts >= targetNt || ntBody === null;
+    if (xeOutposts >= targetXe && ntSatisfied && canFull) {
       const target = this._pickFullColonyBody(empire, bodyIds, civYear, cfg.requireBreathableForP3);
       if (target) return void this._executeFullColony(empire, mother, systemId, target, civYear, cfg);
     }
 
-    // Fallback: pełna kolonia na dowolnym rocky (bez atmosfery też OK).
+    // Fallback: pełna kolonia na dowolnym rocky (bez atmosfery też OK). Łapie etapy
+    //   pośrednie (mamy outpost Xe, nie stać na kolejny, stać na kolonię) — ekspansja
+    //   nie stoi w miejscu.
     if (canFull) {
       const target = this._pickFullColonyBody(empire, bodyIds, civYear, false);
       if (target) return void this._executeFullColony(empire, mother, systemId, target, civYear, cfg);
     }
 
-    this._log(empire, 'brak akcji w tym ticku',
-      `xeOutposts=${xeOutposts} canOutpost=${canOutpost} canFull=${canFull}`);
+    // P4 (Warstwa 3 — porty / heavy cargo) — odłożone do Slice 4 (stub, BEZ budowy).
+    this._log(empire, 'brak akcji w tym ticku (P4 port deferred)',
+      `xe=${xeOutposts}/${targetXe} nt=${ntOutposts}/${targetNt} ntBody=${ntBody ?? '∅'} canOutpost=${canOutpost} canFull=${canFull}`);
   }
 
   // Macierzysta = pierwsza kolonia !isOutpost (źródło POP/zasobów); null gdy brak.
@@ -238,6 +264,34 @@ export class EmpireStrategySystem {
       const ent = EntityManager.get(id);
       if (!ent || !this._hasDeposit(ent, 'Xe')) continue;
       const score = this._scoreXeOutpostCandidate(ent);
+      if (score > bestScore) { bestScore = score; best = id; }
+    }
+    return best;
+  }
+
+  /**
+   * Wybiera najlepsze ciało ze złożem Nt (Neutronium) na outpost autonomiczny (Slice 2 S3, P5).
+   * Analogiczny do _pickXeBody (pomija zajęte i zblacklistowane) — reużywa scoring outpostu
+   * (premiuje Xe+Nt razem, richness, małe ciała). Zwraca null gdy brak zdobywalnego ciała Nt
+   * (P5 waiver → P3 nie czeka na nieosiągalny Nt).
+   * @param {Object}   empire   — obiekt imperium
+   * @param {string[]} bodyIds  — TABLICA id encji kandydatów (NIE systemId)
+   * @param {number}   civYear  — bieżący civYear (blacklist)
+   * @returns {string|null} planetId najlepszego kandydata Nt lub null
+   */
+  _pickNtBody(empire, bodyIds, civYear) {
+    if (!Array.isArray(bodyIds)) {
+      console.warn(`[EmpireStrategySystem] _pickNtBody: bodyIds nie jest tablicą (otrzymano: ${typeof bodyIds}) — zwracam null`);
+      return null;
+    }
+    const cm = window.KOSMOS?.colonyManager;
+    let best = null, bestScore = -Infinity;
+    for (const id of bodyIds) {
+      if (cm.getColony(id)) continue;                  // zajęte (gracz / imperium)
+      if (this._isBlacklisted(id, civYear)) continue;
+      const ent = EntityManager.get(id);
+      if (!ent || !this._hasDeposit(ent, 'Nt')) continue;
+      const score = this._scoreXeOutpostCandidate(ent);  // reuse — premiuje Nt (+8) i Xe
       if (score > bestScore) { bestScore = score; best = id; }
     }
     return best;

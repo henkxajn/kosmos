@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 76;
+export const CURRENT_VERSION     = 77;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -94,6 +94,7 @@ const MIGRATIONS = {
   73: _migrateV73toV74,
   74: _migrateV74toV75,
   75: _migrateV75toV76,
+  76: _migrateV76toV77,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1891,6 +1892,47 @@ function _migrateV75toV76(_data) {
     'Save v75 niekompatybilny ze Slice 1. Imperium AI zostało przepisane. ' +
     'Rozpocznij nową grę. (Save v75 incompatible with Slice 1. Empire AI rewritten. Please start new game.)'
   );
+}
+
+// v76 → v77: Slice 2 S3 — EmpireLogisticsSystem (logistyka AI route-based).
+// Nowe pola:
+//   (a) empire.logistics — stan tras kurierskich per imperium (gameState.empires).
+//       { routes:[], reserve:[], pendingBuildRoute:null, stats:{built,dispatched,delivered} }.
+//       EmpireLogisticsSystem lazy-defaultuje to też w runtime (_ensureLogistics),
+//       ale stampujemy explicit dla deterministycznego stanu po restore.
+//   (b) vessel.assignedRouteId — ID trasy kuriera (null dla nie-kurierów).
+function _migrateV76toV77(data) {
+  // (a) empire.logistics — empires żyją w gameState (pod civ4x.gameState.empires;
+  //     defensywnie sprawdzamy też alternatywne lokalizacje znane z innych migracji).
+  const empires =
+    data.civ4x?.gameState?.empires ??
+    data.c4x?.gameState?.empires ??
+    data.gameState?.empires ??
+    data.empires;
+  if (empires && typeof empires === 'object') {
+    for (const emp of Object.values(empires)) {
+      if (!emp || typeof emp !== 'object') continue;
+      if (!emp.logistics) {
+        emp.logistics = {
+          routes:           [],
+          reserve:          [],
+          pendingBuildRoute: null,
+          stats:            { built: 0, dispatched: 0, delivered: 0 },
+        };
+      }
+    }
+  }
+
+  // (b) vessel.assignedRouteId — lazy default null
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v || typeof v !== 'object') continue;
+      if (v.assignedRouteId === undefined) v.assignedRouteId = null;
+    }
+  }
+
+  return data;
 }
 
 // v73 → v74: Player Fleet Groups P3 (Doctrine effects).

@@ -51,6 +51,7 @@ const techStub = new Proxy({}, {
 // Deposit helpers (richness, remaining). Xe/Nt = najrzadsze.
 const XE = (richness = 1.0, remaining = 50000) => ({ resourceId: 'Xe', richness, totalAmount: remaining, remaining });
 const FE = (remaining = 100000) => ({ resourceId: 'Fe', richness: 1, totalAmount: remaining, remaining });
+const NT = (richness = 0.3, remaining = 10000) => ({ resourceId: 'Nt', richness, totalAmount: remaining, remaining });
 
 // Moon: type='moon', BEZ planetType → PlanetMapGenerator defaultuje rocky (grid OK),
 //   ale _isColonizableRocky=false → wykluczony z kandydatów pełnej kolonii (tylko outpost).
@@ -84,6 +85,23 @@ mkMoon('t17_moon',  'T17 Moon',  [XE(1.0)]);
 mkPlanet('t18_rocky', 'T18 Rocky', 'none', [FE()]);
 mkMoon('d_moon',    'D Moon',    [XE(1.0)]);
 
+// ── Ciała dla testów P5/P3 (Slice 2 S3 — outpost Nt) — osobny system sys_nt ──
+const mkNtMoon = (id, name, deposits) => EntityManager.add({
+  id, name, type: 'moon', moonType: 'rocky', radius: 0.3, mass: 0.1,
+  atmosphere: 'none', temperatureK: 200, systemId: 'sys_nt', deposits,
+  composition: { Fe: 0.3, Si: 0.3, O: 0.4 },
+});
+const mkNtPlanet = (id, name, atmosphere, deposits) => EntityManager.add({
+  id, name, type: 'planet', planetType: 'rocky', radius: 1, mass: 1,
+  atmosphere, temperatureK: 280, systemId: 'sys_nt', deposits,
+  composition: { Fe: 0.3, Si: 0.3, O: 0.4 },
+});
+mkNtPlanet('mother_nt', 'Mother NT', 'breathable', [FE()]);
+mkNtPlanet('rocky_nt',  'Rocky NT',  'breathable', [FE()]);
+mkNtMoon('xe_nt_1', 'Xe NT 1', [XE(1.2), FE()]);
+mkNtMoon('xe_nt_2', 'Xe NT 2', [XE(1.0)]);
+mkNtMoon('nt_body', 'Nt Body', [NT()]);   // TYLKO Nt (nie Xe → nie kandydat P1/P2)
+
 // ── Realny ColonyManager + EmpireRegistry + window.KOSMOS ─────────
 const colonyManager  = new ColonyManager(techStub);
 const empireRegistry = new EmpireRegistry();
@@ -94,11 +112,19 @@ window.KOSMOS = {
   empireRegistry,
   empireColonyBootstrap: EmpireColonyBootstrap,
   starSystemManager: {
-    getSystem: (id) => id === 'sys_x' ? {
-      planetIds:    ['mother_p', 'breath_rocky', 'bare_rocky', 'gas_giant'],
-      moonIds:      ['xe_moon_1', 'xe_moon_2', 'plain_moon'],
-      planetoidIds: [],
-    } : null,
+    getSystem: (id) => {
+      if (id === 'sys_x') return {
+        planetIds:    ['mother_p', 'breath_rocky', 'bare_rocky', 'gas_giant'],
+        moonIds:      ['xe_moon_1', 'xe_moon_2', 'plain_moon'],
+        planetoidIds: [],
+      };
+      if (id === 'sys_nt') return {
+        planetIds:    ['mother_nt', 'rocky_nt'],
+        moonIds:      ['xe_nt_1', 'xe_nt_2', 'nt_body'],
+        planetoidIds: [],
+      };
+      return null;
+    },
   },
 };
 
@@ -351,6 +377,55 @@ console.log('--- T20: gracz z robotics produkuje android_worker MIMO że AI nie 
   const aiCol     = mkTechColony('t20_ai',     false);  // AI bez robotics
   ok('gracz(robotics) → android_worker dostępny',       playerCol.factorySystem.isRecipeAvailable('android_worker') === true);
   ok('AI(bez robotics) → android_worker NIEdostępny',    aiCol.factorySystem.isRecipeAvailable('android_worker') === false);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// T21-T23 — Slice 2 S3: P5 (outpost Nt) + waiver (brak ciała Nt)
+// ═══════════════════════════════════════════════════════════════
+console.log('--- T21: P5 — po zabezpieczeniu Xe (targetXe=2) AI buduje outpost Nt ---');
+{
+  empireRegistry.createEmpire({ id: 'emp_NT', archetype: 'industrialist', homeSystemId: 'sys_nt' });
+  const empNT = empireRegistry.get('emp_NT');
+  const motherNT = EmpireColonyBootstrap.bootstrapColony('emp_NT', 'sys_nt', 'mother_nt', {
+    startPop: { laborer: 1, worker: 1 }, startResources: { food: 200, water: 200 }, archetypeId: 'industrialist',
+  });
+
+  const ntPick = sys._pickNtBody(empNT, ['xe_nt_1', 'xe_nt_2', 'nt_body', 'rocky_nt'], 500);
+  ok('_pickNtBody znajduje nt_body (jedyne ze złożem Nt)', ntPick === 'nt_body');
+
+  // P1 + P2: dwa outposty Xe (do targetXe=2). Refill kosztu outpostu przed każdym.
+  motherNT.resourceSystem.receive(combined);
+  sys._runForEmpire(empNT, 500);
+  motherNT.resourceSystem.receive(combined);
+  sys._runForEmpire(empNT, 501);
+  const xeCount = ['xe_nt_1', 'xe_nt_2'].filter(id => colonyManager.getColony(id)?.isOutpost).length;
+  ok('2 outposty Xe zbudowane (targetXe osiągnięty)', xeCount === 2);
+
+  // P5: outpost Nt (xe>=targetXe, nt<targetNt, ntBody=nt_body).
+  motherNT.resourceSystem.receive(combined);
+  sys._runForEmpire(empNT, 502);
+  const ntColony = colonyManager.getColony('nt_body');
+  ok('outpost Nt zbudowany na nt_body (P5)', !!ntColony && ntColony.isOutpost === true);
+}
+
+console.log('--- T22: po Xe+Nt — P3 pełna kolonia (canFull, commodities=0) ---');
+{
+  const empNT     = empireRegistry.get('emp_NT');
+  const motherNT  = sys._pickMotherColony(empNT);
+  motherNT.civSystem.addPop('laborer', 12);
+  setRes(motherNT.resourceSystem, 'food', 300);
+  setRes(motherNT.resourceSystem, 'water', 300);
+  // commodities=0 → canOutpost false → P5 też skip (nt już =target) → P3 breathable
+  sys._runForEmpire(empNT, 510);
+  const rockyColony = colonyManager.getColony('rocky_nt');
+  ok('pełna kolonia na rocky_nt (P3 po Xe+Nt)', !!rockyColony && rockyColony.isOutpost !== true);
+}
+
+console.log('--- T23: waiver — brak ciała Nt → _pickNtBody null (P3 nie czeka na Nt) ---');
+{
+  const empC = empireRegistry.get('emp_C');
+  // sys_x nie ma żadnego złoża Nt → _pickNtBody null → ntSatisfied=true → P3/Fb działa.
+  ok('sys_x bez Nt → _pickNtBody null', sys._pickNtBody(empC, ['xe_moon_1', 'xe_moon_2', 'plain_moon', 'breath_rocky', 'bare_rocky'], 600) === null);
 }
 
 // ═══════════════════════════════════════════════════════════════
