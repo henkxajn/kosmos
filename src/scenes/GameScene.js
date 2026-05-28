@@ -1053,6 +1053,11 @@ export class GameScene {
       if (c4x.colonies?.length > 0) {
         this.colonyManager.restore(c4x, this.buildingSystem);
       }
+      // #2 (Slice 2 save/restore AI): re-link kolonii AI → ownerEmpireId + per-empire
+      //   TechSystem z emp.colonies. PO colonyManager.restore (obiekty kolonii istnieją)
+      //   I gameState.restore (emp.colonies istnieją). Synchroniczne — przed setTimeout swapem.
+      EmpireColonyBootstrap.relinkColoniesAfterRestore(c4x.empireTech);
+      if (c4x.empireStrategy) window.KOSMOS.empireStrategySystem?.restore(c4x.empireStrategy);
       // Slice 1: drugi sync — po restore kolonii. EmpireRegistry.syncToGalaxyData
       // czyta colony.systemId z ColonyManager (nowa struktura: emp.colonies = [colonyId, ...]).
       // Pierwsze wywołanie (linia 1015, przed restore) działa tylko dla home systemu

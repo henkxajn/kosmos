@@ -23,6 +23,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { BUILDINGS } from '../data/BuildingsData.js';
 import { TechSystem } from './TechSystem.js';
 import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
+import { ARCHETYPES } from '../data/EmpireData.js';
 
 // Bazowy próg safety stock per tier (musi pasować do FactorySystem.getSafetyStockTarget).
 // Bonus = target - base, aplikowany przez setDemandBonus.
@@ -400,6 +401,11 @@ export class EmpireColonyBootstrap {
       outpost.ownerEmpireId = empireId;
     }
 
+    // #14 (Slice 2 save/restore): zarejestruj outpost w imperium — by przeżył save
+    //   (emp.colonies round-trip przez gameState) i był liczony przez getColoniesByEmpire.
+    //   Idempotent (addColony guarduje duplikaty) → bezpieczny też w self-reuse path.
+    empireRegistry.addColony(empireId, planetId);
+
     // 4. Postaw budynek — outpost ma grid + buildingSystem (createOutpost je tworzy).
     //    autoPlaceBuilding: free/instant + scoring AiTerrainRules (fix d848417):
     //    autonomous_mine → mountains/crater (hard), solar → desert/plains (soft),
@@ -430,10 +436,54 @@ export class EmpireColonyBootstrap {
     const reg = window.KOSMOS?.empireRegistry;
     if (!reg?.getColoniesByEmpire) return null;
     for (const c of reg.getColoniesByEmpire(empireId)) {
+      // #14: outpost ma buildingSystem.techSystem=globalny (gracza) i brak colony.techSystem
+      //   → po wejściu outpostów do emp.colonies mógłby zamaskować aiTech stolicy. Pomijamy.
+      if (c?.isOutpost) continue;
       if (c?.techSystem) return c.techSystem;
       if (c?.buildingSystem?.techSystem) return c.buildingSystem.techSystem;
     }
     return null;
+  }
+
+  /**
+   * #2 (Slice 2 save/restore AI): re-link kolonii AI po load.
+   * GameScene woła to po colonyManager.restore() (obiekty kolonii istnieją) ORAZ
+   * gameState.restore() (emp.colonies istnieją). Dla każdego imperium:
+   *   - ustawia colony.ownerEmpireId (derived z emp.colonies — bez osobnego pola w save),
+   *   - buduje JEDEN per-imperium TechSystem (anchor jak bootstrap) i linkuje do pełnych
+   *     kolonii (!isOutpost; civSystem/prosperitySystem zostają globalne — parytet z bootstrap,
+   *     outposty mają tech globalny też w żywej grze).
+   * researched: z save (empireTechData[empId]) lub fallback archetype.startingTechs
+   *   (stare save v77 bez empireTech — pełne kolonie AI odzyskują startowy tech).
+   * @param {Object} empireTechData — map empireId → researched[] (z civ4x.empireTech)
+   */
+  static relinkColoniesAfterRestore(empireTechData = {}) {
+    const reg = window.KOSMOS?.empireRegistry;
+    const cm  = window.KOSMOS?.colonyManager;
+    if (!reg?.listAll || !cm) return;
+
+    for (const emp of reg.listAll()) {
+      const colonies = reg.getColoniesByEmpire(emp.id);
+      if (colonies.length === 0) continue;
+
+      let researched = empireTechData?.[emp.id];
+      if (!Array.isArray(researched) || researched.length === 0) {
+        researched = ARCHETYPES[emp.archetype]?.startingTechs ?? [];
+      }
+
+      // Jeden TechSystem per imperium (anchor = pierwsza pełna kolonia, jak bootstrap).
+      const mother = colonies.find(c => !c.isOutpost) ?? colonies[0];
+      const aiTech = new TechSystem(mother?.resourceSystem ?? null);
+      aiTech.grantTechs(researched);
+
+      for (const c of colonies) {
+        c.ownerEmpireId = emp.id;
+        if (!c.isOutpost) {
+          c.techSystem = aiTech;
+          if (c.buildingSystem) c.buildingSystem.techSystem = aiTech;
+        }
+      }
+    }
   }
 
   /**

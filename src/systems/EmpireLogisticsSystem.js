@@ -160,25 +160,15 @@ export class EmpireLogisticsSystem {
     const sys = ssm.getSystem?.(systemId);
     if (!sys) return;
 
-    const bodyIds = [
-      ...(sys.planetIds ?? []),
-      ...(sys.moonIds ?? []),
-      ...(sys.planetoidIds ?? []),
-    ];
-
     const cfg              = this._logisticsConfig(empire);
     const strategic        = cfg.strategicDeposits ?? DEFAULT_LOGISTICS_CONFIG.strategicDeposits;
     const couriersPerRoute = cfg.couriersPerRoute ?? DEFAULT_LOGISTICS_CONFIG.couriersPerRoute;
 
-    // Outposty imperium ze złożem strategicznym (Xe/Nt) w home-systemie. Outposty
-    // NIE są w EmpireRegistry.getColoniesByEmpire (tylko bootstrapColony woła addColony)
-    // → skanujemy ciała systemu przez ColonyManager.getColony (jak EmpireStrategySystem).
-    const outpostIds = bodyIds.filter(id => {
-      const c = cm.getColony(id);
-      if (!c || c.ownerEmpireId !== empire.id || !c.isOutpost) return false;
-      const ent = EntityManager.get(id);
-      return strategic.some(r => this._hasDeposit(ent, r));
-    });
+    // #14: outposty są teraz w EmpireRegistry (bootstrapAutonomousOutpost woła addColony)
+    //   → bierzemy je z getColoniesByEmpire (jedno źródło prawdy, koniec skanu bodyIds systemu).
+    const outpostIds = reg.getColoniesByEmpire(empire.id)
+      .filter(c => c.isOutpost && strategic.some(r => this._hasDeposit(EntityManager.get(c.planetId), r)))
+      .map(c => c.planetId);
 
     for (const outpostId of outpostIds) {
       let route = logi.routes.find(r => r.outpostId === outpostId);

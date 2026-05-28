@@ -68,6 +68,20 @@ export class EmpireStrategySystem {
 
   stop() { EventBus.off('time:tick', this._onTick); }
 
+  // ── Serializacja (#2 save/restore AI) ─────────────────────────────────────
+  // _blacklist = backoff ciał-celów kolonizacji po failure (Map{planetId →
+  //   {sinceCivYear, retryAtCivYear}}). Bez round-tripu AI po load natychmiast
+  //   ponawia nieudane cele w pierwszym ticku Warstwy C.
+  serialize() {
+    return { blacklist: [...this._blacklist.entries()] };
+  }
+
+  restore(data) {
+    if (data && Array.isArray(data.blacklist)) {
+      this._blacklist = new Map(data.blacklist);
+    }
+  }
+
   // Log akcji (gated _verbose):
   //   [EmpireStrategySystem] [<empireName>] <msg> — <ctx>
   _log(empire, msg, ctx = '') {
@@ -128,20 +142,12 @@ export class EmpireStrategySystem {
       ...(sys.planetoidIds ?? []),
     ];
 
-    // Outposty NIE są rejestrowane w EmpireRegistry (bootstrapAutonomousOutpost nie
-    // woła addColony — tylko bootstrapColony) → liczymy je przez ColonyManager.getColony
-    // po ciałach systemu (ownerEmpireId + isOutpost + złoże Xe).
-    const xeOutposts = bodyIds.filter(id => {
-      const c = cm.getColony(id);
-      return c && c.ownerEmpireId === empire.id && c.isOutpost && this._hasDeposit(EntityManager.get(id), 'Xe');
-    }).length;
-
-    // Nt (Neutronium) outposty — liczone analogicznie (Slice 2 S3). Ciało Xe+Nt
-    // liczy się do OBU złóż → P5 nie buduje dubla na ciele które już ma outpost.
-    const ntOutposts = bodyIds.filter(id => {
-      const c = cm.getColony(id);
-      return c && c.ownerEmpireId === empire.id && c.isOutpost && this._hasDeposit(EntityManager.get(id), 'Nt');
-    }).length;
+    // #14: outposty są teraz w EmpireRegistry (bootstrapAutonomousOutpost woła addColony)
+    //   → liczymy przez getColoniesByEmpire (jedno źródło prawdy, koniec skanu bodyIds).
+    //   Ciało Xe+Nt liczy się do OBU złóż → P5 nie buduje dubla na ciele z outpostem.
+    const empOutposts = reg.getColoniesByEmpire(empire.id).filter(c => c.isOutpost);
+    const xeOutposts = empOutposts.filter(c => this._hasDeposit(EntityManager.get(c.planetId), 'Xe')).length;
+    const ntOutposts = empOutposts.filter(c => this._hasDeposit(EntityManager.get(c.planetId), 'Nt')).length;
 
     const targetXe = cfg.targetXeOutposts ?? DEFAULTS.targetXeOutposts;
     const targetNt = cfg.targetNtOutposts ?? DEFAULTS.targetNtOutposts;

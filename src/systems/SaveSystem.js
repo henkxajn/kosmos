@@ -170,12 +170,33 @@ export class SaveSystem {
       starSystemManager: window.KOSMOS.starSystemManager?.serialize() ?? null,
       // Faza 0: reactive store dla NOWYCH domen (empires/intel/diplomacy/wars/battles/invasions)
       gameState: window.KOSMOS.gameState?.serialize() ?? null,
+      // #2 (Slice 2 save/restore AI): per-empire aiTech researched (map empireId→[techId])
+      //   + EmpireStrategySystem blacklist. Re-link ownerEmpireId/aiTech robi GameScene po
+      //   restore (z emp.colonies). ColonyManager.serialize BEZ zmian (oba derived).
+      empireTech:     this._serializeEmpireTech(),
+      empireStrategy: window.KOSMOS?.empireStrategySystem?.serialize() ?? null,
       productionRequestBoard: window.KOSMOS.productionRequestBoard?.serialize() ?? null,
       notificationCenter: window.KOSMOS.notificationCenter?.serialize() ?? null,
       // Player Fleet Groups (save v73) — { fleets[], nextId }. FleetSystem
       // zawsze instancjowany, więc serialize() bezwarunkowo.
       playerFleets: window.KOSMOS.fleetSystem?.serialize() ?? null,
     };
+  }
+
+  // #2: snapshot per-empire aiTech (researched[]). Anchor stolicy przez
+  //   EmpireColonyBootstrap._findEmpireTechSystem (pomija outposty). Pomija imperia
+  //   bez researched (re-link i tak fallbackuje na archetype.startingTechs).
+  _serializeEmpireTech() {
+    const reg = window.KOSMOS?.empireRegistry;
+    const ecb = window.KOSMOS?.empireColonyBootstrap;
+    const out = {};
+    if (!reg?.listAll || !ecb?._findEmpireTechSystem) return out;
+    for (const emp of reg.listAll()) {
+      const ts = ecb._findEmpireTechSystem(emp.id);
+      const researched = ts?.serialize?.().researched;
+      if (Array.isArray(researched) && researched.length > 0) out[emp.id] = researched;
+    }
+    return out;
   }
 
   _serializeStar(star) {

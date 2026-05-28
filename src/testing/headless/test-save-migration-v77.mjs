@@ -15,7 +15,7 @@ const ok = (name, cond) => {
   else { console.error('  FAIL  ' + name); fail++; }
 };
 
-ok('CURRENT_VERSION === 77', CURRENT_VERSION === 77);
+ok('CURRENT_VERSION === 78', CURRENT_VERSION === 78);
 
 // ── Mock save v76 ────────────────────────────────────────────────
 const saveV76 = {
@@ -46,7 +46,7 @@ try { result = migrate(saveV76); }
 catch (e) { threw = true; console.error('migrate threw:', e); }
 
 ok('migrate nie rzuca', !threw);
-ok('version === 77', result?.version === 77);
+ok('version === 78', result?.version === 78);
 ok('brak error object', !result?.error);
 
 const empires = result?.civ4x?.gameState?.empires ?? {};

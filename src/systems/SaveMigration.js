@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 77;
+export const CURRENT_VERSION     = 78;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -95,6 +95,7 @@ const MIGRATIONS = {
   74: _migrateV74toV75,
   75: _migrateV75toV76,
   76: _migrateV76toV77,
+  77: _migrateV77toV78,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1932,6 +1933,26 @@ function _migrateV76toV77(data) {
     }
   }
 
+  return data;
+}
+
+// v77 → v78: Save/restore kolonii AI (#2) + outposty w EmpireRegistry (#14).
+// Nowe pola w civ4x:
+//   (a) empireTech — map empireId → researched[] (per-empire aiTech). Stare save:
+//       puste {} → GameScene re-link fallbackuje na archetype.startingTechs.
+//   (b) empireStrategy — { blacklist: [] } (EmpireStrategySystem backoff celów).
+// ownerEmpireId/aiTech są re-linkowane w runtime z emp.colonies (bez pola na kolonii),
+// więc migracja ustawia tylko lazy defaults. Outposty starych save NIE były w
+// emp.colonies (pre-#14) → po load zostają graczem (fix-forward — AI save nigdy nie
+// round-tripował). Pełne kolonie AI BYŁY w emp.colonies → re-link je naprawia.
+function _migrateV77toV78(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x && typeof c4x === 'object') {
+    if (!c4x.empireTech || typeof c4x.empireTech !== 'object') c4x.empireTech = {};
+    if (!c4x.empireStrategy || typeof c4x.empireStrategy !== 'object') {
+      c4x.empireStrategy = { blacklist: [] };
+    }
+  }
   return data;
 }
 
