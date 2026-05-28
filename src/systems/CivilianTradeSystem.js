@@ -153,6 +153,10 @@ export class CivilianTradeSystem {
 
         if (!hasNexus && dist > range) continue;
 
+        // Faza 2: handel tylko w obrębie tego samego imperium (gracz↔gracz: null===null;
+        //   normalizacja ?? null — inaczej null !== undefined zepsułoby pary gracza).
+        if ((a.ownerEmpireId ?? null) !== (b.ownerEmpireId ?? null)) continue;
+
         const prosA = a.prosperitySystem?.prosperity ?? 50;
         const prosB = b.prosperitySystem?.prosperity ?? 50;
         const gradient = Math.abs(prosA - prosB) / 100;
@@ -576,8 +580,8 @@ export class CivilianTradeSystem {
         const def = COMMODITIES[goodId];
         if (!def) continue;
 
-        // Recepta niedostępna globalnie — nikt tego nie wyprodukuje
-        if (!this._isRecipeGloballyAvailable(goodId)) {
+        // Recepta niedostępna dla imperium kolonii — nikt z imperium tego nie wyprodukuje
+        if (!this._isRecipeAvailableFor(goodId, col)) {
           this._cancelRequestIfExists(col, goodId, 'recipe_locked');
           continue;
         }
@@ -631,12 +635,14 @@ export class CivilianTradeSystem {
     if (existing) board.cancel(existing.id, reason);
   }
 
-  _isRecipeGloballyAvailable(goodId) {
-    const techSys = window.KOSMOS?.techSystem;
+  _isRecipeAvailableFor(goodId, colony) {
+    // Faza 2 (#15): per-imperium tech zamiast globalnego gracza.
+    //   gracz=global, AI full=aiTech imperium, outpost=global (#14 parytet).
+    const techSys = colony?.buildingSystem?.techSystem;
     if (techSys?.isCommodityUnlocked?.(goodId)) return true;
     const def = COMMODITIES[goodId];
     if (!def?.requiresTech) return true;
-    return techSys?.isResearched(def.requiresTech) ?? false;
+    return techSys?.isResearched?.(def.requiresTech) ?? false;
   }
 
   // ── Budynki handlowe — bonusy ───────────────────────────────────────────

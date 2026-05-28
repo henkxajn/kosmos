@@ -1747,7 +1747,7 @@ export class BuildingSystem {
       const colony = this._planetId ? colMgr?.getColony(this._planetId) : null;
       const bodyType = colony?.planet?.type;
       const isAsteroidBody = bodyType === 'planetoid' || bodyType === 'asteroid';
-      const hasAsteroidMining = window.KOSMOS?.techSystem?.isResearched?.('asteroid_mining') ?? false;
+      const hasAsteroidMining = this.techSystem?.isResearched?.('asteroid_mining') ?? false;
       if (isAsteroidBody && hasAsteroidMining) {
         for (const k in gains) gains[k] *= 2.0;
       }

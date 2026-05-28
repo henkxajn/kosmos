@@ -213,7 +213,7 @@ export class RandomEventSystem {
 
     // Faza D2a hook: spacetime_cartography +50% szansa anomalii temporalnych
     // (uproszczone: zwiększamy globalną szansę event'u zamiast filtrować po typie anomalii)
-    const hasSpacetimeCarto = window.KOSMOS?.techSystem?.isResearched?.('spacetime_cartography') ?? false;
+    const hasSpacetimeCarto = colony?.buildingSystem?.techSystem?.isResearched?.('spacetime_cartography') ?? false;
     if (hasSpacetimeCarto) adjustedChance *= 1.5;
 
     // Szansa na zdarzenie
@@ -286,7 +286,7 @@ export class RandomEventSystem {
     }
 
     // Bonus z technologii (disasterReduction w procentach → 0.01)
-    const techRed = window.KOSMOS?.techSystem?.getDisasterReduction() ?? 0;
+    const techRed = colony?.buildingSystem?.techSystem?.getDisasterReduction() ?? 0;
     reduction += techRed * 0.01;
 
     return Math.min(MAX_DEFENSE_REDUCTION, reduction);
@@ -298,7 +298,7 @@ export class RandomEventSystem {
     if (!tag) return false;
 
     const bSys = colony?.buildingSystem;
-    const tSys = window.KOSMOS?.techSystem;
+    const tSys = colony?.buildingSystem?.techSystem;
 
     switch (tag) {
       case 'kinetic': {

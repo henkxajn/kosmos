@@ -491,7 +491,7 @@ export class FactorySystem {
       const def = COMMODITIES[id];
       if (!def) continue;
       const scenarioMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
-      const techSpeedMult = window.KOSMOS?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
+      const techSpeedMult = this._getOwnerColony()?.buildingSystem?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
       const speedMult = scenarioMult * techSpeedMult;
       const timePerUnit = def.baseTime / (alloc.points * speedMult);
       // Alokacja z 0 FP (zwykle zablokowana przez _autoConsolidate — brak
@@ -708,7 +708,7 @@ export class FactorySystem {
 
       // Czas na 1 szt
       const scenarioMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
-      const techSpeedMult = window.KOSMOS?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
+      const techSpeedMult = this._getOwnerColony()?.buildingSystem?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
       const speedMult = scenarioMult * techSpeedMult;
       const timePerUnit = def.baseTime / (alloc.points * speedMult);
       alloc.progress += deltaYears;

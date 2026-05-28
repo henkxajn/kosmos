@@ -294,6 +294,19 @@ export class VesselManager {
   }
 
   /**
+   * Faza 2 (#15): rozwiąż techSystem dla statku wg właściciela.
+   * Gracz (ownerEmpireId null) → globalny tech gracza. AI → aiTech imperium
+   * (anchor stolicy przez EmpireColonyBootstrap._findEmpireTechSystem). Fail-closed:
+   * null gdy imperium bez stolicy → call-site użyje BASE (?? 1.0 / ?? false).
+   */
+  _techForVessel(vessel) {
+    if (vessel?.ownerEmpireId) {
+      return window.KOSMOS?.empireColonyBootstrap?._findEmpireTechSystem?.(vessel.ownerEmpireId) ?? null;
+    }
+    return window.KOSMOS?.techSystem ?? null;
+  }
+
+  /**
    * Wyślij statek na misję — zmienia status, pozycję, zużywa paliwo.
    * @param {string} vesselId
    * @param {object} mission — { type, targetId, departYear, arrivalYear, returnYear, cargo, ... }
@@ -308,9 +321,10 @@ export class VesselManager {
     // Zastosuj fuel efficiency z tech (np. plasma_drives -30% zużycie)
     // Bazowe zużycie z modułów+masy (vessel.fuel.consumption ustawione przy tworzeniu)
     const baseFuelPerAU = vessel._baseFuelPerAU ?? vessel.fuel.consumption ?? _getHullDef(vessel.shipId)?.fuelPerAU ?? 0.5;
-    const fuelEffMult = window.KOSMOS?.techSystem?.getFuelEfficiency() ?? 1.0;
+    const techSys = this._techForVessel(vessel);
+    const fuelEffMult = techSys?.getFuelEfficiency() ?? 1.0;
     // Faza D2a hook: dyson_transmitter +100% zasięg (= fuelPerAU ×0.5)
-    const dysonRangeMult = (window.KOSMOS?.techSystem?.isResearched?.('dyson_transmitter') ?? false) ? 0.5 : 1.0;
+    const dysonRangeMult = (techSys?.isResearched?.('dyson_transmitter') ?? false) ? 0.5 : 1.0;
     vessel.fuel.consumption = baseFuelPerAU * fuelEffMult * dysonRangeMult;
 
     // Pozycja startu (bieżąca pozycja kolonii)
@@ -2049,7 +2063,8 @@ export class VesselManager {
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const ship = _getHullDef(vessel.shipId);
-    const speedAU = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+    const techSys = this._techForVessel(vessel);
+    const speedAU = (vessel.speedAU ?? ship?.speedAU ?? 1) * (techSys?.getShipSpeedMultiplier() ?? 1);
 
     // Odległość od gwiazdy (pozycja statku) do planety (AU)
     const dx = (target.x - vessel.position.x) / AU_TO_PX;
@@ -2059,7 +2074,7 @@ export class VesselManager {
     const arrivalYear = gameYear + travelYears;
 
     // Zużyj paliwo in-system (pc/AU)
-    const fuelEffMult = window.KOSMOS?.techSystem?.getFuelEfficiency?.() ?? 1.0;
+    const fuelEffMult = techSys?.getFuelEfficiency?.() ?? 1.0;
     const fuelPerAU = (vessel.fuel.consumption ?? ship?.fuelPerAU ?? 1) * fuelEffMult;
     const fuelCost = distAU * fuelPerAU;
     vessel.fuel.current = Math.max(0, vessel.fuel.current - fuelCost);
@@ -2157,7 +2172,8 @@ export class VesselManager {
       // Oblicz czas do pierwszego ciała
       const firstTarget = this._findEntity(targets[0]);
       const ship = _getHullDef(vessel.shipId);
-      const speedAU = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+      const techSys = this._techForVessel(vessel);
+      const speedAU = (vessel.speedAU ?? ship?.speedAU ?? 1) * (techSys?.getShipSpeedMultiplier() ?? 1);
       const distAU = Math.hypot(
         (firstTarget.x - vessel.position.x) / AU_TO_PX,
         (firstTarget.y - vessel.position.y) / AU_TO_PX
@@ -2305,7 +2321,8 @@ export class VesselManager {
         const nextId = m.targets[m.currentIdx];
         const nextBody = this._findEntity(nextId);
         const ship = _getHullDef(vessel.shipId);
-        const speedAU = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
+        const techSys = this._techForVessel(vessel);
+        const speedAU = (vessel.speedAU ?? ship?.speedAU ?? 1) * (techSys?.getShipSpeedMultiplier() ?? 1);
         const distAU = Math.hypot(
           ((nextBody?.x ?? 0) - vessel.position.x) / AU_TO_PX,
           ((nextBody?.y ?? 0) - vessel.position.y) / AU_TO_PX
