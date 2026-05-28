@@ -229,10 +229,13 @@ export class BotInterface {
   _proactiveFoodScore(s) {
     const pop = s.colony.population;
     const foodPerYear = s.resources.perYear.food ?? 0;
+    // Brutto: rozróżnij „brak produkcji" (brutto=0) od „bilans netto≤0" (brutto>0). #6.
+    // Fallback do netto gdy grossPerYear nieobecny (stary state).
+    const foodGross = s.resources.grossPerYear?.food ?? foodPerYear;
     const futureConsumption = (pop + 2) * 2.5;
     const currentConsumption = pop * 2.5;
-    // ZERO produkcji food → KRYTYCZNE
-    if (foodPerYear <= 0) return 72;
+    // BRUTTO produkcja = 0 → naprawdę brak farm → KRYTYCZNE (netto≤0 z brutto>0 = bilans, niżej)
+    if (foodGross <= 0) return 72;
     // Nie wystarczy na pop+2 (z 20% marginesem) → WYSOKI priorytet
     if (foodPerYear < futureConsumption * 1.2) return 68;
     // Ledwo wystarcza na obecnych (z 30% marginesem)

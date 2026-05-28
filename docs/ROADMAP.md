@@ -67,11 +67,11 @@ Systemy liczące coś dla kolonii/vessela AI globalnym `window.KOSMOS.techSystem
 
 | # | Status / Sev / Effort | Co + plik:linia | Decyzja |
 |---|------------------------|------------------|---------|
-| **#4** | TODO · DROBNY · S | `_runSurvival` (`ColonyAutoExpander.js:174-257`) nie sprawdza `_isUnreachable` (jak `_runTargets` `:313,340`). Realnie dotyczy tylko `factory` (requires metallurgy); tłumione anti-thrash+blacklist | wpiąć unreachable do survival |
-| **#5** | TODO · DROBNY · S | `Snapshot.js`: `vessels.byType` nie istnieje (`:86-94`, tylko vesselsByStatus); per-building levels per-kategoria (`:16-33`). **Zero wpływu na grę** — tylko raporty botów | dodać byType + levelsById |
-| **#18-sprite** | TODO · DROBNY · S | Skala GLB hardcoded `0.002` dla wszystkich (`ThreeRenderer.js:3167`); `hull_small`→`cargo3d.glb`. Dodać skalę per-hull | Linie kursu AI = świadomy fog-of-war, **NIE ruszać** (decyzja Filipa) |
-| **#6** | TODO · SPORNY(artefakt) · S | „food rate=0" to bilans NETTO (prod−konsumpcja w `_inventoryPerYear`, `ResourceSystem.js:356-376`), **nie bug**. Famine wymaga `netFlow<0` | rozdzielić brutto/netto dla bota (`BotInterface.js:235`); fix CLAUDE.md `POP_CONSUMPTION.food` 3.0→2.5 (drift, w kodzie `ResourcesData.js` = 2.5) |
-| **#12 test** | TODO · SPORNY · S | Dodać dedykowany test kolizji „1 ciało = 1 właściciel" (guard throw+blacklist, by-design w Slice 2) | per [[testing-rollback-paths]] |
+| **#4** | ✅ DONE · DROBNY · S | `_runSurvival` (`ColonyAutoExpander.js`) nie sprawdzał `_isUnreachable`. Ungated builds MOGĄ failować non-tech (damaged/kategoria/hard-terrain/mutex) | DONE **Opcja 2**: helper `_survivalBuildOutcome` guard w 5 branchach. Root-cause `_findFreeTile` → §7 |
+| **#5** | ✅ DONE · DROBNY · S | `Snapshot.js`: `vessels.byType` nie istniał; `industrialist.js:36` "known bug" | DONE: **ADD** `vessels.byType` (grupowanie po shipId). `levelsById` DEFER (zero konsumentów) |
+| **#18-sprite** | ✅ DONE · DROBNY · S | Skala GLB hardcoded `0.002` (`ThreeRenderer.js`); `hull_small` mikroskopijny | DONE: `VESSEL_SCALE_MAP` per-shipId, `hull_small=0.012` (żywa gra). Linie kursu NIETKNIĘTE. Znaczniki UI → §7 |
+| **#6** | ⚠️ PARTIAL · SPORNY · S | „food rate=0" to NETTO (`_inventoryPerYear`), nie bug. Drift docs 3.0→2.5 | PARTIAL: brutto/netto + drift docs DONE; `getGrossPerYear()` API issue → §7 "Faza 3.1". Prosperity drift → §7 |
+| **#12 test** | ✅ DONE · SPORNY · S | Test kolizji „1 ciało = 1 właściciel" | DONE: T19-T22 w `test-bootstrap-colony.mjs` (throw obce/gracz + idempotencja) |
 
 ---
 
@@ -161,6 +161,75 @@ Pełna analiza w pamięci CC: mini-invest-upgrade-vs-horizontal
   endgame Dyson)
 - buildingLevelCap scaffold już istnieje (deep_drilling/space_mining)
 - Ranking imperiów Slice 3 nie używa level → horyzontal = potęga
+
+---
+
+### Rebalans prosperity threshold (food)  [TechDebt Faza 3 #6]
+
+**Status:** TODO, post-Faza 3, ocena z playtestem
+
+`ProsperitySystem._calcSurvivalSatisfaction` (`:387`) liczy `foodNeed = pop * 3.0`, ale
+realna konsumpcja to `POP_CONSUMPTION.food = 2.5` (`ResourcesData.js`). Komentarz przy linii
+twierdził `// POP_CONSUMPTION.food` → **rozjazd historyczny** (food obniżone 3.0→2.5, ten
+próg nie; `water: 1.5` obok pasuje idealnie do stałej). W Fazie 3 NIE zmieniono logiki
+(ryzyko balansu) — dodano tylko komentarz ostrzegawczy. Do oceny: zsynchronizować z
+`POP_CONSUMPTION.food` (import stałej) czy zostawić jako celowy bufor.
+**Effort:** S (1 linia + playtest balansu prosperity/famine).
+
+### _findFreeTile root-cause (proponuje tile odrzucane przez _build)  [TechDebt Faza 3 #4]
+
+**Status:** TODO, post-Faza 3
+
+`ColonyAutoExpander._findFreeTile` (`:423`) filtruje tylko `terrain.buildable`, ale
+`BuildingSystem._canBuildOnTile` (`:1451`) dodatkowo odrzuca `tile.damaged`, złą kategorię
+(`allowedCategories`) i hard-terrain (fallback `pick(false)` celowo gubi hardTerrains) → może
+podać tile który `_build` odrzuci → outcome `'fail'` non-tech. Faza 3 obeszła to guardem
+unreachable (backoff 30cy) w survival. **Docelowo:** `_findFreeTile` powinien walidować
+`_canBuildOnTile` (nie tylko `buildable`) → eliminacja klasy 'fail' terenowych; target-backoff
+zostałby tylko dla prawdziwie niebudowalnych typów.
+**Effort:** M (refactor _findFreeTile + regresja AutoExpander).
+
+### Znaczniki UI dla statków na mapie (Slice 4 prerequisite)
+
+**Status:** TODO, post tech debt, Slice 4 conflict prerequisite
+
+**Problem (z testów żywej gry Fazy 3 2026-05-29):**
+Statki w realistycznej skali są niewidoczne z dalekiej kamery (widok systemu).
+`hull_small=0.012` to kompromis: widoczne z normalnego zoomu, niewidoczne z dalekiej
+perspektywy. Slice 4 conflict wymaga aby gracz widział floty AI/wrogów z dalekiej kamery
+aby je atakować/przechwytywać cargo.
+
+**Decyzja designerska (Filip):**
+Dodać „znaczniki UI" — ikony/kropki/strzałki widoczne niezależnie od zoomu (counter-scale
+do kamery), wzorzec ze Stellarisa/EU4/HOI4.
+
+**Powiązane systemy:**
+- ThreeRenderer (nowy element — sprite/ikona w przestrzeni ekranu)
+- Logika „zawsze tej samej wielkości na ekranie" (counter-scale do odległości kamery)
+- Intel-gating (jak linie kursu — visible po contact)
+- Filtr per typ (cargo/combat/wrogi/sojuszniczy) — różne ikony; kolory per imperium
+
+**Effort:** M-L (nowy feature). **Dlaczego nie teraz:** Faza 3 = quick wins; wymaga decyzji
+designerskich (kolor/kształt/intel-gated?); należy do Slice 4 conflict.
+
+### TechDebt Faza 3.1: getGrossPerYear API fix
+
+**Status:** TODO, drobny bug znaleziony w live testach Fazy 3 2026-05-29
+
+**Problem (zdiagnozowany w konsoli żywej gry):**
+`ResourceSystem.getGrossPerYear()` wywołane BEZ argumentu zwraca `Number 0` zamiast obiektu
+`{food, water, ...}`. Skutek: per-resource brutto/netto nie jest łatwo dostępne dla konsumenta
+oczekującego obiektu. #6 metryka brutto/netto **częściowo zaimplementowana** — funkcja istnieje
+(`getGrossPerYear(resourceId)` → wartość, mirror `getPerYear`), ale brak wariantu zwracającego
+cały obiekt (jak `_inventoryGrossPerYear` / state `grossPerYear` w HeadlessRuntime).
+
+**Naprawa (effort S):**
+1. Dodać wariant bez-arg `getGrossPerYear()` → `{food, water, ...}` (jak `Object.fromEntries(_inventoryGrossPerYear)`) LUB udokumentować że wymaga `resourceId` + dostosować callery.
+2. Dostosować `BotInterface._proactiveFoodScore` (czyta `s.resources.grossPerYear.food`) jeśli trzeba.
+3. Smoke asercja API (`Object.keys.includes('food')`) by wyłapać regresję.
+
+**Dlaczego nie w Fazie 3:** decyzja commitowa „zaakceptujmy częściowo + fix osobno"; nie psuje
+gameplay (BotInterface = bot testowy, nie gracz). **Powiązane:** #6 Fazy 3.
 
 ---
 

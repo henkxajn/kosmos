@@ -82,16 +82,22 @@ export function capture(core) {
     : {};
   const factoryMode = active?.factorySystem?._mode ?? null;
 
-  // ── Vessels by status ──
+  // ── Vessels by status + byType (shipId) ──
+  // byType: rozbicie floty per typ statku (kurier AI = 'hull_small'). Konsument:
+  //   src/data/targets/industrialist.js (wcześniej pusty — known bug Opcji B).
   const vesselsByStatus = { docked: 0, in_transit: 0, orbiting: 0, away_team: 0, total: 0 };
+  const vesselsByType = {};
   if (core.vesselManager?.getAllVessels) {
     const all = core.vesselManager.getAllVessels();
     for (const v of all) {
       vesselsByStatus.total++;
       const s = v.status ?? 'unknown';
       vesselsByStatus[s] = (vesselsByStatus[s] ?? 0) + 1;
+      const ty = v.shipId ?? 'unknown';
+      vesselsByType[ty] = (vesselsByType[ty] ?? 0) + 1;
     }
   }
+  vesselsByStatus.byType = vesselsByType;
 
   // ── Missions ──
   const missionsByStatus = { active: 0, completed: 0, failed: 0, total: 0 };

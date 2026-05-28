@@ -8,6 +8,7 @@
 //
 //   T1-T10:  bootstrapColony (pełna kolonia, 2 POP, 4 budynki, shared tech)
 //   T11-T18: bootstrapAutonomousOutpost (per-budynek, 0 POP, ownerEmpireId)
+//   T19-T22: kolizja "1 ciało = 1 właściciel" (#12 — throw obce/gracz + idempotencja)
 // ═══════════════════════════════════════════════════════════════
 
 import './env.js'; // MUST be first — shim localStorage/window/THREE
@@ -50,6 +51,7 @@ const mkPlanet = (id, name) => EntityManager.add({
 mkPlanet('thuban_c', 'Thuban C');
 mkPlanet('thuban_b', 'Thuban B');
 mkPlanet('thuban_d_moon', 'Thuban D Moon');
+mkPlanet('thuban_e', 'Thuban E');   // T22: kolonia GRACZA (kolizja AI↔gracz)
 
 // ── Realny ColonyManager + EmpireRegistry ─────────────────────────
 const colonyManager  = new ColonyManager(techStub);
@@ -194,6 +196,38 @@ console.log('--- T18: AutoExpander NIE bierze outpostu (filtr !isOutpost) ---');
   const managed = expander._managedColonies();
   const hasOutpost = managed.some(c => c.planetId === 'thuban_d_moon');
   ok('outpost NIE w _managedColonies', !hasOutpost);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Kolizja "1 ciało = 1 właściciel" (#12 TechDebt Faza 3)
+// Guard: EmpireColonyBootstrap throw (obce imperium / gracz) + ColonyManager
+//   .createColony idempotencja. _colonies keyed by planetId → 1 ciało = 1 owner.
+// ═══════════════════════════════════════════════════════════════
+console.log('--- T19: drugie imperium na zajętym planetId → throw "obcego imperium" ---');
+empireRegistry.createEmpire({ id: 'emp_002', archetype: 'industrialist', homeSystemId: 'sys_061' });
+ok('throw "kolonia obcego imperium" (emp_002 → thuban_c emp_001)', throws(
+  () => EmpireColonyBootstrap.bootstrapColony('emp_002', 'sys_061', 'thuban_c', validOpts),
+  'obcego imperium'));
+
+console.log('--- T20: kolizja NIE dodała kolonii emp_002, planeta nadal emp_001 ---');
+ok('getColoniesByEmpire(emp_002).length === 0', empireRegistry.getColoniesByEmpire('emp_002').length === 0);
+ok('thuban_c.ownerEmpireId nadal emp_001', colonyManager.getColony('thuban_c').ownerEmpireId === 'emp_001');
+
+console.log('--- T21: idempotencja emp_001 nie tworzy duplikatu thuban_c ---');
+{
+  const before = empireRegistry.getColoniesByEmpire('emp_001').length;
+  const cDup = EmpireColonyBootstrap.bootstrapColony('emp_001', 'sys_061', 'thuban_c', validOpts);
+  ok('zwraca istniejącą (=== c1)', cDup === c1);
+  ok('liczba kolonii emp_001 bez zmian', empireRegistry.getColoniesByEmpire('emp_001').length === before);
+}
+
+console.log('--- T22: kolonia GRACZA (ownerEmpireId=null) → AI throw "GRACZA" ---');
+{
+  const playerCol = colonyManager.createColony('thuban_e', { food: 200, water: 200 }, 0, 10);
+  ok('kolonia gracza powstała bez ownerEmpireId', !!playerCol && playerCol.ownerEmpireId == null);
+  ok('throw "kolonia GRACZA" gdy AI kolonizuje planetę gracza', throws(
+    () => EmpireColonyBootstrap.bootstrapColony('emp_001', 'sys_061', 'thuban_e', validOpts),
+    'GRACZA'));
 }
 
 // ═══════════════════════════════════════════════════════════════

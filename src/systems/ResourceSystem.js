@@ -78,6 +78,9 @@ export class ResourceSystem {
 
     // ── Śledzenie zmian inventory per rok (do UI delta) ──────────────────
     this._inventoryPerYear = new Map();
+    // Brutto (tylko dodatnie wkłady producentów) — równolegle do _inventoryPerYear (netto).
+    // Pozwala rozróżnić „brak produkcji" (brutto=0) od „bilans netto≤0" (brutto>0). #6.
+    this._inventoryGrossPerYear = new Map();
 
     // Bufor czasu — throttle emitowania
     this._accumYears = 0;
@@ -231,11 +234,18 @@ export class ResourceSystem {
     return this.inventory.get(mapped) ?? 0;
   }
 
-  // Pobierz zmianę/rok danego zasobu
+  // Pobierz zmianę/rok danego zasobu (netto = produkcja − konsumpcja)
   getPerYear(resourceId) {
     if (resourceId === 'energy') return this.energy.balance;
     if (resourceId === 'research') return this.research.perYear;
     return this._inventoryPerYear.get(resourceId) ?? 0;
+  }
+
+  // Pobierz BRUTTO produkcję/rok (tylko dodatnie wkłady — bez konsumpcji). #6.
+  getGrossPerYear(resourceId) {
+    if (resourceId === 'energy') return this.energy.production;
+    if (resourceId === 'research') return this.research.perYear;
+    return this._inventoryGrossPerYear.get(resourceId) ?? 0;
   }
 
   // Pojemność magazynu — nie używana w nowym systemie (nieograniczone)
@@ -356,6 +366,7 @@ export class ResourceSystem {
   _recalcPerYear() {
     // Reset
     this._inventoryPerYear.clear();
+    this._inventoryGrossPerYear.clear();
     let energyProd = 0, energyCons = 0;
     let researchPerYear = 0;
 
@@ -371,6 +382,11 @@ export class ResourceSystem {
           const mapped = this._mapLegacyKey(key);
           this._inventoryPerYear.set(mapped,
             (this._inventoryPerYear.get(mapped) ?? 0) + value);
+          // Brutto: sumuj tylko dodatnie wkłady (produkcja bez konsumpcji POP/fabryk).
+          if (value > 0) {
+            this._inventoryGrossPerYear.set(mapped,
+              (this._inventoryGrossPerYear.get(mapped) ?? 0) + value);
+          }
         }
       }
     }

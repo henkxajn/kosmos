@@ -384,7 +384,10 @@ export class ProsperitySystem {
     // Food
     const foodStock = this.resourceSystem?.inventory?.get('food') ?? 0;
     const foodRate = this._getPerYear('food');
-    const foodNeed = pop * 3.0;  // POP_CONSUMPTION.food
+    // UWAGA: 3.0 ≠ POP_CONSUMPTION.food (2.5) — rozjazd historyczny
+    // (food obniżone 3.0→2.5, ten próg nie). NIE "naprawiać" bez
+    // playtestu balansu — ROADMAP "rebalans prosperity threshold".
+    const foodNeed = pop * 3.0;
     if (foodNeed > 0) {
       total += this._ratioToSatisfaction((foodStock + Math.max(0, foodRate)) / foodNeed);
       count++;

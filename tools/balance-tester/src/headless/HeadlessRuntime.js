@@ -543,6 +543,8 @@ export class HeadlessRuntime {
       resources: {
         inventory: Object.fromEntries(this.resourceSystem.inventory),
         perYear: Object.fromEntries(this.resourceSystem._inventoryPerYear),
+        // Brutto (tylko produkcja) — rozróżnia brak farm od bilansu netto≤0. #6.
+        grossPerYear: Object.fromEntries(this.resourceSystem._inventoryGrossPerYear ?? new Map()),
         energyBalance: this.resourceSystem.energy.balance,
         energyProduction: this.resourceSystem.energy.production,
         energyConsumption: this.resourceSystem.energy.consumption,

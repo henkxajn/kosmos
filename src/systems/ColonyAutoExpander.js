@@ -201,18 +201,20 @@ export class ColonyAutoExpander {
       //    brak-housing, ale nie odblokowuje wzrostu). Bufor 10% (housing_buffer_ratio).
       const housing      = civ.housing ?? 0;
       const bufferRatio  = TH.housing_buffer_ratio ?? 1.1;
-      if (!restFromBuilds && pop > 0 && housing < pop * bufferRatio) {
+      if (!restFromBuilds && pop > 0 && housing < pop * bufferRatio
+          && !this._isUnreachable(colony, 'build:habitat', civYear)) {
         if (this._doSurvival(colony, 'housing_cap', civYear)) {
-          this._tryBuild(colony, 'habitat', { module: 'survival', civYear, why: `pop ${pop}/${housing} housing cap (target ${(pop * bufferRatio).toFixed(1)})` });
+          this._survivalBuildOutcome(colony, 'habitat', civYear, `pop ${pop}/${housing} housing cap (target ${(pop * bufferRatio).toFixed(1)})`);
           continue;
         }
       }
 
       // 1) Energia — bilans poniżej progu → solar_farm (najwyższy priorytet, brownout psuje wszystko)
       const bal = res.energy?.balance ?? 0;
-      if (!restFromBuilds && bal < (TH.energy_balance_min ?? 0)) {
+      if (!restFromBuilds && bal < (TH.energy_balance_min ?? 0)
+          && !this._isUnreachable(colony, 'build:solar_farm', civYear)) {
         if (this._doSurvival(colony, 'energy', civYear)) {
-          this._tryBuild(colony, 'solar_farm', { module: 'survival', civYear, why: `energy balance ${bal.toFixed(1)}` });
+          this._survivalBuildOutcome(colony, 'solar_farm', civYear, `energy balance ${bal.toFixed(1)}`);
           continue;
         }
       }
@@ -221,9 +223,10 @@ export class ColonyAutoExpander {
       //    food_min_per_pop jest już wliczone w net rate (produkcja − konsumpcja),
       //    więc sygnałem survival jest net < 0 (kolonia traci żywność).
       const orgRate = res.getPerYear?.('organics') ?? 0;
-      if (!restFromBuilds && orgRate < 0) {
+      if (!restFromBuilds && orgRate < 0
+          && !this._isUnreachable(colony, 'build:farm', civYear)) {
         if (this._doSurvival(colony, 'food', civYear)) {
-          this._tryBuild(colony, 'farm', { module: 'survival', civYear, why: `organics rate ${orgRate.toFixed(1)}` });
+          this._survivalBuildOutcome(colony, 'farm', civYear, `organics rate ${orgRate.toFixed(1)}`);
           continue;
         }
       }
@@ -232,9 +235,10 @@ export class ColonyAutoExpander {
       const atmo = civ.planet?.atmosphere ?? colony.planet?.atmosphere ?? 'breathable';
       if (!restFromBuilds && atmo !== 'breathable') {
         const ratio = TH.housing_min_ratio_no_atmosphere ?? 0.5;
-        if ((civ.housing ?? 0) < pop * ratio) {
+        if ((civ.housing ?? 0) < pop * ratio
+            && !this._isUnreachable(colony, 'build:habitat', civYear)) {
           if (this._doSurvival(colony, 'housing', civYear)) {
-            this._tryBuild(colony, 'habitat', { module: 'survival', civYear, why: `housing ${civ.housing ?? 0}/${(pop * ratio).toFixed(1)} (atmo=${atmo})` });
+            this._survivalBuildOutcome(colony, 'habitat', civYear, `housing ${civ.housing ?? 0}/${(pop * ratio).toFixed(1)} (atmo=${atmo})`);
             continue;
           }
         }
@@ -246,7 +250,11 @@ export class ColonyAutoExpander {
       if (prosp < (TH.prosperity_alarm ?? 0)) {
         if (this._doSurvival(colony, 'consumer_goods', civYear)) {
           if (!restFromBuilds && this._countBuilding(colony, 'factory') === 0) {
-            this._tryBuild(colony, 'factory', { module: 'survival', civYear, why: `prosperity ${Math.round(prosp)} (brak fabryki)` });
+            // #4: factory requires:metallurgy → bez techu silent 'fail'. Guard unreachable
+            //   (30cy) zamiast retry co 3cy. setMode reactive niżej działa niezależnie.
+            if (!this._isUnreachable(colony, 'build:factory', civYear)) {
+              this._survivalBuildOutcome(colony, 'factory', civYear, `prosperity ${Math.round(prosp)} (brak fabryki)`);
+            }
           } else if (colony.factorySystem && colony.factorySystem.mode !== 'reactive') {
             colony.factorySystem.setMode('reactive');
             this._log(colony, 'survival', 'setMode reactive', `prosperity ${Math.round(prosp)}`, civYear);
@@ -265,6 +273,20 @@ export class ColonyAutoExpander {
     }
     colony._caeLastSurvivalAction = { type, civYear };
     return true;
+  }
+
+  // Survival build z guardem unreachable (mirror _runTargets:317-330). _findFreeTile
+  // może podać tile który _build odrzuci non-tech (tile.damaged / zła kategoria terenu /
+  // hard-terrain fallback / farm↔synth mutex) → outcome 'fail'. Backoff 30cy zamiast
+  // spamu co 3cy + churn tile'i. Root-cause → ROADMAP "_findFreeTile root-cause".
+  // Caller poprzedza _isUnreachable(build:<id>) w warunku branch (short-circuit przed
+  // _doSurvival, by nie palić anti-thrash gdy w backoffie).
+  _survivalBuildOutcome(colony, buildingId, civYear, why) {
+    const key = `build:${buildingId}`;
+    const outcome = this._tryBuild(colony, buildingId, { module: 'survival', civYear, why });
+    if (this._isBuildSuccess(outcome)) this._clearUnreachable(colony, key);
+    else if (outcome === 'fail') this._markUnreachable(colony, key, civYear, { module: 'survival' });
+    return outcome;
   }
 
   // ── MODUŁ 2: TARGET STATES (co 3 civYears) ───────────────────────────────

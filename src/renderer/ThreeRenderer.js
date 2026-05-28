@@ -3129,6 +3129,21 @@ export class ThreeRenderer {
   // Domyślny model dla nieznanych typów statków
   static VESSEL_MODEL_DEFAULT = 'assets/models/ships/cargo3d.glb';
 
+  // ── Skala modelu GLB per shipId (TechDebt Faza 3 #18) ──────────
+  // Kalibracja per shipId. hull_small (kurier AI) — gracz musi widzieć cargo AI
+  // (Slice 4 ataki); WARTOŚĆ TESTOWA do wizualnej oceny Filipa (STOP-IF-WRONG —
+  // jeśli mikroskopijne/ogromne, podaj liczbę). Pozostałe hulle — szacunkowe,
+  // kalibracja w Slice 4 gdy floty bojowe będą renderowane. DEFAULT = obecny rozmiar
+  // (cargo_ship/science_vessel/colony_ship bez wpisu zachowują 0.002 — brak regresji).
+  static VESSEL_SCALE_MAP = {
+    hull_small:    0.012,   // żywa gra 2026-05-29: 0.005 za małe (niewidoczne bez zoomu) → 0.012 widoczne z normalnego zoomu
+    hull_medium:   0.004,
+    hull_large:    0.004,
+    hull_frigate:  0.004,
+    hull_corvette: 0.004,
+  };
+  static VESSEL_SCALE_DEFAULT = 0.002;
+
   /**
    * Dodaj statek na mapie 3D — model GLB lub sprite (fallback).
    */
@@ -3163,8 +3178,9 @@ export class ThreeRenderer {
 
       const model = template.clone();
 
-      // Skala — mały obiekt na mapie, widoczny przy bliskim zoomie
-      model.scale.set(0.002, 0.002, 0.002);
+      // Skala per shipId (#18) — fallback DEFAULT dla statków bez wpisu w mapie.
+      const vScale = ThreeRenderer.VESSEL_SCALE_MAP[vessel.shipId] ?? ThreeRenderer.VESSEL_SCALE_DEFAULT;
+      model.scale.set(vScale, vScale, vScale);
 
       // Wycentruj geometrię modelu (GLB może mieć offset)
       const box = new THREE.Box3().setFromObject(model);

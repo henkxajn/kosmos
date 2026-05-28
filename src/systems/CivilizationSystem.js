@@ -53,7 +53,7 @@ export const POP_PER_BUILDING = 0.25;  // domyślny koszt POP na budynek
 
 // Konsumpcja per POP per rok gry (nowy system: food/water/energy)
 import { POP_CONSUMPTION } from '../data/ResourcesData.js';
-// POP_CONSUMPTION = { food: 3.0, water: 1.5, energy: 1.0 }
+// POP_CONSUMPTION = { food: 2.5, water: 1.5, energy: 1.0 }
 
 // Wzrost populacji
 const BASE_GROWTH_INTERVAL = 12;  // lat na nowego POPa przy bazowych warunkach
