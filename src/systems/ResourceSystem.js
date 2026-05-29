@@ -234,14 +234,31 @@ export class ResourceSystem {
     return this.inventory.get(mapped) ?? 0;
   }
 
-  // Pobierz zmianę/rok danego zasobu (netto = produkcja − konsumpcja)
+  /**
+   * Pobierz NETTO produkcję/rok dla konkretnego zasobu (brutto minus konsumpcja).
+   * Argument `resourceId` jest wymagany — bez niego metoda zwraca 0.
+   *
+   * @param {string} resourceId  klucz zasobu ('food', 'water', 'energy', 'research', …)
+   * @returns {number}           netto/rok, 0 gdy brak argumentu
+   */
   getPerYear(resourceId) {
     if (resourceId === 'energy') return this.energy.balance;
     if (resourceId === 'research') return this.research.perYear;
     return this._inventoryPerYear.get(resourceId) ?? 0;
   }
 
-  // Pobierz BRUTTO produkcję/rok (tylko dodatnie wkłady — bez konsumpcji). #6.
+  /**
+   * Pobierz BRUTTO produkcję/rok dla konkretnego zasobu (tylko dodatnie wkłady —
+   * bez konsumpcji POPu i fabryk). Argument `resourceId` jest wymagany — bez niego
+   * metoda zwraca 0 (wynik Map.get(undefined) ?? 0), co jest zamierzonym zachowaniem.
+   *
+   * Zwraca Number (scalar). Nie zwraca obiektu agregacyjnego.
+   * Jeśli potrzebujesz {food, water, ...} — użyj snapshotu stanu z HeadlessRuntime
+   * (resources.grossPerYear), nie tej metody.
+   *
+   * @param {string} resourceId  klucz zasobu ('food', 'water', 'energy', 'research', …)
+   * @returns {number}           brutto/rok, 0 gdy brak producenta lub brak argumentu
+   */
   getGrossPerYear(resourceId) {
     if (resourceId === 'energy') return this.energy.production;
     if (resourceId === 'research') return this.research.perYear;

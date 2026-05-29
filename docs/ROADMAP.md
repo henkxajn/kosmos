@@ -70,7 +70,7 @@ Systemy liczące coś dla kolonii/vessela AI globalnym `window.KOSMOS.techSystem
 | **#4** | ✅ DONE · DROBNY · S | `_runSurvival` (`ColonyAutoExpander.js`) nie sprawdzał `_isUnreachable`. Ungated builds MOGĄ failować non-tech (damaged/kategoria/hard-terrain/mutex) | DONE **Opcja 2**: helper `_survivalBuildOutcome` guard w 5 branchach. Root-cause `_findFreeTile` → §7 |
 | **#5** | ✅ DONE · DROBNY · S | `Snapshot.js`: `vessels.byType` nie istniał; `industrialist.js:36` "known bug" | DONE: **ADD** `vessels.byType` (grupowanie po shipId). `levelsById` DEFER (zero konsumentów) |
 | **#18-sprite** | ✅ DONE · DROBNY · S | Skala GLB hardcoded `0.002` (`ThreeRenderer.js`); `hull_small` mikroskopijny | DONE: `VESSEL_SCALE_MAP` per-shipId, `hull_small=0.012` (żywa gra). Linie kursu NIETKNIĘTE. Znaczniki UI → §7 |
-| **#6** | ⚠️ PARTIAL · SPORNY · S | „food rate=0" to NETTO (`_inventoryPerYear`), nie bug. Drift docs 3.0→2.5 | PARTIAL: brutto/netto + drift docs DONE; `getGrossPerYear()` API issue → §7 "Faza 3.1". Prosperity drift → §7 |
+| **#6** | ✅ DONE · SPORNY · S | „food rate=0" to NETTO (`_inventoryPerYear`), nie bug. Drift docs 3.0→2.5 | DONE: brutto/netto + drift docs; `getGrossPerYear()` API issue → §7 "Faza 3.1". Prosperity drift → §7 |
 | **#12 test** | ✅ DONE · SPORNY · S | Test kolizji „1 ciało = 1 właściciel" | DONE: T19-T22 w `test-bootstrap-colony.mjs` (throw obce/gracz + idempotencja) |
 
 ---
@@ -214,7 +214,14 @@ designerskich (kolor/kształt/intel-gated?); należy do Slice 4 conflict.
 
 ### TechDebt Faza 3.1: getGrossPerYear API fix
 
-**Status:** TODO, drobny bug znaleziony w live testach Fazy 3 2026-05-29
+**Status:** ✅ DONE (doc-only) 2026-05-29 — zamknięte jako works-as-intended
+
+**Rozwiązanie (Option C — doc-only):** `getGrossPerYear()` → `0` bez argumentu = **zamierzone**
+(scalar getter, mirror `getPerYear`). Aggregate `{food, water, ...}` = stan HeadlessRuntime
+(`resources.grossPerYear`), nie ta metoda. Brak nowego API. Zmiany: JSDoc w `ResourceSystem.js`
+(`getGrossPerYear` + `getPerYear`) + 2 guardy kontraktu w `tmp_faza3_smoke.mjs` (smoke 20/20,
+regresja 290/0). `BotInterface` NIETKNIĘTY (czyta stan — już poprawny). Krok 0: zero callerów
+bez argumentu w `src/`, brak runtime buga.
 
 **Problem (zdiagnozowany w konsoli żywej gry):**
 `ResourceSystem.getGrossPerYear()` wywołane BEZ argumentu zwraca `Number 0` zamiast obiektu

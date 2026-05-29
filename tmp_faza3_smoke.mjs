@@ -55,6 +55,10 @@ console.log('--- #6: ResourceSystem brutto vs netto ---');
   rs._recalcPerYear();
   ok('brutto food === 0 (brak producenta)', rs.getGrossPerYear('food') === 0);
   ok('netto food === -10 (sama konsumpcja)', rs.getPerYear('food') === -10);
+
+  // Faza 3.1 — guard kontraktu getGrossPerYear (doc-only fix)
+  ok('getGrossPerYear("food") zwraca Number', typeof rs.getGrossPerYear('food') === 'number');
+  ok('getGrossPerYear() bez argumentu === 0 (scalar API, zamierzone)', rs.getGrossPerYear() === 0);
 }
 
 // ── #4: _survivalBuildOutcome — mark/clear unreachable ───────────
