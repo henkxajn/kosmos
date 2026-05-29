@@ -1,19 +1,22 @@
 // EmpireGenerator — spawn obcych imperiów na podstawie danych galaktyki
 //
-// Slice 1: hardcoded 1 imperium typu 'industrialist' (zamiast losowy archetyp 3-6 sztuk).
+// Slice 3.1a: 2 imperia AI — archetyp per-imperium wg AI_ARCHETYPE_SEQUENCE
+//   (Industrialist + Expansionist, każde w innym home-systemie).
 // Imperium dostaje REALNĄ kolonię (typu Colony) na minimal planet entity
 // w wybranym home-systemie. Bez początkowej floty (Slice 4 doda ship production).
 //
 // Wywoływany JEDEN raz przy starcie nowej gry (po GalaxyGenerator.generate).
 // Deterministyczny (Mulberry32 z seeda galaktyki) — ten sam układ → ten sam wynik.
 
-import { NAME_PREFIXES_PL, NAME_PREFIXES_EN } from '../data/EmpireData.js';
-import { INDUSTRIALIST } from '../data/EmpireArchetypeIndustrialist.js';
+import { NAME_PREFIXES_PL, NAME_PREFIXES_EN, ARCHETYPES } from '../data/EmpireData.js';
 import { EmpireColonyBootstrap } from '../systems/EmpireColonyBootstrap.js';
 
 // ── Stałe ─────────────────────────────────────────────────────────────────────
-// Slice 1: 1 imperium AI. Slice 2+ podniesie ten próg po debalansowaniu.
-const SLICE1_EMPIRE_COUNT = 1;
+// Slice 3.1a: gracz + 2 AI. Archetyp per-imperium wg sekwencji (deterministyczny
+//   po indeksie i): AI#1 = Industrialist, AI#2 = Expansionist (klon w S3.1a).
+//   Liczba imperiów AI = długość sekwencji. Eksport dla testów (test-multi-ai-spawn).
+export const AI_ARCHETYPE_SEQUENCE = ['industrialist', 'expansionist'];
+const AI_EMPIRE_COUNT = AI_ARCHETYPE_SEQUENCE.length;  // 2
 const MIN_LY = 5.0;   // min odległość imperium home od sys_home
 const MAX_LY = 30.0;  // max odległość (galaktyka ma MAX 22 LY)
 
@@ -51,15 +54,15 @@ function dist3D(a, b) {
 
 export class EmpireGenerator {
   /**
-   * Generuje obce imperia na galaktyce. Slice 1: 1 imperium typu 'industrialist'
-   * z realną kolonią (EmpireColonyBootstrap).
+   * Generuje obce imperia na galaktyce. Slice 3.1a: 2 imperia AI wg
+   * AI_ARCHETYPE_SEQUENCE (Industrialist + Expansionist), każde z realną kolonią.
    *
    * Zapisuje do GameState przez EmpireRegistry. Ustawia galaxyData.systems[i].empireId
    * dla rendering (GalaxyMap).
    *
    * @param {Object} galaxyData — wynik GalaxyGenerator.generate()
    * @param {EmpireRegistry} empireRegistry — instancja do createEmpire/addColony
-   * @param {number} [count] — opcjonalna liczba imperiów (Slice 1: zawsze 1)
+   * @param {number} [count] — opcjonalna liczba imperiów (default AI_EMPIRE_COUNT=2)
    * @returns {Array} lista id utworzonych imperiów
    */
   static generate(galaxyData, empireRegistry, count = null) {
@@ -88,8 +91,8 @@ export class EmpireGenerator {
       return [];
     }
 
-    // Slice 1: zawsze 1 imperium (count arg ignorowany, zostawiony dla forward compat)
-    const targetCount = count ?? SLICE1_EMPIRE_COUNT;
+    // Slice 3.1a: 2 imperia AI (count arg nadpisuje — testy / forward compat)
+    const targetCount = count ?? AI_EMPIRE_COUNT;
 
     // Tasowanie kandydatów (deterministyczne — Fisher-Yates z PRNG)
     const pool = [...candidates];
@@ -98,8 +101,12 @@ export class EmpireGenerator {
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
 
-    // Wybór home-systemów (Slice 1: tylko pierwszy z shuffled poolu)
+    // Wybór home-systemów: pierwsze targetCount z shuffled poolu (różne układy).
+    // Graceful: gdy kandydatów < targetCount, slice zwraca mniej → mniej imperiów.
     const homesChosen = pool.slice(0, targetCount);
+    if (homesChosen.length < targetCount) {
+      console.warn(`[EmpireGenerator] Tylko ${homesChosen.length} kandydatów w zasięgu (chciano ${targetCount}) — spawnuję mniej imperiów AI`);
+    }
 
     // Generacja imperiów
     const createdIds = [];
@@ -107,8 +114,9 @@ export class EmpireGenerator {
 
     for (let i = 0; i < homesChosen.length; i++) {
       const homeSys = homesChosen[i];
-      // Slice 1: hardcoded archetyp 'industrialist'
-      const archetypeId = 'industrialist';
+      // Slice 3.1a: archetyp per-imperium wg sekwencji (po indeksie). Fallback
+      //   'industrialist' gdy sekwencja krótsza niż liczba imperiów.
+      const archetypeId = AI_ARCHETYPE_SEQUENCE[i] ?? 'industrialist';
 
       // Nazwa: prefix (archetype) + sufix (pula), unikalna, max 8 prób
       let name = null;
@@ -145,10 +153,11 @@ export class EmpireGenerator {
       });
 
       // Bootstrap realnej kolonii (planet entity + ColonyManager.createColony
-      // + startingBuildings via autoPlaceBuilding + POPy + safety stocks)
+      // + startingBuildings via autoPlaceBuilding + POPy + safety stocks).
+      // Obiekt archetypu z rejestru ARCHETYPES (rich config wg archetypeId).
       const colonyId = EmpireColonyBootstrap.bootstrapHomeColony(
         empireId,
-        INDUSTRIALIST,
+        ARCHETYPES[archetypeId],
         homeSys.id
       );
       if (!colonyId) {
@@ -162,7 +171,7 @@ export class EmpireGenerator {
       createdIds.push(empireId);
     }
 
-    console.log(`[EmpireGenerator] Spawnowano ${createdIds.length} imperium (Slice 1):`, createdIds);
+    console.log(`[EmpireGenerator] Spawnowano ${createdIds.length} imperium AI (Slice 3.1a):`, createdIds);
     return createdIds;
   }
 }

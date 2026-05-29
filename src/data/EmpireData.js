@@ -17,9 +17,11 @@
 //   science    — priorytet badań, tempo wzrostu techLevel
 
 import { INDUSTRIALIST } from './EmpireArchetypeIndustrialist.js';
+import { EXPANSIONIST } from './EmpireArchetypeExpansionist.js';
 
 export const ARCHETYPES = {
   industrialist: INDUSTRIALIST,
+  expansionist:  EXPANSIONIST,  // Slice 3.1a — klon Industrialist (różnice: S3.1b cross-system + S3.2 warp)
   xenophage: {
     id: 'xenophage',
     namePL: 'Xenofag',
@@ -85,6 +87,7 @@ export const NAME_PREFIXES_PL = {
   hegemon:       ['Imperium', 'Dominium', 'Suwerenat',   'Korona',     'Tron'],
   swarm:         ['Rój',      'Kolektyw', 'Ul',          'Potomstwo',  'Tkanka'],
   industrialist: ['Manufaktura','Konsorcjum','Fundacja',  'Liga',       'Korporacja'],
+  expansionist:  ['Pionierzy', 'Awangarda', 'Pochód',     'Zew Gwiazd', 'Granica'],
 };
 
 export const NAME_PREFIXES_EN = {
@@ -94,4 +97,5 @@ export const NAME_PREFIXES_EN = {
   hegemon:       ['Empire',       'Dominion',    'Sovereignty','Crown',     'Throne'],
   swarm:         ['Swarm',        'Collective',  'Hive',       'Brood',     'Tissue'],
   industrialist: ['Manufactory',  'Consortium',  'Foundation', 'League',    'Corporation'],
+  expansionist:  ['Pioneers',     'Vanguard',    'March',      'Star Call', 'Frontier'],
 };

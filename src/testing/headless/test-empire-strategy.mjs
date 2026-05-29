@@ -429,5 +429,22 @@ console.log('--- T23: waiver — brak ciała Nt → _pickNtBody null (P3 nie cze
 }
 
 // ═══════════════════════════════════════════════════════════════
+// T24 — Slice 3.1a: Expansionist = klon Industrialist (identyczne decyzje Warstwy C)
+// ═══════════════════════════════════════════════════════════════
+console.log('--- T24: Expansionist _config == Industrialist _config (klon S3.1a) ---');
+{
+  empireRegistry.createEmpire({ id: 'emp_EXP', archetype: 'expansionist', homeSystemId: 'sys_x' });
+  const empEXP = empireRegistry.get('emp_EXP');
+  ok('createEmpire(expansionist) OK (archetyp zarejestrowany)',
+     !!empEXP && empEXP.archetype === 'expansionist');
+  // _config czyta ARCHETYPES[archetype].strategicColonization → klon ⇒ identyczna doktryna
+  ok('_config(Expansionist) === _config(Industrialist)',
+     JSON.stringify(sys._config(empEXP)) === JSON.stringify(sys._config(emp_C)));
+  // personality kopiowana w createEmpire z archetypu — klon ⇒ identyczna
+  ok('personality(Expansionist) === personality(Industrialist)',
+     JSON.stringify(empEXP.personality) === JSON.stringify(empireRegistry.get('emp_C').personality));
+}
+
+// ═══════════════════════════════════════════════════════════════
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);
 process.exit(fail === 0 ? 0 : 1);
