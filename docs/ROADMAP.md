@@ -1,6 +1,6 @@
 # KOSMOS — ROADMAP (master)
 
-> **Last updated:** 2026-05-28, po **TechDebt Faza 2C** (#3 — Faza 2 KOMPLETNA).
+> **Last updated:** 2026-05-30, po **Slice 3.1a/3.1b** (`ee419b0` — multi-empire AI żyje + kolonizuje home-system).
 > Jeden punkt odniesienia dla całej sekwencji prac AI / multi-empire. Sekcje DONE
 > oznaczone commit-hashem. TODO z zależnościami (co jest prerequisite czego).
 > Szczegółowe plany NIE są tu kopiowane — linkowane (patrz „Gdzie są szczegóły").
@@ -88,6 +88,13 @@ Systemy liczące coś dla kolonii/vessela AI globalnym `window.KOSMOS.techSystem
 
 > **Filip chce to PRZEMYŚLEĆ przed startem.** Sekcja design-first — otwarte tematy do rozstrzygnięcia, NIE gotowy plan implementacji. **Prerequisite: TechDebt Faza 2** (izolacja tech + czysty handel).
 
+> **✅ S3.1a/3.1b DONE+COMMITTED (`ee419b0`, 2026-05-30):** 2 imperia AI (Industrialist +
+> Expansionist klon, `maxExtraSystems=2`), oba żyją/rosną/kolonizują home-system organicznie
+> (~gy8, potwierdzone probe headless). Fix ARCHETYPE_DATA (Expansionist w `_managedColonies`)
+> + breathable-kapitał (`SystemGenerator.makeHomeworldBreathable`, koniec freeze 8→8→8). Headless 390/0.
+> **Ti-less Expansionist = DESIGN** (asymetria → handel Ti S3.3). cross-system colonization (+296)
+> UŚPIONY w kodzie (Ti-gated outposty Xe → aktywacja S3.2+). Szczegóły: memory `s3-1b-cross-system`.
+
 Cel: 2+ imperia AI na mapie jednocześnie + interakcje. Warstwa C: akcje handlu i eksploracji (per `docs/kosmos_ai_architecture.md` §Roadmapa).
 
 **Otwarte tematy do designu:**
@@ -121,6 +128,12 @@ Warstwa C: akcje militarne + FleetTacticalAI. Bazuje na istniejącej infrastrukt
 ## 7. Future reforms / design tickets
 
 > Tickety designerskie odłożone świadomie — wymagają playtestów/strojenia, nie blokują bieżącej sekwencji. Implementacja PO tech debt i (zwykle) PO Slice 3.
+
+### S3.1b — odłożone do fazy balansu (2026-05-30, niepotwierdzone jako blokery)
+- **food/organics survival rule** — probe headless zasugerował MARTWĄ regułę: `ColonyAutoExpander:236` patrzy na `getPerYear('organics')`, a `getPerYear` (`ResourceSystem:244-247`) nie mapuje legacy keys → zawsze 0 (farmy/pop pod `'food'`). Możliwy głodowy crash po rozroście (~pop>8, 2 farmy nie karmią). **NIEPOTWIERDZONE w żywej grze** — probe to aproksymacja (ręczny `_reapplyAllRates`, prosperity=1.0, brak trade/upkeep). DO WERYFIKACJI przy balansie. Probe: `src/testing/headless/probe-freepops-longrun.mjs` (niezacommitowany, narzędzie).
+- **bug A — `restFromBuilds` dławi `popCost:0` przy `freePops≤0`** (`ColonyAutoExpander:204-206`) — bije w kolonie non-breathable (gracz + wtórne AI), NIE w breathable-home AI. Osobny ticket.
+- **fog regresja** — `sys_040/061 explored=true` (powinno false). Mniej pilne (cross-system uśpiony).
+- **Ti-transport / Ti→outpost** — część odblokowania uśpionego cross-system (S3.2+). **Ti-less Expansionist to DESIGN** (asymetria → handel Ti S3.3), nie bug.
 
 ### Reforma generacji światów (presja kolonizacji)
 
