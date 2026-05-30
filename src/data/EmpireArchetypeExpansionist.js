@@ -1,26 +1,31 @@
 // EmpireArchetypeExpansionist — archetyp imperium AI typu "Ekspansjonista"
 //
-// Slice 3.1a: drugi archetyp obcych imperiów. Na TYM etapie to KLON Industrialist
-// (zachowanie IDENTYCZNE) — różnice tożsamości (id/nazwy/kolor/opis), nie behawioru.
-// Właściwa różnica przychodzi później:
-//   - S3.1b: kolonizacja cross-system + limit 1-2 układów (tweaki strategicColonization)
-//   - S3.2:  priorytet badania napędu warp (wymaga modelu badania AI — dziś brak)
+// Slice 3.1a: drugi archetyp obcych imperiów — KLON Industrialist (zachowanie
+// identyczne, różnice tożsamości: id/nazwy/kolor/opis).
+// Slice 3.1b: pierwsza RÓŻNICA BEHAWIORALNA — Ekspansjonista kolonizuje systemy
+//   inne niż macierzysty (limit `maxExtraSystems=2`), Industrialist zostaje
+//   jedno-systemowy (`maxExtraSystems=0`). Pozostałe pola doktryny pozostają
+//   identyczne (parytet poza tym jednym kluczem).
+//   S3.2 (TODO): priorytet badania napędu warp (wymaga modelu badania AI).
 //
 // Deep clone (structuredClone) zamiast spreadu: nested obiekty (personality,
 // strategicColonization, startingBuildings…) są NIEZALEŻNE od INDUSTRIALIST, więc
-// przyszłe tweaki S3.1b/S3.2 nie zmutują archetypu Industrialist (forward-safe).
+// nadpisanie maxExtraSystems (i przyszłe tweaki S3.2) nie mutują Industrialist.
 //
 // Plik powiązany: src/data/EmpireData.js rejestruje EXPANSIONIST w ARCHETYPES
-// pod kluczem 'expansionist' (re-export — EmpireRegistry.createEmpire znajdzie
-// arch.personality / arch.namePL po stringu archetype id).
+// pod kluczem 'expansionist'.
 
 import { INDUSTRIALIST } from './EmpireArchetypeIndustrialist.js';
 
-export const EXPANSIONIST = {
-  // Deep clone wszystkich pól behawioralnych Industrialist (S3.1a = klon 1:1).
-  ...structuredClone(INDUSTRIALIST),
+// Klon bazowy (niezależny od INDUSTRIALIST) + nadpisanie różnicy behawioralnej S3.1b.
+const _base = structuredClone(INDUSTRIALIST);
+_base.strategicColonization.maxExtraSystems = 2;  // S3.1b: 2 systemy poza macierzystym (Industrialist=0)
 
-  // Nadpisanie TOŻSAMOŚCI (jedyne różnice w S3.1a).
+export const EXPANSIONIST = {
+  // Deep clone pól behawioralnych Industrialist + maxExtraSystems=2 (już ustawione w _base).
+  ..._base,
+
+  // Nadpisanie TOŻSAMOŚCI.
   id:     'expansionist',
   namePL: 'Ekspansjonista',
   nameEN: 'Expansionist',

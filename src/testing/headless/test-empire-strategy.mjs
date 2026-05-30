@@ -429,20 +429,232 @@ console.log('--- T23: waiver — brak ciała Nt → _pickNtBody null (P3 nie cze
 }
 
 // ═══════════════════════════════════════════════════════════════
-// T24 — Slice 3.1a: Expansionist = klon Industrialist (identyczne decyzje Warstwy C)
+// T24 — Slice 3.1b: Expansionist różni się od Industrialist TYLKO maxExtraSystems
+//   (Exp=2, Ind=0). Reszta doktryny + personality identyczne (klon S3.1a poza tym).
 // ═══════════════════════════════════════════════════════════════
-console.log('--- T24: Expansionist _config == Industrialist _config (klon S3.1a) ---');
+console.log('--- T24: Expansionist _config różni się od Industrialist TYLKO maxExtraSystems (S3.1b) ---');
 {
   empireRegistry.createEmpire({ id: 'emp_EXP', archetype: 'expansionist', homeSystemId: 'sys_x' });
   const empEXP = empireRegistry.get('emp_EXP');
   ok('createEmpire(expansionist) OK (archetyp zarejestrowany)',
      !!empEXP && empEXP.archetype === 'expansionist');
-  // _config czyta ARCHETYPES[archetype].strategicColonization → klon ⇒ identyczna doktryna
-  ok('_config(Expansionist) === _config(Industrialist)',
-     JSON.stringify(sys._config(empEXP)) === JSON.stringify(sys._config(emp_C)));
-  // personality kopiowana w createEmpire z archetypu — klon ⇒ identyczna
+  const cfgEXP = sys._config(empEXP);
+  const cfgIND = sys._config(emp_C);
+  // S3.1b: jawna RÓŻNICA behawioralna — limit ekspansji cross-system.
+  ok('maxExtraSystems: Expansionist=2, Industrialist=0',
+     cfgEXP.maxExtraSystems === 2 && cfgIND.maxExtraSystems === 0);
+  // Poza maxExtraSystems doktryna IDENTYCZNA (parytet klona zachowany na resztę).
+  {
+    const { maxExtraSystems: _e, ...restEXP } = cfgEXP;
+    const { maxExtraSystems: _i, ...restIND } = cfgIND;
+    ok('_config Exp/Ind identyczne POZA maxExtraSystems',
+       JSON.stringify(restEXP) === JSON.stringify(restIND));
+  }
+  // personality kopiowana w createEmpire z archetypu — klon ⇒ identyczna (bez zmian S3.1b)
   ok('personality(Expansionist) === personality(Industrialist)',
      JSON.stringify(empEXP.personality) === JSON.stringify(empireRegistry.get('emp_C').personality));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// T25-T32 — Slice 3.1b: kolonizacja cross-system (Expansionist)
+//   T25: _meetsSystemQualityThreshold (próg otwierania: Xe LUB rocky+breathable)
+//   T26: _pickTargetSystem (najbliższy nieposiadany; wyklucza home/AI/owned/blacklist)
+//   T27: _outpostCountsInSystem (scope per-system)
+//   T28: cross-system founding SUCCESS (mature → outpost Xe w najbliższym dobrym)
+//   T29: develop-existing-before-new (rozbuduj posiadany extra-system, nie otwieraj nowego)
+//   T30: próg jakości → system-blacklist (junk pominięty, kolejny dobry otwarty)
+//   T31: limit enforcement (distinct=3, maxExtra=2 → brak nowego systemu)
+//   T32: Industrialist home-locked (maxExtraSystems=0 → zero cross-system mimo dojrzałości)
+// ═══════════════════════════════════════════════════════════════
+
+// ── Fixture galaktyki + systemów cross-system ──────────────────────
+// Encje ciał (planeta rocky / księżyc) z jawnym systemId. Reużywa XE/FE/NT z góry.
+const mkBody = (id, name, systemId, kind, atmosphere, deposits = []) => EntityManager.add({
+  id, name,
+  type:       kind === 'moon' ? 'moon' : 'planet',
+  planetType: kind === 'moon' ? undefined : 'rocky',
+  moonType:   kind === 'moon' ? 'rocky' : undefined,
+  radius: kind === 'moon' ? 0.3 : 1, mass: kind === 'moon' ? 0.1 : 1,
+  atmosphere, temperatureK: 280, systemId, deposits,
+  composition: { Fe: 0.3, Si: 0.3, O: 0.4 },
+});
+// Home systemy (mature: 2 rocky+breathable na dodatkowe kolonie, 2 Xe-moon na outposty)
+for (const [pfx, sysId] of [['hX', 'sys_hX'], ['hT', 'sys_hT'], ['hI', 'sys_hI']]) {
+  mkBody(`${pfx}_mother`, `${pfx} Mother`, sysId, 'planet', 'breathable', [FE()]);
+  mkBody(`${pfx}_r1`,     `${pfx} Rocky 1`, sysId, 'planet', 'breathable', [FE()]);
+  mkBody(`${pfx}_r2`,     `${pfx} Rocky 2`, sysId, 'planet', 'breathable', [FE()]);
+  mkBody(`${pfx}_xe1`,    `${pfx} Xe 1`,    sysId, 'moon',   'none',       [XE(1.2), FE()]);
+  mkBody(`${pfx}_xe2`,    `${pfx} Xe 2`,    sysId, 'moon',   'none',       [XE(1.0)]);
+}
+mkBody('hL_mother', 'hL Mother', 'sys_hL', 'planet', 'breathable', [FE()]);
+// Systemy-cele
+mkBody('xg_xe',     'XGood Xe',     'sys_xgood', 'moon',   'none',       [XE(1.2)]);   // good (Xe)
+mkBody('xg_breath', 'XGood Breath', 'sys_xgood', 'planet', 'breathable', [FE()]);
+mkBody('xf_breath', 'XFar Breath',  'sys_xfar',  'planet', 'breathable', [FE()]);      // good (breathable)
+mkBody('tj_nt',     'TJunk Nt',     'sys_tjunk', 'moon',   'none',       [NT()]);      // junk (Nt only)
+mkBody('tj_bare',   'TJunk Bare',   'sys_tjunk', 'planet', 'none',       [FE()]);      // junk (bare rocky)
+mkBody('tg_xe',     'TGood Xe',     'sys_tgood', 'moon',   'none',       [XE(1.0)]);   // good (Xe)
+mkBody('tg_breath', 'TGood Breath', 'sys_tgood', 'planet', 'breathable', [FE()]);
+mkBody('ig_xe',     'IGood Xe',     'sys_igood', 'moon',   'none',       [XE(1.0)]);   // good (lock test)
+mkBody('ig_breath', 'IGood Breath', 'sys_igood', 'planet', 'breathable', [FE()]);
+mkBody('l1_p', 'L1 Planet', 'sys_l1', 'planet', 'breathable', [FE()]);  // emp_LIM extra 1
+mkBody('l2_p', 'L2 Planet', 'sys_l2', 'planet', 'breathable', [FE()]);  // emp_LIM extra 2
+mkBody('l3_breath', 'L3 Breath', 'sys_l3', 'planet', 'breathable', [FE()]); // good (limit test — NIE otwierany)
+
+const CROSS_SYS = {
+  sys_hX:    { planetIds: ['hX_mother', 'hX_r1', 'hX_r2'], moonIds: ['hX_xe1', 'hX_xe2'], planetoidIds: [] },
+  sys_hT:    { planetIds: ['hT_mother', 'hT_r1', 'hT_r2'], moonIds: ['hT_xe1', 'hT_xe2'], planetoidIds: [] },
+  sys_hI:    { planetIds: ['hI_mother', 'hI_r1', 'hI_r2'], moonIds: ['hI_xe1', 'hI_xe2'], planetoidIds: [] },
+  sys_hL:    { planetIds: ['hL_mother'], moonIds: [], planetoidIds: [] },
+  sys_xgood: { planetIds: ['xg_breath'], moonIds: ['xg_xe'], planetoidIds: [] },
+  sys_xfar:  { planetIds: ['xf_breath'], moonIds: [], planetoidIds: [] },
+  sys_tjunk: { planetIds: ['tj_bare'], moonIds: ['tj_nt'], planetoidIds: [] },
+  sys_tgood: { planetIds: ['tg_breath'], moonIds: ['tg_xe'], planetoidIds: [] },
+  sys_igood: { planetIds: ['ig_breath'], moonIds: ['ig_xe'], planetoidIds: [] },
+  sys_l1:    { planetIds: ['l1_p'], moonIds: [], planetoidIds: [] },
+  sys_l2:    { planetIds: ['l2_p'], moonIds: [], planetoidIds: [] },
+  sys_l3:    { planetIds: ['l3_breath'], moonIds: [], planetoidIds: [] },
+};
+const _origGetSystem = window.KOSMOS.starSystemManager.getSystem;
+window.KOSMOS.starSystemManager.getSystem = (id) => CROSS_SYS[id] ?? _origGetSystem(id);
+window.KOSMOS.galaxyData = { systems: [
+  { id: 'sys_home',   isHome: true, x: 0,   y: 0, z: 0 },        // home gracza (wyklucz)
+  { id: 'sys_aihome', x: 1,   y: 0, z: 0, empireId: 'emp_aiother' },  // home obcego AI (wyklucz)
+  { id: 'sys_hX',     x: 100, y: 0, z: 0, empireId: 'emp_X' },
+  { id: 'sys_xgood',  x: 102, y: 0, z: 0 },
+  { id: 'sys_xfar',   x: 140, y: 0, z: 0 },
+  { id: 'sys_hT',     x: 200, y: 0, z: 0, empireId: 'emp_THR' },
+  { id: 'sys_tjunk',  x: 201, y: 0, z: 0 },
+  { id: 'sys_tgood',  x: 203, y: 0, z: 0 },
+  { id: 'sys_hI',     x: 300, y: 0, z: 0, empireId: 'emp_IND' },
+  { id: 'sys_igood',  x: 302, y: 0, z: 0 },
+  { id: 'sys_hL',     x: 400, y: 0, z: 0, empireId: 'emp_LIM' },
+  { id: 'sys_l1',     x: 401, y: 0, z: 0 },
+  { id: 'sys_l2',     x: 402, y: 0, z: 0 },
+  { id: 'sys_l3',     x: 403, y: 0, z: 0 },
+]};
+
+// Helper: imperium DOJRZAŁE (2 Xe outposty + stolica + 2 dodatkowe kolonie home).
+const bootstrapMatureEmpire = (empId, archetype, homeSysId, b) => {
+  empireRegistry.createEmpire({ id: empId, archetype, homeSystemId: homeSysId });
+  const m = EmpireColonyBootstrap.bootstrapColony(empId, homeSysId, b.mother,
+    { startPop: { laborer: 1, worker: 1 }, startResources: { food: 200, water: 200 }, archetypeId: archetype });
+  EmpireColonyBootstrap.bootstrapColony(empId, homeSysId, b.rocky1, { startPop: { laborer: 2 }, startResources: { food: 200, water: 200 } });
+  EmpireColonyBootstrap.bootstrapColony(empId, homeSysId, b.rocky2, { startPop: { laborer: 2 }, startResources: { food: 200, water: 200 } });
+  for (const xe of [b.xe1, b.xe2]) {
+    EmpireColonyBootstrap.bootstrapAutonomousOutpost(empId, homeSysId, xe, 'autonomous_solar_farm');
+    EmpireColonyBootstrap.bootstrapAutonomousOutpost(empId, homeSysId, xe, 'autonomous_mine');
+  }
+  return m;
+};
+
+const motherX = bootstrapMatureEmpire('emp_X', 'expansionist', 'sys_hX',
+  { mother: 'hX_mother', rocky1: 'hX_r1', rocky2: 'hX_r2', xe1: 'hX_xe1', xe2: 'hX_xe2' });
+const empX = empireRegistry.get('emp_X');
+
+console.log('--- T25: _meetsSystemQualityThreshold (Xe LUB rocky+breathable) ---');
+ok('Xe → true',                  sys._meetsSystemQualityThreshold(['xg_xe']) === true);
+ok('rocky+breathable → true',    sys._meetsSystemQualityThreshold(['xg_breath']) === true);
+ok('Nt-only → false',            sys._meetsSystemQualityThreshold(['tj_nt']) === false);
+ok('bare rocky → false',         sys._meetsSystemQualityThreshold(['tj_bare']) === false);
+ok('pusty → false',              sys._meetsSystemQualityThreshold([]) === false);
+ok('junk (Nt+bare) → false',     sys._meetsSystemQualityThreshold(['tj_nt', 'tj_bare']) === false);
+ok('mieszany (bare+Xe) → true',  sys._meetsSystemQualityThreshold(['tj_bare', 'xg_xe']) === true);
+
+console.log('--- T26: _pickTargetSystem (najbliższy nieposiadany; wykluczenia + blacklist) ---');
+{
+  const t1 = sys._pickTargetSystem(empX, motherX, 1000);
+  ok('nearest unowned = sys_xgood (d=2)', t1?.id === 'sys_xgood');
+  ok('wynik nie jest home gracza/AI', !!t1 && !t1.isHome && !t1.empireId);
+  sys._systemBlacklistAdd('sys_xgood', 1000, cfg);
+  const t2 = sys._pickTargetSystem(empX, motherX, 1000);
+  ok('po blacklist sys_xgood → sys_xfar', t2?.id === 'sys_xfar');
+  sys._systemBlacklist.delete('sys_xgood');   // sprzątanie dla T28
+}
+
+console.log('--- T27: _outpostCountsInSystem (scope per-system) ---');
+{
+  const cHome = sys._outpostCountsInSystem(empX, 'sys_hX');
+  ok('sys_hX: xe=2 nt=0', cHome.xe === 2 && cHome.nt === 0);
+  const cGood = sys._outpostCountsInSystem(empX, 'sys_xgood');
+  ok('sys_xgood: xe=0 (brak outpostów tam)', cGood.xe === 0 && cGood.nt === 0);
+}
+
+console.log('--- T28: cross-system SUCCESS — outpost Xe w najbliższym dobrym systemie ---');
+{
+  motherX.resourceSystem.receive(combined);   // koszt outpostu
+  sys._runForEmpire(empX, 1100);
+  const o = colonyManager.getColony('xg_xe');
+  ok('outpost Xe powstał w sys_xgood (xg_xe)', !!o && o.isOutpost === true);
+  ok('owner=emp_X, systemId=sys_xgood', !!o && o.ownerEmpireId === 'emp_X' && o.systemId === 'sys_xgood');
+  const distinct = new Set(empireRegistry.getColoniesByEmpire('emp_X').map(c => c.systemId)).size;
+  ok('distinct systemy emp_X = 2 (home + sys_xgood)', distinct === 2);
+}
+
+console.log('--- T29: develop-existing-before-new — rozbuduj posiadany, NIE otwieraj nowego ---');
+{
+  motherX.civSystem.addPop('laborer', 12);    // freePops dla pełnej kolonii
+  setRes(motherX.resourceSystem, 'food', 300);
+  setRes(motherX.resourceSystem, 'water', 300);
+  sys._runForEmpire(empX, 1101);
+  const dev = colonyManager.getColony('xg_breath');
+  ok('kolonia w POSIADANYM sys_xgood (xg_breath)', !!dev && dev.systemId === 'sys_xgood');
+  ok('NOWY system NIE otwarty (sys_xfar pusty)', colonyManager.getColony('xf_breath') === null);
+  const distinct = new Set(empireRegistry.getColoniesByEmpire('emp_X').map(c => c.systemId)).size;
+  ok('distinct nadal 2 (nie otwarto nowego)', distinct === 2);
+}
+
+console.log('--- T30: próg jakości → system-blacklist (junk pominięty, kolejny dobry otwarty) ---');
+{
+  const motherT = bootstrapMatureEmpire('emp_THR', 'expansionist', 'sys_hT',
+    { mother: 'hT_mother', rocky1: 'hT_r1', rocky2: 'hT_r2', xe1: 'hT_xe1', xe2: 'hT_xe2' });
+  const empT = empireRegistry.get('emp_THR');
+  const cfgT = sys._config(empT);
+  const r1 = sys._runCrossSystem(empT, motherT, 1200, cfgT, 1);
+  ok('junk → _runCrossSystem false',          r1 === false);
+  ok('sys_tjunk zablacklistowany',            sys._isSystemBlacklisted('sys_tjunk', 1200) === true);
+  ok('junk NIE skolonizowany',                colonyManager.getColony('tj_bare') === null && colonyManager.getColony('tj_nt') === null);
+  motherT.resourceSystem.receive(combined);
+  const r2 = sys._runCrossSystem(empT, motherT, 1200, cfgT, 1);
+  const tg = colonyManager.getColony('tg_xe');
+  ok('po junk → sys_tgood otwarty (outpost tg_xe)',
+     r2 === true && !!tg && tg.isOutpost === true && tg.systemId === 'sys_tgood');
+}
+
+console.log('--- T31: limit enforcement — distinct=3, maxExtra=2 → brak nowego systemu ---');
+{
+  empireRegistry.createEmpire({ id: 'emp_LIM', archetype: 'expansionist', homeSystemId: 'sys_hL' });
+  const empL = empireRegistry.get('emp_LIM');
+  const motherL = EmpireColonyBootstrap.bootstrapColony('emp_LIM', 'sys_hL', 'hL_mother',
+    { startPop: { laborer: 1, worker: 1 }, startResources: { food: 200, water: 200 }, archetypeId: 'expansionist' });
+  EmpireColonyBootstrap.bootstrapColony('emp_LIM', 'sys_l1', 'l1_p', { startPop: { laborer: 2 }, startResources: { food: 200, water: 200 } });
+  EmpireColonyBootstrap.bootstrapColony('emp_LIM', 'sys_l2', 'l2_p', { startPop: { laborer: 2 }, startResources: { food: 200, water: 200 } });
+  const cfgL = sys._config(empL);
+  const distinctL = new Set(empireRegistry.getColoniesByEmpire('emp_LIM').map(c => c.systemId)).size;
+  ok('emp_LIM distinct=3 (home + 2 extra)', distinctL === 3);
+  motherL.resourceSystem.receive(combined);
+  setRes(motherL.resourceSystem, 'food', 300);
+  setRes(motherL.resourceSystem, 'water', 300);
+  motherL.civSystem.addPop('laborer', 12);
+  const rL = sys._runCrossSystem(empL, motherL, 1300, cfgL, distinctL);
+  ok('_runCrossSystem=false przy distinct=3 maxExtra=2', rL === false);
+  ok('sys_l3 (l3_breath) NIE otwarty', colonyManager.getColony('l3_breath') === null);
+}
+
+console.log('--- T32: Industrialist home-locked — maxExtraSystems=0 → zero cross-system ---');
+{
+  const motherI = bootstrapMatureEmpire('emp_IND', 'industrialist', 'sys_hI',
+    { mother: 'hI_mother', rocky1: 'hI_r1', rocky2: 'hI_r2', xe1: 'hI_xe1', xe2: 'hI_xe2' });
+  const empI = empireRegistry.get('emp_IND');
+  motherI.resourceSystem.receive(combined);
+  setRes(motherI.resourceSystem, 'food', 300);
+  setRes(motherI.resourceSystem, 'water', 300);
+  motherI.civSystem.addPop('laborer', 12);
+  sys._runForEmpire(empI, 1400);
+  ok('brak kolonii cross-system (sys_igood pusty)',
+     colonyManager.getColony('ig_xe') === null && colonyManager.getColony('ig_breath') === null);
+  const distinctI = new Set(empireRegistry.getColoniesByEmpire('emp_IND').map(c => c.systemId)).size;
+  ok('distinct=1 (tylko home — mimo dojrzałości)', distinctI === 1);
 }
 
 // ═══════════════════════════════════════════════════════════════

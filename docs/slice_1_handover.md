@@ -132,3 +132,29 @@ git diff --stat HEAD
 ```
 
 Oczekiwana liczba zmienionych plików: **13 modified + 6 untracked** (po dodaniu tego handover).
+
+---
+
+## Slice 1 Faza 1 — UKOŃCZONA ✅
+
+Patch v5 zaaplikowany pomyślnie. Test acceptance PASS:
+- AI kolonia: laborer 3→4, labSat 75→100, snapFood 258→496, energy stabilna
+- Gracz: laborer 6, sat 99, prosperity 44.8 — bez regresji
+- Brownout transient ~750ms self-resolved w t=12.5 — out-of-scope
+
+Commit: `0acd7d9` (feat(ai): Slice 1 Faza 1 — bootstrap kolonii AI z archetypem Industrialist)
+
+## Następne kroki
+
+Slice 1 Faza 2 (AutoExpander) zostaje **OTWARTA** ale czeka na audyt replay system.
+Planowanie Fazy 2 zmienia się: zamiast Utility AI → skryptowy ColonyAutoExpander
+z deklaratywnymi target states (year 10/20/30/40).
+
+Aktualny stan decyzji design:
+- Architektura AI: hybryda Stellaris-style (3 warstwy: A=ECS, B=Auto-rozbudowa, C=Akcje)
+- Warstwa A: ukończona (ECS + Maintenance)
+- Warstwa B: deklaratywne targets per archetyp (10/20/30/40 lat)
+- Warstwa C: triggered scripts z konsumpcją surowców (Slice 2-4)
+- Personality: 5-osiowy wektor archetypu jako modyfikator wag/cooldownów
+
+Szczegóły w `docs/kosmos_ai_architecture.md` (nowy plik — patrz zadanie 2).

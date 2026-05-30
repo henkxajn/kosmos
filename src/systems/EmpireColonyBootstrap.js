@@ -24,6 +24,7 @@ import { BUILDINGS } from '../data/BuildingsData.js';
 import { TechSystem } from './TechSystem.js';
 import { getTerrainRule } from '../data/ai/AiTerrainRules.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
+import { SystemGenerator } from '../generators/SystemGenerator.js';
 
 // Bazowy próg safety stock per tier (musi pasować do FactorySystem.getSafetyStockTarget).
 // Bonus = target - base, aplikowany przez setDemandBonus.
@@ -90,6 +91,13 @@ export class EmpireColonyBootstrap {
       console.error(`[EmpireColonyBootstrap] Brak planety nadającej się na home w ${homeSystemId}`);
       return null;
     }
+
+    // 2b. S3.1b: gwarancja oddychalnej atmosfery home AI (parytet z sys_home gracza).
+    //     _pickHomePlanet bierze pierwszą rocky DOWOLNEJ atmosfery; na non-breathable
+    //     home AI utykał — CivilizationSystem._updatePopGrowth hard-stopuje wzrost gdy
+    //     !canLiveOutside i pop≥housing → freeze 8→8→8. Reuse mechanizmu gracza.
+    //     Gwarancja Ti (composition) celowo POMINIĘTA — osobna decyzja (raport S3.1b).
+    SystemGenerator.makeHomeworldBreathable(homePlanet);
 
     // 3. Utwórz kolonię na REALNEJ planecie (positional signature ColonyManager).
     //    startPop=0 — POPy dodamy ręcznie per stratum poniżej.

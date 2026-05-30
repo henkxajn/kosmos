@@ -37,6 +37,7 @@ const TARGET_COOLDOWN_CIVYEARS      = 1;   // cooldown między target actions na
 // Inne archetypy spowolnią/przyspieszą tempo (struktura gotowa, wartości później).
 const ARCHETYPE_COOLDOWN_MULTIPLIER = {
   industrialist: 1.0,
+  expansionist:  1.0,   // S3.1a: klon Industrialist (to samo tempo rozbudowy kolonii)
   // diplomat:  1.5,
   // militarist: 0.7,
 };
@@ -44,6 +45,16 @@ const ARCHETYPE_COOLDOWN_MULTIPLIER = {
 // Mapa archetyp → dane targetów. Dodanie archetypu = dopisanie wpisu.
 const ARCHETYPE_DATA = {
   industrialist: {
+    targets:   INDUSTRIALIST_TARGETS,
+    survival:  INDUSTRIALIST_SURVIVAL_THRESHOLDS,
+  },
+  // Expansionist (S3.1a) to behawioralny KLON Industrialist na poziomie rozbudowy
+  //   POJEDYNCZEJ kolonii — różni się TYLKO strategicColonization.maxExtraSystems
+  //   (S3.1b), a to domena EmpireStrategySystem (kolonizacja galaktyczna), nie
+  //   AutoExpandera. Auto-rozbudowa kolonii jest identyczna → współdzieli targets/
+  //   survival Industrialist. Gdy S3.2 doda własną doktrynę warp/ekspansji,
+  //   wydzielić osobny src/data/targets/expansionist.js i podmienić wpis.
+  expansionist: {
     targets:   INDUSTRIALIST_TARGETS,
     survival:  INDUSTRIALIST_SURVIVAL_THRESHOLDS,
   },

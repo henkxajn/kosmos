@@ -56,6 +56,10 @@ export const INDUSTRIALIST = {
     minWaterTransfer:       200,  // próg = transfer water
     blacklistDurationCy:    30,   // jak długo ciało-cel na blackliście po failure
     requireBreathableForP3: true, // P3 wymaga atmosfery oddychalnej (fallback nie)
+    // S3.1b — ekspansja cross-system. Industrialist zostaje JEDNO-systemowy:
+    maxExtraSystems:                0,  // ile systemów POZA macierzystym wolno kolonizować (0 = home-locked)
+    minExtraHomeColoniesForExpansion: 2,  // ile DODATKOWYCH pełnych kolonii z POP w home (poza stolicą)
+                                          //   musi mieć imperium, zanim odblokuje ekspansję cross-system
   },
 
   // Warstwa 2 transportu (EmpireLogisticsSystem) — Slice 2 S3. Kurierzy krążą

@@ -52,6 +52,10 @@ const DEFAULTS = {
   minWaterTransfer:       200,
   blacklistDurationCy:    30,   // backoff ciała-celu po failure
   requireBreathableForP3: true, // P3 wymaga atmosfery oddychalnej (fallback nie)
+  // S3.1b — ekspansja cross-system (fail-safe: domyślnie wyłączona dla wszystkich
+  // archetypów bez jawnego bloku; Expansionist nadpisuje maxExtraSystems=2).
+  maxExtraSystems:                0,  // ile systemów POZA macierzystym wolno kolonizować (0 = home-locked)
+  minExtraHomeColoniesForExpansion: 2,  // ile DODATKOWYCH pełnych kolonii z POP w home (poza stolicą) przed ekspansją
 };
 
 export class EmpireStrategySystem {
@@ -59,6 +63,13 @@ export class EmpireStrategySystem {
     // Blacklist NA INSTANCJI (per planetId) — nie na koloni: macierzysta może się
     // zmienić, a blacklistujemy ciało-cel galaktycznie. Map{planetId→{sinceCivYear,retryAtCivYear}}.
     this._blacklist = new Map();
+    // S3.1b: blacklist CAŁYCH systemów-celów (per systemId) — gdy nowo wygenerowany
+    //   system nie spełnia progu jakości (brak Xe i brak rocky+breathable) lub generacja
+    //   rzuci. Map{systemId→{sinceCivYear,retryAtCivYear}}.
+    this._systemBlacklist = new Map();
+    // S3.1b: toggle naprzemiennego priorytetu home↔cross-system per imperium
+    //   (Map{empireId→bool}; true = w tym ticku cross-system idzie pierwszy).
+    this._expandTurn = new Map();
     this._acc       = 0;       // akumulator civDeltaYears
     this._verbose   = false;   // KOSMOS.empireStrategySystem._verbose = true
 
@@ -73,12 +84,23 @@ export class EmpireStrategySystem {
   //   {sinceCivYear, retryAtCivYear}}). Bez round-tripu AI po load natychmiast
   //   ponawia nieudane cele w pierwszym ticku Warstwy C.
   serialize() {
-    return { blacklist: [...this._blacklist.entries()] };
+    return {
+      blacklist:       [...this._blacklist.entries()],
+      // S3.1b — round-trip blacklisty systemów + toggle naprzemienności (lazy-default przy restore).
+      systemBlacklist: [...this._systemBlacklist.entries()],
+      expandTurn:      [...this._expandTurn.entries()],
+    };
   }
 
   restore(data) {
     if (data && Array.isArray(data.blacklist)) {
       this._blacklist = new Map(data.blacklist);
+    }
+    if (data && Array.isArray(data.systemBlacklist)) {
+      this._systemBlacklist = new Map(data.systemBlacklist);
+    }
+    if (data && Array.isArray(data.expandTurn)) {
+      this._expandTurn = new Map(data.expandTurn);
     }
   }
 
@@ -120,7 +142,12 @@ export class EmpireStrategySystem {
     return block ? { ...DEFAULTS, ...block } : { ...DEFAULTS };
   }
 
-  // ── Decyzja per imperium (P1 > P2 > P3 > fallback) ────────────────────────
+  // ── Decyzja per imperium (home tree + opcjonalna ekspansja cross-system) ──
+  // Pre-S3.1b: tylko home (drzewo P1-P5/Fb). S3.1b: po BRAMCE DOJRZAŁOŚCI
+  // (Xe+Nt zabezpieczone w home + ≥minExtraHomeColonies dodatkowych pełnych kolonii)
+  // Expansionist (maxExtraSystems>0) ekspanduje do innych systemów, NAPRZEMIENNIE
+  // z dalszą rozbudową home (toggle _expandTurn — przy 1 akcji/tick żadna gałąź nie
+  // głodzi drugiej; oba próbowane, kolejność flip per tick).
   _runForEmpire(empire, civYear) {
     const reg = window.KOSMOS?.empireRegistry;
     const cm  = window.KOSMOS?.colonyManager;
@@ -132,71 +159,216 @@ export class EmpireStrategySystem {
     const mother = this._pickMotherColony(empire);
     if (!mother) { this._log(empire, 'brak macierzystej kolonii — skip'); return; }
 
-    const systemId = empire.homeSystemId ?? mother.systemId;
-    const sys = ssm.getSystem?.(systemId);
-    if (!sys) { this._log(empire, 'home-system niewygenerowany — skip', systemId); return; }
+    const homeSystemId = empire.homeSystemId ?? mother.systemId;
+    const homeSys = ssm.getSystem?.(homeSystemId);
+    if (!homeSys) { this._log(empire, 'home-system niewygenerowany — skip', homeSystemId); return; }
 
-    const bodyIds = [
-      ...(sys.planetIds ?? []),
-      ...(sys.moonIds ?? []),
-      ...(sys.planetoidIds ?? []),
-    ];
+    const homeBodyIds = this._systemBodyIds(homeSys);
 
-    // #14: outposty są teraz w EmpireRegistry (bootstrapAutonomousOutpost woła addColony)
-    //   → liczymy przez getColoniesByEmpire (jedno źródło prawdy, koniec skanu bodyIds).
-    //   Ciało Xe+Nt liczy się do OBU złóż → P5 nie buduje dubla na ciele z outpostem.
-    const empOutposts = reg.getColoniesByEmpire(empire.id).filter(c => c.isOutpost);
-    const xeOutposts = empOutposts.filter(c => this._hasDeposit(EntityManager.get(c.planetId), 'Xe')).length;
-    const ntOutposts = empOutposts.filter(c => this._hasDeposit(EntityManager.get(c.planetId), 'Nt')).length;
+    // ── Bramka dojrzałości (S3.1b) — czy imperium MOŻE ekspandować cross-system ──
+    //   Liczone z getColoniesByEmpire (jedno źródło prawdy). Outposty per-system
+    //   (home), bo licznik distinct-systemów limituje, a doktryna Xe/Nt jest per układ.
+    const empColonies = reg.getColoniesByEmpire(empire.id);
+    const targetXe    = cfg.targetXeOutposts ?? DEFAULTS.targetXeOutposts;
+    const targetNt    = cfg.targetNtOutposts ?? DEFAULTS.targetNtOutposts;
+    const homeCounts  = this._outpostCountsInSystem(empire, homeSystemId);
+    const homeNtBody  = this._pickNtBody(empire, homeBodyIds, civYear);
+    const homeNtSat   = homeCounts.nt >= targetNt || homeNtBody === null;
+    const homeFullColonies = empColonies.filter(c => !c.isOutpost && c.systemId === homeSystemId).length;
+    const additionalHomeColonies = Math.max(0, homeFullColonies - 1);  // minus stolica
+    const minExtraHome = cfg.minExtraHomeColoniesForExpansion ?? DEFAULTS.minExtraHomeColoniesForExpansion;
+    const maxExtra     = cfg.maxExtraSystems ?? DEFAULTS.maxExtraSystems;
+    const distinctSystems = new Set(empColonies.map(c => c.systemId)).size;
 
+    const mature   = homeCounts.xe >= targetXe && homeNtSat && additionalHomeColonies >= minExtraHome;
+    const canCross = maxExtra > 0 && mature && (distinctSystems - 1) < maxExtra;
+
+    const tryHome  = () => this._runColonizationTree(empire, mother, homeSystemId, homeBodyIds, civYear, cfg);
+    const tryCross = () => this._runCrossSystem(empire, mother, civYear, cfg, distinctSystems);
+
+    if (canCross) {
+      // Naprzemienny priorytet: oba próbowane, kto pierwszy flip per tick (anty-głodzenie).
+      const crossFirst = this._expandTurn.get(empire.id) === true;
+      this._expandTurn.set(empire.id, !crossFirst);
+      if (crossFirst) {
+        if (tryCross()) return;
+        if (tryHome())  return;
+      } else {
+        if (tryHome())  return;
+        if (tryCross()) return;
+      }
+    } else if (tryHome()) {
+      return;
+    }
+
+    // P4 (Warstwa 3 — porty / heavy cargo) — odłożone do Slice 4 (stub, BEZ budowy).
+    this._log(empire, 'brak akcji w tym ticku (P4 port deferred)',
+      `xe=${homeCounts.xe}/${targetXe} nt=${homeCounts.nt}/${targetNt} addHome=${additionalHomeColonies}/${minExtraHome} sys=${distinctSystems} canCross=${canCross}`);
+  }
+
+  // ── Drzewo kolonizacji P1-P5/Fb dla JEDNEGO systemu (reużywane: home + cross) ──
+  // Outposty liczone PER systemId (każdy układ ma własną doktrynę Xe/Nt). Zwraca
+  // true gdy WYKONANO akcję (caller decyduje o return), false gdy fall-through.
+  _runColonizationTree(empire, mother, systemId, bodyIds, civYear, cfg) {
     const targetXe = cfg.targetXeOutposts ?? DEFAULTS.targetXeOutposts;
     const targetNt = cfg.targetNtOutposts ?? DEFAULTS.targetNtOutposts;
+    const { xe: xeOutposts, nt: ntOutposts } = this._outpostCountsInSystem(empire, systemId);
 
     const canOutpost = this._canAffordOutpost(mother);
     const canFull    = this._canAffordFullColony(mother, cfg);
 
-    // Najlepsze ciało Nt (null gdy brak zdobywalnego) — liczone RAZ, używane przez
-    // P5 (build) ORAZ P3 (waiver: gdy brak ciała Nt P3 nie czeka na nieosiągalny Nt).
+    // Najlepsze ciało Nt (null gdy brak) — P5 (build) ORAZ P3 (waiver) używają.
     const ntBody = this._pickNtBody(empire, bodyIds, civYear);
 
-    // P1: pierwszy outpost Xe (brak żadnego). Gdy stać na outpost ale brak ciała Xe
-    //     → FALL THROUGH (nie no-op) do dalszych priorytetów.
+    // P1: pierwszy outpost Xe (brak żadnego). Brak ciała Xe → FALL THROUGH.
     if (xeOutposts === 0 && canOutpost) {
       const target = this._pickXeBody(empire, bodyIds, civYear);
-      if (target) return void this._executeAutonomousOutpost(empire, mother, systemId, target, civYear, cfg);
+      if (target) { this._executeAutonomousOutpost(empire, mother, systemId, target, civYear, cfg); return true; }
     }
 
     // P2: kolejny outpost Xe (do targetXeOutposts).
     if (xeOutposts >= 1 && xeOutposts < targetXe && canOutpost) {
       const target = this._pickXeBody(empire, bodyIds, civYear);
-      if (target) return void this._executeAutonomousOutpost(empire, mother, systemId, target, civYear, cfg);
+      if (target) { this._executeAutonomousOutpost(empire, mother, systemId, target, civYear, cfg); return true; }
     }
 
-    // P5: outpost Nt (po zabezpieczeniu wszystkich Xe). Bramka WARUNKOWA — fall-through
-    //     gdy ntBody===null (brak zdobywalnego ciała Nt) → brak deadlocku (waiver Filipa).
+    // P5: outpost Nt (po zabezpieczeniu Xe). Bramka warunkowa — fall-through gdy brak ciała Nt.
     if (xeOutposts >= targetXe && ntOutposts < targetNt && canOutpost && ntBody) {
-      return void this._executeAutonomousOutpost(empire, mother, systemId, ntBody, civYear, cfg);
+      this._executeAutonomousOutpost(empire, mother, systemId, ntBody, civYear, cfg);
+      return true;
     }
 
-    // P3: pełna kolonia na rocky z atmosferą oddychalną — DOPIERO po zabezpieczeniu
-    //     Xe (targetXe) ORAZ Nt (targetNt LUB brak zdobywalnego ciała Nt → waiver).
+    // P3: pełna kolonia rocky+breathable — po Xe (targetXe) ORAZ Nt (targetNt lub waiver).
     const ntSatisfied = ntOutposts >= targetNt || ntBody === null;
     if (xeOutposts >= targetXe && ntSatisfied && canFull) {
       const target = this._pickFullColonyBody(empire, bodyIds, civYear, cfg.requireBreathableForP3);
-      if (target) return void this._executeFullColony(empire, mother, systemId, target, civYear, cfg);
+      if (target) { this._executeFullColony(empire, mother, systemId, target, civYear, cfg); return true; }
     }
 
-    // Fallback: pełna kolonia na dowolnym rocky (bez atmosfery też OK). Łapie etapy
-    //   pośrednie (mamy outpost Xe, nie stać na kolejny, stać na kolonię) — ekspansja
-    //   nie stoi w miejscu.
+    // Fallback: pełna kolonia na dowolnym rocky (bez atmosfery też OK).
     if (canFull) {
       const target = this._pickFullColonyBody(empire, bodyIds, civYear, false);
-      if (target) return void this._executeFullColony(empire, mother, systemId, target, civYear, cfg);
+      if (target) { this._executeFullColony(empire, mother, systemId, target, civYear, cfg); return true; }
     }
 
-    // P4 (Warstwa 3 — porty / heavy cargo) — odłożone do Slice 4 (stub, BEZ budowy).
-    this._log(empire, 'brak akcji w tym ticku (P4 port deferred)',
-      `xe=${xeOutposts}/${targetXe} nt=${ntOutposts}/${targetNt} ntBody=${ntBody ?? '∅'} canOutpost=${canOutpost} canFull=${canFull}`);
+    return false;
+  }
+
+  // ── Ekspansja cross-system (S3.1b) — develop-existing-before-open-new ──────
+  // Krok 1: rozbuduj JUŻ posiadane extra-systemy (bez generacji — pełne drzewo P1-Fb).
+  // Krok 2: gdy nasycone i pod limitem → otwórz JEDEN nowy najbliższy system z PROGIEM
+  //   JAKOŚCI (≥1 ciało z Xe LUB rocky+breathable). Zwraca true gdy wykonano akcję.
+  _runCrossSystem(empire, mother, civYear, cfg, distinctSystems) {
+    const reg = window.KOSMOS?.empireRegistry;
+    const ssm = window.KOSMOS?.starSystemManager;
+    const eb  = window.KOSMOS?.empireColonyBootstrap;
+    if (!reg || !ssm || !eb) return false;
+
+    const homeSystemId = empire.homeSystemId ?? mother.systemId;
+    const colonies = reg.getColoniesByEmpire(empire.id);
+    const ownedExtra = [...new Set(colonies.map(c => c.systemId))]
+      .filter(sid => sid && sid !== homeSystemId);
+
+    // Krok 1 — rozbuduj posiadane extra-systemy (Nt/zwykły rocky OK; bez progu).
+    for (const sid of ownedExtra) {
+      const sys = ssm.getSystem?.(sid);
+      if (!sys) continue;
+      if (this._runColonizationTree(empire, mother, sid, this._systemBodyIds(sys), civYear, cfg)) return true;
+    }
+
+    // Krok 2 — otwórz JEDEN nowy system (jeśli pod limitem).
+    const maxExtra = cfg.maxExtraSystems ?? DEFAULTS.maxExtraSystems;
+    if ((distinctSystems - 1) >= maxExtra) return false;
+
+    const target = this._pickTargetSystem(empire, mother, civYear);
+    if (!target) return false;
+
+    // Generacja systemu (lazy, idempotentna). Throw → system-blacklist + retry później.
+    let sysData;
+    try {
+      sysData = eb._ensureSystemGenerated(target.id);
+    } catch (e) {
+      this._systemBlacklistAdd(target.id, civYear, cfg);
+      this._log(empire, 'cross: generacja rzuciła → system-blacklist', `${target.id}: ${e.message}`);
+      return false;
+    }
+    if (!sysData) { this._systemBlacklistAdd(target.id, civYear, cfg); return false; }
+
+    const bodyIds = this._systemBodyIds(sysData);
+
+    // PRÓG JAKOŚCI (tylko OTWIERANIE): ≥1 ciało z Xe LUB rocky+breathable.
+    if (!this._meetsSystemQualityThreshold(bodyIds)) {
+      this._systemBlacklistAdd(target.id, civYear, cfg);
+      this._log(empire, 'cross: próg jakości niespełniony → system-blacklist', target.id);
+      return false;
+    }
+
+    // System wart kolonizacji → pełne drzewo. Gdy nie zadziałało (np. brak środków)
+    //   NIE blacklistujemy — retry w kolejnym ticku (system już wygenerowany, fast-path).
+    return this._runColonizationTree(empire, mother, target.id, bodyIds, civYear, cfg);
+  }
+
+  // Wybór nowego systemu-celu: najbliższy (3D) nieposiadany/nie-home, niezablacklistowany.
+  // Wyklucza: home gracza (isHome), home dowolnego AI (empireId), systemy posiadane
+  // przez to imperium, systemy na system-blackliście.
+  _pickTargetSystem(empire, mother, civYear) {
+    const gd  = window.KOSMOS?.galaxyData;
+    const reg = window.KOSMOS?.empireRegistry;
+    if (!gd?.systems || !reg) return null;
+
+    const homeSystemId = empire.homeSystemId ?? mother.systemId;
+    const homeStar = gd.systems.find(s => s.id === homeSystemId);
+    if (!homeStar) return null;
+
+    const owned = new Set((reg.getColoniesByEmpire(empire.id) ?? []).map(c => c.systemId));
+    let best = null, bestDist = Infinity;
+    for (const s of gd.systems) {
+      if (!s || s.id === homeSystemId) continue;
+      if (s.isHome) continue;                            // home gracza
+      if (s.empireId) continue;                          // home dowolnego AI (w tym własny)
+      if (owned.has(s.id)) continue;                     // już posiadany przez to imperium
+      if (this._isSystemBlacklisted(s.id, civYear)) continue;
+      const d = this._dist3D(homeStar, s);
+      if (d < bestDist) { bestDist = d; best = s; }
+    }
+    return best;
+  }
+
+  // Próg jakości OTWIERANIA nowego systemu: ≥1 ciało z Xe LUB rocky+breathable.
+  // (Nt-only / nie-breathable rocky NIE wystarcza — dopiero rozbudowa już posiadanego.)
+  _meetsSystemQualityThreshold(bodyIds) {
+    if (!Array.isArray(bodyIds)) return false;
+    for (const id of bodyIds) {
+      const ent = EntityManager.get(id);
+      if (!ent) continue;
+      if (this._hasDeposit(ent, 'Xe')) return true;
+      if (ent.planetType === 'rocky' && ent.atmosphere === 'breathable') return true;
+    }
+    return false;
+  }
+
+  // Liczy outposty imperium W DANYM systemie wg złoża (Xe / Nt). Ciało Xe+Nt liczy
+  // się do OBU (jak w pre-S3.1b empire-wide; teraz scope per-system).
+  _outpostCountsInSystem(empire, systemId) {
+    const reg = window.KOSMOS?.empireRegistry;
+    const outposts = (reg?.getColoniesByEmpire?.(empire.id) ?? [])
+      .filter(c => c.isOutpost && c.systemId === systemId);
+    let xe = 0, nt = 0;
+    for (const c of outposts) {
+      const ent = EntityManager.get(c.planetId);
+      if (this._hasDeposit(ent, 'Xe')) xe++;
+      if (this._hasDeposit(ent, 'Nt')) nt++;
+    }
+    return { xe, nt };
+  }
+
+  // Rozwija sysData (StarSystemManager) na płaską tablicę id ciał kandydujących.
+  _systemBodyIds(sys) {
+    return [
+      ...(sys?.planetIds ?? []),
+      ...(sys?.moonIds ?? []),
+      ...(sys?.planetoidIds ?? []),
+    ];
   }
 
   // Macierzysta = pierwsza kolonia !isOutpost (źródło POP/zasobów); null gdy brak.
@@ -441,6 +613,32 @@ export class EmpireStrategySystem {
     if (!rec) return false;
     if (civYear >= rec.retryAtCivYear) { this._blacklist.delete(planetId); return false; }
     return true;
+  }
+
+  // ── System-blacklist (S3.1b — per systemId-cel) ───────────────────────────
+  // Gdy nowo otwierany system nie spełnia progu jakości lub generacja rzuci —
+  // backoff na cały system (blacklistDurationCy), by nie regenerować/sprawdzać
+  // go co tick. Wygasa jak body-blacklist.
+  _systemBlacklistAdd(systemId, civYear, cfg) {
+    const dur = cfg?.blacklistDurationCy ?? DEFAULTS.blacklistDurationCy;
+    this._systemBlacklist.set(systemId, { sinceCivYear: civYear, retryAtCivYear: civYear + dur });
+  }
+
+  _isSystemBlacklisted(systemId, civYear) {
+    const rec = this._systemBlacklist.get(systemId);
+    if (!rec) return false;
+    if (civYear >= rec.retryAtCivYear) { this._systemBlacklist.delete(systemId); return false; }
+    return true;
+  }
+
+  // Dystans galaktyczny 3D (LY) między dwoma gwiazdami galaxyData (x/y/z).
+  // Identyczny wzór co VesselManager.dispatchInterstellar / EmpireGenerator.dist3D
+  // (DistanceUtils obsługuje tylko AU wewnątrz układu, nie LY między układami).
+  _dist3D(a, b) {
+    const dx = (a?.x ?? 0) - (b?.x ?? 0);
+    const dy = (a?.y ?? 0) - (b?.y ?? 0);
+    const dz = (a?.z ?? 0) - (b?.z ?? 0);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
   }
 
   // ── Helpery ────────────────────────────────────────────────────────────────

@@ -30,18 +30,30 @@ const ok = (name, cond) => {
 // ═══════════════════════════════════════════════════════════════
 // A — Expansionist = klon Industrialist (różni się TYLKO tożsamością)
 // ═══════════════════════════════════════════════════════════════
-console.log('--- A: Expansionist = klon Industrialist ---');
+console.log('--- A: Expansionist = klon Industrialist POZA maxExtraSystems (S3.1b) ---');
 const IDENTITY = new Set(['id', 'namePL', 'nameEN', 'descPL', 'descEN', 'color']);
 const behavioralKeys = Object.keys(INDUSTRIALIST).filter(k => !IDENTITY.has(k));
 
+// S3.1b: jedyna RÓŻNICA behawioralna to strategicColonization.maxExtraSystems (Exp=2, Ind=0).
+//   Reszta pól (w tym pozostałe klucze strategicColonization) IDENTYCZNA z klona S3.1a.
 let allBehavioralEqual = true;
 for (const k of behavioralKeys) {
-  if (JSON.stringify(EXPANSIONIST[k]) !== JSON.stringify(INDUSTRIALIST[k])) {
+  let expVal = EXPANSIONIST[k];
+  let indVal = INDUSTRIALIST[k];
+  if (k === 'strategicColonization') {
+    const { maxExtraSystems: _e, ...expRest } = expVal ?? {};
+    const { maxExtraSystems: _i, ...indRest } = indVal ?? {};
+    expVal = expRest; indVal = indRest;   // porównaj POZA maxExtraSystems
+  }
+  if (JSON.stringify(expVal) !== JSON.stringify(indVal)) {
     allBehavioralEqual = false;
     console.error(`     różnica w polu behawioralnym: ${k}`);
   }
 }
-ok('pola behawioralne identyczne z Industrialist (klon)', allBehavioralEqual);
+ok('pola behawioralne identyczne z Industrialist POZA maxExtraSystems', allBehavioralEqual);
+ok('strategicColonization.maxExtraSystems: Exp=2, Ind=0',
+   EXPANSIONIST.strategicColonization.maxExtraSystems === 2 &&
+   INDUSTRIALIST.strategicColonization.maxExtraSystems === 0);
 ok('te same klucze co INDUSTRIALIST',
    JSON.stringify(Object.keys(EXPANSIONIST).sort()) === JSON.stringify(Object.keys(INDUSTRIALIST).sort()));
 ok('id === expansionist', EXPANSIONIST.id === 'expansionist');

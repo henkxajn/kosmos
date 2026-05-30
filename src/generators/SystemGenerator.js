@@ -634,6 +634,35 @@ export class SystemGenerator {
     return planetoids;
   }
 
+  // ── Hospitalność macierzysta (reuse: scenariusz gracza + home AI) ───────────
+  // Wymusza oddychalną atmosferę + przelicza temperaturę do zakresu Earth-like
+  // (5–30°C). Mutuje planet in-place. Reużywane przez generateCivScenario,
+  // generatePowerTestScenario ORAZ EmpireColonyBootstrap.bootstrapHomeColony
+  // (S3.1b — parytet home AI z sys_home gracza). Composition/Ti NIE ruszane.
+  static makeHomeworldBreathable(planet) {
+    if (!planet) return;
+    planet.surface = planet.surface || {};
+    if (planet.temperatureK != null) {
+      const oldGreenhouse = GREENHOUSE[planet.atmosphere] ?? 0;
+      planet.atmosphere = 'breathable';
+      planet.breathableAtmosphere = true;
+      const T_base_C = planet.temperatureK - 273.15 - oldGreenhouse;
+      let finalC = T_base_C + GREENHOUSE.breathable;
+      // Clamp do zakresu Earth-like — planeta macierzysta musi być hospitalna
+      if (finalC < 5)  finalC = 5 + Math.random() * 10;   // 5–15°C
+      if (finalC > 35) finalC = 20 + Math.random() * 10;  // 20–30°C
+      planet.temperatureC = Math.round(finalC);
+      planet.temperatureK = planet.temperatureC + 273.15;
+      planet.surface.temperature = planet.temperatureC;
+    } else {
+      planet.atmosphere = 'breathable';
+      planet.breathableAtmosphere = true;
+      planet.temperatureC = 15;
+      planet.temperatureK = 288.15;
+      planet.surface.temperature = 15;
+    }
+  }
+
   // ── Scenariusz CYWILIZACJA ───────────────────────────────────────────────────
   // Losowy układ planetarny z gwarancją 1 planety z cywilizacją.
   // Wybiera najlepszą planetę rocky w HZ i ustawia lifeScore=100.
@@ -673,28 +702,8 @@ export class SystemGenerator {
     bestPlanet.orbitalStability = Math.max(0.9, bestPlanet.orbitalStability ?? 0.5);
     bestPlanet.surface          = bestPlanet.surface || {};
     bestPlanet.surface.hasWater = true;
-    // Atmosfera breathable (nie thin) — cywilizacja wymaga oddychalnej atmosfery
-    // Przelicz temperatureC: odejmij stary greenhouse, dodaj breathable
-    if (bestPlanet.temperatureK != null) {
-      const oldGreenhouse = GREENHOUSE[bestPlanet.atmosphere] ?? 0;
-      bestPlanet.atmosphere = 'breathable';
-      bestPlanet.breathableAtmosphere = true;
-      const T_base_C = bestPlanet.temperatureK - 273.15 - oldGreenhouse;
-      let finalC = T_base_C + GREENHOUSE.breathable;
-      // Clamp do zakresu Earth-like — planeta macierzysta musi byc hospitalna
-      if (finalC < 5)  finalC = 5 + Math.random() * 10;   // 5–15°C
-      if (finalC > 35) finalC = 20 + Math.random() * 10;  // 20–30°C
-      bestPlanet.temperatureC = Math.round(finalC);
-      bestPlanet.temperatureK = bestPlanet.temperatureC + 273.15;
-      bestPlanet.surface.temperature = bestPlanet.temperatureC;
-    } else {
-      bestPlanet.atmosphere = 'breathable';
-      bestPlanet.breathableAtmosphere = true;
-      bestPlanet.temperatureC = 15;
-      bestPlanet.temperatureK = 288.15;
-      bestPlanet.surface = bestPlanet.surface || {};
-      bestPlanet.surface.temperature = 15;
-    }
+    // Atmosfera breathable + temp Earth-like — reuse helpera (też home AI, S3.1b)
+    SystemGenerator.makeHomeworldBreathable(bestPlanet);
     // Gwarancja minimalnego Ti w composition — żeby gracz nie utknął bez tego surowca
     // Złoża generowane w generate() → trzeba regenerować po modyfikacji composition
     if (bestPlanet.composition) {
@@ -762,26 +771,8 @@ export class SystemGenerator {
     bestPlanet.orbitalStability = Math.max(0.9, bestPlanet.orbitalStability ?? 0.5);
     bestPlanet.surface          = bestPlanet.surface || {};
     bestPlanet.surface.hasWater = true;
-    if (bestPlanet.temperatureK != null) {
-      const oldGreenhouse = GREENHOUSE[bestPlanet.atmosphere] ?? 0;
-      bestPlanet.atmosphere = 'breathable';
-      bestPlanet.breathableAtmosphere = true;
-      const T_base_C = bestPlanet.temperatureK - 273.15 - oldGreenhouse;
-      let finalC = T_base_C + GREENHOUSE.breathable;
-      // Clamp do zakresu Earth-like — planeta macierzysta musi byc hospitalna
-      if (finalC < 5)  finalC = 5 + Math.random() * 10;   // 5–15°C
-      if (finalC > 35) finalC = 20 + Math.random() * 10;  // 20–30°C
-      bestPlanet.temperatureC = Math.round(finalC);
-      bestPlanet.temperatureK = bestPlanet.temperatureC + 273.15;
-      bestPlanet.surface.temperature = bestPlanet.temperatureC;
-    } else {
-      bestPlanet.atmosphere = 'breathable';
-      bestPlanet.breathableAtmosphere = true;
-      bestPlanet.temperatureC = 15;
-      bestPlanet.temperatureK = 288.15;
-      bestPlanet.surface = bestPlanet.surface || {};
-      bestPlanet.surface.temperature = 15;
-    }
+    // Atmosfera breathable + temp Earth-like — reuse helpera (POWER TEST)
+    SystemGenerator.makeHomeworldBreathable(bestPlanet);
     if (!bestPlanet.surfaceRadius) {
       bestPlanet.surfaceRadius = this.calcSurfaceRadius(bestPlanet.physics.mass, bestPlanet.planetType);
     }
