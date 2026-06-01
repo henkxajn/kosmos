@@ -1140,30 +1140,10 @@ export class FactorySystem {
   // Źródło 2: Paliwo — power_cells potrzebne do tankowania floty
   // qty = CAŁKOWITA potrzeba (deficyt liczy alokator)
   _scanFuelDemand() {
-    const items = [];
-    const vMgr = window.KOSMOS?.vesselManager;
-    if (!vMgr) return items;
-
-    const colony = this._getOwnerColony();
-    const planetId = colony?.planetId;
-
-    let fuelNeeded = 0;
-    for (const vessel of vMgr.getAllVessels()) {
-      // Tylko statki zadokowane w NASZEJ kolonii
-      if (vessel.position?.state === 'docked' && vessel.position?.dockedAt === planetId) {
-        const max = vessel.fuel?.max ?? 0;
-        const current = vessel.fuel?.current ?? 0;
-        if (current < max * 0.5) {
-          fuelNeeded += (max - current);
-        }
-      }
-    }
-
-    if (fuelNeeded > 0) {
-      const fuelType = 'power_cells';
-      items.push({ commodityId: fuelType, qty: Math.ceil(fuelNeeded) });
-    }
-    return items;
+    // S3.0a (c): paliwo = produkt rafinerii (gas_fuel_refinery, H→fuel), NIE generycznej fabryki.
+    // Statki tankują 'fuel' z inventory (VesselManager._tickRefueling). Stary scan 'power_cells'
+    // (paliwo Gen I) jest martwy po reformie (a) — żaden statek nie tankuje już power_cells.
+    return [];
   }
 
   // Źródło 3: Konsumpcja — dobra konsumpcyjne na 5 lat

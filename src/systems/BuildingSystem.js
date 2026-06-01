@@ -1725,21 +1725,61 @@ export class BuildingSystem {
     if (!this._deposits || this._deposits.length === 0) return;
     if (!this.resourceSystem) return;
 
-    // Cache mine level — invalidowany przy budowie/rozbiórce kopalni
+    // Cache: generyczne kopalnie (wydobywają WSZYSTKIE złoża) vs restricted (mineResource → 1 surowiec).
+    // S3.0a c-fix: rafineria atmosferyczna (mineResource:'H') wydobywa wyłącznie wodór.
+    // S3.0a c-r2 (Opcja A): refineTo konwertuje zmineowany surowiec OD RAZU w produkt (H→fuel,
+    // H NIE trafia do inventory). Invalidowany przy budowie/rozbiórce kopalni.
     if (this._mineLevelDirty !== false) {
-      let total = 0;
+      let generic = 0;
+      // restricted: key `${mineResource}>${refineTo||''}` → {mineResource, refineTo, ratio, level}
+      const restricted = new Map();
       for (const entry of this._active.values()) {
-        if (entry.building.isMine || entry.building.id === 'mine') {
-          total += entry.level ?? 1;
+        const b = entry.building;
+        if (!(b.isMine || b.id === 'mine')) continue;
+        const lvl = entry.level ?? 1;
+        if (b.mineResource) {
+          const refineTo = b.refineTo ?? null;
+          const ratio = b.refineRatio ?? 1.0;
+          const key = `${b.mineResource}>${refineTo ?? ''}`;
+          const grp = restricted.get(key) ?? { mineResource: b.mineResource, refineTo, ratio, level: 0 };
+          grp.level += lvl;
+          restricted.set(key, grp);
+        } else {
+          generic += lvl;
         }
       }
-      this._cachedMineLevel = total;
+      this._cachedMineLevel = generic;
+      this._cachedRestrictedMines = restricted;
       this._mineLevelDirty = false;
     }
-    if (this._cachedMineLevel === 0) return;
+    if (this._cachedMineLevel === 0 && (this._cachedRestrictedMines?.size ?? 0) === 0) return;
 
-    // Wydobądź surowce z deposits (zwraca plain object)
-    const gains = DepositSystem.extractFromDeposits(this._deposits, this._cachedMineLevel, deltaYears);
+    // Zbierz wydobycie: generyczne (wszystkie złoża) + restricted (1 surowiec, opcjonalnie konwertowany).
+    let gains = null;
+    const merge = (g) => {
+      if (!g) return;
+      if (!gains) gains = {};
+      for (const k in g) gains[k] = (gains[k] ?? 0) + g[k];
+    };
+    if (this._cachedMineLevel > 0) {
+      merge(DepositSystem.extractFromDeposits(this._deposits, this._cachedMineLevel, deltaYears));
+    }
+    if (this._cachedRestrictedMines) {
+      for (const grp of this._cachedRestrictedMines.values()) {
+        const filtered = this._deposits.filter(d => d.resourceId === grp.mineResource);
+        if (!filtered.length) continue;
+        const g = DepositSystem.extractFromDeposits(filtered, grp.level, deltaYears);
+        if (!g) continue;
+        if (grp.refineTo) {
+          // Opcja A: zmineowany surowiec konwertowany OD RAZU w produkt (medium, nie towar).
+          // H ze złoża → fuel; H NIE trafia do inventory. Złoże depletuje → produkcja maleje (gate naturalny).
+          const minedAmt = g[grp.mineResource] ?? 0;
+          if (minedAmt > 0) merge({ [grp.refineTo]: minedAmt * grp.ratio });
+        } else {
+          merge(g);   // restricted bez refineTo: surowiec do inventory (jak zwykła kopalnia 1-surowcowa)
+        }
+      }
+    }
 
     // Faza D2a hook: asteroid_mining ×2 dla planetoid/asteroid
     if (gains && hasKeys(gains)) {

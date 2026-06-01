@@ -7,6 +7,8 @@ export default {
   'building.colony_base.name': 'Stolica',
   'building.colony_base.desc': 'Stolica cywilizacji \u2014 nie blokuje budowy na hexie',
   'building.mine.name': 'Kopalnia',
+  'building.gas_fuel_refinery.name': 'Rafineria Atmosferyczna',
+  'building.gas_fuel_refinery.desc': 'Kolektory zasysają wodór z atmosfery gazowca i rafinują go na paliwo. Autonomiczna.',
   'building.mine.desc': 'Wydobywa surowce z podło\u017ca \u2014 zale\u017cy od zło\u017c na ciele niebieskim',
   'building.solar_farm.name': 'Elektrownia Słoneczna',
   'building.solar_farm.desc': 'Zamienia promieniowanie gwiazdy w energię elektryczną',

@@ -6118,7 +6118,7 @@ export class FleetManagerOverlay {
         if (!body.explored) continue;
         // Tylko odpowiednie typy (rocky, ice, moon, planetoid)
         const pType = body.planetType ?? body.type;
-        const okTypes = ['rocky', 'ice', 'iron', 'volcanic', 'moon', 'planetoid'];
+        const okTypes = ['rocky', 'ice', 'iron', 'volcanic', 'moon', 'planetoid', 'gas'];
         if (!okTypes.includes(pType) && body.type !== 'moon' && body.type !== 'planetoid') continue;
       }
       // Survey/deep_scan — wszystkie ciała (zbadane i niezbadane)

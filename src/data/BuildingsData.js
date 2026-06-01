@@ -428,6 +428,37 @@ export const BUILDINGS = {
     popType:       'miner',
   },
 
+  // ── Rafineria Atmosferyczna (S3.0a c) — H→fuel na gazowcu ─────────────────
+  // 3-w-1: isMine (kolektory wydobywają H ze złoża gazowca) + rates {fuel:+,H:-}
+  // (producent H→fuel, input-gated w ResourceSystem) + isAutonomous (reaktor, bez POP).
+  gas_fuel_refinery: {
+    id:            'gas_fuel_refinery',
+    namePL:        'Rafineria Atmosferyczna',
+    nameEN:        'Atmospheric Refinery',
+    category:      'mining',
+    icon:          '⛽',
+    description:   'Kolektory zasysają wodór z atmosfery gazowca i rafinują go na paliwo. Autonomiczna.',
+    cost:          { Fe: 40, Ti: 15, Cu: 10 },
+    commodityCost: { structural_alloys: 5, extraction_systems: 3, power_cells: 2 },
+    energyCost:    0,                      // isAutonomous = własny reaktor
+    buildTime:     2.0,
+    rates:         {},                     // S3.0a c-r2: BEZ producer rates — fuel z konwersji mining (Opcja A)
+    maintenance:   { Fe: 1 },
+    housing:       0,
+    popCost:       0,                      // autonomiczny — bez POP
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,                   // budowalny na hexach gazowca
+    requires:      'exploration',          // reuse (techOk found_outpost też = 'exploration')
+    isMine:        true,                   // kolektory: wydobywa H ze złoża gazowca
+    mineResource:  'H',                    // WYŁĄCZNIE wodór (kolektory atmosferyczne, nie rudy)
+    refineTo:      'fuel',                 // S3.0a c-r2 (Opcja A): H ze złoża → fuel BEZPOŚREDNIO (H nie do inventory)
+    refineRatio:   1.0,                    // fuel za 1 H (knob balansu — zastępuje stare R=10)
+    isAutonomous:  true,                   // reaktor: bez POP
+    popType:       'miner',
+  },
+
   // ── Autonomiczna elektrownia słoneczna ────────────────────────────────────
 
   autonomous_solar_farm: {

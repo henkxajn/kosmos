@@ -197,7 +197,7 @@ export class MissionSystem {
     const exploredOk = target?.explored === true;
     const typeOk   = target
       ? (target.type === 'planetoid' || target.type === 'moon' ||
-         (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
+         (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice' || target.planetType === 'gas')))
       : false;
     const bDef = BUILDINGS[buildingId];
     const buildingOk = !!bDef;

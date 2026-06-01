@@ -184,7 +184,7 @@ export class ExpeditionSystem {
     const exploredOk = target?.explored === true;
     const typeOk   = target
       ? (target.type === 'planetoid' || target.type === 'moon' ||
-         (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice')))
+         (target.type === 'planet' && (target.planetType === 'rocky' || target.planetType === 'ice' || target.planetType === 'gas')))
       : false;
     const existingCol = colMgr?.getColony(targetId);
     const isDelivery = !!existingCol;

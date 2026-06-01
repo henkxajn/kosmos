@@ -8,6 +8,8 @@ export default {
   'building.colony_base.desc': 'Capital of the civilization — does not block construction on the hex',
   'building.mine.name': 'Mine',
   'building.mine.desc': 'Extracts raw materials from the ground — depends on deposits on the celestial body',
+  'building.gas_fuel_refinery.name': 'Atmospheric Refinery',
+  'building.gas_fuel_refinery.desc': 'Collectors draw hydrogen from a gas giant\'s atmosphere and refine it into fuel. Autonomous.',
   'building.solar_farm.name': 'Solar Power Plant',
   'building.solar_farm.desc': 'Converts stellar radiation into electrical energy',
   'building.coal_plant.name': 'Coal Power Plant',
