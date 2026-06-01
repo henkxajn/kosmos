@@ -10,6 +10,7 @@ import { GAME_CONFIG }    from '../config/GameConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES } from '../data/ResourcesData.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { BUILDINGS }      from '../data/BuildingsData.js';
+import { COMMODITIES }    from '../data/CommoditiesData.js';
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
@@ -645,6 +646,16 @@ export class TopBar {
         color: def.color || C.text,
         tooltipName: `${def.icon} ${getName(def, 'resource')}`,
         _breakdownKey: id,
+      });
+    }
+    // S3.0a: Paliwo — commodity wywyższony do rangi zasobu witalnego (HUD obok food/water).
+    const fuelDef = COMMODITIES.fuel;
+    if (fuelDef) {
+      items.push({
+        icon: fuelDef.icon, symbol: '', value: inv['fuel'] ?? 0, delta: perYear['fuel'] ?? 0,
+        color: C.text,
+        tooltipName: `${fuelDef.icon} ${getName(fuelDef, 'commodity')}`,
+        _breakdownKey: 'fuel',   // forward-compat: breakdown producentów po rafinerii (commit c)
       });
     }
     return items;

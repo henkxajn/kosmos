@@ -40,7 +40,7 @@ export const SHIPS = {
     range:             20,
     speedAU:           1.3,
     cargoCapacity:     0,
-    fuelType:          'power_cells',
+    fuelType:          'fuel',
     cost:              { Fe: 80, Ti: 15, Cu: 10 },
     commodityCost:     { structural_alloys: 4, polymer_composites: 3, electronic_systems: 2 },
     buildTime:         4.0,
@@ -77,7 +77,7 @@ export const SHIPS = {
     range:             20,
     speedAU:           1.0,
     cargoCapacity:     500,  // domyślne z defaultModules (2× cargo_small)
-    fuelType:          'power_cells',
+    fuelType:          'fuel',
     cost:              { Fe: 120, Ti: 20, Cu: 10 },
     commodityCost:     { structural_alloys: 8, polymer_composites: 4, reactive_armor: 3 },
     buildTime:         3.0,
@@ -118,7 +118,7 @@ export const SHIPS = {
     range:             20,
     speedAU:           0.9,
     cargoCapacity:     500,
-    fuelType:          'power_cells',
+    fuelType:          'fuel',
     // Specyficzne dla supply ship
     supplyMagazine:      500,  // pojemność magazynu military_supplies
     supplyTransferRate:  20,   // supply/civY transferowane do sąsiednich statków fleet-group (placeholder)

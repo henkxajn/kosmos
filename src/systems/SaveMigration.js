@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 78;
+export const CURRENT_VERSION     = 79;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -96,6 +96,7 @@ const MIGRATIONS = {
   75: _migrateV75toV76,
   76: _migrateV76toV77,
   77: _migrateV77toV78,
+  78: _migrateV78toV79,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1951,6 +1952,33 @@ function _migrateV77toV78(data) {
     if (!c4x.empireTech || typeof c4x.empireTech !== 'object') c4x.empireTech = {};
     if (!c4x.empireStrategy || typeof c4x.empireStrategy !== 'object') {
       c4x.empireStrategy = { blacklist: [] };
+    }
+  }
+  return data;
+}
+
+// v78 → v79: S3.0a — spłaszczenie paliwa 3→2. fuelType power_cells/plasma_cores → 'fuel'.
+//   (1) statki: root vessel.fuelType + nested vessel.fuel.fuelType remap (zachowaj fuel.current/max).
+//   (2) kolonie: inventory.fuel ??= 30 — by istniejące statki mogły tankować (nowe gry: grant 50).
+//   (3) power_cells/plasma_cores w inventory ZOSTAJĄ (commodity budowlane) — brak akcji.
+//   warp_cores NIE jest ruszany (engine_warp niezmieniony).
+function _migrateV78toV79(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  // (1) remap fuelType na statkach (root + nested)
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v || typeof v !== 'object') continue;
+      if (v.fuelType === 'power_cells' || v.fuelType === 'plasma_cores') v.fuelType = 'fuel';
+      if (v.fuel && (v.fuel.fuelType === 'power_cells' || v.fuel.fuelType === 'plasma_cores')) {
+        v.fuel.fuelType = 'fuel';
+      }
+    }
+  }
+  // (2) startowy zapas fuel w koloniach (stopgap dla starych save)
+  if (Array.isArray(c4x?.colonies)) {
+    for (const col of c4x.colonies) {
+      const inv = col.resources?.inventory;
+      if (inv && inv.fuel == null) inv.fuel = 30;
     }
   }
   return data;

@@ -2685,6 +2685,7 @@ export class GameScene {
       pressure_modules: 4, reactive_armor: 4, compact_bioreactor: 3,
       automation_droid: 0, semiconductor_arrays: 2, propulsion_systems: 0,
       plasma_cores: 0, metamaterials: 0, quantum_processors: 0, warp_cores: 0,
+      fuel: 50,   // S3.0a: paliwo konwencjonalne (spłaszczenie power_cells/plasma_cores → fuel)
     });
     // Gwarantuj małe złoże Xe na planecie domowej (paliwo jonowe)
     if (!planet.deposits) planet.deposits = [];

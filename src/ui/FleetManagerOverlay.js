@@ -5394,7 +5394,12 @@ export class FleetManagerOverlay {
   }
 
   _statusText(vessel) {
-    if (vessel.position.state === 'docked') return vessel.status === 'idle' ? t('fleet.statusTextHangar') : t('fleet.statusTextRefueling');
+    if (vessel.position.state === 'docked') {
+      if (vessel.status === 'idle') return t('fleet.statusTextHangar');
+      // Fix C: rozróżnij "czeka na paliwo" (brak fuel w kolonii) od aktywnego tankowania.
+      if (vessel._awaitingFuel) return t('fleet.statusTextAwaitingFuel');
+      return t('fleet.statusTextRefueling');
+    }
     if (vessel.position.state === 'orbiting') return t('fleet.statusTextOrbiting');
     return t('fleet.statusTextInFlight');
   }

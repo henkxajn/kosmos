@@ -90,6 +90,21 @@ export const COMMODITIES = {
     isConsumerGood: false, consumptionLayer: null,
   },
 
+  fuel: {
+    id:          'fuel',
+    namePL:      'Paliwo',
+    nameEN:      'Fuel',
+    icon:        '⛽',
+    tier:        2,
+    recipe:      { H: 4 },          // H = Wodór; surowiec wchodzi w commit (b), rafineria w (c)
+    baseTime:    0.5,
+    weight:      1.5,
+    requiresTech: null,
+    description: 'Konwencjonalne paliwo statków (Gen I–III). ' +
+                 'Rafinowane z wodoru gazowców.',
+    isConsumerGood: false, consumptionLayer: null,
+  },
+
   pressure_modules: {
     id:          'pressure_modules',
     namePL:      'Moduły Presuryzacyjne',

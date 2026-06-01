@@ -40,6 +40,7 @@ export const BASE_PRICE = {
   civilian_goods:       18,   // C:4(4) + Si:3(4.5) + Li:1(5) = 13.5 → ×1.3 = 18
 
   // ── T2 commodities (koszt surowców × 1.3) ──────────────────
+  fuel:                  3,   // S3.0a: tani produkt rafinerii (H→fuel); pełny handel rzadkości w S3.3
   power_cells:          50,   // Li:6(30) + Cu:4(8) + Si:2(3) = 41 → ×1.3 = 50
   pressure_modules:     50,   // Ti:6(24) + Fe:4(4) + Si:4(6) + Cu:2(4) = 38 → ×1.3 = 50
   electronic_systems:   30,   // Si:8(12) + Cu:5(10) + C:2(2) = 24 → ×1.3 = 30

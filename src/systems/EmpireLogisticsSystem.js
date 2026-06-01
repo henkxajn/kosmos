@@ -265,7 +265,11 @@ export class EmpireLogisticsSystem {
     const speedAU = Math.max(0.05, v.speedAU ?? 1.0);
 
     // IDLE@capital → dispatch outbound do outpostu.
-    if (v.status === 'idle' && v.position?.state === 'docked') {
+    // 'refueling' też akceptowany (lustro dispatchOnMission): po reformie paliwa S3.0a
+    // kurier AI nie ma w kolonii 'fuel' do tankowania → utknąłby w 'refueling' i nigdy
+    // nie wrócił do 'idle'. AI jest fuel-immune (dispatch clampuje paliwo do 0), więc
+    // kurier ma krążyć niezależnie od stanu paliwa.
+    if ((v.status === 'idle' || v.status === 'refueling') && v.position?.state === 'docked') {
       if (!outpost || !outEnt) return;  // outpost zniknął — cleanup przeniesie do reserve
       const distAU = this._distAU(capEnt, outEnt);
       const travel = distAU / speedAU;

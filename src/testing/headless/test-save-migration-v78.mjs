@@ -16,7 +16,9 @@ const ok = (name, cond) => {
   else { console.error('  FAIL  ' + name); fail++; }
 };
 
-ok('CURRENT_VERSION === 78', CURRENT_VERSION === 78);
+// CURRENT_VERSION bump w S3.0a commit (a): 78 → 79 (spłaszczenie paliwa).
+// Migrate() chainuje v77 → v79; logika v77→v78 (empireTech/empireStrategy) dalej weryfikowana niżej.
+ok('CURRENT_VERSION === 79', CURRENT_VERSION === 79);
 
 // ── Mock save v77 (brak empireTech/empireStrategy) ───────────────
 const saveV77 = {
@@ -43,7 +45,7 @@ try { result = migrate(saveV77); }
 catch (e) { threw = true; console.error('migrate threw:', e); }
 
 ok('migrate nie rzuca', !threw);
-ok('version === 78', result?.version === 78);
+ok('version === 79 (chain v77→v79)', result?.version === 79);
 ok('brak error object', !result?.error);
 ok('empireTech default {} (obiekt)', result?.civ4x?.empireTech && typeof result.civ4x.empireTech === 'object');
 ok('empireTech puste (stary save → fallback runtime)', Object.keys(result?.civ4x?.empireTech ?? { x: 1 }).length === 0);

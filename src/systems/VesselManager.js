@@ -52,12 +52,9 @@ const SUN_MARGIN       = 0.1 * AU_TO_PX;                // margines ominięcia
 
 // Tankowanie: ile jednostek paliwa/rok docked vessel ładuje (z inventory kolonii)
 const REFUEL_RATES = {
-  power_cells:  3,    // jednostek/rok
-  plasma_cores: 1,    // jednostek/rok
-  warp_cores:   0.5,  // jednostek/rok
+  fuel:       3,    // jednostek/rok (zastępuje power_cells + plasma_cores — spłaszczenie 3→2)
+  warp_cores: 0.5,  // jednostek/rok
 };
-// Koszt energetyczny: ile energy z inventory kolonii za 1 power_cell
-const ENERGY_PER_PC = 5;
 
 export class VesselManager {
   constructor() {
@@ -922,7 +919,7 @@ export class VesselManager {
         missionLog:   v.missionLog ? [...v.missionLog] : [],
         stats:        v.stats ? { ...v.stats } : { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 },
         generation:   v.generation ?? 1,
-        fuelType:     v.fuelType ?? 'power_cells',
+        fuelType:     v.fuelType ?? 'fuel',
         speedAU:      v.speedAU ?? 1.0,
         cargoMax:     v.cargoMax ?? 0,
         totalMass:    v.totalMass ?? 0,
@@ -1025,7 +1022,7 @@ export class VesselManager {
         missionLog:   vd.missionLog ? [...vd.missionLog] : [],
         stats:        vd.stats ? { ...vd.stats } : { distanceTraveled: 0, missionsComplete: 0, resourcesHauled: 0, bodiesSurveyed: 0 },
         generation:   vd.generation ?? 1,
-        fuelType:     vd.fuelType ?? 'power_cells',
+        fuelType:     vd.fuelType ?? 'fuel',
         speedAU:      vd.speedAU ?? _getHullDef(vd.shipId)?.speedAU ?? 1.0,
         cargoMax:     vd.cargoMax ?? _getHullDef(vd.shipId)?.cargoCapacity ?? 0,
         totalMass:    vd.totalMass ?? _getHullDef(vd.shipId)?.baseMass ?? 30,
@@ -1349,6 +1346,7 @@ export class VesselManager {
     for (const vessel of this._vessels.values()) {
       if (vessel.position.state !== 'docked') continue;
       if (!needsRefuel(vessel)) {
+        vessel._awaitingFuel = false;   // pełny bak — nie czeka na paliwo
         if (vessel.status === 'refueling') vessel.status = 'idle';
         continue;
       }
@@ -1360,10 +1358,11 @@ export class VesselManager {
       if (!inv) continue;
 
       // Sprawdź odpowiedni typ paliwa w inventory
-      const ft = vessel.fuelType ?? vessel.fuel?.fuelType ?? 'power_cells';
+      const ft = vessel.fuelType ?? vessel.fuel?.fuelType ?? 'fuel';
       const fuelAvailable = inv.get(ft) ?? 0;
       if (fuelAvailable <= 0) {
-        // Brak paliwa — status refueling ale nie może ładować
+        // Brak paliwa — status refueling ale nie może ładować (Fix C: sygnał "czeka na paliwo")
+        vessel._awaitingFuel = true;
         if (vessel.status === 'idle') vessel.status = 'refueling';
         continue;
       }
@@ -1374,10 +1373,19 @@ export class VesselManager {
       const canFuel = Math.min(wantFuel, fuelAvailable, vessel.fuel.max - vessel.fuel.current);
 
       if (canFuel > 0) {
-        // Pobierz paliwo z inventory
-        colony.resourceSystem.spend({ [ft]: canFuel });
-        refuel(vessel, canFuel);
-        vessel.status = needsRefuel(vessel) ? 'refueling' : 'idle';
+        // Fix B: tankuj TYLKO gdy spend() faktycznie odjął paliwo z inventory.
+        // spend() zwraca false (bez odejmowania) gdy inventory < amount → bez tego
+        // gate'a bak rósłby ZA DARMO (klasa buga "nieskończone paliwo").
+        const paid = colony.resourceSystem.spend({ [ft]: canFuel });
+        if (paid) {
+          refuel(vessel, canFuel);
+          vessel._awaitingFuel = false;
+          vessel.status = needsRefuel(vessel) ? 'refueling' : 'idle';
+        } else {
+          // Niewystarczające paliwo na pełną ratę — statek czeka (Fix C)
+          vessel._awaitingFuel = true;
+          if (vessel.status === 'idle') vessel.status = 'refueling';
+        }
       }
     }
   }

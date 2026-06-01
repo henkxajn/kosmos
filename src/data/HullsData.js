@@ -35,7 +35,7 @@ export const HULLS = {
     range:             23,
     speedAU:           1.4,
     cargoCapacity:     0,
-    fuelType:          'power_cells',
+    fuelType:          'fuel',
     cost:              { Fe: 60, Ti: 10, Cu: 8 },
     commodityCost:     { structural_alloys: 3, polymer_composites: 2 },
     buildTime:         3.0,
@@ -75,7 +75,7 @@ export const HULLS = {
     range:             24,
     speedAU:           1.0,
     cargoCapacity:     0,
-    fuelType:          'power_cells',
+    fuelType:          'fuel',
     cost:              { Fe: 120, Ti: 20, Cu: 12 },
     commodityCost:     { structural_alloys: 8, polymer_composites: 4, reactive_armor: 2 },
     buildTime:         6.0,
@@ -118,7 +118,7 @@ export const HULLS = {
     range:             26,
     speedAU:           0.7,
     cargoCapacity:     0,
-    fuelType:          'power_cells',
+    fuelType:          'fuel',
     cost:              { Fe: 200, Ti: 35, Cu: 18 },
     commodityCost:     { structural_alloys: 15, polymer_composites: 6, reactive_armor: 5 },
     buildTime:         12.0,
@@ -161,7 +161,7 @@ export const HULLS = {
     range:             25,
     speedAU:           1.2,
     cargoCapacity:     0,
-    fuelType:          'power_cells',
+    fuelType:          'fuel',
     baseHP:            120,      // więcej HP niż zwiadowca
     baseEvasion:       0.20,     // wciąż zwrotna
     baseArmor:         2,        // wbudowany lekki pancerz
@@ -198,7 +198,7 @@ export const HULLS = {
     range:             27,
     speedAU:           0.9,
     cargoCapacity:     0,
-    fuelType:          'power_cells',
+    fuelType:          'fuel',
     baseHP:            220,      // mocny kadłub
     baseEvasion:       0.10,
     baseArmor:         4,        // ciężki wbudowany pancerz
@@ -237,7 +237,7 @@ export const HULLS = {
     range:             29,
     speedAU:           0.7,
     cargoCapacity:     0,
-    fuelType:          'power_cells',
+    fuelType:          'fuel',
     baseHP:            350,      // capital-class HP
     baseEvasion:       0.05,     // duży cel
     baseArmor:         5,        // ciężki pancerz kompozytowy

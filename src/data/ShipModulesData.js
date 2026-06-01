@@ -23,7 +23,7 @@ export const SHIP_MODULES = {
     cost: { Fe: 20, Cu: 10 },
     commodityCost: { power_cells: 2 },
     stats: { speedMult: 1.0, fuelMult: 1.0, rangeMult: 1.0 },
-    fuelType: 'power_cells',
+    fuelType: 'fuel',
     requires: null,
     description: 'Bazowy napęd chemiczny. Niezawodny, tani, ograniczony zasięgiem układu.',
   },
@@ -39,7 +39,7 @@ export const SHIP_MODULES = {
     cost: { Ti: 15, Cu: 10 },
     commodityCost: { propulsion_systems: 2 },
     stats: { speedMult: 1.8, fuelMult: 0.6, rangeMult: 2.5 },
-    fuelType: 'power_cells',
+    fuelType: 'fuel',
     requires: 'ion_drives',
     description: '2.5× zasięg, 1.8× prędkość. Ksenon w komorze jonizacji.',
   },
@@ -55,7 +55,7 @@ export const SHIP_MODULES = {
     cost: { Ti: 30, Hv: 10 },
     commodityCost: { plasma_cores: 3, propulsion_systems: 2 },
     stats: { speedMult: 3.0, fuelMult: 0.4, rangeMult: 4.0 },
-    fuelType: 'plasma_cores',
+    fuelType: 'fuel',
     requires: 'fusion_drives',
     description: '4× zasięg, 3× prędkość. Ciągłe spalanie fuzyjne.',
   },
@@ -534,7 +534,7 @@ export function calcShipStats(hullDef, selectedModuleIds) {
   let survivalBonus = 0;
   let discoveryBonus = 0;
   let colonistCapacity = 0;
-  let fuelType = 'power_cells';
+  let fuelType = 'fuel';
   let warpCapable = false;
   let warpSpeedLY = 0;
   let moduleMass = 0;
