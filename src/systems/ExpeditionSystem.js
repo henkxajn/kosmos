@@ -403,7 +403,8 @@ export class ExpeditionSystem {
       const fuelNeeded = distance * vessel.fuel.consumption;
       if (vessel.fuel.current < fuelNeeded) {
         EventBus.emit('expedition:launchFailed', {
-          reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
+          reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
+          cause: 'fuel',   // (d) Luka A — paliwowa porażka → toast w UIManager
         });
         return;
       }
@@ -502,7 +503,8 @@ export class ExpeditionSystem {
       const fuelNeeded = distance * vessel.fuel.consumption;
       if (vessel.fuel.current < fuelNeeded) {
         EventBus.emit('expedition:launchFailed', {
-          reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
+          reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
+          cause: 'fuel',   // (d) Luka A — paliwowa porażka → toast w UIManager
         });
         return;
       }
@@ -611,7 +613,8 @@ export class ExpeditionSystem {
     const fuelNeeded = distance * vessel.fuel.consumption;
     if (vessel.fuel.current < fuelNeeded) {
       EventBus.emit('expedition:launchFailed', {
-        reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
+        reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
+        cause: 'fuel',   // (d) Luka A
       });
       return;
     }
@@ -822,7 +825,8 @@ export class ExpeditionSystem {
       const fuelNeeded = distance * vessel.fuel.consumption;
       if (vessel.fuel.current < fuelNeeded) {
         EventBus.emit('expedition:launchFailed', {
-          reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
+          reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
+          cause: 'fuel',   // (d) Luka A — paliwowa porażka → toast w UIManager
         });
         return;
       }
@@ -913,24 +917,26 @@ export class ExpeditionSystem {
         );
       }
       const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, returnDist / shipSpeed).toFixed(3));
+      const returnYear = this._gameYear + returnTime;
+      if (vessel?.mission) vessel.mission.returnYear = returnYear;   // startReturn go używa
+      // (d) startReturn może odrzucić (brak paliwa na powrót, owner-gated) → statek zostaje
+      const ok = (vMgr && exp.vesselId) ? vMgr.startReturn(exp.vesselId) : true;
+      if (!ok) return;
       exp.status = 'returning';
-      exp.returnYear = this._gameYear + returnTime;
-      if (vessel?.mission) {
-        vessel.mission.returnYear = exp.returnYear;
-      }
-      if (vMgr && exp.vesselId) vMgr.startReturn(exp.vesselId);
+      exp.returnYear = returnYear;
     } else {
       // Z orbity — standardowy powrót (dystans = droga tam)
       const returnTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, exp.distance / shipSpeed).toFixed(3));
-      exp.status = 'returning';
-      exp.returnYear = this._gameYear + returnTime;
+      const returnYear = this._gameYear + returnTime;
+      let ok = true;
       if (vMgr && exp.vesselId) {
         const vessel = vMgr.getVessel(exp.vesselId);
-        if (vessel?.mission) {
-          vessel.mission.returnYear = exp.returnYear;
-        }
-        vMgr.startReturn(exp.vesselId);
+        if (vessel?.mission) vessel.mission.returnYear = returnYear;
+        ok = vMgr.startReturn(exp.vesselId);   // (d) może odrzucić → statek zostaje
       }
+      if (!ok) return;
+      exp.status = 'returning';
+      exp.returnYear = returnYear;
     }
 
     EventBus.emit('expedition:returnOrdered', { expedition: exp });
@@ -960,7 +966,8 @@ export class ExpeditionSystem {
         const fuelNeeded = dist * vessel.fuel.consumption;
         if (vessel.fuel.current < fuelNeeded) {
           EventBus.emit('expedition:redirectFailed', {
-            reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1))
+            reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
+            cause: 'fuel',   // (d) Luka A
           });
           return;
         }
@@ -1172,10 +1179,12 @@ export class ExpeditionSystem {
         EventBus.emit('expedition:launchFailed', { reason: t('expedition.vesselUnavailable') });
         return;
       }
-      const fuelNeeded = distance * 2 * vessel.fuel.consumption;
+      // (d) one-way spójnie — recon też może utknąć (luka D pokaże "⛽ Utknął").
+      const fuelNeeded = distance * vessel.fuel.consumption;
       if (vessel.fuel.current < fuelNeeded) {
         EventBus.emit('expedition:launchFailed', {
-          reason: t('expedition.noFuelRoundTrip', fuelNeeded.toFixed(1))
+          reason: t('expedition.noFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
+          cause: 'fuel',   // (d) Luka A
         });
         return;
       }
@@ -1815,8 +1824,8 @@ export class ExpeditionSystem {
     }
 
     // Fallback (nie powinno się zdarzyć)
-    exp.status = 'returning';
-    if (exp.vesselId && vMgr) vMgr.startReturn(exp.vesselId);
+    const ok = (exp.vesselId && vMgr) ? vMgr.startReturn(exp.vesselId) : true;
+    if (ok) exp.status = 'returning';   // (d) brak paliwa → statek zostaje (stranded)
   }
 
   // Zbierz ID ciał będących aktywnymi celami innych recon ekspedycji (en_route)

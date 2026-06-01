@@ -34,7 +34,7 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import {
   createVessel, effectiveRange, canReach, consumeFuel, refuel,
   needsRefuel, getShipDef, setNextVesselId, getNextVesselId,
-  addMissionLog, getEnduranceDefaults,
+  addMissionLog, getEnduranceDefaults, isEnemyVessel,
 } from '../entities/Vessel.js';
 import { getModuleCapabilities, calcShipStats, SHIP_MODULES } from '../data/ShipModulesData.js';
 import {
@@ -354,6 +354,7 @@ export class VesselManager {
     vessel.status = 'on_mission';
     vessel.position.state = 'in_transit';
     vessel.position.dockedAt = null;
+    vessel._strandedNotified = false;   // (d) Luka D — nowy ruch re-arming alarmu strandingu
 
     // Wpis do dziennika
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
@@ -401,6 +402,7 @@ export class VesselManager {
     vessel.status = 'on_mission';
     vessel.position.state = 'in_transit';
     vessel.position.dockedAt = null;
+    vessel._strandedNotified = false;   // (d) Luka D — re-arming alarmu strandingu
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     addMissionLog(vessel, gameYear, t('vessel.dispatchedFromOrbit', mission.type, mission.targetName ?? this._resolveEntityName(mission.targetId)), 'info');
@@ -426,47 +428,92 @@ export class VesselManager {
     addMissionLog(vessel, gameYear, t('vessel.arrived', vessel.mission.targetName ?? this._resolveEntityName(vessel.mission.targetId)), 'success');
 
     EventBus.emit('vessel:arrived', { vessel, mission: vessel.mission });
+
+    // (d) Luka D — wykryj stranding: dotarł, brak paliwa na powrót, brak tankowania w celu.
+    this._maybeNotifyStranded(vessel);
+  }
+
+  /**
+   * (d) Luka D — jednorazowy alarm "utknął bez paliwa".
+   * Owner-gated: TYLKO statki gracza (AI lata na clampie — non-blocking). Pomija statki
+   * przy własnej kolonii/placówce (mogą dotankować) i te, które dolecą do bazy.
+   * Emituje wyłącznie sygnał (toast/log) — niczego nie blokuje. Flaga _strandedNotified
+   * jest in-memory (NIE serializowana → brak migracji save).
+   */
+  _maybeNotifyStranded(vessel) {
+    if (!vessel || isEnemyVessel(vessel)) return;        // owner-gate (AI pominięte)
+    if (vessel._strandedNotified) return;                // jednorazowo
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (colMgr?.getColony(vessel.position.dockedAt)) return; // przy kolonii — dotankuje
+    const home = this._findEntity(vessel.homeColonyId ?? vessel.colonyId);
+    if (!home) return;
+    const distHomeAU = Math.hypot(vessel.position.x - home.x, vessel.position.y - home.y) / AU_TO_PX;
+    if (canReach(vessel, distHomeAU)) return;            // doleci do domu — nie utknął
+
+    vessel._strandedNotified = true;
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    addMissionLog(vessel, gameYear, t('vessel.stranded', vessel.name), 'warn');
+    EventBus.emit('vessel:strandedNoFuel', { vesselId: vessel.id, name: vessel.name });
+    EventBus.emit('ui:toast', { text: t('vessel.strandedToast', vessel.name), color: '#ff4466', durationMs: 5000 });
   }
 
   /**
    * Statek wyrusza w powrotną drogę.
    */
-  startReturn(vesselId) {
+  startReturn(vesselId, opts = {}) {
     const vessel = this._vessels.get(vesselId);
-    if (!vessel || !vessel.mission) return;
+    if (!vessel || !vessel.mission) return false;
 
-    // Zamień start↔target na powrót
     const m = vessel.mission;
-    m.returnStartX = vessel.position.x;
-    m.returnStartY = vessel.position.y;
-    m.returnDepartYear = window.KOSMOS?.timeSystem?.gameTime ?? m.arrivalYear; // moment startu powrotu
-    // Cel powrotu = predykowana pozycja kolonii macierzystej w momencie przylotu
+    // Pozycja startu powrotu + predykowany cel (kolonia macierzysta w momencie przylotu)
+    const returnStartX = vessel.position.x;
+    const returnStartY = vessel.position.y;
     const predictedHome = this._predictPosition(vessel.colonyId, m.returnYear);
-    m.returnTargetX = predictedHome.x ?? m.startX;
-    m.returnTargetY = predictedHome.y ?? m.startY;
-    m.phase = 'returning';
+    const returnTargetX = predictedHome.x ?? m.startX;
+    const returnTargetY = predictedHome.y ?? m.startY;
 
-    // Oblicz waypoints powrotne (unikanie Słońca + ciał niebieskich)
+    // Route powrotny (unikanie Słońca + ciał) — potrzebny do bramki paliwa I waypoints.
+    // Liczony PRZED mutacją stanu, by zablokowany powrót nie zostawiał półstanu.
     let returnRoute = { waypoints: [], totalDist: 0 };
     try {
       const returnSysId = vessel.systemId ?? this._findEntity(vessel.colonyId)?.systemId ?? 'sys_home';
-      returnRoute = this._calcRoute(m.returnStartX, m.returnStartY, m.returnTargetX, m.returnTargetY, returnSysId);
+      returnRoute = this._calcRoute(returnStartX, returnStartY, returnTargetX, returnTargetY, returnSysId);
     } catch (e) {
       console.warn('[VesselManager] _calcRoute failed in startReturn, using direct route:', e);
-      const dx = (m.returnTargetX ?? 0) - (m.returnStartX ?? 0);
-      const dy = (m.returnTargetY ?? 0) - (m.returnStartY ?? 0);
+      const dx = returnTargetX - returnStartX;
+      const dy = returnTargetY - returnStartY;
       returnRoute = { waypoints: [], totalDist: Math.sqrt(dx * dx + dy * dy) };
     }
+    const returnDistAU = returnRoute.totalDist / AU_TO_PX;
+
+    // (d) Twardy stranding — owner-gated bramka paliwa na legu powrotnym.
+    // TYLKO statki gracza. AI (isEnemyVessel) wraca na clampie — clamp zapobiega
+    // utykaniu kurierów/flot AI (pułapka DW2). opts.force omija bramkę (np. ewakuacja
+    // ze zniszczonej kolonii — statek nie może utknąć w katastrofie).
+    if (!opts.force && !isEnemyVessel(vessel) && !canReach(vessel, returnDistAU)) {
+      vessel._strandedNotified = true;   // status "⛽ Utknął" + once-guard
+      EventBus.emit('vessel:returnBlocked', { vesselId, reason: 'insufficient_fuel' });
+      return false;                      // statek ZOSTAJE na orbicie (brak mutacji stanu)
+    }
+
+    // Commit powrotu
+    m.returnStartX = returnStartX;
+    m.returnStartY = returnStartY;
+    m.returnDepartYear = window.KOSMOS?.timeSystem?.gameTime ?? m.arrivalYear;
+    m.returnTargetX = returnTargetX;
+    m.returnTargetY = returnTargetY;
+    m.phase = 'returning';
     m.returnWaypoints = returnRoute.waypoints;
 
-    // Zużyj paliwo na powrót (dystans w AU × consumption)
-    const returnDistAU = returnRoute.totalDist / AU_TO_PX;
+    // Zużyj paliwo na powrót (clamp do 0 — AI/force mogą lecieć na oparach)
     consumeFuel(vessel, returnDistAU);
 
     vessel.position.state = 'in_transit';
     vessel.position.dockedAt = null;
+    vessel._strandedNotified = false;   // powrót ruszył → re-arming alarmu
 
     EventBus.emit('vessel:returning', { vessel });
+    return true;
   }
 
   /**
@@ -681,8 +728,8 @@ export class VesselManager {
         if (homeColony && !homeColony.fleet.includes(vessel.id)) {
           homeColony.fleet.push(vessel.id);
         }
-        // Wymuś powrót
-        this.startReturn(vessel.id);
+        // Wymuś powrót — force omija bramkę paliwa (ewakuacja, statek nie może utknąć)
+        this.startReturn(vessel.id, { force: true });
         const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
         addMissionLog(vessel, gameYear, t('vessel.emergencyReturn'), 'danger');
         continue;
@@ -1380,6 +1427,7 @@ export class VesselManager {
         if (paid) {
           refuel(vessel, canFuel);
           vessel._awaitingFuel = false;
+          vessel._strandedNotified = false;   // (d) Luka D — dotankował → re-arming alarmu
           vessel.status = needsRefuel(vessel) ? 'refueling' : 'idle';
         } else {
           // Niewystarczające paliwo na pełną ratę — statek czeka (Fix C)

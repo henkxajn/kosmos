@@ -5400,7 +5400,23 @@ export class FleetManagerOverlay {
       if (vessel._awaitingFuel) return t('fleet.statusTextAwaitingFuel');
       return t('fleet.statusTextRefueling');
     }
-    if (vessel.position.state === 'orbiting') return t('fleet.statusTextOrbiting');
+    if (vessel.position.state === 'orbiting') {
+      // (d) Luka D — orbitujący bez paliwa na powrót: czytelny sygnał zamiast cichego
+      // "Orbituje". Stan WYLICZANY (bez nowego pola/migracji). Nie alarmuj przy własnej
+      // kolonii/placówce (tam można dotankować) — tylko gdy utknął z dala od bazy.
+      const colMgr = window.KOSMOS?.colonyManager;
+      const atFriendly = !!colMgr?.getColony(vessel.position.dockedAt);
+      if (!atFriendly) {
+        // _strandedNotified — ustawiane przy alarmie dotarcia LUB odrzuconym powrocie
+        // (łapie route-edge: powrót dłuższy niż linia prosta przez sun-avoidance).
+        if (vessel._strandedNotified) return t('fleet.statusTextStranded');
+        const home = _findBody(vessel.homeColonyId ?? vessel.colonyId);
+        if (home && effectiveRange(vessel) < this._calcDistAU(vessel, home)) {
+          return t('fleet.statusTextStranded');
+        }
+      }
+      return t('fleet.statusTextOrbiting');
+    }
     return t('fleet.statusTextInFlight');
   }
 
@@ -6011,19 +6027,26 @@ export class FleetManagerOverlay {
     }
 
     // Przycisk ▶ WYŚLIJ MISJĘ
+    // (d) Luka B — gdy paliwa nie starcza na dolot (one-way), przycisk wyszarzony
+    // "⛽ BRAK PALIWA" i NIEklikalny (jednoznacznie zamiast mylącego "za daleko").
+    // fuelCost policzony wyżej (one-way) — spójny z obroną systemową w MissionSystem.
+    const insufficientFuel = (vessel.fuel?.current ?? 0) < fuelCost;
     const sendW = w - pad * 2;
     const sendH = 30;
-    ctx.fillStyle = 'rgba(0,255,180,0.12)';
+    ctx.fillStyle = insufficientFuel ? 'rgba(255,68,102,0.10)' : 'rgba(0,255,180,0.12)';
     ctx.fillRect(x + pad, cy, sendW, sendH);
-    ctx.strokeStyle = THEME.accent;
+    ctx.strokeStyle = insufficientFuel ? THEME.danger : THEME.accent;
     ctx.lineWidth = 1;
     ctx.strokeRect(x + pad, cy, sendW, sendH);
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
+    ctx.fillStyle = insufficientFuel ? THEME.danger : THEME.accent;
     ctx.textAlign = 'center';
-    ctx.fillText(t('fleet.sendMission'), x + w / 2, cy + 20);
+    ctx.fillText(insufficientFuel ? t('fleet.sendMissionNoFuel') : t('fleet.sendMission'), x + w / 2, cy + 20);
     ctx.textAlign = 'left';
-    this._hitZones.push({ x: x + pad, y: cy, w: sendW, h: sendH, type: 'confirm_mission', data: {} });
+    // Hit-zone tylko gdy starczy paliwa; obrona systemowa (MissionSystem) i tak łapie map-pick.
+    if (!insufficientFuel) {
+      this._hitZones.push({ x: x + pad, y: cy, w: sendW, h: sendH, type: 'confirm_mission', data: {} });
+    }
     cy += sendH + 8;
 
     // Przycisk ANULUJ

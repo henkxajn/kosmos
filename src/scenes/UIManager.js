@@ -842,8 +842,26 @@ export class UIManager {
     EventBus.on('expedition:disaster', ({ expedition }) => {
       this._log(t('log.arrivalDisaster', expedition.targetName), 'expedition_fail');
     });
-    EventBus.on('expedition:launchFailed', ({ reason }) => {
+    EventBus.on('expedition:launchFailed', ({ reason, cause }) => {
       this._log(t('log.expeditionLaunchFailed', reason), 'expedition_fail');
+      // (d) Luka A — paliwowa porażka startu też jako toast (EventLog łatwo przeoczyć).
+      // Tylko cause==='fuel' (precyzyjnie wg decyzji); łapie też cichą porażkę map-pick.
+      if (cause === 'fuel') {
+        EventBus.emit('ui:toast', { text: `⛽ ${reason}`, color: THEME.danger, durationMs: 3500 });
+      }
+    });
+    // (d) Luka D — utknięcie statku to trwałe zdarzenie strategiczne → osobny wpis
+    // w EventLogu (obok per-vessel missionLog + toastu). Toast może umknąć; historia zostaje.
+    EventBus.on('vessel:strandedNoFuel', ({ vesselId, name }) => {
+      const vName = name ?? window.KOSMOS?.vesselManager?.getVessel(vesselId)?.name ?? vesselId;
+      this._log(t('vessel.stranded', vName), 'expedition_fail');
+    });
+    // (d) twardy stranding — rozkaz powrotu odrzucony (brak paliwa). EventLog + toast
+    // (reuse kluczy vessel.stranded/strandedToast — semantyka identyczna).
+    EventBus.on('vessel:returnBlocked', ({ vesselId }) => {
+      const vName = window.KOSMOS?.vesselManager?.getVessel(vesselId)?.name ?? vesselId;
+      this._log(t('vessel.stranded', vName), 'expedition_fail');
+      EventBus.emit('ui:toast', { text: t('vessel.strandedToast', vName), color: THEME.danger, durationMs: 4000 });
     });
     EventBus.on('outpost:orderQueued', ({ order }) => {
       const bDef = BUILDINGS[order.buildingId];
