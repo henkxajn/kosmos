@@ -1502,7 +1502,7 @@ export const BUILDINGS = {
 export const RESOURCE_ICONS = {
   // Mined
   C: '\u25C6', Fe: '🔩', Si: '💎', Cu: '🟤', Ti: '⬜',
-  Li: '🔋', Hv: '⚙', Xe: '💜', Nt: '⚛',
+  Li: '🔋', Hv: '⚙', Xe: '💜', Nt: '⚛', H: '💨',
   // Harvested
   food: '🍖', water: '💧',
   // Utility

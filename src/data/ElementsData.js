@@ -52,6 +52,7 @@ export const ELEMENT_TO_RESOURCE = {
   Hv: 'Hv',
   Xe: 'Xe',
   Nt: 'Nt',
+  H:  'H',   // S3.0a (b): ożywia gazowce/lód/zimne skaliste — composition.H już istnieje
 };
 
 // ── 20 Minerałów ─────────────────────────────────────────────────

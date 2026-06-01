@@ -21,6 +21,7 @@ export const MINED_RESOURCES = {
   Hv: { id: 'Hv', namePL: 'Metale Ciężkie', nameEN: 'Heavy Metals', icon: '⚙', symbol: 'Hv', rarity: 4, weight: 2.8, element: 'Hv', color: '#8899bb' },
   Xe: { id: 'Xe', namePL: 'Ksenon',       icon: '💜', symbol: 'Xe', rarity: 5, weight: 0.1, element: 'Xe', color: '#9966cc' },
   Nt: { id: 'Nt', namePL: 'Neutronium',   icon: '⚛',  symbol: 'Nt', rarity: 5, weight: 5.0, element: 'Nt', color: '#ff44aa', maxRichness: 0.3, missionReward: true },
+  H:  { id: 'H',  namePL: 'Wodór',        nameEN: 'Hydrogen', icon: '💨', symbol: 'H',  rarity: 5, weight: 0.1, element: 'H',  color: '#cce0ff' },
 };
 
 // ── 2 surowce zbieralne (HARVESTED) ────────────────────────────────────────

@@ -90,6 +90,31 @@ export class DepositSystem {
     return deposits;
   }
 
+  // ── Backfill pojedynczego złoża (migracja entity-level, S3.0a b) ──────────
+  // Dodaje złoże resourceId do ISTNIEJĄCEGO ciała (ma już deposits, ale bez tego surowca).
+  // Reuse formuły z generateDeposits. Idempotent: skip gdy złoże już jest lub próg niespełniony.
+  // Świeży seed (parytet z new-game niedokładny — backfill starych save, nie wymaga bit-parytetu).
+  ensureResourceDeposit(entity, resourceId) {
+    if (!entity?.composition) return false;
+    if (entity.deposits?.some(d => d.resourceId === resourceId)) return false;
+    const element = Object.keys(ELEMENT_TO_RESOURCE).find(e => ELEMENT_TO_RESOURCE[e] === resourceId);
+    const resDef = MINED_RESOURCES[resourceId];
+    if (!element || !resDef) return false;
+    const compositionPct = entity.composition[element] || 0;
+    const threshold = RARITY_THRESHOLDS[resDef.rarity] ?? (resDef.rarity * 3);
+    if (compositionPct <= threshold) return false;
+    const seed = typeof entity.id === 'string'
+      ? entity.id.split('').reduce((acc, ch) => acc * 31 + ch.charCodeAt(0), 0)
+      : entity.id;
+    const rand = seededRandom(seed);
+    const richness = Math.min(1.0, Math.max(0.1, compositionPct / (resDef.rarity * 2)));
+    const depositMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 10 : 1;
+    const totalAmount = Math.round(richness * 10000 * depositMult * (1 + rand() * 0.5));
+    if (!entity.deposits) entity.deposits = [];
+    entity.deposits.push({ resourceId, richness, totalAmount, remaining: totalAmount });
+    return true;
+  }
+
   // ── Wydobycie z jednej kopalni (wywoływane per tick) ──────────────────────
   // deposits: tablica złóż ciała niebieskiego
   // mineLevel: poziom kopalni (1–10)

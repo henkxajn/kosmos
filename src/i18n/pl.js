@@ -404,6 +404,7 @@ export default {
   'resource.Hv': 'Metale Ciężkie',
   'resource.Xe': 'Ksenon',
   'resource.Nt': 'Neutronium',
+  'resource.H': 'Wodór',
   // aliasy .name dla getName(item, 'resource')
   'resource.C.name': 'Węgiel',
   'resource.Fe.name': '\u017belazo',
@@ -414,6 +415,7 @@ export default {
   'resource.Hv.name': 'Metale Ciężkie',
   'resource.Xe.name': 'Ksenon',
   'resource.Nt.name': 'Neutronium',
+  'resource.H.name': 'Wodór',
   'resource.food.name': '\u017bywność',
   'resource.water.name': 'Woda',
   'resource.energy.name': 'Energia',

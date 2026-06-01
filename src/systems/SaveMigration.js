@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 79;
+export const CURRENT_VERSION     = 80;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -97,6 +97,7 @@ const MIGRATIONS = {
   76: _migrateV76toV77,
   77: _migrateV77toV78,
   78: _migrateV78toV79,
+  79: _migrateV79toV80,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1979,6 +1980,20 @@ function _migrateV78toV79(data) {
     for (const col of c4x.colonies) {
       const inv = col.resources?.inventory;
       if (inv && inv.fuel == null) inv.fuel = 30;
+    }
+  }
+  return data;
+}
+
+// v79 → v80: S3.0a (b) — Wodór jako surowiec. Backfill złóż H jest entity-level w GameScene
+//   (_restoreSystem, wymaga DepositSystem + composition). Tu tylko nowy klucz inventory.
+//   Nowe gry: ResourceSystem seeduje H:0; generateDeposits robi złoża H automatycznie.
+function _migrateV79toV80(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (Array.isArray(c4x?.colonies)) {
+    for (const col of c4x.colonies) {
+      const inv = col.resources?.inventory;
+      if (inv && inv.H == null) inv.H = 0;
     }
   }
   return data;

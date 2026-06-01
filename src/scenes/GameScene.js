@@ -3426,6 +3426,12 @@ export class GameScene {
       if (!p.deposits || p.deposits.length === 0) depSys.generateDeposits(p);
     }
 
+    // S3.0a (b): backfill złóż H na ISTNIEJĄCYCH ciałach (mają deposits, ale bez H — stare save).
+    // Nowe gry: generateDeposits robi H automatycznie (H w ELEMENT_TO_RESOURCE). Idempotent.
+    for (const p of planets)    depSys.ensureResourceDeposit(p, 'H');
+    for (const m of moons)      depSys.ensureResourceDeposit(m, 'H');
+    for (const p of planetoids) depSys.ensureResourceDeposit(p, 'H');
+
     const maxId = [data.star, ...data.planets, ...(data.moons || []), ...(data.planetoids || [])]
       .map(e => { const m = String(e.id).match(/(\d+)$/); return m ? parseInt(m[1]) : 0; })
       .reduce((a, b) => Math.max(a, b), 0);

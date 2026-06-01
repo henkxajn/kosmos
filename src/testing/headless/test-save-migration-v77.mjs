@@ -16,7 +16,7 @@ const ok = (name, cond) => {
 };
 
 // CURRENT_VERSION bump w S3.0a commit (a): 78 → 79 (spłaszczenie paliwa).
-ok('CURRENT_VERSION === 79', CURRENT_VERSION === 79);
+ok('CURRENT_VERSION === 80', CURRENT_VERSION === 80);
 
 // ── Mock save v76 ────────────────────────────────────────────────
 const saveV76 = {
@@ -47,7 +47,7 @@ try { result = migrate(saveV76); }
 catch (e) { threw = true; console.error('migrate threw:', e); }
 
 ok('migrate nie rzuca', !threw);
-ok('version === 79 (chain v76→v79)', result?.version === 79);
+ok('version === 80 (chain v76→v80)', result?.version === 80);
 ok('brak error object', !result?.error);
 
 const empires = result?.civ4x?.gameState?.empires ?? {};
