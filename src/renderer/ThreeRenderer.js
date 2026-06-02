@@ -2963,7 +2963,7 @@ export class ThreeRenderer {
       }
       // Etap pętli
       if (mission.loop && mission.leg) {
-        const legLabel = { outbound: 'W drodze tam', return: 'Powrót', waiting_reload: 'Czeka (ładunek)', waiting_return_cargo: 'Czeka (powrót)' }[mission.leg] ?? mission.leg;
+        const legLabel = { outbound: 'W drodze tam', return: 'Powrót', waiting_reload: 'Czeka (paliwo)', waiting_return_cargo: 'Czeka (paliwo)' }[mission.leg] ?? mission.leg;
         html += `<br><span style="color:#b0c4b0">Etap: ${legLabel}</span>`;
       }
     } else {

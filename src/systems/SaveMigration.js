@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 80;
+export const CURRENT_VERSION     = 81;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -98,6 +98,7 @@ const MIGRATIONS = {
   77: _migrateV77toV78,
   78: _migrateV78toV79,
   79: _migrateV79toV80,
+  80: _migrateV80toV81,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -1994,6 +1995,33 @@ function _migrateV79toV80(data) {
     for (const col of c4x.colonies) {
       const inv = col.resources?.inventory;
       if (inv && inv.H == null) inv.H = 0;
+    }
+  }
+  return data;
+}
+
+// v80 → v81: S3.0a (e) — pętla transportowa best-effort.
+// Dodaje trwały `outboundCargoSpec` (spec ładunku wylotowego) + trackery produktywności
+// (`_lastOutLoaded`, `_lastRetLoaded`, `_unproductiveNotified`) do misji-pętli.
+// outboundCargoSpec odzyskiwany z żywego `cargo`, gdy save złapany w trakcie legu outbound;
+// inaczej {} (manifest wylotowy fizycznie nieobecny — był ręczny w starym modelu waiting_reload).
+function _migrateV80toV81(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  const block = c4x?.missions ?? c4x?.expeditions;
+  const missions = block?.missions ?? block?.expeditions;
+  if (Array.isArray(missions)) {
+    for (const m of missions) {
+      if (!m || typeof m !== 'object' || !m.loop) continue;
+      if (m.outboundCargoSpec == null) {
+        m.outboundCargoSpec = (m.leg === 'outbound' && m.cargo && Object.keys(m.cargo).length > 0)
+          ? { ...m.cargo }   // odzysk z manifestu wylotowego w locie
+          : {};              // nieodzyskiwalny — pętla poleci pusto na wylocie
+      }
+      if (m._lastOutLoaded === undefined) {
+        m._lastOutLoaded = Object.values(m.outboundCargoSpec).reduce((s, v) => s + (v ?? 0), 0);
+      }
+      if (m._lastRetLoaded === undefined)        m._lastRetLoaded = 0;
+      if (m._unproductiveNotified === undefined) m._unproductiveNotified = false;
     }
   }
   return data;

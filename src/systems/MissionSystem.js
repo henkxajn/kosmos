@@ -25,7 +25,7 @@ import { HULLS }         from '../data/HullsData.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
-import { addMissionLog } from '../entities/Vessel.js';
+import { addMissionLog, loadCargo } from '../entities/Vessel.js';
 import { t }             from '../i18n/i18n.js';
 
 // ── Koszty misji ─────────────────────────────────────────────────────────────
@@ -855,7 +855,14 @@ export class MissionSystem {
       loopSourceId:   loop ? loopSourceId : null,    // kolonia źródłowa pętli (stały punkt)
       loopTargetId:   loop ? targetId    : null,    // ciało docelowe pętli (stały punkt)
       returnCargoSpec: loop ? { ...(returnCargoSpec ?? {}) } : null,
-      leg:            loop ? 'outbound' : null,     // 'outbound' | 'return' | 'waiting_reload' | 'waiting_return_cargo'
+      // S3.0a (e): trwały spec ładunku wylotowego (snapshot wyboru z CargoLoadModal).
+      // Best-effort reload na każdym cyklu — zastępuje ręczne doładowanie (waiting_reload).
+      outboundCargoSpec: loop ? { ...cargo } : null,
+      leg:            loop ? 'outbound' : null,     // 'outbound' | 'return' | 'waiting_reload' | 'waiting_return_cargo' (waiting_* = stan "brak paliwa", nie "ręczny ładunek")
+      // S3.0a (e): trackery produktywności pętli (alert 0+0 w cyklu)
+      _lastOutLoaded:        loop ? Object.values(cargo).reduce((s, v) => s + (v ?? 0), 0) : 0,
+      _lastRetLoaded:        0,
+      _unproductiveNotified: false,
     };
 
     this._missions.push(mission);
@@ -1591,8 +1598,12 @@ export class MissionSystem {
   // Stan pętli śledzi `exp.leg`:
   //   'outbound'              → statek leci od źródła do celu
   //   'return'                → statek leci z celu z powrotem do źródła
-  //   'waiting_return_cargo'  → statek zadokowany w celu, czeka aż kolonia zbierze returnCargoSpec
-  //   'waiting_reload'        → statek zadokowany w źródle, czeka aż gracz ręcznie doładuje cargo
+  //   'waiting_return_cargo'  → statek zadokowany w celu, BRAK PALIWA na leg powrotny (cargo już załadowane best-effort)
+  //   'waiting_reload'        → statek zadokowany w źródle, BRAK PALIWA na leg wylotowy (cargo już załadowane best-effort)
+  //
+  // S3.0a (e): ładunek jest best-effort (ile jest, nigdy nie czeka na towar). Stany waiting_*
+  // oznaczają WYŁĄCZNIE oczekiwanie na dotankowanie (soft-gate paliwa w _dispatchLoopLeg),
+  // nie ręczne doładowanie. _tryResumeLoop ponawia dispatch po dotankowaniu.
   //
   // Zwraca `true` jeśli pętla kontynuuje (status/dispatch ustawione); `false` jeśli
   // wywołujący powinien obsłużyć domyślne dokowanie (pętla zakończona/niemożliwa).
@@ -1607,40 +1618,62 @@ export class MissionSystem {
     if (!isAtTarget && !isAtSource) return false; // pętla zdezorientowana — anuluj
 
     if (isAtTarget) {
-      // ── Przybyliśmy do celu → próbujemy pobrać returnCargo i lecieć z powrotem ──
-      const spec = exp.returnCargoSpec ?? {};
-      const specKeys = Object.keys(spec).filter(k => (spec[k] ?? 0) > 0);
-
+      // ── Przybyliśmy do celu → best-effort załaduj returnCargo i leć z powrotem ──
       // Zadokuj w celu (tymczasowo) — potrzebne do redispatch + doładowania cargo z kolonii
       vMgr.dockAtColony(exp.vesselId, exp.targetId);
 
-      // Próbuj załadować returnCargoSpec z kolonii docelowej
-      if (specKeys.length > 0) {
-        const resSys = deliveryCol?.resourceSystem;
-        if (!resSys || !resSys.canAfford(spec)) {
-          // Brak towarów w kolonii docelowej — czekaj
-          exp.status = 'waiting_return_cargo';
-          exp.leg    = 'waiting_return_cargo';
-          return true;
-        }
-        resSys.spend(spec);
-        vessel.cargo = { ...spec };
-        vessel.cargoUsed = Object.values(spec).reduce((s, v) => s + v, 0);
-      } else {
-        // Brak returnCargo — leć pusty
-        vessel.cargo = {};
-        vessel.cargoUsed = 0;
-      }
+      // S3.0a (e): best-effort — bierz ile jest (min(spec, dostępne)), NIGDY nie czekaj.
+      const { total } = this._bestEffortLoad(vessel, deliveryCol, exp.returnCargoSpec ?? {});
+      exp._lastRetLoaded = total;
 
-      // Dispatch return leg
+      // Dispatch return leg (zawsze — pusty też leci)
       return this._dispatchLoopLeg(exp, vessel, exp.loopSourceId, 'return');
     }
 
-    // ── Przybyliśmy do źródła → czekaj na ręczne doładowanie cargo ──
+    // ── Przybyliśmy do źródła → granica cyklu: ewaluuj produktywność, best-effort reload, leć ──
     vMgr.dockAtColony(exp.vesselId, exp.loopSourceId);
-    exp.status = 'waiting_reload';
-    exp.leg    = 'waiting_reload';
-    return true;
+
+    // S3.0a (e): granica cyklu — sprawdź czy pełny round-trip coś przewiózł (PRZED nadpisaniem _lastOutLoaded)
+    this._evaluateLoopProductivity(exp, vessel);
+
+    // S3.0a (e): best-effort reload ładunku wylotowego — zastępuje ręczne doładowanie (waiting_reload)
+    const { total } = this._bestEffortLoad(vessel, deliveryCol, exp.outboundCargoSpec ?? {});
+    exp._lastOutLoaded = total;
+
+    return this._dispatchLoopLeg(exp, vessel, exp.loopTargetId, 'outbound');
+  }
+
+  // S3.0a (e): best-effort load — deleguje do loadCargo() z Vessel.js (ten sam codepath co
+  // CargoLoadModal → identyczny clamp ładowności). Iteruje spec po kolejności kluczy:
+  // pierwszy towar ładuje się do pełna (wg wagi), kolejne biorą resztę miejsca. loadCargo
+  // sam mutuje vessel.cargo/cargoUsed + spend z resSys (cargo puste na granicy cyklu po dostawie).
+  // Zwraca { total } = faktycznie załadowana suma (0 jeśli brak towaru — pętla leci pusta, nie czeka).
+  _bestEffortLoad(vessel, col, spec) {
+    const resSys = col?.resourceSystem;
+    let total = 0;
+    for (const k of Object.keys(spec ?? {})) {
+      const want = spec[k] ?? 0;
+      if (want <= 0) continue;
+      total += loadCargo(vessel, k, want, resSys);
+    }
+    return { total };
+  }
+
+  // S3.0a (e): alert bezproduktywnej pętli — wzorzec _strandedNotified z (d).
+  // 0+0 w pełnym cyklu (nic nie przewiozła) → jednorazowy alert (throttle), reset gdy znów coś przewiezie.
+  // Jedna noga pusta z założenia (np. tankowiec outbound 0 / return fuel>0) = produktywny, BEZ alertu.
+  _evaluateLoopProductivity(exp, vessel) {
+    const productive = (exp._lastOutLoaded ?? 0) > 0 || (exp._lastRetLoaded ?? 0) > 0;
+    if (productive) { exp._unproductiveNotified = false; return; }
+    if (exp._unproductiveNotified) return;   // throttle — raz na passmo bezproduktywności
+    exp._unproductiveNotified = true;
+
+    const name = vessel?.name ?? exp.vesselId ?? '?';
+    const eventLog = window.KOSMOS?.eventLogSystem;
+    if (eventLog?.push) {
+      eventLog.push({ text: t('loop.unproductive', name), channel: 'fleet', severity: 'warn', entityRef: exp.vesselId });
+    }
+    EventBus.emit('ui:toast', { text: t('loop.unproductiveToast', name), color: '#ddaa33', durationMs: 5000 });
   }
 
   // Pomocnik: wyślij statek na kolejny odcinek pętli (outbound lub return).
@@ -1709,42 +1742,42 @@ export class MissionSystem {
     }
   }
 
-  // Wznowienie pętli przy każdym ticku — dla statków czekających zadokowanych:
-  //   'waiting_return_cargo' → próbuj pobrać returnCargo z kolonii docelowej
-  //   'waiting_reload'       → sprawdź czy gracz ręcznie doładował cargo; jeśli tak, wyślij outbound
-  // Zwraca true jeśli wznowiono (stan zmieniony), false jeśli nadal czekamy.
+  // Wznowienie pętli przy każdym ticku — dla statków zaparkowanych na BRAK PALIWA.
+  // S3.0a (e): cargo zostało już załadowane best-effort na granicy cyklu — resume tylko
+  // ponawia dispatch (_dispatchLoopLeg re-sprawdza paliwo). BEZ ponownego loadu (uniknięcie
+  // podwójnego spendu / nadpisania cargo). Statek tankuje przy doku (REFUEL_RATES.fuel/yr).
+  //   'waiting_return_cargo' → ponów leg powrotny (do źródła)
+  //   'waiting_reload'       → ponów leg wylotowy (do celu)
+  // Zwraca true jeśli wznowiono (dispatch), false jeśli nadal brak paliwa.
   _tryResumeLoop(exp) {
     const vMgr   = window.KOSMOS?.vesselManager;
     const colMgr = window.KOSMOS?.colonyManager;
-    if (!vMgr || !colMgr) return false;
+    if (!vMgr) return false;
     const vessel = exp.vesselId ? vMgr.getVessel(exp.vesselId) : null;
     if (!vessel || vessel.position.state !== 'docked') return false;
 
+    // Cargo puste = jeszcze nie załadowane w tym cyklu (np. save zmigrowany ze starego
+    // waiting_reload, albo best-effort wziął 0 bo brak towaru). Wtedy ładuj best-effort
+    // (top-up jeśli towar dotarł podczas czekania na paliwo). Cargo niepuste = już
+    // załadowane przed parkowaniem na paliwo → tylko ponów dispatch (bez podwójnego spendu).
+    const cargoEmpty = !vessel.cargo || !Object.values(vessel.cargo).some(v => v > 0);
+
     if (exp.status === 'waiting_return_cargo') {
-      const targetCol = colMgr.getColony(exp.loopTargetId);
-      const spec = exp.returnCargoSpec ?? {};
-      const specKeys = Object.keys(spec).filter(k => (spec[k] ?? 0) > 0);
-      if (specKeys.length === 0) {
-        // Spec pusty — leć pusty
-        vessel.cargo = {};
-        vessel.cargoUsed = 0;
-        return this._dispatchLoopLeg(exp, vessel, exp.loopSourceId, 'return');
+      if (cargoEmpty) {
+        const col = colMgr?.getColony(exp.loopTargetId);
+        const { total } = this._bestEffortLoad(vessel, col, exp.returnCargoSpec ?? {});
+        exp._lastRetLoaded = total;
       }
-      const resSys = targetCol?.resourceSystem;
-      if (!resSys || !resSys.canAfford(spec)) return false;
-      resSys.spend(spec);
-      vessel.cargo = { ...spec };
-      vessel.cargoUsed = Object.values(spec).reduce((s, v) => s + v, 0);
       return this._dispatchLoopLeg(exp, vessel, exp.loopSourceId, 'return');
     }
-
     if (exp.status === 'waiting_reload') {
-      // Gracz doładował cargo → wyślij outbound
-      const hasCargo = vessel.cargo && Object.values(vessel.cargo).some(v => v > 0);
-      if (!hasCargo) return false;
+      if (cargoEmpty) {
+        const col = colMgr?.getColony(exp.loopSourceId);
+        const { total } = this._bestEffortLoad(vessel, col, exp.outboundCargoSpec ?? {});
+        exp._lastOutLoaded = total;
+      }
       return this._dispatchLoopLeg(exp, vessel, exp.loopTargetId, 'outbound');
     }
-
     return false;
   }
 
