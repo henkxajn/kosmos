@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 81;
+export const CURRENT_VERSION     = 82;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -99,6 +99,7 @@ const MIGRATIONS = {
   78: _migrateV78toV79,
   79: _migrateV79toV80,
   80: _migrateV80toV81,
+  81: _migrateV81toV82,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2022,6 +2023,43 @@ function _migrateV80toV81(data) {
       }
       if (m._lastRetLoaded === undefined)        m._lastRetLoaded = 0;
       if (m._unproductiveNotified === undefined) m._unproductiveNotified = false;
+    }
+  }
+  return data;
+}
+
+// v81 → v82: S3.0b S1 — model dwu-bakowy (fuel in-system + warpFuel skoki).
+// Każdy statek dostaje bak warpFuel (warp_cores). Bak in-system ZAWSZE 'fuel'
+// (porzucenie "ostatni silnik wygrywa"). RESCUE dla statków legacy-warp: stary
+// pojedynczy bak trzymał warp_cores → przenosimy do warpFuel, in-system reset do
+// świeżej rezerwy 'fuel'. Statki bez Komory Warp: warpFuel.max=0 (nie skaczą).
+function _migrateV81toV82(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v || typeof v !== 'object') continue;
+      // Wykryj statek warp: stary pojedynczy bak trzymał warp_cores (definitywny sygnał — skutek
+      // "ostatni silnik wygrywa") LUB ma moduł engine_warp. fuel.fuelType jest pierwszorzędne.
+      const oldFuelWasWarp = !!(v.fuel && v.fuel.fuelType === 'warp_cores');
+      const isLegacyWarp = oldFuelWasWarp || (Array.isArray(v.modules) && v.modules.includes('engine_warp'));
+      v.fuelType = 'fuel';   // root: bak in-system ZAWSZE fuel
+
+      if (oldFuelWasWarp) {
+        // RESCUE: stary pojedynczy bak trzymał warp_cores → przenieś do nowego baku warp.
+        v.warpFuel = {
+          current:     v.fuel.current ?? 0,
+          max:         Math.max(v.fuel.max ?? 0, 5),
+          consumption: 0.5,
+          fuelType:    'warp_cores',
+        };
+        // Świeża rezerwa in-system (statek nie utknie po reformie).
+        v.fuel = { current: 8, max: 8, consumption: 0.5, fuelType: 'fuel' };
+      } else {
+        if (v.fuel && typeof v.fuel === 'object') v.fuel.fuelType = 'fuel';
+        if (v.warpFuel == null) {   // lazy default — bez Komory Warp: max 0
+          v.warpFuel = { current: 0, max: isLegacyWarp ? 5 : 0, consumption: 0.5, fuelType: 'warp_cores' };
+        }
+      }
     }
   }
   return data;

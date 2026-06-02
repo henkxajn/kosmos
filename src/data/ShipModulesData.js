@@ -60,22 +60,50 @@ export const SHIP_MODULES = {
     description: '4× zasięg, 3× prędkość. Ciągłe spalanie fuzyjne.',
   },
 
+  // ── Silniki warp (dwutrybowe: sublight pali fuel + skok pali warp_cores) ──
+  // S3.0b S1: KONIEC absurdalnego speedMult 50 / rangeMult 999. Tryb in-system =
+  //   moc sublight (speedMult), pali fuel. Tryb skoku = warpSpeedLY LY/rok, pali
+  //   warp_cores (bak warpFuel, zużycie warpFuelPerLY). Warp-klasa jest najszybsza
+  //   in-system, ale najżarłoczniejsza (fuelMult najwyższy) — presja paliwowa zostaje.
   engine_warp: {
     id: 'engine_warp',
-    namePL: 'Napęd Warp',
-    nameEN: 'Warp Drive',
+    namePL: 'Volkov VDT-W1 «Wyłom»',     // ⚙ nazwa do potwierdzenia (Volkov, spójna z S2)
+    nameEN: 'Volkov VDT-W1 "Breach"',
     icon: '🌀',
     slotType: 'propulsion',
     tier: 4,
     mass: 30,  // tony — ciężki
     cost: { Ti: 50, Hv: 20 },
     commodityCost: { warp_cores: 2, metamaterials: 4, quantum_processors: 2 },
-    stats: { speedMult: 50.0, fuelMult: 1.0, rangeMult: 999 },
-    fuelType: 'warp_cores',
+    // ⚙ KNOBY balansu: sublight 3.0 (=fuzja, najlepszy nie-warp), fuelMult 1.2 (najżarłoczniejszy),
+    //   rangeMult 2.0 (umiarkowany bufor in-system; było absurdalne 999)
+    stats: { speedMult: 3.0, fuelMult: 1.2, rangeMult: 2.0 },
+    fuelType: 'fuel',          // tryb in-system pali fuel (skok pali warp_cores przez warpFuel)
     warpCapable: true,
-    warpSpeedLY: 2.0,
+    warpSpeedLY: 2.0,          // prędkość skoku (LY/rok) — STAŁA między tierami
+    warpFuelPerLY: 0.5,        // S3.0b S1: warp_cores/LY (ekonomia z mini-audytu)
     requires: 'warp_drive',
-    description: 'Zakrzywienie czasoprzestrzeni. Otwiera drogę do gwiazd.',
+    description: 'Dwutrybowy: sublight (fuel) w układzie + skok warp (warp_cores) między gwiazdami.',
+  },
+
+  engine_warp_mk2: {
+    id: 'engine_warp_mk2',
+    namePL: 'Volkov VDT-W2 «Osnowa»',    // ⚙ do potwierdzenia
+    nameEN: 'Volkov VDT-W2 "Weft"',
+    icon: '🌀',
+    slotType: 'propulsion',
+    tier: 5,
+    mass: 32,  // tony
+    cost: { Ti: 70, Hv: 30 },
+    commodityCost: { warp_cores: 2, metamaterials: 6, quantum_processors: 3 },
+    // Tier podnosi TYLKO moc sublight (3.0→4.5). Reszta identyczna z tier-1.
+    stats: { speedMult: 4.5, fuelMult: 1.2, rangeMult: 2.0 },
+    fuelType: 'fuel',
+    warpCapable: true,
+    warpSpeedLY: 2.0,          // STAŁA — progresja warpu odłożona (knob na później)
+    warpFuelPerLY: 0.5,        // STAŁA
+    requires: 'warp_drive_mk2', // load-bearing gate (UnitDesignOverlay czyta mod.requires)
+    description: 'Ulepszony napęd warp — +50% mocy sublight. Skok bez zmian.',
   },
 
   // ── Moduły cargo ───────────────────────────────────────────────────────
@@ -347,6 +375,24 @@ export const SHIP_MODULES = {
     description: '+25 jednostek paliwa. Kriogeniczna izolacja minimalizuje masę.',
   },
 
+  // ── Moduł warp (bak na warp_cores — paliwo skoków międzygwiezdnych) ──────
+  // S3.0b S1: slotType 'fuel' (NIE 'warp') — mieści się w slocie utility obok zbiorników
+  //   paliwa, gated przez requires. Bez tego modułu statek nie ma baku warp → nie skacze.
+  warp_tank: {
+    id: 'warp_tank',
+    namePL: 'Komora Rdzeni Warp',
+    nameEN: 'Warp Core Bay',
+    icon: '🌀',
+    slotType: 'fuel',
+    tier: 4,
+    mass: 12,  // tony
+    cost: { Ti: 15, Hv: 8 },
+    commodityCost: { structural_alloys: 4, pressure_modules: 2 },
+    stats: { warpCapacityAdd: 5 },   // ⚙ KNOB: pojemność baku warp_cores (stackowalna)
+    requires: 'warp_drive',
+    description: '+5 jednostek warp_cores. Paliwo skoków warp — bez tego modułu statek nie skacze.',
+  },
+
   // ── Moduły uzbrojenia (Faza 4: aktywne w BattleSystem; M4 P3: rangeAU + fireCooldownYears + category dla DeepSpaceCombatSystem) ────────────────────
   // Pola bojowe legacy (BattleSystem orbital): damage (na turę), range ('short'|'medium'|'long'), tracking (0-1)
   // M4 P3 deep-space (DSCS): rangeAU — fizyczny zasięg w AU; fireCooldownYears — cadence; category — alias range dla tech-mult lookup
@@ -537,6 +583,8 @@ export function calcShipStats(hullDef, selectedModuleIds) {
   let fuelType = 'fuel';
   let warpCapable = false;
   let warpSpeedLY = 0;
+  let warpFuelCapacity = 0;   // S3.0b S1: pojemność baku warp_cores (suma Komór Warp)
+  let warpFuelPerLY = 0;      // S3.0b S1: warp_cores/LY (z silnika warp; ostatni silnik warp wygrywa)
   let moduleMass = 0;
   // Troop transport + orbital strike (Faza desantu)
   let troopCapacity = 0;
@@ -573,9 +621,12 @@ export function calcShipStats(hullDef, selectedModuleIds) {
     if (m.stats.orbitalStrike)           orbitalStrike = { ...m.stats.orbitalStrike };
     if (m.stats.hpBonus != null)         hp += m.stats.hpBonus;
     if (m.stats.armorRating != null)     armor += m.stats.armorRating;
-    if (m.fuelType)                      fuelType = m.fuelType; // ostatni silnik wygrywa
+    // S3.0b S1: bak in-system ZAWSZE 'fuel' — porzucenie reguły "ostatni silnik wygrywa".
+    //   Silnik warp pali fuel in-system (tryb sublight); warp_cores idą TYLKO na skok (bak warpFuel).
     if (m.warpCapable)                   warpCapable = true;
     if (m.warpSpeedLY)                   warpSpeedLY = m.warpSpeedLY;
+    if (m.stats.warpCapacityAdd != null) warpFuelCapacity += m.stats.warpCapacityAdd;
+    if (m.warpFuelPerLY != null)         warpFuelPerLY = m.warpFuelPerLY;
   }
 
   // Redundancy silników (więcej silników = bonus do prędkości, kompensuje masę większych kadłubów)
@@ -595,6 +646,7 @@ export function calcShipStats(hullDef, selectedModuleIds) {
     speed, fuelCapacity, cargo, fuelPerAU,
     survivalBonus, discoveryBonus, colonistCapacity,
     fuelType, warpCapable, warpSpeedLY, range,
+    warpFuelCapacity, fuelPerLY: warpFuelPerLY,   // S3.0b S1 — bak warp + zużycie skoku
     totalMass, baseMass, massRatio,
     troopCapacity, canDropTroops, orbitalStrike,
     hp, armor, engineCount,

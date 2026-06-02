@@ -35,6 +35,7 @@ import {
   createVessel, effectiveRange, canReach, consumeFuel, refuel,
   needsRefuel, getShipDef, setNextVesselId, getNextVesselId,
   addMissionLog, getEnduranceDefaults, isEnemyVessel,
+  consumeWarpFuel, needsWarpRefuel, refuelWarp,
 } from '../entities/Vessel.js';
 import { getModuleCapabilities, calcShipStats, SHIP_MODULES } from '../data/ShipModulesData.js';
 import {
@@ -575,7 +576,7 @@ export class VesselManager {
    * @param {string} targetSystemId — id docelowego układu (z GalaxyGenerator)
    * @returns {boolean} sukces
    */
-  dispatchInterstellar(vesselId, targetSystemId) {
+  dispatchInterstellar(vesselId, targetSystemId, opts = {}) {
     const vessel = this._vessels.get(vesselId);
     if (!vessel) return false;
     if (vessel.isWreck) return false;
@@ -612,10 +613,21 @@ export class VesselManager {
     const dz = (targetStar.z ?? 0) - (homeStar.z ?? 0);
     const distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-    // Sprawdź paliwo (warp_cores)
-    const fuelPerLY = shipDef.fuelPerLY ?? 0.5;
+    // S3.0b S1: Sprawdź paliwo warp (bak warp_cores — OSOBNY od baku in-system).
+    const wf = vessel.warpFuel;
+    const fuelPerLY = wf?.consumption ?? stats?.fuelPerLY ?? 0.5;
     const fuelCost = distLY * fuelPerLY;
-    if (vessel.fuel.current < fuelCost) return false;
+    // Brak Komory Warp (bak warp.max=0) → nikt nie skacze (gracz i AI).
+    if (!wf || wf.max <= 0) return false;
+    // S3.0b S1 (fix B): degenerat skoku donikąd (cel = własny układ → distLY=0) daje
+    //   fuelCost=0, więc bramka paliwa poniżej (0<0=false) BY PRZEPUŚCIŁA pusty bak.
+    //   Odrzuć dla WSZYSTKICH (gracz/AI/force) — skok 0 LY to no-op, nie startuje.
+    if (distLY <= 0) return false;
+    // Zepsuta konfiguracja warp (consumption 0/NaN) → fuelCost=0 → ten sam przeciek. Odrzuć dla wszystkich.
+    if (!(fuelPerLY > 0)) return false;
+    // Owner-gate (S3.0a): gracz = twarda bramka; AI (isEnemyVessel) leci na clampie; opts.force omija.
+    // Po powyższych guardach fuelCost>0 gwarantowane → pusty bak gracza (current=0) odrzuca się sam.
+    if (!opts.force && !isEnemyVessel(vessel) && wf.current < fuelCost) return false;
 
     // Prędkość warp (z bonusem beacon) — z modułów jeśli dostępne
     const baseSpeed = stats?.warpSpeedLY || shipDef.warpSpeedLY || 2.5; // LY/rok
@@ -626,8 +638,8 @@ export class VesselManager {
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
 
-    // Zużyj paliwo
-    vessel.fuel.current = Math.max(0, vessel.fuel.current - fuelCost);
+    // S3.0b S1: Zużyj paliwo warp (clamp do 0 — AI/force mogą skoczyć na oparach).
+    consumeWarpFuel(vessel, distLY);
 
     // Ustaw misję
     vessel.mission = {
@@ -955,6 +967,7 @@ export class VesselManager {
         systemId:     v.systemId ?? 'sys_home',
         position:     { ...v.position },
         fuel:         { ...v.fuel },
+        warpFuel:     v.warpFuel ? { ...v.warpFuel } : null,   // S3.0b S1 — bak warp_cores
         mission:      missionData,
         status:       v.status,
         experience:   v.experience,
@@ -1057,6 +1070,9 @@ export class VesselManager {
         systemId:     vd.systemId ?? 'sys_home',
         position:     { ...vd.position },
         fuel:         { ...vd.fuel },
+        // S3.0b S1 — bak warp_cores. Fallback dla save'ów pre-v82 (migracja i tak ustawia,
+        // ale guard chroni przed bezpośrednim restore surowego obiektu w testach).
+        warpFuel:     vd.warpFuel ? { ...vd.warpFuel } : { current: 0, max: 0, consumption: 0, fuelType: 'warp_cores' },
         mission:      missionData,
         status:       vd.status ?? 'idle',
         experience:   vd.experience ?? 0,
@@ -1163,6 +1179,14 @@ export class VesselManager {
             };
           } else {
             vessel.orbitalStrike = null;
+          }
+          // S3.0b S1: warpFuel max/consumption z modułów (Komora Warp + silnik warp).
+          //   Guard >0 — NIE kasuj rescue migracji v82: statek legacy-warp bez modułu Komora
+          //   ma warpFuel.max nadany w migracji; stats.warpFuelCapacity=0 by go wyzerował.
+          if (stats.warpFuelCapacity > 0 && vessel.warpFuel) {
+            vessel.warpFuel.max         = stats.warpFuelCapacity;
+            vessel.warpFuel.consumption = stats.fuelPerLY;
+            vessel.warpFuel.current     = Math.min(vessel.warpFuel.current, vessel.warpFuel.max);
           }
         }
       }
@@ -1384,7 +1408,47 @@ export class VesselManager {
   }
 
   /**
-   * Automatyczne tankowanie docked vessels z energii kolonii.
+   * S3.0b S1: tankuje JEDEN bak statku z commodity kolonii. Generyczny — działa dla
+   * baku in-system (vessel.fuel) i baku warp (vessel.warpFuel).
+   *   trackStranding=true (bak in-system) — zarządza flagami _awaitingFuel/_strandedNotified
+   *     (głód paliwa in-system = stranding S3.0a). false (bak warp) = best-effort, bez alarmu.
+   * @returns {boolean} czy bak jest pełny po tym ticku
+   */
+  _refuelTank(vessel, tank, commodityId, colony, inv, deltaYears, trackStranding) {
+    if (!tank || tank.max <= 0) return true;        // brak baku → traktuj jak "pełny"
+    if (tank.current >= tank.max) {
+      if (trackStranding) vessel._awaitingFuel = false;   // pełny bak — nie czeka na paliwo
+      return true;
+    }
+    const available = inv.get(commodityId) ?? 0;
+    if (available <= 0) {
+      if (trackStranding) {
+        vessel._awaitingFuel = true;                // Fix C: sygnał "czeka na paliwo"
+        if (vessel.status === 'idle') vessel.status = 'refueling';
+      }
+      return false;
+    }
+    const rate = REFUEL_RATES[commodityId] ?? 2;
+    const canFuel = Math.min(rate * deltaYears, available, tank.max - tank.current);
+    if (canFuel > 0) {
+      // Fix B: tankuj TYLKO gdy spend() faktycznie odjął z inventory (inaczej bak rósłby ZA DARMO).
+      const paid = colony.resourceSystem.spend({ [commodityId]: canFuel });
+      if (paid) {
+        tank.current += canFuel;
+        if (trackStranding) { vessel._awaitingFuel = false; vessel._strandedNotified = false; }
+        if (vessel.status === 'idle') vessel.status = 'refueling';
+      } else if (trackStranding) {
+        vessel._awaitingFuel = true;                // niewystarczające paliwo na pełną ratę — czeka
+        if (vessel.status === 'idle') vessel.status = 'refueling';
+      }
+    }
+    return tank.current >= tank.max;
+  }
+
+  /**
+   * Automatyczne tankowanie docked vessels z magazynu kolonii.
+   * S3.0b S1: tankuje OBA baki — fuel (in-system, z 'fuel') ORAZ warp_cores (z 'warp_cores',
+   * tylko gdy statek ma Komorę Warp). Flagi strandingu zostają przy baku in-system.
    */
   _tickRefueling(deltaYears) {
     const colMgr = window.KOSMOS?.colonyManager;
@@ -1392,48 +1456,29 @@ export class VesselManager {
 
     for (const vessel of this._vessels.values()) {
       if (vessel.position.state !== 'docked') continue;
-      if (!needsRefuel(vessel)) {
-        vessel._awaitingFuel = false;   // pełny bak — nie czeka na paliwo
+
+      // Szybkie wyjście: oba baki pełne → idle.
+      if (!needsRefuel(vessel) && !needsWarpRefuel(vessel)) {
+        vessel._awaitingFuel = false;
         if (vessel.status === 'refueling') vessel.status = 'idle';
         continue;
       }
 
-      // Pobierz inventory kolonii
       const colony = colMgr.getColony(vessel.position.dockedAt);
       if (!colony) continue;
       const inv = colony.resourceSystem?.inventory;
       if (!inv) continue;
 
-      // Sprawdź odpowiedni typ paliwa w inventory
-      const ft = vessel.fuelType ?? vessel.fuel?.fuelType ?? 'fuel';
-      const fuelAvailable = inv.get(ft) ?? 0;
-      if (fuelAvailable <= 0) {
-        // Brak paliwa — status refueling ale nie może ładować (Fix C: sygnał "czeka na paliwo")
-        vessel._awaitingFuel = true;
-        if (vessel.status === 'idle') vessel.status = 'refueling';
-        continue;
-      }
+      // (1) Bak in-system (fuel) — stranding-relevant.
+      const inSystemFuelId = vessel.fuel?.fuelType ?? vessel.fuelType ?? 'fuel';
+      this._refuelTank(vessel, vessel.fuel, inSystemFuelId, colony, inv, deltaYears, true);
+      // (2) Bak warp (warp_cores) — best-effort, tylko gdy statek ma Komorę Warp (max>0).
+      this._refuelTank(vessel, vessel.warpFuel, vessel.warpFuel?.fuelType ?? 'warp_cores',
+                       colony, inv, deltaYears, false);
 
-      // Ile chcemy zatankować w tym ticku
-      const refuelRate = REFUEL_RATES[ft] ?? 2;
-      const wantFuel = refuelRate * deltaYears;
-      const canFuel = Math.min(wantFuel, fuelAvailable, vessel.fuel.max - vessel.fuel.current);
-
-      if (canFuel > 0) {
-        // Fix B: tankuj TYLKO gdy spend() faktycznie odjął paliwo z inventory.
-        // spend() zwraca false (bez odejmowania) gdy inventory < amount → bez tego
-        // gate'a bak rósłby ZA DARMO (klasa buga "nieskończone paliwo").
-        const paid = colony.resourceSystem.spend({ [ft]: canFuel });
-        if (paid) {
-          refuel(vessel, canFuel);
-          vessel._awaitingFuel = false;
-          vessel._strandedNotified = false;   // (d) Luka D — dotankował → re-arming alarmu
-          vessel.status = needsRefuel(vessel) ? 'refueling' : 'idle';
-        } else {
-          // Niewystarczające paliwo na pełną ratę — statek czeka (Fix C)
-          vessel._awaitingFuel = true;
-          if (vessel.status === 'idle') vessel.status = 'refueling';
-        }
+      // Status idle gdy oba baki pełne.
+      if (!needsRefuel(vessel) && !needsWarpRefuel(vessel) && vessel.status === 'refueling') {
+        vessel.status = 'idle';
       }
     }
   }

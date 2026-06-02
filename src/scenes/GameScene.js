@@ -550,6 +550,18 @@ export class GameScene {
           this.techSystem.restore?.({ researched: ['point_defense'] });
           console.log(`[debug] ✓ tech point_defense auto-unlocked`);
         }
+        // S3.0b S1: auto-unlock warp tech gdy spawn warp-statku (restore jest addytywny).
+        const _reqMods = opts.modules ?? [];
+        if (this.techSystem && _reqMods.some(m => m === 'engine_warp' || m === 'warp_tank')
+            && !this.techSystem.isResearched?.('warp_drive')) {
+          this.techSystem.restore?.({ researched: ['warp_drive'] });
+          console.log(`[debug] ✓ tech warp_drive auto-unlocked`);
+        }
+        if (this.techSystem && _reqMods.includes('engine_warp_mk2')
+            && !this.techSystem.isResearched?.('warp_drive_mk2')) {
+          this.techSystem.restore?.({ researched: ['warp_drive_mk2'] });
+          console.log(`[debug] ✓ tech warp_drive_mk2 auto-unlocked`);
+        }
         // Sensowne default modules per hull-class — combat-ready
         const defaultModules = {
           hull_frigate:   ['engine_chemical', 'weapon_kinetic', 'shield_basic', 'reinforced_hull'],

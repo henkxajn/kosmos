@@ -119,6 +119,11 @@ export function createVessel(shipId, colonyId, opts = {}) {
   const fuelCurrent = opts.fuel ?? fuelMax;
   const fuelPerAU = opts.fuelPerAU ?? (stats?.fuelPerAU ?? ship.fuelPerAU ?? 0.5);
   const fuelType = opts.fuelType ?? (stats?.fuelType ?? ship.fuelType ?? 'fuel');
+  // S3.0b S1: bak warp (warp_cores) — max>0 tylko gdy statek ma moduł Komora Warp (warpCapacityAdd).
+  //   Nowy statek startuje PUSTY (warp_cores drogie — tankuje z kolonii przez _tickRefueling).
+  const warpFuelMax     = opts.warpFuelMax     ?? (stats?.warpFuelCapacity ?? 0);
+  const warpFuelPerLY   = opts.warpFuelPerLY   ?? (stats?.fuelPerLY ?? 0);
+  const warpFuelCurrent = opts.warpFuelCurrent ?? 0;
   const speedAU = opts.speedAU ?? (stats?.speed ?? ship.speedAU ?? ship.baseSpeedAU ?? 1.0);
   const cargoMax = opts.cargoMax ?? (stats?.cargo ?? ship.cargoCapacity ?? ship.baseCargoCapacity ?? 0);
   const totalMass = stats?.totalMass ?? (ship.baseMass ?? 30);
@@ -174,7 +179,16 @@ export function createVessel(shipId, colonyId, opts = {}) {
       current: fuelCurrent,
       max: fuelMax,
       consumption: fuelPerAU,
-      fuelType,
+      fuelType,                 // S3.0b S1: po reformie ZAWSZE 'fuel' (calcShipStats nie nadpisuje już z silnika)
+    },
+
+    // S3.0b S1: NOWY bak warp_cores — paliwo skoków międzygwiezdnych (osobny dren od in-system).
+    //   max>0 tylko gdy statek ma moduł Komora Warp; inaczej 0 → nie skacze.
+    warpFuel: {
+      current: warpFuelCurrent,
+      max: warpFuelMax,
+      consumption: warpFuelPerLY,   // warp_cores / LY (z silnika warp)
+      fuelType: 'warp_cores',
     },
 
     // Prędkość (AU/rok) — z kadłuba + modułów + masa
@@ -311,6 +325,44 @@ export function refuel(vessel, amount) {
  */
 export function needsRefuel(vessel) {
   return vessel.fuel.current < vessel.fuel.max;
+}
+
+// ── Warp (skoki międzygwiezdne) — lustro helperów in-system dla baku warpFuel ──
+// S3.0b S1. warpRange zwraca 0 (NIE Infinity) gdy brak silnika warp — statek bez
+// napędu warp ma zerowy zasięg skoku, nie nieskończony (celowa asymetria vs effectiveRange).
+
+export function warpRange(vessel) {
+  const wf = vessel.warpFuel;
+  if (!wf || !wf.consumption || wf.consumption <= 0) return 0;
+  return wf.current / wf.consumption;
+}
+
+export function canJump(vessel, distLY) {
+  const wf = vessel.warpFuel;
+  if (!wf || wf.max <= 0 || !wf.consumption || wf.consumption <= 0) return false;
+  return warpRange(vessel) >= distLY;
+}
+
+export function consumeWarpFuel(vessel, distLY) {
+  const wf = vessel.warpFuel;
+  if (!wf) return 0;
+  const cost = distLY * (wf.consumption ?? 0);
+  const used = Math.min(cost, wf.current);
+  wf.current = Math.max(0, wf.current - used);
+  return used;
+}
+
+export function needsWarpRefuel(vessel) {
+  const wf = vessel.warpFuel;
+  return !!wf && wf.max > 0 && wf.current < wf.max;
+}
+
+export function refuelWarp(vessel, amount) {
+  const wf = vessel.warpFuel;
+  if (!wf) return 0;
+  const added = Math.min(amount, wf.max - wf.current);
+  wf.current += added;
+  return added;
 }
 
 /**

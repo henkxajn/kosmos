@@ -830,6 +830,20 @@ export const TECHS = {
     description: 'Moduł napędu skokowego + podróże międzygwiezdne (2.5 LY/rok)',
   },
 
+  warp_drive_mk2: {
+    id:          'warp_drive_mk2',
+    namePL:      'Zaawansowany Napęd Skokowy',
+    nameEN:      'Advanced Warp Drive',
+    branch:      'space',
+    tier:        5,
+    cost:        { research: 2200 },     // ⚙ knob
+    requires:    ['warp_drive'],
+    effects: [
+      { type: 'unlockShipModule', moduleId: 'engine_warp_mk2' },
+    ],
+    description: 'Stabilizacja pola warp — silnik VDT-W2 z +50% mocy sublight (skok bez zmian).',
+  },
+
   interstellar_colonization: {
     id:          'interstellar_colonization',
     namePL:      'Kolonizacja Gwiezdna',
