@@ -10,6 +10,7 @@ import { THEME, hexToRgb } from '../config/ThemeConfig.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { calcShipStats } from '../data/ShipModulesData.js';
+import { canJump } from '../entities/Vessel.js';
 import { t, getName } from '../i18n/i18n.js';
 
 // Wstrzyknij styl scrollbara raz
@@ -57,9 +58,11 @@ export function showShipPickerModal(ships, targetStar) {
         distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
       }
       const shipDef = SHIPS[v.shipId] ?? HULLS[v.shipId];
-      const fuelPerLY = shipDef?.fuelPerLY ?? 0.5;
+      // S3.0b S1b: koszt/feasibility z baku warp (warpFuel.consumption + canJump), nie z martwego
+      // shipDef.fuelPerLY ani z baku in-system (v.fuel). fuelCost w warp_cores (wc).
+      const fuelPerLY = v.warpFuel?.consumption ?? 0.5;
       fuelCost = distLY * fuelPerLY;
-      const hasFuel = (v.fuel?.current ?? 0) >= fuelCost;
+      const hasFuel = canJump(v, distLY);
       return { v, shipDef, distLY, fuelCost, hasFuel, fromName: fromStar?.name ?? '?' };
     });
 
@@ -185,14 +188,22 @@ export function showShipPickerModal(ships, targetStar) {
       const fuelTxt = document.createElement('span');
       const fuelColor = hasFuel ? THEME.success : THEME.warning;
       fuelTxt.innerHTML = `${t('shipPicker.fuel')}: <span style="color:${fuelColor}">${(v.fuel?.current ?? 0).toFixed(1)}/${(v.fuel?.max ?? 0).toFixed(0)}</span>`;
+      // S3.0b S1b (Q1=Oba): segment paliwa warp obok in-system; pomiń gdy brak Komory Warp (max===0).
+      const warpTxt = document.createElement('span');
+      const _wf = v.warpFuel;
+      if (_wf && _wf.max > 0) {
+        const warpColor = hasFuel ? THEME.info : THEME.warning;
+        warpTxt.innerHTML = `${t('shipPicker.warp')}: <span style="color:${warpColor}">${(_wf.current ?? 0).toFixed(1)}/${(_wf.max ?? 0).toFixed(0)} wc</span>`;
+      }
       const distTxt = document.createElement('span');
       distTxt.textContent = `${t('shipPicker.dist')}: ${distLY.toFixed(1)} ly`;
       const costTxt = document.createElement('span');
-      costTxt.innerHTML = `${t('shipPicker.cost')}: <span style="color:${fuelColor}">${fuelCost.toFixed(1)}</span>`;
+      costTxt.innerHTML = `${t('shipPicker.cost')}: <span style="color:${fuelColor}">${fuelCost.toFixed(1)} wc</span>`;
       const fromTxt = document.createElement('span');
       fromTxt.textContent = `${t('shipPicker.from')}: ${fromName}`;
       row2.appendChild(fromTxt);
       row2.appendChild(fuelTxt);
+      if (warpTxt.innerHTML) row2.appendChild(warpTxt);
       row2.appendChild(distTxt);
       row2.appendChild(costTxt);
       item.appendChild(row2);

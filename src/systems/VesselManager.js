@@ -35,7 +35,7 @@ import {
   createVessel, effectiveRange, canReach, consumeFuel, refuel,
   needsRefuel, getShipDef, setNextVesselId, getNextVesselId,
   addMissionLog, getEnduranceDefaults, isEnemyVessel,
-  consumeWarpFuel, needsWarpRefuel, refuelWarp,
+  consumeWarpFuel, needsWarpRefuel, refuelWarp, canJump,
 } from '../entities/Vessel.js';
 import { getModuleCapabilities, calcShipStats, SHIP_MODULES } from '../data/ShipModulesData.js';
 import {
@@ -625,9 +625,10 @@ export class VesselManager {
     if (distLY <= 0) return false;
     // Zepsuta konfiguracja warp (consumption 0/NaN) → fuelCost=0 → ten sam przeciek. Odrzuć dla wszystkich.
     if (!(fuelPerLY > 0)) return false;
-    // Owner-gate (S3.0a): gracz = twarda bramka; AI (isEnemyVessel) leci na clampie; opts.force omija.
-    // Po powyższych guardach fuelCost>0 gwarantowane → pusty bak gracza (current=0) odrzuca się sam.
-    if (!opts.force && !isEnemyVessel(vessel) && wf.current < fuelCost) return false;
+    // Owner-gate (S3.0a): gracz = twarda bramka przez canJump (helper Vessel.js — paliwo≥koszt);
+    // AI (isEnemyVessel) leci na clampie; opts.force omija. canJump ⟺ wf.current≥fuelCost, bo guardy
+    // wyżej gwarantują consumption>0 (=fuelPerLY). S3.0b S1b: ożywiamy canJump zamiast inline wf.current<fuelCost.
+    if (!opts.force && !isEnemyVessel(vessel) && !canJump(vessel, distLY)) return false;
 
     // Prędkość warp (z bonusem beacon) — z modułów jeśli dostępne
     const baseSpeed = stats?.warpSpeedLY || shipDef.warpSpeedLY || 2.5; // LY/rok

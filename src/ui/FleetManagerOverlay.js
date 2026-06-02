@@ -14,7 +14,7 @@ import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleC
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES }   from '../data/ResourcesData.js';
-import { effectiveRange, loadColonists, unloadColonists, isEnemyVessel }  from '../entities/Vessel.js';
+import { effectiveRange, loadColonists, unloadColonists, isEnemyVessel, canJump, warpRange }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import { ALL_DOCTRINES, doctrineNameKey } from '../data/FleetDoctrines.js';
 import EntityManager       from '../core/EntityManager.js';
@@ -971,12 +971,13 @@ export class FleetManagerOverlay {
 
         if (this._selectedVesselId) {
           const selV = vMgr2.getVessel(this._selectedVesselId);
-          const selDef = selV ? (SHIPS[selV.shipId] ?? HULLS[selV.shipId]) : null;
-          if (selV && selDef?.fuelPerLY > 0 &&
+          // S3.0b S1b: gate na realnym baku warp (warpFuel.max>0), nie na martwym selDef.fuelPerLY
+          // (po reformie modułów fuelPerLY nie istnieje na statycznych SHIPS/HULLS → zawsze blokowało).
+          // Nieudany dispatch (np. za mało paliwa warp) → fall-through do pickera, nie cichy niewypał.
+          if (selV && selV.warpFuel?.max > 0 &&
               selV.position.state === 'docked' &&
               (selV.status === 'idle' || selV.status === 'refueling')) {
-            vMgr2.dispatchInterstellar(selV.id, zone.data.systemId);
-            break;
+            if (vMgr2.dispatchInterstellar(selV.id, zone.data.systemId)) break;
           }
         }
         // Brak wybranego statku lub nie spełnia wymagań → pokaż ship picker
@@ -1588,6 +1589,7 @@ export class FleetManagerOverlay {
     const ROW_FLIGHT = 52;  // wyższy: nazwa + paliwo + cel + typ misji + ETA
     const ROW_ENEMY  = 34;  // nazwa + typ + odległość — bez paliwa/ETA (nie znamy)
     const ROW_WRECK  = 30;  // nazwa + "wrak" + rok zniszczenia
+    const WARP_ROW_EXTRA = 8;  // S3.0b S1b: +wysokość wiersza na drugi pasek (warp) — patrz _rowHForVessel
     const SECTION_H  = 22;  // header sekcji (lekko większy dla buttonów floty)
     const ENEMY_COLOR = '#ff4466';
     const WRECK_COLOR = '#808080';
@@ -1597,8 +1599,10 @@ export class FleetManagerOverlay {
     const _rowHForVessel = (v) => {
       if (v.isWreck) return ROW_WRECK;
       if (isEnemyVessel(v)) return ROW_ENEMY;
-      if (v.position?.state === 'in_transit') return ROW_FLIGHT;
-      return ROW_HANGAR;
+      const base = v.position?.state === 'in_transit' ? ROW_FLIGHT : ROW_HANGAR;
+      // S3.0b S1b: statki z Komorą Warp (warpFuel.max>0) dostają drugi pasek paliwa →
+      // rezerwuj WARP_ROW_EXTRA (JEDNO źródło: scroll-total 1734 + draw-loop spójne).
+      return base + (v.warpFuel?.max > 0 ? WARP_ROW_EXTRA : 0);
     };
 
     // M3 P3.1 — cache vesselId→rallyName mapping (per draw) dla LEFT panel indicator.
@@ -2043,6 +2047,20 @@ export class FleetManagerOverlay {
         ctx.textAlign = 'right';
         ctx.fillText(`${Math.round(fuelPct * 100)}%`, x + w - pad, ry + 13);
         ctx.textAlign = 'left';
+
+        // S3.0b S1b: drugi pasek — paliwo warp (cyan THEME.info) pod paskiem in-system; tylko statki
+        // z Komorą Warp. Wysokość zarezerwowana w _rowHForVessel (WARP_ROW_EXTRA). Px → kalibracja wizualna.
+        if (vessel.warpFuel?.max > 0) {
+          const warpPct = vessel.warpFuel.current / vessel.warpFuel.max;
+          const wBarBY = ry + 18;
+          ctx.fillStyle = THEME.bgTertiary; ctx.fillRect(barX, wBarBY, barW, barH);
+          ctx.fillStyle = THEME.info; ctx.fillRect(barX, wBarBY, Math.round(barW * warpPct), barH);
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.info;
+          ctx.textAlign = 'right';
+          ctx.fillText(`${Math.round(warpPct * 100)}%`, x + w - pad, ry + 22);
+          ctx.textAlign = 'left';
+        }
 
         // ── Wiersz 2: lokalizacja / cel ──
         // P2.5 outliner fix: branch po STANIE statku (nie po sec.key — w drzewie
@@ -3800,7 +3818,7 @@ export class FleetManagerOverlay {
       const canSend = vMgr && colMgr;
       const activePid = colMgr?.activePlanetId;
       const avail = activePid ? (vMgr?.getAvailable(activePid) ?? []) : [];
-      const hasWarpShip = avail.some(v => (SHIPS[v.shipId] ?? HULLS[v.shipId])?.fuelPerLY > 0);
+      const hasWarpShip = avail.some(v => v.warpFuel?.max > 0);  // S3.0b S1b: realny bak warp
 
       ctx.fillStyle = hasWarpShip ? 'rgba(0,255,180,0.08)' : 'rgba(60,60,60,0.3)';
       ctx.fillRect(px + PAD, iy, btnW, btnH);
@@ -4136,6 +4154,30 @@ export class FleetManagerOverlay {
     ctx.strokeRect(fBarX, fBarY, fBarW, fBarH);
 
     cy += 32;
+
+    // ── Pasek paliwa warp (S3.0b S1b — tylko statki z Komorą Warp) ──
+    if (vessel.warpFuel && vessel.warpFuel.max > 0) {
+      const wfPct = vessel.warpFuel.current / vessel.warpFuel.max;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(`🌀 ${t('fleet.labelWarpFuel')}`, x + pad, cy + 10);
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${vessel.warpFuel.current.toFixed(1)} / ${vessel.warpFuel.max} wc`, x + w - pad, cy + 10);
+      ctx.textAlign = 'left';
+      const wBarX = x + pad;
+      const wBarY = cy + 16;
+      const wBarW = w - pad * 2;
+      const wBarH = 8;
+      ctx.fillStyle = THEME.bgTertiary;
+      ctx.fillRect(wBarX, wBarY, wBarW, wBarH);
+      ctx.fillStyle = THEME.info;
+      ctx.fillRect(wBarX, wBarY, Math.round(wBarW * wfPct), wBarH);
+      ctx.strokeStyle = THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(wBarX, wBarY, wBarW, wBarH);
+      cy += 32;
+    }
 
     // ── Pasek endurance (Milestone 1 — stamina operacyjna) ────
     if (vessel.endurance && vessel.endurance.max > 0) {
@@ -4721,8 +4763,7 @@ export class FleetManagerOverlay {
     const warpShips = allVessels.filter(v => {
       if (v.position.state !== 'docked') return false;
       if (v.status !== 'idle' && v.status !== 'refueling') return false;
-      const def = SHIPS[v.shipId] ?? HULLS[v.shipId];
-      return def?.fuelPerLY > 0;
+      return v.warpFuel?.max > 0;  // S3.0b S1b: realny bak warp, nie martwy def.fuelPerLY
     });
 
     if (warpShips.length === 0) {
@@ -4738,8 +4779,11 @@ export class FleetManagerOverlay {
         if (cy + btnH > y + h - 40) break;
 
         const shipDef = SHIPS[v.shipId] ?? HULLS[v.shipId];
-        const rangeLY = shipDef?.fuelPerLY ? (v.fuel.current / shipDef.fuelPerLY).toFixed(1) : '?';
-        const fuelPct = v.fuel.max > 0 ? v.fuel.current / v.fuel.max : 0;
+        // S3.0b S1b: zasięg skoku z realnego baku warp (warpRange), nie z martwego shipDef.fuelPerLY.
+        const wr = warpRange(v);
+        const rangeLY = wr > 0 ? wr.toFixed(1) : '?';
+        const fuelPct = v.fuel.max > 0 ? v.fuel.current / v.fuel.max : 0;          // in-system (Q1=Oba)
+        const warpPct = v.warpFuel?.max > 0 ? v.warpFuel.current / v.warpFuel.max : 0;
 
         // Sprawdź czy starczy paliwa
         let hasFuel = true;
@@ -4750,7 +4794,7 @@ export class FleetManagerOverlay {
             const dy = targetStar.y - fromStar.y;
             const dz = (targetStar.z ?? 0) - (fromStar.z ?? 0);
             const distLY = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            hasFuel = v.fuel.current >= distLY * (shipDef?.fuelPerLY ?? 0.5);
+            hasFuel = canJump(v, distLY);  // S3.0b S1b: feasibility z baku warp (warpFuel)
           }
         }
 
@@ -4771,7 +4815,7 @@ export class FleetManagerOverlay {
         // Zasięg + paliwo
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = hasFuel ? THEME.textSecondary : THEME.textDim;
-        ctx.fillText(`⛽ ${rangeLY} LY  (${(fuelPct * 100).toFixed(0)}%)`, x + PAD + 4, cy + 28);
+        ctx.fillText(`⛽ ${rangeLY} LY  (${t('shipPicker.fuel')} ${(fuelPct * 100).toFixed(0)}% · ${t('shipPicker.warp')} ${(warpPct * 100).toFixed(0)}%)`, x + PAD + 4, cy + 28);
 
         if (!hasFuel) {
           ctx.fillStyle = THEME.danger;
@@ -4872,9 +4916,9 @@ export class FleetManagerOverlay {
     ctx.font = valFont;
     ctx.fillStyle = THEME.textPrimary;
     let rangeText = `${range.toFixed(1)} AU`;
-    if (ship.warpCapable && ship.fuelPerLY) {
-      const rangeLY = (vesselFuelCap / ship.fuelPerLY).toFixed(1);
-      rangeText += ` / ${rangeLY} LY`;
+    if (vessel?.warpFuel?.max > 0) {
+      // S3.0b S1b: zasięg skoku z realnego baku warp (warpRange), nie z martwego ship.fuelPerLY.
+      rangeText += ` / ${warpRange(vessel).toFixed(1)} LY`;
     }
     ctx.fillText(rangeText, valX, cy + 10);
     cy += lineH;
