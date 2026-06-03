@@ -406,6 +406,21 @@ console.log('--- T19: fuel sanity — stolica bez power_cells → dispatch i tak
   ok('fuel sclampowany do 0 (nie ujemny)', v.fuel.current >= 0);
 }
 
+console.log('--- T21: _bestEngine NIGDY nie wybiera warp (kurier in-system) — S3.2 S1 ---');
+{
+  // techStub.isResearched → true dla WSZYSTKIEGO (warp "odblokowany") = najgorszy
+  // przypadek po wejściu modelu badań AI (S3.2 S2). Kurier jest in-system + fuel-immune
+  // → nigdy nie skacze; budowa warp wymaga warp_cores (T5) → wieczny queue. _bestEngine
+  // musi pomijać silniki warpCapable mimo że tech "zbadany".
+  const eng = logi._bestEngine(techStub);
+  ok('_bestEngine != engine_warp (mimo "warp researched")', eng !== 'engine_warp');
+  ok('_bestEngine != engine_warp_mk2', eng !== 'engine_warp_mk2');
+  ok('_bestEngine = engine_fusion (najlepszy non-warp gdy wszystko zbadane)', eng === 'engine_fusion');
+  // Regresja: realny aiTech (tylko startingTechs, brak ion/fusion) → engine_chemical bez zmian.
+  const aiTech = T3.capital.techSystem;
+  ok('aiTech bez ion/fusion → engine_chemical (bez regresji)', logi._bestEngine(aiTech) === 'engine_chemical');
+}
+
 // ═══════════════════════════════════════════════════════════════
 console.log(`\n=== WYNIK: ${pass} PASS / ${fail} FAIL (z ${pass + fail}) ===`);
 process.exit(fail === 0 ? 0 : 1);

@@ -47,10 +47,15 @@ const AU_TO_PX = GAME_CONFIG?.AU_TO_PX ?? 110;
 // zarządzania trasami i budową statków.
 const LOGISTICS_INTERVAL_CIVYEARS = 1;
 
-// Silniki od najlepszego do najgorszego (tech-gated). bestEngine zwraca pierwszy
-// którego `requires` spełnia techSystem imperium; engine_chemical (requires:null)
-// to zawsze dostępny fallback.
-const ENGINE_TIERS = ['engine_warp', 'engine_fusion', 'engine_ion', 'engine_chemical'];
+// Silniki kuriera od najlepszego do najgorszego (tech-gated). _bestEngine zwraca
+// pierwszy którego `requires` spełnia techSystem imperium; engine_chemical
+// (requires:null) to zawsze dostępny fallback.
+// S3.2 S1: silniki WARP są WYKLUCZONE. Kurier jest in-system (zero dispatchInterstellar)
+//   i fuel-immune, więc warp nic mu nie daje, a jego budowa wymaga warp_cores (T5,
+//   Ti-zależne). Po wejściu modelu badań AI (S3.2 S2) kurier z warpem zaqueue'owałby
+//   się na wieczność na nieosiągalnym warp_cores → logistyka by stanęła. (Zapalnik:
+//   S3.0b S3 obniżył engine_warp.requires do ion_drives = mid-game.)
+const ENGINE_TIERS = ['engine_fusion', 'engine_ion', 'engine_chemical'];
 
 // Domyślny config logistyki — fallback per-klucz gdy archetyp nie ma logisticsConfig.
 const DEFAULT_LOGISTICS_CONFIG = {
@@ -530,11 +535,14 @@ export class EmpireLogisticsSystem {
     return this._logisticsConfig(empire).couriersPerRoute ?? DEFAULT_LOGISTICS_CONFIG.couriersPerRoute;
   }
 
-  // Najlepszy dostępny silnik wg tech imperium (fallback engine_chemical).
+  // Najlepszy dostępny silnik kuriera wg tech imperium (fallback engine_chemical).
+  // S3.2 S1: defensywnie pomija silniki warpCapable (gdyby ktoś dopisał warp do
+  //   ENGINE_TIERS) — kurier nigdy nie skacze, a warp = T5 warp_cores stall.
   _bestEngine(techSystem) {
     for (const eid of ENGINE_TIERS) {
       const m = SHIP_MODULES[eid];
       if (!m) continue;
+      if (m.warpCapable) continue;  // kurier in-system — nigdy warp (S3.2 S1)
       if (!m.requires || techSystem?.isResearched?.(m.requires)) return eid;
     }
     return 'engine_chemical';
