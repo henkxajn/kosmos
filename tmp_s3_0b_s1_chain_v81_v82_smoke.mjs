@@ -116,7 +116,7 @@ assert(sMk2.warpFuelCapacity === 5 && sMk2.fuelPerLY === 0.5, `mk2: warpFuelCapa
 assert(sMk2.speed > sWarp.speed, `mk2 sublight szybszy niż tier1 (mk2 ${sMk2.speed.toFixed(2)} > w1 ${sWarp.speed.toFixed(2)})`);
 assert(sMk2.warpSpeedLY === sWarp.warpSpeedLY, 'mk2 warpSpeedLY === tier1 (skok bez zmian między tierami)');
 
-// engine_warp jest najżarłoczniejszy in-system (fuelMult 1.2 > fuzja 0.4)
+// engine_warp jest najżarłoczniejszy in-system (fuelMult 2.3 > fuzja 2.0)
 assert(sWarp.fuelPerAU > sPlain.fuelPerAU, `warp fuelPerAU > chemical (presja paliwowa) (got ${sWarp.fuelPerAU.toFixed(3)} > ${sPlain.fuelPerAU.toFixed(3)})`);
 
 // ════════════════════════════════════════════════════════════════════════

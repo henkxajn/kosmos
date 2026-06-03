@@ -38,7 +38,7 @@ export const SHIP_MODULES = {
     mass: 8,   // tony
     cost: { Ti: 15, Cu: 10 },
     commodityCost: { propulsion_systems: 2 },
-    stats: { speedMult: 1.8, fuelMult: 0.6, rangeMult: 2.5 },
+    stats: { speedMult: 2.2, fuelMult: 1.4, rangeMult: 2.5 },
     fuelType: 'fuel',
     requires: 'ion_drives',
     description: '2.5× zasięg, 1.8× prędkość. Ksenon w komorze jonizacji.',
@@ -54,7 +54,7 @@ export const SHIP_MODULES = {
     mass: 15,  // tony
     cost: { Ti: 30, Hv: 10 },
     commodityCost: { plasma_cores: 3, propulsion_systems: 2 },
-    stats: { speedMult: 3.0, fuelMult: 0.4, rangeMult: 4.0 },
+    stats: { speedMult: 3.8, fuelMult: 2.0, rangeMult: 4.0 },
     fuelType: 'fuel',
     requires: 'fusion_drives',
     description: '4× zasięg, 3× prędkość. Ciągłe spalanie fuzyjne.',
@@ -75,9 +75,9 @@ export const SHIP_MODULES = {
     mass: 30,  // tony — ciężki
     cost: { Ti: 50, Hv: 20 },
     commodityCost: { warp_cores: 2, metamaterials: 4, quantum_processors: 2 },
-    // ⚙ KNOBY balansu: sublight 3.0 (=fuzja, najlepszy nie-warp), fuelMult 1.2 (najżarłoczniejszy),
-    //   rangeMult 2.0 (umiarkowany bufor in-system; było absurdalne 999)
-    stats: { speedMult: 3.0, fuelMult: 1.2, rangeMult: 2.0 },
+    // ⚙ KNOBY balansu (S2b Opcja C): sublight 4.5 (najszybszy, ponad fuzją 3.8), fuelMult 2.3 (żarłoczny > fuzja 2.0; ratio ~1.96 > fuzja 1.90, monotoniczny),
+    //   rangeMult 2.0 (umiarkowany bufor in-system)
+    stats: { speedMult: 4.5, fuelMult: 2.3, rangeMult: 2.0 },
     fuelType: 'fuel',          // tryb in-system pali fuel (skok pali warp_cores przez warpFuel)
     warpCapable: true,
     warpSpeedLY: 2.0,          // prędkość skoku (LY/rok) — STAŁA między tierami
@@ -96,8 +96,8 @@ export const SHIP_MODULES = {
     mass: 32,  // tony
     cost: { Ti: 70, Hv: 30 },
     commodityCost: { warp_cores: 2, metamaterials: 6, quantum_processors: 3 },
-    // Tier podnosi TYLKO moc sublight (3.0→4.5). Reszta identyczna z tier-1.
-    stats: { speedMult: 4.5, fuelMult: 1.2, rangeMult: 2.0 },
+    // Tier podnosi moc sublight (4.5→5.5) i fuelMult (2.3→2.8). Skok (warpFuelPerLY/warpSpeedLY) bez zmian.
+    stats: { speedMult: 5.5, fuelMult: 2.8, rangeMult: 2.0 },
     fuelType: 'fuel',
     warpCapable: true,
     warpSpeedLY: 2.0,          // STAŁA — progresja warpu odłożona (knob na później)
