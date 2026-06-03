@@ -479,7 +479,7 @@ const mkBody = (id, name, systemId, kind, atmosphere, deposits = []) => EntityMa
   composition: { Fe: 0.3, Si: 0.3, O: 0.4 },
 });
 // Home systemy (mature: 2 rocky+breathable na dodatkowe kolonie, 2 Xe-moon na outposty)
-for (const [pfx, sysId] of [['hX', 'sys_hX'], ['hT', 'sys_hT'], ['hI', 'sys_hI']]) {
+for (const [pfx, sysId] of [['hX', 'sys_hX'], ['hT', 'sys_hT'], ['hI', 'sys_hI'], ['hW', 'sys_hW']]) {
   mkBody(`${pfx}_mother`, `${pfx} Mother`, sysId, 'planet', 'breathable', [FE()]);
   mkBody(`${pfx}_r1`,     `${pfx} Rocky 1`, sysId, 'planet', 'breathable', [FE()]);
   mkBody(`${pfx}_r2`,     `${pfx} Rocky 2`, sysId, 'planet', 'breathable', [FE()]);
@@ -500,6 +500,9 @@ mkBody('ig_breath', 'IGood Breath', 'sys_igood', 'planet', 'breathable', [FE()])
 mkBody('l1_p', 'L1 Planet', 'sys_l1', 'planet', 'breathable', [FE()]);  // emp_LIM extra 1
 mkBody('l2_p', 'L2 Planet', 'sys_l2', 'planet', 'breathable', [FE()]);  // emp_LIM extra 2
 mkBody('l3_breath', 'L3 Breath', 'sys_l3', 'planet', 'breathable', [FE()]); // good (limit test — NIE otwierany)
+// T33 (S3.2 S3 warp gate): cel dla emp_WARP — najbliższy nieposiadany z Xe (d=2 od sys_hW)
+mkBody('wg_xe',     'WGood Xe',     'sys_wgood', 'moon',   'none',       [XE(1.0)]);
+mkBody('wg_breath', 'WGood Breath', 'sys_wgood', 'planet', 'breathable', [FE()]);
 
 const CROSS_SYS = {
   sys_hX:    { planetIds: ['hX_mother', 'hX_r1', 'hX_r2'], moonIds: ['hX_xe1', 'hX_xe2'], planetoidIds: [] },
@@ -514,6 +517,8 @@ const CROSS_SYS = {
   sys_l1:    { planetIds: ['l1_p'], moonIds: [], planetoidIds: [] },
   sys_l2:    { planetIds: ['l2_p'], moonIds: [], planetoidIds: [] },
   sys_l3:    { planetIds: ['l3_breath'], moonIds: [], planetoidIds: [] },
+  sys_hW:    { planetIds: ['hW_mother', 'hW_r1', 'hW_r2'], moonIds: ['hW_xe1', 'hW_xe2'], planetoidIds: [] },
+  sys_wgood: { planetIds: ['wg_breath'], moonIds: ['wg_xe'], planetoidIds: [] },
 };
 const _origGetSystem = window.KOSMOS.starSystemManager.getSystem;
 window.KOSMOS.starSystemManager.getSystem = (id) => CROSS_SYS[id] ?? _origGetSystem(id);
@@ -532,10 +537,12 @@ window.KOSMOS.galaxyData = { systems: [
   { id: 'sys_l1',     x: 401, y: 0, z: 0 },
   { id: 'sys_l2',     x: 402, y: 0, z: 0 },
   { id: 'sys_l3',     x: 403, y: 0, z: 0 },
+  { id: 'sys_hW',     x: 500, y: 0, z: 0, empireId: 'emp_WARP' },  // T33: home emp_WARP (izolowany)
+  { id: 'sys_wgood',  x: 502, y: 0, z: 0 },                        // T33: najbliższy nieposiadany (Xe)
 ]};
 
 // Helper: imperium DOJRZAŁE (2 Xe outposty + stolica + 2 dodatkowe kolonie home).
-const bootstrapMatureEmpire = (empId, archetype, homeSysId, b) => {
+const bootstrapMatureEmpire = (empId, archetype, homeSysId, b, opts = {}) => {
   empireRegistry.createEmpire({ id: empId, archetype, homeSystemId: homeSysId });
   const m = EmpireColonyBootstrap.bootstrapColony(empId, homeSysId, b.mother,
     { startPop: { laborer: 1, worker: 1 }, startResources: { food: 200, water: 200 }, archetypeId: archetype });
@@ -544,6 +551,24 @@ const bootstrapMatureEmpire = (empId, archetype, homeSysId, b) => {
   for (const xe of [b.xe1, b.xe2]) {
     EmpireColonyBootstrap.bootstrapAutonomousOutpost(empId, homeSysId, xe, 'autonomous_solar_farm');
     EmpireColonyBootstrap.bootstrapAutonomousOutpost(empId, homeSysId, xe, 'autonomous_mine');
+  }
+  // S3.2 S3: per-imperium tech proxy — globalny techStub ColonyManagera (isResearched=true
+  //   DLA WSZYSTKIEGO) maskowałby bramkę warp. Ten proxy jest IDENTYCZNY z techStub poza
+  //   isResearched('warp_drive'), którym steruje flaga warpState (grantTechs(['warp_drive'])
+  //   ją przełącza — T33 pozytywna). Nadpisujemy na PEŁNYCH koloniach imperium (gate czyta
+  //   mother.techSystem / _findEmpireTechSystem). Domyślnie warp ON → T28/T29 zielone,
+  //   T32 (Industrialist) home-locked MIMO warpu. opts.grantWarp:false → ścieżka NEGATYWNA.
+  const warpState = { warp: opts.grantWarp !== false };
+  const empTech = new Proxy({}, {
+    get: (_t, prop) => {
+      if (prop === 'getTerrainUnlocks') return () => [];
+      if (prop === 'isResearched')      return (id) => id === 'warp_drive' ? warpState.warp : true;
+      if (prop === 'grantTechs')        return (ids) => { if (Array.isArray(ids) && ids.includes('warp_drive')) warpState.warp = true; };
+      return () => 1;
+    },
+  });
+  for (const c of empireRegistry.getColoniesByEmpire(empId)) {
+    if (c && !c.isOutpost) { c.techSystem = empTech; if (c.buildingSystem) c.buildingSystem.techSystem = empTech; }
   }
   return m;
 };
@@ -646,6 +671,10 @@ console.log('--- T32: Industrialist home-locked — maxExtraSystems=0 → zero c
   const motherI = bootstrapMatureEmpire('emp_IND', 'industrialist', 'sys_hI',
     { mother: 'hI_mother', rocky1: 'hI_r1', rocky2: 'hI_r2', xe1: 'hI_xe1', xe2: 'hI_xe2' });
   const empI = empireRegistry.get('emp_IND');
+  // S3.2 S3: helper grantuje warp_drive domyślnie — dowód, że sam warp NIE odblokowuje
+  //   cross-system bez maxExtra>0 (Industrialist zostaje home-locked mimo warpu).
+  ok('emp_IND MA warp_drive (a mimo to home-locked: maxExtra=0)',
+     motherI.techSystem.isResearched('warp_drive') === true);
   motherI.resourceSystem.receive(combined);
   setRes(motherI.resourceSystem, 'food', 300);
   setRes(motherI.resourceSystem, 'water', 300);
@@ -655,6 +684,42 @@ console.log('--- T32: Industrialist home-locked — maxExtraSystems=0 → zero c
      colonyManager.getColony('ig_xe') === null && colonyManager.getColony('ig_breath') === null);
   const distinctI = new Set(empireRegistry.getColoniesByEmpire('emp_IND').map(c => c.systemId)).size;
   ok('distinct=1 (tylko home — mimo dojrzałości)', distinctI === 1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// T33 — S3.2 S3: cross-system bramkowany warp_drive (Wariant A)
+//   Mature Expansionist (maxExtra=2 + pełna dojrzałość) BEZ warp_drive → canCross=false
+//   (home-locked). PO grancie warp_drive → canCross=true → cross-system rusza.
+//   Realna ścieżka _runForEmpire + realny bootstrap (nie mocki).
+// ═══════════════════════════════════════════════════════════════
+console.log('--- T33: warp gate — mature Expansionist BEZ warp → brak cross-system; PO grancie warp → cross-system ---');
+{
+  const motherW = bootstrapMatureEmpire('emp_WARP', 'expansionist', 'sys_hW',
+    { mother: 'hW_mother', rocky1: 'hW_r1', rocky2: 'hW_r2', xe1: 'hW_xe1', xe2: 'hW_xe2' },
+    { grantWarp: false });                       // dojrzały, ale BEZ warpu
+  const empW = empireRegistry.get('emp_WARP');
+  motherW.resourceSystem.receive(combined);
+  setRes(motherW.resourceSystem, 'food', 300);
+  setRes(motherW.resourceSystem, 'water', 300);
+  motherW.civSystem.addPop('laborer', 12);
+
+  // NEGATYWNA: maxExtra=2 + pełna dojrzałość, ale brak warp_drive → canCross=false.
+  ok('emp_WARP startowo BEZ warp_drive', motherW.techSystem.isResearched('warp_drive') === false);
+  sys._runForEmpire(empW, 1500);
+  const distinctNo = new Set(empireRegistry.getColoniesByEmpire('emp_WARP').map(c => c.systemId)).size;
+  ok('BEZ warp: brak cross-system (sys_wgood pusty)',
+     colonyManager.getColony('wg_xe') === null && colonyManager.getColony('wg_breath') === null);
+  ok('BEZ warp: distinct=1 (home-locked mimo pełnej dojrzałości)', distinctNo === 1);
+
+  // POZYTYWNA: grant warp_drive → canCross=true → cross-system rusza.
+  motherW.techSystem.grantTechs(['warp_drive']);
+  ok('emp_WARP po grancie ma warp_drive', motherW.techSystem.isResearched('warp_drive') === true);
+  motherW.resourceSystem.receive(combined);
+  sys._runForEmpire(empW, 1501);
+  const o = colonyManager.getColony('wg_xe');
+  const distinctYes = new Set(empireRegistry.getColoniesByEmpire('emp_WARP').map(c => c.systemId)).size;
+  ok('PO warp: outpost Xe w sys_wgood', !!o && o.isOutpost === true && o.systemId === 'sys_wgood');
+  ok('PO warp: distinct=2 (home + sys_wgood)', distinctYes === 2);
 }
 
 // ═══════════════════════════════════════════════════════════════

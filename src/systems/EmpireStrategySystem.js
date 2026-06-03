@@ -181,7 +181,15 @@ export class EmpireStrategySystem {
     const distinctSystems = new Set(empColonies.map(c => c.systemId)).size;
 
     const mature   = homeCounts.xe >= targetXe && homeNtSat && additionalHomeColonies >= minExtraHome;
-    const canCross = maxExtra > 0 && mature && (distinctSystems - 1) < maxExtra;
+    // S3.2 S3 (Wariant A): cross-system = NAGRODA za badania warpu, nie sama dojrzałość.
+    //   aiTech współdzielony per imperium (mother.techSystem; ten sam fallback, którego
+    //   używa EmpireResearchSystem._aiTech do grantTechs). Fail-closed: brak techSystem
+    //   ⇒ brak dowodu warpu ⇒ brak ekspansji cross-system.
+    const aiTech   = mother.techSystem
+      ?? window.KOSMOS?.empireColonyBootstrap?._findEmpireTechSystem?.(empire.id)
+      ?? null;
+    const hasWarp  = !!aiTech?.isResearched?.('warp_drive');
+    const canCross = maxExtra > 0 && mature && (distinctSystems - 1) < maxExtra && hasWarp;
 
     const tryHome  = () => this._runColonizationTree(empire, mother, homeSystemId, homeBodyIds, civYear, cfg);
     const tryCross = () => this._runCrossSystem(empire, mother, civYear, cfg, distinctSystems);
@@ -203,7 +211,7 @@ export class EmpireStrategySystem {
 
     // P4 (Warstwa 3 — porty / heavy cargo) — odłożone do Slice 4 (stub, BEZ budowy).
     this._log(empire, 'brak akcji w tym ticku (P4 port deferred)',
-      `xe=${homeCounts.xe}/${targetXe} nt=${homeCounts.nt}/${targetNt} addHome=${additionalHomeColonies}/${minExtraHome} sys=${distinctSystems} canCross=${canCross}`);
+      `xe=${homeCounts.xe}/${targetXe} nt=${homeCounts.nt}/${targetNt} addHome=${additionalHomeColonies}/${minExtraHome} sys=${distinctSystems} warp=${hasWarp} canCross=${canCross}`);
   }
 
   // ── Drzewo kolonizacji P1-P5/Fb dla JEDNEGO systemu (reużywane: home + cross) ──
