@@ -56,8 +56,8 @@ export const INDUSTRIALIST = {
     minWaterTransfer:       200,  // próg = transfer water
     blacklistDurationCy:    30,   // jak długo ciało-cel na blackliście po failure
     requireBreathableForP3: true, // P3 wymaga atmosfery oddychalnej (fallback nie)
-    // S3.1b — ekspansja cross-system. Industrialist zostaje JEDNO-systemowy:
-    maxExtraSystems:                0,  // ile systemów POZA macierzystym wolno kolonizować (0 = home-locked)
+    // S3.3a v2 — eksperyment: Industrialist DOSTAJE cross-system (przejmuje rolę po shelved Expansionist).
+    maxExtraSystems:                2,  // ile systemów POZA macierzystym wolno kolonizować (było 0 = home-locked)
     minExtraHomeColoniesForExpansion: 2,  // ile DODATKOWYCH pełnych kolonii z POP w home (poza stolicą)
                                           //   musi mieć imperium, zanim odblokuje ekspansję cross-system
   },
@@ -107,7 +107,7 @@ export const INDUSTRIALIST = {
     { buildingId: 'farm',        count: 2, preferredTerrain: ['plains', 'forest'] },
     { buildingId: 'well',        count: 2, preferredTerrain: ['water', 'ice'] },
     { buildingId: 'solar_farm',  count: 6, preferredTerrain: ['desert', 'plains'] },
-    { buildingId: 'research_station', count: 1 },                                       // S3.2 S2: gate produkcji research (model badań AI)
+    { buildingId: 'research_station', count: 2 },                                       // S3.2 S2: gate produkcji research (model badań AI)
   ],
 
   // Startowa populacja — rozkład per strata (suma 6 POP — lekki handicap vs gracz ~4)
@@ -153,6 +153,15 @@ export const INDUSTRIALIST = {
     'nuclear_power',         // Energetyka Jądrowa (req efficient_solar)
     'advanced_materials',    // Zaawansowane Materiały (req metallurgy ✓)
     'android_engineering',   // Inżynieria Androidów (req robotics ✓ + advanced_materials)
+    // S3.3a v2 — ścieżka warp (bramka cross-system: EmpireStrategySystem.canCross → hasWarp).
+    //   Prereqy spełnione przez wcześniejsze ogniwa: rocketry✓(starting)→ion_drives;
+    //   nuclear_power✓(idx2)+data_networks✓(idx0)→quantum_physics; ion_drives+quantum_physics→
+    //   warp_theory (miękkie bramki requiresDiscovery/requiresInventory POMINIĘTE przez grantTechs);
+    //   warp_theory→warp_drive (+3150 research: 250+500+900+1500 ponad obecną kolejkę).
+    'ion_drives',            // Napędy Jonowe Volkov (req rocketry ✓)
+    'quantum_physics',       // Fizyka Kwantowa (req nuclear_power ✓ + data_networks ✓)
+    'warp_theory',           // Teoria Osnowy (req ion_drives + quantum_physics)
+    'warp_drive',            // Napęd Skokowy (req warp_theory) — odblokowuje hasWarp
   ],
 
   // Startowe surowce — deponowane do colony.resourceSystem.inventory.

@@ -54,18 +54,18 @@ for (const k of behavioralKeys) {
   }
 }
 ok('pola behawioralne identyczne z Industrialist POZA maxExtraSystems + researchQueue + startingBuildings', allBehavioralEqual);
-ok('S3.2 S2: Expansionist.researchQueue = warp (≠ Industrialist przemysłowa)',
+ok('S3.3a v2: OBA archetypy mają warp_drive w kolejce (Industrialist przejął cross-system)',
    EXPANSIONIST.researchQueue.includes('warp_drive') &&
-   !INDUSTRIALIST.researchQueue.includes('warp_drive') &&
+   INDUSTRIALIST.researchQueue.includes('warp_drive') &&
    JSON.stringify(EXPANSIONIST.researchQueue) !== JSON.stringify(INDUSTRIALIST.researchQueue));
 const _rsCount = (arch) => arch.startingBuildings
   .filter(b => b.buildingId === 'research_station')
   .reduce((s, b) => s + (b.count ?? 1), 0);
-ok('S3.2 S2: Expansionist ma 2 research_station, Industrialist 1',
-   _rsCount(EXPANSIONIST) === 2 && _rsCount(INDUSTRIALIST) === 1);
-ok('strategicColonization.maxExtraSystems: Exp=2, Ind=0',
+ok('S3.3a v2: OBA mają 2 research_station (Industrialist podbity dla szybszego warpu)',
+   _rsCount(EXPANSIONIST) === 2 && _rsCount(INDUSTRIALIST) === 2);
+ok('S3.3a v2: maxExtraSystems Exp=2, Ind=2 (oba cross-system)',
    EXPANSIONIST.strategicColonization.maxExtraSystems === 2 &&
-   INDUSTRIALIST.strategicColonization.maxExtraSystems === 0);
+   INDUSTRIALIST.strategicColonization.maxExtraSystems === 2);
 ok('te same klucze co INDUSTRIALIST',
    JSON.stringify(Object.keys(EXPANSIONIST).sort()) === JSON.stringify(Object.keys(INDUSTRIALIST).sort()));
 ok('id === expansionist', EXPANSIONIST.id === 'expansionist');

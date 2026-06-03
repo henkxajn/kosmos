@@ -441,8 +441,8 @@ console.log('--- T24: Expansionist _config różni się od Industrialist TYLKO m
   const cfgEXP = sys._config(empEXP);
   const cfgIND = sys._config(emp_C);
   // S3.1b: jawna RÓŻNICA behawioralna — limit ekspansji cross-system.
-  ok('maxExtraSystems: Expansionist=2, Industrialist=0',
-     cfgEXP.maxExtraSystems === 2 && cfgIND.maxExtraSystems === 0);
+  ok('S3.3a v2: maxExtraSystems Expansionist=2, Industrialist=2 (oba cross-system)',
+     cfgEXP.maxExtraSystems === 2 && cfgIND.maxExtraSystems === 2);
   // Poza maxExtraSystems doktryna IDENTYCZNA (parytet klona zachowany na resztę).
   {
     const { maxExtraSystems: _e, ...restEXP } = cfgEXP;
@@ -666,24 +666,25 @@ console.log('--- T31: limit enforcement — distinct=3, maxExtra=2 → brak nowe
   ok('sys_l3 (l3_breath) NIE otwarty', colonyManager.getColony('l3_breath') === null);
 }
 
-console.log('--- T32: Industrialist home-locked — maxExtraSystems=0 → zero cross-system ---');
+console.log('--- T32: Industrialist cross-system — maxExtra=2 + warp + dojrzałość → skacze (S3.3a v2) ---');
 {
   const motherI = bootstrapMatureEmpire('emp_IND', 'industrialist', 'sys_hI',
     { mother: 'hI_mother', rocky1: 'hI_r1', rocky2: 'hI_r2', xe1: 'hI_xe1', xe2: 'hI_xe2' });
   const empI = empireRegistry.get('emp_IND');
-  // S3.2 S3: helper grantuje warp_drive domyślnie — dowód, że sam warp NIE odblokowuje
-  //   cross-system bez maxExtra>0 (Industrialist zostaje home-locked mimo warpu).
-  ok('emp_IND MA warp_drive (a mimo to home-locked: maxExtra=0)',
+  // S3.3a v2: Industrialist przejął cross-system (maxExtra 0→2 + warp w kolejce). Helper grantuje
+  //   warp_drive domyślnie; mature + warp + maxExtra=2 → canCross → otwiera najbliższy dobry system.
+  ok('emp_IND MA warp_drive (sanity)',
      motherI.techSystem.isResearched('warp_drive') === true);
   motherI.resourceSystem.receive(combined);
   setRes(motherI.resourceSystem, 'food', 300);
   setRes(motherI.resourceSystem, 'water', 300);
   motherI.civSystem.addPop('laborer', 12);
   sys._runForEmpire(empI, 1400);
-  ok('brak kolonii cross-system (sys_igood pusty)',
-     colonyManager.getColony('ig_xe') === null && colonyManager.getColony('ig_breath') === null);
+  const oI = colonyManager.getColony('ig_xe');
+  ok('S3.3a v2: Industrialist SKACZE — outpost Xe w sys_igood (ig_xe)',
+     !!oI && oI.isOutpost === true && oI.systemId === 'sys_igood');
   const distinctI = new Set(empireRegistry.getColoniesByEmpire('emp_IND').map(c => c.systemId)).size;
-  ok('distinct=1 (tylko home — mimo dojrzałości)', distinctI === 1);
+  ok('distinct=2 (home + sys_igood)', distinctI === 2);
 }
 
 // ═══════════════════════════════════════════════════════════════
