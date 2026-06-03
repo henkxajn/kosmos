@@ -591,7 +591,7 @@ export const TECHS = {
 
   ion_drives: {
     id:          'ion_drives',
-    namePL:      'Napędy Jonowe',
+    namePL:      'Napędy Jonowe Volkov',
     branch:      'space',
     tier:        3,
     cost:        { research: 250 },
@@ -619,7 +619,7 @@ export const TECHS = {
 
   fusion_drives: {
     id:          'fusion_drives',
-    namePL:      'Napędy Fuzyjne',
+    namePL:      'Napędy Fuzyjne Volkov',
     branch:      'space',  // zmieniono z energy na space — główna gałąź napędowa
     tier:        4,
     cost:        { research: 450 },

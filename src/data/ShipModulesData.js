@@ -14,8 +14,8 @@ export const SHIP_MODULES = {
 
   engine_chemical: {
     id: 'engine_chemical',
-    namePL: 'Napęd Chemiczny',
-    nameEN: 'Chemical Drive',
+    namePL: 'VDT-100 "Wół"',
+    nameEN: 'VDT-100 "Ox"',
     icon: '🔥',
     slotType: 'propulsion',
     tier: 1,
@@ -30,8 +30,8 @@ export const SHIP_MODULES = {
 
   engine_ion: {
     id: 'engine_ion',
-    namePL: 'Napęd Jonowy',
-    nameEN: 'Ion Drive',
+    namePL: 'VDT-250 "Sokół"',
+    nameEN: 'VDT-250 "Falcon"',
     icon: '⚡',
     slotType: 'propulsion',
     tier: 2,
@@ -46,8 +46,8 @@ export const SHIP_MODULES = {
 
   engine_fusion: {
     id: 'engine_fusion',
-    namePL: 'Napęd Fuzyjny',
-    nameEN: 'Fusion Drive',
+    namePL: 'VDT-600 "Pożoga"',
+    nameEN: 'VDT-600 "Blaze"',
     icon: '🔆',
     slotType: 'propulsion',
     tier: 3,
@@ -67,8 +67,8 @@ export const SHIP_MODULES = {
   //   in-system, ale najżarłoczniejsza (fuelMult najwyższy) — presja paliwowa zostaje.
   engine_warp: {
     id: 'engine_warp',
-    namePL: 'Volkov VDT-W1 «Wyłom»',     // ⚙ nazwa do potwierdzenia (Volkov, spójna z S2)
-    nameEN: 'Volkov VDT-W1 "Breach"',
+    namePL: 'VDT-W1 "Wyłom"',
+    nameEN: 'VDT-W1 "Breach"',
     icon: '🌀',
     slotType: 'propulsion',
     tier: 4,
@@ -88,8 +88,8 @@ export const SHIP_MODULES = {
 
   engine_warp_mk2: {
     id: 'engine_warp_mk2',
-    namePL: 'Volkov VDT-W2 «Osnowa»',    // ⚙ do potwierdzenia
-    nameEN: 'Volkov VDT-W2 "Weft"',
+    namePL: 'VDT-W2 "Osnowa"',
+    nameEN: 'VDT-W2 "Weft"',
     icon: '🌀',
     slotType: 'propulsion',
     tier: 5,
