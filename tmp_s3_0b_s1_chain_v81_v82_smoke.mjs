@@ -65,7 +65,7 @@ const saveV81 = {
 
 const m = migrate(JSON.parse(JSON.stringify(saveV81)));
 assert(!m.error, m.error ? `migracja BŁĄD: ${m.error}` : 'migracja bez błędu');
-assert(m.version === CURRENT_VERSION && m.version === 82, `version === 82 (got ${m.version})`);
+assert(m.version === CURRENT_VERSION, `version === CURRENT_VERSION (got ${m.version})`);
 
 const byId = {};
 for (const v of m.civ4x.vesselManager.vessels) byId[v.id] = v;

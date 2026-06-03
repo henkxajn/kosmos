@@ -82,6 +82,7 @@ import { EmpireColonyMaintenance } from '../systems/EmpireColonyMaintenance.js';
 import { ColonyAutoExpander } from '../systems/ColonyAutoExpander.js';
 import { EmpireStrategySystem } from '../systems/EmpireStrategySystem.js';
 import { EmpireLogisticsSystem } from '../systems/EmpireLogisticsSystem.js';
+import { EmpireResearchSystem } from '../systems/EmpireResearchSystem.js';
 import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
@@ -276,6 +277,8 @@ export class GameScene {
     this.empireStrategySystem = new EmpireStrategySystem();
     // Warstwa 2 transportu AI — kurierzy logistyczni outpost↔stolica (Slice 2 S3)
     this.empireLogisticsSystem = new EmpireLogisticsSystem();
+    // Model badań AI — per-archetyp kolejka techów badana w czasie (S3.2 S2)
+    this.empireResearchSystem = new EmpireResearchSystem();
     this.warSystem            = new WarSystem();
     this.invasionSystem       = new InvasionSystem();
     this.orbitalSpaceSystem   = new OrbitalSpaceSystem();
@@ -332,6 +335,7 @@ export class GameScene {
     window.KOSMOS.colonyAutoExpander = this.colonyAutoExpander;
     window.KOSMOS.empireStrategySystem = this.empireStrategySystem;
     window.KOSMOS.empireLogisticsSystem = this.empireLogisticsSystem;
+    window.KOSMOS.empireResearchSystem = this.empireResearchSystem;
     window.KOSMOS.warSystem        = this.warSystem;
     window.KOSMOS.invasionSystem   = this.invasionSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;

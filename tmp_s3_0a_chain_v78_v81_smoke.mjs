@@ -58,7 +58,7 @@ header('Łańcuch v78 → v82 (jedno przejście migrate)');
 const m = migrate(JSON.parse(JSON.stringify(saveV78)));
 
 assert(!m.error, m.error ? `migracja BEZ błędu (got error: ${m.error})` : 'migracja bez błędu (chain OK)');
-assert(m.version === CURRENT_VERSION && m.version === 82, `version === 82 (got ${m.version})`);
+assert(m.version === CURRENT_VERSION, `version === CURRENT_VERSION (got ${m.version})`);
 
 header('v78→v79: remap fuelType + colony fuel default');
 {

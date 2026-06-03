@@ -34,10 +34,12 @@ console.log('--- A: Expansionist = klon Industrialist POZA maxExtraSystems (S3.1
 const IDENTITY = new Set(['id', 'namePL', 'nameEN', 'descPL', 'descEN', 'color']);
 const behavioralKeys = Object.keys(INDUSTRIALIST).filter(k => !IDENTITY.has(k));
 
-// S3.1b: jedyna RÓŻNICA behawioralna to strategicColonization.maxExtraSystems (Exp=2, Ind=0).
+// S3.1b: RÓŻNICA behawioralna to strategicColonization.maxExtraSystems (Exp=2, Ind=0).
+// S3.2 S2: druga RÓŻNICA to researchQueue (Exp=ścieżka warpowa, Ind=przemysłowa) — pomijana w pętli.
 //   Reszta pól (w tym pozostałe klucze strategicColonization) IDENTYCZNA z klona S3.1a.
 let allBehavioralEqual = true;
 for (const k of behavioralKeys) {
+  if (k === 'researchQueue') continue;   // S3.2 S2: celowo różna (warp vs przemysł)
   let expVal = EXPANSIONIST[k];
   let indVal = INDUSTRIALIST[k];
   if (k === 'strategicColonization') {
@@ -50,7 +52,11 @@ for (const k of behavioralKeys) {
     console.error(`     różnica w polu behawioralnym: ${k}`);
   }
 }
-ok('pola behawioralne identyczne z Industrialist POZA maxExtraSystems', allBehavioralEqual);
+ok('pola behawioralne identyczne z Industrialist POZA maxExtraSystems + researchQueue', allBehavioralEqual);
+ok('S3.2 S2: Expansionist.researchQueue = warp (≠ Industrialist przemysłowa)',
+   EXPANSIONIST.researchQueue.includes('warp_drive') &&
+   !INDUSTRIALIST.researchQueue.includes('warp_drive') &&
+   JSON.stringify(EXPANSIONIST.researchQueue) !== JSON.stringify(INDUSTRIALIST.researchQueue));
 ok('strategicColonization.maxExtraSystems: Exp=2, Ind=0',
    EXPANSIONIST.strategicColonization.maxExtraSystems === 2 &&
    INDUSTRIALIST.strategicColonization.maxExtraSystems === 0);

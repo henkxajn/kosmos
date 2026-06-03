@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 82;
+export const CURRENT_VERSION     = 83;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -100,6 +100,7 @@ const MIGRATIONS = {
   79: _migrateV79toV80,
   80: _migrateV80toV81,
   81: _migrateV81toV82,
+  82: _migrateV82toV83,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2059,6 +2060,28 @@ function _migrateV81toV82(data) {
         if (v.warpFuel == null) {   // lazy default — bez Komory Warp: max 0
           v.warpFuel = { current: 0, max: isLegacyWarp ? 5 : 0, consumption: 0.5, fuelType: 'warp_cores' };
         }
+      }
+    }
+  }
+  return data;
+}
+
+// v82 → v83: S3.2 S2 — model badań AI (EmpireResearchSystem).
+//   empire.research = { queueIndex, progress } — postęp kolejki badań per imperium.
+//   Empires żyją w gameState (round-trip), więc nowe pole serializuje się samo;
+//   migracja stampuje lazy default na starych save (mirror v76→v77 empire.logistics).
+//   EmpireResearchSystem._ensureResearch też defaultuje w runtime (belt-and-suspenders).
+function _migrateV82toV83(data) {
+  const empires =
+    data.civ4x?.gameState?.empires ??
+    data.c4x?.gameState?.empires ??
+    data.gameState?.empires ??
+    data.empires;
+  if (empires && typeof empires === 'object') {
+    for (const emp of Object.values(empires)) {
+      if (!emp || typeof emp !== 'object') continue;
+      if (!emp.research || typeof emp.research !== 'object') {
+        emp.research = { queueIndex: 0, progress: 0 };
       }
     }
   }

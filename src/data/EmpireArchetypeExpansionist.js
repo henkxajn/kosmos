@@ -34,4 +34,24 @@ export const EXPANSIONIST = {
   descEN: 'Civilization driven toward the stars. Seeks warp drive and ' +
           'colonization of other star systems.',
   color:  '#2E9B8F',  // teal — odróżnialny od Industrialist (#B07020 amber)
+
+  // S3.2 S2 — NADPISANIE kolejki badań (inaczej klon odziedziczyłby kolejkę
+  // Industrialisty z _base). Ścieżka warpowa: napęd jonowy → fizyka → fuzja → warp.
+  //   Miękkie bramki warp_theory (requiresDiscovery + requiresInventory) POMINIĘTE —
+  //   grantTechs je ignoruje; AI bada warp samym kosztem research (decyzja S3.2 S2,
+  //   bo AI nie ma modelu odkryć/zapasów). Warp = cel cross-system Ekspansjonisty.
+  //   Inserty (data_networks/efficient_solar/nuclear_power/plasma_physics) to prereqy
+  //   spoza startingTechs. research_station dziedziczony z Industrialist.startingBuildings.
+  researchQueue: [
+    'ion_drives',            // Napędy Jonowe (req rocketry ✓)
+    'data_networks',         // Sieci Danych (prereq quantum_physics; req basic_computing ✓)
+    'efficient_solar',       // Wydajne Panele (prereq nuclear_power)
+    'nuclear_power',         // Energetyka Jądrowa (prereq quantum_physics + fusion_power)
+    'quantum_physics',       // Fizyka Kwantowa (req nuclear_power + data_networks)
+    'plasma_physics',        // Fizyka Plazmy (prereq fusion_power)
+    'fusion_power',          // Energia Fuzji (req nuclear_power + plasma_physics)
+    'warp_theory',           // Teoria Osnowy (req ion_drives + quantum_physics; bramki pominięte)
+    'warp_drive',            // Napęd Skokowy (req warp_theory)
+    'warp_drive_mk2',        // Zaawansowany Napęd Skokowy (req warp_drive)
+  ],
 };

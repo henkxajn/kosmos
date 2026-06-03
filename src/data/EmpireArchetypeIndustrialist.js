@@ -107,6 +107,7 @@ export const INDUSTRIALIST = {
     { buildingId: 'farm',        count: 2, preferredTerrain: ['plains', 'forest'] },
     { buildingId: 'well',        count: 2, preferredTerrain: ['water', 'ice'] },
     { buildingId: 'solar_farm',  count: 6, preferredTerrain: ['desert', 'plains'] },
+    { buildingId: 'research_station', count: 1 },                                       // S3.2 S2: gate produkcji research (model badań AI)
   ],
 
   // Startowa populacja — rozkład per strata (suma 6 POP — lekki handicap vs gracz ~4)
@@ -138,6 +139,20 @@ export const INDUSTRIALIST = {
     'robotics',          // Robotyka — odblokowuje recepturę android_worker (wymaga metallurgy).
                          //   Bez tego AI nigdy nie produkuje androidów → P1/P2 (outposty Xe)
                          //   martwe (autonomous_solar/mine wymagają android_worker). Slice 2 S2 fix.
+  ],
+
+  // S3.2 S2 — kolejka badań (EmpireResearchSystem). Techy badane W CZASIE z research
+  // stolicy (gate: research_station). System pomija techy już w startingTechs.
+  // Ścieżka przemysłowa: data_networks → energia jądrowa → materiały → androidy.
+  //   advanced_materials (req metallurgy ✓) → android_engineering (req robotics ✓ +
+  //   advanced_materials) odblokowuje android_lab + android_worker (autonomiczna siła).
+  // efficient_solar wstawione jako prereq nuclear_power (root tech, spoza startingTechs).
+  researchQueue: [
+    'data_networks',         // Sieci Danych (req basic_computing ✓)
+    'efficient_solar',       // Wydajne Panele (prereq nuclear_power)
+    'nuclear_power',         // Energetyka Jądrowa (req efficient_solar)
+    'advanced_materials',    // Zaawansowane Materiały (req metallurgy ✓)
+    'android_engineering',   // Inżynieria Androidów (req robotics ✓ + advanced_materials)
   ],
 
   // Startowe surowce — deponowane do colony.resourceSystem.inventory.
