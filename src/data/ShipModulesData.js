@@ -74,7 +74,7 @@ export const SHIP_MODULES = {
     tier: 4,
     mass: 30,  // tony — ciężki
     cost: { Ti: 50, Hv: 20 },
-    commodityCost: { warp_cores: 2, metamaterials: 4, quantum_processors: 2 },
+    commodityCost: { warp_cores: 2, electronic_systems: 4, power_cells: 2 },  // S3.0b S3: bez T3-komponentów (były metamaterials+quantum_processors)
     // ⚙ KNOBY balansu (S2b Opcja C): sublight 4.5 (najszybszy, ponad fuzją 3.8), fuelMult 2.3 (żarłoczny > fuzja 2.0; ratio ~1.96 > fuzja 1.90, monotoniczny),
     //   rangeMult 2.0 (umiarkowany bufor in-system)
     stats: { speedMult: 4.5, fuelMult: 2.3, rangeMult: 2.0 },
@@ -82,7 +82,7 @@ export const SHIP_MODULES = {
     warpCapable: true,
     warpSpeedLY: 2.0,          // prędkość skoku (LY/rok) — STAŁA między tierami
     warpFuelPerLY: 0.5,        // S3.0b S1: warp_cores/LY (ekonomia z mini-audytu)
-    requires: 'warp_drive',
+    requires: 'ion_drives',    // S3.0b S3: warp mid-game (match warp_cores gate; było warp_drive T4)
     description: 'Dwutrybowy: sublight (fuel) w układzie + skok warp (warp_cores) między gwiazdami.',
   },
 
