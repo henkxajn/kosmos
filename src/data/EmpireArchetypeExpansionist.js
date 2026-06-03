@@ -21,6 +21,12 @@ import { INDUSTRIALIST } from './EmpireArchetypeIndustrialist.js';
 const _base = structuredClone(INDUSTRIALIST);
 _base.strategicColonization.maxExtraSystems = 2;  // S3.1b: 2 systemy poza macierzystym (Industrialist=0)
 
+// S3.2 S2: Ekspansjonista dostaje DRUGĄ stację badawczą (2 total vs Industrialist 1) —
+//   szybsze badania warpu (rate ~14.7 → ~22/rok). count=2 → bootstrap stawia 2 stacje.
+//   Industrialist (oryginał) nietknięty (structuredClone niezależny).
+const _researchStation = _base.startingBuildings.find(b => b.buildingId === 'research_station');
+if (_researchStation) _researchStation.count = 2;
+
 export const EXPANSIONIST = {
   // Deep clone pól behawioralnych Industrialist + maxExtraSystems=2 (już ustawione w _base).
   ..._base,
@@ -41,7 +47,7 @@ export const EXPANSIONIST = {
   //   grantTechs je ignoruje; AI bada warp samym kosztem research (decyzja S3.2 S2,
   //   bo AI nie ma modelu odkryć/zapasów). Warp = cel cross-system Ekspansjonisty.
   //   Inserty (data_networks/efficient_solar/nuclear_power/plasma_physics) to prereqy
-  //   spoza startingTechs. research_station dziedziczony z Industrialist.startingBuildings.
+  //   spoza startingTechs. research_station: 2 stacje (ustawione na _base wyżej) = szybsze badania.
   researchQueue: [
     'ion_drives',            // Napędy Jonowe (req rocketry ✓)
     'data_networks',         // Sieci Danych (prereq quantum_physics; req basic_computing ✓)
