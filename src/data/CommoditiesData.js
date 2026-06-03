@@ -305,7 +305,7 @@ export const COMMODITIES = {
     recipe:      { Si: 6, Nt: 4, Hv: 4, Xe: 3, Ti: 2, Li: 2 },
     baseTime:    8.0,
     weight:      1.0,
-    requiresTech: 'quantum_computing',
+    requiresTech: 'quantum_physics',   // S3.0b S3: gate obniżony do mid-game (spread; koszt surowcowy = lewar)
     description: 'Procesory następnej generacji — qbity utrzymują koherencję latami. ' +
                  'Każdy kosztuje dziesięć lat wysiłku cywilizacji.',
     isConsumerGood: false, consumptionLayer: null,
@@ -320,7 +320,7 @@ export const COMMODITIES = {
     recipe:      { Nt: 4, Xe: 4, Hv: 3, Li: 2 },
     baseTime:    8.0,
     weight:      0.5,
-    requiresTech: 'antimatter_containment',
+    requiresTech: 'fusion_power',   // S3.0b S3: gate obniżony do mid-game (spread; koszt surowcowy = lewar)
     description: 'Magnetyczne pułapki utrzymujące antymaterię w separacji od materii. ' +
                  'Jeden błąd w polu magnetycznym — i nie ma niczego w pobliżu.',
     isConsumerGood: false, consumptionLayer: null,
@@ -339,7 +339,7 @@ export const COMMODITIES = {
     recipe:      { quantum_cores: 2, antimatter_cells: 2, Ti: 8 },
     baseTime:    12.0,
     weight:      3.0,
-    requiresTech: 'warp_drive',
+    requiresTech: 'ion_drives',   // S3.0b S3: gate obniżony do mid-game (match silnik engine_warp; koszt surowcowy = lewar)
     description: 'Zakrzywiacze czasoprzestrzeni w skali statkowej. ' +
                  'Kto je posiada, może dosięgnąć gwiazd.',
     isConsumerGood: false, consumptionLayer: null,
