@@ -35,6 +35,7 @@ import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
+import { stationTotalCost } from '../data/StationData.js';
 import { UNIT_ARCHETYPES, ARCHETYPE_REQUIREMENTS, GROUND_UNIT_CAP_EXEMPT, checkArchetypeUnlocked } from '../data/unitArchetypes.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
@@ -141,6 +142,7 @@ export class ColonyManager {
       this._tickPendingPopReturns(civDt);      // Opcja C v3
       this._tickPendingShipOrders();
       this._tickPendingOutpostOrders();
+      this._tickPendingStationOrders();
       this._tickTaxCollection(physDt);
     });
 
@@ -1617,6 +1619,108 @@ export class ColonyManager {
     }
   }
 
+  // ── Pending Station Orders (S3.3b-S2) ───────────────────────────────────
+  // Wariant A: canAfford → spend → StationSystem.createStation (instant; bez vessela,
+  // bez fazy budowy). buildTime z StationData NIE jest tykany w tym slice.
+
+  addPendingStationOrder(planetId, { targetBodyId, cost = null, ownerEmpireId = null, stationType = 'orbital_station' } = {}) {
+    const colony = this.getColony(planetId);
+    if (!colony) return null;
+    if (!colony.pendingStationOrders) colony.pendingStationOrders = [];
+
+    // Fallback kosztu: null/undefined LUB pusty obiekt → pełny koszt z StationData
+    // (chroni przed potraktowaniem braku override jako darmowej budowy).
+    const finalCost = (cost && Object.keys(cost).length > 0)
+      ? { ...cost }
+      : stationTotalCost(stationType);
+
+    const orderId = `pso_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const targetEntity = EntityManager.get(targetBodyId);
+    const order = {
+      id: orderId,
+      targetBodyId,
+      targetName: targetEntity?.name ?? targetBodyId,
+      cost: finalCost,
+      ownerEmpireId: ownerEmpireId ?? 'player',
+      stationType,
+      queuedAt: window.KOSMOS?.timeSystem?.gameTime ?? 0,
+    };
+    colony.pendingStationOrders.push(order);
+    EventBus.emit('station:orderQueued', { planetId, order });
+    return orderId;
+  }
+
+  cancelPendingStationOrder(planetId, orderId) {
+    const colony = this.getColony(planetId);
+    if (!colony?.pendingStationOrders) return;
+    const idx = colony.pendingStationOrders.findIndex(o => o.id === orderId);
+    if (idx === -1) return;
+    colony.pendingStationOrders.splice(idx, 1);
+    // Bez refundu — w Wariancie A spend następuje dopiero przy materializacji,
+    // więc anulowanie PRZED materializacją nic nie zwraca (nic nie wydano).
+    EventBus.emit('station:orderCancelled', { planetId, orderId });
+  }
+
+  getPendingStationOrders(planetId) {
+    const colony = this.getColony(planetId);
+    return colony?.pendingStationOrders ?? [];
+  }
+
+  /**
+   * Tick pending station orders — Wariant A: spend-at-colony → instant materialize.
+   * canAfford → (pre-check: ciało istnieje) → spend → StationSystem.createStation.
+   * Pre-check PRZED spend, by nie marnować zasobów gdy ciało docelowe zniknęło.
+   */
+  _tickPendingStationOrders() {
+    const ss = window.KOSMOS?.stationSystem;
+    for (const colony of this._colonies.values()) {
+      const pending = colony.pendingStationOrders;
+      if (!pending || pending.length === 0) continue;
+
+      const toRemove = [];
+      for (let i = 0; i < pending.length; i++) {
+        const order = pending[i];
+
+        // Czeka aż kolonia uzbiera surowce. Bez spend dopóki nie stać.
+        if (!colony.resourceSystem.canAfford(order.cost)) continue;
+
+        // Pre-check PRZED spend: StationSystem dostępny + ciało docelowe istnieje.
+        // Brak → anuluj order bez wydawania zasobów (bez refundu, bo nic nie wydano).
+        if (!ss || !EntityManager.get(order.targetBodyId)) {
+          toRemove.push(i);
+          EventBus.emit('station:buildFailed', {
+            planetId: colony.planetId, orderId: order.id,
+            reason: ss ? 'body_lost' : 'no_station_system',
+          });
+          continue;
+        }
+
+        // Stać + ciało istnieje → spend + materializacja na ciele docelowym.
+        colony.resourceSystem.spend(order.cost);
+        toRemove.push(i);
+        const st = ss.createStation(order.targetBodyId, {
+          ownerEmpireId: order.ownerEmpireId,
+          stationType:   order.stationType,
+        });
+        if (st) {
+          EventBus.emit('station:built', {
+            planetId: colony.planetId, stationId: st.id, targetBodyId: order.targetBodyId,
+          });
+        } else {
+          // Nieoczekiwane (ciało istniało chwilę temu) — bez refundu.
+          EventBus.emit('station:buildFailed', {
+            planetId: colony.planetId, orderId: order.id, reason: 'create_failed',
+          });
+        }
+      }
+
+      // Usuń zrealizowane/anulowane (od końca żeby indeksy się nie przesunęły)
+      for (let j = toRemove.length - 1; j >= 0; j--) {
+        pending.splice(toRemove[j], 1);
+      }
+    }
+  }
+
   // Zużyj statek z floty (przy wysyłaniu ekspedycji — np. colony_ship)
   // vesselId: konkretny vessel ID do zużycia, LUB shipId: typ do znalezienia pierwszego
   consumeShip(planetId, shipIdOrVesselId) {
@@ -1903,6 +2007,7 @@ export class ColonyManager {
         groundUnitQueues: col.groundUnitQueues ?? [],
         pendingShipOrders: col.pendingShipOrders ?? [],
         pendingOutpostOrders: col.pendingOutpostOrders ?? [],
+        pendingStationOrders: col.pendingStationOrders ?? [],
         credits:          col.credits ?? 0,
         creditsPerYear:   col.creditsPerYear ?? 0,
         tradeCapacity:    col.tradeCapacity ?? 0,
@@ -2011,6 +2116,7 @@ export class ColonyManager {
         groundUnitQueues: colData.groundUnitQueues ?? [],
         pendingShipOrders: colData.pendingShipOrders ?? [],
         pendingOutpostOrders: colData.pendingOutpostOrders ?? [],
+        pendingStationOrders: colData.pendingStationOrders ?? [],
         credits:          colData.credits ?? 0,
         creditsPerYear:   colData.creditsPerYear ?? 0,
         tradeCapacity:    colData.tradeCapacity ?? 0,

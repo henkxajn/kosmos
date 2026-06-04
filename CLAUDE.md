@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v83 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v84 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -259,6 +259,15 @@ Endurance drain multiplier (VesselManager._tickEndurance) — M2a commit 8
   └─ PURSUE_DRAIN_MULT=3.0 gdy movementOrder.type ∈ ('pursue','intercept')
   └─ Wywoływany dla state='in_transit' LUB isPursuing (pursue orbiting też drainuje)
   └─ Presja zasobowa — hard-stop na endurance=0 → M3
+
+StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant materialize)
+  └─ createStation(bodyId, opts) → Station (type='station') + orbital.assignOrbit(bodyId, id, 'station')
+  └─ destroyStation(id), getStationsAt(bodyId), serialize/restore (encje w civ4x.stationSystem; orbita w civ4x.orbitalSpace)
+  └─ Encja: src/entities/Station.js (extends CelestialBody, orbital=null; fuelStore/fuelCapacity placeholdery depotu S3.3b-S3)
+  └─ Dane: src/data/StationData.js (STATIONS.orbital_station: cost Fe/Ti/Cu/Si + 7 commodities; buildTime placeholder; stationTotalCost())
+  └─ Pending (ColonyManager): addPendingStationOrder/cancel/get + _tickPendingStationOrders (canAfford→spend→createStation; no-refund pre-check ciała)
+  └─ Render: ThreeRenderer._stations Map + _addStationMesh/_removeStationMesh/_tickOrbitingStations (anchored GEO, bez rotacji; 9f instant-position)
+  └─ Devtools: KOSMOS.debug.{spawnStation(bodyId?, opts?), queueStationOrder(target?, costOverride?), destroyStation(id)}
 ```
 
 ---
@@ -370,6 +379,12 @@ Endurance drain multiplier (VesselManager._tickEndurance) — M2a commit 8
 | `notify:listChanged { count }` (active count change) | NotificationCenter | BottomBar (bell badge), NotificationDropdown |
 | `notify:dismissed { id }` | NotificationCenter | NotificationDropdown |
 | `notify:openDetail { notif }` (klik wiersza w dropdown) | NotificationDropdown | MissionEventModal (`noPause:true`) |
+| `station:created { station }` | StationSystem (createStation + restore) | ThreeRenderer (`_addStationMesh`) |
+| `station:destroyed { stationId }` | StationSystem (destroyStation) | ThreeRenderer (`_removeStationMesh`) |
+| `station:orderQueued { planetId, order }` | ColonyManager (addPendingStationOrder) | — (UI/EventLog TBD S3.3b-S3) |
+| `station:orderCancelled { planetId, orderId }` | ColonyManager (cancelPendingStationOrder) | — |
+| `station:built { planetId, stationId, targetBodyId }` | ColonyManager (_tickPendingStationOrders) | — (EventLog TBD) |
+| `station:buildFailed { planetId, orderId, reason }` (`body_lost`/`no_station_system`/`create_failed`) | ColonyManager (_tickPendingStationOrders) | — |
 
 ---
 

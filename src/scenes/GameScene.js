@@ -87,6 +87,7 @@ import { WarSystem }         from '../systems/WarSystem.js';
 import { InvasionSystem }    from '../systems/InvasionSystem.js';
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
+import { StationSystem }      from '../systems/StationSystem.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
 import { ProximitySystem } from '../systems/ProximitySystem.js';
@@ -282,6 +283,7 @@ export class GameScene {
     this.warSystem            = new WarSystem();
     this.invasionSystem       = new InvasionSystem();
     this.orbitalSpaceSystem   = new OrbitalSpaceSystem();
+    this.stationSystem        = new StationSystem();
     this.enemyAttackHandler   = new EnemyAttackHandler();
 
     window.KOSMOS.civMode          = false;
@@ -339,6 +341,7 @@ export class GameScene {
     window.KOSMOS.warSystem        = this.warSystem;
     window.KOSMOS.invasionSystem   = this.invasionSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
+    window.KOSMOS.stationSystem      = this.stationSystem;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
     // M1 Targeting — lazy init, feature flag. Tworzone gdy
     //   GAME_CONFIG.FEATURES.movementOrders=true lub via debug.enableMovementOrders().
@@ -709,6 +712,35 @@ export class GameScene {
         const result = efm.materializeFleet(empireId, fleetId);
         console.log(`[debug] materializeFleet(${empireId},${fleetId}):`, result);
         return result;
+      },
+      // ── S3.3b-S2 Stacje orbitalne ─────────────────────────────────────
+      // KOSMOS.debug.spawnStation(bodyId?, opts?) — instant stacja na orbicie ciała
+      //   (domyślnie homePlanet). Pomija pending order — do live-gate wizualnego.
+      spawnStation: (bodyId = null, opts = {}) => {
+        const ss = window.KOSMOS?.stationSystem;
+        if (!ss) { console.warn('[debug] Brak StationSystem'); return null; }
+        const targetId = bodyId ?? window.KOSMOS?.homePlanet?.id;
+        if (!targetId) { console.warn('[debug] Brak bodyId i homePlanet'); return null; }
+        const st = ss.createStation(targetId, opts);
+        console.log(`[debug] spawnStation → ${st?.id} @ ${targetId}`);
+        return st;
+      },
+      // KOSMOS.debug.queueStationOrder(targetBodyId?, costOverride?) — pending order na
+      //   homePlanet (test canAfford → spend → materialize). Bez override = pełny koszt z StationData.
+      queueStationOrder: (targetBodyId = null, costOverride = null) => {
+        const colMgr = window.KOSMOS?.colonyManager;
+        const home = window.KOSMOS?.homePlanet;
+        if (!colMgr || !home) { console.warn('[debug] Brak ColonyManager/homePlanet'); return null; }
+        const target = targetBodyId ?? home.id;
+        const id = colMgr.addPendingStationOrder(home.id, { targetBodyId: target, cost: costOverride });
+        console.log(`[debug] queueStationOrder → ${id} (target ${target})`);
+        return id;
+      },
+      // KOSMOS.debug.destroyStation(stationId) — usuń stację (orbita + encja).
+      destroyStation: (stationId) => {
+        const ok = window.KOSMOS?.stationSystem?.destroyStation(stationId);
+        console.log(`[debug] destroyStation(${stationId}): ${ok}`);
+        return ok;
       },
       // ── M2a Combat Core (Commit 8) ────────────────────────────────────
       // KOSMOS.debug.enableProximity() — ProximitySystem on + instance.
@@ -1156,6 +1188,11 @@ export class GameScene {
       // Przywróć OrbitalSpaceSystem (sferyczne orbity wszystkich obiektów)
       if (c4x.orbitalSpace) {
         this.orbitalSpaceSystem.restore(c4x.orbitalSpace);
+      }
+      // Przywróć StationSystem (encje stacji — orbita już przywrócona wyżej).
+      // PO orbitalSpace.restore: emit station:created widzi gotową orbitę.
+      if (c4x.stationSystem) {
+        this.stationSystem.restore(c4x.stationSystem);
       }
       // Przywróć EventLogSystem (zunifikowany dziennik — Opcja B)
       if (c4x.eventLog) {

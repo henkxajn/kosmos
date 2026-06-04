@@ -165,6 +165,7 @@ export class ThreeRenderer {
     this._entityByUUID = new Map();   // mesh.uuid → entity
     this._clickable    = [];
     this._vessels      = new Map();   // vesselId → { sprite, routeLine }
+    this._stations     = new Map();   // stationId → { mesh } (S3.3b-S2, anchored orbital object)
     this._predictionConeMeshes = new Map();  // vesselId → { fillMesh, lineMesh, group } (M2b C4)
     this._sensorRingMeshes     = new Map();  // key (`v_xxx` | `col_xxx`) → { mesh, type, radiusAU } (M4 P2)
     this._poiSprites           = new Map();  // poiId → { sprite, type } (M2b C7)
@@ -388,6 +389,11 @@ export class ThreeRenderer {
         this._syncSensorOverlay();
       }
     }));
+
+    // S3.3b-S2 — stacje orbitalne (encje, NIE vessele). Mesh dodawany/usuwany event-driven;
+    // pozycja co klatkę przez _tickOrbitingStations (anchored → bez rotacji wokół planety).
+    EventBus.on('station:created',   safe(({ station })   => this._addStationMesh(station)));
+    EventBus.on('station:destroyed', safe(({ stationId }) => this._removeStationMesh(stationId)));
 
     EventBus.on('body:collision', safe(({ winner, loser, type }) => {
       if (type === 'absorb' || type === 'eject') {
@@ -844,6 +850,15 @@ export class ThreeRenderer {
       }
     }
     this._vessels.clear();
+
+    // Stacje orbitalne (S3.3b-S2) — dispose Group (hub + ring) i wyczyść mapę
+    for (const [, entry] of this._stations) {
+      if (entry.mesh) {
+        entry.mesh.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+        this.scene.remove(entry.mesh);
+      }
+    }
+    this._stations.clear();
 
     // Trade lines + fireflies
     this._clearTradeLines();
@@ -1824,6 +1839,7 @@ export class ThreeRenderer {
 
     // Aktualizuj wizualne orbity statków (animacja co klatkę)
     this._tickOrbitingVessels();
+    this._tickOrbitingStations();
 
     // Aktualizuj śledzenie kamery (ciało się porusza → kamera za nim)
     this._updateCameraFocus();
@@ -3556,6 +3572,74 @@ export class ThreeRenderer {
       if (entry.isModel3D && !entry.isWreck && !orb.anchored) {
         entry.sprite.rotation.y = pos.theta + Math.PI;
       }
+    }
+  }
+
+  /**
+   * Dodaj mesh stacji orbitalnej (S3.3b-S2). Proceduralny placeholder: rdzeń (sfera) +
+   * pierścień dokujący (torus, emissive). NIE w _clickable (selekcja = S3.3b-S4).
+   * Pozycja ustawiana co klatkę w _tickOrbitingStations. Skala/kolor — do kalibracji.
+   */
+  _addStationMesh(station) {
+    if (!station?.id || this._stations.has(station.id)) return;
+    const col = station.visual?.color ?? 0x44aaff;
+
+    const group = new THREE.Group();
+    // Rdzeń — mała sfera
+    const hub = new THREE.Mesh(
+      new THREE.SphereGeometry(0.009, 16, 12),
+      new THREE.MeshStandardMaterial({ color: 0x8899aa, emissive: 0x223344, roughness: 0.5, metalness: 0.6 })
+    );
+    group.add(hub);
+    // Pierścień dokujący — torus leżący w płaszczyźnie równikowej (halo)
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.02, 0.006, 10, 28),
+      new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.6, roughness: 0.4, metalness: 0.3 })
+    );
+    ring.rotation.x = Math.PI / 2;
+    group.add(ring);
+
+    this.scene.add(group);
+    this._stations.set(station.id, { mesh: group });
+    // 9f: natychmiastowe pozycjonowanie — spawn na twardej pauzie nie zostaje w origin.
+    this._tickOrbitingStations();
+  }
+
+  /** Usuń mesh stacji (dispose Group). */
+  _removeStationMesh(stationId) {
+    const entry = this._stations.get(stationId);
+    if (!entry) return;
+    if (entry.mesh) {
+      entry.mesh.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+      this.scene.remove(entry.mesh);
+    }
+    this._stations.delete(stationId);
+  }
+
+  /**
+   * Co-klatkowa pozycja stacji — z OrbitalSpaceSystem (anchored → zamrożona względem
+   * planety, ale podąża za nią gdy planeta orbituje). Mirror _tickOrbitingVessels; bez rotacji.
+   */
+  _tickOrbitingStations() {
+    const orbital = window.KOSMOS?.orbitalSpaceSystem;
+    if (!orbital || this._stations.size === 0) return;
+    const tSec = performance.now() * 0.001;
+    for (const [id, entry] of this._stations) {
+      const orb = orbital.getOrbit(id);
+      if (!orb) continue;
+      const pEntry = this._planets.get(orb.planetId);
+      const planetPos = pEntry
+        ? { x: pEntry.group.position.x, z: pEntry.group.position.z }
+        : this._moons.get(orb.planetId)
+          ? { x: this._moons.get(orb.planetId).mesh.position.x, z: this._moons.get(orb.planetId).mesh.position.z }
+          : this._planetoids.get(orb.planetId)
+            ? { x: this._planetoids.get(orb.planetId).mesh.position.x, z: this._planetoids.get(orb.planetId).mesh.position.z }
+            : null;
+      if (!planetPos) continue;
+      const pos = orbital.getPosition(id, planetPos, tSec);
+      if (!pos) continue;
+      entry.mesh.position.set(pos.x, pos.y, pos.z);
+      // Anchored — brak rotacji wokół planety i brak self-spin (stacja statyczna).
     }
   }
 

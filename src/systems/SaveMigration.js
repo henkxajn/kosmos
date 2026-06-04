@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 83;
+export const CURRENT_VERSION     = 84;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -101,6 +101,7 @@ const MIGRATIONS = {
   80: _migrateV80toV81,
   81: _migrateV81toV82,
   82: _migrateV82toV83,
+  83: _migrateV83toV84,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2083,6 +2084,21 @@ function _migrateV82toV83(data) {
       if (!emp.research || typeof emp.research !== 'object') {
         emp.research = { queueIndex: 0, progress: 0 };
       }
+    }
+  }
+  return data;
+}
+
+// v83 → v84: S3.3b-S2 — stacje orbitalne. Encje w civ4x.stationSystem (StationSystem.serialize),
+//   orbita w civ4x.orbitalSpace (OrbitalSpaceSystem) — oba round-tripują przez własne serializery.
+//   Tu tylko lazy-default pendingStationOrders per-kolonia (Wariant A: instant materialize, brak
+//   pól started/progress). stationSystem null/brak na starych save → StationSystem.restore(null)
+//   to no-op (guard Array.isArray) — encji stacji po prostu nie ma.
+function _migrateV83toV84(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x && Array.isArray(c4x.colonies)) {
+    for (const col of c4x.colonies) {
+      if (!Array.isArray(col.pendingStationOrders)) col.pendingStationOrders = [];
     }
   }
   return data;

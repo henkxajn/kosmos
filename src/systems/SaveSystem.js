@@ -153,6 +153,7 @@ export class SaveSystem {
       randomEventSystem: window.KOSMOS?.randomEventSystem?.serialize() ?? null,
       observatorySystem: window.KOSMOS?.observatorySystem?.serialize() ?? null,
       orbitalSpace:      window.KOSMOS?.orbitalSpaceSystem?.serialize() ?? null,
+      stationSystem:     window.KOSMOS?.stationSystem?.serialize() ?? null,
       eventLog:          window.KOSMOS?.eventLogSystem?.serialize() ?? null,
       collisionForecast: window.KOSMOS?.collisionForecast?.serialize() ?? null,
       groundUnitManager: window.KOSMOS?.groundUnitManager?.serialize() ?? null,
