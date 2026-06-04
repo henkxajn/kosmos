@@ -22,6 +22,8 @@
 //   T16    — player isolation: gracz hull_small NIE claimowany
 //   T17    — route invariant: NIGDY >couriersPerRoute
 //   T19    — fuel sanity: stolica bez power_cells → dispatch i tak (clamp)
+//   T21    — _bestEngine nigdy nie wybiera warp (kurier in-system, S3.2 S1)
+//   T25    — S3.3b-S1: outpost Ti (bez Xe/Nt) dostaje trasę; FE-only nie
 // ═══════════════════════════════════════════════════════════════
 
 import './env.js'; // MUST be first — shim localStorage/window/THREE
@@ -419,6 +421,23 @@ console.log('--- T21: _bestEngine NIGDY nie wybiera warp (kurier in-system) — 
   // Regresja: realny aiTech (tylko startingTechs, brak ion/fusion) → engine_chemical bez zmian.
   const aiTech = T3.capital.techSystem;
   ok('aiTech bez ion/fusion → engine_chemical (bez regresji)', logi._bestEngine(aiTech) === 'engine_chemical');
+}
+
+console.log('--- T25 (S3.3b-S1): outpost Ti (bez Xe/Nt) dostaje trasę; FE-only nie ---');
+{
+  // mkXeOutpost jest generyczny (bootstrapuje autonomiczny outpost z podanymi deposits) —
+  // używamy go dla outpostu Ti-only oraz FE-only mimo nazwy.
+  const TI = (remaining = 50000) => ({ resourceId: 'Ti', richness: 1.0, totalAmount: remaining, remaining });
+  const { capital, planetId: capId } = mkCapital('emp_ti', 1600, 0);
+  const tiOut = mkXeOutpost('emp_ti', 1800, 0,   { Ti: 1000 }, [TI()]);   // złoże WYŁĄCZNIE Ti (bez Xe/Nt)
+  const feOut = mkXeOutpost('emp_ti', 1800, 200, { Fe: 1000 }, [FE()]);   // niestrategiczny (regresja gate)
+  const emp = empireRegistry.get('emp_ti');
+  ok('stolica MA stocznię (precondition)', colonyManager._getShipyardLevel(capital) >= 1);
+  logi._runDispatcher(emp);
+  const tiRoute = emp.logistics.routes.find(r => r.outpostId === tiOut.bodyId);
+  const feRoute = emp.logistics.routes.find(r => r.outpostId === feOut.bodyId);
+  ok('outpost Ti dostaje trasę → stolica (S3.3b-S1)', !!tiRoute && tiRoute.motherId === capId);
+  ok('outpost FE-only NIE dostaje trasy (gate odrzuca niestrategiczne)', !feRoute);
 }
 
 // ═══════════════════════════════════════════════════════════════

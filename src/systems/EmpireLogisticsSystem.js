@@ -62,7 +62,7 @@ const DEFAULT_LOGISTICS_CONFIG = {
   couriersPerRoute:      2,
   cargoModule:           'cargo_small',
   minFreePopsForCourier: 0.05,
-  strategicDeposits:     ['Xe', 'Nt'],
+  strategicDeposits:     ['Xe', 'Nt', 'Ti'],   // S3.3b-S1: Ti dodany — outposty Ti dostają trasę (Ti i tak wożony rare-first)
 };
 
 const EPS = 1e-6;

@@ -73,7 +73,7 @@ export const INDUSTRIALIST = {
     couriersPerRoute:      2,
     cargoModule:           'cargo_small',
     minFreePopsForCourier: 0.05,
-    strategicDeposits:     ['Xe', 'Nt'],
+    strategicDeposits:     ['Xe', 'Nt', 'Ti'],   // S3.3b-S1: Ti strategiczny (Expansionist dziedziczy przez clone)
   },
 
   // Handicap startowy — budynki stawiane instant (bez kosztu surowców i tech)
