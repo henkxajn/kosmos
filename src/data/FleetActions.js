@@ -394,6 +394,30 @@ const ACTIONS = {
     },
   },
 
+  // ── Dokowanie do stacji orbitalnej (depot paliwa, S3.3b-S3) ───────────
+  // Dostępne gdy statek orbituje ciało, na którego orbicie jest WŁASNA stacja.
+  // Dok → VesselManager.dockAtStation (port uniwersalny, dockedAt=stationId).
+  dock_station: {
+    id: 'dock_station',
+    label: 'Dokuj do stacji',
+    icon: '🛰',
+    requiresTarget: false,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
+      if (vessel.status !== 'idle' && vessel.status !== 'on_mission') return { ok: false, reason: 'Statek zajęty' };
+      const stations = window.KOSMOS?.stationSystem?.getStationsAt?.(vessel.position.dockedAt) ?? [];
+      if (!stations.some(s => (s.ownerEmpireId ?? 'player') === 'player')) {
+        return { ok: false, reason: 'Brak własnej stacji na orbicie' };
+      }
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      const stations = window.KOSMOS?.stationSystem?.getStationsAt?.(vessel.position.dockedAt) ?? [];
+      const station = stations.find(s => (s.ownerEmpireId ?? 'player') === 'player') ?? stations[0];
+      if (station) state.vesselManager?.dockAtStation(vessel.id, station.id);
+    },
+  },
+
   // ── Akcje skanowania i Away Team (orbita) ─────────────────────────────
 
   full_scan: {
@@ -596,6 +620,10 @@ export function getAvailableActions(vessel, state) {
     result.push(_check(ACTIONS.return_home, vessel, state));
     result.push(_check(ACTIONS.redirect, vessel, state));
     result.push(_check(ACTIONS.transport, vessel, state));
+    // Dokowanie do stacji — tylko gdy na orbicie ciała jest stacja (depot paliwa, S3.3b-S3).
+    if ((window.KOSMOS?.stationSystem?.getStationsAt?.(vessel.position.dockedAt)?.length ?? 0) > 0) {
+      result.push(_check(ACTIONS.dock_station, vessel, state));
+    }
   } else if (vessel.position.state === 'in_transit') {
     // W locie — tylko powrót
     result.push(_check(ACTIONS.return_home, vessel, state));

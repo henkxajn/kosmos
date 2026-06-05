@@ -4,6 +4,7 @@
 // Tier 1 = baza bez modułów. fuelStore/fuelCapacity to placeholdery pod depot (S3.3b-S3).
 
 import { CelestialBody } from './CelestialBody.js';
+import { StationDepot } from './StationDepot.js';
 
 export class Station extends CelestialBody {
   constructor(config) {
@@ -25,9 +26,10 @@ export class Station extends CelestialBody {
     this.stationType   = config.stationType ?? 'orbital_station';
     this.createdYear   = config.createdYear ?? 0;
 
-    // Depot paliwa — placeholdery pod S3.3b-S3 (dokowanie + tankowanie). Na razie 0.
-    this.fuelStore     = config.fuelStore ?? 0;
-    this.fuelCapacity  = config.fuelCapacity ?? 0;
+    // Depot paliwa (S3.3b-S3) — façade resourceSystem-podobny (fuel + warp_cores, pojemność unlimited).
+    // Tankowanie statków (VesselManager._refuelTank) i ręczny rozładunek gracza (CargoLoadModal/
+    // unloadCargo) operują na tym samym obiekcie przez kontrakt inventory(Map)+receive/spend/getAmount.
+    this.depot = new StationDepot(config.depot);
 
     this.systemId      = config.systemId ?? 'sys_home';
     this.explored      = true;                          // własna stacja — zawsze „znana"

@@ -72,7 +72,7 @@ export function findHitZone(localX, localY, hitZones) {
     const z = hitZones[i];
     if (!z) continue;
     // M3 P2.3 — dodano 'map_poi' (POI sprites w tactical map)
-    if (z.type !== 'map_body' && z.type !== 'map_vessel' && z.type !== 'map_poi') continue;
+    if (z.type !== 'map_body' && z.type !== 'map_vessel' && z.type !== 'map_poi' && z.type !== 'map_station') continue;
     if (localX >= z.x && localX <= z.x + z.w
         && localY >= z.y && localY <= z.y + z.h) {
       return z;
@@ -129,6 +129,20 @@ export function resolveTacticalTarget(hit, worldPoint, lookups = {}) {
       type: 'planet',
       entityId: bodyId,
       planet,
+      worldPoint: worldPoint ?? null,
+    };
+  }
+
+  // S3.3b-S3b — stacja orbitalna (HUB) w tactical map. Reuse pola `planet` dla generycznego tooltipa/menu.
+  if (hit.type === 'map_station') {
+    const stationId = hit.data?.stationId;
+    if (!stationId) return { type: 'empty', worldPoint: worldPoint ?? null };
+    const station = lookups.getEntity?.(stationId) ?? null;
+    if (!station) return { type: 'empty', worldPoint: worldPoint ?? null };
+    return {
+      type: 'station',
+      entityId: stationId,
+      planet: station,
       worldPoint: worldPoint ?? null,
     };
   }

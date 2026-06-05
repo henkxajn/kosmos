@@ -97,7 +97,7 @@ header('T3: _bestEffortLoad (clamp = loadCargo)');
   {
     const v = makeVessel();
     const col = { resourceSystem: makeResSys({ fuel: 30 }) };
-    const { total } = ms._bestEffortLoad(v, col, { fuel: 50 });
+    const { total } = ms._bestEffortLoad(v, col.resourceSystem,{ fuel: 50 });
     assert(total === 30, `dostępne<spec → ładuje 30 (got ${total})`);
     assert(v.cargo.fuel === 30, `vessel.cargo.fuel === 30 (got ${v.cargo.fuel})`);
     assert(col.resourceSystem.inventory.get('fuel') === 0, `inventory zdekrementowane do 0 (got ${col.resourceSystem.inventory.get('fuel')})`);
@@ -107,7 +107,7 @@ header('T3: _bestEffortLoad (clamp = loadCargo)');
   {
     const v = makeVessel();
     const col = { resourceSystem: makeResSys({ fuel: 0 }) };
-    const { total } = ms._bestEffortLoad(v, col, { fuel: 50 });
+    const { total } = ms._bestEffortLoad(v, col.resourceSystem,{ fuel: 50 });
     assert(total === 0, `brak towaru → 0 (got ${total})`);
     assert(Object.keys(v.cargo).length === 0, 'cargo puste (nic nie załadowano)');
   }
@@ -117,7 +117,7 @@ header('T3: _bestEffortLoad (clamp = loadCargo)');
     const v = makeVessel({ cargoMax: 15 });
     const col = { resourceSystem: makeResSys({ fuel: 100 }) };
     const expected = Math.floor(15 / wFuel); // 10
-    const { total } = ms._bestEffortLoad(v, col, { fuel: 100 });
+    const { total } = ms._bestEffortLoad(v, col.resourceSystem,{ fuel: 100 });
     assert(total === expected, `clamp cargoMax: floor(15/${wFuel})=${expected} (got ${total})`);
   }
 
@@ -129,7 +129,7 @@ header('T3: _bestEffortLoad (clamp = loadCargo)');
     const v = makeVessel({ cargoMax });
     const col = { resourceSystem: makeResSys({ fuel: 100, [secondId]: 100 }) };
     const spec = { fuel: 6, [secondId]: 100 };  // kolejność: fuel pierwszy (6 szt), reszta dla secondId
-    ms._bestEffortLoad(v, col, spec);
+    ms._bestEffortLoad(v, col.resourceSystem,spec);
     const fuelLoaded = Math.min(6, Math.floor(cargoMax / wFuel));      // 6 (9t)
     const remW = cargoMax - fuelLoaded * wFuel;                         // 21
     const xLoaded = Math.min(100, Math.floor(remW / wX));

@@ -231,6 +231,10 @@ export function createVessel(shipId, colonyId, opts = {}) {
       autoRefuel: true,   // auto-tankowanie w hangarze
     },
 
+    // S3.3b-S3b — auto-tankowanie przy doku (kolonia/stacja). Default true (zero regresji); gracz
+    // wyłącza per-statek dla kurierów pętli (by nie zjadały dostarczonego paliwa). Gate w _tickRefueling.
+    refuelAutomatically: opts.refuelAutomatically ?? true,
+
     // Dziennik misji (max 20 wpisów, ring buffer)
     missionLog: [],
 

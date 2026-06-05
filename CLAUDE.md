@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v84 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v85 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -263,11 +263,20 @@ Endurance drain multiplier (VesselManager._tickEndurance) — M2a commit 8
 StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant materialize)
   └─ createStation(bodyId, opts) → Station (type='station') + orbital.assignOrbit(bodyId, id, 'station')
   └─ destroyStation(id), getStationsAt(bodyId), serialize/restore (encje w civ4x.stationSystem; orbita w civ4x.orbitalSpace)
-  └─ Encja: src/entities/Station.js (extends CelestialBody, orbital=null; fuelStore/fuelCapacity placeholdery depotu S3.3b-S3)
+  └─ Encja: src/entities/Station.js (extends CelestialBody, orbital=null, x/y STATYCZNE — anchored GEO; depot=StationDepot magazyn ogólny S3.3b-S3b)
   └─ Dane: src/data/StationData.js (STATIONS.orbital_station: cost Fe/Ti/Cu/Si + 7 commodities; buildTime placeholder; stationTotalCost())
   └─ Pending (ColonyManager): addPendingStationOrder/cancel/get + _tickPendingStationOrders (canAfford→spend→createStation; no-refund pre-check ciała)
   └─ Render: ThreeRenderer._stations Map + _addStationMesh/_removeStationMesh/_tickOrbitingStations (anchored GEO, bez rotacji; 9f instant-position)
   └─ Devtools: KOSMOS.debug.{spawnStation(bodyId?, opts?), queueStationOrder(target?, costOverride?), destroyStation(id)}
+  └─ S3.3b-S3b — HUB handlowy (save v85): StationDepot (src/entities/StationDepot.js) façade resSys-podobny
+     (inventory Map + receive/spend/getAmount, BEZ filtra = dowolne towary, sink I source; NIE ResourceSystem reuse).
+     resolveTransferStore (src/utils/TransferStore.js: kolonia.resourceSystem | station.depot) + VesselManager.dockAtTarget
+     (stacja→dockAtStation). Pętla cargo cel/źródło=stacja: MissionSystem _processTransportArrival/_continueTransportLoop/
+     _bestEffortLoad(col→STORE)/_tryResumeLoop + **_findTarget zwraca stację-WIDOK z pozycją LIVE bodyId→body** (encja
+     x/y statyczne; root bug#1: brak 'station' → pętla nie dispatchowała outbound). refuelAutomatically (Vessel,
+     default-true, restore ?? true=bez migracji; gate _tickRefueling `=== false`) + manualRefuel + przycisk Refuel/toggle
+     (_drawActions). Tactical: render map_station (offset bodyScale) + Fix A priorytet handleClick (ciało/stacja>statek
+     w step=select) + Fix B guard map_vessel. _getValidTargets: stacje GRACZA tylko (cross-empire→S3.4/S3.5).
 ```
 
 ---

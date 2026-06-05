@@ -1108,6 +1108,9 @@ export default {
   'fleet.phaseLabel': 'FAZA:',
   'fleet.disbandReturn': '🗑 Disband (zwrot 75%)',
   'fleet.disbandRequiresShipyard': '🗑 Disband — wymaga stoczni',
+  'fleet.refuelNow': '⛽ Refuel',
+  'fleet.refuelAutoOn': 'Auto: WŁ',
+  'fleet.refuelAutoOff': 'Auto: WYŁ',
   'fleet.tradeRoutesHeader': '🔄 PĘTLE TRANSPORTOWE ({0})',
   'fleet.repeatAuto': 'Powtarzaj automatycznie',
   'fleet.activeRouteLabel': 'TRASA HANDLOWA',
@@ -1154,6 +1157,7 @@ export default {
   'vessel.stranded': '{0} utknął — brak paliwa na powrót',
   'vessel.strandedToast': '⛽ {0} utknął — wyślij ratunek',
   'vessel.docked': 'Zadokował w {0}',
+  'vessel.dockedStation': 'Zadokował przy stacji {0}',
   'vessel.emergencyReturn': 'Awaryjny powrót \u2014 cel zniszczony',
   'vessel.redirectedBase': 'Przekierowano do bazy \u2014 kolonia macierzysta zniszczona',
   'vessel.reassigned': 'Reassigned do {0} \u2014 kolonia macierzysta zniszczona',
@@ -1394,6 +1398,7 @@ export default {
   'cargo.rawMaterials': 'SUROWCE',
   'cargo.harvested': 'ZBIERALNE',
   'cargo.title': '📦 CARGO — {0}',
+  'cargo.depotInfo': '🛰 Magazyn stacji: {0}',
   'cargo.shipInfo': '{0} • ładowność: {1} ton',
 
   // === Transport modal ===

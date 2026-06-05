@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 84;
+export const CURRENT_VERSION     = 85;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -102,6 +102,7 @@ const MIGRATIONS = {
   81: _migrateV81toV82,
   82: _migrateV82toV83,
   83: _migrateV83toV84,
+  84: _migrateV84toV85,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2084,6 +2085,22 @@ function _migrateV82toV83(data) {
       if (!emp.research || typeof emp.research !== 'object') {
         emp.research = { queueIndex: 0, progress: 0 };
       }
+    }
+  }
+  return data;
+}
+
+// v84 → v85: S3.3b-S3b — magazyn OGÓLNY stacji (HUB handlowy). fuelStore/fuelCapacity (placeholder, 0)
+//   → depot lazy {} (lub {fuel} gdy fuelStore>0 z debug). Magazyn przyjmuje dowolne towary (StationDepot
+//   bez filtra). stationSystem null/brak na starych save → pętla pominięta (Array.isArray). Idempotentne (!s.depot).
+function _migrateV84toV85(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  const stations = c4x?.stationSystem;
+  if (Array.isArray(stations)) {
+    for (const s of stations) {
+      if (!s.depot) s.depot = (s.fuelStore > 0) ? { fuel: s.fuelStore } : {};
+      delete s.fuelStore;
+      delete s.fuelCapacity;
     }
   }
   return data;

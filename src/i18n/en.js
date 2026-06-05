@@ -1107,6 +1107,9 @@ export default {
   'fleet.phaseLabel': 'PHASE:',
   'fleet.disbandReturn': '🗑 Disband (75% refund)',
   'fleet.disbandRequiresShipyard': '🗑 Disband — requires shipyard',
+  'fleet.refuelNow': '⛽ Refuel',
+  'fleet.refuelAutoOn': 'Auto: ON',
+  'fleet.refuelAutoOff': 'Auto: OFF',
   'fleet.tradeRoutesHeader': '🔄 TRANSPORT LOOPS ({0})',
   'fleet.repeatAuto': 'Repeat automatically',
   'fleet.activeRouteLabel': 'TRADE ROUTE',
@@ -1153,6 +1156,7 @@ export default {
   'vessel.stranded': '{0} stranded — no fuel to return',
   'vessel.strandedToast': '⛽ {0} stranded — send rescue',
   'vessel.docked': 'Docked at {0}',
+  'vessel.dockedStation': 'Docked at station {0}',
   'vessel.emergencyReturn': 'Emergency return — target destroyed',
   'vessel.redirectedBase': 'Redirected to base — home colony destroyed',
   'vessel.reassigned': 'Reassigned to {0} — home colony destroyed',
@@ -1393,6 +1397,7 @@ export default {
   'cargo.rawMaterials': 'RAW MATERIALS',
   'cargo.harvested': 'HARVESTED',
   'cargo.title': '📦 CARGO — {0}',
+  'cargo.depotInfo': '🛰 Station warehouse: {0}',
   'cargo.shipInfo': '{0} • capacity: {1} tons',
 
   // === Transport modal ===

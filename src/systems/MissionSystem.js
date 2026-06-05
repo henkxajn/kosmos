@@ -26,6 +26,7 @@ import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { addMissionLog, loadCargo } from '../entities/Vessel.js';
+import { resolveTransferStore } from '../utils/TransferStore.js';
 import { t }             from '../i18n/i18n.js';
 
 // ── Koszty misji ─────────────────────────────────────────────────────────────
@@ -1607,10 +1608,11 @@ export class MissionSystem {
   //
   // Zwraca `true` jeśli pętla kontynuuje (status/dispatch ustawione); `false` jeśli
   // wywołujący powinien obsłużyć domyślne dokowanie (pętla zakończona/niemożliwa).
-  _continueTransportLoop(exp, vessel, deliveryCol) {
-    const vMgr   = window.KOSMOS?.vesselManager;
-    const colMgr = window.KOSMOS?.colonyManager;
-    if (!vMgr || !vessel || !colMgr) return false;
+  // S3.3b-S3b: `store` = magazyn bieżącej lokacji (resolveTransferStore(exp.targetId) u callera) —
+  // kolonia.resourceSystem LUB station.depot. Cel/źródło pętli może być kolonią lub stacją (HUB).
+  _continueTransportLoop(exp, vessel, store) {
+    const vMgr = window.KOSMOS?.vesselManager;
+    if (!vMgr || !vessel) return false;
 
     const currentLoc = exp.targetId;
     const isAtTarget = currentLoc === exp.loopTargetId;
@@ -1620,10 +1622,10 @@ export class MissionSystem {
     if (isAtTarget) {
       // ── Przybyliśmy do celu → best-effort załaduj returnCargo i leć z powrotem ──
       // Zadokuj w celu (tymczasowo) — potrzebne do redispatch + doładowania cargo z kolonii
-      vMgr.dockAtColony(exp.vesselId, exp.targetId);
+      vMgr.dockAtTarget(exp.vesselId, exp.targetId);
 
       // S3.0a (e): best-effort — bierz ile jest (min(spec, dostępne)), NIGDY nie czekaj.
-      const { total } = this._bestEffortLoad(vessel, deliveryCol, exp.returnCargoSpec ?? {});
+      const { total } = this._bestEffortLoad(vessel, store, exp.returnCargoSpec ?? {});
       exp._lastRetLoaded = total;
 
       // Dispatch return leg (zawsze — pusty też leci)
@@ -1631,13 +1633,13 @@ export class MissionSystem {
     }
 
     // ── Przybyliśmy do źródła → granica cyklu: ewaluuj produktywność, best-effort reload, leć ──
-    vMgr.dockAtColony(exp.vesselId, exp.loopSourceId);
+    vMgr.dockAtTarget(exp.vesselId, exp.loopSourceId);
 
     // S3.0a (e): granica cyklu — sprawdź czy pełny round-trip coś przewiózł (PRZED nadpisaniem _lastOutLoaded)
     this._evaluateLoopProductivity(exp, vessel);
 
     // S3.0a (e): best-effort reload ładunku wylotowego — zastępuje ręczne doładowanie (waiting_reload)
-    const { total } = this._bestEffortLoad(vessel, deliveryCol, exp.outboundCargoSpec ?? {});
+    const { total } = this._bestEffortLoad(vessel, store, exp.outboundCargoSpec ?? {});
     exp._lastOutLoaded = total;
 
     return this._dispatchLoopLeg(exp, vessel, exp.loopTargetId, 'outbound');
@@ -1648,13 +1650,14 @@ export class MissionSystem {
   // pierwszy towar ładuje się do pełna (wg wagi), kolejne biorą resztę miejsca. loadCargo
   // sam mutuje vessel.cargo/cargoUsed + spend z resSys (cargo puste na granicy cyklu po dostawie).
   // Zwraca { total } = faktycznie załadowana suma (0 jeśli brak towaru — pętla leci pusta, nie czeka).
-  _bestEffortLoad(vessel, col, spec) {
-    const resSys = col?.resourceSystem;
+  // S3.3b-S3b: `store` to magazyn resourceSystem-podobny (kolonia.resourceSystem LUB station.depot),
+  // rozwiązany przez resolveTransferStore u callera. loadCargo używa store.spend + store.inventory.
+  _bestEffortLoad(vessel, store, spec) {
     let total = 0;
     for (const k of Object.keys(spec ?? {})) {
       const want = spec[k] ?? 0;
       if (want <= 0) continue;
-      total += loadCargo(vessel, k, want, resSys);
+      total += loadCargo(vessel, k, want, store);
     }
     return { total };
   }
@@ -1751,8 +1754,7 @@ export class MissionSystem {
   // Zwraca true jeśli wznowiono (dispatch), false jeśli nadal brak paliwa.
   _tryResumeLoop(exp) {
     const vMgr   = window.KOSMOS?.vesselManager;
-    const colMgr = window.KOSMOS?.colonyManager;
-    if (!vMgr) return false;
+    if (!vMgr) return false;   // S3.3b-S3b: colMgr usunięty — store rozwiązuje resolveTransferStore
     const vessel = exp.vesselId ? vMgr.getVessel(exp.vesselId) : null;
     if (!vessel || vessel.position.state !== 'docked') return false;
 
@@ -1764,16 +1766,14 @@ export class MissionSystem {
 
     if (exp.status === 'waiting_return_cargo') {
       if (cargoEmpty) {
-        const col = colMgr?.getColony(exp.loopTargetId);
-        const { total } = this._bestEffortLoad(vessel, col, exp.returnCargoSpec ?? {});
+        const { total } = this._bestEffortLoad(vessel, resolveTransferStore(exp.loopTargetId), exp.returnCargoSpec ?? {});
         exp._lastRetLoaded = total;
       }
       return this._dispatchLoopLeg(exp, vessel, exp.loopSourceId, 'return');
     }
     if (exp.status === 'waiting_reload') {
       if (cargoEmpty) {
-        const col = colMgr?.getColony(exp.loopSourceId);
-        const { total } = this._bestEffortLoad(vessel, col, exp.outboundCargoSpec ?? {});
+        const { total } = this._bestEffortLoad(vessel, resolveTransferStore(exp.loopSourceId), exp.outboundCargoSpec ?? {});
         exp._lastOutLoaded = total;
       }
       return this._dispatchLoopLeg(exp, vessel, exp.loopTargetId, 'outbound');
@@ -1786,9 +1786,11 @@ export class MissionSystem {
     const colMgr = window.KOSMOS?.colonyManager;
     const vMgr   = window.KOSMOS?.vesselManager;
     const targetCol = colMgr?.getColony(exp.targetId);
+    // S3.3b-S3b — cel może być STACJĄ (HUB handlowy). Magazyn = kolonia.resourceSystem LUB station.depot.
+    const store = targetCol ? targetCol.resourceSystem : resolveTransferStore(exp.targetId);
 
-    if (targetCol) {
-      // Dostarcz cargo — prefaby zostają na statku, reszta do inventory kolonii
+    if (store) {
+      // Dostarcz cargo — prefaby zostają na statku, reszta do magazynu (kolonia LUB stacja)
       const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
 
       if (exp.cargo) {
@@ -1796,11 +1798,11 @@ export class MissionSystem {
         for (const [key, val] of Object.entries(exp.cargo)) {
           if (val > 0) deliverable[key] = val;
         }
-        targetCol.resourceSystem.receive(deliverable);
+        store.receive(deliverable);
         exp.gained = deliverable;
 
-        // Loguj import (cargo dostarczone do kolonii)
-        if (Object.keys(deliverable).length > 0) {
+        // Loguj import — tylko kolonia (stacja-HUB nie ma colony trade UI)
+        if (targetCol && Object.keys(deliverable).length > 0) {
           const originCol = colMgr?.getColony(exp.originColonyId);
           EventBus.emit('trade:imported', {
             colonyId: exp.targetId,
@@ -1829,7 +1831,7 @@ export class MissionSystem {
       // ── Transport cykliczny — obsługa pętli ─────────────────────────
       // Pętla: po dostarczeniu ładunku wysyłamy statek na kolejny etap pętli
       // (outbound → return → waiting_reload → outbound …). Brak zmiany własności floty.
-      if (exp.loop && this._continueTransportLoop(exp, vessel, targetCol)) {
+      if (exp.loop && this._continueTransportLoop(exp, vessel, store)) {
         this._emit('mission:arrived', 'expedition:arrived', {
           expedition: exp,
           gained: exp.gained,
@@ -1848,8 +1850,9 @@ export class MissionSystem {
           const idx = oldCol.fleet.indexOf(exp.vesselId);
           if (idx !== -1) oldCol.fleet.splice(idx, 1);
         }
-        vMgr.dockAtColony(exp.vesselId, exp.targetId);
-        if (!targetCol.fleet.includes(exp.vesselId)) {
+        vMgr.dockAtTarget(exp.vesselId, exp.targetId);
+        // Fleet membership tylko dla kolonii (stacja-HUB nie zarządza flotą gracza).
+        if (targetCol && !targetCol.fleet.includes(exp.vesselId)) {
           targetCol.fleet.push(exp.vesselId);
         }
       }
@@ -2361,6 +2364,15 @@ export class MissionSystem {
       const bodies = EntityManager.getByType(t);
       const found  = bodies.find(b => b.id === targetId);
       if (found) return found;
+    }
+    // S3.3b-S3b — stacja (HUB): WIDOK z LIVE pozycją ciała macierzystego (encja stacji ma statyczne
+    // x/y — anchored GEO). Kopia, nie encja: spójne z dystansem/arrival, nie mutuje encji. typeOk
+    // w canLaunchColony/canFoundOutpost (type='station') defensywnie blokuje te misje (poprawne —
+    // stacji nie kolonizujesz/nie zakładasz na niej outpostu); transport NIE używa typeOk.
+    const station = EntityManager.get(targetId);
+    if (station?.type === 'station') {
+      const body = EntityManager.get(station.bodyId);
+      return { ...station, x: body?.x ?? station.x, y: body?.y ?? station.y };
     }
     return null;
   }

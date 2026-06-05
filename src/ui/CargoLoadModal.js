@@ -123,6 +123,9 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
       const planetName = colony?.name ?? '???';
       info.innerHTML = `Ładownia desantowa — ${used}/${cap} pkt<br>` +
         `<span style="color:${THEME.textDim}; font-size:9px">Jednostki z planety: <b>${planetName}</b></span>`;
+    } else if (colony?.isDepot) {
+      // S3.3b-S3b — magazyn ogólny stacji (HUB handlowy): nazwa w nagłówku.
+      info.textContent = t('cargo.depotInfo', colony.name ?? '???');
     } else {
       info.textContent = t('cargo.shipInfo', getName({ id: vessel.shipId, namePL: ship?.namePL }, 'ship'), cargoCapacity);
     }
@@ -200,6 +203,7 @@ export function showCargoLoadModal(vessel, colony, options = {}) {
         name.textContent = `${_resName(comId)} ×${qty} (${(qty * w).toFixed(1)}t)`;
         row.appendChild(name);
 
+        // Magazyn stacji (S3.3b-S3b) jest ogólny — przyjmuje dowolny towar, więc unload bez filtra (jak kolonia).
         const btnUnload = _makeBtn(t('cargo.unload'), THEME.yellow, () => {
           const actual = unloadCargo(vessel, comId, qty, resSys);
           if (actual > 0) { changed = true; updateCargoBar(); refreshCargoList(); refreshLoadSection(); }

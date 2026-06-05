@@ -43,6 +43,7 @@ import {
 } from '../data/VesselNames.js';
 import { t } from '../i18n/i18n.js';
 import { needsSpaceportForVessel, hasSpaceportAt } from '../utils/SpaceportCheck.js';
+import { isStationId, resolveTransferStore } from '../utils/TransferStore.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX; // 110
 
@@ -325,8 +326,10 @@ export class VesselManager {
     const dysonRangeMult = (techSys?.isResearched?.('dyson_transmitter') ?? false) ? 0.5 : 1.0;
     vessel.fuel.consumption = baseFuelPerAU * fuelEffMult * dysonRangeMult;
 
-    // Pozycja startu (bieżąca pozycja kolonii)
-    const startEntity = this._findEntity(vessel.position.dockedAt);
+    // Pozycja startu (bieżąca pozycja kolonii / ciała stacji)
+    let startEntity = this._findEntity(vessel.position.dockedAt);
+    // S3.3b-S3b — stacja ma statyczne x/y (anchored GEO) → start-pos z jej ciała macierzystego (live).
+    if (startEntity?.type === 'station') startEntity = this._findEntity(startEntity.bodyId) ?? startEntity;
     const sx = startEntity?.x ?? vessel.position.x;
     const sy = startEntity?.y ?? vessel.position.y;
 
@@ -446,6 +449,8 @@ export class VesselManager {
     if (vessel._strandedNotified) return;                // jednorazowo
     const colMgr = window.KOSMOS?.colonyManager;
     if (colMgr?.getColony(vessel.position.dockedAt)) return; // przy kolonii — dotankuje
+    // S3.3b-S3 — przy stacji-depocie też może dotankować (manualny ratunek) → brak alarmu.
+    if (this._findEntity(vessel.position.dockedAt)?.type === 'station') return;
     const home = this._findEntity(vessel.homeColonyId ?? vessel.colonyId);
     if (!home) return;
     const distHomeAU = Math.hypot(vessel.position.x - home.x, vessel.position.y - home.y) / AU_TO_PX;
@@ -566,6 +571,44 @@ export class VesselManager {
     addMissionLog(vessel, gameYear, t('vessel.docked', targetName), 'success');
 
     EventBus.emit('vessel:docked', { vessel });
+  }
+
+  /**
+   * S3.3b-S3 — dokowanie do STACJI orbitalnej (depot paliwa). Osobne od dockAtColony:
+   * stacja NIE jest kolonią, więc vessel.colonyId zostaje macierzysty (powrót/flota bez zmian).
+   * Port uniwersalny — przyjmuje wszystkie kadłuby (bez bramki spaceport). Pozycja kotwiczona do
+   * ciała macierzystego stacji (encja stacji ma statyczne x/y). NIE resetuje _strandedNotified —
+   * status „⛽ Utknął" znika dopiero po REALNYM tankowaniu w _refuelTank (trackStranding=true).
+   */
+  dockAtStation(vesselId, stationId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return false;
+    const station = this._findEntity(stationId);
+    if (!station || station.type !== 'station') return false;
+
+    const body = this._findEntity(station.bodyId);   // encja stacji = statyczne x/y → kotwicz do ciała
+    vessel.position.state    = 'docked';
+    vessel.position.dockedAt = stationId;             // NIE zmieniamy vessel.colonyId (macierzysta zostaje)
+    vessel.position.x = body?.x ?? station.x ?? vessel.position.x;
+    vessel.position.y = body?.y ?? station.y ?? vessel.position.y;
+    vessel.status  = 'idle';
+    vessel.mission = null;
+    vessel.experience += 1;
+    if (vessel.stats) vessel.stats.missionsComplete += 1;
+
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    addMissionLog(vessel, gameYear, t('vessel.dockedStation', station.name), 'success');
+    EventBus.emit('vessel:docked', { vessel });
+    return true;
+  }
+
+  /**
+   * S3.3b-S3b — dokowanie do CELU transportu/pętli: stacja → dockAtStation, inaczej → dockAtColony.
+   * Jeden punkt rozgałęzienia (MissionSystem pętla cargo nie musi znać typu celu).
+   */
+  dockAtTarget(vesselId, id) {
+    if (isStationId(id)) return this.dockAtStation(vesselId, id);
+    return this.dockAtColony(vesselId, id);
   }
 
   // ── Misje międzygwiezdne ────────────────────────────────────────────────────
@@ -1011,6 +1054,8 @@ export class VesselManager {
         endurance:         enduranceData,
         movementOrder:     movementOrderData,
         suspendedMission:  suspendedMissionData,
+        // S3.3b-S3b — flaga auto-refuel (default true; restore ?? true → bez migracji starych save).
+        refuelAutomatically: v.refuelAutomatically ?? true,
         // velocity — celowo pominięte (derived; resync w pierwszym _updatePositions po load)
         // ── M4 P1 — drift state ───────────────────────────────────────────
         // driftIdle/lowFuelDrift muszą przeżyć save/load: MovementOrderSystem
@@ -1124,6 +1169,8 @@ export class VesselManager {
           regenPerYear:  0,
           lastDepleted:  vd.endurance?.lastDepleted ?? null,
         },
+        // S3.3b-S3b — auto-refuel flaga (?? true → stare save bez pola tankują jak dziś).
+        refuelAutomatically: vd.refuelAutomatically ?? true,
         // MovementOrder: deep-copy po deserializacji z save.
         movementOrder: (() => {
           if (!vd.movementOrder) return null;
@@ -1458,6 +1505,13 @@ export class VesselManager {
     for (const vessel of this._vessels.values()) {
       if (vessel.position.state !== 'docked') continue;
 
+      // S3.3b-S3b — auto-tankowanie respektuje flagę gracza (default-true). Wyłączone → pomiń
+      // (gracz wyłącza dla kurierów pętli, by nie zjadały dostarczonego paliwa). Ręczny refuel = manualRefuel().
+      if (vessel.refuelAutomatically === false) {
+        if (vessel.status === 'refueling') vessel.status = 'idle';
+        continue;
+      }
+
       // Szybkie wyjście: oba baki pełne → idle.
       if (!needsRefuel(vessel) && !needsWarpRefuel(vessel)) {
         vessel._awaitingFuel = false;
@@ -1465,7 +1519,12 @@ export class VesselManager {
         continue;
       }
 
-      const colony = colMgr.getColony(vessel.position.dockedAt);
+      // dockedAt może być kolonią LUB stacją (depot S3.3b-S3). Rozwiąż kontekst tankowania.
+      let colony = colMgr.getColony(vessel.position.dockedAt);
+      if (!colony) {
+        const st = EntityManager.get(vessel.position.dockedAt);
+        if (st?.type === 'station' && st.depot) colony = { resourceSystem: st.depot };  // façade resSys-podobny
+      }
       if (!colony) continue;
       const inv = colony.resourceSystem?.inventory;
       if (!inv) continue;
@@ -1482,6 +1541,24 @@ export class VesselManager {
         vessel.status = 'idle';
       }
     }
+  }
+
+  /**
+   * S3.3b-S3b — ręczny refuel (przycisk „⛽ Refuel"): jednorazowo dotankuj OBA baki z bieżącego
+   * dockedAt (kolonia LUB stacja-depot), NIEZALEŻNIE od flagi refuelAutomatically. Duże dt = do pełna
+   * (limit = dostępne w magazynie lub wolne miejsce w baku). Reuse _refuelTank + resolveTransferStore.
+   */
+  manualRefuel(vesselId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel || vessel.position.state !== 'docked') return false;
+    const store = resolveTransferStore(vessel.position.dockedAt);
+    const inv = store?.inventory;
+    if (!inv) return false;
+    const colony = { resourceSystem: store };   // _refuelTank kontrakt (colony.resourceSystem + inv)
+    const fuelId = vessel.fuel?.fuelType ?? vessel.fuelType ?? 'fuel';
+    this._refuelTank(vessel, vessel.fuel, fuelId, colony, inv, 1000, true);
+    this._refuelTank(vessel, vessel.warpFuel, vessel.warpFuel?.fuelType ?? 'warp_cores', colony, inv, 1000, false);
+    return true;
   }
 
   /**
@@ -1540,12 +1617,14 @@ export class VesselManager {
         continue;
       }
 
-      // Docked statki — synchronizuj pozycję z planetą macierzystą
+      // Docked statki — synchronizuj pozycję z planetą macierzystą (lub ciałem stacji)
       if (vessel.position.state === 'docked' && vessel.position.dockedAt) {
         const entity = this._findEntity(vessel.position.dockedAt);
         if (entity) {
-          vessel.position.x = entity.x;
-          vessel.position.y = entity.y;
+          // S3.3b-S3 — stacja ma statyczne x/y (anchored GEO) → kotwicz do jej ciała macierzystego.
+          const anchor = entity.type === 'station' ? this._findEntity(entity.bodyId) : entity;
+          vessel.position.x = anchor?.x ?? entity.x;
+          vessel.position.y = anchor?.y ?? entity.y;
         }
         continue;
       }
@@ -2604,7 +2683,10 @@ export class VesselManager {
    * @param {number} futureYear — rok gry, w którym chcemy pozycję
    */
   _predictPosition(entityId, futureYear) {
-    const entity = this._findEntity(entityId);
+    let entity = this._findEntity(entityId);
+    // S3.3b-S3b — stacja (anchored GEO, orbital=null, x/y statyczne) → predykcja CIAŁA macierzystego
+    // (porusza się po Keplerze); statek celuje gdzie stacja BĘDZIE, nie creation-time pozycję.
+    if (entity?.type === 'station') entity = this._findEntity(entity.bodyId) ?? entity;
     if (!entity?.orbital) return entity ? { x: entity.x, y: entity.y } : { x: 0, y: 0 };
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;

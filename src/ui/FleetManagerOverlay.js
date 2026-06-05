@@ -437,6 +437,16 @@ export class FleetManagerOverlay {
       return true;
     }
 
+    // S3.3b-S3b — podczas wyboru celu misji (step==='select') PRIORYTET ciała/stacji nad statkiem.
+    // handleClick kończy po PIERWSZEJ trafionej, a statek zone wygrywa reverse-iter — więc tu, ZANIM
+    // wejdziemy w normalną pętlę, sprawdzamy czy pod kliknięciem jest map_body/map_station i wybieramy CEL.
+    if (this._missionConfig?.step === 'select') {
+      const tgtZone = this._hitZones.find(z =>
+        (z.type === 'map_body' || z.type === 'map_station') &&
+        mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h);
+      if (tgtZone) { this._handleHit(tgtZone, mx, my); return true; }
+    }
+
     // Szukaj hit zone (reverse — top-most first).
     // M3 P1.3.5: map_vessel obsługiwane (selection z tactical mapy);
     // wcześniej skipped — wybór tylko z listy po lewej.
@@ -885,6 +895,20 @@ export class FleetManagerOverlay {
         }
         break;
       }
+      case 'map_station': {
+        // S3.3b-S3b — wybór STACJI jako cel misji (transport→HUB). Podczas wyboru celu → targetId+confirm.
+        if (this._missionConfig?.step === 'select') {
+          this._missionConfig.targetId = zone.data.stationId;
+          this._missionConfig.step = 'confirm';
+          this._mapHoverBody = null;
+          break;
+        }
+        // Poza trybem wyboru — focus na ciele macierzystym stacji.
+        this._mapFocusBodyId = zone.data.bodyId;
+        const stBody = _findBody(zone.data.bodyId);
+        if (stBody) { EventBus.emit('body:selected', { entity: stBody }); this._centerMapOnBody(stBody); }
+        break;
+      }
       case 'atlas_report': {
         // Ikona raportu 📋 w Star Atlas — otwórz modal ze szczegółami
         const reportBody = _findBody(zone.data.bodyId);
@@ -894,6 +918,9 @@ export class FleetManagerOverlay {
         break;
       }
       case 'map_vessel': {
+        // S3.3b-S3b — klik w statek W PUSTCE podczas wyboru celu (brak ciała/stacji pod spodem — Fix A
+        // już obsłużył nakładanie) → ignoruj, NIE selekcjonuj (nie podmieniaj wybranego statku w trakcie misji).
+        if (this._missionConfig?.step === 'select') break;
         // P2 polish — Fleet Engage pick mode (tactical map LPM na enemy).
         // Bug fix (jak case 'vessel'): klik na własny → cancel pick mode + select.
         if (this._fleetEngagePickMode?.fleetId) {
@@ -1164,6 +1191,14 @@ export class FleetManagerOverlay {
         this._setSelectedVesselViaUI(null);
         this._missionConfig = null;
         break;
+      case 'manual_refuel':
+        window.KOSMOS?.vesselManager?.manualRefuel?.(zone.data.vesselId);
+        break;
+      case 'toggle_refuel_auto': {
+        const v = window.KOSMOS?.vesselManager?.getVessel?.(zone.data.vesselId);
+        if (v) v.refuelAutomatically = !(v.refuelAutomatically ?? true);
+        break;
+      }
     }
   }
 
@@ -1434,6 +1469,14 @@ export class FleetManagerOverlay {
    */
   _getVesselColony(vessel) {
     const colMgr = window.KOSMOS?.colonyManager;
+    // S3.3b-S3 — zadokowany przy STACJI → pseudo-kolonia z façade depotu (fuel/warp_cores).
+    // CargoLoadModal czyta colony.resourceSystem → station.depot; isDepot filtruje rozładunek do paliwa.
+    if (vessel?.position?.state === 'docked' && vessel.position.dockedAt) {
+      const st = EntityManager.get(vessel.position.dockedAt);
+      if (st?.type === 'station' && st.depot) {
+        return { planetId: st.id, name: st.name, resourceSystem: st.depot, isDepot: true };
+      }
+    }
     // Orbitujący: użyj planety nad którą orbituje (dockedAt)
     if (vessel?.position?.state === 'orbiting' && vessel.position.dockedAt) {
       const orbiting = colMgr?.getColony(vessel.position.dockedAt);
@@ -3030,6 +3073,27 @@ export class FleetManagerOverlay {
       ctx.fillText(label, px + r + 2, py + 3);
 
       this._hitZones.push({ x: px - 10, y: py - 10, w: 20, h: 20, type: 'map_body', data: { bodyId: p.id } });
+    }
+
+    // ── S3.3b-S3b — stacje orbitalne (HUB) — marker przy ciele macierzystym (pozycja LIVE z bodyId) ──
+    for (const st of EntityManager.getByTypeInSystem('station', sysId)) {
+      const body = EntityManager.get(st.bodyId);
+      const bx0 = toSx(body?.x ?? st.x), by0 = toSy(body?.y ?? st.y);
+      const off = bodyScale(9, 30);         // offset skalowany z zoomem (jak rozmiar ciał) — marker poza planetą na każdym zoomie
+      const sxm = bx0 + off, sym = by0 - off;
+      const isOwn = (st.ownerEmpireId ?? 'player') === 'player';
+      ctx.strokeStyle = 'rgba(120,200,255,0.30)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(bx0, by0); ctx.lineTo(sxm, sym); ctx.stroke();   // linia łącząca z ciałem
+      ctx.fillStyle = isOwn ? (THEME.info ?? '#44ccff') : THEME.danger;
+      ctx.fillRect(sxm - 3, sym - 3, 6, 6);
+      ctx.strokeStyle = isOwn ? '#aaddff' : THEME.danger;
+      ctx.strokeRect(sxm - 3, sym - 3, 6, 6);
+      if (this._mapZoom >= 2) {
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText((st.name ?? '').slice(0, 6), sxm + 5, sym + 3);
+      }
+      this._hitZones.push({ x: sxm - 7, y: sym - 7, w: 14, h: 14, type: 'map_station', data: { stationId: st.id, bodyId: st.bodyId } });
     }
 
     // ── Misje aktywne (linie + ikona misji) ─────────────────
@@ -5849,6 +5913,33 @@ export class FleetManagerOverlay {
     }
     cy += disbandH + 4;
 
+    // ── S3.3b-S3b — ręczny Refuel (zawsze gdy docked) + toggle Auto-refuel (default ON) ──
+    if (isDocked) {
+      const halfW = (w - pad * 2 - 4) / 2;
+      const rfH = 22;
+      // Lewa: ⛽ Refuel (jednorazowe dotankowanie z dockedAt — kolonia lub stacja)
+      ctx.fillStyle = 'rgba(0,200,255,0.10)';
+      ctx.fillRect(dbx, cy, halfW, rfH);
+      ctx.strokeStyle = THEME.info ?? THEME.accent;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(dbx, cy, halfW, rfH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.info ?? THEME.accent;
+      ctx.fillText(t('fleet.refuelNow'), dbx + 6, cy + 15);
+      this._hitZones.push({ x: dbx, y: cy, w: halfW, h: rfH, type: 'manual_refuel', data: { vesselId: vessel.id } });
+      // Prawa: toggle Auto-refuel
+      const autoOn = vessel.refuelAutomatically ?? true;
+      const tx2 = dbx + halfW + 4;
+      ctx.fillStyle = autoOn ? 'rgba(20,60,40,0.7)' : 'rgba(60,30,30,0.6)';
+      ctx.fillRect(tx2, cy, halfW, rfH);
+      ctx.strokeStyle = autoOn ? THEME.success : THEME.danger;
+      ctx.strokeRect(tx2, cy, halfW, rfH);
+      ctx.fillStyle = autoOn ? THEME.success : THEME.danger;
+      ctx.fillText(autoOn ? t('fleet.refuelAutoOn') : t('fleet.refuelAutoOff'), tx2 + 6, cy + 15);
+      this._hitZones.push({ x: tx2, y: cy, w: halfW, h: rfH, type: 'toggle_refuel_auto', data: { vesselId: vessel.id } });
+      cy += rfH + 4;
+    }
+
     return cy;
   }
 
@@ -5893,7 +5984,7 @@ export class FleetManagerOverlay {
       if (ry > cy + listH) break;
 
       // Ikona + nazwa + odległość
-      const icon = tgt.type === 'planet' ? '🌍' : tgt.type === 'moon' ? '🌙' : tgt.type === 'planetoid' ? '🪨' : '☄';
+      const icon = tgt.type === 'planet' ? '🌍' : tgt.type === 'moon' ? '🌙' : tgt.type === 'planetoid' ? '🪨' : tgt.type === 'station' ? '🛰' : '☄';
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = tgt.reachable ? THEME.textPrimary : THEME.textDim;
       ctx.fillText(`${icon} ${(tgt.name ?? '?').slice(0, 10)}`, x + pad, ry + 16);
@@ -5959,7 +6050,8 @@ export class FleetManagerOverlay {
 
   _drawMissionConfirm(ctx, x, cy, w, maxH, pad, vessel, action) {
     const targetId = this._missionConfig.targetId;
-    const target = _findBody(targetId);
+    // S3.3b-S3b — cel może być STACJĄ (HUB); _findBody nie zna 'station' → fallback na EntityManager.
+    const target = _findBody(targetId) ?? EntityManager.get(targetId);
     if (!target) { this._missionConfig = null; return; }
 
     // Cel
@@ -6218,6 +6310,21 @@ export class FleetManagerOverlay {
         reachable,
         colonyStatus,
       });
+    }
+
+    // S3.3b-S3b — stacje GRACZA (HUB handlowy) jako cele transportu (magazyn ogólny). Cudze stacje
+    // pominięte (handel cross-empire dopiero po dyplomacji — S3.4/S3.5).
+    if (actionId === 'transport') {
+      for (const st of EntityManager.getByTypeInSystem('station', activeSysId)) {
+        if ((st.ownerEmpireId ?? 'player') !== 'player') continue;
+        const body = EntityManager.get(st.bodyId);
+        const distAU = this._calcDistAU(vessel, { x: body?.x ?? st.x, y: body?.y ?? st.y });
+        targets.push({
+          id: st.id, name: st.name ?? st.id, type: 'station',
+          distAU, explored: true, reachable: distAU <= effectiveRange(vessel),
+          colonyStatus: 'station',
+        });
+      }
     }
 
     // Sortuj: reachable najpierw, potem po odległości

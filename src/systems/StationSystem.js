@@ -77,8 +77,7 @@ export class StationSystem {
       tier:          s.tier,
       stationType:   s.stationType,
       createdYear:   s.createdYear,
-      fuelStore:     s.fuelStore,
-      fuelCapacity:  s.fuelCapacity,
+      depot:         s.depot.serialize(),   // S3.3b-S3 — {fuel, warp_cores} (zastąpił fuelStore/fuelCapacity)
       systemId:      s.systemId,
     }));
   }
