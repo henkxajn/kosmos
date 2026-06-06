@@ -237,6 +237,7 @@ export class ThreeRenderer {
     // ── Śledzenie kamery (focus na planecie/księżycu/statku) ───────
     this._focusEntityId = null;
     this._focusVesselId = null;  // śledzenie statku w locie
+    this._focusStationId = null; // S3.3b-S4a — focus kamery na stację (camera-only, bez selekcji)
 
     // ── Referencja do kontrolera kamery (ustawiana z zewnątrz) ─
     this._cameraController = null;
@@ -609,6 +610,7 @@ export class ThreeRenderer {
     EventBus.on('body:selected', safe(({ entity }) => {
       this._focusEntityId = entity.id;
       this._focusVesselId = null; // przerwij śledzenie statku
+      this._focusStationId = null;
       // Księżyce — pozwól na głębszy zoom (r=0.015–0.04, potrzeba bliskiej kamery)
       if (this._cameraController) {
         this._cameraController.setMinDist(entity.type === 'moon' ? 0.15 : 0.3);
@@ -649,6 +651,7 @@ export class ThreeRenderer {
     EventBus.on('body:deselected', safe(() => {
       this._focusEntityId = null;
       this._focusVesselId = null;
+      this._focusStationId = null;
       // Ukryj ikony budynków kolonii + tooltip
       this._colonyMarkers.hide();
       this._hideColonyTooltip();
@@ -685,6 +688,7 @@ export class ThreeRenderer {
         const pos = entry.sprite.position;
         this._focusEntityId = null;
         this._focusVesselId = vesselId;
+        this._focusStationId = null;
         this._cameraController.setMinDist(0.005); // bardzo bliski zoom dla statków
         this._cameraController.focusOnInstant(pos.x, pos.z, pos.y);
         // Auto-zoom na statek — przybliż do widocznej odległości
@@ -707,6 +711,21 @@ export class ThreeRenderer {
           }
         }
       }
+    }));
+
+    // Centruj kamerę na stacji (klik w scenie 3D) — TYLKO kamera, BEZ selekcji/panelu (S3.3b-S4a).
+    // Mirror vessel:focus; _updateCameraFocus śledzi stację co klatkę (anchored, ale planeta orbituje).
+    EventBus.on('station:focus', safe(({ stationId }) => {
+      if (!this._cameraController) return;
+      const entry = this._stations.get(stationId);
+      if (!entry?.mesh) return;
+      const pos = entry.mesh.position;
+      this._focusEntityId  = null;   // przerwij focus ciała
+      this._focusVesselId  = null;   // przerwij focus statku
+      this._focusStationId = stationId;
+      this._cameraController.setMinDist(0.005);  // bliski zoom — można podziwiać stację
+      this._cameraController.focusOnInstant(pos.x, pos.z, pos.y);
+      this._cameraController.setTargetDist(Math.min(this._cameraController._targetDist, 0.3)); // framing — tunable
     }));
 
     // Zmiana trybu widoczności orbit (z menu)
@@ -923,6 +942,7 @@ export class ThreeRenderer {
     this._clickable = [];
     this._focusEntityId = null;
     this._focusVesselId = null;
+    this._focusStationId = null;
     this._star = null;
     this._starClickMesh = null;
   }
@@ -1669,6 +1689,17 @@ export class ThreeRenderer {
     const safeFocus = (x, z) => {
       if (!isNaN(x) && !isNaN(z)) this._cameraController.focusOn(x, z);
     };
+
+    // Śledzenie stacji (anchored do planety, ale planeta orbituje — kamera nadąża). S3.3b-S4a.
+    if (this._focusStationId) {
+      const sEntry = this._stations.get(this._focusStationId);
+      if (sEntry?.mesh) {
+        const p = sEntry.mesh.position;
+        if (!isNaN(p.x) && !isNaN(p.z)) this._cameraController.focusOnSmooth(p.x, p.z, p.y);
+        return;
+      }
+      this._focusStationId = null; // stacja zniknęła (destroy) — self-heal
+    }
 
     // Śledzenie statku w locie (co klatkę, wygładzone — eliminuje drganie)
     if (this._focusVesselId) {
@@ -2675,6 +2706,19 @@ export class ThreeRenderer {
     this._mouse.y = -(screenY / window.innerHeight) * 2 + 1;
     this._ray.setFromCamera(this._mouse, this.camera);
 
+    // Stacja orbitalna — focus kamery (BEZ selekcji; mesh nie w _clickable). PRZED ciałami,
+    // bo stacja orbituje blisko planety (klik w stację nie ma zaznaczać planety za nią). S3.3b-S4a.
+    if (this._stations.size > 0) {
+      const sMeshes = [];
+      for (const e of this._stations.values()) if (e.mesh) sMeshes.push(e.mesh);
+      const sHits = this._ray.intersectObjects(sMeshes, true); // recursive — child mesh GLB/placeholder
+      if (sHits.length > 0) {
+        let o = sHits[0].object;
+        while (o && !o.userData?.stationId) o = o.parent;      // walk-up do Group z userData
+        if (o?.userData?.stationId) { EventBus.emit('station:focus', { stationId: o.userData.stationId }); return true; }
+      }
+    }
+
     const hits = this._ray.intersectObjects(this._clickable);
     if (hits.length > 0) {
       const entity = this._entityByUUID.get(hits[0].object.uuid);
@@ -3160,6 +3204,25 @@ export class ThreeRenderer {
   };
   static VESSEL_SCALE_DEFAULT = 0.002;
 
+  // Stacja orbitalna — model GLB (S3.3b-S4a). Mirror VESSEL_MODEL_MAP/VESSEL_SCALE_MAP.
+  // STATION_MODEL_MAP keyed po station.stationType → gotowe pod przyszły potrójny moduł / Tier 2.
+  static STATION_MODEL_MAP = { orbital_station: 'assets/models/stations/Ring_Station.glb' };
+  static STATION_MODEL_DEFAULT = 'assets/models/stations/Ring_Station.glb';
+  // Native bbox max 1.911 j. × 0.015 ≈ 0.029 j. średnicy (~rozmiar księżyca lub mniejszy).
+  // Live-gate 2026-06-06: 0.037→0.030 dalej za duża (wielkość planety, nieproporcjonalna) → 0.015.
+  // Proporcje > rozmiar na mapie (focus+zoom rozwiązuje widoczność z daleka). STOP-IF-WRONG.
+  static STATION_SCALE = 0.015;
+  // Pierścień leży natywnie w płaszczyźnie XY modelu (oś cienka = Z); +π/2 wokół X kładzie go
+  // płasko w równikowej płaszczyźnie orbitalnej (halo) — mirror placeholder ring.rotation.x.
+  static STATION_MODEL_ROT_X = Math.PI / 2;
+  // 1.0 = default GLTFLoader (brak KHR_materials_emissive_strength). Tunable gdyby okna za matowe
+  // pod NoToneMapping (bez ruszania globalnego tone mappingu — decyzja Filipa).
+  static STATION_EMISSIVE_INTENSITY = 1.0;
+  // Tint stalowo-niebieski — mnożnik na baseColor (chłodny technologiczny metal; neutralizuje
+  // pomarańcz czerwonej gwiazdy). Nakładany na KLON materiału (nie współdzielony template).
+  // Tunable: jaśniejszy 0xaabbdd jeśli za ciemno / bardziej stalowy 0x7f93c0 jeśli za mało chłodu.
+  static STATION_TINT = 0x8899bb;
+
   /**
    * Dodaj statek na mapie 3D — model GLB lub sprite (fallback).
    */
@@ -3576,14 +3639,17 @@ export class ThreeRenderer {
   }
 
   /**
-   * Dodaj mesh stacji orbitalnej (S3.3b-S2). Proceduralny placeholder: rdzeń (sfera) +
-   * pierścień dokujący (torus, emissive). NIE w _clickable (selekcja = S3.3b-S4).
-   * Pozycja ustawiana co klatkę w _tickOrbitingStations. Skala/kolor — do kalibracji.
+   * Dodaj mesh stacji orbitalnej. Proceduralny placeholder (rdzeń-sfera + pierścień-torus) pojawia
+   * się NATYCHMIAST, a model GLB (S3.3b-S4a) doładowuje się async i podmienia placeholder — 16 MB
+   * ładuje się kilka s, bez placeholdera stacja „znika". NIE w _clickable (selekcja = S3.3b-S4).
+   * Pozycja co klatkę w _tickOrbitingStations (anchored, bez rotacji).
    */
   _addStationMesh(station) {
     if (!station?.id || this._stations.has(station.id)) return;
     const col = station.visual?.color ?? 0x44aaff;
 
+    // 1) Proceduralny placeholder NATYCHMIAST — pokrywa ~kilkusekundowe ładowanie GLB
+    //    i jest trwałym fallbackiem, gdyby load się nie powiódł.
     const group = new THREE.Group();
     // Rdzeń — mała sfera
     const hub = new THREE.Mesh(
@@ -3599,19 +3665,101 @@ export class ThreeRenderer {
     ring.rotation.x = Math.PI / 2;
     group.add(ring);
 
+    // userData na Group — raycast w handleClick mapuje hit (child mesh GLB/placeholder) → stationId (focus kamery).
+    group.userData = { kosmosType: 'station', stationId: station.id };
     this.scene.add(group);
-    this._stations.set(station.id, { mesh: group });
+    this._stations.set(station.id, { mesh: group, isModel3D: false, placeholder: [hub, ring] });
     // 9f: natychmiastowe pozycjonowanie — spawn na twardej pauzie nie zostaje w origin.
     this._tickOrbitingStations();
+
+    // 2) Async GLB → podmiana placeholdera (mirror _addVesselModel3D: _loadShipModel + retry-once;
+    //    finalny fallback = placeholder zostaje, nie sprite).
+    const modelPath = ThreeRenderer.STATION_MODEL_MAP[station.stationType] ?? ThreeRenderer.STATION_MODEL_DEFAULT;
+    const t0 = performance.now();
+    this._loadShipModel(modelPath)
+      .then(template => this._swapStationModel(station.id, template, t0))
+      .catch(err => {
+        console.warn(`[ThreeRenderer] Station GLB load failed (retry za 400ms): ${modelPath}`, err);
+        setTimeout(() => {
+          this._loadShipModel(modelPath)
+            .then(template => this._swapStationModel(station.id, template, t0))
+            .catch(err2 => {
+              console.error(`[ThreeRenderer] Station GLB load failed finalnie: ${modelPath} — placeholder zostaje`, err2);
+            });
+        }, 400);
+      });
   }
 
-  /** Usuń mesh stacji (dispose Group). */
+  /**
+   * Podmień proceduralny placeholder stacji na model GLB (S3.3b-S4a). Mirror placeModel z
+   * _addVesselModel3D: clone template (geometria/materiały współdzielone z _shipModelTemplates),
+   * scale, wycentruj (Box3), połóż pierścień płasko, ustaw emissiveIntensity. Guard-first: stacja
+   * mogła zostać usunięta w trakcie ładowania albo być już podmieniona.
+   */
+  _swapStationModel(stationId, template, t0) {
+    const entry = this._stations.get(stationId);
+    if (!entry || entry.isModel3D) return;
+
+    const model = template.clone();
+    const s = ThreeRenderer.STATION_SCALE;
+    model.scale.set(s, s, s);
+
+    // Wycentruj geometrię (GLB origin ~0, ale spójnie z vesselem)
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+    model.position.sub(center);
+
+    // Pierścień płasko w płaszczyźnie orbitalnej (mirror placeholder ring.rotation.x)
+    model.rotation.x = ThreeRenderer.STATION_MODEL_ROT_X;
+
+    const tint = new THREE.Color(ThreeRenderer.STATION_TINT);
+    model.traverse(child => {
+      if (!child.isMesh) return;
+      child.castShadow = false;
+      child.receiveShadow = false;
+      if (!child.material) return;
+      const mat = child.material.clone();                 // tint NIE przebarwi współdzielonego templatu
+      if (mat.color)    mat.color.copy(tint);             // mnożnik baseColor → chłodny stalowy metal
+      if (mat.emissive) mat.emissiveIntensity = ThreeRenderer.STATION_EMISSIVE_INTENSITY; // okna nietknięte
+      child.material = mat;
+    });
+
+    // Podmiana children tej samej Group: usuń placeholder (własne zasoby → dispose), dodaj GLB.
+    const group = entry.mesh;
+    for (const ph of (entry.placeholder ?? [])) {
+      group.remove(ph);
+      ph.geometry?.dispose?.();
+      ph.material?.dispose?.();
+    }
+    group.add(model);
+    entry.isModel3D = true;
+    entry.tintedMats = true;   // materiały sklonowane (tint) → _removeStationMesh musi je dispose
+    entry.placeholder = null;
+
+    // Pomiar dla live-gate (dane, nie zgadywanie): czas load+swap + VRAM (geometries/textures).
+    const dt = (performance.now() - t0).toFixed(0);
+    console.info(`[ThreeRenderer] Station GLB '${stationId}' load+swap: ${dt}ms; renderer.info.memory=`, this.renderer?.info?.memory);
+  }
+
+  /** Usuń mesh stacji. Dispose świadomy isModel3D (mirror _removeVesselSprite). */
   _removeStationMesh(stationId) {
+    if (this._focusStationId === stationId) this._focusStationId = null; // przerwij focus kamery
     const entry = this._stations.get(stationId);
     if (!entry) return;
     if (entry.mesh) {
-      entry.mesh.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
       this.scene.remove(entry.mesh);
+      if (entry.isModel3D) {
+        // Geometria współdzielona (benign re-upload). Materiał: dispose TYLKO klonu tintu (tintedMats);
+        // .dispose() NIE rusza współdzielonych tekstur (żyją w templacie cache).
+        entry.mesh.traverse(child => {
+          if (!child.isMesh) return;
+          child.geometry?.dispose?.();
+          if (entry.tintedMats && child.material) child.material.dispose();
+        });
+      } else {
+        // Proceduralny placeholder — własne geometrie i materiały.
+        entry.mesh.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+      }
     }
     this._stations.delete(stationId);
   }

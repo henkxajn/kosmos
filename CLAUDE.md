@@ -266,7 +266,7 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
   └─ Encja: src/entities/Station.js (extends CelestialBody, orbital=null, x/y STATYCZNE — anchored GEO; depot=StationDepot magazyn ogólny S3.3b-S3b)
   └─ Dane: src/data/StationData.js (STATIONS.orbital_station: cost Fe/Ti/Cu/Si + 7 commodities; buildTime placeholder; stationTotalCost())
   └─ Pending (ColonyManager): addPendingStationOrder/cancel/get + _tickPendingStationOrders (canAfford→spend→createStation; no-refund pre-check ciała)
-  └─ Render: ThreeRenderer._stations Map + _addStationMesh/_removeStationMesh/_tickOrbitingStations (anchored GEO, bez rotacji; 9f instant-position)
+  └─ Render: ThreeRenderer._stations Map + _addStationMesh/_removeStationMesh/_tickOrbitingStations (anchored GEO, bez rotacji; 9f instant-position; S3.3b-S4a: GLB zamiast placeholdera — niżej)
   └─ Devtools: KOSMOS.debug.{spawnStation(bodyId?, opts?), queueStationOrder(target?, costOverride?), destroyStation(id)}
   └─ S3.3b-S3b — HUB handlowy (save v85): StationDepot (src/entities/StationDepot.js) façade resSys-podobny
      (inventory Map + receive/spend/getAmount, BEZ filtra = dowolne towary, sink I source; NIE ResourceSystem reuse).
@@ -277,6 +277,16 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
      default-true, restore ?? true=bez migracji; gate _tickRefueling `=== false`) + manualRefuel + przycisk Refuel/toggle
      (_drawActions). Tactical: render map_station (offset bodyScale) + Fix A priorytet handleClick (ciało/stacja>statek
      w step=select) + Fix B guard map_vessel. _getValidTargets: stacje GRACZA tylko (cross-empire→S3.4/S3.5).
+  └─ S3.3b-S4a — render GLB (render-only): assets/models/stations/Ring_Station.glb (~16 MB, glTF2 bez
+     Draco/KTX2) zastępuje placeholder. _addStationMesh: placeholder sfera+torus NATYCHMIAST → async
+     _loadShipModel (reuse vessel cache) + retry-once → _swapStationModel podmienia children Group
+     (clone→scale→Box3 center→rot.x π/2 płasko→tint→add; placeholder dispose; fallback=placeholder zostaje).
+     Consts STATION_MODEL_MAP/SCALE(0.015)/MODEL_ROT_X/EMISSIVE_INTENSITY(1.0)/TINT(0x8899bb). Tint=mnożnik
+     baseColor na KLONIE materiału (template czysty, emissive/okna nietknięte); entry.tintedMats →
+     _removeStationMesh dispose klonu (tekstury współdzielone nie ruszane). Focus kamery: klik→station:focus
+     (mirror vessel:focus, BEZ selekcji) — _focusStationId + raycast handleClick PRZED ciałami
+     (userData.stationId walk-up) + śledzenie _updateCameraFocus (focusOnSmooth). NoToneMapping bez zmian.
+     Bez migracji save. Selekcja/panel 3D = S3.3b-S4.
 ```
 
 ---
