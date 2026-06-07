@@ -9,6 +9,8 @@ import { THEME, bgAlpha, GLASS_BORDER, hexToRgb } from '../config/ThemeConfig.js
 import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
 import { BUILDINGS, RESOURCE_ICONS, formatCost } from '../data/BuildingsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
+import { STATIONS } from '../data/StationData.js';
+import EntityManager from '../core/EntityManager.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { HexGrid }      from '../map/HexGrid.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
@@ -109,6 +111,15 @@ export class ColonyOverlay extends BaseOverlay {
     EventBus.on('planet:pendingCancelled', () => this._onBuildingChanged());
     EventBus.on('planet:constructionComplete', (e) => this._onBuildingChanged(e?.planetId));
     EventBus.on('planet:constructionProgress', (e) => this._onBuildingChanged(e?.planetId));
+
+    // Stacje orbitalne (S3.3b-S4) — dialog budowy + feedback (flash)
+    this._stationDialogOpen = false;
+    this._stationTargetId   = null;
+    EventBus.on('station:orderQueued',    (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('🛰 ' + t('station.flashQueued')); });
+    EventBus.on('station:built',          (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('🛰 ' + t('station.flashBuilt')); });
+    EventBus.on('station:buildFailed',    (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('⚠ ' + t('station.flashFailed')); });
+    EventBus.on('station:orderCancelled', (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('✕ ' + t('station.flashCancelled')); });
+    EventBus.on('station:orderRejected',  (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('🔒 ' + t('station.flashRejected')); });
 
     // Away Team — tryb wyboru hexa lądowania
     this._landingMode = false;
@@ -535,6 +546,12 @@ export class ColonyOverlay extends BaseOverlay {
 
   _showFlash(msg) { this._flashMsg = msg; this._flashEnd = Date.now() + 2500; }
 
+  // Czy dany planetId to aktualnie wyświetlana kolonia (do gate'owania flashy stacji)
+  _isActivePlanet(planetId) {
+    const activePid = this._selectedColonyId ?? window.KOSMOS?.colonyManager?.activePlanetId;
+    return !!planetId && planetId === activePid;
+  }
+
   /**
    * Czy jest contested hex w zasięgu jednostki ranged?
    */
@@ -749,6 +766,11 @@ export class ColonyOverlay extends BaseOverlay {
       this._drawBottomDrawer(ctx, ox, oy, ow, oh);
     }
 
+    // Station build dialog (S3.3b-S4) — modal nad mapą
+    if (this._stationDialogOpen && colony && !colony.ownerEmpireId && !colony.isTestEnemy) {
+      this._drawStationDialog(ctx, ox, oy, ow, oh, colony);
+    }
+
     // Landing mode indicator
     if (this._landingMode) {
       const t = Date.now() / 1000;
@@ -802,6 +824,24 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillStyle = '#ffaaaa'; ctx.textAlign = 'center';
       ctx.fillText(this._flashMsg, ox + ow / 2, fy + 15);
       ctx.restore();
+    }
+
+    // Przycisk budowy stacji (S3.3b-S4) — nagłówek, na lewo od [✕]. Bramka tech orbital_construction.
+    if (colony && !colony.ownerEmpireId && !colony.isTestEnemy) {
+      ctx.save();
+      const hasStationTech = window.KOSMOS?.techSystem?.isResearched('orbital_construction') ?? false;
+      const sBtnW = 84, sBtnH = 20, sBtnY = oy + 6, sBtnX = ox + ow - 116;
+      ctx.fillStyle = this._stationDialogOpen ? 'rgba(40,70,90,0.92)'
+                    : (hasStationTech ? 'rgba(20,40,60,0.82)' : 'rgba(22,22,30,0.55)');
+      ctx.fillRect(sBtnX, sBtnY, sBtnW, sBtnH);
+      ctx.strokeStyle = hasStationTech ? (THEME.borderActive ?? '#3a6') : 'rgba(255,255,255,0.12)';
+      ctx.lineWidth = 1; ctx.strokeRect(sBtnX, sBtnY, sBtnW, sBtnH);
+      ctx.font = `bold 11px ${THEME.fontFamily}`;
+      ctx.fillStyle = hasStationTech ? THEME.textBright : THEME.textDim;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(`${hasStationTech ? '🛰' : '🔒'} ${t('station.headerBtn')}`, sBtnX + sBtnW / 2, sBtnY + sBtnH / 2);
+      ctx.restore();
+      this._addHit(sBtnX, sBtnY, sBtnW, sBtnH, 'station_open', { hasTech: hasStationTech });
     }
 
     // Zamknij [X]
@@ -868,7 +908,7 @@ export class ColonyOverlay extends BaseOverlay {
       // Hit zone na ikonę budynku (tooltip)
       this._addHit(sx, oy + 2, labelW + 4, HDR_H - 4, 'headerBuilding', { buildingId: bid, count });
       sx += labelW + 6;
-      if (sx > ox + ow - 40) { ctx.fillText('...', sx, midY); break; }
+      if (sx > ox + ow - 122) { ctx.fillText('...', sx, midY); break; }
     }
 
     if (totalBuildings === 0) {
@@ -2548,6 +2588,118 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   }
 
+  // ── Dialog budowy stacji orbitalnej (S3.3b-S4) ─────────────────────────────
+  // Modal nad mapą: wybór ciała docelowego (planeta + księżyce), koszt, kolejka.
+  _drawStationDialog(ctx, ox, oy, ow, oh, colony) {
+    const def    = STATIONS.orbital_station;
+    const colMgr = window.KOSMOS?.colonyManager;
+
+    // Cele: planeta macierzysta + jej księżyce
+    const targets = [];
+    if (colony.planet) targets.push(colony.planet);
+    EntityManager.getByType('moon')
+      .filter(m => m.parentPlanetId === colony.planetId)
+      .forEach(m => targets.push(m));
+    // Domyślny/awaryjny cel = planeta macierzysta
+    if (!this._stationTargetId || !targets.some(b => b.id === this._stationTargetId)) {
+      this._stationTargetId = colony.planetId;
+    }
+
+    const costEntries = [...Object.entries(def.cost ?? {}), ...Object.entries(def.commodityCost ?? {})];
+    const pending     = colMgr?.getPendingStationOrders?.(colony.planetId) ?? [];
+
+    const DW = 340;
+    const DH = 138 + targets.length * 20 + costEntries.length * 14 + Math.max(1, pending.length) * 18;
+    const dx = ox + ow / 2 - DW / 2;
+    const dy = oy + Math.max(HDR_H + 8, oh / 2 - DH / 2);
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,12,20,0.97)';
+    ctx.fillRect(dx, dy, DW, DH);
+    ctx.strokeStyle = THEME.borderActive ?? '#3a6'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(dx, dy, DW, DH);
+
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    let cy = dy + 8;
+
+    // Tytuł + [✕]
+    ctx.font = `bold 13px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textBright;
+    ctx.fillText('🛰 ' + t('station.dialogTitle'), dx + 10, cy);
+    ctx.fillStyle = THEME.textDim; ctx.textAlign = 'right';
+    ctx.fillText('✕', dx + DW - 10, cy);
+    this._addHit(dx + DW - 24, cy - 4, 22, 22, 'station_dialog_close');
+    ctx.textAlign = 'left';
+    cy += 24;
+
+    // Cel — jedno ciało (tylko planeta) → statyczna linia bez pickera; >1 → wybór
+    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.text;
+    if (targets.length === 1) {
+      ctx.fillText(`${t('station.target')}: ${targets[0]?.name ?? targets[0]?.id}`, dx + 10, cy);
+      cy += 20;
+    } else {
+      ctx.fillText(t('station.target') + ':', dx + 10, cy); cy += 16;
+      for (const body of targets) {
+        const sel = body.id === this._stationTargetId;
+        ctx.fillStyle = sel ? 'rgba(0,255,180,0.12)' : 'rgba(255,255,255,0.03)';
+        ctx.fillRect(dx + 12, cy, DW - 24, 18);
+        ctx.strokeStyle = sel ? (THEME.borderActive ?? '#3a6') : 'rgba(255,255,255,0.08)';
+        ctx.strokeRect(dx + 12, cy, DW - 24, 18);
+        ctx.fillStyle = sel ? THEME.textBright : THEME.text;
+        ctx.fillText(`${sel ? '●' : '○'} ${body.type === 'moon' ? '🌑' : '🪐'} ${body.name ?? body.id}`, dx + 18, cy + 3);
+        this._addHit(dx + 12, cy, DW - 24, 18, 'station_pick_target', { bodyId: body.id });
+        cy += 20;
+      }
+    }
+
+    // Koszt
+    cy += 4;
+    ctx.fillStyle = THEME.text; ctx.font = `11px ${THEME.fontFamily}`;
+    ctx.fillText(t('station.cost') + ':', dx + 10, cy); cy += 18;
+    ctx.font = `10px ${THEME.fontFamily}`;
+    const res = colony.resourceSystem;
+    for (const [key, amount] of costEntries) {
+      const have = res?.getAmount?.(key) ?? res?.inventory?.get(key) ?? 0;
+      const icon = RESOURCE_ICONS[key] ?? COMMODITIES[key]?.icon ?? '📦';
+      const nm   = COMMODITIES[key]?.namePL ?? key;
+      ctx.fillStyle = have >= amount ? '#8cdf9c' : '#cc7777';
+      ctx.fillText(`${icon} ${nm}: ${Math.floor(have)}/${amount}`, dx + 16, cy);
+      cy += 14;
+    }
+
+    // Przycisk budowy
+    cy += 6;
+    const canAfford = this._canAfford(colony, def);
+    this._drawBtn(ctx, t('station.build'), dx + 12, cy, DW - 24, 26,
+      canAfford ? 'rgba(20,80,50,0.9)' : 'rgba(60,50,20,0.85)');
+    this._addHit(dx + 12, cy, DW - 24, 26, 'station_build');
+    cy += 30;
+    ctx.font = `9px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
+    ctx.fillText(canAfford ? t('station.buildAfford') : t('station.buildWait'), dx + DW / 2, cy);
+    ctx.textAlign = 'left'; cy += 16;
+
+    // W kolejce
+    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.text;
+    ctx.fillText(t('station.pending') + ':', dx + 10, cy); cy += 16;
+    ctx.font = `10px ${THEME.fontFamily}`;
+    if (pending.length === 0) {
+      ctx.fillStyle = THEME.textDim; ctx.fillText('—', dx + 16, cy);
+    } else {
+      for (const order of pending) {
+        ctx.fillStyle = THEME.text;
+        ctx.fillText(`• ${order.targetName ?? order.targetBodyId}`, dx + 16, cy);
+        ctx.fillStyle = '#cc7777'; ctx.textAlign = 'right';
+        ctx.fillText('✕', dx + DW - 14, cy); ctx.textAlign = 'left';
+        this._addHit(dx + DW - 26, cy - 3, 20, 16, 'station_cancel_order', { orderId: order.id });
+        cy += 18;
+      }
+    }
+    // Tło dialogu na KOŃCU — _hitTest (Array.find) zwraca pierwszy match, więc przyciski
+    // (dodane wyżej) mają priorytet; tło tylko konsumuje kliki w pustą część panelu.
+    this._addHit(dx, dy, DW, DH, 'stationDialogBg');
+    ctx.restore();
+  }
+
   _getAvailableBuildings(tile) {
     if (!tile) return [];
     const techSys = window.KOSMOS?.techSystem;
@@ -2876,6 +3028,29 @@ export class ColonyOverlay extends BaseOverlay {
       case 'deselectHex': this._selectedHex = null; break;
       case 'floatPanel': break;  // konsumuj klik — nie przebijaj na mapę
       case 'headerBuilding': break;  // konsumuj klik na ikonę budynku w nagłówku
+      case 'stationDialogBg': break; // konsumuj klik w tło dialogu stacji
+      case 'station_open':
+        if (zone.data?.hasTech) this._stationDialogOpen = !this._stationDialogOpen;
+        else this._showFlash('🔒 ' + t('station.requiresTech'));
+        break;
+      case 'station_dialog_close':
+        this._stationDialogOpen = false;
+        break;
+      case 'station_pick_target':
+        if (zone.data?.bodyId) this._stationTargetId = zone.data.bodyId;
+        break;
+      case 'station_build': {
+        if (colony) {
+          const target = this._stationTargetId ?? colony.planetId;
+          window.KOSMOS?.colonyManager?.addPendingStationOrder(colony.planetId, { targetBodyId: target });
+        }
+        break;
+      }
+      case 'station_cancel_order':
+        if (colony && zone.data?.orderId) {
+          window.KOSMOS?.colonyManager?.cancelPendingStationOrder(colony.planetId, zone.data.orderId);
+        }
+        break;
       case 'build':
         if (zone.data?.buildingId && tile) {
           EventBus.emit('planet:buildRequest', { tile, buildingId: zone.data.buildingId });

@@ -589,6 +589,18 @@ export const TECHS = {
     description: 'Moduł habitatu — zakładanie osad na zbadanych ciałach',
   },
 
+  orbital_construction: {
+    id:          'orbital_construction',
+    namePL:      'Konstrukcja Orbitalna',
+    nameEN:      'Orbital Construction',
+    branch:      'space',
+    tier:        3,
+    cost:        { research: 350 },
+    requires:    ['space_mining'],   // bramka tier-3 (pośrednio wymaga rocketry)
+    effects:     [],   // brak typu unlockStation → bramka przez isResearched (patrz StationData.requires)
+    description: 'Stocznie orbitalne — umożliwia budowę stacji orbitalnych.',
+  },
+
   ion_drives: {
     id:          'ion_drives',
     namePL:      'Napędy Jonowe Volkov',

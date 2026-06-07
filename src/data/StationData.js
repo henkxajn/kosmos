@@ -8,6 +8,7 @@ export const STATIONS = {
     namePL: 'Stacja orbitalna',
     nameEN: 'Orbital Station',
     tier:   1,
+    requires: 'orbital_construction',   // bramka tech (S3.3b-S4): wymaga Konstrukcji Orbitalnej
     // Surowce bazowe i commodities są w TYM SAMYM inventory kolonii (ResourceSystem) —
     // rozdzielone tylko dla czytelności/UI; stationTotalCost() scala do jednego obiektu.
     cost: {

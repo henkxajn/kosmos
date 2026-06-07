@@ -35,7 +35,7 @@ import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
-import { stationTotalCost } from '../data/StationData.js';
+import { STATIONS, stationTotalCost } from '../data/StationData.js';
 import { UNIT_ARCHETYPES, ARCHETYPE_REQUIREMENTS, GROUND_UNIT_CAP_EXEMPT, checkArchetypeUnlocked } from '../data/unitArchetypes.js';
 import { RegionSystem } from '../map/RegionSystem.js';
 import { HexGrid }      from '../map/HexGrid.js';
@@ -1626,6 +1626,18 @@ export class ColonyManager {
   addPendingStationOrder(planetId, { targetBodyId, cost = null, ownerEmpireId = null, stationType = 'orbital_station' } = {}) {
     const colony = this.getColony(planetId);
     if (!colony) return null;
+
+    // Bramka tech (S3.3b-S4): stacja wymaga zbadanej technologii (data-driven z StationData).
+    // Tylko gracz buduje stacje → window.KOSMOS.techSystem. Fail-closed gdy brak techSystem.
+    const def = STATIONS[stationType] ?? STATIONS.orbital_station;
+    if (def?.requires) {
+      const techSys = window.KOSMOS?.techSystem;
+      if (!(techSys?.isResearched(def.requires) ?? false)) {
+        EventBus.emit('station:orderRejected', { planetId, reason: 'requiresTech', requires: def.requires });
+        return null;   // zachowuje kontrakt string|null (debug helper + smoke testy)
+      }
+    }
+
     if (!colony.pendingStationOrders) colony.pendingStationOrders = [];
 
     // Fallback kosztu: null/undefined LUB pusty obiekt → pełny koszt z StationData

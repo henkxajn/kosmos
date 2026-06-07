@@ -286,7 +286,13 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
      _removeStationMesh dispose klonu (tekstury współdzielone nie ruszane). Focus kamery: klik→station:focus
      (mirror vessel:focus, BEZ selekcji) — _focusStationId + raycast handleClick PRZED ciałami
      (userData.stationId walk-up) + śledzenie _updateCameraFocus (focusOnSmooth). NoToneMapping bez zmian.
-     Bez migracji save. Selekcja/panel 3D = S3.3b-S4.
+     Bez migracji save. Selekcja/panel/klik 3D = S3.3b-S4-2 (osobny sub-slice).
+  └─ S3.3b-S4-1 (a9dec31+) — orbital_construction tech (space tier 3, ←space_mining, 350rp) +
+     data-driven gate (StationData.requires + ColonyManager early reject + station:orderRejected,
+     kontrakt string|null zachowany) + ColonyOverlay [🛰 Station] header button (locked/enabled) +
+     station build dialog (target: statyczna linia / picker przy księżycach, cost, queue, cancel) +
+     i18n PL+EN. Fix: stationDialogBg _addHit na KOŃCU (priorytet przycisków nad tłem; _hitTest=find).
+     Live-gate PASS. Bez migracji save.
 ```
 
 ---
@@ -400,10 +406,11 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `notify:openDetail { notif }` (klik wiersza w dropdown) | NotificationDropdown | MissionEventModal (`noPause:true`) |
 | `station:created { station }` | StationSystem (createStation + restore) | ThreeRenderer (`_addStationMesh`) |
 | `station:destroyed { stationId }` | StationSystem (destroyStation) | ThreeRenderer (`_removeStationMesh`) |
-| `station:orderQueued { planetId, order }` | ColonyManager (addPendingStationOrder) | — (UI/EventLog TBD S3.3b-S3) |
-| `station:orderCancelled { planetId, orderId }` | ColonyManager (cancelPendingStationOrder) | — |
-| `station:built { planetId, stationId, targetBodyId }` | ColonyManager (_tickPendingStationOrders) | — (EventLog TBD) |
-| `station:buildFailed { planetId, orderId, reason }` (`body_lost`/`no_station_system`/`create_failed`) | ColonyManager (_tickPendingStationOrders) | — |
+| `station:orderQueued { planetId, order }` | ColonyManager (addPendingStationOrder) | wired in ColonyOverlay (flash, S4-1) |
+| `station:orderCancelled { planetId, orderId }` | ColonyManager (cancelPendingStationOrder) | wired in ColonyOverlay (flash, S4-1) |
+| `station:orderRejected { planetId, reason, requires }` (`requiresTech`) | ColonyManager (addPendingStationOrder — bramka tech) | wired in ColonyOverlay (flash, S4-1) |
+| `station:built { planetId, stationId, targetBodyId }` | ColonyManager (_tickPendingStationOrders) | wired in ColonyOverlay (flash, S4-1) |
+| `station:buildFailed { planetId, orderId, reason }` (`body_lost`/`no_station_system`/`create_failed`) | ColonyManager (_tickPendingStationOrders) | wired in ColonyOverlay (flash, S4-1) |
 
 ---
 
