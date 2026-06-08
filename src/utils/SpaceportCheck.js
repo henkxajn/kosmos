@@ -10,6 +10,7 @@
 
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
+import EntityManager from '../core/EntityManager.js';
 
 /**
  * Czy ten statek wymaga portu kosmicznego do dock/launch.
@@ -33,6 +34,8 @@ export function needsSpaceportForVessel(vessel) {
  */
 export function hasSpaceportAt(bodyId) {
   if (!bodyId) return false;
+  // S4-2 — stacja orbitalna = port uniwersalny (dokowanie/start bez bramki spaceport).
+  if (EntityManager.get(bodyId)?.type === 'station') return true;
   const colMgr = window.KOSMOS?.colonyManager;
   if (!colMgr) return false;
   const colony = colMgr.getColony?.(bodyId);

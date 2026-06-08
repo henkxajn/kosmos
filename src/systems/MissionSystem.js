@@ -26,7 +26,7 @@ import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { addMissionLog, loadCargo } from '../entities/Vessel.js';
-import { resolveTransferStore } from '../utils/TransferStore.js';
+import { resolveTransferStore, isStationId } from '../utils/TransferStore.js';
 import { t }             from '../i18n/i18n.js';
 
 // ── Koszty misji ─────────────────────────────────────────────────────────────
@@ -437,6 +437,8 @@ export class MissionSystem {
     if (vessel.position?.state !== 'docked') return true; // już w przestrzeni
     const dockedAt = vessel.position.dockedAt;
     if (!dockedAt) return true; // dock state bez ref — defensywnie zezwól
+    // S4-2 — stacja orbitalna = port uniwersalny (dockAtStation bez bramki); start z niej zawsze OK.
+    if (isStationId(dockedAt)) return true;
     const colMgr = window.KOSMOS?.colonyManager;
     const colony = colMgr?.getColony?.(dockedAt);
     return colony?.buildingSystem?.hasSpaceport?.() ?? false;

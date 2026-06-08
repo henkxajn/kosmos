@@ -2715,7 +2715,12 @@ export class ThreeRenderer {
       if (sHits.length > 0) {
         let o = sHits[0].object;
         while (o && !o.userData?.stationId) o = o.parent;      // walk-up do Group z userData
-        if (o?.userData?.stationId) { EventBus.emit('station:focus', { stationId: o.userData.stationId }); return true; }
+        if (o?.userData?.stationId) {
+          const sid = o.userData.stationId;
+          EventBus.emit('station:focus',    { stationId: sid }); // kamera (S3.3b-S4a, bez zmian)
+          EventBus.emit('station:selected', { stationId: sid }); // S4-2 — otwiera StationPanel
+          return true;
+        }
       }
     }
 
@@ -2735,6 +2740,21 @@ export class ThreeRenderer {
     if (!pEntry) return null;
     const pos = pEntry.group.position.clone();
     pos.project(this.camera);
+    return {
+      x: (pos.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-pos.y * 0.5 + 0.5) * window.innerHeight,
+    };
+  }
+
+  // S4-2 — pozycja stacji na ekranie (px) dla StationPanel (anchored, podąża za orbitującym ciałem).
+  // Mirror getScreenPosition, ale czyta _stations i zwraca null gdy stacja za kamerą (NDC z poza [-1,1])
+  // — wtedy panel zaczepia fallback zamiast rysować poza ekranem.
+  getStationScreenPosition(stationId) {
+    const entry = this._stations.get(stationId);
+    if (!entry?.mesh) return null;
+    const pos = entry.mesh.position.clone();
+    pos.project(this.camera);
+    if (pos.z < -1 || pos.z > 1) return null;
     return {
       x: (pos.x * 0.5 + 0.5) * window.innerWidth,
       y: (-pos.y * 0.5 + 0.5) * window.innerHeight,
@@ -2810,6 +2830,12 @@ export class ThreeRenderer {
         kind: isWreck ? 'wreck' : (isEnemy ? 'enemy' : 'vessel'),
         color,
       });
+    }
+    // Stacje orbitalne (S4-2) — etykieta nazwy w trybie CTRL (pomiń gdy mesh za kamerą/poza ekranem).
+    for (const s of EntityManager.getByType('station')) {
+      const p = this.getStationScreenPosition(s.id);
+      if (!p) continue;
+      out.push({ id: s.id, name: s.name ?? s.id, x: p.x, y: p.y, kind: 'station', color: '#8fb8ff' });
     }
     return out;
   }

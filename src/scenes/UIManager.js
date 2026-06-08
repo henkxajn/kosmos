@@ -41,6 +41,7 @@ import { DiplomacyOverlay }    from '../ui/DiplomacyOverlay.js';
 import { WarOverlay }          from '../ui/WarOverlay.js';
 import { POIPanel }            from '../ui/POIPanel.js';
 import { GalacticMiniMap }     from '../ui/GalacticMiniMap.js';
+import { StationPanel }        from '../ui/StationPanel.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
 import { t, getName }          from '../i18n/i18n.js';
 
@@ -257,6 +258,11 @@ export class UIManager {
     this.combatHud = new CombatHUD();
     // Expose dla BottomBar (chip „⚔ Walki") + click handler.
     window.KOSMOS.combatHud = this.combatHud;
+
+    // S4-2 — StationPanel: lekki pływający panel info stacji. Non-exclusive (jak CombatHUD):
+    // trzymany bezpośrednio, rysowany PO overlayManager, coexist z colony panelem i widokiem 3D.
+    this.stationPanel = new StationPanel();
+    window.KOSMOS.stationPanel = this.stationPanel;
 
     this._setupEvents();
     this._startDrawLoop();
@@ -1234,6 +1240,7 @@ export class UIManager {
     // CombatHUD minimize button — rysowany na wierzchu overlay'ów, więc klik
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
+    if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
 
     // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
     if (this._bottomBar.menuOpen && this._bottomBar.hitTestMenu(x, y, W, H)) {
@@ -1349,6 +1356,7 @@ export class UIManager {
     if (this.overlayManager.isAnyOpen()) {
       this.overlayManager.handleMouseMove(x, y);
     }
+    if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
     // Hover w panelu menu
     this._bottomBar.handleMouseMove(x, y, W, H);
     const prev = this._hoveredBtn;
@@ -1502,6 +1510,7 @@ export class UIManager {
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
+    if (civMode && !globeOpen) this.stationPanel.draw(ctx, W, H);   // S4-2 — na wierzchu overlay'i (coexist z colony)
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──
     this._bottomBar.drawMenu(ctx, W, H, {

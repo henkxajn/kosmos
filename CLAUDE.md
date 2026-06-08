@@ -293,6 +293,22 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
      station build dialog (target: statyczna linia / picker przy księżycach, cost, queue, cancel) +
      i18n PL+EN. Fix: stationDialogBg _addHit na KOŃCU (priorytet przycisków nad tłem; _hitTest=find).
      Live-gate PASS. Bez migracji save.
+  └─ S3.3b-S4-2 (S4-2) — selekcja + pływający panel info stacji (klik 3D). ThreeRenderer.handleClick
+     dual-emit station:selected OBOK station:focus (kamera bez zmian) + getStationScreenPosition
+     (anchor px, mirror getScreenPosition, null gdy mesh za kamerą). NEW StationPanel.js — panel
+     canvas NON-EXCLUSIVE (wzór CombatHUD: trzymany w UIManager, rysowany PO overlayManager, coexist
+     z colony): self-subscribe station:selected/destroyed/body:deselected; sekcje nazwa+właściciel,
+     orbita/tier/rok, depot (surowce vs towary), handel (live snapshot), moduły placeholder, rename
+     (showRenameModal → station:rename → StationSystem._renameStation); anchor do
+     getStationScreenPosition + clamp do map-area; tło _addHit na KOŃCU (S4-1 gotcha). NEW
+     StationPanelLogic.js — czyste helpery classifyStationDepot (COMMODITIES split) +
+     gatherStationTraders (docked z VesselManager + inbound/outbound z MissionSystem.getActive
+     targetId/loopTargetId). UIManager: import+hold+handleClick(PRZED overlayManager)+draw(PO)+
+     handleMouseMove. i18n PL+EN station.* (panel). Bugfixy: (A1) SpaceportCheck.hasSpaceportAt
+     stacja→port (wszystkie ścieżki launch); (A2) MissionSystem._checkPadForVessel station origin
+     (isStationId) → pass; (B) ThreeRenderer.getAllVisibleLabels +stacje w trybie CTRL (#8fb8ff).
+     Live-gate PASS. Bez migracji save (v85). Smoke tmp_s4_2 25/25 + S4-1 regr 23/23.
+     NEXT: S4-3 (production overlay ze stacjami).
 ```
 
 ---

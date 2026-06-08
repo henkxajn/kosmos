@@ -9,6 +9,11 @@ import EntityManager from '../core/EntityManager.js';
 import { Station } from '../entities/Station.js';
 
 export class StationSystem {
+  constructor() {
+    // S4-2 — zmiana nazwy stacji (mirror VesselManager vessel:rename → _renameVessel).
+    EventBus.on('station:rename', ({ stationId, name }) => this._renameStation(stationId, name));
+  }
+
   /**
    * Utwórz stację na orbicie ciała (instant — Wariant A). Wołane przez
    * ColonyManager._tickPendingStationOrders (po spend) oraz debug.spawnStation.
@@ -63,6 +68,12 @@ export class StationSystem {
   /** Stacje na danym ciele (helper pod S3.3b-S3 dokowanie/depot). */
   getStationsAt(bodyId) {
     return EntityManager.getByType('station').filter(s => s.bodyId === bodyId);
+  }
+
+  /** S4-2 — zmień nazwę stacji (mirror VesselManager._renameVessel; StationPanel czyta name live). */
+  _renameStation(stationId, name) {
+    const s = EntityManager.get(stationId);
+    if (s && s.type === 'station' && name) s.name = name;
   }
 
   // ── Save / Restore ──────────────────────────────────────────────────────
