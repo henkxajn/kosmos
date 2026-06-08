@@ -308,7 +308,18 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
      stacja→port (wszystkie ścieżki launch); (A2) MissionSystem._checkPadForVessel station origin
      (isStationId) → pass; (B) ThreeRenderer.getAllVisibleLabels +stacje w trybie CTRL (#8fb8ff).
      Live-gate PASS. Bez migracji save (v85). Smoke tmp_s4_2 25/25 + S4-1 regr 23/23.
-     NEXT: S4-3 (production overlay ze stacjami).
+  └─ S3.3b-S4-3 (S4-3) — stacje jako zakładki w EconomyOverlay (produkcja). Fasada OVERLAY-LOCAL:
+     _playerStationFacades/_getTabEntities/_resolveEntity (NIGDY ColonyManager.getAllColonies — ~40
+     konsumentów: trade/war/AI/observatory). Depot jako resourceSystem (inventory renderuje, stawki
+     puste — depot bez _deltaTracker/_inventoryPerYear, energy 0). 3 array sites→_getTabEntities
+     (tooltip/_drawLeft/_drawFactoriesTab), 2 by-id→_resolveEntity (tooltip+_drawLeft selCol; zwraca
+     FASADĘ nie surową encję — _drawLeft czyta .resourceSystem); flows+right alerts zostają colony-only.
+     🛰 prefix zakładki + "Stacja:"/"Station:" nagłówek (econPanel.stationLabel) + center "Stacja
+     orbitalna — brak produkcji" (econPanel.stationNoProduction; hasManagement guard `!isStation` →
+     pełny przegląd zamiast pustego panelu zarządzania). Fix BUG A: _buildResourceTooltip guard
+     `typeof rs.getResourceBreakdown !== 'function'` continue (StationDepot nie ma breakdown).
+     i18n PL+EN. Live-gate PASS. Bez migracji save (v85). Smoke tmp_s4_3 14/14 + S4-2 regr 25/25 +
+     S4-1 regr 23/23. NEXT: S3.4 (light diplomacy).
 ```
 
 ---

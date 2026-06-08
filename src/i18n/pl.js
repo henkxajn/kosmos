@@ -1636,6 +1636,7 @@ export default {
   // === EconomyOverlay ===
   'econPanel.header': 'EKONOMIA',
   'econPanel.colonyLabel': '📍 {0}',
+  'econPanel.stationLabel': 'Stacja',
   'econPanel.globalLabel': 'globalne · wszystkie kolonie',
   'econPanel.mined': '⛏ WYDOBYWALNE',
   'econPanel.harvested': '🌾 ZBIERALNE',
@@ -1659,6 +1660,7 @@ export default {
   'econPanel.noActiveProduction': 'Brak aktywnej produkcji',
   'econPanel.queueLabel': 'KOLEJKA:',
   'econPanel.noFactories': 'Brak fabryk w żadnej kolonii',
+  'econPanel.stationNoProduction': 'Stacja orbitalna — brak produkcji',
   'econPanel.noResources': 'BRAK SUROWCÓW',
   'econPanel.stall': 'STALL',
   'econPanel.managementHeader': 'ZARZĄDZANIE PRODUKCJĄ',

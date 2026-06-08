@@ -13,6 +13,7 @@ import { COMMODITIES, formatRecipe, COMMODITY_BY_TIER }
 import { PRIORITY_TEMPLATES } from '../systems/FactorySystem.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
+import EntityManager     from '../core/EntityManager.js';
 import { t, getName }    from '../i18n/i18n.js';
 
 const LEFT_W   = 220;
@@ -67,6 +68,37 @@ export class EconomyOverlay extends BaseOverlay {
     this._mouseScreenX = 0;
     this._mouseScreenY = 0;
     this._createTooltipEl();
+  }
+
+  // ── Encje zakładek: kolonie + stacje GRACZA (overlay-local; NIE ColonyManager — audyt §2) ──
+  // Stacja = encja-fasada o kontrakcie kolonii (planetId/name/resourceSystem=depot/factorySystem=null).
+
+  // Fasady stacji gracza — budowane świeżo (getByType cache'owany; kilka stacji = koszt znikomy).
+  _playerStationFacades() {
+    return EntityManager.getByType('station')
+      .filter(s => s.ownerEmpireId === 'player')
+      .map(s => ({
+        planetId:       s.id,        // klucz zakładki/filtra/hit (audyt §5)
+        name:           s.name,
+        resourceSystem: s.depot,     // depot ma .inventory (Map) + getAmount — kontrakt jak resourceSystem (audyt §4)
+        factorySystem:  null,        // brak fabryk → przegląd pomija (697); zarządzanie wyłączone (hasManagement)
+        isOutpost:      true,        // defensywnie (pominięcie w alertach)
+        isStation:      true,        // marker jedynej kosmetycznej gałęzi (hasManagement + empty-state)
+      }));
+  }
+
+  // Lista encji do zakładek: kolonie + fasady stacji gracza.
+  _getTabEntities() {
+    const colMgr = window.KOSMOS?.colonyManager;
+    return [...(colMgr?.getAllColonies() ?? []), ...this._playerStationFacades()];
+  }
+
+  // Rozwiąż wybraną encję po id: kolonia LUB fasada stacji. Zwraca FASADĘ (nie surową encję —
+  // _drawLeft czyta .resourceSystem). Tylko stacje gracza (parytet z _getTabEntities).
+  _resolveEntity(id) {
+    if (!id) return null;
+    const colMgr = window.KOSMOS?.colonyManager;
+    return colMgr?.getColony(id) ?? this._playerStationFacades().find(f => f.planetId === id) ?? null;
   }
 
   // ── Tooltip DOM ─────────────────────────────────────────────────────────
@@ -224,11 +256,9 @@ export class EconomyOverlay extends BaseOverlay {
   }
 
   _buildResourceTooltip(resourceId) {
-    // Określ źródło danych: per-kolonia lub globalne
-    const colMgr = window.KOSMOS?.colonyManager;
-    const selCol = this._selectedColonyId
-      ? colMgr?.getColony(this._selectedColonyId) : null;
-    const colonies = colMgr?.getAllColonies() ?? [];
+    // Określ źródło danych: per-kolonia/stacja lub globalne (overlay-local — audyt §2)
+    const selCol = this._resolveEntity(this._selectedColonyId);
+    const colonies = this._getTabEntities();
     const sourceColonies = selCol ? [selCol] : colonies;
 
     // Szukaj definicji zasobu/towaru
@@ -260,7 +290,7 @@ export class EconomyOverlay extends BaseOverlay {
     const allConsumers = {};
     for (const col of sourceColonies) {
       const rs = col.resourceSystem;
-      if (!rs) continue;
+      if (!rs || typeof rs.getResourceBreakdown !== 'function') continue;   // depot stacji nie ma breakdown (audyt §4)
       const bd = rs.getResourceBreakdown(resourceId);
       for (const [type, g] of Object.entries(bd.producers)) {
         if (!allProducers[type]) allProducers[type] = { total: 0, count: 0 };
@@ -363,16 +393,14 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.fillRect(x, y, w, 44);
     this._drawText(ctx, t('econPanel.header'), x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
 
-    const colMgr = window.KOSMOS?.colonyManager;
-    const selCol = this._selectedColonyId
-      ? colMgr?.getColony(this._selectedColonyId) : null;
+    const selCol = this._resolveEntity(this._selectedColonyId);
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(selCol ? t('econPanel.colonyLabel', selCol.name ?? selCol.planetId) : t('econPanel.globalLabel'), x + pad, y + 32);
+    ctx.fillText(selCol ? t(selCol.isStation ? 'econPanel.stationLabel' : 'econPanel.colonyLabel', selCol.name ?? selCol.planetId) : t('econPanel.globalLabel'), x + pad, y + 32);
 
     // Zbierz dane: per-kolonia lub globalne
-    const colonies = colMgr?.getAllColonies() ?? [];
+    const colonies = this._getTabEntities();
     const sourceColonies = selCol ? [selCol] : colonies;
     const globalInv = {};   // id → amount
     const globalRate = {};  // id → perYear
@@ -592,8 +620,7 @@ export class EconomyOverlay extends BaseOverlay {
   // ══════════════════════════════════════════════════════════════════════════
 
   _drawFactoriesTab(ctx, x, y, w, h) {
-    const colMgr = window.KOSMOS?.colonyManager;
-    const colonies = colMgr?.getAllColonies() ?? [];
+    const colonies = this._getTabEntities();
 
     // ── Filtr kolonii (góra) ──────────────────────────────
     this._drawColonyFilter(ctx, x, y, w, FILTER_H, colonies);
@@ -609,7 +636,8 @@ export class EconomyOverlay extends BaseOverlay {
     // Podział: przegląd (góra) + zarządzanie (dół)
     // Gdy globalny — cała przestrzeń na przegląd
     // Gdy kolonia — 45% przegląd, 55% zarządzanie
-    const hasManagement = this._selectedColonyId !== null;
+    const selectedEntity = this._resolveEntity(this._selectedColonyId);
+    const hasManagement = selectedEntity !== null && !selectedEntity.isStation;
     const overviewH = hasManagement ? Math.floor(contentH * 0.45) : contentH;
     const mgmtH     = hasManagement ? contentH - overviewH : 0;
 
@@ -661,7 +689,7 @@ export class EconomyOverlay extends BaseOverlay {
 
     // Chipy per kolonia (wszystkie, w tym bez fabryk)
     for (const col of colonies) {
-      const label = (col.name ?? col.planetId).slice(0, 12);
+      const label = (col.isStation ? '🛰 ' : '') + (col.name ?? col.planetId).slice(0, 12);
       const cw = Math.min(ctx.measureText(label).width + 14, 100);
       if (cx + cw > x + w - pad) break; // nie mieści się
 
@@ -745,12 +773,13 @@ export class EconomyOverlay extends BaseOverlay {
       ry += 8;
     }
 
-    // Jeśli żadna kolonia nie ma fabryk
+    // Jeśli żadna kolonia nie ma fabryk (lub wybrana stacja — własny komunikat)
     if (!hasContent) {
+      const onlyStation = colonies.length === 1 && colonies[0]?.isStation;
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText(t('econPanel.noFactories'), x + w / 2, y + h / 2);
+      ctx.fillText(t(onlyStation ? 'econPanel.stationNoProduction' : 'econPanel.noFactories'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
     }
 
