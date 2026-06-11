@@ -1117,6 +1117,24 @@ export class UIManager {
       this._log(t('log.m4.warDeclared', empName), 'diplomacy');
     });
 
+    // S3.4 — log dyplomacji: AI envoy, emisariusz gracza, odpowiedź na traktat.
+    const _empName = (empireId) => {
+      const emp = window.KOSMOS?.empireRegistry?.get?.(empireId);
+      return emp?.namePL ?? emp?.name ?? empireId ?? '?';
+    };
+    EventBus.on('diplomacy:aiEnvoy',        ({ empireId }) => {
+      const nm = _empName(empireId);
+      this._log(t('log.diplo.aiEnvoy', nm), 'diplomacy');
+      EventBus.emit('ui:toast', { text: t('log.diplo.aiEnvoy', nm), color: '#50B0A0' });   // BUG6 — widoczny toast
+    });
+    EventBus.on('diplomacy:envoyArrived',   ({ empireId }) => this._log(t('log.diplo.envoyArrived', _empName(empireId)), 'diplomacy'));
+    EventBus.on('diplomacy:envoyReturned',  ({ empireId }) => this._log(t('log.diplo.envoyReturned', _empName(empireId)), 'diplomacy'));
+    EventBus.on('diplomacy:treatyAccepted', ({ empireId }) => this._log(t('log.diplo.treatyAccepted', _empName(empireId)), 'diplomacy'));
+    EventBus.on('diplomacy:treatyRejected', ({ empireId, reason }) => {
+      if (reason === 'already_signed') return;
+      this._log(t('log.diplo.treatyRejected', _empName(empireId)), 'diplomacy');
+    });
+
     // M4 P1.5 — vessel:firstSighting subskrypcja USUNIĘTA po playtest #4.
     // ObservatorySystem._tickVesselDetection już samodzielnie pushuje "🔭 Wykryto
     // wrogą jednostkę" do EventLogSystem (linie 313-321) + emit firstSighting

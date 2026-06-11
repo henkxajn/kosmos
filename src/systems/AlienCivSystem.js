@@ -18,6 +18,7 @@
 
 import EventBus from '../core/EventBus.js';
 import gameState from '../core/GameState.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 import { MilitaryAI } from './ai/MilitaryAI.js';
 import { EconAI } from './ai/EconAI.js';
 
@@ -31,9 +32,17 @@ const H_COOLDOWN   = 25;   // poniżej → RETREAT może wrócić do IDLE
 // Minimalna siła do agresji (relatywna vs player)
 const MIL_RATIO_WAR = 0.7;  // musi mieć co najmniej 70% siły gracza
 
+// ── S3.4 — AI envoy (abstrakcyjny gest dyplomatyczny obcych) ──
+const AI_ENVOY_TRUST_GAIN = 3;     // +3 trust gdy AI wysyła emisariusza
+const AI_ENVOY_COOLDOWN   = 15;    // civYears między emisariuszami (BUG2b — było 12)
+const AI_ENVOY_TRUST_MAX  = 60;    // wysyła tylko gdy trust < 60 (chce poprawić relacje)
+const AI_ENVOY_SKIP_ARCHETYPES = new Set(['xenophage', 'hegemon']);
+
 export class AlienCivSystem {
   constructor() {
     this._tickAccum = 0;
+    // S3.4 — transient cooldown AI envoy per imperium (empireId → lastYear); NIE serializowany.
+    this._aiEnvoyCooldown = new Map();
 
     EventBus.on('time:tick', ({ civDeltaYears }) => {
       if (!civDeltaYears) return;
@@ -96,6 +105,9 @@ export class AlienCivSystem {
         this._transition(emp.id, next, `tick_h${hostility.toFixed(0)}_m${milRatio.toFixed(2)}`);
       }
 
+      // S3.4 — abstrakcyjny AI envoy (poprawa relacji gdy trust niski)
+      this._maybeLaunchAIEnvoy(emp, dipl);
+
       // Faza 7: AI decyzje — najpierw ekonomia, potem militaria
       // (ekonomia wcześniej, żeby zbudowana flota/produkcja była widoczna dla MilitaryAI)
       try {
@@ -105,6 +117,30 @@ export class AlienCivSystem {
         console.error('[AlienCivSystem] AI tick error for', emp.id, err);
       }
     }
+  }
+
+  /**
+   * S3.4 — abstrakcyjny AI envoy: gdy trust < 60 i archetyp nie agresywny, co
+   * AI_ENVOY_COOLDOWN lat imperium wysyła emisariusza → +3 trust + toast.
+   * Bez materializacji statku (zgodnie z lekką dyplomacją).
+   */
+  _maybeLaunchAIEnvoy(emp, dipl) {
+    if (!GAME_CONFIG.FEATURES?.lightDiplomacy) return;
+    if (!emp || !dipl) return;
+    if (AI_ENVOY_SKIP_ARCHETYPES.has(emp.archetype)) return;
+    if (dipl.getTrust(emp.id) >= AI_ENVOY_TRUST_MAX) return;
+    // BUG A — imperium w stanie wojny z graczem NIE wysyła emisariuszy (inaczej
+    // +3/envoy maskuje spadek trust -20 z wojny, zwłaszcza przy dużej prędkości czasu).
+    if (dipl.getState(emp.id) === 'war') return;
+    // tylko gdy gracz zna imperium (intel >= rumor)
+    const intelSys = window.KOSMOS?.intelSystem;
+    if (intelSys && !intelSys.isAtLeast(emp.id, 'rumor')) return;
+    const year = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const last = this._aiEnvoyCooldown.get(emp.id);
+    if (last != null && (year - last) < AI_ENVOY_COOLDOWN) return;
+    this._aiEnvoyCooldown.set(emp.id, year);
+    dipl.changeTrust(emp.id, AI_ENVOY_TRUST_GAIN, 'ai_envoy');
+    EventBus.emit('diplomacy:aiEnvoy', { empireId: emp.id });
   }
 
   _decideNextState(cur, ctx) {

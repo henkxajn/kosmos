@@ -217,6 +217,24 @@ export const SHIP_MODULES = {
     description: 'Rover badawczy do eksploracji powierzchni. Wyślij z orbity na planetę.',
   },
 
+  // ── S3.4 Moduł dyplomatyczny ───────────────────────────────────────────
+  // slotType 'special'; stats.enablesMissions:['envoy'] → getModuleCapabilities
+  // automatycznie dodaje capability 'envoy' (zero zmian w mapperze).
+  diplomatic_module: {
+    id: 'diplomatic_module',
+    namePL: 'Moduł Dyplomatyczny',
+    nameEN: 'Diplomatic Module',
+    icon: '🕊',
+    slotType: 'special',
+    tier: 2,
+    mass: 6,   // tony
+    cost: { Cu: 12, Si: 18 },
+    commodityCost: { electronic_systems: 3 },
+    stats: { enablesMissions: ['envoy'] },
+    requires: null,
+    description: 'Pokładowa misja dyplomatyczna. Umożliwia wysłanie emisariusza do obcego imperium (misja envoy). Niekompatybilny z uzbrojeniem — emisariusz to gest pokojowy.',
+  },
+
   // ── Moduły habitacyjne ─────────────────────────────────────────────────
 
   habitat_pod: {

@@ -75,6 +75,12 @@ export const GAME_CONFIG = {
     // Flip ON po P1 c5 (CRUD + UI gotowe, P2/P3 nie potrzebują flag-flip —
     // dodają semantykę nad bazą). System sam zawsze instancjowany gdy civMode.
     playerFleets:         true,
+    // ── S3.4 — Light Diplomacy (save v85, bez migracji) ───────────────────
+    // Oś trust + misje emisariuszy + efekty traktatów + bramkowe triggery
+    // vessel:arrived (military_presence/research_intrusion/trespassing). OFF do
+    // czasu live-gate (Stage 9 flip ON). Bramkuje: subskrypcję vessel:arrived,
+    // tick traktatów (_tickTreaties), AI envoy (AlienCivSystem) i akcje w DiplomacyOverlay.
+    lightDiplomacy:       true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

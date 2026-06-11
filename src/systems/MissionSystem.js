@@ -25,9 +25,10 @@ import { HULLS }         from '../data/HullsData.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
-import { addMissionLog, loadCargo } from '../entities/Vessel.js';
+import { addMissionLog, loadCargo, canDoEnvoy } from '../entities/Vessel.js';
 import { resolveTransferStore, isStationId } from '../utils/TransferStore.js';
 import { t }             from '../i18n/i18n.js';
+import { GAME_CONFIG }   from '../config/GameConfig.js';
 
 // ── Koszty misji ─────────────────────────────────────────────────────────────
 const LAUNCH_COST          = { Fe: 50, C: 20 };
@@ -44,6 +45,10 @@ const XP_REDUCTION_PER     = 0.1;   // % redukcji na punkt doświadczenia statku
 
 // Zasoby startowe nowej kolonii (przed mnożnikiem)
 const COLONY_START_RESOURCES = { Fe: 200, C: 150, Si: 100, Cu: 50, food: 100, water: 100, research: 50 };
+
+// ── S3.4 — misja dyplomatyczna (envoy) ──
+const ENVOY_TRUST_ARRIVAL = 5;  // +5 trust w połowie misji (arrival @1.5y)
+const ENVOY_TRUST_RETURN  = 5;  // +5 trust po powrocie (return @3.0y) → +10/misję
 
 // ── Mapowanie starych typów → nowe ──────────────────────────────────────────
 // recon(target/nearest) → survey
@@ -1281,8 +1286,11 @@ export class MissionSystem {
         changed = true;
       } else if (exp.status === 'returning' && exp.returnYear && this._gameYear >= exp.returnYear) {
         exp.status = 'completed';
-        // POPy zablokowane przy budowie statku — odblokowane tylko przy disband/zniszczeniu
-        if (exp.vesselId) {
+        if (exp.type === 'envoy') {
+          // S3.4 — emisariusz wraca: +5 trust i zwolnij abstrakcyjną blokadę statku.
+          this._completeEnvoy(exp);
+        } else if (exp.vesselId) {
+          // POPy zablokowane przy budowie statku — odblokowane tylko przy disband/zniszczeniu
           const vMgr = window.KOSMOS?.vesselManager;
           if (vMgr) vMgr.dockAtColony(exp.vesselId, exp.originColonyId);
         }
@@ -1304,6 +1312,84 @@ export class MissionSystem {
     }
   }
 
+  // ── S3.4 — Misja dyplomatyczna (envoy, abstrakcyjna) ──────────────────────
+  // Cel = IMPERIUM (nie ciało). Statek z diplomatic_module zablokowany 3 lata gry
+  // BEZ fizycznego lotu/warpa. +5 trust @1.5y (arrival), +5 @3.0y (return) = +10.
+  _launchEnvoy(empireId, vesselId = null) {
+    if (!GAME_CONFIG.FEATURES?.lightDiplomacy) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.envoyDisabled') });
+      return;
+    }
+    const intelSys = window.KOSMOS?.intelSystem;
+    const reg      = window.KOSMOS?.empireRegistry;
+    const vMgr     = window.KOSMOS?.vesselManager;
+    const colMgr   = window.KOSMOS?.colonyManager;
+
+    const emp = reg?.get(empireId);
+    if (!emp) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.envoyNoEmpire') });
+      return;
+    }
+    // Wymóg kontaktu (intel >= 'contact')
+    if (intelSys && !intelSys.isAtLeast(empireId, 'contact')) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.envoyNoContact') });
+      return;
+    }
+    // Statek: podany (z UI) lub pierwszy idle z modułem dyplomatycznym.
+    let vessel = vesselId ? vMgr?.getVessel(vesselId) : null;
+    if (!vessel && vMgr?.getAllVessels) {
+      vessel = vMgr.getAllVessels().find(v => v.status === 'idle' && canDoEnvoy(v));
+    }
+    if (!vessel || vessel.status !== 'idle' || !canDoEnvoy(vessel)) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.envoyNoVessel') });
+      return;
+    }
+
+    const departYear = this._gameYear;
+    const empName   = emp.name ?? emp.namePL ?? empireId;
+    const activePid = colMgr?.activePlanetId;
+    const mission = {
+      id:             `exp_${this._nextId++}`,
+      type:           'envoy',
+      targetEmpireId: empireId,
+      targetName:     empName,
+      targetType:     'empire',
+      departYear,
+      arrivalYear:    departYear + 2.5,   // BUG1 — arrival → +5 trust (było 1.5)
+      returnYear:     departYear + 5.0,   // BUG1 — return → +5 trust → +10 total (było 3.0)
+      distance:       0,
+      travelTime:     3.0,
+      crewCost:       0,
+      status:         'en_route',
+      gained:         null,
+      eventRoll:      null,
+      vesselId:       vessel.id,
+      originColonyId: vessel.colonyId ?? activePid,
+    };
+    this._missions.push(mission);
+
+    // Abstrakcyjna blokada statku (bez fizycznego lotu, bez paliwa).
+    vMgr?.lockOnAbstractMission?.(vessel.id, mission);
+
+    this._emit('mission:started', 'expedition:launched', { expedition: mission });
+  }
+
+  /** S3.4 — emisariusz dotarł (połowa misji): +5 trust, status → returning. */
+  _processEnvoyArrival(exp) {
+    const dipl = window.KOSMOS?.diplomacySystem;
+    dipl?.changeTrust(exp.targetEmpireId, ENVOY_TRUST_ARRIVAL, 'envoy_arrival');
+    exp.status = 'returning';
+    EventBus.emit('diplomacy:envoyArrived', { empireId: exp.targetEmpireId });
+  }
+
+  /** S3.4 — emisariusz wrócił: +5 trust, zwolnij abstrakcyjną blokadę statku. */
+  _completeEnvoy(exp) {
+    const dipl = window.KOSMOS?.diplomacySystem;
+    dipl?.changeTrust(exp.targetEmpireId, ENVOY_TRUST_RETURN, 'envoy_return');
+    window.KOSMOS?.vesselManager?.releaseFromAbstractMission?.(exp.vesselId);
+    EventBus.emit('diplomacy:envoyReturned', { empireId: exp.targetEmpireId });
+  }
+
   // ── Przetwarzanie przybycia ───────────────────────────────────────────────
   _processArrival(exp) {
     if (exp.targetId) {
@@ -1323,6 +1409,7 @@ export class MissionSystem {
     if (exp.type === 'transport')     { this._processTransportArrival(exp); return; }
     if (exp.type === 'recon')         { this._processReconArrival(exp); return; }
     if (exp.type === 'found_outpost') { this._processFoundOutpostArrival(exp); return; }
+    if (exp.type === 'envoy')         { this._processEnvoyArrival(exp); return; }
 
     const roll = Math.random() * 100;
     exp.eventRoll = roll;

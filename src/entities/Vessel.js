@@ -453,6 +453,15 @@ export function canDoRecon(vessel) {
 }
 
 /**
+ * S3.4 — statek potrafi misję dyplomatyczną (envoy) — ma moduł dyplomatyczny.
+ */
+export function canDoEnvoy(vessel) {
+  if (!vessel) return false;
+  if (hasModule(vessel, 'diplomatic_module')) return true;
+  return getCapabilities(vessel).has('envoy');
+}
+
+/**
  * Statek potrafi zejść Away Team na powierzchnię.
  */
 export function canDeployAwayTeam(vessel) {

@@ -574,6 +574,38 @@ export class VesselManager {
   }
 
   /**
+   * S3.4 — zablokuj statek na abstrakcyjną misję (envoy) BEZ fizycznego lotu.
+   * Statek zostaje w bieżącej pozycji (dock/orbita macierzysta); status→on_mission
+   * (≠ 'idle' → nie zostanie wybrany do innej misji). Brak route/paliwa.
+   */
+  lockOnAbstractMission(vesselId, mission) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return false;
+    vessel.status  = 'on_mission';
+    vessel.mission = mission;
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    addMissionLog(vessel, gameYear, t('vessel.envoyDeparted', mission?.targetName ?? '?'), 'info');
+    return true;
+  }
+
+  /**
+   * S3.4 — zwolnij statek z abstrakcyjnej misji (envoy) → idle (pozycja bez zmian).
+   */
+  releaseFromAbstractMission(vesselId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel) return false;
+    const targetName = vessel.mission?.targetName ?? '?';
+    vessel.status  = 'idle';
+    vessel.mission = null;
+    vessel.experience += 1;
+    if (vessel.stats) vessel.stats.missionsComplete += 1;
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    addMissionLog(vessel, gameYear, t('vessel.envoyReturned', targetName), 'success');
+    EventBus.emit('vessel:docked', { vessel });
+    return true;
+  }
+
+  /**
    * S3.3b-S3 — dokowanie do STACJI orbitalnej (depot paliwa). Osobne od dockAtColony:
    * stacja NIE jest kolonią, więc vessel.colonyId zostaje macierzysty (powrót/flota bez zmian).
    * Port uniwersalny — przyjmuje wszystkie kadłuby (bez bramki spaceport). Pozycja kotwiczona do

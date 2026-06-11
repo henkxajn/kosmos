@@ -319,7 +319,7 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
      pełny przegląd zamiast pustego panelu zarządzania). Fix BUG A: _buildResourceTooltip guard
      `typeof rs.getResourceBreakdown !== 'function'` continue (StationDepot nie ma breakdown).
      i18n PL+EN. Live-gate PASS. Bez migracji save (v85). Smoke tmp_s4_3 14/14 + S4-2 regr 25/25 +
-     S4-1 regr 23/23. NEXT: S3.4 (light diplomacy).
+     S4-1 regr 23/23. NEXT: S3.5 (cross-empire trade). [S3.4 light diplomacy DONE — sekcja „S3.4 — Light Diplomacy" niżej.]
 ```
 
 ---
@@ -563,6 +563,25 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 - [x] **Faza 5** — BattleView3D cinematic (proceduralne statki, timeline, laser/flash) + BattleIntroModal
 - [x] **Faza 6** — InvasionSystem + ColonyOverlay combat (desant, HP bars, przycisk ⚔ ATAKUJ)
 - [~] **Faza 7** — MilitaryAI + EconAI (GOAP + Utility) — ongoing, równolegle do balansu
+
+### S3.4 — Light Diplomacy (✅ ukończony, save v85 bez migracji, live-gate PASS)
+Oś trust + emisariusze + traktaty nad istniejącym DiplomacySystem (Faza 3). `FEATURES.lightDiplomacy=true`.
+- [x] **Trust axis** — `changeTrust/getTrust/getTrustStatus` (0-100, 50=neutral, display −10..+10;
+      hostile/neutral/friendly/ally-via-treaty). Bez auto-decay; emituje `diplomacy:trustChanged`.
+- [x] **Abstract envoy mission** — 5y (+5 trust @2.5y + @5y), statek z `diplomatic_module` (slotType special)
+      zablokowany BEZ fizycznego lotu (`VesselManager.lockOnAbstractMission`/`releaseFromAbstractMission`);
+      `canDoEnvoy()` helper; cel = imperium (nie ciało).
+- [x] **Border triggers** — `vessel:arrived` w systemie obcego → military −5 / research −3 / trespass −5
+      (tick-reconciled, bez `vessel:departed`); `KOSMOS.debug.simulateVesselArrival(empireId, kind)`.
+- [x] **Traktaty** (`src/data/TreatyData.js`) — trade_agreement (+1 trust/yr) / non_aggression (blokuje
+      AI auto-war) / alliance (status „Sojusznik") + heurystyka akceptacji AI (personality × trust).
+- [x] **War consequences** — `declareWar` zeruje trust (drive-to-0) + zrywa WSZYSTKIE traktaty.
+- [x] **AI envoy** — abstrakcyjny (cooldown 15 civY, `ui:toast`, war-guard: brak envoy w stanie wojny);
+      `KOSMOS.debug.triggerAIEnvoy(empireId)`.
+- [x] **DiplomacyOverlay** — pasek trust (−10..+10), status label, 6 przycisków w 3 wierszach
+      (wojna/pokój · emisariusz/handel · pakt/sojusz) + tło-absorber klików (first-match `_hitTest`).
+- [x] **i18n PL+EN** + UIManager EventLog/toast. Smoke `tmp_s3_4_smoke.mjs` 44/44 + regr faza3 20/20,
+      s4-3 14/14, s4-2 25/25, s4-1 23/23. NEXT: S3.5 (cross-empire trade).
 
 ### Testowanie AI (✅ ukończone)
 - [x] Headless bots + runner + UI + raporty (commit `f296032`)

@@ -30,6 +30,9 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
+import { hasWeapons, canDoScience, canDoEnvoy } from '../entities/Vessel.js';
+import { TREATY_TYPES } from '../data/TreatyData.js';
 
 // Progi hostility
 const WARNING_THRESHOLD  = 40;
@@ -46,9 +49,30 @@ const ULTIMATUM_GRACE_YEARS = 3.0;
 
 const INCIDENT_MAX = 10;
 
+// ── S3.4 Light Diplomacy — oś trust (0-100, 50=neutral) ──────────────────
+// Display gracza: (trust-50)/5 → −10..+10. Hostility/wojna BEZ zmian.
+const TRUST_NEUTRAL      = 50;
+// Progi statusu (display + bramki UI/AI/traktatów)
+const TRUST_HOSTILE_MAX  = 29;   // 0-29   → wrogi
+const TRUST_FRIENDLY_MIN = 65;   // 65-79  → przyjazny
+const TRUST_ALLY_MIN     = 80;   // 80-100 → sojusznik
+// Zmiany trust z misji emisariuszy (Stage 3)
+const ENVOY_TRUST_ARRIVAL = 5;   // +5 w połowie misji (arrival @1.5y)
+const ENVOY_TRUST_RETURN  = 5;   // +5 po powrocie (return @3.0y) → +10/misję
+// Kary za obecność w przestrzeni obcych (Stage 4)
+const MILITARY_PRESENCE_PENALTY  = -5;
+const RESEARCH_INTRUSION_PENALTY = -3;
+const TRESPASS_PENALTY           = -5;
+const TRESPASS_YEARS             = 1.0;  // civYears w systemie obcego do naliczenia kary
+// Roczny przyrost trust z aktywnych traktatów (Stage 5)
+const TRADE_AGREEMENT_TRUST_YEAR = 2;
+const PACT_TRUST_YEAR            = 1;
+
 export class DiplomacySystem {
   constructor() {
     this._tickAccum = 0;
+    // S3.4 — transient tracker trespassingu (vesselId → {systemId, year}); NIE serializowany.
+    this._trespassTracking = new Map();
 
     // Automatyczne reguły — przez EventBus
     EventBus.on('colony:founded',  ({ colony }) => this._onColonyFounded(colony, 'colony'));
@@ -64,12 +88,23 @@ export class DiplomacySystem {
       this._tickAccum -= steps;
       this._tickDecay(steps);
       this._tickUltimatumExpiry(steps);
+      this._tickTrespassing();      // S3.4 — kara za zaleganie w przestrzeni obcych
+      this._tickTreaties(steps);    // S3.4 — przyrost trust z aktywnych traktatów
     });
 
     // Gdy powstaje nowe imperium → dopisz relację peace/hostility=0
     EventBus.on('empire:created', ({ empireId }) => {
       if (!this.getRelation(empireId)) this._initRelation(empireId);
     });
+
+    // S3.4 — pierwszy kontakt: zapewnij relację (trust już 50 z _initRelation;
+    // NIE resetuj — wyzerowałoby ewentualną karę z równoczesnego vessel:arrived).
+    EventBus.on('intel:contactEstablished', ({ empireId }) => {
+      if (empireId) this._ensureRelation(empireId);
+    });
+
+    // S3.4 — triggery relacji: gracz w przestrzeni obcego imperium → kara trust.
+    EventBus.on('vessel:arrived', ({ vessel, mission }) => this._onVesselArrived(vessel, mission));
   }
 
   // ── Read-only ─────────────────────────────────────────────────
@@ -83,6 +118,18 @@ export class DiplomacySystem {
 
   getHostility(empireId) { return this.getRelation(empireId)?.hostility ?? 0; }
   getState(empireId)     { return this.getRelation(empireId)?.state ?? 'peace'; }
+
+  // ── S3.4 trust (read-only) ───────────────────────────────────────────
+  getTrust(empireId)     { return this.getRelation(empireId)?.trust ?? TRUST_NEUTRAL; }
+
+  /** Status trust dla UI/AI/bramek traktatów: hostile/neutral/friendly/ally. */
+  getTrustStatus(empireId) {
+    if (this.hasTreaty(empireId, 'alliance')) return 'ally';   // BUG5 — ally tylko traktatem
+    const tr = this.getTrust(empireId);
+    if (tr <= TRUST_HOSTILE_MAX)  return 'hostile';
+    if (tr >= TRUST_FRIENDLY_MIN) return 'friendly';           // 65+ = friendly (max bez sojuszu)
+    return 'neutral';
+  }
 
   listAll() {
     const rels = gameState.get('diplomacy.relations') ?? {};
@@ -137,10 +184,28 @@ export class DiplomacySystem {
     }
   }
 
+  /**
+   * S3.4 — zmień trust (0-100). Mirror changeHostility, ale BEZ progów
+   * eskalacji i BEZ decay. Emituje diplomacy:trustChanged.
+   */
+  changeTrust(empireId, delta, reason = '') {
+    if (!delta) return;
+    const rel = this._ensureRelation(empireId);
+    const oldT = rel.trust ?? TRUST_NEUTRAL;
+    const newT = Math.max(0, Math.min(100, oldT + delta));
+    if (newT === oldT) return;
+    const next = { ...rel, trust: newT, lastChangeYear: this._year() };
+    this._setRelation(empireId, next, `trust_${delta > 0 ? '+' : ''}${delta}_${reason}`);
+    EventBus.emit('diplomacy:trustChanged', { empireId, trust: newT, delta, reason });
+  }
+
   declareWar(empireId, reason = '') {
     const rel = this._ensureRelation(empireId);
     if (rel.state === 'war') return false;
-    const next = {
+    // S3.4 — pakt o nieagresji blokuje wojnę z inicjatywy AI/auto (gracz może mimo to).
+    if (reason !== 'player_action' && this.hasTreaty(empireId, 'non_aggression')) return false;
+    // BUG4 — ustaw stan wojny NAJPIERW (idempotentny guard dla re-entrant changeHostility).
+    const warRel = {
       ...rel,
       state: 'war',
       hostility: Math.max(rel.hostility, WAR_THRESHOLD),
@@ -148,10 +213,15 @@ export class DiplomacySystem {
       warStartYear: this._year(),
       ultimatumStartYear: null,
     };
-    this._setRelation(empireId, next, `war_declared_${reason}`);
+    this._setRelation(empireId, warRel, `war_declared_${reason}`);
     this.addIncident(empireId, 'war_declared', { reason });
+    // BUG4 — wojna zrywa WSZYSTKIE traktaty + duży spadek trust.
+    for (const tr of [...(warRel.treaties ?? [])]) this.breakTreaty(empireId, tr.id);
+    // BUG A — wojna zeruje trust (driveto 0), niezależnie od wartości startowej.
+    const currentTrust = this.getTrust(empireId);
+    this.changeTrust(empireId, -currentTrust, 'war_declared');
     EventBus.emit('diplomacy:warDeclared', { empireId, reason });
-    EventBus.emit('diplomacy:relationChanged', { empireId, hostility: next.hostility, state: 'war', reason });
+    EventBus.emit('diplomacy:relationChanged', { empireId, hostility: this.getHostility(empireId), state: 'war', reason });
     return true;
   }
 
@@ -209,6 +279,63 @@ export class DiplomacySystem {
     this._setRelation(empireId, next, `incident_${type}`);
   }
 
+  // ── S3.4 — Traktaty (efekty + heurystyka akceptacji AI) ──────────────────
+
+  /** Czy relacja ma aktywny traktat danego typu. */
+  hasTreaty(empireId, treatyId) {
+    return (this.getRelation(empireId)?.treaties ?? []).some(tr => tr.id === treatyId);
+  }
+
+  /** Hook dla S3.5 — czy obowiązuje umowa handlowa z imperium. */
+  hasTradeAgreement(empireId) {
+    return this.hasTreaty(empireId, 'trade_agreement');
+  }
+
+  /**
+   * Gracz proponuje traktat. AI ocenia wg personality × trust. Zwraca true gdy
+   * zaakceptowano. Emituje diplomacy:treatyAccepted | diplomacy:treatyRejected.
+   */
+  proposeTreaty(empireId, treatyId) {
+    const def = TREATY_TYPES[treatyId];
+    if (!def) return false;
+    if (this.hasTreaty(empireId, treatyId)) {
+      EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'already_signed' });
+      return false;
+    }
+    const pers  = window.KOSMOS?.empireRegistry?.get(empireId)?.personality ?? {};
+    const trust = this.getTrust(empireId);
+    let accept = false;
+    if (treatyId === 'trade_agreement') {
+      accept = (pers.trade ?? 0) >= 0.5 && trust >= 60;
+    } else if (treatyId === 'non_aggression') {
+      accept = (pers.aggression ?? 1) <= 0.4 && trust >= 75;
+    } else if (treatyId === 'alliance') {
+      accept = (pers.aggression ?? 1) <= 0.3 && trust >= 80;   // BUG5d
+    }
+    if (accept) {
+      this.signTreaty(empireId, { id: treatyId });
+      EventBus.emit('diplomacy:treatyAccepted', { empireId, treatyId });
+      return true;
+    }
+    EventBus.emit('diplomacy:treatyRejected', { empireId, treatyId, reason: 'declined' });
+    return false;
+  }
+
+  /** Roczny przyrost trust z aktywnych traktatów (skip relacji w stanie wojny). */
+  _tickTreaties(years) {
+    if (!GAME_CONFIG.FEATURES?.lightDiplomacy) return;
+    for (const rel of this.listAll()) {
+      if (rel.state === 'war') continue;
+      const treaties = rel.treaties ?? [];
+      if (treaties.length === 0) continue;
+      for (const tr of treaties) {
+        const def = TREATY_TYPES[tr.id];
+        if (!def?.yearlyTrust) continue;
+        this.changeTrust(rel.empireId, def.yearlyTrust * years, 'treaty_active');
+      }
+    }
+  }
+
   // ── Automatyczne handlery ────────────────────────────────────
 
   _onColonyFounded(colony, kind) {
@@ -241,6 +368,82 @@ export class DiplomacySystem {
     this.addIncident(empireId, 'surveillance_scan', { systemId: body.systemId });
   }
 
+  // ── S3.4 — triggery relacji (vessel:arrived) + trespassing ───────────────
+
+  /**
+   * Gracz wszedł statkiem do systemu obcego imperium → kara trust wg typu statku.
+   * Payload vessel:arrived = { vessel, mission } (NIE {vesselId, systemId}).
+   */
+  _onVesselArrived(vessel, mission) {
+    if (!GAME_CONFIG.FEATURES?.lightDiplomacy) return;
+    if (!vessel) return;
+    // tylko statki gracza
+    const isPlayer = (vessel.ownerEmpireId == null || vessel.ownerEmpireId === 'player');
+    if (!isPlayer) return;
+    const empireId = this._resolveArrivalEmpire(vessel, mission);
+    if (!empireId) return;
+
+    // Emisariusz obsłużony przez misję (abstrakcyjny) — bez kary tutaj.
+    if (canDoEnvoy(vessel)) return;
+
+    if (hasWeapons(vessel)) {
+      this.changeTrust(empireId, MILITARY_PRESENCE_PENALTY, 'military_presence');
+      this.addIncident(empireId, 'military_presence', { vesselId: vessel.id });
+    } else if (canDoScience(vessel)) {
+      this.changeTrust(empireId, RESEARCH_INTRUSION_PENALTY, 'research_intrusion');
+      this.addIncident(empireId, 'research_intrusion', { vesselId: vessel.id });
+      // śledź do naliczenia trespassing po TRESPASS_YEARS
+      const sysId = this._resolveArrivalSystemId(vessel, mission);
+      if (sysId) this._trespassTracking.set(vessel.id, { systemId: sysId, year: this._year() });
+    }
+    // cargo / inne → bez kary
+  }
+
+  /** System, do którego dotarł statek (vessel.systemId lub systemId ciała z misji). */
+  _resolveArrivalSystemId(vessel, mission) {
+    if (vessel?.systemId) return vessel.systemId;
+    const targetId = mission?.targetId;
+    if (targetId) {
+      const body = EntityManager.get(targetId);
+      if (body?.systemId) return body.systemId;
+    }
+    return null;
+  }
+
+  /** Imperium-właściciel systemu, do którego dotarł statek (lub null). */
+  _resolveArrivalEmpire(vessel, mission) {
+    const sysId = this._resolveArrivalSystemId(vessel, mission);
+    if (!sysId) return null;
+    const galaxy = window.KOSMOS?.galaxyData;
+    return galaxy?.systems?.find(s => s.id === sysId)?.empireId ?? null;
+  }
+
+  /** Naliczanie trespassing: statek badawczy > TRESPASS_YEARS w systemie obcego. */
+  _tickTrespassing() {
+    if (!GAME_CONFIG.FEATURES?.lightDiplomacy) return;
+    if (this._trespassTracking.size === 0) return;
+    const vMgr = window.KOSMOS?.vesselManager;
+    const currentYear = this._year();
+    for (const [vesselId, entry] of [...this._trespassTracking]) {
+      const vessel = vMgr?.getVessel?.(vesselId);
+      // statek zniknął / opuścił system / nie orbituje → przestań śledzić
+      if (!vessel || vessel.isWreck ||
+          (vessel.systemId ?? 'sys_home') !== entry.systemId ||
+          vessel.position?.state !== 'orbiting') {
+        this._trespassTracking.delete(vesselId);
+        continue;
+      }
+      if ((currentYear - entry.year) >= TRESPASS_YEARS && canDoScience(vessel)) {
+        const empireId = window.KOSMOS?.galaxyData?.systems?.find(s => s.id === entry.systemId)?.empireId;
+        if (empireId) {
+          this.changeTrust(empireId, TRESPASS_PENALTY, 'trespassing');
+          this.addIncident(empireId, 'trespassing', { vesselId });
+        }
+        entry.year = currentYear;   // nalicz raz na okres
+      }
+    }
+  }
+
   // ── Tickery ──────────────────────────────────────────────────
 
   _tickDecay(years) {
@@ -261,10 +464,10 @@ export class DiplomacySystem {
       if (rel.ultimatumStartYear == null) continue;
       if (currentYear - rel.ultimatumStartYear < ULTIMATUM_GRACE_YEARS) continue;
       // Czas ultimatum upłynął → auto war jeśli hostility nadal >= ULTIMATUM_THRESHOLD
-      if ((rel.hostility ?? 0) >= ULTIMATUM_THRESHOLD) {
+      if ((rel.hostility ?? 0) >= ULTIMATUM_THRESHOLD && !this.hasTreaty(rel.empireId, 'non_aggression')) {
         this.declareWar(rel.empireId, 'ultimatum_expired');
       } else {
-        // hostility spadło → anuluj ultimatum
+        // hostility spadło LUB pakt o nieagresji → anuluj ultimatum
         const next = { ...rel, ultimatumStartYear: null };
         this._setRelation(rel.empireId, next, 'ultimatum_expired_cooled');
       }

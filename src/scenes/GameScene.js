@@ -394,6 +394,35 @@ export class GameScene {
     // KOSMOS.debug.giveResearch(10000) — dodaje research do aktywnej kolonii
     //   (przydatne na starym save bez konieczności rozpoczynania nowego Power Test).
     window.KOSMOS.debug = {
+      // S3.4 — KOSMOS.debug.simulateVesselArrival('emp_001', 'weapons'|'research')
+      // wymusza vessel:arrived gracza w systemie imperium (kara trust). Trespassing
+      // (opóźniony) walidowany w headless — fake vessel nie jest w VesselManager.
+      simulateVesselArrival: (empireId, kind = 'weapons') => {
+        const reg  = window.KOSMOS?.empireRegistry;
+        const dipl = window.KOSMOS?.diplomacySystem;
+        const emp  = reg?.get(empireId);
+        if (!emp || !dipl) { console.warn('[debug] simulateVesselArrival: brak imperium/diplomacy'); return; }
+        const before = dipl.getTrust(empireId);
+        const modules = kind === 'research' ? ['science_lab'] : ['weapon_laser'];
+        const fakeVessel = {
+          id: `dbg_${Date.now()}`,
+          ownerEmpireId: 'player',
+          systemId: emp.homeSystemId,
+          modules,
+          position: { state: 'orbiting' },
+        };
+        dipl._onVesselArrived(fakeVessel, { targetId: null });
+        console.log(`[debug] simulateVesselArrival(${empireId}, ${kind}): trust ${before} → ${dipl.getTrust(empireId)}`);
+      },
+      // S3.4 BUG6 — wymuś AI envoy (pomija cooldown/gate) do testu Test 5.
+      triggerAIEnvoy: (empireId) => {
+        const dipl = window.KOSMOS?.diplomacySystem;
+        if (!dipl) { console.warn('[debug] triggerAIEnvoy: brak diplomacy'); return; }
+        const before = dipl.getTrust(empireId);
+        dipl.changeTrust(empireId, 3, 'ai_envoy');
+        EventBus.emit('diplomacy:aiEnvoy', { empireId });
+        console.log(`[debug] triggerAIEnvoy(${empireId}): trust ${before} → ${dipl.getTrust(empireId)}`);
+      },
       spawnTestEnemy,
       spawnEnemyFleet,
       spawnEnemyCiv,
