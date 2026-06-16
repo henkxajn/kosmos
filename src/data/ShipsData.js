@@ -43,6 +43,7 @@ export const SHIPS = {
     fuelType:          'fuel',
     cost:              { Fe: 80, Ti: 15, Cu: 10 },
     commodityCost:     { structural_alloys: 4, polymer_composites: 3, electronic_systems: 2 },
+    upkeepCredits:     50,     // Kr/rok — utrzymanie floty (S3.5a-1)
     buildTime:         4.0,
     maxSurge:          1,
     crewCost:          0.1,
@@ -80,6 +81,7 @@ export const SHIPS = {
     fuelType:          'fuel',
     cost:              { Fe: 120, Ti: 20, Cu: 10 },
     commodityCost:     { structural_alloys: 8, polymer_composites: 4, reactive_armor: 3 },
+    upkeepCredits:     300,    // Kr/rok — utrzymanie floty (S3.5a-1)
     buildTime:         3.0,
     maxSurge:          1,
     crewCost:          0.05,
@@ -124,6 +126,7 @@ export const SHIPS = {
     supplyTransferRate:  20,   // supply/civY transferowane do sąsiednich statków fleet-group (placeholder)
     cost:              { Ti: 40, Si: 30, Hv: 10, Xe: 2 },
     commodityCost:     { structural_alloys: 15, electronic_systems: 8, power_cells: 5 },
+    upkeepCredits:     300,    // Kr/rok — utrzymanie floty (S3.5a-1)
     buildTime:         4.0,
     maxSurge:          1,
     crewCost:          0.1,

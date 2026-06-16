@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 85;
+export const CURRENT_VERSION     = 86;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -103,6 +103,7 @@ const MIGRATIONS = {
   82: _migrateV82toV83,
   83: _migrateV83toV84,
   84: _migrateV84toV85,
+  85: _migrateV85toV86,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2093,6 +2094,21 @@ function _migrateV82toV83(data) {
 // v84 → v85: S3.3b-S3b — magazyn OGÓLNY stacji (HUB handlowy). fuelStore/fuelCapacity (placeholder, 0)
 //   → depot lazy {} (lub {fuel} gdy fuelStore>0 z debug). Magazyn przyjmuje dowolne towary (StationDepot
 //   bez filtra). stationSystem null/brak na starych save → pętla pominięta (Array.isArray). Idempotentne (!s.depot).
+// v85 → v86: utrzymanie floty — licznik nieopłaconych lat per vessel (S3.5a-1).
+//   WYMUSZONY reset do 0 (nie tylko default dla undefined): stare save mogły mieć zawyżone
+//   unpaidYears z buggy cadence per-civYear (12×/rok gry) → statki na starcie immobilized mimo
+//   dodatnich kredytów. Reset = czysty start. Ścieżka: data.civ4x.vesselManager.vessels[].
+function _migrateV85toV86(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (!v || typeof v !== 'object') continue;
+      v.unpaidYears = 0;   // force reset (nie ?? — celowo nadpisuje zawyżone wartości ze starych save)
+    }
+  }
+  return data;
+}
+
 function _migrateV84toV85(data) {
   const c4x = data.civ4x ?? data.c4x;
   const stations = c4x?.stationSystem;

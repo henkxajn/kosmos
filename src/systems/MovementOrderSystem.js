@@ -177,6 +177,12 @@ export class MovementOrderSystem {
     const val = validateOrder(spec);
     if (!val.valid) return { ok: false, reason: val.reason };
 
+    // S3.5a-1 — statek immobilized (>=2 lata nieopłaconego utrzymania) nie przyjmuje
+    // nowych rozkazów. Powrót do bazy idzie przez VesselManager.startReturn (poza issueOrder),
+    // więc pozostaje dozwolony. Bramka PRZED mutacją stanu (drift marker, mission suspend).
+    if (this._vm.isImmobilized?.(vessel))
+      return { ok: false, reason: 'vessel_immobilized' };
+
     // Propaguj opts.fromFleet do spec (forwarded do order factory).
     if (opts.fromFleet) spec._fromFleet = opts.fromFleet;
 

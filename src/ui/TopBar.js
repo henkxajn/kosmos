@@ -762,7 +762,8 @@ export class TopBar {
       if (colMgr) {
         let totalKr = 0;
         for (const col of colMgr.getAllColonies()) {
-          totalKr += col.credits ?? 0;
+          if (col.ownerEmpireId) continue;   // S3.5a-1 fix: pomiń kolonie AI (ownerEmpireId != null)
+          totalKr += col.credits ?? 0;        //   — ich kredyty maskowały drain floty gracza (BUG D/F)
         }
         const krStr = totalKr >= 1000 ? (totalKr / 1000).toFixed(1) + 'k' : String(totalKr);
         items.push({

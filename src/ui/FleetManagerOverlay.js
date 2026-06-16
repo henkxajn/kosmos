@@ -2067,7 +2067,11 @@ export class FleetManagerOverlay {
         const vName = vessel.name.length > 11 ? vessel.name.slice(0, 10) + '…' : vessel.name;
         const inCombat = _isVesselInCombat(vessel.id);
         const combatBadge = inCombat ? ' ⚔' : '';
-        ctx.fillText(`${icon} ${vName}${combatBadge}`, x + pad + fleetGutter, ry + 14);
+        // S3.5a-1 — ⚠ gdy statek immobilized (zaległe utrzymanie floty)
+        const immobilized = window.KOSMOS?.vesselManager?.isImmobilized?.(vessel) ?? false;
+        const immobBadge = immobilized ? ' ⚠' : '';
+        if (immobilized) ctx.fillStyle = THEME.danger;
+        ctx.fillText(`${icon} ${vName}${combatBadge}${immobBadge}`, x + pad + fleetGutter, ry + 14);
 
         // M3 P3.1 — rally indicator (🎯) gdy vessel assigned do rally
         const _rallyName = _rallyByVesselId.get(vessel.id);
@@ -4266,6 +4270,29 @@ export class FleetManagerOverlay {
       ctx.lineWidth = 1;
       ctx.strokeRect(eBarX, eBarY, eBarW, eBarH);
       cy += 32;
+    }
+
+    // ── S3.5a-1 — utrzymanie floty (Kr/rok) + status immobilizacji ──
+    {
+      const vMgr        = window.KOSMOS?.vesselManager;
+      const upkeep      = vMgr?.getVesselUpkeepCredits?.(vessel) ?? 0;
+      const immobilized = vMgr?.isImmobilized?.(vessel) ?? false;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.maintenance'), x + pad, cy + 10);
+      ctx.fillStyle = immobilized ? THEME.danger : THEME.textPrimary;
+      ctx.textAlign = 'right';
+      ctx.fillText(`-${t('fleet.upkeepPerYear', upkeep)}`, x + w - pad, cy + 10);
+      ctx.textAlign = 'left';
+      cy += 18;
+      if (immobilized) {
+        ctx.fillStyle = THEME.danger;
+        ctx.fillText(`⚠ ${t('fleet.immobilized')}`, x + pad, cy + 10);
+        cy += 16;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(t('fleet.unpaidYears', vessel.unpaidYears ?? 0), x + pad, cy + 10);
+        cy += 16;
+      }
     }
 
     // ── Przycisk Cargo (dla statków z ładownią) ──────────────

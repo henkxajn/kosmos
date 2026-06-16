@@ -59,6 +59,10 @@ const REFUEL_RATES = {
 };
 
 export class VesselManager {
+  // S3.5a-1 — utrzymanie floty (core mechanic, bez FEATURES flagi — stałe lokalne klasy).
+  static UPKEEP_GRACE_YEARS = 2;      // LATA GRY bez opłaty → immobilized (pochodna isImmobilized)
+  static DEFAULT_VESSEL_UPKEEP = 50;  // Kr/rok (rok gry) fallback dla nieznanego shipId
+
   constructor() {
     /** @type {Map<string, object>} vesselId → VesselInstance */
     this._vessels = new Map();
@@ -67,9 +71,11 @@ export class VesselManager {
     EventBus.on('fleet:shipCompleted', ({ planetId, shipId, modules = [] }) =>
       this._onShipCompleted(planetId, shipId, modules));
 
-    // civDeltaYears = deltaYears × CIV_TIME_SCALE — tankowanie i naprawa biegną szybciej
-    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) =>
-      this._tick(deltaYears));
+    // civDeltaYears = deltaYears × CIV_TIME_SCALE — tankowanie i naprawa biegną szybciej.
+    // physDt (lata gry) przekazywane osobno — utrzymanie floty nalicza się per ROK GRY (jak podatki,
+    // _tickTaxCollection), nie per civYear (S3.5a-1 fix: civYear = 12×/rok gry → kolonia nie nadąża).
+    EventBus.on('time:tick', ({ deltaYears: physDt, civDeltaYears: deltaYears }) =>
+      this._tick(deltaYears, physDt));
 
     EventBus.on('vessel:rename', ({ vesselId, name }) =>
       this._renameVessel(vesselId, name));
@@ -1114,6 +1120,8 @@ export class VesselManager {
         // EmpireLogisticsSystem odbudowuje route.courierIds z empire.logistics (gameState),
         // ale persyst pola pomaga debugowi i spójności filtrów.
         assignedRouteId: v.assignedRouteId ?? null,
+        // S3.5a-1 (v86) — licznik nieopłaconych lat utrzymania; >=2 → immobilized (pochodna).
+        unpaidYears:    v.unpaidYears ?? 0,
       });
     }
     return {
@@ -1227,6 +1235,8 @@ export class VesselManager {
         combatDamage:   vd.combatDamage   ? { ...vd.combatDamage } : null,
         // Slice 2 S3 (v77) — assignedRouteId kuriera logistycznego (null dla reszty).
         assignedRouteId: vd.assignedRouteId ?? null,
+        // S3.5a-1 (v86) — nieopłacone lata utrzymania floty (default 0 — opłacony).
+        unpaidYears:    vd.unpaidYears ?? 0,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {
@@ -1328,8 +1338,9 @@ export class VesselManager {
   /**
    * Tick gry — tankowanie + naprawa + interpolacja pozycji.
    */
-  _tick(deltaYears) {
+  _tick(deltaYears, physDeltaYears = deltaYears / (GAME_CONFIG.CIV_TIME_SCALE ?? 12)) {
     this._tickRefueling(deltaYears);
+    this._tickVesselMaintenance(physDeltaYears);   // S3.5a-1 — utrzymanie per ROK GRY (nie civYear)
     this._tickRepair(deltaYears);
     this._tickFullScans(deltaYears);
     this._tickEndurance(deltaYears);
@@ -1573,6 +1584,80 @@ export class VesselManager {
         vessel.status = 'idle';
       }
     }
+  }
+
+  /**
+   * S3.5a-1 — utrzymanie floty (główny sink Kredytów). Raz na 1.0 ROKU GRY każda kolonia
+   * macierzysta płaci roczne utrzymanie za swoje statki (per-vessel cheapest-first):
+   * kolonia płaci tyle ile może, tylko nieopłacone statki narastają unpaidYears. >=2 lata gry bez
+   * opłaty → statek immobilized (pochodna isImmobilized — NIE status). Następna udana płatność
+   * zeruje licznik (resume, brak zaległości). Płaci homeColonyId (fallback homePlanet).
+   * Woła civilianTradeSystem.spendCredits() BEZPOŚREDNIO — jedno odejmowanie + zwraca bool
+   * (omija double-deduct latentny w ground-unit upkeep: manual−= + emit trade:spendCredits).
+   * CADENCE: per ROK GRY (physDt), NIE civYear — spójne z podatkami (_tickTaxCollection) i etykietą
+   * „Kr/rok". civYear (12×/rok gry przy CIV_TIME_SCALE=12) sprawiał, że dochód kolonii (per rok gry)
+   * nie nadążał za upkeepem → saldo nigdy nie rosło do kosztu → fałszywy immobilize + brak deduct.
+   */
+  _tickVesselMaintenance(gameDeltaYears) {
+    if (!gameDeltaYears || gameDeltaYears <= 0) return;
+    if (!window.KOSMOS?.civMode) return;
+    this._maintenanceAccum = (this._maintenanceAccum ?? 0) + gameDeltaYears;
+    if (this._maintenanceAccum < 1.0) return;            // raz na 1.0 roku gry
+    this._maintenanceAccum -= 1.0;
+
+    const colMgr   = window.KOSMOS?.colonyManager;
+    const civTrade = window.KOSMOS?.civilianTradeSystem;
+    if (!colMgr || !civTrade) return;
+
+    // grupuj statki GRACZA po pay-home (homeColonyId → fallback homePlanet)
+    const byHome = new Map();
+    for (const v of this._vessels.values()) {
+      if (v.isWreck || isEnemyVessel(v)) continue;        // tylko player, bez wraków
+      const homeId = this._resolvePayHomeId(v, colMgr);
+      if (!homeId) continue;
+      if (!byHome.has(homeId)) byHome.set(homeId, []);
+      byHome.get(homeId).push(v);
+    }
+
+    for (const [homeId, vessels] of byHome) {
+      vessels.sort((a, b) => this.getVesselUpkeepCredits(a) - this.getVesselUpkeepCredits(b)); // cheapest-first
+      for (const v of vessels) {
+        const cost = this.getVesselUpkeepCredits(v);
+        if (cost <= 0) { v.unpaidYears = 0; continue; }
+        const paid = civTrade.spendCredits(homeId, cost, 'fleet_upkeep'); // 1 deduct + trade:creditsChanged + bool
+        if (paid) v.unpaidYears = 0;                       // resume → un-immobilize
+        else      v.unpaidYears = (v.unpaidYears ?? 0) + 1; // narasta; >=2 → immobilized (pochodna)
+      }
+    }
+  }
+
+  /** S3.5a-1 — id kolonii płacącej utrzymanie: homeColonyId (gdy pełna kolonia) → fallback homePlanet. */
+  _resolvePayHomeId(vessel, colMgr) {
+    const col = colMgr.getColony(vessel.homeColonyId);
+    if (col && !col.isOutpost) return vessel.homeColonyId;
+    const hp = window.KOSMOS?.homePlanet;                  // fallback (outpost-homed / sierota)
+    return hp ? hp.id : null;
+  }
+
+  /** S3.5a-1 — roczne utrzymanie statku w Kr (data-driven upkeepCredits; fallback 50 dla nieznanego). */
+  getVesselUpkeepCredits(vessel) {
+    return _getHullDef(vessel.shipId)?.upkeepCredits ?? VesselManager.DEFAULT_VESSEL_UPKEEP;
+  }
+
+  /** S3.5a-1 — pochodna flaga immobilizacji: statek gracza z >=2 nieopłaconymi latami utrzymania. */
+  isImmobilized(vessel) {
+    return !!vessel && !isEnemyVessel(vessel)
+      && (vessel.unpaidYears ?? 0) >= VesselManager.UPKEEP_GRACE_YEARS;
+  }
+
+  /** S3.5a-1 — suma rocznego utrzymania całej floty gracza (linia w CivilizationOverlay). */
+  getTotalFleetUpkeep() {
+    let total = 0;
+    for (const v of this._vessels.values()) {
+      if (v.isWreck || isEnemyVessel(v)) continue;
+      total += this.getVesselUpkeepCredits(v);
+    }
+    return total;
   }
 
   /**
@@ -1857,6 +1942,13 @@ export class VesselManager {
     if (!vessel) return;
     const snapshot = vessel._suspendedMission;
     if (!snapshot) return;  // brak zawieszonej mission — nic do resume
+
+    // S3.5a-1 — immobilized (nieopłacona flota) nie wznawia zawieszonej misji.
+    // Statek może tylko wrócić do bazy (startReturn, poza issueOrder) — drop suspended.
+    if (this.isImmobilized(vessel)) {
+      delete vessel._suspendedMission;
+      return;
+    }
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
 

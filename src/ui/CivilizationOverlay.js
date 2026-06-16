@@ -77,7 +77,10 @@ export class CivilizationOverlay extends BaseOverlay {
     const vMgr    = window.KOSMOS?.vesselManager;
     const civTrade = window.KOSMOS?.civilianTradeSystem;
 
-    const colonies = colMgr?.getAllColonies() ?? [];
+    // S3.5a-1 fix — przegląd Cywilizacji = TYLKO kolonie gracza. getAllColonies() zawiera też
+    //   kolonie AI (ownerEmpireId != null); sumowanie ich kredytów/pop/podatków fałszowało totale
+    //   (kredyty nigdy nie spadały poniżej salda AI, skok przy kolonizacji AI — BUG D/F).
+    const colonies = (colMgr?.getAllColonies() ?? []).filter(c => !c.ownerEmpireId);
     const fullColonies = colonies.filter(c => !c.isOutpost);
     const outposts = colonies.filter(c => c.isOutpost);
 
@@ -205,12 +208,23 @@ export class CivilizationOverlay extends BaseOverlay {
       }
     }
 
+    // S3.5a-1 — utrzymanie floty w Kr (suma roczna). getTotalFleetUpkeep filtruje
+    //   wraki + AI; count = statki gracza bez wraków (player overview).
+    let totalFleetUpkeep = vMgr?.getTotalFleetUpkeep?.() ?? 0;
+    let fleetUpkeepCount = 0;
+    for (const v of vessels) {
+      if (v.isWreck) continue;
+      if (v.ownerEmpireId && v.ownerEmpireId !== 'player') continue;
+      fleetUpkeepCount++;
+    }
+
     return {
       colonies, fullColonies, outposts, perColony,
       totalPop, totalMaxPop, avgProsperity,
       totalCredits, totalCreditsPerYear, totalResearch,
       globalResources, taxIncome, taxEffect,
       totalUnitUpkeep, unitUpkeepCount,
+      totalFleetUpkeep, fleetUpkeepCount,
       vessels, fleetByType, inFlight, orbiting, docked,
       leaderInfo, factionInfo,
     };
@@ -297,16 +311,29 @@ export class CivilizationOverlay extends BaseOverlay {
     this._statRow(ctx, x + pad, ry, w, t('civOverlay.credits'),
       `${data.totalCredits.toFixed(0)} Kr`, THEME.warning);
     ry += ROW_H;
-    const sign = data.totalCreditsPerYear >= 0 ? '+' : '';
+    // S3.5a-1 — Bilans Kr = NETTO: handel + podatki − utrzymanie jednostek − utrzymanie floty.
+    //   Wcześniej pokazywał tylko przepływ handlu (col.creditsPerYear), pomijając podatki (idą
+    //   wprost do col.credits) ORAZ upkeep → mylące +0.0 mimo realnego deficytu.
+    const netPerYear = data.totalCreditsPerYear + data.taxIncome
+                     - data.totalUnitUpkeep - data.totalFleetUpkeep;
+    const sign = netPerYear >= 0 ? '+' : '';
     this._statRow(ctx, x + pad, ry, w, t('civOverlay.creditsPerYear'),
-      `${sign}${data.totalCreditsPerYear.toFixed(1)} Kr/${t('tradePanel.perYear')}`,
-      data.totalCreditsPerYear >= 0 ? THEME.success : THEME.danger);
+      `${sign}${netPerYear.toFixed(1)} Kr/${t('tradePanel.perYear')}`,
+      netPerYear >= 0 ? THEME.success : THEME.danger);
     ry += ROW_H;
     // Utrzymanie jednostek naziemnych (płacone raz na civYear z kolonii macierzystej)
     if (data.unitUpkeepCount > 0) {
       this._statRow(ctx, x + pad, ry, w,
         `Utrzymanie jednostek (${data.unitUpkeepCount})`,
         `-${data.totalUnitUpkeep} Kr/${t('tradePanel.perYear')}`,
+        THEME.danger);
+      ry += ROW_H;
+    }
+    // S3.5a-1 — utrzymanie floty (główny sink Kr; raz na civYear z kolonii macierzystej / homePlanet)
+    if (data.fleetUpkeepCount > 0) {
+      this._statRow(ctx, x + pad, ry, w,
+        `${t('civOverlay.fleetUpkeep')} (${data.fleetUpkeepCount})`,
+        `-${data.totalFleetUpkeep} Kr/${t('tradePanel.perYear')}`,
         THEME.danger);
       ry += ROW_H;
     }

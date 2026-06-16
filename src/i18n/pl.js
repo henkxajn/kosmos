@@ -630,6 +630,7 @@ export default {
   // Vessel — komunikaty walidacji portu kosmicznego (Bug 2)
   'vessel.orbitingNoPort': 'Brak portu na {0} — statek pozostaje na orbicie',
   'vessel.reasonNoSpaceport': 'Brak portu kosmicznego na ciele dokowania',
+  'vessel.reasonVesselImmobilized': 'Statek unieruchomiony — zaległe utrzymanie floty (opłać kolonię)',
   // Notification Center (silent alerts — dzwonek 🔔 w BottomBar)
   'notif.title': 'Powiadomienia',
   'notif.empty': 'Brak nowych powiadomień',
@@ -927,6 +928,11 @@ export default {
   'fleet.buildTime': '⏱ Budowa: {0} lat',
   'fleet.surgeMax': '⚡ Max Surge osiągnięty',
   'fleet.crew': '👤 Załoga: {0}/{1}',
+  // S3.5a-1 — utrzymanie floty (sink Kr)
+  'fleet.maintenance': 'Utrzymanie',
+  'fleet.upkeepPerYear': '{0} Kr/rok',
+  'fleet.immobilized': 'Unieruchomiony (brak opłat)',
+  'fleet.unpaidYears': 'Nieopłacone: {0} lat',
 
   // === Fleet UI (FleetManagerOverlay / FleetTabPanel) ===
   // ── Player Fleet Groups (P1) — tabs + zakładka Floty + CRUD ──
@@ -1790,6 +1796,7 @@ export default {
   'civOverlay.economy': 'EKONOMIA',
   'civOverlay.credits': 'Kredyty',
   'civOverlay.creditsPerYear': 'Bilans Kr',
+  'civOverlay.fleetUpkeep': 'Utrzymanie floty',
   'civOverlay.research': 'Badania',
   'civOverlay.taxes': 'PODATKI',
   'civOverlay.taxRate': 'Stawka podatkowa',

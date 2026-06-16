@@ -629,6 +629,7 @@ export default {
   // Vessel — spaceport validation messages (Bug 2)
   'vessel.orbitingNoPort': 'No spaceport at {0} — vessel stays in orbit',
   'vessel.reasonNoSpaceport': 'No spaceport at vessel\'s docking body',
+  'vessel.reasonVesselImmobilized': 'Vessel immobilized — fleet upkeep in arrears (fund the colony)',
   // Notification Center (silent alerts — bell 🔔 in BottomBar)
   'notif.title': 'Notifications',
   'notif.empty': 'No new notifications',
@@ -925,6 +926,11 @@ export default {
   'fleet.buildTime': '⏱ Build: {0} years',
   'fleet.surgeMax': '⚡ Max Surge reached',
   'fleet.crew': '👤 Crew: {0}/{1}',
+  // S3.5a-1 — fleet maintenance (Kr sink)
+  'fleet.maintenance': 'Maintenance',
+  'fleet.upkeepPerYear': '{0} Kr/yr',
+  'fleet.immobilized': 'Immobilized (unpaid upkeep)',
+  'fleet.unpaidYears': 'Unpaid: {0} yr',
 
   // === Fleet UI (FleetManagerOverlay / FleetTabPanel) ===
   // ── Player Fleet Groups (P1) — tabs + Fleets tab + CRUD ──
@@ -1788,6 +1794,7 @@ export default {
   'civOverlay.economy': 'ECONOMY',
   'civOverlay.credits': 'Credits',
   'civOverlay.creditsPerYear': 'Kr balance',
+  'civOverlay.fleetUpkeep': 'Fleet upkeep',
   'civOverlay.research': 'Research',
   'civOverlay.taxes': 'TAXES',
   'civOverlay.taxRate': 'Tax rate',

@@ -38,6 +38,7 @@ export const HULLS = {
     fuelType:          'fuel',
     cost:              { Fe: 60, Ti: 10, Cu: 8 },
     commodityCost:     { structural_alloys: 3, polymer_composites: 2 },
+    upkeepCredits:     50,     // Kr/rok — utrzymanie floty (S3.5a-1)
     buildTime:         3.0,
     maxSurge:          1,
     crewCost:          0.05,
@@ -78,6 +79,7 @@ export const HULLS = {
     fuelType:          'fuel',
     cost:              { Fe: 120, Ti: 20, Cu: 12 },
     commodityCost:     { structural_alloys: 8, polymer_composites: 4, reactive_armor: 2 },
+    upkeepCredits:     300,    // Kr/rok — utrzymanie floty (S3.5a-1)
     buildTime:         6.0,
     maxSurge:          2,
     crewCost:          0.1,
@@ -121,6 +123,7 @@ export const HULLS = {
     fuelType:          'fuel',
     cost:              { Fe: 200, Ti: 35, Cu: 18 },
     commodityCost:     { structural_alloys: 15, polymer_composites: 6, reactive_armor: 5 },
+    upkeepCredits:     500,    // Kr/rok — utrzymanie floty (S3.5a-1)
     buildTime:         12.0,
     maxSurge:          3,
     crewCost:          0.15,
@@ -167,6 +170,7 @@ export const HULLS = {
     baseArmor:         2,        // wbudowany lekki pancerz
     cost:              { Fe: 100, Ti: 20, Cu: 10 },
     commodityCost:     { structural_alloys: 6, reactive_armor: 4, electronic_systems: 2 },
+    upkeepCredits:     300,    // Kr/rok — utrzymanie floty (S3.5a-1)
     buildTime:         5.0,
     maxSurge:          2,
     crewCost:          0.1,
@@ -204,6 +208,7 @@ export const HULLS = {
     baseArmor:         4,        // ciężki wbudowany pancerz
     cost:              { Fe: 180, Ti: 40, Cu: 15, Hv: 5 },
     commodityCost:     { structural_alloys: 12, reactive_armor: 8, electronic_systems: 4 },
+    upkeepCredits:     500,    // Kr/rok — utrzymanie floty (S3.5a-1)
     buildTime:         9.0,
     maxSurge:          3,
     crewCost:          0.15,
@@ -243,6 +248,7 @@ export const HULLS = {
     baseArmor:         5,        // ciężki pancerz kompozytowy
     cost:              { Fe: 280, Ti: 70, Cu: 25, Hv: 12 },
     commodityCost:     { structural_alloys: 22, reactive_armor: 14, electronic_systems: 8, pressure_modules: 4 },
+    upkeepCredits:     1000,   // Kr/rok — utrzymanie floty (S3.5a-1)
     buildTime:         15.0,
     maxSurge:          4,
     crewCost:          0.25,

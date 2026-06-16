@@ -3938,6 +3938,11 @@ export class ThreeRenderer {
       const vx = isNaN(vessel.position.x) ? 0 : vessel.position.x;
       const vy = isNaN(vessel.position.y) ? 0 : vessel.position.y;
 
+      // S3.5a-1 — maintenance tint PRZED rozgałęzieniem stanu: orbiting statki robią `continue`
+      //   niżej (linia ~3960), więc wywołanie na końcu pętli ich nie obejmowało → immobilized
+      //   orbiter zostawał bez szarości. Player-only (no-op dla wrogów/wraków w samym helperze).
+      this._applyVesselMaintenanceTint(vessel, entry);
+
       // ── Statek orbituje ciało — pozycja zarządzana przez OrbitalSpaceSystem ──
       // `_tickOrbitingVessels()` co klatkę pobiera pozycję z centralnego rejestru
       // i ustawia sprite. Tu tylko usuwamy routeLine (nie lecimy nigdzie).
@@ -4023,6 +4028,51 @@ export class ThreeRenderer {
 
       // M4 P2 — enemy intel-gated rendering (rumor ghost / contact dim / detailed full)
       this._applyVesselIntelVisibility(vessel, entry);
+      // maintenance tint — patrz wyżej (przeniesione PRZED rozgałęzienie stanu, by objąć orbiterów)
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // S3.5a-1 — Maintenance tint (immobilized player vessels)
+  // ─────────────────────────────────────────────────────────────
+  // Statek gracza z >=2 latami zaległego utrzymania floty (VesselManager.isImmobilized)
+  // dostaje szary tint + opacity 0.6. Cache _origColorHex/_origOpacity per materiał,
+  // przywracane gdy statek znów opłacony. Rozłączne z intel-tint (intel = enemy-only).
+  _applyVesselMaintenanceTint(vessel, entry) {
+    if (!entry || entry.isWreck) return;
+    if (isEnemyVessel(vessel)) return;   // ścieżka intel zarządza wrogami
+    const immobilized = window.KOSMOS?.vesselManager?.isImmobilized?.(vessel) ?? false;
+    if (entry._maintImmobilized === immobilized) return;   // bez zmian — pomiń
+    entry._maintImmobilized = immobilized;
+
+    const applyToMat = (mat) => {
+      if (!mat) return;
+      if (mat.color && mat.userData._maintOrigColorHex === undefined) {
+        mat.userData._maintOrigColorHex = mat.color.getHex();
+      }
+      if (mat.userData._maintOrigOpacity === undefined) {
+        mat.userData._maintOrigOpacity = mat.opacity ?? 1.0;
+        mat.userData._maintOrigTransparent = mat.transparent ?? false;
+      }
+      if (immobilized) {
+        if (mat.color) mat.color.setRGB(0.5, 0.5, 0.5);
+        mat.opacity = 0.6 * (mat.userData._maintOrigOpacity ?? 1.0);
+        mat.transparent = true;
+      } else {
+        if (mat.color && mat.userData._maintOrigColorHex !== undefined) {
+          mat.color.setHex(mat.userData._maintOrigColorHex);
+        }
+        mat.opacity = mat.userData._maintOrigOpacity ?? 1.0;
+        mat.transparent = mat.userData._maintOrigTransparent ?? false;
+      }
+      mat.needsUpdate = true;
+    };
+    if (entry.sprite?.isSprite) {
+      applyToMat(entry.sprite.material);
+    } else {
+      entry.sprite?.traverse?.(child => {
+        if ((child.isMesh || child.isSprite) && child.material) applyToMat(child.material);
+      });
     }
   }
 

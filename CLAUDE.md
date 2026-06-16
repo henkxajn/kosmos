@@ -583,6 +583,39 @@ Oś trust + emisariusze + traktaty nad istniejącym DiplomacySystem (Faza 3). `F
 - [x] **i18n PL+EN** + UIManager EventLog/toast. Smoke `tmp_s3_4_smoke.mjs` 44/44 + regr faza3 20/20,
       s4-3 14/14, s4-2 25/25, s4-1 23/23. NEXT: S3.5 (cross-empire trade).
 
+### S3.5a-1 — Fleet maintenance credit sink (✅ ukończony, save v86, live-gate PASS)
+Utrzymanie floty jako GŁÓWNY sink Kredytów (Kr). Bez `FEATURES` flagi (core mechanic).
+- [x] **upkeepCredits per kadłub** (data-driven w `HullsData.js` + `ShipsData.js`): hull_small 50,
+      hull_medium 300, hull_large 500, hull_frigate 300, hull_destroyer 500, hull_cruiser 1000;
+      legacy science_vessel 50, cargo_ship 300, space_supply_ship 300; fallback 50 (nieznany shipId).
+- [x] **VesselManager** — `_tickVesselMaintenance` (raz na **1.0 ROKU GRY** = physDt, NIE civYear;
+      per-vessel **cheapest-first**; woła `civilianTradeSystem.spendCredits()` BEZPOŚREDNIO — 1 odejmowanie
+      + bool, omija double-deduct latentny w ground-unit upkeep) + helpery `getVesselUpkeepCredits`
+      (fallback `DEFAULT_VESSEL_UPKEEP=50`), `isImmobilized` (**pochodna flaga**: `unpaidYears ≥ UPKEEP_GRACE_YEARS=2`,
+      NIE status enum — zero ryzyka dla ~10 sites resetujących status), `getTotalFleetUpkeep`,
+      `_resolvePayHomeId` (homeColonyId pełna kolonia → fallback `KOSMOS.homePlanet`). Serialize/restore `unpaidYears`.
+- [x] **MovementOrderSystem** — `issueOrder` gate `vessel_immobilized` (blokuje moveToPoint/pursue/intercept/
+      engage/retreat/patrol/escort/goToPOI; Return-to-base przez `startReturn` poza issueOrder = dozwolony).
+      `_resumeMissionAfterOrder` drop suspended mission gdy immobilized.
+- [x] **SaveMigration v85→v86** — `_migrateV85toV86`: **force-reset** `unpaidYears=0` na wszystkich vessel
+      (nie tylko default — celowo nadpisuje zawyżone wartości ze starych save z buggy cadence).
+- [x] **UI** — FleetManagerOverlay: ⚠ badge w wierszu + linia „Utrzymanie −X Kr/rok" + „Unpaid: N lat" w detalu.
+      ThreeRenderer: szary tint (`setRGB(0.5,0.5,0.5)`, opacity 0.6) immobilized statków gracza
+      (`_applyVesselMaintenanceTint`, cache `_maintOrigColorHex/_maintOrigOpacity`; wołany PRZED rozgałęzieniem
+      stanu w `_syncVesselPositions` — orbiterzy robią `continue`, więc na końcu pętli ich nie obejmował).
+      CivilizationOverlay: linia utrzymania floty + **uczciwy Bilans Kr = netto** (handel + podatki − utrzymanie
+      jednostek − utrzymanie floty; wcześniej tylko przepływ handlu → mylące +0.0 mimo deficytu).
+- [x] **i18n PL+EN** — `fleet.maintenance/upkeepPerYear/immobilized/unpaidYears`, `civOverlay.fleetUpkeep`,
+      `vessel.reasonVesselImmobilized` (EventLog na odrzucony rozkaz).
+- [x] **Bugfixy live-gate**: (1) cadence **civYear→physYear** — `_tick(deltaYears, physDt)` z `time:tick`;
+      przy CIV_TIME_SCALE=12 civYear naliczał upkeep 12×/rok gry → kolonia nie nadążała (fałszywy immobilize +
+      brak deduct). (2) **TopBar + CivOverlay filtr kolonii AI** (`!c.ownerEmpireId`) — getAllColonies zawiera
+      kolonie AI; sumowanie ich kredytów maskowało drain (kredyty „nie spadały poniżej ~2000", skok przy
+      kolonizacji AI). (3) **tint przed orbit branch** (ISSUE C). (4) **migracja force-reset** stale unpaidYears.
+- [x] Smoke `tmp_s3_5a_1_smoke.mjs` **43/43** (T1-T12: koszty/cheapest-first/immobilize/resume/fallback/gate/
+      resume-drop/no-double-deduct/akumulator/migracja/cadence-wiring/rate-guard) + regr s3_4 44/44, s4_3 14/14,
+      s4_2 25/25. **NEXT: S3.5a-2 (pozostałe sinki Kr).**
+
 ### Testowanie AI (✅ ukończone)
 - [x] Headless bots + runner + UI + raporty (commit `f296032`)
 - [x] ConclusionsEngine (18 reguł wniosków) + rich metrics + RuleBot v4 priorytetyzujący łańcuch kosmiczny (commit `5d5ffed`)
