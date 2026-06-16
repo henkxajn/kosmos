@@ -84,10 +84,15 @@ export class CivilianTradeSystem {
       if (c.tradeOverrides?.isolation) return false;
       if (!this._hasSpaceport(c)) return false;
 
-      // Kolonia obcego imperium — wymaga odkrytego systemu (fog of war)
+      // Kolonia obcego imperium — wymaga odkrytego systemu (fog of war),
+      // CHYBA że gracz ma z tym imperium traktat handlowy (S3.5b: traktat ⇒ kontakt,
+      // kolonie partnera handlowalne niezależnie od statusu eksploracji).
       if (c.ownerEmpireId && galaxySystems) {
-        const system = galaxySystems.find(s => s.id === c.systemId);
-        if (!system?.explored) return false;
+        const hasTreaty = window.KOSMOS?.diplomacySystem?.hasTradeAgreement?.(c.ownerEmpireId) ?? false;
+        if (!hasTreaty) {
+          const system = galaxySystems.find(s => s.id === c.systemId);
+          if (!system?.explored) return false;
+        }
       }
       return true;
     });
@@ -144,18 +149,37 @@ export class CivilianTradeSystem {
         const a = colonies[i];
         const b = colonies[j];
 
+        // ── Bramka imperium (S3.5b: cross-empire = gracz↔AI z warpem + traktatem) ──
+        const aEmp = a.ownerEmpireId ?? null;
+        const bEmp = b.ownerEmpireId ?? null;
+        const sameEmpire = aEmp === bEmp;
+
+        let crossEmpireOk = false;
+        if (!sameEmpire) {
+          // Tylko para gracz↔AI (AI↔AI cross-empire pozostaje zablokowane).
+          const playerSide = aEmp === null ? a : (bEmp === null ? b : null);
+          const aiSide     = aEmp === null ? b : (bEmp === null ? a : null);
+          if (!playerSide || !aiSide) continue;
+
+          // Wymóg: gracz ma warp (ion_drives — match silnik engine_warp/warp_cores) I traktat handlowy.
+          const warp   = window.KOSMOS?.techSystem?.isResearched?.('ion_drives') ?? false;
+          const treaty = window.KOSMOS?.diplomacySystem?.hasTradeAgreement?.(aiSide.ownerEmpireId) ?? false;
+          if (!warp || !treaty) continue;
+
+          // Per-empire toggle auto-handlu (domyślnie ON; tylko jawne false wyłącza tę parę).
+          if (window.KOSMOS?.gameState?.get?.('crossEmpireTrade.' + aiSide.ownerEmpireId) === false) continue;
+
+          crossEmpireOk = true; // warp+traktat+toggle ⇒ zasięg nieograniczony (jak hasNexus)
+        }
+
         const dist = this._getDistance(a, b);
         const range = Math.max(this._getTradeRange(a), this._getTradeRange(b));
 
-        // Sprawdź czy commodity_nexus daje nieograniczony zasięg
+        // commodity_nexus LUB cross-empire (warp) ⇒ nieograniczony zasięg
         const hasNexus = this._hasBuilding(a, 'commodity_nexus') ||
                          this._hasBuilding(b, 'commodity_nexus');
 
-        if (!hasNexus && dist > range) continue;
-
-        // Faza 2: handel tylko w obrębie tego samego imperium (gracz↔gracz: null===null;
-        //   normalizacja ?? null — inaczej null !== undefined zepsułoby pary gracza).
-        if ((a.ownerEmpireId ?? null) !== (b.ownerEmpireId ?? null)) continue;
+        if (!hasNexus && !crossEmpireOk && dist > range) continue;
 
         const prosA = a.prosperitySystem?.prosperity ?? 50;
         const prosB = b.prosperitySystem?.prosperity ?? 50;
@@ -168,6 +192,7 @@ export class CivilianTradeSystem {
           gradient,
           priority: gradient * 0.9 + 0.1,
           hasNexus,
+          crossEmpire: !sameEmpire,
         });
       }
     }
@@ -407,6 +432,7 @@ export class CivilianTradeSystem {
     // Dla każdej pary (emigrant → imigrant) sprawdź połączenie i przeprowadź migrację
     const migrations = [];
     for (const conn of this._connections) {
+      if (conn.crossEmpire) continue; // S3.5b: migracja POPów tylko wewnątrz imperium (cross-empire = tylko towary)
       const fromCol = emigrants.includes(conn.from) ? conn.from :
                       emigrants.includes(conn.to)   ? conn.to   : null;
       const toCol   = fromCol === conn.from ? conn.to :
@@ -892,6 +918,24 @@ export class CivilianTradeSystem {
   getOverrides(colonyId) {
     const colony = this.colonyManager.getColony(colonyId);
     return colony?.tradeOverrides ?? {};
+  }
+
+  // ── S3.5b: wspólna wycena (parytet cen z Order Board) ────────────────────
+  // Cena lokalna towaru w kolonii = cena bazowa × mnożnik niedoboru (stan + konsumpcja).
+  // JEDNO źródło prawdy o cenie — używane przez TradeOrderBoard i panel Rynek.
+  getLocalPrice(goodId, colony) {
+    const stock = colony?.resourceSystem?.inventory?.get(goodId) ?? 0;
+    return (BASE_PRICE[goodId] ?? 1) * scarcityMultiplier(stock, this._getConsumption(goodId, colony));
+  }
+
+  // ── S3.5b: per-empire toggle auto-handlu cywilnego cross-empire ──────────
+  // Intent method (UI nie woła raw gameState.set). Domyślnie ON (brak klucza ⇒ true).
+  setCrossEmpireTrade(empireId, enabled) {
+    window.KOSMOS?.gameState?.set?.('crossEmpireTrade.' + empireId, !!enabled, 's3.5b:autoTradeToggle');
+  }
+
+  isCrossEmpireTradeEnabled(empireId) {
+    return window.KOSMOS?.gameState?.get?.('crossEmpireTrade.' + empireId) !== false;
   }
 
   getLastTransfers() {

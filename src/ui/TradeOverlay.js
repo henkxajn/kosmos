@@ -10,7 +10,7 @@ import { COMMODITIES }    from '../data/CommoditiesData.js';
 import { BASE_PRICE, scarcityMultiplier, TRADEABLE_GOODS } from '../data/TradeValuesData.js';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
-import { t, getName }     from '../i18n/i18n.js';
+import { t, getName, getLocale } from '../i18n/i18n.js';
 
 const LEFT_W  = 320;
 const TAB_H   = 32;
@@ -24,6 +24,13 @@ export class TradeOverlay extends BaseOverlay {
     super(null);
     this._scrollLeft  = 0;
     this._scrollRight = 0;
+
+    // S3.5b — zakładka Rynek (Order Board cross-empire)
+    this._tab            = 'trade';   // 'trade' | 'market'
+    this._marketEmpireId = null;
+    this._marketAiColId  = null;
+    this._marketGoodId   = null;
+    this._marketQty      = 10;
 
     // Tooltip DOM (hover na słupkach wykresu)
     this._hoverTradeBar = null;
@@ -105,7 +112,6 @@ export class TradeOverlay extends BaseOverlay {
     this._hitZones = [];
 
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
-    const rightW = ow - LEFT_W;
 
     // Tło
     ctx.fillStyle = bgAlpha(0.38);
@@ -114,22 +120,349 @@ export class TradeOverlay extends BaseOverlay {
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
-    // Separator kolumn
-    ctx.beginPath();
-    ctx.moveTo(ox + LEFT_W, oy); ctx.lineTo(ox + LEFT_W, oy + oh);
-    ctx.stroke();
+    // Treść wg aktywnej zakładki (S3.5b)
+    if (this._tab === 'market') {
+      this._drawMarket(ctx, ox, oy, ow, oh);
+    } else {
+      // Separator kolumn
+      ctx.strokeStyle = GLASS_BORDER;
+      ctx.beginPath();
+      ctx.moveTo(ox + LEFT_W, oy); ctx.lineTo(ox + LEFT_W, oy + oh);
+      ctx.stroke();
+      this._drawLeft(ctx, ox, oy, LEFT_W, oh);
+      this._drawRight(ctx, ox + LEFT_W, oy, ow - LEFT_W, oh);
+    }
 
-    // Przycisk zamknięcia [X]
+    // Zakładki — PO treści (na wierzchu), żeby nagłówki kolumn ich nie zamalowały
+    this._drawTabs(ctx, ox, oy, ow);
+
+    // Przycisk zamknięcia [X] — na końcu
     const closeX = ox + ow - 24;
     const closeY = oy + 4;
     ctx.font = `bold 14px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
     ctx.fillText('✕', closeX, closeY + 14);
     this._addHit(closeX - 4, closeY, 22, 22, 'close');
+  }
 
-    // Rysuj 2 kolumny
-    this._drawLeft(ctx, ox, oy, LEFT_W, oh);
-    this._drawRight(ctx, ox + LEFT_W, oy, rightW, oh);
+  // ── Pasek zakładek (Handel | Rynek) — prawy górny róg, przed [X] ──────────
+  _drawTabs(ctx, ox, oy, ow) {
+    const tabs = [
+      { id: 'trade',  label: t('tradePanel.tabTrade') },
+      { id: 'market', label: t('tradePanel.tabMarket') },
+    ];
+    let tx = ox + ow - 28; // tuż przed [X]
+    for (let i = tabs.length - 1; i >= 0; i--) {
+      const tb = tabs[i];
+      const tw = 84;
+      tx -= tw + 4;
+      const active = this._tab === tb.id;
+      ctx.fillStyle = active ? 'rgba(255,200,60,0.14)' : 'rgba(0,0,0,0.30)';
+      ctx.fillRect(tx, oy + 5, tw, 22);
+      ctx.strokeStyle = active ? THEME.accent : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tx + 0.5, oy + 5.5, tw - 1, 21);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
+      ctx.textAlign = 'center';
+      ctx.fillText(tb.label, tx + tw / 2, oy + 20);
+      ctx.textAlign = 'left';
+      this._addHit(tx, oy + 4, tw, 24, 'tab', { tab: tb.id });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // ZAKŁADKA RYNEK (S3.5b) — Order Board: kupno/sprzedaż z koloniami AI
+  // ══════════════════════════════════════════════════════════════════════════
+  _drawMarket(ctx, ox, oy, ow, oh) {
+    const colMgr   = window.KOSMOS?.colonyManager;
+    const dipl     = window.KOSMOS?.diplomacySystem;
+    const civTrade = window.KOSMOS?.civilianTradeSystem;
+    const empReg   = window.KOSMOS?.empireRegistry;
+    const board    = window.KOSMOS?.tradeOrderBoard;
+    const warp     = window.KOSMOS?.techSystem?.isResearched?.('ion_drives') ?? false;
+    const now      = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+
+    const activeColId = colMgr?.activePlanetId;
+    const playerCol   = colMgr?.getColony?.(activeColId);
+    const playerOk    = !!playerCol && !playerCol.ownerEmpireId && !playerCol.isOutpost;
+
+    // Separator kolumn
+    ctx.strokeStyle = GLASS_BORDER;
+    ctx.beginPath(); ctx.moveTo(ox + LEFT_W, oy); ctx.lineTo(ox + LEFT_W, oy + oh); ctx.stroke();
+
+    // Partnerzy = kolonie AI z traktatem handlowym, grupowane po imperium
+    const byEmpire = new Map();
+    for (const c of (colMgr?.getAllColonies?.() ?? [])) {
+      if (!c.ownerEmpireId) continue;
+      if (!(dipl?.hasTradeAgreement?.(c.ownerEmpireId) ?? false)) continue;
+      if (!byEmpire.has(c.ownerEmpireId)) byEmpire.set(c.ownerEmpireId, []);
+      byEmpire.get(c.ownerEmpireId).push(c);
+    }
+
+    this._drawMarketLeft(ctx, ox, oy, LEFT_W, oh, { byEmpire, civTrade, empReg, warp });
+    this._drawMarketRight(ctx, ox + LEFT_W, oy, ow - LEFT_W, oh,
+      { colMgr, civTrade, board, playerCol, playerOk, activeColId, now });
+  }
+
+  _drawMarketLeft(ctx, x, y, w, h, d) {
+    const { byEmpire, civTrade, empReg, warp } = d;
+    const pad = 14;
+
+    ctx.fillStyle = bgAlpha(0.50);
+    ctx.fillRect(x, y, w, TAB_H);
+    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('market.header'), x + pad, y + 20);
+
+    const listY = y + TAB_H;
+    const listH = h - TAB_H;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, listY, w, listH); ctx.clip();
+    let ry = listY + 6 - this._scrollLeft;
+
+    if (byEmpire.size === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(warp ? t('market.noPartners') : t('market.requiresWarpTreaty'), x + pad, ry + 12);
+      ctx.restore();
+      return;
+    }
+
+    for (const [empireId, cols] of byEmpire) {
+      const emp = empReg?.get?.(empireId);
+      const empName = this._empireName(emp, empireId);
+      const selected = this._marketEmpireId === empireId;
+
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = selected ? THEME.accent : THEME.textPrimary;
+      ctx.fillText(`${selected ? '▾' : '▸'} ${empName.slice(0, 16)}`, x + pad, ry + 12);
+      this._addHit(x + pad, ry, w - pad * 2 - 60, 16, 'market_empire', { empireId });
+
+      // Toggle Auto-handel (po prawej)
+      const autoOn = civTrade?.isCrossEmpireTradeEnabled?.(empireId) ?? true;
+      const tgW = 52;
+      const tgX = x + w - pad - tgW;
+      ctx.fillStyle = autoOn ? 'rgba(0,255,180,0.10)' : 'rgba(216,90,48,0.12)';
+      ctx.fillRect(tgX, ry, tgW, 16);
+      ctx.strokeStyle = autoOn ? THEME.accent : '#D85A30';
+      ctx.lineWidth = 1; ctx.strokeRect(tgX + 0.5, ry + 0.5, tgW - 1, 15);
+      ctx.fillStyle = autoOn ? THEME.accent : '#D85A30';
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`⇄ ${autoOn ? t('market.on') : t('market.off')}`, tgX + tgW / 2, ry + 12);
+      ctx.textAlign = 'left';
+      this._addHit(tgX, ry, tgW, 16, 'market_empire_toggle', { empireId });
+      ry += 20;
+
+      if (selected) {
+        for (const col of cols) {
+          const cSel = this._marketAiColId === col.planetId;
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = cSel ? THEME.accent : THEME.textSecondary;
+          ctx.fillText(`   ${cSel ? '●' : '○'} ${(col.name ?? col.planetId).slice(0, 22)}`, x + pad, ry + 11);
+          this._addHit(x + pad, ry, w - pad * 2, 15, 'market_colony', { aiColId: col.planetId, empireId });
+          ry += 16;
+        }
+        ry += 2;
+      }
+    }
+    ctx.restore();
+  }
+
+  _drawMarketRight(ctx, x, y, w, h, d) {
+    const { colMgr, civTrade, board, playerCol, playerOk, activeColId, now } = d;
+    const pad = 14;
+
+    const aiCol = this._marketAiColId ? colMgr?.getColony?.(this._marketAiColId) : null;
+
+    ctx.fillStyle = bgAlpha(0.50);
+    ctx.fillRect(x, y, w, TAB_H);
+    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    const title = aiCol
+      ? `${t('market.tradeWith')} ${(aiCol.name ?? this._marketAiColId).slice(0, 18)}`
+      : t('market.selectColony');
+    ctx.fillText(title, x + pad, y + 20);
+
+    const listY = y + TAB_H;
+    const listH = h - TAB_H;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, listY, w, listH); ctx.clip();
+    let ry = listY + 6 - this._scrollRight;
+
+    if (!aiCol) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('market.selectColonyHint'), x + pad, ry + 12);
+      ctx.restore();
+      return;
+    }
+
+    if (!playerOk) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger;
+      ctx.fillText(t('market.activeColonyRequired'), x + pad, ry + 11);
+      ry += 18;
+    }
+
+    // Panel akcji wybranego towaru
+    if (this._marketGoodId) {
+      ry = this._drawMarketAction(ctx, x, ry, w, { civTrade, playerCol, playerOk, aiCol });
+    }
+
+    // Inventory AI (klikalne wiersze)
+    const aiRes = aiCol.resourceSystem;
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textHeader;
+    ctx.fillText(t('market.inventory'), x + pad, ry + 11);
+    ry += 16;
+
+    for (const goodId of TRADEABLE_GOODS) {
+      const stock = aiRes?.inventory?.get(goodId) ?? 0;
+      const cd = COMMODITIES[goodId]; const rd = ALL_RESOURCES[goodId];
+      const nm = cd ? getName(cd, 'commodity') : rd ? getName(rd, 'resource') : goodId;
+      const icon = (cd ?? rd)?.icon ?? '';
+      const price = civTrade?.getLocalPrice ? civTrade.getLocalPrice(goodId, playerCol ?? aiCol) : (BASE_PRICE[goodId] ?? 1);
+      const sel = this._marketGoodId === goodId;
+      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      ctx.fillStyle = sel ? THEME.accent : (stock > 0 ? THEME.textSecondary : THEME.textDim);
+      ctx.fillText(`${icon} ${nm.slice(0, 15)}`, x + pad, ry + 12);
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${Math.round(stock)} · ~${this._fmtKr(price)}Kr`, x + w - pad, ry + 12);
+      ctx.textAlign = 'left';
+      this._addHit(x + pad, ry, w - pad * 2, 17, 'market_good', { goodId });
+      ry += 17;
+    }
+    ry += 6;
+
+    // Zlecenia w toku (aktywna kolonia gracza)
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
+    ry += 8;
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('market.pendingOrders'), x + pad, ry + 11);
+    ry += 16;
+
+    const orders = board?.getOrders?.({ playerColonyId: activeColId }) ?? [];
+    if (orders.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('market.noPendingOrders'), x + pad + 4, ry + 10);
+      ry += 16;
+    } else {
+      for (const o of orders) {
+        const cd = COMMODITIES[o.goodId]; const rd = ALL_RESOURCES[o.goodId];
+        const nm = cd ? getName(cd, 'commodity') : rd ? getName(rd, 'resource') : o.goodId;
+        const sideLbl = o.side === 'buy' ? t('market.buy') : t('market.sell');
+        const yrs = Math.max(0, (o.deliverYear - now)).toFixed(1);
+        const cbW = 44;
+        const cbX = x + w - pad - cbW;
+
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = o.side === 'buy' ? THEME.info : THEME.warning;
+        ctx.fillText(`${sideLbl} ${nm.slice(0, 11)} ×${Math.round(o.qty)}`, x + pad + 4, ry + 11);
+        ctx.fillStyle = THEME.textDim;
+        ctx.textAlign = 'right';
+        ctx.fillText(`${this._fmtKr(o.total)}Kr·${yrs}${t('market.yearsShort')}`, cbX - 6, ry + 11);
+        ctx.textAlign = 'left';
+
+        ctx.fillStyle = 'rgba(216,90,48,0.12)';
+        ctx.fillRect(cbX, ry, cbW, 14);
+        ctx.strokeStyle = '#D85A30'; ctx.lineWidth = 1; ctx.strokeRect(cbX + 0.5, ry + 0.5, cbW - 1, 13);
+        ctx.fillStyle = '#D85A30';
+        ctx.textAlign = 'center';
+        ctx.fillText(t('market.cancelShort'), cbX + cbW / 2, ry + 11);
+        ctx.textAlign = 'left';
+        this._addHit(cbX, ry, cbW, 14, 'market_cancel', { orderId: o.id });
+        ry += 16;
+      }
+    }
+    ctx.restore();
+  }
+
+  // Panel akcji: ilość +/-, ceny kup/sprzedaj, przyciski. Zwraca nowe ry.
+  _drawMarketAction(ctx, x, ry, w, d) {
+    const { civTrade, playerCol, playerOk, aiCol } = d;
+    const pad = 14;
+    const goodId = this._marketGoodId;
+    const cd = COMMODITIES[goodId]; const rd = ALL_RESOURCES[goodId];
+    const nm = cd ? getName(cd, 'commodity') : rd ? getName(rd, 'resource') : goodId;
+    const qty = this._marketQty;
+
+    const buyPrice  = civTrade?.getLocalPrice ? civTrade.getLocalPrice(goodId, playerCol ?? aiCol) : (BASE_PRICE[goodId] ?? 1);
+    const sellPrice = civTrade?.getLocalPrice ? civTrade.getLocalPrice(goodId, aiCol) : (BASE_PRICE[goodId] ?? 1);
+    const buyTotal  = this._fmtKr(buyPrice * qty);
+    const sellTotal = this._fmtKr(sellPrice * qty);
+
+    const bx = x + pad;
+    const bw = w - pad * 2;
+    ctx.fillStyle = 'rgba(255,200,60,0.06)';
+    ctx.fillRect(bx, ry, bw, 80);
+    ctx.strokeStyle = THEME.border; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, ry + 0.5, bw - 1, 79);
+
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary;
+    ctx.fillText(nm, bx + 6, ry + 15);
+
+    // qty [-] N [+]
+    const qy = ry + 26;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(t('market.qty'), bx + 6, qy + 12);
+    const qbX = bx + 56;
+    this._miniBtn(ctx, qbX, qy, 18, '−', 'market_qty', { delta: -10 });
+    ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
+    ctx.fillText(String(qty), qbX + 42, qy + 12);
+    ctx.textAlign = 'left';
+    this._miniBtn(ctx, qbX + 66, qy, 18, '+', 'market_qty', { delta: +10 });
+
+    // Kup / Sprzedaj
+    const aby = ry + 52;
+    const abw = Math.floor((bw - 12) / 2);
+    this._actionBtn(ctx, bx + 4, aby, abw, 22, `${t('market.buy')} ${buyTotal}Kr`, playerOk, 'buy');
+    if (playerOk) this._addHit(bx + 4, aby, abw, 22, 'market_buy', { goodId, qty });
+    this._actionBtn(ctx, bx + 8 + abw, aby, abw, 22, `${t('market.sell')} ${sellTotal}Kr`, playerOk, 'sell');
+    if (playerOk) this._addHit(bx + 8 + abw, aby, abw, 22, 'market_sell', { goodId, qty });
+
+    return ry + 80 + 8;
+  }
+
+  _miniBtn(ctx, bx, by, sz, label, type, data) {
+    ctx.fillStyle = 'rgba(255,200,60,0.12)';
+    ctx.fillRect(bx, by, sz, 16);
+    ctx.strokeStyle = THEME.accent; ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, sz - 1, 15);
+    ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillText(label, bx + sz / 2, by + 12);
+    ctx.textAlign = 'left';
+    this._addHit(bx, by, sz, 16, type, data);
+  }
+
+  _actionBtn(ctx, bx, by, bw, bh, label, enabled, style) {
+    ctx.fillStyle = enabled ? (style === 'sell' ? 'rgba(0,255,180,0.10)' : 'rgba(120,180,255,0.12)') : 'rgba(80,80,80,0.10)';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = enabled ? (style === 'sell' ? THEME.accent : THEME.info) : THEME.border;
+    ctx.lineWidth = 1; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = enabled ? THEME.textPrimary : THEME.textDim;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, bx + bw / 2, by + bh / 2 + 4);
+    ctx.textAlign = 'left';
+  }
+
+  _empireName(emp, fallbackId) {
+    if (!emp) return fallbackId;
+    const en = getLocale() === 'en';
+    return (en ? (emp.nameEN ?? emp.namePL) : (emp.namePL ?? emp.nameEN)) ?? emp.name ?? fallbackId;
+  }
+
+  // Format Kr: 1 miejsce po przecinku gdy < 100 (małe ceny scarcity nie znikają w „0"), inaczej zaokrąglone.
+  _fmtKr(v) {
+    if (!Number.isFinite(v)) return '0';
+    return v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -715,6 +1048,53 @@ export class TradeOverlay extends BaseOverlay {
         });
         break;
       }
+
+      // ── S3.5b: zakładka Rynek (Order Board) ──────────────────────────────
+      case 'tab':
+        this._tab = zone.data.tab;
+        this._scrollLeft = 0;
+        this._scrollRight = 0;
+        break;
+      case 'market_empire':
+        this._marketEmpireId = (this._marketEmpireId === zone.data.empireId) ? null : zone.data.empireId;
+        this._marketAiColId = null;
+        this._marketGoodId = null;
+        break;
+      case 'market_empire_toggle': {
+        const civTrade = window.KOSMOS?.civilianTradeSystem;
+        if (civTrade?.isCrossEmpireTradeEnabled) {
+          civTrade.setCrossEmpireTrade(zone.data.empireId, !civTrade.isCrossEmpireTradeEnabled(zone.data.empireId));
+        }
+        break;
+      }
+      case 'market_colony':
+        this._marketAiColId = zone.data.aiColId;
+        this._marketGoodId = null;
+        break;
+      case 'market_good':
+        this._marketGoodId = zone.data.goodId;
+        break;
+      case 'market_qty':
+        this._marketQty = Math.max(1, (this._marketQty ?? 10) + zone.data.delta);
+        break;
+      case 'market_buy':
+      case 'market_sell': {
+        const board = window.KOSMOS?.tradeOrderBoard;
+        const activeColId = window.KOSMOS?.colonyManager?.activePlanetId;
+        if (board && this._marketAiColId) {
+          board.placeOrder({
+            side: zone.type === 'market_buy' ? 'buy' : 'sell',
+            goodId: zone.data.goodId,
+            qty: zone.data.qty,
+            playerColonyId: activeColId,
+            aiColonyId: this._marketAiColId,
+          });
+        }
+        break;
+      }
+      case 'market_cancel':
+        window.KOSMOS?.tradeOrderBoard?.cancelOrder?.(zone.data.orderId);
+        break;
     }
   }
 

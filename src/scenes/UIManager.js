@@ -944,13 +944,31 @@ export class UIManager {
       if (!vessel) return;
       this._log(`↩ ${vessel.name} ${t('log.vesselDocked')}`, 'fleet');
     });
-    EventBus.on('trade:imported', ({ vesselName, colonyId, items }) => {
+    EventBus.on('trade:imported', ({ vesselName, colonyId, items, orderBoard }) => {
+      if (orderBoard) return; // S3.5b — Order Board loguje własny wpis „🤝" (bez duplikatu 📦)
       if (!items || Object.keys(items).length === 0) return;
       const colName = window.KOSMOS?.colonyManager?.getColony?.(colonyId)?.name ?? colonyId;
       const summary = Object.entries(items)
         .map(([id, qty]) => `${id}:${qty}`)
         .join(', ');
       this._log(`📦 ${vesselName} → ${colName}: ${summary}`, 'fleet');
+    });
+
+    // S3.5b — Order Board: realizacja / anulowanie zleceń (rozliczenie po 1 roku gry)
+    EventBus.on('tradeOrder:delivered', ({ order }) => {
+      if (!order) return;
+      const cd = COMMODITIES[order.goodId];
+      const nm = cd ? getName({ id: order.goodId, namePL: cd.namePL }, 'commodity') : order.goodId;
+      const side = order.side === 'buy' ? t('market.buy') : t('market.sell');
+      this._log(t('market.log.delivered', side, nm, Math.round(order.qty), Math.round(order.total)), 'fleet', order.playerColonyId);
+    });
+    EventBus.on('tradeOrder:cancelled', ({ order, reason }) => {
+      if (!order || reason === 'player_cancel') return; // ręczne anulowanie nie zaśmieca logu
+      const cd = COMMODITIES[order.goodId];
+      const nm = cd ? getName({ id: order.goodId, namePL: cd.namePL }, 'commodity') : order.goodId;
+      const rk = `market.reason.${reason}`;
+      const rl = t(rk);
+      this._log(t('market.log.cancelled', nm, rl === rk ? reason : rl), 'info', order.playerColonyId);
     });
 
     // Milestone prosperity

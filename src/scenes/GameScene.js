@@ -36,6 +36,7 @@ import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }         from '../systems/DepositSystem.js';
 import { ImpactDamageSystem }    from '../systems/ImpactDamageSystem.js';
 import { CivilianTradeSystem }  from '../systems/CivilianTradeSystem.js';
+import { TradeOrderBoard }      from '../systems/TradeOrderBoard.js';
 import { ProductionRequestBoard } from '../systems/ProductionRequestBoard.js';
 import TradeLog                 from '../systems/TradeLog.js';
 import { ResearchSystem }      from '../systems/ResearchSystem.js';
@@ -240,6 +241,7 @@ export class GameScene {
     // FEATURES.playerFleets gates UI ekspozycję, nie istnienie obiektu.
     this.fleetSystem     = new FleetSystem(this.vesselManager);
     this.civilianTradeSystem = new CivilianTradeSystem(this.colonyManager);
+    this.tradeOrderBoard   = new TradeOrderBoard(this.colonyManager);
     this.productionRequestBoard = new ProductionRequestBoard();
     this.tradeLog          = new TradeLog();
     this.randomEventSystem = new RandomEventSystem();
@@ -307,6 +309,7 @@ export class GameScene {
     window.KOSMOS.fleetSystem      = this.fleetSystem;
     window.KOSMOS.overlayManager   = this.uiManager.overlayManager;
     window.KOSMOS.civilianTradeSystem = this.civilianTradeSystem;
+    window.KOSMOS.tradeOrderBoard  = this.tradeOrderBoard;
     window.KOSMOS.productionRequestBoard = this.productionRequestBoard;
     window.KOSMOS.tradeLog         = this.tradeLog;
     window.KOSMOS.timeSystem       = this.timeSystem;
@@ -394,6 +397,39 @@ export class GameScene {
     // KOSMOS.debug.giveResearch(10000) — dodaje research do aktywnej kolonii
     //   (przydatne na starym save bez konieczności rozpoczynania nowego Power Test).
     window.KOSMOS.debug = {
+      // S3.5b — raport bramki handlu cross-empire (diagnostyka live-gate).
+      // Dla każdej kolonii AI: czy handlowalna i dlaczego nie + per-empire warp/treaty/toggle.
+      crossEmpireTradeStatus: () => {
+        const cm   = window.KOSMOS?.colonyManager;
+        const dipl = window.KOSMOS?.diplomacySystem;
+        const civ  = window.KOSMOS?.civilianTradeSystem;
+        const gs   = window.KOSMOS?.galaxyData?.systems;
+        const warp = window.KOSMOS?.techSystem?.isResearched?.('ion_drives') ?? false;
+        console.log(`[cross-empire trade] gracz warp(ion_drives)=${warp}`);
+        const perEmpire = {};
+        for (const c of (cm?.getAllColonies?.() ?? [])) {
+          if (!c.ownerEmpireId) continue;
+          const emp = c.ownerEmpireId;
+          const treaty    = dipl?.hasTradeAgreement?.(emp) ?? false;
+          const toggle    = civ?.isCrossEmpireTradeEnabled?.(emp) ?? true;
+          const sys       = gs?.find(s => s.id === c.systemId);
+          const explored  = !!sys?.explored;
+          const spaceport = civ?._hasSpaceport?.(c) ?? null;
+          const isolation = !!c.tradeOverrides?.isolation;
+          const blocked = [];
+          if (isolation)            blocked.push('isolation');
+          if (spaceport === false)  blocked.push('no_spaceport');
+          if (!treaty && !explored) blocked.push('not_explored(brak traktatu)');
+          if (!warp)                blocked.push('gracz_bez_warp');
+          if (!treaty)              blocked.push('brak_traktatu');
+          if (!toggle)              blocked.push('toggle_off');
+          console.log(`  ${c.planetId} [${emp}]: ${blocked.length ? 'BLOCKED — ' + blocked.join(', ') : 'TRADEABLE'} ` +
+            `(explored=${explored}, spaceport=${spaceport}, treaty=${treaty}, toggle=${toggle})`);
+          perEmpire[emp] = { warp, treaty, toggle };
+        }
+        console.log('[cross-empire trade] per-empire bramka:', perEmpire);
+        return perEmpire;
+      },
       // S3.4 — KOSMOS.debug.simulateVesselArrival('emp_001', 'weapons'|'research')
       // wymusza vessel:arrived gracza w systemie imperium (kara trust). Trespassing
       // (opóźniony) walidowany w headless — fake vessel nie jest w VesselManager.

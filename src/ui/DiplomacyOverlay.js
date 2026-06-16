@@ -450,8 +450,18 @@ export class DiplomacyOverlay extends BaseOverlay {
     // Wiersz 2: emisariusz / umowa handlowa
     this._drawActionButton(ctx, colL, iy, btnW2, btnH, t('diplo.btn.envoy'), canEnvoy, 'primary');
     if (canEnvoy) this._addHit(colL, iy, btnW2, btnH, 'send_envoy', { empireId: this._selectedId });
-    this._drawActionButton(ctx, colR, iy, btnW2, btnH, t('diplo.btn.trade'), canTrade, 'primary');
-    if (canTrade) this._addHit(colR, iy, btnW2, btnH, 'propose_trade', { empireId: this._selectedId });
+    // S3.5b: gdy traktat handlowy AKTYWNY → slot pokazuje toggle auto-handlu cywilnego
+    // (przycisk „zaproponuj umowę" byłby i tak martwy). Inaczej: standardowa propozycja.
+    if (dipl.hasTreaty(this._selectedId, 'trade_agreement')) {
+      const civTrade = window.KOSMOS?.civilianTradeSystem;
+      const autoOn = civTrade?.isCrossEmpireTradeEnabled?.(this._selectedId) ?? true;
+      const autoLbl = `${t('market.autoTrade')}: ${autoOn ? t('market.on') : t('market.off')}`;
+      this._drawActionButton(ctx, colR, iy, btnW2, btnH, autoLbl, true, autoOn ? 'primary' : 'danger');
+      this._addHit(colR, iy, btnW2, btnH, 'toggle_auto_trade', { empireId: this._selectedId });
+    } else {
+      this._drawActionButton(ctx, colR, iy, btnW2, btnH, t('diplo.btn.trade'), canTrade, 'primary');
+      if (canTrade) this._addHit(colR, iy, btnW2, btnH, 'propose_trade', { empireId: this._selectedId });
+    }
     iy += btnH + 6;
 
     // Wiersz 3: pakt o nieagresji / sojusz
@@ -517,6 +527,13 @@ export class DiplomacyOverlay extends BaseOverlay {
       case 'propose_trade':
         if (dipl) dipl.proposeTreaty(zone.data.empireId, 'trade_agreement');
         break;
+      case 'toggle_auto_trade': {
+        const civTrade = window.KOSMOS?.civilianTradeSystem;
+        if (civTrade?.isCrossEmpireTradeEnabled) {
+          civTrade.setCrossEmpireTrade(zone.data.empireId, !civTrade.isCrossEmpireTradeEnabled(zone.data.empireId));
+        }
+        break;
+      }
       case 'propose_pact':
         if (dipl) dipl.proposeTreaty(zone.data.empireId, 'non_aggression');
         break;

@@ -75,6 +75,10 @@ export const BASE_PRICE = {
 // Próg zależy od poziomu zapasów vs minimalny potrzebny bufor.
 //
 export function scarcityMultiplier(stock, annualConsumption) {
+  // Defensywnie: brak danych (undefined/NaN) traktuj jak 0 — pusty magazyn / brak konsumpcji
+  // (inaczej `undefined < 3` itd. = false → błędny mnożnik nadwyżki 0.3 zamiast 3.0).
+  stock = Number.isFinite(stock) ? stock : 0;
+  annualConsumption = Number.isFinite(annualConsumption) ? annualConsumption : 0;
   // ── Flow-based: towary z realną konsumpcją ────────────────
   if (annualConsumption > 0.01) {
     const y = stock / annualConsumption; // lata zapasu

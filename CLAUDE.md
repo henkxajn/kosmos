@@ -616,6 +616,43 @@ Utrzymanie floty jako GŁÓWNY sink Kredytów (Kr). Bez `FEATURES` flagi (core m
       resume-drop/no-double-deduct/akumulator/migracja/cadence-wiring/rate-guard) + regr s3_4 44/44, s4_3 14/14,
       s4_2 25/25. **NEXT: S3.5a-2 (pozostałe sinki Kr).**
 
+### S3.5b — Cross-Empire Trade (✅ ukończony, save v86 bez migracji, live-gate PASS)
+Handel z imperiami AI: brama handlu cywilnego (abstrakcyjnego, bez statków) + ręczny Order Board (zakładka
+„Rynek"). Bez `FEATURES` flagi (core). Ceny = ten sam mechanizm co handel cywilny (`BASE_PRICE × scarcityMultiplier`).
+- [x] **Civilian trade gate** (`CivilianTradeSystem._calcAllConnections`) — para gracz↔AI dozwolona gdy
+      `isResearched('ion_drives')` + `hasTradeAgreement(empireId)` + per-empire toggle (domyślnie ON); zasięg
+      nieograniczony jak `hasNexus`; same-empire nietknięte; AI↔AI cross-empire zablokowane. Pool filter
+      (`_halfYearlyTick`) **omija bramkę explored (fog-of-war) gdy jest traktat** (traktat ⇒ kontakt).
+      `_routeMigration` guard `crossEmpire` (towary przekraczają granicę, POPy NIE).
+- [x] **getLocalPrice(goodId, colony)** (parytet cen — JEDNO źródło prawdy) + `setCrossEmpireTrade`/
+      `isCrossEmpireTradeEnabled` (intent methods owner; `gameState.crossEmpireTrade[empireId]`, brak klucza ⇒ ON).
+- [x] **TradeOrderBoard** (`src/systems/TradeOrderBoard.js`) — `placeOrder/cancelOrder/getOrders/_tick`.
+      Settle-at-delivery (1 ROK GRY, **absolutny zegar** `timeSystem.gameTime` — omija pułapkę civYear/physYear
+      z S3.5a-1), płatność **ZERO-SUM** (BUY: gracz −Kr/+towar, AI +Kr/−towar; SELL odwrotnie), all-or-nothing
+      z 4 powodami anulowania (`agreement_broken`/`insufficient_funds`/`insufficient_goods`/`colony_lost`).
+      Cena lock przy złożeniu; importer = gracz(BUY)/AI(SELL). Emituje `tradeOrder:placed/delivered/cancelled`.
+- [x] **GameState** — `tradeOrders:[]` + `crossEmpireTrade:{}` w `createDefaultState()` (precedens `pois:{}`).
+      **BEZ SaveMigration — save zostaje v86** (round-trip przez `gameState.serialize/restore`; stary save → default []).
+      Wired w GameScene (instancja + `window.KOSMOS.tradeOrderBoard`; restore automatyczny z `gameState.restore`).
+- [x] **TradeOverlay** — zakładka „Rynek" (mechanizm zakładek wzór `EconomyOverlay:590-609` + `case 'tab'`):
+      lista imperiów z traktatem + kolonie (**per-colony counterparty**) + inventory AI z cenami live + panel
+      Kup/Sprzedaj (qty +/−) + zlecenia w toku z anulowaniem + per-empire toggle Auto-handel.
+- [x] **DiplomacyOverlay** — toggle Auto-handel ON/OFF w slocie traktatu (gdy traktat aktywny; martwy przycisk
+      propozycji zastąpiony). **UIManager** — `tradeOrder:delivered/cancelled` → EventLog; `TradeOrderBoard`
+      zasila **TradeLog** (log aktywności + wykresy w zakładce Handel) przez `trade:imported`(BUY)/`trade:exported`
+      (SELL) z `orderBoard:true` (UIManager pomija duplikat 📦).
+- [x] **i18n PL+EN** — `tradePanel.tabTrade/tabMarket` + grupa `market.*` (panel, ceny, zlecenia, powody, toggle).
+- [x] **Bugfixy live-gate**: (A) **explored gate bypass** dla partnerów z traktatem (handel cywilny nie ruszał —
+      system AI `explored=false`). (B) **`scarcityMultiplier` koercja** `undefined/NaN → 0` (brak danych = pusty,
+      nie nadwyżka); ceny OK (0.2 Kr = poprawny floor nadwyżki Fe, nie bug — BASE_PRICE kompletne dla 34 towarów).
+      (C) Order Board → TradeLog (dostawy w logu aktywności). (D) **`_fmtKr`** (małe ceny <100 Kr z miejscem
+      dziesiętnym, nie „0Kr"). (E) font inventory **9→11px** (fontSizeNormal, wiersz 15→17px).
+- [x] **Debug** — `KOSMOS.debug.crossEmpireTradeStatus()` (per kolonia AI: TRADEABLE/BLOCKED + powód; per-empire
+      warp/treaty/toggle).
+- [x] Smoke `tmp_s3_5b_smoke.mjs` **51/51** (G1-G7 bramka+migration guard, P1-P2 cena/toggle, B1-B9 board,
+      S1-S2 save round-trip, A1-A2 explored bypass, C1-C2 TradeLog feed, Bfix scarcity) + regr s3_5a_1 43/43,
+      s3_4 44/44, s4_3 14/14, s4_2 25/25. **NEXT: S3.5a-2 (pozostałe sinki Kr) lub dług techniczny AI.**
+
 ### Testowanie AI (✅ ukończone)
 - [x] Headless bots + runner + UI + raporty (commit `f296032`)
 - [x] ConclusionsEngine (18 reguł wniosków) + rich metrics + RuleBot v4 priorytetyzujący łańcuch kosmiczny (commit `5d5ffed`)
