@@ -1300,17 +1300,16 @@ export class UIManager {
       }
     }
 
-    // CivPanel sidebar (zakładki po lewej) — przed overlayem, żeby zawsze działały
-    if (window.KOSMOS?.civMode && this._hitTestCivPanel(x, y)) return true;
+    // Slice 4 — nawigacja w TopBarze (poziomy pasek); klik obsługuje topBar.hitTest niżej.
 
     // Overlay pełnoekranowy (FleetManager itp.) — przed resztą UI
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleClick(x, y)) return true;
     }
 
-    // TopBar (zasoby + czas)
+    // TopBar (nawigacja + czas)
     if (this._topBar.hitTest(x, y, W)) {
-      // Zamknij menu jeśli kliknięto poza nim
+      // Klik w TopBar poza otwartym menu — zamknij menu
       if (this._bottomBar.menuOpen) this._bottomBar._menuOpen = false;
       return true;
     }
@@ -1460,8 +1459,7 @@ export class UIManager {
       this._drawSimpleTopBar(ctx);
     }
 
-    // ── CivPanel (sidebar + zakładki) ────────────────────────
-    if (civMode && !globeOpen) this._drawCivPanel();
+    // ── CivPanel sidebar USUNIĘTY (Slice 4 — nawigacja w TopBarze, poziomy pasek) ──
 
     // ── Outliner (prawy panel) ───────────────────────────────
     if (civMode && !globeOpen) {
@@ -1530,8 +1528,7 @@ export class UIManager {
       this._bottomContext.draw(ctx, W, H, this._selectedEntity);
     }
 
-    // ── Przerysuj sidebar nad BottomContext (zawsze na wierzchu) ──
-    if (civMode && !globeOpen) this._drawCivPanel();
+    // ── (Slice 4 — sidebar usunięty, brak przerysowania nad BottomContext) ──
 
     // ── BottomBar (stabilność + EventLog + przyciski) ────────
     this._bottomBar.draw(ctx, W, H, {
@@ -1548,8 +1545,7 @@ export class UIManager {
 
     // ── Overlay pełnoekranowy (FleetManager itp.) ────────────
     if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
-    // ── Przerysuj sidebar nad overlayem (zawsze widoczny) ───
-    if (civMode && !globeOpen && this.overlayManager.active) this._drawCivPanel();
+    // ── (Slice 4 — sidebar usunięty; nawigacja w TopBarze rysowana nad overlayem) ──
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);

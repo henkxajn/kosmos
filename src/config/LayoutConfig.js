@@ -11,7 +11,7 @@ export const COSMIC = {
   BOTTOM_BAR_H:  26,   // cienki pasek dolny (stabilność + EventLog + przyciski)
   RESOURCE_BAR_H: 20,  // pasek surowców nad BottomBar (redesign UI v1, Slice 3 — tylko civMode)
   CIV_PANEL_W:   280,  // szerokość rozwiniętego CivPanel
-  CIV_SIDEBAR_W: 30,   // szerokość paska ikon CivPanel
+  CIV_SIDEBAR_W: 0,    // Slice 4 — pionowy sidebar usunięty (nav na górze); lewa krawędź = 0
 };
 
 export const GLOBE = {

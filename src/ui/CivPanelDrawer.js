@@ -8,7 +8,7 @@ import { THEME, bgAlpha, hexToRgb, GLASS_BORDER_SIDE } from '../config/ThemeConf
 import { t } from '../i18n/i18n.js';
 
 // ── Stałe ──────────────────────────────────────────────────
-export const CIV_SIDEBAR_W    = 30;
+export const CIV_SIDEBAR_W    = 0;    // Slice 4 — pionowy sidebar usunięty (nav na górze); lewa krawędź = 0
 export const CIV_SIDEBAR_BTN  = 28;
 export const CIV_SIDEBAR_GAP  = 1;
 export const CIV_SIDEBAR_PAD  = 2;
@@ -101,6 +101,43 @@ export function hitTestSidebar(x, y, panelY, fullH) {
     return 'sidebar'; // klik w sidebar ale nie na przycisk
   }
   return null;
+}
+
+// ── Poziomy pasek nawigacji (Slice 4 — w TopBarze, zastępuje pionowy sidebar) ─
+export const CIV_NAV_BTN_W = 40;   // Slice 4 — szerszy slot = większy odstęp między ikonami (rozmiar ikony bez zmian)
+
+// Rysuje CIV_TABS jako rząd ikon od x0, w pasku o wysokości barH. activeTab = id otwartego overlayu.
+export function drawTopNav(ctx, x0, barH, activeTab) {
+  let x = x0;
+  for (const tab of CIV_TABS) {
+    const active = activeTab === tab.id;
+    if (active) {
+      const a = hexToRgb(THEME.borderActive);
+      ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},0.25)`;
+      ctx.fillRect(x, 0, CIV_NAV_BTN_W, barH);
+      ctx.fillStyle = THEME.accent;
+      ctx.fillRect(x, barH - 3, CIV_NAV_BTN_W, 3); // dolny akcent (pasek poziomy)
+    }
+    ctx.font = `${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
+    ctx.fillStyle = active ? THEME.textPrimary : THEME.textSecondary;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(tab.icon, x + CIV_NAV_BTN_W / 2, barH / 2 - 4);
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = active ? THEME.accent : THEME.textDim;
+    ctx.fillText(tab.key, x + CIV_NAV_BTN_W / 2, barH - 6);
+    x += CIV_NAV_BTN_W;
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  return x; // prawa krawędź nav
+}
+
+export function hitTestTopNav(x, y, x0, barH) {
+  if (y < 0 || y > barH || x < x0) return null;
+  const idx = Math.floor((x - x0) / CIV_NAV_BTN_W);
+  if (idx < 0 || idx >= CIV_TABS.length) return null;
+  return CIV_TABS[idx].id;
 }
 
 // ── Mini pasek (reusable) ──────────────────────────────────

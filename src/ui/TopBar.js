@@ -14,6 +14,7 @@ import { COMMODITIES }    from '../data/CommoditiesData.js';
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
+import { drawTopNav, hitTestTopNav } from './CivPanelDrawer.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
@@ -103,32 +104,10 @@ export class TopBar {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, BAR_H); ctx.lineTo(W, BAR_H); ctx.stroke();
 
-    // Logo KOSMOS + nazwa układu (lewa strona) — tylko gdy brak customowego startX
-    let LOGO_W = startX > 0 ? startX : 56;
-    if (startX <= 0) {
-      ctx.font = `bold ${THEME.fontSizeNormal + 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.title;
-      ctx.textAlign = 'left';
-      ctx.fillText('KOSMOS', 6, 20);
-      // Wskaźnik aktywnego układu gwiezdnego (Etap 40)
-      const ssMgr = window.KOSMOS?.starSystemManager;
-      const sysCount = ssMgr?.getAllSystems().length ?? 0;
-      if (sysCount > 1) {
-        const activeId = ssMgr?.activeSystemId ?? 'sys_home';
-        const activeStar = EntityManager.getStarOfSystem(activeId);
-        const starName = activeStar?.name ?? activeId;
-        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = C.accent;
-        const sysLabel = `⭐ ${starName}`;
-        ctx.fillText(sysLabel, 6, 34);
-        // Poszerzenie LOGO_W żeby zasoby nie nachodziły na nazwę układu
-        const sysLabelW = ctx.measureText(sysLabel).width + 12;
-        if (sysLabelW > LOGO_W) LOGO_W = sysLabelW;
-      } else {
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = C.label;
-        ctx.fillText('4X', 6, 32);
-      }
+    // Slice 4 — poziomy pasek nawigacji po lewej (zamiast logo + surowców).
+    let LOGO_W = 0; // brak logo; nav zaczyna od x=4
+    if (startX <= 0 && window.KOSMOS?.civMode) {
+      drawTopNav(ctx, 4, BAR_H, window.KOSMOS?.overlayManager?.active);
     }
 
     // Kontrolki czasu (prawa strona)
@@ -139,17 +118,8 @@ export class TopBar {
     const resEndX   = W - TIME_W - 4;
     const resW      = resEndX - resStartX;
 
-    // Zbierz widoczne zasoby per grupę
-    // Redesign UI v1 (Slice 3): TopBar slim — tylko częste surowce + energia + Kr.
-    // Reszta (rzadkie surowce, stocks, pozostałe systemy) → BottomResourceBar.
-    const mined   = this._getVisibleMined(inventory, invPerYear).filter(it => COMMON_MINED.includes(it.symbol));
-    const utility = this._getVisibleUtility(energyFlow, resources, resDelta, factoryData)
-      .filter(it => it._energyDetails || it._isCredits);
-
-    const groups = [
-      { items: mined,   label: t('topBar.resources'), color: THEME.textHeader },
-      { items: utility, label: t('topBar.systems'),   color: THEME.textHeader },
-    ];
+    // Slice 4 — TopBar bez surowców (są w BottomResourceBar). Pusta lista → pętla niżej nic nie rysuje.
+    const groups = [];
 
     // Policz łączną liczbę itemów + separatorów → dopasuj iw dynamicznie
     const totalItems = groups.reduce((s, g) => s + g.items.length, 0);
@@ -801,9 +771,16 @@ export class TopBar {
   hitTest(x, y, W) {
     if (y > BAR_H) return false;
 
-    const blockX = W - TIME_W;
+    // Slice 4 — nav po lewej: klik ikony toggluje overlay (aktywny→zamknij, inny→otwórz)
+    const navId = hitTestTopNav(x, y, 4, BAR_H);
+    if (navId) {
+      const om = window.KOSMOS?.overlayManager;
+      if (om) { om.active === navId ? om.closeActive() : om.openPanel(navId); }
+      return true;
+    }
 
-    // Klik w bloku czasu
+    // Klik w bloku czasu (prawa strona)
+    const blockX = W - TIME_W;
     if (x >= blockX) {
       return this._hitTestTime(x, y, W);
     }
