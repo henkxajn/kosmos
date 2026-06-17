@@ -18,7 +18,7 @@ import { drawTopNav, hitTestTopNav } from './CivPanelDrawer.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
-const TIME_W    = COSMIC.OUTLINER_W;  // szerokość bloku czasu = outliner (wyrównanie)
+const TIME_W    = 170;  // Slice 5 — odsprzężone od OUTLINER_W (zwężony); blok czasu zachowuje szerokość
 const GROUP_PAD = 5;    // padding między grupami
 const ITEM_W    = 68;   // bazowa szerokość jednego zasobu — węższa
 const ITEM_W_SM = 50;   // kompaktowa szerokość (wąski ekran)

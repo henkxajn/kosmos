@@ -6,7 +6,7 @@
 export const COSMIC = {
   TOP_BAR_H:     46,   // pasek zasobów + czas (góra)
   MAP_MODE_H:    0,    // MapModeBar usunięty — overlaye zajmują tę przestrzeń
-  OUTLINER_W:    170,  // panel prawy (kolonie/ekspedycje/flota)
+  OUTLINER_W:    150,  // Slice 5 — węższy panel prawy (kompakt: tylko nazwy)
   BOTTOM_CTX_H:  120,  // kontekstowy panel dolny (info o encji)
   BOTTOM_BAR_H:  26,   // cienki pasek dolny (stabilność + EventLog + przyciski)
   RESOURCE_BAR_H: 20,  // pasek surowców nad BottomBar (redesign UI v1, Slice 3 — tylko civMode)

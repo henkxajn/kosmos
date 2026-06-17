@@ -138,9 +138,6 @@ export class Outliner {
         for (const col of sysCols) {
           const iy = startY + dy;
           const icon = col.isHomePlanet ? '🏛' : '🏙';
-          const dispPop = col.civSystem?.displayPopulation ?? 0;
-          const popStr = dispPop >= 1_000_000 ? `${(dispPop/1_000_000).toFixed(1)}M` : dispPop >= 1_000 ? `${(dispPop/1_000).toFixed(0)}k` : `${dispPop}`;
-          const prosp = Math.round(col.prosperitySystem?.prosperity ?? 50);
           const indent = 8; // wcięcie pod nagłówkiem gwiazdy
 
           // Ikona mapy (🗺) po prawej — klik otwiera globus
@@ -149,16 +146,10 @@ export class Outliner {
           ctx.fillStyle = this._hoveredColonyId === col.planetId ? C.bright : C.mint;
           ctx.fillText('🗺', mapIconX, iy + 14);
 
-          // Nazwa kolonii
+          // Nazwa kolonii (Slice 5 — kompakt: tylko nazwa; POP/prosperity w tooltipie hover)
           ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = C.bright;
-          ctx.fillText(`${icon} ${_truncate(col.name, 8)}`, x + PAD + indent, iy + 14);
-
-          // POP + prosperity (przesunięte w lewo — miejsce na ikonę mapy)
-          ctx.fillStyle = prosp < 30 ? C.red : prosp < 60 ? C.orange : C.text;
-          ctx.textAlign = 'right';
-          ctx.fillText(`${popStr}👤⭐${prosp}`, mapIconX - 4, iy + 14);
-          ctx.textAlign = 'left';
+          ctx.fillText(`${icon} ${_truncate(col.name, 16)}`, x + PAD + indent, iy + 14);
 
           this._clickTargets.push({
             type: 'colony', planetId: col.planetId, colony: col,
@@ -235,10 +226,7 @@ export class Outliner {
           const iy = startY + dy;
           const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
           const icon = ship?.icon ?? '🚀';
-          const vName = _truncate(vessel.name ?? (ship ? getName(ship, 'ship') : vessel.shipId), 14);
-          // Status — ikona stanu
-          const stIco = vessel.position.state === 'in_transit' ? '→'
-                      : vessel.position.state === 'orbiting'   ? '⊙' : '';
+          const vName = _truncate(vessel.name ?? (ship ? getName(ship, 'ship') : vessel.shipId), 16);
           // Hover highlight
           const isHov = vid === this._hoveredVesselId;
           if (isHov) {
@@ -247,7 +235,7 @@ export class Outliner {
           }
           ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = isHov ? C.bright : C.text;
-          ctx.fillText(`${icon} ${stIco}${vName}`, x + PAD, iy + 14);
+          ctx.fillText(`${icon} ${vName}`, x + PAD, iy + 14);
           this._clickTargets.push({
             type: 'vessel', vesselId: vid,
             x, y: iy, w: OUTLINER_W, h: ITEM_H,
@@ -473,12 +461,9 @@ export class Outliner {
           return true;
         }
         if (t.type === 'section') {
-          if (t.sectionId === 'fleet') {
-            const om = window.KOSMOS?.overlayManager;
-            if (om) om.openPanel('fleet');
-            else EventBus.emit('civpanel:openTab', { tabId: 'fleet' });
-            return true;
-          }
+          // Slice 5 — wszystkie sekcje (w tym Fleet) zwijają się jednolicie.
+          // Dawny skrót „klik nagłówka Fleet → otwórz FleetManager" usunięty:
+          // FleetManager jest teraz dostępny z górnego paska nawigacji (🚀, klawisz F).
           this._sections[t.sectionId] = !this._sections[t.sectionId];
           return true;
         }
