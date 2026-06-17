@@ -2,8 +2,8 @@
 //
 // Łączy dawny mini-HUD kolonii (lewa część) z paskiem surowców (prawa część) w JEDEN element:
 //   LEWO:  nazwa aktywnej kolonii · 👤 Pop · Kr · (⚠ BROWNOUT)
-//   PRAWO: rzadkie surowce (Hv/Xe/Nt/H) · stocks (Food/Water/Fuel) · systemy (🔬 PC ⭐ ⚖)
-// Jedna linia. TopBar slim trzyma częste surowce + energię + Kr + datę.
+//   PRAWO: WSZYSTKIE surowce (10 MINED + Food + Water, ikony PNG) · bilans energii ⚡ · dobrobyt ⭐
+// Jedna linia. (Faza 1 ikon PNG — TopBar nie rysuje już surowców; ten pasek jest jedynym stałym HUD surowców.)
 //
 // Zawsze widoczny w civMode (rysowany PO overlayManager → nad overlay'em). Pas CENTRALNY
 // (między sidebarem a Outlinerem) — nie rusza ich offsetów. Klik w część kolonii → panel
@@ -11,10 +11,11 @@
 
 import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC }            from '../config/LayoutConfig.js';
-import { MINED_RESOURCES, HARVESTED_RESOURCES, COMMON_MINED } from '../data/ResourcesData.js';
+import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES }       from '../data/CommoditiesData.js';
 import EntityManager         from '../core/EntityManager.js';
 import { t }                 from '../i18n/i18n.js';
+import { drawResourceIcon, RESOURCE_ICON_FILES } from './ResourceIcons.js';
 
 const BAR_H      = COSMIC.RESOURCE_BAR_H; // 20
 const BOTTOM_H   = COSMIC.BOTTOM_BAR_H;   // 26
@@ -41,50 +42,44 @@ export class BottomResourceBar {
     this._colonyRect = null; // część kolonii — klik otwiera panel kolonii
   }
 
-  // Prawa część: grupy tokenów surowców/systemów. item: { icon, sym, val, delta?, color, raw? }
+  // Prawa część: grupy tokenów. item: { id?, icon, val, color, raw?, signed? }
+  // Faza 1: WSZYSTKIE surowce (10 MINED + Food + Water) z ikonami PNG, potem
+  // bilans energii + dobrobyt aktywnej kolonii. Bez symboli/delty (czytelny pasek).
   _collect(state) {
-    const { inventory = {}, invPerYear = {}, resources = {}, resDelta = {}, factoryData } = state;
+    const { inventory = {}, energyFlow = {} } = state;
     const groups = [];
 
-    // Rzadkie surowce (MINED minus COMMON) — Hv/Xe/Nt/H
-    const rare = [];
+    // ── Surowce: 10 wydobywalnych (MINED) + Food + Water — ikony PNG ──
+    const resItems = [];
     for (const [id, def] of Object.entries(MINED_RESOURCES)) {
-      if (COMMON_MINED.includes(id)) continue;
-      rare.push({ icon: def.icon, sym: id, val: inventory[id] ?? 0, delta: invPerYear[id] ?? 0, color: def.color || THEME.textSecondary });
+      resItems.push({ id, icon: def.icon, val: inventory[id] ?? 0, color: def.color || THEME.textSecondary });
     }
-    if (rare.length) groups.push({ label: t('topBar.resources'), items: rare });
-
-    // Stocks: Food/Water + Fuel
-    const stocks = [];
     for (const [id, def] of Object.entries(HARVESTED_RESOURCES)) {
-      stocks.push({ icon: def.icon, sym: '', val: inventory[id] ?? 0, delta: invPerYear[id] ?? 0, color: def.color || THEME.textSecondary });
+      resItems.push({ id, icon: def.icon, val: inventory[id] ?? 0, color: def.color || THEME.textSecondary });
     }
+    // Paliwo — commodity witalny (S3.0a), ikona PNG jak surowce
     const fuelDef = COMMODITIES.fuel;
-    if (fuelDef) stocks.push({ icon: fuelDef.icon, sym: '', val: inventory['fuel'] ?? 0, delta: invPerYear['fuel'] ?? 0, color: THEME.textSecondary });
-    if (stocks.length) groups.push({ label: t('topBar.stocks'), items: stocks });
+    if (fuelDef) resItems.push({ id: 'fuel', icon: fuelDef.icon, val: inventory['fuel'] ?? 0, color: THEME.textSecondary });
+    groups.push({ items: resItems });
 
-    // Systemy: science + PC + prosperity + faction (POP jest w lewej części — kolonia)
-    const sys = [];
-    sys.push({ icon: '🔬', sym: '', val: resources.research ?? 0, delta: resDelta.research ?? 0, color: THEME.purple });
-    const fd = factoryData ?? window.KOSMOS?.factorySystem;
-    if (window.KOSMOS?.civMode) {
-      const used = fd?.usedPoints ?? 0, total = fd?.totalPoints ?? 0;
-      sys.push({ icon: '🏭', sym: 'PC', val: `${used}/${total}`, raw: true,
-        color: used >= total && total > 0 ? THEME.warning : THEME.textSecondary });
-    }
-    const prosp = window.KOSMOS?.prosperitySystem;
-    if (prosp) {
-      const p = Math.round(prosp.prosperity ?? 50);
-      sys.push({ icon: '⭐', sym: '', val: p, raw: true,
+    // ── Bilans: energia (przepływ) + dobrobyt aktywnej kolonii ──
+    const balItems = [];
+    const brownout = !!energyFlow.brownout;
+    const eBal = Math.round(energyFlow.balance ?? 0);
+    balItems.push({
+      icon: '⚡',
+      val: brownout ? 0 : eBal,
+      raw: true, signed: !brownout,
+      color: brownout ? THEME.danger : eBal < 0 ? THEME.warning : THEME.success,
+    });
+    const activeCol = window.KOSMOS?.colonyManager?.getActiveColony?.();
+    const prosp = activeCol?.prosperitySystem?.prosperity;
+    if (prosp !== undefined && prosp !== null) {
+      const p = Math.round(prosp);
+      balItems.push({ icon: '⭐', val: p, raw: true,
         color: p < 30 ? THEME.danger : p < 60 ? THEME.warning : THEME.success });
     }
-    const fac = window.KOSMOS?.factionSystem;
-    if (fac && !fac.isLocked) {
-      const s = Math.round(fac.slider ?? 50);
-      const zc = s <= 30 ? '#D85A30' : s >= 70 ? '#378ADD' : THEME.textSecondary;
-      sys.push({ icon: '⚖', sym: '', val: s, raw: true, color: zc });
-    }
-    if (sys.length) groups.push({ label: t('topBar.systems'), items: sys });
+    groups.push({ items: balItems });
 
     return groups;
   }
@@ -147,45 +142,43 @@ export class BottomResourceBar {
     ctx.beginPath(); ctx.moveTo(cx, y + 3); ctx.lineTo(cx, y + BAR_H - 3); ctx.stroke();
     cx += 8;
 
-    // ── PRAWO: surowce / systemy ──
-    const groups = this._collect(state);
+    // ── PRAWO: surowce (PNG) + bilans (energia/dobrobyt) ──
+    const groups   = this._collect(state);
+    const iconCY   = y + BAR_H / 2;   // środek pionowy ikon
+    const iconSize = BAR_H - 6;       // 22 px przy BAR_H=28
+    ctx.textBaseline = 'middle';
     for (let gi = 0; gi < groups.length && cx < xMax; gi++) {
       const g = groups[gi];
       if (gi > 0) {
         ctx.strokeStyle = THEME.border;
-        ctx.beginPath(); ctx.moveTo(cx + 2, y + 3); ctx.lineTo(cx + 2, y + BAR_H - 3); ctx.stroke();
-        cx += 8;
+        ctx.beginPath(); ctx.moveTo(cx + 2, y + 4); ctx.lineTo(cx + 2, y + BAR_H - 4); ctx.stroke();
+        cx += 10;
       }
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textHeader;
-      ctx.fillText(g.label, cx, ty);
-      cx += ctx.measureText(g.label).width + 6;
 
       for (const it of g.items) {
         if (cx > xMax) break;
-        const label  = `${it.icon}${it.sym}`;
-        const valStr = it.raw ? String(it.val) : _fmtNum(it.val);
 
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = it.color || THEME.textSecondary;
-        ctx.fillText(label, cx, ty);
-        cx += ctx.measureText(label).width + 2;
-
-        ctx.fillStyle = THEME.textPrimary;
-        ctx.fillText(valStr, cx, ty);
-        cx += ctx.measureText(valStr).width;
-
-        if (it.delta !== undefined && Math.abs(it.delta) > 0.01) {
-          const sign = it.delta >= 0 ? '+' : '';
-          const dStr = ` ${sign}${it.delta.toFixed(1)}`;
-          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-          ctx.fillStyle = it.delta >= 0 ? THEME.successDim : THEME.dangerDim;
-          ctx.fillText(dStr, cx, ty);
-          cx += ctx.measureText(dStr).width;
+        // Ikona: PNG dla surowców, inaczej emoji (energia/dobrobyt) w większym foncie
+        if (it.id && RESOURCE_ICON_FILES[it.id]) {
+          cx += drawResourceIcon(ctx, it.id, cx, iconCY, iconSize, it.icon) + 2;
+        } else {
+          ctx.font = `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`;
+          ctx.fillStyle = it.color || THEME.textSecondary;
+          ctx.fillText(it.icon, cx, iconCY);
+          cx += ctx.measureText(it.icon).width + 2;
         }
-        cx += 10;
+
+        // Wartość (dla bilansu kolorowana statusowo; energia ze znakiem +/−)
+        const valStr = it.raw
+          ? (it.signed && it.val > 0 ? '+' : '') + String(it.val)
+          : _fmtNum(it.val);
+        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        ctx.fillStyle = it.raw ? (it.color || THEME.textPrimary) : THEME.textPrimary;
+        ctx.fillText(valStr, cx, iconCY);
+        cx += ctx.measureText(valStr).width + 10;
       }
     }
+    ctx.textBaseline = 'alphabetic';
   }
 
   // Klik w część kolonii → panel kolonii; reszta paska pochłania klik.

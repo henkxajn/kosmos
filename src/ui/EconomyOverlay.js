@@ -15,11 +15,12 @@ import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { t, getName }    from '../i18n/i18n.js';
+import { drawResourceIcon, RESOURCE_ICON_FILES } from './ResourceIcons.js';
 
 const LEFT_W   = 220;
 const RIGHT_W  = 260;
 const CAT_H    = 24;
-const ROW_H    = 22;
+const ROW_H    = 28;   // Faza 1 ikony PNG — wyższy wiersz mieści ikonę 24px
 const TAB_H    = 32;
 const FILTER_H = 28;       // wysokość paska filtra kolonii
 const BTN_S    = 16;        // mały przycisk 16×16
@@ -540,20 +541,26 @@ export class EconomyOverlay extends BaseOverlay {
         ctx.fillRect(x, ry, w, ROW_H);
       }
 
-      // Ikona
+      // Ikona — PNG dla surowców (Faza 1: MINED + Food/Water), inaczej emoji (fallback)
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(res.icon ?? '·', x + pad, ry + 15);
+      if (RESOURCE_ICON_FILES[res.id]) {
+        drawResourceIcon(ctx, res.id, x + pad, ry + ROW_H / 2, 24, res.icon);
+      } else {
+        ctx.textBaseline = 'middle';
+        ctx.fillText(res.icon ?? '·', x + pad, ry + ROW_H / 2);
+        ctx.textBaseline = 'alphabetic';
+      }
 
-      // Nazwa (skrócona)
+      // Nazwa (skrócona) — przesunięta w prawo, bo ikona jest większa (24px)
       ctx.fillStyle = isHovered ? THEME.accent : THEME.textSecondary;
-      ctx.fillText(getName(res, COMMODITIES[res.id] ? 'commodity' : 'resource').slice(0, 10), x + 30, ry + 15);
+      ctx.fillText(getName(res, COMMODITIES[res.id] ? 'commodity' : 'resource').slice(0, 10), x + 44, ry + 18);
 
       // Ilość
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textPrimary;
       ctx.textAlign = 'right';
-      ctx.fillText(_fmtAmt(amt), x + 150, ry + 15);
+      ctx.fillText(_fmtAmt(amt), x + 150, ry + 18);
       ctx.textAlign = 'left';
 
       // Rate
@@ -561,7 +568,7 @@ export class EconomyOverlay extends BaseOverlay {
       const rateColor = rate > 0 ? THEME.success : rate < 0 ? THEME.danger : THEME.textDim;
       ctx.fillStyle = rateColor;
       const rateStr = rate > 0 ? `+${rate.toFixed(1)}` : rate < 0 ? rate.toFixed(1) : '0';
-      ctx.fillText(rateStr, x + 155, ry + 15);
+      ctx.fillText(rateStr, x + 155, ry + 18);
 
       // Hit zone do tooltipa
       this._addHit(x, ry, w, ROW_H, 'resource_hover', { resourceId: res.id });
