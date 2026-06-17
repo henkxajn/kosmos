@@ -2761,6 +2761,33 @@ export class ThreeRenderer {
     };
   }
 
+  // Redesign UI v1 (Slice 1) — ogólna pozycja ekranowa DOWOLNEGO ciała
+  // (planeta/księżyc/planetoida/gwiazda) dla pływającego panelu BottomContext.
+  // Mirror getStationScreenPosition (z-clamp), ale getScreenPosition pokrywał tylko
+  // planety → tu obsługujemy wszystkie typy. getWorldPosition (księżyce mogą być
+  // zagnieżdżone). Zwraca null gdy ciało za kamerą (NDC z poza [-1,1]).
+  getBodyScreenPosition(entityId) {
+    if (!entityId) return null;
+    let obj = null;
+    const pe = this._planets.get(entityId);
+    if (pe) obj = pe.group;
+    if (!obj) { const me = this._moons.get(entityId);      if (me) obj = me.mesh; }
+    if (!obj) { const ae = this._planetoids.get(entityId); if (ae) obj = ae.mesh; }
+    if (!obj && this._starGroup) {
+      const star = EntityManager.getByType('star')?.[0];
+      if (star && star.id === entityId) obj = this._starGroup;
+    }
+    if (!obj) return null;
+    const tmp = this._tmpLabelVec ?? (this._tmpLabelVec = new THREE.Vector3());
+    obj.getWorldPosition(tmp);
+    tmp.project(this.camera);
+    if (tmp.z < -1 || tmp.z > 1) return null;
+    return {
+      x: (tmp.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-tmp.y * 0.5 + 0.5) * window.innerHeight,
+    };
+  }
+
   // Flag: pokaż labele wszystkich widocznych obiektów (toggle CTRL).
   // UIManager w draw() czyta ten flag przez getAllVisibleLabels() i rysuje.
   setShowAllLabels(on) { this._showAllLabels = !!on; }
