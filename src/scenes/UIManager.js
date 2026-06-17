@@ -43,6 +43,7 @@ import { POIPanel }            from '../ui/POIPanel.js';
 import { GalacticMiniMap }     from '../ui/GalacticMiniMap.js';
 import { StationPanel }        from '../ui/StationPanel.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
+import { MiniHud }             from '../ui/MiniHud.js';
 import { t, getName }          from '../i18n/i18n.js';
 
 // Nowe komponenty UI
@@ -263,6 +264,11 @@ export class UIManager {
     // trzymany bezpośrednio, rysowany PO overlayManager, coexist z colony panelem i widokiem 3D.
     this.stationPanel = new StationPanel();
     window.KOSMOS.stationPanel = this.stationPanel;
+
+    // Redesign UI v1 (Slice 2) — MiniHud: stały mini-panel aktywnej kolonii (lewy-dół).
+    // Non-exclusive (jak CombatHUD/StationPanel): rysowany PO overlayManager, klik PRZED nim.
+    this.miniHud = new MiniHud();
+    window.KOSMOS.miniHud = this.miniHud;
 
     this._setupEvents();
     this._startDrawLoop();
@@ -1277,6 +1283,7 @@ export class UIManager {
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
+    if (this.miniHud?.handleClick?.(x, y)) return true;        // Slice 2 — mini-HUD kolonii (klik → panel kolonii)
 
     // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
     if (this._bottomBar.menuOpen && this._bottomBar.hitTestMenu(x, y, W, H)) {
@@ -1547,6 +1554,7 @@ export class UIManager {
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
     if (civMode && !globeOpen) this.stationPanel.draw(ctx, W, H);   // S4-2 — na wierzchu overlay'i (coexist z colony)
+    if (civMode && !globeOpen) this.miniHud.draw(ctx, W, H, this._energyFlow);   // Slice 2 — mini-HUD kolonii (lewy-dół)
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──
     this._bottomBar.drawMenu(ctx, W, H, {
