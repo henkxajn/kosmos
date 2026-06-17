@@ -94,7 +94,7 @@ export class CombatHUD extends BaseOverlay {
     // zostawia tactical map area czytelną.
     const bottomBarH = COSMIC.BOTTOM_BAR_H ?? 32;
     const px = Math.floor(W / 2 - PANEL_W / 2);
-    const py = Math.max((COSMIC.TOP_BAR_H ?? 32) + 8, H - bottomBarH - totalH - 8);
+    const py = Math.max((COSMIC.TOP_BAR_H ?? 32) + 8, H - bottomBarH - (COSMIC.RESOURCE_BAR_H ?? 0) - totalH - 8);   // Slice 3 — nad paskiem surowców
 
     // Tło + ramka
     ctx.fillStyle = bgAlpha(0.78);

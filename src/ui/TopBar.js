@@ -7,7 +7,7 @@
 
 import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { GAME_CONFIG }    from '../config/GameConfig.js';
-import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES } from '../data/ResourcesData.js';
+import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES, COMMON_MINED } from '../data/ResourcesData.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { BUILDINGS }      from '../data/BuildingsData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
@@ -140,14 +140,15 @@ export class TopBar {
     const resW      = resEndX - resStartX;
 
     // Zbierz widoczne zasoby per grupę
-    const mined     = this._getVisibleMined(inventory, invPerYear);
-    const harvested = this._getVisibleHarvested(inventory, invPerYear);
-    const utility   = this._getVisibleUtility(energyFlow, resources, resDelta, factoryData);
+    // Redesign UI v1 (Slice 3): TopBar slim — tylko częste surowce + energia + Kr.
+    // Reszta (rzadkie surowce, stocks, pozostałe systemy) → BottomResourceBar.
+    const mined   = this._getVisibleMined(inventory, invPerYear).filter(it => COMMON_MINED.includes(it.symbol));
+    const utility = this._getVisibleUtility(energyFlow, resources, resDelta, factoryData)
+      .filter(it => it._energyDetails || it._isCredits);
 
     const groups = [
-      { items: mined,     label: t('topBar.resources'),  color: THEME.textHeader },
-      { items: harvested, label: t('topBar.stocks'),   color: THEME.textHeader },
-      { items: utility,   label: t('topBar.systems'),  color: THEME.textHeader },
+      { items: mined,   label: t('topBar.resources'), color: THEME.textHeader },
+      { items: utility, label: t('topBar.systems'),   color: THEME.textHeader },
     ];
 
     // Policz łączną liczbę itemów + separatorów → dopasuj iw dynamicznie
@@ -771,6 +772,7 @@ export class TopBar {
           value: krStr,
           color: THEME.warning,
           tooltipName: '₡ ' + (getLocale() === 'pl' ? 'Kredyty' : 'Credits'),
+          _isCredits: true,   // Slice 3 — marker do filtra slim TopBar (Kr zostaje u góry)
           _rawValue: true,
         });
       }

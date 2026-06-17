@@ -69,9 +69,11 @@ export class BottomContext {
 
   // Obszar mapy (origin + rozmiar) — karta nie wychodzi poza niego.
   _bounds(W, H) {
-    const ox = window.KOSMOS?.civMode ? CIV_SIDEBAR_W : 0;
+    const civMode = window.KOSMOS?.civMode;
+    const ox = civMode ? CIV_SIDEBAR_W : 0;
     const oy = TOP_BAR_H;
-    return { ox, oy, ow: W - OUTLINER_W - ox, oh: H - BAR_H - oy };
+    const resBar = civMode ? (COSMIC.RESOURCE_BAR_H ?? 0) : 0; // Slice 3 — pasek surowców nad BottomBar
+    return { ox, oy, ow: W - OUTLINER_W - ox, oh: H - BAR_H - resBar - oy };
   }
 
   _visibleTabs(entity) {

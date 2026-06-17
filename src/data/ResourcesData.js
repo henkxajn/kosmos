@@ -24,6 +24,10 @@ export const MINED_RESOURCES = {
   H:  { id: 'H',  namePL: 'Wodór',        nameEN: 'Hydrogen', icon: '💨', symbol: 'H',  rarity: 5, weight: 0.1, element: 'H',  color: '#cce0ff' },
 };
 
+// Częste surowce pokazywane w odchudzonym TopBarze (redesign UI v1, Slice 3).
+// Reszta MINED (Hv/Xe/Nt/H) trafia do BottomResourceBar.
+export const COMMON_MINED = ['C', 'Fe', 'Si', 'Cu', 'Ti', 'Li'];
+
 // ── 2 surowce zbieralne (HARVESTED) ────────────────────────────────────────
 export const HARVESTED_RESOURCES = {
   food:  { id: 'food',  namePL: 'Żywność', icon: '🍖', weight: 0.8, color: '#88cc44' },

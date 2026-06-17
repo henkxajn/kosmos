@@ -173,11 +173,14 @@ export class BaseOverlay {
   // Pomocniczy — oblicz wymiary overlay na podstawie canvas
   _getOverlayBounds(W, H) {
     const topOffset = COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H;
+    // Slice 3 — zostaw miejsce na BottomResourceBar (cienki pasek nad BottomBar w civMode),
+    // żeby overlay nie chował dolnej treści (np. bilansu energii) pod paskiem.
+    const resBar = window.KOSMOS?.civMode ? (COSMIC.RESOURCE_BAR_H ?? 0) : 0;
     return {
       ox: CIV_SIDEBAR_W,
       oy: topOffset,
       ow: W - COSMIC.OUTLINER_W - CIV_SIDEBAR_W,
-      oh: H - topOffset - COSMIC.BOTTOM_BAR_H,
+      oh: H - topOffset - COSMIC.BOTTOM_BAR_H - resBar,
     };
   }
 
