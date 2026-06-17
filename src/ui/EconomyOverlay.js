@@ -15,7 +15,7 @@ import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { t, getName }    from '../i18n/i18n.js';
-import { drawResourceIcon, RESOURCE_ICON_FILES } from './ResourceIcons.js';
+import { drawResourceIcon, hasIconFile } from './ResourceIcons.js';
 
 const LEFT_W   = 220;
 const RIGHT_W  = 260;
@@ -544,7 +544,7 @@ export class EconomyOverlay extends BaseOverlay {
       // Ikona — PNG dla surowców (Faza 1: MINED + Food/Water), inaczej emoji (fallback)
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textSecondary;
-      if (RESOURCE_ICON_FILES[res.id]) {
+      if (hasIconFile(res.id)) {
         drawResourceIcon(ctx, res.id, x + pad, ry + ROW_H / 2, 24, res.icon);
       } else {
         ctx.textBaseline = 'middle';
@@ -771,9 +771,12 @@ export class EconomyOverlay extends BaseOverlay {
         for (const q of queue) {
           const def = COMMODITIES[q.commodityId];
           if (!def) continue;
+          const qx = x + pad + 20;
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.textSecondary;
-          ctx.fillText(`${def.icon} ${getName(def, 'commodity')} ×${q.qty}`, x + pad + 20, ry + 10);
-          ry += 16;
+          const qIw = drawResourceIcon(ctx, def.id, qx, ry + 7, 18, def.icon);
+          ctx.fillText(`${getName(def, 'commodity')} ×${q.qty}`, qx + qIw + 4, ry + 11);
+          ry += 20;
         }
       }
 
@@ -800,15 +803,21 @@ export class EconomyOverlay extends BaseOverlay {
     // Stall = FactorySystem ustawił _paused bo brak surowców (lub target osiągnięty)
     const isStall = !!alloc.paused;
 
-    // Ikona
+    // Ikona — PNG dla towarów z assetem (Faza 2), inaczej emoji (fallback)
     ctx.font = `${THEME.fontSizeNormal + 4}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(def.icon, x, y + 16);
+    if (hasIconFile(def.id)) {
+      drawResourceIcon(ctx, def.id, x, y + 14, 24, def.icon);
+    } else {
+      ctx.textBaseline = 'middle';
+      ctx.fillText(def.icon, x, y + 14);
+      ctx.textBaseline = 'alphabetic';
+    }
 
     // Nazwa + receptura
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(getName(def, 'commodity'), x + 24, y + 12);
+    ctx.fillText(getName(def, 'commodity'), x + 30, y + 12);
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
@@ -1089,9 +1098,11 @@ export class EconomyOverlay extends BaseOverlay {
         const forDef = COMMODITIES[ch.forCommodityId];
         if (!def) continue;
 
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
-        const label = `${def.icon} ${getName(def, 'commodity')} ×${ch.qty}`;
-        ctx.fillText(label, x + pad + 6, ry + 10);
+        const acx = x + pad + 6;
+        const acIw = drawResourceIcon(ctx, def.id, acx, ry + 6, 18, def.icon);
+        ctx.fillText(`${getName(def, 'commodity')} ×${ch.qty}`, acx + acIw + 4, ry + 10);
 
         if (forDef) {
           ctx.fillStyle = THEME.textDim;
@@ -1143,7 +1154,11 @@ export class EconomyOverlay extends BaseOverlay {
     // Numer + ikona + nazwa
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = isDone ? THEME.textDim : THEME.textPrimary;
-    ctx.fillText(`${index + 1}. ${def.icon} ${getName(def, 'commodity')}`, x + 16, y + 12);
+    const numStr = `${index + 1}. `;
+    ctx.fillText(numStr, x + 16, y + 12);
+    const pIconX = x + 16 + ctx.measureText(numStr).width;
+    const pIw = drawResourceIcon(ctx, def.id, pIconX, y + 8, 20, def.icon);
+    ctx.fillText(getName(def, 'commodity'), pIconX + pIw + 4, y + 12);
 
     // Zapas / Cel
     ctx.fillStyle = isDone ? THEME.success : (stock === 0 ? THEME.danger : THEME.warning);
@@ -1241,10 +1256,11 @@ export class EconomyOverlay extends BaseOverlay {
           label: '+', x: x + 4,
         });
 
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`${def.icon} ${getName(def, 'commodity')}`, x + 24, ry + 12);
-        ry += 16;
+        const apIw = drawResourceIcon(ctx, def.id, x + 24, ry + 8, 18, def.icon);
+        ctx.fillText(getName(def, 'commodity'), x + 24 + apIw + 4, ry + 12);
+        ry += 20;
       }
     }
     return ry;
@@ -1363,8 +1379,10 @@ export class EconomyOverlay extends BaseOverlay {
         ctx.fillText(srcLabel, x + pad, ry + 10);
 
         // Towar
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`${def.icon} ${getName(def, 'commodity')}`, x + pad + 100, ry + 10);
+        const rdIw = drawResourceIcon(ctx, def.id, x + pad + 100, ry + 6, 18, def.icon);
+        ctx.fillText(getName(def, 'commodity'), x + pad + 100 + rdIw + 4, ry + 10);
 
         // Potrzeba (stock/need) — zaokrąglone
         const stockR = Math.round(stock * 10) / 10;
@@ -1526,11 +1544,14 @@ export class EconomyOverlay extends BaseOverlay {
         const requesterName = requester?.name ?? '?';
         const remaining = Math.max(0, order.qtyTotal - (order.produced ?? 0));
 
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
-        const line = `→ ${def.icon} ${getName(def, 'commodity')} × ${remaining}/${order.qtyTotal} · ${requesterName}`;
-        ctx.fillText(line, x + pad + 8, ry + 10);
-        ry += 14;
+        const arrowStr = '→ ';
+        ctx.fillText(arrowStr, x + pad + 8, ry + 11);
+        const reX = x + pad + 8 + ctx.measureText(arrowStr).width;
+        const reIw = drawResourceIcon(ctx, def.id, reX, ry + 7, 18, def.icon);
+        ctx.fillText(`${getName(def, 'commodity')} × ${remaining}/${order.qtyTotal} · ${requesterName}`, reX + reIw + 4, ry + 11);
+        ry += 20;
       }
     }
 
@@ -1631,19 +1652,22 @@ export class EconomyOverlay extends BaseOverlay {
     else if (stock > 0)       textColor = THEME.warning;
     else                      textColor = THEME.danger;
 
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
 
-    // Ikona + nazwa (+ 🔒 jeśli locked)
+    // Ikona + nazwa (+ 🔒 jeśli locked) — ikona PNG 22px (Faza 2)
     ctx.fillStyle = locked ? THEME.textDim : THEME.textSecondary;
     const lockPrefix = locked ? '🔒 ' : '';
-    ctx.fillText(`${lockPrefix}${def.icon} ${getName(def, 'commodity')}`, x + 4, y + 10);
+    let msX = x + 4;
+    if (lockPrefix) { ctx.fillText(lockPrefix, msX, y + 15); msX += ctx.measureText(lockPrefix).width; }
+    const msIw = drawResourceIcon(ctx, def.id, msX, y + 11, 22, def.icon);
+    ctx.fillText(getName(def, 'commodity'), msX + msIw + 4, y + 15);
 
     // Jeśli locked — pokaż wymaganą naukę (mniejszy font, dimmed, pod nazwą)
     if (locked && def.requiresTech) {
       const techName = t(`tech.${def.requiresTech}.name`) || def.requiresTech;
       ctx.font = `${THEME.fontSizeSmall - 3}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('econPanel.minStockRequires', techName), x + 20, y + 20);
+      ctx.fillText(t('econPanel.minStockRequires', techName), x + 20, y + 26);
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     }
 
@@ -1653,10 +1677,10 @@ export class EconomyOverlay extends BaseOverlay {
     // Rezerwujemy miejsce: [−][BOX][+] = 16+2+34+2+16 = 70 px
     const textX = x + w - 80 - (BOX_W + 4);
     ctx.fillStyle = textColor;
-    ctx.fillText(`${stockR}/${target}`, textX, y + 10);
+    ctx.fillText(`${stockR}/${target}`, textX, y + 15);
 
     // Przyciski [−][BOX][+]
-    const btnY = y + 1;
+    const btnY = y + 5;
     let bx = textX + 42;
     this._drawSmallBtn(ctx, bx, btnY, '−', bonus > 0 ? 'secondary' : 'disabled');
     if (bonus > 0) {
@@ -1684,7 +1708,7 @@ export class EconomyOverlay extends BaseOverlay {
     });
 
     // Wyższy wiersz dla locked (żeby zmieścić nazwę techu)
-    return y + (locked && def.requiresTech ? 24 : 16);
+    return y + (locked && def.requiresTech ? 32 : 24);
   }
 
   // ── Przycisk szeroki (do szablonów/dodaj) ──────────────────────────────────
@@ -1741,7 +1765,8 @@ export class EconomyOverlay extends BaseOverlay {
     // Ikona + nazwa
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = isStall ? THEME.danger : THEME.textPrimary;
-    ctx.fillText(`${def.icon} ${getName(def, 'commodity')}`, x, y + 12);
+    const maIw = drawResourceIcon(ctx, def.id, x, y + 8, 22, def.icon);
+    ctx.fillText(getName(def, 'commodity'), x + maIw + 4, y + 12);
 
     // Punkty (np. "3 FP")
     ctx.fillStyle = THEME.textSecondary;
@@ -1825,9 +1850,13 @@ export class EconomyOverlay extends BaseOverlay {
     const colId = colony.planetId;
 
     // Numer + ikona + nazwa + ilość
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(`${index + 1}. ${def.icon} ${getName(def, 'commodity')} ×${item.qty}`, x + 4, y + 12);
+    const mqNum = `${index + 1}. `;
+    ctx.fillText(mqNum, x + 4, y + 12);
+    const mqX = x + 4 + ctx.measureText(mqNum).width;
+    const mqIw = drawResourceIcon(ctx, def.id, mqX, y + 8, 18, def.icon);
+    ctx.fillText(`${getName(def, 'commodity')} ×${item.qty}`, mqX + mqIw + 4, y + 12);
 
     // Przyciski z prawej: [↑] [↓] [✕]
     const btnY = y;
@@ -1954,13 +1983,14 @@ export class EconomyOverlay extends BaseOverlay {
 
     // Ikona + nazwa (po przyciskach)
     const nameX = bx;
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = hasFree ? THEME.textSecondary : THEME.textDim;
-    const nameStr = `${def.icon} ${getName(def, 'commodity')}`;
-    ctx.fillText(nameStr, nameX, ry + 12);
+    const arIw = drawResourceIcon(ctx, def.id, nameX, ry + 8, 18, def.icon);
+    const arName = getName(def, 'commodity');
+    ctx.fillText(arName, nameX + arIw + 4, ry + 12);
 
     // Receptura — po nazwie z odstępem
-    const nameWidth = ctx.measureText(nameStr).width;
+    const nameWidth = arIw + 4 + ctx.measureText(arName).width;
     ctx.fillStyle = THEME.textDim;
     ctx.fillText(formatRecipe(def.recipe), nameX + nameWidth + 8, ry + 12);
 
