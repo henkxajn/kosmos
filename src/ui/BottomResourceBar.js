@@ -15,7 +15,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES }       from '../data/CommoditiesData.js';
 import EntityManager         from '../core/EntityManager.js';
 import { t, getName }        from '../i18n/i18n.js';
-import { drawResourceIcon, RESOURCE_ICON_FILES, hasResourceIcon } from './ResourceIcons.js';
+import { drawResourceIcon, hasIconFile, hasResourceIcon } from './ResourceIcons.js';
 
 const BAR_H      = COSMIC.RESOURCE_BAR_H; // 28
 const BOTTOM_H   = COSMIC.BOTTOM_BAR_H;   // 26
@@ -43,6 +43,12 @@ function _fmtPop(n) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000)     return `${(n / 1_000).toFixed(0)}k`;
   return String(Math.round(n));
+}
+
+// POP ułamkowy (wolni/zajęci/zablokowani) — max 2 miejsca po przecinku, bez szumu
+// zmiennoprzecinkowego (2.5999999999999996 → 2.6) i bez zer końcowych (3 → "3").
+function _fmtPopFrac(n) {
+  return String(Math.round((n ?? 0) * 100) / 100);
 }
 
 // Inline delta na pasku: zwięzły zapis ze znakiem (+/−), kompaktowy dla dużych wartości.
@@ -117,6 +123,15 @@ export class BottomResourceBar {
         color: p < 30 ? THEME.danger : p < 60 ? THEME.warning : THEME.success,
         kind: 'prosperity', delta: trend, showDelta: true });
     }
+    // ── Kredyty (Kr) aktywnej kolonii — obok dobrobytu, ikona PNG (fallback emoji) ──
+    const creditsVal = activeCol?.credits;
+    if (creditsVal !== undefined && creditsVal !== null) {
+      balItems.push({
+        id: 'credits', icon: '🪙',
+        val: creditsVal, valText: _fmtNum(creditsVal),
+        raw: true, color: THEME.warning, kind: 'credits',
+      });
+    }
     groups.push({ items: balItems });
 
     return groups;
@@ -133,7 +148,7 @@ export class BottomResourceBar {
         ? (COMMODITIES[item.id] ?? { id: item.id })
         : (MINED_RESOURCES[item.id] ?? HARVESTED_RESOURCES[item.id] ?? { id: item.id });
       const name = getName({ id: item.id, namePL: def.namePL, nameEN: def.nameEN }, prefix);
-      lines.push({ text: `${item.icon} ${name}`, color: THEME.accent, bold: true });
+      lines.push({ text: name, color: THEME.accent, bold: true, iconId: item.id, emoji: item.icon });
       lines.push({ text: t('ui.amount', _fmtNum(item.val)), color: THEME.textPrimary });
       if (Math.abs(item.delta) > 0.01) {
         const sign = item.delta >= 0 ? '+' : '';
@@ -154,13 +169,20 @@ export class BottomResourceBar {
       return lines;
     }
 
+    if (item.kind === 'credits') {
+      lines.push({ text: t('resBar.credits'), color: THEME.accent, bold: true,
+        iconId: 'credits', emoji: item.icon });
+      lines.push({ text: t('ui.amount', _fmtNum(item.val)), color: THEME.warning });
+      return lines;
+    }
+
     if (item.kind === 'pop') {
       lines.push({ text: `👤 ${t('topBar.populationLabel')}`, color: THEME.accent, bold: true });
-      lines.push({ text: `${t('topBar.employed')} ${item.employed}`, color: THEME.textPrimary });
-      lines.push({ text: `${t('topBar.freePops')} ${item.free}`,
+      lines.push({ text: `${t('topBar.employed')} ${_fmtPopFrac(item.employed)}`, color: THEME.textPrimary });
+      lines.push({ text: `${t('topBar.freePops')} ${_fmtPopFrac(item.free)}`,
         color: item.free > 0 ? THEME.success : THEME.textSecondary });
-      if (item.locked > 0) lines.push({ text: `${t('topBar.locked')} ${item.locked}`, color: THEME.warning });
-      lines.push({ text: `${t('ui.amount', item.total)}`, color: THEME.textSecondary });
+      if (item.locked > 0) lines.push({ text: `${t('topBar.locked')} ${_fmtPopFrac(item.locked)}`, color: THEME.warning });
+      lines.push({ text: `${t('ui.amount', _fmtPopFrac(item.total))}`, color: THEME.textSecondary });
       return lines;
     }
 
@@ -196,7 +218,8 @@ export class BottomResourceBar {
     this._hitItems = [];
     if (!state) { this._rect = null; this._colonyRect = null; this._hoverTip = null; return; }
     const x0 = SIDEBAR_W;
-    const x1 = W - OUTLINER_W;
+    const x1 = W;            // pełna szerokość — pasek wchodzi pod kolumnę Outlinera
+                            // (Outliner skrócony o RESOURCE_BAR_H, więc nie nachodzą)
     const w  = x1 - x0;
     const y  = H - BOTTOM_H - BAR_H;
     if (w < 120) { this._rect = null; this._colonyRect = null; this._hoverTip = null; return; }
@@ -234,7 +257,7 @@ export class BottomResourceBar {
       const popEmp   = civSys?._employedPops ?? 0;
       const popLock  = civSys?._lockedPops ?? 0;
       const popBase  = `👤 ${_fmtPop(popTotal)} `;
-      const popFreeS = t('resBar.freeSuffix', popFree);
+      const popFreeS = t('resBar.freeSuffix', _fmtPopFrac(popFree));
       const popStartX = cx;
       ctx.fillStyle = THEME.textSecondary;
       ctx.fillText(popBase, cx, ty); cx += ctx.measureText(popBase).width;
@@ -246,9 +269,7 @@ export class BottomResourceBar {
         tip: { kind: 'pop', total: popTotal, free: popFree, employed: popEmp, locked: popLock },
       });
 
-      const krStr = `${_fmtNum(colony.credits ?? 0)} Kr`;
-      ctx.fillStyle = THEME.warning;
-      ctx.fillText(krStr, cx, ty); cx += ctx.measureText(krStr).width + 8;
+      // Kredyty przeniesione do grupy bilansu po prawej (obok dobrobytu) — _collect.
 
       if (brownout) {
         const b = t('econPanel.brownout');
@@ -317,9 +338,13 @@ export class BottomResourceBar {
   _drawItem(ctx, it, cx, iconCY, y, iconSize, render) {
     const itemStartX = cx;
 
-    // Ikona: PNG dla surowców, inaczej emoji (energia/dobrobyt) w większym foncie
-    if (it.id && RESOURCE_ICON_FILES[it.id]) {
+    // Ikona: PNG (surowce/towary/kredyty), inaczej emoji (energia/dobrobyt) w większym foncie
+    if (it.id && hasIconFile(it.id)) {
       if (render) {
+        // font+kolor dla fallbacku emoji gdy PNG jeszcze nie istnieje (np. kredyty);
+        // załadowany PNG idzie przez drawImage, który ignoruje font/fillStyle.
+        ctx.font = `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`;
+        ctx.fillStyle = it.color || THEME.textSecondary;
         cx += drawResourceIcon(ctx, it.id, cx, iconCY, iconSize, it.icon) + GAP_ICON;
       } else {
         let iconW = iconSize;   // PNG zajmuje iconSize; bez PNG — szerokość emoji (fallback)
@@ -338,10 +363,13 @@ export class BottomResourceBar {
       cx += ctx.measureText(it.icon).width + GAP_ICON;
     }
 
-    // Wartość (dla bilansu kolorowana statusowo; energia ze znakiem +/−)
-    const valStr = it.raw
-      ? (it.signed && it.val > 0 ? '+' : '') + String(it.val)
-      : _fmtNum(it.val);
+    // Wartość (dla bilansu kolorowana statusowo; energia ze znakiem +/−).
+    // valText = gotowy string (np. kredyty "1.6k" w kolorze) — omija raw/_fmtNum.
+    const valStr = it.valText != null
+      ? it.valText
+      : it.raw
+        ? (it.signed && it.val > 0 ? '+' : '') + String(it.val)
+        : _fmtNum(it.val);
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     if (render) {
       ctx.fillStyle = it.raw ? (it.color || THEME.textPrimary) : THEME.textPrimary;
@@ -391,14 +419,15 @@ export class BottomResourceBar {
   drawTooltip(ctx, W, H) {
     const tip = this._hoverTip;
     if (!tip || !tip.lines?.length) return;
-    const PADX = 8, PADY = 6, LINE_H = 15, HDR_H = 17;
+    const PADX = 8, PADY = 6, LINE_H = 15, HDR_H = 17, TIP_ICON = 14, ICON_GAP = 4;
 
-    // Wymiary
+    // Wymiary (wiersz z iconId rezerwuje miejsce na ikonę PNG przed tekstem)
     let maxW = 0, totalH = PADY * 2;
     for (let i = 0; i < tip.lines.length; i++) {
       const ln = tip.lines[i];
       ctx.font = `${ln.bold ? THEME.fontSizeNormal : THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      maxW = Math.max(maxW, ctx.measureText(ln.text).width);
+      const iconW = ln.iconId ? TIP_ICON + ICON_GAP : 0;
+      maxW = Math.max(maxW, iconW + ctx.measureText(ln.text).width);
       totalH += ln.bold ? HDR_H : LINE_H;
     }
     const tw = maxW + PADX * 2;
@@ -424,7 +453,13 @@ export class BottomResourceBar {
       ctx.font = `${ln.bold ? THEME.fontSizeNormal : THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = ln.color || THEME.textPrimary;
       const lh = ln.bold ? HDR_H : LINE_H;
-      ctx.fillText(ln.text, tx + PADX, cy + lh - 5);
+      let textX = tx + PADX;
+      // Ikona PNG (fallback emoji) przed tekstem — header surowca/towaru
+      if (ln.iconId) {
+        drawResourceIcon(ctx, ln.iconId, tx + PADX, cy + lh / 2, TIP_ICON, ln.emoji);
+        textX += TIP_ICON + ICON_GAP;
+      }
+      ctx.fillText(ln.text, textX, cy + lh - 5);
       cy += lh;
     }
   }

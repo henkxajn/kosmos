@@ -1683,6 +1683,7 @@ export default {
   'econPanel.producers': '——— Producers ———',
   'econPanel.consumers': '——— Consumers ———',
   'econPanel.noActiveProducers': 'No active producers/consumers',
+  'econPanel.missingInputs': '——— Missing inputs ———',
   'econPanel.productionHeader': '🏭 COMMODITY PRODUCTION',
   'econPanel.globalFilter': '🌍 GLOBAL',
   'econPanel.noActiveProduction': 'No active production',
@@ -1954,6 +1955,7 @@ export default {
 
   // === BottomResourceBar (tooltips + inline free POP) ===
   'resBar.freeSuffix': '({0} free)',
+  'resBar.credits': 'Credits (Kr)',
   'resBar.prospLow': 'low',
   'resBar.prospMedium': 'medium',
   'resBar.prospHigh': 'high',

@@ -15,7 +15,7 @@ import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { t, getName }    from '../i18n/i18n.js';
-import { drawResourceIcon, hasIconFile } from './ResourceIcons.js';
+import { drawResourceIcon, hasIconFile, getIconPath } from './ResourceIcons.js';
 
 const LEFT_W   = 220;
 const RIGHT_W  = 260;
@@ -37,6 +37,13 @@ function _commoditySortFn(a, b) {
   const ga = _commodityGroup(a), gb = _commodityGroup(b);
   if (ga !== gb) return ga - gb;
   return (a.tier ?? 0) - (b.tier ?? 0);
+}
+
+// Ikona do tooltipa DOM: <img> PNG gdy istnieje plik, inaczej emoji (fallback).
+function _iconHtml(id, emoji, size = 15) {
+  const path = getIconPath(id);
+  if (path) return `<img src="${path}" width="${size}" height="${size}" style="vertical-align:middle;margin-right:3px" alt="">`;
+  return emoji ? `${emoji} ` : '';
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -307,7 +314,7 @@ export class EconomyOverlay extends BaseOverlay {
 
     // Buduj HTML
     const lines = [];
-    lines.push(`<div style="font-weight:bold;color:${THEME.accent}">${icon} ${name}</div>`);
+    lines.push(`<div style="font-weight:bold;color:${THEME.accent}">${_iconHtml(resourceId, icon)}${name}</div>`);
     lines.push(`<div>${t('econPanel.tooltipAmount')} ${_fmtAmt(totalAmt)}</div>`);
 
     const rateColor = totalRate > 0 ? THEME.success : totalRate < 0 ? THEME.danger : THEME.textDim;
@@ -341,6 +348,63 @@ export class EconomyOverlay extends BaseOverlay {
 
     if (prodKeys.length === 0 && consKeys.length === 0) {
       lines.push(`<div style="color:${THEME.textDim};margin-top:4px">${t('econPanel.noActiveProducers')}</div>`);
+    }
+
+    // Sekcja blokady produkcji (tylko towary z recepturą; tech-lock / brak składników).
+    if (comDef) {
+      const block = this._productionBlockHtml(resourceId);
+      if (block) lines.push(block);
+    }
+
+    return lines.join('');
+  }
+
+  // Tooltip: dlaczego towaru NIE da się wyprodukować — tech-lock całej receptury,
+  // sub-składniki zablokowane technologicznie, lub brakujące składniki w magazynie.
+  // Zwraca HTML (string) lub '' gdy nie dotyczy (nie-towar / bez receptury / produkowalny).
+  _productionBlockHtml(commodityId) {
+    const def = COMMODITIES[commodityId];
+    if (!def || !def.recipe) return '';   // surowiec lub towar bez receptury (np. prefab bazowy)
+
+    // Kolonia do sprawdzenia: wybrana (jeśli jest) inaczej aktywna.
+    const checkCol = this._resolveEntity(this._selectedColonyId)
+      ?? window.KOSMOS?.colonyManager?.getActiveColony?.();
+    const fs = checkCol?.factorySystem ?? window.KOSMOS?.factorySystem;
+    if (!fs) return '';
+
+    const lines = [];
+
+    // 1) Cała receptura zablokowana technologicznie → jeden powód, koniec.
+    if (typeof fs.isRecipeAvailable === 'function' && !fs.isRecipeAvailable(commodityId)) {
+      const techName = def.requiresTech ? (t(`tech.${def.requiresTech}.name`) || def.requiresTech) : '?';
+      return `<div style="color:${THEME.danger};margin-top:4px">🔒 ${t('ui.requiresTech', techName)}</div>`;
+    }
+
+    // 2) Sub-składniki (commodity) zablokowane technologicznie.
+    const techBlocked = typeof fs._getTechBlockedIngredients === 'function'
+      ? fs._getTechBlockedIngredients(commodityId) : [];
+    for (const b of techBlocked) {
+      const ingName  = getName(COMMODITIES[b.ingredientId] ?? { id: b.ingredientId }, 'commodity');
+      const techName = b.requiresTech ? (t(`tech.${b.requiresTech}.name`) || b.requiresTech) : '?';
+      lines.push(`<div style="color:${THEME.warning}">⚠ ${ingName}: ${t('ui.requiresTech', techName)}</div>`);
+    }
+
+    // 3) Brakujące składniki w magazynie (receptura per szt. vs inventory).
+    const inv = checkCol?.resourceSystem?.inventory;
+    if (inv && typeof inv.get === 'function') {
+      const missing = [];
+      for (const [resId, qty] of Object.entries(def.recipe)) {
+        const have = inv.get(resId) ?? 0;
+        if (have < qty) missing.push({ resId, have, need: qty });
+      }
+      if (missing.length > 0) {
+        lines.push(`<div style="color:${THEME.textDim};margin-top:4px">${t('econPanel.missingInputs')}</div>`);
+        for (const m of missing) {
+          const rdef  = ALL_RESOURCES[m.resId] ?? COMMODITIES[m.resId] ?? { id: m.resId };
+          const mName = getName(rdef, ALL_RESOURCES[m.resId] ? 'resource' : 'commodity');
+          lines.push(`<div style="color:${THEME.danger}">${_iconHtml(m.resId, rdef.icon, 13)}${mName}: ${Math.floor(m.have)}/${m.need}</div>`);
+        }
+      }
     }
 
     return lines.join('');

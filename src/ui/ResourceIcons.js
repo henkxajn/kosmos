@@ -64,10 +64,18 @@ export const COMMODITY_ICON_FILES = {
   warp_cores:           'warp_cores',
 };
 
+// id UI/ekonomia → plik PNG w assets/icons/ (nie surowiec ani towar).
+// Kredyty (Kr) + miejsce na kolejne (np. research). Plik: assets/icons/credits.png
+// (128×128, przezroczyste tło — jak ikony surowców). Brak pliku → fallback emoji.
+export const UI_ICON_FILES = {
+  credits: 'credits',
+};
+
 // Grupy ładowania: mapa id→plik + katalog źródłowy
 const ICON_GROUPS = [
   { map: RESOURCE_ICON_FILES,  dir: 'assets/icons/resources' },
   { map: COMMODITY_ICON_FILES, dir: 'assets/icons/commodities' },
+  { map: UI_ICON_FILES,        dir: 'assets/icons' },
 ];
 
 const _cache = new Map();   // id → HTMLImageElement (po udanym onload)
@@ -119,7 +127,16 @@ export function hasResourceIcon(id) { return _cache.has(id); }
 // Czy dla danego id istnieje zmapowany plik PNG (surowiec LUB towar)?
 // Gate dla wywołujących — niezależny od stanu załadowania (działa też przed onload).
 export function hasIconFile(id) {
-  return (id in RESOURCE_ICON_FILES) || (id in COMMODITY_ICON_FILES);
+  return (id in RESOURCE_ICON_FILES) || (id in COMMODITY_ICON_FILES) || (id in UI_ICON_FILES);
+}
+
+// Ścieżka względna do pliku PNG ikony surowca/towaru (lub null gdy brak mapowania).
+// Do tooltipów DOM (<img src>) — ta sama konwencja katalogów co przy ładowaniu obrazów.
+export function getIconPath(id) {
+  for (const { map, dir } of ICON_GROUPS) {
+    if (id in map) return `${dir}/${map[id]}.png`;
+  }
+  return null;
 }
 
 /**

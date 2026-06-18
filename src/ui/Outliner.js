@@ -15,9 +15,13 @@ import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t, getName }     from '../i18n/i18n.js';
 
-const OUTLINER_W = COSMIC.OUTLINER_W;   // 180px
+const OUTLINER_W = COSMIC.OUTLINER_W;   // 150px (Slice 5 — węższy)
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;   // 50px
-const BOTTOM_BAR_H = COSMIC.BOTTOM_BAR_H; // 30px
+const BOTTOM_BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
+const RESOURCE_BAR_H = COSMIC.RESOURCE_BAR_H; // 28px — pasek surowców pod Outlinerem
+// Panel kończy się NAD paskiem surowców: pasek jest pełnej szerokości i wchodzi pod
+// kolumnę Outlinera, więc rezerwujemy u dołu dolny pasek + pasek surowców.
+const BOTTOM_RESERVED = BOTTOM_BAR_H + RESOURCE_BAR_H;
 
 const SECTION_HDR_H = 22; // wysokość nagłówka sekcji
 const ITEM_H = 20;        // wysokość elementu listy (emoji potrzebują więcej)
@@ -76,7 +80,7 @@ export class Outliner {
 
     const x = W - OUTLINER_W;
     const y = TOP_BAR_H;
-    const h = H - TOP_BAR_H - BOTTOM_BAR_H;
+    const h = H - TOP_BAR_H - BOTTOM_RESERVED;
 
     // Tło glass
     drawGlassPanel(ctx, x, y, OUTLINER_W, h, {
@@ -451,7 +455,7 @@ export class Outliner {
   // ── Hit testing ──────────────────────────────────────────
   hitTest(x, y, W, H) {
     const ox = W - OUTLINER_W;
-    if (x < ox || y < TOP_BAR_H || y > H - BOTTOM_BAR_H) return false;
+    if (x < ox || y < TOP_BAR_H || y > H - BOTTOM_RESERVED) return false;
 
     for (const t of this._clickTargets) {
       if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) {
@@ -589,7 +593,7 @@ export class Outliner {
     this._tooltipX = mx;
     this._tooltipY = my;
     const ox = W - OUTLINER_W;
-    if (mx < ox || my < TOP_BAR_H || my > H - BOTTOM_BAR_H) {
+    if (mx < ox || my < TOP_BAR_H || my > H - BOTTOM_RESERVED) {
       this._hoveredColonyId = null;
       this._hoveredGroundUnitId = null;
       this._colonyTooltip = null;
@@ -894,6 +898,6 @@ export class Outliner {
 
   // Sprawdza czy punkt nad Outlinerem
   isOver(x, y, W, H) {
-    return x >= W - OUTLINER_W && y >= TOP_BAR_H && y <= H - BOTTOM_BAR_H;
+    return x >= W - OUTLINER_W && y >= TOP_BAR_H && y <= H - BOTTOM_RESERVED;
   }
 }

@@ -1685,6 +1685,7 @@ export default {
   'econPanel.producers': '\u2500\u2500\u2500 Producenci \u2500\u2500\u2500',
   'econPanel.consumers': '\u2500\u2500\u2500 Konsumenci \u2500\u2500\u2500',
   'econPanel.noActiveProducers': 'Brak aktywnych producentów/konsumentów',
+  'econPanel.missingInputs': '─── Brakujące składniki ───',
   'econPanel.productionHeader': '🏭 PRODUKCJA TOWARÓW',
   'econPanel.globalFilter': '🌍 GLOBALNY',
   'econPanel.noActiveProduction': 'Brak aktywnej produkcji',
@@ -1956,6 +1957,7 @@ export default {
 
   // === BottomResourceBar (tooltipy + wolne POP inline) ===
   'resBar.freeSuffix': '({0} wolne)',
+  'resBar.credits': 'Kredyty (Kr)',
   'resBar.prospLow': 'niski',
   'resBar.prospMedium': 'średni',
   'resBar.prospHigh': 'wysoki',
