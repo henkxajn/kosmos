@@ -14,7 +14,7 @@ import { COSMIC }            from '../config/LayoutConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES }       from '../data/CommoditiesData.js';
 import EntityManager         from '../core/EntityManager.js';
-import { t }                 from '../i18n/i18n.js';
+import { t, getName }        from '../i18n/i18n.js';
 import { drawResourceIcon, RESOURCE_ICON_FILES } from './ResourceIcons.js';
 
 const BAR_H      = COSMIC.RESOURCE_BAR_H; // 20
@@ -36,31 +36,55 @@ function _fmtPop(n) {
   return String(Math.round(n));
 }
 
+// Inline delta na pasku: zwięzły zapis ze znakiem (+/−), kompaktowy dla dużych wartości.
+function _fmtDelta(n) {
+  const a = Math.abs(n);
+  let r;
+  if (a >= 1_000) r = `${(n / 1_000).toFixed(1)}k`;
+  else if (a >= 10) r = n.toFixed(0);
+  else r = n.toFixed(1);
+  return (n >= 0 ? '+' : '') + r;
+}
+
 export class BottomResourceBar {
   constructor() {
     this._rect       = null; // cały pasek — pochłanianie klików
     this._colonyRect = null; // część kolonii — klik otwiera panel kolonii
+    this._hitItems   = [];   // hit-rects pod tooltipy: { x, y, w, h, tip }
+    this._hoverTip   = null; // dane aktualnie najechanego tooltipa (lines + mx/my)
   }
 
-  // Prawa część: grupy tokenów. item: { id?, icon, val, color, raw?, signed? }
+  // Prawa część: grupy tokenów. item: { id?, icon, val, color, raw?, signed?, kind, delta? }
   // Faza 1: WSZYSTKIE surowce (10 MINED + Food + Water) z ikonami PNG, potem
-  // bilans energii + dobrobyt aktywnej kolonii. Bez symboli/delty (czytelny pasek).
+  // bilans energii + dobrobyt aktywnej kolonii. Bez symboli/delty (czytelny pasek),
+  // ale każdy token niesie metadane (kind/delta) do tooltipa.
   _collect(state) {
-    const { inventory = {}, energyFlow = {} } = state;
+    const { inventory = {}, invPerYear = {}, energyFlow = {}, resources = {}, resDelta = {} } = state;
     const groups = [];
 
     // ── Surowce: 10 wydobywalnych (MINED) + Food + Water — ikony PNG ──
     const resItems = [];
     for (const [id, def] of Object.entries(MINED_RESOURCES)) {
-      resItems.push({ id, icon: def.icon, val: inventory[id] ?? 0, color: def.color || THEME.textSecondary });
+      resItems.push({ id, icon: def.icon, val: inventory[id] ?? 0, color: def.color || THEME.textSecondary,
+        kind: 'resource', delta: invPerYear[id] ?? 0, showDelta: true });
     }
     for (const [id, def] of Object.entries(HARVESTED_RESOURCES)) {
-      resItems.push({ id, icon: def.icon, val: inventory[id] ?? 0, color: def.color || THEME.textSecondary });
+      resItems.push({ id, icon: def.icon, val: inventory[id] ?? 0, color: def.color || THEME.textSecondary,
+        kind: 'resource', delta: invPerYear[id] ?? 0, showDelta: true });
     }
     // Paliwo — commodity witalny (S3.0a), ikona PNG jak surowce
     const fuelDef = COMMODITIES.fuel;
-    if (fuelDef) resItems.push({ id: 'fuel', icon: fuelDef.icon, val: inventory['fuel'] ?? 0, color: THEME.textSecondary });
+    if (fuelDef) resItems.push({ id: 'fuel', icon: fuelDef.icon, val: inventory['fuel'] ?? 0,
+      color: THEME.textSecondary, kind: 'commodity', delta: invPerYear['fuel'] ?? 0, showDelta: true });
     groups.push({ items: resItems });
+
+    // ── Nauka (research) — globalny zasób-akumulator (suma kolonii) ──
+    const researchAmt = resources.research ?? 0;
+    const researchDelta = resDelta.research ?? 0;
+    groups.push({ items: [{
+      id: 'research', icon: '🔬', val: researchAmt, color: '#aa44ff',
+      kind: 'research', delta: researchDelta, showDelta: true,
+    }] });
 
     // ── Bilans: energia (przepływ) + dobrobyt aktywnej kolonii ──
     const balItems = [];
@@ -71,26 +95,102 @@ export class BottomResourceBar {
       val: brownout ? 0 : eBal,
       raw: true, signed: !brownout,
       color: brownout ? THEME.danger : eBal < 0 ? THEME.warning : THEME.success,
+      kind: 'energy', energy: energyFlow,
     });
     const activeCol = window.KOSMOS?.colonyManager?.getActiveColony?.();
-    const prosp = activeCol?.prosperitySystem?.prosperity;
+    const prospSys = activeCol?.prosperitySystem;
+    const prosp = prospSys?.prosperity;
     if (prosp !== undefined && prosp !== null) {
       const p = Math.round(prosp);
+      // Trend dobrobytu: kierunek do celu (target − bieżący) — gdzie zmierza prosperity.
+      const trend = (prospSys?.targetProsperity ?? prosp) - prosp;
       balItems.push({ icon: '⭐', val: p, raw: true,
-        color: p < 30 ? THEME.danger : p < 60 ? THEME.warning : THEME.success });
+        color: p < 30 ? THEME.danger : p < 60 ? THEME.warning : THEME.success,
+        kind: 'prosperity', delta: trend, showDelta: true });
     }
     groups.push({ items: balItems });
 
     return groups;
   }
 
+  // Buduj wiersze tooltipa dla danego tokenu (kind decyduje o treści).
+  // Zwraca [{ text, color, bold? }] lub null gdy brak treści.
+  _buildTooltipLines(item) {
+    const lines = [];
+
+    if (item.kind === 'resource' || item.kind === 'commodity') {
+      const prefix = item.kind === 'commodity' ? 'commodity' : 'resource';
+      const def = item.kind === 'commodity'
+        ? (COMMODITIES[item.id] ?? { id: item.id })
+        : (MINED_RESOURCES[item.id] ?? HARVESTED_RESOURCES[item.id] ?? { id: item.id });
+      const name = getName({ id: item.id, namePL: def.namePL, nameEN: def.nameEN }, prefix);
+      lines.push({ text: `${item.icon} ${name}`, color: THEME.accent, bold: true });
+      lines.push({ text: t('ui.amount', _fmtNum(item.val)), color: THEME.textPrimary });
+      if (Math.abs(item.delta) > 0.01) {
+        const sign = item.delta >= 0 ? '+' : '';
+        lines.push({ text: t('ui.change', sign + item.delta.toFixed(1)),
+          color: item.delta >= 0 ? THEME.success : THEME.danger });
+      }
+      return lines;
+    }
+
+    if (item.kind === 'research') {
+      lines.push({ text: `🔬 ${t('resource.research')}`, color: THEME.accent, bold: true });
+      lines.push({ text: t('ui.amount', _fmtNum(item.val)), color: THEME.textPrimary });
+      if (Math.abs(item.delta) > 0.01) {
+        const sign = item.delta >= 0 ? '+' : '';
+        lines.push({ text: t('ui.change', sign + item.delta.toFixed(1)),
+          color: item.delta >= 0 ? THEME.success : THEME.danger });
+      }
+      return lines;
+    }
+
+    if (item.kind === 'pop') {
+      lines.push({ text: `👤 ${t('topBar.populationLabel')}`, color: THEME.accent, bold: true });
+      lines.push({ text: `${t('topBar.employed')} ${item.employed}`, color: THEME.textPrimary });
+      lines.push({ text: `${t('topBar.freePops')} ${item.free}`,
+        color: item.free > 0 ? THEME.success : THEME.textSecondary });
+      if (item.locked > 0) lines.push({ text: `${t('topBar.locked')} ${item.locked}`, color: THEME.warning });
+      lines.push({ text: `${t('ui.amount', item.total)}`, color: THEME.textSecondary });
+      return lines;
+    }
+
+    if (item.kind === 'prosperity') {
+      const descKey = item.val < 30 ? 'resBar.prospLow' : item.val < 60 ? 'resBar.prospMedium' : 'resBar.prospHigh';
+      lines.push({ text: '⭐ Prosperity', color: THEME.accent, bold: true });
+      lines.push({ text: t('resBar.prospValue', item.val, t(descKey)), color: item.color || THEME.textPrimary });
+      // Trend (kierunek do celu) — gdzie zmierza dobrobyt
+      if (Math.abs(item.delta) > 0.5) {
+        const sign = item.delta >= 0 ? '+' : '';
+        lines.push({ text: t('ui.change', sign + item.delta.toFixed(1)),
+          color: item.delta >= 0 ? THEME.success : THEME.danger });
+      }
+      return lines;
+    }
+
+    if (item.kind === 'energy') {
+      const e = item.energy || {};
+      lines.push({ text: `⚡ ${t('resource.energy')}`, color: THEME.accent, bold: true });
+      lines.push({ text: t('ui.production', _fmtNum(e.production ?? 0)), color: THEME.success });
+      lines.push({ text: t('ui.consumption', _fmtNum(e.consumption ?? 0)), color: THEME.danger });
+      const bal = e.balance ?? 0;
+      lines.push({ text: t('ui.balance', (bal >= 0 ? '+' : '') + _fmtNum(bal)),
+        color: bal >= 0 ? THEME.success : THEME.danger });
+      if (e.brownout) lines.push({ text: t('topBar.brownoutWarning'), color: THEME.danger });
+      return lines;
+    }
+
+    return null;
+  }
+
   draw(ctx, W, H, state) {
-    if (!state) { this._rect = null; this._colonyRect = null; return; }
+    this._hitItems = [];
+    if (!state) { this._rect = null; this._colonyRect = null; this._hoverTip = null; return; }
     const x0 = SIDEBAR_W;
     const x1 = W - OUTLINER_W;
     const w  = x1 - x0;
     const y  = H - BOTTOM_H - BAR_H;
-    if (w < 120) { this._rect = null; this._colonyRect = null; return; }
+    if (w < 120) { this._rect = null; this._colonyRect = null; this._hoverTip = null; return; }
     this._rect = { x: x0, y, w, h: BAR_H };
 
     const brownout = !!state.energyFlow?.brownout;
@@ -117,10 +217,25 @@ export class BottomResourceBar {
       ctx.fillStyle = THEME.accent;
       ctx.fillText(name, cx, ty); cx += ctx.measureText(name).width + 10;
 
+      // Pop: 👤 łącznie (N wolne) — wolne POPy bez pracy wyraźnie widoczne w pasku.
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      const popStr = `👤 ${_fmtPop(colony.civSystem?.population ?? 0)}`;
+      const civSys   = colony.civSystem;
+      const popTotal = civSys?.population ?? 0;
+      const popFree  = civSys?.freePops ?? 0;
+      const popEmp   = civSys?._employedPops ?? 0;
+      const popLock  = civSys?._lockedPops ?? 0;
+      const popBase  = `👤 ${_fmtPop(popTotal)} `;
+      const popFreeS = t('resBar.freeSuffix', popFree);
+      const popStartX = cx;
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(popStr, cx, ty); cx += ctx.measureText(popStr).width + 8;
+      ctx.fillText(popBase, cx, ty); cx += ctx.measureText(popBase).width;
+      // Wolne POPy: kolor statusowy (zielony gdy są wolni, szary gdy 0)
+      ctx.fillStyle = popFree > 0 ? THEME.success : THEME.textSecondary;
+      ctx.fillText(popFreeS, cx, ty); cx += ctx.measureText(popFreeS).width + 8;
+      this._hitItems.push({
+        x: popStartX, y, w: cx - popStartX - 8, h: BAR_H,
+        tip: { kind: 'pop', total: popTotal, free: popFree, employed: popEmp, locked: popLock },
+      });
 
       const krStr = `${_fmtNum(colony.credits ?? 0)} Kr`;
       ctx.fillStyle = THEME.warning;
@@ -157,6 +272,7 @@ export class BottomResourceBar {
 
       for (const it of g.items) {
         if (cx > xMax) break;
+        const itemStartX = cx;
 
         // Ikona: PNG dla surowców, inaczej emoji (energia/dobrobyt) w większym foncie
         if (it.id && RESOURCE_ICON_FILES[it.id]) {
@@ -175,10 +291,79 @@ export class BottomResourceBar {
         ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
         ctx.fillStyle = it.raw ? (it.color || THEME.textPrimary) : THEME.textPrimary;
         ctx.fillText(valStr, cx, iconCY);
-        cx += ctx.measureText(valStr).width + 10;
+        cx += ctx.measureText(valStr).width + (it.showDelta ? 3 : 10);
+
+        // Inline delta (+/−) — realna zmiana per rok (surowce/paliwo/nauka) lub trend (dobrobyt).
+        // Energia pomijana: jej wartość TO już bilans netto (+/−).
+        const dThresh = it.kind === 'prosperity' ? 0.5 : 0.05;
+        if (it.showDelta && Math.abs(it.delta ?? 0) > dThresh) {
+          const dStr = _fmtDelta(it.delta);
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = it.delta >= 0 ? THEME.success : THEME.danger;
+          ctx.fillText(dStr, cx, iconCY);
+          cx += ctx.measureText(dStr).width + 10;
+        } else if (it.showDelta) {
+          cx += 7; // odstęp gdy delta ~0 (zachowaj rytm)
+        }
+
+        // Hit-rect tokenu (tooltip nazwa/wartość/delta/bilans)
+        if (it.kind) this._hitItems.push({ x: itemStartX, y, w: cx - itemStartX - 4, h: BAR_H, tip: it });
       }
     }
     ctx.textBaseline = 'alphabetic';
+  }
+
+  // ── Tooltip: hover (z UIManager.handleMouseMove) + render (po wszystkim) ──
+  handleMouseMove(x, y) {
+    this._hoverTip = null;
+    for (const hit of this._hitItems) {
+      if (x >= hit.x && x <= hit.x + hit.w && y >= hit.y && y <= hit.y + hit.h) {
+        const lines = this._buildTooltipLines(hit.tip);
+        if (lines && lines.length) this._hoverTip = { lines, mx: x, my: y };
+        return;
+      }
+    }
+  }
+
+  drawTooltip(ctx, W, H) {
+    const tip = this._hoverTip;
+    if (!tip || !tip.lines?.length) return;
+    const PADX = 8, PADY = 6, LINE_H = 15, HDR_H = 17;
+
+    // Wymiary
+    let maxW = 0, totalH = PADY * 2;
+    for (let i = 0; i < tip.lines.length; i++) {
+      const ln = tip.lines[i];
+      ctx.font = `${ln.bold ? THEME.fontSizeNormal : THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      maxW = Math.max(maxW, ctx.measureText(ln.text).width);
+      totalH += ln.bold ? HDR_H : LINE_H;
+    }
+    const tw = maxW + PADX * 2;
+    const th = totalH;
+
+    // Pozycja: nad kursorem (pasek jest przy dole ekranu), z clampem
+    let tx = tip.mx + 12;
+    let ty = tip.my - th - 8;
+    if (tx + tw > W - 4) tx = W - tw - 4;
+    if (tx < 4) tx = 4;
+    if (ty < 4) ty = tip.my + 16;
+
+    ctx.fillStyle = bgAlpha(0.96);
+    ctx.fillRect(tx, ty, tw, th);
+    ctx.strokeStyle = GLASS_BORDER;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tx + 0.5, ty + 0.5, tw - 1, th - 1);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    let cy = ty + PADY;
+    for (const ln of tip.lines) {
+      ctx.font = `${ln.bold ? THEME.fontSizeNormal : THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = ln.color || THEME.textPrimary;
+      const lh = ln.bold ? HDR_H : LINE_H;
+      ctx.fillText(ln.text, tx + PADX, cy + lh - 5);
+      cy += lh;
+    }
   }
 
   // Klik w część kolonii → panel kolonii; reszta paska pochłania klik.

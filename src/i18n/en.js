@@ -1952,6 +1952,13 @@ export default {
   'topBar.freePops': 'Free:',
   'topBar.housingLabel': 'Housing:',
 
+  // === BottomResourceBar (tooltips + inline free POP) ===
+  'resBar.freeSuffix': '({0} free)',
+  'resBar.prospLow': 'low',
+  'resBar.prospMedium': 'medium',
+  'resBar.prospHigh': 'high',
+  'resBar.prospValue': 'Prosperity: {0} ({1})',
+
   // === Time speed ===
   'speed.1d': '1d',
   'speed.1w': '1w',

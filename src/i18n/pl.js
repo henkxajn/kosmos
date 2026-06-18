@@ -1954,6 +1954,13 @@ export default {
   'topBar.freePops': 'Wolni:',
   'topBar.housingLabel': 'Mieszkania:',
 
+  // === BottomResourceBar (tooltipy + wolne POP inline) ===
+  'resBar.freeSuffix': '({0} wolne)',
+  'resBar.prospLow': 'niski',
+  'resBar.prospMedium': 'średni',
+  'resBar.prospHigh': 'wysoki',
+  'resBar.prospValue': 'Dobrobyt: {0} ({1})',
+
   // === Prędkość czasu ===
   'speed.1d': '1d',
   'speed.1w': '1t',

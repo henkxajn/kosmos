@@ -1399,6 +1399,7 @@ export class UIManager {
       this.overlayManager.handleMouseMove(x, y);
     }
     if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
+    if (window.KOSMOS?.civMode) this._bottomResourceBar.handleMouseMove(x, y); // Slice 3 — hover tooltipów paska surowców
     // Hover w panelu menu
     this._bottomBar.handleMouseMove(x, y, W, H);
     const prev = this._hoveredBtn;
@@ -1574,6 +1575,9 @@ export class UIManager {
 
     // ── Tooltip CivPanel ─────────────────────────────────────
     if (this._tooltip) this._drawTooltip();
+
+    // ── Tooltip BottomResourceBar (na samym wierzchu) ────────
+    if (civMode && !globeOpen) this._bottomResourceBar.drawTooltip(ctx, W, H);
 
     // ── CTRL-hold: labele wszystkich obiektów w scenie 3D ──
     const tr = window.KOSMOS?.threeRenderer;
