@@ -180,7 +180,9 @@ export class BaseOverlay {
     return {
       ox: CIV_SIDEBAR_W,
       oy: topOffset,
-      ow: W - COSMIC.OUTLINER_W - CIV_SIDEBAR_W,
+      // Slice B — overlaye pełnoekranowe: bez rezerwy na Outliner (ten jest teraz
+      // prawym wysuwanym drawerem rysowanym NA WIERZCHU overlayu, nie obok).
+      ow: W - CIV_SIDEBAR_W,
       oh: H - topOffset - COSMIC.BOTTOM_BAR_H - resBar,
     };
   }

@@ -354,10 +354,11 @@ export class FleetManagerOverlay {
 
     this._hitZones = [];
 
-    // Bounds overlay — nie nakrywamy TopBar, BottomBar, Outliner, Sidebar
+    // Bounds overlay — Slice B: pełnoekranowy (bez rezerwy na Outliner; ten jest teraz
+    // prawym wysuwanym drawerem na wierzchu). Nie nakrywamy tylko TopBar/BottomBar/Sidebar.
     const ox = CIV_SIDEBAR_W;
     const oy = TOP_PAD;
-    const ow = W - OUTLINER_W - CIV_SIDEBAR_W;
+    const ow = W - CIV_SIDEBAR_W;
     const oh = H - TOP_PAD - BOTTOM_PAD;
     this._bounds = { x: ox, y: oy, w: ow, h: oh };
 

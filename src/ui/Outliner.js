@@ -4,7 +4,7 @@
 // Sekcje zwijalne: KOLONIE, EKSPEDYCJE, FLOTA.
 // Klik na kolonię → otwórz globus; klik na ekspedycję → focus kamera.
 
-import { THEME, bgAlpha, drawGlassPanel } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, drawGlassPanel, hexToRgb } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { SHIPS }          from '../data/ShipsData.js';
 import { HULLS }          from '../data/HullsData.js';
@@ -26,6 +26,11 @@ const BOTTOM_RESERVED = BOTTOM_BAR_H + RESOURCE_BAR_H;
 const SECTION_HDR_H = 22; // wysokość nagłówka sekcji
 const ITEM_H = 20;        // wysokość elementu listy (emoji potrzebują więcej)
 const PAD = 6;
+
+// Slice C — prawy wysuwany drawer (gdy aktywny overlay pełnoekranowy zasłania dok)
+const OUTLINER_TRIGGER_W  = 6;    // pasek-trigger na prawej krawędzi
+const OUTLINER_ANIM_SPEED = 0.16; // przyrost slide/klatkę (wzór NavDrawer)
+const OUTLINER_HIDE_DELAY = 300;  // ms — opóźnienie chowania po opuszczeniu hovera
 
 const C = {
   get bg()     { return THEME.bgPrimary; },
@@ -72,15 +77,51 @@ export class Outliner {
     this._colonyTooltip   = null;
     this._tooltipX        = 0;
     this._tooltipY        = 0;
+
+    // Slice C — tryb prawego wysuwanego drawera (ustawiany co klatkę przez UIManager
+    // = !!overlayManager.active). Gdy false → dok jak dotąd (zawsze widoczny).
+    this._drawerMode     = false;
+    this._prevDrawerMode = false;
+    this._slideProgress  = 1;     // 1=wysunięty/dokowany, 0=schowany za prawą krawędzią
+    this._hovered        = false;
+    this._hideAt         = 0;     // ms timestamp planowanego schowania (0=brak)
+    this._slideOffX      = 0;     // bieżące przesunięcie X panelu (px) — dla hit/hover
   }
 
   // ── Rysowanie ───────────────────────────────────────────
   draw(ctx, W, H, state) {
     const { colonies, expeditions, fleet, shipQueues } = state;
 
-    const x = W - OUTLINER_W;
     const y = TOP_BAR_H;
     const h = H - TOP_BAR_H - BOTTOM_RESERVED;
+
+    // ── Slice C — tryb drawer: slide z prawej krawędzi gdy aktywny overlay ──
+    if (this._drawerMode !== this._prevDrawerMode) {
+      this._prevDrawerMode = this._drawerMode;
+      this._slideProgress  = this._drawerMode ? 0 : 1;  // wejście w drawer → schowany
+      this._hovered = false; this._hideAt = 0;
+    }
+    if (this._drawerMode) {
+      if (this._hideAt > 0 && Date.now() >= this._hideAt) { this._hideAt = 0; this._hovered = false; }
+      const tgt = this._hovered ? 1 : 0;
+      if (tgt > this._slideProgress)      this._slideProgress = Math.min(1, this._slideProgress + OUTLINER_ANIM_SPEED);
+      else if (tgt < this._slideProgress) this._slideProgress = Math.max(0, this._slideProgress - OUTLINER_ANIM_SPEED);
+    } else {
+      this._slideProgress = 1;
+    }
+    const offX = this._drawerMode ? Math.round(OUTLINER_W * (1 - this._slideProgress)) : 0;
+    this._slideOffX = offX;
+
+    // Trigger 6px na prawej krawędzi (zawsze widoczny w trybie drawer)
+    if (this._drawerMode) {
+      const a = hexToRgb(THEME.accent);
+      const trigActive = this._hovered || this._slideProgress > 0.001;
+      ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},${trigActive ? 0.85 : 0.4})`;
+      ctx.fillRect(W - OUTLINER_TRIGGER_W, y, OUTLINER_TRIGGER_W, h);
+      if (this._slideProgress <= 0.001) { this._clickTargets = []; return; }  // schowany — koniec
+    }
+
+    const x = W - OUTLINER_W + offX;   // dokowany (offX=0) lub wysunięty z prawej
 
     // Tło glass
     drawGlassPanel(ctx, x, y, OUTLINER_W, h, {
@@ -454,7 +495,15 @@ export class Outliner {
 
   // ── Hit testing ──────────────────────────────────────────
   hitTest(x, y, W, H) {
-    const ox = W - OUTLINER_W;
+    // Slice C — drawer trigger (prawa krawędź) ma priorytet; otwiera na klik.
+    if (this._drawerMode) {
+      if (x >= W - OUTLINER_TRIGGER_W - 2 && y >= TOP_BAR_H && y <= H - BOTTOM_RESERVED) {
+        this._hovered = true; this._hideAt = 0;
+        return true;
+      }
+      if (this._slideProgress <= 0.001) return false;   // schowany — nic do trafienia
+    }
+    const ox = W - OUTLINER_W + (this._slideOffX ?? 0);
     if (x < ox || y < TOP_BAR_H || y > H - BOTTOM_RESERVED) return false;
 
     for (const t of this._clickTargets) {
@@ -592,7 +641,15 @@ export class Outliner {
   updateHover(mx, my, W, H) {
     this._tooltipX = mx;
     this._tooltipY = my;
-    const ox = W - OUTLINER_W;
+    // Slice C — drawer hover (trigger + panel) steruje wysuwaniem / auto-chowaniem.
+    if (this._drawerMode) {
+      const offX = this._slideOffX ?? 0;
+      const overTrigger = mx >= W - OUTLINER_TRIGGER_W - 2 && my >= TOP_BAR_H && my <= H - BOTTOM_RESERVED;
+      const overPanel   = this._slideProgress > 0.01 && mx >= (W - OUTLINER_W + offX) && my >= TOP_BAR_H && my <= H - BOTTOM_RESERVED;
+      if (overTrigger || overPanel) { this._hovered = true; this._hideAt = 0; }
+      else if (this._hovered && this._hideAt === 0) { this._hideAt = Date.now() + OUTLINER_HIDE_DELAY; }
+    }
+    const ox = W - OUTLINER_W + (this._slideOffX ?? 0);
     if (mx < ox || my < TOP_BAR_H || my > H - BOTTOM_RESERVED) {
       this._hoveredColonyId = null;
       this._hoveredGroundUnitId = null;
@@ -896,8 +953,18 @@ export class Outliner {
     }
   }
 
-  // Sprawdza czy punkt nad Outlinerem
+  // Sprawdza czy punkt nad Outlinerem (uwzględnia tryb drawer + slide)
   isOver(x, y, W, H) {
-    return x >= W - OUTLINER_W && y >= TOP_BAR_H && y <= H - BOTTOM_RESERVED;
+    if (this._drawerMode) {
+      if (x >= W - OUTLINER_TRIGGER_W - 2 && y >= TOP_BAR_H && y <= H - BOTTOM_RESERVED) return true;
+      if (this._slideProgress <= 0.001) return false;
+    }
+    return x >= W - OUTLINER_W + (this._slideOffX ?? 0) && y >= TOP_BAR_H && y <= H - BOTTOM_RESERVED;
+  }
+
+  // Slice C — czy drawer animuje (slide/hide-timer) → UIManager podtrzymuje redraw
+  isAnimating() {
+    return this._drawerMode &&
+      ((this._slideProgress > 0 && this._slideProgress < 1) || this._hideAt > 0);
   }
 }

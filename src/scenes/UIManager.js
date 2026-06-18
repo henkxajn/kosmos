@@ -52,6 +52,7 @@ import { BottomBar }     from '../ui/BottomBar.js';
 import { BottomContext }  from '../ui/BottomContext.js';
 import { Outliner }       from '../ui/Outliner.js';
 import { NavDrawer }      from '../ui/NavDrawer.js';
+import { NavEdgeShim }    from '../ui/NavEdgeShim.js';
 import {
   CIV_SIDEBAR_W, CIV_SIDEBAR_BTN, CIV_SIDEBAR_GAP, CIV_SIDEBAR_PAD,
   CIV_TABS,
@@ -278,6 +279,11 @@ export class UIManager {
     // PO overlayManager (na wierzchu overlay'i), klik routowany PRZED overlayManager.
     this._navDrawer = new NavDrawer();
     window.KOSMOS.navDrawer = this._navDrawer;
+
+    // Slice B+C — DOM edge-shim (lewa krawędź, z60) dla NavDrawera nad DOM overlayami
+    // Tech/Observatory (z50). Canvas nie maluje nad nimi → shim zamyka overlay i oddaje
+    // stery drawerowi. Aktywny pointer-events tylko gdy DOM overlay otwarty.
+    this._navEdgeShim = new NavEdgeShim();
 
     this._setupEvents();
     this._startDrawLoop();
@@ -1293,6 +1299,7 @@ export class UIManager {
     if (this.combatHud?.handleClick?.(x, y)) return true;
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._navDrawer?.handleClick?.(x, y)) return true;   // Slice A — lewy NavDrawer (PRZED overlayManager)
+    if (window.KOSMOS?.civMode && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager)
     if (this._bottomResourceBar?.handleClick?.(x, y)) return true;   // Slice 3 — klik kolonii→panel, reszta pochłaniana
 
     // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
@@ -1334,8 +1341,8 @@ export class UIManager {
     // BottomBar (stabilność + EventLog + menu)
     if (this._bottomBar.hitTest(x, y, W, H, this._audioEnabled, this._musicEnabled, this._timeState.autoSlow)) return true;
 
-    // Outliner (prawy panel — kolonie/ekspedycje)
-    if (window.KOSMOS?.civMode && this._outliner.hitTest(x, y, W, H)) return true;
+    // Outliner — Slice C: hitTest przeniesiony WYŻEJ (przed overlayManager), żeby trigger/
+    // panel prawego drawera miał priorytet nad pełnoekranowym overlayem.
 
     // BottomContext (dolny panel kontekstowy)
     if (this._selectedEntity && this._bottomContext.hitTest(x, y, W, H, this._selectedEntity)) return true;
@@ -1531,7 +1538,9 @@ export class UIManager {
         factoryQueue         = activeCol?.factorySystem?.getQueue() ?? [];
         factoryAllocations   = activeCol?.factorySystem?.getAllocations() ?? [];
       } catch (_) { /* defensywne — nie blokuj renderingu */ }
-      this._outliner.draw(ctx, W, H, {
+      // Slice C — nie rysujemy tu: zbieramy stan i rysujemy PO overlayu (prawy drawer
+      // musi być na wierzchu pełnoekranowego overlayu). Gdy brak overlaya → dok.
+      this._outlinerState = {
         colonies: allColonies,
         expeditions: outlinerExps,
         fleet: this._getAllPlayerVessels(),
@@ -1540,7 +1549,9 @@ export class UIManager {
         constructionQueue, pendingBuilds, pendingShipOrders,
         pendingOutpostOrders, factoryQueue, factoryAllocations,
         inventory: colMgr?.getColony(activePid)?.resourceSystem?.inventorySnapshot() ?? {},
-      });
+      };
+    } else {
+      this._outlinerState = null;   // poza civMode / w globe — brak danych Outlinera
     }
 
     // ── BottomContext (dolny panel info o encji) ──────────────
@@ -1571,6 +1582,15 @@ export class UIManager {
     // ── NavDrawer (lewy wysuwany pasek nawigacji) — Slice A. PO overlayManager (na
     //    wierzchu overlay'i), pod MENU/tooltipami. Zastępuje dawny pasek nav w TopBarze. ──
     if (civMode && !globeOpen) this._navDrawer.draw(ctx, W, H);
+    // ── Outliner — Slice B+C: ZAWSZE prawy WYSUWANY drawer w civMode (hover prawej
+    //    krawędzi → wysuwa; brak hovera → chowa), niezależnie od tego czy overlay jest
+    //    otwarty. Rysowany PO overlayu/navDrawer (na wierzchu). ──
+    if (civMode && !globeOpen && this._outlinerState) {
+      this._outliner._drawerMode = true;
+      this._outliner.draw(ctx, W, H, this._outlinerState);
+    }
+    // Slice B+C — edge-shim: włącz DOM pasek lewej krawędzi gdy DOM overlay (Tech/Observatory)
+    this._navEdgeShim?.update();
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
@@ -1619,7 +1639,9 @@ export class UIManager {
     const flashActive = latest && (Date.now() - latest.createdAt) < 3000;
     // NavDrawer slide/hide-timer wymaga ciągłego redrawu (pętla rysuje tylko gdy
     // _dirty || _animating || timeDirty — inaczej slide zamarza przy pauzie).
-    this._animating = flashActive || !!this._gameOverData || (this._navDrawer?.isAnimating?.() ?? false);
+    this._animating = flashActive || !!this._gameOverData
+      || (this._navDrawer?.isAnimating?.() ?? false)
+      || (this._outliner?.isAnimating?.() ?? false);
 
     ctx.restore();
   }

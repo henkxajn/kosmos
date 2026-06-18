@@ -189,7 +189,7 @@ export function drawSubNav(ctx, W, activeId) {
 
   const y0    = COSMIC.TOP_BAR_H;
   const h     = COSMIC.SUBNAV_H;
-  const right = W - COSMIC.OUTLINER_W;
+  const right = W;   // Slice B — overlaye pełnoekranowe: subnav też pełnej szerokości
 
   // Tło pasa (spójne z overlayem) + dolna krawędź
   ctx.fillStyle = bgAlpha(0.55);
@@ -237,7 +237,7 @@ export function hitTestSubNav(x, y, W, activeId) {
   const y0 = COSMIC.TOP_BAR_H;
   const h  = COSMIC.SUBNAV_H;
   if (y < y0 || y >= y0 + h) return null;
-  if (x < 0 || x >= W - COSMIC.OUTLINER_W) return null;
+  if (x < 0 || x >= W) return null;   // Slice B — subnav pełnej szerokości
   if (x < 4) return { id: null };
   const idx = Math.floor((x - 4) / SUBNAV_TAB_W);
   if (idx < 0 || idx >= grp.members.length) return { id: null };
