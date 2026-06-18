@@ -51,6 +51,7 @@ import { TopBar }        from '../ui/TopBar.js';
 import { BottomBar }     from '../ui/BottomBar.js';
 import { BottomContext }  from '../ui/BottomContext.js';
 import { Outliner }       from '../ui/Outliner.js';
+import { NavDrawer }      from '../ui/NavDrawer.js';
 import {
   CIV_SIDEBAR_W, CIV_SIDEBAR_BTN, CIV_SIDEBAR_GAP, CIV_SIDEBAR_PAD,
   CIV_TABS,
@@ -271,6 +272,12 @@ export class UIManager {
     // nad BottomBar. Wchłonął dawny mini-HUD (lewa część = nazwa/Pop/Kr/brownout).
     this._bottomResourceBar = new BottomResourceBar();
     window.KOSMOS.bottomResourceBar = this._bottomResourceBar;
+
+    // Redesign UI v1 (Slice A) — NavDrawer: lewy wysuwany pasek nawigacji (7 grup
+    // NAV_GROUPS). Zastępuje poziomy pasek nav w TopBarze. Non-exclusive: rysowany
+    // PO overlayManager (na wierzchu overlay'i), klik routowany PRZED overlayManager.
+    this._navDrawer = new NavDrawer();
+    window.KOSMOS.navDrawer = this._navDrawer;
 
     this._setupEvents();
     this._startDrawLoop();
@@ -1285,6 +1292,7 @@ export class UIManager {
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
+    if (window.KOSMOS?.civMode && this._navDrawer?.handleClick?.(x, y)) return true;   // Slice A — lewy NavDrawer (PRZED overlayManager)
     if (this._bottomResourceBar?.handleClick?.(x, y)) return true;   // Slice 3 — klik kolonii→panel, reszta pochłaniana
 
     // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
@@ -1366,6 +1374,8 @@ export class UIManager {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     const delta = deltaY * 0.6; // globalna redukcja czułości scrolla o 40%
+    // NavDrawer — scroll listy kafli (gdy kursor nad otwartym panelem). Slice A.
+    if (window.KOSMOS?.civMode && this._navDrawer?.handleWheel?.(x, y, delta)) return true;
     // Overlay pełnoekranowy — scroll
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleScroll(delta, x, y)) return true;
@@ -1408,6 +1418,7 @@ export class UIManager {
       this.overlayManager.handleMouseMove(x, y);
     }
     if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
+    if (window.KOSMOS?.civMode) this._navDrawer.handleMouseMove(x, y);   // Slice A — hover triggera/kafli NavDrawer
     if (window.KOSMOS?.civMode) this._bottomResourceBar.handleMouseMove(x, y); // Slice 3 — hover tooltipów paska surowców
     // Hover w panelu menu
     this._bottomBar.handleMouseMove(x, y, W, H);
@@ -1557,7 +1568,9 @@ export class UIManager {
     if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
     // Subnav (rodzeństwo grupy) — PO overlayu, w pasie pod TopBarem (no-op dla singletonów)
     if (civMode && !globeOpen && this.overlayManager.active) drawSubNav(ctx, W, this.overlayManager.active);
-    // ── (Slice 4 — sidebar usunięty; nawigacja w TopBarze rysowana nad overlayem) ──
+    // ── NavDrawer (lewy wysuwany pasek nawigacji) — Slice A. PO overlayManager (na
+    //    wierzchu overlay'i), pod MENU/tooltipami. Zastępuje dawny pasek nav w TopBarze. ──
+    if (civMode && !globeOpen) this._navDrawer.draw(ctx, W, H);
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
@@ -1604,7 +1617,9 @@ export class UIManager {
     const logSys = window.KOSMOS?.eventLogSystem;
     const latest = logSys?.getLatest();
     const flashActive = latest && (Date.now() - latest.createdAt) < 3000;
-    this._animating = flashActive || !!this._gameOverData;
+    // NavDrawer slide/hide-timer wymaga ciągłego redrawu (pętla rysuje tylko gdy
+    // _dirty || _animating || timeDirty — inaczej slide zamarza przy pauzie).
+    this._animating = flashActive || !!this._gameOverData || (this._navDrawer?.isAnimating?.() ?? false);
 
     ctx.restore();
   }

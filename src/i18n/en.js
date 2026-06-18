@@ -2118,6 +2118,9 @@ export default {
   'civPanel.diplomacy': 'Diplomacy',
   'civPanel.war': 'Wars',
 
+  // === NavDrawer (Slice A — left slide-out navigation rail) ===
+  'navDrawer.title': 'NAVIGATION',
+
   // === DysonOverlay (Phase D3) ===
   'dyson.header':              'DYSON SPHERE',
   'dyson.constructionHeader':  'CONSTRUCTION — PHASES & SEGMENTS',

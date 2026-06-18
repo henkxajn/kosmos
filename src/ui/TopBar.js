@@ -14,7 +14,8 @@ import { COMMODITIES }    from '../data/CommoditiesData.js';
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
-import { drawTopNav, hitTestTopNav } from './CivPanelDrawer.js';
+// Slice A (NavDrawer) — poziomy pasek nav usunięty z TopBaru; nawigacja przez lewy
+// NavDrawer. drawTopNav/hitTestTopNav (CivPanelDrawer) zostają jako legacy, nieużywane.
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
@@ -97,18 +98,20 @@ export class TopBar {
     this._lastState = state;
     this._itemRects = [];
 
-    // Tło paska
+    // Tło paska — Slice A: TYLKO za blokiem czasu (prawa strona). Lewa/środek
+    // przezroczyste, żeby mapa 3D sięgała top:0 (TopBar = lekki overlay, nie pełna
+    // belka). Po usunięciu nav pełna belka czytała się jako „gap" nad sceną 3D.
+    const _timeX = W - TIME_W;
     ctx.fillStyle = bgAlpha(0.45);
-    ctx.fillRect(0, 0, W, BAR_H);
+    ctx.fillRect(_timeX, 0, TIME_W, BAR_H);
     ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, BAR_H); ctx.lineTo(W, BAR_H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(_timeX, BAR_H); ctx.lineTo(W, BAR_H); ctx.stroke();
 
-    // Slice 4 — poziomy pasek nawigacji po lewej (zamiast logo + surowców).
-    let LOGO_W = 0; // brak logo; nav zaczyna od x=4
-    if (startX <= 0 && window.KOSMOS?.civMode) {
-      drawTopNav(ctx, 4, BAR_H, window.KOSMOS?.overlayManager?.active);
-    }
+    // Slice A (NavDrawer) — poziomy pasek nav USUNIĘTY z TopBaru; nawigacja przez
+    // lewy NavDrawer. TopBar zostaje: tło + blok czasu (prawa) + tooltipy. Lewa
+    // strona pusta (surowce w BottomResourceBar od Slice 3).
+    let LOGO_W = 0;
 
     // Kontrolki czasu (prawa strona)
     this._drawTimeBlock(ctx, W, timeState);
@@ -771,13 +774,8 @@ export class TopBar {
   hitTest(x, y, W) {
     if (y > BAR_H) return false;
 
-    // Slice 4 — nav po lewej: klik ikony toggluje overlay (aktywny→zamknij, inny→otwórz)
-    const navId = hitTestTopNav(x, y, 4, BAR_H);
-    if (navId) {
-      const om = window.KOSMOS?.overlayManager;
-      if (om) { om.active === navId ? om.closeActive() : om.openPanel(navId); }
-      return true;
-    }
+    // Slice A (NavDrawer) — nawigacja przeniesiona do lewego NavDrawer; TopBar nie
+    // obsługuje już klików nav (zostaje wyłącznie blok czasu po prawej).
 
     // Klik w bloku czasu (prawa strona)
     const blockX = W - TIME_W;

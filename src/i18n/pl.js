@@ -2120,6 +2120,9 @@ export default {
   'civPanel.diplomacy': 'Dyplomacja',
   'civPanel.war': 'Wojny',
 
+  // === NavDrawer (Slice A — lewy wysuwany pasek nawigacji) ===
+  'navDrawer.title': 'NAWIGACJA',
+
   // === DysonOverlay (Faza D3) ===
   'dyson.header':              'SFERA DYSONA',
   'dyson.constructionHeader':  'BUDOWA — FAZY I SEGMENTY',
