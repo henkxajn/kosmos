@@ -14,6 +14,7 @@ import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleC
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES }   from '../data/ResourcesData.js';
+import { TECHS }           from '../data/TechData.js';
 import { effectiveRange, loadColonists, unloadColonists, isEnemyVessel, canJump, warpRange }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import { ALL_DOCTRINES, doctrineNameKey } from '../data/FleetDoctrines.js';
@@ -5245,7 +5246,6 @@ export class FleetManagerOverlay {
         if (!hull) continue;
 
         const hasTech = !hull.requires || (tSys?.isResearched(hull.requires) ?? false);
-        if (!hasTech) continue;
 
         const mods = (tpl.modules ?? []).filter(Boolean);
         const stats = calcShipStats(hull, mods);
@@ -5255,13 +5255,31 @@ export class FleetManagerOverlay {
         const crewCost = hull.crewCost ?? 0;
         const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
 
-        const btnH = 42;
+        const canBuildNow = hasTech && canBuildAny && allAfford && hasCrew;
+        const canQueue = hasTech && hasCrew && !allAfford;
+        const canClick = canBuildNow || canQueue;
+
+        // Powód blokady (gdy nie da się kliknąć) — priorytet: brak techu kadłuba →
+        // brak wolnych POPów (załoga) → stocznia zajęta. Pokazywany inline jako 3.
+        // linia, bo wcześniej wyszarzony wiersz milczał (brak hit-zone, brak tooltipa)
+        // i gracz nie wiedział CZEGO brakuje.
+        let blockReason = null;
+        let blockColor = THEME.warning;
+        if (!hasTech) {
+          const techName = TECHS[hull.requires] ? getName(TECHS[hull.requires], 'tech') : hull.requires;
+          blockReason = `🔒 ${t('fleet.requiresTech', techName)}`;
+          blockColor = THEME.textDim;
+        } else if (!hasCrew) {
+          blockReason = `👥 ${t('fleet.noCrewPops', crewCost)}`;
+        } else if (!canClick) {
+          // hasCrew && allAfford, więc jedyne co zostało to brak wolnego slotu stoczni
+          blockReason = `⏳ ${t('fleet.shipyardFull', queues.length, shipyardLevel)}`;
+        }
+
+        const btnH = blockReason ? 54 : 42;
         const bx = x + PAD, bw = w - PAD * 2;
 
         // Tło
-        const canBuildNow = canBuildAny && allAfford && hasCrew;
-        const canQueue = hasCrew && !allAfford;
-        const canClick = canBuildNow || canQueue;
         ctx.fillStyle = canClick ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.5)';
         ctx.fillRect(bx, cy, bw, btnH);
         ctx.strokeStyle = canBuildNow ? THEME.borderActive : canQueue ? THEME.warning : THEME.border;
@@ -5278,14 +5296,21 @@ export class FleetManagerOverlay {
         ctx.fillStyle = THEME.textSecondary;
         ctx.fillText(`⚡${stats.speed.toFixed(1)} AU/y  📦${stats.cargo}t  🎯${Math.round(stats.range)} AU  ⚖${stats.totalMass}t`, bx + 6, cy + 28);
 
-        // Przycisk BUDUJ / KOLEJKA
-        const buildLabel = canBuildNow ? '🚀' : canQueue ? '⏳' : '—';
+        // 3. linia — powód blokady (czytelny komunikat zamiast cichego wyszarzenia)
+        if (blockReason) {
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = blockColor;
+          ctx.fillText(blockReason, bx + 6, cy + 44);
+        }
+
+        // Przycisk BUDUJ / KOLEJKA / blokada
+        const buildLabel = canBuildNow ? '🚀' : canQueue ? '⏳' : (!hasTech ? '🔒' : '—');
         const buildBtnW = 28;
         const buildBtnX = bx + bw - buildBtnW - 4;
         ctx.fillStyle = canBuildNow ? THEME.accent : canQueue ? THEME.warning : THEME.textDim;
         ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
         ctx.textAlign = 'center';
-        ctx.fillText(buildLabel, buildBtnX + buildBtnW / 2, cy + btnH / 2 + 5);
+        ctx.fillText(buildLabel, buildBtnX + buildBtnW / 2, cy + 22);
         ctx.textAlign = 'left';
 
         if (canClick) {
