@@ -8,21 +8,26 @@ export class OverlayManager {
   constructor() {
     this.overlays = {}; // id → overlay instance
     this.active = null; // aktualnie widoczny id
+    // Konsolidacja nav 14→7 (Slice 3) — klawisze primary = przyciski TopBaru:
+    //   C·civilization  E·economy  H·colony  P·population  D·diplomacy  F·fleet  T·tech
+    // Skróty wtórne I/W/G/U/O zostają jako bezpośrednie (dostępne też przez subnav).
+    // dyson/trade — BEZ skrótu (klawisze 'd'/'h' przejęte przez primary); tylko subnav.
     this._keyMap = {
-      'f': 'fleet',
-      'p': 'population',
+      // primary (7)
+      'c': 'civilization',
       'e': 'economy',
+      'h': 'colony',
+      'p': 'population',
+      'd': 'diplomacy',
+      'f': 'fleet',
       't': 'tech',
-      'c': 'colony',
-      'o': 'observatory',
-      'h': 'trade',
-      'v': 'civilization',
+      // wtórne overlaye — bezpośrednie skróty
+      'i': 'intel',           // Faza 2 — Wywiad (obce imperia)
+      'w': 'war',             // Faza 4 — Panel wojny
       'g': 'galaxy',
       'u': 'unit_design',
-      'd': 'dyson',           // Faza D3 — Sfera Dysona
-      'i': 'intel',           // Faza 2 — Wywiad (obce imperia)
-      'y': 'diplomacy',       // Faza 3 — Dyplomacja (relacje z obcymi)
-      'w': 'war',             // Faza 4 — Panel wojny
+      'o': 'observatory',
+      // systemowe (poza grupami nav)
       'l': 'eventLog',        // Opcja B/3 — Dziennik zdarzeń
       'n': 'poi',             // M3 P2.1 — POI Panel (sidebar list)
       'm': 'minimap',         // M4 P2 — Galactic mini-map (top-right corner)
