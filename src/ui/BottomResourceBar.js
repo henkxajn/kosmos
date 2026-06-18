@@ -15,13 +15,22 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES }       from '../data/CommoditiesData.js';
 import EntityManager         from '../core/EntityManager.js';
 import { t, getName }        from '../i18n/i18n.js';
-import { drawResourceIcon, RESOURCE_ICON_FILES } from './ResourceIcons.js';
+import { drawResourceIcon, RESOURCE_ICON_FILES, hasResourceIcon } from './ResourceIcons.js';
 
-const BAR_H      = COSMIC.RESOURCE_BAR_H; // 20
+const BAR_H      = COSMIC.RESOURCE_BAR_H; // 28
 const BOTTOM_H   = COSMIC.BOTTOM_BAR_H;   // 26
-const SIDEBAR_W  = COSMIC.CIV_SIDEBAR_W;  // 30
-const OUTLINER_W = COSMIC.OUTLINER_W;     // 170
+const SIDEBAR_W  = COSMIC.CIV_SIDEBAR_W;  // 0
+const OUTLINER_W = COSMIC.OUTLINER_W;     // 150
 const PAD        = 8;
+
+// Odstępy tokenów paska — ciasne, by zmieścić cały ogon (energia ⚡ + dobrobyt ⭐),
+// który przy luźniejszych odstępach wypadał poza prawą krawędź paska.
+const GAP_ICON   = 2;  // ikona → wartość
+const GAP_VAL    = 2;  // wartość → delta (gdy delta rysowana)
+const GAP_PLAIN  = 5;  // wartość → następny token (token bez delty, np. energia) [było 10]
+const GAP_TOKEN  = 4;  // delta → następny token (główny odstęp międzytokenowy) [było 10]
+const GAP_DELTA0 = 3;  // odstęp gdy delta ≈ 0 (utrzymuje rytm) [było 7]
+const GAP_GROUP  = 6;  // odstęp przy separatorze grupy [było 10]
 
 function _fmtNum(n) {
   const a = Math.abs(n);
@@ -258,59 +267,113 @@ export class BottomResourceBar {
     cx += 8;
 
     // ── PRAWO: surowce (PNG) + bilans (energia/dobrobyt) ──
-    const groups   = this._collect(state);
+    // Grupa bilansu (energia ⚡ + dobrobyt ⭐) jest ZAKOTWICZONA do prawej krawędzi
+    // paska — zawsze widoczna, nawet gdy surowców jest tyle, że wypełniają cały pas
+    // (wcześniej wypadała poza krawędź i ginęła). Surowce + nauka płyną od lewej i
+    // zatrzymują się tuż przed grupą bilansu.
+    const groups       = this._collect(state);
+    const balanceGroup = groups[groups.length - 1];   // energia + dobrobyt (zawsze ostatnia)
+    const mainGroups   = groups.slice(0, -1);          // surowce + nauka
     const iconCY   = y + BAR_H / 2;   // środek pionowy ikon
     const iconSize = BAR_H - 6;       // 22 px przy BAR_H=28
     ctx.textBaseline = 'middle';
-    for (let gi = 0; gi < groups.length && cx < xMax; gi++) {
-      const g = groups[gi];
+
+    // Zmierz bilans i zakotwicz go do prawej (nie wchodząc na sekcję kolonii).
+    const balW          = this._measureItems(ctx, balanceGroup.items, iconSize);
+    const balanceStartX = Math.max(cx + GAP_GROUP, xMax - balW);
+    const mainXMax      = balanceStartX - GAP_GROUP;
+
+    // Surowce + nauka — lewo→prawo, do mainXMax (przed bilansem)
+    for (let gi = 0; gi < mainGroups.length && cx < mainXMax; gi++) {
+      const g = mainGroups[gi];
       if (gi > 0) {
         ctx.strokeStyle = THEME.border;
         ctx.beginPath(); ctx.moveTo(cx + 2, y + 4); ctx.lineTo(cx + 2, y + BAR_H - 4); ctx.stroke();
-        cx += 10;
+        cx += GAP_GROUP;
       }
-
       for (const it of g.items) {
-        if (cx > xMax) break;
-        const itemStartX = cx;
-
-        // Ikona: PNG dla surowców, inaczej emoji (energia/dobrobyt) w większym foncie
-        if (it.id && RESOURCE_ICON_FILES[it.id]) {
-          cx += drawResourceIcon(ctx, it.id, cx, iconCY, iconSize, it.icon) + 2;
-        } else {
-          ctx.font = `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`;
-          ctx.fillStyle = it.color || THEME.textSecondary;
-          ctx.fillText(it.icon, cx, iconCY);
-          cx += ctx.measureText(it.icon).width + 2;
-        }
-
-        // Wartość (dla bilansu kolorowana statusowo; energia ze znakiem +/−)
-        const valStr = it.raw
-          ? (it.signed && it.val > 0 ? '+' : '') + String(it.val)
-          : _fmtNum(it.val);
-        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-        ctx.fillStyle = it.raw ? (it.color || THEME.textPrimary) : THEME.textPrimary;
-        ctx.fillText(valStr, cx, iconCY);
-        cx += ctx.measureText(valStr).width + (it.showDelta ? 3 : 10);
-
-        // Inline delta (+/−) — realna zmiana per rok (surowce/paliwo/nauka) lub trend (dobrobyt).
-        // Energia pomijana: jej wartość TO już bilans netto (+/−).
-        const dThresh = it.kind === 'prosperity' ? 0.5 : 0.05;
-        if (it.showDelta && Math.abs(it.delta ?? 0) > dThresh) {
-          const dStr = _fmtDelta(it.delta);
-          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillStyle = it.delta >= 0 ? THEME.success : THEME.danger;
-          ctx.fillText(dStr, cx, iconCY);
-          cx += ctx.measureText(dStr).width + 10;
-        } else if (it.showDelta) {
-          cx += 7; // odstęp gdy delta ~0 (zachowaj rytm)
-        }
-
-        // Hit-rect tokenu (tooltip nazwa/wartość/delta/bilans)
-        if (it.kind) this._hitItems.push({ x: itemStartX, y, w: cx - itemStartX - 4, h: BAR_H, tip: it });
+        if (cx > mainXMax) break;
+        cx = this._drawItem(ctx, it, cx, iconCY, y, iconSize, true);
       }
     }
+
+    // Bilans (energia/dobrobyt) — zakotwiczony do prawej, z separatorem grupy po lewej
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath();
+    ctx.moveTo(balanceStartX - GAP_GROUP + 2, y + 4);
+    ctx.lineTo(balanceStartX - GAP_GROUP + 2, y + BAR_H - 4);
+    ctx.stroke();
+    let bcx = balanceStartX;
+    for (const it of balanceGroup.items) {
+      bcx = this._drawItem(ctx, it, bcx, iconCY, y, iconSize, true);
+    }
     ctx.textBaseline = 'alphabetic';
+  }
+
+  // ── Rysowanie/pomiar pojedynczego tokenu ──────────────────────────────────
+  // render=true rysuje token i dorzuca hit-rect; render=false TYLKO liczy szerokość
+  // (ta sama matematyka → pomiar grupy bilansu zgadza się 1:1 z jej rysowaniem).
+  // Zwraca nowe cx.
+  _drawItem(ctx, it, cx, iconCY, y, iconSize, render) {
+    const itemStartX = cx;
+
+    // Ikona: PNG dla surowców, inaczej emoji (energia/dobrobyt) w większym foncie
+    if (it.id && RESOURCE_ICON_FILES[it.id]) {
+      if (render) {
+        cx += drawResourceIcon(ctx, it.id, cx, iconCY, iconSize, it.icon) + GAP_ICON;
+      } else {
+        let iconW = iconSize;   // PNG zajmuje iconSize; bez PNG — szerokość emoji (fallback)
+        if (!hasResourceIcon(it.id)) {
+          ctx.font = `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`;
+          iconW = ctx.measureText(it.icon).width;
+        }
+        cx += iconW + GAP_ICON;
+      }
+    } else {
+      ctx.font = `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`;
+      if (render) {
+        ctx.fillStyle = it.color || THEME.textSecondary;
+        ctx.fillText(it.icon, cx, iconCY);
+      }
+      cx += ctx.measureText(it.icon).width + GAP_ICON;
+    }
+
+    // Wartość (dla bilansu kolorowana statusowo; energia ze znakiem +/−)
+    const valStr = it.raw
+      ? (it.signed && it.val > 0 ? '+' : '') + String(it.val)
+      : _fmtNum(it.val);
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    if (render) {
+      ctx.fillStyle = it.raw ? (it.color || THEME.textPrimary) : THEME.textPrimary;
+      ctx.fillText(valStr, cx, iconCY);
+    }
+    cx += ctx.measureText(valStr).width + (it.showDelta ? GAP_VAL : GAP_PLAIN);
+
+    // Inline delta (+/−) — realna zmiana per rok (surowce/paliwo/nauka) lub trend (dobrobyt).
+    // Energia pomijana: jej wartość TO już bilans netto (+/−).
+    const dThresh = it.kind === 'prosperity' ? 0.5 : 0.05;
+    if (it.showDelta && Math.abs(it.delta ?? 0) > dThresh) {
+      const dStr = _fmtDelta(it.delta);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      if (render) {
+        ctx.fillStyle = it.delta >= 0 ? THEME.success : THEME.danger;
+        ctx.fillText(dStr, cx, iconCY);
+      }
+      cx += ctx.measureText(dStr).width + GAP_TOKEN;
+    } else if (it.showDelta) {
+      cx += GAP_DELTA0; // odstęp gdy delta ~0 (zachowaj rytm)
+    }
+
+    // Hit-rect tokenu (tooltip nazwa/wartość/delta/bilans)
+    if (render && it.kind) this._hitItems.push({ x: itemStartX, y, w: cx - itemStartX - 4, h: BAR_H, tip: it });
+    return cx;
+  }
+
+  // Łączna szerokość listy tokenów (render=false) — do zakotwiczenia bilansu do prawej.
+  _measureItems(ctx, items, iconSize) {
+    let w = 0;
+    for (const it of items) w = this._drawItem(ctx, it, w, 0, 0, iconSize, false);
+    return w;
   }
 
   // ── Tooltip: hover (z UIManager.handleMouseMove) + render (po wszystkim) ──
