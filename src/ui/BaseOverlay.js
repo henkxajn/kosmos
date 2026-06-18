@@ -5,7 +5,7 @@
 
 import { THEME }  from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
-import { CIV_SIDEBAR_W } from './CivPanelDrawer.js';
+import { CIV_SIDEBAR_W, getSubNavHeight } from './CivPanelDrawer.js';
 
 export class BaseOverlay {
   constructor(state) {
@@ -172,7 +172,8 @@ export class BaseOverlay {
 
   // Pomocniczy — oblicz wymiary overlay na podstawie canvas
   _getOverlayBounds(W, H) {
-    const topOffset = COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H;
+    // +pas subnav, gdy aktywny overlay jest w grupie >1 (singletony → 0). Nav 14→7.
+    const topOffset = COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H + getSubNavHeight();
     // Slice 3 — zostaw miejsce na BottomResourceBar (cienki pasek nad BottomBar w civMode),
     // żeby overlay nie chował dolnej treści (np. bilansu energii) pod paskiem.
     const resBar = window.KOSMOS?.civMode ? (COSMIC.RESOURCE_BAR_H ?? 0) : 0;

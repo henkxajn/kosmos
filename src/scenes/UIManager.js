@@ -56,6 +56,8 @@ import {
   CIV_TABS,
   drawCivPanelSidebar,
   hitTestSidebar,
+  drawSubNav,
+  hitTestSubNav,
 } from '../ui/CivPanelDrawer.js';
 
 // Wymiary fizyczne canvas (piksele urządzenia) — aktualizowane przy resize/fullscreen
@@ -1304,6 +1306,13 @@ export class UIManager {
 
     // Overlay pełnoekranowy (FleetManager itp.) — przed resztą UI
     if (this.overlayManager.isAnyOpen()) {
+      // Subnav (rodzeństwo grupy) — pas pod TopBarem, priorytet nad overlayem.
+      // Klik zakładki → przełącz overlay; klik w tło pasa → absorbuj (nie spadaj na overlay).
+      const sub = hitTestSubNav(x, y, W, this.overlayManager.active);
+      if (sub) {
+        if (sub.id && sub.id !== this.overlayManager.active) this.overlayManager.openPanel(sub.id);
+        return true;
+      }
       if (this.overlayManager.handleClick(x, y)) return true;
     }
 
@@ -1546,6 +1555,8 @@ export class UIManager {
 
     // ── Overlay pełnoekranowy (FleetManager itp.) ────────────
     if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
+    // Subnav (rodzeństwo grupy) — PO overlayu, w pasie pod TopBarem (no-op dla singletonów)
+    if (civMode && !globeOpen && this.overlayManager.active) drawSubNav(ctx, W, this.overlayManager.active);
     // ── (Slice 4 — sidebar usunięty; nawigacja w TopBarze rysowana nad overlayem) ──
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.

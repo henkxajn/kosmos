@@ -4,7 +4,8 @@
 // Gospodarka (E), Populacja (P), Technologie (T), Flota (F), Kolonie (C).
 // Czyste funkcje importowane przez UIManager.
 
-import { THEME, bgAlpha, hexToRgb, GLASS_BORDER_SIDE } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, hexToRgb, GLASS_BORDER_SIDE, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { COSMIC } from '../config/LayoutConfig.js';
 import { t } from '../i18n/i18n.js';
 
 // ── Stałe ──────────────────────────────────────────────────
@@ -138,6 +139,109 @@ export function hitTestTopNav(x, y, x0, barH) {
   const idx = Math.floor((x - x0) / CIV_NAV_BTN_W);
   if (idx < 0 || idx >= CIV_TABS.length) return null;
   return CIV_TABS[idx].id;
+}
+
+// ── Grupy nawigacji (konsolidacja 14→7) ────────────────────
+// Każda grupa: primary (zakładka w TopBarze, Slice 3) + members (overlaye w subnav).
+// members[0] === primary (konwencja). Kolejność = kolejność primary w TopBarze:
+// Civilization · Economy · Colony · Population · Diplomacy · Fleet · Tech (C/E/H/P/D/F/T).
+// UWAGA (Slice 2): TopBar wciąż rysuje wszystkie 14 (drawTopNav bez zmian) — subnav
+// jest addytywny. Filtr TopBaru do 7 + remap klawiszy = Slice 3.
+export const NAV_GROUPS = [
+  { primary: 'civilization', members: ['civilization', 'dyson'] },
+  { primary: 'economy',      members: ['economy', 'trade'] },
+  { primary: 'colony',       members: ['colony'] },
+  { primary: 'population',   members: ['population'] },
+  { primary: 'diplomacy',    members: ['diplomacy', 'intel', 'war', 'galaxy'] },
+  { primary: 'fleet',        members: ['fleet', 'unit_design'] },
+  { primary: 'tech',         members: ['tech', 'observatory'] },
+];
+
+// member id → grupa (mapa odwrotna, budowana raz)
+const _memberToGroup = {};
+for (const _g of NAV_GROUPS) for (const _m of _g.members) _memberToGroup[_m] = _g;
+
+// Zwraca grupę zawierającą dany id overlayu (lub null).
+export function getNavGroup(id) { return _memberToGroup[id] ?? null; }
+
+// Czy id należy do grupy z >1 członkiem (tylko takie mają pas subnav).
+export function isGroupedId(id) {
+  const g = _memberToGroup[id];
+  return !!g && g.members.length > 1;
+}
+
+// Wysokość pasa subnav dla AKTYWNEGO overlayu (0 dla singletonów/braku grupy).
+// Jedyne dynamiczne źródło — czytane przez BaseOverlay._getOverlayBounds. Overlaye
+// zawsze-grupowe (Fleet/Tech/Observatory) używają COSMIC.SUBNAV_H statycznie.
+export function getSubNavHeight() {
+  const active = window.KOSMOS?.overlayManager?.active;
+  return isGroupedId(active) ? COSMIC.SUBNAV_H : 0;
+}
+
+// ── Pasek subnav (rodzeństwo grupy) — pod TopBarem ─────────
+// Rysowany przez UIManager PO overlayManager.draw (na wierzchu, w zarezerwowanym
+// pasie [TOP_BAR_H, TOP_BAR_H+SUBNAV_H]). No-op dla singletonów.
+export const SUBNAV_TAB_W = 112;   // stała szerokość zakładki (draw i hit-test indeksują tak samo)
+
+export function drawSubNav(ctx, W, activeId) {
+  const grp = getNavGroup(activeId);
+  if (!grp || grp.members.length <= 1) return;
+
+  const y0    = COSMIC.TOP_BAR_H;
+  const h     = COSMIC.SUBNAV_H;
+  const right = W - COSMIC.OUTLINER_W;
+
+  // Tło pasa (spójne z overlayem) + dolna krawędź
+  ctx.fillStyle = bgAlpha(0.55);
+  ctx.fillRect(0, y0, right, h);
+  ctx.strokeStyle = GLASS_BORDER;
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, y0 + h); ctx.lineTo(right, y0 + h); ctx.stroke();
+
+  let x = 4;
+  for (const id of grp.members) {
+    const tab = CIV_TABS.find(tb => tb.id === id);
+    if (!tab) { x += SUBNAV_TAB_W; continue; }
+    const active = id === activeId;
+
+    if (active) {
+      const a = hexToRgb(THEME.borderActive);
+      ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},0.22)`;
+      ctx.fillRect(x, y0, SUBNAV_TAB_W, h);
+      ctx.fillStyle = THEME.accent;
+      ctx.fillRect(x, y0 + h - 2, SUBNAV_TAB_W, 2); // dolny akcent
+    }
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const cy = y0 + h / 2;
+    ctx.font = `${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
+    ctx.fillStyle = active ? THEME.textPrimary : THEME.textSecondary;
+    ctx.fillText(tab.icon, x + 8, cy);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillText(t(tab.labelKey), x + 28, cy);
+
+    x += SUBNAV_TAB_W;
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+}
+
+// Hit-test pasa subnav. Zwraca:
+//   { id }        — kliknięto zakładkę rodzeństwa (id overlayu)
+//   { id: null }  — kliknięto w pas, ale poza zakładką (absorbuj klik)
+//   null          — klik poza pasem (przepuść dalej do overlayu)
+export function hitTestSubNav(x, y, W, activeId) {
+  const grp = getNavGroup(activeId);
+  if (!grp || grp.members.length <= 1) return null;
+  const y0 = COSMIC.TOP_BAR_H;
+  const h  = COSMIC.SUBNAV_H;
+  if (y < y0 || y >= y0 + h) return null;
+  if (x < 0 || x >= W - COSMIC.OUTLINER_W) return null;
+  if (x < 4) return { id: null };
+  const idx = Math.floor((x - 4) / SUBNAV_TAB_W);
+  if (idx < 0 || idx >= grp.members.length) return { id: null };
+  return { id: grp.members[idx] };
 }
 
 // ── Mini pasek (reusable) ──────────────────────────────────
