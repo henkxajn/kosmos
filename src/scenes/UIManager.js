@@ -43,7 +43,7 @@ import { POIPanel }            from '../ui/POIPanel.js';
 import { GalacticMiniMap }     from '../ui/GalacticMiniMap.js';
 import { StationPanel }        from '../ui/StationPanel.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
-import { BottomResourceBar }   from '../ui/BottomResourceBar.js';
+import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
 import { t, getName }          from '../i18n/i18n.js';
 
 // Nowe komponenty UI
@@ -269,10 +269,11 @@ export class UIManager {
     this.stationPanel = new StationPanel();
     window.KOSMOS.stationPanel = this.stationPanel;
 
-    // Redesign UI v1 (Slice 3) — BottomResourceBar: zunifikowany pasek (kolonia + surowce)
-    // nad BottomBar. Wchłonął dawny mini-HUD (lewa część = nazwa/Pop/Kr/brownout).
-    this._bottomResourceBar = new BottomResourceBar();
-    window.KOSMOS.bottomResourceBar = this._bottomResourceBar;
+    // Redesign UI — TopResourceDrawer: górny wysuwany pasek surowców (zastąpił dolny
+    // BottomResourceBar). Trigger 6px od górnej krawędzi (y=0); hover → panel z wierszem na kolonię.
+    // Non-exclusive: rysowany PO overlayManager (nad overlay'em), klik PRZED overlayManager.
+    this._topResourceDrawer = new TopResourceDrawer();
+    window.KOSMOS.topResourceDrawer = this._topResourceDrawer;
 
     // Redesign UI v1 (Slice A) — NavDrawer: lewy wysuwany pasek nawigacji (7 grup
     // NAV_GROUPS). Zastępuje poziomy pasek nav w TopBarze. Non-exclusive: rysowany
@@ -1253,6 +1254,9 @@ export class UIManager {
     // Outliner (prawy panel — tylko civMode)
     if (window.KOSMOS?.civMode && this._outliner.isOver(x, y, W, H)) return true;
 
+    // Górny pasek surowców — trigger/rozwinięty panel (tylko civMode)
+    if (window.KOSMOS?.civMode && this._topResourceDrawer?.isOver?.(x, y)) return true;
+
     // BottomContext (dolny panel kontekstowy — gdy encja zaznaczona)
     if (this._bottomContext.isOver(x, y, W, H, this._selectedEntity)) return true;
 
@@ -1300,7 +1304,7 @@ export class UIManager {
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._navDrawer?.handleClick?.(x, y)) return true;   // Slice A — lewy NavDrawer (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager)
-    if (this._bottomResourceBar?.handleClick?.(x, y)) return true;   // Slice 3 — klik kolonii→panel, reszta pochłaniana
+    if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleClick?.(x, y)) return true;   // górny pasek surowców — klik kolonii→panel, reszta pochłaniana (PRZED overlayManager)
 
     // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
     if (this._bottomBar.menuOpen && this._bottomBar.hitTestMenu(x, y, W, H)) {
@@ -1383,6 +1387,8 @@ export class UIManager {
     const delta = deltaY * 0.6; // globalna redukcja czułości scrolla o 40%
     // NavDrawer — scroll listy kafli (gdy kursor nad otwartym panelem). Slice A.
     if (window.KOSMOS?.civMode && this._navDrawer?.handleWheel?.(x, y, delta)) return true;
+    // Górny pasek surowców — scroll listy kolonii (gdy kursor nad rozwiniętym panelem).
+    if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleWheel?.(x, y, delta)) return true;
     // Overlay pełnoekranowy — scroll
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleScroll(delta, x, y)) return true;
@@ -1426,7 +1432,7 @@ export class UIManager {
     }
     if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
     if (window.KOSMOS?.civMode) this._navDrawer.handleMouseMove(x, y);   // Slice A — hover triggera/kafli NavDrawer
-    if (window.KOSMOS?.civMode) this._bottomResourceBar.handleMouseMove(x, y); // Slice 3 — hover tooltipów paska surowców
+    if (window.KOSMOS?.civMode) this._topResourceDrawer.handleMouseMove(x, y); // górny pasek surowców — hover triggera/panelu + tooltipy
     // Hover w panelu menu
     this._bottomBar.handleMouseMove(x, y, W, H);
     const prev = this._hoveredBtn;
@@ -1579,6 +1585,9 @@ export class UIManager {
     if (civMode && !globeOpen) this.overlayManager.draw(ctx, W, H);
     // Subnav (rodzeństwo grupy) — PO overlayu, w pasie pod TopBarem (no-op dla singletonów)
     if (civMode && !globeOpen && this.overlayManager.active) drawSubNav(ctx, W, this.overlayManager.active);
+    // ── Górny pasek surowców (wysuwany) — PO overlayManager (nad overlay'em), ale PRZED
+    //    NavDrawer/Outliner/HUD: gdy nakładają się rogami, te malują się na wierzchu. ──
+    if (civMode && !globeOpen) this._topResourceDrawer.draw(ctx, W, H);
     // ── NavDrawer (lewy wysuwany pasek nawigacji) — Slice A. PO overlayManager (na
     //    wierzchu overlay'i), pod MENU/tooltipami. Zastępuje dawny pasek nav w TopBarze. ──
     if (civMode && !globeOpen) this._navDrawer.draw(ctx, W, H);
@@ -1595,10 +1604,6 @@ export class UIManager {
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
     if (civMode && !globeOpen) this.stationPanel.draw(ctx, W, H);   // S4-2 — na wierzchu overlay'i (coexist z colony)
-    if (civMode && !globeOpen) this._bottomResourceBar.draw(ctx, W, H, {
-      inventory: this._inventory, invPerYear: this._invPerYear, energyFlow: this._energyFlow,
-      resources: this._resources, resDelta: this._resDelta, factoryData: this._factoryData,
-    });   // Slice 3 — zunifikowany pasek (kolonia + surowce), zawsze widoczny nad overlay'em
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──
     this._bottomBar.drawMenu(ctx, W, H, {
@@ -1620,8 +1625,8 @@ export class UIManager {
     // ── Tooltip CivPanel ─────────────────────────────────────
     if (this._tooltip) this._drawTooltip();
 
-    // ── Tooltip BottomResourceBar (na samym wierzchu) ────────
-    if (civMode && !globeOpen) this._bottomResourceBar.drawTooltip(ctx, W, H);
+    // ── Tooltip górnego paska surowców (na samym wierzchu) ────────
+    if (civMode && !globeOpen) this._topResourceDrawer.drawTooltip(ctx, W, H);
 
     // ── CTRL-hold: labele wszystkich obiektów w scenie 3D ──
     const tr = window.KOSMOS?.threeRenderer;
@@ -1641,6 +1646,7 @@ export class UIManager {
     // _dirty || _animating || timeDirty — inaczej slide zamarza przy pauzie).
     this._animating = flashActive || !!this._gameOverData
       || (this._navDrawer?.isAnimating?.() ?? false)
+      || (this._topResourceDrawer?.isAnimating?.() ?? false)
       || (this._outliner?.isAnimating?.() ?? false);
 
     ctx.restore();
