@@ -65,6 +65,7 @@ export class BottomContext {
     this._prevEntity    = null;    // poprzednia encja (detekcja zmiany)
     this._hitZones      = [];      // [{x,y,w,h,type,tab?}] zbudowane w draw()
     this._cardRect      = null;    // {x,y,w,h} ostatnio narysowanej karty
+    this._minimized     = false;   // true = tylko pasek tytułowy (bez treści)
   }
 
   // Obszar mapy (origin + rozmiar) — karta nie wychodzi poza niego.
@@ -133,22 +134,35 @@ export class BottomContext {
     const action = this._actionLabel(entity);
     const deps   = this._visibleDeposits(entity);
 
-    // ── Wysokość karty ──
-    let PH = 4 + HEADER_H + LINE_H;        // pad + nazwa + typ
-    if (distLn) PH += LINE_H;
-    if (tabs.length) PH += TAB_H + 2;
-    PH += lines.length * LINE_H + 4;
-    if (action) PH += ACTION_H + 4;
-    if (deps.length) {
-      const rows = deps.length > 5 ? Math.ceil(deps.length / 2) : deps.length;
-      PH += 14 + rows * DEP_ROW_H + 4;
+    // ── Wysokość karty ── (zminimalizowana = tylko pasek tytułowy)
+    let PH;
+    if (this._minimized) {
+      PH = 4 + HEADER_H + 4;               // sam pasek: nazwa + przyciski
+    } else {
+      PH = 4 + HEADER_H + LINE_H;          // pad + nazwa + typ
+      if (distLn) PH += LINE_H;
+      if (tabs.length) PH += TAB_H + 2;
+      PH += lines.length * LINE_H + 4;
+      if (action) PH += ACTION_H + 4;
+      if (deps.length) {
+        const rows = deps.length > 5 ? Math.ceil(deps.length / 2) : deps.length;
+        PH += 14 + rows * DEP_ROW_H + 4;
+      }
+      PH += 6;
     }
-    PH += 6;
 
-    // ── Pozycja: kotwica do ciała 3D + clamp ──
-    const bounds = this._bounds(W, H);
-    const sp = window.KOSMOS?.threeRenderer?.getBodyScreenPosition?.(entity.id) ?? null;
-    const { px, py } = computeFloatingPlacement({ bodyScreen: sp, PW, PH, bounds, screenW: W });
+    // ── Pozycja: zminimalizowana → stały PRAWY DOLNY róg (tuż nad dolnym triggerem
+    //    EventLog); rozwinięta → kotwica do ciała 3D + clamp. (Bez animacji przejścia —
+    //    karta nie jest w pętli _animating UIManagera; snap między pozycjami.) ──
+    let px, py;
+    if (this._minimized) {
+      px = W - PW - 8;
+      py = H - BAR_H - 6 - PH;   // PH = wysokość zminimalizowanej karty (≈30)
+    } else {
+      const bounds = this._bounds(W, H);
+      const sp = window.KOSMOS?.threeRenderer?.getBodyScreenPosition?.(entity.id) ?? null;
+      ({ px, py } = computeFloatingPlacement({ bodyScreen: sp, PW, PH, bounds, screenW: W }));
+    }
 
     this._cardRect = { x: px, y: py, w: PW, h: PH };
     this._hitZones = [];
@@ -165,19 +179,30 @@ export class BottomContext {
 
     let cy = py + 4;
 
-    // ── Header: nazwa + ✏ rename ──
+    // ── Header: nazwa + przyciski (✏ rename · ▼/▲ minimize · − close) ──
     ctx.textAlign = 'left';
     ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.bright;
-    ctx.fillText(_truncate(entity.name, 24), px + PAD, cy + 15);
-    const rbX = px + PW - 22, rbY = cy + 2, rbS = 16;
+    ctx.fillText(_truncate(entity.name, 18), px + PAD, cy + 15);
+
+    const rbY = cy + 2, rbS = 16;
+    const closeX = px + PW - 22;   // zamknięcie (−) w rogu
+    const minX   = px + PW - 40;   // minimalizacja (▼/▲) obok zamknięcia
+    const renX   = px + PW - 58;   // rename (✏)
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.text;
     ctx.textAlign = 'center';
-    ctx.fillText('✏', rbX + rbS / 2, rbY + 12);
+    ctx.fillStyle = C.text;
+    ctx.fillText('✏', renX + rbS / 2, rbY + 12);
+    ctx.fillText(this._minimized ? '▲' : '▼', minX + rbS / 2, rbY + 12);
+    ctx.fillText('−', closeX + rbS / 2, rbY + 12);
     ctx.textAlign = 'left';
-    this._hitZones.push({ x: rbX, y: rbY, w: rbS, h: rbS, type: 'rename' });
+    this._hitZones.push({ x: renX,   y: rbY, w: rbS, h: rbS, type: 'rename' });
+    this._hitZones.push({ x: minX,   y: rbY, w: rbS, h: rbS, type: 'minimize' });
+    this._hitZones.push({ x: closeX, y: rbY, w: rbS, h: rbS, type: 'close' });
     cy += HEADER_H;
+
+    // Treść tylko gdy rozwinięte (zminimalizowane = sam pasek tytułowy z nazwą).
+    if (!this._minimized) {
 
     // ── Typ ──
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -269,6 +294,7 @@ export class BottomContext {
         }
       });
     }
+    } // koniec if (!this._minimized) — treść karty
 
     // Tło jako hit-zone NA KOŃCU — _hitTest=Array.find, przyciski (dodane wyżej) mają
     // priorytet; tło tylko pochłania klik w kartę (nie przelatuje do 3D pod spodem).
@@ -364,6 +390,8 @@ export class BottomContext {
       return true;
     }
     if (z.type === 'action') { this._doAction(entity); return true; }
+    if (z.type === 'minimize') { this._minimized = !this._minimized; return true; }
+    if (z.type === 'close') { EventBus.emit('body:deselected'); return true; }
     return true; // bg — pochłoń klik w kartę
   }
 
