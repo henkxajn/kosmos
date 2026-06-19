@@ -32,12 +32,12 @@ export const NAV_TILE_FILES = {
 };
 
 /**
- * Logiczna szerokość panelu = 1/3 ekranu (min 220).
+ * Logiczna szerokość panelu = 1/4 ekranu (min 220).
  * UWAGA: LOGICZNE W (przekazane do draw), NIE window.innerWidth — UIManager rysuje
  * w przeskalowanym układzie (UI_SCALE), więc panel liczymy z W.
  */
 export function navPanelWidth(W) {
-  return Math.max(220, Math.floor(W / 3));
+  return Math.max(220, Math.floor(W / 4));
 }
 
 /**
