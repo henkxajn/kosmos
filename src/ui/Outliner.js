@@ -23,9 +23,12 @@ const RESOURCE_BAR_H = COSMIC.RESOURCE_BAR_H; // 28px — pasek surowców pod Ou
 // kolumnę Outlinera, więc rezerwujemy u dołu dolny pasek + pasek surowców.
 const BOTTOM_RESERVED = BOTTOM_BAR_H + RESOURCE_BAR_H;
 
-const SECTION_HDR_H = 22; // wysokość nagłówka sekcji
-const ITEM_H = 20;        // wysokość elementu listy (emoji potrzebują więcej)
-const PAD = 6;
+const SECTION_HDR_H = 18; // wysokość nagłówka sekcji (kompaktowo)
+const ITEM_H = 18;        // wysokość elementu listy (kompaktowo)
+const PAD = 5;
+// Górny obszar drawera (wysokość chipa czasu w prawym rogu) — tło PRZEZROCZYSTE i klik
+// przepuszczany, żeby chip pozostał widoczny i klikalny "przez" drawer. Treść startuje niżej.
+const CHIP_CLEAR_H = 30;
 
 // Slice C — prawy wysuwany drawer (gdy aktywny overlay pełnoekranowy zasłania dok)
 const OUTLINER_TRIGGER_W  = 6;    // pasek-trigger na prawej krawędzi
@@ -92,8 +95,8 @@ export class Outliner {
   draw(ctx, W, H, state) {
     const { colonies, expeditions, fleet, shipQueues } = state;
 
-    const y = TOP_BAR_H;
-    const h = H - TOP_BAR_H - BOTTOM_RESERVED;
+    const y = 0;                   // pełna wysokość od górnej krawędzi (jak NavDrawer po lewej)
+    const h = H - BOTTOM_RESERVED;  // do nad dolnym paskiem
 
     // ── Slice C — tryb drawer: slide z prawej krawędzi gdy aktywny overlay ──
     if (this._drawerMode !== this._prevDrawerMode) {
@@ -123,13 +126,16 @@ export class Outliner {
 
     const x = W - OUTLINER_W + offX;   // dokowany (offX=0) lub wysunięty z prawej
 
-    // Tło glass
-    drawGlassPanel(ctx, x, y, OUTLINER_W, h, {
-      topBorder: false, bottomBorder: false, rightBorder: false,
-    });
+    // Tło: ciemniejsze/bardziej kryjące niż glass + cienka linia accentu na lewej krawędzi.
+    // GÓRNY obszar (y < CHIP_CLEAR_H) PRZEZROCZYSTY — chip czasu widoczny i klikalny przez drawer.
+    ctx.fillStyle = bgAlpha(0.55);
+    ctx.fillRect(x, CHIP_CLEAR_H, OUTLINER_W, h - CHIP_CLEAR_H);
+    ctx.strokeStyle = THEME.borderActive;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + 0.5, CHIP_CLEAR_H); ctx.lineTo(x + 0.5, y + h); ctx.stroke();
 
     this._clickTargets = [];
-    let cy = y + 4;
+    let cy = CHIP_CLEAR_H + 4;   // treść startuje pod przezroczystym obszarem chipa
 
     // ── KOLONIE ──────────────────────────────────────────
     cy = this._drawSection(ctx, x, cy, 'colonies', t('outliner.colonies', colonies.length), (startY) => {
@@ -275,7 +281,7 @@ export class Outliner {
           // Hover highlight
           const isHov = vid === this._hoveredVesselId;
           if (isHov) {
-            ctx.fillStyle = 'rgba(0,255,180,0.08)';
+            ctx.fillStyle = THEME.accentDim;
             ctx.fillRect(x, iy, OUTLINER_W, ITEM_H);
           }
           ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -433,7 +439,7 @@ export class Outliner {
         // Hover highlight
         const isHov = unit.id === this._hoveredGroundUnitId;
         if (isHov) {
-          ctx.fillStyle = 'rgba(0,255,180,0.08)';
+          ctx.fillStyle = THEME.accentDim;
           ctx.fillRect(x, iy, OUTLINER_W, ITEM_H);
         }
 
@@ -471,11 +477,14 @@ export class Outliner {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x, cy + SECTION_HDR_H); ctx.lineTo(x + OUTLINER_W, cy + SECTION_HDR_H); ctx.stroke();
 
+    // Mały, muted, WERSALIKI + subtelny letter-spacing (zgodnie z resztą UI).
     const arrow = open ? '▼' : '►';
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.label;
+    ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+    ctx.fillStyle = C.dim;
     ctx.textAlign = 'left';
-    ctx.fillText(`${arrow} ${title}`, x + PAD, cy + 15);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '1px';
+    ctx.fillText(`${arrow} ${String(title).toUpperCase()}`, x + PAD, cy + SECTION_HDR_H / 2 + 3);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 
     this._clickTargets.push({
       type: 'section', sectionId,
@@ -504,7 +513,8 @@ export class Outliner {
       if (this._slideProgress <= 0.001) return false;   // schowany — nic do trafienia
     }
     const ox = W - OUTLINER_W + (this._slideOffX ?? 0);
-    if (x < ox || y < TOP_BAR_H || y > H - BOTTOM_RESERVED) return false;
+    // y < CHIP_CLEAR_H → przepuść klik (chip czasu pod przezroczystą górą drawera).
+    if (x < ox || y < CHIP_CLEAR_H || y > H - BOTTOM_RESERVED) return false;
 
     for (const t of this._clickTargets) {
       if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) {
@@ -645,12 +655,12 @@ export class Outliner {
     if (this._drawerMode) {
       const offX = this._slideOffX ?? 0;
       const overTrigger = mx >= W - OUTLINER_TRIGGER_W - 2 && my >= 0 && my <= H;   // trigger: pełna wysokość
-      const overPanel   = this._slideProgress > 0.01 && mx >= (W - OUTLINER_W + offX) && my >= TOP_BAR_H && my <= H - BOTTOM_RESERVED;
+      const overPanel   = this._slideProgress > 0.01 && mx >= (W - OUTLINER_W + offX) && my >= CHIP_CLEAR_H && my <= H - BOTTOM_RESERVED;
       if (overTrigger || overPanel) { this._hovered = true; this._hideAt = 0; }
       else if (this._hovered && this._hideAt === 0) { this._hideAt = Date.now() + OUTLINER_HIDE_DELAY; }
     }
     const ox = W - OUTLINER_W + (this._slideOffX ?? 0);
-    if (mx < ox || my < TOP_BAR_H || my > H - BOTTOM_RESERVED) {
+    if (mx < ox || my < CHIP_CLEAR_H || my > H - BOTTOM_RESERVED) {
       this._hoveredColonyId = null;
       this._hoveredGroundUnitId = null;
       this._colonyTooltip = null;
@@ -959,7 +969,7 @@ export class Outliner {
       if (x >= W - OUTLINER_TRIGGER_W - 2 && y >= 0 && y <= H) return true;   // trigger: pełna wysokość
       if (this._slideProgress <= 0.001) return false;
     }
-    return x >= W - OUTLINER_W + (this._slideOffX ?? 0) && y >= TOP_BAR_H && y <= H - BOTTOM_RESERVED;
+    return x >= W - OUTLINER_W + (this._slideOffX ?? 0) && y >= CHIP_CLEAR_H && y <= H - BOTTOM_RESERVED;
   }
 
   // Slice C — czy drawer animuje (slide/hide-timer) → UIManager podtrzymuje redraw
