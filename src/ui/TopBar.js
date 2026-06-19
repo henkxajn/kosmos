@@ -19,7 +19,7 @@ import { t, getName, getLocale } from '../i18n/i18n.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
-export const TIME_W = 170;  // Slice 5 — odsprzężone od OUTLINER_W (zwężony); blok czasu zachowuje szerokość. Export: BottomBar pozycjonuje bell/MENU na lewo od chipa.
+export const TIME_W = 250;  // jedna linia: play + 6 prędkości + data (AUT usunięty). Export: BottomBar pozycjonuje bell/MENU na lewo od chipa.
 const GROUP_PAD = 5;    // padding między grupami
 const ITEM_W    = 68;   // bazowa szerokość jednego zasobu — węższa
 const ITEM_W_SM = 50;   // kompaktowa szerokość (wąski ekran)
@@ -101,12 +101,15 @@ export class TopBar {
     // Tło paska — Slice A: TYLKO za blokiem czasu (prawa strona). Lewa/środek
     // przezroczyste, żeby mapa 3D sięgała top:0 (TopBar = lekki overlay, nie pełna
     // belka). Po usunięciu nav pełna belka czytała się jako „gap" nad sceną 3D.
+    // Wtopiony chip: niskie krycie tła; box ograniczony do wysokości przycisków
+    // (btnH=16 + 4px margines góra/dół = 24px), NIE sięga poza obszar kontrolek.
     const _timeX = W - TIME_W;
-    ctx.fillStyle = bgAlpha(0.45);
-    ctx.fillRect(_timeX, 0, TIME_W, BAR_H);
-    ctx.strokeStyle = GLASS_BORDER;
+    const chipY = 4, chipH = 24;
+    ctx.fillStyle = bgAlpha(0.28);
+    ctx.fillRect(_timeX, chipY, TIME_W, chipH);
+    ctx.strokeStyle = THEME.border;
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(_timeX, BAR_H); ctx.lineTo(W, BAR_H); ctx.stroke();
+    ctx.strokeRect(_timeX + 0.5, chipY + 0.5, TIME_W - 1, chipH - 1);
 
     // Slice A (NavDrawer) — poziomy pasek nav USUNIĘTY z TopBaru; nawigacja przez
     // lewy NavDrawer. TopBar zostaje: tło + blok czasu (prawa) + tooltipy. Lewa
@@ -440,62 +443,58 @@ export class TopBar {
     return { x, lines };
   }
 
-  // ── Blok kontrolek czasu (prawa strona) ─────────────────
+  // ── Layout bloku czasu (JEDNA linia) — współdzielony przez draw + hitTest ──
+  // [▶/⏸] [1d][1w][1m][1y][10y][10k] | [data] [AUT]. Eliminuje rozjazd draw↔hit.
+  _timeButtonLayout(W) {
+    const blockX = W - TIME_W;
+    const btnY = 8, btnH = 16, gap = 2;
+    const playRect = { x: blockX + 6, y: btnY, w: 20, h: btnH };
+    const speedW = 20;
+    const speedRects = [];
+    let sx = playRect.x + playRect.w + gap + 2;
+    for (let i = 0; i < 6; i++) { speedRects.push({ x: sx, y: btnY, w: speedW, h: btnH }); sx += speedW + gap; }
+    const sepX = sx + 4;
+    const dateX = sepX + 8;
+    return { blockX, btnY, btnH, playRect, speedRects, sepX, dateX };
+  }
+
+  // ── Blok kontrolek czasu (prawy górny róg, JEDNA linia, wtopiony) ─────────
+  // [▶/⏸] [1d][1w][1m][1y][10y][10k] | [data]. (AUT usunięty.) Lewą krawędź daje
+  // box tła (strokeRect w draw()), więc bez osobnego separatora pionowego.
   _drawTimeBlock(ctx, W, timeState) {
     const { isPaused, multiplierIndex, displayText } = timeState;
+    const L = this._timeButtonLayout(W);
 
-    const blockX = W - TIME_W;
-    const btnH = 16;        // wysokość przycisków
-    const btnY = 6;         // pozycja Y przycisków (górny rząd)
-    const btnGap = 2;       // odstęp między przyciskami
-    const btnR = 0;         // brak zaokrągleń (spec: zero border-radius)
-
-    // Separator pionowy
-    ctx.strokeStyle = THEME.borderLight;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(blockX, 6);
-    ctx.lineTo(blockX, BAR_H - 6);
-    ctx.stroke();
-
-    // Przycisk PAUZA/GRAJ (kwadratowy)
-    const playX = blockX + 6;
-    const playW = 20;
-    const playActive = isPaused;
-    this._drawBtn(ctx, playX, btnY, playW, btnH, btnR,
+    // Przycisk PAUZA/GRAJ
+    this._drawBtn(ctx, L.playRect.x, L.playRect.y, L.playRect.w, L.playRect.h, 0,
       isPaused ? '▶' : '⏸',
-      playActive ? THEME.accent : THEME.textDim,
-      playActive ? THEME.bgSecondary : null);
+      isPaused ? THEME.accent : THEME.textDim,
+      isPaused ? THEME.bgSecondary : null,
+      THEME.fontSizeSmall - 1);
 
-    // Przyciski prędkości — kompaktowe (6 przycisków: 1d, 1t, 1m, 1r, 10r, 10k)
+    // Przyciski prędkości (6) — mniejszy font (−2px)
     const speedLabels = [t('speed.1d'), t('speed.1w'), t('speed.1m'), t('speed.1y'), t('speed.10y'), t('speed.10k')];
-    const speedBtnW = 20;
-    let sx = playX + playW + btnGap + 2;
-    for (let i = 0; i < speedLabels.length; i++) {
+    for (let i = 0; i < 6; i++) {
+      const rc = L.speedRects[i];
       const isActive = !isPaused && multiplierIndex === i + 1;
-      this._drawBtn(ctx, sx, btnY, speedBtnW, btnH, btnR,
+      this._drawBtn(ctx, rc.x, rc.y, rc.w, rc.h, 0,
         speedLabels[i],
         isActive ? THEME.bgPrimary : THEME.textDim,
-        isActive ? THEME.accent : null);
-      sx += speedBtnW + btnGap;
+        isActive ? THEME.accent : null,
+        THEME.fontSizeSmall - 2);
     }
 
-    // Dolny rząd: data + AutoSlow
-    const row2Y = btnY + btnH + 5;
+    // Separator prędkości | data (w obrębie boxa: y 8..24)
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(L.sepX, 8); ctx.lineTo(L.sepX, 24); ctx.stroke();
 
-    // Data (lewa strona bloku czasu)
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    // Data (jedna linia, mniejszy font −1px) — wyrównana DO PRAWEJ krawędzi (W−8),
+    // żeby treść chipa była dobita do prawego brzegu ekranu.
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.bright;
-    ctx.textAlign = 'left';
-    ctx.fillText(displayText || '', blockX + 8, row2Y + 9);
-
-    // AutoSlow wskaźnik (prawa strona)
-    const autoSlow = timeState.autoSlow;
-    this._drawBtn(ctx, W - 30, row2Y, 24, 14, 0,
-      'AUT',
-      autoSlow ? THEME.bgPrimary : THEME.textDim,
-      autoSlow ? THEME.successDim : null,
-      THEME.fontSizeSmall - 2);
+    ctx.textAlign = 'right';
+    ctx.fillText(displayText || '', W - 8, L.btnY + L.btnH / 2 + 3);
 
     ctx.textAlign = 'left';
   }
@@ -786,38 +785,21 @@ export class TopBar {
   }
 
   _hitTestTime(x, y, W) {
-    const blockX = W - TIME_W;
-    const btnY = 6;
-    const btnH = 16;
-    const btnGap = 2;
+    const L = this._timeButtonLayout(W);
+    const hit = (rc) => x >= rc.x && x <= rc.x + rc.w && y >= rc.y && y <= rc.y + rc.h;
 
-    // Przycisk PAUZA/GRAJ
-    const playX = blockX + 6;
-    const playW = 20;
-    if (x >= playX && x <= playX + playW && y >= btnY && y <= btnY + btnH) {
+    if (hit(L.playRect)) {
       const isPaused = window.KOSMOS?.timeSystem?.isPaused ?? false;
       isPaused ? EventBus.emit('time:play') : EventBus.emit('time:pause');
       return true;
     }
-
-    // Przyciski prędkości (6 przycisków)
-    const speedBtnW = 20;
-    let sx = playX + playW + btnGap + 2;
     for (let i = 0; i < 6; i++) {
-      if (x >= sx && x <= sx + speedBtnW && y >= btnY && y <= btnY + btnH) {
+      if (hit(L.speedRects[i])) {
         EventBus.emit('time:setMultiplier', { index: i + 1 });
         EventBus.emit('time:play');
         return true;
       }
-      sx += speedBtnW + btnGap;
     }
-
-    // AutoSlow toggle (dolny rząd, prawy róg)
-    if (x >= W - 30 && y >= btnY + btnH + 5) {
-      EventBus.emit('time:autoSlowToggle');
-      return true;
-    }
-
     return true; // pochłoń klik w bloku czasu
   }
 

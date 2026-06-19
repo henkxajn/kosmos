@@ -384,14 +384,9 @@ export class BottomBar {
     }
   }
 
-  // ── Przycisk MENU (prawy górny róg, obok chipa czasu) ──
+  // ── Przycisk MENU (prawy górny róg, obok chipa czasu) — tylko tekst (t('ui.menu')
+  //    zawiera już ikonę „☰ MENU"), bez ramki/tła. Podświetlenie tekstu gdy otwarte. ──
   _drawMenuButton(ctx, x, y, w, h) {
-    ctx.fillStyle = this._menuOpen ? THEME.accentMed : THEME.bgTertiary;
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = this._menuOpen ? THEME.borderActive : THEME.borderLight;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, w, h);
-
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = this._menuOpen ? THEME.accent : C.bright;
     ctx.textAlign = 'center';
