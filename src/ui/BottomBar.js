@@ -10,6 +10,7 @@ import EventBus            from '../core/EventBus.js';
 import { t, getLocale }   from '../i18n/i18n.js';
 import { showAutoPauseSettings } from './AutoPauseSettingsModal.js';
 import { toggleNotificationDropdown, isNotificationDropdownOpen } from './NotificationDropdown.js';
+import { TIME_W } from './TopBar.js';
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline w zwiniętym pasku
@@ -109,124 +110,79 @@ export class BottomBar {
 
     // Czy tryb Generator (stabilność widoczna)
     const isGenerator = window.KOSMOS?.scenario === 'generator';
-    const expandedLogX = isGenerator ? 160 : 10;
 
-    // Opcja B/3: tylko inline 2 wpisy w cienkim pasku.
-    // Pełna historia + filtry → overlay 'eventLog' (klawisz L lub klik ▲).
-    const visibleEntries = logSystem
-      ? logSystem.getVisible()
-      : (logEntriesFallback || []);
-
-    // Tło paska
-    ctx.fillStyle = bgAlpha(0.40);
-    ctx.fillRect(0, barY, W, BAR_H);
-    ctx.strokeStyle = GLASS_BORDER;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, barY); ctx.lineTo(W, barY); ctx.stroke();
-
-    const textY = barY + 19;
-
-    // ── Sekcja lewa: Stabilność (tylko tryb Generator) ──
-    let logX = 10; // domyślnie log zaczyna się od lewej
-
-    if (isGenerator) {
-      const { score, trend } = stability || { score: 50, trend: 'stable' };
-      const arrow  = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '–';
-      const tColor = trend === 'up' ? THEME.successDim : trend === 'down' ? THEME.dangerDim : C.text;
-
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = C.label;
-      ctx.textAlign = 'left';
-      ctx.fillText(t('bottomBar.stab'), 10, textY);
-
-      ctx.fillStyle = tColor;
-      ctx.fillText(`${score}${arrow}`, 46, textY);
-
-      // Mini-pasek stabilności
-      const sBarX = 80, sBarW = 50, sBarH = 5;
-      const sBarY = textY - 4;
-      ctx.fillStyle = THEME.bgTertiary;
-      ctx.fillRect(sBarX, sBarY, sBarW, sBarH);
-      const sFillW = Math.round((score / 100) * sBarW);
-      if (sFillW > 0) {
-        ctx.fillStyle = score >= 70 ? THEME.successDim : score >= 40 ? THEME.yellow : THEME.dangerDim;
-        ctx.fillRect(sBarX, sBarY, sFillW, sBarH);
-      }
-      ctx.strokeStyle = THEME.border;
+    // EventLog → EventLogDrawer (hover-drawer dolnej krawędzi). Bell/MENU → prawy górny róg.
+    // W civMode dolny pasek NIE rysuje tła — dolna krawędź to czysty trigger EventLogDrawer
+    // (nad sceną 3D, ten sam kolor co pozostałe triggery). Tło + stabilność tylko w Generatorze.
+    if (!civMode) {
+      ctx.fillStyle = bgAlpha(0.40);
+      ctx.fillRect(0, barY, W, BAR_H);
+      ctx.strokeStyle = GLASS_BORDER;
       ctx.lineWidth = 1;
-      ctx.strokeRect(sBarX, sBarY, sBarW, sBarH);
+      ctx.beginPath(); ctx.moveTo(0, barY); ctx.lineTo(W, barY); ctx.stroke();
 
-      logX = 140;
+      const textY = barY + 19;
+      if (isGenerator) {
+        const { score, trend } = stability || { score: 50, trend: 'stable' };
+        const arrow  = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '–';
+        const tColor = trend === 'up' ? THEME.successDim : trend === 'down' ? THEME.dangerDim : C.text;
+
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.label;
+        ctx.textAlign = 'left';
+        ctx.fillText(t('bottomBar.stab'), 10, textY);
+
+        ctx.fillStyle = tColor;
+        ctx.fillText(`${score}${arrow}`, 46, textY);
+
+        // Mini-pasek stabilności
+        const sBarX = 80, sBarW = 50, sBarH = 5;
+        const sBarY = textY - 4;
+        ctx.fillStyle = THEME.bgTertiary;
+        ctx.fillRect(sBarX, sBarY, sBarW, sBarH);
+        const sFillW = Math.round((score / 100) * sBarW);
+        if (sFillW > 0) {
+          ctx.fillStyle = score >= 70 ? THEME.successDim : score >= 40 ? THEME.yellow : THEME.dangerDim;
+          ctx.fillRect(sBarX, sBarY, sFillW, sBarH);
+        }
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(sBarX, sBarY, sBarW, sBarH);
+      }
     }
 
-    // ── Sekcja prawa: bell 🔔 (NotificationCenter) + MENU ──
+    // ── Klaster prawego GÓRNEGO rogu — bell 🔔 + MENU (+ chip walk), na lewo od chipa czasu.
+    // Przeniesione z dolnego paska: BottomBar (dół) jest teraz tylko obszarem triggera
+    // EventLogDrawer. Pozycje liczone od lewej krawędzi chipa czasu (W − TIME_W).
+    const clTopY = 6;     // górny rząd (jak przyciski chipa czasu)
+    const clBtnH = 20;
+    const chipLeft = W - TIME_W;
     const menuBtnW = 64;
-    const menuBtnX = W - menuBtnW - 6;
+    const menuBtnX = chipLeft - menuBtnW - 8;
     const bellBtnW = 38;
     const bellBtnX = menuBtnX - bellBtnW - 4;
-    this._bellClickBounds = { x: bellBtnX, y: barY, w: bellBtnW, h: BAR_H };
+    this._bellClickBounds = { x: bellBtnX, y: clTopY, w: bellBtnW, h: clBtnH };
+    this._menuClickBounds = { x: menuBtnX, y: clTopY, w: menuBtnW, h: clBtnH };
 
-    // Chip „⚔ Walki [N]" — pokazany TYLKO gdy CombatHUD jest zminimalizowany
-    // i DSCS ma active encounters. Klik → restore HUD (toggleMinimize).
+    // Chip „⚔ Walki [N]" — gdy CombatHUD zminimalizowany i DSCS ma active encounters.
     const combatHud = window.KOSMOS?.combatHud;
-    let combatChipX = null, combatChipW = 0;
     if (combatHud?.isMinimized?.() && combatHud?.hasActiveEncounters?.()) {
       const dscs = window.KOSMOS?.deepSpaceCombatSystem;
       const n = dscs?.listActive?.()?.length ?? 0;
       const chipLabel = n > 1 ? `⚔ Walki [${n}]` : '⚔ Walki';
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      combatChipW = Math.ceil(ctx.measureText(chipLabel).width) + 14;
-      combatChipX = bellBtnX - combatChipW - 6;
-      this._combatChipClickBounds = {
-        x: combatChipX, y: barY + 3, w: combatChipW, h: 20, label: chipLabel,
-      };
+      const combatChipW = Math.ceil(ctx.measureText(chipLabel).width) + 14;
+      const combatChipX = bellBtnX - combatChipW - 6;
+      this._combatChipClickBounds = { x: combatChipX, y: clTopY, w: combatChipW, h: clBtnH, label: chipLabel };
     } else {
       this._combatChipClickBounds = null;
     }
 
-    // ── Sekcja centralna: EventLog (inline, 2 wpisy, flash 3s, klikalna całość) ──
-    const logAreaX = logX;
-    const rightSectionStart = combatChipX != null ? combatChipX : bellBtnX;
-    const logAreaW = (rightSectionStart - 8) - logAreaX;
-    this._logClickBounds = { x: logAreaX, y: barY, w: logAreaW, h: BAR_H };
+    this._logClickBounds = null;  // EventLog → EventLogDrawer
 
-    // Ikona „otwórz dziennik" (📜) + strzałka stanu — na początku sekcji logu
-    const activeOverlay = window.KOSMOS?.overlayManager?.active;
-    const overlayOpen = activeOverlay === 'eventLog';
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = overlayOpen ? C.title : C.label;
-    ctx.fillText(overlayOpen ? '📜▼' : '📜▲', logAreaX, textY);
-    const entriesStartX = logAreaX + 28;
-
-    // Wpisy inline po ikonie (zaweż żeby nie wchodziły na bell/chip + MENU)
-    const entriesW = rightSectionStart - entriesStartX - 8;
-    const maxChars = Math.max(10, Math.floor(entriesW / 6));
-
-    const entries = visibleEntries.slice(0, LOG_INLINE);
-    const now = Date.now();
-    let lx = entriesStartX;
-    entries.forEach((entry, i) => {
-      const baseColor = _entryColor(entry);
-      const age = now - (entry.createdAt ?? 0);
-      const flashing = i === 0 && age < 3000 && age > 0;
-      if (flashing) {
-        const pulse = 0.5 + 0.5 * Math.cos(age * 0.008);
-        ctx.globalAlpha = 0.6 + 0.4 * pulse;
-      }
-      ctx.fillStyle = baseColor;
-      const yr = entry.year > 0 ? `${_shortYear(entry.year)} ` : '';
-      const txt = yr + _truncate(entry.text, Math.floor(maxChars / LOG_INLINE) - 2);
-      ctx.fillText(txt, lx, textY);
-      ctx.globalAlpha = 1.0;
-      lx += ctx.measureText(txt).width + 16;
-    });
-
-    // ── Sekcja prawa: chip „⚔ Walki" (opcjonalnie) + bell 🔔 + MENU ──
-    if (this._combatChipClickBounds) {
-      this._drawCombatChip(ctx, this._combatChipClickBounds, textY);
-    }
-    this._drawBellButton(ctx, bellBtnX, barY + 3, bellBtnW, 20, textY);
-    this._drawMenuButton(ctx, W, H, textY);
+    if (this._combatChipClickBounds) this._drawCombatChip(ctx, this._combatChipClickBounds, clTopY + 14);
+    this._drawBellButton(ctx, bellBtnX, clTopY, bellBtnW, clBtnH, clTopY + 14);
+    this._drawMenuButton(ctx, menuBtnX, clTopY, menuBtnW, clBtnH);
 
     // Hint (jeśli nie civMode)
     if (!civMode) {
@@ -255,6 +211,15 @@ export class BottomBar {
       // Odśwież zawartość tylko przy otwieraniu (nie co klatkę)
       this._updateDomMenu();
     }
+    // Pozycja: prawy górny róg, pod przyciskiem MENU (skala logiczne→ekran).
+    const scale = window.KOSMOS?.uiScale ?? 1;
+    const m = this._menuClickBounds;
+    const rightPx = m ? Math.max(6, Math.round(window.innerWidth - (m.x + m.w) * scale)) : 6;
+    const topPx = Math.round(((m ? m.y + m.h : COSMIC.TOP_BAR_H) + 4) * scale);
+    this._domMenu.style.right  = `${rightPx}px`;
+    this._domMenu.style.top    = `${topPx}px`;
+    this._domMenu.style.bottom = 'auto';
+    this._domMenu.style.left   = 'auto';
     this._domMenu.style.display = 'block';
   }
 
@@ -267,7 +232,7 @@ export class BottomBar {
     el.className = 'kosmos-menu-panel';
     el.style.cssText = `
       position: fixed; z-index: 100; display: none;
-      bottom: ${BAR_H + 4}px; right: 6px;
+      top: 50px; right: 6px;
       width: ${MENU_W}px; padding: ${MENU_PAD}px 0;
       background: rgba(2,4,5,0.96);
       border: 1px solid ${THEME.borderActive};
@@ -419,25 +384,18 @@ export class BottomBar {
     }
   }
 
-  // ── Przycisk MENU w prawym rogu paska ──
-  _drawMenuButton(ctx, W, H, textY) {
-    const btnW = 64;
-    const btnH = 20;
-    const btnX = W - btnW - 6;
-    const btnY = H - BAR_H + 3;
-
-    // Tło przycisku
+  // ── Przycisk MENU (prawy górny róg, obok chipa czasu) ──
+  _drawMenuButton(ctx, x, y, w, h) {
     ctx.fillStyle = this._menuOpen ? THEME.accentMed : THEME.bgTertiary;
-    ctx.fillRect(btnX, btnY, btnW, btnH);
+    ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = this._menuOpen ? THEME.borderActive : THEME.borderLight;
     ctx.lineWidth = 1;
-    ctx.strokeRect(btnX, btnY, btnW, btnH);
+    ctx.strokeRect(x, y, w, h);
 
-    // Tekst
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = this._menuOpen ? THEME.accent : C.bright;
     ctx.textAlign = 'center';
-    ctx.fillText(t('ui.menu'), btnX + btnW / 2, textY);
+    ctx.fillText(t('ui.menu'), x + w / 2, y + h / 2 + 4);
     ctx.textAlign = 'left';
   }
 
@@ -475,98 +433,60 @@ export class BottomBar {
     }
   }
 
-  // Hit test TYLKO panelu menu + przycisku MENU (priorytet nad overlayami)
-  // DOM menu obsługuje swoje kliknięcia — tu zamykamy na klik poza menu
+  // Hit test przy otwartym DOM menu (priorytet nad overlayami). DOM menu pochłania
+  // własne kliki (stopPropagation), więc każdy klik docierający tu jest POZA menu →
+  // zamykamy. Wyjątek: klik w przycisk MENU (prawy górny róg) = jawny toggle off.
   hitTestMenu(x, y, W, H) {
     if (!this._menuOpen) return false;
-
-    // Klik w obszarze DOM menu — pochłoń (DOM sam obsłuży)
-    const menuX = W - MENU_W - 6;
-    const menuY = H - BAR_H - MENU_H - 4;
-    if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) {
-      return true;
+    const m = this._menuClickBounds;
+    if (m && x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h) {
+      this._menuOpen = false; this._syncDomMenu(); return true;
     }
-
-    // Przycisk MENU (toggle zamknij)
-    const btnW = 64;
-    const btnX = W - btnW - 6;
-    const barY = H - BAR_H;
-    if (y >= barY && x >= btnX && x <= btnX + btnW) {
-      this._menuOpen = false;
-      this._syncDomMenu();
-      return true;
-    }
-
-    // Klik poza menu — zamknij
-    this._menuOpen = false;
-    this._syncDomMenu();
-    return false;
+    // Klik poza menu (canvas) — zamknij, ale nie pochłaniaj (klik wykona swoją akcję).
+    this._menuOpen = false; this._syncDomMenu(); return false;
   }
 
-  // ── Hit testing ──────────────────────────────────────────
-  hitTest(x, y, W, H, audioEnabled, musicEnabled, autoSlow) {
-    // Panel menu otwarty — zamknij przy kliknięciu poza nim
-    if (this._menuOpen) {
-      this._menuOpen = false;
-      this._syncDomMenu();
-      // Kontynuuj — sprawdź czy kliknięto w pasek dolny
-    }
-
-    const barY = H - BAR_H;
-
-    if (y < barY) {
-      return false;
-    }
-
-    // Przycisk MENU
-    const btnW = 64;
-    const btnX = W - btnW - 6;
-    if (x >= btnX && x <= btnX + btnW) {
+  // ── Klik w klaster prawego górnego rogu (MENU / chip walk / bell). True = obsłużono. ──
+  // Wołane też z UIManager.handleClick PRZED overlayManager (priorytet, dostępne zawsze).
+  _hitTestTopButtons(x, y) {
+    const m = this._menuClickBounds;
+    if (m && x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h) {
       this._menuOpen = !this._menuOpen;
       this._syncDomMenu();
       this._hoverRow = -1;
       return true;
     }
-
-    // Chip „⚔ Walki" — restoreuje zminimalizowany CombatHUD
-    if (this._combatChipClickBounds) {
-      const b = this._combatChipClickBounds;
-      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
-        window.KOSMOS?.combatHud?.toggleMinimize?.();
-        return true;
-      }
+    const cc = this._combatChipClickBounds;
+    if (cc && x >= cc.x && x <= cc.x + cc.w && y >= cc.y && y <= cc.y + cc.h) {
+      window.KOSMOS?.combatHud?.toggleMinimize?.();
+      return true;
     }
-
-    // Przycisk bell (🔔) — toggle NotificationDropdown
-    if (this._bellClickBounds) {
-      const b = this._bellClickBounds;
-      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
-        // Anchor zawiera bbox bella żeby NotificationDropdown._onOutsideMouseDown
-        // mogło rozpoznać klik w bell i pominąć close (uniknij close+reopen pętli).
-        toggleNotificationDropdown({
-          anchorX: b.x + b.w / 2,
-          anchorY: b.y,
-          barH: BAR_H,
-          bellRect: { x: b.x, y: b.y, w: b.w, h: b.h },
-        });
-        return true;
-      }
+    const b = this._bellClickBounds;
+    if (b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+      // bellRect+scale → NotificationDropdown rozpozna klik w bell (pominie close,
+      // uniknie close+reopen). topY → dropdown rozwija się W DÓŁ poniżej bella.
+      toggleNotificationDropdown({
+        anchorX: b.x + b.w / 2, anchorY: b.y, barH: BAR_H,
+        bellRect: { x: b.x, y: b.y, w: b.w, h: b.h },
+        topY: b.y + b.h + 4,
+        scale: window.KOSMOS?.uiScale ?? 1,
+      });
+      return true;
     }
+    return false;
+  }
 
-    // Klik gdziekolwiek w sekcji logu (ikona 📜 lub inline wpisy) → toggle overlay 'eventLog'
-    if (this._logClickBounds) {
-      const b = this._logClickBounds;
-      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
-        const ovMgr = window.KOSMOS?.overlayManager;
-        if (ovMgr) {
-          if (ovMgr.active === 'eventLog') ovMgr.closeActive();
-          else ovMgr.openPanel('eventLog');
-        }
-        return true;
-      }
-    }
+  // ── Hit testing ──────────────────────────────────────────
+  hitTest(x, y, W, H, audioEnabled, musicEnabled, autoSlow) {
+    // Klaster prawego górnego rogu (bell/MENU/combat) — przeniesiony z dolnego paska.
+    if (this._hitTestTopButtons(x, y)) return true;
 
-    return true; // pochłoń klik w pasku dolnym
+    // Klik poza klastrem przy otwartym menu → zamknij menu (kontynuuj).
+    if (this._menuOpen) { this._menuOpen = false; this._syncDomMenu(); }
+
+    const barY = H - BAR_H;
+    if (y < barY) return false;
+    return true; // pochłoń klik w pasku dolnym (obszar triggera EventLogDrawer)
   }
 
   // ── Cyklowanie opcji autozapisu ──
@@ -625,18 +545,12 @@ export class BottomBar {
     this._hoverRow = -1;
   }
 
-  // Sprawdza czy punkt jest nad BottomBar (lub otwartym menu)
+  // Sprawdza czy punkt jest nad BottomBar. W civMode dolny pasek nie istnieje (dolna
+  // krawędź = trigger EventLogDrawer, który blokuje kamerę przez własny isOver w isOverUI);
+  // bell/MENU w górnym pasku blokuje TopBar.isOver. Poza civMode (Generator) — dolny pasek.
   isOver(x, y, W, H) {
-    const barY = H - BAR_H;
-    if (y >= barY) return true;
-    // Otwarty panel menu
-    if (this._menuOpen) {
-      const menuX = W - MENU_W - 6;
-      const menuY = H - BAR_H - MENU_H - 4;
-      if (x >= menuX && x <= menuX + MENU_W && y >= menuY && y <= menuY + MENU_H) return true;
-    }
-    // (Opcja B/3: rozwinięty panel dziennika przeniesiony do overlay 'eventLog')
-    return false;
+    if (window.KOSMOS?.civMode) return false;
+    return y >= (H - BAR_H);
   }
 }
 

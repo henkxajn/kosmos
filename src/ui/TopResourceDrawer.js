@@ -11,7 +11,7 @@
 // Wzorzec slide/hover/scroll: NavDrawer (stepSlide + _hovered/_hideAt + clampScroll),
 // ale PIONOWO (panel zjeżdża w dół, clip-reveal). Non-exclusive: rysowany PO overlayManager.
 
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER, hexToRgb } from '../config/ThemeConfig.js';
 import { COSMIC }            from '../config/LayoutConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES }       from '../data/CommoditiesData.js';
@@ -24,8 +24,6 @@ import { stepSlide, navIsAnimating, clampScroll, pointInRect, NAV_TRIGGER_W, NAV
 const BOTTOM_H   = COSMIC.BOTTOM_BAR_H;  // 26
 // Trigger/panel kotwiczone od y=0 (sama góra ekranu). Chip czasu (TopBar) to overlay w
 // prawym górnym rogu — panel przykrywa go tylko na czas hovera (po zjeździe chip wraca).
-const INSET_L    = NAV_TRIGGER_W + 2;    // 8 — lewy inset (nie koliduje z triggerem NavDrawera)
-const INSET_R    = 8;                    // prawy inset (zostaw miejsce na trigger Outlinera)
 const ROW_H      = 24;                   // wysokość wiersza kolonii
 const PAD        = 8;
 const ROW_PAD_Y  = 3;                    // górny/dolny margines listy
@@ -155,13 +153,18 @@ export class TopResourceDrawer {
     this._hitItems = [];
     this._colonyRects = [];
 
-    const px = INSET_L;
-    const pw = Math.max(120, W - INSET_L - INSET_R);
-    const panelTop = 0;   // od samej góry ekranu
+    // Inset 6px z lewej i prawej (= szerokość triggerów pionowych) — rogi należą wyłącznie
+    // do NavDrawer (lewy) / Outliner (prawy); trigger poziomy ich nie nachodzi.
+    const EDGE = NAV_TRIGGER_W;
+    const px = EDGE;
+    const pw = W - 2 * EDGE;
+    const panelTop = 0;    // od samej góry ekranu
 
-    // ── Trigger (pasek pod TopBarem, zawsze widoczny) — alpha jak NavDrawer (0.85/0.4) ──
+    // ── Trigger (pasek 6px przy samej górnej krawędzi, pełna szerokość) ──
+    // Kolor = THEME.accent (wspólny dla wszystkich triggerów krawędziowych) @ 0.4/0.85.
     const trigActive = this._hovered || this._slideProgress > 0.001;
-    ctx.fillStyle = trigActive ? 'rgba(0,255,180,0.85)' : 'rgba(0,255,180,0.4)';
+    const a = hexToRgb(THEME.accent);
+    ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},${trigActive ? 0.85 : 0.4})`;
     ctx.fillRect(px, panelTop, pw, NAV_TRIGGER_W);
     this._triggerRect = { x: px, y: panelTop, w: pw, h: NAV_TRIGGER_W + 2 };
 

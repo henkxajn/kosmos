@@ -114,10 +114,12 @@ function _onOutsideMouseDown(e) {
   if (!_dom) return;
   // Klik wewnątrz dropdown — ignoruj (dropdown sam się obroni stopPropagation)
   if (_dom.contains(e.target)) return;
-  // Klik w obszar BottomBar (dolny pasek) — BottomBar.hitTest sam obsłuży
-  // toggle dropdown w bubble phase. Bez tej gardy mielibyśmy close → reopen pętle.
-  // Heurystyka: 50px od dołu okna pokrywa pasek 26px + zapas dla wysokich DPI.
-  if (e.clientY >= window.innerHeight - 50) return;
+  // Klik w przycisk bell (anchor.bellRect, logiczne × scale = px ekranu) — pomiń close;
+  // BottomBar._hitTestTopButtons obsłuży toggle w bubble phase (uniknij close→reopen).
+  const br = _anchor.bellRect;
+  const s = _anchor.scale ?? 1;
+  if (br && e.clientX >= br.x * s && e.clientX <= (br.x + br.w) * s
+        && e.clientY >= br.y * s && e.clientY <= (br.y + br.h) * s) return;
   closeNotificationDropdown();
 }
 
@@ -126,18 +128,26 @@ function _render() {
   const nc = window.KOSMOS?.notificationCenter;
   const groups = nc?.getGrouped?.() ?? [];
 
-  // Pozycjonowanie: rozwiń w górę z anchora (bell button)
+  // Pozycjonowanie: wyśrodkuj poziomo na bellu (skala logiczne→ekran). Rozwiń
+  // W DÓŁ gdy podano topY (bell w górnym pasku), inaczej W GÓRĘ (legacy bottom).
+  // UWAGA: klucz anchora to anchorX (nie x) — wcześniejszy odczyt _anchor.x dawał
+  // undefined → left = lewa krawędź (dropdown po lewej zamiast pod bellem).
+  const scale = _anchor.scale ?? 1;
   const dropW = 320;
   const margin = 6;
-  let left = (_anchor.x ?? 0) - dropW / 2;
+  const bellCx = (_anchor.anchorX ?? _anchor.x ?? 0) * scale;   // środek bella, px ekranu
+  let left = bellCx - dropW / 2;
   if (left < margin) left = margin;
   if (left + dropW > window.innerWidth - margin) left = window.innerWidth - dropW - margin;
-  // Bottom: tuż nad paskiem dolnym
-  const bottom = (_anchor.barH ?? 26) + 4;
-  _dom.style.left   = `${left}px`;
-  _dom.style.bottom = `${bottom}px`;
-  _dom.style.right  = 'auto';
-  _dom.style.top    = 'auto';
+  _dom.style.left  = `${left}px`;
+  _dom.style.right = 'auto';
+  if (_anchor.topY != null) {
+    _dom.style.top    = `${Math.round(_anchor.topY * scale)}px`;
+    _dom.style.bottom = 'auto';
+  } else {
+    _dom.style.bottom = `${(_anchor.barH ?? 26) + 4}px`;
+    _dom.style.top    = 'auto';
+  }
 
   // Header
   const total = groups.reduce((acc, g) => acc + g.items.length, 0);

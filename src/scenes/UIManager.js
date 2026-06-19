@@ -44,6 +44,7 @@ import { GalacticMiniMap }     from '../ui/GalacticMiniMap.js';
 import { StationPanel }        from '../ui/StationPanel.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
 import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
+import { EventLogDrawer }      from '../ui/EventLogDrawer.js';
 import { t, getName }          from '../i18n/i18n.js';
 
 // Nowe komponenty UI
@@ -78,6 +79,8 @@ function _recalcDimensions() {
   UI_SCALE = Math.min(_PW / 1280, _PH / 720);
   W = Math.round(_PW / UI_SCALE);
   H = Math.round(_PH / UI_SCALE);
+  // Wystaw skalę logiczne→ekran dla DOM overlay'i (menu/dropdown pozycjonują się w px ekranu).
+  if (typeof window !== 'undefined' && window.KOSMOS) window.KOSMOS.uiScale = UI_SCALE;
 }
 
 // ── Kolory i style UI ────────────────────────────────────────
@@ -274,6 +277,14 @@ export class UIManager {
     // Non-exclusive: rysowany PO overlayManager (nad overlay'em), klik PRZED overlayManager.
     this._topResourceDrawer = new TopResourceDrawer();
     window.KOSMOS.topResourceDrawer = this._topResourceDrawer;
+
+    // Redesign UI — EventLogDrawer: dziennik zdarzeń jako hover-drawer dolnej krawędzi
+    // (środek). Zastąpił inline EventLog (2 wpisy) w BottomBar. Klik → pełny overlay 'eventLog'.
+    this._eventLogDrawer = new EventLogDrawer();
+    window.KOSMOS.eventLogDrawer = this._eventLogDrawer;
+
+    // Skala logiczne→ekran (dla DOM menu/dropdown przeniesionych do prawego górnego rogu).
+    window.KOSMOS.uiScale = UI_SCALE;
 
     // Redesign UI v1 (Slice A) — NavDrawer: lewy wysuwany pasek nawigacji (7 grup
     // NAV_GROUPS). Zastępuje poziomy pasek nav w TopBarze. Non-exclusive: rysowany
@@ -1257,6 +1268,9 @@ export class UIManager {
     // Górny pasek surowców — trigger/rozwinięty panel (tylko civMode)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.isOver?.(x, y)) return true;
 
+    // Dziennik (dolny hover-drawer) — trigger/rozwinięty panel (tylko civMode)
+    if (window.KOSMOS?.civMode && this._eventLogDrawer?.isOver?.(x, y)) return true;
+
     // BottomContext (dolny panel kontekstowy — gdy encja zaznaczona)
     if (this._bottomContext.isOver(x, y, W, H, this._selectedEntity)) return true;
 
@@ -1305,21 +1319,16 @@ export class UIManager {
     if (window.KOSMOS?.civMode && this._navDrawer?.handleClick?.(x, y)) return true;   // Slice A — lewy NavDrawer (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleClick?.(x, y)) return true;   // górny pasek surowców — klik kolonii→panel, reszta pochłaniana (PRZED overlayManager)
+    if (window.KOSMOS?.civMode && this._eventLogDrawer?.handleClick?.(x, y)) return true;   // dziennik (dolny hover-drawer) — klik → pełny overlay eventLog (PRZED overlayManager)
 
     // Panel MENU — DOM overlay nad canvasami, priorytet nad overlayami
     if (this._bottomBar.menuOpen && this._bottomBar.hitTestMenu(x, y, W, H)) {
       return true;
     }
 
-    // Przycisk MENU — priorytet nad overlayami (dostępny zawsze)
-    if (y >= H - COSMIC.BOTTOM_BAR_H) {
-      const btnW = 64, btnX = W - btnW - 6;
-      if (x >= btnX && x <= btnX + btnW) {
-        this._bottomBar._menuOpen = !this._bottomBar._menuOpen;
-        this._bottomBar._syncDomMenu();
-        return true;
-      }
-    }
+    // Klaster prawego górnego rogu (bell 🔔 / MENU / chip walk) — priorytet nad overlayami
+    // (dostępny zawsze; przeniesiony z dolnego paska obok chipa czasu).
+    if (this._bottomBar._hitTestTopButtons?.(x, y)) return true;
 
     // Slice 4 — nawigacja w TopBarze (poziomy pasek); klik obsługuje topBar.hitTest niżej.
 
@@ -1433,6 +1442,7 @@ export class UIManager {
     if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
     if (window.KOSMOS?.civMode) this._navDrawer.handleMouseMove(x, y);   // Slice A — hover triggera/kafli NavDrawer
     if (window.KOSMOS?.civMode) this._topResourceDrawer.handleMouseMove(x, y); // górny pasek surowców — hover triggera/panelu + tooltipy
+    if (window.KOSMOS?.civMode) this._eventLogDrawer.handleMouseMove(x, y); // dziennik (dolny hover-drawer) — hover triggera/panelu
     // Hover w panelu menu
     this._bottomBar.handleMouseMove(x, y, W, H);
     const prev = this._hoveredBtn;
@@ -1604,6 +1614,7 @@ export class UIManager {
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
     if (civMode && !globeOpen) this.stationPanel.draw(ctx, W, H);   // S4-2 — na wierzchu overlay'i (coexist z colony)
+    if (civMode && !globeOpen) this._eventLogDrawer.draw(ctx, W, H);   // dziennik — hover-drawer dolnej krawędzi (nad overlay'em, nad paskiem bell/MENU)
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──
     this._bottomBar.drawMenu(ctx, W, H, {
@@ -1647,6 +1658,7 @@ export class UIManager {
     this._animating = flashActive || !!this._gameOverData
       || (this._navDrawer?.isAnimating?.() ?? false)
       || (this._topResourceDrawer?.isAnimating?.() ?? false)
+      || (this._eventLogDrawer?.isAnimating?.() ?? false)
       || (this._outliner?.isAnimating?.() ?? false);
 
     ctx.restore();

@@ -19,7 +19,7 @@ import { t, getName, getLocale } from '../i18n/i18n.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
-const TIME_W    = 170;  // Slice 5 — odsprzężone od OUTLINER_W (zwężony); blok czasu zachowuje szerokość
+export const TIME_W = 170;  // Slice 5 — odsprzężone od OUTLINER_W (zwężony); blok czasu zachowuje szerokość. Export: BottomBar pozycjonuje bell/MENU na lewo od chipa.
 const GROUP_PAD = 5;    // padding między grupami
 const ITEM_W    = 68;   // bazowa szerokość jednego zasobu — węższa
 const ITEM_W_SM = 50;   // kompaktowa szerokość (wąski ekran)

@@ -77,12 +77,12 @@ export class NavDrawer {
 
     this._hitZones = [];
 
-    // ── Trigger (pasek lewej krawędzi, zawsze widoczny) ──
+    // ── Trigger (pasek lewej krawędzi, PEŁNA wysokość ekranu 0..H — bez przerw przy rogach) ──
     const a = hexToRgb(THEME.accent);
     const trigActive = this._hovered || this._slideProgress > 0.001;
     ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},${trigActive ? 0.85 : 0.4})`;
-    ctx.fillRect(0, top, NAV_TRIGGER_W, panelH);
-    this._addHit(0, top, NAV_TRIGGER_W + 2, panelH, 'trigger', null);
+    ctx.fillRect(0, 0, NAV_TRIGGER_W, H);
+    this._addHit(0, 0, NAV_TRIGGER_W + 2, H, 'trigger', null);
 
     if (this._slideProgress <= 0.001) { this._panelRect = null; return; }
 

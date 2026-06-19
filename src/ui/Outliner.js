@@ -117,7 +117,7 @@ export class Outliner {
       const a = hexToRgb(THEME.accent);
       const trigActive = this._hovered || this._slideProgress > 0.001;
       ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},${trigActive ? 0.85 : 0.4})`;
-      ctx.fillRect(W - OUTLINER_TRIGGER_W, y, OUTLINER_TRIGGER_W, h);
+      ctx.fillRect(W - OUTLINER_TRIGGER_W, 0, OUTLINER_TRIGGER_W, H);   // PEŁNA wysokość (0..H) — bez przerw przy rogach
       if (this._slideProgress <= 0.001) { this._clickTargets = []; return; }  // schowany — koniec
     }
 
@@ -497,7 +497,7 @@ export class Outliner {
   hitTest(x, y, W, H) {
     // Slice C — drawer trigger (prawa krawędź) ma priorytet; otwiera na klik.
     if (this._drawerMode) {
-      if (x >= W - OUTLINER_TRIGGER_W - 2 && y >= TOP_BAR_H && y <= H - BOTTOM_RESERVED) {
+      if (x >= W - OUTLINER_TRIGGER_W - 2 && y >= 0 && y <= H) {   // trigger: pełna wysokość
         this._hovered = true; this._hideAt = 0;
         return true;
       }
@@ -644,7 +644,7 @@ export class Outliner {
     // Slice C — drawer hover (trigger + panel) steruje wysuwaniem / auto-chowaniem.
     if (this._drawerMode) {
       const offX = this._slideOffX ?? 0;
-      const overTrigger = mx >= W - OUTLINER_TRIGGER_W - 2 && my >= TOP_BAR_H && my <= H - BOTTOM_RESERVED;
+      const overTrigger = mx >= W - OUTLINER_TRIGGER_W - 2 && my >= 0 && my <= H;   // trigger: pełna wysokość
       const overPanel   = this._slideProgress > 0.01 && mx >= (W - OUTLINER_W + offX) && my >= TOP_BAR_H && my <= H - BOTTOM_RESERVED;
       if (overTrigger || overPanel) { this._hovered = true; this._hideAt = 0; }
       else if (this._hovered && this._hideAt === 0) { this._hideAt = Date.now() + OUTLINER_HIDE_DELAY; }
@@ -956,7 +956,7 @@ export class Outliner {
   // Sprawdza czy punkt nad Outlinerem (uwzględnia tryb drawer + slide)
   isOver(x, y, W, H) {
     if (this._drawerMode) {
-      if (x >= W - OUTLINER_TRIGGER_W - 2 && y >= TOP_BAR_H && y <= H - BOTTOM_RESERVED) return true;
+      if (x >= W - OUTLINER_TRIGGER_W - 2 && y >= 0 && y <= H) return true;   // trigger: pełna wysokość
       if (this._slideProgress <= 0.001) return false;
     }
     return x >= W - OUTLINER_W + (this._slideOffX ?? 0) && y >= TOP_BAR_H && y <= H - BOTTOM_RESERVED;
