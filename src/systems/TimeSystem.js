@@ -98,10 +98,11 @@ export class TimeSystem {
     // Przybliżony dzień i miesiąc (30.44 dni/miesiąc)
     const month = Math.min(12, Math.floor(dayOfYear / 30.44) + 1);
     const day = Math.max(1, Math.min(30, dayOfYear - Math.floor((month - 1) * 30.44) + 1));
+    // UI v3 — krótsza forma: rok bez zer wiodących (np. „01/01/7" zamiast „01/01/0007"),
+    // żeby data mieściła się w bloku czasu bez obcinania.
     const dd = String(day).padStart(2, '0');
     const mm = String(month).padStart(2, '0');
-    const yyyy = String(wholeYears).padStart(4, '0');
-    return `${dd}/${mm}/${yyyy}`;
+    return `${dd}/${mm}/${wholeYears}`;
   }
 
   pause() {

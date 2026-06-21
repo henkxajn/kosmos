@@ -151,20 +151,11 @@ export class BottomBar {
       }
     }
 
-    // ── Klaster prawego GÓRNEGO rogu — bell 🔔 + MENU (+ chip walk), na lewo od chipa czasu.
-    // Przeniesione z dolnego paska: BottomBar (dół) jest teraz tylko obszarem triggera
-    // EventLogDrawer. Pozycje liczone od lewej krawędzi chipa czasu (W − TIME_W).
-    const clTopY = 6;     // górny rząd (jak przyciski chipa czasu)
-    const clBtnH = 20;
-    const chipLeft = W - TIME_W;
-    const menuBtnW = 30;  // UI v3 — MENU jako sama ikona „☰" (węższy klaster = więcej miejsca na surowce)
-    const menuBtnX = chipLeft - menuBtnW - 8;
-    const bellBtnW = 30;
-    const bellBtnX = menuBtnX - bellBtnW - 4;
-    this._bellClickBounds = { x: bellBtnX, y: clTopY, w: bellBtnW, h: clBtnH };
-    this._menuClickBounds = { x: menuBtnX, y: clTopY, w: menuBtnW, h: clBtnH };
-
-    // Chip „⚔ Walki [N]" — gdy CombatHUD zminimalizowany i DSCS ma active encounters.
+    // UI v3 — bell 🔔 + MENU ☰ + blok czasu PRZENIESIONE do dolnego BottomControlBar.
+    // Tu zostaje tylko chip „⚔ Walki [N]" (top-right, dosunięty do prawej krawędzi), gdy
+    // CombatHUD zminimalizowany i DSCS ma active encounters. _bellClickBounds nieużywane.
+    const clTopY = 6, clBtnH = 20;
+    this._bellClickBounds = null;
     const combatHud = window.KOSMOS?.combatHud;
     if (combatHud?.isMinimized?.() && combatHud?.hasActiveEncounters?.()) {
       const dscs = window.KOSMOS?.deepSpaceCombatSystem;
@@ -172,22 +163,14 @@ export class BottomBar {
       const chipLabel = n > 1 ? `⚔ Walki [${n}]` : '⚔ Walki';
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       const combatChipW = Math.ceil(ctx.measureText(chipLabel).width) + 14;
-      const combatChipX = bellBtnX - combatChipW - 6;
+      const combatChipX = W - combatChipW - 8;
       this._combatChipClickBounds = { x: combatChipX, y: clTopY, w: combatChipW, h: clBtnH, label: chipLabel };
+      this._drawCombatChip(ctx, this._combatChipClickBounds, clTopY + 14);
     } else {
       this._combatChipClickBounds = null;
     }
 
     this._logClickBounds = null;  // EventLog → EventLogDrawer
-
-    // UI v3 — publikuj lewą krawędź klastra prawego rogu (combat/bell/MENU/chip), by
-    // TopResourceDrawer zatrzymał pasmo surowców PRZED przyciskami zamiast je zakrywać.
-    const clusterLeft = (this._combatChipClickBounds ? this._combatChipClickBounds.x : bellBtnX) - 6;
-    if (window.KOSMOS) window.KOSMOS.topClusterLeftX = clusterLeft;
-
-    if (this._combatChipClickBounds) this._drawCombatChip(ctx, this._combatChipClickBounds, clTopY + 14);
-    this._drawBellButton(ctx, bellBtnX, clTopY, bellBtnW, clBtnH, clTopY + 14);
-    this._drawMenuButton(ctx, menuBtnX, clTopY, menuBtnW, clBtnH);
 
     // Hint (jeśli nie civMode)
     if (!civMode) {
@@ -216,15 +199,21 @@ export class BottomBar {
       // Odśwież zawartość tylko przy otwieraniu (nie co klatkę)
       this._updateDomMenu();
     }
-    // Pozycja: prawy górny róg, pod przyciskiem MENU (skala logiczne→ekran).
+    // Pozycja przy przycisku MENU (skala logiczne→ekran). Przycisk jest teraz w dolnym
+    // BottomControlBar → menu otwiera się W GÓRĘ; fallback (górna połowa) = w dół.
     const scale = window.KOSMOS?.uiScale ?? 1;
     const m = this._menuClickBounds;
     const rightPx = m ? Math.max(6, Math.round(window.innerWidth - (m.x + m.w) * scale)) : 6;
-    const topPx = Math.round(((m ? m.y + m.h : COSMIC.TOP_BAR_H) + 4) * scale);
     this._domMenu.style.right  = `${rightPx}px`;
-    this._domMenu.style.top    = `${topPx}px`;
-    this._domMenu.style.bottom = 'auto';
     this._domMenu.style.left   = 'auto';
+    const btnTopPx = (m ? m.y : COSMIC.TOP_BAR_H) * scale;
+    if (m && btnTopPx > window.innerHeight / 2) {
+      this._domMenu.style.bottom = `${Math.round(window.innerHeight - btnTopPx + 4)}px`;
+      this._domMenu.style.top    = 'auto';
+    } else {
+      this._domMenu.style.top    = `${Math.round((( m ? m.y + m.h : COSMIC.TOP_BAR_H) + 4) * scale)}px`;
+      this._domMenu.style.bottom = 'auto';
+    }
     this._domMenu.style.display = 'block';
   }
 

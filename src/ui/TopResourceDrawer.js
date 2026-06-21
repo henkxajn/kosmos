@@ -31,13 +31,15 @@ const PAD        = 8;
 const ROW_PAD_Y  = 3;                    // górny/dolny margines listy
 const CHIP_GAP   = 8;                    // odstęp pasma od chipa czasu (prawy róg)
 const HINT_W     = 16;                   // rezerwa na chevron „▾ +N" po prawej pasma stałego
+const LEFT_W     = 200;                  // STAŁA szerokość lewej strefy (nazwa kolonii + pop); reszta = strefa środkowa (zasoby, overflow hidden)
+const RIGHT_RESERVE = 80;               // fallback rezerwy prawego bloku (bell+MENU) gdy topClusterLeftX nieustawione
 
-// Odstępy tokenów (jak BottomResourceBar — ciasne, by zmieścić ogon)
+// Odstępy tokenów — ciasne, by zmieścić cały ogon surowców w aktywnym wierszu (UI v3).
 const GAP_ICON   = 2;
 const GAP_VAL    = 2;
-const GAP_PLAIN  = 5;
-const GAP_TOKEN  = 4;
-const GAP_DELTA0 = 3;
+const GAP_PLAIN  = 3;
+const GAP_TOKEN  = 3;
+const GAP_DELTA0 = 2;
 const GAP_GROUP  = 6;
 
 function _fmtNum(n) {
@@ -158,15 +160,13 @@ export class TopResourceDrawer {
     this._hitItems = [];
     this._colonyRects = [];
 
-    // UI v3 — pasmo dobite do LEWEJ krawędzi (x=0). Wiersz AKTYWNEJ kolonii kończy się PRZED
-    // klastrem prawego rogu (combat/bell/MENU/chip), bo dzieli z nim górną linię belki; lewą
-    // krawędź klastra publikuje BottomBar.draw (window.KOSMOS.topClusterLeftX). Wiersze
-    // ROZWINIĘTE są PONIŻEJ klastra → idą na PEŁNĄ szerokość (do prawej krawędzi).
+    // UI v3 — bell/MENU/zegar przeniesione z górnego paska na dolny BottomControlBar → cały
+    // górny pasek jest wolny. Aktywny wiersz i wiersze rozwinięte idą na PEŁNĄ szerokość
+    // (do prawej krawędzi, inset EDGE_R na trigger Outlinera).
     const px = 0;
-    const EDGE_R = 6;   // prawy inset rozwiniętego panelu (nie wchodzi w trigger Outlinera)
-    const activeRight = window.KOSMOS?.topClusterLeftX ?? (W - TIME_W - CHIP_GAP);
-    const bandPw  = Math.max(120, activeRight - px);          // pasmo aktywnej kolonii (przed klastrem)
-    const panelPw = Math.max(bandPw, (W - EDGE_R) - px);      // rozwinięte kolonie (pełna szerokość)
+    const EDGE_R = 6;
+    const bandPw  = Math.max(120, (W - EDGE_R) - px);
+    const panelPw = bandPw;
     const panelTop = 0;
     const baseH = COSMIC.TOP_BAND_H;   // wysokość zunifikowanej belki (wspólna z TopBar)
 
@@ -245,32 +245,31 @@ export class TopResourceDrawer {
     }
   }
 
+  // Wiersz w układzie 3-strefowym: LEWA (nazwa+pop, stała LEFT_W, przycięta) | ŚRODEK
+  // (zasoby od stałego x=px+LEFT_W, overflow hidden do px+pw). Prawa strefa (bell/MENU/zegar)
+  // jest poza tym drawerem (TopBar/BottomBar, fixed do prawej) — `pw` już ją rezerwuje.
   _drawRow(ctx, col, data, px, rowTop, pw, isActive) {
     const cy = rowTop + ROW_H / 2;
-    let cx = px + PAD;
+    const leftW = Math.min(LEFT_W, Math.max(0, pw - 40));   // na wąskim wierszu nie zjadaj całości
 
-    // Subtelny separator wiersza (dolna linia)
+    // Dolna linia + highlight aktywnego (pełna szerokość wiersza)
     ctx.strokeStyle = THEME.border;
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(px, rowTop + ROW_H - 0.5); ctx.lineTo(px + pw, rowTop + ROW_H - 0.5); ctx.stroke();
-
-    // Highlight aktywnego wiersza
-    if (isActive) {
-      ctx.fillStyle = THEME.accentDim;
-      ctx.fillRect(px, rowTop, pw, ROW_H);
-    }
+    if (isActive) { ctx.fillStyle = THEME.accentDim; ctx.fillRect(px, rowTop, pw, ROW_H); }
 
     ctx.textBaseline = 'middle';
 
-    // Nazwa kolonii (aktywna = accent, reszta = textPrimary)
+    // ── LEWA STREFA (stała LEFT_W): nazwa kolonii + pop, przycięta do strefy ──
+    ctx.save();
+    ctx.beginPath(); ctx.rect(px, rowTop, leftW, ROW_H); ctx.clip();
+    let cx = px + PAD;
     const name = col.name ?? EntityManager.get(col.planetId)?.name ?? col.planetId ?? '—';
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = isActive ? THEME.accent : THEME.textPrimary;
     ctx.fillText(name, cx, cy);
-    const colStart = px;
-    cx += ctx.measureText(name).width + 8;
+    cx += ctx.measureText(name).width + 6;
 
-    // Pop: 👤 łącznie (N wolne)
     const civSys = col.civSystem;
     if (civSys) {
       const popTotal = civSys.population ?? 0;
@@ -284,26 +283,28 @@ export class TopResourceDrawer {
       ctx.fillStyle = THEME.textSecondary;
       ctx.fillText(popBase, cx, cy); cx += ctx.measureText(popBase).width;
       ctx.fillStyle = popFree > 0 ? THEME.success : THEME.textSecondary;
-      ctx.fillText(popFreeS, cx, cy); cx += ctx.measureText(popFreeS).width + 8;
-      this._hitItems.push({ x: popStartX, y: rowTop, w: cx - popStartX - 8, h: ROW_H,
+      ctx.fillText(popFreeS, cx, cy); cx += ctx.measureText(popFreeS).width;
+      this._hitItems.push({ x: popStartX, y: rowTop, w: Math.max(0, Math.min(cx, px + leftW) - popStartX), h: ROW_H,
         tip: { kind: 'pop', total: popTotal, free: popFree, employed: popEmp, locked: popLock } });
     }
+    ctx.restore();   // koniec lewej strefy
 
-    // Klik nazwy/pop → panel kolonii (jak dawny colonyRect)
-    this._colonyRects.push({ x: colStart, y: rowTop, w: cx - colStart, h: ROW_H, planetId: col.planetId });
+    // Klik lewej strefy → panel kolonii
+    this._colonyRects.push({ x: px, y: rowTop, w: leftW, h: ROW_H, planetId: col.planetId });
 
-    // Separator
+    // Separator stref (pionowy) na granicy LEFT_W
     ctx.strokeStyle = THEME.border;
-    ctx.beginPath(); ctx.moveTo(cx, rowTop + 4); ctx.lineTo(cx, rowTop + ROW_H - 4); ctx.stroke();
-    cx += 8;
+    ctx.beginPath(); ctx.moveTo(px + leftW + 0.5, rowTop + 4); ctx.lineTo(px + leftW + 0.5, rowTop + ROW_H - 4); ctx.stroke();
 
-    // Tokeny (surowce/research/energia/dobrobyt/kredyty) — lewo→prawo
+    // ── ŚRODKOWA STREFA: zasoby od STAŁEGO x = px+leftW (nie przepychane nazwą), clip do px+pw ──
     if (data?.items) {
       const iconCY = cy;
       const iconSize = ROW_H - 8;  // 16px
+      const rightClip = px + pw - 4;
+      let tx = px + leftW + 6;
       for (const it of data.items) {
-        if (cx > px + pw - 4) break;  // clip do prawej krawędzi panelu
-        cx = this._drawItem(ctx, it, cx, iconCY, rowTop, iconSize);
+        if (tx > rightClip) break;   // overflow hidden — ucinaj zamiast nachodzić na prawą strefę
+        tx = this._drawItem(ctx, it, tx, iconCY, rowTop, iconSize);
       }
     }
     ctx.textBaseline = 'alphabetic';

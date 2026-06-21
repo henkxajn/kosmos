@@ -19,7 +19,7 @@ import { t, getName, getLocale } from '../i18n/i18n.js';
 
 // ── Stałe layoutu ──────────────────────────────────────────
 const BAR_H     = COSMIC.TOP_BAR_H;    // 50px
-export const TIME_W = 250;  // jedna linia: play + 6 prędkości + data (AUT usunięty). Export: BottomBar pozycjonuje bell/MENU na lewo od chipa.
+export const TIME_W = 215;  // UI v3 — zwężony blok czasu (play + 6 prędkości + data lewo-wyrównana, bez luki); mniej zżera z paska surowców. Export: BottomBar pozycjonuje bell/MENU na lewo od chipa.
 const GROUP_PAD = 5;    // padding między grupami
 const ITEM_W    = 68;   // bazowa szerokość jednego zasobu — węższa
 const ITEM_W_SM = 50;   // kompaktowa szerokość (wąski ekran)
@@ -117,8 +117,8 @@ export class TopBar {
     // strona pusta (surowce w BottomResourceBar od Slice 3).
     let LOGO_W = 0;
 
-    // Kontrolki czasu (prawa strona)
-    this._drawTimeBlock(ctx, W, timeState);
+    // UI v3 — blok czasu (play/prędkości/data) PRZENIESIONY do dolnego BottomControlBar.
+    // Górny pasek = tło belki + nazwa/pop/zasoby (TopResourceDrawer rysuje na wierzchu).
 
     // Dostępna szerokość na zasoby (między logo/startX a kontrolkami czasu)
     const resStartX = LOGO_W + 4;
@@ -448,14 +448,16 @@ export class TopBar {
   // [▶/⏸] [1d][1w][1m][1y][10y][10k] | [data] [AUT]. Eliminuje rozjazd draw↔hit.
   _timeButtonLayout(W) {
     const blockX = W - TIME_W;
-    const btnY = 8, btnH = 16, gap = 2;
-    const playRect = { x: blockX + 6, y: btnY, w: 20, h: btnH };
-    const speedW = 20;
+    // UI v3 — ciaśniejszy layout (mniejsze przyciski + odstępy), żeby zegar/data nie były
+    // obcinane po prawej. speedW 20→18, gap 2→1, mniejszy padding wokół.
+    const btnY = 8, btnH = 16, gap = 1;
+    const playRect = { x: blockX + 4, y: btnY, w: 18, h: btnH };
+    const speedW = 18;
     const speedRects = [];
-    let sx = playRect.x + playRect.w + gap + 2;
+    let sx = playRect.x + playRect.w + 3;
     for (let i = 0; i < 6; i++) { speedRects.push({ x: sx, y: btnY, w: speedW, h: btnH }); sx += speedW + gap; }
-    const sepX = sx + 4;
-    const dateX = sepX + 8;
+    const sepX = sx + 2;
+    const dateX = sepX + 6;   // data LEWO-wyrównana tuż za separatorem (przylega do prędkości, bez luki w środku)
     return { blockX, btnY, btnH, playRect, speedRects, sepX, dateX };
   }
 
@@ -490,14 +492,13 @@ export class TopBar {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(L.sepX, 8); ctx.lineTo(L.sepX, 24); ctx.stroke();
 
-    // Data (jedna linia, mniejszy font −1px) — wyrównana DO PRAWEJ krawędzi (W−8).
+    // Data (jedna linia, mniejszy font −1px) — LEWO-wyrównana tuż za separatorem, przylega
+    // do przycisków prędkości (eliminuje pustą przestrzeń między prędkościami a datą).
     // Kolor stonowany (textSecondary) — spójny z paletą paska surowców, nie biały.
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = C.text;
-    ctx.textAlign = 'right';
-    ctx.fillText(displayText || '', W - 8, L.btnY + L.btnH / 2 + 3);
-
     ctx.textAlign = 'left';
+    ctx.fillText(displayText || '', L.dateX, L.btnY + L.btnH / 2 + 3);
   }
 
   // ── Wskaźnik suwaka frakcji (Faza C1) ─────────────────────
@@ -772,16 +773,9 @@ export class TopBar {
 
   // ── Hit testing ──────────────────────────────────────────
   hitTest(x, y, W) {
-    if (y > BAR_H) return false;
-
-    // Slice A (NavDrawer) — nawigacja przeniesiona do lewego NavDrawer; TopBar nie
-    // obsługuje już klików nav (zostaje wyłącznie blok czasu po prawej).
-
-    // Klik w bloku czasu (prawa strona)
-    const blockX = W - TIME_W;
-    if (x >= blockX) {
-      return this._hitTestTime(x, y, W);
-    }
+    // UI v3 — blok czasu przeniesiony do dolnego BottomControlBar; górny pasek nie ma już
+    // klikalnych elementów (nazwa/pop/zasoby obsługuje TopResourceDrawer). Klik w pasmo jest
+    // pochłaniany przez TopResourceDrawer wcześniej w łańcuchu — tu nic nie łapiemy.
     return false;
   }
 

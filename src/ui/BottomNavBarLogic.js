@@ -16,8 +16,8 @@ export const BOTTOM_NAV_EDGE = 6;   // px — inset z lewej/prawej (nie wchodzi 
 export function bottomNavBarRect(W, H) {
   const h = COSMIC.BOTTOM_NAV_H;
   const y = H - COSMIC.BOTTOM_LOG_TRIG_H - h;
-  const x = BOTTOM_NAV_EDGE;
-  const w = Math.max(0, W - 2 * BOTTOM_NAV_EDGE);
+  const x = 0;                                  // dosunięty do LEWEJ krawędzi
+  const w = Math.max(0, W - BOTTOM_NAV_EDGE);   // prawy inset (nie wchodzi w trigger Outlinera)
   return { x, y, w, h };
 }
 

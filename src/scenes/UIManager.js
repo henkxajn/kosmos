@@ -45,6 +45,7 @@ import { StationPanel }        from '../ui/StationPanel.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
 import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
 import { EventLogDrawer }      from '../ui/EventLogDrawer.js';
+import { BottomControlBar }    from '../ui/BottomControlBar.js';
 import { t, getName }          from '../i18n/i18n.js';
 
 // Nowe komponenty UI
@@ -294,6 +295,12 @@ export class UIManager {
     // zakrywają paska, więc edge-shim niepotrzebny.
     this._bottomNavBar = new BottomNavBar();
     window.KOSMOS.bottomNavBar = this._bottomNavBar;
+
+    // UI v3 — BottomControlBar: mały pasek sterowania (bell + MENU + zegar/prędkości) u dołu,
+    // wyrównany do prawej, tuż NAD paskiem nawigacji. Przeniesione z górnego TopBaru.
+    this._bottomControlBar = new BottomControlBar();
+    window.KOSMOS.bottomControlBar = this._bottomControlBar;
+    window.KOSMOS.bottomBar = this._bottomBar;   // UI v3 — BottomControlBar deleguje MENU do menu DOM BottomBaru
 
     this._setupEvents();
     this._startDrawLoop();
@@ -1269,6 +1276,9 @@ export class UIManager {
     // Dolny pasek nawigacji (stały) — blok kamery (tylko civMode)
     if (window.KOSMOS?.civMode && this._bottomNavBar?.isOver?.(x, y)) return true;
 
+    // BottomControlBar (bell + MENU + zegar) — blok kamery (tylko civMode)
+    if (window.KOSMOS?.civMode && this._bottomControlBar?.isOver?.(x, y)) return true;
+
     // Dziennik (dolny hover-drawer) — trigger/rozwinięty panel (tylko civMode)
     if (window.KOSMOS?.civMode && this._eventLogDrawer?.isOver?.(x, y)) return true;
 
@@ -1318,6 +1328,7 @@ export class UIManager {
     if (this.combatHud?.handleClick?.(x, y)) return true;
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._bottomNavBar?.handleClick?.(x, y)) return true;   // UI v3 — dolny pasek nawigacji (PRZED overlayManager)
+    if (window.KOSMOS?.civMode && this._bottomControlBar?.handleClick?.(x, y)) return true;   // UI v3 — bell/MENU/zegar (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleClick?.(x, y)) return true;   // górny pasek surowców — klik kolonii→panel, reszta pochłaniana (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._eventLogDrawer?.handleClick?.(x, y)) return true;   // dziennik (dolny hover-drawer) — klik → pełny overlay eventLog (PRZED overlayManager)
@@ -1440,6 +1451,7 @@ export class UIManager {
     }
     if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
     if (window.KOSMOS?.civMode) this._bottomNavBar.handleMouseMove(x, y);   // UI v3 — hover slotów dolnego paska nawigacji
+    if (window.KOSMOS?.civMode) this._bottomControlBar.handleMouseMove(x, y); // UI v3 — hover bell/MENU/prędkości
     if (window.KOSMOS?.civMode) this._topResourceDrawer.handleMouseMove(x, y); // górny pasek surowców — hover triggera/panelu + tooltipy
     if (window.KOSMOS?.civMode) this._eventLogDrawer.handleMouseMove(x, y); // dziennik (dolny hover-drawer) — hover triggera/panelu
     // Hover w panelu menu
@@ -1600,6 +1612,8 @@ export class UIManager {
     // ── BottomNavBar (stały dolny pasek nawigacji, 7 grup) — UI v3. PO overlayManager (na
     //    wierzchu canvasowych overlay'i), PRZED dziennikiem (ten może go zakryć na hoverze). ──
     if (civMode && !globeOpen) this._bottomNavBar.draw(ctx, W, H);
+    // ── BottomControlBar (bell + MENU + zegar) — UI v3, mały pasek nad nawigacją, prawy. ──
+    if (civMode && !globeOpen) this._bottomControlBar.draw(ctx, W, H, this._timeState);
     // ── Outliner — Slice B+C: ZAWSZE prawy WYSUWANY drawer w civMode (hover prawej
     //    krawędzi → wysuwa; brak hovera → chowa), niezależnie od tego czy overlay jest
     //    otwarty. Rysowany PO overlayu (na wierzchu). ──
@@ -1656,6 +1670,7 @@ export class UIManager {
     this._animating = flashActive || !!this._gameOverData
       || (this._topResourceDrawer?.isAnimating?.() ?? false)
       || (this._eventLogDrawer?.isAnimating?.() ?? false)
+      || (this._bottomNavBar?.isAnimating?.() ?? false)
       || (this._outliner?.isAnimating?.() ?? false);
 
     ctx.restore();
