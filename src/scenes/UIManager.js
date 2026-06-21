@@ -52,8 +52,9 @@ import { TopBar }        from '../ui/TopBar.js';
 import { BottomBar }     from '../ui/BottomBar.js';
 import { BottomContext }  from '../ui/BottomContext.js';
 import { Outliner }       from '../ui/Outliner.js';
-import { NavDrawer }      from '../ui/NavDrawer.js';
-import { NavEdgeShim }    from '../ui/NavEdgeShim.js';
+// UI v3 — nawigacja przeniesiona z lewej krawędzi (NavDrawer) na STAŁY dolny pasek.
+// NavDrawer.js/NavEdgeShim.js zostają na dysku (łatwy powrót), ale nie są już wpinane.
+import { BottomNavBar }   from '../ui/BottomNavBar.js';
 import {
   CIV_SIDEBAR_W, CIV_SIDEBAR_BTN, CIV_SIDEBAR_GAP, CIV_SIDEBAR_PAD,
   CIV_TABS,
@@ -286,16 +287,13 @@ export class UIManager {
     // Skala logiczne→ekran (dla DOM menu/dropdown przeniesionych do prawego górnego rogu).
     window.KOSMOS.uiScale = UI_SCALE;
 
-    // Redesign UI v1 (Slice A) — NavDrawer: lewy wysuwany pasek nawigacji (7 grup
-    // NAV_GROUPS). Zastępuje poziomy pasek nav w TopBarze. Non-exclusive: rysowany
+    // UI v3 — BottomNavBar: STAŁY poziomy pasek nawigacji (7 grup NAV_GROUPS) u dołu,
+    // tuż nad strefą dziennika. Zastępuje lewy wysuwany NavDrawer. Non-exclusive: rysowany
     // PO overlayManager (na wierzchu overlay'i), klik routowany PRZED overlayManager.
-    this._navDrawer = new NavDrawer();
-    window.KOSMOS.navDrawer = this._navDrawer;
-
-    // Slice B+C — DOM edge-shim (lewa krawędź, z60) dla NavDrawera nad DOM overlayami
-    // Tech/Observatory (z50). Canvas nie maluje nad nimi → shim zamyka overlay i oddaje
-    // stery drawerowi. Aktywny pointer-events tylko gdy DOM overlay otwarty.
-    this._navEdgeShim = new NavEdgeShim();
+    // DOM overlaye Tech/Observatory rezerwują BOTTOM_NAV_H (BaseOverlay/DOM bounds) → nie
+    // zakrywają paska, więc edge-shim niepotrzebny.
+    this._bottomNavBar = new BottomNavBar();
+    window.KOSMOS.bottomNavBar = this._bottomNavBar;
 
     this._setupEvents();
     this._startDrawLoop();
@@ -1268,6 +1266,9 @@ export class UIManager {
     // Górny pasek surowców — trigger/rozwinięty panel (tylko civMode)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.isOver?.(x, y)) return true;
 
+    // Dolny pasek nawigacji (stały) — blok kamery (tylko civMode)
+    if (window.KOSMOS?.civMode && this._bottomNavBar?.isOver?.(x, y)) return true;
+
     // Dziennik (dolny hover-drawer) — trigger/rozwinięty panel (tylko civMode)
     if (window.KOSMOS?.civMode && this._eventLogDrawer?.isOver?.(x, y)) return true;
 
@@ -1316,7 +1317,7 @@ export class UIManager {
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
-    if (window.KOSMOS?.civMode && this._navDrawer?.handleClick?.(x, y)) return true;   // Slice A — lewy NavDrawer (PRZED overlayManager)
+    if (window.KOSMOS?.civMode && this._bottomNavBar?.handleClick?.(x, y)) return true;   // UI v3 — dolny pasek nawigacji (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleClick?.(x, y)) return true;   // górny pasek surowców — klik kolonii→panel, reszta pochłaniana (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._eventLogDrawer?.handleClick?.(x, y)) return true;   // dziennik (dolny hover-drawer) — klik → pełny overlay eventLog (PRZED overlayManager)
@@ -1394,8 +1395,6 @@ export class UIManager {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     const delta = deltaY * 0.6; // globalna redukcja czułości scrolla o 40%
-    // NavDrawer — scroll listy kafli (gdy kursor nad otwartym panelem). Slice A.
-    if (window.KOSMOS?.civMode && this._navDrawer?.handleWheel?.(x, y, delta)) return true;
     // Górny pasek surowców — scroll listy kolonii (gdy kursor nad rozwiniętym panelem).
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleWheel?.(x, y, delta)) return true;
     // Overlay pełnoekranowy — scroll
@@ -1440,7 +1439,7 @@ export class UIManager {
       this.overlayManager.handleMouseMove(x, y);
     }
     if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
-    if (window.KOSMOS?.civMode) this._navDrawer.handleMouseMove(x, y);   // Slice A — hover triggera/kafli NavDrawer
+    if (window.KOSMOS?.civMode) this._bottomNavBar.handleMouseMove(x, y);   // UI v3 — hover slotów dolnego paska nawigacji
     if (window.KOSMOS?.civMode) this._topResourceDrawer.handleMouseMove(x, y); // górny pasek surowców — hover triggera/panelu + tooltipy
     if (window.KOSMOS?.civMode) this._eventLogDrawer.handleMouseMove(x, y); // dziennik (dolny hover-drawer) — hover triggera/panelu
     // Hover w panelu menu
@@ -1598,18 +1597,16 @@ export class UIManager {
     // ── Górny pasek surowców (wysuwany) — PO overlayManager (nad overlay'em), ale PRZED
     //    NavDrawer/Outliner/HUD: gdy nakładają się rogami, te malują się na wierzchu. ──
     if (civMode && !globeOpen) this._topResourceDrawer.draw(ctx, W, H);
-    // ── NavDrawer (lewy wysuwany pasek nawigacji) — Slice A. PO overlayManager (na
-    //    wierzchu overlay'i), pod MENU/tooltipami. Zastępuje dawny pasek nav w TopBarze. ──
-    if (civMode && !globeOpen) this._navDrawer.draw(ctx, W, H);
+    // ── BottomNavBar (stały dolny pasek nawigacji, 7 grup) — UI v3. PO overlayManager (na
+    //    wierzchu canvasowych overlay'i), PRZED dziennikiem (ten może go zakryć na hoverze). ──
+    if (civMode && !globeOpen) this._bottomNavBar.draw(ctx, W, H);
     // ── Outliner — Slice B+C: ZAWSZE prawy WYSUWANY drawer w civMode (hover prawej
     //    krawędzi → wysuwa; brak hovera → chowa), niezależnie od tego czy overlay jest
-    //    otwarty. Rysowany PO overlayu/navDrawer (na wierzchu). ──
+    //    otwarty. Rysowany PO overlayu (na wierzchu). ──
     if (civMode && !globeOpen && this._outlinerState) {
       this._outliner._drawerMode = true;
       this._outliner.draw(ctx, W, H, this._outlinerState);
     }
-    // Slice B+C — edge-shim: włącz DOM pasek lewej krawędzi gdy DOM overlay (Tech/Observatory)
-    this._navEdgeShim?.update();
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
@@ -1653,10 +1650,10 @@ export class UIManager {
     const logSys = window.KOSMOS?.eventLogSystem;
     const latest = logSys?.getLatest();
     const flashActive = latest && (Date.now() - latest.createdAt) < 3000;
-    // NavDrawer slide/hide-timer wymaga ciągłego redrawu (pętla rysuje tylko gdy
-    // _dirty || _animating || timeDirty — inaczej slide zamarza przy pauzie).
+    // Hover-drawery (slide/hide-timer) wymagają ciągłego redrawu (pętla rysuje tylko gdy
+    // _dirty || _animating || timeDirty — inaczej slide zamarza przy pauzie). BottomNavBar
+    // jest stały (bez animacji) → nie wpinamy go tutaj.
     this._animating = flashActive || !!this._gameOverData
-      || (this._navDrawer?.isAnimating?.() ?? false)
       || (this._topResourceDrawer?.isAnimating?.() ?? false)
       || (this._eventLogDrawer?.isAnimating?.() ?? false)
       || (this._outliner?.isAnimating?.() ?? false);

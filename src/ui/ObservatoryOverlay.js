@@ -58,7 +58,7 @@ export class ObservatoryOverlay {
     return x >= CIV_SIDEBAR_W &&
            x <= W - COSMIC.OUTLINER_W &&
            y >= COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H &&
-           y <= H - COSMIC.BOTTOM_BAR_H;
+           y <= H - COSMIC.BOTTOM_NAV_H - COSMIC.BOTTOM_LOG_TRIG_H;
   }
 
   // ── Wheel handler (bezpośrednio na DOM) ─────────────────────────────
@@ -85,7 +85,7 @@ export class ObservatoryOverlay {
       top: ${Math.round((COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H) * S)}px;
       left: ${Math.round(CIV_SIDEBAR_W * S)}px;
       right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
-      bottom: ${Math.round(COSMIC.BOTTOM_BAR_H * S)}px;
+      bottom: ${Math.round((COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) * S)}px;
       background: ${bgAlpha(0.38)}; color: ${THEME.textPrimary}; font-family: ${THEME.fontFamily};
       z-index: 50; display: flex; flex-direction: column; padding: 10px 14px;
       overflow: hidden;

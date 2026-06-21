@@ -92,9 +92,12 @@ export class CombatHUD extends BaseOverlay {
     // Bottom-center: nad BottomBar (-8 padding). User feedback 2026-05-20 —
     // top-center zachodziło z FleetManagerOverlay prawy panel. Bottom-center
     // zostawia tactical map area czytelną.
-    const bottomBarH = COSMIC.BOTTOM_BAR_H ?? 32;
+    // UI v3 — w civMode rezerwa dolna = pasek nawigacji + listwa dziennika; poza = dolny pasek.
+    const bottomRes = window.KOSMOS?.civMode
+      ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H)
+      : (COSMIC.BOTTOM_BAR_H ?? 32);
     const px = Math.floor(W / 2 - PANEL_W / 2);
-    const py = Math.max((COSMIC.TOP_BAR_H ?? 32) + 8, H - bottomBarH - (COSMIC.RESOURCE_BAR_H ?? 0) - totalH - 8);   // Slice 3 — nad paskiem surowców
+    const py = Math.max((COSMIC.TOP_BAR_H ?? 32) + 8, H - bottomRes - (COSMIC.RESOURCE_BAR_H ?? 0) - totalH - 8);   // nad paskiem nawigacji + dziennikiem
 
     // Tło + ramka
     ctx.fillStyle = bgAlpha(0.78);

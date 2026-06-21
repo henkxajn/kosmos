@@ -19,9 +19,11 @@ const OUTLINER_W = COSMIC.OUTLINER_W;   // 150px (Slice 5 — węższy)
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;   // 50px
 const BOTTOM_BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const RESOURCE_BAR_H = COSMIC.RESOURCE_BAR_H; // 28px — pasek surowców pod Outlinerem
-// Panel kończy się NAD paskiem surowców: pasek jest pełnej szerokości i wchodzi pod
-// kolumnę Outlinera, więc rezerwujemy u dołu dolny pasek + pasek surowców.
-const BOTTOM_RESERVED = BOTTOM_BAR_H + RESOURCE_BAR_H;
+const BOTTOM_NAV_H = COSMIC.BOTTOM_NAV_H; // 44px — UI v3 stały dolny pasek nawigacji (civMode)
+const BOTTOM_LOG_TRIG_H = COSMIC.BOTTOM_LOG_TRIG_H; // 6px — listwa schowanego dziennika
+// Panel kończy się NAD stałym paskiem nawigacji + listwą dziennika (paski pełnej szerokości
+// wchodzą pod kolumnę Outlinera), więc rezerwujemy u dołu sumę.
+const BOTTOM_RESERVED = BOTTOM_NAV_H + BOTTOM_LOG_TRIG_H + RESOURCE_BAR_H;
 
 const SECTION_HDR_H = 18; // wysokość nagłówka sekcji (kompaktowo)
 const ITEM_H = 18;        // wysokość elementu listy (kompaktowo)

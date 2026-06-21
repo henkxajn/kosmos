@@ -81,7 +81,7 @@ export class TechOverlay {
     return x >= CIV_SIDEBAR_W &&
            x <= W - COSMIC.OUTLINER_W &&
            y >= COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H &&
-           y <= H - COSMIC.BOTTOM_BAR_H;
+           y <= H - COSMIC.BOTTOM_NAV_H - COSMIC.BOTTOM_LOG_TRIG_H;
   }
 
   // ── Budowa DOM ──────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ export class TechOverlay {
       top: ${Math.round((COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H) * S)}px;
       left: ${Math.round(CIV_SIDEBAR_W * S)}px;
       right: ${Math.round(COSMIC.OUTLINER_W * S)}px;
-      bottom: ${Math.round(COSMIC.BOTTOM_BAR_H * S)}px;
+      bottom: ${Math.round((COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) * S)}px;
       z-index: 50;
       background: rgba(2,4,5,0.38);
       display: flex; flex-direction: column;

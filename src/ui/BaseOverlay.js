@@ -177,13 +177,18 @@ export class BaseOverlay {
     // Slice 3 — zostaw miejsce na BottomResourceBar (cienki pasek nad BottomBar w civMode),
     // żeby overlay nie chował dolnej treści (np. bilansu energii) pod paskiem.
     const resBar = window.KOSMOS?.civMode ? (COSMIC.RESOURCE_BAR_H ?? 0) : 0;
+    // UI v3 — rezerwa dolna w civMode = stały pasek nawigacji + listwa dziennika; poza
+    // civMode (Generator) = dolny pasek.
+    const bottomRes = window.KOSMOS?.civMode
+      ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H)
+      : COSMIC.BOTTOM_BAR_H;
     return {
       ox: CIV_SIDEBAR_W,
       oy: topOffset,
       // Slice B — overlaye pełnoekranowe: bez rezerwy na Outliner (ten jest teraz
       // prawym wysuwanym drawerem rysowanym NA WIERZCHU overlayu, nie obok).
       ow: W - CIV_SIDEBAR_W,
-      oh: H - topOffset - COSMIC.BOTTOM_BAR_H - resBar,
+      oh: H - topOffset - bottomRes - resBar,
     };
   }
 

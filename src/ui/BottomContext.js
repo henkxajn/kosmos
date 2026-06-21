@@ -74,7 +74,9 @@ export class BottomContext {
     const ox = civMode ? CIV_SIDEBAR_W : 0;
     const oy = TOP_BAR_H;
     const resBar = civMode ? (COSMIC.RESOURCE_BAR_H ?? 0) : 0; // Slice 3 — pasek surowców nad BottomBar
-    return { ox, oy, ow: W - OUTLINER_W - ox, oh: H - BAR_H - resBar - oy };
+    // UI v3 — w civMode rezerwa dolna = pasek nawigacji + listwa dziennika; poza = dolny pasek.
+    const bottomRes = civMode ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) : BAR_H;
+    return { ox, oy, ow: W - OUTLINER_W - ox, oh: H - bottomRes - resBar - oy };
   }
 
   _visibleTabs(entity) {
@@ -157,7 +159,9 @@ export class BottomContext {
     let px, py;
     if (this._minimized) {
       px = W - PW - 8;
-      py = H - BAR_H - 6 - PH;   // PH = wysokość zminimalizowanej karty (≈30)
+      // UI v3 — nad stałym paskiem nawigacji (civMode) + listwą dziennika.
+      const bottomRes = window.KOSMOS?.civMode ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) : BAR_H;
+      py = H - bottomRes - 6 - PH;   // PH = wysokość zminimalizowanej karty (≈30)
     } else {
       const bounds = this._bounds(W, H);
       const sp = window.KOSMOS?.threeRenderer?.getBodyScreenPosition?.(entity.id) ?? null;

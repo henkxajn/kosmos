@@ -98,18 +98,19 @@ export class TopBar {
     this._lastState = state;
     this._itemRects = [];
 
-    // Tło paska — Slice A: TYLKO za blokiem czasu (prawa strona). Lewa/środek
-    // przezroczyste, żeby mapa 3D sięgała top:0 (TopBar = lekki overlay, nie pełna
-    // belka). Po usunięciu nav pełna belka czytała się jako „gap" nad sceną 3D.
-    // Wtopiony chip: niskie krycie tła; box ograniczony do wysokości przycisków
-    // (btnH=16 + 4px margines góra/dół = 24px), NIE sięga poza obszar kontrolek.
-    const _timeX = W - TIME_W;
-    const chipY = 4, chipH = 24;
-    ctx.fillStyle = bgAlpha(0.28);
-    ctx.fillRect(_timeX, chipY, TIME_W, chipH);
-    ctx.strokeStyle = THEME.border;
+    // UI v3 — JEDNA zunifikowana górna belka (pełna szerokość, od x=0): pasmo surowców
+    // (TopResourceDrawer rysuje tokeny NA WIERZCHU) + chip czasu wkomponowany po prawej.
+    // Tło rysowane TU (najwcześniej w klatce), żeby bell/MENU (BottomBar) i kontrolki czasu
+    // malowały się NA NIM (wcześniej pasmo surowców zakrywało bell/MENU → „wyszarzone").
+    // Zamiast osobnego boxa chipa — tylko subtelny separator pionowy przed blokiem czasu.
+    const BAND_H = COSMIC.TOP_BAND_H;
+    ctx.fillStyle = bgAlpha(0.94);
+    ctx.fillRect(0, 0, W, BAND_H);
+    ctx.strokeStyle = GLASS_BORDER;
     ctx.lineWidth = 1;
-    ctx.strokeRect(_timeX + 0.5, chipY + 0.5, TIME_W - 1, chipH - 1);
+    ctx.beginPath(); ctx.moveTo(0, BAND_H - 0.5); ctx.lineTo(W, BAND_H - 0.5); ctx.stroke();
+    // Bez osobnego separatora/boxa przed blokiem czasu — pełna integracja (zegar/data na tej
+    // samej belce co surowce, ta sama paleta).
 
     // Slice A (NavDrawer) — poziomy pasek nav USUNIĘTY z TopBaru; nawigacja przez
     // lewy NavDrawer. TopBar zostaje: tło + blok czasu (prawa) + tooltipy. Lewa
@@ -489,10 +490,10 @@ export class TopBar {
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(L.sepX, 8); ctx.lineTo(L.sepX, 24); ctx.stroke();
 
-    // Data (jedna linia, mniejszy font −1px) — wyrównana DO PRAWEJ krawędzi (W−8),
-    // żeby treść chipa była dobita do prawego brzegu ekranu.
+    // Data (jedna linia, mniejszy font −1px) — wyrównana DO PRAWEJ krawędzi (W−8).
+    // Kolor stonowany (textSecondary) — spójny z paletą paska surowców, nie biały.
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = C.bright;
+    ctx.fillStyle = C.text;
     ctx.textAlign = 'right';
     ctx.fillText(displayText || '', W - 8, L.btnY + L.btnH / 2 + 3);
 

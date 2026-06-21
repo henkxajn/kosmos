@@ -157,9 +157,9 @@ export class BottomBar {
     const clTopY = 6;     // górny rząd (jak przyciski chipa czasu)
     const clBtnH = 20;
     const chipLeft = W - TIME_W;
-    const menuBtnW = 64;
+    const menuBtnW = 30;  // UI v3 — MENU jako sama ikona „☰" (węższy klaster = więcej miejsca na surowce)
     const menuBtnX = chipLeft - menuBtnW - 8;
-    const bellBtnW = 38;
+    const bellBtnW = 30;
     const bellBtnX = menuBtnX - bellBtnW - 4;
     this._bellClickBounds = { x: bellBtnX, y: clTopY, w: bellBtnW, h: clBtnH };
     this._menuClickBounds = { x: menuBtnX, y: clTopY, w: menuBtnW, h: clBtnH };
@@ -179,6 +179,11 @@ export class BottomBar {
     }
 
     this._logClickBounds = null;  // EventLog → EventLogDrawer
+
+    // UI v3 — publikuj lewą krawędź klastra prawego rogu (combat/bell/MENU/chip), by
+    // TopResourceDrawer zatrzymał pasmo surowców PRZED przyciskami zamiast je zakrywać.
+    const clusterLeft = (this._combatChipClickBounds ? this._combatChipClickBounds.x : bellBtnX) - 6;
+    if (window.KOSMOS) window.KOSMOS.topClusterLeftX = clusterLeft;
 
     if (this._combatChipClickBounds) this._drawCombatChip(ctx, this._combatChipClickBounds, clTopY + 14);
     this._drawBellButton(ctx, bellBtnX, clTopY, bellBtnW, clBtnH, clTopY + 14);
@@ -387,11 +392,14 @@ export class BottomBar {
   // ── Przycisk MENU (prawy górny róg, obok chipa czasu) — tylko tekst (t('ui.menu')
   //    zawiera już ikonę „☰ MENU"), bez ramki/tła. Podświetlenie tekstu gdy otwarte. ──
   _drawMenuButton(ctx, x, y, w, h) {
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    // UI v3 — sama ikona „☰" (bez słowa MENU) dla węższego klastra prawego rogu.
+    ctx.font = `${THEME.fontSizeNormal + 2}px ${THEME.fontFamily}`;
     ctx.fillStyle = this._menuOpen ? THEME.accent : C.bright;
     ctx.textAlign = 'center';
-    ctx.fillText(t('ui.menu'), x + w / 2, y + h / 2 + 4);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('☰', x + w / 2, y + h / 2 + 1);
     ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
   }
 
   // ── Definicje wierszy menu ──

@@ -11,22 +11,26 @@
 // Wzorzec slide/hover/scroll: NavDrawer (stepSlide + _hovered/_hideAt + clampScroll),
 // ale PIONOWO (panel zjeżdża w dół, clip-reveal). Non-exclusive: rysowany PO overlayManager.
 
-import { THEME, bgAlpha, GLASS_BORDER, hexToRgb } from '../config/ThemeConfig.js';
-import { COSMIC }            from '../config/LayoutConfig.js';
+import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES }       from '../data/CommoditiesData.js';
 import EntityManager         from '../core/EntityManager.js';
 import { t, getName }        from '../i18n/i18n.js';
 import { drawResourceIcon, hasIconFile, hasResourceIcon } from './ResourceIcons.js';
-import { stepSlide, navIsAnimating, clampScroll, pointInRect, NAV_TRIGGER_W, NAV_HIDE_DELAY }
+import { TIME_W }            from './TopBar.js';
+import { stepSlide, navIsAnimating, clampScroll, pointInRect, NAV_HIDE_DELAY }
   from './NavDrawerLogic.js';
 
-const BOTTOM_H   = COSMIC.BOTTOM_BAR_H;  // 26
-// Trigger/panel kotwiczone od y=0 (sama góra ekranu). Chip czasu (TopBar) to overlay w
-// prawym górnym rogu — panel przykrywa go tylko na czas hovera (po zjeździe chip wraca).
+// UI v3 — pasek surowców: STAŁE pasmo z wierszem aktywnej kolonii (zawsze na wierzchu) +
+// hover rozwija PONIŻEJ dodatkowe kolonie. Pasmo/panel kończą się PRZED chipem czasu
+// (prawy-górny róg, TIME_W), żeby go nie zakrywać. Po hoverze pozostałe kolonie znikają,
+// aktywna zostaje.
 const ROW_H      = 24;                   // wysokość wiersza kolonii
 const PAD        = 8;
 const ROW_PAD_Y  = 3;                    // górny/dolny margines listy
+const CHIP_GAP   = 8;                    // odstęp pasma od chipa czasu (prawy róg)
+const HINT_W     = 16;                   // rezerwa na chevron „▾ +N" po prawej pasma stałego
 
 // Odstępy tokenów (jak BottomResourceBar — ciasne, by zmieścić ogon)
 const GAP_ICON   = 2;
@@ -146,6 +150,7 @@ export class TopResourceDrawer {
   }
 
   // ── Rysowanie ───────────────────────────────────────────────────────────
+  // STAŁE pasmo (aktywna kolonia, zawsze) + hover-expand dodatkowych kolonii poniżej.
   draw(ctx, W, H) {
     if (this._hideAt > 0 && Date.now() >= this._hideAt) { this._hideAt = 0; this._hovered = false; }
     this._slideProgress = stepSlide(this._slideProgress, this._hovered ? 1 : 0);
@@ -153,59 +158,91 @@ export class TopResourceDrawer {
     this._hitItems = [];
     this._colonyRects = [];
 
-    // Inset 6px z lewej i prawej (= szerokość triggerów pionowych) — rogi należą wyłącznie
-    // do NavDrawer (lewy) / Outliner (prawy); trigger poziomy ich nie nachodzi.
-    const EDGE = NAV_TRIGGER_W;
-    const px = EDGE;
-    const pw = W - 2 * EDGE;
-    const panelTop = 0;    // od samej góry ekranu
+    // UI v3 — pasmo dobite do LEWEJ krawędzi (x=0). Wiersz AKTYWNEJ kolonii kończy się PRZED
+    // klastrem prawego rogu (combat/bell/MENU/chip), bo dzieli z nim górną linię belki; lewą
+    // krawędź klastra publikuje BottomBar.draw (window.KOSMOS.topClusterLeftX). Wiersze
+    // ROZWINIĘTE są PONIŻEJ klastra → idą na PEŁNĄ szerokość (do prawej krawędzi).
+    const px = 0;
+    const EDGE_R = 6;   // prawy inset rozwiniętego panelu (nie wchodzi w trigger Outlinera)
+    const activeRight = window.KOSMOS?.topClusterLeftX ?? (W - TIME_W - CHIP_GAP);
+    const bandPw  = Math.max(120, activeRight - px);          // pasmo aktywnej kolonii (przed klastrem)
+    const panelPw = Math.max(bandPw, (W - EDGE_R) - px);      // rozwinięte kolonie (pełna szerokość)
+    const panelTop = 0;
+    const baseH = COSMIC.TOP_BAND_H;   // wysokość zunifikowanej belki (wspólna z TopBar)
 
-    // ── Trigger (pasek 6px przy samej górnej krawędzi, pełna szerokość) ──
-    // Kolor = THEME.accent (wspólny dla wszystkich triggerów krawędziowych) @ 0.4/0.85.
-    const trigActive = this._hovered || this._slideProgress > 0.001;
-    const a = hexToRgb(THEME.accent);
-    ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},${trigActive ? 0.85 : 0.4})`;
-    ctx.fillRect(px, panelTop, pw, NAV_TRIGGER_W);
-    this._triggerRect = { x: px, y: panelTop, w: pw, h: NAV_TRIGGER_W + 2 };
-
-    if (this._slideProgress <= 0.001) { this._panelRect = null; this._hoverTip = null; return; }
-
-    // ── Panel: wiersz na kolonię, clip-reveal w dół ──
     const cols = this._playerColonies();
-    const contentH = ROW_PAD_Y * 2 + Math.max(1, cols.length) * ROW_H;
-    const maxPanelH = Math.max(ROW_H, H - BOTTOM_H - 8);   // od y=0 do nad dolnym paskiem
-    const panelH = Math.min(contentH, maxPanelH);
-    const revealH = Math.round(panelH * this._slideProgress);
-    this._maxScroll = Math.max(0, contentH - panelH);
-    this._scrollY = clampScroll(this._scrollY, this._maxScroll);
-    this._panelRect = { x: px, y: panelTop, w: pw, h: revealH };
-
-    // Tło panelu + dolna krawędź (czerwona jeśli brownout dowolnej kolonii)
+    const extraCount = Math.max(0, cols.length - 1);
+    const bandRowPw = bandPw - (extraCount > 0 ? HINT_W : 0);   // rezerwa na chevron przy >1 kolonii
     let anyBrownout = false;
-    ctx.fillStyle = bgAlpha(0.94);
-    ctx.fillRect(px, panelTop, pw, revealH);
 
-    ctx.save();
-    ctx.beginPath(); ctx.rect(px, panelTop, pw, revealH); ctx.clip();
-    ctx.textAlign = 'left';
+    // ── Stałe pasmo: wiersz AKTYWNEJ kolonii (zawsze widoczny). Tło + dolną krawędź belki
+    //    daje TopBar (pełna szerokość, rysowane wcześniej) — TU tylko highlight + tokeny. ──
+    this._triggerRect = { x: px, y: panelTop, w: bandPw, h: baseH };
 
-    for (let i = 0; i < cols.length; i++) {
-      const col = cols[i];
-      const rowTop = panelTop + ROW_PAD_Y - this._scrollY + i * ROW_H;
-      // Pomiń wiersze poza widocznym pasem (i hit-rects też)
-      if (rowTop + ROW_H <= panelTop || rowTop >= panelTop + revealH) continue;
-      const isActive = col.planetId === window.KOSMOS?.colonyManager?.activePlanetId;
+    if (cols.length > 0) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(px, panelTop, bandRowPw, baseH); ctx.clip();
+      ctx.textAlign = 'left';
+      const col = cols[0];
       const data = this._colonyTokens(col);
       if (data?.brownout) anyBrownout = true;
-      this._drawRow(ctx, col, data, px, rowTop, pw, isActive);
+      this._drawRow(ctx, col, data, px, panelTop + ROW_PAD_Y, bandRowPw, true);
+      ctx.restore();
     }
-    ctx.restore(); // clip
 
-    // Dolna krawędź panelu
-    ctx.strokeStyle = anyBrownout ? THEME.danger : GLASS_BORDER;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(px, panelTop + revealH - 0.5); ctx.lineTo(px + pw, panelTop + revealH - 0.5); ctx.stroke();
+    // ── Rozwinięcie: dodatkowe kolonie PONIŻEJ pasma — PEŁNA szerokość (clip-reveal w dół) ──
+    let revealH = 0;
+    if (extraCount > 0) {
+      const extraContentH = extraCount * ROW_H + ROW_PAD_Y;
+      const maxPanelH = Math.max(ROW_H, H - BOTTOM_RESERVED - 8);   // nad dolnym nav/dziennikiem
+      const maxExtraH = Math.max(0, maxPanelH - baseH);
+      const extraH = Math.min(extraContentH, maxExtraH);
+      revealH = Math.round(extraH * this._slideProgress);
+      this._maxScroll = Math.max(0, extraContentH - extraH);
+      this._scrollY = clampScroll(this._scrollY, this._maxScroll);
+
+      const extraTop = panelTop + baseH;
+      this._panelRect = revealH > 0 ? { x: px, y: extraTop, w: panelPw, h: revealH } : null;
+
+      if (revealH > 0) {
+        ctx.fillStyle = bgAlpha(0.94);
+        ctx.fillRect(px, extraTop, panelPw, revealH);
+        ctx.save();
+        ctx.beginPath(); ctx.rect(px, extraTop, panelPw, revealH); ctx.clip();
+        ctx.textAlign = 'left';
+        for (let i = 1; i < cols.length; i++) {
+          const col = cols[i];
+          const rowTop = extraTop + ROW_PAD_Y - this._scrollY + (i - 1) * ROW_H;
+          if (rowTop + ROW_H <= extraTop || rowTop >= extraTop + revealH) continue;
+          const data = this._colonyTokens(col);
+          if (data?.brownout) anyBrownout = true;
+          this._drawRow(ctx, col, data, px, rowTop, panelPw, false);
+        }
+        ctx.restore();
+
+        // Krawędzie rozwiniętego panelu (dół + boki) — odznaczają go od sceny 3D
+        ctx.strokeStyle = anyBrownout ? THEME.danger : GLASS_BORDER;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px + 0.5, extraTop); ctx.lineTo(px + 0.5, extraTop + revealH);
+        ctx.moveTo(px + panelPw - 0.5, extraTop); ctx.lineTo(px + panelPw - 0.5, extraTop + revealH);
+        ctx.moveTo(px, extraTop + revealH - 0.5); ctx.lineTo(px + panelPw, extraTop + revealH - 0.5);
+        ctx.stroke();
+      }
+    } else {
+      this._panelRect = null;
+      this._scrollY = 0; this._maxScroll = 0;
+    }
+
+    // ── Chevron „▾/▴ +N" na prawym końcu PASMA aktywnego (sygnał rozwijalności) ──
+    if (extraCount > 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = this._hovered ? THEME.accent : THEME.textSecondary;
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      const glyph = this._slideProgress > 0.5 ? '▴' : `▾${extraCount}`;
+      ctx.fillText(glyph, px + bandPw - 4, panelTop + baseH / 2);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    }
   }
 
   _drawRow(ctx, col, data, px, rowTop, pw, isActive) {
@@ -438,9 +475,9 @@ export class TopResourceDrawer {
       this._hideAt = Date.now() + NAV_HIDE_DELAY;
     }
 
-    // Tooltip per token (tylko gdy panel widoczny)
+    // Tooltip per token — działa nad pasmem stałym (zawsze) ORAZ rozwiniętym panelem.
     this._hoverTip = null;
-    if (overPanel) {
+    if (overTrigger || overPanel) {
       for (const hit of this._hitItems) {
         if (x >= hit.x && x <= hit.x + hit.w && y >= hit.y && y <= hit.y + hit.h) {
           const lines = this._buildTooltipLines(hit.tip);
@@ -452,31 +489,29 @@ export class TopResourceDrawer {
   }
 
   handleClick(x, y) {
-    // Klik triggera = wymuś otwarcie
-    if (pointInRect(this._triggerRect, x, y)) {
-      this._hovered = true; this._hideAt = 0; this._markDirty();
-      return true;
-    }
-    if (this._slideProgress > 0.01 && pointInRect(this._panelRect, x, y)) {
-      // Klik nazwy kolonii → przełącz aktywną (swap systemów) + otwórz panel kolonii.
-      // Wzór z Outliner._handleClick (colony): switchActiveSystem (gdy inny układ) → switchActiveColony.
-      for (const c of this._colonyRects) {
-        if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) {
-          const colMgr = window.KOSMOS?.colonyManager;
-          if (colMgr && c.planetId) {
-            const colony = colMgr.getColony?.(c.planetId);
-            const colSysId = colony?.systemId ?? 'sys_home';
-            const ssMgr = window.KOSMOS?.starSystemManager;
-            if (ssMgr?.activeSystemId && colSysId !== ssMgr.activeSystemId) ssMgr.switchActiveSystem(colSysId);
-            colMgr.switchActiveColony(c.planetId);
-          }
-          window.KOSMOS?.overlayManager?.openPanel?.('colony');
-          return true;
+    const overBand  = pointInRect(this._triggerRect, x, y);
+    const overPanel = this._slideProgress > 0.01 && pointInRect(this._panelRect, x, y);
+    if (!overBand && !overPanel) return false;
+
+    // Klik nazwy kolonii (pasmo stałe lub rozwinięte) → przełącz aktywną (swap systemów)
+    // + otwórz panel kolonii. Wzór z Outliner._handleClick (colony).
+    for (const c of this._colonyRects) {
+      if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) {
+        const colMgr = window.KOSMOS?.colonyManager;
+        if (colMgr && c.planetId) {
+          const colony = colMgr.getColony?.(c.planetId);
+          const colSysId = colony?.systemId ?? 'sys_home';
+          const ssMgr = window.KOSMOS?.starSystemManager;
+          if (ssMgr?.activeSystemId && colSysId !== ssMgr.activeSystemId) ssMgr.switchActiveSystem(colSysId);
+          colMgr.switchActiveColony(c.planetId);
         }
+        window.KOSMOS?.overlayManager?.openPanel?.('colony');
+        return true;
       }
-      return true; // absorbuj klik w panel (nie spadaj na overlay/3D)
     }
-    return false;
+    // Klik w pasmo poza nazwą → wymuś rozwinięcie + absorbuj (nie spadaj na overlay/3D).
+    this._hovered = true; this._hideAt = 0; this._markDirty();
+    return true;
   }
 
   handleWheel(x, y, deltaY) {

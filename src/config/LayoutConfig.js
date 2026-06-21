@@ -5,15 +5,23 @@
 
 export const COSMIC = {
   TOP_BAR_H:     46,   // pasek zasobów + czas (góra)
+  TOP_BAND_H:    28,   // UI v3 — wysokość zunifikowanej górnej belki (pasmo surowców + chip czasu); TopBar i TopResourceDrawer współdzielą
   MAP_MODE_H:    0,    // MapModeBar usunięty — overlaye zajmują tę przestrzeń
   SUBNAV_H:      24,   // pas zakładek rodzeństwa grupy (nav 14→7) — pod TopBarem, tylko gdy aktywny overlay jest w grupie >1
   OUTLINER_W:    150,  // Slice 5 — węższy panel prawy (kompakt: tylko nazwy)
   BOTTOM_CTX_H:  120,  // kontekstowy panel dolny (info o encji)
-  BOTTOM_BAR_H:  26,   // cienki pasek dolny (stabilność + EventLog + przyciski)
+  BOTTOM_BAR_H:  26,   // cienki pasek dolny (Generator: stabilność/EventLog/przyciski); w civMode = strefa triggera dziennika
+  BOTTOM_NAV_H:  44,   // UI v3 — stały poziomy pasek nawigacji (7 grup) dobity w dół do listwy dziennika; tylko civMode
+  BOTTOM_LOG_TRIG_H: 6, // UI v3 — wysokość listwy schowanego dziennika (EventLogDrawer trigger) pod paskiem nawigacji
   RESOURCE_BAR_H: 0,   // dawny dolny pasek surowców usunięty (zastąpiony górnym TopResourceDrawer, hover-drawer); =0 → konsumenci (Outliner/BaseOverlay/BottomContext/CombatHUD) odzyskują tę przestrzeń
   CIV_PANEL_W:   280,  // szerokość rozwiniętego CivPanel
   CIV_SIDEBAR_W: 0,    // Slice 4 — pionowy sidebar usunięty (nav na górze); lewa krawędź = 0
 };
+
+// UI v3 — łączna rezerwacja dolnej krawędzi w civMode: stały pasek nawigacji (BOTTOM_NAV_H)
+// dobity do listwy schowanego dziennika (BOTTOM_LOG_TRIG_H). Konsumenci (BaseOverlay/Outliner/
+// BottomContext/CombatHUD/TopResourceDrawer + DOM overlaye Tech/Observatory) rezerwują tę wysokość.
+export const BOTTOM_RESERVED = COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H;
 
 export const GLOBE = {
   TOP_BAR_H:     50,   // pasek zasobów + "Wróć" (góra)
