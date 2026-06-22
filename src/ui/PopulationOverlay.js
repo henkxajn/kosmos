@@ -3,8 +3,8 @@
 // Trójdzielny overlay: lista kolonii (L), szczegóły populacji (C), prosperity + zdarzenia (R).
 // Dane czytane LIVE z ColonyManager / CivilizationSystem / ResourceSystem.
 
-import { BaseOverlay } from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { BaseOverlay, HEADER_H } from './BaseOverlay.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import EventBus        from '../core/EventBus.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { PROSPERITY_WEIGHTS } from '../data/ConsumerGoodsData.js';
@@ -20,7 +20,7 @@ function _fmtInhab(n) {
 const LEFT_W   = 260;
 const RIGHT_W  = 260;
 const ROW_H    = 52;
-const HDR_H    = 44;
+const HDR_H    = HEADER_H;
 const STAT_H   = 60;
 const TAB_H    = 32;
 
@@ -111,7 +111,7 @@ export class PopulationOverlay extends BaseOverlay {
     ctx.fillStyle = bgAlpha(0.82);
     ctx.fillRect(ox, oy, ow, oh);
 
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -145,11 +145,8 @@ export class PopulationOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h, colonies) {
     const pad = 14;
 
-    // ── Nagłówek ──────────────────────────────────────────
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, HDR_H);
-
-    this._drawText(ctx, t('popPanel.header'), x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
+    // ── Nagłówek (standard: BaseOverlay._drawOverlayHeader) ──
+    this._drawOverlayHeader(ctx, x, y, w, t('popPanel.header'));
 
     const totalPop = colonies.reduce((s, c) => s + (c.civSystem?.population ?? 0), 0);
     const totalDispPop = colonies.reduce((s, c) => s + (c.civSystem?.displayPopulation ?? 0), 0);

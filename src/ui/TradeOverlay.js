@@ -3,8 +3,8 @@
 // Pełnoekranowy overlay handlu: handel cywilny (L), log/wykresy/trasy (R).
 // Wyodrębniony z EconomyOverlay — wszystko co dotyczy handlu między koloniami.
 
-import { BaseOverlay }   from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { BaseOverlay, HEADER_H }   from './BaseOverlay.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { ALL_RESOURCES }  from '../data/ResourcesData.js';
 import { COMMODITIES }    from '../data/CommoditiesData.js';
 import { BASE_PRICE, scarcityMultiplier, TRADEABLE_GOODS } from '../data/TradeValuesData.js';
@@ -13,7 +13,7 @@ import EntityManager      from '../core/EntityManager.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
 
 const LEFT_W  = 320;
-const TAB_H   = 32;
+const TAB_H   = HEADER_H;   // pasmo nagłówka = standard (było 32)
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TradeOverlay
@@ -116,7 +116,7 @@ export class TradeOverlay extends BaseOverlay {
     // Tło
     ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -125,7 +125,7 @@ export class TradeOverlay extends BaseOverlay {
       this._drawMarket(ctx, ox, oy, ow, oh);
     } else {
       // Separator kolumn
-      ctx.strokeStyle = GLASS_BORDER;
+      ctx.strokeStyle = THEME.borderActive;
       ctx.beginPath();
       ctx.moveTo(ox + LEFT_W, oy); ctx.lineTo(ox + LEFT_W, oy + oh);
       ctx.stroke();
@@ -188,7 +188,7 @@ export class TradeOverlay extends BaseOverlay {
     const playerOk    = !!playerCol && !playerCol.ownerEmpireId && !playerCol.isOutpost;
 
     // Separator kolumn
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.beginPath(); ctx.moveTo(ox + LEFT_W, oy); ctx.lineTo(ox + LEFT_W, oy + oh); ctx.stroke();
 
     // Partnerzy = kolonie AI z traktatem handlowym, grupowane po imperium
@@ -209,11 +209,7 @@ export class TradeOverlay extends BaseOverlay {
     const { byEmpire, civTrade, empReg, warp } = d;
     const pad = 14;
 
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(t('market.header'), x + pad, y + 20);
+    this._drawOverlayHeader(ctx, x, y, w, t('market.header'));
 
     const listY = y + TAB_H;
     const listH = h - TAB_H;
@@ -276,14 +272,10 @@ export class TradeOverlay extends BaseOverlay {
 
     const aiCol = this._marketAiColId ? colMgr?.getColony?.(this._marketAiColId) : null;
 
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
     const title = aiCol
       ? `${t('market.tradeWith')} ${(aiCol.name ?? this._marketAiColId).slice(0, 18)}`
       : t('market.selectColony');
-    ctx.fillText(title, x + pad, y + 20);
+    this._drawOverlayHeader(ctx, x, y, w, title);
 
     const listY = y + TAB_H;
     const listH = h - TAB_H;
@@ -472,12 +464,8 @@ export class TradeOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h) {
     const pad = 14;
 
-    // Nagłówek
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(t('tradePanel.header'), x + pad, y + 20);
+    // Nagłówek (standard)
+    this._drawOverlayHeader(ctx, x, y, w, t('tradePanel.header'));
 
     const colMgr   = window.KOSMOS?.colonyManager;
     const civTrade = window.KOSMOS?.civilianTradeSystem;
@@ -759,12 +747,8 @@ export class TradeOverlay extends BaseOverlay {
   _drawRight(ctx, x, y, w, h) {
     const pad = 14;
 
-    // Nagłówek
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('tradePanel.activityHeader'), x + pad, y + 20);
+    // Nagłówek (standard)
+    this._drawOverlayHeader(ctx, x, y, w, t('tradePanel.activityHeader'));
 
     const colMgr   = window.KOSMOS?.colonyManager;
     const vMgr     = window.KOSMOS?.vesselManager;

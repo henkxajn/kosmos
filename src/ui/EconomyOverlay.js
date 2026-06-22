@@ -5,7 +5,7 @@
 // Zakładka FABRYKI: filtr kolonii + przegląd (góra) + zarządzanie produkcją (dół).
 
 import { BaseOverlay }   from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES, ALL_RESOURCES }
                          from '../data/ResourcesData.js';
 import { COMMODITIES, formatRecipe, COMMODITY_BY_TIER }
@@ -423,7 +423,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Tło
     ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -454,10 +454,8 @@ export class EconomyOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h) {
     const pad = 14;
 
-    // Nagłówek
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, 44);
-    this._drawText(ctx, t('econPanel.header'), x + pad, y + 18, THEME.accent, THEME.fontSizeMedium);
+    // Nagłówek (standard: BaseOverlay._drawOverlayHeader — pasmo + tytuł bold accent + linia)
+    this._drawOverlayHeader(ctx, x, y, w, t('econPanel.header'));
 
     const selCol = this._resolveEntity(this._selectedColonyId);
 

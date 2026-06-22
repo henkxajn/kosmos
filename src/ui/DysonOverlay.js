@@ -9,14 +9,14 @@
 // Emituje:
 //   (przez DysonSystem.deliverMax wywołane z handleClick)
 
-import { BaseOverlay } from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { BaseOverlay, HEADER_H } from './BaseOverlay.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { DYSON_SEGMENTS, DYSON_PHASES } from '../data/DysonData.js';
 import { t, getLocale } from '../i18n/i18n.js';
 import EventBus from '../core/EventBus.js';
 
 const LEFT_W = 340;
-const TAB_H  = 32;
+const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
 const ROW_H  = 22;
 const PHASE_HDR_H = 24;
 const SEG_H = 32;          // wysokość wiersza segmentu (mieści 3-region: name | bar | button)
@@ -62,7 +62,7 @@ export class DysonOverlay extends BaseOverlay {
     // Tło
     ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -92,12 +92,8 @@ export class DysonOverlay extends BaseOverlay {
     const pad = 14;
     const isPL = getLocale() !== 'en';
 
-    // Nagłówek
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(t('dyson.header'), x + pad, y + 21);
+    // Nagłówek (standard)
+    this._drawOverlayHeader(ctx, x, y, w, t('dyson.header'));
 
     let ry = y + TAB_H + 16;
 
@@ -168,12 +164,8 @@ export class DysonOverlay extends BaseOverlay {
     const pad = 14;
     const isPL = getLocale() !== 'en';
 
-    // Nagłówek
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('dyson.constructionHeader'), x + pad, y + 21);
+    // Nagłówek (standard)
+    this._drawOverlayHeader(ctx, x, y, w, t('dyson.constructionHeader'));
 
     if (!this._state || !this._state.active) {
       ctx.font = `italic ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;

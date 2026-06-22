@@ -5,7 +5,7 @@
 // Szablony zapisywane w window.KOSMOS.unitDesigns[] — dostępne w stoczni (Flota).
 
 import { BaseOverlay }   from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { HULLS, getSlotCounts } from '../data/HullsData.js';
 import { SHIP_MODULES, UTILITY_SLOT_TYPES, calcShipStats, calcShipCost }
                          from '../data/ShipModulesData.js';
@@ -137,7 +137,7 @@ export class UnitDesignOverlay extends BaseOverlay {
     // Tło overlay
     ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox + 0.5, oy + 0.5, ow - 1, oh - 1);
 
@@ -173,12 +173,11 @@ export class UnitDesignOverlay extends BaseOverlay {
     let cy = y + PAD - this._scrollLeft;
     const useLang = (window.KOSMOS?.lang ?? 'pl') === 'en';
 
-    // ── Nagłówek ──────────────────────────────────────────────
-    ctx.fillStyle = THEME.textHeader;
-    ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(t('unitDesign.shipDesign'), x + w / 2, cy + 14);
+    // ── Nagłówek (standard: bold 13 accent, do lewej) ──
+    ctx.fillStyle = THEME.accent;
+    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
     ctx.textAlign = 'left';
+    ctx.fillText(t('unitDesign.shipDesign'), x + PAD, cy + 14);
     cy += HEADER_H;
 
     // ── Wybór kadłuba ─────────────────────────────────────────

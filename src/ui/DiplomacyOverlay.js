@@ -3,15 +3,15 @@
 // 2-kolumnowy: lewa lista imperiów (tylko intel >= contact widoczne z nazwą,
 // rumor jako "???" z szarym paskiem), prawa szczegóły zaznaczonej relacji.
 
-import { BaseOverlay } from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { BaseOverlay, HEADER_H } from './BaseOverlay.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { canDoEnvoy, hasWeapons } from '../entities/Vessel.js';
 
 const LEFT_W = 300;
-const TAB_H  = 32;
+const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
 
 const STATE_LABEL_PL = {
   peace:    'POKÓJ',
@@ -84,7 +84,7 @@ export class DiplomacyOverlay extends BaseOverlay {
 
     ctx.fillStyle = bgAlpha(0.40);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -113,11 +113,7 @@ export class DiplomacyOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h) {
     const pad = 12;
 
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText('🤝 DYPLOMACJA', x + pad, y + 20);
+    this._drawOverlayHeader(ctx, x, y, w, '🤝 DYPLOMACJA');
 
     const dipl = window.KOSMOS?.diplomacySystem;
     const intelSys = window.KOSMOS?.intelSystem;

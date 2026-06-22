@@ -7,7 +7,7 @@
 // Korzysta z window.KOSMOS.eventLogSystem jako źródła prawdy — żadnej własnej pamięci.
 
 import { BaseOverlay } from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { getLocale } from '../i18n/i18n.js';
 import { CHANNELS, CHANNEL_IDS } from '../systems/EventLogSystem.js';
 import EntityManager from '../core/EntityManager.js';
@@ -80,7 +80,7 @@ export class EventLogOverlay extends BaseOverlay {
     // Tło overlay
     ctx.fillStyle = bgAlpha(0.40);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -114,13 +114,9 @@ export class EventLogOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h, logSys) {
     const pad = 12;
 
-    // Nagłówek
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, HEADER_H);
-    ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
+    // Nagłówek (standard)
     const pl = getLocale() === 'pl';
-    ctx.fillText(pl ? '📜 DZIENNIK' : '📜 LOG', x + pad, y + 28);
+    this._drawOverlayHeader(ctx, x, y, w, pl ? '📜 DZIENNIK' : '📜 LOG');
 
     // Lista kanałów
     const counts = logSys.getCountsByChannel();
@@ -196,15 +192,11 @@ export class EventLogOverlay extends BaseOverlay {
   _drawRight(ctx, x, y, w, h, logSys) {
     const pad = 12;
 
-    // Nagłówek
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, HEADER_H);
+    // Nagłówek (standard)
     const visible = logSys.getVisible();
     const totalAll = logSys._entries.length;
     const pl = getLocale() === 'pl';
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(pl ? 'HISTORIA ZDARZEŃ' : 'EVENT HISTORY', x + pad, y + 20);
+    this._drawOverlayHeader(ctx, x, y, w, pl ? 'HISTORIA ZDARZEŃ' : 'EVENT HISTORY');
     // Licznik widocznych/wszystkich
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;

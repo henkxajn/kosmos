@@ -5,7 +5,7 @@
 // Rysowany na Canvas 2D (#ui-canvas), NA WIERZCHU istniejącego UI.
 // Logika misji delegowana do MissionSystem + FleetActions.
 
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC }          from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W }  from './CivPanelDrawer.js';
 import { SHIPS }           from '../data/ShipsData.js';
@@ -371,7 +371,7 @@ export class FleetManagerOverlay {
     ctx.fillRect(ox, oy, ow, oh);
 
     // Obramowanie glass
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -3228,7 +3228,7 @@ export class FleetManagerOverlay {
     const legY2 = mapY + 8;
     ctx.fillStyle = bgAlpha(0.65);
     ctx.fillRect(legX, legY2, 132, 116);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(legX, legY2, 132, 116);
 

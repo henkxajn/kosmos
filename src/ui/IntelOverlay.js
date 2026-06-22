@@ -4,13 +4,13 @@
 // Lewa kolumna — lista imperiów (kolor archetypu lub szary dla nieznanych).
 // Prawa kolumna — panel szczegółów zaznaczonego imperium (dane gated po intel.level).
 
-import { BaseOverlay }   from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { BaseOverlay, HEADER_H }   from './BaseOverlay.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { ARCHETYPES }     from '../data/EmpireData.js';
 import EventBus           from '../core/EventBus.js';
 
 const LEFT_W = 280;
-const TAB_H  = 32;
+const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
 
 const LEVEL_LABEL_PL = {
   unknown:  'NIEZNANE',
@@ -55,7 +55,7 @@ export class IntelOverlay extends BaseOverlay {
     // Tło
     ctx.fillStyle = bgAlpha(0.40);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -82,11 +82,7 @@ export class IntelOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h) {
     const pad = 12;
 
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText('◐ WYWIAD', x + pad, y + 20);
+    this._drawOverlayHeader(ctx, x, y, w, '◐ WYWIAD');
 
     const intel    = window.KOSMOS?.gameState?.get('intel') ?? {};
     const registry = window.KOSMOS?.empireRegistry;

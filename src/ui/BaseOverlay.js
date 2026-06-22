@@ -3,9 +3,14 @@
 // Zapewnia wspólne API: toggle/show/hide, hitZones, helpers rysowania.
 // Podklasy nadpisują draw(ctx, W, H) i _onHit(zone).
 
-import { THEME }  from '../config/ThemeConfig.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC } from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W, getSubNavHeight } from './CivPanelDrawer.js';
+
+// ── Standard nagłówka overlayu ──────────────────────────────────────────
+// Wspólna wysokość pasma nagłówka (wzorzec: EconomyOverlay). Treść overlayu
+// zaczyna się od oy + HEADER_H. Zmieniaj TYLKO tutaj — propaguje na wszystkie overlaye.
+export const HEADER_H = 44;
 
 export class BaseOverlay {
   constructor(state) {
@@ -143,6 +148,29 @@ export class BaseOverlay {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  // ── Standardowy nagłówek overlayu ──────────────────────────────────────
+  // Pasmo (HEADER_H) + tytuł (bold 13px accent, do lewej) + linia separatora
+  // na dole pasma (borderLight). Wzorzec: EconomyOverlay._drawLeft.
+  // Podtytuł / przycisk ✕ / treść rysuje overlay osobno PO tym wywołaniu.
+  _drawOverlayHeader(ctx, ox, oy, ow, title) {
+    // Pasmo nagłówka
+    ctx.fillStyle = bgAlpha(0.50);
+    ctx.fillRect(ox, oy, ow, HEADER_H);
+    // Tytuł — bold 13px accent, wyrównany do lewej
+    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(title, ox + 14, oy + 18);
+    // Separator 1px pod tytułem (dół pasma)
+    ctx.strokeStyle = THEME.borderLight;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(ox, oy + HEADER_H);
+    ctx.lineTo(ox + ow, oy + HEADER_H);
     ctx.stroke();
   }
 

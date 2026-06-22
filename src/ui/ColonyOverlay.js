@@ -4,8 +4,8 @@
 // Mapa zajmuje CAŁY overlay. Floating panel pojawia się obok zaznaczonego hexa.
 // Nagłówek: nazwa kolonii + POP + budynki.
 
-import { BaseOverlay }  from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER, hexToRgb } from '../config/ThemeConfig.js';
+import { BaseOverlay, HEADER_H }  from './BaseOverlay.js';
+import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
 import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
 import { BUILDINGS, RESOURCE_ICONS, formatCost } from '../data/BuildingsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
@@ -25,7 +25,7 @@ import { t }   from '../i18n/i18n.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 
-const HDR_H = 32;
+const HDR_H = HEADER_H;   // wysokość pasma nagłówka (standard BaseOverlay)
 const FLOAT_W = 200;  // szerokość floating panelu
 
 let _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
@@ -704,7 +704,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Ciemne tło
     ctx.fillStyle = 'rgba(2, 4, 8, 0.92)';
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER; ctx.lineWidth = 1;
+    ctx.strokeStyle = THEME.borderActive; ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
     const colony = this._getColony();
@@ -837,7 +837,7 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.strokeStyle = hasStationTech ? (THEME.borderActive ?? '#3a6') : 'rgba(255,255,255,0.12)';
       ctx.lineWidth = 1; ctx.strokeRect(sBtnX, sBtnY, sBtnW, sBtnH);
       ctx.font = `bold 11px ${THEME.fontFamily}`;
-      ctx.fillStyle = hasStationTech ? THEME.textBright : THEME.textDim;
+      ctx.fillStyle = hasStationTech ? THEME.accent : THEME.textDim;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(`${hasStationTech ? '🛰' : '🔒'} ${t('station.headerBtn')}`, sBtnX + sBtnW / 2, sBtnY + sBtnH / 2);
       ctx.restore();
@@ -852,27 +852,18 @@ export class ColonyOverlay extends BaseOverlay {
     this._addHit(closeX - 4, oy + 6, 22, 22, 'close');
   }
 
-  // ── Nagłówek ─────────────────────────────────────────────────────────────
+  // ── Nagłówek (standard: BaseOverlay._drawOverlayHeader — pasmo 44 + tytuł + linia) ──
   _drawHeader(ctx, ox, oy, ow, colony) {
-    ctx.fillStyle = bgAlpha(0.55);
-    ctx.fillRect(ox, oy, ow, HDR_H);
-    ctx.textBaseline = 'middle';
-    const midY = oy + HDR_H / 2;
-
     if (!colony) {
-      ctx.font = `bold 13px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
-      ctx.fillText('Brak kolonii', ox + ow / 2, midY);
+      this._drawOverlayHeader(ctx, ox, oy, ow, 'Brak kolonii');
       return;
     }
 
-    // Lewa: nazwa planety
-    ctx.font = `bold 13px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textBright; ctx.textAlign = 'left';
+    // Rząd 1: nazwa planety jako tytuł (bold accent przez helper)
     const name = colony.planet?.name ?? colony.planetId ?? '?';
-    ctx.fillText(name, ox + 10, midY);
+    this._drawOverlayHeader(ctx, ox, oy, ow, name);
 
-    // Centrum: podsumowanie + lista budynków
+    // Podsumowanie + lista budynków
     const civ = colony.civSystem;
     const pop = civ?.population ?? 0;
     const housing = civ?.housing ?? 0;
@@ -890,30 +881,32 @@ export class ColonyOverlay extends BaseOverlay {
       }
     }
 
-    // Stats
+    // Stats — druga linia w paśmie nagłówka
+    const row2Y = oy + 34;
+    ctx.textBaseline = 'alphabetic';
     ctx.font = `11px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.text; ctx.textAlign = 'left';
-    let sx = ox + 180;
-    ctx.fillText(`POP: ${pop}/${housing}`, sx, midY);
-    sx += 80;
+    ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
+    let sx = ox + 14;
+    ctx.fillText(`POP: ${pop}/${housing}`, sx, row2Y);
+    sx += 90;
 
     // Mini ikony budynków (kompaktowe) z hit zones na tooltip
     for (const [bid, count] of Object.entries(buildingSummary)) {
       const b = BUILDINGS[bid];
       if (!b) continue;
       const label = `${b.icon ?? '?'}${count > 1 ? '×' + count : ''}`;
-      ctx.fillStyle = CAT_COLORS[b.category] ?? THEME.text;
-      ctx.fillText(label, sx, midY);
+      ctx.fillStyle = CAT_COLORS[b.category] ?? THEME.textPrimary;
+      ctx.fillText(label, sx, row2Y);
       const labelW = ctx.measureText(label).width;
       // Hit zone na ikonę budynku (tooltip)
-      this._addHit(sx, oy + 2, labelW + 4, HDR_H - 4, 'headerBuilding', { buildingId: bid, count });
+      this._addHit(sx, oy + 24, labelW + 4, HDR_H - 26, 'headerBuilding', { buildingId: bid, count });
       sx += labelW + 6;
-      if (sx > ox + ow - 122) { ctx.fillText('...', sx, midY); break; }
+      if (sx > ox + ow - 122) { ctx.fillText('...', sx, row2Y); break; }
     }
 
     if (totalBuildings === 0) {
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('Brak budynków', sx, midY);
+      ctx.fillText('Brak budynków', sx, row2Y);
     }
   }
 
@@ -2341,7 +2334,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     // ── Sekcja: Teren ──
     ctx.font = `bold 12px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textBright;
+    ctx.fillStyle = THEME.accent;
     ctx.fillText(`${terrain.icon ?? ''} ${terrain.namePL ?? tile.type}`, x + 8, cy);
     cy += 18;
 
@@ -2355,7 +2348,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Yield bonus
     if (terrain.yieldBonus) {
-      ctx.fillStyle = THEME.text;
+      ctx.fillStyle = THEME.textPrimary;
       for (const [res, mult] of Object.entries(terrain.yieldBonus)) {
         const label = res === 'default' ? 'ogólny' : res;
         const color = mult >= 1 ? '#88cc88' : '#cc8888';
@@ -2386,7 +2379,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (b) {
       // Budynek
       ctx.font = `bold 12px ${THEME.fontFamily}`;
-      ctx.fillStyle = CAT_COLORS[b.category] ?? THEME.textBright;
+      ctx.fillStyle = CAT_COLORS[b.category] ?? THEME.accent;
       ctx.fillText(`${b.icon ?? ''} ${b.namePL ?? b.id}`, x + 8, cy); cy += 16;
 
       ctx.font = `11px ${THEME.fontFamily}`;
@@ -2453,7 +2446,7 @@ export class ColonyOverlay extends BaseOverlay {
 
       // POP
       if (b.popCost) {
-        ctx.fillStyle = THEME.text;
+        ctx.fillStyle = THEME.textPrimary;
         ctx.fillText(`👤 ${b.popCost} POP`, x + 8, cy); cy += 14;
       }
 
@@ -2484,7 +2477,7 @@ export class ColonyOverlay extends BaseOverlay {
       ctx.fillStyle = '#ffdd44';
       ctx.fillRect(x + 8, cy, (FLOAT_W - 16) * pct / 100, 8);
       cy += 12;
-      ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.text;
+      ctx.font = `10px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary;
       ctx.fillText(`${pct}%`, x + 8, cy);
 
     } else if (tile.pendingBuild) {
@@ -2509,7 +2502,7 @@ export class ColonyOverlay extends BaseOverlay {
       }
       // ── Lista budynków do budowy ──
       ctx.font = `bold 11px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textBright;
+      ctx.fillStyle = THEME.accent;
       ctx.fillText('🔨 Buduj:', x + 8, cy); cy += 16;
 
       const available = this._getAvailableBuildings(tile);
@@ -2624,7 +2617,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Tytuł + [✕]
     ctx.font = `bold 13px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textBright;
+    ctx.fillStyle = THEME.accent;
     ctx.fillText('🛰 ' + t('station.dialogTitle'), dx + 10, cy);
     ctx.fillStyle = THEME.textDim; ctx.textAlign = 'right';
     ctx.fillText('✕', dx + DW - 10, cy);
@@ -2633,7 +2626,7 @@ export class ColonyOverlay extends BaseOverlay {
     cy += 24;
 
     // Cel — jedno ciało (tylko planeta) → statyczna linia bez pickera; >1 → wybór
-    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.text;
+    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary;
     if (targets.length === 1) {
       ctx.fillText(`${t('station.target')}: ${targets[0]?.name ?? targets[0]?.id}`, dx + 10, cy);
       cy += 20;
@@ -2645,7 +2638,7 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.fillRect(dx + 12, cy, DW - 24, 18);
         ctx.strokeStyle = sel ? (THEME.borderActive ?? '#3a6') : 'rgba(255,255,255,0.08)';
         ctx.strokeRect(dx + 12, cy, DW - 24, 18);
-        ctx.fillStyle = sel ? THEME.textBright : THEME.text;
+        ctx.fillStyle = sel ? THEME.accent : THEME.textPrimary;
         ctx.fillText(`${sel ? '●' : '○'} ${body.type === 'moon' ? '🌑' : '🪐'} ${body.name ?? body.id}`, dx + 18, cy + 3);
         this._addHit(dx + 12, cy, DW - 24, 18, 'station_pick_target', { bodyId: body.id });
         cy += 20;
@@ -2654,7 +2647,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Koszt
     cy += 4;
-    ctx.fillStyle = THEME.text; ctx.font = `11px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary; ctx.font = `11px ${THEME.fontFamily}`;
     ctx.fillText(t('station.cost') + ':', dx + 10, cy); cy += 18;
     ctx.font = `10px ${THEME.fontFamily}`;
     const res = colony.resourceSystem;
@@ -2679,14 +2672,14 @@ export class ColonyOverlay extends BaseOverlay {
     ctx.textAlign = 'left'; cy += 16;
 
     // W kolejce
-    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.text;
+    ctx.font = `11px ${THEME.fontFamily}`; ctx.fillStyle = THEME.textPrimary;
     ctx.fillText(t('station.pending') + ':', dx + 10, cy); cy += 16;
     ctx.font = `10px ${THEME.fontFamily}`;
     if (pending.length === 0) {
       ctx.fillStyle = THEME.textDim; ctx.fillText('—', dx + 16, cy);
     } else {
       for (const order of pending) {
-        ctx.fillStyle = THEME.text;
+        ctx.fillStyle = THEME.textPrimary;
         ctx.fillText(`• ${order.targetName ?? order.targetBodyId}`, dx + 16, cy);
         ctx.fillStyle = '#cc7777'; ctx.textAlign = 'right';
         ctx.fillText('✕', dx + DW - 14, cy); ctx.textAlign = 'left';

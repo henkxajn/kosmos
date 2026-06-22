@@ -4,8 +4,8 @@
 // Lewa kolumna: overview (sumy, średnie, kluczowe wskaźniki).
 // Prawa kolumna: breakdown per kolonia (tabela z najważniejszymi danymi).
 
-import { BaseOverlay }   from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { BaseOverlay, HEADER_H }   from './BaseOverlay.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { SHIPS }         from '../data/ShipsData.js';
 import { HULLS }         from '../data/HullsData.js';
@@ -43,7 +43,7 @@ export class CivilizationOverlay extends BaseOverlay {
     // Tło
     ctx.fillStyle = bgAlpha(0.38);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -237,15 +237,11 @@ export class CivilizationOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h, data) {
     const pad = 14;
 
-    // Nagłówek
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(t('civOverlay.header'), x + pad, y + 21);
+    // Nagłówek (standard: BaseOverlay._drawOverlayHeader)
+    this._drawOverlayHeader(ctx, x, y, w, t('civOverlay.header'));
 
-    const listY = y + TAB_H;
-    const listH = h - TAB_H;
+    const listY = y + HEADER_H;
+    const listH = h - HEADER_H;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, listY, w, listH);
@@ -640,15 +636,11 @@ export class CivilizationOverlay extends BaseOverlay {
   _drawRight(ctx, x, y, w, h, data) {
     const pad = 14;
 
-    // Nagłówek
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(t('civOverlay.coloniesHeader'), x + pad, y + 21);
+    // Nagłówek (standard: BaseOverlay._drawOverlayHeader)
+    this._drawOverlayHeader(ctx, x, y, w, t('civOverlay.coloniesHeader'));
 
-    const listY = y + TAB_H;
-    const listH = h - TAB_H;
+    const listY = y + HEADER_H;
+    const listH = h - HEADER_H;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, listY, w, listH);

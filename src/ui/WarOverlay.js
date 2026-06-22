@@ -3,13 +3,13 @@
 // 2-kolumnowy: lewa lista aktywnych wojen, prawa szczegóły wybranej wojny
 // (casus belli, paski exhaustion, fronty, ostatnie bitwy, przyciski pokoju).
 
-import { BaseOverlay } from './BaseOverlay.js';
-import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
+import { BaseOverlay, HEADER_H } from './BaseOverlay.js';
+import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { CASUS_BELLI } from '../data/CasusBelliData.js';
 
 const LEFT_W = 300;
-const TAB_H  = 32;
+const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
 const MASK   = '???';
 
 export class WarOverlay extends BaseOverlay {
@@ -36,7 +36,7 @@ export class WarOverlay extends BaseOverlay {
 
     ctx.fillStyle = bgAlpha(0.40);
     ctx.fillRect(ox, oy, ow, oh);
-    ctx.strokeStyle = GLASS_BORDER;
+    ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
@@ -62,11 +62,7 @@ export class WarOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h) {
     const pad = 12;
 
-    ctx.fillStyle = bgAlpha(0.50);
-    ctx.fillRect(x, y, w, TAB_H);
-    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText('⚔ WOJNY', x + pad, y + 20);
+    this._drawOverlayHeader(ctx, x, y, w, '⚔ WOJNY');
 
     const ws = window.KOSMOS?.warSystem;
     const reg = window.KOSMOS?.empireRegistry;
