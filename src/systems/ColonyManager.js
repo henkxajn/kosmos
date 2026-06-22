@@ -216,9 +216,22 @@ export class ColonyManager {
     return this._colonies.get(planetId)?.civSystem ?? null;
   }
 
-  // Wszystkie kolonie jako tablica
+  // Wszystkie kolonie jako tablica (UWAGA: zawiera też kolonie imperiów AI — dla widoków
+  // GRACZA używaj getPlayerColonies(), aby NIE ujawniać szczegółów przeciwników).
   getAllColonies() {
     return [...this._colonies.values()];
+  }
+
+  // Czy kolonia należy do gracza. Kolonie AI mają ownerEmpireId = identyfikator imperium;
+  // kolonie gracza mają null/undefined (lub jawnie 'player').
+  static isPlayerColony(c) {
+    return !!c && (!c.ownerEmpireId || c.ownerEmpireId === 'player');
+  }
+
+  // Kolonie GRACZA (bez kolonii imperiów AI) — jedyne źródło dla paneli/list widocznych
+  // dla gracza (Economy, Population, Civilization, Outliner, TopBar…).
+  getPlayerColonies() {
+    return this.getAllColonies().filter(c => ColonyManager.isPlayerColony(c));
   }
 
   // Kolonie w danym układzie gwiezdnym

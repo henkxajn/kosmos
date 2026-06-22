@@ -95,10 +95,11 @@ export class EconomyOverlay extends BaseOverlay {
       }));
   }
 
-  // Lista encji do zakładek: kolonie + fasady stacji gracza.
+  // Lista encji do zakładek: kolonie GRACZA + fasady stacji gracza. Kolonie imperiów AI
+  // są ukryte (getPlayerColonies, nie getAllColonies) — gracz nie widzi gospodarki przeciwników.
   _getTabEntities() {
     const colMgr = window.KOSMOS?.colonyManager;
-    return [...(colMgr?.getAllColonies() ?? []), ...this._playerStationFacades()];
+    return [...(colMgr?.getPlayerColonies() ?? []), ...this._playerStationFacades()];
   }
 
   // Rozwiąż wybraną encję po id: kolonia LUB fasada stacji. Zwraca FASADĘ (nie surową encję —
@@ -2273,7 +2274,7 @@ export class EconomyOverlay extends BaseOverlay {
   _drawFlowsTab(ctx, x, y, w, h) {
     const pad = 14;
     const colMgr = window.KOSMOS?.colonyManager;
-    const colonies = colMgr?.getAllColonies() ?? [];
+    const colonies = colMgr?.getPlayerColonies() ?? [];   // tylko kolonie gracza (bez AI)
 
     // Zbierz globalne per-resource produkcja i konsumpcja
     const flows = {};
@@ -2500,7 +2501,7 @@ export class EconomyOverlay extends BaseOverlay {
   _generateAlerts() {
     const alerts = [];
     const colMgr = window.KOSMOS?.colonyManager;
-    const colonies = colMgr?.getAllColonies() ?? [];
+    const colonies = colMgr?.getPlayerColonies() ?? [];   // tylko kolonie gracza (bez AI)
 
     for (const col of colonies) {
       if (col.isOutpost) continue;

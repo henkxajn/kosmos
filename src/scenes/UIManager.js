@@ -915,7 +915,9 @@ export class UIManager {
       this._addNotification(`⏳ ${bName} → ${targetName}`, 'fleet', 'info');
     });
     EventBus.on('colony:founded', ({ colony }) => {
-      this._log(t('log.colonyFounded', colony.name), 'new_planet');
+      // Założenie kolonii AI nie trafia do dziennika gracza (przeciek szczegółów przeciwnika).
+      const isPlayer = !colony?.ownerEmpireId || colony.ownerEmpireId === 'player';
+      if (isPlayer) this._log(t('log.colonyFounded', colony.name), 'new_planet');
       this._coloniesDirty = true;
     });
     // Przełączenie aktywnej kolonii z Outliner → odśwież wszystkie dane UI
@@ -950,6 +952,10 @@ export class UIManager {
       this._log(t('log.migration', count, from, to), 'info');
     });
     EventBus.on('trade:migrationExecuted', ({ fromName, toName, toId, popQty, krCost }) => {
+      // Loguj tylko migracje dotyczące kolonii gracza (migracje wewnątrz imperium AI ukryte).
+      const toCol = window.KOSMOS?.colonyManager?.getColony?.(toId);
+      const isPlayer = !toCol?.ownerEmpireId || toCol.ownerEmpireId === 'player';
+      if (!isPlayer) return;
       this._log(t('log.civMigration', popQty.toFixed(2), fromName, toName, krCost.toFixed(0)), 'info', toId);
     });
 

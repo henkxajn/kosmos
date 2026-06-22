@@ -204,7 +204,10 @@ export class RandomEventSystem {
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr || colMgr.colonyCount === 0) return;
 
-    const colonies = colMgr.getAllColonies();
+    // Tylko kolonie GRACZA — zdarzenia losowe na koloniach AI nie mają wpływu na rozgrywkę
+    // gracza i wyciekałyby do jego dziennika/powiadomień (przeciek szczegółów przeciwnika).
+    const colonies = colMgr.getPlayerColonies();
+    if (colonies.length === 0) return;
     const colony   = colonies[Math.floor(Math.random() * colonies.length)];
 
     // Redukcja szansy z obrony kolonii

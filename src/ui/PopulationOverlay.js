@@ -57,8 +57,8 @@ function _ensureHistoryListener() {
     const prosp = Math.round(window.KOSMOS?.prosperitySystem?.prosperity ?? 50);
     if (pid) _recordHistory(pid, year, data.population, data.housing, prosp);
 
-    // Rejestruj dla WSZYSTKICH pozostałych kolonii (dane bezpośrednio z civSystem)
-    for (const col of colMgr.getAllColonies()) {
+    // Rejestruj dla pozostałych kolonii GRACZA (kolonie AI pomijane — nie pokazujemy ich historii)
+    for (const col of colMgr.getPlayerColonies()) {
       if (col.planetId === pid || col.isOutpost) continue;
       const civ = col.civSystem;
       if (civ) {
@@ -131,7 +131,7 @@ export class PopulationOverlay extends BaseOverlay {
 
     // Dane
     const colMgr = window.KOSMOS?.colonyManager;
-    const colonies = colMgr?.getAllColonies()?.filter(c => !c.isOutpost) ?? [];
+    const colonies = colMgr?.getPlayerColonies()?.filter(c => !c.isOutpost) ?? [];   // bez kolonii AI
 
     // Rysuj 3 kolumny
     this._drawLeft(ctx, ox, oy, LEFT_W, oh, colonies);

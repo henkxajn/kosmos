@@ -1372,10 +1372,13 @@ export class GameScene {
       this.uiManager?.overlayManager?.openPanel('colony');
     });
     EventBus.on('colony:founded', ({ colony }) => {
+      // Kolonie imperiów AI NIE otwierają panelu graczowi — to przeciek szczegółów przeciwnika.
+      if (!ColonyManager.isPlayerColony(colony)) return;
       this.colonyManager.switchActiveColony(colony.planetId);
       this.uiManager?.overlayManager?.openPanel('colony');
     });
     EventBus.on('outpost:founded', ({ colony }) => {
+      if (!ColonyManager.isPlayerColony(colony)) return;
       this.colonyManager.switchActiveColony(colony.planetId);
       this.uiManager?.overlayManager?.openPanel('colony');
     });
