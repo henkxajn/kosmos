@@ -14,7 +14,7 @@ import { PRIORITY_TEMPLATES } from '../systems/FactorySystem.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
-import { t, getName }    from '../i18n/i18n.js';
+import { t, getName, getLocale } from '../i18n/i18n.js';
 import { drawResourceIcon, hasIconFile, getIconPath } from './ResourceIcons.js';
 
 const LEFT_W   = 220;
@@ -660,6 +660,7 @@ export class EconomyOverlay extends BaseOverlay {
     const tabs = [
       { id: 'factories', label: t('econPanel.tabFactories') },
       { id: 'flows',     label: t('econPanel.tabFlows') },
+      { id: 'budget',    label: t('econPanel.tabBudget') },
     ];
     let tx = x + w - pad;
     for (let i = tabs.length - 1; i >= 0; i--) {
@@ -682,6 +683,7 @@ export class EconomyOverlay extends BaseOverlay {
     const ch = h - TAB_H;
 
     if (this._centerTab === 'factories') this._drawFactoriesTab(ctx, x, cy, w, ch);
+    else if (this._centerTab === 'budget') this._drawBudgetTab(ctx, x, cy, w, ch);
     else this._drawFlowsTab(ctx, x, cy, w, ch);
   }
 
@@ -2343,6 +2345,238 @@ export class EconomyOverlay extends BaseOverlay {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // Zakładka BUDŻET — pulpit finansowy (port z CivilizationOverlay)
+  // Dane z TYCH SAMYCH źródeł co Civilization: ColonyManager (kredyty/podatki),
+  // VesselManager (utrzymanie floty), GroundUnitManager (utrzymanie jednostek).
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Zbiera dane budżetowe wyłącznie dla kolonii GRACZA (getPlayerColonies — bez AI).
+  _gatherBudgetData() {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vMgr   = window.KOSMOS?.vesselManager;
+
+    const colonies     = colMgr?.getPlayerColonies() ?? [];
+    const fullColonies = colonies.filter(c => !c.isOutpost);
+
+    let totalCredits = 0, totalCreditsPerYear = 0, totalResearch = 0;
+    const globalResources = {};   // id → { stock, rate }
+
+    for (const col of colonies) {
+      const res = col.resourceSystem;
+      totalCredits        += col.credits ?? 0;
+      totalCreditsPerYear += col.creditsPerYear ?? 0;
+
+      if (res?.inventory) {
+        for (const [id, stock] of res.inventory) {
+          if (!globalResources[id]) globalResources[id] = { stock: 0, rate: 0 };
+          globalResources[id].stock += stock;
+        }
+      }
+      const dt = res?._deltaTracker;
+      if (dt?.observedPerYear) {
+        for (const [id, rate] of dt.observedPerYear) {
+          if (!globalResources[id]) globalResources[id] = { stock: 0, rate: 0 };
+          globalResources[id].rate += rate;
+        }
+        totalResearch += dt.observedPerYear.get('research') ?? 0;
+      }
+    }
+
+    // Podatki — suma przychodu z pełnych kolonii + globalna stawka
+    let taxIncome = 0;
+    for (const col of fullColonies) taxIncome += colMgr?.calculateTaxIncome(col) ?? 0;
+    const taxRate   = colMgr?.taxRate ?? 0.08;
+    const taxEffect = this._getTaxEffectLabel(taxRate);
+
+    // Utrzymanie jednostek naziemnych (Kr/civYear) — tabela GROUND_UNIT_UPKEEP
+    let totalUnitUpkeep = 0, unitUpkeepCount = 0;
+    const guMgr   = window.KOSMOS?.groundUnitManager;
+    const upTable = colMgr?.constructor?.GROUND_UNIT_UPKEEP;
+    if (guMgr && upTable) {
+      for (const u of guMgr._units?.values?.() ?? []) {
+        if (u.owner !== 'player' && u.factionId !== 'humanity') continue;
+        const up = upTable[u.archetypeId];
+        if (!up) continue;
+        totalUnitUpkeep += up.credits ?? 0;
+        unitUpkeepCount++;
+      }
+    }
+
+    // Utrzymanie floty (Kr/rok) — getTotalFleetUpkeep filtruje wraki + statki AI
+    const totalFleetUpkeep = vMgr?.getTotalFleetUpkeep?.() ?? 0;
+    let fleetUpkeepCount = 0;
+    for (const v of (vMgr?.getAllVessels?.() ?? [])) {
+      if (v.isWreck) continue;
+      if (v.ownerEmpireId && v.ownerEmpireId !== 'player') continue;
+      fleetUpkeepCount++;
+    }
+
+    return {
+      totalCredits, totalCreditsPerYear, totalResearch,
+      globalResources, taxIncome, taxRate, taxEffect,
+      totalUnitUpkeep, unitUpkeepCount,
+      totalFleetUpkeep, fleetUpkeepCount,
+    };
+  }
+
+  _drawBudgetTab(ctx, x, y, w, h) {
+    const pad     = 14;
+    const RH      = 16;                          // wysokość wiersza (kompaktowa, jak w Civ)
+    const PANEL_W = Math.min(w - pad, 380);       // szerokość bloku budżetu (nie rozciągaj na całą kolumnę)
+    const data    = this._gatherBudgetData();
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+
+    let ry = y + 8 - this._scrollCenter;
+
+    // ── EKONOMIA ────────────────────────────────────────────────────────
+    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.economy'));
+    ry += 18;
+
+    this._statRow(ctx, x + pad, ry, PANEL_W, t('civOverlay.credits'),
+      `${data.totalCredits.toFixed(0)} Kr`, THEME.warning);
+    ry += RH;
+
+    // Bilans Kr = NETTO: handel + podatki − utrzymanie jednostek − utrzymanie floty
+    const netPerYear = data.totalCreditsPerYear + data.taxIncome
+                     - data.totalUnitUpkeep - data.totalFleetUpkeep;
+    const sign = netPerYear >= 0 ? '+' : '';
+    this._statRow(ctx, x + pad, ry, PANEL_W, t('civOverlay.creditsPerYear'),
+      `${sign}${netPerYear.toFixed(1)} Kr/${t('tradePanel.perYear')}`,
+      netPerYear >= 0 ? THEME.success : THEME.danger);
+    ry += RH;
+
+    if (data.unitUpkeepCount > 0) {
+      this._statRow(ctx, x + pad, ry, PANEL_W,
+        `${t('civOverlay.unitUpkeep')} (${data.unitUpkeepCount})`,
+        `-${data.totalUnitUpkeep} Kr/${t('tradePanel.perYear')}`, THEME.danger);
+      ry += RH;
+    }
+    if (data.fleetUpkeepCount > 0) {
+      this._statRow(ctx, x + pad, ry, PANEL_W,
+        `${t('civOverlay.fleetUpkeep')} (${data.fleetUpkeepCount})`,
+        `-${data.totalFleetUpkeep} Kr/${t('tradePanel.perYear')}`, THEME.danger);
+      ry += RH;
+    }
+    this._statRow(ctx, x + pad, ry, PANEL_W, t('civOverlay.research'),
+      `${data.totalResearch.toFixed(1)}/${t('tradePanel.perYear')}`, THEME.info);
+    ry += RH + 2;
+
+    // ── PODATKI ─────────────────────────────────────────────────────────
+    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.taxes'));
+    ry += 18;
+
+    const taxRate = data.taxRate;
+    const taxPct  = taxRate / 0.25;              // 0–1
+    const BAR_W   = PANEL_W - pad;
+    const taxBarY = ry;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(x + pad, ry, BAR_W, 8);
+    const taxColor = taxRate <= 0.05 ? '#00ff88'
+      : taxRate <= 0.12 ? THEME.accent
+      : taxRate <= 0.20 ? '#ffaa00'
+      : '#ff4444';
+    ctx.fillStyle = taxColor;
+    ctx.fillRect(x + pad, ry, BAR_W * taxPct, 8);
+    const markerX = x + pad + BAR_W * taxPct;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(markerX - 1, ry - 2, 2, 12);
+    ry += 16;
+    // Hit zone na pasku — klik zmienia stawkę (obsługa: _onHit case 'tax_slider')
+    this._addHit(x + pad, taxBarY - 4, BAR_W, 16, 'tax_slider', { barX: x + pad, barW: BAR_W });
+
+    this._statRow(ctx, x + pad, ry, PANEL_W, t('civOverlay.taxRate'),
+      `${Math.round(taxRate * 100)}%`, taxColor);
+    ry += RH;
+    this._statRow(ctx, x + pad, ry, PANEL_W, t('civOverlay.taxIncome'),
+      `+${data.taxIncome} Kr/${t('tradePanel.perYear')}`, THEME.success);
+    ry += RH;
+
+    // Efekt na społeczeństwo
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillText(data.taxEffect, x + pad, ry + 8);
+    ry += 18;
+
+    // ── DEFICYTY / NADWYŻKI ─────────────────────────────────────────────
+    const sortedRes = Object.entries(data.globalResources)
+      .filter(([id]) => ALL_RESOURCES[id])
+      .sort((a, b) => a[1].rate - b[1].rate);
+    const deficits  = sortedRes.filter(([, v]) => v.rate < -0.5).slice(0, 4);
+    const surpluses = sortedRes.filter(([, v]) => v.rate > 0.5).reverse().slice(0, 4);
+
+    if (deficits.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger;
+      ctx.fillText(t('civOverlay.deficits'), x + pad, ry + 10);
+      ry += 14;
+      for (const [id, v] of deficits) {
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`  ${getName(ALL_RESOURCES[id], 'resource')}: ${v.rate.toFixed(1)}/${t('tradePanel.perYear')} (${Math.round(v.stock)})`, x + pad + 4, ry + 10);
+        ry += 13;
+      }
+    }
+    if (surpluses.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.success;
+      ctx.fillText(t('civOverlay.surpluses'), x + pad, ry + 10);
+      ry += 14;
+      for (const [id, v] of surpluses) {
+        ctx.fillStyle = THEME.textSecondary;
+        ctx.fillText(`  ${getName(ALL_RESOURCES[id], 'resource')}: +${v.rate.toFixed(1)}/${t('tradePanel.perYear')} (${Math.round(v.stock)})`, x + pad + 4, ry + 10);
+        ry += 13;
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // ── Helpery sekcji/wiersza budżetu (port z CivilizationOverlay) ───────────
+  _sectionHeader(ctx, sx, sy, label) {
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(label, sx, sy + 11);
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy + 14);
+    ctx.lineTo(sx + 200, sy + 14);
+    ctx.stroke();
+  }
+
+  _statRow(ctx, sx, sy, w, label, value, valueColor) {
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(label, sx, sy + 10);
+    ctx.fillStyle = valueColor ?? THEME.textPrimary;
+    ctx.textAlign = 'right';
+    ctx.fillText(value, sx + w - 32, sy + 10);
+    ctx.textAlign = 'left';
+  }
+
+  // Etykieta efektu stawki podatkowej na konsumpcję (PL/EN). Port z CivilizationOverlay.
+  _getTaxEffectLabel(rate) {
+    const isPL = getLocale() !== 'en';
+    const drain = rate <= 0.05 ? -(0.05 - rate) * 200
+                : rate <= 0.12 ? 0
+                : (rate - 0.12) / 0.13 * 40;
+    const drainPct = Math.round(drain);
+    if (drainPct < 0) return isPL
+      ? `✓ Dotacja konsumpcji +${-drainPct}%`
+      : `✓ Consumption subsidy +${-drainPct}%`;
+    if (drainPct === 0) return isPL ? '● Neutralne' : '● Neutral';
+    if (rate <= 0.20) return isPL
+      ? `⚠ Konsumpcja -${drainPct}%`
+      : `⚠ Consumption -${drainPct}%`;
+    return isPL
+      ? `✗ Konsumpcja -${drainPct}% — ryzyko protestu`
+      : `✗ Consumption -${drainPct}% — protest risk`;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // PRAWA KOLUMNA — bilans energii + alerty
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -2563,6 +2797,7 @@ export class EconomyOverlay extends BaseOverlay {
     );
     if (x < ox || x > ox + ow || y < oy || y > oy + oh) return false;
 
+    this._lastClickX = x;   // zapamiętaj X dla tax_slider (zakładka BUDŻET)
     const hit = this._hitTest(x, y);
     if (hit) {
       this._onHit(hit);
@@ -2594,6 +2829,16 @@ export class EconomyOverlay extends BaseOverlay {
       case 'factory_btn':
         this._handleFactoryBtn(zone.data);
         break;
+      case 'tax_slider': {
+        // Klik na pasku podatków (zakładka BUDŻET) → stawka proporcjonalna do pozycji X.
+        // taxRate jest setterem z clampem 0–0.25 w ColonyManager.
+        const colMgr = window.KOSMOS?.colonyManager;
+        if (!colMgr) break;
+        const hitX = this._lastClickX ?? 0;
+        const relX = Math.max(0, Math.min(zone.data.barW, hitX - zone.data.barX));
+        colMgr.taxRate = Math.round((relX / zone.data.barW) * 0.25 * 100) / 100;
+        break;
+      }
     }
   }
 

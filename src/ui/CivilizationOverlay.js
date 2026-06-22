@@ -1,24 +1,47 @@
-// CivilizationOverlay — panel podsumowania cywilizacji (klawisz V)
+// CivilizationOverlay — panel cywilizacji (klawisz V)
 //
-// Globalne statystyki: populacja, prosperity, produkcja, handel, flota.
-// Lewa kolumna: overview (sumy, średnie, kluczowe wskaźniki).
-// Prawa kolumna: breakdown per kolonia (tabela z najważniejszymi danymi).
+// Po przeniesieniu budżetu do EconomyOverlay (zakładka BUDŻET) panel skupia się na
+// PRZYWÓDZTWIE i IMPERIUM. Układ 3-kolumnowy (lewa szersza pod duży portret):
+//   • LEWA   — Przywódca (duży portret 64→~190px + bonusy + frakcja) → Imperium (sumy/średnie)
+//   • ŚRODEK — lista kolonii (pasek prosperity) + 4 karty podsumowania na dole
+//   • PRAWA  — Historia (scrollowalna kronika kamieni milowych)
 
-import { BaseOverlay, HEADER_H }   from './BaseOverlay.js';
-import { THEME, bgAlpha } from '../config/ThemeConfig.js';
-import { ALL_RESOURCES } from '../data/ResourcesData.js';
-import { SHIPS }         from '../data/ShipsData.js';
-import { HULLS }         from '../data/HullsData.js';
-import { LEADERS }       from '../data/LeaderData.js';
-import { t, getName, getLocale } from '../i18n/i18n.js';
+import { BaseOverlay, HEADER_H } from './BaseOverlay.js';
+import { THEME, bgAlpha }        from '../config/ThemeConfig.js';
+import { LEADERS }               from '../data/LeaderData.js';
+import { t, getLocale }          from '../i18n/i18n.js';
 
 // Faza C5: kolory frakcji (wspólne z FactionSelectScene/branding)
 const COLOR_SEEKERS      = '#D85A30';
 const COLOR_CONFEDERATES = '#378ADD';
 
-const LEFT_W = 340;
-const TAB_H  = 32;
-const ROW_H  = 16;
+// Proporcja lewej kolumny (szersza — mieści duży portret). Środek + prawa dzielą resztę po równo.
+const LEFT_FRAC = 0.36;
+const ROW_H     = 16;
+
+// ── Cache portretów liderów (leniwy, wzorzec ResourceIcons) ──────────────────
+// Import-safe w Node (headless): DOM dotykany tylko pod strażą typeof Image.
+const _portraitCache = new Map();   // leaderId → HTMLImageElement
+function _getPortrait(leaderId, path) {
+  if (typeof Image === 'undefined' || !path) return null;   // headless → fallback
+  let img = _portraitCache.get(leaderId);
+  if (img) return img;
+  img = new Image();
+  img.src = path;
+  _portraitCache.set(leaderId, img);
+  return img;
+}
+
+// "cover" — wypełnia prostokąt docelowy zachowując proporcje obrazu, przycinając nadmiar
+// (odpowiednik CSS object-fit: cover z ekranu wyboru lidera — bez rozciągania).
+function _drawImageCover(ctx, img, dx, dy, dw, dh) {
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  if (!iw || !ih) return;
+  const scale = Math.max(dw / iw, dh / ih);
+  const sw = dw / scale, sh = dh / scale;        // źródłowy wycinek
+  const sx = (iw - sw) / 2, sy = (ih - sh) / 2;  // wyśrodkowany
+  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CivilizationOverlay
@@ -27,8 +50,19 @@ const ROW_H  = 16;
 export class CivilizationOverlay extends BaseOverlay {
   constructor() {
     super(null);
-    this._scrollLeft  = 0;
-    this._scrollRight = 0;
+    this._scrollLeft    = 0;   // scroll lewej kolumny (Przywódca + Imperium)
+    this._scrollMid     = 0;   // scroll listy kolonii (środek)
+    this._scrollHistory = 0;   // scroll kroniki (prawa)
+  }
+
+  // Geometria 3 kolumn (lewa szersza, środek+prawa równo).
+  _getColumns(W, H) {
+    const b = this._getOverlayBounds(W, H);
+    const leftW  = Math.round(b.ow * LEFT_FRAC);
+    const restW  = b.ow - leftW;
+    const midW   = Math.round(restW / 2);
+    const rightW = restW - midW;
+    return { ...b, leftW, midW, rightW, x1: b.ox + leftW, x2: b.ox + leftW + midW };
   }
 
   // ── Główna metoda rysowania ──────────────────────────────────────────────
@@ -37,8 +71,8 @@ export class CivilizationOverlay extends BaseOverlay {
     if (!this.visible) return;
     this._hitZones = [];
 
-    const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
-    const rightW = ow - LEFT_W;
+    const C = this._getColumns(W, H);
+    const { ox, oy, ow, oh, leftW, midW, rightW, x1, x2 } = C;
 
     // Tło
     ctx.fillStyle = bgAlpha(0.38);
@@ -47,9 +81,10 @@ export class CivilizationOverlay extends BaseOverlay {
     ctx.lineWidth = 1;
     ctx.strokeRect(ox, oy, ow, oh);
 
-    // Separator kolumn
+    // Separatory kolumn
     ctx.beginPath();
-    ctx.moveTo(ox + LEFT_W, oy); ctx.lineTo(ox + LEFT_W, oy + oh);
+    ctx.moveTo(x1, oy); ctx.lineTo(x1, oy + oh);
+    ctx.moveTo(x2, oy); ctx.lineTo(x2, oy + oh);
     ctx.stroke();
 
     // Przycisk zamknięcia [X]
@@ -57,121 +92,113 @@ export class CivilizationOverlay extends BaseOverlay {
     const closeY = oy + 4;
     ctx.font = `bold 14px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('\u2715', closeX, closeY + 14);
+    ctx.fillText('✕', closeX, closeY + 14);
     this._addHit(closeX - 4, closeY, 22, 22, 'close');
 
-    // Zbierz dane
     const data = this._gatherData();
 
-    // Rysuj kolumny
-    this._drawLeft(ctx, ox, oy, LEFT_W, oh, data);
-    this._drawRight(ctx, ox + LEFT_W, oy, rightW, oh, data);
+    this._drawLeftCol(ctx, ox, oy, leftW, oh, data);
+    this._drawMidCol(ctx,  x1, oy, midW, oh, data);
+    this._drawRightCol(ctx, x2, oy, rightW, oh, data);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // Zbieranie danych z systemów
+  // Zbieranie danych z systemów (tylko kolonie GRACZA — getPlayerColonies)
   // ══════════════════════════════════════════════════════════════════════════
 
   _gatherData() {
-    const colMgr  = window.KOSMOS?.colonyManager;
-    const vMgr    = window.KOSMOS?.vesselManager;
+    const colMgr   = window.KOSMOS?.colonyManager;
+    const vMgr     = window.KOSMOS?.vesselManager;
     const civTrade = window.KOSMOS?.civilianTradeSystem;
 
-    // S3.5a-1 fix — przegląd Cywilizacji = TYLKO kolonie gracza. getAllColonies() zawiera też
-    //   kolonie AI (ownerEmpireId != null); sumowanie ich kredytów/pop/podatków fałszowało totale
-    //   (kredyty nigdy nie spadały poniżej salda AI, skok przy kolonizacji AI — BUG D/F).
-    const colonies = (colMgr?.getAllColonies() ?? []).filter(c => !c.ownerEmpireId);
+    const colonies     = colMgr?.getPlayerColonies() ?? [];
     const fullColonies = colonies.filter(c => !c.isOutpost);
-    const outposts = colonies.filter(c => c.isOutpost);
+    const outposts     = colonies.filter(c => c.isOutpost);
 
-    // Globalne sumy
     let totalPop = 0, totalMaxPop = 0;
     let avgProsperity = 0, prosperityCount = 0;
-    let totalCredits = 0, totalCreditsPerYear = 0;
-    let totalResearch = 0;
-    const globalResources = {};  // id → { stock, rate }
+    let avgLoyalty = 0, loyaltyCount = 0;
+    let totalCreditsPerYear = 0, taxIncome = 0;
     const perColony = [];
+    const history = [];
 
     for (const col of colonies) {
-      const civ = col.civSystem;
-      const res = col.resourceSystem;
+      const civ   = col.civSystem;
       const prosp = col.prosperitySystem;
       const pop = civ?.population ?? 0;
       const maxPop = civ?.maxPopulation ?? 0;
       const prosperity = prosp?.prosperity ?? 0;
-      const epoch = prosp?.epoch ?? 'early';
-      const credits = col.credits ?? 0;
-      const creditsPerYear = col.creditsPerYear ?? 0;
+      const loyalty = civ?.loyalty ?? 80;
 
       totalPop += pop;
       totalMaxPop += maxPop;
-      totalCredits += credits;
-      totalCreditsPerYear += creditsPerYear;
+      totalCreditsPerYear += col.creditsPerYear ?? 0;
 
-      if (!col.isOutpost && prosp) {
-        avgProsperity += prosperity;
-        prosperityCount++;
+      if (!col.isOutpost) {
+        if (prosp) { avgProsperity += prosperity; prosperityCount++; }
+        avgLoyalty += loyalty; loyaltyCount++;
+        taxIncome += colMgr?.calculateTaxIncome(col) ?? 0;
       }
 
-      // Sumy surowców
-      if (res?.inventory) {
-        for (const [id, stock] of res.inventory) {
-          if (!globalResources[id]) globalResources[id] = { stock: 0, rate: 0 };
-          globalResources[id].stock += stock;
-        }
-        // Netto rates z deltaTracker
-        const dt = res._deltaTracker;
-        if (dt?.observedPerYear) {
-          for (const [id, rate] of dt.observedPerYear) {
-            if (!globalResources[id]) globalResources[id] = { stock: 0, rate: 0 };
-            globalResources[id].rate += rate;
-          }
-        }
-      }
-
-      // Research rate
-      if (res?._deltaTracker?.observedPerYear) {
-        totalResearch += res._deltaTracker.observedPerYear.get('research') ?? 0;
-      }
-
-      // Per-kolonia dane
-      const fleetCount = col.fleet?.length ?? 0;
       perColony.push({
         name: col.name ?? col.planetId,
         planetId: col.planetId,
         isOutpost: col.isOutpost ?? false,
-        pop, maxPop, prosperity, epoch, credits,
-        fleetCount,
+        pop, maxPop, prosperity,
+        credits: col.credits ?? 0,
+        fleetCount: col.fleet?.length ?? 0,
         buildings: col.buildingSystem?._active?.size ?? 0,
-        loyalty: civ?.loyalty ?? 80,
-        identityScore: civ?.identity?.score ?? 0,
-        milestones: civ?.colonyHistory?.length ?? 0,
-        traits: civ?.identity?.traits ?? [],
-        isAutonomous: civ?.isAutonomous ?? false,
+        loyalty,
       });
+
+      // Historia — agreguj wpisy kroniki ze wszystkich kolonii gracza
+      if (Array.isArray(civ?.colonyHistory)) {
+        for (const hEntry of civ.colonyHistory) {
+          history.push({ ...hEntry, colName: col.name ?? col.planetId });
+        }
+      }
     }
 
     if (prosperityCount > 0) avgProsperity /= prosperityCount;
+    if (loyaltyCount > 0)    avgLoyalty    /= loyaltyCount;
 
-    // Flota globalna
+    // Kronika — najnowsze na górze
+    history.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+
+    // Flota (tylko liczba — do "statki" + karty)
     const vessels = vMgr?.getAllVessels?.() ?? [];
-    const fleetByType = {};
-    let inFlight = 0, orbiting = 0, docked = 0;
-    for (const v of vessels) {
-      fleetByType[v.shipId] = (fleetByType[v.shipId] ?? 0) + 1;
-      if (v.status === 'in_transit') inFlight++;
-      else if (v.status === 'orbiting') orbiting++;
-      else docked++;
-    }
 
-    // ── Faza C5: snapshot lidera i frakcji (raz per frame) ─────────────────
+    // Utrzymanie (do NETTO Kr/rok — bez wyświetlania szczegółów; szczegóły są w Economy/BUDŻET)
+    let totalUnitUpkeep = 0;
+    const guMgr = window.KOSMOS?.groundUnitManager;
+    const upTable = colMgr?.constructor?.GROUND_UNIT_UPKEEP;
+    if (guMgr && upTable) {
+      for (const u of guMgr._units?.values?.() ?? []) {
+        if (u.owner !== 'player' && u.factionId !== 'humanity') continue;
+        totalUnitUpkeep += upTable[u.archetypeId]?.credits ?? 0;
+      }
+    }
+    const totalFleetUpkeep = vMgr?.getTotalFleetUpkeep?.() ?? 0;
+    const netCreditsPerYear = totalCreditsPerYear + taxIncome - totalUnitUpkeep - totalFleetUpkeep;
+
+    // Handel — liczba aktywnych połączeń sieci handlu cywilnego
+    const tradeConnections = civTrade?.getAllConnections?.()?.length ?? 0;
+
+    // Wiek cywilizacji — od najstarszej kolonii gracza (col.founded = rok gry założenia)
+    const now = Math.floor(window.KOSMOS?.timeSystem?.gameTime ?? 0);
+    let foundedMin = now;
+    for (const col of colonies) {
+      if (typeof col.founded === 'number') foundedMin = Math.min(foundedMin, col.founded);
+    }
+    const civAge = Math.max(0, now - foundedMin);
+
+    // Lider + frakcja (snapshot raz per frame)
     const leaderSys = window.KOSMOS?.leaderSystem;
     const facSys    = window.KOSMOS?.factionSystem;
     const leaderId  = leaderSys?.activeLeader ?? null;
-    const leaderDef = leaderId ? LEADERS[leaderId] : null;
     const leaderInfo = {
       leaderId,
-      leaderDef,
+      leaderDef: leaderId ? LEADERS[leaderId] : null,
       activeFaction: leaderSys?.activeFaction ?? null,
     };
     const factionInfo = facSys ? {
@@ -182,490 +209,321 @@ export class CivilizationOverlay extends BaseOverlay {
       zone:    facSys.getCurrentZone?.() ?? 'balanced',
     } : null;
 
-    // Podatki — suma przychodu i etykieta efektu
-    const colMgrRef = window.KOSMOS?.colonyManager;
-    let taxIncome = 0;
-    if (colMgrRef) {
-      for (const col of fullColonies) {
-        taxIncome += colMgrRef.calculateTaxIncome(col);
-      }
-    }
-    const taxEffect = this._getTaxEffectLabel(colMgrRef?.taxRate ?? 0.08);
-
-    // Utrzymanie jednostek naziemnych — suma Kr/civYear dla wszystkich jednostek gracza.
-    // Źródło: tabela ColonyManager.GROUND_UNIT_UPKEEP (tick co 1.0 civYear w _tickGroundUnitUpkeep).
-    let totalUnitUpkeep = 0;
-    let unitUpkeepCount = 0;
-    const guMgr = window.KOSMOS?.groundUnitManager;
-    const upTable = colMgrRef?.constructor?.GROUND_UNIT_UPKEEP;
-    if (guMgr && upTable) {
-      for (const u of guMgr._units?.values?.() ?? []) {
-        if (u.owner !== 'player' && u.factionId !== 'humanity') continue;
-        const up = upTable[u.archetypeId];
-        if (!up) continue;
-        totalUnitUpkeep += up.credits ?? 0;
-        unitUpkeepCount++;
-      }
-    }
-
-    // S3.5a-1 — utrzymanie floty w Kr (suma roczna). getTotalFleetUpkeep filtruje
-    //   wraki + AI; count = statki gracza bez wraków (player overview).
-    let totalFleetUpkeep = vMgr?.getTotalFleetUpkeep?.() ?? 0;
-    let fleetUpkeepCount = 0;
-    for (const v of vessels) {
-      if (v.isWreck) continue;
-      if (v.ownerEmpireId && v.ownerEmpireId !== 'player') continue;
-      fleetUpkeepCount++;
-    }
-
     return {
-      colonies, fullColonies, outposts, perColony,
-      totalPop, totalMaxPop, avgProsperity,
-      totalCredits, totalCreditsPerYear, totalResearch,
-      globalResources, taxIncome, taxEffect,
-      totalUnitUpkeep, unitUpkeepCount,
-      totalFleetUpkeep, fleetUpkeepCount,
-      vessels, fleetByType, inFlight, orbiting, docked,
+      colonies, fullColonies, outposts, perColony, history,
+      totalPop, totalMaxPop, avgProsperity, avgLoyalty,
+      vessels, netCreditsPerYear, tradeConnections, civAge,
       leaderInfo, factionInfo,
     };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // LEWA KOLUMNA — globalne podsumowanie
+  // LEWA KOLUMNA — Przywódca (duży portret) → Frakcje → Imperium
   // ══════════════════════════════════════════════════════════════════════════
 
-  _drawLeft(ctx, x, y, w, h, data) {
+  _drawLeftCol(ctx, x, y, w, h, data) {
     const pad = 14;
-
-    // Nagłówek (standard: BaseOverlay._drawOverlayHeader)
     this._drawOverlayHeader(ctx, x, y, w, t('civOverlay.header'));
 
-    const listY = y + HEADER_H;
-    const listH = h - HEADER_H;
+    const contentY = y + HEADER_H;
+    const contentH = h - HEADER_H;
+
     ctx.save();
     ctx.beginPath();
-    ctx.rect(x, listY, w, listH);
+    ctx.rect(x, contentY, w, contentH);
     ctx.clip();
 
-    let ry = listY + 6 - this._scrollLeft;
-
-    // ── IMPERIUM ────────────────────────────────────────────────────────
-    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.empire'));
-    ry += 18;
-
-    const colCount = data.fullColonies.length;
-    const outCount = data.outposts.length;
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.colonies'), `${colCount} (+${outCount} ${t('civOverlay.outposts')})`);
-    ry += ROW_H;
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.totalShips'), `${data.vessels.length}`);
-    ry += ROW_H + 4;
-
-    // ── POPULACJA ───────────────────────────────────────────────────────
-    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.population'));
-    ry += 18;
-
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.totalPop'), `${data.totalPop.toFixed(1)} / ${data.totalMaxPop.toFixed(0)}`);
-    ry += ROW_H;
-    // Pasek populacji
-    const popPct = data.totalMaxPop > 0 ? data.totalPop / data.totalMaxPop : 0;
-    this._drawBar(ctx, x + pad, ry, w - pad * 2, 6, popPct, THEME.accent, THEME.border);
-    ry += 12;
-
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.avgProsperity'),
-      `${data.avgProsperity.toFixed(1)} / 100`, this._prosperityColor(data.avgProsperity));
-    ry += ROW_H;
-
-    // Średnia lojalność + tożsamość (Kronika Imperium)
-    const fullCols = data.perColony.filter(c => !c.isOutpost);
-    if (fullCols.length > 0) {
-      const avgLoyalty = fullCols.reduce((s, c) => s + (c.loyalty ?? 80), 0) / fullCols.length;
-      const avgIdentity = fullCols.reduce((s, c) => s + (c.identityScore ?? 0), 0) / fullCols.length;
-      const atRisk = fullCols.filter(c => (c.loyalty ?? 80) < 30).length;
-
-      const loyColor = avgLoyalty > 70 ? THEME.success : avgLoyalty > 30 ? THEME.warning : THEME.danger;
-      this._statRow(ctx, x + pad, ry, w, t('civOverlay.avgLoyalty') || 'Śr. lojalność',
-        `${avgLoyalty.toFixed(0)}%`, loyColor);
-      ry += ROW_H;
-      this._statRow(ctx, x + pad, ry, w, t('civOverlay.avgIdentity') || 'Śr. tożsamość',
-        `${avgIdentity.toFixed(0)}`, '#c8a050');
-      ry += ROW_H;
-      if (atRisk > 0) {
-        this._statRow(ctx, x + pad, ry, w, t('civOverlay.atRisk') || '⚠ W ryzyku',
-          `${atRisk} ${atRisk === 1 ? 'kolonia' : 'kolonie'}`, THEME.danger);
-        ry += ROW_H;
-      }
-    }
-    ry += 4;
-
-    // ── Faza C5: LIDER + FRAKCJE ────────────────────────────────────────
-    ry = this._drawLeaderFactionBlock(ctx, x, ry, w, pad, data);
-
-    // ── EKONOMIA ────────────────────────────────────────────────────────
-    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.economy'));
-    ry += 18;
-
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.credits'),
-      `${data.totalCredits.toFixed(0)} Kr`, THEME.warning);
-    ry += ROW_H;
-    // S3.5a-1 — Bilans Kr = NETTO: handel + podatki − utrzymanie jednostek − utrzymanie floty.
-    //   Wcześniej pokazywał tylko przepływ handlu (col.creditsPerYear), pomijając podatki (idą
-    //   wprost do col.credits) ORAZ upkeep → mylące +0.0 mimo realnego deficytu.
-    const netPerYear = data.totalCreditsPerYear + data.taxIncome
-                     - data.totalUnitUpkeep - data.totalFleetUpkeep;
-    const sign = netPerYear >= 0 ? '+' : '';
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.creditsPerYear'),
-      `${sign}${netPerYear.toFixed(1)} Kr/${t('tradePanel.perYear')}`,
-      netPerYear >= 0 ? THEME.success : THEME.danger);
-    ry += ROW_H;
-    // Utrzymanie jednostek naziemnych (płacone raz na civYear z kolonii macierzystej)
-    if (data.unitUpkeepCount > 0) {
-      this._statRow(ctx, x + pad, ry, w,
-        `Utrzymanie jednostek (${data.unitUpkeepCount})`,
-        `-${data.totalUnitUpkeep} Kr/${t('tradePanel.perYear')}`,
-        THEME.danger);
-      ry += ROW_H;
-    }
-    // S3.5a-1 — utrzymanie floty (główny sink Kr; raz na civYear z kolonii macierzystej / homePlanet)
-    if (data.fleetUpkeepCount > 0) {
-      this._statRow(ctx, x + pad, ry, w,
-        `${t('civOverlay.fleetUpkeep')} (${data.fleetUpkeepCount})`,
-        `-${data.totalFleetUpkeep} Kr/${t('tradePanel.perYear')}`,
-        THEME.danger);
-      ry += ROW_H;
-    }
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.research'),
-      `${data.totalResearch.toFixed(1)}/${t('tradePanel.perYear')}`, THEME.info);
-    ry += ROW_H + 2;
-
-    // ── PODATKI ─────────────────────────────────────────────────────────
-    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.taxes'));
-    ry += 18;
-
-    // Suwak podatkowy (0–25%) z kolorowymi strefami
-    const colMgrTax = window.KOSMOS?.colonyManager;
-    const taxRate = colMgrTax?.taxRate ?? 0.08;
-    const taxPct = taxRate / 0.25; // 0–1
-    const BAR_W = w - pad * 2;
-    const taxBarY = ry;
-
-    // Tło paska
-    ctx.fillStyle = 'rgba(255,255,255,0.05)';
-    ctx.fillRect(x + pad, ry, BAR_W, 8);
-
-    // Wypełnienie kolorowe wg strefy
-    const taxColor = taxRate <= 0.05 ? '#00ff88'
-      : taxRate <= 0.12 ? THEME.accent
-      : taxRate <= 0.20 ? '#ffaa00'
-      : '#ff4444';
-    ctx.fillStyle = taxColor;
-    ctx.fillRect(x + pad, ry, BAR_W * taxPct, 8);
-
-    // Znacznik pozycji
-    const markerX = x + pad + BAR_W * taxPct;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(markerX - 1, ry - 2, 2, 12);
-    ry += 16;
-
-    // Hit zone na pasku — klik zmienia stawkę
-    this._addHit(x + pad, taxBarY - 4, BAR_W, 16, 'tax_slider', { barX: x + pad, barW: BAR_W });
-
-    // Wartości
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.taxRate'),
-      `${Math.round(taxRate * 100)}%`, taxColor);
-    ry += ROW_H;
-
-    // Przychód z podatków (suma per-kolonia)
-    const taxIncome = data.taxIncome ?? 0;
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.taxIncome'),
-      `+${taxIncome} Kr/${t('tradePanel.perYear')}`, THEME.success);
-    ry += ROW_H;
-
-    // Efekt na społeczeństwo
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillText(data.taxEffect, x + pad, ry + 8);
-    ry += 16;
-
-    // Top surowce (deficytowe i nadmiarowe)
-    const sortedRes = Object.entries(data.globalResources)
-      .filter(([id]) => ALL_RESOURCES[id])
-      .sort((a, b) => a[1].rate - b[1].rate);
-
-    const deficits = sortedRes.filter(([, v]) => v.rate < -0.5).slice(0, 4);
-    const surpluses = sortedRes.filter(([, v]) => v.rate > 0.5).reverse().slice(0, 4);
-
-    if (deficits.length > 0) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.danger;
-      ctx.fillText(t('civOverlay.deficits'), x + pad, ry + 10);
-      ry += 14;
-      for (const [id, v] of deficits) {
-        const rd = ALL_RESOURCES[id];
-        const nm = rd ? getName(rd, 'resource') : id;
-        ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`  ${nm}: ${v.rate.toFixed(1)}/${t('tradePanel.perYear')} (${Math.round(v.stock)})`, x + pad + 4, ry + 10);
-        ry += 13;
-      }
-    }
-    if (surpluses.length > 0) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.success;
-      ctx.fillText(t('civOverlay.surpluses'), x + pad, ry + 10);
-      ry += 14;
-      for (const [id, v] of surpluses) {
-        const rd = ALL_RESOURCES[id];
-        const nm = rd ? getName(rd, 'resource') : id;
-        ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`  ${nm}: +${v.rate.toFixed(1)}/${t('tradePanel.perYear')} (${Math.round(v.stock)})`, x + pad + 4, ry + 10);
-        ry += 13;
-      }
-    }
-    ry += 4;
-
-    // ── FLOTA ───────────────────────────────────────────────────────────
-    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.fleet'));
-    ry += 18;
-
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.docked'), `${data.docked}`);
-    ry += ROW_H;
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.inFlight'), `${data.inFlight}`, THEME.warning);
-    ry += ROW_H;
-    this._statRow(ctx, x + pad, ry, w, t('civOverlay.orbiting'), `${data.orbiting}`, THEME.info);
-    ry += ROW_H + 2;
-
-    // Breakdown per typ statku
-    for (const [shipId, count] of Object.entries(data.fleetByType)) {
-      const shipDef = SHIPS[shipId] ?? HULLS[shipId];
-      const shipName = shipDef ? getName(shipDef, 'ship') : shipId;
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`  ${shipName}: ${count}`, x + pad + 4, ry + 10);
-      ry += 13;
-    }
+    let ry = contentY + 8 - this._scrollLeft;
+    ry = this._drawLeaderBlock(ctx, x, ry, w, pad, data);
+    ry = this._drawFactionBlock(ctx, x, ry, w, pad, data);
+    this._drawEmpireBlock(ctx, x, ry, w, pad, data);
 
     ctx.restore();
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // Faza C5: blok LIDER + FRAKCJE (lewa kolumna, między POPULACJA a EKONOMIA)
-  // ══════════════════════════════════════════════════════════════════════════
+  // ── Przywódca (DUŻY portret + imię + tytuł + cytat + bonusy) ───────────────
+  _drawLeaderBlock(ctx, x, ry, w, pad, data) {
+    const isPL   = getLocale() !== 'en';
+    const leader = data.leaderInfo?.leaderDef;
 
-  // Zwraca nową wartość ry po narysowaniu sekcji.
-  _drawLeaderFactionBlock(ctx, x, ry, w, pad, data) {
-    const isPL = getLocale() !== 'en';
-    const leaderInfo  = data.leaderInfo;
-    const factionInfo = data.factionInfo;
-
-    // ── SEKCJA 1 — LIDER (zawsze widoczna w civMode) ─────────────────────
     this._sectionHeader(ctx, x + pad, ry, t('civOverlay.leader'));
-    ry += 18;
+    ry += 22;
 
-    if (leaderInfo?.leaderDef) {
-      const leader = leaderInfo.leaderDef;
-      const name   = isPL ? leader.namePL : (leader.nameEN || leader.namePL);
-      const title  = isPL ? leader.titlePL : (leader.titleEN || leader.titlePL);
-      const arch   = isPL ? leader.archetype : (leader.archetypeEN || leader.archetype);
-
-      // Imię (główny tekst)
-      ctx.font = `bold ${THEME.fontSizeSmall + 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(name, x + pad, ry + 10);
-      ry += 14;
-
-      // Tytuł (mniejszy, faded)
-      if (title) {
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText(title, x + pad, ry + 9);
-        ry += 12;
-      }
-
-      // Archetype (mniejszy, accent kolor)
-      if (arch) {
-        ctx.font = `italic ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.accent;
-        ctx.fillText(`◈ ${arch}`, x + pad, ry + 9);
-        ry += 12;
-      }
-
-      // Frakcja (znana lub nieznana)
-      const factionId = leaderInfo.activeFaction;
-      let factionLabel, factionColor;
-      if (factionId === 'confederates') {
-        factionLabel = isPL ? 'Konfederaci Misji' : 'Confederation of the Mission';
-        factionColor = COLOR_CONFEDERATES;
-      } else if (factionId === 'seekers') {
-        factionLabel = isPL ? 'Poszukiwacze Drogi' : 'Seekers of the Way';
-        factionColor = COLOR_SEEKERS;
-      } else {
-        factionLabel = t('civOverlay.factionUnknown');
-        factionColor = THEME.textDim;
-      }
-      this._statRow(ctx, x + pad, ry, w, t('civOverlay.faction'), factionLabel, factionColor);
-      ry += ROW_H;
-    } else {
-      // Brak lidera (nie powinno się zdarzyć w civMode, defensywnie)
+    if (!leader) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.fillText('—', x + pad, ry + 10);
-      ry += ROW_H;
+      return ry + ROW_H + 4;
     }
-    ry += 4;
 
-    // ── SEKCJA 2 — FRAKCJE (tylko gdy odblokowane) ──────────────────────
-    if (factionInfo && !factionInfo.locked) {
-      this._sectionHeader(ctx, x + pad, ry, t('civOverlay.factionsHeader'));
-      ry += 18;
+    const name  = isPL ? leader.namePL : (leader.nameEN || leader.namePL);
+    const title = isPL ? leader.titlePL : (leader.titleEN || leader.titlePL);
+    const arch  = isPL ? leader.archetype : (leader.archetypeEN || leader.archetype);
+    const quote = isPL ? leader.quote : (leader.quoteEN || leader.quote);
 
-      const slider  = factionInfo.slider;
-      const tension = factionInfo.tension;
-      const zone    = factionInfo.zone;
-      const barW    = w - pad * 2;
+    const factionId = data.leaderInfo.activeFaction;
+    const facColor = factionId === 'confederates' ? COLOR_CONFEDERATES
+      : factionId === 'seekers' ? COLOR_SEEKERS
+      : THEME.accent;
 
-      // ── Pasek suwaka 0-100 z 3 strefami ──
-      const barX = x + pad;
-      const barY = ry;
-      const barH = 8;
-
-      // Tło paska podzielone na 3 strefy kolorystyczne
-      // Lewa 0-30 = Seekers (#D85A30), środek 31-69 = accent, prawa 70-100 = Confed (#378ADD)
-      const seg1W = Math.round(barW * 0.30);    // 0-30
-      const seg2W = Math.round(barW * 0.40);    // 30-70
-      const seg3W = barW - seg1W - seg2W;       // 70-100
-      ctx.fillStyle = COLOR_SEEKERS + '40';     // semi-transparent (40 = 25%)
-      ctx.fillRect(barX, barY, seg1W, barH);
-      ctx.fillStyle = THEME.accent + '30';
-      ctx.fillRect(barX + seg1W, barY, seg2W, barH);
-      ctx.fillStyle = COLOR_CONFEDERATES + '40';
-      ctx.fillRect(barX + seg1W + seg2W, barY, seg3W, barH);
-
-      // Granice stref (subtelne pionowe linie)
-      ctx.strokeStyle = THEME.border;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(barX + seg1W, barY); ctx.lineTo(barX + seg1W, barY + barH);
-      ctx.moveTo(barX + seg1W + seg2W, barY); ctx.lineTo(barX + seg1W + seg2W, barY + barH);
-      ctx.stroke();
-
-      // Ramka paska
-      ctx.strokeStyle = THEME.border;
-      ctx.strokeRect(barX, barY, barW, barH);
-
-      // Znacznik aktualnej pozycji slidera (pionowa kreska + trójkąt nad)
-      let markerColor;
-      if (slider <= 30)      markerColor = COLOR_SEEKERS;
-      else if (slider >= 70) markerColor = COLOR_CONFEDERATES;
-      else                   markerColor = THEME.accent;
-      const markerX = barX + Math.round(barW * (slider / 100));
-      ctx.fillStyle = markerColor;
-      ctx.fillRect(markerX - 1, barY - 2, 3, barH + 4);
-
-      ry += barH + 6;
-
-      // Etykieta strefy (centered nad paskiem niższe?, na razie pod paskiem po lewej + wartość po prawej)
-      const zoneKey = `civOverlay.zone_${zone}`;
-      const zoneLabel = t(zoneKey);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = markerColor;
-      ctx.fillText(zoneLabel, x + pad, ry + 9);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`${Math.round(slider)}/100`, x + pad + barW, ry + 9);
+    // Portret w proporcji 4:5 (jak ekran wyboru lidera) — cover-crop, BEZ zniekształceń.
+    const PW = Math.min(w - pad * 2, 180);
+    const PH = Math.round(PW * 1.25);             // 4:5 (160×200 / 180×225)
+    const px = x + pad, py = ry;
+    const img = _getPortrait(data.leaderInfo.leaderId, leader.portrait);
+    if (img && img.complete && img.naturalWidth > 0) {
+      _drawImageCover(ctx, img, px, py, PW, PH);
+    } else {
+      ctx.fillStyle = THEME.accent + '22';
+      ctx.fillRect(px, py, PW, PH);
+      const initials = name.split(/\s+/).map(s => s[0] ?? '').slice(0, 2).join('').toUpperCase();
+      ctx.font = `bold ${Math.round(PW * 0.34)}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(initials, px + PW / 2, py + PH / 2);
       ctx.textAlign = 'left';
-      ry += 14;
+      ctx.textBaseline = 'alphabetic';
+    }
+    // Ramka w kolorze theme (zmienia się z motywem)
+    ctx.strokeStyle = THEME.accent;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px + 1, py + 1, PW - 2, PH - 2);
+    ctx.lineWidth = 1;
 
-      // ── Sub-pasek napięcia ──
-      const tensionLabel = `${t('civOverlay.tension')}: ${Math.round(tension)}%`;
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = tension > 50 ? THEME.danger : THEME.textSecondary;
-      ctx.fillText(tensionLabel, x + pad, ry + 9);
-      ry += 12;
+    // Tekst obok portretu (imię + tytuł + archetyp) — kolumna po prawej stronie portretu
+    const tx = px + PW + 12;
+    const tw = w - pad - (PW + 12) - pad;
+    let ty = py + 4;
+    ctx.font = `bold ${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    for (const ln of this._wrapText(ctx, name, tw).slice(0, 3)) { ctx.fillText(ln, tx, ty + 11); ty += 15; }
+    if (title) {
+      ctx.font = `9px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      for (const ln of this._wrapText(ctx, title, tw).slice(0, 3)) { ctx.fillText(ln, tx, ty + 9); ty += 11; }
+    }
+    if (arch) {
+      ctx.font = `italic 9px ${THEME.fontFamily}`;
+      ctx.fillStyle = facColor;
+      for (const ln of this._wrapText(ctx, `◈ ${arch}`, tw).slice(0, 2)) { ctx.fillText(ln, tx, ty + 9); ty += 11; }
+    }
 
-      const tensionColor = tension > 50 ? THEME.danger : THEME.warning;
-      this._drawBar(ctx, x + pad, ry, barW, 4, tension / 100, tensionColor, THEME.border);
-      ry += 8;
+    ry = Math.max(py + PH, ty) + 10;
 
-      // ── Modyfikatory aktywnej strefy (top 2-3) ──
-      const facSys = factionInfo.ref;
-      if (facSys?.getModifier) {
-        const STATS = ['research', 'industryProduction', 'prosperity', 'popGrowth', 'explorationSpeed', 'anomalyChance'];
-        const modLabels = {
-          research:           t('civOverlay.modResearch'),
-          industryProduction: t('civOverlay.modIndustry'),
-          prosperity:         t('civOverlay.modProsperity'),
-          popGrowth:          t('civOverlay.modPopGrowth'),
-          explorationSpeed:   t('civOverlay.modExploration'),
-          anomalyChance:      t('civOverlay.modAnomaly'),
-        };
-        const activeMods = [];
-        for (const stat of STATS) {
-          const mult = facSys.getModifier(stat);
-          if (mult === 1.0) continue;
-          activeMods.push({ stat, mult });
-          if (activeMods.length >= 3) break;
-        }
-        if (activeMods.length > 0) {
-          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-          for (const m of activeMods) {
-            const pct = Math.round((m.mult - 1.0) * 100);
-            const sign = pct > 0 ? '+' : '';
-            const color = m.mult < 1.0 ? THEME.danger : THEME.success;
-            ctx.fillStyle = color;
-            ctx.fillText(`  ${modLabels[m.stat]}: ${sign}${pct}%`, x + pad, ry + 9);
-            ry += 11;
-          }
-        }
+    // Cytat (italic, pełna szerokość)
+    if (quote) {
+      ctx.font = `italic ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      for (const ln of this._wrapText(ctx, `„${quote}”`, w - pad * 2)) {
+        ctx.fillText(ln, x + pad, ry + 9); ry += 12;
       }
       ry += 4;
-    } else if (factionInfo && factionInfo.locked) {
-      // Frakcje jeszcze nie odblokowane — krótka notka zamiast sekcji
+    }
+
+    // Bonusy (descPL/descEN zawierają już wartości)
+    const bonuses = leader.bonuses ?? [];
+    if (bonuses.length > 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('civOverlay.leaderBonuses'), x + pad, ry + 9);
+      ry += 13;
+      for (const b of bonuses) {
+        const desc = isPL ? b.descPL : (b.descEN || b.descPL);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.success;
+        for (const ln of this._wrapText(ctx, `• ${desc}`, w - pad * 2 - 4)) {
+          ctx.fillText(ln, x + pad + 4, ry + 9); ry += 12;
+        }
+      }
+    }
+    for (const m of (leader.maluses ?? [])) {
+      const desc = isPL ? m.descPL : (m.descEN || m.descPL);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger;
+      for (const ln of this._wrapText(ctx, `• ${desc}`, w - pad * 2 - 4)) {
+        ctx.fillText(ln, x + pad + 4, ry + 9); ry += 12;
+      }
+    }
+
+    // Linia frakcji
+    let factionLabel;
+    if (factionId === 'confederates') factionLabel = isPL ? 'Konfederaci Misji' : 'Confederation of the Mission';
+    else if (factionId === 'seekers') factionLabel = isPL ? 'Poszukiwacze Drogi' : 'Seekers of the Way';
+    else factionLabel = t('civOverlay.factionUnknown');
+    ry += 2;
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.faction'), factionLabel, facColor);
+    ry += ROW_H + 6;
+
+    return ry;
+  }
+
+  // ── Frakcje (suwak/napięcie/modyfikatory — tylko gdy odblokowane) ──────────
+  _drawFactionBlock(ctx, x, ry, w, pad, data) {
+    const factionInfo = data.factionInfo;
+    if (!factionInfo) return ry;
+
+    if (factionInfo.locked) {
       ctx.font = `italic ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('civOverlay.factionLocked'), x + pad, ry + 9);
-      ry += 14;
-      ry += 4;
+      for (const ln of this._wrapText(ctx, t('civOverlay.factionLocked'), w - pad * 2)) {
+        ctx.fillText(ln, x + pad, ry + 9); ry += 12;
+      }
+      return ry + 8;
     }
+
+    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.factionsHeader'));
+    ry += 22;
+
+    const slider  = factionInfo.slider;
+    const tension = factionInfo.tension;
+    const zone    = factionInfo.zone;
+    const barW    = w - pad * 2;
+    const barX    = x + pad;
+    const barY    = ry;
+    const barH    = 8;
+
+    const seg1W = Math.round(barW * 0.30);
+    const seg2W = Math.round(barW * 0.40);
+    const seg3W = barW - seg1W - seg2W;
+    ctx.fillStyle = COLOR_SEEKERS + '40';
+    ctx.fillRect(barX, barY, seg1W, barH);
+    ctx.fillStyle = THEME.accent + '30';
+    ctx.fillRect(barX + seg1W, barY, seg2W, barH);
+    ctx.fillStyle = COLOR_CONFEDERATES + '40';
+    ctx.fillRect(barX + seg1W + seg2W, barY, seg3W, barH);
+
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(barX + seg1W, barY); ctx.lineTo(barX + seg1W, barY + barH);
+    ctx.moveTo(barX + seg1W + seg2W, barY); ctx.lineTo(barX + seg1W + seg2W, barY + barH);
+    ctx.stroke();
+    ctx.strokeRect(barX, barY, barW, barH);
+
+    let markerColor;
+    if (slider <= 30)      markerColor = COLOR_SEEKERS;
+    else if (slider >= 70) markerColor = COLOR_CONFEDERATES;
+    else                   markerColor = THEME.accent;
+    const markerX = barX + Math.round(barW * (slider / 100));
+    ctx.fillStyle = markerColor;
+    ctx.fillRect(markerX - 1, barY - 2, 3, barH + 4);
+    ry += barH + 6;
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = markerColor;
+    ctx.fillText(t(`civOverlay.zone_${zone}`), x + pad, ry + 9);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = THEME.textPrimary;
+    ctx.fillText(`${Math.round(slider)}/100`, x + pad + barW, ry + 9);
+    ctx.textAlign = 'left';
+    ry += 14;
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = tension > 50 ? THEME.danger : THEME.textSecondary;
+    ctx.fillText(`${t('civOverlay.tension')}: ${Math.round(tension)}%`, x + pad, ry + 9);
+    ry += 12;
+    this._drawBar(ctx, x + pad, ry, barW, 4, tension / 100,
+      tension > 50 ? THEME.danger : THEME.warning, THEME.border);
+    ry += 8;
+
+    const facSys = factionInfo.ref;
+    if (facSys?.getModifier) {
+      const STATS = ['research', 'industryProduction', 'prosperity', 'popGrowth', 'explorationSpeed', 'anomalyChance'];
+      const modLabels = {
+        research:           t('civOverlay.modResearch'),
+        industryProduction: t('civOverlay.modIndustry'),
+        prosperity:         t('civOverlay.modProsperity'),
+        popGrowth:          t('civOverlay.modPopGrowth'),
+        explorationSpeed:   t('civOverlay.modExploration'),
+        anomalyChance:      t('civOverlay.modAnomaly'),
+      };
+      const activeMods = [];
+      for (const stat of STATS) {
+        const mult = facSys.getModifier(stat);
+        if (mult === 1.0) continue;
+        activeMods.push({ stat, mult });
+        if (activeMods.length >= 3) break;
+      }
+      if (activeMods.length > 0) {
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        for (const m of activeMods) {
+          const pct = Math.round((m.mult - 1.0) * 100);
+          const sign = pct > 0 ? '+' : '';
+          ctx.fillStyle = m.mult < 1.0 ? THEME.danger : THEME.success;
+          ctx.fillText(`  ${modLabels[m.stat]}: ${sign}${pct}%`, x + pad, ry + 9);
+          ry += 11;
+        }
+      }
+    }
+    ry += 6;
+    return ry;
+  }
+
+  // ── Imperium (sumy / średnie / wiek / handel) ──────────────────────────────
+  _drawEmpireBlock(ctx, x, ry, w, pad, data) {
+    this._sectionHeader(ctx, x + pad, ry, t('civOverlay.empire'));
+    ry += 22;
+
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.colonies'),
+      `${data.fullColonies.length} (+${data.outposts.length} ${t('civOverlay.outposts')})`);
+    ry += ROW_H;
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.totalShips'), `${data.vessels.length}`);
+    ry += ROW_H;
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.totalPop'),
+      `${data.totalPop.toFixed(1)} / ${data.totalMaxPop.toFixed(0)}`);
+    ry += ROW_H;
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.avgProsperity'),
+      `${data.avgProsperity.toFixed(1)}`, this._prosperityColor(data.avgProsperity));
+    ry += ROW_H;
+    const loyColor = data.avgLoyalty > 70 ? THEME.success : data.avgLoyalty > 30 ? THEME.warning : THEME.danger;
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.avgLoyalty'), `${data.avgLoyalty.toFixed(0)}%`, loyColor);
+    ry += ROW_H;
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.civAge'),
+      `${data.civAge} ${t('civOverlay.yearsShort')}`);
+    ry += ROW_H;
+    this._statRow(ctx, x + pad, ry, w, t('civOverlay.trade'),
+      `${data.tradeConnections} ${t('civOverlay.connections')}`, THEME.info);
+    ry += ROW_H + 6;
 
     return ry;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // PRAWA KOLUMNA — breakdown per kolonia
+  // ŚRODKOWA KOLUMNA — lista kolonii (pasek prosperity) + 4 karty podsumowania
   // ══════════════════════════════════════════════════════════════════════════
 
-  _drawRight(ctx, x, y, w, h, data) {
+  _drawMidCol(ctx, x, y, w, h, data) {
     const pad = 14;
-
-    // Nagłówek (standard: BaseOverlay._drawOverlayHeader)
     this._drawOverlayHeader(ctx, x, y, w, t('civOverlay.coloniesHeader'));
 
+    const CARDS_H = 104;
+    const BOTTOM_PAD = 28;                        // odstęp nad dolnym paskiem nawigacji — podnosi karty
     const listY = y + HEADER_H;
-    const listH = h - HEADER_H;
+    const listH = h - HEADER_H - CARDS_H - BOTTOM_PAD;
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, listY, w, listH);
     ctx.clip();
 
-    let ry = listY + 6 - this._scrollRight;
+    let ry = listY + 6 - this._scrollMid;
 
-    // Nagłówki tabeli
-    const cols = [0, 110, 180, 230, 280, 330];
+    // Offsety kolumn dopasowane do węższej kolumny środkowej
+    const C = { name: 0, pop: 118, prosp: 172, cr: 214, fleet: 274, bld: 322 };
     ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('civOverlay.colName'),       x + pad + cols[0], ry + 10);
-    ctx.fillText(t('civOverlay.colPop'),         x + pad + cols[1], ry + 10);
-    ctx.fillText(t('civOverlay.colProsperity'),  x + pad + cols[2], ry + 10);
-    ctx.fillText(t('civOverlay.colCredits'),     x + pad + cols[3], ry + 10);
-    ctx.fillText(t('civOverlay.colFleet'),       x + pad + cols[4], ry + 10);
-    ctx.fillText(t('civOverlay.colBuildings'),   x + pad + cols[5], ry + 10);
+    ctx.fillText(t('civOverlay.colName'),       x + pad + C.name,  ry + 10);
+    ctx.fillText(t('civOverlay.colPop'),         x + pad + C.pop,   ry + 10);
+    ctx.fillText(t('civOverlay.colProsperity'),  x + pad + C.prosp, ry + 10);
+    ctx.fillText(t('civOverlay.colCredits'),     x + pad + C.cr,    ry + 10);
+    ctx.fillText(t('civOverlay.colFleet'),       x + pad + C.fleet, ry + 10);
+    ctx.fillText(t('civOverlay.colBuildings'),   x + pad + C.bld,   ry + 10);
     ry += 16;
-
-    // Separator nagłówka
     ctx.strokeStyle = THEME.border;
     ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
     ry += 4;
 
-    // Wiersze kolonii — pełne kolonie najpierw, potem outposty
     const sorted = [...data.perColony].sort((a, b) => {
       if (a.isOutpost !== b.isOutpost) return a.isOutpost ? 1 : -1;
       return b.pop - a.pop;
@@ -673,93 +531,123 @@ export class CivilizationOverlay extends BaseOverlay {
 
     for (const col of sorted) {
       const isActive = col.planetId === window.KOSMOS?.colonyManager?.activePlanetId;
+      const rowTop = ry - 2;
+      const rowH = col.isOutpost ? ROW_H : ROW_H + 8;
 
-      // Podświetlenie aktywnej kolonii
       if (isActive) {
         ctx.fillStyle = 'rgba(0,255,180,0.06)';
-        ctx.fillRect(x + 2, ry - 2, w - 4, ROW_H + 2);
+        ctx.fillRect(x + 2, rowTop, w - 4, rowH + 2);
       }
 
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-
-      // Nazwa
       const nameColor = col.isOutpost ? THEME.textDim : (isActive ? THEME.accent : THEME.textPrimary);
       ctx.fillStyle = nameColor;
-      const prefix = col.isOutpost ? '\u25CB ' : '\u25CF ';  // ring vs filled circle
-      ctx.fillText((prefix + col.name).slice(0, 16), x + pad + cols[0], ry + 10);
+      const prefix = col.isOutpost ? '○ ' : '● ';
+      ctx.fillText((prefix + col.name).slice(0, 15), x + pad + C.name, ry + 10);
 
-      // Populacja
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(col.isOutpost ? '-' : `${col.pop.toFixed(1)}/${col.maxPop}`, x + pad + cols[1], ry + 10);
+      ctx.fillText(col.isOutpost ? '–' : `${col.pop.toFixed(1)}/${col.maxPop}`, x + pad + C.pop, ry + 10);
 
-      // Prosperity
       if (!col.isOutpost) {
         ctx.fillStyle = this._prosperityColor(col.prosperity);
-        ctx.fillText(`${col.prosperity.toFixed(0)}`, x + pad + cols[2], ry + 10);
+        ctx.fillText(`${col.prosperity.toFixed(0)}`, x + pad + C.prosp, ry + 10);
       } else {
         ctx.fillStyle = THEME.textDim;
-        ctx.fillText('-', x + pad + cols[2], ry + 10);
+        ctx.fillText('–', x + pad + C.prosp, ry + 10);
       }
 
-      // Kredyty
       ctx.fillStyle = THEME.warning;
-      ctx.fillText(`${(col.credits ?? 0).toFixed(0)}`, x + pad + cols[3], ry + 10);
-
-      // Flota
+      ctx.fillText(`${col.credits.toFixed(0)}`, x + pad + C.cr, ry + 10);
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`${col.fleetCount}`, x + pad + cols[4], ry + 10);
+      ctx.fillText(`${col.fleetCount}`, x + pad + C.fleet, ry + 10);
+      ctx.fillText(`${col.buildings}`, x + pad + C.bld, ry + 10);
 
-      // Budynki
-      ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`${col.buildings}`, x + pad + cols[5], ry + 10);
-
-      // Loyalty + Identity mini-paski (pod głównym wierszem)
       if (!col.isOutpost) {
-        ry += ROW_H - 2;
-        const barStartX = x + pad + cols[0] + 16;
-        const barW = 60;
-
-        // Mini pasek loyalty
-        const loyRatio = (col.loyalty ?? 80) / 100;
-        const loyColor = loyRatio > 0.7 ? THEME.success : loyRatio > 0.3 ? THEME.warning : THEME.danger;
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(barStartX, ry, barW, 4);
-        ctx.fillStyle = loyColor;
-        ctx.fillRect(barStartX, ry, barW * loyRatio, 4);
-
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = loyColor;
-        ctx.fillText(`L:${Math.round(col.loyalty)}%`, barStartX + barW + 3, ry + 4);
-
-        // Mini pasek identity
-        const idBarX = barStartX + barW + 40;
-        const idRatio = (col.identityScore ?? 0) / 100;
-        const idColor = idRatio > 0.5 ? '#c8a050' : '#a08040';
-        ctx.fillStyle = 'rgba(255,255,255,0.08)';
-        ctx.fillRect(idBarX, ry, barW, 4);
-        ctx.fillStyle = idColor;
-        ctx.fillRect(idBarX, ry, barW * idRatio, 4);
-
-        ctx.fillStyle = idColor;
-        ctx.fillText(`T:${col.identityScore}`, idBarX + barW + 3, ry + 4);
-
-        // Flaga ryzyka
-        if (col.loyalty < 30) {
-          ctx.fillStyle = THEME.danger;
-          ctx.fillText('⚠', idBarX + barW + 30, ry + 4);
-        }
-        if (col.isAutonomous) {
-          ctx.fillStyle = THEME.warning;
-          ctx.fillText('🏴', idBarX + barW + 40, ry + 4);
-        }
-
-        ry += 6;
+        this._drawBar(ctx, x + pad + C.name, ry + 14, 100, 4, col.prosperity / 100,
+          this._prosperityColor(col.prosperity), 'rgba(255,255,255,0.08)');
       }
 
-      // Klik — przejdź do kolonii
-      this._addHit(x + 2, ry - ROW_H - 4, w - 4, ROW_H + 10, 'goto_colony', { planetId: col.planetId });
+      this._addHit(x + 2, rowTop, w - 4, rowH + 2, 'goto_colony', { planetId: col.planetId });
+      ry += rowH + 2;
+    }
 
-      ry += 4;
+    ctx.restore();
+
+    this._drawSummaryCards(ctx, x, y + h - CARDS_H - BOTTOM_PAD, w, CARDS_H, pad, data);
+  }
+
+  // 4 karty podsumowania w siatce 2×2 (przypięte na dole środkowej kolumny)
+  _drawSummaryCards(ctx, x, y, w, h, pad, data) {
+    const net = data.netCreditsPerYear;
+    const cards = [
+      { label: t('civOverlay.cardTotalPop'),      value: data.totalPop.toFixed(1),       color: THEME.accent },
+      { label: t('civOverlay.cardAvgProsperity'), value: data.avgProsperity.toFixed(0),  color: this._prosperityColor(data.avgProsperity) },
+      { label: t('civOverlay.cardKrIncome'),      value: `${net >= 0 ? '+' : ''}${net.toFixed(0)}`, color: net >= 0 ? THEME.success : THEME.danger },
+      { label: t('civOverlay.cardTrade'),         value: `${data.tradeConnections}`,     color: THEME.info },
+    ];
+
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + pad, y); ctx.lineTo(x + w - pad, y); ctx.stroke();
+
+    const gap = 6;
+    const cw = (w - pad * 2 - gap) / 2;
+    const ch = (h - 10 - gap) / 2;
+    for (let i = 0; i < cards.length; i++) {
+      const c = cards[i];
+      const cxi = x + pad + (i % 2) * (cw + gap);
+      const cyi = y + 8 + Math.floor(i / 2) * (ch + gap);
+      ctx.fillStyle = bgAlpha(0.50);
+      ctx.fillRect(cxi, cyi, cw, ch);
+      ctx.strokeStyle = THEME.border;
+      ctx.strokeRect(cxi + 0.5, cyi + 0.5, cw - 1, ch - 1);
+
+      ctx.font = `bold ${THEME.fontSizeLarge + 4}px ${THEME.fontFamily}`;
+      ctx.fillStyle = c.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(c.value, cxi + cw / 2, cyi + ch / 2 + 3);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(c.label, cxi + cw / 2, cyi + ch - 8);
+      ctx.textAlign = 'left';
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PRAWA KOLUMNA — Historia (kronika kamieni milowych, scrollowalna)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  _drawRightCol(ctx, x, y, w, h, data) {
+    const pad = 14;
+    this._drawOverlayHeader(ctx, x, y, w, t('civOverlay.history'));
+
+    const listY = y + HEADER_H;
+    const listH = h - HEADER_H;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, listY, w, listH);
+    ctx.clip();
+
+    let hy = listY + 8 - this._scrollHistory;
+
+    if (data.history.length === 0) {
+      ctx.font = `italic ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('civOverlay.historyEmpty'), x + pad, hy + 10);
+      ctx.restore();
+      return;
+    }
+
+    const isPL = getLocale() !== 'en';
+    for (const hEntry of data.history) {
+      const name = isPL ? (hEntry.namePL ?? hEntry.nameEN) : (hEntry.nameEN ?? hEntry.namePL);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(`${hEntry.year ?? '?'}`, x + pad, hy + 10);
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(`${hEntry.icon ?? '•'} ${name ?? ''}`, x + pad + 40, hy + 10);
+      hy += 17;
     }
 
     ctx.restore();
@@ -771,7 +659,6 @@ export class CivilizationOverlay extends BaseOverlay {
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
     ctx.fillText(label, sx, sy + 11);
-    // Linia pod nagłówkiem sekcji
     ctx.strokeStyle = THEME.border;
     ctx.beginPath();
     ctx.moveTo(sx, sy + 14);
@@ -795,6 +682,24 @@ export class CivilizationOverlay extends BaseOverlay {
     return THEME.danger;
   }
 
+  // Zawija tekst do szerokości maxW; zwraca tablicę linii.
+  _wrapText(ctx, text, maxW) {
+    const words = String(text).split(/\s+/);
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > maxW && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
   // ── Obsługa kliknięć ───────────────────────────────────────────────────
 
   handleClick(x, y) {
@@ -805,12 +710,8 @@ export class CivilizationOverlay extends BaseOverlay {
     );
     if (x < ox || x > ox + ow || y < oy || y > oy + oh) return false;
 
-    this._lastClickX = x; // zapamiętaj pozycję X dla tax_slider
     const hit = this._hitTest(x, y);
-    if (hit) {
-      this._onHit(hit);
-      return true;
-    }
+    if (hit) this._onHit(hit);
     return true;
   }
 
@@ -821,61 +722,22 @@ export class CivilizationOverlay extends BaseOverlay {
         break;
       case 'goto_colony': {
         const colMgr = window.KOSMOS?.colonyManager;
-        if (colMgr) {
-          colMgr.switchActiveColony(zone.data.planetId);
-        }
-        break;
-      }
-      case 'tax_slider': {
-        // Klik na pasku → ustaw stawkę proporcjonalnie do pozycji X
-        const colMgr = window.KOSMOS?.colonyManager;
-        if (!colMgr) break;
-        // Pozycja kliknięcia w pikselach od lewej krawędzi paska
-        const hitX = this._lastClickX ?? 0;
-        const relX = Math.max(0, Math.min(zone.data.barW, hitX - zone.data.barX));
-        const newRate = (relX / zone.data.barW) * 0.25;
-        // Snap do 1% kroków
-        colMgr.taxRate = Math.round(newRate * 100) / 100;
+        if (colMgr) colMgr.switchActiveColony(zone.data.planetId);
         break;
       }
     }
-  }
-
-  _getTaxEffectLabel(rate) {
-    const isPL = getLocale() !== 'en';
-    // taxDrain: jak bardzo podatki obcinają konsumpcję
-    const drain = rate <= 0.05 ? -(0.05 - rate) * 200    // bonus 0→10%
-                : rate <= 0.12 ? 0
-                : (rate - 0.12) / 0.13 * 40;             // kara 0→40%
-    const drainPct = Math.round(drain);
-
-    if (drainPct < 0) return isPL
-      ? `✓ Dotacja konsumpcji +${-drainPct}%`
-      : `✓ Consumption subsidy +${-drainPct}%`;
-    if (drainPct === 0) return isPL
-      ? '● Neutralne'
-      : '● Neutral';
-    if (rate <= 0.20) return isPL
-      ? `⚠ Konsumpcja -${drainPct}%`
-      : `⚠ Consumption -${drainPct}%`;
-    return isPL
-      ? `✗ Konsumpcja -${drainPct}% — ryzyko protestu`
-      : `✗ Consumption -${drainPct}% — protest risk`;
   }
 
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
-    const { ox, oy, ow, oh } = this._getOverlayBounds(
-      Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720))),
-      Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)))
-    );
+    const W = Math.round(window.innerWidth / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)));
+    const H = Math.round(window.innerHeight / (Math.min(window.innerWidth / 1280, window.innerHeight / 720)));
+    const { ox, oy, ow, oh, x1, x2 } = this._getColumns(W, H);
     if (x < ox || x > ox + ow || y < oy || y > oy + oh) return false;
 
-    if (x < ox + LEFT_W) {
-      this._scrollLeft = Math.max(0, this._scrollLeft + delta * 0.5);
-    } else {
-      this._scrollRight = Math.max(0, this._scrollRight + delta * 0.5);
-    }
+    if (x < x1)        this._scrollLeft    = Math.max(0, this._scrollLeft    + delta * 0.5);
+    else if (x < x2)   this._scrollMid     = Math.max(0, this._scrollMid     + delta * 0.5);
+    else               this._scrollHistory = Math.max(0, this._scrollHistory + delta * 0.5);
     return true;
   }
 }

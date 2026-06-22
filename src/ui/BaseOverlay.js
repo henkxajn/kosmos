@@ -201,7 +201,9 @@ export class BaseOverlay {
   // Pomocniczy — oblicz wymiary overlay na podstawie canvas
   _getOverlayBounds(W, H) {
     // +pas subnav, gdy aktywny overlay jest w grupie >1 (singletony → 0). Nav 14→7.
-    const topOffset = COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H + getSubNavHeight();
+    // UI v3 — overlaye stykają się z dolną krawędzią górnej belki (TOP_BAND_H, nie TOP_BAR_H);
+    // belka surowców rozwija się przy hoverze i zasłania górny skrawek overlayu (zamierzone).
+    const topOffset = COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H + getSubNavHeight();
     // Slice 3 — zostaw miejsce na BottomResourceBar (cienki pasek nad BottomBar w civMode),
     // żeby overlay nie chował dolnej treści (np. bilansu energii) pod paskiem.
     const resBar = window.KOSMOS?.civMode ? (COSMIC.RESOURCE_BAR_H ?? 0) : 0;

@@ -187,7 +187,7 @@ export function drawSubNav(ctx, W, activeId) {
   const grp = getNavGroup(activeId);
   if (!grp || grp.members.length <= 1) return;
 
-  const y0    = COSMIC.TOP_BAR_H;
+  const y0    = COSMIC.TOP_BAND_H;   // stykaj subnav z dolną krawędzią górnej belki (UI v3)
   const h     = COSMIC.SUBNAV_H;
   const right = W;   // Slice B — overlaye pełnoekranowe: subnav też pełnej szerokości
 
@@ -234,7 +234,7 @@ export function drawSubNav(ctx, W, activeId) {
 export function hitTestSubNav(x, y, W, activeId) {
   const grp = getNavGroup(activeId);
   if (!grp || grp.members.length <= 1) return null;
-  const y0 = COSMIC.TOP_BAR_H;
+  const y0 = COSMIC.TOP_BAND_H;   // patrz drawSubNav — subnav styka się z górną belką
   const h  = COSMIC.SUBNAV_H;
   if (y < y0 || y >= y0 + h) return null;
   if (x < 0 || x >= W) return null;   // Slice B — subnav pełnej szerokości
