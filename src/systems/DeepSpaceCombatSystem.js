@@ -248,6 +248,23 @@ export class DeepSpaceCombatSystem {
       return null;
     }
 
+    // ── Bezbronni się nie biją ──────────────────────────────────────────
+    // Gdy ŻADNA strona nie ma uzbrojonego statku, nie startuj walki — byłby
+    // bezsensowny 30-rundowy remis (0 dmg) z modalem i auto-slow. Wykrycie idzie
+    // osobno przez proximity → IntelSystem (kontakt), więc statki i tak się
+    // "widzą" na mapie; po prostu nie ma walki. (Uzbrojony vs bezbronny = walka
+    // rusza normalnie — uzbrojony może strzelać do bezbronnego.)
+    const anyArmed =
+      playerGroup.some(v => this._vesselHasWeapons(v)) ||
+      bestGroup.some(v => this._vesselHasWeapons(v));
+    if (!anyArmed) {
+      if (trace) console.log('[DSCS] reject startEng: both sides unarmed', {
+        playerGroup: playerGroup.map(v => v.id),
+        bestGroup:   bestGroup.map(v => v.id),
+      });
+      return null;
+    }
+
     if (trace) console.log('[DSCS] startEng OK — creating encounter', {
       playerGroup: playerGroup.map(v => v.id),
       bestGroup: bestGroup.map(v => v.id),
@@ -941,6 +958,16 @@ export class DeepSpaceCombatSystem {
    * @private
    * @returns {VesselState}
    */
+  // Czy statek ma jakąkolwiek broń (moduł z stats.damage)? Lekki odpowiednik
+  // _buildVesselState — bez budowania pełnego stanu. Używany przez bramkę
+  // "bezbronni się nie biją" w startEngagement.
+  _vesselHasWeapons(v) {
+    for (const modId of v?.modules ?? []) {
+      if (SHIP_MODULES?.[modId]?.stats?.damage != null) return true;
+    }
+    return false;
+  }
+
   _buildVesselState(v) {
     const hull = HULLS?.[v.hullId] ?? HULLS?.[v.shipId];
     let hp = hull?.baseHP ?? 50;
