@@ -209,6 +209,7 @@ export const BUILDINGS = {
     terrainAny:  true,       // habitat można postawić na każdym terenie poza oceanem
     requires:    null,
     popType:     'laborer',
+    isHabitat:   true,       // dedykowany habitat — liczy się do wzrostu populacji na planetach non-breathable
   },
 
   // ── Nauka ─────────────────────────────────────────────────────────────────
@@ -660,6 +661,7 @@ export const BUILDINGS = {
     terrainAny:    true,
     requires:      'arcology',
     popType:       'laborer',
+    isHabitat:     true,       // dedykowany habitat — liczy się do wzrostu populacji na planetach non-breathable
   },
 
   orbital_mine: {
@@ -897,6 +899,7 @@ export const BUILDINGS = {
     isOrbital:     true,   // nie zajmuje hexa, limit 3 per kolonia
     maxPerColony:  3,
     popType:       'laborer',
+    isHabitat:     true,   // dedykowany habitat — liczy się do wzrostu populacji na planetach non-breathable
   },
 
   // ── Budynki handlowe (market) ──────────────────────────────────────────────

@@ -471,7 +471,7 @@ export class RandomEventSystem {
           bSys.resourceSystem.removeProducer(entry.producerId ?? `building_${activeKey}`);
         }
         if (entry.housing > 0 && bSys.civSystem) {
-          bSys.civSystem.removeHousing(entry.housing);
+          bSys.civSystem.removeHousing(entry.housing, !!entry.building?.isHabitat);
         }
         const popCost = entry.popCost ?? 0;
         if (popCost > 0 && bSys.civSystem) {

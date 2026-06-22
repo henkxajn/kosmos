@@ -490,8 +490,11 @@ ok('po 60 cy blacklist wygasa — tile znów dostępny', tileAfter != null && ti
 // _tickPendingQueue gate'uje fulfillment na freePops >= popCost. Habitat
 // popCost=0.25 → nigdy nie fulfilled → housing nie rośnie → pop nie rośnie →
 // freePops zostaje 0. Fix: habitat.popCost 0.25 → 0 (mieszkanie nie zatrudnia).
-// Planeta NIE-oddychalna (atmo='thin') → housing realnie gate'uje wzrost
+// Planeta NIE-oddychalna (atmo='thin') → wzrost gate'owany przez DEDYKOWANE
+// habitaty (effectiveHabitatHousing), nie przez bazowe housing Stolicy/Portu.
 // (na 'breathable' wzrost nie jest housing-gated, _updateStrataGrowth linia ~1069).
+// Setup: 8 POP mieszka w 8 miejscach habitatowych (habitatHousing=8) — by urosnąć
+// dalej kolonia musi dobudować habitat (survival rule).
 console.log('--- T13: Deadlock POP housing cap (habitat.popCost=0) ---');
 const planetThin = { id: 'p13', name: 'Thuban b', atmosphere: 'thin' };
 const techReal13 = new TechSystem(); techReal13.grantTechs(INDUSTRIALIST.startingTechs);
@@ -503,6 +506,7 @@ bSys13._grid = grid13; bSys13._gridHeight = grid13.height; bSys13.setDeposits?.(
 const fact13 = new FactorySystem(res13); bSys13.setFactorySystem(fact13);
 civ13.population    = 8;
 civ13.housing       = 8;   // cap: pop === housing
+civ13.habitatHousing = 8;  // 8 POP w habitatach → cap wzrostu (non-breathable gate'owany habitatami)
 civ13._employedPops = 8;   // wszystkie POP zatrudnione → freePops = 0 (deadlock przed fixem)
 const colony13 = { planetId:'p13', ownerEmpireId:'e13', isOutpost:false, planet:planetThin,
   resourceSystem:res13, civSystem:civ13, buildingSystem:bSys13, factorySystem:fact13 };
@@ -545,7 +549,8 @@ for (let i = 0; i < 5; i++) {
   res13.receive(startResources);
 }
 const totalGrowthProgress = Object.values(civ13.strata).reduce((s, st) => s + (st.growthProgress ?? 0), 0);
-console.log(`    Σ strata growthProgress=${totalGrowthProgress.toFixed(3)} (housing ${civ13.effectiveHousing} > pop ${civ13.population})`);
+console.log(`    Σ strata growthProgress=${totalGrowthProgress.toFixed(3)} (habitatHousing ${civ13.effectiveHabitatHousing} > pop ${civ13.population})`);
+ok('habitatHousing > pop po dobudowaniu habitatu', civ13.effectiveHabitatHousing > civ13.population);
 ok('wzrost populacji odblokowany (Σ strata growthProgress > 0)', totalGrowthProgress > 0);
 
 // ── T14: _syncGridFromActive — stempluje buildingId/level z _active (#3) ──────

@@ -376,9 +376,10 @@ export class BuildingSystem {
       this.resourceSystem.registerProducer(producerId, effectiveRates);
     }
 
-    // Housing (bezpośrednio na własnym civSystem)
+    // Housing (bezpośrednio na własnym civSystem) — isHabitat: tylko dedykowane
+    // habitaty liczą się do wzrostu populacji na planetach non-breathable.
     if (building.housing > 0 && this.civSystem) {
-      this.civSystem.addHousing(building.housing);
+      this.civSystem.addHousing(building.housing, !!building.isHabitat);
     }
 
     // Fabryka: dodaj punkt produkcji
@@ -775,7 +776,7 @@ export class BuildingSystem {
     // Housing: każdy kolejny level dodaje housing (np. habitat +3/lv)
     if (building.housing > 0) {
       entry.housing = (entry.housing || 0) + building.housing;
-      if (this.civSystem) this.civSystem.addHousing(building.housing);
+      if (this.civSystem) this.civSystem.addHousing(building.housing, !!building.isHabitat);
     }
 
     // Fabryka: dodaj punkt produkcji za każdy level powyżej 1
@@ -923,7 +924,7 @@ export class BuildingSystem {
       // Odejmij housing za obniżony poziom (np. habitat -3/lv)
       if (building?.housing > 0) {
         entry.housing = Math.max(0, (entry.housing || 0) - building.housing);
-        if (this.civSystem) this.civSystem.removeHousing(building.housing);
+        if (this.civSystem) this.civSystem.removeHousing(building.housing, !!building.isHabitat);
       }
 
       // Zwolnij POPy za obniżony poziom (bezpośrednio)
@@ -951,7 +952,7 @@ export class BuildingSystem {
 
     // Housing (bezpośrednio)
     if (entry?.housing > 0 && this.civSystem) {
-      this.civSystem.removeHousing(entry.housing);
+      this.civSystem.removeHousing(entry.housing, !!entry.building?.isHabitat);
     }
 
     // Zwrot 50% kosztu budowy (surowce + commodities)
@@ -1283,6 +1284,7 @@ export class BuildingSystem {
   restoreFromSave(buildings) {
     let totalPopCost = 0;
     let totalHousing = 0;
+    let totalHabitatHousing = 0;   // tylko dedykowane habitaty (isHabitat) — limit wzrostu non-breathable
 
     for (const b of buildings) {
       const building = BUILDINGS[b.buildingId];
@@ -1311,6 +1313,7 @@ export class BuildingSystem {
       });
       totalPopCost += popCost * level;
       totalHousing += housing;  // housing już skumulowany (per-level) w serialize()
+      if (building.isHabitat) totalHabitatHousing += housing;
     }
 
     if (this.civSystem) {
@@ -1321,6 +1324,10 @@ export class BuildingSystem {
       // Przelicz housing z budynków (analogicznie — bezpośrednio, nie przez EventBus)
       if (totalHousing > 0) {
         this.civSystem.housing += totalHousing;
+      }
+      // Habitat housing (limit wzrostu populacji na planetach non-breathable)
+      if (totalHabitatHousing > 0) {
+        this.civSystem.habitatHousing += totalHabitatHousing;
       }
     }
 

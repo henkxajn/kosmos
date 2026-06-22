@@ -97,6 +97,12 @@ export class CivilizationSystem {
     // Miejsca mieszkalne (start: 4 — na 2 POPy + 2 miejsce na wzrost)
     this.housing = initialOverride.housing ?? DEFAULT_HOUSING;
 
+    // Housing pochodzący WYŁĄCZNIE z dedykowanych habitatów (habitat/arkologia/
+    // habitat orbitalny — flaga isHabitat w BuildingsData). Bazowe housing ze
+    // Stolicy/Portu zapewnia schronienie (przeżycie), ale NIE liczy się do wzrostu
+    // populacji na planetach bez oddychalnej atmosfery. Na breathable nieistotne.
+    this.habitatHousing = initialOverride.habitatHousing ?? 0;
+
     // Identity + Loyalty + Movements
     this.identity          = { score: 0, events: [], dominantType: 'laborer', traits: [] };
     this._loyaltyModifiers = [];
@@ -218,13 +224,15 @@ export class CivilizationSystem {
 
   // ── Publiczne metody modyfikacji stanu (bezpośrednie wywołania, bez EventBus) ──
 
-  addHousing(amount) {
+  addHousing(amount, isHabitat = false) {
     this.housing += amount;
+    if (isHabitat) this.habitatHousing += amount;
     EventBus.emit('civ:populationChanged', this._popSnapshot());
   }
 
-  removeHousing(amount) {
+  removeHousing(amount, isHabitat = false) {
     this.housing = Math.max(this.population, this.housing - amount);
+    if (isHabitat) this.habitatHousing = Math.max(0, this.habitatHousing - amount);
     EventBus.emit('civ:populationChanged', this._popSnapshot());
   }
 
@@ -538,6 +546,16 @@ export class CivilizationSystem {
     return this.housing;
   }
 
+  /**
+   * Efektywny housing z dedykowanych habitatów — limit wzrostu populacji na
+   * planetach bez oddychalnej atmosfery (∞ na macierzystej). Bazowe housing
+   * (Stolica/Port) NIE wlicza się tu — daje schronienie, nie miejsce na wzrost.
+   */
+  get effectiveHabitatHousing() {
+    if (this.isHomePlanet) return Infinity;
+    return this.habitatHousing;
+  }
+
   // Wolne POPy dostępne do budowy/ekspedycji
   get freePops() {
     return Math.max(0, this.population - this._employedPops - this._lockedPops);
@@ -661,6 +679,7 @@ export class CivilizationSystem {
       productionPenalties:  [...this._productionPenalties],
       autonomousState:      this._autonomousState,
       housing:              this.housing,
+      habitatHousing:       this.habitatHousing,   // diagnostyka; restore przelicza z budynków
       epochIndex:           this.epochIndex,
       growthProgress:       this._growthProgress,
       starvationYears:      this._starvationYears,
@@ -723,6 +742,7 @@ export class CivilizationSystem {
       if (legacyLocked > 0) this._lockedPerStrata.laborer = legacyLocked;
     }
     this.housing              = DEFAULT_HOUSING;
+    this.habitatHousing       = 0;   // przeliczany z budynków w BuildingSystem.restoreFromSave
     this._lowProsperityYears  = data.lowProsperityYears   ?? 0;
     this._unrestActive        = data.unrestActive         ?? false;
     this._unrestRemainingYears= data.unrestRemainingYears ?? 0;
@@ -795,10 +815,11 @@ export class CivilizationSystem {
   // ── Wzrost populacji (akumulator) ───────────────────────────────────────
 
   _updatePopGrowth(foodRatio) {
-    // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą ani macierzystej)
+    // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą ani
+    // macierzystej). Bez breathable wzrost wymaga dedykowanych habitatów.
     const atmo = this.planet?.atmosphere ?? 'breathable';
     const canLiveOutside = (atmo === 'breathable');
-    if (!canLiveOutside && this.population >= this.effectiveHousing) {
+    if (!canLiveOutside && this.population >= this.effectiveHabitatHousing) {
       this._lastGrowth = 0;
       return;
     }
@@ -1065,8 +1086,10 @@ export class CivilizationSystem {
     const atmo = this.planet?.atmosphere ?? 'breathable';
     const canLiveOutside = (atmo === 'breathable');
 
-    // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą ani macierzystej)
-    if (!canLiveOutside && this.population >= this.effectiveHousing) {
+    // Brak miejsca → zero wzrostu (nie dotyczy planet z oddychalną atmosferą ani
+    // macierzystej). Na planetach bez breathable wzrost wymaga DEDYKOWANYCH habitatów
+    // (effectiveHabitatHousing) — bazowe housing Stolicy/Portu daje tylko schronienie.
+    if (!canLiveOutside && this.population >= this.effectiveHabitatHousing) {
       this._lastGrowth = 0;
       return;
     }
