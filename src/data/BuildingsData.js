@@ -459,6 +459,38 @@ export const BUILDINGS = {
     popType:       'miner',
   },
 
+  // ── Rafineria (naziemna) — H z INVENTORY → fuel ──────────────────────────
+  // Odróżnienie od Rafinerii Atmosferycznej: ta NIE wydobywa — pobiera zmagazynowany
+  // wodór (z kopalni gazowca / handlu / importu) i rafinuje go na paliwo. Konwersja
+  // jest input-gated w BuildingSystem (clamp do stanu magazynu — nie tworzy z niczego).
+  fuel_refinery: {
+    id:            'fuel_refinery',
+    namePL:        'Rafineria',
+    nameEN:        'Refinery',
+    category:      'mining',
+    icon:          '🛢',
+    description:   'Rafinuje zmagazynowany wodór (H) na paliwo. Pracuje gdziekolwiek — H musi być w magazynie.',
+    cost:          { Fe: 30, Cu: 8, Si: 5 },
+    commodityCost: { structural_alloys: 4, power_cells: 2 },
+    energyCost:    4,                      // proces przemysłowy — pobiera energię z sieci
+    buildTime:     1.5,
+    rates:         {},                     // BEZ producer rates — konwersja w _tickConverters (input-gated)
+    maintenance:   { Fe: 1 },
+    housing:       0,
+    popCost:       0,                      // autonomiczny — bez POP (sterowanie procesem)
+    maxLevel:      5,
+    capacityBonus: null,
+    terrainOnly:   null,
+    terrainAny:    true,                   // naziemna instalacja — budowalna na dowolnym hexie
+    requires:      'exploration',          // dostępna gdy odblokowane loty/eksploracja
+    isAutonomous:  true,                   // bez POP (employmentPenalty nie dotyczy)
+    convertFrom:   'H',                    // wejście z inventory: wodór
+    convertTo:     'fuel',                 // wyjście: paliwo (medium)
+    convertRate:   8,                      // jednostek H / rok / poziom (zdolność przerobowa)
+    convertRatio:  0.25,                   // fuel za 1 H (4 H → 1 fuel — parytet z recipe fabryki {H:4})
+    popType:       'worker',
+  },
+
   // ── Autonomiczna elektrownia słoneczna ────────────────────────────────────
 
   autonomous_solar_farm: {

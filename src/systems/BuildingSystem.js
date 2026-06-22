@@ -139,6 +139,7 @@ export class BuildingSystem {
     EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => {
       this._tickConstruction(deltaYears);
       this._tickMineExtraction(deltaYears);
+      this._tickConverters(deltaYears);
       this._tickPendingQueue();
       // Faza C5: mediation_center pasywnie redukuje napięcie frakcji
       // (3/rok × civDeltaYears, tylko gdy mediation_center jest aktywne na kolonii)
@@ -1796,6 +1797,39 @@ export class BuildingSystem {
     // Dodaj wydobyte surowce do inventory
     if (gains && hasKeys(gains)) {
       this.resourceSystem.receive(gains);
+    }
+  }
+
+  // Tick: rafinerie naziemne — konwersja surowca z INVENTORY na produkt (input-gated).
+  // Odróżnienie od _tickMineExtraction (Opcja A): tamta rafinuje H prosto ze złoża,
+  // ta pobiera zmagazynowany surowiec (np. fuel_refinery: H → fuel). Bramkowane
+  // dostępnością wejścia (clamp do stanu magazynu) — NIE tworzy produktu z niczego,
+  // dlatego nie używa producer rates ResourceSystem (te nie input-gatują ujemnych wejść).
+  _tickConverters(deltaYears) {
+    if (!this.resourceSystem || this._active.size === 0) return;
+
+    // Agreguj zdolność przerobową per para `from>to` (jednostek wejścia / rok).
+    let pairs = null;
+    for (const entry of this._active.values()) {
+      const b = entry.building;
+      if (!b.convertFrom || !b.convertTo) continue;
+      const cap = (b.convertRate ?? 0) * (entry.level ?? 1);
+      if (cap <= 0) continue;
+      const key = `${b.convertFrom}>${b.convertTo}`;
+      if (!pairs) pairs = new Map();
+      const p = pairs.get(key) ?? { from: b.convertFrom, to: b.convertTo, ratio: b.convertRatio ?? 1.0, cap: 0 };
+      p.cap += cap;
+      pairs.set(key, p);
+    }
+    if (!pairs) return;
+
+    // Per para: zużyj min(zdolność, dostępne) wejścia → wyprodukuj wyjście wg ratio.
+    for (const p of pairs.values()) {
+      const want = p.cap * deltaYears;                      // jednostek wejścia
+      const used = Math.min(want, this.resourceSystem.getAmount(p.from));
+      if (used <= 0) continue;
+      this.resourceSystem.spend({ [p.from]: used });
+      this.resourceSystem.receive({ [p.to]: used * p.ratio });
     }
   }
 }
