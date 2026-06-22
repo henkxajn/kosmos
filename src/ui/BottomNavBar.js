@@ -87,22 +87,26 @@ export class BottomNavBar {
     //    dziennika) + cienkie linie MIĘDZY przyciskami. Rysowane NA WIERZCHU kafli (crisp). ──
     const a = hexToRgb(THEME.accent);
     ctx.lineWidth = 1;
-    // Separatory między przyciskami (subtelniejsze niż rama)
-    ctx.strokeStyle = `rgba(${a.r},${a.g},${a.b},0.35)`;
+    // Separatory między przyciskami — cienka linia 1px THEME.accent @0.3 na pełną wysokość paska
+    ctx.strokeStyle = `rgba(${a.r},${a.g},${a.b},0.3)`;
     ctx.beginPath();
     for (let i = 1; i < slots.length; i++) {
       const lx = Math.round(slots[i].x) + 0.5;
-      ctx.moveTo(lx, rect.y + 4); ctx.lineTo(lx, rect.y + rect.h - 4);
+      ctx.moveTo(lx, rect.y); ctx.lineTo(lx, rect.y + rect.h);
     }
     ctx.stroke();
-    // Rama: lewy bok → góra → prawy bok (bez dołu)
+    // Boki ramy (lewy + prawy, bez dołu) — cienkie 1px
     ctx.strokeStyle = `rgba(${a.r},${a.g},${a.b},0.55)`;
     ctx.beginPath();
     ctx.moveTo(rect.x + 0.5, rect.y + rect.h);
     ctx.lineTo(rect.x + 0.5, rect.y + 0.5);
+    ctx.moveTo(rect.x + rect.w - 0.5, rect.y + rect.h);
     ctx.lineTo(rect.x + rect.w - 0.5, rect.y + 0.5);
-    ctx.lineTo(rect.x + rect.w - 0.5, rect.y + rect.h);
     ctx.stroke();
+    // GÓRNA ramka — pogrubiona (pasek na całej szerokości)
+    const TOP_BORDER_H = 2.4;
+    ctx.fillStyle = `rgba(${a.r},${a.g},${a.b},0.55)`;
+    ctx.fillRect(rect.x, rect.y, rect.w, TOP_BORDER_H);
   }
 
   // Slot = gotowa ikona PNG w wielkości przycisku (center-crop do slotu) + dolny pasek etykiety.

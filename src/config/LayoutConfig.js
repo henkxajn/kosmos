@@ -11,7 +11,7 @@ export const COSMIC = {
   OUTLINER_W:    150,  // Slice 5 — węższy panel prawy (kompakt: tylko nazwy)
   BOTTOM_CTX_H:  120,  // kontekstowy panel dolny (info o encji)
   BOTTOM_BAR_H:  26,   // cienki pasek dolny (Generator: stabilność/EventLog/przyciski); w civMode = strefa triggera dziennika
-  BOTTOM_NAV_H:  32,   // UI v3 — stały poziomy pasek nawigacji (7 grup) dobity w dół do listwy dziennika; tylko civMode (obniżony 44→32, ~27%)
+  BOTTOM_NAV_H:  36,   // UI v3 — stały poziomy pasek nawigacji (7 grup) dobity w dół do listwy dziennika; tylko civMode
   BOTTOM_LOG_TRIG_H: 6, // UI v3 — wysokość listwy schowanego dziennika (EventLogDrawer trigger) pod paskiem nawigacji
   RESOURCE_BAR_H: 0,   // dawny dolny pasek surowców usunięty (zastąpiony górnym TopResourceDrawer, hover-drawer); =0 → konsumenci (Outliner/BaseOverlay/BottomContext/CombatHUD) odzyskują tę przestrzeń
   CIV_PANEL_W:   280,  // szerokość rozwiniętego CivPanel

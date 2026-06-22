@@ -13,6 +13,8 @@ import { COSMIC } from '../config/LayoutConfig.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
 import { toggleNotificationDropdown, isNotificationDropdownOpen } from './NotificationDropdown.js';
+import { bottomNavBarRect, navSlotLayout } from './BottomNavBarLogic.js';
+import { NAV_GROUPS } from './CivPanelDrawer.js';
 
 // Metryki ~25% mniejsze od TopBaru (btnH 16→12, speedW 18→14, play 18→14, bell/MENU 30→22).
 const STRIP_H = 20;
@@ -23,7 +25,6 @@ const SPEED_W = 14;
 const GAP     = 1;
 const BELL_W  = 22;
 const MENU_W  = 22;
-const EDGE_R  = 6;   // prawy inset (nie wchodzi w trigger Outlinera)
 
 export class BottomControlBar {
   constructor() {
@@ -50,9 +51,24 @@ export class BottomControlBar {
     const stripTop = this._stripTop(H);
     const cy = stripTop + STRIP_H / 2;
     const btnY = Math.round(cy - BTN_H / 2);
-    const right = W - EDGE_R;
 
-    // ── Layout RIGHT-ANCHORED: [bell][MENU][play][speeds][data], grupa dosunięta do prawej ──
+    // Klaster wyrównany do ostatniego slotu nawigacji ("Technologie"): ramka = pełny span
+    // przycisku, treść JUSTOWANA — lewa grupa [bell][MENU][play] dosunięta do LEWEJ krawędzi
+    // slotu, prawa grupa [speeds][data] do PRAWEJ. Dzwonek = lewa krawędź przycisku.
+    const navRect = bottomNavBarRect(W, H);
+    const navSlots = navSlotLayout(navRect, NAV_GROUPS.length);
+    const lastSlot = navSlots.length ? navSlots[navSlots.length - 1] : { x: W - 200, w: 200 };
+    const lastSlotX     = lastSlot.x;
+    const lastSlotRight = lastSlot.x + lastSlot.w;   // = navRect.x + navRect.w (W - inset)
+
+    // ── Lewa grupa: bell → MENU → play, od lewej krawędzi slotu ──
+    const leftEdge = lastSlotX + PAD;
+    this._bellRect = { x: leftEdge, y: btnY, w: BELL_W, h: BTN_H };
+    this._menuRect = { x: this._bellRect.x + BELL_W + 3, y: btnY, w: MENU_W, h: BTN_H };
+    this._playRect = { x: this._menuRect.x + MENU_W + 5, y: btnY, w: PLAY_W, h: BTN_H };
+
+    // ── Prawa grupa: data dosunięta do prawej krawędzi slotu, prędkości tuż przed nią ──
+    const right = lastSlotRight - PAD;
     const dateFont = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
     ctx.font = dateFont;
     const dateW = displayText ? ctx.measureText(displayText).width : 0;
@@ -64,12 +80,9 @@ export class BottomControlBar {
       const x = speedsRight - SPEED_W - (5 - i) * (SPEED_W + GAP);
       this._speedRects[i] = { x, y: btnY, w: SPEED_W, h: BTN_H };
     }
-    this._playRect = { x: this._speedRects[0].x - 3 - PLAY_W, y: btnY, w: PLAY_W, h: BTN_H };
-    this._menuRect = { x: this._playRect.x - 5 - MENU_W, y: btnY, w: MENU_W, h: BTN_H };
-    this._bellRect = { x: this._menuRect.x - 3 - BELL_W, y: btnY, w: BELL_W, h: BTN_H };
 
-    const bgLeft = this._bellRect.x - PAD;
-    const bgW = (right + 2) - bgLeft;
+    const bgLeft = lastSlotX;
+    const bgW = lastSlotRight - lastSlotX;
     this._bgRect = { x: bgLeft, y: stripTop, w: bgW, h: STRIP_H };
 
     // ── Tło paska + delikatna rama motywu (góra + boki), spójnie z dolnym nav ──
