@@ -106,13 +106,15 @@ export class EmpireColonyBootstrap {
     const credits = startResources.credits ?? 0;
     delete startResources.credits;
 
-    const colony = colonyManager.createColony(homePlanet.id, startResources, 0, gameYear);
+    // ownerEmpireId przekazany do createColony → ustawiony PRZED emitem
+    // 'colony:founded', inaczej widoki gracza ujawniłyby kolonię AI.
+    const colony = colonyManager.createColony(homePlanet.id, startResources, 0, gameYear, empireId);
     if (!colony) {
       console.error(`[EmpireColonyBootstrap] createColony failed dla ${homePlanet.id}`);
       return null;
     }
 
-    // 4. Slice 1 hook: ownerEmpireId. Default null = gracz.
+    // 4. Slice 1 hook: ownerEmpireId (defensywne — już ustawione w createColony).
     colony.ownerEmpireId = empireId;
     colony.credits       = credits;
     colony.isHomePlanet  = false;  // AI ma "home" ale flag tylko dla gracza
@@ -284,10 +286,12 @@ export class EmpireColonyBootstrap {
     const credits = startResources.credits ?? 0;
     delete startResources.credits;
 
-    const colony = colonyManager.createColony(planetId, startResources, 0, gameYear);
+    // ownerEmpireId przekazany do createColony → ustawiony PRZED emitem
+    // 'colony:founded' (inaczej auto-open panelu/EventLog ujawnia kolonię AI graczowi).
+    const colony = colonyManager.createColony(planetId, startResources, 0, gameYear, empireId);
     if (!colony) throw new Error(`[bootstrapColony] createColony failed dla ${planetId}`);
 
-    colony.ownerEmpireId = empireId;
+    colony.ownerEmpireId = empireId;  // defensywne — już ustawione w createColony
     colony.credits       = credits;
     colony.isHomePlanet  = false;
 
@@ -404,9 +408,10 @@ export class EmpireColonyBootstrap {
       if (!planetEntity) {
         throw new Error(`[bootstrapAutonomousOutpost] planeta ${planetId} nie znaleziona (system ${systemId}?)`);
       }
-      outpost = colonyManager.createOutpost(planetId, {}, gameYear);
+      // ownerEmpireId przekazany → ustawiony PRZED emitem 'outpost:founded'.
+      outpost = colonyManager.createOutpost(planetId, {}, gameYear, empireId);
       if (!outpost) throw new Error(`[bootstrapAutonomousOutpost] createOutpost failed dla ${planetId}`);
-      outpost.ownerEmpireId = empireId;
+      outpost.ownerEmpireId = empireId;  // defensywne — już ustawione w createOutpost
     }
 
     // #14 (Slice 2 save/restore): zarejestruj outpost w imperium — by przeżył save

@@ -100,7 +100,7 @@ export function spawnTestEnemy() {
 
   // 3. Utwórz kolonię w ColonyManager — oznacz jako testową wrogą
   const gameYear = Math.floor(K.timeSystem?.gameTime ?? 0);
-  const colony = colMgr.createColony(target.id, { ...START_RESOURCES }, START_POP, gameYear);
+  const colony = colMgr.createColony(target.id, { ...START_RESOURCES }, START_POP, gameYear, TEST_ENEMY_ID);
   if (!colony) {
     reg.destroyEmpire(TEST_ENEMY_ID, 'debug_rollback');
     return { success: false, reason: 'colony_create_failed' };

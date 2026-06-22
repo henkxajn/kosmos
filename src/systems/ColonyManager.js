@@ -353,7 +353,10 @@ export class ColonyManager {
   }
 
   // Utwórz nową kolonię (z ekspedycji kolonizacyjnej)
-  createColony(planetId, startResources, startPop, gameYear) {
+  // ownerEmpireId: właściciel kolonii — null=gracz, id imperium=kolonia AI.
+  //   MUSI być znany PRZED emitem 'colony:founded', inaczej widoki gracza
+  //   (auto-open panelu, EventLog) potraktują kolonię AI jak własną i ujawnią ją.
+  createColony(planetId, startResources, startPop, gameYear, ownerEmpireId = null) {
     // Guard: nie nadpisuj istniejącej kolonii
     if (this._colonies.has(planetId)) {
       return this._colonies.get(planetId);
@@ -392,7 +395,7 @@ export class ColonyManager {
       planetId,
       planet:          entity,
       isHomePlanet:    false,
-      ownerEmpireId:   null,  // Slice 1: null = gracz; bootstrap AI nadpisze
+      ownerEmpireId,   // null = gracz; id imperium = kolonia AI (ustawiony PRZED emitem)
       name:            entity.name,
       systemId:        entity.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home',
       founded:         gameYear,
@@ -423,7 +426,8 @@ export class ColonyManager {
   }
 
   // Utwórz outpost (mini-kolonia bez POPów)
-  createOutpost(planetId, startResources, gameYear) {
+  // ownerEmpireId: właściciel — null=gracz, id imperium=outpost AI (ustawiony PRZED emitem).
+  createOutpost(planetId, startResources, gameYear, ownerEmpireId = null) {
     // Guard: nie nadpisuj istniejącej kolonii/outpostu
     if (this._colonies.has(planetId)) {
       const existing = this._colonies.get(planetId);
@@ -478,7 +482,7 @@ export class ColonyManager {
       planet:          entity,
       isHomePlanet:    false,
       isOutpost:       true,
-      ownerEmpireId:   null,  // Slice 1: null = gracz
+      ownerEmpireId,   // null = gracz; id imperium = outpost AI (ustawiony PRZED emitem)
       name:            entity.name,
       systemId:        entity.systemId ?? window.KOSMOS?.activeSystemId ?? 'sys_home',
       founded:         gameYear,

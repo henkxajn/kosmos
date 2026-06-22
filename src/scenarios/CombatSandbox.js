@@ -385,7 +385,7 @@ function _setupEnemyCivilization(scene, enemyPlanet) {
   reg.addColony(SANDBOX_ENEMY_ID, enemyPlanet.id);
 
   const colony = colMgr.createColony(enemyPlanet.id, { ...ENEMY_START_RESOURCES },
-                                     ENEMY_POPULATION, START_YEAR);
+                                     ENEMY_POPULATION, START_YEAR, SANDBOX_ENEMY_ID);
   if (!colony) {
     console.warn('[CombatSandbox] Nie utworzono wrogiej kolonii');
     return null;
