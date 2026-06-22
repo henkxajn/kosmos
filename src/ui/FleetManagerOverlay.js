@@ -47,6 +47,21 @@ function _isVesselInCombat(vesselId) {
   return false;
 }
 
+// ── Helper detekcji wrogów: czy wrogi statek jest WYKRYTY (widoczny na mapie/listach) ──
+// Spójność ze sceną 3D (ThreeRenderer._applyVesselIntelVisibility): wróg jest znany gdy
+//   (a) kolonia widzi go przez obserwatorium (live, binarne), LUB
+//   (b) IntelSystem ma na niego kontakt jakości >= 'contact' — czyli statek gracza
+//       namierzył go z bliska / w walce (pozycja aktualna).
+// 'rumor' (stara, ostatnio znana pozycja) celowo NIE trafia na taktyczną — pokazana
+// jako żywa kropka byłaby myląca; ghost rumoru zostaje featurem sceny 3D.
+const _INTEL_RANK = { unknown: 0, rumor: 1, contact: 2, detailed: 3 };
+function _isEnemyTracked(v) {
+  const obs = window.KOSMOS?.observatorySystem;
+  if (obs?.isVesselDetected?.(v.id)) return true;
+  const rec = window.KOSMOS?.intelSystem?.getVesselContact?.(v.id);
+  return (_INTEL_RANK[rec?.quality] ?? 0) >= _INTEL_RANK.contact;
+}
+
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
 const _BODY_TYPES = ['star', 'planet', 'moon', 'asteroid', 'comet', 'planetoid'];
 function _findBody(id) {
@@ -393,7 +408,6 @@ export class FleetManagerOverlay {
     const vMgr = window.KOSMOS?.vesselManager;
     const ms   = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
     const colMgr = window.KOSMOS?.colonyManager;
-    const obs    = window.KOSMOS?.observatorySystem;
     const allVessels = vMgr?.getAllVessels() ?? [];
     const activePid = colMgr?.activePlanetId;
 
@@ -403,7 +417,7 @@ export class FleetManagerOverlay {
     const playerAll  = allVessels.filter(v => !isEnemyVessel(v) && isLiving(v));
     const playerList = this._filterVessels(playerAll, activePid);
     const enemyVisible = allVessels.filter(v =>
-      isEnemyVessel(v) && isLiving(v) && (obs?.isVesselDetected?.(v.id) ?? false)
+      isEnemyVessel(v) && isLiving(v) && _isEnemyTracked(v)
     );
     const wrecks = allVessels.filter(v => v.isWreck);
 
@@ -2681,11 +2695,10 @@ export class FleetManagerOverlay {
       return;
     }
     const vm = window.KOSMOS?.vesselManager;
-    const obs = window.KOSMOS?.observatorySystem;
     if (!vm) return;
-    // Lista wykrytych enemy vesseli (active, nie wraki, detected przez obserwatorium)
+    // Lista wykrytych enemy vesseli (active, nie wraki) — obserwatorium LUB kontakt intelu
     const enemies = vm.getAllVessels().filter(v =>
-      isEnemyVessel(v) && !v.isWreck && (obs?.isVesselDetected?.(v.id) ?? false)
+      isEnemyVessel(v) && !v.isWreck && _isEnemyTracked(v)
     );
     // Sortuj po dystansie od pierwszego membera floty
     const fs = window.KOSMOS?.fleetSystem;
@@ -3175,14 +3188,14 @@ export class FleetManagerOverlay {
     }
 
     // ── Statki (kropki — na wierzchu) — tylko z aktywnego układu ──
-    const obs = window.KOSMOS?.observatorySystem;
     for (const v of allVessels) {
       if ((v.systemId ?? 'sys_home') !== sysId) continue;
       const isEnemy = isEnemyVessel(v);
       const isWreck = !!v.isWreck;
-      // Fog-of-war: wrogi statek ukryty dopóki go nie wykryjemy.
+      // Fog-of-war: wrogi statek ukryty dopóki go nie wykryjemy — obserwatorium
+      // LUB kontakt intelu (statek gracza namierzył go z bliska / w walce).
       // Wraki są widoczne zawsze — zniszczony statek nie ma mgły.
-      if (isEnemy && !isWreck && !(obs?.isVesselDetected?.(v.id) ?? false)) continue;
+      if (isEnemy && !isWreck && !_isEnemyTracked(v)) continue;
       const vx = toSx(v.position.x), vy = toSy(v.position.y);
       const isSel = v.id === this._selectedVesselId;
       // Statki skalują się z zoom; absolutny cap 10px żeby nie konkurowały z planetami
