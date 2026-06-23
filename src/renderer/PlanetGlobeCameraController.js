@@ -15,6 +15,11 @@ export class PlanetGlobeCameraController {
     this._dist      = 3.0;    // aktualna odległość od centrum
     this._targetDist = 3.0;   // docelowa odległość (smooth lerp)
 
+    // Auto-rotacja (rad/s) — napędzana w update() z deltą czasu pętli renderu,
+    // dzięki czemu obrót jest płynny niezależnie od kadencji draw() overlayu.
+    this._autoRotate   = 0;
+    this._lastUpdateMs = null;
+
     this._isDragging  = false;
     this._lastX       = 0;
     this._lastY       = 0;
@@ -114,8 +119,18 @@ export class PlanetGlobeCameraController {
     this._pitch = Math.max(-1.3, Math.min(1.3, pitch));
   }
 
-  // Aktualizuj pozycję kamery (wywoływane co klatkę)
+  // Włącz/wyłącz auto-rotację (rad/s). 0 = stop.
+  setAutoRotate(speed) { this._autoRotate = speed || 0; }
+
+  // Aktualizuj pozycję kamery (wywoływane co klatkę pętli renderu)
   update() {
+    // Auto-rotacja — przyrost yaw proporcjonalny do realnej delty czasu klatki
+    // (nie liczby wywołań), więc obrót jest gładki. Wstrzymana podczas dragu.
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    const dt = this._lastUpdateMs == null ? 0 : Math.min(0.1, (now - this._lastUpdateMs) / 1000);
+    this._lastUpdateMs = now;
+    if (this._autoRotate && !this._isDragging) this._yaw += this._autoRotate * dt;
+
     // Płynny zoom
     this._dist += (this._targetDist - this._dist) * 0.1;
 

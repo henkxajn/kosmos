@@ -21,12 +21,23 @@ import { showUnitCard } from './UnitCardPanel.js';
 import { showBattleGroup } from './BattleGroupPanel.js';
 import { showConfirmModal } from './ConfirmModal.js';
 import { ANOMALIES }     from '../data/AnomalyData.js';
-import { t }   from '../i18n/i18n.js';
+import { t, getLocale }   from '../i18n/i18n.js';
+import { ALL_RESOURCES } from '../data/ResourcesData.js';
+import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 
 const HDR_H = HEADER_H;   // wysokość pasma nagłówka (standard BaseOverlay)
 const FLOAT_W = 200;  // szerokość floating panelu
+
+// Panel info planety (prawa kolumna) — ~30% szerokości overlayu z limitem,
+// żeby na ultrawide nie był gigantyczny ani na wąskim ekranie nie zjadł mapy.
+const INFO_FRAC = 0.30;
+const INFO_MIN  = 300;
+const INFO_MAX  = 460;
+
+// Pasek listy budynków nad mapą 2D (kolumna mapy, pod nagłówkiem)
+const BUILD_BAR_H = 30;
 
 let _UI_SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
 window.addEventListener('resize', () => {
@@ -53,6 +64,15 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedHex      = null;
     this._hoveredHex       = null;
     this._hoveredBuildId   = null;
+
+    // Globus 3D w prawej kolumnie info (PlanetGlobeRenderer, tryb embedded)
+    this._globe = null;
+    this._globePlanetId = null;
+
+    // Poziome przewinięcie paska budynków nad mapą (px)
+    this._buildBarScroll = 0;
+    // Poziome przewinięcie paska zakładek kolonii w nagłówku (px)
+    this._colonyTabScroll = 0;
 
     // Kamera
     this._camX = 0; this._camY = 0;
@@ -332,6 +352,7 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedHex = null; this._hoveredHex = null;
     this._selectedUnit = null;
     this._hideTooltip();
+    this._teardownGlobe();   // zwolnij WebGL canvas globu (z-index 3 — nie może wisieć nad innymi overlay'ami)
     document.getElementById('colony-open-backdrop')?.remove();
     // Wymuś reset active w OverlayManager (nie czekaj na draw)
     const om = window.KOSMOS?.overlayManager;
@@ -343,7 +364,7 @@ export class ColonyOverlay extends BaseOverlay {
     if (!canvas) return;
     const W = canvas.width / _UI_SCALE, H = canvas.height / _UI_SCALE;
     const { ow, oh } = this._getOverlayBounds(W, H);
-    const mapW = ow - 20, mapH = oh - HDR_H - 20;
+    const mapW = (ow - this._infoW(ow)) - 20, mapH = oh - HDR_H - BUILD_BAR_H - 20;
     const gp = grid.gridPixelSize(1);
     this._hexSize = Math.max(this._minHexSize, Math.min(this._maxHexSize,
       Math.floor(Math.min(mapW / gp.w, mapH / gp.h) * 0.90)
@@ -710,20 +731,29 @@ export class ColonyOverlay extends BaseOverlay {
     const colony = this._getColony();
     const grid = colony ? this._getGrid(colony) : null;
 
-    // Nagłówek z podsumowaniem kolonii
+    // Nagłówek z podsumowaniem kolonii (pełna szerokość — pasmo tytułu nad splitem)
     this._drawHeader(ctx, ox, oy, ow, colony);
 
-    // Mapa hex 2D — pełna szerokość
-    const mapY = oy + HDR_H;
-    const mapH = oh - HDR_H;
+    // Split 70/30: mapa hex po lewej (mapW), dossier planety po prawej (infoW).
+    const infoW = this._infoW(ow);
+    const mapW  = ow - infoW;
+    const colTop = oy + HDR_H;          // szczyt treści pod nagłówkiem
+    // Pasek listy budynków nad mapą (tylko kolumna mapy)
+    this._drawBuildingsBar(ctx, ox, colTop, mapW, BUILD_BAR_H, colony);
+    const mapY = colTop + BUILD_BAR_H;
+    const mapH = oh - HDR_H - BUILD_BAR_H;
     if (grid) {
       ctx.save();
-      ctx.beginPath(); ctx.rect(ox, mapY, ow, mapH); ctx.clip();
-      this._drawMap(ctx, ox, mapY, ow, mapH, grid, colony?.planet);
+      ctx.beginPath(); ctx.rect(ox, mapY, mapW, mapH); ctx.clip();
+      this._drawMap(ctx, ox, mapY, mapW, mapH, grid, colony?.planet);
       ctx.restore();
     }
 
-    // Floating panel obok zaznaczonego hexa (nie pokazuj gdy jednostka zaznaczona)
+    // Prawa kolumna — dossier planety (globus 3D + charakterystyka/surowce); pełna wysokość
+    this._drawInfoPanel(ctx, ox + mapW, colTop, infoW, oh - HDR_H, colony, grid);
+
+    // Floating panel obok zaznaczonego hexa (nie pokazuj gdy jednostka zaznaczona).
+    // Clampowany do obszaru MAPY (ox..ox+mapW), żeby nie wchodził pod kolumnę info.
     if (this._selectedHex && !this._selectedUnit && grid && colony) {
       const tile = grid.get(this._selectedHex.q, this._selectedHex.r);
       if (tile) {
@@ -732,55 +762,55 @@ export class ColonyOverlay extends BaseOverlay {
         const playerStack = gum?.getUnitsAtHex?.(colony.planetId, tile.q, tile.r)
           .filter(u => !u.owner || u.owner === 'player') ?? [];
         if (playerStack.length >= 2) {
-          const sp = this._tileScreenPos(tile, grid, ox, oy, ow, oh);
+          const sp = this._tileScreenPos(tile, grid, ox, oy, mapW, oh);
           let fx = sp.x + this._hexSize + 8;
           let fy = sp.y - 60;
           const STACK_W = 240;
-          if (fx + STACK_W > ox + ow - 10) fx = sp.x - STACK_W - this._hexSize - 8;
-          fx = Math.max(ox + 4, Math.min(ox + ow - STACK_W - 4, fx));
+          if (fx + STACK_W > ox + mapW - 10) fx = sp.x - STACK_W - this._hexSize - 8;
+          fx = Math.max(ox + 4, Math.min(ox + mapW - STACK_W - 4, fx));
           fy = Math.max(mapY + 4, fy);
           this._floatX = fx; this._floatY = fy;
           this._drawStackFloatingPanel(ctx, fx, fy, STACK_W, playerStack, tile);
         } else {
           // Zwykły panel budowy
-          const sp = this._tileScreenPos(tile, grid, ox, oy, ow, oh);
+          const sp = this._tileScreenPos(tile, grid, ox, oy, mapW, oh);
           let fx = sp.x + this._hexSize + 8;
           let fy = sp.y - 60;
-          if (fx + FLOAT_W > ox + ow - 10) fx = sp.x - FLOAT_W - this._hexSize - 8;
+          if (fx + FLOAT_W > ox + mapW - 10) fx = sp.x - FLOAT_W - this._hexSize - 8;
           const panelH = this._floatH ?? 300;
           fy = Math.max(mapY + 4, Math.min(oy + oh - panelH - 4, fy));
-          fx = Math.max(ox + 4, Math.min(ox + ow - FLOAT_W - 4, fx));
+          fx = Math.max(ox + 4, Math.min(ox + mapW - FLOAT_W - 4, fx));
           this._floatX = fx; this._floatY = fy;
           this._drawFloatingPanel(ctx, fx, fy, tile, colony, grid);
         }
       }
     }
 
-    // Panel jednostki naziemnej
+    // Panel jednostki naziemnej (dolny-prawy róg MAPY, nie pod kolumną info)
     if (this._selectedUnit && colony) {
-      this._drawUnitPanel(ctx, ox, oy, ow, oh);
+      this._drawUnitPanel(ctx, ox, oy, mapW, oh);
     }
 
     // Bottom Drawer (Paradox HoI4-style) — pas pod mapą gdy coś zaznaczone
     if (this._selectedUnits.size > 0 && colony) {
-      this._drawBottomDrawer(ctx, ox, oy, ow, oh);
+      this._drawBottomDrawer(ctx, ox, oy, mapW, oh);
     }
 
-    // Station build dialog (S3.3b-S4) — modal nad mapą
+    // Station build dialog (S3.3b-S4) — modal wyśrodkowany nad mapą
     if (this._stationDialogOpen && colony && !colony.ownerEmpireId && !colony.isTestEnemy) {
-      this._drawStationDialog(ctx, ox, oy, ow, oh, colony);
+      this._drawStationDialog(ctx, ox, oy, mapW, oh, colony);
     }
 
-    // Landing mode indicator
+    // Landing mode indicator (pas na szczycie mapy)
     if (this._landingMode) {
       const t = Date.now() / 1000;
       const pulse = (Math.sin(t * 3) + 1) / 2;
       ctx.fillStyle = `rgba(0, 200, 160, ${0.08 + pulse * 0.06})`;
-      ctx.fillRect(ox, oy + HDR_H, ow, 22);
+      ctx.fillRect(ox, mapY, mapW, 22);
       ctx.font = `bold 11px ${THEME.fontFamily}`;
       ctx.fillStyle = `rgba(0, 255, 180, ${0.7 + pulse * 0.3})`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('🤖 WYBIERZ HEX LĄDOWANIA — kliknij na mapie', ox + ow / 2, oy + HDR_H + 11);
+      ctx.fillText('🤖 WYBIERZ HEX LĄDOWANIA — kliknij na mapie', ox + mapW / 2, mapY + 11);
     }
 
     // Rect-select (LMB drag) — live-preview obwódek jednostek wewnątrz prostokąta
@@ -859,55 +889,332 @@ export class ColonyOverlay extends BaseOverlay {
       return;
     }
 
-    // Rząd 1: nazwa planety jako tytuł (bold accent przez helper)
     const name = colony.planet?.name ?? colony.planetId ?? '?';
-    this._drawOverlayHeader(ctx, ox, oy, ow, name);
+    const isPlayer = !colony.ownerEmpireId && !colony.isTestEnemy;
 
-    // Podsumowanie + lista budynków
+    if (!isPlayer) {
+      // Obca planeta (drop-mode) — zwykły tytuł, bez zakładek przełączania.
+      this._drawOverlayHeader(ctx, ox, oy, ow, name);
+      return;
+    }
+
+    // Pasmo + linia bez tytułu — w rzędzie 1 idą zakładki kolonii gracza.
+    this._drawOverlayHeader(ctx, ox, oy, ow, '');
+    this._drawColonyTabs(ctx, ox, oy, ow);
+
+    // Rząd 2: POP aktywnej kolonii (budynki → pasek nad mapą).
     const civ = colony.civSystem;
     const pop = civ?.population ?? 0;
     const housing = civ?.housing ?? 0;
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = `11px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
+    ctx.fillText(`POP: ${pop}/${housing}`, ox + 14, oy + 38);
+  }
 
-    // Zlicz budynki per typ
-    const buildingSummary = {};
-    let totalBuildings = 0;
-    if (colony.buildingSystem?._active) {
+  // ── Zakładki kolonii gracza (przełączanie aktywnej kolonii z nagłówka) ─────
+  // Pigułki: aktywna = akcent, reszta stonowana. Nadmiar → poziome przewijanie
+  // kółkiem nad nagłówkiem (wskaźniki ‹ ›). Klik → _switchColony.
+  _drawColonyTabs(ctx, ox, oy, ow) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const colonies = colMgr?.getPlayerColonies?.() ?? [];
+    if (!colonies.length) return;
+
+    const activeId = this._selectedColonyId;
+    const tabY = oy + 5, tabH = 20;
+    const x0 = ox + 14;
+    const xRight = ox + ow - 130;          // miejsce na [🛰 Station] + [✕]
+    const availW = Math.max(40, xRight - x0);
+
+    // Zmierz pigułki
+    ctx.font = `bold 11px ${THEME.fontFamily}`;
+    const tabs = [];
+    let totalW = 0;
+    for (const c of colonies) {
+      const nm = c.planet?.name ?? c.planetId ?? '?';
+      const label = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
+      const tw = ctx.measureText(label).width + 22;
+      tabs.push({ id: c.planetId, label, tw, active: c.planetId === activeId });
+      totalW += tw + 6;
+    }
+    totalW = Math.max(0, totalW - 6);
+
+    // Clamp scrollu do zawartości
+    const maxScroll = Math.max(0, totalW - availW);
+    this._colonyTabScroll = Math.max(0, Math.min(maxScroll, this._colonyTabScroll ?? 0));
+    const scroll = this._colonyTabScroll;
+
+    // Clip do strefy zakładek i rysuj
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x0 - 2, oy, availW + 4, HDR_H); ctx.clip();
+    let sx = x0 - scroll;
+    for (const tab of tabs) {
+      const visible = sx + tab.tw > x0 && sx < xRight;
+      if (visible) {
+        ctx.fillStyle = tab.active ? THEME.accentDim : 'rgba(255,255,255,0.03)';
+        ctx.fillRect(sx, tabY, tab.tw, tabH);
+        ctx.strokeStyle = tab.active ? THEME.accent : THEME.borderLight;
+        ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, tabY + 0.5, tab.tw - 1, tabH - 1);
+        ctx.fillStyle = tab.active ? THEME.accent : THEME.textSecondary;
+        ctx.font = `bold 11px ${THEME.fontFamily}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(tab.label, sx + tab.tw / 2, tabY + tabH / 2);
+        this._addHit(sx, tabY, tab.tw, tabH, 'colonyTab', { planetId: tab.id });
+      }
+      sx += tab.tw + 6;
+    }
+    ctx.restore();
+
+    // Wskaźniki przewijania ‹ ›
+    ctx.font = `bold 13px ${THEME.fontFamily}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+    if (scroll > 0)         { ctx.fillStyle = THEME.accent; ctx.fillText('‹', x0 - 7, tabY + tabH / 2); }
+    if (scroll < maxScroll) { ctx.fillStyle = THEME.accent; ctx.fillText('›', xRight + 7, tabY + tabH / 2); }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  // Przełącz aktywną kolonię (z zakładki nagłówka). Podmienia systemy w
+  // window.KOSMOS (cała gra podąża) + przeładowuje mapę/globus overlayu.
+  _switchColony(planetId) {
+    if (!planetId || planetId === this._selectedColonyId) return;
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr?.getColony(planetId)) return;
+    colMgr.switchActiveColony(planetId);
+    this._selectedColonyId = planetId;
+    this._selectedHex = null; this._hoveredHex = null;
+    this._selectedUnit = null; this._selectedUnits.clear();
+    this._buildBarScroll = 0; this._stationDialogOpen = false;
+    const colony = this._getColony();
+    const grid = colony ? this._getGrid(colony) : null;
+    if (grid) { this._fitMapToView(grid); this._centerOnCapital(grid); }
+    // Globus re-syncuje się sam przy następnym draw (zmiana _globePlanetId).
+  }
+
+  // ── Panel info planety (prawa kolumna 30%) ────────────────────────────────
+  // Górę zajmuje żywy globus 3D (PlanetGlobeRenderer, osobny DOM canvas nad
+  // ui-canvas). Poniżej dossier: charakterystyka, pierwiastki, surowce, budynki.
+  _drawInfoPanel(ctx, x, y, w, h, colony, grid) {
+    const planet = colony?.planet ?? null;
+
+    // Pionowy separator mapa | panel (tło = standardowe ciemne tło overlayu)
+    ctx.strokeStyle = THEME.borderActive; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + 0.5, y); ctx.lineTo(x + 0.5, y + h); ctx.stroke();
+
+    if (!planet) { this._teardownGlobe(); return; }
+    const pad = 12;
+
+    // ── Globus 3D (góra) ──
+    const discSize = Math.min(w - pad * 2, Math.round(h * 0.42));
+    const discX = x + (w - discSize) / 2;
+    const discY = y + 8;
+    this._syncGlobe(discX, discY, discSize, discSize, planet, grid);
+
+    // Treść poniżej globu — clip do panelu (poniżej strefy globu)
+    let cy = discY + discSize + 12;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, cy - 4, w, y + h - cy + 4); ctx.clip();
+
+    const cw = w - pad * 2;
+    const lx = x + pad;
+
+    // ── Charakterystyka ──
+    cy = this._drawInfoSection(ctx, lx, cy, cw, t('colonyInfo.physics'));
+    const tempC = planet.temperatureC ?? planet.surface?.temperature ?? 0;
+    const tempStr = `${tempC > 0 ? '+' : ''}${tempC.toFixed(0)} °C`;
+    const atmKey = `colonyInfo.atm.${planet.atmosphere || 'none'}`;
+    const rows = [
+      [t('colonyInfo.temperature'), tempStr],
+      [t('colonyInfo.mass'),     `${(planet.physics?.mass ?? 1).toFixed(2)} ${t('colonyInfo.massUnit')}`],
+      [t('colonyInfo.gravity'),  `${(planet.surfaceGravity ?? 1).toFixed(2)} g`],
+      [t('colonyInfo.radius'),   `${(planet.surfaceRadius ?? 1).toFixed(2)} ${t('colonyInfo.radiusUnit')}`],
+      [t('colonyInfo.atmosphere'), t(atmKey)],
+    ];
+    for (const [label, val] of rows) cy = this._drawInfoRow(ctx, lx, cy, cw, label, val);
+    cy += 8;
+
+    // ── Surowce (złoża) ──
+    cy = this._drawInfoSection(ctx, lx, cy, cw, t('colonyInfo.resources'));
+    const deps = planet.deposits || [];
+    if (!deps.length) {
+      ctx.font = `italic 10px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left';
+      ctx.fillText(t('colonyInfo.noResources'), lx, cy + 10); cy += 18;
+    } else {
+      // Surowce mają teraz cały panel (budynki → pasek nad mapą)
+      for (const d of deps) cy = this._drawDepositRow(ctx, lx, cy, cw, d);
+    }
+    ctx.restore();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  // ── Pasek listy budynków nad mapą (poziomy, kompaktowe chipy ikona+×count) ─
+  // Pokazuje WSZYSTKIE budynki (czytane z _active co klatkę → nowo powstałe na
+  // żywo). Nadmiar dostępny przez poziome przewijanie kółkiem nad paskiem.
+  _drawBuildingsBar(ctx, x, y, w, h, colony) {
+    // Tło paska + dolna linia
+    ctx.fillStyle = 'rgba(2,4,8,0.72)'; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = THEME.borderActive; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, y + h - 0.5); ctx.lineTo(x + w, y + h - 0.5); ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    const cy = y + h / 2;
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+
+    // Etykieta sekcji (stała, nie przewija się)
+    ctx.font = `bold 10px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(t('colonyInfo.buildings'), x + 12, cy);
+    const labelW = ctx.measureText(t('colonyInfo.buildings')).width;
+
+    const entries = Object.entries(this._buildingSummary(colony));
+    if (!entries.length) {
+      ctx.font = `italic 10px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('colonyInfo.noBuildings'), x + 12 + labelW + 16, cy);
+      ctx.textBaseline = 'alphabetic';
+      this._buildBarScroll = 0;
+      return;
+    }
+
+    // Strefa chipów (przewijana). Zachowaj margines na strzałki ‹ ›.
+    const chipsX0 = x + 12 + labelW + 16;
+    const chipsX1 = x + w - 12;
+    const availW = chipsX1 - chipsX0;
+
+    // Zmierz chipy (kompaktowe: ikona + ×count gdy >1)
+    ctx.font = `12px ${THEME.fontFamily}`;
+    const chips = [];
+    let totalW = 0;
+    for (const [bid, count] of entries) {
+      const b = BUILDINGS[bid];
+      if (!b) continue;
+      const label = count > 1 ? `${b.icon ?? '▪'}${count}` : `${b.icon ?? '▪'}`;
+      const lw = ctx.measureText(label).width + 12;   // + padding chipa
+      chips.push({ bid, count, b, label, lw });
+      totalW += lw;
+    }
+
+    // Clamp scrollu do zawartości
+    const maxScroll = Math.max(0, totalW - availW);
+    this._buildBarScroll = Math.max(0, Math.min(maxScroll, this._buildBarScroll ?? 0));
+    const scroll = this._buildBarScroll;
+
+    // Clip do strefy chipów i rysuj
+    ctx.save();
+    ctx.beginPath(); ctx.rect(chipsX0, y, availW, h); ctx.clip();
+    let sx = chipsX0 - scroll;
+    for (const c of chips) {
+      const visible = sx + c.lw > chipsX0 && sx < chipsX1;
+      if (visible) {
+        ctx.fillStyle = CAT_COLORS[c.b.category] ?? THEME.textPrimary;
+        ctx.fillText(c.label, sx + 2, cy);
+        this._addHit(sx, y + 4, c.lw, h - 8, 'headerBuilding', { buildingId: c.bid, count: c.count });
+      }
+      sx += c.lw;
+    }
+    ctx.restore();
+
+    // Wskaźniki przewijania ‹ ›
+    ctx.font = `bold 12px ${THEME.fontFamily}`;
+    if (scroll > 0) {
+      ctx.fillStyle = THEME.accent; ctx.textAlign = 'left';
+      ctx.fillText('‹', chipsX0 - 10, cy);
+    }
+    if (scroll < maxScroll) {
+      ctx.fillStyle = THEME.accent; ctx.textAlign = 'left';
+      ctx.fillText('›', chipsX1 + 1, cy);
+    }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  // Zlicz budynki per typ (bez capital_*) — wspólne dla nagłówka i panelu info
+  _buildingSummary(colony) {
+    const out = {};
+    if (colony?.buildingSystem?._active) {
       for (const [key, entry] of colony.buildingSystem._active) {
         if (key.startsWith('capital_')) continue;
         const bid = entry.building?.id;
         if (!bid) continue;
-        buildingSummary[bid] = (buildingSummary[bid] ?? 0) + 1;
-        totalBuildings++;
+        out[bid] = (out[bid] ?? 0) + 1;
       }
     }
+    return out;
+  }
 
-    // Stats — druga linia w paśmie nagłówka
-    const row2Y = oy + 34;
-    ctx.textBaseline = 'alphabetic';
+  _drawInfoSection(ctx, x, y, w, label) {
+    ctx.font = `bold 10px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(label, x, y + 10);
+    ctx.strokeStyle = THEME.borderActive; ctx.lineWidth = 1; ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.moveTo(x, y + 15); ctx.lineTo(x + w, y + 15); ctx.stroke();
+    ctx.globalAlpha = 1;
+    return y + 24;
+  }
+
+  _drawInfoRow(ctx, x, y, w, label, val) {
     ctx.font = `11px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(label, x, y + 11);
+    ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'right';
+    ctx.fillText(val, x + w, y + 11);
+    ctx.textAlign = 'left';
+    return y + 17;
+  }
+
+  _drawDepositRow(ctx, x, y, w, dep) {
+    const def = ALL_RESOURCES[dep.resourceId];
+    const lang = getLocale();
+    const name = def ? (lang === 'en' ? (def.nameEN ?? def.namePL) : def.namePL) : dep.resourceId;
+    const icon = def?.icon ?? '•';
+    ctx.font = `11px ${THEME.fontFamily}`; ctx.textBaseline = 'alphabetic';
     ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
-    let sx = ox + 14;
-    ctx.fillText(`POP: ${pop}/${housing}`, sx, row2Y);
-    sx += 90;
-
-    // Mini ikony budynków (kompaktowe) z hit zones na tooltip
-    for (const [bid, count] of Object.entries(buildingSummary)) {
-      const b = BUILDINGS[bid];
-      if (!b) continue;
-      const label = `${b.icon ?? '?'}${count > 1 ? '×' + count : ''}`;
-      ctx.fillStyle = CAT_COLORS[b.category] ?? THEME.textPrimary;
-      ctx.fillText(label, sx, row2Y);
-      const labelW = ctx.measureText(label).width;
-      // Hit zone na ikonę budynku (tooltip)
-      this._addHit(sx, oy + 24, labelW + 4, HDR_H - 26, 'headerBuilding', { buildingId: bid, count });
-      sx += labelW + 6;
-      if (sx > ox + ow - 122) { ctx.fillText('...', sx, row2Y); break; }
+    ctx.fillText(`${icon} ${name}`, x, y + 11);
+    // Bogactwo złoża → 4 kropki
+    const dots = Math.max(0, Math.min(4, Math.round((dep.richness ?? 0) * 4)));
+    const dx = x + w - 4 * 9;
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i < dots ? THEME.accent : 'rgba(255,255,255,0.12)';
+      ctx.beginPath(); ctx.arc(dx + i * 9 + 3, y + 7, 2.5, 0, Math.PI * 2); ctx.fill();
     }
+    return y + 17;
+  }
 
-    if (totalBuildings === 0) {
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText('Brak budynków', sx, row2Y);
+  // ── Globus 3D embedded — cykl życia ─────────────────────────────────────
+  // bounds w pikselach CSS = logiczne × uiScale (osobny DOM canvas).
+  _syncGlobe(discX, discY, discW, discH, planet, grid) {
+    if (!planet) { this._teardownGlobe(); return; }
+    const scale = window.KOSMOS?.uiScale ?? _UI_SCALE;
+    const bounds = {
+      x: Math.round(discX * scale), y: Math.round(discY * scale),
+      w: Math.round(discW * scale), h: Math.round(discH * scale),
+    };
+    if (!this._globe) this._globe = new PlanetGlobeRenderer();
+
+    // Re-open gdy zmiana planety (przełączenie aktywnej kolonii)
+    if (this._globePlanetId !== planet.id) {
+      if (this._globe.isOpen) this._globe.close();
+      try {
+        this._globe.open(planet, grid, bounds, /* externalInput */ true);
+        // Globus jest dekoracyjny (auto-rotacja) — niech nie łapie zdarzeń myszy
+        // w swoim prostokącie (z-index 3, nad ui-canvas); klik idzie do overlayu.
+        if (this._globe._canvas) this._globe._canvas.style.pointerEvents = 'none';
+        // Auto-rotacja napędzana pętlą renderu globu (płynna, niezależna od draw()).
+        // Ustawiamy RAZ przy otwarciu — lekki tilt + powolny obrót.
+        const ctrl = this._globe.cameraCtrl;
+        if (ctrl) { ctrl.setYawPitch(0.6, 0.28); ctrl.setAutoRotate(0.18); }
+        this._globePlanetId = planet.id;
+      } catch (err) {
+        console.warn('[ColonyOverlay] globe open failed:', err);
+        this._globe = null; this._globePlanetId = null;
+        return;
+      }
+    } else if (this._globe.isOpen) {
+      this._globe.updateBounds(bounds);
     }
+  }
+
+  _teardownGlobe() {
+    if (this._globe?.isOpen) this._globe.close();
+    this._globePlanetId = null;
   }
 
   // ── Mapa 2D ──────────────────────────────────────────────────────────────
@@ -2774,18 +3081,28 @@ export class ColonyOverlay extends BaseOverlay {
   }
 
   // ── Pixel → Tile ─────────────────────────────────────────────────────────
+  // Szerokość prawej kolumny info (clamp 30% — patrz INFO_* na górze pliku).
+  // Nigdy nie przekracza połowy overlayu (ochrona wąskich ekranów).
+  _infoW(ow) {
+    return Math.round(Math.min(Math.floor(ow * 0.5), Math.max(INFO_MIN, Math.min(INFO_MAX, ow * INFO_FRAC))));
+  }
+
   _getMapBounds() {
     const canvas = document.getElementById('ui-canvas');
     if (!canvas) return null;
     const W = canvas.width / _UI_SCALE, H = canvas.height / _UI_SCALE;
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
-    return { ox, oy: oy + HDR_H, ow, oh: oh - HDR_H };
+    // Mapa: overlay POMNIEJSZONY o prawą kolumnę info (szer.) oraz pasek budynków (wys.).
+    return { ox, oy: oy + HDR_H + BUILD_BAR_H, ow: ow - this._infoW(ow), oh: oh - HDR_H - BUILD_BAR_H };
   }
 
   _screenToTile(sx, sy, grid) {
     if (!grid) return null;
     const b = this._getMapBounds();
     if (!b) return null;
+    // Po splicie 70/30: ignoruj kliknięcia/hover w prawej kolumnie info (poza
+    // obszarem mapy) — inaczej klik w dossier wybierałby losowy hex.
+    if (sx < b.ox || sx > b.ox + b.ow || sy < b.oy || sy > b.oy + b.oh) return null;
     const cx = b.ox + b.ow / 2 - this._camX;
     const cy = b.oy + b.oh / 2 - this._camY;
     return grid.pixelToTile(sx - cx, sy - cy, this._hexSize);
@@ -3019,6 +3336,9 @@ export class ColonyOverlay extends BaseOverlay {
         if (window.KOSMOS?.overlayManager) window.KOSMOS.overlayManager.active = null;
         break;
       case 'deselectHex': this._selectedHex = null; break;
+      case 'colonyTab':
+        if (zone.data?.planetId) this._switchColony(zone.data.planetId);
+        break;
       case 'floatPanel': break;  // konsumuj klik — nie przebijaj na mapę
       case 'headerBuilding': break;  // konsumuj klik na ikonę budynku w nagłówku
       case 'stationDialogBg': break; // konsumuj klik w tło dialogu stacji
@@ -3472,8 +3792,20 @@ export class ColonyOverlay extends BaseOverlay {
   handleScroll(delta, x, y) {
     if (!this.visible) return false;
 
+    const mb = this._getMapBounds();
+    // Scroll poziomy zakładek kolonii (kursor nad pasmem nagłówka)
+    if (mb && x >= mb.ox && y >= mb.oy - HDR_H - BUILD_BAR_H && y <= mb.oy - BUILD_BAR_H) {
+      this._colonyTabScroll = Math.max(0, (this._colonyTabScroll ?? 0) + delta * 24); // górny clamp w draw
+      return true;
+    }
+    // Scroll poziomy paska budynków (kursor nad paskiem nad mapą)
+    if (mb && x >= mb.ox && x <= mb.ox + mb.ow && y >= mb.oy - BUILD_BAR_H && y <= mb.oy) {
+      this._buildBarScroll = Math.max(0, (this._buildBarScroll ?? 0) + delta * 24); // górny clamp w draw
+      return true;
+    }
+
     // Kursor poza overlay bounds → przepuść scroll
-    const bounds = this._getMapBounds();
+    const bounds = mb;
     if (bounds && (x < bounds.ox || x > bounds.ox + bounds.ow || y < bounds.oy - HDR_H || y > bounds.oy + bounds.oh)) {
       return false;
     }
