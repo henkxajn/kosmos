@@ -24,29 +24,33 @@ ok(order === 'civilization,economy,colony,population,diplomacy,fleet,tech',
    'G1.2 kolejność C/E/H/P/D/F/T: ' + order);
 ok(NAV_GROUPS.every(g => g.members[0] === g.primary), 'G1.3 members[0] === primary');
 const allMembers = NAV_GROUPS.flatMap(g => g.members);
-ok(allMembers.length === 14, 'G1.4 łącznie 14 członków: ' + allMembers.length);
-ok(new Set(allMembers).size === 14, 'G1.5 brak duplikatów członków');
+// Designs (unit_design) → zakładka Stocznia; galaxy → Stratcom (zakładka w Dowództwie
+// Taktycznym, klawisz G/M). Oba usunięte z subnav.
+ok(allMembers.length === 12, 'G1.4 łącznie 12 członków: ' + allMembers.length);
+ok(new Set(allMembers).size === 12, 'G1.5 brak duplikatów członków');
 const expectedIds = ['civilization','dyson','economy','trade','colony','population',
-  'diplomacy','intel','war','galaxy','fleet','unit_design','tech','observatory'];
-ok(expectedIds.every(id => allMembers.includes(id)), 'G1.6 wszystkie 14 overlay-id obecne');
-ok(getNavGroup('diplomacy').members.join(',') === 'diplomacy,intel,war,galaxy',
-   'G1.7 grupa Diplomacy = diplomacy,intel,war,galaxy');
+  'diplomacy','intel','war','fleet','tech','observatory'];
+ok(expectedIds.every(id => allMembers.includes(id)), 'G1.6 wszystkie 12 overlay-id obecne');
+ok(!allMembers.includes('unit_design'), 'G1.6b unit_design NIE jest już członkiem subnav (→ Stocznia)');
+ok(!allMembers.includes('galaxy'), 'G1.6c galaxy NIE jest już członkiem subnav (→ Stratcom)');
+ok(getNavGroup('diplomacy').members.join(',') === 'diplomacy,intel,war',
+   'G1.7 grupa Diplomacy = diplomacy,intel,war');
 // Każdy member istnieje w CIV_TABS (subnav czyta ikonę/label stamtąd)
 ok(allMembers.every(id => CIV_TABS.some(t => t.id === id)), 'G1.8 każdy member ma wpis w CIV_TABS');
 
 // ── G2: getNavGroup (mapa odwrotna) ───────────────────────
 ok(getNavGroup('dyson')?.primary === 'civilization', 'G2.1 dyson → civilization');
 ok(getNavGroup('trade')?.primary === 'economy',       'G2.2 trade → economy');
-ok(getNavGroup('galaxy')?.primary === 'diplomacy',    'G2.3 galaxy → diplomacy');
+ok(getNavGroup('galaxy') === null,                    'G2.3 galaxy ungrouped (→ Stratcom, brak subnav)');
 ok(getNavGroup('observatory')?.primary === 'tech',    'G2.4 observatory → tech');
-ok(getNavGroup('unit_design')?.primary === 'fleet',   'G2.5 unit_design → fleet');
+ok(getNavGroup('unit_design') === null,               'G2.5 unit_design ungrouped (→ Stocznia, brak subnav)');
 ok(getNavGroup('nieistnieje') === null,               'G2.6 nieznany id → null');
 
 // ── G3: isGroupedId (grupy >1 vs singletony) ──────────────
 ok(isGroupedId('civilization') === true,  'G3.1 civilization grupowy');
 ok(isGroupedId('economy') === true,       'G3.2 economy grupowy');
 ok(isGroupedId('diplomacy') === true,     'G3.3 diplomacy grupowy');
-ok(isGroupedId('fleet') === true,         'G3.4 fleet grupowy');
+ok(isGroupedId('fleet') === false,        'G3.4 fleet singleton (Designs → Stocznia; brak subnav)');
 ok(isGroupedId('tech') === true,          'G3.5 tech grupowy');
 ok(isGroupedId('colony') === false,       'G3.6 colony singleton');
 ok(isGroupedId('population') === false,    'G3.7 population singleton');
@@ -68,7 +72,7 @@ ok(getSubNavHeight() === 0, 'G4.5 active=null → 0');
 
 // ── G5: hitTestSubNav ─────────────────────────────────────
 const W = 1280;
-const y0 = COSMIC.TOP_BAR_H, h = COSMIC.SUBNAV_H, yMid = y0 + h / 2;
+const y0 = COSMIC.TOP_BAND_H, h = COSMIC.SUBNAV_H, yMid = y0 + h / 2;  // subnav stykany z TOP_BAND_H (UI v3)
 ok(hitTestSubNav(4 + 0 * SUBNAV_TAB_W + 5, yMid, W, 'economy')?.id === 'economy', 'G5.1 1. zakładka → economy');
 ok(hitTestSubNav(4 + 1 * SUBNAV_TAB_W + 5, yMid, W, 'economy')?.id === 'trade',   'G5.2 2. zakładka → trade');
 const gap = hitTestSubNav(4 + 2 * SUBNAV_TAB_W + 5, yMid, W, 'economy');
@@ -77,8 +81,10 @@ ok(hitTestSubNav(10, y0 - 1, W, 'economy') === null,     'G5.4 y nad pasem → n
 ok(hitTestSubNav(10, y0 + h + 1, W, 'economy') === null, 'G5.5 y pod pasem → null');
 ok(hitTestSubNav(10, yMid, W, 'colony') === null,        'G5.6 singleton colony → null');
 ok(hitTestSubNav(10, yMid, W, 'population') === null,    'G5.7 singleton population → null');
-ok(hitTestSubNav(4 + 3 * SUBNAV_TAB_W + 5, yMid, W, 'diplomacy')?.id === 'galaxy', 'G5.8 diplomacy 4. zakładka → galaxy');
-ok(hitTestSubNav(W - COSMIC.OUTLINER_W + 5, yMid, W, 'economy') === null, 'G5.9 obszar outlinera → null');
+const g58 = hitTestSubNav(4 + 3 * SUBNAV_TAB_W + 5, yMid, W, 'diplomacy');
+ok(g58 && g58.id === null, 'G5.8 diplomacy ma 3 członków → 4. slot poza zakładkami → {id:null}');
+const g59 = hitTestSubNav(W - COSMIC.OUTLINER_W + 5, yMid, W, 'economy');
+ok(g59 && g59.id === null, 'G5.9 subnav pełnej szerokości (Slice B): obszar po prawej poza zakładkami → {id:null} (absorb)');
 ok(hitTestSubNav(4 + 1 * SUBNAV_TAB_W + 5, yMid, W, 'diplomacy')?.id === 'intel', 'G5.10 diplomacy 2. zakładka → intel');
 
 // ── G6: drawSubNav (mock ctx — no-op singleton, nie rzuca) ─
@@ -101,12 +107,12 @@ const { BaseOverlay } = await import('./src/ui/BaseOverlay.js');
 const ov = new BaseOverlay({});
 window.KOSMOS.overlayManager.active = 'economy';   // grupowy → +pas
 const bGrp = ov._getOverlayBounds(1280, 800);
-ok(bGrp.oy === COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H,
-   `G7.1 grupowy: oy = TOP_BAR_H+SUBNAV_H (${bGrp.oy})`);
+ok(bGrp.oy === COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H,
+   `G7.1 grupowy: oy = TOP_BAND_H+SUBNAV_H (${bGrp.oy})`);
 window.KOSMOS.overlayManager.active = 'population';  // singleton → bez pasa
 const bSng = ov._getOverlayBounds(1280, 800);
-ok(bSng.oy === COSMIC.TOP_BAR_H + COSMIC.MAP_MODE_H,
-   `G7.2 singleton: oy = TOP_BAR_H (bez pasa) (${bSng.oy})`);
+ok(bSng.oy === COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H,
+   `G7.2 singleton: oy = TOP_BAND_H (bez pasa) (${bSng.oy})`);
 ok(bGrp.oy - bSng.oy === COSMIC.SUBNAV_H, 'G7.3 różnica oy grupowy−singleton = SUBNAV_H');
 ok(bSng.oh - bGrp.oh === COSMIC.SUBNAV_H, 'G7.4 grupowy oh mniejszy o SUBNAV_H (pas zjada wysokość)');
 

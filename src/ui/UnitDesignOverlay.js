@@ -333,7 +333,7 @@ export class UnitDesignOverlay extends BaseOverlay {
     }
 
     // ── Lista zapisanych szablonów ─────────────────────────────
-    this._drawSavedTemplates(ctx, x, cy, w, 999);
+    cy = this._drawSavedTemplates(ctx, x, cy, w, 99999);
 
     cy += 40; // margines dolny
 
@@ -341,6 +341,10 @@ export class UnitDesignOverlay extends BaseOverlay {
     const contentH = (cy + this._scrollLeft) - y;
     const maxScroll = Math.max(0, contentH - h);
     if (this._scrollLeft > maxScroll) this._scrollLeft = maxScroll;
+
+    // Zwróć dolną krawędź treści — pozwala hostowi (zakładka Stocznia w
+    // Dowództwie Taktycznym) policzyć łączną wysokość do wspólnego scrolla.
+    return cy;
   }
 
   // ── Picker modułów dla aktywnego slotu ────────────────────────────────────
@@ -499,7 +503,7 @@ export class UnitDesignOverlay extends BaseOverlay {
       ctx.fillStyle = THEME.textDim;
       ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
       ctx.fillText(t('unitDesign.noTemplates'), x + PAD + 4, cy + 10);
-      return;
+      return cy + 14;
     }
 
     for (let i = 0; i < templates.length; i++) {
@@ -544,6 +548,7 @@ export class UnitDesignOverlay extends BaseOverlay {
 
       cy += TPL_ROW_H;
     }
+    return cy;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

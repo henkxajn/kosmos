@@ -1657,8 +1657,10 @@ export class UIManager {
     if (civMode && !globeOpen) this._topResourceDrawer.drawTooltip(ctx, W, H);
 
     // ── CTRL-hold: labele wszystkich obiektów w scenie 3D ──
+    // Tylko gdy widoczna jest mapa 3D układu — pod otwartym overlayem (Stratcom,
+    // kolonia itd.) labele nie mają sensu i przebijały przez panel.
     const tr = window.KOSMOS?.threeRenderer;
-    if (tr?._showAllLabels) this._drawAllLabels(ctx, tr);
+    if (tr?._showAllLabels && !this.overlayManager.isAnyOpen()) this._drawAllLabels(ctx, tr);
 
     // ── Dialog potwierdzenia ─────────────────────────────────
     if (this._confirmDialog?.visible) this._drawConfirmDialog();

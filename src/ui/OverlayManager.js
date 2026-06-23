@@ -24,13 +24,15 @@ export class OverlayManager {
       // wtórne overlaye — bezpośrednie skróty
       'i': 'intel',           // Faza 2 — Wywiad (obce imperia)
       'w': 'war',             // Faza 4 — Panel wojny
-      'g': 'galaxy',
+      // Stratcom zastąpił mapę galaktyki (G) i mini-mapę (M) — oba otwierają
+      // Dowództwo Taktyczne na zakładce Stratcom (radar strategiczny).
+      'g': { id: 'fleet', opts: { tab: 'stratcom' } },
       'u': 'unit_design',
       'o': 'observatory',
       // systemowe (poza grupami nav)
       'l': 'eventLog',        // Opcja B/3 — Dziennik zdarzeń
       'n': 'poi',             // M3 P2.1 — POI Panel (sidebar list)
-      'm': 'minimap',         // M4 P2 — Galactic mini-map (top-right corner)
+      'm': { id: 'fleet', opts: { tab: 'stratcom' } }, // Stratcom zastąpił mini-mapę
       'k': { id: 'fleet', opts: { focusSection: 'wreck' } }, // M4 P2 — Fleet → sekcja Wraki
     };
   }

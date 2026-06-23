@@ -152,8 +152,8 @@ export const NAV_GROUPS = [
   { primary: 'economy',      members: ['economy', 'trade'] },
   { primary: 'colony',       members: ['colony'] },
   { primary: 'population',   members: ['population'] },
-  { primary: 'diplomacy',    members: ['diplomacy', 'intel', 'war', 'galaxy'] },
-  { primary: 'fleet',        members: ['fleet', 'unit_design'] },
+  { primary: 'diplomacy',    members: ['diplomacy', 'intel', 'war'] },  // 'galaxy' usunięte — Stratcom (zakładka w Dowództwie Taktycznym, klawisz G/M) zastąpił mapę galaktyki
+  { primary: 'fleet',        members: ['fleet'] },  // Designs (unit_design) wchłonięte przez zakładkę Stocznia w Dowództwie Taktycznym
   { primary: 'tech',         members: ['tech', 'observatory'] },
 ];
 
