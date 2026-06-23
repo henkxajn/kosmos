@@ -21,6 +21,10 @@ const HEADER_H  = 18;
 const MAX_ROWS  = 12;
 const PAD       = 8;
 const TRIG_H    = NAV_TRIGGER_W;        // 6
+// Opóźnienie intencji hovera (ms) — panel otwiera się dopiero gdy kursor pozostaje na
+// triggerze przez ten czas. Eliminuje przypadkowe otwarcia przy przelocie kursora nad
+// dolną krawędzią ekranu (zob. handleMouseMove + draw + isAnimating).
+const HOVER_OPEN_DELAY = 1000;
 
 // ── Kolory wpisu (kopia z BottomBar — severity > kanał > default) ──
 function _severityColor(sev) {
@@ -58,12 +62,15 @@ export class EventLogDrawer {
     this._slideProgress = 0;
     this._hovered       = false;
     this._hideAt        = 0;
+    this._hoverIntentAt = 0;            // ms (Date.now+delay) — pending otwarcie; 0 = brak
     this._triggerRect   = null;
     this._panelRect     = null;
   }
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
-  isAnimating() { return navIsAnimating(this._slideProgress, this._hideAt); }
+  // Animacja trwa też podczas oczekiwania na intencję hovera — inaczej pętla renderu
+  // zamarłaby (kursor nieruchomy) i timer otwarcia nigdy by nie wystrzelił.
+  isAnimating() { return this._hoverIntentAt > 0 || navIsAnimating(this._slideProgress, this._hideAt); }
   isOpen() { return this._slideProgress > 0.001; }
 
   _entries() {
@@ -74,6 +81,8 @@ export class EventLogDrawer {
 
   draw(ctx, W, H) {
     if (this._hideAt > 0 && Date.now() >= this._hideAt) { this._hideAt = 0; this._hovered = false; }
+    // Intencja hovera dojrzała → otwórz panel (kursor wytrzymał HOVER_OPEN_DELAY na triggerze).
+    if (this._hoverIntentAt > 0 && Date.now() >= this._hoverIntentAt) { this._hoverIntentAt = 0; this._hovered = true; }
     this._slideProgress = stepSlide(this._slideProgress, this._hovered ? 1 : 0);
 
     const anchorBottom = H;                          // PRZYKLEJONY do dolnej krawędzi (y=H)
@@ -145,13 +154,17 @@ export class EventLogDrawer {
   }
 
   handleMouseMove(x, y) {
-    const over = pointInRect(this._triggerRect, x, y)
-      || (this._slideProgress > 0.01 && pointInRect(this._panelRect, x, y));
-    if (over) {
-      if (!this._hovered) this._markDirty();
-      this._hovered = true; this._hideAt = 0;
-    } else if (this._hovered && this._hideAt === 0) {
-      this._hideAt = Date.now() + NAV_HIDE_DELAY;
+    const overTrig  = pointInRect(this._triggerRect, x, y);
+    const overPanel = this._slideProgress > 0.01 && pointInRect(this._panelRect, x, y);
+    if (overTrig || overPanel) {
+      this._hideAt = 0;
+      if (this._hovered) return;                 // już otwarty — utrzymaj
+      if (overPanel) { this._hovered = true; this._hoverIntentAt = 0; this._markDirty(); return; }
+      // Sam trigger — uruchom opóźnienie intencji (anty-przypadkowe najechanie).
+      if (this._hoverIntentAt === 0) { this._hoverIntentAt = Date.now() + HOVER_OPEN_DELAY; this._markDirty(); }
+    } else {
+      this._hoverIntentAt = 0;                   // opuszczenie triggera kasuje pending-otwarcie
+      if (this._hovered && this._hideAt === 0) this._hideAt = Date.now() + NAV_HIDE_DELAY;
     }
   }
 
