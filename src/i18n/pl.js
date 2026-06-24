@@ -2007,6 +2007,7 @@ export default {
   'topBar.systems': 'SYSTEMY',
   'topBar.brownoutWarning': '⚠ BROWNOUT \u2014 produkcja wstrzymana',
   'topBar.popConsumption': 'Konsumpcja POP',
+  'topBar.colonyBase': 'Baza kolonii',
   'topBar.populationLabel': 'Populacja',
   'topBar.productionPoints': 'Punkty Produkcji',
   'topBar.used': 'Używane:',

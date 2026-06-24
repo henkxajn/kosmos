@@ -15,6 +15,7 @@ import { THEME, bgAlpha, GLASS_BORDER } from '../config/ThemeConfig.js';
 import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
 import { MINED_RESOURCES, HARVESTED_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES }       from '../data/CommoditiesData.js';
+import { BUILDINGS }         from '../data/BuildingsData.js';
 import EntityManager         from '../core/EntityManager.js';
 import { t, getName }        from '../i18n/i18n.js';
 import { drawResourceIcon, hasIconFile, hasResourceIcon } from './ResourceIcons.js';
@@ -324,6 +325,10 @@ export class TopResourceDrawer {
       const rightClip = px + pw - 4;
       let tx = px + leftW + 6;
       for (const it of data.items) {
+        // Stempel kontekstu kolonii na tokenie — tooltip rozbicia produkcji/zużycia
+        // (getResourceBreakdown) jest poprawny TYLKO dla aktywnej kolonii (czyta globalny
+        // window.KOSMOS dla kopalni/fabryk), więc rozbicie pokazujemy wyłącznie dla niej.
+        it._col = col; it._active = isActive;
         if (tx > rightClip) break;   // overflow hidden — ucinaj zamiast nachodzić na prawą strefę
         tx = this._drawItem(ctx, it, tx, iconCY, rowTop, iconSize);
       }
@@ -408,6 +413,7 @@ export class TopResourceDrawer {
         lines.push({ text: t('ui.change', sign + item.delta.toFixed(1)),
           color: item.delta >= 0 ? THEME.success : THEME.danger });
       }
+      this._appendBreakdownLines(lines, item);   // źródła produkcji/zużycia (aktywna kolonia)
       return lines;
     }
     if (item.kind === 'research') {
@@ -455,9 +461,56 @@ export class TopResourceDrawer {
       lines.push({ text: t('ui.balance', (bal >= 0 ? '+' : '') + _fmtNum(bal)),
         color: bal >= 0 ? THEME.success : THEME.danger });
       if (e.brownout) lines.push({ text: t('topBar.brownoutWarning'), color: THEME.danger });
+      // Rozbicie per budynek (id syntetyczne 'energy' — item energii nie ma .id)
+      this._appendBreakdownLines(lines, { id: 'energy', _active: item._active, _col: item._col });
       return lines;
     }
     return null;
+  }
+
+  // Dopisuje do tooltipu rozbicie surowca na ŹRÓDŁA produkcji i zużycia
+  // (kopalnie, baza, populacja, fabryki, budynki spalające surowiec — np. coal_plant).
+  // Tylko dla AKTYWNEJ kolonii: getResourceBreakdown sekcje kopalni/fabryk czytają
+  // globalny window.KOSMOS, więc dla rozwiniętych (nieaktywnych) kolonii byłyby błędne.
+  _appendBreakdownLines(lines, item) {
+    if (!item?._active || !item.id) return;
+    const rs = item._col?.resourceSystem;
+    if (!rs || typeof rs.getResourceBreakdown !== 'function') return;
+    const bd = rs.getResourceBreakdown(item.id);
+    if (!bd) return;
+
+    const prodKeys = Object.keys(bd.producers ?? {});
+    const consKeys = Object.keys(bd.consumers ?? {});
+    if (prodKeys.length === 0 && consKeys.length === 0) return;
+
+    if (prodKeys.length > 0) {
+      lines.push({ text: t('econPanel.producers'), color: THEME.textDim });
+      for (const type of prodKeys) {
+        const g = bd.producers[type];
+        const meta = this._breakdownTypeMeta(type);
+        const cnt = g.count > 1 ? ` ×${g.count}` : '';
+        lines.push({ text: `${meta.icon} ${meta.name}${cnt}  +${_fmtNum(g.total)}/r`, color: THEME.success });
+      }
+    }
+    if (consKeys.length > 0) {
+      lines.push({ text: t('econPanel.consumers'), color: THEME.textDim });
+      for (const type of consKeys) {
+        const g = bd.consumers[type];   // total ujemny
+        const meta = this._breakdownTypeMeta(type);
+        const cnt = g.count > 1 ? ` ×${g.count}` : '';
+        lines.push({ text: `${meta.icon} ${meta.name}${cnt}  ${_fmtNum(g.total)}/r`, color: THEME.danger });
+      }
+    }
+  }
+
+  // Mapuje klucz typu z getResourceBreakdown na nazwę (i18n) + ikonę.
+  // Pseudo-typy 'mine'/'factory' są budynkami w BUILDINGS (rozwiązują się same).
+  _breakdownTypeMeta(type) {
+    if (type === 'pop_consumption') return { name: t('topBar.popConsumption'), icon: '👥' };
+    if (type === 'colony_base')     return { name: t('topBar.colonyBase'),     icon: '🏛' };
+    const def = BUILDINGS[type];
+    if (def) return { name: getName(def, 'building'), icon: def.icon ?? '🏭' };
+    return { name: type, icon: '•' };
   }
 
   drawTooltip(ctx, W, H) {

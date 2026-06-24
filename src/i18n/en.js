@@ -2005,6 +2005,7 @@ export default {
   'topBar.systems': 'SYSTEMS',
   'topBar.brownoutWarning': '⚠ BROWNOUT — production halted',
   'topBar.popConsumption': 'POP Consumption',
+  'topBar.colonyBase': 'Colony base',
   'topBar.populationLabel': 'Population',
   'topBar.productionPoints': 'Production Points',
   'topBar.used': 'Used:',
