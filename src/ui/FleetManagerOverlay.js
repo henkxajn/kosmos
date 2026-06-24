@@ -347,16 +347,17 @@ export class FleetManagerOverlay {
   close()  { this._visible = false; this._close(); }
 
   // Przy otwarciu overlay'a — jeśli mapa w stanie domyślnym (pan=0, zoom=1),
-  // automatycznie zcentruj na homePlanet i ustaw sensowny zoom widzący planetę
-  // z księżycami. Bez tego user przy zoom=300 nadal widzi gwiazdę w centrum,
-  // bo focus nie jest ustawiony.
+  // ustaw domyślne ujęcie: gwiazda w centrum (pan=0) z zoomem fit-all, przy
+  // którym ZAWSZE widać orbitę najdalszego ciała. Skala mapy normalizuje się do
+  // maxOrbitAU (najdalsza orbita × 1.15 zapasu), więc zoom=1.0 = orbita
+  // najdalszego ciała tuż przy krawędzi kadru, niezależnie od rozpiętości
+  // układu. Stan jest ustawiany tylko raz (guard) — kolejne otwarcia zachowują
+  // pan/zoom dostosowany przez gracza.
   _focusOnHomeAtStart() {
     if (this._mapPanX !== 0 || this._mapPanY !== 0 || this._mapZoom !== 1.0) return;
-    const home = window.KOSMOS?.homePlanet;
-    if (!home) return;
-    this._mapFocusBodyId = home.id;
-    this._mapZoom = 40;  // widok planeta + księżyce
-    this._centerMapOnBody(home);
+    this._mapFocusBodyId = null;  // null = gwiazda (środek układu)
+    this._mapZoom = 1.0;          // fit-all → najdalsza orbita zawsze widoczna
+    // pan zostaje 0 → mapCx/mapCy bez offsetu → gwiazda w środku obszaru mapy
   }
   get isVisible() { return this._visible; }
 

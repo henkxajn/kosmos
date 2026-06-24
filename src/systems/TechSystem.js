@@ -486,8 +486,11 @@ export class TechSystem {
     const researchNeeded = effectiveCost.research ?? 0;
     if (researchNeeded > 0) {
       const colMgr = window.KOSMOS?.colonyManager;
-      const colonies = colMgr?.getAllColonies() ?? [];
-      // Zbierz łączny research z wszystkich kolonii
+      // Tylko kolonie GRACZA — getAllColonies() zawiera kolonie AI, których
+      // research.amount nie jest drenowany (EmpireResearchSystem liczy postęp
+      // osobno) → pulowanie ich = darmowy research z kolonii wroga.
+      const colonies = colMgr?.getPlayerColonies() ?? [];
+      // Zbierz łączny research z kolonii gracza
       let totalResearch = 0;
       const sources = []; // { resourceSystem, available }
       for (const col of colonies) {

@@ -58,11 +58,16 @@ export class ResearchSystem {
     this._fillSlots();
     if (this.activeResearch.length === 0) return;
 
-    // Zbierz punkty badań ze wszystkich kolonii
+    // Zbierz punkty badań TYLKO z kolonii GRACZA. getAllColonies() zawiera
+    // kolonie imperiów AI — ich resourceSystem.research.amount akumuluje się bez
+    // drenażu (EmpireResearchSystem liczy postęp z osobnego accumulatora, nie
+    // dotyka research.amount). Pulowanie ich tutaj = darmowy research z kolonii
+    // wroga → techy odkrywają się mimo zerowej produkcji gracza. Patrz
+    // ColonyManager.getPlayerColonies (kanon dla widoków/akcji gracza).
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return;
     let totalPoints = 0;
-    for (const col of colMgr.getAllColonies()) {
+    for (const col of colMgr.getPlayerColonies()) {
       const rs = col.resourceSystem;
       if (!rs) continue;
       const available = rs.research?.amount ?? 0;
@@ -88,10 +93,10 @@ export class ResearchSystem {
       const applied = Math.min(perSlot, needed);
       slot.progress += applied;
 
-      // Zwróć nadmiar do pierwszej kolonii (rzadkie, ale czyste)
+      // Zwróć nadmiar do pierwszej kolonii GRACZA (rzadkie, ale czyste)
       const surplus = perSlot - applied;
       if (surplus > 0) {
-        const firstCol = colMgr.getAllColonies()[0];
+        const firstCol = colMgr.getPlayerColonies()[0];
         if (firstCol?.resourceSystem) {
           firstCol.resourceSystem.research.amount += surplus;
         }
@@ -143,7 +148,7 @@ export class ResearchSystem {
     if (!colMgr) return;
 
     let totalPoints = 0;
-    for (const col of colMgr.getAllColonies()) {
+    for (const col of colMgr.getPlayerColonies()) {
       const rs = col.resourceSystem;
       if (!rs) continue;
       const available = rs.research?.amount ?? 0;
@@ -168,7 +173,7 @@ export class ResearchSystem {
       slot.progress += applied;
       const surplus = perSlot - applied;
       if (surplus > 0) {
-        const firstCol = colMgr.getAllColonies()[0];
+        const firstCol = colMgr.getPlayerColonies()[0];
         if (firstCol?.resourceSystem) {
           firstCol.resourceSystem.research.amount += surplus;
         }
@@ -286,7 +291,9 @@ export class ResearchSystem {
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return 0;
     let total = 0;
-    for (const col of colMgr.getAllColonies()) {
+    // Tylko kolonie GRACZA — patrz komentarz w _tick (research kolonii AI nie
+    // wlicza się do tempa badań gracza).
+    for (const col of colMgr.getPlayerColonies()) {
       total += col.resourceSystem?.research?.perYear ?? 0;
     }
     return total;
