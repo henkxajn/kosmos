@@ -3805,6 +3805,57 @@ export class FleetManagerOverlay {
     return { home, list, rangeLY, isEmpKnown };
   }
 
+  // ── Realne kolory gwiazdy wg typu spektralnego (rdzeń + halo) ──────────────
+  // galaxyData niesie colorHex/glowColorHex (liczby 0xRRGGBB ze STAR_TYPES).
+  // Fallback: brak danych → akcent motywu (degradacja do dawnego „cyan").
+  _starRgb(sys) {
+    const toRgb = (hex) => `${(hex >> 16) & 255},${(hex >> 8) & 255},${hex & 255}`;
+    const core = sys?.colorHex;
+    if (core == null) {
+      const a = hexToRgb(THEME.accent);
+      const s = `${a.r},${a.g},${a.b}`;
+      return { core: s, glow: s };
+    }
+    return { core: toRgb(core), glow: toRgb(sys.glowColorHex ?? core) };
+  }
+
+  // Stała faza migotania per-gwiazda (z id) — gwiazdy nie pulsują zgodnie.
+  _starPhase(sys) {
+    const s = String(sys?.id ?? '');
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) & 0xffff;
+    return (h / 0xffff) * Math.PI * 2;
+  }
+
+  // ── „Małe słońce": rdzeń biało-gorący → kolor spektralny → halo glow ───────
+  // r = promień rdzenia (px); dim → przygaszona „widmowa" gwiazda (niezbadana).
+  // Rysuje TYLKO ciało gwiazdy — pierścienie stanu/etykiety dorysowuje wywołujący.
+  _drawStarGlyph(ctx, sx, sy, r, sys, dim = false) {
+    const { core, glow } = this._starRgb(sys);
+    const bright = dim ? 0.5 : 1.0;
+    const tw = 0.88 + 0.12 * Math.sin(performance.now() / 850 + this._starPhase(sys));
+    const a = (v) => Math.max(0, Math.min(1, v)).toFixed(3);
+
+    // Halo — additive, rozświetla sąsiedztwo (efekt korony słonecznej)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const hg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 3.6);
+    hg.addColorStop(0,    `rgba(${glow},${a(0.55 * bright * tw)})`);
+    hg.addColorStop(0.35, `rgba(${glow},${a(0.18 * bright * tw)})`);
+    hg.addColorStop(1,    `rgba(${glow},0)`);
+    ctx.fillStyle = hg;
+    ctx.beginPath(); ctx.arc(sx, sy, r * 3.6, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // Rdzeń — biało-gorące centrum przechodzące w kolor typu gwiazdy
+    const cg = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+    cg.addColorStop(0,    `rgba(255,255,255,${a(0.95 * bright)})`);
+    cg.addColorStop(0.45, `rgba(${core},${a(0.98 * bright)})`);
+    cg.addColorStop(1,    `rgba(${core},${a(0.65 * bright)})`);
+    ctx.fillStyle = cg;
+    ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+  }
+
   // Radar Stratcom. isBig=true → pełny (hity gwiazd + panel polityczny + legenda);
   // isBig=false → kompaktowy podgląd (całość = hit „rozwiń", bez selekcji gwiazd).
   _drawStratcom(ctx, x, y, w, h, isBig = true) {
@@ -3941,26 +3992,23 @@ export class FleetManagerOverlay {
       const isHover    = this._clusterHoverSystem === s.id;
       const empKnown   = isEmpKnown(s);
 
-      // Kolor + promień
-      let color, r = isHome ? 6 : (known ? 4 : 3);
-      if (isHome) color = THEME.yellow;
-      else if (empKnown) color = ARCHETYPES[empReg?.get(s.empireId)?.archetype]?.color ?? THEME.danger;
-      else if (s.explored) color = THEME.accent;
-      else color = THEME.textDim;
+      // Promień (rozmiar wg ważności; zaznaczone/hover odrobinę większe)
+      let r = isHome ? 6 : (known ? 4 : 3);
       if (isSelected || isHover) r += 1;
+      const dim = !known && !isHome;   // w zasięgu, ale niezbadana → „widmowa"
 
-      // Glow home/selected
+      // Miękka poświata akcentu pod gwiazdą (czytelność home/selekcji)
       if (isHome || isSelected) {
-        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 3);
-        grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.3)' : 'rgba(0,255,180,0.3)');
+        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 4);
+        grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.18)' : 'rgba(0,255,180,0.18)');
         grad.addColorStop(1, 'transparent');
         ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(sx, sy, r * 3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx, sy, r * 4, 0, Math.PI * 2); ctx.fill();
       }
 
-      // Punkt systemu
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+      // „Małe słońce" — rdzeń + halo w realnym kolorze typu gwiazdy.
+      // Stan gry = nakładka: nieznane przygaszone, pierścienie/etykiety niżej.
+      this._drawStarGlyph(ctx, sx, sy, r, s, dim);
 
       // Pierścień hostility dla znanego imperium
       if (empKnown) {
@@ -4463,17 +4511,14 @@ export class FleetManagerOverlay {
       const isHover = this._clusterHoverSystem === s.id;
       const empKnown = vis.isEmpKnown(s);
       let r = isHome ? 6 : (known ? 4 : 3); if (isSelected || isHover) r += 1;
-      let color;
-      if (isHome) color = THEME.yellow;
-      else if (empKnown) color = ARCHETYPES[empReg?.get(s.empireId)?.archetype]?.color ?? THEME.danger;
-      else if (s.explored) color = THEME.accent;
-      else color = THEME.textDim;
+      const dim = !known && !isHome;   // w zasięgu, ale niezbadana → „widmowa"
       if (isHome || isSelected) {
-        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 3);
-        grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.3)' : 'rgba(0,255,180,0.3)'); grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(sx, sy, r * 3, 0, Math.PI * 2); ctx.fill();
+        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 4);
+        grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.18)' : 'rgba(0,255,180,0.18)'); grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(sx, sy, r * 4, 0, Math.PI * 2); ctx.fill();
       }
-      ctx.fillStyle = color; ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+      // „Małe słońce" w realnym kolorze typu gwiazdy (stan = nakładki niżej)
+      this._drawStarGlyph(ctx, sx, sy, r, s, dim);
       if (empKnown) {
         const host = dipl?.getHostility?.(s.empireId) ?? 0;
         ctx.strokeStyle = host <= 30 ? (THEME.success ?? '#44cc66') : host <= 70 ? (THEME.warning ?? '#ffcc44') : (THEME.danger ?? '#ff4466');
