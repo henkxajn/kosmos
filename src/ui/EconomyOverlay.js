@@ -53,7 +53,10 @@ function _iconHtml(id, emoji, size = 15) {
 export class EconomyOverlay extends BaseOverlay {
   constructor() {
     super(null);
-    this._centerTab = 'factories'; // 'factories' | 'flows'
+    // Zakładka środka wyprowadzana w draw() z overlayManager.active (ta sama instancja
+    // zarejestrowana pod 'economy'/'budget'/'flows' → subnav steruje treścią):
+    //   'production' (economy) | 'budget' | 'flows'
+    this._centerTab = 'production';
     this._scrollLeft = 0;          // scroll lewej kolumny
     this._scrollCenter = 0;        // scroll środkowej kolumny (flows/trade)
     this._scrollRight = 0;         // scroll prawej kolumny (alerty)
@@ -64,8 +67,15 @@ export class EconomyOverlay extends BaseOverlay {
     };
     // Fabryki — filtr kolonii i podwójny scroll
     this._selectedColonyId = null; // null = globalny, string = konkretna kolonia
-    this._scrollCenterTop = 0;     // scroll przeglądu produkcji
-    this._scrollCenterBot = 0;     // scroll zarządzania produkcją
+    this._scrollCenterTop = 0;     // scroll przeglądu produkcji (lewa-góra)
+    this._scrollCenterBot = 0;     // scroll zarządzania produkcją (lewa-dół)
+    this._scrollRightStock = 0;    // scroll prawej połowy PRODUCTION (Safety Stock)
+
+    // One-shot — picker wyboru towaru do jednorazowego zlecenia
+    this._showOneShotPicker = false;
+
+    // Flows — wybrany zasób w matrycy zużycia (master-detail)
+    this._flowSelectedResId = null;
 
     // Tryby fabryki — panele modalne
     this._showAddPriority = false; // panel dodawania towaru do listy priorytetów
@@ -417,8 +427,18 @@ export class EconomyOverlay extends BaseOverlay {
     if (!this.visible) return;
     this._hitZones = [];
 
+    // Multi-rejestracja: ta sama instancja jest pod id 'economy'/'budget'/'flows'.
+    // Aktywne id (subnav) decyduje o treści środka.
+    const activeId = window.KOSMOS?.overlayManager?.active;
+    this._centerTab = activeId === 'budget' ? 'budget'
+                    : activeId === 'flows'  ? 'flows'
+                    : 'production';
+
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
-    const centerW = ow - LEFT_W - RIGHT_W;
+    // PRODUCTION = 3 kolumny (lewa bilans | środek | prawa wykresy+alerty).
+    // BUDGET/FLOWS = lewa bilans + szeroki środek (bez prawej kolumny).
+    const showRight = this._centerTab === 'production';
+    const centerW = ow - LEFT_W - (showRight ? RIGHT_W : 0);
 
     // Tło
     ctx.fillStyle = bgAlpha(0.38);
@@ -430,7 +450,7 @@ export class EconomyOverlay extends BaseOverlay {
     // Separatory kolumn
     ctx.beginPath();
     ctx.moveTo(ox + LEFT_W, oy); ctx.lineTo(ox + LEFT_W, oy + oh);
-    ctx.moveTo(ox + ow - RIGHT_W, oy); ctx.lineTo(ox + ow - RIGHT_W, oy + oh);
+    if (showRight) { ctx.moveTo(ox + ow - RIGHT_W, oy); ctx.lineTo(ox + ow - RIGHT_W, oy + oh); }
     ctx.stroke();
 
     // Przycisk zamknięcia [X]
@@ -441,10 +461,10 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.fillText('✕', closeX, closeY + 14);
     this._addHit(closeX - 4, closeY, 22, 22, 'close');
 
-    // Rysuj 3 kolumny
+    // Rysuj kolumny
     this._drawLeft(ctx, ox, oy, LEFT_W, oh);
     this._drawCenter(ctx, ox + LEFT_W, oy, centerW, oh);
-    this._drawRight(ctx, ox + ow - RIGHT_W, oy, RIGHT_W, oh);
+    if (showRight) this._drawRight(ctx, ox + ow - RIGHT_W, oy, RIGHT_W, oh);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -649,42 +669,22 @@ export class EconomyOverlay extends BaseOverlay {
   _drawCenter(ctx, x, y, w, h) {
     const pad = 14;
 
-    // Nagłówek z zakładkami
+    // Nagłówek tytułu aktywnej zakładki (pasek tabów zastąpiony subnav BUDGET/PRODUCTION/TRADE/FLOWS).
     ctx.fillStyle = bgAlpha(0.50);
     ctx.fillRect(x, y, w, TAB_H);
-
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(t('econPanel.productionHeader'), x + pad, y + 20);
-
-    const tabs = [
-      { id: 'factories', label: t('econPanel.tabFactories') },
-      { id: 'flows',     label: t('econPanel.tabFlows') },
-      { id: 'budget',    label: t('econPanel.tabBudget') },
-    ];
-    let tx = x + w - pad;
-    for (let i = tabs.length - 1; i >= 0; i--) {
-      const t = tabs[i];
-      const tw = 62;
-      tx -= tw + 4;
-      const active = this._centerTab === t.id;
-      ctx.strokeStyle = active ? THEME.accent : THEME.border;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(tx, y + 6, tw, 20);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = active ? THEME.accent : THEME.textSecondary;
-      ctx.textAlign = 'center';
-      ctx.fillText(t.label, tx + tw / 2, y + 20);
-      ctx.textAlign = 'left';
-      this._addHit(tx, y + 4, tw, 24, 'tab', { tab: t.id });
-    }
+    const title = this._centerTab === 'budget' ? t('econPanel.tabBudget')
+                : this._centerTab === 'flows'  ? t('econPanel.tabFlows')
+                : t('econPanel.productionHeader');
+    ctx.fillText(title, x + pad, y + 20);
 
     const cy = y + TAB_H;
     const ch = h - TAB_H;
 
-    if (this._centerTab === 'factories') this._drawFactoriesTab(ctx, x, cy, w, ch);
-    else if (this._centerTab === 'budget') this._drawBudgetTab(ctx, x, cy, w, ch);
-    else this._drawFlowsTab(ctx, x, cy, w, ch);
+    if (this._centerTab === 'budget')     this._drawBudgetTab(ctx, x, cy, w, ch);
+    else if (this._centerTab === 'flows') this._drawFlowsTab(ctx, x, cy, w, ch);
+    else                                  this._drawFactoriesTab(ctx, x, cy, w, ch);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -694,44 +694,188 @@ export class EconomyOverlay extends BaseOverlay {
   _drawFactoriesTab(ctx, x, y, w, h) {
     const colonies = this._getTabEntities();
 
-    // ── Filtr kolonii (góra) ──────────────────────────────
+    // ── Filtr kolonii (góra, pełna szerokość) ─────────────
     this._drawColonyFilter(ctx, x, y, w, FILTER_H, colonies);
 
     const contentY = y + FILTER_H;
     const contentH = h - FILTER_H;
 
-    // Wyfiltrowane kolonie
     const filtered = this._selectedColonyId
       ? colonies.filter(c => c.planetId === this._selectedColonyId)
       : colonies;
 
-    // Podział: przegląd (góra) + zarządzanie (dół)
-    // Gdy globalny — cała przestrzeń na przegląd
-    // Gdy kolonia — 45% przegląd, 55% zarządzanie
     const selectedEntity = this._resolveEntity(this._selectedColonyId);
-    const hasManagement = selectedEntity !== null && !selectedEntity.isStation;
+    const hasManagement  = selectedEntity !== null && !selectedEntity.isStation;
+    const selCol = colonies.find(c => c.planetId === this._selectedColonyId) ?? null;
+
+    // ── Split: LEWA = fabryki (przegląd + zarządzanie), PRAWA = Safety Stock ──
+    const leftW  = Math.floor(w * 0.5);
+    const rightW = w - leftW;
+
+    // LEWA połowa: przegląd (góra 45%) + zarządzanie (dół 55%, tylko gdy kolonia)
     const overviewH = hasManagement ? Math.floor(contentH * 0.45) : contentH;
     const mgmtH     = hasManagement ? contentH - overviewH : 0;
-
-    // ── Przegląd produkcji (góra) ─────────────────────────
-    this._drawProductionOverview(ctx, x, contentY, w, overviewH, filtered);
-
-    // ── Separator + Zarządzanie (dół) ─────────────────────
-    if (hasManagement) {
+    this._drawProductionOverview(ctx, x, contentY, leftW, overviewH, filtered);
+    if (hasManagement && selCol) {
       const sepY = contentY + overviewH;
       ctx.strokeStyle = THEME.border;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.moveTo(x + 10, sepY);
-      ctx.lineTo(x + w - 10, sepY);
+      ctx.lineTo(x + leftW - 10, sepY);
       ctx.stroke();
       ctx.setLineDash([]);
-
-      const selCol = colonies.find(c => c.planetId === this._selectedColonyId);
-      if (selCol) {
-        this._drawFactoryManagement(ctx, x, sepY + 2, w, mgmtH - 2, selCol);
-      }
+      this._drawFactoryManagement(ctx, x, sepY + 2, leftW, mgmtH - 2, selCol);
     }
+
+    // Pionowy separator L/R
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + leftW, contentY);
+    ctx.lineTo(x + leftW, contentY + contentH);
+    ctx.stroke();
+
+    // PRAWA połowa: Safety Stock (edytor min-zapasów przeniesiony „na bok")
+    this._drawSafetyStockPanel(ctx, x + leftW + 1, contentY, rightW - 1, contentH, hasManagement ? selCol : null);
+  }
+
+  // ── PRAWA połowa PRODUCTION — Safety Stock (próg minimalnego zapasu) ───────
+  // Reuse istniejącego edytora min-zapasów (_drawMinStockEditor) przeniesionego
+  // „na bok" dla lepszej widoczności. Własny clip + scroll (_scrollRightStock).
+  // Edycja progu uruchamia automatycznie produkcję reaktywną przy zejściu poniżej.
+  _drawSafetyStockPanel(ctx, x, y, w, h, colony) {
+    const pad = 14;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+
+    const fs = colony?.factorySystem;
+    if (!fs) {
+      ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      ctx.fillText(t('econPanel.safetyStockHeader'), x + pad, y + 14);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.safetyStockSelectHint'), x + pad, y + 40);
+      ctx.restore();
+      return;
+    }
+
+    // _drawMinStockEditor rysuje separator + nagłówek „Minimalne zapasy" + wiersze [−][box][+].
+    const ry = y + 6 - this._scrollRightStock;
+    this._drawMinStockEditor(ctx, x, ry, w, fs, colony.planetId);
+    ctx.restore();
+  }
+
+  // ── Pasek jednorazowego zlecenia (one-shot) ───────────────────────────────
+  // Aktywne zlecenie → ikona + postęp + [Anuluj]. Brak → przycisk „+ Dodaj"
+  // rozwijający picker towarów (klik → input ilości → setOneShotJob). Zwraca ry.
+  _drawOneShotBar(ctx, x, ry, w, fs, colony) {
+    const colId = colony.planetId;
+    const job = fs.oneShotJob;
+
+    ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(t('econPanel.oneShotHeader'), x, ry + 10);
+    ry += 16;
+
+    if (job) {
+      const def = COMMODITIES[job.commodityId];
+      const name = def ? getName(def, 'commodity') : job.commodityId;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      const iw = drawResourceIcon(ctx, job.commodityId, x, ry + 1, 16, def?.icon);
+      ctx.fillText(`${name}  ${Math.floor(job.produced)}/${job.qty}`, x + iw + 4, ry + 11);
+
+      const bw = 56, bx = x + w - bw;
+      this._drawSmallBtnWide(ctx, bx, ry, bw, t('econPanel.oneShotCancel'), 'danger');
+      this._addHit(bx, ry, bw, 16, 'factory_btn', {
+        action: 'oneshot_cancel', colonyId: colId, label: t('econPanel.oneShotCancel'), x: bx,
+      });
+      ry += 20;
+      this._drawBar(ctx, x, ry, w, 4, Math.min(1, job.produced / Math.max(1, job.qty)), THEME.accent, THEME.bgTertiary);
+      ry += 8;
+    } else {
+      const bw = Math.min(180, w);
+      this._drawSmallBtnWide(ctx, x, ry, bw, t('econPanel.oneShotAdd'), this._showOneShotPicker ? 'unique' : 'primary');
+      this._addHit(x, ry, bw, 16, 'factory_btn', {
+        action: 'oneshot_toggle_picker', colonyId: colId, label: t('econPanel.oneShotAdd'), x,
+      });
+      ry += 20;
+      if (this._showOneShotPicker) ry = this._drawOneShotPicker(ctx, x, ry, w, fs, colId);
+    }
+    return ry;
+  }
+
+  // Lista WSZYSTKICH towarów — odblokowane klikalne (→ input ilości),
+  // tech-locked wyszarzone z 🔒 (niemożliwe do zlecenia), wzór jak edytor min-zapasów.
+  _drawOneShotPicker(ctx, x, ry, w, fs, colId) {
+    const all = Object.values(COMMODITIES).sort(_commoditySortFn);
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    for (const def of all) {
+      const locked = !fs.isRecipeAvailable(def.id);
+      ctx.fillStyle = locked ? THEME.textDim : THEME.textSecondary;
+      let tx = x + 6;
+      if (locked) { ctx.fillText('🔒 ', tx, ry + 10); tx += ctx.measureText('🔒 ').width; }
+      const iw = drawResourceIcon(ctx, def.id, tx, ry + 1, 15, def.icon);
+      ctx.fillText(getName(def, 'commodity'), tx + iw + 4, ry + 10);
+      // Tylko odblokowane są klikalne
+      if (!locked) {
+        this._addHit(x, ry - 2, w, 16, 'factory_btn', {
+          action: 'oneshot_pick', colonyId: colId, commodityId: def.id,
+          label: 'os_' + def.id, x, boxCanvasX: x + w - 56, boxCanvasY: ry - 2,
+        });
+      }
+      ry += 16;
+    }
+    return ry;
+  }
+
+  // Inline DOM input ilości jednorazowego zlecenia (wzór _openMinStockInput).
+  _openOneShotQtyInput(colonyId, commodityId, canvasX, canvasY) {
+    this._closeMinStockInput();   // współdzielony slot inputu
+    const colMgr = window.KOSMOS?.colonyManager;
+    const fs = colMgr?.getColony(colonyId)?.factorySystem;
+    if (!fs) return;
+
+    const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const boxW = 50, boxH = 18;
+    const sx = (canvasX ?? 100) * SCALE, sy = (canvasY ?? 100) * SCALE;
+    const sw = boxW * SCALE, sh = boxH * SCALE;
+
+    const input = document.createElement('input');
+    input.type = 'number'; input.min = '1'; input.max = '9999'; input.step = '1'; input.value = '10';
+    Object.assign(input.style, {
+      position: 'fixed', left: `${Math.round(sx)}px`, top: `${Math.round(sy)}px`,
+      width: `${Math.round(sw)}px`, height: `${Math.round(sh)}px`, boxSizing: 'border-box',
+      padding: '0 3px', margin: '0', background: THEME.bgPrimary,
+      border: `1px solid ${THEME.borderActive}`, color: THEME.accent, fontFamily: THEME.fontFamily,
+      fontSize: `${Math.max(10, Math.round(sh * 0.6))}px`, textAlign: 'center', outline: 'none',
+      zIndex: '300', caretColor: THEME.accent,
+    });
+    input.style.appearance = 'textfield';
+    document.body.appendChild(input);
+    this._minStockInput = input;
+
+    let done = false;
+    const commit = () => {
+      if (done) return; done = true;
+      const raw = parseInt(input.value, 10);
+      const val = Number.isFinite(raw) ? Math.max(1, Math.min(9999, raw)) : 0;
+      if (val >= 1) fs.setOneShotJob(commodityId, val);
+      this._closeMinStockInput();
+    };
+    const cancel = () => { if (done) return; done = true; this._closeMinStockInput(); };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      e.stopPropagation();
+    });
+    input.addEventListener('blur', commit);
+    for (const evt of ['click', 'mousedown', 'mouseup']) input.addEventListener(evt, (e) => e.stopPropagation());
+    requestAnimationFrame(() => { input.focus(); input.select(); });
   }
 
   // ── Pasek filtra kolonii ──────────────────────────────────────────────────
@@ -957,19 +1101,16 @@ export class EconomyOverlay extends BaseOverlay {
     ctx.fillText(t('econPanel.fpFree', fs.freePoints, fs.totalPoints), x + pad + 160, ry + 12);
     ry += 20;
 
-    // ── Pasek trybów [Manual] [Priorytet] [Reaktywny] ────
-    ry = this._drawModeBar(ctx, x + pad, ry, w - pad * 2, fs, colony);
-    ry += 4;
+    // Pasek trybów USUNIĘTY — gracz produkuje WYŁĄCZNIE reactive (reforma).
+    // Defensywnie wymuś reactive (gdyby stara kolonia prześliznęła się przez migrację).
+    if (fs.mode !== 'reactive') fs.setMode('reactive');
 
-    // ── Zawartość wg trybu ──────────────────────────────────
-    const mode = fs.mode ?? 'manual';
-    if (mode === 'manual') {
-      ry = this._drawManualMode(ctx, x, ry, w, colony, fs);
-    } else if (mode === 'priority') {
-      ry = this._drawPriorityMode(ctx, x, ry, w, colony, fs);
-    } else if (mode === 'reactive') {
-      ry = this._drawReactiveMode(ctx, x, ry, w, colony, fs);
-    }
+    // ── Jednorazowe zlecenie (one-shot) ────────────────────
+    ry = this._drawOneShotBar(ctx, x + pad, ry, w - pad * 2, fs, colony);
+    ry += 6;
+
+    // ── Zawartość reaktywna ────────────────────────────────
+    ry = this._drawReactiveMode(ctx, x, ry, w, colony, fs);
 
     ctx.restore();
   }
@@ -1507,9 +1648,8 @@ export class EconomyOverlay extends BaseOverlay {
     // ── Sekcja: ZLECENIA EKSPORTOWE ────────────────────────────────────────
     ry = this._drawExportOrdersSection(ctx, x, ry + 4, w, fs, colId);
 
-    // ── Sekcja: MINIMALNE ZAPASY ───────────────────────────────────────────
-    // Edytor progu dla KAŻDEGO towaru (również tech-locked — można pre-konfigurować).
-    ry = this._drawMinStockEditor(ctx, x, ry + 4, w, fs, colId);
+    // Sekcja MINIMALNE ZAPASY (safety stock) przeniesiona do prawej połowy
+    // PRODUCTION (_drawSafetyStockPanel) — „na bok" dla lepszej widoczności.
 
     // Aktywne alokacje (read-only)
     const allocs = fs.getAllocations();
@@ -2256,6 +2396,18 @@ export class EconomyOverlay extends BaseOverlay {
         );
         break;
 
+      // ── Jednorazowe zlecenie (one-shot) ──────────────
+      case 'oneshot_toggle_picker':
+        this._showOneShotPicker = !this._showOneShotPicker;
+        break;
+      case 'oneshot_pick':
+        this._showOneShotPicker = false;
+        this._openOneShotQtyInput(data.colonyId, data.commodityId, data.boxCanvasX, data.boxCanvasY);
+        break;
+      case 'oneshot_cancel':
+        fs.cancelOneShotJob();
+        break;
+
       // ── Tryb reaktywny — zlecenia eksportowe (Plan B) ─
       case 'export_toggle_enabled':
         EventBus.emit('factory:setExportEnabled', { enabled: !fs.exportPrefs.enabled });
@@ -2271,17 +2423,18 @@ export class EconomyOverlay extends BaseOverlay {
 
   // ── Zakładka PRZEPŁYWY ──────────────────────────────────────────────────
 
+  // Zakładka PRZEPŁYWY — matryca zużycia (master-detail): lista zasobów (lewa)
+  // + rozbicie KTO produkuje / KTO konsumuje wybrany zasób (prawa).
   _drawFlowsTab(ctx, x, y, w, h) {
     const pad = 14;
-    const colMgr = window.KOSMOS?.colonyManager;
-    const colonies = colMgr?.getPlayerColonies() ?? [];   // tylko kolonie gracza (bez AI)
+    const colonies = window.KOSMOS?.colonyManager?.getPlayerColonies?.() ?? [];
 
-    // Zbierz globalne per-resource produkcja i konsumpcja
+    // Globalne totale prod/cons per zasób (z _producers) — do listy po lewej.
     const flows = {};
     for (const col of colonies) {
       const rs = col.resourceSystem;
       if (!rs?._producers) continue;
-      for (const [pid, rates] of rs._producers) {
+      for (const rates of rs._producers.values()) {
         for (const [resId, rate] of Object.entries(rates)) {
           if (resId === 'energy' || resId === 'research') continue;
           if (!flows[resId]) flows[resId] = { prod: 0, cons: 0 };
@@ -2291,8 +2444,9 @@ export class EconomyOverlay extends BaseOverlay {
       }
     }
 
-    // Filtruj tylko te z ruchem
-    const items = Object.entries(flows).filter(([, f]) => f.prod > 0 || f.cons > 0);
+    const items = Object.entries(flows)
+      .filter(([, f]) => f.prod > 0 || f.cons > 0)
+      .sort((a, b) => (b[1].prod + b[1].cons) - (a[1].prod + a[1].cons));
 
     if (items.length === 0) {
       ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
@@ -2303,45 +2457,177 @@ export class EconomyOverlay extends BaseOverlay {
       return;
     }
 
+    // Domyślny wybór = pierwszy zasób (lub gdy poprzedni zniknął)
+    if (!this._flowSelectedResId || !flows[this._flowSelectedResId]) {
+      this._flowSelectedResId = items[0][0];
+    }
+
+    const leftW = Math.floor(w * 0.46);
+
+    // ── LEWA: lista zasobów (klikalna, scroll _scrollCenter) ──
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, leftW, h); ctx.clip();
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    let ry = y + 8;
-
-    // Nagłówki kolumn
-    ctx.fillText(t('econPanel.colResource'), x + pad, ry + 10);
-    ctx.textAlign = 'center';
-    ctx.fillText(t('econPanel.colProduction'), x + w * 0.45, ry + 10);
-    ctx.fillText(t('econPanel.colConsumption'), x + w * 0.65, ry + 10);
-    ctx.fillText(t('econPanel.colBalance'), x + w * 0.85, ry + 10);
-    ctx.textAlign = 'left';
-    ry += 18;
-
-    ctx.strokeStyle = THEME.border;
-    ctx.beginPath(); ctx.moveTo(x + pad, ry); ctx.lineTo(x + w - pad, ry); ctx.stroke();
-    ry += 4;
-
+    ctx.fillText(t('econPanel.flowResListHeader'), x + pad, y + 12);
+    let ry = y + 24 - this._scrollCenter;
     for (const [resId, f] of items) {
       const def = ALL_RESOURCES[resId] ?? COMMODITIES[resId];
-      const icon = def?.icon ?? '·';
-      const name = (def ? getName(def, COMMODITIES[resId] ? 'commodity' : 'resource') : resId).slice(0, 10);
-      const balance = f.prod - f.cons;
-
+      const name = def ? getName(def, COMMODITIES[resId] ? 'commodity' : 'resource') : resId;
+      const sel = resId === this._flowSelectedResId;
+      if (sel) { ctx.fillStyle = 'rgba(0,255,180,0.10)'; ctx.fillRect(x + 2, ry - 2, leftW - 4, 20); }
+      const iw = drawResourceIcon(ctx, resId, x + pad, ry + 2, 16, def?.icon);
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`${icon} ${name}`, x + pad, ry + 12);
-
-      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.textAlign = 'center';
-      ctx.fillStyle = THEME.success;
-      ctx.fillText(`+${f.prod.toFixed(1)}`, x + w * 0.45, ry + 12);
-      ctx.fillStyle = THEME.danger;
-      ctx.fillText(`-${f.cons.toFixed(1)}`, x + w * 0.65, ry + 12);
-      ctx.fillStyle = balance >= 0 ? THEME.success : THEME.danger;
-      ctx.fillText(`${balance >= 0 ? '+' : ''}${balance.toFixed(1)}`, x + w * 0.85, ry + 12);
+      ctx.fillStyle = sel ? THEME.accent : THEME.textSecondary;
+      ctx.fillText(name.slice(0, 13), x + pad + iw + 4, ry + 12);
+      const bal = f.prod - f.cons;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = bal >= 0 ? THEME.success : THEME.danger;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${bal >= 0 ? '+' : ''}${_fmtAmt(bal)}`, x + leftW - 6, ry + 12);
       ctx.textAlign = 'left';
-
+      this._addHit(x, ry - 2, leftW, 20, 'flow_res', { resId });
       ry += 20;
     }
+    ctx.restore();
+
+    // Separator
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + leftW, y); ctx.lineTo(x + leftW, y + h); ctx.stroke();
+
+    // ── PRAWA: matryca zużycia wybranego zasobu ──
+    this._drawFlowBreakdown(ctx, x + leftW + 1, y, w - leftW - 1, h, this._flowSelectedResId);
+  }
+
+  // Rozbicie wybranego zasobu: KTO produkuje (+) i KTO konsumuje (−) per typ źródła.
+  _drawFlowBreakdown(ctx, x, y, w, h, resId) {
+    const pad = 14;
+    const def = ALL_RESOURCES[resId] ?? COMMODITIES[resId];
+    const name = def ? getName(def, COMMODITIES[resId] ? 'commodity' : 'resource') : resId;
+
+    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textPrimary;
+    const iw = drawResourceIcon(ctx, resId, x + pad, y + 4, 18, def?.icon);
+    ctx.fillText(name, x + pad + iw + 6, y + 15);
+    let ry = y + 28;
+
+    const { producers, consumers } = this._gatherFlowBreakdown(resId);
+    const prodEntries = Object.entries(producers).sort((a, b) => b[1] - a[1]);
+    const consEntries = Object.entries(consumers).sort((a, b) => b[1] - a[1]);
+    const maxMag = Math.max(1, ...prodEntries.map(e => e[1]), ...consEntries.map(e => e[1]));
+
+    // PRODUCENCI
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.success;
+    ctx.fillText(t('econPanel.flowProducers'), x + pad, ry + 8);
+    ry += 16;
+    if (prodEntries.length === 0) {
+      ctx.fillStyle = THEME.textDim; ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillText(t('econPanel.flowNone'), x + pad + 4, ry + 8); ry += 16;
+    }
+    for (const [type, val] of prodEntries) ry = this._drawFlowRow(ctx, x + pad, ry, w - pad * 2, type, val, maxMag, THEME.success);
+
+    ry += 8;
+    // KONSUMENCI
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.danger;
+    ctx.fillText(t('econPanel.flowConsumers'), x + pad, ry + 8);
+    ry += 16;
+    if (consEntries.length === 0) {
+      ctx.fillStyle = THEME.textDim; ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillText(t('econPanel.flowNone'), x + pad + 4, ry + 8); ry += 16;
+    }
+    for (const [type, val] of consEntries) ry = this._drawFlowRow(ctx, x + pad, ry, w - pad * 2, type, val, maxMag, THEME.danger);
+  }
+
+  // Wiersz matrycy: ikona+nazwa źródła, pasek proporcjonalny, wartość.
+  _drawFlowRow(ctx, x, ry, w, type, val, maxMag, color) {
+    const { icon, name } = _resolveTypeName(type);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(`${icon} ${name}`.slice(0, 18), x, ry + 9);
+    const barX = x + w * 0.5;
+    const barMaxW = w * 0.32;
+    const barW = Math.max(2, (val / maxMag) * barMaxW);
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = color;
+    ctx.fillRect(barX, ry + 2, barW, 8);
+    ctx.globalAlpha = 1.0;
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'right';
+    ctx.fillText(_fmtAmt(val), x + w, ry + 9);
+    ctx.textAlign = 'left';
+    return ry + 16;
+  }
+
+  // Agreguje producentów/konsumentów zasobu per typ źródła, GLOBALNIE (kolonie gracza).
+  // Replika logiki ResourceSystem.getResourceBreakdown, ale per-kolonia (nie active-only):
+  //   §1 zarejestrowani producenci (budynki/POP/colony_base), §2 kopalnie (raw),
+  //   §3 konsumpcja fabryk (składniki). Zwraca { producers:{type:total}, consumers:{type:total} }.
+  _gatherFlowBreakdown(resId) {
+    const producers = {};
+    const consumers = {};
+    const colonies = window.KOSMOS?.colonyManager?.getPlayerColonies?.() ?? [];
+    const isBoosted = window.KOSMOS?.scenario === 'civilization_boosted';
+
+    const add = (tgt, type, v) => { tgt[type] = (tgt[type] ?? 0) + v; };
+
+    for (const col of colonies) {
+      const rs = col.resourceSystem;
+      if (!rs?._producers) continue;
+      const bSys = col.buildingSystem;
+
+      // §1 — zarejestrowani producenci/konsumenci
+      for (const [pid, rates] of rs._producers) {
+        const val = rates[resId] ?? 0;
+        if (val === 0) continue;
+        let type = pid;
+        if (pid.startsWith('building_')) {
+          const tileKey = pid.slice('building_'.length);
+          type = bSys?._active?.get(tileKey)?.building?.id ?? 'unknown';
+        } else if (pid.startsWith('capital_')) type = 'colony_base';
+        else if (pid === 'civilization_consumption') type = 'pop_consumption';
+        add(val > 0 ? producers : consumers, type, Math.abs(val));
+      }
+
+      // §2 — wydobycie z kopalni (raw, nie rejestrowane jako producer)
+      const deposits = bSys?._deposits;
+      if (deposits && bSys._cachedMineLevel > 0) {
+        const rateMult = isBoosted ? 5 : 1;
+        let mineOutput = 0;
+        for (const dep of deposits) {
+          if (dep.remaining <= 0 || dep.resourceId !== resId) continue;
+          const depletion = dep.remaining / dep.totalAmount;
+          mineOutput += bSys._cachedMineLevel * 10 * rateMult * dep.richness * depletion;
+        }
+        if (mineOutput > 0) add(producers, 'mine', mineOutput);
+      }
+
+      // §3 — konsumpcja fabryk (składniki, via spend — nie rejestrowane jako consumer)
+      const factSys = col.factorySystem;
+      if (factSys?._allocations) {
+        const demandRates = rs._producers.get('prosperity_consumption') ?? {};
+        let factoryCons = 0;
+        for (const [commodityId, alloc] of factSys._allocations) {
+          if (alloc._paused) continue;
+          const cdef = COMMODITIES[commodityId];
+          if (!cdef?.recipe) continue;
+          const recipe = factSys._getScaledRecipe?.(cdef.recipe, commodityId) ?? cdef.recipe;
+          const needed = recipe[resId];
+          if (!needed || needed <= 0) continue;
+          const speedMult = isBoosted ? 1.5 : 1;
+          const capacityPerYear = alloc.points * speedMult / cdef.baseTime;
+          const demandPerYear = Math.abs(demandRates[commodityId] ?? 0);
+          const unitsPerYear = demandPerYear > 0 ? Math.min(capacityPerYear, demandPerYear) : capacityPerYear;
+          factoryCons += unitsPerYear * needed;
+        }
+        if (factoryCons > 0) add(consumers, 'factory', factoryCons);
+      }
+    }
+
+    return { producers, consumers };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -2592,82 +2878,9 @@ export class EconomyOverlay extends BaseOverlay {
 
     let cy = y + TAB_H + 8;
 
-    // ── Bilans energii — aktywna kolonia ──────────────────
-    const colMgr = window.KOSMOS?.colonyManager;
-    const activePid = colMgr?.activePlanetId;
-    const activeCol = colMgr?.getColony(activePid);
-    const colName = activeCol?.name ?? t('econPanel.noColony');
-
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('econPanel.energyBalanceCol', colName), x + pad, cy + 10);
-    cy += 16;
-
-    // Zbierz producentów/konsumentów energii
-    const bs = activeCol?.buildingSystem;
-    const energyItems = [];
-    if (bs?._active) {
-      // Pogrupuj wg buildingId
-      const grouped = {};
-      for (const [, entry] of bs._active) {
-        const buildId = entry.building?.id ?? entry.def?.id ?? '?';
-        const energyRate = entry.effectiveRates?.energy ?? entry.baseRates?.energy ?? 0;
-        if (energyRate === 0) continue;
-        if (!grouped[buildId]) grouped[buildId] = { name: getName(entry.building ?? entry.def ?? { id: buildId }, 'building'), count: 0, total: 0 };
-        grouped[buildId].count++;
-        grouped[buildId].total += energyRate;
-      }
-      for (const [, g] of Object.entries(grouped)) {
-        energyItems.push(g);
-      }
-    }
-
-    // POP konsumpcja energii
-    const pop = activeCol?.civSystem?.population ?? 0;
-    if (pop > 0) {
-      energyItems.push({ name: t('econPanel.popConsumption', pop), count: 1, total: -(pop * 1.0) });
-    }
-
-    if (energyItems.length === 0) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('econPanel.noData'), x + pad, cy + 10);
-      cy += 18;
-    } else {
-      // Sortuj: producenci pierwsi, potem konsumenci
-      energyItems.sort((a, b) => b.total - a.total);
-
-      for (const item of energyItems) {
-        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.textSecondary;
-        const label = item.count > 1 ? `${item.name} ×${item.count}` : item.name;
-        ctx.fillText(label.slice(0, 22), x + pad, cy + 10);
-
-        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-        ctx.fillStyle = item.total >= 0 ? THEME.success : THEME.danger;
-        ctx.textAlign = 'right';
-        ctx.fillText(`${item.total >= 0 ? '+' : ''}${item.total.toFixed(1)}`, x + w - pad, cy + 10);
-        ctx.textAlign = 'left';
-
-        cy += 18;
-      }
-
-      // Suma
-      const totalE = energyItems.reduce((s, i) => s + i.total, 0);
-      cy += 2;
-      ctx.strokeStyle = THEME.border;
-      ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
-      cy += 10;
-
-      ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(t('econPanel.totalBalance'), x + pad, cy + 10);
-      ctx.fillStyle = totalE >= 0 ? THEME.success : THEME.danger;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${totalE >= 0 ? '+' : ''}${totalE.toFixed(1)}`, x + w - pad, cy + 10);
-      ctx.textAlign = 'left';
-      cy += 18;
-    }
+    // ── Wykres: produkcja / konsumpcja towarów (rok) ──────
+    // Zastąpił bilans energii (energia per-kolonia żyje w lewej kolumnie _drawLeft).
+    cy = this._drawProductionChart(ctx, x, cy, w);
 
     // ── Alerty produkcji ──────────────────────────────────
     cy += 10;
@@ -2726,6 +2939,98 @@ export class EconomyOverlay extends BaseOverlay {
 
       ctx.restore();
     }
+  }
+
+  // ── Wykresy: roczna produkcja i konsumpcja towarów (globalnie, gracz) ─────
+  // Dane z EconomyHistoryLog (logowane + zapisywane). Bieżący rok = słupek „w toku"
+  // (półprzezroczysty) → efekt „na żywo". Zwraca nowe cy (pod wykresem).
+  _drawProductionChart(ctx, x, cy, w) {
+    const pad = 14;
+    const log = window.KOSMOS?.economyHistoryLog;
+    const data = log?.getYearlyHistory?.(10) ?? [];
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('econPanel.prodChartTitle'), x + pad, cy + 10);
+    cy += 16;
+
+    const hasData = data.some(d => d.producedTotal > 0 || d.consumedTotal > 0);
+    if (!hasData) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('econPanel.prodChartNoData'), x + pad, cy + 12);
+      return cy + 22;
+    }
+
+    const chartW = w - pad * 2;
+    const chartH = 42;
+
+    // Produkcja (zielony)
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.success;
+    ctx.fillText(t('econPanel.prodChartProduced'), x + pad, cy + 8);
+    cy += 11;
+    this._drawMiniBars(ctx, x + pad, cy, chartW, chartH, data, 'producedTotal', THEME.success);
+    cy += chartH + 12;   // +12 na etykiety lat
+
+    // Konsumpcja (czerwony)
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.danger;
+    ctx.fillText(t('econPanel.prodChartConsumed'), x + pad, cy + 8);
+    cy += 11;
+    this._drawMiniBars(ctx, x + pad, cy, chartW, chartH, data, 'consumedTotal', THEME.danger);
+    cy += chartH + 12;
+
+    return cy;
+  }
+
+  // Kompaktowy wykres słupkowy (wzór TradeOverlay._drawBarChart). data[i][valKey] = wartość.
+  _drawMiniBars(ctx, x, y, w, h, data, valKey, color) {
+    // Osie
+    ctx.strokeStyle = THEME.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x, y + h); ctx.lineTo(x + w, y + h);
+    ctx.stroke();
+    if (data.length === 0) return;
+
+    const maxVal = Math.max(1, ...data.map(d => d[valKey] ?? 0));
+    const slot = w / data.length;
+    const barW = Math.max(3, Math.min(20, Math.floor(slot - 4)));
+
+    for (let i = 0; i < data.length; i++) {
+      const d = data[i];
+      const val = d[valKey] ?? 0;
+      const bx = x + i * slot + Math.floor((slot - barW) / 2);
+      if (val > 0) {
+        const barH = Math.max(2, Math.floor((val / maxVal) * (h - 4)));
+        const by = y + h - barH;
+        ctx.globalAlpha = d.current ? 0.45 : 0.85;   // bieżący rok = w toku
+        ctx.fillStyle = color;
+        ctx.fillRect(bx, by, barW, barH);
+        ctx.globalAlpha = 1.0;
+        if (barH > 12) {
+          ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textPrimary;
+          ctx.textAlign = 'center';
+          ctx.fillText(_fmtAmt(val), bx + barW / 2, by - 2);
+          ctx.textAlign = 'left';
+        }
+      }
+      // Etykieta roku (co drugi, by nie zlewały się)
+      if (i % 2 === 0 || data.length <= 6) {
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${d.year}`, bx + barW / 2, y + h + 9);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    // Skala (max) w lewym-górnym
+    ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(_fmtAmt(maxVal), x + 2, y + 8);
   }
 
   // ── Generuj alerty dynamicznie ──────────────────────────────────────────
@@ -2820,6 +3125,9 @@ export class EconomyOverlay extends BaseOverlay {
       case 'toggle_cat':
         this._collapsed[zone.data.catKey] = !this._collapsed[zone.data.catKey];
         break;
+      case 'flow_res':
+        this._flowSelectedResId = zone.data.resId;
+        break;
       case 'colony_filter':
         this._selectedColonyId = zone.data.colonyId;
         this._scrollLeft = 0;
@@ -2885,33 +3193,39 @@ export class EconomyOverlay extends BaseOverlay {
       this._scrollLeft = Math.max(0, this._scrollLeft + delta * 0.5);
       return true;
     }
-    // Prawa kolumna
-    if (x > ox + ow - RIGHT_W) {
+    // Prawa kolumna (energia/alerty) — TYLKO PRODUCTION ma tę kolumnę (RIGHT_W);
+    // Budget/Flows mają szeroki środek bez prawej kolumny.
+    if (this._centerTab === 'production' && x > ox + ow - RIGHT_W) {
       this._scrollRight = Math.max(0, this._scrollRight + delta * 0.5);
       return true;
     }
-    // Środkowa kolumna — fabryki: podwójny scroll
-    if (this._centerTab === 'factories' && this._selectedColonyId !== null) {
-      // Oblicz pozycję separatora (45% dostępnej wysokości pod filtrem)
-      const centerX = ox + LEFT_W;
-      const tabBottom = oy + TAB_H;
-      const contentY = tabBottom + FILTER_H;
-      const contentH = oh - TAB_H - FILTER_H;
-      const splitY = contentY + Math.floor(contentH * 0.45);
 
-      if (y < splitY) {
-        this._scrollCenterTop = Math.max(0, this._scrollCenterTop + delta * 0.5);
+    // Środkowa kolumna
+    if (this._centerTab === 'production') {
+      const centerStart = ox + LEFT_W;
+      const centerEnd   = ox + ow - RIGHT_W;
+      const halfX = centerStart + Math.floor((centerEnd - centerStart) * 0.5);
+      // PRAWA połowa środka = Safety Stock
+      if (x >= halfX) {
+        this._scrollRightStock = Math.max(0, this._scrollRightStock + delta * 0.5);
+        return true;
+      }
+      // LEWA połowa = fabryki: przegląd (góra) / zarządzanie (dół) gdy kolonia wybrana
+      if (this._selectedColonyId !== null) {
+        const tabBottom = oy + TAB_H;
+        const contentY = tabBottom + FILTER_H;
+        const contentH = oh - TAB_H - FILTER_H;
+        const splitY = contentY + Math.floor(contentH * 0.45);
+        if (y < splitY) this._scrollCenterTop = Math.max(0, this._scrollCenterTop + delta * 0.5);
+        else            this._scrollCenterBot = Math.max(0, this._scrollCenterBot + delta * 0.5);
       } else {
-        this._scrollCenterBot = Math.max(0, this._scrollCenterBot + delta * 0.5);
+        this._scrollCenterTop = Math.max(0, this._scrollCenterTop + delta * 0.5);
       }
       return true;
     }
-    // Inne zakładki / globalny widok fabryk
-    if (this._centerTab === 'factories') {
-      this._scrollCenterTop = Math.max(0, this._scrollCenterTop + delta * 0.5);
-    } else {
-      this._scrollCenter = Math.max(0, this._scrollCenter + delta * 0.5);
-    }
+
+    // Budget / Flows — pojedynczy scroll środka
+    this._scrollCenter = Math.max(0, this._scrollCenter + delta * 0.5);
     return true;
   }
 }

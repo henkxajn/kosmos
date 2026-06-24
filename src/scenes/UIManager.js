@@ -249,7 +249,12 @@ export class UIManager {
     this.overlayManager = new OverlayManager();
     this.overlayManager.register('fleet', new FleetManagerOverlay());
     this.overlayManager.register('population', new PopulationOverlay());
-    this.overlayManager.register('economy', new EconomyOverlay());
+    // Multi-rejestracja: jedna instancja EconomyOverlay obsługuje 3 elementy subnav
+    // (BUDGET/PRODUCTION/FLOWS) — treść środka wyprowadzana z overlayManager.active.
+    const _economyOverlay = new EconomyOverlay();
+    this.overlayManager.register('economy', _economyOverlay);
+    this.overlayManager.register('budget',  _economyOverlay);
+    this.overlayManager.register('flows',   _economyOverlay);
     this.overlayManager.register('tech', new TechOverlay());
     this.overlayManager.register('colony', new ColonyOverlay());
     this.overlayManager.register('observatory', new ObservatoryOverlay());

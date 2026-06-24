@@ -21,6 +21,11 @@ export const CIV_TABS = [
   { id: 'fleet',        icon: '🚀', labelKey: 'civPanel.fleet',        key: 'F' },
   { id: 'colony',       icon: '🏠', labelKey: 'civPanel.colonies',     key: 'C' },
   { id: 'trade',          icon: '🏪', labelKey: 'civPanel.trade',         key: 'H' },
+  // budget/flows — TYLKO subnav grupy economy (multi-rejestracja EconomyOverlay);
+  // brak skrótu klawiszowego (nieobecne w OverlayManager._keyMap), brak nav-slotu
+  // (BottomNavBar rysuje tylko primary). Wpisy potrzebne dla etykiet+ikon w drawSubNav.
+  { id: 'budget',         icon: '💰', labelKey: 'civPanel.budget',        key: '' },
+  { id: 'flows',          icon: '🕸', labelKey: 'civPanel.flows',         key: '' },
   { id: 'civilization',  icon: '🏛', labelKey: 'civPanel.civilization', key: 'V' },
   { id: 'observatory',   icon: '🔭', labelKey: 'civPanel.observatory',  key: 'O' },
   { id: 'unit_design',   icon: '🔧', labelKey: 'civPanel.unitDesign',   key: 'U' },
@@ -149,7 +154,9 @@ export function hitTestTopNav(x, y, x0, barH) {
 // jest addytywny. Filtr TopBaru do 7 + remap klawiszy = Slice 3.
 export const NAV_GROUPS = [
   { primary: 'civilization', members: ['civilization', 'dyson'] },
-  { primary: 'economy',      members: ['economy', 'trade'] },
+  // Subnav L→P: BUDGET · PRODUCTION (economy) · TRADE · FLOWS. primary='economy' →
+  // nav-slot otwiera Produkcję; budget/flows = ta sama instancja EconomyOverlay (multi-rejestracja).
+  { primary: 'economy',      members: ['budget', 'economy', 'trade', 'flows'] },
   { primary: 'colony',       members: ['colony'] },
   { primary: 'population',   members: ['population'] },
   { primary: 'diplomacy',    members: ['diplomacy', 'intel', 'war'] },  // 'galaxy' usunięte — Stratcom (zakładka w Dowództwie Taktycznym, klawisz G/M) zastąpił mapę galaktyki

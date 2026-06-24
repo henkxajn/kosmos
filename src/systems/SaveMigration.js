@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 86;
+export const CURRENT_VERSION     = 87;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -104,6 +104,7 @@ const MIGRATIONS = {
   83: _migrateV83toV84,
   84: _migrateV84toV85,
   85: _migrateV85toV86,
+  86: _migrateV86toV87,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2098,6 +2099,23 @@ function _migrateV82toV83(data) {
 //   WYMUSZONY reset do 0 (nie tylko default dla undefined): stare save mogły mieć zawyżone
 //   unpaidYears z buggy cadence per-civYear (12×/rok gry) → statki na starcie immobilized mimo
 //   dodatnich kredytów. Reset = czysty start. Ścieżka: data.civ4x.vesselManager.vessels[].
+// ── v86 → v87: Reforma EconomyOverlay — gracz produkuje wyłącznie reactive ──
+// UI usuwa tryby manual/priority dla gracza → wymuś reactive na fabrykach
+// serializowanych kolonii (= kolonie gracza; AI rekonstruowane osobno).
+// + dodaj puste jednorazowe zlecenie (one-shot).
+function _migrateV86toV87(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.colonies) {
+    for (const c of c4x.colonies) {
+      if (c?.factorySystem) {
+        c.factorySystem.mode = 'reactive';   // force (nadpisuje manual/priority ze starych save)
+        c.factorySystem.oneShotJob ??= null;
+      }
+    }
+  }
+  return data;
+}
+
 function _migrateV85toV86(data) {
   const c4x = data.civ4x ?? data.c4x;
   if (c4x?.vesselManager?.vessels) {

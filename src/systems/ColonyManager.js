@@ -310,8 +310,10 @@ export class ColonyManager {
     // Milestone founding dla home planet
     civSystem.initFoundingMilestone?.();
 
-    // FactorySystem per-kolonia
+    // FactorySystem per-kolonia. Kolonia gracza = tryb reaktywny (reforma:
+    // gracz produkuje wyłącznie reactive + jednorazowe zlecenia; brak manual/priority w UI).
     const factSys = new FactorySystem(resourceSystem);
+    factSys.setMode('reactive');
     if (buildingSystem) {
       buildingSystem.setFactorySystem(factSys);
       buildingSystem.setPlanetId(planet.id);
@@ -384,8 +386,10 @@ export class ColonyManager {
     bSys.setDeposits(entity.deposits ?? []);
     bSys.setPlanetId(planetId);
 
-    // FactorySystem per-kolonia
+    // FactorySystem per-kolonia. Kolonia GRACZA (ownerEmpireId=null) startuje
+    // w trybie reaktywnym (reforma); kolonie AI ustawia EmpireColonyBootstrap.
     const factSys = new FactorySystem(resSys);
+    if (!ownerEmpireId) factSys.setMode('reactive');
     bSys.setFactorySystem(factSys);
 
     // ProsperitySystem per-kolonia
@@ -465,8 +469,9 @@ export class ColonyManager {
     bSys._grid = grid;
     bSys._gridHeight = grid.height ?? 10;
 
-    // FactorySystem per-outpost
+    // FactorySystem per-outpost. Outpost GRACZA → tryb reaktywny (reforma).
     const factSys = new FactorySystem(resSys);
+    if (!ownerEmpireId) factSys.setMode('reactive');
     bSys.setFactorySystem(factSys);
 
     // ProsperitySystem per-outpost (pop=0 → prosperity=0, brak demand/epoch)

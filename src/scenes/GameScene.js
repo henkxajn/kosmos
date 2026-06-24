@@ -39,6 +39,7 @@ import { CivilianTradeSystem }  from '../systems/CivilianTradeSystem.js';
 import { TradeOrderBoard }      from '../systems/TradeOrderBoard.js';
 import { ProductionRequestBoard } from '../systems/ProductionRequestBoard.js';
 import TradeLog                 from '../systems/TradeLog.js';
+import { EconomyHistoryLog }    from '../systems/EconomyHistoryLog.js';
 import { ResearchSystem }      from '../systems/ResearchSystem.js';
 import { DiscoverySystem }     from '../systems/DiscoverySystem.js';
 import { ObservatorySystem }  from '../systems/ObservatorySystem.js';
@@ -244,6 +245,7 @@ export class GameScene {
     this.tradeOrderBoard   = new TradeOrderBoard(this.colonyManager);
     this.productionRequestBoard = new ProductionRequestBoard();
     this.tradeLog          = new TradeLog();
+    this.economyHistoryLog = new EconomyHistoryLog();
     this.randomEventSystem = new RandomEventSystem();
     this.impactDamageSystem = new ImpactDamageSystem(this.colonyManager);
     this.researchSystem    = new ResearchSystem(this.techSystem);
@@ -312,6 +314,7 @@ export class GameScene {
     window.KOSMOS.tradeOrderBoard  = this.tradeOrderBoard;
     window.KOSMOS.productionRequestBoard = this.productionRequestBoard;
     window.KOSMOS.tradeLog         = this.tradeLog;
+    window.KOSMOS.economyHistoryLog = this.economyHistoryLog;
     window.KOSMOS.timeSystem       = this.timeSystem;
     window.KOSMOS.randomEventSystem = this.randomEventSystem;
     window.KOSMOS.researchSystem   = this.researchSystem;
@@ -1291,6 +1294,10 @@ export class GameScene {
       // Przywróć TradeLog
       if (c4x.tradeLog) {
         this.tradeLog.restore(c4x.tradeLog);
+      }
+      // Przywróć EconomyHistoryLog (historia wykresów produkcji/konsumpcji)
+      if (c4x.economyHistory) {
+        this.economyHistoryLog.restore(c4x.economyHistory);
       }
       // Migracja starych save: fleet[] ze stringami → vessel instances
       this._migrateStringFleets();

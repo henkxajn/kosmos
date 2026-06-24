@@ -1734,6 +1734,23 @@ export default {
   'econPanel.noActiveProducers': 'No active producers/consumers',
   'econPanel.missingInputs': '——— Missing inputs ———',
   'econPanel.productionHeader': '🏭 COMMODITY PRODUCTION',
+  // Reform: Safety Stock (right half) + one-time order (one-shot)
+  'econPanel.safetyStockHeader': '🛡 SAFETY STOCK',
+  'econPanel.safetyStockSelectHint': 'Select a colony to set stock thresholds.',
+  'econPanel.oneShotHeader': '⚡ ONE-TIME ORDER',
+  'econPanel.oneShotAdd': '+ Add order',
+  'econPanel.oneShotCancel': 'Cancel',
+  'econPanel.oneShotNoneAvail': 'No available recipes.',
+  // Production/consumption chart (right panel — replaced energy balance)
+  'econPanel.prodChartTitle': '📊 COMMODITY FLOW (year)',
+  'econPanel.prodChartProduced': 'Production',
+  'econPanel.prodChartConsumed': 'Consumption',
+  'econPanel.prodChartNoData': 'No data yet — history is being collected.',
+  // Usage matrix (Flows tab)
+  'econPanel.flowResListHeader': 'RESOURCE ▾ (click = breakdown)',
+  'econPanel.flowProducers': '── Producers ──',
+  'econPanel.flowConsumers': '── Consumers ──',
+  'econPanel.flowNone': '(none)',
   'econPanel.globalFilter': '🌍 GLOBAL',
   'econPanel.noActiveProduction': 'No active production',
   'econPanel.queueLabel': 'QUEUE:',
@@ -1923,7 +1940,7 @@ export default {
   'civOverlay.modExploration':  'Exploration',
   'civOverlay.modAnomaly':      'Anomaly Chance',
 
-  'econPanel.alertsHeader': 'ENERGY BALANCE · ALERTS',
+  'econPanel.alertsHeader': 'COMMODITY FLOW · ALERTS',
   'econPanel.energyBalanceCol': 'ENERGY BALANCE — {0}',
   'econPanel.noColony': 'None',
   'econPanel.noData': 'No data',
@@ -2168,7 +2185,9 @@ export default {
   'colonyPanel.notEnoughResources': 'Insufficient resources',
 
   // === CivPanel sidebar ===
-  'civPanel.economy': 'Economy',
+  'civPanel.economy': 'Production',
+  'civPanel.budget': 'Budget',
+  'civPanel.flows': 'Flows',
   'civPanel.population': 'Population',
   'civPanel.tech': 'Technologies',
   'civPanel.fleet': 'Command',

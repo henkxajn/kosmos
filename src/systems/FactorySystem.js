@@ -8,7 +8,9 @@
 //   Nasłuchuje: 'factory:allocate'     { commodityId, points }
 //               'factory:setMode'      { mode }
 //               'time:tick'            → aktualizacja produkcji
-//   Emituje:    'factory:produced'     { commodityId, amount }
+//   Emituje:    'factory:produced'     { commodityId, amount, planetId }
+//               'factory:consumed'     { commodityId, amount, planetId } (składniki-TOWARY)
+//               'factory:oneShotCompleted' { commodityId, qty }
 //               'factory:statusChanged' { allocations, totalPoints, mode }
 //               'factory:modeChanged'  { mode }
 
@@ -99,6 +101,12 @@ export class FactorySystem {
 
     // Kolejka produkcji: [{commodityId, qty}]
     this._queue = [];
+
+    // Jednorazowe zlecenie produkcyjne (JEDEN naraz, per kolonia). W trybie
+    // reaktywnym dostaje NAJWYŻSZY priorytet (przed całym demandem); po
+    // wyprodukowaniu `qty` szt znika i fabryka wraca do czystego reactive.
+    // { commodityId, qty, produced } | null. Nowe zlecenie zastępuje poprzednie.
+    this._oneShotJob = null;
 
     // ── Tryb automatyzacji ──────────────────────────────────────────────────
     // 'manual' = obecny system, 'priority' = lista celów, 'reactive' = auto
@@ -276,6 +284,32 @@ export class FactorySystem {
     if (mode === 'reactive') this._reactiveAllocate();
 
     EventBus.emit('factory:modeChanged', { mode });
+    this._emitStatus();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // API publiczne — jednorazowe zlecenie (one-shot)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  get oneShotJob() { return this._oneShotJob ? { ...this._oneShotJob } : null; }
+
+  // Ustaw jednorazowe zlecenie (jeden naraz — zastępuje poprzednie). Zwraca bool.
+  setOneShotJob(commodityId, qty) {
+    const def = COMMODITIES[commodityId];
+    if (!def) return false;
+    const n = Math.max(1, Math.floor(Number(qty) || 0));
+    if (!this.isRecipeAvailable(commodityId)) return false;
+    this._oneShotJob = { commodityId, qty: n, produced: 0 };
+    // Natychmiastowy re-scan → alokacja FP od razu (nie czekaj 0.1 civYears)
+    if (this._mode === 'reactive') this._reactiveAllocate();
+    this._emitStatus();
+    return true;
+  }
+
+  cancelOneShotJob() {
+    if (!this._oneShotJob) return;
+    this._oneShotJob = null;
+    if (this._mode === 'reactive') this._reactiveAllocate();
     this._emitStatus();
   }
 
@@ -581,6 +615,7 @@ export class FactorySystem {
       totalPoints:          this._totalPoints,
       allocations:          allocs,
       queue:                [...this._queue],
+      oneShotJob:           this._oneShotJob ? { ...this._oneShotJob } : null,
       mode:                 this._mode,
       priorityList:         this._priorityList.map(p => ({ ...p })),
       customTemplates:      this._customTemplates.map(t => ({
@@ -614,6 +649,9 @@ export class FactorySystem {
       }
     }
     this._queue = data.queue ?? [];
+    this._oneShotJob = data.oneShotJob
+      ? { commodityId: data.oneShotJob.commodityId, qty: data.oneShotJob.qty, produced: data.oneShotJob.produced ?? 0 }
+      : null;
     this._mode = data.mode ?? 'manual';
     this._priorityList = data.priorityList ?? [];
     this._customTemplates = data.customTemplates ?? [];
@@ -689,6 +727,10 @@ export class FactorySystem {
     if (this._allocations.size === 0 && this._queue.length === 0) return;
 
     const targetReached = [];
+    // Atrybucja kolonii (EconomyHistoryLog filtruje gracz↔AI) + agregacja konsumpcji
+    // składników-TOWARÓW w tym ticku (jedno zdarzenie factory:consumed per towar).
+    const ownerPid = this._getOwnerColony()?.planetId ?? null;
+    const consumedAgg = {};
 
     for (const [commodityId, alloc] of this._allocations) {
       const def = COMMODITIES[commodityId];
@@ -724,12 +766,22 @@ export class FactorySystem {
           break;
         }
 
-        this._consumeIngredients(def.recipe, commodityId);
+        const usedRecipe = this._consumeIngredients(def.recipe, commodityId);
+        if (usedRecipe) {
+          for (const ingId in usedRecipe) {
+            if (COMMODITIES[ingId]) consumedAgg[ingId] = (consumedAgg[ingId] ?? 0) + usedRecipe[ingId];
+          }
+        }
         alloc.progress -= timePerUnit;
         alloc.produced = (alloc.produced ?? 0) + 1;
 
         // Ta kolonia właśnie wyprodukowała jednostkę — zapamiętaj do safety scan
         this._everProducedHere.add(commodityId);
+
+        // One-shot: synchronizuj licznik na zleceniu (źródło prawdy jednorazówki)
+        if (alloc._isOneShot && this._oneShotJob && this._oneShotJob.commodityId === commodityId) {
+          this._oneShotJob.produced++;
+        }
 
         if (this.resourceSystem) {
           this.resourceSystem.receive({ [commodityId]: 1 });
@@ -738,8 +790,13 @@ export class FactorySystem {
         // Jeśli ta produkcja wypełnia zlecenie eksportowe — aktualizuj board
         this._onUnitProducedForExport(commodityId);
 
-        EventBus.emit('factory:produced', { commodityId, amount: 1 });
+        EventBus.emit('factory:produced', { commodityId, amount: 1, planetId: ownerPid });
       }
+    }
+
+    // Konsumpcja składników-TOWARÓW → historia gospodarcza (zagregowane per tick)
+    for (const ingId in consumedAgg) {
+      EventBus.emit('factory:consumed', { commodityId: ingId, amount: consumedAgg[ingId], planetId: ownerPid });
     }
 
     // Obsługa targetów
@@ -749,6 +806,14 @@ export class FactorySystem {
     }
     if (targetReached.length > 0) {
       if (this._mode === 'manual') this._promoteFromQueue();
+      this._emitStatus();
+    }
+
+    // One-shot ukończony → wyczyść + powiadom (fabryka wraca do czystego reactive)
+    if (this._oneShotJob && this._oneShotJob.produced >= this._oneShotJob.qty) {
+      const done = this._oneShotJob;
+      this._oneShotJob = null;
+      EventBus.emit('factory:oneShotCompleted', { commodityId: done.commodityId, qty: done.qty });
       this._emitStatus();
     }
   }
@@ -938,6 +1003,43 @@ export class FactorySystem {
     // Przydziel FP wg priorytetów zapotrzebowania
     let remainingFP = this._totalPoints;
 
+    // ── One-shot: jednorazowe zlecenie ma NAJWYŻSZY priorytet (produkcja N szt,
+    // niezależnie od poziomu zapasu — semantyka przepływu, nie targetu zapasu).
+    // Alokujemy FP PRZED normalnym demandem + łańcuch składników (reuse
+    // _resolveChainNeeds). _isOneShot → produce-loop synchronizuje licznik na
+    // _oneShotJob.produced i kończy zlecenie po osiągnięciu qty. ────────────────
+    const osChainEntries = [];
+    if (this._oneShotJob) {
+      const j = this._oneShotJob;
+      const osRemaining = Math.max(0, j.qty - j.produced);
+      if (osRemaining <= 0) {
+        this._oneShotJob = null;  // defensywnie — już ukończone
+      } else if (this.isRecipeAvailable(j.commodityId) && this._colonyCanSustainRecipe(j.commodityId)) {
+        const { chain: osChain } = this._resolveChainNeeds([
+          { commodityId: j.commodityId, deficit: osRemaining, stockTarget: osRemaining },
+        ]);
+        for (const ch of osChain) {
+          if (remainingFP <= 0) break;
+          if (this._allocations.has(ch.commodityId)) continue;
+          const chStock = this._getStock(ch.commodityId);
+          if (chStock >= ch.qty) continue;
+          const chFp = Math.min(1, remainingFP);
+          this._allocations.set(ch.commodityId, {
+            points: chFp, progress: oldProgress.get(ch.commodityId)?.progress ?? 0,
+            targetQty: ch.qty - chStock, produced: 0, _isChain: true,
+          });
+          remainingFP -= chFp;
+          osChainEntries.push({ commodityId: ch.commodityId, qty: ch.qty - chStock, produced: chStock, forCommodityId: ch.forCommodityId });
+        }
+        const osFp = Math.min(1, Math.max(0, remainingFP));
+        this._allocations.set(j.commodityId, {
+          points: osFp, progress: oldProgress.get(j.commodityId)?.progress ?? 0,
+          targetQty: osRemaining, produced: 0, _isChain: false, _isOneShot: true,
+        });
+        remainingFP -= osFp;
+      }
+    }
+
     // Agreguj zapotrzebowanie po commodityId — bierz MAX qty (nie sumuj)
     // i zachowaj najwyższy priorytet źródła
     const sourceOrder = this._reactiveSourceOrder;
@@ -1007,7 +1109,7 @@ export class FactorySystem {
         forCommodityId: ch.forCommodityId,
       });
     }
-    this._autoChain = newAutoChain;
+    this._autoChain = [...osChainEntries, ...newAutoChain];
 
     // Alokuj FP — każdy główny towar z deficytem rejestruje alokację.
     // Gdy chain pochłonął cały budżet FP, rejestrujemy main z 0 FP —
@@ -1513,9 +1615,10 @@ export class FactorySystem {
   }
 
   _consumeIngredients(recipe, commodityId) {
-    if (!this.resourceSystem) return;
+    if (!this.resourceSystem) return null;
     const actual = this._getScaledRecipe(recipe, commodityId);
     this.resourceSystem.spend(actual);
+    return actual;   // zwracane do logu konsumpcji (EconomyHistoryLog)
   }
 
   _emitStatus() {

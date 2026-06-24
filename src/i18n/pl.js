@@ -1736,6 +1736,23 @@ export default {
   'econPanel.noActiveProducers': 'Brak aktywnych producentów/konsumentów',
   'econPanel.missingInputs': '─── Brakujące składniki ───',
   'econPanel.productionHeader': '🏭 PRODUKCJA TOWARÓW',
+  // Reforma: Safety Stock (prawa połowa) + jednorazowe zlecenie (one-shot)
+  'econPanel.safetyStockHeader': '🛡 ZAPAS BEZPIECZEŃSTWA',
+  'econPanel.safetyStockSelectHint': 'Wybierz kolonię, aby ustawić progi zapasu.',
+  'econPanel.oneShotHeader': '⚡ ZLECENIE JEDNORAZOWE',
+  'econPanel.oneShotAdd': '+ Dodaj zlecenie',
+  'econPanel.oneShotCancel': 'Anuluj',
+  'econPanel.oneShotNoneAvail': 'Brak dostępnych receptur.',
+  // Wykres produkcji/konsumpcji (prawy panel — zastąpił bilans energii)
+  'econPanel.prodChartTitle': '📊 PRZEPŁYW TOWARÓW (rok)',
+  'econPanel.prodChartProduced': 'Produkcja',
+  'econPanel.prodChartConsumed': 'Konsumpcja',
+  'econPanel.prodChartNoData': 'Brak danych — gra dopiero zbiera historię.',
+  // Matryca zużycia (zakładka Przepływy)
+  'econPanel.flowResListHeader': 'ZASÓB ▾ (klik = rozbicie)',
+  'econPanel.flowProducers': '── Produkują ──',
+  'econPanel.flowConsumers': '── Konsumują ──',
+  'econPanel.flowNone': '(brak)',
   'econPanel.globalFilter': '🌍 GLOBALNY',
   'econPanel.noActiveProduction': 'Brak aktywnej produkcji',
   'econPanel.queueLabel': 'KOLEJKA:',
@@ -1925,7 +1942,7 @@ export default {
   'civOverlay.modExploration':  'Eksploracja',
   'civOverlay.modAnomaly':      'Szansa anomalii',
 
-  'econPanel.alertsHeader': 'BILANS ENERGII · ALERTY',
+  'econPanel.alertsHeader': 'PRZEPŁYW TOWARÓW · ALERTY',
   'econPanel.energyBalanceCol': 'BILANS ENERGII — {0}',
   'econPanel.noColony': 'Brak',
   'econPanel.noData': 'Brak danych',
@@ -2170,7 +2187,9 @@ export default {
   'colonyPanel.notEnoughResources': 'Brakuje zasobów',
 
   // === CivPanel sidebar ===
-  'civPanel.economy': 'Gospodarka',
+  'civPanel.economy': 'Produkcja',
+  'civPanel.budget': 'Budżet',
+  'civPanel.flows': 'Przepływy',
   'civPanel.population': 'Populacja',
   'civPanel.tech': 'Technologie',
   'civPanel.fleet': 'Dowództwo',
