@@ -2029,11 +2029,10 @@ export default {
 
   // === Prędkość czasu ===
   'speed.1d': '1d',
+  'speed.3d': '3d',
   'speed.1w': '1t',
   'speed.1m': '1m',
   'speed.1y': '1r',
-  'speed.10y': '10r',
-  'speed.10k': '10k',
 
   // === BottomContext ===
   'context.orbit': 'ORBITA',

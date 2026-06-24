@@ -11,11 +11,11 @@ export const GAME_CONFIG = {
   AU_TO_PX: 110,
 
   // Czas gry — mnożniki: ile lat gry na sekundę realną
-  // 1/365.25 (1d/s) | 7/365.25 (1t/s) | 1/12 (1m/s) | 1 (1r/s) | 10 (10r/s) | 10000 (10kr/s)
-  TIME_MULTIPLIERS: [0, 1 / 365.25, 7 / 365.25, 1 / 12, 1, 10, 10000],
+  // 1/365.25 (1d/s) | 3/365.25 (3d/s) | 7/365.25 (1t/s) | 1/12 (1m/s) | 1 (1r/s)
+  TIME_MULTIPLIERS: [0, 1 / 365.25, 3 / 365.25, 7 / 365.25, 1 / 12, 1],
 
   // Etykiety przycisków UI (indeks 1:1 z TIME_MULTIPLIERS)
-  TIME_MULTIPLIER_LABELS: ['PAUZA', '1d/s', '1t/s', '1m/s', '1r/s', '10r/s', '10kr/s'],
+  TIME_MULTIPLIER_LABELS: ['PAUZA', '1d/s', '3d/s', '1t/s', '1m/s', '1r/s'],
 
   // Mnożnik czasu cywilizacyjnego — mechaniki 4X biegną N× szybciej niż fizyka orbitalna
   CIV_TIME_SCALE: 12,

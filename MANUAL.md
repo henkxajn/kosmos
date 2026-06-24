@@ -83,10 +83,10 @@ Czas gry możesz kontrolować swobodnie. Przyciski na dole ekranu:
 |----------|----------|--------------|
 | **PAUZA** | zatrzymany | Planowanie, czytanie danych |
 | **1d/s** | 1 dzień gry / sekundę | Zarządzanie kolonią, budowanie |
+| **3d/s** | 3 dni gry / sekundę | Drobne zadania, lekkie przyspieszenie |
+| **1t/s** | 1 tydzień / sekundę | Obserwowanie krótkich procesów |
 | **1m/s** | 1 miesiąc / sekundę | Obserwowanie wzrostu populacji |
-| **1r/s** | 1 rok / sekundę | Śledzenie zmian orbitalnych |
-| **10r/s** | 10 lat / sekundę | Normalne tempo symulacji |
-| **10kr/s** | 10 000 lat / sekundę | Oczekiwanie na powstanie życia |
+| **1r/s** | 1 rok / sekundę | Śledzenie zmian orbitalnych, najszybsze tempo |
 
 ### Auto-slow (przycisk AUT)
 Gdy coś ważnego się dzieje, gra automatycznie zwalnia do **1d/s** i informuje cię w dzienniku. Wyzwalacze:

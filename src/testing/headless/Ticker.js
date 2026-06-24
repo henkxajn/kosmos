@@ -57,8 +57,8 @@ export class Ticker {
     // deltaMs taki, żeby civDeltaYears = tickSize przy multiplier=1
     // deltaYears = deltaMs/1000 * multiplier → civDeltaYears = deltaYears * 12
     // Chcemy civDeltaYears = tickSize → deltaMs = tickSize / 12 * 1000
-    this.timeSystem.multiplierIndex = 4; // 1 rok/s (indeks 4 w TIME_MULTIPLIERS)
-    const multiplier = this.timeSystem.multipliers[4]; // =1
+    this.timeSystem.multiplierIndex = 5; // 1 rok/s (indeks 5 w TIME_MULTIPLIERS)
+    const multiplier = this.timeSystem.multipliers[5]; // =1
     const deltaMs = (tickSize / CIV_TIME_SCALE / multiplier) * 1000;
 
     const totalTicks = Math.ceil(targetCivYears / tickSize);

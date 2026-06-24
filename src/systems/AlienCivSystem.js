@@ -48,8 +48,8 @@ export class AlienCivSystem {
       if (!civDeltaYears) return;
       this._tickAccum += civDeltaYears;
       if (this._tickAccum < 1.0) return;
-      // Clamp steps — przy bardzo wysokich prędkościach (10kr/s) `steps` może być
-      // kilka tysięcy. Procesujemy max 8 iteracji per real-time tick, reszta
+      // Clamp steps — przy wysokich prędkościach (1r/s × CIV_TIME_SCALE) `steps`
+      // może urosnąć. Procesujemy max 8 iteracji per real-time tick, reszta
       // zostaje w akumulatorze na następną klatkę. Dzięki temu AI nadąża bez
       // zamrażania UI i daje widoczną progresję.
       const MAX_STEPS_PER_TICK = 8;

@@ -1,5 +1,5 @@
 // Panel kontroli czasu gry
-// Przyciski: PAUZA | 1d/s | 1m/s | 1r/s | 10r/s | 10kr/s
+// Przyciski: PAUZA | 1d/s | 3d/s | 1t/s | 1m/s | 1r/s
 // Wyświetlacz: aktualny czas gry w czytelnej postaci
 
 import EventBus from '../core/EventBus.js';
@@ -43,7 +43,7 @@ export class TimeControls {
       .on('pointerout',  () => this.updateStyles());
 
     // Przyciski prędkości — 5 przycisków symetrycznie względem centrum
-    // Indeksy 1-5 w TIME_MULTIPLIERS: 1d/s | 1m/s | 1r/s | 10r/s | 10kr/s
+    // Indeksy 1-5 w TIME_MULTIPLIERS: 1d/s | 3d/s | 1t/s | 1m/s | 1r/s
     const labels = GAME_CONFIG.TIME_MULTIPLIER_LABELS.slice(1);
     labels.forEach((label, i) => {
       // 5 przycisków: środkowy (i=2) na centerX, spacing 62px

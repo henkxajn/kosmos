@@ -1784,7 +1784,7 @@ export class GameScene {
       );
 
       // M4 P1 fix — najpierw auto-slow do 1d/s, potem pauza. Po dismiss czas wraca
-      // na 1d/s (nie na poprzedni multiplier, np. 10kr/s). _triggerAutoSlow zapamiętuje
+      // na 1d/s (nie na poprzedni multiplier, np. 1r/s). _triggerAutoSlow zapamiętuje
       // multiplier=1 zanim pause go zamrozi → resume kontynuuje na slow.
       const ts = window.KOSMOS?.timeSystem;
       if (ts?._triggerAutoSlow) {
@@ -3684,11 +3684,10 @@ export class GameScene {
           this.cameraController.resetToCenter();
           break;
         case 'Digit1': EventBus.emit('time:setMultiplier', { index: 1 }); EventBus.emit('time:play'); break; // 1d/s
-        case 'Digit2': EventBus.emit('time:setMultiplier', { index: 2 }); EventBus.emit('time:play'); break; // 1t/s
-        case 'Digit3': EventBus.emit('time:setMultiplier', { index: 3 }); EventBus.emit('time:play'); break; // 1m/s
-        case 'Digit4': EventBus.emit('time:setMultiplier', { index: 4 }); EventBus.emit('time:play'); break; // 1r/s
-        case 'Digit5': EventBus.emit('time:setMultiplier', { index: 5 }); EventBus.emit('time:play'); break; // 10r/s
-        case 'Digit6': EventBus.emit('time:setMultiplier', { index: 6 }); EventBus.emit('time:play'); break; // 10kr/s
+        case 'Digit2': EventBus.emit('time:setMultiplier', { index: 2 }); EventBus.emit('time:play'); break; // 3d/s
+        case 'Digit3': EventBus.emit('time:setMultiplier', { index: 3 }); EventBus.emit('time:play'); break; // 1t/s
+        case 'Digit4': EventBus.emit('time:setMultiplier', { index: 4 }); EventBus.emit('time:play'); break; // 1m/s
+        case 'Digit5': EventBus.emit('time:setMultiplier', { index: 5 }); EventBus.emit('time:play'); break; // 1r/s
         case 'BracketLeft':  EventBus.emit('time:slower'); break;
         case 'BracketRight': EventBus.emit('time:faster'); break;
         case 'KeyQ': if (!window.KOSMOS?.civMode) EventBus.emit('action:stabilize');  break;

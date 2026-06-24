@@ -126,7 +126,7 @@ export class HeadlessRuntime {
 
     // ── TimeSystem ──
     this.timeSystem = new TimeSystem();
-    this.timeSystem.multiplierIndex = 4; // 1r/s (index 4 w TIME_MULTIPLIERS)
+    this.timeSystem.multiplierIndex = 5; // 1r/s (index 5 w TIME_MULTIPLIERS — wartość 1)
     this.timeSystem.isPaused = false;
     // Wyłącz auto-slow (niepotrzebny w headless)
     this.timeSystem._autoSlowEnabled = false;
@@ -501,7 +501,7 @@ export class HeadlessRuntime {
 
     const TICK_SIZE = 0.1; // 0.1 roku per tick
     const numTicks = Math.ceil(gameYears / TICK_SIZE);
-    // deltaMs odpowiadające TICK_SIZE przy multiplier=1.0 (index 3)
+    // deltaMs odpowiadające TICK_SIZE przy multiplier=1.0 (index 5)
     const deltaMs = TICK_SIZE * 1000; // 100ms = 0.1 roku przy 1r/s
 
     for (let i = 0; i < numTicks && !this._gameOver; i++) {

@@ -16,15 +16,16 @@ import { toggleNotificationDropdown, isNotificationDropdownOpen } from './Notifi
 import { bottomNavBarRect, navSlotLayout } from './BottomNavBarLogic.js';
 import { NAV_GROUPS } from './CivPanelDrawer.js';
 
-// Metryki ~25% mniejsze od TopBaru (btnH 16→12, speedW 18→14, play 18→14, bell/MENU 30→22).
+// Metryki kompaktowe — cały klaster (bell/menu/play/5×speed/data) musi zmieścić się w
+// JEDNYM slocie nawigacji ("Technologie"), więc bell/menu są wąskie (16) a reszta drobna.
 const STRIP_H = 20;
-const PAD     = 6;
+const PAD     = 5;
 const BTN_H   = 12;
-const PLAY_W  = 14;
-const SPEED_W = 14;
+const PLAY_W  = 13;
+const SPEED_W = 13;
 const GAP     = 1;
-const BELL_W  = 22;
-const MENU_W  = 22;
+const BELL_W  = 16;
+const MENU_W  = 16;
 
 export class BottomControlBar {
   constructor() {
@@ -52,33 +53,40 @@ export class BottomControlBar {
     const cy = stripTop + STRIP_H / 2;
     const btnY = Math.round(cy - BTN_H / 2);
 
-    // Klaster wyrównany do ostatniego slotu nawigacji ("Technologie"): ramka = pełny span
-    // przycisku, treść JUSTOWANA — lewa grupa [bell][MENU][play] dosunięta do LEWEJ krawędzi
-    // slotu, prawa grupa [speeds][data] do PRAWEJ. Dzwonek = lewa krawędź przycisku.
+    // Klaster ZAKOTWICZONY w ostatnim slocie nawigacji ("Technologie"): tło = DOKŁADNIE ten
+    // slot (równo z przyciskiem poniżej), treść CIĄGŁA dosunięta do prawej, liczona od prawej
+    // do lewej: [data] | [prędkości][▶][☰][🔔]. Klamra nie pozwala dzwonkowi wyjść poza lewą
+    // krawędź slotu (przy wąskim oknie treść jest przesuwana w prawo, zamiast wystawać w lewo).
     const navRect = bottomNavBarRect(W, H);
     const navSlots = navSlotLayout(navRect, NAV_GROUPS.length);
     const lastSlot = navSlots.length ? navSlots[navSlots.length - 1] : { x: W - 200, w: 200 };
     const lastSlotX     = lastSlot.x;
     const lastSlotRight = lastSlot.x + lastSlot.w;   // = navRect.x + navRect.w (W - inset)
 
-    // ── Lewa grupa: bell → MENU → play, od lewej krawędzi slotu ──
-    const leftEdge = lastSlotX + PAD;
-    this._bellRect = { x: leftEdge, y: btnY, w: BELL_W, h: BTN_H };
-    this._menuRect = { x: this._bellRect.x + BELL_W + 3, y: btnY, w: MENU_W, h: BTN_H };
-    this._playRect = { x: this._menuRect.x + MENU_W + 5, y: btnY, w: PLAY_W, h: BTN_H };
-
-    // ── Prawa grupa: data dosunięta do prawej krawędzi slotu, prędkości tuż przed nią ──
+    // ── Od prawej: data → separator → prędkości → play → menu → bell ──
     const right = lastSlotRight - PAD;
     const dateFont = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
     ctx.font = dateFont;
     const dateW = displayText ? ctx.measureText(displayText).width : 0;
-    const dateLeft = right - dateW;
-    const sepX = dateLeft - 6;
-    const speedsRight = sepX - 4;
+    let dateLeft = right - dateW;
+    let sepX = dateLeft - 5;
+    const speedsRight = sepX - 3;
     this._speedRects = [];
-    for (let i = 5; i >= 0; i--) {
-      const x = speedsRight - SPEED_W - (5 - i) * (SPEED_W + GAP);
+    for (let i = 4; i >= 0; i--) {
+      const x = speedsRight - SPEED_W - (4 - i) * (SPEED_W + GAP);
       this._speedRects[i] = { x, y: btnY, w: SPEED_W, h: BTN_H };
+    }
+    // play → menu → bell, każdy na lewo od poprzedniego (treść ciągła, bez nakładania)
+    this._playRect = { x: this._speedRects[0].x - 3 - PLAY_W, y: btnY, w: PLAY_W, h: BTN_H };
+    this._menuRect = { x: this._playRect.x - 2 - MENU_W, y: btnY, w: MENU_W, h: BTN_H };
+    this._bellRect = { x: this._menuRect.x - 2 - BELL_W, y: btnY, w: BELL_W, h: BTN_H };
+
+    // Klamra anti-overflow: dzwonek nie wychodzi poza lewą krawędź slotu (z wcięciem PAD).
+    const shift = Math.max(0, (lastSlotX + PAD) - this._bellRect.x);
+    if (shift) {
+      this._bellRect.x += shift; this._menuRect.x += shift; this._playRect.x += shift;
+      for (const r of this._speedRects) r.x += shift;
+      dateLeft += shift; sepX += shift;
     }
 
     const bgLeft = lastSlotX;
@@ -105,9 +113,9 @@ export class BottomControlBar {
     // ── Play / Pause ──
     this._drawTextBtn(ctx, this._playRect, cy, isPaused ? '▶' : '⏸',
       isPaused ? THEME.accent : THEME.textDim, isPaused ? THEME.bgSecondary : null, this._hover === 'play');
-    // ── Prędkości (6) ──
-    const speedLabels = [t('speed.1d'), t('speed.1w'), t('speed.1m'), t('speed.1y'), t('speed.10y'), t('speed.10k')];
-    for (let i = 0; i < 6; i++) {
+    // ── Prędkości (5) ──
+    const speedLabels = [t('speed.1d'), t('speed.3d'), t('speed.1w'), t('speed.1m'), t('speed.1y')];
+    for (let i = 0; i < 5; i++) {
       const isActive = !isPaused && multiplierIndex === i + 1;
       this._drawTextBtn(ctx, this._speedRects[i], cy, speedLabels[i],
         isActive ? THEME.bgPrimary : THEME.textDim, isActive ? THEME.accent : null, this._hover === `speed${i}`,
@@ -197,7 +205,7 @@ export class BottomControlBar {
       return true;
     }
     // Prędkości
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       if (this._in(this._speedRects[i], x, y)) {
         EventBus.emit('time:setMultiplier', { index: i + 1 });
         EventBus.emit('time:play');
@@ -213,7 +221,7 @@ export class BottomControlBar {
     if (this._in(this._bellRect, x, y)) h = 'bell';
     else if (this._in(this._menuRect, x, y)) h = 'menu';
     else if (this._in(this._playRect, x, y)) h = 'play';
-    else { for (let i = 0; i < 6; i++) if (this._in(this._speedRects[i], x, y)) { h = `speed${i}`; break; } }
+    else { for (let i = 0; i < 5; i++) if (this._in(this._speedRects[i], x, y)) { h = `speed${i}`; break; } }
     if (h !== this._hover) { this._hover = h; this._markDirty(); }
   }
 

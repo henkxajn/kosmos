@@ -455,14 +455,14 @@ export class TopBar {
     const speedW = 18;
     const speedRects = [];
     let sx = playRect.x + playRect.w + 3;
-    for (let i = 0; i < 6; i++) { speedRects.push({ x: sx, y: btnY, w: speedW, h: btnH }); sx += speedW + gap; }
+    for (let i = 0; i < 5; i++) { speedRects.push({ x: sx, y: btnY, w: speedW, h: btnH }); sx += speedW + gap; }
     const sepX = sx + 2;
     const dateX = sepX + 6;   // data LEWO-wyrównana tuż za separatorem (przylega do prędkości, bez luki w środku)
     return { blockX, btnY, btnH, playRect, speedRects, sepX, dateX };
   }
 
   // ── Blok kontrolek czasu (prawy górny róg, JEDNA linia, wtopiony) ─────────
-  // [▶/⏸] [1d][1w][1m][1y][10y][10k] | [data]. (AUT usunięty.) Lewą krawędź daje
+  // [▶/⏸] [1d][3d][1w][1m][1y] | [data]. (AUT usunięty.) Lewą krawędź daje
   // box tła (strokeRect w draw()), więc bez osobnego separatora pionowego.
   _drawTimeBlock(ctx, W, timeState) {
     const { isPaused, multiplierIndex, displayText } = timeState;
@@ -475,9 +475,9 @@ export class TopBar {
       isPaused ? THEME.bgSecondary : null,
       THEME.fontSizeSmall - 1);
 
-    // Przyciski prędkości (6) — mniejszy font (−2px)
-    const speedLabels = [t('speed.1d'), t('speed.1w'), t('speed.1m'), t('speed.1y'), t('speed.10y'), t('speed.10k')];
-    for (let i = 0; i < 6; i++) {
+    // Przyciski prędkości (5) — mniejszy font (−2px)
+    const speedLabels = [t('speed.1d'), t('speed.3d'), t('speed.1w'), t('speed.1m'), t('speed.1y')];
+    for (let i = 0; i < 5; i++) {
       const rc = L.speedRects[i];
       const isActive = !isPaused && multiplierIndex === i + 1;
       this._drawBtn(ctx, rc.x, rc.y, rc.w, rc.h, 0,
@@ -788,7 +788,7 @@ export class TopBar {
       isPaused ? EventBus.emit('time:play') : EventBus.emit('time:pause');
       return true;
     }
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       if (hit(L.speedRects[i])) {
         EventBus.emit('time:setMultiplier', { index: i + 1 });
         EventBus.emit('time:play');
