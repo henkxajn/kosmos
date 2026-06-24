@@ -22,6 +22,9 @@ import { STAR_TYPES } from '../config/GameConfig.js';
 import { loadStarTextures, hashCode, TEXTURE_VARIANTS } from './PlanetTextureUtils.js';
 
 const FOV = 50;
+// Tło kosmiczne (subtelne). Plik podmienialny; jasność regulowana mnożnikiem (niska = subtelne).
+const BG_URL = 'assets/backgrounds/deep_space.png';
+const BG_BRIGHTNESS = 0.25;   // 0..1 — mnożnik jasności tła (1.0 = bez tłumienia)
 
 export class StratcomGalaxyRenderer {
   constructor() {
@@ -36,6 +39,8 @@ export class StratcomGalaxyRenderer {
     this._ringSig   = '';
     this._glowCache = new Map();  // glowColorHex → CanvasTexture (współdzielone)
     this._failed    = false;
+    this._bgTexture = null;       // tło kosmiczne (CanvasTexture ściemniona) → scene.background
+    this._bgTried   = false;      // czy próbowano już załadować tło (async, raz)
     this.fitDist    = 40;         // domyślny dystans kamery dopasowany do rozrzutu
   }
 
@@ -63,6 +68,7 @@ export class StratcomGalaxyRenderer {
         this._camera = new THREE.PerspectiveCamera(FOV, wPx / hPx, 0.05, 5000);
         this._starGroup = new THREE.Group(); this._scene.add(this._starGroup);
         this._ringGroup = new THREE.Group(); this._scene.add(this._ringGroup);
+        this._loadBackground();   // subtelne tło kosmiczne (async, ładuje się raz)
       } catch (e) {
         console.warn('[StratcomGalaxyRenderer] WebGL init failed:', e);
         this._failed = true;
@@ -76,6 +82,37 @@ export class StratcomGalaxyRenderer {
       this._camera.updateProjectionMatrix();
     }
     return true;
+  }
+
+  // ── Tło kosmiczne: PNG ściemniony do subtelności (czarny overlay = mnożenie jasności).
+  // Screen-fixed (scene.background) — nie obraca się z kamerą; dla ciemnej mgławicy OK.
+  _loadBackground() {
+    if (this._bgTried || !this._scene) return;
+    this._bgTried = true;
+    const img = new Image();
+    img.onload = () => {
+      if (!this._scene) return;
+      const maxW = 4096;   // wyższy cap → zachowaj detal pola gwiazd
+      const k = Math.min(1, maxW / (img.width || maxW));
+      const w = Math.max(1, Math.round((img.width  || maxW) * k));
+      const h = Math.max(1, Math.round((img.height || maxW) * k));
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, w, h);
+      // Ściemnienie: czarny overlay o alpha=(1-jasność) == mnożenie pikseli przez jasność
+      ctx.fillStyle = `rgba(0,0,0,${(1 - BG_BRIGHTNESS).toFixed(3)})`;
+      ctx.fillRect(0, 0, w, h);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.minFilter = THREE.LinearFilter;   // bez mip-blura drobnego pola gwiazd
+      tex.generateMipmaps = false;
+      tex.anisotropy = 8;
+      this._bgTexture = tex;
+      this._scene.background = tex;
+    };
+    img.onerror = () => { /* brak pliku → zostaje sam clearColor */ };
+    img.src = BG_URL;
   }
 
   // systems: [{ id, x, y, z, colorHex, glowColorHex, isHome, dim, luminosity }]
@@ -256,6 +293,8 @@ export class StratcomGalaxyRenderer {
     this._disposeGroup(this._ringGroup);
     for (const t of this._glowCache.values()) t.dispose();
     this._glowCache.clear();
+    if (this._bgTexture) { this._bgTexture.dispose(); this._bgTexture = null; }
+    this._bgTried = false;
     if (this._renderer) {
       this._renderer.forceContextLoss?.();
       this._renderer.dispose();

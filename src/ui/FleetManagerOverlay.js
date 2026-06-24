@@ -106,6 +106,7 @@ const STRATCOM_STEP_LY  = 6;     // przyrost zasięgu na poziom obserwatorium (p
 const STRATCOM_MAX_BLIPS = 14;   // miękki limit liczby gwiazd na radarze (czytelność)
 const STRATCOM_GLOW    = true;  // animowana iluminacja tarczy radaru (ciągły redraw); false = wyłącz
 const STRATCOM_GLOW_MS = 7000;  // okres „oddechu" podświetlenia [ms] — wolny, ambientowy
+const STRATCOM_BG_BRIGHTNESS = 0.25;  // jasność tła-mgławicy paneli Stratcomu (0..1; 1.0 = bez tłumienia)
 // Górny offset overlay. „Dowództwo Taktyczne" jest pojedynczą grupą nav (bez rodzeństwa
 // Fleet/Designs) → brak subnav, więc overlay sięga aż pod górną belkę i to jego własny
 // pasek zakładek (4 zakładki) zajmuje miejsce dawnego subnav. getSubNavHeight() liczone
@@ -3901,14 +3902,51 @@ export class FleetManagerOverlay {
     ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
   }
 
+  // ── Tło panelu Stratcomu (Canvas 2D): PNG mgławicy ściemniony do subtelności ──
+  // key: 'radar' → deep_space_radar.png | 'galaxy' → deep_space.png. Obraz ładowany
+  // leniwie (cache na instancji); do czasu załadowania panel jest czarny. Widoczne
+  // niezależnie od tego, czy panel jest duży czy mały (podgląd).
+  _getPanelBgImage(key) {
+    if (typeof Image === 'undefined') return null;   // headless (smoke) — brak globalu Image
+    if (!this._bgImages) this._bgImages = {};
+    if (!this._bgImages[key]) {
+      const url = key === 'radar'
+        ? 'assets/backgrounds/deep_space_radar.png'
+        : 'assets/backgrounds/deep_space.png';
+      const img = new Image();
+      img.src = url;
+      this._bgImages[key] = img;
+    }
+    return this._bgImages[key];
+  }
+
+  _drawPanelBg(ctx, x, y, w, h, key) {
+    // Czarna baza (gdy obraz jeszcze się ładuje lub brak pliku)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x + 1, y, w - 2, h - 1);
+    const img = this._getPanelBgImage(key);
+    if (!img || !img.complete || !img.naturalWidth) return;
+    const rw = w - 2, rh = h - 1;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x + 1, y, rw, rh); ctx.clip();
+    ctx.imageSmoothingQuality = 'high';
+    // cover-fit: skala tak, by wypełnić prostokąt (wyśrodkowane)
+    const k = Math.max(rw / img.naturalWidth, rh / img.naturalHeight);
+    const dw = img.naturalWidth * k, dh = img.naturalHeight * k;
+    ctx.drawImage(img, x + 1 + (rw - dw) / 2, y + (rh - dh) / 2, dw, dh);
+    // ściemnienie do subtelności (czarny overlay = mnożenie jasności)
+    ctx.fillStyle = `rgba(0,0,0,${(1 - STRATCOM_BG_BRIGHTNESS).toFixed(3)})`;
+    ctx.fillRect(x + 1, y, rw, rh);
+    ctx.restore();
+  }
+
   // Radar Stratcom. isBig=true → pełny (hity gwiazd + panel polityczny + legenda);
   // isBig=false → kompaktowy podgląd (całość = hit „rozwiń", bez selekcji gwiazd).
   _drawStratcom(ctx, x, y, w, h, isBig = true) {
     const PAD = 10;
 
-    // Tło — solidne czarne (overlay zakrywa 3D mapę układu)
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x + 1, y, w - 2, h - 1);
+    // Tło — subtelna mgławica radaru (deep_space_radar) ściemniona; czarna baza pod spodem
+    this._drawPanelBg(ctx, x, y, w, h, 'radar');
 
     const gd = window.KOSMOS?.galaxyData;
     const home = gd?.systems?.find(s => s.isHome) ?? null;
@@ -3972,17 +4010,16 @@ export class FleetManagerOverlay {
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
     ctx.clip();
 
-    // ── Iluminacja tarczy radaru — miękkie podświetlenie OD DOŁU, powolne
-    //    „oddychanie" (styl sci-fi: backlit hologram). Warstwa pod blipami.
+    // ── Iluminacja tarczy radaru — miękkie podświetlenie OD ŚRODKA na CAŁĄ tarczę,
+    //    powolne „oddychanie" (styl sci-fi: backlit hologram). Warstwa pod blipami.
     if (STRATCOM_GLOW) {
       const breath = 0.5 + 0.5 * Math.sin(performance.now() / STRATCOM_GLOW_MS * Math.PI * 2);
       const intensity = 0.10 + 0.12 * breath;            // 0.10..0.22 alpha
-      const gy = cy + R * 0.55;                           // źródło światła poniżej środka → underglow
       const { r, g, b } = hexToRgb(THEME.accent);         // kolor z motywu (podąża za THEME)
-      const grad = ctx.createRadialGradient(cx, gy, 0, cx, gy, R * 1.45);
-      grad.addColorStop(0,   `rgba(${r},${g},${b},${intensity.toFixed(3)})`);
-      grad.addColorStop(0.5, `rgba(${r},${g},${b},${(intensity * 0.4).toFixed(3)})`);
-      grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.05);  // środek → cała powierzchnia
+      grad.addColorStop(0,    `rgba(${r},${g},${b},${intensity.toFixed(3)})`);
+      grad.addColorStop(0.65, `rgba(${r},${g},${b},${(intensity * 0.55).toFixed(3)})`);
+      grad.addColorStop(1,    `rgba(${r},${g},${b},0)`);
       ctx.fillStyle = grad;
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
     }
@@ -4499,8 +4536,8 @@ export class FleetManagerOverlay {
   // gwiazd + panel operacyjny; mały → „rozwiń".
   _drawStratcomGalaxy(ctx, x, y, w, h, isBig) {
     const PAD = 10;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x + 1, y, w - 2, h - 1);
+    // Tło — subtelna mgławica galaktyki (deep_space); gdy panel DUŻY, WebGL ją nadpisze
+    this._drawPanelBg(ctx, x, y, w, h, 'galaxy');
 
     const vis = this._stratcomVisibleSystems();
     const home = vis.home;
