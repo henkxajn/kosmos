@@ -1637,6 +1637,12 @@ export default {
   'techPanel.fxResearchCost': 'koszt badań',
   'techPanel.fxSingularity': 'OSOBLIWOŚĆ: wszystkie budynki autonomiczne',
   'techPanel.allBranches': 'Wszystkie',
+  'techPanel.tierColumn': 'TIER {0}',
+  'techPanel.points': 'pkt',
+  'techPanel.cost': 'Koszt',
+  'techPanel.estTime': '≈ {0} lat',
+  'techPanel.idleWaste': 'Brak aktywnego badania — nadwyżka punktów przepada',
+  'techPanel.fxProsperity': 'prosperity',
 
   // === PopulationOverlay ===
   'popPanel.header': 'POPULACJA',
@@ -2014,6 +2020,7 @@ export default {
   // === BottomResourceBar (tooltipy + wolne POP inline) ===
   'resBar.freeSuffix': '({0} wolne)',
   'resBar.credits': 'Kredyty (Kr)',
+  'resBar.researchGlobal': 'Pula globalna (wszystkie kolonie)',
   'resBar.prospLow': 'niski',
   'resBar.prospMedium': 'średni',
   'resBar.prospHigh': 'wysoki',

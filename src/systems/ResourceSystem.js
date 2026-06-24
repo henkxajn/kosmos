@@ -26,6 +26,15 @@ import { t } from '../i18n/i18n.js';
 // ── Jak często emitujemy resource:changed (co ile lat gry) ─────────────────
 const EMIT_THROTTLE_YEARS = 1 / 365.25; // co dzień gry
 
+// ── Limit banku punktów badań (lata gry) ───────────────────────────────────
+// Gdy NIC nie jest aktywnie badane, akumulator research.amount puchnie bez
+// granic (ResearchSystem drenuje punkty tylko przy aktywnym badaniu). Późniejsze
+// zakolejkowanie techu zrzucało cały bank naraz → efekt "instant research".
+// Cap = perYear × RESEARCH_BANK_YEARS pozwala na mały bufor wyprzedzający
+// (head-start), ale nie na bankowanie setek lat produkcji. Aktywne badanie
+// drenuje amount do 0 co tik, więc przy badaniu cap praktycznie nie działa.
+const RESEARCH_BANK_YEARS = 2;
+
 // ── Stare klucze zasobów (do kompatybilności z istniejącym kodem) ──────────
 export const RESOURCE_DEFS = {
   minerals: { get namePL() { return t('resource.minerals'); }, icon: '⛏', color: 0x8B7355 },
@@ -471,6 +480,16 @@ export class ResourceSystem {
     if (this.research.perYear !== 0) {
       const before = this.research.amount;
       this.research.amount = Math.max(0, this.research.amount + this.research.perYear * deltaYears);
+      // Limit banku TYLKO gdy nic nie jest aktywnie badane (patrz RESEARCH_BANK_YEARS).
+      // Bez bramki "idle" cap throttlowałby aktywne badanie przy dużej prędkości czasu
+      // (jeden tik akumuluje perYear × civDeltaYears, może >2 lata). Przy aktywnym
+      // badaniu ResearchSystem i tak drenuje amount do 0 co tik → bank nie rośnie.
+      const rSys = window.KOSMOS?.researchSystem;
+      const researchIdle = !rSys || (rSys.activeResearch?.length ?? 0) === 0;
+      const bankCap = this.research.perYear * RESEARCH_BANK_YEARS;
+      if (researchIdle && bankCap > 0 && this.research.amount > bankCap) {
+        this.research.amount = bankCap;
+      }
       if (this.research.amount !== before) anyChange = true;
     }
 

@@ -1635,6 +1635,12 @@ export default {
   'techPanel.fxResearchCost': 'research cost',
   'techPanel.fxSingularity': 'SINGULARITY: all buildings autonomous',
   'techPanel.allBranches': 'All',
+  'techPanel.tierColumn': 'TIER {0}',
+  'techPanel.points': 'pts',
+  'techPanel.cost': 'Cost',
+  'techPanel.estTime': '≈ {0} yr',
+  'techPanel.idleWaste': 'No active research — surplus points wasted',
+  'techPanel.fxProsperity': 'prosperity',
 
   // === PopulationOverlay ===
   'popPanel.header': 'POPULATION',
@@ -2012,6 +2018,7 @@ export default {
   // === BottomResourceBar (tooltips + inline free POP) ===
   'resBar.freeSuffix': '({0} free)',
   'resBar.credits': 'Credits (Kr)',
+  'resBar.researchGlobal': 'Global pool (all colonies)',
   'resBar.prospLow': 'low',
   'resBar.prospMedium': 'medium',
   'resBar.prospHigh': 'high',

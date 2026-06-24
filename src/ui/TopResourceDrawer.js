@@ -98,6 +98,20 @@ export class TopResourceDrawer {
     ];
   }
 
+  // ── Globalna pula badań (suma po koloniach gracza) ─────────────────────────
+  // Research nie jest silosowany per-kolonia — ResearchSystem sumuje/drenuje
+  // amount i perYear ze wszystkich kolonii. Belka pokazuje łączny stan.
+  _globalResearch() {
+    let amount = 0, perYear = 0;
+    for (const c of this._playerColonies()) {
+      const rs = c.resourceSystem;
+      if (!rs?.research) continue;
+      amount  += rs.research.amount  ?? 0;
+      perYear += rs.research.perYear ?? 0;
+    }
+    return { amount, perYear };
+  }
+
   // ── Tokeny jednej kolonii (port BottomResourceBar._collect, źródło = kolonia) ──
   _colonyTokens(col) {
     const rs = col.resourceSystem;
@@ -120,10 +134,12 @@ export class TopResourceDrawer {
     if (fuelDef) items.push({ id: 'fuel', icon: fuelDef.icon, val: snap['fuel'] ?? 0,
       color: THEME.textSecondary, kind: 'commodity', delta: perYear('fuel'), showDelta: true });
 
-    // Research (per-kolonia akumulator)
-    const research = snap._research ?? {};
-    items.push({ id: 'research', icon: '🔬', val: research.amount ?? 0, color: '#aa44ff',
-      kind: 'research', delta: research.perYear ?? 0, showDelta: true });
+    // Research — GLOBALNA pula: badania są sumowane i drenowane ze WSZYSTKICH
+    // kolonii gracza przez ResearchSystem (nie silos per-kolonia jak surowce).
+    // Pokazujemy łączny stan + łączną stawkę, identycznie na każdym wierszu.
+    const gRes = this._globalResearch();
+    items.push({ id: 'research', icon: '🔬', val: gRes.amount, color: '#aa44ff',
+      kind: 'research', delta: gRes.perYear, showDelta: true, global: true });
 
     // Bilans energii (per-kolonia)
     const e = snap._energy ?? {};
@@ -396,6 +412,7 @@ export class TopResourceDrawer {
     }
     if (item.kind === 'research') {
       lines.push({ text: `🔬 ${t('resource.research')}`, color: THEME.accent, bold: true });
+      if (item.global) lines.push({ text: t('resBar.researchGlobal'), color: THEME.textDim });
       lines.push({ text: t('ui.amount', _fmtNum(item.val)), color: THEME.textPrimary });
       if (Math.abs(item.delta) > 0.01) {
         const sign = item.delta >= 0 ? '+' : '';

@@ -882,7 +882,10 @@ export const TECHS = {
     branch:      'computing',
     tier:        1,
     cost:        { research: 70 },
-    requires:    [],
+    // Drugi slot badawczy = świadoma inwestycja, NIE od startu. Gate za łańcuchem
+    // materiałowym: metalurgia → zaawansowane materiały → obliczenia cyfrowe
+    // (układy scalone wymagają zaawansowanych materiałów). ~3 techy w głąb.
+    requires:    ['advanced_materials'],
     effects: [
       { type: 'unlockBuilding', buildingId: 'data_center' },
       { type: 'researchSlots', amount: 1 },

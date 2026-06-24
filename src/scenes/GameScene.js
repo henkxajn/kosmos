@@ -3228,7 +3228,9 @@ export class GameScene {
     // Tech wymagane: orbital_survey → rocketry (launch_pad), exploration (shipyard)
     // Odblokowane od startu — gracz nie musi ich badać
     // Nuclear power NIE odblokowany — gracz musi sam zbadać
-    const techIds = ['orbital_survey', 'rocketry', 'exploration', 'basic_computing', 'automation'];
+    // basic_computing + automation USUNIĘTE — gracz musi je sam zbadać (drugi slot
+    // badawczy i budynki autonomiczne nie są darmowe na starcie).
+    const techIds = ['orbital_survey', 'rocketry', 'exploration'];
     this.techSystem.restore({ researched: techIds });
   }
 
