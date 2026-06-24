@@ -263,6 +263,19 @@ export class FleetManagerOverlay {
     this._clusterPanY = 0;
     this._selectedClusterSystem = null;
     this._clusterHoverSystem = null;
+
+    // Stratcom — galaktyka 3D (WebGL offscreen, lazy). Kamera orbitalna własna,
+    // niezależna od _clusterZoom/Pan (te zostają dla płaskiego radaru i podglądu).
+    this._galaxy3D = null;          // StratcomGalaxyRenderer (dynamic import — three)
+    this._galaxy3DLoading = false;
+    this._galaxy3DFailed = false;
+    this._galaxyYaw = 0.6;
+    this._galaxyPitch = 0.92;       // lekko z góry (przechylony „tank")
+    this._galaxyDist = null;        // lazy = renderer.fitDist
+    this._galaxyDrag = false;
+    this._galaxyPanelRect = null;   // rect dużego panelu galaktyki (hit-test myszy 3D)
+    this._galaxyLastDragMs = 0;
+
     this._hitZones = [];          // { x,y,w,h, type, data }
     this._bounds = null;          // { x,y,w,h } — cały overlay
 
@@ -363,6 +376,11 @@ export class FleetManagerOverlay {
     this._clusterHoverSystem = null;
     this._pendingSendSystemId = null;
     this._activeTab = 'tactical';
+    // Zwolnij kontekst WebGL galaktyki 3D (odtworzy się leniwie przy ponownym wejściu)
+    if (this._galaxy3D) { this._galaxy3D.dispose(); this._galaxy3D = null; }
+    this._galaxyDist = null;
+    this._galaxyDrag = false;
+    this._galaxyPanelRect = null;
   }
 
   // Przełączenie zakładki + reset stanu, który nie powinien wyciekać między
@@ -739,11 +757,18 @@ export class FleetManagerOverlay {
       return true;
     }
 
-    // ── STRATCOM (pełna szerokość) — zoom star-cluster/radaru ─
+    // ── STRATCOM — zoom radaru 2D LUB dystans kamery galaktyki 3D ─
     if (this._activeTab === 'stratcom') {
       if (inRect(this._contentBounds)) {
-        const zf = delta > 0 ? 0.85 : 1.18;
-        this._clusterZoom = Math.max(0.3, Math.min(8, this._clusterZoom * zf));
+        const gr = this._galaxyPanelRect;
+        const overGalaxy3D = gr && this._stratcomBig === 'galaxy' && this._galaxyDist != null &&
+          mx >= gr.x && mx <= gr.x + gr.w && my >= gr.y && my <= gr.y + gr.h;
+        if (overGalaxy3D) {
+          this._galaxyDist = Math.max(4, Math.min(600, this._galaxyDist * (delta > 0 ? 1.12 : 0.89)));
+        } else {
+          const zf = delta > 0 ? 0.85 : 1.18;
+          this._clusterZoom = Math.max(0.3, Math.min(8, this._clusterZoom * zf));
+        }
       }
       return true;
     }
@@ -809,9 +834,22 @@ export class FleetManagerOverlay {
       this._mapDragWasDrag = false;
       return true;
     }
-    // Stratcom — pan star-cluster/radaru (pełna szerokość → _contentBounds).
+    // Stratcom — duża galaktyka 3D: drag = obrót kamery (zamiast pan 2D).
+    const gr = this._galaxyPanelRect;
+    if (this._activeTab === 'stratcom' && this._stratcomBig === 'galaxy' && gr &&
+        mx >= gr.x && mx <= gr.x + gr.w && my >= gr.y && my <= gr.y + gr.h) {
+      this._galaxyDrag = true;
+      this._clusterDrag = false;
+      this._mapDragging = true;
+      this._mapDragStartX = mx;
+      this._mapDragStartY = my;
+      this._mapDragWasDrag = false;
+      return true;
+    }
+    // Stratcom — pan star-cluster/radaru 2D (pełna szerokość → _contentBounds).
     if (this._activeTab === 'stratcom' && inRect(this._contentBounds)) {
       this._clusterDrag = true;
+      this._galaxyDrag = false;
       this._mapDragging = true;
       this._mapDragStartX = mx;
       this._mapDragStartY = my;
@@ -824,6 +862,7 @@ export class FleetManagerOverlay {
   handleMouseUp(mx, my) {
     if (this._mapDragging) {
       this._mapDragging = false;
+      this._galaxyDrag = false;
       // Jeśli to był drag (nie klik) — pochłoń event
       if (this._mapDragWasDrag) return true;
     }
@@ -838,7 +877,13 @@ export class FleetManagerOverlay {
       const dx = mx - this._mapDragStartX;
       const dy = my - this._mapDragStartY;
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) this._mapDragWasDrag = true;
-      if (this._clusterDrag) {
+      if (this._galaxyDrag) {
+        // Obrót kamery galaktyki 3D (orbit sferyczny)
+        this._galaxyYaw   -= dx * 0.006;
+        this._galaxyPitch += dy * 0.006;
+        this._galaxyPitch = Math.max(0.12, Math.min(Math.PI - 0.12, this._galaxyPitch));
+        this._galaxyLastDragMs = (typeof performance !== 'undefined') ? performance.now() : 0;
+      } else if (this._clusterDrag) {
         this._clusterPanX += dx;
         this._clusterPanY += dy;
       } else {
@@ -4434,8 +4479,24 @@ export class FleetManagerOverlay {
     this._drawStratcomGalaxy(ctx, gx, y, galaxyW, h, !bigRadar);
   }
 
-  // Mapa galaktyki 2D (prawy panel Stratcomu). Mgła wojny wspólna z radarem
-  // (_stratcomVisibleSystems). isBig → hity gwiazd + panel operacyjny; mały → „rozwiń".
+  // Lazy: renderer 3D galaktyki. Dynamic import (NIE statyczny) — three psułoby
+  // headless import FleetManagerOverlay (patrz nagłówek pliku). Pierwszy frame
+  // zwraca false (import w toku) → płaski 2D; po załadowaniu klasy kolejne frame'y
+  // rysują 3D. WebGL fail → _galaxy3DFailed (trwale 2D).
+  _ensureGalaxy3D() {
+    if (this._galaxy3DFailed) return false;
+    if (this._galaxy3D) return true;
+    if (this._galaxy3DLoading) return false;
+    this._galaxy3DLoading = true;
+    import('../renderer/StratcomGalaxyRenderer.js')
+      .then(mod => { this._galaxy3D = new mod.StratcomGalaxyRenderer(); this._galaxy3DLoading = false; })
+      .catch(e => { console.warn('[FleetOverlay] galaxy3D import failed:', e); this._galaxy3DFailed = true; this._galaxy3DLoading = false; });
+    return false;
+  }
+
+  // Mapa galaktyki (prawy panel Stratcomu): 3D WebGL gdy DUŻA, płaski 2D gdy mały
+  // podgląd. Mgła wojny wspólna z radarem (_stratcomVisibleSystems). isBig → hity
+  // gwiazd + panel operacyjny; mały → „rozwiń".
   _drawStratcomGalaxy(ctx, x, y, w, h, isBig) {
     const PAD = 10;
     ctx.fillStyle = '#000';
@@ -4469,25 +4530,68 @@ export class FleetManagerOverlay {
     ctx.rect(x + 1, y, w - 2, h - 1);
     ctx.clip();
 
-    // Skala — zmieść widoczne systemy
-    let maxD = 1;
-    for (const e of vis.list) if (e.d2 > maxD) maxD = e.d2;
-    maxD *= 1.2;
-    const cx = x + w / 2 + this._clusterPanX;
-    const cy = y + h / 2 + this._clusterPanY;
-    const baseR = Math.min(w / 2, h / 2) - 24;
-    const scale = (baseR * this._clusterZoom) / maxD;
-    const toSx = (lx) => cx + ((lx ?? 0) - (home.x ?? 0)) * scale;
-    const toSy = (ly) => cy + ((ly ?? 0) - (home.y ?? 0)) * scale;
+    // ── Projekcja: 3D (WebGL) gdy galaktyka DUŻA, inaczej płaski 2D ──
     const visIds = new Set(vis.list.map(e => e.s.id));
+    let use3D = false;
+    let projS, projPt;   // projS(systemLike{x,y,z}) / projPt(galaxyX, galaxyY) → {sx,sy}|null
+
+    if (isBig && this._ensureGalaxy3D()) {
+      const g3 = this._galaxy3D;
+      const hx = home.x ?? 0, hy = home.y ?? 0, hz = home.z ?? 0;   // home → origin sceny
+      const m = ctx.getTransform ? ctx.getTransform() : { a: 1, d: 1 };
+      const wPx = Math.max(2, Math.round((w - 2) * (Math.abs(m.a) || 1)));
+      const hPx = Math.max(2, Math.round((h - 1) * (Math.abs(m.d) || 1)));
+
+      // Gwiazdy 3D z mgły wojny (kolor spektralny + dim wg stanu); współrzędne home-względne
+      g3.setSystems(vis.list.map(({ s, known }) => ({
+        id: s.id, x: (s.x ?? 0) - hx, y: (s.y ?? 0) - hy, z: (s.z ?? 0) - hz,
+        colorHex: s.colorHex, glowColorHex: s.glowColorHex, spectralType: s.spectralType,
+        luminosity: s.luminosity ?? 1,
+        isHome: !!s.isHome, dim: !known && !s.isHome,
+      })));
+      const rangeLY = this._getStratcomRangeLY();
+      g3.setRangeRings([rangeLY * 0.25, rangeLY * 0.5, rangeLY * 0.75, rangeLY]);
+
+      if (this._galaxyDist == null) this._galaxyDist = g3.fitDist;
+      // Galaktyka stoi statycznie — obrót WYŁĄCZNIE ręczny (LPM-drag). Brak auto-spin.
+      g3.setCameraOrbit(this._galaxyYaw, this._galaxyPitch, this._galaxyDist);
+
+      if (g3.render(wPx, hPx)) {
+        use3D = true;
+        try { ctx.drawImage(g3.canvas, x + 1, y, w - 2, h - 1); } catch (_) { /* buffer not ready */ }
+        this._galaxyPanelRect = { x, y, w, h };
+        projS  = (o)      => { const p = g3.projectXYZ((o.x ?? 0) - hx, (o.z ?? 0) - hz, (o.y ?? 0) - hy, w, h); return p.behind ? null : { sx: x + p.x, sy: y + p.y }; };
+        projPt = (gx, gy) => { const p = g3.projectXYZ(gx - hx, 0, gy - hy, w, h);                              return p.behind ? null : { sx: x + p.x, sy: y + p.y }; };
+      } else {
+        this._galaxy3DFailed = true;   // WebGL padł → trwale 2D
+      }
+    }
+
+    if (!use3D) {
+      // ── Płaski 2D (mały podgląd lub brak/oczekiwanie WebGL) ──
+      this._galaxyPanelRect = null;
+      let maxD = 1;
+      for (const e of vis.list) if (e.d2 > maxD) maxD = e.d2;
+      maxD *= 1.2;
+      const cx = x + w / 2 + this._clusterPanX;
+      const cy = y + h / 2 + this._clusterPanY;
+      const baseR = Math.min(w / 2, h / 2) - 24;
+      const scale = (baseR * this._clusterZoom) / maxD;
+      const toSx = (lx) => cx + ((lx ?? 0) - (home.x ?? 0)) * scale;
+      const toSy = (ly) => cy + ((ly ?? 0) - (home.y ?? 0)) * scale;
+      projS  = (o)      => ({ sx: toSx(o.x), sy: toSy(o.y) });
+      projPt = (gx, gy) => ({ sx: toSx(gx), sy: toSy(gy) });
+    }
 
     // Linie jump-gate (między widocznymi)
     for (const g of systems.filter(s => s.jumpGate && visIds.has(s.id))) {
       const connTo = ssMgr?.getSystem(g.id)?.jumpGate?.connectedTo;
       const other = connTo && visIds.has(connTo) ? systems.find(s => s.id === connTo) : null;
       if (!other) continue;
+      const a = projS(g), b = projS(other);
+      if (!a || !b) continue;
       ctx.strokeStyle = 'rgba(170,136,255,0.4)'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
-      ctx.beginPath(); ctx.moveTo(toSx(g.x), toSy(g.y)); ctx.lineTo(toSx(other.x), toSy(other.y)); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
     }
     // Linie tranzytu warp
     for (const v of (vMgr?.getInterstellarVessels() ?? [])) {
@@ -4495,16 +4599,19 @@ export class FleetManagerOverlay {
       const fromS = systems.find(s => s.id === m.fromSystemId);
       const toS   = systems.find(s => s.id === m.toSystemId);
       if (!fromS || !toS) continue;
+      const a = projS(fromS), b = projS(toS);
+      if (!a || !b) continue;
       ctx.strokeStyle = 'rgba(255,170,50,0.3)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.moveTo(toSx(fromS.x), toSy(fromS.y)); ctx.lineTo(toSx(toS.x), toSy(toS.y)); ctx.stroke(); ctx.setLineDash([]);
-      const vsx = toSx(m.currentGalX ?? fromS.x), vsy = toSy(m.currentGalY ?? fromS.y);
-      ctx.fillStyle = THEME.warning; ctx.beginPath(); ctx.arc(vsx, vsy, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
+      const vp = projPt(m.currentGalX ?? fromS.x, m.currentGalY ?? fromS.y);
+      if (vp) { ctx.fillStyle = THEME.warning; ctx.beginPath(); ctx.arc(vp.sx, vp.sy, 3, 0, Math.PI * 2); ctx.fill(); }
     }
 
-    // Gwiazdy (widoczne)
+    // Gwiazdy (widoczne) — w 3D ciało rysuje WebGL pod spodem; tu chrome 2D
     const selSys = this._selectedClusterSystem;
     for (const { s, known } of vis.list) {
-      const sx = toSx(s.x), sy = toSy(s.y);
+      const pp = projS(s); if (!pp) continue;
+      const sx = pp.sx, sy = pp.sy;
       if (sx < x - 20 || sx > x + w + 20 || sy < y - 20 || sy > y + h + 20) continue;
       const isHome = !!s.isHome;
       const isSelected = selSys === s.id;
@@ -4512,13 +4619,16 @@ export class FleetManagerOverlay {
       const empKnown = vis.isEmpKnown(s);
       let r = isHome ? 6 : (known ? 4 : 3); if (isSelected || isHover) r += 1;
       const dim = !known && !isHome;   // w zasięgu, ale niezbadana → „widmowa"
-      if (isHome || isSelected) {
-        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 4);
-        grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.18)' : 'rgba(0,255,180,0.18)'); grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(sx, sy, r * 4, 0, Math.PI * 2); ctx.fill();
+      if (!use3D) {
+        // 2D: ciało gwiazdy rysujemy tu (w 3D rysuje je WebGL)
+        if (isHome || isSelected) {
+          const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 4);
+          grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.18)' : 'rgba(0,255,180,0.18)'); grad.addColorStop(1, 'transparent');
+          ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(sx, sy, r * 4, 0, Math.PI * 2); ctx.fill();
+        }
+        // „Małe słońce" w realnym kolorze typu gwiazdy (stan = nakładki niżej)
+        this._drawStarGlyph(ctx, sx, sy, r, s, dim);
       }
-      // „Małe słońce" w realnym kolorze typu gwiazdy (stan = nakładki niżej)
-      this._drawStarGlyph(ctx, sx, sy, r, s, dim);
       if (empKnown) {
         const host = dipl?.getHostility?.(s.empireId) ?? 0;
         ctx.strokeStyle = host <= 30 ? (THEME.success ?? '#44cc66') : host <= 70 ? (THEME.warning ?? '#ffcc44') : (THEME.danger ?? '#ff4466');
