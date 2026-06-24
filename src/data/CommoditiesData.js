@@ -355,7 +355,10 @@ export const COMMODITIES = {
     nameEN:      'Basic Supplies',
     icon:        '🔩',
     tier:        1,
-    recipe:      { Fe: 3, C: 3, Cu: 1 },
+    // Reforma węgla (2026-06-24): C usunięty (był jednym z 3 dóbr konsumpcyjnych
+    // przeciążających węgiel). Metalowa kotwica (Fe+Cu = uszczelki/narzędzia) zostaje,
+    // woda = bytowy element (filtry/leki). Uwaga: woda dostaje ×2.0 na non-breathable.
+    recipe:      { Fe: 3, Cu: 1, water: 1 },
     baseTime:    0.20,
     weight:      2.0,
     isConsumerGood: true, consumptionLayer: 'functioning',
@@ -369,7 +372,10 @@ export const COMMODITIES = {
     nameEN:      'Civilian Goods',
     icon:        '👕',
     tier:        1,
-    recipe:      { C: 4, Si: 3, Li: 1 },
+    // Reforma węgla (2026-06-24): C zmniejszony 4→2 (polimer ubrań syntetycznych
+    // zostaje, ale o połowę), Li wypada, +food pod „przetworzoną żywność". Cel:
+    // zbić powtarzalny dren C bez utraty tematu. food nie ma mnożnika ×2.0 atmo.
+    recipe:      { C: 2, Si: 3, food: 1 },
     baseTime:    0.25,
     weight:      1.5,
     isConsumerGood: true, consumptionLayer: 'comfort',
