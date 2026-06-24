@@ -34,13 +34,14 @@ const HINT_W     = 16;                   // rezerwa na chevron „▾ +N" po pra
 const LEFT_W     = 200;                  // STAŁA szerokość lewej strefy (nazwa kolonii + pop); reszta = strefa środkowa (zasoby, overflow hidden)
 const RIGHT_RESERVE = 80;               // fallback rezerwy prawego bloku (bell+MENU) gdy topClusterLeftX nieustawione
 
-// Odstępy tokenów — ciasne, by zmieścić cały ogon surowców w aktywnym wierszu (UI v3).
-const GAP_ICON   = 2;
-const GAP_VAL    = 2;
-const GAP_PLAIN  = 3;
-const GAP_TOKEN  = 3;
-const GAP_DELTA0 = 2;
-const GAP_GROUP  = 6;
+// Anti-jitter (UI v3): treść tokenu rysowana jak dawniej (ikona·wartość·delta,
+// hugujące), ale każdy slot ma szerokość = HIGH-WATER MARK (najszersza, jaką token
+// kiedykolwiek pokazał — patrz _hwSlot). Dzięki temu przy zmianie liczb pozycje
+// kolejnych surowców nie skaczą (zero kaskady), a zarazem nie rezerwujemy
+// pesymistycznego maksa (gęstość ~ jak wcześniej, mieści 17 tokenów w ~1048 px).
+const ICON_GAP   = 2;        // ikona → wartość
+const VALUE_GAP  = 2;        // wartość → delta
+const TOKEN_GAP  = 3;        // slot → następny token (= dawny GAP_TOKEN → ta sama gęstość)
 
 function _fmtNum(n) {
   const a = Math.abs(n);
@@ -75,6 +76,9 @@ export class TopResourceDrawer {
     this._colonyRects   = [];    // [{x,y,w,h, planetId}] — klik nazwy → panel kolonii
     this._hitItems      = [];    // [{x,y,w,h, tip}] — tooltipy per token
     this._hoverTip      = null;
+    this._hw            = new Map(); // high-water szer. slotu per (kolonia|token) → stałe pozycje
+    this._hwFontKey     = null;      // reset HW przy zmianie fontu motywu
+    this._hwRowId       = '_';       // id kolonii bieżącego wiersza (klucz HW)
   }
 
   _markDirty() { const um = window.KOSMOS?.uiManager; if (um) um._dirty = true; }
@@ -250,6 +254,7 @@ export class TopResourceDrawer {
   // jest poza tym drawerem (TopBar/BottomBar, fixed do prawej) — `pw` już ją rezerwuje.
   _drawRow(ctx, col, data, px, rowTop, pw, isActive) {
     const cy = rowTop + ROW_H / 2;
+    this._hwRowId = col?.planetId ?? '_';   // klucz HW slotów dla tego wiersza
     const leftW = Math.min(LEFT_W, Math.max(0, pw - 40));   // na wąskim wierszu nie zjadaj całości
 
     // Dolna linia + highlight aktywnego (pełna szerokość wiersza)
@@ -310,23 +315,37 @@ export class TopResourceDrawer {
     ctx.textBaseline = 'alphabetic';
   }
 
-  // Rysuje token (ikona PNG/emoji + wartość + delta) i dorzuca hit-rect. Zwraca nowe cx.
-  // Port z BottomResourceBar._drawItem (zawsze render).
-  _drawItem(ctx, it, cx, iconCY, rowTop, iconSize) {
-    const itemStartX = cx;
+  // High-water szerokość slotu dla tokenu w bieżącym wierszu: max(dotychczasowa,
+  // bieżąca naturalna). Nigdy nie maleje → przy spadku liczby zostaje luz na końcu
+  // slotu zamiast wciągać kolejne tokeny w lewo (zero kaskady). Reset przy zmianie
+  // fontu motywu (px ≠ porównywalne między fontami). Klucz = kolonia|token.
+  _hwSlot(it, naturalW) {
+    const fontKey = `${THEME.fontSizeNormal}|${THEME.fontSizeSmall}|${THEME.fontFamily}`;
+    if (this._hwFontKey !== fontKey) { this._hw.clear(); this._hwFontKey = fontKey; }
+    const key = `${this._hwRowId}|${it.id ?? it.kind ?? 'x'}`;
+    const prev = this._hw.get(key) ?? 0;
+    if (naturalW > prev) { this._hw.set(key, naturalW); return naturalW; }
+    return prev;
+  }
 
+  // Rysuje token (ikona PNG/emoji + wartość + delta, hugujące jak dawniej) i dorzuca
+  // hit-rect. Zwraca początek następnego slotu = slotX + HIGH-WATER szer. + TOKEN_GAP,
+  // więc pozycja kolejnego surowca jest stała mimo zmian liczb (anti-jitter, UI v3).
+  _drawItem(ctx, it, slotX, iconCY, rowTop, iconSize) {
+    let cx = slotX;
+
+    // 1. Ikona (naturalna szerokość — stała w czasie dla danego surowca)
+    ctx.font = `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`;
+    ctx.fillStyle = it.color || THEME.textSecondary;
     if (it.id && hasIconFile(it.id)) {
-      ctx.font = `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`;
-      ctx.fillStyle = it.color || THEME.textSecondary;
-      cx += drawResourceIcon(ctx, it.id, cx, iconCY, iconSize, it.icon) + GAP_ICON;
+      cx += drawResourceIcon(ctx, it.id, cx, iconCY, iconSize, it.icon) + ICON_GAP;
     } else {
-      ctx.font = `${THEME.fontSizeNormal + 3}px ${THEME.fontFamily}`;
-      ctx.fillStyle = it.color || THEME.textSecondary;
       ctx.textBaseline = 'middle';
       ctx.fillText(it.icon, cx, iconCY);
-      cx += ctx.measureText(it.icon).width + GAP_ICON;
+      cx += ctx.measureText(it.icon).width + ICON_GAP;
     }
 
+    // 2. Wartość (lewy-align, huga ikonę — jak wcześniej)
     const valStr = it.valText != null
       ? it.valText
       : it.raw
@@ -336,21 +355,25 @@ export class TopResourceDrawer {
     ctx.fillStyle = it.raw ? (it.color || THEME.textPrimary) : THEME.textPrimary;
     ctx.textBaseline = 'middle';
     ctx.fillText(valStr, cx, iconCY);
-    cx += ctx.measureText(valStr).width + (it.showDelta ? GAP_VAL : GAP_PLAIN);
+    cx += ctx.measureText(valStr).width + VALUE_GAP;
 
-    const dThresh = it.kind === 'prosperity' ? 0.5 : 0.05;
-    if (it.showDelta && Math.abs(it.delta ?? 0) > dThresh) {
-      const dStr = _fmtDelta(it.delta);
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = it.delta >= 0 ? THEME.success : THEME.danger;
-      ctx.fillText(dStr, cx, iconCY);
-      cx += ctx.measureText(dStr).width + GAP_TOKEN;
-    } else if (it.showDelta) {
-      cx += GAP_DELTA0;
+    // 3. Delta (huga wartość; rysowana tylko gdy istotna — lewy brzeg = prawy brzeg
+    //    wartości, więc przy zmianie delty „dorasta" tylko jej prawy koniec).
+    if (it.showDelta) {
+      const dThresh = it.kind === 'prosperity' ? 0.5 : 0.05;
+      if (Math.abs(it.delta ?? 0) > dThresh) {
+        const dStr = _fmtDelta(it.delta);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = it.delta >= 0 ? THEME.success : THEME.danger;
+        ctx.fillText(dStr, cx, iconCY);
+        cx += ctx.measureText(dStr).width;
+      }
     }
 
-    if (it.kind) this._hitItems.push({ x: itemStartX, y: rowTop, w: cx - itemStartX - 4, h: ROW_H, tip: it });
-    return cx;
+    // Slot = high-water (stały po „rozgrzaniu") → następny token nie skacze.
+    const slotW = this._hwSlot(it, cx - slotX);
+    if (it.kind) this._hitItems.push({ x: slotX, y: rowTop, w: slotW, h: ROW_H, tip: it });
+    return slotX + slotW + TOKEN_GAP;
   }
 
   // ── Tooltip (port z BottomResourceBar — dane per token, bez globalnego breakdown) ──
