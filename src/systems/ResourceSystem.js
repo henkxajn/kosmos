@@ -330,8 +330,17 @@ export class ResourceSystem {
     }
 
     // ── 3. Konsumpcja fabryk (via spend() — nie rejestrowana jako consumer) ──
+    // WAŻNE: pokazujemy REALNE średnie zużycie, nie teoretyczną pojemność. Fabryka
+    // produkująca dobra konsumpcyjne produkuje DO popytu populacji i pauzuje, więc
+    // jej średnie zużycie surowca = min(pojemność, popyt) × receptura. Wcześniej linia
+    // pokazywała samą pojemność (produkcja non-stop na pełnej mocy) → rozbicie zawyżało
+    // zużycie ~5× (w „Nowej grze" receptury tier-1 ×5) i nie sumowało się do
+    // obserwowanej zmiany (snap._observedPerYear). Popyt = stawki prosperity_consumption
+    // rejestrowane przez ProsperitySystem na GOTOWE dobra. Dla towarów bez popytu
+    // (budowa/handel) brak throttlingu — wtedy realnie mielą blisko pojemności.
     const factSys = window.KOSMOS?.factorySystem;
     if (factSys?._allocations) {
+      const demandRates = this._producers.get('prosperity_consumption') ?? {};
       let factoryConsumption = 0;
       for (const [commodityId, alloc] of factSys._allocations) {
         if (alloc._paused) continue;
@@ -340,10 +349,15 @@ export class ResourceSystem {
         const recipe = factSys._getScaledRecipe?.(def.recipe, commodityId) ?? def.recipe;
         const needed = recipe[resourceId];
         if (!needed || needed <= 0) continue;
-        // Stawka konsumpcji: units/rok = (points × speedMult / baseTime) × recipe[res]
+        // Pojemność (gotowych szt/rok) = points × speedMult / baseTime
         const speedMult = window.KOSMOS?.scenario === 'civilization_boosted' ? 1.5 : 1;
-        const unitsPerYear = (alloc.points * speedMult / def.baseTime) * needed;
-        factoryConsumption += unitsPerYear;
+        const capacityPerYear = alloc.points * speedMult / def.baseTime;
+        // Popyt na to dobro (gotowych szt/rok) — gdy istnieje, produkcja ≈ popyt (reszta = pauza).
+        const demandPerYear = Math.abs(demandRates[commodityId] ?? 0);
+        const unitsPerYear = demandPerYear > 0
+          ? Math.min(capacityPerYear, demandPerYear)
+          : capacityPerYear;
+        factoryConsumption += unitsPerYear * needed;
       }
       if (factoryConsumption > 0) {
         consumers['factory'] = { total: -factoryConsumption, count: 1 };
