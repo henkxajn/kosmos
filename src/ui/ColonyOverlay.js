@@ -362,7 +362,7 @@ export class ColonyOverlay extends BaseOverlay {
   _fitMapToView(grid) {
     const canvas = document.getElementById('ui-canvas');
     if (!canvas) return;
-    const W = canvas.width / _UI_SCALE, H = canvas.height / _UI_SCALE;
+    const _r = canvas.getBoundingClientRect(); const W = _r.width / _UI_SCALE, H = _r.height / _UI_SCALE;  // CSS-size (niezależne od DPR backing store)
     const { ow, oh } = this._getOverlayBounds(W, H);
     const mapW = (ow - this._infoW(ow)) - 20, mapH = oh - HDR_H - BUILD_BAR_H - 20;
     const gp = grid.gridPixelSize(1);
@@ -2605,7 +2605,7 @@ export class ColonyOverlay extends BaseOverlay {
 
     // Ogranicz max wysokość panelu do 70% viewport
     const canvas = document.getElementById('ui-canvas');
-    const maxPanelH = canvas ? (canvas.height / _UI_SCALE) * 0.65 : 500;
+    const maxPanelH = canvas ? (canvas.getBoundingClientRect().height / _UI_SCALE) * 0.65 : 500;
     const contentH = h;
     h = Math.min(h, maxPanelH);
 
@@ -3090,7 +3090,7 @@ export class ColonyOverlay extends BaseOverlay {
   _getMapBounds() {
     const canvas = document.getElementById('ui-canvas');
     if (!canvas) return null;
-    const W = canvas.width / _UI_SCALE, H = canvas.height / _UI_SCALE;
+    const _r = canvas.getBoundingClientRect(); const W = _r.width / _UI_SCALE, H = _r.height / _UI_SCALE;  // CSS-size (niezależne od DPR backing store)
     const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
     // Mapa: overlay POMNIEJSZONY o prawą kolumnę info (szer.) oraz pasek budynków (wys.).
     return { ox, oy: oy + HDR_H + BUILD_BAR_H, ow: ow - this._infoW(ow), oh: oh - HDR_H - BUILD_BAR_H };
@@ -3115,7 +3115,7 @@ export class ColonyOverlay extends BaseOverlay {
     // Sprawdź czy klik jest w overlay bounds
     const canvas = document.getElementById('ui-canvas');
     if (canvas) {
-      const W = canvas.width / _UI_SCALE, H = canvas.height / _UI_SCALE;
+      const _r = canvas.getBoundingClientRect(); const W = _r.width / _UI_SCALE, H = _r.height / _UI_SCALE;  // CSS-size (niezależne od DPR backing store)
       const { ox, oy, ow, oh } = this._getOverlayBounds(W, H);
       // Klik POZA overlay → przepuść do reszty UI (tempo, lewy panel, itp.)
       if (x < ox || x > ox + ow || y < oy || y > oy + oh) return false;

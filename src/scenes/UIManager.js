@@ -70,6 +70,8 @@ let _PW = window.innerWidth;
 let _PH = window.innerHeight;
 // Skala UI względem bazowego 1280×720 — automatycznie skaluje tekst i panele
 let UI_SCALE = Math.min(_PW / 1280, _PH / 720);
+// DPR backing store (cap 2 = limit kosztu): canvas renderuje w pikselach urządzenia → ostrość na HiDPI
+let _DPR = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
 // Wymiary logiczne (używane w kodzie rysującym — niezależne od DPI/rozdzielczości)
 let W = Math.round(_PW / UI_SCALE);
 let H = Math.round(_PH / UI_SCALE);
@@ -79,6 +81,7 @@ function _recalcDimensions() {
   _PW = window.innerWidth;
   _PH = window.innerHeight;
   UI_SCALE = Math.min(_PW / 1280, _PH / 720);
+  _DPR = Math.min(window.devicePixelRatio || 1, 2);
   W = Math.round(_PW / UI_SCALE);
   H = Math.round(_PH / UI_SCALE);
   // Wystaw skalę logiczne→ekran dla DOM overlay'i (menu/dropdown pozycjonują się w px ekranu).
@@ -158,16 +161,16 @@ const TOOLTIP_OFS    = 14;
 
 export class UIManager {
   constructor(uiCanvas) {
-    uiCanvas.width  = _PW;
-    uiCanvas.height = _PH;
+    uiCanvas.width  = Math.round(_PW * _DPR);   // backing store w px urządzenia (CSS-size = 100% → ostro)
+    uiCanvas.height = Math.round(_PH * _DPR);
     this.canvas = uiCanvas;
     this.ctx    = uiCanvas.getContext('2d');
 
     // Resize handler — aktualizuj wymiary canvas przy fullscreen / resize
     window.addEventListener('resize', () => {
       _recalcDimensions();
-      this.canvas.width  = _PW;
-      this.canvas.height = _PH;
+      this.canvas.width  = Math.round(_PW * _DPR);
+      this.canvas.height = Math.round(_PH * _DPR);
       this._dirty = true;
     });
 
@@ -1498,7 +1501,7 @@ export class UIManager {
   _draw() {
     const ctx = this.ctx;
     ctx.save();
-    ctx.setTransform(UI_SCALE, 0, 0, UI_SCALE, 0, 0);
+    ctx.setTransform(UI_SCALE * _DPR, 0, 0, UI_SCALE * _DPR, 0, 0);  // logiczne → px urządzenia
     ctx.clearRect(0, 0, W, H);
 
     const civMode = !!window.KOSMOS?.civMode;
