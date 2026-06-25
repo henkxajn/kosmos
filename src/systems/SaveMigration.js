@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 87;
+export const CURRENT_VERSION     = 88;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -105,6 +105,7 @@ const MIGRATIONS = {
   84: _migrateV84toV85,
   85: _migrateV85toV86,
   86: _migrateV86toV87,
+  87: _migrateV87toV88,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2103,6 +2104,19 @@ function _migrateV82toV83(data) {
 // UI usuwa tryby manual/priority dla gracza → wymuś reactive na fabrykach
 // serializowanych kolonii (= kolonie gracza; AI rekonstruowane osobno).
 // + dodaj puste jednorazowe zlecenie (one-shot).
+// v87 → v88: Warp multi-hop (WarpRouteSystem) — lazy default vessel.warpRoute=null.
+//   Restore i tak robi `&& Array.isArray` fallback, ale stamp tutaj dla spójności
+//   łańcucha wersji (konwencja repo). Brak innych zmian formatu.
+function _migrateV87toV88(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  if (c4x?.vesselManager?.vessels) {
+    for (const v of c4x.vesselManager.vessels) {
+      if (v && typeof v === 'object' && v.warpRoute === undefined) v.warpRoute = null;
+    }
+  }
+  return data;
+}
+
 function _migrateV86toV87(data) {
   const c4x = data.civ4x ?? data.c4x;
   if (c4x?.colonies) {

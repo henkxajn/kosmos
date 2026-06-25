@@ -103,7 +103,12 @@ const visRes = o3._stratcomVisibleSystems();
 const visIds = visRes.list.map(e => e.s.id);
 ok(visRes.home?.id === 'sys_home', "visible: home wykryty");
 ok(visIds.includes('sys_home') && visIds.includes('sys_001') && visIds.includes('sys_002'), "visible: home/001/002 znane lub w zasięgu");
-ok(!visIds.includes('sys_099'), "visible: sys_099 (50 ly) poza zasięgiem → ukryty (mgła wojny)");
+// NOWY model: WSZYSTKIE gwiazdy widoczne (mapa nawigacyjna); sensory = inSensor.
+ok(visIds.includes('sys_099'), "visible: sys_099 (50 ly) TEŻ pokazany (pełna mapa gwiazd)");
+const far = visRes.list.find(e => e.s.id === 'sys_099');
+ok(far && far.inSensor === false, "sys_099 poza zasięgiem sensorów (inSensor=false)");
+const homeE = visRes.list.find(e => e.s.id === 'sys_home');
+ok(homeE && homeE.inSensor === true, "sys_home w zasięgu sensorów (inSensor=true)");
 
 // render dwupanelu bez wyjątku (radar duży)
 let t2 = null;

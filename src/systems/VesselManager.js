@@ -55,7 +55,7 @@ const SUN_MARGIN       = 0.1 * AU_TO_PX;                // margines ominięcia
 // Tankowanie: ile jednostek paliwa/rok docked vessel ładuje (z inventory kolonii)
 const REFUEL_RATES = {
   fuel:       3,    // jednostek/rok (zastępuje power_cells + plasma_cores — spłaszczenie 3→2)
-  warp_cores: 0.5,  // jednostek/rok
+  warp_cores: 2.0,  // jednostek/rok (4× vs bazowe 0.5 — szybkie tankowanie baku warp)
 };
 
 export class VesselManager {
@@ -1122,6 +1122,15 @@ export class VesselManager {
         assignedRouteId: v.assignedRouteId ?? null,
         // S3.5a-1 (v86) — licznik nieopłaconych lat utrzymania; >=2 → immobilized (pochodna).
         unpaidYears:    v.unpaidYears ?? 0,
+        // Warp multi-hop (v88) — aktywna trasa warp (WarpRouteSystem). null = brak.
+        // Przeżywa nadpisanie mission per skok; po load WarpRouteSystem łańcuchuje dalej.
+        warpRoute:      v.warpRoute ? {
+          hops:             [...v.warpRoute.hops],
+          legIndex:         v.warpRoute.legIndex ?? 0,
+          finalSystemId:    v.warpRoute.finalSystemId ?? null,
+          totalFuelPlanned: v.warpRoute.totalFuelPlanned ?? 0,
+          startedYear:      v.warpRoute.startedYear ?? 0,
+        } : null,
       });
     }
     return {
@@ -1237,6 +1246,14 @@ export class VesselManager {
         assignedRouteId: vd.assignedRouteId ?? null,
         // S3.5a-1 (v86) — nieopłacone lata utrzymania floty (default 0 — opłacony).
         unpaidYears:    vd.unpaidYears ?? 0,
+        // Warp multi-hop (v88) — aktywna trasa warp; null gdy brak/stary save.
+        warpRoute: (vd.warpRoute && Array.isArray(vd.warpRoute.hops)) ? {
+          hops:             [...vd.warpRoute.hops],
+          legIndex:         vd.warpRoute.legIndex ?? 0,
+          finalSystemId:    vd.warpRoute.finalSystemId ?? (vd.warpRoute.hops[vd.warpRoute.hops.length - 1] ?? null),
+          totalFuelPlanned: vd.warpRoute.totalFuelPlanned ?? 0,
+          startedYear:      vd.warpRoute.startedYear ?? 0,
+        } : null,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {
@@ -1278,6 +1295,12 @@ export class VesselManager {
             vessel.warpFuel.consumption = stats.fuelPerLY;
             vessel.warpFuel.current     = Math.min(vessel.warpFuel.current, vessel.warpFuel.max);
           }
+          // Zużycie paliwa IN-SYSTEM (bazowe, z modułów+masy = fuelMult silnika) + prędkość
+          // sublight (speedMult) — przelicz z modułów, by zmiany danych (np. fuelMult/speedMult
+          // warp) działały retroaktywnie na istniejące statki. Tech mnożniki nakładane przy starcie.
+          vessel._baseFuelPerAU = stats.fuelPerAU;
+          vessel.fuel.consumption = stats.fuelPerAU;   // natychmiastowy efekt (launch dołoży tech-mult)
+          vessel.speedAU        = stats.speed;
         }
       }
 

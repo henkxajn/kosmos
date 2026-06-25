@@ -112,6 +112,11 @@ export const GAME_CONFIG = {
   // oddalą się > tej wartości od midpoint → encounter kończony jako draw.
   COMBAT_DISENGAGE_AU: 0.50,
 
+  // ── Warp — twardy limit dystansu POJEDYNCZEGO skoku (LY) ────────────────────
+  // Cel dalej niż to = WarpRouteSystem planuje multi-hop przez układy pośrednie
+  // (każdy odcinek ≤ limit). Niezależny od pojemności baku (limit fizyczny napędu).
+  WARP_MAX_JUMP_LY: 10,
+
   // ── M3 P3.1 — POI runtime tunables ───────────────────────────────────────
   // POIRuntimeSystem detection throttling i parametry per-type.
   // Detection runs co N time:tick events (~16ms each) — co 10 = ~167ms delay.

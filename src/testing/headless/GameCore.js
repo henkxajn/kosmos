@@ -30,6 +30,7 @@ import { TechSystem }        from '../../systems/TechSystem.js';
 import { MissionSystem }     from '../../systems/MissionSystem.js';
 import { ColonyManager }     from '../../systems/ColonyManager.js';
 import { VesselManager }     from '../../systems/VesselManager.js';
+import { WarpRouteSystem }   from '../../systems/WarpRouteSystem.js';
 import { RandomEventSystem } from '../../systems/RandomEventSystem.js';
 import { FactorySystem }     from '../../systems/FactorySystem.js';
 import { DepositSystem }     from '../../systems/DepositSystem.js';
@@ -129,6 +130,7 @@ export class GameCore {
     this.missionSystem = this.expeditionSystem;
     this.colonyManager = new ColonyManager(this.techSystem);
     this.vesselManager = new VesselManager();
+    this.warpRouteSystem = new WarpRouteSystem(this.vesselManager);
     this.civilianTradeSystem = new CivilianTradeSystem(this.colonyManager);
     this.tradeLog = new TradeLog();
     this.randomEventSystem = new RandomEventSystem();
@@ -164,6 +166,7 @@ export class GameCore {
     K.missionSystem = this.missionSystem;
     K.colonyManager = this.colonyManager;
     K.vesselManager = this.vesselManager;
+    K.warpRouteSystem = this.warpRouteSystem;
     K.civilianTradeSystem = this.civilianTradeSystem;
     K.tradeLog = this.tradeLog;
     K.timeSystem = this.timeSystem;

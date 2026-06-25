@@ -75,13 +75,13 @@ export const SHIP_MODULES = {
     mass: 30,  // tony — ciężki
     cost: { Ti: 50, Hv: 20 },
     commodityCost: { warp_cores: 2, electronic_systems: 4, power_cells: 2 },  // S3.0b S3: bez T3-komponentów (były metamaterials+quantum_processors)
-    // ⚙ KNOBY balansu (S2b Opcja C): sublight 4.5 (najszybszy, ponad fuzją 3.8), fuelMult 2.3 (żarłoczny > fuzja 2.0; ratio ~1.96 > fuzja 1.90, monotoniczny),
-    //   rangeMult 2.0 (umiarkowany bufor in-system)
-    stats: { speedMult: 4.5, fuelMult: 2.3, rangeMult: 2.0 },
+    // ⚙ KNOBY balansu: sublight 9.0 (+100% vs 4.5), fuelMult 0.012 (in-system PRAWIE DARMOWY —
+    //   ÷50 vs 0.6; statki warp nie mają być ograniczane paliwem in-system), rangeMult 2.0
+    stats: { speedMult: 9.0, fuelMult: 0.012, rangeMult: 2.0 },
     fuelType: 'fuel',          // tryb in-system pali fuel (skok pali warp_cores przez warpFuel)
     warpCapable: true,
     warpSpeedLY: 2.0,          // prędkość skoku (LY/rok) — STAŁA między tierami
-    warpFuelPerLY: 0.5,        // S3.0b S1: warp_cores/LY (ekonomia z mini-audytu)
+    warpFuelPerLY: 0.125,      // warp_cores/LY (−75% vs 0.5 — tańsze skoki, dłuższy zasięg na bak)
     requires: 'ion_drives',    // S3.0b S3: warp mid-game (match warp_cores gate; było warp_drive T4)
     description: 'Dwutrybowy: sublight (fuel) w układzie + skok warp (warp_cores) między gwiazdami.',
   },
@@ -96,12 +96,12 @@ export const SHIP_MODULES = {
     mass: 32,  // tony
     cost: { Ti: 70, Hv: 30 },
     commodityCost: { warp_cores: 2, metamaterials: 6, quantum_processors: 3 },
-    // Tier podnosi moc sublight (4.5→5.5) i fuelMult (2.3→2.8). Skok (warpFuelPerLY/warpSpeedLY) bez zmian.
-    stats: { speedMult: 5.5, fuelMult: 2.8, rangeMult: 2.0 },
+    // Tier podnosi moc sublight (9.0→11.0). fuelMult 0.014 (in-system prawie darmowy — ÷50 vs 0.7).
+    stats: { speedMult: 11.0, fuelMult: 0.014, rangeMult: 2.0 },
     fuelType: 'fuel',
     warpCapable: true,
     warpSpeedLY: 2.0,          // STAŁA — progresja warpu odłożona (knob na później)
-    warpFuelPerLY: 0.5,        // STAŁA
+    warpFuelPerLY: 0.125,      // warp_cores/LY (−75% vs 0.5 — spójnie z engine_warp)
     requires: 'warp_drive_mk2', // load-bearing gate (UnitDesignOverlay czyta mod.requires)
     description: 'Ulepszony napęd warp — +50% mocy sublight. Skok bez zmian.',
   },

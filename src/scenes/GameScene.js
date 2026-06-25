@@ -31,6 +31,7 @@ import { TechSystem }        from '../systems/TechSystem.js';
 import { MissionSystem }    from '../systems/MissionSystem.js';
 import { ColonyManager }      from '../systems/ColonyManager.js';
 import { VesselManager }      from '../systems/VesselManager.js';
+import { WarpRouteSystem }    from '../systems/WarpRouteSystem.js';
 import { RandomEventSystem }  from '../systems/RandomEventSystem.js';
 import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }         from '../systems/DepositSystem.js';
@@ -238,6 +239,8 @@ export class GameScene {
     this.missionSystem    = this.expeditionSystem; // alias — ten sam obiekt
     this.colonyManager   = new ColonyManager(this.techSystem);
     this.vesselManager   = new VesselManager();
+    // Warp multi-hop — egzekutor sekwencji skoków (subskrybuje interstellar:arrived).
+    this.warpRouteSystem = new WarpRouteSystem(this.vesselManager);
     // Player Fleet Groups (save v73) — zawsze instancjowany dla save consistency;
     // FEATURES.playerFleets gates UI ekspozycję, nie istnienie obiektu.
     this.fleetSystem     = new FleetSystem(this.vesselManager);
@@ -308,6 +311,7 @@ export class GameScene {
     window.KOSMOS.missionSystem    = this.missionSystem;
     window.KOSMOS.colonyManager    = this.colonyManager;
     window.KOSMOS.vesselManager    = this.vesselManager;
+    window.KOSMOS.warpRouteSystem  = this.warpRouteSystem;
     window.KOSMOS.fleetSystem      = this.fleetSystem;
     window.KOSMOS.overlayManager   = this.uiManager.overlayManager;
     window.KOSMOS.civilianTradeSystem = this.civilianTradeSystem;

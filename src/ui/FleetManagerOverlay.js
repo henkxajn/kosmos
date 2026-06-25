@@ -26,6 +26,7 @@ import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
+import { planWarpRoute, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showDropTroopsModal } from '../ui/DropTroopsModal.js';
 import { ColonistLoadModal } from '../ui/ColonistLoadModal.js';
@@ -257,6 +258,11 @@ export class FleetManagerOverlay {
     this._atlasScrollY = 0;       // scroll katalogu ciał
     this._atlasContentH = 0;      // wysokość zawartości katalogu
     this._atlasVisibleH = 0;      // widoczna wysokość katalogu
+    // Prawy panel taktyki (szczegóły statku) — pionowy scroll (treść bywa wyższa niż panel)
+    this._rightScrollY = 0;
+    this._rightContentH = 0;      // łączna wysokość treści panelu (do clampu)
+    this._rightViewH = 0;         // widoczna wysokość panelu
+    this._rightScrollVesselId = null;  // reset scrolla przy zmianie statku
 
     // Star Cluster — zoom, pan, selekcja
     this._clusterZoom = 1;
@@ -264,6 +270,10 @@ export class FleetManagerOverlay {
     this._clusterPanY = 0;
     this._selectedClusterSystem = null;
     this._clusterHoverSystem = null;
+
+    // Warp multi-hop — lewa tabela statków warp na radarze + rozkaz „skok do układu".
+    this._selectedWarpShipId = null;  // wybrany statek warp (marker + cel rozkazu)
+    this._warpShipScrollY = 0;        // scroll listy statków warp
 
     // Stratcom — galaktyka 3D (WebGL offscreen, lazy). Kamera orbitalna własna,
     // niezależna od _clusterZoom/Pan (te zostają dla płaskiego radaru i podglądu).
@@ -395,6 +405,7 @@ export class FleetManagerOverlay {
     this._clusterHoverSystem = null;
     this._hoverShipId = null;
     this._hoverVesselId = null;
+    this._rightScrollY = 0;   // reset scrolla prawego panelu przy zmianie zakładki
     // Tryb wyboru celu misji nie może przetrwać zmiany zakładki
     if (this._missionConfig?.step === 'select') {
       this._missionConfig = null;
@@ -405,6 +416,8 @@ export class FleetManagerOverlay {
     if (tab === 'stratcom') {
       this._selectedClusterSystem = null;
       this._pendingSendSystemId = null;
+      this._selectedWarpShipId = null;
+      this._warpShipScrollY = 0;
       this._stratcomBig = 'radar';   // wejście w Stratcom → duży radar (domyślny przegląd)
     }
   }
@@ -793,6 +806,12 @@ export class FleetManagerOverlay {
     // Scroll w RIGHT (konfigurator celów)
     if (mx > b.x + b.w - RIGHT_W && this._missionConfig?.step === 'select') {
       this._targetScrollOffset = Math.max(0, this._targetScrollOffset + delta * 0.5);
+      return true;
+    }
+    // Scroll w RIGHT (panel szczegółów statku/floty) — gdy NIE konfigurator celów
+    if (mx > b.x + b.w - RIGHT_W && (this._selectedVesselId || this._selectedFleetId) && this._missionConfig?.step !== 'select') {
+      const maxScroll = Math.max(0, (this._rightContentH || 0) - (this._rightViewH || 0));
+      this._rightScrollY = Math.max(0, Math.min(maxScroll, (this._rightScrollY || 0) + delta * 0.5));
       return true;
     }
     // Zoom-at-cursor mapy taktycznej
@@ -1246,7 +1265,11 @@ export class FleetManagerOverlay {
           if (selV && selV.warpFuel?.max > 0 &&
               selV.position.state === 'docked' &&
               (selV.status === 'idle' || selV.status === 'refueling')) {
-            if (vMgr2.dispatchInterstellar(selV.id, zone.data.systemId)) break;
+            // Multi-hop: planer trasy (limit skoku) zamiast bezpośredniego dispatchu.
+            const wrs = window.KOSMOS?.warpRouteSystem;
+            const ok = wrs ? wrs.beginJourney(selV.id, zone.data.systemId).ok
+                           : vMgr2.dispatchInterstellar(selV.id, zone.data.systemId);
+            if (ok) break;
           }
         }
         // Brak wybranego statku lub nie spełnia wymagań → pokaż ship picker
@@ -1254,10 +1277,12 @@ export class FleetManagerOverlay {
         break;
       }
       case 'cluster_send_pick': {
-        // Wybór konkretnego statku z pickera
+        // Wybór konkretnego statku z pickera — przez planer trasy (multi-hop + limit skoku).
         const vMgr2b = window.KOSMOS?.vesselManager;
         if (vMgr2b && zone.data.vesselId && zone.data.systemId) {
-          vMgr2b.dispatchInterstellar(zone.data.vesselId, zone.data.systemId);
+          const wrs = window.KOSMOS?.warpRouteSystem;
+          if (wrs) wrs.beginJourney(zone.data.vesselId, zone.data.systemId);
+          else vMgr2b.dispatchInterstellar(zone.data.vesselId, zone.data.systemId);
           this._pendingSendSystemId = null;
         }
         break;
@@ -1266,6 +1291,28 @@ export class FleetManagerOverlay {
         this._pendingSendSystemId = null;
         break;
       }
+      case 'warp_ship_select':
+        // Toggle wyboru statku warp (lewa tabela radaru) → marker + cel rozkazu.
+        this._selectedWarpShipId = (this._selectedWarpShipId === zone.data.vesselId) ? null : zone.data.vesselId;
+        break;
+      case 'warp_order_send': {
+        const wrs = window.KOSMOS?.warpRouteSystem;
+        if (wrs && zone.data.vesselId && zone.data.systemId) {
+          const res = wrs.beginJourney(zone.data.vesselId, zone.data.systemId);
+          if (res?.ok) {
+            this._selectedClusterSystem = null;  // wyczyść uzbrojony cel; statek zostaje wybrany (marker)
+            EventBus.emit('ui:toast', { text: t('fleet.warpOrderSent'), color: THEME.accent, durationMs: 2500 });
+          } else {
+            EventBus.emit('ui:toast', { text: t('fleet.warpOrderFailed'), color: THEME.danger ?? '#ff4466', durationMs: 3000 });
+          }
+        }
+        break;
+      }
+      case 'warp_order_cancel':
+        this._selectedClusterSystem = null;
+        break;
+      case 'warp_order_bg':
+        break;   // absorber kliknięć tła panelu rozkazu (nie przepuszcza do gwiazd pod spodem)
       case 'cluster_beacon': {
         EventBus.emit('orbital:buildBeacon', { systemId: zone.data.systemId });
         break;
@@ -3828,9 +3875,11 @@ export class FleetManagerOverlay {
     return STRATCOM_BASE_LY + lvl * STRATCOM_STEP_LY;
   }
 
-  // Zbiór systemów widocznych w Stratcomie (mgła wojny) — wspólny dla radaru i mapy
-  // galaktyki. Widoczne: home + zbadane + imperia z intel>=rumor LUB w żywym zasięgu radaru.
-  // Zwraca { home, list:[{s,d2,known}] (sort wg odległości), rangeLY, isEmpKnown }.
+  // Zbiór systemów Stratcomu — wspólny dla radaru i mapy galaktyki. Pokazujemy
+  // WSZYSTKIE gwiazdy (mapa nawigacyjna — można planować skoki do odległych).
+  // `known` = zbadane/home/intel-empire; `inSensor` = w zasięgu sensorów obserwatorium
+  // (wykrywanie OBECNOŚCI statków own/enemy ograniczone do tego promienia).
+  // Zwraca { home, list:[{s,d2,known,inSensor}] (sort wg odległości), rangeLY, isEmpKnown }.
   _stratcomVisibleSystems() {
     const systems = window.KOSMOS?.galaxyData?.systems ?? [];
     const home = systems.find(s => s.isHome) ?? null;
@@ -3844,8 +3893,7 @@ export class FleetManagerOverlay {
         const dy = (s.y ?? 0) - (home.y ?? 0);
         const d2 = Math.sqrt(dx * dx + dy * dy);
         const known = !!s.isHome || !!s.explored || isEmpKnown(s);
-        if (!known && d2 > rangeLY) continue;
-        list.push({ s, d2, known });
+        list.push({ s, d2, known, inSensor: d2 <= rangeLY });
       }
       list.sort((a, b) => a.d2 - b.d2);
     }
@@ -3968,11 +4016,23 @@ export class FleetManagerOverlay {
     const dipl   = window.KOSMOS?.diplomacySystem;
 
     // ── Geometria radaru ──────────────────────────────────────
-    const cx = x + w / 2 + this._clusterPanX;
+    // Lewa kolumna (tylko duży radar) = tabela statków warp; tarcza kurczy się do prawej.
+    const LIST_W = isBig ? Math.min(220, Math.round(w * 0.30)) : 0;
+    const dialX = x + LIST_W;
+    const dialW = w - LIST_W;
+    const cx = dialX + dialW / 2 + this._clusterPanX;
     const cy = y + h / 2 + this._clusterPanY;
-    const R  = Math.min(w, h) / 2 - 40;
-    const rangeLY = this._getStratcomRangeLY();
-    const scale = (R * this._clusterZoom) / rangeLY;   // px na ly
+    const R  = Math.min(dialW, h) / 2 - 40;
+    const rangeLY = this._getStratcomRangeLY();   // zasięg SENSORÓW (obserwatorium)
+    // Skala dopasowana do NAJDALSZEJ gwiazdy — radar pokazuje CAŁE pole gwiazd
+    // (nawigacja). Sensory (wykrywanie statków) ograniczone do rangeLY = osobny pierścień.
+    let maxD = rangeLY;
+    for (const s of systems) {
+      const d = Math.hypot((s.x ?? 0) - home.x, (s.y ?? 0) - home.y);
+      if (d > maxD) maxD = d;
+    }
+    maxD *= 1.08;
+    const scale = (R * this._clusterZoom) / maxD;   // px na ly
     const toSx = (lx) => cx + (lx - home.x) * scale;
     const toSy = (ly) => cy + (ly - home.y) * scale;
 
@@ -3983,11 +4043,11 @@ export class FleetManagerOverlay {
     ctx.clip();
 
     // ── Pierścienie zasięgu + krzyż celownika ─────────────────
-    const ringLYatScreen = rangeLY / this._clusterZoom;   // ly na zewnętrznym pierścieniu
+    const outerLY = maxD / this._clusterZoom;   // ly na zewnętrznym pierścieniu (pełne pole)
     ctx.lineWidth = 1;
     for (let i = 1; i <= 4; i++) {
       const rr = R * (i / 4);
-      ctx.strokeStyle = i === 4 ? 'rgba(0,255,180,0.28)' : 'rgba(0,255,180,0.10)';
+      ctx.strokeStyle = i === 4 ? 'rgba(0,255,180,0.22)' : 'rgba(0,255,180,0.08)';
       ctx.beginPath();
       ctx.arc(cx, cy, rr, 0, Math.PI * 2);
       ctx.stroke();
@@ -3995,7 +4055,21 @@ export class FleetManagerOverlay {
       ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText(`${(ringLYatScreen * i / 4).toFixed(1)} ly`, cx, cy - rr - 2);
+      ctx.fillText(`${(outerLY * i / 4).toFixed(1)} ly`, cx, cy - rr - 2);
+      ctx.textAlign = 'left';
+    }
+    // Pierścień ZASIĘGU SENSORÓW (obserwatorium) — w jego obrębie wykrywamy statki.
+    const sensorRR = Math.min(R, rangeLY * scale);
+    if (sensorRR > 4 && sensorRR < R - 1) {
+      ctx.strokeStyle = 'rgba(0,224,255,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.arc(cx, cy, sensorRR, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+      ctx.fillStyle = 'rgba(0,224,255,0.85)';
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.stratcomSensors', rangeLY.toFixed(0)), cx, cy + sensorRR + 9);
       ctx.textAlign = 'left';
     }
     // Krzyż
@@ -4037,10 +4111,15 @@ export class FleetManagerOverlay {
       ctx.stroke(); ctx.setLineDash([]);
     }
 
-    // Linie tranzytu międzygwiezdnego (pomarańczowe) + pozycja statku
+    // Linie tranzytu międzygwiezdnego (pomarańczowe) + pozycja statku.
+    // SENSORY: wykrywanie statków (own+enemy) tylko w zasięgu obserwatorium (rangeLY).
+    // Wybrany statek gracza pomijamy tu — ma własną trasę + marker (rysowane zawsze).
     for (const v of (vMgr?.getInterstellarVessels() ?? [])) {
+      if (v.id === this._selectedWarpShipId) continue;
       const m = v.mission;
       if (!m || m.phase !== 'warp_transit') continue;
+      const sx0 = m.currentGalX ?? 0, sy0 = m.currentGalY ?? 0;
+      if (Math.hypot(sx0 - home.x, sy0 - home.y) > rangeLY) continue;   // poza sensorami → niewykryty
       const fromS = systems.find(s => s.id === m.fromSystemId);
       const toS   = systems.find(s => s.id === m.toSystemId);
       if (!fromS || !toS) continue;
@@ -4055,10 +4134,16 @@ export class FleetManagerOverlay {
       ctx.beginPath(); ctx.arc(vsx, vsy, 3, 0, Math.PI * 2); ctx.fill();
     }
 
-    // ── Zbiór „znanych"/w-zasięgu systemów (mgła wojny) — wspólny z mapą galaktyki ──
+    // Trasa wybranego statku warp (CAŁA, do celu): bieżący skok + pozostałe (2 kolory).
+    {
+      const selMv = this._selectedWarpShipId ? vMgr?.getVessel?.(this._selectedWarpShipId) : null;
+      if (selMv?.warpRoute) this._drawWarpRouteLine(ctx, selMv.warpRoute, (s) => ({ sx: toSx(s.x ?? 0), sy: toSy(s.y ?? 0) }));
+    }
+
+    // ── Wszystkie gwiazdy (radar = pełna mapa nawigacyjna) ──
     const vis = this._stratcomVisibleSystems();
     const isEmpKnown = vis.isEmpKnown;
-    const shown = vis.list.slice(0, STRATCOM_MAX_BLIPS);
+    const shown = vis.list;
 
     const selSys = this._selectedClusterSystem;
     let anyBeyondHome = false;
@@ -4141,12 +4226,32 @@ export class FleetManagerOverlay {
       }
     }
 
+    // Marker „mój statek" — wybrany statek warp (bieżący układ lub pozycja tranzytu).
+    if (this._selectedWarpShipId) {
+      const mv = vMgr?.getVessel?.(this._selectedWarpShipId);
+      if (mv) {
+        let mx = null, my = null;
+        if (mv.position?.state === 'in_transit' && mv.mission?.type === 'interstellar_jump') {
+          mx = toSx(mv.mission.currentGalX ?? mv.mission.fromGalX ?? 0);
+          my = toSy(mv.mission.currentGalY ?? mv.mission.fromGalY ?? 0);
+        } else {
+          const msys = systems.find(s => s.id === (mv.systemId ?? 'sys_home'));
+          if (msys) { mx = toSx(msys.x ?? 0); my = toSy(msys.y ?? 0); }
+        }
+        if (mx != null && Math.hypot(mx - cx, my - cy) <= R) this._drawMyShipMarker(ctx, mx, my);
+      }
+    }
+
     ctx.restore(); // koniec clipu koła
 
-    // ── Panel polityczny wybranego systemu (tylko gdy radar duży) ──
+    // ── Panel wybranego systemu (tylko gdy radar duży) ──
+    // Wybrany statek warp → panel rozkazu skoku; inaczej panel polityczny.
     if (isBig && selSys) {
       const selData = systems.find(s => s.id === selSys);
-      if (selData) this._drawStratcomPolitical(ctx, x, y, w, h, selData, empReg, intel, dipl, colMgr);
+      if (selData) {
+        if (this._selectedWarpShipId) this._drawWarpOrderPanel(ctx, dialX, y, dialW, h, selData, vMgr);
+        else this._drawStratcomPolitical(ctx, dialX, y, dialW, h, selData, empReg, intel, dipl, colMgr);
+      }
     }
 
     ctx.restore(); // koniec clipu prostokąta
@@ -4156,10 +4261,10 @@ export class FleetManagerOverlay {
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
     ctx.textAlign = 'left';
-    ctx.fillText(t('fleet.stratcomRange', rangeLY.toFixed(0)), x + PAD, y + 16);
+    ctx.fillText(t('fleet.stratcomRange', rangeLY.toFixed(0)), dialX + PAD, y + 16);
     if (isBig) {
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('fleet.stratcomObsLevel', obsLvl), x + PAD, y + 30);
+      ctx.fillText(t('fleet.stratcomObsLevel', obsLvl), dialX + PAD, y + 30);
     }
     if (isBig && !anyBeyondHome) {
       ctx.fillStyle = THEME.warning;
@@ -4168,9 +4273,9 @@ export class FleetManagerOverlay {
       ctx.textAlign = 'left';
     }
 
-    // ── Legenda (lewy-dolny) — tylko gdy duży ──
+    // ── Legenda (lewy-dolny dla tarczy) — tylko gdy duży ──
     if (isBig) {
-      const lx = x + PAD;
+      const lx = dialX + PAD;
       let ly = y + h - 56;
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
       const items = [
@@ -4186,6 +4291,9 @@ export class FleetManagerOverlay {
         ly += 13;
       }
     }
+
+    // ── Tabela statków warp (lewa kolumna, tylko duży radar) ──
+    if (isBig && LIST_W > 0) this._drawWarpShipList(ctx, x, y, LIST_W, h, vMgr);
 
     // Mały radar — całość klikalna jako „rozwiń" (priorytet niski, dodany na końcu).
     if (!isBig) this._hitZones.push({ x, y, w, h, type: 'stratcom_expand', data: { panel: 'radar' } });
@@ -4631,9 +4739,14 @@ export class FleetManagerOverlay {
       ctx.strokeStyle = 'rgba(170,136,255,0.4)'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
       ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
     }
-    // Linie tranzytu warp
+    // Linie tranzytu warp — SENSORY: tylko statki w zasięgu obserwatorium (rangeLY).
+    // Wybrany statek gracza pomijamy (ma własną trasę + marker rysowane zawsze).
+    const sensorRangeLY = vis.rangeLY;
     for (const v of (vMgr?.getInterstellarVessels() ?? [])) {
+      if (v.id === this._selectedWarpShipId) continue;
       const m = v.mission; if (!m || m.phase !== 'warp_transit') continue;
+      const sx0 = m.currentGalX ?? 0, sy0 = m.currentGalY ?? 0;
+      if (Math.hypot(sx0 - (home.x ?? 0), sy0 - (home.y ?? 0)) > sensorRangeLY) continue;
       const fromS = systems.find(s => s.id === m.fromSystemId);
       const toS   = systems.find(s => s.id === m.toSystemId);
       if (!fromS || !toS) continue;
@@ -4643,6 +4756,12 @@ export class FleetManagerOverlay {
       ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
       const vp = projPt(m.currentGalX ?? fromS.x, m.currentGalY ?? fromS.y);
       if (vp) { ctx.fillStyle = THEME.warning; ctx.beginPath(); ctx.arc(vp.sx, vp.sy, 3, 0, Math.PI * 2); ctx.fill(); }
+    }
+
+    // Trasa wybranego statku warp (CAŁA, do celu) — bieżący skok + pozostałe (2 kolory).
+    {
+      const selMv = this._selectedWarpShipId ? vMgr?.getVessel?.(this._selectedWarpShipId) : null;
+      if (selMv?.warpRoute) this._drawWarpRouteLine(ctx, selMv.warpRoute, (s) => projS(s));
     }
 
     // Gwiazdy (widoczne) — w 3D ciało rysuje WebGL pod spodem; tu chrome 2D
@@ -4690,10 +4809,28 @@ export class FleetManagerOverlay {
       }
     }
 
-    // Panel operacyjny (duży + selekcja)
+    // Marker „mój statek" — wybrany statek warp (projekcja 3D/2D galaktyki).
+    if (this._selectedWarpShipId) {
+      const mv = vMgr?.getVessel?.(this._selectedWarpShipId);
+      if (mv) {
+        let p = null;
+        if (mv.position?.state === 'in_transit' && mv.mission?.type === 'interstellar_jump') {
+          p = projPt(mv.mission.currentGalX ?? mv.mission.fromGalX ?? 0, mv.mission.currentGalY ?? mv.mission.fromGalY ?? 0);
+        } else {
+          const msys = systems.find(s => s.id === (mv.systemId ?? 'sys_home'));
+          p = msys ? projS(msys) : null;
+        }
+        if (p) this._drawMyShipMarker(ctx, p.sx, p.sy);
+      }
+    }
+
+    // Panel operacyjny / rozkaz warp (duży + selekcja)
     if (isBig && selSys) {
       const selData = systems.find(s => s.id === selSys);
-      if (selData) this._drawStratcomOps(ctx, x, y, w, h, selData, ssMgr, vMgr, colMgr);
+      if (selData) {
+        if (this._selectedWarpShipId) this._drawWarpOrderPanel(ctx, x, y, w, h, selData, vMgr);
+        else this._drawStratcomOps(ctx, x, y, w, h, selData, ssMgr, vMgr, colMgr);
+      }
     }
 
     ctx.restore();
@@ -4833,6 +4970,241 @@ export class FleetManagerOverlay {
       ctx.fillText(t('fleet.clusterSwitch'), px + PAD + btnW / 2, iy + 13); ctx.textAlign = 'left';
       this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'cluster_switch', data: { systemId: sys.id } });
     }
+  }
+
+  // ── Warp multi-hop UI ──────────────────────────────────────────────────────
+
+  // Marker „mój statek" — wybrany statek warp. Pulsujący pierścień + trójkąt
+  // (odróżnialny od pomarańczowej kropki tranzytu warp innych statków).
+  _drawMyShipMarker(ctx, sx, sy) {
+    const t0 = (typeof performance !== 'undefined' ? performance.now() : 0);
+    const pulse = 0.5 + 0.5 * Math.sin(t0 / 600 * Math.PI);
+    ctx.save();
+    ctx.strokeStyle = THEME.accent;
+    ctx.globalAlpha = 0.35 + 0.45 * pulse;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(sx, sy, 8 + pulse * 3, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = THEME.accent;
+    ctx.strokeStyle = '#06121a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - 6);
+    ctx.lineTo(sx - 5, sy + 5);
+    ctx.lineTo(sx + 5, sy + 5);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Rysuje CAŁĄ pozostałą trasę warp (od bieżącego odcinka do celu). Bieżący skok
+  // w jednym kolorze (cyan), pozostałe w drugim (fioletowy). projSysPt(systemObj)
+  // → {sx,sy}|null (radar: toSx/toSy; galaktyka: projS).
+  _drawWarpRouteLine(ctx, route, projSysPt) {
+    if (!route || !Array.isArray(route.hops) || route.hops.length < 2) return;
+    const systems = window.KOSMOS?.galaxyData?.systems ?? [];
+    const li = route.legIndex || 0;
+    const ptOf = (id) => { const s = systems.find(x => x.id === id); return s ? projSysPt(s) : null; };
+    ctx.save();
+    for (let i = li; i < route.hops.length - 1; i++) {
+      const a = ptOf(route.hops[i]);
+      const b = ptOf(route.hops[i + 1]);
+      if (!a || !b) continue;
+      const isCurrent = (i === li);
+      ctx.setLineDash(isCurrent ? [7, 4] : [4, 5]);
+      ctx.lineWidth = isCurrent ? 2.5 : 1.8;
+      ctx.strokeStyle = isCurrent ? '#00e0ff' : '#b884ff';   // bieżący skok cyan / pozostałe fioletowe
+      ctx.globalAlpha = isCurrent ? 0.95 : 0.7;
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+      // Węzeł pośredni (cel etapowy) — mała kropka.
+      if (i < route.hops.length - 2) {
+        ctx.setLineDash([]); ctx.globalAlpha = 0.9;
+        ctx.fillStyle = '#b884ff';
+        ctx.beginPath(); ctx.arc(b.sx, b.sy, 2.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  // Etykieta statusu wiersza statku warp (nieaktywny → powód z canOrder).
+  _warpStatusLabel(reason) {
+    switch (reason) {
+      case 'in_transit':  return t('fleet.warpStatusInTransit');
+      case 'immobilized': return t('fleet.warpStatusImmobilized');
+      case 'docked':
+      case 'orbiting':    return t('fleet.warpStatusIdle');
+      default:            return t('fleet.warpStatusBusy');
+    }
+  }
+
+  // Lewa tabela statków warp (kolumna radaru). Pokazuje WSZYSTKIE statki gracza
+  // z napędem warp; nieaktywne wyszarzone ze statusem. Selekcja dowolnego (także
+  // w tranzycie) — by pokazać marker; rozkaz gated osobno w panelu rozkazu.
+  _drawWarpShipList(ctx, lx, ly, lw, h, vMgr) {
+    const PAD = 8;
+    ctx.fillStyle = 'rgba(6,12,18,0.55)';
+    ctx.fillRect(lx, ly, lw, h);
+    ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(lx + lw - 0.5, ly); ctx.lineTo(lx + lw - 0.5, ly + h); ctx.stroke();
+
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textHeader; ctx.textAlign = 'left';
+    ctx.fillText(t('fleet.warpShipsTitle'), lx + PAD, ly + 16);
+
+    const all = (vMgr?.getAllVessels?.() ?? []).filter(v => !isEnemyVessel(v) && !v.isWreck && v.warpFuel?.max > 0);
+    const wrs = window.KOSMOS?.warpRouteSystem;
+    const canAct = (v) => wrs?.canOrder ? wrs.canOrder(v).ok : (v.position?.state === 'docked' || v.position?.state === 'orbiting');
+    all.sort((a, b) => {
+      const aa = canAct(a) ? 0 : 1, bb = canAct(b) ? 0 : 1;
+      if (aa !== bb) return aa - bb;
+      return String(a.name ?? a.id).localeCompare(String(b.name ?? b.id));
+    });
+
+    if (all.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.warpNoShips'), lx + PAD, ly + 38);
+      return;
+    }
+
+    const rowH = 34;
+    let ry = ly + 26;
+    const maxY = ly + h - 6;
+    for (const v of all) {
+      if (ry + rowH > maxY) break;   // MVP: limit widocznych (scroll = follow-up)
+      const act = canAct(v);
+      const selected = v.id === this._selectedWarpShipId;
+
+      ctx.fillStyle = selected ? 'rgba(0,255,180,0.12)' : (act ? 'rgba(0,255,180,0.05)' : 'rgba(60,60,60,0.12)');
+      ctx.fillRect(lx + 4, ry, lw - 8, rowH - 4);
+      ctx.strokeStyle = selected ? THEME.accent : (act ? THEME.border : 'rgba(120,120,120,0.3)');
+      ctx.lineWidth = selected ? 1.5 : 1;
+      ctx.strokeRect(lx + 4, ry, lw - 8, rowH - 4);
+
+      const def = SHIPS[v.shipId] ?? HULLS[v.shipId];
+      const icon = def?.icon ?? '🚀';
+      const nm = (v.name ?? v.id);
+      const nmShort = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = act ? THEME.textPrimary : THEME.textDim;
+      ctx.textAlign = 'left';
+      ctx.fillText(`${icon} ${nmShort}`, lx + PAD, ry + 13);
+
+      const wr = warpRange(v);
+      ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+      ctx.fillStyle = act ? THEME.textSecondary : THEME.textDim;
+      const statusLabel = act
+        ? `${wr > 0 ? wr.toFixed(1) : '?'} ly`
+        : this._warpStatusLabel(wrs?.canOrder ? wrs.canOrder(v).reason : v.position?.state);
+      ctx.fillText(statusLabel, lx + PAD, ry + 26);
+
+      const warpPct = v.warpFuel?.max > 0 ? Math.max(0, Math.min(1, v.warpFuel.current / v.warpFuel.max)) : 0;
+      const barW = 44, barH = 5, barX = lx + lw - PAD - barW, barY = ry + 20;
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(barX, barY, barW, barH);
+      ctx.fillStyle = act ? THEME.accent : THEME.textDim; ctx.fillRect(barX, barY, barW * warpPct, barH);
+
+      this._hitZones.push({ x: lx + 4, y: ry, w: lw - 8, h: rowH - 4, type: 'warp_ship_select', data: { vesselId: v.id } });
+      ry += rowH;
+    }
+  }
+
+  // Etykieta błędu w panelu rozkazu (priorytet: bramka statku > powód trasy).
+  _warpErrLabel(plan, gate) {
+    if (!gate.ok) {
+      switch (gate.reason) {
+        case 'in_transit':       return t('fleet.warpErrInTransit');
+        case 'immobilized':      return t('fleet.warpErrImmobilized');
+        case 'not_warp_capable': return t('fleet.warpErrConfig');
+        default:                 return t('fleet.warpErrState');
+      }
+    }
+    switch (plan.reason) {
+      case WARP_ROUTE_REASONS.SAME_SYSTEM:       return t('fleet.warpErrSame');
+      case WARP_ROUTE_REASONS.NO_ROUTE:          return t('fleet.warpErrNoRoute');
+      case WARP_ROUTE_REASONS.INSUFFICIENT_FUEL: return t('fleet.warpErrFuel');
+      case WARP_ROUTE_REASONS.BAD_CONFIG:
+      case WARP_ROUTE_REASONS.UNKNOWN_SYSTEM:    return t('fleet.warpErrConfig');
+      default:                                   return t('fleet.warpErrNoRoute');
+    }
+  }
+
+  // Panel potwierdzenia rozkazu skoku warp (gdy wybrany statek warp + system).
+  // Liczy trasę co frame (planWarpRoute — tanio dla ~kilkudziesięciu układów).
+  _drawWarpOrderPanel(ctx, areaX, areaY, areaW, areaH, sys, vMgr) {
+    const v = vMgr?.getVessel?.(this._selectedWarpShipId);
+    if (!v) return;
+    const PAD = 8;
+    const panelW = Math.min(220, Math.max(170, areaW - 16));
+    const px = areaX + areaW - panelW - 8;
+    const py = areaY + 8;
+
+    const wrs = window.KOSMOS?.warpRouteSystem;
+    const gate = wrs?.canOrder ? wrs.canOrder(v) : { ok: true };
+    const wf = v.warpFuel;
+    // Zasięg jednego skoku = min(twardy limit napędu, zasięg z baku) — spójne z beginJourney.
+    const tankRange = (wf?.max > 0 && wf?.consumption > 0) ? wf.max / wf.consumption : 0;
+    const maxHopLY = Math.min(GAME_CONFIG.WARP_MAX_JUMP_LY ?? 10, tankRange);
+    const def = SHIPS[v.shipId] ?? HULLS[v.shipId];
+    const stats = (Array.isArray(v.modules) && v.modules.length > 0) ? calcShipStats(def, v.modules) : null;
+    const warpSpeed = stats?.warpSpeedLY || def?.warpSpeedLY || 2.5;
+    const systems = window.KOSMOS?.galaxyData?.systems ?? [];
+    const plan = planWarpRoute(systems, v.systemId ?? 'sys_home', sys.id, {
+      maxHopLY, currentFuel: wf?.current ?? 0, consumption: wf?.consumption ?? 0, warpSpeed,
+    });
+
+    const hasPlanInfo = plan.ok || plan.reason === WARP_ROUTE_REASONS.INSUFFICIENT_FUEL;
+    const feasible = plan.ok && gate.ok;
+
+    const infoLines = hasPlanInfo ? (plan.etaYears != null ? 4 : 3) : 0;
+    const panelH = PAD + 18 + 16 + (infoLines * 14) + 18 + 22 + PAD;
+    ctx.fillStyle = 'rgba(8,12,18,0.94)';
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeStyle = feasible ? THEME.accent : THEME.border; ctx.lineWidth = 1;
+    ctx.strokeRect(px, py, panelW, panelH);
+    // Tło-absorber kliknięć (przed przyciskami — reverse-find da priorytet przyciskom).
+    this._hitZones.push({ x: px, y: py, w: panelW, h: panelH, type: 'warp_order_bg', data: {} });
+
+    let iy = py + PAD;
+    ctx.textAlign = 'left';
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textHeader;
+    ctx.fillText(t('fleet.warpOrderTitle'), px + PAD, iy + 11); iy += 18;
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = sys.colorHex ?? THEME.textPrimary;
+    const vn = (v.name ?? v.id);
+    const vnS = vn.length > 12 ? vn.slice(0, 11) + '…' : vn;
+    ctx.fillText(`${vnS} → ${sys.name}`, px + PAD, iy + 10); iy += 16;
+
+    if (hasPlanInfo) {
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(t('fleet.warpHops', String(plan.hops.length - 1)), px + PAD, iy + 10); iy += 14;
+      ctx.fillText(t('fleet.warpTotalLY', plan.totalLY.toFixed(1)), px + PAD, iy + 10); iy += 14;
+      ctx.fillText(t('fleet.warpFuelNeed', plan.totalFuel.toFixed(1), (wf?.current ?? 0).toFixed(1)), px + PAD, iy + 10); iy += 14;
+      if (plan.etaYears != null) { ctx.fillText(t('fleet.warpEta', plan.etaYears.toFixed(1)), px + PAD, iy + 10); iy += 14; }
+    }
+
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    if (feasible) { ctx.fillStyle = THEME.success; ctx.fillText(t('fleet.warpFeasible'), px + PAD, iy + 10); }
+    else { ctx.fillStyle = THEME.danger; ctx.fillText(this._warpErrLabel(plan, gate), px + PAD, iy + 10); }
+    iy += 18;
+
+    const btnW = (panelW - PAD * 3) / 2;
+    const btnH = 22;
+    const sendX = px + PAD, cancelX = px + PAD * 2 + btnW;
+    ctx.fillStyle = feasible ? 'rgba(0,255,180,0.12)' : 'rgba(60,60,60,0.25)';
+    ctx.fillRect(sendX, iy, btnW, btnH);
+    ctx.strokeStyle = feasible ? THEME.accent : THEME.border; ctx.strokeRect(sendX, iy, btnW, btnH);
+    ctx.fillStyle = feasible ? THEME.accent : THEME.textDim; ctx.textAlign = 'center';
+    ctx.fillText(t('fleet.warpSend'), sendX + btnW / 2, iy + 15);
+    ctx.fillStyle = 'rgba(255,51,68,0.10)'; ctx.fillRect(cancelX, iy, btnW, btnH);
+    ctx.strokeStyle = THEME.danger; ctx.strokeRect(cancelX, iy, btnW, btnH);
+    ctx.fillStyle = THEME.danger; ctx.fillText(t('fleet.warpCancel'), cancelX + btnW / 2, iy + 15);
+    ctx.textAlign = 'left';
+
+    // Hity przycisków NA KOŃCU (priorytet nad tłem-absorberem).
+    if (feasible) this._hitZones.push({ x: sendX, y: iy, w: btnW, h: btnH, type: 'warp_order_send', data: { vesselId: v.id, systemId: sys.id } });
+    this._hitZones.push({ x: cancelX, y: iy, w: btnW, h: btnH, type: 'warp_order_cancel', data: {} });
   }
 
   // ── Tooltip informacji o ciele niebieskim ─────────────────────────────────
@@ -5002,6 +5374,10 @@ export class FleetManagerOverlay {
 
   _drawRight(ctx, x, y, w, h, vMgr, ms, colMgr, activePid) {
     const pad = 8;
+    // Domyślnie brak scrolla (gałęzie early-return: flota/picker/brak/wróg). Ścieżka
+    // szczegółów statku gracza nadpisuje _rightContentH przez _finishRight (niżej).
+    this._rightViewH = h;
+    this._rightContentH = h;
 
     // Player Fleet Groups (P2.5 outliner) — mutex: gdy selectedFleetId set,
     // pokazuj fleet detail. Inaczej spadamy do dotychczasowej logiki vessel detail
@@ -5047,8 +5423,37 @@ export class FleetManagerOverlay {
     }
 
     const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
-    let cy = y + pad;
 
+    // ── Scroll pionowy panelu szczegółów (treść bywa wyższa niż panel) ──
+    // Reset przy zmianie statku; clip do prostokąta panelu; cy przesunięte o
+    // -scroll (rysowanie I hit-zony używają tego samego cy → spójne).
+    if (this._rightScrollVesselId !== this._selectedVesselId) {
+      this._rightScrollY = 0;
+      this._rightScrollVesselId = this._selectedVesselId;
+    }
+    const _scrollY = this._rightScrollY || 0;
+    const _hzStart = this._hitZones.length;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    let cy = y + pad - _scrollY;
+    // Finalizator: restore clipu + pomiar treści + clamp scrolla + scrollbar + przycięcie
+    // hit-zon. Wołany w `finally` (niżej) → ZAWSZE przywraca ctx, nawet gdy render rzuci
+    // wyjątek. Bez tego wyjątek zostawiał aktywny clip = korupcja canvasu („pusta mapa").
+    let _finished = false;
+    const _finishRight = () => {
+      if (_finished) return;
+      _finished = true;
+      ctx.restore();
+      this._rightViewH = h;
+      this._rightContentH = (cy - y) + _scrollY + pad;   // całkowita wysokość treści
+      const maxS = Math.max(0, this._rightContentH - h);
+      if (this._rightScrollY > maxS) this._rightScrollY = maxS;
+      if (this._rightScrollY < 0) this._rightScrollY = 0;
+      this._clipRightHitZones(_hzStart, y, h);
+      this._drawRightScrollbar(ctx, x, y, w, h);
+    };
+
+    try {
     // ── Przycisk powrotu do Stoczni ────────────────────────
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
@@ -5577,6 +5982,7 @@ export class FleetManagerOverlay {
       // ── Przyciski akcji dla foreign_recon ──
       cy += 4;
       const abortBtnW = w - pad * 2;
+      const btnH = 22;   // FIX: brak deklaracji → ReferenceError przy rekonie obcego (crash mapy)
 
       // Przerwij rekon → statek przechodzi do orbiting_body z pełnymi akcjami
       ctx.fillStyle = THEME.warning;
@@ -5665,8 +6071,9 @@ export class FleetManagerOverlay {
 
     // ── Konfigurator misji (jeśli aktywny) ───────────────────
     if (this._missionConfig) {
-      this._drawMissionConfig(ctx, x, cy, w, h - (cy - y), pad, vessel, ms, colMgr);
-      return; // Konfigurator zastępuje akcje i log
+      // Wysokość liczona z UNSCROLLED cy (cy zawiera offset -_scrollY).
+      this._drawMissionConfig(ctx, x, cy, w, h - (cy + _scrollY - y), pad, vessel, ms, colMgr);
+      return; // Konfigurator zastępuje akcje i log (finally → _finishRight)
     }
 
     // ── Akcje ────────────────────────────────────────────────
@@ -5676,10 +6083,42 @@ export class FleetManagerOverlay {
     cy = this._drawRallyAssignSection(ctx, x, cy, w, pad, vessel);
 
     // ── Log misji ────────────────────────────────────────────
-    const logSpace = h - (cy - y);
-    if (logSpace > 30 && vessel.missionLog.length > 0) {
-      this._drawMissionLog(ctx, x, cy, w, logSpace, pad, vessel);
+    // Naturalna (ograniczona) wysokość → część przewijalnej treści (advance cy).
+    if (vessel.missionLog.length > 0) {
+      const logH = 16 + Math.min(8, vessel.missionLog.length) * 14 + 4;
+      this._drawMissionLog(ctx, x, cy, w, logH, pad, vessel);
+      cy += logH;
     }
+    } finally {
+      _finishRight();   // ZAWSZE: restore ctx (nawet przy wyjątku w renderze powyżej)
+    }
+  }
+
+  // Usuwa hit-zony dodane od indeksu `start`, które wypadły poza pionowy zakres
+  // panelu (przewinięte poza widok) — zapobiega „duchom" klików na niewidocznych
+  // przyciskach po scrollu. Wzór: cy-offset + clip rysowania nie tnie hit-zon.
+  _clipRightHitZones(start, y, h) {
+    for (let i = this._hitZones.length - 1; i >= start; i--) {
+      const z = this._hitZones[i];
+      if (z.y + z.h <= y || z.y >= y + h) this._hitZones.splice(i, 1);
+    }
+  }
+
+  // Wskaźnik scrolla prawego panelu (cienki pasek przy prawej krawędzi).
+  _drawRightScrollbar(ctx, x, y, w, h) {
+    const contentH = this._rightContentH || 0;
+    if (contentH <= h + 1) return;   // wszystko widoczne → brak paska
+    const trackX = x + w - 4, trackY = y + 2, trackH = h - 4;
+    const thumbH = Math.max(20, trackH * (h / contentH));
+    const maxS = contentH - h;
+    const thumbY = trackY + (trackH - thumbH) * (maxS > 0 ? ((this._rightScrollY || 0) / maxS) : 0);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(trackX, trackY, 3, trackH);
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillRect(trackX, thumbY, 3, thumbH);
+    ctx.restore();
   }
 
   // M3 P3.1 — sekcja rally assignment (RIGHT detail panel).
