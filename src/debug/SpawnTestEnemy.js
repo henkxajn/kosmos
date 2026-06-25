@@ -648,3 +648,74 @@ export function spawnEnemyAttack(opts = {}) {
   console.log('[spawnEnemyAttack] 🚀 Wrogi atak w drodze:', report);
   return report;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// spawnEnemyWarpGhost — wrogi statek w TRANZYCIE WARP (międzygwiezdnym), do testu
+// fog-of-war na radarze/galaktyce Stratcom. Tworzy PEŁNĄ instancję Vessel (createVessel)
+// — w przeciwieństwie do ręcznego `_vessels.set('ghost_test', {...})`, który był surowym
+// obiektem bez `position`/`status` i wywracał pętle draw/tick (brak v.position.dockedAt itd.).
+// Przy Lv≥4 obserwatorium pojawi się na Stratcom jako ghost „?" (rumor) — bez tożsamości
+// do bliskiego spotkania. opts: { offsetLY=3, name }.
+// ─────────────────────────────────────────────────────────────────────────────
+export function spawnEnemyWarpGhost(opts = {}) {
+  const K = window.KOSMOS;
+  if (!K?.civMode) {
+    console.warn('[spawnEnemyWarpGhost] Gracz jeszcze nie przejął cywilizacji');
+    return { success: false, reason: 'no_civ_mode' };
+  }
+  const vMgr = K.vesselManager;
+  const home = K.homePlanet;
+  const homeSys = K.galaxyData?.systems?.find(s => s.isHome) ?? null;
+  if (!vMgr || !home || !homeSys) {
+    console.warn('[spawnEnemyWarpGhost] Brak VesselManager / homePlanet / systemu domowego');
+    return { success: false, reason: 'no_deps' };
+  }
+
+  // Upewnij się że wrogie imperium istnieje (ownerEmpireId musi wskazywać realne imperium).
+  if (!K.empireRegistry?.get(TEST_ENEMY_ID)) {
+    const res = spawnTestEnemy();
+    if (!res?.success) return res;
+  }
+
+  // Pełna instancja — pozycja in-system nieistotna dla radaru warp (czyta mission.currentGalX/Y),
+  // ale createVessel gwarantuje poprawny obiekt (position/status/baki) → zero crashy w draw/tick.
+  const vessel = createVessel('hull_medium', home.id, {
+    name:    opts.name ?? 'Widmo',
+    modules: ['engine_ion', 'armor_standard', 'weapon_kinetic'],
+    x: home.x ?? 0, y: home.y ?? 0,
+    systemId: null,   // w tranzycie międzygwiezdnym — nieprzypisany do układu
+  });
+  vessel.ownerEmpireId = TEST_ENEMY_ID;
+  vessel.owner         = TEST_ENEMY_ID;
+  vessel.isEnemy       = true;
+
+  const offsetLY = opts.offsetLY ?? 3;
+  const gx = (homeSys.x ?? 0) + offsetLY, gy = (homeSys.y ?? 0);
+  const gameYear = K.timeSystem?.gameTime ?? 0;
+  // Pola podróży KOMPLETNE — bez departYear/arrivalYear `_tickInterstellar` liczy progress=NaN
+  // → currentGalX/Y=NaN → ghost znika po odpauzowaniu. to==from (gx,gy) → pozycja stabilna;
+  // długie arrivalYear (gameYear+50) → ghost utrzymuje się na radarze, nie „przylatuje" od razu.
+  vessel.mission = {
+    type:         'interstellar_jump',
+    phase:        'warp_transit',
+    fromSystemId: homeSys.id,
+    toSystemId:   homeSys.id,
+    departYear:   gameYear,
+    arrivalYear:  gameYear + 50,
+    distLY:       offsetLY,
+    fromGalX:     gx, fromGalY: gy,
+    toGalX:       gx, toGalY:   gy,
+    currentGalX:  gx, currentGalY: gy,
+  };
+  vessel.position.state    = 'in_transit';
+  vessel.position.dockedAt = null;
+  vessel.status            = 'on_mission';
+
+  vMgr._vessels.set(vessel.id, vessel);
+  EventBus.emit('vessel:created',        { vessel });
+  EventBus.emit('vessel:positionUpdate', { vessels: [vessel] });
+
+  console.log(`[spawnEnemyWarpGhost] 👻 Wrogi warp ${offsetLY} ly od domu (id=${vessel.id}). ` +
+              `Otwórz Stratcom (Lv≥4) → ghost „?". Usuń: KOSMOS.vesselManager._vessels.delete('${vessel.id}')`);
+  return { success: true, vesselId: vessel.id, offsetLY };
+}

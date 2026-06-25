@@ -14,10 +14,10 @@ import { KeplerMath }  from '../utils/KeplerMath.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { t }           from '../i18n/i18n.js';
 
-// Horyzont prognozy per level obserwatorium (lata gry)
-const HORIZON_BY_LEVEL = [0, 50, 100, 200, 350, 500];
-// Przeliczanie co N civYears per level
-const RECALC_BY_LEVEL  = [0, 10, 8, 5, 3, 2];
+// Horyzont prognozy per level obserwatorium (lata gry) — idx = poziom (Lv6 dodany)
+const HORIZON_BY_LEVEL = [0, 50, 100, 200, 350, 500, 700];
+// Przeliczanie co N civYears per level (Lv6 dodany)
+const RECALC_BY_LEVEL  = [0, 10, 8, 5, 3, 2, 1];
 // Krok symulacji (lata gry)
 const SIM_STEP = 0.1;
 // Ile kroków obliczyć per tick (rozkład na klatki)
@@ -72,7 +72,7 @@ export class CollisionForecast {
     const obsLevel = window.KOSMOS?.observatorySystem?.getMaxObservatoryLevel() ?? 0;
     if (obsLevel <= 0) return;
 
-    const recalcInterval = RECALC_BY_LEVEL[Math.min(obsLevel, 5)];
+    const recalcInterval = RECALC_BY_LEVEL[Math.min(obsLevel, RECALC_BY_LEVEL.length - 1)];
     this._recalcAccum += civDeltaYears;
 
     // Kontynuuj inkrementalną symulację jeśli trwa
@@ -95,7 +95,7 @@ export class CollisionForecast {
     const star = EntityManager.getByTypeInSystem('star', sysId)?.[0];
     if (!star) return;
 
-    const horizon = HORIZON_BY_LEVEL[Math.min(obsLevel, 5)];
+    const horizon = HORIZON_BY_LEVEL[Math.min(obsLevel, HORIZON_BY_LEVEL.length - 1)];
     const maxSteps = Math.floor(horizon / SIM_STEP);
 
     // Zbierz ciała z bieżącymi danymi orbitalnymi (snapshot)

@@ -446,6 +446,39 @@ export class IntelSystem {
     return true;
   }
 
+  // Sighting zdalny (radar obserwatorium) — pośredni kontakt position-only, BEZ identyfikacji.
+  // W odróżnieniu od _observeVessel (proximity): brak dystansu, jawna jakość (domyślnie 'rumor'),
+  // positionKnown=false → render jako zamrożony ghost (nie żywy blob). Zapisuje/odświeża
+  // positionLastKnown + lastSeenYear; quality podnosi tylko w górę; emituje event wyłącznie przy
+  // realnej zmianie quality (reszta = ciche odświeżenie pozycji, ogranicza churn DebugLog).
+  recordSighting(vesselId, vessel, quality = 'rumor') {
+    if (!GAME_CONFIG.FEATURES.intelContactState) return false;
+    if (this._isPlayerVessel(vessel)) return false;            // AI-leak guard: statek gracza nigdy
+    if (!VESSEL_LEVEL_RANK.hasOwnProperty(quality)) return false;
+    const rec = this._getOrInitVesselRecord(vesselId);
+    const oldQuality = rec.quality;
+    const oldRank = VESSEL_LEVEL_RANK[oldQuality] ?? 0;
+    const newRank = VESSEL_LEVEL_RANK[quality] ?? 0;
+    const updated = {
+      ...rec,
+      lastSeenYear:      this._year(),
+      positionLastKnown: vessel?.position
+        ? { x: vessel.position.x, y: vessel.position.y }
+        : rec.positionLastKnown,
+      strengthEstimate:  rec.strengthEstimate ?? this._estimateStrength(vessel),
+    };
+    if (newRank > oldRank) {
+      updated.quality = quality;
+      gameState.set(`intel.vessels.${vesselId}`, updated, 'observatory_sighting');
+      EventBus.emit('intel:vesselContactChanged', {
+        vesselId, oldQuality, newQuality: quality, reason: 'observatory_sighting',
+      });
+    } else {
+      gameState.set(`intel.vessels.${vesselId}`, updated, 'observatory_sighting');
+    }
+    return true;
+  }
+
   degradeVesselContact(vesselId, toQuality, reason) {
     if (!VESSEL_LEVEL_RANK.hasOwnProperty(toQuality)) return false;
     const rec = gameState.get(`intel.vessels.${vesselId}`);

@@ -631,6 +631,9 @@ export default {
   'vessel.orbitingNoPort': 'Brak portu na {0} — statek pozostaje na orbicie',
   'vessel.reasonNoSpaceport': 'Brak portu kosmicznego na ciele dokowania',
   'vessel.reasonVesselImmobilized': 'Statek unieruchomiony — zaległe utrzymanie floty (opłać kolonię)',
+  // Fog-of-war tożsamości — ghost wrogiego statku (detekcja obserwatorium = pozycja bez tożsamości)
+  'intel.unidentifiedContact': 'Niezidentyfikowany kontakt',
+  'intel.unidentifiedHint': 'Wykryty przez obserwatorium — brak identyfikacji. Zbliż statek dla pełnych danych.',
   // Notification Center (silent alerts — dzwonek 🔔 w BottomBar)
   'notif.title': 'Powiadomienia',
   'notif.empty': 'Brak nowych powiadomień',

@@ -68,7 +68,7 @@ import { initMissionEvents, queueMissionEvent } from '../ui/MissionEventModal.js
 import { initConsulElection } from '../ui/ConsulElectionModal.js';
 import { initAutoPauseToast } from '../ui/AutoPauseToast.js';
 import { ActionRecorder }     from '../testing/recorder/ActionRecorder.js';
-import { spawnTestEnemy, spawnEnemyFleet, spawnEnemyCiv, spawnEnemyAttack } from '../debug/SpawnTestEnemy.js';
+import { spawnTestEnemy, spawnEnemyFleet, spawnEnemyCiv, spawnEnemyAttack, spawnEnemyWarpGhost } from '../debug/SpawnTestEnemy.js';
 import { loadCombatSandbox, sandboxInfo, sandboxResetPositions, sandboxSpawnMoreEnemies } from '../scenarios/CombatSandbox.js';
 import { formatStatLine, formatStatLineWithCursor, formatSectionTitle } from '../ui/TerminalPopupBase.js';
 import { SystemGenerator }   from '../generators/SystemGenerator.js';
@@ -470,6 +470,10 @@ export class GameScene {
       spawnEnemyFleet,
       spawnEnemyCiv,
       spawnEnemyAttack,
+      // KOSMOS.debug.spawnEnemyWarpGhost({ offsetLY?, name? }) — wrogi statek w tranzycie
+      // warp (pełna instancja Vessel) do testu ghost „?" na radarze/galaktyce Stratcom.
+      // Zastępuje kruchy ręczny `_vessels.set('ghost_test', {...})` (surowy obiekt → crashe).
+      spawnEnemyWarpGhost,
       // KOSMOS.debug.dumpIntel() — wypisz intel quality dla każdego enemy
       // vessela i imperium. Sprawdza czy IntelSystem (M4 P2) dziala.
       dumpIntel: () => {
@@ -1766,27 +1770,42 @@ export class GameScene {
         targetName = target?.name ?? mission.targetName ?? mission.targetId;
       }
 
+      // Fog-of-war tożsamości: detekcja obserwatorium = poziom 'rumor' (pozycja bez tożsamości).
+      // Popup pierwszego wykrycia pokazuje pełne dane (nazwa/imperium/kadłub/misja/ETA) DOPIERO
+      // przy intel ≥ contact (bliskie spotkanie proximity). Inaczej anonimowy alert „niezident.".
+      const intelQ = window.KOSMOS?.intelSystem?.getVesselContact?.(vessel.id)?.quality ?? 'unknown';
+      const identified = (intelQ === 'contact' || intelQ === 'detailed');
+
       let stats = '';
-      stats += formatStatLine(isPL ? 'Jednostka'  : 'Unit',     vessel.name ?? '?');
-      stats += formatStatLine(isPL ? 'Imperium'   : 'Empire',   empireName ?? '?');
-      stats += formatStatLine(isPL ? 'Kadłub'     : 'Hull',     hullName);
-      if (distAU != null) {
-        stats += formatStatLine(isPL ? 'Odległość' : 'Distance', `${distAU.toFixed(2)} AU`);
-      }
-      if (mission?.type === 'attack') {
-        stats += formatStatLine(isPL ? 'Misja' : 'Mission', isPL ? 'ATAK' : 'ATTACK', 'at-stat-neg');
-        if (targetName) {
-          stats += formatStatLine(isPL ? 'Cel'   : 'Target', targetName);
+      if (identified) {
+        stats += formatStatLine(isPL ? 'Jednostka'  : 'Unit',     vessel.name ?? '?');
+        stats += formatStatLine(isPL ? 'Imperium'   : 'Empire',   empireName ?? '?');
+        stats += formatStatLine(isPL ? 'Kadłub'     : 'Hull',     hullName);
+        if (distAU != null) {
+          stats += formatStatLine(isPL ? 'Odległość' : 'Distance', `${distAU.toFixed(2)} AU`);
         }
-        if (etaYears != null) {
-          stats += formatStatLine(
-            isPL ? 'ETA' : 'ETA',
-            `${etaYears.toFixed(2)} ${isPL ? 'lat' : 'yr'}`,
-            'at-stat-neg'
-          );
+        if (mission?.type === 'attack') {
+          stats += formatStatLine(isPL ? 'Misja' : 'Mission', isPL ? 'ATAK' : 'ATTACK', 'at-stat-neg');
+          if (targetName) {
+            stats += formatStatLine(isPL ? 'Cel'   : 'Target', targetName);
+          }
+          if (etaYears != null) {
+            stats += formatStatLine(
+              isPL ? 'ETA' : 'ETA',
+              `${etaYears.toFixed(2)} ${isPL ? 'lat' : 'yr'}`,
+              'at-stat-neg'
+            );
+          }
+        } else {
+          stats += formatStatLine(isPL ? 'Stan' : 'State', vessel.position?.state ?? '?');
         }
       } else {
-        stats += formatStatLine(isPL ? 'Stan' : 'State', vessel.position?.state ?? '?');
+        // Anonimowy: ujawniamy tylko to, co daje radar — pozycję (dystans), bez tożsamości.
+        stats += formatStatLine(isPL ? 'Jednostka' : 'Unit', isPL ? 'Niezidentyfikowana' : 'Unidentified');
+        if (distAU != null) {
+          stats += formatStatLine(isPL ? 'Odległość' : 'Distance', `${distAU.toFixed(2)} AU`);
+        }
+        stats += formatStatLine(isPL ? 'Intel' : 'Intel', isPL ? 'Brak identyfikacji — zbliż statek' : 'No ID — close in to identify');
       }
       stats += formatStatLineWithCursor(
         isPL ? 'ZAGROŻENIE' : 'THREAT',
@@ -1802,10 +1821,16 @@ export class GameScene {
         try { ts._triggerAutoSlow(t('log.autoSlowEnemyDetected')); } catch (e) { /* defensive */ }
       }
       EventBus.emit('time:pause');
-      const headline = isPL ? '⚔ WYKRYTO WROGĄ JEDNOSTKĘ' : '⚔ ENEMY UNIT DETECTED';
-      const desc = isPL
-        ? `Systemy obserwatorium wykryły obcy statek w naszym układzie. Analizuj dane, rozważ odpowiedź.`
-        : `Observatory detected an alien vessel in our system. Analyze intel, consider response.`;
+      const headline = identified
+        ? (isPL ? '⚔ WYKRYTO WROGĄ JEDNOSTKĘ' : '⚔ ENEMY UNIT DETECTED')
+        : (isPL ? '⚠ NIEZIDENTYFIKOWANY KONTAKT' : '⚠ UNIDENTIFIED CONTACT');
+      const desc = identified
+        ? (isPL
+            ? `Systemy obserwatorium wykryły obcy statek w naszym układzie. Analizuj dane, rozważ odpowiedź.`
+            : `Observatory detected an alien vessel in our system. Analyze intel, consider response.`)
+        : (isPL
+            ? `Obserwatorium wykryło kontakt w naszym układzie — znamy tylko pozycję. Zbliż statek, by zidentyfikować.`
+            : `Observatory detected a contact in our system — position only. Bring a vessel closer to identify.`);
       const { overlay, dismiss, btnElements } = buildScheduledEventPopup({
         severity:    'danger',
         svgKey:      'alert',

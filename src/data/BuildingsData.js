@@ -583,7 +583,7 @@ export const BUILDINGS = {
     maintenance:   { Si: 1 },
     housing:       0,
     popCost:       0.25,
-    maxLevel:      5,
+    maxLevel:      6,
     capacityBonus: null,
     terrainOnly:   null,
     terrainAny:    true,

@@ -185,6 +185,7 @@ export class VesselManager {
   getVesselsAt(colonyId) {
     const result = [];
     for (const v of this._vessels.values()) {
+      if (!v.position) continue;   // statek bez pozycji (np. transient/malformed) — pomiń, nie wywracaj draw
       if (v.position.dockedAt === colonyId && v.position.state === 'docked') {
         result.push(v);
       }
@@ -1569,6 +1570,7 @@ export class VesselManager {
     if (!colMgr) return;
 
     for (const vessel of this._vessels.values()) {
+      if (!vessel.position) continue;   // statek bez pozycji (transient/malformed) — pomiń, nie zrywaj tick-loop
       if (vessel.position.state !== 'docked') continue;
 
       // S3.3b-S3b — auto-tankowanie respektuje flagę gracza (default-true). Wyłączone → pomiń

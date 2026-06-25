@@ -630,6 +630,9 @@ export default {
   'vessel.orbitingNoPort': 'No spaceport at {0} — vessel stays in orbit',
   'vessel.reasonNoSpaceport': 'No spaceport at vessel\'s docking body',
   'vessel.reasonVesselImmobilized': 'Vessel immobilized — fleet upkeep in arrears (fund the colony)',
+  // Identity fog-of-war — enemy vessel ghost (observatory detection = position without identity)
+  'intel.unidentifiedContact': 'Unidentified contact',
+  'intel.unidentifiedHint': 'Detected by observatory — no identification. Bring a vessel closer for full data.',
   // Notification Center (silent alerts — bell 🔔 in BottomBar)
   'notif.title': 'Notifications',
   'notif.empty': 'No new notifications',

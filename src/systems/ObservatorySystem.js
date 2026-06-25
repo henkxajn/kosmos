@@ -26,8 +26,13 @@ const SCANNABLE_TYPES = ['planet', 'moon', 'planetoid', 'asteroid', 'comet'];
 
 // Zasięg detekcji wrogich statków per poziom obserwatorium (AU).
 // Index 0 = brak obserwatorium — każda kolonia dostaje 1 AU pasywnego wzroku
-// (planeta widzi własną orbitę). Ostatni slot Lv5+ = ∞ (cały układ).
-const VESSEL_DETECTION_RANGE = [1, 3, 6, 10, 15, Infinity];
+// (planeta widzi własną orbitę). Lv4+ = ∞ (cały układ); Lv5/Lv6 dokładają radar LY
+// galaktyczny (Stratcom, patrz STRATCOM_LY_BY_LEVEL w FleetManagerOverlay).
+const VESSEL_DETECTION_RANGE = [1, 3, 6, 15, Infinity, Infinity, Infinity];
+
+// Co ile civYears odświeżać pozycję ghost-sightingu już-wykrytych statków (throttle — ogranicza
+// churn gameState/DebugLog przy ciągłej detekcji). Nowo wykryte ('added') zapisują się natychmiast.
+const SIGHTING_REFRESH_YEARS = 1.0;
 
 export class ObservatorySystem {
   constructor() {
@@ -83,6 +88,7 @@ export class ObservatorySystem {
 
     let maxLevel = 0;
     for (const col of colMgr.getAllColonies()) {
+      if (col.ownerEmpireId) continue;   // tylko kolonie gracza (radar/ostrzeżenia należą do gracza)
       if (!col.buildingSystem) continue;
       col.buildingSystem._active.forEach(entry => {
         if (entry.building.id === 'observatory') {
@@ -98,7 +104,8 @@ export class ObservatorySystem {
     const level = this.getObservatoryLevel(colonyId);
     if (level <= 0) return 0;
     const def = BUILDINGS.observatory;
-    return (def?.disasterReduction ?? 0.3) * level;
+    // Klamra 0.9 — przy Lv6 surowe 0.3×6=1.8 (180%) dawałoby pełną/ujemną immunizację.
+    return Math.min(0.9, (def?.disasterReduction ?? 0.3) * level);
   }
 
   // Bonus do yield misji z obserwatorium w danej kolonii (mnożnik, np. 0.15)
@@ -153,7 +160,7 @@ export class ObservatorySystem {
   _tickScan(civDeltaYears) {
     // Detekcja statków działa continuous — wykrycie wroga nie może czekać 6 lat jak
     // pierwsze odkrycie ciała niebieskiego. Każdy tick rebuildsowi Set i emituje diff.
-    this._tickVesselDetection();
+    this._tickVesselDetection(civDeltaYears);
 
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return;
@@ -166,6 +173,7 @@ export class ObservatorySystem {
     let bestEntity = null;  // ciało niebieskie kolonii (do obliczania odległości)
 
     for (const col of colMgr.getAllColonies()) {
+      if (col.ownerEmpireId) continue;   // skan ciał napędza obserwatorium gracza, nie AI
       if (!col.buildingSystem) continue;
       let colLevel = 0;
       col.buildingSystem._active.forEach(entry => {
@@ -245,20 +253,23 @@ export class ObservatorySystem {
   // Rebuild zbioru wykrytych wrogich statków na podstawie zasięgów wszystkich kolonii gracza.
   // Statek jest "detected" gdy leży w zasięgu JAKIEJKOLWIEK kolonii (OR nie SUM).
   // Zasięg per kolonia = max z VESSEL_DETECTION_RANGE dla jej obserwatorium.
-  _tickVesselDetection() {
+  _tickVesselDetection(civDeltaYears = 0) {
     const colMgr = window.KOSMOS?.colonyManager;
     const vMgr   = window.KOSMOS?.vesselManager;
     if (!colMgr || !vMgr) return;
 
     const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    // Tylko kolonie GRACZA — radar/detekcja należą do gracza; obserwatoria AI nie zasilają jego widoku.
     const colonies = colMgr.getAllColonies().filter(c => {
+      if (c.ownerEmpireId) return false;
       const cs = c.planet?.systemId ?? c.systemId ?? sysId;
       return cs === sysId;
     });
 
     const currentlyDetected = new Set();
+    const detectedVessels   = new Map();  // id → vessel (do odświeżania ghost-sightingu)
 
-    // Wczesne wyjście gdy brak kolonii w aktywnym systemie — nic nie widzimy
+    // Wczesne wyjście gdy brak kolonii gracza w aktywnym systemie — nic nie widzimy
     if (colonies.length > 0) {
       const allVessels = vMgr.getAllVessels?.() ?? [];
       for (const v of allVessels) {
@@ -276,11 +287,14 @@ export class ObservatorySystem {
           );
           if (dist <= range) {
             currentlyDetected.add(v.id);
+            detectedVessels.set(v.id, v);
             break;  // wystarczy jedna kolonia
           }
         }
       }
     }
+
+    const intelSys = window.KOSMOS?.intelSystem;
 
     // Diff z poprzednim stanem — emituj zmiany visibility
     const added = [];
@@ -288,22 +302,34 @@ export class ObservatorySystem {
     currentlyDetected.forEach(id => { if (!this._detectedVesselIds.has(id)) added.push(id); });
     this._detectedVesselIds.forEach(id => { if (!currentlyDetected.has(id)) removed.push(id); });
 
+    // Throttlowane odświeżenie pozycji ghost-sightingu już-wykrytych statków (nie co tick — churn).
+    // Działa też w steady-state (przed early-return); nowo wykryte dostają świeży zapis niżej.
+    this._sightingRefreshAccum = (this._sightingRefreshAccum ?? 0) + civDeltaYears;
+    if (this._sightingRefreshAccum >= SIGHTING_REFRESH_YEARS) {
+      this._sightingRefreshAccum = 0;
+      for (const [id, v] of detectedVessels) {
+        if (this._detectedVesselIds.has(id)) intelSys?.recordSighting?.(id, v, 'rumor');
+      }
+    }
+
     if (added.length === 0 && removed.length === 0) return;
 
     this._detectedVesselIds = currentlyDetected;
 
-    const evtLog   = window.KOSMOS?.eventLogSystem;
-    const intelSys = window.KOSMOS?.intelSystem;
-    const reg      = window.KOSMOS?.empireRegistry;
+    const evtLog = window.KOSMOS?.eventLogSystem;
+    const reg    = window.KOSMOS?.empireRegistry;
 
     for (const id of added) {
-      const v = vMgr.getVessel?.(id) ?? null;
+      const v = detectedVessels.get(id) ?? vMgr.getVessel?.(id) ?? null;
       EventBus.emit('vessel:detectionChanged', { vesselId: id, detected: true, vessel: v });
 
       if (!v) continue;
 
-      // IntelSystem — wykrycie wzrokowe to 'rumor' (nie spotkanie bezpośrednie).
-      // Faktyczny 'contact' przychodzi przez vessel:arrived / battle:resolved.
+      // Per-vessel intel: zdalny sighting obserwatorium = 'rumor' (pozycja bez identyfikacji).
+      // Faktyczny 'contact' (żywy + tożsamość) przychodzi z proximity / vessel:arrived / battle.
+      intelSys?.recordSighting?.(id, v, 'rumor');
+
+      // Intel poziomu IMPERIUM — osobny tor (ujawnia istnienie imperium, nie konkretny statek).
       const empId = v.ownerEmpireId ?? v.owner;
       if (empId && empId !== 'player') {
         intelSys?.advanceIntel?.(empId, 'rumor', 'vessel_sighted');
@@ -313,8 +339,10 @@ export class ObservatorySystem {
       if (!this._reportedVesselSightings.has(id)) {
         this._reportedVesselSightings.add(id);
         const empName = (empId && reg?.get?.(empId)?.name) ? reg.get(empId).name : 'nieznane imperium';
+        // Fog-of-war tożsamości: detekcja obserwatorium = rumor (pozycja bez identyfikacji).
+        // Log NIE ujawnia nazwy statku — tylko fakt wykrycia kontaktu. Pełne dane = proximity.
         evtLog?.push({
-          text:      `🔭 Wykryto wrogą jednostkę: ${v.name ?? '?'} (${empName}).`,
+          text:      `🔭 Wykryto niezidentyfikowany kontakt w układzie.`,
           channel:   'intel',
           severity:  'warn',
           entityRef: id,

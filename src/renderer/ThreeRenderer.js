@@ -24,6 +24,7 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { t } from '../i18n/i18n.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -2850,9 +2851,15 @@ export class ThreeRenderer {
       const color = isWreck ? '#888'
                   : isEnemy ? '#ff4466'
                   :           '#44cc66';
+      // Fog-of-war tożsamości: wrogi ghost (intel < contact) = etykieta „?" bez nazwy.
+      let label = vessel?.name ?? id;
+      if (isEnemy && !isWreck) {
+        const q = window.KOSMOS?.intelSystem?.getVesselContact?.(id)?.quality ?? 'unknown';
+        if (q !== 'contact' && q !== 'detailed') label = '?';
+      }
       out.push({
         id,
-        name: vessel?.name ?? id,
+        name: label,
         x: p.x, y: p.y,
         kind: isWreck ? 'wreck' : (isEnemy ? 'enemy' : 'vessel'),
         color,
@@ -3050,6 +3057,21 @@ export class ThreeRenderer {
     const vMgr = window.KOSMOS?.vesselManager;
     const vessel = vMgr?.getVessel(vesselId);
     if (!vessel) { this._hideColonyTooltip(); return; }
+
+    // Fog-of-war tożsamości: wrogi statek bez pełnego kontaktu (rumor/unknown) = ghost
+    // „pozycja bez tożsamości". Pełne info (nazwa/misja/cargo) tylko przy intel ≥ contact
+    // (bliskie spotkanie proximity). Bez tej bramki hover na ghoście zdradzał wszystko —
+    // niwecząc sens reformy detekcji obserwatorium.
+    if (isEnemyVessel(vessel)) {
+      const q = window.KOSMOS?.intelSystem?.getVesselContact?.(vesselId)?.quality ?? 'unknown';
+      if (q !== 'contact' && q !== 'detailed') {
+        this._showColonyTooltipEl(
+          `<b style="color:#ff8888">❓ ${t('intel.unidentifiedContact')}</b>` +
+          `<br><span style="opacity:0.7">${t('intel.unidentifiedHint')}</span>`,
+          sx, sy);
+        return;
+      }
+    }
 
     const mSys = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
     const missions = mSys?._missions ?? mSys?._expeditions ?? [];
@@ -4131,11 +4153,12 @@ export class ThreeRenderer {
     const obsSys = window.KOSMOS?.observatorySystem;
     const detected = obsSys?.isVesselDetected?.(vessel.id) ?? false;
 
-    // Quality z intel + override przez aktualną detekcję — jeśli wróg jest TERAZ
-    // w radarze (proximity), pokaż go co najmniej jako 'contact' nawet gdy intel
-    // jeszcze nie zdążył podnieść quality (kolejność eventów per tick).
+    // Quality z intel + override przez aktualną detekcję. Detekcja obserwatorium to ZDALNY radar —
+    // gwarantuje min. 'rumor' (ghost position-only, bez tożsamości), NIE 'contact'. Pełny 'contact'
+    // (żywy + tożsamość) rezerwujemy dla bliskiego spotkania proximity. Bump unknown→rumor łata
+    // wyścig eventów per tick (detekcja zadziałała, zanim recordSighting zapisał rekord intel).
     let quality = rec?.quality ?? 'unknown';
-    if (detected && (quality === 'unknown' || quality === 'rumor')) quality = 'contact';
+    if (detected && quality === 'unknown') quality = 'rumor';
 
     if (quality === 'unknown') {
       entry.sprite.visible = false;

@@ -52,19 +52,32 @@ function _isVesselInCombat(vesselId) {
   return false;
 }
 
-// ── Helper detekcji wrogów: czy wrogi statek jest WYKRYTY (widoczny na mapie/listach) ──
-// Spójność ze sceną 3D (ThreeRenderer._applyVesselIntelVisibility): wróg jest znany gdy
-//   (a) kolonia widzi go przez obserwatorium (live, binarne), LUB
-//   (b) IntelSystem ma na niego kontakt jakości >= 'contact' — czyli statek gracza
-//       namierzył go z bliska / w walce (pozycja aktualna).
-// 'rumor' (stara, ostatnio znana pozycja) celowo NIE trafia na taktyczną — pokazana
-// jako żywa kropka byłaby myląca; ghost rumoru zostaje featurem sceny 3D.
+// ── Helper detekcji wrogów: czy wrogi statek jest WYKRYTY z TOŻSAMOŚCIĄ (mapa taktyczna/listy) ──
+// Po reformie detekcji obserwatorium (2026-06-25): wykrycie przez obserwatorium = poziom 'rumor'
+// (pozycja bez tożsamości — ghost na scenie 3D). Mapa taktyczna pokazuje wroga z PEŁNĄ tożsamością
+// (sprite + panel + tooltip), więc gateuje WYŁĄCZNIE intel >= 'contact' (statek gracza namierzył go
+// z bliska / w walce — pozycja aktualna + identyfikacja). 'rumor'/'unknown' celowo NIE trafia na
+// taktyczną — pokazany z nazwą/imperium byłby przeciekiem; ghost rumoru zostaje featurem sceny 3D.
+// (Wcześniej short-circuit `obs.isVesselDetected` wynosił rumor do pełnego trackingu = przeciek.)
 const _INTEL_RANK = { unknown: 0, rumor: 1, contact: 2, detailed: 3 };
-function _isEnemyTracked(v) {
+
+// Poziom widoczności wroga (fog-of-war, spójny ze sceną 3D + Stratcom):
+//   'identified' — intel >= contact (statek gracza namierzył z bliska / w walce) → PEŁNA tożsamość
+//                  (nazwa/imperium/kadłub, sprite, listy, targetowanie, panel).
+//   'echo'       — wykryty przez obserwatorium (rumor / isVesselDetected) → ECHO „?" na mapie
+//                  (znana pozycja, BRAK tożsamości). Nie trafia na listy/targetowanie/panel.
+//   'hidden'     — niewykryty → niewidoczny (mgła).
+function _enemyVisLevel(v) {
+  const rec  = window.KOSMOS?.intelSystem?.getVesselContact?.(v.id);
+  const rank = _INTEL_RANK[rec?.quality] ?? 0;
+  if (rank >= _INTEL_RANK.contact) return 'identified';
   const obs = window.KOSMOS?.observatorySystem;
-  if (obs?.isVesselDetected?.(v.id)) return true;
-  const rec = window.KOSMOS?.intelSystem?.getVesselContact?.(v.id);
-  return (_INTEL_RANK[rec?.quality] ?? 0) >= _INTEL_RANK.contact;
+  if (rank >= _INTEL_RANK.rumor || obs?.isVesselDetected?.(v.id)) return 'echo';
+  return 'hidden';
+}
+// Pełna tożsamość (contact+) — gate dla list/panelu/targetowania (NIE echo, by nie przeciekać nazwy).
+function _isEnemyTracked(v) {
+  return _enemyVisLevel(v) === 'identified';
 }
 
 // ── Helper: znajdź ciało niebieskie po ID ────────────────────────────────────
@@ -102,8 +115,9 @@ const DESIGN_EDITOR_HIT_TYPES = new Set([
 ]);
 
 // ── Stratcom (radar strategiczny) ─────────────────────────────────────────────
-const STRATCOM_BASE_LY  = 3;     // zasięg radaru bez obserwatorium (działanie „w ciemno")
-const STRATCOM_STEP_LY  = 6;     // przyrost zasięgu na poziom obserwatorium (poz. 5 → 33 ly)
+// Zasięg radaru galaktycznego per poziom obserwatorium (ly). Radar galaktyczny dopiero od Lv4 —
+// Lv1-3 nie wykrywają statków warp (gwiazdy nadal zawsze widoczne jako mapa nawigacyjna).
+const STRATCOM_LY_BY_LEVEL = [0, 0, 0, 0, 5, 10, 15];  // idx = poziom obserwatorium imperium
 const STRATCOM_MAX_BLIPS = 14;   // miękki limit liczby gwiazd na radarze (czytelność)
 const STRATCOM_GLOW    = true;  // animowana iluminacja tarczy radaru (ciągły redraw); false = wyłącz
 const STRATCOM_GLOW_MS = 7000;  // okres „oddechu" podświetlenia [ms] — wolny, ambientowy
@@ -3412,10 +3426,30 @@ export class FleetManagerOverlay {
       if ((v.systemId ?? 'sys_home') !== sysId) continue;
       const isEnemy = isEnemyVessel(v);
       const isWreck = !!v.isWreck;
-      // Fog-of-war: wrogi statek ukryty dopóki go nie wykryjemy — obserwatorium
-      // LUB kontakt intelu (statek gracza namierzył go z bliska / w walce).
-      // Wraki są widoczne zawsze — zniszczony statek nie ma mgły.
-      if (isEnemy && !isWreck && !_isEnemyTracked(v)) continue;
+      // Fog-of-war 3-poziomowy (wraki zawsze widoczne — zniszczony statek nie ma mgły):
+      //   hidden → pomiń; echo → anonimowy ghost „?" (pozycja bez tożsamości); identified → pełny render.
+      if (isEnemy && !isWreck) {
+        const vis = _enemyVisLevel(v);
+        if (vis === 'hidden') continue;
+        if (vis === 'echo') {
+          // Echo obserwatorium: pusta przyćmiona kropka „?" — bez nazwy, bez hit-zony (brak inspekcji
+          // tożsamości; gracz wysyła statek → proximity → contact → pełne dane). Pozycja = ZAMROŻONA
+          // positionLastKnown (jak ghost na 3D): w zasięgu sensorów odświeżana ~na żywo, po wyjściu
+          // zamrożona i gaśnie po RUMOR_FADE_YEARS (inaczej rumor — który nie wygasa — śledziłby wroga
+          // na żywo poza zasięgiem = przeciek pozycji).
+          const rec = window.KOSMOS?.intelSystem?.getVesselContact?.(v.id);
+          const pos = rec?.positionLastKnown ?? v.position;
+          if (!pos) continue;
+          const detectedNow = window.KOSMOS?.observatorySystem?.isVesselDetected?.(v.id);
+          if (!detectedNow) {
+            const gy = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+            const ageY = gy - (rec?.lastSeenYear ?? gy);
+            if (ageY > (GAME_CONFIG.RUMOR_FADE_YEARS ?? 10)) continue;   // przestarzałe echo → zgaś
+          }
+          this._drawStratcomGhostBlip(ctx, toSx(pos.x), toSy(pos.y));
+          continue;
+        }
+      }
       const vx = toSx(v.position.x), vy = toSy(v.position.y);
       const isSel = v.id === this._selectedVesselId;
       // Statki skalują się z zoom; absolutny cap 10px żeby nie konkurowały z planetami
@@ -3871,8 +3905,34 @@ export class FleetManagerOverlay {
   // obserwatorium rozszerza (przyszłe sieci radioteleskopów OR-ują tu swój zasięg).
   _getStratcomRangeLY() {
     const obs = window.KOSMOS?.observatorySystem;
-    const lvl = obs?.getMaxObservatoryLevel?.() ?? 0;
-    return STRATCOM_BASE_LY + lvl * STRATCOM_STEP_LY;
+    const raw = obs?.getMaxObservatoryLevel?.() ?? 0;
+    const lvl = Math.min(raw, STRATCOM_LY_BY_LEVEL.length - 1);
+    return STRATCOM_LY_BY_LEVEL[lvl];
+  }
+
+  // Tryb renderu blipu statku warp na Stratcom (fog-of-war). Wołane gdy statek jest JUŻ w zasięgu
+  // rangeLY (bramka dystansu = detekcja galaktyczna). Zwraca:
+  //   'self'    — własny/sojuszniczy → żywy blip (akcent),
+  //   'contact' — wróg z intel ≥ contact (bliskie spotkanie) → solid czerwony + linia trasy,
+  //   'rumor'   — wróg wykryty radarem, bez identyfikacji → ghost „?" (pośredni kontakt).
+  _stratcomWarpBlipMode(v) {
+    if (!isEnemyVessel(v)) return 'self';
+    const q = window.KOSMOS?.intelSystem?.getVesselContact?.(v.id)?.quality ?? 'unknown';
+    return (q === 'contact' || q === 'detailed') ? 'contact' : 'rumor';
+  }
+
+  // Ghost-blip pośredniego kontaktu: przyćmiona pusta kropka „?" (brak tożsamości i trasy).
+  _drawStratcomGhostBlip(ctx, x, y) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,90,90,0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,90,90,0.75)';
+    ctx.font = `bold ${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('?', x, y + 0.5);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.restore();
   }
 
   // Zbiór systemów Stratcomu — wspólny dla radaru i mapy galaktyki. Pokazujemy
@@ -4111,8 +4171,9 @@ export class FleetManagerOverlay {
       ctx.stroke(); ctx.setLineDash([]);
     }
 
-    // Linie tranzytu międzygwiezdnego (pomarańczowe) + pozycja statku.
-    // SENSORY: wykrywanie statków (own+enemy) tylko w zasięgu obserwatorium (rangeLY).
+    // Linie tranzytu międzygwiezdnego + pozycja statku. SENSORY: wykrywanie tylko w zasięgu
+    // obserwatorium (rangeLY = bramka detekcji galaktycznej). Fog-of-war: wróg bez intel-kontaktu =
+    // ghost „?" (pośredni), wróg z contact = solid czerwony, własny/sojuszniczy = żywy blip.
     // Wybrany statek gracza pomijamy tu — ma własną trasę + marker (rysowane zawsze).
     for (const v of (vMgr?.getInterstellarVessels() ?? [])) {
       if (v.id === this._selectedWarpShipId) continue;
@@ -4120,17 +4181,24 @@ export class FleetManagerOverlay {
       if (!m || m.phase !== 'warp_transit') continue;
       const sx0 = m.currentGalX ?? 0, sy0 = m.currentGalY ?? 0;
       if (Math.hypot(sx0 - home.x, sy0 - home.y) > rangeLY) continue;   // poza sensorami → niewykryty
+      const mode = this._stratcomWarpBlipMode(v);   // 'self' | 'contact' | 'rumor'
       const fromS = systems.find(s => s.id === m.fromSystemId);
       const toS   = systems.find(s => s.id === m.toSystemId);
-      if (!fromS || !toS) continue;
-      ctx.strokeStyle = 'rgba(255,170,50,0.35)';
-      ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(toSx(fromS.x), toSy(fromS.y)); ctx.lineTo(toSx(toS.x), toSy(toS.y));
-      ctx.stroke(); ctx.setLineDash([]);
-      const vsx = toSx(m.currentGalX ?? fromS.x);
-      const vsy = toSy(m.currentGalY ?? fromS.y);
-      ctx.fillStyle = THEME.warning;
+      const vsx = toSx(m.currentGalX ?? (fromS?.x ?? sx0));
+      const vsy = toSy(m.currentGalY ?? (fromS?.y ?? sy0));
+      if (mode === 'rumor') {
+        // Pośredni kontakt — ghost bez linii trasy (nie znamy celu).
+        this._drawStratcomGhostBlip(ctx, vsx, vsy);
+        continue;
+      }
+      if (fromS && toS) {
+        ctx.strokeStyle = mode === 'contact' ? 'rgba(255,68,102,0.4)' : 'rgba(255,170,50,0.35)';
+        ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(toSx(fromS.x), toSy(fromS.y)); ctx.lineTo(toSx(toS.x), toSy(toS.y));
+        ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.fillStyle = mode === 'contact' ? '#ff4466' : THEME.warning;
       ctx.beginPath(); ctx.arc(vsx, vsy, 3, 0, Math.PI * 2); ctx.fill();
     }
 
@@ -4739,7 +4807,8 @@ export class FleetManagerOverlay {
       ctx.strokeStyle = 'rgba(170,136,255,0.4)'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
       ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
     }
-    // Linie tranzytu warp — SENSORY: tylko statki w zasięgu obserwatorium (rangeLY).
+    // Linie tranzytu warp — SENSORY: tylko statki w zasięgu obserwatorium (rangeLY). Fog-of-war
+    // identyczny jak na radarze: wróg bez intel-kontaktu = ghost „?", contact = solid czerwony.
     // Wybrany statek gracza pomijamy (ma własną trasę + marker rysowane zawsze).
     const sensorRangeLY = vis.rangeLY;
     for (const v of (vMgr?.getInterstellarVessels() ?? [])) {
@@ -4747,15 +4816,27 @@ export class FleetManagerOverlay {
       const m = v.mission; if (!m || m.phase !== 'warp_transit') continue;
       const sx0 = m.currentGalX ?? 0, sy0 = m.currentGalY ?? 0;
       if (Math.hypot(sx0 - (home.x ?? 0), sy0 - (home.y ?? 0)) > sensorRangeLY) continue;
+      const mode = this._stratcomWarpBlipMode(v);   // 'self' | 'contact' | 'rumor'
+      const vp = projPt(m.currentGalX ?? sx0, m.currentGalY ?? sy0);
+      if (mode === 'rumor') {
+        // Pośredni kontakt — ghost bez linii trasy.
+        if (vp) this._drawStratcomGhostBlip(ctx, vp.sx, vp.sy);
+        continue;
+      }
       const fromS = systems.find(s => s.id === m.fromSystemId);
       const toS   = systems.find(s => s.id === m.toSystemId);
-      if (!fromS || !toS) continue;
-      const a = projS(fromS), b = projS(toS);
-      if (!a || !b) continue;
-      ctx.strokeStyle = 'rgba(255,170,50,0.3)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
-      const vp = projPt(m.currentGalX ?? fromS.x, m.currentGalY ?? fromS.y);
-      if (vp) { ctx.fillStyle = THEME.warning; ctx.beginPath(); ctx.arc(vp.sx, vp.sy, 3, 0, Math.PI * 2); ctx.fill(); }
+      if (fromS && toS) {
+        const a = projS(fromS), b = projS(toS);
+        if (a && b) {
+          ctx.strokeStyle = mode === 'contact' ? 'rgba(255,68,102,0.35)' : 'rgba(255,170,50,0.3)';
+          ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+          ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
+        }
+      }
+      if (vp) {
+        ctx.fillStyle = mode === 'contact' ? '#ff4466' : THEME.warning;
+        ctx.beginPath(); ctx.arc(vp.sx, vp.sy, 3, 0, Math.PI * 2); ctx.fill();
+      }
     }
 
     // Trasa wybranego statku warp (CAŁA, do celu) — bieżący skok + pozostałe (2 kolory).
@@ -5300,6 +5381,33 @@ export class FleetManagerOverlay {
     const backW = ctx.measureText(backLabel).width + 4;
     this._hitZones.push({ x: x + pad - 2, y: cy, w: backW, h: 16, type: 'back_to_shipyard', data: {} });
     cy += 22;
+
+    // Fog-of-war tożsamości: wróg bez pełnego kontaktu (intel < contact) = panel anonimowy.
+    // Detekcja obserwatorium daje tylko 'rumor' (pozycja bez tożsamości); pełne dane (nazwa/
+    // imperium/kadłub/misja) odsłania dopiero bliskie spotkanie (proximity → contact). Bez tej
+    // bramki selekcja ghosta (np. klik na scenie 3D → vessel:focus) zdradzała wszystko.
+    if (!_isEnemyTracked(vessel)) {
+      ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
+      ctx.fillStyle = ENEMY_COLOR;
+      ctx.fillText(`❓ ${t('intel.unidentifiedContact')}`, x + pad, cy + 16);
+      cy += 26;
+      const home = window.KOSMOS?.homePlanet;
+      if (home) {
+        const d = DistanceUtils.euclideanAU(
+          { x: home.x ?? 0, y: home.y ?? 0 },
+          { x: vessel.position?.x ?? 0, y: vessel.position?.y ?? 0 }
+        );
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textSecondary;
+        const distLabel = getLocale() === 'en' ? 'From home' : 'Od domu';
+        ctx.fillText(`${distLabel}: ${d.toFixed(2)} AU`, x + pad, cy + 14);
+        cy += 20;
+      }
+      ctx.font = `italic ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('intel.unidentifiedHint'), x + pad, cy + 14);
+      return;
+    }
 
     // Nagłówek — ⚔ WROGA JEDNOSTKA
     ctx.font = `bold ${THEME.fontSizeLarge}px ${THEME.fontFamily}`;
