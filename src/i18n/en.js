@@ -846,6 +846,7 @@ export default {
   'log.autoSlowLifeEvolved': 'Life evolution: {0}',
   'log.autoSlowLifeExtinct': 'Extinction on {0}',
   'log.autoSlowDiskPhase': 'Disk phase: {0}',
+  'log.autoSlowCombat': 'Fleet engagement',
   // Civilization
   'log.epochChanged': '⭐ Epoch: {0}',
   'log.unrest': '⚠ UNREST: {0}',

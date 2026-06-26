@@ -848,6 +848,7 @@ export default {
   'log.autoSlowLifeEvolved': 'Ewolucja życia: {0}',
   'log.autoSlowLifeExtinct': 'Wymieranie na {0}',
   'log.autoSlowDiskPhase': 'Faza dysku: {0}',
+  'log.autoSlowCombat': 'Starcie floty',
   // Cywilizacja
   'log.epochChanged': '⭐ Epoka: {0}',
   'log.unrest': '⚠ NIEPOKOJE: {0}',

@@ -109,6 +109,7 @@ import { Star }              from '../entities/Star.js';
 import { Planet }            from '../entities/Planet.js';
 import { Moon }              from '../entities/Moon.js';
 import { Planetoid }         from '../entities/Planetoid.js';
+import { isEnemyVessel }     from '../entities/Vessel.js';
 import { ThreeRenderer }     from '../renderer/ThreeRenderer.js';
 import { ThreeCameraController } from '../renderer/ThreeCameraController.js';
 import { UIManager }         from './UIManager.js';
@@ -1463,6 +1464,7 @@ export class GameScene {
 
         battleData = {
           warId: null, battleId, result,
+          source: 'dscs',  // Slice 1 — walka deep-space na żywej mapie (retire kina)
           aggressorName:      aIsPlayer ? 'Gracz' : (reg?.get(pA.empireId)?.name ?? pA.label ?? 'Obcy'),
           defenderName:       bIsPlayer ? 'Gracz' : (reg?.get(pB.empireId)?.name ?? pB.label ?? 'Obcy'),
           aggressorArchetype: emp?.archetype,
@@ -2866,6 +2868,18 @@ export class GameScene {
     this._battleShowing = true;
 
     const battleData = this._battleQueue.shift();
+
+    // Fleet Command Console (Slice 1) — bitwy deep-space (DSCS, Path B) rozgrywają
+    // się NA ŻYWO na głównej mapie (smugi + kamera + auto-slow). Pomijamy modal kina
+    // — tylko lekki baner outcome (domknięcie). Kino zostaje dla Path A (war-driven,
+    // abstrakcja bez żywych meshy). Rollback: fcCombatFx=false → stary pełny modal.
+    if (GAME_CONFIG.FEATURES?.fcCombatFx && battleData?.source === 'dscs') {
+      try { await showBattleOutcome(battleData); }
+      catch (err) { console.error('[BattleOutcome] Error:', err); }
+      this._battleShowing = false;
+      if (this._battleQueue.length > 0) this._tryShowNextBattle();
+      return;
+    }
 
     // Preferencja gracza — 'ask' (domyślnie) lub 'skip' (Zawsze pomijaj)
     const pref = getBattleViewPreference();
@@ -4461,7 +4475,26 @@ export class GameScene {
     // od overlay state (poprzedni isAnyOpen() guard działał tylko gdy
     // overlay otwarty — z FleetOverlay zamkniętym furtka była otwarta).
     const targetId = e.target?.id;
-    if (targetId === 'three-canvas' || targetId === 'planet-canvas') return;
+    const isMapCanvas = (targetId === 'three-canvas' || targetId === 'planet-canvas');
+    // Fleet Command Console (Slice 0) — mapa 3D NIE jest już read-only dla selekcji.
+    // Zwykły klik = zaznacz OWN statek przez NIEZAWODNY screen-space picker
+    // (_getVesselAtScreen; raycast tonie na sub-pikselowych GLB skala 0.002-0.012).
+    // Picker mode (POI/patrol) padają do worldPoint flow niżej. Rollback: fcConsole=false → no-op.
+    if (isMapCanvas) {
+      if (!GAME_CONFIG.FEATURES?.fcConsole) return;
+      if (!this.uiManager?.isPickerActive?.()) {
+        const tr = this.threeRenderer;
+        const vid = tr?._getVesselAtScreen?.(e.clientX, e.clientY, 40);
+        if (vid) {
+          const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
+          if (v && !isEnemyVessel(v)) { this.uiManager.setSelectedVesselId(vid); return; }
+          if (v) return;  // wrogi statek pod kursorem — nie zaznaczamy (P1.2 semantyka), bez deselect
+        }
+        this.uiManager.clearSelection();  // klik w pustkę/ciało → deselekcja statku
+        return;
+      }
+      // picker aktywny → kontynuuj do worldPoint flow niżej (NIE return)
+    }
     // Fullscreen overlay (FleetOverlay/IntelOverlay/...) zakrywa 3D mapę układu
     // — lewy klik NIE może raycast'ować przez niego do 3D sceny.
     // (W normalnym flow uiManager.handleClick i tak by to wcześniej pochłonął;
@@ -4516,17 +4549,46 @@ export class GameScene {
     // FleetOverlay (FleetManagerOverlay.handleRightClick z GameScene
     // contextmenu route, P1.3.5 commit 0c720d9).
     const targetId = e.target?.id;
-    if (targetId === 'three-canvas' || targetId === 'planet-canvas') return;
-    // Fullscreen overlay (FleetOverlay/IntelOverlay/...) zakrywa 3D mapę układu
-    // — prawy klik NIE może raycast'ować przez niego do 3D sceny.
+    const isMapCanvas = (targetId === 'three-canvas' || targetId === 'planet-canvas');
+    // Fleet Command Console (Slice 7) — PPM wydaje rozkazy WPROST z mapy 3D
+    // (read-only "telewizor" zniesione). Rollback: fcCommandFromMap=false → no-op na mapie.
+    if (isMapCanvas && !GAME_CONFIG.FEATURES?.fcCommandFromMap) return;
+    // Fullscreen overlay (FleetOverlay/IntelOverlay/...) zakrywa 3D mapę układu —
+    // PPM NIE może raycast'ować przez niego. FleetOverlay PPM route'owany osobno
+    // (contextmenu → handleRightClick przed tym handlerem), więc ten guard
+    // zapobiega podwójnemu dispatchowi (single owner = RightClickMenu singleton).
     if (this.uiManager?.overlayManager?.isAnyOpen?.()) return;
     // Patrz _handleTacticalLeftClick — bypass isOverUI dla CANVAS targetów
     // (game viewport), DOM panele dalej blokowane.
     const isGameCanvas = e.target?.tagName === 'CANVAS';
     if (!isGameCanvas && this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
 
-    const target = this._resolveClickTarget(e.clientX, e.clientY);
+    let target = this._resolveClickTarget(e.clientX, e.clientY);
     if (!target) return;
+
+    // Slice 7 FIX — worldPoint z raycastu to Three.js WORLD coords (÷WORLD_SCALE=10);
+    // MOS.issueOrder(moveToPoint) wymaga GAMEPLAY coords (AU×110). Bez konwersji cel był
+    // 10× za blisko origin → „order rejected: unreachable target". Wzór: picker worldToGameplay.
+    if (target.worldPoint) {
+      const gp = worldToGameplay(target.worldPoint.x, target.worldPoint.z);
+      if (gp) target = { ...target, worldPoint: { x: gp.x, y: gp.y } };
+    }
+
+    // Niezawodny screen-space vessel pick (raycast tonie na sub-pikselowych GLB 0.002-0.012).
+    // Nadpisuje target gdy statek pod kursorem; wróg tylko gdy intel ≥ contact (fog-of-war)
+    // — inaczej brak opcji engage/pursue na niewykrytego fantoma.
+    const tr = this.threeRenderer;
+    const vid = tr?._getVesselAtScreen?.(e.clientX, e.clientY, 40);
+    if (vid) {
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
+      if (v && !isEnemyVessel(v)) {
+        target = { type: 'ownVessel', entityId: vid, worldPoint: target.worldPoint };
+      } else if (v && tr._isEnemyTargetable?.(vid)) {
+        // Wróg WYKRYTY (≥rumor) — można nakazać engage/pursue na kontakt radarowy.
+        target = { type: 'enemyVessel', entityId: vid, worldPoint: target.worldPoint };
+      }
+      // niewykryty wróg (unknown) → zostaw target z raycastu (empty/body), brak menu na fantoma
+    }
 
     EventBus.emit('ui:rightClickMenuOpened', {
       target,

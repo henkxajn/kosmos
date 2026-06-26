@@ -564,6 +564,28 @@ export class DeepSpaceCombatSystem {
     fireFromSide(sideAVids, sideBVids, encounter.sideA.ownerEmpireId);
     fireFromSide(sideBVids, sideAVids, encounter.sideB.ownerEmpireId);
 
+    // ── Fleet Command Console (Slice 1) — FX-only emit dla smug na ŻYWEJ mapie ──
+    // Snapshot pozycji AT EMIT (vessele ruszają się/giną do czasu odtworzenia FX).
+    // CZYSTO WIZUALNE — nie dotyka matematyki walki ani round.events (kontrakt kino/save).
+    // ThreeRenderer subskrybuje i bramkuje endpointy przez _resolveFxEndpoint (fog-of-war).
+    if (GAME_CONFIG.FEATURES?.fcCombatFx && round.events.length > 0) {
+      const vm = this._vm;
+      const snap = (id) => {
+        const p = vm?._vessels?.get(id)?.position;
+        return (p && Number.isFinite(p.x) && Number.isFinite(p.y)) ? { x: p.x, y: p.y } : null;
+      };
+      EventBus.emit('combat:roundFx', {
+        encounterId: encounter.id,
+        midpoint:    { x: encounter.location.point.x, y: encounter.location.point.y },
+        events: round.events.map(ev => ({
+          attacker: ev.attacker, target: ev.target,
+          category: SHIP_MODULES[ev.weapon]?.stats?.category ?? null,
+          hit: ev.hit, blockedByShield: ev.blockedByShield,
+          aPos: snap(ev.attacker), tPos: snap(ev.target),
+        })),
+      });
+    }
+
     // Shield regen (alive vessels).
     for (const state of encounter.vesselStates.values()) {
       if (state.hp <= 0) continue;

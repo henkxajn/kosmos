@@ -24,7 +24,15 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { ARCHETYPES } from '../data/EmpireData.js';
 import { t } from '../i18n/i18n.js';
+import {
+  weaponColor as fxWeaponColor,
+  FX_MAX_ACTIVE, FX_TRACER_MS, FX_FLASH_MS, FX_FLASH_DELAY_MS,
+  FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR,
+} from '../config/CombatFxConfig.js';
+import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality }
+  from '../utils/VesselFxLogic.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
@@ -57,6 +65,18 @@ const SENSOR_RING_Y            = 0.04;      // tuż pod prediction cone (0.05), 
 // Lv5 obserwatorium daje Infinity dla detection range — clamp do tej wartości
 // żeby uniknąć NaN/over-the-horizon ring covering całej sceny.
 const SENSOR_RING_MAX_COLONY_AU = 35.0;     // ≈ MAX_ORBIT_AU — cały układ widoczny
+
+// ── Fleet Command Console (Slice 0) — pierścień zaznaczenia/hover ────────────
+// Płaski annulus pod statkiem (Y tuż nad orbitami, pod statkiem Y≈0.3). Stała
+// wielkość world-units (ambient); krytyczny screen-constant wskaźnik = ramki 2D (Slice 4).
+// Fix#4: SCREEN-CONSTANT (promień ∝ dystans kamery) — hug statku przy każdym zoomie,
+// nie dominujący torus. Cienki annulus (thickness 0.02 przy scale 1).
+const SELECTION_RING_INNER_WU = 0.20;
+const SELECTION_RING_OUTER_WU = 0.22;
+const SELECTION_RING_SCREEN_K = 0.018;      // promień = clamp(camDist × K) → ~stały rozmiar na ekranie
+
+// Slice 5 — cache tekstur insygniów per kolor frakcji (reuse, wzór ResourceIcons).
+const _INSIGNIA_TEX_CACHE = new Map();      // colorHex → THREE.CanvasTexture
 
 // ── POI sprites (M2b C7) ────────────────────────────────────────────────
 // Wizualne markery 5 typów POI na mapie 3D: per-typ paleta cyan-shifted
@@ -172,6 +192,21 @@ export class ThreeRenderer {
     this._poiSprites           = new Map();  // poiId → { sprite, type } (M2b C7)
     this._poiTextureCache      = new Map();  // type → CanvasTexture (5 entries, M2b C7)
     this._tradeLines   = [];          // THREE.Line[] — linie handlu cywilnego
+
+    // ── Fleet Command Console (Slice 0) — wspólny silnik FX + selekcja ──────
+    // _activeEffects: efemeryczne efekty {mesh,startTime,lifetime,kind,...}
+    //   drenowane co klatkę w _startLoop (real-time, niezależne od pauzy gry).
+    // _fxGroup: leniwie tworzony Group (scena może jeszcze nie istnieć w ctor).
+    // _selectionRingMeshes: mark&sweep pierścienie zaznaczenia/hover (wzór sensor).
+    this._activeEffects        = [];
+    this._fxGroup              = null;
+    this._selectionRingMeshes  = new Map();  // key (`sel`|`hov`) → { mesh, geom, mat, vesselId }
+    this._selectedVesselId     = null;       // mirror UIManager (ui:selectionChanged)
+    this._factionColorCache    = new Map();  // ownerEmpireId → 0xRRGGBB
+    this._engagementMarkers    = new Map();  // encounterId → { mesh, geom, mat } (znacznik starcia, TTL)
+    this._focusEncounterId     = null;       // Slice 1 — kamera śledzi midpoint bitwy
+    this._routeComet           = null;       // Slice 3 — kometa płynąca po trasie zaznaczonego statku
+    this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
 
     // ── Cache modeli 3D statków ─────────────────────────────────
     this._shipModelTemplates = new Map(); // modelPath → THREE.Group (oryginał)
@@ -680,6 +715,64 @@ export class ThreeRenderer {
     EventBus.on('planet:demolishResult',       safe(refreshMarkers));
     EventBus.on('planet:constructionComplete', safe(refreshMarkers));
 
+    // Fleet Command Console (Slice 0) — mirror zaznaczenia z UIManager dla
+    // pierścienia selekcji (rebuild w _syncSelectionRings co klatkę).
+    EventBus.on('ui:selectionChanged', safe(({ vesselId }) => {
+      this._selectedVesselId = vesselId ?? null;
+    }));
+
+    // Fleet Command Console (Slice 1) — smugi walki na żywej mapie (FX-only).
+    EventBus.on('combat:roundFx', safe((p) => this._onCombatRoundFx(p)));
+
+    // Fix#3 — bitwy orbitalne/abstrakcyjne (EnemyAttackHandler/WarSystem, „stare zasady",
+    // statki niefizycznie blisko) NIE mają combat:roundFx. Syntezujemy „imitację" walki
+    // (burst smug+błysków) przy planecie/celu, żeby walka była WIDOCZNA na mapie.
+    EventBus.on('battle:resolved', safe((p) => this._onBattleResolvedFx(p)));
+
+    // Slice 1 — łagodny auto-focus kamery gdy gracz wchodzi w starcie (wide framing).
+    // Domyślnie ON (gracz chce widzieć bitwy); close-up = klik statku / „Obserwuj bitwę".
+    EventBus.on('vessel:engaged', safe(({ sideA = [], sideB = [], location }) => {
+      if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
+      if (window.KOSMOS?.uiPrefs?.battleAutoFocus === false) return;
+      const vm = window.KOSMOS?.vesselManager;
+      const playerIn = [...sideA, ...sideB].some(id => {
+        const v = vm?.getVessel?.(id); return v && !isEnemyVessel(v);
+      });
+      if (!playerIn || !this._cameraController) return;
+      const p = location?.point;
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+      this._cameraController.focusOn(S(p.x), S(p.y));  // wide — nie slam zoom
+      this._cameraController.setTargetDist(Math.min(this._cameraController._targetDist, 6));
+    }));
+
+    // Slice 1 — kamera „Obserwuj bitwę" (mirror vessel:focus, close-up na midpoint).
+    EventBus.on('camera:watchBattle', safe(({ x, y }) => {
+      if (!this._cameraController || !Number.isFinite(x) || !Number.isFinite(y)) return;
+      this._focusEntityId = null; this._focusVesselId = null; this._focusStationId = null;
+      this._focusEncounterId = { x, y };
+      this._cameraController.setMinDist(0.005);  // bliski zoom — można obejrzeć model
+      this._cameraController.focusOnInstant(S(x), S(y), 0.3);
+      this._cameraController.setTargetDist(Math.min(this._cameraController._targetDist, 1.2));
+    }));
+
+    // Slice 2 — efekty skanu (snop + pierścień + ping ukończenia). Eventy już lecą.
+    EventBus.on('expedition:reconProgress', safe((p) => this._onReconProgress(p)));
+    EventBus.on('expedition:reconComplete', safe((p) => {
+      if (!GAME_CONFIG.FEATURES?.fcScanFx) return;
+      const disc = p?.discovered;
+      if (Array.isArray(disc)) for (const b of disc) if (b && Number.isFinite(b.x)) this._spawnScanPing(b.x, b.y);
+    }));
+    EventBus.on('observatory:discovered', safe((p) => {
+      if (!GAME_CONFIG.FEATURES?.fcScanFx) return;
+      const b = p?.body;
+      if (b && Number.isFinite(b.x)) this._spawnScanPing(b.x, b.y);
+    }));
+
+    // Slice 6 — pulsy startu/przybycia (satysfakcjonujące sprzężenie zwrotne ruchu).
+    EventBus.on('vessel:launched', safe(({ vessel }) => this._spawnMovementPulse(vessel, 0x88ffcc)));
+    EventBus.on('vessel:arrived',  safe(({ vessel }) => this._spawnMovementPulse(vessel, 0x88ddff)));
+    EventBus.on('vessel:docked',   safe(({ vessel }) => this._spawnMovementPulse(vessel, 0x88ddff)));
+
     // Centruj kamerę na statku (kliknięcie w liście floty / Outliner)
     EventBus.on('vessel:focus', safe(({ vesselId }) => {
       if (!this._cameraController) return;
@@ -690,10 +783,12 @@ export class ThreeRenderer {
         this._focusEntityId = null;
         this._focusVesselId = vesselId;
         this._focusStationId = null;
-        this._cameraController.setMinDist(0.005); // bardzo bliski zoom dla statków
+        this._focusEncounterId = null;
+        // Fix#5: minDist 0.005→0.05 (najbliższy nie absurdalnie blisko), auto-zoom do
+        // POŚREDNIEGO ~0.9 (model widoczny + kontekst); gracz może doscrollować bliżej.
+        this._cameraController.setMinDist(0.05);
         this._cameraController.focusOnInstant(pos.x, pos.z, pos.y);
-        // Auto-zoom na statek — przybliż do widocznej odległości
-        this._cameraController.setTargetDist(Math.min(this._cameraController._targetDist, 0.5));
+        this._cameraController.setTargetDist(Math.min(this._cameraController._targetDist, 0.9));
       } else {
         // Statek zadokowany — centruj na planecie hangaru + zaznacz ją
         const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
@@ -3219,6 +3314,14 @@ export class ThreeRenderer {
         // Animacja chmur — niezaleznie od pauzy gry (real-time)
         this._tickClouds();
 
+        // Fleet Command Console — drenuj efemeryczne FX (real-time) + pierścienie selekcji + znaczniki starć + kometa trasy
+        this._updateActiveEffects(performance.now());
+        // Fix#4: 3D pierścień selekcji USUNIĘTY (za duży/obscuring) — wskaźnik = ramki 2D
+        // (UIManager._drawSelectionBrackets, screen-constant, widoczne z daleka).
+        this._tickEngagementMarkers(performance.now());
+        this._tickEngineTrails(performance.now());
+        this._syncInsignia();
+
         this.renderer.render(this.scene, this.camera);
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
@@ -3419,7 +3522,7 @@ export class ThreeRenderer {
         ];
         const geo = new THREE.BufferGeometry().setFromPoints(points);
         const lineMat = new THREE.LineDashedMaterial({
-          color, dashSize: 0.3, gapSize: 0.15,
+          color: this._orderLineColor(vessel), dashSize: 0.3, gapSize: 0.15,
           transparent: true, opacity: 0.4,
         });
         routeLine = new THREE.Line(geo, lineMat);
@@ -3619,7 +3722,7 @@ export class ThreeRenderer {
 
       const geo = new THREE.BufferGeometry().setFromPoints(points);
       const lineMat = new THREE.LineDashedMaterial({
-        color, dashSize: 0.3, gapSize: 0.15,
+        color: this._orderLineColor(vessel), dashSize: 0.3, gapSize: 0.15,
         transparent: true, opacity: 0.4,
       });
       routeLine = new THREE.Line(geo, lineMat);
@@ -4036,10 +4139,19 @@ export class ThreeRenderer {
 
         entry.sprite.position.set(S(vx), shipY, S(vy));
 
-        // Model 3D — obróć dziobem w kierunku celu
+        // Model 3D — obróć dziobem w kierunku celu (+ Slice 6 banking roll w skręcie)
         if (entry.isModel3D) {
           if (dx !== 0 || dy !== 0) {
-            entry.sprite.rotation.y = Math.atan2(dx, dy) + Math.PI / 2;
+            const yaw = Math.atan2(dx, dy) + Math.PI / 2;
+            if (GAME_CONFIG.FEATURES?.fcMovementFx && entry._prevYaw != null) {
+              let dYaw = yaw - entry._prevYaw;
+              while (dYaw >  Math.PI) dYaw -= 2 * Math.PI;
+              while (dYaw < -Math.PI) dYaw += 2 * Math.PI;
+              const targetRoll = Math.max(-0.5, Math.min(0.5, dYaw * 12));  // przechył ∝ zmiana kursu
+              entry.sprite.rotation.z += (targetRoll - entry.sprite.rotation.z) * 0.15;  // lerp do 0 gdy prosto
+            }
+            entry._prevYaw = yaw;
+            entry.sprite.rotation.y = yaw;
           }
         }
 
@@ -4051,7 +4163,7 @@ export class ThreeRenderer {
           ];
           const geo = new THREE.BufferGeometry().setFromPoints(pts);
           const lineMat = new THREE.LineDashedMaterial({
-            color: savedColor, dashSize: 0.3, gapSize: 0.15,
+            color: this._orderLineColor(vessel), dashSize: 0.3, gapSize: 0.15,
             transparent: true, opacity: 0.4,
           });
           entry.routeLine = new THREE.Line(geo, lineMat);
@@ -4997,6 +5109,600 @@ export class ThreeRenderer {
     for (const k of [...this._sensorRingMeshes.keys()]) {
       this._disposeSensorRing(k);
     }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Fleet Command Console (Slice 0) — wspólny silnik FX + helpery selekcji/intel
+  // ════════════════════════════════════════════════════════════════════════
+
+  // Pozycja statku na ekranie (px) — luka API (getScreenPosition jest planet-only).
+  // Mirror getStationScreenPosition: rzut world→NDC z z-clampem; null gdy za kamerą.
+  // Źródło prawdy dla 2D-zakotwiczonych UI per-statek (ramki, paski HP — Slice 4).
+  getVesselScreenPosition(vesselId) {
+    const entry = this._vessels.get(vesselId);
+    if (!entry?.sprite) return null;
+    const tmp = this._tmpLabelVec ?? (this._tmpLabelVec = new THREE.Vector3());
+    entry.sprite.getWorldPosition(tmp);
+    tmp.project(this.camera);
+    if (tmp.z < -1 || tmp.z > 1) return null;
+    return {
+      x: (tmp.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-tmp.y * 0.5 + 0.5) * window.innerHeight,
+    };
+  }
+
+  // Kolor frakcji statku (cache per ownerEmpireId). Own=mint, enemy=archetyp, wrak=szary.
+  // Używany przez smugi walki, tint insygniów, kolor linii rozkazu, pierścień selekcji.
+  _factionColorHex(vessel) {
+    if (!vessel) return 0x888888;
+    if (vessel.isWreck) return factionColorRaw({ isWreck: true });
+    if (!isEnemyVessel(vessel)) return factionColorRaw({ isEnemy: false });
+    const empId = vessel.ownerEmpireId ?? null;
+    if (empId && this._factionColorCache.has(empId)) return this._factionColorCache.get(empId);
+    const emp = empId ? window.KOSMOS?.empireRegistry?.get?.(empId) : null;
+    const archColor = emp?.archetype ? (ARCHETYPES?.[emp.archetype]?.color ?? null) : null;
+    const col = factionColorRaw({ isEnemy: true, archetypeColor: archColor });
+    if (empId) this._factionColorCache.set(empId, col);
+    return col;
+  }
+
+  // Centralna bramka fog-of-war: czy wrogi statek jest „widoczny" dla gracza
+  // (intel ≥ contact)? Own zawsze true. Używana przez pickability/insygnia/PPM.
+  // Chroni reformę detekcji obserwatorium — bez niej smugi/selekcja zdradzają wroga.
+  _isEnemyEndpointVisible(vesselId) {
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    if (!v) return false;
+    const isEnemy = isEnemyVessel(v);
+    const q = isEnemy ? (window.KOSMOS?.intelSystem?.getVesselContact?.(vesselId)?.quality ?? 'unknown') : null;
+    return isEndpointVisibleByQuality(isEnemy, q);
+  }
+
+  // Targetowalny dla rozkazów (engage/pursue) = own LUB wróg WYKRYTY (≥rumor, radar blip).
+  // Luźniej niż _isEnemyEndpointVisible (≥contact): pozycję znamy już przy rumor, więc
+  // można nakazać atak na kontakt radarowy (statek doleci i zaangażuje przy zbliżeniu).
+  _isEnemyTargetable(vesselId) {
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    if (!v) return false;
+    if (!isEnemyVessel(v)) return true;
+    const q = window.KOSMOS?.intelSystem?.getVesselContact?.(vesselId)?.quality ?? 'unknown';
+    return q === 'rumor' || q === 'contact' || q === 'detailed';
+  }
+
+  // Resolver endpointu FX → {wx, wz, visible} w world coords (po S()).
+  // own→live; enemy unknown→visible:false (BRAK FX); rumor→positionLastKnown (NIE live);
+  // contact/detailed→live. Jedyne źródło reguły dla smug walki (snapshot vs leak).
+  _resolveFxEndpoint(vesselId) {
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    if (!v || !v.position) return null;
+    const isEnemy = isEnemyVessel(v);
+    const rec = isEnemy ? (window.KOSMOS?.intelSystem?.getVesselContact?.(vesselId) ?? null) : null;
+    const raw = resolveFxEndpointRaw({
+      isEnemy,
+      livePos: { x: v.position.x, y: v.position.y },
+      quality: rec?.quality ?? null,
+      positionLastKnown: rec?.positionLastKnown ?? null,
+    });
+    if (!raw) return null;
+    return { wx: S(raw.x), wz: S(raw.y), visible: raw.visible };
+  }
+
+  // ── Wspólny silnik FX ──────────────────────────────────────────────────
+  // Spawn efemerycznego efektu. cfg: {lifetime, kind, baseScale?, baseOpacity?,
+  // delay?, onTick?(ef,progress)}. Twardy cap FX_MAX_ACTIVE (drop-oldest).
+  // _fxGroup tworzony leniwie (scena istnieje dopiero po _setup).
+  _spawnFx(mesh, cfg = {}) {
+    if (!mesh) return null;
+    if (!this._fxGroup) {
+      this._fxGroup = new THREE.Group();
+      this._fxGroup.name = 'fcFxGroup';
+      this.scene.add(this._fxGroup);
+    }
+    while (this._activeEffects.length >= FX_MAX_ACTIVE) {
+      this._disposeFx(this._activeEffects.shift());
+    }
+    this._fxGroup.add(mesh);
+    const ef = {
+      mesh,
+      startTime: performance.now(),
+      lifetime:    cfg.lifetime    ?? FX_TRACER_MS,
+      kind:        cfg.kind        ?? 'tracer',
+      baseScale:   cfg.baseScale   ?? (mesh.scale?.x ?? 1),
+      baseOpacity: cfg.baseOpacity ?? (mesh.material?.opacity ?? 1),
+      delay:       cfg.delay       ?? 0,
+      onTick:      cfg.onTick      ?? null,
+    };
+    this._activeEffects.push(ef);
+    return ef;
+  }
+
+  _disposeFx(ef) {
+    if (!ef?.mesh) return;
+    if (this._fxGroup) this._fxGroup.remove(ef.mesh);
+    ef.mesh.geometry?.dispose?.();
+    ef.mesh.material?.dispose?.();
+  }
+
+  // Drenuj _activeEffects co klatkę (real-time, w _startLoop — niezależne od pauzy).
+  // Port _updateEffects z BattleView3D + obsługa delay (błysk po smudze).
+  _updateActiveEffects(nowMs) {
+    if (!this._activeEffects.length) return;
+    const keep = [];
+    for (const ef of this._activeEffects) {
+      const age = nowMs - ef.startTime - ef.delay;
+      if (age < 0) { ef.mesh.visible = false; keep.push(ef); continue; }  // czeka na delay
+      if (age > ef.lifetime) { this._disposeFx(ef); continue; }
+      ef.mesh.visible = true;
+      const progress = age / ef.lifetime;
+      const mat = ef.mesh.material;
+      switch (ef.kind) {
+        case 'tracer':
+        case 'beam':
+          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
+          break;
+        case 'flash':
+          if (mat) mat.opacity = 0.9 * (1 - progress);
+          ef.mesh.scale.setScalar(ef.baseScale * (1 + progress * 2));
+          break;
+        case 'shieldRing':
+        case 'ring':
+        case 'pulse':
+          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
+          ef.mesh.scale.setScalar(ef.baseScale * (1 + progress * 2));
+          break;
+        case 'ping':
+          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
+          ef.mesh.scale.setScalar(ef.baseScale * (1 + progress * 3));
+          break;
+        case 'trail':  // smuga silnika — gaśnie i lekko się kurczy (zostaje za statkiem)
+          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
+          ef.mesh.scale.setScalar(ef.baseScale * (1 - 0.5 * progress));
+          break;
+        default:
+          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
+      }
+      if (ef.onTick) ef.onTick(ef, progress);
+      keep.push(ef);
+    }
+    this._activeEffects = keep;
+  }
+
+  // ── Pierścienie zaznaczenia/hover (mark&sweep, wzór sensor ring) ─────────
+  _syncSelectionRings() {
+    if (!GAME_CONFIG.FEATURES?.fcConsole) {
+      if (this._selectionRingMeshes.size > 0) this._disposeAllSelectionRings();
+      return;
+    }
+    const active = new Set();
+    const selId = this._selectedVesselId;
+    const hovId = this._hoverVesselId;
+    if (selId && this._vessels.has(selId)) { this._upsertSelectionRing('sel', selId, 0xffffff, 0.55); active.add('sel'); }
+    if (hovId && hovId !== selId && this._vessels.has(hovId)) { this._upsertSelectionRing('hov', hovId, 0xaaccff, 0.3); active.add('hov'); }
+    for (const k of [...this._selectionRingMeshes.keys()]) {
+      if (!active.has(k)) this._disposeSelectionRing(k);
+    }
+  }
+
+  _upsertSelectionRing(key, vesselId, fallbackColor, baseOpacity) {
+    const sprite = this._vessels.get(vesselId)?.sprite;
+    if (!sprite) { if (this._selectionRingMeshes.has(key)) this._disposeSelectionRing(key); return; }
+    let color = fallbackColor;
+    if (key === 'sel') {
+      const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+      if (vessel) color = this._factionColorHex(vessel);
+    }
+    let entry = this._selectionRingMeshes.get(key);
+    if (!entry || entry.color !== color || entry.vesselId !== vesselId) {
+      if (entry) this._disposeSelectionRing(key);
+      const geom = new THREE.RingGeometry(SELECTION_RING_INNER_WU, SELECTION_RING_OUTER_WU, 40);
+      const mat  = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: baseOpacity, side: THREE.DoubleSide, depthWrite: false });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.rotation.x = -Math.PI / 2;  // płaszczyzna XZ
+      this.scene.add(mesh);
+      entry = { mesh, geom, mat, color, vesselId, baseOpacity };
+      this._selectionRingMeshes.set(key, entry);
+    }
+    const p = sprite.position;
+    entry.mesh.position.set(p.x, p.y, p.z);  // śledzi Y statku (0.3 w locie / 0.02 orbita)
+    const tt = this._clock.getElapsedTime();
+    // Screen-constant: promień ∝ dystans kamery (mały, hug statku przy każdym zoomie).
+    const camDist = this._cameraController?._dist ?? 20;
+    const R = Math.max(0.04, Math.min(3.0, camDist * SELECTION_RING_SCREEN_K));
+    entry.mesh.scale.setScalar((R / SELECTION_RING_OUTER_WU) * (1 + 0.06 * Math.sin(tt * 3)));
+    entry.mat.opacity = entry.baseOpacity * (0.6 + 0.4 * Math.sin(tt * 3));
+  }
+
+  _disposeSelectionRing(key) {
+    const entry = this._selectionRingMeshes.get(key);
+    if (!entry) return;
+    this.scene.remove(entry.mesh);
+    entry.geom.dispose();
+    entry.mat.dispose();
+    this._selectionRingMeshes.delete(key);
+  }
+
+  _disposeAllSelectionRings() {
+    for (const k of [...this._selectionRingMeshes.keys()]) this._disposeSelectionRing(k);
+  }
+
+  // ── Slice 1 — smugi walki na żywej mapie (FX-only, z combat:roundFx) ─────
+  _onCombatRoundFx(payload) {
+    if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
+    if (window.KOSMOS?.uiPrefs?.combatFxVisible === false) return;
+    const events = payload?.events ?? [];
+    let stagger = 0;
+    for (const ev of events) {
+      const aw = this._combatEndpointWorld(ev.attacker, ev.aPos);
+      const tw = this._combatEndpointWorld(ev.target, ev.tPos);
+      if (!aw || !tw) continue;  // któryś endpoint fog-gated (wróg unknown) → skip, brak przecieku
+      const delay = (stagger++ % 8) * 40;  // rozłóż salwę po ~0..280ms (czytelność, nie 1-frame)
+      this._spawnCombatTracer(aw, tw, ev.category, ev.hit, ev.blockedByShield, delay);
+    }
+    // Znacznik starcia (midpoint) — żeby gracz zauważył walkę nawet zoom-out.
+    const mp = payload?.midpoint;
+    if (mp && Number.isFinite(mp.x) && Number.isFinite(mp.y)) {
+      this._upsertEngagementMarker(payload.encounterId, mp.x, mp.y);
+    }
+  }
+
+  // Fix#3 — FX dla bitew orbitalnych/abstrakcyjnych (bez per-rundy combat:roundFx).
+  _onBattleResolvedFx(payload) {
+    if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
+    if (window.KOSMOS?.uiPrefs?.combatFxVisible === false) return;
+    const result = payload?.result;
+    if (!result) return;
+    const pA = result.participantA, pB = result.participantB;
+    const loc = result.location;
+    let playerIn = pA?.empireId === 'player' || pB?.empireId === 'player'
+                || pA?.type === 'player' || pB?.type === 'player';
+    // Fallback: bitwa przy kolonii gracza (obrona orbitalna — kształt participantów bywa różny).
+    if (!playerIn && loc?.planetId && window.KOSMOS?.colonyManager?.isPlayerColony?.(loc.planetId)) {
+      playerIn = true;
+    }
+    if (!playerIn) return;
+    if (loc?.point && Number.isFinite(loc.point.x)) return;  // deep-space → combat:roundFx już rysuje
+    let fx = null, fy = null;
+    if (loc?.planetId) {
+      const planet = EntityManager.get(loc.planetId);
+      if (planet && Number.isFinite(planet.x)) { fx = planet.x; fy = planet.y; }
+    }
+    if (fx == null) {
+      const hp = window.KOSMOS?.homePlanet;
+      if (hp && Number.isFinite(hp.x)) { fx = hp.x; fy = hp.y; }
+    }
+    if (fx == null) return;
+    this._spawnBattleBurst(fx, fy);
+  }
+
+  // Burst „imitacji" walki wokół celu (gameplay coords). Wall-clock (widoczny przy każdej prędkości).
+  _spawnBattleBurst(gx, gy) {
+    const cx = S(gx), cz = S(gy);
+    const R = 0.6;
+    const COLORS = [0x60E0FF, 0xFFD060, 0xFF6060];
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + i * 0.7;  // deterministyczny rozrzut
+      const ex = cx + Math.cos(a) * R, ez = cz + Math.sin(a) * R;
+      const col = COLORS[i % 3];
+      const delay = (i % 8) * 110;
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(ex, 0.3, ez), new THREE.Vector3(cx, 0.3, cz)]),
+        new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9 }),
+      );
+      this._spawnFx(line, { kind: 'tracer', lifetime: FX_TRACER_MS, baseOpacity: 0.9, delay });
+      if (i % 2 === 0) {
+        const flash = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8),
+          new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9 }));
+        flash.position.set(cx + Math.cos(a) * R * 0.5, 0.3, cz + Math.sin(a) * R * 0.5);
+        this._spawnFx(flash, { kind: 'flash', lifetime: FX_FLASH_MS, baseScale: 1, delay: delay + 120 });
+      }
+    }
+    this._upsertEngagementMarker('orbital_' + Math.round(gx) + '_' + Math.round(gy), gx, gy);
+  }
+
+  // Endpoint smugi → world coords {x,z} z bramką fog-of-war. Preferuj live/intel,
+  // fallback snapshot (vessel zginął). null = pomiń (wróg niewykryty).
+  _combatEndpointWorld(vesselId, snapPos) {
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    if (v && isEnemyVessel(v) && !this._isEnemyEndpointVisible(vesselId)) return null;  // fog-of-war
+    // Fix#3 — pozycja DOKŁADNIE tam, gdzie statek jest RYSOWANY (sprite X/Y/Z), żeby smugi
+    // łączyły realne tekstury (wcześniej _resolveFxEndpoint dawał tylko X/Z + Y=0.3 → rozjazd).
+    const entry = this._vessels.get(vesselId);
+    if (entry?.sprite?.visible) {
+      const p = entry.sprite.position;
+      if (Number.isFinite(p.x)) return { x: p.x, y: p.y, z: p.z };
+    }
+    if (snapPos && Number.isFinite(snapPos.x) && Number.isFinite(snapPos.y)) {
+      return { x: S(snapPos.x), y: 0.3, z: S(snapPos.y) };  // vessel zginął — snapshot
+    }
+    return null;
+  }
+
+  _spawnCombatTracer(aw, tw, category, hit, blockedByShield, delay = 0) {
+    const color = fxWeaponColor(category);
+    const ay = aw.y ?? 0.3, ty = tw.y ?? 0.3;  // poziom RYSOWANEGO statku (fix#3)
+    const pts = [ new THREE.Vector3(aw.x, ay, aw.z), new THREE.Vector3(tw.x, ty, tw.z) ];
+    const geom = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: hit ? 0.9 : 0.4 });
+    this._spawnFx(new THREE.Line(geom, mat), {
+      kind: 'tracer', lifetime: FX_TRACER_MS, baseOpacity: hit ? 0.9 : 0.4, delay,
+    });
+    if (!hit) return;
+    // Błysk trafienia (expand 1→3, fade) — na celu, mniejszy (fix#4: za mocne).
+    const fMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 });
+    const flash = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), fMat);
+    flash.position.set(tw.x, ty, tw.z);
+    this._spawnFx(flash, { kind: 'flash', lifetime: FX_FLASH_MS, baseScale: 1, baseOpacity: 0.85, delay: delay + FX_FLASH_DELAY_MS });
+    // Pierścień tarczy gdy trafienie zablokowane.
+    if (blockedByShield > 0) {
+      const sMat = new THREE.MeshBasicMaterial({ color: FX_SHIELD_COLOR, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.10, 18), sMat);
+      ring.position.set(tw.x, ty, tw.z); ring.rotation.x = -Math.PI / 2;
+      this._spawnFx(ring, { kind: 'shieldRing', lifetime: FX_SHIELD_MS, baseScale: 1, baseOpacity: 0.8, delay: delay + FX_FLASH_DELAY_MS });
+    }
+  }
+
+  // ── Znacznik starcia (persistent, mark&sweep TTL) ────────────────────────
+  _upsertEngagementMarker(encounterId, gx, gy) {
+    if (!encounterId) return;
+    let entry = this._engagementMarkers.get(encounterId);
+    if (!entry) {
+      const geom = new THREE.RingGeometry(0.25, 0.32, 36);
+      const mat  = new THREE.MeshBasicMaterial({ color: 0xff5544, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      this.scene.add(mesh);
+      entry = { mesh, geom, mat, _lastTouch: 0 };
+      this._engagementMarkers.set(encounterId, entry);
+    }
+    entry.mesh.position.set(S(gx), 0.05, S(gy));
+    entry._lastTouch = performance.now();
+  }
+
+  _disposeEngagementMarker(encounterId) {
+    const e = this._engagementMarkers.get(encounterId);
+    if (!e) return;
+    this.scene.remove(e.mesh); e.geom.dispose(); e.mat.dispose();
+    this._engagementMarkers.delete(encounterId);
+  }
+
+  _disposeAllEngagementMarkers() {
+    for (const k of [...this._engagementMarkers.keys()]) this._disposeEngagementMarker(k);
+  }
+
+  // Puls + auto-expire (combat:roundFx przestaje karmić gdy bitwa się kończy).
+  _tickEngagementMarkers(nowMs) {
+    if (!this._engagementMarkers.size) return;
+    const tt = this._clock.getElapsedTime();
+    for (const [id, e] of [...this._engagementMarkers]) {
+      if (nowMs - (e._lastTouch ?? 0) > 1600) { this._disposeEngagementMarker(id); continue; }
+      e.mat.opacity = 0.5 * (0.55 + 0.45 * Math.sin(tt * 4));
+      e.mesh.scale.setScalar(1 + 0.1 * Math.sin(tt * 4));
+    }
+  }
+
+  // ── Slice 2 — efekty skanu (FX-only, z eventów rekonu/odkrycia) ──────────
+  _onReconProgress(payload) {
+    if (!GAME_CONFIG.FEATURES?.fcScanFx) return;
+    const body = payload?.body;
+    if (!body || !Number.isFinite(body.x) || !Number.isFinite(body.y)) return;
+    // Origin snopa = pozycja skanującego statku (tylko gdy znamy expedition.vesselId).
+    let origin = null;
+    const vid = payload?.expedition?.vesselId;
+    const vp = vid ? window.KOSMOS?.vesselManager?.getVessel?.(vid)?.position : null;
+    if (vp && Number.isFinite(vp.x) && Number.isFinite(vp.y)) origin = { x: vp.x, y: vp.y };
+    this._spawnScanFx(origin, body.x, body.y);
+  }
+
+  _spawnScanFx(origin, gx, gy) {
+    const bx = S(gx), bz = S(gy);
+    // Pierścień skanu rozszerzający się na ciele (większy + dłuższy = widoczny).
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.22, 0.30, 32),
+      new THREE.MeshBasicMaterial({ color: FX_SCAN_COLOR, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    ring.position.set(bx, 0.05, bz); ring.rotation.x = -Math.PI / 2;
+    this._spawnFx(ring, { kind: 'ring', lifetime: FX_RING_MS, baseScale: 1, baseOpacity: 0.7 });
+    // Snop od statku do ciała (gdy znamy origin).
+    if (origin) {
+      const pts = [ new THREE.Vector3(S(origin.x), 0.3, S(origin.y)), new THREE.Vector3(bx, 0.1, bz) ];
+      const beam = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: FX_SCAN_COLOR, transparent: true, opacity: 0.5 }));
+      this._spawnFx(beam, { kind: 'beam', lifetime: FX_RING_MS, baseOpacity: 0.5 });
+    }
+  }
+
+  _spawnScanPing(gx, gy) {
+    if (!GAME_CONFIG.FEATURES?.fcScanFx) return;
+    const ping = new THREE.Mesh(
+      new THREE.RingGeometry(0.18, 0.26, 32),
+      new THREE.MeshBasicMaterial({ color: FX_SCAN_COLOR, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    ping.position.set(S(gx), 0.05, S(gy)); ping.rotation.x = -Math.PI / 2;
+    this._spawnFx(ping, { kind: 'ping', lifetime: FX_PING_MS, baseScale: 1, baseOpacity: 1 });
+  }
+
+  // ── Slice 3 — kolor linii rozkazu wg typu + kometa po trasie ─────────────
+  // Rollback fcOrderLines=false → kolor frakcji (stare zachowanie).
+  _orderLineColor(vessel) {
+    if (!GAME_CONFIG.FEATURES?.fcOrderLines) return this._factionColorHex(vessel);
+    switch (vessel?.movementOrder?.type) {
+      case 'engage':              return 0xff5544;  // czerwony — atak
+      case 'pursue':
+      case 'intercept':           return 0xffaa44;  // amber — pościg
+      case 'patrol':              return 0x44ccff;  // cyan — patrol
+      case 'retreat':             return 0xcc88ff;  // fiolet — odwrót
+      case 'moveToPoint':         return 0x66ddaa;  // zielony — ruch
+      default:
+        return (vessel && !isEnemyVessel(vessel)) ? 0x66ddaa : 0xff8866;
+    }
+  }
+
+  // Kometa (additive) płynąca statek→cel po trasie ZAZNACZONEGO statku — czyta
+  // endpointy z geometrii routeLine (reuse). Mark&sweep pojedynczej encji.
+  _syncRouteComet() {
+    if (!GAME_CONFIG.FEATURES?.fcOrderLines) { if (this._routeComet) this._disposeRouteComet(); return; }
+    const selId = this._selectedVesselId;
+    const entry = selId ? this._vessels.get(selId) : null;
+    const rl = entry?.routeLine;
+    const arr = rl?.visible ? rl.geometry?.attributes?.position?.array : null;
+    if (!arr || arr.length < 6) { if (this._routeComet) this._disposeRouteComet(); return; }
+    if (!this._routeComet) {
+      const mat = new THREE.MeshBasicMaterial({ color: 0x88ffcc, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), mat);
+      this.scene.add(m);
+      this._routeComet = m;
+    }
+    const tt = (this._clock.getElapsedTime() * 0.6) % 1;  // pętla ~1.67s statek→cel
+    this._routeComet.position.set(
+      arr[0] + (arr[3] - arr[0]) * tt,
+      arr[1] + (arr[4] - arr[1]) * tt,
+      arr[2] + (arr[5] - arr[2]) * tt,
+    );
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(selId);
+    this._routeComet.material.color.setHex(this._orderLineColor(v));
+  }
+
+  _disposeRouteComet() {
+    if (!this._routeComet) return;
+    this.scene.remove(this._routeComet);
+    this._routeComet.geometry.dispose();
+    this._routeComet.material.dispose();
+    this._routeComet = null;
+  }
+
+  // ── Slice 6 — puls startu/przybycia statku (FX harness) ──────────────────
+  _spawnMovementPulse(vessel, color) {
+    if (!GAME_CONFIG.FEATURES?.fcMovementFx) return;
+    const p = vessel?.position;
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.08, 0.13, 24),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    ring.position.set(S(p.x), 0.3, S(p.y)); ring.rotation.x = -Math.PI / 2;
+    this._spawnFx(ring, { kind: 'pulse', lifetime: FX_RING_MS, baseScale: 1, baseOpacity: 0.8 });
+  }
+
+  // Miękka tekstura glow (radial) — współdzielona dla smug silnika (i innych FX).
+  _getGlowTex() {
+    if (this._fcGlowTex) return this._fcGlowTex;
+    const sz = 64;
+    const cv = document.createElement('canvas'); cv.width = cv.height = sz;
+    const c = cv.getContext('2d');
+    // Skondensowany rdzeń + szybki spadek (fix#4a: było zbyt rozproszone/duże).
+    const g = c.createRadialGradient(sz / 2, sz / 2, 0, sz / 2, sz / 2, sz / 2);
+    g.addColorStop(0,    'rgba(255,255,255,1)');
+    g.addColorStop(0.16, 'rgba(255,255,255,0.6)');
+    g.addColorStop(0.42, 'rgba(255,255,255,0.08)');
+    g.addColorStop(1,    'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, sz, sz);
+    this._fcGlowTex = new THREE.CanvasTexture(cv);
+    this._fcGlowTex.needsUpdate = true;
+    return this._fcGlowTex;
+  }
+
+  // Fix#5 — smuga silnika za statkiem w locie (additive glow, gaśnie). Zastępuje
+  // „kometę lecącą do przodu" (gracz: słabe). Throttled, bounded przez FX cap.
+  _tickEngineTrails(nowMs) {
+    if (!GAME_CONFIG.FEATURES?.fcMovementFx) return;
+    if (nowMs - (this._lastTrailMs ?? 0) < 110) return;  // throttle batchy
+    this._lastTrailMs = nowMs;
+    const vm = window.KOSMOS?.vesselManager;
+    if (!vm) return;
+    const tex = this._getGlowTex();
+    for (const [vid, entry] of this._vessels) {
+      const sp0 = entry?.sprite;
+      if (!sp0?.visible) continue;
+      const v = vm.getVessel?.(vid);
+      if (!v || v.isWreck || v.position?.state !== 'in_transit') continue;
+      if (isEnemyVessel(v) && !this._isEnemyEndpointVisible(vid)) continue;
+      // Gate ruchu — emituj TYLKO gdy statek realnie się przesunął (bez tego additive
+      // glow kumuluje się w jednym punkcie przy wolnym/stojącym statku → oślepiająca kula).
+      const p = sp0.position;
+      const prev = entry._trailPrev;
+      if (prev) {
+        const dx = p.x - prev.x, dz = p.z - prev.z;
+        if (dx * dx + dz * dz < 0.0036) continue;  // <0.06 WU od ostatniej smugi
+      }
+      entry._trailPrev = { x: p.x, z: p.z };
+      const mat = new THREE.SpriteMaterial({
+        map: tex, color: this._factionColorHex(v), transparent: true,
+        opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false,
+      });
+      const sp = new THREE.Sprite(mat);
+      sp.position.copy(p);
+      sp.scale.set(0.028, 0.028, 0.028);  // zwarta kropka (fix#4a: 0.045→0.028)
+      this._spawnFx(sp, { kind: 'trail', lifetime: 300, baseScale: 0.028, baseOpacity: 0.22 });
+    }
+  }
+
+  // ── Slice 5 — insygnia frakcji (billboard nad statkiem, intel-gated) ─────
+  // Osobny overlay mark&sweep (jak sensor ringi) — unika threadowania async
+  // model-swap + intel-visibility. Wróg widoczny TYLKO ≥contact (brak przecieku tożsamości).
+  static _createInsigniaTexture(colorHex) {
+    if (_INSIGNIA_TEX_CACHE.has(colorHex)) return _INSIGNIA_TEX_CACHE.get(colorHex);
+    const sz = 64;
+    const cv = document.createElement('canvas'); cv.width = cv.height = sz;
+    const c = cv.getContext('2d');
+    const hex = '#' + (colorHex >>> 0).toString(16).padStart(6, '0').slice(-6);
+    c.strokeStyle = hex; c.fillStyle = hex; c.lineWidth = 7; c.lineJoin = 'round';
+    c.globalAlpha = 0.95;
+    c.beginPath();                         // szewron
+    c.moveTo(sz * 0.22, sz * 0.64);
+    c.lineTo(sz * 0.50, sz * 0.30);
+    c.lineTo(sz * 0.78, sz * 0.64);
+    c.stroke();
+    c.beginPath();                         // kropka pod szewronem
+    c.arc(sz * 0.50, sz * 0.74, sz * 0.07, 0, Math.PI * 2); c.fill();
+    const tex = new THREE.CanvasTexture(cv);
+    tex.needsUpdate = true;
+    _INSIGNIA_TEX_CACHE.set(colorHex, tex);
+    return tex;
+  }
+
+  _syncInsignia() {
+    if (!GAME_CONFIG.FEATURES?.fcInsignia) { if (this._insigniaSprites.size) this._disposeAllInsignia(); return; }
+    const vm = window.KOSMOS?.vesselManager;
+    if (!vm) { if (this._insigniaSprites.size) this._disposeAllInsignia(); return; }
+    const active = new Set();
+    for (const [vid, entry] of this._vessels) {
+      if (!entry?.sprite?.visible) continue;       // ukryty ghost (unknown) → brak insygniów
+      const v = vm.getVessel?.(vid);
+      if (!v || v.isWreck) continue;
+      if (isEnemyVessel(v) && !this._isEnemyEndpointVisible(vid)) continue;  // wróg tylko ≥contact
+      active.add(vid);
+      this._upsertInsignia(vid, entry, v);
+    }
+    for (const k of [...this._insigniaSprites.keys()]) if (!active.has(k)) this._disposeInsignia(k);
+  }
+
+  _upsertInsignia(vid, entry, vessel) {
+    const col = this._factionColorHex(vessel);
+    let ins = this._insigniaSprites.get(vid);
+    if (!ins || ins._col !== col) {
+      if (ins) this._disposeInsignia(vid);
+      const tex = ThreeRenderer._createInsigniaTexture(col);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+      sp.scale.set(0.32, 0.32, 0.32);
+      sp._col = col;
+      this.scene.add(sp);
+      ins = sp;
+      this._insigniaSprites.set(vid, ins);
+    }
+    const p = entry.sprite.position;
+    ins.position.set(p.x, p.y + 0.4, p.z);
+    ins.material.opacity = entry.intelOpacity ?? 1.0;  // dopasuj do ghost-opacity (contact 0.5)
+  }
+
+  _disposeInsignia(vid) {
+    const ins = this._insigniaSprites.get(vid);
+    if (!ins) return;
+    this.scene.remove(ins);
+    ins.material?.dispose?.();   // tekstura (map) współdzielona z cache — NIE dispose
+    this._insigniaSprites.delete(vid);
+  }
+
+  _disposeAllInsignia() {
+    for (const k of [...this._insigniaSprites.keys()]) this._disposeInsignia(k);
   }
 
   // ─────────────────────────────────────────────────────────────

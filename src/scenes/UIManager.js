@@ -1676,6 +1676,12 @@ export class UIManager {
     const tr = window.KOSMOS?.threeRenderer;
     if (tr?._showAllLabels && !this.overlayManager.isAnyOpen()) this._drawAllLabels(ctx, tr);
 
+    // Slice 4 — ramki RTS + paski paliwa dla zaznaczonego (własnego) statku.
+    if (civMode && tr && GAME_CONFIG.FEATURES?.fcBrackets
+        && !this.overlayManager.isAnyOpen() && !globeOpen) {
+      this._drawSelectionBrackets(ctx, tr);
+    }
+
     // ── Dialog potwierdzenia ─────────────────────────────────
     if (this._confirmDialog?.visible) this._drawConfirmDialog();
 
@@ -1857,6 +1863,51 @@ export class UIManager {
       ctx.fillStyle = lbl.color ? this._softenColor(lbl.color, 0.7) : 'rgba(160,220,200,0.7)';
       ctx.fill();
     }
+    ctx.restore();
+  }
+
+  // Slice 4 — ramki RTS + paski paliwa nad zaznaczonym WŁASNYM statkiem.
+  // getVesselScreenPosition zwraca px ekranu (window.innerW/H) → /UI_SCALE jak labele.
+  _drawSelectionBrackets(ctx, tr) {
+    const id = this._selectedVesselId;
+    if (!id) return;
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(id);
+    if (!v || v.isWreck || isEnemyVessel(v)) return;  // tylko własne (brak przecieku HP/paliwa wroga)
+    const pos = tr.getVesselScreenPosition?.(id);
+    if (!pos) return;
+    const x = pos.x / UI_SCALE, y = pos.y / UI_SCALE;
+    if (x < 0 || x > W || y < 0 || y > H) return;
+    const s = 17, L = 7;
+    ctx.save();
+    // Cień pod ramką — czytelność na jasnym tle (gwiazda/glow).
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.lineWidth = 3.5;
+    const corner = (cx, cy, dx, dy) => {
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + dy * L); ctx.lineTo(cx, cy); ctx.lineTo(cx + dx * L, cy);
+      ctx.stroke();
+    };
+    corner(x - s, y - s, +1, +1); corner(x + s, y - s, -1, +1);
+    corner(x - s, y + s, +1, -1); corner(x + s, y + s, -1, -1);
+    // Główne ramki — jasny mint, grubsze (widoczne z daleka).
+    ctx.strokeStyle = 'rgba(140,255,200,0.95)';
+    ctx.lineWidth = 2;
+    corner(x - s, y - s, +1, +1); corner(x + s, y - s, -1, +1);
+    corner(x - s, y + s, +1, -1); corner(x + s, y + s, -1, -1);
+    // Mały znacznik środka — lokalizator statku gdy z daleka to ledwie piksel.
+    ctx.fillStyle = 'rgba(140,255,200,0.9)';
+    ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
+    // Paski zasobów pod ramką (paliwo + warp jeśli statek warp).
+    const bw = s * 2, bh = 3, bx = x - s;
+    let by = y + s + 4;
+    const bar = (frac, colFull, colLow) => {
+      frac = Math.max(0, Math.min(1, frac));
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = frac > 0.3 ? colFull : colLow; ctx.fillRect(bx, by, bw * frac, bh);
+      by += bh + 2;
+    };
+    if (v.fuel && v.fuel.max > 0)         bar(v.fuel.current / v.fuel.max, '#44cc66', '#cc6644');
+    if (v.warpFuel && v.warpFuel.max > 0) bar(v.warpFuel.current / v.warpFuel.max, '#6688ff', '#445599');
     ctx.restore();
   }
 

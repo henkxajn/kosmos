@@ -46,6 +46,17 @@ export class TimeSystem {
       this._triggerAutoSlow(t('log.autoSlowLifeExtinct', planet?.name ?? '?')));
     EventBus.on('disk:phaseChanged',  ({ newPhase, newPhasePL }) =>
       this._triggerAutoSlow(t('log.autoSlowDiskPhase', newPhasePL ?? newPhase)));
+    // Fleet Command Console (Slice 1) — auto-slow gdy gracz wchodzi w starcie floty
+    // (bitwa deep-space rozgrywa się na żywo na mapie; daj czas obejrzeć/zoomować).
+    EventBus.on('vessel:engaged', ({ sideA = [], sideB = [] }) => {
+      const vm = window.KOSMOS?.vesselManager;
+      if (!vm) return;
+      const isOwn = (v) => v && !(v.isEnemy === true
+        || (v.owner && v.owner !== 'player')
+        || (v.ownerEmpireId && v.ownerEmpireId !== 'player'));
+      const playerIn = [...sideA, ...sideB].some(id => isOwn(vm.getVessel?.(id)));
+      if (playerIn) this._triggerAutoSlow(t('log.autoSlowCombat'));
+    });
     // resource:shortage — NIE zwalniaj czasu; gracz sam kontroluje prędkość
     // EventBus.on('resource:shortage', ...) — usunięte na życzenie gracza
   }

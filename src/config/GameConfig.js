@@ -81,6 +81,19 @@ export const GAME_CONFIG = {
     // czasu live-gate (Stage 9 flip ON). Bramkuje: subskrypcję vessel:arrived,
     // tick traktatów (_tickTreaties), AI envoy (AlienCivSystem) i akcje w DiplomacyOverlay.
     lightDiplomacy:       true,
+    // ── Fleet Command Console — reforma wizualna statków na mapie 3D ───────
+    // Master + sub-gate per slice (rollback per-feature bez restartu). Render/
+    // runtime-only — brak migracji save. Selekcja LPM, walka na żywej mapie,
+    // kamera bitwy, rozkazy z mapy, skan/linie/insygnia/ramki.
+    fcConsole:            true,   // Slice 0 — fundament (selekcja + FX harness + helpery)
+    fcCombatFx:           true,   // Slice 1 — smugi/błyski walki + kamera bitwy + retire kina DSCS
+    fcScanFx:             true,   // Slice 2 — efekty skanu (snop/pierścień/ping)
+    fcOrderLines:         true,   // Slice 3 — animowane linie rozkazów (kolor/strumień/grot)
+    fcBrackets:           true,   // Slice 4 — ramki zaznaczenia + paski HP/tarcza (#ui-canvas)
+    fcInsignia:           true,   // Slice 5 — insygnia frakcji nad statkiem
+    fcMovementFx:         true,   // Slice 6 — żywość ruchu (roll/bob/poświata/pulsy)
+    fcCommandFromMap:     true,   // Slice 7 — PPM rozkazy wprost z mapy 3D
+    fcMultiSelect:        false,  // Slice 8 — multi-select Set (ODŁOŻONE do v1.1)
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

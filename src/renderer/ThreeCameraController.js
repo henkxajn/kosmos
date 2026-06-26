@@ -74,12 +74,13 @@ export class ThreeCameraController {
       if (window.KOSMOS?.overlayManager?.isAnyOpen()) return;
       // Blokuj zoom gdy kursor jest nad elementem UI
       if (this._isOverUI && this._isOverUI(e.clientX, e.clientY)) return;
-      // Adaptacyjna czułość: wolniej przy bliskim zoomie → precyzja
-      const zoomSpeed = this._targetDist < 0.1 ? 0.001
-                      : this._targetDist < 0.5 ? 0.002
-                      : this._targetDist < 2   ? 0.005
-                      : this._targetDist < 5   ? 0.01
-                      : this._targetDist < 20  ? 0.02 : 0.05;
+      // Adaptacyjna czułość: wolniej przy bliskim zoomie → precyzja.
+      // Fix#5: drobniejsze kroki w zakresie statku (0.05–0.6) → łatwiej trafić pośredni zoom.
+      const zoomSpeed = this._targetDist < 0.15 ? 0.0006
+                      : this._targetDist < 0.6  ? 0.0012
+                      : this._targetDist < 2    ? 0.004
+                      : this._targetDist < 5    ? 0.01
+                      : this._targetDist < 20   ? 0.02 : 0.05;
       this._targetDist = Math.max(this._minDist, Math.min(450, this._targetDist + e.deltaY * zoomSpeed));
     }, { passive: false });
   }
