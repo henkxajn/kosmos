@@ -128,9 +128,9 @@ export class Outliner {
 
     const x = W - OUTLINER_W + offX;   // dokowany (offX=0) lub wysunięty z prawej
 
-    // Tło: ciemniejsze/bardziej kryjące niż glass + cienka linia accentu na lewej krawędzi.
+    // Tło: PEŁNE krycie — prawy drawer zasłania treść pod sobą (ColonyOverlay itp.).
     // GÓRNY obszar (y < CHIP_CLEAR_H) PRZEZROCZYSTY — chip czasu widoczny i klikalny przez drawer.
-    ctx.fillStyle = bgAlpha(0.55);
+    ctx.fillStyle = bgAlpha(1);
     ctx.fillRect(x, CHIP_CLEAR_H, OUTLINER_W, h - CHIP_CLEAR_H);
     ctx.strokeStyle = THEME.borderActive;
     ctx.lineWidth = 1;
@@ -972,6 +972,14 @@ export class Outliner {
       if (this._slideProgress <= 0.001) return false;
     }
     return x >= W - OUTLINER_W + (this._slideOffX ?? 0) && y >= CHIP_CLEAR_H && y <= H - BOTTOM_RESERVED;
+  }
+
+  // Szerokość (px logiczne) jaką drawer AKTUALNIE zasłania od prawej krawędzi
+  // (0 gdy schowany, OUTLINER_W gdy w pełni wysunięty). Używane przez ColonyOverlay,
+  // by globus 3D (osobny canvas nad ui-canvas) nie wchodził pod drawer.
+  getCoveredWidth() {
+    if (!this._drawerMode) return OUTLINER_W;   // dok (poza civMode — pełna szerokość)
+    return Math.round(OUTLINER_W * this._slideProgress);
   }
 
   // Slice C — czy drawer animuje (slide/hide-timer) → UIManager podtrzymuje redraw

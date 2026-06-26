@@ -1003,8 +1003,22 @@ export class ColonyOverlay extends BaseOverlay {
     const pad = 12;
 
     // ── Globus 3D (góra) ──
-    const discSize = Math.min(w - pad * 2, Math.round(h * 0.42));
-    const discX = x + (w - discSize) / 2;
+    // Globus to osobny DOM canvas (z-index:3) NAD ui-canvas — drawer rysowany na
+    // ui-canvas nie może go zakryć. Dlatego kurczymy/przesuwamy globus tak, by nie
+    // wchodził pod prawy drawer (Outliner). availRight = prawy limit (krawędź info
+    // panelu minus aktualnie zasłonięta przez drawer szerokość).
+    const drawer = window.KOSMOS?.uiManager?._outliner;
+    const drawerCover = drawer?.getCoveredWidth?.() ?? 0;
+    const availRight = (x + w - drawerCover) - 4;
+    let discSize = Math.min(w - pad * 2, Math.round(h * 0.42));
+    let discX = x + (w - discSize) / 2;
+    if (discX + discSize > availRight) {
+      discX = availRight - discSize;            // przesuń w lewo spod drawera
+      if (discX < x + pad) {                     // nie mieści się — zmniejsz
+        discX = x + pad;
+        discSize = Math.max(60, availRight - discX);
+      }
+    }
     const discY = y + 8;
     this._syncGlobe(discX, discY, discSize, discSize, planet, grid);
 

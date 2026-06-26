@@ -1337,13 +1337,16 @@ export class UIManager {
       return this._hitTestConfirm(x, y);
     }
 
+    // Outliner — prawy drawer rysowany NA SAMYM WIERZCHU (zawsze na topie), więc jego
+    // klik ma priorytet PRZED wszystkimi panelami, które wizualnie zasłania (combatHud,
+    // stationPanel, bell/MENU, dziennik). hitTest zwraca false poza drawerem/triggerem.
+    if (window.KOSMOS?.civMode && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager)
     // CombatHUD minimize button — rysowany na wierzchu overlay'ów, więc klik
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._bottomNavBar?.handleClick?.(x, y)) return true;   // UI v3 — dolny pasek nawigacji (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._bottomControlBar?.handleClick?.(x, y)) return true;   // UI v3 — bell/MENU/zegar (PRZED overlayManager)
-    if (window.KOSMOS?.civMode && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleClick?.(x, y)) return true;   // górny pasek surowców — klik kolonii→panel, reszta pochłaniana (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._eventLogDrawer?.handleClick?.(x, y)) return true;   // dziennik (dolny hover-drawer) — klik → pełny overlay eventLog (PRZED overlayManager)
 
@@ -1628,13 +1631,6 @@ export class UIManager {
     if (civMode && !globeOpen) this._bottomNavBar.draw(ctx, W, H);
     // ── BottomControlBar (bell + MENU + zegar) — UI v3, mały pasek nad nawigacją, prawy. ──
     if (civMode && !globeOpen) this._bottomControlBar.draw(ctx, W, H, this._timeState);
-    // ── Outliner — Slice B+C: ZAWSZE prawy WYSUWANY drawer w civMode (hover prawej
-    //    krawędzi → wysuwa; brak hovera → chowa), niezależnie od tego czy overlay jest
-    //    otwarty. Rysowany PO overlayu (na wierzchu). ──
-    if (civMode && !globeOpen && this._outlinerState) {
-      this._outliner._drawerMode = true;
-      this._outliner.draw(ctx, W, H, this._outlinerState);
-    }
     // ── M4 P3 — CombatHUD always-on (rysowany NA WIERZCHU overlay'i,
     //    samo-filtrujący by active encounters). Tylko w civMode.
     if (civMode && !globeOpen) this.combatHud.draw(ctx, W, H);
@@ -1646,6 +1642,16 @@ export class UIManager {
       audioEnabled: this._audioEnabled,
       musicEnabled: this._musicEnabled,
     });
+
+    // ── Outliner — Slice B+C: ZAWSZE prawy WYSUWANY drawer w civMode (hover prawej
+    //    krawędzi → wysuwa; brak hovera → chowa), niezależnie od tego czy overlay jest
+    //    otwarty. Rysowany NA SAMYM WIERZCHU (po wszystkich panelach: combatHud,
+    //    stationPanel, dziennik, pasek bell/MENU, MENU) — prawy drawer ma być zawsze
+    //    widoczny, nic go nie zasłania. ──
+    if (civMode && !globeOpen && this._outlinerState) {
+      this._outliner._drawerMode = true;
+      this._outliner.draw(ctx, W, H, this._outlinerState);
+    }
 
     // ── Panel akcji gracza (tylko tryb Generator) ────────────
     if (!civMode && window.KOSMOS?.scenario === 'generator') this._drawActionPanel();
