@@ -18,6 +18,8 @@
 // Eventy:
 //   vessel:proximityEnter    { vesselAId, vesselBId, distanceAU, sameFaction }
 //   vessel:proximityExit     { vesselAId, vesselBId }
+//   vessel:sensorLockEnter   { vesselAId, vesselBId, distanceAU, sameFaction }  (reforma detekcji — reveal tożsamości)
+//   vessel:sensorLockExit    { vesselAId, vesselBId }
 //   vessel:combatRangeEnter  { vesselAId, vesselBId, distanceAU, sameFaction }
 //   vessel:combatRangeExit   { vesselAId, vesselBId }
 //
@@ -85,6 +87,8 @@ export class ProximitySystem {
     this._activePairs = new Set();
     /** @type {Set<string>} aktywne pary w combat range (<0.15 AU) */
     this._activeCombatPairs = new Set();
+    /** @type {Set<string>} aktywne pary w sensor-lock (reforma detekcji — reveal tożsamości) */
+    this._activeSensorLockPairs = new Set();
     /** @type {number} offset do rotacji iteracji w _tick (budget handling) */
     this._iterationOffset = 0;
 
@@ -197,6 +201,32 @@ export class ProximitySystem {
     }
     // W pasie hysteresis (enterAU .. exitAU) — no-op dla spójności.
 
+    // Trzeci próg: sensor-lock (reforma detekcji) — reveal tożsamości wroga BEZ walki.
+    // Gdy własny statek gracza zbliży się na SENSOR_LOCK_AU×tech do wroga → emit
+    // vessel:sensorLockEnter; IntelSystem podbija intel rumor→contact (advanceVesselContact,
+    // BYPASS dystansowego progu w _observeVessel). Próg leży MIĘDZY detection (rumor)
+    // a combat (0.15). Liczy się tylko gdy któryś vessel to gracz (enemy lock=0).
+    if (GAME_CONFIG.FEATURES?.sensorLockContact) {
+      const isLocked    = this._activeSensorLockPairs.has(key);
+      const lockEnterAU = Math.max(this._getSensorLockAU(v1), this._getSensorLockAU(v2));
+      if (lockEnterAU > 0) {
+        const lockExitAU = lockEnterAU * DETECTION_HYSTERESIS;
+        if (!isLocked && distAU < lockEnterAU) {
+          this._activeSensorLockPairs.add(key);
+          const sameFaction = (v1.ownerEmpireId ?? null) === (v2.ownerEmpireId ?? null);
+          EventBus.emit('vessel:sensorLockEnter', {
+            vesselAId:  v1.id,
+            vesselBId:  v2.id,
+            distanceAU: distAU,
+            sameFaction,
+          });
+        } else if (isLocked && distAU >= lockExitAU) {
+          this._activeSensorLockPairs.delete(key);
+          EventBus.emit('vessel:sensorLockExit', { vesselAId: v1.id, vesselBId: v2.id });
+        }
+      }
+    }
+
     // Drugi próg: combat range. M4 P3 hotfix3 — DYNAMIC per pair:
     // combat enter = max(BASE 0.15, weapon range obu vesseli × 1.05).
     // Vessel z missile (0.30 AU) inicjuje combat z 0.30 AU; frigate z kinetic
@@ -272,10 +302,34 @@ export class ProximitySystem {
    */
   _getDetectionRangeAU(vessel) {
     const isPlayer = (vessel.ownerEmpireId == null || vessel.ownerEmpireId === 'player');
+    // Wróg: flat baza (empire tech state nie trackowany — P5). Asymetria na korzyść gracza.
     if (!isPlayer) return PROXIMITY_DETECTION_AU;
+    // Gracz: per-kadłub sensorRangeAU × mnożnik techu sensorów. Fallback do bazy gdy
+    // VesselManager/TechSystem niedostępny (np. headless smoke bez window.KOSMOS).
+    const vm      = window.KOSMOS?.vesselManager;
     const techSys = window.KOSMOS?.techSystem;
-    if (!techSys?.getMultiplier) return PROXIMITY_DETECTION_AU;
-    return PROXIMITY_DETECTION_AU * techSys.getMultiplier('sensor_range');
+    const base    = vm?.getVesselSensorRangeAU ? vm.getVesselSensorRangeAU(vessel) : PROXIMITY_DETECTION_AU;
+    const mult    = techSys?.getMultiplier ? techSys.getMultiplier('sensor_range') : 1.0;
+    return base * mult;
+  }
+
+  /**
+   * Reforma detekcji — zasięg sensor-lock (reveal tożsamości) per vessel.
+   *
+   * Tylko statki GRACZA identyfikują wroga (reveal = wiedza gracza); wróg → 0
+   * (nie podbija intelu gracza). Próg = SENSOR_LOCK_AU (0.3 AU) × mnożnik techu
+   * sensorów — skaluje się razem z zasięgiem wykrycia. Pair lock = max obu = lock gracza.
+   *
+   * @private
+   * @param {object} vessel
+   * @returns {number} sensor-lock range w AU (0 dla wroga)
+   */
+  _getSensorLockAU(vessel) {
+    const isPlayer = (vessel.ownerEmpireId == null || vessel.ownerEmpireId === 'player');
+    if (!isPlayer) return 0;
+    const techSys = window.KOSMOS?.techSystem;
+    const mult    = techSys?.getMultiplier ? techSys.getMultiplier('sensor_range') : 1.0;
+    return GAME_CONFIG.SENSOR_LOCK_AU * mult;
   }
 
   /**
@@ -287,7 +341,8 @@ export class ProximitySystem {
    */
   _handleVesselWrecked({ vesselId }) {
     if (!vesselId) return;
-    if (this._activePairs.size === 0 && this._activeCombatPairs.size === 0) return;
+    if (this._activePairs.size === 0 && this._activeCombatPairs.size === 0
+        && this._activeSensorLockPairs.size === 0) return;
     const prefix1 = `${vesselId}|`;
     const suffix1 = `|${vesselId}`;
     for (const key of [...this._activePairs]) {
@@ -300,12 +355,18 @@ export class ProximitySystem {
         this._activeCombatPairs.delete(key);
       }
     }
+    for (const key of [...this._activeSensorLockPairs]) {
+      if (key.startsWith(prefix1) || key.endsWith(suffix1)) {
+        this._activeSensorLockPairs.delete(key);
+      }
+    }
   }
 
   destroy() {
     EventBus.off('vessel:wrecked', this._onVesselWrecked);
     this._activePairs.clear();
     this._activeCombatPairs.clear();
+    this._activeSensorLockPairs.clear();
     this._iterationOffset = 0;
   }
 

@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 
 const DRAG_THRESHOLD = 5;  // px — poniżej = kliknięcie, powyżej = orbit
 
@@ -39,6 +40,8 @@ export class ThreeCameraController {
     // Wszystkie zdarzenia na window — nie zależy od z-index warstw
     window.addEventListener('mousedown', (e) => {
       if (e.button !== 0) return;
+      // Slice 8 — SHIFT+LPM zarezerwowane na box-select (GameScene); kamera nie orbituje.
+      if (e.shiftKey && GAME_CONFIG.FEATURES?.fcMultiSelect) return;
       // Blokuj kamerę gdy kursor jest nad elementem UI
       if (this._isOverUI && this._isOverUI(e.clientX, e.clientY)) return;
       this._isDragging = true;

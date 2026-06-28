@@ -93,7 +93,15 @@ export const GAME_CONFIG = {
     fcInsignia:           true,   // Slice 5 — insygnia frakcji nad statkiem
     fcMovementFx:         true,   // Slice 6 — żywość ruchu (roll/bob/poświata/pulsy)
     fcCommandFromMap:     true,   // Slice 7 — PPM rozkazy wprost z mapy 3D
-    fcMultiSelect:        false,  // Slice 8 — multi-select Set (ODŁOŻONE do v1.1)
+    fcMultiSelect:        true,   // Slice 8 — multi-select (CTRL+klik toggle + SHIFT box-select)
+    // ── Reforma detekcji (post-handoff) — sensory per-kadłub + reveal tożsamości ──
+    // sensorLockContact: trzeci próg w ProximitySystem (sensor-lock) — własny statek
+    //   w promieniu SENSOR_LOCK_AU×tech od wroga → vessel:sensorLockEnter → IntelSystem
+    //   advanceVesselContact('contact'). Reveal tożsamości BEZ walki (skalowany techem).
+    // observatoryVesselScan: aktywny skan wykrytego wroga z obserwatorium (zadanie) →
+    //   po SCAN_DURATION_YEARS rumor→contact. Render/runtime-only, bez migracji save.
+    sensorLockContact:    true,
+    observatoryVesselScan: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

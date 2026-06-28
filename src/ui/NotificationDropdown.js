@@ -19,11 +19,13 @@ let _listeners = false;
 // Ikony per typ grupy (dla nagłówka grupy w dropdown)
 const GROUP_ICONS = {
   discovery_body: '🔭',
+  vessel_scan:    '🛰',
 };
 
 function _groupTitle(type) {
   switch (type) {
     case 'discovery_body': return t('notif.group.discoveryBody');
+    case 'vessel_scan':    return t('notif.group.vesselScan');
     default:               return type;
   }
 }

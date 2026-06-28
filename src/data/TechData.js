@@ -1213,9 +1213,9 @@ export const TECHS = {
     cost:        { research: 80 },
     requires:    [],
     effects: [
-      { type: 'multiplier', category: 'sensor_range', value: 1.25 },
+      { type: 'multiplier', category: 'sensor_range', value: 1.6 },
     ],
-    description: 'Lepsze anteny radarowe — +25% zasięg sensorów statków (0.5 → 0.625 AU).',
+    description: 'Lepsze anteny radarowe — +60% zasięg sensorów statków (fregata 1.6 → 2.6 AU).',
   },
 
   advanced_sensors_2: {
@@ -1227,9 +1227,9 @@ export const TECHS = {
     cost:        { research: 180 },
     requires:    ['advanced_sensors_1'],
     effects: [
-      { type: 'multiplier', category: 'sensor_range', value: 1.20 },  // łącznie ×1.5 z poprzednim
+      { type: 'multiplier', category: 'sensor_range', value: 1.6 },  // łącznie ×2.56 z poprzednim
     ],
-    description: 'Macierze fazowane — łącznie ×1.5 zasięg sensorów (0.75 AU).',
+    description: 'Macierze fazowane — łącznie ×2.56 zasięg sensorów (fregata → 4.1 AU).',
   },
 
   advanced_sensors_3: {
@@ -1241,9 +1241,9 @@ export const TECHS = {
     cost:        { research: 320 },
     requires:    ['advanced_sensors_2', 'quantum_computing'],
     effects: [
-      { type: 'multiplier', category: 'sensor_range', value: 1.333 },  // łącznie ×2.0 (1.25 × 1.20 × 1.333)
+      { type: 'multiplier', category: 'sensor_range', value: 1.8 },  // łącznie ×4.6 (1.6 × 1.6 × 1.8)
     ],
-    description: 'Sieci sensoryczne kwantowe — łącznie ×2.0 zasięg sensorów (1.0 AU).',
+    description: 'Sieci sensoryczne kwantowe — łącznie ×4.6 zasięg sensorów (fregata → 7.4 AU, zwiadowca → ~11.5 AU).',
   },
 
   weapon_optics: {

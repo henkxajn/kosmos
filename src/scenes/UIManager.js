@@ -186,6 +186,12 @@ export class UIManager {
     // M3 P1.1 — selection model dla orderów (single source of truth).
     // FleetManagerOverlay._selectedVesselId pełni rolę cache rendering.
     this._selectedVesselId = null;
+    // Slice 8 (fcMultiSelect) — multi-select Set. `_selectedVesselId` zostaje
+    // „leadem" (aktywny statek do pickerów/panelu); zbiór ZAWSZE zawiera lead
+    // przy single-select. Render ramek + dispatch rozkazów iterują po zbiorze.
+    this._selectedVesselIds = new Set();
+    // Slice 8 — prostokąt box-select (client px) rysowany w draw(); ustawia GameScene.
+    this._marqueeRect = null;
     // Player Fleet Groups (P2) — analogiczne selektor floty (single source of truth).
     // RightClickMenu czyta przez getSelectedFleetId() żeby pokazywać fleet-context
     // entries. FleetManagerOverlay._selectedFleetId pełni rolę cache rendering.
@@ -331,8 +337,16 @@ export class UIManager {
     return this._selectedVesselId;
   }
 
+  // Slice 8 — kopia zbioru zaznaczonych (lead + reszta). Single-select = [lead].
+  getSelectedVesselIds() {
+    return [...this._selectedVesselIds];
+  }
+
+  // Single-select: zastępuje CAŁY zbiór jednym statkiem (lub czyści gdy null).
   setSelectedVesselId(vesselId) {
-    if (this._selectedVesselId === vesselId) return;  // dedupe
+    // Dedupe tylko gdy zbiór to już dokładnie {vesselId} (re-klik leada przy
+    // multi-select MUSI zwinąć zbiór do jednego — dlatego warunek o rozmiarze).
+    if (this._selectedVesselId === vesselId && this._selectedVesselIds.size <= 1) return;
     if (vesselId !== null) {
       const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
       if (!v) {
@@ -342,10 +356,45 @@ export class UIManager {
     }
     const prev = this._selectedVesselId;
     this._selectedVesselId = vesselId;
-    // Sync cache w FleetOverlay (D1: jednokierunkowy data flow)
+    this._selectedVesselIds = vesselId === null ? new Set() : new Set([vesselId]);
+    this._syncFleetOvLead();
+    EventBus.emit('ui:selectionChanged', { vesselId, vesselIds: [...this._selectedVesselIds], prevVesselId: prev });
+  }
+
+  // Slice 8 — dodaj statek do zbioru (multi-select; nie czyści). Tylko OWN żywe.
+  addToSelection(vesselId) {
+    if (vesselId == null) return;
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    if (!v || v.isWreck || isEnemyVessel(v)) return;
+    if (this._selectedVesselIds.has(vesselId)) return;
+    this._selectedVesselIds.add(vesselId);
+    if (this._selectedVesselId == null) this._selectedVesselId = vesselId;  // pierwszy = lead
+    this._syncFleetOvLead();
+    EventBus.emit('ui:selectionChanged', { vesselId: this._selectedVesselId, vesselIds: [...this._selectedVesselIds], prevVesselId: this._selectedVesselId });
+  }
+
+  // Slice 8 — usuń statek ze zbioru; gdy był leadem, lead = pierwszy pozostały.
+  removeFromSelection(vesselId) {
+    if (!this._selectedVesselIds.delete(vesselId)) return;
+    if (this._selectedVesselId === vesselId) {
+      this._selectedVesselId = this._selectedVesselIds.values().next().value ?? null;
+    }
+    this._syncFleetOvLead();
+    EventBus.emit('ui:selectionChanged', { vesselId: this._selectedVesselId, vesselIds: [...this._selectedVesselIds], prevVesselId: vesselId });
+  }
+
+  // Slice 8 — toggle (CTRL+klik): w zbiorze → usuń, poza → dodaj.
+  toggleSelection(vesselId) {
+    if (this._selectedVesselIds.has(vesselId)) this.removeFromSelection(vesselId);
+    else this.addToSelection(vesselId);
+  }
+
+  _syncFleetOvLead() {
     const fleetOv = this.overlayManager?.overlays?.fleet;
-    if (fleetOv) fleetOv._selectedVesselId = vesselId;
-    EventBus.emit('ui:selectionChanged', { vesselId, prevVesselId: prev });
+    if (fleetOv) {
+      fleetOv._selectedVesselId = this._selectedVesselId;          // cache leada (D1: jednokierunkowy)
+      fleetOv._selectedVesselIds = new Set(this._selectedVesselIds);  // Slice 8 — cache zbioru (highlight rostera)
+    }
   }
 
   // ── P2: Selected fleet (analog vessel) ────────────────────────
@@ -1681,6 +1730,10 @@ export class UIManager {
         && !this.overlayManager.isAnyOpen() && !globeOpen) {
       this._drawSelectionBrackets(ctx, tr);
     }
+    // Slice 8 — prostokąt box-select (gdy aktywny drag); nad mapą, pod overlayami.
+    if (civMode && !globeOpen && this._marqueeRect && !this.overlayManager.isAnyOpen()) {
+      this._drawMarquee(ctx);
+    }
 
     // ── Dialog potwierdzenia ─────────────────────────────────
     if (this._confirmDialog?.visible) this._drawConfirmDialog();
@@ -1869,7 +1922,18 @@ export class UIManager {
   // Slice 4 — ramki RTS + paski paliwa nad zaznaczonym WŁASNYM statkiem.
   // getVesselScreenPosition zwraca px ekranu (window.innerW/H) → /UI_SCALE jak labele.
   _drawSelectionBrackets(ctx, tr) {
-    const id = this._selectedVesselId;
+    // Slice 8 — rysuj ramki dla CAŁEGO zbioru (lead jaśniejszy, reszta przyciemniona).
+    // Zbiór zawsze zawiera lead przy single-select; fallback do leada gdy zbiór pusty.
+    const ids = this._selectedVesselIds;
+    if (ids && ids.size > 0) {
+      for (const id of ids) this._drawBracketForVessel(ctx, tr, id, id === this._selectedVesselId);
+    } else if (this._selectedVesselId) {
+      this._drawBracketForVessel(ctx, tr, this._selectedVesselId, true);
+    }
+  }
+
+  // Rysuje ramki RTS dla jednego statku. isLead = jaśniejsze + paski zasobów.
+  _drawBracketForVessel(ctx, tr, id, isLead) {
     if (!id) return;
     const v = window.KOSMOS?.vesselManager?.getVessel?.(id);
     if (!v || v.isWreck || isEnemyVessel(v)) return;  // tylko własne (brak przecieku HP/paliwa wroga)
@@ -1878,6 +1942,7 @@ export class UIManager {
     const x = pos.x / UI_SCALE, y = pos.y / UI_SCALE;
     if (x < 0 || x > W || y < 0 || y > H) return;
     const s = 17, L = 7;
+    const mainA = isLead ? 0.95 : 0.55;   // reszta zbioru przyciemniona
     ctx.save();
     // Cień pod ramką — czytelność na jasnym tle (gwiazda/glow).
     ctx.strokeStyle = 'rgba(0,0,0,0.55)';
@@ -1890,24 +1955,43 @@ export class UIManager {
     corner(x - s, y - s, +1, +1); corner(x + s, y - s, -1, +1);
     corner(x - s, y + s, +1, -1); corner(x + s, y + s, -1, -1);
     // Główne ramki — jasny mint, grubsze (widoczne z daleka).
-    ctx.strokeStyle = 'rgba(140,255,200,0.95)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = `rgba(140,255,200,${mainA})`;
+    ctx.lineWidth = isLead ? 2 : 1.5;
     corner(x - s, y - s, +1, +1); corner(x + s, y - s, -1, +1);
     corner(x - s, y + s, +1, -1); corner(x + s, y + s, -1, -1);
     // Mały znacznik środka — lokalizator statku gdy z daleka to ledwie piksel.
-    ctx.fillStyle = 'rgba(140,255,200,0.9)';
+    ctx.fillStyle = `rgba(140,255,200,${isLead ? 0.9 : 0.55})`;
     ctx.beginPath(); ctx.arc(x, y, 1.6, 0, Math.PI * 2); ctx.fill();
-    // Paski zasobów pod ramką (paliwo + warp jeśli statek warp).
-    const bw = s * 2, bh = 3, bx = x - s;
-    let by = y + s + 4;
-    const bar = (frac, colFull, colLow) => {
-      frac = Math.max(0, Math.min(1, frac));
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, by, bw, bh);
-      ctx.fillStyle = frac > 0.3 ? colFull : colLow; ctx.fillRect(bx, by, bw * frac, bh);
-      by += bh + 2;
-    };
-    if (v.fuel && v.fuel.max > 0)         bar(v.fuel.current / v.fuel.max, '#44cc66', '#cc6644');
-    if (v.warpFuel && v.warpFuel.max > 0) bar(v.warpFuel.current / v.warpFuel.max, '#6688ff', '#445599');
+    // Paski zasobów pod ramką (paliwo + warp) — tylko dla leada (mniej clutter).
+    if (isLead) {
+      const bw = s * 2, bh = 3, bx = x - s;
+      let by = y + s + 4;
+      const bar = (frac, colFull, colLow) => {
+        frac = Math.max(0, Math.min(1, frac));
+        ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = frac > 0.3 ? colFull : colLow; ctx.fillRect(bx, by, bw * frac, bh);
+        by += bh + 2;
+      };
+      if (v.fuel && v.fuel.max > 0)         bar(v.fuel.current / v.fuel.max, '#44cc66', '#cc6644');
+      if (v.warpFuel && v.warpFuel.max > 0) bar(v.warpFuel.current / v.warpFuel.max, '#6688ff', '#445599');
+    }
+    ctx.restore();
+  }
+
+  // Slice 8 — prostokąt box-select (marquee). _marqueeRect w CLIENT px (ustawia
+  // GameScene); konwersja /UI_SCALE jak ramki. Rysowany w draw() po brackets.
+  _drawMarquee(ctx) {
+    const r = this._marqueeRect;
+    if (!r) return;
+    const x0 = Math.min(r.x0, r.x1) / UI_SCALE, y0 = Math.min(r.y0, r.y1) / UI_SCALE;
+    const x1 = Math.max(r.x0, r.x1) / UI_SCALE, y1 = Math.max(r.y0, r.y1) / UI_SCALE;
+    ctx.save();
+    ctx.fillStyle = 'rgba(140,255,200,0.10)';
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    ctx.strokeStyle = 'rgba(140,255,200,0.85)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
     ctx.restore();
   }
 

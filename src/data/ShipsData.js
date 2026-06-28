@@ -34,6 +34,7 @@ export const SHIPS = {
     baseSpeedAU:       1.3,
     baseCargoCapacity: 0,
     baseFuelPerAU:     0.4,
+    sensorRangeAU:     2.5,    // AU — kadłub naukowy: szerokie sensory zwiadowcze (reforma detekcji)
     // Aliasy kompatybilności (stary kod czyta te pola z SHIPS[shipId])
     fuelCapacity:      8,
     fuelPerAU:         0.4,
@@ -72,6 +73,7 @@ export const SHIPS = {
     baseSpeedAU:       1.0,
     baseCargoCapacity: 0,    // cargo wyłącznie z modułów
     baseFuelPerAU:     0.5,
+    sensorRangeAU:     1.0,    // AU — transport: minimalne sensory (reforma detekcji)
     // Aliasy kompatybilności (stary kod czyta te pola z SHIPS[shipId])
     fuelCapacity:      10,
     fuelPerAU:         0.5,
@@ -114,6 +116,7 @@ export const SHIPS = {
     baseSpeedAU:       0.9,
     baseCargoCapacity: 0,
     baseFuelPerAU:     0.6,
+    sensorRangeAU:     1.0,    // AU — zaopatrzeniowiec: minimalne sensory (reforma detekcji)
     // Aliasy kompatybilności
     fuelCapacity:      12,
     fuelPerAU:         0.6,

@@ -292,11 +292,11 @@ export default {
 
   // M4 P3 — Sensor + Weapon Range Tech (defense)
   'tech.advanced_sensors_1.name':  'Zaawansowane Sensory I',
-  'tech.advanced_sensors_1.desc':  'Lepsze anteny radarowe \u2014 +25% zasięg sensorów statków (0.5 \u2192 0.625 AU).',
+  'tech.advanced_sensors_1.desc':  'Lepsze anteny radarowe \u2014 +60% zasięg sensorów statków (fregata 1.6 \u2192 2.6 AU).',
   'tech.advanced_sensors_2.name':  'Zaawansowane Sensory II',
-  'tech.advanced_sensors_2.desc':  'Macierze fazowane \u2014 łącznie \u00d71.5 zasięg sensorów (0.75 AU).',
+  'tech.advanced_sensors_2.desc':  'Macierze fazowane \u2014 łącznie \u00d72.56 zasięg sensorów (fregata \u2192 4.1 AU).',
   'tech.advanced_sensors_3.name':  'Zaawansowane Sensory III',
-  'tech.advanced_sensors_3.desc':  'Sieci sensoryczne kwantowe \u2014 łącznie \u00d72.0 zasięg sensorów (1.0 AU).',
+  'tech.advanced_sensors_3.desc':  'Sieci sensoryczne kwantowe \u2014 łącznie \u00d74.6 zasięg sensorów (fregata \u2192 7.4 AU, zwiadowca \u2192 ~11.5 AU).',
   'tech.weapon_optics.name':       'Optyka Bojowa',
   'tech.weapon_optics.desc':       'Celowniki laserowe i światłowodowe \u2014 +25% zasięg broni krótkiego zasięgu.',
   'tech.kinetic_targeting.name':   'Naprowadzanie Kinetyczne',
@@ -633,6 +633,7 @@ export default {
   'vessel.reasonVesselImmobilized': 'Statek unieruchomiony — zaległe utrzymanie floty (opłać kolonię)',
   // Fog-of-war tożsamości — ghost wrogiego statku (detekcja obserwatorium = pozycja bez tożsamości)
   'intel.unidentifiedContact': 'Niezidentyfikowany kontakt',
+  'intel.unknownEmpire': 'Nieznane imperium',
   'intel.unidentifiedHint': 'Wykryty przez obserwatorium — brak identyfikacji. Zbliż statek dla pełnych danych.',
   // Notification Center (silent alerts — dzwonek 🔔 w BottomBar)
   'notif.title': 'Powiadomienia',
@@ -642,7 +643,9 @@ export default {
   'notif.discoveryTitle': 'Odkryto: {0}',
   'notif.reconCompleteTitle': 'Misja recon zakończona ({0})',
   'notif.reconCompleteSubtitle': 'Statek: {0}',
+  'notif.vesselScanTitle': '🔭 Zidentyfikowano kontakt: {0}',
   'notif.group.discoveryBody': 'Odkrycia',
+  'notif.group.vesselScan': 'Zidentyfikowane kontakty',
   'minimap.title': 'Mapa galaktyczna',
   'minimap.empty': 'Brak znanych imperiów',
   'minimap.fleetETA': 'ETA {0} lat',
@@ -849,6 +852,7 @@ export default {
   'log.autoSlowLifeExtinct': 'Wymieranie na {0}',
   'log.autoSlowDiskPhase': 'Faza dysku: {0}',
   'log.autoSlowCombat': 'Starcie floty',
+  'combat.watchBattle': 'Obserwuj',
   // Cywilizacja
   'log.epochChanged': '⭐ Epoka: {0}',
   'log.unrest': '⚠ NIEPOKOJE: {0}',
@@ -2416,6 +2420,17 @@ export default {
   'observatory.year': 'rok',
   'observatory.tab.catalog': 'KATALOG',
   'observatory.tab.threats': 'ZAGROŻENIA',
+  'observatory.tab.contacts': 'KONTAKTY',
+  // Reforma detekcji — zakładka skanu wrogich kontaktów
+  'observatory.contactsTitle': 'WYKRYTE KONTAKTY WROGA',
+  'observatory.noContacts': 'Brak wykrytych wrogich statków',
+  'observatory.scanHint': 'Skan ujawnia tożsamość kontaktu zdalnie (bez wysyłania statku).',
+  'observatory.scanBtn': 'Skanuj',
+  'observatory.cancelScanBtn': 'Anuluj',
+  'observatory.scanning': 'Skanowanie… {0}%',
+  'observatory.identified': 'Zidentyfikowany',
+  'observatory.contactRumor': 'Niezidentyfikowany kontakt',
+  'observatory.contactEta': 'ETA ~{0} lat',
   'observatory.name': 'Nazwa',
   'observatory.type': 'Typ',
   'observatory.years': 'lat',

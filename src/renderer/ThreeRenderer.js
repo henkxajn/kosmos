@@ -67,14 +67,6 @@ const SENSOR_RING_Y            = 0.04;      // tuż pod prediction cone (0.05), 
 const SENSOR_RING_MAX_COLONY_AU = 35.0;     // ≈ MAX_ORBIT_AU — cały układ widoczny
 
 // ── Fleet Command Console (Slice 0) — pierścień zaznaczenia/hover ────────────
-// Płaski annulus pod statkiem (Y tuż nad orbitami, pod statkiem Y≈0.3). Stała
-// wielkość world-units (ambient); krytyczny screen-constant wskaźnik = ramki 2D (Slice 4).
-// Fix#4: SCREEN-CONSTANT (promień ∝ dystans kamery) — hug statku przy każdym zoomie,
-// nie dominujący torus. Cienki annulus (thickness 0.02 przy scale 1).
-const SELECTION_RING_INNER_WU = 0.20;
-const SELECTION_RING_OUTER_WU = 0.22;
-const SELECTION_RING_SCREEN_K = 0.018;      // promień = clamp(camDist × K) → ~stały rozmiar na ekranie
-
 // Slice 5 — cache tekstur insygniów per kolor frakcji (reuse, wzór ResourceIcons).
 const _INSIGNIA_TEX_CACHE = new Map();      // colorHex → THREE.CanvasTexture
 
@@ -197,15 +189,12 @@ export class ThreeRenderer {
     // _activeEffects: efemeryczne efekty {mesh,startTime,lifetime,kind,...}
     //   drenowane co klatkę w _startLoop (real-time, niezależne od pauzy gry).
     // _fxGroup: leniwie tworzony Group (scena może jeszcze nie istnieć w ctor).
-    // _selectionRingMeshes: mark&sweep pierścienie zaznaczenia/hover (wzór sensor).
     this._activeEffects        = [];
     this._fxGroup              = null;
-    this._selectionRingMeshes  = new Map();  // key (`sel`|`hov`) → { mesh, geom, mat, vesselId }
     this._selectedVesselId     = null;       // mirror UIManager (ui:selectionChanged)
     this._factionColorCache    = new Map();  // ownerEmpireId → 0xRRGGBB
     this._engagementMarkers    = new Map();  // encounterId → { mesh, geom, mat } (znacznik starcia, TTL)
     this._focusEncounterId     = null;       // Slice 1 — kamera śledzi midpoint bitwy
-    this._routeComet           = null;       // Slice 3 — kometa płynąca po trasie zaznaczonego statku
     this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
 
     // ── Cache modeli 3D statków ─────────────────────────────────
@@ -715,8 +704,8 @@ export class ThreeRenderer {
     EventBus.on('planet:demolishResult',       safe(refreshMarkers));
     EventBus.on('planet:constructionComplete', safe(refreshMarkers));
 
-    // Fleet Command Console (Slice 0) — mirror zaznaczenia z UIManager dla
-    // pierścienia selekcji (rebuild w _syncSelectionRings co klatkę).
+    // Fleet Command Console (Slice 0) — mirror zaznaczenia z UIManager
+    // (wskaźnik = ramki 2D w UIManager._drawSelectionBrackets).
     EventBus.on('ui:selectionChanged', safe(({ vesselId }) => {
       this._selectedVesselId = vesselId ?? null;
     }));
@@ -3147,6 +3136,32 @@ export class ThreeRenderer {
     return best;
   }
 
+  // Slice 8 (box-select) — ID własnych żywych statków w prostokącie ekranu (client px).
+  // Współrzędne jak _getVesselAtScreen (canvas bounding rect). Tylko own (brak wroga/wraka).
+  _getOwnVesselsInScreenRect(x0, y0, x1, y1) {
+    const out = [];
+    if (!this._vessels || this._vessels.size === 0) return out;
+    const canvas = this.renderer?.domElement;
+    const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    const cw = rect.width, ch = rect.height;
+    const minX = Math.min(x0, x1), maxX = Math.max(x0, x1);
+    const minY = Math.min(y0, y1), maxY = Math.max(y0, y1);
+    const tmp = this._tmpPickVec ?? (this._tmpPickVec = new THREE.Vector3());
+    for (const [vid, entry] of this._vessels) {
+      const obj = entry?.sprite;
+      if (!obj) continue;
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
+      if (!v || v.isWreck || isEnemyVessel(v)) continue;   // tylko własne żywe
+      obj.getWorldPosition(tmp);
+      tmp.project(this.camera);
+      if (tmp.z < -1 || tmp.z > 1) continue;
+      const vx = (tmp.x * 0.5 + 0.5) * cw + rect.left;
+      const vy = (-tmp.y * 0.5 + 0.5) * ch + rect.top;
+      if (vx >= minX && vx <= maxX && vy >= minY && vy <= maxY) out.push(vid);
+    }
+    return out;
+  }
+
   // ── Tooltip statku (hover na vessel sprite/model) ─────────────────────
   _showVesselTooltip(vesselId, sx, sy) {
     const vMgr = window.KOSMOS?.vesselManager;
@@ -5266,64 +5281,6 @@ export class ThreeRenderer {
     this._activeEffects = keep;
   }
 
-  // ── Pierścienie zaznaczenia/hover (mark&sweep, wzór sensor ring) ─────────
-  _syncSelectionRings() {
-    if (!GAME_CONFIG.FEATURES?.fcConsole) {
-      if (this._selectionRingMeshes.size > 0) this._disposeAllSelectionRings();
-      return;
-    }
-    const active = new Set();
-    const selId = this._selectedVesselId;
-    const hovId = this._hoverVesselId;
-    if (selId && this._vessels.has(selId)) { this._upsertSelectionRing('sel', selId, 0xffffff, 0.55); active.add('sel'); }
-    if (hovId && hovId !== selId && this._vessels.has(hovId)) { this._upsertSelectionRing('hov', hovId, 0xaaccff, 0.3); active.add('hov'); }
-    for (const k of [...this._selectionRingMeshes.keys()]) {
-      if (!active.has(k)) this._disposeSelectionRing(k);
-    }
-  }
-
-  _upsertSelectionRing(key, vesselId, fallbackColor, baseOpacity) {
-    const sprite = this._vessels.get(vesselId)?.sprite;
-    if (!sprite) { if (this._selectionRingMeshes.has(key)) this._disposeSelectionRing(key); return; }
-    let color = fallbackColor;
-    if (key === 'sel') {
-      const vessel = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
-      if (vessel) color = this._factionColorHex(vessel);
-    }
-    let entry = this._selectionRingMeshes.get(key);
-    if (!entry || entry.color !== color || entry.vesselId !== vesselId) {
-      if (entry) this._disposeSelectionRing(key);
-      const geom = new THREE.RingGeometry(SELECTION_RING_INNER_WU, SELECTION_RING_OUTER_WU, 40);
-      const mat  = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: baseOpacity, side: THREE.DoubleSide, depthWrite: false });
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.rotation.x = -Math.PI / 2;  // płaszczyzna XZ
-      this.scene.add(mesh);
-      entry = { mesh, geom, mat, color, vesselId, baseOpacity };
-      this._selectionRingMeshes.set(key, entry);
-    }
-    const p = sprite.position;
-    entry.mesh.position.set(p.x, p.y, p.z);  // śledzi Y statku (0.3 w locie / 0.02 orbita)
-    const tt = this._clock.getElapsedTime();
-    // Screen-constant: promień ∝ dystans kamery (mały, hug statku przy każdym zoomie).
-    const camDist = this._cameraController?._dist ?? 20;
-    const R = Math.max(0.04, Math.min(3.0, camDist * SELECTION_RING_SCREEN_K));
-    entry.mesh.scale.setScalar((R / SELECTION_RING_OUTER_WU) * (1 + 0.06 * Math.sin(tt * 3)));
-    entry.mat.opacity = entry.baseOpacity * (0.6 + 0.4 * Math.sin(tt * 3));
-  }
-
-  _disposeSelectionRing(key) {
-    const entry = this._selectionRingMeshes.get(key);
-    if (!entry) return;
-    this.scene.remove(entry.mesh);
-    entry.geom.dispose();
-    entry.mat.dispose();
-    this._selectionRingMeshes.delete(key);
-  }
-
-  _disposeAllSelectionRings() {
-    for (const k of [...this._selectionRingMeshes.keys()]) this._disposeSelectionRing(k);
-  }
-
   // ── Slice 1 — smugi walki na żywej mapie (FX-only, z combat:roundFx) ─────
   _onCombatRoundFx(payload) {
     if (!GAME_CONFIG.FEATURES?.fcCombatFx) return;
@@ -5520,7 +5477,7 @@ export class ThreeRenderer {
     this._spawnFx(ping, { kind: 'ping', lifetime: FX_PING_MS, baseScale: 1, baseOpacity: 1 });
   }
 
-  // ── Slice 3 — kolor linii rozkazu wg typu + kometa po trasie ─────────────
+  // ── Slice 3 — kolor linii rozkazu wg typu ────────────────────────────────
   // Rollback fcOrderLines=false → kolor frakcji (stare zachowanie).
   _orderLineColor(vessel) {
     if (!GAME_CONFIG.FEATURES?.fcOrderLines) return this._factionColorHex(vessel);
@@ -5534,39 +5491,6 @@ export class ThreeRenderer {
       default:
         return (vessel && !isEnemyVessel(vessel)) ? 0x66ddaa : 0xff8866;
     }
-  }
-
-  // Kometa (additive) płynąca statek→cel po trasie ZAZNACZONEGO statku — czyta
-  // endpointy z geometrii routeLine (reuse). Mark&sweep pojedynczej encji.
-  _syncRouteComet() {
-    if (!GAME_CONFIG.FEATURES?.fcOrderLines) { if (this._routeComet) this._disposeRouteComet(); return; }
-    const selId = this._selectedVesselId;
-    const entry = selId ? this._vessels.get(selId) : null;
-    const rl = entry?.routeLine;
-    const arr = rl?.visible ? rl.geometry?.attributes?.position?.array : null;
-    if (!arr || arr.length < 6) { if (this._routeComet) this._disposeRouteComet(); return; }
-    if (!this._routeComet) {
-      const mat = new THREE.MeshBasicMaterial({ color: 0x88ffcc, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
-      const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), mat);
-      this.scene.add(m);
-      this._routeComet = m;
-    }
-    const tt = (this._clock.getElapsedTime() * 0.6) % 1;  // pętla ~1.67s statek→cel
-    this._routeComet.position.set(
-      arr[0] + (arr[3] - arr[0]) * tt,
-      arr[1] + (arr[4] - arr[1]) * tt,
-      arr[2] + (arr[5] - arr[2]) * tt,
-    );
-    const v = window.KOSMOS?.vesselManager?.getVessel?.(selId);
-    this._routeComet.material.color.setHex(this._orderLineColor(v));
-  }
-
-  _disposeRouteComet() {
-    if (!this._routeComet) return;
-    this.scene.remove(this._routeComet);
-    this._routeComet.geometry.dispose();
-    this._routeComet.material.dispose();
-    this._routeComet = null;
   }
 
   // ── Slice 6 — puls startu/przybycia statku (FX harness) ──────────────────

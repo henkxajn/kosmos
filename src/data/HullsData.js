@@ -29,6 +29,7 @@ export const HULLS = {
     // Faza 4: combat — małe HP, wysokie evasion (mały i zwrotny)
     baseHP:            30,
     baseEvasion:       0.25,
+    sensorRangeAU:     2.5,    // AU — zwiadowca: oczy floty, najszerszy zasięg wykrycia (reforma detekcji)
     // Aliasy kompatybilności (stary kod czyta te pola)
     fuelCapacity:      8,
     fuelPerAU:         0.35,
@@ -71,6 +72,7 @@ export const HULLS = {
     // Faza 4: combat — zbalansowane HP i evasion
     baseHP:            80,
     baseEvasion:       0.15,
+    sensorRangeAU:     1.5,    // AU — zbalansowany zasięg wykrycia (reforma detekcji)
     fuelCapacity:      12,
     fuelPerAU:         0.5,
     range:             24,
@@ -115,6 +117,7 @@ export const HULLS = {
     // Faza 4: combat — duże HP, niskie evasion (niezdarny ale wytrzymały)
     baseHP:            180,
     baseEvasion:       0.05,
+    sensorRangeAU:     1.1,    // AU — ciężki transport: skromne sensory (reforma detekcji)
     fuelCapacity:      18,
     fuelPerAU:         0.7,
     range:             26,
@@ -168,6 +171,7 @@ export const HULLS = {
     baseHP:            120,      // więcej HP niż zwiadowca
     baseEvasion:       0.20,     // wciąż zwrotna
     baseArmor:         2,        // wbudowany lekki pancerz
+    sensorRangeAU:     1.6,      // AU — lekki okręt: dobre sensory bojowe (reforma detekcji)
     cost:              { Fe: 100, Ti: 20, Cu: 10 },
     commodityCost:     { structural_alloys: 6, reactive_armor: 4, electronic_systems: 2 },
     upkeepCredits:     300,    // Kr/rok — utrzymanie floty (S3.5a-1)
@@ -206,6 +210,7 @@ export const HULLS = {
     baseHP:            220,      // mocny kadłub
     baseEvasion:       0.10,
     baseArmor:         4,        // ciężki wbudowany pancerz
+    sensorRangeAU:     1.4,      // AU — średni okręt bojowy (reforma detekcji)
     cost:              { Fe: 180, Ti: 40, Cu: 15, Hv: 5 },
     commodityCost:     { structural_alloys: 12, reactive_armor: 8, electronic_systems: 4 },
     upkeepCredits:     500,    // Kr/rok — utrzymanie floty (S3.5a-1)
@@ -246,6 +251,7 @@ export const HULLS = {
     baseHP:            350,      // capital-class HP
     baseEvasion:       0.05,     // duży cel
     baseArmor:         5,        // ciężki pancerz kompozytowy
+    sensorRangeAU:     1.3,      // AU — capital: sensory ustępują uzbrojeniu (reforma detekcji)
     cost:              { Fe: 280, Ti: 70, Cu: 25, Hv: 12 },
     commodityCost:     { structural_alloys: 22, reactive_armor: 14, electronic_systems: 8, pressure_modules: 4 },
     upkeepCredits:     1000,   // Kr/rok — utrzymanie floty (S3.5a-1)

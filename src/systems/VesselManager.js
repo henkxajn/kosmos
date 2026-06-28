@@ -1669,6 +1669,16 @@ export class VesselManager {
     return _getHullDef(vessel.shipId)?.upkeepCredits ?? VesselManager.DEFAULT_VESSEL_UPKEEP;
   }
 
+  /**
+   * Reforma detekcji — bazowy zasięg sensorów statku w AU (data-driven per kadłub).
+   * Per-kadłub `sensorRangeAU` (HullsData/ShipsData); fallback 0.5 AU = stara baza
+   * PROXIMITY_DETECTION_AU dla nieznanego/legacy bez pola. Mnożnik techu (sensor_range)
+   * dokłada ProximitySystem._getDetectionRangeAU (tylko statki gracza).
+   */
+  getVesselSensorRangeAU(vessel) {
+    return _getHullDef(vessel?.shipId)?.sensorRangeAU ?? 0.5;
+  }
+
   /** S3.5a-1 — pochodna flaga immobilizacji: statek gracza z >=2 nieopłaconymi latami utrzymania. */
   isImmobilized(vessel) {
     return !!vessel && !isEnemyVessel(vessel)

@@ -288,27 +288,46 @@ export class RightClickMenu {
       return;
     }
 
-    // Standard issue: build spec → MOS.issueOrder(vesselId, spec).
-    const built = buildOrderSpec(option, target, vesselId);
-    if (!built.ok) {
-      console.warn(`[RightClickMenu] buildOrderSpec rejected: ${built.reason}`);
-      return;
-    }
     if (!mos?.issueOrder) {
       console.warn('[RightClickMenu] MovementOrderSystem niedostępny — użyj enableMovementOrders()');
       return;
     }
-    const result = mos.issueOrder(vesselId, built.spec);
-    if (!result?.ok) {
-      console.warn(`[RightClickMenu] MOS.issueOrder failed (${option.orderType}):`, result?.reason);
-      // Bug 2 — visible feedback w EventLog dla typowych powodów odrzucenia
-      const reasonKey = `vessel.reason${_pascalCase(result?.reason ?? 'unknown')}`;
+
+    // Slice 8 — dispatch do CAŁEGO zbioru zaznaczonych (multi-select). W single-select
+    // getSelectedVesselIds() = [lead], więc ścieżka identyczna jak wcześniej. Per-vessel
+    // buildOrderSpec/issueOrder; vessele odrzucone (np. engage bez broni) pomijane.
+    let ids = um?.getSelectedVesselIds ? um.getSelectedVesselIds() : [];
+    if (ids.length === 0 && vesselId) ids = [vesselId];
+    if (ids.length === 0) {
+      console.warn('[RightClickMenu] brak zaznaczonego statku do rozkazu');
+      return;
+    }
+
+    let anyOk = false;
+    let firstFail = null;  // { vesselId, reason } — do feedbacku gdy NIC się nie udało
+    for (const vid of ids) {
+      const built = buildOrderSpec(option, target, vid);
+      if (!built.ok) {
+        if (!firstFail) firstFail = { vesselId: vid, reason: built.reason };
+        continue;
+      }
+      const result = mos.issueOrder(vid, built.spec);
+      if (result?.ok) anyOk = true;
+      else if (!firstFail) firstFail = { vesselId: vid, reason: result?.reason };
+      if (result && result.ok === false) {
+        console.warn(`[RightClickMenu] MOS.issueOrder failed (${option.orderType}, ${vid}):`, result?.reason);
+      }
+    }
+
+    // EventLog feedback tylko gdy ŻADEN statek nie przyjął rozkazu (mniej spamu przy multi).
+    if (!anyOk && firstFail) {
+      const reasonKey = `vessel.reason${_pascalCase(firstFail.reason ?? 'unknown')}`;
       const reasonText = t(reasonKey);
       window.KOSMOS?.eventLogSystem?.push({
-        text: reasonText !== reasonKey ? reasonText : `Order rejected: ${result?.reason ?? 'unknown'}`,
+        text: reasonText !== reasonKey ? reasonText : `Order rejected: ${firstFail.reason ?? 'unknown'}`,
         channel: 'fleet',
         severity: 'warn',
-        entityRef: vesselId,
+        entityRef: firstFail.vesselId,
       });
     }
   }

@@ -12,6 +12,7 @@ import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC }        from '../config/LayoutConfig.js';
+import { GAME_CONFIG }   from '../config/GameConfig.js';
 import { CIV_SIDEBAR_W } from './CivPanelDrawer.js';
 import { t }             from '../i18n/i18n.js';
 import { resolveTextureType, hashCode, TEXTURE_VARIANTS }
@@ -110,11 +111,13 @@ export class ObservatoryOverlay {
     `;
     c.appendChild(header);
 
-    // Podzakładki — 2 zakładki: KATALOG | ZAGROŻENIA
+    // Podzakładki — KATALOG | ZAGROŻENIA | (KONTAKTY gdy reforma detekcji ON)
     const tabs = document.createElement('div');
     tabs.id = 'obs-tabs';
     tabs.style.cssText = 'display:flex; gap:2px; margin-bottom:8px; flex-shrink:0;';
-    for (const tab of ['catalog', 'threats']) {
+    const tabList = ['catalog', 'threats'];
+    if (GAME_CONFIG.FEATURES?.observatoryVesselScan) tabList.push('contacts');
+    for (const tab of tabList) {
       const btn = document.createElement('button');
       btn.dataset.tab = tab;
       btn.textContent = t(`observatory.tab.${tab}`);
@@ -219,6 +222,7 @@ export class ObservatoryOverlay {
     switch (this._subTab) {
       case 'catalog':  body.innerHTML = this._renderCatalog(obsSys); break;
       case 'threats':  body.innerHTML = this._renderThreats(forecast); break;
+      case 'contacts': body.innerHTML = this._renderContacts(obsSys); break;
     }
 
     // Bind kliki na ciałach
@@ -231,6 +235,18 @@ export class ObservatoryOverlay {
         this._refresh();
       };
       el.style.cursor = 'pointer';
+    });
+
+    // Reforma detekcji — przyciski skanu wrogich kontaktów
+    body.querySelectorAll('[data-scanaction]').forEach(btn => {
+      btn.onclick = (ev) => {
+        ev.stopPropagation();
+        const id = btn.dataset.vesselid;
+        const obs = window.KOSMOS?.observatorySystem;
+        if (btn.dataset.scanaction === 'start') obs?.startVesselScan?.(id);
+        else obs?.cancelVesselScan?.(id, 'manual');
+        this._refresh();
+      };
     });
 
     requestAnimationFrame(() => this._restoreScroll());
@@ -429,6 +445,83 @@ export class ObservatoryOverlay {
     if (years < 20)   return t('observatory.timeAbout', Math.round(years));
     if (years < 100)  return t('observatory.timeAbout', Math.round(years / 5) * 5);
     return t('observatory.timeAbout', Math.round(years / 10) * 10);
+  }
+
+  // ── KONTAKTY (reforma detekcji — skan wrogich statków) ─────────────
+
+  _renderContacts(obsSys) {
+    const vMgr     = window.KOSMOS?.vesselManager;
+    const intelSys = window.KOSMOS?.intelSystem;
+    const reg      = window.KOSMOS?.empireRegistry;
+    const detected = obsSys?.getDetectedVesselIds?.() ?? new Set();
+
+    let html = `<div class="obs-scroll-main" style="flex:1; overflow-y:auto; min-height:0; padding-right:4px;">`;
+    html += `<div style="font-weight:bold; margin-bottom:4px; color:${THEME.warning}; font-size:12px; text-transform:uppercase;">⚠ ${t('observatory.contactsTitle')}</div>`;
+    html += `<div style="color:${THEME.textDim}; font-size:10px; margin-bottom:10px; font-style:italic;">${t('observatory.scanHint')}</div>`;
+
+    const ids = [...detected];
+    if (ids.length === 0) {
+      html += `<div style="color:${THEME.textDim}; font-size:11px; font-style:italic;">— ${t('observatory.noContacts')}</div>`;
+      html += `</div>`;
+      return html;
+    }
+
+    let unidIdx = 0;
+    for (const id of ids) {
+      const v = vMgr?.getVessel?.(id);
+      if (!v) continue;
+      const q = intelSys?.getVesselContact?.(id)?.quality ?? 'rumor';
+      const identified = (q === 'contact' || q === 'detailed');
+      const scan = obsSys?.getVesselScanProgress?.(id);
+
+      let label, empLabel;
+      if (identified) {
+        label = v.name ?? id;
+        const empId = v.ownerEmpireId ?? v.owner;
+        empLabel = (empId && reg?.get?.(empId)?.name) ? reg.get(empId).name : t('intel.unknownEmpire');
+      } else {
+        unidIdx++;
+        label = `${t('observatory.contactRumor')} #${unidIdx}`;
+        empLabel = '—';
+      }
+
+      const borderColor = identified ? THEME.danger : THEME.warning;
+      const cardBg = identified ? 'rgba(255,51,68,0.06)' : 'rgba(255,204,68,0.05)';
+      html += `<div style="padding:8px 10px; margin-bottom:6px; border-radius:4px; font-size:12px; background:${cardBg}; border-left:3px solid ${borderColor};">`;
+      html += `<div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">`;
+      html += `<div><span style="color:${borderColor}; font-weight:bold;">${identified ? '🛰' : '❓'} ${label}</span>`;
+      html += ` <span style="color:${THEME.textDim}; font-size:10px;">${empLabel}</span></div>`;
+
+      if (identified) {
+        html += `<span style="color:${THEME.success}; font-size:10px; font-weight:bold;">✓ ${t('observatory.identified')}</span>`;
+      } else if (scan) {
+        html += `<button data-scanaction="cancel" data-vesselid="${id}" style="${this._scanBtnStyle(false)}">${t('observatory.cancelScanBtn')}</button>`;
+      } else {
+        html += `<button data-scanaction="start" data-vesselid="${id}" style="${this._scanBtnStyle(true)}">🔭 ${t('observatory.scanBtn')}</button>`;
+      }
+      html += `</div>`;
+
+      // Pasek postępu skanu
+      if (!identified && scan) {
+        const pct = Math.round(scan.pct * 100);
+        html += `<div style="margin-top:6px;">`;
+        html += `<div style="font-size:10px; color:${THEME.textDim}; margin-bottom:2px;">${t('observatory.scanning', pct)}</div>`;
+        html += `<div style="height:5px; background:${THEME.bgSecondary}; border-radius:3px; overflow:hidden;">`;
+        html += `<div style="height:100%; width:${pct}%; background:${THEME.accent};"></div>`;
+        html += `</div></div>`;
+      }
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+    return html;
+  }
+
+  _scanBtnStyle(primary) {
+    return `padding:3px 10px; border:1px solid ${primary ? THEME.accent : THEME.border};`
+         + ` border-radius:3px; font-size:10px; font-family:${THEME.fontFamily};`
+         + ` background:${primary ? THEME.accent : 'transparent'};`
+         + ` color:${primary ? THEME.bgPrimary : THEME.textPrimary}; cursor:pointer; white-space:nowrap;`;
   }
 
   // ── Szczegóły ciała (prawa kolumna) ─────────────────────────────────

@@ -414,7 +414,28 @@ export class MovementOrderSystem {
    * moveToPoint — reużywa _calcRoute (unikanie Słońca + planet) do syntezy mission.
    */
   _issueMoveToPoint(vessel, spec) {
-    const p = spec.targetPoint;
+    let p = spec.targetPoint;
+
+    // Fix live-gate T7 — cel ruchomego CIAŁA: przewiduj gdzie będzie w momencie
+    // przybycia (Kepler), inaczej statek leci do statycznego snapshotu a planeta
+    // orbituje dalej → dolot w pustkę. Jedna iteracja: szacuj ETA z bieżącej pozycji
+    // ciała → przewiduj pozycję na ten ETA. mission.targetId (niżej) zapewnia snap do
+    // ŻYWEJ pozycji na arrival + orbitę (statek śledzi planetę). Fallback gdy ciało bez
+    // orbity / brak predykcji → zostaje snapshot z spec.targetPoint.
+    const bodyId = spec.targetBodyId ?? null;
+    if (bodyId) {
+      const bodyNow = this._vm._findEntity?.(bodyId);
+      const nowX = bodyNow?.x ?? p?.x;
+      const nowY = bodyNow?.y ?? p?.y;
+      if (typeof nowX === 'number' && typeof nowY === 'number') {
+        const speed0 = Math.max(0.01, vessel.speedAU ?? 1.0);
+        const gy0 = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+        const estDistAU = Math.hypot(nowX - vessel.position.x, nowY - vessel.position.y) / AU_TO_PX;
+        const estArrival = gy0 + estDistAU / speed0;
+        const pred = this._vm._predictPosition?.(bodyId, estArrival);
+        p = { x: pred?.x ?? nowX, y: pred?.y ?? nowY };
+      }
+    }
 
     // §8.5 — reject gdy punkt wewnątrz strefy wykluczenia Słońca (nie do obejścia).
     if (Math.hypot(p.x, p.y) < SUN_EXCLUSION_PX) {
@@ -494,13 +515,14 @@ export class MovementOrderSystem {
       preferMaxRange:      !!spec.preferMaxRange,
     };
 
-    // Konstrukcja mission — specjalny typ 'move_to_point', bez targetId.
-    // _updatePositions interpoluje przez startX/Y → targetX/Y + waypoints;
-    // detekcja przylotu snap'uje do targetX/Y gdy gameYear ≥ arrivalYear.
+    // Konstrukcja mission — typ 'move_to_point'. Dla celu-CIAŁA targetId=bodyId:
+    // _updatePositions interpoluje przez startX/Y → targetX/Y (przewidziane) + waypoints;
+    // detekcja przylotu snap'uje do ŻYWEJ pozycji ciała (target.x) i dokuje (orbita) —
+    // statek śledzi planetę po przybyciu. Dla pustego punktu targetId=null → drift (jak dotąd).
     const mission = {
       type:       'move_to_point',
-      targetId:   null,
-      targetName: null,
+      targetId:   bodyId,
+      targetName: spec.targetName ?? null,
       startX: sx, startY: sy,
       targetX: tx, targetY: ty,
       waypoints:  route.waypoints,

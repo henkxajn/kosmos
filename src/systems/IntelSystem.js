@@ -25,6 +25,7 @@ import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import gameState from '../core/GameState.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { isEnemyVessel } from '../entities/Vessel.js';
 
 const LEVELS = ['unknown', 'rumor', 'contact', 'detailed'];
 const LEVEL_RANK = { unknown: 0, rumor: 1, contact: 2, detailed: 3 };
@@ -66,6 +67,10 @@ export class IntelSystem {
     EventBus.on('vessel:combatRangeEnter',  (e) => this._onVesselProximityEnter(e));
     EventBus.on('vessel:proximityExit',     (e) => this._onVesselProximityExit(e));
     EventBus.on('vessel:wrecked',           (e) => this._onVesselWrecked(e));
+    // Reforma detekcji — sensor-lock = pełna identyfikacja wroga (reveal tożsamości)
+    // gdy własny statek zbliży się na SENSOR_LOCK_AU×tech. Próg leży POWYŻEJ combat
+    // (0.15) — pozwala zidentyfikować wroga BEZ konieczności walki.
+    EventBus.on('vessel:sensorLockEnter',   (e) => this._onSensorLock(e));
 
     // Pasywny ticker (civDeltaYears — mechanika 4X)
     EventBus.on('time:tick', ({ civDeltaYears }) => {
@@ -257,8 +262,13 @@ export class IntelSystem {
     return window.KOSMOS?.timeSystem?.gameTime ?? 0;
   }
 
+  // Statek gracza = NIE-wrogi statek. KANON: player vessele nie mają ownerEmpireId/owner
+  // (isEnemyVessel: „statki gracza nie mają żadnego z tych pól"). Stary warunek
+  // `=== 'player'` był ZA WĄSKI → real player vessel (undefined owner) był „nie-gracz I
+  // nie-wróg" → _resolveObservedFromPair zwracał null → WŁASNY statek NIE podbijał intelu
+  // (root-cause TODO „player ship doesn't boost intel"). Teraz proximity/sensor-lock działają.
   _isPlayerVessel(v) {
-    return v?.ownerEmpireId === 'player' || v?.owner === 'player';
+    return !!v && !isEnemyVessel(v);
   }
 
   _getOrInitVesselRecord(vesselId) {
@@ -301,6 +311,20 @@ export class IntelSystem {
     const r = this._resolveObservedFromPair(vesselAId, vesselBId);
     if (!r) return;
     this._observeVessel(r.observedId, r.observed, distanceAU);
+  }
+
+  // Reforma detekcji — sensor-lock: własny statek w promieniu SENSOR_LOCK_AU×tech
+  // od wroga → pełna identyfikacja (rumor→contact). BYPASS dystansowego progu
+  // _observeVessel (lock teched ~1.4 AU > VESSEL_CONTACT_DISTANCE_AU=0.3 → liczyłby
+  // 'rumor'); używamy advanceVesselContact (intencja upgrade tożsamości, no-downgrade).
+  // Pozycję dalej trzyma proximityEnter→_observeVessel (positionKnown).
+  _onSensorLock({ vesselAId, vesselBId, sameFaction } = {}) {
+    if (!GAME_CONFIG.FEATURES.intelContactState) return;
+    if (!GAME_CONFIG.FEATURES.sensorLockContact) return;
+    if (sameFaction) return;
+    const r = this._resolveObservedFromPair(vesselAId, vesselBId);
+    if (!r) return;
+    this.advanceVesselContact(r.observedId, 'contact', 'sensor_lock');
   }
 
   _observeVessel(vesselId, vessel, distanceAU) {

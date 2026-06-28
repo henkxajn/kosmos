@@ -45,13 +45,22 @@ export function buildOrderSpec(option, target, vesselId) {
 
   switch (orderType) {
     case 'moveToPoint': {
-      // Planet target — używaj body.x/body.y bezpośrednio (V3 — Planet NIE ma .position)
+      // Planet target — przekaż targetBodyId żeby MOS ŚLEDZIŁ ruchome ciało (predykcja
+      // Kepler pozycji w momencie przybycia + snap do żywej pozycji na arrival + orbita).
+      // Bez tego statek leciał do STATYCZNEGO snapshotu, planeta orbitowała dalej, statek
+      // dolatywał w pustkę (fix live-gate T7). targetPoint zostaje jako fallback (snapshot)
+      // gdyby predykcja zawiodła (ciało bez orbity).
       if (target.type === 'planet' && target.planet
           && typeof target.planet.x === 'number'
           && typeof target.planet.y === 'number') {
         return {
           ok: true,
-          spec: { type: 'moveToPoint', targetPoint: { x: target.planet.x, y: target.planet.y } },
+          spec: {
+            type:         'moveToPoint',
+            targetBodyId: target.planet.id ?? target.entityId ?? null,
+            targetName:   target.planet.name ?? null,
+            targetPoint:  { x: target.planet.x, y: target.planet.y },
+          },
         };
       }
       // Empty target — worldPoint może być 3D (mapa 3D, XZ plane) lub

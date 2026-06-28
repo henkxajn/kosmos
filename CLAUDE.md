@@ -438,6 +438,35 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `station:orderRejected { planetId, reason, requires }` (`requiresTech`) | ColonyManager (addPendingStationOrder — bramka tech) | wired in ColonyOverlay (flash, S4-1) |
 | `station:built { planetId, stationId, targetBodyId }` | ColonyManager (_tickPendingStationOrders) | wired in ColonyOverlay (flash, S4-1) |
 | `station:buildFailed { planetId, orderId, reason }` (`body_lost`/`no_station_system`/`create_failed`) | ColonyManager (_tickPendingStationOrders) | wired in ColonyOverlay (flash, S4-1) |
+| `vessel:sensorLockEnter { vesselAId, vesselBId, distanceAU, sameFaction }` (reforma detekcji — reveal tożsamości) | ProximitySystem (3. próg, gate `sensorLockContact`) | IntelSystem (`_onSensorLock` → `advanceVesselContact('contact')`) |
+| `vessel:sensorLockExit { vesselAId, vesselBId }` | ProximitySystem | — (cleanup pary) |
+| `observatory:vesselScanStarted { vesselId, durationYears }` | ObservatorySystem (`startVesselScan`) | ObservatoryOverlay (zakładka Kontakty) |
+| `observatory:vesselScanComplete { vesselId, vessel }` (rumor→contact zdalnie) | ObservatorySystem (`_completeVesselScan`) | NotificationCenter (`_handleVesselScanComplete`) |
+| `observatory:vesselScanCancelled { vesselId, reason }` (`manual`/`target_lost`) | ObservatorySystem (`cancelVesselScan`/`_tickVesselScans`) | ObservatoryOverlay |
+| `intel:vesselContactChanged { vesselId, oldQuality, newQuality, reason }` (`proximity_observation`/`sensor_lock`/`observatory_scan`/`observatory_sighting`) | IntelSystem | UIManager/GameScene EventLog (**tylko contact+**, fog-of-war: rumor anonimowy), ThreeRenderer (ghost) |
+
+---
+
+## Reforma detekcji + Konsola Dowodzenia polish (post-handoff, save v88 bez migracji, live-gate PASS)
+
+Plan: `C:\Users\Komputer\.claude\plans\przeczytaj-handoff-z-ostatniej-dynamic-wreath.md`. Handoff: `docs/KOSMOS_handoff_detekcja_multiselect.md`. Memory: `memory/detection-reform-multiselect.md`.
+
+**Faza 1 — Detekcja/intel (główny lever walki):**
+- **Per-kadłub `sensorRangeAU`** (HullsData/ShipsData; scout 2.5 / fregata 1.6 / niszczyciel 1.4 / krążownik 1.3 / transport 1.0–1.1) → `VesselManager.getVesselSensorRangeAU` (fallback 0.5) → `ProximitySystem._getDetectionRangeAU` gałąź gracza (`base × tech sensor_range`); wróg flat 0.5 (asymetria).
+- **Techy sensorów ×mocniej**: `advanced_sensors_1/2/3` = ×1.6/×1.6/×1.8 (kumulatywnie ~×4.6).
+- **Sensor-lock reveal** (gate `FEATURES.sensorLockContact`): 3. próg w ProximitySystem (`_activeSensorLockPairs` + `_getSensorLockAU` = `SENSOR_LOCK_AU 0.3 × tech`) → `vessel:sensorLockEnter` → `IntelSystem._onSensorLock` → `advanceVesselContact('contact')` (BYPASS dystansu w `_observeVessel`). Reveal tożsamości BEZ walki.
+- **⚠ ROOT-CAUSE FIX `IntelSystem._isPlayerVessel`**: było `ownerEmpireId === 'player'`, statki gracza mają `undefined` → `_resolveObservedFromPair` zwracał null → **własny statek NIGDY nie podbijał intelu**. Teraz `!!v && !isEnemyVessel(v)` → proximity I sensor-lock działają.
+- **Skan obserwatorium** (gate `observatoryVesselScan`): `ObservatorySystem._vesselScans` + `startVesselScan/cancelVesselScan/getVesselScanProgress/getActiveVesselScans` + `_tickVesselScans` (`SCAN_DURATION_YEARS 3.0 / level`, civDeltaYears) → `_completeVesselScan` rumor→contact zdalnie. UI: zakładka „Kontakty" w ObservatoryOverlay (Skanuj/Anuluj + pasek). serialize/restore `vesselScans` z `?? {}` (bez migracji). Wraki filtrowane u źródła (`_tickVesselDetection`).
+
+**Faza 2 — Sprzątnięcie martwego kodu** (ThreeRenderer): usunięte `_syncSelectionRings`/`_upsert`/`_dispose*SelectionRing*` + `SELECTION_RING_*` + `_routeComet`/`_syncRouteComet`/`_disposeRouteComet`. `_orderLineColor` ZACHOWANE (3 route-line sites).
+
+**Faza 3 — „Obserwuj bitwę"**: przycisk 👁 w nagłówku CombatHUD → `camera:watchBattle {x,y}` z `enc.location.point` (gameplay px); i18n `combat.watchBattle`.
+
+**Faza 4 — Multi-select (Slice 8, `fcMultiSelect` flip ON)**: UIManager `_selectedVesselIds` Set + lead (`_selectedVesselId`); `getSelectedVesselIds/addToSelection/removeFromSelection/toggleSelection`; CTRL+klik toggle; **SHIFT+box-select** (`ThreeCameraController` ustępuje przy SHIFT; marquee w `_drawMarquee`; `ThreeRenderer._getOwnVesselsInScreenRect`); dispatch rozkazu do CAŁEGO zbioru (RightClickMenu pętla). GOTCHA: `_boxSelectConsumedClick` (pochłania artefakt-click po dragu, reset na mousedown); mouseup guard `e.button !== 0`.
+
+**Fix live-gate T7 — moveToPoint na ruchome ciało**: `buildOrderSpec` planet → `targetBodyId` (+ fallback `targetPoint`); `_issueMoveToPoint` przewiduje pozycję ciała na ETA (`_predictPosition`) + `mission.targetId=bodyId` → przylot snapuje do ŻYWEJ pozycji planety i orbituje (statek śledzi planetę). Wzór rekon/atak. Pusty punkt = drift (bez zmian).
+
+**NEXT (jutro):** Slice 8b UI zarządzania grupą/statkiem; ujednolicenie skali odległości na mapie 3D (3D vs tactical map); empire tech state (sensory/broń per imperium).
 
 ---
 

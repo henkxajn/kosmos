@@ -14,6 +14,8 @@ import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { COSMIC }         from '../config/LayoutConfig.js';
 import { HULLS }          from '../data/HullsData.js';
 import { SHIP_MODULES }   from '../data/ShipModulesData.js';
+import EventBus           from '../core/EventBus.js';
+import { t }              from '../i18n/i18n.js';
 
 const PANEL_W       = 560;
 const HEADER_H      = 24;
@@ -33,6 +35,8 @@ export class CombatHUD extends BaseOverlay {
     this._minimized = false;
     /** @type {{x:number,y:number,w:number,h:number}|null} */
     this._minimizeBtnBounds = null;
+    /** @type {{x:number,y:number,w:number,h:number,point:{x:number,y:number}|null}|null} — przycisk „Obserwuj bitwę" */
+    this._watchBtnBounds = null;
   }
 
   toggle() { /* no-op */ }
@@ -59,6 +63,7 @@ export class CombatHUD extends BaseOverlay {
     const encounters = dscs.listActive();
     if (encounters.length === 0) {
       this._minimizeBtnBounds = null;
+      this._watchBtnBounds = null;
       // Auto-reset minimize gdy nie ma już active encounters (następna bitwa
       // startuje w expanded mode — bez tego user widziałby chip dla nic).
       if (this._minimized) this._minimized = false;
@@ -67,6 +72,7 @@ export class CombatHUD extends BaseOverlay {
     if (this._minimized) {
       // Chip rysuje BottomBar; tu nic.
       this._minimizeBtnBounds = null;
+      this._watchBtnBounds = null;
       return;
     }
 
@@ -135,6 +141,31 @@ export class CombatHUD extends BaseOverlay {
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
     this._minimizeBtnBounds = { x: minBtnX, y: minBtnY, w: minBtnW, h: minBtnH };
+
+    // „Obserwuj bitwę" (👁) — top-left header. Klik → camera:watchBattle na PIERWSZĄ
+    // widoczną bitwę (close-up kamery na midpoint). Punkt = enc.location.point (gameplay px).
+    const watchPoint = visible[0]?.location?.point ?? null;
+    if (watchPoint && Number.isFinite(watchPoint.x) && Number.isFinite(watchPoint.y)) {
+      const wBtnW = 104;
+      const wBtnH = HEADER_H - 4;
+      const wBtnX = px + 4;
+      const wBtnY = py + 2;
+      ctx.fillStyle = bgAlpha(0.4);
+      ctx.fillRect(wBtnX, wBtnY, wBtnW, wBtnH);
+      ctx.strokeStyle = THEME.accent ?? '#ffaa44';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(wBtnX + 0.5, wBtnY + 0.5, wBtnW - 1, wBtnH - 1);
+      ctx.fillStyle = THEME.accent ?? '#ffaa44';
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`👁 ${t('combat.watchBattle')}`, wBtnX + wBtnW / 2, wBtnY + wBtnH / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'left';
+      this._watchBtnBounds = { x: wBtnX, y: wBtnY, w: wBtnW, h: wBtnH, point: { x: watchPoint.x, y: watchPoint.y } };
+    } else {
+      this._watchBtnBounds = null;
+    }
 
     ctx.strokeStyle = THEME.border ?? '#444';
     ctx.beginPath();
@@ -385,9 +416,15 @@ export class CombatHUD extends BaseOverlay {
    * rysowany na wierzchu overlay'ów). Zwraca true gdy klik został zjedzony.
    */
   handleClick(mx, my) {
-    if (!this._minimizeBtnBounds || this._minimized) return false;
+    if (this._minimized) return false;
+    // „Obserwuj bitwę" — close-up kamery na bitwę.
+    const w = this._watchBtnBounds;
+    if (w && mx >= w.x && mx <= w.x + w.w && my >= w.y && my <= w.y + w.h) {
+      if (w.point) EventBus.emit('camera:watchBattle', { x: w.point.x, y: w.point.y });
+      return true;
+    }
     const b = this._minimizeBtnBounds;
-    if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
+    if (b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) {
       this.toggleMinimize();
       return true;
     }

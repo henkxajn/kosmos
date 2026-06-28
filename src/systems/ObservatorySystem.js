@@ -20,6 +20,7 @@ import { BUILDINGS } from '../data/BuildingsData.js';
 import { t }         from '../i18n/i18n.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 
 // Typy ciał podlegające skanowaniu
 const SCANNABLE_TYPES = ['planet', 'moon', 'planetoid', 'asteroid', 'comet'];
@@ -33,6 +34,11 @@ const VESSEL_DETECTION_RANGE = [1, 3, 6, 15, Infinity, Infinity, Infinity];
 // Co ile civYears odświeżać pozycję ghost-sightingu już-wykrytych statków (throttle — ogranicza
 // churn gameState/DebugLog przy ciągłej detekcji). Nowo wykryte ('added') zapisują się natychmiast.
 const SIGHTING_REFRESH_YEARS = 1.0;
+
+// Reforma detekcji — aktywny skan wrogiego statku (zadanie obserwatorium). Bazowy czas
+// skanu w civYears; dzielony przez najwyższy poziom obserwatorium (lepszy radar = szybciej).
+// Po ukończeniu rumor→contact (pełna tożsamość: nazwa/imperium/kadłub) zdalnie, bez statku.
+const SCAN_DURATION_YEARS = 3.0;
 
 export class ObservatorySystem {
   constructor() {
@@ -49,6 +55,11 @@ export class ObservatorySystem {
     // Set ID statków dla których wyemitowano już komunikat "Wykryto wrogą jednostkę"
     // — unika spamu EventLoga gdy statek wchodzi/wychodzi z zasięgu kilka razy.
     this._reportedVesselSightings = new Set();
+
+    // Reforma detekcji — aktywne skany wrogich statków: Map<vesselId, {progress, startedYear}>.
+    // Progres akumuluje civDeltaYears (tylko gdy cel dalej wykryty); po SCAN_DURATION/level
+    // → rumor→contact. Persystuje w save (serialize/restore).
+    this._vesselScans = new Map();
 
     // Rok gry
     this._gameYear = 0;
@@ -155,12 +166,104 @@ export class ObservatorySystem {
     return new Set(this._detectedVesselIds);
   }
 
+  // ── Aktywny skan wrogiego statku (reforma detekcji) ────────────────────
+
+  // Czas skanu w civYears = baza / max poziom obserwatorium (lepszy radar = szybciej).
+  _getScanDurationYears() {
+    return SCAN_DURATION_YEARS / Math.max(1, this.getMaxObservatoryLevel());
+  }
+
+  // Rozpocznij skan wrogiego statku → po czasie rumor→contact (zdalna identyfikacja).
+  // Walidacja: feature ON, cel wykryty, intel < contact, nie skanowany już.
+  startVesselScan(vesselId) {
+    if (!GAME_CONFIG.FEATURES?.observatoryVesselScan) return false;
+    if (!vesselId || this._vesselScans.has(vesselId)) return false;
+    if (!this._detectedVesselIds.has(vesselId)) return false;   // tylko wykryte (rumor)
+    const intelSys = window.KOSMOS?.intelSystem;
+    const q = intelSys?.getVesselContact?.(vesselId)?.quality;
+    if (q === 'contact' || q === 'detailed') return false;       // już zidentyfikowany
+    this._vesselScans.set(vesselId, { progress: 0, startedYear: this._gameYear });
+    EventBus.emit('observatory:vesselScanStarted', { vesselId, durationYears: this._getScanDurationYears() });
+    return true;
+  }
+
+  // Anuluj trwający skan.
+  cancelVesselScan(vesselId, reason = 'manual') {
+    if (!this._vesselScans.has(vesselId)) return false;
+    this._vesselScans.delete(vesselId);
+    EventBus.emit('observatory:vesselScanCancelled', { vesselId, reason });
+    return true;
+  }
+
+  // Postęp skanu dla statku: { progress, durationYears, pct } | null.
+  getVesselScanProgress(vesselId) {
+    const scan = this._vesselScans.get(vesselId);
+    if (!scan) return null;
+    const durationYears = this._getScanDurationYears();
+    return {
+      progress: scan.progress,
+      durationYears,
+      pct: durationYears > 0 ? Math.min(1, scan.progress / durationYears) : 0,
+    };
+  }
+
+  // Wszystkie aktywne skany (do UI).
+  getActiveVesselScans() {
+    const out = [];
+    const durationYears = this._getScanDurationYears();
+    for (const [vesselId, scan] of this._vesselScans) {
+      out.push({
+        vesselId,
+        progress: scan.progress,
+        durationYears,
+        pct: durationYears > 0 ? Math.min(1, scan.progress / durationYears) : 0,
+      });
+    }
+    return out;
+  }
+
+  // Tick aktywnych skanów. Progres tylko gdy cel dalej wykryty; cel zniknął (wrak/
+  // brak encji) → anuluj; cel zidentyfikowany inną drogą (proximity/walka) → cichy drop.
+  _tickVesselScans(civDeltaYears = 0) {
+    if (this._vesselScans.size === 0) return;
+    const vMgr     = window.KOSMOS?.vesselManager;
+    const intelSys = window.KOSMOS?.intelSystem;
+    for (const [vesselId, scan] of [...this._vesselScans]) {
+      const vessel = vMgr?.getVessel?.(vesselId);
+      if (!vessel || vessel.isWreck) {                 // cel zniknął
+        this.cancelVesselScan(vesselId, 'target_lost');
+        continue;
+      }
+      const q = intelSys?.getVesselContact?.(vesselId)?.quality;
+      if (q === 'contact' || q === 'detailed') {        // zidentyfikowany inną drogą — drop bez notyfikacji
+        this._vesselScans.delete(vesselId);
+        continue;
+      }
+      if (!this._detectedVesselIds.has(vesselId)) continue;  // poza zasięgiem — pauza (bez progresu)
+      scan.progress += civDeltaYears;
+      if (scan.progress >= this._getScanDurationYears()) {
+        this._completeVesselScan(vesselId, vessel);
+      }
+    }
+  }
+
+  _completeVesselScan(vesselId, vessel) {
+    this._vesselScans.delete(vesselId);
+    const intelSys = window.KOSMOS?.intelSystem;
+    intelSys?.advanceVesselContact?.(vesselId, 'contact', 'observatory_scan');
+    EventBus.emit('observatory:vesselScanComplete', { vesselId, vessel });
+  }
+
   // ── Tick skanowania ───────────────────────────────────────────────────
 
   _tickScan(civDeltaYears) {
     // Detekcja statków działa continuous — wykrycie wroga nie może czekać 6 lat jak
     // pierwsze odkrycie ciała niebieskiego. Każdy tick rebuildsowi Set i emituje diff.
     this._tickVesselDetection(civDeltaYears);
+
+    // Aktywne skany wrogich statków (reforma detekcji) — po _tickVesselDetection,
+    // bo czyta świeży _detectedVesselIds (progres tylko gdy cel dalej wykryty).
+    this._tickVesselScans(civDeltaYears);
 
     const colMgr = window.KOSMOS?.colonyManager;
     if (!colMgr) return;
@@ -273,7 +376,7 @@ export class ObservatorySystem {
     if (colonies.length > 0) {
       const allVessels = vMgr.getAllVessels?.() ?? [];
       for (const v of allVessels) {
-        if (!isEnemyVessel(v)) continue;
+        if (!isEnemyVessel(v) || v.isWreck) continue;   // wrak nie jest „kontaktem" (znika z listy/skanu)
         if ((v.systemId ?? sysId) !== sysId) continue;
 
         for (const col of colonies) {
@@ -396,9 +499,14 @@ export class ObservatorySystem {
     const scanAccum = {};
     this._scanAccum.forEach((val, key) => { scanAccum[key] = val; });
 
+    // Reforma detekcji — aktywne skany wrogich statków (Map→obj).
+    const vesselScans = {};
+    this._vesselScans.forEach((val, key) => { vesselScans[key] = val; });
+
     return {
       scanAccum,
       discoveries: this._discoveries,
+      vesselScans,
     };
   }
 
@@ -415,6 +523,11 @@ export class ObservatorySystem {
     // Przywróć historię odkryć
     if (Array.isArray(data.discoveries)) {
       this._discoveries = data.discoveries;
+    }
+
+    // Reforma detekcji — aktywne skany (defensywny default = brak; bez migracji save v88).
+    for (const [key, val] of Object.entries(data.vesselScans ?? {})) {
+      this._vesselScans.set(key, val);
     }
   }
 }

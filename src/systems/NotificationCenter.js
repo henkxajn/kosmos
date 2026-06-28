@@ -25,6 +25,7 @@ export class NotificationCenter {
     EventBus.on('expedition:reconProgress',  e => this._handleReconProgress(e));
     EventBus.on('expedition:reconComplete',  e => this._handleReconComplete(e));
     EventBus.on('observatory:discovered',    e => this._handleObservatoryDiscovered(e));
+    EventBus.on('observatory:vesselScanComplete', e => this._handleVesselScanComplete(e));
   }
 
   // ── Public API ──────────────────────────────────────────────────────────
@@ -230,6 +231,26 @@ export class NotificationCenter {
         bodyName: body.name,
         colonyName: colonyName ?? null,
       },
+    });
+  }
+
+  // Reforma detekcji — ukończony skan wrogiego statku (rumor→contact). Po skanie
+  // statek JEST zidentyfikowany → wolno ujawnić nazwę + imperium (fog-of-war zdjęty).
+  _handleVesselScanComplete({ vesselId, vessel }) {
+    const v = vessel ?? window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    const reg = window.KOSMOS?.empireRegistry;
+    const empId = v?.ownerEmpireId ?? v?.owner ?? null;
+    const empName = (empId && reg?.get?.(empId)?.name) ? reg.get(empId).name : t('intel.unknownEmpire');
+    const vName = v?.name ?? vesselId;
+    this.add({
+      type: 'vessel_scan',
+      severity: 'info',
+      source: 'observatoryScan',
+      title: t('notif.vesselScanTitle', vName),
+      subtitle: empName,
+      logChannel: 'intel',
+      logText: t('notif.vesselScanTitle', vName),
+      payload: { vesselId, empireId: empId },
     });
   }
 

@@ -1550,6 +1550,13 @@ export class GameScene {
     EventBus.on('intel:vesselContactChanged', ({ vesselId, oldQuality, newQuality, reason }) => {
       const evtLog = window.KOSMOS?.eventLogSystem;
       if (!evtLog) return;
+      // Reforma detekcji — loguj WYŁĄCZNIE ujawnienie tożsamości (contact+). Fog-of-war:
+      // rumor = anonim „?" (nazwa zakazana; po fixie _isPlayerVessel proximity gracza emituje
+      // teraz rumor — bez tej bramki ujawniałby nazwę). Pierwsze wykrycie rumor loguje osobno
+      // ObservatorySystem (anonimowo). Skan obserwatorium → NotificationCenter (bogatszy wpis,
+      // unik duplikatu).
+      if (newQuality !== 'contact' && newQuality !== 'detailed') return;
+      if (reason === 'observatory_scan') return;
       const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
       const label = vessel?.name ?? vesselId;
       evtLog.push({
@@ -3999,7 +4006,11 @@ export class GameScene {
   // ── Mysz: rozdziela kliknięcia między UI a Three.js ───────────
   // Nasłuchuje na window (gwarantuje odbiór niezależnie od z-index warstw)
   _setupMouseInput(eventLayer) {
+    this._setupBoxSelect();
     window.addEventListener('click', (e) => {
+      // Slice 8 — klik bezpośrednio po box-select (drag) to artefakt; pochłoń go
+      // (inaczej _handleTacticalLeftClick wyczyściłby świeżo zaznaczony zbiór).
+      if (this._boxSelectConsumedClick) { this._boxSelectConsumedClick = false; return; }
       // Propaguj modifiery kliku do ColonyOverlay (multi-select shift/ctrl)
       const overlay = this.uiManager?.overlayManager?.overlays?.colony;
       if (overlay) overlay._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
@@ -4465,6 +4476,47 @@ export class GameScene {
   // Prawy klik (z istniejącego 'contextmenu' handler — ELSE branch po
   // ColonyOverlay early-return):
   //   emit ui:rightClickMenuOpened z target shape z resolveTargetFromHits.
+  // Slice 8 (box-select) — SHIFT+LPM drag na mapie 3D = marquee zaznaczenia własnych
+  // statków. Kamera nie orbituje przy SHIFT (ThreeCameraController guard). +CTRL = dodaj
+  // do zbioru (bez czyszczenia). Gate FEATURES.fcMultiSelect. Marquee rysuje UIManager.
+  _setupBoxSelect() {
+    const onMap = (e) => {
+      if (this.planetScene?.isOpen) return false;
+      if (this.uiManager?.overlayManager?.isAnyOpen?.()) return false;
+      const tgt = e.target;
+      const isCanvasish = tgt?.tagName === 'CANVAS' || tgt?.id === 'event-layer' || tgt?.id === 'three-canvas';
+      if (!isCanvasish) return false;
+      if (this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return false;  // nie nad chrome UI
+      return true;
+    };
+    window.addEventListener('mousedown', (e) => {
+      if (e.button === 0) this._boxSelectConsumedClick = false;  // świeży start interakcji
+      if (!GAME_CONFIG.FEATURES?.fcMultiSelect) return;
+      if (e.button !== 0 || !e.shiftKey) return;
+      if (!onMap(e)) return;
+      this._boxSel = { x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY, additive: e.ctrlKey };
+      this.uiManager._marqueeRect = { ...this._boxSel };
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (!this._boxSel) return;
+      this._boxSel.x1 = e.clientX; this._boxSel.y1 = e.clientY;
+      this.uiManager._marqueeRect = { x0: this._boxSel.x0, y0: this._boxSel.y0, x1: e.clientX, y1: e.clientY };
+    });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button !== 0) return;   // tylko LPM finalizuje box-select (PPM/MPM mid-drag nie urywa)
+      if (!this._boxSel) return;
+      const box = this._boxSel;
+      this._boxSel = null;
+      this.uiManager._marqueeRect = null;
+      const dx = Math.abs(box.x1 - box.x0), dy = Math.abs(box.y1 - box.y0);
+      if (dx < 4 && dy < 4) return;  // za mały drag → click handler zrobi single-select
+      this._boxSelectConsumedClick = true;  // pochłoń artefaktowy click po dragu
+      const ids = this.threeRenderer?._getOwnVesselsInScreenRect?.(box.x0, box.y0, box.x1, box.y1) ?? [];
+      if (!box.additive) this.uiManager.clearSelection();
+      for (const id of ids) this.uiManager.addToSelection(id);
+    });
+  }
+
   _handleTacticalLeftClick(e) {
     if (this.planetScene?.isOpen) return;
     if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
@@ -4485,12 +4537,18 @@ export class GameScene {
       if (!this.uiManager?.isPickerActive?.()) {
         const tr = this.threeRenderer;
         const vid = tr?._getVesselAtScreen?.(e.clientX, e.clientY, 40);
+        // Slice 8 — CTRL+klik = toggle do zbioru (multi-select); inaczej single-select.
+        const multi = GAME_CONFIG.FEATURES?.fcMultiSelect && e.ctrlKey;
         if (vid) {
           const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
-          if (v && !isEnemyVessel(v)) { this.uiManager.setSelectedVesselId(vid); return; }
+          if (v && !isEnemyVessel(v)) {
+            if (multi) this.uiManager.toggleSelection(vid);
+            else       this.uiManager.setSelectedVesselId(vid);
+            return;
+          }
           if (v) return;  // wrogi statek pod kursorem — nie zaznaczamy (P1.2 semantyka), bez deselect
         }
-        this.uiManager.clearSelection();  // klik w pustkę/ciało → deselekcja statku
+        if (!multi) this.uiManager.clearSelection();  // klik w pustkę/ciało → deselekcja (CTRL+pustka zachowuje zbiór)
         return;
       }
       // picker aktywny → kontynuuj do worldPoint flow niżej (NIE return)
