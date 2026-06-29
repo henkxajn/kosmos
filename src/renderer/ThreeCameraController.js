@@ -8,14 +8,22 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 
 const DRAG_THRESHOLD = 5;  // px — poniżej = kliknięcie, powyżej = orbit
 
+// Skala 3D ↔ tactical — dystans kamery przypadający na 1 AU promienia układu przy
+// ramce startowej. Dobrane empirycznie (FOV 55°, oblique tilt) tak, by cały układ
+// mieścił się w kadrze jak fit-to-bounds mapy taktycznej. Tunable: większe = dalej
+// (ciaśniej/bardziej kompaktowo na ekranie), mniejsze = bliżej (rozleglej).
+const SYSTEM_FIT_DIST_PER_AU = 20;
+
 export class ThreeCameraController {
   constructor(camera) {
     this.camera = camera;
 
     this._theta      = 0.3;
     this._phi        = 1.1;
-    this._dist       = 85;
-    this._targetDist = 85;
+    // Ramka startowa — nadpisywana przez frameSystem() wg zasięgu układu (skala 3D ↔ tactical)
+    this._defaultDist = 85;
+    this._dist       = this._defaultDist;
+    this._targetDist = this._defaultDist;
     this._target     = new THREE.Vector3(0, 0, 0);
     this._goalTarget = new THREE.Vector3(0, 0, 0); // cel docelowy (lerp)
 
@@ -96,7 +104,7 @@ export class ThreeCameraController {
     if (isNaN(this._target.x) || isNaN(this._target.z)) {
       this._target.set(0, 0, 0);
       this._goalTarget.set(0, 0, 0);
-      this._dist = this._targetDist = 85;
+      this._dist = this._targetDist = this._defaultDist;
     }
     this._applyCamera();
   }
@@ -114,8 +122,22 @@ export class ThreeCameraController {
   }
 
   resetToCenter() {
-    this._theta = 0.3; this._phi = 1.1; this._targetDist = 85;
+    this._theta = 0.3; this._phi = 1.1; this._targetDist = this._defaultDist;
     this._goalTarget.set(0, 0, 0);
+  }
+
+  // Skala 3D ↔ tactical — ramka startowa: dopasuj dystans kamery tak, by cały układ
+  // (promień maxOrbitAU w AU) zmieścił się w kadrze, jak fit-to-bounds mapy taktycznej.
+  // Ustawia też _defaultDist → reset (H) wraca do tej ramki, nie do sztywnego 85.
+  frameSystem(maxOrbitAU) {
+    if (!Number.isFinite(maxOrbitAU) || maxOrbitAU <= 0) return;
+    const fit = Math.max(70, Math.min(450, maxOrbitAU * SYSTEM_FIT_DIST_PER_AU));
+    this._defaultDist = fit;
+    this._dist = this._targetDist = fit;  // snap bez lerpa — start / zmiana układu
+    this._theta = 0.3;
+    this._phi   = 1.1;
+    this._goalTarget.set(0, 0, 0);
+    this._target.set(0, 0, 0);
   }
 
   // Ustaw docelowy punkt kamery (płynny lerp w update)

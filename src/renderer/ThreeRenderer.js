@@ -862,6 +862,10 @@ export class ThreeRenderer {
     this._initPlanetoids();
     this._rebuildAllOrbits();
     if (planetesimals?.length > 0) this._updateDiskPoints(planetesimals);
+    // Skala 3D ↔ tactical — ramkuj kamerę do zasięgu układu. Przy starcie kontroler
+    // jeszcze niewpięty (no-op) → setCameraController woła to ponownie; przy switchSystem
+    // kontroler już jest → ramka odświeża się na nowy układ.
+    this._frameActiveSystem();
   }
 
   // ── Przełączanie układu gwiezdnego (dispose + reinit) ──────────────────
@@ -3367,7 +3371,35 @@ export class ThreeRenderer {
   getRaycaster() { return this._ray; }
 
   // Rejestracja kontrolera kamery (ustawiany przez GameScene)
-  setCameraController(ctrl) { this._cameraController = ctrl; }
+  setCameraController(ctrl) {
+    this._cameraController = ctrl;
+    this._frameActiveSystem();  // ramka startowa układu (skala 3D ↔ tactical)
+  }
+
+  // ── Skala 3D ↔ tactical: ramka startowa kamery ────────────────────────
+  // Maks. promień orbitalny aktywnego układu (AU) — IDENTYCZNA logika co mapa
+  // taktyczna (planety + planetoidy). Margines kadru jest w SYSTEM_FIT_DIST_PER_AU,
+  // więc tu zwracamy surowy maksymalny zasięg (bez paddingu ×1.15 mapy taktycznej).
+  _computeSystemExtentAU() {
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    let maxOrbitAU = 1;  // AU
+    for (const p of (EntityManager.getByTypeInSystem('planet', sysId) || [])) {
+      const a = p.orbital?.a ?? 0;  // AU
+      if (a > maxOrbitAU) maxOrbitAU = a;
+    }
+    for (const pd of (EntityManager.getByTypeInSystem('planetoid', sysId) || [])) {
+      const a = pd.orbital?.a ?? 0;  // AU
+      if (a > maxOrbitAU) maxOrbitAU = a;
+    }
+    return maxOrbitAU;
+  }
+
+  // Dopasuj kamerę tak, by cały układ był widoczny przy starcie/zmianie układu
+  // (odpowiednik fit-to-bounds mapy taktycznej). No-op gdy kontroler niewpięty.
+  _frameActiveSystem() {
+    if (!this._cameraController?.frameSystem) return;
+    this._cameraController.frameSystem(this._computeSystemExtentAU());
+  }
 
   // ── Vessel sprites ──────────────────────────────────────────────────
 
@@ -3807,9 +3839,25 @@ export class ThreeRenderer {
    */
   _tickOrbitingVessels() {
     const orbital = window.KOSMOS?.orbitalSpaceSystem;
-    if (!orbital) return;
+    const vm = window.KOSMOS?.vesselManager;
     const tSec = performance.now() * 0.001;
     for (const [id, entry] of this._vessels) {
+      // Fix desync 3D↔tactical (M4): statek w stanie 'orbiting' z dockedAt=null jest w
+      // WOLNEJ PRZESTRZENI (engage / pursue-hold / drift), NIE orbituje ciała — jego
+      // pozycję bierzemy z realnego vessel.position.x/y. Bez tego nieaktualna orbita w
+      // OrbitalSpaceSystem (nie zwalniana po _issueEngage, bo engage nie przechodzi przez
+      // in_transit/dock) pinowała sprite do ciała macierzystego (~1 AU), podczas gdy statek
+      // walczył 16 AU dalej (tactical czyta x/y wprost → był poprawny). dockedAt to źródło
+      // prawdy: bodyId ⇒ orbita, null ⇒ wolna przestrzeń. Wraki pomijamy (mają graveyard-
+      // orbit lub wreckLocation w _syncVesselPositions).
+      const v = vm?.getVessel?.(id);
+      if (v && !v.isWreck && v.position?.state === 'orbiting' && v.position?.dockedAt == null) {
+        const vx = isNaN(v.position.x) ? 0 : v.position.x;
+        const vy = isNaN(v.position.y) ? 0 : v.position.y;
+        entry.sprite.position.set(S(vx), 0.3, S(vy));
+        continue;
+      }
+      if (!orbital) continue;
       const orb = orbital.getOrbit(id);
       if (!orb) continue;
       // Pozycja planety w world-space
@@ -4142,6 +4190,10 @@ export class ThreeRenderer {
           const wx = isNaN(vessel.wreckLocation.x) ? 0 : vessel.wreckLocation.x;
           const wy = isNaN(vessel.wreckLocation.y) ? 0 : vessel.wreckLocation.y;
           entry.sprite.position.set(S(wx), 0.45, S(wy));
+        } else if (!vessel.isWreck && vessel.position.dockedAt == null) {
+          // Spójność z _tickOrbitingVessels: orbiting w wolnej przestrzeni (engage/drift,
+          // dockedAt=null) — pozycja z real x,y, NIE z nieaktualnej orbity macierzystej.
+          entry.sprite.position.set(S(vx), 0.3, S(vy));
         }
         continue;
       }

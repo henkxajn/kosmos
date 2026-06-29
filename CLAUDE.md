@@ -481,7 +481,25 @@ Minimize ▼→chip „⛬ Zazn. N"; stronicowanie ▲/▼ przy >6. Pliki: `src/
 UIManager 5 wpięć, `fcGroupPanel` w GameConfig, i18n `fleetGroup.*` PL+EN. Smoke `tmp_slice8b_smoke.mjs` 33/33
 + regr fc_command 10 / fc_foundation 25 / fc_combat_fx 11 / sensor_detection 46. **Live-gate PENDING.**
 
-**NEXT (jutro):** ujednolicenie skali odległości na mapie 3D (3D vs tactical map); empire tech state (sensory/broń per imperium).
+**Skala 3D ↔ tactical + fix desync pozycji walki (post-Slice8b, save v88 bez migracji, live-gate PASS):**
+- **Auto-fit kamery 3D do układu** (camera-only): `ThreeCameraController.frameSystem(maxOrbitAU)` ustawia
+  dystans = `clamp(maxOrbitAU × SYSTEM_FIT_DIST_PER_AU(20), 70, 450)` + nowe pole `_defaultDist` (reset H /
+  NaN-recovery wracają do ramki układu, nie sztywnego 85). `ThreeRenderer._computeSystemExtentAU` (max
+  `orbital.a` planet+planetoid — IDENTYCZNA logika co mapa taktyczna) + `_frameActiveSystem` wpięte w
+  `setCameraController` (start) i koniec `initSystem` (switchSystem/warp). Otwarcie układu kadruje CAŁY układ
+  jak fit-to-bounds tactical (px/AU ~20–80 zamiast ~134). Startowy focus na home (GameScene) nadal wygrywa
+  na starcie — ramka działa na H/reset/zmianę układu. Knob: `SYSTEM_FIT_DIST_PER_AU`.
+- **⚠ ROOT-CAUSE fix desync 3D↔tactical podczas Engage**: `_issueEngage` ustawia `state='orbiting'`+`dockedAt=null`
+  i lata statkiem mutując x/y, ale NIE zwalnia orbity w `OrbitalSpaceSystem` (engage omija ścieżkę
+  in_transit/dock która normalnie woła `releaseOrbit`). `_tickOrbitingVessels` (co klatkę) pinował sprite do
+  NIEAKTUALNEJ orbity macierzystej (~1 AU) gdy statek walczył 16 AU dalej (tactical czyta x/y wprost → był OK).
+  Fix renderer-only (`dockedAt` = źródło prawdy): w `_tickOrbitingVessels` I `_syncVesselPositions` statek
+  `orbiting`+`dockedAt==null`+`!wreck` (engage/pursue-hold/drift) pozycjonowany z REAL x/y, NIE z orbity.
+  Genuine orbiter (`dockedAt=bodyId`) i wraki (graveyard/wreckLocation) bez zmian. Inwariant potwierdzony:
+  wszystkie orbitery w VesselManager ustawiają `dockedAt=bodyId`, tylko deep-space free-float = null.
+- Smoke `tmp_3d_scale_fit_smoke.mjs` 25/25 + `tmp_engage_desync_smoke.mjs` 12/12 (untracked).
+
+**NEXT (jutro):** empire tech state (sensory/broń per imperium).
 
 ---
 
