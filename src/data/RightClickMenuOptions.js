@@ -104,9 +104,12 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
   planet: [
     { id: 'moveToPlanet', labelPL: 'Lecisz do planety', labelEN: 'Move to planet', icon: '→',
       action: 'issueOrder', orderType: 'moveToPoint', requiresSelection: true },
-    // dock — pominięte w P1.1: Planet entity nie ma flagi canDock; decyzja
-    // dokowania to runtime (ColonyManager.colonies + OrbitalSpaceSystem).
-    // P1.3 doda gdy będzie miał resolveTarget logic.
+    // Slice 8b — Dock na kolonię gracza (hangar). Każda kolonia gracza: małe kadłuby dokują BEZ
+    // portu, duże wymagają portu (per-vessel `dockAtColony` decyduje; bez portu duży→orbita).
+    // Stacje orbitalne = dropdown w panelu floty. buildOrderSpec('dock') buduje spec.
+    { id: 'dock', labelPL: 'Dokuj tutaj', labelEN: 'Dock here', icon: '⚓',
+      action: 'issueOrder', orderType: 'dock', requiresSelection: true,
+      condition: (target) => _isPlayerColony(target.entityId) },
     // P2 — fleet move to planet (sync ETA)
     { id: 'fleet.moveToPlanet', labelPL: 'Flota: lecisz do planety', labelEN: 'Fleet: move to planet', icon: '🎯',
       action: 'issueFleetOrder', orderType: 'moveToPoint', forFleet: true },
@@ -129,6 +132,13 @@ export const MENU_OPTIONS_BY_TARGET = Object.freeze({
  * @param {string} vesselId
  * @returns {boolean}
  */
+// Slice 8b — czy `id` to kolonia gracza (dock target = hangar/port). Kolonie AI mają ownerEmpireId.
+function _isPlayerColony(id) {
+  if (!id) return false;
+  const c = window.KOSMOS?.colonyManager?.getColony?.(id);
+  return !!c && (!c.ownerEmpireId || c.ownerEmpireId === 'player');
+}
+
 function _vesselInCombat(vesselId) {
   if (!vesselId) return false;
   const dscs = window.KOSMOS?.deepSpaceCombatSystem;

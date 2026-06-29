@@ -1953,9 +1953,10 @@ export class ThreeRenderer {
     // Planetoidy: synchronizuj pozycje meshów
     this._syncPlanetoidPositions();
 
-    // Aktualizuj wizualne orbity statków (animacja co klatkę)
-    this._tickOrbitingVessels();
+    // Aktualizuj wizualne orbity statków (animacja co klatkę). Stacje PRZED statkami — statek
+    // orbitujący stację czyta mesh stacji z TEJ klatki (bez 1-klatkowego opóźnienia).
     this._tickOrbitingStations();
+    this._tickOrbitingVessels();
 
     // Aktualizuj śledzenie kamery (ciało się porusza → kamera za nim)
     this._updateCameraFocus();
@@ -3819,7 +3820,11 @@ export class ThreeRenderer {
           ? { x: this._moons.get(orb.planetId).mesh.position.x, z: this._moons.get(orb.planetId).mesh.position.z }
           : this._planetoids.get(orb.planetId)
             ? { x: this._planetoids.get(orb.planetId).mesh.position.x, z: this._planetoids.get(orb.planetId).mesh.position.z }
-            : null;
+            // Slice 8b — statek orbitujący STACJĘ (dock/undock przy stacji) — śledzi mesh stacji
+            // (która sama podąża za planetą). Bez tego sprite zamarzał (stacja NIE w _planets/_moons).
+            : this._stations.get(orb.planetId)
+              ? { x: this._stations.get(orb.planetId).mesh.position.x, z: this._stations.get(orb.planetId).mesh.position.z }
+              : null;
       if (!planetPos) continue;
       const pos = orbital.getPosition(id, planetPos, tSec);
       if (!pos) continue;
@@ -4092,6 +4097,15 @@ export class ThreeRenderer {
 
       // Statek nie należy do aktywnego układu → usuń sprite jeśli istnieje
       if (!inActiveSys) {
+        if (entry) this._removeVesselSprite(vessel.id);
+        continue;
+      }
+
+      // Slice 8b — statek ZADOKOWANY nie ma sprite'a (schowany w hangarze/stacji). RACE: gdy dock
+      // odpala w tym samym _updatePositions ticku co arrival, vessel:positionUpdate{vessels:moving}
+      // niesie zadokowany statek → poniższe `_addVesselSprite` ODTWARZAŁO sprite (statek „wracał").
+      // Usuń sprite jeśli istnieje i NIE odtwarzaj — docked = niewidoczny.
+      if (vessel.position?.state === 'docked') {
         if (entry) this._removeVesselSprite(vessel.id);
         continue;
       }

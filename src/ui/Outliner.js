@@ -14,6 +14,7 @@ import { COMMODITIES }    from '../data/CommoditiesData.js';
 import EventBus            from '../core/EventBus.js';
 import EntityManager       from '../core/EntityManager.js';
 import { t, getName }     from '../i18n/i18n.js';
+import { resolveBodyName } from '../utils/BodyName.js';
 
 const OUTLINER_W = COSMIC.OUTLINER_W;   // 150px (Slice 5 — węższy)
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;   // 50px
@@ -91,6 +92,9 @@ export class Outliner {
     this._hovered        = false;
     this._hideAt         = 0;     // ms timestamp planowanego schowania (0=brak)
     this._slideOffX      = 0;     // bieżące przesunięcie X panelu (px) — dla hit/hover
+    // Modyfikatory ostatniego kliku (propagowane przez GameScene, wzór ColonyOverlay) —
+    // CTRL+klik statku = multi-select. Ustawiane PRZED hitTest.
+    this._lastMouseMods  = { shift: false, ctrl: false };
   }
 
   // ── Rysowanie ───────────────────────────────────────────
@@ -270,30 +274,61 @@ export class Outliner {
 
       let dy = 0;
 
-      // Lista indywidualnych statków (klikalne → centruj kamerę)
+      // Statki pogrupowane po stanie (W locie / Na orbicie / W hangarze). Klik wiersza = zaznacz
+      // (→ FleetGroupPanel) + kamera; CTRL+klik = multi-toggle. Zaznaczone podświetlone; lokacja
+      // (ciało) po prawej. Wraki pominięte. Umożliwia zaznaczenie ZADOKOWANYCH (brak sprite'a 3D).
       const vMgr = window.KOSMOS?.vesselManager;
+      const selSet = new Set(window.KOSMOS?.uiManager?.getSelectedVesselIds?.() ?? []);
+      const FLEET_GROUPS = [
+        { state: 'in_transit', label: t('outliner.fleetInTransit') },
+        { state: 'orbiting',   label: t('outliner.fleetOrbiting') },
+        { state: 'docked',     label: t('outliner.fleetDocked') },
+      ];
       if (fleet) {
+        const byState = { in_transit: [], orbiting: [], docked: [] };
         for (const vid of fleet) {
           const vessel = vMgr?.getVessel(vid);
-          if (!vessel) continue;
-          const iy = startY + dy;
-          const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
-          const icon = ship?.icon ?? '🚀';
-          const vName = _truncate(vessel.name ?? (ship ? getName(ship, 'ship') : vessel.shipId), 16);
-          // Hover highlight
-          const isHov = vid === this._hoveredVesselId;
-          if (isHov) {
-            ctx.fillStyle = THEME.accentDim;
-            ctx.fillRect(x, iy, OUTLINER_W, ITEM_H);
+          if (!vessel || vessel.isWreck) continue;
+          const st = vessel.position?.state ?? 'docked';
+          (byState[st] ?? byState.docked).push(vessel);
+        }
+        for (const g of FLEET_GROUPS) {
+          const ships = byState[g.state];
+          if (!ships || ships.length === 0) continue;
+          // Sub-nagłówek grupy stanu
+          ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+          ctx.fillStyle = C.label;
+          ctx.fillText(`${g.label} (${ships.length})`, x + PAD, startY + dy + 12);
+          dy += SECTION_HDR_H - 2;
+          for (const vessel of ships) {
+            const vid = vessel.id;
+            const iy = startY + dy;
+            const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
+            const icon = ship?.icon ?? '🚀';
+            const isSel = selSet.has(vid);
+            const isHov = vid === this._hoveredVesselId;
+            if (isSel)      { ctx.fillStyle = THEME.accentMed; ctx.fillRect(x, iy, OUTLINER_W, ITEM_H); }
+            else if (isHov) { ctx.fillStyle = THEME.accentDim; ctx.fillRect(x, iy, OUTLINER_W, ITEM_H); }
+            // Lokacja po prawej (ciało / cel / powrót)
+            let loc = '';
+            if (g.state === 'docked' || g.state === 'orbiting') loc = resolveBodyName(vessel.position?.dockedAt);
+            else if (vessel.mission?.phase === 'returning')      loc = t('outliner.fleetReturn');
+            else                                                 loc = resolveBodyName(vessel.mission?.targetId);
+            // Nazwa po lewej (krótsza gdy jest lokacja)
+            ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+            ctx.fillStyle = (isSel || isHov) ? C.bright : C.text;
+            const vName = _truncate(vessel.name ?? (ship ? getName(ship, 'ship') : vessel.shipId), loc ? 11 : 17);
+            ctx.fillText(`${icon} ${vName}`, x + PAD, iy + 14);
+            if (loc) {
+              ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+              ctx.fillStyle = C.dim;
+              ctx.textAlign = 'right';
+              ctx.fillText(_truncate(loc, 10), x + OUTLINER_W - PAD, iy + 14);
+              ctx.textAlign = 'left';
+            }
+            this._clickTargets.push({ type: 'vessel', vesselId: vid, x, y: iy, w: OUTLINER_W, h: ITEM_H });
+            dy += ITEM_H;
           }
-          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          ctx.fillStyle = isHov ? C.bright : C.text;
-          ctx.fillText(`${icon} ${vName}`, x + PAD, iy + 14);
-          this._clickTargets.push({
-            type: 'vessel', vesselId: vid,
-            x, y: iy, w: OUTLINER_W, h: ITEM_H,
-          });
-          dy += ITEM_H;
         }
       }
 
@@ -521,8 +556,15 @@ export class Outliner {
     for (const t of this._clickTargets) {
       if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) {
         if (t.type === 'vessel') {
-          // Centruj kamerę 3D na statku — obsłuż PRZED sekcją
-          EventBus.emit('vessel:focus', { vesselId: t.vesselId });
+          // Klik = zaznacz (→ FleetGroupPanel, komenda z mapy/PPM) + kamera; CTRL+klik = multi-toggle.
+          // Działa też dla ZADOKOWANYCH (brak sprite'a 3D) — jedyna droga ich zaznaczenia.
+          const um = window.KOSMOS?.uiManager;
+          if (this._lastMouseMods?.ctrl && um?.toggleSelection) {
+            um.toggleSelection(t.vesselId);
+          } else {
+            um?.setSelectedVesselId?.(t.vesselId);
+            EventBus.emit('vessel:focus', { vesselId: t.vesselId });   // kamera (docked → ciało hangaru)
+          }
           return true;
         }
         if (t.type === 'section') {

@@ -466,7 +466,22 @@ Plan: `C:\Users\Komputer\.claude\plans\przeczytaj-handoff-z-ostatniej-dynamic-wr
 
 **Fix live-gate T7 — moveToPoint na ruchome ciało**: `buildOrderSpec` planet → `targetBodyId` (+ fallback `targetPoint`); `_issueMoveToPoint` przewiduje pozycję ciała na ETA (`_predictPosition`) + `mission.targetId=bodyId` → przylot snapuje do ŻYWEJ pozycji planety i orbituje (statek śledzi planetę). Wzór rekon/atak. Pusty punkt = drift (bez zmian).
 
-**NEXT (jutro):** Slice 8b UI zarządzania grupą/statkiem; ujednolicenie skali odległości na mapie 3D (3D vs tactical map); empire tech state (sensory/broń per imperium).
+**Slice 8b — FleetGroupPanel (panel zaznaczonej grupy statków, gate `FEATURES.fcGroupPanel` ON, bez migracji save):**
+Lekki non-exclusive panel (wzór StationPanel/CombatHUD; trzymany w UIManager, klik PRZED overlayManager,
+draw PO — oba gated `fcGroupPanel && !overlayManager.isAnyOpen()`) w LEWYM-DOLNYM rogu pokazujący TRANSIENTNE
+zaznaczenie mapy (`UIManager._selectedVesselIds`), NIEZALEŻNE od trwałych flot (FleetSystem). Self-managed:
+`ui:selectionChanged` → show/hide (czyta `vesselIds`); `vessel:wrecked` → `removeFromSelection` (UIManager sam
+NIE czyści zbioru). Zawiera: podsumowanie (liczba/paliwo%/utrzymanie Kr/uzbr. N/M/⚠unieruchomione) + roster
+(nazwa·kadłub·status·rozkaz + mini-pasek paliwa, lead=accent) + akcje per-statek (🎯 `vessel:focus` / ✏
+`showRenameModal`→`vessel:rename` / ✕ `removeFromSelection`) + rozkazy grupowe BEZ celu (Powrót `startReturn`
+/ Tankuj `manualRefuel` docked / Stop `mos.cancelOrder` / Odwrót `mos.issueOrder retreat`) — szare gdy 0
+kwalifikuje się (`countActionable`). Celowane (Move/Pursue/Engage) zostają na PPM mapy (już pętli zaznaczenie).
+Minimize ▼→chip „⛬ Zazn. N"; stronicowanie ▲/▼ przy >6. Pliki: `src/ui/FleetGroupPanel.js` (widok) +
+`src/ui/FleetGroupPanelLogic.js` (czyste `summarizeFleetGroup`/`buildRosterRows`/`countActionable`, node-test),
+UIManager 5 wpięć, `fcGroupPanel` w GameConfig, i18n `fleetGroup.*` PL+EN. Smoke `tmp_slice8b_smoke.mjs` 33/33
++ regr fc_command 10 / fc_foundation 25 / fc_combat_fx 11 / sensor_detection 46. **Live-gate PENDING.**
+
+**NEXT (jutro):** ujednolicenie skali odległości na mapie 3D (3D vs tactical map); empire tech state (sensory/broń per imperium).
 
 ---
 

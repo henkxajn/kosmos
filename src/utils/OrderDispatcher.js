@@ -93,6 +93,25 @@ export function buildOrderSpec(option, target, vesselId) {
       return { ok: true, spec: { type: 'retreat' } };
     }
 
+    case 'dock': {
+      // Slice 8b — Dock na ciało (planet target). STATYCZNY targetPoint (order się kończy →
+      // _maybeDockOnArrival dokuje + snap do żywej pozycji ciała). targetBodyId niesiony info.
+      if (target.type === 'planet' && target.planet
+          && typeof target.planet.x === 'number'
+          && typeof target.planet.y === 'number') {
+        return {
+          ok: true,
+          spec: {
+            type:         'dock',
+            targetBodyId: target.planet.id ?? target.entityId ?? null,
+            targetName:   target.planet.name ?? null,
+            targetPoint:  { x: target.planet.x, y: target.planet.y },
+          },
+        };
+      }
+      return { ok: false, reason: 'dock_needs_planet' };
+    }
+
     case 'goToPOI': {
       if (target.type !== 'poi' || !target.entityId) {
         return { ok: false, reason: 'no_poi_target' };

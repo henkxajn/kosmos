@@ -94,6 +94,8 @@ export const GAME_CONFIG = {
     fcMovementFx:         true,   // Slice 6 — żywość ruchu (roll/bob/poświata/pulsy)
     fcCommandFromMap:     true,   // Slice 7 — PPM rozkazy wprost z mapy 3D
     fcMultiSelect:        true,   // Slice 8 — multi-select (CTRL+klik toggle + SHIFT box-select)
+    fcGroupPanel:         true,   // Slice 8b — panel zarządzania zaznaczoną grupą statków (lewy-dolny róg)
+    fcFleetPanel:         true,   // Slice 8b — pływający panel dowodzenia wybraną flotą (FleetCommandPanel)
     // ── Reforma detekcji (post-handoff) — sensory per-kadłub + reveal tożsamości ──
     // sensorLockContact: trzeci próg w ProximitySystem (sensor-lock) — własny statek
     //   w promieniu SENSOR_LOCK_AU×tech od wroga → vessel:sensorLockEnter → IntelSystem

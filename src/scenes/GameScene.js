@@ -4014,6 +4014,9 @@ export class GameScene {
       // Propaguj modifiery kliku do ColonyOverlay (multi-select shift/ctrl)
       const overlay = this.uiManager?.overlayManager?.overlays?.colony;
       if (overlay) overlay._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
+      // Slice 8b — modifiery kliku do Outlinera (CTRL+klik statku = multi-select w drawerze).
+      const outl = this.uiManager?._outliner;
+      if (outl) outl._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
       if (this.planetScene?.isOpen) return;
       // Blokuj kliknięcia gdy DOM modal/menu jest na wierzchu
       if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;
@@ -4312,6 +4315,12 @@ export class GameScene {
   _tooltipHoverFromMain3D(clientX, clientY) {
     // Fullscreen overlay zakrywa mapę 3D — żaden hover nie trafia
     if (this.uiManager?.overlayManager?.isAnyOpen?.()) {
+      this._scheduleEntityTooltip(null, clientX, clientY);
+      return;
+    }
+    // Slice 8b — kursor nad pływającym panelem (FleetGroupPanel/StationPanel) na #ui-canvas:
+    // nie pokazuj tooltipa mapy 3D (koordynaty/encja) przebijającego przez panel.
+    if (this.uiManager?.isPointerOverFloatingPanel?.(clientX, clientY)) {
       this._scheduleEntityTooltip(null, clientX, clientY);
       return;
     }

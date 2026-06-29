@@ -213,8 +213,31 @@ export class MovementOrderSystem {
     if (spec.type === ORDER_TYPES.retreat) {
       return this._issueRetreat(vessel, spec);
     }
+    if (spec.type === ORDER_TYPES.dock) {
+      return this._issueDock(vessel, spec);
+    }
 
     return { ok: false, reason: 'unhandled_type' };
+  }
+
+  /**
+   * Slice 8b — Dock: lecisz do ciała (STATYCZNY targetPoint, by order się ZAKOŃCZYŁ) + marker
+   * `_pendingDock`. Przy `vessel:orderCompleted` FleetSystem._maybeDockOnArrival woła
+   * `dockAtTarget` (stacja→hangar; planeta z portem→hangar; bez portu→orbita). Wzór Powrót
+   * (_pendingReturnDock), ale wynik = DOK, nie orbita. targetBodyId NIE używany (tracking nie kończy się).
+   * `bypassFuelCheck`: rozkaz gracza — NIE odrzucaj cicho za paliwo (origin pozycji orbitującego
+   * statku bywa nieaktualny → zawyżony dystans → fałszywy insufficient_fuel; snap przy dotarciu i tak
+   * koryguje pozycję). Stranding nie grozi (dock = baza/stacja gracza).
+   */
+  _issueDock(vessel, spec) {
+    const result = this._issueMoveToPoint(vessel, {
+      type: ORDER_TYPES.moveToPoint,
+      targetPoint: spec.targetPoint,
+      bypassSpaceportCheck: spec.bypassSpaceportCheck,
+      bypassFuelCheck: true,
+    });
+    if (result?.ok) vessel._pendingDock = spec.targetBodyId ?? null;
+    return result;
   }
 
   /**

@@ -21,6 +21,7 @@ import {
 import { FLEET_DOCTRINES, DEFAULT_DOCTRINE, isValidDoctrine } from '../data/FleetDoctrines.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
+import { isStationId } from '../utils/TransferStore.js';
 
 const AU_TO_PX = GAME_CONFIG.AU_TO_PX;
 // Próg auto-dock przy Return to base — gdy vessel dotrze w tej odległości od
@@ -69,6 +70,7 @@ export class FleetSystem {
       // P2 polish — auto-dock po Return to base. Sprawdź vessel._pendingReturnDock
       // PRZED _onMemberOrderEnded (które może czyścić activeOrder).
       this._maybeAutoDockOnReturn(vesselId);
+      this._maybeDockOnArrival(vesselId);   // Slice 8b — rozkaz Dock (hangar) po dotarciu
       this._onMemberOrderEnded(vesselId, orderId, 'completed');
     });
     EventBus.on('vessel:orderCancelled', ({ vesselId, orderId }) => {
@@ -649,6 +651,47 @@ export class FleetSystem {
     v.colonyId = planetId;
     v.mission = null;
     v.status = 'idle';
-    EventBus.emit('vessel:docked', { vessel: v });
+    // FIX (live-gate r3): vessel:arrived (NIE vessel:docked) — statek ZOSTAJE 'orbiting' przy bazie.
+    // vessel:docked → OrbitalSpaceSystem.releaseOrbit + ThreeRenderer usuwał sprite, a state='orbiting'
+    // → statek bez orbity w rejestrze → _tickOrbitingVessels go pomijał → sprite ZAMROŻONY (planeta
+    // odlatuje, na tactical/mechanice orbituje, w 3D stoi). vessel:arrived → OrbitalSpaceSystem
+    // assignOrbit → _tickOrbitingVessels śledzi planetę w 3D. Wzór: VesselManager recon-abort
+    // (~2713 „sprite w 3D będzie żyć"). Player vessel + dockedAt set → pozostali słuchacze no-op.
+    EventBus.emit('vessel:arrived', { vessel: v, mission: null });
+    EventBus.emit('vessel:positionUpdate', { vessels: [v] });
+  }
+
+  // ── Slice 8b — auto-dock przy rozkazie Dock (hangar) ───────────────────────
+  // MovementOrderSystem._issueDock ustawia vessel._pendingDock=bodyId PRZED moveToPoint.
+  // Po vessel:orderCompleted dokujemy przez dockAtColony (spaceport gate: port→hangar,
+  // brak portu→orbita). Gdy wynik=orbita, rejestrujemy orbitę (vessel:arrived) by sprite 3D
+  // nie zamarzł (dockAtColony emituje vessel:orbiting, NIE arrived — jak w runda 4 root-cause).
+  _maybeDockOnArrival(vesselId) {
+    const v = this._vm._vessels?.get?.(vesselId);
+    if (!v || !v._pendingDock) return;
+    const bodyId = v._pendingDock;
+    delete v._pendingDock;   // jednorazowy flag
+    // Stacja orbitalna → dockAtStation: statek CHOWA SIĘ w stacji (hangar, sprite usuwany — Filip:
+    // „schować się w niej, nie orbitować"). Fallback gdy dock się nie powiódł → orbituj stację
+    // WIDOCZNIE (śledzona w _tickOrbitingVessels), żeby sprite nie zamarzł.
+    if (isStationId(bodyId)) {
+      this._vm.dockAtStation?.(vesselId, bodyId);
+      if (v.position?.state !== 'docked') {
+        if (!v.position.dockedAt) v.position.dockedAt = bodyId;
+        EventBus.emit('vessel:arrived', { vessel: v, mission: null });
+        EventBus.emit('vessel:positionUpdate', { vessels: [v] });
+      }
+      return;
+    }
+    // Planeta — dockAtColony (port-gate: port→hangar, brak portu→orbita widoczna).
+    this._vm.dockAtColony?.(vesselId, bodyId);
+    if (v.position?.state === 'orbiting') {   // no-port fallback → zarejestruj orbitę w 3D
+      // dockAtColony (gałąź no-port) ZEROWAŁ dockedAt → OrbitalSpaceSystem.vessel:arrived czyta
+      // `dockedAt ?? mission.targetId` = null → orbita NIE rejestrowana → sprite zamarza („stoi na
+      // orbicie i nic więcej"). Przywróć dockedAt=bodyId by orbita się zarejestrowała (statek śledzi ciało).
+      if (!v.position.dockedAt) v.position.dockedAt = bodyId;
+      EventBus.emit('vessel:arrived', { vessel: v, mission: null });
+      EventBus.emit('vessel:positionUpdate', { vessels: [v] });
+    }
   }
 }

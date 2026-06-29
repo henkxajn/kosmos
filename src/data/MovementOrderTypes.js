@@ -21,10 +21,11 @@ export const ORDER_TYPES = Object.freeze({
   goToPOI:     'goToPOI',    // M2b C6: POI nawigacja (delegacja do moveToPoint)
   engage:      'engage',     // M4 P3 C5: tactical kiting na enemy vessel (utrzymuje optimal range)
   retreat:     'retreat',    // M4 P3 polish: manualne wycofanie z bitwy (auto-pick friendly planet)
+  dock:        'dock',       // Slice 8b: lecisz do ciała + dokujesz (moveToPoint + marker _pendingDock)
 });
 
 const TYPES_WITH_ENTITY_TARGET = new Set([ORDER_TYPES.pursue, ORDER_TYPES.intercept, ORDER_TYPES.escort, ORDER_TYPES.engage]);
-const TYPES_WITH_POINT_TARGET  = new Set([ORDER_TYPES.moveToPoint]);
+const TYPES_WITH_POINT_TARGET  = new Set([ORDER_TYPES.moveToPoint, ORDER_TYPES.dock]);
 export const TYPES_WITH_POI_TARGET = new Set([ORDER_TYPES.goToPOI]);
 
 /**

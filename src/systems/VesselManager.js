@@ -581,6 +581,29 @@ export class VesselManager {
   }
 
   /**
+   * Slice 8b — Undock (launch to orbit): zadokowany statek startuje z hangaru i ORBITUJE ciało,
+   * na którym był zadokowany. Instant (bez lotu/paliwa). Snap do żywej pozycji ciała + state=orbiting;
+   * `vessel:arrived` rejestruje orbitę w OrbitalSpaceSystem (sprite 3D śledzi planetę — patrz runda 4
+   * root-cause), `vessel:positionUpdate` dodaje sprite (był usunięty przy dokowaniu). dockedAt zostaje
+   * = ciało (orbituje je). Zwraca false gdy statek nie jest zadokowany / brak dockedAt.
+   */
+  undockToOrbit(vesselId) {
+    const vessel = this._vessels.get(vesselId);
+    if (!vessel || vessel.position?.state !== 'docked') return false;
+    const bodyId = vessel.position.dockedAt;
+    if (!bodyId) return false;
+    const body = this._findEntity(bodyId);
+    if (body) { vessel.position.x = body.x; vessel.position.y = body.y; }
+    vessel.position.state = 'orbiting';   // dockedAt zostaje — orbituje to ciało
+    vessel.status = 'idle';
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    addMissionLog(vessel, gameYear, t('vessel.undocked', this._resolveEntityName(bodyId)), 'info');
+    EventBus.emit('vessel:arrived', { vessel, mission: null });   // → OrbitalSpaceSystem assignOrbit
+    EventBus.emit('vessel:positionUpdate', { vessels: [vessel] });
+    return true;
+  }
+
+  /**
    * S3.4 — zablokuj statek na abstrakcyjną misję (envoy) BEZ fizycznego lotu.
    * Statek zostaje w bieżącej pozycji (dock/orbita macierzysta); status→on_mission
    * (≠ 'idle' → nie zostanie wybrany do innej misji). Brak route/paliwa.
