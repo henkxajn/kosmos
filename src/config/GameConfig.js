@@ -91,6 +91,7 @@ export const GAME_CONFIG = {
     fcOrderLines:         true,   // Slice 3 — animowane linie rozkazów (kolor/strumień/grot)
     fcBrackets:           true,   // Slice 4 — ramki zaznaczenia + paski HP/tarcza (#ui-canvas)
     fcInsignia:           true,   // Slice 5 — insygnia frakcji nad statkiem
+    fcEnemyAlertMarker:   true,   // Pulsujący czerwony marker wykrytego wroga (≥rumor) na mapie 3D
     fcMovementFx:         true,   // Slice 6 — żywość ruchu (roll/bob/poświata/pulsy)
     fcCommandFromMap:     true,   // Slice 7 — PPM rozkazy wprost z mapy 3D
     fcMultiSelect:        true,   // Slice 8 — multi-select (CTRL+klik toggle + SHIFT box-select)

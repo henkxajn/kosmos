@@ -984,6 +984,7 @@ export default {
   'fleetGroup.actionDock': 'Dokuj',
   'fleetGroup.actionUndock': 'Odcumuj',
   'fleetGroup.dockFailed': 'Dokowanie niemożliwe: {0}',
+  'fleetGroup.targetLine': '{0} · {1} AU',
 
   // Slice 8b — FleetCommandPanel (pływający panel dowodzenia flotą)
   'fleetCmd.doctrine': 'Doktryna',

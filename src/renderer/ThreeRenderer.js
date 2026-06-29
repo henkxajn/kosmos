@@ -66,6 +66,11 @@ const SENSOR_RING_Y            = 0.04;      // tuż pod prediction cone (0.05), 
 // żeby uniknąć NaN/over-the-horizon ring covering całej sceny.
 const SENSOR_RING_MAX_COLONY_AU = 35.0;     // ≈ MAX_ORBIT_AU — cały układ widoczny
 
+// ── Marker wykrytego wroga (≥rumor) — pulsujący czerwony alert na mapie 3D ──
+const ALERT_MARKER_COLOR = 0xff4466;        // czerwony (konwencja wroga, == factionColorRaw fallback)
+const ALERT_MARKER_SCALE = 0.7;             // bazowa skala billboardu (encircle ~0.3 sprite statku)
+const ALERT_MARKER_REF_DIST = 60;           // dystans kamery [WU] dający skalę bazową; dalej → skala rośnie (stały rozmiar ekranowy)
+
 // ── Fleet Command Console (Slice 0) — pierścień zaznaczenia/hover ────────────
 // Slice 5 — cache tekstur insygniów per kolor frakcji (reuse, wzór ResourceIcons).
 const _INSIGNIA_TEX_CACHE = new Map();      // colorHex → THREE.CanvasTexture
@@ -196,6 +201,8 @@ export class ThreeRenderer {
     this._engagementMarkers    = new Map();  // encounterId → { mesh, geom, mat } (znacznik starcia, TTL)
     this._focusEncounterId     = null;       // Slice 1 — kamera śledzi midpoint bitwy
     this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
+    this._enemyAlertMarkers    = new Map();  // vesselId → Sprite (pulsujący czerwony marker wroga ≥rumor)
+    this._alertReticleTex      = null;       // współdzielona tekstura reticle (lazy)
 
     // ── Cache modeli 3D statków ─────────────────────────────────
     this._shipModelTemplates = new Map(); // modelPath → THREE.Group (oryginał)
@@ -1022,6 +1029,9 @@ export class ThreeRenderer {
 
     // Sensor rings (M4 P2) — switchSystem nie zostawia ghost ringów
     this._disposeAllSensorRings();
+
+    // Markery wykrytych wrogów — switchSystem nie zostawia ghost markerów
+    this._disposeAllEnemyAlertMarkers();
 
     // POI sprites (M2b C7) — switchSystem nie zostawia ghost markerów
     this._disposeAllPOISprites();
@@ -3341,6 +3351,7 @@ export class ThreeRenderer {
         this._tickEngagementMarkers(performance.now());
         this._tickEngineTrails(performance.now());
         this._syncInsignia();
+        this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
 
         this.renderer.render(this.scene, this.camera);
       } catch (err) {
@@ -5693,6 +5704,85 @@ export class ThreeRenderer {
 
   _disposeAllInsignia() {
     for (const k of [...this._insigniaSprites.keys()]) this._disposeInsignia(k);
+  }
+
+  // ── Pulsujący marker wykrytego wroga (≥rumor) — alert na mapie 3D ──────────
+  // Czerwony reticle-billboard (zawsze ku kamerze) wokół KAŻDEGO wrogiego statku
+  // wykrytego przez statek LUB obserwatorium (intel ≥ rumor — gate _isEnemyTargetable).
+  // Pozycja = entry.sprite.position (przy rumor zamrożona na positionLastKnown przez
+  // _applyVesselIntelVisibility → BRAK przecieku mgły wojny; tożsamość nie ujawniona —
+  // marker to tylko „tu jest wróg"). Mark&sweep (wzór _syncInsignia) + wspólny puls.
+  _getAlertReticleTex() {
+    if (this._alertReticleTex) return this._alertReticleTex;
+    const sz = 64;
+    const cv = document.createElement('canvas'); cv.width = cv.height = sz;
+    const c = cv.getContext('2d');
+    // Biały reticle (tint przez material.color) — pierścień + 4 ticki celownika.
+    c.strokeStyle = '#ffffff'; c.lineWidth = 5; c.lineCap = 'round';
+    const cx = sz / 2, cy = sz / 2, r0 = sz * 0.32, r1 = sz * 0.46;
+    c.beginPath(); c.arc(cx, cy, r0, 0, Math.PI * 2); c.stroke();
+    for (const a of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+      c.beginPath();
+      c.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      c.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+      c.stroke();
+    }
+    this._alertReticleTex = new THREE.CanvasTexture(cv);
+    this._alertReticleTex.needsUpdate = true;
+    return this._alertReticleTex;
+  }
+
+  _syncEnemyAlertMarkers() {
+    if (!GAME_CONFIG.FEATURES?.fcEnemyAlertMarker) {
+      if (this._enemyAlertMarkers.size) this._disposeAllEnemyAlertMarkers();
+      return;
+    }
+    const vm = window.KOSMOS?.vesselManager;
+    if (!vm) { if (this._enemyAlertMarkers.size) this._disposeAllEnemyAlertMarkers(); return; }
+    const tt = this._clock.getElapsedTime();
+    const pulse = 0.5 + 0.5 * Math.sin(tt * 3.2);   // 0..1, wspólna faza (radar-sync)
+    const opacity = 0.35 + 0.55 * pulse;            // 0.35..0.90 — nigdy niewidoczny
+    const pulseScale = ALERT_MARKER_SCALE * (1 + 0.16 * pulse);
+    const camPos = this.camera?.position;            // skala wg dystansu → stały rozmiar EKRANOWY
+    const active = new Set();
+    for (const [vid, entry] of this._vessels) {
+      if (!entry?.sprite?.visible) continue;          // ukryty/wyblakły ghost → brak markera
+      const v = vm.getVessel?.(vid);
+      if (!v || v.isWreck) continue;
+      if (!isEnemyVessel(v)) continue;                // tylko wrogowie (NIE własne statki)
+      if (!this._isEnemyTargetable(vid)) continue;    // intel ≥ rumor (gate quality)
+      active.add(vid);
+      let m = this._enemyAlertMarkers.get(vid);
+      if (!m) {
+        m = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: this._getAlertReticleTex(), color: ALERT_MARKER_COLOR,
+          transparent: true, depthWrite: false,
+        }));
+        this.scene.add(m);
+        this._enemyAlertMarkers.set(vid, m);
+      }
+      const p = entry.sprite.position;
+      m.position.set(p.x, p.y, p.z);
+      m.material.opacity = opacity;
+      // Skaluj wielkością proporcjonalnie do dystansu kamery — billboard o stałym rozmiarze
+      // świata KURCZY się ekranowo przy oddaleniu (znikał z dalekiego zoomu). Mnożnik
+      // dist/REF_DIST utrzymuje ~stały rozmiar na ekranie od bliska po cały układ.
+      const distFactor = camPos ? Math.max(0.5, camPos.distanceTo(m.position) / ALERT_MARKER_REF_DIST) : 1;
+      m.scale.setScalar(pulseScale * distFactor);
+    }
+    for (const k of [...this._enemyAlertMarkers.keys()]) if (!active.has(k)) this._disposeEnemyAlertMarker(k);
+  }
+
+  _disposeEnemyAlertMarker(vid) {
+    const m = this._enemyAlertMarkers.get(vid);
+    if (!m) return;
+    this.scene.remove(m);
+    m.material?.dispose?.();   // tekstura (map) współdzielona z _alertReticleTex — NIE dispose
+    this._enemyAlertMarkers.delete(vid);
+  }
+
+  _disposeAllEnemyAlertMarkers() {
+    for (const k of [...this._enemyAlertMarkers.keys()]) this._disposeEnemyAlertMarker(k);
   }
 
   // ─────────────────────────────────────────────────────────────

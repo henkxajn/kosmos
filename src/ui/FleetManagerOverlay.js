@@ -33,6 +33,7 @@ import { ColonistLoadModal } from '../ui/ColonistLoadModal.js';
 import { showBodyDetailModal } from '../ui/BodyDetailModal.js';
 import { showReturnCargoModal } from '../ui/ReturnCargoModal.js';
 import { showFleetAssignModal } from './FleetAssignModal.js';
+import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
@@ -7120,9 +7121,14 @@ export class FleetManagerOverlay {
     const order = vessel?.movementOrder;
     if (!order || order.status === 'cancelled' || order.status === 'completed') return cy;
 
-    // Resolve target name
+    // Cel: dla rozkazów celujących we wroga (engage/pursue/intercept) użyj wspólnego
+    // helpera — nazwa z mgłą wojny (rumor → anonimowy) + żywy dystans. tinfo == null dla
+    // pozostałych typów (moveToPoint/escort/patrol/POI) → stara ścieżka rozwiązania nazwy.
+    const tinfo = getOrderTargetInfo(vessel);
     let targetName = '-';
-    if (order.targetEntityId) {
+    if (tinfo) {
+      targetName = tinfo.name;
+    } else if (order.targetEntityId) {
       const tv = window.KOSMOS?.vesselManager?.getVessel?.(order.targetEntityId);
       targetName = tv?.name ?? _resolveName(order.targetEntityId);
     } else if (order.targetPoint) {
@@ -7163,6 +7169,11 @@ export class FleetManagerOverlay {
         case 'engage':      label = `⊗ Engage: ${targetName}`;        color = THEME.danger; break;
         default:            label = `? ${order.type}: ${targetName}`;  color = THEME.textDim;
       }
+    }
+
+    // Żywy dystans do wrogiego celu (engage/pursue/intercept) — z helpera (po S() w AU).
+    if (tinfo && Number.isFinite(tinfo.distAU) && order.status !== 'blocked') {
+      label += ` · ${tinfo.distAU.toFixed(1)} AU`;
     }
 
     // Suspended oryginalna mission (§8.3) — marker istnieje na vessel._suspendedMission.
@@ -7910,8 +7921,9 @@ export class FleetManagerOverlay {
   _calcDistAU(vessel, target) {
     const vx = (vessel.position.x ?? 0) / GAME_CONFIG.AU_TO_PX;
     const vy = (vessel.position.y ?? 0) / GAME_CONFIG.AU_TO_PX;
-    const tx = (target.x ?? 0) / GAME_CONFIG.AU_TO_PX;
-    const ty = (target.y ?? 0) / GAME_CONFIG.AU_TO_PX;
+    // Ciała niebieskie trzymają x/y w korzeniu; statki pod .position — czytaj oba (fix).
+    const tx = (target.x ?? target.position?.x ?? 0) / GAME_CONFIG.AU_TO_PX;
+    const ty = (target.y ?? target.position?.y ?? 0) / GAME_CONFIG.AU_TO_PX;
     return Math.sqrt((vx - tx) ** 2 + (vy - ty) ** 2);
   }
 }

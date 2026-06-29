@@ -28,12 +28,14 @@ import { showBodyPickerModal } from './BodyPickerModal.js';
 import { ALL_DOCTRINES, doctrineNameKey } from '../data/FleetDoctrines.js';
 import { summarizeFleetGroup, buildRosterRows } from './FleetGroupPanelLogic.js';
 import { nextFleetId, nextDoctrine, nearestEnemyToPoint } from './FleetCommandPanelLogic.js';
+import { getOrderTargetInfo } from './OrderTargetInfo.js';
 
 const PW           = 340;
 const PAD          = 8;
 const HEADER_H     = 26;
 const DOCTRINE_H   = 18;
 const ROW_H        = 26;
+const ROW_H_TARGET = 40;   // wiersz członka z 3. linią celu (engage/pursue/intercept)
 const PAGE_H       = 16;
 const ACTION_H     = 50;   // 2 rzędy przycisków rozkazów floty
 const ROWS_VISIBLE = 6;
@@ -152,7 +154,13 @@ export class FleetCommandPanel extends BaseOverlay {
     const showPaging = rows.length > ROWS_VISIBLE;
     const paged = rows.slice(this._page * ROWS_VISIBLE, this._page * ROWS_VISIBLE + ROWS_VISIBLE);
 
-    const totalH = HEADER_H + DOCTRINE_H + 4 + paged.length * ROW_H
+    // Info o celu (ikona/nazwa-z-mgłą-wojny/żywy dystans) — per wiersz; null = brak rozkazu
+    // celującego we wroga. Liczone PRZED totalH (zmienna wysokość wiersza).
+    const vById = new Map(members.map((v) => [v.id, v]));
+    for (const row of paged) row._tinfo = getOrderTargetInfo(vById.get(row.id));
+    const rosterH = paged.reduce((s, r) => s + (r._tinfo ? ROW_H_TARGET : ROW_H), 0);
+
+    const totalH = HEADER_H + DOCTRINE_H + 4 + rosterH
                  + (showPaging ? PAGE_H : 0) + 6 + ACTION_H + 6;
 
     let py = H - bottomRes - (COSMIC.RESOURCE_BAR_H ?? 0) - totalH - 8;
@@ -202,7 +210,7 @@ export class FleetCommandPanel extends BaseOverlay {
     let cy = py + HEADER_H + DOCTRINE_H + 4;
     for (const row of paged) {
       this._drawMemberRow(ctx, row, px, cy, leadId);
-      cy += ROW_H;
+      cy += row._tinfo ? ROW_H_TARGET : ROW_H;
     }
 
     // ── Stronicowanie ──
@@ -295,6 +303,16 @@ export class FleetCommandPanel extends BaseOverlay {
     ctx.fillStyle = C.textDim;
     ctx.font = `${C.fontSizeSmall - 1}px ${C.fontFamily}`;
     ctx.fillText(this._truncate(ctx, sub, textMaxW), px + PAD, rowY + 22);
+
+    // Linia 3 (warunkowa): cel rozkazu engage/pursue/intercept + żywy dystans.
+    if (row._tinfo) {
+      const ti = row._tinfo;
+      const distTxt = Number.isFinite(ti.distAU) ? ti.distAU.toFixed(1) : '?';
+      const line = `${ti.icon} ${t('fleetGroup.targetLine', ti.name, distTxt)}`;
+      ctx.fillStyle = ti.orderType === 'engage' ? (C.danger ?? '#ff4466') : (C.warning ?? '#ffcc44');
+      ctx.font = `${C.fontSizeSmall - 1}px ${C.fontFamily}`;
+      ctx.fillText(this._truncate(ctx, line, PW - PAD * 2), px + PAD, rowY + 33);
+    }
   }
 
   _drawIconBtn(ctx, glyph, x, y, size, type, id) {

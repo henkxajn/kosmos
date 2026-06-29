@@ -982,6 +982,7 @@ export default {
   'fleetGroup.actionDock': 'Dock',
   'fleetGroup.actionUndock': 'Undock',
   'fleetGroup.dockFailed': 'Cannot dock: {0}',
+  'fleetGroup.targetLine': '{0} · {1} AU',
 
   // Slice 8b — FleetCommandPanel (floating fleet command panel)
   'fleetCmd.doctrine': 'Doctrine',

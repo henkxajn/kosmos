@@ -25,6 +25,7 @@ import { HULLS }           from '../data/HullsData.js';
 import { resolveBodyName, resolveBodyPos, getDockTargets } from '../utils/BodyName.js';
 import { showBodyPickerModal } from './BodyPickerModal.js';
 import { summarizeFleetGroup, buildRosterRows, countActionable } from './FleetGroupPanelLogic.js';
+import { getOrderTargetInfo } from './OrderTargetInfo.js';
 
 // Wymiary
 const PW           = 340;  // szerokość karty
@@ -32,6 +33,7 @@ const PAD          = 8;
 const HEADER_H     = 26;   // tytuł + minimize
 const SUMMARY_H    = 18;   // wiersz agregatów
 const ROW_H        = 30;   // wiersz statku (2 linie tekstu)
+const ROW_H_TARGET = 44;   // wiersz statku z 3. linią celu (engage/pursue/intercept)
 const PAGE_H       = 16;   // pasek stronicowania
 const ACTION_H     = 50;   // 2 rzędy przycisków grupowych
 const ROWS_VISIBLE = 6;    // maks. wierszy widocznych naraz
@@ -148,7 +150,13 @@ export class FleetGroupPanel extends BaseOverlay {
     const showPaging = rows.length > ROWS_VISIBLE;
     const paged = rows.slice(this._page * ROWS_VISIBLE, this._page * ROWS_VISIBLE + ROWS_VISIBLE);
 
-    const totalH = HEADER_H + SUMMARY_H + 4 + paged.length * ROW_H
+    // Info o celu (ikona/nazwa-z-mgłą-wojny/żywy dystans) — per wiersz; null = brak rozkazu
+    // celującego we wroga. Liczone PRZED totalH (wpływa na zmienną wysokość wiersza).
+    const vById = new Map(vessels.map((v) => [v.id, v]));
+    for (const row of paged) row._tinfo = getOrderTargetInfo(vById.get(row.id));
+    const rosterH = paged.reduce((s, r) => s + (r._tinfo ? ROW_H_TARGET : ROW_H), 0);
+
+    const totalH = HEADER_H + SUMMARY_H + 4 + rosterH
                  + (showPaging ? PAGE_H : 0) + 6 + ACTION_H + 6;
 
     let py = H - bottomRes - (COSMIC.RESOURCE_BAR_H ?? 0) - totalH - 8;
@@ -221,7 +229,7 @@ export class FleetGroupPanel extends BaseOverlay {
     let cy = py + HEADER_H + SUMMARY_H + 4;
     for (const row of paged) {
       this._drawRow(ctx, row, px, cy, leadId);
-      cy += ROW_H;
+      cy += row._tinfo ? ROW_H_TARGET : ROW_H;
     }
 
     // ── Stronicowanie ──
@@ -326,6 +334,17 @@ export class FleetGroupPanel extends BaseOverlay {
     ctx.fillStyle = C.textDim;
     ctx.font = `${C.fontSizeSmall - 1}px ${C.fontFamily}`;
     ctx.fillText(this._truncate(ctx, sub, textMaxW), px + PAD, rowY + 25);
+
+    // Linia 3 (warunkowa): cel rozkazu engage/pursue/intercept + dystans. Pełna szerokość
+    // wnętrza (ikony/pasek są w górnej strefie ROW_H, nie kolidują z linią przy +37).
+    if (row._tinfo) {
+      const ti = row._tinfo;
+      const distTxt = Number.isFinite(ti.distAU) ? ti.distAU.toFixed(1) : '?';
+      const line = `${ti.icon} ${t('fleetGroup.targetLine', ti.name, distTxt)}`;
+      ctx.fillStyle = ti.orderType === 'engage' ? (C.danger ?? '#ff4466') : (C.warning ?? '#ffcc44');
+      ctx.font = `${C.fontSizeSmall - 1}px ${C.fontFamily}`;
+      ctx.fillText(this._truncate(ctx, line, PW - PAD * 2), px + PAD, rowY + 37);
+    }
   }
 
   _drawIconBtn(ctx, glyph, x, y, size, type, id) {
