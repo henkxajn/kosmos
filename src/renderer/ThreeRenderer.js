@@ -20,6 +20,8 @@ import { GasGiantShader }    from './GasGiantShader.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
 import { BUILDINGS, RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
+import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT }
+  from './VesselModelResolver.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
@@ -207,6 +209,7 @@ export class ThreeRenderer {
     // ── Cache modeli 3D statków ─────────────────────────────────
     this._shipModelTemplates = new Map(); // modelPath → THREE.Group (oryginał)
     this._shipModelPromises  = new Map(); // modelPath → Promise — deduplikacja równoległych load
+    this._missingModelPaths  = new Set(); // modelPath → brak pliku (route prosto do DEFAULT)
     this._gltfLoader = new GLTFLoader();
     // Preload — ładuj templaty GLB z wyprzedzeniem, żeby statki dostały model od razu.
     // Deduplikacja przez promise cache: równoczesne wywołania dla tego samego pliku
@@ -3414,34 +3417,15 @@ export class ThreeRenderer {
 
   // ── Vessel sprites ──────────────────────────────────────────────────
 
-  // ── Mapowanie shipId → plik modelu 3D ──────────────────────────
-  // Wszystkie typy statków używają modelu 3D (tymczasowo cargo3d dla brakujących)
-  static VESSEL_MODEL_MAP = {
-    cargo_ship:      'assets/models/ships/cargo3d.glb',
-    heavy_freighter: 'assets/models/ships/cargo3d.glb',
-    bulk_freighter:  'assets/models/ships/cargo3d.glb',
-    science_vessel:  'assets/models/ships/research1.glb',
-    colony_ship:     'assets/models/ships/cargo3d.glb',
-  };
-  // Domyślny model dla nieznanych typów statków
-  static VESSEL_MODEL_DEFAULT = 'assets/models/ships/cargo3d.glb';
+  // ── Modele 3D statków ──────────────────────────────────────────
+  // Plik modelu i rozmiar wybierane przez VesselModelResolver wg napędu
+  // (nonwarp/warp) i klasy (small/medium/large × science/cargo/colony + frigate/
+  // destroyer/battleship). 24 pliki `<klucz>.glb` w assets/models/ships/;
+  // brakujący plik → VESSEL_MODEL_DEFAULT (`default.glb`). Skala = normalizacja
+  // bounding-box do VESSEL_TARGET_SIZE (resolver), więc dowolny model gracza
+  // renderuje się spójnie bez ręcznego dobierania mnożnika per plik.
 
-  // ── Skala modelu GLB per shipId (TechDebt Faza 3 #18) ──────────
-  // Kalibracja per shipId. hull_small (kurier AI) — gracz musi widzieć cargo AI
-  // (Slice 4 ataki); WARTOŚĆ TESTOWA do wizualnej oceny Filipa (STOP-IF-WRONG —
-  // jeśli mikroskopijne/ogromne, podaj liczbę). Pozostałe hulle — szacunkowe,
-  // kalibracja w Slice 4 gdy floty bojowe będą renderowane. DEFAULT = obecny rozmiar
-  // (cargo_ship/science_vessel/colony_ship bez wpisu zachowują 0.002 — brak regresji).
-  static VESSEL_SCALE_MAP = {
-    hull_small:    0.012,   // żywa gra 2026-05-29: 0.005 za małe (niewidoczne bez zoomu) → 0.012 widoczne z normalnego zoomu
-    hull_medium:   0.004,
-    hull_large:    0.004,
-    hull_frigate:  0.004,
-    hull_corvette: 0.004,
-  };
-  static VESSEL_SCALE_DEFAULT = 0.002;
-
-  // Stacja orbitalna — model GLB (S3.3b-S4a). Mirror VESSEL_MODEL_MAP/VESSEL_SCALE_MAP.
+  // Stacja orbitalna — model GLB (S3.3b-S4a).
   // STATION_MODEL_MAP keyed po station.stationType → gotowe pod przyszły potrójny moduł / Tier 2.
   static STATION_MODEL_MAP = { orbital_station: 'assets/models/stations/Ring_Station.glb' };
   static STATION_MODEL_DEFAULT = 'assets/models/stations/Ring_Station.glb';
@@ -3466,8 +3450,10 @@ export class ThreeRenderer {
   _addVesselSprite(vessel) {
     if (this._vessels.has(vessel.id)) return;
 
-    const modelPath = ThreeRenderer.VESSEL_MODEL_MAP[vessel.shipId]
-                   ?? ThreeRenderer.VESSEL_MODEL_DEFAULT;
+    // Resolver wybiera plik wg napędu+klasy. Jeśli już wiemy że pliku brak
+    // (poprzedni load 404) — od razu DEFAULT, bez ponownego nieudanego fetcha.
+    const resolved = vesselModelPath(vessel);
+    const modelPath = this._missingModelPaths.has(resolved) ? VESSEL_MODEL_DEFAULT : resolved;
     this._addVesselModel3D(vessel, modelPath);
   }
 
@@ -3494,11 +3480,16 @@ export class ThreeRenderer {
 
       const model = template.clone();
 
-      // Skala per shipId (#18) — fallback DEFAULT dla statków bez wpisu w mapie.
-      const vScale = ThreeRenderer.VESSEL_SCALE_MAP[vessel.shipId] ?? ThreeRenderer.VESSEL_SCALE_DEFAULT;
+      // Normalizacja rozmiaru: skaluj model tak, by jego największy wymiar
+      // odpowiadał docelowemu rozmiarowi klasy (VESSEL_TARGET_SIZE). Robi to
+      // dowolny model gracza o nieznanej skali natywnej spójnym wizualnie.
+      const rawBox = new THREE.Box3().setFromObject(model);
+      const rawSize = rawBox.getSize(new THREE.Vector3());
+      const maxDim = Math.max(rawSize.x, rawSize.y, rawSize.z) || 1;
+      const vScale = vesselTargetSize(vessel) / maxDim;
       model.scale.set(vScale, vScale, vScale);
 
-      // Wycentruj geometrię modelu (GLB może mieć offset)
+      // Wycentruj geometrię modelu (GLB może mieć offset) — po przeskalowaniu
       const box = new THREE.Box3().setFromObject(model);
       const center = box.getCenter(new THREE.Vector3());
       model.position.sub(center); // przesunięcie do centrum (0,0,0)
@@ -3656,8 +3647,21 @@ export class ThreeRenderer {
           this._loadShipModel(modelPath)
             .then(template => placeModel(template))
             .catch(err2 => {
-              console.error(`[ThreeRenderer] GLB load failed finalnie: ${modelPath} — fallback sprite dla ${vessel.name}`, err2);
-              this._addVesselSpriteFallback(vessel);
+              // Konkretny model klasy nie istnieje (np. gracz nie wgrał pliku) →
+              // oznacz jako brakujący i spróbuj DEFAULT, dopiero potem sprite.
+              this._missingModelPaths.add(modelPath);
+              if (modelPath !== VESSEL_MODEL_DEFAULT) {
+                console.warn(`[ThreeRenderer] Brak modelu ${modelPath} — fallback na DEFAULT (${VESSEL_MODEL_DEFAULT})`);
+                this._loadShipModel(VESSEL_MODEL_DEFAULT)
+                  .then(template => placeModel(template))
+                  .catch(err3 => {
+                    console.error(`[ThreeRenderer] DEFAULT GLB też nie wczytany — sprite dla ${vessel.name}`, err3);
+                    this._addVesselSpriteFallback(vessel);
+                  });
+              } else {
+                console.error(`[ThreeRenderer] DEFAULT GLB nie wczytany — sprite dla ${vessel.name}`, err2);
+                this._addVesselSpriteFallback(vessel);
+              }
             });
         }, 400);
       });
@@ -3691,16 +3695,14 @@ export class ThreeRenderer {
     return p;
   }
 
-  // Preload wszystkich unikalnych modeli GLB — uruchamiane raz w konstruktorze.
-  // Dzięki temu statki wczytywane z save mają gotowy template w cache.
+  // Preload modelu DEFAULT — gwarantuje natychmiastowy fallback dla statków z save.
+  // Modeli per-klasa (18 plików) NIE preloadujemy: są duże i większość może nie
+  // istnieć — ładują się leniwie przy pierwszym statku danej klasy (cache w
+  // _loadShipModel deduplikuje, _missingModelPaths zapobiega ponownym 404).
   _preloadShipModels() {
-    const paths = new Set(Object.values(ThreeRenderer.VESSEL_MODEL_MAP));
-    paths.add(ThreeRenderer.VESSEL_MODEL_DEFAULT);
-    for (const p of paths) {
-      this._loadShipModel(p).catch(err => {
-        console.warn(`[ThreeRenderer] Preload GLB failed: ${p}`, err);
-      });
-    }
+    this._loadShipModel(VESSEL_MODEL_DEFAULT).catch(err => {
+      console.warn(`[ThreeRenderer] Preload DEFAULT GLB failed: ${VESSEL_MODEL_DEFAULT}`, err);
+    });
   }
 
   /**
