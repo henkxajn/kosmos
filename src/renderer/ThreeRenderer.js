@@ -8,6 +8,10 @@
 
 import * as THREE         from 'three';
 import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
 import { GAME_CONFIG, STAR_TYPES } from '../config/GameConfig.js';
@@ -33,7 +37,9 @@ import {
   FX_MAX_ACTIVE, FX_TRACER_MS, FX_FLASH_MS, FX_FLASH_DELAY_MS,
   FX_SHIELD_MS, FX_RING_MS, FX_PING_MS, FX_SHIELD_COLOR, FX_SCAN_COLOR,
 } from '../config/CombatFxConfig.js';
-import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality }
+import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
+  exhaustGradientColors, exhaustIntensityRaw, explosionColorRaw,
+  EXPLOSION_RING_COLOR, WRECK_EMISSIVE_COLOR }
   from '../utils/VesselFxLogic.js';
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
@@ -165,10 +171,48 @@ export class ThreeRenderer {
     this.camera.position.set(0, 35, 50);
     this.camera.lookAt(0, 0, 0);
 
+    // ── Post-processing: bloom (silniki/eksplozje/gwiazda świecą) ──────────
+    // RenderPass → UnrealBloomPass → OutputPass (OutputPass konwertuje linear→sRGB
+    // — bez niego scena wyszłaby przyciemniona). Fallback na bezpośredni render
+    // gdy inicjalizacja addonów z CDN zawiedzie (offline / błąd sieci).
+    // MSAA render target: `antialias:true` na WebGLRenderer dotyczy TYLKO domyślnego
+    // framebuffera — offscreen target EffectComposera renderuje BEZ antyaliasingu →
+    // poszarpane krawędzie („spadek rozdzielczości"). samples:4 przywraca AA.
+    // HalfFloat = poprawny zakres wartości dla bright-pass bloomu.
+    this._composer  = null;
+    this._bloomPass = null;
+    try {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const rt = new THREE.WebGLRenderTarget(W, H, {
+        type: THREE.HalfFloatType,
+        samples: 4,   // MSAA — antyaliasing w pipeline post-processingu
+      });
+      const composer = new EffectComposer(this.renderer, rt);
+      composer.setPixelRatio(dpr);   // setSize(cssW,cssH) skaluje wewn. o dpr — NIE mnożymy ręcznie
+      composer.setSize(W, H);
+      // RenderPass z JAWNYM clear color = oryginalne tło sceny (0x020405). Bez tego
+      // kolor tła zależy od stanu renderera przy każdym passie (źródło „niebieskawego" tła).
+      const renderPass = new RenderPass(this.scene, this.camera);
+      renderPass.clearColor = new THREE.Color(0x020405);
+      renderPass.clearAlpha = 1;
+      composer.addPass(renderPass);
+      // UnrealBloomPass(resolution, strength, radius, threshold) — stonowane po live-teście
+      // (0.4/0.8 → 0.25/0.9): mniej veilu na ciemnym tle, gwiazda dalej świeci.
+      const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.25, 0.3, 0.9);
+      composer.addPass(bloom);
+      composer.addPass(new OutputPass());
+      this._composer  = composer;
+      this._bloomPass = bloom;
+    } catch (err) {
+      console.warn('[ThreeRenderer] Bloom composer init failed — fallback direct render:', err);
+      this._composer = null;
+    }
+
     // ── Obsługa zmiany rozmiaru okna ──────────────────────────
     window.addEventListener('resize', () => {
       const nW = window.innerWidth, nH = window.innerHeight;
       this.renderer.setSize(nW, nH);
+      this._composer?.setSize(nW, nH);   // resizuje też UnrealBloomPass (pass.setSize)
       this.camera.aspect = nW / nH;
       this.camera.updateProjectionMatrix();
       // Aktualizuj skalę gwiazd tła (jak Three.js PointsMaterial)
@@ -549,6 +593,11 @@ export class ThreeRenderer {
     EventBus.on('vessel:wrecked', safe(({ vesselId, vessel }) => {
       const entry = this._vessels.get(vesselId);
       if (!entry) return;
+      // Eksplozja w miejscu zniszczenia — PRZED zamianą na wrak (pozycja jeszcze
+      // żywa). Gated fcCombatFx. Kula ognia + pierścień uderzeniowy (_spawnExplosion).
+      if (GAME_CONFIG.FEATURES?.fcCombatFx) {
+        this._spawnExplosion(entry.sprite.position, vesselTargetSize(vessel));
+      }
       entry.isWreck = true;
       entry.sprite.visible = true;
       // Usuń linię trasy — wrak nie leci nigdzie
@@ -590,7 +639,15 @@ export class ThreeRenderer {
           if (!child.isMesh || !child.material) return;
           const mat = child.material.clone();
           if (mat.color)    mat.color.copy(wreckCol);
-          if (mat.emissive) mat.emissive.setHex(0x110000);
+          if (mat.emissive) {
+            if (GAME_CONFIG.FEATURES?.fcCombatFx) {
+              // Żarzący się wrak — dogorywające reaktory (mocna poświata + bloom).
+              mat.emissive.setHex(WRECK_EMISSIVE_COLOR);
+              if (mat.emissiveIntensity != null) mat.emissiveIntensity = 0.5;
+            } else {
+              mat.emissive.setHex(0x110000);  // legacy: ledwo widoczna czerwień
+            }
+          }
           if (mat.metalness != null) mat.metalness = 0.3;
           if (mat.roughness != null) mat.roughness = 1.0;
           if (mat.opacity != null)   mat.opacity   = 1.0;
@@ -3352,11 +3409,14 @@ export class ThreeRenderer {
         // Fix#4: 3D pierścień selekcji USUNIĘTY (za duży/obscuring) — wskaźnik = ramki 2D
         // (UIManager._drawSelectionBrackets, screen-constant, widoczne z daleka).
         this._tickEngagementMarkers(performance.now());
-        this._tickEngineTrails(performance.now());
+        // _tickEngineTrails USUNIĘTE — zastąpione stożkiem wydechu (_applyExhaust).
+        // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
         this._syncInsignia();
         this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
 
-        this.renderer.render(this.scene, this.camera);
+        // Bloom przez EffectComposer (fallback: bezpośredni render gdy composer padł)
+        if (this._composer) this._composer.render();
+        else this.renderer.render(this.scene, this.camera);
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
       }
@@ -3496,6 +3556,47 @@ export class ThreeRenderer {
 
       wrapper.add(model);
 
+      // ── Exhaust cone (plume silnika) — child wrappera, NIE modelu ──────────
+      // Dziedziczy yaw + banking (aplikowane na wrapperze co klatkę).
+      // Live-test: dziób modeli jest w lokalnym −X, więc RUFA = lokalne +X
+      // (box.max.x − center.x = +halfWidthX). Stożek obrócony rotation.z=+π/2:
+      // apex(+Y)→−X (ku kadłubowi), szeroka podstawa(−Y)→+X (plume za rufą).
+      // Apex przy krawędzi rufy (rearX), baza trailing coneLen w tył.
+      // Rozmiar zmniejszony ~60% (radius) / do ~połowy kadłuba (length) po live-teście.
+      // Modulacja opacity/scale.x w _syncVesselPositions → _applyExhaust.
+      let exhaustCone = null;
+      if (GAME_CONFIG.FEATURES?.fcCombatFx && !vessel.isWreck) {
+        const size = box.getSize(new THREE.Vector3());
+        const rearX = box.max.x - center.x;               // rufa w układzie wrappera (+halfWidthX)
+        const coneRadius = Math.max(0.008, size.y * 0.04);// cienka smuga (było 0.11)
+        const coneLen    = Math.max(0.08, size.x * 0.15); // krótka, ~15% kadłuba (było 0.35)
+        // 32 segmenty (gładkie krawędzie) + gradient wierzchołkowy RGBA:
+        // apex(+Y, przy rufie) jasny + alpha 1, baza(−Y, koniec smugi) alpha 0 →
+        // zanikająca smuga plazmowa zamiast twardego stożka.
+        const geo = new THREE.ConeGeometry(coneRadius, coneLen, 32, 1, true);
+        const grad = exhaustGradientColors({ isEnemy });
+        const posAttr = geo.attributes.position;
+        const colAttr = new Float32Array(posAttr.count * 4);
+        for (let i = 0; i < posAttr.count; i++) {
+          const t = (posAttr.getY(i) + coneLen / 2) / coneLen;  // 0=baza(−Y), 1=apex(+Y)
+          colAttr[i * 4 + 0] = grad.base.r + (grad.apex.r - grad.base.r) * t;
+          colAttr[i * 4 + 1] = grad.base.g + (grad.apex.g - grad.base.g) * t;
+          colAttr[i * 4 + 2] = grad.base.b + (grad.apex.b - grad.base.b) * t;
+          colAttr[i * 4 + 3] = t;                                // alpha apex1 → baza0
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(colAttr, 4));
+        const exMat = new THREE.MeshBasicMaterial({
+          vertexColors: true, transparent: true, opacity: 0.5,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        });
+        exhaustCone = new THREE.Mesh(geo, exMat);
+        exhaustCone.rotation.z = Math.PI / 2;              // baza(−Y) → +X (plume za rufą)
+        exhaustCone.position.set(rearX + coneLen / 2, 0, 0); // apex przy rufie, baza w tył
+        exhaustCone.renderOrder = 2;
+        exhaustCone.visible = false;                        // domyślnie zgaszony (idle)
+        wrapper.add(exhaustCone);
+      }
+
       // Pozycja — lekko nad płaszczyzną orbitalną
       wrapper.position.set(px, 0.3, pz);
 
@@ -3597,6 +3698,8 @@ export class ThreeRenderer {
         sprite: wrapper, routeLine, color, isModel3D: true,
         enemyTint: isEnemy || isWreck,  // wszystkie sklonowane materiały do dispose
         isWreck,
+        exhaust: exhaustCone,           // stożek wydechu (może być null) — modulowany co tick
+        _exhaustPhase: Math.random() * Math.PI * 2,  // desync flickeru między statkami
       });
 
       // M4 P2 — po set: apply intel visibility (rumor ghost / contact dim / detailed)
@@ -3830,6 +3933,13 @@ export class ThreeRenderer {
       // Sprite billboard — dispose materiału i tekstury
       entry.sprite.material.dispose();
       if (entry.tex) entry.tex.dispose();
+    }
+
+    // Stożek wydechu — materiał additive statku GRACZA nie jest kryty warunkiem
+    // enemyTint w traverse wyżej (disposeMats=false), więc dispose jawnie.
+    if (entry.exhaust) {
+      entry.exhaust.geometry?.dispose();
+      entry.exhaust.material?.dispose();
     }
 
     // Jeśli skończony hover był na tym statku — wyczyść
@@ -4184,6 +4294,10 @@ export class ThreeRenderer {
       //   niżej (linia ~3960), więc wywołanie na końcu pętli ich nie obejmowało → immobilized
       //   orbiter zostawał bez szarości. Player-only (no-op dla wrogów/wraków w samym helperze).
       this._applyVesselMaintenanceTint(vessel, entry);
+
+      // Exhaust cone — PRZED rozgałęzieniem stanu (orbiting robi `continue` niżej):
+      // pełny plume w tranzycie, zgaszony przy orbiting/docked/wrak.
+      this._applyExhaust(vessel, entry);
 
       // ── Statek orbituje ciało — pozycja zarządzana przez OrbitalSpaceSystem ──
       // `_tickOrbitingVessels()` co klatkę pobiera pozycję z centralnego rejestru
@@ -5351,6 +5465,19 @@ export class ThreeRenderer {
           if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
           ef.mesh.scale.setScalar(ef.baseScale * (1 - 0.5 * progress));
           break;
+        case 'explosion': {  // kula ognia: scale 0→3, kolor biały→pomarańcz→czerwony
+          const c = explosionColorRaw(progress);
+          if (mat) {
+            if (mat.color) mat.color.setRGB(c.r, c.g, c.b);
+            mat.opacity = 1 - progress * progress;  // trzyma jasność, szybki zanik na końcu
+          }
+          ef.mesh.scale.setScalar(ef.baseScale * (0.001 + progress * 3));
+          break;
+        }
+        case 'explosionRing':  // pierścień uderzeniowy: radius 0→target (scale)
+          if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
+          ef.mesh.scale.setScalar(ef.baseScale * Math.max(0.001, progress));
+          break;
         default:
           if (mat) mat.opacity = ef.baseOpacity * (1 - progress);
       }
@@ -5358,6 +5485,53 @@ export class ThreeRenderer {
       keep.push(ef);
     }
     this._activeEffects = keep;
+  }
+
+  // Modulacja stożka wydechu wg stanu statku. Pełny plume w tranzycie, zgaszony
+  // przy orbiting/docked/wrak. Wołane z _syncVesselPositions PRZED rozgałęzieniem
+  // stanu (orbiterzy robią `continue`, więc call na końcu pętli by ich pominął).
+  _applyExhaust(vessel, entry) {
+    const cone = entry?.exhaust;
+    if (!cone) return;
+    if (!GAME_CONFIG.FEATURES?.fcCombatFx) { cone.visible = false; return; }
+    const intensity = exhaustIntensityRaw({
+      state:   vessel?.position?.state,
+      isWreck: !!(vessel?.isWreck || entry.isWreck),
+    });
+    if (intensity <= 0) { cone.visible = false; return; }
+    cone.visible = true;
+    // Lekki flicker (throb silnika) — desync per statek przez _exhaustPhase.
+    const flick = 0.8 + 0.2 * Math.sin(performance.now() * 0.02 + (entry._exhaustPhase ?? 0));
+    if (cone.material) cone.material.opacity = 0.5 * intensity * flick;
+    cone.scale.x = intensity * (0.85 + 0.3 * flick);
+  }
+
+  // Eksplozja zniszczonego statku — kula ognia (scale 0→3, biały→pomarańcz→czerwony)
+  // + pierścień uderzeniowy (radius 0→bboxSize×2). pos = world coords (sprite.position).
+  _spawnExplosion(pos, bboxSize) {
+    if (!pos) return;
+    const b = Math.max(0.2, bboxSize || 0.5);
+    // Kula ognia — MeshBasicMaterial + additive (świeci z bloomem).
+    const sph = new THREE.Mesh(
+      new THREE.SphereGeometry(b * 0.4, 16, 16),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 1,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }),
+    );
+    sph.position.copy(pos);
+    this._spawnFx(sph, { kind: 'explosion', lifetime: 600, baseScale: 1, baseOpacity: 1 });
+    // Pierścień uderzeniowy — płasko w płaszczyźnie orbitalnej, radius 0→b×2.
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(b * 1.75, b * 2.0, 32),
+      new THREE.MeshBasicMaterial({
+        color: EXPLOSION_RING_COLOR, transparent: true, opacity: 0.8,
+        side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+      }),
+    );
+    ring.position.copy(pos);
+    ring.rotation.x = -Math.PI / 2;
+    this._spawnFx(ring, { kind: 'explosionRing', lifetime: 800, baseScale: 1, baseOpacity: 0.8 });
   }
 
   // ── Slice 1 — smugi walki na żywej mapie (FX-only, z combat:roundFx) ─────
@@ -5603,40 +5777,11 @@ export class ThreeRenderer {
     return this._fcGlowTex;
   }
 
-  // Fix#5 — smuga silnika za statkiem w locie (additive glow, gaśnie). Zastępuje
-  // „kometę lecącą do przodu" (gracz: słabe). Throttled, bounded przez FX cap.
-  _tickEngineTrails(nowMs) {
-    if (!GAME_CONFIG.FEATURES?.fcMovementFx) return;
-    if (nowMs - (this._lastTrailMs ?? 0) < 110) return;  // throttle batchy
-    this._lastTrailMs = nowMs;
-    const vm = window.KOSMOS?.vesselManager;
-    if (!vm) return;
-    const tex = this._getGlowTex();
-    for (const [vid, entry] of this._vessels) {
-      const sp0 = entry?.sprite;
-      if (!sp0?.visible) continue;
-      const v = vm.getVessel?.(vid);
-      if (!v || v.isWreck || v.position?.state !== 'in_transit') continue;
-      if (isEnemyVessel(v) && !this._isEnemyEndpointVisible(vid)) continue;
-      // Gate ruchu — emituj TYLKO gdy statek realnie się przesunął (bez tego additive
-      // glow kumuluje się w jednym punkcie przy wolnym/stojącym statku → oślepiająca kula).
-      const p = sp0.position;
-      const prev = entry._trailPrev;
-      if (prev) {
-        const dx = p.x - prev.x, dz = p.z - prev.z;
-        if (dx * dx + dz * dz < 0.0036) continue;  // <0.06 WU od ostatniej smugi
-      }
-      entry._trailPrev = { x: p.x, z: p.z };
-      const mat = new THREE.SpriteMaterial({
-        map: tex, color: this._factionColorHex(v), transparent: true,
-        opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false,
-      });
-      const sp = new THREE.Sprite(mat);
-      sp.position.copy(p);
-      sp.scale.set(0.028, 0.028, 0.028);  // zwarta kropka (fix#4a: 0.045→0.028)
-      this._spawnFx(sp, { kind: 'trail', lifetime: 300, baseScale: 0.028, baseOpacity: 0.22 });
-    }
-  }
+  // _tickEngineTrails USUNIĘTE (2026-07-01) — stary efekt silnika: additive-glow
+  // sprite w kolorze frakcji (mint 0x44cc66 dla gracza) spawnowany w ŚRODKU statku
+  // podczas lotu → wyglądał jak zielona kula ze środka kadłuba. Zastąpiony stożkiem
+  // wydechu (_addVesselModel3D → entry.exhaust, modulowany w _applyExhaust).
+  // Helper _getGlowTex zostaje (potencjalny reuse dla innych FX).
 
   // ── Slice 5 — insygnia frakcji (billboard nad statkiem, intel-gated) ─────
   // Osobny overlay mark&sweep (jak sensor ringi) — unika threadowania async

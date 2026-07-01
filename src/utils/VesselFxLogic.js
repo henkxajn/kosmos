@@ -42,3 +42,47 @@ export function factionColorRaw({ isWreck, isEnemy, archetypeColor }) {
   }
   return 0xff4466;  // fallback enemy red
 }
+
+// ── Efekty silnikowe / eksplozje (kolory + intensywność) ────────────────────
+// Kolory jako stałe — jedno źródło prawdy (ThreeRenderer importuje).
+export const EXHAUST_COLOR_DEFAULT = 0x66ccff;  // plume napędu (cyan)
+export const EXHAUST_COLOR_ENEMY   = 0xff8844;  // plume wroga (ciepły pomarańcz)
+export const EXPLOSION_RING_COLOR  = 0xff6622;  // pierścień uderzeniowy eksplozji
+export const WRECK_EMISSIVE_COLOR  = 0xff2200;  // żarząca się poświata wraka (dogorywające reaktory)
+
+// Kolor wydechu silnika (0xRRGGBB). Domyślnie cyan; wróg cieplejszy dla kontrastu.
+export function exhaustColorRaw({ isEnemy = false } = {}) {
+  return isEnemy ? EXHAUST_COLOR_ENEMY : EXHAUST_COLOR_DEFAULT;
+}
+
+// Gradient smugi plazmowej (vertex colors). apex = przy rufie (jasny), base = koniec
+// smugi (ciemniejszy). Alpha (apex 1 → base 0) nadaje renderer z pozycji Y wierzchołka
+// — tu tylko RGB (0..1). own = biało-niebieski→niebieski; wróg = biało-pomarańcz→czerwony.
+export function exhaustGradientColors({ isEnemy = false } = {}) {
+  if (isEnemy) {
+    return { apex: { r: 1.0, g: 0.85, b: 0.55 }, base: { r: 1.0, g: 0.35, b: 0.10 } };
+  }
+  return { apex: { r: 0.85, g: 0.95, b: 1.0 }, base: { r: 0.30, g: 0.60, b: 1.0 } };
+}
+
+// Intensywność wydechu 0..1 wg stanu statku. Pełna w tranzycie, zero przy
+// orbiting/docked/wrak. state: 'in_transit' | 'orbiting' | 'docked' | undefined.
+export function exhaustIntensityRaw({ state, isWreck = false } = {}) {
+  if (isWreck) return 0;
+  return state === 'in_transit' ? 1 : 0;
+}
+
+// Rampa koloru kuli ognia eksplozji: progress 0→1 = biały → pomarańcz → czerwony.
+// Zwraca {r,g,b} w 0..1 (renderer aplikuje przez color.setRGB — bez THREE tutaj).
+export function explosionColorRaw(progress) {
+  const p = Math.max(0, Math.min(1, progress));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  if (p < 0.5) {
+    // biały (1,1,1) → pomarańcz (1, 0.5, 0.1)
+    const t = p / 0.5;
+    return { r: 1, g: lerp(1, 0.5, t), b: lerp(1, 0.1, t) };
+  }
+  // pomarańcz (1, 0.5, 0.1) → czerwony (0.8, 0.05, 0)
+  const t = (p - 0.5) / 0.5;
+  return { r: lerp(1, 0.8, t), g: lerp(0.5, 0.05, t), b: lerp(0.1, 0.0, t) };
+}
