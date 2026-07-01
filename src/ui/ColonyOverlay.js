@@ -25,6 +25,7 @@ import { t, getLocale }   from '../i18n/i18n.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
+import { getBuildingTexture, hasBuildingTexture } from '../renderer/BuildingTextures.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
 
 const HDR_H = HEADER_H;   // wysokość pasma nagłówka (standard BaseOverlay)
@@ -131,6 +132,15 @@ export class ColonyOverlay extends BaseOverlay {
     EventBus.on('planet:pendingCancelled', () => this._onBuildingChanged());
     EventBus.on('planet:constructionComplete', (e) => this._onBuildingChanged(e?.planetId));
     EventBus.on('planet:constructionProgress', (e) => this._onBuildingChanged(e?.planetId));
+
+    // Tekstury PNG budynków dogrywają się async (start/switch układu). Gdy mapa
+    // kolonii jest już otwarta w chwili załadowania, dirty-based loop UIManagera
+    // nie przerysuje jej sam (przy pauzie brak timeDirty) → tekstury pojawiłyby
+    // się dopiero po ruchu kamery. Wymuś jeden redraw (wzór: teren→PlanetScene
+    // przerysowuje mapę; tu odpowiednik = mark UIManager dirty).
+    EventBus.on('buildings:texturesLoaded', () => {
+      if (this.visible && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
+    });
 
     // Stacje orbitalne (S3.3b-S4) — dialog budowy + feedback (flash)
     this._stationDialogOpen = false;
@@ -2471,12 +2481,21 @@ export class ColonyOverlay extends BaseOverlay {
     if (tile.buildingId || tile.capitalBase) {
       ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fill();
       const b = tile.buildingId ? BUILDINGS[tile.buildingId] : null;
-      const icon = b?.icon ?? (tile.capitalBase ? '🏛' : '');
-      if (icon && r > 10) {
-        ctx.font = `${Math.max(8, Math.round(r * 0.65))}px serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = '#fff';
-        ctx.fillText(icon, cx, cy);
+      // Tekstura PNG budynku ma priorytet; brak pliku → fallback do emoji (jak dotąd)
+      const tex = tile.buildingId && hasBuildingTexture(tile.buildingId)
+        ? getBuildingTexture(tile.buildingId)
+        : null;
+      if (tex && r > 10) {
+        const size = r * 1.3;   // ~promień hexa × 1.3 — mieści się w kaflu, nieco większe od emoji
+        ctx.drawImage(tex, cx - size / 2, cy - size / 2, size, size);
+      } else {
+        const icon = b?.icon ?? (tile.capitalBase ? '🏛' : '');
+        if (icon && r > 10) {
+          ctx.font = `${Math.max(8, Math.round(r * 0.65))}px serif`;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillStyle = '#fff';
+          ctx.fillText(icon, cx, cy);
+        }
       }
       if ((tile.buildingLevel ?? 1) > 1 && r > 14) {
         ctx.font = `bold ${Math.max(6, r * 0.22)}px ${THEME.fontFamily}`;

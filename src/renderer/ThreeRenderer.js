@@ -25,6 +25,7 @@ import { GasGiantShader }    from './GasGiantShader.js';
 import { ColonyBuildingMarkers } from './ColonyBuildingMarkers.js';
 import { BUILDINGS, RESOURCE_ICONS } from '../data/BuildingsData.js';
 import { loadAllTerrainTextures, texturesLoaded } from './TerrainTextures.js';
+import { loadBuildingTextures } from './BuildingTextures.js';
 import { vesselModelPath, vesselTargetSize, VESSEL_MODEL_DEFAULT }
   from './VesselModelResolver.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
@@ -959,6 +960,8 @@ export class ThreeRenderer {
   initSystem(star, planets, planetesimals, moons = []) {
     // Ładuj tekstury terenu — po załadowaniu przebuduj diffuse planet
     loadAllTerrainTextures().then(() => this._rebakePlanetTextures());
+    // Ładuj tekstury PNG budynków dla mapy 2D kolonii (async, cichy fallback do emoji)
+    loadBuildingTextures();
 
     this.renderStar(star);
     this._buildHabitableZone(star);
