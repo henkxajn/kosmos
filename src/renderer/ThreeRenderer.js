@@ -11,6 +11,7 @@ import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { ShaderPass }     from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
@@ -44,6 +45,9 @@ import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
+// Warstwa selektywnego bloomu — obiekty tu przypisane (exhaust cone, wraki, eksplozje)
+// bloomują; reszta sceny (gwiazda, tło, planety) NIE. Eliminuje niebieski veil na tle.
+const BLOOM_LAYER = 1;
 const S           = (v) => v / WORLD_SCALE; // skrót: skaluj pozycję
 const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 
@@ -126,7 +130,11 @@ export class ThreeRenderer {
     // ── Renderer WebGL ─────────────────────────────────────────
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
     this.renderer.setSize(W, H);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    // Supersampling ×1.5 (SSAA) — antyaliasing dla całej sceny 3D, w tym cienkich
+    // linii orbit i kierunku lotu (gdzie MSAA bywa niewystarczający). Cap 2 = koszt
+    // ograniczony. Composery (bloom/final) używają tego samego ratio (spójność RT↔ekran).
+    this._pixelRatio = Math.min((window.devicePixelRatio || 1) * 1.5, 2);
+    this.renderer.setPixelRatio(this._pixelRatio);
     // Poprawne zarządzanie kolorami dla MeshStandardMaterial (PBR)
     this.renderer.toneMapping    = THREE.NoToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -171,48 +179,76 @@ export class ThreeRenderer {
     this.camera.position.set(0, 35, 50);
     this.camera.lookAt(0, 0, 0);
 
-    // ── Post-processing: bloom (silniki/eksplozje/gwiazda świecą) ──────────
-    // RenderPass → UnrealBloomPass → OutputPass (OutputPass konwertuje linear→sRGB
-    // — bez niego scena wyszłaby przyciemniona). Fallback na bezpośredni render
-    // gdy inicjalizacja addonów z CDN zawiedzie (offline / błąd sieci).
-    // MSAA render target: `antialias:true` na WebGLRenderer dotyczy TYLKO domyślnego
-    // framebuffera — offscreen target EffectComposera renderuje BEZ antyaliasingu →
-    // poszarpane krawędzie („spadek rozdzielczości"). samples:4 przywraca AA.
-    // HalfFloat = poprawny zakres wartości dla bright-pass bloomu.
-    this._composer  = null;
-    this._bloomPass = null;
+    // ── Post-processing: SELECTIVE bloom (tylko warstwa BLOOM_LAYER) ───────
+    // Dwa composery (wzór three.js webgl_postprocessing_unreal_bloom_selective):
+    //   bloomComposer  — renderuje TYLKO obiekty na BLOOM_LAYER (camera.layers.set),
+    //                    reszta sceny niewidoczna → czarne tło → bloom liczony
+    //                    wyłącznie z exhaust/wraków/eksplozji. renderToScreen=false.
+    //   finalComposer  — pełna scena (clear 0x020405) + mixPass domieszkuje bloom +
+    //                    OutputPass (linear→sRGB). renderuje na ekran.
+    // Efekt: bloom NIE dotyka gwiazdy/tła/planet → zero niebieskiego veilu.
+    // Antyaliasing: supersampling (setPixelRatio ×1.5 wyżej) — NIE MSAA na RT
+    // (samples+HalfFloat = czarny prostokąt na części sterowników). Composery
+    // dziedziczą pixelRatio renderera przez setPixelRatio.
+    this._bloomComposer = null;
+    this._finalComposer = null;
+    this._bloomPass     = null;
     try {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const rt = new THREE.WebGLRenderTarget(W, H, {
-        type: THREE.HalfFloatType,
-        samples: 4,   // MSAA — antyaliasing w pipeline post-processingu
-      });
-      const composer = new EffectComposer(this.renderer, rt);
-      composer.setPixelRatio(dpr);   // setSize(cssW,cssH) skaluje wewn. o dpr — NIE mnożymy ręcznie
-      composer.setSize(W, H);
-      // RenderPass z JAWNYM clear color = oryginalne tło sceny (0x020405). Bez tego
-      // kolor tła zależy od stanu renderera przy każdym passie (źródło „niebieskawego" tła).
-      const renderPass = new RenderPass(this.scene, this.camera);
-      renderPass.clearColor = new THREE.Color(0x020405);
-      renderPass.clearAlpha = 1;
-      composer.addPass(renderPass);
-      // UnrealBloomPass(resolution, strength, radius, threshold) — stonowane po live-teście
-      // (0.4/0.8 → 0.25/0.9): mniej veilu na ciemnym tle, gwiazda dalej świeci.
-      const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.25, 0.3, 0.9);
-      composer.addPass(bloom);
-      composer.addPass(new OutputPass());
-      this._composer  = composer;
-      this._bloomPass = bloom;
+      const pr = this._pixelRatio;
+
+      // — bloomComposer (bloom-only) —
+      const bloomRender = new RenderPass(this.scene, this.camera);
+      bloomRender.clearColor = new THREE.Color(0x000000);  // czarne tło bloom-passu
+      bloomRender.clearAlpha = 1;
+      const bloomComposer = new EffectComposer(this.renderer);
+      bloomComposer.renderToScreen = false;
+      bloomComposer.setPixelRatio(pr);
+      bloomComposer.setSize(W, H);
+      bloomComposer.addPass(bloomRender);
+      // threshold 0 — w bloom-passie widać TYLKO emitery (reszta czarna), więc
+      // nie trzeba progować jasności; strength/radius sterują intensywnością glow.
+      const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.8, 0.4, 0.0);
+      bloomComposer.addPass(bloom);
+
+      // — finalComposer (pełna scena + domieszka bloomu) —
+      const finalRender = new RenderPass(this.scene, this.camera);
+      finalRender.clearColor = new THREE.Color(0x020405);  // oryginalne tło sceny
+      finalRender.clearAlpha = 1;
+      const mixPass = new ShaderPass(
+        new THREE.ShaderMaterial({
+          uniforms: {
+            baseTexture:  { value: null },
+            bloomTexture: { value: bloomComposer.renderTarget2.texture },
+          },
+          vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+          fragmentShader: `uniform sampler2D baseTexture; uniform sampler2D bloomTexture; varying vec2 vUv;
+            void main(){ gl_FragColor = texture2D(baseTexture, vUv) + texture2D(bloomTexture, vUv); }`,
+        }),
+        'baseTexture',
+      );
+      mixPass.needsSwap = true;
+      const finalComposer = new EffectComposer(this.renderer);
+      finalComposer.setPixelRatio(pr);
+      finalComposer.setSize(W, H);
+      finalComposer.addPass(finalRender);
+      finalComposer.addPass(mixPass);
+      finalComposer.addPass(new OutputPass());
+
+      this._bloomComposer = bloomComposer;
+      this._finalComposer = finalComposer;
+      this._bloomPass     = bloom;
     } catch (err) {
-      console.warn('[ThreeRenderer] Bloom composer init failed — fallback direct render:', err);
-      this._composer = null;
+      console.warn('[ThreeRenderer] Selective bloom init failed — fallback direct render:', err);
+      this._bloomComposer = null;
+      this._finalComposer = null;
     }
 
     // ── Obsługa zmiany rozmiaru okna ──────────────────────────
     window.addEventListener('resize', () => {
       const nW = window.innerWidth, nH = window.innerHeight;
       this.renderer.setSize(nW, nH);
-      this._composer?.setSize(nW, nH);   // resizuje też UnrealBloomPass (pass.setSize)
+      this._bloomComposer?.setSize(nW, nH);  // resizuje też UnrealBloomPass
+      this._finalComposer?.setSize(nW, nH);  // renderTarget2 (bloomTexture) pozostaje ważny
       this.camera.aspect = nW / nH;
       this.camera.updateProjectionMatrix();
       // Aktualizuj skalę gwiazd tła (jak Three.js PointsMaterial)
@@ -653,6 +689,8 @@ export class ThreeRenderer {
           if (mat.opacity != null)   mat.opacity   = 1.0;
           mat.transparent = false;
           child.material = mat;
+          // Selective bloom — żarzący się wrak świeci (emissive w passie bloom).
+          if (GAME_CONFIG.FEATURES?.fcCombatFx) child.layers.enable(BLOOM_LAYER);
         });
         // Losowy tilt — wrak przechylony, sygnalizuje uszkodzony kadłub
         entry.sprite.rotation.z = (Math.random() - 0.5) * 0.6;
@@ -3414,14 +3452,28 @@ export class ThreeRenderer {
         this._syncInsignia();
         this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
 
-        // Bloom przez EffectComposer (fallback: bezpośredni render gdy composer padł)
-        if (this._composer) this._composer.render();
+        // Selective bloom (fallback: bezpośredni render gdy composery padły)
+        if (this._bloomComposer && this._finalComposer) this._renderSelectiveBloom();
         else this.renderer.render(this.scene, this.camera);
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
       }
     };
     loop();
+  }
+
+  // Selective bloom — dwa przebiegi:
+  //   1) bloom-only: camera.layers=BLOOM_LAYER → renderują się TYLKO emitery
+  //      (exhaust/wraki/eksplozje) na czarnym tle → bloomComposer liczy glow.
+  //   2) final: camera.layers przywrócone → pełna scena + mixPass domieszkuje bloom.
+  // Gwiazda/tło/planety (layer 0) są niewidoczne w passie 1 → NIE bloomują.
+  _renderSelectiveBloom() {
+    const cam = this.camera;
+    const savedMask = cam.layers.mask;
+    cam.layers.set(BLOOM_LAYER);       // tylko warstwa bloom
+    this._bloomComposer.render();
+    cam.layers.mask = savedMask;       // przywróć pełną widoczność
+    this._finalComposer.render();
   }
 
   // Animacja chmur — co klatkę, niezaleznie od pauzy gry
@@ -3567,9 +3619,9 @@ export class ThreeRenderer {
       let exhaustCone = null;
       if (GAME_CONFIG.FEATURES?.fcCombatFx && !vessel.isWreck) {
         const size = box.getSize(new THREE.Vector3());
-        const rearX = box.max.x - center.x;               // rufa w układzie wrappera (+halfWidthX)
-        const coneRadius = Math.max(0.008, size.y * 0.04);// cienka smuga (było 0.11)
-        const coneLen    = Math.max(0.08, size.x * 0.15); // krótka, ~15% kadłuba (było 0.35)
+        const rearX = box.max.x - center.x;                // rufa w układzie wrappera (+halfWidthX)
+        const coneRadius = Math.max(0.012, size.y * 0.04); // ujście dyszy (było 0.08)
+        const coneLen    = Math.max(0.03, size.x * 0.02);  // krótka, ~2% kadłuba (było 0.04)
         // 32 segmenty (gładkie krawędzie) + gradient wierzchołkowy RGBA:
         // apex(+Y, przy rufie) jasny + alpha 1, baza(−Y, koniec smugi) alpha 0 →
         // zanikająca smuga plazmowa zamiast twardego stożka.
@@ -3586,7 +3638,7 @@ export class ThreeRenderer {
         }
         geo.setAttribute('color', new THREE.BufferAttribute(colAttr, 4));
         const exMat = new THREE.MeshBasicMaterial({
-          vertexColors: true, transparent: true, opacity: 0.5,
+          vertexColors: true, transparent: true, opacity: 0.35, // subtelne (było 0.5)
           blending: THREE.AdditiveBlending, depthWrite: false,
         });
         exhaustCone = new THREE.Mesh(geo, exMat);
@@ -3594,6 +3646,7 @@ export class ThreeRenderer {
         exhaustCone.position.set(rearX + coneLen / 2, 0, 0); // apex przy rufie, baza w tył
         exhaustCone.renderOrder = 2;
         exhaustCone.visible = false;                        // domyślnie zgaszony (idle)
+        exhaustCone.layers.enable(BLOOM_LAYER);             // selective bloom — TYLKO smuga świeci
         wrapper.add(exhaustCone);
       }
 
@@ -5502,7 +5555,7 @@ export class ThreeRenderer {
     cone.visible = true;
     // Lekki flicker (throb silnika) — desync per statek przez _exhaustPhase.
     const flick = 0.8 + 0.2 * Math.sin(performance.now() * 0.02 + (entry._exhaustPhase ?? 0));
-    if (cone.material) cone.material.opacity = 0.5 * intensity * flick;
+    if (cone.material) cone.material.opacity = 0.35 * intensity * flick;  // subtelne (było 0.5)
     cone.scale.x = intensity * (0.85 + 0.3 * flick);
   }
 
@@ -5520,6 +5573,7 @@ export class ThreeRenderer {
       }),
     );
     sph.position.copy(pos);
+    sph.layers.enable(BLOOM_LAYER);   // selective bloom — kula ognia świeci
     this._spawnFx(sph, { kind: 'explosion', lifetime: 600, baseScale: 1, baseOpacity: 1 });
     // Pierścień uderzeniowy — płasko w płaszczyźnie orbitalnej, radius 0→b×2.
     const ring = new THREE.Mesh(
@@ -5531,6 +5585,7 @@ export class ThreeRenderer {
     );
     ring.position.copy(pos);
     ring.rotation.x = -Math.PI / 2;
+    ring.layers.enable(BLOOM_LAYER);  // selective bloom — pierścień świeci
     this._spawnFx(ring, { kind: 'explosionRing', lifetime: 800, baseScale: 1, baseOpacity: 0.8 });
   }
 
