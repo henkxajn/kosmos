@@ -17,7 +17,7 @@ import EntityManager from '../core/EntityManager.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 88;
+export const CURRENT_VERSION     = 89;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -106,6 +106,7 @@ const MIGRATIONS = {
   85: _migrateV85toV86,
   86: _migrateV86toV87,
   87: _migrateV87toV88,
+  88: _migrateV88toV89,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2114,6 +2115,17 @@ function _migrateV87toV88(data) {
       if (v && typeof v === 'object' && v.warpRoute === undefined) v.warpRoute = null;
     }
   }
+  return data;
+}
+
+// v88→v89 — reforma obserwatorium: dwupoziomowy intel ciał.
+// Nowe pole `analyzed` (poziom szczegółowy). Stary save: ciała `explored` (przez
+// stary pasywny skan) pokazywały PEŁNE złoża → backfill analyzed=explored zachowuje
+// to wyświetlanie. Inwariant: analyzed ⇒ explored. Ciała są top-level (data.planets/...).
+function _migrateV88toV89(data) {
+  for (const p of (data.planets    || [])) if (p.analyzed == null) p.analyzed = !!p.explored;
+  for (const m of (data.moons      || [])) if (m.analyzed == null) m.analyzed = !!m.explored;
+  for (const p of (data.planetoids || [])) if (p.analyzed == null) p.analyzed = !!p.explored;
   return data;
 }
 

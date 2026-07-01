@@ -22,9 +22,6 @@ import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 
-// Typy ciał podlegające skanowaniu
-const SCANNABLE_TYPES = ['planet', 'moon', 'planetoid', 'asteroid', 'comet'];
-
 // Zasięg detekcji wrogich statków per poziom obserwatorium (AU).
 // Index 0 = brak obserwatorium — każda kolonia dostaje 1 AU pasywnego wzroku
 // (planeta widzi własną orbitę). Lv4+ = ∞ (cały układ); Lv5/Lv6 dokładają radar LY
@@ -39,6 +36,11 @@ const SIGHTING_REFRESH_YEARS = 1.0;
 // skanu w civYears; dzielony przez najwyższy poziom obserwatorium (lepszy radar = szybciej).
 // Po ukończeniu rumor→contact (pełna tożsamość: nazwa/imperium/kadłub) zdalnie, bez statku.
 const SCAN_DURATION_YEARS = 3.0;
+
+// Ręczny skan ciała niebieskiego (reforma obserwatorium). Bazowy czas w civYears
+// (~3 miesiące gry); dzielony przez najwyższy poziom obserwatorium (lepszy sprzęt = szybciej).
+// Po ukończeniu ciało → explored (zgrubny poziom: kolonizacja + obecność surowców, bez ilości).
+const BODY_SCAN_DURATION_YEARS = 0.25;
 
 export class ObservatorySystem {
   constructor() {
@@ -60,6 +62,11 @@ export class ObservatorySystem {
     // Progres akumuluje civDeltaYears (tylko gdy cel dalej wykryty); po SCAN_DURATION/level
     // → rumor→contact. Persystuje w save (serialize/restore).
     this._vesselScans = new Map();
+
+    // Reforma obserwatorium — aktywne ręczne skany ciał niebieskich:
+    // Map<bodyId, {progress, startedYear}>. Progres akumuluje civDeltaYears; po
+    // BODY_SCAN_DURATION/level → body.explored=true (zgrubny). Persystuje w save.
+    this._bodyScans = new Map();
 
     // Rok gry
     this._gameYear = 0;
@@ -254,103 +261,124 @@ export class ObservatorySystem {
     EventBus.emit('observatory:vesselScanComplete', { vesselId, vessel });
   }
 
+  // ── Ręczny skan ciała niebieskiego (reforma obserwatorium) ─────────────
+  // Zgrubny skan (~3 mies. gry) ujawnia obecność + jakość surowców i umożliwia
+  // kolonizację (explored=true). Dokładne ilości złóż dopiero po statku naukowym (analyzed).
+
+  // Czas skanu ciała w civYears = baza / max poziom obserwatorium (lepszy sprzęt = szybciej).
+  _getBodyScanDurationYears() {
+    return BODY_SCAN_DURATION_YEARS / Math.max(1, this.getMaxObservatoryLevel());
+  }
+
+  // Rozpocznij ręczny skan ciała. Walidacja: feature ON, jest obserwatorium,
+  // encja istnieje, jeszcze niezbadana (nie explored), nie skanowana już.
+  startBodyScan(bodyId) {
+    if (!GAME_CONFIG.FEATURES?.observatoryBodyScan) return false;
+    if (!bodyId || this._bodyScans.has(bodyId)) return false;
+    if (this.getMaxObservatoryLevel() <= 0) return false;   // wymaga obserwatorium
+    const body = EntityManager.get(bodyId);
+    if (!body) return false;
+    if (body.explored) return false;                        // już zbadane (zgrubnie lub szczegółowo)
+    this._bodyScans.set(bodyId, { progress: 0, startedYear: this._gameYear });
+    EventBus.emit('observatory:bodyScanStarted', { bodyId, durationYears: this._getBodyScanDurationYears() });
+    return true;
+  }
+
+  // Anuluj trwający skan ciała.
+  cancelBodyScan(bodyId, reason = 'manual') {
+    if (!this._bodyScans.has(bodyId)) return false;
+    this._bodyScans.delete(bodyId);
+    EventBus.emit('observatory:bodyScanCancelled', { bodyId, reason });
+    return true;
+  }
+
+  // Postęp skanu ciała: { progress, durationYears, pct } | null.
+  getBodyScanProgress(bodyId) {
+    const scan = this._bodyScans.get(bodyId);
+    if (!scan) return null;
+    const durationYears = this._getBodyScanDurationYears();
+    return {
+      progress: scan.progress,
+      durationYears,
+      pct: durationYears > 0 ? Math.min(1, scan.progress / durationYears) : 0,
+    };
+  }
+
+  // Wszystkie aktywne skany ciał (do UI + FX 3D).
+  getActiveBodyScans() {
+    const out = [];
+    const durationYears = this._getBodyScanDurationYears();
+    for (const [bodyId, scan] of this._bodyScans) {
+      out.push({
+        bodyId,
+        progress: scan.progress,
+        durationYears,
+        pct: durationYears > 0 ? Math.min(1, scan.progress / durationYears) : 0,
+      });
+    }
+    return out;
+  }
+
+  // Tick aktywnych skanów ciał. Brak obserwatorium → anuluj; brak encji (inny
+  // układ/warp) → pauza (bez progresu); ciało już explored (statek dotarł wcześniej)
+  // → cichy drop; inaczej akumuluj i po czasie ukończ.
+  _tickBodyScans(civDeltaYears = 0) {
+    if (this._bodyScans.size === 0) return;
+    const noObservatory = this.getMaxObservatoryLevel() <= 0;
+    for (const [bodyId, scan] of [...this._bodyScans]) {
+      if (noObservatory) { this.cancelBodyScan(bodyId, 'no_observatory'); continue; }
+      const body = EntityManager.get(bodyId);
+      if (!body) continue;                                  // inny układ/warp — pauza
+      if (body.explored) { this._bodyScans.delete(bodyId); continue; }  // statek dotarł wcześniej
+      scan.progress += civDeltaYears;
+      if (scan.progress >= this._getBodyScanDurationYears()) {
+        this._completeBodyScan(bodyId, body);
+      }
+    }
+  }
+
+  // Ukończenie skanu ciała → explored (zgrubny). Reużywa 'observatory:discovered'
+  // (ping FX w ThreeRenderer + NotificationCenter/EventLog + log odkryć).
+  _completeBodyScan(bodyId, body) {
+    this._bodyScans.delete(bodyId);
+    body.explored = true;   // poziom zgrubny — kolonizacja odblokowana, obecność surowców widoczna
+    const colonyName = this._getScanColonyName();
+    this._discoveries.push({
+      bodyId,
+      bodyName:   body.name ?? bodyId,
+      year:       this._gameYear,
+      colonyName,
+    });
+    EventBus.emit('observatory:discovered', { body, discovered: [body], colonyName });
+  }
+
+  // Nazwa kolonii-obserwatorium dla logu odkryć (best-effort; skan jest imperium-wide).
+  _getScanColonyName() {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (colMgr) {
+      for (const col of colMgr.getAllColonies()) {
+        if (col.ownerEmpireId || !col.buildingSystem) continue;
+        let hasObs = false;
+        col.buildingSystem._active.forEach(e => { if (e.building.id === 'observatory') hasObs = true; });
+        if (hasObs) return col.name ?? col.planetId;
+      }
+    }
+    return window.KOSMOS?.homePlanet?.name ?? t('observatory.title');
+  }
+
   // ── Tick skanowania ───────────────────────────────────────────────────
 
   _tickScan(civDeltaYears) {
-    // Detekcja statków działa continuous — wykrycie wroga nie może czekać 6 lat jak
-    // pierwsze odkrycie ciała niebieskiego. Każdy tick rebuildsowi Set i emituje diff.
+    // Detekcja statków działa continuous — wykrycie wroga nie może czekać jak
+    // ręczny skan ciała. Każdy tick rebuildsowi Set i emituje diff.
     this._tickVesselDetection(civDeltaYears);
 
     // Aktywne skany wrogich statków (reforma detekcji) — po _tickVesselDetection,
     // bo czyta świeży _detectedVesselIds (progres tylko gdy cel dalej wykryty).
     this._tickVesselScans(civDeltaYears);
 
-    const colMgr = window.KOSMOS?.colonyManager;
-    if (!colMgr) return;
-
-    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
-
-    // Znajdź najlepsze obserwatorium w imperium (najszybsze tempo)
-    let bestColony = null;
-    let bestLevel  = 0;
-    let bestEntity = null;  // ciało niebieskie kolonii (do obliczania odległości)
-
-    for (const col of colMgr.getAllColonies()) {
-      if (col.ownerEmpireId) continue;   // skan ciał napędza obserwatorium gracza, nie AI
-      if (!col.buildingSystem) continue;
-      let colLevel = 0;
-      col.buildingSystem._active.forEach(entry => {
-        if (entry.building.id === 'observatory') {
-          colLevel = Math.max(colLevel, entry.level);
-        }
-      });
-      if (colLevel > bestLevel) {
-        bestLevel = colLevel;
-        bestColony = col;
-        bestEntity = col.planet ?? this._findEntity(col.planetId);
-      }
-    }
-
-    if (bestLevel <= 0 || !bestColony) return;
-
-    // Parametry skanowania
-    const def = BUILDINGS.observatory;
-    const interval = (def?.scanInterval ?? 0.5) / bestLevel;  // civYears
-    const baseRange = def?.scanRange ?? 8;
-    const range = bestLevel >= 5 ? Infinity : baseRange + bestLevel * 4;  // AU
-
-    // Akumuluj czas (max 1 odkrycie per tick — clamp nadmiar)
-    const colId = bestColony.planetId;
-    const accum = (this._scanAccum.get(colId) ?? 0) + civDeltaYears;
-
-    if (accum < interval) {
-      this._scanAccum.set(colId, accum);
-      return;
-    }
-
-    // Zużyj interwał, clamp resztę żeby nie kumulować przy szybkim czasie
-    this._scanAccum.set(colId, Math.min(accum - interval, interval * 0.5));
-
-    // Znajdź niezbadane ciała w zasięgu
-    const candidates = this._getUnexploredBodies(sysId, bestEntity, range);
-    if (candidates.length === 0) return;
-
-    // Wybierz najbliższe
-    const target = candidates[0];  // posortowane wg odległości
-
-    // Odkryj ciało
-    target.body.explored = true;
-    const discovered = [target.body];
-
-    // Auto-discover księżyce (jeśli odkryto planetę)
-    if (target.body.type === 'planet') {
-      const moons = EntityManager.getByTypeInSystem('moon', sysId)
-        .filter(m => m.parentPlanetId === target.body.id && !m.explored);
-      moons.forEach(m => { m.explored = true; });
-      discovered.push(...moons);
-    }
-
-    // Zapisz w historii
-    const entry = {
-      bodyId:     target.body.id,
-      bodyName:   target.body.name ?? target.body.id,
-      year:       this._gameYear,
-      colonyName: bestColony.name ?? bestColony.planetId,
-    };
-    this._discoveries.push(entry);
-
-    // Emituj zdarzenia
-    EventBus.emit('observatory:discovered', {
-      body: target.body,
-      discovered,
-      colonyName: bestColony.name,
-    });
-
-    // Spójne z recon — inne systemy mogą nasłuchiwać tego samego eventu
-    EventBus.emit('expedition:reconProgress', {
-      body: target.body,
-      discovered,
-    });
+    // Ręczne skany ciał niebieskich (reforma obserwatorium — zastąpił pasywny auto-skan).
+    this._tickBodyScans(civDeltaYears);
   }
 
   // Rebuild zbioru wykrytych wrogich statków na podstawie zasięgów wszystkich kolonii gracza.
@@ -464,35 +492,6 @@ export class ObservatorySystem {
     }
   }
 
-  // Zbierz niezbadane ciała w zasięgu, posortowane wg odległości orbitalnej
-  _getUnexploredBodies(systemId, fromEntity, rangeAU) {
-    const result = [];
-    const fromA = fromEntity?.orbital?.a ?? 0;
-
-    for (const type of SCANNABLE_TYPES) {
-      for (const body of EntityManager.getByTypeInSystem(type, systemId)) {
-        if (body.explored) continue;
-
-        // Odległość orbitalna (stabilna)
-        const bodyA = body.orbital?.a ?? 0;
-        const dist = Math.abs(bodyA - fromA);
-
-        if (dist <= rangeAU) {
-          result.push({ body, dist });
-        }
-      }
-    }
-
-    // Sortuj wg odległości (najbliższe najpierw)
-    result.sort((a, b) => a.dist - b.dist);
-    return result;
-  }
-
-  // Helper: znajdź encję po ID
-  _findEntity(id) {
-    return EntityManager.get(id) ?? null;
-  }
-
   // ── Serializacja ──────────────────────────────────────────────────────
 
   serialize() {
@@ -503,10 +502,15 @@ export class ObservatorySystem {
     const vesselScans = {};
     this._vesselScans.forEach((val, key) => { vesselScans[key] = val; });
 
+    // Reforma obserwatorium — aktywne ręczne skany ciał (Map→obj).
+    const bodyScans = {};
+    this._bodyScans.forEach((val, key) => { bodyScans[key] = val; });
+
     return {
       scanAccum,
       discoveries: this._discoveries,
       vesselScans,
+      bodyScans,
     };
   }
 
@@ -528,6 +532,11 @@ export class ObservatorySystem {
     // Reforma detekcji — aktywne skany (defensywny default = brak; bez migracji save v88).
     for (const [key, val] of Object.entries(data.vesselScans ?? {})) {
       this._vesselScans.set(key, val);
+    }
+
+    // Reforma obserwatorium — aktywne ręczne skany ciał (defensywny default = brak).
+    for (const [key, val] of Object.entries(data.bodyScans ?? {})) {
+      this._bodyScans.set(key, val);
     }
   }
 }

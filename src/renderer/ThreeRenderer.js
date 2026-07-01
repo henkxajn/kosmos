@@ -79,6 +79,10 @@ const SENSOR_RING_Y            = 0.04;      // tuż pod prediction cone (0.05), 
 // żeby uniknąć NaN/over-the-horizon ring covering całej sceny.
 const SENSOR_RING_MAX_COLONY_AU = 35.0;     // ≈ MAX_ORBIT_AU — cały układ widoczny
 
+// ── Reforma obserwatorium — szara zasłona niezbadanego ciała (podgląd) ──
+const BODY_VEIL_COLOR   = 0x8a8a99;         // szara mgła na niezbadanym ciele
+const BODY_VEIL_OPACITY = 0.72;             // 0=widać, 1=ukryte (grey-out do czasu skanu)
+
 // ── Marker wykrytego wroga (≥rumor) — pulsujący czerwony alert na mapie 3D ──
 const ALERT_MARKER_COLOR = 0xff4466;        // czerwony (konwencja wroga, == factionColorRaw fallback)
 const ALERT_MARKER_SCALE = 0.7;             // bazowa skala billboardu (encircle ~0.3 sprite statku)
@@ -252,6 +256,7 @@ export class ThreeRenderer {
       this._finalComposer?.setSize(nW, nH);  // renderTarget2 (bloomTexture) pozostaje ważny
       this.camera.aspect = nW / nH;
       this.camera.updateProjectionMatrix();
+      this._applyFocusViewOffset();   // re-aplikuj przesunięcie podglądu obserwatorium (nowe wymiary)
       // Aktualizuj skalę gwiazd tła (jak Three.js PointsMaterial)
       if (this._starScaleUniform) this._starScaleUniform.value = nH * 0.5;
     });
@@ -282,6 +287,9 @@ export class ThreeRenderer {
     this._selectedVesselId     = null;       // mirror UIManager (ui:selectionChanged)
     this._factionColorCache    = new Map();  // ownerEmpireId → 0xRRGGBB
     this._engagementMarkers    = new Map();  // encounterId → { mesh, geom, mat } (znacznik starcia, TTL)
+    this._bodyVeil             = null;       // { bodyId, mesh, geom, mat } — szara zasłona niezbadanego ciała (podgląd obserwatorium)
+    this._focusViewOffset      = null;       // { fracX, fracY } — przesunięcie widoku 3D w podglądzie obserwatorium
+    this._observatoryPreviewActive = false;  // czy overlay obserwatorium jest otwarty (podgląd ciała)
     this._focusEncounterId     = null;       // Slice 1 — kamera śledzi midpoint bitwy
     this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
     this._enemyAlertMarkers    = new Map();  // vesselId → Sprite (pulsujący czerwony marker wroga ≥rumor)
@@ -1885,9 +1893,12 @@ export class ThreeRenderer {
   _updateCameraFocus() {
     if (!this._cameraController) return;
 
-    // Helper: focusOn z guardem NaN
-    const safeFocus = (x, z) => {
-      if (!isNaN(x) && !isNaN(z)) this._cameraController.focusOn(x, z);
+    // Helper: focusOn z guardem NaN. W podglądzie obserwatorium — twardy lock
+    // (focusOnInstant, bez lerp-lag) → ciało stoi w miejscu mimo ruchu po orbicie.
+    const safeFocus = (x, z, y = 0) => {
+      if (isNaN(x) || isNaN(z)) return;
+      if (this._observatoryPreviewActive) this._cameraController.focusOnInstant(x, z, y);
+      else this._cameraController.focusOn(x, z);
     };
 
     // Śledzenie stacji (anchored do planety, ale planeta orbituje — kamera nadąża). S3.3b-S4a.
@@ -1919,13 +1930,13 @@ export class ThreeRenderer {
 
     // Sprawdź planety
     const pEntry = this._planets.get(this._focusEntityId);
-    if (pEntry) { safeFocus(pEntry.group.position.x, pEntry.group.position.z); return; }
+    if (pEntry) { safeFocus(pEntry.group.position.x, pEntry.group.position.z, pEntry.group.position.y); return; }
     // Sprawdź księżyce
     const mEntry = this._moons.get(this._focusEntityId);
-    if (mEntry) { safeFocus(mEntry.mesh.position.x, mEntry.mesh.position.z); return; }
+    if (mEntry) { safeFocus(mEntry.mesh.position.x, mEntry.mesh.position.z, mEntry.mesh.position.y); return; }
     // Sprawdź planetoidy
     const pdEntry = this._planetoids.get(this._focusEntityId);
-    if (pdEntry) { safeFocus(pdEntry.mesh.position.x, pdEntry.mesh.position.z); }
+    if (pdEntry) { safeFocus(pdEntry.mesh.position.x, pdEntry.mesh.position.z, pdEntry.mesh.position.y); }
   }
 
   // ── Synchronizacja pozycji planet i księżyców ─────────────────
@@ -3432,6 +3443,9 @@ export class ThreeRenderer {
           }
         }
 
+        // Podgląd obserwatorium — twardy lock kamery na ciele co klatkę (przed update, bez lerp-lag).
+        if (this._observatoryPreviewActive) this._updateCameraFocus();
+
         // Aktualizuj kamerę (płynny zoom + orbit)
         if (this._cameraController) this._cameraController.update();
 
@@ -3454,6 +3468,7 @@ export class ThreeRenderer {
         // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
         this._syncInsignia();
         this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
+        this._syncBodyScanVeil();        // reforma obserwatorium — szara zasłona niezbadanego ciała w podglądzie
 
         // Selective bloom (fallback: bezpośredni render gdy composery padły)
         if (this._bloomComposer && this._finalComposer) this._renderSelectiveBloom();
@@ -5786,6 +5801,70 @@ export class ThreeRenderer {
     );
     ping.position.set(S(gx), 0.05, S(gy)); ping.rotation.x = -Math.PI / 2;
     this._spawnFx(ping, { kind: 'ping', lifetime: FX_PING_MS, baseScale: 1, baseOpacity: 1 });
+  }
+
+  // ── Reforma obserwatorium — podgląd ciała (przesunięcie widoku + szara zasłona) ──
+  // Overlay obserwatorium woła enter/exit; kamera już fokusuje wybrane ciało (body:selected).
+  // enter: przesuwa render 3D tak, by ciało trafiło w prawą-dolną część ekranu (pod danymi).
+  enterObservatoryPreview(fracX, fracY) {
+    this._observatoryPreviewActive = true;
+    this._focusViewOffset = { fracX, fracY };
+    this._applyFocusViewOffset();
+  }
+
+  exitObservatoryPreview() {
+    this._observatoryPreviewActive = false;
+    this._focusViewOffset = null;
+    this.camera?.clearViewOffset?.();
+    this._disposeBodyVeil();
+  }
+
+  // Przesunięcie renderu tak, by wyfokusowane ciało (środek NDC) trafiło w zadany punkt ekranu.
+  // fracX/fracY = przesunięcie celu względem środka (ułamek szer./wys.). setViewOffset przelicza
+  // się przy resize (fullWidth/Height muszą być aktualne) → wołane też w handlerze resize.
+  _applyFocusViewOffset() {
+    if (!this.camera?.setViewOffset) return;
+    if (!this._focusViewOffset) { this.camera.clearViewOffset?.(); return; }
+    const W = window.innerWidth, H = window.innerHeight;
+    const { fracX, fracY } = this._focusViewOffset;
+    this.camera.setViewOffset(W, H, -fracX * W, -fracY * H, W, H);
+  }
+
+  // Szara zasłona na wybranym, NIEZBADANYM ciele w podglądzie obserwatorium (fog-of-war).
+  // Znika automatycznie gdy body.explored=true (po skanie) → efekt „grey-out → reveal".
+  _syncBodyScanVeil() {
+    let veilId = null;
+    if (this._observatoryPreviewActive && this._focusEntityId) {
+      const body = EntityManager.get(this._focusEntityId);
+      if (body && !body.explored) veilId = this._focusEntityId;  // grey-out tylko niezbadane
+    }
+    if (!veilId) { this._disposeBodyVeil(); return; }
+
+    const info = this._findBodyMesh(veilId);
+    if (!info?.mesh) { this._disposeBodyVeil(); return; }
+
+    if (!this._bodyVeil || this._bodyVeil.bodyId !== veilId) {
+      this._disposeBodyVeil();
+      const geom = new THREE.SphereGeometry(1, 24, 16);
+      const mat  = new THREE.MeshBasicMaterial({
+        color: BODY_VEIL_COLOR, transparent: true, opacity: BODY_VEIL_OPACITY, depthWrite: false,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      this.scene.add(mesh);
+      this._bodyVeil = { bodyId: veilId, mesh, geom, mat };
+    }
+    // Kotwicz do rzeczywistej pozycji świata mesha (planeta może być w grupie/orbicie).
+    const wp = info.mesh.getWorldPosition(this._tmpVeilVec ?? (this._tmpVeilVec = new THREE.Vector3()));
+    this._bodyVeil.mesh.position.copy(wp);
+    this._bodyVeil.mesh.scale.setScalar(info.radius * 1.03);
+  }
+
+  _disposeBodyVeil() {
+    if (!this._bodyVeil) return;
+    this.scene.remove(this._bodyVeil.mesh);
+    this._bodyVeil.geom.dispose();
+    this._bodyVeil.mat.dispose();
+    this._bodyVeil = null;
   }
 
   // ── Slice 3 — kolor linii rozkazu wg typu ────────────────────────────────

@@ -249,8 +249,9 @@ export class SaveSystem {
       orbitalStability: p.orbitalStability || 1.0,
       // Powierzchnia
       surface: { ...(p.surface || {}) },
-      // Eksploracja (Etap 14)
+      // Eksploracja (Etap 14) — explored=zgrubny (obserwatorium/statek), analyzed=szczegółowy (statek)
       explored: p.explored || false,
+      analyzed: p.analyzed || false,
       // Układ gwiezdny (Etap 40)
       systemId: p.systemId ?? 'sys_home',
       // Złoża (Etap 26 — gospodarka)
@@ -277,6 +278,7 @@ export class SaveSystem {
       color:             m.visual.color,
       age:               m.age || 0,
       explored:          m.explored || false,
+      analyzed:          m.analyzed || false,
       composition:       m.composition || null,
       temperatureK:      m.temperatureK || null,
       temperatureC:      m.temperatureC ?? null,
@@ -310,6 +312,7 @@ export class SaveSystem {
       surfaceGravity:    p.surfaceGravity ?? null,
       composition:       { ...(p.composition || {}) },
       explored:          p.explored || false,
+      analyzed:          p.analyzed || false,
       systemId:          p.systemId ?? 'sys_home',
       deposits: p.deposits ? p.deposits.map(d => ({
         resourceId: d.resourceId, richness: d.richness,

@@ -1196,6 +1196,7 @@ export class GameScene {
           if (hp) {
             window.KOSMOS.homePlanet = hp;
             hp.explored = true;
+            hp.analyzed = true;   // planeta domowa = pełna wiedza
           }
           // Przywróć aktywne systemy z homePlanet (per-kolonia instancje)
           const homeCol = this.colonyManager.getColony(homePlanetId);
@@ -2839,6 +2840,7 @@ export class GameScene {
     window.KOSMOS.civMode    = true;
     window.KOSMOS.homePlanet = planet;
     planet.explored = true;
+    planet.analyzed = true;   // planeta domowa = pełna wiedza (zgrubny + szczegółowy)
     // Podłącz referencję planety do CivSystem (potrzebne do sprawdzania atmosfery)
     this.civSystem.planet = planet;
     // Księżyce planety domowej — wymagają rozpoznania statkiem naukowym
@@ -3521,6 +3523,7 @@ export class GameScene {
       p.age              = pd.age              || 0;
       p.surface          = { ...(pd.surface || {}) };
       p.explored         = pd.explored         || false;
+      p.analyzed         = pd.analyzed         ?? pd.explored ?? false;  // backfill inwariantu (analyzed ⇒ explored)
       p.systemId         = pd.systemId         ?? 'sys_home';
       // Przywróć złoża z save (v6)
       if (pd.deposits?.length > 0) {
@@ -3555,6 +3558,7 @@ export class GameScene {
       });
       m.age      = md.age      || 0;
       m.explored = md.explored || false;
+      m.analyzed = md.analyzed ?? md.explored ?? false;  // backfill inwariantu (analyzed ⇒ explored)
       m.systemId = md.systemId ?? 'sys_home';
       // Przywróć złoża z save (v6)
       if (md.deposits?.length > 0) {
@@ -3585,6 +3589,7 @@ export class GameScene {
         composition:       pd.composition,
       });
       p.explored = pd.explored || false;
+      p.analyzed = pd.analyzed ?? pd.explored ?? false;  // backfill inwariantu (analyzed ⇒ explored)
       p.systemId = pd.systemId ?? 'sys_home';
       // Przywróć złoża z save
       if (pd.deposits?.length > 0) {

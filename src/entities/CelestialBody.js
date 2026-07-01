@@ -33,7 +33,8 @@ export class CelestialBody {
     this.age        = 0;      // wiek w latach gry
     this.isSelected = false;  // czy zaznaczone przez gracza
     this.lifeScore  = 0;      // wynik życia (0=brak; tylko Planet.js nadpisuje logicznie)
-    this.explored   = false;  // czy zbadane ekspedycją naukową (wymagane do kolonizacji)
+    this.explored   = false;  // poziom ZGRUBNY — zbadane (skan obserwatorium LUB statek) → umożliwia kolonizację + obecność surowców (bez ilości)
+    this.analyzed   = false;  // poziom SZCZEGÓŁOWY — pełna analiza statkiem naukowym → dokładne ilości złóż (remaining). Inwariant: analyzed ⇒ explored
     this.deposits   = [];     // złoża surowców [{ resourceId, richness, totalAmount, remaining }]
   }
 

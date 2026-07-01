@@ -15,14 +15,9 @@ import { COSMIC }        from '../config/LayoutConfig.js';
 import { GAME_CONFIG }   from '../config/GameConfig.js';
 import { CIV_SIDEBAR_W } from './CivPanelDrawer.js';
 import { t }             from '../i18n/i18n.js';
-import { resolveTextureType, hashCode, TEXTURE_VARIANTS }
-                         from '../renderer/PlanetTextureUtils.js';
 
 // Typy ciał wyświetlane w katalogu
 const ORBIT_TYPES = ['planet', 'moon', 'planetoid'];
-
-// Ścieżka do tekstur planet
-const TEXTURE_DIR = 'assets/planet-textures';
 
 export class ObservatoryOverlay {
   constructor() {
@@ -37,8 +32,31 @@ export class ObservatoryOverlay {
 
   // ── OverlayManager API ──────────────────────────────────────────────
   toggle() { this.visible ? this.hide() : this.show(); }
-  show()   { this.visible = true;  this._createDOM(); this._startSync(); }
-  hide()   { this.visible = false; this._destroyDOM(); this._stopSync(); }
+  show()   {
+    this.visible = true;  this._createDOM(); this._startSync();
+    // Przesuń widok 3D tak, by wyfokusowane ciało trafiło w prawą-dolną część (pod danymi).
+    const f = this._computePreviewFrac();
+    window.KOSMOS?.threeRenderer?.enterObservatoryPreview?.(f.fracX, f.fracY);
+  }
+  hide()   {
+    this.visible = false; this._destroyDOM(); this._stopSync();
+    window.KOSMOS?.threeRenderer?.exitObservatoryPreview?.();
+  }
+
+  // Docelowy punkt ekranu dla podglądu ciała (środek prawej kolumny, poniżej danych),
+  // jako ułamek przesunięcia względem środka ekranu (dla camera.setViewOffset).
+  _computePreviewFrac() {
+    const S = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const W = window.innerWidth, H = window.innerHeight;
+    const left   = CIV_SIDEBAR_W * S;
+    const right  = W - COSMIC.OUTLINER_W * S;
+    const top    = (COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H + COSMIC.SUBNAV_H) * S;
+    const bottom = H - (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) * S;
+    const ow = right - left;
+    const rightColCenterX = left + ow * 0.70;              // środek prawej kolumny (flex 2:3)
+    const bodyTargetY     = top + (bottom - top) * 0.67;   // poniżej bloku danych
+    return { fracX: rightColCenterX / W - 0.5, fracY: bodyTargetY / H - 0.5 };
+  }
 
   draw() {}
 
@@ -161,10 +179,48 @@ export class ObservatoryOverlay {
 
   _startSync() {
     this._syncTimer = setInterval(() => { if (this.visible) this._refresh(); }, 2000);
+    // Szybki tick tylko dla płynnego paska skanu ciała (in-place, bez rebuildu innerHTML).
+    this._scanTimer = setInterval(() => this._scanTick(), 250);
   }
 
   _stopSync() {
     if (this._syncTimer) { clearInterval(this._syncTimer); this._syncTimer = null; }
+    if (this._scanTimer) { clearInterval(this._scanTimer); this._scanTimer = null; }
+  }
+
+  // Płynny update paska skanu wybranego ciała. Zmiana strukturalna (start/koniec skanu,
+  // zmiana poziomu) → pełny _refresh; inaczej mutacja w miejscu (bez resetu scrolla).
+  _scanTick() {
+    if (!this.visible || !this._container) return;
+    if (this._subTab !== 'catalog' || !this._selectedBodyId) return;
+    const key = this._currentPanelStateKey();
+    if (key !== this._panelStateKey) { this._refresh(); return; }
+    const prog = window.KOSMOS?.observatorySystem?.getBodyScanProgress?.(this._selectedBodyId);
+    if (prog) this._updateScanProgressDOM(prog.pct);
+  }
+
+  // Klucz stanu panelu (id + poziom + czy skanowany) — do wykrywania zmian strukturalnych.
+  _currentPanelStateKey() {
+    const id = this._selectedBodyId;
+    if (!id) return 'none';
+    const b = EntityManager.get(id);
+    const scanning = !!window.KOSMOS?.observatorySystem?.getBodyScanProgress?.(id);
+    return `${id}|${b ? this._bodyTier(b) : 'gone'}|${scanning}`;
+  }
+
+  // Mutacja w miejscu paska/etykiet/progresywnych wierszy podczas skanu.
+  _updateScanProgressDOM(pct) {
+    const c = this._container;
+    if (!c) return;
+    const bar = c.querySelector('#obs-scan-bar');
+    if (bar) bar.style.width = `${Math.round(pct * 100)}%`;
+    const lbl = c.querySelector('#obs-scan-pct');
+    if (lbl) lbl.textContent = t('observatory.scanning', Math.round(pct * 100));
+    const phase = c.querySelector('#obs-scan-phase');
+    if (phase) phase.textContent = this._scanPhaseLabel(pct);
+    c.querySelectorAll('[data-reveal]').forEach(el => {
+      el.style.opacity = pct >= parseFloat(el.dataset.reveal) ? '1' : '0';
+    });
   }
 
   // ── Scroll persistence ────────────────────────────────────────────
@@ -249,6 +305,21 @@ export class ObservatoryOverlay {
       };
     });
 
+    // Reforma obserwatorium — przyciski ręcznego skanu ciała (Skanuj/Anuluj)
+    body.querySelectorAll('[data-bodyscanaction]').forEach(btn => {
+      btn.onclick = (ev) => {
+        ev.stopPropagation();
+        const id = btn.dataset.bodyid;
+        const obs = window.KOSMOS?.observatorySystem;
+        if (btn.dataset.bodyscanaction === 'start') obs?.startBodyScan?.(id);
+        else obs?.cancelBodyScan?.(id, 'manual');
+        this._refresh();
+      };
+    });
+
+    // Zapisz klucz stanu panelu (do wykrywania zmian strukturalnych w _scanTick).
+    this._panelStateKey = this._currentPanelStateKey();
+
     requestAnimationFrame(() => this._restoreScroll());
   }
 
@@ -261,10 +332,12 @@ export class ObservatoryOverlay {
     // Zbierz ciała
     const allBodies = [];
     let exploredCount = 0;
+    let analyzedCount = 0;
     for (const type of ORBIT_TYPES) {
       for (const b of EntityManager.getByTypeInSystem(type, sysId)) {
         allBodies.push(b);
         if (b.explored) exploredCount++;
+        if (b.analyzed) analyzedCount++;
       }
     }
     allBodies.sort((a, b) => (a.orbital?.a ?? 0) - (b.orbital?.a ?? 0));
@@ -274,7 +347,8 @@ export class ObservatoryOverlay {
 
     // Statystyki
     html += `<div style="color:${THEME.textDim}; margin-bottom:6px; font-size:12px;">`;
-    html += `${t('observatory.explored')}: <span style="color:${THEME.accent}">${exploredCount}</span>/${allBodies.length}`;
+    html += `${t('observatory.surveyedCount')}: <span style="color:#44ccff">${exploredCount}</span> · `;
+    html += `${t('observatory.analyzedCount')}: <span style="color:${THEME.success}">${analyzedCount}</span> / ${allBodies.length}`;
     html += `</div>`;
 
     // Tabela ciał
@@ -294,8 +368,9 @@ export class ObservatoryOverlay {
       const icon = b.type === 'planet' ? '🪐' : b.type === 'moon' ? '🌙' : '🪨';
       const explored = b.explored;
 
+      const glyph = this._tierGlyph(this._bodyTier(b));
       html += `<tr data-bodyid="${b.id}" style="background:${bg}; border-bottom:1px solid ${THEME.border};" onmouseover="this.style.background='${THEME.accentDim}'" onmouseout="this.style.background='${selected ? THEME.accentMed : 'transparent'}'">`;
-      html += `<td style="padding:3px 6px; color:${explored ? THEME.textPrimary : THEME.textDim};">${icon} ${explored ? (b.name ?? b.id) : '???'}</td>`;
+      html += `<td style="padding:3px 6px; color:${explored ? THEME.textPrimary : THEME.textDim};">${glyph} ${icon} ${explored ? (b.name ?? b.id) : '???'}</td>`;
       html += `<td style="text-align:center; color:${THEME.textDim}; padding:3px;">${explored ? (b.planetType ?? b.type) : '—'}</td>`;
       html += `<td style="text-align:center; padding:3px;">${(orb.a ?? 0).toFixed(2)}</td>`;
       html += `<td style="text-align:center; padding:3px;">${explored ? (orb.e ?? 0).toFixed(3) : '—'}</td>`;
@@ -532,25 +607,139 @@ export class ObservatoryOverlay {
     }
 
     const body = EntityManager.get(this._selectedBodyId);
-    if (!body) return '';
+    if (!body) return `<div style="${this._rightColStyle()}"></div>`;
 
+    const obsSys = window.KOSMOS?.observatorySystem;
+    const scan   = obsSys?.getBodyScanProgress?.(this._selectedBodyId);
+    const icon   = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
+
+    // Kamera już fokusuje ciało (body:selected) → widać je w tle za panelem (brak miniatury).
+    if (scan)                            return this._renderScanningDetails(body, icon, scan);
+    if (this._bodyTier(body) === 'unknown') return this._renderUnknownDetails(body, icon, obsSys);
+    return this._renderKnownDetails(body, icon);
+  }
+
+  _rightColStyle() {
+    return `flex:3; padding:12px 16px; border-left:1px solid ${THEME.border}; overflow-y:auto; min-height:0;`;
+  }
+
+  // Poziom wiedzy o ciele: unknown (nie zbadane) / rough (skan obserwatorium) / detailed (statek naukowy)
+  _bodyTier(b) {
+    if (b?.analyzed) return 'detailed';
+    if (b?.explored) return 'rough';
+    return 'unknown';
+  }
+
+  // Glif statusu w katalogu (kompaktowy — kółka).
+  _tierGlyph(tier) {
+    if (tier === 'detailed') return `<span style="color:${THEME.success}">●</span>`;
+    if (tier === 'rough')    return `<span style="color:#44ccff">◐</span>`;
+    return `<span style="color:${THEME.textDim}">○</span>`;
+  }
+
+  // Zgrubne pasmo jakości złoża (te same progi co BodyDetailModal/BottomContext).
+  _richnessStars(r) {
+    return r >= 0.7 ? '★★★' : r >= 0.4 ? '★★' : '★';
+  }
+  _richnessColor(r) {
+    return r >= 0.7 ? THEME.yellow : r >= 0.4 ? THEME.accent : THEME.textDim;
+  }
+
+  // Etykieta fazy skanu wg postępu (klimatyczny „proces analizy").
+  _scanPhaseLabel(pct) {
+    if (pct < 0.45) return t('observatory.calibrating');
+    if (pct < 0.90) return t('observatory.spectralAnalysis');
+    return t('observatory.mineralAnalysis');
+  }
+
+  // ── UNKNOWN: zero danych, tylko przycisk skanu ─────────────────────
+  _renderUnknownDetails(body, icon, obsSys) {
+    const hasObs = (obsSys?.getMaxObservatoryLevel?.() ?? 0) > 0;
+    let html = `<div style="${this._rightColStyle()}">`;
+    html += `<div style="font-size:18px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:8px;">${icon} ???</div>`;
+    html += `<div style="color:${THEME.textDim}; font-size:13px; margin-bottom:16px;">${t('observatory.tierUnknown')}</div>`;
+    if (hasObs) {
+      html += `<button data-bodyscanaction="start" data-bodyid="${body.id}" style="${this._scanBtnStyle(true)} padding:8px 18px; font-size:12px;">🔭 ${t('observatory.scanBodyBtn')}</button>`;
+    } else {
+      html += `<div style="${this._scanBtnStyle(false)} padding:8px 18px; font-size:12px; opacity:0.5; display:inline-block;">🔭 ${t('observatory.scanBodyBtn')}</div>`;
+      html += `<div style="color:${THEME.warning}; font-size:11px; margin-top:8px;">⚠ ${t('observatory.needObservatory')}</div>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+
+  // ── SCANNING: pasek + faza + progresywne ujawnianie danych ─────────
+  _renderScanningDetails(body, icon, scan) {
+    const pct = scan.pct;
+    let html = `<div style="${this._rightColStyle()}">`;
+    html += `<div style="font-size:18px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:10px;">${icon} ${t('observatory.scanningBody')}</div>`;
+
+    // Pasek postępu + faza + %
+    html += `<div style="margin-bottom:14px;">`;
+    html += `<div id="obs-scan-phase" style="font-size:11px; color:#7fd4ff; margin-bottom:4px; letter-spacing:0.5px;">${this._scanPhaseLabel(pct)}</div>`;
+    html += `<div style="height:6px; background:${THEME.bgSecondary}; border-radius:3px; overflow:hidden;">`;
+    html += `<div id="obs-scan-bar" style="height:100%; width:${Math.round(pct * 100)}%; background:linear-gradient(90deg,#2a8fbf,#44ccff); transition:width .25s;"></div>`;
+    html += `</div>`;
+    html += `<div id="obs-scan-pct" style="font-size:10px; color:${THEME.textDim}; margin-top:3px;">${t('observatory.scanning', Math.round(pct * 100))}</div>`;
+    html += `</div>`;
+
+    // Progresywne wiersze (opacity wg pct; timer aktualizuje w miejscu)
+    for (const r of this._progressiveRows(body)) {
+      const vis = pct >= r.threshold ? '1' : '0';
+      html += `<div data-reveal="${r.threshold}" style="opacity:${vis}; transition:opacity .4s;">${r.html}</div>`;
+    }
+
+    html += `<button data-bodyscanaction="cancel" data-bodyid="${body.id}" style="${this._scanBtnStyle(false)} margin-top:14px;">${t('observatory.cancelScanBtn')}</button>`;
+    html += `</div>`;
+    return html;
+  }
+
+  // Wiersze ujawniane etapami podczas skanu (threshold = ukończony % fazy).
+  _progressiveRows(body) {
     const orb = body.orbital ?? {};
-    const icon = body.type === 'planet' ? '🪐' : body.type === 'moon' ? '🌙' : '🪨';
     const homePl = window.KOSMOS?.homePlanet;
     const distAU = homePl ? Math.abs((orb.a ?? 0) - (homePl.orbital?.a ?? 0)).toFixed(2) : '?';
+    const rows = [];
+    // 0–20% klasyfikacja
+    rows.push({ threshold: 0.20, html:
+      this._detailRow(t('observatory.name'), body.name ?? body.id) +
+      this._detailRow(t('observatory.type'), body.planetType ?? body.type) });
+    // 20–45% orbita
+    rows.push({ threshold: 0.45, html:
+      this._detailRow(t('observatory.semiMajor'), `${(orb.a ?? 0).toFixed(3)} AU`) +
+      this._detailRow(t('observatory.eccentricity'), `${(orb.e ?? 0).toFixed(4)}`) +
+      this._detailRow(t('observatory.period'), `${(orb.T ?? 0).toFixed(3)} ${t('observatory.years')}`) +
+      this._detailRow(t('observatory.distHome'), `${distAU} AU`) });
+    // 45–70% fizyka
+    let phys = '';
+    if (body.temperatureK) { const c = Math.round(body.temperatureK - 273.15); phys += this._detailRow(t('observatory.temp'), `${Math.round(body.temperatureK)} K (${c}°C)`); }
+    if (body.physics?.mass)   phys += this._detailRow(t('observatory.mass'), `${body.physics.mass.toFixed(3)} M⊕`);
+    if (body.physics?.radius) phys += this._detailRow(t('observatory.radius'), `${body.physics.radius.toFixed(3)} R⊕`);
+    if (phys) rows.push({ threshold: 0.70, html: phys });
+    // 70–90% atmosfera + życie
+    const atmo = this._atmoLifeHtml(body);
+    if (atmo) rows.push({ threshold: 0.90, html: atmo });
+    // 90–100% surowce (obecność + jakość, bez ilości)
+    rows.push({ threshold: 0.98, html: this._resourcePresenceHtml(body, false) });
+    return rows;
+  }
 
-    let html = `<div style="flex:3; padding:12px 16px; border-left:1px solid ${THEME.border}; overflow-y:auto; min-height:0;">`;
+  // ── ROUGH / DETAILED: pełny widok ──────────────────────────────────
+  _renderKnownDetails(body, icon) {
+    const tier = this._bodyTier(body);
+    const orb = body.orbital ?? {};
+    const homePl = window.KOSMOS?.homePlanet;
+    const distAU = homePl ? Math.abs((orb.a ?? 0) - (homePl.orbital?.a ?? 0)).toFixed(2) : '?';
+    const detailed = tier === 'detailed';
+    const tag = detailed ? t('observatory.tierDetailedTag') : t('observatory.tierRoughTag');
+    const tagColor = detailed ? THEME.success : '#44ccff';
 
-    // Nagłówek z nazwą
-    html += `<div style="font-size:18px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:12px;">${icon} ${body.name ?? body.id}</div>`;
-
-    // Zdjęcie — duże, na górze, pełna szerokość
-    const thumbUrl = this._getBodyThumbnailUrl(body);
-    if (thumbUrl) {
-      html += `<div style="text-align:center; margin-bottom:14px;">`;
-      html += `<img src="${thumbUrl}" style="max-width:100%; max-height:240px; border-radius:6px; border:1px solid ${THEME.borderLight};" alt="${body.name ?? body.id}" onerror="this.parentElement.style.display='none'">`;
-      html += `</div>`;
-    }
+    let html = `<div style="${this._rightColStyle()}">`;
+    // Nagłówek z nazwą + tag poziomu
+    html += `<div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">`;
+    html += `<span style="font-size:18px; font-weight:bold; color:${THEME.textHeader};">${icon} ${body.name ?? body.id}</span>`;
+    html += `<span style="font-size:9px; color:${tagColor}; border:1px solid ${tagColor}; border-radius:3px; padding:1px 6px; text-transform:uppercase; letter-spacing:0.5px;">${tag}</span>`;
+    html += `</div>`;
 
     // Dane szczegółowe
     html += this._detailRow(t('observatory.type'), body.planetType ?? body.type);
@@ -558,47 +747,18 @@ export class ObservatoryOverlay {
     html += this._detailRow(t('observatory.eccentricity'), `${(orb.e ?? 0).toFixed(4)}`);
     html += this._detailRow(t('observatory.period'), `${(orb.T ?? 0).toFixed(3)} ${t('observatory.years')}`);
     html += this._detailRow(t('observatory.distHome'), `${distAU} AU`);
-
     if (body.temperatureK) {
       const tempC = Math.round(body.temperatureK - 273.15);
       html += this._detailRow(t('observatory.temp'), `${Math.round(body.temperatureK)} K (${tempC}°C)`);
     }
-    if (body.physics?.mass) {
-      html += this._detailRow(t('observatory.mass'), `${body.physics.mass.toFixed(3)} M⊕`);
-    }
-    if (body.physics?.radius) {
-      html += this._detailRow(t('observatory.radius'), `${body.physics.radius.toFixed(3)} R⊕`);
-    }
-    if (body.atmosphere?.pressure > 0) {
-      html += this._detailRow(t('observatory.atmo'), `${body.atmosphere.pressure.toFixed(2)} atm`);
-      if (body.atmosphere?.composition) {
-        const comp = body.atmosphere.composition;
-        const sorted = Object.entries(comp).sort((a, b) => b[1] - a[1]).slice(0, 3);
-        if (sorted.length > 0) {
-          const compStr = sorted.map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`).join(', ');
-          html += this._detailRow(t('observatory.atmoComp'), compStr);
-        }
-      }
-    }
-    if (body.lifeScore != null && body.lifeScore > 0) {
-      const lifeColor = body.lifeScore > 50 ? THEME.success : THEME.warning;
-      html += `<div style="display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px solid ${THEME.border};">
-        <span style="color:${THEME.textDim}">${t('observatory.life')}</span>
-        <span style="color:${lifeColor}; font-weight:bold;">${body.lifeScore.toFixed(0)}%</span>
-      </div>`;
-    }
+    if (body.physics?.mass)   html += this._detailRow(t('observatory.mass'), `${body.physics.mass.toFixed(3)} M⊕`);
+    if (body.physics?.radius) html += this._detailRow(t('observatory.radius'), `${body.physics.radius.toFixed(3)} R⊕`);
+    html += this._atmoLifeHtml(body);
 
-    // Depozyty
-    if (body.deposits?.length > 0) {
-      html += `<div style="margin-top:10px; padding-top:8px; border-top:1px solid ${THEME.border};">`;
-      html += `<div style="font-weight:bold; color:${THEME.textHeader}; font-size:12px; text-transform:uppercase; margin-bottom:4px;">${t('observatory.deposits')}</div>`;
-      html += `<div style="display:flex; flex-wrap:wrap; gap:3px 14px;">`;
-      for (const d of body.deposits) {
-        const remaining = typeof d.remaining === 'number' ? Math.round(d.remaining) : '?';
-        html += `<span style="font-size:12px; color:${THEME.textPrimary};">${d.resourceId}: ${d.richness?.toFixed(1) ?? '?'} (${remaining})</span>`;
-      }
-      html += `</div></div>`;
-    }
+    // Surowce (zgrubny = obecność + jakość; szczegółowy = + ilości)
+    html += `<div style="margin-top:10px; padding-top:8px; border-top:1px solid ${THEME.border};">`;
+    html += this._resourcePresenceHtml(body, detailed);
+    html += `</div>`;
 
     // Kolonie na tym ciele
     const colMgr = window.KOSMOS?.colonyManager;
@@ -616,25 +776,55 @@ export class ObservatoryOverlay {
     return html;
   }
 
-  /** Zwraca URL miniatury ciała — live render z ThreeRenderer, fallback na statyczny PNG */
-  _getBodyThumbnailUrl(body) {
-    // Live render z głównej sceny 3D (offscreen snapshot)
-    const renderer = window.KOSMOS?.threeRenderer;
-    if (renderer) {
-      try {
-        const dataUrl = renderer.renderBodyThumbnail(body.id);
-        if (dataUrl) return dataUrl;
-      } catch { /* fallback poniżej */ }
+  // Atmosfera + wskaźnik życia (wspólne dla scan/known).
+  _atmoLifeHtml(body) {
+    let html = '';
+    if (body.atmosphere?.pressure > 0) {
+      html += this._detailRow(t('observatory.atmo'), `${body.atmosphere.pressure.toFixed(2)} atm`);
+      if (body.atmosphere?.composition) {
+        const sorted = Object.entries(body.atmosphere.composition).sort((a, b) => b[1] - a[1]).slice(0, 3);
+        if (sorted.length > 0) {
+          const compStr = sorted.map(([k, v]) => `${k} ${(v * 100).toFixed(0)}%`).join(', ');
+          html += this._detailRow(t('observatory.atmoComp'), compStr);
+        }
+      }
     }
-    // Fallback: statyczny PNG (equirectangular diffuse)
-    try {
-      const texType = resolveTextureType(body);
-      const variant = (hashCode(body.id) % TEXTURE_VARIANTS) + 1;
-      const vStr = String(variant).padStart(2, '0');
-      return `${TEXTURE_DIR}/${texType}_${vStr}_diffuse.png`;
-    } catch {
-      return null;
+    if (body.lifeScore != null && body.lifeScore > 0) {
+      const lifeColor = body.lifeScore > 50 ? THEME.success : THEME.warning;
+      html += `<div style="display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px solid ${THEME.border};">
+        <span style="color:${THEME.textDim}">${t('observatory.life')}</span>
+        <span style="color:${lifeColor}; font-weight:bold;">${body.lifeScore.toFixed(0)}%</span>
+      </div>`;
     }
+    return html;
+  }
+
+  // Sekcja surowców. withNumbers=false → obecność + jakość (gwiazdki), BEZ ilości + hint statku.
+  // withNumbers=true → jakość + dokładna pozostała ilość (poziom szczegółowy).
+  _resourcePresenceHtml(body, withNumbers) {
+    const deps = (body.deposits ?? []).filter(d => (d.richness ?? 0) > 0 || (d.remaining ?? d.totalAmount ?? 0) > 0);
+    let html = `<div style="font-weight:bold; color:${THEME.textHeader}; font-size:12px; text-transform:uppercase; margin-bottom:4px;">${t('observatory.resourcesPresent')}</div>`;
+    if (deps.length === 0) {
+      html += `<div style="color:${THEME.textDim}; font-size:12px; font-style:italic;">—</div>`;
+      return html;
+    }
+    html += `<div style="display:flex; flex-wrap:wrap; gap:4px 14px;">`;
+    for (const d of deps) {
+      const r = d.richness ?? 0;
+      const stars = this._richnessStars(r);
+      const sc = this._richnessColor(r);
+      if (withNumbers) {
+        const remaining = typeof d.remaining === 'number' ? Math.round(d.remaining) : '?';
+        html += `<span style="font-size:12px; color:${THEME.textPrimary};">${d.resourceId} <span style="color:${sc}">${stars}</span> <span style="color:${THEME.textDim}">(${remaining})</span></span>`;
+      } else {
+        html += `<span style="font-size:12px; color:${THEME.textPrimary};">${d.resourceId} <span style="color:${sc}">${stars}</span></span>`;
+      }
+    }
+    html += `</div>`;
+    if (!withNumbers) {
+      html += `<div style="color:${THEME.textDim}; font-size:10px; font-style:italic; margin-top:6px;">🛰 ${t('observatory.resourceQtyHint')}</div>`;
+    }
+    return html;
   }
 
   _detailRow(label, value) {

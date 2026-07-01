@@ -479,8 +479,9 @@ export class ColonyManager {
     prospSys.prosperity = 0;
     prospSys.targetProsperity = 0;
 
-    // Oznacz ciało jako zbadane
+    // Oznacz ciało jako zbadane (kolonia = pełna wiedza: zgrubny + szczegółowy)
     entity.explored = true;
+    entity.analyzed = true;
 
     const colony = {
       planetId,

@@ -39,8 +39,9 @@ export class Planetoid extends CelestialBody {
     this.lifeScore        = 0;
     this.orbitalStability = 1.0;
 
-    // Exploration gating (recon missions)
+    // Exploration gating (recon missions) — explored=zgrubny (obserwatorium/statek), analyzed=szczegółowy (statek)
     this.explored = config.explored || false;
+    this.analyzed = config.analyzed || false;
 
     // Pola powierzchniowe (kompatybilność z PlanetMapGenerator / RegionSystem)
     this.surface = {

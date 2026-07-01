@@ -105,6 +105,10 @@ export const GAME_CONFIG = {
     //   po SCAN_DURATION_YEARS rumor→contact. Render/runtime-only, bez migracji save.
     sensorLockContact:    true,
     observatoryVesselScan: true,
+    // observatoryBodyScan: ręczny skan ciała z obserwatorium (~3 mies. gry) → explored
+    //   (zgrubny: obecność+jakość surowców, kolonizacja). Dokładne ilości dopiero po statku
+    //   naukowym (analyzed). Zastąpił pasywny auto-skan. Bramkuje: startBodyScan, przycisk, FX 3D.
+    observatoryBodyScan:  true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

@@ -189,11 +189,14 @@ export function showBodyDetailModal(body) {
       });
       panel.appendChild(depTitle);
 
+      // Dokładne ilości (remaining) tylko po pełnej analizie statkiem naukowym (analyzed).
+      // Skan obserwatorium (explored) ujawnia obecność + jakość (gwiazdki) bez liczb.
+      const analyzed = body.analyzed === true;
       for (const dep of deposits) {
         if (dep.remaining <= 0) continue;
         const stars = dep.richness >= 0.7 ? '★★★' : dep.richness >= 0.4 ? '★★' : '★';
         const starColor = dep.richness >= 0.7 ? THEME.yellow : dep.richness >= 0.4 ? THEME.accent : THEME.textDim;
-        addRow(`${dep.resourceId}`, `${stars}  (${Math.floor(dep.remaining)})`, starColor);
+        addRow(`${dep.resourceId}`, analyzed ? `${stars}  (${Math.floor(dep.remaining)})` : stars, starColor);
       }
     }
 

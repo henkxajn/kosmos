@@ -1719,10 +1719,13 @@ export class ExpeditionSystem {
     if (exp.scope === 'target' || exp.scope === 'nearest') {
       const discovered = [];
       const target = this._findTarget(exp.targetId);
-      if (target && !target.explored) {
+      // Statek naukowy = pełna analiza (analyzed). Działa też na ciele zbadanym
+      // zgrubnie przez obserwatorium (explored=true) → upgrade rough→detailed.
+      if (target && !target.analyzed) {
         target.explored = true;
+        target.analyzed = true;   // dokładne ilości złóż (remaining)
         discovered.push(target.id);
-        // Jeśli to planeta — odkryj też jej księżyce
+        // Jeśli to planeta — odkryj też jej księżyce (zgrubnie; własna wizyta = analyzed)
         if (target.type === 'planet') {
           for (const m of EntityManager.getByType('moon')) {
             if (m.parentPlanetId === target.id && !m.explored) {
@@ -1751,11 +1754,12 @@ export class ExpeditionSystem {
     // ── Sekwencyjny full_system recon ──
     if (exp.scope === 'full_system') {
       const target = this._findTarget(exp.targetId);
-      if (target && !target.explored) {
+      if (target && !target.analyzed) {
         target.explored = true;
+        target.analyzed = true;   // statek naukowy = pełna analiza (dokładne ilości złóż)
         if (!exp.bodiesDiscovered) exp.bodiesDiscovered = [];
         exp.bodiesDiscovered.push(target.id);
-        // Odkryj księżyce planety
+        // Odkryj księżyce planety (zgrubnie)
         if (target.type === 'planet') {
           for (const m of EntityManager.getByType('moon')) {
             if (m.parentPlanetId === target.id && !m.explored) {
