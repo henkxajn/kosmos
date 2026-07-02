@@ -842,6 +842,55 @@ export class SystemGenerator {
     }
   }
 
+  // ── Zdalny „peek" liczby ciał obcego układu (skan STRATCOM) ───────────────
+  // Zwraca DETERMINISTYCZNĄ liczbę ciał układu BEZ rejestracji encji w EntityManager.
+  // Reużywa ten sam seed (galaxyStar.id) i DOKŁADNIE tę samą sekwencję generatorów
+  // co generateForStar — dzięki temu skan z odległości pokazuje liczby SPÓJNE z tym,
+  // co gracz zobaczy po faktycznym wysłaniu statku (pełnej eksploracji).
+  //
+  // ⚠ INWARIANT: kolejność wywołań generate*() MUSI być identyczna jak w generateForStar
+  //   (każdy generator zużywa RNG — zmiana kolejności/pominięcie = rozjazd liczb).
+  //   Pomijamy tylko EntityManager.add() i _generateDepositsForAll() (są PO generacji ciał,
+  //   nie wpływają na długości tablic). generateId() jedynie inkrementuje licznik (bez RNG).
+  peekCountsForStar(galaxyStar) {
+    const seed = hashString(galaxyStar.id);
+    const rng  = mulberry32(seed);
+    const origRandom = Math.random;
+    Math.random = rng;
+
+    try {
+      const star = new Star({
+        id:           EntityManager.generateId(),
+        name:         galaxyStar.name,
+        spectralType: galaxyStar.spectralType,
+        mass:         galaxyStar.mass,
+        luminosity:   galaxyStar.luminosity,
+        x: 0,
+        y: 0,
+      });
+
+      // Ta sama sekwencja co generateForStar (bez .add / bez depozytów).
+      const planets       = this.generateProtoPlanets(star);
+      const moons         = this.generateMoonsForPlanets(planets, star);
+      this.generateDisk(star);                          // planetezymale — nie liczone, ale zużywają RNG
+      const asteroids     = this._generateAsteroidBelt(star, planets);
+      const comets        = this._generateComets(star);
+      const planetoids    = this._generatePlanetoids(star, planets);
+
+      const counts = {
+        planets:    planets.length,
+        moons:      moons.length,
+        planetoids: planetoids.length,
+        asteroids:  asteroids.length,
+        comets:     comets.length,
+      };
+      counts.total = counts.planets + counts.moons + counts.planetoids + counts.asteroids + counts.comets;
+      return counts;
+    } finally {
+      Math.random = origRandom;
+    }
+  }
+
   // ── Generowanie księżyców ──────────────────────────────────────
   // Liczba księżyców per planeta na podstawie masy i typu
   // Oparte na statystykach Układu Słonecznego i modelach formowania satelitów

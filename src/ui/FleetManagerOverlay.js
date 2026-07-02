@@ -1246,9 +1246,22 @@ export class FleetManagerOverlay {
         this._stratcomBig = zone.data.panel;
         this._pendingSendSystemId = null;
         break;
-      case 'stratcom_scan':
-        // Placeholder skanowania układu obserwatorium (właściwa mechanika = później).
-        EventBus.emit('ui:toast', { text: t('fleet.opsScanToast'), color: THEME.info ?? '#00ccff', durationMs: 3000 });
+      case 'stratcom_scan': {
+        // Rozpocznij czasowy skan obcego układu (obserwatorium Lv2+). Ujawnia liczby ciał.
+        const obsSys = window.KOSMOS?.observatorySystem;
+        const ok = obsSys?.startSystemScan?.(zone.data.systemId);
+        if (!ok) {
+          const maxTier = obsSys?.getMaxSystemScanTier?.() ?? 0;
+          const atLimit = obsSys && obsSys.getActiveSystemScans().length >= obsSys.getMaxConcurrentSystemScans();
+          const txt = maxTier <= 0 ? t('fleet.scanLockedToast')
+                    : atLimit      ? t('fleet.scanLimitToast')
+                    :                t('fleet.scanBusyToast');
+          EventBus.emit('ui:toast', { text: txt, color: THEME.warning ?? '#ffcc44', durationMs: 3000 });
+        }
+        break;
+      }
+      case 'stratcom_scan_cancel':
+        window.KOSMOS?.observatorySystem?.cancelSystemScan?.(zone.data.systemId, 'manual');
         break;
       case 'cluster_star':
         this._selectedClusterSystem = zone.data.systemId;
@@ -3946,6 +3959,7 @@ export class FleetManagerOverlay {
     const systems = window.KOSMOS?.galaxyData?.systems ?? [];
     const home = systems.find(s => s.isHome) ?? null;
     const intel = window.KOSMOS?.intelSystem;
+    const obsSys = window.KOSMOS?.observatorySystem;
     const rangeLY = this._getStratcomRangeLY();
     const isEmpKnown = (s) => !!(s.empireId && (intel ? intel.isAtLeast(s.empireId, 'rumor') : false));
     const list = [];
@@ -3955,7 +3969,9 @@ export class FleetManagerOverlay {
         const dy = (s.y ?? 0) - (home.y ?? 0);
         const d2 = Math.sqrt(dx * dx + dy * dy);
         const known = !!s.isHome || !!s.explored || isEmpKnown(s);
-        list.push({ s, d2, known, inSensor: d2 <= rangeLY });
+        // Nazwa znana = zbadany LUB przeskanowany w STRATCOM (skan ujawnia nazwę).
+        const nameKnown = known || !!obsSys?.getSystemScanResult?.(s.id);
+        list.push({ s, d2, known, nameKnown, inSensor: d2 <= rangeLY });
       }
       list.sort((a, b) => a.d2 - b.d2);
     }
@@ -4218,7 +4234,7 @@ export class FleetManagerOverlay {
     const selSys = this._selectedClusterSystem;
     let anyBeyondHome = false;
 
-    for (const { s, known } of shown) {
+    for (const { s, known, nameKnown } of shown) {
       const sx = toSx(s.x ?? 0);
       const sy = toSy(s.y ?? 0);
       // poza okręgiem radaru → pomiń (i blip, i hit)
@@ -4277,7 +4293,7 @@ export class FleetManagerOverlay {
       // Nazwa (znane) lub „???" (kontakt w zasięgu, nieznany)
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.textAlign = 'center';
-      if (known) {
+      if (nameKnown) {
         ctx.fillStyle = isHome ? THEME.yellow : THEME.textPrimary;
         ctx.fillText(s.name, sx, sy + r + 12);
       } else if (isHover || isSelected) {
@@ -4588,11 +4604,17 @@ export class FleetManagerOverlay {
 
   // Panel informacyjny o zaznaczonym systemie w star cluster
   _drawClusterInfoPanel(ctx, areaX, areaY, areaW, areaH, sys, ssMgr, vMgr, colMgr) {
+    const PAD = 8;
     const panelW = 200;
-    const panelH = 160;
+    const sysReg = ssMgr?.getSystem(sys.id);
+    const isExplored = !!sysReg?.explored || !!sys.explored;
+    const obsSys = window.KOSMOS?.observatorySystem;
+    const layout = this._buildSystemScanLayout(sys, obsSys, isExplored);
+
+    // Wysokość dynamiczna: nagłówek + dane + sekcja skanu + przyciski
+    const panelH = 98 + layout.height + (!sys.isHome ? 22 : 0) + (isExplored && sysReg ? 22 : 0);
     const px = areaX + areaW - panelW - 8;
     const py = areaY + 8;
-    const PAD = 8;
 
     // Tło panelu
     ctx.fillStyle = 'rgba(8,12,18,0.92)';
@@ -4606,7 +4628,7 @@ export class FleetManagerOverlay {
     // Nazwa gwiazdy
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = sys.colorHex ?? THEME.textPrimary;
-    ctx.fillText(`⭐ ${sys.name}`, px + PAD, iy + 12);
+    ctx.fillText(`⭐ ${this._systemDisplayName(sys)}`, px + PAD, iy + 12);
     iy += 20;
 
     // Typ, masa, odległość
@@ -4621,12 +4643,13 @@ export class FleetManagerOverlay {
     iy += 18;
 
     // Status
-    const sysReg = ssMgr?.getSystem(sys.id);
-    const isExplored = !!sysReg?.explored || !!sys.explored;
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = isExplored ? THEME.success : THEME.textDim;
     ctx.fillText(isExplored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10);
     iy += 16;
+
+    // Sekcja skanu układu (wyniki + kontrolka)
+    iy = this._drawSystemScanSection(ctx, px, iy, panelW, PAD, sys, layout);
 
     // Przyciski akcji
     const btnW = panelW - PAD * 2;
@@ -4849,7 +4872,7 @@ export class FleetManagerOverlay {
 
     // Gwiazdy (widoczne) — w 3D ciało rysuje WebGL pod spodem; tu chrome 2D
     const selSys = this._selectedClusterSystem;
-    for (const { s, known } of vis.list) {
+    for (const { s, known, nameKnown } of vis.list) {
       const pp = projS(s); if (!pp) continue;
       const sx = pp.sx, sy = pp.sy;
       if (sx < x - 20 || sx > x + w + 20 || sy < y - 20 || sy > y + h + 20) continue;
@@ -4883,7 +4906,7 @@ export class FleetManagerOverlay {
         if (sysData?.jumpGate   || s.jumpGate)   { ctx.font = `7px ${THEME.fontFamily}`; ctx.fillText('🌀', sx + r + 2, sy + 10); }
       }
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`; ctx.textAlign = 'center';
-      if (known) { ctx.fillStyle = isHome ? THEME.yellow : THEME.textPrimary; ctx.fillText(s.name, sx, sy + r + 12); }
+      if (nameKnown) { ctx.fillStyle = isHome ? THEME.yellow : THEME.textPrimary; ctx.fillText(s.name, sx, sy + r + 12); }
       else if (isHover || isSelected) { ctx.fillStyle = THEME.textDim; ctx.fillText('???', sx, sy + r + 12); }
       ctx.textAlign = 'left';
       if (isBig) {
@@ -4952,7 +4975,7 @@ export class FleetManagerOverlay {
     ctx.textAlign = 'left';
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = sys.colorHex ?? THEME.textPrimary;
-    ctx.fillText(`⭐ ${sys.name}`, px + PAD, iy + 12); iy += 20;
+    ctx.fillText(`⭐ ${this._systemDisplayName(sys)}`, px + PAD, iy + 12); iy += 20;
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     // Imperium
@@ -4978,7 +5001,7 @@ export class FleetManagerOverlay {
     ctx.fillText(explored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10);
   }
 
-  // Panel OPERACYJNY (mapa galaktyki): ciała (jeśli przeskanowane) + skan + wyślij statek + przełącz widok.
+  // Panel OPERACYJNY (mapa galaktyki): skan układu (liczby ciał) + wyślij statek + przełącz widok.
   _drawStratcomOps(ctx, areaX, areaY, areaW, areaH, sys, ssMgr, vMgr, colMgr) {
     const PAD = 8;
     const panelW = Math.min(216, Math.max(160, areaW - 16));
@@ -4986,10 +5009,10 @@ export class FleetManagerOverlay {
     const py = areaY + 8;
     const sysReg = ssMgr?.getSystem(sys.id);
     const explored = !!sysReg?.explored || !!sys.explored;
-    const planets = explored ? (EntityManager.getByTypeInSystem?.('planet', sys.id) ?? []) : [];
+    const obsSys = window.KOSMOS?.observatorySystem;
+    const layout = this._buildSystemScanLayout(sys, obsSys, explored);
 
-    const bodyLines = Math.min(planets.length, 5);
-    const panelH = 92 + (explored ? Math.max(1, bodyLines) * 13 : 14) + 26 + (!sys.isHome ? 22 : 0) + (explored ? 22 : 0);
+    const panelH = 50 + layout.height + (!sys.isHome ? 22 : 0) + (explored && sysReg ? 22 : 0);
     ctx.fillStyle = 'rgba(8,12,18,0.92)';
     ctx.fillRect(px, py, panelW, panelH);
     ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
@@ -4999,39 +5022,17 @@ export class FleetManagerOverlay {
     ctx.textAlign = 'left';
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = sys.colorHex ?? THEME.textPrimary;
-    ctx.fillText(`⭐ ${sys.name}`, px + PAD, iy + 12); iy += 20;
+    ctx.fillText(`⭐ ${this._systemDisplayName(sys)}`, px + PAD, iy + 12); iy += 20;
 
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = explored ? THEME.success : THEME.textDim;
     ctx.fillText(explored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10); iy += 16;
 
-    // Ciała w układzie (jeśli przeskanowane)
-    if (explored && planets.length) {
-      ctx.fillStyle = THEME.textHeader;
-      ctx.fillText(t('fleet.opsBodies', planets.length), px + PAD, iy + 10); iy += 13;
-      ctx.fillStyle = THEME.textSecondary;
-      for (let i = 0; i < bodyLines; i++) {
-        const p = planets[i];
-        const nm = (p.name ?? p.id ?? '?').slice(0, 22);
-        ctx.fillText(`• ${nm}`, px + PAD + 4, iy + 9); iy += 13;
-      }
-      if (planets.length > bodyLines) { ctx.fillStyle = THEME.textDim; ctx.fillText(`+${planets.length - bodyLines}…`, px + PAD + 4, iy + 9); iy += 13; }
-    } else {
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('fleet.opsNoScan'), px + PAD, iy + 10); iy += 14;
-    }
+    // Sekcja skanu układu (wyniki + kontrolka)
+    iy = this._drawSystemScanSection(ctx, px, iy, panelW, PAD, sys, layout);
 
-    // Przyciski
+    // Przyciski akcji
     const btnW = panelW - PAD * 2, btnH = 18;
-    // Skanuj (placeholder obserwatorium) — gdy nieprzeskanowany
-    if (!explored) {
-      ctx.fillStyle = 'rgba(0,204,255,0.10)'; ctx.fillRect(px + PAD, iy, btnW, btnH);
-      ctx.strokeStyle = THEME.info ?? THEME.accent; ctx.strokeRect(px + PAD, iy, btnW, btnH);
-      ctx.fillStyle = THEME.info ?? THEME.accent; ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.opsScan'), px + PAD + btnW / 2, iy + 13); ctx.textAlign = 'left';
-      this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'stratcom_scan', data: { systemId: sys.id } });
-      iy += btnH + 4;
-    }
     // Wyślij statek
     if (!sys.isHome) {
       const activePid = colMgr?.activePlanetId;
@@ -5040,6 +5041,7 @@ export class FleetManagerOverlay {
       ctx.fillStyle = hasWarpShip ? 'rgba(0,255,180,0.08)' : 'rgba(60,60,60,0.3)';
       ctx.fillRect(px + PAD, iy, btnW, btnH);
       ctx.strokeStyle = hasWarpShip ? THEME.accent : THEME.border; ctx.strokeRect(px + PAD, iy, btnW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = hasWarpShip ? THEME.accent : THEME.textDim; ctx.textAlign = 'center';
       ctx.fillText(t('fleet.clusterSend'), px + PAD + btnW / 2, iy + 13); ctx.textAlign = 'left';
       if (hasWarpShip) this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'cluster_send', data: { systemId: sys.id } });
@@ -5049,10 +5051,140 @@ export class FleetManagerOverlay {
     if (explored && sysReg) {
       ctx.fillStyle = 'rgba(0,255,180,0.08)'; ctx.fillRect(px + PAD, iy, btnW, btnH);
       ctx.strokeStyle = THEME.accent; ctx.strokeRect(px + PAD, iy, btnW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.accent; ctx.textAlign = 'center';
       ctx.fillText(t('fleet.clusterSwitch'), px + PAD + btnW / 2, iy + 13); ctx.textAlign = 'left';
       this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'cluster_switch', data: { systemId: sys.id } });
     }
+  }
+
+  // Nazwa układu do wyświetlenia — ujawniona po zbadaniu LUB skanie STRATCOM; inaczej „???".
+  _systemDisplayName(sys) {
+    if (!sys) return '???';
+    if (sys.isHome || sys.explored) return sys.name ?? '???';
+    const scanned = !!window.KOSMOS?.observatorySystem?.getSystemScanResult?.(sys.id);
+    return scanned ? (sys.name ?? '???') : '???';
+  }
+
+  // ── Skan układu STRATCOM (wspólne dla panelu galaktyki i radaru) ──────────
+  // Buduje opis sekcji: wiersze wyników (liczby ciał wg osiągniętego tieru) + stan
+  // kontrolki (locked/scanning/scan/rescan/full/null) + wysokość w pikselach.
+  _buildSystemScanLayout(sys, obsSys, explored) {
+    const LINE = 13, BTN = 18, GAP = 4;
+    const layout = { resultLines: [], control: null, pct: 0, height: 0 };
+    if (!obsSys || sys?.isHome) return layout;   // home znany — nie skanujemy
+
+    let result   = obsSys.getSystemScanResult?.(sys.id) ?? null;
+    const scan   = obsSys.getSystemScanProgress?.(sys.id) ?? null;
+    const maxTier = obsSys.getMaxSystemScanTier?.() ?? 0;
+
+    // Odwiedzony układ → pełna wiedza o liczbie ciał (z EntityManager), bez potrzeby skanu.
+    if (!result && explored) {
+      const planets = EntityManager.getByTypeInSystem('planet', sys.id);
+      if (planets.length) {
+        const c = {
+          planets:    planets.length,
+          moons:      EntityManager.getByTypeInSystem('moon', sys.id).length,
+          planetoids: EntityManager.getByTypeInSystem('planetoid', sys.id).length,
+          asteroids:  EntityManager.getByTypeInSystem('asteroid', sys.id).length,
+          comets:     EntityManager.getByTypeInSystem('comet', sys.id).length,
+        };
+        c.total = c.planets + c.moons + c.planetoids + c.asteroids + c.comets;
+        result = { tier: 3, counts: c };
+      }
+    }
+
+    // Wiersze wyników wg osiągniętego tieru
+    if (result?.counts) {
+      const c = result.counts;
+      layout.resultLines.push({ label: t('fleet.scanPlanets'), value: c.planets });
+      if (result.tier >= 2) layout.resultLines.push({ label: t('fleet.scanMoons'), value: c.moons });
+      if (result.tier >= 3) {
+        layout.resultLines.push({ label: t('fleet.scanPlanetoids'), value: c.planetoids });
+        layout.resultLines.push({ label: t('fleet.scanAsteroids'),  value: c.asteroids });
+        layout.resultLines.push({ label: t('fleet.scanComets'),     value: c.comets });
+        layout.resultLines.push({ label: t('fleet.scanTotal'),      value: c.total, strong: true });
+      }
+    }
+
+    // Kontrolka
+    if (scan) {
+      layout.control = 'scanning';
+      layout.pct = scan.pct;
+    } else if (explored) {
+      layout.control = null;                      // odwiedzony — „Przełącz widok" wystarcza
+    } else if (maxTier <= 0) {
+      layout.control = 'locked';                  // wymaga obserwatorium Lv2+
+    } else if (!result || result.tier < maxTier) {
+      layout.control = result ? 'rescan' : 'scan';
+    } else {
+      layout.control = 'full';                    // wiemy maksimum dla tego poziomu
+    }
+
+    // Wysokość
+    let h = 0;
+    if (layout.resultLines.length) h += layout.resultLines.length * LINE + 2;
+    if (layout.control === 'scanning')  h += LINE + 8 + BTN + GAP;   // etykieta + pasek + anuluj
+    else if (layout.control === 'full') h += LINE;
+    else if (layout.control)            h += BTN + GAP;              // locked/scan/rescan
+    layout.height = h;
+    return layout;
+  }
+
+  // Rysuj sekcję skanu układu od pozycji iy; zwraca nowe iy. Pcha hit-zony skanu/anulowania.
+  _drawSystemScanSection(ctx, px, iy, panelW, PAD, sys, layout) {
+    const btnW = panelW - PAD * 2, btnH = 18;
+
+    // Wiersze wyników (etykieta z lewej, liczba z prawej)
+    for (const r of layout.resultLines) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = r.strong ? THEME.textHeader : THEME.textSecondary;
+      ctx.fillText(r.label, px + PAD, iy + 9);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = r.strong ? THEME.accent : THEME.textPrimary;
+      ctx.fillText(String(r.value), px + panelW - PAD, iy + 9);
+      ctx.textAlign = 'left';
+      iy += 13;
+    }
+    if (layout.resultLines.length) iy += 2;
+
+    if (layout.control === 'scanning') {
+      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.info ?? THEME.accent;
+      ctx.fillText(t('fleet.scanProgress', Math.round(layout.pct * 100)), px + PAD, iy + 9);
+      iy += 13;
+      ctx.fillStyle = THEME.bgSecondary; ctx.fillRect(px + PAD, iy, btnW, 5);
+      ctx.fillStyle = THEME.accent;      ctx.fillRect(px + PAD, iy, btnW * layout.pct, 5);
+      iy += 8;
+      ctx.strokeStyle = THEME.border; ctx.strokeRect(px + PAD, iy, btnW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary; ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.scanCancel'), px + PAD + btnW / 2, iy + 13); ctx.textAlign = 'left';
+      this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'stratcom_scan_cancel', data: { systemId: sys.id } });
+      iy += btnH + 4;
+    } else if (layout.control === 'locked') {
+      ctx.fillStyle = 'rgba(60,60,60,0.3)'; ctx.fillRect(px + PAD, iy, btnW, btnH);
+      ctx.strokeStyle = THEME.border; ctx.strokeRect(px + PAD, iy, btnW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.scanLocked'), px + PAD + btnW / 2, iy + 13); ctx.textAlign = 'left';
+      iy += btnH + 4;
+    } else if (layout.control === 'scan' || layout.control === 'rescan') {
+      ctx.fillStyle = 'rgba(0,204,255,0.10)'; ctx.fillRect(px + PAD, iy, btnW, btnH);
+      ctx.strokeStyle = THEME.info ?? THEME.accent; ctx.strokeRect(px + PAD, iy, btnW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.info ?? THEME.accent; ctx.textAlign = 'center';
+      ctx.fillText(t(layout.control === 'rescan' ? 'fleet.scanMore' : 'fleet.opsScan'), px + PAD + btnW / 2, iy + 13); ctx.textAlign = 'left';
+      this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'stratcom_scan', data: { systemId: sys.id } });
+      iy += btnH + 4;
+    } else if (layout.control === 'full') {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'left'; ctx.fillStyle = THEME.success;
+      ctx.fillText(t('fleet.scanComplete'), px + PAD, iy + 9);
+      iy += 13;
+    }
+    return iy;
   }
 
   // ── Warp multi-hop UI ──────────────────────────────────────────────────────

@@ -109,6 +109,11 @@ export const GAME_CONFIG = {
     //   (zgrubny: obecność+jakość surowców, kolonizacja). Dokładne ilości dopiero po statku
     //   naukowym (analyzed). Zastąpił pasywny auto-skan. Bramkuje: startBodyScan, przycisk, FX 3D.
     observatoryBodyScan:  true,
+    // observatorySystemScan: czasowy skan obcego układu z STRATCOM (obserwatorium Lv2+).
+    //   Tiery wg poziomu: Lv2→liczba planet, Lv3-4→+księżyce, Lv5+→wszystkie ciała (rozbicie).
+    //   Nie eksploruje układu (bez podglądu/kolonizacji) — ujawnia tylko liczby ciał zdalnie.
+    //   Bramkuje: startSystemScan, przycisk STRATCOM. Bez migracji save (pola z ?? {}).
+    observatorySystemScan: true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

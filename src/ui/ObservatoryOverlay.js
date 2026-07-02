@@ -259,7 +259,9 @@ export class ObservatoryOverlay {
         const dr = obsSys.getDisasterReduction(colMgr?.activePlanetId);
         const yb = obsSys.getMissionYieldBonus(colMgr?.activePlanetId);
         const wy = obsSys.getWarningYears();
-        statusEl.textContent = `Lv${maxLevel} | -${dr.toFixed(1)}% ${t('observatory.disaster')} | +${(yb * 100).toFixed(0)}% yield | ${wy.toFixed(1)}${t('observatory.warningYearsShort')}`;
+        const activeScans = obsSys.getActiveBodyScans?.().length ?? 0;
+        const maxScans    = obsSys.getMaxConcurrentBodyScans?.() ?? 1;
+        statusEl.textContent = `Lv${maxLevel} | -${dr.toFixed(1)}% ${t('observatory.disaster')} | +${(yb * 100).toFixed(0)}% yield | ${wy.toFixed(1)}${t('observatory.warningYearsShort')} | ${t('observatory.scanSlots', activeScans, maxScans)}`;
       }
     }
 
@@ -311,8 +313,18 @@ export class ObservatoryOverlay {
         ev.stopPropagation();
         const id = btn.dataset.bodyid;
         const obs = window.KOSMOS?.observatorySystem;
-        if (btn.dataset.bodyscanaction === 'start') obs?.startBodyScan?.(id);
-        else obs?.cancelBodyScan?.(id, 'manual');
+        if (btn.dataset.bodyscanaction === 'start') {
+          const ok = obs?.startBodyScan?.(id);
+          // Odrzucenie z powodu limitu równoczesnych skanów → czytelny toast.
+          if (!ok && obs && (obs.getActiveBodyScans?.().length ?? 0) >= (obs.getMaxConcurrentBodyScans?.() ?? 1)) {
+            EventBus.emit('ui:toast', {
+              text: t('observatory.scanLimitReached', obs.getMaxConcurrentBodyScans?.() ?? 1),
+              color: THEME.warning, durationMs: 3000,
+            });
+          }
+        } else {
+          obs?.cancelBodyScan?.(id, 'manual');
+        }
         this._refresh();
       };
     });
@@ -655,10 +667,16 @@ export class ObservatoryOverlay {
   // ── UNKNOWN: zero danych, tylko przycisk skanu ─────────────────────
   _renderUnknownDetails(body, icon, obsSys) {
     const hasObs = (obsSys?.getMaxObservatoryLevel?.() ?? 0) > 0;
+    const maxScans    = obsSys?.getMaxConcurrentBodyScans?.() ?? 1;
+    const atLimit     = (obsSys?.getActiveBodyScans?.().length ?? 0) >= maxScans;
     let html = `<div style="${this._rightColStyle()}">`;
     html += `<div style="font-size:18px; font-weight:bold; color:${THEME.textHeader}; margin-bottom:8px;">${icon} ???</div>`;
     html += `<div style="color:${THEME.textDim}; font-size:13px; margin-bottom:16px;">${t('observatory.tierUnknown')}</div>`;
-    if (hasObs) {
+    if (hasObs && atLimit) {
+      // Obserwatorium jest, ale wszystkie sloty skanu zajęte — przycisk wyszarzony + wskazówka.
+      html += `<div style="${this._scanBtnStyle(false)} padding:8px 18px; font-size:12px; opacity:0.5; display:inline-block;">🔭 ${t('observatory.scanBodyBtn')}</div>`;
+      html += `<div style="color:${THEME.warning}; font-size:11px; margin-top:8px;">⚠ ${t('observatory.scanLimitHint', maxScans)}</div>`;
+    } else if (hasObs) {
       html += `<button data-bodyscanaction="start" data-bodyid="${body.id}" style="${this._scanBtnStyle(true)} padding:8px 18px; font-size:12px;">🔭 ${t('observatory.scanBodyBtn')}</button>`;
     } else {
       html += `<div style="${this._scanBtnStyle(false)} padding:8px 18px; font-size:12px; opacity:0.5; display:inline-block;">🔭 ${t('observatory.scanBodyBtn')}</div>`;

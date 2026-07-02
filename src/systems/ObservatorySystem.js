@@ -21,6 +21,7 @@ import { t }         from '../i18n/i18n.js';
 import { DistanceUtils } from '../utils/DistanceUtils.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
+import { SystemGenerator } from '../generators/SystemGenerator.js';
 
 // Zasięg detekcji wrogich statków per poziom obserwatorium (AU).
 // Index 0 = brak obserwatorium — każda kolonia dostaje 1 AU pasywnego wzroku
@@ -41,6 +42,10 @@ const SCAN_DURATION_YEARS = 3.0;
 // (~3 miesiące gry); dzielony przez najwyższy poziom obserwatorium (lepszy sprzęt = szybciej).
 // Po ukończeniu ciało → explored (zgrubny poziom: kolonizacja + obecność surowców, bez ilości).
 const BODY_SCAN_DURATION_YEARS = 0.25;
+
+// Czasowy skan obcego układu z STRATCOM. Czas liczony w latach GRY (deltaYears z time:tick,
+// NIE civYears) — stały 1 rok gry, niezależnie od poziomu obserwatorium (decyzja gracza).
+const SYSTEM_SCAN_DURATION_YEARS = 1.0;
 
 export class ObservatorySystem {
   constructor() {
@@ -68,13 +73,22 @@ export class ObservatorySystem {
     // BODY_SCAN_DURATION/level → body.explored=true (zgrubny). Persystuje w save.
     this._bodyScans = new Map();
 
+    // Skan STRATCOM — aktywne czasowe skany obcych układów:
+    // Map<systemId, {progress, startedYear, targetTier}>. Persystuje w save.
+    this._systemScans = new Map();
+
+    // Skan STRATCOM — ukończone wyniki: Map<systemId, {tier, counts}>.
+    // tier: 1=liczba planet, 2=+księżyce, 3=wszystkie ciała (rozbicie). Persystuje w save.
+    this._systemScanResults = new Map();
+
     // Rok gry
     this._gameYear = 0;
 
-    // Nasłuch czasu — civDeltaYears (mechaniki 4X biegną szybciej)
-    EventBus.on('time:tick', ({ civDeltaYears }) => {
+    // Nasłuch czasu — civDeltaYears (mechaniki 4X biegną szybciej) + deltaYears (lata gry:
+    // skan STRATCOM liczy się w czasie GRY, nie civ, by trwał dokładnie 1 rok gry).
+    EventBus.on('time:tick', ({ civDeltaYears, deltaYears }) => {
       if (!window.KOSMOS?.civMode) return;
-      this._tickScan(civDeltaYears);
+      this._tickScan(civDeltaYears, deltaYears);
     });
 
     EventBus.on('time:display', ({ gameTime }) => {
@@ -270,12 +284,28 @@ export class ObservatorySystem {
     return BODY_SCAN_DURATION_YEARS / Math.max(1, this.getMaxObservatoryLevel());
   }
 
+  // Ile ciał można skanować RÓWNOCZEŚNIE w układzie (zależne od poziomu obserwatorium):
+  // brak obserwatorium → 0; Lv1-2 → 1; Lv3 → 2; Lv4+ → 3.
+  getMaxConcurrentBodyScans() {
+    const lvl = this.getMaxObservatoryLevel();
+    if (lvl <= 0) return 0;
+    if (lvl < 3)  return 1;
+    if (lvl === 3) return 2;
+    return 3;
+  }
+
   // Rozpocznij ręczny skan ciała. Walidacja: feature ON, jest obserwatorium,
-  // encja istnieje, jeszcze niezbadana (nie explored), nie skanowana już.
+  // encja istnieje, jeszcze niezbadana (nie explored), nie skanowana już, w limicie.
   startBodyScan(bodyId) {
     if (!GAME_CONFIG.FEATURES?.observatoryBodyScan) return false;
     if (!bodyId || this._bodyScans.has(bodyId)) return false;
     if (this.getMaxObservatoryLevel() <= 0) return false;   // wymaga obserwatorium
+    // Limit równoczesnych skanów wg poziomu obserwatorium (Lv3=2, Lv4+=3).
+    const limit = this.getMaxConcurrentBodyScans();
+    if (this._bodyScans.size >= limit) {
+      EventBus.emit('observatory:bodyScanRejected', { bodyId, reason: 'scan_limit', limit });
+      return false;
+    }
     const body = EntityManager.get(bodyId);
     if (!body) return false;
     if (body.explored) return false;                        // już zbadane (zgrubnie lub szczegółowo)
@@ -366,9 +396,158 @@ export class ObservatorySystem {
     return window.KOSMOS?.homePlanet?.name ?? t('observatory.title');
   }
 
+  // ── Czasowy skan obcego układu (STRATCOM) ──────────────────────────────
+  // Zdalny skan gwiazdy ujawnia liczbę ciał układu, BEZ jego eksploracji/kolonizacji.
+  // Tier wg poziomu obserwatorium: Lv2→planety, Lv3-4→+księżyce, Lv5+→wszystkie ciała.
+
+  // Tier danych ujawniany przy danym poziomie obserwatorium (0 = nie można skanować).
+  getSystemScanTierForLevel(level) {
+    if (level < 2)   return 0;
+    if (level === 2) return 1;   // liczba planet
+    if (level < 5)   return 2;   // Lv3-4: +księżyce
+    return 3;                    // Lv5+: wszystkie ciała (rozbicie)
+  }
+
+  // Najwyższy tier jaki gracz może teraz osiągnąć (wg aktualnego obserwatorium).
+  getMaxSystemScanTier() {
+    return this.getSystemScanTierForLevel(this.getMaxObservatoryLevel());
+  }
+
+  // Ile układów można skanować RÓWNOCZEŚNIE (ta sama krzywa co skan ciał):
+  // Lv1-2 → 1, Lv3 → 2, Lv4+ → 3. (Lv<2 i tak nie może skanować — tier 0.)
+  getMaxConcurrentSystemScans() {
+    return this.getMaxConcurrentBodyScans();
+  }
+
+  // Czas skanu układu = stały 1 rok GRY (nie zależy od poziomu obserwatorium).
+  _getSystemScanDurationYears() {
+    return SYSTEM_SCAN_DURATION_YEARS;
+  }
+
+  // Wpis galaxyStar dla danego systemId (źródło seeda do peek).
+  _getGalaxyStar(systemId) {
+    const gd = window.KOSMOS?.galaxyData;
+    return gd?.systems?.find(s => s.id === systemId) ?? null;
+  }
+
+  // Rozpocznij skan układu. Walidacja: feature ON, obserwatorium Lv2+, układ obcy
+  // (nie home), istnieje w galaxyData, nie skanowany już, i jest CO ujawnić (docelowy
+  // tier > już-osiągnięty). Zwraca true gdy skan wystartował.
+  startSystemScan(systemId) {
+    if (!GAME_CONFIG.FEATURES?.observatorySystemScan) return false;
+    if (!systemId || this._systemScans.has(systemId)) return false;
+    const targetTier = this.getMaxSystemScanTier();
+    if (targetTier <= 0) {                                   // wymaga obserwatorium Lv2+
+      EventBus.emit('observatory:systemScanRejected', { systemId, reason: 'needs_level' });
+      return false;
+    }
+    // Limit równoczesnych skanów układów (Lv2 → 1, Lv3 → 2, Lv4+ → 3).
+    const limit = this.getMaxConcurrentSystemScans();
+    if (this._systemScans.size >= limit) {
+      EventBus.emit('observatory:systemScanRejected', { systemId, reason: 'scan_limit', limit });
+      return false;
+    }
+    const gs = this._getGalaxyStar(systemId);
+    if (!gs || gs.isHome) {                                  // home znany; nieistniejący układ pomijamy
+      EventBus.emit('observatory:systemScanRejected', { systemId, reason: 'invalid_target' });
+      return false;
+    }
+    const prev = this._systemScanResults.get(systemId);
+    if (prev && prev.tier >= targetTier) {                  // już wiemy tyle (lub więcej)
+      EventBus.emit('observatory:systemScanRejected', { systemId, reason: 'already_scanned' });
+      return false;
+    }
+    this._systemScans.set(systemId, { progress: 0, startedYear: this._gameYear, targetTier });
+    EventBus.emit('observatory:systemScanStarted', { systemId, targetTier, durationYears: this._getSystemScanDurationYears() });
+    return true;
+  }
+
+  // Anuluj trwający skan układu.
+  cancelSystemScan(systemId, reason = 'manual') {
+    if (!this._systemScans.has(systemId)) return false;
+    this._systemScans.delete(systemId);
+    EventBus.emit('observatory:systemScanCancelled', { systemId, reason });
+    return true;
+  }
+
+  // Postęp skanu układu: { progress, durationYears, targetTier, pct } | null.
+  getSystemScanProgress(systemId) {
+    const scan = this._systemScans.get(systemId);
+    if (!scan) return null;
+    const durationYears = this._getSystemScanDurationYears();
+    return {
+      progress:   scan.progress,
+      durationYears,
+      targetTier: scan.targetTier,
+      pct: durationYears > 0 ? Math.min(1, scan.progress / durationYears) : 0,
+    };
+  }
+
+  // Ukończony wynik skanu układu: { tier, counts } | null.
+  getSystemScanResult(systemId) {
+    return this._systemScanResults.get(systemId) ?? null;
+  }
+
+  // Wszystkie aktywne skany układów (do UI).
+  getActiveSystemScans() {
+    const out = [];
+    const durationYears = this._getSystemScanDurationYears();
+    for (const [systemId, scan] of this._systemScans) {
+      out.push({
+        systemId,
+        progress:   scan.progress,
+        durationYears,
+        targetTier: scan.targetTier,
+        pct: durationYears > 0 ? Math.min(1, scan.progress / durationYears) : 0,
+      });
+    }
+    return out;
+  }
+
+  // Tick aktywnych skanów układów (akumuluje lata GRY). Brak obserwatorium Lv2+ → anuluj.
+  _tickSystemScans(gameDeltaYears = 0) {
+    if (this._systemScans.size === 0) return;
+    const canScan = this.getMaxSystemScanTier() > 0;
+    for (const [systemId, scan] of [...this._systemScans]) {
+      if (!canScan) { this.cancelSystemScan(systemId, 'no_observatory'); continue; }
+      scan.progress += gameDeltaYears;
+      if (scan.progress >= this._getSystemScanDurationYears()) {
+        this._completeSystemScan(systemId, scan);
+      }
+    }
+  }
+
+  _completeSystemScan(systemId, scan) {
+    this._systemScans.delete(systemId);
+    const counts = this._countSystemBodies(systemId);
+    if (!counts) return;                                     // brak danych (np. usunięty układ)
+    this._systemScanResults.set(systemId, { tier: scan.targetTier, counts });
+    EventBus.emit('observatory:systemScanned', { systemId, tier: scan.targetTier, counts });
+  }
+
+  // Policz ciała układu. Jeśli już wygenerowany (encje w EntityManager) → licz je
+  // (źródło prawdy). Inaczej deterministyczny peek z seeda (spójny z późniejszą eksploracją).
+  _countSystemBodies(systemId) {
+    const planets = EntityManager.getByTypeInSystem('planet', systemId);
+    if (planets.length > 0) {
+      const c = {
+        planets:    planets.length,
+        moons:      EntityManager.getByTypeInSystem('moon', systemId).length,
+        planetoids: EntityManager.getByTypeInSystem('planetoid', systemId).length,
+        asteroids:  EntityManager.getByTypeInSystem('asteroid', systemId).length,
+        comets:     EntityManager.getByTypeInSystem('comet', systemId).length,
+      };
+      c.total = c.planets + c.moons + c.planetoids + c.asteroids + c.comets;
+      return c;
+    }
+    const gs = this._getGalaxyStar(systemId);
+    if (!gs) return null;
+    return new SystemGenerator().peekCountsForStar(gs);
+  }
+
   // ── Tick skanowania ───────────────────────────────────────────────────
 
-  _tickScan(civDeltaYears) {
+  _tickScan(civDeltaYears, gameDeltaYears = 0) {
     // Detekcja statków działa continuous — wykrycie wroga nie może czekać jak
     // ręczny skan ciała. Każdy tick rebuildsowi Set i emituje diff.
     this._tickVesselDetection(civDeltaYears);
@@ -379,6 +558,9 @@ export class ObservatorySystem {
 
     // Ręczne skany ciał niebieskich (reforma obserwatorium — zastąpił pasywny auto-skan).
     this._tickBodyScans(civDeltaYears);
+
+    // Czasowe skany obcych układów (STRATCOM) — w czasie GRY (deltaYears), nie civ.
+    this._tickSystemScans(gameDeltaYears);
   }
 
   // Rebuild zbioru wykrytych wrogich statków na podstawie zasięgów wszystkich kolonii gracza.
@@ -506,11 +688,19 @@ export class ObservatorySystem {
     const bodyScans = {};
     this._bodyScans.forEach((val, key) => { bodyScans[key] = val; });
 
+    // Skan STRATCOM — aktywne skany układów + ukończone wyniki (Map→obj).
+    const systemScans = {};
+    this._systemScans.forEach((val, key) => { systemScans[key] = val; });
+    const systemScanResults = {};
+    this._systemScanResults.forEach((val, key) => { systemScanResults[key] = val; });
+
     return {
       scanAccum,
       discoveries: this._discoveries,
       vesselScans,
       bodyScans,
+      systemScans,
+      systemScanResults,
     };
   }
 
@@ -537,6 +727,14 @@ export class ObservatorySystem {
     // Reforma obserwatorium — aktywne ręczne skany ciał (defensywny default = brak).
     for (const [key, val] of Object.entries(data.bodyScans ?? {})) {
       this._bodyScans.set(key, val);
+    }
+
+    // Skan STRATCOM — aktywne skany + wyniki (defensywny default = brak; bez migracji save v89).
+    for (const [key, val] of Object.entries(data.systemScans ?? {})) {
+      this._systemScans.set(key, val);
+    }
+    for (const [key, val] of Object.entries(data.systemScanResults ?? {})) {
+      this._systemScanResults.set(key, val);
     }
   }
 }
