@@ -114,6 +114,10 @@ export const GAME_CONFIG = {
     //   Nie eksploruje układu (bez podglądu/kolonizacji) — ujawnia tylko liczby ciał zdalnie.
     //   Bramkuje: startSystemScan, przycisk STRATCOM. Bez migracji save (pola z ?? {}).
     observatorySystemScan: true,
+    // navPeekCards: karta "peek" wysuwana nad slotem dolnego paska nawigacji na
+    //   hover (podgląd kluczowych danych domeny) + pasywne badge alertów na slotach.
+    //   Render/UI-only — brak migracji save. Rollback OFF przywraca goły pasek.
+    navPeekCards:         true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

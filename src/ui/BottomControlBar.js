@@ -41,7 +41,14 @@ export class BottomControlBar {
 
   _stripTop(H) {
     const navTop = H - COSMIC.BOTTOM_LOG_TRIG_H - COSMIC.BOTTOM_NAV_H;
-    return navTop - STRIP_H;
+    let top = navTop - STRIP_H;
+    // Gdy kafelek OSTATNIEGO slotu (Science/'tech') jest wysunięty — pasek czasu jedzie w górę
+    // razem z nim (siada tuż nad kartą, animowany w synchronizacji), zamiast być zasłanianym.
+    const peek = window.KOSMOS?.bottomNavBar?._peek;
+    const lastPrimary = NAV_GROUPS.length ? NAV_GROUPS[NAV_GROUPS.length - 1].primary : null;
+    const cardTop = peek?.peekTopY?.(lastPrimary);
+    if (cardTop != null) top = Math.round(cardTop - STRIP_H);
+    return top;
   }
 
   // ── Rysowanie ───────────────────────────────────────────────────────────
