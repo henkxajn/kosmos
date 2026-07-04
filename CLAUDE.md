@@ -503,6 +503,22 @@ UIManager 5 wpięć, `fcGroupPanel` w GameConfig, i18n `fleetGroup.*` PL+EN. Smo
 
 ---
 
+## S3.4 stacje — PAUZA po FAZIE 2 (live-gate pending)
+
+Przeprojektowanie stacji orbitalnych w pełny ekran gracza (moduły + POP + ekran + transport +
+etykiety), plan wielofazowy. **ZAMROŻONE po FAZIE 2 (2026-07-04).** FAZA 0 DONE (audyt
+`docs/audits/s34-phase0-findings.md`), FAZA 1 DONE (`35ce5a2`, live-gate PASS z zastrzeżeniem),
+FAZA 2 DONE (`7073a99`, smoke 54/54, **live-gate FAZY 2 PENDING** — Filip wykona z manuala
+`docs/testing/s34-faza2-live-gate-manual.md`). FAZY 3-6 NIEROZPOCZĘTE. Save v90.
+
+**Wznowienie: `docs/plans/s34-stations-continuation.md`** (samowystarczalny — świeża instancja
+wznawia wyłącznie z tego pliku + repo). ⚠ FLAGA na start FAZY 4: `obsada = max(pop, popCapacity)`
+to tymczasowy mostek (decyzja o powrocie do `obsada = pop` przy pasażerach). ⚠ CADENCE: buildTime
+stacji w latach cywilizacyjnych (advance civDeltaYears). Pliki logiki: `StationSystem.js` (`_tick`),
+`StationModuleData.js` (balans), `Station.js` (encja+gettery).
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
