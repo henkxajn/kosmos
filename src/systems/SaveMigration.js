@@ -14,10 +14,11 @@
 
 import { ORBITAL_ROLES, getOrbitRange, computeBodyRadius } from '../data/OrbitalRolesData.js';
 import EntityManager from '../core/EntityManager.js';
+import { createStarterModules } from '../data/StationModuleData.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 
-export const CURRENT_VERSION     = 89;
+export const CURRENT_VERSION     = 90;
 export const MIN_SUPPORTED_VERSION = 4;
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
@@ -107,6 +108,7 @@ const MIGRATIONS = {
   86: _migrateV86toV87,
   87: _migrateV87toV88,
   88: _migrateV88toV89,
+  89: _migrateV89toV90,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2108,6 +2110,25 @@ function _migrateV82toV83(data) {
 // v87 → v88: Warp multi-hop (WarpRouteSystem) — lazy default vessel.warpRoute=null.
 //   Restore i tak robi `&& Array.isArray` fallback, ale stamp tutaj dla spójności
 //   łańcucha wersji (konwencja repo). Brak innych zmian formatu.
+// v89 → v90: S3.4 FAZA 1 — stacje orbitalne dostają moduły + populację załogi.
+// Istniejące stacje: wyposażenie startowe (1× habitat + 1× power_atom, wzór createStation),
+// pop=0, pusta kolejka modułów. Nowe pola round-tripują przez StationSystem.serialize/restore
+// (constructor Station: ?? default). stationSystem null/brak (save bez stacji) → pętla nie
+// rusza (guard Array.isArray) — jak _migrateV84toV85. popCapacity NIE jest polem (pochodna z modules).
+function _migrateV89toV90(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  const stations = c4x?.stationSystem;
+  if (Array.isArray(stations)) {
+    for (const s of stations) {
+      if (!s || typeof s !== 'object') continue;
+      if (!Array.isArray(s.modules) || s.modules.length === 0) s.modules = createStarterModules();
+      if (typeof s.pop !== 'number') s.pop = 0;
+      if (!Array.isArray(s.pendingModuleOrders)) s.pendingModuleOrders = [];
+    }
+  }
+  return data;
+}
+
 function _migrateV87toV88(data) {
   const c4x = data.civ4x ?? data.c4x;
   if (c4x?.vesselManager?.vessels) {

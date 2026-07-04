@@ -7,6 +7,7 @@
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import { Station } from '../entities/Station.js';
+import { createStarterModules } from '../data/StationModuleData.js';
 
 export class StationSystem {
   constructor() {
@@ -42,6 +43,7 @@ export class StationSystem {
       systemId:      body.systemId ?? 'sys_home',
       x:             body.x,
       y:             body.y,
+      modules:       createStarterModules(),   // S3.4 FAZA 1.3 — 1× habitat + 1× power_atom (w cenie bazy)
     });
     EntityManager.add(station);
 
@@ -90,6 +92,9 @@ export class StationSystem {
       createdYear:   s.createdYear,
       depot:         s.depot.serialize(),   // S3.3b-S3 — {fuel, warp_cores} (zastąpił fuelStore/fuelCapacity)
       systemId:      s.systemId,
+      modules:             s.modules,               // S3.4 FAZA 1 — lista { id, moduleType, level, active }
+      pop:                 s.pop,                   // załoga (popCapacity = pochodna, NIE serializowana)
+      pendingModuleOrders: s.pendingModuleOrders,   // kolejka budowy modułów
     }));
   }
 

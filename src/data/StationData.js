@@ -27,6 +27,7 @@ export const STATIONS = {
     // NIEUŻYWANE — materializacja jest natychmiastowa po spend (canAfford → spend → stacja
     // od razu). Zostaje w danych, by przyszły slice mógł włączyć progresję bez zmiany schematu.
     buildTime: 7,   // lat gry (~6–8) — obecnie nietykany (instant materialize)
+    maxModules: 8,  // S3.4 FAZA 1 — limit slotów modułów (tier 1); patrz StationModuleData.js
   },
 };
 

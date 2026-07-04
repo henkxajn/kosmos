@@ -1,10 +1,12 @@
 // Station — encja stacji orbitalnej (osobny typ 'station', NIE Vessel). S3.3b-S2 fundament.
 // Pozycja zarządzana przez OrbitalSpaceSystem (rola 'station' → GEO, anchored, omega=0),
 // nie przez komponent Keplera (orbital = null → fizyka orbitalna jej nie tyka).
-// Tier 1 = baza bez modułów. fuelStore/fuelCapacity to placeholdery pod depot (S3.3b-S3).
+// S3.4 FAZA 1: encja rozszerzona o moduły (modules[]), populację załogi (pop) i kolejkę budowy
+// modułów (pendingModuleOrders[]). popCapacity liczone DYNAMICZNIE z modułów habitat (getter).
 
 import { CelestialBody } from './CelestialBody.js';
 import { StationDepot } from './StationDepot.js';
+import { STATION_MODULES } from '../data/StationModuleData.js';
 
 export class Station extends CelestialBody {
   constructor(config) {
@@ -33,5 +35,25 @@ export class Station extends CelestialBody {
 
     this.systemId      = config.systemId ?? 'sys_home';
     this.explored      = true;                          // własna stacja — zawsze „znana"
+
+    // ── S3.4 FAZA 1 — moduły, populacja załogi, kolejka budowy modułów ────────
+    // modules: lista instancji { id, moduleType, level, active } (wg planu — lista, NIE mapa).
+    this.modules             = config.modules ?? [];
+    // pop: aktualna załoga stacji (serializowana). popCapacity = pochodna (getter niżej).
+    this.pop                 = config.pop ?? 0;
+    // Kolejka budowy modułów — wzór colony.pendingStationOrders, ale trzymana NA ENCJI stacji.
+    this.pendingModuleOrders = config.pendingModuleOrders ?? [];
+  }
+
+  // popCapacity — pochodna pojemność załogi: Σ (efekt popCapacity modułu × poziom) po modułach
+  // habitat. NIE serializowana (S3.4 FAZA 1 decyzja #1: liczona z modules przy każdym odczycie),
+  // więc dodanie/usunięcie/ulepszenie habitatu automatycznie zmienia pojemność stacji.
+  get popCapacity() {
+    let cap = 0;
+    for (const m of this.modules) {
+      const def = STATION_MODULES[m.moduleType];
+      if (def && def.popCapacity) cap += def.popCapacity * (m.level || 1);
+    }
+    return cap;
   }
 }
