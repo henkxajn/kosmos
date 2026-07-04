@@ -43,6 +43,9 @@ export class Station extends CelestialBody {
     this.pop                 = config.pop ?? 0;
     // Kolejka budowy modułów — wzór colony.pendingStationOrders, ale trzymana NA ENCJI stacji.
     this.pendingModuleOrders = config.pendingModuleOrders ?? [];
+    // S3.4 FAZA 2 — kolejka budowy statków w stoczni orbitalnej (mirror colony.shipQueues).
+    // Serializowana; brak w starym save v90 → [] przez ?? (bez migracji, precedens refuelAutomatically).
+    this.shipQueues          = config.shipQueues ?? [];
   }
 
   // popCapacity — pochodna pojemność załogi: Σ (efekt popCapacity modułu × poziom) po modułach
@@ -55,5 +58,22 @@ export class Station extends CelestialBody {
       if (def && def.popCapacity) cap += def.popCapacity * (m.level || 1);
     }
     return cap;
+  }
+
+  // tradeCapacity — pochodna (S3.4 FAZA 2, decyzja #3): Σ tradeCapacityByLevel po AKTYWNYCH modułach
+  // trade. Tylko WYSTAWIONA (realne wpięcie w CivilianTradeSystem = przyszły slice). Niesertializowana.
+  get tradeCapacity() {
+    let tc = 0;
+    for (const m of this.modules) {
+      if (m.active === false) continue;
+      const def = STATION_MODULES[m.moduleType];
+      if (def && def.tradeCapacityByLevel) tc += def.tradeCapacityByLevel[(m.level || 1) - 1] ?? 0;
+    }
+    return tc;
+  }
+
+  // hasActiveShipyard — czy stacja ma DZIAŁAJĄCĄ stocznię (gate kolejki budowy statków). Pochodna.
+  get hasActiveShipyard() {
+    return this.modules.some(m => m.active !== false && m.moduleType === 'shipyard');
   }
 }

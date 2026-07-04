@@ -7,7 +7,9 @@
 //
 // Konwencje pól definicji:
 //   cost / commodityCost   — surowce bazowe / towary do budowy (spend z depotu stacji, FAZA 2)
-//   buildTime              — czas budowy w LATACH GRY (spójnie z BuildingsData; ~dni w komentarzu)
+//   buildTime              — czas budowy w LATACH CYWILIZACYJNYCH (advance civDeltaYears — spójnie z
+//                            BuildingsData i ColonyManager._tickShipBuilds; 1 civrok ≈ 30.4 dnia gry
+//                            @CIV_TIME_SCALE=12, tj. ~30s real @1d/s). Komentarz = ~dni gry.
 //   energy                 — bilans energii modułu: +produkuje / -pobiera (FAZA 2 bilans energii)
 //   popWork                — POP potrzebne do obsługi modułu (FAZA 2 bilans pracy; 0 = autonomiczny)
 //   maxLevel               — maks. poziom (tylko trade_module >1; upgrade w FAZIE 2/3)
@@ -32,7 +34,7 @@ export const STATION_MODULES = {
     category:      'housing',
     cost:          { Fe: 400 },
     commodityCost: { pressure_modules: 40 },
-    buildTime:     0.25,   // lata gry (~90 dni)
+    buildTime:     3.0,    // lata cyw. (~91 dni gry)
     energy:        -1,
     popWork:       0,
     maxLevel:      1,
@@ -51,7 +53,7 @@ export const STATION_MODULES = {
     category:      'energy',
     cost:          { Fe: 300 },
     commodityCost: { power_cells: 60 },
-    buildTime:     0.33,   // lata gry (~120 dni)
+    buildTime:     4.0,    // lata cyw. (~122 dni gry)
     energy:        6,
     popWork:       0.1,
     maxLevel:      1,
@@ -68,7 +70,7 @@ export const STATION_MODULES = {
     category:      'energy',
     cost:          { Si: 300 },
     commodityCost: { conductor_bundles: 40 },
-    buildTime:     0.16,   // lata gry (~60 dni)
+    buildTime:     2.0,    // lata cyw. (~61 dni gry)
     energy:        3,
     popWork:       0.1,
     maxLevel:      1,
@@ -85,7 +87,7 @@ export const STATION_MODULES = {
     category:      'energy',
     cost:          { Ti: 400 },
     commodityCost: { plasma_cores: 80 },
-    buildTime:     0.49,   // lata gry (~180 dni)
+    buildTime:     6.0,    // lata cyw. (~182 dni gry)
     energy:        12,
     popWork:       0.1,
     maxLevel:      1,
@@ -102,7 +104,7 @@ export const STATION_MODULES = {
     category:      'energy',
     cost:          { Si: 400 },
     commodityCost: { electronic_systems: 60 },
-    buildTime:     0.25,   // lata gry (~90 dni)
+    buildTime:     3.0,    // lata cyw. (~91 dni gry)
     energy:        2,
     popWork:       0,      // obsługiwane przez roboty — zero POP
     maxLevel:      1,
@@ -120,7 +122,7 @@ export const STATION_MODULES = {
     category:      'industry',
     cost:          { Fe: 800 },
     commodityCost: { structural_alloys: 120 },
-    buildTime:     0.66,   // lata gry (~240 dni)
+    buildTime:     8.0,    // lata cyw. (~243 dni gry)
     energy:        -3,
     popWork:       0.2,
     maxLevel:      1,
@@ -139,7 +141,7 @@ export const STATION_MODULES = {
     category:      'trade',
     cost:          { Fe: 500 },
     commodityCost: { electronic_systems: 80 },
-    buildTime:     0.41,   // lata gry (~150 dni)
+    buildTime:     5.0,    // lata cyw. (~152 dni gry)
     energy:        -2,
     popWork:       0.5,
     maxLevel:      3,      // jedyny moduł z poziomami (upgrade w FAZIE 2/3)
@@ -161,7 +163,7 @@ export const STATION_MODULES = {
     category:      'science',
     cost:          { Ti: 300 },
     commodityCost: { electronic_systems: 60 },
-    buildTime:     0.41,   // lata gry (~150 dni)
+    buildTime:     5.0,    // lata cyw. (~152 dni gry)
     energy:        -2,
     popWork:       0.1,
     maxLevel:      1,
@@ -171,6 +173,10 @@ export const STATION_MODULES = {
     descEN:        'Orbital laboratory — conducts research in microgravity.',
   },
 };
+
+// Kolejność wyłączania modułów przy deficycie energii/pracy (S3.4 FAZA 2): trade → lab → shipyard.
+// Moduły spoza tej listy (habitat + power_*) to CORE — nigdy nie gasną (infrastruktura: mieszkania+energia).
+export const MODULE_SHED_ORDER = ['trade_module', 'lab', 'shipyard'];
 
 // Płaski koszt budowy modułu do spend()/canAfford() — surowce bazowe + towary w jednym obiekcie
 // (mirror stationTotalCost w StationData.js). FAZA 2 użyje przy budowie z kolejki.

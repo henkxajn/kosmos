@@ -819,6 +819,68 @@ export class GameScene {
         console.log(`[debug] destroyStation(${stationId}): ${ok}`);
         return ok;
       },
+      // ── S3.4 FAZA 2 — moduły stacji, bilans, stocznia (live-gate bez UI) ─────
+      // Pierwsza stacja gracza (helper wewnętrzny dla poniższych).
+      _firstStation: (stationId = null) => {
+        const ss = window.KOSMOS?.stationSystem;
+        if (!ss) { console.warn('[debug] Brak StationSystem'); return null; }
+        const st = stationId ? ss.getAllStations().find(s => s.id === stationId) : ss.getAllStations()[0];
+        if (!st) console.warn('[debug] Brak stacji — użyj spawnStation()');
+        return st;
+      },
+      // KOSMOS.debug.stationFillDepot(stationId?) — dosyp surowce/towary do budowy modułów/statków.
+      stationFillDepot: (stationId = null) => {
+        const st = window.KOSMOS.debug._firstStation(stationId);
+        if (!st) return null;
+        st.depot.receive({
+          Fe: 5000, Ti: 5000, Si: 5000, Cu: 5000, Hv: 2000, Li: 1000, W: 500, Pt: 500,
+          structural_alloys: 500, pressure_modules: 500, power_cells: 500, conductor_bundles: 500,
+          plasma_cores: 500, electronic_systems: 500, reactive_armor: 500,
+        });
+        console.log(`[debug] stationFillDepot → ${st.id}`);
+        return st.id;
+      },
+      // KOSMOS.debug.stationBuildModule(moduleType?, stationId?) — dosyp depot + zakolejkuj moduł.
+      stationBuildModule: (moduleType = 'trade_module', stationId = null) => {
+        const st = window.KOSMOS.debug._firstStation(stationId);
+        if (!st) return null;
+        window.KOSMOS.debug.stationFillDepot(st.id);
+        const r = window.KOSMOS?.stationSystem?.addPendingModuleOrder(st.id, moduleType);
+        console.log(`[debug] stationBuildModule(${moduleType}) →`, r);
+        return r;
+      },
+      // KOSMOS.debug.stationSetPop(pop, stationId?) — ustaw załogę (test bilansu pracy / prekursor pasażerów).
+      stationSetPop: (pop = 1, stationId = null) => {
+        const st = window.KOSMOS.debug._firstStation(stationId);
+        if (!st) return null;
+        st.pop = pop;
+        console.log(`[debug] stationSetPop → ${st.id} pop=${pop} (popCapacity=${st.popCapacity})`);
+        return st.id;
+      },
+      // KOSMOS.debug.stationBuildShip(shipId?, stationId?) — wymaga aktywnej stoczni; dosyp depot + kolejkuj.
+      stationBuildShip: (shipId = 'science_vessel', stationId = null) => {
+        const st = window.KOSMOS.debug._firstStation(stationId);
+        if (!st) return null;
+        window.KOSMOS.debug.stationFillDepot(st.id);
+        const r = window.KOSMOS?.stationSystem?.queueStationShip(st.id, shipId);
+        console.log(`[debug] stationBuildShip(${shipId}) →`, r);
+        return r;
+      },
+      // KOSMOS.debug.stationInfo(stationId?) — wypisz moduły (typ/poziom/active/powód), pop, tradeCapacity, kolejki.
+      stationInfo: (stationId = null) => {
+        const st = window.KOSMOS.debug._firstStation(stationId);
+        if (!st) return null;
+        const info = {
+          id: st.id, pop: st.pop, popCapacity: st.popCapacity, tradeCapacity: st.tradeCapacity,
+          hasActiveShipyard: st.hasActiveShipyard,
+          modules: st.modules.map(m => `${m.moduleType} lv${m.level} ${m.active === false ? '✗' + (m.inactiveReason || '') : '✓'}`),
+          pendingModuleOrders: st.pendingModuleOrders.map(o => `${o.moduleType} ${o.status} ${o.progress?.toFixed?.(2)}/${o.buildTime}`),
+          shipQueues: st.shipQueues.map(q => `${q.shipId} ${q.progress?.toFixed?.(2)}/${q.buildTime}`),
+        };
+        console.table ? console.table(info.modules) : null;
+        console.log('[debug] stationInfo', info);
+        return info;
+      },
       // ── M2a Combat Core (Commit 8) ────────────────────────────────────
       // KOSMOS.debug.enableProximity() — ProximitySystem on + instance.
       enableProximity: () => {
