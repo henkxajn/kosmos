@@ -217,10 +217,19 @@ export class StationSystem {
       return { ok: false, reason: 'requiresTech', requires: ship.requires };
     }
 
+    // Koszt = surowce (cost) + towary (commodityCost) kadłuba. BRAK kredytów/paliwa: budowa
+    // kadłuba w stoczni orbitalnej płacona wyłącznie MATERIAŁAMI z depotu (kredyty utrzymania
+    // floty to osobny sink — S3.5a-1 — z globalnej puli gracza, nie z depotu stacji).
     const cost = { ...(ship.cost ?? {}), ...(ship.commodityCost ?? {}) };
     if (!station.depot.spend(cost)) {
-      EventBus.emit('station:shipBuildRejected', { stationId, shipId, reason: 'insufficient_resources' });
-      return { ok: false, reason: 'insufficient_resources' };
+      // Wypisz brakujące pozycje (have < need) — żeby live-gate dało się debugować z konsoli.
+      const missing = {};
+      for (const [id, amt] of Object.entries(cost)) {
+        const have = station.depot.getAmount(id);
+        if (have < amt) missing[id] = +(amt - have).toFixed(3);
+      }
+      EventBus.emit('station:shipBuildRejected', { stationId, shipId, reason: 'insufficient_resources', missing });
+      return { ok: false, reason: 'insufficient_resources', missing };
     }
 
     station.shipQueues.push({ shipId, progress: 0, buildTime: ship.buildTime ?? 5 });

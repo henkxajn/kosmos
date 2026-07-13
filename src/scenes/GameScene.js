@@ -99,6 +99,7 @@ import { DeepSpaceCombatSystem } from '../systems/DeepSpaceCombatSystem.js';
 import { AutoRetreatSystem } from '../systems/AutoRetreatSystem.js';
 import { FleetSystem }         from '../systems/FleetSystem.js';
 import { HULLS } from '../data/HullsData.js';
+import { SHIPS } from '../data/ShipsData.js';
 import { MilitaryAI }        from '../systems/ai/MilitaryAI.js';
 import { EconAI }            from '../systems/ai/EconAI.js';
 import { THEME }             from '../config/ThemeConfig.js';
@@ -832,11 +833,23 @@ export class GameScene {
       stationFillDepot: (stationId = null) => {
         const st = window.KOSMOS.debug._firstStation(stationId);
         if (!st) return null;
-        st.depot.receive({
+        // Baza: materiały do budowy MODUŁÓW stacji (surowce + towary konstrukcyjne).
+        const fill = {
           Fe: 5000, Ti: 5000, Si: 5000, Cu: 5000, Hv: 2000, Li: 1000, W: 500, Pt: 500,
           structural_alloys: 500, pressure_modules: 500, power_cells: 500, conductor_bundles: 500,
           plasma_cores: 500, electronic_systems: 500, reactive_armor: 500,
-        });
+        };
+        // Union kosztów KAŻDEGO kadłuba budowalnego w stoczni (SHIPS + HULLS) — gwarantuje, że
+        // queueStationShip(dowolny kadłub) przejdzie po jednym filldepot. Fix S3.4-F2: brakowało
+        // Xe (space_supply_ship) + polymer_composites (science_vessel/cargo_ship/hull_*), przez co
+        // science_vessel odbijał się od insufficient_resources mimo „napełnionego" depotu.
+        for (const def of [...Object.values(SHIPS), ...Object.values(HULLS)]) {
+          const cost = { ...(def.cost ?? {}), ...(def.commodityCost ?? {}) };
+          for (const [id, amt] of Object.entries(cost)) {
+            fill[id] = Math.max(fill[id] ?? 0, amt * 10);   // ×10 headroom = kilka statków z jednego filla
+          }
+        }
+        st.depot.receive(fill);
         console.log(`[debug] stationFillDepot → ${st.id}`);
         return st.id;
       },
@@ -854,6 +867,12 @@ export class GameScene {
         const st = window.KOSMOS.debug._firstStation(stationId);
         if (!st) return null;
         st.pop = pop;
+        // FAZA 2 debug NIE egzekwuje capacity (pasażerowie = FAZA 4). Guard capacity przy PRZYLOCIE
+        // pasażera powstanie w FAZIE 4 (_processPassengerArrival: gate station.pop < station.popCapacity
+        // → pełna stacja = status no_housing, statek czeka zadokowany). Tu tylko ostrzeżenie.
+        if (pop > st.popCapacity) {
+          console.warn(`[debug] stationSetPop: pop=${pop} > popCapacity=${st.popCapacity} — FAZA 2 nie egzekwuje limitu; guard capacity dojdzie w FAZIE 4 (przylot pasażera).`);
+        }
         console.log(`[debug] stationSetPop → ${st.id} pop=${pop} (popCapacity=${st.popCapacity})`);
         return st.id;
       },

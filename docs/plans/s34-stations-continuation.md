@@ -48,7 +48,7 @@ Habitaty auto-obsadzają moduły do swojej pojemności.
 |------|--------|-------|
 | **FAZA 0** — mini-audyty | ✅ DONE | `docs/audits/s34-phase0-findings.md` (workflow 4 agenty + 4 weryfikatory, confidence high) |
 | **FAZA 1** — dane + model + migracja v90 | ✅ DONE, **live-gate PASS z zastrzeżeniem** | commit **`35ce5a2`**; smoke `tmp_s34_p1_smoke.mjs` **50/50**. ⚠ Zastrzeżenie: migracja v89→v90 **nietestowana na żywo** (stary save nadpisany przez nową grę, single-slot) — akceptacja na podstawie headless smoke. Pokryte na żywo: natywny v90 nowej gry, moduły startowe (debug spawn + ścieżka orderowa UI), popCapacity=1, round-trip save→F5→load. |
-| **FAZA 2** — logika ticka (budowa/energia/praca/efekty/stocznia) | ✅ DONE, **live-gate PENDING** | commit **`7073a99`**; smoke `tmp_s34_p2_smoke.mjs` **54/54**; regresja FAZY 1 **50/50**. Manual: `docs/testing/s34-faza2-live-gate-manual.md`. **Live-gate wykona Filip po powrocie z manuala.** |
+| **FAZA 2** — logika ticka (budowa/energia/praca/efekty/stocznia) | ✅ DONE, **live-gate CZĘŚCIOWY PASS** (fix stoczni) | commity **`7073a99`** + fix stoczni; smoke `tmp_s34_p2_smoke.mjs` **60/60** (było 54, +6 sekcja 12); regresja FAZY 1 **50/50**. Manual: `docs/testing/s34-faza2-live-gate-manual.md`. **PASS (Filip):** T1 budowa modułów, T2 tech-gate, T4 bilans energii, T8 regresja. **FIX (ta sesja):** T6 stocznia — `stationBuildShip` odrzucał wszystko `insufficient_resources` (root cause niżej). **DO POWTÓRKI przez Filipa:** T6 (stocznia po fixie), T7 round-trip, sekwencja no_crew. |
 | **FAZA 3** — ekran zarządzania | ❌ NIEROZPOCZĘTA | — |
 | **FAZA 4** — transport POP | ❌ NIEROZPOCZĘTA | — |
 | **FAZA 5** — etykiety na mapie | ❌ NIEROZPOCZĘTA | — |
@@ -57,6 +57,39 @@ Habitaty auto-obsadzają moduły do swojej pojemności.
 **Save:** `CURRENT_VERSION = 90` (`SaveMigration.js`). FAZA 1 wprowadziła `_migrateV89toV90`.
 FAZA 2 nie bumpuje wersji (`shipQueues` przez `?? []` w konstruktorze — precedens `refuelAutomatically`).
 Kolejność restore: `orbitalSpace.restore` (`GameScene.js:1268`) **przed** `stationSystem.restore` (`:1273`) — zachować.
+
+### FIX FAZY 2 — stocznia stacji (ta sesja, commit `fix(S3.4-F2)`)
+
+**Objaw (Filip, live-gate T6):** `KOSMOS.debug.stationBuildShip('science_vessel')` zwracał
+`{ok:false, reason:'insufficient_resources'}` mimo że debug woła `stationFillDepot` bezpośrednio
+przed. `giveAll(1000)` do kolonii nie pomagał (poprawnie — check jest na DEPOCIE stacji, nie kolonii).
+
+**Root cause:** `stationFillDepot` (GameScene) dosypywał ustaloną listę pozycji, która **nie
+zawierała `polymer_composites`** — a `science_vessel.commodityCost` go wymaga
+(`{structural_alloys:4, polymer_composites:3, electronic_systems:2}`). `StationDepot.spend` jest
+all-or-nothing → jeden brakujący składnik = całkowita odmowa. Analogicznie brakowało **`Xe`**
+(`space_supply_ship.cost`). Reszta kadłubów (HULLS) też wymaga `polymer_composites` (small/medium/large).
+
+**Fix (3 zmiany, bez migracji save):**
+1. **`stationFillDepot` DATA-DRIVEN** (GameScene): baza materiałów modułowych + **union kosztów
+   KAŻDEGO kadłuba z `SHIPS`+`HULLS` (×10 headroom)**. Dowolny przyszły kadłub auto-pokryty. Dodano
+   import `SHIPS` do GameScene.
+2. **`queueStationShip` niesie `missing:{...}`** (StationSystem): odmowa `insufficient_resources`
+   zwraca i emituje `{missing:{id:brak,...}}` (have<need per pozycja) → live-gate debugowalny z konsoli.
+3. **`stationSetPop` `console.warn`** gdy `pop > popCapacity` (bez egzekwowania — FAZA 2 nie ma
+   pasażerów). **POTWIERDZONE (bez implementacji):** guard capacity dojdzie w **FAZIE 4**
+   (`_processPassengerArrival`: gate `station.pop < station.popCapacity` → pełna stacja = status
+   `no_housing`, statek czeka zadokowany — patrz sekcja FAZA 4 §4.3).
+
+**DECYZJA (odnotowana): koszt budowy statku w stoczni stacji = WYŁĄCZNIE MATERIAŁY z depotu.**
+`science_vessel`/pozostałe kadłuby nie mają kosztu w kredytach (`upkeepCredits` to utrzymanie floty,
+osobny sink S3.5a-1 z globalnej puli gracza, nie koszt budowy). Depot trzyma tylko materiały —
+parytet ze stocznią kolonijną. Gdyby przyszły kadłub dostał koszt kredytowy: kredyty z globalnej
+puli gracza (jak stocznia kolonijna), nie z depotu.
+
+**Smoke:** `tmp_s34_p2_smoke.mjs` sekcja 12 (**+6 asercji, 60/60**): fill zawiera
+polymer_composites+Xe, `queueStationShip` ok:true dla każdego z SHIPS∪HULLS po jednym fillu,
+odmowa niesie `missing`.
 
 ---
 
