@@ -48,7 +48,7 @@ Habitaty auto-obsadzają moduły do swojej pojemności.
 |------|--------|-------|
 | **FAZA 0** — mini-audyty | ✅ DONE | `docs/audits/s34-phase0-findings.md` (workflow 4 agenty + 4 weryfikatory, confidence high) |
 | **FAZA 1** — dane + model + migracja v90 | ✅ DONE, **live-gate PASS z zastrzeżeniem** | commit **`35ce5a2`**; smoke `tmp_s34_p1_smoke.mjs` **50/50**. ⚠ Zastrzeżenie: migracja v89→v90 **nietestowana na żywo** (stary save nadpisany przez nową grę, single-slot) — akceptacja na podstawie headless smoke. Pokryte na żywo: natywny v90 nowej gry, moduły startowe (debug spawn + ścieżka orderowa UI), popCapacity=1, round-trip save→F5→load. |
-| **FAZA 2** — logika ticka (budowa/energia/praca/efekty/stocznia) | ✅ DONE, **live-gate CZĘŚCIOWY PASS** (fix stoczni) | commity **`7073a99`** + fix stoczni; smoke `tmp_s34_p2_smoke.mjs` **60/60** (było 54, +6 sekcja 12); regresja FAZY 1 **50/50**. Manual: `docs/testing/s34-faza2-live-gate-manual.md`. **PASS (Filip):** T1 budowa modułów, T2 tech-gate, T4 bilans energii, T8 regresja. **FIX (ta sesja):** T6 stocznia — `stationBuildShip` odrzucał wszystko `insufficient_resources` (root cause niżej). **DO POWTÓRKI przez Filipa:** T6 (stocznia po fixie), T7 round-trip, sekwencja no_crew. |
+| **FAZA 2** — logika ticka (budowa/energia/praca/efekty/stocznia) | ✅ DONE, **live-gate PASS mechaniki + fix Command** | commity **`7073a99`** + fix stoczni (`a3892e0`) + fix Command; smoke `tmp_s34_p2_smoke.mjs` **60/60**, `tmp_s34_command_stations_smoke.mjs` **17/17**; regresja FAZY 1 **50/50**, slice8b **51/51**. **PASS (Filip, powtórka):** T1 budowa modułów, T2 tech-gate, T4 bilans energii, T8 regresja, **R2 no_crew** (rebalans na kolejnym ticku), **R3 round-trip** (progres przeżywa save→reload i kontynuuje), **R1 stocznia mechanika** (queue→build→spawn docked→rozkazy). **FIX #1 (`a3892e0`):** stocznia — `stationBuildShip` odrzucał wszystko `insufficient_resources`. **FIX #2 (ta sesja):** BUG INTEGRACYJNY — Command (FleetManagerOverlay) „nie znał" stacji jako lokacji (root cause niżej). **DO POWTÓRKI przez Filipa:** T6 stocznia, T7 round-trip, no_crew (po obu fixach) + weryfikacja Command (statki stacyjne widoczne, undock z Command, kolonijne bez regresji). |
 | **FAZA 3** — ekran zarządzania | ❌ NIEROZPOCZĘTA | — |
 | **FAZA 4** — transport POP | ❌ NIEROZPOCZĘTA | — |
 | **FAZA 5** — etykiety na mapie | ❌ NIEROZPOCZĘTA | — |
@@ -90,6 +90,40 @@ puli gracza (jak stocznia kolonijna), nie z depotu.
 **Smoke:** `tmp_s34_p2_smoke.mjs` sekcja 12 (**+6 asercji, 60/60**): fill zawiera
 polymer_composites+Xe, `queueStationShip` ok:true dla każdego z SHIPS∪HULLS po jednym fillu,
 odmowa niesie `missing`.
+
+### FIX FAZY 2 #2 — Command (FleetManagerOverlay) zna stacje jako lokację (ta sesja)
+
+**Objaw (Filip, live-gate R1):** statki zadokowane przy KOLONII widoczne w Command; statki
+zadokowane przy STACJI lub orbitujące stację — wizualnie osierocone. Outliner (prawy drawer)
+i StationPanel pokazują je poprawnie; rozkazy działają.
+
+**Diagnoza:** statek stacyjny JEST w źródle listy Command (`vMgr.getAllVessels()` filtrowane
+`!isEnemyVessel && !isWreck`) — potwierdzone smoke 17/17. Problem: FleetManagerOverlay traktował
+stacje jako NIEZNANĄ lokację:
+- lokalny `_findBody`/`_resolveName` pomija typ `station` (nie ma w `_BODY_TYPES`) → wiersz statku
+  pokazywał SUROWE id (`station_1`) zamiast nazwy stacji (Outliner używa `utils/BodyName.resolveBodyName`
+  = `EntityManager.get`, dlatego działał);
+- mapa taktyczna (center) rysowała tylko ciała — brak markera stacji → statki przy stacji bez kotwicy;
+- brak akcji **undock** w Command (była tylko w drawerze/FleetGroupPanel).
+
+**Fix (FleetManagerOverlay + i18n, bez migracji save, bez zmian 3D):**
+1. `_resolveName` rozwiązuje stacje wprost z `EntityManager.get` (mirror `resolveBodyName`) → `🛰 <nazwa>`
+   w wierszach listy I etykietach mapy.
+2. Mapa taktyczna: rysowanie stacji gracza (romb 🛰) na pozycji CIAŁA KOTWICZĄCEGO (`st.bodyId` live,
+   bo stacja ma statyczne x/y) + hit-zone `map_station` → `station:selected`/`station:focus` (mgła
+   wojny: `!ownerEmpireId || 'player'`).
+3. Przycisk **Undock** w prawym panelu detalu dla zadokowanego statku → reuse
+   `VesselManager.undockToOrbit` (instant launch to orbit ciała/stacji; ZERO nowej logiki dokowania).
+4. i18n `fleet.undock` (pl+en).
+
+**Zero zmian w renderingu 3D** — docked statki pozostają ukryte na głównej mapie 3D (świadoma
+konwencja, kolonie i stacje jednakowo); zmiany dotyczą tylko listy/mapy taktycznej Command (Canvas 2D).
+
+**Smoke:** `tmp_s34_command_stations_smoke.mjs` **17/17** (realne VesselManager/StationSystem/
+BodyName/Vessel): statek stacyjny obecny na liście Command PRZED i PO undock, `resolveBodyName`
+zwraca nazwę stacji, statek kolonijny bez regresji. ⚠ FMO nieimportowalny headless (canvas) — test
+pokrywa ŹRÓDŁO listy + `resolveBodyName` (który `_resolveName` wiernie odwzorowuje); klik/rysowanie
+weryfikuje Filip na żywo.
 
 ---
 
@@ -147,6 +181,15 @@ Wg audytu §4.7 `ColonyOverlay` to edytor hex twardo związany z `colony.planet`
 skrótem: lista aktywnych modułów + POP + przycisk „Zarządzaj" otwierający `ColonyOverlay` w trybie stacji.
 
 **3.4** i18n: komplet kluczy `station.module.*` (pl+en).
+
+**⚠ NOTATKA UI (z live-gate FAZY 2):** statusy modułów (`active`/`no_power`/`no_crew`) i postęp
+budowy zmieniają się **PER TICK** (`StationSystem._tick(civDt)`), NIE synchronicznie po akcji gracza
+(np. zbudowanie power_solar gasi/wznawia moduły dopiero na kolejnym ticku bilansu — R2 no_crew,
+R4 energia potwierdziły to jako zgodne z architekturą). `StationManagementView` musi odświeżać się
+jak inne overlaye (dirty-loop / subskrypcja eventów `station:moduleBuilt`/`moduleBuildStarted`/tick),
+a NIE zakładać natychmiastowej zmiany stanu po kliknięciu — inaczej UI pokaże nieaktualny status
+do następnej klatki. Wzór: `station:*` eventy → `window.KOSMOS.uiManager._dirty=true`
+(precedens `buildings:texturesLoaded` w ColonyOverlay).
 
 **Gotowe API (FAZA 2) do wpięcia w UI FAZY 3:**
 - `stationSystem.getAllStations()`, `getPendingModuleOrders(stationId)`.

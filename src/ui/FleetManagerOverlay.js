@@ -99,6 +99,12 @@ function _resolveName(id) {
   if (!id) return '???';
   const body = _findBody(id);
   if (body?.name) return body.name;
+  // S3.4-F2: stacje orbitalne to pełnoprawna lokacja doku/orbity — _findBody ich pomija (nie ma
+  // ich w _BODY_TYPES), przez co statki zadokowane/orbitujące stację pokazywały surowe id zamiast
+  // nazwy stacji (Command „nie znał" stacji jako lokacji). Rozwiąż nazwę wprost z EntityManager
+  // (jak utils/BodyName.resolveBodyName) i oznacz 🛰 dla czytelności.
+  const ent = EntityManager.get?.(id);
+  if (ent?.type === 'station' && ent.name) return `🛰 ${ent.name}`;
   const colony = window.KOSMOS?.colonyManager?.getColony(id);
   if (colony?.name) return colony.name;
   return id;
@@ -1146,6 +1152,19 @@ export class FleetManagerOverlay {
         this._cachedTargets = null;
         this._activeTab = 'shipyard';
         break;
+      case 'map_station': {
+        // S3.4-F2 — klik stacji na mapie taktycznej: wybór celu (gdy konfigurator) lub selekcja
+        // stacji (dual-emit station:selected/focus, wzór ThreeRenderer.handleClick — bez body:selected).
+        if (this._missionConfig?.step === 'select') {
+          this._missionConfig.targetId = zone.data.stationId;
+          this._missionConfig.step = 'confirm';
+          this._mapHoverBody = null;
+          break;
+        }
+        EventBus.emit('station:selected', { stationId: zone.data.stationId });
+        EventBus.emit('station:focus', { stationId: zone.data.stationId });
+        break;
+      }
       case 'map_body': {
         // Gdy konfigurator aktywny i czeka na cel → wybierz cel z mapy
         if (this._missionConfig?.step === 'select') {
@@ -1478,6 +1497,10 @@ export class FleetManagerOverlay {
         break;
       case 'unload_colonists':
         this._unloadColonists(zone.data.vesselId);
+        break;
+      case 'undock':
+        // S3.4-F2 — reuse ścieżki z drawera: instant launch to orbit ciała/stacji.
+        window.KOSMOS?.vesselManager?.undockToOrbit?.(zone.data.vesselId);
         break;
       case 'toggle_repeat':
         if (this._missionConfig) {
@@ -3434,6 +3457,32 @@ export class FleetManagerOverlay {
         ctx.beginPath(); ctx.arc(svx, svy, rangeR, 0, Math.PI * 2); ctx.stroke();
         ctx.setLineDash([]);
       }
+    }
+
+    // ── Stacje gracza (lokacja doku/orbity) — S3.4-F2 ────────────
+    // Command „nie znał" stacji jako lokacji: mapa taktyczna rysowała tylko ciała, więc statki
+    // zadokowane/orbitujące stację były wizualnie osierocone (bez kotwicy). Rysuj 🛰 markery na
+    // POZYCJI CIAŁA KOTWICZĄCEGO (stacja ma statyczne x/y, ale anchor body orbituje) — spójnie z
+    // resolveBodyPos. Docked statki i tak ukryte, ale stacja daje im widoczną lokację na mapie.
+    for (const st of (EntityManager.getByType('station') ?? [])) {
+      if (st.ownerEmpireId && st.ownerEmpireId !== 'player') continue;   // mgła wojny — tylko stacje gracza
+      if ((st.systemId ?? 'sys_home') !== sysId) continue;
+      const anchor = st.bodyId ? EntityManager.get(st.bodyId) : null;
+      const sx = toSx(anchor?.x ?? st.x), sy = toSy(anchor?.y ?? st.y);
+      const sr = bodyScale(3, 9);
+      // Romb (diament) — odróżnia stację od kropek statków/ciał; obrys akcentowy.
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(Math.PI / 4);
+      ctx.strokeStyle = THEME.accent; ctx.lineWidth = 1.5;
+      ctx.strokeRect(-sr, -sr, sr * 2, sr * 2);
+      ctx.restore();
+      if (this._mapZoom >= 1.5) {
+        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.accent;
+        ctx.fillText(`🛰 ${(st.name ?? '').slice(0, 8)}`, sx + sr + 3, sy + 3);
+      }
+      this._hitZones.push({ x: sx - 9, y: sy - 9, w: 18, h: 18, type: 'map_station', data: { stationId: st.id } });
     }
 
     // ── Statki (kropki — na wierzchu) — tylko z aktywnego układu ──
@@ -5905,6 +5954,27 @@ export class FleetManagerOverlay {
         type: 'unload_colonists', data: { vesselId: vessel.id },
       });
       cy += unloadBtnH + 6;
+    }
+
+    // ── Przycisk Undock / Wystartuj na orbitę (dla zadokowanego statku) ──────
+    // S3.4-F2: reuse ścieżki z drawera (FleetGroupPanel grpUndock → VesselManager.undockToOrbit).
+    // Zero nowej logiki dokowania — instant launch to orbit ciała/stacji, na której statek stał.
+    if (vessel.position.state === 'docked' && vessel.position.dockedAt) {
+      const undBtnW = w - pad * 2;
+      const undBtnH = 24;
+      ctx.fillStyle = 'rgba(0,255,180,0.08)';
+      ctx.fillRect(x + pad, cy, undBtnW, undBtnH);
+      ctx.strokeStyle = THEME.accent;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad, cy, undBtnW, undBtnH);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      ctx.fillText(t('fleet.undock'), x + pad + 8, cy + 16);
+      this._hitZones.push({
+        x: x + pad, y: cy, w: undBtnW, h: undBtnH,
+        type: 'undock', data: { vesselId: vessel.id },
+      });
+      cy += undBtnH + 6;
     }
 
     // Separator

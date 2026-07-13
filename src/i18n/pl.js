@@ -1261,6 +1261,7 @@ export default {
   'fleet.activeRouteLabel': 'TRASA HANDLOWA',
   'fleet.activeLoopLabel': 'PĘTLA TRANSPORTOWA',
   'fleet.unloadColonists': 'Wyładuj {0} kolonistów',
+  'fleet.undock': '🚀 Wystartuj na orbitę',
   'fleet.cancelOrder': 'Anuluj rozkaz',
   'fleet.cancelOrderEntry': 'Anulowano rozkaz: {0} ({1})',
   'fleet.tripsLabel': 'kursów: {0}',

@@ -1259,6 +1259,7 @@ export default {
   'fleet.activeRouteLabel': 'TRADE ROUTE',
   'fleet.activeLoopLabel': 'TRANSPORT LOOP',
   'fleet.unloadColonists': 'Unload {0} colonists',
+  'fleet.undock': '🚀 Launch to orbit',
   'fleet.cancelOrder': 'Cancel order',
   'fleet.cancelOrderEntry': 'Order cancelled: {0} ({1})',
   'fleet.tripsLabel': 'trips: {0}',
