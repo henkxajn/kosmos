@@ -745,6 +745,13 @@ export default {
   'station.mgmt.flashQueued': 'Module queued for build',
   'station.mgmt.flashLocked': 'Missing technology',
   'station.mgmt.flashFull': 'No free slot',
+  'station.mgmt.demolishConfirm': 'Demolish module "{0}"? No resource refund.',
+  'station.mgmt.buildShip': 'Build ship',
+  'station.mgmt.shipPicker': 'Choose hull to build',
+  'station.mgmt.shipQueueEmpty': 'Queue empty',
+  'station.mgmt.flashShipQueued': 'Ship queued for build',
+  'station.mgmt.flashShipCost': 'Not enough resources in depot',
+  'station.mgmt.flashNoShipyard': 'No active shipyard',
   // ── Planet info panel (ColonyOverlay right column) ──
   'colonyInfo.physics': 'CHARACTERISTICS',
   'colonyInfo.temperature': 'Temperature',

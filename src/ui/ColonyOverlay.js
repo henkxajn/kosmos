@@ -10,6 +10,7 @@ import { UNIT_ARCHETYPES } from '../data/unitArchetypes.js';
 import { BUILDINGS, RESOURCE_ICONS, formatCost } from '../data/BuildingsData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { STATIONS } from '../data/StationData.js';
+import { STATION_MODULES } from '../data/StationModuleData.js';   // S3.4 FAZA 3 — nazwa modułu (rozbiórka)
 import EntityManager from '../core/EntityManager.js';
 import { TERRAIN_TYPES } from '../map/HexTile.js';
 import { HexGrid }      from '../map/HexGrid.js';
@@ -154,14 +155,16 @@ export class ColonyOverlay extends BaseOverlay {
     EventBus.on('station:orderRejected',  (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('🔒 ' + t('station.flashRejected')); });
 
     // S3.4 FAZA 3 — TRYB STACJI (ekran zarządzania w miejsce mapy hex). NIE woła switchActiveColony.
-    this._stationMode        = false;   // czy overlay renderuje ekran stacji zamiast mapy planety
-    this._selectedStationId  = null;    // stacja pokazywana w trybie stacji
-    this._stationPickerOpen  = false;   // modal wyboru modułu (pusty slot → picker)
+    this._stationMode          = false; // czy overlay renderuje ekran stacji zamiast mapy planety
+    this._selectedStationId    = null;  // stacja pokazywana w trybie stacji
+    this._stationPickerOpen    = false; // modal wyboru modułu (pusty slot → picker)
+    this._stationShipPickerOpen = false; // modal wyboru kadłuba (kolejka stoczni → + Buduj statek)
     // Statusy modułów/postęp budowy zmieniają się PER TICK (StationSystem._tick), nie po akcji —
     // przy pauzie brak timeDirty, więc wymuś redraw na zdarzeniach stacji gdy jesteśmy w trybie stacji.
     for (const ev of ['station:moduleOrderQueued', 'station:moduleOrderCancelled', 'station:moduleBuildStarted',
-                      'station:moduleBuilt', 'station:moduleOrderRejected', 'station:shipBuildStarted',
-                      'station:shipCompleted', 'station:shipBuildCancelled', 'station:rename']) {
+                      'station:moduleBuilt', 'station:moduleOrderRejected', 'station:moduleDemolished',
+                      'station:shipBuildStarted', 'station:shipCompleted', 'station:shipBuildCancelled',
+                      'station:shipBuildRejected', 'station:rename']) {
       EventBus.on(ev, () => { if (this.visible && this._stationMode && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true; });
     }
 
@@ -433,6 +436,7 @@ export class ColonyOverlay extends BaseOverlay {
       addHit: (hx, hy, hw, hh, type, data) => this._addHit(hx, hy, hw, hh, type, data),
       techIsResearched: (id) => window.KOSMOS?.techSystem?.isResearched?.(id) ?? false,
       pickerOpen: this._stationPickerOpen,
+      shipPickerOpen: this._stationShipPickerOpen,
     });
   }
 
@@ -3440,7 +3444,15 @@ export class ColonyOverlay extends BaseOverlay {
         break;
       case 'deselectHex': this._selectedHex = null; break;
       case 'colonyTab':
-        if (zone.data?.planetId) this._switchColony(zone.data.planetId);
+        if (zone.data?.planetId) {
+          // B1 fix: wyjście z trybu stacji MUSI nastąpić nawet gdy klikamy zakładkę TEJ SAMEJ
+          // kolonii (fallback active) — _switchColony robi early-return przy planetId===selected,
+          // więc czyścimy stationMode tutaj, przed nim (inaczej mapa hex nie wraca).
+          this._stationMode = false;
+          this._stationPickerOpen = false;
+          this._stationShipPickerOpen = false;
+          this._switchColony(zone.data.planetId);
+        }
         break;
       // ── S3.4 FAZA 3 — tryb stacji ──────────────────────────────────────────
       case 'stationTab':
@@ -3464,10 +3476,42 @@ export class ColonyOverlay extends BaseOverlay {
       }
       case 'station_mgmt_addslot':
         this._stationPickerOpen = true;
+        this._stationShipPickerOpen = false;
         break;
       case 'station_mgmt_picker_close':
       case 'station_mgmt_picker_bg':
         this._stationPickerOpen = false;
+        break;
+      case 'station_mgmt_demolish':
+        // R1 — rozbiórka modułu: potwierdzenie (akcja niszcząca) → StationSystem.demolishModule (bez zwrotu).
+        if (zone.data?.moduleId && this._selectedStationId) {
+          const modId = zone.data.moduleId, sid = this._selectedStationId;
+          const def = STATION_MODULES[zone.data.moduleType];
+          const nm = def ? (getLocale() === 'en' ? def.nameEN : def.namePL) : zone.data.moduleType;
+          showConfirmModal({ message: t('station.mgmt.demolishConfirm', nm), danger: true }).then((ok) => {
+            if (ok) {
+              window.KOSMOS?.stationSystem?.demolishModule(sid, modId);
+              if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
+            }
+          });
+        }
+        break;
+      case 'station_mgmt_addship':
+        this._stationShipPickerOpen = true;
+        this._stationPickerOpen = false;
+        break;
+      case 'station_mgmt_shippicker_close':
+      case 'station_mgmt_shippicker_bg':
+        this._stationShipPickerOpen = false;
+        break;
+      case 'station_mgmt_buildship':
+        if (zone.data?.shipId && this._selectedStationId) {
+          const r = window.KOSMOS?.stationSystem?.queueStationShip(this._selectedStationId, zone.data.shipId);
+          if (r?.ok) { this._stationShipPickerOpen = false; this._showFlash('🛠 ' + t('station.mgmt.flashShipQueued')); }
+          else if (r?.reason === 'requiresTech')          this._showFlash('🔒 ' + t('station.mgmt.flashLocked'));
+          else if (r?.reason === 'insufficient_resources') this._showFlash('⚠ ' + t('station.mgmt.flashShipCost'));
+          else if (r?.reason === 'no_shipyard')            this._showFlash('⚠ ' + t('station.mgmt.flashNoShipyard'));
+        }
         break;
       case 'station_mgmt_build':
         if (zone.data?.moduleType && this._selectedStationId) {

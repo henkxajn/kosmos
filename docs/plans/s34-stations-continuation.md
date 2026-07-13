@@ -49,7 +49,7 @@ Habitaty auto-obsadzają moduły do swojej pojemności.
 | **FAZA 0** — mini-audyty | ✅ DONE | `docs/audits/s34-phase0-findings.md` (workflow 4 agenty + 4 weryfikatory, confidence high) |
 | **FAZA 1** — dane + model + migracja v90 | ✅ DONE, **live-gate PASS z zastrzeżeniem** | commit **`35ce5a2`**; smoke `tmp_s34_p1_smoke.mjs` **50/50**. ⚠ Zastrzeżenie: migracja v89→v90 **nietestowana na żywo** (stary save nadpisany przez nową grę, single-slot) — akceptacja na podstawie headless smoke. Pokryte na żywo: natywny v90 nowej gry, moduły startowe (debug spawn + ścieżka orderowa UI), popCapacity=1, round-trip save→F5→load. |
 | **FAZA 2** — logika ticka (budowa/energia/praca/efekty/stocznia) | ✅ DONE, **live-gate ZALICZONY W CAŁOŚCI** | commity **`7073a99`** + fix stoczni (`a3892e0`) + fix Command (`7894230`); smoke `tmp_s34_p2_smoke.mjs` **60/60**, `tmp_s34_command_stations_smoke.mjs` **17/17**; regresja FAZY 1 **50/50**, slice8b **51/51**. **F2 live-gate = R1-R3 PASS + fix Command zweryfikowany (V1-V5 PASS).** R1 stocznia (queue→build→spawn docked→rozkazy), R2 no_crew (rebalans na kolejnym ticku), R3 round-trip (progres przeżywa save→reload i kontynuuje) — zaliczone w powtórce PRZED fixem Command. FIX #1 (`a3892e0`): stocznia `insufficient_resources`. FIX #2 (`7894230`): Command „nie znał" stacji jako lokacji — V1-V5 PASS (statki stacyjne widoczne z 🛰, undock z Command, marker stacji klikalny, kolonijne bez regresji). |
-| **FAZA 3** — ekran zarządzania | ✅ DONE, **live-gate PENDING** | `StationManagementView.js` (nowy) + tryb stacji w ColonyOverlay (zakładki 🛰, siatka slotów, picker modułów, depot, kolejka stoczni) + StationPanel „Zarządzaj". Smoke `tmp_s34_faza3_smoke.mjs` **16/16**; regr slice8b 51/51, s4_2 25/25, p1 50/50, p2 60/60. **Live-gate wykona Filip** (lista klikania niżej). |
+| **FAZA 3** — ekran zarządzania | ✅ DONE, **live-gate CZĘŚCIOWY** (T2-T5,T7 PASS; B1-B3 fix + R1-R2 dodane) | `StationManagementView.js` + tryb stacji w ColonyOverlay (zakładki 🛰, siatka slotów, picker modułów+statków, depot, kolejka stoczni, rozbiórka) + StationPanel „Zarządzaj". Smoke `tmp_s34_faza3_smoke.mjs` **35/35**; regr slice8b 51/51, s4_2 25/25, p1 50/50, p2 60/60. **DO POWTÓRKI (Filip):** retest B1-B3 + R1-R2, zaległe T8 (i18n/estetyka) + T9 (round-trip/regresja). |
 | **FAZA 4** — transport POP | ❌ NIEROZPOCZĘTA | — |
 | **FAZA 5** — etykiety na mapie | ❌ NIEROZPOCZĘTA | — |
 | **FAZA 6** — domknięcie | ❌ NIEROZPOCZĘTA | — |
@@ -153,6 +153,27 @@ cancelmodule/cancelship, picker build tylko dla stać+odblokowany (power_fusion 
 pełne sloty → brak build. ⚠ ColonyOverlay/StationPanel nieimportowalne headless (three/canvas) — smoke
 pokrywa CZYSTY widok + gettery; wpięcie (branch draw/taby/klik) weryfikuje Filip.
 
+### DOMKNIĘCIE FAZY 3 (po częściowym live-gate T1-T7 — bugi B1-B3 + rozszerzenia R1-R2)
+
+**Live-gate T1-T7:** T2/T3/T4/T5/T7 rdzeń PASS. Naprawione/dodane:
+- **B1** — powrót z trybu stacji do kolonii nie przywracał mapy hex. Root cause: wejście w tryb
+  stacji zostawia `_selectedColonyId` = aktywna kolonia (fallback); klik zakładki TEJ SAMEJ kolonii
+  → `_switchColony` early-return (`planetId===_selectedColonyId`) → `_stationMode` nigdy nie czyszczony.
+  Fix: handler `colonyTab` czyści `_stationMode`/`_stationPickerOpen`/`_stationShipPickerOpen` PRZED `_switchColony`.
+- **B2** — ✕ pickera modułów nie zamykał. Root cause: bazowe hit-zony ekranu (dodane wcześniej)
+  wygrywały z `_hitTest=find()` nad ✕/Buduj pickera (z-order). Fix: gdy picker (modułów LUB statków)
+  otwarty, ekran bazowy NIE rejestruje hit-zon (`bhit` = no-op) → zostają tylko strefy pickera.
+- **B3** — StationPanel (3D) wisiał nad overlayem po „Zarządzaj". Fix: handler `manage` woła `this.hide()`
+  (re-show tylko przez `station:selected` — ponowny klik stacji na 3D; nie wraca sam).
+- **R1 — rozbiórka modułu**: 🗑 na karcie zbudowanego modułu → `showConfirmModal` (danger) →
+  `StationSystem.demolishModule(stationId, moduleId)`. **BEZ zwrotu kosztów** (konwencja jak cancel
+  budowy). Slot → pusty; bilanse przeliczą się na kolejnym ticku. Guard: rozbiórka habitatu z
+  `pop>popCapacity` DOZWOLONA z `console.warn` (limit egzekwuje FAZA 4 — spójnie z `stationSetPop`).
+  Emit `station:moduleDemolished`. i18n `station.mgmt.demolishConfirm`.
+- **R2 — budowa statku z UI stacji**: „＋ Buduj statek" w sekcji stoczni (gdy shipyard aktywny) →
+  ship picker (lista `SHIPS`, tech-gate 🔒, koszt have/need z depotu, Buduj) → **reuse `queueStationShip`**
+  (z jego `missing:{...}` → flash powodu). Zero nowej logiki budowy. i18n `station.mgmt.buildShip/shipPicker`.
+
 ### LISTA LIVE-GATE FAZY 3 (elementy UI do klikania — Filip)
 
 Setup: `KOSMOS.debug.spawnStation()` (lub zbuduj stację z kolonii), potem otwórz ekran kolonii (C).
@@ -177,6 +198,13 @@ Setup: `KOSMOS.debug.spawnStation()` (lub zbuduj stację z kolonii), potem otwó
     listę+POP; przycisk „🛰 Zarządzaj" → otwiera ColonyOverlay w trybie tej stacji.
 11. **Regresja** — zakładki/mapa zwykłych kolonii bez zmian; przełączanie kolonia↔stacja↔kolonia stabilne;
     `switchActiveColony` NIE wołane przy wyborze stacji (globalny stan gry nietknięty).
+12. **[B1 retest]** kolonia → 🛰 stacja → **klik zakładki TEJ SAMEJ kolonii** → mapa hex WRACA (bez artefaktu).
+13. **[B2 retest]** picker modułów: ✕ ORAZ klik w tło zamykają picker.
+14. **[B3 retest]** klik „Zarządzaj" w StationPanel → panel 3D znika; po zamknięciu overlaya NIE wraca sam.
+15. **[R1]** 🗑 na karcie modułu → modal potwierdzenia → po „Tak" moduł znika, slot pusty ＋, bilanse
+    przeliczone na kolejnym ticku. Rozbiórka habitatu przy pop>cap → działa + `console.warn` w konsoli.
+16. **[R2]** „＋ Buduj statek" (gdy stocznia aktywna) → ship picker (kadłuby, tech-gate 🔒, koszt have/need);
+    „Buduj" (gdy stać) → statek w kolejce stoczni; brak środków → flash powodu.
 
 ---
 
@@ -194,6 +222,12 @@ Setup: `KOSMOS.debug.spawnStation()` (lub zbuduj stację z kolonii), potem otwó
    bez auto-powrotu. Passenger = **one-shot** (bez pętli cyklicznej).
 7. Przy przylocie pasażera do KOLONII: `civSystem.addPop` + **fallback-emit `civ:popBorn`** wzorem
    `ExpeditionSystem.js:1407` (`addPop` sam NIE emituje `civ:popBorn`).
+8. **Rozbiórka modułu (FAZA 3, R1) = BEZ zwrotu kosztów** (konwencja jak cancel budowy modułu/statku).
+   `StationSystem.demolishModule` usuwa moduł, bilanse przeliczają się na kolejnym ticku. Guard habitatu
+   `pop>popCapacity` → dozwolone z `console.warn` (limit egzekwuje FAZA 4).
+9. **Budowa statków STACYJNYCH z UI stacji (FAZA 3, R2)** — ship picker w ekranie stacji reuse
+   `queueStationShip` (lista `SHIPS`). Budowa statków stacyjnych z poziomu **Command/Shipyard** (globalny
+   FleetOverlay) = **POZA ZAKRESEM S3.4** → osobny slice (dotyka FleetOverlay globalnie; patrz backlog e).
 
 ---
 
@@ -346,6 +380,10 @@ Outlinerze/minimapie, tier 2+, klasy stacji, stacje AI — świadomie POZA zakre
    (live-gate FAZY 1 pokazał, że single-slot save utrudnia test migracji na żywo).
 3. **`tmp_s34_p*_smoke.mjs`** — zdecydować, czy zostają jako **stałe testy** (przenieść do
    `src/testing/`?) czy usunąć. Obecnie untracked w root (konwencja tmp).
+4. **Budowa statków stacyjnych z Command/Shipyard** (globalny FleetOverlay) — osobny slice PO S3.4.
+   Dotyka FleetOverlay globalnie (zakładka Stocznia buduje dla kolonii; rozszerzenie o stacje = zmiana
+   celu budowy + routing spawnu). W S3.4 FAZA 3 (R2) budowa statków stacyjnych działa TYLKO z ekranu
+   stacji (ship picker → `queueStationShip`). Świadomie poza zakresem S3.4.
 
 ---
 

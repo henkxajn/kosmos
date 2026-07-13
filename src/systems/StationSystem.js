@@ -195,6 +195,26 @@ export class StationSystem {
     return EntityManager.get(stationId)?.pendingModuleOrders ?? [];
   }
 
+  /**
+   * S3.4 FAZA 3 — rozbiórka ZBUDOWANEGO modułu. BEZ zwrotu kosztu (konwencja stacji — jak cancel
+   * budowy). Slot wraca do pustego; bilanse (energia/praca/tradeCapacity/popCapacity) przeliczą się
+   * na kolejnym ticku (_recomputeModuleStates). Guard: rozbiórka habitatu może zejść popCapacity
+   * poniżej pop (pasażerowie = FAZA 4) → DOZWOLONA z console.warn (limit egzekwuje FAZA 4, spójnie
+   * z decyzją o stationSetPop). @returns {boolean}
+   */
+  demolishModule(stationId, moduleId) {
+    const station = EntityManager.get(stationId);
+    if (!station?.modules) return false;
+    const idx = station.modules.findIndex(m => m.id === moduleId);
+    if (idx === -1) return false;
+    const [removed] = station.modules.splice(idx, 1);
+    if ((station.pop ?? 0) > station.popCapacity) {
+      console.warn(`[StationSystem] demolishModule: pop=${station.pop} > popCapacity=${station.popCapacity} po rozbiórce ${removed.moduleType} — dozwolone (limit egzekwuje FAZA 4).`);
+    }
+    EventBus.emit('station:moduleDemolished', { stationId, moduleId, moduleType: removed.moduleType });
+    return true;
+  }
+
   // ── Stocznia orbitalna — kolejka budowy statków (MVP: bez POP, koszt z depotu) ──
 
   /**

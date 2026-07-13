@@ -746,6 +746,13 @@ export default {
   'station.mgmt.flashQueued': 'Moduł w kolejce budowy',
   'station.mgmt.flashLocked': 'Brak technologii',
   'station.mgmt.flashFull': 'Brak wolnego slotu',
+  'station.mgmt.demolishConfirm': 'Rozebrać moduł „{0}"? Bez zwrotu surowców.',
+  'station.mgmt.buildShip': 'Buduj statek',
+  'station.mgmt.shipPicker': 'Wybierz kadłub do budowy',
+  'station.mgmt.shipQueueEmpty': 'Kolejka pusta',
+  'station.mgmt.flashShipQueued': 'Statek w kolejce budowy',
+  'station.mgmt.flashShipCost': 'Za mało surowców w magazynie',
+  'station.mgmt.flashNoShipyard': 'Brak aktywnej stoczni',
   // ── Panel info planety (ColonyOverlay prawa kolumna) ──
   'colonyInfo.physics': 'CHARAKTERYSTYKA',
   'colonyInfo.temperature': 'Temperatura',

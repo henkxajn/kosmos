@@ -52,7 +52,11 @@ function moduleStatus(m) {
  */
 export function drawStationManagement(ctx, area, station, view) {
   const { x, y, w, h } = area;
-  const { addHit, techIsResearched, pickerOpen } = view;
+  const { addHit, techIsResearched, pickerOpen, shipPickerOpen } = view;
+  // B2 fix: gdy picker (modułów LUB statków) otwarty, ekran bazowy NIE rejestruje hit-zon — inaczej
+  // bazowe strefy (dodane wcześniej) wygrywają z _hitTest=find() nad ✕/Buduj pickera (z-order bug).
+  const modal = pickerOpen || shipPickerOpen;
+  const bhit = modal ? (() => {}) : addHit;
   const PAD = 12;
   const maxModules = STATIONS[station.stationType]?.maxModules ?? 8;
 
@@ -74,7 +78,7 @@ export function drawStationManagement(ctx, area, station, view) {
   ctx.textAlign = 'center';
   ctx.fillText('✏', renX + renW / 2, cy + 13);
   ctx.textAlign = 'left';
-  addHit(renX, cy, renW, 18, 'station_mgmt_rename', {});
+  bhit(renX, cy, renW, 18, 'station_mgmt_rename', {});
   cy += 26;
 
   // Pasek statystyk
@@ -138,7 +142,7 @@ export function drawStationManagement(ctx, area, station, view) {
       ctx.textAlign = 'center';
       ctx.fillText(`＋ ${t('station.mgmt.addModule')}`, bx + cardW / 2, by + cardH / 2 + 4);
       ctx.textAlign = 'left';
-      addHit(bx, by, cardW, cardH, 'station_mgmt_addslot', {});
+      bhit(bx, by, cardW, cardH, 'station_mgmt_addslot', {});
       continue;
     }
 
@@ -161,12 +165,20 @@ export function drawStationManagement(ctx, area, station, view) {
       ctx.fillStyle = THEME.textDim;
       const lvTxt = (def?.maxLevel ?? 1) > 1 ? `lv${slot.m.level ?? 1}` : '';
       ctx.fillText(`${lvTxt}`, bx + 34, by + 36);
-      // Status badge (prawy)
+      // Status badge (prawy-góra)
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = st.color;
       ctx.textAlign = 'right';
-      ctx.fillText(slot.m.active === false ? `${st.label} ${t('station.mgmt.' + (slot.m.inactiveReason === 'no_crew' ? 'noCrew' : 'noPower'))}` : st.label, bx + cardW - 8, by + 20);
+      ctx.fillText(slot.m.active === false ? `${st.label} ${t('station.mgmt.' + (slot.m.inactiveReason === 'no_crew' ? 'noCrew' : 'noPower'))}` : st.label, bx + cardW - 8, by + 18);
       ctx.textAlign = 'left';
+      // R1 — 🗑 rozbiórka modułu (prawy-dół karty). Potwierdzenie + brak zwrotu → w ColonyOverlay._onHit.
+      const dW = 18, dX = bx + cardW - dW - 6, dY = by + cardH - dW - 4;
+      ctx.strokeStyle = THEME.danger; ctx.lineWidth = 1;
+      ctx.strokeRect(dX + 0.5, dY + 0.5, dW, 16);
+      ctx.fillStyle = THEME.danger; ctx.textAlign = 'center';
+      ctx.fillText('🗑', dX + dW / 2, dY + 12);
+      ctx.textAlign = 'left';
+      bhit(dX, dY, dW, 16, 'station_mgmt_demolish', { moduleId: slot.m.id, moduleType: slot.m.moduleType });
     } else {
       // pending (queued / building) — pasek postępu
       const o = slot.o;
@@ -193,21 +205,38 @@ export function drawStationManagement(ctx, area, station, view) {
       ctx.textAlign = 'center';
       ctx.fillText('✕', bx + cardW - 14, by + 15);
       ctx.textAlign = 'left';
-      addHit(bx + cardW - 22, by + 4, 16, 14, 'station_mgmt_cancelmodule', { orderId: o.id });
+      bhit(bx + cardW - 22, by + 4, 16, 14, 'station_mgmt_cancelmodule', { orderId: o.id });
     }
   }
   const gridRows = Math.ceil(slots.length / COLS);
   let leftBottom = cy + gridRows * (cardH + gap);
 
-  // Kolejka stoczni (pod siatką, tylko gdy stocznia aktywna I coś w kolejce)
-  if (station.hasActiveShipyard && (station.shipQueues?.length ?? 0) > 0) {
+  // Kolejka stoczni (pod siatką, tylko gdy stocznia aktywna). Nagłówek + „+ Buduj statek" (R2).
+  if (station.hasActiveShipyard) {
     leftBottom += 6;
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
     ctx.fillText(t('station.mgmt.shipQueue'), leftX, leftBottom + 12);
+    // Przycisk „+ Buduj statek" (prawy) → ship picker.
+    const abW = 110, abX = leftX + leftW - abW, abY = leftBottom;
+    ctx.fillStyle = 'rgba(0,255,180,0.08)';
+    ctx.fillRect(abX, abY, abW, 16);
+    ctx.strokeStyle = THEME.accent; ctx.lineWidth = 1;
+    ctx.strokeRect(abX + 0.5, abY + 0.5, abW - 1, 15);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.accent; ctx.textAlign = 'center';
+    ctx.fillText(`＋ ${t('station.mgmt.buildShip')}`, abX + abW / 2, abY + 12);
+    ctx.textAlign = 'left';
+    bhit(abX, abY, abW, 16, 'station_mgmt_addship', {});
     leftBottom += 20;
-    for (let i = 0; i < station.shipQueues.length; i++) {
-      const q = station.shipQueues[i];
+    const queues = station.shipQueues ?? [];
+    if (queues.length === 0) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('station.mgmt.shipQueueEmpty'), leftX, leftBottom + 11);
+    }
+    for (let i = 0; i < queues.length; i++) {
+      const q = queues[i];
       const ship = SHIPS[q.shipId] ?? HULLS[q.shipId];
       const frac = q.buildTime > 0 ? Math.min(1, (q.progress ?? 0) / q.buildTime) : 0;
       const ry = leftBottom + i * 20;
@@ -221,7 +250,7 @@ export function drawStationManagement(ctx, area, station, view) {
       ctx.fillStyle = THEME.danger; ctx.textAlign = 'center';
       ctx.fillText('✕', leftX + leftW - 16, ry + 11);
       ctx.textAlign = 'left';
-      addHit(leftX + leftW - 24, ry, 16, 14, 'station_mgmt_cancelship', { index: i });
+      bhit(leftX + leftW - 24, ry, 16, 14, 'station_mgmt_cancelship', { index: i });
     }
   }
 
@@ -252,9 +281,11 @@ export function drawStationManagement(ctx, area, station, view) {
     drawList(t('station.commodities'), depot.commodities);
   }
 
-  // ── MODULE PICKER (overlay nad ekranem) ─────────────────────────────────────
+  // ── PICKERY (overlay nad ekranem; wzajemnie wykluczające się) ────────────────
   if (pickerOpen) {
     drawModulePicker(ctx, area, station, view, maxModules);
+  } else if (shipPickerOpen) {
+    drawShipPicker(ctx, area, station, view);
   }
 }
 
@@ -345,4 +376,80 @@ function drawModulePicker(ctx, area, station, view, maxModules) {
 
   // Tło pickera NA KOŃCU — _hitTest=find, przyciski (dodane wyżej) wygrywają; tło konsumuje resztę.
   addHit(px, py, PW, PH, 'station_mgmt_picker_bg', {});
+}
+
+// Ship picker — lista kadłubów SHIPS do budowy w stoczni (tech-gate 🔒, koszt have/need z depotu, Buduj).
+// Reuse queueStationShip (ColonyOverlay._onHit) — zero nowej logiki budowy. Kolejka nielimitowana.
+function drawShipPicker(ctx, area, station, view) {
+  const { x, y, w, h } = area;
+  const { addHit, techIsResearched } = view;
+
+  const ids = Object.keys(SHIPS);
+  const rowH = 46;
+  const PW = Math.min(560, w - 40);
+  const PH = Math.min(h - 40, 60 + ids.length * rowH + 16);
+  const px = x + Math.floor((w - PW) / 2);
+  const py = y + Math.floor((h - PH) / 2);
+
+  ctx.fillStyle = 'rgba(4,8,14,0.97)';
+  ctx.fillRect(px, py, PW, PH);
+  ctx.strokeStyle = THEME.borderActive ?? THEME.accent; ctx.lineWidth = 1;
+  ctx.strokeRect(px + 0.5, py + 0.5, PW - 1, PH - 1);
+
+  ctx.font = `bold ${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+  ctx.fillStyle = THEME.accent; ctx.textAlign = 'left';
+  ctx.fillText(t('station.mgmt.shipPicker'), px + 12, py + 22);
+  ctx.strokeStyle = THEME.border; ctx.strokeRect(px + PW - 26.5, py + 6.5, 20, 18);
+  ctx.fillStyle = THEME.textSecondary; ctx.textAlign = 'center';
+  ctx.fillText('✕', px + PW - 16, py + 19);
+  ctx.textAlign = 'left';
+  addHit(px + PW - 26, py + 6, 20, 18, 'station_mgmt_shippicker_close', {});
+
+  let ry = py + 32;
+  for (const id of ids) {
+    const ship = SHIPS[id];
+    const locked = ship.requires && !techIsResearched?.(ship.requires);
+    const cost = { ...(ship.cost ?? {}), ...(ship.commodityCost ?? {}) };
+    let afford = true;
+    const costParts = [];
+    for (const [cid, amt] of Object.entries(cost)) {
+      const have = station.depot?.getAmount?.(cid) ?? 0;
+      if (have < amt) afford = false;
+      costParts.push({ id: cid, amt, have });
+    }
+    const canBuild = !locked && afford;
+
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    ctx.fillRect(px + 8, ry, PW - 16, rowH - 4);
+    ctx.font = `18px ${THEME.fontFamily}`;
+    ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
+    ctx.fillText(ship.icon ?? '🚀', px + 16, ry + 24);
+    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
+    ctx.fillText(moduleName(ship), px + 42, ry + 16);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    let costX = px + 42;
+    for (const c of costParts) {
+      const txt = `${c.id} ${Math.round(c.have)}/${c.amt}`;
+      ctx.fillStyle = c.have < c.amt ? THEME.danger : THEME.textDim;
+      ctx.fillText(txt, costX, ry + 34);
+      costX += ctx.measureText(txt).width + 12;
+    }
+
+    const bw = 76, bh = 24, bx = px + PW - bw - 12, by = ry + (rowH - 4 - bh) / 2;
+    ctx.fillStyle = canBuild ? 'rgba(0,255,180,0.10)' : 'rgba(60,60,70,0.25)';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = canBuild ? THEME.accent : THEME.border; ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = canBuild ? THEME.accent : THEME.textDim;
+    ctx.textAlign = 'center';
+    ctx.fillText(locked ? '🔒' : t('station.mgmt.build'), bx + bw / 2, by + bh / 2 + 4);
+    ctx.textAlign = 'left';
+    if (canBuild) addHit(bx, by, bw, bh, 'station_mgmt_buildship', { shipId: id });
+
+    ry += rowH;
+  }
+
+  addHit(px, py, PW, PH, 'station_mgmt_shippicker_bg', {});
 }

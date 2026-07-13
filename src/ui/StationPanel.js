@@ -281,6 +281,9 @@ export class StationPanel extends BaseOverlay {
       const colMgr = window.KOSMOS?.colonyManager;
       const colonyId = colMgr?.activePlanetId ?? window.KOSMOS?.homePlanet?.id ?? null;
       window.KOSMOS?.overlayManager?.openPanel?.('colony', { colonyId, stationMode: true, stationId: st.id });
+      // B3 fix: schowaj pływający panel (nie wisi nad overlayem). Nie wróci sam — re-show tylko
+      // przez station:selected (ponowny klik stacji na 3D po zamknięciu overlaya).
+      this.hide();
       this._markDirty();
       return;
     }
