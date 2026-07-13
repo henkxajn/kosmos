@@ -16,6 +16,7 @@ import EntityManager              from '../core/EntityManager.js';
 import { t, getLocale }           from '../i18n/i18n.js';
 import { showRenameModal }        from './ModalInput.js';
 import { COMMODITIES }            from '../data/CommoditiesData.js';
+import { STATION_MODULES }        from '../data/StationModuleData.js';
 import { classifyStationDepot, gatherStationTraders } from './StationPanelLogic.js';
 
 // Wymiary
@@ -24,6 +25,7 @@ const PAD       = 8;
 const LH        = 15;    // wysokość wiersza
 const HEADER_H  = 24;    // nazwa + przyciski
 const SEP_H     = 7;     // wysokość separatora
+const BTN_H     = 24;    // wysokość wiersza-przycisku (S3.4 FAZA 3 — „Zarządzaj")
 
 // Mapowanie statusu kuriera → klucz i18n
 const STATUS_KEY = {
@@ -89,9 +91,9 @@ export class StationPanel extends BaseOverlay {
     });
     const lines = this._buildLines(station, depot, traders);
 
-    // Wysokość karty z treści (separatory liczone osobno).
+    // Wysokość karty z treści (separatory + przyciski liczone osobno).
     let bodyH = 0;
-    for (const ln of lines) bodyH += ln.sep ? SEP_H : LH;
+    for (const ln of lines) bodyH += ln.sep ? SEP_H : (ln.btn ? BTN_H : LH);
     const PH = HEADER_H + PAD + bodyH + PAD;
 
     // Kotwica: ekranowa pozycja stacji + offset; null (za kamerą) → fallback lewy-górny róg mapy.
@@ -134,6 +136,21 @@ export class StationPanel extends BaseOverlay {
         ctx.strokeStyle = C.border;
         ctx.beginPath(); ctx.moveTo(px + PAD, cy + 2); ctx.lineTo(px + PW - PAD, cy + 2); ctx.stroke();
         cy += SEP_H;
+        continue;
+      }
+      if (ln.btn) {
+        // Przycisk pełnej szerokości (S3.4 FAZA 3 — „Zarządzaj" → ColonyOverlay w trybie stacji).
+        const bx = px + PAD, bw = PW - PAD * 2, bh = BTN_H - 4;
+        const hover = this._hoverZone?.type === ln.type;
+        ctx.fillStyle = hover ? 'rgba(0,255,180,0.14)' : 'rgba(0,255,180,0.07)';
+        ctx.fillRect(bx, cy, bw, bh);
+        ctx.strokeStyle = C.accent; ctx.lineWidth = 1;
+        ctx.strokeRect(bx + 0.5, cy + 0.5, bw - 1, bh - 1);
+        ctx.fillStyle = C.accent; ctx.textAlign = 'center';
+        ctx.fillText(ln.text, px + PW / 2, cy + bh / 2 + 4);
+        ctx.textAlign = 'left';
+        this._addHit(bx, cy, bw, bh, ln.type);
+        cy += BTN_H;
         continue;
       }
       const indent = ln.indent ?? 0;
@@ -198,9 +215,23 @@ export class StationPanel extends BaseOverlay {
     }
     lines.push({ sep: true });
 
-    // Moduły — placeholder (nieinteraktywny)
+    // Moduły — podsumowanie (S3.4 FAZA 3): POP + lista aktywnych modułów + przycisk „Zarządzaj".
     lines.push({ text: t('station.modules'), color: C.accent });
-    lines.push({ text: t('station.moduleShipyardSoon'), color: C.textDim, indent: 8 });
+    lines.push({ text: `👥 ${station.pop ?? 0}/${station.popCapacity}   🛠 ${station.hasActiveShipyard ? '✓' : '—'}`, color: C.textSecondary, indent: 8 });
+    const mods = station.modules ?? [];
+    if (mods.length === 0) {
+      lines.push({ text: t('station.mgmt.noModules'), color: C.textDim, indent: 8 });
+    } else {
+      const lang = getLocale();
+      for (const m of mods.slice(0, 6)) {
+        const def = STATION_MODULES[m.moduleType];
+        const nm = (lang === 'en' ? def?.nameEN : def?.namePL) ?? m.moduleType;
+        const badge = m.active === false ? (m.inactiveReason === 'no_crew' ? '👥✗' : '⚡✗') : '✓';
+        lines.push({ text: `${def?.icon ?? '▪'} ${nm} ${badge}`, color: m.active === false ? C.textDim : C.textSecondary, indent: 8 });
+      }
+      if (mods.length > 6) lines.push({ text: `+${mods.length - 6}…`, color: C.textDim, indent: 8 });
+    }
+    lines.push({ btn: true, text: `🛰 ${t('station.mgmt.manage')}`, type: 'manage' });
 
     return lines;
   }
@@ -240,6 +271,17 @@ export class StationPanel extends BaseOverlay {
         if (nm) EventBus.emit('station:rename', { stationId: sid, name: nm });
         this._markDirty();
       });
+      return;
+    }
+    if (zone.type === 'manage') {
+      // S3.4 FAZA 3 — otwórz ColonyOverlay w TRYBIE STACJI (colonyId = fallback aktywnej kolonii gracza,
+      // żeby tab bar/globus miały valid stan; render idzie ekranem stacji). Bez switchActiveColony.
+      const st = this._station();
+      if (!st) return;
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colonyId = colMgr?.activePlanetId ?? window.KOSMOS?.homePlanet?.id ?? null;
+      window.KOSMOS?.overlayManager?.openPanel?.('colony', { colonyId, stationMode: true, stationId: st.id });
+      this._markDirty();
       return;
     }
     // 'bg' → swallow (klik w panel nie przelatuje niżej).

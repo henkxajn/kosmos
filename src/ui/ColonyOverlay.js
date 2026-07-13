@@ -27,6 +27,8 @@ import { PlanetGlobeRenderer } from '../renderer/PlanetGlobeRenderer.js';
 import { getTerrainTexture, getTransitionTexture, texturesLoaded } from '../renderer/TerrainTextures.js';
 import { getBuildingTexture, hasBuildingTexture } from '../renderer/BuildingTextures.js';
 import { HEX_DIRECTIONS } from '../map/HexGrid.js';
+import { drawStationManagement } from './StationManagementView.js';   // S3.4 FAZA 3 — ekran stacji
+import { showRenameModal } from './ModalInput.js';                     // S3.4 FAZA 3 — rename stacji
 
 const HDR_H = HEADER_H;   // wysokość pasma nagłówka (standard BaseOverlay)
 const FLOAT_W = 200;  // szerokość floating panelu
@@ -150,6 +152,18 @@ export class ColonyOverlay extends BaseOverlay {
     EventBus.on('station:buildFailed',    (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('⚠ ' + t('station.flashFailed')); });
     EventBus.on('station:orderCancelled', (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('✕ ' + t('station.flashCancelled')); });
     EventBus.on('station:orderRejected',  (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('🔒 ' + t('station.flashRejected')); });
+
+    // S3.4 FAZA 3 — TRYB STACJI (ekran zarządzania w miejsce mapy hex). NIE woła switchActiveColony.
+    this._stationMode        = false;   // czy overlay renderuje ekran stacji zamiast mapy planety
+    this._selectedStationId  = null;    // stacja pokazywana w trybie stacji
+    this._stationPickerOpen  = false;   // modal wyboru modułu (pusty slot → picker)
+    // Statusy modułów/postęp budowy zmieniają się PER TICK (StationSystem._tick), nie po akcji —
+    // przy pauzie brak timeDirty, więc wymuś redraw na zdarzeniach stacji gdy jesteśmy w trybie stacji.
+    for (const ev of ['station:moduleOrderQueued', 'station:moduleOrderCancelled', 'station:moduleBuildStarted',
+                      'station:moduleBuilt', 'station:moduleOrderRejected', 'station:shipBuildStarted',
+                      'station:shipCompleted', 'station:shipBuildCancelled', 'station:rename']) {
+      EventBus.on(ev, () => { if (this.visible && this._stationMode && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true; });
+    }
 
     // Away Team — tryb wyboru hexa lądowania
     this._landingMode = false;
@@ -321,6 +335,15 @@ export class ColonyOverlay extends BaseOverlay {
     } else if (colMgr) {
       this._selectedColonyId = colMgr.activePlanetId;
     }
+    // S3.4 FAZA 3 — otwarcie w TRYBIE STACJI (np. z przycisku „Zarządzaj" w StationPanel).
+    // Colony pozostaje ustawiona (tab bar/globus mają valid fallback), ale render idzie ekranem stacji.
+    if (opts.stationMode && opts.stationId) {
+      this._stationMode = true;
+      this._selectedStationId = opts.stationId;
+      this._stationPickerOpen = false;
+    } else {
+      this._stationMode = false;
+    }
     this._selectedHex = null;
     this._hoveredBuildId = null;
 
@@ -397,6 +420,21 @@ export class ColonyOverlay extends BaseOverlay {
 
   // ── Dane ─────────────────────────────────────────────────────────────────
   _getColony() { return window.KOSMOS?.colonyManager?.getColony(this._selectedColonyId) ?? null; }
+
+  // S3.4 FAZA 3 — encja stacji pokazywanej w trybie stacji (null gdy zniknęła → wyjście z trybu).
+  _getSelectedStation() {
+    const s = EntityManager.get(this._selectedStationId);
+    return s?.type === 'station' ? s : null;
+  }
+
+  // S3.4 FAZA 3 — deleguj render ekranu stacji do StationManagementView (addHit → _hitZones overlayu).
+  _drawStationManagement(ctx, x, y, w, h, station) {
+    drawStationManagement(ctx, { x, y, w, h }, station, {
+      addHit: (hx, hy, hw, hh, type, data) => this._addHit(hx, hy, hw, hh, type, data),
+      techIsResearched: (id) => window.KOSMOS?.techSystem?.isResearched?.(id) ?? false,
+      pickerOpen: this._stationPickerOpen,
+    });
+  }
 
   _getGrid(colony) {
     if (!colony) return null;
@@ -744,6 +782,16 @@ export class ColonyOverlay extends BaseOverlay {
     // Nagłówek z podsumowaniem kolonii (pełna szerokość — pasmo tytułu nad splitem)
     this._drawHeader(ctx, ox, oy, ow, colony);
 
+    // S3.4 FAZA 3 — TRYB STACJI: ekran zarządzania zamiast mapy hex (gate całego bloku mapy).
+    if (this._stationMode) {
+      const station = this._getSelectedStation();
+      if (station) {
+        this._drawStationManagement(ctx, ox, oy + HDR_H, ow, oh - HDR_H, station);
+      } else {
+        this._stationMode = false;   // stacja zniknęła (destroy) → powrót do mapy planety
+      }
+    } else {
+
     // Split 70/30: mapa hex po lewej (mapW), dossier planety po prawej (infoW).
     const infoW = this._infoW(ow);
     const mapW  = ow - infoW;
@@ -851,6 +899,8 @@ export class ColonyOverlay extends BaseOverlay {
       this._drawRectSelect(ctx);
     }
 
+    }   // koniec bloku !_stationMode (mapa hex)
+
     // Flash message
     if (this._flashMsg && Date.now() < this._flashEnd) {
       const fA = Math.min(1, (this._flashEnd - Date.now()) / 500);
@@ -867,7 +917,8 @@ export class ColonyOverlay extends BaseOverlay {
     }
 
     // Przycisk budowy stacji (S3.3b-S4) — nagłówek, na lewo od [✕]. Bramka tech orbital_construction.
-    if (colony && !colony.ownerEmpireId && !colony.isTestEnemy) {
+    // W trybie stacji ukryty (dotyczy budowy NOWEJ stacji z kolonii, nie zarządzania bieżącą).
+    if (!this._stationMode && colony && !colony.ownerEmpireId && !colony.isTestEnemy) {
       ctx.save();
       const hasStationTech = window.KOSMOS?.techSystem?.isResearched('orbital_construction') ?? false;
       const sBtnW = 84, sBtnH = 20, sBtnY = oy + 6, sBtnX = ox + ow - 116;
@@ -912,14 +963,17 @@ export class ColonyOverlay extends BaseOverlay {
     this._drawOverlayHeader(ctx, ox, oy, ow, '');
     this._drawColonyTabs(ctx, ox, oy, ow);
 
-    // Rząd 2: POP aktywnej kolonii (budynki → pasek nad mapą).
-    const civ = colony.civSystem;
-    const pop = civ?.population ?? 0;
-    const housing = civ?.housing ?? 0;
-    ctx.textBaseline = 'alphabetic';
-    ctx.font = `11px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
-    ctx.fillText(`POP: ${pop}/${housing}`, ox + 14, oy + 38);
+    // Rząd 2: POP aktywnej kolonii (budynki → pasek nad mapą). W trybie stacji ukryte
+    // (ekran stacji ma własny nagłówek z załogą/energią) — nie mieszaj danych kolonii i stacji.
+    if (!this._stationMode) {
+      const civ = colony.civSystem;
+      const pop = civ?.population ?? 0;
+      const housing = civ?.housing ?? 0;
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = `11px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'left';
+      ctx.fillText(`POP: ${pop}/${housing}`, ox + 14, oy + 38);
+    }
   }
 
   // ── Zakładki kolonii gracza (przełączanie aktywnej kolonii z nagłówka) ─────
@@ -931,12 +985,13 @@ export class ColonyOverlay extends BaseOverlay {
     if (!colonies.length) return;
 
     const activeId = this._selectedColonyId;
+    const stationMode = this._stationMode;
     const tabY = oy + 5, tabH = 20;
     const x0 = ox + 14;
     const xRight = ox + ow - 130;          // miejsce na [🛰 Station] + [✕]
     const availW = Math.max(40, xRight - x0);
 
-    // Zmierz pigułki
+    // Zmierz pigułki: kolonie gracza + stacje gracza (🛰). Stacje = osobny typ hitu (tryb stacji).
     ctx.font = `bold 11px ${THEME.fontFamily}`;
     const tabs = [];
     let totalW = 0;
@@ -944,7 +999,17 @@ export class ColonyOverlay extends BaseOverlay {
       const nm = c.planet?.name ?? c.planetId ?? '?';
       const label = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
       const tw = ctx.measureText(label).width + 22;
-      tabs.push({ id: c.planetId, label, tw, active: c.planetId === activeId });
+      tabs.push({ kind: 'colony', id: c.planetId, label, tw, active: !stationMode && c.planetId === activeId });
+      totalW += tw + 6;
+    }
+    // Stacje gracza (mgła wojny: tylko własne). Encja stacji ma name + type='station'.
+    const stations = (window.KOSMOS?.stationSystem?.getAllStations?.() ?? [])
+      .filter(s => !s.ownerEmpireId || s.ownerEmpireId === 'player');
+    for (const s of stations) {
+      const nm = `🛰 ${s.name ?? s.id}`;
+      const label = nm.length > 16 ? nm.slice(0, 15) + '…' : nm;
+      const tw = ctx.measureText(label).width + 22;
+      tabs.push({ kind: 'station', id: s.id, label, tw, active: stationMode && s.id === this._selectedStationId });
       totalW += tw + 6;
     }
     totalW = Math.max(0, totalW - 6);
@@ -969,7 +1034,8 @@ export class ColonyOverlay extends BaseOverlay {
         ctx.font = `bold 11px ${THEME.fontFamily}`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(tab.label, sx + tab.tw / 2, tabY + tabH / 2);
-        this._addHit(sx, tabY, tab.tw, tabH, 'colonyTab', { planetId: tab.id });
+        if (tab.kind === 'station') this._addHit(sx, tabY, tab.tw, tabH, 'stationTab', { stationId: tab.id });
+        else                        this._addHit(sx, tabY, tab.tw, tabH, 'colonyTab', { planetId: tab.id });
       }
       sx += tab.tw + 6;
     }
@@ -993,6 +1059,7 @@ export class ColonyOverlay extends BaseOverlay {
     this._selectedHex = null; this._hoveredHex = null;
     this._selectedUnit = null; this._selectedUnits.clear();
     this._buildBarScroll = 0; this._stationDialogOpen = false;
+    this._stationMode = false; this._stationPickerOpen = false;   // S3.4 FAZA 3 — powrót do mapy planety
     const colony = this._getColony();
     const grid = colony ? this._getGrid(colony) : null;
     if (grid) { this._fitMapToView(grid); this._centerOnCapital(grid); }
@@ -3157,6 +3224,9 @@ export class ColonyOverlay extends BaseOverlay {
     const hit = this._hitTest(x, y);
     if (hit) { this._onHit(hit); return true; }
 
+    // S3.4 FAZA 3 — w trybie stacji brak mapy hex: klik poza przyciskiem konsumowany (bez logiki kafla).
+    if (this._stationMode) return true;
+
     if (!this._hasDragged) {
       const colony = this._getColony();
       const grid = colony ? this._getGrid(colony) : null;
@@ -3372,6 +3442,52 @@ export class ColonyOverlay extends BaseOverlay {
       case 'colonyTab':
         if (zone.data?.planetId) this._switchColony(zone.data.planetId);
         break;
+      // ── S3.4 FAZA 3 — tryb stacji ──────────────────────────────────────────
+      case 'stationTab':
+        // Wejście w tryb stacji BEZ switchActiveColony (globalny stan nietknięty).
+        if (zone.data?.stationId) {
+          this._stationMode = true;
+          this._selectedStationId = zone.data.stationId;
+          this._stationPickerOpen = false;
+        }
+        break;
+      case 'station_mgmt_rename': {
+        const st = this._getSelectedStation();
+        if (st) {
+          const sid = st.id;
+          showRenameModal(st.name ?? '').then((n) => {
+            const nm = n?.trim();
+            if (nm) EventBus.emit('station:rename', { stationId: sid, name: nm });
+          });
+        }
+        break;
+      }
+      case 'station_mgmt_addslot':
+        this._stationPickerOpen = true;
+        break;
+      case 'station_mgmt_picker_close':
+      case 'station_mgmt_picker_bg':
+        this._stationPickerOpen = false;
+        break;
+      case 'station_mgmt_build':
+        if (zone.data?.moduleType && this._selectedStationId) {
+          const r = window.KOSMOS?.stationSystem?.addPendingModuleOrder(this._selectedStationId, zone.data.moduleType);
+          if (r?.ok) { this._stationPickerOpen = false; this._showFlash('🛰 ' + t('station.mgmt.flashQueued')); }
+          else if (r?.reason === 'requiresTech') this._showFlash('🔒 ' + t('station.mgmt.flashLocked'));
+          else if (r?.reason === 'no_slots')     this._showFlash('⚠ ' + t('station.mgmt.flashFull'));
+        }
+        break;
+      case 'station_mgmt_cancelmodule':
+        if (zone.data?.orderId && this._selectedStationId) {
+          window.KOSMOS?.stationSystem?.cancelPendingModuleOrder(this._selectedStationId, zone.data.orderId);
+        }
+        break;
+      case 'station_mgmt_cancelship':
+        if (zone.data?.index != null && this._selectedStationId) {
+          window.KOSMOS?.stationSystem?.cancelStationShip(this._selectedStationId, zone.data.index);
+        }
+        break;
+      case 'stationMgmtBg': break;   // konsumuj klik w tło ekranu stacji
       case 'floatPanel': break;  // konsumuj klik — nie przebijaj na mapę
       case 'headerBuilding': break;  // konsumuj klik na ikonę budynku w nagłówku
       case 'stationDialogBg': break; // konsumuj klik w tło dialogu stacji

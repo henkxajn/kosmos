@@ -49,7 +49,7 @@ Habitaty auto-obsadzają moduły do swojej pojemności.
 | **FAZA 0** — mini-audyty | ✅ DONE | `docs/audits/s34-phase0-findings.md` (workflow 4 agenty + 4 weryfikatory, confidence high) |
 | **FAZA 1** — dane + model + migracja v90 | ✅ DONE, **live-gate PASS z zastrzeżeniem** | commit **`35ce5a2`**; smoke `tmp_s34_p1_smoke.mjs` **50/50**. ⚠ Zastrzeżenie: migracja v89→v90 **nietestowana na żywo** (stary save nadpisany przez nową grę, single-slot) — akceptacja na podstawie headless smoke. Pokryte na żywo: natywny v90 nowej gry, moduły startowe (debug spawn + ścieżka orderowa UI), popCapacity=1, round-trip save→F5→load. |
 | **FAZA 2** — logika ticka (budowa/energia/praca/efekty/stocznia) | ✅ DONE, **live-gate ZALICZONY W CAŁOŚCI** | commity **`7073a99`** + fix stoczni (`a3892e0`) + fix Command (`7894230`); smoke `tmp_s34_p2_smoke.mjs` **60/60**, `tmp_s34_command_stations_smoke.mjs` **17/17**; regresja FAZY 1 **50/50**, slice8b **51/51**. **F2 live-gate = R1-R3 PASS + fix Command zweryfikowany (V1-V5 PASS).** R1 stocznia (queue→build→spawn docked→rozkazy), R2 no_crew (rebalans na kolejnym ticku), R3 round-trip (progres przeżywa save→reload i kontynuuje) — zaliczone w powtórce PRZED fixem Command. FIX #1 (`a3892e0`): stocznia `insufficient_resources`. FIX #2 (`7894230`): Command „nie znał" stacji jako lokacji — V1-V5 PASS (statki stacyjne widoczne z 🛰, undock z Command, marker stacji klikalny, kolonijne bez regresji). |
-| **FAZA 3** — ekran zarządzania | ❌ NIEROZPOCZĘTA | — |
+| **FAZA 3** — ekran zarządzania | ✅ DONE, **live-gate PENDING** | `StationManagementView.js` (nowy) + tryb stacji w ColonyOverlay (zakładki 🛰, siatka slotów, picker modułów, depot, kolejka stoczni) + StationPanel „Zarządzaj". Smoke `tmp_s34_faza3_smoke.mjs` **16/16**; regr slice8b 51/51, s4_2 25/25, p1 50/50, p2 60/60. **Live-gate wykona Filip** (lista klikania niżej). |
 | **FAZA 4** — transport POP | ❌ NIEROZPOCZĘTA | — |
 | **FAZA 5** — etykiety na mapie | ❌ NIEROZPOCZĘTA | — |
 | **FAZA 6** — domknięcie | ❌ NIEROZPOCZĘTA | — |
@@ -124,6 +124,59 @@ BodyName/Vessel): statek stacyjny obecny na liście Command PRZED i PO undock, `
 zwraca nazwę stacji, statek kolonijny bez regresji. ⚠ FMO nieimportowalny headless (canvas) — test
 pokrywa ŹRÓDŁO listy + `resolveBodyName` (który `_resolveName` wiernie odwzorowuje); klik/rysowanie
 weryfikuje Filip na żywo.
+
+---
+
+## FAZA 3 — DONE (ekran zarządzania stacją; live-gate PENDING)
+
+**Zaimplementowane (bez migracji save, render/UI-only, zgodnie z planem c) FAZA 3):**
+- **Nowy plik `src/ui/StationManagementView.js`** — `drawStationManagement(ctx, area, station, {addHit, techIsResearched, pickerOpen})`.
+  Pure-ish (node-importowalny), addHit → `_hitZones` overlayu. Sekcje: nagłówek (nazwa + ✏ rename,
+  załoga pop/cap + dostępna, bilans energii +prod/-cons/net, status stoczni, tradeCapacity), siatka
+  slotów (maxModules=8, 2 kolumny: moduł=ikona+nazwa+lv+status ✓/⚡✗/👥✗; pending=pasek postępu+✕
+  anuluj; pusty=＋ picker), depot (classifyStationDepot: surowce vs towary), kolejka stoczni (gdy
+  shipyard aktywny — lista +✕), **picker modułów** (koszt have/need czerwony gdy brak, gate tech 🔒,
+  gate slotów, Buduj).
+- **ColonyOverlay TRYB STACJI** (`_stationMode`/`_selectedStationId`/`_stationPickerOpen`): zakładki
+  🛰 stacji gracza dołączone do tab bara (`stationTab` → tryb stacji BEZ `switchActiveColony`); branch
+  w `draw()` gatuje CAŁY blok mapy hex (`if(_stationMode){...}else{mapa}`); `show({stationMode, stationId})`;
+  redraw per-tick przez subskrypcje `station:*`→`uiManager._dirty` (statusy zmieniają się na ticku, nie
+  po akcji); klik poza hit-zone konsumowany (bez logiki kafla); nagłówek POP kolonii ukryty w trybie stacji.
+  Intent: `addPendingModuleOrder`/`cancelPendingModuleOrder`/`cancelStationShip` + `station:rename`.
+- **StationPanel** (pływający): placeholder „moduły wkrótce" zastąpiony podsumowaniem (POP/cap, stocznia,
+  lista modułów ze statusem) + przycisk **„🛰 Zarządzaj"** → `overlayManager.openPanel('colony',
+  {stationMode:true, stationId, colonyId:activePlanetId})`.
+- **i18n `station.mgmt.*`** (pl+en, 23 klucze). Nazwy modułów z danych (dwujęzyczne w StationModuleData).
+
+**Smoke:** `tmp_s34_faza3_smoke.mjs` **16/16** (realny `Station` + mock ctx): hit-zony rename/addslot(×5)/
+cancelmodule/cancelship, picker build tylko dla stać+odblokowany (power_fusion tak / power_solar_auto nie),
+pełne sloty → brak build. ⚠ ColonyOverlay/StationPanel nieimportowalne headless (three/canvas) — smoke
+pokrywa CZYSTY widok + gettery; wpięcie (branch draw/taby/klik) weryfikuje Filip.
+
+### LISTA LIVE-GATE FAZY 3 (elementy UI do klikania — Filip)
+
+Setup: `KOSMOS.debug.spawnStation()` (lub zbuduj stację z kolonii), potem otwórz ekran kolonii (C).
+
+1. **Zakładka stacji** — w tab barze ColonyOverlay widoczna zakładka 🛰 `<nazwa stacji>`; klik → wejście
+   w tryb stacji (mapa hex znika, pojawia się ekran stacji). Klik zakładki kolonii → powrót do mapy.
+2. **Nagłówek stacji** — nazwa + ✏; klik ✏ → modal rename → nazwa zmienia się (i w zakładce, i w panelu 3D).
+3. **Pasek statystyk** — załoga (pop/cap + dostępna), energia (+prod/-cons/net; net czerwony przy deficycie),
+   stocznia (aktywna/nieaktywna), tradeCapacity — zgodne ze `stationInfo()` w konsoli.
+4. **Siatka slotów** — moduły startowe (habitat, power_atom) jako karty ze statusem ✓; puste sloty „＋ Dodaj".
+5. **Picker modułów** — klik pustego slotu → modal listy modułów; koszt have/need (czerwony gdy brak);
+   `power_fusion` 🔒 bez `fusion_power`, `power_solar_auto` 🔒 bez `automation`; klik „Buduj" (gdy stać) →
+   moduł ląduje w kolejce (flash), picker się zamyka. Klik ✕ / tło → zamknięcie pickera.
+6. **Budowa modułu w toku** — po `Buduj` slot pokazuje pasek postępu; po odczekaniu (advance czasu) moduł
+   staje się aktywny (✓); ✕ na slocie pending → anulowanie.
+7. **Bilans na żywo** — dobuduj `power_solar`/`power_fusion` przy deficycie → moduły trade/lab/shipyard
+   wracają do ✓ na kolejnym ticku (status per-tick, nie natychmiast — celowe).
+8. **Kolejka stoczni** — zbuduj `shipyard` (lub `spawnStation` z shipyard) + `KOSMOS.debug.stationBuildShip()`;
+   sekcja „Kolejka stoczni" pokazuje statek z % + ✕ anuluj.
+9. **Depot** — prawa kolumna pokazuje surowce/towary (po `stationFillDepot()` niepusta).
+10. **StationPanel „Zarządzaj"** — klik stacji na mapie 3D → pływający panel; sekcja Moduły pokazuje
+    listę+POP; przycisk „🛰 Zarządzaj" → otwiera ColonyOverlay w trybie tej stacji.
+11. **Regresja** — zakładki/mapa zwykłych kolonii bez zmian; przełączanie kolonia↔stacja↔kolonia stabilne;
+    `switchActiveColony` NIE wołane przy wyborze stacji (globalny stan gry nietknięty).
 
 ---
 
