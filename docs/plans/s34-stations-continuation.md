@@ -41,11 +41,12 @@ działa bez załogi.
    `docs/audits/s34-phase0-findings.md` (FAZA 0 — etykiety/trade capacity/moduły statków/misje transportu).
 3. `git log --oneline 35ce5a2^..HEAD` — przejrzyj commity S3.4 (35ce5a2 F1, 7073a99 F2, F3: ee19179/
    2c0fb84/03bff50, F4: 2394c6b/19084f5).
-4. Odpal smoke: `tmp_s34_p1` (**50/50**), `tmp_s34_p2` (**61/61**), `tmp_s34_faza3` (**45/45**),
-   `tmp_s34_command_stations` (**17/17**), `tmp_s34_faza4` (**57/57**). Każdy fail → STOP + raport.
-5. **STAN (2026-07-14):** FAZY 1-4 DONE. **FAZA 4 live-gate PENDING** (Filip). Następna praca:
-   - **FAZA 4 live-gate FAIL / brak** → poprawki wg uwag Filipa; nie zaczynaj FAZY 5.
-   - **FAZA 4 live-gate PASS** → START **FAZY 5** (etykiety kolonii+stacji na mapie; sekcja c) FAZA 5).
+4. Odpal smoke: `tmp_s34_p1` (**50/50**), `tmp_s34_p2` (**61/61**), `tmp_s34_faza3` (**47/47**),
+   `tmp_s34_command_stations` (**17/17**), `tmp_s34_faza4` (**80/80**). Każdy fail → STOP + raport.
+5. **STAN (2026-07-14):** FAZY 1-4 DONE; FAZA 4 częściowy live-gate + domknięcie B1/B2/K1/K2 (`c0ff981`).
+   **FAZA 4 RETEST PENDING** (Filip — „LISTA RETEST FAZY 4"). Następna praca:
+   - **RETEST FAIL / brak** → poprawki wg uwag Filipa; nie zaczynaj FAZY 5.
+   - **RETEST PASS** → START **FAZY 5** (etykiety kolonii+stacji na mapie; sekcja c) FAZA 5).
 6. ⚠ 3 pre-istniejące faile smoke NIE-S3.4 (stale, nie regresje): `tmp_s3_5a_1`/`tmp_s3_5b` asertują
    `CURRENT_VERSION===86` (jest 90), `tmp_s4_3` mock bez `getPlayerColonies`. Backlog e) pkt 1.
 
@@ -59,7 +60,7 @@ działa bez załogi.
 | **FAZA 1** — dane + model + migracja v90 | ✅ DONE, **live-gate PASS z zastrzeżeniem** | commit **`35ce5a2`**; smoke `tmp_s34_p1_smoke.mjs` **50/50**. ⚠ Zastrzeżenie: migracja v89→v90 **nietestowana na żywo** (stary save nadpisany przez nową grę, single-slot) — akceptacja na podstawie headless smoke. Pokryte na żywo: natywny v90 nowej gry, moduły startowe (debug spawn + ścieżka orderowa UI), popCapacity=1, round-trip save→F5→load. |
 | **FAZA 2** — logika ticka (budowa/energia/praca/efekty/stocznia) | ✅ DONE, **live-gate ZALICZONY W CAŁOŚCI** | commity **`7073a99`** + fix stoczni (`a3892e0`) + fix Command (`7894230`); smoke `tmp_s34_p2_smoke.mjs` **61/61** (przepisane pod obsada=pop), `tmp_s34_command_stations_smoke.mjs` **17/17**; regresja FAZY 1 **50/50**, slice8b **51/51**. **F2 live-gate = R1-R3 PASS + fix Command zweryfikowany (V1-V5 PASS).** R1 stocznia (queue→build→spawn docked→rozkazy), R2 no_crew (rebalans na kolejnym ticku), R3 round-trip (progres przeżywa save→reload i kontynuuje). FIX #1 (`a3892e0`): stocznia `insufficient_resources`. FIX #2 (`7894230`): Command zna stacje jako lokację (V1-V5 PASS). |
 | **FAZA 3** — ekran zarządzania | ✅ DONE + **domknięcie R2** (`03bff50`), **live-gate CZĘŚCIOWY** (T2-T5,T7 PASS; B1-B3 fix + R1-R2 + R2-fix dodane) | `StationManagementView.js` + tryb stacji w ColonyOverlay (zakładki 🛰, siatka slotów, picker modułów+statków, depot, kolejka stoczni, rozbiórka) + StationPanel „Zarządzaj". **R2 (`03bff50`): ship picker stacji buduje WYŁĄCZNIE projekty gracza** (`window.KOSMOS.unitDesigns`), NIE surowe szablony `SHIPS` — parytet ze stocznią kolonijną (decyzja #10). Smoke `tmp_s34_faza3_smoke.mjs` **45/45**; regr slice8b 51/51, s4_2 25/25, p1 50/50, p2 61/61. **DO POWTÓRKI (Filip):** retest B1-B3 + R1-R2 + R2-fix (budowa z projektu), zaległe T8 (i18n/estetyka) + T9 (round-trip/regresja). |
-| **FAZA 4** — transport POP | ✅ DONE, **live-gate PENDING** | commity **`2394c6b`** (obsada=pop) + **`19084f5`** (transport pasażerski); smoke `tmp_s34_faza4_smoke.mjs` **57/57** + `tmp_s34_p2_smoke.mjs` **61/61** (obsada). Sekcja „FAZA 4 — DONE" niżej. Manual live-gate: Filip dostanie osobny. |
+| **FAZA 4** — transport POP | ✅ DONE + **domknięcie live-gate** (`c0ff981`), **live-gate RETEST PENDING** | commity **`2394c6b`** (obsada=pop) + **`19084f5`** (transport pasażerski) + **`c0ff981`** (B1/B2/K1/K2 po częściowym live-gate); smoke `tmp_s34_faza4_smoke.mjs` **80/80** + `tmp_s34_faza3_smoke.mjs` **47/47** (K2) + `p2` **61/61** (obsada). Sekcje „FAZA 4 — DONE" + „FAZA 4 — poprawki live-gate" niżej. Filip robi RETEST z nowego manuala. |
 | **FAZA 5** — etykiety na mapie | ❌ NIEROZPOCZĘTA | — |
 | **FAZA 6** — domknięcie | ❌ NIEROZPOCZĘTA | — |
 
@@ -287,6 +288,58 @@ Setup: stacja (`KOSMOS.debug.spawnStation()` lub zbuduj), kolonia z ≥2 POP, pr
 
 ---
 
+## FAZA 4 — POPRAWKI LIVE-GATE (B1/B2/K1/K2, commit `c0ff981`; RETEST PENDING)
+
+Częściowy live-gate FAZY 4 (Filip): **T1/T3/T6/T7/T8 PASS**, pętla główna T4 działa dla 1. POP.
+Zgłoszone 2 bugi + 2 korekty — domknięte commitem `c0ff981` (bez migracji save, v90). RETEST przez Filipa.
+
+**B1 (fix, KRYTYCZNE) — root cause:** bramka `Vessel.canColonize` (przeprojektowana w `19084f5` na moduł
+`slotType==='habitat'`) była POPRAWNA, ale UI jej NIE używało. `getModuleCapabilities` dodaje capability
+`'colony'` dla KAŻDEGO `colonistCapacity>0` — więc statek z 2× `passenger_module` (zero habitatu) dostawał
+akcję „Kolonizuj" przez `caps.has('colony')`. W nowej grze maskował to osobny tech-gate (`colonization`
+niezbadany → akcja nieaktywna). Fix: JEDNO źródło prawdy — `canColonize` w 3 miejscach decydujących o
+dostępności: `FleetActions.getAvailableActions` (push colonize) + `colonize.canExecute` + `FleetManagerOverlay`
+picker `foreign_colonize`. Pozostałe `colonistCapacity>0` w UI to display projektu (nie dostępność) —
+`transport_passenger` słusznie zostaje na `colonistCapacity>0`.
+
+**B2 (fix) — root cause:** statek pasażerski czekający przy pełnej stacji (`no_housing`) był
+niekomunikowany — gracz sądził, że POP zginął. Dwie mylące etykiety: (1) status „Czeka na paliwo" —
+`dockAtTarget` przy stacji uruchamia auto-tankowanie z depotu (bez `power_cells`) → `_awaitingFuel=true`
+mimo pełnego baku; (2) misja „Tranzyt ETA rok X" — faza `no_housing` wpadała w `else`→`phaseTransit` z
+nieaktualnym `arrivalYear`. Fix: marker `vessel._awaitingHousing` (transient) + event `vessel:awaitingHousing`;
+`_statusText` daje markerowi PIERWSZEŃSTWO → „Oczekuje na wolny habitat"; `_drawActiveMission` faza
+`no_housing` → „Oczekiwanie (brak miejsca)" + ukryte ETA; EventLog (UIManager); hint na ekranie stacji
+(StationManagementView); dirty-redraw (ColonyOverlay). **Retry potwierdzony smoke:** `no_housing` → +habitat
+→ auto-unload → `completed` w ≤ kilku ticków.
+
+**K1 (feat) — załadunek = pełna pojemność kabin** (był hardcode 1 POP). Kolonia: `min(kabiny, population-1)`
+(nigdy ostatni POP); stacja: `min(kabiny, pop)` (hub przeładunkowy — można opróżnić). **Rozładunek CZĘŚCIOWY:**
+wysiada tylu, ilu mieści się w wolnych habitatach; reszta czeka na pokładzie w `no_housing` (spójnie z B2).
+Selektor ilości w UI = backlog (świadomie nie teraz).
+
+**K2 (feat, decyzja Filipa) — blokada rozbiórki zasiedlonego habitatu** (zastępuje wariant „dozwolone +
+warn", decyzja #8). `StationSystem.demolishModule`: splice-check-revert (żywy getter `popCapacity`) → `false`
+gdy `pop > popCapacity` po rozbiórce. UI: 🗑 szary + hit-zone `station_mgmt_demolish_blocked` + komunikat
+„Najpierw przetransportuj POP — habitat zamieszkany". Nie-habitaty i puste habitaty bez zmian.
+
+**Smoke:** `tmp_s34_faza4_smoke.mjs` **80/80** (§8 B1 dostępność akcji, §9 K1 pojemność+rozładunek częściowy,
+§10 B2 marker/event/retry, §11 K2 blokada) + `tmp_s34_faza3_smoke.mjs` **47/47** (§5 pod K2: pusta stacja +
+5.11 blocked view). Regr p1 50/p2 61/command 17/slice8b 51/s4_2 25.
+
+### LISTA RETEST FAZY 4 (Filip — po `c0ff981`)
+
+1. **[B1]** Zbuduj projekt z 2× `passenger_module` (zero habitat_pod/cryo_pod), odblokuj tech Kolonizacja
+   (lub save z techem). Statek pasażerski **NIE MA** akcji „Kolonizuj"; colony ship (z habitatem) MA.
+2. **[B2]** Wyślij pasażera na PEŁNĄ stację → statek: status „Oczekuje na wolny habitat" (nie „Czeka na
+   paliwo"), misja „Oczekiwanie (brak miejsca)" (nie „Tranzyt ETA"), EventLog „<statek> czeka…", ekran
+   stacji hint „Statek z X POP czeka — dobuduj habitat". Dobuduj habitat → POP rozładowany sam.
+3. **[K1]** Statek 2-kabinowy z kolonii ≥3 POP → zabiera 2 (nie 1); z kolonii 2 POP → zabiera 1. Rozładunek
+   na stację z 1 wolnym miejscem (2 na pokładzie) → 1 wysiada, 1 czeka.
+4. **[K2]** 🗑 na zasiedlonym habitacie → szary + komunikat „Najpierw przetransportuj POP". Pusty habitat /
+   inny moduł → rozbiórka działa.
+
+---
+
 ## d) ZATWIERDZONE DECYZJE (wiążące — nie re-litygować)
 
 1. **`trade_module` tradeCapacity = `[200, 400, 600]` ABSOLUTNE per poziom** (parytet naziemnego
@@ -302,8 +355,11 @@ Setup: stacja (`KOSMOS.debug.spawnStation()` lub zbuduj), kolonia z ≥2 POP, pr
 7. Przy przylocie pasażera do KOLONII: `civSystem.addPop` + **fallback-emit `civ:popBorn`** wzorem
    `ExpeditionSystem.js:1407` (`addPop` sam NIE emituje `civ:popBorn`).
 8. **Rozbiórka modułu (FAZA 3, R1) = BEZ zwrotu kosztów** (konwencja jak cancel budowy modułu/statku).
-   `StationSystem.demolishModule` usuwa moduł, bilanse przeliczają się na kolejnym ticku. Guard habitatu
-   `pop>popCapacity` → dozwolone z `console.warn` (limit egzekwuje FAZA 4).
+   `StationSystem.demolishModule` usuwa moduł, bilanse przeliczają się na kolejnym ticku.
+   ⚠ **ZAKTUALIZOWANE przez K2 (FAZA 4 live-gate, `c0ff981`):** rozbiórka ZASIEDLONEGO habitatu
+   (`pop > popCapacity` po rozbiórce) jest **ZABLOKOWANA** (splice-check-revert → `false`), NIE „dozwolona
+   z console.warn". UI wyszarza 🗑 (`station_mgmt_demolish_blocked`) + komunikat „Najpierw przetransportuj
+   POP". Decyzja Filipa zastępuje wariant warn-owy.
 9. **Budowa statków STACYJNYCH z UI stacji (FAZA 3, R2)** — ship picker w ekranie stacji reuse
    `queueStationShip`. Budowa statków stacyjnych z poziomu **Command/Shipyard** (globalny
    FleetOverlay) = **POZA ZAKRESEM S3.4** → osobny slice (dotyka FleetOverlay globalnie; patrz backlog e).
@@ -512,6 +568,7 @@ Cały system budowy tak działa: `ColonyManager._tickShipBuilds(civDt)` (`:139`)
 - FAZA 0 findings: `docs/audits/s34-phase0-findings.md`
 - Manual live-gate FAZY 2: `docs/testing/s34-faza2-live-gate-manual.md`
 - Commity: **`35ce5a2`** (FAZA 1), **`7073a99`** (FAZA 2), **`03bff50`** (FAZA 3 R2 — projekty gracza),
-  **`2394c6b`** (FAZA 4 obsada=pop), **`19084f5`** (FAZA 4 transport pasażerski). `git log 35ce5a2^..HEAD`.
-- Smoke: `tmp_s34_p1_smoke.mjs` (50/50), `tmp_s34_p2_smoke.mjs` (61/61), `tmp_s34_faza3_smoke.mjs` (45/45),
-  `tmp_s34_command_stations_smoke.mjs` (17/17), `tmp_s34_faza4_smoke.mjs` (57/57). Untracked (konwencja tmp).
+  **`2394c6b`** (FAZA 4 obsada=pop), **`19084f5`** (FAZA 4 transport pasażerski), **`c0ff981`** (FAZA 4
+  poprawki live-gate B1/B2/K1/K2). `git log 35ce5a2^..HEAD`.
+- Smoke: `tmp_s34_p1_smoke.mjs` (50/50), `tmp_s34_p2_smoke.mjs` (61/61), `tmp_s34_faza3_smoke.mjs` (47/47),
+  `tmp_s34_command_stations_smoke.mjs` (17/17), `tmp_s34_faza4_smoke.mjs` (80/80). Untracked (konwencja tmp).
