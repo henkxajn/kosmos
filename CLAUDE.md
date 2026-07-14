@@ -503,7 +503,7 @@ UIManager 5 wpięć, `fcGroupPanel` w GameConfig, i18n `fleetGroup.*` PL+EN. Smo
 
 ---
 
-## S3.4 stacje — UKOŃCZONE (FAZY 0-6, save v90, final live-gate pending)
+## S3.4 stacje — UKOŃCZONE (FAZY 0-6 + S3.4b, save v90, live-gate PASS — ARC ZAMKNIĘTY)
 
 Przeprojektowanie stacji orbitalnych w pełny ekran gracza (moduły + POP + ekran zarządzania +
 transport pasażerski + etykiety na mapie), plan wielofazowy. **WSZYSTKIE FAZY 0-6 DONE.** Wariant A
@@ -537,6 +537,17 @@ stationInfo, exportSave, importSave}`.
 **Świadomie POZA zakresem S3.4 (backlog):** wpięcie stacji w `CivilianTradeSystem` (handel przez stację),
 stacje w Outlinerze/minimapie, tier 2+ i klasy stacji, stacje AI, szablon „Statek pasażerski" w kreatorze,
 budowa statków stacyjnych z Command/Shipyard, selektor ilości POP w transporcie.
+
+**S3.4b — panele okienkowe (save v90 bez migracji, live-gate PASS — domknięcie arca stacji):**
+Pływające panele (BottomContext „okno planety" + StationPanel) dostają: **drag za nagłówek** (clamp do
+viewportu, pozycje NIESERIALIZOWANE), **minimalizacja do doku** (belki stackują się w lewym-dolnym rogu nad
+paskiem nawigacji I nad panelami floty), **StationPanel 2× szerszy** (440 px, dwie kolumny: właściciel/orbita/
+depot | handel/moduły). Architektura KOMPOZYCYJNA: `src/ui/FloatingPanel.js` (helper drag/clamp/reanchor) +
+`src/ui/PanelDock.js` (rejestr belek, trzymany przez UIManager — rysowany PO overlayManager, klikany PRZED,
+blokuje kamerę przez `isOverUI`) + `src/ui/PanelDockLogic.js` (`computeDockSlots` czysta geometria stacka).
+Minimalizacja „w miejscu" USUNIĘTA — oba panele mają JEDEN model dokowania (klucze `body:<id>` / `station:<id>`).
+Displaced panel (przełączenie na inną żywą stację) auto-dokuje (nic nie ginie). Smoke `tmp_s34b_paneldock`
+19/19 + `tmp_s34b_bottomcontext` 14/14. Backlog polish: multi-instance panele, per-belka ✕, serializacja pozycji.
 
 ---
 

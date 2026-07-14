@@ -3,6 +3,7 @@
 > **Samowystarczalny.** Świeża instancja Claude Code ma wznowić pracę WYŁĄCZNIE z tego pliku
 > + repozytorium. Nie zakłada pamięci poprzedniej sesji.
 > **Data zamrożenia:** 2026-07-04 (koniec pracy po FAZIE 2; live-gate FAZY 2 PENDING).
+> **STATUS 2026-07-14: ARC ZAMKNIĘTY — S3.4 (F0–F6) + W2.1 + S3.4b DONE, live-gate PASS. Szczegóły na końcu pliku.**
 > **Plan nadrzędny:** S3.4 „STACJE ORBITALNE: MODUŁY, POP, EKRAN, OZNACZENIA" (ewolucja Wariantu A z audytu).
 
 ---
@@ -804,3 +805,40 @@ PW 220→440, treść w dwóch kolumnach (LEWA: właściciel/orbita/depot; PRAWA
 - Wszystko WIZUALNE → **live-gate**. `node --check` czyste (9 plików); smokes: paneldock 19/19,
   bottomcontext-dock 14/14, s4_2 25/25, s4_3 14/14, faza3 47/47, command_stations 17/17, map_labels 37/37,
   slice8b 51/51 (regr FleetGroupPanel), FloatingPanel logika (node import) OK.
+
+---
+
+## ✅ STATUS KOŃCOWY — ARC STACJI ORBITALNYCH ZAMKNIĘTY (2026-07-14)
+
+**S3.4 (FAZY 0–6) + W2.1 (KROK A+B) + S3.4b (C0–C4) = DONE, LIVE-GATE PASS, save v90.**
+
+Final live-gate (Filip, 2026-07-14) przeszedł w całości:
+- **KROK B / W2.1** — etykiety mapy trzymają się ciał podczas zoomu/inercji kamery (fix redraw-gate przez
+  `moveEpoch` kamery); dynamiczna szerokość plakietki do nazwy (MAX 200 px, potem „…"). PASS.
+- **S3.4b** — panele okienkowe: drag za nagłówek + minimalizacja do doku + stackowanie belek nad panelami
+  floty + StationPanel 2× szerszy (440 px, dwie kolumny). Zweryfikowane pkt 1–12 (w tym restore z krawędzi
+  ekranu, brak duplikatu panel↔belka, kotwica bez draga nietknięta, „Zarządzaj" nie chowa panelu, klik-ciała
+  otwiera panel bez zmian). PASS.
+
+Commity arca (main, wypchnięte): F0–F6 (patrz sekcja „Referencje"/„FAZA 6"), W2.1 `e934072` (KROK A
+promocja smoke'ów + sweep pinów) + KROK B (etykiety), S3.4b `e583e0c` (C1 drag) · `537fdfa` (C2 dock) ·
+`35f5933` (C3 szerszy panel) · `c16b38e` + `eb9deff` (adversarial-review fixy #1–#8).
+
+**Nic z S3.4/S3.4b nie wisi lokalnie.** Świeża instancja: arc traktować jako zamknięty; kolejne prace
+otwierają NOWY slice.
+
+### Backlog feature'ów (świadomie ODŁOŻONE — nowe slice'y, nie dług do domknięcia arca)
+Stacje — funkcje:
+- Wpięcie stacji w `CivilianTradeSystem` (handel cywilny/kredyty przez stację jako węzeł).
+- Stacje w Outlinerze i na minimapie galaktycznej.
+- Tier 2+ i klasy stacji (obecnie tylko `orbital_station` tier 1).
+- Stacje AI (imperia budują własne stacje).
+- Szablon „Statek pasażerski" w kreatorze statków; budowa statków stacyjnych z modułu Command/Shipyard.
+- Selektor ilości POP w transporcie pasażerskim (obecnie stały transfer).
+
+Panele okienkowe (S3.4b) — polish:
+- Prawdziwie MULTI-INSTANCE panele (obecnie 1 okno planety + 1 okno stacji naraz; displaced auto-dokuje).
+- Per-belka ✕ (dismiss bez restore) — dziś dismiss = restore→✕.
+- Serializacja pozycji paneli (dziś reset per sesja — celowo, żeby nie zaśmiecać save).
+- BottomContext restore na „ostatnią pozycję draga" (dziś re-emit `body:selected` = reanchor przy kotwicy;
+  StationPanel już trzyma `restorePos`).
