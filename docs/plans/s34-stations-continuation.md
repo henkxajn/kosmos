@@ -64,7 +64,7 @@ działa bez załogi.
 | **FAZA 3** — ekran zarządzania | ✅ DONE + **domknięcie R2** (`03bff50`), **live-gate CZĘŚCIOWY** (T2-T5,T7 PASS; B1-B3 fix + R1-R2 + R2-fix dodane) | `StationManagementView.js` + tryb stacji w ColonyOverlay (zakładki 🛰, siatka slotów, picker modułów+statków, depot, kolejka stoczni, rozbiórka) + StationPanel „Zarządzaj". **R2 (`03bff50`): ship picker stacji buduje WYŁĄCZNIE projekty gracza** (`window.KOSMOS.unitDesigns`), NIE surowe szablony `SHIPS` — parytet ze stocznią kolonijną (decyzja #10). Smoke `tmp_s34_faza3_smoke.mjs` **45/45**; regr slice8b 51/51, s4_2 25/25, p1 50/50, p2 61/61. **DO POWTÓRKI (Filip):** retest B1-B3 + R1-R2 + R2-fix (budowa z projektu), zaległe T8 (i18n/estetyka) + T9 (round-trip/regresja). |
 | **FAZA 4** — transport POP | ✅ **ZAMKNIĘTA** (RETEST PASS RT1-RT5) | commity **`2394c6b`** (obsada=pop) + **`19084f5`** (transport pasażerski) + **`c0ff981`** (B1/B2/K1/K2); smoke `tmp_s34_faza4_smoke.mjs` **80/80** + `tmp_s34_faza3_smoke.mjs` **47/47** + `p2` **61/61**. **RETEST PASS** (Filip): bramka canColonize w UI, no_housing + auto-unload na żywo, pełna pojemność + częściowy rozładunek, blokada rozbiórki zasiedlonego habitatu. |
 | **FAZA 5** — etykiety na mapie | ✅ DONE (W2.1 + cleanup), **live-gate final PENDING** | commity **`c17eb95`** (W1/W2) + **`4f18b15`** (W2.1: LOD K1 + stacking K2 + focus K3 + kosmetyka K4) + **`d7e6e34`** (cleanup: romby/W1/flaga wariantu out); smoke `tmp_map_labels_smoke.mjs` **37/37** + regr faza1-4 (50/61/47/80). `MapLabelLayer` (Trasa A: overlay 2D na #ui-canvas) — etykiety kolonii (ikona+nazwa+POP) i stacji (🛰+nazwa+pop/cap+badge). **Wybór Filipa: W2** → cleanup wykonany (stare romby `_colonyLabels` + gałąź `_drawW1` + `resolveLabelVariant`/`mapLabelVariant` debug usunięte; W2.1 jedyny render). Stacja klikalna → `station:selected` + `station:focus` (K3). Sekcja „FAZA 5 — DONE" niżej. **BACKLOG (nie teraz):** odcień niebieskiego ramki stacji do palety terminala; dalsze podkręcanie plakietek. |
-| **FAZA 6** — domknięcie | ❌ NIEROZPOCZĘTA | — |
+| **FAZA 6** — domknięcie | ✅ DONE | commity **`8620c61`** (sweep §6.2) + **`8d8f53d`** (exportSave/importSave) + **`adb90e6`** (CLAUDE.md); regresja rot-proof (piny v85/v86 + mock s4_3) w tmp smokes; smoke `tmp_s34_faza6_smoke.mjs` **18/18**. Raport końcowy S3.4 niżej („FAZA 6 — DONE + RAPORT KOŃCOWY"). §6.1 round-trip pokryty istniejącymi smokami (p1 migracja v90 / faza3 station serialize-restore / faza4 misja pasażerska) + live-gate F2 R3. |
 
 **Save:** `CURRENT_VERSION = 90` (`SaveMigration.js`). FAZA 1 wprowadziła `_migrateV89toV90`.
 FAZY 2/3/4 **nie bumpują wersji** (nowe pola przez `?? default` w restore; passenger_module data-only;
@@ -589,13 +589,21 @@ Outlinerze/minimapie, tier 2+, klasy stacji, stacje AI — świadomie POZA zakre
 
 ## e) BACKLOG FAZY 6 (dodatkowe, poza planem nadrzędnym)
 
-1. **Naprawa starych pinów v85 + przestarzałego mocka w regresji** — testy `tmp_s3_3b_s2/s3_smoke.mjs`
-   asertują `CURRENT_VERSION===85` (od dawna nieaktualne), a `tmp_s4_3_smoke.mjs` używa mocka bez
-   `getPlayerColonies` (crash). To NIE są regresje S3.4 (były zepsute wcześniej), ale warto naprawić.
-2. **Debug `exportSave()` / `importSave()`** — backup save'a przed przyszłymi bumpami wersji
-   (live-gate FAZY 1 pokazał, że single-slot save utrudnia test migracji na żywo).
-3. **`tmp_s34_p*_smoke.mjs`** — zdecydować, czy zostają jako **stałe testy** (przenieść do
-   `src/testing/`?) czy usunąć. Obecnie untracked w root (konwencja tmp).
+1. ✅ **DONE (F6, untracked)** — **Naprawa starych pinów v85/v86 + przestarzałego mocka w regresji.**
+   Piny przepisane **rot-proof**: `CURRENT_VERSION === N` → `>= N` (floor istnienia migracji),
+   `migrated.version === N` → `=== CURRENT_VERSION` (wynik pełnego łańcucha). Naprawione:
+   `tmp_s3_3b_s2` (34/34), `tmp_s3_3b_s3` (35/35), `tmp_s3_3b_s3b_e1` (16/16), `tmp_s3_5a_1` (43/43),
+   `tmp_s3_5b` (51/51). Mock `tmp_s4_3` (14/14) + `getPlayerColonies` (filtr `!ownerEmpireId`, mirror
+   ColonyManager). ⚠ Zostają untracked → efemeryczne (patrz #3). **Poza scope Filipa jeszcze wykryte**
+   (NIENAPRAWIONE, starsze slice'y, ten sam pattern): `tmp_s3_0a_a/b/d/e` (v80/81), `tmp_s3_2_s2` (v83),
+   `tmp_warp_route_system` (v88) — rekomendacja: rot-proof sweep razem z decyzją #3.
+2. ✅ **DONE (F6, `8d8f53d`)** — **Debug `exportSave()` / `importSave()`** (+ statyczne `SaveSystem.exportSave/
+   importSave`). `KOSMOS.debug.exportSave()` pobiera plik + schowek + zwraca string; `importSave(json)`
+   nadpisuje slot (string/obiekt) + instruuje reload. Smoke 9/9 (w `tmp_s34_faza6_smoke.mjs` 18/18).
+3. ⏳ **DECYZJA FILIPA** — **`tmp_s34_*` i pozostałe `tmp_*` smokes: stałe czy usunąć?** Obecnie ~60
+   untracked plików w root; fixy z #1 są efemeryczne (znikną przy `git clean`). Rekomendacja: promować
+   kluczowe (`tmp_s34_p1/p2/faza3/faza4/faza6`, `tmp_map_labels`, `tmp_s34_command_stations`) do
+   `src/testing/` jako trackowane + runner, resztę zostawić/usunąć. Osobny slice infra-testów (poza S3.4).
 4. **Budowa statków stacyjnych z Command/Shipyard** (globalny FleetOverlay) — osobny slice PO S3.4.
    Dotyka FleetOverlay globalnie (zakładka Stocznia buduje dla kolonii; rozszerzenie o stacje = zmiana
    celu budowy + routing spawnu). W S3.4 FAZA 3 (R2) budowa statków stacyjnych działa TYLKO z ekranu
@@ -634,7 +642,62 @@ Cały system budowy tak działa: `ColonyManager._tickShipBuilds(civDt)` (`:139`)
 - Manual live-gate FAZY 2: `docs/testing/s34-faza2-live-gate-manual.md`
 - Commity: **`35ce5a2`** (FAZA 1), **`7073a99`** (FAZA 2), **`03bff50`** (FAZA 3 R2 — projekty gracza),
   **`2394c6b`** (FAZA 4 obsada=pop), **`19084f5`** (FAZA 4 transport pasażerski), **`c0ff981`** (FAZA 4
-  poprawki live-gate B1/B2/K1/K2), **`c17eb95`** (FAZA 5 etykiety mapy). `git log 35ce5a2^..HEAD`.
+  poprawki live-gate B1/B2/K1/K2), **`c17eb95`** (FAZA 5 etykiety W1/W2), **`4f18b15`** (FAZA 5 W2.1:
+  LOD/stacking/focus/kosmetyka), **`d7e6e34`** (FAZA 5 cleanup — romby/W1/flaga out), **`8620c61`**
+  (FAZA 6 sweep §6.2), **`8d8f53d`** (FAZA 6 exportSave/importSave), **`adb90e6`** (FAZA 6 CLAUDE.md).
+  `git log 35ce5a2^..HEAD`.
 - Smoke: `tmp_s34_p1_smoke.mjs` (50/50), `tmp_s34_p2_smoke.mjs` (61/61), `tmp_s34_faza3_smoke.mjs` (47/47),
   `tmp_s34_command_stations_smoke.mjs` (17/17), `tmp_s34_faza4_smoke.mjs` (80/80),
-  `tmp_map_labels_smoke.mjs` (35/35). Untracked (konwencja tmp).
+  `tmp_map_labels_smoke.mjs` (37/37), `tmp_s34_faza6_smoke.mjs` (18/18). Untracked (konwencja tmp).
+
+---
+
+## FAZA 6 — DONE + RAPORT KOŃCOWY S3.4 (2026-07-14)
+
+**S3.4 (stacje orbitalne jako pełny ekran gracza) — WSZYSTKIE FAZY 0-6 UKOŃCZONE.** Save v90.
+Final live-gate FAZY 5 (etykiety W2.1 wizualnie) + retest domknięcia F6 PENDING (Filip).
+
+### Co zrobione (per faza)
+- **F0** audyt (workflow 4+4 agenty) → `docs/audits/s34-phase0-findings.md`.
+- **F1** dane + model encji + migracja v89→v90 (`35ce5a2`). Live-gate PASS z zastrzeżeniem (migracja
+  headless-tested — single-slot save).
+- **F2** tick stateful: budowa modułów (depot.spend), bilans energii/pracy (obsada=pop od F4),
+  lab→research home, stocznia→spawn+dockAtStation (`7073a99` + fixy stoczni/Command). Live-gate PASS.
+- **F3** ekran zarządzania: `StationManagementView.js` + tryb stacji w ColonyOverlay (zakładki 🛰, siatka
+  slotów, picker modułów+statków z projektów gracza, depot, kolejka stoczni, rozbiórka). Live-gate PASS.
+- **F4** transport pasażerski POP: `passenger_module` + misja `_launchPassenger`/`_processPassengerArrival`
+  + `_awaitingHousing`/no_housing (auto-unload po zbudowaniu habitatu) + pełna pojemność/częściowy
+  rozładunek + blokada rozbiórki zasiedlonego habitatu. `canColonize` = moduł habitat (nie colonistCapacity).
+  RETEST PASS RT1-RT5 (`2394c6b`+`19084f5`+`c0ff981`).
+- **F5** etykiety mapy (`MapLabelLayer`, Trasa A overlay 2D): W2.1 = plakietki kolonii (ikona+nazwa+POP)
+  i stacji (🛰+nazwa+pop/cap+badge), LOD 3-poziomowy (plakietka→znacznik→fade), anty-nakładanie greedy +
+  łącznik, kosmetyka (ucinanie „…", offset nad/pod tarczą), stacja klikalna → `station:selected`+`station:focus`.
+  Mgła wojny: `getPlayerColonies`/stacje `!ownerEmpireId` — NIGDY getAllColonies. Wybór Filipa=W2 →
+  cleanup (romby/W1/flaga wariantu out). (`c17eb95`+`4f18b15`+`d7e6e34`).
+- **F6** domknięcie: sweep §6.2 (StationData.buildTime + i18n moduleShipyardSoon/rename — martwe),
+  `exportSave/importSave` debug, regresja rot-proof (piny v85/v86 + mock s4_3), CLAUDE.md + ten raport.
+  (`8620c61`+`8d8f53d`+`adb90e6`).
+
+### Inwarianty utrzymane (twarde ograniczenia)
+- Stacja NIGDY w `ColonyManager._colonies`. Zero zmian w `CivilianTradeSystem`/`switchActiveColony`/
+  `ColonyManager.serialize`. Balans wyłącznie w `StationModuleData.js`. Commity atomowe. i18n PL+EN.
+- Fasady: `StationDepot` (façade store), `_playerStationFacades` (EconomyOverlay), tryb stacji ColonyOverlay
+  (colonyId fallback, render ekranem stacji, bez switchActiveColony).
+
+### Świadomie ODŁOŻONE (backlog — poza zakresem S3.4)
+- Wpięcie stacji w `CivilianTradeSystem` (handel towarami PRZEZ stację jako węzeł).
+- Stacje w Outlinerze/minimapie/Stratcom; stacje AI (cross-empire); tier 2+ i klasy stacji.
+- Szablon „Statek pasażerski" w kreatorze jednostek; budowa statków stacyjnych z Command/Shipyard
+  (globalny FleetOverlay — dziś tylko z ekranu stacji); selektor ilości POP w transporcie pasażerskim.
+- Dostrojenie odcienia niebieskiego ramki stacji (`#8fb8ff`) do palety terminala; dalsze podkręcanie plakietek.
+- **DECYZJA FILIPA:** los `tmp_*` smokes (efemeryczne fixy pinów) — promocja do `src/testing/` czy usunięcie
+  (§e.3). Starsze piny v80/81/83/88 (`tmp_s3_0a_*`/`tmp_s3_2`/`tmp_warp`) niezaadresowane — rot-proof sweep razem.
+
+### Regresja końcowa (headless, wszystkie PASS)
+`p1` 50/50 · `p2` 61/61 · `faza3` 47/47 · `command_stations` 17/17 · `faza4` 80/80 ·
+`map_labels` 37/37 · `faza6` 18/18. Regresja rot-proof: `s3_3b_s2` 34/34 · `s3_3b_s3` 35/35 ·
+`s3_3b_s3b_e1` 16/16 · `s3_5a_1` 43/43 · `s3_5b` 51/51 · `s4_3` 14/14.
+
+### NEXT (po final live-gate Filipa)
+S3.5 (cross-empire trade — częściowo zrobione: S3.5a-1 upkeep, S3.5b order board) / dług techniczny AI /
+empire tech state — wg nadrzędnego roadmapu, poza S3.4.
