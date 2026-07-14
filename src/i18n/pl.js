@@ -722,8 +722,6 @@ export default {
   'station.statusDocked': 'zadokowany',
   'station.statusOutbound': 'odlatuje',
   'station.modules': 'Moduły',
-  'station.moduleShipyardSoon': 'Stocznia orbitalna — wkrótce',
-  'station.rename': 'Zmień nazwę',
   // ── S3.4 FAZA 3 — ekran zarządzania stacją (StationManagementView) ──
   'station.mgmt.manage': 'Zarządzaj',
   'station.mgmt.crew': 'Załoga',

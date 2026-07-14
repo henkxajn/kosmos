@@ -721,8 +721,6 @@ export default {
   'station.statusDocked': 'docked',
   'station.statusOutbound': 'outbound',
   'station.modules': 'Modules',
-  'station.moduleShipyardSoon': 'Orbital shipyard — soon',
-  'station.rename': 'Rename',
   // ── S3.4 FAZA 3 — station management screen (StationManagementView) ──
   'station.mgmt.manage': 'Manage',
   'station.mgmt.crew': 'Crew',

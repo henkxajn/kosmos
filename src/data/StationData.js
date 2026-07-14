@@ -23,10 +23,10 @@ export const STATIONS = {
       power_cells:        50,
       plasma_cores:       40,
     },
-    // PLACEHOLDER pod S3.3b-S3/S4 (przyszła faza budowy). W S3.3b-S2 (Wariant A) pole jest
-    // NIEUŻYWANE — materializacja jest natychmiastowa po spend (canAfford → spend → stacja
-    // od razu). Zostaje w danych, by przyszły slice mógł włączyć progresję bez zmiany schematu.
-    buildTime: 7,   // lat gry (~6–8) — obecnie nietykany (instant materialize)
+    // Wariant A (S3.3b-S2): materializacja NATYCHMIASTOWA po spend (canAfford → spend → stacja
+    // od razu) — brak fazy budowy stacji jako całości. Progresja czasowa dotyczy MODUŁÓW
+    // (StationModuleData.buildTime, tykane w StationSystem._tick), nie samej stacji.
+    // (S3.4 FAZA 6 — usunięto martwe pole `buildTime:7`, nigdy nietykane; tier 2+ poza zakresem.)
     maxModules: 8,  // S3.4 FAZA 1 — limit slotów modułów (tier 1); patrz StationModuleData.js
   },
 };
