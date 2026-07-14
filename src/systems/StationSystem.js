@@ -14,6 +14,7 @@ import {
 import { STATIONS } from '../data/StationData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
+import { calcShipCost } from '../data/ShipModulesData.js';
 
 export class StationSystem {
   constructor() {
@@ -218,12 +219,17 @@ export class StationSystem {
   // ── Stocznia orbitalna — kolejka budowy statków (MVP: bez POP, koszt z depotu) ──
 
   /**
-   * Zakolejkuj statek w stoczni stacji. Wymaga AKTYWNEGO modułu shipyard (bilans energii/pracy w
-   * _recomputeModuleStates — sam moduł potrzebuje obsady jak każdy) + tech statku + środków w depocie
-   * (spend all-or-nothing). MVP: sama BUDOWA statku nie blokuje POP (brak crewCost — inaczej niż
-   * kolonia; koszt tylko z depotu). @returns {{ok:boolean, reason?:string}}
+   * Zakolejkuj statek w stoczni stacji. Buduje WYŁĄCZNIE projekty gracza (kadłub + moduły z
+   * `window.KOSMOS.unitDesigns`) — parytet ze stocznią kolonijną (S3.4 FAZA 3 R2, decyzja #10).
+   * Wymaga AKTYWNEGO modułu shipyard (bilans energii/pracy w _recomputeModuleStates — sam moduł
+   * potrzebuje obsady jak każdy) + tech KADŁUBA + środków w depocie (spend all-or-nothing).
+   * MVP: sama BUDOWA statku nie blokuje POP (brak crewCost — inaczej niż kolonia; koszt tylko z depotu).
+   * @param {string} stationId
+   * @param {string} shipId    — id kadłuba projektu (HULLS) lub legacy statku (SHIPS)
+   * @param {string[]} moduleIds — moduły projektu (koszt liczony przez calcShipCost, spawn z modułami)
+   * @returns {{ok:boolean, reason?:string, missing?:object}}
    */
-  queueStationShip(stationId, shipId) {
+  queueStationShip(stationId, shipId, moduleIds = []) {
     const station = EntityManager.get(stationId);
     if (!station || station.type !== 'station') return { ok: false, reason: 'no_station' };
     if (!station.hasActiveShipyard) return { ok: false, reason: 'no_shipyard' };
@@ -231,16 +237,19 @@ export class StationSystem {
     const ship = SHIPS[shipId] ?? HULLS[shipId];
     if (!ship) return { ok: false, reason: 'unknown_ship' };
 
-    // Bramka tech (gracz — globalny techSystem)
+    // Bramka tech (gracz — globalny techSystem). Kadłub gatuje budowę; moduły projektu odblokowuje
+    // projektant (statku z zablokowanym modułem nie da się zapisać jako projekt).
     if (ship.requires && !window.KOSMOS?.techSystem?.isResearched?.(ship.requires)) {
       EventBus.emit('station:shipBuildRejected', { stationId, shipId, reason: 'requiresTech', requires: ship.requires });
       return { ok: false, reason: 'requiresTech', requires: ship.requires };
     }
 
-    // Koszt = surowce (cost) + towary (commodityCost) kadłuba. BRAK kredytów/paliwa: budowa
-    // kadłuba w stoczni orbitalnej płacona wyłącznie MATERIAŁAMI z depotu (kredyty utrzymania
-    // floty to osobny sink — S3.5a-1 — z globalnej puli gracza, nie z depotu stacji).
-    const cost = { ...(ship.cost ?? {}), ...(ship.commodityCost ?? {}) };
+    // Koszt = kadłub + MODUŁY projektu (calcShipCost — identycznie jak stocznia kolonijna). BRAK
+    // kredytów/paliwa: budowa płacona wyłącznie MATERIAŁAMI z depotu (kredyty utrzymania floty to
+    // osobny sink — S3.5a-1 — z globalnej puli gracza, nie z depotu stacji).
+    const mods = (moduleIds ?? []).filter(Boolean);
+    const { cost: rawCost, commodityCost } = calcShipCost(ship, mods);
+    const cost = { ...rawCost, ...commodityCost };
     if (!station.depot.spend(cost)) {
       // Wypisz brakujące pozycje (have < need) — żeby live-gate dało się debugować z konsoli.
       const missing = {};
@@ -252,7 +261,7 @@ export class StationSystem {
       return { ok: false, reason: 'insufficient_resources', missing };
     }
 
-    station.shipQueues.push({ shipId, progress: 0, buildTime: ship.buildTime ?? 5 });
+    station.shipQueues.push({ shipId, modules: mods, progress: 0, buildTime: ship.buildTime ?? 5 });
     EventBus.emit('station:shipBuildStarted', { stationId, shipId });
     return { ok: true };
   }
@@ -379,15 +388,16 @@ export class StationSystem {
     for (let i = q.length - 1; i >= 0; i--) {
       q[i].progress += civDt;
       if (q[i].progress >= q[i].buildTime) {
-        const shipId = q[i].shipId;
+        const shipId  = q[i].shipId;
+        const modules = q[i].modules ?? [];
         q.splice(i, 1);
-        this._spawnStationShip(station, shipId);
+        this._spawnStationShip(station, shipId, modules);
       }
     }
   }
 
   /** Materializuj statek zbudowany w stoczni: createAndRegister + dockAtStation + dodaj do floty domu. */
-  _spawnStationShip(station, shipId) {
+  _spawnStationShip(station, shipId, modules = []) {
     const vMgr = window.KOSMOS?.vesselManager;
     if (!vMgr?.createAndRegister) return;
     const homeCol  = this._resolveHomeColony();
@@ -396,6 +406,7 @@ export class StationSystem {
     const vessel = vMgr.createAndRegister(shipId, colonyId, {
       x: body?.x ?? station.x,
       y: body?.y ?? station.y,
+      modules,   // moduły projektu → colonistCapacity/staty (parytet ze stocznią kolonijną)
     });
     if (!vessel) return;
     vMgr.dockAtStation?.(vessel.id, station.id);   // port uniwersalny (nie zmienia vessel.colonyId)

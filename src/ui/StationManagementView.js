@@ -14,6 +14,7 @@ import { STATION_MODULES, stationModuleCost } from '../data/StationModuleData.js
 import { STATIONS } from '../data/StationData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
+import { calcShipCost } from '../data/ShipModulesData.js';
 import { classifyStationDepot } from './StationPanelLogic.js';
 
 // Nazwa modułu wg locale (dane są dwujęzyczne w StationModuleData — bez duplikacji w i18n).
@@ -378,16 +379,19 @@ function drawModulePicker(ctx, area, station, view, maxModules) {
   addHit(px, py, PW, PH, 'station_mgmt_picker_bg', {});
 }
 
-// Ship picker — lista kadłubów SHIPS do budowy w stoczni (tech-gate 🔒, koszt have/need z depotu, Buduj).
-// Reuse queueStationShip (ColonyOverlay._onHit) — zero nowej logiki budowy. Kolejka nielimitowana.
+// Ship picker — lista PROJEKTÓW GRACZA (kadłub + moduły z window.KOSMOS.unitDesigns) do budowy w
+// stoczni stacji — parytet ze stocznią kolonijną (S3.4 FAZA 3 R2 / decyzja #10). Tech-gate na KADŁUBIE
+// (🔒), koszt have/need z depotu = calcShipCost(hull, moduły). Reuse queueStationShip(hullId, modules)
+// (ColonyOverlay._onHit). Pusta lista → „Brak projektów — stwórz projekt w stoczni".
 function drawShipPicker(ctx, area, station, view) {
   const { x, y, w, h } = area;
   const { addHit, techIsResearched } = view;
 
-  const ids = Object.keys(SHIPS);
+  // Projekty gracza: preferuj przekazane w view.designs (testowalność headless), inaczej z window.KOSMOS.
+  const designs = view.designs ?? (typeof window !== 'undefined' ? window.KOSMOS?.unitDesigns : null) ?? [];
   const rowH = 46;
   const PW = Math.min(560, w - 40);
-  const PH = Math.min(h - 40, 60 + ids.length * rowH + 16);
+  const PH = Math.min(h - 40, 60 + Math.max(1, designs.length) * rowH + 16);
   const px = x + Math.floor((w - PW) / 2);
   const py = y + Math.floor((h - PH) / 2);
 
@@ -405,11 +409,24 @@ function drawShipPicker(ctx, area, station, view) {
   ctx.textAlign = 'left';
   addHit(px + PW - 26, py + 6, 20, 18, 'station_mgmt_shippicker_close', {});
 
+  // Pusta lista projektów → komunikat kierujący do projektanta (Command/Shipyard).
+  if (designs.length === 0) {
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
+    ctx.fillText(t('station.mgmt.noDesigns'), px + PW / 2, py + PH / 2);
+    ctx.textAlign = 'left';
+    addHit(px, py, PW, PH, 'station_mgmt_shippicker_bg', {});
+    return;
+  }
+
   let ry = py + 32;
-  for (const id of ids) {
-    const ship = SHIPS[id];
-    const locked = ship.requires && !techIsResearched?.(ship.requires);
-    const cost = { ...(ship.cost ?? {}), ...(ship.commodityCost ?? {}) };
+  for (const tpl of designs) {
+    const hull = HULLS[tpl.hullId] ?? SHIPS[tpl.hullId];
+    if (!hull) continue;                                   // projekt na nieznanym kadłubie — pomiń
+    const mods = (tpl.modules ?? []).filter(Boolean);
+    const locked = hull.requires && !techIsResearched?.(hull.requires);
+    const { cost: rawC, commodityCost: comC } = calcShipCost(hull, mods);
+    const cost = { ...rawC, ...comC };
     let afford = true;
     const costParts = [];
     for (const [cid, amt] of Object.entries(cost)) {
@@ -423,11 +440,14 @@ function drawShipPicker(ctx, area, station, view) {
     ctx.fillRect(px + 8, ry, PW - 16, rowH - 4);
     ctx.font = `18px ${THEME.fontFamily}`;
     ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
-    ctx.fillText(ship.icon ?? '🚀', px + 16, ry + 24);
+    ctx.fillText(hull.icon ?? '🚀', px + 16, ry + 24);
+    // Nazwa PROJEKTU (nie kadłuba) + kadłub w nawiasie.
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
-    ctx.fillText(moduleName(ship), px + 42, ry + 16);
+    ctx.fillText(`${tpl.name ?? moduleName(hull)}`, px + 42, ry + 16);
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(`${moduleName(hull)} · ${mods.length} mod`, px + 42 + ctx.measureText(`${tpl.name ?? moduleName(hull)}  `).width, ry + 16);
     let costX = px + 42;
     for (const c of costParts) {
       const txt = `${c.id} ${Math.round(c.have)}/${c.amt}`;
@@ -446,7 +466,7 @@ function drawShipPicker(ctx, area, station, view) {
     ctx.textAlign = 'center';
     ctx.fillText(locked ? '🔒' : t('station.mgmt.build'), bx + bw / 2, by + bh / 2 + 4);
     ctx.textAlign = 'left';
-    if (canBuild) addHit(bx, by, bw, bh, 'station_mgmt_buildship', { shipId: id });
+    if (canBuild) addHit(bx, by, bw, bh, 'station_mgmt_buildship', { hullId: tpl.hullId, modules: mods, name: tpl.name });
 
     ry += rowH;
   }

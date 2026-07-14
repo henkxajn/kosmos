@@ -435,6 +435,8 @@ export class ColonyOverlay extends BaseOverlay {
     drawStationManagement(ctx, { x, y, w, h }, station, {
       addHit: (hx, hy, hw, hh, type, data) => this._addHit(hx, hy, hw, hh, type, data),
       techIsResearched: (id) => window.KOSMOS?.techSystem?.isResearched?.(id) ?? false,
+      // Ship picker buduje projekty gracza (parytet ze stocznią kolonijną — S3.4 FAZA 3 R2 / decyzja #10).
+      designs: window.KOSMOS?.unitDesigns ?? [],
       pickerOpen: this._stationPickerOpen,
       shipPickerOpen: this._stationShipPickerOpen,
     });
@@ -3505,8 +3507,9 @@ export class ColonyOverlay extends BaseOverlay {
         this._stationShipPickerOpen = false;
         break;
       case 'station_mgmt_buildship':
-        if (zone.data?.shipId && this._selectedStationId) {
-          const r = window.KOSMOS?.stationSystem?.queueStationShip(this._selectedStationId, zone.data.shipId);
+        // Buduj PROJEKT gracza: hullId (kadłub) + modules (moduły projektu) — parytet ze stocznią kolonijną.
+        if (zone.data?.hullId && this._selectedStationId) {
+          const r = window.KOSMOS?.stationSystem?.queueStationShip(this._selectedStationId, zone.data.hullId, zone.data.modules ?? []);
           if (r?.ok) { this._stationShipPickerOpen = false; this._showFlash('🛠 ' + t('station.mgmt.flashShipQueued')); }
           else if (r?.reason === 'requiresTech')          this._showFlash('🔒 ' + t('station.mgmt.flashLocked'));
           else if (r?.reason === 'insufficient_resources') this._showFlash('⚠ ' + t('station.mgmt.flashShipCost'));

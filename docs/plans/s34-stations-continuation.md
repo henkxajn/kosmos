@@ -226,8 +226,19 @@ Setup: `KOSMOS.debug.spawnStation()` (lub zbuduj stację z kolonii), potem otwó
    `StationSystem.demolishModule` usuwa moduł, bilanse przeliczają się na kolejnym ticku. Guard habitatu
    `pop>popCapacity` → dozwolone z `console.warn` (limit egzekwuje FAZA 4).
 9. **Budowa statków STACYJNYCH z UI stacji (FAZA 3, R2)** — ship picker w ekranie stacji reuse
-   `queueStationShip` (lista `SHIPS`). Budowa statków stacyjnych z poziomu **Command/Shipyard** (globalny
+   `queueStationShip`. Budowa statków stacyjnych z poziomu **Command/Shipyard** (globalny
    FleetOverlay) = **POZA ZAKRESEM S3.4** → osobny slice (dotyka FleetOverlay globalnie; patrz backlog e).
+10. **Ship picker stacji buduje WYŁĄCZNIE projekty gracza** (korekta R2 po live-gate — zastępuje „lista
+    `SHIPS`" z decyzji #9). Źródło = `window.KOSMOS.unitDesigns` (te same projekty co stocznia kolonijna,
+    `FleetManagerOverlay._drawShipyard`), filtr = tech-gate na KADŁUBIE (`HULLS[hullId].requires`), koszt =
+    `calcShipCost(hull, moduły)` z depotu stacji. `queueStationShip(stationId, hullId, moduleIds)` niesie
+    moduły do `_spawnStationShip` → `createAndRegister(shipId, colonyId, {modules})` (parytet: statek stacyjny
+    ma moduły projektu, jak kolonijny). Surowy szablon `SHIPS` (np. `science_vessel`) NIE jest budowalny ze
+    stacji. Pusta lista → „Brak projektów — stwórz projekt w stoczni (Dowództwo)" (`station.mgmt.noDesigns`,
+    pl+en). Backward-compat: `queueStationShip(id, shipId)` bez `moduleIds` = goły kadłub (koszt = hull cost,
+    `calcShipCost(ship, [])`). Bez migracji save (v90). Commit `fix(S3.4-F3): stocznia stacji buduje projekty
+    gracza`. Smoke `tmp_s34_faza3_smoke.mjs` **45/45** (sekcja 6 rewrite + sekcja 8 system-level koszt/spawn
+    z modułami).
 
 ---
 
