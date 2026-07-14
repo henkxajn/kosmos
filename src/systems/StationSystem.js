@@ -9,7 +9,7 @@ import EntityManager from '../core/EntityManager.js';
 import { Station } from '../entities/Station.js';
 import {
   createStarterModules, makeStationModule, stationModuleCost,
-  STATION_MODULES, MODULE_SHED_ORDER,
+  STATION_MODULES, MODULE_SHED_ORDER, CREW_SHED_ORDER,
 } from '../data/StationModuleData.js';
 import { STATIONS } from '../data/StationData.js';
 import { SHIPS } from '../data/ShipsData.js';
@@ -317,9 +317,13 @@ export class StationSystem {
   }
 
   /**
-   * Bilans energii + pracy. Reset wszystkich modułów na active, potem gaszenie sheddable
-   * (trade → lab → shipyard) aż net energii ≥ 0 i Σ popWork ≤ pop. CORE (habitat + power_*)
-   * nigdy nie gaśnie (infrastruktura); przy skrajnym deficycie stacja biegnie na samym core.
+   * Bilans energii + pracy. Reset wszystkich modułów na active, potem:
+   *  (1) ENERGIA — gaś KONSUMENTÓW (MODULE_SHED_ORDER: trade→lab→shipyard) aż net energii ≥ 0.
+   *      Producenci (power_*) nigdy nie gaszeni dla energii.
+   *  (2) PRACA — gaś wg CREW_SHED_ORDER (konsumenci → power_*) aż Σ popWork(active) ≤ pop.
+   * S3.4 FAZA 4 (decyzja obsada=pop): dostępna załoga = `station.pop` (habitat daje TYLKO
+   * pojemność, NIE obsadę). Świeża stacja z pop=0 → wszystkie moduły z popWork>0 (w tym power_*)
+   * na no_crew; żyją tylko habitat i power_solar_auto (popWork 0). Stacja ożywa po dowiezieniu POP.
    */
   _recomputeModuleStates(station) {
     const mods = station.modules;
@@ -329,37 +333,35 @@ export class StationSystem {
     const energyOf  = (m) => STATION_MODULES[m.moduleType]?.energy  ?? 0;
     const popWorkOf = (m) => STATION_MODULES[m.moduleType]?.popWork ?? 0;
 
-    // Energia: gaś sheddable dopóki net < 0
+    // Energia: gaś konsumentów dopóki net < 0
     let guard = 0;
     while (guard++ < 64) {
       let net = 0;
       for (const m of mods) if (m.active !== false) net += energyOf(m);
       if (net >= 0) break;
-      const t = this._firstActiveSheddable(station);
-      if (!t) break;   // tylko core aktywne — deficyt akceptowany (zbuduj więcej energii)
+      const t = this._firstActiveSheddable(station, MODULE_SHED_ORDER);
+      if (!t) break;   // tylko producenci/core aktywne — deficyt akceptowany (zbuduj więcej energii)
       t.active = false; t.inactiveReason = 'no_power';
     }
 
-    // Praca: gaś sheddable dopóki Σ popWork(active) > dostępna załoga (epsilon na float).
-    // Dostępna załoga = max(pop, popCapacity): habitaty zapewniają BAZOWĄ obsadę modułów
-    // równą liczbie miejsc (stacja działa od uruchomienia — FAZA 2 nie ma jeszcze pasażerów),
-    // a rzeczywista populacja `pop` (dowożona w FAZIE 4) nigdy tej obsady nie ZMNIEJSZA.
-    // Bez tego (gate na samym pop=0) każdy moduł trade/lab/shipyard gasłby zaraz po budowie.
-    const availCrew = Math.max(station.pop ?? 0, station.popCapacity);
+    // Praca: gaś wg CREW_SHED_ORDER (power OSTATNIE) dopóki Σ popWork(active) > pop (epsilon na float).
+    // Konsumenci gasną przed power → gdy power gaśnie, żaden aktywny konsument już go nie potrzebuje
+    // (invariant: każdy moduł z popWork>0 jest w CREW_SHED_ORDER i wcześniej od power).
+    const availCrew = station.pop ?? 0;
     guard = 0;
     while (guard++ < 64) {
       let crew = 0;
       for (const m of mods) if (m.active !== false) crew += popWorkOf(m);
       if (crew <= availCrew + 1e-9) break;
-      const t = this._firstActiveSheddable(station);
-      if (!t) break;   // tylko core — understaffed core biegnie best-effort
+      const t = this._firstActiveSheddable(station, CREW_SHED_ORDER);
+      if (!t) break;   // pozostały tylko moduły popWork=0 (habitat/power_solar_auto) — best-effort
       t.active = false; t.inactiveReason = 'no_crew';
     }
   }
 
-  /** Pierwszy AKTYWNY moduł do wyłączenia wg priorytetu MODULE_SHED_ORDER (trade → lab → shipyard). */
-  _firstActiveSheddable(station) {
-    for (const type of MODULE_SHED_ORDER) {
+  /** Pierwszy AKTYWNY moduł do wyłączenia wg zadanej kolejności (MODULE_SHED_ORDER / CREW_SHED_ORDER). */
+  _firstActiveSheddable(station, order) {
+    for (const type of order) {
       const m = station.modules.find(mm => mm.active !== false && mm.moduleType === type);
       if (m) return m;
     }

@@ -174,9 +174,17 @@ export const STATION_MODULES = {
   },
 };
 
-// Kolejność wyłączania modułów przy deficycie energii/pracy (S3.4 FAZA 2): trade → lab → shipyard.
-// Moduły spoza tej listy (habitat + power_*) to CORE — nigdy nie gasną (infrastruktura: mieszkania+energia).
+// Kolejność wyłączania modułów przy deficycie ENERGII (S3.4 FAZA 2): trade → lab → shipyard.
+// Producenci (power_*) NIGDY nie gasną dla energii (gaszenie producenta pogłębiłoby deficyt).
 export const MODULE_SHED_ORDER = ['trade_module', 'lab', 'shipyard'];
+
+// Kolejność wyłączania przy deficycie PRACY (S3.4 FAZA 4, decyzja obsada=pop): najpierw KONSUMENCI
+// (trade → lab → shipyard), POTEM ENERGIA (power_* — priorytet utrzymania: gaszone OSTATNIE, żeby wracały
+// PIERWSZE gdy rośnie załoga → kaskada „power → konsumenci"). Świeża stacja z pop=0 jest NAPRAWDĘ martwa:
+// każdy moduł z popWork>0 gaśnie na no_crew do przywiezienia POP. Wyjątki (popWork 0, NIEobecne tu →
+// nigdy nie gaszone dla pracy): habitat (pasywne miejsca — popCapacity działa bez załogi) i
+// power_solar_auto (autonomiczne — energia bez załogi). Moduł z popWork>0 MUSI być na tej liście.
+export const CREW_SHED_ORDER = ['trade_module', 'lab', 'shipyard', 'power_solar', 'power_atom', 'power_fusion'];
 
 // Płaski koszt budowy modułu do spend()/canAfford() — surowce bazowe + towary w jednym obiekcie
 // (mirror stationTotalCost w StationData.js). FAZA 2 użyje przy budowie z kolejki.

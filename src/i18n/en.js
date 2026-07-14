@@ -737,6 +737,7 @@ export default {
   'station.mgmt.noModules': 'No modules',
   'station.mgmt.noPower': 'no power',
   'station.mgmt.noCrew': 'no crew',
+  'station.mgmt.noCrewHint': 'No crew — transport POP from a colony (passenger ship)',
   'station.mgmt.queued': 'queued',
   'station.mgmt.shipQueue': 'Shipyard queue',
   'station.mgmt.picker': 'Choose module to build',

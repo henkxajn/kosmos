@@ -63,7 +63,10 @@ export function drawStationManagement(ctx, area, station, view) {
 
   // ── NAGŁÓWEK ────────────────────────────────────────────────────────────────
   const bal = computeBalance(station);
-  const availCrew = Math.max(station.pop ?? 0, station.popCapacity);
+  // S3.4 FAZA 4 (obsada=pop): dostępna załoga = pop (habitat daje pojemność, nie obsadę).
+  const availCrew = station.pop ?? 0;
+  // Świeża stacja z pop=0 gasi moduły na no_crew — CELOWO (stacja ożywa po dowiezieniu POP).
+  const hasNoCrew = station.modules.some(m => m.active === false && m.inactiveReason === 'no_crew');
   let cy = y + PAD;
 
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
@@ -98,6 +101,15 @@ export function drawStationManagement(ctx, area, station, view) {
     sx += ctx.measureText(s.txt).width + 22;
   }
   cy += 24;
+
+  // Hint „brak załogi" — gdy moduły gaszone na no_crew (świeża stacja z pop=0). Stan OCZEKIWANY,
+  // nie awaria: gracz ma dowieźć POP statkiem pasażerskim z kolonii (S3.4 FAZA 4, obsada=pop).
+  if (hasNoCrew) {
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.warning;
+    ctx.fillText(`⚠ ${t('station.mgmt.noCrewHint')}`, x + PAD, cy + 11);
+    cy += 20;
+  }
 
   ctx.strokeStyle = THEME.border;
   ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();

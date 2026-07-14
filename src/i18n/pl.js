@@ -738,6 +738,7 @@ export default {
   'station.mgmt.noModules': 'Brak modułów',
   'station.mgmt.noPower': 'brak energii',
   'station.mgmt.noCrew': 'brak załogi',
+  'station.mgmt.noCrewHint': 'Brak załogi — przetransportuj POP z kolonii (statek pasażerski)',
   'station.mgmt.queued': 'w kolejce',
   'station.mgmt.shipQueue': 'Kolejka stoczni',
   'station.mgmt.picker': 'Wybierz moduł do budowy',
