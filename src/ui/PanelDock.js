@@ -46,10 +46,19 @@ export class PanelDock {
   _geom(W, H) {
     const civMode = window.KOSMOS?.civMode;
     const leftX = (civMode ? CIV_SIDEBAR_W : 0) + 8;
-    const bottomReserved = civMode
+    const navReserved = civMode
       ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H)
       : COSMIC.BOTTOM_BAR_H;
-    return { H, barW: BAR_W, barH: BAR_H, gap: GAP, leftX, bottomReserved, topLimit: COSMIC.TOP_BAR_H };
+    // #6/#7 (review) — panele floty (FleetGroupPanel/FleetCommandPanel) też siedzą w lewym-dole;
+    // jeśli widoczne, dok stackuje się NAD nimi (nie nakłada się i nie kradnie im klików).
+    let floorY = H - navReserved - 6;   // dolna krawędź najniższej belki
+    const um  = window.KOSMOS?.uiManager;
+    const fcp = um?.fleetCommandPanel?.visible ? um.fleetCommandPanel?._drawnRect : null;
+    const fgp = um?.fleetGroupPanel?.visible   ? um.fleetGroupPanel?._drawnRect   : null;
+    if (fcp) floorY = Math.min(floorY, fcp.y - 6);
+    if (fgp) floorY = Math.min(floorY, fgp.y - 6);
+    // computeDockSlots liczy baseY = H - bottomReserved - marginBottom - barH → chcemy baseY = floorY - barH.
+    return { H, barW: BAR_W, barH: BAR_H, gap: GAP, leftX, bottomReserved: H - floorY, marginBottom: 0, topLimit: COSMIC.TOP_BAR_H };
   }
 
   draw(ctx, W, H) {

@@ -1385,7 +1385,7 @@ export class UIManager {
     if (this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
 
     // C2 (S3.4b) — belki doku (zminimalizowane panele) blokują kamerę.
-    if (window.KOSMOS?.civMode && this.panelDock?.isOver?.(x, y)) return true;
+    if (this.panelDock?.isOver?.(x, y)) return true;
 
     // BottomContext (dolny panel kontekstowy — gdy encja zaznaczona)
     if (this._bottomContext.isOver(x, y, W, H, this._selectedEntity)) return true;
@@ -1448,7 +1448,7 @@ export class UIManager {
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
     // C2 (S3.4b) — belki doku (zminimalizowane panele) na wierzchu, PRZED overlayManager; tylko gdy dok widoczny.
-    if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen() && this.panelDock?.handleClick?.(x, y)) return true;
+    if (!this.overlayManager.isAnyOpen() && this.panelDock?.handleClick?.(x, y)) return true;
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
     // Slice 8b — panel grupy statków (PRZED overlayManager, tylko gdy żaden overlay otwarty — bo draw też gated).
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()
@@ -1568,10 +1568,12 @@ export class UIManager {
     this._dirty = true;
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
+    // C1 (S3.4b) — zakończ drag paneli ZAWSZE (przed early-return na overlay — inaczej _dragging utyka, #4).
+    // Realny drag (moved) pochłania nadchodzący click, by nie przeleciał do sceny 3D (deselekcja, #5).
+    const draggedS = this.stationPanel?.endDrag?.();
+    const draggedB = this._bottomContext?.endDrag?.();
+    if (draggedS || draggedB) this._panelDragConsumedClick = true;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y, button); return; }
-    // C1 (S3.4b) — zakończ drag paneli (jeśli trwał).
-    this.stationPanel?.endDrag?.();
-    this._bottomContext?.endDrag?.();
   }
 
   // M3 P1.5 — wystawiamy konwersję clientX/Y → ui-canvas local px (post-UI_SCALE)
@@ -1586,6 +1588,8 @@ export class UIManager {
     x /= UI_SCALE; y /= UI_SCALE;
     this._tooltipMouseX = x;
     this._tooltipMouseY = y;
+    // #4 (review) — overlay/modal pojawił się w trakcie draga → przerwij drag (inaczej _dragging utyka).
+    if (this.overlayManager.isAnyOpen()) { this.stationPanel?.endDrag?.(); this._bottomContext?.endDrag?.(); }
     // C1 (S3.4b) — jeśli panel jest przeciągany, aktualizuj i POCHŁOŃ ruch (bez hoverów pod spodem).
     if (this.stationPanel?.isDraggingPanel?.())   { this.stationPanel.handleDragMove(x, y);   return; }
     if (this._bottomContext?.isDraggingPanel?.()) { this._bottomContext.handleDragMove(x, y); return; }
@@ -1594,7 +1598,7 @@ export class UIManager {
       this.overlayManager.handleMouseMove(x, y);
     }
     if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
-    if (window.KOSMOS?.civMode) this.panelDock?.handleMouseMove?.(x, y);       // C2 — hover belek doku
+    this.panelDock?.handleMouseMove?.(x, y);       // C2 — hover belek doku (bez bramki civMode, #1)
     if (this.fleetGroupPanel?.visible && !this.overlayManager.isAnyOpen()) this.fleetGroupPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu grupy
     if (this.fleetCommandPanel?.visible && !this.overlayManager.isAnyOpen()) this.fleetCommandPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu floty
     if (window.KOSMOS?.civMode) this._bottomNavBar.handleMouseMove(x, y);   // UI v3 — hover slotów dolnego paska nawigacji
@@ -1778,7 +1782,8 @@ export class UIManager {
     // (jak ramki selekcji) — by nie nadrysowywać FleetManagerOverlay (rysowany wcześniej).
     if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()) this.fleetGroupPanel.draw(ctx, W, H);
     // C2 (S3.4b) — pasek zadań zminimalizowanych paneli (lewy-dół, nad nawigacją); ukryty gdy pełny overlay.
-    if (civMode && !globeOpen && !this.overlayManager.isAnyOpen()) this.panelDock.draw(ctx, W, H);
+    // #1 (review) — bez bramki civMode: BottomContext (a więc i minimalizacja) działa też poza civMode.
+    if (!globeOpen && !this.overlayManager.isAnyOpen()) this.panelDock.draw(ctx, W, H);
     if (civMode && !globeOpen) this._eventLogDrawer.draw(ctx, W, H);   // dziennik — hover-drawer dolnej krawędzi (nad overlay'em, nad paskiem bell/MENU)
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──

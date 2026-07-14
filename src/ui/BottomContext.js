@@ -75,6 +75,12 @@ export class BottomContext {
       this._minimized = false;
       if (entity) window.KOSMOS?.panelDock?.unregister?.('body:' + entity.id);
     });
+    // #2 (review) — usunięcie ciała z symulacji zdejmuje osieroconą belkę (parytet ze StationPanel).
+    EventBus.on('entity:removed', ({ entity }) => {
+      if (!entity) return;
+      window.KOSMOS?.panelDock?.unregister?.('body:' + entity.id);
+      if (this._prevEntity?.id === entity.id) { this._prevEntity = null; this._minimized = false; }
+    });
   }
 
   // Obszar mapy (origin + rozmiar) — karta nie wychodzi poza niego.
@@ -130,7 +136,7 @@ export class BottomContext {
     // Fade in/out
     if (entity) this._slideProgress = Math.min(1, this._slideProgress + ANIM_SPEED);
     else        this._slideProgress = Math.max(0, this._slideProgress - ANIM_SPEED);
-    if (this._slideProgress <= 0 || !entity) { this._cardRect = null; this._hitZones = []; return; }
+    if (this._slideProgress <= 0 || !entity) { this._cardRect = null; this._hitZones = []; this._lastRect = null; return; }   // #8 — bez fantomowej strefy-drag
 
     // Reset zakładki przy zmianie encji
     if (entity !== this._prevEntity) {

@@ -346,6 +346,17 @@ export class StationPanel extends BaseOverlay {
 
   _restoreFromDock(sid) {
     const dock = window.KOSMOS?.panelDock;
+    // #3 (review) — jeśli panel pokazuje INNĄ żywą stację, najpierw ją zadokuj (nie gub jej + pozycji).
+    const prevId = this._stationId;
+    if (!this._float.minimized && prevId && prevId !== sid) {
+      const cur = this._station();
+      if (cur) dock?.register('station:' + prevId, {
+        icon: '🛰',
+        label: cur.name ?? '—',
+        restorePos: this._float.dragPos ? { ...this._float.dragPos } : null,
+        onRestore: () => this._restoreFromDock(prevId),
+      });
+    }
     const entry = dock?.get?.('station:' + sid);
     this._stationId = sid;
     this._float.dragPos = entry?.restorePos ? { ...entry.restorePos } : null;

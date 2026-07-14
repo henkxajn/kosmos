@@ -4129,6 +4129,9 @@ export class GameScene {
       // Slice 8 — klik bezpośrednio po box-select (drag) to artefakt; pochłoń go
       // (inaczej _handleTacticalLeftClick wyczyściłby świeżo zaznaczony zbiór).
       if (this._boxSelectConsumedClick) { this._boxSelectConsumedClick = false; return; }
+      // #5 (S3.4b review) — klik zaraz po przeciągnięciu pływającego panelu = artefakt; pochłoń
+      // (inaczej _handleTacticalLeftClick zdeselekcjonowałby ciało / wyczyścił zaznaczenie floty).
+      if (this.uiManager?._panelDragConsumedClick) { this.uiManager._panelDragConsumedClick = false; return; }
       // Propaguj modifiery kliku do ColonyOverlay (multi-select shift/ctrl)
       const overlay = this.uiManager?.overlayManager?.overlays?.colony;
       if (overlay) overlay._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
@@ -4617,7 +4620,7 @@ export class GameScene {
       return true;
     };
     window.addEventListener('mousedown', (e) => {
-      if (e.button === 0) this._boxSelectConsumedClick = false;  // świeży start interakcji
+      if (e.button === 0) { this._boxSelectConsumedClick = false; if (this.uiManager) this.uiManager._panelDragConsumedClick = false; }  // świeży start interakcji
       if (!GAME_CONFIG.FEATURES?.fcMultiSelect) return;
       if (e.button !== 0 || !e.shiftKey) return;
       if (!onMap(e)) return;

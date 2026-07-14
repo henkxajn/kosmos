@@ -106,9 +106,9 @@ export class FleetGroupPanel extends BaseOverlay {
 
   // ── Rysowanie ──────────────────────────────────────────────────────────────
   draw(ctx, W, H) {
-    if (!this.visible) return;
+    if (!this.visible) { this._drawnRect = null; return; }
     const vessels = this._liveVessels();
-    if (vessels.length === 0) { this.hide(); this._markDirty(); return; }
+    if (vessels.length === 0) { this._drawnRect = null; this.hide(); this._markDirty(); return; }
 
     this._hitZones = [];
     const C = THEME;
@@ -137,6 +137,7 @@ export class FleetGroupPanel extends BaseOverlay {
       ctx.fillText(chipText, px + 8, cy + chipH / 2 + 1);
       ctx.textBaseline = 'alphabetic';
       this._addHit(px, cy, chipW, chipH, 'restore');
+      this._drawnRect = { x: px, y: cy, w: chipW, h: chipH };   // #6/#7 — PanelDock stackuje się NAD tym
       return;
     }
 
@@ -173,6 +174,7 @@ export class FleetGroupPanel extends BaseOverlay {
     ctx.strokeStyle = C.borderActive ?? C.accent;
     ctx.lineWidth = 1;
     ctx.strokeRect(px + 0.5, py + 0.5, PW - 1, totalH - 1);
+    this._drawnRect = { x: px, y: py, w: PW, h: totalH };   // #6/#7 — PanelDock stackuje się NAD tym
 
     // ── Header: tytuł · N + [—] ──
     ctx.fillStyle = C.accent;
