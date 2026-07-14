@@ -40,8 +40,16 @@ export class ThreeCameraController {
     // Callback: (clientX, clientY) => bool — blokuje kamerę gdy kursor nad UI
     this._isOverUI = null;
 
+    // B1 (W2.1): epoka ruchu kamery — inkrementowana w update() gdy pozycja kamery FAKTYCZNIE
+    // się zmienia (drag / zoom-lerp / pan-lerp / follow / frameSystem). UIManager czyta ją w
+    // pętli rysowania i odświeża overlay 2D (etykiety mapy + ramki selekcji) co klatkę, dopóki
+    // kamera się rusza — inaczej overlay dogania dopiero na timeDirty (10fps) lub ruch myszy.
+    this._moveEpoch  = 0;
+    this._lastCamPos = new THREE.Vector3();
+
     this._setup();
     this._applyCamera();
+    this._lastCamPos.copy(this.camera.position);   // snapshot startowy (nie liczy się jako ruch)
   }
 
   _setup() {
@@ -107,6 +115,13 @@ export class ThreeCameraController {
       this._dist = this._targetDist = this._defaultDist;
     }
     this._applyCamera();
+    // B1 (W2.1): wykryj realną zmianę pozycji kamery → bump epoki (overlay 2D dogania co klatkę).
+    // Próg odl.² > 1e-8 (≈1e-4 liniowo): poniżej = wizualnie osiadło (sub-piksel) → epoka zamiera,
+    // overlay wraca do trybu dirty/idle (bez wiecznego przerysowywania).
+    if (this._lastCamPos.distanceToSquared(this.camera.position) > 1e-8) {
+      this._lastCamPos.copy(this.camera.position);
+      this._moveEpoch++;
+    }
   }
 
   _applyCamera() {
@@ -180,4 +195,5 @@ export class ThreeCameraController {
 
   get wasDrag()    { return this._hasMoved; }
   get isDragging() { return this._isDragging; }
+  get moveEpoch()  { return this._moveEpoch; }   // B1 (W2.1): rośnie gdy kamera się rusza
 }

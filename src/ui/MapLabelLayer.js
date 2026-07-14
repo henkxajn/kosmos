@@ -27,7 +27,11 @@ const KIND_COLOR = () => ({
 
 const COLONY_PLAQUE_OFFSET  = -34;   // K4: plakietka kolonii NAD ciałem (nie zasłania tarczy)
 const STATION_PLAQUE_OFFSET =  30;   // K4: plakietka stacji POD kotwicą
-const MAX_NAME_W = 120;              // K4: max szerokość nazwy przed „…"
+// B2 (W2.1): plakietka dopasowuje szerokość do nazwy (measureText + padding, patrz _measurePlaque)
+// aż do tego MAKSIMUM — dopiero powyżej ucina „…". 200px ≈ ~30 znaków przy fontSizeNormal 10-11px:
+// pełne realne nazwy kolonii/stacji (np. „Stacja Orbitalna Alfa") mieszczą się bez ucinania,
+// a absurdalnie długa nazwa i tak nie rozsadzi układu. Stacking/łączniki liczą realną szerokość.
+const MAX_NAME_W = 200;              // K4/B2: max szerokość nazwy przed „…" (sensowne maksimum)
 const STACK_GAP  = 3;                // K2: odstęp pionowy przy zsuwaniu
 
 export class MapLabelLayer {

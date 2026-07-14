@@ -251,6 +251,7 @@ export class UIManager {
     this._dirty        = true;   // wymuszaj pierwszy frame
     this._animating    = false;  // ciągły redraw dla animacji (notifications, gameOver)
     this._lastDrawTime = 0;      // timestamp ostatniego renderowania (ms)
+    this._lastCamEpoch = 0;      // B1 (W2.1): ost. widziana epoka ruchu kamery (overlay dogania co klatkę)
     this._coloniesDirty  = true; // invalidacja cache getAllColonies()
     this._cachedColonies = [];   // cache wyników getAllColonies()
 
@@ -1606,8 +1607,14 @@ export class UIManager {
       // Gdy gra biega (nie pauza) — min ~10fps dla odświeżenia zegara
       const timeDirty = !this._timeState.isPaused
         && (now - this._lastDrawTime > 100);
-      if (this._dirty || this._animating || timeDirty) {
+      // B1 (W2.1): kamera w ruchu (zoom/pan/lerp/„inercja") → odśwież overlay co klatkę, żeby
+      // etykiety mapy i ramki selekcji trzymały się ciał bez smużenia i bez „dogadniania" myszką.
+      // Epoka rośnie tylko gdy pozycja kamery się zmienia → po osiadnięciu overlay wraca do idle.
+      const camEpoch = window.KOSMOS?.threeRenderer?.getCameraMoveEpoch?.() ?? this._lastCamEpoch;
+      const cameraMoved = camEpoch !== this._lastCamEpoch;
+      if (this._dirty || this._animating || timeDirty || cameraMoved) {
         this._dirty = false;
+        this._lastCamEpoch = camEpoch;
         this._lastDrawTime = now;
         this._draw();
       }

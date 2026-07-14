@@ -2820,6 +2820,12 @@ export class ThreeRenderer {
     return this._cameraController?._dist ?? null;
   }
 
+  // B1 (W2.1): epoka ruchu kamery — UIManager odświeża overlay 2D (etykiety + ramki selekcji)
+  // co klatkę, gdy ta wartość rośnie (kamera w ruchu). 0 gdy kontroler niepodpięty (headless).
+  getCameraMoveEpoch() {
+    return this._cameraController?.moveEpoch ?? 0;
+  }
+
   // Flag: pokaż labele wszystkich widocznych obiektów (toggle CTRL).
   // UIManager w draw() czyta ten flag przez getAllVisibleLabels() i rysuje.
   setShowAllLabels(on) { this._showAllLabels = !!on; }

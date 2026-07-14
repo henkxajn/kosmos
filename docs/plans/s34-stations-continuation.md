@@ -701,3 +701,44 @@ Final live-gate FAZY 5 (etykiety W2.1 wizualnie) + retest domknięcia F6 PENDING
 ### NEXT (po final live-gate Filipa)
 S3.5 (cross-empire trade — częściowo zrobione: S3.5a-1 upkeep, S3.5b order board) / dług techniczny AI /
 empire tech state — wg nadrzędnego roadmapu, poza S3.4.
+
+---
+
+## Domknięcie S3.4 — KROK A (testy) + KROK B (W2.1) — final live-gate PASS + poprawki
+
+### KROK A — promocja smoke'ów + sweep pinów (commit `e934072`)
+18 headless smoke'ów przeniesionych z rootu do **`src/testing/smoke/`** (trackowane, regresja):
+- S3.4 (7): `p1/p2/faza3/faza4/faza6`, `map_labels`, `command_stations`.
+- Milestone regresja (11): `s3_0a_a2/b/c/d/e/chain_v78_v81`, `s3_0b_s3`, `s3_2_s2_integration`,
+  `warp_route_planner/route_system/stratcom`.
+Zmiany: importy `./src/` → `../../` (jak `headless/`); **sweep martwych pinów wersji** —
+`CURRENT_VERSION === N` → `>= N`, `migrated.version === N` → `=== CURRENT_VERSION` (odporność na bump).
+`faza6` zostawia literały `v90/v85` — celowo testują preserve-version `importSave/exportSave`, to nie piny.
+`README.md` z konwencją. Wszystkie 18 zielone z nowej lokalizacji.
+**NIE promowane (dług, untracked w root):** `s3_0a_a`, `s3_0b_s1_chain_v81_v82`, `s3_0b_s1b_readers`,
+`s3_2_s2_smoke` — mają **dryf zachowania** (nie piny): krzywa `fuelMult` S3.0b-S2 (`fuelPerLY` 0.5→0.125,
+`warpFuel` 5→4.375), model `fuelType` dual-tank, kolejka badań AI. Decyzja: update asercji do bieżącej
+krzywej **vs** retire — odłożone (rewrite behawioralnych asercji ≠ „sweep pinów", ryzyko zamaskowania regresji).
+
+### KROK B — W2.1 (poprawki etykiet MapLabelLayer)
+**B1 — lag etykiet / „dogadnianie" myszką (root-cause WSPÓLNY z ramkami selekcji):**
+Diagnoza: overlay 2D (`UIManager._draw`) jest bramkowany `_dirty || _animating || timeDirty` — **nic nie
+śledzi ruchu kamery**. `ThreeCameraController.update()` (co klatkę) *lerpuje* `_dist→_targetDist` i
+`_target→_goalTarget` (0.08/kl.) → po scrollu/panie kamera WebGL sunie ~30 klatek („inercja"), a overlay
+dogania dopiero na `timeDirty` (10fps, gra biegnie) albo na ruch myszy (pauza). `_drawSelectionBrackets`
+dzieli TEN SAM `_draw()` → ten sam utajony bug. Fix na poziomie bramki naprawia OBA spójnie.
+Fix: `ThreeCameraController` eksponuje **epokę ruchu** (`_moveEpoch`, bump w `update()` gdy `distanceToSquared`
+pozycji > 1e-8) → `ThreeRenderer.getCameraMoveEpoch()` → `UIManager` dokłada `cameraMoved` do bramki
+(`|| cameraMoved`). Overlay przerysowuje się co klatkę DOPÓKI kamera się rusza; po osiadnięciu epoka zamiera →
+powrót do idle (bez wiecznego redrawu). Zysk: etykiety + łączniki + ramki selekcji przyklejone bez smużenia.
+Pozostaje (świadomie, poza B1): przy grze biegnącej + statycznej kamerze ciała ruszają się, overlay 10fps
+(`timeDirty`) — osobny, celowy throttle.
+
+**B2 — dynamiczna szerokość plakietki:** `MapLabelLayer._measurePlaque` już liczył `w = max(mainW,subW)+16`
+(szerokość adaptacyjna), ale `MAX_NAME_W=120` ucinał ~18-znakowe nazwy. Podniesione do **200** (≈30 znaków przy
+foncie 10-11px) — pełne realne nazwy (np. „Stacja Orbitalna Alfa") bez „…"; dopiero absurd ucina. Stacking i
+łączniki i tak liczyły realną `dims.w`.
+
+Pliki B: `ThreeCameraController.js`, `ThreeRenderer.js`, `UIManager.js`, `MapLabelLayer.js`. Bez migracji save.
+B1/B2 są WIZUALNE → **live-gate** (headless nie testuje canvas/three). `map_labels` smoke 37/37 PASS (bez regresji),
+4 pliki `node --check` czyste.
