@@ -549,6 +549,10 @@ Minimalizacja „w miejscu" USUNIĘTA — oba panele mają JEDEN model dokowania
 Displaced panel (przełączenie na inną żywą stację) auto-dokuje (nic nie ginie). Smoke `tmp_s34b_paneldock`
 19/19 + `tmp_s34b_bottomcontext` 14/14. Backlog polish: multi-instance panele, per-belka ✕, serializacja pozycji.
 
+**S3.4c — unifikacja magazynu STACJA↔KOLONIA — ZAPLANOWANE (decyzje D1-D9 zatwierdzone, implementacja NIEROZPOCZĘTA).**
+Stacja z kolonią-matką używa magazynu kolonii (Wariant B depot-jako-proxy); sierota → własny depot. Save v90 bez bumpu.
+Plan (samowystarczalny start): `docs/plans/s34c-depot-unification-plan.md` · audyt: `docs/audits/s34c-depot-unification-audit.md`.
+
 ---
 
 ## Dodawanie nowych funkcji

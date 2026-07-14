@@ -842,3 +842,29 @@ Panele okienkowe (S3.4b) — polish:
 - Serializacja pozycji paneli (dziś reset per sesja — celowo, żeby nie zaśmiecać save).
 - BottomContext restore na „ostatnią pozycję draga" (dziś re-emit `body:selected` = reanchor przy kotwicy;
   StationPanel już trzyma `restorePos`).
+
+---
+
+## S3.4c — Unifikacja magazynu STACJA <-> KOLONIA — ZAPLANOWANE (decyzje D1-D9 zatwierdzone, implementacja NIEROZPOCZETA)
+
+**Design:** "orbitalna dzielnica" — stacja gracza z kolonia-matka w systemie uzywa magazynu kolonii
+(`colony.resourceSystem`) zamiast wlasnego `StationDepot`; stacja bez matki (debug / osierocona) zachowuje
+wlasny depot. Implementacja: **Wariant B (depot-jako-proxy)** — `StationDepot` pozostaje obiektem
+(inwariant `instanceof` zachowany), wewnetrznie deleguje do kolonii.
+
+**Audyt (przeczytac W CALOSCI przed kodem):** `docs/audits/s34c-depot-unification-audit.md` —
+kontrakty depot<->resourceSystem, mapy call-site (Obszary 1-6), ryzyka R1-R13.
+**Plan implementacji (samowystarczalny, START jutrzejszy stad):** `docs/plans/s34c-depot-unification-plan.md` —
+kontekst, decyzje D1-D9 (pelne brzmienie), plan 5 commitow z mapa ryzyk, smoke do napisania, live-gate, protokol startu.
+
+**Decyzje (skrot — pelne w planie):** D1 stamp `ownerColonyId`+fallbacki per-body->parent->jedyna->depot ·
+D2 proxy w `station.depot`, inwariant+serialize bez zmiany ksztaltu · D3 drain do kolonii przy restore
+(idempotentny, **save v90 bez bumpu**, sieroty nietkniete) · D4 wspolny pool fuel/warp_cores · D5 subskrybent
+`colony:destroyed` -> osierocenie (nie zniszczenie) · D6 `resource:changed` z operacji stacyjnych POZADANE ·
+D7 `trade_module` -> tc kolonii-matki po `ownerColonyId`, bez capa · D8 self-cargo out w `FleetManagerOverlay:8108`,
+`transport_passenger` zostaje, sieroty legalnym celem · D9 UI "Wspolny magazyn: <kolonia>", pickery canAfford
+must-fix (`:363/466`), fasady depotowe w EconomyOverlay out, sierota = depot + "Odcieta od zaopatrzenia".
+
+**Twarde ograniczenia S3.4 (Wariant A architektury) OBOWIAZUJA** — stacja poza `ColonyManager._colonies`,
+nie dotyka `switchActiveColony`/`ColonyManager.serialize`; unifikacja idzie przez proxy magazynu, NIE przez
+wciagniecie stacji do rejestru kolonii.
