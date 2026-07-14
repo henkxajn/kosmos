@@ -118,6 +118,13 @@ export const GAME_CONFIG = {
     //   hover (podgląd kluczowych danych domeny) + pasywne badge alertów na slotach.
     //   Render/UI-only — brak migracji save. Rollback OFF przywraca goły pasek.
     navPeekCards:         true,
+    // ── S3.4 FAZA 5 — etykiety kolonii + stacji na mapie 3D (MapLabelLayer) ──
+    //   Overlay 2D tekstowych etykiet (Trasa A) nad WebGL: kolonia (ikona+nazwa+POP),
+    //   stacja (🛰+nazwa+pop/cap+badge status). Stacja klikalna → station:selected.
+    //   Wariant W1/W2 przez uiPrefs.mapLabelVariant (KOSMOS.debug.mapLabelVariant).
+    //   Render/UI-only — brak migracji save. Stare romby _colonyLabels zostają do
+    //   wyboru wariantu (potem cleanup). Rollback OFF = tylko stare romby.
+    mapLabels:            true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────

@@ -45,6 +45,7 @@ import { StationPanel }        from '../ui/StationPanel.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
 import { FleetGroupPanel }     from '../ui/FleetGroupPanel.js';
 import { FleetCommandPanel }   from '../ui/FleetCommandPanel.js';
+import { MapLabelLayer }       from '../ui/MapLabelLayer.js';
 import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
 import { EventLogDrawer }      from '../ui/EventLogDrawer.js';
 import { BottomControlBar }    from '../ui/BottomControlBar.js';
@@ -295,6 +296,10 @@ export class UIManager {
     // rysowany PO overlayManager (tylko gdy żaden overlay otwarty), klik PRZED overlayManager.
     this.fleetGroupPanel = new FleetGroupPanel();
     window.KOSMOS.fleetGroupPanel = this.fleetGroupPanel;
+
+    // S3.4 FAZA 5 — etykiety kolonii+stacji na mapie 3D (overlay 2D, Trasa A). Non-exclusive:
+    // rysowany w draw() nad WebGL (gate mapLabels && civMode && !isAnyOpen), klik stacji PRZED overlayManager.
+    this._mapLabelLayer = new MapLabelLayer();
 
     // Slice 8b — FleetCommandPanel: pływający panel dowodzenia WYBRANĄ flotą (battlegroup).
     // Self-managed przez ui:fleetSelectionChanged. Anchor lewy-dolny; FleetGroupPanel stackuje się NAD nim.
@@ -1442,6 +1447,11 @@ export class UIManager {
     // Slice 8b — panel dowodzenia flotą (FleetCommandPanel).
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.fcFleetPanel && !this.overlayManager.isAnyOpen()
         && this.fleetCommandPanel?.handleClick?.(x, y)) return true;
+    // S3.4 FAZA 5 — klik etykiety STACJI na mapie → station:selected (PRZED overlayManager i raycastem 3D).
+    // Gate MIRROR draw (civMode && mapLabels && !isAnyOpen && !globeOpen) — inaczej klik trafia w stare
+    // hit-zony gdy warstwa nie była rysowana (np. podczas podglądu globusa).
+    if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.mapLabels && !this.overlayManager.isAnyOpen()
+        && !window.KOSMOS?.planetGlobeOpen && this._mapLabelLayer?.handleClick?.(x, y)) return true;
     if (window.KOSMOS?.civMode && this._bottomNavBar?.handleClick?.(x, y)) return true;   // UI v3 — dolny pasek nawigacji (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._bottomControlBar?.handleClick?.(x, y)) return true;   // UI v3 — bell/MENU/zegar (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleClick?.(x, y)) return true;   // górny pasek surowców — klik kolonii→panel, reszta pochłaniana (PRZED overlayManager)
@@ -1780,6 +1790,12 @@ export class UIManager {
     // kolonia itd.) labele nie mają sensu i przebijały przez panel.
     const tr = window.KOSMOS?.threeRenderer;
     if (tr?._showAllLabels && !this.overlayManager.isAnyOpen()) this._drawAllLabels(ctx, tr);
+
+    // S3.4 FAZA 5 — etykiety kolonii+stacji (pod ramkami statków; overlay 2D nad WebGL).
+    if (civMode && tr && GAME_CONFIG.FEATURES?.mapLabels
+        && !this.overlayManager.isAnyOpen() && !globeOpen) {
+      this._mapLabelLayer.draw(ctx, tr, W, H, UI_SCALE);
+    }
 
     // Slice 4 — ramki RTS + paski paliwa dla zaznaczonego (własnego) statku.
     if (civMode && tr && GAME_CONFIG.FEATURES?.fcBrackets

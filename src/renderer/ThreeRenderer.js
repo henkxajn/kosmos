@@ -3000,6 +3000,12 @@ export class ThreeRenderer {
     };
   }
 
+  // FAZA 5 (S3.4) — bieżący dystans kamery orbitalnej (zakres ~3..450) dla fade/scale etykiet mapy.
+  // null gdy kontroler nie podpięty (headless / przed initem).
+  getCameraDistance() {
+    return this._cameraController?._dist ?? null;
+  }
+
   // Flag: pokaż labele wszystkich widocznych obiektów (toggle CTRL).
   // UIManager w draw() czyta ten flag przez getAllVisibleLabels() i rysuje.
   setShowAllLabels(on) { this._showAllLabels = !!on; }

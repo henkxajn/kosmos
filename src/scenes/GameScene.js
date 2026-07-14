@@ -406,6 +406,19 @@ export class GameScene {
     // KOSMOS.debug.giveResearch(10000) — dodaje research do aktywnej kolonii
     //   (przydatne na starym save bez konieczności rozpoczynania nowego Power Test).
     window.KOSMOS.debug = {
+      // S3.4 FAZA 5 — przełącz wariant etykiet mapy: 'W1' (minimalistyczny) | 'W2' (plakietka).
+      // Bez argumentu = zwraca bieżący. Zapisuje w uiPrefs + wymusza redraw.
+      mapLabelVariant: (v) => {
+        window.KOSMOS.uiPrefs = window.KOSMOS.uiPrefs ?? {};
+        if (v === 'W1' || v === 'W2') {
+          window.KOSMOS.uiPrefs.mapLabelVariant = v;
+          if (window.KOSMOS.uiManager) window.KOSMOS.uiManager._dirty = true;
+          console.log(`[mapLabels] wariant = ${v}`);
+        } else {
+          console.log(`[mapLabels] bieżący wariant = ${window.KOSMOS.uiPrefs.mapLabelVariant ?? 'W1 (default)'}. Użyj mapLabelVariant('W1') lub ('W2').`);
+        }
+        return window.KOSMOS.uiPrefs.mapLabelVariant ?? 'W1';
+      },
       // S3.5b — raport bramki handlu cross-empire (diagnostyka live-gate).
       // Dla każdej kolonii AI: czy handlowalna i dlaczego nie + per-empire warp/treaty/toggle.
       crossEmpireTradeStatus: () => {
