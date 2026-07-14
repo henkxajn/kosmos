@@ -111,6 +111,21 @@ export function drawStationManagement(ctx, area, station, view) {
     cy += 20;
   }
 
+  // B2 (F4 live-gate): hint gdy statek pasażerski czeka przy stacji na wolny habitat (guarded window —
+  // widok node-importowalny; w smoke brak vesselManager → 0). Dobuduj habitat → auto-rozładunek.
+  let waitingPax = 0;
+  if (typeof window !== 'undefined' && window.KOSMOS?.vesselManager?.getAllVessels) {
+    for (const v of window.KOSMOS.vesselManager.getAllVessels()) {
+      if (v?.position?.dockedAt === station.id && v._awaitingHousing && (v.colonists ?? 0) > 0) waitingPax += v.colonists;
+    }
+  }
+  if (waitingPax > 0) {
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.warning;
+    ctx.fillText(`🧑‍🚀 ${t('station.mgmt.waitingPassengers', waitingPax)}`, x + PAD, cy + 11);
+    cy += 20;
+  }
+
   ctx.strokeStyle = THEME.border;
   ctx.beginPath(); ctx.moveTo(x + PAD, cy); ctx.lineTo(x + w - PAD, cy); ctx.stroke();
   cy += 10;
@@ -185,13 +200,18 @@ export function drawStationManagement(ctx, area, station, view) {
       ctx.fillText(slot.m.active === false ? `${st.label} ${t('station.mgmt.' + (slot.m.inactiveReason === 'no_crew' ? 'noCrew' : 'noPower'))}` : st.label, bx + cardW - 8, by + 18);
       ctx.textAlign = 'left';
       // R1 — 🗑 rozbiórka modułu (prawy-dół karty). Potwierdzenie + brak zwrotu → w ColonyOverlay._onHit.
+      // K2 (F4 live-gate): rozbiórka ZASIEDLONEGO habitatu ZABLOKOWANA (po rozbiórce pop > popCapacity).
+      // Przycisk szary + hit-zone „blocked" → ColonyOverlay pokazuje komunikat (nie modal potwierdzenia).
+      const modCap = (def?.popCapacity ?? 0) * (slot.m.level || 1);
+      const demolishBlocked = modCap > 0 && (station.pop ?? 0) > (station.popCapacity - modCap);
       const dW = 18, dX = bx + cardW - dW - 6, dY = by + cardH - dW - 4;
-      ctx.strokeStyle = THEME.danger; ctx.lineWidth = 1;
+      ctx.strokeStyle = demolishBlocked ? THEME.textDim : THEME.danger; ctx.lineWidth = 1;
       ctx.strokeRect(dX + 0.5, dY + 0.5, dW, 16);
-      ctx.fillStyle = THEME.danger; ctx.textAlign = 'center';
+      ctx.fillStyle = demolishBlocked ? THEME.textDim : THEME.danger; ctx.textAlign = 'center';
       ctx.fillText('🗑', dX + dW / 2, dY + 12);
       ctx.textAlign = 'left';
-      bhit(dX, dY, dW, 16, 'station_mgmt_demolish', { moduleId: slot.m.id, moduleType: slot.m.moduleType });
+      bhit(dX, dY, dW, 16, demolishBlocked ? 'station_mgmt_demolish_blocked' : 'station_mgmt_demolish',
+           { moduleId: slot.m.id, moduleType: slot.m.moduleType });
     } else {
       // pending (queued / building) — pasek postępu
       const o = slot.o;

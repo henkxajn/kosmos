@@ -969,16 +969,22 @@ export class MissionSystem {
       return;
     }
 
-    // ── Bramki OK → pobierz 1 POP ze źródła (atomowo z dispatchem poniżej) ──
+    // ── Bramki OK → pobierz POP ze źródła (K1: pełna pojemność kabin, nigdy ostatni POP kolonii) ──
     let originStationId = null;
+    let loadedCount = 0;
+    const cabins = Math.max(0, (vessel.colonistCapacity ?? 0) - (vessel.colonists ?? 0));
     if (originStation) {
-      originStation.pop = Math.max(0, (originStation.pop ?? 0) - 1);
-      vessel.colonists  = (vessel.colonists ?? 0) + 1;
+      // Stacja = hub przeładunkowy: bierz min(kabiny, pop). Stację MOŻNA opróżnić (nie „żyje" jak kolonia).
+      loadedCount = Math.min(cabins, originStation.pop ?? 0);
+      originStation.pop = Math.max(0, (originStation.pop ?? 0) - loadedCount);
+      vessel.colonists  = (vessel.colonists ?? 0) + loadedCount;
       originStationId   = originStation.id;
-      EventBus.emit('station:popDeparted', { stationId: originStation.id, stationName: originStation.name, pop: originStation.pop, count: 1 });
+      EventBus.emit('station:popDeparted', { stationId: originStation.id, stationName: originStation.name, pop: originStation.pop, count: loadedCount });
     } else {
-      const loaded = loadColonists(vessel, 1, originCol.civSystem);   // fizycznie usuwa POP z kolonii
-      if (loaded <= 0) {
+      // Kolonia: min(kabiny, population-1) — NIGDY ostatni POP; loadColonists dodatkowo ogranicza freePops.
+      const want = Math.min(cabins, (originCol.civSystem.population ?? 0) - 1);
+      loadedCount = loadColonists(vessel, want, originCol.civSystem);   // fizycznie usuwa POP z kolonii
+      if (loadedCount <= 0) {
         this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.colonistsUnavailable') });
         return;
       }
@@ -1003,7 +1009,7 @@ export class MissionSystem {
       vesselId,
       originColonyId: originStation ? (vessel.colonyId ?? colMgr?.activePlanetId) : originId,
       originStationId,
-      colonists:      1,
+      colonists:      loadedCount,
       status:         'en_route',
       gained:         null,
       eventRoll:      null,
@@ -2157,18 +2163,33 @@ export class MissionSystem {
     // Cel = STACJA: mutuj encję LIVE (kopia z _findTarget nie ma getterów popCapacity ani nie mutuje pop).
     const station = isStationId(exp.targetId) ? EntityManager.get(exp.targetId) : null;
     if (station?.type === 'station') {
-      if ((station.pop ?? 0) < station.popCapacity) {
-        station.pop = (station.pop ?? 0) + colonists;
-        if (vessel) vessel.colonists = 0;
-        if (firstArrival && exp.vesselId && vMgr) vMgr.dockAtTarget(exp.vesselId, exp.targetId);
+      // K1: rozładunek CZĘŚCIOWY — wysiada tylu, ilu mieści się w wolnych habitatach; reszta czeka (B2).
+      const space  = Math.max(0, station.popCapacity - (station.pop ?? 0));
+      const unload = Math.min(colonists, space);
+      if (unload > 0) {
+        station.pop = (station.pop ?? 0) + unload;
+        if (vessel) vessel.colonists = Math.max(0, (vessel.colonists ?? 0) - unload);
+        // Dostawa POP = lekki feed (EventLog + flash), BEZ pauzy-popup (nie mission:report).
+        EventBus.emit('station:popArrived', { stationId: station.id, stationName: station.name, pop: station.pop, count: unload });
+      }
+      // Dok na PIERWSZYM przylocie (niezależnie czy dostarczono w całości — reszta czeka zadokowana).
+      if (firstArrival && exp.vesselId && vMgr) vMgr.dockAtTarget(exp.vesselId, exp.targetId);
+      const remaining = vessel ? (vessel.colonists ?? 0) : Math.max(0, colonists - unload);
+      if (remaining > 0) {
+        // B2: brak (dość) wolnych habitatów — statek CZEKA zadokowany, retry co tick. Komunikacja stanu:
+        // marker _awaitingHousing (etykieta statusu), status misji no_housing (faza), EventLog na wejściu.
+        if (vessel) vessel._awaitingHousing = true;
+        exp.status = 'no_housing';
+        if (firstArrival) {
+          EventBus.emit('vessel:awaitingHousing', {
+            vesselId: exp.vesselId, vesselName: vessel?.name,
+            stationId: station.id, stationName: station.name, count: remaining,
+          });
+        }
+      } else {
+        if (vessel) vessel._awaitingHousing = false;
         exp.status = 'completed';
         exp.gained = {};
-        // Dostawa POP = lekki feed (EventLog + flash), BEZ pauzy-popup (nie mission:report — 1 POP).
-        EventBus.emit('station:popArrived', { stationId: station.id, stationName: station.name, pop: station.pop, count: colonists });
-      } else {
-        // Pełna stacja (brak wolnych miejsc habitatu) — statek CZEKA zadokowany, retry co tick.
-        if (firstArrival && exp.vesselId && vMgr) vMgr.dockAtTarget(exp.vesselId, exp.targetId);
-        exp.status = 'no_housing';
       }
       return;
     }
@@ -2180,7 +2201,7 @@ export class MissionSystem {
       targetCol.civSystem.addPop('laborer', colonists);
       EventBus.emit('civ:popBorn', { population: targetCol.civSystem.population, planetId: exp.targetId, colonyName: targetCol.name });
     }
-    if (vessel) vessel.colonists = 0;
+    if (vessel) { vessel.colonists = 0; vessel._awaitingHousing = false; }
 
     // Statek przeżywa — przepnij flotę do kolonii docelowej (wzór _processColonyArrival).
     if (exp.vesselId && vMgr) {

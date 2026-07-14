@@ -18,6 +18,7 @@ import { SHIP_MODULES, getModuleCapabilities } from './ShipModulesData.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
 import { t } from '../i18n/i18n.js';
+import { canColonize } from '../entities/Vessel.js';
 
 // Helper: czy statek wymaga wyrzutni (spaceport)?
 // Małe kadłuby (size === 'small') nie wymagają — mogą startować/lądować wszędzie
@@ -187,8 +188,9 @@ const ACTIONS = {
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
       if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
-      const caps = _getVesselCaps(vessel);
-      if (!caps.has('colony')) return { ok: false, reason: 'Statek nie ma zdolności kolonizacyjnych' };
+      // B1 (F4 live-gate): kolonizacja przez JEDNO źródło prawdy — Vessel.canColonize (moduł habitat),
+      // NIE caps.has('colony') (= colonistCapacity>0, przez co czysty passenger fałszywie kolonizował).
+      if (!canColonize(vessel)) return { ok: false, reason: 'Statek nie ma zdolności kolonizacyjnych' };
       const ms = state.missionSystem;
       if (!ms) return { ok: false, reason: 'Brak systemu misji' };
       const techOk = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
@@ -604,7 +606,9 @@ export function getAvailableActions(vessel, state) {
     if (hasScience && caps.has('deep_scan')) {
       result.push(_check(ACTIONS.deep_scan, vessel, state));
     }
-    if (caps.has('colony')) {
+    // B1 (F4 live-gate): dostępność kolonizacji przez Vessel.canColonize (moduł habitat), NIE
+    // caps.has('colony') — passenger-only ma colonistCapacity>0, ale NIE koloniuzje.
+    if (canColonize(vessel)) {
       result.push(_check(ACTIONS.colonize, vessel, state));
     }
     result.push(_check(ACTIONS.transport, vessel, state));

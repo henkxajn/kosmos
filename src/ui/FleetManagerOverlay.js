@@ -15,7 +15,7 @@ import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES }   from '../data/ResourcesData.js';
 import { TECHS }           from '../data/TechData.js';
-import { effectiveRange, loadColonists, unloadColonists, isEnemyVessel, canJump, warpRange }  from '../entities/Vessel.js';
+import { effectiveRange, loadColonists, unloadColonists, isEnemyVessel, canJump, warpRange, canColonize as vesselCanColonize }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import { ALL_DOCTRINES, doctrineNameKey } from '../data/FleetDoctrines.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
@@ -6161,8 +6161,10 @@ export class FleetManagerOverlay {
         cy += btnH + 4;
       }
 
-      // ── Kolonizacja (colony cap) ──
-      if (caps.has('colony')) {
+      // ── Kolonizacja ──
+      // B1 (F4 live-gate): dostępność przez Vessel.canColonize (moduł habitat), NIE caps.has('colony')
+      // (= colonistCapacity>0) — passenger-only ma pojemność, ale kolonii nie zakłada.
+      if (vesselCanColonize(vessel)) {
         const colMgr4 = window.KOSMOS?.colonyManager;
         const isExploredCol = orbitBody?.explored ?? false;
         const isColonized = colMgr4?.getColony(isMission.targetId) != null;
@@ -7276,6 +7278,9 @@ export class FleetManagerOverlay {
   }
 
   _statusText(vessel) {
+    // B2 (F4 live-gate): pasażer czekający na wolny habitat ma PIERWSZEŃSTWO nad etykietami paliwa —
+    // inaczej auto-tankowanie przy stacji (depot bez power_cells) fałszywie pokazuje „Czeka na paliwo".
+    if (vessel._awaitingHousing) return t('fleet.statusTextAwaitingHousing');
     if (vessel.position.state === 'docked') {
       if (vessel.status === 'idle') return t('fleet.statusTextHangar');
       // Fix C: rozróżnij "czeka na paliwo" (brak fuel w kolonii) od aktywnego tankowania.
@@ -7440,10 +7445,12 @@ export class FleetManagerOverlay {
 
     // Faza + ETA
     const phase = mission.status ?? 'transit';
-    const phasePL = phase === 'returning' ? t('fleet.phaseReturn') : phase === 'orbiting' ? t('fleet.phaseOrbiting') : phase === 'working' ? t('fleet.phaseWorking') : t('fleet.phaseTransit');
+    // B2 (F4 live-gate): no_housing = statek stoi w doku (nie „Tranzyt"); ETA nieaktualne → ukryj.
+    const isWaitingHousing = phase === 'no_housing';
+    const phasePL = phase === 'returning' ? t('fleet.phaseReturn') : phase === 'orbiting' ? t('fleet.phaseOrbiting') : phase === 'working' ? t('fleet.phaseWorking') : isWaitingHousing ? t('fleet.phaseWaitingHousing') : t('fleet.phaseTransit');
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    const eta = mission.arrivalYear ? t('fleet.etaYearLabel', Math.ceil(mission.arrivalYear)) : '';
+    const eta = (mission.arrivalYear && !isWaitingHousing) ? t('fleet.etaYearLabel', Math.ceil(mission.arrivalYear)) : '';
     ctx.fillText(`${phasePL}  ${eta}`, x + pad, cy + 42);
 
     // Pasek postępu

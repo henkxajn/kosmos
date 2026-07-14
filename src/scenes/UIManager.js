@@ -930,6 +930,10 @@ export class UIManager {
     EventBus.on('station:popDeparted', ({ stationName, stationId, count }) => {
       this._log(t('log.passengerFromStation', count ?? 1, stationName ?? stationId ?? '—'), 'pop_born');
     });
+    // B2 (F4 live-gate): statek pasażerski utknął przy pełnej stacji — komunikat, że czeka (nie zginął).
+    EventBus.on('vessel:awaitingHousing', ({ vesselName, stationName, stationId }) => {
+      this._log(t('log.awaitingHousing', vesselName ?? '—', stationName ?? stationId ?? '—'), 'fleet');
+    });
     EventBus.on('civ:popDied', ({ cause, population, planetId, colonyName }) => {
       const name = colonyName ?? '—';
       const key = cause === 'starvation' ? 'log.popDiedStarvation' : 'log.popDied';

@@ -167,7 +167,8 @@ export class ColonyOverlay extends BaseOverlay {
     for (const ev of ['station:moduleOrderQueued', 'station:moduleOrderCancelled', 'station:moduleBuildStarted',
                       'station:moduleBuilt', 'station:moduleOrderRejected', 'station:moduleDemolished',
                       'station:shipBuildStarted', 'station:shipCompleted', 'station:shipBuildCancelled',
-                      'station:shipBuildRejected', 'station:rename', 'station:popArrived', 'station:popDeparted']) {
+                      'station:shipBuildRejected', 'station:rename', 'station:popArrived', 'station:popDeparted',
+                      'vessel:awaitingHousing']) {
       EventBus.on(ev, () => { if (this.visible && this._stationMode && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true; });
     }
 
@@ -3500,6 +3501,10 @@ export class ColonyOverlay extends BaseOverlay {
             }
           });
         }
+        break;
+      case 'station_mgmt_demolish_blocked':
+        // K2 — habitat zasiedlony: rozbiórka zablokowana (po niej pop > popCapacity). Komunikat zamiast modalu.
+        this._showFlash('🔒 ' + t('station.mgmt.demolishBlocked'));
         break;
       case 'station_mgmt_addship':
         this._stationShipPickerOpen = true;

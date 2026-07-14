@@ -209,8 +209,13 @@ export class StationSystem {
     const idx = station.modules.findIndex(m => m.id === moduleId);
     if (idx === -1) return false;
     const [removed] = station.modules.splice(idx, 1);
+    // K2 (FAZA 4): rozbiórka ZABLOKOWANA, jeśli po niej pop przekroczyłby popCapacity (zasiedlony
+    // habitat). Zastępuje wariant „dozwolone + warn". Splice-check-revert korzysta z żywego gettera
+    // popCapacity (liczonego z modules). Gracz musi najpierw przetransportować POP. Defense-in-depth —
+    // UI (StationManagementView) i tak wyszarza przycisk (station_mgmt_demolish_blocked).
     if ((station.pop ?? 0) > station.popCapacity) {
-      console.warn(`[StationSystem] demolishModule: pop=${station.pop} > popCapacity=${station.popCapacity} po rozbiórce ${removed.moduleType} — dozwolone (limit egzekwuje FAZA 4).`);
+      station.modules.splice(idx, 0, removed);   // przywróć — rozbiórka niedozwolona
+      return false;
     }
     EventBus.emit('station:moduleDemolished', { stationId, moduleId, moduleType: removed.moduleType });
     return true;
