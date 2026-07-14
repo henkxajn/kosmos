@@ -10,26 +10,69 @@ import { STATION_MODULES } from '../data/StationModuleData.js';
 export const COLONY_ICON = { home: '🏠', colony: '🏙️', outpost: '⛺' };
 export const STATION_ICON = '🛰️';
 
-// Progi czytelności na zoom-out (jednostki dystansu kamery 3D — zakres orbitu 3..450).
-export const LABEL_FADE_START = 140;   // ≤ → pełna nieprzezroczystość
-export const LABEL_FADE_END   = 320;   // ≥ → etykiety zanikają (clutter przy całym układzie w kadrze)
-export const LABEL_DETAIL_DIST = 180;  // > → tryb kompaktowy (sama nazwa+ikona, bez POP/badge)
+// LOD (K1) — 3 poziomy wg dystansu kamery 3D (zakres orbitu 3..450). Przejścia PŁYNNE (cross-fade):
+//   dist ≤ PLAQUE_FULL             → pełna plakietka (plaqueAlpha 1)
+//   PLAQUE_FULL..PLAQUE_FADE       → cross-fade plakietka↓ / znacznik↑
+//   PLAQUE_FADE..MARKER_FADE       → sam znacznik (ikona [+badge], bez nazwy/POP) — „tu coś jest"
+//   MARKER_FADE..FADE_END          → znacznik zanika
+//   ≥ FADE_END                     → nic (declutter — imersja przy całym układzie w kadrze)
+export const LOD_PLAQUE_FULL = 150;
+export const LOD_PLAQUE_FADE = 215;
+export const LOD_MARKER_FADE = 300;
+export const LABEL_FADE_END  = 360;
 
 /**
- * Alpha etykiety wg dystansu kamery (fade progowy). dist=null → 1 (brak danych = pokaż).
- * @returns {number} 0..1
+ * Poziom szczegółowości etykiety wg dystansu (K1). Zwraca alfy obu reprezentacji (cross-fade płynny).
+ * dist=null/NaN → pełna plakietka (brak danych = pokaż z bliska).
+ * @returns {{plaqueAlpha:number, markerAlpha:number}}
  */
-export function labelAlphaForDistance(dist, fadeStart = LABEL_FADE_START, fadeEnd = LABEL_FADE_END) {
-  if (dist == null || !Number.isFinite(dist)) return 1;
-  if (dist <= fadeStart) return 1;
-  if (dist >= fadeEnd) return 0;
-  return (fadeEnd - dist) / (fadeEnd - fadeStart);
+export function labelLOD(dist) {
+  if (dist == null || !Number.isFinite(dist)) return { plaqueAlpha: 1, markerAlpha: 0 };
+  if (dist <= LOD_PLAQUE_FULL) return { plaqueAlpha: 1, markerAlpha: 0 };
+  if (dist < LOD_PLAQUE_FADE) {
+    const t = (dist - LOD_PLAQUE_FULL) / (LOD_PLAQUE_FADE - LOD_PLAQUE_FULL);
+    return { plaqueAlpha: 1 - t, markerAlpha: t };
+  }
+  if (dist <= LOD_MARKER_FADE) return { plaqueAlpha: 0, markerAlpha: 1 };
+  if (dist < LABEL_FADE_END) {
+    const t = (dist - LOD_MARKER_FADE) / (LABEL_FADE_END - LOD_MARKER_FADE);
+    return { plaqueAlpha: 0, markerAlpha: 1 - t };
+  }
+  return { plaqueAlpha: 0, markerAlpha: 0 };
 }
 
-/** Czy pokazywać szczegóły (POP, badge) — kompakt przy dużym oddaleniu. */
-export function labelShowDetail(dist, detailDist = LABEL_DETAIL_DIST) {
-  if (dist == null || !Number.isFinite(dist)) return true;
-  return dist <= detailDist;
+/**
+ * Anty-nakładanie (K2) — deterministyczny greedy: sort po docelowym Y (potem X dla stabilności),
+ * każdą kolidującą etykietę zsuń W DÓŁ pod najniższą nakładającą się (z odstępem gap). Bez fizyki,
+ * bez iteracyjnych solverów. Kolizja = AABB (nakładanie w X ORAZ Y). `targetY` = pożądany środek
+ * plakietki (punkt ciała + offset). Zwraca te same itemy z `drawY` + `displaced` (czy przesunięto).
+ * @param {Array<{id,anchorX,targetY,w,h}>} items
+ * @param {number} gap
+ * @returns {Array<{id,anchorX,targetY,w,h,drawY,displaced}>}
+ */
+export function stackLabels(items, gap = 3) {
+  const xOverlap = (a, b) =>
+    (a.anchorX - a.w / 2) < (b.anchorX + b.w / 2) && (a.anchorX + a.w / 2) > (b.anchorX - b.w / 2);
+
+  const sorted = [...items].sort((a, b) => (a.targetY - b.targetY) || (a.anchorX - b.anchorX));
+  const placed = [];   // utrzymywane rosnąco po drawY
+  const out = [];
+  for (const it of sorted) {
+    let drawY = it.targetY;
+    for (const p of placed) {   // placed rosnąco → zsuwanie łańcuchowe działa
+      if (!xOverlap(it, p)) continue;
+      const pBottom = p.drawY + p.h / 2;
+      const myTop = drawY - it.h / 2;
+      if (myTop < pBottom + gap && (drawY + it.h / 2) > (p.drawY - p.h / 2)) {
+        drawY = pBottom + gap + it.h / 2;   // zsuń pod ten box
+      }
+    }
+    const res = { ...it, drawY, displaced: Math.abs(drawY - it.targetY) > 0.5 };
+    out.push(res);
+    placed.push(res);
+    placed.sort((a, b) => a.drawY - b.drawY);
+  }
+  return out;
 }
 
 /**

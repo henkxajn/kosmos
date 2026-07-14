@@ -2,28 +2,33 @@
 // overlay 2D na #ui-canvas rysowany w UIManager.draw() (nad WebGL), NIE sprite'y 3D. Wzór gate jak
 // _drawSelectionBrackets (civMode && !overlayManager.isAnyOpen()). Pozycje przez getBodyScreenPosition
 // (kolonie) / getStationScreenPosition (stacje) — oba z-clamp, NIGDY legacy getScreenPosition. Dane
-// (mgła wojny, badge) w MapLabelLogic.js. Dwa warianty W1/W2 za flagą (uiPrefs.mapLabelVariant / query).
+// (mgła wojny, badge, LOD, stacking) w MapLabelLogic.js.
 //
-// Etykieta stacji KLIKALNA → station:selected (selekcja/panel; bez station:focus — brak skoku kamery,
-// bez body:selected). Kolonie = display-only (klik ciała obsługuje raycast 3D).
+// W2.1 (live-gate FAZY 5 — wybór Filipa: W2 z korektami):
+//   K1 LOD — 3 poziomy wg dystansu kamery (plakietka → znacznik → fade), przejścia płynne (cross-fade).
+//   K2 anty-nakładanie — greedy vertical stacking + łącznik do ciała (stackLabels).
+//   K3 klik stacji — station:selected ORAZ station:focus (najazd kamery, reuse ścieżki Outlinera).
+//   K4 kosmetyka — ucinanie nazw „…" + plakietka NAD/POD tarczą ciała (nie na niej) + łącznik.
+//
+// Etykieta stacji KLIKALNA (bez body:selected). Kolonie = display-only (klik ciała = raycast 3D).
 
 import { THEME } from '../config/ThemeConfig.js';
 import EventBus from '../core/EventBus.js';
 import {
-  gatherColonyLabels, gatherStationLabels, labelAlphaForDistance, labelShowDetail,
-  resolveLabelVariant, BADGE_ICON,
+  gatherColonyLabels, gatherStationLabels, labelLOD, stackLabels, resolveLabelVariant, BADGE_ICON,
 } from './MapLabelLogic.js';
 
-// Kolory wg typu (spójne z brutalist terminal). Home = akcent, kolonia = mint, outpost = przygaszony.
 const KIND_COLOR = () => ({
   home:    THEME.accent,
   colony:  THEME.mint ?? THEME.success,
   outpost: THEME.textSecondary,
-  station: '#8fb8ff',          // ten sam błękit co etykiety stacji w trybie CTRL
+  station: '#8fb8ff',
 });
 
-const COLONY_Y_OFFSET  = -24;  // etykieta kolonii NAD ciałem
-const STATION_Y_OFFSET =  18;  // etykieta stacji POD kotwicą (mniej koliduje z etykietą ciała)
+const COLONY_PLAQUE_OFFSET  = -34;   // K4: plakietka kolonii NAD ciałem (nie zasłania tarczy)
+const STATION_PLAQUE_OFFSET =  30;   // K4: plakietka stacji POD kotwicą
+const MAX_NAME_W = 120;              // K4: max szerokość nazwy przed „…"
+const STACK_GAP  = 3;                // K2: odstęp pionowy przy zsuwaniu
 
 export class MapLabelLayer {
   constructor() {
@@ -37,107 +42,167 @@ export class MapLabelLayer {
   }
 
   /**
-   * Rysuj etykiety. ctx w transformacie UI_SCALE (jak reszta UIManager) → pozycje /uiScale.
-   * @param {CanvasRenderingContext2D} ctx
-   * @param {object} tr — ThreeRenderer (getBodyScreenPosition/getStationScreenPosition/getCameraDistance)
-   * @param {number} W @param {number} H — logiczne wymiary @param {number} uiScale
+   * Rysuj etykiety. ctx w transformacie UI_SCALE → pozycje /uiScale.
+   * @param {CanvasRenderingContext2D} ctx @param {object} tr — ThreeRenderer @param {number} W @param {number} H @param {number} uiScale
    */
   draw(ctx, tr, W, H, uiScale) {
     this._hitZones = [];
     if (!tr) return;
 
-    const dist  = tr.getCameraDistance?.() ?? null;
-    const alpha = labelAlphaForDistance(dist);
-    if (alpha <= 0.02) return;                         // całkowicie oddalone → clutter, nie rysuj
-    const detail  = labelShowDetail(dist);
+    const { plaqueAlpha, markerAlpha } = labelLOD(tr.getCameraDistance?.() ?? null);
+    if (plaqueAlpha <= 0.02 && markerAlpha <= 0.02) return;   // za daleko → declutter
     const variant = this.variant;
     const colors  = KIND_COLOR();
-    const colMgr  = window.KOSMOS?.colonyManager;
-    const homePid = window.KOSMOS?.homePlanet?.id;
+
+    // Zbierz itemy z pozycją ekranową (anchor = punkt ciała) — mgła wojny w MapLabelLogic.
+    const raw = [];
+    for (const it of gatherColonyLabels(window.KOSMOS?.colonyManager, window.KOSMOS?.homePlanet?.id)) {
+      const pos = tr.getBodyScreenPosition?.(it.id);
+      if (!pos) continue;
+      raw.push({ ...it, isStation: false, anchorX: pos.x / uiScale, anchorY: pos.y / uiScale, offset: COLONY_PLAQUE_OFFSET, color: colors[it.kind] });
+    }
+    for (const it of gatherStationLabels(window.KOSMOS?.stationSystem)) {
+      const pos = tr.getStationScreenPosition?.(it.id);
+      if (!pos) continue;
+      raw.push({ ...it, isStation: true, anchorX: pos.x / uiScale, anchorY: pos.y / uiScale, offset: STATION_PLAQUE_OFFSET, color: colors.station });
+    }
 
     ctx.save();
     ctx.textBaseline = 'middle';
 
-    // ── Kolonie gracza (display-only) ──
-    for (const item of gatherColonyLabels(colMgr, homePid)) {
-      const pos = tr.getBodyScreenPosition?.(item.id);
-      if (!pos) continue;
-      const x = pos.x / uiScale, y = pos.y / uiScale + COLONY_Y_OFFSET;
-      if (x < 0 || x > W || y < 0 || y > H) continue;
-      this._drawLabel(ctx, x, y, item, colors[item.kind], alpha, detail, variant, false);
+    // ── LOD-far: znaczniki przy ciele (K1) — bez stackingu (małe), klik gdy dominują ──
+    if (markerAlpha > 0.02) {
+      for (const it of raw) {
+        if (it.anchorX < 0 || it.anchorX > W || it.anchorY < 0 || it.anchorY > H) continue;
+        const box = this._drawMarker(ctx, it.anchorX, it.anchorY, it, markerAlpha);
+        if (it.isStation && box && markerAlpha >= plaqueAlpha) this._hitZones.push({ ...box, stationId: it.id });
+      }
     }
 
-    // ── Stacje gracza (klikalne) ──
-    for (const item of gatherStationLabels(window.KOSMOS?.stationSystem)) {
-      const pos = tr.getStationScreenPosition?.(item.id);
-      if (!pos) continue;
-      const x = pos.x / uiScale, y = pos.y / uiScale + STATION_Y_OFFSET;
-      if (x < 0 || x > W || y < 0 || y > H) continue;
-      const box = this._drawLabel(ctx, x, y, item, colors.station, alpha, detail, variant, true);
-      if (box) this._hitZones.push({ ...box, stationId: item.id });
+    // ── LOD-near/mid: plakietki z anty-nakładaniem (K2) + łącznikiem (K4) ──
+    if (plaqueAlpha > 0.02) {
+      const items = [];
+      for (const it of raw) {
+        if (it.anchorX < 0 || it.anchorX > W || it.anchorY < 0 || it.anchorY > H) continue;
+        const dims = this._measurePlaque(ctx, it, variant);
+        items.push({ id: it.id, anchorX: it.anchorX, targetY: it.anchorY + it.offset, w: dims.w, h: dims.h, _it: it, _dims: dims });
+      }
+      const stacked = stackLabels(items, STACK_GAP);
+      // Łączniki pod plakietkami (K4/K2 — od plakietki do punktu ciała).
+      for (const s of stacked) this._drawConnector(ctx, s.anchorX, s._it.anchorY, s.drawY, s._dims.h, s._it.color, plaqueAlpha);
+      // Plakietki.
+      for (const s of stacked) {
+        const box = this._drawPlaque(ctx, s.anchorX, s.drawY, s._it, s._dims, variant, plaqueAlpha);
+        if (s._it.isStation && box && plaqueAlpha > markerAlpha) this._hitZones.push({ ...box, stationId: s._it.id });
+      }
     }
 
     ctx.restore();
   }
 
-  // Buduje treść etykiety (linia główna + opcjonalny detal) i deleguje do wariantu. Zwraca bbox (klik).
-  _drawLabel(ctx, x, y, item, color, alpha, detail, variant, isStation) {
-    const main = `${item.icon} ${item.name}`;
-    let sub = '';
-    if (detail) {
-      if (isStation) {
-        const badges = (item.badges ?? []).map(b => BADGE_ICON[b] ?? '').join('');
-        sub = `${item.pop}/${item.popCapacity} POP${badges ? '  ' + badges : ''}`;
-      } else if (item.pop != null) {
-        sub = `${item.pop} POP`;
-      }
-    }
-    return variant === 'W2'
-      ? this._drawW2(ctx, x, y, main, sub, color, alpha)
-      : this._drawW1(ctx, x, y, main, sub, color, alpha);
+  // Ucinanie tekstu do maxW z „…" (font musi być ustawiony na ctx wcześniej).
+  _truncate(ctx, text, maxW) {
+    if (ctx.measureText(text).width <= maxW) return text;
+    let s = text;
+    while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+    return s + '…';
   }
 
-  // W1 — minimalistyczny: tekst + cienka ramka + subtelne tło (czytelność na jasnym tle). Jedna linia
-  // (main · sub) — kompaktowy. Zwraca bbox.
-  _drawW1(ctx, x, y, main, sub, color, alpha) {
+  // Zmierz plakietkę + przygotuj treść (nazwa ucięta K4). Zwraca {w,h,main,sub,twoLine}.
+  _measurePlaque(ctx, it, variant) {
+    // Nazwa ucinana wg fontu głównego wariantu.
+    ctx.font = variant === 'W2' ? `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}` : `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const name = this._truncate(ctx, it.name, MAX_NAME_W);
+    const main = `${it.icon} ${name}`;
+    let sub = '';
+    if (it.isStation) {
+      const badges = (it.badges ?? []).map(b => BADGE_ICON[b] ?? '').join('');
+      sub = `${it.pop}/${it.popCapacity} POP${badges ? '  ' + badges : ''}`;
+    } else if (it.pop != null) {
+      sub = `${it.pop} POP`;
+    }
+
+    if (variant === 'W2') {
+      ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      const mainW = ctx.measureText(main).width;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      const subW = sub ? ctx.measureText(sub).width : 0;
+      const twoLine = !!sub;
+      return { w: Math.max(mainW, subW) + 16, h: twoLine ? 30 : 18, main, sub, twoLine };
+    }
+    // W1
     const label = sub ? `${main}  ${sub}` : main;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    const tw = ctx.measureText(label).width;
-    const padX = 5, h = 15, w = tw + padX * 2;
-    const bx = Math.round(x - w / 2), by = Math.round(y - h / 2);
+    return { w: ctx.measureText(label).width + 10, h: 15, main, sub, label, twoLine: false };
+  }
 
-    ctx.globalAlpha = alpha;
-    // Tło + ramka
-    ctx.fillStyle = 'rgba(6,10,16,0.62)';
-    ctx.fillRect(bx, by, w, h);
+  // Plakietka (wariant W1/W2) wyśrodkowana w (x,y). Zwraca bbox (klik).
+  _drawPlaque(ctx, x, y, it, dims, variant, alpha) {
+    return variant === 'W2'
+      ? this._drawW2(ctx, x, y, dims, it.color, alpha)
+      : this._drawW1(ctx, x, y, dims, it.color, alpha);
+  }
+
+  // Łącznik plakietka↔ciało (K4): cienka linia od bliższej krawędzi plakietki do punktu ciała + kropka.
+  _drawConnector(ctx, x, bodyY, plaqueY, plaqueH, color, alpha) {
+    const edgeY = plaqueY < bodyY ? plaqueY + plaqueH / 2 : plaqueY - plaqueH / 2;
+    ctx.globalAlpha = alpha * 0.5;
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
-    ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
-    // Tekst (cień pod spodem dla kontrastu)
-    ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillText(label, bx + padX + 0.6, y + 0.6);
+    ctx.beginPath();
+    ctx.moveTo(x, edgeY);
+    ctx.lineTo(x, bodyY);
+    ctx.stroke();
     ctx.fillStyle = color;
-    ctx.fillText(label, bx + padX, y);
+    ctx.beginPath(); ctx.arc(x, bodyY, 1.6, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Znacznik LOD-far (K1): mała ikona + ewentualny badge, przy ciele. Zwraca bbox.
+  _drawMarker(ctx, x, y, it, alpha) {
+    const badge = it.isStation && (it.badges?.length) ? (BADGE_ICON[it.badges[0]] ?? '') : '';
+    const txt = `${it.icon}${badge}`;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const tw = ctx.measureText(txt).width;
+    const w = tw + 6, h = 15;
+    const bx = Math.round(x - w / 2), by = Math.round(y - h / 2);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(6,10,16,0.55)';
+    ctx.fillRect(bx, by, w, h);
+    ctx.strokeStyle = it.color; ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = it.color;
+    ctx.fillText(txt, x, y);
+    ctx.textAlign = 'left';
     ctx.globalAlpha = 1;
     return { x: bx, y: by, w, h };
   }
 
-  // W2 — pełny: plakietka z tłem + ikonografia (2 linie: main pogrubiony, sub przygaszony). Zwraca bbox.
-  _drawW2(ctx, x, y, main, sub, color, alpha) {
-    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    const mainW = ctx.measureText(main).width;
-    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    const subW = sub ? ctx.measureText(sub).width : 0;
-    const padX = 8;
-    const twoLine = !!sub;
-    const w = Math.max(mainW, subW) + padX * 2;
-    const h = twoLine ? 30 : 18;
+  // W1 — minimalistyczny: tekst + cienka ramka + subtelne tło. Jedna linia. Zwraca bbox.
+  _drawW1(ctx, x, y, dims, color, alpha) {
+    const { label, w, h } = dims;
     const bx = Math.round(x - w / 2), by = Math.round(y - h / 2);
-    const r = 5;
-
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.globalAlpha = alpha;
-    // Plakietka (rounded rect)
+    ctx.fillStyle = 'rgba(6,10,16,0.62)';
+    ctx.fillRect(bx, by, w, h);
+    ctx.strokeStyle = color; ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, by + 0.5, w - 1, h - 1);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillText(label, bx + 5.6, y + 0.6);
+    ctx.fillStyle = color;
+    ctx.fillText(label, bx + 5, y);
+    ctx.globalAlpha = 1;
+    return { x: bx, y: by, w, h };
+  }
+
+  // W2 — pełny: plakietka rounded-rect + pasek akcentu + 2 linie (main pogrubiony, sub przygaszony). Zwraca bbox.
+  _drawW2(ctx, x, y, dims, color, alpha) {
+    const { main, sub, twoLine, w, h } = dims;
+    const bx = Math.round(x - w / 2), by = Math.round(y - h / 2), r = 5;
+    ctx.globalAlpha = alpha;
     ctx.beginPath();
     ctx.moveTo(bx + r, by);
     ctx.arcTo(bx + w, by, bx + w, by + h, r);
@@ -147,15 +212,12 @@ export class MapLabelLayer {
     ctx.closePath();
     ctx.fillStyle = 'rgba(8,12,20,0.82)';
     ctx.fill();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = color; ctx.lineWidth = 1.2;
     ctx.stroke();
-    // Akcentowy pasek z lewej (ikonografia typu)
     ctx.fillStyle = color;
-    ctx.fillRect(bx + 1.5, by + 3, 2.5, h - 6);
-    // Tekst
+    ctx.fillRect(bx + 1.5, by + 3, 2.5, h - 6);   // pasek akcentu (ikonografia typu)
     ctx.textAlign = 'left';
-    const tx = bx + padX;
+    const tx = bx + 8;
     if (twoLine) {
       ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = color;
@@ -172,11 +234,12 @@ export class MapLabelLayer {
     return { x: bx, y: by, w, h };
   }
 
-  /** Klik etykiety stacji → selekcja (station:selected). x,y w logical px. */
+  /** Klik etykiety stacji → selekcja + focus kamery (K3). x,y w logical px. */
   handleClick(x, y) {
     for (const z of this._hitZones) {
       if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
-        EventBus.emit('station:selected', { stationId: z.stationId });
+        EventBus.emit('station:selected', { stationId: z.stationId });   // panel (jak dotąd)
+        EventBus.emit('station:focus',    { stationId: z.stationId });   // K3 — najazd kamery (reuse ścieżki)
         return true;
       }
     }
