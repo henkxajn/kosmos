@@ -14,6 +14,7 @@ import EventBus            from '../core/EventBus.js';
 import { CIV_SIDEBAR_W }  from '../ui/CivPanelDrawer.js';
 import { t }              from '../i18n/i18n.js';
 import { computeFloatingPlacement } from '../ui/BottomContextLogic.js';
+import { FloatingPanel }  from '../ui/FloatingPanel.js';
 
 const TOP_BAR_H  = COSMIC.TOP_BAR_H;    // 46px
 const BAR_H      = COSMIC.BOTTOM_BAR_H; // 26px
@@ -66,6 +67,8 @@ export class BottomContext {
     this._hitZones      = [];      // [{x,y,w,h,type,tab?}] zbudowane w draw()
     this._cardRect      = null;    // {x,y,w,h} ostatnio narysowanej karty
     this._minimized     = false;   // true = tylko pasek tytułowy (bez treści)
+    this._float         = new FloatingPanel();  // C1 (S3.4b) — drag za nagłówek
+    this._lastRect      = null;    // {px,py,PW,PH,b,dragZone} z ostatniego draw (drag hit-test)
   }
 
   // Obszar mapy (origin + rozmiar) — karta nie wychodzi poza niego.
@@ -126,6 +129,7 @@ export class BottomContext {
     // Reset zakładki przy zmianie encji
     if (entity !== this._prevEntity) {
       if (!entity.composition && this._tab === 'composition') this._tab = 'orbit';
+      this._float.reanchor();   // C1 — nowa encja → wróć do kotwicy (nie zostawiaj okna w starym miejscu)
       this._prevEntity = entity;
     }
 
@@ -162,10 +166,14 @@ export class BottomContext {
       // UI v3 — nad stałym paskiem nawigacji (civMode) + listwą dziennika.
       const bottomRes = window.KOSMOS?.civMode ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) : BAR_H;
       py = H - bottomRes - 6 - PH;   // PH = wysokość zminimalizowanej karty (≈30)
+      this._lastRect = null;   // in-place minimize — bez draga
     } else {
       const bounds = this._bounds(W, H);
       const sp = window.KOSMOS?.threeRenderer?.getBodyScreenPosition?.(entity.id) ?? null;
-      ({ px, py } = computeFloatingPlacement({ bodyScreen: sp, PW, PH, bounds, screenW: W }));
+      const pl = computeFloatingPlacement({ bodyScreen: sp, PW, PH, bounds, screenW: W });
+      ({ px, py } = this._float.place(pl.px, pl.py, PW, PH, bounds));   // C1 — drag override kotwicy
+      // Strefa-drag = pas nagłówka POZA przyciskami (✏ najbliżej lewej @ px+PW-58).
+      this._lastRect = { px, py, PW, PH, b: bounds, dragZone: { x: px, y: py, w: PW - 60, h: HEADER_H } };
     }
 
     this._cardRect = { x: px, y: py, w: PW, h: PH };
@@ -425,4 +433,23 @@ export class BottomContext {
     const r = this._cardRect;
     return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
   }
+
+  // ── Drag za nagłówek (C1, S3.4b) — router w UIManager woła mousedown/move/up ──
+  tryBeginDrag(x, y) {
+    const r = this._lastRect;
+    if (this._minimized || !r) return false;
+    const z = r.dragZone;
+    if (x < z.x || x > z.x + z.w || y < z.y || y > z.y + z.h) return false;
+    this._float.beginDrag(x, y, r.px, r.py);
+    return true;
+  }
+
+  handleDragMove(x, y) {
+    const r = this._lastRect;
+    if (!r || !this._float.isDragging()) return false;
+    return this._float.updateDrag(x, y, r.PW, r.PH, r.b);
+  }
+
+  endDrag() { return this._float.endDrag(); }
+  isDraggingPanel() { return this._float.isDragging(); }
 }

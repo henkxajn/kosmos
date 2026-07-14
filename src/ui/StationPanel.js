@@ -10,6 +10,7 @@
 // handel (live snapshot statków) / placeholder modułów. Brak historii przepływów (audyt §4).
 
 import { BaseOverlay }            from './BaseOverlay.js';
+import { FloatingPanel }          from './FloatingPanel.js';
 import { THEME, bgAlpha }         from '../config/ThemeConfig.js';
 import EventBus                   from '../core/EventBus.js';
 import EntityManager              from '../core/EntityManager.js';
@@ -38,10 +39,14 @@ export class StationPanel extends BaseOverlay {
   constructor() {
     super(null);
     this._stationId = null;
+    this._float = new FloatingPanel();   // C1 (S3.4b) — drag za nagłówek
+    this._lastRect = null;               // {px,py,PW,PH,b,dragZone} z ostatniego draw (drag hit-test)
 
     // Self-managed cykl życia (decyzja S4-2: wiring w panelu, nie w UIManager).
     EventBus.on('station:selected', (e) => {
-      this._stationId = e?.stationId ?? null;
+      const nid = e?.stationId ?? null;
+      if (nid !== this._stationId) this._float.reanchor();   // C1 — nowa stacja → wróć do kotwicy
+      this._stationId = nid;
       this.show();
       this._markDirty();
     });
@@ -99,12 +104,13 @@ export class StationPanel extends BaseOverlay {
     // Kotwica: ekranowa pozycja stacji + offset; null (za kamerą) → fallback lewy-górny róg mapy.
     const b  = this._getOverlayBounds(W, H);
     const sp = window.KOSMOS?.threeRenderer?.getStationScreenPosition?.(this._stationId);
-    let px, py;
-    if (sp) { px = sp.x + 18;     py = sp.y - PH / 2; }
-    else    { px = b.ox + 12;     py = b.oy + 12; }
-    // Clamp do obszaru mapy (panel zawsze w całości na ekranie).
-    px = Math.max(b.ox + 4, Math.min(b.ox + b.ow - PW - 4, px));
-    py = Math.max(b.oy + 4, Math.min(b.oy + b.oh - PH - 4, py));
+    let ax, ay;
+    if (sp) { ax = sp.x + 18;     ay = sp.y - PH / 2; }
+    else    { ax = b.ox + 12;     ay = b.oy + 12; }
+    // C1 (S3.4b) — drag override kotwicy; place() clampuje panel do obszaru mapy.
+    const { px, py } = this._float.place(ax, ay, PW, PH, b);
+    // Rect + strefa-drag (pas nagłówka POZA przyciskami [✏][✕]) do przeciągania (tryBeginDrag).
+    this._lastRect = { px, py, PW, PH, b, dragZone: { x: px, y: py, w: PW - 46, h: HEADER_H } };
 
     // Tło + ramka
     ctx.fillStyle = bgAlpha(0.92);
@@ -289,4 +295,25 @@ export class StationPanel extends BaseOverlay {
     }
     // 'bg' → swallow (klik w panel nie przelatuje niżej).
   }
+
+  // ── Drag za nagłówek (C1, S3.4b) — router w UIManager woła mousedown/move/up ──
+  tryBeginDrag(x, y) {
+    const r = this._lastRect;
+    if (!this.visible || this._float.minimized || !r) return false;
+    const z = r.dragZone;
+    if (x < z.x || x > z.x + z.w || y < z.y || y > z.y + z.h) return false;
+    this._float.beginDrag(x, y, r.px, r.py);
+    return true;
+  }
+
+  handleDragMove(x, y) {
+    const r = this._lastRect;
+    if (!r || !this._float.isDragging()) return false;
+    const moved = this._float.updateDrag(x, y, r.PW, r.PH, r.b);
+    if (moved) this._markDirty();
+    return moved;
+  }
+
+  endDrag() { return this._float.endDrag(); }
+  isDraggingPanel() { return this._float.isDragging(); }
 }

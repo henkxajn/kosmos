@@ -1549,6 +1549,11 @@ export class UIManager {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseDown(x, y, button); return; }
+    // C1 (S3.4b) — drag pływających paneli za nagłówek (kamera już zablokowana przez isOverUI).
+    if (button === 0) {
+      if (this.stationPanel?.visible && this.stationPanel.tryBeginDrag?.(x, y)) return;
+      if (this._bottomContext?.tryBeginDrag?.(x, y)) return;
+    }
   }
 
   handleMouseUp(rawX, rawY, button = 0) {
@@ -1556,6 +1561,9 @@ export class UIManager {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     if (this.overlayManager.isAnyOpen()) { this.overlayManager.handleMouseUp(x, y, button); return; }
+    // C1 (S3.4b) — zakończ drag paneli (jeśli trwał).
+    this.stationPanel?.endDrag?.();
+    this._bottomContext?.endDrag?.();
   }
 
   // M3 P1.5 — wystawiamy konwersję clientX/Y → ui-canvas local px (post-UI_SCALE)
@@ -1570,6 +1578,9 @@ export class UIManager {
     x /= UI_SCALE; y /= UI_SCALE;
     this._tooltipMouseX = x;
     this._tooltipMouseY = y;
+    // C1 (S3.4b) — jeśli panel jest przeciągany, aktualizuj i POCHŁOŃ ruch (bez hoverów pod spodem).
+    if (this.stationPanel?.isDraggingPanel?.())   { this.stationPanel.handleDragMove(x, y);   return; }
+    if (this._bottomContext?.isDraggingPanel?.()) { this._bottomContext.handleDragMove(x, y); return; }
     // Overlay pełnoekranowy — hover
     if (this.overlayManager.isAnyOpen()) {
       this.overlayManager.handleMouseMove(x, y);
