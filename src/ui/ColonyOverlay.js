@@ -153,6 +153,9 @@ export class ColonyOverlay extends BaseOverlay {
     EventBus.on('station:buildFailed',    (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('⚠ ' + t('station.flashFailed')); });
     EventBus.on('station:orderCancelled', (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('✕ ' + t('station.flashCancelled')); });
     EventBus.on('station:orderRejected',  (e) => { if (this._isActivePlanet(e?.planetId)) this._showFlash('🔒 ' + t('station.flashRejected')); });
+    // S3.4 FAZA 4 — flash przy dostawie/odbiorze POP (gdy oglądamy tę stację w trybie stacji).
+    EventBus.on('station:popArrived',  (e) => { if (this._stationMode && e?.stationId === this._selectedStationId) this._showFlash('🧑‍🚀 +1 POP'); });
+    EventBus.on('station:popDeparted', (e) => { if (this._stationMode && e?.stationId === this._selectedStationId) this._showFlash('🧑‍🚀 −1 POP'); });
 
     // S3.4 FAZA 3 — TRYB STACJI (ekran zarządzania w miejsce mapy hex). NIE woła switchActiveColony.
     this._stationMode          = false; // czy overlay renderuje ekran stacji zamiast mapy planety
@@ -164,7 +167,7 @@ export class ColonyOverlay extends BaseOverlay {
     for (const ev of ['station:moduleOrderQueued', 'station:moduleOrderCancelled', 'station:moduleBuildStarted',
                       'station:moduleBuilt', 'station:moduleOrderRejected', 'station:moduleDemolished',
                       'station:shipBuildStarted', 'station:shipCompleted', 'station:shipBuildCancelled',
-                      'station:shipBuildRejected', 'station:rename']) {
+                      'station:shipBuildRejected', 'station:rename', 'station:popArrived', 'station:popDeparted']) {
       EventBus.on(ev, () => { if (this.visible && this._stationMode && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true; });
     }
 

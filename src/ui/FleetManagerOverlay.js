@@ -177,6 +177,7 @@ function _missionTypeIcon(type) {
   switch (type) {
     case 'recon': case 'survey': case 'deep_scan': return '🔭';
     case 'transport': return '📦';
+    case 'passenger': return '🧑‍🚀';
     case 'colony': return '🏗';
     case 'mining': return '⛏';
     case 'trade_route': return '🔄';
@@ -191,6 +192,7 @@ function _missionTypeLabel(type) {
     deep_scan: 'fleet.missionTypeDeepScan',
     mining: 'fleet.missionTypeMining', colony: 'fleet.missionTypeColony',
     transport: 'fleet.missionTypeTransport', trade_route: 'fleet.missionTypeTransport',
+    passenger: 'fleet.missionTypePassenger',
     interstellar_jump: 'fleet.missionTypeInterstellar',
   }[type];
   return key ? t(key) : type || '';
@@ -8044,8 +8046,8 @@ export class FleetManagerOverlay {
         continue;
       }
 
-      // Transport — tylko ciała z kolonią/outpostem
-      if (actionId === 'transport') {
+      // Transport (cargo/pasażer) — tylko ciała z kolonią/outpostem (POP dostarczany do kolonii).
+      if (actionId === 'transport' || actionId === 'transport_passenger') {
         if (!colMgr?.hasColony(body.id)) continue;
       }
       // Kolonizacja — nie pokazuj pełnych kolonii (outposty można upgrade'ować)
@@ -8094,11 +8096,12 @@ export class FleetManagerOverlay {
       });
     }
 
-    // S3.3b-S3b — stacje GRACZA (HUB handlowy) jako cele transportu (magazyn ogólny). Cudze stacje
-    // pominięte (handel cross-empire dopiero po dyplomacji — S3.4/S3.5).
-    if (actionId === 'transport') {
+    // S3.3b-S3b — stacje GRACZA (HUB handlowy) jako cele transportu cargo; S3.4 FAZA 4 — także cel
+    // transportu pasażerskiego (dostawa POP na stację). Cudze stacje pominięte (cross-empire → S3.5).
+    if (actionId === 'transport' || actionId === 'transport_passenger') {
       for (const st of EntityManager.getByTypeInSystem('station', activeSysId)) {
         if ((st.ownerEmpireId ?? 'player') !== 'player') continue;
+        if (st.id === vessel.position.dockedAt) continue;   // nie celuj we własny dok (no-op)
         const body = EntityManager.get(st.bodyId);
         const distAU = this._calcDistAU(vessel, { x: body?.x ?? st.x, y: body?.y ?? st.y });
         targets.push({

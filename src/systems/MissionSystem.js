@@ -25,7 +25,7 @@ import { HULLS }         from '../data/HullsData.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import { COMMODITIES }   from '../data/CommoditiesData.js';
 import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
-import { addMissionLog, loadCargo, canDoEnvoy } from '../entities/Vessel.js';
+import { addMissionLog, loadCargo, canDoEnvoy, loadColonists } from '../entities/Vessel.js';
 import { resolveTransferStore, isStationId } from '../utils/TransferStore.js';
 import { t }             from '../i18n/i18n.js';
 import { GAME_CONFIG }   from '../config/GameConfig.js';
@@ -83,6 +83,10 @@ export class MissionSystem {
 
     EventBus.on('expedition:transportRequest', ({ targetId, cargo, vesselId, cargoPreloaded, sourceColonyId, loop, returnCargoSpec }) =>
       this._launchTransport(targetId, cargo, vesselId, cargoPreloaded, sourceColonyId, loop, returnCargoSpec));
+
+    // S3.4 FAZA 4 — transport pasażerski (1 POP; kolonia↔stacja). One-shot, bez pętli.
+    EventBus.on('expedition:passengerRequest', ({ targetId, vesselId }) =>
+      this._launchPassenger(targetId, vesselId));
 
     // Anuluj pętlę transportową — statek dokończy bieżący etap, potem zatrzymuje się
     EventBus.on('transport:cancelLoop', ({ vesselId }) => this._cancelTransportLoop(vesselId));
@@ -908,6 +912,115 @@ export class MissionSystem {
     }
   }
 
+  // ── Transport pasażerski (S3.4 FAZA 4) — 1 POP, kolonia↔stacja, one-shot ────
+  // ORIGIN = bieżący dok statku (kolonia LUB stacja). Załadunek 1 POP dopiero PO wszystkich bramkach
+  // (port/paliwo) — inaczej porażka „zgubiłaby" POP zdjęty ze źródła. Wzorowane na _launchTransport
+  // (bez cargo). Guard „nigdy ostatni POP" (kolonia) / „pop>0" (stacja) = NOWE (loadColonists ich nie ma).
+  _launchPassenger(targetId, vesselId) {
+    const vMgr   = window.KOSMOS?.vesselManager;
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vessel = vesselId ? vMgr?.getVessel(vesselId) : null;
+
+    if (!vessel || vessel.position.state !== 'docked'
+        || (vessel.status !== 'idle' && vessel.status !== 'refueling')) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.shipUnavailable') });
+      return;
+    }
+    if ((vessel.colonistCapacity ?? 0) - (vessel.colonists ?? 0) <= 0) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noPassengerCabin') });
+      return;
+    }
+
+    // Źródło POP = bieżący dok. Walidacja (bez pobrania) — stacja: pop>0; kolonia: population>1.
+    const originId      = vessel.position.dockedAt ?? vessel.colonyId;
+    const originStation = isStationId(originId) ? EntityManager.get(originId) : null;
+    const originCol     = originStation ? null : colMgr?.getColony(originId);
+
+    if (originStation) {
+      if ((originStation.pop ?? 0) <= 0) {
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noStationCrew') });
+        return;
+      }
+    } else {
+      if (!originCol?.civSystem) {
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.sourceColonyMissing') });
+        return;
+      }
+      if ((originCol.civSystem.population ?? 0) <= 1) {   // NOWY guard — nigdy ostatni POP kolonii
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.neverLastPop') });
+        return;
+      }
+    }
+
+    // Port startu (stacja = uniwersalny; małe kadłuby bez portu) + paliwo (jak transport).
+    if (!this._checkPadForVessel(vesselId)) {
+      this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.noSpaceport') });
+      return;
+    }
+    const target   = this._findTarget(targetId);
+    const distance = Math.max(0.001, DistanceUtils.euclideanAU(
+      { x: vessel.position.x, y: vessel.position.y }, target || { x: 0, y: 0 }));
+    const fuelNeeded = distance * vessel.fuel.consumption;
+    if (vessel.fuel.current < fuelNeeded) {
+      this._emit('mission:failed', 'expedition:launchFailed', {
+        reason: t('mission.insufficientFuel', fuelNeeded.toFixed(1), vessel.fuel.current.toFixed(1)),
+        cause: 'fuel',
+      });
+      return;
+    }
+
+    // ── Bramki OK → pobierz 1 POP ze źródła (atomowo z dispatchem poniżej) ──
+    let originStationId = null;
+    if (originStation) {
+      originStation.pop = Math.max(0, (originStation.pop ?? 0) - 1);
+      vessel.colonists  = (vessel.colonists ?? 0) + 1;
+      originStationId   = originStation.id;
+      EventBus.emit('station:popDeparted', { stationId: originStation.id, stationName: originStation.name, pop: originStation.pop, count: 1 });
+    } else {
+      const loaded = loadColonists(vessel, 1, originCol.civSystem);   // fizycznie usuwa POP z kolonii
+      if (loaded <= 0) {
+        this._emit('mission:failed', 'expedition:launchFailed', { reason: t('mission.colonistsUnavailable') });
+        return;
+      }
+    }
+
+    const shipSpeed  = this._getShipSpeed(vesselId);
+    const travelTime = parseFloat(Math.max(MIN_TRAVEL_YEARS, distance / shipSpeed).toFixed(3));
+    const departYear = this._gameYear;
+
+    const mission = {
+      id:             `exp_${this._nextId++}`,
+      type:           'passenger',
+      targetId,
+      targetName:     target?.name ?? colMgr?.getColony(targetId)?.name ?? targetId,
+      targetType:     target?.type ?? (isStationId(targetId) ? 'station' : 'colony'),
+      departYear,
+      arrivalYear:    departYear + travelTime,
+      returnYear:     null,
+      distance:       parseFloat(distance.toFixed(2)),
+      travelTime,
+      crewCost:       0,
+      vesselId,
+      originColonyId: originStation ? (vessel.colonyId ?? colMgr?.activePlanetId) : originId,
+      originStationId,
+      colonists:      1,
+      status:         'en_route',
+      gained:         null,
+      eventRoll:      null,
+    };
+    this._missions.push(mission);
+
+    // dispatchOnMission sam odejmuje fuelCost (nie podwajać) + ustawia trasę/pozycję.
+    vMgr.dispatchOnMission(vesselId, {
+      type: 'passenger', targetId,
+      targetName: mission.targetName,
+      departYear, arrivalYear: mission.arrivalYear, returnYear: null,
+      fuelCost: distance * (vessel.fuel?.consumption ?? 0),
+    });
+
+    this._emit('mission:started', 'expedition:launched', { expedition: mission });
+  }
+
   // ── Rozkaz powrotu ────────────────────────────────────────────────────────
   _orderReturn(missionId) {
     const exp = this._missions.find(e => e.id === missionId);
@@ -1298,6 +1411,11 @@ export class MissionSystem {
         changed = true;
       } else if (exp.loop && (exp.status === 'waiting_return_cargo' || exp.status === 'waiting_reload')) {
         if (this._tryResumeLoop(exp)) changed = true;
+      } else if (exp.type === 'passenger' && exp.status === 'no_housing') {
+        // Pełna stacja — statek czeka ZADOKOWANY, ponów dostawę co tick (wzór _tryResumeLoop).
+        const before = exp.status;
+        this._processPassengerArrival(exp);
+        if (exp.status !== before) changed = true;
       }
     }
 
@@ -1407,6 +1525,7 @@ export class MissionSystem {
 
     if (exp.type === 'colony')        { this._processColonyArrival(exp); return; }
     if (exp.type === 'transport')     { this._processTransportArrival(exp); return; }
+    if (exp.type === 'passenger')     { this._processPassengerArrival(exp); return; }
     if (exp.type === 'recon')         { this._processReconArrival(exp); return; }
     if (exp.type === 'found_outpost') { this._processFoundOutpostArrival(exp); return; }
     if (exp.type === 'envoy')         { this._processEnvoyArrival(exp); return; }
@@ -2024,6 +2143,57 @@ export class MissionSystem {
       gained: exp.gained ?? exp.cargo,
       multiplier: 1.0,
     });
+  }
+
+  // ── Passenger arrival (S3.4 FAZA 4) — 1 POP na stację (pop++) lub do kolonii (addPop) ──
+  // Re-wołane z _checkArrivals przy status='no_housing' (pełna stacja) → retry dostawy co tick.
+  _processPassengerArrival(exp) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    const vMgr   = window.KOSMOS?.vesselManager;
+    const vessel = exp.vesselId ? vMgr?.getVessel(exp.vesselId) : null;
+    const colonists    = vessel?.colonists ?? exp.colonists ?? 1;
+    const firstArrival = exp.status !== 'no_housing';   // retry NIE dokuje ponownie (już zadokowany)
+
+    // Cel = STACJA: mutuj encję LIVE (kopia z _findTarget nie ma getterów popCapacity ani nie mutuje pop).
+    const station = isStationId(exp.targetId) ? EntityManager.get(exp.targetId) : null;
+    if (station?.type === 'station') {
+      if ((station.pop ?? 0) < station.popCapacity) {
+        station.pop = (station.pop ?? 0) + colonists;
+        if (vessel) vessel.colonists = 0;
+        if (firstArrival && exp.vesselId && vMgr) vMgr.dockAtTarget(exp.vesselId, exp.targetId);
+        exp.status = 'completed';
+        exp.gained = {};
+        // Dostawa POP = lekki feed (EventLog + flash), BEZ pauzy-popup (nie mission:report — 1 POP).
+        EventBus.emit('station:popArrived', { stationId: station.id, stationName: station.name, pop: station.pop, count: colonists });
+      } else {
+        // Pełna stacja (brak wolnych miejsc habitatu) — statek CZEKA zadokowany, retry co tick.
+        if (firstArrival && exp.vesselId && vMgr) vMgr.dockAtTarget(exp.vesselId, exp.targetId);
+        exp.status = 'no_housing';
+      }
+      return;
+    }
+
+    // Cel = KOLONIA: addPop('laborer') + fallback-emit civ:popBorn (wzór ExpeditionSystem.js:1407 —
+    // addPop sam NIE emituje civ:popBorn; emitujemy jawnie z planetId+colonyName do growth/UI/EventLog).
+    const targetCol = colMgr?.getColony(exp.targetId);
+    if (targetCol?.civSystem?.addPop) {
+      targetCol.civSystem.addPop('laborer', colonists);
+      EventBus.emit('civ:popBorn', { population: targetCol.civSystem.population, planetId: exp.targetId, colonyName: targetCol.name });
+    }
+    if (vessel) vessel.colonists = 0;
+
+    // Statek przeżywa — przepnij flotę do kolonii docelowej (wzór _processColonyArrival).
+    if (exp.vesselId && vMgr) {
+      const oldCol = vessel?.colonyId ? colMgr?.getColony(vessel.colonyId) : null;
+      if (oldCol) {
+        const idx = oldCol.fleet.indexOf(exp.vesselId);
+        if (idx !== -1) oldCol.fleet.splice(idx, 1);
+      }
+      vMgr.dockAtColony(exp.vesselId, exp.targetId);
+      if (targetCol && !targetCol.fleet.includes(exp.vesselId)) targetCol.fleet.push(exp.vesselId);
+    }
+    exp.status = 'completed';
+    exp.gained = {};
   }
 
   // ── Found outpost arrival ─────────────────────────────────────────────────

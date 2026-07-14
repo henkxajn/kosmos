@@ -17,6 +17,7 @@ import { HULLS } from './HullsData.js';
 import { SHIP_MODULES, getModuleCapabilities } from './ShipModulesData.js';
 import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
+import { t } from '../i18n/i18n.js';
 
 // Helper: czy statek wymaga wyrzutni (spaceport)?
 // Małe kadłuby (size === 'small') nie wymagają — mogą startować/lądować wszędzie
@@ -155,6 +156,26 @@ const ACTIONS = {
         loop: !!state.loop,
         returnCargoSpec: state.returnCargoSpec ?? null,
       });
+    },
+  },
+
+  // ── Transport pasażerski (S3.4 FAZA 4) — 1 POP z bieżącego doku (kolonia/stacja) do celu ──
+  // Wymaga modułu z pojemnością pasażera (passenger_module / habitat_pod). Załadunek POP w
+  // MissionSystem._launchPassenger (kolonia: population>1; stacja: pop>0). One-shot, bez pętli.
+  transport_passenger: {
+    id: 'transport_passenger',
+    get label() { return t('fleet.actionPassenger'); },
+    icon: '🧑‍🚀',
+    requiresTarget: true,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'docked') return { ok: false, reason: t('fleet.reasonNotDocked') };
+      if (vessel.status !== 'idle' && vessel.status !== 'refueling') return { ok: false, reason: t('fleet.reasonBusy') };
+      if ((vessel.colonistCapacity ?? 0) <= 0) return { ok: false, reason: t('fleet.reasonNoPassengerCabin') };
+      return { ok: true };
+    },
+    execute(vessel, state) {
+      if (!state.targetId) return;
+      EventBus.emit('expedition:passengerRequest', { targetId: state.targetId, vesselId: vessel.id });
     },
   },
 
@@ -587,6 +608,10 @@ export function getAvailableActions(vessel, state) {
       result.push(_check(ACTIONS.colonize, vessel, state));
     }
     result.push(_check(ACTIONS.transport, vessel, state));
+    // Transport pasażerski — statki z pojemnością na pasażera (passenger_module / colony ship).
+    if ((vessel.colonistCapacity ?? 0) > 0) {
+      result.push(_check(ACTIONS.transport_passenger, vessel, state));
+    }
     if (caps.has('cargo')) {
       result.push(_check(ACTIONS.found_outpost, vessel, state));
     }

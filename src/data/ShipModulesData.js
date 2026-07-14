@@ -267,6 +267,24 @@ export const SHIP_MODULES = {
     description: '3 POP w hibernacji kriogenicznej.',
   },
 
+  // Moduł pasażerski (S3.4 FAZA 4) — wozi 1 POP jako PASAŻERA (vessel.colonists), ale slotType
+  // 'special' (NIE 'habitat') → NIE czyni statku kolonizatorem (canColonize bramkuje na 'habitat').
+  // Transport ludności między koloniami i stacjami (stacja ożywa dopiero po dowiezieniu załogi).
+  passenger_module: {
+    id: 'passenger_module',
+    namePL: 'Moduł Pasażerski',
+    nameEN: 'Passenger Module',
+    icon: '🧑‍🚀',
+    slotType: 'special',
+    tier: 1,
+    mass: 8,   // tony — lekka kabina ciśnieniowa
+    cost: { Fe: 20, Ti: 8 },
+    commodityCost: { pressure_modules: 2 },
+    stats: { colonistCapacity: 1 },   // 1 POP pasażera — reuse vessel.colonists (bez zakładania kolonii)
+    requires: null,
+    description: 'Kabina ciśnieniowa dla 1 pasażera (POP). Przewóz ludności — bez zakładania kolonii.',
+  },
+
   // ── Moduły pancerne ────────────────────────────────────────────────────
 
   armor_standard: {

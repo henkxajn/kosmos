@@ -89,6 +89,9 @@ export function vesselRole(vessel) {
       // analogicznie jak moduł naukowy = slotType 'science'.
       if (m.slotType === 'habitat') hasColony = true;
       else if (m.slotType === 'science') hasScience = true;
+      // S3.4 FAZA 4: statek pasażerski reuse GLB colony ship (ten sam model — rozjazd wizualny
+      // do ogarnięcia później). Model-only: NIE wpływa na canColonize (bramka 'habitat').
+      else if (id === 'passenger_module') hasColony = true;
     }
     if (hasColony)  return 'colony';
     if (hasScience) return 'science';

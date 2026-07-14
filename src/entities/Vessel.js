@@ -418,9 +418,14 @@ export function getCapabilities(vessel) {
  */
 export function canColonize(vessel) {
   if (!vessel) return false;
-  if ((vessel.colonistCapacity ?? 0) > 0) return true;
-  if (hasModule(vessel, 'habitat_pod') || hasModule(vessel, 'cryo_pod')) return true;
-  // Legacy fallback
+  // S3.4 FAZA 4 §4.1a: kolonizacja wymaga MODUŁU HABITACYJNEGO (slotType 'habitat' — habitat_pod/
+  // cryo_pod), NIE samej pojemności kolonistów. passenger_module (slotType 'special', colonistCapacity 1)
+  // wozi POP jako pasażera, ale kolonii NIE zakłada — dlatego `colonistCapacity>0` już NIE bramkuje.
+  const mods = vessel.modules ?? [];
+  for (const modId of mods) {
+    if (SHIP_MODULES[modId]?.slotType === 'habitat') return true;
+  }
+  // Legacy fallback (stary save bez modułów / SHIPS.isColonizer) — NIE ruszać (regresja colony ship).
   const def = getShipDef(vessel);
   return !!def?.isColonizer;
 }

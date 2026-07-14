@@ -1269,7 +1269,13 @@ export default {
   'fleet.missionTypeMining': 'Mining',
   'fleet.missionTypeColony': 'Colonization',
   'fleet.missionTypeTransport': 'Transport',
+  'fleet.missionTypePassenger': 'Passengers',
   'fleet.missionTypeTransit': 'Transit',
+  // ── S3.4 FAZA 4 — passenger transport action ──
+  'fleet.actionPassenger': 'Transport POP',
+  'fleet.reasonNotDocked': 'Ship must be docked',
+  'fleet.reasonBusy': 'Ship busy',
+  'fleet.reasonNoPassengerCabin': 'No room for a passenger (passenger module)',
   'fleet.missionTypeForeignRecon': 'Foreign Recon',
   'fleet.missionTypeExploration': 'Exploration',
   'fleet.missionTypeInterstellar': 'Warp Jump',
@@ -1437,6 +1443,14 @@ export default {
   'mission.nearestBody': 'Nearest body',
   'mission.bodyAlreadyExplored': 'Body already explored',
   'mission.insufficientFuel': 'Insufficient fuel (need {0} pc, has {1})',
+  // ── S3.4 FAZA 4 — passenger transport ──
+  'mission.noPassengerCabin': 'Ship has no room for a passenger',
+  'mission.noStationCrew': 'Station has no crew to transport',
+  'mission.neverLastPop': "Cannot send the colony's last POP",
+  'mission.sourceColonyMissing': 'No source colony',
+  'mission.colonistsUnavailable': 'No POP available on the ship',
+  'log.passengerToStation': '🧑‍🚀 Passenger ({0} POP) arrived at station {1}',
+  'log.passengerFromStation': '🧑‍🚀 Passenger ({0} POP) departed station {1}',
   // ── S3.4 Light Diplomacy ──
   'mission.envoyDisabled': 'Diplomacy disabled',
   'mission.envoyNoEmpire': 'Unknown empire',

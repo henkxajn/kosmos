@@ -923,6 +923,13 @@ export class UIManager {
       const name = colonyName ?? '—';
       this._log(t('log.popBorn', name, population), 'pop_born', planetId);
     });
+    // S3.4 FAZA 4 — transport pasażerski: dostawa/odbiór POP na stacji (linia EventLog, bez pauzy).
+    EventBus.on('station:popArrived', ({ stationName, stationId, count }) => {
+      this._log(t('log.passengerToStation', count ?? 1, stationName ?? stationId ?? '—'), 'pop_born');
+    });
+    EventBus.on('station:popDeparted', ({ stationName, stationId, count }) => {
+      this._log(t('log.passengerFromStation', count ?? 1, stationName ?? stationId ?? '—'), 'pop_born');
+    });
     EventBus.on('civ:popDied', ({ cause, population, planetId, colonyName }) => {
       const name = colonyName ?? '—';
       const key = cause === 'starvation' ? 'log.popDiedStarvation' : 'log.popDied';

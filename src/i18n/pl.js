@@ -1271,7 +1271,13 @@ export default {
   'fleet.missionTypeMining': 'Wydobycie',
   'fleet.missionTypeColony': 'Kolonizacja',
   'fleet.missionTypeTransport': 'Transport',
+  'fleet.missionTypePassenger': 'Pasażerowie',
   'fleet.missionTypeTransit': 'Tranzyt',
+  // ── S3.4 FAZA 4 — akcja transportu pasażerskiego ──
+  'fleet.actionPassenger': 'Transport POP',
+  'fleet.reasonNotDocked': 'Statek musi być zadokowany',
+  'fleet.reasonBusy': 'Statek zajęty',
+  'fleet.reasonNoPassengerCabin': 'Brak miejsca dla pasażera (moduł pasażerski)',
   'fleet.missionTypeForeignRecon': 'Rekon obcy',
   'fleet.missionTypeExploration': 'Eksploracja',
   'fleet.missionTypeInterstellar': 'Skok warp',
@@ -1439,6 +1445,14 @@ export default {
   'mission.nearestBody': 'Najbliższe ciało',
   'mission.bodyAlreadyExplored': 'Ciało już zbadane',
   'mission.insufficientFuel': 'Brak paliwa (potrzeba {0} pc, ma {1})',
+  // ── S3.4 FAZA 4 — transport pasażerski ──
+  'mission.noPassengerCabin': 'Statek nie ma miejsca dla pasażera',
+  'mission.noStationCrew': 'Stacja nie ma załogi do przewiezienia',
+  'mission.neverLastPop': 'Nie można wysłać ostatniego POP kolonii',
+  'mission.sourceColonyMissing': 'Brak kolonii źródłowej',
+  'mission.colonistsUnavailable': 'Brak dostępnych POP na statku',
+  'log.passengerToStation': '🧑‍🚀 Pasażer ({0} POP) dotarł na stację {1}',
+  'log.passengerFromStation': '🧑‍🚀 Pasażer ({0} POP) wyruszył ze stacji {1}',
   // ── S3.4 Light Diplomacy ──
   'mission.envoyDisabled': 'Dyplomacja wyłączona',
   'mission.envoyNoEmpire': 'Nieznane imperium',
