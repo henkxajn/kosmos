@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v87 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v90 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -503,19 +503,40 @@ UIManager 5 wpięć, `fcGroupPanel` w GameConfig, i18n `fleetGroup.*` PL+EN. Smo
 
 ---
 
-## S3.4 stacje — PAUZA po FAZIE 2 (live-gate pending)
+## S3.4 stacje — UKOŃCZONE (FAZY 0-6, save v90, final live-gate pending)
 
-Przeprojektowanie stacji orbitalnych w pełny ekran gracza (moduły + POP + ekran + transport +
-etykiety), plan wielofazowy. **ZAMROŻONE po FAZIE 2 (2026-07-04).** FAZA 0 DONE (audyt
-`docs/audits/s34-phase0-findings.md`), FAZA 1 DONE (`35ce5a2`, live-gate PASS z zastrzeżeniem),
-FAZA 2 DONE (`7073a99`, smoke 54/54, **live-gate FAZY 2 PENDING** — Filip wykona z manuala
-`docs/testing/s34-faza2-live-gate-manual.md`). FAZY 3-6 NIEROZPOCZĘTE. Save v90.
+Przeprojektowanie stacji orbitalnych w pełny ekran gracza (moduły + POP + ekran zarządzania +
+transport pasażerski + etykiety na mapie), plan wielofazowy. **WSZYSTKIE FAZY 0-6 DONE.** Wariant A
+(stacja poza `ColonyManager._colonies`, fasady): `Station` extends CelestialBody (type='station',
+orbital=null, x/y statyczne — anchored GEO); `StationDepot` façade store; NIGDY nie dotyka
+CivilianTradeSystem/switchActiveColony/ColonyManager.serialize. Plan/raport: `docs/plans/s34-stations-continuation.md`.
 
-**Wznowienie: `docs/plans/s34-stations-continuation.md`** (samowystarczalny — świeża instancja
-wznawia wyłącznie z tego pliku + repo). ⚠ FLAGA na start FAZY 4: `obsada = max(pop, popCapacity)`
-to tymczasowy mostek (decyzja o powrocie do `obsada = pop` przy pasażerach). ⚠ CADENCE: buildTime
-stacji w latach cywilizacyjnych (advance civDeltaYears). Pliki logiki: `StationSystem.js` (`_tick`),
-`StationModuleData.js` (balans), `Station.js` (encja+gettery).
+**Model danych (S3.4):**
+- `Station.modules[]` + gettery `popCapacity` (Σ habitat), `tradeCapacity` (aktywne trade), `hasActiveShipyard`;
+  `pop`/`shipQueues[]`/`pendingModuleOrders[]`; `colonists`/`_awaitingHousing` (transport pasażerski).
+- `src/data/StationModuleData.js` (8 modułów; balans TYLKO tutaj) — ⚠ `buildTime` w LATACH CYWILIZACYJNYCH
+  (advance civDeltaYears, spójnie z kolonią). MODULE_SHED_ORDER trade→lab→shipyard; CREW_SHED_ORDER.
+- `src/data/StationData.js` — koszt bazowy + commodityCost + maxModules (buildTime stacji USUNIĘTE w F6 —
+  Wariant A = instant materialize; progresja czasowa dotyczy modułów, nie stacji).
+- **obsada = pop** (F4 — likwidacja tymczasowego mostka `max(pop,popCapacity)`); `Vessel.canColonize` = ma
+  moduł `slotType:'habitat'` (NIE colonistCapacity>0) — JEDNO źródło prawdy w UI.
+
+**Fazy:** F0 audyt (`docs/audits/s34-phase0-findings.md`) · F1 dane+model+migracja v90 (`35ce5a2`) ·
+F2 tick budowa/energia/praca/stocznia (`7073a99`+fixy) · F3 ekran zarządzania (`StationManagementView.js`
++ tryb stacji w ColonyOverlay: zakładki 🛰, siatka slotów, picker modułów+statków, depot, rozbiórka) ·
+F4 transport pasażerski POP (`passenger_module` + misja `_launchPassenger`/`_processPassengerArrival` +
+`_awaitingHousing`/no_housing + blokada rozbiórki zasiedlonego habitatu) · F5 etykiety mapy
+(`MapLabelLayer` W2.1 — plakietki kolonii/stacji, LOD 3-poziomowy, anty-nakładanie, stacja klikalna →
+`station:selected`+`station:focus`) · F6 domknięcie (sweep martwego kodu + `exportSave/importSave` debug +
+regresja rot-proof).
+
+**Save v90** (F1 `_migrateV89toV90`). Pola pasażerskie round-trip przez serialize misji (bez migracji F4-F6).
+Debug: `KOSMOS.debug.{spawnStation, queueStationOrder, stationBuildModule, stationBuildShip, stationSetPop,
+stationInfo, exportSave, importSave}`.
+
+**Świadomie POZA zakresem S3.4 (backlog):** wpięcie stacji w `CivilianTradeSystem` (handel przez stację),
+stacje w Outlinerze/minimapie, tier 2+ i klasy stacji, stacje AI, szablon „Statek pasażerski" w kreatorze,
+budowa statków stacyjnych z Command/Shipyard, selektor ilości POP w transporcie.
 
 ---
 
