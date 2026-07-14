@@ -406,6 +406,38 @@ export class GameScene {
     // KOSMOS.debug.giveResearch(10000) — dodaje research do aktywnej kolonii
     //   (przydatne na starym save bez konieczności rozpoczynania nowego Power Test).
     window.KOSMOS.debug = {
+      // S3.4 FAZA 6 — backup/restore save'a przed bumpem wersji (single-slot save utrudnia
+      //   test migracji na żywo). exportSave() → pobiera plik + kopiuje do schowka + zwraca string;
+      //   importSave(json) → nadpisuje slot (string LUB obiekt) i instruuje reload (migracja przy load).
+      exportSave: () => {
+        const raw = SaveSystem.exportSave();
+        if (!raw) { console.warn('[save] brak zapisu w localStorage (kosmos_save_v1)'); return null; }
+        let version = '?';
+        try { version = JSON.parse(raw).version ?? '?'; } catch {}
+        // Pobierz plik (Blob + anchor) — nazwa z wersją + znacznikiem czasu.
+        try {
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const blob = new Blob([raw], { type: 'application/json' });
+          const url  = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = `kosmos_save_v${version}_${stamp}.json`;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) { console.warn('[save] pobranie pliku nieudane:', e?.message); }
+        // Kopia do schowka (best-effort — może wymagać gestu użytkownika).
+        try { navigator.clipboard?.writeText?.(raw); } catch {}
+        console.log(`[save] wyeksportowano save v${version} (${raw.length} B) — plik + schowek. Zwrócony string poniżej:`);
+        return raw;
+      },
+      importSave: (json) => {
+        const res = SaveSystem.importSave(json);
+        if (res.ok) {
+          console.log(`[save] zaimportowano save v${res.version} → slot kosmos_save_v1. Przeładuj grę i wybierz „Kontynuuj" (migracja przy odczycie).`);
+        } else {
+          console.error(`[save] import nieudany: ${res.reason}. Podaj string JSON lub obiekt z polem version.`);
+        }
+        return res;
+      },
       // S3.5b — raport bramki handlu cross-empire (diagnostyka live-gate).
       // Dla każdej kolonii AI: czy handlowalna i dlaczego nie + per-empire warp/treaty/toggle.
       crossEmpireTradeStatus: () => {

@@ -351,4 +351,36 @@ export class SaveSystem {
   static clearSave() {
     localStorage.removeItem(SAVE_KEY);
   }
+
+  /**
+   * Eksport surowego save'a (backup przed bumpem wersji). Zwraca string JSON z localStorage
+   * lub null gdy brak zapisu. Enkapsuluje SAVE_KEY (prywatny w module).
+   * @returns {string|null}
+   */
+  static exportSave() {
+    return localStorage.getItem(SAVE_KEY);
+  }
+
+  /**
+   * Import save'a z backupu (string JSON lub obiekt). Waliduje parsowalność + pole version,
+   * potem nadpisuje slot. NIE przeładowuje gry — wywołujący decyduje (reload → migracja+restore).
+   * @param {string|object} json
+   * @returns {{ok:boolean, version?:number, reason?:string}}
+   */
+  static importSave(json) {
+    let obj;
+    try {
+      obj = typeof json === 'string' ? JSON.parse(json) : json;
+    } catch {
+      return { ok: false, reason: 'parse_error' };
+    }
+    if (!obj || typeof obj !== 'object') return { ok: false, reason: 'not_object' };
+    if (typeof obj.version !== 'number' || obj.version < 1) return { ok: false, reason: 'no_version' };
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(obj));
+    } catch (e) {
+      return { ok: false, reason: 'write_error' };
+    }
+    return { ok: true, version: obj.version };
+  }
 }
