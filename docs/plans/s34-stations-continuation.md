@@ -742,3 +742,65 @@ foncie 10-11px) — pełne realne nazwy (np. „Stacja Orbitalna Alfa") bez „�
 Pliki B: `ThreeCameraController.js`, `ThreeRenderer.js`, `UIManager.js`, `MapLabelLayer.js`. Bez migracji save.
 B1/B2 są WIZUALNE → **live-gate** (headless nie testuje canvas/three). `map_labels` smoke 37/37 PASS (bez regresji),
 4 pliki `node --check` czyste.
+
+---
+
+## S3.4b — Panele okienkowe (drag / minimize / dock / stacking)
+
+Cel: pływające panele ciał (BottomContext = „okno planety", StationPanel) zachowują się jak lekkie
+okienka — przesuwalne, minimalizowalne do paska zadań, kilka naraz. **C0 zaakceptowany przez Filipa**
+(architektura kompozycyjna, NIE przepisywanie paneli).
+
+### C0 — rekonesans (ustalenia)
+Dwa OSOBNE pływające panele, brak wspólnej bazy „okna": **BottomContext** (bespoke, planeta/kolonia,
+miał już minimize „in-place") vs **StationPanel** (`extends BaseOverlay`, stacja). Oba anchored do
+ekranowej pozycji ciała/stacji + clamp do mapy. Drag/dock nie istniały. Decyzje: okno planety =
+BottomContext; ▼ BottomContext PRZEROBIĆ na dokowanie (minimalizacja in-place znika); drag odczepia od
+kotwicy (panel nieruchomy przy ruchu kamery); pozycje NIE serializowane (reset per sesja); StationPanel ~440px.
+
+### Architektura (kompozycja, nie dziedziczenie)
+- **`FloatingPanel.js`** (helper): `dragPos` (override kotwicy), `place/beginDrag/updateDrag(próg 4px)/endDrag/
+  reanchor`, flaga `minimized`. Panel trzyma instancję i deleguje pozycję + drag.
+- **`PanelDock.js`** + **`PanelDockLogic.js`** (`computeDockSlots` — czysta, smoke): wspólny pasek zadań
+  (rejestr `register/unregister/get/has` + draw belek + `handleClick`→onRestore + `isOver`/hover). Belki
+  lewy-dół, stack pionowo w górę nad nawigacją, overflow guard. Trzymany w UIManager: draw PO overlayach,
+  klik PRZED, blokada kamery przez `isOver`.
+
+### C1 — drag (commit `e583e0c`)
+BottomContext + StationPanel: `_float` + strefa-drag = pas nagłówka POZA przyciskami; `tryBeginDrag/
+handleDragMove/endDrag/isDraggingPanel`; reanchor przy zmianie encji/stacji. UIManager router:
+mousedown→tryBeginDrag, mousemove→handleDragMove+pochłoń, mouseup→endDrag.
+
+### C2 — minimize + dock (commit `537fdfa`)
+BottomContext: ▼ przerobione (in-place USUNIĘTE) → dokuj belkę (encja-scoped `body:<id>`); `_minimized`=
+zadokowany (early-return w draw); restore=klik belki (onRestore→body:selected); `body:selected` un-minimizuje
++ zdejmuje belkę. StationPanel: nowy ▼ w [✏][▼][✕] (dragZone→PW-70) → dok z `restorePos` (przywrócenie na
+poprzednią pozycję); station:selected/destroyed zdejmują belkę. Smoke `computeDockSlots` 19/19.
+
+### C3 — StationPanel 2× szerszy (commit `35f5933`)
+PW 220→440, treść w dwóch kolumnach (LEWA: właściciel/orbita/depot; PRAWA: handel/moduły — pełna lista).
+`_buildLines`→`_buildColumns({left,right})` + `_drawColumn`; „Zarządzaj" full-width na dole; wysokość=max(kolumn).
+
+### Poprawki z adversarial review (workflow `s34b-review` — 8/9 CONFIRMED)
+- **#1** dok bez bramki `civMode` (4 call-sites w UIManager: draw/handleClick/isOver/handleMouseMove) —
+  BottomContext (a więc minimalizacja) działa też poza civMode (generator/power_test); geometria już adaptuje.
+- **#2** BottomContext słucha `entity:removed` → zdejmuje osieroconą belkę + czyści stan (parytet ze StationPanel).
+- **#3** StationPanel `_restoreFromDock`: displaced (inna żywa stacja na ekranie) najpierw DOKOWANA — nie gubi
+  jej ani pozycji (realizuje wizję „stacja 1 + stacja 2" bez utraty).
+- **#4** `endDrag` na SZCZYCIE `handleMouseUp` (przed early-return na overlay) + abort draga gdy overlay wejdzie
+  w trakcie (handleMouseMove) — drag nie utyka `_dragging=true`.
+- **#5** `_panelDragConsumedClick` — realny drag pochłania nadchodzący click (GameScene guard obok
+  `_boxSelectConsumedClick`) → nie przelatuje do sceny 3D (deselekcja/czyszczenie floty).
+- **#6/#7** PanelDock stackuje się NAD panelami floty (FleetGroupPanel/FleetCommandPanel) — dodany
+  `FleetGroupPanel._drawnRect`; `_geom` podnosi `baseY` nad ich rect. Bez nakładania i kradzieży klików.
+- **#8** BottomContext zeruje `_lastRect` przy deselect (early-return) — brak fantomowej strefy-drag.
+
+### Znane ograniczenia / świadome decyzje (S3.4b)
+- Panele SINGLE-INSTANCE: jednocześnie WIDOCZNE = 1 okno planety + 1 okno stacji; wiele MOŻNA zadokować
+  (belki niezależne); przełączanie displaced auto-dokuje (#3), więc nic nie ginie.
+- Belki doku = tylko restore (klik). Brak per-belka ✕ (dismiss) — dismiss = restore→✕. Follow-up jeśli trzeba.
+- BottomContext restore = re-emit `body:selected` → pokazuje przy kotwicy + fokus kamery (nie „poprzednia
+  pozycja draga" jak StationPanel — draw-time reanchor). Pozycje nieserializowane (reset per sesja).
+- Wszystko WIZUALNE → **live-gate**. `node --check` czyste (9 plików); smokes: paneldock 19/19,
+  bottomcontext-dock 14/14, s4_2 25/25, s4_3 14/14, faza3 47/47, command_stations 17/17, map_labels 37/37,
+  slice8b 51/51 (regr FleetGroupPanel), FloatingPanel logika (node import) OK.
