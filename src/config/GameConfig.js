@@ -120,10 +120,10 @@ export const GAME_CONFIG = {
     navPeekCards:         true,
     // ── S3.4 FAZA 5 — etykiety kolonii + stacji na mapie 3D (MapLabelLayer) ──
     //   Overlay 2D tekstowych etykiet (Trasa A) nad WebGL: kolonia (ikona+nazwa+POP),
-    //   stacja (🛰+nazwa+pop/cap+badge status). Stacja klikalna → station:selected.
-    //   Wariant W1/W2 przez uiPrefs.mapLabelVariant (KOSMOS.debug.mapLabelVariant).
-    //   Render/UI-only — brak migracji save. Stare romby _colonyLabels zostają do
-    //   wyboru wariantu (potem cleanup). Rollback OFF = tylko stare romby.
+    //   stacja (🛰+nazwa+pop/cap+badge status). Stacja klikalna → station:selected+focus.
+    //   Render W2.1 (plakietka + LOD K1 + stacking K2 + kosmetyka K4) — jedyny wariant
+    //   po cleanupie live-gate. Render/UI-only — brak migracji save. Stare romby
+    //   _colonyLabels usunięte (MapLabelLayer je zastąpił). Rollback OFF = brak etykiet.
     mapLabels:            true,
   },
 

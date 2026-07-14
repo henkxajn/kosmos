@@ -143,13 +143,3 @@ export function gatherStationLabels(stationSystem) {
   }
   return out;
 }
-
-// Wariant wizualny: 'W1' (minimalistyczny) | 'W2' (plakietka). Źródło: uiPrefs.mapLabelVariant lub
-// query param ?maplabels=W2 (fallback dev). Default W1.
-export function resolveLabelVariant(uiPrefs, queryString = '') {
-  const pref = uiPrefs?.mapLabelVariant;
-  if (pref === 'W1' || pref === 'W2') return pref;
-  const m = /[?&]maplabels=(W[12])/i.exec(queryString || '');
-  if (m) return m[1].toUpperCase();
-  return 'W1';
-}

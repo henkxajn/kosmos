@@ -333,10 +333,8 @@ export class ThreeRenderer {
 
     // ── Licznik do periodycznego odświeżania orbit ───────────
     this._orbitRebuildCounter = 0;
-
-    // ── Labele kolonii nad planetami ────────────────────────
-    this._colonyLabels = new Map(); // planetId → { sprite }
-    this._colonyLabelCounter = 88;  // pierwsze sprawdzenie po ~2 klatkach
+    // S3.4 FAZA 5 — stare romby _colonyLabels USUNIĘTE (zastąpione MapLabelLayer, overlay 2D).
+    // Selekcja ciała działa przez raycast planety/księżyca (_entityByUUID), nie przez romb.
 
     // ── Gwiazda ───────────────────────────────────────────────
     this._star      = null;
@@ -1049,16 +1047,6 @@ export class ThreeRenderer {
       sprite.material?.dispose();
     }
     this._lifeGlows.clear();
-
-    // Colony labels
-    for (const [id, entry] of this._colonyLabels) {
-      if (entry.sprite) {
-        entry.sprite.material?.map?.dispose();
-        entry.sprite.material?.dispose();
-        this.scene.remove(entry.sprite);
-      }
-    }
-    this._colonyLabels.clear();
 
     // Vessels
     for (const [id, entry] of this._vessels) {
@@ -2070,9 +2058,6 @@ export class ThreeRenderer {
       entry.mesh.position.set(S(moon.x), 0, S(moon.y));
     });
 
-    // Markery kolonii — pozycje (po aktualizacji planet i księżyców)
-    if (this._colonyLabels.size > 0) this._updateColonyLabelPositions();
-
     // Linie handlu cywilnego — aktualizuj pozycje endpointów
     if (this._tradeLines.length > 0) this._syncTradeLinePositions();
 
@@ -2096,177 +2081,6 @@ export class ThreeRenderer {
       this._rebuildAllOrbits();
       this._rebuildPlanetoidOrbits();
     }
-
-    // Odświeżanie labeli kolonii (co ~90 klatek ≈ 1.5s)
-    this._colonyLabelCounter++;
-    if (this._colonyLabelCounter >= 90) {
-      this._colonyLabelCounter = 0;
-      this._syncColonyLabels();
-    }
-  }
-
-  // ── Markery kolonii nad planetami/księżycami ─────────────────
-  _syncColonyLabels() {
-    const colMgr = window.KOSMOS?.colonyManager;
-    if (!colMgr) return;
-    const homePid = window.KOSMOS?.homePlanet?.id;
-    const colonies = colMgr.getAllColonies?.() ?? [];
-
-    // Zbierz aktywne colony IDs
-    const activeIds = new Set();
-    for (const col of colonies) activeIds.add(col.planetId ?? col.planet?.id);
-
-    // Usuń markery dla ciał bez kolonii
-    for (const [pid] of this._colonyLabels) {
-      if (!activeIds.has(pid)) this._removeColonyLabel(pid);
-    }
-
-    // Dodaj/aktualizuj markery
-    for (const col of colonies) {
-      const pid = col.planetId ?? col.planet?.id;
-      if (!pid) continue;
-
-      // Szukaj ciała w planetach i księżycach
-      const pEntry = this._planets.get(pid);
-      const mEntry = this._moons.get(pid);
-      if (!pEntry && !mEntry) continue;
-
-      const isHome = pid === homePid;
-      const isOutpost = col.isOutpost === true;
-      const isMoon = !!mEntry;
-      const labelType = isHome ? 'home' : isOutpost ? 'outpost' : 'colony';
-
-      // Sprawdź czy marker już istnieje z tym samym typem
-      const existing = this._colonyLabels.get(pid);
-      if (existing && existing.sprite.userData._labelType === labelType) continue;
-
-      // Usuń stary marker
-      if (existing) this._removeColonyLabel(pid);
-
-      // Stwórz nowy marker
-      const name = (col.planet?.name ?? col.planetId ?? '').slice(0, 12);
-      const sprite = this._createColonyMarker(name, isHome, isOutpost, isMoon);
-      sprite.userData._labelType = labelType;
-      sprite.userData._bodyId = pid;
-
-      this.scene.add(sprite);
-      this._clickable.push(sprite);
-      if (col.planet) this._entityByUUID.set(sprite.uuid, col.planet);
-      this._colonyLabels.set(pid, { sprite, isMoon });
-    }
-  }
-
-  // Pozycje markerów — wywoływane co klatkę w _syncPlanetMeshes
-  _updateColonyLabelPositions() {
-    for (const [pid, entry] of this._colonyLabels) {
-      let wx, wz;
-      if (entry.isMoon) {
-        const mE = this._moons.get(pid);
-        if (!mE) continue;
-        wx = mE.mesh.position.x; wz = mE.mesh.position.z;
-      } else {
-        const pE = this._planets.get(pid);
-        if (!pE) continue;
-        wx = pE.group.position.x; wz = pE.group.position.z;
-      }
-      entry.sprite.position.set(wx, entry.isMoon ? 0.4 : 1.0, wz);
-    }
-  }
-
-  _removeColonyLabel(pid) {
-    const entry = this._colonyLabels.get(pid);
-    if (!entry) return;
-    this.scene.remove(entry.sprite);
-    const idx = this._clickable.indexOf(entry.sprite);
-    if (idx !== -1) this._clickable.splice(idx, 1);
-    this._entityByUUID.delete(entry.sprite.uuid);
-    entry.sprite.material.map?.dispose();
-    entry.sprite.material.dispose();
-    this._colonyLabels.delete(pid);
-  }
-
-  /**
-   * Marker kolonii — złoty/mint diament ze świecącą poświatą.
-   * sizeAttenuation: true → skaluje się ze sceną, zawsze widoczny.
-   */
-  _createColonyMarker(name, isHome, isOutpost, isMoon) {
-    const S = 128; // rozdzielczość canvas
-    const canvas = document.createElement('canvas');
-    canvas.width = S; canvas.height = S;
-    const c = canvas.getContext('2d');
-    const cx = S / 2, cy = S / 2;
-
-    // Kolory per status
-    let fillColor, glowColor, glowRadius;
-    if (isHome) {
-      fillColor = '#ffcc44'; glowColor = 'rgba(255,200,50,'; glowRadius = 52;
-    } else if (isOutpost) {
-      fillColor = '#44ddaa'; glowColor = 'rgba(68,221,170,'; glowRadius = 40;
-    } else {
-      fillColor = '#00ee88'; glowColor = 'rgba(0,238,136,'; glowRadius = 46;
-    }
-
-    // ── Zewnętrzna poświata (radial gradient) ──
-    const grd = c.createRadialGradient(cx, cy, 4, cx, cy, glowRadius);
-    grd.addColorStop(0,   glowColor + '0.6)');
-    grd.addColorStop(0.3, glowColor + '0.2)');
-    grd.addColorStop(0.7, glowColor + '0.05)');
-    grd.addColorStop(1,   glowColor + '0)');
-    c.fillStyle = grd;
-    c.fillRect(0, 0, S, S);
-
-    // ── Diament — romb 4 wierzchołki ──
-    const dw = isHome ? 16 : isOutpost ? 10 : 13; // połowa szerokości
-    const dh = isHome ? 22 : isOutpost ? 14 : 18; // połowa wysokości
-    c.beginPath();
-    c.moveTo(cx, cy - dh);       // góra
-    c.lineTo(cx + dw, cy);       // prawo
-    c.lineTo(cx, cy + dh);       // dół
-    c.lineTo(cx - dw, cy);       // lewo
-    c.closePath();
-
-    // Gradient diamentu — jaśniejszy u góry (efekt blasku)
-    const dGrd = c.createLinearGradient(cx, cy - dh, cx, cy + dh);
-    dGrd.addColorStop(0,   '#ffffff');
-    dGrd.addColorStop(0.3, fillColor);
-    dGrd.addColorStop(1,   fillColor);
-    c.fillStyle = dGrd;
-    c.fill();
-
-    // Cienki biały kontur
-    c.strokeStyle = 'rgba(255,255,255,0.7)';
-    c.lineWidth = 1.5;
-    c.stroke();
-
-    // Outpost: hollow (wytnij środek)
-    if (isOutpost) {
-      const iw = dw - 4, ih = dh - 5;
-      c.globalCompositeOperation = 'destination-out';
-      c.beginPath();
-      c.moveTo(cx, cy - ih);
-      c.lineTo(cx + iw, cy);
-      c.lineTo(cx, cy + ih);
-      c.lineTo(cx - iw, cy);
-      c.closePath();
-      c.fill();
-      c.globalCompositeOperation = 'source-over';
-    }
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.minFilter = THREE.LinearFilter;
-    tex.magFilter = THREE.LinearFilter;
-    const mat = new THREE.SpriteMaterial({
-      map: tex, transparent: true, opacity: 0.95,
-      depthWrite: false, depthTest: false,
-      sizeAttenuation: true,
-    });
-    const sprite = new THREE.Sprite(mat);
-    // Skala 3D — duża, widoczna z daleka (porównaj: planeta rocky r≈0.08–0.15)
-    const sz = isMoon ? 0.5 : (isHome ? 1.0 : 0.7);
-    sprite.scale.set(sz, sz, 1);
-    sprite.renderOrder = 10;
-    sprite.center.set(0.5, -0.3); // kotwica pod spodem → diament nad planetą
-    return sprite;
   }
 
   // ── Mesh księżyca + orbit line ────────────────────────────────
