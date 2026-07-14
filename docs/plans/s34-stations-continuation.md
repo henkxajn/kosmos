@@ -63,7 +63,7 @@ działa bez załogi.
 | **FAZA 2** — logika ticka (budowa/energia/praca/efekty/stocznia) | ✅ DONE, **live-gate ZALICZONY W CAŁOŚCI** | commity **`7073a99`** + fix stoczni (`a3892e0`) + fix Command (`7894230`); smoke `tmp_s34_p2_smoke.mjs` **61/61** (przepisane pod obsada=pop), `tmp_s34_command_stations_smoke.mjs` **17/17**; regresja FAZY 1 **50/50**, slice8b **51/51**. **F2 live-gate = R1-R3 PASS + fix Command zweryfikowany (V1-V5 PASS).** R1 stocznia (queue→build→spawn docked→rozkazy), R2 no_crew (rebalans na kolejnym ticku), R3 round-trip (progres przeżywa save→reload i kontynuuje). FIX #1 (`a3892e0`): stocznia `insufficient_resources`. FIX #2 (`7894230`): Command zna stacje jako lokację (V1-V5 PASS). |
 | **FAZA 3** — ekran zarządzania | ✅ DONE + **domknięcie R2** (`03bff50`), **live-gate CZĘŚCIOWY** (T2-T5,T7 PASS; B1-B3 fix + R1-R2 + R2-fix dodane) | `StationManagementView.js` + tryb stacji w ColonyOverlay (zakładki 🛰, siatka slotów, picker modułów+statków, depot, kolejka stoczni, rozbiórka) + StationPanel „Zarządzaj". **R2 (`03bff50`): ship picker stacji buduje WYŁĄCZNIE projekty gracza** (`window.KOSMOS.unitDesigns`), NIE surowe szablony `SHIPS` — parytet ze stocznią kolonijną (decyzja #10). Smoke `tmp_s34_faza3_smoke.mjs` **45/45**; regr slice8b 51/51, s4_2 25/25, p1 50/50, p2 61/61. **DO POWTÓRKI (Filip):** retest B1-B3 + R1-R2 + R2-fix (budowa z projektu), zaległe T8 (i18n/estetyka) + T9 (round-trip/regresja). |
 | **FAZA 4** — transport POP | ✅ **ZAMKNIĘTA** (RETEST PASS RT1-RT5) | commity **`2394c6b`** (obsada=pop) + **`19084f5`** (transport pasażerski) + **`c0ff981`** (B1/B2/K1/K2); smoke `tmp_s34_faza4_smoke.mjs` **80/80** + `tmp_s34_faza3_smoke.mjs` **47/47** + `p2` **61/61**. **RETEST PASS** (Filip): bramka canColonize w UI, no_housing + auto-unload na żywo, pełna pojemność + częściowy rozładunek, blokada rozbiórki zasiedlonego habitatu. |
-| **FAZA 5** — etykiety na mapie | ✅ DONE, **live-gate PENDING** (wybór W1/W2) | commit **`c17eb95`**; smoke `tmp_map_labels_smoke.mjs` **35/35**. `MapLabelLayer` (Trasa A: overlay 2D na #ui-canvas) — etykiety kolonii (ikona+nazwa+POP) i stacji (🛰+nazwa+pop/cap+badge), stacja klikalna → station:selected. Warianty W1/W2 za `KOSMOS.debug.mapLabelVariant`. Filip wybiera wariant → dopiero wtedy cleanup starych rombów + flagi wariantu. Sekcja „FAZA 5 — DONE" niżej. |
+| **FAZA 5** — etykiety na mapie | ✅ DONE (W2.1 + cleanup), **live-gate final PENDING** | commity **`c17eb95`** (W1/W2) + **`4f18b15`** (W2.1: LOD K1 + stacking K2 + focus K3 + kosmetyka K4) + **`d7e6e34`** (cleanup: romby/W1/flaga wariantu out); smoke `tmp_map_labels_smoke.mjs` **37/37** + regr faza1-4 (50/61/47/80). `MapLabelLayer` (Trasa A: overlay 2D na #ui-canvas) — etykiety kolonii (ikona+nazwa+POP) i stacji (🛰+nazwa+pop/cap+badge). **Wybór Filipa: W2** → cleanup wykonany (stare romby `_colonyLabels` + gałąź `_drawW1` + `resolveLabelVariant`/`mapLabelVariant` debug usunięte; W2.1 jedyny render). Stacja klikalna → `station:selected` + `station:focus` (K3). Sekcja „FAZA 5 — DONE" niżej. **BACKLOG (nie teraz):** odcień niebieskiego ramki stacji do palety terminala; dalsze podkręcanie plakietek. |
 | **FAZA 6** — domknięcie | ❌ NIEROZPOCZĘTA | — |
 
 **Save:** `CURRENT_VERSION = 90` (`SaveMigration.js`). FAZA 1 wprowadziła `_migrateV89toV90`.
@@ -350,51 +350,53 @@ gdy `pop > popCapacity` po rozbiórce. UI: 🗑 szary + hit-zone `station_mgmt_d
   JEDNYM miejscu: `gatherColonyLabels` (**`getPlayerColonies` — NIGDY `getAllColonies`**; ikona
   home/colony/outpost + POP; outpost `pop=null`), `gatherStationLabels` (**tylko stacje gracza**
   `!ownerEmpireId`; pop/popCapacity + badge), `stationStatusBadges` (`building`→`no_crew`→`no_power`
-  z `inactiveReason`), `labelAlphaForDistance`/`labelShowDetail` (fade + kompakt progowe na zoom-out),
-  `resolveLabelVariant` (uiPrefs > query `?maplabels=W2` > default W1).
+  z `inactiveReason`), **`labelLOD(dist)`** (K1 — cross-fade `{plaqueAlpha, markerAlpha}` na progach
+  `LOD_PLAQUE_FULL 150 / LOD_PLAQUE_FADE 215 / LOD_MARKER_FADE 300 / LABEL_FADE_END 360`), **`stackLabels`**
+  (K2 — deterministyczny greedy anty-nakładanie: sort po targetY, kolidujące zsuwane w dół z odstępem).
 - **NEW `src/ui/MapLabelLayer.js`** (widok canvas) — **Trasa A: overlay 2D na `#ui-canvas`** rysowany
   w `UIManager.draw()` nad WebGL (NIE sprite 3D). Pozycje: kolonie **`getBodyScreenPosition`**, stacje
   **`getStationScreenPosition`** (oba z-clamp, **NIGDY legacy `getScreenPosition`**); `/UI_SCALE` + clip
-  wzorem `_drawBracketForVessel`. Dwa warianty: **W1** (tekst + cienka ramka + subtelne tło), **W2**
-  (plakietka rounded-rect + pasek akcentu + 2 linie + badge). Fade wg `tr.getCameraDistance()`. **Etykieta
-  stacji KLIKALNA → `station:selected`** (bez `station:focus`/`body:selected`); kolonie display-only
-  (klik ciała = raycast 3D).
-- **`ThreeRenderer.getCameraDistance()`** (accessor `_cameraController._dist`) dla fade.
-- **`GameConfig.FEATURES.mapLabels`** (ON) — master gate; rollback OFF = tylko stare romby.
+  wzorem `_drawBracketForVessel`. Render **W2.1** (jedyny po cleanupie): plakietka rounded-rect + pasek
+  akcentu + 2 linie + badge (`_drawW2`), LOD-far → minimalny znacznik ikona[+badge] (`_drawMarker`,
+  klikalny), łącznik plakietka↔ciało (`_drawConnector`, K4), nazwa ucinana „…" do `MAX_NAME_W` (K4),
+  offset NAD/POD tarczą (K4). **Etykieta stacji KLIKALNA → `station:selected` ORAZ `station:focus`**
+  (K3 — reuse ścieżki najazdu kamery); kolonie display-only (klik ciała = raycast 3D).
+- **`ThreeRenderer.getCameraDistance()`** (accessor `_cameraController._dist`) dla LOD.
+- **`GameConfig.FEATURES.mapLabels`** (ON) — master gate; rollback OFF = brak etykiet.
 - **UIManager** — instancja + draw (gate `mapLabels && civMode && !isAnyOpen && !globeOpen`, pod ramkami
   statków) + `handleClick` stacji (gate MIRROR draw — chroni przed klikiem w stare hit-zony podczas globusa).
-- **GameScene** — `KOSMOS.debug.mapLabelVariant('W1'|'W2')` (uiPrefs + redraw; bez arg = bieżący).
 - **Treść:** KOLONIA = ikona typu + nazwa + POP; STACJA = 🛰 + nazwa + pop/popCapacity + badge
   (🔨 budowa / 👥 brak załogi / ⚡ deficyt). Bez i18n (emoji + nazwy encji + liczby — uniwersalne).
 
-**⚠ Stare romby `_colonyLabels` (ThreeRenderer) NIETKNIĘTE** — coexist z nowymi etykietami do czasu
-wyboru wariantu. **Po live-gate (Filip wybiera W1/W2):** cleanup starych rombów + usunięcie martwej
-gałęzi wariantu (zostaje wybrany) — patrz FAZA 6 §6.2.
+**✅ CLEANUP WYKONANY (`d7e6e34`)** — Filip wybrał **W2** na live-gate → usunięto:
+- stare romby `_colonyLabels` w ThreeRenderer (`_syncColonyLabels`/`_updateColonyLabelPositions`/
+  `_removeColonyLabel`/`_createColonyMarker` + init/dispose/tick) — selekcja ciała przez raycast
+  planety/księżyca (`_entityByUUID`) nietknięta;
+- martwą gałąź wariantu W1 (`_drawW1`, `_drawPlaque` dispatcher, param `variant`);
+- `resolveLabelVariant` (MapLabelLogic) + `KOSMOS.debug.mapLabelVariant` (GameScene).
+W2.1 (`_drawW2` + LOD + stacking) = jedyny render.
 
-**Smoke:** `tmp_map_labels_smoke.mjs` **35/35** (mgła wojny + inwariant getAllColonies-never, ikony/POP,
-stacje gracza-only, badge+kolejność, fade/detail progi, wariant uiPrefs>query>default). ⚠ `MapLabelLayer`
-(widok) nieimportowalny headless do renderu — smoke pokrywa CZYSTĄ logikę; rysowanie/klik weryfikuje Filip.
+**Smoke:** `tmp_map_labels_smoke.mjs` **37/37** (mgła wojny + inwariant getAllColonies-never, ikony/POP,
+stacje gracza-only, badge+kolejność, **LOD cross-fade + monotoniczność (K1)**, **stacking kolizja/łańcuch/
+determinizm/no-mutate (K2)**). ⚠ `MapLabelLayer` (widok) nieimportowalny headless do renderu — smoke
+pokrywa CZYSTĄ logikę; rysowanie/klik/LOD wizualnie weryfikuje Filip na final live-gate.
 
-### PRZEŁĄCZANIE WARIANTÓW W1/W2 (live-gate — Filip)
+**BACKLOG (continuation doc, nie teraz):** dostrojenie odcienia niebieskiego ramki stacji (`#8fb8ff`) do
+palety terminala; dalsze podkręcanie wyglądu plakietek (offsety, fonty, progi LOD).
 
-W konsoli przeglądarki (F12):
-- `KOSMOS.debug.mapLabelVariant('W1')` — wariant minimalistyczny (tekst + cienka ramka).
-- `KOSMOS.debug.mapLabelVariant('W2')` — wariant pełny (plakietka z tłem + ikonografia).
-- `KOSMOS.debug.mapLabelVariant()` — pokaż bieżący wariant.
-- Alternatywnie URL: `...?maplabels=W2` (uiPrefs ma priorytet nad query).
+### LISTA FINAL LIVE-GATE FAZY 5 (Filip — po cleanupie)
 
-### LISTA LIVE-GATE FAZY 5 (Filip)
-
-1. **Etykiety kolonii** — nad każdą kolonią gracza tekst: ikona (🏠 home / 🏙️ kolonia / ⛺ placówka) +
+1. **Etykiety kolonii** — nad każdą kolonią gracza: ikona (🏠 home / 🏙️ kolonia / ⛺ placówka) +
    nazwa + POP (placówka bez POP). Kolonie AI **NIE** mają etykiet (mgła wojny).
 2. **Etykiety stacji** — nad stacją gracza: 🛰 + nazwa + `pop/popCapacity` + badge (🔨 budowa modułu/
    statku, 👥 brak załogi, ⚡ deficyt energii). Cudze stacje bez etykiet.
-3. **Klik etykiety stacji** → otwiera StationPanel (selekcja); klik NIE rusza kamery ani selekcji ciała.
-4. **Zoom-out** — etykiety bledną i przechodzą w tryb kompaktowy (sama nazwa) przy oddaleniu, znikają
-   przy pełnym układzie w kadrze (declutter).
-5. **Wybór wariantu** — przełącz `W1`↔`W2` (konsola), wybierz preferowany. Po decyzji: cleanup starych rombów.
-6. **Regresja** — romby kolonii (stare) nadal działają (klik ciała); overlay kolonii/stacji bez zmian;
-   pod otwartym panelem/globusem etykiety znikają.
+3. **Klik etykiety stacji** → `station:selected` (StationPanel) + `station:focus` (najazd kamery, K3).
+4. **LOD zoom-out (K1)** — BLISKO/ŚREDNIO: pełna plakietka; DALEKO: zwija się do minimalnego znacznika
+   (ikona[+badge], klikalny); BARDZO DALEKO: fade out. Przejścia płynne.
+5. **Anty-nakładanie (K2)** — nachodzące etykiety rozsuwają się pionowo + łącznik do ciała-kotwicy.
+6. **Kosmetyka (K4)** — długie nazwy ucinane „…"; plakietka NAD/POD tarczą (nie na niej) + krótki łącznik.
+7. **Regresja** — klik ciała (planeta/księżyc) dalej selekcjonuje (romby usunięte, raycast działa);
+   overlay kolonii/stacji bez zmian; pod otwartym panelem/globusem etykiety znikają.
 
 ---
 
@@ -574,11 +576,11 @@ bez ruszania `body:selected`).
 **6.2** Sweep martwego kodu wg audytu **§5.2 W ZAKRESIE stacji:** placeholder „wkrótce"
 (`StationPanel.js:201-203`), nieużywany klucz i18n `station.rename` (`pl.js:726` — podepnij pod ✏
 zamiast hardkodu), `StationData.buildTime:7` (martwe pole instant-materialize).
-**⚠ + FAZA 5 (po wyborze W1/W2):** usuń stare romby `_colonyLabels`/`_syncColonyLabels`/
-`_createColonyMarker`/`_updateColonyLabelPositions`/`_removeColonyLabel` w `ThreeRenderer` (zastąpione
-`MapLabelLayer`) ORAZ martwą gałąź wariantu w `MapLabelLayer._drawW1`/`_drawW2` (zostaje wybrany) +
-`resolveLabelVariant`/`mapLabelVariant` debug jeśli wariant zamrożony. Uwaga: romby są też klikalne
-(`_clickable`) — selekcja ciała musi zostać (przez raycast planety/księżyca, nie rombu).
+**✅ Cleanup etykiet FAZY 5 WYKONANY (`d7e6e34`, przed FAZĄ 6):** stare romby `_colonyLabels` +
+`_syncColonyLabels`/`_createColonyMarker`/`_updateColonyLabelPositions`/`_removeColonyLabel` w
+`ThreeRenderer` usunięte (zastąpione `MapLabelLayer`); martwa gałąź `_drawW1`/`_drawPlaque` +
+`resolveLabelVariant`/`mapLabelVariant` debug usunięte (W2.1 jedyny render). Selekcja ciała działa
+dalej przez raycast planety/księżyca (`_entityByUUID`), zweryfikowana grep-em.
 **6.3** Aktualizacja `CLAUDE.md` (sekcja stacji: nowy model, save v90, mapa plików).
 **6.4** Raport końcowy: co zrobione, co odłożone (wpięcie trade w `CivilianTradeSystem`, stacje w
 Outlinerze/minimapie, tier 2+, klasy stacji, stacje AI — świadomie POZA zakresem).
