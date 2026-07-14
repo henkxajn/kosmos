@@ -21,7 +21,7 @@ import { STATION_MODULES }        from '../data/StationModuleData.js';
 import { classifyStationDepot, gatherStationTraders } from './StationPanelLogic.js';
 
 // Wymiary
-const PW        = 220;   // szerokość karty
+const PW        = 440;   // C3 (S3.4b) — 2× szersza karta (dwie kolumny: właściciel/depot | handel/moduły)
 const PAD       = 8;
 const LH        = 15;    // wysokość wiersza
 const HEADER_H  = 24;    // nazwa + przyciski
@@ -100,12 +100,12 @@ export class StationPanel extends BaseOverlay {
       vesselManager: window.KOSMOS?.vesselManager,
       missionSystem: window.KOSMOS?.missionSystem,
     });
-    const lines = this._buildLines(station, depot, traders);
+    const { left, right } = this._buildColumns(station, depot, traders);
 
-    // Wysokość karty z treści (separatory + przyciski liczone osobno).
-    let bodyH = 0;
-    for (const ln of lines) bodyH += ln.sep ? SEP_H : (ln.btn ? BTN_H : LH);
-    const PH = HEADER_H + PAD + bodyH + PAD;
+    // Wysokość kolumny (sep=SEP_H, wiersz=LH); body = wyższa z dwóch kolumn.
+    const colH  = (arr) => arr.reduce((h, ln) => h + (ln.sep ? SEP_H : LH), 0);
+    const bodyH = Math.max(colH(left), colH(right));
+    const PH = HEADER_H + PAD + bodyH + PAD + BTN_H + PAD;   // header + kolumny + „Zarządzaj"
 
     // Kotwica: ekranowa pozycja stacji + offset; null (za kamerą) → fallback lewy-górny róg mapy.
     const b  = this._getOverlayBounds(W, H);
@@ -115,7 +115,7 @@ export class StationPanel extends BaseOverlay {
     else    { ax = b.ox + 12;     ay = b.oy + 12; }
     // C1 (S3.4b) — drag override kotwicy; place() clampuje panel do obszaru mapy.
     const { px, py } = this._float.place(ax, ay, PW, PH, b);
-    // Rect + strefa-drag (pas nagłówka POZA przyciskami [✏][✕]) do przeciągania (tryBeginDrag).
+    // Rect + strefa-drag (pas nagłówka POZA przyciskami [✏][▼][✕]) do przeciągania (tryBeginDrag).
     this._lastRect = { px, py, PW, PH, b, dragZone: { x: px, y: py, w: PW - 70, h: HEADER_H } };
 
     // Tło + ramka
@@ -142,112 +142,114 @@ export class StationPanel extends BaseOverlay {
     ctx.strokeStyle = C.border;
     ctx.beginPath(); ctx.moveTo(px, py + HEADER_H); ctx.lineTo(px + PW, py + HEADER_H); ctx.stroke();
 
-    // Wiersze
-    let cy = py + HEADER_H + PAD;
+    // ── Dwie kolumny (C3): lewa = właściciel/orbita/depot, prawa = handel/moduły ──
+    const colW = (PW - PAD * 3) / 2;
+    const topY = py + HEADER_H + PAD;
+    this._drawColumn(ctx, left,  px + PAD,            topY, colW);
+    this._drawColumn(ctx, right, px + PAD * 2 + colW, topY, colW);
+    // Pionowy separator między kolumnami
+    ctx.strokeStyle = C.border;
+    const sepX = px + PAD * 1.5 + colW;
+    ctx.beginPath(); ctx.moveTo(sepX, topY - 2); ctx.lineTo(sepX, topY + bodyH); ctx.stroke();
+
+    // Przycisk „Zarządzaj" (pełna szerokość, na dole) → ColonyOverlay w trybie stacji.
+    const mby = py + HEADER_H + PAD + bodyH + PAD;
+    const mbx = px + PAD, mbw = PW - PAD * 2, mbh = BTN_H - 4;
+    const mHover = this._hoverZone?.type === 'manage';
+    ctx.fillStyle = mHover ? 'rgba(0,255,180,0.14)' : 'rgba(0,255,180,0.07)';
+    ctx.fillRect(mbx, mby, mbw, mbh);
+    ctx.strokeStyle = C.accent; ctx.lineWidth = 1;
+    ctx.strokeRect(mbx + 0.5, mby + 0.5, mbw - 1, mbh - 1);
+    ctx.fillStyle = C.accent; ctx.textAlign = 'center';
     ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`;
+    ctx.fillText(`🛰 ${t('station.mgmt.manage')}`, px + PW / 2, mby + mbh / 2 + 4);
+    ctx.textAlign = 'left';
+    this._addHit(mbx, mby, mbw, mbh, 'manage');
+
+    // Tło jako hit-zone NA KOŃCU — _hitTest=Array.find, przyciski (dodane wyżej) mają priorytet. S4-1 gotcha.
+    this._addHit(px, py, PW, PH, 'bg');
+  }
+
+  // Rysuj jedną kolumnę listy wierszy (sep / text z indentem). C3.
+  _drawColumn(ctx, lines, x, topY, colW) {
+    const C = THEME;
+    ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`;
+    let cy = topY;
     for (const ln of lines) {
       if (ln.sep) {
         ctx.strokeStyle = C.border;
-        ctx.beginPath(); ctx.moveTo(px + PAD, cy + 2); ctx.lineTo(px + PW - PAD, cy + 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, cy + 2); ctx.lineTo(x + colW, cy + 2); ctx.stroke();
         cy += SEP_H;
-        continue;
-      }
-      if (ln.btn) {
-        // Przycisk pełnej szerokości (S3.4 FAZA 3 — „Zarządzaj" → ColonyOverlay w trybie stacji).
-        const bx = px + PAD, bw = PW - PAD * 2, bh = BTN_H - 4;
-        const hover = this._hoverZone?.type === ln.type;
-        ctx.fillStyle = hover ? 'rgba(0,255,180,0.14)' : 'rgba(0,255,180,0.07)';
-        ctx.fillRect(bx, cy, bw, bh);
-        ctx.strokeStyle = C.accent; ctx.lineWidth = 1;
-        ctx.strokeRect(bx + 0.5, cy + 0.5, bw - 1, bh - 1);
-        ctx.fillStyle = C.accent; ctx.textAlign = 'center';
-        ctx.fillText(ln.text, px + PW / 2, cy + bh / 2 + 4);
-        ctx.textAlign = 'left';
-        this._addHit(bx, cy, bw, bh, ln.type);
-        cy += BTN_H;
         continue;
       }
       const indent = ln.indent ?? 0;
       ctx.fillStyle = ln.color ?? C.textSecondary;
-      ctx.fillText(this._truncate(ctx, ln.text, PW - PAD * 2 - indent), px + PAD + indent, cy + 11);
+      ctx.textAlign = 'left';
+      ctx.fillText(this._truncate(ctx, ln.text, colW - indent - 2), x + indent, cy + 11);
       cy += LH;
     }
-
-    // Tło jako hit-zone NA KOŃCU — _hitTest=Array.find, przyciski (dodane wyżej) mają priorytet;
-    // tło tylko konsumuje kliki w panel (nie przelatują do 3D/overlay pod spodem). S4-1 gotcha.
-    this._addHit(px, py, PW, PH, 'bg');
   }
 
-  /** Zbuduj listę wierszy treści (sekcje + dane). */
-  _buildLines(station, depot, traders) {
+  /** Zbuduj treść dwóch kolumn (C3): { left, right }. Manage rysowany osobno (full-width). */
+  _buildColumns(station, depot, traders) {
     const C = THEME;
-    const lines = [];
+    const left = [], right = [];
 
-    // Właściciel
+    // ── LEWA: właściciel + status + depot ──
     const owner = station.ownerEmpireId === 'player'
       ? t('station.ownerPlayer')
       : (window.KOSMOS?.empireRegistry?.get?.(station.ownerEmpireId)?.name ?? station.ownerEmpireId);
-    lines.push({ text: owner, color: C.textSecondary });
-    lines.push({ sep: true });
-
-    // Status: orbita / układ / tier / rok
+    left.push({ text: owner, color: C.textSecondary });
     const body = EntityManager.get(station.bodyId);
-    lines.push({ text: `${t('station.orbit')}: ${body?.name ?? station.bodyId ?? '—'}`, color: C.textSecondary });
-    lines.push({ text: `${t('station.system')}: ${station.systemId ?? '—'}`, color: C.textDim });
-    lines.push({ text: `${t('station.tier')}: ${station.tier ?? 1}`, color: C.textDim });
-    lines.push({ text: `${t('station.created')}: ${Math.round(station.createdYear ?? 0)}`, color: C.textDim });
-    lines.push({ sep: true });
-
-    // Depot
-    lines.push({ text: t('station.depot'), color: C.accent });
+    left.push({ text: `${t('station.orbit')}: ${body?.name ?? station.bodyId ?? '—'}`, color: C.textSecondary });
+    left.push({ text: `${t('station.system')}: ${station.systemId ?? '—'}`, color: C.textDim });
+    left.push({ text: `${t('station.tier')}: ${station.tier ?? 1}`, color: C.textDim });
+    left.push({ text: `${t('station.created')}: ${Math.round(station.createdYear ?? 0)}`, color: C.textDim });
+    left.push({ sep: true });
+    left.push({ text: t('station.depot'), color: C.accent });
     if (depot.resources.length === 0 && depot.commodities.length === 0) {
-      lines.push({ text: t('station.depotEmpty'), color: C.textDim, indent: 8 });
+      left.push({ text: t('station.depotEmpty'), color: C.textDim, indent: 8 });
     } else {
       if (depot.resources.length) {
-        lines.push({ text: t('station.resources'), color: C.textDim, indent: 4 });
+        left.push({ text: t('station.resources'), color: C.textDim, indent: 4 });
         for (const [id, amt] of depot.resources) {
-          lines.push({ text: `${this._itemLabel(id)}: ${this._fmt(amt)}`, color: C.textSecondary, indent: 12 });
+          left.push({ text: `${this._itemLabel(id)}: ${this._fmt(amt)}`, color: C.textSecondary, indent: 12 });
         }
       }
       if (depot.commodities.length) {
-        lines.push({ text: t('station.commodities'), color: C.textDim, indent: 4 });
+        left.push({ text: t('station.commodities'), color: C.textDim, indent: 4 });
         for (const [id, amt] of depot.commodities) {
-          lines.push({ text: `${this._itemLabel(id)}: ${this._fmt(amt)}`, color: C.textSecondary, indent: 12 });
+          left.push({ text: `${this._itemLabel(id)}: ${this._fmt(amt)}`, color: C.textSecondary, indent: 12 });
         }
       }
     }
-    lines.push({ sep: true });
 
-    // Handel (live snapshot)
-    lines.push({ text: t('station.traders'), color: C.accent });
+    // ── PRAWA: handel + moduły ──
+    right.push({ text: t('station.traders'), color: C.accent });
     if (traders.length === 0) {
-      lines.push({ text: t('station.tradersNone'), color: C.textDim, indent: 8 });
+      right.push({ text: t('station.tradersNone'), color: C.textDim, indent: 8 });
     } else {
       for (const tr of traders) {
-        lines.push({ text: `${tr.name} — ${t(STATUS_KEY[tr.status] ?? 'station.statusDocked')}`, color: C.textSecondary, indent: 8 });
+        right.push({ text: `${tr.name} — ${t(STATUS_KEY[tr.status] ?? 'station.statusDocked')}`, color: C.textSecondary, indent: 8 });
       }
     }
-    lines.push({ sep: true });
-
-    // Moduły — podsumowanie (S3.4 FAZA 3): POP + lista aktywnych modułów + przycisk „Zarządzaj".
-    lines.push({ text: t('station.modules'), color: C.accent });
-    lines.push({ text: `👥 ${station.pop ?? 0}/${station.popCapacity}   🛠 ${station.hasActiveShipyard ? '✓' : '—'}`, color: C.textSecondary, indent: 8 });
+    right.push({ sep: true });
+    right.push({ text: t('station.modules'), color: C.accent });
+    right.push({ text: `👥 ${station.pop ?? 0}/${station.popCapacity}   🛠 ${station.hasActiveShipyard ? '✓' : '—'}`, color: C.textSecondary, indent: 8 });
     const mods = station.modules ?? [];
     if (mods.length === 0) {
-      lines.push({ text: t('station.mgmt.noModules'), color: C.textDim, indent: 8 });
+      right.push({ text: t('station.mgmt.noModules'), color: C.textDim, indent: 8 });
     } else {
       const lang = getLocale();
-      for (const m of mods.slice(0, 6)) {
+      for (const m of mods) {   // C3 — pełna lista (kolumna daje miejsce; brak „+N…")
         const def = STATION_MODULES[m.moduleType];
         const nm = (lang === 'en' ? def?.nameEN : def?.namePL) ?? m.moduleType;
         const badge = m.active === false ? (m.inactiveReason === 'no_crew' ? '👥✗' : '⚡✗') : '✓';
-        lines.push({ text: `${def?.icon ?? '▪'} ${nm} ${badge}`, color: m.active === false ? C.textDim : C.textSecondary, indent: 8 });
+        right.push({ text: `${def?.icon ?? '▪'} ${nm} ${badge}`, color: m.active === false ? C.textDim : C.textSecondary, indent: 8 });
       }
-      if (mods.length > 6) lines.push({ text: `+${mods.length - 6}…`, color: C.textDim, indent: 8 });
     }
-    lines.push({ btn: true, text: `🛰 ${t('station.mgmt.manage')}`, type: 'manage' });
 
-    return lines;
+    return { left, right };
   }
 
   _drawIconBtn(ctx, glyph, x, y, size, type) {
