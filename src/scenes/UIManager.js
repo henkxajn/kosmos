@@ -42,6 +42,7 @@ import { WarOverlay }          from '../ui/WarOverlay.js';
 import { POIPanel }            from '../ui/POIPanel.js';
 import { GalacticMiniMap }     from '../ui/GalacticMiniMap.js';
 import { StationPanel }        from '../ui/StationPanel.js';
+import { PanelDock }           from '../ui/PanelDock.js';
 import { CombatHUD }           from '../ui/CombatHUD.js';
 import { FleetGroupPanel }     from '../ui/FleetGroupPanel.js';
 import { FleetCommandPanel }   from '../ui/FleetCommandPanel.js';
@@ -291,6 +292,8 @@ export class UIManager {
     // trzymany bezpośrednio, rysowany PO overlayManager, coexist z colony panelem i widokiem 3D.
     this.stationPanel = new StationPanel();
     window.KOSMOS.stationPanel = this.stationPanel;
+    this.panelDock = new PanelDock();       // C2 (S3.4b) — pasek zadań zminimalizowanych paneli
+    window.KOSMOS.panelDock = this.panelDock;
 
     // Slice 8b — FleetGroupPanel: panel zaznaczonej grupy statków (lewy-dolny róg).
     // Non-exclusive (jak StationPanel/CombatHUD): self-managed przez ui:selectionChanged,
@@ -1381,6 +1384,9 @@ export class UIManager {
     // S4-2 — StationPanel (pływający) blokuje kamerę gdy kursor nad nim.
     if (this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
 
+    // C2 (S3.4b) — belki doku (zminimalizowane panele) blokują kamerę.
+    if (window.KOSMOS?.civMode && this.panelDock?.isOver?.(x, y)) return true;
+
     // BottomContext (dolny panel kontekstowy — gdy encja zaznaczona)
     if (this._bottomContext.isOver(x, y, W, H, this._selectedEntity)) return true;
 
@@ -1441,6 +1447,8 @@ export class UIManager {
     // CombatHUD minimize button — rysowany na wierzchu overlay'ów, więc klik
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
+    // C2 (S3.4b) — belki doku (zminimalizowane panele) na wierzchu, PRZED overlayManager; tylko gdy dok widoczny.
+    if (window.KOSMOS?.civMode && !this.overlayManager.isAnyOpen() && this.panelDock?.handleClick?.(x, y)) return true;
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
     // Slice 8b — panel grupy statków (PRZED overlayManager, tylko gdy żaden overlay otwarty — bo draw też gated).
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()
@@ -1586,6 +1594,7 @@ export class UIManager {
       this.overlayManager.handleMouseMove(x, y);
     }
     if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
+    if (window.KOSMOS?.civMode) this.panelDock?.handleMouseMove?.(x, y);       // C2 — hover belek doku
     if (this.fleetGroupPanel?.visible && !this.overlayManager.isAnyOpen()) this.fleetGroupPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu grupy
     if (this.fleetCommandPanel?.visible && !this.overlayManager.isAnyOpen()) this.fleetCommandPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu floty
     if (window.KOSMOS?.civMode) this._bottomNavBar.handleMouseMove(x, y);   // UI v3 — hover slotów dolnego paska nawigacji
@@ -1768,6 +1777,8 @@ export class UIManager {
     // Slice 8b — panel grupy statków: NA WIERZCHU sceny, ukryty gdy otwarty pełnoekranowy overlay
     // (jak ramki selekcji) — by nie nadrysowywać FleetManagerOverlay (rysowany wcześniej).
     if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()) this.fleetGroupPanel.draw(ctx, W, H);
+    // C2 (S3.4b) — pasek zadań zminimalizowanych paneli (lewy-dół, nad nawigacją); ukryty gdy pełny overlay.
+    if (civMode && !globeOpen && !this.overlayManager.isAnyOpen()) this.panelDock.draw(ctx, W, H);
     if (civMode && !globeOpen) this._eventLogDrawer.draw(ctx, W, H);   // dziennik — hover-drawer dolnej krawędzi (nad overlay'em, nad paskiem bell/MENU)
 
     // ── Panel MENU — rysowany PO overlayach (na wierzchu) ──

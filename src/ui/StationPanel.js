@@ -47,11 +47,16 @@ export class StationPanel extends BaseOverlay {
       const nid = e?.stationId ?? null;
       if (nid !== this._stationId) this._float.reanchor();   // C1 — nowa stacja → wróć do kotwicy
       this._stationId = nid;
+      this._float.minimized = false;   // C2 — pokazanie stacji un-minimizuje
+      const dock = window.KOSMOS?.panelDock;
+      if (nid && dock?.has?.('station:' + nid)) dock.unregister('station:' + nid);   // C2 — była zadokowana → zdejmij belkę
       this.show();
       this._markDirty();
     });
     EventBus.on('station:destroyed', (e) => {
-      if (e?.stationId === this._stationId) { this.hide(); this._markDirty(); }
+      const sid = e?.stationId;
+      window.KOSMOS?.panelDock?.unregister?.('station:' + sid);   // C2 — zdejmij belkę zniszczonej stacji
+      if (sid === this._stationId) { this.hide(); this._float.minimized = false; this._markDirty(); }
     });
     EventBus.on('body:deselected', () => {
       if (this.visible) { this.hide(); this._markDirty(); }
@@ -84,6 +89,7 @@ export class StationPanel extends BaseOverlay {
   // ── Rysowanie ──────────────────────────────────────────────────────────────
   draw(ctx, W, H) {
     if (!this.visible) return;
+    if (this._float.minimized) { this._hitZones = []; return; }   // C2 — zadokowana: karty nie rysujemy (belka w PanelDock)
     const station = this._station();
     if (!station) { this.hide(); return; }   // stacja zniknęła (destroy w trakcie) — self-heal
     this._hitZones = [];
@@ -110,7 +116,7 @@ export class StationPanel extends BaseOverlay {
     // C1 (S3.4b) — drag override kotwicy; place() clampuje panel do obszaru mapy.
     const { px, py } = this._float.place(ax, ay, PW, PH, b);
     // Rect + strefa-drag (pas nagłówka POZA przyciskami [✏][✕]) do przeciągania (tryBeginDrag).
-    this._lastRect = { px, py, PW, PH, b, dragZone: { x: px, y: py, w: PW - 46, h: HEADER_H } };
+    this._lastRect = { px, py, PW, PH, b, dragZone: { x: px, y: py, w: PW - 70, h: HEADER_H } };
 
     // Tło + ramka
     ctx.fillStyle = bgAlpha(0.92);
@@ -119,15 +125,17 @@ export class StationPanel extends BaseOverlay {
     ctx.lineWidth = 1;
     ctx.strokeRect(px + 0.5, py + 0.5, PW - 1, PH - 1);
 
-    // Header: nazwa + przyciski [✏][✕]
+    // Header: nazwa + przyciski [✏][▼][✕]  (▼ = minimalizuj do doku, C2)
     const btn = 18;
     const closeX  = px + PW - btn - 4;
-    const renameX = closeX - btn - 4;
+    const minX    = closeX - btn - 4;
+    const renameX = minX - btn - 4;
     ctx.fillStyle = C.accent;
     ctx.font = `${C.fontSizeSmall + 1}px ${C.fontFamily}`;
     ctx.textAlign = 'left';
     ctx.fillText(this._truncate(ctx, station.name ?? '—', renameX - (px + PAD) - 6), px + PAD, py + 16);
     this._drawIconBtn(ctx, '✏', renameX, py + 3, btn, 'rename');
+    this._drawIconBtn(ctx, '▼', minX,    py + 3, btn, 'minimize');
     this._drawIconBtn(ctx, '✕', closeX,  py + 3, btn, 'close');
 
     // Separator pod headerem
@@ -267,6 +275,7 @@ export class StationPanel extends BaseOverlay {
   _onHit(zone) {
     if (!zone) return;
     if (zone.type === 'close') { this.hide(); this._markDirty(); return; }
+    if (zone.type === 'minimize') { this._minimize(); return; }   // C2 — do doku
     if (zone.type === 'rename') {
       const st = this._station();
       if (!st) return;
@@ -316,4 +325,31 @@ export class StationPanel extends BaseOverlay {
 
   endDrag() { return this._float.endDrag(); }
   isDraggingPanel() { return this._float.isDragging(); }
+
+  // ── Minimalizacja do doku (C2, S3.4b) — belka w PanelDock, restore = klik belki ──
+  _minimize() {
+    const st = this._station();
+    const dock = window.KOSMOS?.panelDock;
+    if (!st || !dock) return;
+    const sid = this._stationId;
+    this._float.minimized = true;
+    dock.register('station:' + sid, {
+      icon: '🛰',
+      label: st.name ?? '—',
+      restorePos: this._float.dragPos ? { ...this._float.dragPos } : null,   // przywróć na poprzednią pozycję
+      onRestore: () => this._restoreFromDock(sid),
+    });
+    this._markDirty();
+  }
+
+  _restoreFromDock(sid) {
+    const dock = window.KOSMOS?.panelDock;
+    const entry = dock?.get?.('station:' + sid);
+    this._stationId = sid;
+    this._float.dragPos = entry?.restorePos ? { ...entry.restorePos } : null;
+    this._float.minimized = false;
+    this.show();
+    dock?.unregister?.('station:' + sid);
+    this._markDirty();
+  }
 }

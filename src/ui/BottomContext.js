@@ -69,6 +69,12 @@ export class BottomContext {
     this._minimized     = false;   // true = tylko pasek tytułowy (bez treści)
     this._float         = new FloatingPanel();  // C1 (S3.4b) — drag za nagłówek
     this._lastRect      = null;    // {px,py,PW,PH,b,dragZone} z ostatniego draw (drag hit-test)
+
+    // C2 (S3.4b) — wybór ciała (klik 3D / restore z doku) pokazuje kartę i zdejmuje jego belkę.
+    EventBus.on('body:selected', ({ entity }) => {
+      this._minimized = false;
+      if (entity) window.KOSMOS?.panelDock?.unregister?.('body:' + entity.id);
+    });
   }
 
   // Obszar mapy (origin + rozmiar) — karta nie wychodzi poza niego.
@@ -130,8 +136,12 @@ export class BottomContext {
     if (entity !== this._prevEntity) {
       if (!entity.composition && this._tab === 'composition') this._tab = 'orbit';
       this._float.reanchor();   // C1 — nowa encja → wróć do kotwicy (nie zostawiaj okna w starym miejscu)
+      this._minimized = false;  // C2 — nowa encja pokazuje kartę (belka starej encji zostaje w doku)
       this._prevEntity = entity;
     }
+
+    // C2 (S3.4b) — zminimalizowany = ZADOKOWANY (belka w PanelDock); karty nie rysujemy.
+    if (this._minimized) { this._cardRect = null; this._hitZones = []; this._lastRect = null; return; }
 
     // ── Treść (do wyliczenia wysokości) ──
     const tabs   = this._visibleTabs(entity);
@@ -140,41 +150,25 @@ export class BottomContext {
     const action = this._actionLabel(entity);
     const deps   = this._visibleDeposits(entity);
 
-    // ── Wysokość karty ── (zminimalizowana = tylko pasek tytułowy)
-    let PH;
-    if (this._minimized) {
-      PH = 4 + HEADER_H + 4;               // sam pasek: nazwa + przyciski
-    } else {
-      PH = 4 + HEADER_H + LINE_H;          // pad + nazwa + typ
-      if (distLn) PH += LINE_H;
-      if (tabs.length) PH += TAB_H + 2;
-      PH += lines.length * LINE_H + 4;
-      if (action) PH += ACTION_H + 4;
-      if (deps.length) {
-        const rows = deps.length > 5 ? Math.ceil(deps.length / 2) : deps.length;
-        PH += 14 + rows * DEP_ROW_H + 4;
-      }
-      PH += 6;
+    // ── Wysokość karty (pełna — zminimalizowana wraca wcześniej przez early-return) ──
+    let PH = 4 + HEADER_H + LINE_H;          // pad + nazwa + typ
+    if (distLn) PH += LINE_H;
+    if (tabs.length) PH += TAB_H + 2;
+    PH += lines.length * LINE_H + 4;
+    if (action) PH += ACTION_H + 4;
+    if (deps.length) {
+      const rows = deps.length > 5 ? Math.ceil(deps.length / 2) : deps.length;
+      PH += 14 + rows * DEP_ROW_H + 4;
     }
+    PH += 6;
 
-    // ── Pozycja: zminimalizowana → stały PRAWY DOLNY róg (tuż nad dolnym triggerem
-    //    EventLog); rozwinięta → kotwica do ciała 3D + clamp. (Bez animacji przejścia —
-    //    karta nie jest w pętli _animating UIManagera; snap między pozycjami.) ──
-    let px, py;
-    if (this._minimized) {
-      px = W - PW - 8;
-      // UI v3 — nad stałym paskiem nawigacji (civMode) + listwą dziennika.
-      const bottomRes = window.KOSMOS?.civMode ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H) : BAR_H;
-      py = H - bottomRes - 6 - PH;   // PH = wysokość zminimalizowanej karty (≈30)
-      this._lastRect = null;   // in-place minimize — bez draga
-    } else {
-      const bounds = this._bounds(W, H);
-      const sp = window.KOSMOS?.threeRenderer?.getBodyScreenPosition?.(entity.id) ?? null;
-      const pl = computeFloatingPlacement({ bodyScreen: sp, PW, PH, bounds, screenW: W });
-      ({ px, py } = this._float.place(pl.px, pl.py, PW, PH, bounds));   // C1 — drag override kotwicy
-      // Strefa-drag = pas nagłówka POZA przyciskami (✏ najbliżej lewej @ px+PW-58).
-      this._lastRect = { px, py, PW, PH, b: bounds, dragZone: { x: px, y: py, w: PW - 60, h: HEADER_H } };
-    }
+    // ── Pozycja: kotwica do ciała 3D + clamp (albo pozycja narzucona dragiem). ──
+    const bounds = this._bounds(W, H);
+    const sp = window.KOSMOS?.threeRenderer?.getBodyScreenPosition?.(entity.id) ?? null;
+    const pl = computeFloatingPlacement({ bodyScreen: sp, PW, PH, bounds, screenW: W });
+    const { px, py } = this._float.place(pl.px, pl.py, PW, PH, bounds);   // C1 — drag override kotwicy
+    // Strefa-drag = pas nagłówka POZA przyciskami (✏ najbliżej lewej @ px+PW-58).
+    this._lastRect = { px, py, PW, PH, b: bounds, dragZone: { x: px, y: py, w: PW - 60, h: HEADER_H } };
 
     this._cardRect = { x: px, y: py, w: PW, h: PH };
     this._hitZones = [];
@@ -205,7 +199,7 @@ export class BottomContext {
     ctx.textAlign = 'center';
     ctx.fillStyle = C.text;
     ctx.fillText('✏', renX + rbS / 2, rbY + 12);
-    ctx.fillText(this._minimized ? '▲' : '▼', minX + rbS / 2, rbY + 12);
+    ctx.fillText('▼', minX + rbS / 2, rbY + 12);   // C2 — minimalizuj do doku (belka lewy-dół)
     ctx.fillText('−', closeX + rbS / 2, rbY + 12);
     ctx.textAlign = 'left';
     this._hitZones.push({ x: renX,   y: rbY, w: rbS, h: rbS, type: 'rename' });
@@ -402,7 +396,7 @@ export class BottomContext {
       return true;
     }
     if (z.type === 'action') { this._doAction(entity); return true; }
-    if (z.type === 'minimize') { this._minimized = !this._minimized; return true; }
+    if (z.type === 'minimize') { this._minimize(entity); return true; }
     if (z.type === 'close') { EventBus.emit('body:deselected'); return true; }
     return true; // bg — pochłoń klik w kartę
   }
@@ -452,4 +446,35 @@ export class BottomContext {
 
   endDrag() { return this._float.endDrag(); }
   isDraggingPanel() { return this._float.isDragging(); }
+
+  // ── Minimalizacja do doku (C2, S3.4b) — belka w PanelDock, restore = klik belki ──
+  _minimize(entity) {
+    const dock = window.KOSMOS?.panelDock;
+    if (!dock || !entity) return;
+    const key = 'body:' + entity.id;
+    this._minimized = true;
+    dock.register(key, {
+      icon: this._entityIcon(entity),
+      label: entity.name ?? '—',
+      onRestore: () => {
+        dock.unregister(key);
+        this._minimized = false;
+        this._float.reanchor();
+        EventBus.emit('body:selected', { entity });   // pokaż kartę (ustawia _selectedEntity + fokus + _dirty)
+      },
+    });
+  }
+
+  _entityIcon(entity) {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (colMgr?.hasColony?.(entity.id) || entity.id === window.KOSMOS?.homePlanet?.id) return '⬢';
+    switch (entity.type) {
+      case 'star':      return '★';
+      case 'moon':      return '☾';
+      case 'asteroid':  return '◆';
+      case 'planetoid': return '◆';
+      case 'comet':     return '☄';
+      default:          return '●';
+    }
+  }
 }
