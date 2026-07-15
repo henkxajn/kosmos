@@ -591,9 +591,8 @@ export class ColonyManager {
 
     // Z4/Z5: rozłącz per-kolonijne tickery (time:tick) — inaczej zniszczona kolonia tyka
     // w nieskończoność (FactorySystem warn per-frame w isRecipeAvailable → zalew konsoli +
-    // spadek FPS; leak subskrypcji EventBus). transferColony (:654) ma bliźniaczy leak —
-    // BACKLOG (ścieżka game-over home-planet; orphan-guard w FactorySystem._update wycisza
-    // ją tymczasowo, dispose-pattern gotowy do reużycia).
+    // spadek FPS; leak subskrypcji EventBus). Bliźniaczy dispose w transferColony (przejęcie
+    // kolonii przez AI) — ten sam wzorzec.
     colony.factorySystem?.dispose?.();
     colony.resourceSystem?.dispose?.();
     colony.civSystem?.dispose?.();
@@ -661,6 +660,17 @@ export class ColonyManager {
     const colonyName = colony.name ?? planetId;
     const population = colony.civSystem?.population ?? 0;
     const wasHomePlanet = !!colony.isHomePlanet;
+
+    // S-BACKLOG: rozłącz per-kolonijne tickery (time:tick) — bliźniaczy leak do removeColony (Z4/Z5).
+    // Przejęta kolonia opuszcza _colonies i staje się abstrakcyjnym wpisem imperium (goły planetId
+    // w EmpireRegistry); AI NIE adoptuje tych subsystemów, więc bez dispose tykałyby w nieskończoność
+    // (jałowa praca + leak subskrypcji EventBus). Locale colonyName/population/wasHomePlanet są już
+    // zsnapshotowane wyżej, a addColony/galaxyData/emit ich nie czytają → kolejność bezpieczna.
+    colony.factorySystem?.dispose?.();
+    colony.resourceSystem?.dispose?.();
+    colony.civSystem?.dispose?.();
+    colony.buildingSystem?.dispose?.();
+    colony.prosperitySystem?.dispose?.();
 
     // Usuń z gracza
     this._colonies.delete(planetId);
