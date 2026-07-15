@@ -14,6 +14,7 @@ import {
 import { STATIONS } from '../data/StationData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
+import { canBuildHullAt } from '../data/ShipBuildRules.js';
 import { calcShipCost } from '../data/ShipModulesData.js';
 import { resolveHomeColony, resolveReadoptionColony } from '../utils/TransferStore.js';
 
@@ -324,6 +325,13 @@ export class StationSystem {
 
     const ship = SHIPS[shipId] ?? HULLS[shipId];
     if (!ship) return { ok: false, reason: 'unknown_ship' };
+
+    // S3.4d — stocznia ORBITALNA buduje WSZYSTKO. Jawne wywołanie dla symetrii i jednego źródła
+    // prawdy (canBuildHullAt(...,'orbital') === true zawsze). Martwa gałąź — dokumentuje intencję,
+    // żeby oba pickery + obie stocznie spinały się na jednym helperze canBuildHullAt.
+    if (!canBuildHullAt(ship.id, 'orbital')) {
+      return { ok: false, reason: 'facility_restricted' };
+    }
 
     // Bramka tech (gracz — globalny techSystem). Kadłub gatuje budowę; moduły projektu odblokowuje
     // projektant (statku z zablokowanym modułem nie da się zapisać jako projekt).

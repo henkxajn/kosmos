@@ -10,6 +10,7 @@ import { COSMIC }          from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W, getSubNavHeight }  from './CivPanelDrawer.js';
 import { SHIPS }           from '../data/ShipsData.js';
 import { HULLS }           from '../data/HullsData.js';
+import { canBuildHullAt }  from '../data/ShipBuildRules.js';
 import { SHIP_MODULES, calcShipStats, calcShipCost, countModuleSlots, getModuleCapabilities } from '../data/ShipModulesData.js';
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
@@ -6988,6 +6989,7 @@ export class FleetManagerOverlay {
         if (!hull) continue;
 
         const hasTech = !hull.requires || (tSys?.isResearched(hull.requires) ?? false);
+        const canBuildFacility = canBuildHullAt(tpl.hullId, 'ground');   // S3.4d — kolonia = stocznia naziemna (tylko small)
 
         const mods = (tpl.modules ?? []).filter(Boolean);
         const stats = calcShipStats(hull, mods);
@@ -6997,8 +6999,8 @@ export class FleetManagerOverlay {
         const crewCost = hull.crewCost ?? 0;
         const hasCrew = crewCost <= 0 || (activeCol?.civSystem?.freePops ?? 0) >= crewCost;
 
-        const canBuildNow = hasTech && canBuildAny && allAfford && hasCrew;
-        const canQueue = hasTech && hasCrew && !allAfford;
+        const canBuildNow = hasTech && canBuildFacility && canBuildAny && allAfford && hasCrew;
+        const canQueue = hasTech && canBuildFacility && hasCrew && !allAfford;
         const canClick = canBuildNow || canQueue;
 
         // Powód blokady (gdy nie da się kliknąć) — priorytet: brak techu kadłuba →
@@ -7010,6 +7012,10 @@ export class FleetManagerOverlay {
         if (!hasTech) {
           const techName = TECHS[hull.requires] ? getName(TECHS[hull.requires], 'tech') : hull.requires;
           blockReason = `🔒 ${t('fleet.requiresTech', techName)}`;
+          blockColor = THEME.textDim;
+        } else if (!canBuildFacility) {
+          // S3.4d — kadłub medium+/wojenny nie zbuduje się w stoczni naziemnej (kolonia). Wymaga stacji.
+          blockReason = `🛰 ${t('fleet.requiresOrbitalShipyard')}`;
           blockColor = THEME.textDim;
         } else if (!hasCrew) {
           blockReason = `👥 ${t('fleet.noCrewPops', crewCost)}`;
@@ -7046,7 +7052,7 @@ export class FleetManagerOverlay {
         }
 
         // Przycisk BUDUJ / KOLEJKA / blokada
-        const buildLabel = canBuildNow ? '🚀' : canQueue ? '⏳' : (!hasTech ? '🔒' : '—');
+        const buildLabel = canBuildNow ? '🚀' : canQueue ? '⏳' : (!hasTech ? '🔒' : !canBuildFacility ? '🛰' : '—');
         const buildBtnW = 28;
         const buildBtnX = bx + bw - buildBtnW - 4;
         ctx.fillStyle = canBuildNow ? THEME.accent : canQueue ? THEME.warning : THEME.textDim;

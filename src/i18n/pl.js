@@ -981,6 +981,7 @@ export default {
   'fleet.requiresTech': 'Wymaga technologii: {0}',
   'fleet.noShipyard': 'Brak Stoczni w tej kolonii',
   'fleet.shipyardFull': 'Stocznia pełna: {0}/{1} slotów',
+  'fleet.requiresOrbitalShipyard': 'Wymaga stoczni orbitalnej (kadłub medium+/wojenny)',
   'fleet.noResources': 'Brak surowców na budowę statku',
   'fleet.buildQueued': 'Statek w kolejce — oczekuje na surowce',
   'fleet.pendingCancelled': 'Zamówienie statku anulowane',

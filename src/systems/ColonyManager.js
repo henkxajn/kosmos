@@ -35,6 +35,7 @@ import { ProsperitySystem } from './ProsperitySystem.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { SHIP_MODULES } from '../data/ShipModulesData.js';
+import { canBuildHullAt } from '../data/ShipBuildRules.js';
 import { STATIONS, stationTotalCost } from '../data/StationData.js';
 import { UNIT_ARCHETYPES, ARCHETYPE_REQUIREMENTS, GROUND_UNIT_CAP_EXEMPT, checkArchetypeUnlocked } from '../data/unitArchetypes.js';
 import { RegionSystem } from '../map/RegionSystem.js';
@@ -770,6 +771,15 @@ export class ColonyManager {
     const buildTech = colony.techSystem ?? this.techSystem;
     if (ship.requires && !buildTech?.isResearched(ship.requires)) {
       const reason = t('fleet.requiresTech', ship.requires);
+      EventBus.emit('fleet:buildFailed', { reason });
+      return { ok: false, reason };
+    }
+
+    // S3.4d — gate kadłubowy: stocznia NAZIEMNA (kolonijna) buduje tylko small; medium+/wojenne
+    // (fregata/niszczyciel/krążownik) wymagają stoczni ORBITALNEJ (stacji). TYLKO kolonie GRACZA —
+    // AI zwolnione z gatingu (buduje po staremu; kurier hull_small i tak przechodzi).
+    if (ColonyManager.isPlayerColony(colony) && !canBuildHullAt(ship.id, 'ground')) {
+      const reason = t('fleet.requiresOrbitalShipyard');
       EventBus.emit('fleet:buildFailed', { reason });
       return { ok: false, reason };
     }

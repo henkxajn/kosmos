@@ -594,6 +594,36 @@ Wariant B (depot-jako-proxy): stacja gracza z kolonią-matką w systemie używa 
 Plan: `docs/plans/s34c-depot-unification-plan.md` · `docs/plans/s34c-Z4-Z7-continuation.md` (Z4-Z8) ·
 audyt: `docs/audits/s34c-depot-unification-audit.md`.
 
+**S3.4d — gating kadłubów: stocznie naziemne budują TYLKO small, orbitalne (stacje) WSZYSTKO (Opcja A, save v90 bez migracji, live-gate PASS).**
+Sens strategiczny stacji = JEDYNE miejsce budowy medium/large + wojennych (frigate/destroyer/cruiser). Twardy gate,
+tylko dla GRACZA (AI zwolnione). Audyt: `docs/audits/s34d-hull-gating-audit.md`.
+- **`canBuildHullAt(shipId, facilityType)`** (`src/data/ShipBuildRules.js`) — JEDNO źródło prawdy. `'orbital'`→zawsze
+  true; `'ground'`→`spec.groundBuildable === true` (default-DENY: nowy kadłub bez flagi = tylko orbita). Flaga
+  `groundBuildable:true` WYŁĄCZNIE na `hull_small` (`HullsData.js`); pole `size` istnieje ale NIEWYSTARCZAJĄCE
+  (hull_frigate ma `size:'small'` a jest wojenny → orbital-only). Legacy `SHIPS` (science/cargo/supply) NIETKNIĘTE
+  (martwy kod w UI — role osiągane przez moduły na HULLS). Brak „battleship" (najcięższy = hull_cruiser).
+- **Gate = 2 chokepointy LOGIKI** (Opcja A): `ColonyManager.startShipBuild` (po tech-gate, guard
+  `ColonyManager.isPlayerColony` → AI przechodzi; medium+/wojenny → `fleet:buildFailed` reason
+  `fleet.requiresOrbitalShipyard`) + `StationSystem.queueStationShip` (symetryczny no-op `canBuildHullAt(...,'orbital')`
+  — jedno źródło prawdy dla obu stoczni; martwa gałąź `facility_restricted`). Stare kolejki/floty NIETKNIĘTE (tick
+  ukończenia `_tickShipBuilds`/`_tickShipQueues` nie rewaliduje; gate WYŁĄCZNIE przy enqueue). Bez SaveMigration (v90).
+- **UX „widoczny+zablokowany"** (analogia tech-gate 🔒): `FleetManagerOverlay` lista szablonów — gałąź
+  `!canBuildFacility` w łańcuchu powodów (`🛰 fleet.requiresOrbitalShipyard`, wiersz wyszarzony, hit-zone zdjęta) +
+  `FleetTabPanel._drawDesignHull` — kadłuby wojenne/medium/large NIE ukrywane (usunięto `LEGACY_HIDDEN_HULLS`) lecz
+  pokazane ZABLOKOWANE (🛰), by gracz ODKRYŁ progresję. Projekt medium+ MOŻNA tworzyć zawsze (gate na budowie, nie
+  projektowaniu). i18n PL+EN `fleet.requiresOrbitalShipyard`.
+- **Airtight (Opcja B) ROZWAŻONY i WYCOFANY** (rewizja #2): gate w fabryce `Vessel.createVessel` + `bypassHullGate`
+  na ~10 ścieżkach spawnu. Wycofano po odkryciu: (a) **AI/enemy materializują floty z `colonyId = pozycja gracza
+  (homePlanet.id)`, NIE właściciel** (`EmpireFleetMaterializer`/`SpawnTestEnemy` spawnują na orbicie gracza) →
+  `isPlayerColony(colonyId)` fałszywie `true` → gate blokowałby floty wojenne AI; wymuszało bypassy na AI/enemy/dev =
+  mina na przyszłość; (b) koszt/ryzyko dotykania WSPÓLNEJ fabryki bez realnej wartości — furtki dev/test
+  (`spawnMyVessel`, Power Test, CombatSandbox) nieosiągalne w normalnej grze. Fabryka + wszystkie ścieżki spawnu =
+  PRISTINE (jak przed slice'em).
+- **Backlog (AI + stacje/gating kadłubów)**: docelowo mniej rozwinięte AI (bez stacji orbitalnej) buduje WIĘCEJ
+  small hulli zamiast być zwolnione z gatingu — realny hull-gating AI przy PRZYSZŁYM skryptowaniu budowy statków AI
+  (rozszerzyć `canBuildHullAt` również dla AI + stacje AI), NIE przez bypassy fabryki.
+- Smoke `src/testing/smoke/s34d_hull_gating_smoke.mjs` 26/26 (G/P/AI/OLD/FLEET/UX/i18n) + pełna regresja 0 FAIL.
+
 ---
 
 ## Dodawanie nowych funkcji

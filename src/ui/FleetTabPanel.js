@@ -6,6 +6,7 @@
 import { THEME } from '../config/ThemeConfig.js';
 import { SHIPS }           from '../data/ShipsData.js';
 import { HULLS }           from '../data/HullsData.js';
+import { canBuildHullAt }  from '../data/ShipBuildRules.js';
 import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES }   from '../data/ResourcesData.js';
@@ -1629,21 +1630,21 @@ export class FleetTabPanel {
 
     const canBuildAny = queues.length < shipyardLevel;
 
-    // Kapitalizacja capability-based: stocznia pokazuje TYLKO uniwersalne kadłuby (HULLS).
-    // Legacy statki z SHIPS (colony_ship/cargo_ship/science_vessel) są ukryte —
-    // gracz osiąga te role przez wybór modułów (habitat_pod → colony, cargo_bay → frachtowiec).
-    // Dodatkowo: kadłuby bojowe (hull_frigate/destroyer/cruiser) są ukryte — ich rola
-    // jest emergentna z modułów (pancerz + broń + troop_bay). Save loading legacy nadal działa.
-    const LEGACY_HIDDEN_HULLS = new Set(['hull_frigate', 'hull_destroyer', 'hull_cruiser']);
+    // Kapitalizacja capability-based: stocznia pokazuje uniwersalne kadłuby (HULLS).
+    // Legacy statki z SHIPS (cargo_ship/science_vessel) pomijane — role osiągane przez moduły
+    // (habitat_pod → colony, cargo_bay → frachtowiec).
+    // S3.4d — kadłuby medium+/wojenne (frigate/destroyer/cruiser) NIE są już UKRYWANE: pokazujemy je
+    // ZABLOKOWANE (🛰), by gracz ODKRYŁ progresję „stocznia orbitalna". Twardy gate logiki i tak siedzi
+    // w ColonyManager.startShipBuild — tu wyłącznie UX (enabled=false → klik design_hull nieaktywny).
     for (const ship of Object.values(HULLS)) {
-      if (LEGACY_HIDDEN_HULLS.has(ship.id)) continue;
       if (cy > maxY - 30) break;
       const hasTech = !ship.requires || (tSys?.isResearched(ship.requires) ?? false);
+      const canBuildFacility = canBuildHullAt(ship.id, 'ground');   // kolonia = stocznia naziemna (tylko small)
 
       const btnH = 38;
       const bx = x + PAD;
       const bw = w - PAD * 2;
-      const enabled = hasTech && canBuildAny;
+      const enabled = hasTech && canBuildAny && canBuildFacility;
 
       // Tło przycisku
       ctx.fillStyle = enabled ? 'rgba(20,40,60,0.8)' : 'rgba(20,20,30,0.5)';
@@ -1666,11 +1667,16 @@ export class FleetTabPanel {
         bx + 6, cy + 28
       );
 
-      // Blokada technologiczna
+      // Blokada technologiczna / stoczniowa (S3.4d)
       if (!hasTech) {
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
         ctx.fillStyle = C.orange;
         ctx.fillText(`🔒 ${ship.requires}`, bx + bw - 80, cy + 14);
+      } else if (!canBuildFacility) {
+        // Kadłub medium+/wojenny — wymaga stoczni orbitalnej (stacji). Ikona 🛰 przy krawędzi.
+        ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        ctx.fillStyle = C.orange;
+        ctx.fillText('🛰', bx + bw - 24, cy + 14);
       }
 
       this._hitZones.push({

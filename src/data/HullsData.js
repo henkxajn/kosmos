@@ -20,6 +20,7 @@ export const HULLS = {
     nameEN:            'Small Hull',
     icon:              '🔹',
     size:              'small',
+    groundBuildable:   true,   // S3.4d — JEDYNY kadłub budowalny w stoczni naziemnej; reszta wymaga stoczni orbitalnej
     baseMass:          25,     // tony — lekki
     baseModuleSlots:   3,
     baseFuelCapacity:  8,

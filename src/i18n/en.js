@@ -979,6 +979,7 @@ export default {
   'fleet.requiresTech': 'Requires technology: {0}',
   'fleet.noShipyard': 'No Shipyard in this colony',
   'fleet.shipyardFull': 'Shipyard full: {0}/{1} slots',
+  'fleet.requiresOrbitalShipyard': 'Requires orbital shipyard (medium+/warship hull)',
   'fleet.noResources': 'Insufficient resources for ship construction',
   'fleet.buildQueued': 'Ship queued — awaiting resources',
   'fleet.pendingCancelled': 'Ship order cancelled',
