@@ -941,6 +941,65 @@ export class GameScene {
         console.log('[debug] stationInfo', info);
         return info;
       },
+      // KOSMOS.debug.tradeCapacityBreakdown(colonyId?) — S3.4c Z1 DIAGNOZA: rozbij tradeCapacity
+      // kolonii na składowe (200·pop + prosperity + trade_hub + BONUS STACJI per stacja) i porównaj
+      // wartość LIVE (_allocateTC z bonusem) z ECHO (col.tradeCapacity — to co widzi UI handlu).
+      // Ujawnia: (1) czy bonus stacji liczony, (2) czy moduł trade AKTYWNY (no_crew/no_power=0),
+      // (3) czy echo stale (tick early-return przy <2 koloniach handlowych → UI nie widzi zmian).
+      tradeCapacityBreakdown: (colonyId = null) => {
+        const cts = window.KOSMOS?.civilianTradeSystem;
+        const colMgr = window.KOSMOS?.colonyManager;
+        if (!cts || !colMgr) { console.warn('[debug] Brak CivilianTradeSystem/ColonyManager'); return null; }
+        const id = colonyId ?? window.KOSMOS?.homePlanet?.id ?? colMgr.getActiveColony?.()?.planetId;
+        const colony = colMgr.getColony?.(id);
+        if (!colony) { console.warn(`[debug] Brak kolonii ${id}`); return null; }
+
+        const isOutpost = colony.isOutpost ?? false;
+        const pop = colony.civSystem?.population ?? 0;
+        const prosperity = colony.prosperitySystem?.prosperity ?? 50;
+        const basePop        = isOutpost ? 0 : 200 * pop;
+        const baseProsperity = isOutpost ? 0 : Math.floor(prosperity / 20) * 50;
+        const buildingBonus  = cts._getBuildingBonus(colony, 'tcBonus');
+        const stationBonus   = cts._getStationTradeBonus(colony);
+        const allocatedLive  = cts._allocateTC(colony);          // z bonusem, TERAZ (pure)
+        const echo           = cts.getTradeCapacity(colony.planetId);   // to co widzi UI (z ostatniego ticku)
+
+        // Rozbicie per stacja (przypisane do TEJ kolonii) + wszystkie stacje gracza (widoczność stampu).
+        const ss = window.KOSMOS?.stationSystem;
+        const allStations = ss?.getAllStations?.() ?? [];
+        const attributed = [];
+        for (const st of allStations) {
+          if (st.ownerColonyId !== colony.planetId) continue;
+          const tradeMods = (st.modules ?? []).filter(m => m.moduleType === 'trade_module')
+            .map(m => ({ level: m.level, active: m.active !== false, inactiveReason: m.inactiveReason ?? null }));
+          attributed.push({ id: st.id, name: st.name, pop: st.pop, popCapacity: st.popCapacity,
+            depotDetached: !!st.depotDetached, tradeModules: tradeMods, contribution: st.tradeCapacity });
+        }
+        const allPlayerStations = allStations.filter(s => s.ownerEmpireId === 'player').map(s => ({
+          id: s.id, ownerColonyId: s.ownerColonyId, depotDetached: !!s.depotDetached,
+          tradeCapacity: s.tradeCapacity, pop: s.pop,
+        }));
+
+        const playerCols = colMgr.getPlayerColonies?.() ?? [];
+        const out = {
+          colonyId: colony.planetId, isOutpost, pop, prosperity,
+          components: { basePop, baseProsperity, buildingBonus, stationBonus },
+          allocatedTC_live: allocatedLive,
+          echo_tradeCapacity_UI: echo,
+          echoMatchesLive: allocatedLive === echo,
+          attributedStations: attributed,
+          allPlayerStations,
+          diagnostic: playerCols.length < 2
+            ? '⚠ <2 kolonie gracza → _halfYearlyTick prawdopodobnie early-return (L99): ECHO nie aktualizowany, UI pokazuje wartość stale. LIVE pokazuje prawdę.'
+            : (allocatedLive === echo ? 'OK — echo == live (tick aktualizuje).'
+                                      : '⚠ echo ≠ live — tick nie odświeżył echa (sprawdź spaceporty/isolation na koloniach handlowych).'),
+        };
+        console.log('[debug] tradeCapacityBreakdown', out);
+        if (attributed.length) console.table?.(attributed.flatMap(s =>
+          s.tradeModules.map(m => ({ station: s.id, level: m.level, active: m.active, reason: m.inactiveReason, stContribution: s.contribution }))));
+        else console.log('[debug]   (brak stacji przypisanych do tej kolonii — sprawdź allPlayerStations.ownerColonyId)');
+        return out;
+      },
       // ── M2a Combat Core (Commit 8) ────────────────────────────────────
       // KOSMOS.debug.enableProximity() — ProximitySystem on + instance.
       enableProximity: () => {
