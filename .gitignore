@@ -15,6 +15,10 @@ package-lock.json.*
 # Stray empty files
 /0
 
+# Jednorazowe smoke/debug w katalogu głównym (untracked debris). Trackowane smoke żyją
+# w src/testing/smoke/ (leading slash = TYLKO root, nie src/testing/smoke/tmp_*.mjs).
+/tmp_*.mjs
+
 # Audit reports (pre-existing, nie część źródeł)
 kod_audit_*.md
 

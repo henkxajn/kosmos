@@ -869,6 +869,8 @@ export class GameScene {
         return st;
       },
       // KOSMOS.debug.stationFillDepot(stationId?) — dosyp surowce/towary do budowy modułów/statków.
+      // S3.4c: `st.depot.receive` deleguje przez proxy — stacja z matką zasila MAGAZYN KOLONII
+      // (wspólny pool), sierota własny depot. Bez zmian w kodzie (proxy transparentny).
       stationFillDepot: (stationId = null) => {
         const st = window.KOSMOS.debug._firstStation(stationId);
         if (!st) return null;

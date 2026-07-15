@@ -845,7 +845,47 @@ Panele okienkowe (S3.4b) — polish:
 
 ---
 
-## S3.4c — Unifikacja magazynu STACJA <-> KOLONIA — ZAPLANOWANE (decyzje D1-D9 zatwierdzone, implementacja NIEROZPOCZETA)
+## S3.4c — Unifikacja magazynu STACJA <-> KOLONIA — IMPLEMENTACJA UKONCZONA (Commity 1-5, save v90 bez bumpu, live-gate PENDING)
+
+**Status:** kod + smoke KOMPLETNE (5 commitow na main), pelna regresja zielona. **STOP na live-gate**
+(reguła `live-game-mandatory-gate`) — arc NIE zamkniety do czasu przejscia zywej gry (szkic live-gate w
+`docs/plans/s34c-depot-unification-plan.md` §e).
+
+**Commity:**
+- **C1** `2b4c6fc` — proxy resolver StationDepot + stamp `ownerColonyId` (D1, D2). `resolveHomeColony`
+  w `TransferStore.js` (guard AI -> stamp -> per-body -> parent(ksiezyc) -> jedyna-w-systemie -> null).
+  `StationDepot` deleguje receive/spend/getAmount/inventory do kolonii-matki; sierota wlasna Mapa.
+  serialize ksztalt bez zmian (matka `{}`, sierota plaski). Smoke `s34c_depot_proxy` 28/28.
+- **C2** `cbfaeb9` — drain przy restore (D3) + osierocenie po `colony:destroyed` (D5).
+  `_normalizeAndDrainDepot` (stamp normalizacyjny + przelew do kolonii, idempotentny; drenuje tez
+  fuel/warp_cores D4). `depotDetached` marker (subskrybent match po STAMPIE — kolonia usunieta przed
+  emitem; brak re-motheringu do rodzenstwa). Smoke `s34c_drain_orphan` 28/28.
+- **C3** `97e882e` — trade bonus (D7) + wykluczenie self-cargo (D8). `_getStationTradeBonus` po
+  `ownerColonyId` (zero double-count) w `_allocateTC`; bez capa; detached/AI pominiete. Self-cargo:
+  stacja z matka poza celami `transport`, `transport_passenger` zostaje, sierota legalna. Smoke
+  `s34c_trade_selfcargo` 14/14.
+- **C4** `9bf3d4c` — UI wspolnego magazynu + i18n (D9). StationManagementView/StationPanel: "Wspolny
+  magazyn: <kolonia>" (matka) / wlasny depot + "Odcieta od zaopatrzenia" (detached). EconomyOverlay
+  fasada matki OUT. Pickery canAfford BEZ zmian (proxy `station.depot.getAmount` deleguje -> poprawne).
+  i18n PL+EN `station.sharedStorage`/`cutOffFromSupply`. Smoke `s34c_ui_i18n` 9/9.
+- **C5** (ten) — debug `stationFillDepot` komentarz (proxy), weryfikacja `loadOrbitalShells` (R13 —
+  dziedziczy proxy przez resSys), `.gitignore /tmp_*.mjs` (root debris), pelna regresja, docs.
+
+**Regresja (pelna, zielona):** wszystkie smoke w `src/testing/smoke/` (S3.4c 79 + S3.4/S3.4b + S3.0a/S3.0b
++ warp + map_labels) — 0 FAIL.
+
+**Ryzyka R1-R13 (mitygacja):** R1 (eventy resource:changed) — D6 pozadane. R2 (colony:destroyed cleanup) —
+subskrybent D5. R3 (migracja JSON) — live-restore drain, save v90. R4 (stacje AI) — guard `ownerEmpireId`
+w resolveHomeColony. R5 (self-transfer) — filtr D8. R6 (2+ kolonii double-count) — atrybucja po ownerColonyId.
+R7 (redundancja UI) — D9 + pickery przez proxy. R8 (wspolny pool paliwa) — akceptacja (drain fuel/warp_cores).
+R9 (side-effect migracji POP) — zaakceptowany. R10 (energy-jako-cargo) — benign. R11 (0 kolonii) — fallback
+null->depot. R12 (spend guard) — benign. R13 (loadOrbitalShells) — dziedziczy proxy przez resSys.
+
+**Ponizej: pierwotny plan (ZAPLANOWANE) — zachowany dla kontekstu decyzji.**
+
+---
+
+### (pierwotny wpis planistyczny)
 
 **Design:** "orbitalna dzielnica" — stacja gracza z kolonia-matka w systemie uzywa magazynu kolonii
 (`colony.resourceSystem`) zamiast wlasnego `StationDepot`; stacja bez matki (debug / osierocona) zachowuje
