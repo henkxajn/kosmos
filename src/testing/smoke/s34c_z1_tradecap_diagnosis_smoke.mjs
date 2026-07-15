@@ -55,20 +55,20 @@ mkStation('stA', { bodyId: 'planet_home', ownerColonyId: 'planet_home', pop: 5, 
 T('1.2 _allocateTC z aktywnym trade_module = 900 (700+200)', cts._allocateTC(home) === 900);
 T('1.3 _getStationTradeBonus = 200', cts._getStationTradeBonus(home) === 200);
 
-// ══ 2. ROOT CAUSE: getTradeCapacity zwraca ECHO, nie _allocateTC — echo NIE ustawiony bez ticku ══════
-T('2.1 echo col.tradeCapacity niezdefiniowany przed tickiem', home.tradeCapacity === undefined);
-T('2.2 getTradeCapacity() = 0 mimo że live=900 (UI pokazuje 0/stale)', cts.getTradeCapacity('planet_home') === 0);
-T('2.3 DYWERGENCJA: live(900) ≠ echo(0)', cts._allocateTC(home) !== cts.getTradeCapacity('planet_home'));
+// ══ 2. Z7 FIX: getTradeCapacity liczy LIVE (_allocateTC), NIE stale echo ════════════════════════════
+// Poprzednio zwracał echo `col.tradeCapacity` (undefined bez ticku → 0). Po Z7 = live.
+T('2.1 echo col.tradeCapacity niezdefiniowany przed tickiem (pole nietknięte)', home.tradeCapacity === undefined);
+T('2.2 Z7: getTradeCapacity() = 900 (LIVE, bonus stacji widoczny natychmiast)', cts.getTradeCapacity('planet_home') === 900);
+T('2.3 Z7: brak dywergencji — getTradeCapacity == _allocateTC', cts._allocateTC(home) === cts.getTradeCapacity('planet_home'));
 
-// ══ 3. Gate L76: <2 kolonie → _halfYearlyTick early-return → echo NIE aktualizowany ════════════════
+// ══ 3. Single-colony: _halfYearlyTick early-return (routing off), ale display LIVE poprawny ═════════
 window.KOSMOS.civMode = true;
-cts._halfYearlyTick();   // tylko 1 kolonia w rejestrze
-T('3.1 po tick z 1 kolonią echo NADAL niezdefiniowany (early-return L76)', home.tradeCapacity === undefined);
-T('3.2 getTradeCapacity nadal 0 (UI nie widzi bonusu)', cts.getTradeCapacity('planet_home') === 0);
+cts._halfYearlyTick();   // tylko 1 kolonia → early-return L76 (routing nie biegnie)
+T('3.1 po tick z 1 kolonią echo NADAL niezdefiniowany (early-return L76 — routing off)', home.tradeCapacity === undefined);
+T('3.2 Z7: getTradeCapacity NADAL 900 (display live niezależny od ticku)', cts.getTradeCapacity('planet_home') === 900);
 
-// ══ 4. Symulacja tego, co robi tick przy ≥2 koloniach (L835 echo = _allocateTC) ═════════════════════
-home.tradeCapacity = cts._allocateTC(home);   // to samo przypisanie co L835 w _halfYearlyTick
-T('4.1 po echo-update getTradeCapacity = 900 (bonus WIDOCZNY w UI)', cts.getTradeCapacity('planet_home') === 900);
+// ══ 4. getTradeCapacity nieznanej kolonii = 0 (guard) ═══════════════════════════════════════════════
+T('4.1 getTradeCapacity(brak kolonii) = 0', cts.getTradeCapacity('planet_nonexistent') === 0);
 
 // ══ 5. Point (d): bonus TYLKO z AKTYWNYCH modułów (no_crew/no_power = 0) ════════════════════════════
 colonies.clear(); EntityManager.clear?.();
@@ -79,7 +79,7 @@ T('5.1 wygaszony trade_module → station.tradeCapacity = 0', EntityManager.get(
 T('5.2 _getStationTradeBonus = 0 (moduł nieaktywny)', cts._getStationTradeBonus(home2) === 0);
 T('5.3 _allocateTC = baza 700 (bez wkładu nieaktywnej stacji)', cts._allocateTC(home2) === 700);
 
-console.log(`\nS3.4c Z1 diagnoza (trade bonus vs echo) smoke: ${pass}/${pass + fail} passed` + (fail ? ` — ${fail} FAILED` : ' ✓'));
-console.log('WNIOSEK: bonus jest w _allocateTC (live); UI czyta ECHO (col.tradeCapacity) aktualizowane tylko');
-console.log('  w _halfYearlyTick, który early-return przy <2 koloniach handlowych → single-colony NIE widzi bonusu.');
+console.log(`\nS3.4c Z1/Z7 (trade bonus + getTradeCapacity LIVE) smoke: ${pass}/${pass + fail} passed` + (fail ? ` — ${fail} FAILED` : ' ✓'));
+console.log('WNIOSEK: bonus jest w _allocateTC (live); po Z7 getTradeCapacity liczy LIVE →');
+console.log('  single-colony WIDZI bonus stacji natychmiast, niezależnie od early-return _halfYearlyTick.');
 process.exit(fail ? 1 : 0);

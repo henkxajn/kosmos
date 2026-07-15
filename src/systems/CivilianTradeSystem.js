@@ -926,7 +926,11 @@ export class CivilianTradeSystem {
 
   getTradeCapacity(colonyId) {
     const colony = this.colonyManager.getColony(colonyId);
-    return colony?.tradeCapacity ?? 0;
+    if (!colony) return 0;
+    // Z7: licz LIVE (_allocateTC, pure) zamiast czytać echo `col.tradeCapacity`, które jest
+    // stale gdy <2 kolonie handlowe (_halfYearlyTick early-return L76/L99 → tick nie odświeża
+    // echa). Jedyny konsument = display (TradeOverlay). Bonus stacji (D7) widoczny natychmiast.
+    return this._allocateTC(colony);
   }
 
   getConnections(colonyId) {

@@ -891,7 +891,12 @@ export class GameScene {
           }
         }
         st.depot.receive(fill);
-        console.log(`[debug] stationFillDepot → ${st.id}`);
+        // Z6: log celu (matka/sierota + tryb magazynu) + lista WSZYSTKICH stacji dla orientacji.
+        // Proxy S3.4c: matka → zasila magazyn kolonii (wspólny pool), sierota → własny depot.
+        const _all = window.KOSMOS?.stationSystem?.getAllStations?.() ?? [];
+        console.log(`[debug] stationFillDepot → cel=${st.id} (matka=${st.ownerColonyId ?? '(sierota)'}, `
+          + `${st.depotDetached ? 'odcięta/własny depot' : 'wspólny magazyn kolonii'}). Wszystkie stacje:`,
+          _all.map(s => ({ id: s.id, owner: s.ownerColonyId ?? '(sierota)', detached: !!s.depotDetached })));
         return st.id;
       },
       // KOSMOS.debug.stationBuildModule(moduleType?, stationId?) — dosyp depot + zakolejkuj moduł.
@@ -980,19 +985,25 @@ export class GameScene {
           tradeCapacity: s.tradeCapacity, pop: s.pop,
         }));
 
-        const playerCols = colMgr.getPlayerColonies?.() ?? [];
+        // T5 fix: prawdziwy gate _halfYearlyTick to <2 kolonie HANDLOWE (spaceport, nie-izolowane),
+        // NIE liczba kolonii gracza. Licz po tym samym filtrze co _halfYearlyTick (L83-98).
+        const tradingCount = (colMgr.getAllColonies?.() ?? []).filter(c =>
+          !c.tradeOverrides?.isolation && cts._hasSpaceport(c)).length;
         const out = {
           colonyId: colony.planetId, isOutpost, pop, prosperity,
           components: { basePop, baseProsperity, buildingBonus, stationBonus },
           allocatedTC_live: allocatedLive,
           echo_tradeCapacity_UI: echo,
           echoMatchesLive: allocatedLive === echo,
+          tradingColonies: tradingCount,
           attributedStations: attributed,
           allPlayerStations,
-          diagnostic: playerCols.length < 2
-            ? '⚠ <2 kolonie gracza → _halfYearlyTick prawdopodobnie early-return (L99): ECHO nie aktualizowany, UI pokazuje wartość stale. LIVE pokazuje prawdę.'
-            : (allocatedLive === echo ? 'OK — echo == live (tick aktualizuje).'
-                                      : '⚠ echo ≠ live — tick nie odświeżył echa (sprawdź spaceporty/isolation na koloniach handlowych).'),
+          // Po Z7 getTradeCapacity liczy LIVE → echo == live z definicji (display nie jest już stale).
+          // <2 kolonie handlowe wpływa tylko na ROUTING (_tcPool/goods flow), nie na display.
+          diagnostic: tradingCount < 2
+            ? 'ℹ <2 kolonie handlowe (spaceport, nie-izolowane): routing handlu (_tcPool/flow) nie biegnie (_halfYearlyTick early-return), ale getTradeCapacity liczy LIVE (Z7) → display poprawny.'
+            : (allocatedLive === echo ? 'OK — echo == live.'
+                                      : '⚠ echo ≠ live — nieoczekiwane po Z7 (zgłoś).'),
         };
         console.log('[debug] tradeCapacityBreakdown', out);
         if (attributed.length) console.table?.(attributed.flatMap(s =>
