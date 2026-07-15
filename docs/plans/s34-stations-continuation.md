@@ -881,6 +881,28 @@ R7 (redundancja UI) — D9 + pickery przez proxy. R8 (wspolny pool paliwa) — a
 R9 (side-effect migracji POP) — zaakceptowany. R10 (energy-jako-cargo) — benign. R11 (0 kolonii) — fallback
 null->depot. R12 (spend guard) — benign. R13 (loadOrbitalShells) — dziedziczy proxy przez resSys.
 
+**Live-gate (w toku, Filip):** T1-T4 PASS (2 uwagi). Zadania post-live-gate:
+- **Z1 (DIAGNOZA T5 trade bonus):** bonus JEST poprawnie w `_allocateTC` (C3 OK). ROOT CAUSE symptomu
+  „brak wzrostu tradeCapacity w UI": `getTradeCapacity` zwraca ECHO `col.tradeCapacity` odswiezane TYLKO
+  w `_halfYearlyTick`, ktory early-return przy <2 koloniach handlowych (L76 getAllColonies<2, L99
+  tradingColonies<2) → single-colony NIE widzi bonusu (ani bazy). Drugi mozliwy powod: modul trade
+  nieaktywny (no_crew/no_power → `station.tradeCapacity`=0, poprawne D7). Debug:
+  `KOSMOS.debug.tradeCapacityBreakdown(colonyId?)` (składowe + LIVE vs ECHO + flag early-return).
+  **FIX wstrzymany** — czeka na breakdown z zywej gry (rekomendacja: `getTradeCapacity` liczy LIVE przez
+  `_allocateTC` zamiast stale echa — dziala dla single-colony, bezpieczne dla wszystkich przypadkow).
+  Smoke `s34c_z1_tradecap_diagnosis` 12/12.
+- **Z2 (helper T6):** `KOSMOS.debug.destroyColony(colonyId?, {confirm}?)` + `destroyColonyConfirm()` —
+  PELNA sciezka produkcyjna (`ColonyManager.removeColony` → emit `colony:destroyed`, jak
+  body:collision/planet:ejected). Produkcyjna smierc kolonii ISTNIEJE (kolizja/ejekcja/entity:removed →
+  removeColony). **UWAGA:** removeColony NIE niszczy home planety (isHomePlanet guard) → test osierocenia
+  wymaga stacji z matka na kolonii WTORNEJ.
+- **Z3 (self-cargo domkniecie):** `FleetManagerOverlay._getValidTargets` wyklucza cel==zrodlo
+  (kolonia→ta sama kolonia) dla transport I transport_passenger; stacja↔matka ZOSTAJE legalna dla
+  pasazerow. Smoke `s34c_z3_selfsource` 9/9.
+
+**Backlog kosmetyka (odnotowane, nie teraz):** panel „Wspolny magazyn: <kolonia>" pokazuje tylko naglowek
+bez zawartosci — do rozwazenia skrocona lista kluczowych zasobow kolonii-matki.
+
 **Ponizej: pierwotny plan (ZAPLANOWANE) — zachowany dla kontekstu decyzji.**
 
 ---

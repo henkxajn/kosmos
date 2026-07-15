@@ -8031,6 +8031,10 @@ export class FleetManagerOverlay {
     const targets = [];
     const homePid = window.KOSMOS?.homePlanet?.id;
     const colMgr  = window.KOSMOS?.colonyManager;
+    // S3.4c Z3 — źródło misji transport (kolonia/stacja, z której statek ładuje). Cel == źródło =
+    // self-transfer (kolonia→ta sama kolonia) — wykluczany niżej dla transport/transport_passenger.
+    const sourceColonyId = this._getVesselColony?.(vessel)?.planetId
+      ?? vessel.colonyId ?? vessel.homeColonyId ?? null;
 
     // Zbierz ciała aktywnego układu
     const activeSysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
@@ -8057,6 +8061,10 @@ export class FleetManagerOverlay {
       // Transport (cargo/pasażer) — tylko ciała z kolonią/outpostem (POP dostarczany do kolonii).
       if (actionId === 'transport' || actionId === 'transport_passenger') {
         if (!colMgr?.hasColony(body.id)) continue;
+        // S3.4c Z3 — wyklucz cel tożsamy ze ŹRÓDŁEM (kolonia→ta sama kolonia = self-transfer cargo /
+        // self-POP bez sensu). Stacja↔matka dla pasażerów ZOSTAJE legalna (to blok stacji niżej, nie
+        // ta pętla ciał — źródło=kolonia, cel=stacja, różne id).
+        if (sourceColonyId && body.id === sourceColonyId) continue;
       }
       // Kolonizacja — nie pokazuj pełnych kolonii (outposty można upgrade'ować)
       if (actionId === 'colonize') {

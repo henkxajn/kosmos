@@ -1000,6 +1000,45 @@ export class GameScene {
         else console.log('[debug]   (brak stacji przypisanych do tej kolonii — sprawdź allPlayerStations.ownerColonyId)');
         return out;
       },
+      // KOSMOS.debug.destroyColony(colonyId?, {confirm}?) — S3.4c Z2: zniszcz kolonię PEŁNĄ ścieżką
+      // produkcyjną (ColonyManager.removeColony → emit colony:destroyed + cleanup hangar/tras + switch
+      // aktywnej). Odblokowuje live-gate T6 (osierocenie stacji z C2 dostaje PRAWDZIWY event, nie skrót).
+      // Akcja NISZCZĄCA → wymaga potwierdzenia: destroyColonyConfirm() lub {confirm:true}.
+      // UWAGA: removeColony NIE niszczy home planety (isHomePlanet guard → game-over path osobno) —
+      // do testu osierocenia użyj stacji z matką na koloni WTÓRNEJ (nie home).
+      destroyColony: (colonyId = null, opts = {}) => {
+        const colMgr = window.KOSMOS?.colonyManager;
+        if (!colMgr) { console.warn('[debug] Brak ColonyManager'); return null; }
+        const id = colonyId ?? colMgr.getActiveColony?.()?.planetId ?? window.KOSMOS?.homePlanet?.id;
+        const colony = colMgr.getColony?.(id);
+        if (!colony) { console.warn(`[debug] Brak kolonii ${id}`); return null; }
+        if (colony.isHomePlanet) {
+          console.warn(`[debug] destroyColony: ${id} to HOME PLANET — removeColony jej NIE niszczy (ścieżka game-over osobno). Wskaż kolonię wtórną.`);
+          return null;
+        }
+        if (opts.confirm !== true) {
+          window.KOSMOS.debug._pendingDestroyColony = id;
+          console.warn(`[debug] ⚠ AKCJA NISZCZĄCA: kolonia "${colony.name ?? id}" (${id}). ` +
+            `Potwierdź: KOSMOS.debug.destroyColonyConfirm()  albo  destroyColony('${id}', {confirm:true}).`);
+          return { pending: id };
+        }
+        return window.KOSMOS.debug._doDestroyColony(id);
+      },
+      destroyColonyConfirm: () => {
+        const id = window.KOSMOS?.debug?._pendingDestroyColony;
+        if (!id) { console.warn('[debug] Brak oczekującego destroyColony — wywołaj najpierw destroyColony(id).'); return null; }
+        window.KOSMOS.debug._pendingDestroyColony = null;
+        return window.KOSMOS.debug._doDestroyColony(id);
+      },
+      _doDestroyColony: (id) => {
+        const colMgr = window.KOSMOS?.colonyManager;
+        const colony = colMgr?.getColony?.(id);
+        if (!colony) { console.warn(`[debug] Kolonia ${id} już nie istnieje`); return null; }
+        // PEŁNA ścieżka produkcyjna (identyczna z body:collision/planet:ejected) — emit colony:destroyed.
+        colMgr.removeColony(id, 'debug');
+        console.log(`[debug] destroyColony → ${id} zniszczona (removeColony reason=debug; colony:destroyed wyemitowany → osierocenie stacji C2).`);
+        return id;
+      },
       // ── M2a Combat Core (Commit 8) ────────────────────────────────────
       // KOSMOS.debug.enableProximity() — ProximitySystem on + instance.
       enableProximity: () => {
