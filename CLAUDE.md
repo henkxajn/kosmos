@@ -585,7 +585,10 @@ Wariant B (depot-jako-proxy): stacja gracza z kolonią-matką w systemie używa 
   `BuildingSystem`/`ProsperitySystem`) dostało `dispose()` (off `time:tick`); `ColonyManager.removeColony` woła je →
   koniec leaku tickerów po `destroyColony` (był warn per-frame `FactorySystem.isRecipeAvailable` → zalew konsoli +
   spadek FPS). `FactorySystem._update` orphan-guard (`!_getOwnerColony()`→return) jako defense-in-depth.
-  **Backlog:** `transferColony:654` bliźniaczy leak (ścieżka game-over — orphan-guard wycisza, dispose gotowy do reużycia).
+  **Z9 (bliźniaczy leak DOMKNIĘTY, `ac572f6`):** `transferColony` (przejęcie kolonii przez AI) woła te same 5×
+  `dispose()` przed `_colonies.delete` — czysty dispose (przejęta kolonia = abstrakcyjny wpis imperium, AI nie
+  adoptuje subsystemów). Orphan-guard `FactorySystem._update` zostaje jako defense-in-depth. Smoke
+  `s34c_z9_transfer_dispose` 16/16 + live-gate PASS.
 - **`getTradeCapacity` LIVE (Z7)** — `CivilianTradeSystem.getTradeCapacity` liczy `_allocateTC` (pure) zamiast stale
   echo `col.tradeCapacity` → single-colony widzi bonus stacji natychmiast (echo aktualizowany tylko w `_halfYearlyTick`).
 - Commity: C1 `2b4c6fc` · C2 `cbfaeb9` · C3 `97e882e` · C4 `9bf3d4c` · C5 `b5e2ab0` · Z2/Z3 `7b91f71` · Z4-Z8 (ten arc).
