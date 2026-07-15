@@ -136,7 +136,7 @@ export class BuildingSystem {
 
     // Tick: budowa + wydobycie surowców z deposits przez kopalnie + pending queue
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — mechaniki 4X biegną szybciej
-    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => {
+    this._onTick = ({ civDeltaYears: deltaYears }) => {
       this._tickConstruction(deltaYears);
       this._tickMineExtraction(deltaYears);
       this._tickConverters(deltaYears);
@@ -144,7 +144,8 @@ export class BuildingSystem {
       // Faza C5: mediation_center pasywnie redukuje napięcie frakcji
       // (3/rok × civDeltaYears, tylko gdy mediation_center jest aktywne na kolonii)
       this._tickMediation(deltaYears);
-    });
+    };
+    EventBus.on('time:tick', this._onTick);
 
     // Faza C5: faction:sliderChanged → przelicz stawki (modifier zmienia się ze strefą)
     // BEZ guardu `buildingSystem !== this` — slider jest globalny, wszystkie kolonie
@@ -1363,6 +1364,12 @@ export class BuildingSystem {
     if (this._factorySystem) {
       this._recalcFactoryPoints();
     }
+  }
+
+  // Z4: rozłącz ticker per-kolonia (ColonyManager.removeColony).
+  dispose() {
+    if (this._onTick) EventBus.off('time:tick', this._onTick);
+    this._onTick = null;
   }
 
   // ── Serializacja ────────────────────────────────────────────────────────

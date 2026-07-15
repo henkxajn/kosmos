@@ -152,7 +152,8 @@ export class CivilizationSystem {
 
     // ── Nasłuch zdarzeń ─────────────────────────────────────────────────
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — wzrost POP, kryzysy biegną szybciej
-    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
+    this._onTick = ({ civDeltaYears: deltaYears }) => this._update(deltaYears);
+    EventBus.on('time:tick', this._onTick);
 
     // Zasoby — invalidacja lazy cache (Patch v5). Handler odpalany tylko dla
     // aktywnej kolonii gracza (emit `resource:changed` guarded w ResourceSystem),
@@ -660,6 +661,12 @@ export class CivilizationSystem {
     this.addMilestone('founding');
     this._milestoneState.popAtReference = this.population;
     this._milestoneState.popReferenceYear = 0;
+  }
+
+  // Z4: rozłącz ticker per-kolonia (ColonyManager.removeColony).
+  dispose() {
+    if (this._onTick) EventBus.off('time:tick', this._onTick);
+    this._onTick = null;
   }
 
   // ── Serializacja ────────────────────────────────────────────────────────

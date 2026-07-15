@@ -588,6 +588,17 @@ export class ColonyManager {
     const isOutpost  = colony.isOutpost ?? false;
     const population = colony.civSystem?.population ?? 0;
 
+    // Z4/Z5: rozłącz per-kolonijne tickery (time:tick) — inaczej zniszczona kolonia tyka
+    // w nieskończoność (FactorySystem warn per-frame w isRecipeAvailable → zalew konsoli +
+    // spadek FPS; leak subskrypcji EventBus). transferColony (:654) ma bliźniaczy leak —
+    // BACKLOG (ścieżka game-over home-planet; orphan-guard w FactorySystem._update wycisza
+    // ją tymczasowo, dispose-pattern gotowy do reużycia).
+    colony.factorySystem?.dispose?.();
+    colony.resourceSystem?.dispose?.();
+    colony.civSystem?.dispose?.();
+    colony.buildingSystem?.dispose?.();
+    colony.prosperitySystem?.dispose?.();
+
     this._colonies.delete(planetId);
 
     EventBus.emit('colony:destroyed', {

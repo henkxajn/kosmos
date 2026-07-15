@@ -252,7 +252,15 @@ export class FactorySystem {
     });
 
     // Tick produkcji (civDeltaYears)
-    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
+    this._onTick = ({ civDeltaYears: deltaYears }) => this._update(deltaYears);
+    EventBus.on('time:tick', this._onTick);
+  }
+
+  // Z4: rozłącz ticker per-kolonia — wołane z ColonyManager.removeColony przy śmierci
+  // kolonii. Bez tego zniszczona kolonia tyka w nieskończoność (warn per-frame → spadek FPS).
+  dispose() {
+    if (this._onTick) EventBus.off('time:tick', this._onTick);
+    this._onTick = null;
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -703,6 +711,10 @@ export class FactorySystem {
   // ══════════════════════════════════════════════════════════════════════════
 
   _update(deltaYears) {
+    // Z4: osierocona fabryka (kolonia zniszczona) — nie tykaj. Zapobiega warn per-frame
+    // w isRecipeAvailable oraz jałowej pracy zombie-systemu (m.in. ścieżka transferColony).
+    if (!this._getOwnerColony()) return;
+
     // Jednorazowy cleanup po restore: usuń alokacje na commodities których
     // kolonia nie ma jak lokalnie zrobić (stare save'y z buga sprzed v57).
     if (this._needsUnsustainablePrune) {

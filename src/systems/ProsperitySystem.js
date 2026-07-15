@@ -60,7 +60,14 @@ export class ProsperitySystem {
 
   _setupListeners() {
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — prosperity biegnie szybciej
-    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
+    this._onTick = ({ civDeltaYears: deltaYears }) => this._update(deltaYears);
+    EventBus.on('time:tick', this._onTick);
+  }
+
+  // Z4: rozłącz ticker per-kolonia (ColonyManager.removeColony).
+  dispose() {
+    if (this._onTick) EventBus.off('time:tick', this._onTick);
+    this._onTick = null;
   }
 
   // ── Główna pętla ────────────────────────────────────────────────────────

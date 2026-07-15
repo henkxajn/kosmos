@@ -114,7 +114,8 @@ export class ResourceSystem {
 
     // ── Nasłuch zdarzeń ──────────────────────────────────────────────────
     // civDeltaYears = deltaYears × CIV_TIME_SCALE — produkcja/konsumpcja 4X biegną szybciej
-    EventBus.on('time:tick', ({ civDeltaYears: deltaYears }) => this._update(deltaYears));
+    this._onTick = ({ civDeltaYears: deltaYears }) => this._update(deltaYears);
+    EventBus.on('time:tick', this._onTick);
 
     EventBus.on('resource:registerProducer', ({ id, rates }) => {
       if (window.KOSMOS?.resourceSystem !== this) return;
@@ -365,6 +366,12 @@ export class ResourceSystem {
     }
 
     return { producers, consumers };
+  }
+
+  // Z4: rozłącz ticker per-kolonia (ColonyManager.removeColony).
+  dispose() {
+    if (this._onTick) EventBus.off('time:tick', this._onTick);
+    this._onTick = null;
   }
 
   // ── Serializacja ─────────────────────────────────────────────────────────
