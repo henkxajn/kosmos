@@ -30,7 +30,7 @@ export class StationSystem {
    * ColonyManager._tickPendingStationOrders (po spend) oraz debug.spawnStation.
    * Bez limitu stacji per ciało/system. @returns {Station|null} (null gdy brak ciała)
    */
-  createStation(bodyId, { ownerEmpireId = 'player', stationType = 'orbital_station', tier = 1, name = null } = {}) {
+  createStation(bodyId, { ownerEmpireId = 'player', stationType = 'orbital_station', tier = 1, name = null, ownerColonyId = null } = {}) {
     const body = EntityManager.get(bodyId);
     if (!body) {
       console.warn(`[StationSystem] createStation: brak ciała ${bodyId}`);
@@ -47,6 +47,7 @@ export class StationSystem {
       name:          name ?? `Stacja ${body.name}`,
       bodyId,
       ownerEmpireId,
+      ownerColonyId,   // S3.4c (D1) — kolonia-matka (płatnik); null dla debug spawn bez matki
       stationType,
       tier,
       createdYear:   year,
@@ -102,6 +103,7 @@ export class StationSystem {
       name:          s.name,
       bodyId:        s.bodyId,
       ownerEmpireId: s.ownerEmpireId,
+      ownerColonyId: s.ownerColonyId,   // S3.4c (D1) — kolonia-matka (round-trip; brak w starym save → null w konstruktorze)
       tier:          s.tier,
       stationType:   s.stationType,
       createdYear:   s.createdYear,

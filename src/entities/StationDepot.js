@@ -4,40 +4,72 @@
 // inventory (Map) + receive/spend/getAmount. Magazyn OGÓLNY: przyjmuje i wydaje DOWOLNE towary jak
 // colony.resourceSystem (sink I source handlu). Pojemność unlimited. Lekki — bez time:tick/producentów/
 // legacyProxy ResourceSystem (te ciągnęłyby tick co klatkę + listener leak per-stację).
+//
+// S3.4c (D2) — Wariant B: depot-jako-PROXY. Encja pozostaje instancją StationDepot (inwariant
+// `station.depot instanceof StationDepot` zachowany), ale gdy stacja ma kolonię-matkę (resolveHomeColony)
+// — receive/spend/getAmount + getter `inventory` DELEGUJĄ do `motherColony.resourceSystem` (jeden,
+// wspólny magazyn „orbitalnej dzielnicy"). Stacja-sierota (brak matki) trzyma własną Mapę jak dawniej.
+// serialize() bez zmiany kształtu: matka → {} (delegat nie ma własnego stanu), sierota → własna Mapa.
+
+import { resolveHomeColony } from '../utils/TransferStore.js';
 
 export class StationDepot {
-  constructor(data = {}) {
-    // Żywa Map = jedyne źródło prawdy (mutowana przez receive/spend; CargoLoadModal trzyma referencję).
-    // Lazy: trzyma tylko obecne wpisy; getAmount zwraca 0 dla brakujących.
-    this.inventory = new Map(Object.entries(data ?? {}));
+  constructor(data = {}, station = null) {
+    // Własna Map (dla sieroty). Żywa = jedyne źródło prawdy; getAmount zwraca 0 dla brakujących.
+    // (Historycznie pole nazywało się `inventory`; teraz `inventory` to GETTER — patrz niżej.)
+    this._ownInventory = new Map(Object.entries(data ?? {}));
+    // Back-reference do encji stacji — potrzebny do LAZY rozwiązania kolonii-matki (proxy).
+    // Late-bind: Station przekazuje `this` przy konstrukcji depotu; brak (null) = zawsze własna Mapa.
+    this._station = station;
+  }
+
+  // Rozwiąż efektywny store: resourceSystem kolonii-matki (proxy) lub null (sierota → własna Mapa).
+  _target() {
+    if (!this._station) return null;
+    const col = resolveHomeColony(this._station);
+    return col?.resourceSystem ?? null;
+  }
+
+  // inventory — Map efektywnego magazynu (matka: kolonii; sierota: własna). GETTER (nie pole).
+  get inventory() {
+    const t = this._target();
+    return t ? t.inventory : this._ownInventory;
   }
 
   // Ilość zasobu (kontrakt jak ResourceSystem.getAmount; loadCargo via _getAvailable).
   getAmount(id) {
-    return this.inventory.get(id) ?? 0;
+    const t = this._target();
+    return t ? t.getAmount(id) : (this._ownInventory.get(id) ?? 0);
   }
 
   // Przychód (kontrakt jak ResourceSystem.receive). Magazyn OGÓLNY — przyjmuje DOWOLNY towar.
   receive(gains) {
+    const t = this._target();
+    if (t) { t.receive(gains); return; }   // matka → wspólny magazyn kolonii (D6: eventy pożądane)
     for (const [id, amount] of Object.entries(gains)) {
       if (amount <= 0) continue;
-      this.inventory.set(id, (this.inventory.get(id) ?? 0) + amount);
+      this._ownInventory.set(id, (this._ownInventory.get(id) ?? 0) + amount);
     }
   }
 
   // Wydatek (kontrakt jak ResourceSystem.spend — zwraca bool; _refuelTank/_bestEffortLoad działają tylko gdy true).
   spend(costs) {
+    const t = this._target();
+    if (t) return t.spend(costs);           // matka → wspólny magazyn kolonii
     for (const [id, amount] of Object.entries(costs)) {
-      if ((this.inventory.get(id) ?? 0) < amount) return false;   // weryfikacja przed pobraniem
+      if ((this._ownInventory.get(id) ?? 0) < amount) return false;   // weryfikacja przed pobraniem
     }
     for (const [id, amount] of Object.entries(costs)) {
-      this.inventory.set(id, (this.inventory.get(id) ?? 0) - amount);
+      this._ownInventory.set(id, (this._ownInventory.get(id) ?? 0) - amount);
     }
     return true;
   }
 
-  // Serializacja do save (StationSystem.serialize → civ4x.stationSystem[].depot). Tylko niezerowe wpisy.
+  // Serializacja do save (StationSystem.serialize → civ4x.stationSystem[].depot). Kształt PŁASKI bez
+  // zmian (D2 transparentny): matka → {} (delegat nie przechowuje własnego stanu → nic do zapisania),
+  // sierota → własna Mapa (niezerowe wpisy). Drain zawartości starych depotów do kolonii = restore (D3).
   serialize() {
-    return Object.fromEntries([...this.inventory].filter(([, v]) => v !== 0));
+    if (this._target()) return {};
+    return Object.fromEntries([...this._ownInventory].filter(([, v]) => v !== 0));
   }
 }

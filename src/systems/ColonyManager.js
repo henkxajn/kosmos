@@ -1736,6 +1736,7 @@ export class ColonyManager {
         const st = ss.createStation(order.targetBodyId, {
           ownerEmpireId: order.ownerEmpireId,
           stationType:   order.stationType,
+          ownerColonyId: colony.planetId,   // S3.4c (D1) — matka = kolonia-płatnik (wspólny magazyn)
         });
         if (st) {
           EventBus.emit('station:built', {

@@ -11,6 +11,7 @@ import { worldToGameplay } from '../utils/CoordTransform.js';
 import { tacticalToWorld } from '../utils/TacticalRaycaster.js';
 import { showPOIModalCreate, showPOIModalEdit, showPOIModalCreateFromPicker } from '../ui/POIModal.js';
 import { pickerResultToPOISpec } from '../utils/POIPanelLogic.js';
+import { resolveHomeColony } from '../utils/TransferStore.js';
 import EntityManager         from '../core/EntityManager.js';
 import gameState             from '../core/GameState.js';
 import debugLog              from '../core/DebugLog.js';
@@ -832,7 +833,13 @@ export class GameScene {
         const targetId = bodyId ?? window.KOSMOS?.homePlanet?.id;
         if (!targetId) { console.warn('[debug] Brak bodyId i homePlanet'); return null; }
         const st = ss.createStation(targetId, opts);
-        console.log(`[debug] spawnStation → ${st?.id} @ ${targetId}`);
+        // S3.4c (D1) — debug też stampuje ownerColonyId (gdy cel ma kolonię-matkę wg reguły
+        // resolveHomeColony), by ścieżka debug nie tworzyła nienormalnych stanów (stacja z matką bez stampu).
+        if (st && !st.ownerColonyId) {
+          const mother = resolveHomeColony(st);
+          if (mother) st.ownerColonyId = mother.planetId;
+        }
+        console.log(`[debug] spawnStation → ${st?.id} @ ${targetId} (matka: ${st?.ownerColonyId ?? 'brak'})`);
         return st;
       },
       // KOSMOS.debug.queueStationOrder(targetBodyId?, costOverride?) — pending order na

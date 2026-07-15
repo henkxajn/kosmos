@@ -24,6 +24,10 @@ export class Station extends CelestialBody {
 
     this.bodyId        = config.bodyId ?? null;        // ciało wokół którego orbituje
     this.ownerEmpireId = config.ownerEmpireId ?? 'player';
+    // S3.4c (D1) — kolonia-matka (płatnik z budowy). Stampowana przy createStation / spawnStation,
+    // serializowana (wzór Vessel.homeColonyId). Rozwiązanie matki dla magazynu/TC: resolveHomeColony
+    // (fallbacki per-body/parent/jedyna gdy brak/nieaktualny). null = sierota → własny depot.
+    this.ownerColonyId = config.ownerColonyId ?? null;
     this.tier          = config.tier ?? 1;             // tier 1 = baza (bez modułów)
     this.stationType   = config.stationType ?? 'orbital_station';
     this.createdYear   = config.createdYear ?? 0;
@@ -31,7 +35,10 @@ export class Station extends CelestialBody {
     // Depot paliwa (S3.3b-S3) — façade resourceSystem-podobny (fuel + warp_cores, pojemność unlimited).
     // Tankowanie statków (VesselManager._refuelTank) i ręczny rozładunek gracza (CargoLoadModal/
     // unloadCargo) operują na tym samym obiekcie przez kontrakt inventory(Map)+receive/spend/getAmount.
-    this.depot = new StationDepot(config.depot);
+    // S3.4c (D2) — depot-jako-proxy: przekazujemy back-ref `this`, by depot mógł LAZY rozwiązać
+    // kolonię-matkę i delegować receive/spend/getAmount/inventory do jej resourceSystem (stacja z
+    // matką = wspólny magazyn). Bez matki (sierota) depot używa własnej Mapy z config.depot.
+    this.depot = new StationDepot(config.depot, this);
 
     this.systemId      = config.systemId ?? 'sys_home';
     this.explored      = true;                          // własna stacja — zawsze „znana"
