@@ -28,6 +28,10 @@ export class Station extends CelestialBody {
     // serializowana (wzór Vessel.homeColonyId). Rozwiązanie matki dla magazynu/TC: resolveHomeColony
     // (fallbacki per-body/parent/jedyna gdy brak/nieaktualny). null = sierota → własny depot.
     this.ownerColonyId = config.ownerColonyId ?? null;
+    // S3.4c (D5) — osierocenie: gdy kolonia-matka zostaje zniszczona, stacja przełącza się na WŁASNY
+    // depot (zamrożenie z pustym magazynem). Flaga wymusza `resolveHomeColony → null` niezależnie od
+    // fallbacków (bez niej stacja re-mothered do kolonii-rodzeństwa w systemie). Serializowana.
+    this.depotDetached = config.depotDetached ?? false;
     this.tier          = config.tier ?? 1;             // tier 1 = baza (bez modułów)
     this.stationType   = config.stationType ?? 'orbital_station';
     this.createdYear   = config.createdYear ?? 0;

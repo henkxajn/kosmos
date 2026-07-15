@@ -15,11 +15,14 @@ import { STATIONS } from '../data/StationData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { calcShipCost } from '../data/ShipModulesData.js';
+import { resolveHomeColony } from '../utils/TransferStore.js';
 
 export class StationSystem {
   constructor() {
     // S4-2 — zmiana nazwy stacji (mirror VesselManager vessel:rename → _renameVessel).
     EventBus.on('station:rename', ({ stationId, name }) => this._renameStation(stationId, name));
+    // S3.4c (D5) — osierocenie stacji po zniszczeniu kolonii-matki: przełącz na własny depot (nie niszcz).
+    EventBus.on('colony:destroyed', ({ planetId }) => this._onColonyDestroyed(planetId));
     // S3.4 FAZA 2 — tick stacji: budowa modułów/statków (postęp wg civDeltaYears — spójnie z
     // ColonyManager._tickShipBuilds), bilans energii/pracy (gasi moduły), efekty (lab → research).
     EventBus.on('time:tick', ({ civDeltaYears: civDt }) => this._tick(civDt ?? 0));
@@ -104,6 +107,7 @@ export class StationSystem {
       bodyId:        s.bodyId,
       ownerEmpireId: s.ownerEmpireId,
       ownerColonyId: s.ownerColonyId,   // S3.4c (D1) — kolonia-matka (round-trip; brak w starym save → null w konstruktorze)
+      depotDetached: s.depotDetached,   // S3.4c (D5) — sierota po zniszczeniu matki (round-trip; brak → false)
       tier:          s.tier,
       stationType:   s.stationType,
       createdYear:   s.createdYear,
@@ -124,12 +128,48 @@ export class StationSystem {
       if (EntityManager.get(sd.id)) continue;        // idempotent — nie duplikuj
       const station = new Station({ ...sd });
       EntityManager.add(station);
+      // S3.4c (D3) — drain zawartości starego depotu do kolonii-matki (kolonie żyją — restore po
+      // colonyManager.restore) + normalizacja stampu ownerColonyId dla starych save. Idempotentny.
+      this._normalizeAndDrainDepot(station);
       // Orbita przywracana WCZEŚNIEJ przez orbitalSpace.restore. Defensywnie:
       // gdy jej brak (uszkodzony save) → przypisz na nowo (nowa θ akceptowalna).
       if (orbital && sd.bodyId && !orbital.hasOrbit(sd.id)) {
         orbital.assignOrbit(sd.bodyId, sd.id, 'station');
       }
       EventBus.emit('station:created', { station });
+    }
+  }
+
+  /**
+   * S3.4c (D3) — normalizacja + drain depotu stacji przy restore. Dla stacji gracza z rozwiązywalną
+   * kolonią-matką: (1) stampuje `ownerColonyId` gdy brak (stare save bez stampu — by runtime
+   * orphaning matchował po stampie), (2) przelewa surową zawartość depotu (Mapa z save) do magazynu
+   * kolonii tym samym resolverem co runtime. IDEMPOTENTNY (drugi przebieg = pusta Mapa → no-op).
+   * Sierota (brak matki / depotDetached) NIETKNIĘTA — jej depot to jedyny magazyn.
+   */
+  _normalizeAndDrainDepot(station) {
+    if (!station || station.ownerEmpireId !== 'player') return;   // AI — depot własny, bez normalizacji
+    if (station.depotDetached) return;                            // zapisana sierota — zostaw własny depot
+    const col = resolveHomeColony(station);
+    if (!col?.resourceSystem) return;                             // brak matki → sierota (własny depot)
+    if (!station.ownerColonyId) station.ownerColonyId = col.planetId;   // stamp normalizacyjny (stare save)
+    station.depot.drainOwnInventoryTo(col.resourceSystem);        // przelej zawartość → magazyn kolonii
+  }
+
+  /**
+   * S3.4c (D5) — reakcja na zniszczenie kolonii. Osierocenie stacji, których matką była zniszczona
+   * kolonia: ustaw `depotDetached` (wymusza własny depot mimo fallbacków). Match po STAMPIE
+   * `ownerColonyId` — kolonia jest już usunięta z rejestru (emit po _colonies.delete), więc
+   * resolveHomeColony jej nie potwierdzi. Stacja NIE jest niszczona — zamraża się z pustym magazynem.
+   */
+  _onColonyDestroyed(planetId) {
+    if (!planetId) return;
+    for (const st of EntityManager.getByType('station')) {
+      if (st.ownerEmpireId !== 'player' || st.depotDetached) continue;
+      if (st.ownerColonyId === planetId) {
+        st.depotDetached = true;
+        EventBus.emit('station:orphaned', { stationId: st.id, formerColonyId: planetId });
+      }
     }
   }
 

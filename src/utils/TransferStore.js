@@ -36,6 +36,8 @@ export function isStationId(id) {
 export function resolveHomeColony(station) {
   // Guard: stacje AI NIGDY nie sięgają magazynu gracza (Wariant A + mgła wojny).
   if (!station || station.ownerEmpireId !== 'player') return null;
+  // Sierota po zniszczeniu matki (D5) — wymuszony własny depot (bez re-motheringu przez fallbacki).
+  if (station.depotDetached) return null;
   const colMgr = window.KOSMOS?.colonyManager;
   if (!colMgr) return null;
 

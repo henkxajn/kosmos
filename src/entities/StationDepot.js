@@ -65,6 +65,18 @@ export class StationDepot {
     return true;
   }
 
+  // S3.4c (D3) — przelej zawartość WŁASNEJ Mapy do docelowego store (kolonii-matki) i wyzeruj.
+  // Używane przy restore dla stacji z matką: surowa Mapa z save → magazyn kolonii tym samym
+  // resolverem co runtime (zero rozjazdu). IDEMPOTENTNY — pusta własna Mapa → no-op (drugi drain
+  // nie dubluje). Po drainie delegat pusty; wszystkie operacje idą już do kolonii.
+  drainOwnInventoryTo(store) {
+    if (!store || this._ownInventory.size === 0) return;
+    const gains = {};
+    for (const [id, amt] of this._ownInventory) if (amt > 0) gains[id] = amt;
+    store.receive(gains);
+    this._ownInventory.clear();
+  }
+
   // Serializacja do save (StationSystem.serialize → civ4x.stationSystem[].depot). Kształt PŁASKI bez
   // zmian (D2 transparentny): matka → {} (delegat nie przechowuje własnego stanu → nic do zapisania),
   // sierota → własna Mapa (niezerowe wpisy). Drain zawartości starych depotów do kolonii = restore (D3).
