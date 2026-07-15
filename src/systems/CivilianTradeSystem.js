@@ -208,8 +208,8 @@ export class CivilianTradeSystem {
     const isOutpost = colony.isOutpost ?? false;
 
     if (isOutpost) {
-      // Outpost: TC wyłącznie z budynków handlowych (brak POPów = brak bazowego TC)
-      return this._getBuildingBonus(colony, 'tcBonus');
+      // Outpost: TC wyłącznie z budynków handlowych (brak POPów = brak bazowego TC) + stacje (D7)
+      return this._getBuildingBonus(colony, 'tcBonus') + this._getStationTradeBonus(colony);
     }
 
     const pop = colony.civSystem?.population ?? 0;
@@ -221,7 +221,26 @@ export class CivilianTradeSystem {
     // Bonus z budynków trade_hub
     tc += this._getBuildingBonus(colony, 'tcBonus');
 
+    // S3.4c (D7) — bonus z aktywnych trade_module stacji przypisanych do tej kolonii (ownerColonyId).
+    tc += this._getStationTradeBonus(colony);
+
     return tc;
+  }
+
+  // S3.4c (D7) — suma tradeCapacity stacji GRACZA przypisanych do kolonii (atrybucja po ownerColonyId
+  // — deterministyczna, zero double-count nawet przy 2+ koloniach w systemie). Getter station.tradeCapacity
+  // liczy tylko AKTYWNE moduły trade. Bez capa (D7). Osierocone stacje (depotDetached) pominięte —
+  // odcięte od zaopatrzenia, nie wnoszą pojemności handlowej. Side-effect: wspólny _tcPool → większy
+  // budżet migracji POP (świadomie zaakceptowany, D7).
+  _getStationTradeBonus(colony) {
+    const ss = window.KOSMOS?.stationSystem;
+    if (!ss?.getAllStations) return 0;
+    let total = 0;
+    for (const st of ss.getAllStations()) {
+      if (st.ownerEmpireId !== 'player' || st.depotDetached) continue;
+      if (st.ownerColonyId === colony.planetId) total += st.tradeCapacity;
+    }
+    return total;
   }
 
   // ── Routing towarów ─────────────────────────────────────────────────────

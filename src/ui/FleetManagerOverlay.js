@@ -25,6 +25,7 @@ import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { getPOILocation } from '../utils/POIPanelLogic.js';
+import { resolveHomeColony } from '../utils/TransferStore.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { planWarpRoute, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
@@ -8109,6 +8110,10 @@ export class FleetManagerOverlay {
       for (const st of EntityManager.getByTypeInSystem('station', activeSysId)) {
         if ((st.ownerEmpireId ?? 'player') !== 'player') continue;
         if (st.id === vessel.position.dockedAt) continue;   // nie celuj we własny dok (no-op)
+        // S3.4c (D8) — stacja z matką = wspólny magazyn kolonii → transport CARGO to self-cargo
+        // (jałowa pętla, R5). Wyklucz z 'transport'; 'transport_passenger' ZOSTAJE (POP → habitat,
+        // niezależny od depotu). Sierota (bez matki, własny depot) pozostaje legalnym celem cargo.
+        if (actionId === 'transport' && resolveHomeColony(st) !== null) continue;
         const body = EntityManager.get(st.bodyId);
         const distAU = this._calcDistAU(vessel, { x: body?.x ?? st.x, y: body?.y ?? st.y });
         targets.push({
