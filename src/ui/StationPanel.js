@@ -19,6 +19,7 @@ import { showRenameModal }        from './ModalInput.js';
 import { COMMODITIES }            from '../data/CommoditiesData.js';
 import { STATION_MODULES }        from '../data/StationModuleData.js';
 import { classifyStationDepot, gatherStationTraders } from './StationPanelLogic.js';
+import { resolveHomeColony } from '../utils/TransferStore.js';
 
 // Wymiary
 const PW        = 440;   // C3 (S3.4b) — 2× szersza karta (dwie kolumny: właściciel/depot | handel/moduły)
@@ -207,9 +208,16 @@ export class StationPanel extends BaseOverlay {
     left.push({ text: `${t('station.created')}: ${Math.round(station.createdYear ?? 0)}`, color: C.textDim });
     left.push({ sep: true });
     left.push({ text: t('station.depot'), color: C.accent });
-    if (depot.resources.length === 0 && depot.commodities.length === 0) {
+    // S3.4c (D9) — stacja z matką: linia zaopatrzenia zamiast duplikatu listy magazynu kolonii.
+    const mother = resolveHomeColony(station);
+    if (mother) {
+      left.push({ text: t('station.sharedStorage'), color: C.textSecondary, indent: 4 });
+      left.push({ text: `▸ ${mother.name ?? mother.planetId}`, color: C.accent, indent: 12 });
+    } else if (depot.resources.length === 0 && depot.commodities.length === 0) {
+      if (station.depotDetached) left.push({ text: t('station.cutOffFromSupply'), color: C.danger, indent: 4 });
       left.push({ text: t('station.depotEmpty'), color: C.textDim, indent: 8 });
     } else {
+      if (station.depotDetached) left.push({ text: t('station.cutOffFromSupply'), color: C.danger, indent: 4 });
       if (depot.resources.length) {
         left.push({ text: t('station.resources'), color: C.textDim, indent: 4 });
         for (const [id, amt] of depot.resources) {

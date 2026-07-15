@@ -713,6 +713,8 @@ export default {
   'station.created': 'Built (year)',
   'station.depot': 'Depot',
   'station.depotEmpty': '— empty —',
+  'station.sharedStorage': 'Shared storage:',        // S3.4c (D9) — station with mother shares colony storage
+  'station.cutOffFromSupply': '⚠ Cut off from supply',   // S3.4c (D9) — orphaned after mother destroyed
   'station.resources': 'Resources',
   'station.commodities': 'Commodities',
   'station.traders': 'Trade',

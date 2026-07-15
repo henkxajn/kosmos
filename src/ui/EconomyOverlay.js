@@ -14,6 +14,7 @@ import { PRIORITY_TEMPLATES } from '../systems/FactorySystem.js';
 import { BUILDINGS }     from '../data/BuildingsData.js';
 import EventBus          from '../core/EventBus.js';
 import EntityManager     from '../core/EntityManager.js';
+import { resolveHomeColony } from '../utils/TransferStore.js';
 import { t, getName, getLocale } from '../i18n/i18n.js';
 import { drawResourceIcon, hasIconFile, getIconPath } from './ResourceIcons.js';
 
@@ -95,6 +96,9 @@ export class EconomyOverlay extends BaseOverlay {
   _playerStationFacades() {
     return EntityManager.getByType('station')
       .filter(s => s.ownerEmpireId === 'player')
+      // S3.4c (D9) — stacja z matką dzieli magazyn kolonii → zakładka-fasada byłaby duplikatem
+      // przeglądu kolonii-matki. Pokazujemy TYLKO sieroty (własny depot); matka = resolveHomeColony≠null.
+      .filter(s => resolveHomeColony(s) === null)
       .map(s => ({
         planetId:       s.id,        // klucz zakładki/filtra/hit (audyt §5)
         name:           s.name,

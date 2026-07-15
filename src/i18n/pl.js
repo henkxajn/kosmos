@@ -714,6 +714,8 @@ export default {
   'station.created': 'Rok budowy',
   'station.depot': 'Magazyn',
   'station.depotEmpty': '— pusty —',
+  'station.sharedStorage': 'Wspólny magazyn:',       // S3.4c (D9) — stacja z matką dzieli magazyn kolonii
+  'station.cutOffFromSupply': '⚠ Odcięta od zaopatrzenia',   // S3.4c (D9) — sierota po zniszczeniu matki
   'station.resources': 'Surowce',
   'station.commodities': 'Towary',
   'station.traders': 'Handel',

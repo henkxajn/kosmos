@@ -16,6 +16,7 @@ import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { calcShipCost } from '../data/ShipModulesData.js';
 import { classifyStationDepot } from './StationPanelLogic.js';
+import { resolveHomeColony } from '../utils/TransferStore.js';
 
 // Nazwa modułu wg locale (dane są dwujęzyczne w StationModuleData — bez duplikacji w i18n).
 function moduleName(def) {
@@ -288,30 +289,47 @@ export function drawStationManagement(ctx, area, station, view) {
   }
 
   // ── PRAWA KOLUMNA: depot ────────────────────────────────────────────────────
-  const depot = classifyStationDepot([...(station.depot?.inventory ?? [])]);
+  // S3.4c (D9) — stacja z matką dzieli magazyn kolonii → NIE duplikujemy pełnej listy (byłaby
+  // kopią górnej belki kolonii). Pokazujemy etykietę „Wspólny magazyn: <kolonia>". Sierota pokazuje
+  // własny depot; jeśli osierocona (depotDetached) — etykieta „Odcięta od zaopatrzenia".
+  const motherColony = resolveHomeColony(station);
   let ry = gridTop;
   ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
   ctx.fillStyle = THEME.accent;
   ctx.fillText(t('station.depot'), rightX, ry + 12);
   ry += 20;
-  if (depot.resources.length === 0 && depot.commodities.length === 0) {
+  if (motherColony) {
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('station.depotEmpty'), rightX + 6, ry + 11);
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(t('station.sharedStorage'), rightX + 2, ry + 10); ry += 14;
+    ctx.fillStyle = THEME.accent;
+    ctx.fillText(`▸ ${motherColony.name ?? motherColony.planetId}`, rightX + 10, ry + 10); ry += 14;
   } else {
-    const drawList = (label, entries) => {
-      if (!entries.length) return;
+    if (station.depotDetached) {
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.danger;
+      ctx.fillText(t('station.cutOffFromSupply'), rightX + 2, ry + 10); ry += 16;
+    }
+    const depot = classifyStationDepot([...(station.depot?.inventory ?? [])]);
+    if (depot.resources.length === 0 && depot.commodities.length === 0) {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(label, rightX + 2, ry + 10); ry += 14;
-      for (const [id, amt] of entries) {
-        ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`${id}: ${Math.round(amt)}`, rightX + 10, ry + 10);
-        ry += 14;
-      }
-    };
-    drawList(t('station.resources'), depot.resources);
-    drawList(t('station.commodities'), depot.commodities);
+      ctx.fillText(t('station.depotEmpty'), rightX + 6, ry + 11);
+    } else {
+      const drawList = (label, entries) => {
+        if (!entries.length) return;
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textDim;
+        ctx.fillText(label, rightX + 2, ry + 10); ry += 14;
+        for (const [id, amt] of entries) {
+          ctx.fillStyle = THEME.textSecondary;
+          ctx.fillText(`${id}: ${Math.round(amt)}`, rightX + 10, ry + 10);
+          ry += 14;
+        }
+      };
+      drawList(t('station.resources'), depot.resources);
+      drawList(t('station.commodities'), depot.commodities);
+    }
   }
 
   // ── PICKERY (overlay nad ekranem; wzajemnie wykluczające się) ────────────────
