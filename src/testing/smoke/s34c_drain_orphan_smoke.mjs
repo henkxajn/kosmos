@@ -122,22 +122,41 @@ EventBus.emit('colony:destroyed', { planetId: 'planet_a' });
 T('6.1 osierocona mimo rodzeństwa w systemie (depotDetached)', st6.depotDetached === true);
 T('6.2 NIE re-mothered do planet_sib', resolveHomeColony(st6) === null && resolveHomeColony(st6) !== colSib);
 
-// ══ 7. depotDetached round-trip (save v90) + sierota drain-skip przy restore ════════════════════════
+// ══ 7. depotDetached round-trip (save v90) + Z8 ADOPCJA przy restore (matka wróciła na ciało) ════════
 colonies.clear();
 EntityManager.clear?.();
-// stacja osierocona z własną zawartością → serialize → restore → wciąż detached, zawartość zachowana
+// stacja osierocona z własną zawartością → serialize → restore GDY kolonia jest na bodyId → adopcja (Z8b).
 const st7 = new Station({ id: 'st_rt', name: 'RT', bodyId: 'planet_x', systemId: 'sys_home', depotDetached: true, depot: { Fe: 20 } });
 EntityManager.add(st7);
 const ser7 = sys.serialize().find(r => r.id === 'st_rt');
 T('7.1 serialize zawiera depotDetached', ser7 && ser7.depotDetached === true);
 T('7.2 serialize depot płaski (własna Mapa)', ser7 && JSON.stringify(ser7.depot) === JSON.stringify({ Fe: 20 }));
 EntityManager.remove('st_rt');
-setColony('planet_x', { init: {} });   // nawet gdy pojawi się kolonia na bodyId — detached blokuje mothering
+const colX = setColony('planet_x', { init: {} });   // Z8: kolonia na bodyId → restore ADOPTUJE (per-body link)
 sys.restore([ser7]);
 const st7r = EntityManager.get('st_rt');
-T('7.3 restore zachowuje depotDetached', st7r.depotDetached === true);
-T('7.4 detached: drain POMINIĘTY, własny depot zachowany', st7r.depot.getAmount('Fe') === 20);
-T('7.5 detached: kolonia na bodyId NIE dostała zawartości', colonies.get('planet_x').resourceSystem.getAmount('Fe') === 0);
+T('7.3 Z8: restore ADOPTUJE (depotDetached wyczyszczony)', st7r.depotDetached === false);
+T('7.4 Z8: lokalny depot ZDRENOWANY do kolonii (własna Mapa pusta)', st7r.depot._ownInventory.size === 0);
+T('7.5 Z8: kolonia na bodyId DOSTAŁA zawartość (Fe 20)', colX.resourceSystem.getAmount('Fe') === 20);
+T('7.6 Z8: proxy routuje do kolonii po adopcji', st7r.depot.getAmount('Fe') === 20);
+sys._normalizeAndDrainDepot(st7r);   // drugi drain
+T('7.7 Z8: drugi drain przy restore = no-op (idempotencja)', colX.resourceSystem.getAmount('Fe') === 20);
+
+// ══ 8. Regresja (e): sierota BEZ kolonii-matki → restore NIE adoptuje (zostaje detached) ═════════════
+colonies.clear();
+EntityManager.clear?.();
+// detached, ownerColonyId wskazuje na martwą kolonię, brak kolonii na bodyId/parent — brak SILNEGO linku.
+const st8 = new Station({ id: 'st_noadopt', name: 'NA', bodyId: 'asteroid_q', systemId: 'sys_far',
+  ownerColonyId: 'dead_colony', depotDetached: true, depot: { Ti: 33 } });
+EntityManager.add(st8);
+const ser8 = sys.serialize().find(r => r.id === 'st_noadopt');
+EntityManager.remove('st_noadopt');
+setColony('planet_elsewhere', { systemId: 'sys_far', init: {} });   // niepowiązana kolonia w tym samym systemie
+sys.restore([ser8]);
+const st8r = EntityManager.get('st_noadopt');
+T('8.1 brak silnego linku → zostaje detached', st8r.depotDetached === true);
+T('8.2 własny depot nietknięty (Ti 33)', st8r.depot.getAmount('Ti') === 33);
+T('8.3 niepowiązana kolonia w systemie NIE adoptuje (D5, bez single-in-system)', st8r.depot._ownInventory.get('Ti') === 33);
 
 console.log(`\nS3.4c Commit 2 (drain + orphan) smoke: ${pass}/${pass + fail} passed` + (fail ? ` — ${fail} FAILED` : ' ✓'));
 process.exit(fail ? 1 : 0);

@@ -15,7 +15,7 @@ import { STATIONS } from '../data/StationData.js';
 import { SHIPS } from '../data/ShipsData.js';
 import { HULLS } from '../data/HullsData.js';
 import { calcShipCost } from '../data/ShipModulesData.js';
-import { resolveHomeColony } from '../utils/TransferStore.js';
+import { resolveHomeColony, resolveReadoptionColony } from '../utils/TransferStore.js';
 
 export class StationSystem {
   constructor() {
@@ -23,6 +23,10 @@ export class StationSystem {
     EventBus.on('station:rename', ({ stationId, name }) => this._renameStation(stationId, name));
     // S3.4c (D5) — osierocenie stacji po zniszczeniu kolonii-matki: przełącz na własny depot (nie niszcz).
     EventBus.on('colony:destroyed', ({ planetId }) => this._onColonyDestroyed(planetId));
+    // S3.4c (Z8) — adopcja osieroconej stacji przez nowo założoną/przywróconą kolonię-matkę na żywo
+    // (symetryczne do _onColonyDestroyed). Gracz NIE musi robić F5. outpost:founded też (outpost = matka).
+    EventBus.on('colony:founded', ({ colony }) => this._onColonyFounded(colony));
+    EventBus.on('outpost:founded', ({ colony }) => this._onColonyFounded(colony));
     // S3.4 FAZA 2 — tick stacji: budowa modułów/statków (postęp wg civDeltaYears — spójnie z
     // ColonyManager._tickShipBuilds), bilans energii/pracy (gasi moduły), efekty (lab → research).
     EventBus.on('time:tick', ({ civDeltaYears: civDt }) => this._tick(civDt ?? 0));
@@ -149,11 +153,48 @@ export class StationSystem {
    */
   _normalizeAndDrainDepot(station) {
     if (!station || station.ownerEmpireId !== 'player') return;   // AI — depot własny, bez normalizacji
-    if (station.depotDetached) return;                            // zapisana sierota — zostaw własny depot
+    if (station.depotDetached) {
+      // Z8b — sierota z save: spróbuj ADOPCJI (matka mogła wrócić na ciało/planetę przed reloadem —
+      // repro: nowa kolonia na tym samym ciele, save, F5). Sukces → clear flag + re-stamp + drain;
+      // brak SILNEGO linku → zostaje sierotą (depot lokalny, bez zmian — regresja „orphan bez kolonii").
+      this._tryAdoptStation(station);
+      return;
+    }
     const col = resolveHomeColony(station);
     if (!col?.resourceSystem) return;                             // brak matki → sierota (własny depot)
     if (!station.ownerColonyId) station.ownerColonyId = col.planetId;   // stamp normalizacyjny (stare save)
     station.depot.drainOwnInventoryTo(col.resourceSystem);        // przelej zawartość → magazyn kolonii
+  }
+
+  /**
+   * S3.4c (Z8) — nowa/przywrócona kolonia GRACZA może adoptować osierocone stacje z SILNYM linkiem
+   * (stamp ownerColonyId / per-body / parent). Sweep po wszystkich detached stacjach gracza — tania
+   * (kilka encji). Kolonie AI pomijane (adopcja tylko do magazynu gracza).
+   */
+  _onColonyFounded(colony) {
+    if (!colony || colony.ownerEmpireId) return;   // tylko kolonie gracza adoptują (AI → własny depot)
+    for (const st of EntityManager.getByType('station')) {
+      if (st.ownerEmpireId === 'player' && st.depotDetached) this._tryAdoptStation(st);
+    }
+  }
+
+  /**
+   * S3.4c (Z8) — adopcja osieroconej stacji przez kolonię-matkę. Symetryczne do `_onColonyDestroyed`:
+   * czyści `depotDetached`, re-stampuje `ownerColonyId` na aktualną matkę i drenuje LOKALNY depot →
+   * magazyn kolonii (idempotentnie — po drainie własna Mapa pusta). Adopcja TYLKO przy SILNYM linku
+   * (`resolveReadoptionColony` — stamp/per-body/parent, BEZ „jedyna w systemie"; D5: orphan nie łapie
+   * się na niepowiązaną kolonię). Idempotentna: drugi przebieg (flaga już czysta) → early-return.
+   * @returns {boolean} true gdy adoptowano.
+   */
+  _tryAdoptStation(station) {
+    if (!station || station.ownerEmpireId !== 'player' || !station.depotDetached) return false;
+    const col = resolveReadoptionColony(station);
+    if (!col?.resourceSystem) return false;
+    station.depotDetached = false;                          // Z8a — symetryczne czyszczenie flagi
+    station.ownerColonyId = col.planetId;                   // re-stamp na żywą matkę
+    station.depot.drainOwnInventoryTo(col.resourceSystem);  // Z8c — lokalny depot → kolonia (idempotentny)
+    EventBus.emit('station:adopted', { stationId: station.id, colonyId: col.planetId });
+    return true;
   }
 
   /**

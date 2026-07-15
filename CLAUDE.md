@@ -549,10 +549,12 @@ Minimalizacja „w miejscu" USUNIĘTA — oba panele mają JEDEN model dokowania
 Displaced panel (przełączenie na inną żywą stację) auto-dokuje (nic nie ginie). Smoke `tmp_s34b_paneldock`
 19/19 + `tmp_s34b_bottomcontext` 14/14. Backlog polish: multi-instance panele, per-belka ✕, serializacja pozycji.
 
-**S3.4c — unifikacja magazynu STACJA↔KOLONIA — IMPLEMENTACJA UKOŃCZONA (Commity 1-5, save v90 bez bumpu, live-gate PENDING).**
+**S3.4c — unifikacja magazynu STACJA↔KOLONIA — ARC ZAMKNIĘTY (Commity 1-5 + Z4-Z8, save v90 bez bumpu, live-gate PASS).**
 Wariant B (depot-jako-proxy): stacja gracza z kolonią-matką w systemie używa magazynu kolonii; sierota → własny depot.
-- **`resolveHomeColony(station)`** (`src/utils/TransferStore.js`) — JEDNO źródło prawdy matki: guard AI → stamp
-  `ownerColonyId` → per-body → parent (księżyc `parentPlanetId`) → jedyna kolonia gracza w systemie → null (sierota).
+- **`resolveHomeColony(station)`** (`src/utils/TransferStore.js`) — JEDNO źródło prawdy matki: guard AI → detached →
+  silny link `_strictMotherLink` (stamp `ownerColonyId` → per-body → parent księżyc `parentPlanetId`) → jedyna kolonia
+  gracza w systemie → null (sierota). **Z8: `resolveReadoptionColony`** = tylko silny link, ignoruje `depotDetached`
+  (test „czy MOŻNA adoptować", BEZ single-in-system).
 - **`StationDepot`** (D2) — `receive/spend/getAmount` + getter `inventory` DELEGUJĄ do `colony.resourceSystem` matki
   (przez `_target()`→resolveHomeColony); sierota trzyma `_ownInventory`. `serialize()` kształt bez zmian (matka `{}`,
   sierota płaski). `drainOwnInventoryTo(store)` idempotentny drain.
@@ -563,6 +565,12 @@ Wariant B (depot-jako-proxy): stacja gracza z kolonią-matką w systemie używa 
 - **Osierocenie (D5)** — `StationSystem._onColonyDestroyed` (subskrybent `colony:destroyed`): stacje z
   `ownerColonyId`=zniszczona kolonia dostają `depotDetached` (wymusza własny depot, `resolveHomeColony→null` bez
   re-motheringu do rodzeństwa). Match po STAMPIE (kolonia usunięta z rejestru PRZED emitem `:591/593`). Stacja żyje.
+- **Re-adopcja (Z8)** — flaga `depotDetached` była jednokierunkowa (ustawiana, nigdy czyszczona) → sierota NIE
+  wracała do matki nawet po założeniu nowej kolonii na tym samym ciele. `StationSystem._tryAdoptStation` (silny link
+  `resolveReadoptionColony` → clear flag + re-stamp `ownerColonyId` + drain lokalny depot → kolonia, idempotentnie).
+  Dwa triggery: NA ŻYWO `colony:founded`/`outpost:founded` (`_onColonyFounded` sweep, bez F5) + PRZY RESTORE
+  (`_normalizeAndDrainDepot` próbuje adopcji dla detached). D5 nienaruszone (passive resolver dalej null dla detached;
+  brak single-in-system w adopcji → rodzeństwo nie adoptuje).
 - **Trade bonus (D7)** — `CivilianTradeSystem._getStationTradeBonus(colony)` w `_allocateTC`: Σ `st.tradeCapacity`
   po stacjach gracza z `ownerColonyId===colony.planetId` (atrybucja → zero double-count przy 2+ koloniach). Bez capa.
   Detached/AI pominięte. Side-effect na `_tcPool` migracji POP zaakceptowany.
@@ -571,10 +579,20 @@ Wariant B (depot-jako-proxy): stacja gracza z kolonią-matką w systemie używa 
 - **UI (D9)** — StationManagementView/StationPanel: „Wspólny magazyn: <kolonia>" (matka) / własny depot +
   „Odcięta od zaopatrzenia" (detached). EconomyOverlay `_playerStationFacades` filtr matki OUT (sierota zostaje).
   Pickery canAfford BEZ zmian (`station.depot.getAmount` deleguje przez proxy → poprawne). i18n PL+EN.
-- **Debug** — `stationFillDepot` zasila magazyn kolonii (matka) / własny depot (sierota) przez proxy.
-- Commity: C1 `2b4c6fc` · C2 `cbfaeb9` · C3 `97e882e` · C4 `9bf3d4c` · C5 (debug/gitignore/docs). Smoke S3.4c:
-  proxy 28 / drain_orphan 28 / trade_selfcargo 14 / ui_i18n 9 (`src/testing/smoke/s34c_*`) + pełna regresja 0 FAIL.
-Plan: `docs/plans/s34c-depot-unification-plan.md` · audyt: `docs/audits/s34c-depot-unification-audit.md`.
+- **Debug** — `stationFillDepot(stationId?)` zasila magazyn kolonii (matka) / własny depot (sierota) przez proxy;
+  Z6 log: cel + tryb magazynu + lista wszystkich stacji. `tradeCapacityBreakdown` licznik po koloniach HANDLOWYCH (T5 fix).
+- **Higiena śmierci kolonii (Z4/Z5)** — 5 systemów per-kolonia (`FactorySystem`/`ResourceSystem`/`CivilizationSystem`/
+  `BuildingSystem`/`ProsperitySystem`) dostało `dispose()` (off `time:tick`); `ColonyManager.removeColony` woła je →
+  koniec leaku tickerów po `destroyColony` (był warn per-frame `FactorySystem.isRecipeAvailable` → zalew konsoli +
+  spadek FPS). `FactorySystem._update` orphan-guard (`!_getOwnerColony()`→return) jako defense-in-depth.
+  **Backlog:** `transferColony:654` bliźniaczy leak (ścieżka game-over — orphan-guard wycisza, dispose gotowy do reużycia).
+- **`getTradeCapacity` LIVE (Z7)** — `CivilianTradeSystem.getTradeCapacity` liczy `_allocateTC` (pure) zamiast stale
+  echo `col.tradeCapacity` → single-colony widzi bonus stacji natychmiast (echo aktualizowany tylko w `_halfYearlyTick`).
+- Commity: C1 `2b4c6fc` · C2 `cbfaeb9` · C3 `97e882e` · C4 `9bf3d4c` · C5 `b5e2ab0` · Z2/Z3 `7b91f71` · Z4-Z8 (ten arc).
+  Smoke S3.4c: proxy 28 / drain_orphan 33 / trade_selfcargo 14 / ui_i18n 9 / z1(Z7) 12 / z3 9 / z4_dispose 14 /
+  z8_readoption 24 (`src/testing/smoke/s34c_*`) + pełna regresja 0 FAIL.
+Plan: `docs/plans/s34c-depot-unification-plan.md` · `docs/plans/s34c-Z4-Z7-continuation.md` (Z4-Z8) ·
+audyt: `docs/audits/s34c-depot-unification-audit.md`.
 
 ---
 
