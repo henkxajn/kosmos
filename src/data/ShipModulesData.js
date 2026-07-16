@@ -83,7 +83,7 @@ export const SHIP_MODULES = {
     stats: { speedMult: 9.0, fuelMult: 0.012, rangeMult: 2.0 },
     fuelType: 'fuel',          // tryb in-system pali fuel (skok pali warp_cores przez warpFuel)
     warpCapable: true,
-    warpSpeedLY: 2.0,          // prędkość skoku (LY/rok) — STAŁA między tierami
+    warpSpeedLY: 18.0,         // prędkość skoku (LY/rok) — +200% (6.0→18.0); zużycie paliwa bez zmian
     warpFuelPerLY: 0.125,      // warp_cores/LY (−75% vs 0.5 — tańsze skoki, dłuższy zasięg na bak)
     requires: 'ion_drives',    // S3.0b S3: warp mid-game (match warp_cores gate; było warp_drive T4)
     description: 'Dwutrybowy: sublight (fuel) w układzie + skok warp (warp_cores) między gwiazdami.',
@@ -104,7 +104,7 @@ export const SHIP_MODULES = {
     stats: { speedMult: 11.0, fuelMult: 0.014, rangeMult: 2.0 },
     fuelType: 'fuel',
     warpCapable: true,
-    warpSpeedLY: 2.0,          // STAŁA — progresja warpu odłożona (knob na później)
+    warpSpeedLY: 18.0,         // +200% (6.0→18.0); zużycie paliwa bez zmian
     warpFuelPerLY: 0.125,      // warp_cores/LY (−75% vs 0.5 — spójnie z engine_warp)
     requires: 'warp_drive_mk2', // load-bearing gate (UnitDesignOverlay czyta mod.requires)
     description: 'Ulepszony napęd warp — +50% mocy sublight. Skok bez zmian.',
