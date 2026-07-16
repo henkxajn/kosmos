@@ -813,7 +813,7 @@ export class Outliner {
               totalHave += Math.min(have, need);
               if (have < need) {
                 const cDef = COMMODITIES[resId] ?? ALL_RESOURCES[resId];
-                const shortName = cDef ? (getName(cDef, 'commodity') ?? cDef.namePL ?? resId) : resId;
+                const shortName = cDef ? getName(cDef, 'commodity') : resId;
                 missing.push(`${shortName}: ${Math.floor(have)}/${need}`);
               }
             }
@@ -845,7 +845,7 @@ export class Outliner {
           items.push({
             queueType: 'factory',
             icon: cDef?.icon ?? '🏭',
-            name: cDef?.namePL ?? a.commodityId,
+            name: cDef ? getName(cDef, 'commodity') : a.commodityId,
             progress: a.pctComplete != null ? a.pctComplete : null,
             total: 100,
             blocked: a.paused ?? false,
@@ -862,7 +862,7 @@ export class Outliner {
           items.push({
             queueType: 'factory',
             icon: cDef?.icon ?? '🏭',
-            name: cDef?.namePL ?? q.commodityId,
+            name: cDef ? getName(cDef, 'commodity') : q.commodityId,
             progress: null, total: null,
             blocked: false,
             qtyLabel: `⏳×${q.qty}`,

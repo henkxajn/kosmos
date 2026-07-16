@@ -12,15 +12,15 @@
 
 // ── 10 surowców wydobywalnych (MINED) ──────────────────────────────────────
 export const MINED_RESOURCES = {
-  C:  { id: 'C',  namePL: 'Węgiel',      icon: '\u25C6', symbol: 'C',  rarity: 1, weight: 0.5, element: 'C',  color: '#555555' },
-  Fe: { id: 'Fe', namePL: 'Żelazo',      icon: '🔩', symbol: 'Fe', rarity: 1, weight: 2.0, element: 'Fe', color: '#c8a870' },
-  Si: { id: 'Si', namePL: 'Krzem',        icon: '💎', symbol: 'Si', rarity: 2, weight: 1.5, element: 'Si', color: '#8899aa' },
-  Cu: { id: 'Cu', namePL: 'Miedź',        icon: '🟤', symbol: 'Cu', rarity: 2, weight: 1.8, element: 'Cu', color: '#cc7744' },
-  Ti: { id: 'Ti', namePL: 'Tytan',        icon: '⬜', symbol: 'Ti', rarity: 3, weight: 2.2, element: 'Ti', color: '#aabbcc' },
-  Li: { id: 'Li', namePL: 'Lit',          icon: '🔋', symbol: 'Li', rarity: 3, weight: 0.8, element: 'Li', color: '#88aadd' },
+  C:  { id: 'C',  namePL: 'Węgiel',         nameEN: 'Carbon', icon: '\u25C6', symbol: 'C',  rarity: 1, weight: 0.5, element: 'C',  color: '#555555' },
+  Fe: { id: 'Fe', namePL: 'Żelazo',         nameEN: 'Iron', icon: '🔩', symbol: 'Fe', rarity: 1, weight: 2.0, element: 'Fe', color: '#c8a870' },
+  Si: { id: 'Si', namePL: 'Krzem',          nameEN: 'Silicon', icon: '💎', symbol: 'Si', rarity: 2, weight: 1.5, element: 'Si', color: '#8899aa' },
+  Cu: { id: 'Cu', namePL: 'Miedź',          nameEN: 'Copper', icon: '🟤', symbol: 'Cu', rarity: 2, weight: 1.8, element: 'Cu', color: '#cc7744' },
+  Ti: { id: 'Ti', namePL: 'Tytan',          nameEN: 'Titanium', icon: '⬜', symbol: 'Ti', rarity: 3, weight: 2.2, element: 'Ti', color: '#aabbcc' },
+  Li: { id: 'Li', namePL: 'Lit',            nameEN: 'Lithium', icon: '🔋', symbol: 'Li', rarity: 3, weight: 0.8, element: 'Li', color: '#88aadd' },
   Hv: { id: 'Hv', namePL: 'Metale Ciężkie', nameEN: 'Heavy Metals', icon: '⚙', symbol: 'Hv', rarity: 4, weight: 2.8, element: 'Hv', color: '#8899bb' },
-  Xe: { id: 'Xe', namePL: 'Ksenon',       icon: '💜', symbol: 'Xe', rarity: 5, weight: 0.1, element: 'Xe', color: '#9966cc' },
-  Nt: { id: 'Nt', namePL: 'Neutronium',   icon: '⚛',  symbol: 'Nt', rarity: 5, weight: 5.0, element: 'Nt', color: '#ff44aa', maxRichness: 0.3, missionReward: true },
+  Xe: { id: 'Xe', namePL: 'Ksenon',         nameEN: 'Xenon', icon: '💜', symbol: 'Xe', rarity: 5, weight: 0.1, element: 'Xe', color: '#9966cc' },
+  Nt: { id: 'Nt', namePL: 'Neutronium',     nameEN: 'Neutronium', icon: '⚛',  symbol: 'Nt', rarity: 5, weight: 5.0, element: 'Nt', color: '#ff44aa', maxRichness: 0.3, missionReward: true },
   H:  { id: 'H',  namePL: 'Wodór',        nameEN: 'Hydrogen', icon: '💨', symbol: 'H',  rarity: 5, weight: 0.1, element: 'H',  color: '#cce0ff' },
 };
 
@@ -30,14 +30,14 @@ export const COMMON_MINED = ['C', 'Fe', 'Si', 'Cu', 'Ti', 'Li'];
 
 // ── 2 surowce zbieralne (HARVESTED) ────────────────────────────────────────
 export const HARVESTED_RESOURCES = {
-  food:  { id: 'food',  namePL: 'Żywność', icon: '🍖', weight: 0.8, color: '#88cc44' },
-  water: { id: 'water', namePL: 'Woda',    icon: '💧', weight: 1.0, color: '#4488ff' },
+  food:  { id: 'food',  namePL: 'Żywność', nameEN: 'Food', icon: '🍖', weight: 0.8, color: '#88cc44' },
+  water: { id: 'water', namePL: 'Woda',    nameEN: 'Water', icon: '💧', weight: 1.0, color: '#4488ff' },
 };
 
 // ── 2 zasoby utility (FLOW — nie w inventory) ─────────────────────────────
 export const UTILITY_RESOURCES = {
-  energy:   { id: 'energy',   namePL: 'Energia', icon: '⚡', color: '#ffd700' },
-  research: { id: 'research', namePL: 'Nauka',   icon: '🔬', color: '#aa44ff' },
+  energy:   { id: 'energy',   namePL: 'Energia', nameEN: 'Energy', icon: '⚡', color: '#ffd700' },
+  research: { id: 'research', namePL: 'Nauka',   nameEN: 'Research', icon: '🔬', color: '#aa44ff' },
 };
 
 // ── Połączone definicje wszystkich zasobów ─────────────────────────────────

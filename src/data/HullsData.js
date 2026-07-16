@@ -52,6 +52,7 @@ export const HULLS = {
       { type: 'utility' },
     ],
     description:       'Lekki kadłub — 3 sloty (1 napęd + 2 użytkowe). Szybki i tani. Nie wymaga wyrzutni.',
+    descEN:            'Light hull — 3 slots (1 propulsion + 2 utility). Fast and cheap. No launcher required.',
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -97,6 +98,7 @@ export const HULLS = {
       { type: 'utility' },
     ],
     description:       'Średni kadłub — 6 slotów (2 napędy + 4 użytkowe). Zbalansowany. Wymaga wyrzutni.',
+    descEN:            'Medium hull — 6 slots (2 propulsion + 4 utility). Balanced. Requires a launcher.',
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -145,6 +147,7 @@ export const HULLS = {
       { type: 'utility' },
     ],
     description:       'Duży kadłub — 9 slotów (3 napędy + 6 użytkowych). Ciężki i drogi. Wymaga wyrzutni.',
+    descEN:            'Large hull — 9 slots (3 propulsion + 6 utility). Heavy and expensive. Requires a launcher.',
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -188,6 +191,7 @@ export const HULLS = {
       { type: 'utility' },
     ],
     description:       'Lekki okręt bojowy — 4 sloty (1 napęd + 3 użytkowe). Wbudowany pancerz lekki.',
+    descEN:            'Light warship — 4 slots (1 propulsion + 3 utility). Built-in light armor.',
   },
 
   hull_destroyer: {
@@ -229,6 +233,7 @@ export const HULLS = {
       { type: 'utility' },
     ],
     description:       'Średni okręt bojowy — 6 slotów (2 napędy + 4 użytkowe). Ciężki pancerz, duże HP.',
+    descEN:            'Medium warship — 6 slots (2 propulsion + 4 utility). Heavy armor, high HP.',
   },
 
   hull_cruiser: {
@@ -272,6 +277,7 @@ export const HULLS = {
       { type: 'utility' },
     ],
     description:       'Ciężki okręt desantowy — 8 slotów (3 napędy + 5 użytkowych). Mieści troop bay L lub 2× troop bay M. Podstawa pełnoskalowej inwazji.',
+    descEN:            'Heavy assault ship — 8 slots (3 propulsion + 5 utility). Fits one troop bay L or 2× troop bay M. Backbone of full-scale invasion.',
   },
 };
 

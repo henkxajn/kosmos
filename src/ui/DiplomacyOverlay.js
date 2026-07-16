@@ -13,11 +13,12 @@ import { canDoEnvoy, hasWeapons } from '../entities/Vessel.js';
 const LEFT_W = 300;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
 
-const STATE_LABEL_PL = {
-  peace:    'POKÓJ',
-  truce:    'ROZEJM',
-  war:      'WOJNA',
-  alliance: 'SOJUSZ',
+// S3.4 — klucze i18n stanu relacji (peace/truce/war/alliance)
+const STATE_KEY = {
+  peace:    'diplo.state.peace',
+  truce:    'diplo.state.truce',
+  war:      'diplo.state.war',
+  alliance: 'diplo.state.alliance',
 };
 const STATE_COLOR = {
   peace:    '#60B090',
@@ -113,7 +114,7 @@ export class DiplomacyOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h) {
     const pad = 12;
 
-    this._drawOverlayHeader(ctx, x, y, w, '🤝 DYPLOMACJA');
+    this._drawOverlayHeader(ctx, x, y, w, t('diplo.header'));
 
     const dipl = window.KOSMOS?.diplomacySystem;
     const intelSys = window.KOSMOS?.intelSystem;
@@ -139,10 +140,10 @@ export class DiplomacyOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Nie znamy jeszcze żadnych', x + w / 2, listY + 40);
-      ctx.fillText('obcych cywilizacji.', x + w / 2, listY + 58);
-      ctx.fillText('Zbuduj obserwatorium (O)', x + w / 2, listY + 80);
-      ctx.fillText('lub wyślij statek rozpoznawczy.', x + w / 2, listY + 96);
+      ctx.fillText(t('diplo.empty1'), x + w / 2, listY + 40);
+      ctx.fillText(t('diplo.empty2'), x + w / 2, listY + 58);
+      ctx.fillText(t('diplo.empty3'), x + w / 2, listY + 80);
+      ctx.fillText(t('diplo.empty4'), x + w / 2, listY + 96);
       ctx.textAlign = 'left';
       ctx.restore();
       return;
@@ -183,7 +184,8 @@ export class DiplomacyOverlay extends BaseOverlay {
       ctx.fillText(name, x + pad + 14, ry + 16);
 
       // Stan (peace/war/etc)
-      const stateLabel = STATE_LABEL_PL[rel.state ?? 'peace'] ?? '?';
+      const skey = STATE_KEY[rel.state ?? 'peace'];
+      const stateLabel = skey ? t(skey) : '?';
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = STATE_COLOR[rel.state ?? 'peace'];
       ctx.textAlign = 'right';
@@ -211,7 +213,7 @@ export class DiplomacyOverlay extends BaseOverlay {
       // Etykieta "Hostility" + FSM (stan AI)
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('wrogość', x + pad, barY + 16);
+      ctx.fillText(t('diplo.hostility'), x + pad, barY + 16);
       const fsmState = emp?.fsm?.state ?? 'IDLE';
       if (isContact) {
         ctx.fillStyle = FSM_COLOR[fsmState] ?? THEME.textDim;
@@ -241,7 +243,7 @@ export class DiplomacyOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Wybierz imperium z listy', x + w / 2, y + h / 2);
+      ctx.fillText(t('diplo.selectEmpire'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
@@ -263,7 +265,7 @@ export class DiplomacyOverlay extends BaseOverlay {
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = STATE_COLOR[rel.state ?? 'peace'];
     ctx.textAlign = 'right';
-    ctx.fillText(`[${STATE_LABEL_PL[rel.state ?? 'peace']}]`, x + w - pad, y + 22);
+    ctx.fillText(`[${t(STATE_KEY[rel.state ?? 'peace'])}]`, x + w - pad, y + 22);
     ctx.textAlign = 'left';
 
     let iy = y + TAB_H + 20;
@@ -271,7 +273,7 @@ export class DiplomacyOverlay extends BaseOverlay {
     // Pasek hostility (duży)
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('Wrogość (Hostility)', x + pad, iy);
+    ctx.fillText(t('diplo.hostilityFull'), x + pad, iy);
     iy += 14;
 
     const barW = w - pad * 2;
@@ -299,7 +301,7 @@ export class DiplomacyOverlay extends BaseOverlay {
     // Legenda progów
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText('40 ostrzeżenie · 60 ultimatum · 80 wojna', x + pad, iy + 10);
+    ctx.fillText(t('diplo.thresholdLegend'), x + pad, iy + 10);
     iy += 20;
 
     // ── S3.4 — Pasek zaufania (Trust, display −10..+10) ──
@@ -345,7 +347,7 @@ export class DiplomacyOverlay extends BaseOverlay {
       const remaining = Math.max(0, 3 - elapsed);
       ctx.fillStyle = '#D8A030';
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillText(`⚠ ULTIMATUM — ${remaining.toFixed(1)} lat do wojny`, x + pad, iy + 10);
+      ctx.fillText(t('diplo.ultimatumWarn', remaining.toFixed(1)), x + pad, iy + 10);
       iy += 18;
     }
 
@@ -358,7 +360,7 @@ export class DiplomacyOverlay extends BaseOverlay {
     // Stan AI (FSM) — contact+
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('Postawa AI', x + pad, iy);
+    ctx.fillText(t('diplo.aiStance'), x + pad, iy);
     iy += 16;
     const fsmState = emp.fsm?.state ?? 'IDLE';
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
@@ -379,18 +381,18 @@ export class DiplomacyOverlay extends BaseOverlay {
     // Traktaty
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('Traktaty', x + pad, iy);
+    ctx.fillText(t('diplo.treaties'), x + pad, iy);
     iy += 16;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     const treaties = rel.treaties ?? [];
     if (treaties.length === 0) {
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('  (brak umów)', x + pad + 4, iy);
+      ctx.fillText(t('diplo.noTreaties'), x + pad + 4, iy);
       iy += 14;
     } else {
       for (const tr of treaties) {
         ctx.fillStyle = THEME.textSecondary;
-        ctx.fillText(`  • ${tr.id} (od ${(tr.signedYear ?? 0).toFixed(0)})`, x + pad + 4, iy);
+        ctx.fillText(t('diplo.treatyItem', tr.id, (tr.signedYear ?? 0).toFixed(0)), x + pad + 4, iy);
         iy += 14;
       }
     }
@@ -404,13 +406,13 @@ export class DiplomacyOverlay extends BaseOverlay {
     // Ostatnie incydenty
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('Ostatnie incydenty', x + pad, iy);
+    ctx.fillText(t('diplo.recentIncidents'), x + pad, iy);
     iy += 16;
     const inc = rel.lastIncidents ?? [];
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     if (inc.length === 0) {
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('  (brak)', x + pad + 4, iy);
+      ctx.fillText(t('diplo.none'), x + pad + 4, iy);
       iy += 14;
     } else {
       for (const ev of inc.slice(-4).reverse()) {
@@ -437,9 +439,9 @@ export class DiplomacyOverlay extends BaseOverlay {
     const canAlly  = isContact && notWar && trust >= 80 && !dipl.hasTreaty(this._selectedId, 'alliance');
 
     // Wiersz 1: wojna / pokój
-    this._drawActionButton(ctx, colL, iy, btnW2, btnH, '⚔ WYPOWIEDZ WOJNĘ', canWar, 'danger');
+    this._drawActionButton(ctx, colL, iy, btnW2, btnH, t('diplo.btn.declareWar'), canWar, 'danger');
     if (canWar) this._addHit(colL, iy, btnW2, btnH, 'declare_war', { empireId: this._selectedId });
-    this._drawActionButton(ctx, colR, iy, btnW2, btnH, '☮ ZAPROPONUJ POKÓJ', canPeace, 'primary');
+    this._drawActionButton(ctx, colR, iy, btnW2, btnH, t('diplo.btn.offerPeace'), canPeace, 'primary');
     if (canPeace) this._addHit(colR, iy, btnW2, btnH, 'offer_peace', { empireId: this._selectedId });
     iy += btnH + 6;
 

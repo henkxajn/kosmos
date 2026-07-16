@@ -6,37 +6,51 @@
 export const UNE_UNITS = {
   shock_infantry: {
     name:   'Mechanized Infantry',
+    namePL: 'Piechota zmechanizowana',
+    nameEN: 'Mechanized Infantry',
     sprite: 'assets/units/ground/UNE/une_marines.png',
     color:  '#2563EB',
     // statsModifier: {} // add when faction system activates
   },
   rocket_artillery: {
     name:   'Rocket Artillery',
+    namePL: 'Artyleria rakietowa',
+    nameEN: 'Rocket Artillery',
     sprite: 'assets/units/ground/UNE/une_artillery.png',
     color:  '#2563EB',
   },
   garrison_unit: {
     name:   'Garrison Bunker',
+    namePL: 'Bunkier garnizonowy',
+    nameEN: 'Garrison Bunker',
     sprite: 'assets/units/ground/UNE/une_garrison.png',
     color:  '#2563EB',
   },
   aa_platform: {
     name:   'AA Defense Platform',
+    namePL: 'Platforma obrony przeciwlotniczej',
+    nameEN: 'AA Defense Platform',
     sprite: 'assets/units/ground/UNE/une_aa.png',
     color:  '#2563EB',
   },
   medic_unit: {
     name:   'Medic Crawler',
+    namePL: 'Transporter medyczny',
+    nameEN: 'Medic Crawler',
     sprite: 'assets/units/ground/UNE/une_medic.png',
     color:  '#2563EB',
   },
   recon_drone: {
     name:   'Recon Drone',
+    namePL: 'Dron zwiadowczy',
+    nameEN: 'Recon Drone',
     sprite: 'assets/units/ground/UNE/une_drone.png',
     color:  '#2563EB',
   },
   combat_engineers: {
     name:   'Combat Engineers',
+    namePL: 'Saperzy bojowi',
+    nameEN: 'Combat Engineers',
     sprite: 'assets/units/ground/UNE/une_engineers.png',
     color:  '#2563EB',
   },

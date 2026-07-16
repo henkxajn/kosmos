@@ -15,7 +15,7 @@ import { COSMIC }         from '../config/LayoutConfig.js';
 import { HULLS }          from '../data/HullsData.js';
 import { SHIP_MODULES }   from '../data/ShipModulesData.js';
 import EventBus           from '../core/EventBus.js';
-import { t }              from '../i18n/i18n.js';
+import { t, getName }     from '../i18n/i18n.js';
 
 const PANEL_W       = 560;
 const HEADER_H      = 24;
@@ -117,8 +117,8 @@ export class CombatHUD extends BaseOverlay {
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.textAlign = 'center';
     const headerLabel = encounters.length === 1
-      ? '⚔ BITWA W DEEP-SPACE'
-      : `⚔ BITWY W DEEP-SPACE (${encounters.length})`;
+      ? `⚔ ${t('combat.hudHeaderSingle')}`
+      : `⚔ ${t('combat.hudHeaderMulti', encounters.length)}`;
     ctx.fillText(headerLabel, px + PANEL_W / 2, py + 16);
     ctx.textAlign = 'left';
 
@@ -184,7 +184,7 @@ export class CombatHUD extends BaseOverlay {
       ctx.fillStyle = THEME.textDim ?? '#888';
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.textAlign = 'center';
-      ctx.fillText(`+ ${overflow} kolejnych…`, px + PANEL_W / 2, cy + 12);
+      ctx.fillText(t('combat.hudMore', overflow), px + PANEL_W / 2, cy + 12);
       ctx.textAlign = 'left';
     }
   }
@@ -215,7 +215,7 @@ export class CombatHUD extends BaseOverlay {
 
     ctx.fillStyle = THEME.textDim ?? '#888';
     ctx.textAlign = 'center';
-    ctx.fillText(`runda ${round} · ${distStr}`, px + PANEL_W / 2, py + 14);
+    ctx.fillText(`${t('combat.hudRound', round)} · ${distStr}`, px + PANEL_W / 2, py + 14);
 
     ctx.fillStyle = THEME.danger ?? '#ff4466';
     ctx.textAlign = 'right';
@@ -236,9 +236,9 @@ export class CombatHUD extends BaseOverlay {
     // Linia 3: alive counters
     ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary ?? '#bbb';
-    ctx.fillText(`zywych: ${aliveA}/${totalA}`, px + PADDING, py + 50);
+    ctx.fillText(t('combat.hudAlive', aliveA, totalA), px + PADDING, py + 50);
     ctx.textAlign = 'right';
-    ctx.fillText(`zywych: ${aliveB}/${totalB}`, px + PANEL_W - PADDING, py + 50);
+    ctx.fillText(t('combat.hudAlive', aliveB, totalB), px + PANEL_W - PADDING, py + 50);
     ctx.textAlign = 'left';
 
     // Linia 4+: vessel details per side (hull + bronie)
@@ -271,7 +271,7 @@ export class CombatHUD extends BaseOverlay {
 
     ctx.fillStyle = THEME.textDim ?? '#888';
     ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-    ctx.fillText('-- log walki --', px + PADDING, logY + 10);
+    ctx.fillText(`-- ${t('combat.hudBattleLog')} --`, px + PADDING, logY + 10);
 
     // Zbierz ostatnie LOG_LINES_MAX events z timeline (newest first).
     const recentEvents = this._collectRecentEvents(enc, LOG_LINES_MAX);
@@ -350,13 +350,14 @@ export class CombatHUD extends BaseOverlay {
       const vessel = vm?._vessels?.get?.(vid);
       const name = vessel?.name ?? vessel?.shipId ?? vid;
       const hullId = vessel?.hullId ?? vessel?.shipId ?? '';
-      const hullName = (HULLS?.[hullId]?.namePL ?? hullId.replace(/^hull_/, ''));
+      const hull = HULLS?.[hullId];
+      const hullName = hull ? getName(hull, 'ship') : hullId.replace(/^hull_/, '');
       const weapons = (state?.weapons ?? []).map(w => {
         const mod = SHIP_MODULES?.[w.moduleId];
-        const wn = (mod?.namePL ?? w.moduleId.replace(/^weapon_/, ''));
+        const wn = mod ? getName(mod) : w.moduleId.replace(/^weapon_/, '');
         return wn;
       });
-      const wstr = weapons.length > 0 ? weapons.join(', ') : 'bez broni';
+      const wstr = weapons.length > 0 ? weapons.join(', ') : t('combat.hudNoWeapons');
       const alive = (state?.hp ?? 0) > 0;
       out.push({ text: `${name} · ${hullName}`, alive, indent: false });
       out.push({ text: `  ${wstr}`,              alive, indent: true  });
@@ -381,11 +382,11 @@ export class CombatHUD extends BaseOverlay {
         const attName = att?.name ?? ev.attacker;
         const tgtName = tgt?.name ?? ev.target;
         const mod = SHIP_MODULES?.[ev.weapon];
-        const wn = (mod?.namePL ?? ev.weapon.replace(/^weapon_/, ''));
+        const wn = mod ? getName(mod) : ev.weapon.replace(/^weapon_/, '');
         let dmgInfo;
-        if (!ev.hit) dmgInfo = 'pudlo';
-        else if ((ev.blockedByShield ?? 0) > 0 && (ev.damage ?? 0) === 0) dmgInfo = `tarcza ${ev.blockedByShield.toFixed(0)}`;
-        else if ((ev.blockedByShield ?? 0) > 0) dmgInfo = `${ev.damage.toFixed(0)} dmg (+${ev.blockedByShield.toFixed(0)} tarcza)`;
+        if (!ev.hit) dmgInfo = t('combat.hudMiss');
+        else if ((ev.blockedByShield ?? 0) > 0 && (ev.damage ?? 0) === 0) dmgInfo = `${t('combat.hudShield')} ${ev.blockedByShield.toFixed(0)}`;
+        else if ((ev.blockedByShield ?? 0) > 0) dmgInfo = `${ev.damage.toFixed(0)} dmg (+${ev.blockedByShield.toFixed(0)} ${t('combat.hudShield')})`;
         else dmgInfo = `${(ev.damage ?? 0).toFixed(0)} dmg`;
         events.push({
           text: `R${round.round}: ${this._truncate(attName, 12)} → ${wn} → ${this._truncate(tgtName, 12)} (${dmgInfo})`,

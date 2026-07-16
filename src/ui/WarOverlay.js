@@ -7,6 +7,7 @@ import { BaseOverlay, HEADER_H } from './BaseOverlay.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { CASUS_BELLI } from '../data/CasusBelliData.js';
+import { t, getName, getDesc } from '../i18n/i18n.js';
 
 const LEFT_W = 300;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
@@ -62,7 +63,7 @@ export class WarOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h) {
     const pad = 12;
 
-    this._drawOverlayHeader(ctx, x, y, w, '⚔ WOJNY');
+    this._drawOverlayHeader(ctx, x, y, w, t('warOverlay.title'));
 
     const ws = window.KOSMOS?.warSystem;
     const reg = window.KOSMOS?.empireRegistry;
@@ -85,8 +86,8 @@ export class WarOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Nie prowadzisz aktywnych wojen.', x + w / 2, listY + 40);
-      ctx.fillText('Wypowiedz wojnę z panelu Dyplomacji (Y).', x + w / 2, listY + 58);
+      ctx.fillText(t('warOverlay.noActiveWars'), x + w / 2, listY + 40);
+      ctx.fillText(t('warOverlay.declareHint'), x + w / 2, listY + 58);
       ctx.textAlign = 'left';
       ctx.restore();
       return;
@@ -115,7 +116,7 @@ export class WarOverlay extends BaseOverlay {
 
       // Status
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      const statusLabel = war.active ? '⚔ AKTYWNA' : '☮ ZAKOŃCZONA';
+      const statusLabel = war.active ? t('warOverlay.statusActive') : t('warOverlay.statusEnded');
       const statusColor = war.active ? '#D85A30' : THEME.textDim;
       ctx.fillStyle = statusColor;
       ctx.fillText(statusLabel, x + pad, ry + 14);
@@ -129,7 +130,7 @@ export class WarOverlay extends BaseOverlay {
       // Casus belli
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(cb.namePL, x + pad, ry + 44);
+      ctx.fillText(getName(cb), x + pad, ry + 44);
 
       // Exhaustion bars mini (player | empireId)
       const pExh = war.exhaustion?.player ?? 0;
@@ -169,7 +170,7 @@ export class WarOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Wybierz wojnę z listy', x + w / 2, y + h / 2);
+      ctx.fillText(t('warOverlay.selectWar'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
@@ -182,12 +183,12 @@ export class WarOverlay extends BaseOverlay {
     // Nagłówek
     ctx.font = `bold ${THEME.fontSizeMedium + 2}px ${THEME.fontFamily}`;
     ctx.fillStyle = arch?.color ?? THEME.textPrimary;
-    ctx.fillText(`⚔ WOJNA vs ${emp?.name ?? MASK}`, x + pad, y + 22);
+    ctx.fillText(t('warOverlay.warVsTitle', emp?.name ?? MASK), x + pad, y + 22);
 
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = war.active ? '#D85A30' : THEME.textDim;
     ctx.textAlign = 'right';
-    ctx.fillText(war.active ? '[AKTYWNA]' : '[ZAKOŃCZONA]', x + w - pad, y + 22);
+    ctx.fillText(war.active ? t('warOverlay.tagActive') : t('warOverlay.tagEnded'), x + w - pad, y + 22);
     ctx.textAlign = 'left';
 
     let iy = y + TAB_H + 20;
@@ -199,16 +200,16 @@ export class WarOverlay extends BaseOverlay {
     iy += 16;
     ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.accent;
-    ctx.fillText(cb.namePL, x + pad + 4, iy);
+    ctx.fillText(getName(cb), x + pad + 4, iy);
     iy += 14;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(cb.descPL.slice(0, 80), x + pad + 4, iy);
+    ctx.fillText(getDesc(cb).slice(0, 80), x + pad + 4, iy);
     iy += 18;
 
     // Data startu
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(`Wypowiedziana: rok ${(war.startYear ?? 0).toFixed(1)}`, x + pad + 4, iy);
+    ctx.fillText(t('warOverlay.declaredYear', (war.startYear ?? 0).toFixed(1)), x + pad + 4, iy);
     iy += 18;
 
     // Separator
@@ -219,7 +220,7 @@ export class WarOverlay extends BaseOverlay {
     // Exhaustion — 2 paski
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('Wyczerpanie wojenne', x + pad, iy);
+    ctx.fillText(t('warOverlay.exhaustionHeader'), x + pad, iy);
     iy += 18;
 
     const barH = 18;
@@ -230,7 +231,7 @@ export class WarOverlay extends BaseOverlay {
     // Gracz
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText('Gracz', x + pad, iy);
+    ctx.fillText(t('warOverlay.player'), x + pad, iy);
     ctx.fillStyle = THEME.textDim;
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.round(pExh)}/100`, x + w - pad, iy);
@@ -264,27 +265,27 @@ export class WarOverlay extends BaseOverlay {
     // Ostatnie bitwy
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText(`Bitwy (${war.battles?.length ?? 0})`, x + pad, iy);
+    ctx.fillText(t('warOverlay.battlesHeader', war.battles?.length ?? 0), x + pad, iy);
     iy += 16;
 
     const battles = (war.battles ?? []).slice(-5).reverse();
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     if (battles.length === 0) {
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('  (brak starć — flota obca jeszcze nie dotarła)', x + pad + 4, iy);
+      ctx.fillText('  ' + t('warOverlay.noBattlesYet'), x + pad + 4, iy);
       iy += 16;
     } else {
       for (const battleId of battles) {
         const b = window.KOSMOS?.gameState?.get(`battles.${battleId}`);
         if (!b) continue;
-        const winner = b.winner === 'A' ? 'Obcy' : b.winner === 'B' ? 'Gracz' : 'Remis';
+        const winner = b.winner === 'A' ? t('warOverlay.sideAlien') : b.winner === 'B' ? t('warOverlay.player') : t('warOverlay.sideDraw');
         const color = b.winner === 'B' ? '#60B090' : b.winner === 'A' ? '#D85A30' : THEME.textDim;
         ctx.fillStyle = color;
-        ctx.fillText(`  [${(b.year ?? 0).toFixed(0)}] Zwycięzca: ${winner}`, x + pad + 4, iy);
+        ctx.fillText(`  [${(b.year ?? 0).toFixed(0)}] ${t('warOverlay.winnerLine', winner)}`, x + pad + 4, iy);
         iy += 13;
         ctx.fillStyle = THEME.textDim;
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillText(`      Straty: obcy ${b.lossesA}, gracz ${b.lossesB} (tur: ${b.turns})`, x + pad + 4, iy);
+        ctx.fillText(`      ${t('warOverlay.battleLosses', b.lossesA, b.lossesB, b.turns)}`, x + pad + 4, iy);
         iy += 14;
         ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       }
@@ -296,17 +297,17 @@ export class WarOverlay extends BaseOverlay {
     const btnH = 28;
     if (war.active) {
       // Propose peace
-      this._drawActionButton(ctx, x + pad, iy, btnW, btnH, '☮ ZAPROPONUJ POKÓJ', true, 'primary');
+      this._drawActionButton(ctx, x + pad, iy, btnW, btnH, t('warOverlay.btnProposePeace'), true, 'primary');
       this._addHit(x + pad, iy, btnW, btnH, 'offer_peace', { empireId });
 
       // Debug: wymuszone starcie (dev tool)
-      this._drawActionButton(ctx, x + pad + btnW + pad, iy, btnW, btnH, '⚡ WYMUŚ STARCIE (debug)', true, 'danger');
+      this._drawActionButton(ctx, x + pad + btnW + pad, iy, btnW, btnH, t('warOverlay.btnForceBattle'), true, 'danger');
       this._addHit(x + pad + btnW + pad, iy, btnW, btnH, 'force_battle', { warId: war.id, empireId });
 
       // Debug: wymuszone lądowanie (skip space battle)
       iy += btnH + 8;
       const fullBtnW = w - pad * 2;
-      this._drawActionButton(ctx, x + pad, iy, fullBtnW, btnH, '🪖 WYMUŚ DESANT (debug — pomija bitwę kosmiczną)', true, 'danger');
+      this._drawActionButton(ctx, x + pad, iy, fullBtnW, btnH, t('warOverlay.btnForceInvasion'), true, 'danger');
       this._addHit(x + pad, iy, fullBtnW, btnH, 'force_invasion', { warId: war.id, empireId });
     }
   }

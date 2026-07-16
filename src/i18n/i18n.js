@@ -74,9 +74,13 @@ export function registerStrings(lang, dict) {
  */
 export function getName(item, prefix) {
   const key = `${prefix}.${item.id}.name`;
+  const en = _locale === 'en';
+  // Pole encji wg locale (fallback gdy brak klucza słownikowego)
+  const fromField = en ? (item.nameEN ?? item.namePL) : (item.namePL ?? item.nameEN);
   return _dictionaries[_locale]?.[key]
+      ?? (en ? item.nameEN : null)   // EN: pole nameEN wygrywa z polskim fallbackiem klucza
       ?? _dictionaries['pl']?.[key]
-      ?? item.namePL
+      ?? fromField
       ?? item.id;
 }
 
@@ -88,9 +92,13 @@ export function getName(item, prefix) {
  */
 export function getDesc(item, prefix) {
   const key = `${prefix}.${item.id}.desc`;
+  const en = _locale === 'en';
+  const enField = item.descEN ?? item.descriptionEN;
+  const plField = item.descPL ?? item.description;
   return _dictionaries[_locale]?.[key]
+      ?? (en ? enField : null)   // EN: pole descEN wygrywa z polskim fallbackiem klucza
       ?? _dictionaries['pl']?.[key]
-      ?? item.description
+      ?? (en ? (enField ?? plField) : (plField ?? enField))
       ?? '';
 }
 

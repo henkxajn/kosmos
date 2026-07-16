@@ -20,6 +20,7 @@ export const ANOMALIES = {
     icon:        '⬡',
     category:    'geological',
     description: 'Skaner wykrył nienaturalnie gęstą żyłę minerału pod powierzchnią — analiza wykazała czysty neutronium, surowiec używany w zaawansowanych napędach kosmicznych.',
+    descEN:      'The scanner detected an unnaturally dense mineral vein beneath the surface — analysis revealed pure neutronium, a resource used in advanced spacecraft drives.',
     rarity:      0.03,
     conditions: {
       terrains:    ['crater', 'mountains', 'wasteland'],
@@ -42,6 +43,7 @@ export const ANOMALIES = {
     icon:        '⛏',
     category:    'geological',
     description: 'Pod powierzchnią skaner wykrył skondensowaną warstwę wolframu i platyny — naturalne złoże ciężkich metali, które zwiększy wydajność wydobycia na tym hexie.',
+    descEN:      'Beneath the surface the scanner found a condensed layer of tungsten and platinum — a natural heavy-metals deposit that will raise mining yield on this hex.',
     rarity:      0.06,
     conditions: {
       terrains:    ['mountains', 'crater', 'wasteland'],
@@ -64,6 +66,7 @@ export const ANOMALIES = {
     icon:        '🕳',
     category:    'geological',
     description: 'Radar wgłębny wykrył rozległą komorę podziemną — naturalna jaskinia o stabilnych ścianach. Budowa fundamentów jest tu łatwiejsza, ale grunt może się osunąć.',
+    descEN:      'Ground-penetrating radar revealed a vast underground chamber — a natural cavern with stable walls. Laying foundations here is easier, but the ground may collapse.',
     rarity:      0.08,
     conditions: {
       terrains: ['plains', 'desert', 'tundra', 'wasteland'],
@@ -84,6 +87,7 @@ export const ANOMALIES = {
     icon:        '💎',
     category:    'geological',
     description: 'Odkryto naturalnie uformowane kryształy krzemu o wyjątkowej czystości — idealne do produkcji półprzewodników. Hex generuje dodatkowy krzem co roku.',
+    descEN:      'Naturally formed silicon crystals of exceptional purity were found — ideal for semiconductor production. This hex yields extra silicon each year.',
     rarity:      0.08,
     conditions: {
       terrains: ['mountains', 'crater', 'desert'],
@@ -105,6 +109,7 @@ export const ANOMALIES = {
     icon:        '🌋',
     category:    'geological',
     description: 'Potężne źródło energii geotermalnej — ciśnienie gorących gazów pod powierzchnią jest 4× powyżej normy. Elektrownia geotermalna zbudowana tutaj będzie produkować znacznie więcej energii.',
+    descEN:      'A powerful geothermal energy source — hot-gas pressure below the surface runs 4× above norm. A geothermal plant built here will produce far more energy.',
     rarity:      0.05,
     conditions: {
       terrains:    ['volcano', 'mountains'],
@@ -126,6 +131,7 @@ export const ANOMALIES = {
     icon:        '🦴',
     category:    'geological',
     description: 'Rover odkopał skamieniałości mikroorganizmów sprzed miliardów lat — jedyny dowód na prymitywne życie na tej planecie. Analiza dostarcza cennych danych naukowych.',
+    descEN:      'The rover unearthed fossils of microorganisms billions of years old — the only evidence of primitive life on this planet. Analysis yields valuable scientific data.',
     rarity:      0.07,
     conditions: {
       terrains: ['plains', 'tundra', 'desert'],
@@ -148,6 +154,7 @@ export const ANOMALIES = {
     icon:        '🔵',
     category:    'biological',
     description: 'Pod powierzchnią lodu wykryto regularne impulsy światła — bioluminescencyjne organizmy głębinowe. Ich biochemia to przełom naukowy wart szczegółowej analizy.',
+    descEN:      'Regular pulses of light were detected beneath the ice — bioluminescent deep-water organisms. Their biochemistry is a scientific breakthrough worth detailed study.',
     rarity:      0.04,
     conditions: {
       terrains: ['ocean', 'ice_sheet'],
@@ -168,6 +175,7 @@ export const ANOMALIES = {
     icon:        '🍄',
     category:    'biological',
     description: 'Podziemna sieć grzybni rozciąga się na setki kilometrów — jeden organizm pokrywający całą platformę. Jego symbiotyczne właściwości zwiększają urodzajność gleby na planecie.',
+    descEN:      'An underground mycelial network stretches for hundreds of kilometers — a single organism blanketing the entire plateau. Its symbiotic traits enrich soil fertility across the planet.',
     rarity:      0.04,
     conditions: {
       terrains: ['forest', 'plains'],
@@ -188,6 +196,7 @@ export const ANOMALIES = {
     icon:        '☣',
     category:    'biological',
     description: 'Rover wykrył chmurę toksycznych zarodników unoszących się nad gruntem. Analiza chemiczna ujawniła wysokie stężenie litu w tkankach roślinnych — cenny surowiec do odzysku.',
+    descEN:      'The rover detected a cloud of toxic spores drifting above the ground. Chemical analysis revealed a high lithium concentration in the plant tissue — a valuable resource to recover.',
     rarity:      0.07,
     conditions: {
       terrains: ['forest', 'plains', 'tundra'],
@@ -209,6 +218,7 @@ export const ANOMALIES = {
     icon:        '🧬',
     category:    'biological',
     description: 'Odkryto kolonie mikroorganizmów, które naturalnie koncentrują miedź i tytan w swoich tkankach. Kopalnia postawiona na tym hexie będzie miała znacznie wyższą wydajność dzięki biologicznemu wzbogacaniu rudy.',
+    descEN:      'Colonies of microorganisms were found that naturally concentrate copper and titanium in their tissue. A mine placed on this hex will run at far higher yield thanks to biological ore enrichment.',
     rarity:      0.05,
     conditions: {
       terrains: ['forest', 'plains'],
@@ -229,6 +239,7 @@ export const ANOMALIES = {
     icon:        '🌳',
     category:    'biological',
     description: 'Rover odkrył drzewa liczące tysiące lat — ich DNA zawiera zapisy zmian klimatycznych planety. Analiza materiału genetycznego to kopalnia wiedzy naukowej.',
+    descEN:      'The rover discovered trees thousands of years old — their DNA encodes a record of planetary climate shifts. Analyzing the genetic material is a trove of scientific knowledge.',
     rarity:      0.06,
     conditions: {
       terrains: ['forest'],
@@ -251,6 +262,7 @@ export const ANOMALIES = {
     icon:        '🏛',
     category:    'alien',
     description: 'Rover odkrył ruiny sztucznych konstrukcji — wyraźnie nie naturalnego pochodzenia. Architektura jest obca, materiały nieznane. Szczegółowa analiza przynosi ogromny skok wiedzy naukowej.',
+    descEN:      'The rover discovered ruins of artificial structures — clearly not of natural origin. The architecture is alien, the materials unknown. Detailed analysis brings a massive leap in scientific knowledge.',
     rarity:      0.02,
     conditions: {
       terrains: ['plains', 'desert', 'tundra', 'wasteland', 'crater'],
@@ -270,6 +282,7 @@ export const ANOMALIES = {
     icon:        '📡',
     category:    'alien',
     description: 'Rover zarejestrował powtarzający się sygnał radiowy emitowany co 27.3 sekundy z wnętrza skały. Źródło jest sztuczne — dekodowanie sygnału dostarcza zaawansowanej wiedzy technicznej.',
+    descEN:      'The rover recorded a repeating radio signal emitted every 27.3 seconds from within the rock. The source is artificial — decoding the signal provides advanced technical knowledge.',
     rarity:      0.02,
     conditions: {
       terrains: ['plains', 'mountains', 'crater', 'wasteland'],
@@ -289,6 +302,7 @@ export const ANOMALIES = {
     icon:        '🧲',
     category:    'alien',
     description: 'Silne zaburzenie pola magnetycznego w tym regionie — kompasy wirują, elektronika działa wolniej. Badanie źródła anomalii dostarcza nowych danych o fizyce planetarnej.',
+    descEN:      'A strong magnetic-field disturbance grips this region — compasses spin, electronics run slower. Studying the anomaly source yields new data on planetary physics.',
     rarity:      0.05,
     conditions: {
       terrains: ['plains', 'mountains', 'crater'],
@@ -308,6 +322,7 @@ export const ANOMALIES = {
     icon:        '💨',
     category:    'alien',
     description: 'Rover wykrył podziemną kieszeń gazu ksenonu o stężeniu 8× powyżej normy planetarnej. Ksenon jest cennym surowcem do napędów jonowych — hex będzie go pasywnie dostarczał.',
+    descEN:      'The rover detected an underground pocket of xenon gas at 8× the planetary norm. Xenon is a valuable resource for ion drives — this hex will supply it passively.',
     rarity:      0.05,
     conditions: {
       terrains: ['desert', 'wasteland', 'crater'],
@@ -328,6 +343,7 @@ export const ANOMALIES = {
     icon:        '⬛',
     category:    'alien',
     description: 'Rover odkrył idealnie gładki, czarny, kubiczny obiekt wystający z gruntu. Żaden znany proces geologiczny nie tworzy takich form. Interakcja z monolitem daje nieprzewidywalne rezultaty.',
+    descEN:      'The rover discovered a perfectly smooth, black, cubic object jutting from the ground. No known geological process forms shapes like this. Interacting with the monolith yields unpredictable results.',
     rarity:      0.015,
     conditions: {
       terrains: ['plains', 'desert', 'tundra', 'wasteland', 'mountains'],
@@ -354,6 +370,7 @@ export const ANOMALIES = {
     icon:        '🔭',
     category:    'cosmic',
     description: 'Ten punkt na powierzchni znajduje się w strefie neutralnej grawitacyjnie — idealny punkt równowagi między ciałami niebieskimi. Stocznia zbudowana tutaj zużywa mniej paliwa przy startach.',
+    descEN:      'This point on the surface sits in a gravitationally neutral zone — a perfect equilibrium between celestial bodies. A shipyard built here burns less fuel on launch.',
     rarity:      0.04,
     conditions: {
       terrains: ['plains', 'desert', 'wasteland'],
@@ -374,6 +391,7 @@ export const ANOMALIES = {
     icon:        '☄',
     category:    'cosmic',
     description: 'Rover zbadał stosunkowo świeży krater — materiał meteorytu nie zdążył wietrzeć. Zawiera cenne metale ciężkie i neutronium do natychmiastowego odzysku.',
+    descEN:      'The rover surveyed a relatively fresh crater — the meteorite material has not yet weathered. It holds valuable heavy metals and neutronium for immediate recovery.',
     rarity:      0.07,
     conditions: {
       terrains: ['crater'],
@@ -393,6 +411,7 @@ export const ANOMALIES = {
     icon:        '☢',
     category:    'cosmic',
     description: 'Rover zmierzył promieniowanie jonizujące 40× powyżej normy planetarnej. Strefa niebezpieczna dla załogi, ale badanie źródła promieniowania dostarcza danych naukowych.',
+    descEN:      'The rover measured ionizing radiation at 40× the planetary norm. The zone is hazardous to crew, but studying the radiation source provides scientific data.',
     rarity:      0.06,
     conditions: {
       terrains: ['wasteland', 'crater', 'desert', 'mountains'],
@@ -412,6 +431,7 @@ export const ANOMALIES = {
     icon:        '☀',
     category:    'cosmic',
     description: 'Rezonans orbitalny sprawia, że ten region jest stale nasłoneczniony — idealnie dla elektrowni słonecznych. Farma solarna postawiona tutaj produkuje 3× więcej energii.',
+    descEN:      'An orbital resonance keeps this region under constant sunlight — ideal for solar power plants. A solar farm placed here produces 3× more energy.',
     rarity:      0.05,
     conditions: {
       terrains:    ['desert', 'plains', 'wasteland'],

@@ -9,31 +9,43 @@
 export const HUMANITY_UNITS = {
   shock_infantry: {
     name:   'Colonial Marines',
+    namePL: 'Marines Kolonialni',
+    nameEN: 'Colonial Marines',
     sprite: 'assets/units/ground/humanity/human_marines.png',
     color:  '#94A3B8',
   },
   rocket_artillery: {
     name:   'Mobile Rocket Battery',
+    namePL: 'Mobilna Bateria Rakietowa',
+    nameEN: 'Mobile Rocket Battery',
     sprite: 'assets/units/ground/humanity/human_artillery.png',
     color:  '#94A3B8',
   },
   garrison_unit: {
     name:   'Fortified Position',
+    namePL: 'Umocniona Pozycja',
+    nameEN: 'Fortified Position',
     sprite: 'assets/units/ground/humanity/human_garrison.png',
     color:  '#94A3B8',
   },
   aa_platform: {
     name:   'Point Defense Vehicle',
+    namePL: 'Pojazd Obrony Punktowej',
+    nameEN: 'Point Defense Vehicle',
     sprite: 'assets/units/ground/humanity/human_aa.png',
     color:  '#94A3B8',
   },
   medic_unit: {
     name:   'Medical Support Crawler',
+    namePL: 'Gąsienicowy Transporter Medyczny',
+    nameEN: 'Medical Support Crawler',
     sprite: 'assets/units/ground/humanity/human_medic.png',
     color:  '#94A3B8',
   },
   recon_drone: {
     name:   'Scout Drone MK-I',
+    namePL: 'Dron Zwiadowczy MK-I',
+    nameEN: 'Scout Drone MK-I',
     sprite: 'assets/units/ground/humanity/human_drone.png',
     color:  '#94A3B8',
   },

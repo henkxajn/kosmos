@@ -28,6 +28,7 @@ export const GROUND_UNITS = {
     sprite:    'science_rover',
     role:      'civilian',   // niemilitarny — ucieka przed walką
     description: 'Robot badawczy. Słabo zbrojny, ale niezbędny do skanowania anomalii.',
+    descEN:    'Research robot. Lightly armed, but essential for scanning anomalies.',
   },
 
   infantry: {
@@ -43,6 +44,7 @@ export const GROUND_UNITS = {
     sprite:    'infantry',
     role:      'military',
     description: 'Podstawowa jednostka bojowa. Tania, szybka, uniwersalna.',
+    descEN:    'Basic combat unit. Cheap, fast, versatile.',
   },
 
   mech: {
@@ -58,6 +60,7 @@ export const GROUND_UNITS = {
     sprite:    'mech',
     role:      'military',
     description: 'Ciężka jednostka bojowa. Duże HP, silny atak, powolny.',
+    descEN:    'Heavy combat unit. High HP, strong attack, slow.',
   },
 
   garrison: {
@@ -73,6 +76,7 @@ export const GROUND_UNITS = {
     sprite:    'garrison',
     role:      'defensive',
     description: 'Stacjonarna jednostka obronna. Wysoka obrona, zero mobilności.',
+    descEN:    'Stationary defensive unit. High defense, zero mobility.',
   },
 };
 

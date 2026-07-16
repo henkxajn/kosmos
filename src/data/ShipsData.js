@@ -54,6 +54,8 @@ export const SHIPS = {
     capabilities:      ['recon', 'survey', 'deep_scan'],
     description:       'Lekki kadłub naukowy — 4 sloty modułowe. ' +
                        'Dobierz napęd i skaner stosownie do misji.',
+    descEN:            'Light science hull — 4 module slots. ' +
+                       'Fit the drive and scanner to match the mission.',
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -93,6 +95,8 @@ export const SHIPS = {
     capabilities:      ['cargo'],
     description:       'Ciężki kadłub transportowy — 6 slotów modułowych. ' +
                        'Ładowność zależy od modułów cargo.',
+    descEN:            'Heavy transport hull — 6 module slots. ' +
+                       'Cargo capacity depends on the cargo modules.',
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -143,6 +147,8 @@ export const SHIPS = {
     placeholder:       true,  // fleet-group supply broadcast w osobnym projekcie
     description:       'Mobilne zaopatrzenie flotowe. Przewozi zaopatrzenie dla statków bojowych. ' +
                        '[Placeholder: aktywna mechanika fleet-group w osobnym projekcie.]',
+    descEN:            'Mobile fleet resupply. Carries provisions for combat vessels. ' +
+                       '[Placeholder: active fleet-group mechanics in a separate project.]',
   },
 
 };

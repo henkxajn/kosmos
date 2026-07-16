@@ -8,15 +8,17 @@ import { BaseOverlay, HEADER_H }   from './BaseOverlay.js';
 import { THEME, bgAlpha } from '../config/ThemeConfig.js';
 import { ARCHETYPES }     from '../data/EmpireData.js';
 import EventBus           from '../core/EventBus.js';
+import { t, getName, getDesc } from '../i18n/i18n.js';
 
 const LEFT_W = 280;
 const TAB_H  = HEADER_H;   // pasmo nagłówka = standard (było 32)
 
-const LEVEL_LABEL_PL = {
-  unknown:  'NIEZNANE',
-  rumor:    'POGŁOSKI',
-  contact:  'KONTAKT',
-  detailed: 'SZCZEGÓŁY',
+// Klucze i18n dla poziomów wywiadu (locale-aware; wartości w słownikach)
+const LEVEL_LABEL_KEY = {
+  unknown:  'intel.levelUnknown',
+  rumor:    'intel.levelRumor',
+  contact:  'intel.levelContact',
+  detailed: 'intel.levelDetailed',
 };
 const LEVEL_COLOR = {
   unknown:  '#666',
@@ -82,7 +84,7 @@ export class IntelOverlay extends BaseOverlay {
   _drawLeft(ctx, x, y, w, h) {
     const pad = 12;
 
-    this._drawOverlayHeader(ctx, x, y, w, '◐ WYWIAD');
+    this._drawOverlayHeader(ctx, x, y, w, `◐ ${t('intel.title')}`);
 
     const intel    = window.KOSMOS?.gameState?.get('intel') ?? {};
     const registry = window.KOSMOS?.empireRegistry;
@@ -102,9 +104,9 @@ export class IntelOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Brak danych wywiadowczych', x + w / 2, listY + 40);
-      ctx.fillText('Wyślij statki lub zbuduj', x + w / 2, listY + 58);
-      ctx.fillText('Obserwatorium (klawisz O)', x + w / 2, listY + 74);
+      ctx.fillText(t('intel.noData'), x + w / 2, listY + 40);
+      ctx.fillText(t('intel.sendShipsOrBuild'), x + w / 2, listY + 58);
+      ctx.fillText(t('intel.observatoryHint'), x + w / 2, listY + 74);
       ctx.textAlign = 'left';
       ctx.restore();
       return;
@@ -154,14 +156,14 @@ export class IntelOverlay extends BaseOverlay {
       // Poziom intel (label)
       ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
       ctx.fillStyle = LEVEL_COLOR[level];
-      ctx.fillText(LEVEL_LABEL_PL[level], x + pad + 14, ry + 30);
+      ctx.fillText(t(LEVEL_LABEL_KEY[level]), x + pad + 14, ry + 30);
 
       // Archetyp (po prawej — tylko przy contact+)
       if (levelRank >= LEVEL_RANK.contact && arch) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textSecondary;
         ctx.textAlign = 'right';
-        ctx.fillText(arch.namePL, x + w - pad, ry + 30);
+        ctx.fillText(getName(arch), x + w - pad, ry + 30);
         ctx.textAlign = 'left';
       }
 
@@ -188,7 +190,7 @@ export class IntelOverlay extends BaseOverlay {
       ctx.font = `${THEME.fontSizeMedium}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
-      ctx.fillText('Wybierz imperium z listy', x + w / 2, y + h / 2);
+      ctx.fillText(t('intel.selectEmpire'), x + w / 2, y + h / 2);
       ctx.textAlign = 'left';
       return;
     }
@@ -207,7 +209,7 @@ export class IntelOverlay extends BaseOverlay {
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = LEVEL_COLOR[level];
     ctx.textAlign = 'right';
-    ctx.fillText(`[${LEVEL_LABEL_PL[level]}]`, x + w - pad, y + 22);
+    ctx.fillText(`[${t(LEVEL_LABEL_KEY[level])}]`, x + w - pad, y + 22);
     ctx.textAlign = 'left';
 
     let iy = y + TAB_H + 20;
@@ -217,15 +219,15 @@ export class IntelOverlay extends BaseOverlay {
     ctx.fillStyle = THEME.textSecondary;
     if (rank >= LEVEL_RANK.contact && arch) {
       ctx.fillStyle = arch.color;
-      ctx.fillText(`Archetyp: ${arch.namePL}`, x + pad, iy);
+      ctx.fillText(`${t('intel.archetype')}: ${getName(arch)}`, x + pad, iy);
       iy += 18;
       ctx.fillStyle = THEME.textDim;
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      this._wrapText(ctx, arch.descPL, x + pad, iy, w - pad * 2, 14);
+      this._wrapText(ctx, getDesc(arch), x + pad, iy, w - pad * 2, 14);
       iy += 18 + 14;
     } else {
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText(`Archetyp: ${MASK}`, x + pad, iy);
+      ctx.fillText(`${t('intel.archetype')}: ${MASK}`, x + pad, iy);
       iy += 18;
     }
 
@@ -238,14 +240,14 @@ export class IntelOverlay extends BaseOverlay {
     // Blok 2: znane kolonie (systemy)
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('Znane systemy', x + pad, iy);
+    ctx.fillText(t('intel.knownSystems'), x + pad, iy);
     iy += 16;
 
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     const known = intel.knownColonies ?? [];
     if (known.length === 0) {
       ctx.fillStyle = THEME.textDim;
-      ctx.fillText('(brak)', x + pad + 8, iy);
+      ctx.fillText(t('intel.none'), x + pad + 8, iy);
       iy += 16;
     } else {
       const galaxy = window.KOSMOS?.galaxyData;
@@ -254,7 +256,7 @@ export class IntelOverlay extends BaseOverlay {
         const name = gs?.name ?? sysId;
         const isHome = emp.homeSystemId === sysId;
         ctx.fillStyle = isHome ? THEME.accent : THEME.textSecondary;
-        ctx.fillText(`  • ${name}${isHome ? ' (stolica)' : ''}`, x + pad + 4, iy);
+        ctx.fillText(`  • ${name}${isHome ? ` (${t('intel.capital')})` : ''}`, x + pad + 4, iy);
         iy += 14;
       }
     }
@@ -268,13 +270,13 @@ export class IntelOverlay extends BaseOverlay {
     // Blok 3: siła wojskowa (detailed+)
     ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textHeader;
-    ctx.fillText('Siła wojskowa', x + pad, iy);
+    ctx.fillText(t('intel.militaryStrength'), x + pad, iy);
     iy += 16;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     if (rank >= LEVEL_RANK.detailed && intel.knownMilitary != null) {
       const bars = Math.min(10, Math.floor(intel.knownMilitary / 50));
       ctx.fillStyle = THEME.warning;
-      ctx.fillText(`  ≈ ${intel.knownMilitary} jednostek bojowych`, x + pad + 4, iy);
+      ctx.fillText(`  ≈ ${t('intel.combatUnits', intel.knownMilitary)}`, x + pad + 4, iy);
       iy += 14;
       ctx.fillStyle = THEME.textDim;
       ctx.fillText(`  ${'█'.repeat(bars)}${'░'.repeat(10 - bars)}`, x + pad + 4, iy);

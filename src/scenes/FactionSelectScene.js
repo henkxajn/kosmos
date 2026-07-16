@@ -7,7 +7,7 @@
 
 import { LEADERS, STARTING_LEADERS } from '../data/LeaderData.js';
 import { THEME } from '../config/ThemeConfig.js';
-import { getLocale } from '../i18n/i18n.js';
+import { getLocale, getName } from '../i18n/i18n.js';
 
 const PL = () => getLocale() === 'pl';
 
@@ -119,7 +119,7 @@ export class FactionSelectScene {
   }
 
   _renderLeaderCard(leader) {
-    const initials = leader.namePL.split(' ')
+    const initials = getName(leader).split(' ')
       .filter(w => w.length > 2 && w[0] === w[0].toUpperCase())
       .map(w => w[0]).join('').slice(0, 2);
 
@@ -135,13 +135,13 @@ export class FactionSelectScene {
         <div class="fs-portrait-wrap">
           <img class="fs-portrait-img" src="${leader.portrait}"
                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-               alt="${leader.namePL}">
+               alt="${getName(leader)}">
           <div class="fs-portrait-fallback" style="display:none">
             ${initials}
           </div>
         </div>
         <p class="fs-leader-archetype">${archetypeText ?? ''}</p>
-        <h3 class="fs-leader-name">${leader.namePL}</h3>
+        <h3 class="fs-leader-name">${getName(leader)}</h3>
         <p class="fs-leader-title">
           ${PL() ? leader.titlePL : (leader.titleEN || leader.titlePL)}
         </p>
@@ -175,7 +175,7 @@ export class FactionSelectScene {
       return;
     }
 
-    const initials = leader.namePL.split(' ')
+    const initials = getName(leader).split(' ')
       .filter(w => w.length > 2 && w[0] === w[0].toUpperCase())
       .map(w => w[0]).join('').slice(0, 2);
 
@@ -203,7 +203,7 @@ export class FactionSelectScene {
         <div class="fs-confirm-portrait">
           <img class="fs-confirm-img" src="${leader.portrait}"
                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
-               alt="${leader.namePL}">
+               alt="${getName(leader)}">
           <div class="fs-confirm-fallback" style="display:none">
             ${initials}
           </div>
@@ -211,7 +211,7 @@ export class FactionSelectScene {
 
         <div class="fs-confirm-info">
           <p class="fs-confirm-archetype">${archetypeText ?? ''}</p>
-          <h2 class="fs-confirm-name">${leader.namePL}</h2>
+          <h2 class="fs-confirm-name">${getName(leader)}</h2>
           <p class="fs-confirm-title-text">
             ${PL() ? leader.titlePL : (leader.titleEN || leader.titlePL)}
           </p>

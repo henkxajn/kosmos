@@ -26,6 +26,7 @@ export const SHIP_MODULES = {
     fuelType: 'fuel',
     requires: null,
     description: 'Bazowy napęd chemiczny. Niezawodny, tani, ograniczony zasięgiem układu.',
+    descEN: 'Baseline chemical drive. Reliable, cheap, limited to in-system range.',
   },
 
   engine_ion: {
@@ -42,6 +43,7 @@ export const SHIP_MODULES = {
     fuelType: 'fuel',
     requires: 'ion_drives',
     description: '2.5× zasięg, 1.8× prędkość. Ksenon w komorze jonizacji.',
+    descEN: '2.5× range, 1.8× speed. Xenon in the ionization chamber.',
   },
 
   engine_fusion: {
@@ -58,6 +60,7 @@ export const SHIP_MODULES = {
     fuelType: 'fuel',
     requires: 'fusion_drives',
     description: '4× zasięg, 3× prędkość. Ciągłe spalanie fuzyjne.',
+    descEN: '4× range, 3× speed. Sustained fusion burn.',
   },
 
   // ── Silniki warp (dwutrybowe: sublight pali fuel + skok pali warp_cores) ──
@@ -84,6 +87,7 @@ export const SHIP_MODULES = {
     warpFuelPerLY: 0.125,      // warp_cores/LY (−75% vs 0.5 — tańsze skoki, dłuższy zasięg na bak)
     requires: 'ion_drives',    // S3.0b S3: warp mid-game (match warp_cores gate; było warp_drive T4)
     description: 'Dwutrybowy: sublight (fuel) w układzie + skok warp (warp_cores) między gwiazdami.',
+    descEN: 'Dual-mode: sublight (fuel) in-system + warp jump (warp_cores) between stars.',
   },
 
   engine_warp_mk2: {
@@ -104,6 +108,7 @@ export const SHIP_MODULES = {
     warpFuelPerLY: 0.125,      // warp_cores/LY (−75% vs 0.5 — spójnie z engine_warp)
     requires: 'warp_drive_mk2', // load-bearing gate (UnitDesignOverlay czyta mod.requires)
     description: 'Ulepszony napęd warp — +50% mocy sublight. Skok bez zmian.',
+    descEN: 'Upgraded warp drive — +50% sublight power. Jump unchanged.',
   },
 
   // ── Moduły cargo ───────────────────────────────────────────────────────
@@ -121,6 +126,7 @@ export const SHIP_MODULES = {
     stats: { cargoAdd: 200 },
     requires: null,
     description: '+200t ładowni.',
+    descEN: '+200t cargo hold.',
   },
 
   cargo_large: {
@@ -136,6 +142,7 @@ export const SHIP_MODULES = {
     stats: { cargoAdd: 1000 },
     requires: null,
     description: '+1000t ładowni. Wzmocnione ściany.',
+    descEN: '+1000t cargo hold. Reinforced walls.',
   },
 
   cargo_mass: {
@@ -151,6 +158,7 @@ export const SHIP_MODULES = {
     stats: { cargoAdd: 5000 },
     requires: 'interplanetary_logistics',
     description: '+5000t ładowni masowej.',
+    descEN: '+5000t bulk cargo hold.',
   },
 
   // ── Moduły naukowe ─────────────────────────────────────────────────────
@@ -168,6 +176,7 @@ export const SHIP_MODULES = {
     stats: { discoveryBonus: 0.25, enablesMissions: ['survey', 'deep_scan'] },
     requires: null,
     description: '+25% szans odkrycia naukowego. Umożliwia misje naukowe.',
+    descEN: '+25% science discovery chance. Enables science missions.',
   },
 
   deep_scanner: {
@@ -183,6 +192,7 @@ export const SHIP_MODULES = {
     stats: { discoveryBonus: 0.5, enablesMissions: ['deep_scan', 'anomaly_hunt'] },
     requires: 'orbital_survey',
     description: '+50% odkrycia. Umożliwia polowanie na anomalie.',
+    descEN: '+50% discovery. Enables anomaly hunting.',
   },
 
   quantum_scanner: {
@@ -198,6 +208,7 @@ export const SHIP_MODULES = {
     stats: { discoveryBonus: 1.0, enablesMissions: ['deep_scan', 'anomaly_hunt', 'neutron_star'] },
     requires: 'quantum_computing',
     description: '+100% odkrycia. Umożliwia misje do gwiazd neutronowych.',
+    descEN: '+100% discovery. Enables missions to neutron stars.',
   },
 
   // ── Moduły specjalne ──────────────────────────────────────────────────
@@ -215,6 +226,7 @@ export const SHIP_MODULES = {
     stats: { enablesAwayTeam: true, awayTeamType: 'science_rover' },
     requires: 'exploration',
     description: 'Rover badawczy do eksploracji powierzchni. Wyślij z orbity na planetę.',
+    descEN: 'Research rover for surface exploration. Deploy from orbit to the planet.',
   },
 
   // ── S3.4 Moduł dyplomatyczny ───────────────────────────────────────────
@@ -233,6 +245,7 @@ export const SHIP_MODULES = {
     stats: { enablesMissions: ['envoy'] },
     requires: null,
     description: 'Pokładowa misja dyplomatyczna. Umożliwia wysłanie emisariusza do obcego imperium (misja envoy). Niekompatybilny z uzbrojeniem — emisariusz to gest pokojowy.',
+    descEN: 'Onboard diplomatic mission. Enables dispatching an envoy to an alien empire (envoy mission). Incompatible with weapons — an envoy is a gesture of peace.',
   },
 
   // ── Moduły habitacyjne ─────────────────────────────────────────────────
@@ -250,6 +263,7 @@ export const SHIP_MODULES = {
     stats: { colonistCapacity: 1.0, enablesMissions: ['colony'] },
     requires: 'colonization',
     description: 'Ciśnieniowy moduł dla 1 POP kolonistów.',
+    descEN: 'Pressurized module for 1 POP of colonists.',
   },
 
   cryo_pod: {
@@ -265,6 +279,7 @@ export const SHIP_MODULES = {
     stats: { colonistCapacity: 3.0, enablesMissions: ['colony'] },
     requires: 'cryogenics',
     description: '3 POP w hibernacji kriogenicznej.',
+    descEN: '3 POP in cryogenic hibernation.',
   },
 
   // Moduł pasażerski (S3.4 FAZA 4) — wozi 1 POP jako PASAŻERA (vessel.colonists), ale slotType
@@ -283,6 +298,7 @@ export const SHIP_MODULES = {
     stats: { colonistCapacity: 1 },   // 1 POP pasażera — reuse vessel.colonists (bez zakładania kolonii)
     requires: null,
     description: 'Kabina ciśnieniowa dla 1 pasażera (POP). Przewóz ludności — bez zakładania kolonii.',
+    descEN: 'Pressurized cabin for 1 passenger (POP). Population transport — without founding a colony.',
   },
 
   // ── Moduły pancerne ────────────────────────────────────────────────────
@@ -300,6 +316,7 @@ export const SHIP_MODULES = {
     stats: { armorRating: 1, survivalBonus: 0.02 },
     requires: null,
     description: '+2% przeżywalność misji.',
+    descEN: '+2% mission survivability.',
   },
 
   armor_heavy: {
@@ -315,6 +332,7 @@ export const SHIP_MODULES = {
     stats: { armorRating: 3, survivalBonus: 0.05, speedMult: 0.9 },
     requires: 'point_defense',
     description: '+5% przeżywalność, -10% prędkość.',
+    descEN: '+5% survivability, -10% speed.',
   },
 
   // ── Wzmocnienie kadłuba — +HP (zastępuje wbudowany pancerz hull_frigate/destroyer/cruiser) ──
@@ -332,6 +350,7 @@ export const SHIP_MODULES = {
     stats: { hpBonus: 60, armorRating: 1 },
     requires: 'point_defense',
     description: '+60 HP kadłuba, +1 armor. Wewnętrzne wzmocnienia konstrukcyjne.',
+    descEN: '+60 hull HP, +1 armor. Internal structural reinforcements.',
   },
 
   titanic_plating: {
@@ -347,6 +366,7 @@ export const SHIP_MODULES = {
     stats: { hpBonus: 180, armorRating: 4, speedMult: 0.92 },
     requires: 'exotic_materials',
     description: '+180 HP, +4 armor, -8% prędkość. Endgame — kapitalny okręt bojowy.',
+    descEN: '+180 HP, +4 armor, -8% speed. Endgame — capital warship.',
   },
 
   // ── Moduły paliwowe ────────────────────────────────────────────────────
@@ -364,6 +384,7 @@ export const SHIP_MODULES = {
     stats: { fuelCapacityAdd: 5 },
     requires: null,
     description: '+5 jednostek paliwa.',
+    descEN: '+5 fuel units.',
   },
 
   fuel_tank_medium: {
@@ -379,6 +400,7 @@ export const SHIP_MODULES = {
     stats: { fuelCapacityAdd: 10 },
     requires: null,
     description: '+10 jednostek paliwa.',
+    descEN: '+10 fuel units.',
   },
 
   fuel_tank_large: {
@@ -394,6 +416,7 @@ export const SHIP_MODULES = {
     stats: { fuelCapacityAdd: 15 },
     requires: null,
     description: '+15 jednostek paliwa.',
+    descEN: '+15 fuel units.',
   },
 
   fuel_tank_cryo: {
@@ -409,6 +432,7 @@ export const SHIP_MODULES = {
     stats: { fuelCapacityAdd: 25 },
     requires: 'cryogenics',
     description: '+25 jednostek paliwa. Kriogeniczna izolacja minimalizuje masę.',
+    descEN: '+25 fuel units. Cryogenic insulation minimizes mass.',
   },
 
   // ── Moduł warp (bak na warp_cores — paliwo skoków międzygwiezdnych) ──────
@@ -427,6 +451,7 @@ export const SHIP_MODULES = {
     stats: { warpCapacityAdd: 5 },   // ⚙ KNOB: pojemność baku warp_cores (stackowalna)
     requires: 'warp_drive',
     description: '+5 jednostek warp_cores. Paliwo skoków warp — bez tego modułu statek nie skacze.',
+    descEN: '+5 warp_cores units. Warp jump fuel — without this module the ship cannot jump.',
   },
 
   // ── Moduły uzbrojenia (Faza 4: aktywne w BattleSystem; M4 P3: rangeAU + fireCooldownYears + category dla DeepSpaceCombatSystem) ────────────────────
@@ -446,6 +471,7 @@ export const SHIP_MODULES = {
     stats: { attackPower: 5, survivalBonus: 0.01, damage: 5, range: 'short', tracking: 0.8, rangeAU: 0.05, fireCooldownYears: 0.3, category: 'short' },
     requires: 'point_defense',
     description: 'Broń energetyczna bliskiego zasięgu. Wysokie tracking, niskie obrażenia.',
+    descEN: 'Short-range energy weapon. High tracking, low damage.',
   },
 
   weapon_kinetic: {
@@ -461,6 +487,7 @@ export const SHIP_MODULES = {
     stats: { attackPower: 8, survivalBonus: 0.01, damage: 8, range: 'medium', tracking: 0.6, armorPierce: 1, rangeAU: 0.15, fireCooldownYears: 0.5, category: 'medium' },
     requires: 'point_defense',
     description: 'Pociski kinetyczne średniego zasięgu. Przebijają lekki pancerz.',
+    descEN: 'Medium-range kinetic rounds. Pierce light armor.',
   },
 
   weapon_missile: {
@@ -476,6 +503,7 @@ export const SHIP_MODULES = {
     stats: { attackPower: 12, survivalBonus: 0.02, speedMult: 0.95, damage: 12, range: 'long', tracking: 0.5, rangeAU: 0.30, fireCooldownYears: 1.0, category: 'long' },
     requires: 'point_defense',
     description: 'Rakiety dalekiego zasięgu. Wysokie obrażenia, słabsze trafianie.',
+    descEN: 'Long-range missiles. High damage, weaker accuracy.',
   },
 
   // ── Moduły tarcz (Faza 4: absorbują damage przed armor/hp) ────────────────
@@ -493,6 +521,7 @@ export const SHIP_MODULES = {
     stats: { shieldHP: 15, shieldRegen: 1 },
     requires: 'point_defense',
     description: 'Ładowane pole ochronne. +15 HP tarczy, +1/turę regeneracji.',
+    descEN: 'Charged protective field. +15 shield HP, +1/turn regeneration.',
   },
 
   shield_phase: {
@@ -508,6 +537,7 @@ export const SHIP_MODULES = {
     stats: { shieldHP: 35, shieldRegen: 3 },
     requires: 'quantum_computing',
     description: 'Zaawansowana tarcza fazowa. Dużo HP i szybka regeneracja.',
+    descEN: 'Advanced phase shield. High HP and fast regeneration.',
   },
 
   // ── Moduły transportu wojsk (Faza desantu) ────────────────────────────────
@@ -527,6 +557,7 @@ export const SHIP_MODULES = {
     stats: { troopCapacity: 3 },
     requires: 'ground_warfare',
     description: 'Mieści 3 pkt ładowności (3 piechoty / 1 ciężki sprzęt). Raid/commando.',
+    descEN: 'Holds 3 capacity points (3 infantry / 1 heavy unit). Raid/commando.',
   },
 
   troop_bay_m: {
@@ -542,6 +573,7 @@ export const SHIP_MODULES = {
     stats: { troopCapacity: 8 },
     requires: 'ground_warfare',
     description: 'Mieści 8 pkt ładowności (batalion mieszany). Standard inwazyjny.',
+    descEN: 'Holds 8 capacity points (mixed battalion). Invasion standard.',
   },
 
   troop_bay_l: {
@@ -557,6 +589,7 @@ export const SHIP_MODULES = {
     stats: { troopCapacity: 16 },
     requires: 'fleet_logistics',
     description: 'Mieści 16 pkt ładowności (pełna armia z logistyką). Kampania podbojowa.',
+    descEN: 'Holds 16 capacity points (full army with logistics). Conquest campaign.',
   },
 
   drop_pods: {
@@ -572,6 +605,7 @@ export const SHIP_MODULES = {
     stats: { enablesPlanetLanding: true },
     requires: 'ground_warfare',
     description: 'Umożliwia desant jednostek z troop bay na powierzchnię planety (wymaga dominacji orbitalnej). Bez tego jednostki są tylko transportowane — nie wysadzane na wrogi ląd.',
+    descEN: 'Enables landing units from a troop bay onto a planet surface (requires orbital dominance). Without it, units are only transported — not deployed onto hostile ground.',
   },
 
   // ── Moduł wsparcia orbitalnego (Faza desantu) ─────────────────────────────
@@ -590,6 +624,7 @@ export const SHIP_MODULES = {
     stats: { orbitalStrike: { damage: 20, cooldownYears: 0.5, ammoCapacity: 10, ammoType: 'orbital_shells' } },
     requires: 'tech_munitions',
     description: 'Ciężka bateria kinetyczna do ostrzału powierzchni. Zużywa Pociski Orbitalne (max 10 na pokładzie). Wymaga dominacji orbitalnej.',
+    descEN: 'Heavy kinetic battery for surface bombardment. Consumes Orbital Shells (max 10 onboard). Requires orbital dominance.',
   },
 };
 

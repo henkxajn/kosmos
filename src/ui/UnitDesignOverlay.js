@@ -206,7 +206,7 @@ export class UnitDesignOverlay extends BaseOverlay {
       ctx.fillStyle = isSelected ? THEME.accent : THEME.textPrimary;
       ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.textAlign = 'center';
-      ctx.fillText(`${hull.icon} ${getName(hull)}`, bx + btnW / 2, cy + 18);
+      ctx.fillText(`${hull.icon} ${getName(hull, 'ship')}`, bx + btnW / 2, cy + 18);
 
       // Sloty
       ctx.fillStyle = THEME.textSecondary;
@@ -638,8 +638,8 @@ export class UnitDesignOverlay extends BaseOverlay {
 
     // Domyślna nazwa
     const defaultName = this._editingTemplateId
-      ? (window.KOSMOS?.unitDesigns?.find(t => t.id === this._editingTemplateId)?.name ?? getName(hull))
-      : getName(hull);
+      ? (window.KOSMOS?.unitDesigns?.find(t => t.id === this._editingTemplateId)?.name ?? getName(hull, 'ship'))
+      : getName(hull, 'ship');
 
     const name = await showRenameModal(defaultName);
     if (!name) return;
