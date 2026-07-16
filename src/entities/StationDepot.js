@@ -52,6 +52,19 @@ export class StationDepot {
     }
   }
 
+  // Stać-nas? (kontrakt jak ResourceSystem.canAfford — zwraca bool, NIE pobiera). Bez tej metody
+  // OutpostBuildingPicker (resSys.canAfford) rzucał TypeError na depocie stacji → picker się nie
+  // otwierał przy zakładaniu placówki statkiem zadokowanym przy stacji (cicho łapane w try/catch).
+  canAfford(costs) {
+    const t = this._target();
+    if (t) return typeof t.canAfford === 'function' ? t.canAfford(costs) : false;  // matka → magazyn kolonii
+    for (const [id, amount] of Object.entries(costs ?? {})) {
+      if (amount <= 0) continue;
+      if ((this._ownInventory.get(id) ?? 0) < amount) return false;
+    }
+    return true;
+  }
+
   // Wydatek (kontrakt jak ResourceSystem.spend — zwraca bool; _refuelTank/_bestEffortLoad działają tylko gdy true).
   spend(costs) {
     const t = this._target();
