@@ -433,43 +433,36 @@ function drawModulePicker(ctx, area, station, view, maxModules) {
 // stoczni stacji — parytet ze stocznią kolonijną (S3.4 FAZA 3 R2 / decyzja #10). Tech-gate na KADŁUBIE
 // (🔒), koszt have/need z depotu = calcShipCost(hull, moduły). Reuse queueStationShip(hullId, modules)
 // (ColonyOverlay._onHit). Pusta lista → „Brak projektów — stwórz projekt w stoczni".
+// Rozkłada listę kosztów (chipów „Fe 100/140") na wiersze mieszczące się w maxW.
+// Zwraca tablicę wierszy, każdy = tablica { txt, c, w }. Font musi być ustawiony PRZED wołaniem.
+function layoutCostChips(ctx, costParts, maxW) {
+  const GAP = 14;
+  const lines = [[]];
+  let lineW = 0;
+  for (const c of costParts) {
+    const txt = `${c.id} ${Math.round(c.have)}/${c.amt}`;
+    const wtxt = ctx.measureText(txt).width;
+    if (lineW > 0 && lineW + GAP + wtxt > maxW) { lines.push([]); lineW = 0; }
+    lines[lines.length - 1].push({ txt, c, w: wtxt });
+    lineW += (lineW > 0 ? GAP : 0) + wtxt;
+  }
+  return lines;
+}
+
 function drawShipPicker(ctx, area, station, view) {
   const { x, y, w, h } = area;
   const { addHit, techIsResearched } = view;
 
   // Projekty gracza: preferuj przekazane w view.designs (testowalność headless), inaczej z window.KOSMOS.
   const designs = view.designs ?? (typeof window !== 'undefined' ? window.KOSMOS?.unitDesigns : null) ?? [];
-  const rowH = 46;
-  const PW = Math.min(560, w - 40);
-  const PH = Math.min(h - 40, 60 + Math.max(1, designs.length) * rowH + 16);
-  const px = x + Math.floor((w - PW) / 2);
-  const py = y + Math.floor((h - PH) / 2);
+  const bw = 84, bh = 26;                                  // przycisk Buduj
+  const PW = Math.min(760, w - 40);
+  const HEADER_H = 40;
+  const cw = PW - 32;                                      // szerokość treści (margines 16 po bokach)
+  const costW = cw - bw - 16;                              // koszty zawijają się z dala od przycisku
 
-  ctx.fillStyle = 'rgba(4,8,14,0.97)';
-  ctx.fillRect(px, py, PW, PH);
-  ctx.strokeStyle = THEME.borderActive ?? THEME.accent; ctx.lineWidth = 1;
-  ctx.strokeRect(px + 0.5, py + 0.5, PW - 1, PH - 1);
-
-  ctx.font = `bold ${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
-  ctx.fillStyle = THEME.accent; ctx.textAlign = 'left';
-  ctx.fillText(t('station.mgmt.shipPicker'), px + 12, py + 22);
-  ctx.strokeStyle = THEME.border; ctx.strokeRect(px + PW - 26.5, py + 6.5, 20, 18);
-  ctx.fillStyle = THEME.textSecondary; ctx.textAlign = 'center';
-  ctx.fillText('✕', px + PW - 16, py + 19);
-  ctx.textAlign = 'left';
-  addHit(px + PW - 26, py + 6, 20, 18, 'station_mgmt_shippicker_close', {});
-
-  // Pusta lista projektów → komunikat kierujący do projektanta (Command/Shipyard).
-  if (designs.length === 0) {
-    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
-    ctx.fillText(t('station.mgmt.noDesigns'), px + PW / 2, py + PH / 2);
-    ctx.textAlign = 'left';
-    addHit(px, py, PW, PH, 'station_mgmt_shippicker_bg', {});
-    return;
-  }
-
-  let ry = py + 32;
+  // Pass pomiarowy: policz wysokość każdego wiersza (zawinięte koszty) → dokładne PH.
+  const rows = [];
   for (const tpl of designs) {
     const hull = HULLS[tpl.hullId] ?? SHIPS[tpl.hullId];
     if (!hull) continue;                                   // projekt na nieznanym kadłubie — pomiń
@@ -484,29 +477,88 @@ function drawShipPicker(ctx, area, station, view) {
       if (have < amt) afford = false;
       costParts.push({ id: cid, amt, have });
     }
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const costLines = layoutCostChips(ctx, costParts, costW);
+    const rowH = 26 + costLines.length * 16 + 12;          // nagłówek wiersza + wiersze kosztów + padding
+    rows.push({ tpl, hull, mods, locked, costParts, costLines, afford, rowH });
+  }
+
+  const bodyH = rows.reduce((s, r) => s + r.rowH, 0) || 48;
+  const PH = Math.min(h - 40, HEADER_H + bodyH + 12);
+  const px = x + Math.floor((w - PW) / 2);
+  const py = y + Math.floor((h - PH) / 2);
+
+  ctx.fillStyle = 'rgba(4,8,14,0.98)';
+  ctx.fillRect(px, py, PW, PH);
+  ctx.strokeStyle = THEME.borderActive ?? THEME.accent; ctx.lineWidth = 1;
+  ctx.strokeRect(px + 0.5, py + 0.5, PW - 1, PH - 1);
+
+  // Nagłówek + separator.
+  ctx.font = `bold ${THEME.fontSizeNormal + 1}px ${THEME.fontFamily}`;
+  ctx.fillStyle = THEME.accent; ctx.textAlign = 'left';
+  ctx.fillText(t('station.mgmt.shipPicker'), px + 14, py + 25);
+  ctx.strokeStyle = THEME.border; ctx.strokeRect(px + PW - 28.5, py + 9.5, 20, 18);
+  ctx.fillStyle = THEME.textSecondary; ctx.textAlign = 'center';
+  ctx.fillText('✕', px + PW - 18, py + 22);
+  ctx.textAlign = 'left';
+  addHit(px + PW - 28, py + 9, 20, 18, 'station_mgmt_shippicker_close', {});
+  ctx.strokeStyle = THEME.border;
+  ctx.beginPath(); ctx.moveTo(px + 8, py + HEADER_H - 4.5); ctx.lineTo(px + PW - 8, py + HEADER_H - 4.5); ctx.stroke();
+
+  // Pusta lista projektów → komunikat kierujący do projektanta (Command/Shipyard).
+  if (rows.length === 0) {
+    ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim; ctx.textAlign = 'center';
+    ctx.fillText(t('station.mgmt.noDesigns'), px + PW / 2, py + HEADER_H + bodyH / 2);
+    ctx.textAlign = 'left';
+    addHit(px, py, PW, PH, 'station_mgmt_shippicker_bg', {});
+    return;
+  }
+
+  let ry = py + HEADER_H;
+  for (const r of rows) {
+    const { tpl, hull, mods, locked, costLines, afford, rowH } = r;
     const canBuild = !locked && afford;
 
     ctx.fillStyle = 'rgba(255,255,255,0.02)';
-    ctx.fillRect(px + 8, ry, PW - 16, rowH - 4);
+    ctx.fillRect(px + 8, ry + 2, PW - 16, rowH - 4);
+
+    // Ikona kadłuba.
     ctx.font = `18px ${THEME.fontFamily}`;
     ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
     ctx.fillText(hull.icon ?? '🚀', px + 16, ry + 24);
-    // Nazwa PROJEKTU (nie kadłuba) + kadłub w nawiasie.
+
+    // Nazwa PROJEKTU + kadłub·liczba modułów obok (przycięte, by nie wchodzić pod przycisk).
+    const nameX = px + 42;
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = locked ? THEME.textDim : THEME.textPrimary;
-    ctx.fillText(`${tpl.name ?? moduleName(hull)}`, px + 42, ry + 16);
+    const name = `${tpl.name ?? moduleName(hull)}`;
+    ctx.fillText(name, nameX, ry + 20);
+    const subX = nameX + ctx.measureText(name).width + 8;
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textDim;
-    ctx.fillText(`${moduleName(hull)} · ${mods.length} mod`, px + 42 + ctx.measureText(`${tpl.name ?? moduleName(hull)}  `).width, ry + 16);
-    let costX = px + 42;
-    for (const c of costParts) {
-      const txt = `${c.id} ${Math.round(c.have)}/${c.amt}`;
-      ctx.fillStyle = c.have < c.amt ? THEME.danger : THEME.textDim;
-      ctx.fillText(txt, costX, ry + 34);
-      costX += ctx.measureText(txt).width + 12;
+    const subMaxX = px + PW - bw - 20;                     // koniec strefy tekstu przed przyciskiem
+    if (subX < subMaxX) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(subX, ry, subMaxX - subX, 26); ctx.clip();
+      ctx.fillText(`${moduleName(hull)} · ${mods.length} mod`, subX, ry + 20);
+      ctx.restore();
     }
 
-    const bw = 76, bh = 24, bx = px + PW - bw - 12, by = ry + (rowH - 4 - bh) / 2;
+    // Koszty — zawinięte wiersze chipów.
+    let cy = ry + 40;
+    for (const line of costLines) {
+      let cx = nameX;
+      for (const chip of line) {
+        ctx.fillStyle = chip.c.have < chip.c.amt ? THEME.danger : THEME.textDim;
+        ctx.fillText(chip.txt, cx, cy);
+        cx += chip.w + 14;
+      }
+      cy += 16;
+    }
+
+    // Przycisk Buduj — wyśrodkowany pionowo, prawy górny obszar wiersza.
+    const bx = px + PW - bw - 12, by = ry + 8;
     ctx.fillStyle = canBuild ? 'rgba(0,255,180,0.10)' : 'rgba(60,60,70,0.25)';
     ctx.fillRect(bx, by, bw, bh);
     ctx.strokeStyle = canBuild ? THEME.accent : THEME.border; ctx.lineWidth = 1;
