@@ -744,6 +744,12 @@ export class FactorySystem {
     const ownerPid = this._getOwnerColony()?.planetId ?? null;
     const consumedAgg = {};
 
+    // Bramka brownout: dostępność energii skaluje przepustowość fabryk.
+    // Throttlowana fabryka nadal konsumuje pełną energię (energyCost budynku) — NIE
+    // oszczędza jej proporcjonalnie do throttlingu. To CELOWE: domyka pętlę "zbuduj
+    // elektrownię" (MDA: niedobór→kara→motywacja). NIE "naprawiać" bez tego kontekstu.
+    const avail = this.resourceSystem ? this.resourceSystem.getEnergyAvailability() : 1.0;
+
     for (const [commodityId, alloc] of this._allocations) {
       const def = COMMODITIES[commodityId];
       if (!def || alloc.points <= 0) continue;
@@ -765,7 +771,7 @@ export class FactorySystem {
       const techSpeedMult = this._getOwnerColony()?.buildingSystem?.techSystem?.getFactorySpeedMultiplier() ?? 1.0;
       const speedMult = scenarioMult * techSpeedMult;
       const timePerUnit = def.baseTime / (alloc.points * speedMult);
-      alloc.progress += deltaYears;
+      alloc.progress += deltaYears * avail;   // brownout: avail<1 → wolniejsza produkcja; avail=0 → brak akumulacji
 
       while (alloc.progress >= timePerUnit) {
         if (!this._hasIngredients(def.recipe, commodityId)) {

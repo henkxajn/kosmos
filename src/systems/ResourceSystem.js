@@ -22,6 +22,7 @@ import { MINED_RESOURCES, HARVESTED_RESOURCES, UTILITY_RESOURCES, ALL_RESOURCES 
   from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { t } from '../i18n/i18n.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 
 // ── Jak często emitujemy resource:changed (co ile lat gry) ─────────────────
 const EMIT_THROTTLE_YEARS = 1 / 365.25; // co dzień gry
@@ -399,6 +400,19 @@ export class ResourceSystem {
     this._syncLegacyProxy();
   }
 
+  // Dostępność energii ∈ [0,1] — proporcjonalna bramka produkcji gospodarczej.
+  // JEDNO źródło prawdy dla brownoutu: czyta balance/production/consumption
+  // (NIE flagę brownout — omija timing; _recalcPerYear ustawia całą trójkę w jednym
+  // przebiegu → nigdy niespójna). balance≥0 → 1.0 (bezczynna bez deficytu).
+  // Skaluje minerały/towary/badania; NIGDY energii ani survival (food/water).
+  getEnergyAvailability() {
+    if (!GAME_CONFIG.FEATURES?.energyBrownoutGate) return 1.0;  // kill-switch (default ON) — pełny rollback bramki
+    const e = this.energy;
+    if (e.balance >= 0) return 1.0;      // pokrywa też prod=0,cons=0 (balance=0)
+    if (e.consumption <= 0) return 1.0;  // defensywny guard div/0 (nieosiągalny gdy balance<0)
+    return Math.max(0, Math.min(1, e.production / e.consumption));
+  }
+
   // ── Prywatne ─────────────────────────────────────────────────────────────
 
   // Mapuj stare klucze zasobów na nowe
@@ -500,7 +514,10 @@ export class ResourceSystem {
     // Aktualizuj research (accumulator)
     if (this.research.perYear !== 0) {
       const before = this.research.amount;
-      this.research.amount = Math.max(0, this.research.amount + this.research.perYear * deltaYears);
+      // Bramka brownout: skaluj TYLKO dodatni przyrost badań (survival food/water w
+      // _inventoryPerYear NIETKNIĘTE; ujemny research-drain nigdy nie bramkowany).
+      const _avail = this.research.perYear > 0 ? this.getEnergyAvailability() : 1;
+      this.research.amount = Math.max(0, this.research.amount + this.research.perYear * deltaYears * _avail);
       // Limit banku TYLKO gdy nic nie jest aktywnie badane (patrz RESEARCH_BANK_YEARS).
       // Bez bramki "idle" cap throttlowałby aktywne badanie przy dużej prędkości czasu
       // (jeden tik akumuluje perYear × civDeltaYears, może >2 lata). Przy aktywnym

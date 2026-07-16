@@ -1744,30 +1744,49 @@ export class BuildingSystem {
     // S3.0a c-fix: rafineria atmosferyczna (mineResource:'H') wydobywa wyłącznie wodór.
     // S3.0a c-r2 (Opcja A): refineTo konwertuje zmineowany surowiec OD RAZU w produkt (H→fuel,
     // H NIE trafia do inventory). Invalidowany przy budowie/rozbiórce kopalni.
+    // ZAŁOŻENIE: energyCost jest polem statycznym danych budynku — żaden tech/moduł w
+    // kodzie go nie mutuje na zbudowanej kopalni. Jeśli to się zmieni, split grid/ungated
+    // (oraz klucz grup restricted) muszą to uwzględnić. Zweryfikowano: 2026-07-16.
     if (this._mineLevelDirty !== false) {
-      let generic = 0;
-      // restricted: key `${mineResource}>${refineTo||''}` → {mineResource, refineTo, ratio, level}
+      let genericGrid = 0;     // kopalnie generyczne z sieci (energyCost>0) — bramkowane brownoutem
+      let genericUngated = 0;  // generyczne z własnym reaktorem (energyCost==0) — poza bramką
+      // restricted: key `${mineResource}>${refineTo||''}>${grid}` → {mineResource, refineTo, ratio, level, grid}.
+      // grid W KLUCZU: grid i ungated kopalnie tego samego surowca NIGDY nie łączą się w jedną
+      // grupę (inaczej own-reactor byłaby błędnie duszona przez OR). grid stały per-grupa.
       const restricted = new Map();
       for (const entry of this._active.values()) {
         const b = entry.building;
         if (!(b.isMine || b.id === 'mine')) continue;
         const lvl = entry.level ?? 1;
+        const grid = (b.energyCost ?? 0) > 0;   // >0 = pobiera z sieci; 0 = własny reaktor
         if (b.mineResource) {
           const refineTo = b.refineTo ?? null;
           const ratio = b.refineRatio ?? 1.0;
-          const key = `${b.mineResource}>${refineTo ?? ''}`;
-          const grp = restricted.get(key) ?? { mineResource: b.mineResource, refineTo, ratio, level: 0 };
+          const key = `${b.mineResource}>${refineTo ?? ''}>${grid}`;
+          const grp = restricted.get(key) ?? { mineResource: b.mineResource, refineTo, ratio, level: 0, grid };
           grp.level += lvl;
           restricted.set(key, grp);
+        } else if (grid) {
+          genericGrid += lvl;
         } else {
-          generic += lvl;
+          genericUngated += lvl;
         }
       }
-      this._cachedMineLevel = generic;
+      this._cachedMineLevelGrid = genericGrid;
+      this._cachedMineLevelUngated = genericUngated;
+      // Suma generyczna — zachowana dla czytników breakdownu UI (ResourceSystem/EconomyOverlay);
+      // ich estymata nie odzwierciedla throttlingu brownout (poza zakresem tego slice'a).
+      this._cachedMineLevel = genericGrid + genericUngated;
       this._cachedRestrictedMines = restricted;
       this._mineLevelDirty = false;
     }
-    if (this._cachedMineLevel === 0 && (this._cachedRestrictedMines?.size ?? 0) === 0) return;
+    if (this._cachedMineLevelGrid === 0 && this._cachedMineLevelUngated === 0 &&
+        (this._cachedRestrictedMines?.size ?? 0) === 0) return;
+
+    // Bramka brownout: dostępność energii skaluje POZIOM WEJŚCIOWY kopalń z sieci
+    // (NIE zwrócony wynik). outputPerYear jest liniowy w mineLevel → skaluje i wydobycie,
+    // i depletion złoża. avail=0 → złoże NIETKNIĘTE (mnożenie wyniku niszczyłoby rezerwy).
+    const avail = this.resourceSystem.getEnergyAvailability();
 
     // Zbierz wydobycie: generyczne (wszystkie złoża) + restricted (1 surowiec, opcjonalnie konwertowany).
     let gains = null;
@@ -1776,14 +1795,17 @@ export class BuildingSystem {
       if (!gains) gains = {};
       for (const k in g) gains[k] = (gains[k] ?? 0) + g[k];
     };
-    if (this._cachedMineLevel > 0) {
-      merge(DepositSystem.extractFromDeposits(this._deposits, this._cachedMineLevel, deltaYears));
+    if (this._cachedMineLevelGrid > 0) {
+      merge(DepositSystem.extractFromDeposits(this._deposits, this._cachedMineLevelGrid * avail, deltaYears));
+    }
+    if (this._cachedMineLevelUngated > 0) {
+      merge(DepositSystem.extractFromDeposits(this._deposits, this._cachedMineLevelUngated, deltaYears));
     }
     if (this._cachedRestrictedMines) {
       for (const grp of this._cachedRestrictedMines.values()) {
         const filtered = this._deposits.filter(d => d.resourceId === grp.mineResource);
         if (!filtered.length) continue;
-        const g = DepositSystem.extractFromDeposits(filtered, grp.level, deltaYears);
+        const g = DepositSystem.extractFromDeposits(filtered, grp.level * (grp.grid ? avail : 1), deltaYears);
         if (!g) continue;
         if (grp.refineTo) {
           // Opcja A: zmineowany surowiec konwertowany OD RAZU w produkt (medium, nie towar).

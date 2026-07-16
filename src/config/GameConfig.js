@@ -125,6 +125,14 @@ export const GAME_CONFIG = {
     //   po cleanupie live-gate. Render/UI-only — brak migracji save. Stare romby
     //   _colonyLabels usunięte (MapLabelLayer je zastąpił). Rollback OFF = brak etykiet.
     mapLabels:            true,
+    // ── Energy Brownout Gate (runtime-only, bez migracji save) ────────────
+    //   Deficyt energii (balance<0) realnie ogranicza produkcję PROPORCJONALNIE
+    //   do pokrycia (avail=production/consumption): kopalnie (poziom wejściowy),
+    //   fabryki (przepustowość), badania (dodatni przyrost). NIGDY: energia
+    //   (brak spirali śmierci) ani survival food/water. Wszystkie kolonie
+    //   (gracz+AI). Kill-switch — OFF przywraca kosmetyczny brownout (getter
+    //   getEnergyAvailability zwraca 1.0). Default ON (zmiana balansowa).
+    energyBrownoutGate:   true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
