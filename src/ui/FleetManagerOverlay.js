@@ -546,8 +546,10 @@ export class FleetManagerOverlay {
       const isLiving = (v) => !v.isWreck;
       const playerAll  = allVessels.filter(v => !isEnemyVessel(v) && isLiving(v));
       const playerList = this._filterVessels(playerAll, activePid);
+      const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';   // aktualnie oglądany układ (jak mapa)
       const enemyVisible = allVessels.filter(v =>
         isEnemyVessel(v) && isLiving(v) && _isEnemyTracked(v)
+        && (v.systemId ?? 'sys_home') === sysId   // tylko wrogowie z oglądanego układu (spójność z mapą)
       );
       const wrecks = allVessels.filter(v => v.isWreck);
 
@@ -3025,9 +3027,12 @@ export class FleetManagerOverlay {
     }
     const vm = window.KOSMOS?.vesselManager;
     if (!vm) return;
-    // Lista wykrytych enemy vesseli (active, nie wraki) — obserwatorium LUB kontakt intelu
+    // Lista wykrytych enemy vesseli (active, nie wraki) — engage tylko w obrębie oglądanego
+    // układu (walka jest wewnątrzukładowa; wróg z innego układu nie jest legalnym celem).
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
     const enemies = vm.getAllVessels().filter(v =>
       isEnemyVessel(v) && !v.isWreck && _isEnemyTracked(v)
+      && (v.systemId ?? 'sys_home') === sysId
     );
     // Sortuj po dystansie od pierwszego membera floty
     const fs = window.KOSMOS?.fleetSystem;
@@ -5619,7 +5624,10 @@ export class FleetManagerOverlay {
     ctx.fillText(`Imperium: ${empName}`, x + pad, cy + 14);
     cy += 18;
 
-    const intel = window.KOSMOS?.intelSystem?.getLevel?.(empId);
+    // „Wywiad" = jakość kontaktu z TYM statkiem (getVesselContact), nie z całym imperium
+    // (getLevel) — inaczej panel pokazywał tożsamość statku, a obok „Wywiad: niepoznane".
+    const intel = window.KOSMOS?.intelSystem?.getVesselContact?.(vessel.id)?.quality
+               ?? window.KOSMOS?.intelSystem?.getLevel?.(empId);
     if (intel) {
       const intelLabels = { unknown: 'niepoznane', rumor: 'plotka', contact: 'kontakt', detailed: 'szczegółowe' };
       ctx.fillStyle = THEME.textDim;

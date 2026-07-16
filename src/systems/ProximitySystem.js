@@ -171,10 +171,19 @@ export class ProximitySystem {
    */
   _checkPair(v1, v2) {
     const key = pairKey(v1.id, v2.id);
+    // Guard międzyukładowy (fix 2026-07-15): każdy układ ma własną ramkę współrzędnych
+    // wyśrodkowaną na swojej gwieździe (x=0,y=0), więc statki z RÓŻNYCH układów mają
+    // zbliżone surowe x/y (oba blisko własnej gwiazdy). Bez tego raw hypot dawał fałszywe
+    // zbliżenie — gracz w sys_home „wykrywał" wroga w sys_061 (~0.2 AU), co podbijało intel
+    // do rumor/contact (obcy wpadał na listę floty, choć mapa filtrująca po systemId ich nie
+    // pokazywała) i groziło fantomową bitwą międzyukładową. Detekcja/walka liczy się WYŁĄCZNIE
+    // w obrębie jednego układu. Różne układy = dystans ∞ → gałęzie enter nie odpalą, a pary
+    // aktywne (gdy statek zmienił układ) zamkną się przez gałęzie exit poniżej.
+    const sameSystem = (v1.systemId ?? 'sys_home') === (v2.systemId ?? 'sys_home');
     const dx = v1.position.x - v2.position.x;
     const dy = v1.position.y - v2.position.y;
     const distPx = Math.hypot(dx, dy);
-    const distAU = distPx / AU_TO_PX;
+    const distAU = sameSystem ? (distPx / AU_TO_PX) : Infinity;
     const isPaired = this._activePairs.has(key);
 
     // M4 P3-7 — dynamic detection threshold per vessel pair. Wygrywa większy
