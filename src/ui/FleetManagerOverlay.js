@@ -137,7 +137,14 @@ const STRATCOM_BG_BRIGHTNESS = 0.25;  // jasność tła-mgławicy paneli Stratco
 // pasek zakładek (4 zakładki) zajmuje miejsce dawnego subnav. getSubNavHeight() liczone
 // dynamicznie w draw() (== 0 dla fleet-singleton; defensywnie, gdyby kiedyś wrócił subnav).
 const TOP_BASE  = COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H;
-const BOTTOM_PAD = COSMIC.BOTTOM_BAR_H; // 30
+// Rezerwa dolna = pasek nawigacji (BOTTOM_NAV_H) + listwa dziennika (BOTTOM_LOG_TRIG_H) — jak
+// BaseOverlay w civMode — PLUS pasek czasu (BottomControlBar, STRIP_H≈20 px), rysowany NA WIERZCHU
+// nad nawigacją (UIManager _bottomNavBar/_bottomControlBar PO overlayManager). Bez rezerwy paska
+// czasu dolna treść prawego panelu (akcje statku: Refuel / toggle „Tankuj automatycznie", scroll
+// do końca) chowała się pod zawsze-wierzchnim sterowaniem czasu i była nieosiągalna mimo scrolla.
+// (Wcześniej BOTTOM_BAR_H=26 → overlay wchodził ~36 px pod nawigację + pasek czasu.)
+const TIME_STRIP_H = 20;   // = BottomControlBar.STRIP_H (pasek czasu nad nawigacją)
+const BOTTOM_PAD = COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H + TIME_STRIP_H; // 36+6+20 = 62
 const OUTLINER_W = COSMIC.OUTLINER_W;  // 180
 
 // Kolory statusów statków
