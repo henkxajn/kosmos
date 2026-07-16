@@ -17,6 +17,7 @@ import { HULLS } from '../data/HullsData.js';
 import { calcShipCost } from '../data/ShipModulesData.js';
 import { classifyStationDepot } from './StationPanelLogic.js';
 import { resolveHomeColony } from '../utils/TransferStore.js';
+import { drawResourceIcon } from './ResourceIcons.js';
 
 // Nazwa modułu wg locale (dane są dwujęzyczne w StationModuleData — bez duplikacji w i18n).
 function moduleName(def) {
@@ -433,18 +434,25 @@ function drawModulePicker(ctx, area, station, view, maxModules) {
 // stoczni stacji — parytet ze stocznią kolonijną (S3.4 FAZA 3 R2 / decyzja #10). Tech-gate na KADŁUBIE
 // (🔒), koszt have/need z depotu = calcShipCost(hull, moduły). Reuse queueStationShip(hullId, modules)
 // (ColonyOverlay._onHit). Pusta lista → „Brak projektów — stwórz projekt w stoczni".
-// Rozkłada listę kosztów (chipów „Fe 100/140") na wiersze mieszczące się w maxW.
-// Zwraca tablicę wierszy, każdy = tablica { txt, c, w }. Font musi być ustawiony PRZED wołaniem.
+// Bok ikony kosztu (px) + odstęp między chipami.
+const COST_ICON = 15;
+const COST_GAP = 12;
+
+// Szerokość chipu kosztu = ikona + odstęp + liczba wymaganej ilości. Font PRZED wołaniem.
+function costChipWidth(ctx, amt) {
+  return COST_ICON + 3 + ctx.measureText(String(amt)).width;
+}
+
+// Rozkłada listę kosztów (ikona + ilość) na wiersze mieszczące się w maxW.
+// Zwraca tablicę wierszy, każdy = tablica { c, w }. Font musi być ustawiony PRZED wołaniem.
 function layoutCostChips(ctx, costParts, maxW) {
-  const GAP = 14;
   const lines = [[]];
   let lineW = 0;
   for (const c of costParts) {
-    const txt = `${c.id} ${Math.round(c.have)}/${c.amt}`;
-    const wtxt = ctx.measureText(txt).width;
-    if (lineW > 0 && lineW + GAP + wtxt > maxW) { lines.push([]); lineW = 0; }
-    lines[lines.length - 1].push({ txt, c, w: wtxt });
-    lineW += (lineW > 0 ? GAP : 0) + wtxt;
+    const w = costChipWidth(ctx, c.amt);
+    if (lineW > 0 && lineW + COST_GAP + w > maxW) { lines.push([]); lineW = 0; }
+    lines[lines.length - 1].push({ c, w });
+    lineW += (lineW > 0 ? COST_GAP : 0) + w;
   }
   return lines;
 }
@@ -479,7 +487,7 @@ function drawShipPicker(ctx, area, station, view) {
     }
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     const costLines = layoutCostChips(ctx, costParts, costW);
-    const rowH = 26 + costLines.length * 16 + 12;          // nagłówek wiersza + wiersze kosztów + padding
+    const rowH = 28 + costLines.length * 19 + 10;          // nagłówek wiersza + wiersze kosztów + padding
     rows.push({ tpl, hull, mods, locked, costParts, costLines, afford, rowH });
   }
 
@@ -545,16 +553,19 @@ function drawShipPicker(ctx, area, station, view) {
       ctx.restore();
     }
 
-    // Koszty — zawinięte wiersze chipów.
-    let cy = ry + 40;
+    // Koszty — ikona surowca/towaru + wymagana ilość; czerwony gdy brakuje. Zawinięte wiersze.
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    let cy = ry + 42;
     for (const line of costLines) {
       let cx = nameX;
       for (const chip of line) {
-        ctx.fillStyle = chip.c.have < chip.c.amt ? THEME.danger : THEME.textDim;
-        ctx.fillText(chip.txt, cx, cy);
-        cx += chip.w + 14;
+        const short = chip.c.have < chip.c.amt;
+        drawResourceIcon(ctx, chip.c.id, cx, cy - 6, COST_ICON, null);
+        ctx.fillStyle = short ? THEME.danger : THEME.textSecondary;
+        ctx.fillText(String(chip.c.amt), cx + COST_ICON + 3, cy);
+        cx += chip.w + COST_GAP;
       }
-      cy += 16;
+      cy += 19;
     }
 
     // Przycisk Buduj — wyśrodkowany pionowo, prawy górny obszar wiersza.
