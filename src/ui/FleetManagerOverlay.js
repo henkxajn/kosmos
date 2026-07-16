@@ -499,7 +499,15 @@ export class FleetManagerOverlay {
     const ox = CIV_SIDEBAR_W;
     const oy = TOP_BASE + getSubNavHeight();
     const ow = W - CIV_SIDEBAR_W;
-    const oh = H - oy - BOTTOM_PAD;
+    // Dolna granica overlayu = górna krawędź paska czasu (BottomControlBar), rysowanego NA WIERZCHU
+    // (UIManager PO overlayManager). Pasek RIDE'uje w górę, gdy ostatnia karta nawigacji (Science)
+    // jest w podglądzie (peek) → wtedy STAŁY BOTTOM_PAD nie wystarcza i pasek wjeżdża na dolną treść
+    // prawego panelu (akcje statku / „Powtarzaj automatycznie"), której nie da się doscrollować.
+    // Czytamy realny top paska CO KLATKĘ (peek-aware, ten sam _stripTop którego pasek użyje przy
+    // rysowaniu); fallback = baza (nav + dziennik + STRIP_H) gdy pasek niedostępny.
+    const _stripTop = window.KOSMOS?.bottomControlBar?._stripTop?.(H);
+    const _bottomLimit = (_stripTop != null && _stripTop > oy + 40) ? _stripTop : (H - BOTTOM_PAD);
+    const oh = _bottomLimit - oy;
     this._bounds = { x: ox, y: oy, w: ow, h: oh };
 
     // ── Tło ──────────────────────────────────────────────────
