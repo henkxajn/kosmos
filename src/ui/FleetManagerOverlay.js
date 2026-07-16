@@ -5749,6 +5749,14 @@ export class FleetManagerOverlay {
       this._rightScrollY = 0;
       this._rightScrollVesselId = this._selectedVesselId;
     }
+    // Reset scrolla przy wejściu w konfigurator misji / zmianie kroku (select↔confirm) lub celu —
+    // świeży widok od góry (inaczej krok „confirm" mógłby otworzyć się przewinięty z widoku detali).
+    if (this._missionConfig) {
+      const _cfgKey = `${this._missionConfig.actionId}|${this._missionConfig.step}|${this._missionConfig.targetId ?? ''}`;
+      if (_cfgKey !== this._missionCfgScrollKey) { this._missionCfgScrollKey = _cfgKey; this._rightScrollY = 0; }
+    } else {
+      this._missionCfgScrollKey = null;
+    }
     const _scrollY = this._rightScrollY || 0;
     const _hzStart = this._hitZones.length;
     ctx.save();
@@ -6412,8 +6420,12 @@ export class FleetManagerOverlay {
 
     // ── Konfigurator misji (jeśli aktywny) ───────────────────
     if (this._missionConfig) {
-      // Wysokość liczona z UNSCROLLED cy (cy zawiera offset -_scrollY).
-      this._drawMissionConfig(ctx, x, cy, w, h - (cy + _scrollY - y), pad, vessel, ms, colMgr);
+      // _drawMissionConfig zwraca końcowe cy (współrzędne scrollowane) → advance cy, żeby
+      // _finishRight policzył _rightContentH z PEŁNĄ wysokością konfiguratora. Bez tego krok
+      // „confirm" (przycisk WYŚLIJ na dole) miał _rightContentH zmierzone SPRZED konfiguratora
+      // → maxScroll≈0 → przycisku nie dało się doscrollować (chował się pod paskiem czasu).
+      const endCy = this._drawMissionConfig(ctx, x, cy, w, h - (cy + _scrollY - y), pad, vessel, ms, colMgr);
+      if (typeof endCy === 'number' && endCy > cy) cy = endCy;
       return; // Konfigurator zastępuje akcje i log (finally → _finishRight)
     }
 
@@ -7769,13 +7781,14 @@ export class FleetManagerOverlay {
   _drawMissionConfig(ctx, x, cy, w, maxH, pad, vessel, ms, colMgr) {
     const config = this._missionConfig;
     const action = FLEET_ACTIONS[config.actionId];
-    if (!action) return;
+    if (!action) return cy;
 
     if (config.step === 'select') {
-      this._drawTargetPicker(ctx, x, cy, w, maxH, pad, vessel, action, ms);
+      return this._drawTargetPicker(ctx, x, cy, w, maxH, pad, vessel, action, ms);
     } else if (config.step === 'confirm') {
-      this._drawMissionConfirm(ctx, x, cy, w, maxH, pad, vessel, action);
+      return this._drawMissionConfirm(ctx, x, cy, w, maxH, pad, vessel, action);
     }
+    return cy;
   }
 
   _drawTargetPicker(ctx, x, cy, w, maxH, pad, vessel, action, ms) {
@@ -7867,13 +7880,15 @@ export class FleetManagerOverlay {
     ctx.textAlign = 'left';
 
     this._hitZones.push({ x: cancelX, y: cancelY, w: cancelW, h: 24, type: 'cancel_config', data: {} });
+
+    return cancelY + 24;   // dolna krawędź (ANULUJ) → pomiar _rightContentH
   }
 
   _drawMissionConfirm(ctx, x, cy, w, maxH, pad, vessel, action) {
     const targetId = this._missionConfig.targetId;
     // S3.3b-S3b — cel może być STACJĄ (HUB); _findBody nie zna 'station' → fallback na EntityManager.
     const target = _findBody(targetId) ?? EntityManager.get(targetId);
-    if (!target) { this._missionConfig = null; return; }
+    if (!target) { this._missionConfig = null; return cy; }
 
     // Cel
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
@@ -8019,6 +8034,8 @@ export class FleetManagerOverlay {
     ctx.fillText(t('fleet.cancel'), cancelX + cancelW / 2, cy + 16);
     ctx.textAlign = 'left';
     this._hitZones.push({ x: cancelX, y: cy, w: cancelW, h: 24, type: 'cancel_config', data: {} });
+
+    return cy + 24;   // dolna krawędź (ANULUJ) → pomiar _rightContentH (scroll dociąga do WYŚLIJ)
   }
 
   // ── Log misji ─────────────────────────────────────────────────────────────
