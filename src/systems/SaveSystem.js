@@ -99,20 +99,33 @@ export class SaveSystem {
 
       const json = JSON.stringify(data);
 
-      // Self-healing przy quocie: backupy migracji to zero czytelników w grze, a każdy waży
-      // tyle co cały zapis — poświęcamy je, zanim ogłosimy graczowi porażkę. Bardzo często
-      // to wystarcza i gracz nawet nie zauważy problemu.
+      // Self-healing przy quocie — ŻYWY zapis gracza ma pierwszeństwo przed KAŻDĄ kopią.
+      // Obie ofiary (backupy migracji, kopia przedimportowa) nie mają w grze ścieżki odczytu,
+      // a potrafią być większe niż sam zapis: realny przypadek z live-gate to preimport 4,19 MiB
+      // przy zapisie 1,11 MiB. Kolejność = od najmniej po najbardziej wartościową.
       if (!_trySetItem(SAVE_KEY, json)) {
         const removed = pruneMigrationBackups();
         if (removed > 0) console.warn(`[SaveSystem] Brak miejsca — zwolniono ${removed} backup(ów) migracji, ponawiam zapis`);
+
         if (!_trySetItem(SAVE_KEY, json)) {
-          console.error('[SaveSystem] Save padl: brak miejsca w localStorage (po sprzataniu backupow)');
-          EventBus.emit('game:saveFailed', {
-            reason:  'quota',
-            message: `Zapis ${(json.length / 1024 / 1024).toFixed(2)} MB nie miesci sie w pamieci przegladarki`,
-            stack:   null,
-          });
-          return;
+          // Ostatnia ofiara: kopia sprzed importu. Ratuj ją do pliku, jeśli jest Ci potrzebna
+          // (KOSMOS.debug.exportBackup) — tu ustępuje, bo bieżąca gra jest ważniejsza.
+          let hadPreimport = false;
+          try {
+            hadPreimport = localStorage.getItem(PREIMPORT_BACKUP_KEY) !== null;
+            if (hadPreimport) localStorage.removeItem(PREIMPORT_BACKUP_KEY);
+          } catch { /* nieistotne */ }
+          if (hadPreimport) console.warn('[SaveSystem] Brak miejsca — usunieto kopie przedimportowa, ponawiam zapis');
+
+          if (!hadPreimport || !_trySetItem(SAVE_KEY, json)) {
+            console.error('[SaveSystem] Save padl: brak miejsca w localStorage (po sprzatnieciu kopii)');
+            EventBus.emit('game:saveFailed', {
+              reason:  'quota',
+              message: `Zapis ${(json.length / 1024 / 1024).toFixed(2)} MB nie miesci sie w pamieci przegladarki`,
+              stack:   null,
+            });
+            return;
+          }
         }
       }
 

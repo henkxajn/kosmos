@@ -24,6 +24,7 @@ import { LifeSystem }        from '../systems/LifeSystem.js';
 import { GravitySystem }     from '../systems/GravitySystem.js';
 import { AudioSystem }       from '../systems/AudioSystem.js';
 import { SaveSystem }        from '../systems/SaveSystem.js';
+import { buildSaveFileName, downloadSave } from '../utils/SaveFile.js';
 import { CURRENT_VERSION }   from '../systems/SaveMigration.js';
 import { ResourceSystem }    from '../systems/ResourceSystem.js';
 import { CivilizationSystem } from '../systems/CivilizationSystem.js';
@@ -413,22 +414,28 @@ export class GameScene {
       exportSave: () => {
         const raw = SaveSystem.exportSave();
         if (!raw) { console.warn('[save] brak zapisu w localStorage (kosmos_save_v1)'); return null; }
-        let version = '?';
-        try { version = JSON.parse(raw).version ?? '?'; } catch {}
-        // Pobierz plik (Blob + anchor) — nazwa z wersją + znacznikiem czasu.
-        try {
-          const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-          const blob = new Blob([raw], { type: 'application/json' });
-          const url  = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url; a.download = `kosmos_save_v${version}_${stamp}.json`;
-          document.body.appendChild(a); a.click(); a.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
-        } catch (e) { console.warn('[save] pobranie pliku nieudane:', e?.message); }
+        let data = null;
+        try { data = JSON.parse(raw); } catch {}
+        // Ta sama nazwa i ten sam downloader co menu ☰ → „Zapisz do pliku" (utils/SaveFile.js).
+        downloadSave(raw, buildSaveFileName(data));
         // Kopia do schowka (best-effort — może wymagać gestu użytkownika).
         try { navigator.clipboard?.writeText?.(raw); } catch {}
-        console.log(`[save] wyeksportowano save v${version} (${raw.length} B) — plik + schowek. Zwrócony string poniżej:`);
+        console.log(`[save] wyeksportowano save v${data?.version ?? '?'} (${raw.length} B) — plik + schowek. Zwrócony string poniżej:`);
         return raw;
+      },
+      // Ratuje kopię przedimportową (Twoja gra sprzed wczytania pliku) na dysk.
+      // To JEDYNA ścieżka odczytu tej kopii — gra nie umie jej przywrócić sama, a przy braku
+      // miejsca save() ją poświęca. Jeśli storageReport() pokazuje duży 'backup_preimport'
+      // i chcesz tamtą grę zachować — najpierw to, potem importSave(...) z pobranego pliku.
+      exportBackup: () => {
+        const raw = localStorage.getItem('kosmos_save_backup_preimport');
+        if (!raw) { console.warn('[save] brak kopii przedimportowej'); return null; }
+        let data = null;
+        try { data = JSON.parse(raw); } catch {}
+        const filename = buildSaveFileName(data).replace(/\.json$/, '_przed-importem.json');
+        downloadSave(raw, filename);
+        console.log(`[save] kopia przedimportowa → ${filename} (${(raw.length / 1e6).toFixed(2)} mln znaków, v${data?.version ?? '?'}, rok ${Math.round(data?.gameTime ?? 0)}). Wczytasz ją przez menu ☰ → „Wczytaj z pliku".`);
+        return filename;
       },
       // Raport zużycia localStorage — quota to ~5,2 mln ZNAKÓW na wszystkie klucze razem
       // (10 MiB liczone w UTF-16). Pokazuje, co realnie zajmuje miejsce.

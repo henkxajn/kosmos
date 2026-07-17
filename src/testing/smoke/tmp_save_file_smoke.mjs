@@ -279,6 +279,37 @@ const T = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// T10 — drabinka self-healing: ŻYWY zapis ma pierwszeństwo przed KAŻDĄ kopią.
+//       Z live-gate: kopia przedimportowa potrafi być 4× większa od zapisu
+//       (4,19 MiB vs 1,11 MiB) — nie może blokować zapisu gracza.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  // save() wymaga EntityManager/timeSystem, więc testujemy sam KONTRAKT drabinki:
+  // które klucze wolno poświęcić i w jakiej kolejności.
+  const { pruneMigrationBackups } = await import('../../systems/SaveMigration.js');
+  store.clear();
+  quotaChars = QUOTA_UNLIMITED;
+
+  globalThis.localStorage.setItem('kosmos_save_v1', 'ZYWY_ZAPIS');
+  globalThis.localStorage.setItem('kosmos_save_backup_v88', 'x'.repeat(500));
+  globalThis.localStorage.setItem('kosmos_save_backup_preimport', 'x'.repeat(2000));
+  globalThis.localStorage.setItem('kosmos_lang', 'pl');
+
+  // Stopień 1: backupy migracji
+  pruneMigrationBackups();
+  T('T10 stopień 1 usuwa backupy migracji', globalThis.localStorage.getItem('kosmos_save_backup_v88') === null);
+  T('T10 stopień 1 NIE rusza kopii przedimportowej (jest cenniejsza)',
+    globalThis.localStorage.getItem('kosmos_save_backup_preimport') !== null);
+  T('T10 stopień 1 NIE rusza żywego zapisu', globalThis.localStorage.getItem('kosmos_save_v1') === 'ZYWY_ZAPIS');
+  T('T10 prune nie rusza preferencji', globalThis.localStorage.getItem('kosmos_lang') === 'pl');
+
+  // Stopień 2 (w save(): removeItem PREIMPORT) — kopia ustępuje żywemu zapisowi
+  globalThis.localStorage.removeItem('kosmos_save_backup_preimport');
+  T('T10 stopień 2 poświęca kopię przedimportową', globalThis.localStorage.getItem('kosmos_save_backup_preimport') === null);
+  T('T10 po obu stopniach żywy zapis wciąż stoi', globalThis.localStorage.getItem('kosmos_save_v1') === 'ZYWY_ZAPIS');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // T9 — flaga „wczytaj od razu po reloadzie" (import z gry pomija ekran tytułowy)
 // ═══════════════════════════════════════════════════════════════════════════
 {
