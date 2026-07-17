@@ -133,10 +133,11 @@ function _resolveName(id) {
 // min(mb.w/2, mb.h/2)-20, czyli limituje go WYSOKOŚĆ (~300 px), nie szerokość (~400 px).
 const LEFT_W    = 260;
 const RIGHT_W   = 200;
-const TAB_H     = 28;   // wysokość paska zakładek (tytuł + 4 zakładki) pod nagłówkiem overlay
+const TAB_H     = 28;   // wysokość paska zakładek (tytuł + 5 zakładek) pod nagłówkiem overlay
 
 // Typy hitów pochodzące z osadzonego edytora projektów (UnitDesignOverlay._drawShipDesigner) —
-// delegowane do instancji edytora w _handleHit. ('ground:*' pomijamy — panel naziemny nie jest osadzany.)
+// delegowane do instancji edytora w _handleHit. ('ground:*' idą osobną gałęzią po prefiksie —
+// zakładka Jednostki osadza GroundUnitPanel.)
 const DESIGN_EDITOR_HIT_TYPES = new Set([
   'select_hull', 'select_slot', 'clear_slot', 'pick_module',
   'save_template', 'clear_design', 'edit_template', 'delete_template', 'tpl_row',
@@ -167,7 +168,7 @@ function _stratcomFanOffset(idx, count) {
 }
 // Górny offset overlay. „Dowództwo Taktyczne" jest pojedynczą grupą nav (bez rodzeństwa
 // Fleet/Designs) → brak subnav, więc overlay sięga aż pod górną belkę i to jego własny
-// pasek zakładek (4 zakładki) zajmuje miejsce dawnego subnav. getSubNavHeight() liczone
+// pasek zakładek (5 zakładek) zajmuje miejsce dawnego subnav. getSubNavHeight() liczone
 // dynamicznie w draw() (== 0 dla fleet-singleton; defensywnie, gdyby kiedyś wrócił subnav).
 const TOP_BASE  = COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H;
 // Zegar (BottomControlBar, STRIP_H≈20 px) to samodzielny widget rysowany NA WIERZCHU w prawym-
@@ -612,6 +613,12 @@ export class FleetManagerOverlay {
       const syW = Math.min(ow, 560);
       const syX = ox + Math.floor((ow - syW) / 2);
       this._drawShipyardTab(ctx, syX, contentY, syW, contentH, colMgr, activePid);
+    } else if (this._activeTab === 'ground') {
+      // Jednostki naziemne = prawa połowa UnitDesignOverlay (GroundUnitPanel),
+      // osadzona jak edytor projektów w Stoczni. Panel ma własny scroll i layout
+      // kotwiczony do dołu → dostaje pełną wysokość treści, bez triku BIG.
+      const guW = Math.min(ow, 560);
+      this._drawGroundTab(ctx, ox + Math.floor((ow - guW) / 2), contentY, guW, contentH);
     } else if (this._activeTab === 'stratcom') {
       // Dwupanelowy Stratcom: radar (przegląd polityczny) + mapa galaktyki 2D
       // (operacyjna). Jeden duży (70%), drugi mały (klik rozwija). Pływający picker
@@ -640,6 +647,7 @@ export class FleetManagerOverlay {
       { id: 'stratcom', label: t('fleet.tabStratcom') },
       { id: 'tactical', label: t('fleet.tabTactical') },
       { id: 'shipyard', label: t('fleet.tabShipyard') },
+      { id: 'ground',   label: t('fleet.tabGround') },
       { id: 'atlas',    label: t('fleet.tabAtlas') },
     ];
     const TW = 118, TH = 20, ty = oy + 4;
@@ -873,6 +881,14 @@ export class FleetManagerOverlay {
       return true;
     }
 
+    // ── JEDNOSTKI — scroll detalu archetypu (własny scroll panelu) ─
+    if (this._activeTab === 'ground') {
+      if (inRect(this._contentBounds)) {
+        this._getDesignEditor()?._groundPanel?.handleScroll(delta, mx, my);
+      }
+      return true;
+    }
+
     // ── TACTICAL — 3 kolumny ─────────────────────────────────
     // Scroll w LEFT (jedna lista drzewa — outliner P2.5).
     if (mx < b.x + LEFT_W) {
@@ -1015,11 +1031,17 @@ export class FleetManagerOverlay {
         break;
       }
     }
-    // Hover osadzonego edytora projektów (zakładka Stocznia) — podświetlenia
-    // wierszy modułów/szablonów czytają editor._hoverZone.
-    if (this._activeTab === 'shipyard') {
+    // Hover osadzonych części UnitDesignOverlay (Stocznia = edytor projektów,
+    // Jednostki = GroundUnitPanel) — podświetlenia wierszy i tooltipy panelu
+    // czytają editor._hoverZone oraz _mouseX/_mouseY (UDO.handleMouseMove nie
+    // biegnie, bo overlay unit_design jest schowany).
+    if (this._activeTab === 'shipyard' || this._activeTab === 'ground') {
       const ed = this._getDesignEditor();
-      if (ed) ed._hoverZone = findHitZone(mx, my, this._hitZones) ?? null;
+      if (ed) {
+        ed._hoverZone = findHitZone(mx, my, this._hitZones) ?? null;
+        ed._mouseX = mx;
+        ed._mouseY = my;
+      }
     }
   }
 
@@ -1029,6 +1051,11 @@ export class FleetManagerOverlay {
     // Edytor projektów osadzony w zakładce Stocznia — jego hity (select_hull,
     // select_slot, pick_module, save_template, edit/delete_template itd.) trafiają
     // do wspólnej tablicy _hitZones i są tu delegowane do instancji edytora.
+    // Panel jednostek naziemnych (zakładka Jednostki) — UDO._onHit rozpakowuje prefix.
+    if (zone.type?.startsWith('ground:')) {
+      this._getDesignEditor()?._onHit(zone);
+      return;
+    }
     if (DESIGN_EDITOR_HIT_TYPES.has(zone.type)) {
       this._getDesignEditor()?._onHit(zone);
       return;
@@ -7036,6 +7063,18 @@ export class FleetManagerOverlay {
       if (this._hoverShipId) this._drawShipCostTooltip(ctx, x, y, w, h, this._hoverShipId, inv, canBuildAny, activeCol);
       if (this._hoverPendingOrder) this._drawPendingOrderTooltip(ctx, x, y, w, h, this._hoverPendingOrder, inv);
     }
+  }
+
+  // ── Zakładka JEDNOSTKI: katalog + rekrutacja jednostek naziemnych ───────────
+  // Panel to prawa połowa UnitDesignOverlay (wspólny stan z klawiszem U). Hity
+  // ('ground:*') trafiają do wspólnej _hitZones i są delegowane w _handleHit.
+  _drawGroundTab(ctx, x, y, w, h) {
+    const editor = this._getDesignEditor();
+    if (!editor?._groundPanel) return;   // headless/brak rejestracji → pusto
+    const savedHits = editor._hitZones;
+    editor._hitZones = this._hitZones;   // hity panelu do wspólnej tablicy
+    editor._groundPanel.draw(ctx, x, y, w, h);
+    editor._hitZones = savedHits;
   }
 
   // ── Stocznia — sekcja budowy statków (zwraca dolną krawędź cy) ─────────────

@@ -402,9 +402,9 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `groundUnit:expired { unitId, planetId, reason }` | GroundUnitManager | ColonyOverlay |
 | `groundUnit:stealthRevealed { unitId }` | GroundUnitManager | ColonyOverlay |
 | `groundUnit:stealthHidden { unitId }` | GroundUnitManager | ColonyOverlay |
-| `groundUnit:buildStarted { planetId, archetypeId, factionId }` | ColonyManager | GroundUnitPanel, EventLog |
-| `groundUnit:buildCompleted { unitId, archetypeId, factionId, planetId, q, r }` | ColonyManager | GroundUnitPanel, ColonyOverlay |
-| `groundUnit:buildFailed { planetId, archetypeId, reason }` | ColonyManager | GroundUnitPanel |
+| `groundUnit:buildStarted { planetId, archetypeId, factionId }` | ColonyManager | — (emit-only; GroundUnitPanel czyta zwrotkę `startGroundUnitBuild`) |
+| `groundUnit:buildCompleted { unitId, archetypeId, factionId, planetId, q, r }` | ColonyManager | — (emit-only) |
+| `groundUnit:buildFailed { planetId, archetypeId, reason }` | ColonyManager | — (emit-only) |
 | `groundUnit:supplyChanged { unitId, supply, max }` | SupplyCoverageSystem | ColonyOverlay |
 | `groundUnit:orgChanged { unitId, org, max }` | GroundUnitManager, SupplyCoverageSystem | ColonyOverlay |
 | `groundUnit:moraleChanged { unitId, morale, max }` | GroundUnitManager, SupplyCoverageSystem | ColonyOverlay |
