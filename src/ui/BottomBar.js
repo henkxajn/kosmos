@@ -13,7 +13,7 @@ import { showConfirmModal } from './ConfirmModal.js';
 import { toggleNotificationDropdown, isNotificationDropdownOpen } from './NotificationDropdown.js';
 import { TIME_W } from './TopBar.js';
 import { SaveSystem } from '../systems/SaveSystem.js';
-import { buildSaveFileName, downloadSave, pickSaveFile, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
+import { buildSaveFileName, downloadSave, pickSaveFile, markPendingLoad, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline w zwiniętym pasku
@@ -369,7 +369,9 @@ export class BottomBar {
     }
     // Reload natychmiast — stan w pamięci jest już nieaktualny, a każdy zapis (ręczny
     // lub autozapis) nadpisałby świeżo zaimportowany slot. Restore idzie przez migrate()
-    // przy odczycie, więc gra musi wystartować od nowa.
+    // przy odczycie, więc gra musi wystartować od nowa. Flaga sprawia, że wraca prosto
+    // do gry, z pominięciem ekranu tytułowego (gracz importował Z gry — chce grać, nie wybierać).
+    markPendingLoad();
     window.location.reload();
   }
 

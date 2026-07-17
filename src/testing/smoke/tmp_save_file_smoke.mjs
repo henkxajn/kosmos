@@ -265,6 +265,37 @@ const T = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('
   function SaveSystem_slotIntact() { return globalThis.localStorage.getItem('kosmos_save_v1') === '{"version":90}'; }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// T9 — flaga „wczytaj od razu po reloadzie" (import z gry pomija ekran tytułowy)
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const sess = new Map();
+  globalThis.sessionStorage = {
+    getItem: k => sess.get(k) ?? null,
+    setItem: (k, v) => sess.set(k, String(v)),
+    removeItem: k => sess.delete(k),
+  };
+  const { markPendingLoad, consumePendingLoad } = await import('../../utils/SaveFile.js');
+
+  sess.clear();
+  T('T9 bez flagi → false (normalny start = ekran tytułowy)', consumePendingLoad() === false);
+
+  markPendingLoad();
+  T('T9 po mark → true', consumePendingLoad() === true);
+  T('T9 flaga JEDNORAZOWA (drugi odczyt false — crash nie zapętli auto-startu)',
+    consumePendingLoad() === false);
+  T('T9 klucz sprzątnięty z sessionStorage', sess.get('kosmos_pending_load') === undefined);
+
+  // Brak sessionStorage (tryb prywatny) → degradacja do ekranu tytułowego, bez wyjątku
+  const savedSess = globalThis.sessionStorage;
+  globalThis.sessionStorage = { getItem: () => { throw new Error('denied'); }, setItem: () => { throw new Error('denied'); }, removeItem: () => {} };
+  let threw = false;
+  try { markPendingLoad(); consumePendingLoad(); } catch { threw = true; }
+  T('T9 niedostępny sessionStorage nie wysypuje (graceful)', threw === false);
+  T('T9 niedostępny sessionStorage → false (ekran tytułowy jako fallback)', consumePendingLoad() === false);
+  globalThis.sessionStorage = savedSess;
+}
+
 // ── Podsumowanie ─────────────────────────────────────────────────────────────
 console.log(`\nSave-do-pliku smoke: ${pass}/${pass + fail} PASS${fail ? `  (${fail} FAIL)` : ''}`);
 process.exit(fail ? 1 : 0);

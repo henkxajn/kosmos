@@ -8,7 +8,7 @@ import { PRESET_THEMES, applyPreset, saveTheme } from '../config/ThemeConfig.js'
 import { updateCrt } from '../ui/CrtOverlay.js';
 import { t, getLocale, setLocale } from '../i18n/i18n.js';
 import { FactionSelectScene } from './FactionSelectScene.js';
-import { pickSaveFile, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
+import { pickSaveFile, consumePendingLoad, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
 
 // ── 4 warianty kolorystyczne ekranu startowego ────────────────
 const SS_THEMES = [
@@ -66,6 +66,14 @@ export class TitleScene {
   }
 
   show() {
+    // Import pliku z poziomu gry wraca tu po reloadzie — wtedy ekran tytułowy jest tylko
+    // przystankiem w drodze do gry, więc NIE budujemy go wcale (zero migotania) i startujemy
+    // od razu z zaimportowanego zapisu.
+    if (consumePendingLoad()) {
+      if (this._prepareContinue()) this._launchGame();
+      return;
+    }
+
     // Przywróć zapisany wariant
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -326,19 +334,7 @@ export class TitleScene {
 
   _handleChoice(action) {
     if (action === 'continue') {
-      let saveData = SaveSystem.loadData();
-      if (saveData) {
-        saveData = migrate(saveData);
-        if (saveData.error) {
-          console.error('[TitleScene] Migracja save:', saveData.message);
-          alert(saveData.message);
-          SaveSystem.clearSave();
-          window.location.reload();
-          return;
-        }
-      }
-      window.KOSMOS.savedData = saveData;
-      window.KOSMOS.scenario  = saveData?.scenario ?? 'civilization';
+      if (!this._prepareContinue()) return;
     } else if (action === 'load_file') {
       // Start gry nastąpi dopiero po wybraniu pliku (dialog jest asynchroniczny),
       // więc nie schodzimy do wspólnego fade-outu poniżej.
@@ -356,12 +352,7 @@ export class TitleScene {
       setTimeout(() => {
         this.destroy();
         const factionScene = new FactionSelectScene();
-        factionScene.show(() => {
-          window._showLoadingScreen?.();
-          requestAnimationFrame(() => {
-            setTimeout(() => window._startMainGame(), 16);
-          });
-        });
+        factionScene.show(() => this._launchGame());
       }, 600);
       return;  // nie kontynuuj do wspólnego fade out poniżej
 
@@ -382,13 +373,38 @@ export class TitleScene {
 
     setTimeout(() => {
       this.destroy();
-      // Pokaż loading screen i odrocz inicjalizację
-      window._showLoadingScreen?.();
-      // requestAnimationFrame pozwala przeglądarce wyrenderować loading screen
-      requestAnimationFrame(() => {
-        setTimeout(() => window._startMainGame(), 16);
-      });
+      this._launchGame();
     }, 600);
+  }
+
+  /**
+   * Wczytuje zapis ze slotu i przygotowuje window.KOSMOS pod start gry.
+   * Wspólne dla „Kontynuuj" i dla auto-startu po imporcie pliku.
+   * @returns {boolean} czy można startować (false = błąd migracji, ścieżka sama się posprząta)
+   */
+  _prepareContinue() {
+    let saveData = SaveSystem.loadData();
+    if (saveData) {
+      saveData = migrate(saveData);
+      if (saveData.error) {
+        console.error('[TitleScene] Migracja save:', saveData.message);
+        alert(saveData.message);
+        SaveSystem.clearSave();
+        window.location.reload();
+        return false;
+      }
+    }
+    window.KOSMOS.savedData = saveData;
+    window.KOSMOS.scenario  = saveData?.scenario ?? 'civilization';
+    return true;
+  }
+
+  /** Loading screen → start gry. rAF pozwala przeglądarce wyrenderować loading zanim ruszy init. */
+  _launchGame() {
+    window._showLoadingScreen?.();
+    requestAnimationFrame(() => {
+      setTimeout(() => window._startMainGame(), 16);
+    });
   }
 
   // ── CSS (kompletny) ──────────────────────────────────────────

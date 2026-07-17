@@ -12,6 +12,32 @@
 const MAX_SLUG_LEN  = 30;   // spójne z maxlength inputu nazwy cywilizacji (IntroModal)
 const PICK_GRACE_MS = 500;  // okno na zdarzenie 'change' po powrocie fokusu (anulowanie dialogu)
 
+// Flaga „po reloadzie wczytaj od razu" — sessionStorage przeżywa reload, ale znika razem z kartą,
+// więc nie może zostać na stałe. Wczytanie w locie nie istnieje: GameScene._restoreSystem() biegnie
+// wyłącznie przy tworzeniu sceny, więc import MUSI przejść przez reload — a to jest sposób, by gracz
+// nie oglądał po drodze ekranu tytułowego.
+const PENDING_LOAD_KEY = 'kosmos_pending_load';
+
+/** Zaznacza, że po najbliższym reloadzie gra ma wystartować z zapisu bez pytania. */
+export function markPendingLoad() {
+  try { sessionStorage.setItem(PENDING_LOAD_KEY, '1'); } catch { /* prywatny tryb — trudno, będzie ekran tytułowy */ }
+}
+
+/**
+ * Odczytuje i OD RAZU kasuje flagę (jednorazowa). Kasowanie przed startem gry jest istotne:
+ * gdyby wczytywanie wysypało się w połowie, flaga nie może zapętlić auto-startu.
+ * @returns {boolean}
+ */
+export function consumePendingLoad() {
+  try {
+    if (sessionStorage.getItem(PENDING_LOAD_KEY) !== '1') return false;
+    sessionStorage.removeItem(PENDING_LOAD_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Powody odrzucenia z SaveSystem.importSave() → klucze i18n.
  * Trzymane tu (a nie w UI), bo konsumują je oba wejścia importu: menu w grze i ekran tytułowy.
