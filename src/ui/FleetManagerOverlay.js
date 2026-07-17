@@ -144,12 +144,27 @@ const DESIGN_EDITOR_HIT_TYPES = new Set([
 
 // ── Stratcom (radar strategiczny) ─────────────────────────────────────────────
 // Zasięg radaru galaktycznego per poziom obserwatorium (ly). Radar galaktyczny dopiero od Lv4 —
-// Lv1-3 nie wykrywają statków warp (gwiazdy nadal zawsze widoczne jako mapa nawigacyjna).
+// Lv1-3 nie wykrywają OBCYCH statków warp (gwiazdy nadal zawsze widoczne jako mapa nawigacyjna).
+// Bramka dotyczy WYŁĄCZNIE cudzych statków (mgła wojny) — własną flotę widać zawsze,
+// niezależnie od obserwatorium (patrz _stratcomOwnShipBlips).
 const STRATCOM_LY_BY_LEVEL = [0, 0, 0, 0, 5, 10, 15];  // idx = poziom obserwatorium imperium
 const STRATCOM_MAX_BLIPS = 14;   // miękki limit liczby gwiazd na radarze (czytelność)
 const STRATCOM_GLOW    = true;  // animowana iluminacja tarczy radaru (ciągły redraw); false = wyłącz
 const STRATCOM_GLOW_MS = 7000;  // okres „oddechu" podświetlenia [ms] — wolny, ambientowy
 const STRATCOM_BG_BRIGHTNESS = 0.25;  // jasność tła-mgławicy paneli Stratcomu (0..1; 1.0 = bez tłumienia)
+// Wachlarz ikon własnej floty: statki stojące w tym samym układzie mają JEDEN punkt
+// (gwiazdę), więc bez rozsunięcia N ikon leży w jednym pikselu. Rządek idzie NAD gwiazdę —
+// nazwa układu jest pod nią, ikony infrastruktury (🏗📡🌀) po prawej, góra jest wolna.
+// Offset w PIKSELACH (nie w ly) → odstęp nie zmienia się ze zoomem radaru.
+const STRATCOM_FAN_MAX  = 6;    // powyżej → licznik „+N" zamiast kolejnych ikon
+const STRATCOM_FAN_STEP = 9;    // odstęp ikon w rządku [px]
+const STRATCOM_FAN_DY   = -13;  // wysokość rządka nad gwiazdą [px]
+
+// Offset idx-tej ikony z `count` statków stojących w tym samym układzie (rządek wyśrodkowany).
+function _stratcomFanOffset(idx, count) {
+  const n = Math.min(count, STRATCOM_FAN_MAX);
+  return { dx: (idx - (n - 1) / 2) * STRATCOM_FAN_STEP, dy: STRATCOM_FAN_DY };
+}
 // Górny offset overlay. „Dowództwo Taktyczne" jest pojedynczą grupą nav (bez rodzeństwa
 // Fleet/Designs) → brak subnav, więc overlay sięga aż pod górną belkę i to jego własny
 // pasek zakładek (4 zakładki) zajmuje miejsce dawnego subnav. getSubNavHeight() liczone
@@ -4091,6 +4106,51 @@ export class FleetManagerOverlay {
     return { home, list, rangeLY, isEmpKnown };
   }
 
+  // Blipy WŁASNEJ floty — wspólne dla radaru i mapy galaktyki. Statki gracza widać
+  // ZAWSZE: bramka sensorów (rangeLY) to mgła wojny i dotyczy wykrywania OBCYCH, nie
+  // własnej floty (pozycje swoich statków znamy niezależnie od obserwatorium).
+  // Zbiór = ten sam co tabela „Statki warp" (statki z bakiem warp), poszerzony o wszystko
+  // co aktualnie skacze — statek przez jump gate bez baku warp też ma być widoczny.
+  // Pozycja: faza 'warp_transit' → punkt tranzytu (gx/gy), inaczej → gwiazda macierzysta
+  // (po dolocie misja ma phase='in_system' i systemId celu — VesselManager._tickInterstellar).
+  // starS = obiekt gwiazdy dla stojących (null w tranzycie) — mapa galaktyki projektuje
+  // przez projS(starS), żeby ikona siadła na gwieździe także w 3D (z ≠ 0).
+  // fanIdx/fanCount = miejsce w wachlarzu statków stojących w TYM SAMYM układzie.
+  // Zwraca [{ v, gx, gy, starS, inTransit, fromS, toS, fanIdx, fanCount }] — projekcja po stronie panelu.
+  _stratcomOwnShipBlips(vMgr) {
+    const systems = window.KOSMOS?.galaxyData?.systems ?? [];
+    const out = [];
+    const atStar = new Map();   // systemId → liczba stojących statków (rozmiar wachlarza)
+    for (const v of (vMgr?.getAllVessels?.() ?? [])) {
+      if (isEnemyVessel(v) || v.isWreck) continue;
+      const m = v.mission;
+      const jumping = m?.type === 'interstellar_jump';
+      if (!(v.warpFuel?.max > 0) && !jumping) continue;   // wewnątrzukładowy → poza zakresem radaru
+      if (jumping && m.phase === 'warp_transit') {
+        out.push({
+          v, gx: m.currentGalX ?? m.fromGalX ?? 0, gy: m.currentGalY ?? m.fromGalY ?? 0,
+          starS: null, inTransit: true,
+          fromS: systems.find(s => s.id === m.fromSystemId) ?? null,
+          toS:   systems.find(s => s.id === m.toSystemId) ?? null,
+          fanIdx: 0, fanCount: 1,
+        });
+        continue;
+      }
+      const sid = v.systemId ?? 'sys_home';
+      const s = systems.find(x => x.id === sid);
+      if (!s) continue;
+      const idx = atStar.get(sid) ?? 0;
+      atStar.set(sid, idx + 1);
+      out.push({
+        v, gx: s.x ?? 0, gy: s.y ?? 0, starS: s, inTransit: false,
+        fromS: null, toS: null, fanIdx: idx, fanCount: 1,
+      });
+    }
+    // fanCount znamy dopiero po przejściu CAŁEJ floty (komplet stojących w układzie).
+    for (const e of out) if (e.starS) e.fanCount = atStar.get(e.starS.id) ?? 1;
+    return out;
+  }
+
   // ── Realne kolory gwiazdy wg typu spektralnego (rdzeń + halo) ──────────────
   // galaxyData niesie colorHex/glowColorHex (liczby 0xRRGGBB ze STAR_TYPES).
   // Fallback: brak danych → akcent motywu (degradacja do dawnego „cyan").
@@ -4302,17 +4362,17 @@ export class FleetManagerOverlay {
       ctx.stroke(); ctx.setLineDash([]);
     }
 
-    // Linie tranzytu międzygwiezdnego + pozycja statku. SENSORY: wykrywanie tylko w zasięgu
-    // obserwatorium (rangeLY = bramka detekcji galaktycznej). Fog-of-war: wróg bez intel-kontaktu =
-    // ghost „?" (pośredni), wróg z contact = solid czerwony, własny/sojuszniczy = żywy blip.
-    // Wybrany statek gracza pomijamy tu — ma własną trasę + marker (rysowane zawsze).
+    // Linie tranzytu OBCYCH + ich pozycja. SENSORY: wykrywanie tylko w zasięgu obserwatorium
+    // (rangeLY = bramka detekcji galaktycznej). Fog-of-war: wróg bez intel-kontaktu = ghost „?"
+    // (pośredni), wróg z contact = solid czerwony. Własna flota NIE przechodzi tędy — jest
+    // widoczna zawsze i bez bramki sensorów (ownBlips niżej).
     for (const v of (vMgr?.getInterstellarVessels() ?? [])) {
-      if (v.id === this._selectedWarpShipId) continue;
+      if (!isEnemyVessel(v)) continue;
       const m = v.mission;
       if (!m || m.phase !== 'warp_transit') continue;
       const sx0 = m.currentGalX ?? 0, sy0 = m.currentGalY ?? 0;
       if (Math.hypot(sx0 - home.x, sy0 - home.y) > rangeLY) continue;   // poza sensorami → niewykryty
-      const mode = this._stratcomWarpBlipMode(v);   // 'self' | 'contact' | 'rumor'
+      const mode = this._stratcomWarpBlipMode(v);   // tu tylko 'contact' | 'rumor'
       const fromS = systems.find(s => s.id === m.fromSystemId);
       const toS   = systems.find(s => s.id === m.toSystemId);
       const vsx = toSx(m.currentGalX ?? (fromS?.x ?? sx0));
@@ -4323,14 +4383,25 @@ export class FleetManagerOverlay {
         continue;
       }
       if (fromS && toS) {
-        ctx.strokeStyle = mode === 'contact' ? 'rgba(255,68,102,0.4)' : 'rgba(255,170,50,0.35)';
+        ctx.strokeStyle = 'rgba(255,68,102,0.4)';
         ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
         ctx.beginPath();
         ctx.moveTo(toSx(fromS.x), toSy(fromS.y)); ctx.lineTo(toSx(toS.x), toSy(toS.y));
         ctx.stroke(); ctx.setLineDash([]);
       }
-      ctx.fillStyle = mode === 'contact' ? '#ff4466' : THEME.warning;
+      ctx.fillStyle = '#ff4466';
       ctx.beginPath(); ctx.arc(vsx, vsy, 3, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // Własna flota — jedno źródło dla tras (tu, pod gwiazdami) i ikon (niżej, nad gwiazdami).
+    const ownBlips = this._stratcomOwnShipBlips(vMgr);
+    for (const e of ownBlips) {
+      if (!e.inTransit || !e.fromS || !e.toS) continue;
+      ctx.strokeStyle = 'rgba(255,170,50,0.35)';
+      ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(toSx(e.fromS.x), toSy(e.fromS.y)); ctx.lineTo(toSx(e.toS.x), toSy(e.toS.y));
+      ctx.stroke(); ctx.setLineDash([]);
     }
 
     // Trasa wybranego statku warp (CAŁA, do celu): bieżący skok + pozostałe (2 kolory).
@@ -4425,20 +4496,13 @@ export class FleetManagerOverlay {
       }
     }
 
-    // Marker „mój statek" — wybrany statek warp (bieżący układ lub pozycja tranzytu).
-    if (this._selectedWarpShipId) {
-      const mv = vMgr?.getVessel?.(this._selectedWarpShipId);
-      if (mv) {
-        let mx = null, my = null;
-        if (mv.position?.state === 'in_transit' && mv.mission?.type === 'interstellar_jump') {
-          mx = toSx(mv.mission.currentGalX ?? mv.mission.fromGalX ?? 0);
-          my = toSy(mv.mission.currentGalY ?? mv.mission.fromGalY ?? 0);
-        } else {
-          const msys = systems.find(s => s.id === (mv.systemId ?? 'sys_home'));
-          if (msys) { mx = toSx(msys.x ?? 0); my = toSy(msys.y ?? 0); }
-        }
-        if (mx != null && Math.hypot(mx - cx, my - cy) <= R) this._drawMyShipMarker(ctx, mx, my);
-      }
+    // Ikony WŁASNEJ floty — widoczne ZAWSZE, bez względu na selekcję (zaznaczenie tylko
+    // podświetla: pulsujący marker zamiast statycznego trójkąta). Nad gwiazdami, żeby glif
+    // gwiazdy nie zasłaniał statku stojącego w układzie.
+    for (const e of ownBlips) {
+      const bx = toSx(e.gx), by = toSy(e.gy);
+      if (Math.hypot(bx - cx, by - cy) > R) continue;   // poza tarczą radaru
+      this._drawStratcomOwnBlip(ctx, e, bx, by);
     }
 
     ctx.restore(); // koniec clipu koła
@@ -4449,7 +4513,7 @@ export class FleetManagerOverlay {
       const selData = systems.find(s => s.id === selSys);
       if (selData) {
         if (this._selectedWarpShipId) this._drawWarpOrderPanel(ctx, dialX, y, dialW, h, selData, vMgr);
-        else this._drawStratcomPolitical(ctx, dialX, y, dialW, h, selData, empReg, intel, dipl, colMgr);
+        else this._drawStratcomPolitical(ctx, dialX, y, dialW, h, selData, empReg, intel, dipl, colMgr, vMgr);
       }
     }
 
@@ -4945,16 +5009,16 @@ export class FleetManagerOverlay {
       ctx.strokeStyle = 'rgba(170,136,255,0.4)'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
       ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
     }
-    // Linie tranzytu warp — SENSORY: tylko statki w zasięgu obserwatorium (rangeLY). Fog-of-war
-    // identyczny jak na radarze: wróg bez intel-kontaktu = ghost „?", contact = solid czerwony.
-    // Wybrany statek gracza pomijamy (ma własną trasę + marker rysowane zawsze).
+    // Linie tranzytu warp OBCYCH — SENSORY: tylko statki w zasięgu obserwatorium (rangeLY).
+    // Fog-of-war identyczny jak na radarze: wróg bez intel-kontaktu = ghost „?", contact =
+    // solid czerwony. Własna flota tędy NIE idzie — widoczna zawsze, bez bramki (ownBlips niżej).
     const sensorRangeLY = vis.rangeLY;
     for (const v of (vMgr?.getInterstellarVessels() ?? [])) {
-      if (v.id === this._selectedWarpShipId) continue;
+      if (!isEnemyVessel(v)) continue;
       const m = v.mission; if (!m || m.phase !== 'warp_transit') continue;
       const sx0 = m.currentGalX ?? 0, sy0 = m.currentGalY ?? 0;
       if (Math.hypot(sx0 - (home.x ?? 0), sy0 - (home.y ?? 0)) > sensorRangeLY) continue;
-      const mode = this._stratcomWarpBlipMode(v);   // 'self' | 'contact' | 'rumor'
+      const mode = this._stratcomWarpBlipMode(v);   // tu tylko 'contact' | 'rumor'
       const vp = projPt(m.currentGalX ?? sx0, m.currentGalY ?? sy0);
       if (mode === 'rumor') {
         // Pośredni kontakt — ghost bez linii trasy.
@@ -4966,15 +5030,26 @@ export class FleetManagerOverlay {
       if (fromS && toS) {
         const a = projS(fromS), b = projS(toS);
         if (a && b) {
-          ctx.strokeStyle = mode === 'contact' ? 'rgba(255,68,102,0.35)' : 'rgba(255,170,50,0.3)';
+          ctx.strokeStyle = 'rgba(255,68,102,0.35)';
           ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
           ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
         }
       }
       if (vp) {
-        ctx.fillStyle = mode === 'contact' ? '#ff4466' : THEME.warning;
+        ctx.fillStyle = '#ff4466';
         ctx.beginPath(); ctx.arc(vp.sx, vp.sy, 3, 0, Math.PI * 2); ctx.fill();
       }
+    }
+
+    // Własna flota — jedno źródło dla tras (tu, pod gwiazdami) i ikon (niżej, nad gwiazdami).
+    const ownBlips = this._stratcomOwnShipBlips(vMgr);
+    for (const e of ownBlips) {
+      if (!e.inTransit || !e.fromS || !e.toS) continue;
+      const a = projS(e.fromS), b = projS(e.toS);
+      if (!a || !b) continue;
+      ctx.strokeStyle = 'rgba(255,170,50,0.3)';
+      ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke(); ctx.setLineDash([]);
     }
 
     // Trasa wybranego statku warp (CAŁA, do celu) — bieżący skok + pozostałe (2 kolory).
@@ -5028,19 +5103,12 @@ export class FleetManagerOverlay {
       }
     }
 
-    // Marker „mój statek" — wybrany statek warp (projekcja 3D/2D galaktyki).
-    if (this._selectedWarpShipId) {
-      const mv = vMgr?.getVessel?.(this._selectedWarpShipId);
-      if (mv) {
-        let p = null;
-        if (mv.position?.state === 'in_transit' && mv.mission?.type === 'interstellar_jump') {
-          p = projPt(mv.mission.currentGalX ?? mv.mission.fromGalX ?? 0, mv.mission.currentGalY ?? mv.mission.fromGalY ?? 0);
-        } else {
-          const msys = systems.find(s => s.id === (mv.systemId ?? 'sys_home'));
-          p = msys ? projS(msys) : null;
-        }
-        if (p) this._drawMyShipMarker(ctx, p.sx, p.sy);
-      }
+    // Ikony WŁASNEJ floty — widoczne ZAWSZE, bez względu na selekcję (zaznaczenie tylko
+    // podświetla). Stojące projektujemy przez projS(starS), żeby ikona siadła na gwieździe
+    // także w 3D (projPt spłaszcza do z=0 i rozjechałaby się z gwiazdą o z ≠ 0).
+    for (const e of ownBlips) {
+      const p = e.starS ? projS(e.starS) : projPt(e.gx, e.gy);
+      if (p) this._drawStratcomOwnBlip(ctx, e, p.sx, p.sy);
     }
 
     // Panel operacyjny / rozkaz warp (duży + selekcja)
@@ -5057,8 +5125,9 @@ export class FleetManagerOverlay {
     if (!isBig) this._hitZones.push({ x, y, w, h, type: 'stratcom_expand', data: { panel: 'galaxy' } });
   }
 
-  // Panel POLITYCZNY (radar): imperium / relacja / populacja / życie — jeśli znane.
-  _drawStratcomPolitical(ctx, areaX, areaY, areaW, areaH, sys, empReg, intel, dipl, colMgr) {
+  // Panel POLITYCZNY (radar): imperium / relacja / populacja / życie — jeśli znane —
+  // + rozkaz „Wyślij statek" (radar daje rozkaz tak samo jak mapa galaktyki).
+  _drawStratcomPolitical(ctx, areaX, areaY, areaW, areaH, sys, empReg, intel, dipl, colMgr, vMgr) {
     const PAD = 8;
     const panelW = Math.min(216, Math.max(150, areaW - 16));
     const px = areaX + areaW - panelW - 8;
@@ -5112,6 +5181,26 @@ export class FleetManagerOverlay {
     // Status
     ctx.fillStyle = explored ? THEME.success : THEME.textDim;
     ctx.fillText(explored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10);
+
+    // ── Rozkaz „Wyślij statek" — to samo wejście co na mapie galaktyki ──────────
+    // Ten sam typ hitu (cluster_send) i ten sam gating co _drawStratcomOps; picker statku
+    // rysuje zakładka Stratcomu (_pendingSendSystemId), więc handler nie wymaga zmian.
+    // Przyklejony do DOŁU panelu — blok informacyjny wyżej ma zmienną wysokość.
+    if (!sys.isHome) {
+      const btnW = panelW - PAD * 2, btnH = 18;
+      const by = py + panelH - PAD - btnH;
+      const activePid = colMgr?.activePlanetId;
+      const avail = activePid ? (vMgr?.getAvailable?.(activePid) ?? []) : [];
+      const hasWarpShip = avail.some(v => v.warpFuel?.max > 0);
+      ctx.fillStyle = hasWarpShip ? 'rgba(0,255,180,0.08)' : 'rgba(60,60,60,0.3)';
+      ctx.fillRect(px + PAD, by, btnW, btnH);
+      ctx.strokeStyle = hasWarpShip ? THEME.accent : THEME.border; ctx.lineWidth = 1;
+      ctx.strokeRect(px + PAD, by, btnW, btnH);
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = hasWarpShip ? THEME.accent : THEME.textDim; ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.clusterSend'), px + PAD + btnW / 2, by + 13); ctx.textAlign = 'left';
+      if (hasWarpShip) this._hitZones.push({ x: px + PAD, y: by, w: btnW, h: btnH, type: 'cluster_send', data: { systemId: sys.id } });
+    }
   }
 
   // Panel OPERACYJNY (mapa galaktyki): skan układu (liczby ciał) + wyślij statek + przełącz widok.
@@ -5302,8 +5391,51 @@ export class FleetManagerOverlay {
 
   // ── Warp multi-hop UI ──────────────────────────────────────────────────────
 
+  // Ikona własnego statku na Stratcom (radar + mapa galaktyki) — rysowana ZAWSZE,
+  // niezależnie od selekcji. Zaznaczony statek dostaje pulsujący marker zamiast
+  // statycznego trójkąta (selekcja = podświetlenie, NIE warunek widoczności).
+  // (sx,sy) = punkt po projekcji; wachlarz doliczany tutaj, żeby oba panele miały
+  // wywołanie jednolinijkowe. Statek w tranzycie ma własny punkt na trasie → bez wachlarza.
+  _drawStratcomOwnBlip(ctx, e, sx, sy) {
+    let dx = 0, dy = 0;
+    if (!e.inTransit) {
+      if (e.fanIdx >= STRATCOM_FAN_MAX) {
+        // Nadmiar w rządku → jeden licznik na gwiazdę zamiast ściany nieczytelnych ikon.
+        if (e.fanIdx === STRATCOM_FAN_MAX) {
+          const o = _stratcomFanOffset(STRATCOM_FAN_MAX - 1, e.fanCount);
+          ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.accent;
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.fillText(`+${e.fanCount - STRATCOM_FAN_MAX}`, sx + o.dx + 6, sy + o.dy);
+          ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+        }
+        return;
+      }
+      ({ dx, dy } = _stratcomFanOffset(e.fanIdx, e.fanCount));
+    }
+    if (e.v.id === this._selectedWarpShipId) this._drawMyShipMarker(ctx, sx + dx, sy + dy);
+    else this._drawOwnShipTriangle(ctx, sx + dx, sy + dy);
+  }
+
+  // Statyczna ikona własnego statku — mniejszy brat trójkąta z _drawMyShipMarker (bez
+  // pulsującego pierścienia), żeby zaznaczony statek nadal wyróżniał się z floty.
+  _drawOwnShipTriangle(ctx, sx, sy) {
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = THEME.accent;
+    ctx.strokeStyle = '#06121a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - 4.5);
+    ctx.lineTo(sx - 3.5, sy + 3.5);
+    ctx.lineTo(sx + 3.5, sy + 3.5);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
   // Marker „mój statek" — wybrany statek warp. Pulsujący pierścień + trójkąt
-  // (odróżnialny od pomarańczowej kropki tranzytu warp innych statków).
+  // (odróżnialny od statycznej ikony reszty floty i od blipów obcych).
   _drawMyShipMarker(ctx, sx, sy) {
     const t0 = (typeof performance !== 'undefined' ? performance.now() : 0);
     const pulse = 0.5 + 0.5 * Math.sin(t0 / 600 * Math.PI);
