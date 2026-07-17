@@ -9,8 +9,11 @@ import { COSMIC }         from '../config/LayoutConfig.js';
 import EventBus            from '../core/EventBus.js';
 import { t, getLocale }   from '../i18n/i18n.js';
 import { showAutoPauseSettings } from './AutoPauseSettingsModal.js';
+import { showConfirmModal } from './ConfirmModal.js';
 import { toggleNotificationDropdown, isNotificationDropdownOpen } from './NotificationDropdown.js';
 import { TIME_W } from './TopBar.js';
+import { SaveSystem } from '../systems/SaveSystem.js';
+import { buildSaveFileName, downloadSave, pickSaveFile, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
 
 const BAR_H = COSMIC.BOTTOM_BAR_H; // 26px
 const LOG_INLINE = 2; // ile wpisów widocznych inline w zwiniętym pasku
@@ -26,7 +29,7 @@ function _severityColor(sev) {
 const MENU_W = 220;
 const MENU_ROW_H = 28;
 const MENU_PAD = 8;
-const MENU_ROWS = 8; // Nowa gra, Zapisz, Autozapis, Auto-pauza, Orbity, Radar, Muzyka, Dźwięki
+const MENU_ROWS = 10; // Nowa gra, Zapisz, Zapisz do pliku, Wczytaj z pliku, Autozapis, Auto-pauza, Orbity, Radar, Muzyka, Dźwięki
 const MENU_H = MENU_PAD * 2 + MENU_ROWS * MENU_ROW_H;
 
 // Opcje interwału autozapisu
@@ -287,6 +290,16 @@ export class BottomBar {
         this._menuOpen = false;
         this._syncDomMenu();
         break;
+      case 'saveToFile':
+        this._menuOpen = false;
+        this._syncDomMenu();
+        this._saveToFile();
+        break;
+      case 'loadFromFile':
+        this._menuOpen = false;
+        this._syncDomMenu();
+        this._loadFromFile();
+        break;
       case 'autosave':
         this._cycleAutosave();
         this._updateDomMenu(); // odśwież wartość
@@ -314,6 +327,50 @@ export class BottomBar {
         setTimeout(() => this._updateDomMenu(), 50);
         break;
     }
+  }
+
+  // ── Zapis do pliku na dysku gracza ──────────────────────────────
+  // Zrzuca bieżący stan do slotu PRZED eksportem: exportSave() czyta wyłącznie slot
+  // localStorage, więc bez tego na dysk poszedłby poprzedni, nieaktualny zapis.
+  _saveToFile() {
+    EventBus.emit('game:save');
+    const raw = SaveSystem.exportSave();
+    if (!raw) {
+      EventBus.emit('ui:toast', { text: t('saveFile.noSave'), color: THEME.danger, durationMs: 3500 });
+      return;
+    }
+    let data = null;
+    try { data = JSON.parse(raw); } catch { /* nazwa poleci na fallback */ }
+    const filename = buildSaveFileName(data);
+    if (downloadSave(raw, filename)) {
+      EventBus.emit('ui:toast', { text: t('saveFile.saved', filename), color: THEME.success, durationMs: 3500 });
+    }
+  }
+
+  // ── Wczytanie zapisu z pliku ────────────────────────────────────
+  // Confirm (operacja zastępuje bieżącą grę) → natywny picker → import → reload.
+  async _loadFromFile() {
+    const confirmed = await showConfirmModal({
+      title:        t('saveFile.confirmLoadTitle'),
+      message:      t('saveFile.confirmLoadMsg'),
+      confirmLabel: t('saveFile.confirmLoadBtn'),
+      danger:       true,
+    });
+    if (!confirmed) return;
+
+    const text = await pickSaveFile();
+    if (text === null) return;  // anulowano dialog albo błąd odczytu
+
+    const res = SaveSystem.importSave(text);
+    if (!res.ok) {
+      const reason = t(IMPORT_REASON_KEYS[res.reason] ?? 'saveFile.reasonParseError');
+      EventBus.emit('ui:toast', { text: t('saveFile.loadFailed', reason), color: THEME.danger, durationMs: 5000 });
+      return;
+    }
+    // Reload natychmiast — stan w pamięci jest już nieaktualny, a każdy zapis (ręczny
+    // lub autozapis) nadpisałby świeżo zaimportowany slot. Restore idzie przez migrate()
+    // przy odczycie, więc gra musi wystartować od nowa.
+    window.location.reload();
   }
 
   // Rysuj panel MENU — stub (menu jest teraz DOM, nie canvas)
@@ -406,6 +463,8 @@ export class BottomBar {
     return [
       { id: 'newGame', label: t('menu.newGame') },
       { id: 'save',    label: t('menu.save') },
+      { id: 'saveToFile',   label: t('menu.saveToFile') },
+      { id: 'loadFromFile', label: t('menu.loadFromFile') },
       { id: 'autosave', label: t('menu.autosave'), value: autosaveLabel, valueOn: autosaveOn },
       { id: 'autopause', label: apLabel, value: apValue, valueOn: apEnabled },
       { id: 'orbits',   label: t('menu.orbits'), value: orbitLabel, valueOn: true },

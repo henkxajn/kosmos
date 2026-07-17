@@ -668,6 +668,43 @@ Centralny system migracji: `src/systems/SaveMigration.js`
 
 ---
 
+## Strategia zapisu: localStorage vs pliki (save-do-pliku, save v90 bez migracji)
+
+**Dwie warstwy, różne role — żadna nie zastępuje drugiej:**
+- **`localStorage['kosmos_save_v1']`** = BIEŻĄCA gra: autozapis (co 1 rok gry), ochrona przed crashem/F5,
+  JEDEN slot. Nadpisywany.
+- **plik `.json` na dysku** = TRWAŁE zapisy gracza: ręczne, nieograniczone, przenośne.
+  **Pliki pełnią rolę slotów** — system plików gracza jest lepszym menedżerem zapisów niż picker w grze.
+  Dlatego **multi-slot/IndexedDB (Etap 1 z `docs/plan-multi-save-indexeddb.md`) świadomie ODRZUCONY** —
+  ten plan jest nieaktualny (zakładał też zmiany w `BootScene`, który jest martwym kodem: `main.js:38`
+  instancjonuje `TitleScene`).
+
+**`src/utils/SaveFile.js`** — `slugify` / `buildSaveFileName` / `downloadSave` / `pickSaveFile` /
+`IMPORT_REASON_KEYS`. Nazwa pliku liczona **z zawartości zapisu** (`data.civ4x.civName`, `gameTime`,
+`version`), NIE z żywego `window.KOSMOS` → funkcja czysta, ta sama w grze i na ekranie tytułowym:
+`kosmos_Zjednoczona_Federacja_r39_v90.json` (generator: `civ4x=null` → `kosmos_r5_v90.json`).
+`pickSaveFile` — anulowanie natywnego dialogu NIE emituje `change`, więc null idzie przez
+`window focus` + 500 ms grace (flaga `reading` chroni odczyt dużych plików).
+
+**⚠ ROOT-CAUSE FIX `SaveSystem.importSave`** — walidacja była `version >= 1`, więc przepuszczała v91/v3.
+Przy następnym „Kontynuuj" `migrate()` zwracał `error` → `TitleScene:305-311` robił `clearSave()`.
+`future_version`/`too_old` wracają PRZED blokiem backupu (`SaveMigration.js:150`) → **ginął i import, i
+poprzedni zapis gracza, bez śladu**. Teraz bramka zakresu (`CURRENT_VERSION`/`MIN_SUPPORTED_VERSION`)
+odrzuca PRZED `setItem` → slot nietknięty; + kopia `kosmos_save_backup_preimport` (łapie pomyłkę
+„poprawny plik, ale nie ten"). Powody `reason` lustrzane do kodów `migrate()`.
+
+**Wejścia (jedna wspólna ścieżka importu):** menu ☰ (`BottomBar._saveToFile`/`_loadFromFile`) +
+ekran tytułowy (`TitleScene._loadFromFile` → `importSave` → `_handleChoice('continue')`).
+GOTCHA: **eksport MUSI najpierw `emit('game:save')`** — `exportSave()` czyta wyłącznie slot, więc bez
+tego na dysk poszedłby stary stan. **Import MUSI reloadować natychmiast** — stan w pamięci jest już
+nieaktualny, a ręczny zapis nadpisze slot niezależnie od pauzy (autozapis stoi przy pauzie:
+`TimeSystem.js:70` wraca przed `emit('time:tick')`).
+`TitleScene` — numeracja pozycji menu z licznika `num()` (ręczne ternary rozjeżdżały się przy każdej
+nowej pozycji). Autosave ZOSTAJE (ma kill-switch `off` w menu; chroni przed crashem — pliki są ręczne).
+Smoke `tmp_save_file_smoke.mjs` 61/61 (T4 = dowód, że odrzucony import nie rusza slotu).
+
+---
+
 ## Etapy rozwoju
 
 ### Warstwa symulacyjna (✅ ukończone)

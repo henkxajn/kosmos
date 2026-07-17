@@ -12,9 +12,10 @@
 
 import EventBus     from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
-import { CURRENT_VERSION } from './SaveMigration.js';
+import { CURRENT_VERSION, MIN_SUPPORTED_VERSION } from './SaveMigration.js';
 
 const SAVE_KEY           = 'kosmos_save_v1';
+const PREIMPORT_BACKUP_KEY = 'kosmos_save_backup_preimport';
 const DEFAULT_AUTOSAVE   = 1;  // lat gry między autosave'ami (domyślnie co rok)
 const AUTOSAVE_INTERVALS = { off: 0, month: 1 / 12, year: 1, '10y': 10 };
 
@@ -362,8 +363,16 @@ export class SaveSystem {
   }
 
   /**
-   * Import save'a z backupu (string JSON lub obiekt). Waliduje parsowalność + pole version,
-   * potem nadpisuje slot. NIE przeładowuje gry — wywołujący decyduje (reload → migracja+restore).
+   * Import save'a z backupu/pliku (string JSON lub obiekt). Waliduje parsowalność, pole version
+   * ORAZ jego zakres, potem nadpisuje slot. NIE przeładowuje gry — wywołujący decyduje
+   * (reload → migracja+restore).
+   *
+   * Bramka zakresu jest tu, a nie w migracji, celowo: migrate() odrzuca future_version/too_old
+   * ZANIM zdąży zrobić backup, a wywołujący na ścieżce błędu robi clearSave() — czyli plik spoza
+   * zakresu wpuszczony do slotu kasowałby i import, i poprzedni zapis gracza, bez śladu.
+   * Odrzucenie przed setItem() sprawia, że slot pozostaje nietknięty.
+   * Nazwy reason lustrzane do kodów błędu migrate().
+   *
    * @param {string|object} json
    * @returns {{ok:boolean, version?:number, reason?:string}}
    */
@@ -376,6 +385,18 @@ export class SaveSystem {
     }
     if (!obj || typeof obj !== 'object') return { ok: false, reason: 'not_object' };
     if (typeof obj.version !== 'number' || obj.version < 1) return { ok: false, reason: 'no_version' };
+    if (obj.version > CURRENT_VERSION)       return { ok: false, reason: 'future_version' };
+    if (obj.version < MIN_SUPPORTED_VERSION) return { ok: false, reason: 'too_old' };
+
+    // Kopia bieżącego slotu przed nadpisaniem — walidacja wersji nie wychwyci pomyłki
+    // „zaimportowałem poprawny, ale nie ten plik". Awaria kopii nie blokuje importu.
+    try {
+      const prev = localStorage.getItem(SAVE_KEY);
+      if (prev) localStorage.setItem(PREIMPORT_BACKUP_KEY, prev);
+    } catch (e) {
+      console.warn('[SaveSystem] backup przedimportowy nieudany:', e?.message);
+    }
+
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(obj));
     } catch (e) {

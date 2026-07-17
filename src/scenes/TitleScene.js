@@ -8,6 +8,7 @@ import { PRESET_THEMES, applyPreset, saveTheme } from '../config/ThemeConfig.js'
 import { updateCrt } from '../ui/CrtOverlay.js';
 import { t, getLocale, setLocale } from '../i18n/i18n.js';
 import { FactionSelectScene } from './FactionSelectScene.js';
+import { pickSaveFile, IMPORT_REASON_KEYS } from '../utils/SaveFile.js';
 
 // ── 4 warianty kolorystyczne ekranu startowego ────────────────
 const SS_THEMES = [
@@ -171,6 +172,11 @@ export class TitleScene {
     const saveYears = hasSave !== null ? Math.round(hasSave).toLocaleString(getLocale() === 'pl' ? 'pl-PL' : 'en-US') : null;
     const curLang = getLocale().toUpperCase();
 
+    // Numeracja pozycji menu liczona sekwencyjnie: wiersz „Kontynuuj" jest warunkowy,
+    // a ręczne ternary per pozycja trzeba było przenumerowywać przy każdej nowej.
+    let itemNo = 0;
+    const num = () => String(++itemNo).padStart(2, '0');
+
     const c = document.createElement('div');
     c.id = 'start-screen';
 
@@ -220,21 +226,25 @@ export class TitleScene {
       <div class="ss-menu">
         ${hasSave !== null ? `
         <button class="ss-menu-item" data-action="continue">
-          <span class="ss-item-num">01</span>
+          <span class="ss-item-num">${num()}</span>
           <span class="ss-item-label">${t('title.continue', 'CONTINUE')}</span>
           <span class="ss-item-info">${saveYears} ${t('title.years', 'lat')}</span>
         </button>
         ` : ''}
+        <button class="ss-menu-item" data-action="load_file">
+          <span class="ss-item-num">${num()}</span>
+          <span class="ss-item-label">${t('title.loadFile')}</span>
+        </button>
         <button class="ss-menu-item" data-action="new">
-          <span class="ss-item-num">${hasSave !== null ? '02' : '01'}</span>
+          <span class="ss-item-num">${num()}</span>
           <span class="ss-item-label">${t('title.newGameLabel', 'NOWA GRA')}</span>
         </button>
         <button class="ss-menu-item" data-action="power_test">
-          <span class="ss-item-num">${hasSave !== null ? '03' : '02'}</span>
+          <span class="ss-item-num">${num()}</span>
           <span class="ss-item-label">POWER TEST</span>
         </button>
         <button class="ss-menu-item" data-action="combat_sandbox">
-          <span class="ss-item-num">${hasSave !== null ? '04' : '03'}</span>
+          <span class="ss-item-num">${num()}</span>
           <span class="ss-item-label">COMBAT SANDBOX</span>
         </button>
       </div>
@@ -295,6 +305,23 @@ export class TitleScene {
     }
   }
 
+  // ── Wczytanie zapisu z pliku na dysku ─────────────────────────
+  // Plik trafia do slotu przez importSave() (bramka wersji + kopia zapasowa poprzedniego
+  // stanu), a potem gra startuje zwykłą ścieżką „Kontynuuj" — czyli loadData → migrate →
+  // start. Dzięki temu ekran tytułowy i menu w grze dzielą tę samą, jedyną drogę importu.
+  async _loadFromFile() {
+    const text = await pickSaveFile();
+    if (text === null) return;  // anulowano — zostajemy na ekranie tytułowym
+
+    const res = SaveSystem.importSave(text);
+    if (!res.ok) {
+      const reason = t(IMPORT_REASON_KEYS[res.reason] ?? 'saveFile.reasonParseError');
+      alert(t('saveFile.loadFailed', reason));
+      return;
+    }
+    this._handleChoice('continue');
+  }
+
   // ── Wybór scenariusza ─────────────────────────────────────────
 
   _handleChoice(action) {
@@ -312,6 +339,11 @@ export class TitleScene {
       }
       window.KOSMOS.savedData = saveData;
       window.KOSMOS.scenario  = saveData?.scenario ?? 'civilization';
+    } else if (action === 'load_file') {
+      // Start gry nastąpi dopiero po wybraniu pliku (dialog jest asynchroniczny),
+      // więc nie schodzimy do wspólnego fade-outu poniżej.
+      this._loadFromFile();
+      return;
     } else if (action === 'new') {
       SaveSystem.clearSave();
       window.KOSMOS.savedData = null;

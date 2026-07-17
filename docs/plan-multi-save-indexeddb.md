@@ -1,6 +1,26 @@
 # Plan: Multi-save + IndexedDB + Export/Import
 
-**Status:** plan zatwierdzony, implementacja odłożona.
+> ## ⚠ NIEAKTUALNY — rozstrzygnięty 2026-07-17
+> **Etap 2 (Export/Import) — ZREALIZOWANY** w uproszczonej formie. Szczegóły: `CLAUDE.md`,
+> sekcja „Strategia zapisu: localStorage vs pliki". Kod: `src/utils/SaveFile.js`.
+>
+> **Etap 1 (IndexedDB + 5 slotów) — ODRZUCONY, nie wracać.** Powód: **eksport/import do pliku
+> czyni multi-slot zbędnym** — system plików gracza jest lepszym menedżerem slotów niż picker
+> w grze (nieograniczona liczba zapisów, własne nazwy, foldery, backup, przenoszenie między
+> maszynami). Etap 1 odtwarzałby w przeglądarce to, co Eksplorator robi lepiej, kosztem async
+> przepisania `save()`/`loadData()`, mutexa na autosave i ryzyka dla działającego systemu.
+>
+> **Ten dokument jest też miejscami nieaktualny faktograficznie:**
+> - zakłada zmiany w `BootScene.js` — to **martwy kod** (`main.js:38` instancjonuje `TitleScene`);
+> - nie wie o `SaveSystem.exportSave()/importSave()` (powstały później, w S3.4 F6);
+> - „brak backupu na dysku gracza" (kontekst, pkt 3) — **rozwiązane**;
+> - „localStorage quota ~5 MB" (pkt 2) — łagodzone ostrzeżeniem `game:saveLargeWarning` @3.5 MB
+>   (`SaveSystem.js:95`) + eksportem do pliku jako zaworem. Gdyby quota realnie zaczęła boleć
+>   w endgame, IndexedDB wraca jako OSOBNY temat — ale wtedy jako zamiana magazynu, nie multi-slot.
+>
+> Zachowane jako zapis decyzji i uzasadnienia. Poniższa treść = stan sprzed rozstrzygnięcia.
+
+**Status:** ~~plan zatwierdzony, implementacja odłożona~~ → Etap 2 zrobiony, Etap 1 odrzucony (2026-07-17).
 **Data planu:** 2026-05-20
 **Powiązany commit fixów:** `77740c2` (save: try/catch + prune battles + size warning)
 
