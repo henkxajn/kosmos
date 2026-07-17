@@ -1563,6 +1563,8 @@ export class UIManager {
     const delta = deltaY * 0.6; // globalna redukcja czułości scrolla o 40%
     // Górny pasek surowców — scroll listy kolonii (gdy kursor nad rozwiniętym panelem).
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleWheel?.(x, y, delta)) return true;
+    // Prawy Outliner — scroll listy (kolonie/flota potrafią być dłuższe niż panel).
+    if (window.KOSMOS?.civMode && this._outliner?.handleWheel?.(x, y, delta, W, H)) return true;
     // Overlay pełnoekranowy — scroll
     if (this.overlayManager.isAnyOpen()) {
       if (this.overlayManager.handleScroll(delta, x, y)) return true;

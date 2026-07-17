@@ -76,10 +76,15 @@ export class Outliner {
     };
     // Hit-rects do kliknięć
     this._clickTargets = [];
+    // Scroll pionowy zawartości (kolonie+ekspedycje+flota+kolejka+jednostki bywają
+    // dłuższe niż panel). _maxScroll liczony co klatkę z realnej wysokości treści.
+    this._scrollY   = 0;
+    this._maxScroll = 0;
     // Hover tooltip kolonii
     this._hoveredColonyId = null;
     this._hoveredVesselId = null;
     this._hoveredGroundUnitId = null;
+    this._hoveredStationId = null;
     this._colonyTooltip   = null;
     this._tooltipX        = 0;
     this._tooltipY        = 0;
@@ -141,28 +146,62 @@ export class Outliner {
     ctx.beginPath(); ctx.moveTo(x + 0.5, CHIP_CLEAR_H); ctx.lineTo(x + 0.5, y + h); ctx.stroke();
 
     this._clickTargets = [];
-    let cy = CHIP_CLEAR_H + 4;   // treść startuje pod przezroczystym obszarem chipa
+
+    // Scroll — clipuj treść do obszaru panelu i przesuń o _scrollY. Nagłówki sekcji,
+    // wiersze i hit-recty rysowane są w przesuniętych współrzędnych (hitTest/hover
+    // trafiają wprost, bo cele zapisywane z tym samym offsetem).
+    const contentTop = CHIP_CLEAR_H + 4;   // treść startuje pod przezroczystym obszarem chipa
+    const contentBottom = y + h;
+    const viewportH = contentBottom - contentTop;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, CHIP_CLEAR_H, OUTLINER_W, h - CHIP_CLEAR_H);
+    ctx.clip();
+
+    let cy = contentTop - this._scrollY;
 
     // ── KOLONIE ──────────────────────────────────────────
     cy = this._drawSection(ctx, x, cy, 'colonies', t('outliner.colonies', colonies.length), (startY) => {
-      // Grupuj kolonie wg systemu gwiezdnego
+      // Grupuj kolonie gracza wg systemu gwiezdnego
       const bySystem = new Map();
       for (const col of colonies) {
         const sysId = col.systemId ?? 'sys_home';
         if (!bySystem.has(sysId)) bySystem.set(sysId, []);
         bySystem.get(sysId).push(col);
       }
-      // Dodaj odwiedzone układy bez kolonii (z StarSystemManager)
+      // Stacje orbitalne gracza pogrupowane wg systemu (S3.4 — pokazywane pod
+      // kolonami danego układu). Tylko własne (ownerEmpireId 'player'/null).
+      const stationsBySystem = new Map();
+      const stSys = window.KOSMOS?.stationSystem;
+      if (stSys) {
+        for (const st of stSys.getAllStations()) {
+          if (st.ownerEmpireId && st.ownerEmpireId !== 'player') continue;
+          const sysId = st.systemId ?? 'sys_home';
+          if (!stationsBySystem.has(sysId)) stationsBySystem.set(sysId, []);
+          stationsBySystem.get(sysId).push(st);
+        }
+      }
+      // Dodaj TYLKO układy ZNANE graczowi (odwiedzone). Układy AI, których gracz sam
+      // nie zwiedził, pozostają UKRYTE — mgła wojny (galaxyStar.explored=false dla AI;
+      // sysData.explored zostaje true, więc filtrujemy po galaxyStar).
       const ssMgr = window.KOSMOS?.starSystemManager;
       if (ssMgr) {
         for (const sys of ssMgr.getAllSystems()) {
+          const visited = sys.systemId === 'sys_home' || sys.galaxyStar?.explored === true;
+          if (!visited) continue;
           if (!bySystem.has(sys.systemId)) bySystem.set(sys.systemId, []);
         }
       }
-      // Dodaj układy w których przebywają statki (fallback gdy SSM nie ma wpisu)
+      // Układy z własną stacją gracza — zawsze znane (gracz tam budował)
+      for (const sysId of stationsBySystem.keys()) {
+        if (!bySystem.has(sysId)) bySystem.set(sysId, []);
+      }
+      // Dodaj układy w których przebywają WŁASNE statki gracza (fallback gdy SSM
+      // nie ma wpisu). Wraki i statki AI pomijamy, by nie odsłonić układów obcych.
       const vMgr = window.KOSMOS?.vesselManager;
       if (vMgr) {
         for (const v of vMgr.getAllVessels()) {
+          if (v.isWreck || v.ownerEmpireId) continue;
           const vsId = v.systemId;
           if (vsId && !bySystem.has(vsId)) bySystem.set(vsId, []);
         }
@@ -184,13 +223,32 @@ export class Outliner {
         });
         dy += 16;
 
-        if (sysCols.length === 0) {
-          // Odwiedzony układ bez kolonii — info
+        const sysStations = stationsBySystem.get(sysId) ?? [];
+
+        if (sysCols.length === 0 && sysStations.length === 0) {
+          // Odwiedzony układ bez kolonii ani stacji — info
           ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
           ctx.fillStyle = C.dim;
           ctx.fillText(t('outliner.noColoniesHere'), x + PAD + 8, startY + dy + 12);
           dy += 16;
         }
+
+        // Rysowanie wiersza stacji (wcięcie głębsze niż kolonia — stacja „pod matką").
+        const drawStationRow = (st, stIndent) => {
+          const iy = startY + dy;
+          const isHov = st.id === this._hoveredStationId;
+          if (isHov) { ctx.fillStyle = THEME.accentDim; ctx.fillRect(x, iy, OUTLINER_W, ITEM_H); }
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = isHov ? C.bright : C.text;
+          ctx.fillText(`🛰 ${_truncate(st.name, 14)}`, x + PAD + stIndent, iy + 14);
+          this._clickTargets.push({
+            type: 'station', stationId: st.id, systemId: sysId,
+            x: x, y: iy, w: OUTLINER_W, h: ITEM_H,
+          });
+          dy += ITEM_H;
+        };
+
+        const stConsumed = new Set();
 
         for (const col of sysCols) {
           const iy = startY + dy;
@@ -214,6 +272,22 @@ export class Outliner {
             mapIconX,
           });
           dy += ITEM_H;
+
+          // Stacje należące do TEJ kolonii — tuż pod nią, głębsze wcięcie.
+          // Matka: ownerColonyId (płatnik) lub bezpośrednia orbita planety kolonii.
+          for (const st of sysStations) {
+            if (stConsumed.has(st.id)) continue;
+            if (st.ownerColonyId === col.planetId || st.bodyId === col.planetId) {
+              stConsumed.add(st.id);
+              drawStationRow(st, 16);
+            }
+          }
+        }
+
+        // Pozostałe stacje układu bez kolonii-matki w tym widoku (np. sierota) — na końcu.
+        for (const st of sysStations) {
+          if (stConsumed.has(st.id)) continue;
+          drawStationRow(st, 8);
         }
       }
       return Math.max(ITEM_H, dy);
@@ -499,6 +573,24 @@ export class Outliner {
       }
       return Math.max(ITEM_H, dy);
     });
+
+    // ── Finalizacja scrolla ──────────────────────────────────
+    // Realna wysokość treści (w niescrollowanych współrzędnych) = dolna krawędź + offset.
+    const contentH = cy - (contentTop - this._scrollY);
+    this._maxScroll = Math.max(0, contentH - viewportH);
+    if (this._scrollY > this._maxScroll) this._scrollY = this._maxScroll;  // clamp (np. po zwinięciu sekcji)
+    ctx.restore();   // koniec clipu treści
+
+    // Pasek scrolla (cienki, po prawej krawędzi treści) — tylko gdy jest co przewijać.
+    if (this._maxScroll > 0) {
+      const trackX = x + OUTLINER_W - 3;
+      const trackY = contentTop;
+      const trackH = viewportH;
+      const thumbH = Math.max(20, trackH * (viewportH / contentH));
+      const thumbY = trackY + (trackH - thumbH) * (this._scrollY / this._maxScroll);
+      ctx.fillStyle = THEME.accentMed ?? 'rgba(0,255,180,0.35)';
+      ctx.fillRect(trackX, thumbY, 3, thumbH);
+    }
   }
 
   // Rysuj sekcję z nagłówkiem (zwijalna)
@@ -537,6 +629,14 @@ export class Outliner {
     }
 
     return cy;
+  }
+
+  // ── Scroll kółkiem (pochłania event tylko nad panelem) ────
+  handleWheel(x, y, delta, W, H) {
+    if (!this.isOver(x, y, W, H)) return false;
+    if (this._maxScroll <= 0) return false;   // nic do przewijania — nie pochłaniaj
+    this._scrollY = Math.max(0, Math.min(this._maxScroll, this._scrollY + delta));
+    return true;
   }
 
   // ── Hit testing ──────────────────────────────────────────
@@ -602,6 +702,16 @@ export class Outliner {
             EventBus.emit('colony:switched', { planetId: t.planetId });
             EventBus.emit('camera:focusTarget', { targetId: t.planetId });
           }
+          return true;
+        }
+        if (t.type === 'station') {
+          // Przełącz układ jeśli stacja w innym systemie, potem otwórz panel + najazd kamery.
+          const ssMgr = window.KOSMOS?.starSystemManager;
+          if (ssMgr && t.systemId && ssMgr.activeSystemId !== t.systemId) {
+            ssMgr.switchActiveSystem(t.systemId);
+          }
+          EventBus.emit('station:selected', { stationId: t.stationId });   // StationPanel
+          EventBus.emit('station:focus',    { stationId: t.stationId });   // najazd kamery
           return true;
         }
         if (t.type === 'expedition') {
@@ -707,11 +817,13 @@ export class Outliner {
     if (mx < ox || my < CHIP_CLEAR_H || my > H - BOTTOM_RESERVED) {
       this._hoveredColonyId = null;
       this._hoveredGroundUnitId = null;
+      this._hoveredStationId = null;
       this._colonyTooltip = null;
       return;
     }
     let foundVessel = null;
     let foundGroundUnit = null;
+    let foundStation = null;
     for (const t of this._clickTargets) {
       if (mx >= t.x && mx <= t.x + t.w && my >= t.y && my <= t.y + t.h) {
         if (t.type === 'colony') {
@@ -721,6 +833,7 @@ export class Outliner {
           }
           this._hoveredVesselId = null;
           this._hoveredGroundUnitId = null;
+          this._hoveredStationId = null;
           return;
         }
         if (t.type === 'vessel') {
@@ -729,10 +842,14 @@ export class Outliner {
         if (t.type === 'groundUnit') {
           foundGroundUnit = t.unitId;
         }
+        if (t.type === 'station') {
+          foundStation = t.stationId;
+        }
       }
     }
     this._hoveredVesselId = foundVessel;
     this._hoveredGroundUnitId = foundGroundUnit;
+    this._hoveredStationId = foundStation;
     this._hoveredColonyId = null;
     this._colonyTooltip = null;
   }
