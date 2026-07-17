@@ -8,9 +8,31 @@
 //   T4 ROLLBACK: odrzucony import NIE rusza slotu (dowód, że poprzedni zapis przeżywa)
 //   T5 backup przedimportowy
 //   T6 i18n — parytet PL=EN dla nowych kluczy menu.* / title.*
+//   T7 QUOTA — import przy pełnym storage (regresja: backup preimport blokował import)
+//   T8 prune backupów migracji
 
+// Mock localStorage odwzorowujący SEMANTYKĘ CHROME (inaczej test nie bada realnego silnika):
+//  - quota jest per-origin, na SUMIE wszystkich kluczy (nie per-klucz),
+//  - QuotaExceededError leci TYLKO gdy element ROŚNIE (storage_area_map.cc: `new_item_size >
+//    old_item_size && new_quota_used > quota_`) — zapisy kurczące przechodzą nawet ponad budżet.
+const QUOTA_UNLIMITED = Infinity;
+let quotaChars = QUOTA_UNLIMITED;
 const store = new Map();
-globalThis.localStorage = { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) };
+const _used = () => [...store.entries()].reduce((s, [k, v]) => s + k.length + v.length, 0);
+globalThis.localStorage = {
+  getItem: k => store.get(k) ?? null,
+  setItem: (k, v) => {
+    v = String(v);
+    const oldSize = store.has(k) ? store.get(k).length : 0;
+    if (v.length > oldSize && _used() - oldSize + v.length > quotaChars) {
+      const e = new Error('QuotaExceededError'); e.name = 'QuotaExceededError'; throw e;
+    }
+    store.set(k, v);
+  },
+  removeItem: k => store.delete(k),
+  get length() { return store.size; },
+  key: i => [...store.keys()][i] ?? null,
+};
 globalThis.window = { localStorage: globalThis.localStorage, KOSMOS: {} };
 
 let pass = 0, fail = 0;
@@ -150,6 +172,97 @@ const T = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('
   const enS = Object.keys(en).filter(k => k.startsWith('saveFile.'));
   T('T6 saveFile.* parytet PL=EN', plS.every(k => k in en) && enS.every(k => k in pl));
   T('T6 EN nie jest kopią PL (tłumaczenie realne)', en['menu.saveToFile'] !== pl['menu.saveToFile']);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T7 — QUOTA: import przy zapchanym storage
+//      REGRESJA z live-gate: kopia przedimportowa zapisywana PRZED importem kradła
+//      headroom → setItem slotu leciał QuotaExceededError → „brak miejsca w przeglądarce".
+//      Przy save'ach ≥ połowy quoty dwie kopie NIE MIESZCZĄ SIĘ fizycznie — więc kopia
+//      musi być luksusem po fakcie, nigdy warunkiem importu.
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const { SaveSystem } = await import('../../systems/SaveSystem.js');
+  const bigSave = (marker, pad) => JSON.stringify({ version: 90, gameTime: 1, marker, pad: 'x'.repeat(pad) });
+
+  // Slot zajmuje ~60% quoty → druga kopia fizycznie się nie mieści.
+  store.clear();
+  quotaChars = 10000;
+  globalThis.localStorage.setItem('kosmos_save_v1', bigSave('STARY', 5500));
+  const r1 = SaveSystem.importSave(bigSave('NOWY', 5500));
+  T('T7 import DUŻEGO save przechodzi mimo ciasnej quoty', r1.ok === true);
+  T('T7 slot ma zaimportowany save',        JSON.parse(SaveSystem.exportSave()).marker === 'NOWY');
+  T('T7 kopia pominięta gdy się nie mieści', globalThis.localStorage.getItem('kosmos_save_backup_preimport') === null);
+
+  // ⚠ SEDNO REGRESJI: kopia MIEŚCI SIĘ, ale zjada headroom pod WIĘKSZY import.
+  // Stara kolejność (kopia PRZED importem): slot 3000 + kopia 3000 = 6000/7000 → import 4500
+  // rośnie o 1500 → 7500 > 7000 → QuotaExceededError → „brak miejsca w przeglądarce".
+  // Nowa kolejność: import 4500 wchodzi (4500/7000), kopia dopiero potem i tylko jeśli wejdzie.
+  store.clear();
+  quotaChars = 7000;
+  globalThis.localStorage.setItem('kosmos_save_v1', bigSave('STARY', 2900));
+  const r0 = SaveSystem.importSave(bigSave('NOWY', 4400));
+  T('T7 ⚠ import WIĘKSZY niż poprzedni przechodzi (kopia nie kradnie headroomu)', r0.ok === true);
+  T('T7 ⚠ slot ma nowy save',  JSON.parse(SaveSystem.exportSave()).marker === 'NOWY');
+
+  // Backupy migracji zjadły miejsce → prune je usuwa i import przechodzi.
+  store.clear();
+  quotaChars = 10000;
+  globalThis.localStorage.setItem('kosmos_save_v1', bigSave('STARY', 2000));
+  globalThis.localStorage.setItem('kosmos_save_backup_v88', bigSave('B88', 2000));
+  globalThis.localStorage.setItem('kosmos_save_backup_v89', bigSave('B89', 2000));
+  const r2 = SaveSystem.importSave(bigSave('NOWY', 3500));
+  T('T7 import przechodzi po sprzątnięciu backupów migracji', r2.ok === true);
+  T('T7 backupy migracji usunięte',
+    globalThis.localStorage.getItem('kosmos_save_backup_v88') === null &&
+    globalThis.localStorage.getItem('kosmos_save_backup_v89') === null);
+
+  // Beznadziejna ciasnota: import większy niż CAŁA quota → uczciwa porażka, slot NIETKNIĘTY.
+  store.clear();
+  quotaChars = 5000;
+  const mine = bigSave('MOJA_GRA', 1000);
+  globalThis.localStorage.setItem('kosmos_save_v1', mine);
+  const r3 = SaveSystem.importSave(bigSave('ZA_DUZY', 9000));
+  T('T7 import ponad quotę → write_error', r3.ok === false && r3.reason === 'write_error');
+  T('T7 po write_error slot NIETKNIĘTY (setItem atomowy)', SaveSystem.exportSave() === mine);
+
+  // Mały save w luźnej quocie → kopia JEST (siatka za darmo).
+  store.clear();
+  quotaChars = QUOTA_UNLIMITED;
+  globalThis.localStorage.setItem('kosmos_save_v1', bigSave('POPRZEDNI', 10));
+  SaveSystem.importSave(bigSave('NOWY', 10));
+  T('T7 mały save → kopia przedimportowa powstaje',
+    JSON.parse(globalThis.localStorage.getItem('kosmos_save_backup_preimport')).marker === 'POPRZEDNI');
+
+  quotaChars = QUOTA_UNLIMITED;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// T8 — prune backupów migracji (zero czytelników w grze, każdy waży tyle co save)
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const { pruneMigrationBackups } = await import('../../systems/SaveMigration.js');
+  store.clear();
+  globalThis.localStorage.setItem('kosmos_save_v1', '{"version":90}');
+  globalThis.localStorage.setItem('kosmos_save_backup_v85', 'a');
+  globalThis.localStorage.setItem('kosmos_save_backup_v88', 'b');
+  globalThis.localStorage.setItem('kosmos_save_backup_v89', 'c');
+  globalThis.localStorage.setItem('kosmos_lang', 'pl');
+
+  T('T8 usuwa wszystkie backupy migracji', pruneMigrationBackups() === 3);
+  T('T8 slot nietknięty',      SaveSystem_slotIntact());
+  T('T8 preferencje nietknięte', globalThis.localStorage.getItem('kosmos_lang') === 'pl');
+  T('T8 idempotentny (drugi przebieg = 0)', pruneMigrationBackups() === 0);
+
+  // keepVersion zostawia wskazany backup (używane przy migracji — świeży ma przetrwać)
+  globalThis.localStorage.setItem('kosmos_save_backup_v88', 'b');
+  globalThis.localStorage.setItem('kosmos_save_backup_v89', 'c');
+  T('T8 keepVersion zostawia wskazany', pruneMigrationBackups({ keepVersion: 89 }) === 1);
+  T('T8 zachowany to ten wskazany',
+    globalThis.localStorage.getItem('kosmos_save_backup_v89') === 'c' &&
+    globalThis.localStorage.getItem('kosmos_save_backup_v88') === null);
+
+  function SaveSystem_slotIntact() { return globalThis.localStorage.getItem('kosmos_save_v1') === '{"version":90}'; }
 }
 
 // ── Podsumowanie ─────────────────────────────────────────────────────────────

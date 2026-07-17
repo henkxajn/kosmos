@@ -17,9 +17,46 @@ import EntityManager from '../core/EntityManager.js';
 import { createStarterModules } from '../data/StationModuleData.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
+const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
 export const CURRENT_VERSION     = 90;
 export const MIN_SUPPORTED_VERSION = 4;
+
+/**
+ * Usuwa backupy migracji (`kosmos_save_backup_v{N}`) — każdy waży tyle co CAŁY save.
+ *
+ * Powstawały przy każdym bumpie wersji i NIGDY nie były sprzątane, a gra nie ma dla nich
+ * ścieżki odczytu (odzysk = ręcznie w DevTools). Realnie zjadały większość quoty:
+ * localStorage to 10 MiB liczone w UTF-16 (2 B/znak) = ~5,2 mln znaków na WSZYSTKIE klucze
+ * razem — więc kilka kopii save'a wystarczyło, by zablokować zapis. Trwały backup gracza to
+ * dziś plik `.json` na dysku (`src/utils/SaveFile.js`), nie localStorage.
+ *
+ * @param {object} [opts]
+ * @param {number|null} [opts.keepVersion] — wersja, której backup zostawić (null = usuń wszystkie)
+ * @returns {number} ile kluczy usunięto
+ */
+export function pruneMigrationBackups({ keepVersion = null } = {}) {
+  let removed = 0;
+  try {
+    const keepKey = keepVersion === null ? null : `${BACKUP_PREFIX}${keepVersion}`;
+    // Kopia listy kluczy PRZED usuwaniem — removeItem przenumerowuje indeksy w trakcie iteracji.
+    // Storage API (length/key) zamiast Object.keys: to samo w przeglądarce, ale uczciwie testowalne.
+    const keys = [];
+    for (let i = 0; i < (localStorage.length ?? 0); i++) {
+      const k = localStorage.key(i);
+      if (k) keys.push(k);
+    }
+    for (const k of keys) {
+      if (!k.startsWith(BACKUP_PREFIX) || k === keepKey) continue;
+      localStorage.removeItem(k);
+      removed++;
+    }
+    if (removed > 0) console.log(`[SaveMigration] Usunięto ${removed} backup(ów) migracji`);
+  } catch (e) {
+    console.warn('[SaveMigration] Sprzątanie backupów nieudane:', e?.message);
+  }
+  return removed;
+}
 
 // ── Mapa migracji: fromVersion → funkcja(data) → data ──────────────────────
 const MIGRATIONS = {
@@ -148,8 +185,11 @@ export function migrate(data) {
   }
 
   // ── Backup starego save'a ──────────────────────────────────────────────
+  // Sprzątamy PRZED zapisem: backupy z poprzednich bumpów są bezużyteczne (zero czytelników),
+  // a każdy zajmuje tyle co cały save — bez tego kolejny backup często nie miałby się gdzie zmieścić.
+  pruneMigrationBackups();
   try {
-    const backupKey = `kosmos_save_backup_v${fromVersion}`;
+    const backupKey = `${BACKUP_PREFIX}${fromVersion}`;
     localStorage.setItem(backupKey, JSON.stringify(data));
     console.log(`[SaveMigration] Backup save v${fromVersion} → ${backupKey}`);
   } catch (e) {

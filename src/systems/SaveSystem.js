@@ -12,12 +12,22 @@
 
 import EventBus     from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
-import { CURRENT_VERSION, MIN_SUPPORTED_VERSION } from './SaveMigration.js';
+import { CURRENT_VERSION, MIN_SUPPORTED_VERSION, pruneMigrationBackups } from './SaveMigration.js';
 
 const SAVE_KEY           = 'kosmos_save_v1';
 const PREIMPORT_BACKUP_KEY = 'kosmos_save_backup_preimport';
 const DEFAULT_AUTOSAVE   = 1;  // lat gry między autosave'ami (domyślnie co rok)
 const AUTOSAVE_INTERVALS = { off: 0, month: 1 / 12, year: 1, '10y': 10 };
+
+// Zapis do localStorage bez rzucania — zwraca czy się udał (quota / prywatny tryb).
+function _trySetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
 
 export class SaveSystem {
   constructor(star, timeSystem) {
@@ -388,19 +398,33 @@ export class SaveSystem {
     if (obj.version > CURRENT_VERSION)       return { ok: false, reason: 'future_version' };
     if (obj.version < MIN_SUPPORTED_VERSION) return { ok: false, reason: 'too_old' };
 
-    // Kopia bieżącego slotu przed nadpisaniem — walidacja wersji nie wychwyci pomyłki
-    // „zaimportowałem poprawny, ale nie ten plik". Awaria kopii nie blokuje importu.
-    try {
-      const prev = localStorage.getItem(SAVE_KEY);
-      if (prev) localStorage.setItem(PREIMPORT_BACKUP_KEY, prev);
-    } catch (e) {
-      console.warn('[SaveSystem] backup przedimportowy nieudany:', e?.message);
+    // Poprzedni stan trzymamy w PAMIĘCI, nie w localStorage — kopia zapisana przed importem
+    // kradłaby miejsce potrzebne na sam import. Chromium sprawdza quotę tylko gdy element
+    // ROŚNIE, więc podmiana slotu na porównywalny save przechodzi — o ile nikt nie zjadł
+    // headroomu tuż przed nią.
+    const prev    = localStorage.getItem(SAVE_KEY);
+    const payload = JSON.stringify(obj);
+
+    // Backupy migracji: zero czytelników, a każdy waży tyle co cały save. Import i tak kasuje
+    // oś czasu, do której należą.
+    pruneMigrationBackups();
+
+    if (!_trySetItem(SAVE_KEY, payload)) {
+      // Quota — zwolnij wszystko, co da się poświęcić, i spróbuj ostatni raz.
+      try { localStorage.removeItem(PREIMPORT_BACKUP_KEY); } catch { /* nieistotne */ }
+      if (!_trySetItem(SAVE_KEY, payload)) {
+        // setItem jest atomowy — nieudany zapis nie rusza slotu, poprzedni save żyje.
+        return { ok: false, reason: 'write_error' };
+      }
     }
 
-    try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(obj));
-    } catch (e) {
-      return { ok: false, reason: 'write_error' };
+    // Import się udał → kopia poprzedniego stanu to LUKSUS. Zapisywana po fakcie, więc nigdy
+    // nie może zablokować importu; przy dużych save'ach po prostu się nie zmieści (dwie kopie
+    // przekraczają quotę fizycznie). Nieudany zapis czyści nieaktualny klucz z poprzedniej sesji,
+    // żeby nie udawał kopii tego importu.
+    if (prev && !_trySetItem(PREIMPORT_BACKUP_KEY, prev)) {
+      try { localStorage.removeItem(PREIMPORT_BACKUP_KEY); } catch { /* nieistotne */ }
+      console.warn('[SaveSystem] kopia przedimportowa się nie zmieściła — import wykonany bez niej');
     }
     return { ok: true, version: obj.version };
   }

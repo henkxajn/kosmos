@@ -701,7 +701,32 @@ nieaktualny, a ręczny zapis nadpisze slot niezależnie od pauzy (autozapis stoi
 `TimeSystem.js:70` wraca przed `emit('time:tick')`).
 `TitleScene` — numeracja pozycji menu z licznika `num()` (ręczne ternary rozjeżdżały się przy każdej
 nowej pozycji). Autosave ZOSTAJE (ma kill-switch `off` w menu; chroni przed crashem — pliki są ręczne).
-Smoke `tmp_save_file_smoke.mjs` 61/61 (T4 = dowód, że odrzucony import nie rusza slotu).
+
+**⚠ QUOTA localStorage — reguły, bez których import padnie (live-gate fix):**
+- **Quota = 10 MiB liczone w UTF-16 (2 B/znak) = ~5,2 mln ZNAKÓW na WSZYSTKIE klucze razem** (per origin).
+  `SaveSystem.js:105` mierzy `json.length/1024/1024` = ZNAKI, nie bajty → próg 3.5 „MB" = ~67% realnego
+  sufitu (dobrze dobrany, zostawiony). **Save ≥2,6 mln znaków ⇒ DWIE kopie nie mieszczą się fizycznie.**
+- **Chromium sprawdza quotę TYLKO gdy element ROŚNIE** (`storage_area_map.cc`: `new_item_size >
+  old_item_size && new_quota_used > quota_`; zapisy kurczące przechodzą ponad budżet). Wniosek:
+  podmiana slotu na porównywalny save NIE MOŻE paść — pada tylko, gdy ktoś zjadł headroom tuż przed nią.
+- **Kolejność w `importSave` jest kontraktem**: `prev` do ZMIENNEJ → `pruneMigrationBackups()` → `setItem`
+  slotu → (na quota: `removeItem(PREIMPORT)` + retry) → **kopia przedimportowa PO fakcie, best-effort**.
+  Kopia PRZED importem = regresja z live-gate (kradła headroom → `write_error` „brak miejsca").
+  `setItem` jest atomowy → nieudany zapis nie rusza slotu (poprzedni save żyje).
+- **`pruneMigrationBackups({keepVersion})`** (`SaveMigration.js`, tam bo `SaveSystem`→`SaveMigration` jest
+  jednokierunkowe — odwrotny import = cykl). `kosmos_save_backup_v{N}` powstawały przy każdym bumpie
+  i NIGDY nie były sprzątane (commit `77740c2`: gracz miał 9 backupów = 4,4 MB). **Ani one, ani
+  `kosmos_save_backup_preimport` NIE MAJĄ ścieżki odczytu w grze** (odzysk = ręcznie w DevTools) —
+  trwały backup to plik `.json`. Prune: przy imporcie (wszystkie) + w `migrate()` przed backupem
+  (`keepVersion=fromVersion`). Używa Storage API `length`/`key(i)`, NIE `Object.keys` (mockowalne;
+  stare mocki bez `length` degradują do zera usunięć).
+- Smoke `tmp_save_file_smoke.mjs` 77/77 — mock odwzorowuje semantykę Chrome (rzut tylko przy wzroście);
+  T4 = odrzucony import nie rusza slotu, T7 = import przechodzi przy ciasnej quocie (zweryfikowane:
+  na kodzie z `a462e10` te asercje PADAJĄ), T8 = prune.
+
+**Znany bug POZA tym slice'em:** `SaveMigration.js` (backup + persist) i `SaveSystem.save()` przy quota
+robią cichy `console.warn`/`game:saveFailed` — gra rusza na stanie z pamięci, a gracz może nie zauważyć,
+że NIE jest zapisywany. Kandydat na osobny fix (twardy modal zamiast warn).
 
 ---
 
