@@ -574,8 +574,13 @@ Wariant B (depot-jako-proxy): stacja gracza z kolonią-matką w systemie używa 
 - **Trade bonus (D7)** — `CivilianTradeSystem._getStationTradeBonus(colony)` w `_allocateTC`: Σ `st.tradeCapacity`
   po stacjach gracza z `ownerColonyId===colony.planetId` (atrybucja → zero double-count przy 2+ koloniach). Bez capa.
   Detached/AI pominięte. Side-effect na `_tcPool` migracji POP zaakceptowany.
-- **Self-cargo (D8)** — `FleetManagerOverlay._getValidTargets:8108`: stacja z matką poza celami `transport`
-  (`resolveHomeColony≠null`); `transport_passenger` ZOSTAJE (POP→habitat); sierota legalna dla `transport`.
+- **Self-cargo (D8) — ZNIESIONY (`7ee65de`)** — pierwotnie `FleetManagerOverlay._getValidTargets` wykluczał
+  stację z matką z celów `transport` (`resolveHomeColony≠null`). Filtr USUNIĘTY: **każda stacja gracza** jest
+  celem cargo I pasażerów (wykluczone tylko stacje AI + własny dok statku). Powód: start ze stacji jest tańszy
+  paliwowo niż z planety (studnia grawitacyjna) → stacja = wysunięty skład/przeładunek. Mechanika magazynu
+  nietknięta (stacja z matką dalej dzieli magazyn kolonii); jednorazowy transport bezpieczny, jałową pętlę
+  (`loop=true` na wspólny magazyn) łapie `MissionSystem._evaluateLoopProductivity` (best-effort, nigdy nie
+  zawiesza — leci pusta i ostrzega). `resolveHomeColony` nie bramkuje już listy celów (import zdjęty z overlay).
 - **UI (D9)** — StationManagementView/StationPanel: „Wspólny magazyn: <kolonia>" (matka) / własny depot +
   „Odcięta od zaopatrzenia" (detached). EconomyOverlay `_playerStationFacades` filtr matki OUT (sierota zostaje).
   Pickery canAfford BEZ zmian (`station.depot.getAmount` deleguje przez proxy → poprawne). i18n PL+EN.
@@ -592,8 +597,9 @@ Wariant B (depot-jako-proxy): stacja gracza z kolonią-matką w systemie używa 
 - **`getTradeCapacity` LIVE (Z7)** — `CivilianTradeSystem.getTradeCapacity` liczy `_allocateTC` (pure) zamiast stale
   echo `col.tradeCapacity` → single-colony widzi bonus stacji natychmiast (echo aktualizowany tylko w `_halfYearlyTick`).
 - Commity: C1 `2b4c6fc` · C2 `cbfaeb9` · C3 `97e882e` · C4 `9bf3d4c` · C5 `b5e2ab0` · Z2/Z3 `7b91f71` · Z4-Z8 (ten arc).
-  Smoke S3.4c: proxy 28 / drain_orphan 33 / trade_selfcargo 14 / ui_i18n 9 / z1(Z7) 12 / z3 9 / z4_dispose 14 /
-  z8_readoption 24 (`src/testing/smoke/s34c_*`) + pełna regresja 0 FAIL.
+  Smoke S3.4c: proxy 28 / drain_orphan 33 / trade_selfcargo 15 / ui_i18n 9 / z1(Z7) 12 / z3 11 / z4_dispose 14 /
+  z8_readoption 24 (`src/testing/smoke/s34c_*`) + pełna regresja 0 FAIL. (trade_selfcargo/z3 zaktualizowane po
+  zniesieniu D8 — patrz `7ee65de`.)
 Plan: `docs/plans/s34c-depot-unification-plan.md` · `docs/plans/s34c-Z4-Z7-continuation.md` (Z4-Z8) ·
 audyt: `docs/audits/s34c-depot-unification-audit.md`.
 
