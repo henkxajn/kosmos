@@ -26,7 +26,6 @@ import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { getPOILocation } from '../utils/POIPanelLogic.js';
-import { resolveHomeColony } from '../utils/TransferStore.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { planWarpRoute, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
@@ -8375,10 +8374,12 @@ export class FleetManagerOverlay {
       for (const st of EntityManager.getByTypeInSystem('station', activeSysId)) {
         if ((st.ownerEmpireId ?? 'player') !== 'player') continue;
         if (st.id === vessel.position.dockedAt) continue;   // nie celuj we własny dok (no-op)
-        // S3.4c (D8) — stacja z matką = wspólny magazyn kolonii → transport CARGO to self-cargo
-        // (jałowa pętla, R5). Wyklucz z 'transport'; 'transport_passenger' ZOSTAJE (POP → habitat,
-        // niezależny od depotu). Sierota (bez matki, własny depot) pozostaje legalnym celem cargo.
-        if (actionId === 'transport' && resolveHomeColony(st) !== null) continue;
+        // WSZYSTKIE stacje gracza są legalnym celem cargo (zniesiony filtr D8 „stacja z matką").
+        // Gracz świadomie kieruje transport na stację — start ze stacji jest tańszy paliwowo niż
+        // z planety (studnia grawitacyjna), więc stacja pełni rolę wysuniętego składu/przeładunku.
+        // Stacja z matką dzieli magazyn kolonii (S3.4c) → cargo trafia do wspólnej puli; ewentualną
+        // jałową pętlę (loop=true na wspólny magazyn) łapie best-effort + `_evaluateLoopProductivity`
+        // (nigdy nie zawiesza — leci pusta i ostrzega). Jednorazowy transport (loop=false) = bezpieczny.
         const body = EntityManager.get(st.bodyId);
         const distAU = this._calcDistAU(vessel, { x: body?.x ?? st.x, y: body?.y ?? st.y });
         targets.push({

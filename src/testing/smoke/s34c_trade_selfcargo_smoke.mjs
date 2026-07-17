@@ -18,7 +18,6 @@ const T = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('
 
 const { Station } = await import('../../entities/Station.js');
 const { makeStationModule } = await import('../../data/StationModuleData.js');
-const { resolveHomeColony } = await import('../../utils/TransferStore.js');
 const EntityManager = (await import('../../core/EntityManager.js')).default;
 const { StationSystem } = await import('../../systems/StationSystem.js');
 const { CivilianTradeSystem } = await import('../../systems/CivilianTradeSystem.js');
@@ -82,21 +81,24 @@ outpost.isOutpost = true;
 mkStation('stOut', { bodyId: 'outpost_1', ownerColonyId: 'outpost_1', modules: [makeStationModule('trade_module', 1, true)] });
 T('6.1 outpost TC = 0 baza + 200 stacja = 200', cts._allocateTC(outpost) === 200);
 
-// ══ 7. Predykat D8 — self-cargo exclusion ═══════════════════════════════════════════════════════════
-// Reguła z FleetManagerOverlay._getValidTargets: dla 'transport' pomiń stację z matką (resolveHomeColony !== null);
-// dla 'transport_passenger' zostaw; sierota (bez matki) legalnym celem cargo.
+// ══ 7. Cele transportu na stacje — filtr D8 ZNIESIONY ═══════════════════════════════════════════════
+// Reguła z FleetManagerOverlay._getValidTargets: KAŻDA stacja gracza jest celem cargo I pasażerów
+// (stacja = tańszy paliwowo skład/przeładunku niż start z planety). Filtr „stacja z matką" usunięty —
+// stacja z matką dzieli magazyn kolonii (S3.4c), jałową pętlę łapie best-effort + _evaluateLoopProductivity.
+// Wyklucza się tylko stacje obce (AI). resolveHomeColony NIE bramkuje już listy celów.
 colonies.clear();
 EntityManager.clear?.();
 setColony('planet_home');
 const stMother = new Station({ id: 'st_m', bodyId: 'planet_home', ownerColonyId: 'planet_home', systemId: 'sys_home' });
 const stOrphan = new Station({ id: 'st_o', bodyId: 'asteroid_x', systemId: 'sys_deep' });   // brak matki
-const passTransport = (st) => resolveHomeColony(st) === null;   // true = pokazany w 'transport'
-T('7.1 stacja z matką WYKLUCZONA z transport cargo', passTransport(stMother) === false);
-T('7.2 sierota LEGALNYM celem transport cargo', passTransport(stOrphan) === true);
-// passenger: predykat cargo NIE stosowany — filtr passenger to tylko player-owned (jak w overlay).
-const passPassenger = (st) => (st.ownerEmpireId ?? 'player') === 'player';   // brak filtra po matce
-T('7.3 transport_passenger: stacja z matką POZOSTAJE celem (POP → habitat)', passPassenger(stMother) === true);
-T('7.4 transport_passenger: sierota też celem', passPassenger(stOrphan) === true);
+const stAI2 = new Station({ id: 'st_ai', bodyId: 'planet_home', ownerEmpireId: 'ai_1', systemId: 'sys_home' });
+const isCargoTarget = (st) => (st.ownerEmpireId ?? 'player') === 'player';   // player-owned = cel cargo
+T('7.1 stacja z matką JEST celem transport cargo (D8 zniesiony)', isCargoTarget(stMother) === true);
+T('7.2 sierota JEST celem transport cargo', isCargoTarget(stOrphan) === true);
+T('7.3 stacja AI NIE jest celem transport cargo', isCargoTarget(stAI2) === false);
+// passenger: ta sama reguła player-owned (POP → habitat).
+T('7.4 transport_passenger: stacja z matką POZOSTAJE celem (POP → habitat)', isCargoTarget(stMother) === true);
+T('7.5 transport_passenger: sierota też celem', isCargoTarget(stOrphan) === true);
 
 console.log(`\nS3.4c Commit 3 (trade bonus + self-cargo) smoke: ${pass}/${pass + fail} passed` + (fail ? ` — ${fail} FAILED` : ' ✓'));
 process.exit(fail ? 1 : 0);
