@@ -430,6 +430,38 @@ export class GameScene {
         console.log(`[save] wyeksportowano save v${version} (${raw.length} B) — plik + schowek. Zwrócony string poniżej:`);
         return raw;
       },
+      // Raport zużycia localStorage — quota to ~5,2 mln ZNAKÓW na wszystkie klucze razem
+      // (10 MiB liczone w UTF-16). Pokazuje, co realnie zajmuje miejsce.
+      storageReport: () => {
+        const rows = [];
+        let total = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          const chars = (localStorage.getItem(k) ?? '').length;
+          total += chars + k.length;
+          rows.push({ klucz: k, 'mln znaków': +(chars / 1e6).toFixed(3), 'MiB (UTF-16)': +(chars * 2 / 1048576).toFixed(2) });
+        }
+        rows.sort((a, b) => b['mln znaków'] - a['mln znaków']);
+        console.table(rows);
+        console.log(`[storage] razem: ${(total / 1e6).toFixed(2)} mln znaków = ${(total * 2 / 1048576).toFixed(2)} MiB / ~10 MiB (${(total / 5.24e6 * 100).toFixed(0)}%)`);
+        return { totalChars: total, totalMiB: +(total * 2 / 1048576).toFixed(2), keys: rows.length };
+      },
+      // Zapycha localStorage śmieciem, żeby dało się przetestować ścieżki quota
+      // (self-healing zapisu, odrzucenie importu). fillStorage(0) sprząta.
+      fillStorage: (targetMiB = 8) => {
+        localStorage.removeItem('kosmos_debug_ballast');
+        if (targetMiB <= 0) { console.log('[storage] balast usunięty'); return 0; }
+        let used = 0;
+        for (let i = 0; i < localStorage.length; i++) used += (localStorage.getItem(localStorage.key(i)) ?? '').length;
+        const wantChars = Math.max(0, Math.floor(targetMiB * 1048576 / 2) - used);
+        try {
+          localStorage.setItem('kosmos_debug_ballast', 'x'.repeat(wantChars));
+          console.log(`[storage] dosypano balast ${(wantChars / 1e6).toFixed(2)} mln znaków → użycie ~${targetMiB} MiB. Teraz spróbuj zapisać grę.`);
+        } catch (e) {
+          console.warn('[storage] balast się nie zmieścił:', e?.message);
+        }
+        return wantChars;
+      },
       importSave: (json) => {
         const res = SaveSystem.importSave(json);
         if (res.ok) {

@@ -98,17 +98,36 @@ export class SaveSystem {
       };
 
       const json = JSON.stringify(data);
-      localStorage.setItem(SAVE_KEY, json);
 
-      // Proaktywne ostrzezenie gdy rozmiar zbliza sie do quota (~5 MB Chrome).
-      // 3.5 MB = ~70% — czas pomyslec o eksporcie/cleanupie zanim padnie naprawde.
+      // Self-healing przy quocie: backupy migracji to zero czytelników w grze, a każdy waży
+      // tyle co cały zapis — poświęcamy je, zanim ogłosimy graczowi porażkę. Bardzo często
+      // to wystarcza i gracz nawet nie zauważy problemu.
+      if (!_trySetItem(SAVE_KEY, json)) {
+        const removed = pruneMigrationBackups();
+        if (removed > 0) console.warn(`[SaveSystem] Brak miejsca — zwolniono ${removed} backup(ów) migracji, ponawiam zapis`);
+        if (!_trySetItem(SAVE_KEY, json)) {
+          console.error('[SaveSystem] Save padl: brak miejsca w localStorage (po sprzataniu backupow)');
+          EventBus.emit('game:saveFailed', {
+            reason:  'quota',
+            message: `Zapis ${(json.length / 1024 / 1024).toFixed(2)} MB nie miesci sie w pamieci przegladarki`,
+            stack:   null,
+          });
+          return;
+        }
+      }
+
+      // Proaktywne ostrzezenie gdy rozmiar zbliza sie do quota.
+      // UWAGA: json.length to ZNAKI, nie bajty — localStorage liczy quote w UTF-16 (2 B/znak),
+      // wiec realny sufit to ~5.2 mln znakow (10 MiB). Prog 3.5 = ~67% sufitu.
       const sizeMB = json.length / 1024 / 1024;
       if (sizeMB > 3.5) {
         EventBus.emit('game:saveLargeWarning', { sizeMB });
       }
       EventBus.emit('game:saved', { gameTime: data.gameTime, sizeBytes: json.length });
     } catch (e) {
-      // QuotaExceededError albo blad serializacji (null deref, circular ref, etc).
+      // Zapis slotu idzie przez _trySetItem (nie rzuca), wiec tu trafiaja przede wszystkim
+      // bledy serializacji (null deref, circular ref). Klasyfikacja quota zostaje jako
+      // zabezpieczenie, gdyby rzucila inna operacja storage.
       const isQuota = e?.name === 'QuotaExceededError' || /quota|storage/i.test(e?.message ?? '');
       const isSerialization = !isQuota; // wszystko inne to wewnetrzny blad serializatora
       console.error('[SaveSystem] Save padl:', e);

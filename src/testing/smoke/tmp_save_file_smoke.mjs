@@ -172,6 +172,19 @@ const T = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('
   const enS = Object.keys(en).filter(k => k.startsWith('saveFile.'));
   T('T6 saveFile.* parytet PL=EN', plS.every(k => k in en) && enS.every(k => k in pl));
   T('T6 EN nie jest kopią PL (tłumaczenie realne)', en['menu.saveToFile'] !== pl['menu.saveToFile']);
+
+  // Komunikaty awarii zapisu — wcześniej hardkod po polsku z połamanymi znakami
+  const FAIL_KEYS = ['save.failedQuota', 'save.failedSerialization', 'save.failedUnknown', 'save.largeWarning'];
+  for (const k of FAIL_KEYS) {
+    T(`T6 PL ma ${k}`, typeof pl[k] === 'string' && pl[k].length > 0);
+    T(`T6 EN ma ${k}`, typeof en[k] === 'string' && en[k].length > 0);
+    T(`T6 EN ${k} przetłumaczony (≠ PL)`, en[k] !== pl[k]);
+  }
+  T('T6 komunikaty z parametrem zachowują {0}',
+    pl['save.failedSerialization'].includes('{0}') && en['save.failedSerialization'].includes('{0}') &&
+    pl['save.largeWarning'].includes('{0}')       && en['save.largeWarning'].includes('{0}'));
+  T('T6 PL bez połamanych diakrytyków (był hardkod „pelny/Usun/blad")',
+    !/\b(pelny|Usun|blad|padl|Rozwaz|konsole)\b/.test(FAIL_KEYS.map(k => pl[k]).join(' ')));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -3116,4 +3116,10 @@ export default {
   'saveFile.reasonFutureVersion': 'save from a newer version of the game — update the game',
   'saveFile.reasonTooOld':        'save too old — it can no longer be migrated',
   'saveFile.reasonWriteError':    'no space left in browser storage',
+
+  // === Save — failures (losing a save is the only irreversible event in the game) ===
+  'save.failedQuota':         '⚠ The game is NOT being saved — no space left in browser storage. Save to a file (☰ menu) before you close the game!',
+  'save.failedSerialization': '⚠ Save failed (data error): {0}. See the console (F12) for details.',
+  'save.failedUnknown':       '⚠ Save failed: {0}',
+  'save.largeWarning':        '⚠ Your save is large ({0} MB) — approaching the browser storage limit. Consider saving to a file (☰ menu).',
 };

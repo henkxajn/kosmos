@@ -3117,4 +3117,10 @@ export default {
   'saveFile.reasonFutureVersion': 'zapis z nowszej wersji gry — zaktualizuj grę',
   'saveFile.reasonTooOld':        'zapis zbyt stary — nie da się go już zmigrować',
   'saveFile.reasonWriteError':    'brak miejsca w pamięci przeglądarki',
+
+  // === Zapis — awarie (utrata zapisu = jedyne nieodwracalne zdarzenie w grze) ===
+  'save.failedQuota':         '⚠ Gra NIE jest zapisywana — brak miejsca w pamięci przeglądarki. Zapisz do pliku (menu ☰) zanim zamkniesz grę!',
+  'save.failedSerialization': '⚠ Zapis nieudany (błąd danych): {0}. Szczegóły w konsoli (F12).',
+  'save.failedUnknown':       '⚠ Zapis nieudany: {0}',
+  'save.largeWarning':        '⚠ Zapis jest duży ({0} MB) — zbliża się limit pamięci przeglądarki. Rozważ zapis do pliku (menu ☰).',
 };

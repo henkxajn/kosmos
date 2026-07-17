@@ -724,9 +724,21 @@ nowej pozycji). Autosave ZOSTAJE (ma kill-switch `off` w menu; chroni przed cras
   T4 = odrzucony import nie rusza slotu, T7 = import przechodzi przy ciasnej quocie (zweryfikowane:
   na kodzie z `a462e10` te asercje PADAJĄ), T8 = prune.
 
-**Znany bug POZA tym slice'em:** `SaveMigration.js` (backup + persist) i `SaveSystem.save()` przy quota
-robią cichy `console.warn`/`game:saveFailed` — gra rusza na stanie z pamięci, a gracz może nie zauważyć,
-że NIE jest zapisywany. Kandydat na osobny fix (twardy modal zamiast warn).
+**Alarm o awarii zapisu (utrata zapisu = JEDYNE nieodwracalne zdarzenie w grze):**
+- **Self-healing w `save()`** — na quocie: `pruneMigrationBackups()` + ponowny `_trySetItem` ZANIM
+  poleci `game:saveFailed`. Najczęściej wystarcza i gracz nie zauważa problemu.
+- **⚠ FIX severity `'warning'`→`'warn'`** (`UIManager.js` saveFailed + saveLargeWarning):
+  `EventLogSystem.js:90` waliduje whitelistą `['info','warn','alert']` i po cichu koercuje nieznane
+  do `'info'` → „Save NIE zapisany" wyglądał IDENTYCZNIE jak „💾 Zapisano". Literówka, nie decyzja.
+- **Toast + throttle** — `UIManager._saveAlertToast(msg, color, stampField)`; `SAVE_ALERT_COOLDOWN_YEARS=25`,
+  osobny stamp per rodzaj (`_lastSaveFailToastYear`/`_lastSaveLargeToastYear`), pierwsza awaria zawsze.
+  **Throttle jest warunkiem koniecznym**: quota to błąd TRWAŁY, autosave leci co rok gry → bez tego alarm
+  zalewa ekran i wypłukuje ring buffer Dziennika (`MAX_RUNTIME`), kasując dowody innych zdarzeń.
+  Różnica lat przez `Math.abs` — wczytanie zapisu cofa zegar, inaczej toast zamilkłby na zawsze.
+- **i18n `save.failedQuota/failedSerialization/failedUnknown/largeWarning`** PL+EN (był hardkod PL
+  z połamanymi znakami: „pelny", „Usun", „blad" — gracz EN dostawał zepsuty polski).
+- **Debug**: `KOSMOS.debug.storageReport()` (console.table per klucz + % quoty) ·
+  `fillStorage(MiB)` (balast do testowania ścieżek quota; `fillStorage(0)` sprząta).
 
 ---
 

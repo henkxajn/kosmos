@@ -69,6 +69,10 @@ import {
   hitTestSubNav,
 } from '../ui/CivPanelDrawer.js';
 
+// Odstęp między toastami o awarii/rozmiarze zapisu (lata gry). Quota to błąd TRWAŁY —
+// autosave leci co rok gry, więc bez throttlingu alarm zalałby ekran i wypłukał Dziennik.
+const SAVE_ALERT_COOLDOWN_YEARS = 25;
+
 // Wymiary fizyczne canvas (piksele urządzenia) — aktualizowane przy resize/fullscreen
 let _PW = window.innerWidth;
 let _PH = window.innerHeight;
@@ -239,6 +243,9 @@ export class UIManager {
     // ── EventLog ──────────────────────────────────────────────
     this._logEntries = [];
     this._logYear    = 0;
+    // Ostatni rok gry, w którym pokazano toast o zapisie (null = jeszcze nigdy w tej sesji)
+    this._lastSaveFailToastYear  = null;
+    this._lastSaveLargeToastYear = null;
 
     // ── Hover buttonów ────────────────────────────────────────
     this._hoveredBtn = null;
@@ -814,27 +821,25 @@ export class UIManager {
       this._addNotification(`\u{1F4BE} Zapisano (${y} lat${mb})`, 'system', 'info');
     });
 
-    // Save failure (np. localStorage quota — bez tego user nie wie ze save padl)
+    // Awaria zapisu. Utrata zapisu to JEDYNE nieodwracalne zdarzenie w grze, a szło dotąd
+    // wyłącznie do Dziennika — ukrytego drawera, którego gracz może nigdy nie otworzyć.
+    // Stąd toast. Severity 'warn', NIE 'warning': EventLogSystem waliduje whitelistą
+    // ['info','warn','alert'] i po cichu koercuje nieznane do 'info' — przez co „Save NIE
+    // zapisany" wyglądał identycznie jak „Zapisano".
     EventBus.on('game:saveFailed', ({ reason, message }) => {
-      let msg;
-      if (reason === 'quota') {
-        msg = '\u{26A0} Save NIE zapisany — localStorage pelny. Usun stare save lub eksportuj.';
-      } else if (reason === 'serialization') {
-        msg = `\u{26A0} Save padl (blad serializacji): ${message}. Zobacz konsole F12.`;
-      } else {
-        msg = `\u{26A0} Save padl: ${message}`;
-      }
-      this._addNotification(msg, 'system', 'warning');
+      const msg = reason === 'quota'         ? t('save.failedQuota')
+                : reason === 'serialization' ? t('save.failedSerialization', message ?? '')
+                :                              t('save.failedUnknown', message ?? '');
+      this._addNotification(msg, 'system', 'warn');
+      this._saveAlertToast(msg, THEME.danger, '_lastSaveFailToastYear');
     });
 
-    // Proaktywne ostrzezenie gdy save zbliza sie do quota (~5 MB Chrome)
+    // Proaktywne ostrzeżenie, gdy zapis zbliża się do limitu pamięci — jedyna szansa, by
+    // gracz zareagował ZANIM zapis zacznie padać.
     EventBus.on('game:saveLargeWarning', ({ sizeMB }) => {
-      const mb = sizeMB.toFixed(2);
-      this._addNotification(
-        `\u{26A0} Save duzy (${mb} MB / ~5 MB limit). Rozwaz eksport.`,
-        'system',
-        'warning',
-      );
+      const msg = t('save.largeWarning', sizeMB.toFixed(2));
+      this._addNotification(msg, 'system', 'warn');
+      this._saveAlertToast(msg, THEME.warning, '_lastSaveLargeToastYear');
     });
 
     // Dialog Nowa Gra (emitowane z BottomBar)
@@ -1340,6 +1345,23 @@ export class UIManager {
     this._dirty = true;
     const logSys = window.KOSMOS?.eventLogSystem;
     if (logSys) logSys.push({ text, channel, severity });
+  }
+
+  /**
+   * Toast o problemie z zapisem, nie częściej niż raz na SAVE_ALERT_COOLDOWN_YEARS lat gry.
+   * Pierwsza awaria w sesji jest zawsze pokazywana — kolejne dopiero po cooldownie.
+   * Różnica lat przez Math.abs, bo wczytanie zapisu może cofnąć zegar (bez tego toast
+   * zamilkłby na zawsze po skoku w przeszłość).
+   * @param {string} msg
+   * @param {string} color
+   * @param {'_lastSaveFailToastYear'|'_lastSaveLargeToastYear'} stampField — osobny licznik per rodzaj
+   */
+  _saveAlertToast(msg, color, stampField) {
+    const year = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const last = this[stampField];
+    if (last !== null && Math.abs(year - last) < SAVE_ALERT_COOLDOWN_YEARS) return;
+    this[stampField] = year;
+    EventBus.emit('ui:toast', { text: msg, color, durationMs: 6000 });
   }
 
   _flashResource(resource) {
