@@ -6,7 +6,7 @@
 // Logika misji delegowana do MissionSystem + FleetActions.
 
 import { THEME, bgAlpha, hexToRgb } from '../config/ThemeConfig.js';
-import { COSMIC }          from '../config/LayoutConfig.js';
+import { COSMIC, BOTTOM_RESERVED } from '../config/LayoutConfig.js';
 import { CIV_SIDEBAR_W, getSubNavHeight }  from './CivPanelDrawer.js';
 import { SHIPS }           from '../data/ShipsData.js';
 import { HULLS }           from '../data/HullsData.js';
@@ -42,6 +42,19 @@ import { t, getName, getLocale } from '../i18n/i18n.js';
 // UWAGA: NIE importujemy UnitDesignOverlay statycznie — pociąga three (GroundUnitPanel →
 // GlbSnapshotRenderer) i psuje headless import. Edytor projektów do osadzenia w Stoczni
 // bierzemy z zarejestrowanej instancji (window.KOSMOS.overlayManager.overlays.unit_design).
+
+// ── Helper: skrót tekstu do zadanej SZEROKOŚCI w px (mierzonej bieżącym fontem ctx) ──
+// Zastępuje obcinanie po liczbie znaków (slice(0,N)), które ignorowało realną szerokość
+// panelu — nazwa ucinała się na sztywnym limicie niezależnie od tego ile było miejsca.
+// Wzór: FleetCommandPanel._truncate.
+function _fitText(ctx, text, maxW) {
+  text = String(text ?? '');
+  if (maxW <= 0) return '';
+  if (ctx.measureText(text).width <= maxW) return text;
+  let s = text;
+  while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+  return s + '…';
+}
 
 // ── Helper M4 P3: czy vessel bierze udział w aktywnym deep-space encounter ──
 // Sprawdza DSCS._activeEncounters → vesselStates ma vessel.id. Read-only — wołane
@@ -113,7 +126,12 @@ function _resolveName(id) {
 }
 
 // ── Stałe layoutu ────────────────────────────────────────────────────────────
-const LEFT_W    = 170;
+// LEFT_W: szerokość listy floty. Budżet nazwy ≈ (LEFT_W - 107) px przy 13px Space Mono
+// (0.6em/znak) → 260 daje ~19 znaków, czyli mieści pulę VesselNames z licznikiem rzymskim
+// (mediana 12, p90 15, „Kwatermistrz VIII" 17) także z odznaką ⚔/⚠. Dłuższe („Zaopatrzeniowiec
+// VIII" = 21) skraca _fitText. Centrum nic na tym nie traci: promień mapy taktycznej to
+// min(mb.w/2, mb.h/2)-20, czyli limituje go WYSOKOŚĆ (~300 px), nie szerokość (~400 px).
+const LEFT_W    = 260;
 const RIGHT_W   = 200;
 const TAB_H     = 28;   // wysokość paska zakładek (tytuł + 4 zakładki) pod nagłówkiem overlay
 
@@ -137,14 +155,18 @@ const STRATCOM_BG_BRIGHTNESS = 0.25;  // jasność tła-mgławicy paneli Stratco
 // pasek zakładek (4 zakładki) zajmuje miejsce dawnego subnav. getSubNavHeight() liczone
 // dynamicznie w draw() (== 0 dla fleet-singleton; defensywnie, gdyby kiedyś wrócił subnav).
 const TOP_BASE  = COSMIC.TOP_BAND_H + COSMIC.MAP_MODE_H;
-// Rezerwa dolna = pasek nawigacji (BOTTOM_NAV_H) + listwa dziennika (BOTTOM_LOG_TRIG_H) — jak
-// BaseOverlay w civMode — PLUS pasek czasu (BottomControlBar, STRIP_H≈20 px), rysowany NA WIERZCHU
-// nad nawigacją (UIManager _bottomNavBar/_bottomControlBar PO overlayManager). Bez rezerwy paska
-// czasu dolna treść prawego panelu (akcje statku: Refuel / toggle „Tankuj automatycznie", scroll
-// do końca) chowała się pod zawsze-wierzchnim sterowaniem czasu i była nieosiągalna mimo scrolla.
-// (Wcześniej BOTTOM_BAR_H=26 → overlay wchodził ~36 px pod nawigację + pasek czasu.)
+// Zegar (BottomControlBar, STRIP_H≈20 px) to samodzielny widget rysowany NA WIERZCHU w prawym-
+// dolnym rogu (UIManager rysuje go PO overlayManager, a jego kliki routuje PRZED). Rozdzielamy
+// dwie rzeczy:
+//   • TŁO/RAMKA overlayu sięgają paska nawigacji (BOTTOM_RESERVED) — jak w BaseOverlay. Wcześniej
+//     overlay kończył się na górnej krawędzi zegara, a zegar maluje tło TYLKO pod swoim slotem
+//     nawigacji (~1/7 szerokości) → pas 20 px był na ~85% szerokości niczym nie zamalowany,
+//     przebijała przez niego mapa 3D i dolna krawędź ramki tworzyła linię tnącą ekran.
+//   • TREŚĆ zakładek nadal ustępuje zegarowi o TIME_STRIP_H, bo leży on na niej — bez tej rezerwy
+//     dolna treść prawego panelu (akcje statku: Refuel / „Tankuj automatycznie") chowała się pod
+//     zawsze-wierzchnim sterowaniem czasu i była nieosiągalna mimo scrolla.
+// Wypadkowa: geometria treści (contentY/contentH) BEZ ZMIAN — rośnie wyłącznie zamalowane tło.
 const TIME_STRIP_H = 20;   // = BottomControlBar.STRIP_H (pasek czasu nad nawigacją)
-const BOTTOM_PAD = COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H + TIME_STRIP_H; // 36+6+20 = 62
 const OUTLINER_W = COSMIC.OUTLINER_W;  // 180
 
 // Kolory statusów statków
@@ -499,15 +521,9 @@ export class FleetManagerOverlay {
     const ox = CIV_SIDEBAR_W;
     const oy = TOP_BASE + getSubNavHeight();
     const ow = W - CIV_SIDEBAR_W;
-    // Dolna granica overlayu = górna krawędź paska czasu (BottomControlBar), rysowanego NA WIERZCHU
-    // (UIManager PO overlayManager). Pasek RIDE'uje w górę, gdy ostatnia karta nawigacji (Science)
-    // jest w podglądzie (peek) → wtedy STAŁY BOTTOM_PAD nie wystarcza i pasek wjeżdża na dolną treść
-    // prawego panelu (akcje statku / „Powtarzaj automatycznie"), której nie da się doscrollować.
-    // Czytamy realny top paska CO KLATKĘ (peek-aware, ten sam _stripTop którego pasek użyje przy
-    // rysowaniu); fallback = baza (nav + dziennik + STRIP_H) gdy pasek niedostępny.
-    const _stripTop = window.KOSMOS?.bottomControlBar?._stripTop?.(H);
-    const _bottomLimit = (_stripTop != null && _stripTop > oy + 40) ? _stripTop : (H - BOTTOM_PAD);
-    const oh = _bottomLimit - oy;
+    // Dolna granica TŁA overlayu = górna krawędź paska nawigacji (jak BaseOverlay). Zegar leży na
+    // overlayu jako widget w rogu — ustępuje mu dopiero treść (contentH niżej). Patrz TIME_STRIP_H.
+    const oh = (H - BOTTOM_RESERVED) - oy;
     this._bounds = { x: ox, y: oy, w: ow, h: oh };
 
     // ── Tło ──────────────────────────────────────────────────
@@ -532,9 +548,11 @@ export class FleetManagerOverlay {
     ctx.fillText('✕', closeX, closeY + 14);
     this._hitZones.push({ x: closeX - 4, y: closeY, w: 22, h: 22, type: 'close', data: {} });
 
-    // Obszar treści pod paskiem zakładek
+    // Obszar treści pod paskiem zakładek — z rezerwą na leżący na nim zegar (TIME_STRIP_H).
+    // Wartość contentH jest identyczna jak przed rozdzieleniem tła i treści: dawniej oh kończyło
+    // się na górnej krawędzi zegara, dziś oh sięga nawigacji, a te same 20 px odejmujemy tutaj.
     const contentY = oy + TAB_H;
-    const contentH = oh - TAB_H;
+    const contentH = oh - TAB_H - TIME_STRIP_H;
     this._contentBounds = { x: ox, y: contentY, w: ow, h: contentH };
 
     // ── Pobierz dane ────────────────────────────────────────
@@ -1989,25 +2007,24 @@ export class FleetManagerOverlay {
     // tabH usunięty (brak zakładek). _activeTab obsolete.
     const flagOn = !!GAME_CONFIG.FEATURES?.playerFleets;
     const tabH = 0;
-    const ROW_HANGAR = 34;  // kompaktowy wiersz: nazwa + paliwo + lokalizacja
-    const ROW_ORBIT  = 34;
-    const ROW_FLIGHT = 52;  // wyższy: nazwa + paliwo + cel + typ misji + ETA
+    // Wiersz statku gracza ma STAŁĄ wysokość — niezależnie od stanu (docked/orbiting/in_transit)
+    // i wyposażenia (Komora Warp). Miejsce na WSZYSTKIE pola (nazwa + paliwo + pasek warp +
+    // status + ETA) jest zarezerwowane na sztywno, nawet gdy dane pole akurat nie występuje.
+    // Wcześniej wysokość zależała od stanu (34 vs 52 px) i od baku warp (+8 px) → każdy start
+    // i każde zadokowanie zmieniało wysokość kafla i cała lista poniżej „skakała".
+    const ROW_PLAYER = 52;  // = dawny ROW_FLIGHT (kalibracja bez zmian: nazwa+paliwo, status, ETA)
     const ROW_ENEMY  = 34;  // nazwa + typ + odległość — bez paliwa/ETA (nie znamy)
     const ROW_WRECK  = 30;  // nazwa + "wrak" + rok zniszczenia
-    const WARP_ROW_EXTRA = 8;  // S3.0b S1b: +wysokość wiersza na drugi pasek (warp) — patrz _rowHForVessel
     const SECTION_H  = 22;  // header sekcji (lekko większy dla buttonów floty)
     const ENEMY_COLOR = '#ff4466';
     const WRECK_COLOR = '#808080';
 
-    // Helper: dobierz wysokość wiersza per vessel state (per-vessel zamiast per-section
-    // — w sekcji floty mogą być statki w różnych stanach).
+    // Helper: wysokość wiersza per vessel (JEDNO źródło: scroll-total, focus-offset i draw-loop
+    // liczą z niego tak samo). Statki gracza mają jedną stałą wysokość — patrz ROW_PLAYER.
     const _rowHForVessel = (v) => {
       if (v.isWreck) return ROW_WRECK;
       if (isEnemyVessel(v)) return ROW_ENEMY;
-      const base = v.position?.state === 'in_transit' ? ROW_FLIGHT : ROW_HANGAR;
-      // S3.0b S1b: statki z Komorą Warp (warpFuel.max>0) dostają drugi pasek paliwa →
-      // rezerwuj WARP_ROW_EXTRA (JEDNO źródło: scroll-total 1734 + draw-loop spójne).
-      return base + (v.warpFuel?.max > 0 ? WARP_ROW_EXTRA : 0);
+      return ROW_PLAYER;
     };
 
     // M3 P3.1 — cache vesselId→rallyName mapping (per draw) dla LEFT panel indicator.
@@ -2423,32 +2440,41 @@ export class FleetManagerOverlay {
         // checkbox zajmuje 14px gutter po lewej — przesuwamy nazwę+ikonę o ten offset.
         const fleetGutter = (flagOn && sec.key !== 'enemy' && sec.key !== 'wreck') ? 14 : 0;
 
+        // Pasek paliwa — geometria liczona PRZED nazwą, bo wyznacza jej budżet szerokości.
+        const fuelPct = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
+        const fuelColor = fuelPct > 0.5 ? THEME.success : fuelPct > 0.2 ? THEME.warning : THEME.danger;
+        const barW = 26; const barH = 3;
+        const barX = x + w - pad - barW - 24; const barBY = ry + 9;
+
         // ── Wiersz 1: ikona + nazwa + paliwo ──
+        const nameX = x + pad + fleetGutter;
+        const _rallyName = _rallyByVesselId.get(vessel.id);   // M3 P3.1 — rezerwuje miejsce na 🎯
         ctx.font = `13px ${THEME.fontFamily}`;
         ctx.fillStyle = selected ? THEME.textPrimary : THEME.textSecondary;
-        const vName = vessel.name.length > 11 ? vessel.name.slice(0, 10) + '…' : vessel.name;
         const inCombat = _isVesselInCombat(vessel.id);
         const combatBadge = inCombat ? ' ⚔' : '';
         // S3.5a-1 — ⚠ gdy statek immobilized (zaległe utrzymanie floty)
         const immobilized = window.KOSMOS?.vesselManager?.isImmobilized?.(vessel) ?? false;
         const immobBadge = immobilized ? ' ⚠' : '';
         if (immobilized) ctx.fillStyle = THEME.danger;
-        ctx.fillText(`${icon} ${vName}${combatBadge}${immobBadge}`, x + pad + fleetGutter, ry + 14);
+        // Nazwa skracana do REALNEJ wolnej szerokości (do paska paliwa), z odjęciem części
+        // stałych: ikony, znaczników ⚔/⚠ i ewentualnego 🎯 rally.
+        const namePrefix = `${icon} `;
+        const nameSuffix = `${combatBadge}${immobBadge}`;
+        const nameBudget = (barX - 6) - nameX
+                         - ctx.measureText(namePrefix + nameSuffix).width
+                         - (_rallyName ? 16 : 0);
+        const vName = _fitText(ctx, vessel.name, nameBudget);
+        ctx.fillText(`${namePrefix}${vName}${nameSuffix}`, nameX, ry + 14);
 
         // M3 P3.1 — rally indicator (🎯) gdy vessel assigned do rally
-        const _rallyName = _rallyByVesselId.get(vessel.id);
         if (_rallyName) {
-          const _nameW = ctx.measureText(`${icon} ${vName}`).width;
+          const _nameW = ctx.measureText(`${namePrefix}${vName}${nameSuffix}`).width;
           ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
           ctx.fillStyle = '#ffaa22';  // rally color
-          ctx.fillText('🎯', x + pad + fleetGutter + _nameW + 4, ry + 14);
+          ctx.fillText('🎯', nameX + _nameW + 4, ry + 14);
         }
 
-        // Pasek paliwa
-        const fuelPct = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
-        const fuelColor = fuelPct > 0.5 ? THEME.success : fuelPct > 0.2 ? THEME.warning : THEME.danger;
-        const barW = 26; const barH = 3;
-        const barX = x + w - pad - barW - 24; const barBY = ry + 9;
         ctx.fillStyle = THEME.bgTertiary; ctx.fillRect(barX, barBY, barW, barH);
         ctx.fillStyle = fuelColor; ctx.fillRect(barX, barBY, Math.round(barW * fuelPct), barH);
         ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
@@ -2458,7 +2484,7 @@ export class FleetManagerOverlay {
         ctx.textAlign = 'left';
 
         // S3.0b S1b: drugi pasek — paliwo warp (cyan THEME.info) pod paskiem in-system; tylko statki
-        // z Komorą Warp. Wysokość zarezerwowana w _rowHForVessel (WARP_ROW_EXTRA). Px → kalibracja wizualna.
+        // z Komorą Warp. Miejsce mieści się w stałej wysokości wiersza (ROW_PLAYER). Px → kalibracja wizualna.
         if (vessel.warpFuel?.max > 0) {
           const warpPct = vessel.warpFuel.current / vessel.warpFuel.max;
           const wBarBY = ry + 18;
@@ -2477,14 +2503,14 @@ export class FleetManagerOverlay {
         // docked vessel w sekcji floty/ungrouped wpadał w fallback "W locie → ???".
         ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
         const vState = vessel.position?.state;
+        const subX = x + pad + 2 + fleetGutter;   // lewa krawędź wierszy 2 i 3
+        const missionColX = x + pad + 95 + fleetGutter;   // kolumna typu misji (wiersz 2)
         if (vState === 'docked') {
           ctx.fillStyle = THEME.success;
-          const locName = _resolveName(vessel.position.dockedAt);
-          ctx.fillText(`◈ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2 + fleetGutter, ry + 28);
+          ctx.fillText(`◈ ${_fitText(ctx, _resolveName(vessel.position.dockedAt), w - (subX - x) - pad - 12)}`, subX, ry + 28);
         } else if (vState === 'orbiting') {
           ctx.fillStyle = THEME.mint;
-          const locName = _resolveName(vessel.position.dockedAt);
-          ctx.fillText(`⊙ ${locName.length > 18 ? locName.slice(0, 17) + '…' : locName}`, x + pad + 2 + fleetGutter, ry + 28);
+          ctx.fillText(`⊙ ${_fitText(ctx, _resolveName(vessel.position.dockedAt), w - (subX - x) - pad - 12)}`, subX, ry + 28);
         } else {
           // W locie: → cel + typ misji
           const targetName = vessel.mission?.targetName ?? _resolveName(vessel.mission?.targetId);
@@ -2492,25 +2518,39 @@ export class FleetManagerOverlay {
           const mIcon = _missionTypeIcon(mType);
           const mLabel = _missionTypeLabel(mType);
           ctx.fillStyle = THEME.warning;
-          ctx.fillText(`→ ${(targetName ?? '?').slice(0, 12)}`, x + pad + 2 + fleetGutter, ry + 28);
+          ctx.fillText(`→ ${_fitText(ctx, targetName ?? '?', missionColX - subX - 18)}`, subX, ry + 28);
           ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`${mIcon} ${mLabel}`, x + pad + 95 + fleetGutter, ry + 28);
+          ctx.fillText(_fitText(ctx, `${mIcon} ${mLabel}`, x + w - pad - missionColX), missionColX, ry + 28);
 
-          // ── Wiersz 3 (tylko flight): ETA ──
+          // ── Wiersz 3: ETA ──
           const m = vessel.mission;
           const isReturning = m?.phase === 'returning';
           const etaYear = isReturning
             ? (m?.returnYear ?? m?.arrivalYear)
             : (m?.arrivalYear ?? m?.returnYear);
           ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-          const etaLabel = isReturning ? '↩ ETA' : '⏱ ETA';
+          // Ikona + gotowy dwujęzyczny wpis (klucze zawierają już „ETA:"); wcześniej „rok"
+          // było wpisane po polsku na sztywno, mimo dostępnego fleet.etaYearLabel.
+          const etaIcon = isReturning ? '↩' : '⏱';
           if (etaYear != null && etaYear > 0) {
             ctx.fillStyle = THEME.warning;
-            ctx.fillText(`${etaLabel}: rok ${_fmtYear(etaYear)}`, x + pad + 2 + fleetGutter, ry + 43);
+            ctx.fillText(`${etaIcon} ${t('fleet.etaYearLabel', _fmtYear(etaYear))}`, subX, ry + 43);
           } else {
             ctx.fillStyle = THEME.textSecondary;
-            ctx.fillText(`${etaLabel}: —`, x + pad + 2 + fleetGutter, ry + 43);
+            ctx.fillText(`${etaIcon} ${t('fleet.etaPrefix', '—')}`, subX, ry + 43);
           }
+        }
+
+        // ── Wiersz 3 poza lotem: klasa kadłuba ──
+        // Wysokość wiersza jest stała, więc linia po ETA istnieje zawsze. Dla statku
+        // w hangarze/na orbicie nie ma ETA — zamiast zostawiać pustkę (kafel wyglądałby
+        // na uszkodzony) pokazujemy klasę kadłuba, której lista statków gracza dotąd nie
+        // pokazywała wcale (wiersz wroga pokazuje ją od zawsze).
+        if (vState === 'docked' || vState === 'orbiting') {
+          ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+          ctx.fillStyle = THEME.textDim;
+          const clsName = ship ? getName(ship, 'ship') : (vessel.shipId ?? '?');
+          ctx.fillText(_fitText(ctx, clsName, x + w - pad - subX - 44), subX, ry + 43);
         }
 
         // Separator
