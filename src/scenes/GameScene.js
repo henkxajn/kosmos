@@ -446,8 +446,35 @@ export class GameScene {
         console.log(`[storage] razem: ${(total / 1e6).toFixed(2)} mln znaków = ${(total * 2 / 1048576).toFixed(2)} MiB / ~10 MiB (${(total / 5.24e6 * 100).toFixed(0)}%)`);
         return { totalChars: total, totalMiB: +(total * 2 / 1048576).toFixed(2), keys: rows.length };
       },
-      // Zapycha localStorage śmieciem, żeby dało się przetestować ścieżki quota
-      // (self-healing zapisu, odrzucenie importu). fillStorage(0) sprząta.
+      // Wymusza awarię zapisu i pokazuje, co widzi gracz. Uczciwsze niż fillStorage:
+      // samo zapchanie pamięci NIE wywoła awarii, bo Chromium sprawdza quotę tylko gdy
+      // element ROŚNIE — a autosave nadpisuje slot podobnym rozmiarem i przechodzi.
+      //   heal:true  → pierwszy zapis pada, drugi (po sprzątnięciu backupów) przechodzi
+      //                = ścieżka self-healing: w konsoli „zwolniono N backup(ów)", bez alarmu.
+      //   heal:false → każdy zapis pada = ścieżka alarmu: czerwony toast + wpis w Dzienniku.
+      simulateQuotaFail: ({ heal = false } = {}) => {
+        const real = localStorage.setItem.bind(localStorage);
+        let throwsLeft = heal ? 1 : Infinity;
+        localStorage.setItem = (k, v) => {
+          if (k === 'kosmos_save_v1' && throwsLeft > 0) {
+            throwsLeft--;
+            const e = new Error('QuotaExceededError (symulacja)');
+            e.name = 'QuotaExceededError';
+            throw e;
+          }
+          return real(k, v);
+        };
+        try {
+          EventBus.emit('game:save');
+        } finally {
+          localStorage.setItem = real;   // ZAWSZE przywróć — inaczej gra zostaje kaleka
+        }
+        console.log(`[storage] symulacja zakończona (heal=${heal}). Zapis działa znowu normalnie.`);
+        return { heal };
+      },
+      // Zapycha localStorage śmieciem. UWAGA: sam w sobie NIE wywoła awarii zapisu (patrz
+      // simulateQuotaFail) — służy do testowania ODRZUCENIA IMPORTU, gdzie plik bywa większy
+      // od bieżącego slotu. fillStorage(0) sprząta balast.
       fillStorage: (targetMiB = 8) => {
         localStorage.removeItem('kosmos_debug_ballast');
         if (targetMiB <= 0) { console.log('[storage] balast usunięty'); return 0; }
@@ -456,7 +483,13 @@ export class GameScene {
         const wantChars = Math.max(0, Math.floor(targetMiB * 1048576 / 2) - used);
         try {
           localStorage.setItem('kosmos_debug_ballast', 'x'.repeat(wantChars));
-          console.log(`[storage] dosypano balast ${(wantChars / 1e6).toFixed(2)} mln znaków → użycie ~${targetMiB} MiB. Teraz spróbuj zapisać grę.`);
+          console.log(
+            `[storage] Twoje dane: ${(used / 1e6).toFixed(2)} mln znaków (~${(used * 2 / 1048576).toFixed(1)} MiB)\n` +
+            `[storage] balast:     ${(wantChars / 1e6).toFixed(2)} mln znaków → użycie ~${targetMiB} MiB / ~10 MiB\n` +
+            `[storage] UWAGA: to NIE wywoła awarii zapisu (nadpisanie slotu podobnym rozmiarem przechodzi\n` +
+            `[storage]   nawet przy pełnej pamięci). Do testu alarmu użyj KOSMOS.debug.simulateQuotaFail().\n` +
+            `[storage] Sprzątanie: KOSMOS.debug.fillStorage(0)`,
+          );
         } catch (e) {
           console.warn('[storage] balast się nie zmieścił:', e?.message);
         }
