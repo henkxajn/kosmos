@@ -45,6 +45,81 @@ export class TradeOverlay extends BaseOverlay {
     super.hide();
     this._hoverTradeBar = null;
     this._hideTooltip();
+    this._closeQtyInput();
+  }
+
+  // ── Inline input ilości (wpisanie z klawiatury nad polem, wzór EconomyOverlay safety stock) ──
+  _openQtyInput(canvasX, canvasY, boxW, boxH) {
+    this._closeQtyInput();
+
+    // Skala logiczne → fizyczne piksele (identyczna jak w UIManager/EconomyOverlay)
+    const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const sx = canvasX * SCALE, sy = canvasY * SCALE;
+    const sw = boxW * SCALE, sh = boxH * SCALE;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '1';
+    input.step = '1';
+    input.value = String(this._marketQty ?? 10);
+    Object.assign(input.style, {
+      position: 'fixed',
+      left: `${Math.round(sx)}px`,
+      top:  `${Math.round(sy)}px`,
+      width: `${Math.round(sw)}px`,
+      height: `${Math.round(sh)}px`,
+      boxSizing: 'border-box',
+      padding: '0 3px',
+      margin: '0',
+      background: THEME.bgPrimary,
+      border: `1px solid ${THEME.borderActive}`,
+      color: THEME.accent,
+      fontFamily: THEME.fontFamily,
+      fontSize: `${Math.max(10, Math.round(sh * 0.7))}px`,
+      textAlign: 'center',
+      outline: 'none',
+      zIndex: '300',
+      caretColor: THEME.accent,
+      appearance: 'textfield',
+    });
+
+    document.body.appendChild(input);
+    this._qtyInput = input;
+
+    let done = false;
+    const commit = () => {
+      if (done) return;
+      done = true;
+      const raw = parseInt(input.value, 10);
+      this._marketQty = Number.isFinite(raw) ? Math.max(1, raw) : (this._marketQty ?? 10);
+      this._closeQtyInput();
+    };
+    const cancel = () => {
+      if (done) return;
+      done = true;
+      this._closeQtyInput();
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      e.stopPropagation(); // nie propaguj do GameScene (Space, 1-5, etc.)
+    });
+    input.addEventListener('blur', commit);
+    // Nie propaguj klików do canvas (nie zamknij overlay ani nie trigger hit zones)
+    for (const evt of ['click', 'mousedown', 'mouseup']) {
+      input.addEventListener(evt, (e) => e.stopPropagation());
+    }
+
+    requestAnimationFrame(() => { input.focus(); input.select(); });
+  }
+
+  _closeQtyInput() {
+    const el = this._qtyInput;
+    if (!el) return;
+    this._qtyInput = null;
+    el.onblur = null;
+    if (el.parentNode) el.parentNode.removeChild(el);
   }
 
   _createTooltipEl() {
@@ -406,9 +481,18 @@ export class TradeOverlay extends BaseOverlay {
     ctx.fillText(t('market.qty'), bx + 6, qy + 12);
     const qbX = bx + 56;
     this._miniBtn(ctx, qbX, qy, 18, '−', 'market_qty', { delta: -10 });
+    // Klikalne pole liczby — otwiera modal do wpisania ilości z klawiatury
+    const numX = qbX + 22, numW = 44, numH = 16;
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(numX, qy, numW, numH);
+    ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
+    ctx.strokeRect(numX + 0.5, qy + 0.5, numW - 1, numH - 1);
     ctx.fillStyle = THEME.textPrimary; ctx.textAlign = 'center';
-    ctx.fillText(String(qty), qbX + 42, qy + 12);
+    ctx.fillText(String(qty), numX + numW / 2, qy + 12);
     ctx.textAlign = 'left';
+    this._addHit(numX, qy, numW, numH, 'market_qty_edit', {
+      boxCanvasX: numX, boxCanvasY: qy, boxW: numW, boxH: numH,
+    });
     this._miniBtn(ctx, qbX + 66, qy, 18, '+', 'market_qty', { delta: +10 });
 
     // Kup / Sprzedaj
@@ -1060,6 +1144,10 @@ export class TradeOverlay extends BaseOverlay {
         break;
       case 'market_qty':
         this._marketQty = Math.max(1, (this._marketQty ?? 10) + zone.data.delta);
+        break;
+      case 'market_qty_edit':
+        // Wpisanie ilości z klawiatury bezpośrednio w UI (input nad polem, wzór EconomyOverlay safety stock)
+        this._openQtyInput(zone.data.boxCanvasX, zone.data.boxCanvasY, zone.data.boxW, zone.data.boxH);
         break;
       case 'market_buy':
       case 'market_sell': {
