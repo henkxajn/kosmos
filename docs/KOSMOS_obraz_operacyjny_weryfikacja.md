@@ -312,3 +312,27 @@ flaga OFF = zero kosztów w pętli; zero regresji `mapLabels` kolonii/stacji).
 **Slice 1d — playtest-checklista + DoD:** `docs/obraz-operacyjny-faza1-playtest.md` (wzór
 `docs/m4-p3-playtest-checklist.md`): czytelność przy ~20 statkach, brak migotania przy powolnym
 zoomie (histereza), OFF-switch, regresja etykiet kolonii, mgła wojny. Raport + STOP przed Fazą 2.
+
+### 8.1 WYKONANIE FAZY 1 (2026-07-18)
+
+**Wszystkie slice'y zrealizowane:** 1a `e4054b4` (czysta logika: toLogicalPx / gatherVesselLabels
+z mgłą wojny / vesselLabelLOD / edgeIndicators / buildSystemChips) · 1b `26e758e` (render plakietek
++ `FEATURES.fleetMapLabels` + `uiPrefs.fleetMapLabelsVisible` + wiersz menu „Plakietki floty" +
+i18n) · 1c `877132c` (strzałki krawędziowe + chipy układów + interakcje: klik plakietki → selekcja
+zbioru; chip → `starSystemManager.switchActiveSystem` — kanał STAR ATLAS, `StarSystemManager.js:135`,
+emituje `system:switched`; chip 🌀 → `openPanel('fleet', {tab:'tactical'})`) · 1d — checklista
+`docs/obraz-operacyjny-faza1-playtest.md`.
+
+**Smoke:** `tmp_fleet_map_labels_smoke.mjs` 44/44 (w tym wymagane case'y: `/UI_SCALE`, rumor→'?'/
+unknown→brak, histereza z Fazy 0 re-używana, progi kolonii nietknięte-asercja) + regresja
+`tmp_map_labels` 37/37 · `tmp_fleetpicture` 81/81 · `tmp_ui_v3` 40/0.
+
+**Live-gate CC (Chrome, Power Test):** plakietka ×2 (ton alert) nad statkami w locie i podąża przy
+zoomie · klik plakietki → selekcja [v_4,v_5] + FleetGroupPanel · chip „sys_home ×5 ⚠1" przy prawej
+krawędzi · toggle OFF → warstwa znika (kolonie zostają), ON → wraca · menu ☰ wiersz działa.
+Nie pokryte live (Power Test = 1 układ): chip-switch układu, chip tranzytu, strzałki wizualnie —
+logika w smoke, wizual w checkliście Filipa (realny save).
+
+**DoD Fazy 1 wg planu §3:** flaga ON → plakietki/strzałki/chipy działają ✔ · flaga OFF → zero
+śladu i kosztów (1 boolean w UIManager) ✔ · brak regresji mapLabels ✔ (smoke+live) ·
+playtest ~20 statków + migotanie → **checklista czeka na Filipa** (ostatni punkt DoD).
