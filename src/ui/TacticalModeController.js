@@ -71,5 +71,7 @@ export class TacticalModeController {
     if (K?.uiPrefs) K.uiPrefs.sensorOverlayVisible = sensorVisible;
     EventBus.emit('ui:sensorOverlayToggle', { visible: sensorVisible });
     K?.threeRenderer?._syncPredictionCones?.();
+    // Dim kosmetyki (2d): ON razem z trybem, pełny restore przy wyjściu.
+    K?.threeRenderer?.setTacticalDim?.(this._active);
   }
 }

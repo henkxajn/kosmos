@@ -34,6 +34,7 @@ import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { THEME } from '../config/ThemeConfig.js';
+import { gameplayToWorld } from '../utils/CoordTransform.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { t } from '../i18n/i18n.js';
 import {
@@ -297,6 +298,8 @@ export class ThreeRenderer {
     this._enemyAlertMarkers    = new Map();  // vesselId → Sprite (pulsujący czerwony marker wroga ≥rumor)
     this._tacticalGlyphs       = new Map();  // F2 tryb Y: vesselId → Sprite-glif (stały rozmiar ekranowy)
     this._tacticalHiddenModels = new Map();  // F2: vesselId → [dzieci wrappera ukryte na czas trybu]
+    this._tacticalGhosts       = new Map();  // F2: vesselId → Sprite-duch ETA w punkcie celu misji
+    this._tacticalDimmed       = null;       // F2: [{m, opacity, transparent}] — restore dim przy wyjściu
     this._alertReticleTex      = null;       // współdzielona tekstura reticle (lazy)
 
     // ── Cache modeli 3D statków ─────────────────────────────────
@@ -992,6 +995,12 @@ export class ThreeRenderer {
     this._disposeAllMeshes();
     this.initSystem(star, planets, planetesimals, moons);
     this._restoreActiveSystemVesselSprites();
+    // F2: tryb taktyczny przeżywa zmianę układu (chip-switch w trybie Y) —
+    // stare dimowane materiały zostały zdisposowane razem ze sceną; re-dim świeżej.
+    if (window.KOSMOS?.tacticalMode?.isActive) {
+      this._tacticalDimmed = null;
+      this.setTacticalDim(true);
+    }
   }
 
   // Slice 1e (Obraz Operacyjny F1) — po przebudowie sceny statki aktywnego układu
@@ -5925,8 +5934,109 @@ export class ThreeRenderer {
       sp.material.opacity = entry.intelOpacity ?? 1.0;            // ghost-opacity wrogów
       this._hideVesselModel(vid, entry);
       aliveIds.add(vid);
+
+      // ── Duch ETA (2d) — WYŁĄCZNIE własne statki z celem misji; rok z
+      // buildShipEntry (zero lokalnych ETA); 'moving' → ~rok + puls.
+      if (!enemy && v.mission && Number.isFinite(v.mission.targetX)
+          && Number.isFinite(v.mission.targetY) && pict.eta) {
+        this._upsertTacticalGhost(vid, v, pict, glyph, colorHex, camPos);
+      } else if (this._tacticalGhosts.has(vid)) {
+        this._disposeTacticalGhost(vid);
+      }
     }
     for (const k of [...this._tacticalGlyphs.keys()]) if (!aliveIds.has(k)) this._disposeTacticalGlyph(k);
+    for (const k of [...this._tacticalGhosts.keys()]) if (!aliveIds.has(k)) this._disposeTacticalGhost(k);
+  }
+
+  // Tekstura ducha: glif-OUTLINE + etykieta `⏱rok` (moving → `~rok`). Cache per treść.
+  static _ghostTexCache = new Map();
+  static _createGhostTexture(glyph, colorHex, etaLabel) {
+    const key = `${glyph}|${colorHex}|${etaLabel}`;
+    const cached = ThreeRenderer._ghostTexCache.get(key);
+    if (cached) return cached;
+    const w = 128, h = 96;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const c = cv.getContext('2d');
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.strokeStyle = colorHex; c.lineWidth = 3;
+    c.font = `bold 44px sans-serif`;
+    c.strokeText(glyph, w / 2, 34);              // sam OBRYS — „przyszły stan", nie obiekt
+    c.font = `bold 20px sans-serif`;
+    c.fillStyle = colorHex;
+    c.fillText(etaLabel, w / 2, 76);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.needsUpdate = true;
+    ThreeRenderer._ghostTexCache.set(key, tex);
+    return tex;
+  }
+
+  _upsertTacticalGhost(vid, vessel, pict, glyph, colorHex, camPos) {
+    const world = gameplayToWorld({ x: vessel.mission.targetX, y: vessel.mission.targetY });
+    if (!world) { this._disposeTacticalGhost(vid); return; }
+    const moving = pict.eta.confidence === 'moving';
+    const yr = Number.isFinite(pict.eta.year) ? Math.round(pict.eta.year) : null;
+    const etaLabel = yr === null ? '⏱?' : (moving ? `~${yr}` : `⏱${yr}`);
+    const key = `${glyph}|${colorHex}|${etaLabel}`;
+    let sp = this._tacticalGhosts.get(vid);
+    if (!sp || sp._ghostKey !== key) {
+      if (sp) this._disposeTacticalGhost(vid);
+      sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: ThreeRenderer._createGhostTexture(glyph, colorHex, etaLabel),
+        transparent: true, depthWrite: false, depthTest: false,
+      }));
+      sp.renderOrder = 29;
+      sp._ghostKey = key;
+      this.scene.add(sp);
+      this._tacticalGhosts.set(vid, sp);
+    }
+    sp.position.set(world.worldX, 0.02, world.worldZ);
+    const distFactor = camPos ? Math.max(0.5, camPos.distanceTo(sp.position) / ALERT_MARKER_REF_DIST) : 1;
+    sp.scale.set(0.8 * distFactor, 0.6 * distFactor, 1);
+    // 'moving' pulsuje (cel ruchomy — ETA przybliżone); firm = spokojna półprzezroczystość.
+    sp.material.opacity = moving
+      ? 0.35 + 0.25 * (0.5 + 0.5 * Math.sin(this._clock.getElapsedTime() * 3.2))
+      : 0.55;
+  }
+
+  _disposeTacticalGhost(vid) {
+    const sp = this._tacticalGhosts.get(vid);
+    if (!sp) return;
+    this.scene.remove(sp);
+    sp.material?.dispose?.();   // tekstura z cache — NIE dispose
+    this._tacticalGhosts.delete(vid);
+  }
+
+  // ── Dim kosmetyki (2d) — TYLKO planety/księżyce/orbity (materiały statków
+  // NIETKNIĘTE → intelOpacity wrogich ghostów z definicji bez konfliktu; exhaust
+  // znika razem z modelem — jest dzieckiem wrappera). Gwiazda zostaje jasna
+  // (punkt orientacyjny; jej shader-materiały nie są bezpieczne do mutacji).
+  setTacticalDim(on) {
+    if (on === !!this._tacticalDimmed) return;   // idempotentne
+    if (on) {
+      const seen = new Set();
+      const rec = [];
+      const dimObj = (root, factor) => root.traverse?.(o => {
+        const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
+        for (const m of mats) {
+          if (seen.has(m)) continue;
+          seen.add(m);
+          rec.push({ m, opacity: m.opacity, transparent: m.transparent });
+          m.transparent = true;
+          m.opacity = (m.opacity ?? 1) * factor;
+        }
+      });
+      for (const [, e] of this._planets) if (e.group) dimObj(e.group, 0.35);
+      for (const [, e] of this._moons) if (e.mesh) dimObj(e.mesh, 0.35);
+      for (const [, line] of this._orbits) dimObj(line, 0.5);
+      for (const [, line] of this._planetoidOrbits) dimObj(line, 0.5);
+      this._tacticalDimmed = rec;
+    } else {
+      for (const { m, opacity, transparent } of this._tacticalDimmed ?? []) {
+        m.opacity = opacity;
+        m.transparent = transparent;
+      }
+      this._tacticalDimmed = null;
+    }
   }
 
   // Ukryj DZIECI wrappera (model GLB + exhaust) — refs do restore; sprite-fallback
@@ -5956,6 +6066,7 @@ export class ThreeRenderer {
 
   _disposeAllTacticalGlyphs() {
     for (const k of [...this._tacticalGlyphs.keys()]) this._disposeTacticalGlyph(k);
+    for (const k of [...this._tacticalGhosts.keys()]) this._disposeTacticalGhost(k);
     // Modele mogły zostać ukryte bez żywego glifu (np. statek zniknął z intelu) —
     // domknij wszystkie pozostałe restore'y.
     for (const [vid, hidden] of this._tacticalHiddenModels) {
