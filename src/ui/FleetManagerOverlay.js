@@ -3281,8 +3281,34 @@ export class FleetManagerOverlay {
     }
     ctx.textAlign = 'left';
 
+    // ── Fix 1 (#registry-assign-bar) — pasek „Przypisz (N)" jako element
+    // REJESTRU (niezależny od ukrytej lewej listy); TE SAME handlery co dotąd
+    // (fleetAssignMenuOpen → showFleetAssignModal bulk-assign; ✕ → clear).
+    let assignH = 0;
+    const multiCount = this._multiSelectedIds.size;
+    if (multiCount > 0) {
+      const barY = cy + 19;
+      assignH = 22;
+      ctx.fillStyle = 'rgba(0,255,180,0.10)';
+      ctx.fillRect(x + pad, barY, w - pad * 2, 18);
+      ctx.strokeStyle = THEME.borderActive;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + pad + 0.5, barY + 0.5, w - pad * 2 - 1, 17);
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      const assignLabel = t('fleet.assignSelectedTo') + ` (${multiCount}) ▼`;
+      ctx.fillText(assignLabel, x + pad + 6, barY + 13);
+      const labelW = ctx.measureText(assignLabel).width + 10;
+      this._hitZones.push({ x: x + pad, y: barY, w: labelW, h: 18, type: 'fleetAssignMenuOpen', data: {} });
+      ctx.fillStyle = THEME.danger;
+      ctx.textAlign = 'right';
+      ctx.fillText('✕', x + w - pad - 6, barY + 13);
+      ctx.textAlign = 'left';
+      this._hitZones.push({ x: x + w - pad - 18, y: barY, w: 14, h: 18, type: 'fleetClearMultiSelect', data: {} });
+    }
+
     // ── Nagłówki kolumn (sort klikiem) ──
-    const hy = cy + 21;
+    const hy = cy + 21 + assignH;
     const cols = this._registryColumnRects(x + pad, w - pad * 2);
     ctx.font = `bold 9px ${THEME.fontFamily}`;
     for (const c of cols) {
