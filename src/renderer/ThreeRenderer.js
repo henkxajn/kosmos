@@ -5866,6 +5866,12 @@ export class ThreeRenderer {
   static TACTICAL_GLYPH_SCALE = 0.66;   // rozmiar glifu (+~20% vs 0.55 z 2c)
   static TACTICAL_ORBIT_ALPHA = 0.55;   // wyraźne orbity w trybie (normalnie ~0.2-0.3)
   static TACTICAL_GRID_ALPHA  = 0.05;   // subtelna siatka tła (0 = wyłączona)
+  // 2h — wskaźniki ruchu w skali EKRANU (playtest F2-D: nieczytelne przy zoom-out):
+  static TACTICAL_TICK_SCALE   = 0.95;  // bazowy rozmiar tika/etykiety (× distFactor)
+  static TACTICAL_CHEV_SCALE   = 0.55;  // bazowy rozmiar chevronu (× distFactor)
+  static TACTICAL_ETA_SCALE    = 1.15;  // znacznik ⏱rok celu (× distFactor)
+  static TACTICAL_ZOOM_FAR     = 250;   // dist ≥ → mniej tików, większe (count 1, krok ×2, rozmiar ×1.25)
+  static TACTICAL_ZOOM_NEAR    = 80;    // dist ≤ → gęściej, mniejsze (count 3, rozmiar ×0.85)
 
   static _glyphTexCache = new Map();
   static _createGlyphTexture(glyph, colorHex) {
@@ -6094,16 +6100,17 @@ export class ThreeRenderer {
     const key = `${label}|${colorHex}`;
     const cached = ThreeRenderer._orbitTickTexCache.get(key);
     if (cached) return cached;
-    const w = 96, h = 48;
+    const w = 128, h = 64;
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
     const c = cv.getContext('2d');
     c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillStyle = colorHex;
-    c.beginPath(); c.arc(w / 2, 12, 5, 0, Math.PI * 2); c.fill();   // kropka na orbicie
-    c.font = 'bold 18px sans-serif';
-    c.strokeStyle = 'rgba(0,0,0,0.85)'; c.lineWidth = 4;
-    c.strokeText(label, w / 2, 34);
-    c.fillText(label, w / 2, 34);
+    c.beginPath(); c.arc(w / 2, 13, 6, 0, Math.PI * 2); c.fill();   // kropka na orbicie
+    // 2h: font podbity 18→26 px (etykiety '+N' czytelne przy pełnym kadrze układu)
+    c.font = 'bold 26px sans-serif';
+    c.strokeStyle = 'rgba(0,0,0,0.85)'; c.lineWidth = 5;
+    c.strokeText(label, w / 2, 42);
+    c.fillText(label, w / 2, 42);
     const tex = new THREE.CanvasTexture(cv);
     tex.needsUpdate = true;
     ThreeRenderer._orbitTickTexCache.set(key, tex);
@@ -6134,6 +6141,18 @@ export class ThreeRenderer {
       alive.add(key);
     };
 
+    // 2h — adaptacja wskaźników do ZOOMU kamery: daleki kadr → mniej tików,
+    // większe; bliski → gęściej, mniejsze. Rozmiary bazowe × distFactor w upsert
+    // (stały rozmiar EKRANOWY — kryterium: czytelne przy pełnym kadrze I zbliżeniu).
+    const camDist = this._cameraController?._dist ?? 85;
+    const far  = camDist >= ThreeRenderer.TACTICAL_ZOOM_FAR;
+    const near = camDist <= ThreeRenderer.TACTICAL_ZOOM_NEAR;
+    const tickCount = far ? 1 : near ? 3 : 2;
+    const tickStepMult = far ? 2 : 1;
+    const sizeMult = far ? 1.25 : near ? 0.85 : 1;
+    const tickW = ThreeRenderer.TACTICAL_TICK_SCALE * sizeMult;
+    const chevW = ThreeRenderer.TACTICAL_CHEV_SCALE * sizeMult;
+
     for (const [pid] of this._planets) {
       const body = EntityManager.get(pid);
       const orb = body?.orbital;
@@ -6144,16 +6163,16 @@ export class ThreeRenderer {
       if (now && ahead) {
         const tex = ThreeRenderer._createOrbitTickTexture('➤', '#9fd8e8');
         const key = `chev:${pid}`;
-        upsert(key, tex, { x: now.x + (ahead.x - now.x) * 2.5, y: now.y + (ahead.y - now.y) * 2.5 }, 0.5, 0.25);
+        upsert(key, tex, { x: now.x + (ahead.x - now.x) * 2.5, y: now.y + (ahead.y - now.y) * 2.5 }, chevW, chevW * 0.5);
         const sp = this._tacticalOrbitMarkers.get(key);
         // Obrót spritu w płaszczyźnie ekranu wg kierunku ruchu (gameplay XY → world XZ).
         if (sp) sp.material.rotation = -Math.atan2(ahead.y - now.y, ahead.x - now.x);
       }
-      // Tiki przyszłych pozycji (+N lat — adaptacyjnie do okresu orbity).
-      for (const { dt, label } of futureMarkerDeltas(orb.T)) {
+      // Tiki przyszłych pozycji (+N lat — adaptacyjnie do okresu orbity I zoomu).
+      for (const { dt, label } of futureMarkerDeltas(orb.T, tickCount, tickStepMult)) {
         const p = orbitalPositionAtDelta(orb, dt, GAME_CONFIG.AU_TO_PX, star?.x ?? 0, star?.y ?? 0);
         if (!p) continue;
-        upsert(`tick:${pid}:${dt}`, ThreeRenderer._createOrbitTickTexture(label, '#7fb8cc'), p, 0.6, 0.3);
+        upsert(`tick:${pid}:${dt}`, ThreeRenderer._createOrbitTickTexture(label, '#7fb8cc'), p, tickW, tickW * 0.5);
       }
     }
 
@@ -6167,7 +6186,7 @@ export class ThreeRenderer {
                                        star?.x ?? 0, star?.y ?? 0);
       if (p) {
         upsert(`eta:${selId}`, ThreeRenderer._createOrbitTickTexture(`⏱${Math.round(etaYear)}`, '#ffd479'),
-               p, 0.8, 0.4);
+               p, ThreeRenderer.TACTICAL_ETA_SCALE * sizeMult, ThreeRenderer.TACTICAL_ETA_SCALE * sizeMult * 0.5);
       }
     }
 

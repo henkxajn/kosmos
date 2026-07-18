@@ -74,13 +74,16 @@ const NICE_STEPS = [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100];
 /**
  * Adaptacyjne delty znaczników przyszłych pozycji: krok ≈ 1/8 okresu zaokrąglony
  * do „ładnego" (wolne olbrzymy NIE dostają tików co 2°, szybkie skalne nie co 720°).
+ * 2h: adaptacja także względem ZOOMU kamery — stepMult rozrzedza tiki przy dalekim
+ * kadrze (mniej znaczników, większy odstęp kątowy), count zagęszcza przy bliskim.
  * @param {number} periodYears — okres orbitalny T (lata)
  * @param {number} [count=2] — liczba znaczników
+ * @param {number} [stepMult=1] — mnożnik kroku (2 = co drugi „ładny" krok)
  * @returns {Array<{dt:number, label:string}>} np. [{dt:1,label:'+1'},{dt:2,label:'+2'}]
  */
-export function futureMarkerDeltas(periodYears, count = 2) {
+export function futureMarkerDeltas(periodYears, count = 2, stepMult = 1) {
   if (!Number.isFinite(periodYears) || periodYears <= 0) return [];
-  const raw = periodYears / 8;
+  const raw = (periodYears / 8) * Math.max(1, stepMult);
   const step = NICE_STEPS.find(s => s >= raw) ?? NICE_STEPS[NICE_STEPS.length - 1];
   const out = [];
   for (let i = 1; i <= count; i++) {
