@@ -392,3 +392,27 @@ przeżywa `system:switched` mechanizmem z 1e; auto-exit przy overlayu; OFF = zer
   w trybie detailAlpha=1 + plakietki wszystkich własnych + aktywność/mini-ETA w tekście plakietki.
 - **Slice 2f — playtest-checklista Fazy 2 + DoD raport** (obowiązkowo: enter/exit <1 s, pełny
   restore kamery i warstw, PPM identyczne, dim × echo-wróg, tryb Y → chip-switch → spójność).
+
+### 9.1 WYKONANIE FAZY 2 (2026-07-18)
+
+**Slice'y:** 2a `d7cb300` (lerp kątów `_goalTheta/_goalPhi`, drag przerywa, `snapshotView`
+GOAL-AWARE + `flyTo`) · 2b `34f71ce` (TacticalModeLogic TACTICAL_PHI=0.12 + TacticalModeController:
+snapshot/restore uiPrefs+kamera, wymuszenie warstw = flaga + jawny re-sync, autoExitIfOverlay
+per-frame, KeyY, badge, `FEATURES.tacticalMode`) · 2c `ac50bd8` (glify-billboardy stały rozmiar
+ekranowy, cache tekstur per glif|kolor, ukrywanie WYŁĄCZNIE dzieci wrappera, wróg ≥rumor „?" do
+contact, intelOpacity respektowane) · 2d `1aa5844` (duchy ETA z `buildShipEntry.eta` — zero
+lokalnych ETA, `~rok`+puls dla moving; dim planet/księżyców/orbit z pełnym restore; materiały
+statków NIETYKANE → dim×intelOpacity bez konfliktu z definicji; tryb przeżywa `switchSystem` —
+re-dim świeżej sceny) · 2e `f89d04b` (profil tactical TEJ SAMEJ warstwy etykiet: pełna gęstość +
+aktywność+mini-ETA na plakietkach; punkty gather niosą activityKey/etaYear/etaMoving) + fix
+exit-sync (jawny `_syncTacticalGlyphs()` w ścieżce enter/exit — restore natychmiastowy, nie „przy
+najbliższej klatce").
+
+**Smoke:** `tmp_tactical_mode_smoke.mjs` 28/28 · `tmp_fleet_map_labels` 52/52 · regresja
+fleetpicture 81/81, map_labels 37/37. **Live-gate CC (Chrome/Power Test):** Y → top-down (phi
+1.1→0.12, lerp+snap), badge, glify ×2 + duchy ×2 na końcach tras + dim ON + chip „◉ KOI-9208 ×5
+⚠2"; wyjście → restore sensor/dim/dist + glify/duchy/modele sprzątnięte natychmiast (0/0/0);
+autoExitIfOverlay PASS. **DoD Fazy 2 wg planu §4:** Y on/off <1 s bez przeładowań ✔ (lerp, zero
+rebuildów) · warstwy wracają do stanu sprzed trybu ✔ · rozkazy PPM = te same kanały (żadna nowa
+powierzchnia dispatchu nie powstała) ✔ · flaga OFF → klawisz martwy, zero kosztów ✔ · playtest →
+**checklista `docs/obraz-operacyjny-faza2-playtest.md` czeka na Filipa** (ostatni punkt DoD).
