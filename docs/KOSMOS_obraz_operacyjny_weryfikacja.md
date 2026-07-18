@@ -358,3 +358,37 @@ klik = świadomy no-op absorbujący) · ROADMAP §4 wpis `#nan-resources-power-t
 dystansie kadrowania + `systemDisplayName` łańcuch fallbacków) + regresja map_labels 37/37,
 fleetpicture 81/81. **Live repro-scenariusz PASS** (Chrome/Power Test): `switchSystem` przy PAUZIE →
 sprite'y wracają (~1 klatka, async GLB), plakietka renderuje się ponownie, chip „◉ LHS-5215 ⚠1".
+
+---
+
+## 9. KROK B — SLICE'OWANIE FAZY 2 (tryb taktyczny, klawisz Y, `FEATURES.tacticalMode`)
+
+Wg planu §4 + Aneks A.4 + wymagania twarde Filipa (kamera: minimalny lerp kątów + pełny restore,
+wejście gracza przerywa lerp; glif = DODATKOWY billboard + ukrycie WYŁĄCZNIE dziecka-modelu;
+wymuszenie warstw = jawny re-sync + restore flag/uiPrefs; dim × intelOpacity przez mnożenie;
+duchy ETA tylko własne, dane z FleetPictureLogic; etykiety = profil tactical TEJ SAMEJ warstwy,
+przeżywa `system:switched` mechanizmem z 1e; auto-exit przy overlayu; OFF = zero kosztów).
+
+- **Slice 2a — kamera:** `ThreeCameraController`: `_goalTheta/_goalPhi` + lerp w `update()`
+  (przerywany dragiem — drag czyści goals), `snapshotView()/applyView()/flyTo({theta,phi,dist})`;
+  preset top-down `_phi≈0.1`. Weryfikacja live (THREE nie importuje się w node).
+- **Slice 2b — TacticalModeController + Y + badge:** nowy `src/ui/TacticalModeController.js`
+  (maszyna stanów enter/exit: snapshot kamery + uiPrefs/warstw → preset → wymuszenie warstw
+  z JAWNYM re-synciem → restore przy wyjściu; auto-exit gdy `overlayManager.isAnyOpen()` —
+  sprawdzane per-frame z draw UIManagera) + czysta logika `TacticalModeLogic.js` (co zapisać/
+  przywrócić — smoke) + klawisz **Y** w GameScene (gate `civMode && FEATURES.tacticalMode`) +
+  badge trybu na ekranie + i18n. Flaga `FEATURES.tacticalMode` w GameConfig.
+- **Slice 2c — glify:** `ThreeRenderer._syncTacticalGlyphs` (per-frame, wzorzec insygniów/alert
+  markerów): billboard-glif nad statkiem (cache tekstur per rola+kolor wzorem
+  `_createInsigniaTexture`; stały rozmiar ekranowy wzorem `_syncEnemyAlertMarkers`); ukrycie
+  WYŁĄCZNIE wewnętrznego dziecka-modelu (traverse `entry.sprite.children`, refs do restore);
+  kolory: własne `toneColor(tone)`, wrodzy wg bramek intel. Odwracalne w 1 klatkę.
+- **Slice 2d — duchy ETA + dim:** duchy: glif-outline w punkcie celu (`mission.targetX/Y` →
+  konwersja gameplay→world jak linie tras) + etykieta `⏱rok` (`confidence:'moving'` → `~rok` +
+  puls); dane WYŁĄCZNIE z `buildShipEntry` (zero lokalnych ETA). Dim kosmetyki: TYLKO
+  planety/gwiazda/orbity/exhaust (materiały zebrane w jednej mapie trybu, restore przy wyjściu);
+  materiałów STATKÓW nie dotykamy → intelOpacity wrogów (echo) nienaruszone z definicji.
+- **Slice 2e — profil tactical etykiet:** rozszerzenie warstwy z Fazy 1 (TE SAME funkcje):
+  w trybie detailAlpha=1 + plakietki wszystkich własnych + aktywność/mini-ETA w tekście plakietki.
+- **Slice 2f — playtest-checklista Fazy 2 + DoD raport** (obowiązkowo: enter/exit <1 s, pełny
+  restore kamery i warstw, PPM identyczne, dim × echo-wróg, tryb Y → chip-switch → spójność).
