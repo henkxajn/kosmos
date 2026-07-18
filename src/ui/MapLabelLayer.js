@@ -17,6 +17,7 @@ import EventBus from '../core/EventBus.js';
 import {
   gatherColonyLabels, gatherStationLabels, labelLOD, stackLabels, BADGE_ICON,
   gatherVesselLabels, vesselLabelLOD, toLogicalPx,
+  edgeIndicators, buildSystemChips, layoutSystemChips,
 } from './MapLabelLogic.js';
 import { clusterScreenPoints, toneColor } from './FleetPictureLogic.js';
 
@@ -46,8 +47,9 @@ export class MapLabelLayer {
     // Obraz Operacyjny F1 — stan plakietek flotowych:
     this._vesselPrevClusters      = new Map();   // histereza klastrów WŁASNYCH (id → klucz klastra)
     this._vesselPrevClustersEnemy = new Map();   // osobna histereza WROGÓW (stron nie sklejamy)
-    this._vesselHitZones          = [];          // { x, y, w, h, vesselIds[] } — klik plakietki (1c)
-    this._lastOffscreenPoints     = [];          // punkty poza kadrem → strzałki krawędziowe (1c)
+    this._vesselHitZones          = [];          // { x, y, w, h, vesselIds[], isEnemy } — klik plakietki
+    this._lastOffscreenPoints     = [];          // punkty poza kadrem → strzałki krawędziowe
+    this._chipZones               = [];          // { x, y, w, h, chip } — klik chipu układu
   }
 
   /**
@@ -219,6 +221,7 @@ export class MapLabelLayer {
   drawVesselLabels(ctx, tr, W, H, uiScale) {
     this._vesselHitZones = [];
     this._lastOffscreenPoints = [];
+    this._chipZones = [];
     if (!tr) return;
     if (window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible === false) {
       this._vesselPrevClusters.clear();
@@ -229,13 +232,6 @@ export class MapLabelLayer {
     const vm = K?.vesselManager;
     if (!vm?.getAllVessels) return;
 
-    const { clusterAlpha, detailAlpha } = vesselLabelLOD(tr.getCameraDistance?.() ?? null);
-    if (clusterAlpha <= 0.02 && detailAlpha <= 0.02) {
-      this._vesselPrevClusters.clear();
-      this._vesselPrevClustersEnemy.clear();
-      return;
-    }
-
     // ctx dla FleetPictureLogic — wpięcia świata (DSCS/VesselManager/FleetSystem).
     const dscs = K?.deepSpaceCombatSystem;
     const pictureCtx = {
@@ -245,8 +241,21 @@ export class MapLabelLayer {
         ? (id) => !!dscs._findActiveEncounterContaining(id) : null,
       isImmobilized: vm.isImmobilized ? (v) => vm.isImmobilized(v) : null,
     };
+    const vessels = vm.getAllVessels();
+
+    // Chipy układów — screen-anchored UI, niezależne od LOD i kadru (statki w
+    // INNYCH układach oraz tranzyt zasilają chipy mimo pustej mapy lokalnej).
+    this._drawSystemChips(ctx, vessels, pictureCtx, W, H);
+
+    const { clusterAlpha, detailAlpha } = vesselLabelLOD(tr.getCameraDistance?.() ?? null);
+    if (clusterAlpha <= 0.02 && detailAlpha <= 0.02) {
+      this._vesselPrevClusters.clear();
+      this._vesselPrevClustersEnemy.clear();
+      return;
+    }
+
     const intel = K?.intelSystem;
-    const points = gatherVesselLabels(vm.getAllVessels(), {
+    const points = gatherVesselLabels(vessels, {
       getScreenPos:   (id) => toLogicalPx(tr.getVesselScreenPosition?.(id), uiScale),
       pictureCtx,
       enemyQuality:   (id) => intel?.getVesselContact?.(id)?.quality ?? 'unknown',
@@ -303,9 +312,84 @@ export class MapLabelLayer {
                             s._dims.color, s._j.alpha * 0.8);
       }
       const box = this._drawVesselPlaque(ctx, s.anchorX, s.drawY, s._dims, s._j);
-      if (box) this._vesselHitZones.push({ ...box, vesselIds: s._j.cluster.items.map(p => p.id) });
+      if (box) {
+        this._vesselHitZones.push({
+          ...box,
+          vesselIds: s._j.cluster.items.map(p => p.id),
+          isEnemy: s._j.isEnemy,
+        });
+      }
     }
+    // Strzałki krawędziowe — statki poza kadrem (alpha jak plakietki klastrów).
+    this._drawEdgeArrows(ctx, W, H, clusterAlpha);
     ctx.restore();
+  }
+
+  // Chipy układów przy prawej krawędzi. Chowamy stos, gdy jedynym wpisem jest
+  // aktywny układ bez alertów (zero szumu, mapa i tak wszystko pokazuje).
+  _drawSystemChips(ctx, vessels, pictureCtx, W, H) {
+    const K = window.KOSMOS;
+    const chips = buildSystemChips(vessels, {
+      activeSystemId: K?.activeSystemId ?? 'sys_home',
+      systemName: (id) => K?.starSystemManager?.getAllSystems?.()
+        ?.find(s => s.systemId === id)?.galaxyStar?.name ?? id,
+      pictureCtx,
+    });
+    if (!chips.length) return;
+    if (chips.length === 1 && chips[0].isActive && chips[0].alertCount === 0) return;
+
+    ctx.save();
+    ctx.textBaseline = 'middle';
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    for (const r of layoutSystemChips(chips, W, H)) {
+      const { chip } = r;
+      const color = chip.isTransit ? THEME.info
+        : chip.isActive ? THEME.accent : THEME.textSecondary;
+      ctx.globalAlpha = 0.92;
+      ctx.fillStyle = 'rgba(8,12,20,0.80)';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = color;
+      const label = chip.isTransit ? `🌀 ×${chip.count}`
+        : `${this._truncate(ctx, String(chip.name), r.w - 44)} ×${chip.count}`;
+      ctx.fillText(label, r.x + 6, r.y + r.h / 2);
+      if (chip.alertCount > 0) {
+        ctx.textAlign = 'right';
+        ctx.fillStyle = THEME.warning;
+        ctx.fillText(`⚠${chip.alertCount}`, r.x + r.w - 4, r.y + r.h / 2);
+      }
+      this._chipZones.push(r);
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // Strzałki krawędziowe: trójkąt wskazujący krawędź + licznik przy grupie.
+  _drawEdgeArrows(ctx, W, H, alpha) {
+    if (alpha <= 0.02 || !this._lastOffscreenPoints.length) return;
+    const DIRS = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] };
+    ctx.globalAlpha = alpha * 0.9;
+    for (const a of edgeIndicators(this._lastOffscreenPoints, W, H)) {
+      const color = toneColor(a.worstTone, THEME) ?? THEME.textSecondary;
+      const [dx, dy] = DIRS[a.edge];
+      const s = 6;   // px logiczne — rozmiar grotu
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(a.x + dx * s, a.y + dy * s);                       // wierzchołek ku krawędzi
+      ctx.lineTo(a.x - dx * s + dy * s, a.y - dy * s + dx * s);
+      ctx.lineTo(a.x - dx * s - dy * s, a.y - dy * s - dx * s);
+      ctx.closePath();
+      ctx.fill();
+      if (a.count > 1) {
+        ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.fillText(String(a.count), a.x - dx * (s + 9), a.y - dy * (s + 9) + 1);
+      }
+    }
+    ctx.globalAlpha = 1;
   }
 
   // Zmierz plakietkę flotową + przygotuj treść. Zwraca {w,h,text,color,alertCount}.
@@ -363,10 +447,46 @@ export class MapLabelLayer {
     return { x: bx, y: by, w, h };
   }
 
-  /** Klik etykiety stacji → selekcja + focus kamery (K3). x,y w logical px. */
+  /**
+   * Klik warstwy etykiet (logical px). Priorytet: plakietki flotowe → chipy
+   * układów → etykiety stacji. Rozkazy NIE stąd — wyłącznie selekcja/nawigacja
+   * istniejącymi kanałami (twarda reguła planu §0).
+   */
   handleClick(x, y) {
+    const inside = (z) => x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h;
+
+    // Plakietka flotowa → selekcja zbioru (multi przy klastrze) przez UIManager.
+    for (const z of this._vesselHitZones) {
+      if (!inside(z)) continue;
+      if (z.isEnemy) {
+        // Wróg: bez selekcji (selekcja = własne statki); tylko dolot kamery.
+        EventBus.emit('vessel:focus', { vesselId: z.vesselIds[0] });
+        return true;
+      }
+      const um = window.KOSMOS?.uiManager;
+      if (um?.setSelectedVesselId) {
+        um.setSelectedVesselId(z.vesselIds[0]);
+        for (let i = 1; i < z.vesselIds.length; i++) um.addToSelection?.(z.vesselIds[i]);
+      }
+      return true;
+    }
+
+    // Chip układu → przełączenie układu (kanał STAR ATLAS) / tranzyt → COMMAND.
+    for (const z of this._chipZones) {
+      if (!inside(z)) continue;
+      const chip = z.chip;
+      if (chip.isTransit) {
+        // Docelowo REJESTR z prefiltrem transit (Faza 3) — do tego czasu tactical.
+        window.KOSMOS?.uiManager?.overlayManager?.openPanel?.('fleet', { tab: 'tactical' });
+      } else if (!chip.isActive) {
+        window.KOSMOS?.starSystemManager?.switchActiveSystem?.(chip.systemId);
+      }
+      return true;   // klik aktywnego chipu = świadomy no-op (absorbuje klik)
+    }
+
+    // Etykieta stacji (K3 — jak dotąd).
     for (const z of this._hitZones) {
-      if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
+      if (inside(z)) {
         EventBus.emit('station:selected', { stationId: z.stationId });   // panel (jak dotąd)
         EventBus.emit('station:focus',    { stationId: z.stationId });   // K3 — najazd kamery (reuse ścieżki)
         return true;

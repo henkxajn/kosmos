@@ -1485,7 +1485,11 @@ export class UIManager {
     // S3.4 FAZA 5 — klik etykiety STACJI na mapie → station:selected (PRZED overlayManager i raycastem 3D).
     // Gate MIRROR draw (civMode && mapLabels && !isAnyOpen && !globeOpen) — inaczej klik trafia w stare
     // hit-zony gdy warstwa nie była rysowana (np. podczas podglądu globusa).
-    if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.mapLabels && !this.overlayManager.isAnyOpen()
+    // Obraz Operacyjny F1: także fleetMapLabels (plakietki/chipy) — zone-listy per
+    // powierzchnia są puste gdy dana flaga nie rysowała, więc OR jest bezpieczny.
+    if (window.KOSMOS?.civMode
+        && (GAME_CONFIG.FEATURES?.mapLabels || GAME_CONFIG.FEATURES?.fleetMapLabels)
+        && !this.overlayManager.isAnyOpen()
         && !window.KOSMOS?.planetGlobeOpen && this._mapLabelLayer?.handleClick?.(x, y)) return true;
     if (window.KOSMOS?.civMode && this._bottomNavBar?.handleClick?.(x, y)) return true;   // UI v3 — dolny pasek nawigacji (PRZED overlayManager)
     if (window.KOSMOS?.civMode && this._bottomControlBar?.handleClick?.(x, y)) return true;   // UI v3 — bell/MENU/zegar (PRZED overlayManager)

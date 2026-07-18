@@ -342,3 +342,26 @@ export function buildSystemChips(vessels, ctx = {}) {
   });
   return out;
 }
+
+// Layout chipów układów — pionowy stos przy PRAWEJ krawędzi (na lewo od paska
+// trigger Outlinera). Czysta geometria (testowalna) — render w MapLabelLayer.
+export const CHIP_W       = 112;   // px logiczne
+export const CHIP_H       = 18;
+export const CHIP_GAP     = 4;
+export const CHIP_RIGHT_M = 14;    // odstęp od prawej krawędzi (trigger Outlinera ~6px)
+export const CHIP_TOP_FRAC = 0.30; // start stosu (ułamek H — pod minimapą/Outlinerem)
+
+/**
+ * @param {Array} chips — wynik buildSystemChips
+ * @returns {Array<{x,y,w,h,chip}>} recty w px logicznych; stos przycinany do H
+ */
+export function layoutSystemChips(chips, W, H) {
+  const out = [];
+  let y = Math.round(H * CHIP_TOP_FRAC);
+  for (const chip of chips ?? []) {
+    if (y + CHIP_H > H - CHIP_H) break;   // nie wychodź poza ekran (dół zarezerwowany)
+    out.push({ x: W - CHIP_RIGHT_M - CHIP_W, y, w: CHIP_W, h: CHIP_H, chip });
+    y += CHIP_H + CHIP_GAP;
+  }
+  return out;
+}
