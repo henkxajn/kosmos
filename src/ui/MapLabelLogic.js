@@ -254,6 +254,10 @@ export function gatherVesselLabels(vessels, ctx = {}) {
       alertCount: entry.alerts.length,
       kind: 'own',
       selected: selected.has(v.id),
+      // Profil tactical (F2): aktywność + mini-ETA na plakietce — z buildShipEntry.
+      activityKey: entry.activityKey,
+      etaYear: entry.eta.year,
+      etaMoving: entry.eta.confidence === 'moving',
     });
   }
   return out;

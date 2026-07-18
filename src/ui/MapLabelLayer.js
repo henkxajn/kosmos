@@ -21,6 +21,7 @@ import {
   edgeIndicators, buildSystemChips, layoutSystemChips, systemDisplayName,
 } from './MapLabelLogic.js';
 import { clusterScreenPoints, toneColor } from './FleetPictureLogic.js';
+import { t } from '../i18n/i18n.js';
 
 const KIND_COLOR = () => ({
   home:    THEME.accent,
@@ -248,7 +249,12 @@ export class MapLabelLayer {
     // INNYCH układach oraz tranzyt zasilają chipy mimo pustej mapy lokalnej).
     this._drawSystemChips(ctx, vessels, pictureCtx, W, H);
 
-    const { clusterAlpha, detailAlpha } = vesselLabelLOD(tr.getCameraDistance?.() ?? null);
+    // Profil tactical (F2): pełna gęstość niezależnie od dystansu (te same funkcje,
+    // inne progi — żadnego drugiego systemu etykiet); przeżywa system:switched
+    // tym samym mechanizmem co 1e (stan odbudowywany per-frame).
+    const tactical = window.KOSMOS?.tacticalMode?.isActive === true;
+    let { clusterAlpha, detailAlpha } = vesselLabelLOD(tr.getCameraDistance?.() ?? null);
+    if (tactical) { clusterAlpha = 1; detailAlpha = 1; }
     if (clusterAlpha <= 0.02 && detailAlpha <= 0.02) {
       this._vesselPrevClusters.clear();
       this._vesselPrevClustersEnemy.clear();
@@ -289,11 +295,12 @@ export class MapLabelLayer {
       let alpha = 0;
       if (!single || isFleet || c.alertCount > 0) alpha = Math.max(alpha, clusterAlpha);
       if (c.items.some(p => p.selected))          alpha = Math.max(alpha, detailAlpha);
+      if (tactical) alpha = 1;   // profil tactical: KAŻDY własny statek ma etykietę
       if (alpha <= 0.02) continue;
-      jobs.push({ cluster: c, alpha, isEnemy: false });
+      jobs.push({ cluster: c, alpha, isEnemy: false, tactical });
     }
     if (clusterAlpha > 0.02) {
-      for (const c of enemyClusters) jobs.push({ cluster: c, alpha: clusterAlpha, isEnemy: true });
+      for (const c of enemyClusters) jobs.push({ cluster: c, alpha: clusterAlpha, isEnemy: true, tactical });
     }
     if (!jobs.length) return;
 
@@ -409,6 +416,13 @@ export class MapLabelLayer {
       const p = c.items[0];
       const name = this._truncate(ctx, p.name ?? '', VESSEL_MAX_NAME_W);
       text = p.glyph ? `${p.glyph} ${name}` : name;
+      // Profil tactical (F2): + aktywność i mini-ETA (klucze z FleetPictureLogic).
+      if (job.tactical && !job.isEnemy && p.activityKey) {
+        text += ` · ${t(p.activityKey)}`;
+        if (Number.isFinite(p.etaYear)) {
+          text += ` · ${p.etaMoving ? '~' : '⏱'}${Math.round(p.etaYear)}`;
+        }
+      }
     } else if (job.isEnemy) {
       text = `⚠ ×${c.items.length}`;
     } else if (c.label === 'fleet') {
