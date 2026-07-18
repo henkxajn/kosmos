@@ -548,6 +548,25 @@ zbiorcza = istniejący pasek „Przypisz (N)"); rozkazy w prawym panelu i na map
 **Wniosek:** jedyny realny brak = skrót klik-celu-na-mapie w pickerze misji (⚠ wyżej) —
 checklista do domknięcia przed decyzją o usunięciu kodu mapy 2D.
 
+## 10.4 PLAYTEST POLISH (wyniki Filipa) + FIXY ZAMYKAJĄCE SESJĘ
+
+**Wyniki:** A PASS (sanity + skala 2h przy zbliżeniu; tiki przy PEŁNYM kadrowaniu wciąż
+nieczytelne → Fix 2) · B PASS z regresją (pasek „Przypisz (N)" zniknął z widoku REJESTR —
+żył tylko w ukrytej lewej liście → Fix 1) · C nietestowane live (brak wraków w save; logika
+pokryta smoke — weryfikacja przy naturalnej okazji) · D („tydzień bez MAPY") W TOKU.
+
+- **Fix 1 `9a16869` (#registry-assign-bar):** rejestr renderuje WŁASNY pasek „Przypisz (N)"
+  przy ≥1 checkboxie (wiersz między chipami a nagłówkami; nagłówki/tabela zsuwają się o
+  `assignH`); TE SAME handlery (`fleetAssignMenuOpen` → showFleetAssignModal bulk-assign,
+  `fleetClearMultiSelect` → ✕) — zero nowej logiki.
+- **Fix 2 `76cb53e` (#tactical-tick-declutter):** czysta reguła `orbitTicksVisible(screenRadiusPx,
+  TICK_MIN_ORBIT_PX=120)`; renderer liczy promień orbity na ekranie (przybliżenie centralne
+  `(H/2)/(dist·tan(fov/2)) × worldPerAU × a`) — tiki tylko na orbitach > progu (wewnętrzne
+  czyste), chevrony na wszystkich; bump skali tików far 1.25→1.45. Smoke tactical 44/44.
+
+**Live-check 2 min (Filip):** rejestr → zaznacz 2 statki → pasek jest i działa · tryb Y →
+pełne kadrowanie → tiki zewnętrzne czytelne, wewnętrzne czyste.
+
 - **Slice 3d — spięcia + domknięcie:** chip 🌀 tranzyt → REJESTR z prefiltrem transit (zamiast
   tactical); playtest-checklista F3; **raport końcowy §8 planu**: MANUAL.md (tryb Y, rejestr,
   plakietki/chipy), kompletność i18n, lista długu konsolidacyjnego (§4), pomiar wydajności vs budżet
