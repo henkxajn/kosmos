@@ -336,3 +336,25 @@ logika w smoke, wizual w checkliście Filipa (realny save).
 **DoD Fazy 1 wg planu §3:** flaga ON → plakietki/strzałki/chipy działają ✔ · flaga OFF → zero
 śladu i kosztów (1 boolean w UIManager) ✔ · brak regresji mapLabels ✔ (smoke+live) ·
 playtest ~20 statków + migotanie → **checklista czeka na Filipa** (ostatni punkt DoD).
+
+### 8.2 SLICE 1e — poprawki po playteście Filipa (7/8 + bug)
+
+**BUG „plakietki znikają po powrocie do układu" — DWIE współdziałające przyczyny, obie naprawione:**
+1. `ThreeRenderer.switchSystem` czyści `_vessels`, a odbudowa sprite'ów była LENIWA (dopiero
+   `vessel:positionUpdate` z ticku czasu) — przy pauzie po powrocie `getVesselScreenPosition`
+   zwracał null → plakietki/strzałki/klastry martwe (chipy zostawały — nie potrzebują pozycji).
+   Fix: `_restoreActiveSystemVesselSprites()` na końcu `switchSystem` (idempotentne, docked pomijane).
+2. Fade dystansowy plakietek klastrów (dawne 380..450) pokrywał się DOKŁADNIE z dystansem
+   `frameSystem` po przełączeniu układu → alpha≈0. Fix: fade klastrów USUNIĘTY
+   (`clusterAlpha` zawsze 1 — świadomość w tle to sedno M1; detail-fade bez zmian).
+
+**Pozostałe:** nazwa układu macierzystego — `systemDisplayName` (rejestr → **nazwa gwiazdy układu**
+→ id; chip pokazuje np. „LHS-5215", nigdy surowe `sys_home`) · gołe „×N" → „◆ ×N" (odróżnienie od
+markerów kolonii) · **chip aktywnego układu POTWIERDZONY jako świadoma decyzja** („◉ tu jesteś" +
+agregat alertów; prefiks ◉ + kolor akcent odróżniają go od klikalnych chipów innych układów;
+klik = świadomy no-op absorbujący) · ROADMAP §4 wpis `#nan-resources-power-test-fastforward`.
+
+**Weryfikacja:** smoke 51/51 (nowy T7: „switch tam i z powrotem" na poziomie logiki + LOD na
+dystansie kadrowania + `systemDisplayName` łańcuch fallbacków) + regresja map_labels 37/37,
+fleetpicture 81/81. **Live repro-scenariusz PASS** (Chrome/Power Test): `switchSystem` przy PAUZIE →
+sprite'y wracają (~1 klatka, async GLB), plakietka renderuje się ponownie, chip „◉ LHS-5215 ⚠1".

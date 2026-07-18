@@ -14,10 +14,11 @@
 
 import { THEME } from '../config/ThemeConfig.js';
 import EventBus from '../core/EventBus.js';
+import EntityManager from '../core/EntityManager.js';
 import {
   gatherColonyLabels, gatherStationLabels, labelLOD, stackLabels, BADGE_ICON,
   gatherVesselLabels, vesselLabelLOD, toLogicalPx,
-  edgeIndicators, buildSystemChips, layoutSystemChips,
+  edgeIndicators, buildSystemChips, layoutSystemChips, systemDisplayName,
 } from './MapLabelLogic.js';
 import { clusterScreenPoints, toneColor } from './FleetPictureLogic.js';
 
@@ -331,8 +332,12 @@ export class MapLabelLayer {
     const K = window.KOSMOS;
     const chips = buildSystemChips(vessels, {
       activeSystemId: K?.activeSystemId ?? 'sys_home',
-      systemName: (id) => K?.starSystemManager?.getAllSystems?.()
-        ?.find(s => s.systemId === id)?.galaxyStar?.name ?? id,
+      // 1e: nigdy surowe id — rejestr układów → fallback nazwa GWIAZDY układu
+      // (macierzysty bywa poza rejestrem wygenerowanych; np. real save: sys_home).
+      systemName: (id) => systemDisplayName(id, {
+        systems: K?.starSystemManager?.getAllSystems?.() ?? [],
+        starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
+      }),
       pictureCtx,
     });
     if (!chips.length) return;
@@ -353,8 +358,10 @@ export class MapLabelLayer {
       ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
       ctx.textAlign = 'left';
       ctx.fillStyle = color;
+      // 1e: aktywny układ = „◉ tu jesteś" (świadomy no-op; agregat alertów) —
+      // wyraźnie odróżniony od klikalnych chipów innych układów.
       const label = chip.isTransit ? `🌀 ×${chip.count}`
-        : `${this._truncate(ctx, String(chip.name), r.w - 44)} ×${chip.count}`;
+        : `${chip.isActive ? '◉ ' : ''}${this._truncate(ctx, String(chip.name), r.w - (chip.isActive ? 56 : 44))} ×${chip.count}`;
       ctx.fillText(label, r.x + 6, r.y + r.h / 2);
       if (chip.alertCount > 0) {
         ctx.textAlign = 'right';
@@ -408,7 +415,8 @@ export class MapLabelLayer {
       const fleetName = window.KOSMOS?.fleetSystem?.getFleet?.(c.fleetId)?.name ?? '';
       text = this._truncate(ctx, `⚑ ${fleetName} ×${c.items.length}`, VESSEL_MAX_NAME_W + 30);
     } else {
-      text = `×${c.items.length}`;
+      // 1e: prefiks glifu statku — gołe „×N" myliło się z markerami kolonii obok.
+      text = `◆ ×${c.items.length}`;
     }
     if (job.isEnemy && single) text = `⚠ ${text}`;
     const color = job.isEnemy ? THEME.danger : toneColor(c.worstTone, THEME);

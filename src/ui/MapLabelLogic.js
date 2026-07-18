@@ -164,13 +164,13 @@ export function toLogicalPx(pos, uiScale) {
 }
 
 // LOD plakietek STATKÓW (profil light) — osobne progi, NIE ruszamy labelLOD kolonii.
-//   clusterAlpha — plakietki flot/klastrów (świadomość w tle; widoczne też daleko,
-//                  zanikają dopiero przy ekstremalnym oddaleniu całego układu);
+//   clusterAlpha — plakietki flot/klastrów: ZAWSZE 1 (świadomość w tle to sedno M1).
+//     Slice 1e: fade dystansowy USUNIĘTY — frameSystem po przełączeniu układu ląduje
+//     na dist 380..450 (SYSTEM_FIT_DIST_PER_AU), czyli dokładnie w dawnym pasie fade
+//     → plakietki „znikały" po powrocie do układu (bug z playtestu Filipa).
 //   detailAlpha  — etykiety indywidualne (wybrany statek + statki z alertem) — tylko blisko.
 export const VESSEL_DETAIL_FULL  = 120;   // dist ≤ → pełne etykiety indywidualne
 export const VESSEL_DETAIL_FADE  = 180;   // fade out detali
-export const VESSEL_CLUSTER_FADE = 380;   // od tego dystansu plakietki klastrów zanikają…
-export const VESSEL_CLUSTER_END  = 450;   // …aż do zera (maks. oddalenie kamery)
 
 /**
  * LOD plakietek statków wg dystansu kamery (cross-fade jak labelLOD).
@@ -179,17 +179,27 @@ export const VESSEL_CLUSTER_END  = 450;   // …aż do zera (maks. oddalenie kam
  */
 export function vesselLabelLOD(dist) {
   if (dist == null || !Number.isFinite(dist)) return { clusterAlpha: 1, detailAlpha: 1 };
-  let clusterAlpha = 1;
-  if (dist >= VESSEL_CLUSTER_END) clusterAlpha = 0;
-  else if (dist > VESSEL_CLUSTER_FADE) {
-    clusterAlpha = 1 - (dist - VESSEL_CLUSTER_FADE) / (VESSEL_CLUSTER_END - VESSEL_CLUSTER_FADE);
-  }
   let detailAlpha = 0;
   if (dist <= VESSEL_DETAIL_FULL) detailAlpha = 1;
   else if (dist < VESSEL_DETAIL_FADE) {
     detailAlpha = 1 - (dist - VESSEL_DETAIL_FULL) / (VESSEL_DETAIL_FADE - VESSEL_DETAIL_FULL);
   }
-  return { clusterAlpha, detailAlpha };
+  return { clusterAlpha: 1, detailAlpha };
+}
+
+/**
+ * Nazwa WYŚWIETLANA układu (slice 1e) — nigdy surowe id: wpis StarSystemManagera
+ * (galaxyStar.name) → fallback nazwa gwiazdy układu (układ macierzysty bywa poza
+ * rejestrem wygenerowanych) → dopiero na końcu id.
+ * @param {string} systemId
+ * @param {object} [sources] — { systems: [{systemId, galaxyStar}], starName(systemId)→string|null }
+ */
+export function systemDisplayName(systemId, sources = {}) {
+  const sys = sources.systems?.find?.(s => s?.systemId === systemId);
+  if (sys?.galaxyStar?.name) return sys.galaxyStar.name;
+  const star = sources.starName?.(systemId);
+  if (star) return star;
+  return systemId;
 }
 
 /**

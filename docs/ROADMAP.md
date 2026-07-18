@@ -78,6 +78,11 @@ Systemy liczące coś dla kolonii/vessela AI globalnym `window.KOSMOS.techSystem
 ## 4. TechDebt — odłożone / nieaktualne
 
 - **#H-reset-kamery** — w civMode klawisz `H` NIE resetuje kamery: `OverlayManager._keyMap` (`'h'→colony`) konsumuje klawisz z `return` PRZED `switch(e.code)` w GameScene (`KeyH→resetToCenter` osiągalne tylko poza civMode). Reset kamery w civMode jest nieosiągalny z klawiatury. Wykryte w weryfikacji „Obrazu Operacyjnego" (`docs/KOSMOS_obraz_operacyjny_weryfikacja.md` §5.2, dyspozycja Aneks A.7 planu). **DEFERRED** — do rozstrzygnięcia przy najbliższym sprzątaniu keymapy (np. dedykowany klawisz resetu albo `H` z modyfikatorem); wpis do MANUAL.md przy okazji.
+- **#nan-resources-power-test-fastforward** — Power Test: ~73 lata gry przewinięte na maks. prędkości
+  (mnożnik z klawisza 5) + losowe wybory popupów → pasek zasobów pokazuje NaN-y (`NaN -9.8` itd.).
+  Zaobserwowane przy sanity-checku „Obrazu Operacyjnego" (2026-07-18); czysta sesja bez ekstremalnego
+  fast-forwardu zdrowa. Podejrzenie: spike'i dt w którymś producencie/konsumencie przy dużym mnożniku.
+  **DEFERRED** — nie ścigać przy okazji innych arców, ale ma nie zginąć.
 - **#stale-smoke-fleet-p1-p3** — `tmp_fleet_p1_smoke.mjs` / `tmp_fleet_p3_smoke.mjs` zawierają testy migracji
   save v72/v73, które rozbijają się o CELOWY break v75→v76 ze Slice 1 („Save v75 niekompatybilny — rozpocznij
   nową grę") → oba smoke'i padają w całości, mimo że ich testy nie-migracyjne przechodzą. Odświeżyć: sekcje

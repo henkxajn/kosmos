@@ -987,6 +987,25 @@ export class ThreeRenderer {
   switchSystem(star, planets, planetesimals, moons = []) {
     this._disposeAllMeshes();
     this.initSystem(star, planets, planetesimals, moons);
+    this._restoreActiveSystemVesselSprites();
+  }
+
+  // Slice 1e (Obraz Operacyjny F1) — po przebudowie sceny statki aktywnego układu
+  // wracają NATYCHMIAST. _disposeAllMeshes czyści _vessels, a lazy re-add w
+  // _syncVesselPositions działa dopiero na vessel:positionUpdate (tick czasu) —
+  // przy PAUZIE po powrocie do układu sprite'y nie istniały → getVesselScreenPosition
+  // zwracał null → plakietki/strzałki/klastry znikały (chipy zostawały, bo nie
+  // potrzebują pozycji). Idempotentne (_addVesselSprite guard na istniejący entry);
+  // docked pomijane (hangar — spójnie z _syncVesselPositions).
+  _restoreActiveSystemVesselSprites() {
+    const vm = window.KOSMOS?.vesselManager;
+    if (!vm?.getAllVessels) return;
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    for (const v of vm.getAllVessels()) {
+      if (v.systemId !== sysId) continue;
+      if (v.position?.state === 'docked') continue;
+      this._addVesselSprite(v);
+    }
   }
 
   // Usuń wszystkie meshe z bieżącej sceny (planety, księżyce, gwiazda, orbity, itp.)
