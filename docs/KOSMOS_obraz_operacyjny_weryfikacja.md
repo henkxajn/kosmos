@@ -257,3 +257,58 @@ skonsolidowanym helperem.
 **Bez flagi FEATURES w Fazie 0** — moduł nie jest importowany przez żaden plik runtime
 (zero kosztów, zero zmian zachowania gry); pierwszy konsument (Faza 1) wchodzi za
 `FEATURES.fleetMapLabels`. Zero zmian sim/save.
+
+**Sanity-check live fixu `_currentYear` (dyspozycja Filipa, 2026-07-18):** żywa gra (Power Test,
+Chrome), floty tworzone przy biegnącym czasie: `Sanity-A createdYear=0.0329`, `Sanity-B =0.0659`
+(oba ≠0, == `gameTime` w chwili utworzenia, rosnąco); Konsola Dowodzenia listuje sekcje w kolejności
+chronologicznej (A przed B, potem BEZ FLOTY). PASS.
+
+---
+
+## 8. KROK B — SLICE'OWANIE FAZY 1 (M1-light, `FEATURES.fleetMapLabels`)
+
+Wg planu §3 + Aneks A.3 + wymagania twarde Filipa (histereza od pierwszego slice'a; px CSS →
+`/UI_SCALE` z case'em w smoke; mgła wojny przez istniejące bramki intel z case'em „rumor → ?/brak";
+flaga OFF = zero kosztów w pętli; zero regresji `mapLabels` kolonii/stacji).
+
+**Slice 1a — czysta logika zbieracza (MapLabelLogic; bez renderu):**
+- `toLogicalPx(pos, uiScale)` — konwersja px CSS (z `getVesselScreenPosition`) → px logiczne (A.3);
+  używana przez Layer, testowana wprost w smoke.
+- `gatherVesselLabels(vessels, ctx)` — czysty zbieracz punktów do klastrowania:
+  `{x, y, id, name, fleetId, tone, alertCount, kind:'own'|'enemy'}`. Pomija wraki
+  (`buildShipEntry.excluded`) i statki spoza aktywnego układu; wrogowie wg `ctx.enemyQuality(id)`:
+  `unknown`→pomiń, `rumor`→wpis anonimowy (`name:'?'`, bez fleetId), `contact+`→nazwa. Pozycje przez
+  `ctx.getScreenPos(id)` (Layer wstrzykuje `tr.getVesselScreenPosition` + `toLogicalPx`). Tone/alerty
+  WYŁĄCZNIE z `FleetPictureLogic.buildShipEntry` (twarda reguła planu §0).
+- `vesselLabelLOD(camDist)` — osobne progi LOD dla plakietek statków (progi kolonii `labelLOD`
+  NIETKNIĘTE); profil light: daleko=plakietki klastrów, blisko=wybrany+alerty.
+- `edgeIndicators(points, W, H, opts)` — statki poza kadrem: clamp do prostokąta + grupowanie
+  w sektory krawędzi → `{x, y, edge, count, worstTone}`.
+- `buildSystemChips(vessels, ctx)` — chipy układów: grupowanie po `systemId` (własne statki),
+  licznik + suma alertów + chip `transit` dla `systemId===null`; nazwa układu przez `ctx.systemName`.
+- Smoke `tmp_fleet_map_labels_smoke.mjs`: filtrowanie (wrak out, enemy unknown out, rumor '?'),
+  case `/UI_SCALE`, LOD statków vs kolonie, clamp strzałek, chipy (grupowanie/liczniki/tranzyt).
+
+**Slice 1b — render plakietek (MapLabelLayer + flaga):**
+- `FEATURES.fleetMapLabels` (GameConfig, ON dev) + `uiPrefs.fleetMapLabelsVisible` (default true,
+  bez migracji save) + wiersz toggle w menu BottomBar (wzór „Radar") + i18n PL+EN.
+- MapLabelLayer: gałąź vessel-labels w `draw` (early-return gdy flaga/uiPrefs OFF — zero iteracji);
+  `_vesselPrevClusters` Map (histereza między klatkami!); pipeline: gather → `clusterScreenPoints`
+  (44/56) → `stackLabels` → render plakietek (glif roli, licznik ×N, kolor `toneColor(worstTone,
+  THEME)`, kropka alertu) z cross-fade `vesselLabelLOD`; blisko: etykieta wybranego statku
+  (`ui:selectionChanged` → UIManager selection) i statków z alertem.
+- Live-gate: plakietki na statkach Power Test; OFF → brak śladu; kolonie/stacje bez regresji.
+
+**Slice 1c — strzałki krawędziowe + chipy układów + interakcje:**
+- Render strzałek (`edgeIndicators`) i chipów (prawa krawędź, pod Outlinerem).
+- Klik plakietki → selekcja zbioru (`setSelectedVesselId` / multi przy klastrze przez
+  `addToSelection`) — istniejące kanały UIManager; klik chipu układu →
+  `starSystemManager.switchActiveSystem(systemId)` (kanał STAR ATLAS, weryfikacja §5.7);
+  klik chipu 🌀 tranzyt → `overlayManager.open('fleet')` (zakładka tactical; przekierowanie
+  do REJESTRU dojdzie w Fazie 3). Hit-zones w istniejącym `handleClick` MapLabelLayer
+  (już wpięty PRZED overlayManager w UIManager).
+- Smoke: layout chipów/hit-zones (czyste helpery), regresja slice'a 1a.
+
+**Slice 1d — playtest-checklista + DoD:** `docs/obraz-operacyjny-faza1-playtest.md` (wzór
+`docs/m4-p3-playtest-checklist.md`): czytelność przy ~20 statkach, brak migotania przy powolnym
+zoomie (histereza), OFF-switch, regresja etykiet kolonii, mgła wojny. Raport + STOP przed Fazą 2.
