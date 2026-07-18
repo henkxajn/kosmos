@@ -8631,6 +8631,18 @@ export class FleetManagerOverlay {
     ctx.fillText(t('fleet.clickBodyOnMap'), x + pad, cy + 8);
     cy += 14;
 
+    // Statek warp: picker listuje TYLKO aktywny układ. Kolonizacja innego układu idzie
+    // osobnym torem (STRATCOM skok → orbituj ciało → „Kolonizuj obcy"). Podpowiedź, bo
+    // z tego przycisku cel cross-system jest nieosiągalny.
+    const isWarpShip = (vessel.warpFuel?.max ?? 0) > 0
+      || (vessel.modules ?? []).some(m => SHIP_MODULES[m]?.warpCapable);
+    if (this._missionConfig.actionId === 'colonize' && isWarpShip) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.info;
+      ctx.fillText(t('fleet.colonizeCrossSystemHint'), x + pad, cy + 8);
+      cy += 14;
+    }
+
     // Lista celów
     const targets = this._getValidTargets(vessel, this._missionConfig.actionId);
     const rowH = 24;

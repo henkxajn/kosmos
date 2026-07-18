@@ -1251,6 +1251,7 @@ export default {
   'fleet.selectTarget': 'SELECT TARGET',
   'fleet.selectTargetFor': 'SELECT TARGET — {0}',
   'fleet.clickBodyOnMap': 'or click a body on the map ←',
+  'fleet.colonizeCrossSystemHint': '🛰 Other system: STRATCOM jump → "Colonize" while orbiting',
   'fleet.missionLabel': 'Mission: {0}',
   'fleet.cancel': 'CANCEL',
   'fleet.cancelShort': '✕ Cancel',

@@ -35,7 +35,7 @@ import {
   createVessel, effectiveRange, canReach, consumeFuel, refuel,
   needsRefuel, getShipDef, setNextVesselId, getNextVesselId,
   addMissionLog, getEnduranceDefaults, isEnemyVessel,
-  consumeWarpFuel, needsWarpRefuel, refuelWarp, canJump,
+  consumeWarpFuel, needsWarpRefuel, refuelWarp, canJump, canColonize,
 } from '../entities/Vessel.js';
 import { getModuleCapabilities, calcShipStats, SHIP_MODULES } from '../data/ShipModulesData.js';
 import {
@@ -2759,7 +2759,11 @@ export class VesselManager {
 
     const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
     const ship = _getHullDef(vessel.shipId);
-    const startPop = ship?.colonists ?? 2;
+    // startPop = faktycznie załadowani koloniści (moduł habitat), NIE hull.colonists
+    // (undefined dla kadłubów modularnych → wcześniej zawsze 2, a POPy z modułu przepadały).
+    // Wzór z misji in-system: MissionSystem._processColonyArrival.
+    const colonistsLoaded = vessel.colonists ?? 0;
+    const startPop = colonistsLoaded > 0 ? colonistsLoaded : Math.max(2, ship?.colonists ?? 2);
 
     // Zasoby startowe
     const startResources = {
@@ -2787,7 +2791,10 @@ export class VesselManager {
     // emit) cache'ował grid ColonyOverlay jeszcze jako outpost (bez stolicy),
     // a późniejsze autoPlaceBuilding nie invalidowało cache → kolonia w innym
     // układzie nie pokazywała stolicy ani żadnego budynku.
-    if (startPop >= 2) {
+    // Kolonizator (moduł habitat) zakłada PEŁNĄ kolonię — spójnie z in-system
+    // (_processColonyArrival zawsze emituje colonyFounded). Bez tego 1 kolonista → outpost
+    // bez POPów = zgubiony kolonista. Brak habitatu → outpost (fallback, tu nieosiągalny).
+    if (canColonize(vessel)) {
       // Colony ship — pełna kolonia (autoSpaceport: statek staje się
       // wyrzutnią + elektrownią solarną, jak w _processColonyArrival).
       EventBus.emit('expedition:colonyFounded', {

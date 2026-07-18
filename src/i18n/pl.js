@@ -1252,6 +1252,7 @@ export default {
   'fleet.selectTarget': 'WYBIERZ CEL',
   'fleet.selectTargetFor': 'WYBIERZ CEL — {0}',
   'fleet.clickBodyOnMap': 'lub kliknij ciało na mapie ←',
+  'fleet.colonizeCrossSystemHint': '🛰 Inny układ: skok STRATCOM → „Kolonizuj obcy" na orbicie',
   'fleet.missionLabel': 'Misja: {0}',
   'fleet.cancel': 'ANULUJ',
   'fleet.cancelShort': '✕ Anuluj',
