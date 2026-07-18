@@ -270,6 +270,7 @@ export function buildShipEntry(vessel, ctx = {}) {
     role,
     glyph,
     tone,
+    state,       // surowy token stanu fizycznego (kolumna „Stan" rejestru K3)
     activityKey,
     activityArgs,
     eta:         { year: etaYear, confidence: moving ? 'moving' : 'firm' },
