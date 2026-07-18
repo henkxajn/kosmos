@@ -138,6 +138,11 @@ export const GAME_CONFIG = {
     //   w zakładce SYSTEM TACTICAL (tabela + oś czasu). Render/UI-only.
     //   OFF = przełącznik niewidoczny, zero kosztów.
     fleetRegistry:        true,
+    // Mini-arc „Polish + Rejestr 2.0" (3g) — PRÓBA DEPRECJACJI mapy 2D w Command:
+    //   OFF (default) = REJESTR jest domyślną treścią SYSTEM TACTICAL (mapa 2D
+    //   i lewa lista ukryte, kod NIETKNIĘTY); ON = przywraca wszystko 1:1.
+    //   Usunięcie kodu mapy = OSOBNA decyzja Filipa po okresie próbnym.
+    commandTacticalMap:   false,
     // ── Energy Brownout Gate (runtime-only, bez migracji save) ────────────
     //   Deficyt energii (balance<0) realnie ogranicza produkcję PROPORCJONALNIE
     //   do pokrycia (avail=production/consumption): kopalnie (poziom wejściowy),

@@ -451,6 +451,15 @@ export class FleetManagerOverlay {
     // Sekcja Wraki żyje w lewym pasie (tylko zakładka taktyczna) → wymuś ją.
     this._pendingFocusSection = opts.focusSection ?? null;
     if (this._pendingFocusSection) this._activeTab = 'tactical';
+    // 3g: przy mapie 2D OFF klawisz K (sekcja wraków lewej listy) prowadzi do
+    // REJESTRU z włączonym chipem 💀 (lewa lista nie istnieje w tym trybie).
+    if (this._pendingFocusSection === 'wreck'
+        && GAME_CONFIG.FEATURES?.commandTacticalMap !== true
+        && GAME_CONFIG.FEATURES?.fleetRegistry === true) {
+      this._pendingFocusSection = null;
+      this._tacticalView = 'registry';
+      this._registryFilter.showWrecks = true;
+    }
     // F3: otwarcie wprost w REJESTRZE (chip 🌀 tranzytu → prefiltr transit).
     if (opts.view === 'registry' && GAME_CONFIG.FEATURES?.fleetRegistry === true) {
       this._activeTab = 'tactical';
@@ -644,6 +653,11 @@ export class FleetManagerOverlay {
       // F3 (K3): pod-widok [MAPA]/[REJESTR]. Rejestr 2.0 (3e): PEŁNA szerokość
       // (bez lewej listy) + prawy panel poszerzony per-widok (parametr, nie
       // zmiana globalnej stałej — _drawRight i helpery liczą z parametru w).
+      // 3g — próba deprecjacji mapy 2D: commandTacticalMap OFF → REJESTR jest
+      // jedyną treścią tactical (kod mapy NIETKNIĘTY; ON przywraca 1:1).
+      const mapAvailable = GAME_CONFIG.FEATURES?.commandTacticalMap === true
+        || GAME_CONFIG.FEATURES?.fleetRegistry !== true;   // bez rejestru mapa zawsze (guard pustki)
+      if (!mapAvailable && this._tacticalView !== 'registry') this._tacticalView = 'registry';
       const useRegistry = GAME_CONFIG.FEATURES?.fleetRegistry === true
         && this._tacticalView === 'registry';
       if (useRegistry) {
@@ -654,7 +668,8 @@ export class FleetManagerOverlay {
         ctx.moveTo(ox + ow - rightW, contentY); ctx.lineTo(ox + ow - rightW, contentY + contentH);
         ctx.stroke();
         this._drawRegistry(ctx, ox, contentY, ow - rightW, contentH, allVessels);
-        this._drawTacticalViewSwitch(ctx, ox, contentY, 8);
+        // 3g: przełącznik tylko gdy mapa 2D w ogóle dostępna (flaga ON)
+        if (mapAvailable) this._drawTacticalViewSwitch(ctx, ox, contentY, 8);
         this._drawRight(ctx, ox + ow - rightW, contentY, rightW, contentH, vMgr, ms, colMgr, activePid);
       } else {
         this._drawLeft(ctx, ox, contentY, LEFT_W, contentH, playerList, ms, enemyVisible, wrecks);

@@ -503,6 +503,51 @@ tactical ✔ (smoke + live). Checklista: `docs/obraz-operacyjny-faza3-playtest.m
 
 **Faza 4 (pasek osi w trybie Y) — NIE planowana, NIE implementowana** (osobna decyzja Filipa).
 
+---
+
+## 10.2 MINI-ARC „Polish + Rejestr 2.0" (2h · 3e · 3f · 3g) — WYKONANIE
+
+**Decyzja obowiązująca:** rejestr NIE wydaje rozkazów — monitoring + selekcja (jedyna akcja
+zbiorcza = istniejący pasek „Przypisz (N)"); rozkazy w prawym panelu i na mapie 3D.
+
+- **2h `ce7d27b`** — wskaźniki ruchu w skali EKRANU: font tików 18→26 px + nazwane stałe
+  (`TACTICAL_TICK_SCALE=0.95`/`CHEV=0.55`/`ETA=1.15` × distFactor) + adaptacja do zoomu
+  (`ZOOM_FAR=250`: 1 tik, krok ×2, ×1.25; `ZOOM_NEAR=80`: 3 tiki, ×0.85);
+  `futureMarkerDeltas(period, count, stepMult)`.
+- **3e `8cd7895`** — Rejestr 2.0: pełna szerokość (lewa lista ukryta w widoku REJESTR), prawy
+  panel per-widok `REGISTRY_RIGHT_W=300` (parametr; `_drawRight` + helpery nie używają stałej
+  RIGHT_W — zweryfikowane grepem), `groupRows` (flota/układ/brak; sort wewnątrz grup = sort
+  tabeli; „Bez floty"/🌀 na końcu; collapse wzór `_collapsedFleets`), klik nagłówka floty →
+  `setSelectedFleetId` → istniejący panel floty; oś czasu przejmuje kolejność i grupowanie.
+- **3f `948564b`** — ZMIANA KONTRAKTU `buildShipEntry`: wrak = PEŁNY wpis (`isWreck:true`,
+  glif 💀, stan „wrak", bez ETA/paliwa/alertów, `wreckedYear`, własny/wrogi); pole `excluded`
+  USUNIĘTE (konsumenci filtrują po `isWreck`; macierz smoke zaktualizowana). Rejestr: sekcje
+  💀 WRAKI / 👁 KONTAKTY (chipy, domyślnie odfiltrowane); kontakty WYŁĄCZNIE przez bramki
+  intel (rumor→anonim „?", contact+→pełny wiersz READ-ONLY, intencje niejawne, ZERO akcji);
+  klik wraku → prawy panel z raportem bitwy (reuse `getBattleRecord`).
+  **CEL ARCHITEKTONICZNY POTWIERDZONY: żadna funkcja nie jest już ekskluzywna dla lewej
+  listy** — selekcja/multi-select/„Przypisz (N)"/panel floty/wraki+raport bitwy/kontakty/
+  🎯 cross-system są osiągalne z rejestru (+ mapa 3D dla rozkazów).
+- **3g** — `FEATURES.commandTacticalMap` **OFF (default)**: REJESTR = domyślna treść SYSTEM
+  TACTICAL (mapa 2D + lewa lista ukryte; przełącznik [MAPA] niewidoczny; klawisz K → rejestr
+  z chipem 💀); ON przywraca 1:1. Kod mapy 2D NIETKNIĘTY (usunięcie = osobna decyzja).
+  Guard pustki: `fleetRegistry` OFF → mapa działa niezależnie od flagi.
+
+## 10.3 AUDYT FLOWS MAPY 2D (3g — weryfikacja przed ewentualnym kasowaniem kodu)
+
+| Flow używający mapy 2D | Ekwiwalent bez mapy 2D | Status |
+|---|---|---|
+| Fleet **Move/Engage** (przyciski panelu floty) | `setPickerMode('targetPoint'/…)` — picker działa na MAPIE 3D (`_handleFleetMoveToPoint/Engage` → UIManager), overlay się chowa | ✅ już 3D-native |
+| **Target picker misji** (Wyślij/recon/transport/kolonizacja, `_missionConfig.step='select'`) | LISTA celów w prawym panelu (zostaje w obu trybach); klik ciała/stacji NA MAPIE 2D był tylko skrótem | ⚠ CZĘŚCIOWY — lista działa, skrót klik-w-mapę znika. Przed kasowaniem kodu: dodać wybór celu klikiem wiersza REJESTRU albo picker 3D dla misji |
+| **Selekcja statku/ciała klikiem** (`map_vessel`/`map_body`/`map_station`) | Rejestr (klik wiersza) + mapa 3D (LPM/raycast) + Outliner | ✅ |
+| **TRASY/ZASIĘG/HOME** (`map_toggle`) | Warstwy mapy 3D (linie tras, sensor ringi, `vessel:focus`); toggle dotyczył tylko mapy 2D | ✅ (nie-funkcja bez mapy) |
+| **Sekcja WRAKÓW lewej listy + klawisz K** (`focusSection='wreck'`) | Rejestr: chip 💀 + klik→raport bitwy w prawym panelu; K przekierowany (3g) | ✅ |
+| **Wrogowie/foreign_recon na mapie 2D obcego układu** | Obcy układ po `switchActiveSystem` renderuje się TAKŻE na 3D (scena przebudowana) — PPM/rekon 3D | ✅ (potwierdzić w playteście) |
+| **Atlas/STRATCOM `map_body`/`cluster_send`** | Osobne zakładki — NIE znikają z mapą tactical | ✅ n/d |
+
+**Wniosek:** jedyny realny brak = skrót klik-celu-na-mapie w pickerze misji (⚠ wyżej) —
+checklista do domknięcia przed decyzją o usunięciu kodu mapy 2D.
+
 - **Slice 3d — spięcia + domknięcie:** chip 🌀 tranzyt → REJESTR z prefiltrem transit (zamiast
   tactical); playtest-checklista F3; **raport końcowy §8 planu**: MANUAL.md (tryb Y, rejestr,
   plakietki/chipy), kompletność i18n, lista długu konsolidacyjnego (§4), pomiar wydajności vs budżet
