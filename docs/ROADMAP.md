@@ -78,6 +78,16 @@ Systemy liczące coś dla kolonii/vessela AI globalnym `window.KOSMOS.techSystem
 ## 4. TechDebt — odłożone / nieaktualne
 
 - **#H-reset-kamery** — w civMode klawisz `H` NIE resetuje kamery: `OverlayManager._keyMap` (`'h'→colony`) konsumuje klawisz z `return` PRZED `switch(e.code)` w GameScene (`KeyH→resetToCenter` osiągalne tylko poza civMode). Reset kamery w civMode jest nieosiągalny z klawiatury. Wykryte w weryfikacji „Obrazu Operacyjnego" (`docs/KOSMOS_obraz_operacyjny_weryfikacja.md` §5.2, dyspozycja Aneks A.7 planu). **DEFERRED** — do rozstrzygnięcia przy najbliższym sprzątaniu keymapy (np. dedykowany klawisz resetu albo `H` z modyfikatorem); wpis do MANUAL.md przy okazji.
+- **#obraz-operacyjny-faza4** — kompaktowy pasek osi czasu dokowany na dole trybu Y (te same
+  `timelineRows` co rejestr; filtr: bieżący układ + tranzyt; hover ↔ podświetlenie ducha ETA).
+  Spec: `docs/KOSMOS_plan_obraz_operacyjny_v1.md` §5 (Faza 4). **DEFERRED** — wyłącznie na osobną
+  decyzję Filipa po okresie używania Faz 1–3 (tag `obraz-operacyjny-v1`).
+- **#fleetpicture-consolidation** — migracja rozproszonych formatterów statusu/misji/rozkazów na
+  `FleetPictureLogic` (jedno źródło słownika). Pełna lista miejsc:
+  `docs/KOSMOS_obraz_operacyjny_weryfikacja.md` §4 (A: 7 formatterów typu misji · B: formattery
+  stanu + hardcode PL sekcji WROGIE/WRAKI · C: `_drawMovementOrderLabel`/`_computeFleetStatus`).
+  `OrderTargetInfo` zostaje osobno (już skonsolidowany). **DEFERRED** — migracja stopniowa,
+  nie przy okazji innych arców bez decyzji.
 - **#loop-resume-ux** — statek z pętlą transportową po ręcznym rozkazie PPM (moveToPoint itd.) wykonuje
   rozkaz i WRACA do pętli — to PROJEKTOWE (`MovementOrderSystem` deep-copy misji do `vessel._suspendedMission`
   przy issueOrder; `VesselManager._resumeMissionAfterOrder` podnosi ją na `vessel:orderCompleted/Cancelled`,
