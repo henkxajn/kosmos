@@ -77,6 +77,7 @@ Systemy liczące coś dla kolonii/vessela AI globalnym `window.KOSMOS.techSystem
 
 ## 4. TechDebt — odłożone / nieaktualne
 
+- **#H-reset-kamery** — w civMode klawisz `H` NIE resetuje kamery: `OverlayManager._keyMap` (`'h'→colony`) konsumuje klawisz z `return` PRZED `switch(e.code)` w GameScene (`KeyH→resetToCenter` osiągalne tylko poza civMode). Reset kamery w civMode jest nieosiągalny z klawiatury. Wykryte w weryfikacji „Obrazu Operacyjnego" (`docs/KOSMOS_obraz_operacyjny_weryfikacja.md` §5.2, dyspozycja Aneks A.7 planu). **DEFERRED** — do rozstrzygnięcia przy najbliższym sprzątaniu keymapy (np. dedykowany klawisz resetu albo `H` z modyfikatorem); wpis do MANUAL.md przy okazji.
 - **#7** — `MAX_PENDING_BUILDS_PER_COLONY=3`/`MAX_PENDING_UPGRADES=2` (`ColonyAutoExpander.js:71-72`): heurystyka z nagrania, `_reconcilePending` zwalnia sloty → brak zatoru. **DEFERRED** (tuning, nic nie blokuje).
 - **#13** — buildings=5 (duplikat colony_base): **NIEAKTUALNE** — guard idempotencji `BuildingSystem.autoPlaceBuilding:1162-1169` działa, buildings=4 poprawne.
 - **#11** — „rozmiar statku → różne budynki startowe": **NIEAKTUALNE** — nie istnieje; budynki z `archetype.startingBuildings`/hardkod, nie zależą od statku.

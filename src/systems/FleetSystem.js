@@ -624,7 +624,9 @@ export class FleetSystem {
 
   /** Aktualny gameYear dla createdYear stamping. */
   _currentYear() {
-    return window.KOSMOS?.timeSystem?.currentYear ?? 0;
+    // TimeSystem trzyma bieżący rok w `gameTime` (pole `currentYear` nie istnieje —
+    // stary odczyt zwracał zawsze 0 i zerował createdYear nowych flot).
+    return window.KOSMOS?.timeSystem?.gameTime ?? 0;
   }
 
   // ── P2 polish — auto-dock przy Return to base ──────────────────────────
