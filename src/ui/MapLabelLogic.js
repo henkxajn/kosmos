@@ -226,6 +226,7 @@ export function gatherVesselLabels(vessels, ctx = {}) {
       out.push({
         x: pos.x, y: pos.y, id: v.id,
         name: anonymous ? '?' : entry.name,
+        glyph: anonymous ? null : entry.glyph,                 // rola wroga jawna dopiero od contact
         fleetId: null,                                         // floty wroga nie grupują plakietek
         tone: entry.tone,
         alertCount: 0,                                         // alerty tylko własne (bez leakowania)
@@ -237,6 +238,7 @@ export function gatherVesselLabels(vessels, ctx = {}) {
     out.push({
       x: pos.x, y: pos.y, id: v.id,
       name: entry.name,
+      glyph: entry.glyph,
       fleetId: entry.fleetId,
       tone: entry.tone,
       alertCount: entry.alerts.length,

@@ -634,6 +634,7 @@ export default {
   'menu.orbitsPlanetoids': 'Planetoids',
   'menu.orbitsNone': 'None',
   'menu.radar': 'Radar',
+  'menu.fleetLabels': 'Fleet plaques',
   // Vessel — spaceport validation messages (Bug 2)
   'vessel.orbitingNoPort': 'No spaceport at {0} — vessel stays in orbit',
   'vessel.reasonNoSpaceport': 'No spaceport at vessel\'s docking body',

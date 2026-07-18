@@ -848,6 +848,10 @@ export class UIManager {
       this._dirty = true;
     });
 
+    // Obraz Operacyjny F1 — toggle plakietek flotowych z menu ☰: redraw także
+    // przy pauzie (layer czyta uiPrefs per frame, ale pętla rysuje tylko na _dirty).
+    EventBus.on('ui:fleetMapLabelsToggle', () => { this._dirty = true; });
+
     // Game Over — cywilizacja zniszczona
     EventBus.on('game:over', ({ reason, planetName }) => {
       this._gameOverData = { reason, planetName };
@@ -1853,6 +1857,12 @@ export class UIManager {
     if (civMode && tr && GAME_CONFIG.FEATURES?.mapLabels
         && !this.overlayManager.isAnyOpen() && !globeOpen) {
       this._mapLabelLayer.draw(ctx, tr, W, H, UI_SCALE);
+    }
+    // Obraz Operacyjny F1 — plakietki flotowe (OSOBNA flaga od mapLabels; toggle
+    // uiPrefs czyta layer wewnętrznie). OFF = zero kosztów (jeden boolean).
+    if (civMode && tr && GAME_CONFIG.FEATURES?.fleetMapLabels
+        && !this.overlayManager.isAnyOpen() && !globeOpen) {
+      this._mapLabelLayer.drawVesselLabels(ctx, tr, W, H, UI_SCALE);
     }
 
     // Slice 4 — ramki RTS + paski paliwa dla zaznaczonego (własnego) statku.

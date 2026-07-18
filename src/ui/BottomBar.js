@@ -29,7 +29,7 @@ function _severityColor(sev) {
 const MENU_W = 220;
 const MENU_ROW_H = 28;
 const MENU_PAD = 8;
-const MENU_ROWS = 10; // Nowa gra, Zapisz, Zapisz do pliku, Wczytaj z pliku, Autozapis, Auto-pauza, Orbity, Radar, Muzyka, Dźwięki
+const MENU_ROWS = 11; // Nowa gra, Zapisz, Zapisz do pliku, Wczytaj z pliku, Autozapis, Auto-pauza, Orbity, Radar, Plakietki floty, Muzyka, Dźwięki
 const MENU_H = MENU_PAD * 2 + MENU_ROWS * MENU_ROW_H;
 
 // Opcje interwału autozapisu
@@ -317,6 +317,10 @@ export class BottomBar {
         this._toggleSensorOverlay();
         this._updateDomMenu();
         break;
+      case 'fleetLabels':
+        this._toggleFleetMapLabels();
+        this._updateDomMenu();
+        break;
       case 'music':
         EventBus.emit('music:toggle');
         // Wartości odświeżą się przy następnym otwarciu
@@ -462,6 +466,8 @@ export class BottomBar {
     const apValue = apEnabled ? (pl ? 'WŁ' : 'ON') : (pl ? 'WYŁ' : 'OFF');
     // M4 P2 — radar toggle (window.KOSMOS.uiPrefs.sensorOverlayVisible)
     const radarOn = window.KOSMOS?.uiPrefs?.sensorOverlayVisible === true;
+    // Obraz Operacyjny F1 — plakietki flotowe (default ON: brak klucza ≠ false)
+    const fleetLblOn = window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible !== false;
     return [
       { id: 'newGame', label: t('menu.newGame') },
       { id: 'save',    label: t('menu.save') },
@@ -471,6 +477,7 @@ export class BottomBar {
       { id: 'autopause', label: apLabel, value: apValue, valueOn: apEnabled },
       { id: 'orbits',   label: t('menu.orbits'), value: orbitLabel, valueOn: true },
       { id: 'radar',   label: t('menu.radar'),  value: radarOn ? t('menu.on') : t('menu.off'), valueOn: radarOn },
+      { id: 'fleetLabels', label: t('menu.fleetLabels'), value: fleetLblOn ? t('menu.on') : t('menu.off'), valueOn: fleetLblOn },
       { id: 'music',   label: t('menu.music'), value: musicEnabled ? t('menu.on') : t('menu.off'), valueOn: musicEnabled },
       { id: 'sfx',     label: t('menu.sfx'),   value: audioEnabled ? t('menu.on') : t('menu.off'), valueOn: audioEnabled },
     ];
@@ -580,6 +587,18 @@ export class BottomBar {
     const next = !window.KOSMOS.uiPrefs.sensorOverlayVisible;
     window.KOSMOS.uiPrefs.sensorOverlayVisible = next;
     EventBus.emit('ui:sensorOverlayToggle', { visible: next });
+  }
+
+  // ── Toggle plakietek flotowych (Obraz Operacyjny F1) ──────────────────
+  // Stan w uiPrefs.fleetMapLabelsVisible (default ON — brak klucza ≠ false;
+  // nowe klucze uiPrefs bez migracji save). MapLabelLayer czyta uiPrefs per
+  // frame; event tylko budzi redraw overlayu przy pauzie (UIManager _dirty).
+  _toggleFleetMapLabels() {
+    if (!window.KOSMOS) return;
+    window.KOSMOS.uiPrefs = window.KOSMOS.uiPrefs ?? {};
+    const next = window.KOSMOS.uiPrefs.fleetMapLabelsVisible === false;
+    window.KOSMOS.uiPrefs.fleetMapLabelsVisible = next;
+    EventBus.emit('ui:fleetMapLabelsToggle', { visible: next });
   }
 
   _getOrbitLabel() {

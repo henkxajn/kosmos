@@ -635,6 +635,7 @@ export default {
   'menu.orbitsPlanetoids': 'Planetoidy',
   'menu.orbitsNone': 'Żadne',
   'menu.radar': 'Radar',
+  'menu.fleetLabels': 'Plakietki floty',
   // Vessel — komunikaty walidacji portu kosmicznego (Bug 2)
   'vessel.orbitingNoPort': 'Brak portu na {0} — statek pozostaje na orbicie',
   'vessel.reasonNoSpaceport': 'Brak portu kosmicznego na ciele dokowania',

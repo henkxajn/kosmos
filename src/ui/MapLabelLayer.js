@@ -16,7 +16,9 @@ import { THEME } from '../config/ThemeConfig.js';
 import EventBus from '../core/EventBus.js';
 import {
   gatherColonyLabels, gatherStationLabels, labelLOD, stackLabels, BADGE_ICON,
+  gatherVesselLabels, vesselLabelLOD, toLogicalPx,
 } from './MapLabelLogic.js';
+import { clusterScreenPoints, toneColor } from './FleetPictureLogic.js';
 
 const KIND_COLOR = () => ({
   home:    THEME.accent,
@@ -34,9 +36,18 @@ const STATION_PLAQUE_OFFSET =  30;   // K4: plakietka stacji POD kotwicą
 const MAX_NAME_W = 200;              // K4/B2: max szerokość nazwy przed „…" (sensowne maksimum)
 const STACK_GAP  = 3;                // K2: odstęp pionowy przy zsuwaniu
 
+// Obraz Operacyjny F1 — plakietki flotowe (profil light).
+const VESSEL_PLAQUE_OFFSET = -22;    // plakietka NAD statkiem
+const VESSEL_MAX_NAME_W    = 140;    // krótsze niż kolonie — plakietki mają być dyskretne
+
 export class MapLabelLayer {
   constructor() {
     this._hitZones = [];   // { x, y, w, h, stationId } — logical px, klik stacji
+    // Obraz Operacyjny F1 — stan plakietek flotowych:
+    this._vesselPrevClusters      = new Map();   // histereza klastrów WŁASNYCH (id → klucz klastra)
+    this._vesselPrevClustersEnemy = new Map();   // osobna histereza WROGÓW (stron nie sklejamy)
+    this._vesselHitZones          = [];          // { x, y, w, h, vesselIds[] } — klik plakietki (1c)
+    this._lastOffscreenPoints     = [];          // punkty poza kadrem → strzałki krawędziowe (1c)
   }
 
   /**
@@ -192,6 +203,161 @@ export class MapLabelLayer {
       ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
       ctx.fillStyle = color;
       ctx.fillText(main, tx, by + h / 2);
+    }
+    ctx.globalAlpha = 1;
+    return { x: bx, y: by, w, h };
+  }
+
+  // ═══ Obraz Operacyjny F1 — plakietki flotowe (profil light) ═══════════════
+  // Wołane OSOBNYM gate'em z UIManagera (FEATURES.fleetMapLabels niezależna od
+  // mapLabels). Pipeline: gather (mgła wojny w MapLabelLogic) → clusterScreenPoints
+  // (histereza 44/56, prev między klatkami) → stackLabels → plakietki.
+  // Profil light: multi-klaster/flota/alert → clusterAlpha; pojedynczy WYBRANY →
+  // detailAlpha; samotny zdrowy statek bez floty → nic (spokój wizualny).
+
+  /** @param ctx transformata UI_SCALE @param tr ThreeRenderer @param uiScale UI_SCALE */
+  drawVesselLabels(ctx, tr, W, H, uiScale) {
+    this._vesselHitZones = [];
+    this._lastOffscreenPoints = [];
+    if (!tr) return;
+    if (window.KOSMOS?.uiPrefs?.fleetMapLabelsVisible === false) {
+      this._vesselPrevClusters.clear();
+      this._vesselPrevClustersEnemy.clear();
+      return;
+    }
+    const K = window.KOSMOS;
+    const vm = K?.vesselManager;
+    if (!vm?.getAllVessels) return;
+
+    const { clusterAlpha, detailAlpha } = vesselLabelLOD(tr.getCameraDistance?.() ?? null);
+    if (clusterAlpha <= 0.02 && detailAlpha <= 0.02) {
+      this._vesselPrevClusters.clear();
+      this._vesselPrevClustersEnemy.clear();
+      return;
+    }
+
+    // ctx dla FleetPictureLogic — wpięcia świata (DSCS/VesselManager/FleetSystem).
+    const dscs = K?.deepSpaceCombatSystem;
+    const pictureCtx = {
+      gameYear:      K?.timeSystem?.gameTime ?? 0,
+      fleetSystem:   K?.fleetSystem ?? null,
+      combatCheck:   dscs?._findActiveEncounterContaining
+        ? (id) => !!dscs._findActiveEncounterContaining(id) : null,
+      isImmobilized: vm.isImmobilized ? (v) => vm.isImmobilized(v) : null,
+    };
+    const intel = K?.intelSystem;
+    const points = gatherVesselLabels(vm.getAllVessels(), {
+      getScreenPos:   (id) => toLogicalPx(tr.getVesselScreenPosition?.(id), uiScale),
+      pictureCtx,
+      enemyQuality:   (id) => intel?.getVesselContact?.(id)?.quality ?? 'unknown',
+      activeSystemId: K?.activeSystemId ?? 'sys_home',
+      selectedIds:    new Set(K?.uiManager?.getSelectedVesselIds?.() ?? []),
+    });
+    if (!points.length) {
+      this._vesselPrevClusters.clear();
+      this._vesselPrevClustersEnemy.clear();
+      return;
+    }
+
+    // On-screen → klastry/plakietki; off-screen → strzałki krawędziowe (slice 1c).
+    const onScreen = [];
+    for (const p of points) {
+      if (p.x >= 0 && p.x <= W && p.y >= 0 && p.y <= H) onScreen.push(p);
+      else this._lastOffscreenPoints.push(p);
+    }
+
+    // Klastrowanie STRON OSOBNO (własne ≠ wrogie w jednej plakietce) — dwie mapy histerezy.
+    const ownClusters = clusterScreenPoints(onScreen.filter(p => p.kind === 'own'),
+                                            { prev: this._vesselPrevClusters });
+    const enemyClusters = clusterScreenPoints(onScreen.filter(p => p.kind === 'enemy'),
+                                              { prev: this._vesselPrevClustersEnemy });
+
+    const jobs = [];
+    for (const c of ownClusters) {
+      const single = c.items.length === 1;
+      const isFleet = c.label === 'fleet';
+      let alpha = 0;
+      if (!single || isFleet || c.alertCount > 0) alpha = Math.max(alpha, clusterAlpha);
+      if (c.items.some(p => p.selected))          alpha = Math.max(alpha, detailAlpha);
+      if (alpha <= 0.02) continue;
+      jobs.push({ cluster: c, alpha, isEnemy: false });
+    }
+    if (clusterAlpha > 0.02) {
+      for (const c of enemyClusters) jobs.push({ cluster: c, alpha: clusterAlpha, isEnemy: true });
+    }
+    if (!jobs.length) return;
+
+    ctx.save();
+    ctx.textBaseline = 'middle';
+    const items = jobs.map((j, i) => {
+      const dims = this._measureVesselPlaque(ctx, j);
+      return {
+        id: `vp_${i}`, anchorX: j.cluster.x, targetY: j.cluster.y + VESSEL_PLAQUE_OFFSET,
+        w: dims.w, h: dims.h, _j: j, _dims: dims,
+      };
+    });
+    for (const s of stackLabels(items, STACK_GAP)) {
+      // Łącznik tylko gdy plakietka zsunięta z kotwicy (anty-nakładanie).
+      if (s.displaced) {
+        this._drawConnector(ctx, s.anchorX, s._j.cluster.y, s.drawY, s._dims.h,
+                            s._dims.color, s._j.alpha * 0.8);
+      }
+      const box = this._drawVesselPlaque(ctx, s.anchorX, s.drawY, s._dims, s._j);
+      if (box) this._vesselHitZones.push({ ...box, vesselIds: s._j.cluster.items.map(p => p.id) });
+    }
+    ctx.restore();
+  }
+
+  // Zmierz plakietkę flotową + przygotuj treść. Zwraca {w,h,text,color,alertCount}.
+  _measureVesselPlaque(ctx, job) {
+    const c = job.cluster;
+    const single = c.items.length === 1;
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    let text;
+    if (single) {
+      const p = c.items[0];
+      const name = this._truncate(ctx, p.name ?? '', VESSEL_MAX_NAME_W);
+      text = p.glyph ? `${p.glyph} ${name}` : name;
+    } else if (job.isEnemy) {
+      text = `⚠ ×${c.items.length}`;
+    } else if (c.label === 'fleet') {
+      const fleetName = window.KOSMOS?.fleetSystem?.getFleet?.(c.fleetId)?.name ?? '';
+      text = this._truncate(ctx, `⚑ ${fleetName} ×${c.items.length}`, VESSEL_MAX_NAME_W + 30);
+    } else {
+      text = `×${c.items.length}`;
+    }
+    if (job.isEnemy && single) text = `⚠ ${text}`;
+    const color = job.isEnemy ? THEME.danger : toneColor(c.worstTone, THEME);
+    const w = ctx.measureText(text).width + 14;
+    return { w, h: 16, text, color, alertCount: c.alertCount };
+  }
+
+  // Plakietka flotowa: rounded-rect 1-liniowy + kropka alertu (prawy-górny róg).
+  _drawVesselPlaque(ctx, x, y, dims, job) {
+    const { text, color, w, h, alertCount } = dims;
+    const bx = Math.round(x - w / 2), by = Math.round(y - h / 2), r = 4;
+    ctx.globalAlpha = job.alpha;
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.arcTo(bx + w, by, bx + w, by + h, r);
+    ctx.arcTo(bx + w, by + h, bx, by + h, r);
+    ctx.arcTo(bx, by + h, bx, by, r);
+    ctx.arcTo(bx, by, bx + w, by, r);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(8,12,20,0.80)';
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = color;
+    ctx.fillText(text, bx + 7, by + h / 2);
+    if (alertCount > 0) {   // kropka alertu — świadomość „coś wymaga uwagi"
+      ctx.fillStyle = THEME.warning;
+      ctx.beginPath();
+      ctx.arc(bx + w - 2, by + 2, 2.5, 0, Math.PI * 2);
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
     return { x: bx, y: by, w, h };

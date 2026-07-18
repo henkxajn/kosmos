@@ -20,6 +20,7 @@ window.KOSMOS = {
   uiPrefs:      {
     sensorOverlayVisible: false,   // M4 P2 — radar (cyan vessel rings + yellow colony rings)
     miniMapVisible:       false,   // M4 P2 — galactic minimap (klawisz M)
+    fleetMapLabelsVisible: true,   // Obraz Operacyjny F1 — plakietki flotowe na mapie 3D
   },
 };
 

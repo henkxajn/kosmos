@@ -125,6 +125,11 @@ export const GAME_CONFIG = {
     //   po cleanupie live-gate. Render/UI-only — brak migracji save. Stare romby
     //   _colonyLabels usunięte (MapLabelLayer je zastąpił). Rollback OFF = brak etykiet.
     mapLabels:            true,
+    // Obraz Operacyjny Faza 1 (M1-light) — plakietki flot/klastrów + strzałki
+    //   krawędziowe + chipy układów na mapie 3D. Osobna flaga od mapLabels
+    //   (kolonie/stacje) — rollback niezależny. Render/UI-only, bez migracji
+    //   save (toggle w uiPrefs.fleetMapLabelsVisible). OFF = zero kosztów w pętli.
+    fleetMapLabels:       true,
     // ── Energy Brownout Gate (runtime-only, bez migracji save) ────────────
     //   Deficyt energii (balance<0) realnie ogranicza produkcję PROPORCJONALNIE
     //   do pokrycia (avail=production/consumption): kopalnie (poziom wejściowy),
