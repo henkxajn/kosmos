@@ -39,11 +39,21 @@
 - [ ] Wrogowie NIE mają duchów (intencje wroga niejawne). Skala/czytelność duchów OK? (knob:
       rozmiar w `_upsertTacticalGhost`, 0.8/0.6 × distFactor — zgłoś jeśli za małe/duże).
 
-## D. Warstwy i kosmetyka
+## D. Warstwa nawigacyjna (2g — KOREKTA: dodajemy informację, nie zabieramy grafiki)
 
 - [ ] W trybie: sensor ringi + prediction cones + linie tras/rozkazów + POI widoczne naraz.
-- [ ] Planety/księżyce/orbity przygaszone (0.35/0.5), gwiazda celowo jasna (punkt orientacyjny);
-      po wyjściu pełna jasność wraca 1:1.
+- [ ] **Ciała w PEŁNEJ jasności** (dim wycofany) — planety/księżyce wyglądają jak w trybie normalnym.
+- [ ] **Orbity wyraźne** (alfa `TACTICAL_ORBIT_ALPHA=0.55`) — czytelniejsze niż normalnie; po wyjściu
+      wracają do zwykłej subtelności 1:1.
+- [ ] **Chevron kierunku ruchu** przy każdej planecie (➤ na orbicie, obrócony zgodnie z ruchem).
+- [ ] **Tiki przyszłych pozycji** na orbitach: `+1`, `+2` (interwał adaptacyjny — szybkie skalne
+      `+0.25/+0.5`, gazowe olbrzymy `+20/+40`; kroki z `futureMarkerDeltas`, geometria z tego samego
+      łańcucha Keplera co PhysicsSystem).
+- [ ] **Znacznik ETA celu** (synergia z duchem): zaznacz statek w locie do CIAŁA → na orbicie celu
+      bursztynowy `⏱rok` w pozycji planety z roku przylotu („statek będzie tu ⏱56, planeta wtedy tam").
+- [ ] **Siatka taktyczna** — subtelne koncentryczne pierścienie (alfa `TACTICAL_GRID_ALPHA=0.05`;
+      0 = wyłączona). Ocena klimatu — zgłoś, jeśli za mocna/za słaba.
+- [ ] Glify +20% (`TACTICAL_GLYPH_SCALE=0.66`) — ocena rozmiaru/kontrastu.
 - [ ] Etykiety: profil tactical — KAŻDY własny statek ma plakietkę z aktywnością i mini-ETA
       (`△ Nazwa · Pościg · ~57`); po wyjściu wraca profil light (tylko floty/alerty/wybrany).
 
@@ -64,7 +74,10 @@
 
 ## Znane ograniczenia v1 (świadome)
 
-- Gwiazda nie jest przygaszana (shader-materiały; jasne centrum = orientacja). Zgłoś, jeśli razi.
+- Dwuton orbity (jaśniejszy łuk przed planetą) ODRZUCONY w v1: wymagałby rozcięcia geometrii każdej
+  orbity na 2 łuki aktualizowane per-frame — chevron kierunku daje tę samą informację taniej.
+- Wskaźniki ruchu tylko dla PLANET (księżyce krążą w ramie planety — inna geometria; planetoidy do
+  rozważenia po ocenie czytelności).
 - Duchy ETA tylko dla misji z fizycznym celem (`targetX/Y`); rozkazy pursue/intercept bez punktu
   docelowego nie mają ducha (cel ruchomy — ETA na plakietce `~rok`).
 - Szybkie Y-Y-Y w trakcie przelotu: snapshot bierze CEL animacji (nie klatkę przejściową) — restore

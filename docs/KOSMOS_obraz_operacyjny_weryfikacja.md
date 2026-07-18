@@ -408,7 +408,34 @@ aktywność+mini-ETA na plakietkach; punkty gather niosą activityKey/etaYear/et
 exit-sync (jawny `_syncTacticalGlyphs()` w ścieżce enter/exit — restore natychmiastowy, nie „przy
 najbliższej klatce").
 
-**Smoke:** `tmp_tactical_mode_smoke.mjs` 28/28 · `tmp_fleet_map_labels` 52/52 · regresja
+### 9.2 SLICE 2g — restyle taktyczny: warstwa nawigacyjna zamiast dimu (KOREKTA kierunku)
+
+**Dim ciał WYCOFANY** (planety/księżyce pełna jasność; `setTacticalDim` usunięty → `setTacticalStyle`).
+„Stół sztabowy" = DODANA informacja: **orbity wyraźne** (`TACTICAL_ORBIT_ALPHA=0.55`, restore 1:1) ·
+**siatka taktyczna** (pierścienie co ładny krok AU, `TACTICAL_GRID_ALPHA=0.05`, 0=off) · **wskaźniki
+ruchu ciał**: chevron ➤ kierunku + tiki przyszłych pozycji `+N` (interwał adaptacyjny
+`futureMarkerDeltas`: T/8 → ładny krok 0.25…100 lat) · **znacznik ETA celu** dla zaznaczonego statku
+(pkt 3 OKAZAŁ SIĘ TANI → zaimplementowany; ślad decyzji w ROADMAP `#tactical-eta-planet-marker`) ·
+glify +20% (`TACTICAL_GLYPH_SCALE=0.66`, nazwane stałe).
+
+**Weryfikacja mechaniki orbit (dyspozycja):** najtańszy sposób policzenia pozycji ciała w roku T to
+DOKŁADNIE łańcuch `PhysicsSystem._updateOrbit` (`KeplerMath.updateMeanAnomaly → solveKepler →
+eccentricToTrueAnomaly → orbitalRadius → obrót o inclinationOffset → ×AU_TO_PX od gwiazdy`) —
+opakowany w CZYSTĄ funkcję `TacticalModeLogic.orbitalPositionAtDelta(orbital, dtYears, auToPx)`
+(node-testowalna; jedno źródło mechaniki, zero dryfu względem symulacji). **Dwuton orbity ODRZUCONY**
+(rozcinanie geometrii per-frame vs chevron dający tę samą informację taniej). Wskaźniki dla PLANET
+(księżyce = rama planety; planetoidy po ocenie czytelności). Restyle/markery odwracalne istniejącym
+restore (`setTacticalStyle(false)` + sweep w `_disposeAllTacticalGlyphs`); `switchSystem` w trybie →
+świeży restyle+siatka (mechanizm jak 1e).
+
+**Weryfikacja pętli (dyspozycja, bez zmian kodu):** powrót statku do pętli transportowej po rozkazie
+PPM to PROJEKTOWE wznowienie — `MovementOrderSystem` robi deep-copy misji do `vessel._suspendedMission`
+przy `issueOrder` (§8.3), a `VesselManager._resumeMissionAfterOrder` podnosi ją na
+`vessel:orderCompleted/Cancelled` (VesselManager.js:95-97). Wpis backlogowy ROADMAP §4 `#loop-resume-ux`
+(komunikacja tymczasowości rozkazu — NIE implementowane).
+
+**Smoke:** `tmp_tactical_mode_smoke.mjs` 38/38 (+T4: geometria kołowa/eliptyczna/inclinationOffset/
+pełny okres + adaptacyjne kroki 0.25↔40 lat) · `tmp_fleet_map_labels` 52/52 · regresja
 fleetpicture 81/81, map_labels 37/37. **Live-gate CC (Chrome/Power Test):** Y → top-down (phi
 1.1→0.12, lerp+snap), badge, glify ×2 + duchy ×2 na końcach tras + dim ON + chip „◉ KOI-9208 ×5
 ⚠2"; wyjście → restore sensor/dim/dist + glify/duchy/modele sprzątnięte natychmiast (0/0/0);

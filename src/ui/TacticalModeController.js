@@ -71,8 +71,8 @@ export class TacticalModeController {
     if (K?.uiPrefs) K.uiPrefs.sensorOverlayVisible = sensorVisible;
     EventBus.emit('ui:sensorOverlayToggle', { visible: sensorVisible });
     K?.threeRenderer?._syncPredictionCones?.();
-    // Dim kosmetyki (2d): ON razem z trybem, pełny restore przy wyjściu.
-    K?.threeRenderer?.setTacticalDim?.(this._active);
+    // Warstwa nawigacyjna (2g — zamiast dimu): wyraźne orbity + siatka; restore przy wyjściu.
+    K?.threeRenderer?.setTacticalStyle?.(this._active);
     // Glify/duchy (2c/2d): jawny sync — enter tworzy, exit sprząta NATYCHMIAST
     // (bez czekania na klatkę renderu; przysłonięte okno wstrzymuje RAF).
     K?.threeRenderer?._syncTacticalGlyphs?.();

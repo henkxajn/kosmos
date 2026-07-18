@@ -35,6 +35,7 @@ import { isEnemyVessel } from '../entities/Vessel.js';
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
+import { orbitalPositionAtDelta, futureMarkerDeltas } from '../ui/TacticalModeLogic.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { t } from '../i18n/i18n.js';
 import {
@@ -299,7 +300,9 @@ export class ThreeRenderer {
     this._tacticalGlyphs       = new Map();  // F2 tryb Y: vesselId → Sprite-glif (stały rozmiar ekranowy)
     this._tacticalHiddenModels = new Map();  // F2: vesselId → [dzieci wrappera ukryte na czas trybu]
     this._tacticalGhosts       = new Map();  // F2: vesselId → Sprite-duch ETA w punkcie celu misji
-    this._tacticalDimmed       = null;       // F2: [{m, opacity, transparent}] — restore dim przy wyjściu
+    this._tacticalOrbitStyled  = null;       // 2g: [{m, opacity, transparent}] — restore restyle orbit
+    this._tacticalGrid         = null;       // 2g: Group — subtelna siatka taktyczna
+    this._tacticalOrbitMarkers = new Map();  // 2g: klucz → Sprite (chevron/tik przyszłej pozycji/ETA)
     this._alertReticleTex      = null;       // współdzielona tekstura reticle (lazy)
 
     // ── Cache modeli 3D statków ─────────────────────────────────
@@ -995,11 +998,14 @@ export class ThreeRenderer {
     this._disposeAllMeshes();
     this.initSystem(star, planets, planetesimals, moons);
     this._restoreActiveSystemVesselSprites();
-    // F2: tryb taktyczny przeżywa zmianę układu (chip-switch w trybie Y) —
-    // stare dimowane materiały zostały zdisposowane razem ze sceną; re-dim świeżej.
+    // F2/2g: tryb taktyczny przeżywa zmianę układu (chip-switch w trybie Y) —
+    // stare materiały orbit zdisposowane ze sceną → restyle świeżych + nowa siatka;
+    // markery ruchu starego układu sprzątnięte (odbudują się w syncu).
     if (window.KOSMOS?.tacticalMode?.isActive) {
-      this._tacticalDimmed = null;
-      this.setTacticalDim(true);
+      this._disposeTacticalGrid();
+      this._disposeAllTacticalOrbitMarkers();
+      this._tacticalOrbitStyled = null;
+      this.setTacticalStyle(true);
     }
   }
 
@@ -5856,6 +5862,11 @@ export class ThreeRenderer {
   // kotwiczy wszystkie nakładki). Cache tekstur per (glif|kolor) — wzór insygniów.
   // Słownik ról/tonów WYŁĄCZNIE z FleetPictureLogic (twarda reguła planu §0).
 
+  // Stałe tuningu trybu Y (2g — nazwane do oceny wizualnej Filipa):
+  static TACTICAL_GLYPH_SCALE = 0.66;   // rozmiar glifu (+~20% vs 0.55 z 2c)
+  static TACTICAL_ORBIT_ALPHA = 0.55;   // wyraźne orbity w trybie (normalnie ~0.2-0.3)
+  static TACTICAL_GRID_ALPHA  = 0.05;   // subtelna siatka tła (0 = wyłączona)
+
   static _glyphTexCache = new Map();
   static _createGlyphTexture(glyph, colorHex) {
     const key = `${glyph}|${colorHex}`;
@@ -5930,7 +5941,7 @@ export class ThreeRenderer {
       sp.position.set(p.x, p.y + 0.02, p.z);
       // Stały rozmiar ekranowy — kompensacja dystansu (wzór ALERT_MARKER_REF_DIST).
       const distFactor = camPos ? Math.max(0.5, camPos.distanceTo(sp.position) / ALERT_MARKER_REF_DIST) : 1;
-      sp.scale.setScalar(0.55 * distFactor);
+      sp.scale.setScalar(ThreeRenderer.TACTICAL_GLYPH_SCALE * distFactor);
       sp.material.opacity = entry.intelOpacity ?? 1.0;            // ghost-opacity wrogów
       this._hideVesselModel(vid, entry);
       aliveIds.add(vid);
@@ -5946,6 +5957,8 @@ export class ThreeRenderer {
     }
     for (const k of [...this._tacticalGlyphs.keys()]) if (!aliveIds.has(k)) this._disposeTacticalGlyph(k);
     for (const k of [...this._tacticalGhosts.keys()]) if (!aliveIds.has(k)) this._disposeTacticalGhost(k);
+    // 2g — wskaźniki ruchu ciał (chevron + tiki przyszłych pozycji + ETA celu).
+    this._syncTacticalOrbitMarkers(camPos);
   }
 
   // Tekstura ducha: glif-OUTLINE + etykieta `⏱rok` (moving → `~rok`). Cache per treść.
@@ -6006,36 +6019,174 @@ export class ThreeRenderer {
     this._tacticalGhosts.delete(vid);
   }
 
-  // ── Dim kosmetyki (2d) — TYLKO planety/księżyce/orbity (materiały statków
-  // NIETKNIĘTE → intelOpacity wrogich ghostów z definicji bez konfliktu; exhaust
-  // znika razem z modelem — jest dzieckiem wrappera). Gwiazda zostaje jasna
-  // (punkt orientacyjny; jej shader-materiały nie są bezpieczne do mutacji).
-  setTacticalDim(on) {
-    if (on === !!this._tacticalDimmed) return;   // idempotentne
+  // ── Warstwa nawigacyjna trybu Y (2g — KOREKTA kierunku po playteście) ──────
+  // Dim ciał WYCOFANY: planety/księżyce zostają w pełnej jasności; „stół sztabowy"
+  // = DODANA informacja: wyraźne orbity + subtelna siatka + wskaźniki ruchu ciał.
+  // Materiały statków jak dotąd nietykane (intelOpacity wrogów bez konfliktu).
+  setTacticalStyle(on) {
+    if (on === !!this._tacticalOrbitStyled) return;   // idempotentne
     if (on) {
-      const seen = new Set();
+      // Orbity WYRAŹNE (stała alfa; kolor zostaje — stonowany z materiału).
       const rec = [];
-      const dimObj = (root, factor) => root.traverse?.(o => {
-        const mats = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
-        for (const m of mats) {
-          if (seen.has(m)) continue;
-          seen.add(m);
-          rec.push({ m, opacity: m.opacity, transparent: m.transparent });
-          m.transparent = true;
-          m.opacity = (m.opacity ?? 1) * factor;
-        }
-      });
-      for (const [, e] of this._planets) if (e.group) dimObj(e.group, 0.35);
-      for (const [, e] of this._moons) if (e.mesh) dimObj(e.mesh, 0.35);
-      for (const [, line] of this._orbits) dimObj(line, 0.5);
-      for (const [, line] of this._planetoidOrbits) dimObj(line, 0.5);
-      this._tacticalDimmed = rec;
+      const boost = (line) => {
+        const m = line?.material;
+        if (!m) return;
+        rec.push({ m, opacity: m.opacity, transparent: m.transparent });
+        m.transparent = true;
+        m.opacity = ThreeRenderer.TACTICAL_ORBIT_ALPHA;
+      };
+      for (const [, line] of this._orbits) boost(line);
+      for (const [, line] of this._planetoidOrbits) boost(line);
+      this._tacticalOrbitStyled = rec;
+      this._buildTacticalGrid();
     } else {
-      for (const { m, opacity, transparent } of this._tacticalDimmed ?? []) {
+      for (const { m, opacity, transparent } of this._tacticalOrbitStyled ?? []) {
         m.opacity = opacity;
         m.transparent = transparent;
       }
-      this._tacticalDimmed = null;
+      this._tacticalOrbitStyled = null;
+      this._disposeTacticalGrid();
+    }
+  }
+
+  // Subtelna siatka taktyczna — koncentryczne pierścienie co „ładny" krok AU.
+  _buildTacticalGrid() {
+    this._disposeTacticalGrid();
+    const extentAU = this._computeSystemExtentAU?.() ?? 25;
+    const step = extentAU > 20 ? 5 : extentAU > 8 ? 2 : 1;   // AU
+    const group = new THREE.Group();
+    const SEG = 128;
+    const worldPerAU = gameplayToWorld({ x: GAME_CONFIG.AU_TO_PX, y: 0 })?.worldX
+      - gameplayToWorld({ x: 0, y: 0 })?.worldX;
+    if (!Number.isFinite(worldPerAU) || worldPerAU === 0) return;
+    for (let au = step; au <= extentAU + step * 0.5; au += step) {
+      const r = au * worldPerAU;
+      const pts = [];
+      for (let i = 0; i <= SEG; i++) {
+        const a = (i / SEG) * Math.PI * 2;
+        pts.push(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const mat = new THREE.LineBasicMaterial({
+        color: 0x88bbcc, transparent: true,
+        opacity: ThreeRenderer.TACTICAL_GRID_ALPHA, depthWrite: false,
+      });
+      group.add(new THREE.Line(geo, mat));
+    }
+    group.renderOrder = -1;
+    this.scene.add(group);
+    this._tacticalGrid = group;
+  }
+
+  _disposeTacticalGrid() {
+    if (!this._tacticalGrid) return;
+    this.scene.remove(this._tacticalGrid);
+    this._tacticalGrid.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+    this._tacticalGrid = null;
+  }
+
+  // ── Wskaźniki ruchu ciał (2g pkt 2/3) — chevron kierunku + tiki przyszłych
+  // pozycji (+N lat, interwał adaptacyjny do okresu) + znacznik ETA na orbicie
+  // ciała docelowego ZAZNACZONEGO statku (synergia z duchem ETA). Geometria z
+  // TacticalModeLogic (czysta, ten sam łańcuch Keplera co PhysicsSystem).
+  static _orbitTickTexCache = new Map();
+  static _createOrbitTickTexture(label, colorHex) {
+    const key = `${label}|${colorHex}`;
+    const cached = ThreeRenderer._orbitTickTexCache.get(key);
+    if (cached) return cached;
+    const w = 96, h = 48;
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const c = cv.getContext('2d');
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillStyle = colorHex;
+    c.beginPath(); c.arc(w / 2, 12, 5, 0, Math.PI * 2); c.fill();   // kropka na orbicie
+    c.font = 'bold 18px sans-serif';
+    c.strokeStyle = 'rgba(0,0,0,0.85)'; c.lineWidth = 4;
+    c.strokeText(label, w / 2, 34);
+    c.fillText(label, w / 2, 34);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.needsUpdate = true;
+    ThreeRenderer._orbitTickTexCache.set(key, tex);
+    return tex;
+  }
+
+  _syncTacticalOrbitMarkers(camPos) {
+    const star = this._star;
+    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+    const alive = new Set();
+    const upsert = (key, tex, gp, scaleW, scaleH) => {
+      const world = gameplayToWorld(gp);
+      if (!world) return;
+      let sp = this._tacticalOrbitMarkers.get(key);
+      if (!sp || sp._tex !== tex) {
+        if (sp) { this.scene.remove(sp); sp.material?.dispose?.(); }
+        sp = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: tex, transparent: true, depthWrite: false, depthTest: false, opacity: 0.85,
+        }));
+        sp.renderOrder = 28;
+        sp._tex = tex;
+        this.scene.add(sp);
+        this._tacticalOrbitMarkers.set(key, sp);
+      }
+      sp.position.set(world.worldX, 0.01, world.worldZ);
+      const df = camPos ? Math.max(0.5, camPos.distanceTo(sp.position) / ALERT_MARKER_REF_DIST) : 1;
+      sp.scale.set(scaleW * df, scaleH * df, 1);
+      alive.add(key);
+    };
+
+    for (const [pid] of this._planets) {
+      const body = EntityManager.get(pid);
+      const orb = body?.orbital;
+      if (!orb || !Number.isFinite(orb.T)) continue;
+      // Chevron kierunku ruchu: pozycja za mały krok czasu → strzałka „➤" obrócona.
+      const now = orbitalPositionAtDelta(orb, 0, GAME_CONFIG.AU_TO_PX, star?.x ?? 0, star?.y ?? 0);
+      const ahead = orbitalPositionAtDelta(orb, orb.T / 72, GAME_CONFIG.AU_TO_PX, star?.x ?? 0, star?.y ?? 0);
+      if (now && ahead) {
+        const tex = ThreeRenderer._createOrbitTickTexture('➤', '#9fd8e8');
+        const key = `chev:${pid}`;
+        upsert(key, tex, { x: now.x + (ahead.x - now.x) * 2.5, y: now.y + (ahead.y - now.y) * 2.5 }, 0.5, 0.25);
+        const sp = this._tacticalOrbitMarkers.get(key);
+        // Obrót spritu w płaszczyźnie ekranu wg kierunku ruchu (gameplay XY → world XZ).
+        if (sp) sp.material.rotation = -Math.atan2(ahead.y - now.y, ahead.x - now.x);
+      }
+      // Tiki przyszłych pozycji (+N lat — adaptacyjnie do okresu orbity).
+      for (const { dt, label } of futureMarkerDeltas(orb.T)) {
+        const p = orbitalPositionAtDelta(orb, dt, GAME_CONFIG.AU_TO_PX, star?.x ?? 0, star?.y ?? 0);
+        if (!p) continue;
+        upsert(`tick:${pid}:${dt}`, ThreeRenderer._createOrbitTickTexture(label, '#7fb8cc'), p, 0.6, 0.3);
+      }
+    }
+
+    // Znacznik ETA planety docelowej ZAZNACZONEGO statku: „planeta będzie wtedy TAM".
+    const selId = window.KOSMOS?.uiManager?.getSelectedVesselId?.();
+    const selV = selId ? window.KOSMOS?.vesselManager?.getVessel?.(selId) : null;
+    const tgt = selV?.mission?.targetId ? EntityManager.get(selV.mission.targetId) : null;
+    const etaYear = selV?.mission?.arrivalYear;
+    if (tgt?.orbital && Number.isFinite(etaYear) && etaYear > gameYear) {
+      const p = orbitalPositionAtDelta(tgt.orbital, etaYear - gameYear, GAME_CONFIG.AU_TO_PX,
+                                       star?.x ?? 0, star?.y ?? 0);
+      if (p) {
+        upsert(`eta:${selId}`, ThreeRenderer._createOrbitTickTexture(`⏱${Math.round(etaYear)}`, '#ffd479'),
+               p, 0.8, 0.4);
+      }
+    }
+
+    for (const k of [...this._tacticalOrbitMarkers.keys()]) {
+      if (!alive.has(k)) {
+        const sp = this._tacticalOrbitMarkers.get(k);
+        this.scene.remove(sp);
+        sp.material?.dispose?.();
+        this._tacticalOrbitMarkers.delete(k);
+      }
+    }
+  }
+
+  _disposeAllTacticalOrbitMarkers() {
+    for (const k of [...this._tacticalOrbitMarkers.keys()]) {
+      const sp = this._tacticalOrbitMarkers.get(k);
+      this.scene.remove(sp);
+      sp.material?.dispose?.();
+      this._tacticalOrbitMarkers.delete(k);
     }
   }
 
@@ -6067,6 +6218,7 @@ export class ThreeRenderer {
   _disposeAllTacticalGlyphs() {
     for (const k of [...this._tacticalGlyphs.keys()]) this._disposeTacticalGlyph(k);
     for (const k of [...this._tacticalGhosts.keys()]) this._disposeTacticalGhost(k);
+    this._disposeAllTacticalOrbitMarkers();
     // Modele mogły zostać ukryte bez żywego glifu (np. statek zniknął z intelu) —
     // domknij wszystkie pozostałe restore'y.
     for (const [vid, hidden] of this._tacticalHiddenModels) {

@@ -78,6 +78,15 @@ Systemy liczące coś dla kolonii/vessela AI globalnym `window.KOSMOS.techSystem
 ## 4. TechDebt — odłożone / nieaktualne
 
 - **#H-reset-kamery** — w civMode klawisz `H` NIE resetuje kamery: `OverlayManager._keyMap` (`'h'→colony`) konsumuje klawisz z `return` PRZED `switch(e.code)` w GameScene (`KeyH→resetToCenter` osiągalne tylko poza civMode). Reset kamery w civMode jest nieosiągalny z klawiatury. Wykryte w weryfikacji „Obrazu Operacyjnego" (`docs/KOSMOS_obraz_operacyjny_weryfikacja.md` §5.2, dyspozycja Aneks A.7 planu). **DEFERRED** — do rozstrzygnięcia przy najbliższym sprzątaniu keymapy (np. dedykowany klawisz resetu albo `H` z modyfikatorem); wpis do MANUAL.md przy okazji.
+- **#loop-resume-ux** — statek z pętlą transportową po ręcznym rozkazie PPM (moveToPoint itd.) wykonuje
+  rozkaz i WRACA do pętli — to PROJEKTOWE (`MovementOrderSystem` deep-copy misji do `vessel._suspendedMission`
+  przy issueOrder; `VesselManager._resumeMissionAfterOrder` podnosi ją na `vessel:orderCompleted/Cancelled`,
+  §8.3). Brakuje KOMUNIKACJI, że rozkaz jest tymczasowy — kandydaci: toast „wznowiono pętlę" po powrocie,
+  wariant PPM „przerwij pętlę i leć". Potwierdzone w playteście Fazy 2 „Obrazu Operacyjnego" (2026-07-18).
+  **DEFERRED** — nie implementować bez decyzji Filipa.
+- **#tactical-eta-planet-marker** — ✅ ZREALIZOWANE w slice 2g (okazało się tanie: `orbitalPositionAtDelta`
+  z łańcuchem KeplerMath jak PhysicsSystem): znacznik „⏱rok" na orbicie ciała docelowego ZAZNACZONEGO
+  statku w pozycji z roku jego ETA. Wpis zostawiony dla śladu decyzji.
 - **#nan-resources-power-test-fastforward** — Power Test: ~73 lata gry przewinięte na maks. prędkości
   (mnożnik z klawisza 5) + losowe wybory popupów → pasek zasobów pokazuje NaN-y (`NaN -9.8` itd.).
   Zaobserwowane przy sanity-checku „Obrazu Operacyjnego" (2026-07-18); czysta sesja bez ekstremalnego
