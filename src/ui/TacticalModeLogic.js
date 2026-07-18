@@ -68,6 +68,16 @@ export function orbitalPositionAtDelta(orbital, deltaYears, auToPx, starX = 0, s
   return { x: starX + r * Math.cos(angle) * auToPx, y: starY + r * Math.sin(angle) * auToPx };
 }
 
+// Fix 2 (#tactical-tick-declutter) — tiki przyszłych pozycji TYLKO na orbitach,
+// które na EKRANIE są wystarczająco duże (pełne kadrowanie: zewnętrzne czytelne,
+// wewnętrzne czyste). Chevrony kierunku zostają na wszystkich orbitach.
+export const TICK_MIN_ORBIT_PX = 120;   // minimalny promień orbity na ekranie (px, do tuningu)
+
+/** Czy orbita o danym promieniu EKRANOWYM dostaje tiki przyszłych pozycji. */
+export function orbitTicksVisible(orbitScreenRadiusPx, minPx = TICK_MIN_ORBIT_PX) {
+  return Number.isFinite(orbitScreenRadiusPx) && orbitScreenRadiusPx > minPx;
+}
+
 // „Ładne" kroki czasowe znaczników (lata) — od szybkich skalnych po gazowe olbrzymy.
 const NICE_STEPS = [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100];
 

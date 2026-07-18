@@ -35,7 +35,7 @@ import { isEnemyVessel } from '../entities/Vessel.js';
 import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
 import { THEME } from '../config/ThemeConfig.js';
 import { gameplayToWorld } from '../utils/CoordTransform.js';
-import { orbitalPositionAtDelta, futureMarkerDeltas } from '../ui/TacticalModeLogic.js';
+import { orbitalPositionAtDelta, futureMarkerDeltas, orbitTicksVisible } from '../ui/TacticalModeLogic.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { t } from '../i18n/i18n.js';
 import {
@@ -6149,9 +6149,18 @@ export class ThreeRenderer {
     const near = camDist <= ThreeRenderer.TACTICAL_ZOOM_NEAR;
     const tickCount = far ? 1 : near ? 3 : 2;
     const tickStepMult = far ? 2 : 1;
-    const sizeMult = far ? 1.25 : near ? 0.85 : 1;
+    // Fix 2: bump skali przy dalekim kadrze 1.25→1.45 (czytelność tików zewnętrznych).
+    const sizeMult = far ? 1.45 : near ? 0.85 : 1;
     const tickW = ThreeRenderer.TACTICAL_TICK_SCALE * sizeMult;
     const chevW = ThreeRenderer.TACTICAL_CHEV_SCALE * sizeMult;
+    // Fix 2 (#tactical-tick-declutter): promień orbity na EKRANIE (przybliżenie
+    // centralne: px/world = (H/2) / (dist·tan(fov/2))) — tiki tylko gdy
+    // orbitTicksVisible (> TICK_MIN_ORBIT_PX); chevrony na wszystkich orbitach.
+    const fovRad = (this.camera?.fov ?? 55) * Math.PI / 180;
+    const pxPerWorld = ((window.innerHeight || 720) / 2) / (camDist * Math.tan(fovRad / 2));
+    const w0 = gameplayToWorld({ x: 0, y: 0 });
+    const w1 = gameplayToWorld({ x: GAME_CONFIG.AU_TO_PX, y: 0 });
+    const worldPerAU = (w1 && w0) ? Math.abs(w1.worldX - w0.worldX) : 0;
 
     for (const [pid] of this._planets) {
       const body = EntityManager.get(pid);
@@ -6168,11 +6177,14 @@ export class ThreeRenderer {
         // Obrót spritu w płaszczyźnie ekranu wg kierunku ruchu (gameplay XY → world XZ).
         if (sp) sp.material.rotation = -Math.atan2(ahead.y - now.y, ahead.x - now.x);
       }
-      // Tiki przyszłych pozycji (+N lat — adaptacyjnie do okresu orbity I zoomu).
-      for (const { dt, label } of futureMarkerDeltas(orb.T, tickCount, tickStepMult)) {
-        const p = orbitalPositionAtDelta(orb, dt, GAME_CONFIG.AU_TO_PX, star?.x ?? 0, star?.y ?? 0);
-        if (!p) continue;
-        upsert(`tick:${pid}:${dt}`, ThreeRenderer._createOrbitTickTexture(label, '#7fb8cc'), p, tickW, tickW * 0.5);
+      // Tiki przyszłych pozycji (+N lat — adaptacyjnie do okresu orbity I zoomu);
+      // Fix 2: TYLKO orbity dostatecznie duże na ekranie (wewnętrzne = czyste).
+      if (orbitTicksVisible((orb.a ?? 0) * worldPerAU * pxPerWorld)) {
+        for (const { dt, label } of futureMarkerDeltas(orb.T, tickCount, tickStepMult)) {
+          const p = orbitalPositionAtDelta(orb, dt, GAME_CONFIG.AU_TO_PX, star?.x ?? 0, star?.y ?? 0);
+          if (!p) continue;
+          upsert(`tick:${pid}:${dt}`, ThreeRenderer._createOrbitTickTexture(label, '#7fb8cc'), p, tickW, tickW * 0.5);
+        }
       }
     }
 
