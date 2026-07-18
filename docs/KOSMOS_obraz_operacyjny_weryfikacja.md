@@ -469,6 +469,40 @@ tab-barze, hit-zonach zakładek, lewej liście i prawym panelu.
   PRZEFILTROWANA lista tabeli, paski z `buildTimelineRows` przez `TimelineLayout`, kolory misji =
   te same co linie tras na mapie (`_routeColor`), linia „teraz", zoom zakresu scrollem nad osią,
   hover → tooltip, klik paska = selekcja. READ-ONLY (zero dispatchu rozkazów).
+### 10.1 WYKONANIE FAZY 3 + RAPORT KOŃCOWY CAŁOŚCI (§8 planu)
+
+**Slice'y:** 3a `a750a1d` · 3b+3c `a3608b5` (+ 2g `457034c` restyle taktyczny). Smoke
+`tmp_fleet_registry` 42/42; **live-gate PASS** (rejestr: przełącznik/chipy „HD-8722"+role/sort/
+wiersze z glifami/oś czasu z linią „teraz"; lewa lista i prawy panel nietknięte).
+**DoD F3:** pełny obieg REJESTR→sort/filtr→🎯→mapa→chip 🌀→REJESTR ✔ (kanały: `switchActiveSystem`
++ `vessel:focus` + wspólna selekcja UIManager) · flaga OFF → przełącznik niewidoczny ✔ · zero regresji
+tactical ✔ (smoke + live). Checklista: `docs/obraz-operacyjny-faza3-playtest.md`.
+
+**Raport §8 planu:**
+1. **Flagi:** `fleetMapLabels` / `tacticalMode` / `fleetRegistry` — wszystkie ON dev, wyłączalne
+   osobno, zero kosztów przy OFF. **Save:** format NIETKNIĘTY przez cały arc (v90, zero zmian
+   serialize/migracji; jedyny persist = `uiPrefs.fleetMapLabelsVisible` — spread+merge bez migracji);
+   save sprzed arca wczytuje się bez migracji z konstrukcji (żaden writer formatu nie był dotykany).
+2. **Smoke'i:** fleetpicture 81/81 · fleet_map_labels 52/52 · tactical_mode 38/38 · fleet_registry
+   42/42 · currentyear 5/5 + regresja map_labels 37/37 (kolonie/stacje). (fleet_p1/p3 stale —
+   pre-existing, ROADMAP §4.)
+3. **Playtest-checklisty:** F1 `obraz-operacyjny-faza1-playtest.md` (odhaczona 7/8 + 1e fix) ·
+   F2 `...faza2-playtest.md` (8/8 + 2g do oceny wizualnej) · F3 `...faza3-playtest.md` (czeka).
+4. **MANUAL.md** — sekcja „Obraz Operacyjny floty" (plakietki/chipy · tryb Y · rejestr) PL;
+   i18n PL+EN kompletne (37 kluczy `fleetPicture.*` F0 + `tactical.badge` + `fleet.view*`/
+   `registry.*`/`fleetPicture.role.*` F3; asercje kompletności w smoke'ach).
+5. **Wydajność (bench node, 100 statków):** warstwa mapy (100× buildShipEntry + klaster 100 pkt)
+   = **0.073 ms/klatkę**; rejestr (rows+filter+sort+timeline) = **0.112 ms** — ~20× pod budżetem
+   2 ms; grid-bucketing klastra niepotrzebny.
+6. **Dług konsolidacyjny (do migracji na FleetPictureLogic — §4 tego dokumentu, NIC nie zmigrowano
+   zgodnie z planem):** 7 formatterów typu misji (FleetManagerOverlay ×3, FleetTabPanel ×2,
+   NavPeekProviders, MissionEventModal) · formattery stanu (FleetManagerOverlay._statusText,
+   FleetGroupPanel/FleetCommandPanel STATUS_KEY, FleetTabPanel, hardcode PL wierszy wroga) ·
+   `_drawMovementOrderLabel` + `_computeFleetStatus` (overlay). `OrderTargetInfo` zostaje osobno
+   (już skonsolidowany). Hardcode PL sekcji WROGIE/WRAKI — do zdjęcia przy migracji.
+
+**Faza 4 (pasek osi w trybie Y) — NIE planowana, NIE implementowana** (osobna decyzja Filipa).
+
 - **Slice 3d — spięcia + domknięcie:** chip 🌀 tranzyt → REJESTR z prefiltrem transit (zamiast
   tactical); playtest-checklista F3; **raport końcowy §8 planu**: MANUAL.md (tryb Y, rejestr,
   plakietki/chipy), kompletność i18n, lista długu konsolidacyjnego (§4), pomiar wydajności vs budżet

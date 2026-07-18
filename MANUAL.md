@@ -810,3 +810,27 @@ Przycisk **[🔊/🔇]** → włącz/wyłącz efekty dźwiękowe (Web Audio API,
 ---
 
 *Manual aktualizowany wraz z rozwojem gry.*
+
+---
+
+## Obraz Operacyjny floty (M1 + tryb Y + rejestr K3)
+
+**Plakietki flotowe (mapa 3D):** nad flotami/klastrami statków wiszą plakietki (`⚑ Nazwa ×N` / `◆ ×N`);
+kolor = stan (szary bezczynny · cyan ruch · zielony misja · bursztyn alert · czerwony walka), kropka = alert.
+Klik plakietki zaznacza cały zbiór. Statki poza kadrem → strzałki przy krawędziach. Prawa krawędź: chipy
+układów z Twoimi statkami (`◉` = tu jesteś; klik innego = przełączenie układu; `🌀 ×N` = tranzyt → REJESTR).
+Wyłącznik: menu ☰ → „Plakietki floty".
+
+**Tryb taktyczny — klawisz `Y`:** kamera płynnie przechodzi w rzut z góry („stół sztabowy"), statki stają
+się glifami o stałym rozmiarze (□ transport · △ bojowy · ◇ nauka · ○ zwiad · ⬠ kolonizacyjny; wróg
+niezidentyfikowany = `?`), włączają się sensor ringi i stożki przechwycenia, orbity robią się wyraźne,
+a na orbitach pojawiają się wskaźniki ruchu: chevron kierunku + znaczniki przyszłych pozycji (`+1`, `+2`…)
+oraz — dla zaznaczonego statku — pozycja planety-celu w roku przylotu (`⏱rok`). Własne statki w locie mają
+„duchy ETA" w punkcie celu (`⏱rok`; `~rok` pulsuje = cel ruchomy). Ponowne `Y` lub otwarcie dowolnego
+panelu przywraca wszystko do stanu sprzed trybu. Rozkazy (PPM) działają identycznie jak poza trybem.
+
+**Rejestr floty (Dowództwo → TAKTYKA SYSTEMU → [REJESTR]):** sortowalna tabela całej floty
+(Nazwa·Rola·Flota·Układ·Stan·Zadanie·ETA·⛽·⚠) z chipami filtrów (układy + 🌀 tranzyt, role) i szukajką;
+klik wiersza = selekcja, 🎯 = skok na mapę (w innym układzie najpierw przełącza układ), checkboxy = pasek
+„Przypisz (N)". Pod tabelą zwijana OŚ CZASU: paski misji (kolory jak trasy na mapie), linia „teraz",
+zoom scrollem, klik paska = selekcja. Oś jest tylko do odczytu — rozkazy wydajesz na mapie.
