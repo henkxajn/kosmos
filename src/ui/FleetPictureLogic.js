@@ -17,7 +17,7 @@
 // swojemu — potrzebujesz wariantu? Zmieniasz TEN moduł, nie robisz fallbacku.
 //
 // Wraki: poza zakresem Obrazu Operacyjnego v1 (Aneks A.2) — buildShipEntry
-// zwraca dla nich `{ excluded: true }`; powierzchnie je pomijają.
+// zwraca PEŁNY wpis z `isWreck:true` (3f); powierzchnie filtrują po tym polu.
 
 import { getPrimaryRole, isEnemyVessel } from '../entities/Vessel.js';
 
@@ -184,7 +184,7 @@ function _gatherAlerts(vessel, ctx) {
  *
  * @param {object} vessel — instancja Vessel (żywa lub wrak)
  * @param {object} [ctx]  — { gameYear, fleetSystem, combatCheck, isImmobilized, lowFuelPct }
- * @returns {object|null} wpis; dla wraka `{ id, name, excluded:true }` (Aneks A.2);
+ * @returns {object|null} wpis; dla wraka pełny wpis z `isWreck:true` (3f);
  *   null dla braku vessela.
  *
  * Kształt wpisu (kontrakt):
@@ -192,14 +192,37 @@ function _gatherAlerts(vessel, ctx) {
  *   eta:{year:number|null, confidence:'firm'|'moving'},
  *   systemId (string | null — null ZOSTAJE null = tranzyt międzygwiezdny!),
  *   fleetId, fuelPct (0..1|null), warpFuelPct (0..1|null), alerts:[{kind,severity}],
- *   excluded:false }
+ *   isWreck:false }
  */
 export function buildShipEntry(vessel, ctx = {}) {
   if (!vessel) return null;
 
-  // Wraki poza zakresem v1 — powierzchnie pomijają, bez wymyślania tonu.
+  // 3f — ZMIANA KONTRAKTU: wrak dostaje PEŁNY wpis (rejestr pokazuje sekcję
+  // WRAKI), zamiast dawnego `excluded:true`. Powierzchnie filtrują po
+  // `entry.isWreck` (mapa/tryb Y/chipy pomijają; rejestr pokazuje za chipem).
+  // Bez ETA/paliwa/alertów i bez pasków na osi (buildTimelineRows pomija wraki).
   if (_isWreck(vessel)) {
-    return { id: vessel.id, name: vessel.name ?? null, excluded: true };
+    const sysId = (vessel.systemId === undefined) ? 'sys_home' : vessel.systemId;
+    return {
+      id:          vessel.id,
+      name:        vessel.name ?? String(vessel.id),
+      isWreck:     true,
+      isEnemy:     isEnemyVessel(vessel),
+      role:        null,
+      glyph:       '💀',
+      tone:        'idle',
+      state:       'wreck',
+      activityKey: 'fleetPicture.state.wreck',
+      activityArgs: [],
+      eta:         { year: null, confidence: 'firm' },
+      systemId:    sysId,
+      fleetId:     null,
+      fuelPct:     null,
+      warpFuelPct: null,
+      alerts:      [],
+      wreckedYear: Number.isFinite(vessel.wreckedAt) ? vessel.wreckedAt
+        : (Number.isFinite(vessel.lastBattleYear) ? vessel.lastBattleYear : null),
+    };
   }
 
   const role  = getPrimaryRole(vessel);
@@ -267,6 +290,8 @@ export function buildShipEntry(vessel, ctx = {}) {
   return {
     id:          vessel.id,
     name:        vessel.name ?? String(vessel.id),
+    isWreck:     false,
+    isEnemy:     enemy,
     role,
     glyph,
     tone,
@@ -279,7 +304,6 @@ export function buildShipEntry(vessel, ctx = {}) {
     fuelPct:     _tankPct(vessel.fuel),
     warpFuelPct: _tankPct(vessel.warpFuel),
     alerts,
-    excluded:    false,
   };
 }
 

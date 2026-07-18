@@ -5924,7 +5924,7 @@ export class ThreeRenderer {
       const enemy = isEnemyVessel(v);
       if (enemy && !this._isEnemyTargetable(vid)) continue;       // wróg ≥rumor
       const pict = buildShipEntry(v, pictureCtx);
-      if (!pict || pict.excluded) continue;
+      if (!pict || pict.isWreck) continue;   // wraki bez glifów trybu Y (model wraka zostaje)
       const anon = enemy && !this._isEnemyEndpointVisible(vid);   // rumor → rola ukryta
       const glyph = anon ? '?' : pict.glyph;
       const colorHex = enemy ? this._factionColorHex(v)

@@ -326,7 +326,8 @@ export class FleetManagerOverlay {
     // ── Faza 3 (Obraz Operacyjny) — rejestr K3 (pod-widok zakładki tactical) ──
     this._tacticalView = 'map';                 // 'map' | 'registry' (gate FEATURES.fleetRegistry)
     this._registrySort = { col: 'name', dir: 1 };
-    this._registryFilter = { systemKey: null, role: null, search: '' };
+    this._registryFilter = { systemKey: null, role: null, search: '',
+                             showWrecks: false, showContacts: false };   // 3f: sekcje domyślnie OFF
     this._registryGroupMode = 'none';           // 3e: 'none' | 'fleet' | 'system'
     this._registryCollapsedGroups = new Set();  // 3e: klucze zwiniętych grup (wzór _collapsedFleets)
     this._registryScroll = 0;
@@ -1239,6 +1240,9 @@ export class FleetManagerOverlay {
       case 'registryGroupFleet':
         // Prawy panel z istniejącym widokiem floty (rename/disband/rozkazy).
         window.KOSMOS?.uiManager?.setSelectedFleetId?.(zone.data.fleetId);
+        break;
+      case 'registryChipKind':
+        this._registryFilter[zone.data.field] = !this._registryFilter[zone.data.field];
         break;
       case 'registrySearch':
         this._openRegistrySearch(zone);
@@ -3186,6 +3190,8 @@ export class FleetManagerOverlay {
         systems: K?.starSystemManager?.getAllSystems?.() ?? [],
         starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
       }),
+      // 3f — kontakty WYŁĄCZNIE przez istniejące bramki intel.
+      enemyQuality: (id) => K?.intelSystem?.getVesselContact?.(id)?.quality ?? 'unknown',
     };
   }
 
@@ -3226,9 +3232,21 @@ export class FleetManagerOverlay {
            this._registryFilter.systemKey === c.key, 'registryChipSystem', { key: c.key });
     }
     cx += 6;
-    for (const role of collectRoleChoices(rowsAll)) {
+    for (const role of collectRoleChoices(rowsAll.filter(r => r.kind === 'own'))) {
       chip(t(`fleetPicture.role.${role}`), this._registryFilter.role === role,
            'registryChipRole', { role });
+    }
+    // 3f — sekcje WRAKI/KONTAKTY (domyślnie odfiltrowane; chip pokazuje licznik).
+    cx += 6;
+    const nWrecks = rowsAll.filter(r => r.kind === 'wreck').length;
+    const nContacts = rowsAll.filter(r => r.kind === 'contact').length;
+    if (nWrecks > 0) {
+      chip(`💀 ${t('registry.wrecks')} ×${nWrecks}`, this._registryFilter.showWrecks,
+           'registryChipKind', { field: 'showWrecks' }, THEME.textDim);
+    }
+    if (nContacts > 0) {
+      chip(`👁 ${t('registry.contacts')} ×${nContacts}`, this._registryFilter.showContacts,
+           'registryChipKind', { field: 'showContacts' }, THEME.danger);
     }
     // Szukajka (DOM input po kliku — adaptacja TradeOverlay._openQtyInput).
     const sw = 118, sx = x + w - pad - sw;
@@ -3349,17 +3367,22 @@ export class FleetManagerOverlay {
   _drawRegistryRow(ctx, cols, x, ry, w, rowH, r, selId, gameYear) {
     const isSel = r.id === selId;
     const isMulti = this._multiSelectedIds.has(r.id);
+    const kind = r.kind ?? 'own';
     if (isSel) {
       ctx.fillStyle = 'rgba(0,255,180,0.08)';
       ctx.fillRect(x - 4, ry, w + 8, rowH);
     }
-    // checkbox (reuse vesselMultiToggle → istniejący pasek „Przypisz (N)")
-    ctx.strokeStyle = isMulti ? THEME.accent : THEME.border;
-    ctx.strokeRect(x + 1.5, ry + 7.5, 9, 9);
-    if (isMulti) { ctx.fillStyle = THEME.accent; ctx.fillRect(x + 3.5, ry + 9.5, 5, 5); }
-    this._hitZones.push({ x: x, y: ry + 4, w: 14, h: 16, type: 'vesselMultiToggle', data: { vesselId: r.id } });
+    // checkbox tylko dla WŁASNYCH żywych (wraki/kontakty = read-only)
+    if (kind === 'own') {
+      ctx.strokeStyle = isMulti ? THEME.accent : THEME.border;
+      ctx.strokeRect(x + 1.5, ry + 7.5, 9, 9);
+      if (isMulti) { ctx.fillStyle = THEME.accent; ctx.fillRect(x + 3.5, ry + 9.5, 5, 5); }
+      this._hitZones.push({ x: x, y: ry + 4, w: 14, h: 16, type: 'vesselMultiToggle', data: { vesselId: r.id } });
+    }
 
-    const tone = toneColor(r.tone, THEME) ?? THEME.textPrimary;
+    const tone = kind === 'contact' ? THEME.danger
+      : kind === 'wreck' ? THEME.textDim
+      : (toneColor(r.tone, THEME) ?? THEME.textPrimary);
     ctx.font = `10px ${THEME.fontFamily}`;
     const cell = (colId, text, color = THEME.textSecondary, bold = false) => {
       const c = cols.find(k => k.id === colId);
@@ -3369,11 +3392,14 @@ export class FleetManagerOverlay {
       ctx.fillText(this._truncate(ctx, text, c.w - 8), c.x, ry + rowH / 2 + 3.5);
     };
     cell('name', `${r.glyph} ${r.name}`, tone, true);
-    cell('role', t(`fleetPicture.role.${r.role}`));
+    cell('role', kind === 'wreck' ? t(r.isEnemy ? 'registry.enemyShort' : 'registry.ownShort')
+      : (r.role ? t(`fleetPicture.role.${r.role}`) : '—'));
     cell('fleet', r.fleetName ?? '—');
     cell('system', r.isTransit ? t('registry.transit') : (r.systemName ?? ''), r.isTransit ? THEME.info : THEME.textSecondary);
-    cell('state', t(r.stateKey));
-    cell('activity', t(r.activityKey));
+    cell('state', r.stateKey ? t(r.stateKey) : '—');
+    cell('activity', kind === 'wreck'
+      ? (r.wreckedYear != null ? `☠ ${t('registry.wreckYear', Math.floor(r.wreckedYear))}` : '—')
+      : (r.activityKey ? t(r.activityKey) : '—'));
     cell('eta', r.eta.year === null ? '—'
       : `${r.eta.confidence === 'moving' ? '~' : ''}${Math.round(r.eta.year)}`,
       r.eta.confidence === 'moving' ? THEME.warning : THEME.textSecondary);
@@ -3381,10 +3407,12 @@ export class FleetManagerOverlay {
       r.fuelPct !== null && r.fuelPct < 0.2 ? THEME.danger : THEME.textSecondary);
     cell('alerts', r.alertCount > 0 ? `⚠${r.alertCount}` : '', THEME.warning);
 
-    // wiersz klikalny = selekcja wspólna (poza checkboxem i 🎯)
+    // 3f — KONTAKTY: zero akcji (bez selekcji/checkboxa/🎯 — czysty read-only).
+    if (kind === 'contact') return;
+    // wiersz klikalny = selekcja wspólna (wrak → prawy panel z raportem bitwy)
     this._hitZones.push({ x: x + 16, y: ry, w: w - 40, h: rowH, type: 'vessel', data: { vesselId: r.id } });
-    // 🎯 — dolot (dla tranzytu brak: statek nie jest na żadnej mapie układu)
-    if (!r.isTransit) {
+    // 🎯 — dolot (dla tranzytu i wraków bez sprite'a brak sensu; wraki mają klawisz K)
+    if (!r.isTransit && kind === 'own') {
       ctx.fillStyle = THEME.textDim;
       ctx.fillText('🎯', x + w - 16, ry + rowH / 2 + 3.5);
       this._hitZones.push({ x: x + w - 20, y: ry, w: 20, h: rowH, type: 'registryFocus',
@@ -6431,6 +6459,38 @@ export class FleetManagerOverlay {
     if (this._pendingSendSystemId) {
       this._drawShipPicker(ctx, x, y, w, h, vMgr, colMgr, activePid);
       return;
+    }
+
+    // 3f — wybrany WRAK → raport bitwy w prawym panelu (reuse getBattleRecord;
+    // ta sama treść co expand w lewej liście — nic nie jest ekskluzywne dla listy).
+    {
+      const selV = this._selectedVesselId ? vMgr?.getVessel?.(this._selectedVesselId) : null;
+      if (selV?.isWreck) {
+        ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.textPrimary;
+        ctx.fillText(`💀 ${this._truncate(ctx, selV.name ?? selV.id, w - pad * 2 - 20)}`, x + pad, y + 20);
+        ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+        const rec = window.KOSMOS?.warSystem?.getBattleRecord?.(selV.lastBattleId);
+        let yy = y + 40;
+        const line = (txt, color = THEME.textSecondary) => {
+          ctx.fillStyle = color;
+          ctx.fillText(this._truncate(ctx, txt, w - pad * 2), x + pad, yy);
+          yy += 15;
+        };
+        const wy = Number.isFinite(selV.wreckedAt) ? Math.floor(selV.wreckedAt)
+          : (Number.isFinite(selV.lastBattleYear) ? Math.floor(selV.lastBattleYear) : null);
+        if (wy != null) line(`☠ ${t('registry.wreckYear', wy)}`);
+        if (rec) {
+          const aCount = rec.participantA?.count ?? rec.participantA?.vesselIds?.length ?? '?';
+          const bCount = rec.participantB?.count ?? rec.participantB?.vesselIds?.length ?? '?';
+          line(`⚔ ${t('fleet.battleHeader', rec.year != null ? Math.floor(rec.year) : '?')}`);
+          line(`A:${aCount} vs B:${bCount}`);
+          line(`${t('fleet.battleResult')}: ${rec.winner ?? '?'}`, THEME.warning);
+        } else {
+          line(t('fleet.battleNoRecord'), THEME.textDim);
+        }
+        return;
+      }
     }
 
     if (!this._selectedVesselId) {

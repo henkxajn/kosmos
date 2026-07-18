@@ -206,7 +206,7 @@ export function systemDisplayName(systemId, sources = {}) {
  * Zbieracz punktów etykiet statków AKTYWNEGO układu — wejście do clusterScreenPoints.
  * Mgła wojny: wrogowie wyłącznie przez ctx.enemyQuality (istniejące bramki intel):
  *   'unknown' → pomijany, 'rumor' → wpis ANONIMOWY (name '?', bez fleetId),
- *   'contact'/'detailed' → pełna nazwa. Wraki pomijane (buildShipEntry.excluded).
+ *   'contact'/'detailed' → pełna nazwa. Wraki pomijane (entry.isWreck — 3f).
  *
  * @param {object[]} vessels — vesselManager.getAllVessels()
  * @param {object} ctx —
@@ -224,7 +224,7 @@ export function gatherVesselLabels(vessels, ctx = {}) {
   for (const v of vessels ?? []) {
     if (!v) continue;
     const entry = buildShipEntry(v, ctx.pictureCtx ?? {});
-    if (!entry || entry.excluded) continue;                    // wraki poza zakresem v1
+    if (!entry || entry.isWreck) continue;                     // wraki poza mapą etykiet
     if (entry.systemId !== activeSys) continue;                // tylko aktywny układ (null=tranzyt → chip)
     const pos = ctx.getScreenPos?.(v.id);
     if (!pos) continue;                                        // za kamerą (z-clamp)
@@ -329,7 +329,7 @@ export function buildSystemChips(vessels, ctx = {}) {
   for (const v of vessels ?? []) {
     if (!v || isEnemyVessel(v)) continue;
     const entry = buildShipEntry(v, ctx.pictureCtx ?? {});
-    if (!entry || entry.excluded) continue;
+    if (!entry || entry.isWreck) continue;
     const key = entry.systemId === null ? '__transit' : entry.systemId;
     if (!groups.has(key)) groups.set(key, { count: 0, alertCount: 0 });
     const g = groups.get(key);

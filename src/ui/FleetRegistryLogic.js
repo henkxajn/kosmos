@@ -20,7 +20,7 @@ export const REGISTRY_COLUMNS = Object.freeze(
   ['name', 'role', 'fleet', 'system', 'state', 'activity', 'eta', 'fuel', 'alerts']);
 
 /**
- * Wiersze rejestru — własne żywe statki (wraki excluded, wrogowie poza rejestrem).
+ * Wiersze rejestru — flota gracza + (3f) WRAKI i KONTAKTY (intel-gated).
  * @param {object[]} vessels — vesselManager.getAllVessels()
  * @param {object} ctx —
  *   pictureCtx  — ctx dla buildShipEntry (combatCheck/isImmobilized/fleetSystem/gameYear)
@@ -35,11 +35,52 @@ export function buildRegistryRows(vessels, ctx = {}) {
   for (const v of vessels ?? []) {
     if (!v) continue;
     const e = buildShipEntry(v, ctx.pictureCtx ?? {});
-    if (!e || e.excluded) continue;
-    if (v.isEnemy === true || (v.owner && v.owner !== 'player')
-        || (v.ownerEmpireId && v.ownerEmpireId !== 'player')) continue;   // rejestr = flota GRACZA
+    if (!e) continue;
     const isTransit = e.systemId === null;
+    const sysName = isTransit ? null : (ctx.systemName?.(e.systemId) ?? e.systemId);
+
+    // 3f — WRAKI: pełny wiersz read-only (własne I wrogie; sekcja za chipem 💀).
+    if (e.isWreck) {
+      out.push({
+        kind: 'wreck', id: e.id, name: e.name,
+        role: null, glyph: e.glyph, tone: e.tone,
+        stateKey: 'fleetPicture.state.wreck',
+        activityKey: null, activityArgs: [],
+        eta: { year: null, confidence: 'firm' },
+        systemId: e.systemId, systemName: sysName, isTransit,
+        fleetId: null, fleetName: null,
+        fuelPct: null, warpFuelPct: null, alerts: [], alertCount: 0,
+        wreckedYear: e.wreckedYear, isEnemy: e.isEnemy, anonymous: false,
+      });
+      continue;
+    }
+
+    // 3f — KONTAKTY: wrogowie żywi WYŁĄCZNIE przez bramki intel (unknown → brak;
+    // rumor → anonimowy „?"; contact+ → pełny wiersz READ-ONLY). Zero akcji;
+    // intencje wroga (zadanie/ETA/paliwo) NIEJAWNE niezależnie od jakości.
+    if (e.isEnemy) {
+      const q = ctx.enemyQuality?.(v.id) ?? 'unknown';
+      if (q === 'unknown') continue;
+      const anonymous = q === 'rumor';
+      out.push({
+        kind: 'contact', id: e.id,
+        name: anonymous ? '?' : e.name,
+        role: anonymous ? null : e.role,
+        glyph: anonymous ? '?' : e.glyph,
+        tone: e.tone,
+        stateKey: anonymous ? null : (STATE_LABEL_KEYS[e.state] ?? null),
+        activityKey: null, activityArgs: [],
+        eta: { year: null, confidence: 'firm' },
+        systemId: e.systemId, systemName: sysName, isTransit,
+        fleetId: null, fleetName: null,
+        fuelPct: null, warpFuelPct: null, alerts: [], alertCount: 0,
+        isEnemy: true, anonymous,
+      });
+      continue;
+    }
+
     out.push({
+      kind: 'own',
       id: e.id,
       name: e.name,
       role: e.role,
@@ -50,7 +91,7 @@ export function buildRegistryRows(vessels, ctx = {}) {
       activityArgs: e.activityArgs,
       eta: e.eta,
       systemId: e.systemId,
-      systemName: isTransit ? null : (ctx.systemName?.(e.systemId) ?? e.systemId),
+      systemName: sysName,
       isTransit,
       fleetId: e.fleetId,
       fleetName: e.fleetId ? (ctx.fleetName?.(e.fleetId) ?? null) : null,
@@ -58,6 +99,7 @@ export function buildRegistryRows(vessels, ctx = {}) {
       warpFuelPct: e.warpFuelPct,
       alerts: e.alerts,
       alertCount: e.alerts.length,
+      isEnemy: false, anonymous: false,
     });
   }
   return out;
@@ -89,9 +131,13 @@ export function sortRows(rows, col, dir = 1) {
  * Filtry łączone: układ (systemId | TRANSIT_KEY | null=wszystkie) × rola × szukajka
  * (case-insensitive, po nazwie ORAZ nazwie floty).
  */
-export function filterRows(rows, { systemKey = null, role = null, search = '' } = {}) {
+export function filterRows(rows, { systemKey = null, role = null, search = '',
+                                   showWrecks = false, showContacts = false } = {}) {
   const q = String(search ?? '').trim().toLowerCase();
   return (rows ?? []).filter(r => {
+    // 3f — sekcje WRAKI/KONTAKTY domyślnie ODFILTROWANE (chipy je włączają).
+    if (r.kind === 'wreck' && !showWrecks) return false;
+    if (r.kind === 'contact' && !showContacts) return false;
     if (systemKey === TRANSIT_KEY) { if (!r.isTransit) return false; }
     else if (systemKey != null) { if (r.isTransit || r.systemId !== systemKey) return false; }
     if (role != null && r.role !== role) return false;
