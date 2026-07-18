@@ -3169,4 +3169,28 @@ export default {
 
   // ── Tryb taktyczny (Obraz Operacyjny — Faza 2) ────────────────────────────
   'tactical.badge': '⬢ TRYB TAKTYCZNY [Y]',
+
+  // ── Rejestr floty K3 (Obraz Operacyjny — Faza 3) ──────────────────────────
+  'fleet.viewMap':      'MAPA',
+  'fleet.viewRegistry': 'REJESTR',
+  'registry.col_name':     'Nazwa',
+  'registry.col_role':     'Rola',
+  'registry.col_fleet':    'Flota',
+  'registry.col_system':   'Układ',
+  'registry.col_state':    'Stan',
+  'registry.col_activity': 'Zadanie',
+  'registry.col_eta':      'ETA',
+  'registry.col_fuel':     '⛽',
+  'registry.col_alerts':   '⚠',
+  'registry.transit':      '🌀 Tranzyt',
+  'registry.searchPlaceholder': 'szukaj…',
+  'registry.timeline':     'OŚ CZASU',
+  'registry.empty':        'Brak statków spełniających filtry',
+  'fleetPicture.role.colony':    'Kolonizacyjny',
+  'fleetPicture.role.assault':   'Desantowy',
+  'fleetPicture.role.transport': 'Transportowiec',
+  'fleetPicture.role.warship':   'Okręt bojowy',
+  'fleetPicture.role.science':   'Naukowy',
+  'fleetPicture.role.cargo':     'Frachtowiec',
+  'fleetPicture.role.scout':     'Zwiadowca',
 };

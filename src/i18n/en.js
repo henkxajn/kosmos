@@ -3168,4 +3168,28 @@ export default {
 
   // ── Tactical mode (Operational Picture — Phase 2) ─────────────────────────
   'tactical.badge': '⬢ TACTICAL MODE [Y]',
+
+  // ── Fleet registry K3 (Operational Picture — Phase 3) ─────────────────────
+  'fleet.viewMap':      'MAP',
+  'fleet.viewRegistry': 'REGISTRY',
+  'registry.col_name':     'Name',
+  'registry.col_role':     'Role',
+  'registry.col_fleet':    'Fleet',
+  'registry.col_system':   'System',
+  'registry.col_state':    'State',
+  'registry.col_activity': 'Task',
+  'registry.col_eta':      'ETA',
+  'registry.col_fuel':     '⛽',
+  'registry.col_alerts':   '⚠',
+  'registry.transit':      '🌀 Transit',
+  'registry.searchPlaceholder': 'search…',
+  'registry.timeline':     'TIMELINE',
+  'registry.empty':        'No ships match the filters',
+  'fleetPicture.role.colony':    'Colonizer',
+  'fleetPicture.role.assault':   'Assault',
+  'fleetPicture.role.transport': 'Troop transport',
+  'fleetPicture.role.warship':   'Warship',
+  'fleetPicture.role.science':   'Science vessel',
+  'fleetPicture.role.cargo':     'Freighter',
+  'fleetPicture.role.scout':     'Scout',
 };

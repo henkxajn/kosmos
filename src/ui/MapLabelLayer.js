@@ -13,6 +13,7 @@
 // Etykieta stacji KLIKALNA (bez body:selected). Kolonie = display-only (klik ciała = raycast 3D).
 
 import { THEME } from '../config/ThemeConfig.js';
+import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import {
@@ -498,8 +499,11 @@ export class MapLabelLayer {
       if (!inside(z)) continue;
       const chip = z.chip;
       if (chip.isTransit) {
-        // Docelowo REJESTR z prefiltrem transit (Faza 3) — do tego czasu tactical.
-        window.KOSMOS?.uiManager?.overlayManager?.openPanel?.('fleet', { tab: 'tactical' });
+        // F3: REJESTR z prefiltrem 🌀 tranzytu (fallback: tactical, gdy flaga OFF).
+        window.KOSMOS?.uiManager?.overlayManager?.openPanel?.('fleet',
+          GAME_CONFIG.FEATURES?.fleetRegistry === true
+            ? { tab: 'tactical', view: 'registry', registrySystemKey: '__transit' }
+            : { tab: 'tactical' });
       } else if (!chip.isActive) {
         window.KOSMOS?.starSystemManager?.switchActiveSystem?.(chip.systemId);
       }

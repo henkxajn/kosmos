@@ -134,6 +134,10 @@ export const GAME_CONFIG = {
     //   glify-billboardy, wymuszone warstwy, duchy ETA. Render/UI-only, bez migracji
     //   save. OFF = klawisz nieaktywny, zero kosztów w pętli.
     tacticalMode:         true,
+    // Obraz Operacyjny Faza 3 — rejestr floty K3: pod-widok [MAPA]/[REJESTR]
+    //   w zakładce SYSTEM TACTICAL (tabela + oś czasu). Render/UI-only.
+    //   OFF = przełącznik niewidoczny, zero kosztów.
+    fleetRegistry:        true,
     // ── Energy Brownout Gate (runtime-only, bez migracji save) ────────────
     //   Deficyt energii (balance<0) realnie ogranicza produkcję PROPORCJONALNIE
     //   do pokrycia (avail=production/consumption): kopalnie (poziom wejściowy),

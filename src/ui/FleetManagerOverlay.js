@@ -27,6 +27,15 @@ import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
+import {
+  TRANSIT_KEY, buildRegistryRows, sortRows, filterRows,
+  collectSystemChoices, collectRoleChoices, REGISTRY_COLUMNS,
+} from './FleetRegistryLogic.js';
+import {
+  defaultViewport, zoomViewport, layoutTimelineRows, nowLineX, timelineTicks, xToYear,
+} from './TimelineLayout.js';
+import { buildTimelineRows, toneColor } from './FleetPictureLogic.js';
+import { systemDisplayName } from './MapLabelLogic.js';
 import { planWarpRoute, WARP_ROUTE_REASONS } from '../utils/WarpRoutePlanner.js';
 import { showCargoLoadModal } from '../ui/CargoLoadModal.js';
 import { showDropTroopsModal } from '../ui/DropTroopsModal.js';
@@ -309,6 +318,17 @@ export class FleetManagerOverlay {
     this._collapsedSections = new Set();
     // Multi-select w drzewie — Set<vesselId>; przypisywanie do floty.
     this._multiSelectedIds = new Set();
+    // ── Faza 3 (Obraz Operacyjny) — rejestr K3 (pod-widok zakładki tactical) ──
+    this._tacticalView = 'map';                 // 'map' | 'registry' (gate FEATURES.fleetRegistry)
+    this._registrySort = { col: 'name', dir: 1 };
+    this._registryFilter = { systemKey: null, role: null, search: '' };
+    this._registryScroll = 0;
+    this._timelineCollapsed = false;
+    this._timelineYears = null;                 // {startYear,endYear} — lazy default, zoom scrollem
+    this._registrySearchEl = null;              // DOM input (żyje TYLKO w widoku REJESTR)
+    this._registryRects = null;                 // {table, timeline} — regiony scroll/zoom
+    this._timelineBarZones = [];                // hover-tooltip pasków osi
+    this._regMouseX = 0; this._regMouseY = 0;
     // P2 polish — Fleet Engage pick mode: po kliku „Atak" w panelu floty,
     // gracz wybiera enemy klikem LPM w tactical map.
     this._fleetEngagePickMode = null;  // null | { fleetId }
@@ -423,8 +443,16 @@ export class FleetManagerOverlay {
     // Sekcja Wraki żyje w lewym pasie (tylko zakładka taktyczna) → wymuś ją.
     this._pendingFocusSection = opts.focusSection ?? null;
     if (this._pendingFocusSection) this._activeTab = 'tactical';
+    // F3: otwarcie wprost w REJESTRZE (chip 🌀 tranzytu → prefiltr transit).
+    if (opts.view === 'registry' && GAME_CONFIG.FEATURES?.fleetRegistry === true) {
+      this._activeTab = 'tactical';
+      this._tacticalView = 'registry';
+      if (opts.registrySystemKey !== undefined) {
+        this._registryFilter.systemKey = opts.registrySystemKey;
+      }
+    }
   }
-  close()  { this._visible = false; this._close(); }
+  close()  { this._visible = false; this._closeRegistrySearch(); this._close(); }
 
   // Przy otwarciu overlay'a — jeśli mapa w stanie domyślnym (pan=0, zoom=1),
   // ustaw domyślne ujęcie: gwiazda w centrum (pan=0) z zoomem fit-all, przy
@@ -470,6 +498,7 @@ export class FleetManagerOverlay {
   _switchTab(tab) {
     if (!tab || tab === this._activeTab) return;
     this._activeTab = tab;
+    this._closeRegistrySearch();   // F3: DOM input żyje tylko w widoku REJESTR
     // Wyczyść hovery wszystkich widoków
     this._mapHoverBody = null;
     this._clusterHoverSystem = null;
@@ -602,7 +631,17 @@ export class FleetManagerOverlay {
       const wrecks = allVessels.filter(v => v.isWreck);
 
       this._drawLeft(ctx, ox, contentY, LEFT_W, contentH, playerList, ms, enemyVisible, wrecks);
-      this._drawCenter(ctx, ox + LEFT_W, contentY, centerW, contentH, allVessels, ms);
+      // F3 (K3): pod-widok centrum [MAPA]/[REJESTR] — lewa lista i prawy panel bez zmian.
+      const useRegistry = GAME_CONFIG.FEATURES?.fleetRegistry === true
+        && this._tacticalView === 'registry';
+      if (useRegistry) {
+        this._drawRegistry(ctx, ox + LEFT_W, contentY, centerW, contentH, allVessels);
+      } else {
+        this._drawCenter(ctx, ox + LEFT_W, contentY, centerW, contentH, allVessels, ms);
+      }
+      if (GAME_CONFIG.FEATURES?.fleetRegistry === true) {
+        this._drawTacticalViewSwitch(ctx, ox + LEFT_W, contentY);
+      }
       this._drawRight(ctx, ox + ow - RIGHT_W, contentY, RIGHT_W, contentH, vMgr, ms, colMgr, activePid);
     } else if (this._activeTab === 'atlas') {
       this._drawAtlasCatalog(ctx, ox, contentY, ow, contentH, allVessels);
@@ -889,6 +928,20 @@ export class FleetManagerOverlay {
     }
 
     // ── TACTICAL — 3 kolumny ─────────────────────────────────
+    // F3 REJESTR: scroll tabeli / zoom osi czasu (pivot = rok pod kursorem).
+    if (GAME_CONFIG.FEATURES?.fleetRegistry === true && this._tacticalView === 'registry') {
+      const r = this._registryRects;
+      if (r && inRect(r.timeline) && this._timelineYears) {
+        const vp = { ...this._timelineYears, x0: r.timeline.vx0, x1: r.timeline.vx1 };
+        const nv = zoomViewport(vp, delta > 0 ? 1.2 : 0.83, xToYear(mx, vp));
+        this._timelineYears = { startYear: nv.startYear, endYear: nv.endYear };
+        return true;
+      }
+      if (r && inRect(r.table)) {
+        this._registryScroll = Math.max(0, this._registryScroll + delta * 0.5);
+        return true;
+      }
+    }
     // Scroll w LEFT (jedna lista drzewa — outliner P2.5).
     if (mx < b.x + LEFT_W) {
       this._scrollOffset = Math.max(0, this._scrollOffset + delta * 0.5);
@@ -982,6 +1035,7 @@ export class FleetManagerOverlay {
   }
 
   handleMouseMove(mx, my) {
+    this._regMouseX = mx; this._regMouseY = my;   // F3: hover-tooltip osi czasu
     if (!this._visible) return;
 
     // Drag mapy / cluster
@@ -1136,6 +1190,48 @@ export class FleetManagerOverlay {
         else this._multiSelectedIds.add(vid);
         break;
       }
+      // ── F3 (rejestr K3) ──────────────────────────────────────────────────
+      case 'tacticalView':
+        this._tacticalView = zone.data.view;
+        if (zone.data.view !== 'registry') this._closeRegistrySearch();
+        break;
+      case 'registrySort':
+        if (this._registrySort.col === zone.data.col) this._registrySort.dir *= -1;
+        else this._registrySort = { col: zone.data.col, dir: 1 };
+        break;
+      case 'registryChipSystem':
+        this._registryFilter.systemKey =
+          this._registryFilter.systemKey === zone.data.key ? null : zone.data.key;
+        break;
+      case 'registryChipRole':
+        this._registryFilter.role =
+          this._registryFilter.role === zone.data.role ? null : zone.data.role;
+        break;
+      case 'registrySearch':
+        this._openRegistrySearch(zone);
+        break;
+      case 'registrySearchClear':
+        this._registryFilter.search = '';
+        this._closeRegistrySearch();
+        break;
+      case 'registryFocus': {
+        // 🎯 = zamknij overlay → (inny układ? przełącz kanałem STAR ATLAS) → dolot.
+        const { vesselId, systemId } = zone.data;
+        window.KOSMOS?.uiManager?.overlayManager?.closeActive?.();
+        const activeSys = window.KOSMOS?.activeSystemId ?? 'sys_home';
+        if (systemId && systemId !== activeSys) {
+          window.KOSMOS?.starSystemManager?.switchActiveSystem?.(systemId);
+        }
+        this._setSelectedVesselViaUI(vesselId);
+        EventBus.emit('vessel:focus', { vesselId });
+        break;
+      }
+      case 'timelineCollapse':
+        this._timelineCollapsed = !this._timelineCollapsed;
+        break;
+      case 'timelineBar':
+        this._setSelectedVesselViaUI(zone.data.vesselId);   // klik paska = selekcja (read-only oś)
+        break;
       case 'fleetAssignMenuOpen':
         this._handleAssignMultiToFleet();
         break;
@@ -3000,6 +3096,354 @@ export class FleetManagerOverlay {
       this._hitZones.push({ x: x + pad, y: cy, w: w - pad * 2, h: ROW, type: 'fleetMemberSelect', data: { vesselId: vid } });
       cy += ROW;
     }
+  }
+
+  // ═══ F3 (Obraz Operacyjny) — REJESTR K3: tabela + oś czasu ═══════════════
+  // Pod-widok centrum zakładki tactical. Wiersze WYŁĄCZNIE z FleetRegistryLogic
+  // (buildShipEntry), paski osi WYŁĄCZNIE z buildTimelineRows (te same dane co
+  // duchy ETA trybu Y). Oś READ-ONLY — rozkazy tylko mapa/PPM (plan §0).
+
+  // Ucinanie px-owe do szerokości kolumny (font ustawiony na ctx wcześniej).
+  _truncate(ctx, text, maxW) {
+    const s0 = String(text ?? '');
+    if (ctx.measureText(s0).width <= maxW) return s0;
+    let s = s0;
+    while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+    return s + '…';
+  }
+
+  // Przełącznik [MAPA]/[REJESTR] — w linii nagłówka centrum, za tytułem+zoomem.
+  _drawTacticalViewSwitch(ctx, x, y) {
+    const views = [['map', t('fleet.viewMap')], ['registry', t('fleet.viewRegistry')]];
+    let bx = x + 170;
+    ctx.font = `bold 9px ${THEME.fontFamily}`;
+    for (const [id, label] of views) {
+      const tw = ctx.measureText(label).width + 12;
+      const active = (this._tacticalView === 'registry') === (id === 'registry');
+      ctx.fillStyle = active ? 'rgba(0,255,180,0.12)' : 'rgba(255,255,255,0.03)';
+      ctx.fillRect(bx, y + 6, tw, 16);
+      ctx.strokeStyle = active ? THEME.accent : THEME.border;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx + 0.5, y + 6.5, tw - 1, 15);
+      ctx.fillStyle = active ? THEME.accent : THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(label, bx + tw / 2, y + 17);
+      this._hitZones.push({ x: bx, y: y + 6, w: tw, h: 16, type: 'tacticalView', data: { view: id } });
+      bx += tw + 4;
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // ctx dla czystej logiki rejestru (wpięcia świata jak MapLabelLayer).
+  _registryCtx() {
+    const K = window.KOSMOS;
+    const vm = K?.vesselManager;
+    const dscs = K?.deepSpaceCombatSystem;
+    return {
+      pictureCtx: {
+        gameYear:      K?.timeSystem?.gameTime ?? 0,
+        fleetSystem:   K?.fleetSystem ?? null,
+        combatCheck:   dscs?._findActiveEncounterContaining
+          ? (id) => !!dscs._findActiveEncounterContaining(id) : null,
+        isImmobilized: vm?.isImmobilized ? (v) => vm.isImmobilized(v) : null,
+      },
+      fleetName:  (id) => K?.fleetSystem?.getFleet?.(id)?.name ?? null,
+      systemName: (id) => systemDisplayName(id, {
+        systems: K?.starSystemManager?.getAllSystems?.() ?? [],
+        starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
+      }),
+    };
+  }
+
+  _drawRegistry(ctx, x, y, w, h, allVessels) {
+    const pad = 8;
+    const rowH = 24;                                    // gęstość wg planu §5
+    const regCtx = this._registryCtx();
+    const gameYear = regCtx.pictureCtx.gameYear;
+
+    const rowsAll = buildRegistryRows(allVessels, regCtx);
+    const rowsFiltered = filterRows(rowsAll, this._registryFilter);
+    const rows = sortRows(rowsFiltered, this._registrySort.col, this._registrySort.dir);
+
+    // ── Chipy filtrów (układy + 🌀 tranzyt, role) + szukajka ──
+    let cy = y + 26;
+    ctx.font = `9px ${THEME.fontFamily}`;
+    let cx = x + pad;
+    const chip = (label, active, type, data, color = THEME.textSecondary) => {
+      const tw = ctx.measureText(label).width + 10;
+      if (cx + tw > x + w - 130) return;                 // nie wyjeżdżaj na szukajkę
+      ctx.fillStyle = active ? 'rgba(0,255,180,0.14)' : 'rgba(255,255,255,0.04)';
+      ctx.fillRect(cx, cy, tw, 15);
+      ctx.strokeStyle = active ? THEME.accent : THEME.border;
+      ctx.strokeRect(cx + 0.5, cy + 0.5, tw - 1, 14);
+      ctx.fillStyle = active ? THEME.accent : color;
+      ctx.textAlign = 'center';
+      ctx.fillText(label, cx + tw / 2, cy + 10.5);
+      this._hitZones.push({ x: cx, y: cy, w: tw, h: 15, type, data });
+      cx += tw + 4;
+    };
+    for (const c of collectSystemChoices(rowsAll)) {
+      chip(c.isTransit ? t('registry.transit') : c.name,
+           this._registryFilter.systemKey === c.key, 'registryChipSystem', { key: c.key });
+    }
+    cx += 6;
+    for (const role of collectRoleChoices(rowsAll)) {
+      chip(t(`fleetPicture.role.${role}`), this._registryFilter.role === role,
+           'registryChipRole', { role });
+    }
+    // Szukajka (DOM input po kliku — adaptacja TradeOverlay._openQtyInput).
+    const sw = 118, sx = x + w - pad - sw;
+    ctx.fillStyle = 'rgba(255,255,255,0.05)';
+    ctx.fillRect(sx, cy, sw, 15);
+    ctx.strokeStyle = this._registrySearchEl ? THEME.accent : THEME.border;
+    ctx.strokeRect(sx + 0.5, cy + 0.5, sw - 1, 14);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = this._registryFilter.search ? THEME.textPrimary : THEME.textDim;
+    ctx.fillText(`🔍 ${this._registryFilter.search || t('registry.searchPlaceholder')}`,
+                 sx + 4, cy + 10.5);
+    this._hitZones.push({ x: sx, y: cy, w: sw - 14, h: 15, type: 'registrySearch', data: {} });
+    if (this._registryFilter.search) {
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText('✕', sx + sw - 10, cy + 10.5);
+      this._hitZones.push({ x: sx + sw - 14, y: cy, w: 14, h: 15, type: 'registrySearchClear', data: {} });
+    }
+    ctx.textAlign = 'left';
+
+    // ── Nagłówki kolumn (sort klikiem) ──
+    const hy = cy + 21;
+    const cols = this._registryColumnRects(x + pad, w - pad * 2);
+    ctx.font = `bold 9px ${THEME.fontFamily}`;
+    for (const c of cols) {
+      const sorted = this._registrySort.col === c.id;
+      ctx.fillStyle = sorted ? THEME.accent : THEME.textSecondary;
+      ctx.fillText(`${t(`registry.col_${c.id}`)}${sorted ? (this._registrySort.dir > 0 ? ' ▲' : ' ▼') : ''}`,
+                   c.x, hy + 10);
+      this._hitZones.push({ x: c.x, y: hy, w: c.w, h: 14, type: 'registrySort', data: { col: c.id } });
+    }
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, hy + 15.5); ctx.lineTo(x + w - pad, hy + 15.5); ctx.stroke();
+
+    // ── Obszary: tabela + oś czasu ──
+    const timelineH = this._timelineCollapsed ? 18 : Math.floor(h * 0.32);
+    const tableY = hy + 18;
+    const tableH = h - (tableY - y) - timelineH - 4;
+    this._registryRects = {
+      table:    { x, y: tableY, w, h: tableH },
+      timeline: { x, y: y + h - timelineH, w, h: timelineH, vx0: x + pad + 110, vx1: x + w - pad },
+    };
+
+    // ── Wiersze (culling wzorem _drawLeft) ──
+    const maxScroll = Math.max(0, rows.length * rowH - tableH);
+    if (this._registryScroll > maxScroll) this._registryScroll = maxScroll;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, tableY, w, tableH); ctx.clip();
+    const selId = window.KOSMOS?.uiManager?.getSelectedVesselId?.();
+    let ry = tableY - this._registryScroll;
+    for (const r of rows) {
+      if (ry + rowH >= tableY && ry <= tableY + tableH) {
+        this._drawRegistryRow(ctx, cols, x + pad, ry, w - pad * 2, rowH, r, selId, gameYear);
+      }
+      ry += rowH;
+    }
+    ctx.restore();
+    if (rows.length === 0) {
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('registry.empty'), x + w / 2, tableY + 30);
+      ctx.textAlign = 'left';
+    }
+
+    // ── Oś czasu (READ-ONLY) ──
+    this._drawTimelinePanel(ctx, this._registryRects.timeline, rows, allVessels, gameYear);
+  }
+
+  // Kolumny: name flex; reszta stała. Zwraca [{id,x,w}].
+  _registryColumnRects(x0, totalW) {
+    const fixed = { role: 56, fleet: 88, system: 78, state: 72, activity: 132, eta: 46, fuel: 40, alerts: 30 };
+    const fixedSum = Object.values(fixed).reduce((a, b) => a + b, 0) + 20 /*🎯*/ + 18 /*checkbox*/;
+    const nameW = Math.max(90, totalW - fixedSum);
+    const out = [];
+    let cx = x0 + 18;   // miejsce na checkbox
+    for (const id of REGISTRY_COLUMNS) {
+      const w = id === 'name' ? nameW : fixed[id];
+      out.push({ id, x: cx, w });
+      cx += w;
+    }
+    return out;
+  }
+
+  _drawRegistryRow(ctx, cols, x, ry, w, rowH, r, selId, gameYear) {
+    const isSel = r.id === selId;
+    const isMulti = this._multiSelectedIds.has(r.id);
+    if (isSel) {
+      ctx.fillStyle = 'rgba(0,255,180,0.08)';
+      ctx.fillRect(x - 4, ry, w + 8, rowH);
+    }
+    // checkbox (reuse vesselMultiToggle → istniejący pasek „Przypisz (N)")
+    ctx.strokeStyle = isMulti ? THEME.accent : THEME.border;
+    ctx.strokeRect(x + 1.5, ry + 7.5, 9, 9);
+    if (isMulti) { ctx.fillStyle = THEME.accent; ctx.fillRect(x + 3.5, ry + 9.5, 5, 5); }
+    this._hitZones.push({ x: x, y: ry + 4, w: 14, h: 16, type: 'vesselMultiToggle', data: { vesselId: r.id } });
+
+    const tone = toneColor(r.tone, THEME) ?? THEME.textPrimary;
+    ctx.font = `10px ${THEME.fontFamily}`;
+    const cell = (colId, text, color = THEME.textSecondary, bold = false) => {
+      const c = cols.find(k => k.id === colId);
+      if (!c) return;
+      ctx.font = `${bold ? 'bold ' : ''}10px ${THEME.fontFamily}`;
+      ctx.fillStyle = color;
+      ctx.fillText(this._truncate(ctx, text, c.w - 8), c.x, ry + rowH / 2 + 3.5);
+    };
+    cell('name', `${r.glyph} ${r.name}`, tone, true);
+    cell('role', t(`fleetPicture.role.${r.role}`));
+    cell('fleet', r.fleetName ?? '—');
+    cell('system', r.isTransit ? t('registry.transit') : (r.systemName ?? ''), r.isTransit ? THEME.info : THEME.textSecondary);
+    cell('state', t(r.stateKey));
+    cell('activity', t(r.activityKey));
+    cell('eta', r.eta.year === null ? '—'
+      : `${r.eta.confidence === 'moving' ? '~' : ''}${Math.round(r.eta.year)}`,
+      r.eta.confidence === 'moving' ? THEME.warning : THEME.textSecondary);
+    cell('fuel', r.fuelPct === null ? '—' : `${Math.round(r.fuelPct * 100)}%`,
+      r.fuelPct !== null && r.fuelPct < 0.2 ? THEME.danger : THEME.textSecondary);
+    cell('alerts', r.alertCount > 0 ? `⚠${r.alertCount}` : '', THEME.warning);
+
+    // wiersz klikalny = selekcja wspólna (poza checkboxem i 🎯)
+    this._hitZones.push({ x: x + 16, y: ry, w: w - 40, h: rowH, type: 'vessel', data: { vesselId: r.id } });
+    // 🎯 — dolot (dla tranzytu brak: statek nie jest na żadnej mapie układu)
+    if (!r.isTransit) {
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText('🎯', x + w - 16, ry + rowH / 2 + 3.5);
+      this._hitZones.push({ x: x + w - 20, y: ry, w: 20, h: rowH, type: 'registryFocus',
+        data: { vesselId: r.id, systemId: r.systemId } });
+    }
+  }
+
+  // Oś czasu: gutter nazw + paski z buildTimelineRows (kolory jak linie tras mapy).
+  _drawTimelinePanel(ctx, rect, rows, allVessels, gameYear) {
+    const { x, y, w, h } = rect;
+    this._timelineBarZones = [];
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x, y + 0.5); ctx.lineTo(x + w, y + 0.5); ctx.stroke();
+    // Nagłówek + zwijanie
+    ctx.font = `bold 9px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(`${this._timelineCollapsed ? '▸' : '▾'} ${t('registry.timeline')}`, x + 8, y + 13);
+    this._hitZones.push({ x, y, w: 120, h: 17, type: 'timelineCollapse', data: {} });
+    if (this._timelineCollapsed) return;
+
+    if (!this._timelineYears) {
+      const d = defaultViewport(gameYear, 0, 1);
+      this._timelineYears = { startYear: d.startYear, endYear: d.endYear };
+    }
+    const vp = { ...this._timelineYears, x0: rect.vx0, x1: rect.vx1 };
+
+    // Podziałka + linia „teraz"
+    ctx.font = `8px ${THEME.fontFamily}`;
+    for (const tick of timelineTicks(vp)) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath(); ctx.moveTo(tick.x, y + 17); ctx.lineTo(tick.x, y + h - 2); ctx.stroke();
+      ctx.fillStyle = THEME.textDim;
+      ctx.textAlign = 'center';
+      ctx.fillText(String(Math.round(tick.year * 100) / 100), tick.x, y + 13);
+    }
+    ctx.textAlign = 'left';
+    const nx = nowLineX(gameYear, vp);
+    if (nx !== null) {
+      ctx.strokeStyle = THEME.accent;
+      ctx.beginPath(); ctx.moveTo(nx, y + 5); ctx.lineTo(nx, y + h - 2); ctx.stroke();
+    }
+
+    // Wiersze = PRZEFILTROWANA lista tabeli (spójność tabela↔oś); scroll dzielony.
+    const laneH = 15;
+    const vesselById = new Map((allVessels ?? []).map(v => [v.id, v]));
+    const tlVessels = rows.map(r => vesselById.get(r.id)).filter(Boolean);
+    const tlRows = buildTimelineRows(tlVessels, window.KOSMOS?.fleetSystem?.listFleets?.() ?? [], gameYear);
+    const laid = layoutTimelineRows(tlRows, vp);
+    const startIdx = Math.floor(this._registryScroll / 24);
+    const visLanes = Math.floor((h - 20) / laneH);
+    const KIND_COLOR = (kind) =>
+      kind === 'warp' ? THEME.info
+      : kind === 'return' ? 'rgba(255,255,255,0.35)'
+      : kind.startsWith('mission-recon') || kind.startsWith('mission-survey') || kind.startsWith('mission-deep') ? 'rgba(0,204,255,0.75)'
+      : kind.startsWith('mission-colony') ? 'rgba(170,136,255,0.75)'
+      : kind.startsWith('mission-transport') ? 'rgba(255,204,68,0.75)'
+      : 'rgba(160,200,190,0.6)';
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y + 17, w, h - 19); ctx.clip();
+    for (let i = startIdx; i < Math.min(laid.length, startIdx + visLanes + 1); i++) {
+      const lane = laid[i];
+      const ly = y + 19 + (i - startIdx) * laneH;
+      const row = rows[i];
+      ctx.font = `8px ${THEME.fontFamily}`;
+      ctx.fillStyle = row?.id === window.KOSMOS?.uiManager?.getSelectedVesselId?.()
+        ? THEME.accent : THEME.textDim;
+      ctx.fillText(this._truncate(ctx, row?.name ?? '', 100), x + 8, ly + 9);
+      for (const b of lane.bars) {
+        ctx.fillStyle = KIND_COLOR(b.kind);
+        ctx.globalAlpha = lane.confidence === 'moving' ? 0.55 : 0.9;
+        ctx.fillRect(b.x0, ly + 2, Math.max(2, b.x1 - b.x0), laneH - 5);
+        ctx.globalAlpha = 1;
+        const zone = { x: b.x0, y: ly + 2, w: Math.max(2, b.x1 - b.x0), h: laneH - 5,
+          labelKey: b.labelKey, vesselId: lane.entryId, kind: b.kind };
+        this._timelineBarZones.push(zone);
+        this._hitZones.push({ ...zone, type: 'timelineBar', data: { vesselId: lane.entryId } });
+      }
+    }
+    ctx.restore();
+
+    // Hover-tooltip paska (READ-ONLY info)
+    const mx = this._regMouseX, my = this._regMouseY;
+    const hov = this._timelineBarZones.find(z =>
+      mx >= z.x && mx <= z.x + z.w && my >= z.y && my <= z.y + z.h);
+    if (hov) {
+      const label = t(hov.labelKey);
+      ctx.font = `9px ${THEME.fontFamily}`;
+      const tw = ctx.measureText(label).width + 10;
+      ctx.fillStyle = 'rgba(8,12,20,0.92)';
+      ctx.fillRect(mx + 10, my - 18, tw, 15);
+      ctx.strokeStyle = THEME.border;
+      ctx.strokeRect(mx + 10.5, my - 17.5, tw - 1, 14);
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(label, mx + 15, my - 7.5);
+    }
+  }
+
+  // Wyszukiwarka rejestru — inline DOM input NAD polem canvasa (adaptacja
+  // wzorca TradeOverlay._openQtyInput; żyje tylko w widoku REJESTR).
+  _openRegistrySearch(zone) {
+    this._closeRegistrySearch();
+    const SCALE = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = this._registryFilter.search;
+    Object.assign(input.style, {
+      position: 'fixed',
+      left: `${zone.x * SCALE}px`, top: `${zone.y * SCALE}px`,
+      width: `${(zone.w + 14) * SCALE}px`, height: `${16 * SCALE}px`,
+      zIndex: '300', background: '#0a1016', color: '#cfeee4',
+      border: '1px solid #2a4a44', font: `${Math.round(10 * SCALE)}px monospace`,
+      padding: '0 4px', outline: 'none',
+    });
+    input.oninput = () => {
+      this._registryFilter.search = input.value;
+      if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
+    };
+    input.onkeydown = (e) => {
+      e.stopPropagation();
+      if (e.key === 'Escape' || e.key === 'Enter') this._closeRegistrySearch();
+    };
+    for (const ev of ['click', 'mousedown', 'mouseup']) {
+      input.addEventListener(ev, (e) => e.stopPropagation());
+    }
+    document.body.appendChild(input);
+    input.focus();
+    this._registrySearchEl = input;
+  }
+
+  _closeRegistrySearch() {
+    const el = this._registrySearchEl;
+    if (el?.parentNode) el.parentNode.removeChild(el);
+    this._registrySearchEl = null;
   }
 
   // ── P2 — Helper: derived fleet status (idle/moving/engaging/mixed) ──────
