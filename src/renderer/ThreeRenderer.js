@@ -32,6 +32,8 @@ import { PlanetMapGenerator } from '../map/PlanetMapGenerator.js';
 import { ALL_RESOURCES } from '../data/ResourcesData.js';
 import { COMMODITIES } from '../data/CommoditiesData.js';
 import { isEnemyVessel } from '../entities/Vessel.js';
+import { buildShipEntry, toneColor } from '../ui/FleetPictureLogic.js';
+import { THEME } from '../config/ThemeConfig.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
 import { t } from '../i18n/i18n.js';
 import {
@@ -293,6 +295,8 @@ export class ThreeRenderer {
     this._focusEncounterId     = null;       // Slice 1 — kamera śledzi midpoint bitwy
     this._insigniaSprites      = new Map();  // vesselId → Sprite (Slice 5 — insygnia frakcji, intel-gated)
     this._enemyAlertMarkers    = new Map();  // vesselId → Sprite (pulsujący czerwony marker wroga ≥rumor)
+    this._tacticalGlyphs       = new Map();  // F2 tryb Y: vesselId → Sprite-glif (stały rozmiar ekranowy)
+    this._tacticalHiddenModels = new Map();  // F2: vesselId → [dzieci wrappera ukryte na czas trybu]
     this._alertReticleTex      = null;       // współdzielona tekstura reticle (lazy)
 
     // ── Cache modeli 3D statków ─────────────────────────────────
@@ -3313,6 +3317,7 @@ export class ThreeRenderer {
         // Stary trail spawnował zieloną additive-kulę w środku statku (kolor frakcji).
         this._syncInsignia();
         this._syncEnemyAlertMarkers();   // pulsujący czerwony marker wykrytego wroga (≥rumor)
+        this._syncTacticalGlyphs();      // F2 tryb Y — glify-billboardy (no-op poza trybem)
         this._syncBodyScanVeil();        // reforma obserwatorium — szara zasłona niezbadanego ciała w podglądzie
 
         // Selective bloom (fallback: bezpośredni render gdy composery padły)
@@ -5833,6 +5838,130 @@ export class ThreeRenderer {
 
   _disposeAllInsignia() {
     for (const k of [...this._insigniaSprites.keys()]) this._disposeInsignia(k);
+  }
+
+  // ── Faza 2 (Obraz Operacyjny) — glify trybu taktycznego ────────────────────
+  // Billboard-glif o stałym rozmiarze EKRANOWYM (wzór _syncEnemyAlertMarkers)
+  // nad każdym statkiem; model GLB (DZIECI wrappera) ukrywany na czas trybu —
+  // NIGDY cały wrapper (jego .visible bramkuje insygnia/markery/labele, a pozycja
+  // kotwiczy wszystkie nakładki). Cache tekstur per (glif|kolor) — wzór insygniów.
+  // Słownik ról/tonów WYŁĄCZNIE z FleetPictureLogic (twarda reguła planu §0).
+
+  static _glyphTexCache = new Map();
+  static _createGlyphTexture(glyph, colorHex) {
+    const key = `${glyph}|${colorHex}`;
+    const cached = ThreeRenderer._glyphTexCache.get(key);
+    if (cached) return cached;
+    const sz = 96;
+    const cv = document.createElement('canvas'); cv.width = cv.height = sz;
+    const c = cv.getContext('2d');
+    c.font = `bold ${Math.round(sz * 0.6)}px sans-serif`;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.strokeStyle = 'rgba(0,0,0,0.9)'; c.lineWidth = sz * 0.08;   // obwódka — czytelność
+    c.strokeText(glyph, sz / 2, sz / 2 + sz * 0.03);
+    c.fillStyle = colorHex;
+    c.fillText(glyph, sz / 2, sz / 2 + sz * 0.03);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.needsUpdate = true;
+    ThreeRenderer._glyphTexCache.set(key, tex);
+    return tex;
+  }
+
+  // ctx dla buildShipEntry — wpięcia świata (jak MapLabelLayer).
+  _buildPictureCtx() {
+    const K = window.KOSMOS;
+    const vm = K?.vesselManager;
+    const dscs = K?.deepSpaceCombatSystem;
+    return {
+      gameYear:      K?.timeSystem?.gameTime ?? 0,
+      fleetSystem:   K?.fleetSystem ?? null,
+      combatCheck:   dscs?._findActiveEncounterContaining
+        ? (id) => !!dscs._findActiveEncounterContaining(id) : null,
+      isImmobilized: vm?.isImmobilized ? (v) => vm.isImmobilized(v) : null,
+    };
+  }
+
+  _syncTacticalGlyphs() {
+    if (window.KOSMOS?.tacticalMode?.isActive !== true) {
+      if (this._tacticalGlyphs.size) this._disposeAllTacticalGlyphs();
+      return;   // poza trybem: jeden boolean — zero kosztów
+    }
+    const vm = window.KOSMOS?.vesselManager;
+    if (!vm) return;
+    const camPos = this.camera?.position;
+    const pictureCtx = this._buildPictureCtx();
+    const aliveIds = new Set();
+    for (const [vid, entry] of this._vessels) {
+      if (!entry?.sprite?.visible) continue;                      // intel-ghost unknown → nic
+      const v = vm.getVessel?.(vid);
+      if (!v || v.isWreck) continue;
+      const enemy = isEnemyVessel(v);
+      if (enemy && !this._isEnemyTargetable(vid)) continue;       // wróg ≥rumor
+      const pict = buildShipEntry(v, pictureCtx);
+      if (!pict || pict.excluded) continue;
+      const anon = enemy && !this._isEnemyEndpointVisible(vid);   // rumor → rola ukryta
+      const glyph = anon ? '?' : pict.glyph;
+      const colorHex = enemy ? this._factionColorHex(v)
+        : (toneColor(pict.tone, THEME) ?? THEME.text);
+
+      let sp = this._tacticalGlyphs.get(vid);
+      const key = `${glyph}|${colorHex}`;
+      if (!sp || sp._glyphKey !== key) {
+        if (sp) this._disposeTacticalGlyph(vid, /*keepModelHidden*/ true);
+        sp = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: ThreeRenderer._createGlyphTexture(glyph, colorHex),
+          transparent: true, depthWrite: false, depthTest: false,
+        }));
+        sp.renderOrder = 30;
+        sp._glyphKey = key;
+        this.scene.add(sp);
+        this._tacticalGlyphs.set(vid, sp);
+      }
+      const p = entry.sprite.position;
+      sp.position.set(p.x, p.y + 0.02, p.z);
+      // Stały rozmiar ekranowy — kompensacja dystansu (wzór ALERT_MARKER_REF_DIST).
+      const distFactor = camPos ? Math.max(0.5, camPos.distanceTo(sp.position) / ALERT_MARKER_REF_DIST) : 1;
+      sp.scale.setScalar(0.55 * distFactor);
+      sp.material.opacity = entry.intelOpacity ?? 1.0;            // ghost-opacity wrogów
+      this._hideVesselModel(vid, entry);
+      aliveIds.add(vid);
+    }
+    for (const k of [...this._tacticalGlyphs.keys()]) if (!aliveIds.has(k)) this._disposeTacticalGlyph(k);
+  }
+
+  // Ukryj DZIECI wrappera (model GLB + exhaust) — refs do restore; sprite-fallback
+  // (brak dzieci) zostaje widoczny pod glifem (rzadki przypadek, nieszkodliwy).
+  _hideVesselModel(vid, entry) {
+    if (this._tacticalHiddenModels.has(vid)) return;
+    const kids = entry.sprite?.children;
+    if (!kids?.length) return;
+    const hidden = [];
+    for (const k of kids) if (k.visible) { k.visible = false; hidden.push(k); }
+    this._tacticalHiddenModels.set(vid, hidden);
+  }
+
+  _disposeTacticalGlyph(vid, keepModelHidden = false) {
+    const sp = this._tacticalGlyphs.get(vid);
+    if (sp) {
+      this.scene.remove(sp);
+      sp.material?.dispose?.();   // tekstura (map) z cache — NIE dispose
+      this._tacticalGlyphs.delete(vid);
+    }
+    if (!keepModelHidden) {
+      const hidden = this._tacticalHiddenModels.get(vid);
+      if (hidden) for (const k of hidden) k.visible = true;
+      this._tacticalHiddenModels.delete(vid);
+    }
+  }
+
+  _disposeAllTacticalGlyphs() {
+    for (const k of [...this._tacticalGlyphs.keys()]) this._disposeTacticalGlyph(k);
+    // Modele mogły zostać ukryte bez żywego glifu (np. statek zniknął z intelu) —
+    // domknij wszystkie pozostałe restore'y.
+    for (const [vid, hidden] of this._tacticalHiddenModels) {
+      for (const k of hidden) k.visible = true;
+      this._tacticalHiddenModels.delete(vid);
+    }
   }
 
   // ── Pulsujący marker wykrytego wroga (≥rumor) — alert na mapie 3D ──────────
