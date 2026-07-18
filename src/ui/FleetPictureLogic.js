@@ -303,3 +303,158 @@ export function collectAlerts(vessels, ctx = {}) {
     (a.severity - b.severity) || (ALERT_ORDER.indexOf(a.kind) - ALERT_ORDER.indexOf(b.kind)));
   return out;
 }
+
+// ═══ Slice 0b — klastrowanie screen-space + oś czasu ═════════════════════════
+
+/**
+ * Klastruje punkty ekranowe statków (plakietki M1/trybu Y) z HISTEREZĄ:
+ * wejście do klastra przy dist < enterRadius, wyjście dopiero przy
+ * dist ≥ exitRadius (para, która była razem w poprzedniej klatce, trzyma się
+ * do exitRadius — plakietki nie migoczą na granicy przy powolnym zoomie).
+ *
+ * @param {object[]} points — [{x, y, id, fleetId, tone, alertCount?}]
+ *   (px LOGICZNE — po /UI_SCALE, patrz Aneks A.3; alertCount opcjonalny, default 0)
+ * @param {object} [opts] — { enterRadius=44, exitRadius=56, prev:Map }
+ *   `prev` = akumulator in/out: Map(pointId → klucz klastra z POPRZEDNIEJ klatki).
+ *   Funkcja czyta go dla histerezy i PRZEBUDOWUJE w miejscu na potrzeby następnej
+ *   klatki — wołający trzyma jedną Mapę między klatkami (jedyna dozwolona mutacja).
+ * @returns {{x, y, items, label:'fleet'|'mixed', fleetId, worstTone, alertCount}[]}
+ *   x,y = centroid; items = oryginalne punkty; label 'fleet' gdy WSZYSTKIE punkty
+ *   mają ten sam nie-null fleetId (wtedy fleetId ustawione), inaczej 'mixed'.
+ *
+ * Naiwne O(n²) — akceptowalne do ~200 statków (plan §7); ewentualny
+ * grid-bucketing wchodzi WEWNĄTRZ tej funkcji, bez zmiany kontraktu.
+ */
+export function clusterScreenPoints(points, opts = {}) {
+  const enterR = opts.enterRadius ?? 44;   // px logiczne
+  const exitR  = opts.exitRadius  ?? 56;   // px logiczne
+  const prev   = (opts.prev instanceof Map) ? opts.prev : null;
+
+  const pts = (points ?? []).filter(p => p && Number.isFinite(p.x) && Number.isFinite(p.y));
+  const n = pts.length;
+
+  // Union-find po parach (enter LUB [exit + razem w poprzedniej klatce]).
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[rb] = ra; };
+
+  const enter2 = enterR * enterR;
+  const exit2  = exitR * exitR;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const dx = pts[i].x - pts[j].x;
+      const dy = pts[i].y - pts[j].y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < enter2) { union(i, j); continue; }
+      if (d2 < exit2 && prev) {
+        const pa = prev.get(pts[i].id);
+        const pb = prev.get(pts[j].id);
+        if (pa !== undefined && pa === pb) union(i, j); // histereza — byli razem
+      }
+    }
+  }
+
+  // Komponenty w deterministycznej kolejności wejścia.
+  const byRoot = new Map();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    if (!byRoot.has(r)) byRoot.set(r, []);
+    byRoot.get(r).push(pts[i]);
+  }
+
+  const clusters = [];
+  for (const items of byRoot.values()) {
+    let sx = 0, sy = 0, alertCount = 0;
+    const tones = [];
+    let fleetId = items[0].fleetId ?? null;
+    let sameFleet = fleetId !== null;
+    for (const p of items) {
+      sx += p.x; sy += p.y;
+      alertCount += p.alertCount ?? 0;
+      tones.push(p.tone);
+      if (sameFleet && (p.fleetId ?? null) !== fleetId) sameFleet = false;
+    }
+    clusters.push({
+      x: sx / items.length,
+      y: sy / items.length,
+      items,
+      label:     sameFleet ? 'fleet' : 'mixed',
+      fleetId:   sameFleet ? fleetId : null,
+      worstTone: worstTone(tones),
+      alertCount,
+    });
+  }
+
+  // Przebuduj prev dla następnej klatki: id → stabilny klucz klastra
+  // (najmniejsze id członka — niezależne od kolejności wejścia).
+  if (prev) {
+    prev.clear();
+    for (const c of clusters) {
+      let key = null;
+      for (const p of c.items) if (key === null || String(p.id) < String(key)) key = p.id;
+      for (const p of c.items) prev.set(p.id, key);
+    }
+  }
+
+  return clusters;
+}
+
+/**
+ * Paski osi czasu (rejestr K3) — te same dane zasilają duchy ETA trybu Y
+ * (koncepcja §3.3: oś pokazuje „kiedy", mapa „gdzie" — jeden byt).
+ *
+ * @param {object[]} vessels — instancje Vessel (wraki i wrogowie pomijani)
+ * @param {object[]} fleets  — fleetSystem.listFleets(); sync-ETA floty jako
+ *   fallback paska dla członka BEZ własnej misji (pursue/hold nie mają ETA)
+ * @param {number} gameYear  — timeSystem.gameTime (lata gry)
+ * @returns {{entryId, confidence:'firm'|'moving', bars:[{t0,t1,kind,labelKey}]}[]}
+ *   kind ∈ 'mission-<typ>' | 'return' | 'warp'; wiersz bez misji → bars:[]
+ *   (docked = pusty wiersz, nie brak wiersza). Paski zdegenerowane (t1 ≤ t0,
+ *   NaN, przeterminowane przyloty) są pomijane.
+ */
+export function buildTimelineRows(vessels, fleets, gameYear) {
+  const fleetById = new Map();
+  for (const f of fleets ?? []) if (f?.id) fleetById.set(f.id, f);
+
+  const rows = [];
+  for (const v of vessels ?? []) {
+    if (!v || _isWreck(v) || isEnemyVessel(v)) continue;
+
+    const order       = v.movementOrder;
+    const orderActive = order?.status === 'active';
+    const confidence  = (orderActive && MOVING_ETA_ORDER_TYPES.includes(order.type))
+      ? 'moving' : 'firm';
+
+    const bars = [];
+    const pushBar = (t0, t1, kind, labelKey) => {
+      if (Number.isFinite(t0) && Number.isFinite(t1) && t1 > t0) bars.push({ t0, t1, kind, labelKey });
+    };
+
+    const m = v.mission;
+    if (m?.type === 'interstellar_jump') {
+      // Skok warp: pasek teraz → przylot (postęp galProgress to sprawa renderu).
+      pushBar(gameYear, _finiteYear(m.arrivalYear), 'warp', 'fleetPicture.activity.warp');
+    } else if (m && m.phase === 'returning') {
+      pushBar(gameYear, _finiteYear(m.returnYear) ?? _finiteYear(m.arrivalYear),
+              'return', 'fleetPicture.activity.returning');
+    } else if (m) {
+      const arr = _finiteYear(m.arrivalYear);
+      pushBar(gameYear, arr, `mission-${m.type}`,
+              MISSION_ACTIVITY_KEYS[m.type] ?? MISSION_ACTIVITY_FALLBACK_KEY);
+      const ret = _finiteYear(m.returnYear);
+      if (arr !== null && ret !== null) {
+        pushBar(arr, ret, 'return', 'fleetPicture.activity.returning');
+      }
+    } else if (v.fleetId) {
+      // Bez własnej misji — sync-ETA rozkazu floty (activeOrder.arrivalSyncYear).
+      const ao = fleetById.get(v.fleetId)?.activeOrder;
+      if (ao) {
+        pushBar(gameYear, _finiteYear(ao.arrivalSyncYear), `mission-${ao.type}`,
+                ORDER_ACTIVITY_KEYS[ao.type] ?? ORDER_ACTIVITY_FALLBACK_KEY);
+      }
+    }
+
+    rows.push({ entryId: v.id, confidence, bars });
+  }
+  return rows;
+}
