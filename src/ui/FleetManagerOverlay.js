@@ -30,7 +30,12 @@ import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import {
   TRANSIT_KEY, buildRegistryRows, sortRows, filterRows,
   collectSystemChoices, collectRoleChoices, REGISTRY_COLUMNS,
+  groupRows, GROUP_MODES, UNGROUPED_KEY,
 } from './FleetRegistryLogic.js';
+
+// Rejestr 2.0 (3e): szerokość prawego panelu W WIDOKU REJESTR (per-widok —
+// globalny RIGHT_W=200 dla mapy NIEZMIENIONY; _drawRight liczy z parametru w).
+const REGISTRY_RIGHT_W = 300;
 import {
   defaultViewport, zoomViewport, layoutTimelineRows, nowLineX, timelineTicks, xToYear,
 } from './TimelineLayout.js';
@@ -322,6 +327,8 @@ export class FleetManagerOverlay {
     this._tacticalView = 'map';                 // 'map' | 'registry' (gate FEATURES.fleetRegistry)
     this._registrySort = { col: 'name', dir: 1 };
     this._registryFilter = { systemKey: null, role: null, search: '' };
+    this._registryGroupMode = 'none';           // 3e: 'none' | 'fleet' | 'system'
+    this._registryCollapsedGroups = new Set();  // 3e: klucze zwiniętych grup (wzór _collapsedFleets)
     this._registryScroll = 0;
     this._timelineCollapsed = false;
     this._timelineYears = null;                 // {startYear,endYear} — lazy default, zoom scrollem
@@ -610,13 +617,16 @@ export class FleetManagerOverlay {
     if (this._activeTab === 'tactical') {
       const centerW = ow - LEFT_W - RIGHT_W;
 
-      // Separatory kolumn (tylko w układzie 3-kolumnowym taktyki)
-      ctx.strokeStyle = THEME.border;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(ox + LEFT_W, contentY); ctx.lineTo(ox + LEFT_W, contentY + contentH);
-      ctx.moveTo(ox + ow - RIGHT_W, contentY); ctx.lineTo(ox + ow - RIGHT_W, contentY + contentH);
-      ctx.stroke();
+      // Separatory kolumn (tylko w układzie 3-kolumnowym MAPY; rejestr 2.0
+      // rysuje własny separator prawego panelu niżej)
+      if (!(GAME_CONFIG.FEATURES?.fleetRegistry === true && this._tacticalView === 'registry')) {
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(ox + LEFT_W, contentY); ctx.lineTo(ox + LEFT_W, contentY + contentH);
+        ctx.moveTo(ox + ow - RIGHT_W, contentY); ctx.lineTo(ox + ow - RIGHT_W, contentY + contentH);
+        ctx.stroke();
+      }
 
       // Podział: statki gracza żywe + wrogie widoczne + wraki (osobna sekcja).
       // Wraki gracza wypadają z sekcji "flota gracza" i lądują w sekcji WRAKI.
@@ -630,19 +640,29 @@ export class FleetManagerOverlay {
       );
       const wrecks = allVessels.filter(v => v.isWreck);
 
-      this._drawLeft(ctx, ox, contentY, LEFT_W, contentH, playerList, ms, enemyVisible, wrecks);
-      // F3 (K3): pod-widok centrum [MAPA]/[REJESTR] — lewa lista i prawy panel bez zmian.
+      // F3 (K3): pod-widok [MAPA]/[REJESTR]. Rejestr 2.0 (3e): PEŁNA szerokość
+      // (bez lewej listy) + prawy panel poszerzony per-widok (parametr, nie
+      // zmiana globalnej stałej — _drawRight i helpery liczą z parametru w).
       const useRegistry = GAME_CONFIG.FEATURES?.fleetRegistry === true
         && this._tacticalView === 'registry';
       if (useRegistry) {
-        this._drawRegistry(ctx, ox + LEFT_W, contentY, centerW, contentH, allVessels);
+        const rightW = REGISTRY_RIGHT_W;
+        ctx.strokeStyle = THEME.border;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(ox + ow - rightW, contentY); ctx.lineTo(ox + ow - rightW, contentY + contentH);
+        ctx.stroke();
+        this._drawRegistry(ctx, ox, contentY, ow - rightW, contentH, allVessels);
+        this._drawTacticalViewSwitch(ctx, ox, contentY, 8);
+        this._drawRight(ctx, ox + ow - rightW, contentY, rightW, contentH, vMgr, ms, colMgr, activePid);
       } else {
+        this._drawLeft(ctx, ox, contentY, LEFT_W, contentH, playerList, ms, enemyVisible, wrecks);
         this._drawCenter(ctx, ox + LEFT_W, contentY, centerW, contentH, allVessels, ms);
+        if (GAME_CONFIG.FEATURES?.fleetRegistry === true) {
+          this._drawTacticalViewSwitch(ctx, ox + LEFT_W, contentY);
+        }
+        this._drawRight(ctx, ox + ow - RIGHT_W, contentY, RIGHT_W, contentH, vMgr, ms, colMgr, activePid);
       }
-      if (GAME_CONFIG.FEATURES?.fleetRegistry === true) {
-        this._drawTacticalViewSwitch(ctx, ox + LEFT_W, contentY);
-      }
-      this._drawRight(ctx, ox + ow - RIGHT_W, contentY, RIGHT_W, contentH, vMgr, ms, colMgr, activePid);
     } else if (this._activeTab === 'atlas') {
       this._drawAtlasCatalog(ctx, ox, contentY, ow, contentH, allVessels);
     } else if (this._activeTab === 'shipyard') {
@@ -1206,6 +1226,19 @@ export class FleetManagerOverlay {
       case 'registryChipRole':
         this._registryFilter.role =
           this._registryFilter.role === zone.data.role ? null : zone.data.role;
+        break;
+      case 'registryGroupMode':
+        this._registryGroupMode = zone.data.mode;
+        break;
+      case 'registryGroupToggle': {
+        const k = zone.data.key;
+        if (this._registryCollapsedGroups.has(k)) this._registryCollapsedGroups.delete(k);
+        else this._registryCollapsedGroups.add(k);
+        break;
+      }
+      case 'registryGroupFleet':
+        // Prawy panel z istniejącym widokiem floty (rename/disband/rozkazy).
+        window.KOSMOS?.uiManager?.setSelectedFleetId?.(zone.data.fleetId);
         break;
       case 'registrySearch':
         this._openRegistrySearch(zone);
@@ -3112,10 +3145,11 @@ export class FleetManagerOverlay {
     return s + '…';
   }
 
-  // Przełącznik [MAPA]/[REJESTR] — w linii nagłówka centrum, za tytułem+zoomem.
-  _drawTacticalViewSwitch(ctx, x, y) {
+  // Przełącznik [MAPA]/[REJESTR] — w linii nagłówka centrum, za tytułem+zoomem
+  // (mapa: offset 170 za „TACTICAL MAP ×N"; rejestr pełnej szerokości: offset 8).
+  _drawTacticalViewSwitch(ctx, x, y, offset = 170) {
     const views = [['map', t('fleet.viewMap')], ['registry', t('fleet.viewRegistry')]];
-    let bx = x + 170;
+    let bx = x + offset;
     ctx.font = `bold 9px ${THEME.fontFamily}`;
     for (const [id, label] of views) {
       const tw = ctx.measureText(label).width + 12;
@@ -3182,6 +3216,11 @@ export class FleetManagerOverlay {
       this._hitZones.push({ x: cx, y: cy, w: tw, h: 15, type, data });
       cx += tw + 4;
     };
+    // 3e — przełącznik grupowania: „grupuj: — / ⚑ flota / układ"
+    chip(t('registry.groupNone'), this._registryGroupMode === 'none', 'registryGroupMode', { mode: 'none' });
+    chip(t('registry.groupFleet'), this._registryGroupMode === 'fleet', 'registryGroupMode', { mode: 'fleet' });
+    chip(t('registry.groupSystem'), this._registryGroupMode === 'system', 'registryGroupMode', { mode: 'system' });
+    cx += 8;
     for (const c of collectSystemChoices(rowsAll)) {
       chip(c.isTransit ? t('registry.transit') : c.name,
            this._registryFilter.systemKey === c.key, 'registryChipSystem', { key: c.key });
@@ -3232,29 +3271,36 @@ export class FleetManagerOverlay {
       timeline: { x, y: y + h - timelineH, w, h: timelineH, vx0: x + pad + 110, vx1: x + w - pad },
     };
 
-    // ── Wiersze (culling wzorem _drawLeft) ──
-    const maxScroll = Math.max(0, rows.length * rowH - tableH);
+    // ── Wiersze + grupy (3e: groupRows — sort wewnątrz grup = sort tabeli) ──
+    const { items, visibleRows } = groupRows(rows, this._registryGroupMode,
+                                             this._registryCollapsedGroups);
+    const maxScroll = Math.max(0, items.length * rowH - tableH);
     if (this._registryScroll > maxScroll) this._registryScroll = maxScroll;
     ctx.save();
     ctx.beginPath(); ctx.rect(x, tableY, w, tableH); ctx.clip();
     const selId = window.KOSMOS?.uiManager?.getSelectedVesselId?.();
+    const selFleetId = window.KOSMOS?.uiManager?.getSelectedFleetId?.();
     let ry = tableY - this._registryScroll;
-    for (const r of rows) {
+    for (const it of items) {
       if (ry + rowH >= tableY && ry <= tableY + tableH) {
-        this._drawRegistryRow(ctx, cols, x + pad, ry, w - pad * 2, rowH, r, selId, gameYear);
+        if (it.type === 'header') {
+          this._drawRegistryGroupHeader(ctx, x + pad, ry, w - pad * 2, rowH, it, selFleetId);
+        } else {
+          this._drawRegistryRow(ctx, cols, x + pad, ry, w - pad * 2, rowH, it.row, selId, gameYear);
+        }
       }
       ry += rowH;
     }
     ctx.restore();
-    if (rows.length === 0) {
+    if (items.length === 0) {
       ctx.fillStyle = THEME.textDim;
       ctx.textAlign = 'center';
       ctx.fillText(t('registry.empty'), x + w / 2, tableY + 30);
       ctx.textAlign = 'left';
     }
 
-    // ── Oś czasu (READ-ONLY) ──
-    this._drawTimelinePanel(ctx, this._registryRects.timeline, rows, allVessels, gameYear);
+    // ── Oś czasu (READ-ONLY) — przejmuje kolejność i grupowanie tabeli ──
+    this._drawTimelinePanel(ctx, this._registryRects.timeline, visibleRows, allVessels, gameYear);
   }
 
   // Kolumny: name flex; reszta stała. Zwraca [{id,x,w}].
@@ -3270,6 +3316,34 @@ export class FleetManagerOverlay {
       cx += w;
     }
     return out;
+  }
+
+  // 3e — nagłówek grupy (⚑ flota / układ / „Bez floty" / 🌀): caret zwija,
+  // klik reszty nagłówka FLOTY = setSelectedFleetId → prawy panel floty
+  // (rename/disband/rozkazy pozostają osiągalne — nic nie jest ekskluzywne dla lewej listy).
+  _drawRegistryGroupHeader(ctx, x, ry, w, rowH, it, selFleetId) {
+    const isFleetHeader = it.fleetId != null;
+    const selected = isFleetHeader && it.fleetId === selFleetId;
+    ctx.fillStyle = selected ? 'rgba(0,255,180,0.10)' : 'rgba(255,255,255,0.045)';
+    ctx.fillRect(x - 4, ry + 1, w + 8, rowH - 2);
+    ctx.font = `bold 10px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textSecondary;
+    ctx.fillText(it.collapsed ? '▸' : '▾', x + 2, ry + rowH / 2 + 3.5);
+    const label = it.isTransit ? t('registry.transit')
+      : it.label ?? (isFleetHeader === false && it.key === UNGROUPED_KEY
+        ? t('registry.ungrouped') : (it.label ?? t('registry.ungrouped')));
+    ctx.fillStyle = selected ? THEME.accent : (isFleetHeader ? THEME.accent : THEME.textSecondary);
+    ctx.fillText(`${isFleetHeader ? '⚑ ' : ''}${this._truncate(ctx, label, w - 90)}  ×${it.count}`,
+                 x + 16, ry + rowH / 2 + 3.5);
+    // caret = zwijanie; reszta = selekcja floty (dla grup flotowych) lub też zwijanie
+    this._hitZones.push({ x: x - 4, y: ry, w: 16, h: rowH, type: 'registryGroupToggle', data: { key: it.key } });
+    if (isFleetHeader) {
+      this._hitZones.push({ x: x + 14, y: ry, w: w - 14, h: rowH, type: 'registryGroupFleet',
+        data: { fleetId: it.fleetId } });
+    } else {
+      this._hitZones.push({ x: x + 14, y: ry, w: w - 14, h: rowH, type: 'registryGroupToggle',
+        data: { key: it.key } });
+    }
   }
 
   _drawRegistryRow(ctx, cols, x, ry, w, rowH, r, selId, gameYear) {

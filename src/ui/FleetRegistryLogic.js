@@ -120,3 +120,57 @@ export function collectSystemChoices(rows) {
 export function collectRoleChoices(rows) {
   return [...new Set((rows ?? []).map(r => r.role))].sort();
 }
+
+// ── Rejestr 2.0 (slice 3e) — grupowanie ──────────────────────────────────────
+export const GROUP_MODES = Object.freeze(['none', 'fleet', 'system']);
+export const UNGROUPED_KEY = '__ungrouped';   // „Bez floty"
+
+/**
+ * Grupuje POSORTOWANE/PRZEFILTROWANE wiersze w płaską listę pozycji do renderu:
+ * nagłówki grup (zwijane) + wiersze widoczne. Sort wewnątrz grup = kolejność
+ * wejścia (czyli sort tabeli); grupy sortowane po etykiecie (bez-floty/tranzyt
+ * na końcu). Oś czasu przejmuje TĘ SAMĄ spłaszczoną listę wierszy (visibleRows).
+ *
+ * @param {Array} rows — wynik sortRows(filterRows(...))
+ * @param {'none'|'fleet'|'system'} mode
+ * @param {Set<string>} collapsed — klucze zwiniętych grup
+ * @returns {{items: Array<{type:'header',key,label,count,fleetId?,isTransit?,collapsed}
+ *                        |{type:'row',row}>, visibleRows: Array}}
+ */
+export function groupRows(rows, mode = 'none', collapsed = new Set()) {
+  if (mode === 'none' || !GROUP_MODES.includes(mode)) {
+    return { items: (rows ?? []).map(row => ({ type: 'row', row })), visibleRows: rows ?? [] };
+  }
+  const groups = new Map();   // key → { label, fleetId?, isTransit?, rows: [] }
+  for (const r of rows ?? []) {
+    let key, label, meta = {};
+    if (mode === 'fleet') {
+      key = r.fleetId ?? UNGROUPED_KEY;
+      label = r.fleetName ?? null;                 // null → widok tłumaczy „Bez floty"
+      meta = { fleetId: r.fleetId ?? null };
+    } else {
+      key = r.isTransit ? TRANSIT_KEY : r.systemId;
+      label = r.isTransit ? null : (r.systemName ?? r.systemId);
+      meta = { isTransit: r.isTransit };
+    }
+    if (!groups.has(key)) groups.set(key, { label, ...meta, rows: [] });
+    groups.get(key).rows.push(r);
+  }
+  const keys = [...groups.keys()].sort((a, b) => {
+    const last = (k) => k === UNGROUPED_KEY || k === TRANSIT_KEY;   // specjalne na końcu
+    if (last(a) !== last(b)) return last(a) ? 1 : -1;
+    return String(groups.get(a).label ?? '').localeCompare(String(groups.get(b).label ?? ''));
+  });
+  const items = [];
+  const visibleRows = [];
+  for (const key of keys) {
+    const g = groups.get(key);
+    const isCollapsed = collapsed.has(key);
+    items.push({ type: 'header', key, label: g.label, count: g.rows.length,
+                 fleetId: g.fleetId, isTransit: g.isTransit, collapsed: isCollapsed });
+    if (!isCollapsed) {
+      for (const row of g.rows) { items.push({ type: 'row', row }); visibleRows.push(row); }
+    }
+  }
+  return { items, visibleRows };
+}
