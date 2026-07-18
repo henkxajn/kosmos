@@ -130,6 +130,10 @@ export const GAME_CONFIG = {
     //   (kolonie/stacje) — rollback niezależny. Render/UI-only, bez migracji
     //   save (toggle w uiPrefs.fleetMapLabelsVisible). OFF = zero kosztów w pętli.
     fleetMapLabels:       true,
+    // Obraz Operacyjny Faza 2 — tryb taktyczny (klawisz Y): preset kamery top-down,
+    //   glify-billboardy, wymuszone warstwy, duchy ETA. Render/UI-only, bez migracji
+    //   save. OFF = klawisz nieaktywny, zero kosztów w pętli.
+    tacticalMode:         true,
     // ── Energy Brownout Gate (runtime-only, bez migracji save) ────────────
     //   Deficyt energii (balance<0) realnie ogranicza produkcję PROPORCJONALNIE
     //   do pokrycia (avail=production/consumption): kopalnie (poziom wejściowy),

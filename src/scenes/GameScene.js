@@ -4049,6 +4049,13 @@ export class GameScene {
           this.threeRenderer._focusEntityId = null;
           this.cameraController.resetToCenter();
           break;
+        case 'KeyY':
+          // Obraz Operacyjny F2 — tryb taktyczny (Y zamiast zajętego T — decyzja
+          // weryfikacji §3.2; gate: civMode + flaga; toggle sam sprawdza flagę).
+          if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalMode) {
+            window.KOSMOS.tacticalMode?.toggle();
+          }
+          break;
         case 'Digit1': EventBus.emit('time:setMultiplier', { index: 1 }); EventBus.emit('time:play'); break; // 1d/s
         case 'Digit2': EventBus.emit('time:setMultiplier', { index: 2 }); EventBus.emit('time:play'); break; // 3d/s
         case 'Digit3': EventBus.emit('time:setMultiplier', { index: 3 }); EventBus.emit('time:play'); break; // 1t/s

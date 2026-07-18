@@ -3165,4 +3165,7 @@ export default {
   'fleetPicture.alert.lowFuel':        'Low fuel',
   'fleetPicture.alert.damaged':        'Damaged',
   'fleetPicture.alert.awaitingFuel':   'Awaiting fuel',
+
+  // ── Tactical mode (Operational Picture — Phase 2) ─────────────────────────
+  'tactical.badge': '⬢ TACTICAL MODE [Y]',
 };

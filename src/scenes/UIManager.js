@@ -47,6 +47,7 @@ import { CombatHUD }           from '../ui/CombatHUD.js';
 import { FleetGroupPanel }     from '../ui/FleetGroupPanel.js';
 import { FleetCommandPanel }   from '../ui/FleetCommandPanel.js';
 import { MapLabelLayer }       from '../ui/MapLabelLayer.js';
+import { TacticalModeController } from '../ui/TacticalModeController.js';
 import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
 import { EventLogDrawer }      from '../ui/EventLogDrawer.js';
 import { BottomControlBar }    from '../ui/BottomControlBar.js';
@@ -311,6 +312,10 @@ export class UIManager {
     // S3.4 FAZA 5 — etykiety kolonii+stacji na mapie 3D (overlay 2D, Trasa A). Non-exclusive:
     // rysowany w draw() nad WebGL (gate mapLabels && civMode && !isAnyOpen), klik stacji PRZED overlayManager.
     this._mapLabelLayer = new MapLabelLayer();
+    // Faza 2 (Obraz Operacyjny) — tryb taktyczny Y; rejestr w KOSMOS (GameScene
+    // keydown + warstwy czytają isActive).
+    this._tacticalMode = new TacticalModeController();
+    if (window.KOSMOS) window.KOSMOS.tacticalMode = this._tacticalMode;
 
     // Slice 8b — FleetCommandPanel: pływający panel dowodzenia WYBRANĄ flotą (battlegroup).
     // Self-managed przez ui:fleetSelectionChanged. Anchor lewy-dolny; FleetGroupPanel stackuje się NAD nim.
@@ -1868,6 +1873,11 @@ export class UIManager {
         && !this.overlayManager.isAnyOpen() && !globeOpen) {
       this._mapLabelLayer.drawVesselLabels(ctx, tr, W, H, UI_SCALE);
     }
+    // Faza 2 — tryb taktyczny: auto-exit przy overlayu (per-frame) + badge trybu.
+    if (GAME_CONFIG.FEATURES?.tacticalMode) {
+      this._tacticalMode.autoExitIfOverlay(this.overlayManager);
+      if (civMode && this._tacticalMode.isActive && !globeOpen) this._drawTacticalBadge(ctx, W);
+    }
 
     // Slice 4 — ramki RTS + paski paliwa dla zaznaczonego (własnego) statku.
     if (civMode && tr && GAME_CONFIG.FEATURES?.fcBrackets
@@ -2124,6 +2134,27 @@ export class UIManager {
 
   // Slice 8 — prostokąt box-select (marquee). _marqueeRect w CLIENT px (ustawia
   // GameScene); konwersja /UI_SCALE jak ramki. Rysowany w draw() po brackets.
+  // Faza 2 — badge trybu taktycznego (góra-środek; wzór makiety, tokeny THEME).
+  _drawTacticalBadge(ctx, W) {
+    const label = t('tactical.badge');
+    ctx.save();
+    ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    const tw = ctx.measureText(label).width;
+    const w = tw + 22, h = 18;
+    const x = Math.round((W - w) / 2), y = 34;
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = 'rgba(8,12,20,0.85)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = THEME.accent;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.fillStyle = THEME.accent;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x + w / 2, y + h / 2 + 0.5);
+    ctx.restore();
+  }
+
   _drawMarquee(ctx) {
     const r = this._marqueeRect;
     if (!r) return;

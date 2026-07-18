@@ -215,11 +215,16 @@ export class ThreeCameraController {
 
   // ── Faza 2 (tryb taktyczny) — snapshot/restore + płynny przelot ──────────
 
-  /** Pełny stan widoku (kąty + dystans + cel) — do restore przy wyjściu z trybu. */
+  /**
+   * Pełny stan widoku (kąty + dystans + cel) — do restore przy wyjściu z trybu.
+   * Gdy animacja kątów jest W LOCIE (np. szybkie Y-Y podczas powrotu z trybu),
+   * snapshotuje CEL animacji, nie stan przejściowy — restore zawsze wraca do
+   * prawdziwego widoku sprzed trybu, nie do klatki w połowie przelotu.
+   */
   snapshotView() {
     return {
-      theta: this._theta,
-      phi:   this._phi,
+      theta: this._goalTheta ?? this._theta,
+      phi:   this._goalPhi   ?? this._phi,
       dist:  this._targetDist,
       target: { x: this._goalTarget.x, y: this._goalTarget.y, z: this._goalTarget.z },
     };

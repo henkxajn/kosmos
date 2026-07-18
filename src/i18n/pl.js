@@ -3166,4 +3166,7 @@ export default {
   'fleetPicture.alert.lowFuel':        'Niski poziom paliwa',
   'fleetPicture.alert.damaged':        'Uszkodzony',
   'fleetPicture.alert.awaitingFuel':   'Czeka na paliwo',
+
+  // ── Tryb taktyczny (Obraz Operacyjny — Faza 2) ────────────────────────────
+  'tactical.badge': '⬢ TRYB TAKTYCZNY [Y]',
 };
