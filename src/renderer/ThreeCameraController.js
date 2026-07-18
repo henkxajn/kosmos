@@ -20,6 +20,10 @@ export class ThreeCameraController {
 
     this._theta      = 0.3;
     this._phi        = 1.1;
+    // Faza 2 (tryb taktyczny) — animowane kąty: null = brak animacji; lerp w update().
+    // Drag gracza PRZERYWA animację (nie blokujemy sterowania — wymóg A.4).
+    this._goalTheta  = null;
+    this._goalPhi    = null;
     // Ramka startowa — nadpisywana przez frameSystem() wg zasięgu układu (skala 3D ↔ tactical)
     this._defaultDist = 85;
     this._dist       = this._defaultDist;
@@ -76,6 +80,9 @@ export class ThreeCameraController {
         this._hasMoved = true;
       }
       if (this._hasMoved) {
+        // Wejście gracza przerywa animację kątów (tryb taktyczny nie blokuje sterowania).
+        this._goalTheta = null;
+        this._goalPhi   = null;
         this._theta -= dx * 0.005;
         this._phi    = Math.max(0.1, Math.min(Math.PI * 0.9, this._phi - dy * 0.005));
       }
@@ -105,6 +112,15 @@ export class ThreeCameraController {
   }
 
   update() {
+    // Faza 2 — lerp kątów (jedyna animacja _theta/_phi w kontrolerze; snap przy zbieżności).
+    if (this._goalTheta !== null) {
+      this._theta += (this._goalTheta - this._theta) * 0.12;
+      if (Math.abs(this._goalTheta - this._theta) < 0.002) { this._theta = this._goalTheta; this._goalTheta = null; }
+    }
+    if (this._goalPhi !== null) {
+      this._phi += (this._goalPhi - this._phi) * 0.12;
+      if (Math.abs(this._goalPhi - this._phi) < 0.002) { this._phi = this._goalPhi; this._goalPhi = null; }
+    }
     this._dist += (this._targetDist - this._dist) * 0.08;
     // Płynne przesuwanie celu kamery (śledzenie planety/księżyca)
     this._target.lerp(this._goalTarget, 0.08);
@@ -196,4 +212,30 @@ export class ThreeCameraController {
   get wasDrag()    { return this._hasMoved; }
   get isDragging() { return this._isDragging; }
   get moveEpoch()  { return this._moveEpoch; }   // B1 (W2.1): rośnie gdy kamera się rusza
+
+  // ── Faza 2 (tryb taktyczny) — snapshot/restore + płynny przelot ──────────
+
+  /** Pełny stan widoku (kąty + dystans + cel) — do restore przy wyjściu z trybu. */
+  snapshotView() {
+    return {
+      theta: this._theta,
+      phi:   this._phi,
+      dist:  this._targetDist,
+      target: { x: this._goalTarget.x, y: this._goalTarget.y, z: this._goalTarget.z },
+    };
+  }
+
+  /**
+   * Płynny przelot do zadanego widoku (kąty przez lerp w update(), dist/target
+   * istniejącymi lerpami). Lerp zbiega DOKŁADNIE do celu (snap przy progu) —
+   * restore snapshotu przywraca kamerę 1:1. Drag gracza przerywa kąty.
+   */
+  flyTo({ theta, phi, dist, target } = {}) {
+    if (Number.isFinite(theta)) this._goalTheta = theta;
+    if (Number.isFinite(phi))   this._goalPhi = Math.max(0.1, Math.min(Math.PI * 0.9, phi));
+    if (Number.isFinite(dist))  this.setTargetDist(dist);
+    if (target && Number.isFinite(target.x) && Number.isFinite(target.z)) {
+      this._goalTarget.set(target.x, target.y ?? 0, target.z);
+    }
+  }
 }
