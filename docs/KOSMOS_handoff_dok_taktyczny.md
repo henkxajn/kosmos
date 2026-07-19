@@ -66,11 +66,27 @@ node tmp_fleet_registry_smoke.mjs      # 50/50
 `tmp_*` w .gitignore (lokalne). ⚠ `tmp_fleet_p1/p3` padają — to znany `#stale-smoke-fleet-p1-p3`
 (pre-existing, potwierdzone na HEAD~5; NIE dotyczy doku).
 
-## Otwarte / backlog
+## STAN ZAMKNIĘCIA SESJI (2026-07-19)
 
-- **Live-gate (Filip)** — checklista `docs/dok-taktyczny-playtest.md` (flaga ON → `Y` → pełny
-  obieg + kolizje HUD/paneli + scroll + OŚ). To ostatni punkt DoD §4.
+Dok **zaimplementowany** (Krok A-lite + slice'y 4a–4d), **smoke 103/103 + regresje arca zielone**
+(fleetpicture 83 / map_labels 52 / tactical 44 / registry 50), flaga `tacticalDock` **OFF (default)**.
+**DoD §4.3 (pełny obieg na żywo w przeglądarce) OCZEKUJE na playtest Filipa** — sesja autonomiczna
+nie miała podłączonego rozszerzenia Chrome. **NASTĘPNA SESJA ZACZYNA OD WYNIKÓW TEGO PLAYTESTU**
+(`docs/dok-taktyczny-playtest.md`): naprawa ewentualnych uwag, potem domknięcie DoD.
+
+## Otwarte pozycje (bez zmian względem arca Obrazu Operacyjnego)
+
+- **Live-gate doku (§4.3)** — checklista `docs/dok-taktyczny-playtest.md` (flaga ON → `Y` → pełny
+  obieg + kolizje HUD/paneli + scroll + OŚ). Ostatni punkt DoD §4; do zrobienia przez Filipa.
+- **„Tydzień bez MAPY"** (deprecjacja mapy 2D, `commandTacticalMap` OFF) — **start PO playteście doku**,
+  z **dokiem ON jako konfiguracją docelową** (dok + rejestr zastępują mapę 2D). Notatki: weryfikacja §10.3.
+- **Checklista §10.3** (`docs/KOSMOS_obraz_operacyjny_weryfikacja.md`) — audyt flows mapy 2D PRZED
+  ewentualnym kasowaniem kodu.
+- **#fleetpicture-consolidation** (ROADMAP §4) — migracja legacy formatterów na `FleetPictureLogic`
+  (stopniowo, za decyzją).
+- **Wraki/kontakty w rejestrze — NIETESTOWANE live** (brak wraków w save; logika smoke) — zweryfikować
+  przy naturalnej okazji.
 - **Domyślny stan pasa** — start rozwinięty (`TACTICAL_DOCK_H=200`); pierwsza sesja Filipa oceni
   (rozwinięty vs zwinięty) — stała łatwa do zmiany.
-- **Backlog (poza planem, osobna decyzja):** zoom poziomy osi, marker year-planet dla nie-hover
+- **Backlog doku (poza planem, osobna decyzja):** zoom poziomy osi, marker year-planet dla nie-hover
   celów, akcje zbiorcze w doku (świadomie oddane FleetGroupPanel/FleetCommandPanel).
