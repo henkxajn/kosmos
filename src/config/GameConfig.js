@@ -147,8 +147,9 @@ export const GAME_CONFIG = {
     //   na dole ekranu WYŁĄCZNIE w trybie taktycznym Y. Lewy dok [LISTA]/[OŚ] (czwarta
     //   soczewka FleetPictureLogic — „co się dzieje TERAZ, tutaj") + prawy mini-panel
     //   wybranego statku. Render/UI-only, bez migracji save (collapse+zakładka w uiPrefs).
-    //   OFF (default) = zero śladu i zero kosztów; tryb Y bez doku działa jak dotąd.
-    tacticalDock:         false,
+    //   Default ON (konwencja arca — plan główny §8 DoD: flagi domyślnie ON na dev);
+    //   tryb Y bez doku (flaga OFF) działa jak dotąd — zero śladu i zero kosztów.
+    tacticalDock:         true,
     // ── Energy Brownout Gate (runtime-only, bez migracji save) ────────────
     //   Deficyt energii (balance<0) realnie ogranicza produkcję PROPORCJONALNIE
     //   do pokrycia (avail=production/consumption): kopalnie (poziom wejściowy),
