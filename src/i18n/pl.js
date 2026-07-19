@@ -3175,6 +3175,7 @@ export default {
   'tacticalDock.tabList':     'LISTA',
   'tacticalDock.tabTimeline': 'OŚ',
   'tacticalDock.empty':       'Brak statków w tym układzie',
+  'tacticalDock.timelineSoon': 'Oś czasu — wkrótce',
 
   // ── Rejestr floty K3 (Obraz Operacyjny — Faza 3) ──────────────────────────
   'fleet.viewMap':      'MAPA',

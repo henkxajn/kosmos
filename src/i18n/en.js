@@ -3175,6 +3175,7 @@ export default {
   'tacticalDock.tabList':     'LIST',
   'tacticalDock.tabTimeline': 'AXIS',
   'tacticalDock.empty':       'No vessels in this system',
+  'tacticalDock.timelineSoon': 'Timeline — coming soon',
 
   'fleet.viewMap':      'MAP',
   'fleet.viewRegistry': 'REGISTRY',

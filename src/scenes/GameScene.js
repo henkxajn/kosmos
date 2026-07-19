@@ -4470,6 +4470,9 @@ export class GameScene {
     window.addEventListener('dblclick', (e) => {
       if (this.planetScene?.isOpen) return;
       if (this.uiManager?.overlayManager?.isAnyOpen()) return;
+      // Faza 4 (Dok taktyczny) + higiena: dwuklik nad panelem UI (dok/panele floty/stacji)
+      // NIE fokusuje statku „pod spodem" — 3D picking tylko nad odsłoniętą mapą.
+      if (this.uiManager?.isOverUI?.(e.clientX, e.clientY)) return;
 
       // Najpierw vessel — hover state łapie go niezależnie od rozmiaru sprite.
       // Screen-space picking zwiększamy do 50px (sprite ma często <5px na ekranie).

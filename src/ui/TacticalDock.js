@@ -20,15 +20,35 @@ import {
   BOTTOM_RESERVED, TACTICAL_DOCK_H, TACTICAL_DOCK_PANEL_W, TACTICAL_DOCK_TAB_H, COSMIC,
 } from '../config/LayoutConfig.js';
 import { t }                from '../i18n/i18n.js';
-import { DOCK_TABS, DEFAULT_DOCK_TAB, computeDockLayout } from './TacticalDockLogic.js';
+import { toneColor }        from './FleetPictureLogic.js';
+import {
+  DOCK_TABS, DEFAULT_DOCK_TAB, computeDockLayout,
+  buildDockRows, dockVisibleRowCount, clampDockScroll,
+} from './TacticalDockLogic.js';
+
+const DOCK_ROW_H      = 22;    // wysokość wiersza LISTY (px logiczne)
+const DOCK_DBLCLICK_MS = 300;  // okno dwukliku wiersza → vessel:focus (inaczej select+ping)
+const DOCK_ROW_FUEL_W = 44;    // mini-pasek paliwa w wierszu
+
+// Kolor kropki alertu wg severity (1 krytyczny → 3 ostrzeżenie).
+function _alertDotColor(severity) {
+  if (severity <= 1) return THEME.danger;
+  if (severity === 2) return '#ff8844';
+  return THEME.warning;
+}
 
 export class TacticalDock extends BaseOverlay {
   constructor() {
     super(null);
     this._collapsed = false;
     this._tab       = DEFAULT_DOCK_TAB;   // 'list' | 'timeline'
-    this._scroll    = 0;                  // offset scrolla LISTY (4b)
+    this._scroll    = 0;                  // offset scrolla LISTY (px)
     this._drawnRect = null;
+    this._rowCount    = 0;                // z ostatniego draw (clamp scrolla w handleWheel)
+    this._visibleRows = 0;
+    this._lastRowClickMs = 0;            // detekcja dwukliku wiersza
+    this._lastRowClickId = null;
+    this._pendingScrollToId = null;      // auto-scroll do statku wybranego na mapie
     this._syncPrefs();
 
     // Self-managed widoczność: pas żyje TYLKO w trybie taktycznym Y i tylko gdy flaga ON.
@@ -36,9 +56,21 @@ export class TacticalDock extends BaseOverlay {
       const active = !!e?.active && GAME_CONFIG.FEATURES?.tacticalDock === true;
       this.visible = active;
       if (active) this._syncPrefs();      // przy wejściu wczytaj świeże (restore save)
-      else this._hoverZone = null;
+      else { this._hoverZone = null; this._clearHoverVid(); }
       this._markDirty();
     });
+
+    // Selekcja dwustronna: klik statku na MAPIE 3D → dok przewija się do wiersza.
+    EventBus.on('ui:selectionChanged', (e) => {
+      if (!this.visible) return;
+      const id = e?.vesselId ?? null;
+      if (id) this._pendingScrollToId = id;   // draw doścignie scroll
+      this._markDirty();
+    });
+  }
+
+  _clearHoverVid() {
+    window.KOSMOS?.threeRenderer?.setTacticalHoverVid?.(null);
   }
 
   _syncPrefs() {
@@ -143,7 +175,7 @@ export class TacticalDock extends BaseOverlay {
       this._addHit(cb.x, cb.y, cb.w, cb.h, 'collapse', {});
     }
 
-    // Treść (tylko rozwinięty) — 4a: puste ramki + hint (LISTA/OŚ w 4b/4c, mini-panel w 4d).
+    // Treść (tylko rozwinięty). LISTA = 4b; OŚ = placeholder do 4c; mini-panel = 4d.
     if (!this._collapsed) {
       // Przegroda lewy dok ┬ prawy mini-panel.
       ctx.strokeStyle = C.border;
@@ -153,22 +185,170 @@ export class TacticalDock extends BaseOverlay {
       ctx.lineTo(L.panelRect.x + 0.5, L.y + L.h);
       ctx.stroke();
 
-      // Hint w centrum lewego regionu (placeholder do slice 4b/4c).
-      if (L.leftRect.h > 16) {
-        ctx.fillStyle = C.textDim;
-        ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(t('tacticalDock.empty'),
-          L.leftRect.x + L.leftRect.w / 2, L.leftRect.y + L.leftRect.h / 2);
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'alphabetic';
+      if (this._tab === 'list') {
+        this._drawListRows(ctx, L);
+      } else {
+        this._rowCount = 0; this._visibleRows = 0;
+        this._drawCenterHint(ctx, L.leftRect, t('tacticalDock.timelineSoon'));
       }
+    } else {
+      this._rowCount = 0; this._visibleRows = 0;
     }
 
-    // Tło jako hit-zone NA KOŃCU — zony konkretne (zakładki/collapse) mają priorytet
+    // Tło jako hit-zone NA KOŃCU — zony konkretne (zakładki/collapse/wiersze) mają priorytet
     // (_hitTest=find); tło konsumuje kliki/scroll w pas (nie przelatują do mapy 3D).
     this._addHit(L.x, L.y, L.w, L.h, 'bg', {});
+  }
+
+  // ── LISTA — dane + rysowanie wierszy ─────────────────────────────────────────
+  // ctx dla czystej logiki (wpięcia świata jak FleetManagerOverlay._registryCtx).
+  _dockCtx() {
+    const K = window.KOSMOS;
+    const vm = K?.vesselManager;
+    const dscs = K?.deepSpaceCombatSystem;
+    return {
+      pictureCtx: {
+        gameYear:      K?.timeSystem?.gameTime ?? 0,
+        fleetSystem:   K?.fleetSystem ?? null,
+        combatCheck:   dscs?._findActiveEncounterContaining
+          ? (id) => !!dscs._findActiveEncounterContaining(id) : null,
+        isImmobilized: vm?.isImmobilized ? (v) => vm.isImmobilized(v) : null,
+      },
+      activeSystemId: K?.activeSystemId ?? 'sys_home',
+    };
+  }
+
+  _computeRows() {
+    const vm = window.KOSMOS?.vesselManager;
+    if (!vm?.getAllVessels) return [];
+    return buildDockRows(vm.getAllVessels(), this._dockCtx());
+  }
+
+  _drawCenterHint(ctx, rect, text) {
+    if (rect.h <= 16) return;
+    ctx.fillStyle = THEME.textDim;
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, rect.x + rect.w / 2, rect.y + rect.h / 2);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+
+  _drawListRows(ctx, L) {
+    const rect = L.leftRect;
+    const rows = this._computeRows();
+    this._rowCount = rows.length;
+    const visible = dockVisibleRowCount(rect.h, DOCK_ROW_H);
+    this._visibleRows = visible;
+
+    if (rows.length === 0) { this._scroll = 0; this._drawCenterHint(ctx, rect, t('tacticalDock.empty')); return; }
+
+    // Auto-scroll do statku wybranego na mapie (jednorazowo, gdy jest w bieżącej liście).
+    if (this._pendingScrollToId) {
+      const idx = rows.findIndex((r) => r.id === this._pendingScrollToId);
+      if (idx >= 0) {
+        const rowTop = idx * DOCK_ROW_H;
+        const rowBot = rowTop + DOCK_ROW_H;
+        if (rowTop < this._scroll) this._scroll = rowTop;
+        else if (rowBot > this._scroll + rect.h) this._scroll = rowBot - rect.h;
+      }
+      this._pendingScrollToId = null;
+    }
+    this._scroll = clampDockScroll(this._scroll, rows.length, visible, DOCK_ROW_H);
+
+    const leadId = window.KOSMOS?.uiManager?.getSelectedVesselId?.();
+    ctx.save();
+    ctx.beginPath(); ctx.rect(rect.x, rect.y, rect.w, rect.h); ctx.clip();
+    for (let i = 0; i < rows.length; i++) {
+      const ry = rect.y + i * DOCK_ROW_H - this._scroll;
+      if (ry + DOCK_ROW_H < rect.y || ry > rect.y + rect.h) continue;   // poza widokiem
+      this._drawRow(ctx, rows[i], rect.x, ry, rect.w, leadId);
+      // Hit-zone przycięta do widocznego wycinka wiersza (klik tylko w widoczne).
+      const visTop = Math.max(ry, rect.y);
+      const visBot = Math.min(ry + DOCK_ROW_H, rect.y + rect.h);
+      if (visBot > visTop) this._addHit(rect.x, visTop, rect.w, visBot - visTop, 'row', { id: rows[i].id });
+    }
+    ctx.restore();
+
+    // Wskaźnik scrolla (gdy jest co przewijać).
+    if (rows.length > visible) {
+      const trackH = rect.h;
+      const thumbH = Math.max(16, trackH * visible / rows.length);
+      const maxScroll = (rows.length - visible) * DOCK_ROW_H;
+      const thumbY = rect.y + (maxScroll > 0 ? (this._scroll / maxScroll) * (trackH - thumbH) : 0);
+      ctx.fillStyle = 'rgba(0,255,180,0.20)';
+      ctx.fillRect(rect.x + rect.w - 3, thumbY, 2, thumbH);
+    }
+  }
+
+  _drawRow(ctx, row, x, ry, w, leadId) {
+    const C = THEME;
+    const isLead = row.id === leadId;
+    const hover  = this._hoverZone?.type === 'row' && this._hoverZone?.data?.id === row.id;
+    if (isLead)      { ctx.fillStyle = 'rgba(0,255,180,0.12)'; ctx.fillRect(x, ry, w, DOCK_ROW_H); }
+    else if (hover)  { ctx.fillStyle = 'rgba(0,255,180,0.05)'; ctx.fillRect(x, ry, w, DOCK_ROW_H); }
+
+    const midY = ry + DOCK_ROW_H / 2;
+    const padL = x + 6;
+    ctx.textBaseline = 'middle';
+
+    // Glif (kolor tonu).
+    ctx.fillStyle = toneColor(row.tone, C) ?? C.text ?? C.textPrimary;
+    ctx.font = `${C.fontSizeMedium}px ${C.fontFamily}`;
+    ctx.textAlign = 'left';
+    ctx.fillText(row.glyph, padL, midY + 1);
+
+    // Prawy klaster: kropka alertu → pasek paliwa → ETA (od prawej).
+    let rx = x + w - 8;
+    if (row.alertCount > 0) {
+      ctx.fillStyle = _alertDotColor(row.alerts[0].severity);
+      ctx.beginPath(); ctx.arc(rx - 4, midY, 4, 0, Math.PI * 2); ctx.fill();
+      rx -= 12;
+      if (row.alertCount > 1) {
+        ctx.fillStyle = C.textDim; ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`; ctx.textAlign = 'right';
+        ctx.fillText(String(row.alertCount), rx, midY); rx -= 10;
+      }
+    }
+    if (row.fuelPct !== null && row.fuelPct !== undefined) {
+      const bw = DOCK_ROW_FUEL_W, bh = 5, bx = rx - bw, by = midY - bh / 2;
+      const col = row.fuelPct > 0.3 ? (C.success ?? '#00ee88') : (C.warning ?? '#ffcc44');
+      this._drawBar(ctx, bx, by, bw, bh, row.fuelPct, col, C.border);
+      rx = bx - 8;
+    }
+    if (Number.isFinite(row.eta?.year)) {
+      const moving = row.eta.confidence === 'moving';
+      const txt = `${moving ? '~' : '⏱'}${Math.round(row.eta.year)}`;
+      ctx.fillStyle = C.info; ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`; ctx.textAlign = 'right';
+      ctx.fillText(txt, rx, midY); rx -= ctx.measureText(txt).width + 8;
+    }
+
+    // Nazwa (+⚠ gdy unieruchomiony) + aktywność (dim), do lewej.
+    ctx.textAlign = 'left';
+    let nameX = padL + 16;
+    if (row.immobilized) {
+      ctx.fillStyle = C.danger; ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`;
+      ctx.fillText('⚠', nameX, midY); nameX += ctx.measureText('⚠ ').width;
+    }
+    ctx.fillStyle = isLead ? C.accent : C.textPrimary;
+    ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`;
+    const nameMaxW = Math.max(0, Math.min(150, rx - nameX - 6));
+    const nameTxt = this._truncate(ctx, row.name, nameMaxW);
+    ctx.fillText(nameTxt, nameX, midY);
+    const actX = nameX + ctx.measureText(nameTxt).width + 10;
+    if (actX < rx - 20) {
+      ctx.fillStyle = C.textDim; ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`;
+      const act = t(row.activityKey, ...(row.activityArgs ?? []));
+      ctx.fillText(this._truncate(ctx, act, rx - actX - 6), actX, midY);
+    }
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  _truncate(ctx, text, maxW) {
+    text = String(text ?? '');
+    if (maxW <= 0) return '';
+    if (ctx.measureText(text).width <= maxW) return text;
+    let s = text;
+    while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+    return s + '…';
   }
 
   // ── Interakcja ───────────────────────────────────────────────────────────────
@@ -188,15 +368,46 @@ export class TacticalDock extends BaseOverlay {
         this._writePref('tacticalDockCollapsed', this._collapsed);
         this._markDirty();
         return;
+      case 'row': {
+        const id = zone.data?.id;
+        if (!id) return;
+        const um = window.KOSMOS?.uiManager;
+        const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+        const isDouble = (now - this._lastRowClickMs < DOCK_DBLCLICK_MS) && this._lastRowClickId === id;
+        this._lastRowClickMs = now;
+        this._lastRowClickId = id;
+        if (isDouble) {
+          EventBus.emit('vessel:focus', { vesselId: id });     // dwuklik → dolot kamery + śledzenie
+        } else {
+          um?.setSelectedVesselId?.(id);                        // klik → selekcja (współdzielona)
+          window.KOSMOS?.threeRenderer?.pingVessel?.(id);       // + ping FX (kamera nietknięta)
+        }
+        this._markDirty();
+        return;
+      }
       // 'bg' → swallow (klik w pas nie przelatuje do mapy 3D).
     }
   }
 
-  /** Scroll listy nad pasem (konsumuje kółko → kamera nie zoomuje). 4a: brak listy → tylko blokada. */
+  /** Hover wiersza → podgląd trasy/ducha statku (setTacticalHoverVid); niczego nie zaznacza. */
+  handleMouseMove(x, y) {
+    if (!this.visible) return;
+    const prev = this._hoverZone;
+    super.handleMouseMove(x, y);   // ustawia _hoverZone
+    const z = this._hoverZone;
+    const hoverVid = z?.type === 'row' ? (z.data?.id ?? null) : null;
+    window.KOSMOS?.threeRenderer?.setTacticalHoverVid?.(hoverVid);
+    if (prev !== z) this._markDirty();
+  }
+
+  /** Kółko nad pasem = scroll LISTY (blokuje zoom kamery). Poza pasem → false (zoom). */
   handleWheel(x, y, delta) {
     if (!this.visible) return false;
     if (!this._hitTest(x, y)) return false;   // poza pasem → nie konsumuj (zoom kamery)
-    // 4b doda faktyczny scroll offsetu LISTY; teraz sam fakt bycia nad pasem blokuje zoom.
-    return true;
+    if (this._tab === 'list' && this._rowCount > this._visibleRows) {
+      this._scroll = clampDockScroll(this._scroll + delta, this._rowCount, this._visibleRows, DOCK_ROW_H);
+      this._markDirty();
+    }
+    return true;   // nad pasem ZAWSZE konsumuj (nawet gdy nie ma czego scrollować)
   }
 }

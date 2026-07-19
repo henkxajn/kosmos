@@ -91,6 +91,10 @@ const BODY_VEIL_OPACITY = 0.72;             // 0=widać, 1=ukryte (grey-out do c
 const ALERT_MARKER_COLOR = 0xff4466;        // czerwony (konwencja wroga, == factionColorRaw fallback)
 const ALERT_MARKER_SCALE = 0.7;             // bazowa skala billboardu (encircle ~0.3 sprite statku)
 const ALERT_MARKER_REF_DIST = 60;           // dystans kamery [WU] dający skalę bazową; dalej → skala rośnie (stały rozmiar ekranowy)
+const TACTICAL_PING_COLOR      = 0x66ddff;  // F4 Dok: kolor ping-FX kliku wiersza (cyan, spójny z sensor ringiem)
+const TACTICAL_PING_THROTTLE_MS = 180;      // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
+const ROUTE_LINE_HOVER_OPACITY = 0.9;       // F4 Dok: opacity routeLine statku pod kursorem doku (baza 0.4)
+const ROUTE_LINE_BASE_OPACITY  = 0.4;       // baza materiału routeLine (mirror inline w tworzeniu)
 
 // ── Fleet Command Console (Slice 0) — pierścień zaznaczenia/hover ────────────
 // Slice 5 — cache tekstur insygniów per kolor frakcji (reuse, wzór ResourceIcons).
@@ -300,6 +304,8 @@ export class ThreeRenderer {
     this._tacticalGlyphs       = new Map();  // F2 tryb Y: vesselId → Sprite-glif (stały rozmiar ekranowy)
     this._tacticalHiddenModels = new Map();  // F2: vesselId → [dzieci wrappera ukryte na czas trybu]
     this._tacticalGhosts       = new Map();  // F2: vesselId → Sprite-duch ETA w punkcie celu misji
+    this._tacticalHoverVid     = null;       // F4 Dok: vesselId pod kursorem w doku (hover-podgląd: routeLine jaśniej + puls ducha)
+    this._lastTacticalPingMs   = 0;          // F4 Dok: throttle ping-FX przy kliku wiersza
     this._tacticalOrbitStyled  = null;       // 2g: [{m, opacity, transparent}] — restore restyle orbit
     this._tacticalGrid         = null;       // 2g: Group — subtelna siatka taktyczna
     this._tacticalOrbitMarkers = new Map();  // 2g: klucz → Sprite (chevron/tik przyszłej pozycji/ETA)
@@ -5907,6 +5913,50 @@ export class ThreeRenderer {
     };
   }
 
+  // ── F4 Dok taktyczny: hover-podgląd + ping ─────────────────────────────────
+  // Ustawia statek pod kursorem doku. Rozjaśnienie routeLine = event-driven set
+  // opacity materiału (dla WŁASNYCH nikt nie nadpisuje per-frame — trzyma się);
+  // puls ducha ETA czyta _tacticalHoverVid w _upsertTacticalGhost (per-frame).
+  setTacticalHoverVid(vid) {
+    const next = vid ?? null;
+    if (this._tacticalHoverVid === next) return;
+    const prev = this._tacticalHoverVid;
+    this._tacticalHoverVid = next;
+    this._setRouteLineHover(prev, false);
+    this._setRouteLineHover(next, true);
+  }
+
+  _setRouteLineHover(vid, on) {
+    if (!vid) return;
+    const mat = this._vessels.get(vid)?.routeLine?.material;
+    if (mat) mat.opacity = on ? ROUTE_LINE_HOVER_OPACITY : ROUTE_LINE_BASE_OPACITY;
+  }
+
+  // Krótki „ping" (pierścień ripple) na pozycji statku — feedback selekcji w doku BEZ
+  // ruszania kamery. Throttle koalescuje szybkie kliki; auto-dispose przez silnik FX.
+  pingVessel(vesselId) {
+    if (!vesselId) return;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+    if (now - (this._lastTacticalPingMs || 0) < TACTICAL_PING_THROTTLE_MS) return;
+    this._lastTacticalPingMs = now;
+    // Pozycja: sprite.position = gotowy world (orbita/dok); fallback vessel.position → S().
+    const sp = this._vessels.get(vesselId)?.sprite;
+    let x, y, z;
+    if (sp?.visible && sp.position) { x = sp.position.x; y = sp.position.y; z = sp.position.z; }
+    else {
+      const p = window.KOSMOS?.vesselManager?.getVessel?.(vesselId)?.position;
+      if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+      x = S(p.x); y = 0.3; z = S(p.y);
+    }
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.08, 0.13, 24),
+      new THREE.MeshBasicMaterial({ color: TACTICAL_PING_COLOR, transparent: true, opacity: 1, side: THREE.DoubleSide, depthWrite: false }),
+    );
+    ring.position.set(x, y, z);
+    ring.rotation.x = -Math.PI / 2;
+    this._spawnFx(ring, { kind: 'ping', lifetime: FX_PING_MS, baseScale: 1, baseOpacity: 1 });
+  }
+
   _syncTacticalGlyphs() {
     if (window.KOSMOS?.tacticalMode?.isActive !== true) {
       if (this._tacticalGlyphs.size) this._disposeAllTacticalGlyphs();
@@ -6011,10 +6061,14 @@ export class ThreeRenderer {
     sp.position.set(world.worldX, 0.02, world.worldZ);
     const distFactor = camPos ? Math.max(0.5, camPos.distanceTo(sp.position) / ALERT_MARKER_REF_DIST) : 1;
     sp.scale.set(0.8 * distFactor, 0.6 * distFactor, 1);
-    // 'moving' pulsuje (cel ruchomy — ETA przybliżone); firm = spokojna półprzezroczystość.
-    sp.material.opacity = moving
-      ? 0.35 + 0.25 * (0.5 + 0.5 * Math.sin(this._clock.getElapsedTime() * 3.2))
-      : 0.55;
+    // F4 Dok — hover w doku: mocniejszy/szybszy puls (podgląd „który to statek").
+    // Inaczej: 'moving' pulsuje (cel ruchomy — ETA przybliżone); firm = spokojna półprzezroczystość.
+    const hovered = vid === this._tacticalHoverVid;
+    sp.material.opacity = hovered
+      ? 0.60 + 0.40 * (0.5 + 0.5 * Math.sin(this._clock.getElapsedTime() * 6.0))
+      : (moving
+          ? 0.35 + 0.25 * (0.5 + 0.5 * Math.sin(this._clock.getElapsedTime() * 3.2))
+          : 0.55);
   }
 
   _disposeTacticalGhost(vid) {
