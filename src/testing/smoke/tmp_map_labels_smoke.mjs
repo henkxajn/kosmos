@@ -13,7 +13,7 @@ const T = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('
 
 const {
   gatherColonyLabels, gatherStationLabels, stationStatusBadges,
-  labelLOD, stackLabels,
+  labelLOD, stationLabelLOD, STATION_MARKER_FLOOR, stackLabels,
   COLONY_ICON, STATION_ICON, BADGE_ICON,
   LOD_PLAQUE_FULL, LOD_PLAQUE_FADE, LOD_MARKER_FADE, LABEL_FADE_END,
 } = await import('../../ui/MapLabelLogic.js');
@@ -105,6 +105,26 @@ const {
   // Monotoniczność: plaqueAlpha nie rośnie z dystansem
   const seq = [100, 160, 200, 260, 320, 400].map(d => labelLOD(d).plaqueAlpha);
   T('4.8 plaqueAlpha monotonicznie nierosnący', seq.every((v, i) => i === 0 || v <= seq[i - 1] + 1e-9));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. stationLabelLOD — fix znikającej stacji: marker z podłogą przy oddaleniu
+//    (kolonie declutterują normalnie — mają widoczną planetę; stacja NIE — GLB sub-pikselowy).
+// ═══════════════════════════════════════════════════════════════════════════
+{
+  const far = LABEL_FADE_END + 60;   // dystans dopasowania układu / tryb Y (frameSystem 380..450)
+  T('5.1 kolonia daleko → marker 0 (declutter)', labelLOD(far).markerAlpha === 0);
+  T('5.2 stacja daleko → marker ≥ podłoga (nie znika)', stationLabelLOD(far).markerAlpha >= STATION_MARKER_FLOOR);
+  T('5.3 stacja daleko → plakietka 0 (tylko marker)', stationLabelLOD(far).plaqueAlpha === 0);
+  T('5.4 na FADE_END kolonia znika, stacja żyje',
+    labelLOD(LABEL_FADE_END).markerAlpha === 0 && stationLabelLOD(LABEL_FADE_END).markerAlpha >= STATION_MARKER_FLOOR);
+  const mid = (LOD_PLAQUE_FADE + LOD_MARKER_FADE) / 2;   // reżim znacznika (plakietka zgasła)
+  T('5.5 mid: marker=1 (podłoga nie psuje pełni)', stationLabelLOD(mid).markerAlpha === 1);
+  const near = LOD_PLAQUE_FULL - 10;   // faza plakietki
+  T('5.6 blisko: stacja == kolonia (podłoga NIE wskrzesza markera)',
+    stationLabelLOD(near).markerAlpha === labelLOD(near).markerAlpha
+    && stationLabelLOD(near).plaqueAlpha === labelLOD(near).plaqueAlpha);
+  T('5.7 podłoga tunable w (0,1]', STATION_MARKER_FLOOR > 0 && STATION_MARKER_FLOOR <= 1);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

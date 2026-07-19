@@ -17,7 +17,7 @@ import { GAME_CONFIG } from '../config/GameConfig.js';
 import EventBus from '../core/EventBus.js';
 import EntityManager from '../core/EntityManager.js';
 import {
-  gatherColonyLabels, gatherStationLabels, labelLOD, stackLabels, BADGE_ICON,
+  gatherColonyLabels, gatherStationLabels, labelLOD, stationLabelLOD, stackLabels, BADGE_ICON,
   gatherVesselLabels, vesselLabelLOD, toLogicalPx,
   edgeIndicators, buildSystemChips, layoutSystemChips, systemDisplayName,
 } from './MapLabelLogic.js';
@@ -63,9 +63,21 @@ export class MapLabelLayer {
     this._hitZones = [];
     if (!tr) return;
 
-    const { plaqueAlpha, markerAlpha } = labelLOD(tr.getCameraDistance?.() ?? null);
-    if (plaqueAlpha <= 0.02 && markerAlpha <= 0.02) return;   // za daleko → declutter
+    const camDist = tr.getCameraDistance?.() ?? null;
+    const { plaqueAlpha, markerAlpha } = labelLOD(camDist);
+    const stationLod = stationLabelLOD(camDist);   // marker stacji ma podłogę (nie znika przy oddaleniu)
     const colors  = KIND_COLOR();
+
+    // Stacje zbieramy PIERWSZE — potrzebne do decyzji declutter (marker stacji z podłogą pozwala
+    // pasowi etykiet żyć nawet gdy kolonie zniknęły; ale gdy stacji brak, zachowujemy early-out).
+    const stationRaw = [];
+    for (const it of gatherStationLabels(window.KOSMOS?.stationSystem)) {
+      const pos = tr.getStationScreenPosition?.(it.id);
+      if (!pos) continue;
+      stationRaw.push({ ...it, isStation: true, anchorX: pos.x / uiScale, anchorY: pos.y / uiScale, offset: STATION_PLAQUE_OFFSET, color: colors.station });
+    }
+    const stationsVisible = stationRaw.length > 0 && stationLod.markerAlpha > 0.02;
+    if (plaqueAlpha <= 0.02 && markerAlpha <= 0.02 && !stationsVisible) return;   // za daleko I brak stacji → declutter
 
     // Zbierz itemy z pozycją ekranową (anchor = punkt ciała) — mgła wojny w MapLabelLogic.
     const raw = [];
@@ -74,21 +86,20 @@ export class MapLabelLayer {
       if (!pos) continue;
       raw.push({ ...it, isStation: false, anchorX: pos.x / uiScale, anchorY: pos.y / uiScale, offset: COLONY_PLAQUE_OFFSET, color: colors[it.kind] });
     }
-    for (const it of gatherStationLabels(window.KOSMOS?.stationSystem)) {
-      const pos = tr.getStationScreenPosition?.(it.id);
-      if (!pos) continue;
-      raw.push({ ...it, isStation: true, anchorX: pos.x / uiScale, anchorY: pos.y / uiScale, offset: STATION_PLAQUE_OFFSET, color: colors.station });
-    }
+    raw.push(...stationRaw);
 
     ctx.save();
     ctx.textBaseline = 'middle';
 
-    // ── LOD-far: znaczniki przy ciele (K1) — bez stackingu (małe), klik gdy dominują ──
-    if (markerAlpha > 0.02) {
+    // ── LOD-far: znaczniki przy ciele (K1) — bez stackingu (małe), klik gdy dominują.
+    // Alfa per rodzaj: kolonie = markerAlpha (declutter przy oddaleniu), stacje = stationLod (podłoga).
+    if (markerAlpha > 0.02 || stationLod.markerAlpha > 0.02) {
       for (const it of raw) {
+        const mA = it.isStation ? stationLod.markerAlpha : markerAlpha;
+        if (mA <= 0.02) continue;
         if (it.anchorX < 0 || it.anchorX > W || it.anchorY < 0 || it.anchorY > H) continue;
-        const box = this._drawMarker(ctx, it.anchorX, it.anchorY, it, markerAlpha);
-        if (it.isStation && box && markerAlpha >= plaqueAlpha) this._hitZones.push({ ...box, stationId: it.id });
+        const box = this._drawMarker(ctx, it.anchorX, it.anchorY, it, mA);
+        if (it.isStation && box && mA >= plaqueAlpha) this._hitZones.push({ ...box, stationId: it.id });
       }
     }
 

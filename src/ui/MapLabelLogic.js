@@ -43,6 +43,28 @@ export function labelLOD(dist) {
   return { plaqueAlpha: 0, markerAlpha: 0 };
 }
 
+// Podłoga alfy markera STACJI (0..1). Stacja gracza NIE znika przy oddaleniu: jej model GLB jest
+// sub-pikselowy przy dystansie dopasowania układu / w trybie Y (frameSystem ląduje na 380..450 —
+// dokładnie w paśmie declutter labelLOD), więc marker etykiety to JEDYNA jej reprezentacja. 0 =
+// przywróć stare declutterowanie stacji.
+export const STATION_MARKER_FLOOR = 0.9;
+
+/**
+ * LOD etykiety STACJI — jak labelLOD, ale marker ma PODŁOGĘ (nie znika przy oddaleniu). Identyczny
+ * fix jak clusterAlpha=1 dla plakietek statków (Slice 1e): frameSystem/tryb Y parkuje kamerę w dawnym
+ * paśmie fade, przez co WŁASNA stacja gracza znikała naraz z etykietą (bug live-gate 4f). Kolonie
+ * declutterują normalnie (mają widoczną planetę); stacje NIE (sub-pikselowy GLB). Podłoga TYLKO w
+ * reżimie znacznika (plakietka już zgasła) — bez wskrzeszania markera w fazie plakietki (z bliska).
+ * @returns {{plaqueAlpha:number, markerAlpha:number}}
+ */
+export function stationLabelLOD(dist) {
+  const base = labelLOD(dist);
+  const markerAlpha = base.plaqueAlpha <= 0.02
+    ? Math.max(base.markerAlpha, STATION_MARKER_FLOOR)
+    : base.markerAlpha;
+  return { plaqueAlpha: base.plaqueAlpha, markerAlpha };
+}
+
 /**
  * Anty-nakładanie (K2) — deterministyczny greedy: sort po docelowym Y (potem X dla stabilności),
  * każdą kolidującą etykietę zsuń W DÓŁ pod najniższą nakładającą się (z odstępem gap). Bez fizyki,
