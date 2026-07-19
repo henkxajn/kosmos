@@ -2,8 +2,10 @@
 
 **Data:** 2026-07-19 · **Save:** v90 — FORMAT NIETKNIĘTY (zero migracji; persist =
 `uiPrefs.tacticalDockCollapsed` + `uiPrefs.tacticalDockTab`, jadą w hurtowej serializacji uiPrefs).
-**Flaga:** `FEATURES.tacticalDock` — **OFF (default)**. **Live-gate: PENDING Filip** (sesja
-autonomiczna, rozszerzenie Chrome niepodłączone → weryfikacja = smoke + regresje).
+**Flaga:** `FEATURES.tacticalDock` — **ON (default)** (commit `8cbd2e8`). **Live-gate 4f: 7/9 PASS +
+pakiet poprawek wdrożony** (slice 4f + 4f-1b + fix znikającej stacji + kandydat B) — pozostał FINALNY
+live-check Filipa: **przezroczystość/brak ramki + scenariusz stacja→inny układ→powrót**. Jeśli przejdzie
+→ **Faza 4 zamknięta w całości**.
 **Dokumenty:** plan `docs/KOSMOS_plan_dok_taktyczny_v1.md` · Krok A-lite = §11
 `docs/KOSMOS_obraz_operacyjny_weryfikacja.md` · playtest `docs/dok-taktyczny-playtest.md`.
 
@@ -35,10 +37,31 @@ zostaje w Command/REJESTR — dok świadomie BEZ szukajki/wraków/kontaktów/gru
 - **4d** (`6278770`) — mini-panel: single (karta + ✕ Anuluj `cancelOrder` / 🎯 Rejestr) ·
   multi/flota = agregat (ustępowanie FleetGroupPanel/FleetCommandPanel). FleetManagerOverlay:
   `open({view:'registry', focusVesselId})` czyści filtry + scrolluje rejestr do statku (Q3).
+- **4f** (`0b4cfb7`) — polish po live-gate 7/9. **4f-1** pas wycentrowany ~90% (`DOCK_SIDE_GAP_FRAC=0.05`
+  → wszystkie pod-rect offsetowane) + tło jaśniejsze (`TACTICAL_DOCK_BG_ALPHA`) + mini-panel 300→260 +
+  podniesienie nad zegar (`TACTICAL_DOCK_CLOCK_CLEARANCE=20`; dolna krawędź pasa siada na `H-62` = górna
+  krawędź paska zegara; `getReservedHeight += prześwit`, panele w lockstep). **4f-2** hover trasy pełny
+  (kolor+opacity + mocniejszy puls ducha; grubość linii = knob best-effort, WebGL capuje do 1 px). **4f-3**
+  CTRL+klik wiersza = `toggleSelection` (mods plumbowane w GameScene, wzór Outlinera). **4f-4** dwuklik
+  zadokowanego przy STACJI → `station:focus` (else-branch vessel:focus miał tylko planety/księżyce). Smoke
+  `tmp_dok_taktyczny_4f_smoke.mjs` 31/31.
+- **4f-1b** (`be4517d`) — strojenie „niemal pływa": `TACTICAL_DOCK_BG_ALPHA` 0.55→0.32 + **USUNIĘTA ramka**
+  pasa (górna krawędź) I przegroda mini-panelu; separacja = przyciemnienie tła + typografia (wiersze/zakładki
+  bez zmian).
+- **Fix znikającej stacji** (`b35c0a5`, OSOBNO) — przyczyna intermittent NIE była zniknięciem mesha, lecz
+  **declutter `labelLOD`**: kamera w trybie Y/dopasowaniu układu parkuje ≥360, marker+plakietka gaśnie a GLB
+  stacji sub-pikselowy → stacja „znika i wraca". Fix `stationLabelLOD` z podłogą markera
+  `STATION_MARKER_FLOOR=0.9` (Filip akceptuje — spójne z `clusterAlpha=1` statków, Slice 1e). Smoke
+  `tmp_map_labels_smoke.mjs` 44/44.
+- **Kandydat B** (`75f5778`, potwierdzony live) — `switchSystem` gubił stacje po zmianie i powrocie do
+  układu → `_restoreActiveSystemStations` (mirror restorera statków, idempotentny). Weryfikacja: Filip,
+  scenariusz stacja→inny układ→powrót.
 
 **i18n** `tacticalDock.*` PL+EN (zakładki, empty, panel, akcje). **Stałe** LayoutConfig:
-`TACTICAL_DOCK_H=200` / `_PANEL_W=300` / `_TAB_H=24`; ThreeRenderer: `TACTICAL_PING_*`,
-`ROUTE_LINE_*_OPACITY`.
+`TACTICAL_DOCK_H=200` / `_PANEL_W=260` / `_TAB_H=24` / `DOCK_SIDE_GAP_FRAC=0.05` /
+`TACTICAL_DOCK_CLOCK_CLEARANCE=20`; TacticalDock: `TACTICAL_DOCK_BG_ALPHA=0.32`; ThreeRenderer:
+`TACTICAL_PING_*`, `ROUTE_LINE_*` (opacity/color/width), `GHOST_PULSE_HOVER_*`; MapLabelLogic:
+`STATION_MARKER_FLOOR=0.9`.
 
 ## Architektura — kto co robi
 
@@ -66,13 +89,15 @@ node tmp_fleet_registry_smoke.mjs      # 50/50
 `tmp_*` w .gitignore (lokalne). ⚠ `tmp_fleet_p1/p3` padają — to znany `#stale-smoke-fleet-p1-p3`
 (pre-existing, potwierdzone na HEAD~5; NIE dotyczy doku).
 
-## STAN ZAMKNIĘCIA SESJI (2026-07-19)
+## STAN ZAMKNIĘCIA SESJI (live-gate 4f + poprawki)
 
-Dok **zaimplementowany** (Krok A-lite + slice'y 4a–4d), **smoke 103/103 + regresje arca zielone**
-(fleetpicture 83 / map_labels 52 / tactical 44 / registry 50), flaga `tacticalDock` **OFF (default)**.
-**DoD §4.3 (pełny obieg na żywo w przeglądarce) OCZEKUJE na playtest Filipa** — sesja autonomiczna
-nie miała podłączonego rozszerzenia Chrome. **NASTĘPNA SESJA ZACZYNA OD WYNIKÓW TEGO PLAYTESTU**
-(`docs/dok-taktyczny-playtest.md`): naprawa ewentualnych uwag, potem domknięcie DoD.
+Dok **zaimplementowany i wypchnięty** (Krok A-lite + 4a–4d + **4f + 4f-1b**), flaga `tacticalDock`
+**ON**. **Live-gate 4f Filipa: 7/9 PASS** (hover w wersji kolor+puls wystarcza); zgłoszone uwagi
+naprawione: 4f-1b (przezroczystość 0.32 + brak ramki), fix znikającej stacji (`labelLOD`) + kandydat B
+(`switchSystem` restore). **POZOSTAŁ FINALNY live-check Filipa**: przezroczystość/brak ramki + scenariusz
+stacja→inny układ→powrót. **Jeśli przejdzie → Faza 4 ZAMKNIĘTA W CAŁOŚCI**, a **następny krok = test
+„tydzień bez MAPY"** po stronie Filipa (z **dokiem ON** jako konfiguracją docelową), po którym decyzja
+o kasowaniu kodu mapy 2D wg **checklisty §10.3** (`docs/KOSMOS_obraz_operacyjny_weryfikacja.md`).
 
 ## Otwarte pozycje (bez zmian względem arca Obrazu Operacyjnego)
 
@@ -90,3 +115,9 @@ nie miała podłączonego rozszerzenia Chrome. **NASTĘPNA SESJA ZACZYNA OD WYNI
   (rozwinięty vs zwinięty) — stała łatwa do zmiany.
 - **Backlog doku (poza planem, osobna decyzja):** zoom poziomy osi, marker year-planet dla nie-hover
   celów, akcje zbiorcze w doku (świadomie oddane FleetGroupPanel/FleetCommandPanel).
+- **`#route-line2-thickness` (DEFERRED)** — realna grubość linii tras. WebGL capuje `LineDashedMaterial`/
+  `LineBasicMaterial.linewidth` do 1 px, więc knoby `ROUTE_LINE_*_WIDTH` nie renderują pogrubienia.
+  Filip: kolor+puls wystarcza → NIE implementować teraz; gdyby temat wrócił = konwersja tras na `Line2`/
+  tube geometry (mesh o realnej szerokości).
+- **`#station-restore-live` — do potwierdzenia przez Filipa** — kandydat B (`_restoreActiveSystemStations`)
+  bez smoke (ThreeRenderer niefeasible headless); scenariusz: stacja→inny układ→powrót → stacja wraca.

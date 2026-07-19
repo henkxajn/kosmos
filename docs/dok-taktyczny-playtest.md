@@ -67,3 +67,22 @@
 ---
 
 **Uwagi / bugi (wpisuj tutaj):**
+
+---
+
+## WYNIKI LIVE-GATE 4f (Filip) — 7/9 PASS + pakiet poprawek
+
+**PASS:** hover (pkt D — kolor+puls wystarcza; realna grubość linii DEFERRED `#route-line2-thickness`),
+selekcja/dwuklik/scroll/OŚ/mini-panel. **Uwagi zgłoszone i naprawione:**
+
+1. **Znikająca „Stacja Nowa Ziemia"** (znika i wraca) — przyczyna to NIE zniknięcie mesha, lecz declutter
+   `labelLOD` przy dystansie dopasowania układu / w trybie Y (GLB stacji sub-pikselowy → marker etykiety =
+   jedyna forma). **Fix `b35c0a5`**: `stationLabelLOD` z podłogą markera `STATION_MARKER_FLOOR=0.9`
+   (akceptowana). **Kandydat B potwierdzony live** (stacja → chip do innego układu → powrót → stacji nie ma):
+   **fix `75f5778`** `_restoreActiveSystemStations` w `switchSystem`.
+2. **Dok „niemal pływa" (4f-1b, `be4517d`)** — `TACTICAL_DOCK_BG_ALPHA` 0.55→0.32 + USUNIĘTA ramka pasa
+   i przegroda mini-panelu (separacja = przyciemnienie tła + typografia).
+
+**POZOSTAŁY FINALNY live-check Filipa:** (a) przezroczystość/brak ramki doku; (b) scenariusz
+**stacja → inny układ → powrót** (stacja wraca). Jeśli oba PASS → **Faza 4 zamknięta w całości** →
+następny krok: test **„tydzień bez MAPY"** (dok ON) → decyzja o kasowaniu mapy 2D wg §10.3.
