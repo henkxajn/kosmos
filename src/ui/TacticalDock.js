@@ -32,8 +32,9 @@ import {
   TIMELINE_MIN_SPAN_YEARS,
 } from './TimelineLayout.js';
 
-// 4f-1 — alfa tła pasa (0..1). Niższa = mapa mocniej prześwituje. Było 0.82 (za ciemno) → 0.55.
-const TACTICAL_DOCK_BG_ALPHA = 0.55;
+// 4f-1b — alfa tła pasa (0..1). Niższa = mapa mocniej prześwituje. 0.82→0.55→0.32: pas „niemal
+// pływa"; separację od mapy robi samo delikatne przyciemnienie + typografia (BEZ ramki, niżej).
+const TACTICAL_DOCK_BG_ALPHA = 0.32;
 
 const DOCK_ROW_H      = 22;    // wysokość wiersza LISTY / lane'u OSI (px logiczne)
 const DOCK_DBLCLICK_MS = 300;  // okno dwukliku wiersza → vessel:focus (inaczej select+ping)
@@ -154,12 +155,10 @@ export class TacticalDock extends BaseOverlay {
     const L = this._layout(W, H);
     this._drawnRect = { x: L.x, y: L.y, w: L.w, h: L.h };
 
-    // Tło pasa (półprzezroczyste — 4f-1: mapa prześwituje) + górna krawędź.
+    // Tło pasa — BARDZO półprzezroczyste (4f-1b: „niemal pływa"). BEZ górnej krawędzi/konturu:
+    // separację od mapy robi samo przyciemnienie tła + typografia.
     ctx.fillStyle = bgAlpha(TACTICAL_DOCK_BG_ALPHA);
     ctx.fillRect(L.x, L.y, L.w, L.h);
-    ctx.strokeStyle = C.borderActive ?? C.accent;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(L.x, L.y + 0.5); ctx.lineTo(L.x + L.w, L.y + 0.5); ctx.stroke();
 
     // Pasek zakładek — tło + separator dolny.
     ctx.fillStyle = bgAlpha(0.35);
@@ -204,14 +203,7 @@ export class TacticalDock extends BaseOverlay {
 
     // Treść (tylko rozwinięty). LISTA = 4b; OŚ = placeholder do 4c; mini-panel = 4d.
     if (!this._collapsed) {
-      // Przegroda lewy dok ┬ prawy mini-panel.
-      ctx.strokeStyle = C.border;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(L.panelRect.x + 0.5, L.y);
-      ctx.lineTo(L.panelRect.x + 0.5, L.y + L.h);
-      ctx.stroke();
-
+      // 4f-1b — BEZ przegrody lewy dok ┬ mini-panel: separację robi układ treści, nie linia konturu.
       if (this._tab === 'list') { this._timelineVp = null; this._drawListRows(ctx, L); }
       else                      { this._drawTimeline(ctx, L); }
 
