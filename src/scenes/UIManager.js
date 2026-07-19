@@ -48,6 +48,7 @@ import { FleetGroupPanel }     from '../ui/FleetGroupPanel.js';
 import { FleetCommandPanel }   from '../ui/FleetCommandPanel.js';
 import { MapLabelLayer }       from '../ui/MapLabelLayer.js';
 import { TacticalModeController } from '../ui/TacticalModeController.js';
+import { TacticalDock }        from '../ui/TacticalDock.js';
 import { TopResourceDrawer }   from '../ui/TopResourceDrawer.js';
 import { EventLogDrawer }      from '../ui/EventLogDrawer.js';
 import { BottomControlBar }    from '../ui/BottomControlBar.js';
@@ -316,6 +317,12 @@ export class UIManager {
     // keydown + warstwy czytają isActive).
     this._tacticalMode = new TacticalModeController();
     if (window.KOSMOS) window.KOSMOS.tacticalMode = this._tacticalMode;
+
+    // Faza 4 (Obraz Operacyjny) — „Dok taktyczny": pas dowodzenia w trybie Y (gate
+    // FEATURES.tacticalDock). Non-exclusive; self-managed przez tactical:modeChanged.
+    // Rysowany PRZED dolnymi paskami (nav/control na wierzchu), klik/scroll PRZED overlayManager.
+    this.tacticalDock = new TacticalDock();
+    if (window.KOSMOS) window.KOSMOS.tacticalDock = this.tacticalDock;
 
     // Slice 8b — FleetCommandPanel: pływający panel dowodzenia WYBRANĄ flotą (battlegroup).
     // Self-managed przez ui:fleetSelectionChanged. Anchor lewy-dolny; FleetGroupPanel stackuje się NAD nim.
@@ -1394,8 +1401,8 @@ export class UIManager {
     // BottomBar (zawsze widoczny) + panel menu
     if (this._bottomBar.isOver(x, y, W, H)) return true;
 
-    // Outliner (prawy panel — tylko civMode)
-    if (window.KOSMOS?.civMode && this._outliner.isOver(x, y, W, H)) return true;
+    // Outliner (prawy panel — tylko civMode; chowany gdy Dok taktyczny rozwinięty, §1.8)
+    if (window.KOSMOS?.civMode && !this.tacticalDock?.isExpanded?.() && this._outliner.isOver(x, y, W, H)) return true;
 
     // Górny pasek surowców — trigger/rozwinięty panel (tylko civMode)
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.isOver?.(x, y)) return true;
@@ -1414,6 +1421,11 @@ export class UIManager {
     if (window.KOSMOS?.civMode && this.fleetCommandPanel?.visible && this.fleetCommandPanel._hitTest(x, y)) return true;
     // S4-2 — StationPanel (pływający) blokuje kamerę gdy kursor nad nim.
     if (this.stationPanel?.visible && this.stationPanel._hitTest(x, y)) return true;
+
+    // Faza 4 — Dok taktyczny (tryb Y): kursor nad pasem blokuje zoom+drag+box-select kamery.
+    // TEN SAM _hitTest co handleWheel (spójność: inaczej scroll nad pasem „znika").
+    if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalDock
+        && this._tacticalMode?.isActive && this.tacticalDock?._hitTest?.(x, y)) return true;
 
     // C2 (S3.4b) — belki doku (zminimalizowane panele) blokują kamerę.
     if (this.panelDock?.isOver?.(x, y)) return true;
@@ -1474,13 +1486,16 @@ export class UIManager {
     // Outliner — prawy drawer rysowany NA SAMYM WIERZCHU (zawsze na topie), więc jego
     // klik ma priorytet PRZED wszystkimi panelami, które wizualnie zasłania (combatHud,
     // stationPanel, bell/MENU, dziennik). hitTest zwraca false poza drawerem/triggerem.
-    if (window.KOSMOS?.civMode && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager)
+    if (window.KOSMOS?.civMode && !this.tacticalDock?.isExpanded?.() && this._outliner?.hitTest?.(x, y, W, H)) return true;   // Slice C — prawy Outliner drawer/dok (trigger/panel PRZED overlayManager; chowany gdy dok rozwinięty)
     // CombatHUD minimize button — rysowany na wierzchu overlay'ów, więc klik
     // musi mieć priorytet PRZED overlayManager (inaczej overlay łapie najpierw).
     if (this.combatHud?.handleClick?.(x, y)) return true;
     // C2 (S3.4b) — belki doku (zminimalizowane panele) na wierzchu, PRZED overlayManager; tylko gdy dok widoczny.
     if (!this.overlayManager.isAnyOpen() && this.panelDock?.handleClick?.(x, y)) return true;
     if (this.stationPanel?.handleClick?.(x, y)) return true;   // S4-2 — panel info stacji (na wierzchu, PRZED overlayManager)
+    // Faza 4 — Dok taktyczny (PRZED overlayManager; gate flaga+tryb Y). Konsumuje kliki w pas.
+    if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalDock && this._tacticalMode?.isActive
+        && !this.overlayManager.isAnyOpen() && this.tacticalDock?.handleClick?.(x, y)) return true;
     // Slice 8b — panel grupy statków (PRZED overlayManager, tylko gdy żaden overlay otwarty — bo draw też gated).
     if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.fcGroupPanel && !this.overlayManager.isAnyOpen()
         && this.fleetGroupPanel?.handleClick?.(x, y)) return true;
@@ -1574,6 +1589,10 @@ export class UIManager {
     const x = rawX / UI_SCALE;
     const y = rawY / UI_SCALE;
     const delta = deltaY * 0.6; // globalna redukcja czułości scrolla o 40%
+    // Faza 4 — Dok taktyczny: kółko NAD pasem = scroll listy (blokuje zoom kamery). Na
+    // POCZĄTKU łańcucha (w trybie Y overlay zawsze zamknięty → bramka isAnyOpen nie zadziała).
+    if (window.KOSMOS?.civMode && GAME_CONFIG.FEATURES?.tacticalDock && this._tacticalMode?.isActive
+        && this.tacticalDock?.handleWheel?.(x, y, delta)) return true;
     // Górny pasek surowców — scroll listy kolonii (gdy kursor nad rozwiniętym panelem).
     if (window.KOSMOS?.civMode && this._topResourceDrawer?.handleWheel?.(x, y, delta)) return true;
     // Prawy Outliner — scroll listy (kolonie/flota potrafią być dłuższe niż panel).
@@ -1636,6 +1655,7 @@ export class UIManager {
     }
     if (this.stationPanel?.visible) this.stationPanel.handleMouseMove(x, y);   // S4-2 — hover przycisków panelu
     this.panelDock?.handleMouseMove?.(x, y);       // C2 — hover belek doku (bez bramki civMode, #1)
+    if (this.tacticalDock?.isShowing?.() && !this.overlayManager.isAnyOpen()) this.tacticalDock.handleMouseMove(x, y);   // Faza 4 — hover doku taktycznego
     if (this.fleetGroupPanel?.visible && !this.overlayManager.isAnyOpen()) this.fleetGroupPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu grupy
     if (this.fleetCommandPanel?.visible && !this.overlayManager.isAnyOpen()) this.fleetCommandPanel.handleMouseMove(x, y);   // Slice 8b — hover panelu floty
     if (window.KOSMOS?.civMode) this._bottomNavBar.handleMouseMove(x, y);   // UI v3 — hover slotów dolnego paska nawigacji
@@ -1803,6 +1823,13 @@ export class UIManager {
     // ── Górny pasek surowców (wysuwany) — PO overlayManager (nad overlay'em), ale PRZED
     //    NavDrawer/Outliner/HUD: gdy nakładają się rogami, te malują się na wierzchu. ──
     if (civMode && !globeOpen) this._topResourceDrawer.draw(ctx, W, H);
+    // ── Faza 4 — „Dok taktyczny": pas dowodzenia (tryb Y). Rysowany PRZED nav+control
+    //    (te malują się na wierzchu → sterowanie czasem zawsze widoczne przy prawym-dolnym
+    //    rogu pasa). Gate: flaga + tryb Y; auto-exit trybu Y zamyka overlaye → dok nie
+    //    współistnieje z pełnoekranowym overlayem. ──
+    if (civMode && !globeOpen && GAME_CONFIG.FEATURES?.tacticalDock && this._tacticalMode?.isActive) {
+      this.tacticalDock.draw(ctx, W, H);
+    }
     // ── BottomNavBar (stały dolny pasek nawigacji, 7 grup) — UI v3. PO overlayManager (na
     //    wierzchu canvasowych overlay'i), PRZED dziennikiem (ten może go zakryć na hoverze). ──
     if (civMode && !globeOpen) this._bottomNavBar.draw(ctx, W, H);
@@ -1834,7 +1861,7 @@ export class UIManager {
     //    otwarty. Rysowany NA SAMYM WIERZCHU (po wszystkich panelach: combatHud,
     //    stationPanel, dziennik, pasek bell/MENU, MENU) — prawy drawer ma być zawsze
     //    widoczny, nic go nie zasłania. ──
-    if (civMode && !globeOpen && this._outlinerState) {
+    if (civMode && !globeOpen && this._outlinerState && !this.tacticalDock?.isExpanded?.()) {
       this._outliner._drawerMode = true;
       this._outliner.draw(ctx, W, H, this._outlinerState);
     }

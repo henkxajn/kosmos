@@ -46,9 +46,10 @@ export class PanelDock {
   _geom(W, H) {
     const civMode = window.KOSMOS?.civMode;
     const leftX = (civMode ? CIV_SIDEBAR_W : 0) + 8;
-    const navReserved = civMode
+    const navReserved = (civMode
       ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H)
-      : COSMIC.BOTTOM_BAR_H;
+      : COSMIC.BOTTOM_BAR_H)
+      + (window.KOSMOS?.tacticalDock?.getReservedHeight?.() ?? 0);   // Faza 4 — belki nad Dokiem taktycznym
     // #6/#7 (review) — panele floty (FleetGroupPanel/FleetCommandPanel) też siedzą w lewym-dole;
     // jeśli widoczne, dok stackuje się NAD nimi (nie nakłada się i nie kradnie im klików).
     let floorY = H - navReserved - 6;   // dolna krawędź najniższej belki

@@ -143,6 +143,12 @@ export const GAME_CONFIG = {
     //   i lewa lista ukryte, kod NIETKNIĘTY); ON = przywraca wszystko 1:1.
     //   Usunięcie kodu mapy = OSOBNA decyzja Filipa po okresie próbnym.
     commandTacticalMap:   false,
+    // Obraz Operacyjny Faza 4 — „Dok taktyczny": półprzezroczysty pas dowodzenia
+    //   na dole ekranu WYŁĄCZNIE w trybie taktycznym Y. Lewy dok [LISTA]/[OŚ] (czwarta
+    //   soczewka FleetPictureLogic — „co się dzieje TERAZ, tutaj") + prawy mini-panel
+    //   wybranego statku. Render/UI-only, bez migracji save (collapse+zakładka w uiPrefs).
+    //   OFF (default) = zero śladu i zero kosztów; tryb Y bez doku działa jak dotąd.
+    tacticalDock:         false,
     // ── Energy Brownout Gate (runtime-only, bez migracji save) ────────────
     //   Deficyt energii (balance<0) realnie ogranicza produkcję PROPORCJONALNIE
     //   do pokrycia (avail=production/consumption): kopalnie (poziom wejściowy),

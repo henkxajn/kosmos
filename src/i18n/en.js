@@ -3171,6 +3171,11 @@ export default {
   'tactical.badge': '⬢ TACTICAL MODE [Y]',
 
   // ── Fleet registry K3 (Operational Picture — Phase 3) ─────────────────────
+  // ── Tactical Dock (Fleet Picture — Phase 4) ──
+  'tacticalDock.tabList':     'LIST',
+  'tacticalDock.tabTimeline': 'AXIS',
+  'tacticalDock.empty':       'No vessels in this system',
+
   'fleet.viewMap':      'MAP',
   'fleet.viewRegistry': 'REGISTRY',
   'registry.col_name':     'Name',

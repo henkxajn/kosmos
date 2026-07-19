@@ -119,9 +119,10 @@ export class FleetCommandPanel extends BaseOverlay {
     const C = THEME;
     const members = this._members(fleet);
 
-    const bottomRes = window.KOSMOS?.civMode
+    const bottomRes = (window.KOSMOS?.civMode
       ? (COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H)
-      : (COSMIC.BOTTOM_BAR_H ?? 32);
+      : (COSMIC.BOTTOM_BAR_H ?? 32))
+      + (window.KOSMOS?.tacticalDock?.getReservedHeight?.() ?? 0);   // Faza 4 — podnieś NAD Dok taktyczny
     const px = (COSMIC.CIV_SIDEBAR_W ?? 0) + 8;
 
     // ── Tryb zwinięty — chip ──

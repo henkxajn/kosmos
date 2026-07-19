@@ -23,6 +23,14 @@ export const COSMIC = {
 // BottomContext/CombatHUD/TopResourceDrawer + DOM overlaye Tech/Observatory) rezerwują tę wysokość.
 export const BOTTOM_RESERVED = COSMIC.BOTTOM_NAV_H + COSMIC.BOTTOM_LOG_TRIG_H;
 
+// Obraz Operacyjny Faza 4 — „Dok taktyczny" (pas dowodzenia w trybie Y). Wymiary px LOGICZNE.
+// Pas kotwiczy dolną krawędzią do (H - BOTTOM_RESERVED); rysowany PRZED dolnymi paskami
+// (nav/control malują się na wierzchu → sterowanie czasem zawsze widoczne). Pływające panele
+// dolno-kotwiczone podnoszą się o TacticalDock.getReservedHeight() (jedno źródło prawdy).
+export const TACTICAL_DOCK_H       = 200;   // wysokość rozwiniętego pasa (zakres 180-220)
+export const TACTICAL_DOCK_PANEL_W = 300;   // szerokość prawego mini-panelu wybranego statku
+export const TACTICAL_DOCK_TAB_H   = 24;    // wysokość paska zakładek [LISTA]/[OŚ] (= wys. zwinięta)
+
 export const GLOBE = {
   TOP_BAR_H:     50,   // pasek zasobów + "Wróć" (góra)
   LEFT_W:        240,  // lewy panel (CivPanel + budynki)

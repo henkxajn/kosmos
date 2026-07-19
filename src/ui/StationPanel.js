@@ -110,6 +110,9 @@ export class StationPanel extends BaseOverlay {
 
     // Kotwica: ekranowa pozycja stacji + offset; null (za kamerą) → fallback lewy-górny róg mapy.
     const b  = this._getOverlayBounds(W, H);
+    // Faza 4 — Dok taktyczny zajmuje dół: skurcz obszar clampu, by panel nie chował się pod pasem.
+    const dockRes = window.KOSMOS?.tacticalDock?.getReservedHeight?.() ?? 0;
+    if (dockRes > 0) b.oh = Math.max(40, b.oh - dockRes);
     const sp = window.KOSMOS?.threeRenderer?.getStationScreenPosition?.(this._stationId);
     let ax, ay;
     if (sp) { ax = sp.x + 18;     ay = sp.y - PH / 2; }

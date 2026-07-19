@@ -3171,6 +3171,11 @@ export default {
   // ── Tryb taktyczny (Obraz Operacyjny — Faza 2) ────────────────────────────
   'tactical.badge': '⬢ TRYB TAKTYCZNY [Y]',
 
+  // ── Dok taktyczny (Obraz Operacyjny — Faza 4) ─────────────────────────────
+  'tacticalDock.tabList':     'LISTA',
+  'tacticalDock.tabTimeline': 'OŚ',
+  'tacticalDock.empty':       'Brak statków w tym układzie',
+
   // ── Rejestr floty K3 (Obraz Operacyjny — Faza 3) ──────────────────────────
   'fleet.viewMap':      'MAPA',
   'fleet.viewRegistry': 'REJESTR',
