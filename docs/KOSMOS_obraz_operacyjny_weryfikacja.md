@@ -577,3 +577,63 @@ autoExitIfOverlay PASS. **DoD Fazy 2 wg planu §4:** Y on/off <1 s bez przełado
 rebuildów) · warstwy wracają do stanu sprzed trybu ✔ · rozkazy PPM = te same kanały (żadna nowa
 powierzchnia dispatchu nie powstała) ✔ · flaga OFF → klawisz martwy, zero kosztów ✔ · playtest →
 **checklista `docs/obraz-operacyjny-faza2-playtest.md` czeka na Filipa** (ostatni punkt DoD).
+
+---
+
+## 11. KROK A-LITE — „Dok taktyczny" (Faza 4) — weryfikacja przed implementacją
+
+**Data:** 2026-07-19 · **Status:** UKOŃCZONA (analiza bez zmian w kodzie) · **Metoda:** 7 pytań §2
+planu `docs/KOSMOS_plan_dok_taktyczny_v1.md` zbadane bezpośrednio w kodzie (readery równoległe +
+odczyt ręczny). **Save:** v90 — pas jest render/UI-only, bez migracji (stan zwinięcia + aktywna
+zakładka w `uiPrefs`).
+
+### 11.0 WERDYKT
+
+**Architektura planu POTWIERDZONA — warunek STOP z §2 planu NIE zachodzi.** Wszystkie fundamenty
+istnieją: współdzielona selekcja (`UIManager._selectedVesselIds` + lead), czwarta soczewka
+`FleetPictureLogic` (`buildShipEntry`/`buildTimelineRows`/`collectAlerts` gotowe), tryb Y jako
+brama widoczności (`TacticalModeController.isActive`, auto-exit przy overlayu), silnik FX (`_spawnFx`
++ typ `ping`), kanał otwarcia REJESTRU (`open({view:'registry'})` już działa), rezerwa dolnej
+krawędzi (`BOTTOM_RESERVED=42`). **Prerequisity P1/P2 WYKONANE i DZIAŁAJĄCE** (potwierdzone w kodzie,
+nie tylko w git — §11.1 pkt 7).
+
+Wykryto **6 rozbieżności szczegółowych** (§11.2) — żadna nie podważa architektury; każda zmienia
+detal implementacji jednego slice'u. Podjęto **1 decyzję wiążącą** (§11.2 D2): przy kolizji
+pas↔pływające panele trzymamy się planu §1.8 (offset paneli NAD dok), NIE supresji.
+
+### 11.1 TABELA WERYFIKACYJNA (7 punktów §2)
+
+| # | Pytanie §2 | Stan faktyczny (plik:linia) | Wpływ / rekomendacja |
+|---|---|---|---|
+| 1 | Wysokość pasa a dolny HUD (`BOTTOM_RESERVED`/BottomNavBar/BottomResourceBar) | `BOTTOM_RESERVED=42` = `BOTTOM_NAV_H(36)`+`BOTTOM_LOG_TRIG_H(6)` (`LayoutConfig.js:14-15,24`). **`BottomResourceBar` NIE ISTNIEJE** — `RESOURCE_BAR_H=0`, surowce przeniesione na górę (`TopResourceDrawer`). BottomNavBar `[H-42,H-6]` pełna szerokość (`BottomNavBarLogic.js:16-22`). BottomControlBar (zegar/prędkości/bell/MENU) `[H-62,H-42]` **tylko prawy ~1/7** (`STRIP_H=20`, `BottomControlBar.js:21,42-52,99-101`). | Pas: `dockBottom = H - BOTTOM_RESERVED`; wys. `TACTICAL_DOCK_H=200`, band `[H-242,H-42]`, pełna szerokość; lewy dok `0..W-300` (zakładki), prawy mini-panel `W-300..W` (`TACTICAL_DOCK_PANEL_W=300`). Kolizja z paskiem czasu tylko w prawym-dolnym rogu → **pas rysowany PRZED nav+control** (sterowanie czasem na wierzchu) + padding dna mini-panelu. |
+| 2 | Kotwiczenie `FleetGroupPanel`/`FleetCommandPanel`/`StationPanel` + najtańsze podniesienie nad dok | FleetGroupPanel: `bottomRes = BOTTOM_NAV_H+BOTTOM_LOG_TRIG_H`, `py = H - bottomRes - totalH - 8` (`FleetGroupPanel.js:117-120,163`); stackuje się nad FleetCommandPanel przez `_drawnRect`. CombatHUD bottom-center identyczny wzór. PanelDock `baseY = H-42-6-barH` (`PanelDockLogic.js`). StationPanel = `FloatingPanel` (kotwica do pozycji stacji + clamp). | **JEDNO źródło:** dok wystawia `getReservedHeight()` (wys. zajęta gdy `visible && tacticalMode.isActive`, inaczej 0); panele dolno-kotwiczone dodają go do `bottomRes` (FleetGroupPanel/FleetCommandPanel/CombatHUD/PanelDock). StationPanel — podnieść dolny clamp. Per-panel odczyt, ale wartość z jednego miejsca. **Decyzja D2: offset, NIE supresja** (plan §1.8 wiążący). |
+| 3 | Kanał „otwórz Command/REJESTR z wybranym statkiem" | `overlayManager.openPanel('fleet', opts)` → `open(opts)`; **`open({view:'registry'})` już dziś przełącza `_activeTab='tactical'`+`_tacticalView='registry'`** (`FleetManagerOverlay.js:464-466`). Selekcja współdzielona (`setSelectedVesselId`). **BRAK** mechanizmu „scroll rejestru do wybranego statku" (`_registryScroll` osobny od `_scrollOffset`; `_pendingFocusSection` dotyczy lewej listy wraków, nie rejestru). | Drobne rozszerzenie (slice 4d): `open({view:'registry', focusVesselId})` → `_pendingFocusVesselId` → w pierwszym `_drawRegistry` policz indeks wiersza tego statku → ustaw `_registryScroll` + selekcja. Otwarcie overlaya auto-wyłącza tryb Y (chowa dok) — zamierzony pomost mostek→biuro. |
+| 4 | Ping FX (bez ruszania kamery) — najtańsza ścieżka + gate ilościowy | `_spawnFx(mesh,cfg)` (`ThreeRenderer.js:5337`), cap `FX_MAX_ACTIVE=120` drop-oldest, typ `ping` (scale ×3+fade, `FX_PING_MS=1300`, `:5396`), drenaż per-frame niezależny od pauzy (`_updateActiveEffects:5371`). Wzory: `_spawnMovementPulse(vessel,color):5752` (**bramka `fcMovementFx`**), `_spawnScanPing(gx,gy):5661` (bramka `fcScanFx`). Pozycja świata: `_vessels.get(id).sprite.position` (world, bez `S()`) lub fallback `vessel.position` przez `S()`. | Dedykowana metoda `ThreeRenderer.pingVessel(vesselId)` (odsprzężona od `fcMovementFx`) + throttle `TACTICAL_PING_THROTTLE_MS=180`. Kolor cyan `0x66ddff`. Wołana z doku przy kliku (single). Kamera nietknięta (rusza ją tylko `vessel:focus` przy dwukliku). |
+| 5 | Hover-podgląd: rozjaśnienie `routeLine` + puls ducha ETA (tanio) | `routeLine` per-entry w `_vessels` (`LineDashedMaterial`, opacity 0.4, kolor `_orderLineColor:5737`). **Opacity materiału WŁASNYCH statków NIE jest ruszane per-frame** (`_syncVesselPositions` rusza tylko geometrię; `_applyVesselIntelVisibility` early-return dla `!enemy`) → set z zewnątrz trzyma się. Duch ETA: `_tacticalGhosts` + `_upsertTacticalGhost:5992`, **opacity PER-FRAME authoritative** (`:6015`). Istnieje `_hoverVesselId` (screen-picking 3D + tooltip — **inny byt**). | Nowe pole `_tacticalHoverVid` + `setTacticalHoverVid(vid)`. (a) routeLine: event-driven set opacity 0.4→~0.9 (reset poprzedniego). (b) duch/glif: `if(vid===_tacticalHoverVid)` mocniejszy puls WEWNĄTRZ per-frame sync. NIE reużywać `_hoverVesselId`. Koszt O(1). |
+| 6 | Konflikt kółka: scroll listy vs zoom kamery | Dwa listenery `wheel`: zoom (`ThreeCameraController:97-111`, bramki `overlayManager.isAnyOpen()` + `_isOverUI`) i UI (`UIManager:357-363→handleWheel:1572`). `_isOverUI = uiManager.isOverUI` (`GameScene.js:206`) bramkuje TEŻ drag/orbit. **W trybie Y overlay zawsze zamknięty** (auto-exit) → zoom aktywny domyślnie; pas MUSI blokować przez `isOverUI`. | 3 wpięcia (gate `tacticalMode.isActive && FEATURES.tacticalDock`): `isOverUI` `+dock._hitTest` (~1416, blok zoom+drag); `handleWheel` `+dock.handleWheel` na początku (~1577, scroll listy); `handleClick` `+dock.handleClick` przed overlayManager (~1484). Oba regiony `_hitTest` identyczne. Dwuklik: własny timer w doku `DOCK_DBLCLICK_MS=300` + guard `isOverUI` na natywnym `dblclick` (`GameScene.js:4470`, dziś nie sprawdza → focus statku pod pasem). |
+| 7 | Stan P1/P2 (prerequisity) | **P1 #registry-assign-bar** (`9a16869`): pasek „Przypisz (N) ▼" w REJESTR (`FleetManagerOverlay.js:3284-3308`; `assignH=22` przesuwa nagłówki `hy=cy+21+assignH:3311`), handlery `fleetAssignMenuOpen`/`fleetClearMultiSelect`, checkbox `kind==='own'` (`:3416`). **P2 #tactical-tick-declutter** (`76cb53e`): `TICK_MIN_ORBIT_PX=120`+`orbitTicksVisible` (`TacticalModeLogic.js:74,77`), render `if(orbitTicksVisible(a×worldPerAU×pxPerWorld))` (`ThreeRenderer.js:6156-6188`), chevrony bez gatingu. | **WYKONANE, brak blokerów.** Smoke fleet_registry 50/50, tactical 44/44 (handoff). ⚠ `_multiSelectedIds` (rejestr) to stan overlaya — dok używa WŁASNEJ selekcji przez `UIManager`, NIE miesza z tym Setem. |
+
+### 11.2 ROZBIEŻNOŚCI + DECYZJE
+
+- **D1 — `BottomResourceBar` nie istnieje** (plan §2.1 wymienia go): `RESOURCE_BAR_H=0`, surowce są w górnym `TopResourceDrawer`. Brak dolnego HUD surowców do omijania — pas kotwiczy do `BOTTOM_RESERVED`.
+- **D2 — kolizja pas↔panele: OFFSET, nie supresja (WIĄŻĄCE).** Reader Q1 sugerował supresję FleetGroupPanel/FleetCommandPanel w trybie Y; to **sprzeczne z planem §1.7/§1.8** (dok ustępuje im przy multi/flocie; mają współistnieć NAD dokiem). Trzymamy się planu: dok wystawia `getReservedHeight()`, panele dodają go do rezerwy dolnej.
+- **D3 — ping: dedykowana metoda, nie reuse `_spawnMovementPulse`** (bramka `fcMovementFx` mogłaby wyciąć ping). `pingVessel(vesselId)` odsprzężona + throttle.
+- **D4 — brak „scroll rejestru do wybranego" — drobne rozszerzenie** `open({view:'registry', focusVesselId})` (slice 4d). `view:'registry'` sam w sobie już działa.
+- **D5 — natywny `dblclick` (GameScene:4470) nie sprawdza `isOverUI`** → dwuklik w wiersz mógłby wyfokusować statek „pod pasem". Guard `isOverUI` na starcie handlera + własny timer dwukliku w doku.
+- **D6 — asymetria kanałów hover:** `routeLine.opacity` własnych = event-driven (set trzyma się); `ghost.opacity` = per-frame authoritative (read-in-sync). Jedno pole `_tacticalHoverVid` obsługuje oba, ale różnym mechanizmem.
+
+### 11.3 STAŁE / FLAGA / MAPA SLICE'ÓW
+
+**Flaga (GameConfig.FEATURES):** `tacticalDock: false` (obok `tacticalMode`; render/UI-only, bez migracji).
+**Nowe stałe (LayoutConfig.js):** `TACTICAL_DOCK_H=200`, `TACTICAL_DOCK_PANEL_W=300` (px logiczne).
+**Nowe stałe (dok/renderer):** `TACTICAL_PING_THROTTLE_MS=180`, `DOCK_DBLCLICK_MS=300`, `TACTICAL_PING_COLOR=0x66ddff`.
+**Reuse:** `BOTTOM_RESERVED` (kotwica), `FX_PING_MS`/`FX_MAX_ACTIVE` (CombatFxConfig), `TICK_MIN_ORBIT_PX`,
+`FleetPictureLogic.*`, `TimelineLayout`/`buildTimelineRows`, `_orderLineColor`, `UI_SCALE`.
+
+**Mapa slice'ów (§3 planu):** 4a `TacticalDockLogic.js` (buildDockRows: filtr układ+tranzyt, sort
+alerty→ETA; layout; collapse/tab) + szkielet pasa (zakładki, zwijanie, persist uiPrefs, konsumpcja
+myszy `isOverUI`+`handleWheel`, Outliner hide, `getReservedHeight`+offset paneli) · 4b LISTA +
+selekcja dwustronna (klik+ping+dwuklik+auto-scroll) + hover-podgląd (`_tacticalHoverVid`) · 4c OŚ
+(reuse `TimelineLayout`, hover→znacznik pozycji planety; zamknij #obraz-operacyjny-faza4) · 4d
+mini-panel (karta, ✕ Anuluj `cancelOrder`, 🎯 `open({view:'registry',focusVesselId})`, agregat multi,
+ustępowanie FleetGroupPanel/FleetCommandPanel).
