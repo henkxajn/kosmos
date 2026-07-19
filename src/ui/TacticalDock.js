@@ -18,6 +18,7 @@ import { THEME, bgAlpha }   from '../config/ThemeConfig.js';
 import { GAME_CONFIG }      from '../config/GameConfig.js';
 import {
   BOTTOM_RESERVED, TACTICAL_DOCK_H, TACTICAL_DOCK_PANEL_W, TACTICAL_DOCK_TAB_H, COSMIC,
+  DOCK_SIDE_GAP_FRAC, TACTICAL_DOCK_CLOCK_CLEARANCE,
 } from '../config/LayoutConfig.js';
 import { t }                from '../i18n/i18n.js';
 import { toneColor, buildTimelineRows, buildShipEntry } from './FleetPictureLogic.js';
@@ -30,6 +31,9 @@ import {
   defaultViewport, yearToX, xToYear, layoutTimelineRows, nowLineX, timelineTicks,
   TIMELINE_MIN_SPAN_YEARS,
 } from './TimelineLayout.js';
+
+// 4f-1 — alfa tła pasa (0..1). Niższa = mapa mocniej prześwituje. Było 0.82 (za ciemno) → 0.55.
+const TACTICAL_DOCK_BG_ALPHA = 0.55;
 
 const DOCK_ROW_H      = 22;    // wysokość wiersza LISTY / lane'u OSI (px logiczne)
 const DOCK_DBLCLICK_MS = 300;  // okno dwukliku wiersza → vessel:focus (inaczej select+ping)
@@ -124,7 +128,10 @@ export class TacticalDock extends BaseOverlay {
    */
   getReservedHeight() {
     if (!this.visible) return 0;
-    return this._collapsed ? TACTICAL_DOCK_TAB_H : TACTICAL_DOCK_H;
+    // 4f-1 — pas podniesiony o TACTICAL_DOCK_CLOCK_CLEARANCE nad zegar → pływające panele muszą
+    // podnieść się o (wysokość pasa + prześwit), by usiąść dokładnie NAD górną krawędzią pasa.
+    const barH = this._collapsed ? TACTICAL_DOCK_TAB_H : TACTICAL_DOCK_H;
+    return barH + TACTICAL_DOCK_CLOCK_CLEARANCE;
   }
 
   _layout(W, H) {
@@ -133,7 +140,8 @@ export class TacticalDock extends BaseOverlay {
       dockH:          TACTICAL_DOCK_H,
       panelW:         TACTICAL_DOCK_PANEL_W,
       tabH:           TACTICAL_DOCK_TAB_H,
-      bottomReserved: BOTTOM_RESERVED,
+      sideGapFrac:    DOCK_SIDE_GAP_FRAC,                              // 4f-1: wycentrowanie ~90%
+      bottomReserved: BOTTOM_RESERVED + TACTICAL_DOCK_CLOCK_CLEARANCE, // 4f-1: podniesienie nad zegar
       topLimit:       COSMIC.TOP_BAND_H + 8,
     });
   }
@@ -146,8 +154,8 @@ export class TacticalDock extends BaseOverlay {
     const L = this._layout(W, H);
     this._drawnRect = { x: L.x, y: L.y, w: L.w, h: L.h };
 
-    // Tło pasa (półprzezroczyste) + górna krawędź.
-    ctx.fillStyle = bgAlpha(0.82);
+    // Tło pasa (półprzezroczyste — 4f-1: mapa prześwituje) + górna krawędź.
+    ctx.fillStyle = bgAlpha(TACTICAL_DOCK_BG_ALPHA);
     ctx.fillRect(L.x, L.y, L.w, L.h);
     ctx.strokeStyle = C.borderActive ?? C.accent;
     ctx.lineWidth = 1;
@@ -633,6 +641,15 @@ export class TacticalDock extends BaseOverlay {
         const id = zone.data?.id;
         if (!id) return;
         const um = window.KOSMOS?.uiManager;
+        // 4f-3 — CTRL+klik = toggleSelection (spójnie z Outlinerem/mapą); zwykły klik = pojedyncza
+        // selekcja jak dotąd. Przy ≥2 zaznaczonych mini-panel pokazuje agregat (computePanelMode),
+        // a akcje zbiorcze ma FleetGroupPanel (wisi nad pasem).
+        if (this._lastMouseMods?.ctrl && um?.toggleSelection) {
+          um.toggleSelection(id);
+          this._lastRowClickMs = 0; this._lastRowClickId = null;   // CTRL nie liczy się do dwukliku
+          this._markDirty();
+          return;
+        }
         const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
         const isDouble = (now - this._lastRowClickMs < DOCK_DBLCLICK_MS) && this._lastRowClickId === id;
         this._lastRowClickMs = now;

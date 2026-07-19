@@ -4335,6 +4335,9 @@ export class GameScene {
       // Slice 8b — modifiery kliku do Outlinera (CTRL+klik statku = multi-select w drawerze).
       const outl = this.uiManager?._outliner;
       if (outl) outl._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
+      // 4f-3 — modifiery kliku do Doku taktycznego (CTRL+klik wiersza = multi-toggle, jak Outliner).
+      const dock = this.uiManager?.tacticalDock;
+      if (dock) dock._lastMouseMods = { shift: e.shiftKey, ctrl: e.ctrlKey };
       if (this.planetScene?.isOpen) return;
       // Blokuj kliknięcia gdy DOM modal/menu jest na wierzchu
       if (document.querySelector('.mission-modal-overlay, .kosmos-modal-overlay')) return;

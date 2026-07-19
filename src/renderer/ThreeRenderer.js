@@ -93,8 +93,18 @@ const ALERT_MARKER_SCALE = 0.7;             // bazowa skala billboardu (encircle
 const ALERT_MARKER_REF_DIST = 60;           // dystans kamery [WU] dający skalę bazową; dalej → skala rośnie (stały rozmiar ekranowy)
 const TACTICAL_PING_COLOR      = 0x66ddff;  // F4 Dok: kolor ping-FX kliku wiersza (cyan, spójny z sensor ringiem)
 const TACTICAL_PING_THROTTLE_MS = 180;      // F4 Dok: min. odstęp między pingami (koalescencja szybkich klików)
-const ROUTE_LINE_HOVER_OPACITY = 0.9;       // F4 Dok: opacity routeLine statku pod kursorem doku (baza 0.4)
-const ROUTE_LINE_BASE_OPACITY  = 0.4;       // baza materiału routeLine (mirror inline w tworzeniu)
+// 4f-2 — hover-podgląd trasy JEDNOZNACZNY: pełna nieprzezroczystość + jaśniejszy kolor + grubsza
+// linia (linewidth honorowane tylko tam, gdzie GPU je wspiera; głównym leverem jest kolor+opacity).
+// Bazowe linie w trybie Y lekko pogrubione podniesieniem bazowej opacity (0.4→0.55).
+const ROUTE_LINE_HOVER_OPACITY = 1.0;       // F4 Dok: opacity routeLine statku pod kursorem doku
+const ROUTE_LINE_BASE_OPACITY  = 0.55;      // baza materiału routeLine (mirror inline w tworzeniu; 4f-2 pogrub.)
+const ROUTE_LINE_HOVER_COLOR   = 0x9fffe6;  // 4f-2: jasny cyan-biały dla trasy pod kursorem
+const ROUTE_LINE_BASE_WIDTH    = 1;         // 4f-2: bazowa grubość (WebGL zwykle capuje do 1 px)
+const ROUTE_LINE_HOVER_WIDTH   = 3;         // 4f-2: ×2+ grubość na hover (best-effort wg GPU)
+// 4f-2 — puls „ducha ETA" statku pod kursorem: mocniejszy/szybszy (podgląd „który to statek").
+const GHOST_PULSE_HOVER_MIN    = 0.35;      // dolna granica pulsu (głębszy kontrast)
+const GHOST_PULSE_HOVER_MAX    = 1.0;       // górna granica pulsu (pełna jasność)
+const GHOST_PULSE_HOVER_FREQ   = 7.5;       // częstotliwość pulsu (rad/s) — szybszy niż bazowy 3.2/6.0
 
 // ── Fleet Command Console (Slice 0) — pierścień zaznaczenia/hover ────────────
 // Slice 5 — cache tekstur insygniów per kolor frakcji (reuse, wzór ResourceIcons).
@@ -908,10 +918,16 @@ export class ThreeRenderer {
         this._cameraController.focusOnInstant(pos.x, pos.z, pos.y);
         this._cameraController.setTargetDist(Math.min(this._cameraController._targetDist, 0.9));
       } else {
-        // Statek zadokowany — centruj na planecie hangaru + zaznacz ją
+        // Statek zadokowany (brak sprite'a — schowany w hangarze/stacji) — centruj na ciele/stacji dokowania.
         const vessel = window.KOSMOS?.vesselManager?.getVessel(vesselId);
         const dockedAt = vessel?.position?.dockedAt;
         if (dockedAt) {
+          // 4f-4 — dok przy STACJI: statek nie ma sprite'a, więc fokusujemy stację istniejącym
+          // kanałem station:focus (kamera na stację; mirror kliku etykiety/mesh stacji).
+          if (this._stations.has(dockedAt)) {
+            EventBus.emit('station:focus', { stationId: dockedAt });
+            return;
+          }
           const pEntry = this._planets.get(dockedAt);
           const mEntry = this._moons.get(dockedAt);
           const entity = pEntry ? this._entityByUUID.get(pEntry.mesh.uuid)
@@ -3617,7 +3633,7 @@ export class ThreeRenderer {
         const geo = new THREE.BufferGeometry().setFromPoints(points);
         const lineMat = new THREE.LineDashedMaterial({
           color: this._orderLineColor(vessel), dashSize: 0.3, gapSize: 0.15,
-          transparent: true, opacity: 0.4,
+          transparent: true, opacity: ROUTE_LINE_BASE_OPACITY, linewidth: ROUTE_LINE_BASE_WIDTH,
         });
         routeLine = new THREE.Line(geo, lineMat);
         routeLine.computeLineDistances();
@@ -3830,7 +3846,7 @@ export class ThreeRenderer {
       const geo = new THREE.BufferGeometry().setFromPoints(points);
       const lineMat = new THREE.LineDashedMaterial({
         color: this._orderLineColor(vessel), dashSize: 0.3, gapSize: 0.15,
-        transparent: true, opacity: 0.4,
+        transparent: true, opacity: ROUTE_LINE_BASE_OPACITY, linewidth: ROUTE_LINE_BASE_WIDTH,
       });
       routeLine = new THREE.Line(geo, lineMat);
       routeLine.computeLineDistances();
@@ -4315,7 +4331,7 @@ export class ThreeRenderer {
           const geo = new THREE.BufferGeometry().setFromPoints(pts);
           const lineMat = new THREE.LineDashedMaterial({
             color: this._orderLineColor(vessel), dashSize: 0.3, gapSize: 0.15,
-            transparent: true, opacity: 0.4,
+            transparent: true, opacity: ROUTE_LINE_BASE_OPACITY, linewidth: ROUTE_LINE_BASE_WIDTH,
           });
           entry.routeLine = new THREE.Line(geo, lineMat);
           entry.routeLine.computeLineDistances();
@@ -5930,7 +5946,19 @@ export class ThreeRenderer {
   _setRouteLineHover(vid, on) {
     if (!vid) return;
     const mat = this._vessels.get(vid)?.routeLine?.material;
-    if (mat) mat.opacity = on ? ROUTE_LINE_HOVER_OPACITY : ROUTE_LINE_BASE_OPACITY;
+    if (!mat) return;
+    // 4f-2 — hover: pełna opacity + jasny kolor + grubsza linia; zdjęcie: powrót do bazy (kolor
+    // z rodzaju rozkazu — _orderLineColor odzwierciedla bieżący stan; opacity/width bazowe).
+    if (on) {
+      mat.opacity   = ROUTE_LINE_HOVER_OPACITY;
+      mat.linewidth = ROUTE_LINE_HOVER_WIDTH;
+      mat.color?.set?.(ROUTE_LINE_HOVER_COLOR);
+    } else {
+      mat.opacity   = ROUTE_LINE_BASE_OPACITY;
+      mat.linewidth = ROUTE_LINE_BASE_WIDTH;
+      const v = window.KOSMOS?.vesselManager?.getVessel?.(vid);
+      if (v && mat.color?.set) mat.color.set(this._orderLineColor(v));
+    }
   }
 
   // Rok pod kursorem na OSI doku → marker „gdzie będzie planeta celu w tym roku"
@@ -6076,7 +6104,8 @@ export class ThreeRenderer {
     // Inaczej: 'moving' pulsuje (cel ruchomy — ETA przybliżone); firm = spokojna półprzezroczystość.
     const hovered = vid === this._tacticalHoverVid;
     sp.material.opacity = hovered
-      ? 0.60 + 0.40 * (0.5 + 0.5 * Math.sin(this._clock.getElapsedTime() * 6.0))
+      ? GHOST_PULSE_HOVER_MIN + (GHOST_PULSE_HOVER_MAX - GHOST_PULSE_HOVER_MIN)
+          * (0.5 + 0.5 * Math.sin(this._clock.getElapsedTime() * GHOST_PULSE_HOVER_FREQ))
       : (moving
           ? 0.35 + 0.25 * (0.5 + 0.5 * Math.sin(this._clock.getElapsedTime() * 3.2))
           : 0.55);

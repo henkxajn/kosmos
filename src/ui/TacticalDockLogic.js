@@ -102,7 +102,11 @@ export function sortDockRows(rows) {
  */
 export function computeDockLayout(W, H, opts = {}) {
   const dockH   = opts.dockH   ?? 200;
-  const panelW  = Math.min(opts.panelW ?? 300, Math.max(0, W - 120));   // guard wąskie ekrany
+  // 4f-1 — pas wycentrowany z marginesem bocznym (frakcja na stronę); 0 = pełna szerokość (parytet regresji).
+  const sideGapFrac = Math.max(0, Math.min(0.25, opts.sideGapFrac ?? 0));
+  const x = Math.round(W * sideGapFrac);          // lewa krawędź pasa
+  const w = Math.max(200, W - x * 2);             // szerokość pasa po odjęciu marginesów obu stron
+  const panelW  = Math.min(opts.panelW ?? 300, Math.max(0, w - 120));   // guard wąskie ekrany (względem szer. PASA)
   const tabH    = opts.tabH    ?? 24;
   const tabW    = opts.tabW    ?? 68;
   const bottomReserved = opts.bottomReserved ?? 42;
@@ -111,29 +115,28 @@ export function computeDockLayout(W, H, opts = {}) {
 
   const barH = collapsed ? tabH : Math.max(tabH, Math.min(dockH, H - bottomReserved - topLimit));
   const y = H - bottomReserved - barH;
-  const w = W;
 
   const leftW = Math.max(0, w - panelW);
 
-  // Zakładki [LISTA][OŚ] przy lewej krawędzi paska; przycisk zwijania na prawym końcu
+  // Zakładki [LISTA][OŚ] przy lewej krawędzi PASA (offset x); przycisk zwijania na prawym końcu
   // LEWEGO regionu (przed przegrodą mini-panelu ┬).
   const tabs = [
-    { id: 'list',     x: 4,                y, w: tabW, h: tabH },
-    { id: 'timeline', x: 4 + tabW + 2,     y, w: tabW, h: tabH },
+    { id: 'list',     x: x + 4,            y, w: tabW, h: tabH },
+    { id: 'timeline', x: x + 4 + tabW + 2, y, w: tabW, h: tabH },
   ];
-  const collapseBtn = { x: leftW - tabH - 4, y, w: tabH, h: tabH };
+  const collapseBtn = { x: x + leftW - tabH - 4, y, w: tabH, h: tabH };
 
   const contentY = y + tabH;
   const contentH = Math.max(0, barH - tabH);
 
   return {
-    x: 0, y, w, h: barH, collapsed, tabH, tabW,
-    tabBar: { x: 0, y, w, h: tabH },
+    x, y, w, h: barH, collapsed, tabH, tabW,
+    tabBar: { x, y, w, h: tabH },
     tabs,
     collapseBtn,
-    leftRect:  { x: 0,     y: contentY, w: leftW,  h: contentH },   // treść LISTA/OŚ (pod zakładkami)
-    listRect:  { x: 0,     y: contentY, w: leftW,  h: contentH },   // alias — LISTA renderuje tu
-    panelRect: { x: leftW, y,           w: panelW, h: barH },       // mini-panel — pełna wysokość pasa
+    leftRect:  { x,          y: contentY, w: leftW,  h: contentH },   // treść LISTA/OŚ (pod zakładkami)
+    listRect:  { x,          y: contentY, w: leftW,  h: contentH },   // alias — LISTA renderuje tu
+    panelRect: { x: x + leftW, y,         w: panelW, h: barH },       // mini-panel — pełna wysokość pasa
     dockH, panelW, bottomReserved,
   };
 }
