@@ -2,10 +2,11 @@
 
 **Data:** 2026-07-19 · **Save:** v90 — FORMAT NIETKNIĘTY (zero migracji; persist =
 `uiPrefs.tacticalDockCollapsed` + `uiPrefs.tacticalDockTab`, jadą w hurtowej serializacji uiPrefs).
-**Flaga:** `FEATURES.tacticalDock` — **ON (default)** (commit `8cbd2e8`). **Live-gate 4f: 7/9 PASS +
-pakiet poprawek wdrożony** (slice 4f + 4f-1b + fix znikającej stacji + kandydat B) — pozostał FINALNY
-live-check Filipa: **przezroczystość/brak ramki + scenariusz stacja→inny układ→powrót**. Jeśli przejdzie
-→ **Faza 4 zamknięta w całości**.
+**Flaga:** `FEATURES.tacticalDock` — **ON (default)** (commit `8cbd2e8`). **✅ FAZA 4 PRZYJĘTA — „Dok
+taktyczny" ZAMKNIĘTY W CAŁOŚCI.** Finalny live-check Filipa PASS: dok „pływa" i jest czytelny, stacja
+przeżywa przełączanie układów; ostatni szlif **4f-1c** = belka zakładek jednolita z pasem.
+**Następny krok = test „tydzień bez MAPY"** (dok ON jako konfiguracja docelowa) → decyzja o kasowaniu
+kodu mapy 2D wg **checklisty §10.3** (`docs/KOSMOS_obraz_operacyjny_weryfikacja.md`).
 **Dokumenty:** plan `docs/KOSMOS_plan_dok_taktyczny_v1.md` · Krok A-lite = §11
 `docs/KOSMOS_obraz_operacyjny_weryfikacja.md` · playtest `docs/dok-taktyczny-playtest.md`.
 
@@ -48,6 +49,8 @@ zostaje w Command/REJESTR — dok świadomie BEZ szukajki/wraków/kontaktów/gru
 - **4f-1b** (`be4517d`) — strojenie „niemal pływa": `TACTICAL_DOCK_BG_ALPHA` 0.55→0.32 + **USUNIĘTA ramka**
   pasa (górna krawędź) I przegroda mini-panelu; separacja = przyciemnienie tła + typografia (wiersze/zakładki
   bez zmian).
+- **4f-1c** (`4e6bdd1`) — belka zakładek BEZ osobnego przyciemnienia (usunięty overlay `bgAlpha(0.35)`) →
+  jednolite tło pasa; aktywna zakładka = sama ramka + kolor tekstu, nie ciemniejsza belka.
 - **Fix znikającej stacji** (`b35c0a5`, OSOBNO) — przyczyna intermittent NIE była zniknięciem mesha, lecz
   **declutter `labelLOD`**: kamera w trybie Y/dopasowaniu układu parkuje ≥360, marker+plakietka gaśnie a GLB
   stacji sub-pikselowy → stacja „znika i wraca". Fix `stationLabelLOD` z podłogą markera
@@ -89,15 +92,16 @@ node tmp_fleet_registry_smoke.mjs      # 50/50
 `tmp_*` w .gitignore (lokalne). ⚠ `tmp_fleet_p1/p3` padają — to znany `#stale-smoke-fleet-p1-p3`
 (pre-existing, potwierdzone na HEAD~5; NIE dotyczy doku).
 
-## STAN ZAMKNIĘCIA SESJI (live-gate 4f + poprawki)
+## ✅ FAZA 4 PRZYJĘTA — ARC „DOK TAKTYCZNY" ZAMKNIĘTY W CAŁOŚCI
 
-Dok **zaimplementowany i wypchnięty** (Krok A-lite + 4a–4d + **4f + 4f-1b**), flaga `tacticalDock`
-**ON**. **Live-gate 4f Filipa: 7/9 PASS** (hover w wersji kolor+puls wystarcza); zgłoszone uwagi
-naprawione: 4f-1b (przezroczystość 0.32 + brak ramki), fix znikającej stacji (`labelLOD`) + kandydat B
-(`switchSystem` restore). **POZOSTAŁ FINALNY live-check Filipa**: przezroczystość/brak ramki + scenariusz
-stacja→inny układ→powrót. **Jeśli przejdzie → Faza 4 ZAMKNIĘTA W CAŁOŚCI**, a **następny krok = test
-„tydzień bez MAPY"** po stronie Filipa (z **dokiem ON** jako konfiguracją docelową), po którym decyzja
-o kasowaniu kodu mapy 2D wg **checklisty §10.3** (`docs/KOSMOS_obraz_operacyjny_weryfikacja.md`).
+Dok **zaimplementowany i wypchnięty** (Krok A-lite + 4a–4d + **4f + 4f-1b + 4f-1c**), flaga `tacticalDock`
+**ON**. **Live-gate 4f Filipa: 7/9 PASS** (hover kolor+puls wystarcza), poprawki wdrożone (4f-1b/4f-1c
+strojenie „pływania", fix znikającej stacji `labelLOD` + kandydat B `switchSystem` restore), **FINALNY
+live-check Filipa PASS** (dok pływa i czytelny, stacja przeżywa przełączanie układów). **DoD §4 domknięte.**
+
+**NASTĘPNY KROK (Filip): test „tydzień bez MAPY"** — grać z **dokiem ON** (dok + rejestr jako docelowe
+zastąpienie mapy 2D), z `commandTacticalMap` OFF. Po nim **decyzja o kasowaniu kodu mapy 2D** wg audytu
+flows **§10.3** (`docs/KOSMOS_obraz_operacyjny_weryfikacja.md`). Filip wróci z notatkami + decyzją.
 
 ## Otwarte pozycje (bez zmian względem arca Obrazu Operacyjnego)
 

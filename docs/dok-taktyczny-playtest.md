@@ -83,6 +83,9 @@ selekcja/dwuklik/scroll/OŚ/mini-panel. **Uwagi zgłoszone i naprawione:**
 2. **Dok „niemal pływa" (4f-1b, `be4517d`)** — `TACTICAL_DOCK_BG_ALPHA` 0.55→0.32 + USUNIĘTA ramka pasa
    i przegroda mini-panelu (separacja = przyciemnienie tła + typografia).
 
-**POZOSTAŁY FINALNY live-check Filipa:** (a) przezroczystość/brak ramki doku; (b) scenariusz
-**stacja → inny układ → powrót** (stacja wraca). Jeśli oba PASS → **Faza 4 zamknięta w całości** →
-następny krok: test **„tydzień bez MAPY"** (dok ON) → decyzja o kasowaniu mapy 2D wg §10.3.
+3. **Belka zakładek jednolita (4f-1c, `4e6bdd1`)** — pasek LIST/AXIS+zwijanie miał ciemniejsze tło niż
+   reszta pasa; usunięty overlay → jednolite tło; aktywna zakładka = ramka + kolor tekstu.
+
+**✅ FINALNY live-check Filipa: PASS** — dok „pływa" i jest czytelny, stacja przeżywa przełączanie układów.
+**FAZA 4 PRZYJĘTA — „Dok taktyczny" ZAMKNIĘTY W CAŁOŚCI (DoD §4 domknięte).** Następny krok: test
+**„tydzień bez MAPY"** (dok ON) → decyzja o kasowaniu mapy 2D wg §10.3.
