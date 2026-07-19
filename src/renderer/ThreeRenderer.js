@@ -1021,6 +1021,7 @@ export class ThreeRenderer {
     this._disposeAllMeshes();
     this.initSystem(star, planets, planetesimals, moons);
     this._restoreActiveSystemVesselSprites();
+    this._restoreActiveSystemStations();   // 4f-B: stacje aktywnego układu wracają po switchSystem
     // F2/2g: tryb taktyczny przeżywa zmianę układu (chip-switch w trybie Y) —
     // stare materiały orbit zdisposowane ze sceną → restyle świeżych + nowa siatka;
     // markery ruchu starego układu sprzątnięte (odbudują się w syncu).
@@ -1047,6 +1048,21 @@ export class ThreeRenderer {
       if (v.systemId !== sysId) continue;
       if (v.position?.state === 'docked') continue;
       this._addVesselSprite(v);
+    }
+  }
+
+  // Śledztwo znikającej stacji — KANDYDAT B (fix): _disposeAllMeshes czyści _stations, a
+  // `station:created` NIE re-firuje przy switchSystem → stacja gracza znikała NA STAŁE po
+  // przełączeniu na inny układ (chip) i powrocie. Mirror _restoreActiveSystemVesselSprites:
+  // po przebudowie sceny re-dodaj stacje aktywnego układu. Idempotentne (_addStationMesh
+  // guard na _stations.has), więc bezpieczne przy wielokrotnym wywołaniu / spójne z reszcie.
+  _restoreActiveSystemStations() {
+    const ss = window.KOSMOS?.stationSystem;
+    if (!ss?.getAllStations) return;
+    const sysId = window.KOSMOS?.activeSystemId ?? 'sys_home';
+    for (const st of ss.getAllStations()) {
+      if ((st.systemId ?? 'sys_home') !== sysId) continue;
+      this._addStationMesh(st);
     }
   }
 
