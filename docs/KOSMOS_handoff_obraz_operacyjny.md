@@ -65,12 +65,13 @@ GOTCHA: `systemId===null` = tranzyt — NIE używać `?? 'sys_home'` (łapie nul
 - Backlog powiązany: `#loop-resume-ux`, `#nan-resources-power-test-fastforward`,
   `#stale-smoke-fleet-p1-p3`, `#H-reset-kamery` (ROADMAP §4).
 
-## ⏭ NASTĘPNA SESJA — „Dok taktyczny"
+## ✅ „Dok taktyczny" — WYKONANY (Faza 4)
 
-W **`docs/KOSMOS_plan_dok_taktyczny_v1.md`** czeka zlecenie „Dok taktyczny". Jego
-**prerequisity P1/P2 są JUŻ WYKONANE** — to dzisiejsze **Fix 1 (#registry-assign-bar,
-`9a16869`)** i **Fix 2 (#tactical-tick-declutter, `76cb53e`)**. Następna sesja zaczyna od
-**Kroku A-lite (§2 planu)**.
+Zlecenie z **`docs/KOSMOS_plan_dok_taktyczny_v1.md`** ZREALIZOWANE: Krok A-lite (§11
+weryfikacji) + slice'y 4a–4d (`d946915` · `f55e198` · `97e4002` · `6278770`).
+Handoff arca: **`docs/KOSMOS_handoff_dok_taktyczny.md`**. Flaga `FEATURES.tacticalDock` OFF
+(default). **Live-gate PENDING Filip** — checklista `docs/dok-taktyczny-playtest.md`.
+Prerequisity P1/P2 (`9a16869` / `76cb53e`) potwierdzone jako wykonane w §11.1 pkt 7.
 
 ## Smoke'i (lokalne — `tmp_*` w .gitignore; uruchamiać z korzenia repo)
 

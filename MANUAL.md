@@ -834,3 +834,19 @@ panelu przywraca wszystko do stanu sprzed trybu. Rozkazy (PPM) działają identy
 klik wiersza = selekcja, 🎯 = skok na mapę (w innym układzie najpierw przełącza układ), checkboxy = pasek
 „Przypisz (N)". Pod tabelą zwijana OŚ CZASU: paski misji (kolory jak trasy na mapie), linia „teraz",
 zoom scrollem, klik paska = selekcja. Oś jest tylko do odczytu — rozkazy wydajesz na mapie.
+
+**Dok taktyczny (tylko w trybie `Y`):** na dole ekranu pojawia się półprzezroczysty pas dowodzenia —
+„co się dzieje TERAZ, tutaj" (bieżący układ + statki w tranzycie międzygwiezdnym). Po lewej dwie zakładki:
+- **[LISTA]** — kompaktowe wiersze (glif w kolorze stanu, nazwa, aktywność, ETA, pasek paliwa, kropka
+  alertu); alerty na górze, potem najbliższe ETA. **Klik** wiersza = zaznaczenie + krótki „ping" na
+  pozycji statku (kamera nieruszona); **dwuklik** = dolot kamery; **najechanie** rozjaśnia trasę statku
+  i pulsuje jego „ducha ETA". Klik statku na mapie przewija dok do jego wiersza.
+- **[OŚ]** — te same statki jako kompaktowa oś czasu (paski misji + linia „teraz"); najechanie na pasek
+  pokazuje, gdzie będzie planeta-cel w danym roku (marker `~rok`).
+
+Po prawej stronie pasa — **mini-panel** wybranego statku: glif+nazwa, rola, aktywność, ETA, paski paliwa
+(+warp), alerty. Dwie akcje: **✕ Anuluj rozkaz** (widoczna, gdy statek ma aktywny/zablokowany rozkaz ruchu
+— anuluje TYLKO rozkaz, misje/pętle zostają w Dowództwie) i **🎯 Rejestr** (otwiera Dowództwo → REJESTR z
+tym statkiem). Przy zaznaczeniu wielu statków lub floty mini-panel pokazuje tylko podsumowanie — akcje
+zbiorcze masz w panelu grupy / dowodzenia flotą. Pas zwijasz strzałką **▾** do samego paska zakładek
+(stan zapamiętywany). Kółko myszy nad pasem przewija listę (poza pasem = zoom kamery).
