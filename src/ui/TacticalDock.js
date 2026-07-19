@@ -20,10 +20,11 @@ import {
   BOTTOM_RESERVED, TACTICAL_DOCK_H, TACTICAL_DOCK_PANEL_W, TACTICAL_DOCK_TAB_H, COSMIC,
 } from '../config/LayoutConfig.js';
 import { t }                from '../i18n/i18n.js';
-import { toneColor, buildTimelineRows } from './FleetPictureLogic.js';
+import { toneColor, buildTimelineRows, buildShipEntry } from './FleetPictureLogic.js';
 import {
   DOCK_TABS, DEFAULT_DOCK_TAB, computeDockLayout,
   buildDockRows, filterDockVessels, dockVisibleRowCount, clampDockScroll,
+  computePanelMode, canCancelOrder,
 } from './TacticalDockLogic.js';
 import {
   defaultViewport, yearToX, xToYear, layoutTimelineRows, nowLineX, timelineTicks,
@@ -205,6 +206,9 @@ export class TacticalDock extends BaseOverlay {
 
       if (this._tab === 'list') { this._timelineVp = null; this._drawListRows(ctx, L); }
       else                      { this._drawTimeline(ctx, L); }
+
+      // Prawy mini-panel wybranego statku (4d).
+      this._drawPanel(ctx, L.panelRect);
     } else {
       this._rowCount = 0; this._visibleRows = 0;
     }
@@ -489,6 +493,124 @@ export class TacticalDock extends BaseOverlay {
     ctx.textBaseline = 'alphabetic';
   }
 
+  // ── Mini-panel (4d) — karta wybranego statku / agregat multi/flota ───────────
+  _drawPanel(ctx, rect) {
+    const C = THEME;
+    const K = window.KOSMOS;
+    const um = K?.uiManager;
+    const leadId = um?.getSelectedVesselId?.() ?? null;
+    const ids = um?.getSelectedVesselIds?.() ?? (leadId ? [leadId] : []);
+    const fleetId = um?.getSelectedFleetId?.() ?? null;
+    const mode = computePanelMode({ leadId, selectedCount: ids.length, fleetId });
+
+    const pad = 8;
+    const x = rect.x + pad, w = rect.w - pad * 2;
+    let cy = rect.y + pad + 10;
+
+    if (mode === 'none') { this._drawCenterHint(ctx, rect, t('tacticalDock.selectHint')); return; }
+
+    // Ustępowanie panelom (§1.7): flota→FleetCommandPanel, multi→FleetGroupPanel.
+    if (mode === 'fleet') {
+      const fleet = K?.fleetSystem?.getFleet?.(fleetId);
+      this._panelHeader(ctx, x, cy, w, '⚑', fleet?.name ?? t('tacticalDock.fleetLabel'), C.accent);
+      this._panelSub(ctx, x, cy + 18, w, t('tacticalDock.fleetHint'));
+      return;
+    }
+    if (mode === 'multi') {
+      this._panelHeader(ctx, x, cy, w, '⛬', t('tacticalDock.selectedN', ids.length), C.accent);
+      this._panelSub(ctx, x, cy + 18, w, t('tacticalDock.multiHint'));
+      return;
+    }
+
+    // single — karta statku.
+    const v = K?.vesselManager?.getVessel?.(leadId);
+    if (!v) { this._drawCenterHint(ctx, rect, t('tacticalDock.selectHint')); return; }
+    const e = buildShipEntry(v, this._dockCtx().pictureCtx);
+    if (!e) return;
+
+    this._panelHeader(ctx, x, cy, w, e.glyph, e.name, toneColor(e.tone, C) ?? C.textPrimary);
+    cy += 20;
+    ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = C.textSecondary;
+    ctx.fillText(this._truncate(ctx, `${t(`fleetPicture.role.${e.role}`)} · ${t(e.activityKey, ...(e.activityArgs ?? []))}`, w), x, cy);
+    cy += 15;
+    if (Number.isFinite(e.eta?.year)) {
+      ctx.fillStyle = C.info;
+      ctx.fillText(`${e.eta.confidence === 'moving' ? '~' : '⏱'}${Math.round(e.eta.year)}`, x, cy);
+      cy += 15;
+    }
+    cy += 2;
+    if (e.fuelPct !== null && e.fuelPct !== undefined) {
+      cy = this._panelBar(ctx, x, cy, w, t('tacticalDock.fuel'), e.fuelPct,
+        e.fuelPct > 0.3 ? (C.success ?? '#00ee88') : (C.warning ?? '#ffcc44'));
+    }
+    if (e.warpFuelPct !== null && e.warpFuelPct !== undefined) {
+      cy = this._panelBar(ctx, x, cy, w, t('tacticalDock.warp'), e.warpFuelPct, '#cc88ff');
+    }
+    if (e.alerts?.length) {
+      cy += 2;
+      for (const a of e.alerts) {
+        ctx.fillStyle = _alertDotColor(a.severity);
+        ctx.beginPath(); ctx.arc(x + 4, cy - 3, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = C.textSecondary; ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`; ctx.textAlign = 'left';
+        ctx.fillText(this._truncate(ctx, t(`fleetPicture.alert.${a.kind}`), w - 12), x + 12, cy);
+        cy += 13;
+      }
+    }
+
+    // Akcje (DOKŁADNIE dwie): [✕ Anuluj rozkaz] (gdy active/blocked) + [🎯 Rejestr].
+    const btnH = 20, gap = 6;
+    const by = rect.y + rect.h - btnH - pad;
+    const showCancel = canCancelOrder(v);
+    let bx = x;
+    if (showCancel) {
+      const bw = (w - gap) / 2;
+      this._drawButton(ctx, t('tacticalDock.cancelOrder'), bx, by, bw, btnH, 'danger');
+      this._addHit(bx, by, bw, btnH, 'panelCancel', { id: v.id, label: t('tacticalDock.cancelOrder') });
+      bx += bw + gap;
+      this._drawButton(ctx, t('tacticalDock.showInRegistry'), bx, by, bw, btnH, 'secondary');
+      this._addHit(bx, by, bw, btnH, 'panelRegistry', { id: v.id, label: t('tacticalDock.showInRegistry') });
+    } else {
+      this._drawButton(ctx, t('tacticalDock.showInRegistry'), bx, by, w, btnH, 'secondary');
+      this._addHit(bx, by, w, btnH, 'panelRegistry', { id: v.id, label: t('tacticalDock.showInRegistry') });
+    }
+  }
+
+  _panelHeader(ctx, x, y, w, glyph, name, glyphColor) {
+    const C = THEME;
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+    ctx.fillStyle = glyphColor;
+    ctx.font = `${C.fontSizeMedium}px ${C.fontFamily}`;
+    ctx.fillText(glyph, x, y);
+    ctx.fillStyle = C.accent;
+    ctx.fillText(this._truncate(ctx, name, w - 18), x + 16, y);
+  }
+
+  _panelSub(ctx, x, y, w, text) {
+    ctx.fillStyle = THEME.textDim; ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    const words = String(text).split(' ');
+    let line = '', yy = y;
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (ctx.measureText(test).width > w && line) { ctx.fillText(line, x, yy); yy += 13; line = word; }
+      else line = test;
+    }
+    if (line) ctx.fillText(line, x, yy);
+  }
+
+  _panelBar(ctx, x, y, w, label, pct, color) {
+    const C = THEME;
+    ctx.fillStyle = C.textDim; ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(label, x, y);
+    const barX = x + 40, barW = Math.max(10, w - 40 - 34), barY = y - 6;
+    this._drawBar(ctx, barX, barY, barW, 6, pct, color, C.border);
+    ctx.fillStyle = C.textSecondary; ctx.textAlign = 'right';
+    ctx.fillText(`${Math.round(pct * 100)}%`, x + w, y);
+    ctx.textAlign = 'left';
+    return y + 14;
+  }
+
   // ── Interakcja ───────────────────────────────────────────────────────────────
   _onHit(zone) {
     if (!zone) return;
@@ -522,6 +644,23 @@ export class TacticalDock extends BaseOverlay {
           window.KOSMOS?.threeRenderer?.pingVessel?.(id);       // + ping FX (kamera nietknięta)
         }
         this._markDirty();
+        return;
+      }
+      case 'panelCancel': {
+        // ✕ Anuluj — TYLKO warstwa rozkazu ruchu (istniejący kanał; misje/pętle zostają w Command).
+        const id = zone.data?.id;
+        if (id) window.KOSMOS?.movementOrderSystem?.cancelOrder?.(id, 'player');
+        this._markDirty();
+        return;
+      }
+      case 'panelRegistry': {
+        // 🎯 Pokaż w rejestrze — pomost mostek→biuro (otwarcie overlaya auto-wyłącza tryb Y).
+        const id = zone.data?.id;
+        const om = window.KOSMOS?.overlayManager;
+        if (id && om?.openPanel) {
+          window.KOSMOS?.uiManager?.setSelectedVesselId?.(id);
+          om.openPanel('fleet', { view: 'registry', focusVesselId: id });
+        }
         return;
       }
       // 'bg' → swallow (klik w pas nie przelatuje do mapy 3D).

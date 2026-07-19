@@ -467,6 +467,13 @@ export class FleetManagerOverlay {
       if (opts.registrySystemKey !== undefined) {
         this._registryFilter.systemKey = opts.registrySystemKey;
       }
+      // 4d (Dok taktyczny 🎯) — otwórz REJESTR z KONKRETNYM statkiem: wyczyść filtry
+      // (by nie był ukryty), zaznacz i zaznacz do scrolla w pierwszym _drawRegistry.
+      if (opts.focusVesselId) {
+        this._registryFilter = { systemKey: null, role: null, search: '', showWrecks: false, showContacts: false };
+        this._pendingFocusVesselId = opts.focusVesselId;
+        this._setSelectedVesselViaUI(opts.focusVesselId);
+      }
     }
   }
   close()  { this._visible = false; this._closeRegistrySearch(); this._close(); }
@@ -3335,6 +3342,17 @@ export class FleetManagerOverlay {
                                              this._registryCollapsedGroups);
     const maxScroll = Math.max(0, items.length * rowH - tableH);
     if (this._registryScroll > maxScroll) this._registryScroll = maxScroll;
+    // 4d (Dok 🎯) — jednorazowy scroll rejestru do wybranego statku po open({focusVesselId}).
+    if (this._pendingFocusVesselId) {
+      const idx = items.findIndex((it) => it.type === 'row' && it.row?.id === this._pendingFocusVesselId);
+      if (idx >= 0) {
+        const top = idx * rowH;
+        if (top < this._registryScroll) this._registryScroll = top;
+        else if (top + rowH > this._registryScroll + tableH) this._registryScroll = top + rowH - tableH;
+        this._registryScroll = Math.max(0, Math.min(maxScroll, this._registryScroll));
+      }
+      this._pendingFocusVesselId = null;
+    }
     ctx.save();
     ctx.beginPath(); ctx.rect(x, tableY, w, tableH); ctx.clip();
     const selId = window.KOSMOS?.uiManager?.getSelectedVesselId?.();

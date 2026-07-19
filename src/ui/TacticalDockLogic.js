@@ -138,6 +138,22 @@ export function computeDockLayout(W, H, opts = {}) {
   };
 }
 
+// ── Mini-panel (4d) — maszyna stanów ustępowania panelom ─────────────────────
+// Dok NIE dubluje akcji zbiorczych: flota→FleetCommandPanel, multi→FleetGroupPanel.
+// 'single' = karta jednego statku (2 akcje: ✕ Anuluj + 🎯 Rejestr); 'none' = hint.
+export function computePanelMode({ leadId = null, selectedCount = 0, fleetId = null } = {}) {
+  if (fleetId) return 'fleet';
+  if (selectedCount > 1) return 'multi';
+  if (leadId) return 'single';
+  return 'none';
+}
+
+/** Czy pokazać ✕ Anuluj rozkaz — TYLKO warstwa rozkazu ruchu (active/blocked). */
+export function canCancelOrder(vessel) {
+  const st = vessel?.movementOrder?.status;
+  return st === 'active' || st === 'blocked';
+}
+
 /** Liczba wierszy mieszczących się w regionie treści (do stronicowania/scrolla). */
 export function dockVisibleRowCount(contentH, rowH) {
   if (!(rowH > 0)) return 0;

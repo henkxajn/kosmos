@@ -3176,6 +3176,15 @@ export default {
   'tacticalDock.tabTimeline': 'OŚ',
   'tacticalDock.empty':       'Brak statków w tym układzie',
   'tacticalDock.timelineSoon': 'Oś czasu — wkrótce',
+  'tacticalDock.selectHint':  'Wybierz statek',
+  'tacticalDock.fleetLabel':  'Flota',
+  'tacticalDock.fleetHint':   'Akcje floty w panelu dowodzenia flotą',
+  'tacticalDock.selectedN':   'Zaznaczone: {0}',
+  'tacticalDock.multiHint':   'Akcje zbiorcze w panelu grupy',
+  'tacticalDock.fuel':        'Paliwo',
+  'tacticalDock.warp':        'Warp',
+  'tacticalDock.cancelOrder': '✕ Anuluj rozkaz',
+  'tacticalDock.showInRegistry': '🎯 Rejestr',
 
   // ── Rejestr floty K3 (Obraz Operacyjny — Faza 3) ──────────────────────────
   'fleet.viewMap':      'MAPA',
