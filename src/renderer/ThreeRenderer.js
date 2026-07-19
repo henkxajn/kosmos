@@ -305,6 +305,7 @@ export class ThreeRenderer {
     this._tacticalHiddenModels = new Map();  // F2: vesselId → [dzieci wrappera ukryte na czas trybu]
     this._tacticalGhosts       = new Map();  // F2: vesselId → Sprite-duch ETA w punkcie celu misji
     this._tacticalHoverVid     = null;       // F4 Dok: vesselId pod kursorem w doku (hover-podgląd: routeLine jaśniej + puls ducha)
+    this._tacticalHoverYear    = null;       // F4 Dok OŚ: rok pod kursorem na osi → marker pozycji planety celu w tym roku
     this._lastTacticalPingMs   = 0;          // F4 Dok: throttle ping-FX przy kliku wiersza
     this._tacticalOrbitStyled  = null;       // 2g: [{m, opacity, transparent}] — restore restyle orbit
     this._tacticalGrid         = null;       // 2g: Group — subtelna siatka taktyczna
@@ -5932,6 +5933,16 @@ export class ThreeRenderer {
     if (mat) mat.opacity = on ? ROUTE_LINE_HOVER_OPACITY : ROUTE_LINE_BASE_OPACITY;
   }
 
+  // Rok pod kursorem na OSI doku → marker „gdzie będzie planeta celu w tym roku"
+  // (rysowany w _syncTacticalOrbitMarkers dla HOVEROWANEGO statku). null = brak.
+  setTacticalHoverYear(year) {
+    const next = Number.isFinite(year) ? year : null;
+    if (this._tacticalHoverYear === next) return;
+    this._tacticalHoverYear = next;
+    const um = window.KOSMOS?.uiManager;
+    if (um) um._dirty = true;
+  }
+
   // Krótki „ping" (pierścień ripple) na pozycji statku — feedback selekcji w doku BEZ
   // ruszania kamery. Throttle koalescuje szybkie kliki; auto-dispose przez silnik FX.
   pingVessel(vesselId) {
@@ -6253,6 +6264,21 @@ export class ThreeRenderer {
       if (p) {
         upsert(`eta:${selId}`, ThreeRenderer._createOrbitTickTexture(`⏱${Math.round(etaYear)}`, '#ffd479'),
                p, ThreeRenderer.TACTICAL_ETA_SCALE * sizeMult, ThreeRenderer.TACTICAL_ETA_SCALE * sizeMult * 0.5);
+      }
+    }
+
+    // F4 Dok OŚ — hover paska osi: „gdzie będzie planeta celu HOVEROWANEGO statku w roku X"
+    // (cyan, odróżnia od żółtego markera ETA zaznaczonego). Pomija gdy hover==zaznaczony.
+    const hovId = this._tacticalHoverVid;
+    const hovYear = this._tacticalHoverYear;
+    if (hovId && hovId !== selId && Number.isFinite(hovYear) && hovYear > gameYear) {
+      const hv = window.KOSMOS?.vesselManager?.getVessel?.(hovId);
+      const htgt = hv?.mission?.targetId ? EntityManager.get(hv.mission.targetId) : null;
+      if (htgt?.orbital) {
+        const hp = orbitalPositionAtDelta(htgt.orbital, hovYear - gameYear, GAME_CONFIG.AU_TO_PX,
+                                          star?.x ?? 0, star?.y ?? 0);
+        if (hp) upsert(`hover:${hovId}`, ThreeRenderer._createOrbitTickTexture(`~${Math.round(hovYear)}`, '#66ddff'),
+                       hp, ThreeRenderer.TACTICAL_ETA_SCALE * sizeMult, ThreeRenderer.TACTICAL_ETA_SCALE * sizeMult * 0.5);
       }
     }
 

@@ -9,6 +9,7 @@
 // grupowania, wraków, kontaktów (to jest w Command/REJESTR — dok ich nie dubluje).
 
 import { buildShipEntry } from './FleetPictureLogic.js';
+import { isEnemyVessel } from '../entities/Vessel.js';
 
 // Zakładki doku (id → widok). 'list' = LISTA, 'timeline' = OŚ.
 export const DOCK_TABS = Object.freeze(['list', 'timeline']);
@@ -16,6 +17,24 @@ export const DEFAULT_DOCK_TAB = 'list';
 
 // Severity zastępcza dla wierszy BEZ alertu (sortowane po alertach z alertem).
 const NO_ALERT_SEVERITY = 99;
+
+/**
+ * Filtr statków doku — JEDNO źródło zbioru dla LISTY i OSI (spójność „ten sam zbiór").
+ * Żywe statki gracza w bieżącym układzie LUB w tranzycie międzygwiezdnym (systemId===null).
+ * systemId===undefined traktowany jak 'sys_home' (parytet z buildShipEntry).
+ */
+export function filterDockVessels(vessels, activeSystemId = 'sys_home') {
+  const out = [];
+  for (const v of vessels ?? []) {
+    if (!v) continue;
+    if (v.isWreck === true || v.status === 'destroyed') continue;
+    if (isEnemyVessel(v)) continue;
+    const sys = (v.systemId === undefined) ? 'sys_home' : v.systemId;
+    if (sys !== null && sys !== activeSystemId) continue;   // null=tranzyt zostaje
+    out.push(v);
+  }
+  return out;
+}
 
 /**
  * Wiersze LISTY doku — flota gracza w bieżącym układzie + tranzycie.
@@ -30,13 +49,11 @@ const NO_ALERT_SEVERITY = 99;
 export function buildDockRows(vessels, ctx = {}) {
   const activeSys = ctx.activeSystemId ?? 'sys_home';
   const rows = [];
-  for (const v of vessels ?? []) {
-    if (!v) continue;
+  // filterDockVessels = JEDNO źródło zbioru (spójne z OSIĄ); buildShipEntry tylko na przefiltrowanych.
+  for (const v of filterDockVessels(vessels, activeSys)) {
     const e = buildShipEntry(v, ctx.pictureCtx ?? {});
-    if (!e || e.isWreck || e.isEnemy) continue;          // tylko żywe statki gracza
+    if (!e) continue;                                    // defensywnie (nie powinno zajść)
     const isTransit = e.systemId === null;               // warp międzygwiezdny (systemId===null!)
-    // Filtr stały: bieżący układ + tranzyt (nic z innych układów — to soczewka „tutaj").
-    if (!isTransit && e.systemId !== activeSys) continue;
     rows.push({
       id:          e.id,
       name:        e.name,

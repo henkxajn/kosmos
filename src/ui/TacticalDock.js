@@ -20,21 +20,37 @@ import {
   BOTTOM_RESERVED, TACTICAL_DOCK_H, TACTICAL_DOCK_PANEL_W, TACTICAL_DOCK_TAB_H, COSMIC,
 } from '../config/LayoutConfig.js';
 import { t }                from '../i18n/i18n.js';
-import { toneColor }        from './FleetPictureLogic.js';
+import { toneColor, buildTimelineRows } from './FleetPictureLogic.js';
 import {
   DOCK_TABS, DEFAULT_DOCK_TAB, computeDockLayout,
-  buildDockRows, dockVisibleRowCount, clampDockScroll,
+  buildDockRows, filterDockVessels, dockVisibleRowCount, clampDockScroll,
 } from './TacticalDockLogic.js';
+import {
+  defaultViewport, yearToX, xToYear, layoutTimelineRows, nowLineX, timelineTicks,
+  TIMELINE_MIN_SPAN_YEARS,
+} from './TimelineLayout.js';
 
-const DOCK_ROW_H      = 22;    // wysokość wiersza LISTY (px logiczne)
+const DOCK_ROW_H      = 22;    // wysokość wiersza LISTY / lane'u OSI (px logiczne)
 const DOCK_DBLCLICK_MS = 300;  // okno dwukliku wiersza → vessel:focus (inaczej select+ping)
 const DOCK_ROW_FUEL_W = 44;    // mini-pasek paliwa w wierszu
+const DOCK_TL_GUTTER  = 128;   // szerokość lewej rynny OSI (glif + nazwa)
+const DOCK_TL_HEADER  = 14;    // pasek podziałki lat OSI (nad lane'ami)
+const DOCK_TL_MAX_SPAN = 40;   // maks. zakres osi (lata) — auto-fit clampowany do tego
+const DOCK_TL_BAR_H   = 8;     // wysokość paska misji w lane
 
 // Kolor kropki alertu wg severity (1 krytyczny → 3 ostrzeżenie).
 function _alertDotColor(severity) {
   if (severity <= 1) return THEME.danger;
   if (severity === 2) return '#ff8844';
   return THEME.warning;
+}
+
+// Kolor paska osi wg rodzaju (mission-*/return/warp).
+function _barKindColor(kind) {
+  if (kind === 'warp')   return '#cc88ff';
+  if (kind === 'return') return THEME.info ?? '#00ccff';
+  if (typeof kind === 'string' && kind.startsWith('mission-')) return THEME.success ?? '#00ee88';
+  return THEME.textSecondary;
 }
 
 export class TacticalDock extends BaseOverlay {
@@ -70,7 +86,9 @@ export class TacticalDock extends BaseOverlay {
   }
 
   _clearHoverVid() {
-    window.KOSMOS?.threeRenderer?.setTacticalHoverVid?.(null);
+    const tr = window.KOSMOS?.threeRenderer;
+    tr?.setTacticalHoverVid?.(null);
+    tr?.setTacticalHoverYear?.(null);
   }
 
   _syncPrefs() {
@@ -185,12 +203,8 @@ export class TacticalDock extends BaseOverlay {
       ctx.lineTo(L.panelRect.x + 0.5, L.y + L.h);
       ctx.stroke();
 
-      if (this._tab === 'list') {
-        this._drawListRows(ctx, L);
-      } else {
-        this._rowCount = 0; this._visibleRows = 0;
-        this._drawCenterHint(ctx, L.leftRect, t('tacticalDock.timelineSoon'));
-      }
+      if (this._tab === 'list') { this._timelineVp = null; this._drawListRows(ctx, L); }
+      else                      { this._drawTimeline(ctx, L); }
     } else {
       this._rowCount = 0; this._visibleRows = 0;
     }
@@ -351,6 +365,130 @@ export class TacticalDock extends BaseOverlay {
     return s + '…';
   }
 
+  // ── OŚ — reuse TimelineLayout/buildTimelineRows (ten sam zbiór co LISTA) ──────
+  _computeTimelineRows() {
+    const K = window.KOSMOS;
+    const vm = K?.vesselManager;
+    if (!vm?.getAllVessels) return { ordered: [], meta: new Map(), gameYear: 0 };
+    const all = vm.getAllVessels();
+    const ctx = this._dockCtx();
+    const listRows = buildDockRows(all, ctx);                         // kanoniczna kolejność (alerty→ETA)
+    const dockVessels = filterDockVessels(all, ctx.activeSystemId);   // TEN SAM zbiór co LISTA
+    const fleets = K?.fleetSystem?.listFleets?.() ?? [];
+    const gameYear = ctx.pictureCtx.gameYear;
+    const tl = buildTimelineRows(dockVessels, fleets, gameYear);
+    const byId = new Map(tl.map((r) => [r.entryId, r]));
+    // Kolejność lane'ów = kolejność LISTY (spójność tabela↔oś); statek bez paska = pusty lane.
+    const ordered = listRows.map((r) => byId.get(r.id) ?? { entryId: r.id, confidence: 'firm', bars: [] });
+    const meta = new Map(listRows.map((r) => [r.id, r]));             // glif/nazwa/tone do rynny
+    return { ordered, meta, gameYear };
+  }
+
+  _drawTimeline(ctx, L) {
+    const C = THEME;
+    const rect = L.leftRect;
+    const { ordered, meta, gameYear } = this._computeTimelineRows();
+    this._rowCount = ordered.length;
+
+    const laneTop = rect.y + DOCK_TL_HEADER;
+    const laneH = Math.max(0, rect.h - DOCK_TL_HEADER);
+    const visible = dockVisibleRowCount(laneH, DOCK_ROW_H);
+    this._visibleRows = visible;
+
+    if (ordered.length === 0) { this._scroll = 0; this._timelineVp = null; this._drawCenterHint(ctx, rect, t('tacticalDock.empty')); return; }
+
+    // Viewport: teraz → auto-fit najdalszego paska (clamp 4..MAX lat).
+    let maxEnd = gameYear + TIMELINE_MIN_SPAN_YEARS;
+    for (const r of ordered) for (const b of r.bars) if (Number.isFinite(b.t1)) maxEnd = Math.max(maxEnd, b.t1);
+    const span = Math.max(4, Math.min(DOCK_TL_MAX_SPAN, (maxEnd - gameYear) * 1.1 + 0.5));
+    const tlX0 = rect.x + DOCK_TL_GUTTER;
+    const tlX1 = rect.x + rect.w - 8;
+    const vp = defaultViewport(gameYear, tlX0, tlX1, span);
+    this._timelineVp = vp;
+    this._timelineArea = { x: tlX0, y: laneTop, w: tlX1 - tlX0, h: laneH };
+
+    // Podziałka lat + linie pionowe przez region lane'ów.
+    ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`;
+    ctx.textBaseline = 'middle';
+    for (const tick of timelineTicks(vp, 6)) {
+      if (tick.x < tlX0 - 1 || tick.x > tlX1 + 1) continue;
+      ctx.strokeStyle = 'rgba(0,255,180,0.06)';
+      ctx.beginPath(); ctx.moveTo(tick.x + 0.5, laneTop); ctx.lineTo(tick.x + 0.5, rect.y + rect.h); ctx.stroke();
+      ctx.fillStyle = C.textDim; ctx.textAlign = 'center';
+      ctx.fillText(String(Math.round(tick.year)), tick.x, rect.y + DOCK_TL_HEADER / 2);
+    }
+    const nx = nowLineX(gameYear, vp);
+    if (nx !== null) {
+      ctx.strokeStyle = C.accent; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(nx + 0.5, laneTop); ctx.lineTo(nx + 0.5, rect.y + rect.h); ctx.stroke();
+    }
+
+    // Auto-scroll do wybranego (jak LISTA).
+    if (this._pendingScrollToId) {
+      const idx = ordered.findIndex((r) => r.entryId === this._pendingScrollToId);
+      if (idx >= 0) {
+        const rowTop = idx * DOCK_ROW_H, rowBot = rowTop + DOCK_ROW_H;
+        if (rowTop < this._scroll) this._scroll = rowTop;
+        else if (rowBot > this._scroll + laneH) this._scroll = rowBot - laneH;
+      }
+      this._pendingScrollToId = null;
+    }
+    this._scroll = clampDockScroll(this._scroll, ordered.length, visible, DOCK_ROW_H);
+
+    const leadId = window.KOSMOS?.uiManager?.getSelectedVesselId?.();
+    const laid = layoutTimelineRows(ordered, vp);
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(rect.x, laneTop, rect.w, laneH); ctx.clip();
+    for (let i = 0; i < laid.length; i++) {
+      const ry = laneTop + i * DOCK_ROW_H - this._scroll;
+      if (ry + DOCK_ROW_H < laneTop || ry > laneTop + laneH) continue;
+      this._drawTimelineLane(ctx, laid[i], meta.get(laid[i].entryId), rect, ry, leadId);
+      const visTop = Math.max(ry, laneTop), visBot = Math.min(ry + DOCK_ROW_H, laneTop + laneH);
+      if (visBot > visTop) this._addHit(rect.x, visTop, rect.w, visBot - visTop, 'row', { id: laid[i].entryId });
+    }
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic';
+
+    if (ordered.length > visible) {
+      const thumbH = Math.max(16, laneH * visible / ordered.length);
+      const maxScroll = (ordered.length - visible) * DOCK_ROW_H;
+      const thumbY = laneTop + (maxScroll > 0 ? (this._scroll / maxScroll) * (laneH - thumbH) : 0);
+      ctx.fillStyle = 'rgba(0,255,180,0.20)'; ctx.fillRect(rect.x + rect.w - 3, thumbY, 2, thumbH);
+    }
+  }
+
+  _drawTimelineLane(ctx, laid, meta, rect, ry, leadId) {
+    const C = THEME;
+    const x = rect.x;
+    const isLead = laid.entryId === leadId;
+    const hover  = this._hoverZone?.type === 'row' && this._hoverZone?.data?.id === laid.entryId;
+    if (isLead)     { ctx.fillStyle = 'rgba(0,255,180,0.12)'; ctx.fillRect(x, ry, rect.w, DOCK_ROW_H); }
+    else if (hover) { ctx.fillStyle = 'rgba(0,255,180,0.05)'; ctx.fillRect(x, ry, rect.w, DOCK_ROW_H); }
+
+    const midY = ry + DOCK_ROW_H / 2;
+    // Rynna: glif (kolor tonu) + nazwa.
+    if (meta) {
+      ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+      ctx.fillStyle = toneColor(meta.tone, C) ?? C.textPrimary;
+      ctx.font = `${C.fontSizeMedium}px ${C.fontFamily}`;
+      ctx.fillText(meta.glyph, x + 6, midY + 1);
+      ctx.fillStyle = isLead ? C.accent : C.textPrimary;
+      ctx.font = `${C.fontSizeSmall}px ${C.fontFamily}`;
+      ctx.fillText(this._truncate(ctx, meta.name, DOCK_TL_GUTTER - 26), x + 22, midY);
+    }
+    // Paski misji (kolor wg rodzaju; 'moving' półprzezroczysty).
+    const barY = midY - DOCK_TL_BAR_H / 2;
+    for (const b of laid.bars) {
+      const bw = Math.max(2, b.x1 - b.x0);
+      ctx.fillStyle = _barKindColor(b.kind);
+      ctx.globalAlpha = laid.confidence === 'moving' ? 0.6 : 0.9;
+      ctx.fillRect(b.x0, barY, bw, DOCK_TL_BAR_H);
+      ctx.globalAlpha = 1;
+    }
+    ctx.textBaseline = 'alphabetic';
+  }
+
   // ── Interakcja ───────────────────────────────────────────────────────────────
   _onHit(zone) {
     if (!zone) return;
@@ -359,6 +497,7 @@ export class TacticalDock extends BaseOverlay {
         if (zone.data?.id && DOCK_TABS.includes(zone.data.id) && this._tab !== zone.data.id) {
           this._tab = zone.data.id;
           this._scroll = 0;
+          window.KOSMOS?.threeRenderer?.setTacticalHoverYear?.(null);   // opuszczamy OŚ → brak markera roku
           this._writePref('tacticalDockTab', this._tab);
           this._markDirty();
         }
@@ -389,22 +528,30 @@ export class TacticalDock extends BaseOverlay {
     }
   }
 
-  /** Hover wiersza → podgląd trasy/ducha statku (setTacticalHoverVid); niczego nie zaznacza. */
+  /** Hover wiersza → podgląd trasy/ducha (setTacticalHoverVid); hover OSI → rok→marker planety. */
   handleMouseMove(x, y) {
     if (!this.visible) return;
     const prev = this._hoverZone;
     super.handleMouseMove(x, y);   // ustawia _hoverZone
     const z = this._hoverZone;
     const hoverVid = z?.type === 'row' ? (z.data?.id ?? null) : null;
-    window.KOSMOS?.threeRenderer?.setTacticalHoverVid?.(hoverVid);
+    const tr = window.KOSMOS?.threeRenderer;
+    tr?.setTacticalHoverVid?.(hoverVid);
+    // OŚ: rok pod kursorem (nad obszarem osi) → marker „gdzie będzie planeta celu w roku X".
+    let hoverYear = null;
+    if (this._tab === 'timeline' && this._timelineVp && this._timelineArea) {
+      const a = this._timelineArea;
+      if (x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h) hoverYear = xToYear(x, this._timelineVp);
+    }
+    tr?.setTacticalHoverYear?.(hoverYear);
     if (prev !== z) this._markDirty();
   }
 
-  /** Kółko nad pasem = scroll LISTY (blokuje zoom kamery). Poza pasem → false (zoom). */
+  /** Kółko nad pasem = scroll LISTY/OSI (blokuje zoom kamery). Poza pasem → false (zoom). */
   handleWheel(x, y, delta) {
     if (!this.visible) return false;
     if (!this._hitTest(x, y)) return false;   // poza pasem → nie konsumuj (zoom kamery)
-    if (this._tab === 'list' && this._rowCount > this._visibleRows) {
+    if (this._rowCount > this._visibleRows) {  // scroll wspólny dla LISTY i OSI
       this._scroll = clampDockScroll(this._scroll + delta, this._rowCount, this._visibleRows, DOCK_ROW_H);
       this._markDirty();
     }
