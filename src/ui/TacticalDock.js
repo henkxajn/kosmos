@@ -160,9 +160,9 @@ export class TacticalDock extends BaseOverlay {
     ctx.fillStyle = bgAlpha(TACTICAL_DOCK_BG_ALPHA);
     ctx.fillRect(L.x, L.y, L.w, L.h);
 
-    // Pasek zakładek — tło + separator dolny.
-    ctx.fillStyle = bgAlpha(0.35);
-    ctx.fillRect(L.tabBar.x, L.tabBar.y, L.tabBar.w, L.tabBar.h);
+    // 4f-1c — belka zakładek BEZ osobnego przyciemnienia: tło jednolite z resztą pasa
+    // (TACTICAL_DOCK_BG_ALPHA wypełnia już cały pas). Aktywna zakładka = ramka + kolor tekstu, nie
+    // ciemniejsza belka.
 
     // Zakładki [LISTA] [OŚ].
     const TAB_KEYS = { list: 'tacticalDock.tabList', timeline: 'tacticalDock.tabTimeline' };
