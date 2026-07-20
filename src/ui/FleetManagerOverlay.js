@@ -1009,7 +1009,11 @@ export class FleetManagerOverlay {
     // Scroll w RIGHT (panel szczegółów statku/floty) — obejmuje TAKŻE konfigurator
     // misji (krok 'select' i 'confirm'): picker celów jest rysowany jako część
     // przewijalnej treści panelu, więc jeden `_rightScrollY` przewija całość.
-    if (mx > b.x + b.w - RIGHT_W && (this._selectedVesselId || this._selectedFleetId)) {
+    // Szerokość prawego panelu zależy od widoku: REJESTR jest szerszy (300) niż
+    // mapa (200) — bez tego lewe ~100 px panelu rejestru nie łapało scrolla.
+    const _effRightW = (GAME_CONFIG.FEATURES?.fleetRegistry === true && this._tacticalView === 'registry')
+      ? REGISTRY_RIGHT_W : RIGHT_W;
+    if (mx > b.x + b.w - _effRightW && (this._selectedVesselId || this._selectedFleetId)) {
       const maxScroll = Math.max(0, (this._rightContentH || 0) - (this._rightViewH || 0));
       this._rightScrollY = Math.max(0, Math.min(maxScroll, (this._rightScrollY || 0) + delta * 0.5));
       return true;
