@@ -5153,8 +5153,7 @@ export class FleetManagerOverlay {
       // Ikony infrastruktury (tylko dla znanych)
       if (known) {
         const sysData = ssMgr?.getSystem(s.id);
-        const hasCol = colMgr?.getAllColonies?.().some(c => EntityManager.get(c.planetId)?.systemId === s.id) ?? false;
-        if (hasCol)                              { ctx.font = `8px ${THEME.fontFamily}`; ctx.fillText('🏗', sx + r + 2, sy - r); }
+        this._drawStratcomOwnerGlyph(ctx, s.id, sx + r + 5, sy - r + 2);
         if (sysData?.warpBeacon || s.warpBeacon) { ctx.font = `7px ${THEME.fontFamily}`; ctx.fillText('📡', sx + r + 2, sy + 2); }
         if (sysData?.jumpGate   || s.jumpGate)   { ctx.font = `7px ${THEME.fontFamily}`; ctx.fillText('🌀', sx + r + 2, sy + 10); }
       }
@@ -5365,10 +5364,6 @@ export class FleetManagerOverlay {
       const isExplored = !!s.explored;
       const isSelected = selSys === s.id;
       const isHover = this._clusterHoverSystem === s.id;
-      const hasCol = colMgr?.getAllColonies().some(c => {
-        const body = EntityManager.get(c.planetId);
-        return body?.systemId === s.id;
-      }) ?? false;
 
       // Promień gwiazdy
       let r = isHome ? 6 : isExplored ? 4 : 3;
@@ -5402,10 +5397,7 @@ export class FleetManagerOverlay {
 
       // Ikony infrastruktury
       const sysData = ssMgr?.getSystem(s.id);
-      if (hasCol) {
-        ctx.font = `8px ${THEME.fontFamily}`;
-        ctx.fillText('🏗', sx + r + 2, sy - r);
-      }
+      this._drawStratcomOwnerGlyph(ctx, s.id, sx + r + 5, sy - r + 2);
       if (sysData?.warpBeacon || s.warpBeacon) {
         ctx.font = `7px ${THEME.fontFamily}`;
         ctx.fillText('📡', sx + r + 2, sy + 2);
@@ -5598,6 +5590,19 @@ export class FleetManagerOverlay {
   // Mapa galaktyki (prawy panel Stratcomu): 3D WebGL gdy DUŻA, płaski 2D gdy mały
   // podgląd. Mgła wojny wspólna z radarem (_stratcomVisibleSystems). isBig → hity
   // gwiazd + panel operacyjny; mały → „rozwiń".
+  // Glif własności GRACZA na mapie galaktyki: mały wypełniony romb w kolorze
+  // imperium gracza. Zastąpił emoji 🏗 liczone bez filtra właściciela (kolonie
+  // AI już nie zapalają znacznika; strefy AI idą tintem/izolinią w B4/B5).
+  _drawStratcomOwnerGlyph(ctx, systemId, cx, cy) {
+    const terr = window.KOSMOS?.territoryService;
+    if (terr?.getSystemOwner?.(systemId) !== 'player') return;
+    const s = 4;
+    ctx.fillStyle = terr.getEmpireColor('player');
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - s); ctx.lineTo(cx + s, cy); ctx.lineTo(cx, cy + s); ctx.lineTo(cx - s, cy);
+    ctx.closePath(); ctx.fill();
+  }
+
   _drawStratcomGalaxy(ctx, x, y, w, h, isBig) {
     const PAD = 10;
     // Tło — subtelna mgławica galaktyki (deep_space); gdy panel DUŻY, WebGL ją nadpisze
@@ -5773,8 +5778,7 @@ export class FleetManagerOverlay {
       if (isSelected) { ctx.strokeStyle = THEME.accent; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(sx, sy, r + 5, 0, Math.PI * 2); ctx.stroke(); }
       if (known) {
         const sysData = ssMgr?.getSystem(s.id);
-        const hasCol = colMgr?.getAllColonies?.().some(c => EntityManager.get(c.planetId)?.systemId === s.id) ?? false;
-        if (hasCol)                              { ctx.font = `8px ${THEME.fontFamily}`; ctx.fillText('🏗', sx + r + 2, sy - r); }
+        this._drawStratcomOwnerGlyph(ctx, s.id, sx + r + 5, sy - r + 2);
         if (sysData?.warpBeacon || s.warpBeacon) { ctx.font = `7px ${THEME.fontFamily}`; ctx.fillText('📡', sx + r + 2, sy + 2); }
         if (sysData?.jumpGate   || s.jumpGate)   { ctx.font = `7px ${THEME.fontFamily}`; ctx.fillText('🌀', sx + r + 2, sy + 10); }
       }

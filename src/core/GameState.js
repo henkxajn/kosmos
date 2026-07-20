@@ -29,6 +29,9 @@ function createDefaultState() {
     pois:       {},  // M2b — POIRegistry (poiId → poi object); init w createDefaultState żeby restore() nie pomijał klucza
     tradeOrders:      [],  // S3.5b — Order Board: kolejka zleceń kupna/sprzedaży z AI (init by restore() nie pominął klucza)
     crossEmpireTrade: {},  // S3.5b — empireId → bool: toggle auto-handlu cywilnego cross-empire (brak klucza ⇒ ON)
+    // Warstwa polityczna (strefy wpływów) — kolor tożsamości gracza. Wybór na
+    // starcie (B2); domyślnie cyjan. Klucz MUSI tu być, inaczej restore() go pominie.
+    player:           { empireColor: '#33ccff' },
   };
 }
 

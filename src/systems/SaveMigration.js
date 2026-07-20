@@ -15,11 +15,12 @@
 import { ORBITAL_ROLES, getOrbitRange, computeBodyRadius } from '../data/OrbitalRolesData.js';
 import EntityManager from '../core/EntityManager.js';
 import { createStarterModules } from '../data/StationModuleData.js';
+import { ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
 
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 90;
+export const CURRENT_VERSION     = 91;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -146,6 +147,7 @@ const MIGRATIONS = {
   87: _migrateV87toV88,
   88: _migrateV88toV89,
   89: _migrateV89toV90,
+  90: _migrateV90toV91,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2154,6 +2156,33 @@ function _migrateV82toV83(data) {
 // pop=0, pusta kolejka modułów. Nowe pola round-tripują przez StationSystem.serialize/restore
 // (constructor Station: ?? default). stationSystem null/brak (save bez stacji) → pętla nie
 // rusza (guard Array.isArray) — jak _migrateV84toV85. popCapacity NIE jest polem (pochodna z modules).
+// ── Migracja v90 → v91 (Strefy wpływów — kolor tożsamości imperiów) ──────────
+// empire.color: stare imperia bez koloru → deterministyczny dobór (id posortowane):
+//   archetyp → pierwszy wolny slot EMPIRE_COLOR_PALETTE, z wykluczeniem koloru gracza.
+// player.empireColor: seedowane '#33ccff' (createDefaultState i tak je doda przy
+//   restore, ale zapisujemy jawnie dla spójności save'a). Idempotentna.
+function _migrateV90toV91(data) {
+  const gs = data.civ4x?.gameState ?? data.gameState;
+  if (!gs) return data;
+  gs.player ??= {};
+  gs.player.empireColor ??= '#33ccff';
+  const empires = gs.empires;
+  if (empires && typeof empires === 'object') {
+    const used = new Set([String(gs.player.empireColor).toLowerCase()]);
+    for (const emp of Object.values(empires)) if (emp?.color) used.add(String(emp.color).toLowerCase());
+    for (const id of Object.keys(empires).sort()) {
+      const emp = empires[id];
+      if (!emp || emp.color) continue;
+      const arch = ARCHETYPES[emp.archetype]?.color;
+      let color = (arch && !used.has(arch.toLowerCase())) ? arch : null;
+      if (!color) color = EMPIRE_COLOR_PALETTE.find(c => !used.has(c.toLowerCase())) ?? arch ?? '#888888';
+      emp.color = color;
+      used.add(color.toLowerCase());
+    }
+  }
+  return data;
+}
+
 function _migrateV89toV90(data) {
   const c4x = data.civ4x ?? data.c4x;
   const stations = c4x?.stationSystem;

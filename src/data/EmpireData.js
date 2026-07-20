@@ -72,6 +72,21 @@ export const ARCHETYPES = {
 // Lista ID w stabilnej kolejności (do losowania deterministycznego)
 export const ARCHETYPE_IDS = Object.keys(ARCHETYPES);
 
+// Paleta kolorów tożsamości imperiów (warstwa polityczna / strefy wpływów).
+// ~8 rozróżnialnych barw; pierwsza (#33ccff cyjan) = domyślny kolor gracza.
+// EmpireGenerator przydziela AI bez duplikatów i z wykluczeniem koloru gracza
+// (preferuje kolor archetypu, fallback = pierwszy wolny slot palety).
+export const EMPIRE_COLOR_PALETTE = [
+  '#33ccff',  // cyjan — domyślny gracz
+  '#C05080',  // róż/magenta    (podmiana za #B07020 — było zbyt blisko #C89040)
+  '#2E9B8F',  // morski         (expansionist)
+  '#B03030',  // czerwony       (xenophage)
+  '#4A5A80',  // stalowy błękit (isolationist)
+  '#C89040',  // bursztyn       (trader)
+  '#7A50A0',  // fiolet         (hegemon)
+  '#60A050',  // zieleń         (swarm)
+];
+
 // Pomocnicza: wybór archetypu przez PRNG (deterministyczny przy podanym rng)
 // rng: funkcja () → [0,1) — np. z seedu układu
 export function pickArchetype(rng = Math.random) {

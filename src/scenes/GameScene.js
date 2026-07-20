@@ -93,6 +93,7 @@ import { InvasionSystem }    from '../systems/InvasionSystem.js';
 import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
 import { StationSystem }      from '../systems/StationSystem.js';
+import { TerritoryService }   from '../systems/TerritoryService.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
 import { ProximitySystem } from '../systems/ProximitySystem.js';
@@ -296,6 +297,9 @@ export class GameScene {
     this.orbitalSpaceSystem   = new OrbitalSpaceSystem();
     this.stationSystem        = new StationSystem();
     this.enemyAttackHandler   = new EnemyAttackHandler();
+    // Strefy wpływów — indeks własności układów (czyta colonyManager/stationSystem/
+    // empireRegistry/gameState przez window.KOSMOS; event-invalidowany).
+    this.territoryService     = new TerritoryService();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -356,6 +360,7 @@ export class GameScene {
     window.KOSMOS.invasionSystem   = this.invasionSystem;
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
     window.KOSMOS.stationSystem      = this.stationSystem;
+    window.KOSMOS.territoryService   = this.territoryService;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
     // M1 Targeting — lazy init, feature flag. Tworzone gdy
     //   GAME_CONFIG.FEATURES.movementOrders=true lub via debug.enableMovementOrders().
@@ -1419,6 +1424,8 @@ export class GameScene {
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,
     // a syncToGalaxyData() odtworzy empireId na galaxyData.systems.
     if (isNewGame) {
+      // ⚠ B2: wybór barwy MUSI ustawić gameState.player.empireColor PRZED tym
+      // wywołaniem — EmpireGenerator wyklucza kolor gracza z puli AI (B1: '#33ccff').
       EmpireGenerator.generate(window.KOSMOS.galaxyData, this.empireRegistry);
       // Slice 1 log — pierwsze imperium AI z realną kolonią
       const _firstEmp = this.empireRegistry.listAll()[0];
@@ -1491,6 +1498,7 @@ export class GameScene {
       // Pierwsze wywołanie (linia 1015, przed restore) działa tylko dla home systemu
       // emp.homeSystemId — nowy sync dopisuje pozostałe kolonie.
       this.empireRegistry.syncToGalaxyData(window.KOSMOS.galaxyData);
+      this.territoryService?.reindex();   // strefy wpływów — przebuduj indeks własności po restore
       // Ustaw homePlanet i aktywne systemy
       const homePlanetId = c4x.homePlanetId ?? c4x.colonies?.find(c => c.isHomePlanet)?.planetId;
       if (homePlanetId) {

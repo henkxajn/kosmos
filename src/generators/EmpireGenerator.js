@@ -8,7 +8,7 @@
 // Wywoływany JEDEN raz przy starcie nowej gry (po GalaxyGenerator.generate).
 // Deterministyczny (Mulberry32 z seeda galaktyki) — ten sam układ → ten sam wynik.
 
-import { NAME_PREFIXES_PL, NAME_PREFIXES_EN, ARCHETYPES } from '../data/EmpireData.js';
+import { NAME_PREFIXES_PL, NAME_PREFIXES_EN, ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
 import { EmpireColonyBootstrap } from '../systems/EmpireColonyBootstrap.js';
 
 // ── Stałe ─────────────────────────────────────────────────────────────────────
@@ -112,6 +112,14 @@ export class EmpireGenerator {
     const createdIds = [];
     const usedNames = new Set();
 
+    // Kolory tożsamości imperiów — bez duplikatów i z wykluczeniem koloru gracza.
+    // Czyta AKTUALNY gameState.player.empireColor. ⚠ W B2 (wybór barwy na starcie)
+    // kolor gracza MUSI trafić do gameState PRZED tym wywołaniem (EmpireGenerator.
+    // generate w przepływie nowej gry) — inaczej AI może dostać kolor gracza.
+    // Na etapie B1 to zawsze domyślny '#33ccff' z createDefaultState.
+    const playerColor = String(globalThis.KOSMOS?.gameState?.get?.('player.empireColor') ?? '#33ccff').toLowerCase();
+    const usedColors  = new Set([playerColor]);
+
     for (let i = 0; i < homesChosen.length; i++) {
       const homeSys = homesChosen[i];
       // Slice 3.1a: archetyp per-imperium wg sekwencji (po indeksie). Fallback
@@ -140,6 +148,12 @@ export class EmpireGenerator {
 
       const empireId = `emp_${String(i + 1).padStart(3, '0')}`;
 
+      // Kolor: preferuj archetyp; przy kolizji/pokryciu z graczem → pierwszy wolny slot palety.
+      const archColor = ARCHETYPES[archetypeId]?.color;
+      let color = (archColor && !usedColors.has(archColor.toLowerCase())) ? archColor : null;
+      if (!color) color = EMPIRE_COLOR_PALETTE.find(c => !usedColors.has(c.toLowerCase())) ?? archColor ?? '#888888';
+      usedColors.add(color.toLowerCase());
+
       // Utwórz imperium — Slice 1: BEZ abstract scalars (military/tech/resources)
       empireRegistry.createEmpire({
         id:           empireId,
@@ -147,6 +161,7 @@ export class EmpireGenerator {
         namePL:       name,
         nameEN,
         archetype:    archetypeId,
+        color,
         homeSystemId: homeSys.id,
         // colonies puste — EmpireColonyBootstrap doda przez addColony
         colonies:     [],

@@ -77,6 +77,9 @@ export class EmpireRegistry {
       namePL:       p.namePL ?? p.name ?? arch.namePL,
       nameEN:       p.nameEN ?? p.name ?? arch.nameEN,
       archetype:    p.archetype,
+      // Kolor tożsamości imperium (strefy wpływów) — przydzielony przez
+      // EmpireGenerator bez duplikatów; fallback = kolor archetypu.
+      color:        p.color ?? arch.color ?? null,
       personality:  { ...arch.personality },
       homeSystemId: p.homeSystemId ?? null,
       // Slice 1: colonies to array colonyId stringów (planetId z ColonyManager).
