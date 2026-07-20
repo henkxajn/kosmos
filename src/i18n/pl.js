@@ -7,6 +7,8 @@ export default {
   'lang': 'pl',
   // B2 — wybór barwy imperium na ekranie startowym (FactionSelectScene)
   'faction.empireColor': 'Barwa imperium',
+  // B4 — etykieta imperium gracza na mapie stref wpływów (Stratcom)
+  'territory.playerEmpire': 'Twoje Imperium',
 
   // === Budynki ===
   'building.colony_base.name': 'Stolica',

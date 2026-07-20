@@ -27,6 +27,7 @@ import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
+import { resolveTerritoryVisibility } from './TerritoryRenderLogic.js';
 import {
   TRANSIT_KEY, buildRegistryRows, sortRows, filterRows,
   collectSystemChoices, collectRoleChoices, REGISTRY_COLUMNS,
@@ -36,6 +37,9 @@ import {
 // Rejestr 2.0 (3e): szerokość prawego panelu W WIDOKU REJESTR (per-widok —
 // globalny RIGHT_W=200 dla mapy NIEZMIENIONY; _drawRight liczy z parametru w).
 const REGISTRY_RIGHT_W = 300;
+
+// Strefy wpływów (B4) — prędkość „marszu" przerywanej izolinii (px/s; tuning B6).
+const TERRITORY_DASH_MARCH_PX_PER_SEC = 3;
 import {
   defaultViewport, zoomViewport, layoutTimelineRows, nowLineX, timelineTicks, xToYear,
 } from './TimelineLayout.js';
@@ -5591,18 +5595,118 @@ export class FleetManagerOverlay {
   // Mapa galaktyki (prawy panel Stratcomu): 3D WebGL gdy DUŻA, płaski 2D gdy mały
   // podgląd. Mgła wojny wspólna z radarem (_stratcomVisibleSystems). isBig → hity
   // gwiazd + panel operacyjny; mały → „rozwiń".
-  // Glif własności GRACZA na mapie galaktyki: mały wypełniony romb w kolorze
-  // imperium gracza. Zastąpił emoji 🏗 liczone bez filtra właściciela (kolonie
-  // AI już nie zapalają znacznika; strefy AI idą tintem/izolinią w B4/B5).
+  // Glif własności na mapie galaktyki: mały wypełniony romb w kolorze imperium
+  // WŁAŚCICIELA (wariant B: gracz zawsze; AI przy intel ≥ contact — fog-of-war).
+  // Zastąpił emoji 🏗 liczone bez filtra właściciela.
   _drawStratcomOwnerGlyph(ctx, systemId, cx, cy) {
     const terr = window.KOSMOS?.territoryService;
-    if (terr?.getSystemOwner?.(systemId) !== 'player') return;
+    const owner = terr?.getSystemOwner?.(systemId);
+    if (!owner) return;
+    if (owner !== 'player' && !window.KOSMOS?.intelSystem?.isAtLeast?.(owner, 'contact')) return;
     const s = 4;
-    ctx.fillStyle = terr.getEmpireColor('player');
+    ctx.fillStyle = terr.getEmpireColor(owner);
     ctx.beginPath();
     ctx.moveTo(cx, cy - s); ctx.lineTo(cx + s, cy); ctx.lineTo(cx, cy + s); ctx.lineTo(cx - s, cy);
     ctx.closePath(); ctx.fill();
   }
+
+  // Render 2D warstwy politycznej: tint (maska→offscreen, cache) + przerywana
+  // izolinia (projekcja pętli, dash, war-pulse) + etykieta. Fog-of-war + wrogość.
+  // TYLKO 2D (mały podgląd / fallback WebGL); duży panel 3D idzie w B5.
+  _drawStratcomTerritory2D(ctx, projPt, isBig) {
+    const tf     = window.KOSMOS?.territoryField;
+    const empReg = window.KOSMOS?.empireRegistry;
+    const intel  = window.KOSMOS?.intelSystem;
+    const warSys = window.KOSMOS?.warSystem;
+    if (!tf) return;
+    const territories = tf.getAllTerritories();
+    if (!territories.length) return;
+
+    const vis = resolveTerritoryVisibility(territories.map(td => td.ownerId), {
+      isPlayer:     (oid) => oid === 'player',
+      intelLevelOf: (oid) => intel?.getLevel?.(oid),
+      isAtWarWith:  (oid) => warSys?.getWarWith?.(oid),
+    });
+    const byOwner = new Map(vis.map(v => [v.ownerId, v]));
+    const now = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
+
+    // 1. TINT — tylko 'full' (gracz + AI contact+); offscreen cache per maska.
+    for (const td of territories) {
+      const v = byOwner.get(td.ownerId);
+      if (!v || v.mode !== 'full') continue;
+      const cv = this._territoryTintCanvas(td);
+      const mb = td.maskBounds;
+      const tl = projPt(mb.x0, mb.y0);
+      const br = projPt(mb.x0 + (mb.nx - 1) * mb.cell, mb.y0 + (mb.ny - 1) * mb.cell);
+      if (!cv || !tl || !br) continue;
+      ctx.drawImage(cv, Math.min(tl.sx, br.sx), Math.min(tl.sy, br.sy), Math.abs(br.sx - tl.sx), Math.abs(br.sy - tl.sy));
+    }
+
+    // 2. IZOLINIA — full=kolor imperium, outline=szary; dash (duży panel animowany),
+    //    war-pulse alpha (~2 s). Kolor tożsamości bez zmian.
+    ctx.save();
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([6, 5]);
+    for (const td of territories) {
+      const v = byOwner.get(td.ownerId);
+      if (!v || v.mode === 'skip') continue;
+      ctx.strokeStyle = v.mode === 'outline' ? '#8a8a8a' : td.color;
+      ctx.lineDashOffset = isBig ? -(now * TERRITORY_DASH_MARCH_PX_PER_SEC) : 0;   // mały podgląd: statyczny
+      ctx.globalAlpha = (isBig && v.atWar) ? (0.45 + 0.55 * Math.abs(Math.sin(now * Math.PI))) : 1;   // ~2 s
+      for (const loop of td.loops) {
+        ctx.beginPath();
+        let started = false;
+        for (const p of loop.pts) {
+          const s = projPt(p.x, p.y);
+          if (!s) { started = false; continue; }
+          if (!started) { ctx.moveTo(s.sx, s.sy); started = true; } else ctx.lineTo(s.sx, s.sy);
+        }
+        ctx.closePath(); ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    ctx.restore();
+
+    // 3. ETYKIETA (tylko duży panel; przy największej pętli; raz per imperium).
+    if (isBig) {
+      ctx.save();
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.textAlign = 'center';
+      for (const td of territories) {
+        const v = byOwner.get(td.ownerId);
+        if (!v || v.mode !== 'full') continue;
+        const big = this._largestLoop(td.loops); if (!big) continue;
+        const c = this._loopCentroid(big), s = projPt(c.x, c.y); if (!s) continue;
+        const name = td.ownerId === 'player' ? t('territory.playerEmpire') : (empReg?.get?.(td.ownerId)?.name ?? '?');
+        ctx.fillStyle = td.color;
+        ctx.fillText(String(name).toUpperCase(), s.sx, s.sy);
+      }
+      ctx.restore(); ctx.textAlign = 'left';
+    }
+  }
+
+  // Offscreen tint (nx×ny) barwiony kolorem imperium @ FILL_ALPHA; cache invalidowany
+  // przez identyczność maski (TerritoryField tworzy NOWĄ Uint8Array na recompute).
+  _territoryTintCanvas(td) {
+    this._territoryTint ??= new Map();
+    const hit = this._territoryTint.get(td.ownerId);
+    if (hit && hit.mask === td.mask) return hit.canvas;
+    const mb = td.maskBounds;
+    const cv = document.createElement('canvas'); cv.width = mb.nx; cv.height = mb.ny;
+    const c2 = cv.getContext('2d'); const img = c2.createImageData(mb.nx, mb.ny);
+    const { r, g, b } = hexToRgb(td.color);
+    const a = Math.round((GAME_CONFIG.TERRITORY?.FILL_ALPHA ?? 0.07) * 255);
+    for (let k = 0; k < td.mask.length; k++) {
+      if (td.mask[k] >= 128) { const o = k * 4; img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = a; }
+    }
+    c2.putImageData(img, 0, 0);
+    this._territoryTint.set(td.ownerId, { mask: td.mask, canvas: cv });
+    return cv;
+  }
+
+  _largestLoop(loops) { let best = null, ba = -1; for (const l of loops) { const a = this._loopArea(l); if (a > ba) { ba = a; best = l; } } return best; }
+  _loopArea(loop) { const p = loop.pts; let a = 0; for (let i = 0; i < p.length; i++) { const q = p[(i + 1) % p.length]; a += p[i].x * q.y - q.x * p[i].y; } return Math.abs(a) / 2; }
+  _loopCentroid(loop) { const p = loop.pts; let x = 0, y = 0; for (const q of p) { x += q.x; y += q.y; } return { x: x / p.length, y: y / p.length }; }
 
   _drawStratcomGalaxy(ctx, x, y, w, h, isBig) {
     const PAD = 10;
@@ -5688,6 +5792,11 @@ export class FleetManagerOverlay {
       const toSy = (ly) => cy + ((ly ?? 0) - (home.y ?? 0)) * scale;
       projS  = (o)      => ({ sx: toSx(o.x), sy: toSy(o.y) });
       projPt = (gx, gy) => ({ sx: toSx(gx), sy: toSy(gy) });
+    }
+
+    // ── Strefy wpływów (warstwa polityczna) — tint + izolinia (TYLKO 2D; 3D w B5) ──
+    if (!use3D && GAME_CONFIG.FEATURES?.territoryOverlay) {
+      this._drawStratcomTerritory2D(ctx, projPt, isBig);
     }
 
     // Linie jump-gate (między widocznymi)

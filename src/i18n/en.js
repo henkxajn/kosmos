@@ -7,6 +7,8 @@ export default {
   'lang': 'en',
   // B2 — empire color picker on the start screen (FactionSelectScene)
   'faction.empireColor': 'Empire color',
+  // B4 — player empire label on the zones-of-influence map (Stratcom)
+  'territory.playerEmpire': 'Your Empire',
 
   // === Buildings ===
   'building.colony_base.name': 'Capital',
