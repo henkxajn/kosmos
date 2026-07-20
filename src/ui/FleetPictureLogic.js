@@ -212,6 +212,7 @@ export function buildShipEntry(vessel, ctx = {}) {
       glyph:       '💀',
       tone:        'idle',
       state:       'wreck',
+      dockedAt:    vessel.position?.dockedAt ?? null,   // ciało cmentarne (kolumna „Ciało")
       activityKey: 'fleetPicture.state.wreck',
       activityArgs: [],
       eta:         { year: null, confidence: 'firm' },
@@ -287,6 +288,27 @@ export function buildShipEntry(vessel, ctx = {}) {
   // bo `??` łapie też null i zabiłby semantykę tranzytu (weryfikacja pkt 1).
   const systemId = (vessel.systemId === undefined) ? 'sys_home' : vessel.systemId;
 
+  // ── Trasa misji (rejestr K3: kolumny Skąd/Dokąd + znacznik pętli) ──────────
+  // Kierunek wg BIEŻĄCEGO etapu: powrót/return → cel↦źródło; inaczej źródło↦cel.
+  // Nazwę „do" bierzemy z mission.targetName (już rozwiązana przy starcie); resztę
+  // ID rozwiązuje widok przez ctx.bodyName (moduł czysty — nie zna nazw ciał).
+  let fromId = null, toId = null, toName = null, isLoop = false;
+  if (mission) {
+    isLoop = mission.loop === true;
+    const src = mission.originColonyId ?? mission.loopSourceId ?? null;
+    const dst = mission.targetId ?? mission.loopTargetId ?? null;
+    const returning = mission.phase === 'returning' || mission.leg === 'return';
+    fromId = returning ? dst : src;
+    toId   = returning ? src : dst;
+    toName = returning ? null : (mission.targetName ?? null);
+  } else if (orderActive && order.type === 'moveToPoint') {
+    toId = order.targetBodyId ?? null;                 // ruch do ciała (punkt → null)
+  }
+
+  // Ciało bazowania: dockedAt istotne tylko przy docked/orbiting (w locie → null).
+  const dockedAt = (state === 'docked' || state === 'orbiting')
+    ? (vessel.position?.dockedAt ?? null) : null;
+
   return {
     id:          vessel.id,
     name:        vessel.name ?? String(vessel.id),
@@ -304,6 +326,9 @@ export function buildShipEntry(vessel, ctx = {}) {
     fuelPct:     _tankPct(vessel.fuel),
     warpFuelPct: _tankPct(vessel.warpFuel),
     alerts,
+    // Rejestr K3 — ciało bazowania + trasa misji (kolumny Ciało / Skąd / Dokąd + ↻ pętli)
+    dockedAt,
+    fromId, toId, toName, isLoop,
   };
 }
 

@@ -16,8 +16,9 @@ export const STATE_LABEL_KEYS = Object.freeze({
 });
 
 // Kolumny tabeli (id → czy sortowalna); szerokości/etykiety to sprawa widoku.
+// „body" (ciało bazowania) tuż za „system"; „from"/„to" (trasa misji) za „activity".
 export const REGISTRY_COLUMNS = Object.freeze(
-  ['name', 'role', 'fleet', 'system', 'state', 'activity', 'eta', 'fuel', 'alerts']);
+  ['name', 'role', 'fleet', 'system', 'body', 'state', 'activity', 'from', 'to', 'eta', 'fuel', 'alerts']);
 
 /**
  * Wiersze rejestru — flota gracza + (3f) WRAKI i KONTAKTY (intel-gated).
@@ -32,6 +33,7 @@ export const REGISTRY_COLUMNS = Object.freeze(
  */
 export function buildRegistryRows(vessels, ctx = {}) {
   const out = [];
+  const bodyName = ctx.bodyName ?? ((id) => id);   // ID ciała → nazwa (resolver widoku)
   for (const v of vessels ?? []) {
     if (!v) continue;
     const e = buildShipEntry(v, ctx.pictureCtx ?? {});
@@ -50,6 +52,8 @@ export function buildRegistryRows(vessels, ctx = {}) {
         systemId: e.systemId, systemName: sysName, isTransit,
         fleetId: null, fleetName: null,
         fuelPct: null, warpFuelPct: null, alerts: [], alertCount: 0,
+        body: e.dockedAt ? (bodyName(e.dockedAt) ?? e.dockedAt) : null,
+        fromName: null, toName: null, isLoop: false, state: 'wreck',
         wreckedYear: e.wreckedYear, isEnemy: e.isEnemy, anonymous: false,
       });
       continue;
@@ -74,6 +78,7 @@ export function buildRegistryRows(vessels, ctx = {}) {
         systemId: e.systemId, systemName: sysName, isTransit,
         fleetId: null, fleetName: null,
         fuelPct: null, warpFuelPct: null, alerts: [], alertCount: 0,
+        body: null, fromName: null, toName: null, isLoop: false,
         isEnemy: true, anonymous,
       });
       continue;
@@ -99,6 +104,10 @@ export function buildRegistryRows(vessels, ctx = {}) {
       warpFuelPct: e.warpFuelPct,
       alerts: e.alerts,
       alertCount: e.alerts.length,
+      body: e.dockedAt ? (bodyName(e.dockedAt) ?? e.dockedAt) : null,
+      fromName: e.fromId ? (bodyName(e.fromId) ?? e.fromId) : null,
+      toName: e.toName ?? (e.toId ? (bodyName(e.toId) ?? e.toId) : null),
+      isLoop: e.isLoop === true, state: e.state,
       isEnemy: false, anonymous: false,
     });
   }
@@ -113,8 +122,11 @@ const CMP = {
   fleet:    (a, b) => String(a.fleetName ?? '￿').localeCompare(String(b.fleetName ?? '￿')),
   system:   (a, b) => (a.isTransit === b.isTransit ? 0 : a.isTransit ? 1 : -1)
                    || String(a.systemName ?? '').localeCompare(String(b.systemName ?? '')),
+  body:     (a, b) => String(a.body ?? '￿').localeCompare(String(b.body ?? '￿')),
   state:    (a, b) => String(a.stateKey).localeCompare(String(b.stateKey)),
   activity: (a, b) => String(a.activityKey).localeCompare(String(b.activityKey)),
+  from:     (a, b) => String(a.fromName ?? '￿').localeCompare(String(b.fromName ?? '￿')),
+  to:       (a, b) => String(a.toName ?? '￿').localeCompare(String(b.toName ?? '￿')),
   eta:      (a, b) => (a.eta.year ?? Infinity) - (b.eta.year ?? Infinity),   // brak ETA na końcu
   fuel:     (a, b) => (a.fuelPct ?? -1) - (b.fuelPct ?? -1),
   alerts:   (a, b) => a.alertCount - b.alertCount,
@@ -142,7 +154,10 @@ export function filterRows(rows, { systemKey = null, role = null, search = '',
     else if (systemKey != null) { if (r.isTransit || r.systemId !== systemKey) return false; }
     if (role != null && r.role !== role) return false;
     if (q && !String(r.name).toLowerCase().includes(q)
-          && !String(r.fleetName ?? '').toLowerCase().includes(q)) return false;
+          && !String(r.fleetName ?? '').toLowerCase().includes(q)
+          && !String(r.toName ?? '').toLowerCase().includes(q)
+          && !String(r.fromName ?? '').toLowerCase().includes(q)
+          && !String(r.body ?? '').toLowerCase().includes(q)) return false;
     return true;
   });
 }

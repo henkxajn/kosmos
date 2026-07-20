@@ -3283,6 +3283,14 @@ export class FleetManagerOverlay {
         systems: K?.starSystemManager?.getAllSystems?.() ?? [],
         starName: (sid) => EntityManager.getByTypeInSystem?.('star', sid)?.[0]?.name ?? null,
       }),
+      // Ciało → nazwa (kolumny Ciało / Skąd / Dokąd): encja (planeta/księżyc/
+      // planetoida/stacja) z EntityManager, fallback nazwa kolonii, potem ID.
+      bodyName: (id) => {
+        if (!id) return null;
+        const ent = EntityManager.get(id);
+        if (ent?.name) return ent.name;
+        return K?.colonyManager?.getColony?.(id)?.name ?? String(id);
+      },
       // 3f — kontakty WYŁĄCZNIE przez istniejące bramki intel.
       enemyQuality: (id) => K?.intelSystem?.getVesselContact?.(id)?.quality ?? 'unknown',
     };
@@ -3453,7 +3461,7 @@ export class FleetManagerOverlay {
 
   // Kolumny: name flex; reszta stała. Zwraca [{id,x,w}].
   _registryColumnRects(x0, totalW) {
-    const fixed = { role: 56, fleet: 88, system: 78, state: 72, activity: 132, eta: 46, fuel: 40, alerts: 30 };
+    const fixed = { role: 54, fleet: 80, system: 66, body: 76, state: 62, activity: 96, from: 78, to: 82, eta: 42, fuel: 38, alerts: 28 };
     const fixedSum = Object.values(fixed).reduce((a, b) => a + b, 0) + 20 /*🎯*/ + 18 /*checkbox*/;
     const nameW = Math.max(90, totalW - fixedSum);
     const out = [];
@@ -3526,10 +3534,14 @@ export class FleetManagerOverlay {
       : (r.role ? t(`fleetPicture.role.${r.role}`) : '—'));
     cell('fleet', r.fleetName ?? '—');
     cell('system', r.isTransit ? t('registry.transit') : (r.systemName ?? ''), r.isTransit ? THEME.info : THEME.textSecondary);
+    cell('body', r.body ?? (kind === 'own' ? t('registry.bodyTransit') : '—'),
+      r.body ? THEME.textSecondary : THEME.textDim);
     cell('state', r.stateKey ? t(r.stateKey) : '—');
     cell('activity', kind === 'wreck'
       ? (r.wreckedYear != null ? `☠ ${t('registry.wreckYear', Math.floor(r.wreckedYear))}` : '—')
-      : (r.activityKey ? t(r.activityKey) : '—'));
+      : (r.activityKey ? `${t(r.activityKey)}${r.isLoop ? ' ↻' : ''}` : '—'));
+    cell('from', r.fromName ?? '—');
+    cell('to', r.toName ?? '—');
     cell('eta', r.eta.year === null ? '—'
       : `${r.eta.confidence === 'moving' ? '~' : ''}${Math.round(r.eta.year)}`,
       r.eta.confidence === 'moving' ? THEME.warning : THEME.textSecondary);
