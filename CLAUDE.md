@@ -18,7 +18,7 @@ Cel warstwy 4X (oryginalna wizja gracza):
 - JavaScript ES Modules (natywne, bez bundlera)
 - **Node.js** (v24) — generator tekstur planet (`generate-planets.js` + `lib/`), zależności: `sharp`, `simplex-noise`
 - Grę otwierać przez Live Server w VS Code (brak bundlera)
-- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v90 (patrz `SaveMigration.CURRENT_VERSION`)
+- Zapis: localStorage (klucz `kosmos_save_v1`), wersja save: v91 (patrz `SaveMigration.CURRENT_VERSION`)
 
 ### Architektura renderingu (3D + 2D overlay)
 ```
@@ -445,6 +445,11 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `observatory:vesselScanComplete { vesselId, vessel }` (rumor→contact zdalnie) | ObservatorySystem (`_completeVesselScan`) | NotificationCenter (`_handleVesselScanComplete`) |
 | `observatory:vesselScanCancelled { vesselId, reason }` (`manual`/`target_lost`) | ObservatorySystem (`cancelVesselScan`/`_tickVesselScans`) | ObservatoryOverlay |
 | `intel:vesselContactChanged { vesselId, oldQuality, newQuality, reason }` (`proximity_observation`/`sensor_lock`/`observatory_scan`/`observatory_sighting`) | IntelSystem | UIManager/GameScene EventLog (**tylko contact+**, fog-of-war: rumor anonimowy), ThreeRenderer (ghost) |
+| `territory:ownersChanged {}` (indeks własności układów unieważniony/przebudowany) | TerritoryService (`_invalidate`/`reindex`) | TerritoryField (recompute) |
+| `territory:changed {}` (pole + kontury przeliczone) | TerritoryField (`recompute`) | FleetManagerOverlay (render 2D/3D via `setTerritory`) |
+| `territory:merged { ownerId, from, to }` (bąble się zrosły — spadek liczby pętli przy niezmniejszonej liczbie źródeł) | TerritoryField | FleetManagerOverlay (rozbłysk izolinii 2D+3D) |
+| `colony:capturedByPlayer { planetId, colonyName, previousOwner, isOutpost, reason }` (gracz przejmuje ciało AI po desancie) | ColonyManager (`captureColonyForPlayer`) | TerritoryService (invalidacja indeksu), GameScene |
+| `colony:listChanged {}` — ⚠ teraz emitowane TAKŻE przez `registerHomePlanet` i `restore` (były ciche → TerritoryService cache'ował indeks bez kolonii gracza; fix B3) | ColonyManager | TerritoryService, listy UI |
 
 ---
 
@@ -633,6 +638,53 @@ tylko dla GRACZA (AI zwolnione). Audyt: `docs/audits/s34d-hull-gating-audit.md`.
   small hulli zamiast być zwolnione z gatingu — realny hull-gating AI przy PRZYSZŁYM skryptowaniu budowy statków AI
   (rozszerzyć `canBuildHullAt` również dla AI + stacje AI), NIE przez bypassy fabryki.
 - Smoke `src/testing/smoke/s34d_hull_gating_smoke.mjs` 26/26 (G/P/AI/OLD/FLEET/UX/i18n) + pełna regresja 0 FAIL.
+
+---
+
+## Strefy wpływów — UKOŃCZONE (Wariant B, B0-B6, save v91, live-gate PASS — ARC ZAMKNIĘTY)
+
+Warstwa polityczna mapy galaktycznej (Stratcom): każde imperium (gracz + AI) jako STREFA WPŁYWÓW —
+pola wpływu posiadanych układów zlewają się (metaballe / marching squares) w organiczny kształt z tintem
+koloru imperium + przerywaną izolinią; dwa odległe skupiska = dwa bąble; warstwa ZAWSZE widoczna (bez
+user-toggle, tylko wewn. kill-switch `FEATURES.territoryOverlay`). Gracz wybiera barwę na starcie.
+
+**Nowe systemy / pliki:**
+- `src/systems/TerritoryService.js` — indeks własności układów (`getSystemOwner`/`getOwnedSystems`/
+  `getSystemDevScore`/`getEmpireColor`/`reindex`; `Map<systemId,{owner,kind,devScore,colonyIds}>`).
+  Event-invalidowany, leniwy rebuild, emituje `territory:ownersChanged`. Układ SPORNY: kolonia innego
+  właściciela NIE zasila devScore strefy. `window.KOSMOS.territoryService`.
+- `src/systems/TerritoryField.js` — pole `f=Σexp(-d²/r²)` per imperium na wspólnej siatce, marching
+  squares (interpolacja) → **zamknięte pętle** + maska `Uint8` + `contested` + content-`hash`. Promień z
+  devScore. Throttle: `territory:ownersChanged` + `time:tick`/civMonth WYMUSZA `reindex()`+`recompute()`
+  (wzrost pop nie emituje eventu). `territory:merged` z guardem liczby źródeł. `window.KOSMOS.territoryField`.
+- `src/ui/TerritoryRenderLogic.js` — pure: `resolveTerritoryVisibility` (fog + atWar),
+  `buildTerritory3DPayload` (sig=content-hash+fog+atWar), `mergeFlashFactor`.
+- `src/data/EmpireData.js` — `EMPIRE_COLOR_PALETTE` (8 barw; #33ccff domyślny gracza). `empire.color`
+  przydzielany w `EmpireGenerator` (archetyp→wolny slot, ≠ gracz).
+
+**Render:** `FleetManagerOverlay._drawStratcomGalaxy` 2D (tint maska→offscreen cache + izolinia dash+
+war-pulse+contested+merge-flash + etykieta; romb właściciela **wariant B** = gracz + AI intel≥contact) +
+radar (subtelny tint) + wiersz „Terytorium" (panel political/ops) + legenda. 3D:
+`StratcomGalaxyRenderer.setTerritory` (płaszczyzna CanvasTexture na dysku y=-0.02 **DoubleSide** + izolinie
+`LineDashedMaterial`; animacja dashu przez `onBeforeCompile` uDashOffset z fallbackiem statycznym; war-pulse
++merge-flash opacity per-frame; `_territorySig`=content-hash). Etykiety w chrome 2D. Miękkie krawędzie
+tintu z `TERRITORY.SOFT_TINT`.
+
+**Fazy/commity:** B0 `db48bc4` (wyburzenie 3 martwych map + `tools/check-i18n.mjs`) · B1 `110e753`
+(TerritoryService + kolory + migracja **v90→v91** `_migrateV90toV91`) · B2 `9c2b4ff` (wybór barwy →
+`gameState.player.empireColor` PRZED `EmpireGenerator.generate`) · B3 `1888a0c` (TerritoryField + **fix
+root-cause**: `registerHomePlanet`/`restore` CICHO dodawały kolonię gracza → indeks stale; teraz emitują
+`colony:listChanged`) · B4 `ea2e578` (render 2D) · B5 `46d8389` (render 3D) · B6 (polish + docs).
+
+**Config `GameConfig.TERRITORY`:** ISO / GRID_LY / R_MIN_LY / R_MAX_LY / R_STATION_LY / BEACON_LY (hook) /
+DEV_FULL / FILL_ALPHA / CONTESTED_T / SOFT_TINT / SOFT_RAMP_LO / SOFT_RAMP_HI. Kill-switch
+`FEATURES.territoryOverlay`.
+
+**Decyzje:** kolor gracza z palety (wybór na starcie, [[wybór-barwy]]); kolor=tożsamość, wrogość=
+modyfikator (puls); fog-of-war (gracz zawsze / AI contact→pełny / rumor→szary / unknown→nic); romby
+wariant B; warstwa zawsze widoczna; `empire.color` persystowany (migracja); układ sporny nie miesza
+devScore; content-hash sig (miesięczny recompute nie przebudowuje sceny 3D). Plan/spec:
+`prompt-cc-strefy-wplywow.md` + `plan-mapa-terytorium-imperium.md` (audyt).
 
 ---
 

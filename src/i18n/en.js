@@ -9,6 +9,11 @@ export default {
   'faction.empireColor': 'Empire color',
   // B4 — player empire label on the zones-of-influence map (Stratcom)
   'territory.playerEmpire': 'Your Empire',
+  // B6 — zones of influence: system control row + legend
+  'territory.controlRow': 'Territory: {0}',
+  'territory.legendZone': 'Zone of influence',
+  'territory.legendBorder': 'Border',
+  'territory.legendOwner': 'System control',
 
   // === Buildings ===
   'building.colony_base.name': 'Capital',

@@ -850,3 +850,25 @@ Po prawej stronie pasa — **mini-panel** wybranego statku: glif+nazwa, rola, ak
 tym statkiem). Przy zaznaczeniu wielu statków lub floty mini-panel pokazuje tylko podsumowanie — akcje
 zbiorcze masz w panelu grupy / dowodzenia flotą. Pas zwijasz strzałką **▾** do samego paska zakładek
 (stan zapamiętywany). Kółko myszy nad pasem przewija listę (poza pasem = zoom kamery).
+
+## Strefy wpływów (mapa galaktyczna)
+
+Na mapie galaktycznej (**Dowództwo → STRATCOM**, klawisze `G`/`M`) każde imperium — Twoje i obce —
+pokazane jest jako **strefa wpływów**: posiadane układy emitują pole, którego pola bliskich kolonii
+zlewają się w organiczny kształt z subtelnym **tintem** w barwie imperium i **przerywaną izolinią** na
+granicy. Dwa odległe skupiska = dwa „bąble" w tej samej barwie; gdy skolonizujesz układ pomiędzy, bąble
+**zrastają się na oczach** (krótki rozbłysk granicy).
+
+- **Barwa = tożsamość.** Kolor mówi KTO (stały kolor imperium). Barwę swojego imperium wybierasz na
+  ekranie startowym (paleta 8 kolorów, domyślnie cyjan). Obce imperia mają własne, rozróżnialne kolory.
+  Wrogość to tylko modyfikator — granica imperium, z którym jesteś w **wojnie**, pulsuje.
+- **Rozmiar pola = rozwój.** Im więcej populacji i budynków w układzie, tym większe pole wpływu.
+- **Mgła wojny.** Twoje terytorium widzisz zawsze. Obce: od kontaktu (`intel ≥ contact`) w pełnym
+  kolorze; przy plotce (`rumor`) tylko szary zarys bez wypełnienia; nieznane — nic.
+- **Romb właściciela** przy gwieździe oznacza układ pod kontrolą (Twój zawsze; obcy przy kontakcie).
+- **Granica sporna** (pola dwóch imperiów stykają się) jest jaśniejsza / podwójna — zapowiedź napięcia
+  granicznego.
+- Panel układu pokazuje wiersz **„Terytorium: <imperium>"**; legenda radaru — próbki strefy, granicy
+  i rombu.
+
+Warstwa jest zawsze włączona (bez przełącznika). Działa w widoku 2D (mały podgląd) i 3D (duży panel).

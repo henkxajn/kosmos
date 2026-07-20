@@ -9,6 +9,11 @@ export default {
   'faction.empireColor': 'Barwa imperium',
   // B4 — etykieta imperium gracza na mapie stref wpływów (Stratcom)
   'territory.playerEmpire': 'Twoje Imperium',
+  // B6 — strefy wpływów: wiersz kontroli układu + legenda
+  'territory.controlRow': 'Terytorium: {0}',
+  'territory.legendZone': 'Strefa wpływów',
+  'territory.legendBorder': 'Granica',
+  'territory.legendOwner': 'Kontrola układu',
 
   // === Budynki ===
   'building.colony_base.name': 'Stolica',
