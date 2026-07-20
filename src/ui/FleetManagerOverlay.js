@@ -51,7 +51,7 @@ import { showFleetAssignModal } from './FleetAssignModal.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
-import { t, getName, getDesc, getLocale } from '../i18n/i18n.js';
+import { t, getName, getDesc, getShort, getLocale } from '../i18n/i18n.js';
 // UWAGA: NIE importujemy UnitDesignOverlay statycznie — pociąga three (GroundUnitPanel →
 // GlbSnapshotRenderer) i psuje headless import. Edytor projektów do osadzenia w Stoczni
 // bierzemy z zarejestrowanej instancji (window.KOSMOS.overlayManager.overlays.unit_design).
@@ -7610,10 +7610,9 @@ export class FleetManagerOverlay {
     if (vessel?.warpFuel?.max > 0) rangeText += ` / ${warpRange(vessel).toFixed(1)} LY`;
     specLine(t('fleet.shipRange'), rangeText);
 
-    // Typ paliwa
-    const fuelComm = COMMODITIES[ship.fuelType];
-    const fuelName = fuelComm ? (COMMODITY_SHORT[ship.fuelType] ?? fuelComm.namePL ?? ship.fuelType) : ship.fuelType;
-    specLine(t('fleet.shipFuelType'), fuelName);
+    // Typ paliwa — locale-aware (getShort czyta commodity.<id>.short PL/EN;
+    // było COMMODITY_SHORT = def.namePL = zawsze PL, przeciek „Paliwo" w trybie EN)
+    specLine(t('fleet.shipFuelType'), getShort(ship.fuelType));
 
     // Masa
     const totalMass = vessel?.totalMass ?? ship.baseMass ?? 0;
