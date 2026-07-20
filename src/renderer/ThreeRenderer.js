@@ -2205,6 +2205,10 @@ export class ThreeRenderer {
     }
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(S(moon.x), 0, S(moon.y));
+    // Raycaster (resolveTargetFromHits) — patrz planetoida: bez kosmosType księżyc
+    // był pomijany w castRay → moveToPoint bez targetBodyId → statek dryfował w punkcie
+    // zamiast śledzić orbitujący księżyc. Ustawiamy id → moveToPoint wchodzi na orbitę.
+    mesh.userData = { kosmosType: 'moon', moonId: moon.id };
     this.scene.add(mesh);
 
     this._clickable.push(mesh);
@@ -2475,6 +2479,12 @@ export class ThreeRenderer {
 
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(S(p.x), 0, S(p.y));
+      // Raycaster (resolveTargetFromHits) — bez kosmosType planetoida była pomijana
+      // w castRay (filter findKosmosNode) → PPM zwracał target 'empty' → moveToPoint bez
+      // targetBodyId → statek leciał do STATYCZNEGO punktu i dryfował, gdy planetoida
+      // orbitowała dalej (fix bug: „statek stoi, planetoida leci"). Ustawiamy id ciała →
+      // moveToPoint śledzi ruchome ciało i wchodzi na orbitę.
+      mesh.userData = { kosmosType: 'planetoid', planetoidId: p.id };
       this.scene.add(mesh);
 
       this._clickable.push(mesh);

@@ -84,14 +84,20 @@ export function resolveTargetFromHits(hits, worldPoint, _currentEmpireId) {
     return { type: 'poi', entityId: ud.poiId, poi, worldPoint };
   }
 
-  if (ud.kosmosType === 'planet') {
+  // Ciała niebieskie (planeta / księżyc / planetoida) — jeden cel celestialny.
+  // Zwracamy type:'planet' (menu + buildOrderSpec rozumieją tylko ten typ) → moveToPoint
+  // dostaje targetBodyId i ŚLEDZI ruchome ciało (predykcja Kepler + orbita na arrival).
+  // Bez tego księżyce/planetoidy (bez kosmosType przed fixem) trafiały w gałąź 'empty'
+  // → statek leciał do statycznego punktu i dryfował, gdy ciało orbitowało dalej.
+  if (ud.kosmosType === 'planet' || ud.kosmosType === 'moon' || ud.kosmosType === 'planetoid') {
     // EntityManager (singleton) has .get(id) — not .getEntity(). Two prior
     // gaps fixed in P4: missing window.KOSMOS.entityManager exposure +
     // method-name mismatch made planet hover return type:'empty'.
+    const bodyId = ud.planetId ?? ud.moonId ?? ud.planetoidId;
     const em = window.KOSMOS?.entityManager;
-    const planet = em?.get?.(ud.planetId);
+    const planet = em?.get?.(bodyId);
     if (!planet) return { type: 'empty', worldPoint };
-    return { type: 'planet', entityId: ud.planetId, planet, worldPoint };
+    return { type: 'planet', entityId: bodyId, planet, worldPoint };
   }
 
   return { type: 'empty', worldPoint };
