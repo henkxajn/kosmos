@@ -392,7 +392,8 @@ StationSystem (src/systems/StationSystem.js) — S3.3b-S2, Wariant A (instant ma
 | `observatory:collisionAlert { bodyA, bodyB, yearsUntil, margin }` | CollisionForecast | EventLog, GameScene |
 | `observatory:alertCleared { alertId }` | CollisionForecast | UIManager |
 | `groundUnit:capturingBuilding { unitId, planetId, q, r, progress }` | GroundUnitManager | ColonyOverlay |
-| `groundUnit:buildingCaptured { unitId, planetId, q, r, buildingId, newOwner }` | GroundUnitManager | ColonyOverlay, ColonyManager |
+| `groundUnit:buildingCaptured { unitId, planetId, q, r, buildingId, newOwner }` | GroundUnitManager | InvasionSystem (podbój gracza — `_tryPlayerCapture`) |
+| `colony:capturedByPlayer { planetId, colonyName, previousOwner, isOutpost, reason }` | ColonyManager (`captureColonyForPlayer`) | GameScene (switchActiveColony), UIManager (EventLog + odśwież listę) |
 | `groundUnit:captureInterrupted { unitId, planetId, q, r }` | GroundUnitManager | ColonyOverlay |
 | `groundUnit:orbitalStrike { unitId, planetId, q, r, hits, friendlyFireHits, placeholder }` | GroundAbilities (orbital_support) | BattleSystem (placeholder) |
 | `groundUnit:minefieldLaid { planetId, q, r, ownerId }` | GroundAbilities (lay_minefield) | ColonyOverlay, GameState |
@@ -830,6 +831,21 @@ nowej pozycji). Autosave ZOSTAJE (ma kill-switch `off` w menu; chroni przed cras
 - [x] **Faza 4** — WarSystem + BattleSystem (deterministic seeded) + moduły bojowe + WarOverlay (klawisz W)
 - [x] **Faza 5** — BattleView3D cinematic (proceduralne statki, timeline, laser/flash) + BattleIntroModal
 - [x] **Faza 6** — InvasionSystem + ColonyOverlay combat (desant, HP bars, przycisk ⚔ ATAKUJ)
+- [x] **Faza 6b — podbój ciała AI PRZEZ gracza** (`2d1b825`+`53e0127`, save bez migracji, live-gate PASS).
+      Dotąd desant zmieniał tylko `tile.owner` (event `groundUnit:buildingCaptured` BEZ subskrybenta),
+      a `transferColony` działał jednostronnie (gracz→imperium). Teraz:
+      **`ColonyManager.captureColonyForPlayer(planetId)`** — odwrotność transferColony: kolonia ZOSTAJE
+      w `_colonies` (inventory/budynki/produkcja liczą się na gracza), zdejmuje `ownerEmpireId`+`isTestEnemy`,
+      czyści „[WRÓG]", hexy→`player`, wypina z EmpireRegistry+galaxyData; emituje `colony:capturedByPlayer`
+      (NIE `colony:captured` — ten wyzwala alert „utracono") + `colony:listChanged`.
+      **Trigger `InvasionSystem`** dwutorowo: event `groundUnit:buildingCaptured` (feedback) + **skan
+      okresowy `_tickPlayerConquestChecks`** (1 civYear) — skan KONIECZNY na starym save (event nie wraca
+      po load) i gdy ostatni wróg ginie PO przejęciu stolicy. Wspólny `_tryPlayerCapture`: brak żywych
+      wrogich jednostek naziemnych ORAZ (kolonia MA stolicę→gracz właściciel `capitalBase` | outpost bez
+      stolicy→gracz kontroluje ≥1 przejęty hex z budynkiem). GameScene switchActiveColony, UIManager
+      EventLog+odświeżenie belki/drawera, i18n `log.colonyCaptured`/`log.outpostCaptured`.
+      Smoke `invasion_player_capture_smoke.mjs` 25/25. Poza zakresem: przejmowanie wrogich jednostek
+      naziemnych, stacje AI, konwersja POP.
 - [~] **Faza 7** — MilitaryAI + EconAI (GOAP + Utility) — ongoing, równolegle do balansu
 
 ### S3.4 — Light Diplomacy (✅ ukończony, save v85 bez migracji, live-gate PASS)
