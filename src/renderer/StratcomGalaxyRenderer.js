@@ -18,7 +18,7 @@
 // żonglowania pozycją/uiScale osobnego DOM-canvasa.
 
 import * as THREE from 'three';
-import { STAR_TYPES } from '../config/GameConfig.js';
+import { STAR_TYPES, GAME_CONFIG } from '../config/GameConfig.js';
 import { loadStarTextures, hashCode, TEXTURE_VARIANTS } from './PlanetTextureUtils.js';
 
 const FOV = 50;
@@ -42,6 +42,8 @@ export class StratcomGalaxyRenderer {
     this._territorySig   = '';
     this._territoryTex   = null;  // wspólna CanvasTexture (dispose ręczny — map nie idzie z material.dispose)
     this._territoryDashMats = []; // materiały izolinii z patchem uDashOffset (update per render)
+    this._territoryLines = [];    // izolinie (userData: ownerId/atWar/baseOpacity) — war-pulse + merge-flash
+    this._territoryFlash = null;  // Map ownerId→factor (0..1), ustawiane per-frame przez overlay
     this._glowCache = new Map();  // glowColorHex → CanvasTexture (współdzielone)
     this._failed    = false;
     this._bgTexture = null;       // tło kosmiczne (CanvasTexture ściemniona) → scene.background
@@ -265,12 +267,18 @@ export class StratcomGalaxyRenderer {
       const cv = document.createElement('canvas'); cv.width = mb.nx; cv.height = mb.ny;
       const cctx = cv.getContext('2d');
       const alpha = payload.fillAlpha ?? 0.07;
+      const cfg = GAME_CONFIG.TERRITORY ?? {};
+      const soft = cfg.SOFT_TINT, lo = cfg.SOFT_RAMP_LO ?? 40, hi = cfg.SOFT_RAMP_HI ?? 200, fullA = Math.round(alpha * 255);
       for (const l of full) {
         const lc = document.createElement('canvas'); lc.width = mb.nx; lc.height = mb.ny;
         const lctx = lc.getContext('2d'); const img = lctx.createImageData(mb.nx, mb.ny);
         const col = new THREE.Color(l.colorHex);
-        const r = (col.r*255)|0, g = (col.g*255)|0, b = (col.b*255)|0, a = Math.round(alpha*255);
-        for (let k = 0; k < l.mask.length; k++) if (l.mask[k] >= 128) { const o=k*4; img.data[o]=r; img.data[o+1]=g; img.data[o+2]=b; img.data[o+3]=a; }
+        const r = (col.r*255)|0, g = (col.g*255)|0, b = (col.b*255)|0;
+        for (let k = 0; k < l.mask.length; k++) {
+          const m = l.mask[k];   // miękkie krawędzie (B6): alpha z wartości maski vs binarny próg
+          const av = soft ? Math.round(fullA * Math.min(1, Math.max(0, (m - lo) / Math.max(1, hi - lo)))) : (m >= 128 ? fullA : 0);
+          if (av > 0) { const o = k*4; img.data[o]=r; img.data[o+1]=g; img.data[o+2]=b; img.data[o+3]=av; }
+        }
         lctx.putImageData(img, 0, 0);
         cctx.drawImage(lc, 0, 0);   // source-over — nakładanie się stref blenduje
       }
@@ -290,21 +298,30 @@ export class StratcomGalaxyRenderer {
     }
 
     // ── Izolinie: THREE.Line + LineDashedMaterial (computeLineDistances WYMAGANE) ──
+    // Tagowane userData (ownerId/atWar/baseOpacity) — war-pulse + merge-flash w render() (B6).
+    this._territoryLines = [];
     for (const l of layers) {
-      const colorHex = l.mode === 'outline' ? 0x8a8a8a : new THREE.Color(l.colorHex).getHex();
+      const baseCol = new THREE.Color(l.mode === 'outline' ? 0x8a8a8a : l.colorHex);
       for (const loop of (l.loops ?? [])) {
         if (!loop.pts || loop.pts.length < 2) continue;
         const pts = loop.pts.map(p => new THREE.Vector3(p.x, 0.0, p.y));
         pts.push(pts[0].clone());   // domknięcie pętli
         const geo = new THREE.BufferGeometry().setFromPoints(pts);
-        const mat = new THREE.LineDashedMaterial({ color: colorHex, dashSize: 0.6, gapSize: 0.5, transparent: true, opacity: 0.9, depthWrite: false });
+        const col = loop.contested ? baseCol.clone().lerp(new THREE.Color(0xffffff), 0.35) : baseCol;   // sporne jaśniej
+        const baseOpacity = loop.contested ? 1.0 : 0.9;
+        const mat = new THREE.LineDashedMaterial({ color: col.getHex(), dashSize: 0.6, gapSize: 0.5, transparent: true, opacity: baseOpacity, depthWrite: false });
         this._patchDashOffset(mat);
         const line = new THREE.Line(geo, mat);
         line.computeLineDistances();
+        line.userData = { ownerId: l.ownerId, atWar: !!l.atWar, baseOpacity };
+        this._territoryLines.push(line);
         this._territoryGroup.add(line);
       }
     }
   }
+
+  // Współczynniki rozbłysku (Map ownerId→0..1) ustawiane per-frame przez overlay (merge-flash).
+  setTerritoryFlash(factors) { this._territoryFlash = factors; }
 
   // r0.171 LineDashedMaterial NIE ma dashOffset → wstrzykujemy uniform onBeforeCompile.
   // Fallback: gdy string shadera się nie zgadza → statyczny dash (2D animuje) — udokumentowane.
@@ -335,9 +352,21 @@ export class StratcomGalaxyRenderer {
 
   render(wPx, hPx) {
     if (!this._ensure(wPx, hPx)) return false;
+    const now = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
     if (this._territoryDashMats.length) {
-      const off = -((typeof performance !== 'undefined' ? performance.now() : 0) / 1000) * TERRITORY_DASH_SPEED;
+      const off = -now * TERRITORY_DASH_SPEED;
       for (const m of this._territoryDashMats) { const s = m.userData._dashShader; if (s?.uniforms?.uDashOffset) s.uniforms.uDashOffset.value = off; }
+    }
+    // War-pulse (izolinia wroga w stanie wojny) + merge-flash (po zroście bąbli) — B6.
+    if (this._territoryLines.length) {
+      const pulse = 0.45 + 0.55 * Math.abs(Math.sin(now * Math.PI));   // ~2 s
+      for (const line of this._territoryLines) {
+        const u = line.userData;
+        let op = u.atWar ? pulse : u.baseOpacity;
+        const fl = this._territoryFlash?.get?.(u.ownerId) ?? 0;
+        if (fl > 0) op = Math.min(1, op + 0.5 * fl);
+        line.material.opacity = op;
+      }
     }
     this._renderer.render(this._scene, this._camera);
     return true;
@@ -391,6 +420,7 @@ export class StratcomGalaxyRenderer {
     }
     this._scene = null; this._camera = null; this._canvas = null;
     this._starGroup = null; this._ringGroup = null; this._territoryGroup = null;
-    this._sig = ''; this._ringSig = ''; this._territorySig = ''; this._territoryDashMats = [];
+    this._sig = ''; this._ringSig = ''; this._territorySig = '';
+    this._territoryDashMats = []; this._territoryLines = []; this._territoryFlash = null;
   }
 }

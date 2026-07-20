@@ -219,6 +219,10 @@ export const GAME_CONFIG = {
     DEV_FULL: 20,        // devScore (pop+budynki) dający R_MAX
     FILL_ALPHA: 0.07,    // tint wypełnienia (B4/B5)
     CONTESTED_T: 0.35,   // próg pola drugiego imperium → segment sporny
+    SOFT_TINT: false,    // B6: decyzja Filipa — BINARY (próg >=128); kod soft pod flagą na przyszłość
+    SOFT_RAMP_LO: 40,    // maska < LO → alpha 0 (używane gdy SOFT_TINT=true)
+    SOFT_RAMP_HI: 200,   // maska ≥ HI → pełne FILL_ALPHA (liniowy ramp LO..HI)
+    RADAR_FILL_ALPHA: 0.18,   // B6: tint stref na tarczy radaru — wyższy (glow tarczy zmywa 0.07)
   },
 };
 

@@ -133,6 +133,7 @@ export class TerritoryField {
       this._territories.set(ownerId, {
         ownerId, color: terr.getEmpireColor(ownerId), loops, mask,
         maskBounds: { x0: X0, y0: Y0, cell: stepX, nx, ny },
+        hash: territoryHash(mask, loops),   // content-hash → sygnatura rebuildu 3D (B6)
       });
     }
 
@@ -166,6 +167,22 @@ export class TerritoryField {
 }
 
 // ── Pomocnicze (czyste) ──────────────────────────────────────────────────────
+// Tani content-hash (FNV-1a) maski + pętli — sygnatura rebuildu renderu 3D (B6).
+// Miesięczny wymuszony recompute z tymi samymi danymi daje ten sam hash → brak
+// przebudowy sceny WebGL (w przeciwieństwie do licznika _version, który rósł zawsze).
+function territoryHash(mask, loops) {
+  let h = 2166136261 >>> 0;
+  const bump = (x) => { h = Math.imul(h ^ (x & 0xff), 16777619) >>> 0; };
+  bump(mask.length); bump(mask.length >>> 8);
+  for (let i = 0; i < mask.length; i += 13) bump(mask[i]);
+  bump(loops.length);
+  for (const lp of loops) {
+    bump(lp.pts.length); bump(lp.contested ? 1 : 0);
+    const p = lp.pts[0]; if (p) { bump(Math.round(p.x)); bump(Math.round(p.y)); }
+  }
+  return h.toString(36);
+}
+
 function sampleNearest(f, nx, ny, X0, Y0, stepX, stepY, x, y) {
   const i = clamp(Math.round((x - X0) / stepX), 0, nx - 1);
   const j = clamp(Math.round((y - Y0) / stepY), 0, ny - 1);
