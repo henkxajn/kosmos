@@ -16,7 +16,7 @@ import { RESOURCE_ICONS }  from '../data/BuildingsData.js';
 import { COMMODITIES, COMMODITY_SHORT } from '../data/CommoditiesData.js';
 import { ALL_RESOURCES }   from '../data/ResourcesData.js';
 import { TECHS }           from '../data/TechData.js';
-import { effectiveRange, loadColonists, unloadColonists, isEnemyVessel, canJump, warpRange, canColonize as vesselCanColonize }  from '../entities/Vessel.js';
+import { effectiveRange, loadColonists, unloadColonists, isEnemyVessel, canJump, warpRange, canColonize as vesselCanColonize, getPrimaryRole, canDoEnvoy }  from '../entities/Vessel.js';
 import { getAvailableActions, FLEET_ACTIONS } from '../data/FleetActions.js';
 import { ALL_DOCTRINES, doctrineNameKey } from '../data/FleetDoctrines.js';
 import { ARCHETYPES } from '../data/EmpireData.js';
@@ -51,7 +51,7 @@ import { showFleetAssignModal } from './FleetAssignModal.js';
 import { getOrderTargetInfo } from './OrderTargetInfo.js';
 import { OutpostBuildingPicker } from '../ui/OutpostBuildingPicker.js';
 import { showRallyAssignModal } from '../ui/RallyAssignModal.js';
-import { t, getName, getLocale } from '../i18n/i18n.js';
+import { t, getName, getDesc, getLocale } from '../i18n/i18n.js';
 // UWAGA: NIE importujemy UnitDesignOverlay statycznie — pociąga three (GroundUnitPanel →
 // GlbSnapshotRenderer) i psuje headless import. Edytor projektów do osadzenia w Stoczni
 // bierzemy z zarejestrowanej instancji (window.KOSMOS.overlayManager.overlays.unit_design).
@@ -68,6 +68,22 @@ function _fitText(ctx, text, maxW) {
   while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
   return s + '…';
 }
+
+// ── Ikony + etykiety slotów modułów (panel szczegółów statku) ──
+// Reuse ikon/kluczy i18n z designera (MODULE_CATEGORIES w FleetTabPanel) + 3 typy
+// bojowe/desantowe których designer nie grupuje (weapon/shield/troop).
+const MODULE_SLOT_INFO = {
+  propulsion: { icon: '🔥', key: 'fleet.designCatPropulsion' },
+  fuel:       { icon: '⛽', key: 'fleet.designCatFuel' },
+  cargo:      { icon: '📦', key: 'fleet.designCatCargo' },
+  science:    { icon: '🔬', key: 'fleet.designCatScience' },
+  special:    { icon: '🤖', key: 'fleet.designCatSpecial' },
+  habitat:    { icon: '🏠', key: 'fleet.designCatHabitat' },
+  armor:      { icon: '🛡', key: 'fleet.designCatArmor' },
+  weapon:     { icon: '🔫', key: 'fleet.slotWeapon' },
+  shield:     { icon: '✦', key: 'fleet.slotShield' },
+  troop:      { icon: '🪖', key: 'fleet.slotTroop' },
+};
 
 // ── Helper M4 P3: czy vessel bierze udział w aktywnym deep-space encounter ──
 // Sprawdza DSCS._activeEncounters → vesselStates ma vessel.id. Read-only — wołane
@@ -1810,6 +1826,12 @@ export class FleetManagerOverlay {
       return;
     }
 
+    // Załadunek kolonistów bez startu (load-and-hold) — modal → loadColonists od razu.
+    if (actionId === 'load_colonists') {
+      this._openColonistLoader(vessel);
+      return;
+    }
+
     // Załadunek wojsk — CargoLoadModal w trybie troopsOnly (ukrywa cargo/surowce/orbital).
     if (actionId === 'load_troops') {
       const colony = this._getVesselColony?.(vessel) ?? window.KOSMOS?.colonyManager?.getColony(vessel.colonyId);
@@ -1954,6 +1976,38 @@ export class FleetManagerOverlay {
     } catch {
       // Anulowano — nic nie rób
     }
+  }
+
+  /**
+   * Załadunek kolonistów na statek BEZ startu misji (load-and-hold). W odróżnieniu od
+   * `_openColonistThenTarget` (colonize) — ładuje POPy fizycznie od razu i je trzyma, bez
+   * wyboru celu. Warp: załaduj tu → skok STRATCOM → „Kolonizuj obcy". Rozładunek: „Wyładuj kolonistów".
+   */
+  async _openColonistLoader(vessel) {
+    try {
+      const colMgr = window.KOSMOS?.colonyManager;
+      const colony = colMgr?.getColony(vessel.colonyId ?? vessel.homeColonyId);
+      if (!colony?.civSystem) {
+        EventBus.emit('expedition:launchFailed', { reason: t('expedition.sourceColonyMissing') });
+        return;
+      }
+      const capRemaining = Math.max(0, (vessel.colonistCapacity ?? 0) - (vessel.colonists ?? 0));
+      if (capRemaining <= 0) {
+        EventBus.emit('expedition:launchFailed', { reason: t('expedition.vesselFullOfColonists', vessel.colonistCapacity ?? 0) });
+        return;
+      }
+      const free = Math.floor(colony.civSystem?.freePops ?? 0);
+      if (free <= 0) {
+        EventBus.emit('expedition:launchFailed', { reason: t('expedition.colonistsUnavailable') });
+        return;
+      }
+      const count = await ColonistLoadModal.getInstance().show(capRemaining, free);
+      if (count <= 0) return;   // anulowano
+      const loaded = loadColonists(vessel, count, colony.civSystem);
+      if (loaded > 0) {
+        EventBus.emit('ui:toast', { text: t('fleet.colonistsLoadedToast', loaded, vessel.name), color: THEME.accent, durationMs: 3000 });
+      }
+    } catch { /* anulowano */ }
   }
 
   /**
@@ -6642,16 +6696,34 @@ export class FleetManagerOverlay {
     ctx.fillText('✎', renX, cy + 16);
     this._hitZones.push({ x: renX - 2, y: cy + 4, w: 14, h: 16, type: 'rename', data: { vesselId: vessel.id } });
 
-    // Typ statku
+    // Rola statku (z modułów) + klasa kadłuba — było: sama nazwa kadłuba („Small Hull")
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
     ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(ship ? getName(ship, 'ship') : vessel.shipId, x + pad + 24, cy + 32);
+    const subtitle = `${this._roleLabel(vessel)} · ${ship ? getName(ship, 'ship') : vessel.shipId}`;
+    ctx.fillText(this._truncate(ctx, subtitle, w - pad * 2 - 24), x + pad + 24, cy + 32);
 
     cy += 44;
 
-    // ── Ship specs panel ─────────────────────────────────────
-    if (ship) {
-      cy = this._drawShipSpecs(ctx, x, cy, w, pad, ship, vessel);
+    // ── Przegląd: status + doświadczenie (rząd 1), baza (rząd 2) ──
+    {
+      const statusColor = (STATUS_COLORS[vessel.position.state] ?? (() => THEME.textSecondary))();
+      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
+      ctx.fillStyle = statusColor;
+      ctx.fillText(this._truncate(ctx, `● ${this._statusText(vessel)}`, w - pad * 2 - 60), x + pad, cy + 12);
+      ctx.fillStyle = THEME.yellow;
+      ctx.textAlign = 'right';
+      ctx.fillText(this._xpStars(vessel), x + w - pad, cy + 12);
+      ctx.textAlign = 'left';
+      cy += 18;
+      // Baza macierzysta
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      const baseLbl = `${t('fleet.labelBase')}: `;
+      ctx.fillText(baseLbl, x + pad, cy + 10);
+      const baseLblW = ctx.measureText(baseLbl).width;
+      ctx.fillStyle = THEME.textPrimary;
+      ctx.fillText(this._truncate(ctx, this._baseText(vessel), w - pad * 2 - baseLblW), x + pad + baseLblW, cy + 10);
+      cy += 16;
     }
 
     // Separator
@@ -6659,30 +6731,23 @@ export class FleetManagerOverlay {
     ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
     cy += 8;
 
-    // ── Stats grid (2×2) ─────────────────────────────────────
-    const gridW = (w - pad * 2) / 2;
-    const gridH = 30;
-    const stats = [
-      { label: t('fleet.labelStatus'), value: this._statusText(vessel), color: (STATUS_COLORS[vessel.position.state] ?? (() => THEME.textSecondary))() },
-      { label: t('fleet.labelSpeed'),  value: `${((vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1)).toFixed(1)} AU/r`, color: THEME.textPrimary },
-      { label: t('fleet.labelBase'),   value: this._baseText(vessel), color: THEME.textPrimary },
-      { label: t('fleet.labelExperience'), value: this._xpStars(vessel), color: THEME.yellow },
-    ];
-    for (let i = 0; i < stats.length; i++) {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const sx = x + pad + col * gridW;
-      const sy = cy + row * gridH;
+    // ── Moduły statku (pełna lista — sedno statku modułowego) ──
+    cy = this._drawModulesSection(ctx, x, cy, w, pad, ship, vessel);
 
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(stats[i].label, sx, sy + 10);
+    // Separator
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+    cy += 8;
 
-      ctx.font = `${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-      ctx.fillStyle = stats[i].color;
-      ctx.fillText(stats[i].value, sx, sy + 24);
+    // ── Osiągi (opis kadłuba + specyfikacja) ─────────────────
+    if (ship) {
+      cy = this._drawShipSpecs(ctx, x, cy, w, pad, ship, vessel);
     }
-    cy += gridH * 2 + 4;
+
+    // Separator (osiągi → zasoby)
+    ctx.strokeStyle = THEME.border;
+    ctx.beginPath(); ctx.moveTo(x + pad, cy); ctx.lineTo(x + w - pad, cy); ctx.stroke();
+    cy += 8;
 
     // ── Pasek paliwa (h=36) ──────────────────────────────────
     const fuelPct = vessel.fuel.max > 0 ? vessel.fuel.current / vessel.fuel.max : 0;
@@ -7502,98 +7567,64 @@ export class FleetManagerOverlay {
     const valX   = x + pad + 58;
     const maxW   = w - pad * 2;
 
-    // Opis statku (wrapped, dimmed)
-    if (ship.description) {
+    // Opis kadłuba (wrapped, dimmed) — locale-aware (było: ship.description = zawsze PL)
+    const desc = getDesc(ship, 'ship');
+    if (desc) {
       ctx.font = specFont;
       ctx.fillStyle = THEME.textDim;
-      const descLines = this._wrapTextWidth(ctx, ship.description, maxW);
-      for (const line of descLines) {
+      for (const line of this._wrapTextWidth(ctx, desc, maxW)) {
         ctx.fillText(line, labelX, cy + 10);
         cy += lineH;
       }
       cy += 4;
     }
 
-    // Generacja
-    const genLabels = ['', 'I', 'II', 'III', 'IV', 'V'];
-    ctx.font = specFont;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('fleet.shipGeneration'), labelX, cy + 10);
+    // Nagłówek sekcji OSIĄGI
     ctx.font = valFont;
-    ctx.fillStyle = THEME.accent;
-    ctx.fillText(`Gen ${genLabels[ship.generation] ?? ship.generation}`, valX, cy + 10);
-    cy += lineH;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(t('fleet.specsHeader'), labelX, cy + 10);
+    cy += 16;
+
+    // Helper: wiersz „etykieta  wartość" (obcięty do szerokości panelu)
+    const specLine = (label, value, col = THEME.textPrimary) => {
+      ctx.font = specFont; ctx.fillStyle = THEME.textDim;
+      ctx.fillText(label, labelX, cy + 10);
+      ctx.font = valFont;  ctx.fillStyle = col;
+      ctx.fillText(this._truncate(ctx, value, x + w - pad - valX), valX, cy + 10);
+      cy += lineH;
+    };
+
+    // ── Prędkość: baza → efektywna (z tech). Koniec dubla ze siatką 2×2 ──
+    const baseSpeed = vessel?.speedAU ?? ship.speedAU ?? ship.baseSpeedAU ?? 1.0;
+    const techMult  = window.KOSMOS?.techSystem?.getShipSpeedMultiplier?.() ?? 1;
+    const effSpeed  = baseSpeed * techMult;
+    specLine(t('fleet.designSpeed'), techMult > 1.01
+      ? `${baseSpeed.toFixed(1)} → ${effSpeed.toFixed(1)} AU/r`
+      : `${baseSpeed.toFixed(1)} AU/r`);
+
+    // Zasięg (+ warp jeśli statek ma bak warp)
+    const vesselFuelPerAU = vessel?.fuel?.consumption ?? ship.fuelPerAU ?? 0.5;
+    const vesselFuelCap = vessel?.fuel?.max ?? ship.fuelCapacity ?? 10;
+    const range = vesselFuelPerAU > 0 ? vesselFuelCap / vesselFuelPerAU : (ship.range ?? 20);
+    let rangeText = `${range.toFixed(1)} AU`;
+    if (vessel?.warpFuel?.max > 0) rangeText += ` / ${warpRange(vessel).toFixed(1)} LY`;
+    specLine(t('fleet.shipRange'), rangeText);
 
     // Typ paliwa
     const fuelComm = COMMODITIES[ship.fuelType];
     const fuelName = fuelComm ? (COMMODITY_SHORT[ship.fuelType] ?? fuelComm.namePL ?? ship.fuelType) : ship.fuelType;
-    ctx.font = specFont;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('fleet.shipFuelType'), labelX, cy + 10);
-    ctx.font = valFont;
-    ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(fuelName, valX, cy + 10);
-    cy += lineH;
-
-    // Prędkość (z vessel jeśli dostępna, fallback na ship)
-    const vesselSpeed = vessel?.speedAU ?? ship.speedAU ?? ship.baseSpeedAU ?? 1.0;
-    ctx.font = specFont;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('fleet.designSpeed'), labelX, cy + 10);
-    ctx.font = valFont;
-    ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(`${vesselSpeed.toFixed(1)} AU/y`, valX, cy + 10);
-    cy += lineH;
-
-    // Zasięg (z vessel jeśli dostępna)
-    const vesselFuelPerAU = vessel?.fuel?.consumption ?? ship.fuelPerAU ?? 0.5;
-    const vesselFuelCap = vessel?.fuel?.max ?? ship.fuelCapacity ?? 10;
-    const range = vesselFuelPerAU > 0 ? vesselFuelCap / vesselFuelPerAU : (ship.range ?? 20);
-    ctx.font = specFont;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('fleet.shipRange'), labelX, cy + 10);
-    ctx.font = valFont;
-    ctx.fillStyle = THEME.textPrimary;
-    let rangeText = `${range.toFixed(1)} AU`;
-    if (vessel?.warpFuel?.max > 0) {
-      // S3.0b S1b: zasięg skoku z realnego baku warp (warpRange), nie z martwego ship.fuelPerLY.
-      rangeText += ` / ${warpRange(vessel).toFixed(1)} LY`;
-    }
-    ctx.fillText(rangeText, valX, cy + 10);
-    cy += lineH;
+    specLine(t('fleet.shipFuelType'), fuelName);
 
     // Masa
     const totalMass = vessel?.totalMass ?? ship.baseMass ?? 0;
-    if (totalMass > 0) {
-      ctx.font = specFont;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('fleet.designMass'), labelX, cy + 10);
-      ctx.font = valFont;
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`${totalMass} t`, valX, cy + 10);
-      cy += lineH;
-    }
+    if (totalMass > 0) specLine(t('fleet.designMass'), `${totalMass} t`);
 
     // Ładownia (jeśli > 0)
     const cargoCapacity = vessel?.cargoMax ?? ship.cargoCapacity ?? 0;
-    if (cargoCapacity > 0) {
-      ctx.font = specFont;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('fleet.shipCargo'), labelX, cy + 10);
-      ctx.font = valFont;
-      ctx.fillStyle = THEME.textPrimary;
-      ctx.fillText(`${cargoCapacity} t`, valX, cy + 10);
-      cy += lineH;
-    }
+    if (cargoCapacity > 0) specLine(t('fleet.shipCargo'), `${cargoCapacity} t`);
 
     // Załoga
-    ctx.font = specFont;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('fleet.shipCrew'), labelX, cy + 10);
-    ctx.font = valFont;
-    ctx.fillStyle = THEME.textPrimary;
-    ctx.fillText(`${ship.crewCost} POP`, valX, cy + 10);
-    cy += lineH;
+    specLine(t('fleet.shipCrew'), `${ship.crewCost} POP`);
 
     // Zdolności
     if (ship.capabilities?.length > 0) {
@@ -7613,6 +7644,56 @@ export class FleetManagerOverlay {
 
     cy += 6;
     return cy;
+  }
+
+  // ── Sekcja MODUŁY — pełna lista modułów zainstalowanych na statku ──────────
+  // Sedno statku modułowego: pokazuje z CZEGO statek się składa (napęd + użytkowe),
+  // każdy wiersz = ikona slotu + etykieta slotu (dim) + nazwa modułu (bright).
+  // Licznik used/max ze slotów kadłuba (baseModuleSlots / slots[].length).
+  _drawModulesSection(ctx, x, cy, w, pad, ship, vessel) {
+    const mods   = vessel.modules ?? [];
+    const labelX = x + pad;
+    const valX   = x + pad + 78;
+    const used   = mods.length;
+    const max    = ship?.baseModuleSlots ?? ship?.slots?.length ?? used;
+
+    ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+    ctx.fillStyle = THEME.textDim;
+    ctx.fillText(`${t('fleet.modulesHeader')} (${used}/${max})`, labelX, cy + 10);
+    cy += 18;
+
+    if (used === 0) {
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.noModules'), labelX, cy + 10);
+      return cy + 16;
+    }
+
+    for (const id of mods) {
+      const m    = SHIP_MODULES[id];
+      const slot = MODULE_SLOT_INFO[m?.slotType] ?? { icon: '▪', key: null };
+      // Ikona slotu
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textSecondary;
+      ctx.fillText(slot.icon, labelX, cy + 11);
+      // Etykieta slotu (dim)
+      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(slot.key ? t(slot.key) : (m?.slotType ?? ''), labelX + 18, cy + 11);
+      // Nazwa modułu (bright; danger gdy nieznany moduł)
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = m ? THEME.textPrimary : THEME.danger;
+      ctx.fillText(this._truncate(ctx, m ? getName(m, 'module') : id, x + w - pad - valX), valX, cy + 11);
+      cy += 15;
+    }
+    return cy + 4;
+  }
+
+  // ── Etykieta roli statku (podtytuł nagłówka) ────────────────────────────────
+  // getPrimaryRole nie zna dyplomaty → envoy sprawdzamy osobno (moduł dyplomatyczny).
+  _roleLabel(vessel) {
+    const role = canDoEnvoy(vessel) ? 'envoy' : getPrimaryRole(vessel);
+    return t(`fleet.role.${role}`);
   }
 
   // Helper: wrap text do zadanej szerokości (piksele)

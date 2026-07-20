@@ -56,24 +56,24 @@ function _getVesselCaps(vessel) {
 const ACTIONS = {
   survey: {
     id: 'survey',
-    label: 'Zbadaj ciało',
+    get label() { return t('fleet.action.survey'); },
     icon: '🔭',
     requiresTarget: true,
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked' && vessel.position.state !== 'orbiting') {
-        return { ok: false, reason: 'Statek w locie' };
+        return { ok: false, reason: t('fleet.reason.inFlight') };
       }
       if (vessel.status !== 'idle' && vessel.status !== 'on_mission') {
-        return { ok: false, reason: 'Statek zajęty' };
+        return { ok: false, reason: t('fleet.reasonBusy') };
       }
       const ms = state.missionSystem;
-      if (!ms) return { ok: false, reason: 'Brak systemu misji' };
+      if (!ms) return { ok: false, reason: t('fleet.reason.noMissionSystem') };
       const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
+      if (!techOk) return { ok: false, reason: t('fleet.reason.needRocketry') };
+      if (!_checkPad(vessel, state)) return { ok: false, reason: t('fleet.reason.needSpaceport') };
       const caps = _getVesselCaps(vessel);
       if (!caps.has('survey')) {
-        return { ok: false, reason: 'Statek nie ma zdolności zwiadowczych' };
+        return { ok: false, reason: t('fleet.reason.noSurveyCap') };
       }
       return { ok: true };
     },
@@ -85,23 +85,23 @@ const ACTIONS = {
 
   deep_scan: {
     id: 'deep_scan',
-    label: 'Skan układu',
+    get label() { return t('fleet.action.deepScan'); },
     icon: '📡',
     requiresTarget: false,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
-      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      if (vessel.position.state !== 'docked') return { ok: false, reason: t('fleet.reason.mustBeDocked') };
+      if (vessel.status !== 'idle') return { ok: false, reason: t('fleet.reasonBusy') };
       const ms = state.missionSystem;
-      if (!ms) return { ok: false, reason: 'Brak systemu misji' };
+      if (!ms) return { ok: false, reason: t('fleet.reason.noMissionSystem') };
       const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
+      if (!techOk) return { ok: false, reason: t('fleet.reason.needRocketry') };
+      if (!_checkPad(vessel, state)) return { ok: false, reason: t('fleet.reason.needSpaceport') };
       const caps = _getVesselCaps(vessel);
       if (!caps.has('deep_scan')) {
-        return { ok: false, reason: 'Statek nie ma zdolności skanowania' };
+        return { ok: false, reason: t('fleet.reason.noScanCap') };
       }
       const unexplored = ms.getUnexploredCount();
-      if (unexplored.total === 0) return { ok: false, reason: 'Układ w pełni zbadany' };
+      if (unexplored.total === 0) return { ok: false, reason: t('fleet.reason.systemFullyExplored') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -111,15 +111,15 @@ const ACTIONS = {
 
   mining: {
     id: 'mining',
-    label: 'Wydobycie',
+    get label() { return t('fleet.action.mining'); },
     icon: '⛏',
     requiresTarget: true,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
-      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      if (vessel.position.state !== 'docked') return { ok: false, reason: t('fleet.reason.mustBeDocked') };
+      if (vessel.status !== 'idle') return { ok: false, reason: t('fleet.reasonBusy') };
       const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
-      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
+      if (!techOk) return { ok: false, reason: t('fleet.reason.needRocketry') };
+      if (!_checkPad(vessel, state)) return { ok: false, reason: t('fleet.reason.needSpaceport') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -132,16 +132,16 @@ const ACTIONS = {
 
   transport: {
     id: 'transport',
-    label: 'Transport',
+    get label() { return t('fleet.action.transport'); },
     icon: '📦',
     requiresTarget: true,
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked' && vessel.position.state !== 'orbiting') {
-        return { ok: false, reason: 'Statek w locie' };
+        return { ok: false, reason: t('fleet.reason.inFlight') };
       }
       // Pozwól tankującym statkom na misję — paliwo sprawdzane przy dispatchu
       if (vessel.status !== 'idle' && vessel.status !== 'on_mission' && vessel.status !== 'refueling') {
-        return { ok: false, reason: 'Statek zajęty' };
+        return { ok: false, reason: t('fleet.reasonBusy') };
       }
       return { ok: true };
     },
@@ -182,28 +182,28 @@ const ACTIONS = {
 
   colonize: {
     id: 'colonize',
-    label: 'Kolonizuj',
+    get label() { return t('fleet.action.colonize'); },
     icon: '🏗',
     requiresTarget: true,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
-      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      if (vessel.position.state !== 'docked') return { ok: false, reason: t('fleet.reason.mustBeDocked') };
+      if (vessel.status !== 'idle') return { ok: false, reason: t('fleet.reasonBusy') };
       // B1 (F4 live-gate): kolonizacja przez JEDNO źródło prawdy — Vessel.canColonize (moduł habitat),
       // NIE caps.has('colony') (= colonistCapacity>0, przez co czysty passenger fałszywie kolonizował).
-      if (!canColonize(vessel)) return { ok: false, reason: 'Statek nie ma zdolności kolonizacyjnych' };
+      if (!canColonize(vessel)) return { ok: false, reason: t('fleet.reason.noColonyCap') };
       const ms = state.missionSystem;
-      if (!ms) return { ok: false, reason: 'Brak systemu misji' };
+      if (!ms) return { ok: false, reason: t('fleet.reason.noMissionSystem') };
       const techOk = window.KOSMOS?.techSystem?.isResearched('colonization') ?? false;
-      if (!techOk) return { ok: false, reason: 'Brak tech: Kolonizacja' };
+      if (!techOk) return { ok: false, reason: t('fleet.reason.needColonization') };
       // Misja kolonizacyjna: średni/duży kadłub nie wymaga wyrzutni (statek → spaceport na miejscu)
       const hull = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
       const colonyBypassPad = hull?.size === 'medium' || hull?.size === 'large';
-      if (!colonyBypassPad && !_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
+      if (!colonyBypassPad && !_checkPad(vessel, state)) return { ok: false, reason: t('fleet.reason.needSpaceport') };
       if (state.targetId) {
         const check = ms.canLaunchColony(state.targetId);
         if (!check.ok) {
-          if (!check.exploredOk)  return { ok: false, reason: 'Cel niezbadany' };
-          if (!check.typeOk)      return { ok: false, reason: 'Cel nie nadaje się' };
+          if (!check.exploredOk)  return { ok: false, reason: t('fleet.reason.targetUnexplored') };
+          if (!check.typeOk)      return { ok: false, reason: t('fleet.reason.targetUnsuitable') };
         }
       }
       return { ok: true };
@@ -216,19 +216,42 @@ const ACTIONS = {
     },
   },
 
+  // ── Załadunek kolonistów bez startu (pre-load pod kolonizację cross-system) ──
+  // Ładuje POPy na kolonizator i TRZYMA je (load-and-hold), bez wyboru celu i bez startu.
+  // Warp colony ship: załaduj tu → skok STRATCOM → „Kolonizuj obcy" (czyta vessel.colonists).
+  // Rozładunek: istniejący przycisk „Wyładuj kolonistów".
+  load_colonists: {
+    id: 'load_colonists',
+    get label() { return t('fleet.actionLoadColonists'); },
+    icon: '👥',
+    requiresTarget: false,
+    canExecute(vessel, state) {
+      if (vessel.position.state !== 'docked') return { ok: false, reason: t('fleet.reasonNotDocked') };
+      if (vessel.status !== 'idle' && vessel.status !== 'refueling') return { ok: false, reason: t('fleet.reasonBusy') };
+      if (Math.max(0, (vessel.colonistCapacity ?? 0) - (vessel.colonists ?? 0)) <= 0) {
+        return { ok: false, reason: t('fleet.reasonColonistCabinsFull') };
+      }
+      const colony = state.colonyManager?.getColony(vessel.colonyId);
+      if (Math.floor(colony?.civSystem?.freePops ?? 0) <= 0) return { ok: false, reason: t('fleet.reasonNoFreePops') };
+      return { ok: true };
+    },
+    // Realizację przechwytuje FleetManagerOverlay._handleAction (modal + loadColonists) — execute no-op.
+    execute() {},
+  },
+
   found_outpost: {
     id: 'found_outpost',
-    label: 'Załóż placówkę',
+    get label() { return t('fleet.action.foundOutpost'); },
     icon: '🏗',
     requiresTarget: true,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
-      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      if (vessel.position.state !== 'docked') return { ok: false, reason: t('fleet.reason.mustBeDocked') };
+      if (vessel.status !== 'idle') return { ok: false, reason: t('fleet.reasonBusy') };
       const caps = _getVesselCaps(vessel);
-      if (!caps.has('cargo')) return { ok: false, reason: 'Wymaga statku cargo' };
+      if (!caps.has('cargo')) return { ok: false, reason: t('fleet.reason.needCargoShip') };
       const techOk = window.KOSMOS?.techSystem?.isResearched('exploration') ?? false;
-      if (!techOk) return { ok: false, reason: 'Brak tech: Eksploracja' };
-      if (!_checkPad(vessel, state)) return { ok: false, reason: 'Brak Wyrzutni (wymagana dla tego kadłuba)' };
+      if (!techOk) return { ok: false, reason: t('fleet.reason.needExploration') };
+      if (!_checkPad(vessel, state)) return { ok: false, reason: t('fleet.reason.needSpaceport') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -244,14 +267,14 @@ const ACTIONS = {
   // ── Załadunek wojsk na statek desantowy (docked) ──────────────────────
   load_troops: {
     id: 'load_troops',
-    label: 'Załaduj wojsko',
+    get label() { return t('fleet.action.loadTroops'); },
     icon: '🪖',
     requiresTarget: false,
     canExecute(vessel, state) {
       if (vessel.position.state !== 'docked' && vessel.position.state !== 'orbiting') {
-        return { ok: false, reason: 'Statek w locie' };
+        return { ok: false, reason: t('fleet.reason.inFlight') };
       }
-      if ((vessel.troopCapacity ?? 0) <= 0) return { ok: false, reason: 'Brak ładowni desantowej' };
+      if ((vessel.troopCapacity ?? 0) <= 0) return { ok: false, reason: t('fleet.reason.noTroopBay') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -271,14 +294,14 @@ const ACTIONS = {
   // statek wychodzi na orbitę z hangaru i zrzuca przez drop pods, bez lądowania.
   orbit: {
     id: 'orbit',
-    label: 'Leć i orbituj',
+    get label() { return t('fleet.action.orbit'); },
     icon: '⊙',
     requiresTarget: true,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'docked') return { ok: false, reason: 'Statek musi być w hangarze' };
-      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      if (vessel.position.state !== 'docked') return { ok: false, reason: t('fleet.reason.mustBeDocked') };
+      if (vessel.status !== 'idle') return { ok: false, reason: t('fleet.reasonBusy') };
       const techOk = window.KOSMOS?.techSystem?.isResearched('rocketry') ?? false;
-      if (!techOk) return { ok: false, reason: 'Brak tech: Rakietnictwo' };
+      if (!techOk) return { ok: false, reason: t('fleet.reason.needRocketry') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -294,18 +317,18 @@ const ACTIONS = {
 
   return_home: {
     id: 'return_home',
-    label: 'Powrót',
+    get label() { return t('fleet.action.return'); },
     icon: '🏠',
     requiresTarget: false,
     canExecute(vessel, state) {
       // Dostępny gdy orbituje lub jest w locie
-      if (vessel.position.state === 'docked') return { ok: false, reason: 'Statek w hangarze' };
+      if (vessel.position.state === 'docked') return { ok: false, reason: t('fleet.reason.inHangar') };
 
       // Blokada: away team na powierzchni
-      if (vessel.awayTeamUnitId) return { ok: false, reason: 'Zbierz Away Team przed odlotem' };
+      if (vessel.awayTeamUnitId) return { ok: false, reason: t('fleet.reason.collectAwayFirst') };
 
       // Statek już wraca (vessel-level) — nie potrzebuje rozkazu
-      if (vessel.mission?.phase === 'returning') return { ok: false, reason: 'Już wraca' };
+      if (vessel.mission?.phase === 'returning') return { ok: false, reason: t('fleet.reason.alreadyReturning') };
 
       // Znajdź misję statku w systemie ekspedycji
       const ms = state.missionSystem;
@@ -317,9 +340,9 @@ const ACTIONS = {
         if (vessel.mission) {
           return { ok: true };
         }
-        return { ok: false, reason: 'Brak aktywnej misji' };
+        return { ok: false, reason: t('fleet.reason.noActiveMission') };
       }
-      if (mission.status === 'returning') return { ok: false, reason: 'Już wraca' };
+      if (mission.status === 'returning') return { ok: false, reason: t('fleet.reason.alreadyReturning') };
 
       // Statek w obcym układzie — powrót = skok warp (nie lokalny dystans)
       const homeEntity = state.vesselManager?._findEntity(vessel.colonyId);
@@ -336,7 +359,7 @@ const ACTIONS = {
         const distAU = distPx / AU_TO_PX;
         const fuelNeeded = distAU * (vessel.fuel.consumption ?? 0);
         if (vessel.fuel.current < fuelNeeded) {
-          return { ok: true, lowFuel: true, reason: `Mało paliwa (${vessel.fuel.current.toFixed(1)}/${fuelNeeded.toFixed(1)} pc)` };
+          return { ok: true, lowFuel: true, reason: t('fleet.reason.lowFuel', vessel.fuel.current.toFixed(1), fuelNeeded.toFixed(1)) };
         }
       }
       return { ok: true };
@@ -392,16 +415,16 @@ const ACTIONS = {
 
   redirect: {
     id: 'redirect',
-    label: 'Zmień cel',
+    get label() { return t('fleet.action.redirect'); },
     icon: '🔄',
     requiresTarget: true,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Statek musi orbitować' };
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: t('fleet.reason.mustOrbit') };
       const ms = state.missionSystem;
-      if (!ms) return { ok: false, reason: 'Brak systemu misji' };
+      if (!ms) return { ok: false, reason: t('fleet.reason.noMissionSystem') };
       const mission = ms.getActive().find(m => m.vesselId === vessel.id);
-      if (!mission) return { ok: false, reason: 'Brak aktywnej misji' };
-      if (mission.status !== 'orbiting') return { ok: false, reason: 'Statek nie na orbicie' };
+      if (!mission) return { ok: false, reason: t('fleet.reason.noActiveMission') };
+      if (mission.status !== 'orbiting') return { ok: false, reason: t('fleet.reason.notOrbiting') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -422,15 +445,15 @@ const ACTIONS = {
   // Dok → VesselManager.dockAtStation (port uniwersalny, dockedAt=stationId).
   dock_station: {
     id: 'dock_station',
-    label: 'Dokuj do stacji',
+    get label() { return t('fleet.action.dockStation'); },
     icon: '🛰',
     requiresTarget: false,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
-      if (vessel.status !== 'idle' && vessel.status !== 'on_mission') return { ok: false, reason: 'Statek zajęty' };
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: t('fleet.reason.requiresOrbit') };
+      if (vessel.status !== 'idle' && vessel.status !== 'on_mission') return { ok: false, reason: t('fleet.reasonBusy') };
       const stations = window.KOSMOS?.stationSystem?.getStationsAt?.(vessel.position.dockedAt) ?? [];
       if (!stations.some(s => (s.ownerEmpireId ?? 'player') === 'player')) {
-        return { ok: false, reason: 'Brak własnej stacji na orbicie' };
+        return { ok: false, reason: t('fleet.reason.noOwnStation') };
       }
       return { ok: true };
     },
@@ -445,17 +468,17 @@ const ACTIONS = {
 
   full_scan: {
     id: 'full_scan',
-    label: 'Pełny Skan',
+    get label() { return t('fleet.action.fullScan'); },
     icon: '📡',
     requiresTarget: false,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
-      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: t('fleet.reason.requiresOrbit') };
+      if (vessel.status !== 'idle') return { ok: false, reason: t('fleet.reasonBusy') };
       // Wymaga modułu naukowego
       const hasSciMod = (vessel.modules ?? []).some(
         m => SHIP_MODULES[m]?.slotType === 'science'
       );
-      if (!hasSciMod) return { ok: false, reason: 'Brak modułu naukowego' };
+      if (!hasSciMod) return { ok: false, reason: t('fleet.reason.noScienceModule') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -468,19 +491,19 @@ const ACTIONS = {
 
   send_away_team: {
     id: 'send_away_team',
-    label: 'Wyślij Away Team',
+    get label() { return t('fleet.action.sendAwayTeam'); },
     icon: '🤖',
     requiresTarget: false,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
-      if (vessel.status !== 'idle') return { ok: false, reason: 'Statek zajęty' };
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: t('fleet.reason.requiresOrbit') };
+      if (vessel.status !== 'idle') return { ok: false, reason: t('fleet.reasonBusy') };
       // Wymaga modułu away team
       const hasAT = (vessel.modules ?? []).some(
         m => SHIP_MODULES[m]?.stats?.enablesAwayTeam
       );
-      if (!hasAT) return { ok: false, reason: 'Brak modułu Away Team' };
+      if (!hasAT) return { ok: false, reason: t('fleet.reason.noAwayTeamModule') };
       // Nie może mieć już aktywnego away team
-      if (vessel.awayTeamUnitId) return { ok: false, reason: 'Away Team już na powierzchni' };
+      if (vessel.awayTeamUnitId) return { ok: false, reason: t('fleet.reason.awayTeamDeployed') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -493,12 +516,12 @@ const ACTIONS = {
 
   collect_away_team: {
     id: 'collect_away_team',
-    label: 'Zbierz Away Team',
+    get label() { return t('fleet.action.collectAwayTeam'); },
     icon: '⬆',
     requiresTarget: false,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
-      if (!vessel.awayTeamUnitId) return { ok: false, reason: 'Brak Away Team na powierzchni' };
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: t('fleet.reason.requiresOrbit') };
+      if (!vessel.awayTeamUnitId) return { ok: false, reason: t('fleet.reason.noAwayTeamDeployed') };
       return { ok: true };
     },
     execute(vessel, state) {
@@ -511,13 +534,13 @@ const ACTIONS = {
   // ── Zrzut desantu (orbita + drop_pods + załadowane wojsko) ─────────────
   drop_troops: {
     id: 'drop_troops',
-    label: 'Zrzuć wojska',
+    get label() { return t('fleet.action.dropTroops'); },
     icon: '⚔',
     requiresTarget: false,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
-      if (!vessel.canDropTroops) return { ok: false, reason: 'Brak Kapsuł Desantowych' };
-      if ((vessel.groundUnits?.length ?? 0) === 0) return { ok: false, reason: 'Ładownia pusta' };
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: t('fleet.reason.requiresOrbit') };
+      if (!vessel.canDropTroops) return { ok: false, reason: t('fleet.reason.noDropPods') };
+      if ((vessel.groundUnits?.length ?? 0) === 0) return { ok: false, reason: t('fleet.reason.holdEmpty') };
       // Dominacja orbitalna wymagana dla wrogich ciał (własne kolonie OK bez bitwy).
       // Wrogie = kolonia z ownerEmpireId LUB isTestEnemy (debug spawn), lub brak kolonii w colMgr.
       const targetId = vessel.position.dockedAt;
@@ -528,7 +551,7 @@ const ACTIONS = {
         && !targetColony.ownerEmpireId
         && !targetColony.isTestEnemy;
       if (!targetIsOwn && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
-        return { ok: false, reason: 'Brak dominacji orbitalnej' };
+        return { ok: false, reason: t('fleet.reason.noOrbitalDominance') };
       }
       return { ok: true };
     },
@@ -543,17 +566,17 @@ const ACTIONS = {
   // ── Ostrzał orbitalny (orbita + orbital_strike_battery + amunicja + cooldown) ─
   orbital_strike: {
     id: 'orbital_strike',
-    label: 'Ostrzał orbitalny',
+    get label() { return t('fleet.action.orbitalStrike'); },
     icon: '💥',
     requiresTarget: false,
     canExecute(vessel, state) {
-      if (vessel.position.state !== 'orbiting') return { ok: false, reason: 'Wymaga orbity' };
-      if (!vessel.orbitalStrike) return { ok: false, reason: 'Brak baterii ostrzału' };
+      if (vessel.position.state !== 'orbiting') return { ok: false, reason: t('fleet.reason.requiresOrbit') };
+      if (!vessel.orbitalStrike) return { ok: false, reason: t('fleet.reason.noStrikeBattery') };
       const os = vessel.orbitalStrike;
-      if ((os.ammoCurrent ?? 0) <= 0) return { ok: false, reason: 'Brak amunicji' };
+      if ((os.ammoCurrent ?? 0) <= 0) return { ok: false, reason: t('fleet.reason.noAmmo') };
       const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
       if (gameYear < (os.cooldownUntilYear ?? 0)) {
-        return { ok: false, reason: `Cooldown (${(os.cooldownUntilYear - gameYear).toFixed(1)}y)` };
+        return { ok: false, reason: t('fleet.reason.cooldown', (os.cooldownUntilYear - gameYear).toFixed(1)) };
       }
       const targetId = vessel.position.dockedAt;
       const colMgr = state.colonyManager;
@@ -563,7 +586,7 @@ const ACTIONS = {
         && !targetColony.ownerEmpireId
         && !targetColony.isTestEnemy;
       if (!targetIsOwn && warSys && !warSys.playerHasOrbitalDominance(targetId)) {
-        return { ok: false, reason: 'Brak dominacji orbitalnej' };
+        return { ok: false, reason: t('fleet.reason.noOrbitalDominance') };
       }
       return { ok: true };
     },
@@ -610,6 +633,7 @@ export function getAvailableActions(vessel, state) {
     // caps.has('colony') — passenger-only ma colonistCapacity>0, ale NIE koloniuzje.
     if (canColonize(vessel)) {
       result.push(_check(ACTIONS.colonize, vessel, state));
+      result.push(_check(ACTIONS.load_colonists, vessel, state));   // pre-load POP (kolonizacja cross-system)
     }
     result.push(_check(ACTIONS.transport, vessel, state));
     // Transport pasażerski — statki z pojemnością na pasażera (passenger_module / colony ship).
