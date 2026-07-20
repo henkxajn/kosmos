@@ -27,7 +27,7 @@ import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
-import { resolveTerritoryVisibility, buildTerritory3DPayload } from './TerritoryRenderLogic.js';
+import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash } from './TerritoryRenderLogic.js';
 import {
   TRANSIT_KEY, buildRegistryRows, sortRows, filterRows,
   collectSystemChoices, collectRoleChoices, REGISTRY_COLUMNS,
@@ -40,6 +40,10 @@ const REGISTRY_RIGHT_W = 300;
 
 // Strefy wpływów (B4) — prędkość „marszu" przerywanej izolinii (px/s; tuning B6).
 const TERRITORY_DASH_MARCH_PX_PER_SEC = 3;
+// B6 — czas rozbłysku izolinii po zroście bąbli (territory:merged), ms.
+const TERRITORY_FLASH_MS = 1500;
+// B6 — pending flash starszy niż to (ms) odrzucamy przy 1. rysowaniu (zrost dawno temu).
+const TERRITORY_FLASH_PENDING_MAX_MS = 60000;
 import {
   defaultViewport, zoomViewport, layoutTimelineRows, nowLineX, timelineTicks, xToYear,
 } from './TimelineLayout.js';
@@ -332,6 +336,14 @@ export class FleetManagerOverlay {
     this._scrollOffset = 0;       // scroll listy statków (LEFT)
     this._selectedVesselId = null;
     this._hoverVesselId = null;
+    // Strefy wpływów (B6) — rozbłysk izolinii po zroście bąbli (territory:merged). Lazy-start:
+    // event → pending; zegar FLASH_MS startuje przy PIERWSZYM rysowaniu warstwy (zrost zwykle
+    // przy zamkniętym Stratcomie); pending starszy niż PENDING_MAX odrzucamy.
+    this._territoryFlash = new Map();          // ownerId → flashStart (ustawiany przy 1. draw)
+    this._territoryFlashPending = new Map();   // ownerId → eventTimestamp
+    EventBus.on('territory:merged', ({ ownerId }) => {
+      if (ownerId) this._territoryFlashPending.set(ownerId, (typeof performance !== 'undefined' ? performance.now() : 0));
+    });
     // Player Fleet Groups (P2.5 outliner) — jedna lista z drzewem.
     //   _activeTab i _fleetScrollOffset usunięte (jeden widok, jeden scroll).
     //   _collapsedFleets — Set<fleetId> dla collapse state per fleet. Lokalne,
@@ -5040,6 +5052,12 @@ export class FleetManagerOverlay {
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
     }
 
+    // Strefy wpływów — tint (poświata; bez izolinii/etykiet/animacji), fog-gated. Wyższa alpha
+    // (RADAR_FILL_ALPHA) bo glow tarczy zmywa domyślne 0.07 (B6 fix).
+    if (GAME_CONFIG.FEATURES?.territoryOverlay) {
+      this._drawStratcomTerritoryTint(ctx, (gx, gy) => ({ sx: toSx(gx), sy: toSy(gy) }), GAME_CONFIG.TERRITORY?.RADAR_FILL_ALPHA ?? 0.18);
+    }
+
     // Linie jump-gate (fioletowe)
     for (const g of systems.filter(s => s.jumpGate)) {
       const connTo = ssMgr?.getSystem(g.id)?.jumpGate?.connectedTo;
@@ -5228,16 +5246,29 @@ export class FleetManagerOverlay {
     // ── Legenda (lewy-dolny dla tarczy) — tylko gdy duży ──
     if (isBig) {
       const lx = dialX + PAD;
-      let ly = y + h - 56;
+      let ly = y + h - 95;   // +3 wiersze na strefy wpływów (B6)
       ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
+      const pc = window.KOSMOS?.territoryService?.getEmpireColor?.('player') ?? THEME.accent;
       const items = [
         { color: THEME.yellow,  label: t('fleet.clusterHome') },
         { color: THEME.accent,  label: t('fleet.clusterExplored') },
         { color: THEME.textDim, label: t('fleet.clusterUnexplored') },
+        { kind: 'zone',   color: pc, label: t('territory.legendZone') },     // strefy wpływów (B6)
+        { kind: 'border', color: pc, label: t('territory.legendBorder') },
+        { kind: 'owner',  color: pc, label: t('territory.legendOwner') },
       ];
       for (const it of items) {
-        ctx.fillStyle = it.color;
-        ctx.beginPath(); ctx.arc(lx + 4, ly + 4, 3, 0, Math.PI * 2); ctx.fill();
+        if (it.kind === 'zone') {
+          ctx.fillStyle = it.color; ctx.globalAlpha = 0.5; ctx.fillRect(lx, ly + 1, 8, 6); ctx.globalAlpha = 1;
+        } else if (it.kind === 'border') {
+          ctx.strokeStyle = it.color; ctx.lineWidth = 1.4; ctx.setLineDash([3, 2]);
+          ctx.beginPath(); ctx.moveTo(lx, ly + 4); ctx.lineTo(lx + 8, ly + 4); ctx.stroke(); ctx.setLineDash([]);
+        } else if (it.kind === 'owner') {
+          ctx.fillStyle = it.color; const gx = lx + 4, gy = ly + 4, s = 3.5;
+          ctx.beginPath(); ctx.moveTo(gx, gy - s); ctx.lineTo(gx + s, gy); ctx.lineTo(gx, gy + s); ctx.lineTo(gx - s, gy); ctx.closePath(); ctx.fill();
+        } else {
+          ctx.fillStyle = it.color; ctx.beginPath(); ctx.arc(lx + 4, ly + 4, 3, 0, Math.PI * 2); ctx.fill();
+        }
         ctx.fillStyle = THEME.textDim;
         ctx.fillText(it.label, lx + 12, ly + 7);
         ly += 13;
@@ -5627,32 +5658,28 @@ export class FleetManagerOverlay {
       isAtWarWith:  (oid) => warSys?.getWarWith?.(oid),
     });
     const byOwner = new Map(vis.map(v => [v.ownerId, v]));
-    const now = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
+    const nowMs = (typeof performance !== 'undefined' ? performance.now() : 0);
+    const now = nowMs / 1000;
+    this._promotePendingFlashes(nowMs);   // lazy-start rozbłysku (2D)
 
-    // 1. TINT — tylko 'full' (gracz + AI contact+); offscreen cache per maska.
-    for (const td of territories) {
-      const v = byOwner.get(td.ownerId);
-      if (!v || v.mode !== 'full') continue;
-      const cv = this._territoryTintCanvas(td);
-      const mb = td.maskBounds;
-      const tl = projPt(mb.x0, mb.y0);
-      const br = projPt(mb.x0 + (mb.nx - 1) * mb.cell, mb.y0 + (mb.ny - 1) * mb.cell);
-      if (!cv || !tl || !br) continue;
-      ctx.drawImage(cv, Math.min(tl.sx, br.sx), Math.min(tl.sy, br.sy), Math.abs(br.sx - tl.sx), Math.abs(br.sy - tl.sy));
-    }
+    // 1. TINT — współdzielony helper (galaktyka + radar).
+    this._drawStratcomTerritoryTint(ctx, projPt);
 
-    // 2. IZOLINIA — full=kolor imperium, outline=szary; dash (duży panel animowany),
-    //    war-pulse alpha (~2 s). Kolor tożsamości bez zmian.
+    // 2. IZOLINIA — full=kolor imperium, outline=szary; dash (duży panel), war-pulse (~2 s),
+    //    contested jaśniej + podwójna kreska (B6), merge-flash boost (B6).
     ctx.save();
-    ctx.lineWidth = 1.4;
     ctx.setLineDash([6, 5]);
     for (const td of territories) {
       const v = byOwner.get(td.ownerId);
       if (!v || v.mode === 'skip') continue;
-      ctx.strokeStyle = v.mode === 'outline' ? '#8a8a8a' : td.color;
+      const flash = mergeFlashFactor(nowMs, this._territoryFlash?.get?.(td.ownerId), TERRITORY_FLASH_MS);
+      const baseColor = v.mode === 'outline' ? '#8a8a8a' : td.color;
       ctx.lineDashOffset = isBig ? -(now * TERRITORY_DASH_MARCH_PX_PER_SEC) : 0;   // mały podgląd: statyczny
-      ctx.globalAlpha = (isBig && v.atWar) ? (0.45 + 0.55 * Math.abs(Math.sin(now * Math.PI))) : 1;   // ~2 s
+      const warAlpha = (isBig && v.atWar) ? (0.45 + 0.55 * Math.abs(Math.sin(now * Math.PI))) : 1;   // ~2 s
       for (const loop of td.loops) {
+        ctx.strokeStyle = baseColor;
+        ctx.lineWidth = (loop.contested ? 2.4 : 1.4) + 1.2 * flash;
+        ctx.globalAlpha = Math.min(1, warAlpha * (loop.contested ? 1 : 0.92) + 0.4 * flash);
         ctx.beginPath();
         let started = false;
         for (const p of loop.pts) {
@@ -5661,6 +5688,10 @@ export class FleetManagerOverlay {
           if (!started) { ctx.moveTo(s.sx, s.sy); started = true; } else ctx.lineTo(s.sx, s.sy);
         }
         ctx.closePath(); ctx.stroke();
+        if (loop.contested) {   // podwójna kreska: jaśniejszy wewnętrzny obrys
+          ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = Math.min(0.6, 0.3 + 0.4 * flash); ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       }
     }
     ctx.setLineDash([]); ctx.globalAlpha = 1;
@@ -5668,6 +5699,27 @@ export class FleetManagerOverlay {
 
     // 3. ETYKIETA (tylko duży panel; przy największej pętli; raz per imperium).
     if (isBig) this._drawStratcomTerritoryLabels(ctx, projPt);
+  }
+
+  // Tint stref (tylko 'full' = gracz + AI contact+); offscreen cache per maska.
+  // Współdzielony: galaktyka 2D + radar (item 5 — poświata bez izolinii/etykiet/animacji).
+  _drawStratcomTerritoryTint(ctx, projPt, fillAlpha) {
+    const tf = window.KOSMOS?.territoryField, intel = window.KOSMOS?.intelSystem, warSys = window.KOSMOS?.warSystem;
+    if (!tf || typeof projPt !== 'function') return;
+    const territories = tf.getAllTerritories(); if (!territories.length) return;
+    const vis = resolveTerritoryVisibility(territories.map(td => td.ownerId), {
+      isPlayer: (o) => o === 'player', intelLevelOf: (o) => intel?.getLevel?.(o), isAtWarWith: (o) => warSys?.getWarWith?.(o),
+    });
+    const byOwner = new Map(vis.map(v => [v.ownerId, v]));
+    for (const td of territories) {
+      const v = byOwner.get(td.ownerId);
+      if (!v || v.mode !== 'full') continue;
+      const cv = this._territoryTintCanvas(td, fillAlpha);
+      const mb = td.maskBounds;
+      const tl = projPt(mb.x0, mb.y0), br = projPt(mb.x0 + (mb.nx - 1) * mb.cell, mb.y0 + (mb.ny - 1) * mb.cell);
+      if (!cv || !tl || !br) continue;
+      ctx.drawImage(cv, Math.min(tl.sx, br.sx), Math.min(tl.sy, br.sy), Math.abs(br.sx - tl.sx), Math.abs(br.sy - tl.sy));
+    }
   }
 
   // Etykiety imperiów (nazwa przy największej pętli; tylko 'full' = gracz / AI contact+).
@@ -5699,25 +5751,52 @@ export class FleetManagerOverlay {
     const vis = resolveTerritoryVisibility(territories.map(td => td.ownerId), {
       isPlayer: (o) => o === 'player', intelLevelOf: (o) => intel?.getLevel?.(o), isAtWarWith: (o) => warSys?.getWarWith?.(o),
     });
-    return buildTerritory3DPayload(territories, vis, { fillAlpha: GAME_CONFIG.TERRITORY?.FILL_ALPHA ?? 0.07, version: tf.getVersion?.() ?? 0 });
+    return buildTerritory3DPayload(territories, vis, { fillAlpha: GAME_CONFIG.TERRITORY?.FILL_ALPHA ?? 0.07 });
+  }
+
+  // Promuj oczekujące rozbłyski przy PIERWSZYM rysowaniu warstwy po evencie (lazy-start B6).
+  _promotePendingFlashes(nowMs) {
+    if (!this._territoryFlashPending?.size) return;
+    for (const [oid, evtMs] of this._territoryFlashPending) {
+      if (classifyPendingFlash(evtMs, nowMs, TERRITORY_FLASH_PENDING_MAX_MS) === 'start') this._territoryFlash.set(oid, nowMs);
+      this._territoryFlashPending.delete(oid);   // skonsumowane (start lub discard)
+    }
+  }
+
+  // Map ownerId→factor (0..1) merge-flash → g3.setTerritoryFlash (B6). Sprząta wygasłe.
+  _territoryFlashFactors() {
+    const nowMs = (typeof performance !== 'undefined' ? performance.now() : 0);
+    this._promotePendingFlashes(nowMs);
+    const out = new Map();
+    if (!this._territoryFlash?.size) return out;
+    for (const [oid, ts] of this._territoryFlash) {
+      const f = mergeFlashFactor(nowMs, ts, TERRITORY_FLASH_MS);
+      if (f > 0) out.set(oid, f); else this._territoryFlash.delete(oid);
+    }
+    return out;
   }
 
   // Offscreen tint (nx×ny) barwiony kolorem imperium @ FILL_ALPHA; cache invalidowany
   // przez identyczność maski (TerritoryField tworzy NOWĄ Uint8Array na recompute).
-  _territoryTintCanvas(td) {
+  _territoryTintCanvas(td, fillAlpha) {
+    const cfg = GAME_CONFIG.TERRITORY ?? {};
+    fillAlpha = fillAlpha ?? (cfg.FILL_ALPHA ?? 0.07);
     this._territoryTint ??= new Map();
-    const hit = this._territoryTint.get(td.ownerId);
+    const key = `${td.ownerId}:${fillAlpha}`;   // osobny cache dla galaktyki (0.07) i radaru (wyższy)
+    const hit = this._territoryTint.get(key);
     if (hit && hit.mask === td.mask) return hit.canvas;
     const mb = td.maskBounds;
     const cv = document.createElement('canvas'); cv.width = mb.nx; cv.height = mb.ny;
     const c2 = cv.getContext('2d'); const img = c2.createImageData(mb.nx, mb.ny);
     const { r, g, b } = hexToRgb(td.color);
-    const a = Math.round((GAME_CONFIG.TERRITORY?.FILL_ALPHA ?? 0.07) * 255);
+    const soft = cfg.SOFT_TINT, lo = cfg.SOFT_RAMP_LO ?? 40, hi = cfg.SOFT_RAMP_HI ?? 200, fullA = Math.round(fillAlpha * 255);
     for (let k = 0; k < td.mask.length; k++) {
-      if (td.mask[k] >= 128) { const o = k * 4; img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = a; }
+      const m = td.mask[k];   // miękkie krawędzie (B6): alpha z wartości maski vs binarny próg
+      const av = soft ? Math.round(fullA * Math.min(1, Math.max(0, (m - lo) / Math.max(1, hi - lo)))) : (m >= 128 ? fullA : 0);
+      if (av > 0) { const o = k * 4; img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = av; }
     }
     c2.putImageData(img, 0, 0);
-    this._territoryTint.set(td.ownerId, { mask: td.mask, canvas: cv });
+    this._territoryTint.set(key, { mask: td.mask, canvas: cv });
     return cv;
   }
 
@@ -5779,7 +5858,10 @@ export class FleetManagerOverlay {
       })));
       const rangeLY = this._getStratcomRangeLY();
       g3.setRangeRings([rangeLY * 0.25, rangeLY * 0.5, rangeLY * 0.75, rangeLY]);
-      if (GAME_CONFIG.FEATURES?.territoryOverlay) g3.setTerritory(this._buildTerritory3DPayload());
+      if (GAME_CONFIG.FEATURES?.territoryOverlay) {
+        g3.setTerritory(this._buildTerritory3DPayload());
+        g3.setTerritoryFlash?.(this._territoryFlashFactors());
+      }
 
       if (this._galaxyDist == null) this._galaxyDist = g3.fitDist;
       // Galaktyka stoi statycznie — obrót WYŁĄCZNIE ręczny (LPM-drag). Brak auto-spin.
@@ -5991,6 +6073,18 @@ export class FleetManagerOverlay {
       ctx.fillStyle = THEME.textDim;
       ctx.fillText(t('fleet.stratcomEmpireUnknown'), px + PAD, iy + 10); iy += 14;
     }
+    // Terytorium (kontrola strefy wpływów — może różnić się od empireId układu; intel-gated)
+    {
+      const terr = window.KOSMOS?.territoryService;
+      const owner = terr?.getSystemOwner?.(sys.id);
+      let tName = null;
+      if (owner === 'player') tName = t('territory.playerEmpire');
+      else if (owner && intel?.isAtLeast?.(owner, 'contact')) tName = empReg?.get?.(owner)?.name ?? '?';
+      if (tName) {
+        ctx.fillStyle = terr.getEmpireColor(owner);
+        ctx.fillText(t('territory.controlRow', tName), px + PAD, iy + 10); iy += 14;
+      }
+    }
     // Populacja
     ctx.fillStyle = THEME.textSecondary;
     ctx.fillText(pop != null ? t('fleet.stratcomPopulation', pop) : t('fleet.stratcomPopUnknown'), px + PAD, iy + 10); iy += 14;
@@ -6033,7 +6127,7 @@ export class FleetManagerOverlay {
     const obsSys = window.KOSMOS?.observatorySystem;
     const layout = this._buildSystemScanLayout(sys, obsSys, explored);
 
-    const panelH = 50 + layout.height + (!sys.isHome ? 22 : 0) + (explored && sysReg ? 22 : 0);
+    const panelH = 66 + layout.height + (!sys.isHome ? 22 : 0) + (explored && sysReg ? 22 : 0);   // +16: wiersz Terytorium (B6)
     ctx.fillStyle = 'rgba(8,12,18,0.92)';
     ctx.fillRect(px, py, panelW, panelH);
     ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
@@ -6048,6 +6142,19 @@ export class FleetManagerOverlay {
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
     ctx.fillStyle = explored ? THEME.success : THEME.textDim;
     ctx.fillText(explored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10); iy += 16;
+
+    // Terytorium (kontrola strefy wpływów) — intel-gated (B6)
+    {
+      const terr = window.KOSMOS?.territoryService, intel = window.KOSMOS?.intelSystem, empReg = window.KOSMOS?.empireRegistry;
+      const owner = terr?.getSystemOwner?.(sys.id);
+      let tName = null;
+      if (owner === 'player') tName = t('territory.playerEmpire');
+      else if (owner && intel?.isAtLeast?.(owner, 'contact')) tName = empReg?.get?.(owner)?.name ?? '?';
+      if (tName) {
+        ctx.fillStyle = terr.getEmpireColor(owner);
+        ctx.fillText(t('territory.controlRow', tName), px + PAD, iy + 10); iy += 16;
+      }
+    }
 
     // Sekcja skanu układu (wyniki + kontrolka)
     iy = this._drawSystemScanSection(ctx, px, iy, panelW, PAD, sys, layout);
