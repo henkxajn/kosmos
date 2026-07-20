@@ -806,8 +806,6 @@ export class ThreeRenderer {
       // Pokaż orbitę księżyca po kliknięciu (ukryta domyślnie)
       this._hideAllMoonOrbits();
       if (entity.type === 'moon') this._showMoonOrbit(entity.id);
-      // HZ widoczny gdy zaznaczona gwiazda
-      if (this._hzRing) this._hzRing.visible = (entity.type === 'star');
       // Odśwież orbity — zaznaczona planeta dostaje złotą orbitę
       this._rebuildAllOrbits();
     }));
@@ -826,8 +824,7 @@ export class ThreeRenderer {
         const sz = this._starGroup ? this._starGroup.position.z : 0;
         this._cameraController.focusOn(sx, sz);
       }
-      // Ukryj HZ, orbity planetoidów i księżyców
-      if (this._hzRing) this._hzRing.visible = false;
+      // Ukryj orbity planetoidów i księżyców
       this._hideAllPlanetoidOrbits();
       this._hideAllMoonOrbits();
       this._rebuildAllOrbits();
@@ -987,11 +984,6 @@ export class ThreeRenderer {
           this._restoreOrbitDefaults(id, line);
         }
       });
-
-      // Hover na gwiazdę → pokaż HZ (jeśli gwiazda nie jest zaznaczona)
-      if (this._hzRing && this._focusEntityId !== this._star?.id) {
-        this._hzRing.visible = (entityId === this._star?.id);
-      }
     }));
   }
 
@@ -1003,7 +995,6 @@ export class ThreeRenderer {
     loadBuildingTextures();
 
     this.renderStar(star);
-    this._buildHabitableZone(star);
     planets.forEach(p => this.addPlanetMesh(p));
     moons.forEach(m => this._addMoonMesh(m));
     this._initPlanetoids();
@@ -1172,14 +1163,6 @@ export class ThreeRenderer {
       this.scene.remove(this._dysonRingsGroup);
       this._dysonRingsGroup = null;
       this._dysonStage = 0;
-    }
-
-    // HZ ring
-    if (this._hzRing) {
-      this._hzRing.geometry?.dispose();
-      this._hzRing.material?.dispose();
-      this.scene.remove(this._hzRing);
-      this._hzRing = null;
     }
 
     // Dysk planetezymali
@@ -1385,23 +1368,6 @@ export class ThreeRenderer {
     // Zaktualizuj PointLight
     this._starLight.color = color;
     this._starLight.position.set(S(star.x), 0, S(star.y));
-  }
-
-  // ── Strefa Goldilocksa ───────────────────────────────────────
-  _buildHabitableZone(star) {
-    const hzMin = S(star.habitableZone.min * AU);
-    const hzMax = S(star.habitableZone.max * AU);
-    const geo   = new THREE.RingGeometry(hzMin, hzMax, 128);
-    const mat   = new THREE.MeshBasicMaterial({
-      color: 0x33aa44, side: THREE.DoubleSide,
-      transparent: true, opacity: 0.07, depthWrite: false,
-    });
-    const ring = new THREE.Mesh(geo, mat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = -0.5;
-    ring.visible = false; // domyślnie ukryty — widoczny na hover/click gwiazdy
-    this.scene.add(ring);
-    this._hzRing = ring;
   }
 
   // Rozmiary 3D planet per typ — logarytmiczna skala masy
