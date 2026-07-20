@@ -41,10 +41,15 @@ export class InvasionSystem {
       const steps = Math.floor(this._tickAccum);
       this._tickAccum -= steps;
       this._tickCaptureChecks(steps);
+      // Skan bezpieczeństwa: łapie stan, w którym event buildingCaptured już nie wróci
+      // (stary save z przejętymi budynkami; ostatni wróg dobity PO przejęciu stolicy).
+      this._tickPlayerConquestChecks();
     });
 
-    // Player-side: przejęcie budynku przez gracza → ewentualny podbój ciała AI
-    EventBus.on('groundUnit:buildingCaptured', (ev) => this._onPlayerBuildingCaptured(ev));
+    // Player-side: przejęcie budynku przez gracza → natychmiastowa próba podboju (feedback).
+    EventBus.on('groundUnit:buildingCaptured', (ev) => {
+      if (ev?.newOwner === 'player') this._tryPlayerCapture(ev.planetId);
+    });
   }
 
   // ── Read-only ────────────────────────────────────────────────
@@ -197,32 +202,51 @@ export class InvasionSystem {
 
   // ── Player-side conquest ─────────────────────────────────────
   //
-  // Gracz zdobył budynek na ciele AI (groundUnit:buildingCaptured, newOwner='player').
-  // Jeśli spełniony warunek podboju → całe ciało staje się kolonią gracza:
+  // Skan okresowy (1 civYear) — próbuje przejąć każde ciało AI. Konieczny obok
+  // eventu buildingCaptured, bo event leci TYLKO w momencie przejęcia budynku:
+  // na starym save (budynki przejęte w poprzedniej sesji) ani gdy ostatni wróg
+  // ginie PO przejęciu stolicy — event już nie wróci, a skan wychwyci stan.
+  _tickPlayerConquestChecks() {
+    const colMgr = window.KOSMOS?.colonyManager;
+    if (!colMgr) return;
+    for (const colony of colMgr.getAllColonies()) {
+      if (!colony.ownerEmpireId || colony.ownerEmpireId === 'player') continue;
+      this._tryPlayerCapture(colony.planetId);
+    }
+  }
+
+  // Warunek podboju ciała AI przez gracza (jedno źródło prawdy dla eventu i skanu):
   //   • brak żywych wrogich jednostek naziemnych, ORAZ
   //   • kolonia MA stolicę → gracz jest właścicielem hexa capitalBase
-  //   • kolonia NIE ma stolicy (outpost) → sam fakt przejęcia budynku wystarcza
-  _onPlayerBuildingCaptured({ planetId, newOwner }) {
-    if (newOwner !== 'player') return;
+  //   • kolonia NIE ma stolicy (outpost) → gracz kontroluje ≥1 hex z budynkiem
+  // Zwraca true jeśli przejęto.
+  _tryPlayerCapture(planetId) {
     const colMgr = window.KOSMOS?.colonyManager;
     const gum = window.KOSMOS?.groundUnitManager;
-    if (!colMgr || !gum) return;
+    if (!colMgr || !gum) return false;
 
     const colony = colMgr.getColony(planetId);
-    if (!colony) return;
+    if (!colony) return false;
     // Już nasza (lub nie należy do imperium) — nic do przejęcia
-    if (!colony.ownerEmpireId || colony.ownerEmpireId === 'player') return;
+    if (!colony.ownerEmpireId || colony.ownerEmpireId === 'player') return false;
 
     // Muszą zginąć wszyscy wrodzy obrońcy naziemni
     const enemyAlive = gum.getUnitsOnPlanet(planetId)
       .some(u => u.owner && u.owner !== 'player' && (u.hp ?? 0) > 0);
-    if (enemyAlive) return;
+    if (enemyAlive) return false;
 
-    // Warunek stolicy (pełna kolonia); brak stolicy (outpost) → fallback = przejęty budynek wystarcza
-    const capital = colony.grid?.toArray?.().find(t => t?.capitalBase);
-    if (capital && capital.owner !== 'player') return;
+    const tiles = colony.grid?.toArray?.() ?? [];
+    const capital = tiles.find(t => t?.capitalBase);
+    if (capital) {
+      // Pełna kolonia: wymagana stolica gracza
+      if (capital.owner !== 'player') return false;
+    } else {
+      // Outpost bez stolicy: wymagany ≥1 przejęty hex z budynkiem
+      const ownsBuilding = tiles.some(t => t && t.owner === 'player' && (t.buildingId || t.capitalBase));
+      if (!ownsBuilding) return false;
+    }
 
-    colMgr.captureColonyForPlayer?.(planetId, 'ground_invasion');
+    return colMgr.captureColonyForPlayer?.(planetId, 'ground_invasion') === true;
   }
 
   // ── Tick: capture checks ─────────────────────────────────────

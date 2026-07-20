@@ -63,7 +63,7 @@ window.KOSMOS.civMode = true;
 const techMock = { isResearched: () => true };
 const cm = new ColonyManager(techMock);
 window.KOSMOS.colonyManager = cm;
-new InvasionSystem();  // subskrybuje groundUnit:buildingCaptured
+const inv = new InvasionSystem();  // subskrybuje groundUnit:buildingCaptured + skan tickowy
 
 // Kolektory eventów
 let capturedByPlayer = null, listChanged = 0;
@@ -118,20 +118,53 @@ gumUnits['p_b3'] = [{ owner: 'empire_ai', hp: 0 }, { owner: 'player', hp: 8 }];
 EventBus.emit('groundUnit:buildingCaptured', { planetId: 'p_b3', q: 0, r: 0, buildingId: 'colony_base', newOwner: 'player' });
 T('B3 kapitał gracza + brak żywych wrogów → podbój', colB3.ownerEmpireId === null);
 
-// B-4: outpost BEZ stolicy, brak wrogów → PODBÓJ (fallback)
+// B-4: outpost BEZ stolicy, przejęty hex z budynkiem (mine→player), brak wrogów → PODBÓJ
 const colB4 = makeEnemyColony('p_b4', { isOutpost: true, withCapital: false });
+colB4.grid.toArray().find(t => t.buildingId === 'mine').owner = 'player';  // symulacja: _changeTileOwner przed emitem
 cm._colonies.set('p_b4', colB4);
 gumUnits['p_b4'] = [];
 EventBus.emit('groundUnit:buildingCaptured', { planetId: 'p_b4', q: 1, r: 0, buildingId: 'mine', newOwner: 'player' });
-T('B4 outpost bez stolicy + brak wrogów → podbój', colB4.ownerEmpireId === null);
+T('B4 outpost bez stolicy + przejęty budynek + brak wrogów → podbój', colB4.ownerEmpireId === null);
 T('B4b outpost payload isOutpost=true', capturedByPlayer?.planetId === 'p_b4' && capturedByPlayer?.isOutpost === true);
 
-// B-5: newOwner != player (AI zdobywa własny budynek) → ignorowane
-const colB5 = makeEnemyColony('p_b5', { capitalOwner: 'empire_ai' });
+// B-5: newOwner != player (AI zdobywa własny budynek) → ignorowane (event handler bramkuje)
+const colB5 = makeEnemyColony('p_b5', { capitalOwner: 'player' });
 cm._colonies.set('p_b5', colB5);
 gumUnits['p_b5'] = [];
 EventBus.emit('groundUnit:buildingCaptured', { planetId: 'p_b5', q: 0, r: 0, buildingId: 'colony_base', newOwner: 'empire_ai' });
 T('B5 newOwner=empire → brak reakcji', colB5.ownerEmpireId === 'empire_ai');
+
+// ══ C. Skan okresowy (_tickPlayerConquestChecks) — stary save / wróg dobity po przejęciu ═══════════
+// Kluczowy dla starego save: event buildingCaptured NIE wraca po wczytaniu.
+
+// C-1: pełna kolonia, kapitał JUŻ gracza (przejęty w poprzedniej sesji), brak wrogów, BEZ eventu
+const colC1 = makeEnemyColony('p_c1', { capitalOwner: 'player' });
+cm._colonies.set('p_c1', colC1);
+gumUnits['p_c1'] = [];
+inv._tickPlayerConquestChecks();
+T('C1 skan przejmuje zaległą kolonię (stary save, bez eventu)', colC1.ownerEmpireId === null);
+
+// C-2: outpost, przejęty budynek z poprzedniej sesji, brak wrogów, BEZ eventu
+const colC2 = makeEnemyColony('p_c2', { isOutpost: true, withCapital: false });
+colC2.grid.toArray().find(t => t.buildingId === 'solar_farm').owner = 'player';
+cm._colonies.set('p_c2', colC2);
+gumUnits['p_c2'] = [];
+inv._tickPlayerConquestChecks();
+T('C2 skan przejmuje zaległy outpost (stary save)', colC2.ownerEmpireId === null);
+
+// C-3: kapitał gracza, ale wróg wciąż żyje → skan NIE przejmuje
+const colC3 = makeEnemyColony('p_c3', { capitalOwner: 'player' });
+cm._colonies.set('p_c3', colC3);
+gumUnits['p_c3'] = [{ owner: 'empire_ai', hp: 20 }];
+inv._tickPlayerConquestChecks();
+T('C3 skan nie przejmuje gdy wróg żyje', colC3.ownerEmpireId === 'empire_ai');
+
+// C-4: kapitał NIE gracza (nie tknięty desantem) → skan NIE przejmuje mimo braku wrogów
+const colC4 = makeEnemyColony('p_c4', { capitalOwner: 'empire_ai' });
+cm._colonies.set('p_c4', colC4);
+gumUnits['p_c4'] = [];
+inv._tickPlayerConquestChecks();
+T('C4 skan nie przejmuje gdy stolica nie tknięta', colC4.ownerEmpireId === 'empire_ai');
 
 console.log(`\nInvasion player-capture smoke: ${pass}/${pass + fail} passed` + (fail ? ` — ${fail} FAILED` : ' ✓'));
 process.exit(fail ? 1 : 0);
