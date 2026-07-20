@@ -1006,13 +1006,10 @@ export class FleetManagerOverlay {
       this._scrollOffset = Math.max(0, this._scrollOffset + delta * 0.5);
       return true;
     }
-    // Scroll w RIGHT (konfigurator celów)
-    if (mx > b.x + b.w - RIGHT_W && this._missionConfig?.step === 'select') {
-      this._targetScrollOffset = Math.max(0, this._targetScrollOffset + delta * 0.5);
-      return true;
-    }
-    // Scroll w RIGHT (panel szczegółów statku/floty) — gdy NIE konfigurator celów
-    if (mx > b.x + b.w - RIGHT_W && (this._selectedVesselId || this._selectedFleetId) && this._missionConfig?.step !== 'select') {
+    // Scroll w RIGHT (panel szczegółów statku/floty) — obejmuje TAKŻE konfigurator
+    // misji (krok 'select' i 'confirm'): picker celów jest rysowany jako część
+    // przewijalnej treści panelu, więc jeden `_rightScrollY` przewija całość.
+    if (mx > b.x + b.w - RIGHT_W && (this._selectedVesselId || this._selectedFleetId)) {
       const maxScroll = Math.max(0, (this._rightContentH || 0) - (this._rightViewH || 0));
       this._rightScrollY = Math.max(0, Math.min(maxScroll, (this._rightScrollY || 0) + delta * 0.5));
       return true;
@@ -8745,20 +8742,16 @@ export class FleetManagerOverlay {
       cy += 14;
     }
 
-    // Lista celów
+    // Lista celów — rysowana jako część PRZEWIJALNEJ treści prawego panelu
+    // (advance cy), NIE jako osobny wewnętrzny scroll. Dzięki temu cały panel
+    // (szczegóły statku + picker) przewija się jednym `_rightScrollY`; wcześniej
+    // picker miał własny `_targetScrollOffset` i mikroskopijny clip przy dole
+    // panelu → nie dawało się przewinąć do listy celów ani ANULUJ.
     const targets = this._getValidTargets(vessel, this._missionConfig.actionId);
     const rowH = 24;
-    const listH = maxH - 50; // Zostaw miejsce na ANULUJ
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x, cy, w, listH);
-    ctx.clip();
-
-    let ry = cy - this._targetScrollOffset;
     for (const tgt of targets) {
-      if (ry + rowH < cy) { ry += rowH; continue; }
-      if (ry > cy + listH) break;
+      const ry = cy;
 
       // Ikona + nazwa + odległość
       const icon = tgt.type === 'planet' ? '🌍' : tgt.type === 'moon' ? '🌙' : tgt.type === 'planetoid' ? '🪨' : tgt.type === 'station' ? '🛰' : '☄';
@@ -8789,7 +8782,7 @@ export class FleetManagerOverlay {
 
       if (tgt.reachable) {
         this._hitZones.push({
-          x, y: Math.max(ry, cy), w, h: rowH,
+          x, y: ry, w, h: rowH,
           type: 'select_target',
           data: { targetId: tgt.id },
         });
@@ -8799,17 +8792,11 @@ export class FleetManagerOverlay {
       ctx.strokeStyle = 'rgba(0,255,180,0.07)';
       ctx.beginPath(); ctx.moveTo(x + pad, ry + rowH - 1); ctx.lineTo(x + w - pad, ry + rowH - 1); ctx.stroke();
 
-      ry += rowH;
+      cy += rowH;
     }
 
-    // Ograniczenie scroll
-    const maxScroll = Math.max(0, targets.length * rowH - listH);
-    if (this._targetScrollOffset > maxScroll) this._targetScrollOffset = maxScroll;
-
-    ctx.restore();
-
     // Przycisk ANULUJ
-    const cancelY = cy + listH + 4;
+    const cancelY = cy + 6;
     const cancelW = 80;
     const cancelX = x + w / 2 - cancelW / 2;
     ctx.fillStyle = THEME.bgTertiary;
