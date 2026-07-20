@@ -3,6 +3,9 @@
 
 export default {
 
+  // Active locale code — locale-detect via t('lang') (see EventChoiceModal)
+  'lang': 'en',
+
   // === Buildings ===
   'building.colony_base.name': 'Capital',
   'building.colony_base.desc': 'Capital of the civilization — does not block construction on the hex',
@@ -654,10 +657,6 @@ export default {
   'notif.vesselScanTitle': '🔭 Contact identified: {0}',
   'notif.group.discoveryBody': 'Discoveries',
   'notif.group.vesselScan': 'Identified contacts',
-  'minimap.title': 'Galactic Map',
-  'minimap.empty': 'No known empires',
-  'minimap.fleetETA': 'ETA {0}y',
-  'minimap.legendHome': 'Home system',
   'fleet.battleHeader': 'Battle, year {0}',
   'fleet.battleResult': 'Result',
   'fleet.battleNoRecord': 'No battle record',
@@ -905,6 +904,7 @@ export default {
   'log.popDied':            'POP lost in {0}. Population: {1}',
   'log.popDiedStarvation':  'POP lost (starvation) in {0}. Population: {1}',
   'log.socialUnrest':       'Social unrest in {0}',
+  'log.colonyUnknown':      'Unknown colony',
   'log.colonyUnrestLifted': '✓ Unrest in {0} ended',
   'log.colonyFamine':       '💀 Famine in {0}! Reserves < 1 year, negative flow',
   'log.colonyFamineLifted': '✓ Famine in {0} ended',
@@ -2741,34 +2741,9 @@ export default {
   'observatory.atmoComp': 'Atmo comp.',
   'observatory.life': 'Life',
 
-  // === GalaxyMapScene ===
-  'galaxy.starM': 'Red Dwarf (M)',
-  'galaxy.starK': 'Orange Dwarf (K)',
-  'galaxy.starG': 'Yellow Dwarf (G)',
-  'galaxy.starF': 'Yellow-White Dwarf (F)',
-  'galaxy.mass': 'Mass:',
-  'galaxy.luminosity': 'Luminosity:',
-  'galaxy.distance': 'Distance:',
+  // === Galaxy (shared labels — rest of the dead galaxy view demolished in B0) ===
   'galaxy.status': 'Status:',
-  'galaxy.interstellarSoon': 'Interstellar expedition — coming soon',
-  'galaxy.clickStar': 'Click a star to see details',
-  'galaxy.close': 'ESC ×',
-  'galaxy.title': '🌌 GALAXY MAP',
-  'galaxy.systemsInRange': '{0} systems in range',
-  'galaxy.yourSystem': '🏠 YOUR SYSTEM',
-  'galaxy.explored': '✅ EXPLORED',
-  'galaxy.unexplored': '❓ UNEXPLORED',
-  'galaxy.hasColony': 'Colony',
-  'galaxy.warpBeacon': 'Warp Beacon',
-  'galaxy.jumpGate': 'Jump Gate',
-  'galaxy.switchView': '🔭 Switch view',
-  'galaxy.sendShip': '🚀 Send ship',
   'galaxy.noWarpShips': 'No warp-capable ships available',
-  'galaxy.needWarpTech': 'Requires technology: Warp Drive',
-  'galaxy.inTransit': 'In transit:',
-  'galaxy.more': 'more',
-  'galaxy.buildBeacon': 'Build Beacon',
-  'galaxy.buildGate': 'Build Jump Gate',
 
   // === ShipPickerModal (warp jump ship selection) ===
   'shipPicker.title': '🚀 Select ship for jump',

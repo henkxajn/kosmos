@@ -63,7 +63,6 @@ export const GAME_CONFIG = {
     // ── M4 P2 — Sensor overlay + Enemy ghosts + Minimap (save v70) ────────
     m4SensorOverlay:      true,   // ThreeRenderer._syncSensorOverlay (cyan/yellow rings) — rollback OFF dla regresji
     m4EnemyGhosts:        true,   // _syncVesselPositions intel-gated rendering (rumor/contact/detailed)
-    m4MiniMap:            true,   // GalacticMiniMap overlay (klawisz M)
     // ── M4 P3 — Tick-based Deep-Space Combat (save v71) ───────────────────
     // Flip ON w P3-3 (fire exchange działa end-to-end). Gdy true: VCS deleguje
     // vessel:combatRangeEnter do DSCS (per-tick fire exchange zamiast instant

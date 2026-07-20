@@ -3,6 +3,9 @@
 
 export default {
 
+  // Kod aktywnego locale — locale-detect przez t('lang') (patrz EventChoiceModal)
+  'lang': 'pl',
+
   // === Budynki ===
   'building.colony_base.name': 'Stolica',
   'building.colony_base.desc': 'Stolica cywilizacji \u2014 nie blokuje budowy na hexie',
@@ -655,10 +658,6 @@ export default {
   'notif.vesselScanTitle': '🔭 Zidentyfikowano kontakt: {0}',
   'notif.group.discoveryBody': 'Odkrycia',
   'notif.group.vesselScan': 'Zidentyfikowane kontakty',
-  'minimap.title': 'Mapa galaktyczna',
-  'minimap.empty': 'Brak znanych imperiów',
-  'minimap.fleetETA': 'ETA {0} lat',
-  'minimap.legendHome': 'Macierzysty układ',
   'fleet.battleHeader': 'Bitwa, rok {0}',
   'fleet.battleResult': 'Wynik',
   'fleet.battleNoRecord': 'Brak rekordu bitwy',
@@ -906,6 +905,7 @@ export default {
   'log.popDied':            'Strata POPa w {0}. Populacja: {1}',
   'log.popDiedStarvation':  'Strata POPa (głód) w {0}. Populacja: {1}',
   'log.socialUnrest':       'Niepokoje społeczne w {0}',
+  'log.colonyUnknown':      'Nieznana kolonia',
   'log.colonyUnrestLifted': '✓ Niepokoje w {0} zażegnane',
   'log.colonyFamine':       '💀 Głód w {0}! Zapasy < 1 rok, produkcja ujemna',
   'log.colonyFamineLifted': '✓ Głód w {0} zakończony',
@@ -2742,34 +2742,9 @@ export default {
   'observatory.atmoComp': 'Skład atm.',
   'observatory.life': 'Życie',
 
-  // === GalaxyMapScene ===
-  'galaxy.starM': 'Czerwony karzeł (M)',
-  'galaxy.starK': 'Pomarańczowy karzeł (K)',
-  'galaxy.starG': '\u017bółty karzeł (G)',
-  'galaxy.starF': '\u017bółto-biały karzeł (F)',
-  'galaxy.mass': 'Masa:',
-  'galaxy.luminosity': 'Jasność:',
-  'galaxy.distance': 'Odległość:',
+  // === Galaxy (współdzielone etykiety — reszta martwego widoku galaktyki wyburzona w B0) ===
   'galaxy.status': 'Status:',
-  'galaxy.interstellarSoon': 'Ekspedycja międzygwiezdna \u2014 wkrótce',
-  'galaxy.clickStar': 'Kliknij gwiazdę aby zobaczyć szczegóły',
-  'galaxy.close': 'ESC ×',
-  'galaxy.title': '🌌 MAPA GALAKTYCZNA',
-  'galaxy.systemsInRange': '{0} układów w zasięgu',
-  'galaxy.yourSystem': '🏠 TWÓJ UKŁAD',
-  'galaxy.explored': '✅ ZBADANY',
-  'galaxy.unexplored': '❓ NIEZBADANY',
-  'galaxy.hasColony': 'Kolonia',
-  'galaxy.warpBeacon': 'Warp Beacon',
-  'galaxy.jumpGate': 'Jump Gate',
-  'galaxy.switchView': '🔭 Przełącz widok',
-  'galaxy.sendShip': '🚀 Wyślij statek',
   'galaxy.noWarpShips': 'Brak statków z napędem warp',
-  'galaxy.needWarpTech': 'Wymagana technologia: Napęd Warp',
-  'galaxy.inTransit': 'W tranzycie:',
-  'galaxy.more': 'więcej',
-  'galaxy.buildBeacon': 'Buduj Beacon',
-  'galaxy.buildGate': 'Buduj Jump Gate',
 
   // === ShipPickerModal (wybór statku do skoku) ===
   'shipPicker.title': '🚀 Wybierz statek do skoku',

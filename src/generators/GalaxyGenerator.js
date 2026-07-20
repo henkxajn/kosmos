@@ -90,7 +90,6 @@ export class GalaxyGenerator {
       x: 0, y: 0, z: 0,
       distanceLY:   0,
       explored:     true,
-      hasColony:    true,
       isHome:       true,
     });
 
@@ -156,7 +155,6 @@ export class GalaxyGenerator {
         z: +z.toFixed(2),
         distanceLY:   +distLY.toFixed(1),
         explored:     false,
-        hasColony:    false,
         isHome:       false,
       });
     }

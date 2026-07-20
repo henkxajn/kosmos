@@ -1864,7 +1864,6 @@ function _migrateV68toV69(data) {
 // ── Migracja v69 → v70 ──────────────────────────────────────────────────────
 // M4 P2 — Sensor overlay + Enemy ghosts + MiniMap + Wraki battle history.
 //   - uiPrefs.sensorOverlayVisible (BottomBar Radar toggle) — default false
-//   - uiPrefs.miniMapVisible (klawisz M) — default false
 //   - vessel.lastBattleId / lastBattleYear (Battle history per vessel) —
 //     stampowane przez VesselManager battle:resolved listener. Stare save
 //     przed P2 nie mają tej info — null jako sensowny default
@@ -2284,9 +2283,6 @@ function _migrateV69toV70(data) {
   data.uiPrefs ??= {};
   if (data.uiPrefs.sensorOverlayVisible === undefined) {
     data.uiPrefs.sensorOverlayVisible = false;
-  }
-  if (data.uiPrefs.miniMapVisible === undefined) {
-    data.uiPrefs.miniMapVisible = false;
   }
 
   // Vessels — battle history pola
