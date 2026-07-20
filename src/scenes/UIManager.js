@@ -1051,6 +1051,11 @@ export class UIManager {
     // Invalidacja cache kolonii przy zmianie listy
     EventBus.on('colony:destroyed', () => { this._coloniesDirty = true; this._dirty = true; });
     EventBus.on('outpost:founded',  () => { this._coloniesDirty = true; this._dirty = true; });
+    EventBus.on('colony:capturedByPlayer', ({ colonyName, isOutpost }) => {
+      this._coloniesDirty = true;
+      this._dirty = true;
+      this._log(t(isOutpost ? 'log.outpostCaptured' : 'log.colonyCaptured', colonyName), 'new_planet');
+    });
 
     EventBus.on('colony:tradeExecuted', ({ route }) => {
       this._log(t('log.tradeExecuted'), 'info');

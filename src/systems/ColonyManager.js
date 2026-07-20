@@ -705,6 +705,63 @@ export class ColonyManager {
     return true;
   }
 
+  // ── Przejęcie kolonii/placówki AI PRZEZ GRACZA (desant) ────────────
+  //
+  // Odwrotność transferColony: ciało AI staje się kolonią gracza.
+  // Kolonia ZOSTAJE w _colonies (nie usuwamy, nie dispose — inventory,
+  // budynki i produkcja żyją dalej i liczą się teraz na gracza).
+  // Zwraca true jeśli przejęto.
+  captureColonyForPlayer(planetId, reason = 'invasion') {
+    const colony = this._colonies.get(planetId);
+    if (!colony) return false;
+    // Już nasza (lub nie należy do imperium) — nic do przejęcia
+    if (!colony.ownerEmpireId || colony.ownerEmpireId === 'player') return false;
+
+    const previousOwner = colony.ownerEmpireId;
+    const isOutpost = colony.isOutpost ?? false;
+
+    // Wypnij ciało z metadanych imperium AI + galaxyData
+    const empireReg = window.KOSMOS?.empireRegistry;
+    empireReg?.removeColony?.(previousOwner, planetId);
+
+    const planetEntity = EntityManager.get(planetId);
+    const systemId = planetEntity?.systemId ?? colony.systemId ?? null;
+    const gd = window.KOSMOS?.galaxyData;
+    if (gd?.systems && systemId) {
+      const gs = gd.systems.find(s => s.id === systemId);
+      if (gs && gs.empireId === previousOwner) gs.empireId = null;
+    }
+
+    // Zdejmij oznaczenia wroga → getPlayerColonies() zacznie widzieć ciało
+    colony.ownerEmpireId = null;
+    colony.isTestEnemy   = false;
+    // Oczyść znacznik "[WRÓG]" z nazwy (SpawnTestEnemy dokleja go)
+    if (typeof colony.name === 'string') {
+      colony.name = colony.name.replace(/\s*\[WR[ÓO]G\]\s*$/i, '').trim() || planetId;
+    }
+
+    // Przełącz wszystkie hexy na gracza
+    if (colony.grid?.toArray) {
+      for (const tile of colony.grid.toArray()) {
+        if (tile) tile.owner = 'player';
+      }
+    }
+
+    // Odśwież stawki produkcji (flaga outpost bez zmian)
+    colony.buildingSystem?._reapplyAllRates?.();
+
+    EventBus.emit('colony:capturedByPlayer', {
+      planetId,
+      colonyName: colony.name,
+      previousOwner,
+      isOutpost,
+      reason,
+    });
+    EventBus.emit('colony:listChanged', {});
+
+    return true;
+  }
+
   // ── Drogi handlowe ────────────────────────────────────────────────
 
   // Pobierz listę dróg handlowych

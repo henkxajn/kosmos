@@ -937,6 +937,8 @@ export default {
   'log.arrivalDisaster': 'Katastrofa: {0}!',
   // Kolonia i handel
   'log.colonyFounded': '🏙 Nowa kolonia: {0}',
+  'log.colonyCaptured': '⚔ Przejęto kolonię: {0}',
+  'log.outpostCaptured': '⚔ Przejęto placówkę: {0}',
   'log.tradeExecuted': '📦 Droga handlowa: transfer wykonany',
   'log.migration': '👤 Migracja: {0} POP z {1} → {2}',
   // Prosperity i epoki

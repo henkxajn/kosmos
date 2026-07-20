@@ -1735,6 +1735,12 @@ export class GameScene {
       }, 100);
     });
 
+    // Faza 6: przejęcie kolonii/placówki AI przez gracza (desant zakończony sukcesem)
+    EventBus.on('colony:capturedByPlayer', ({ planetId }) => {
+      if (!window.KOSMOS?.civMode) return;
+      this.colonyManager.switchActiveColony(planetId);
+    });
+
     EventBus.on('battle:resolved', ({ warId, battleId, result }) => {
       // Tylko gdy civMode aktywny i gracz bierze udział
       if (!window.KOSMOS?.civMode) return;

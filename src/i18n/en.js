@@ -936,6 +936,8 @@ export default {
   'log.arrivalDisaster': 'Disaster: {0}!',
   // Colony and trade
   'log.colonyFounded': '🏙 New colony: {0}',
+  'log.colonyCaptured': '⚔ Colony captured: {0}',
+  'log.outpostCaptured': '⚔ Outpost captured: {0}',
   'log.tradeExecuted': '📦 Trade route: transfer completed',
   'log.migration': '👤 Migration: {0} POP from {1} → {2}',
   // Prosperity and epochs
