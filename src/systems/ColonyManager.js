@@ -352,6 +352,10 @@ export class ColonyManager {
     this._activePlanetId = planet.id;
     window.KOSMOS.factorySystem = factSys;
     window.KOSMOS.prosperitySystem = prospSys;
+    // Zarejestrowano kolonię domową — powiadom konsumentów (indeks strefy-wpływów
+    // TerritoryService, listy UI). registerHomePlanet był CICHY, więc gdy indeks
+    // zbudował się wcześniej (np. TerritoryField na 1. ticku), zostawał stale bez gracza.
+    EventBus.emit('colony:listChanged', {});
     return colony;
   }
 
@@ -2293,6 +2297,10 @@ export class ColonyManager {
     this._taxRate          = data.taxRate ?? 0.08;
     this._taxAccum         = data.taxAccum ?? 0;
     this._taxProtestAccum  = data.taxProtestAccum ?? 0;
+
+    // Kolonie przywrócone — powiadom konsumentów (indeks strefy-wpływów, listy UI).
+    // restore() był cichy → TerritoryService mógł zbudować indeks bez kolonii gracza.
+    EventBus.emit('colony:listChanged', {});
   }
 
   // ── Prywatne ──────────────────────────────────────────────────────────

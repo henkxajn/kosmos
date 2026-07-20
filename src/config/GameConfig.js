@@ -157,6 +157,10 @@ export const GAME_CONFIG = {
     //   (gracz+AI). Kill-switch — OFF przywraca kosmetyczny brownout (getter
     //   getEnergyAvailability zwraca 1.0). Default ON (zmiana balansowa).
     energyBrownoutGate:   true,
+    // ── Strefy wpływów (warstwa polityczna mapy galaktycznej, B3-B6) ──────
+    //   Kill-switch WEWNĘTRZNY (nie user-toggle — warstwa zawsze widoczna dla
+    //   gracza). OFF = TerritoryField nie liczy pola, Stratcom bez tintu/izolinii.
+    territoryOverlay:     true,
   },
 
   // ── M4 P2 — Sensor + Intel rendering tunables ────────────────────────────
@@ -203,6 +207,19 @@ export const GAME_CONFIG = {
   // Rally member gather range (gameplay px). Hardcoded MVP, per-rally konfig
   // w future. Vessel w tym promieniu od poi.center liczony jako "zebrany".
   rallyGatherRangePx: 50,
+
+  // ── Strefy wpływów — pole wpływu + kontury (B3; tuning w B6) ──────────────
+  TERRITORY: {
+    ISO: 0.5,            // próg izolinii (pole = suma exp(-d²/r²))
+    GRID_LY: 0.75,       // rozmiar komórki siatki marching squares
+    R_MIN_LY: 1.5,       // outpost / świeża kolonia
+    R_MAX_LY: 4.0,       // rozwinięta kolonia (cap)
+    R_STATION_LY: 1.0,   // posterunek: sama stacja bez kolonii
+    BEACON_LY: 0.5,      // HOOK — beacony jeszcze nie istnieją w grze; nie używać
+    DEV_FULL: 20,        // devScore (pop+budynki) dający R_MAX
+    FILL_ALPHA: 0.07,    // tint wypełnienia (B4/B5)
+    CONTESTED_T: 0.35,   // próg pola drugiego imperium → segment sporny
+  },
 };
 
 // Typy gwiazd z parametrami fizycznymi

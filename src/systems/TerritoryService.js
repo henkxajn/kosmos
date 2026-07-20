@@ -25,7 +25,9 @@ export class TerritoryService {
     this._onInvalidate = () => this._invalidate();
     // Zdarzenia unieważniające indeks (kolonie/outposty/stacje/imperia)
     this._events = [
-      'colony:founded', 'outpost:founded', 'colony:destroyed', 'colony:captured',
+      'colony:founded', 'outpost:founded', 'colony:destroyed',
+      'colony:captured',          // AI przejmuje kolonię gracza (transferColony)
+      'colony:capturedByPlayer',  // gracz przejmuje ciało AI po desancie (captureColonyForPlayer)
       'colony:listChanged', 'empire:colonyAdded', 'empire:colonyRemoved',
       'empire:destroyed', 'station:created', 'station:destroyed',
     ];

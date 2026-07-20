@@ -94,6 +94,7 @@ import { EnemyAttackHandler } from '../systems/EnemyAttackHandler.js';
 import { OrbitalSpaceSystem } from '../systems/OrbitalSpaceSystem.js';
 import { StationSystem }      from '../systems/StationSystem.js';
 import { TerritoryService }   from '../systems/TerritoryService.js';
+import { TerritoryField }     from '../systems/TerritoryField.js';
 import { MovementOrderSystem } from '../systems/MovementOrderSystem.js';
 import { EmpireFleetMaterializer } from '../systems/EmpireFleetMaterializer.js';
 import { ProximitySystem } from '../systems/ProximitySystem.js';
@@ -300,6 +301,9 @@ export class GameScene {
     // Strefy wpływów — indeks własności układów (czyta colonyManager/stationSystem/
     // empireRegistry/gameState przez window.KOSMOS; event-invalidowany).
     this.territoryService     = new TerritoryService();
+    // Strefy wpływów — pole wpływu + kontury (marching squares); czyta
+    // territoryService/galaxyData/timeSystem przez window.KOSMOS.
+    this.territoryField       = new TerritoryField();
 
     window.KOSMOS.civMode          = false;
     window.KOSMOS.homePlanet       = null;
@@ -361,6 +365,7 @@ export class GameScene {
     window.KOSMOS.orbitalSpaceSystem = this.orbitalSpaceSystem;
     window.KOSMOS.stationSystem      = this.stationSystem;
     window.KOSMOS.territoryService   = this.territoryService;
+    window.KOSMOS.territoryField     = this.territoryField;
     window.KOSMOS.enemyAttackHandler = this.enemyAttackHandler;
     // M1 Targeting — lazy init, feature flag. Tworzone gdy
     //   GAME_CONFIG.FEATURES.movementOrders=true lub via debug.enableMovementOrders().
