@@ -1424,8 +1424,12 @@ export class GameScene {
     // Przy save — imperia w gameState.empires zostają przywrócone niżej,
     // a syncToGalaxyData() odtworzy empireId na galaxyData.systems.
     if (isNewGame) {
-      // ⚠ B2: wybór barwy MUSI ustawić gameState.player.empireColor PRZED tym
-      // wywołaniem — EmpireGenerator wyklucza kolor gracza z puli AI (B1: '#33ccff').
+      // B2: barwa imperium wybrana na starcie (FactionSelectScene) → gameState PRZED
+      // EmpireGenerator (wykluczenie koloru gracza z puli AI). Fallback: '#33ccff'
+      // z createDefaultState gdy gracz nie wybrał (Power Test / brak ekranu wyboru).
+      if (window.KOSMOS.selectedColor) {
+        gameState.set('player.empireColor', window.KOSMOS.selectedColor, 'player_empire_color');
+      }
       EmpireGenerator.generate(window.KOSMOS.galaxyData, this.empireRegistry);
       // Slice 1 log — pierwsze imperium AI z realną kolonią
       const _firstEmp = this.empireRegistry.listAll()[0];

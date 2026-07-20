@@ -5,6 +5,8 @@ export default {
 
   // Active locale code — locale-detect via t('lang') (see EventChoiceModal)
   'lang': 'en',
+  // B2 — empire color picker on the start screen (FactionSelectScene)
+  'faction.empireColor': 'Empire color',
 
   // === Buildings ===
   'building.colony_base.name': 'Capital',

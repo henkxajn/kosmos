@@ -5,6 +5,8 @@ export default {
 
   // Kod aktywnego locale — locale-detect przez t('lang') (patrz EventChoiceModal)
   'lang': 'pl',
+  // B2 — wybór barwy imperium na ekranie startowym (FactionSelectScene)
+  'faction.empireColor': 'Barwa imperium',
 
   // === Budynki ===
   'building.colony_base.name': 'Stolica',

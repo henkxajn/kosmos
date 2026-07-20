@@ -7,7 +7,8 @@
 
 import { LEADERS, STARTING_LEADERS } from '../data/LeaderData.js';
 import { THEME } from '../config/ThemeConfig.js';
-import { getLocale, getName } from '../i18n/i18n.js';
+import { getLocale, getName, t } from '../i18n/i18n.js';
+import { EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
 
 const PL = () => getLocale() === 'pl';
 
@@ -16,6 +17,8 @@ export class FactionSelectScene {
     this._container       = null;
     this._step            = 1;
     this._selectedLeader  = null;
+    // B2: barwa imperium (strefy wpływów). Domyślnie #33ccff (pierwsza w palecie).
+    this._selectedColor   = EMPIRE_COLOR_PALETTE[0];
     this._onComplete      = null;
   }
 
@@ -218,11 +221,28 @@ export class FactionSelectScene {
           <p class="fs-confirm-quote">
             "${PL() ? leader.quote : (leader.quoteEN || leader.quote)}"
           </p>
+
+          <p class="fs-colors-label">${t('faction.empireColor')}</p>
+          <div class="fs-swatch-row" id="fs-swatch-row">
+            ${EMPIRE_COLOR_PALETTE.map(c =>
+              `<div class="fs-swatch${c === this._selectedColor ? ' selected' : ''}" data-color="${c}" style="background:${c}" title="${c}"></div>`
+            ).join('')}
+          </div>
+
           <div class="fs-confirm-sep"></div>
           <div class="fs-confirm-stats">${bonusesHtml}</div>
         </div>
       </div>
     `;
+
+    // B2: wybór barwy imperium — toggle .selected + zapis this._selectedColor
+    body.querySelectorAll('.fs-swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        this._selectedColor = sw.dataset.color;
+        body.querySelectorAll('.fs-swatch').forEach(s => s.classList.remove('selected'));
+        sw.classList.add('selected');
+      });
+    });
 
     nav.querySelector('#fs-back').addEventListener('click', () => {
       this._fadeTransition(() => this._renderStep1());
@@ -232,6 +252,7 @@ export class FactionSelectScene {
       // Faza C4: frakcja nieznana — tylko leader id
       window.KOSMOS.selectedLeader  = this._selectedLeader;
       window.KOSMOS.selectedFaction = null;
+      window.KOSMOS.selectedColor   = this._selectedColor;   // B2: barwa imperium (→ gameState w GameScene)
 
       this._container.style.transition = 'opacity 0.6s ease';
       this._container.style.opacity = '0';
@@ -509,6 +530,23 @@ export class FactionSelectScene {
       .fs-confirm-bonus {
         font-size: 13px; color: ${THEME.success || '#00ee88'}; margin: 5px 0;
       }
+
+      /* ── Barwy imperium (B2) ── */
+      .fs-colors-label {
+        font-family: 'Orbitron', monospace;
+        font-size: 10px; letter-spacing: 3px;
+        color: ${acc}99; text-transform: uppercase;
+        margin: 0 0 10px;
+      }
+      .fs-swatch-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 4px; }
+      .fs-swatch {
+        width: 28px; height: 28px; border-radius: 4px; cursor: pointer;
+        border: 2px solid rgba(255,255,255,0.15);
+        box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35);
+        transition: transform 0.15s ease-out, border-color 0.15s ease-out, box-shadow 0.15s ease-out;
+      }
+      .fs-swatch:hover { transform: translateY(-2px) scale(1.08); border-color: rgba(255,255,255,0.45); }
+      .fs-swatch.selected { border-color: #ffffff; box-shadow: 0 0 0 2px ${acc}, 0 0 14px ${acc}66; }
 
       /* ── Nawigacja ── */
       .fs-nav {
