@@ -25,6 +25,7 @@ const FOV = 50;
 // Tło kosmiczne (subtelne). Plik podmienialny; jasność regulowana mnożnikiem (niska = subtelne).
 const BG_URL = 'assets/backgrounds/deep_space.png';
 const BG_BRIGHTNESS = 0.25;   // 0..1 — mnożnik jasności tła (1.0 = bez tłumienia)
+const TERRITORY_DASH_SPEED = 0.3;   // „marsz" dashа izolinii 3D (jedn. galakt./s; tuning B6)
 
 export class StratcomGalaxyRenderer {
   constructor() {
@@ -37,6 +38,10 @@ export class StratcomGalaxyRenderer {
     this._ringGroup = null;       // pierścienie zasięgu na płaszczyźnie dysku
     this._sig       = '';         // sygnatura zestawu gwiazd (rebuild tylko przy zmianie)
     this._ringSig   = '';
+    this._territoryGroup = null;  // strefy wpływów: płaszczyzna polityczna + izolinie
+    this._territorySig   = '';
+    this._territoryTex   = null;  // wspólna CanvasTexture (dispose ręczny — map nie idzie z material.dispose)
+    this._territoryDashMats = []; // materiały izolinii z patchem uDashOffset (update per render)
     this._glowCache = new Map();  // glowColorHex → CanvasTexture (współdzielone)
     this._failed    = false;
     this._bgTexture = null;       // tło kosmiczne (CanvasTexture ściemniona) → scene.background
@@ -68,6 +73,7 @@ export class StratcomGalaxyRenderer {
         this._camera = new THREE.PerspectiveCamera(FOV, wPx / hPx, 0.05, 5000);
         this._starGroup = new THREE.Group(); this._scene.add(this._starGroup);
         this._ringGroup = new THREE.Group(); this._scene.add(this._ringGroup);
+        this._territoryGroup = new THREE.Group(); this._scene.add(this._territoryGroup);
         this._loadBackground();   // subtelne tło kosmiczne (async, ładuje się raz)
       } catch (e) {
         console.warn('[StratcomGalaxyRenderer] WebGL init failed:', e);
@@ -237,6 +243,83 @@ export class StratcomGalaxyRenderer {
     }
   }
 
+  // Warstwa polityczna (strefy wpływów): płaszczyzna tint (CanvasTexture z masek 'full')
+  // + przerywane izolinie (LineDashedMaterial). payload = { sig, fillAlpha, layers:[
+  //   { colorHex, mode:'full'|'outline', mask:Uint8, maskBounds:{x0,y0,cell,nx,ny}, loops:[{pts:[{x,y}]}] } ] }
+  // Fog-of-war i wybór warstw robi overlay (resolveTerritoryVisibility) — TA SAMA logika co 2D.
+  setTerritory(payload) {
+    if (!this._territoryGroup) return;
+    const sig = payload?.sig ?? '';
+    if (sig === this._territorySig) return;   // rebuild tylko przy zmianie
+    this._territorySig = sig;
+    this._disposeGroup(this._territoryGroup);
+    if (this._territoryTex) { this._territoryTex.dispose(); this._territoryTex = null; }
+    this._territoryDashMats = [];
+    const layers = payload?.layers ?? [];
+    if (!layers.length) return;
+
+    // ── Płaszczyzna: composite masek 'full' → CanvasTexture → PlaneGeometry (y≈-0.02) ──
+    const full = layers.filter(l => l.mode === 'full' && l.mask && l.maskBounds);
+    if (full.length) {
+      const mb = full[0].maskBounds;   // wspólna siatka (TerritoryField)
+      const cv = document.createElement('canvas'); cv.width = mb.nx; cv.height = mb.ny;
+      const cctx = cv.getContext('2d');
+      const alpha = payload.fillAlpha ?? 0.07;
+      for (const l of full) {
+        const lc = document.createElement('canvas'); lc.width = mb.nx; lc.height = mb.ny;
+        const lctx = lc.getContext('2d'); const img = lctx.createImageData(mb.nx, mb.ny);
+        const col = new THREE.Color(l.colorHex);
+        const r = (col.r*255)|0, g = (col.g*255)|0, b = (col.b*255)|0, a = Math.round(alpha*255);
+        for (let k = 0; k < l.mask.length; k++) if (l.mask[k] >= 128) { const o=k*4; img.data[o]=r; img.data[o+1]=g; img.data[o+2]=b; img.data[o+3]=a; }
+        lctx.putImageData(img, 0, 0);
+        cctx.drawImage(lc, 0, 0);   // source-over — nakładanie się stref blenduje
+      }
+      const tex = new THREE.CanvasTexture(cv);   // flipY=true (default) → wiersz j maski = world y0+j*cell
+      tex.colorSpace = THREE.SRGBColorSpace; tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+      this._territoryTex = tex;
+      const worldW = (mb.nx - 1) * mb.cell, worldH = (mb.ny - 1) * mb.cell;
+      const plane = new THREE.Mesh(
+        new THREE.PlaneGeometry(worldW, worldH),
+        // DoubleSide: kamera Stratcomu schodzi pod dysk → strefy widoczne też od spodu.
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
+      );
+      plane.rotation.x = -Math.PI / 2;                                   // na dysk XZ (Three y=0)
+      plane.position.set(mb.x0 + worldW/2, -0.02, mb.y0 + worldH/2);     // offset pod pierścieniami zasięgu
+      plane.renderOrder = -1;                                            // pod gwiazdami
+      this._territoryGroup.add(plane);
+    }
+
+    // ── Izolinie: THREE.Line + LineDashedMaterial (computeLineDistances WYMAGANE) ──
+    for (const l of layers) {
+      const colorHex = l.mode === 'outline' ? 0x8a8a8a : new THREE.Color(l.colorHex).getHex();
+      for (const loop of (l.loops ?? [])) {
+        if (!loop.pts || loop.pts.length < 2) continue;
+        const pts = loop.pts.map(p => new THREE.Vector3(p.x, 0.0, p.y));
+        pts.push(pts[0].clone());   // domknięcie pętli
+        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+        const mat = new THREE.LineDashedMaterial({ color: colorHex, dashSize: 0.6, gapSize: 0.5, transparent: true, opacity: 0.9, depthWrite: false });
+        this._patchDashOffset(mat);
+        const line = new THREE.Line(geo, mat);
+        line.computeLineDistances();
+        this._territoryGroup.add(line);
+      }
+    }
+  }
+
+  // r0.171 LineDashedMaterial NIE ma dashOffset → wstrzykujemy uniform onBeforeCompile.
+  // Fallback: gdy string shadera się nie zgadza → statyczny dash (2D animuje) — udokumentowane.
+  _patchDashOffset(mat) {
+    mat.onBeforeCompile = (shader) => {
+      const target = 'if ( mod( vLineDistance, totalSize ) > dashSize ) {';
+      if (!shader.fragmentShader.includes(target)) return;   // fallback: statyczny dash
+      shader.uniforms.uDashOffset = { value: 0 };
+      shader.fragmentShader = 'uniform float uDashOffset;\n' + shader.fragmentShader.replace(
+        target, 'if ( mod( vLineDistance + uDashOffset, totalSize ) > dashSize ) {');
+      mat.userData._dashShader = shader;
+      this._territoryDashMats.push(mat);
+    };
+  }
+
   // Kamera orbitalna sferyczna (yaw=theta, pitch=phi, dist). Target domyślnie origin.
   setCameraOrbit(yaw, pitch, dist, target = null) {
     if (!this._camera) return;
@@ -252,6 +335,10 @@ export class StratcomGalaxyRenderer {
 
   render(wPx, hPx) {
     if (!this._ensure(wPx, hPx)) return false;
+    if (this._territoryDashMats.length) {
+      const off = -((typeof performance !== 'undefined' ? performance.now() : 0) / 1000) * TERRITORY_DASH_SPEED;
+      for (const m of this._territoryDashMats) { const s = m.userData._dashShader; if (s?.uniforms?.uDashOffset) s.uniforms.uDashOffset.value = off; }
+    }
     this._renderer.render(this._scene, this._camera);
     return true;
   }
@@ -291,6 +378,8 @@ export class StratcomGalaxyRenderer {
   dispose() {
     this._disposeGroup(this._starGroup);
     this._disposeGroup(this._ringGroup);
+    this._disposeGroup(this._territoryGroup);
+    if (this._territoryTex) { this._territoryTex.dispose(); this._territoryTex = null; }
     for (const t of this._glowCache.values()) t.dispose();
     this._glowCache.clear();
     if (this._bgTexture) { this._bgTexture.dispose(); this._bgTexture = null; }
@@ -301,7 +390,7 @@ export class StratcomGalaxyRenderer {
       this._renderer = null;
     }
     this._scene = null; this._camera = null; this._canvas = null;
-    this._starGroup = null; this._ringGroup = null;
-    this._sig = ''; this._ringSig = '';
+    this._starGroup = null; this._ringGroup = null; this._territoryGroup = null;
+    this._sig = ''; this._ringSig = ''; this._territorySig = ''; this._territoryDashMats = [];
   }
 }

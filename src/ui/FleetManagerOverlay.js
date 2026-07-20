@@ -27,7 +27,7 @@ import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
-import { resolveTerritoryVisibility } from './TerritoryRenderLogic.js';
+import { resolveTerritoryVisibility, buildTerritory3DPayload } from './TerritoryRenderLogic.js';
 import {
   TRANSIT_KEY, buildRegistryRows, sortRows, filterRows,
   collectSystemChoices, collectRoleChoices, REGISTRY_COLUMNS,
@@ -5615,7 +5615,6 @@ export class FleetManagerOverlay {
   // TYLKO 2D (mały podgląd / fallback WebGL); duży panel 3D idzie w B5.
   _drawStratcomTerritory2D(ctx, projPt, isBig) {
     const tf     = window.KOSMOS?.territoryField;
-    const empReg = window.KOSMOS?.empireRegistry;
     const intel  = window.KOSMOS?.intelSystem;
     const warSys = window.KOSMOS?.warSystem;
     if (!tf) return;
@@ -5668,21 +5667,39 @@ export class FleetManagerOverlay {
     ctx.restore();
 
     // 3. ETYKIETA (tylko duży panel; przy największej pętli; raz per imperium).
-    if (isBig) {
-      ctx.save();
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.textAlign = 'center';
-      for (const td of territories) {
-        const v = byOwner.get(td.ownerId);
-        if (!v || v.mode !== 'full') continue;
-        const big = this._largestLoop(td.loops); if (!big) continue;
-        const c = this._loopCentroid(big), s = projPt(c.x, c.y); if (!s) continue;
-        const name = td.ownerId === 'player' ? t('territory.playerEmpire') : (empReg?.get?.(td.ownerId)?.name ?? '?');
-        ctx.fillStyle = td.color;
-        ctx.fillText(String(name).toUpperCase(), s.sx, s.sy);
-      }
-      ctx.restore(); ctx.textAlign = 'left';
+    if (isBig) this._drawStratcomTerritoryLabels(ctx, projPt);
+  }
+
+  // Etykiety imperiów (nazwa przy największej pętli; tylko 'full' = gracz / AI contact+).
+  // Współdzielona: 2D (projPt) i 3D (chrome 2D nad WebGL, ten sam projPt = rzut galaktyka→px).
+  _drawStratcomTerritoryLabels(ctx, proj) {
+    const tf = window.KOSMOS?.territoryField, empReg = window.KOSMOS?.empireRegistry, intel = window.KOSMOS?.intelSystem;
+    if (!tf || typeof proj !== 'function') return;
+    const territories = tf.getAllTerritories(); if (!territories.length) return;
+    ctx.save();
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.textAlign = 'center';
+    for (const td of territories) {
+      const oid = td.ownerId;
+      if (oid !== 'player' && !(intel?.isAtLeast?.(oid, 'contact'))) continue;   // etykieta tylko dla full
+      const big = this._largestLoop(td.loops); if (!big) continue;
+      const c = this._loopCentroid(big), s = proj(c.x, c.y); if (!s) continue;
+      const name = oid === 'player' ? t('territory.playerEmpire') : (empReg?.get?.(oid)?.name ?? '?');
+      ctx.fillStyle = td.color;
+      ctx.fillText(String(name).toUpperCase(), s.sx, s.sy);
     }
+    ctx.restore(); ctx.textAlign = 'left';
+  }
+
+  // Payload dla StratcomGalaxyRenderer.setTerritory (B5) — TA SAMA logika fog-of-war co 2D.
+  _buildTerritory3DPayload() {
+    const tf = window.KOSMOS?.territoryField, intel = window.KOSMOS?.intelSystem, warSys = window.KOSMOS?.warSystem;
+    if (!tf) return { sig: '', layers: [] };
+    const territories = tf.getAllTerritories();
+    const vis = resolveTerritoryVisibility(territories.map(td => td.ownerId), {
+      isPlayer: (o) => o === 'player', intelLevelOf: (o) => intel?.getLevel?.(o), isAtWarWith: (o) => warSys?.getWarWith?.(o),
+    });
+    return buildTerritory3DPayload(territories, vis, { fillAlpha: GAME_CONFIG.TERRITORY?.FILL_ALPHA ?? 0.07, version: tf.getVersion?.() ?? 0 });
   }
 
   // Offscreen tint (nx×ny) barwiony kolorem imperium @ FILL_ALPHA; cache invalidowany
@@ -5762,6 +5779,7 @@ export class FleetManagerOverlay {
       })));
       const rangeLY = this._getStratcomRangeLY();
       g3.setRangeRings([rangeLY * 0.25, rangeLY * 0.5, rangeLY * 0.75, rangeLY]);
+      if (GAME_CONFIG.FEATURES?.territoryOverlay) g3.setTerritory(this._buildTerritory3DPayload());
 
       if (this._galaxyDist == null) this._galaxyDist = g3.fitDist;
       // Galaktyka stoi statycznie — obrót WYŁĄCZNIE ręczny (LPM-drag). Brak auto-spin.
@@ -5794,9 +5812,11 @@ export class FleetManagerOverlay {
       projPt = (gx, gy) => ({ sx: toSx(gx), sy: toSy(gy) });
     }
 
-    // ── Strefy wpływów (warstwa polityczna) — tint + izolinia (TYLKO 2D; 3D w B5) ──
-    if (!use3D && GAME_CONFIG.FEATURES?.territoryOverlay) {
-      this._drawStratcomTerritory2D(ctx, projPt, isBig);
+    // ── Strefy wpływów — 2D: tint+izolinia+etykiety w ctx; 3D: tint/izolinia w WebGL
+    //    (g3.setTerritory wyżej), etykiety w chrome 2D. Ta sama logika fog-of-war. ──
+    if (GAME_CONFIG.FEATURES?.territoryOverlay) {
+      if (!use3D) this._drawStratcomTerritory2D(ctx, projPt, isBig);
+      else this._drawStratcomTerritoryLabels(ctx, projPt);
     }
 
     // Linie jump-gate (między widocznymi)

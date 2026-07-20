@@ -25,6 +25,7 @@ export class TerritoryField {
     this._sourceCounts = new Map();  // ownerId → poprzednia liczba źródeł (guard: utrata ≠ zrost)
     this._computed = false;
     this._dirty = true;
+    this._version = 0;   // bump na recompute — sygnatura rebuildu renderu 3D (B5)
     this._lastComputeYear = -Infinity;
     this._onOwnersChanged = () => { this._dirty = true; };
     this._onTick = () => this._maybeRecompute();
@@ -34,6 +35,7 @@ export class TerritoryField {
 
   getTerritory(ownerId) { this._ensure(); return this._territories.get(ownerId) ?? null; }
   getAllTerritories()   { this._ensure(); return [...this._territories.values()]; }
+  getVersion()          { return this._version; }   // rośnie z każdym recompute (B5 sygnatura)
 
   // Odczyt: przelicz gdy nigdy nie liczono LUB zmiana własności (świeżość po podboju/kolonizacji).
   _ensure() { if (!this._computed || this._dirty) this.recompute(); }
@@ -49,6 +51,7 @@ export class TerritoryField {
   recompute() {
     this._dirty = false;
     this._computed = true;
+    this._version++;
     this._lastComputeYear = window.KOSMOS?.timeSystem?.gameTime ?? this._lastComputeYear;
     this._territories.clear();
 
