@@ -20,6 +20,7 @@ import {
   gatherColonyLabels, gatherStationLabels, labelLOD, stationLabelLOD, stackLabels, BADGE_ICON,
   gatherVesselLabels, vesselLabelLOD, toLogicalPx,
   edgeIndicators, buildSystemChips, layoutSystemChips, systemDisplayName,
+  CHIP_MIN_W, CHIP_MAX_W,
 } from './MapLabelLogic.js';
 import { clusterScreenPoints, toneColor } from './FleetPictureLogic.js';
 import { t } from '../i18n/i18n.js';
@@ -345,8 +346,8 @@ export class MapLabelLayer {
     ctx.restore();
   }
 
-  // Chipy układów przy prawej krawędzi. Chowamy stos, gdy jedynym wpisem jest
-  // aktywny układ bez alertów (zero szumu, mapa i tak wszystko pokazuje).
+  // Chipy układów — poziomy rząd w jednej linii pod górnym paskiem surowców.
+  // Chowamy rząd, gdy jedynym wpisem jest aktywny układ bez alertów (zero szumu).
   _drawSystemChips(ctx, vessels, pictureCtx, W, H) {
     const K = window.KOSMOS;
     const chips = buildSystemChips(vessels, {
@@ -365,8 +366,36 @@ export class MapLabelLayer {
     ctx.save();
     ctx.textBaseline = 'middle';
     ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-    for (const r of layoutSystemChips(chips, W, H)) {
-      const { chip } = r;
+
+    // Poziomy rząd (jedna linia pod paskiem surowców) — szerokość chipa dopasowana
+    // do treści (nazwa + ×N + ewentualny ⚠N), z clampem do CHIP_MIN_W/CHIP_MAX_W.
+    // Etykietę składamy raz i cache'ujemy w rekcie, by render nie mierzył dwa razy.
+    const built = chips.map((chip) => {
+      const alert = chip.alertCount > 0 ? ` ⚠${chip.alertCount}` : '';
+      let label;
+      if (chip.isTransit) {
+        label = `🌀 ×${chip.count}`;
+      } else {
+        const prefix = chip.isActive ? '◉ ' : '';
+        // Nazwa ucinana do maksimum, tak by cały chip zmieścił się w CHIP_MAX_W.
+        const suffix = ` ×${chip.count}${alert}`;
+        const budget = CHIP_MAX_W - 12 - ctx.measureText(prefix + suffix).width;
+        const name = this._truncate(ctx, String(chip.name), Math.max(24, budget));
+        label = `${prefix}${name}${suffix}`;
+      }
+      const w = Math.min(CHIP_MAX_W, Math.max(CHIP_MIN_W, ctx.measureText(label).width + 12));
+      return { chip, label, w };
+    });
+
+    // Prawa granica rzędu = lewa krawędź Outlinera (150px dok) − luz, by chipy nie
+    // wchodziły pod prawy panel przy wielu układach.
+    const rects = layoutSystemChips(chips, W, H, {
+      chipWidths: built.map(b => b.w),
+      maxRight: W - 158,
+    });
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      const { chip, label } = built[i];
       const color = chip.isTransit ? THEME.info
         : chip.isActive ? THEME.accent : THEME.textSecondary;
       ctx.globalAlpha = 0.92;
@@ -376,17 +405,10 @@ export class MapLabelLayer {
       ctx.lineWidth = 1;
       ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
       ctx.textAlign = 'left';
-      ctx.fillStyle = color;
       // 1e: aktywny układ = „◉ tu jesteś" (świadomy no-op; agregat alertów) —
-      // wyraźnie odróżniony od klikalnych chipów innych układów.
-      const label = chip.isTransit ? `🌀 ×${chip.count}`
-        : `${chip.isActive ? '◉ ' : ''}${this._truncate(ctx, String(chip.name), r.w - (chip.isActive ? 56 : 44))} ×${chip.count}`;
+      // wyraźnie odróżniony od klikalnych chipów innych układów. ⚠N wliczony w label.
+      ctx.fillStyle = color;
       ctx.fillText(label, r.x + 6, r.y + r.h / 2);
-      if (chip.alertCount > 0) {
-        ctx.textAlign = 'right';
-        ctx.fillStyle = THEME.warning;
-        ctx.fillText(`⚠${chip.alertCount}`, r.x + r.w - 4, r.y + r.h / 2);
-      }
       this._chipZones.push(r);
     }
     ctx.globalAlpha = 1;

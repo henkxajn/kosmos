@@ -379,25 +379,35 @@ export function buildSystemChips(vessels, ctx = {}) {
   return out;
 }
 
-// Layout chipów układów — pionowy stos przy PRAWEJ krawędzi (na lewo od paska
-// trigger Outlinera). Czysta geometria (testowalna) — render w MapLabelLayer.
-export const CHIP_W       = 112;   // px logiczne
+// Layout chipów układów — poziomy RZĄD tuż pod górnym paskiem surowców (jedna
+// linia, chip za chipem od lewej). Wcześniej pionowy stos przy prawej krawędzi
+// zasłaniał treść mapy — Filip: „wszystko w jednej linii pod belką surowców".
+// Czysta geometria (testowalna) — render w MapLabelLayer.
+export const CHIP_W       = 112;   // px logiczne — domyślna szerokość (fallback bez pomiaru)
 export const CHIP_H       = 18;
-export const CHIP_GAP     = 4;
-export const CHIP_RIGHT_M = 14;    // odstęp od prawej krawędzi (trigger Outlinera ~6px)
-export const CHIP_TOP_FRAC = 0.30; // start stosu (ułamek H — pod minimapą/Outlinerem)
+export const CHIP_GAP     = 6;     // odstęp poziomy między chipami
+export const CHIP_LEFT_M  = 12;    // odstęp od lewej krawędzi ekranu
+export const CHIP_TOP     = 34;    // y rzędu — pod górnym pasmem surowców (TOP_BAND_H 28 + luz)
+export const CHIP_MIN_W   = 54;    // min szerokość chipa
+export const CHIP_MAX_W   = 168;   // max szerokość chipa (dłuższe nazwy ucinane w renderze)
 
 /**
  * @param {Array} chips — wynik buildSystemChips
- * @returns {Array<{x,y,w,h,chip}>} recty w px logicznych; stos przycinany do H
+ * @param {object} opts — { chipWidths?: number[] (per chip; fallback CHIP_W), top?, left? }
+ * @returns {Array<{x,y,w,h,chip}>} recty w px logicznych; rząd przycinany do szerokości W
  */
-export function layoutSystemChips(chips, W, H) {
+export function layoutSystemChips(chips, W, H, opts = {}) {
   const out = [];
-  let y = Math.round(H * CHIP_TOP_FRAC);
-  for (const chip of chips ?? []) {
-    if (y + CHIP_H > H - CHIP_H) break;   // nie wychodź poza ekran (dół zarezerwowany)
-    out.push({ x: W - CHIP_RIGHT_M - CHIP_W, y, w: CHIP_W, h: CHIP_H, chip });
-    y += CHIP_H + CHIP_GAP;
+  const widths = opts.chipWidths ?? null;
+  const top  = opts.top  ?? CHIP_TOP;
+  const maxRight = opts.maxRight ?? (W - CHIP_LEFT_M);   // prawa granica rzędu (np. lewa krawędź Outlinera)
+  let x = opts.left ?? CHIP_LEFT_M;
+  const list = chips ?? [];
+  for (let i = 0; i < list.length; i++) {
+    const w = widths ? widths[i] : CHIP_W;
+    if (x + w > maxRight) break;   // jeden wiersz — nie wychodź poza prawą granicę
+    out.push({ x, y: top, w, h: CHIP_H, chip: list[i] });
+    x += w + CHIP_GAP;
   }
   return out;
 }
