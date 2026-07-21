@@ -59,6 +59,11 @@ const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
 const FX_HDR_EXHAUST   = 4.5;  // gain vertex-colors smugi (opacity 0.35 × flicker ~0.8 → apex ~1.3)
 const FX_HDR_EXPLOSION = 2.5;  // gain kuli ognia i pierścienia uderzeniowego
 const FX_HDR_WRECK     = 2.2;  // emissiveIntensity żarzącego się wraku
+// Mnożnik promienia JASNEJ, nieprzezroczystej tarczy rdzenia gwiazdy. Tarcza jest
+// JEDYNYM elementem słońca realnie zasłaniającym ciała (korona = poświata addytywna,
+// bloom = post-process — nic nie zasłaniają). Większy = większy dysk = zasłania więcej
+// ciał przechodzących za słońcem. Strojenie na żywym obrazie.
+const STAR_CORE_SCALE = 3.0;
 const S           = (v) => v / WORLD_SCALE; // skrót: skaluj pozycję
 const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 
@@ -1282,7 +1287,7 @@ export class ThreeRenderer {
         }
       `,
     });
-    group.add(new THREE.Mesh(new THREE.SphereGeometry(r, 64, 64), coreMat));
+    group.add(new THREE.Mesh(new THREE.SphereGeometry(r * STAR_CORE_SCALE, 64, 64), coreMat));
 
     // ── [1] Korona — JEDEN billboard shaderowy (float = zero bandingu 8-bit).
     // Zanik wykładniczy DO ZERA przed krawędzią plane'a (żadnych ogonów alpha,
@@ -2022,7 +2027,10 @@ export class ThreeRenderer {
         uTime:     { value: 0.0 },
         uLightDir: { value: new THREE.Vector3(0, 0, 0) },
       },
-      transparent: true, depthWrite: false, depthTest: false, side: THREE.FrontSide,
+      // depthTest:true — chmury (sfera 1.025× promienia) są PRZED powierzchnią, więc
+      // dalej rysują się nad planetą, ale są prawidłowo ZASŁANIANE przez ciała bliżej
+      // kamery (np. tarczę słońca). depthWrite:false — nie blokują innych warstw planety.
+      transparent: true, depthWrite: false, depthTest: true, side: THREE.FrontSide,
     });
     return new THREE.Mesh(new THREE.SphereGeometry(planetRadius * 1.025, 32, 32), mat);
   }
