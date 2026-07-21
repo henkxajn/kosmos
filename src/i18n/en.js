@@ -1139,6 +1139,7 @@ export default {
   'fleet.stratcomBlind': 'No contact — expand observatory',
   'fleet.stratcomObsLevel': 'Observatory: lv {0}',
   'fleet.galaxyMapTitle': 'GALAXY MAP',
+  'fleet.sensorLens': 'Sensors',
   'fleet.stratcomEmpire': 'Empire: {0}',
   'fleet.stratcomEmpireUnknown': 'Owner: unknown',
   'fleet.stratcomHostility': 'Hostility: {0}/100',

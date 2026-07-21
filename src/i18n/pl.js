@@ -1140,6 +1140,7 @@ export default {
   'fleet.stratcomBlind': 'Brak kontaktu — rozbuduj obserwatorium',
   'fleet.stratcomObsLevel': 'Obserwatorium: poz. {0}',
   'fleet.galaxyMapTitle': 'MAPA GALAKTYKI',
+  'fleet.sensorLens': 'Sensory',
   'fleet.stratcomEmpire': 'Imperium: {0}',
   'fleet.stratcomEmpireUnknown': 'Właściciel: nieznany',
   'fleet.stratcomHostility': 'Wrogość: {0}/100',

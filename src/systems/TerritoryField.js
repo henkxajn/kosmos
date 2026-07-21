@@ -130,8 +130,14 @@ export class TerritoryField {
       }
       const mask = new Uint8Array(nx * ny);
       for (let k = 0; k < f.length; k++) mask[k] = Math.min(255, Math.round((f[k] / ISO) * 128));
+      // H4: zagnieżdżone warstwice (ISO×mnożnik) — ciaśniejsze pętle wokół rdzeni („topografia").
+      const contours = [];
+      for (const isoMul of (cfg.CONTOUR_LEVELS ?? [])) {
+        const cl = stitchLoops(marchingSquares(f, nx, ny, ISO * isoMul, nodeX, nodeY));
+        if (cl.length) contours.push({ isoMul, loops: cl });
+      }
       this._territories.set(ownerId, {
-        ownerId, color: terr.getEmpireColor(ownerId), loops, mask,
+        ownerId, color: terr.getEmpireColor(ownerId), loops, mask, contours,
         maskBounds: { x0: X0, y0: Y0, cell: stepX, nx, ny },
         hash: territoryHash(mask, loops),   // content-hash → sygnatura rebuildu 3D (B6)
       });

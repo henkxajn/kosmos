@@ -27,8 +27,9 @@ import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { getPOILocation } from '../utils/POIPanelLogic.js';
 import { warpDist3D } from '../utils/WarpRoutePlanner.js';
+import { DEFAULT_OBLIQUE_PITCH, panScreenToWorld } from '../renderer/HolotableCamera.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
-import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash } from './TerritoryRenderLogic.js';
+import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash, poolFillAlpha, computeOwnedLanes } from './TerritoryRenderLogic.js';
 import {
   TRANSIT_KEY, buildRegistryRows, sortRows, filterRows,
   collectSystemChoices, collectRoleChoices, REGISTRY_COLUMNS,
@@ -187,6 +188,7 @@ const DESIGN_EDITOR_HIT_TYPES = new Set([
 // Bramka dotyczy WYŁĄCZNIE cudzych statków (mgła wojny) — własną flotę widać zawsze,
 // niezależnie od obserwatorium (patrz _stratcomOwnShipBlips).
 const STRATCOM_LY_BY_LEVEL = [0, 0, 0, 0, 5, 10, 15];  // idx = poziom obserwatorium imperium
+const LANE_FLOW_PX_PER_SEC = 22;   // H6: „płynące światło" warp-lane (marsz dashа px/s)
 const STRATCOM_MAX_BLIPS = 14;   // miękki limit liczby gwiazd na radarze (czytelność)
 const STRATCOM_GLOW    = true;  // animowana iluminacja tarczy radaru (ciągły redraw); false = wyłącz
 const STRATCOM_GLOW_MS = 7000;  // okres „oddechu" podświetlenia [ms] — wolny, ambientowy
@@ -381,7 +383,6 @@ export class FleetManagerOverlay {
     // Zastąpiły boole _showAtlas/_showCluster — atlas i star-cluster (→ Stratcom) to
     // teraz osobne pełnoekranowe zakładki obok mapy taktycznej i stoczni.
     this._activeTab = 'tactical';
-    this._stratcomBig = 'radar';  // który panel Stratcomu duży (70%): 'radar' | 'galaxy'
     this._contentBounds = null;   // { x,y,w,h } — obszar treści pod paskiem zakładek
     this._shipyardScrollY = 0;    // wspólny pionowy scroll zakładki Stocznia (budowa + edytor projektów)
     this._shipyardContentH = 0;   // łączna wysokość treści Stoczni (do clampu scrolla)
@@ -412,8 +413,10 @@ export class FleetManagerOverlay {
     this._galaxy3DLoading = false;
     this._galaxy3DFailed = false;
     this._galaxyYaw = 0.6;
-    this._galaxyPitch = 0.92;       // lekko z góry (przechylony „tank")
+    this._galaxyPitch = DEFAULT_OBLIQUE_PITCH;   // stały skos „stołu" (holotable) — nie obracany
     this._galaxyDist = null;        // lazy = renderer.fitDist
+    this._holotablePanTarget = { x: 0, z: 0 };   // przesunięcie widoku po dysku (pan L/P/G/D)
+    this._sensorLens = false;                    // H5: soczewka sensora (pierścień zasięgu + sweep)
     this._galaxyDrag = false;
     this._galaxyPanelRect = null;   // rect dużego panelu galaktyki (hit-test myszy 3D)
     this._galaxyLastDragMs = 0;
@@ -548,6 +551,7 @@ export class FleetManagerOverlay {
     this._galaxyDist = null;
     this._galaxyDrag = false;
     this._galaxyPanelRect = null;
+    this._holotablePanTarget = { x: 0, z: 0 };   // wyśrodkuj widok przy ponownym otwarciu
   }
 
   // Przełączenie zakładki + reset stanu, który nie powinien wyciekać między
@@ -574,7 +578,6 @@ export class FleetManagerOverlay {
       this._pendingSendSystemId = null;
       this._selectedWarpShipId = null;
       this._warpShipScrollY = 0;
-      this._stratcomBig = 'radar';   // wejście w Stratcom → duży radar (domyślny przegląd)
     }
   }
 
@@ -974,7 +977,7 @@ export class FleetManagerOverlay {
     if (this._activeTab === 'stratcom') {
       if (inRect(this._contentBounds)) {
         const gr = this._galaxyPanelRect;
-        const overGalaxy3D = gr && this._stratcomBig === 'galaxy' && this._galaxyDist != null &&
+        const overGalaxy3D = gr && this._galaxyDist != null &&
           mx >= gr.x && mx <= gr.x + gr.w && my >= gr.y && my <= gr.y + gr.h;
         if (overGalaxy3D) {
           this._galaxyDist = Math.max(4, Math.min(600, this._galaxyDist * (delta > 0 ? 1.12 : 0.89)));
@@ -1078,7 +1081,7 @@ export class FleetManagerOverlay {
     }
     // Stratcom — duża galaktyka 3D: drag = obrót kamery (zamiast pan 2D).
     const gr = this._galaxyPanelRect;
-    if (this._activeTab === 'stratcom' && this._stratcomBig === 'galaxy' && gr &&
+    if (this._activeTab === 'stratcom' && gr &&
         mx >= gr.x && mx <= gr.x + gr.w && my >= gr.y && my <= gr.y + gr.h) {
       this._galaxyDrag = true;
       this._clusterDrag = false;
@@ -1121,10 +1124,14 @@ export class FleetManagerOverlay {
       const dy = my - this._mapDragStartY;
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) this._mapDragWasDrag = true;
       if (this._galaxyDrag) {
-        // Obrót kamery galaktyki 3D (orbit sferyczny)
-        this._galaxyYaw   -= dx * 0.006;
-        this._galaxyPitch += dy * 0.006;
-        this._galaxyPitch = Math.max(0.12, Math.min(Math.PI - 0.12, this._galaxyPitch));
+        // Holotable: przeciąganie = PAN po dysku (nie obrót). Skos i azymut STAŁE.
+        const vpH = this._galaxyPanelRect?.h ?? 600;
+        const pan = panScreenToWorld(dx, dy, {
+          dist: this._galaxyDist ?? 40, fov: 50, yaw: this._galaxyYaw, viewportHpx: vpH,
+        });
+        const CLAMP = 30;   // ly — nie pozwól zgubić galaktyki poza kadrem (promień ~22 ly)
+        this._holotablePanTarget.x = Math.max(-CLAMP, Math.min(CLAMP, this._holotablePanTarget.x + pan.dx));
+        this._holotablePanTarget.z = Math.max(-CLAMP, Math.min(CLAMP, this._holotablePanTarget.z + pan.dz));
         this._galaxyLastDragMs = (typeof performance !== 'undefined') ? performance.now() : 0;
       } else if (this._clusterDrag) {
         this._clusterPanX += dx;
@@ -1541,10 +1548,10 @@ export class FleetManagerOverlay {
       case 'tab':
         this._switchTab(zone.data.tab);
         break;
-      case 'stratcom_expand':
-        // Klik małego panelu Stratcomu → rozwiń go do 70% (drugi maleje).
-        this._stratcomBig = zone.data.panel;
-        this._pendingSendSystemId = null;
+      case 'stratcom_detail_bg':
+        break;   // absorber klików tła panelu detalu (nie przepuszcza do gwiazd pod spodem)
+      case 'stratcom_lens_toggle':
+        this._sensorLens = !this._sensorLens;   // H5: włącz/wyłącz soczewkę sensora
         break;
       case 'stratcom_scan': {
         // Rozpocznij czasowy skan obcego układu (obserwatorium Lv2+). Ujawnia liczby ciał.
@@ -2224,6 +2231,9 @@ export class FleetManagerOverlay {
       loop: !!this._missionConfig.repeat,
       returnCargoSpec: this._missionConfig.returnCargo ?? null,
     };
+    // Zunifikowana ścieżka: transport/pasażer/powrót idą przez OrderService
+    // (same-system → emit event jak dotąd; cross-system → auto-chain warp→dostawa).
+    // NIGDY oba (action.execute I orderService) — ryzyko double-dispatch.
     const orderService = window.KOSMOS?.orderService;
     if (orderService && (actionId === 'transport' || actionId === 'transport_passenger')) {
       const targetSystemId = this._missionConfig.targetSystemId ?? null;
@@ -4990,670 +5000,21 @@ export class FleetManagerOverlay {
     ctx.restore();
   }
 
-  // Radar Stratcom. isBig=true → pełny (hity gwiazd + panel polityczny + legenda);
-  // isBig=false → kompaktowy podgląd (całość = hit „rozwiń", bez selekcji gwiazd).
-  _drawStratcom(ctx, x, y, w, h, isBig = true) {
-    const PAD = 10;
-
-    // Tło — subtelna mgławica radaru (deep_space_radar) ściemniona; czarna baza pod spodem
-    this._drawPanelBg(ctx, x, y, w, h, 'radar');
-
-    const gd = window.KOSMOS?.galaxyData;
-    const home = gd?.systems?.find(s => s.isHome) ?? null;
-    if (!gd?.systems?.length || !home) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('fleet.stratcomNoData'), x + PAD, y + 20);
-      if (!isBig) this._hitZones.push({ x, y, w, h, type: 'stratcom_expand', data: { panel: 'radar' } });
-      return;
-    }
-
-    const systems = gd.systems;
-    const ssMgr  = window.KOSMOS?.starSystemManager;
-    const vMgr   = window.KOSMOS?.vesselManager;
-    const colMgr = window.KOSMOS?.colonyManager;
-    const empReg = window.KOSMOS?.empireRegistry;
-    const intel  = window.KOSMOS?.intelSystem;
-    const dipl   = window.KOSMOS?.diplomacySystem;
-
-    // ── Geometria radaru ──────────────────────────────────────
-    // Lewa kolumna (tylko duży radar) = tabela statków warp; tarcza kurczy się do prawej.
-    const LIST_W = isBig ? Math.min(220, Math.round(w * 0.30)) : 0;
-    const dialX = x + LIST_W;
-    const dialW = w - LIST_W;
-    const cx = dialX + dialW / 2 + this._clusterPanX;
-    const cy = y + h / 2 + this._clusterPanY;
-    const R  = Math.min(dialW, h) / 2 - 40;
-    const rangeLY = this._getStratcomRangeLY();   // zasięg SENSORÓW (obserwatorium)
-    // Skala dopasowana do NAJDALSZEJ gwiazdy — radar pokazuje CAŁE pole gwiazd
-    // (nawigacja). Sensory (wykrywanie statków) ograniczone do rangeLY = osobny pierścień.
-    let maxD = rangeLY;
-    for (const s of systems) {
-      const d = Math.hypot((s.x ?? 0) - home.x, (s.y ?? 0) - home.y);
-      if (d > maxD) maxD = d;
-    }
-    maxD *= 1.08;
-    const scale = (R * this._clusterZoom) / maxD;   // px na ly
-    const toSx = (lx) => cx + (lx - home.x) * scale;
-    const toSy = (ly) => cy + (ly - home.y) * scale;
-
-    // Clip do prostokąta zakładki
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x + 1, y, w - 2, h - 1);
-    ctx.clip();
-
-    // ── Pierścienie zasięgu + krzyż celownika ─────────────────
-    const outerLY = maxD / this._clusterZoom;   // ly na zewnętrznym pierścieniu (pełne pole)
-    ctx.lineWidth = 1;
-    for (let i = 1; i <= 4; i++) {
-      const rr = R * (i / 4);
-      ctx.strokeStyle = i === 4 ? 'rgba(0,255,180,0.22)' : 'rgba(0,255,180,0.08)';
-      ctx.beginPath();
-      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-      ctx.stroke();
-      // Etykieta ly przy górze pierścienia
-      ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(`${(outerLY * i / 4).toFixed(1)} ly`, cx, cy - rr - 2);
-      ctx.textAlign = 'left';
-    }
-    // Pierścień ZASIĘGU SENSORÓW (obserwatorium) — w jego obrębie wykrywamy statki.
-    const sensorRR = Math.min(R, rangeLY * scale);
-    if (sensorRR > 4 && sensorRR < R - 1) {
-      ctx.strokeStyle = 'rgba(0,224,255,0.5)';
-      ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath(); ctx.arc(cx, cy, sensorRR, 0, Math.PI * 2); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.font = `${THEME.fontSizeTiny}px ${THEME.fontFamily}`;
-      ctx.fillStyle = 'rgba(0,224,255,0.85)';
-      ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.stratcomSensors', rangeLY.toFixed(0)), cx, cy + sensorRR + 9);
-      ctx.textAlign = 'left';
-    }
-    // Krzyż
-    ctx.strokeStyle = 'rgba(0,255,180,0.08)';
-    ctx.beginPath();
-    ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
-    ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
-    ctx.stroke();
-
-    // ── Zawartość plotowana — clip do koła radaru ─────────────
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.clip();
-
-    // ── Iluminacja tarczy radaru — miękkie podświetlenie OD ŚRODKA na CAŁĄ tarczę,
-    //    powolne „oddychanie" (styl sci-fi: backlit hologram). Warstwa pod blipami.
-    if (STRATCOM_GLOW) {
-      const breath = 0.5 + 0.5 * Math.sin(performance.now() / STRATCOM_GLOW_MS * Math.PI * 2);
-      const intensity = 0.10 + 0.12 * breath;            // 0.10..0.22 alpha
-      const { r, g, b } = hexToRgb(THEME.accent);         // kolor z motywu (podąża za THEME)
-      const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.05);  // środek → cała powierzchnia
-      grad.addColorStop(0,    `rgba(${r},${g},${b},${intensity.toFixed(3)})`);
-      grad.addColorStop(0.65, `rgba(${r},${g},${b},${(intensity * 0.55).toFixed(3)})`);
-      grad.addColorStop(1,    `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = grad;
-      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // Strefy wpływów — tint (poświata; bez izolinii/etykiet/animacji), fog-gated. Wyższa alpha
-    // (RADAR_FILL_ALPHA) bo glow tarczy zmywa domyślne 0.07 (B6 fix).
-    if (GAME_CONFIG.FEATURES?.territoryOverlay) {
-      this._drawStratcomTerritoryTint(ctx, (gx, gy) => ({ sx: toSx(gx), sy: toSy(gy) }), GAME_CONFIG.TERRITORY?.RADAR_FILL_ALPHA ?? 0.18);
-    }
-
-    // Linie jump-gate (fioletowe)
-    for (const g of systems.filter(s => s.jumpGate)) {
-      const connTo = ssMgr?.getSystem(g.id)?.jumpGate?.connectedTo;
-      const other = connTo ? systems.find(s => s.id === connTo) : null;
-      if (!other) continue;
-      ctx.strokeStyle = 'rgba(170,136,255,0.4)';
-      ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(toSx(g.x), toSy(g.y)); ctx.lineTo(toSx(other.x), toSy(other.y));
-      ctx.stroke(); ctx.setLineDash([]);
-    }
-
-    // Linie tranzytu OBCYCH + ich pozycja. SENSORY: wykrywanie tylko w zasięgu obserwatorium
-    // (rangeLY = bramka detekcji galaktycznej). Fog-of-war: wróg bez intel-kontaktu = ghost „?"
-    // (pośredni), wróg z contact = solid czerwony. Własna flota NIE przechodzi tędy — jest
-    // widoczna zawsze i bez bramki sensorów (ownBlips niżej).
-    for (const v of (vMgr?.getInterstellarVessels() ?? [])) {
-      if (!isEnemyVessel(v)) continue;
-      const m = v.mission;
-      if (!m || m.phase !== 'warp_transit') continue;
-      const sx0 = m.currentGalX ?? 0, sy0 = m.currentGalY ?? 0;
-      if (Math.hypot(sx0 - home.x, sy0 - home.y) > rangeLY) continue;   // poza sensorami → niewykryty
-      const mode = this._stratcomWarpBlipMode(v);   // tu tylko 'contact' | 'rumor'
-      const fromS = systems.find(s => s.id === m.fromSystemId);
-      const toS   = systems.find(s => s.id === m.toSystemId);
-      const vsx = toSx(m.currentGalX ?? (fromS?.x ?? sx0));
-      const vsy = toSy(m.currentGalY ?? (fromS?.y ?? sy0));
-      if (mode === 'rumor') {
-        // Pośredni kontakt — ghost bez linii trasy (nie znamy celu).
-        this._drawStratcomGhostBlip(ctx, vsx, vsy);
-        continue;
-      }
-      if (fromS && toS) {
-        ctx.strokeStyle = 'rgba(255,68,102,0.4)';
-        ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(toSx(fromS.x), toSy(fromS.y)); ctx.lineTo(toSx(toS.x), toSy(toS.y));
-        ctx.stroke(); ctx.setLineDash([]);
-      }
-      ctx.fillStyle = '#ff4466';
-      ctx.beginPath(); ctx.arc(vsx, vsy, 3, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // Własna flota — jedno źródło dla tras (tu, pod gwiazdami) i ikon (niżej, nad gwiazdami).
-    const ownBlips = this._stratcomOwnShipBlips(vMgr);
-    for (const e of ownBlips) {
-      if (!e.inTransit || !e.fromS || !e.toS) continue;
-      ctx.strokeStyle = 'rgba(255,170,50,0.35)';
-      ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(toSx(e.fromS.x), toSy(e.fromS.y)); ctx.lineTo(toSx(e.toS.x), toSy(e.toS.y));
-      ctx.stroke(); ctx.setLineDash([]);
-    }
-
-    // Trasa wybranego statku warp (CAŁA, do celu): bieżący skok + pozostałe (2 kolory).
-    {
-      const selMv = this._selectedWarpShipId ? vMgr?.getVessel?.(this._selectedWarpShipId) : null;
-      if (selMv?.warpRoute) this._drawWarpRouteLine(ctx, selMv.warpRoute, (s) => ({ sx: toSx(s.x ?? 0), sy: toSy(s.y ?? 0) }));
-    }
-
-    // ── Wszystkie gwiazdy (radar = pełna mapa nawigacyjna) ──
-    const vis = this._stratcomVisibleSystems();
-    const isEmpKnown = vis.isEmpKnown;
-    const shown = vis.list;
-
-    const selSys = this._selectedClusterSystem;
-    let anyBeyondHome = false;
-
-    for (const { s, known, nameKnown } of shown) {
-      const sx = toSx(s.x ?? 0);
-      const sy = toSy(s.y ?? 0);
-      // poza okręgiem radaru → pomiń (i blip, i hit)
-      if (Math.hypot(sx - cx, sy - cy) > R - 2) continue;
-      if (!s.isHome) anyBeyondHome = true;
-
-      const isHome     = !!s.isHome;
-      const isSelected = selSys === s.id;
-      const isHover    = this._clusterHoverSystem === s.id;
-      const empKnown   = isEmpKnown(s);
-
-      // Promień (rozmiar wg ważności; zaznaczone/hover odrobinę większe)
-      let r = isHome ? 6 : (known ? 4 : 3);
-      if (isSelected || isHover) r += 1;
-      const dim = !known && !isHome;   // w zasięgu, ale niezbadana → „widmowa"
-
-      // Miękka poświata akcentu pod gwiazdą (czytelność home/selekcji)
-      if (isHome || isSelected) {
-        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 4);
-        grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.18)' : 'rgba(0,255,180,0.18)');
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.beginPath(); ctx.arc(sx, sy, r * 4, 0, Math.PI * 2); ctx.fill();
-      }
-
-      // „Małe słońce" — rdzeń + halo w realnym kolorze typu gwiazdy.
-      // Stan gry = nakładka: nieznane przygaszone, pierścienie/etykiety niżej.
-      this._drawStarGlyph(ctx, sx, sy, r, s, dim);
-
-      // Pierścień hostility dla znanego imperium
-      if (empKnown) {
-        const host = dipl?.getHostility?.(s.empireId) ?? 0;
-        ctx.strokeStyle = host <= 30 ? (THEME.success ?? '#44cc66')
-                        : host <= 70 ? (THEME.warning ?? '#ffcc44')
-                        : (THEME.danger ?? '#ff4466');
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(sx, sy, r + 3, 0, Math.PI * 2); ctx.stroke();
-      }
-
-      // Obwódka selekcji
-      if (isSelected) {
-        ctx.strokeStyle = THEME.accent;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(sx, sy, r + 5, 0, Math.PI * 2); ctx.stroke();
-      }
-
-      // Ikony infrastruktury (tylko dla znanych)
-      if (known) {
-        const sysData = ssMgr?.getSystem(s.id);
-        this._drawStratcomOwnerGlyph(ctx, s.id, sx + r + 5, sy - r + 2);
-        if (sysData?.warpBeacon || s.warpBeacon) { ctx.font = `7px ${THEME.fontFamily}`; ctx.fillText('📡', sx + r + 2, sy + 2); }
-        if (sysData?.jumpGate   || s.jumpGate)   { ctx.font = `7px ${THEME.fontFamily}`; ctx.fillText('🌀', sx + r + 2, sy + 10); }
-      }
-
-      // Nazwa (znane) lub „???" (kontakt w zasięgu, nieznany)
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.textAlign = 'center';
-      if (nameKnown) {
-        ctx.fillStyle = isHome ? THEME.yellow : THEME.textPrimary;
-        ctx.fillText(s.name, sx, sy + r + 12);
-      } else if (isHover || isSelected) {
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText('???', sx, sy + r + 12);
-      }
-      ctx.textAlign = 'left';
-
-      // Hit zone selekcji gwiazdy — tylko gdy radar duży (mały = klik rozwija).
-      if (isBig) {
-        const hitR = Math.max(r + 5, 11);
-        this._hitZones.push({
-          x: sx - hitR, y: sy - hitR, w: hitR * 2, h: hitR * 2,
-          type: 'cluster_star', data: { systemId: s.id },
-        });
-      }
-    }
-
-    // Ikony WŁASNEJ floty — widoczne ZAWSZE, bez względu na selekcję (zaznaczenie tylko
-    // podświetla: pulsujący marker zamiast statycznego trójkąta). Nad gwiazdami, żeby glif
-    // gwiazdy nie zasłaniał statku stojącego w układzie.
-    for (const e of ownBlips) {
-      const bx = toSx(e.gx), by = toSy(e.gy);
-      if (Math.hypot(bx - cx, by - cy) > R) continue;   // poza tarczą radaru
-      this._drawStratcomOwnBlip(ctx, e, bx, by);
-    }
-
-    ctx.restore(); // koniec clipu koła
-
-    // ── Panel wybranego systemu (tylko gdy radar duży) ──
-    // Wybrany statek warp → panel rozkazu skoku; inaczej panel polityczny.
-    if (isBig && selSys) {
-      const selData = systems.find(s => s.id === selSys);
-      if (selData) {
-        if (this._selectedWarpShipId) this._drawWarpOrderPanel(ctx, dialX, y, dialW, h, selData, vMgr);
-        else this._drawStratcomPolitical(ctx, dialX, y, dialW, h, selData, empReg, intel, dipl, colMgr, vMgr);
-      }
-    }
-
-    ctx.restore(); // koniec clipu prostokąta
-
-    // ── Odczyt zasięgu + stan „ślepy" (lewy-górny) ────────────
-    const obsLvl = window.KOSMOS?.observatorySystem?.getMaxObservatoryLevel?.() ?? 0;
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textSecondary;
-    ctx.textAlign = 'left';
-    ctx.fillText(t('fleet.stratcomRange', rangeLY.toFixed(0)), dialX + PAD, y + 16);
-    if (isBig) {
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText(t('fleet.stratcomObsLevel', obsLvl), dialX + PAD, y + 30);
-    }
-    if (isBig && !anyBeyondHome) {
-      ctx.fillStyle = THEME.warning;
-      ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.stratcomBlind'), cx, y + h - 14);
-      ctx.textAlign = 'left';
-    }
-
-    // ── Legenda (lewy-dolny dla tarczy) — tylko gdy duży ──
-    if (isBig) {
-      const lx = dialX + PAD;
-      let ly = y + h - 95;   // +3 wiersze na strefy wpływów (B6)
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      const pc = window.KOSMOS?.territoryService?.getEmpireColor?.('player') ?? THEME.accent;
-      const items = [
-        { color: THEME.yellow,  label: t('fleet.clusterHome') },
-        { color: THEME.accent,  label: t('fleet.clusterExplored') },
-        { color: THEME.textDim, label: t('fleet.clusterUnexplored') },
-        { kind: 'zone',   color: pc, label: t('territory.legendZone') },     // strefy wpływów (B6)
-        { kind: 'border', color: pc, label: t('territory.legendBorder') },
-        { kind: 'owner',  color: pc, label: t('territory.legendOwner') },
-      ];
-      for (const it of items) {
-        if (it.kind === 'zone') {
-          ctx.fillStyle = it.color; ctx.globalAlpha = 0.5; ctx.fillRect(lx, ly + 1, 8, 6); ctx.globalAlpha = 1;
-        } else if (it.kind === 'border') {
-          ctx.strokeStyle = it.color; ctx.lineWidth = 1.4; ctx.setLineDash([3, 2]);
-          ctx.beginPath(); ctx.moveTo(lx, ly + 4); ctx.lineTo(lx + 8, ly + 4); ctx.stroke(); ctx.setLineDash([]);
-        } else if (it.kind === 'owner') {
-          ctx.fillStyle = it.color; const gx = lx + 4, gy = ly + 4, s = 3.5;
-          ctx.beginPath(); ctx.moveTo(gx, gy - s); ctx.lineTo(gx + s, gy); ctx.lineTo(gx, gy + s); ctx.lineTo(gx - s, gy); ctx.closePath(); ctx.fill();
-        } else {
-          ctx.fillStyle = it.color; ctx.beginPath(); ctx.arc(lx + 4, ly + 4, 3, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText(it.label, lx + 12, ly + 7);
-        ly += 13;
-      }
-    }
-
-    // ── Tabela statków warp (lewa kolumna, tylko duży radar) ──
-    if (isBig && LIST_W > 0) this._drawWarpShipList(ctx, x, y, LIST_W, h, vMgr);
-
-    // Mały radar — całość klikalna jako „rozwiń" (priorytet niski, dodany na końcu).
-    if (!isBig) this._hitZones.push({ x, y, w, h, type: 'stratcom_expand', data: { panel: 'radar' } });
-
-    // Ciągły redraw dla animacji iluminacji (także na pauzie gry).
-    if (STRATCOM_GLOW && window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
-  }
-
-  // DEPRECATED (Slice 4): zastąpione przez _drawStratcom (radar). Nie wołane —
-  // zakładka Stratcom renderuje radar. Zostawione tymczasowo jako referencja
-  // (kandydat do usunięcia po live-gate). _drawClusterInfoPanel nadal używany przez radar.
-  _drawStarCluster(ctx, x, y, w, h) {
-    const PAD = 10;
-
-    // Tło — solidne czarne (overlay zakrywa 3D mapę układu)
-    ctx.fillStyle = '#000';
-    ctx.fillRect(x + 1, y, w - 2, h - 1);
-
-    const gd = window.KOSMOS?.galaxyData;
-    if (!gd?.systems?.length) {
-      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.textDim;
-      ctx.fillText('No galaxy data', x + PAD, y + 20);
-      return;
-    }
-
-    const systems = gd.systems;
-    const ssMgr = window.KOSMOS?.starSystemManager;
-    const vMgr  = window.KOSMOS?.vesselManager;
-    const colMgr = window.KOSMOS?.colonyManager;
-
-    // Clip
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(x + 1, y, w - 2, h - 1);
-    ctx.clip();
-
-    // Oblicz skalę — zmieść wszystkie gwiazdy w widoku
-    let maxLY = 1;
-    for (const s of systems) {
-      const d = Math.sqrt(s.x * s.x + s.y * s.y);
-      if (d > maxLY) maxLY = d;
-    }
-    maxLY *= 1.15;
-
-    const cx = x + w / 2 + this._clusterPanX;
-    const cy = y + h / 2 + this._clusterPanY;
-    const baseR = Math.min(w / 2, h / 2) - 20;
-    const scale = (baseR * this._clusterZoom) / maxLY; // px per LY
-
-    // Pomocnicza: LY → px
-    const toSx = (lx) => cx + lx * scale;
-    const toSy = (ly) => cy + ly * scale;
-
-    // ── Jump gate lines (fioletowe) ──
-    const gates = systems.filter(s => s.jumpGate);
-    for (const g of gates) {
-      // Szukaj sparowanego gate w innym systemie
-      const sys = ssMgr?.getSystem(g.id);
-      const connTo = sys?.jumpGate?.connectedTo;
-      if (connTo) {
-        const other = systems.find(s => s.id === connTo);
-        if (other) {
-          ctx.strokeStyle = 'rgba(170,136,255,0.4)';
-          ctx.lineWidth = 2;
-          ctx.setLineDash([6, 4]);
-          ctx.beginPath();
-          ctx.moveTo(toSx(g.x), toSy(g.y));
-          ctx.lineTo(toSx(other.x), toSy(other.y));
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      }
-    }
-
-    // ── Interstellar transit lines (pomarańczowe) ──
-    const interVessels = vMgr?.getInterstellarVessels() ?? [];
-    for (const v of interVessels) {
-      const m = v.mission;
-      if (!m || m.phase !== 'warp_transit') continue;
-      const fromS = systems.find(s => s.id === m.fromSystemId);
-      const toS   = systems.find(s => s.id === m.toSystemId);
-      if (!fromS || !toS) continue;
-
-      // Linia trasy
-      ctx.strokeStyle = 'rgba(255,170,50,0.3)';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(toSx(fromS.x), toSy(fromS.y));
-      ctx.lineTo(toSx(toS.x), toSy(toS.y));
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Punkt pozycji statku
-      const vsx = toSx(m.currentGalX ?? fromS.x);
-      const vsy = toSy(m.currentGalY ?? fromS.y);
-      ctx.fillStyle = THEME.warning;
-      ctx.beginPath();
-      ctx.arc(vsx, vsy, 3, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Etykieta statku
-      if (this._clusterZoom > 1.5) {
-        ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-        ctx.fillStyle = THEME.warning;
-        ctx.fillText(v.name, vsx + 5, vsy - 3);
-      }
-    }
-
-    // ── Gwiazdy ──
-    const selSys = this._selectedClusterSystem;
-    for (const s of systems) {
-      const sx = toSx(s.x);
-      const sy = toSy(s.y);
-
-      // Cull poza widocznością
-      if (sx < x - 20 || sx > x + w + 20 || sy < y - 20 || sy > y + h + 20) continue;
-
-      const isHome = !!s.isHome;
-      const isExplored = !!s.explored;
-      const isSelected = selSys === s.id;
-      const isHover = this._clusterHoverSystem === s.id;
-
-      // Promień gwiazdy
-      let r = isHome ? 6 : isExplored ? 4 : 3;
-      if (isSelected || isHover) r += 1;
-
-      // Glow
-      if (isHome || isSelected) {
-        const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 3);
-        grad.addColorStop(0, isHome ? 'rgba(255,204,68,0.3)' : 'rgba(170,136,255,0.3)');
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Kolor gwiazdy
-      ctx.fillStyle = s.colorHex ?? (isExplored ? THEME.accent : THEME.textDim);
-      ctx.beginPath();
-      ctx.arc(sx, sy, r, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Obwódka selekcji
-      if (isSelected) {
-        ctx.strokeStyle = THEME.accent;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(sx, sy, r + 3, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // Ikony infrastruktury
-      const sysData = ssMgr?.getSystem(s.id);
-      this._drawStratcomOwnerGlyph(ctx, s.id, sx + r + 5, sy - r + 2);
-      if (sysData?.warpBeacon || s.warpBeacon) {
-        ctx.font = `7px ${THEME.fontFamily}`;
-        ctx.fillText('📡', sx + r + 2, sy + 2);
-      }
-      if (sysData?.jumpGate || s.jumpGate) {
-        ctx.font = `7px ${THEME.fontFamily}`;
-        ctx.fillText('🌀', sx + r + 2, sy + 10);
-      }
-
-      // Nazwa (widoczna przy bliskim zoom lub dla wybranych/home)
-      if (this._clusterZoom > 0.8 || isHome || isSelected || isHover) {
-        ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-        ctx.fillStyle = isHome ? THEME.yellow : isExplored ? THEME.textPrimary : THEME.textDim;
-        ctx.textAlign = 'center';
-        ctx.fillText(s.name, sx, sy + r + 12);
-        ctx.textAlign = 'left';
-      }
-
-      // Hit zone
-      const hitR = Math.max(r + 4, 10);
-      this._hitZones.push({
-        x: sx - hitR, y: sy - hitR, w: hitR * 2, h: hitR * 2,
-        type: 'cluster_star', data: { systemId: s.id },
-      });
-    }
-
-    // ── Panel inline: info o zaznaczonym systemie ──
-    if (selSys) {
-      const selData = systems.find(s => s.id === selSys);
-      if (selData) {
-        this._drawClusterInfoPanel(ctx, x, y, w, h, selData, ssMgr, vMgr, colMgr);
-      }
-    }
-
-    // ── Legenda (lewy-dolny) ──
-    {
-      const lx = x + PAD;
-      let ly = y + h - 60;
-      ctx.font = `${THEME.fontSizeSmall - 2}px ${THEME.fontFamily}`;
-      const items = [
-        { color: THEME.yellow, label: t('fleet.clusterHome') },
-        { color: THEME.accent, label: t('fleet.clusterExplored') },
-        { color: THEME.textDim, label: t('fleet.clusterUnexplored') },
-      ];
-      for (const it of items) {
-        ctx.fillStyle = it.color;
-        ctx.beginPath();
-        ctx.arc(lx + 4, ly + 4, 3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = THEME.textDim;
-        ctx.fillText(it.label, lx + 12, ly + 7);
-        ly += 14;
-      }
-    }
-
-    ctx.restore();
-  }
-
-  // Panel informacyjny o zaznaczonym systemie w star cluster
-  _drawClusterInfoPanel(ctx, areaX, areaY, areaW, areaH, sys, ssMgr, vMgr, colMgr) {
-    const PAD = 8;
-    const panelW = 200;
-    const sysReg = ssMgr?.getSystem(sys.id);
-    const isExplored = !!sysReg?.explored || !!sys.explored;
-    const obsSys = window.KOSMOS?.observatorySystem;
-    const layout = this._buildSystemScanLayout(sys, obsSys, isExplored);
-
-    // Wysokość dynamiczna: nagłówek + dane + sekcja skanu + przyciski
-    const panelH = 98 + layout.height + (!sys.isHome ? 22 : 0) + (isExplored && sysReg ? 22 : 0);
-    const px = areaX + areaW - panelW - 8;
-    const py = areaY + 8;
-
-    // Tło panelu
-    ctx.fillStyle = 'rgba(8,12,18,0.92)';
-    ctx.fillRect(px, py, panelW, panelH);
-    ctx.strokeStyle = THEME.border;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(px, py, panelW, panelH);
-
-    let iy = py + PAD;
-
-    // Nazwa gwiazdy
-    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = sys.colorHex ?? THEME.textPrimary;
-    ctx.fillText(`⭐ ${this._systemDisplayName(sys)}`, px + PAD, iy + 12);
-    iy += 20;
-
-    // Typ, masa, odległość
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.textSecondary;
-    ctx.fillText(t('fleet.clusterSpectral', sys.spectralType ?? '?'), px + PAD, iy + 10);
-    iy += 14;
-    ctx.fillText(t('fleet.clusterMass', (sys.mass ?? 1).toFixed(2)), px + PAD, iy + 10);
-    iy += 14;
-    ctx.fillStyle = THEME.textDim;
-    ctx.fillText(t('fleet.clusterDistance', (sys.distanceLY ?? 0).toFixed(1)), px + PAD, iy + 10);
-    iy += 18;
-
-    // Status
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = isExplored ? THEME.success : THEME.textDim;
-    ctx.fillText(isExplored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10);
-    iy += 16;
-
-    // Sekcja skanu układu (wyniki + kontrolka)
-    iy = this._drawSystemScanSection(ctx, px, iy, panelW, PAD, sys, layout);
-
-    // Przyciski akcji
-    const btnW = panelW - PAD * 2;
-    const btnH = 18;
-
-    // Przycisk: Wyślij statek (jeśli tech + statek)
-    if (!sys.isHome) {
-      const canSend = vMgr && colMgr;
-      const activePid = colMgr?.activePlanetId;
-      const avail = activePid ? (vMgr?.getAvailable(activePid) ?? []) : [];
-      const hasWarpShip = avail.some(v => v.warpFuel?.max > 0);  // S3.0b S1b: realny bak warp
-
-      ctx.fillStyle = hasWarpShip ? 'rgba(0,255,180,0.08)' : 'rgba(60,60,60,0.3)';
-      ctx.fillRect(px + PAD, iy, btnW, btnH);
-      ctx.strokeStyle = hasWarpShip ? THEME.accent : THEME.border;
-      ctx.strokeRect(px + PAD, iy, btnW, btnH);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = hasWarpShip ? THEME.accent : THEME.textDim;
-      ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.clusterSend'), px + PAD + btnW / 2, iy + 13);
-      ctx.textAlign = 'left';
-      if (hasWarpShip) {
-        this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'cluster_send', data: { systemId: sys.id } });
-      }
-      iy += btnH + 4;
-    }
-
-    // Przycisk: Przełącz widok (jeśli odwiedzony)
-    if (isExplored && sysReg) {
-      ctx.fillStyle = 'rgba(0,255,180,0.08)';
-      ctx.fillRect(px + PAD, iy, btnW, btnH);
-      ctx.strokeStyle = THEME.accent;
-      ctx.strokeRect(px + PAD, iy, btnW, btnH);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = THEME.accent;
-      ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.clusterSwitch'), px + PAD + btnW / 2, iy + 13);
-      ctx.textAlign = 'left';
-      this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'cluster_switch', data: { systemId: sys.id } });
-      iy += btnH + 4;
-    }
-  }
-
   // ═══════════════════════════════════════════════════════════════════════════
-  // STRATCOM — układ dwupanelowy: radar (lewo) + mapa galaktyki 2D (prawo).
-  // Jeden panel duży (70%), drugi mały (30%); klik małego rozwija go (_stratcomBig).
-  // Radar = przegląd polityczny; mapa galaktyki = operacyjna (ciała/skan/wyślij statek).
+  // STRATCOM — „stół holograficzny": JEDNA mapa galaktyki na całą szerokość.
+  // Radar wchłonięty (przegląd polityczny + operacyjny scalone w panelu detalu).
+  // Wąski pasek statków warp z lewej pojawia się tylko, gdy jest kogo wysłać.
   // ═══════════════════════════════════════════════════════════════════════════
   _drawStratcomTab(ctx, x, y, w, h) {
-    const GAP = 10;
-    const bigRadar = this._stratcomBig !== 'galaxy';   // domyślnie radar duży
-    const radarW = Math.round((bigRadar ? 0.68 : 0.30) * (w - GAP));
-    const galaxyW = w - GAP - radarW;
-    const gx = x + radarW + GAP;
-
-    this._drawStratcom(ctx, x, y, radarW, h, bigRadar);
-
-    // Separator pionowy między panelami
-    ctx.strokeStyle = THEME.borderActive;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + radarW + GAP / 2, y);
-    ctx.lineTo(x + radarW + GAP / 2, y + h);
-    ctx.stroke();
-
-    this._drawStratcomGalaxy(ctx, gx, y, galaxyW, h, !bigRadar);
+    const vMgr = window.KOSMOS?.vesselManager;
+    const hasWarpShips = (vMgr?.getAllVessels?.() ?? [])
+      .some(v => !isEnemyVessel(v) && !v.isWreck && v.warpFuel?.max > 0);
+    const listW = hasWarpShips ? Math.min(210, Math.round(w * 0.22)) : 0;
+    if (listW > 0) this._drawWarpShipList(ctx, x, y, listW, h, vMgr);
+    this._drawStratcomGalaxy(ctx, x + listW, y, w - listW, h, true);
+    // Stratcom = żywa mapa (marsz izolinii + dokończenie async-ładowania 3D) → ciągły redraw.
+    // (radar robił to samo przez STRATCOM_GLOW; po usunięciu radaru trigger jest tutaj)
+    if (window.KOSMOS?.uiManager) window.KOSMOS.uiManager._dirty = true;
   }
 
   // Lazy: renderer 3D galaktyki. Dynamic import (NIE statyczny) — three psułoby
@@ -5740,6 +5101,25 @@ export class FleetManagerOverlay {
           ctx.strokeStyle = '#ffffff'; ctx.globalAlpha = Math.min(0.6, 0.3 + 0.4 * flash); ctx.lineWidth = 1;
           ctx.stroke();
         }
+      }
+      // H4: wewnętrzne warstwice (rdzeń) — solid, ciaśniejsze, tylko dla 'full'.
+      if (v.mode === 'full') {
+        ctx.setLineDash([]); ctx.lineWidth = 1;
+        for (const c of (td.contours ?? [])) {
+          for (const loop of c.loops) {
+            ctx.strokeStyle = baseColor;
+            ctx.globalAlpha = Math.min(1, 0.35 * warAlpha + 0.3 * flash);
+            ctx.beginPath();
+            let started = false;
+            for (const p of loop.pts) {
+              const s = projPt(p.x, p.y);
+              if (!s) { started = false; continue; }
+              if (!started) { ctx.moveTo(s.sx, s.sy); started = true; } else ctx.lineTo(s.sx, s.sy);
+            }
+            ctx.closePath(); ctx.stroke();
+          }
+        }
+        ctx.setLineDash([6, 5]);   // przywróć dash na kolejne izolinie
       }
     }
     ctx.setLineDash([]); ctx.globalAlpha = 1;
@@ -5837,10 +5217,10 @@ export class FleetManagerOverlay {
     const cv = document.createElement('canvas'); cv.width = mb.nx; cv.height = mb.ny;
     const c2 = cv.getContext('2d'); const img = c2.createImageData(mb.nx, mb.ny);
     const { r, g, b } = hexToRgb(td.color);
-    const soft = cfg.SOFT_TINT, lo = cfg.SOFT_RAMP_LO ?? 40, hi = cfg.SOFT_RAMP_HI ?? 200, fullA = Math.round(fillAlpha * 255);
+    const fullA = Math.round(fillAlpha * 255);   // H4: „rozlane światło" (poolFillAlpha) zamiast binarnego
     for (let k = 0; k < td.mask.length; k++) {
-      const m = td.mask[k];   // miękkie krawędzie (B6): alpha z wartości maski vs binarny próg
-      const av = soft ? Math.round(fullA * Math.min(1, Math.max(0, (m - lo) / Math.max(1, hi - lo)))) : (m >= 128 ? fullA : 0);
+      const m = td.mask[k];   // H4: alpha „rozlanego światła" — jasny rdzeń → gasnący front
+      const av = poolFillAlpha(m, fullA, cfg);
       if (av > 0) { const o = k * 4; img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = av; }
     }
     c2.putImageData(img, 0, 0);
@@ -5863,7 +5243,6 @@ export class FleetManagerOverlay {
       ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.textDim;
       ctx.fillText(t('fleet.stratcomNoData'), x + PAD, y + 20);
-      if (!isBig) this._hitZones.push({ x, y, w, h, type: 'stratcom_expand', data: { panel: 'galaxy' } });
       return;
     }
 
@@ -5880,6 +5259,14 @@ export class FleetManagerOverlay {
     ctx.textAlign = 'left';
     ctx.fillText(t('fleet.galaxyMapTitle'), x + PAD, y + 14);
 
+    // Renderer 3D ładuje się asynchronicznie (dynamic import). Dopóki nie jest gotowy,
+    // pokazujemy SAMO tło (+ nagłówek) zamiast błyskać płaskim rzutem 2D, który za moment
+    // zmienia się w 3D — to był „dziwny ruch kąta" przy otwarciu Stratcomu. Płaski 2D zostaje
+    // jako trwały fallback WYŁĄCZNIE przy realnej awarii WebGL (_galaxy3DFailed). Ciągły redraw
+    // z _drawStratcomTab dokańcza przejście pending→3D.
+    const ready3D = isBig && this._ensureGalaxy3D();
+    if (isBig && !ready3D && !this._galaxy3DFailed) return;
+
     ctx.save();
     ctx.beginPath();
     ctx.rect(x + 1, y, w - 2, h - 1);
@@ -5890,7 +5277,7 @@ export class FleetManagerOverlay {
     let use3D = false;
     let projS, projPt;   // projS(systemLike{x,y,z}) / projPt(galaxyX, galaxyY) → {sx,sy}|null
 
-    if (isBig && this._ensureGalaxy3D()) {
+    if (ready3D) {
       const g3 = this._galaxy3D;
       const hx = home.x ?? 0, hy = home.y ?? 0, hz = home.z ?? 0;   // home → origin sceny
       const m = ctx.getTransform ? ctx.getTransform() : { a: 1, d: 1 };
@@ -5912,8 +5299,8 @@ export class FleetManagerOverlay {
       }
 
       if (this._galaxyDist == null) this._galaxyDist = g3.fitDist;
-      // Galaktyka stoi statycznie — obrót WYŁĄCZNIE ręczny (LPM-drag). Brak auto-spin.
-      g3.setCameraOrbit(this._galaxyYaw, this._galaxyPitch, this._galaxyDist);
+      // Holotable: stały skos + azymut; przeciąganie PANuje po dysku (_holotablePanTarget = look-at).
+      g3.setCameraOrbit(this._galaxyYaw, this._galaxyPitch, this._galaxyDist, { x: this._holotablePanTarget.x, y: 0, z: this._holotablePanTarget.z });
 
       if (g3.render(wPx, hPx)) {
         use3D = true;
@@ -5948,6 +5335,10 @@ export class FleetManagerOverlay {
       if (!use3D) this._drawStratcomTerritory2D(ctx, projPt, isBig);
       else this._drawStratcomTerritoryLabels(ctx, projPt);
     }
+
+    // H6: warp-lane (płynące światło) między układami gracza — konstelacja imperium
+    // (nad strefą, pod gwiazdami). projS działa i w 3D (skośna płyta), i w 2D fallback.
+    this._drawOwnedLanes(ctx, projS);
 
     // Linie jump-gate (między widocznymi)
     for (const g of systems.filter(s => s.jumpGate && visIds.has(s.id))) {
@@ -6060,32 +5451,116 @@ export class FleetManagerOverlay {
       if (p) this._drawStratcomOwnBlip(ctx, e, p.sx, p.sy);
     }
 
+    // Soczewka sensora (H5): pierścień zasięgu + obracający się sweep od home (gdy włączona).
+    if (this._sensorLens && vis.rangeLY > 0) this._drawSensorSweep(ctx, home, vis.rangeLY, projS, projPt);
+
     // Panel operacyjny / rozkaz warp (duży + selekcja)
     if (isBig && selSys) {
       const selData = systems.find(s => s.id === selSys);
       if (selData) {
         if (this._selectedWarpShipId) this._drawWarpOrderPanel(ctx, x, y, w, h, selData, vMgr);
-        else this._drawStratcomOps(ctx, x, y, w, h, selData, ssMgr, vMgr, colMgr);
+        else this._drawStratcomDetail(ctx, x, y, w, h, selData, ssMgr, vMgr, colMgr);
       }
     }
 
     ctx.restore();
 
-    if (!isBig) this._hitZones.push({ x, y, w, h, type: 'stratcom_expand', data: { panel: 'galaxy' } });
+    // Przełącznik soczewki sensora (chrome, poza clip) — pod tytułem mapy.
+    this._drawSensorLensButton(ctx, x, y);
   }
 
-  // Panel POLITYCZNY (radar): imperium / relacja / populacja / życie — jeśli znane —
-  // + rozkaz „Wyślij statek" (radar daje rozkaz tak samo jak mapa galaktyki).
-  _drawStratcomPolitical(ctx, areaX, areaY, areaW, areaH, sys, empReg, intel, dipl, colMgr, vMgr) {
-    const PAD = 8;
-    const panelW = Math.min(216, Math.max(150, areaW - 16));
-    const px = areaX + areaW - panelW - 8;
-    const py = areaY + 8;
+  // ── Warp-lane / konstelacja imperium (H6) ──────────────────────────────────
+  // Płynące światło (animowany dash) po minimalnym drzewie rozpinającym układy GRACZA.
+  // 2D chrome przez projS → działa i na skośnej płycie 3D, i w fallbacku 2D. Kolor imperium.
+  _drawOwnedLanes(ctx, projS) {
+    const terr = window.KOSMOS?.territoryService;
+    const systems = window.KOSMOS?.galaxyData?.systems ?? [];
+    const owned = terr?.getOwnedSystems?.('player') ?? [];
+    if (owned.length < 2) return;
+    const nodes = owned.map(o => systems.find(s => s.id === o.systemId)).filter(Boolean);
+    if (nodes.length < 2) return;
+    const edges = computeOwnedLanes(nodes.map(s => ({ x: s.x ?? 0, y: s.y ?? 0, z: s.z ?? 0 })));
+    const now = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
+    ctx.save();
+    ctx.strokeStyle = terr.getEmpireColor('player');
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 8]);
+    ctx.lineDashOffset = -(now * LANE_FLOW_PX_PER_SEC);   // płynące światło
+    ctx.globalAlpha = 0.65;
+    for (const [i, j] of edges) {
+      const a = projS(nodes[i]), b = projS(nodes[j]);
+      if (!a || !b) continue;
+      ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+    }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    ctx.restore();
+  }
 
-    const empId = sys.empireId;
+  // ── Soczewka sensora (H5) ──────────────────────────────────────────────────
+  // Pierścień zasięgu obserwatorium wokół home + obracający się „sweep" z zanikającym
+  // śladem. Odzyskuje radarowe „jak daleko widzę" bez drugiej mapy. 2D na płycie
+  // (projS/projPt) → leży na dysku holotable. Wrogie ghost-blipy rysowane osobno (zawsze).
+  _drawSensorSweep(ctx, home, rangeLY, projS, projPt) {
+    const hx = home.x ?? 0, hy = home.y ?? 0;
+    const now = (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
+    const ph = projS(home); if (!ph) return;
+    ctx.save();
+    // Pierścień zasięgu (okrąg na dysku → elipsa po projekcji skośnej)
+    const N = 64;
+    ctx.strokeStyle = 'rgba(0,255,180,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([5, 5]);
+    ctx.beginPath(); let started = false;
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const s = projPt(hx + rangeLY * Math.cos(a), hy + rangeLY * Math.sin(a));
+      if (!s) { started = false; continue; }
+      if (!started) { ctx.moveTo(s.sx, s.sy); started = true; } else ctx.lineTo(s.sx, s.sy);
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+    // Sweep: linia home→krawędź pod obracającym się kątem + zanikający ślad
+    const base = (now / 6) * Math.PI * 2;   // ~6 s / obrót
+    const TRAIL = 7;
+    for (let k = 0; k < TRAIL; k++) {
+      const edge = projPt(hx + rangeLY * Math.cos(base - k * 0.09), hy + rangeLY * Math.sin(base - k * 0.09));
+      if (!edge) continue;
+      ctx.strokeStyle = `rgba(0,255,180,${(0.5 * (1 - k / TRAIL)).toFixed(3)})`;
+      ctx.lineWidth = k === 0 ? 2 : 1;
+      ctx.beginPath(); ctx.moveTo(ph.sx, ph.sy); ctx.lineTo(edge.sx, edge.sy); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Przełącznik soczewki sensora — mały przycisk pod tytułem mapy (lewy-górny).
+  _drawSensorLensButton(ctx, x, y) {
+    const bw = 100, bh = 18, bx = x + 10, by = y + 22;
+    const on = this._sensorLens;
+    ctx.fillStyle = on ? 'rgba(0,255,180,0.14)' : 'rgba(20,28,36,0.6)';
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = on ? THEME.accent : THEME.border; ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, bw, bh);
+    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+    ctx.fillStyle = on ? THEME.accent : THEME.textSecondary;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(`📡 ${t('fleet.sensorLens')}`, bx + 6, by + bh / 2 + 1);
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+    this._hitZones.push({ x: bx, y: by, w: bw, h: bh, type: 'stratcom_lens_toggle' });
+  }
+
+  // Panel DETALU układu (scalony polityczny + operacyjny) — jedna mapa = jeden panel.
+  // Nazwa / status / imperium+wrogość / terytorium / populacja+życie / skan + akcje.
+  // Tło = absorber klików (nie przepuszcza do gwiazd pod spodem — patrz stratcom_detail_bg).
+  _drawStratcomDetail(ctx, areaX, areaY, areaW, areaH, sys, ssMgr, vMgr, colMgr) {
+    const PAD = 8;
+    const empReg = window.KOSMOS?.empireRegistry;
+    const intel  = window.KOSMOS?.intelSystem;
+    const dipl   = window.KOSMOS?.diplomacySystem;
+    const terr   = window.KOSMOS?.territoryService;
+    const obsSys = window.KOSMOS?.observatorySystem;
+
+    const empId    = sys.empireId;
     const empKnown = !!(empId && (intel ? intel.isAtLeast(empId, 'rumor') : false));
-    const explored = !!sys.explored;
-    const known = !!sys.isHome || explored || empKnown;
+    const sysReg   = ssMgr?.getSystem(sys.id);
+    const explored = !!sysReg?.explored || !!sys.explored;
+    const known    = !!sys.isHome || explored || empKnown;
 
     // Populacja + życie (tylko gdy znane)
     let pop = null, life = null;
@@ -6096,20 +5571,46 @@ export class FleetManagerOverlay {
       if (planets.length) life = planets.some(p => (p.lifeScore ?? 0) > 0 || (p.lifeStage && p.lifeStage !== 'none' && p.lifeStage !== 'sterile'));
     }
 
-    const panelH = 132;
+    // Terytorium (kontrola strefy wpływów — intel-gated; może różnić się od empireId układu)
+    const owner = terr?.getSystemOwner?.(sys.id);
+    let tName = null, tColor = null;
+    if (owner === 'player') { tName = t('territory.playerEmpire'); tColor = terr.getEmpireColor(owner); }
+    else if (owner && intel?.isAtLeast?.(owner, 'contact')) { tName = empReg?.get?.(owner)?.name ?? '?'; tColor = terr.getEmpireColor(owner); }
+
+    const layout = this._buildSystemScanLayout(sys, obsSys, explored);
+
+    // Wysokość panelu — z rzeczywiście rysowanych wierszy (unikamy przycięcia/pustki)
+    let panelH = PAD + 20 /*nazwa*/ + 16 /*status*/;
+    panelH += empKnown ? 28 : 14;          // imperium+wrogość | „nieznane"
+    if (tName) panelH += 16;               // terytorium
+    panelH += 28;                          // populacja + życie
+    if (layout.height) panelH += layout.height + 2;
+    if (!sys.isHome) panelH += 22;         // przycisk „Wyślij statek"
+    if (explored && sysReg) panelH += 22;  // przycisk „Przełącz widok"
+    panelH += PAD;
+
+    const panelW = Math.min(220, Math.max(160, areaW - 16));
+    const px = areaX + areaW - panelW - 8;
+    const py = areaY + 8;
+
+    // Tło + ramka + absorber klików (PRZED przyciskami → przyciski wygrywają reverse-find)
     ctx.fillStyle = 'rgba(8,12,18,0.92)';
     ctx.fillRect(px, py, panelW, panelH);
     ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
     ctx.strokeRect(px, py, panelW, panelH);
+    this._hitZones.push({ x: px, y: py, w: panelW, h: panelH, type: 'stratcom_detail_bg' });
 
     let iy = py + PAD;
     ctx.textAlign = 'left';
+    // Nazwa
     ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
     ctx.fillStyle = sys.colorHex ?? THEME.textPrimary;
     ctx.fillText(`⭐ ${this._systemDisplayName(sys)}`, px + PAD, iy + 12); iy += 20;
-
+    // Status eksploracji
     ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    // Imperium
+    ctx.fillStyle = explored ? THEME.success : THEME.textDim;
+    ctx.fillText(explored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10); iy += 16;
+    // Imperium + wrogość
     if (empKnown) {
       const emp = empReg?.get(empId);
       ctx.fillStyle = ARCHETYPES[emp?.archetype]?.color ?? THEME.textPrimary;
@@ -6121,17 +5622,10 @@ export class FleetManagerOverlay {
       ctx.fillStyle = THEME.textDim;
       ctx.fillText(t('fleet.stratcomEmpireUnknown'), px + PAD, iy + 10); iy += 14;
     }
-    // Terytorium (kontrola strefy wpływów — może różnić się od empireId układu; intel-gated)
-    {
-      const terr = window.KOSMOS?.territoryService;
-      const owner = terr?.getSystemOwner?.(sys.id);
-      let tName = null;
-      if (owner === 'player') tName = t('territory.playerEmpire');
-      else if (owner && intel?.isAtLeast?.(owner, 'contact')) tName = empReg?.get?.(owner)?.name ?? '?';
-      if (tName) {
-        ctx.fillStyle = terr.getEmpireColor(owner);
-        ctx.fillText(t('territory.controlRow', tName), px + PAD, iy + 10); iy += 14;
-      }
+    // Terytorium
+    if (tName) {
+      ctx.fillStyle = tColor;
+      ctx.fillText(t('territory.controlRow', tName), px + PAD, iy + 10); iy += 16;
     }
     // Populacja
     ctx.fillStyle = THEME.textSecondary;
@@ -6139,77 +5633,12 @@ export class FleetManagerOverlay {
     // Życie
     ctx.fillStyle = life === true ? THEME.success : THEME.textSecondary;
     ctx.fillText(life == null ? t('fleet.stratcomLifeUnknown') : life ? t('fleet.stratcomLifeYes') : t('fleet.stratcomLifeNo'), px + PAD, iy + 10); iy += 14;
-    // Status
-    ctx.fillStyle = explored ? THEME.success : THEME.textDim;
-    ctx.fillText(explored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10);
 
-    // ── Rozkaz „Wyślij statek" — to samo wejście co na mapie galaktyki ──────────
-    // Ten sam typ hitu (cluster_send) i ten sam gating co _drawStratcomOps; picker statku
-    // rysuje zakładka Stratcomu (_pendingSendSystemId), więc handler nie wymaga zmian.
-    // Przyklejony do DOŁU panelu — blok informacyjny wyżej ma zmienną wysokość.
-    if (!sys.isHome) {
-      const btnW = panelW - PAD * 2, btnH = 18;
-      const by = py + panelH - PAD - btnH;
-      const activePid = colMgr?.activePlanetId;
-      const avail = activePid ? (vMgr?.getAvailable?.(activePid) ?? []) : [];
-      const hasWarpShip = avail.some(v => v.warpFuel?.max > 0);
-      ctx.fillStyle = hasWarpShip ? 'rgba(0,255,180,0.08)' : 'rgba(60,60,60,0.3)';
-      ctx.fillRect(px + PAD, by, btnW, btnH);
-      ctx.strokeStyle = hasWarpShip ? THEME.accent : THEME.border; ctx.lineWidth = 1;
-      ctx.strokeRect(px + PAD, by, btnW, btnH);
-      ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-      ctx.fillStyle = hasWarpShip ? THEME.accent : THEME.textDim; ctx.textAlign = 'center';
-      ctx.fillText(t('fleet.clusterSend'), px + PAD + btnW / 2, by + 13); ctx.textAlign = 'left';
-      if (hasWarpShip) this._hitZones.push({ x: px + PAD, y: by, w: btnW, h: btnH, type: 'cluster_send', data: { systemId: sys.id } });
-    }
-  }
-
-  // Panel OPERACYJNY (mapa galaktyki): skan układu (liczby ciał) + wyślij statek + przełącz widok.
-  _drawStratcomOps(ctx, areaX, areaY, areaW, areaH, sys, ssMgr, vMgr, colMgr) {
-    const PAD = 8;
-    const panelW = Math.min(216, Math.max(160, areaW - 16));
-    const px = areaX + areaW - panelW - 8;
-    const py = areaY + 8;
-    const sysReg = ssMgr?.getSystem(sys.id);
-    const explored = !!sysReg?.explored || !!sys.explored;
-    const obsSys = window.KOSMOS?.observatorySystem;
-    const layout = this._buildSystemScanLayout(sys, obsSys, explored);
-
-    const panelH = 66 + layout.height + (!sys.isHome ? 22 : 0) + (explored && sysReg ? 22 : 0);   // +16: wiersz Terytorium (B6)
-    ctx.fillStyle = 'rgba(8,12,18,0.92)';
-    ctx.fillRect(px, py, panelW, panelH);
-    ctx.strokeStyle = THEME.border; ctx.lineWidth = 1;
-    ctx.strokeRect(px, py, panelW, panelH);
-
-    let iy = py + PAD;
-    ctx.textAlign = 'left';
-    ctx.font = `bold ${THEME.fontSizeNormal}px ${THEME.fontFamily}`;
-    ctx.fillStyle = sys.colorHex ?? THEME.textPrimary;
-    ctx.fillText(`⭐ ${this._systemDisplayName(sys)}`, px + PAD, iy + 12); iy += 20;
-
-    ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
-    ctx.fillStyle = explored ? THEME.success : THEME.textDim;
-    ctx.fillText(explored ? t('fleet.clusterExplored') : t('fleet.clusterUnexplored'), px + PAD, iy + 10); iy += 16;
-
-    // Terytorium (kontrola strefy wpływów) — intel-gated (B6)
-    {
-      const terr = window.KOSMOS?.territoryService, intel = window.KOSMOS?.intelSystem, empReg = window.KOSMOS?.empireRegistry;
-      const owner = terr?.getSystemOwner?.(sys.id);
-      let tName = null;
-      if (owner === 'player') tName = t('territory.playerEmpire');
-      else if (owner && intel?.isAtLeast?.(owner, 'contact')) tName = empReg?.get?.(owner)?.name ?? '?';
-      if (tName) {
-        ctx.fillStyle = terr.getEmpireColor(owner);
-        ctx.fillText(t('territory.controlRow', tName), px + PAD, iy + 10); iy += 16;
-      }
-    }
-
-    // Sekcja skanu układu (wyniki + kontrolka)
+    // Sekcja skanu układu (wyniki + kontrolka skanu obserwatorium)
     iy = this._drawSystemScanSection(ctx, px, iy, panelW, PAD, sys, layout);
 
-    // Przyciski akcji
+    // Akcje
     const btnW = panelW - PAD * 2, btnH = 18;
-    // Wyślij statek
     if (!sys.isHome) {
       const activePid = colMgr?.activePlanetId;
       const avail = activePid ? (vMgr?.getAvailable?.(activePid) ?? []) : [];
@@ -6223,7 +5652,6 @@ export class FleetManagerOverlay {
       if (hasWarpShip) this._hitZones.push({ x: px + PAD, y: iy, w: btnW, h: btnH, type: 'cluster_send', data: { systemId: sys.id } });
       iy += btnH + 4;
     }
-    // Przełącz widok (gdy odwiedzony)
     if (explored && sysReg) {
       ctx.fillStyle = 'rgba(0,255,180,0.08)'; ctx.fillRect(px + PAD, iy, btnW, btnH);
       ctx.strokeStyle = THEME.accent; ctx.strokeRect(px + PAD, iy, btnW, btnH);

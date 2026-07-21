@@ -222,7 +222,12 @@ export const GAME_CONFIG = {
     SOFT_TINT: false,    // B6: decyzja Filipa — BINARY (próg >=128); kod soft pod flagą na przyszłość
     SOFT_RAMP_LO: 40,    // maska < LO → alpha 0 (używane gdy SOFT_TINT=true)
     SOFT_RAMP_HI: 200,   // maska ≥ HI → pełne FILL_ALPHA (liniowy ramp LO..HI)
-    RADAR_FILL_ALPHA: 0.18,   // B6: tint stref na tarczy radaru — wyższy (glow tarczy zmywa 0.07)
+    RADAR_FILL_ALPHA: 0.18,   // (radar scalony w H1 — nieużywane) tint stref na tarczy
+    // H4 — „rozlane światło" (jasny rdzeń → gasnący front) zamiast płaskiego wypełnienia:
+    POOL_LUMA_LO: 128,       // maska na izolinii (=ISO) → alpha bazowa (front strefy)
+    POOL_LUMA_HI: 240,       // maska przy rdzeniu → alpha × POOL_CORE_MULT (jasny rdzeń)
+    POOL_CORE_MULT: 2.6,     // ile razy jaśniejszy rdzeń względem frontu (baza = FILL_ALPHA)
+    CONTOUR_LEVELS: [1.5, 2.2],  // H4 zagnieżdżone warstwice: ISO×mnożnik (ciaśniejsze pętle rdzenia)
   },
 };
 

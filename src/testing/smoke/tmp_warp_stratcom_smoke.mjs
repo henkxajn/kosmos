@@ -13,6 +13,8 @@ const ok = (c, m) => { if (c) { pass++; } else { fail++; console.log('FAIL:', m)
 const fm = await import('../../ui/FleetManagerOverlay.js');
 const { WarpRouteSystem } = await import('../../systems/WarpRouteSystem.js');
 const O = fm.FleetManagerOverlay;
+// Headless: brak WebGL → wymuś ścieżkę 2D fallback (renderer 3D nigdy się nie ładuje).
+O.prototype._ensureGalaxy3D = function () { this._galaxy3DFailed = true; return false; };
 
 function mockCtx() {
   const grad = { addColorStop() {} };
@@ -81,41 +83,41 @@ ok(typeof new O()._drawWarpShipList === 'function', '_drawWarpShipList istnieje'
 // W1 — radar render z listą warp (bez selekcji) bez wyjątku (lista + filtr)
 {
   const o = new O(); let threw = null;
-  try { o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true); } catch (e) { threw = e; }
+  try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W1: radar z tabelą warp bez wyjątku: ' + (threw?.message ?? ''));
 }
 
 // W2 — marker na radarze (statek wybrany) bez wyjątku
 {
   const o = new O(); o._selectedWarpShipId = 'v_warp'; let threw = null;
-  try { o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true); } catch (e) { threw = e; }
+  try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W2: radar + marker (docked) bez wyjątku: ' + (threw?.message ?? ''));
 }
 
 // W3 — marker dla statku w tranzycie (currentGalX/Y) bez wyjątku
 {
   const o = new O(); o._selectedWarpShipId = 'v_tr'; let threw = null;
-  try { o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true); } catch (e) { threw = e; }
+  try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W3: radar + marker (in_transit) bez wyjątku: ' + (threw?.message ?? ''));
 }
 
 // W4 — panel rozkazu (statek wybrany + system wybrany) bez wyjątku (REALNY planner)
 {
   const o = new O(); o._selectedWarpShipId = 'v_warp'; o._selectedClusterSystem = 'sys_001'; let threw = null;
-  try { o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true); } catch (e) { threw = e; }
+  try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W4: radar + panel rozkazu bez wyjątku: ' + (threw?.message ?? ''));
 }
 
 // W5 — HOME jako cel (statek z obcego układu) panel bez wyjątku (planner same_system/ok)
 {
   const o = new O(); o._selectedWarpShipId = 'v_warp'; o._selectedClusterSystem = 'sys_home'; let threw = null;
-  try { o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true); } catch (e) { threw = e; }
+  try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W5: HOME jako cel (panel) bez wyjątku: ' + (threw?.message ?? ''));
 }
 
 // W6 — galaxy big + ship + system → marker galaktyki + panel rozkazu bez wyjątku
 {
-  const o = new O(); o._stratcomBig = 'galaxy'; o._selectedWarpShipId = 'v_warp'; o._selectedClusterSystem = 'sys_002'; let threw = null;
+  const o = new O(); o._selectedWarpShipId = 'v_warp'; o._selectedClusterSystem = 'sys_002'; let threw = null;
   try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W6: galaxy big + marker + panel rozkazu bez wyjątku: ' + (threw?.message ?? ''));
 }
@@ -163,10 +165,10 @@ ok(typeof new O()._drawWarpShipList === 'function', '_drawWarpShipList istnieje'
   warpDocked.warpRoute = { hops: ['sys_home', 'sys_001', 'sys_002'], legIndex: 0, finalSystemId: 'sys_002', totalFuelPlanned: 2, startedYear: 0 };
   const o = new O(); o._selectedWarpShipId = 'v_warp';
   let threw = null;
-  try { o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true); } catch (e) { threw = e; }
+  try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W11a: radar z linią trasy multi-hop bez wyjątku: ' + (threw?.message ?? ''));
   threw = null;
-  try { o._stratcomBig = 'galaxy'; o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
+  try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W11b: galaktyka z linią trasy bez wyjątku: ' + (threw?.message ?? ''));
   // bezpośrednie wywołanie helpera z projekcją
   threw = null;
@@ -246,7 +248,7 @@ function spyBlips(o) {
   const prev = baseKOSMOS.vesselManager;
   baseKOSMOS.vesselManager = vm2;
   let threw = null;
-  try { o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true); } catch (e) { threw = e; }
+  try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W16b: radar z licznikiem „+N" bez wyjątku: ' + (threw?.message ?? ''));
   baseKOSMOS.vesselManager = prev;
 }
@@ -254,37 +256,35 @@ function spyBlips(o) {
 // W17 — RADAR: ikony rysowane BEZ selekcji; selekcja tylko zamienia ikonę na marker
 {
   const o = new O(); const s = spyBlips(o);
-  o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true);
+  o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600);
   ok(s.triangles === 2 && s.markers === 0, `W17a: radar bez selekcji → 2 ikony, 0 markerów (jest ${s.triangles}/${s.markers})`);
 
   const o2 = new O(); const s2 = spyBlips(o2); o2._selectedWarpShipId = 'v_warp';
-  o2._drawStratcom(mockCtx(), 0, 0, 1000, 600, true);
+  o2._drawStratcomTab(mockCtx(), 0, 0, 1000, 600);
   ok(s2.triangles === 1 && s2.markers === 1,
     `W17b: selekcja → 1 marker + reszta floty nadal widoczna (jest ${s2.triangles}/${s2.markers})`);
 }
 
-// W18 — MAPA GALAKTYKI: to samo (ikony bez selekcji). Panel wołany BEZPOŚREDNIO —
-// _drawStratcomTab rysuje OBA panele naraz (mały radar + duża galaktyka), więc liczyłby
-// ikony podwójnie. Że oba panele rysują flotę równocześnie sprawdza W18c.
+// W18 — MAPA GALAKTYKI: ikony floty bez selekcji; selekcja zamienia ikonę na marker.
 {
-  const o = new O(); const s = spyBlips(o); o._stratcomBig = 'galaxy';
+  const o = new O(); const s = spyBlips(o);
   o._drawStratcomGalaxy(mockCtx(), 0, 0, 700, 600, true);
   ok(s.triangles === 2 && s.markers === 0, `W18a: galaktyka bez selekcji → 2 ikony (jest ${s.triangles}/${s.markers})`);
 
-  const o2 = new O(); const s2 = spyBlips(o2); o2._stratcomBig = 'galaxy'; o2._selectedWarpShipId = 'v_tr';
+  const o2 = new O(); const s2 = spyBlips(o2); o2._selectedWarpShipId = 'v_tr';
   o2._drawStratcomGalaxy(mockCtx(), 0, 0, 700, 600, true);
   ok(s2.triangles === 1 && s2.markers === 1, `W18b: galaktyka + selekcja (jest ${s2.triangles}/${s2.markers})`);
 
-  // Oba panele Stratcomu (duży + mały podgląd) pokazują flotę → 2 statki × 2 panele.
-  const o3 = new O(); const s3 = spyBlips(o3); o3._stratcomBig = 'galaxy';
+  // Jedna mapa: _drawStratcomTab rysuje flotę RAZ (pasek warp to tabela — bez ikon floty).
+  const o3 = new O(); const s3 = spyBlips(o3);
   o3._drawStratcomTab(mockCtx(), 0, 0, 1000, 600);
-  ok(s3.triangles === 4 && s3.markers === 0, `W18c: flota na obu panelach zakładki (jest ${s3.triangles}/${s3.markers})`);
+  ok(s3.triangles === 2 && s3.markers === 0, `W18c: jedna mapa → flota raz (jest ${s3.triangles}/${s3.markers})`);
 }
 
 // W19 — RADAR: klik gwiazdy (bez wybranego statku) daje przycisk rozkazu (cluster_send)
 {
   const o = new O(); o._selectedClusterSystem = 'sys_001'; o._hitZones = [];
-  o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true);
+  o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600);
   const send = o._hitZones.filter(z => z.type === 'cluster_send');
   ok(send.length === 1 && send[0].data.systemId === 'sys_001',
     `W19: radar + panel polityczny → hit cluster_send na wybrany układ (jest ${send.length})`);
@@ -293,7 +293,7 @@ function spyBlips(o) {
 // W20 — HOME nie dostaje przycisku wysyłki (nie ma dokąd lecieć)
 {
   const o = new O(); o._selectedClusterSystem = 'sys_home'; o._hitZones = [];
-  o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true);
+  o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600);
   ok(o._hitZones.filter(z => z.type === 'cluster_send').length === 0, 'W20: HOME bez przycisku wysyłki');
 }
 
@@ -303,7 +303,7 @@ function spyBlips(o) {
   baseKOSMOS.vesselManager = { ...vmStub, getAvailable: () => [] };
   const o = new O(); o._selectedClusterSystem = 'sys_001'; o._hitZones = [];
   let threw = null;
-  try { o._drawStratcom(mockCtx(), 0, 0, 1000, 600, true); } catch (e) { threw = e; }
+  try { o._drawStratcomTab(mockCtx(), 0, 0, 1000, 600); } catch (e) { threw = e; }
   ok(threw === null, 'W21a: radar bez dostępnych statków bez wyjątku: ' + (threw?.message ?? ''));
   ok(o._hitZones.filter(z => z.type === 'cluster_send').length === 0, 'W21b: brak statku → brak hitu (gating jak w Ops)');
   baseKOSMOS.vesselManager = prev;

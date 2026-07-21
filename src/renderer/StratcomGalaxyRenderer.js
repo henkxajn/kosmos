@@ -24,12 +24,16 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
 import { STAR_TYPES, GAME_CONFIG } from '../config/GameConfig.js';
 import { loadStarTextures, hashCode, TEXTURE_VARIANTS } from './PlanetTextureUtils.js';
+import { orbitPosition, riserEndpoints } from './HolotableCamera.js';
+import { poolFillAlpha } from '../ui/TerritoryRenderLogic.js';
 
 const FOV = 50;
 // Tło kosmiczne (subtelne). Plik podmienialny; jasność regulowana mnożnikiem (niska = subtelne).
 const BG_URL = 'assets/backgrounds/deep_space.png';
 const BG_BRIGHTNESS = 0.25;   // 0..1 — scene.backgroundIntensity (1.0 = bez tłumienia)
 const TERRITORY_DASH_SPEED = 0.3;   // „marsz" dashа izolinii 3D (jedn. galakt./s; tuning B6)
+const RISER_COLOR   = 0x7796b5;     // chłodny błękit — pionowy „słupek z" od dysku do gwiazdy (głębia bez brył)
+const RISER_OPACITY = 0.35;         // subtelny, żeby nie zaśmiecać dysku (× dimF dla niezbadanych)
 
 export class StratcomGalaxyRenderer {
   constructor() {
@@ -221,6 +225,30 @@ export class StratcomGalaxyRenderer {
     // Brak osobnej poświaty-sprite: była ADDITYWNA/półprzezroczysta i to ona „przebijała".
     // Gorące centrum daje już sam shader sfery. (Glow z poprawną głębią → ewentualnie bloom.)
 
+    // ── Słupek (riser): pionowa szpilka od rzutu na dysk (Y=0) do gwiazdy (Y=z) — pokazuje
+    //    wysokość galaktyczną „z" jako głębię BEZ brył. depthWrite:false → nie okluduje;
+    //    opaque sfera zasłania odcinek wewnątrz rdzenia. Sierota w _starGroup (dispose z grupą). ──
+    const zH = s.z ?? 0;
+    if (Math.abs(zH) > 1e-3) {
+      const re = riserEndpoints(s.x ?? 0, s.y ?? 0, zH);   // Three: base=(x,0,y), top=(x,z,y)
+      const riserGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(re.base.x, re.base.y, re.base.z),
+        new THREE.Vector3(re.top.x,  re.top.y,  re.top.z),
+      ]);
+      const riserMat = new THREE.LineBasicMaterial({
+        color: RISER_COLOR, transparent: true, opacity: RISER_OPACITY * dimF, depthWrite: false,
+      });
+      this._starGroup.add(new THREE.Line(riserGeo, riserMat));
+      // Kropka u podstawy słupka — rzut gwiazdy na dysk (czytelna pozycja XY, gdy z ją unosi).
+      const baseDot = new THREE.Mesh(
+        new THREE.CircleGeometry(unit * 0.18, 16),
+        new THREE.MeshBasicMaterial({ color: RISER_COLOR, transparent: true, opacity: Math.min(1, RISER_OPACITY + 0.2) * dimF, depthWrite: false, side: THREE.DoubleSide }),
+      );
+      baseDot.position.set(re.base.x, re.base.y, re.base.z);   // (x, 0, y) na dysku
+      baseDot.rotation.x = -Math.PI / 2;                        // płasko na dysk XZ
+      this._starGroup.add(baseDot);
+    }
+
     this._starGroup.add(g);
   }
 
@@ -289,15 +317,15 @@ export class StratcomGalaxyRenderer {
       const cctx = cv.getContext('2d');
       const alpha = payload.fillAlpha ?? 0.07;
       const cfg = GAME_CONFIG.TERRITORY ?? {};
-      const soft = cfg.SOFT_TINT, lo = cfg.SOFT_RAMP_LO ?? 40, hi = cfg.SOFT_RAMP_HI ?? 200, fullA = Math.round(alpha * 255);
+      const fullA = Math.round(alpha * 255);   // H4: „rozlane światło" (poolFillAlpha) zamiast binarnego
       for (const l of full) {
         const lc = document.createElement('canvas'); lc.width = mb.nx; lc.height = mb.ny;
         const lctx = lc.getContext('2d'); const img = lctx.createImageData(mb.nx, mb.ny);
         const col = new THREE.Color(l.colorHex);
         const r = (col.r*255)|0, g = (col.g*255)|0, b = (col.b*255)|0;
         for (let k = 0; k < l.mask.length; k++) {
-          const m = l.mask[k];   // miękkie krawędzie (B6): alpha z wartości maski vs binarny próg
-          const av = soft ? Math.round(fullA * Math.min(1, Math.max(0, (m - lo) / Math.max(1, hi - lo)))) : (m >= 128 ? fullA : 0);
+          const m = l.mask[k];   // H4: alpha „rozlanego światła" — jasny rdzeń → gasnący front
+          const av = poolFillAlpha(m, fullA, cfg);
           if (av > 0) { const o = k*4; img.data[o]=r; img.data[o+1]=g; img.data[o+2]=b; img.data[o+3]=av; }
         }
         lctx.putImageData(img, 0, 0);
@@ -338,6 +366,18 @@ export class StratcomGalaxyRenderer {
         this._territoryLines.push(line);
         this._territoryGroup.add(line);
       }
+      // H4: wewnętrzne warstwice (rdzeń) — ciaśniejsze pętle, solid, ciemniejsze niż izolinia.
+      // Statyczne (bez dash/war-pulse) → NIE do _territoryLines; dispose przez _disposeGroup.
+      for (const c of (l.contours ?? [])) {
+        for (const loop of c.loops) {
+          if (!loop.pts || loop.pts.length < 2) continue;
+          const pts = loop.pts.map(p => new THREE.Vector3(p.x, 0.0, p.y));
+          pts.push(pts[0].clone());
+          const geo = new THREE.BufferGeometry().setFromPoints(pts);
+          const mat = new THREE.LineBasicMaterial({ color: baseCol.getHex(), transparent: true, opacity: 0.22, depthWrite: false });
+          this._territoryGroup.add(new THREE.Line(geo, mat));
+        }
+      }
     }
   }
 
@@ -359,14 +399,13 @@ export class StratcomGalaxyRenderer {
   }
 
   // Kamera orbitalna sferyczna (yaw=theta, pitch=phi, dist). Target domyślnie origin.
+  // Pozycja liczona w czystym HolotableCamera.orbitPosition (headless-testowalne; ten
+  // sam clamp pitcha 0.12..π-0.12 i ta sama formuła co dotychczas).
   setCameraOrbit(yaw, pitch, dist, target = null) {
     if (!this._camera) return;
     const tx = target?.x ?? 0, ty = target?.y ?? 0, tz = target?.z ?? 0;
-    const ph = Math.max(0.12, Math.min(Math.PI - 0.12, pitch));
-    const x = dist * Math.sin(ph) * Math.cos(yaw);
-    const y = dist * Math.cos(ph);
-    const z = dist * Math.sin(ph) * Math.sin(yaw);
-    this._camera.position.set(tx + x, ty + y, tz + z);
+    const p = orbitPosition(yaw, pitch, dist, target);
+    this._camera.position.set(p.x, p.y, p.z);
     this._camera.lookAt(tx, ty, tz);
     this._camera.updateMatrixWorld();
   }

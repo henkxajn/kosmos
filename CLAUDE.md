@@ -734,6 +734,47 @@ i18n `fleet.otherSystem/badgeWarp/crossSystemDelivery(+Hint)` + `order.composite
 
 ---
 
+## STRATCOM — „stół holograficzny" (holotable), jedna mapa galaktyki 2.5D (H0–H6, save v92 bez migracji, live-gate PASS)
+
+Przeprojektowanie zakładki STRATCOM: DWIE mapy obok siebie (radar 2D + galaktyka 3D, karmione tym samym
+`_stratcomVisibleSystems` → redundancja „rozmyte") → JEDNA mapa („stół holograficzny"): stała pochylona płyta
+z panem, głębia bez brył. Rozwiązuje redundancję i płaskość stref wpływów. Warstwa prezentacji — BEZ migracji
+save. Plan: `C:\Users\Komputer\.claude\plans\troche-mi-sie-nie-curried-meerkat.md`.
+
+- **H0** `src/renderer/HolotableCamera.js` (NEW, ZERO importu three — headless-testowalny): `orbitPosition`
+  (lustro setCameraOrbit — regresja w smoke), `clampPitch`, `DEFAULT_OBLIQUE_PITCH=0.92`, `panScreenToWorld`,
+  `riserEndpoints`, `computeOwnedLanes` (MST — w TerritoryRenderLogic). `setCameraOrbit` deleguje do `orbitPosition`.
+- **H1 — jedna mapa**: `_drawStratcomTab` = pełnowymiarowa `_drawStratcomGalaxy` + pasek statków warp z lewej.
+  USUNIĘTE (~801 linii): radar `_drawStratcom`, martwe `_drawStarCluster`/`_drawClusterInfoPanel`, flaga
+  `_stratcomBig`, `stratcom_expand`. Panele „polityczny"+„operacyjny" SCALONE w `_drawStratcomDetail` + absorber
+  `stratcom_detail_bg`. Warp/skany/fog-of-war/blipy/jump-gate/switchSystem zachowane. **Fix async-flash**:
+  `_ensureGalaxy3D` ładuje renderer async → klatka 1 była płaskim 2D, potem skok w 3D. Teraz pending → SAMO tło
+  (2D fallback TYLKO przy `_galaxy3DFailed`). **Ciągły redraw** przywrócony w `_drawStratcomTab`
+  (`uiManager._dirty=true` — radar robił to przez STRATCOM_GLOW).
+- **H2 — stały skos + pan**: przeciąganie = PAN po dysku (`panScreenToWorld` → `_holotablePanTarget` = look-at),
+  NIE obrót. Pitch/yaw stałe. Clamp ±30 ly. Reset panu przy `close`. Zoom (scroll) bez zmian.
+- **H3 — słupki (risers)**: pionowa szpilka dysk(Y=0)→gwiazda(Y=z) — `z` jako głębia bez brył
+  (`RISER_COLOR/OPACITY`, `depthWrite:false`) + kropka u podstawy (CircleGeometry na dysku). Sierota w
+  `_starGroup` (dispose przez `_disposeGroup` traverse).
+- **H4 — strefy jako rozlane światło + warstwice** (koniec płaskości): `poolFillAlpha` (TerritoryRenderLogic,
+  pure) — jasny rdzeń → gasnący front zamiast binarnego `m>=128`; wspólny helper 3D (`setTerritory`) + 2D
+  (`_territoryTintCanvas`). `TerritoryField` liczy zagnieżdżone warstwice przy ISO×`CONTOUR_LEVELS` [1.5,2.2]
+  (`contours:[{isoMul,loops}]`; hash niezmieniony — pochodne pola); render inner solid lines (3D static w
+  `_territoryGroup`, 2D mirror dla `full`). Config `POOL_LUMA_LO/HI`, `POOL_CORE_MULT`, `CONTOUR_LEVELS`.
+- **H5 — soczewka sensora**: przycisk „📡 Sensory" (`stratcom_lens_toggle`, `_sensorLens`) → pierścień zasięgu
+  (obs-gated `STRATCOM_LY_BY_LEVEL`, wymaga Obs Lv4+) + obracający się sweep z zanikającym śladem (2D chrome via
+  projS/projPt). Ghost-blipy wroga bez zmian. i18n `fleet.sensorLens` PL+EN.
+- **H6 — warp-lane / konstelacja**: płynące światło (animowany dash) po MST (`computeOwnedLanes`, pure) między
+  układami GRACZA, kolor imperium; 2D chrome via projS (działa 3D+2D). `LANE_FLOW_PX_PER_SEC=22`. ≥2 układów.
+
+Smoke: `tmp_holotable_cam_smoke` 19 · `tmp_stratcom_smoke` 42 (przepisany: jedna mapa + H2/H5/H6) ·
+`tmp_territory_contours_smoke` 13 · `tmp_warp_stratcom_smoke` 43 (przepięte z radaru na jedną mapę) + regr
+territory b2-b6 / obs-scan / cross-system-leak / fc-command 0 FAIL. Pliki: `StratcomGalaxyRenderer.js`,
+`FleetManagerOverlay.js`, `TerritoryField.js`, `TerritoryRenderLogic.js`, `GameConfig.js`, i18n; NEW
+`HolotableCamera.js`. Backlog: kalibracja (riser/pool/sweep), foreshortening panu, invert flags kierunku panu.
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
