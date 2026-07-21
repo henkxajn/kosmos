@@ -11,7 +11,6 @@ import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { ShaderPass }     from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
 import EventBus           from '../core/EventBus.js';
 import EntityManager      from '../core/EntityManager.js';
@@ -50,9 +49,16 @@ import { resolveFxEndpointRaw, factionColorRaw, isEndpointVisibleByQuality,
 
 const AU          = GAME_CONFIG.AU_TO_PX;   // 110
 const WORLD_SCALE = 10;                      // dzielnik pozycji: AU×11 w 3D
-// Warstwa selektywnego bloomu — obiekty tu przypisane (exhaust cone, wraki, eksplozje)
-// bloomują; reszta sceny (gwiazda, tło, planety) NIE. Eliminuje niebieski veil na tle.
-const BLOOM_LAYER = 1;
+// ── Pipeline HDR (2026-07-20, analiza-grafiki-mapy-3d.md) ────────────────
+// Scena liczona w linear HDR → JEDEN pełnoekranowy UnrealBloom z progiem 1.0 →
+// ACES filmic → sRGB (OutputPass). Bloomują wyłącznie piksele HDR (>1.0):
+// rdzeń/korona gwiazdy, smugi silników, eksplozje, żarzące wraki. Cała reszta
+// (tło, planety, markery ≤1.0) NIE bloomuje → czerń zostaje czernią, zero veilu.
+// Zastąpiło warstwę selektywnego bloomu (BLOOM_LAYER) i 2 composery.
+// Wzmocnienia HDR emiterów FX (dobrane pod próg 1.0 z uwzgl. opacity/flicker):
+const FX_HDR_EXHAUST   = 4.5;  // gain vertex-colors smugi (opacity 0.35 × flicker ~0.8 → apex ~1.3)
+const FX_HDR_EXPLOSION = 2.5;  // gain kuli ognia i pierścienia uderzeniowego
+const FX_HDR_WRECK     = 2.2;  // emissiveIntensity żarzącego się wraku
 const S           = (v) => v / WORLD_SCALE; // skrót: skaluj pozycję
 const SR          = (r) => r / WORLD_SCALE; // skaluj promień
 
@@ -158,10 +164,13 @@ export class ThreeRenderer {
     // ograniczony. Composery (bloom/final) używają tego samego ratio (spójność RT↔ekran).
     this._pixelRatio = Math.min((window.devicePixelRatio || 1) * 1.5, 2);
     this.renderer.setPixelRatio(this._pixelRatio);
-    // Poprawne zarządzanie kolorami dla MeshStandardMaterial (PBR)
-    this.renderer.toneMapping    = THREE.NoToneMapping;
+    // Pipeline HDR: scena w linear HDR, ACES filmic tone mapping + sRGB na wyjściu.
+    // W torze composera tone mapping aplikuje OutputPass (render do RT jest surowy);
+    // w fallbacku direct-render aplikuje go renderer sam — spójny wynik w obu torach.
+    this.renderer.toneMapping    = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.12;   // strojenie globalnej ekspozycji: 1.0–1.3
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.setClearColor(0x020405, 1); // tło: #020405 (spec bg)
+    this.renderer.setClearColor(0x000000, 1); // prawdziwa czerń kosmosu
 
     // ── Obsługa utraty/odzyskania kontekstu WebGL ───────────
     this._contextLost = false;
@@ -173,7 +182,7 @@ export class ThreeRenderer {
     canvas.addEventListener('webglcontextrestored', () => {
       this._contextLost = false;
       console.info('[ThreeRenderer] WebGL context restored — rebuilding scene');
-      this.renderer.setClearColor(0x020405, 1);
+      this.renderer.setClearColor(0x000000, 1);
       // Odbuduj tekstury — Three.js nie robi tego automatycznie po context loss
       try {
         this.scene.traverse((obj) => {
@@ -202,81 +211,48 @@ export class ThreeRenderer {
     this.camera.position.set(0, 35, 50);
     this.camera.lookAt(0, 0, 0);
 
-    // ── Post-processing: SELECTIVE bloom (tylko warstwa BLOOM_LAYER) ───────
-    // Dwa composery (wzór three.js webgl_postprocessing_unreal_bloom_selective):
-    //   bloomComposer  — renderuje TYLKO obiekty na BLOOM_LAYER (camera.layers.set),
-    //                    reszta sceny niewidoczna → czarne tło → bloom liczony
-    //                    wyłącznie z exhaust/wraków/eksplozji. renderToScreen=false.
-    //   finalComposer  — pełna scena (clear 0x020405) + mixPass domieszkuje bloom +
-    //                    OutputPass (linear→sRGB). renderuje na ekran.
-    // Efekt: bloom NIE dotyka gwiazdy/tła/planet → zero niebieskiego veilu.
+    // ── Post-processing: pełnoekranowy bloom HDR (próg 1.0) ────────────────
+    // JEDEN composer: RenderPass → UnrealBloomPass(threshold=1.0) → OutputPass
+    // (ACES + linear→sRGB). Render do RT jest surowy (bez tone mappingu) — próg
+    // bloomu działa na wartościach HDR sceny; dopiero OutputPass mapuje na ekran.
+    // Bloomują wyłącznie piksele >1.0 (gwiazda, korona, FX HDR) → tło/planety
+    // zostają nietknięte, czerń jest czernią. Scena renderuje się RAZ na klatkę
+    // (dawny selective bloom robił 2 pełne przebiegi).
     // Antyaliasing: supersampling (setPixelRatio ×1.5 wyżej) — NIE MSAA na RT
-    // (samples+HalfFloat = czarny prostokąt na części sterowników). Composery
-    // dziedziczą pixelRatio renderera przez setPixelRatio.
-    this._bloomComposer = null;
-    this._finalComposer = null;
-    this._bloomPass     = null;
+    // (samples+HalfFloat = czarny prostokąt na części sterowników).
+    this._composer  = null;
+    this._bloomPass = null;
     try {
       const pr = this._pixelRatio;
-
-      // — bloomComposer (bloom-only) —
-      const bloomRender = new RenderPass(this.scene, this.camera);
-      bloomRender.clearColor = new THREE.Color(0x000000);  // czarne tło bloom-passu
-      bloomRender.clearAlpha = 1;
-      const bloomComposer = new EffectComposer(this.renderer);
-      bloomComposer.renderToScreen = false;
-      bloomComposer.setPixelRatio(pr);
-      bloomComposer.setSize(W, H);
-      bloomComposer.addPass(bloomRender);
-      // threshold 0 — w bloom-passie widać TYLKO emitery (reszta czarna), więc
-      // nie trzeba progować jasności; strength/radius sterują intensywnością glow.
-      const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.8, 0.4, 0.0);
-      bloomComposer.addPass(bloom);
-
-      // — finalComposer (pełna scena + domieszka bloomu) —
-      const finalRender = new RenderPass(this.scene, this.camera);
-      finalRender.clearColor = new THREE.Color(0x020405);  // oryginalne tło sceny
-      finalRender.clearAlpha = 1;
-      const mixPass = new ShaderPass(
-        new THREE.ShaderMaterial({
-          uniforms: {
-            baseTexture:  { value: null },
-            bloomTexture: { value: bloomComposer.renderTarget2.texture },
-          },
-          vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-          fragmentShader: `uniform sampler2D baseTexture; uniform sampler2D bloomTexture; varying vec2 vUv;
-            void main(){ gl_FragColor = texture2D(baseTexture, vUv) + texture2D(bloomTexture, vUv); }`,
-        }),
-        'baseTexture',
-      );
-      mixPass.needsSwap = true;
-      const finalComposer = new EffectComposer(this.renderer);
-      finalComposer.setPixelRatio(pr);
-      finalComposer.setSize(W, H);
-      finalComposer.addPass(finalRender);
-      finalComposer.addPass(mixPass);
-      finalComposer.addPass(new OutputPass());
-
-      this._bloomComposer = bloomComposer;
-      this._finalComposer = finalComposer;
-      this._bloomPass     = bloom;
+      const composer = new EffectComposer(this.renderer);
+      composer.setPixelRatio(pr);
+      composer.setSize(W, H);
+      composer.addPass(new RenderPass(this.scene, this.camera));
+      // strength 0.5 / radius 0.0 / threshold 1.0. Kształt halo ustawiają JAWNE wagi
+      // mipów niżej — parametr radius musi zostać 0, bo jego wewnętrzny lerp
+      // (mix(f, 1.2-f, radius)) z powrotem podbija najniższe mipy, których
+      // bilinear-upsample rysuje subtelny „kwadrat" wokół gwiazdy na czerni.
+      const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.5, 0.0, 1.0);
+      // Wagi mipów composite'u (domyślne [1,.8,.6,.4,.2]): tłumimy 2 najniższe —
+      // szeroki miękki zanik zapewnia korona gwiazdy, bloom robi ciasny glare.
+      try { bloom.compositeMaterial.uniforms.bloomFactors.value = [1.0, 0.7, 0.4, 0.15, 0.03]; } catch (e) {}
+      composer.addPass(bloom);
+      composer.addPass(new OutputPass());
+      this._composer  = composer;
+      this._bloomPass = bloom;
     } catch (err) {
-      console.warn('[ThreeRenderer] Selective bloom init failed — fallback direct render:', err);
-      this._bloomComposer = null;
-      this._finalComposer = null;
+      console.warn('[ThreeRenderer] HDR composer init failed — fallback direct render:', err);
+      this._composer = null;   // fallback: renderer.render (ACES+sRGB aplikuje renderer, brak bloomu)
     }
 
     // ── Obsługa zmiany rozmiaru okna ──────────────────────────
     window.addEventListener('resize', () => {
       const nW = window.innerWidth, nH = window.innerHeight;
       this.renderer.setSize(nW, nH);
-      this._bloomComposer?.setSize(nW, nH);  // resizuje też UnrealBloomPass
-      this._finalComposer?.setSize(nW, nH);  // renderTarget2 (bloomTexture) pozostaje ważny
+      this._composer?.setSize(nW, nH);  // resizuje też UnrealBloomPass
       this.camera.aspect = nW / nH;
       this.camera.updateProjectionMatrix();
       this._applyFocusViewOffset();   // re-aplikuj przesunięcie podglądu obserwatorium (nowe wymiary)
-      // Aktualizuj skalę gwiazd tła (jak Three.js PointsMaterial)
-      if (this._starScaleUniform) this._starScaleUniform.value = nH * 0.5;
     });
 
     // ── Mapy encji → obiekty Three.js ─────────────────────────
@@ -367,6 +343,7 @@ export class ThreeRenderer {
     this._star      = null;
     this._starGroup = null;
     this._starLight = null;
+    this._starCorona = null;          // billboard korony HDR (sync quaternion w pętli)
     this._starCoronaUniform  = null;  // referencja do uTime korony
     this._starTwinkleUniform = null;  // referencja do uTime migotania gwiazd tła
     this._starPromCount      = 0;     // liczba protuberancji
@@ -375,8 +352,8 @@ export class ThreeRenderer {
     this._dysonStage      = 0;
     this._dysonRingsGroup = null;
     // Zachowane oryginalne wartości lighta — restore przy stage 0 (dla idempotencji)
-    this._starLightOrigColor     = 0xffeedd;
-    this._starLightOrigIntensity = 1.5;
+    this._starLightOrigColor     = 0xfff1de;   // = _buildLights (pipeline HDR)
+    this._starLightOrigIntensity = 2.8;
 
     // ── Raycaster ─────────────────────────────────────────────
     this._ray   = new THREE.Raycaster();
@@ -400,18 +377,29 @@ export class ThreeRenderer {
     this._startLoop();
   }
 
-  // ── Tło: galaktyczne gwiazdy + mgławica ─────────────────────
+  // ── Tło: gwiazdy z profilem PSF + subtelna mgławica (pipeline HDR) ────────
+  // Realizm: paleta ciała doskonale czarnego (białe/błękitne jasne, pomarańczowe/
+  // czerwone słabe — bez teal), potęgowy rozkład jasności (mnóstwo słabych,
+  // pojedyncze jasne), profil PSF zamiast twardego kółka. Top ~3% gwiazd ma
+  // intensywność >1.0 (HDR) → dostaje naturalne mini-halo od bloomu composera.
+  // W próżni gwiazdy NIE migoczą (scyntylacja = atmosfera) — zostawione śladowe
+  // ±5% wolnego „oddechu" dla życia obrazu.
   _buildBackground() {
-    // 6000 gwiazd tła (sfera r=300-1000) z migotaniem (twinkle)
-    const N   = 6000;
-    const pos = new Float32Array(N * 3);
-    const col = new Float32Array(N * 3);
+    const N   = 7000;
+    const pos   = new Float32Array(N * 3);
+    const col   = new Float32Array(N * 3);
+    const inten = new Float32Array(N);   // intensywność HDR (mnoży kolor w shaderze)
+    const size  = new Float32Array(N);   // rozmiar punktu w px (stały — gwiazdy są „w nieskończoności")
+    const phase = new Float32Array(N);
 
-    // Atrybuty migotania per gwiazda
-    const phase      = new Float32Array(N);
-    const speed      = new Float32Array(N);
-    const brightness = new Float32Array(N);
-
+    // Paleta: [udział, R, G, B] — przybliżenie barw ciała doskonale czarnego
+    const PALETTE = [
+      [0.22, 0.62, 0.75, 1.00],   // błękitne gorące (O/B/A)
+      [0.36, 0.95, 0.97, 1.00],   // białe (F)
+      [0.22, 1.00, 0.94, 0.82],   // żółto-białe (G)
+      [0.14, 1.00, 0.78, 0.55],   // pomarańczowe (K)
+      [0.06, 1.00, 0.58, 0.40],   // czerwone (M)
+    ];
     for (let i = 0; i < N; i++) {
       const r     = 300 + Math.random() * 700;
       const theta = Math.random() * Math.PI * 2;
@@ -420,105 +408,117 @@ export class ThreeRenderer {
       pos[i*3+1]  = r * Math.sin(phi) * Math.sin(theta);
       pos[i*3+2]  = r * Math.cos(phi);
 
-      // Kolory gwiazd tła — dominujące teal + rzadkie kolorowe (jak w rzeczywistości)
-      const temp = Math.random();
-      if (temp < 0.03) {
-        // Czerwone karły (~3%) — ciepły czerwony
-        col[i*3]=0.95; col[i*3+1]=0.45; col[i*3+2]=0.35;
-      } else if (temp < 0.06) {
-        // Diamentowe/białe (~3%) — jasny czysto-biały z lekkim ciepłem
-        col[i*3]=1.0; col[i*3+1]=0.98; col[i*3+2]=0.95;
-      } else if (temp < 0.09) {
-        // Niebieskie gorące (~3%) — intensywny błękit
-        col[i*3]=0.4; col[i*3+1]=0.55; col[i*3+2]=1.0;
-      } else if (temp < 0.29) {
-        // Chłodne błękitne (20%)
-        col[i*3]=0.55; col[i*3+1]=0.75; col[i*3+2]=0.85;
-      } else if (temp < 0.59) {
-        // Teal #b0f0e0 (30%)
-        col[i*3]=0.69; col[i*3+1]=0.94; col[i*3+2]=0.88;
-      } else {
-        // Jasny teal-biały (41%)
-        col[i*3]=0.85; col[i*3+1]=0.95; col[i*3+2]=0.92;
-      }
+      let u = Math.random(), acc = 0, pi = 0;
+      for (let k = 0; k < PALETTE.length; k++) { acc += PALETTE[k][0]; if (u <= acc) { pi = k; break; } }
+      col[i*3] = PALETTE[pi][1]; col[i*3+1] = PALETTE[pi][2]; col[i*3+2] = PALETTE[pi][3];
 
-      phase[i]      = Math.random() * Math.PI * 2;
-      speed[i]      = 0.15 + Math.random() * 0.4;
-      // Kolorowe gwiazdy jaśniejsze — bardziej wyraziste na tle teal
-      brightness[i] = temp < 0.09 ? (0.8 + Math.random() * 0.2) : (0.6 + Math.random() * 0.4);
+      // Rozkład potęgowy: b^6 → większość <0.3, top ~3% przekracza 1.0 (HDR → bloom)
+      const b  = Math.random();
+      inten[i] = 0.05 + 2.6 * Math.pow(b, 6.0);
+      size[i]  = 1.6  + 3.4 * Math.pow(b, 5.0);
+      phase[i] = Math.random() * Math.PI * 2;
     }
 
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position',    new THREE.BufferAttribute(pos, 3));
-    geo.setAttribute('color',       new THREE.BufferAttribute(col, 3));
-    geo.setAttribute('aPhase',      new THREE.BufferAttribute(phase, 1));
-    geo.setAttribute('aSpeed',      new THREE.BufferAttribute(speed, 1));
-    geo.setAttribute('aBrightness', new THREE.BufferAttribute(brightness, 1));
+    geo.setAttribute('position',   new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color',      new THREE.BufferAttribute(col, 3));
+    geo.setAttribute('aIntensity', new THREE.BufferAttribute(inten, 1));
+    geo.setAttribute('aSize',      new THREE.BufferAttribute(size, 1));
+    geo.setAttribute('aPhase',     new THREE.BufferAttribute(phase, 1));
 
     const starMat = new THREE.ShaderMaterial({
       uniforms: {
-        uTime:  { value: 0.0 },
-        uSize:  { value: 0.8 },
-        uScale: { value: window.innerHeight * 0.5 },
+        uTime: { value: 0.0 },
+        uPx:   { value: this._pixelRatio },   // gl_PointSize jest w device px
       },
       vertexShader: `
+        attribute float aIntensity;
+        attribute float aSize;
         attribute float aPhase;
-        attribute float aSpeed;
-        attribute float aBrightness;
         varying vec3  vColor;
-        varying float vAlpha;
+        varying float vI;
         uniform float uTime;
-        uniform float uSize;
-        uniform float uScale;
+        uniform float uPx;
 
         void main() {
           vColor = color;
-
-          // Migotanie: sin z indywidualną fazą i prędkością
-          float wave = sin(uTime * aSpeed + aPhase);
-          float twinkle = wave * 0.15;
-          vAlpha = clamp(aBrightness + twinkle, 0.15, 1.0);
-
+          // Śladowy „oddech" ±5% (w próżni brak scyntylacji)
+          vI = aIntensity * (1.0 + 0.05 * sin(uTime * 0.3 + aPhase));
           vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          // Modulacja rozmiaru — widoczna przy statycznej kamerze
-          float sizeMod = 1.0 + wave * 0.25;
-          gl_PointSize = uSize * sizeMod * (uScale / -mvPos.z);
+          gl_PointSize = aSize * uPx;
           gl_Position  = projectionMatrix * mvPos;
         }
       `,
       fragmentShader: `
         varying vec3  vColor;
-        varying float vAlpha;
+        varying float vI;
 
         void main() {
-          // Okrągły punkt z miękką krawędzią
-          float d = length(gl_PointCoord - vec2(0.5));
-          if (d > 0.5) discard;
-          float alpha = vAlpha * (1.0 - smoothstep(0.3, 0.5, d));
-          gl_FragColor = vec4(vColor, alpha);
+          vec2  p  = gl_PointCoord - vec2(0.5);
+          float d2 = dot(p, p);
+          // Profil PSF: gaussowski rdzeń + słabszy szeroki ogon (jak glare optyki)
+          float core = exp(-d2 * 38.0);
+          float halo = exp(-d2 * 9.0) * 0.18;
+          float I = (core + halo) * vI;
+          if (I < 0.002) discard;
+          gl_FragColor = vec4(vColor * I, 1.0);   // additive — alpha bez znaczenia
         }
       `,
       transparent: true,
       vertexColors: true,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
     });
 
-    // Referencje do uniformów — aktualizowane w render loop i resize
+    // Referencja do uniformu czasu — aktualizowana w render loop
     this._starTwinkleUniform = starMat.uniforms.uTime;
-    this._starScaleUniform   = starMat.uniforms.uScale;
+    this._starScaleUniform   = null;   // niepotrzebny — stały rozmiar px (gwiazdy w nieskończoności)
 
     this.scene.add(new THREE.Points(geo, starMat));
 
+    // ── Mgławica — bardzo subtelna struktura FBM, peak luminancji ~0.014 linear
+    // (na ekranie ~10-14/255 po ACES). Struktura i głębia bez rozjaśniania tła;
+    // pas „drogi mlecznej" wokół nachylonej płaszczyzny. Statyczna (bez uniformów).
+    const nebMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false,
+      uniforms: { uPeak: { value: 0.014 } },
+      vertexShader: `varying vec3 vDir;
+        void main(){ vDir = normalize(position);
+          gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0)); }`,
+      fragmentShader: `varying vec3 vDir; uniform float uPeak;
+        float hash(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+        float noise(vec3 p){ vec3 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+          float a=hash(i),           b=hash(i+vec3(1,0,0)), c=hash(i+vec3(0,1,0)), d=hash(i+vec3(1,1,0));
+          float e=hash(i+vec3(0,0,1)), g=hash(i+vec3(1,0,1)), h2=hash(i+vec3(0,1,1)), j=hash(i+vec3(1,1,1));
+          return mix(mix(mix(a,b,f.x), mix(c,d,f.x), f.y), mix(mix(e,g,f.x), mix(h2,j,f.x), f.y), f.z); }
+        float fbm(vec3 p){ float v = 0.0, amp = 0.5;
+          for (int k = 0; k < 4; k++) { v += amp * noise(p); p *= 2.13; amp *= 0.5; } return v; }
+        void main(){
+          vec3 axis = normalize(vec3(0.25, 1.0, 0.18));
+          float band = 1.0 - smoothstep(0.0, 0.55, abs(dot(vDir, axis)));
+          float n = fbm(vDir * 5.0) * 0.65 + fbm(vDir * 13.0) * 0.35;
+          n = max(0.0, n - 0.42) * 1.7;
+          float m = band * n;
+          vec3 cold = vec3(0.35, 0.55, 0.85);   // zimny gaz
+          vec3 warm = vec3(0.85, 0.55, 0.35);   // pył
+          vec3 tint = mix(cold, warm, noise(vDir * 3.0));
+          gl_FragColor = vec4(tint * m * uPeak, 1.0); }`,
+      transparent: false, blending: THREE.AdditiveBlending,
+    });
+    const nebula = new THREE.Mesh(new THREE.SphereGeometry(1400, 32, 32), nebMat);
+    nebula.renderOrder = -2;   // rysuj przed resztą (additive na czystym tle)
+    this.scene.add(nebula);
   }
 
   // ── Oświetlenie ──────────────────────────────────────────────
   _buildLights() {
-    // Ambient — słabe wypełnienie (nocna strona delikatnie widoczna)
-    this.scene.add(new THREE.AmbientLight(0x1a2832, 0.25));
+    // Ambient — słabe, chłodne wypełnienie (nocna strona LEDWO czytelna, nie szara).
+    // Wartości pod ACES (ściemnia midtony ~20% względem NoToneMapping).
+    this.scene.add(new THREE.AmbientLight(0x101a26, 0.4));
     // PointLight od gwiazdy — decay=0: brak fizycznego tłumienia (r171 domyślnie decay=2
     // co przy intensity=2.0 i odl.=11j daje 2/121≈0.017 = czarny).
-    // distance=0 = brak limitu zasięgu.
-    this._starLight = new THREE.PointLight(0xffeedd, 1.5, 0, 0);
+    // distance=0 = brak limitu zasięgu. Intensywność 2.8 kompensuje krzywą ACES.
+    this._starLight = new THREE.PointLight(0xfff1de, 2.8, 0, 0);
     this._starLight.position.set(0, 0, 0);
     this.scene.add(this._starLight);
   }
@@ -711,9 +711,10 @@ export class ThreeRenderer {
           if (mat.color)    mat.color.copy(wreckCol);
           if (mat.emissive) {
             if (GAME_CONFIG.FEATURES?.fcCombatFx) {
-              // Żarzący się wrak — dogorywające reaktory (mocna poświata + bloom).
+              // Żarzący się wrak — dogorywające reaktory. emissiveIntensity >1 (HDR)
+              // → przekracza próg bloomu 1.0 i świeci naturalnie (pipeline HDR).
               mat.emissive.setHex(WRECK_EMISSIVE_COLOR);
-              if (mat.emissiveIntensity != null) mat.emissiveIntensity = 0.5;
+              if (mat.emissiveIntensity != null) mat.emissiveIntensity = FX_HDR_WRECK;
             } else {
               mat.emissive.setHex(0x110000);  // legacy: ledwo widoczna czerwień
             }
@@ -723,8 +724,6 @@ export class ThreeRenderer {
           if (mat.opacity != null)   mat.opacity   = 1.0;
           mat.transparent = false;
           child.material = mat;
-          // Selective bloom — żarzący się wrak świeci (emissive w passie bloom).
-          if (GAME_CONFIG.FEATURES?.fcCombatFx) child.layers.enable(BLOOM_LAYER);
         });
         // Losowy tilt — wrak przechylony, sygnalizuje uszkodzony kadłub
         entry.sprite.rotation.z = (Math.random() - 0.5) * 0.6;
@@ -1152,6 +1151,7 @@ export class ThreeRenderer {
       });
       this.scene.remove(this._starGroup);
       this._starGroup = null;
+      this._starCorona = null;   // billboard korony był dzieckiem groupy (już zdisposowany)
     }
 
     // Faza D3: dispose pierścieni Sfery Dysona razem z gwiazdą
@@ -1224,26 +1224,19 @@ export class ThreeRenderer {
     const group = new THREE.Group();
     group.position.set(S(star.x), 0, S(star.y));
 
-    // Kolory RGB do canvas gradientów
-    const cr = Math.round(color.r * 255);
-    const cg = Math.round(color.g * 255);
-    const cb = Math.round(color.b * 255);
-    const glR = Math.round(glow.r * 255);
-    const glG = Math.round(glow.g * 255);
-    const glB = Math.round(glow.b * 255);
-
-    // ── [0] Rdzeń — shader: tekstura wypalona do jasności, kolor na krawędziach ──
+    // ── [0] Rdzeń — shader HDR: wyjście LINIOWE >1 (bez własnego Reinharda).
+    // ACES (OutputPass) mapuje szczyt, bloom (próg 1.0) robi glare z realnie
+    // jasnych pikseli. Limb darkening + granulacja z tekstury emission zostają.
     const texType = stData.texType || `star_${spec}`;
     const variant = (hashCode(star.id || 'star') % TEXTURE_VARIANTS) + 1;
     const texMaps = loadStarTextures(texType, variant);
 
     const coreMat = new THREE.ShaderMaterial({
       uniforms: {
-        uDiffuse:    { value: texMaps.diffuse },
         uEmission:   { value: texMaps.emission },
         uColor:      { value: color },
-        uBrightness: { value: brightness },
-        uWhitePower: { value: whitePower },
+        uBrightness: { value: brightness },   // 2.5-3.5 z STAR_TYPES.corona = skala HDR rdzenia
+        uWhitePower: { value: whitePower },   // szerokość gorącego centrum (M/K szerokie, F wąskie)
       },
       vertexShader: `
         varying vec2 vUv;
@@ -1258,7 +1251,6 @@ export class ThreeRenderer {
         }
       `,
       fragmentShader: `
-        uniform sampler2D uDiffuse;
         uniform sampler2D uEmission;
         uniform vec3  uColor;
         uniform float uBrightness;
@@ -1270,26 +1262,21 @@ export class ThreeRenderer {
 
         void main() {
           vec3 emTex = texture2D(uEmission, vUv).rgb;
+          float lum = dot(emTex, vec3(0.299, 0.587, 0.114));
 
           // Limb darkening — krawędzie ciemniejsze (fizycznie poprawne)
           float NdotV = max(dot(vNormal, vViewDir), 0.0);
-          float limb = pow(NdotV, 0.5);
+          float limb = 0.35 + 0.65 * pow(NdotV, 0.65);
 
-          // Bazowy kolor: emission texture × kolor gwiazdy × jasność
-          vec3 base = emTex * uColor * uBrightness * limb;
+          // Granulacja powierzchni z tekstury emission (widoczna przy zoomie)
+          float gran = mix(0.55, 1.35, lum);
 
-          // Białe prześwietlenie — uWhitePower kontroluje zasięg
-          // M/K (ciemne) → whitePower 0.8-0.9 = szerokie białe centrum
-          // F (jasne)   → whitePower 1.5 = wąskie białe centrum
-          float whiteAmount = pow(NdotV, uWhitePower) * 1.0;
-          base = mix(base, vec3(1.0), whiteAmount);
+          // HDR linear: kolor typu × jasność × kształt — BEZ clampu i Reinharda
+          vec3 base = uColor * uBrightness * limb * gran;
 
-          // Gwarantuj minimalną jasność (gwiazda nigdy nie jest ciemna)
-          base = max(base, uColor * 0.3);
-
-          // Reinhard tone mapping — miękki clamp, zachowuje kolory
-          base = base / (base + vec3(0.35));
-          base *= 1.7;
+          // Gorące centrum — uWhitePower×1.7 zachowuje charakter per-typ
+          // (M/K szerokie białe centrum, F wąskie)
+          base += vec3(1.0) * uBrightness * 0.45 * pow(NdotV, uWhitePower * 1.7);
 
           gl_FragColor = vec4(base, 1.0);
         }
@@ -1297,59 +1284,44 @@ export class ThreeRenderer {
     });
     group.add(new THREE.Mesh(new THREE.SphereGeometry(r, 64, 64), coreMat));
 
-    // ── Helper: canvas sprite z radial gradient ──
-    const _glowSprite = (size, stops, opacity, scale) => {
-      const c = document.createElement('canvas');
-      c.width = size; c.height = size;
-      const ctx = c.getContext('2d');
-      const h = size / 2;
-      const g = ctx.createRadialGradient(h, h, 0, h, h, h);
-      for (const [pos, col] of stops) g.addColorStop(pos, col);
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, size, size);
-      const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-        map: new THREE.CanvasTexture(c),
-        transparent: true, opacity,
-        blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true,
-      }));
-      sp.scale.setScalar(scale);
-      return sp;
-    };
-
-    // ── [1] Glow wewnętrzny — silny biały bloom zakrywający rdzeń ──
-    group.add(_glowSprite(512, [
-      [0.0,  `rgba(255,255,255,1.0)`],
-      [0.06, `rgba(255,255,255,0.9)`],
-      [0.12, `rgba(255,255,255,0.6)`],
-      [0.20, `rgba(${cr},${cg},${cb},0.30)`],
-      [0.32, `rgba(${cr},${cg},${cb},0.10)`],
-      [0.50, `rgba(${glR},${glG},${glB},0.03)`],
-      [0.75, `rgba(${glR},${glG},${glB},0.005)`],
-      [1.0,  `rgba(${glR},${glG},${glB},0.0)`],
-    ], 1.0, r * 7.0));
-
-    // ── [2] Glow średni — kolorowa poświata ──
-    group.add(_glowSprite(512, [
-      [0.0,  `rgba(${cr},${cg},${cb},0.50)`],
-      [0.06, `rgba(${cr},${cg},${cb},0.30)`],
-      [0.14, `rgba(${glR},${glG},${glB},0.16)`],
-      [0.25, `rgba(${glR},${glG},${glB},0.08)`],
-      [0.40, `rgba(${glR},${glG},${glB},0.03)`],
-      [0.60, `rgba(${glR},${glG},${glB},0.008)`],
-      [0.85, `rgba(${glR},${glG},${glB},0.001)`],
-      [1.0,  `rgba(${glR},${glG},${glB},0.0)`],
-    ], glowOpacity, r * glowScale * 3.0));
-
-    // ── [3] Glow zewnętrzny — duży zasięg, miękkie promieniowanie ──
-    group.add(_glowSprite(512, [
-      [0.0,  `rgba(${glR},${glG},${glB},0.14)`],
-      [0.06, `rgba(${glR},${glG},${glB},0.08)`],
-      [0.15, `rgba(${glR},${glG},${glB},0.035)`],
-      [0.30, `rgba(${glR},${glG},${glB},0.012)`],
-      [0.50, `rgba(${glR},${glG},${glB},0.003)`],
-      [0.75, `rgba(${glR},${glG},${glB},0.0005)`],
-      [1.0,  `rgba(${glR},${glG},${glB},0.0)`],
-    ], glowOpacity * 0.8, r * glowScale * 6.0));
+    // ── [1] Korona — JEDEN billboard shaderowy (float = zero bandingu 8-bit).
+    // Zanik wykładniczy DO ZERA przed krawędzią plane'a (żadnych ogonów alpha,
+    // które robiły szarą mgłę), lekko HDR przy rdzeniu (uGain ~1.75): bloom
+    // dostaje OKRĄGŁE źródło energii → miękki glare bez kwadratu mip-blura.
+    // Zastępuje dawne 3 sprite'y canvas (glow ×7/×21/×42 — patrz analiza).
+    const coronaCol = new THREE.Color(star.visual.glowColor ?? star.visual.color)
+      .lerp(new THREE.Color(1, 1, 1), 0.5);   // 50% ku bieli — naturalniejszy glare
+    const coronaMat = new THREE.ShaderMaterial({
+      transparent: true, blending: THREE.AdditiveBlending,
+      depthWrite: false, depthTest: true,
+      uniforms: {
+        uColor: { value: coronaCol },
+        uGain:  { value: 0.95 * glowOpacity },   // <1.0 = korona NIE karmi bloomu (czysty gradient)
+      },
+      vertexShader: `
+        varying vec2 vP;
+        void main() {
+          vP = uv * 2.0 - 1.0;
+          gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vP;
+        uniform vec3  uColor;
+        uniform float uGain;
+        void main() {
+          float d = length(vP);
+          float I = (exp(-d * 4.0) - exp(-4.0)) / (1.0 - exp(-4.0));   // wykładniczo DO ZERA
+          gl_FragColor = vec4(uColor * uGain * max(I, 0.0), 1.0);
+        }
+      `,
+    });
+    const coronaSize = r * glowScale * 2.2;   // G: 1.2×7×2.2 ≈ 18.5 j. (wciąż ~3× mniej niż stary sprite [3])
+    const corona = new THREE.Mesh(new THREE.PlaneGeometry(coronaSize, coronaSize), coronaMat);
+    corona.renderOrder = 2;
+    corona.material.userData._baseGain = coronaMat.uniforms.uGain.value;   // baza „oddechu" w pętli
+    group.add(corona);
+    this._starCorona = corona;   // billboard: quaternion syncowany w _startLoop
 
     // Niewidoczna sfera klikalna — większa od wizualnej gwiazdy
     const clickGeo = new THREE.SphereGeometry(r * 2.5, 16, 16);
@@ -3300,26 +3272,18 @@ export class ThreeRenderer {
         // Aktualizuj migotanie gwiazd tła
         if (this._starTwinkleUniform) this._starTwinkleUniform.value = t;
 
-        // Animacja gwiazdy — [0]=rdzeń, [1]=innerGlow, [2]=midGlow, [3]=outerGlow
+        // Animacja gwiazdy — [0]=rdzeń (rotacja granulacji), [1]=korona (billboard + oddech)
         if (this._starGroup) {
-          const sg = this._starGroup;
-          // Rdzeń — powolna rotacja (granulacja widoczna przy zoom-in)
-          if (sg.children[0]) sg.children[0].rotation.y += 0.0005;
-          // Glow pulsowanie — delikatne "oddychanie"
-          for (let gi = 1; gi <= 3 && gi < sg.children.length; gi++) {
-            const spr = sg.children[gi];
-            if (!spr.material) continue;
-            if (spr.material._baseOpacity === undefined) {
-              spr.material._baseOpacity = spr.material.opacity;
-              spr.userData.baseScale = spr.scale.x;
-            }
-            const speed = 1.6 - gi * 0.3;  // inner szybszy, outer wolniejszy
-            spr.material.opacity = spr.material._baseOpacity
-              + Math.sin(t * speed) * 0.03;
-            spr.scale.setScalar(
-              spr.userData.baseScale * (1 + Math.sin(t * speed * 0.8) * 0.015)
-            );
-          }
+          const core = this._starGroup.children[0];
+          if (core) core.rotation.y += 0.0005;   // granulacja widoczna przy zoom-in
+        }
+        if (this._starCorona) {
+          // Billboard — plane zawsze frontem do kamery (group ma tylko pozycję, bez rotacji)
+          this._starCorona.quaternion.copy(this.camera.quaternion);
+          // Delikatne „oddychanie" jasności korony (±3%)
+          const gU = this._starCorona.material.uniforms?.uGain;
+          const base = this._starCorona.material.userData._baseGain;
+          if (gU && base !== undefined) gU.value = base * (1 + Math.sin(t * 0.9) * 0.03);
         }
 
         // Podgląd obserwatorium — twardy lock kamery na ciele co klatkę (przed update, bez lerp-lag).
@@ -3350,28 +3314,15 @@ export class ThreeRenderer {
         this._syncTacticalGlyphs();      // F2 tryb Y — glify-billboardy (no-op poza trybem)
         this._syncBodyScanVeil();        // reforma obserwatorium — szara zasłona niezbadanego ciała w podglądzie
 
-        // Selective bloom (fallback: bezpośredni render gdy composery padły)
-        if (this._bloomComposer && this._finalComposer) this._renderSelectiveBloom();
+        // Pipeline HDR: Render → Bloom(próg 1.0) → OutputPass (ACES+sRGB).
+        // Fallback: bezpośredni render gdy composer padł (ACES aplikuje renderer, brak bloomu).
+        if (this._composer) this._composer.render();
         else this.renderer.render(this.scene, this.camera);
       } catch (err) {
         console.error('[ThreeRenderer] Render loop error:', err);
       }
     };
     loop();
-  }
-
-  // Selective bloom — dwa przebiegi:
-  //   1) bloom-only: camera.layers=BLOOM_LAYER → renderują się TYLKO emitery
-  //      (exhaust/wraki/eksplozje) na czarnym tle → bloomComposer liczy glow.
-  //   2) final: camera.layers przywrócone → pełna scena + mixPass domieszkuje bloom.
-  // Gwiazda/tło/planety (layer 0) są niewidoczne w passie 1 → NIE bloomują.
-  _renderSelectiveBloom() {
-    const cam = this.camera;
-    const savedMask = cam.layers.mask;
-    cam.layers.set(BLOOM_LAYER);       // tylko warstwa bloom
-    this._bloomComposer.render();
-    cam.layers.mask = savedMask;       // przywróć pełną widoczność
-    this._finalComposer.render();
   }
 
   // Animacja chmur — co klatkę, niezaleznie od pauzy gry
@@ -3529,9 +3480,11 @@ export class ThreeRenderer {
         const colAttr = new Float32Array(posAttr.count * 4);
         for (let i = 0; i < posAttr.count; i++) {
           const t = (posAttr.getY(i) + coneLen / 2) / coneLen;  // 0=baza(−Y), 1=apex(+Y)
-          colAttr[i * 4 + 0] = grad.base.r + (grad.apex.r - grad.base.r) * t;
-          colAttr[i * 4 + 1] = grad.base.g + (grad.apex.g - grad.base.g) * t;
-          colAttr[i * 4 + 2] = grad.base.b + (grad.apex.b - grad.base.b) * t;
+          // ×FX_HDR_EXHAUST: apex przekracza próg bloomu 1.0 mimo opacity 0.35
+          // i flickera (pipeline HDR — smuga świeci naturalnie, bez warstw)
+          colAttr[i * 4 + 0] = (grad.base.r + (grad.apex.r - grad.base.r) * t) * FX_HDR_EXHAUST;
+          colAttr[i * 4 + 1] = (grad.base.g + (grad.apex.g - grad.base.g) * t) * FX_HDR_EXHAUST;
+          colAttr[i * 4 + 2] = (grad.base.b + (grad.apex.b - grad.base.b) * t) * FX_HDR_EXHAUST;
           colAttr[i * 4 + 3] = t;                                // alpha apex1 → baza0
         }
         geo.setAttribute('color', new THREE.BufferAttribute(colAttr, 4));
@@ -3544,7 +3497,6 @@ export class ThreeRenderer {
         exhaustCone.position.set(rearX + coneLen / 2, 0, 0); // apex przy rufie, baza w tył
         exhaustCone.renderOrder = 2;
         exhaustCone.visible = false;                        // domyślnie zgaszony (idle)
-        exhaustCone.layers.enable(BLOOM_LAYER);             // selective bloom — TYLKO smuga świeci
         wrapper.add(exhaustCone);
       }
 
@@ -5419,7 +5371,8 @@ export class ThreeRenderer {
         case 'explosion': {  // kula ognia: scale 0→3, kolor biały→pomarańcz→czerwony
           const c = explosionColorRaw(progress);
           if (mat) {
-            if (mat.color) mat.color.setRGB(c.r, c.g, c.b);
+            // ×FX_HDR_EXPLOSION — wartości >1 przekraczają próg bloomu (pipeline HDR)
+            if (mat.color) mat.color.setRGB(c.r * FX_HDR_EXPLOSION, c.g * FX_HDR_EXPLOSION, c.b * FX_HDR_EXPLOSION);
             mat.opacity = 1 - progress * progress;  // trzyma jasność, szybki zanik na końcu
           }
           ef.mesh.scale.setScalar(ef.baseScale * (0.001 + progress * 3));
@@ -5462,7 +5415,8 @@ export class ThreeRenderer {
   _spawnExplosion(pos, bboxSize) {
     if (!pos) return;
     const b = Math.max(0.2, bboxSize || 0.5);
-    // Kula ognia — MeshBasicMaterial + additive (świeci z bloomem).
+    // Kula ognia — MeshBasicMaterial + additive. Kolor HDR (×FX_HDR_EXPLOSION,
+    // per-frame w _updateActiveEffects) przekracza próg bloomu → świeci naturalnie.
     const sph = new THREE.Mesh(
       new THREE.SphereGeometry(b * 0.4, 16, 16),
       new THREE.MeshBasicMaterial({
@@ -5471,7 +5425,6 @@ export class ThreeRenderer {
       }),
     );
     sph.position.copy(pos);
-    sph.layers.enable(BLOOM_LAYER);   // selective bloom — kula ognia świeci
     this._spawnFx(sph, { kind: 'explosion', lifetime: 600, baseScale: 1, baseOpacity: 1 });
     // Pierścień uderzeniowy — płasko w płaszczyźnie orbitalnej, radius 0→b×2.
     const ring = new THREE.Mesh(
@@ -5481,9 +5434,10 @@ export class ThreeRenderer {
         side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
       }),
     );
+    // HDR: pierścień ponad progiem bloomu (kolor bazowy ×FX_HDR_EXPLOSION)
+    ring.material.color.multiplyScalar(FX_HDR_EXPLOSION);
     ring.position.copy(pos);
     ring.rotation.x = -Math.PI / 2;
-    ring.layers.enable(BLOOM_LAYER);  // selective bloom — pierścień świeci
     this._spawnFx(ring, { kind: 'explosionRing', lifetime: 800, baseScale: 1, baseOpacity: 0.8 });
   }
 

@@ -18,13 +18,17 @@
 // żonglowania pozycją/uiScale osobnego DOM-canvasa.
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
 import { STAR_TYPES, GAME_CONFIG } from '../config/GameConfig.js';
 import { loadStarTextures, hashCode, TEXTURE_VARIANTS } from './PlanetTextureUtils.js';
 
 const FOV = 50;
 // Tło kosmiczne (subtelne). Plik podmienialny; jasność regulowana mnożnikiem (niska = subtelne).
 const BG_URL = 'assets/backgrounds/deep_space.png';
-const BG_BRIGHTNESS = 0.25;   // 0..1 — mnożnik jasności tła (1.0 = bez tłumienia)
+const BG_BRIGHTNESS = 0.25;   // 0..1 — scene.backgroundIntensity (1.0 = bez tłumienia)
 const TERRITORY_DASH_SPEED = 0.3;   // „marsz" dashа izolinii 3D (jedn. galakt./s; tuning B6)
 
 export class StratcomGalaxyRenderer {
@@ -46,7 +50,9 @@ export class StratcomGalaxyRenderer {
     this._territoryFlash = null;  // Map ownerId→factor (0..1), ustawiane per-frame przez overlay
     this._glowCache = new Map();  // glowColorHex → CanvasTexture (współdzielone)
     this._failed    = false;
-    this._bgTexture = null;       // tło kosmiczne (CanvasTexture ściemniona) → scene.background
+    this._composer  = null;       // pipeline HDR: Render → Bloom(próg 1.0) → OutputPass
+    this._bloomPass = null;
+    this._bgTexture = null;       // tło kosmiczne (tekstura) → scene.background + backgroundIntensity
     this._bgTried   = false;      // czy próbowano już załadować tło (async, raz)
     this.fitDist    = 40;         // domyślny dystans kamery dopasowany do rozrzutu
   }
@@ -67,9 +73,14 @@ export class StratcomGalaxyRenderer {
           alpha: false,
           preserveDrawingBuffer: true,   // niezbędne do ctx.drawImage(canvas)
         });
-        this._renderer.setClearColor(0x02040a, 1);  // ciemny kosmos
+        this._renderer.setClearColor(0x000000, 1);  // prawdziwa czerń (pipeline HDR)
         this._renderer.outputColorSpace = THREE.SRGBColorSpace; // jak w mapie układu (tekstury sRGB)
-        this._renderer.toneMapping = THREE.NoToneMapping;       // shader gwiazdy tonemapuje sam
+        // Pipeline HDR jak w mapie układu: ACES + pełnoekranowy bloom (próg 1.0).
+        // Rdzenie gwiazd świecą HDR (>1) → miękka poświata z poprawną okluzją
+        // (bloom to post-process na WIDOCZNYCH pikselach — bliższa gwiazda zasłania
+        // dalszą razem z poświatą; dokładnie problem, przez który usunięto sprite-glow).
+        this._renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this._renderer.toneMappingExposure = 1.12;
         this._scene  = new THREE.Scene();
         this._scene.add(new THREE.AmbientLight(0xffffff, 1)); // by MeshBasicMaterial świecił
         this._camera = new THREE.PerspectiveCamera(FOV, wPx / hPx, 0.05, 5000);
@@ -77,6 +88,22 @@ export class StratcomGalaxyRenderer {
         this._ringGroup = new THREE.Group(); this._scene.add(this._ringGroup);
         this._territoryGroup = new THREE.Group(); this._scene.add(this._territoryGroup);
         this._loadBackground();   // subtelne tło kosmiczne (async, ładuje się raz)
+        // Composer: Render → Bloom(0.45, 0.3, próg 1.0) → OutputPass (ACES+sRGB).
+        // Fallback przy błędzie: _composer=null → renderer.render (bez bloomu).
+        try {
+          const composer = new EffectComposer(this._renderer);
+          composer.setSize(wPx, hPx);
+          composer.addPass(new RenderPass(this._scene, this._camera));
+          this._bloomPass = new UnrealBloomPass(new THREE.Vector2(wPx, hPx), 0.45, 0.0, 1.0);
+          // radius=0 + jawne wagi mipów — bez „kwadratu" upsamplingu na czerni (jak mapa układu)
+          try { this._bloomPass.compositeMaterial.uniforms.bloomFactors.value = [1.0, 0.7, 0.4, 0.15, 0.03]; } catch (e) {}
+          composer.addPass(this._bloomPass);
+          composer.addPass(new OutputPass());
+          this._composer = composer;
+        } catch (e) {
+          console.warn('[StratcomGalaxyRenderer] HDR composer init failed — direct render:', e);
+          this._composer = null;
+        }
       } catch (e) {
         console.warn('[StratcomGalaxyRenderer] WebGL init failed:', e);
         this._failed = true;
@@ -86,41 +113,35 @@ export class StratcomGalaxyRenderer {
     if (wPx !== this._wPx || hPx !== this._hPx) {
       this._wPx = wPx; this._hPx = hPx;
       this._renderer.setSize(wPx, hPx, false);
+      this._composer?.setSize(wPx, hPx);   // resizuje też UnrealBloomPass
       this._camera.aspect = wPx / hPx;
       this._camera.updateProjectionMatrix();
     }
     return true;
   }
 
-  // ── Tło kosmiczne: PNG ściemniony do subtelności (czarny overlay = mnożenie jasności).
+  // ── Tło kosmiczne: PNG + scene.backgroundIntensity (zamiast canvas-multiply).
+  // Jedna ścieżka zarządzana kolorami — bez ręcznego przetwarzania obrazu;
+  // jasność regulowana na żywo przez BG_BRIGHTNESS.
   // Screen-fixed (scene.background) — nie obraca się z kamerą; dla ciemnej mgławicy OK.
   _loadBackground() {
     if (this._bgTried || !this._scene) return;
     this._bgTried = true;
-    const img = new Image();
-    img.onload = () => {
-      if (!this._scene) return;
-      const maxW = 4096;   // wyższy cap → zachowaj detal pola gwiazd
-      const k = Math.min(1, maxW / (img.width || maxW));
-      const w = Math.max(1, Math.round((img.width  || maxW) * k));
-      const h = Math.max(1, Math.round((img.height || maxW) * k));
-      const c = document.createElement('canvas'); c.width = w; c.height = h;
-      const ctx = c.getContext('2d');
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, w, h);
-      // Ściemnienie: czarny overlay o alpha=(1-jasność) == mnożenie pikseli przez jasność
-      ctx.fillStyle = `rgba(0,0,0,${(1 - BG_BRIGHTNESS).toFixed(3)})`;
-      ctx.fillRect(0, 0, w, h);
-      const tex = new THREE.CanvasTexture(c);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.minFilter = THREE.LinearFilter;   // bez mip-blura drobnego pola gwiazd
-      tex.generateMipmaps = false;
-      tex.anisotropy = 8;
-      this._bgTexture = tex;
-      this._scene.background = tex;
-    };
-    img.onerror = () => { /* brak pliku → zostaje sam clearColor */ };
-    img.src = BG_URL;
+    new THREE.TextureLoader().load(
+      BG_URL,
+      (tex) => {
+        if (!this._scene) { tex.dispose(); return; }
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.minFilter = THREE.LinearFilter;   // bez mip-blura drobnego pola gwiazd
+        tex.generateMipmaps = false;
+        tex.anisotropy = 8;
+        this._bgTexture = tex;
+        this._scene.background = tex;
+        this._scene.backgroundIntensity = BG_BRIGHTNESS;
+      },
+      undefined,
+      () => { /* brak pliku → zostaje sam clearColor (czerń) */ },
+    );
   }
 
   // systems: [{ id, x, y, z, colorHex, glowColorHex, isHome, dim, luminosity }]
@@ -167,7 +188,7 @@ export class StratcomGalaxyRenderer {
       uniforms: {
         uEmission:   { value: tex.emission },
         uColor:      { value: color },
-        uBrightness: { value: 1.2 },   // umiarkowane — kolor typu NASYCONY, nie wybielony
+        uBrightness: { value: 2.6 },   // HDR (>1) → rdzeń przekracza próg bloomu 1.0 = miękka poświata
         uDim:        { value: dimF },   // przygaszenie niezbadanych JASNOŚCIĄ (nie przezroczystością!)
       },
       vertexShader: `
@@ -189,11 +210,11 @@ export class StratcomGalaxyRenderer {
           float NdotV = max(dot(vNormal, vViewDir), 0.0);
           float limb   = 0.6 + 0.4 * pow(NdotV, 0.7);          // kształt sfery (krawędzie ciemniejsze)
           float detail = mix(0.78, 1.22, lum);                 // subtelny detal powierzchni (przy zbliżeniu)
-          vec3 base = uColor * uBrightness * limb * detail;    // KOLOR typu dominuje
-          base += vec3(1.0) * pow(NdotV, 10.0) * 0.5;          // WĄSKIE gorące centrum (tylko sam środek)
+          vec3 base = uColor * uBrightness * limb * detail;    // KOLOR typu dominuje (HDR — bloom w kolorze typu)
+          base += vec3(1.0) * pow(NdotV, 10.0) * 0.5 * uBrightness;  // WĄSKIE gorące centrum (skalowane HDR)
           base = max(base, uColor * 0.45);                     // nigdy nie czarna
           base *= uDim;                                        // przygaszenie niezbadanych (wciąż OPAQUE)
-          gl_FragColor = vec4(clamp(base, 0.0, 1.0), 1.0);     // alpha=1 ZAWSZE → zasłania
+          gl_FragColor = vec4(max(base, 0.0), 1.0);            // BEZ clampu — ACES+bloom na composerze; alpha=1 → zasłania
         }`,
     });
     g.add(new THREE.Mesh(new THREE.SphereGeometry(rCore, 24, 24), coreMat));
@@ -368,7 +389,10 @@ export class StratcomGalaxyRenderer {
         line.material.opacity = op;
       }
     }
-    this._renderer.render(this._scene, this._camera);
+    // Pipeline HDR: Render → Bloom(próg 1.0) → OutputPass (ACES+sRGB).
+    // Fallback: bezpośredni render (ACES aplikuje renderer, brak bloomu).
+    if (this._composer) this._composer.render();
+    else this._renderer.render(this._scene, this._camera);
     return true;
   }
 
@@ -413,6 +437,8 @@ export class StratcomGalaxyRenderer {
     this._glowCache.clear();
     if (this._bgTexture) { this._bgTexture.dispose(); this._bgTexture = null; }
     this._bgTried = false;
+    if (this._composer) { this._composer.dispose?.(); this._composer = null; }
+    this._bloomPass = null;
     if (this._renderer) {
       this._renderer.forceContextLoss?.();
       this._renderer.dispose();
