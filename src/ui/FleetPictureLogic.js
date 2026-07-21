@@ -295,7 +295,10 @@ export function buildShipEntry(vessel, ctx = {}) {
   let fromId = null, toId = null, toName = null, isLoop = false;
   if (mission) {
     isLoop = mission.loop === true;
-    const src = mission.originColonyId ?? mission.loopSourceId ?? null;
+    // „Skąd" = ciało startu. VesselManager.dispatchOnMission ustawia mission.originId
+    // (dockedAt ?? colonyId) dla KAŻDEJ misji — to jedyne pewne źródło na vessel.mission
+    // (originColonyId bywa pominięte przy dispatchu, np. recon/scientific). Fallback: loop.
+    const src = mission.originId ?? mission.originColonyId ?? mission.loopSourceId ?? null;
     const dst = mission.targetId ?? mission.loopTargetId ?? null;
     const returning = mission.phase === 'returning' || mission.leg === 'return';
     fromId = returning ? dst : src;
