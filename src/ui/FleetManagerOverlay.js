@@ -1441,6 +1441,18 @@ export class FleetManagerOverlay {
           this._mapHoverBody = null;
           break;
         }
+        // Obcy układ — swobodne latanie: wybrany statek orbituje ciało / właśnie przybył,
+        // więc klik ciała na mapie = przekieruj tam (to samo co wiersz listy „Leć do innego
+        // ciała", tylko wygodniej). Warunek = misja akceptowana przez _redirectInterstellarVessel.
+        if (this._selectedVesselId && this._isForeignRedirectClickable(this._selectedVesselId, zone.data.bodyId)) {
+          EventBus.emit('vessel:interstellarRedirect', {
+            vesselId: this._selectedVesselId,
+            targetId: zone.data.bodyId,
+          });
+          this._mapFocusBodyId = zone.data.bodyId;
+          this._mapHoverBody = null;
+          break;
+        }
         // Ustaw focus na klikniętym ciele (zoom + centruj mapę)
         this._mapFocusBodyId = zone.data.bodyId;
         const bodyEntity = _findBody(zone.data.bodyId);
@@ -7295,7 +7307,8 @@ export class FleetManagerOverlay {
 
       // Nagłówek — na orbicie ciała
       const orbitBody = _findBody(isMission.targetId);
-      const orbitName = orbitBody ? getName(orbitBody) : isMission.targetId;
+      // Ciała niebieskie mają pole .name (NIE namePL/nameEN) — getName() zwróciłby surowe id (entity_N).
+      const orbitName = orbitBody?.name ?? isMission.targetId;
       ctx.font = `bold ${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
       ctx.fillStyle = THEME.purple;
       ctx.fillText(`🌍 ${t('fleet.orbitingBody', orbitName)}`, x + pad, cy + 10);
@@ -7399,18 +7412,29 @@ export class FleetManagerOverlay {
       // ── Separator ──
       cy += 2;
 
-      // ── Leć do innego ciała (lista planet) ──
+      // ── Leć do innego ciała (planety + księżyce + planetoidy w tym układzie) ──
+      // Redirect (_redirectInterstellarVessel) przyjmuje dowolne ciało przez _findEntity,
+      // więc lista musi obejmować też księżyce i planetoidy — nie tylko planety. Sortujemy
+      // wg realnej odległości od statku (_calcDistAU), nie wg półosi orbity.
       const sysId = vessel.systemId;
-      const planetsOrbit = EntityManager.getByType('planet')?.filter(p => p.systemId === sysId && p.id !== isMission.targetId) ?? [];
-      if (planetsOrbit.length > 0) {
+      const redirectBodies = [
+        ...EntityManager.getByTypeInSystem('planet', sysId),
+        ...EntityManager.getByTypeInSystem('moon', sysId),
+        ...EntityManager.getByTypeInSystem('planetoid', sysId),
+      ]
+        .filter(b => b.id !== isMission.targetId)
+        .map(b => ({ body: b, distAU: this._calcDistAU(vessel, b) }))
+        .sort((a, b) => a.distAU - b.distAU);
+      if (redirectBodies.length > 0) {
         ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
         ctx.fillStyle = THEME.textDim;
         ctx.fillText(t('fleet.foreignRedirect'), x + pad, cy + 10);
         cy += 16;
 
-        for (const planet of planetsOrbit.slice(0, 6)) {
+        for (const { body: rb, distAU: rDist } of redirectBodies) {
           const pBtnH2 = 20;
           if (cy + pBtnH2 > y + h - 40) break;
+          const rIcon = rb.type === 'moon' ? '🌙' : rb.type === 'planetoid' ? '🪨' : '🪐';
           ctx.fillStyle = 'rgba(170,136,255,0.06)';
           ctx.fillRect(x + pad, cy, btnW, pBtnH2);
           ctx.strokeStyle = THEME.border;
@@ -7418,14 +7442,14 @@ export class FleetManagerOverlay {
           ctx.strokeRect(x + pad, cy, btnW, pBtnH2);
           ctx.font = `${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
           ctx.fillStyle = THEME.textPrimary;
-          ctx.fillText(`🪐 ${getName(planet)}`, x + pad + 6, cy + 14);
+          ctx.fillText(`${rIcon} ${rb.name ?? rb.id}`, x + pad + 6, cy + 14);
           ctx.textAlign = 'right';
           ctx.fillStyle = THEME.textDim;
-          ctx.fillText(`${(planet.orbital?.a ?? 0).toFixed(1)} AU`, x + w - pad - 4, cy + 14);
+          ctx.fillText(`${rDist.toFixed(1)} AU`, x + w - pad - 4, cy + 14);
           ctx.textAlign = 'left';
           this._hitZones.push({
             x: x + pad, y: cy, w: btnW, h: pBtnH2,
-            type: 'foreign_redirect', data: { vesselId: vessel.id, targetId: planet.id },
+            type: 'foreign_redirect', data: { vesselId: vessel.id, targetId: rb.id },
           });
           cy += pBtnH2 + 2;
         }
@@ -9380,6 +9404,27 @@ export class FleetManagerOverlay {
     const tx = (target.x ?? target.position?.x ?? 0) / GAME_CONFIG.AU_TO_PX;
     const ty = (target.y ?? target.position?.y ?? 0) / GAME_CONFIG.AU_TO_PX;
     return Math.sqrt((vx - tx) ** 2 + (vy - ty) ** 2);
+  }
+
+  /**
+   * Czy klik ciała na mapie ma PRZEKIEROWAĆ statek (obcy układ), zamiast tylko go focusować?
+   * Warunek = statek na misji akceptowanej przez VesselManager._redirectInterstellarVessel
+   * (exploration/foreign_recon w fazie orbiting_body LUB interstellar_jump w fazie in_system),
+   * a klikane ciało jest w tym samym układzie i różne od aktualnego celu.
+   * @param {string} vesselId
+   * @param {string} bodyId
+   * @returns {boolean}
+   */
+  _isForeignRedirectClickable(vesselId, bodyId) {
+    const v = window.KOSMOS?.vesselManager?.getVessel?.(vesselId);
+    if (!v || !bodyId) return false;
+    const m = v.mission;
+    if (!m || bodyId === m.targetId) return false;
+    const orbiting = (m.type === 'exploration' || m.type === 'foreign_recon') && m.phase === 'orbiting_body';
+    const arrived  = m.type === 'interstellar_jump' && m.phase === 'in_system';
+    if (!orbiting && !arrived) return false;
+    const body = _findBody(bodyId);
+    return !!body && body.systemId === v.systemId;
   }
 }
 
