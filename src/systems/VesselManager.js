@@ -2863,7 +2863,7 @@ export class VesselManager {
   }
 
   /**
-   * Rozładunek cargo w obcym układzie.
+   * Rozładunek cargo w obcym układzie (przycisk „📦 Rozładuj cargo" na orbitującym statku).
    */
   _startForeignUnload(vesselId, targetId) {
     const vessel = this._vessels.get(vesselId);
@@ -2874,37 +2874,50 @@ export class VesselManager {
     const target = this._findEntity(targetId);
     if (!target) return;
 
-    let colony = colMgr?.getColony(targetId);
+    const colony = colMgr?.getColony(targetId);
 
-    // Jeśli brak kolonii — utwórz outpost z cargo jako zasoby startowe
     if (!colony && colMgr) {
+      // Brak kolonii — utwórz outpost z cargo jako zasoby startowe
       const startRes = {};
       for (const [key, qty] of Object.entries(vessel.cargo)) {
         if (qty > 0) startRes[key] = qty;
       }
       colMgr.createOutpost(targetId, startRes, gameYear);
-      vessel.cargo = {};
-      vessel.cargoUsed = 0;
-
       addMissionLog(vessel, gameYear,
         t('vessel.foreignUnloadOutpost', target.name ?? targetId), 'success');
-      return;
-    }
-
-    // Jest kolonia — dodaj cargo do zasobów
-    if (colony) {
+    } else if (colony) {
+      // Jest kolonia — dodaj cargo do inventory przez receive() (zapis do Map,
+      // NIE do legacy proxy resources[] który jest nadpisywany przy _syncLegacyProxy).
       const resSys = colony.resourceSystem;
-      for (const [key, qty] of Object.entries(vessel.cargo)) {
-        if (qty > 0 && resSys) {
-          const current = resSys.getAmount?.(key) ?? resSys.resources?.[key] ?? 0;
-          if (resSys.resources) resSys.resources[key] = current + qty;
+      if (resSys?.receive) {
+        const deliverable = {};
+        for (const [key, qty] of Object.entries(vessel.cargo)) {
+          if (qty > 0) deliverable[key] = qty;
         }
+        resSys.receive(deliverable);
       }
-      vessel.cargo = {};
-      vessel.cargoUsed = 0;
-
       addMissionLog(vessel, gameYear,
         t('vessel.foreignUnloadColony', target.name ?? targetId), 'success');
+    } else {
+      return;   // brak colMgr — nic nie rób
+    }
+
+    // Cargo dostarczone — wyczyść ładownię
+    vessel.cargo = {};
+    vessel.cargoUsed = 0;
+
+    // Osiądź przy kolonii docelowej (jak _processTransportArrival): wypnij z floty
+    // poprzedniej kolonii macierzystej → dockAtColony (spaceport gate: docked albo
+    // orbiting-bez-portu; ustawia colonyId, czyści mission, status=idle) → dopisz do floty.
+    const oldCol = vessel.colonyId ? colMgr?.getColony(vessel.colonyId) : null;
+    if (oldCol) {
+      const idx = oldCol.fleet.indexOf(vesselId);
+      if (idx !== -1) oldCol.fleet.splice(idx, 1);
+    }
+    this.dockAtColony(vesselId, targetId);
+    const newCol = colMgr?.getColony(targetId);
+    if (newCol && !newCol.fleet.includes(vesselId)) {
+      newCol.fleet.push(vesselId);
     }
   }
 
