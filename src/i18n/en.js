@@ -1287,6 +1287,11 @@ export default {
   'fleet.badgeTooFar': 'too far',
   'fleet.badgeUnexplored': 'unexplored',
   'fleet.badgeExplored': 'explored',
+  // Slice D — cross-system targets (transport via warp)
+  'fleet.badgeWarp': 'warp',
+  'fleet.otherSystem': 'Other system',
+  'fleet.crossSystemDelivery': 'Delivery to system: {0}',
+  'fleet.crossSystemDeliveryHint': 'The ship will warp, then deliver the cargo on arrival.',
   'fleet.target.existingColony': '(existing colony)',
   'fleet.target.existingOutpost': '(outpost)',
   'fleet.fuelInsufficient': '⛽ insufficient fuel',
@@ -1506,6 +1511,9 @@ export default {
   'warpRoute.legDone': '{0}: jumped to {1}',
   'warpRoute.completed': '{0}: arrived at {1}',
   'warpRoute.aborted': '{0}: route aborted ({1})',
+
+  // OrderService — unified order layer (composite cross-system transport)
+  'order.compositeTargetLost': '{0}: delivery target lost during warp — order cancelled',
   'fleet.foreignScanning': '🔭 Scanning... {0}',
   'fleet.foreignTraveling': '🚀 En route to: {0}',
   'fleet.abortRecon': 'Abort Recon',

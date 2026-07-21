@@ -1288,6 +1288,11 @@ export default {
   'fleet.badgeTooFar': 'za daleko',
   'fleet.badgeUnexplored': 'niezbadane',
   'fleet.badgeExplored': 'zbadane',
+  // Slice D — cele cross-system (transport przez warp)
+  'fleet.badgeWarp': 'warp',
+  'fleet.otherSystem': 'Inny układ',
+  'fleet.crossSystemDelivery': 'Dostawa do układu: {0}',
+  'fleet.crossSystemDeliveryHint': 'Statek wykona skok warp, a po przylocie dostarczy ładunek.',
   'fleet.target.existingColony': '(istniejąca kolonia)',
   'fleet.target.existingOutpost': '(placówka)',
   'fleet.fuelInsufficient': '⛽ brak paliwa',
@@ -1507,6 +1512,9 @@ export default {
   'warpRoute.legDone': '{0}: przeskok do {1}',
   'warpRoute.completed': '{0}: dotarł do {1}',
   'warpRoute.aborted': '{0}: trasa przerwana ({1})',
+
+  // OrderService — zunifikowana warstwa rozkazów (composite cross-system transport)
+  'order.compositeTargetLost': '{0}: cel dostawy zniknął podczas skoku — rozkaz anulowany',
   'fleet.foreignScanning': '🔭 Skanowanie... {0}',
   'fleet.foreignTraveling': '🚀 W drodze do: {0}',
   'fleet.abortRecon': 'Przerwij rekon',

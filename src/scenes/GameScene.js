@@ -34,6 +34,7 @@ import { MissionSystem }    from '../systems/MissionSystem.js';
 import { ColonyManager }      from '../systems/ColonyManager.js';
 import { VesselManager }      from '../systems/VesselManager.js';
 import { WarpRouteSystem }    from '../systems/WarpRouteSystem.js';
+import { OrderService }       from '../systems/OrderService.js';
 import { RandomEventSystem }  from '../systems/RandomEventSystem.js';
 import { FactorySystem }      from '../systems/FactorySystem.js';
 import { DepositSystem }         from '../systems/DepositSystem.js';
@@ -247,6 +248,8 @@ export class GameScene {
     this.vesselManager   = new VesselManager();
     // Warp multi-hop — egzekutor sekwencji skoków (subskrybuje interstellar:arrived).
     this.warpRouteSystem = new WarpRouteSystem(this.vesselManager);
+    // Zunifikowana fasada rozkazów (rejestr/Stratcom/PPM) + auto-chain cross-system transport.
+    this.orderService    = new OrderService();
     // Player Fleet Groups (save v73) — zawsze instancjowany dla save consistency;
     // FEATURES.playerFleets gates UI ekspozycję, nie istnienie obiektu.
     this.fleetSystem     = new FleetSystem(this.vesselManager);
@@ -324,6 +327,7 @@ export class GameScene {
     window.KOSMOS.colonyManager    = this.colonyManager;
     window.KOSMOS.vesselManager    = this.vesselManager;
     window.KOSMOS.warpRouteSystem  = this.warpRouteSystem;
+    window.KOSMOS.orderService     = this.orderService;
     window.KOSMOS.fleetSystem      = this.fleetSystem;
     window.KOSMOS.overlayManager   = this.uiManager.overlayManager;
     window.KOSMOS.civilianTradeSystem = this.civilianTradeSystem;
@@ -1558,6 +1562,9 @@ export class GameScene {
         if (this.movementOrderSystem?._indexExistingOrders) {
           this.movementOrderSystem._indexExistingOrders();
         }
+        // Slice C — wznów composite: statek przyleciał do celu przed zapisem, ale
+        // arrival-event nie wróci po load → dostaw drugą nogę (transport/pasażer).
+        this.orderService?._resumePendingOrders?.();
       }
       // M4 P3 — Przywróć DeepSpaceCombatSystem encounter state (po VesselManager,
       // bo restore filtruje encountery których vessele nie istnieją w VM).

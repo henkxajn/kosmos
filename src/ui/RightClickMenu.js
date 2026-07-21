@@ -311,7 +311,9 @@ export class RightClickMenu {
         if (!firstFail) firstFail = { vesselId: vid, reason: built.reason };
         continue;
       }
-      const result = mos.issueOrder(vid, built.spec);
+      // Zunifikowana ścieżka rozkazu ruchu przez OrderService (forward do MOS.issueOrder).
+      const os = window.KOSMOS?.orderService;
+      const result = os ? os.issueMove(vid, built.spec) : mos.issueOrder(vid, built.spec);
       if (result?.ok) anyOk = true;
       else if (!firstFail) firstFail = { vesselId: vid, reason: result?.reason };
       if (result && result.ok === false) {

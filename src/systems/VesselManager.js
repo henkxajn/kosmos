@@ -216,6 +216,33 @@ export class VesselManager {
   }
 
   /**
+   * Slice A — autorytatywny resolver bieżącego układu statku.
+   * Inwariant: systemId === null TYLKO w prawdziwym tranzycie warp
+   * (mission.type==='interstellar_jump' && phase==='warp_transit'); w każdym innym
+   * stanie to konkretny id, a dla misji międzygwiezdnej po tranzycie == mission.toSystemId.
+   * @returns {string|null} oczekiwany systemId (null = tranzyt)
+   */
+  _resolveSystemId(v) {
+    const m = v?.mission;
+    if (m?.type === 'interstellar_jump') {
+      if (m.phase === 'warp_transit') return null;   // w tranzycie
+      if (m.toSystemId) return m.toSystemId;          // po przylocie / in_system
+    }
+    return v?.systemId ?? 'sys_home';
+  }
+
+  /**
+   * Slice A — napraw systemId statku do inwariantu. Idempotentne; NIE nadpisuje
+   * znacznika tranzytu (want===null → bez zmian). Zwraca true jeśli zmieniono.
+   */
+  _reconcileSystemId(v) {
+    if (!v) return false;
+    const want = this._resolveSystemId(v);
+    if (want !== null && v.systemId !== want) { v.systemId = want; return true; }
+    return false;
+  }
+
+  /**
    * Statki dostępne do misji (docked + idle + wystarczające paliwo opcjonalnie).
    * @param {string} colonyId
    * @param {string} [shipId] — filtruj po typie statku
@@ -1070,7 +1097,8 @@ export class VesselManager {
         name:         v.name,
         colonyId:     v.colonyId,
         homeColonyId: v.homeColonyId ?? v.colonyId,
-        systemId:     v.systemId ?? 'sys_home',
+        // Slice A — zachowaj explicite null (znacznik tranzytu warp); tylko brak pola → home.
+        systemId:     v.systemId === undefined ? 'sys_home' : v.systemId,
         position:     { ...v.position },
         fuel:         { ...v.fuel },
         warpFuel:     v.warpFuel ? { ...v.warpFuel } : null,   // S3.0b S1 — bak warp_cores
@@ -1155,6 +1183,9 @@ export class VesselManager {
           totalFuelPlanned: v.warpRoute.totalFuelPlanned ?? 0,
           startedYear:      v.warpRoute.startedYear ?? 0,
         } : null,
+        // Slice C — pendingOrder: druga noga rozkazu composite (dostawa po warp).
+        //   OrderService._maybeDeliver odczytuje to po warpRoute:completed/interstellar:arrived.
+        pendingOrder:   v.pendingOrder ? { ...v.pendingOrder } : null,
       });
     }
     return {
@@ -1186,7 +1217,8 @@ export class VesselManager {
         name:         vd.name,
         colonyId:     vd.colonyId,
         homeColonyId: vd.homeColonyId ?? vd.colonyId,
-        systemId:     vd.systemId ?? 'sys_home',
+        // Slice A — zachowaj null (tranzyt); reconcile na końcu pętli leczy stare mis-homed.
+        systemId:     vd.systemId === undefined ? 'sys_home' : vd.systemId,
         position:     { ...vd.position },
         fuel:         { ...vd.fuel },
         // S3.0b S1 — bak warp_cores. Fallback dla save'ów pre-v82 (migracja i tak ustawia,
@@ -1278,6 +1310,8 @@ export class VesselManager {
           totalFuelPlanned: vd.warpRoute.totalFuelPlanned ?? 0,
           startedYear:      vd.warpRoute.startedYear ?? 0,
         } : null,
+        // Slice C — pendingOrder (druga noga composite); null gdy brak/stary save.
+        pendingOrder:   vd.pendingOrder ? { ...vd.pendingOrder } : null,
       };
       // _suspendedMission — oryginalna mission zawieszona przez aktywny order.
       if (vd.suspendedMission) {
@@ -1341,6 +1375,10 @@ export class VesselManager {
           vessel._baseFuelPerAU = stats.fuelPerAU;
         }
       }
+
+      // Slice A — inwariant systemId: lecz statki interstellar, których systemId
+      // zwinął się do 'sys_home' w starym save (arrival hook :2197 już się nie odpali).
+      this._reconcileSystemId(vessel);
 
       this._vessels.set(vessel.id, vessel);
     }
@@ -1745,6 +1783,11 @@ export class VesselManager {
     const moving = []; // statki w ruchu (do vessel:positionUpdate)
 
     for (const vessel of this._vessels.values()) {
+      // Slice A — inwariant systemId (defensywnie, poza bramką warp_transit :1880):
+      //   statek interstellar po tranzycie musi mieć systemId === mission.toSystemId.
+      //   Idempotentne i tanie; NIE rusza znacznika tranzytu (want===null → no-op).
+      this._reconcileSystemId(vessel);
+
       // M1 Targeting — pursue/intercept są zarządzane przez MovementOrderSystem.
       //   MOS ustawia vessel.position i vessel.velocity bezpośrednio przed tym call'em;
       //   tu pomijamy całą logikę interpolacji, tylko push do moving (sprite update).

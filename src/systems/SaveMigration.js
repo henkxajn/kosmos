@@ -20,7 +20,7 @@ import { ARCHETYPES, EMPIRE_COLOR_PALETTE } from '../data/EmpireData.js';
 const SAVE_KEY = 'kosmos_save_v1';
 const BACKUP_PREFIX = 'kosmos_save_backup_v';
 
-export const CURRENT_VERSION     = 91;
+export const CURRENT_VERSION     = 92;
 export const MIN_SUPPORTED_VERSION = 4;
 
 /**
@@ -148,6 +148,7 @@ const MIGRATIONS = {
   88: _migrateV88toV89,
   89: _migrateV89toV90,
   90: _migrateV90toV91,
+  91: _migrateV91toV92,
 };
 
 // ── Główna funkcja migracji ─────────────────────────────────────────────────
@@ -2161,6 +2162,39 @@ function _migrateV82toV83(data) {
 //   archetyp → pierwszy wolny slot EMPIRE_COLOR_PALETTE, z wykluczeniem koloru gracza.
 // player.empireColor: seedowane '#33ccff' (createDefaultState i tak je doda przy
 //   restore, ale zapisujemy jawnie dla spójności save'a). Idempotentna.
+// ── Migracja v91 → v92 (Zunifikowana warstwa rozkazów — Slice A/C) ───────────
+// (a) Self-heal systemId: stare save'y zwijały systemId tranzytowy (null) do
+//     'sys_home' (serialize ?? 'sys_home' + _migrateV21toV22:801). Statek, którego
+//     faza minęła 'warp_transit', już nigdy nie odpali arrival-hooka (:2197) →
+//     był trwale mis-homed w rejestrze. Tu: warp_transit → null (przywróć znacznik),
+//     inaczej systemId := mission.toSystemId (napraw przylot).
+// (b) vessel.pendingOrder default null (druga noga rozkazu composite — Slice C).
+// (c) Defensywnie: mission.originSystemId/destSystemId default 'sys_home' (Slice E;
+//     odczyt i tak ma ?? 'sys_home', ale unikamy undefined w traffic).
+// Idempotentna.
+function _migrateV91toV92(data) {
+  const c4x = data.civ4x ?? data.c4x;
+  for (const v of (c4x?.vesselManager?.vessels ?? [])) {
+    if (!v || typeof v !== 'object') continue;
+    const m = v.mission;
+    if (m && m.type === 'interstellar_jump' && m.toSystemId) {
+      if (m.phase === 'warp_transit') v.systemId = null;                 // przywróć tranzyt
+      else if (v.systemId !== m.toSystemId) v.systemId = m.toSystemId;   // napraw mis-homed
+    }
+    if (v.pendingOrder === undefined) v.pendingOrder = null;
+  }
+  const block = c4x?.missions ?? c4x?.expeditions;
+  const missions = block?.missions ?? block?.expeditions;
+  if (Array.isArray(missions)) {
+    for (const mm of missions) {
+      if (!mm || typeof mm !== 'object') continue;
+      if (mm.originSystemId === undefined) mm.originSystemId = 'sys_home';
+      if (mm.destSystemId   === undefined) mm.destSystemId   = 'sys_home';
+    }
+  }
+  return data;
+}
+
 function _migrateV90toV91(data) {
   const gs = data.civ4x?.gameState ?? data.gameState;
   if (!gs) return data;

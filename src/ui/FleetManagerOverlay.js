@@ -26,6 +26,7 @@ import { GAME_CONFIG }     from '../config/GameConfig.js';
 import { DistanceUtils }   from '../utils/DistanceUtils.js';
 import { tacticalToWorld, findHitZone, resolveTacticalTarget } from '../utils/TacticalRaycaster.js';
 import { getPOILocation } from '../utils/POIPanelLogic.js';
+import { warpDist3D } from '../utils/WarpRoutePlanner.js';
 import { tryCancelVesselOrder } from '../utils/MovementOrderCancellation.js';
 import { resolveTerritoryVisibility, buildTerritory3DPayload, mergeFlashFactor, classifyPendingFlash } from './TerritoryRenderLogic.js';
 import {
@@ -1593,10 +1594,12 @@ export class FleetManagerOverlay {
           if (selV && selV.warpFuel?.max > 0 &&
               selV.position.state === 'docked' &&
               (selV.status === 'idle' || selV.status === 'refueling')) {
-            // Multi-hop: planer trasy (limit skoku) zamiast bezpośredniego dispatchu.
-            const wrs = window.KOSMOS?.warpRouteSystem;
-            const ok = wrs ? wrs.beginJourney(selV.id, zone.data.systemId).ok
-                           : vMgr2.dispatchInterstellar(selV.id, zone.data.systemId);
+            // Zunifikowana ścieżka warp przez OrderService (deleguje do WarpRouteSystem.beginJourney).
+            const os = window.KOSMOS?.orderService;
+            const ok = os ? os.issueWarp(selV.id, zone.data.systemId).ok
+                          : (window.KOSMOS?.warpRouteSystem
+                              ? window.KOSMOS.warpRouteSystem.beginJourney(selV.id, zone.data.systemId).ok
+                              : vMgr2.dispatchInterstellar(selV.id, zone.data.systemId));
             if (ok) break;
           }
         }
@@ -1608,8 +1611,9 @@ export class FleetManagerOverlay {
         // Wybór konkretnego statku z pickera — przez planer trasy (multi-hop + limit skoku).
         const vMgr2b = window.KOSMOS?.vesselManager;
         if (vMgr2b && zone.data.vesselId && zone.data.systemId) {
-          const wrs = window.KOSMOS?.warpRouteSystem;
-          if (wrs) wrs.beginJourney(zone.data.vesselId, zone.data.systemId);
+          const os = window.KOSMOS?.orderService;
+          if (os) os.issueWarp(zone.data.vesselId, zone.data.systemId);
+          else if (window.KOSMOS?.warpRouteSystem) window.KOSMOS.warpRouteSystem.beginJourney(zone.data.vesselId, zone.data.systemId);
           else vMgr2b.dispatchInterstellar(zone.data.vesselId, zone.data.systemId);
           this._pendingSendSystemId = null;
         }
@@ -1624,9 +1628,11 @@ export class FleetManagerOverlay {
         this._selectedWarpShipId = (this._selectedWarpShipId === zone.data.vesselId) ? null : zone.data.vesselId;
         break;
       case 'warp_order_send': {
+        const os = window.KOSMOS?.orderService;
         const wrs = window.KOSMOS?.warpRouteSystem;
-        if (wrs && zone.data.vesselId && zone.data.systemId) {
-          const res = wrs.beginJourney(zone.data.vesselId, zone.data.systemId);
+        if ((os || wrs) && zone.data.vesselId && zone.data.systemId) {
+          const res = os ? os.issueWarp(zone.data.vesselId, zone.data.systemId)
+                         : wrs.beginJourney(zone.data.vesselId, zone.data.systemId);
           if (res?.ok) {
             this._selectedClusterSystem = null;  // wyczyść uzbrojony cel; statek zostaje wybrany (marker)
             EventBus.emit('ui:toast', { text: t('fleet.warpOrderSent'), color: THEME.accent, durationMs: 2500 });
@@ -1736,6 +1742,8 @@ export class FleetManagerOverlay {
       case 'select_target':
         if (this._missionConfig) {
           this._missionConfig.targetId = zone.data.targetId;
+          // Slice D — cross-system: przenieś systemId celu do composite (OrderService).
+          this._missionConfig.targetSystemId = zone.data.targetSystemId ?? null;
           this._missionConfig.step = 'confirm';
         }
         break;
@@ -1886,16 +1894,22 @@ export class FleetManagerOverlay {
       this._cachedTargets = null;
     } else {
       // Wykonaj od razu (np. deep_scan, return_home)
-      const ms = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
-      const colMgr = window.KOSMOS?.colonyManager;
-      const state = {
-        missionSystem: ms,
-        vesselManager: window.KOSMOS?.vesselManager,
-        colonyManager: colMgr,
-        techSystem: window.KOSMOS?.techSystem,
-        activePlanetId: colMgr?.activePlanetId,
-      };
-      action.execute(vessel, state);
+      const orderService = window.KOSMOS?.orderService;
+      if (orderService && actionId === 'return_home') {
+        // Zunifikowana ścieżka powrotu (foreign→warp / local→cancel) przez OrderService.
+        orderService.issueReturn(vessel.id);
+      } else {
+        const ms = window.KOSMOS?.missionSystem ?? window.KOSMOS?.expeditionSystem;
+        const colMgr = window.KOSMOS?.colonyManager;
+        const state = {
+          missionSystem: ms,
+          vesselManager: window.KOSMOS?.vesselManager,
+          colonyManager: colMgr,
+          techSystem: window.KOSMOS?.techSystem,
+          activePlanetId: colMgr?.activePlanetId,
+        };
+        action.execute(vessel, state);
+      }
       this._missionConfig = null;
     }
   }
@@ -2210,7 +2224,17 @@ export class FleetManagerOverlay {
       loop: !!this._missionConfig.repeat,
       returnCargoSpec: this._missionConfig.returnCargo ?? null,
     };
-    action.execute(vessel, state);
+    const orderService = window.KOSMOS?.orderService;
+    if (orderService && (actionId === 'transport' || actionId === 'transport_passenger')) {
+      const targetSystemId = this._missionConfig.targetSystemId ?? null;
+      if (actionId === 'transport') {
+        orderService.issueTransport(vessel.id, { targetId, targetSystemId, cargo: state.cargo, loop: state.loop, returnCargoSpec: state.returnCargoSpec });
+      } else {
+        orderService.issuePassenger(vessel.id, { targetId, targetSystemId });
+      }
+    } else {
+      action.execute(vessel, state);
+    }
     this._missionConfig = null;
     this._targetScrollOffset = 0;
   }
@@ -9026,7 +9050,17 @@ export class FleetManagerOverlay {
     const targets = this._getValidTargets(vessel, this._missionConfig.actionId);
     const rowH = 24;
 
+    let lastGroupSysName = null;   // Slice D — subheader grupy układu (cross-system)
     for (const tgt of targets) {
+      // Slice D — subheader dla celów w INNYM układzie (grupowanie po nazwie układu).
+      if (tgt.sameSystem === false && tgt.systemName !== lastGroupSysName) {
+        lastGroupSysName = tgt.systemName;
+        ctx.font = `bold ${THEME.fontSizeSmall - 1}px ${THEME.fontFamily}`;
+        ctx.fillStyle = THEME.info;
+        ctx.fillText(`🪐 ${t('fleet.otherSystem')}: ${tgt.systemName}`, x + pad, cy + 12);
+        cy += 16;
+      }
+
       const ry = cy;
 
       // Ikona + nazwa + odległość
@@ -9035,10 +9069,11 @@ export class FleetManagerOverlay {
       ctx.fillStyle = tgt.reachable ? THEME.textPrimary : THEME.textDim;
       ctx.fillText(`${icon} ${(tgt.name ?? '?').slice(0, 10)}`, x + pad, ry + 16);
 
-      // Odległość
+      // Odległość — same-system w AU, cross-system w latach świetlnych (warp).
       ctx.textAlign = 'right';
       ctx.fillStyle = THEME.textSecondary;
-      ctx.fillText(`${tgt.distAU.toFixed(1)} AU`, x + w - pad - 60, ry + 16);
+      const distLabel = (tgt.distAU != null) ? `${tgt.distAU.toFixed(1)} AU` : `${(tgt.distLY ?? 0).toFixed(1)} ly`;
+      ctx.fillText(distLabel, x + w - pad - 60, ry + 16);
 
       // Badge
       let badge = '', badgeColor = THEME.textDim;
@@ -9050,6 +9085,7 @@ export class FleetManagerOverlay {
       else if (this._missionConfig?.actionId === 'found_outpost' && tgt.colonyStatus === 'outpost') {
         badge = t('fleet.target.existingOutpost'); badgeColor = THEME.warning;
       }
+      else if (tgt.sameSystem === false) { badge = t('fleet.badgeWarp'); badgeColor = THEME.info; }
       else { badge = t('fleet.badgeExplored'); badgeColor = THEME.textDim; }
 
       ctx.fillStyle = badgeColor;
@@ -9060,7 +9096,7 @@ export class FleetManagerOverlay {
         this._hitZones.push({
           x, y: ry, w, h: rowH,
           type: 'select_target',
-          data: { targetId: tgt.id },
+          data: { targetId: tgt.id, targetSystemId: tgt.systemId ?? null },
         });
       }
 
@@ -9116,14 +9152,29 @@ export class FleetManagerOverlay {
     this._hitZones.push({ x: chgX - 2, y: cy, w: 54, h: 18, type: 'change_target', data: {} });
     cy += 24;
 
-    // Tabela: odległość, czas lotu, paliwo
+    // Slice D — cel w INNYM układzie: pokaż notkę o auto-łańcuchu warp→dostawa
+    // zamiast mylącej tabeli AU (dystans/paliwo in-system nie dotyczą skoku warp).
+    const targetSysId = this._missionConfig.targetSystemId ?? null;
+    const isCrossSystem = targetSysId && targetSysId !== (vessel.systemId ?? 'sys_home');
+    if (isCrossSystem) {
+      const sysName = window.KOSMOS?.galaxyData?.systems?.find(s => s.id === targetSysId)?.name ?? targetSysId;
+      ctx.font = `${THEME.fontSizeSmall}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.info;
+      ctx.fillText(t('fleet.crossSystemDelivery', sysName), x + pad, cy + 12);
+      cy += 18;
+      ctx.fillStyle = THEME.textDim;
+      ctx.fillText(t('fleet.crossSystemDeliveryHint'), x + pad, cy + 12);
+      cy += 22;
+    }
+
+    // Tabela: odległość, czas lotu, paliwo (tylko same-system)
     const ship = SHIPS[vessel.shipId] ?? HULLS[vessel.shipId];
     const distAU = this._calcDistAU(vessel, target);
     const effectiveSpeed = (vessel.speedAU ?? ship?.speedAU ?? 1) * (window.KOSMOS?.techSystem?.getShipSpeedMultiplier() ?? 1);
     const travelYears = effectiveSpeed > 0 ? distAU / effectiveSpeed : Infinity;
     const fuelCost = distAU * (vessel.fuel.consumption ?? 0);
 
-    const tableData = [
+    const tableData = isCrossSystem ? [] : [
       [t('fleet.distanceLabel'), `${distAU.toFixed(2)} AU`],
       [t('fleet.travelTime'), travelYears < 1 ? t('fleet.etaDays', Math.ceil(travelYears * 365)) : t('fleet.etaYears', travelYears.toFixed(1))],
       [t('fleet.fuelOneWay'), `${fuelCost.toFixed(1)} pc`],
@@ -9140,15 +9191,17 @@ export class FleetManagerOverlay {
       cy += 18;
     }
 
-    // ETA (duże)
-    const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
-    const eta = gameYear + travelYears;
-    ctx.font = `bold ${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
-    ctx.fillStyle = THEME.accent;
-    ctx.textAlign = 'center';
-    ctx.fillText(t('fleet.etaYearLabel', Math.ceil(eta)), x + w / 2, cy + 22);
-    ctx.textAlign = 'left';
-    cy += 34;
+    // ETA (duże) — tylko same-system (cross-system ETA = warp, liczony przy dispatchu).
+    if (!isCrossSystem) {
+      const gameYear = window.KOSMOS?.timeSystem?.gameTime ?? 0;
+      const eta = gameYear + travelYears;
+      ctx.font = `bold ${THEME.fontSizeTitle}px ${THEME.fontFamily}`;
+      ctx.fillStyle = THEME.accent;
+      ctx.textAlign = 'center';
+      ctx.fillText(t('fleet.etaYearLabel', Math.ceil(eta)), x + w / 2, cy + 22);
+      ctx.textAlign = 'left';
+      cy += 34;
+    }
 
     // Checkbox "Powtarzaj" — dla transportu ze statkami z ładownią.
     // vessel.cargoMax (z modułów) lub ship.cargoCapacity (legacy SHIPS) — nowoczesne
@@ -9361,6 +9414,8 @@ export class FleetManagerOverlay {
         explored: body.explored ?? false,
         reachable,
         colonyStatus,
+        systemId: activeSysId,
+        sameSystem: true,
       });
     }
 
@@ -9382,14 +9437,66 @@ export class FleetManagerOverlay {
           id: st.id, name: st.name ?? st.id, type: 'station',
           distAU, explored: true, reachable: distAU <= effectiveRange(vessel),
           colonyStatus: 'station',
+          systemId: activeSysId,
+          sameSystem: true,
         });
       }
     }
 
-    // Sortuj: reachable najpierw, potem po odległości
+    // ── Slice D — cele CROSS-SYSTEM (transport/pasażer) ──────────────────────
+    // Kolonie i stacje GRACZA w INNYCH układach (warp-capable statek → auto-chain
+    // warp→dostawa przez OrderService). Cudze kolonie = handel cross-empire (S3.5b),
+    // NIE transport — pomijane. Reachable = zasięg warp (multi-hop planuje beginJourney).
+    if ((actionId === 'transport' || actionId === 'transport_passenger') && (vessel.warpFuel?.max ?? 0) > 0) {
+      const galaxy = window.KOSMOS?.galaxyData?.systems ?? [];
+      const curSysId = vessel.systemId ?? activeSysId;
+      const curSys = galaxy.find(s => s.id === curSysId);
+      const warpReachLY = warpRange(vessel);
+      for (const sys of galaxy) {
+        if (sys.id === activeSysId || sys.id === curSysId) continue;   // in-system pokryty wyżej
+        const distLY = (curSys && sys) ? warpDist3D(curSys, sys) : Infinity;
+        const reachable = warpReachLY >= distLY;
+        const sysName = sys.name ?? sys.id;
+        // Kolonie gracza w tym układzie
+        const foreignBodies = [
+          ...EntityManager.getByTypeInSystem('planet', sys.id),
+          ...EntityManager.getByTypeInSystem('moon', sys.id),
+          ...EntityManager.getByTypeInSystem('planetoid', sys.id),
+        ];
+        for (const body of foreignBodies) {
+          const col = colMgr?.getColony(body.id);
+          // Kolonia gracza = brak ownerEmpireId (lub 'player'); kolonie AI = handel S3.5b, nie transport.
+          if (!col || (col.ownerEmpireId && col.ownerEmpireId !== 'player')) continue;
+          if (sourceColonyId && body.id === sourceColonyId) continue;
+          const existingCol = col;
+          targets.push({
+            id: body.id, name: body.name ?? body.id, type: body.type,
+            distAU: null, distLY, explored: true, reachable,
+            colonyStatus: existingCol.isOutpost ? 'outpost' : 'colony',
+            systemId: sys.id, sameSystem: false, systemName: sysName,
+          });
+        }
+        // Stacje gracza w tym układzie
+        for (const st of EntityManager.getByTypeInSystem('station', sys.id)) {
+          if ((st.ownerEmpireId ?? 'player') !== 'player') continue;
+          targets.push({
+            id: st.id, name: st.name ?? st.id, type: 'station',
+            distAU: null, distLY, explored: true, reachable,
+            colonyStatus: 'station', systemId: sys.id, sameSystem: false, systemName: sysName,
+          });
+        }
+      }
+    }
+
+    // Sortuj: same-system najpierw (reachable→AU), potem cross-system (reachable→LY),
+    // grupując po nazwie układu dla czytelności pickera.
     targets.sort((a, b) => {
+      if (a.sameSystem !== b.sameSystem) return a.sameSystem ? -1 : 1;
       if (a.reachable !== b.reachable) return a.reachable ? -1 : 1;
-      return a.distAU - b.distAU;
+      if (a.sameSystem) return (a.distAU ?? 0) - (b.distAU ?? 0);
+      // cross-system: grupuj po układzie, potem po LY
+      if ((a.systemName ?? '') !== (b.systemName ?? '')) return String(a.systemName ?? '').localeCompare(String(b.systemName ?? ''));
+      return (a.distLY ?? 0) - (b.distLY ?? 0);
     });
 
     this._cachedTargets = targets;

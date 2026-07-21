@@ -858,6 +858,9 @@ export class MissionSystem {
       crewCost:    EXPEDITION_CREW_COST,
       vesselId:    vesselId ?? null,
       originColonyId: loopSourceId,
+      // Slice E — kontekst układów (system-aware traffic). In-system: oba równe.
+      originSystemId: vessel?.systemId ?? 'sys_home',
+      destSystemId:   target?.systemId ?? vessel?.systemId ?? 'sys_home',
       cargo:       { ...cargo },
       status:      'en_route',
       gained:      null,
@@ -1009,6 +1012,9 @@ export class MissionSystem {
       vesselId,
       originColonyId: originStation ? (vessel.colonyId ?? colMgr?.activePlanetId) : originId,
       originStationId,
+      // Slice E — kontekst układów (system-aware traffic).
+      originSystemId: vessel?.systemId ?? 'sys_home',
+      destSystemId:   target?.systemId ?? vessel?.systemId ?? 'sys_home',
       colonists:      loadedCount,
       status:         'en_route',
       gained:         null,

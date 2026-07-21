@@ -128,6 +128,7 @@ const T = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('
 // ═══════════════════════════════════════════════════════════════════════════
 {
   const { SaveSystem } = await import('../../systems/SaveSystem.js');
+  const { CURRENT_VERSION } = await import('../../systems/SaveMigration.js');
   store.clear();
 
   const prev = JSON.stringify({ version: 90, gameTime: 111, marker: 'POPRZEDNI' });
@@ -138,8 +139,9 @@ const T = (name, cond) => { if (cond) { pass++; } else { fail++; console.error('
   T('T5 slot ma nowy zapis',  JSON.parse(SaveSystem.exportSave()).marker === 'NOWY');
   T('T5 backup ma poprzedni', JSON.parse(globalThis.localStorage.getItem('kosmos_save_backup_preimport')).marker === 'POPRZEDNI');
 
-  // Odrzucony import nie nadpisuje backupu poprawnym zapisem
-  SaveSystem.importSave({ version: 91 });
+  // Odrzucony import nie nadpisuje backupu poprawnym zapisem (future_version = zawsze odrzucony,
+  // bump-proof: CURRENT_VERSION+1 zamiast twardej wersji, która przy bumpie staje się migrowalna).
+  SaveSystem.importSave({ version: CURRENT_VERSION + 1 });
   T('T5 backup nietknięty po odrzuceniu',
     JSON.parse(globalThis.localStorage.getItem('kosmos_save_backup_preimport')).marker === 'POPRZEDNI');
 

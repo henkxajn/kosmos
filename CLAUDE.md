@@ -688,6 +688,52 @@ devScore; content-hash sig (miesięczny recompute nie przebudowuje sceny 3D). Pl
 
 ---
 
+## Zunifikowana warstwa rozkazów floty — UKOŃCZONE (save v92, live-gate PASS, ARC ZAMKNIĘTY)
+
+Jedna fasada wydawania rozkazów dla WSZYSTKICH UI + fix bug mis-homed statków po warpie + auto-łańcuch
+cross-system transport (warp→lot→dostawa). Plan: `radiant-stirring-walrus.md`. Memory: `unified-order-service.md`.
+
+**Bug wyjściowy:** statki po skoku warp pokazywały się w rejestrze jako „w home, wyszarzone" (nie w grupie
+właściwego układu), a na mapie 3D poprawnie. **Root-cause:** jedyne źródło prawdy `vessel.systemId` pisane
+tylko w ścieżce warp (`VesselManager:771` =null start, `:2197` =toSystemId przylot bramkowane
+`phase==='warp_transit'`), a serialize/restore zwijały `null → 'sys_home'` (`?? 'sys_home'`). Statek zapisany
+mid-warp / z fazą już poza `warp_transit` był trwale mis-homed (arrival hook się nie odpalał ponownie).
+
+**Slice A — integralność `systemId`:** `VesselManager._resolveSystemId` (null TYLKO w prawdziwym `warp_transit`;
+inaczej `mission.toSystemId`) + `_reconcileSystemId` (idempotentny, NIE rusza tranzytu). serialize/restore
+zachowują `null` (`=== undefined ? 'sys_home' : v.systemId`). Reconcile na końcu pętli restore + defensywnie w
+`_updatePositions`. Migracja `_migrateV91toV92` (self-heal mis-homed + `pendingOrder`/mission `origin/destSystemId` defaults).
+
+**Slice B — `OrderService`** (`src/systems/OrderService.js`, `window.KOSMOS.orderService`, wired w GameScene
+po `warpRouteSystem`): cienki router, kolaboratorzy leniwie przez `window.KOSMOS` (zero cross-importów — JEDYNY
+dozwolony orkiestrator multi-system). Intent: `issueTransport/issuePassenger/issueMove/issueWarp/issueReturn/getTraffic`.
+WSZYSTKIE UI wołają fasadę: `FleetManagerOverlay._executeMission` (transport/pasażer) + `return_home` handler,
+Stratcom zony `cluster_send`/`cluster_send_pick`/`warp_order_send` (→`issueWarp`), PPM `RightClickMenu:314`
+(→`issueMove`). Same-system = emit `expedition:transportRequest` (MissionSystem właścicielem logiki). ⚠ NIGDY
+oba (`action.execute` I orderService) — ryzyko double-dispatch.
+
+**Slice C — auto-chain cross-system** (warp→lot→dostawa): stan w `vessel.pendingOrder` (NIE loop/leg —
+izolacja od `_tryResumeLoop`), serialize-safe. `_beginComposite`→`beginJourney`→ustaw `pendingOrder`. Łańcuch na
+`interstellar:arrived`+`warpRoute:completed`→`_maybeDeliver` z guardami **jednokrotności**: `if(v.warpRoute)return`
+(multi-hop trwa) + `if(v.systemId!==targetSystemId)return`. Re-walidacja celu (kolonia/stacja) → `order:compositeFailed`.
+`warpRoute:aborted`→clear. `_resumePendingOrders()` po restore w GameScene. Dostawa reużywa `expedition:transportRequest`
+(statek arrived=`orbiting`/`on_mission` → `_launchTransport` traktuje jako `isRedispatch` z orbity, bez spaceportu).
+
+**Slice D — cele cross-system w rejestrze:** `_getValidTargets` pass cross-system (guard `warpFuel.max>0`):
+kolonie/stacje GRACZA w innych układach (AI wykluczone → handel S3.5b), tag `{systemId, sameSystem, systemName,
+distLY}`, `reachable = warpRange ≥ warpDist3D`. Picker: subheader układu + „X ly" + badge warp; `select_target`
+zone niesie `targetSystemId` → `_missionConfig`. `_drawMissionConfirm` notka warp zamiast mylącej tabeli AU.
+i18n `fleet.otherSystem/badgeWarp/crossSystemDelivery(+Hint)` + `order.compositeTargetLost`.
+
+**Slice E — system-aware traffic:** MissionSystem `_launchTransport`/`_launchPassenger` rekordy +
+`originSystemId`/`destSystemId`. `OrderService.getTraffic()` = `{bySystem, inTransit, missions}` — czyta `systemId`
+(nie `colonyId`) → obcy statek w WŁAŚCIWYM układzie (znika rozjazd rejestr↔3D).
+
+**Save v91→v92** (`_migrateV91toV92`). Smoke: `tmp_systemid_integrity_smoke` 19 · `tmp_order_service_smoke` 28 ·
+`tmp_cross_system_targets_smoke` 8 + pełna regresja 0 FAIL (warp/save/s34/s34c/load_colonists/fleet_list_rows).
+
+---
+
 ## Dodawanie nowych funkcji
 
 1. Nowa mechanika → nowy plik w `src/systems/` (logika) lub `src/data/` (definicje)
